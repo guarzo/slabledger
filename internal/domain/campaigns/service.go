@@ -210,6 +210,13 @@ type Service interface {
 	DismissAISuggestion(ctx context.Context, purchaseID string) error
 	GetPriceOverrideStats(ctx context.Context) (*PriceOverrideStats, error)
 
+	// Cert entry
+	ImportCerts(ctx context.Context, certNumbers []string) (*CertImportResult, error)
+
+	// eBay export
+	ListEbayExportItems(ctx context.Context, flaggedOnly bool) (*EbayExportListResponse, error)
+	GenerateEbayCSV(ctx context.Context, items []EbayExportGenerateItem) ([]byte, error)
+
 	// Shopify price sync
 	MatchShopifyPrices(ctx context.Context, items []ShopifyPriceSyncItem) (*ShopifyPriceSyncResponse, error)
 

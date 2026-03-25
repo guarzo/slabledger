@@ -85,6 +85,11 @@ type MockCampaignService struct {
 	// Monte Carlo projection
 	RunProjectionFn func(ctx context.Context, campaignID string) (*campaigns.MonteCarloComparison, error)
 
+	// Cert entry & eBay export
+	ImportCertsFn         func(ctx context.Context, certNumbers []string) (*campaigns.CertImportResult, error)
+	ListEbayExportItemsFn func(ctx context.Context, flaggedOnly bool) (*campaigns.EbayExportListResponse, error)
+	GenerateEbayCSVFn     func(ctx context.Context, items []campaigns.EbayExportGenerateItem) ([]byte, error)
+
 	// Shopify price sync
 	MatchShopifyPricesFn func(ctx context.Context, items []campaigns.ShopifyPriceSyncItem) (*campaigns.ShopifyPriceSyncResponse, error)
 
@@ -448,6 +453,29 @@ func (m *MockCampaignService) RunProjection(ctx context.Context, campaignID stri
 		return m.RunProjectionFn(ctx, campaignID)
 	}
 	return &campaigns.MonteCarloComparison{Confidence: "insufficient"}, nil
+}
+
+// Cert entry & eBay export
+
+func (m *MockCampaignService) ImportCerts(ctx context.Context, certNumbers []string) (*campaigns.CertImportResult, error) {
+	if m.ImportCertsFn != nil {
+		return m.ImportCertsFn(ctx, certNumbers)
+	}
+	return nil, nil
+}
+
+func (m *MockCampaignService) ListEbayExportItems(ctx context.Context, flaggedOnly bool) (*campaigns.EbayExportListResponse, error) {
+	if m.ListEbayExportItemsFn != nil {
+		return m.ListEbayExportItemsFn(ctx, flaggedOnly)
+	}
+	return nil, nil
+}
+
+func (m *MockCampaignService) GenerateEbayCSV(ctx context.Context, items []campaigns.EbayExportGenerateItem) ([]byte, error) {
+	if m.GenerateEbayCSVFn != nil {
+		return m.GenerateEbayCSVFn(ctx, items)
+	}
+	return nil, nil
 }
 
 // Shopify price sync
