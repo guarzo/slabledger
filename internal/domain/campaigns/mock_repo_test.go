@@ -489,6 +489,43 @@ func (m *mockRepo) AcceptAISuggestion(_ context.Context, purchaseID string, pric
 	return nil
 }
 
+func (m *mockRepo) SetEbayExportFlag(_ context.Context, purchaseID string, flaggedAt time.Time) error {
+	p, ok := m.purchases[purchaseID]
+	if !ok {
+		return ErrPurchaseNotFound
+	}
+	p.EbayExportFlaggedAt = &flaggedAt
+	return nil
+}
+
+func (m *mockRepo) ClearEbayExportFlags(_ context.Context, purchaseIDs []string) error {
+	for _, id := range purchaseIDs {
+		if p, ok := m.purchases[id]; ok {
+			p.EbayExportFlaggedAt = nil
+		}
+	}
+	return nil
+}
+
+func (m *mockRepo) ListEbayFlaggedPurchases(_ context.Context) ([]Purchase, error) {
+	var result []Purchase
+	for _, p := range m.purchases {
+		if p.EbayExportFlaggedAt != nil && !m.purchaseSales[p.ID] {
+			result = append(result, *p)
+		}
+	}
+	return result, nil
+}
+
+func (m *mockRepo) UpdatePurchaseCardYear(_ context.Context, id string, year string) error {
+	p, ok := m.purchases[id]
+	if !ok {
+		return ErrPurchaseNotFound
+	}
+	p.CardYear = year
+	return nil
+}
+
 // mockPriceLookup is a test double for PriceLookup used by in-package tests
 // (import_test.go, tuning_test.go) that access unexported symbols.
 // Service-layer tests in campaigns_test use the version in service_test.go.

@@ -659,3 +659,40 @@ func (m *MockCampaignRepository) AcceptAISuggestion(_ context.Context, purchaseI
 	p.AISuggestedAt = ""
 	return nil
 }
+
+func (m *MockCampaignRepository) SetEbayExportFlag(_ context.Context, purchaseID string, flaggedAt time.Time) error {
+	p, ok := m.Purchases[purchaseID]
+	if !ok {
+		return campaigns.ErrPurchaseNotFound
+	}
+	p.EbayExportFlaggedAt = &flaggedAt
+	return nil
+}
+
+func (m *MockCampaignRepository) ClearEbayExportFlags(_ context.Context, purchaseIDs []string) error {
+	for _, id := range purchaseIDs {
+		if p, ok := m.Purchases[id]; ok {
+			p.EbayExportFlaggedAt = nil
+		}
+	}
+	return nil
+}
+
+func (m *MockCampaignRepository) ListEbayFlaggedPurchases(_ context.Context) ([]campaigns.Purchase, error) {
+	var result []campaigns.Purchase
+	for _, p := range m.Purchases {
+		if p.EbayExportFlaggedAt != nil && !m.PurchaseSales[p.ID] {
+			result = append(result, *p)
+		}
+	}
+	return result, nil
+}
+
+func (m *MockCampaignRepository) UpdatePurchaseCardYear(_ context.Context, id string, year string) error {
+	p, ok := m.Purchases[id]
+	if !ok {
+		return campaigns.ErrPurchaseNotFound
+	}
+	p.CardYear = year
+	return nil
+}

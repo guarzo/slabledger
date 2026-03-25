@@ -46,6 +46,12 @@ type PurchaseRepository interface {
 	AcceptAISuggestion(ctx context.Context, purchaseID string, priceCents int) error
 	GetPriceOverrideStats(ctx context.Context) (*PriceOverrideStats, error)
 
+	// eBay export
+	SetEbayExportFlag(ctx context.Context, purchaseID string, flaggedAt time.Time) error
+	ClearEbayExportFlags(ctx context.Context, purchaseIDs []string) error
+	ListEbayFlaggedPurchases(ctx context.Context) ([]Purchase, error)
+	UpdatePurchaseCardYear(ctx context.Context, id string, year string) error
+
 	// Snapshot status
 	ListSnapshotPurchasesByStatus(ctx context.Context, status SnapshotStatus, limit int) ([]Purchase, error)
 	UpdatePurchaseSnapshotStatus(ctx context.Context, id string, status SnapshotStatus, retryCount int) error
