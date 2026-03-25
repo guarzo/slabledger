@@ -134,9 +134,8 @@ func (c *Client) StreamCompletion(ctx context.Context, req ai.CompletionRequest,
 			break
 		}
 		// Rate limits need longer backoff; other transient errors use shorter.
-		var rlErr *rateLimitError
 		var backoff time.Duration
-		if errors.As(lastErr, &rlErr) {
+		if _, ok := errors.AsType[*rateLimitError](lastErr); ok {
 			backoff = time.Duration(30<<attempt) * time.Second // 30s, 60s, 120s
 		} else {
 			backoff = time.Duration(5<<attempt) * time.Second // 5s, 10s, 20s
@@ -418,8 +417,7 @@ func isPermanentError(err error) bool {
 	if err == nil {
 		return false
 	}
-	var rlErr *rateLimitError
-	if errors.As(err, &rlErr) {
+	if _, ok := errors.AsType[*rateLimitError](err); ok {
 		return false // 429 is retriable
 	}
 	msg := err.Error()
