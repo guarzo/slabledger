@@ -779,8 +779,18 @@ func (r *CampaignsRepository) ListEbayFlaggedPurchases(ctx context.Context) ([]c
 }
 
 func (r *CampaignsRepository) UpdatePurchaseCardYear(ctx context.Context, id string, year string) error {
-	_, err := r.db.ExecContext(ctx,
+	result, err := r.db.ExecContext(ctx,
 		`UPDATE campaign_purchases SET card_year = ? WHERE id = ?`,
 		year, id)
-	return err
+	if err != nil {
+		return err
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return campaigns.ErrPurchaseNotFound
+	}
+	return nil
 }

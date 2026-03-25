@@ -39,10 +39,18 @@ func (s *service) ImportCerts(ctx context.Context, certNumbers []string) (*CertI
 
 	for _, certNum := range cleaned {
 		if existing, ok := existingMap[certNum]; ok {
-			if flagErr := s.repo.SetEbayExportFlag(ctx, existing.ID, now); flagErr != nil && s.logger != nil {
-				s.logger.Warn(ctx, "cert import: failed to set ebay export flag",
-					observability.String("cert", certNum),
-					observability.Err(flagErr))
+			if flagErr := s.repo.SetEbayExportFlag(ctx, existing.ID, now); flagErr != nil {
+				if s.logger != nil {
+					s.logger.Warn(ctx, "cert import: failed to set ebay export flag",
+						observability.String("cert", certNum),
+						observability.Err(flagErr))
+				}
+				result.Failed++
+				result.Errors = append(result.Errors, CertImportError{
+					CertNumber: certNum,
+					Error:      fmt.Sprintf("exists but failed to flag for export: %v", flagErr),
+				})
+				continue
 			}
 			result.AlreadyExisted++
 			continue
