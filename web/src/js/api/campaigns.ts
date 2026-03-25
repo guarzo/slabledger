@@ -445,13 +445,39 @@ proto.listEbayExportItems = async function (
 proto.generateEbayCSV = async function (
   this: APIClient, items: EbayExportGenerateItem[],
 ): Promise<Blob> {
-  const response = await this.fetchWithRetry(
-    `${this.baseURL}/purchases/export-ebay/generate`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ items }),
-    },
-  );
-  return response.blob();
+  // No retry — export clears ebay_export_flagged_at on the server; retrying
+  // a failed request could produce duplicate side effects.
+  const { controller, cleanup } = this.createTimeoutController(this.defaultTimeoutMs);
+  try {
+    const response = await fetch(
+      `${this.baseURL}/purchases/export-ebay/generate`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items }),
+        signal: controller.signal,
+        credentials: 'include',
+      },
+    );
+    cleanup();
+    if (!response.ok) {
+      let data: { message?: string; code?: string; error?: string } = { error: response.statusText };
+      try { data = await response.json(); } catch { /* keep default */ }
+      throw new APIError(
+        data.message || `API error: ${response.status} ${response.statusText}`,
+        response.status,
+        data.code,
+        data,
+      );
+    }
+    return response.blob();
+  } catch (err) {
+    cleanup();
+    if (isAPIError(err)) throw err;
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new APIError('Request was cancelled', 0, 'CANCELLED');
+    }
+    const message = err instanceof Error ? err.message : 'Network error';
+    throw new APIError(message, 0, 'NETWORK_ERROR');
+  }
 };

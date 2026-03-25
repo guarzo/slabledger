@@ -520,9 +520,13 @@ func (m *mockRepo) ClearEbayExportFlags(_ context.Context, purchaseIDs []string)
 func (m *mockRepo) ListEbayFlaggedPurchases(_ context.Context) ([]Purchase, error) {
 	var result []Purchase
 	for _, p := range m.purchases {
-		if p.EbayExportFlaggedAt != nil && !m.purchaseSales[p.ID] {
-			result = append(result, *p)
+		if p.EbayExportFlaggedAt == nil || m.purchaseSales[p.ID] || p.Grader != "PSA" {
+			continue
 		}
+		if c, ok := m.campaigns[p.CampaignID]; ok && c.Phase == PhaseClosed {
+			continue
+		}
+		result = append(result, *p)
 	}
 	return result, nil
 }

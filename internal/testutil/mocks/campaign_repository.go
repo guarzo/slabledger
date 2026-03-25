@@ -691,9 +691,14 @@ func (m *MockCampaignRepository) ClearEbayExportFlags(_ context.Context, purchas
 func (m *MockCampaignRepository) ListEbayFlaggedPurchases(_ context.Context) ([]campaigns.Purchase, error) {
 	var result []campaigns.Purchase
 	for _, p := range m.Purchases {
-		if p.EbayExportFlaggedAt != nil && !m.PurchaseSales[p.ID] {
-			result = append(result, *p)
+		if p.EbayExportFlaggedAt == nil || m.PurchaseSales[p.ID] || p.Grader != "PSA" {
+			continue
 		}
+		// Exclude purchases from closed campaigns (matches real SQL query).
+		if c, ok := m.Campaigns[p.CampaignID]; ok && c.Phase == campaigns.PhaseClosed {
+			continue
+		}
+		result = append(result, *p)
 	}
 	return result, nil
 }

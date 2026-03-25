@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { api } from '@/js/api';
 import type { EbayExportItem, EbayExportGenerateItem } from '@/types/campaigns/core';
 import { centsToDollars, dollarsToCents } from '@/react/utils/formatters';
@@ -29,6 +29,13 @@ export default function EbayExportTab() {
     } finally {
       setLoading(false);
     }
+  }, [flaggedOnly]);
+
+  // Clear stale items when the filter toggle changes.
+  useEffect(() => {
+    setItems([]);
+    setDecisions(new Map());
+    setError(null);
   }, [flaggedOnly]);
 
   const setDecision = (purchaseId: string, decision: Decision) => {
@@ -207,6 +214,7 @@ export default function EbayExportTab() {
                             <span className="text-gray-400">$</span>
                             <input
                               type="number"
+                              aria-label={`Edit price for ${item.cardName}`}
                               value={editPrice}
                               onChange={e => setEditPrice(e.target.value)}
                               onKeyDown={e => {
