@@ -1,0 +1,479 @@
+/**
+ * Design System Tokens
+ *
+ * CSS Custom Properties for runtime theming and consistent design.
+ * Works alongside Tailwind - these tokens can be changed dynamically
+ * without rebuilding, enabling theme switching and customization.
+ */
+
+:root {
+  /* ===================================
+     BRAND COLORS
+     =================================== */
+  --brand-50: #eef2ff;
+  --brand-100: #e0e7ff;
+  --brand-200: #c7d2fe;
+  --brand-300: #a5b4fc;
+  --brand-400: #818cf8;
+  --brand-500: #5a5de8;
+  --brand-600: #4f46e5;
+  --brand-700: #4338ca;
+  --brand-800: #3730a3;
+  --brand-900: #312e81;
+
+  /* ===================================
+     POKÉMON-THEMED GRADIENTS
+     =================================== */
+  --gradient-charizard: linear-gradient(135deg, #FF3C00 0%, #FFD700 100%);
+  --gradient-pikachu: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+  --gradient-lugia: linear-gradient(135deg, #2563eb 0%, #60a5fa 100%);
+  --gradient-mewtwo: linear-gradient(135deg, #764ba2 0%, #9333ea 100%);
+  --gradient-rayquaza: linear-gradient(135deg, #10b981 0%, #34d399 100%);
+
+  /* ===================================
+     PAGE BACKGROUND GRADIENTS (Dark)
+     =================================== */
+  --bg-gradient-top: #131b2e;
+  --bg-gradient-bottom: #0a0f1a;
+  --bg-gradient-start: #0f172a;
+  --bg-gradient-end: #0b1120;
+
+  /* ===================================
+     PRIMARY COLORS (Button/CTA)
+     =================================== */
+  --primary: #2563eb;
+  --primary-hover: #1d4ed8;
+
+  /* ===================================
+     LINK COLORS
+     =================================== */
+  --color-link: #2563eb;
+  --color-link-hover: #1d4ed8;
+
+  /* ===================================
+     FOCUS INDICATOR COLORS
+     =================================== */
+  --color-focus: #60a5fa;
+  --color-focus-ring: rgba(96, 165, 250, 0.2);
+  --color-focus-ring-subtle: rgba(96, 165, 250, 0.15);
+
+  /* ===================================
+     HEADING & PARAGRAPH COLORS
+     =================================== */
+  --color-heading: #f9fafb;
+  --color-paragraph: #d1d5db;
+
+  /* ===================================
+     LOGIN PAGE SPECIFIC TOKENS
+     =================================== */
+  --gradient-brand: linear-gradient(135deg, var(--brand-500), var(--brand-400));
+  --gradient-brand-extended: linear-gradient(135deg, var(--brand-500) 0%, var(--brand-400) 50%, #06b6d4 100%);
+  --gradient-brand-orb-primary: linear-gradient(135deg, var(--brand-500), var(--brand-400));
+  --gradient-brand-orb-secondary: linear-gradient(135deg, var(--success), #06b6d4);
+  --gradient-success-accent: linear-gradient(135deg, var(--success), #059669);
+  --gradient-surface-dark: linear-gradient(135deg, var(--surface-2) 0%, var(--surface-3) 100%);
+  --gradient-button-light: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+  --gradient-button-dark: linear-gradient(135deg, var(--surface-2) 0%, var(--bg) 100%);
+
+  /* Login box shadows */
+  --shadow-brand-glow: 0 0 60px rgba(99, 102, 241, 0.15);
+  --shadow-brand-glow-hover: 0 0 80px rgba(99, 102, 241, 0.25);
+  --shadow-success-badge: 0 2px 8px rgba(16, 185, 129, 0.4);
+  --shadow-card-showcase: 0 20px 40px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(255, 255, 255, 0.1);
+  --shadow-card-showcase-hover: 0 25px 50px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(255, 255, 255, 0.15);
+  --shadow-button-light: 0 4px 15px rgba(0, 0, 0, 0.1), 0 1px 3px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  --shadow-button-light-hover: 0 8px 25px rgba(0, 0, 0, 0.15), 0 4px 10px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  --shadow-button-focus: 0 4px 15px rgba(0, 0, 0, 0.1), 0 0 0 4px rgba(66, 133, 244, 0.3);
+
+  /* Login-specific text colors */
+  --color-button-text-light: #1f2937;
+  --color-button-text-dark: #f1f5f9;
+
+  /* ===================================
+     PSA-GRADE COLORS
+     =================================== */
+  --grade-psa10: #dc2626;    /* Red - PSA 10 Gem Mint */
+  --grade-psa9: #2563eb;     /* Blue - PSA 9 Mint */
+  --grade-psa8: #f59e0b;     /* Amber - PSA 8 */
+  --grade-bgs10: #000000;    /* Black - BGS 10 Black Label */
+  --grade-cgc: #f59e0b;      /* Orange/Amber - CGC grades */
+
+  /* ===================================
+     SURFACES & BACKGROUNDS (Dark Default)
+     =================================== */
+  --bg: #0f172a;              /* Page background */
+  --surface-0: #0b1220;       /* Flat surface (lowest elevation) */
+  --surface-1: #111827;       /* Card surface (base elevation) */
+  --surface-2: #1f2937;       /* Raised surface (mid elevation) */
+  --surface-3: #374151;       /* Higher elevation surface */
+  --surface-4: #4b5563;       /* Highest elevation surface */
+  --surface-hover: #1f2937;   /* Hover state for interactive surfaces */
+  --surface-overlay: rgba(0, 0, 0, 0.5);  /* Modal/overlay backdrop */
+
+  /* ===================================
+     TEXT COLORS
+     =================================== */
+  --text: #e5e7eb;            /* Primary text */
+  --text-muted: #b0b8c4;      /* Secondary text - improved contrast (WCAG AA) */
+  --text-subtle: #8b95a5;     /* Tertiary text / hints - improved contrast */
+  --color-text-inverse: #ffffff;  /* Text on colored backgrounds (buttons, badges) */
+
+  /* ===================================
+     SEMANTIC COLORS (High contrast for WCAG AA)
+     =================================== */
+  --success: #34d399;         /* Brighter green for better contrast on dark backgrounds */
+  --success-bg: rgba(16, 185, 129, 0.1);
+  --success-border: rgba(16, 185, 129, 0.2);
+  --color-on-success: #ffffff;  /* Text color on success backgrounds */
+
+  --warning: #fbbf24;         /* Brighter yellow for better contrast */
+  --warning-bg: rgba(245, 158, 11, 0.1);
+  --warning-border: rgba(245, 158, 11, 0.2);
+
+  --danger: #f87171;          /* Brighter red for better contrast on dark backgrounds */
+  --danger-hover: #dc2626;
+  /* --danger-subtle: Used for subtle text highlights and hover states on danger elements */
+  --danger-subtle: rgba(239, 68, 68, 0.1);
+  /* --danger-bg: Used for container backgrounds (e.g., alert boxes, error message containers) */
+  --danger-bg: rgba(239, 68, 68, 0.1);
+  --danger-border: rgba(239, 68, 68, 0.2);
+
+  --info: #22d3ee;            /* Brighter cyan for better contrast on dark backgrounds */
+  --info-bg: rgba(34, 211, 238, 0.1);
+  --info-border: rgba(34, 211, 238, 0.2);
+
+  /* ===================================
+     BORDER RADIUS
+     =================================== */
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 18px;
+  --radius-xl: 22px;
+  --radius-full: 9999px;
+
+  /* ===================================
+     SHADOWS (Elevation System)
+     =================================== */
+  --shadow-0: 0 0 0 rgba(0, 0, 0, 0);
+  --shadow-1: 0 6px 16px rgba(0, 0, 0, 0.24);
+  --shadow-2: 0 10px 30px rgba(0, 0, 0, 0.35);
+  --shadow-3: 0 20px 40px rgba(0, 0, 0, 0.45);
+
+  /* Glow effects for premium cards */
+  --glow-gold: 0 0 20px rgba(255, 215, 0, 0.5);
+  --glow-brand: 0 0 20px rgba(99, 102, 241, 0.4);
+  --glow-brand-soft: 0 0 20px rgba(99, 102, 241, 0.3);
+  --glow-brand-color: rgba(99, 102, 241, 0.4);
+  --glow-white: rgba(255, 255, 255, 0.8);
+  --glow-violet: 0 0 40px rgba(139, 92, 246, 0.5);
+  --glow-psa10: 0 0 20px rgba(220, 38, 38, 0.2);
+  --glow-psa9: 0 0 20px rgba(37, 99, 235, 0.2);
+
+  /* Navigation shadows */
+  --shadow-nav-inset: inset 0 1px 2px rgba(0, 0, 0, 0.1), 0 2px 8px rgba(0, 0, 0, 0.08);
+  --shadow-nav-active: 0 4px 16px rgba(99, 102, 241, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.1);
+  --shadow-brand-scroll: 0 8px 32px rgba(99, 102, 241, 0.15);
+
+  /* PSA highlight gradients */
+  --gradient-psa10-highlight: linear-gradient(90deg, rgba(220, 38, 38, 0.06) 0%, transparent 100%);
+  --gradient-psa9-highlight: linear-gradient(90deg, rgba(37, 99, 235, 0.04) 0%, transparent 100%);
+
+  /* ===================================
+     PRICE QUALITY INDICATORS
+     =================================== */
+  /* Excellent/Good price (green) */
+  --price-quality-excellent: #22c55e;
+  --price-quality-excellent-bg: rgba(34, 197, 94, 0.1);
+  --price-quality-excellent-gradient-end: rgba(34, 197, 94, 0.4);
+  --price-quality-good: #4ade80;
+  --price-quality-good-bg: rgba(74, 222, 128, 0.1);
+
+  /* Acceptable price (yellow) */
+  --price-quality-acceptable: #eab308;
+  --price-quality-acceptable-bg: rgba(234, 179, 8, 0.1);
+  --price-quality-above: #facc15;
+  --price-quality-above-bg: rgba(250, 204, 21, 0.1);
+
+  /* Too expensive (red) */
+  --price-quality-expensive: #ef4444;
+  --price-quality-expensive-bg: rgba(239, 68, 68, 0.1);
+
+  /* Drop shadow effects */
+  --drop-shadow-image: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.4));
+
+  /* Shine/highlight effects for buttons */
+  --shine-white: rgba(255, 255, 255, 0.4);
+
+  /* Glass effect colors (light variant) */
+  --glass-bg-light: rgba(255, 255, 255, 0.8);
+  --glass-border-light: rgba(255, 255, 255, 0.2);
+
+  /* Pure color references for text */
+  --color-white: #ffffff;
+
+  /* ===================================
+     GLASSMORPHISM
+     =================================== */
+  --glass-bg: rgba(22, 27, 34, 0.7);
+  --glass-border: rgba(139, 152, 207, 0.1);
+  --glass-blur: blur(20px) saturate(180%);
+
+  /* Glass table tokens */
+  --table-header-gradient-end: rgba(31, 41, 55, 0.85);
+  --table-header-border: rgba(99, 102, 241, 0.08);
+  --table-row-border: rgba(31, 41, 55, 0.3);
+  --table-row-hover: rgba(31, 41, 55, 0.3);
+  --table-row-stripe: rgba(11, 18, 32, 0.2);
+  --table-row-selected: rgba(99, 102, 241, 0.08);
+  --table-row-selected-hover: rgba(99, 102, 241, 0.12);
+  --table-row-expanded: rgba(99, 102, 241, 0.06);
+
+  /* ===================================
+     SPACING (Density Scale)
+     =================================== */
+  /* Use --space-* tokens below for all spacing needs */
+
+  /* ===================================
+     TYPOGRAPHY
+     =================================== */
+  --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Monaco, "Cascadia Code", "Roboto Mono", Consolas, "Courier New", monospace;
+
+  /* ===================================
+     RIPPLE EFFECT COLORS
+     =================================== */
+  --ripple-light: rgba(255, 255, 255, 0.6);  /* For primary/success/danger/warning buttons */
+  --ripple-dark: rgba(0, 0, 0, 0.2);          /* For secondary/ghost/outline buttons */
+
+  /* ===================================
+     TRANSITIONS
+     =================================== */
+  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-base: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* ===================================
+     Z-INDEX LAYERS
+     =================================== */
+  --z-dropdown: 1000;
+  --z-sticky: 1020;
+  --z-fixed: 1030;
+  --z-modal-backdrop: 1040;
+  --z-modal: 1050;
+  --z-popover: 1060;
+  --z-tooltip: 1070;
+
+  /* ===================================
+     SPRINT 5: INTELLIGENCE INDICATORS
+     =================================== */
+
+  /* Velocity/Liquidity indicators */
+  --color-velocity-high: #10b981;        /* Green - High liquidity */
+  --color-velocity-moderate: #f59e0b;    /* Yellow - Moderate */
+  --color-velocity-stagnant: #ef4444;    /* Red - Low/stagnant */
+
+  /* Momentum indicators */
+  --color-momentum-up: #10b981;          /* Green - Upward trend */
+  --color-momentum-flat: #6b7280;        /* Gray - Flat */
+  --color-momentum-down: #ef4444;        /* Red - Downward */
+
+  /* Confidence tiers */
+  --color-confidence-high: #10b981;      /* >0.8 confidence */
+  --color-confidence-medium: #f59e0b;    /* 0.6-0.8 */
+  --color-confidence-low: #ef4444;       /* <0.6 */
+
+  /* Badge backgrounds (with transparency) */
+  --color-badge-primary: rgba(99, 102, 241, 0.1);
+  --color-badge-success: rgba(16, 185, 129, 0.1);
+  --color-badge-warning: rgba(245, 158, 11, 0.1);
+  --color-badge-danger: rgba(239, 68, 68, 0.1);
+  --color-badge-info: rgba(8, 145, 178, 0.1);
+  --color-badge-neutral: rgba(107, 114, 128, 0.1);
+
+  /* Badge borders */
+  --color-badge-primary-border: rgba(99, 102, 241, 0.3);
+  --color-badge-success-border: rgba(16, 185, 129, 0.3);
+  --color-badge-warning-border: rgba(245, 158, 11, 0.3);
+  --color-badge-danger-border: rgba(239, 68, 68, 0.3);
+  --color-badge-info-border: rgba(8, 145, 178, 0.3);
+  --color-badge-neutral-border: rgba(107, 114, 128, 0.3);
+
+  /* ===================================
+     STAR RATING COLORS
+     =================================== */
+  --color-star: #fbbf24;           /* Amber - filled star */
+  --color-star-empty: #374151;     /* Gray - empty star (dark mode) */
+
+  /* ===================================
+     SPACING SCALE (Tailwind-compatible)
+     =================================== */
+  --space-0: 0;            /* 0px */
+  --space-1: 0.25rem;      /* 4px */
+  --space-2: 0.5rem;       /* 8px */
+  --space-3: 0.75rem;      /* 12px */
+  --space-4: 1rem;         /* 16px */
+  --space-5: 1.25rem;      /* 20px */
+  --space-6: 1.5rem;       /* 24px */
+  --space-8: 2rem;         /* 32px */
+  --space-10: 2.5rem;      /* 40px */
+  --space-12: 3rem;        /* 48px */
+  --space-16: 4rem;        /* 64px */
+
+  /* Dense layout extensions */
+  --space-0-5: 0.125rem;   /* 2px */
+  --space-1-5: 0.375rem;   /* 6px */
+  --space-2-5: 0.625rem;   /* 10px */
+  --space-3-5: 0.875rem;   /* 14px */
+
+  /* ===================================
+     TYPOGRAPHY SCALE
+     =================================== */
+  --font-size-2xs: 0.625rem;    /* 10px - for tiny labels */
+  --font-size-xs: 0.75rem;      /* 12px */
+  --font-size-sm: 0.875rem;     /* 14px */
+  --font-size-base: 1rem;       /* 16px */
+  --font-size-lg: 1.125rem;     /* 18px */
+  --font-size-xl: 1.25rem;      /* 20px */
+  --font-size-2xl: 1.5rem;      /* 24px */
+  --font-size-3xl: 1.875rem;    /* 30px */
+  --font-size-4xl: 2.25rem;     /* 36px */
+
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  /* ===================================
+     CARD/COMPONENT SIZING
+     =================================== */
+  --card-padding: var(--space-5);
+  --card-gap: var(--space-3-5);
+  --card-radius: var(--radius-lg);
+  --card-shadow: var(--shadow-1);
+
+  /* ===================================
+     CHANNEL COLORS (Sales Channels)
+     =================================== */
+  --channel-ebay: #3b82f6;
+  --channel-tcgplayer: #8b5cf6;
+  --channel-local: #10b981;
+  --channel-other: #6b7280;
+  --channel-gamestop: #ef4444;
+  --channel-website: #f59e0b;
+  --channel-cardshow: #ec4899;
+
+  /* ===================================
+     CHART TOKENS (Dark Mode)
+     =================================== */
+  --chart-line-primary: #2563eb;           /* Blue line color */
+  --chart-line-secondary: #8b5cf6;         /* Purple secondary line */
+  --chart-line-spend: #ef4444;             /* Spend line (red) */
+  --chart-line-recovery: #22c55e;          /* Recovery line (green) */
+  --chart-line-outstanding: #3b82f6;       /* Outstanding line (blue) */
+  --chart-area-fill: rgba(37, 99, 235, 0.2);  /* Semi-transparent fill */
+  --chart-grid: rgba(255, 255, 255, 0.1);  /* Grid lines */
+  --chart-axis-text: #9ca3af;              /* Axis label color */
+  --chart-tooltip-bg: rgba(22, 27, 34, 0.95);  /* Tooltip background */
+  --chart-tooltip-border: rgba(255, 255, 255, 0.1);  /* Tooltip border */
+  --chart-tooltip-text: #e5e7eb;           /* Tooltip text */
+  --chart-cursor: #2563eb;                 /* Cursor/crosshair color */
+
+  /* Badge sizing */
+  --badge-padding-sm: var(--space-0-5) var(--space-2);
+  --badge-padding-md: var(--space-1) var(--space-2-5);
+  --badge-padding-lg: var(--space-1-5) var(--space-3);
+  --badge-radius: var(--radius-md);
+  --badge-font-size-sm: var(--font-size-2xs);
+  --badge-font-size-md: var(--font-size-xs);
+  --badge-font-size-lg: var(--font-size-sm);
+
+  /* ===================================
+     AI ACCENT
+     =================================== */
+  --ai-accent: #a78bfa;
+
+  /* ===================================
+     RECOMMENDATION BADGE TOKENS (Dark Mode)
+     =================================== */
+
+  /* MUST BUY - Premium green with glow */
+  --rec-must-buy-gradient: linear-gradient(135deg, #047857 0%, #059669 100%);
+  --rec-must-buy-border: #065f46;
+  --rec-must-buy-text: #ffffff;
+  --rec-must-buy-shadow: 0 4px 16px rgba(5, 150, 105, 0.5);
+
+  /* STRONG BUY - Green gradient */
+  --rec-strong-buy-gradient: linear-gradient(135deg, #059669 0%, #10b981 100%);
+  --rec-strong-buy-border: #047857;
+  --rec-strong-buy-text: #ffffff;
+  --rec-strong-buy-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+
+  /* BUY - Lighter green */
+  --rec-buy-gradient: linear-gradient(135deg, #10b981 0%, #34d399 100%);
+  --rec-buy-border: #059669;
+  --rec-buy-text: #ffffff;
+  --rec-buy-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+
+  /* BUY WITH CAUTION - Amber/warning */
+  --rec-buy-caution-gradient: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%);
+  --rec-buy-caution-border: #d97706;
+  --rec-buy-caution-text: #ffffff;
+  --rec-buy-caution-shadow: 0 2px 8px rgba(245, 158, 11, 0.4);
+
+  /* WATCH - Neutral gray */
+  --rec-watch-gradient: linear-gradient(135deg, #6b7280 0%, #9ca3af 100%);
+  --rec-watch-border: #4b5563;
+  --rec-watch-text: #ffffff;
+  --rec-watch-shadow: 0 2px 6px rgba(107, 114, 128, 0.3);
+
+  /* AVOID - Red danger */
+  --rec-avoid-gradient: linear-gradient(135deg, #dc2626 0%, #ef4444 100%);
+  --rec-avoid-border: #b91c1c;
+  --rec-avoid-text: #ffffff;
+  --rec-avoid-shadow: 0 2px 8px rgba(220, 38, 38, 0.4);
+}
+
+/* Light mode removed — dark mode only */
+
+/* ===================================
+   BASE STYLES
+   =================================== */
+html,
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  transition: background-color var(--transition-base), color var(--transition-base);
+}
+
+/* Utility classes using tokens */
+.surface-0 {
+  background-color: var(--surface-0);
+}
+
+.surface-1 {
+  background-color: var(--surface-1);
+}
+
+.surface-2 {
+  background-color: var(--surface-2);
+}
+
+.surface-3 {
+  background-color: var(--surface-3);
+}
+
+.surface-4 {
+  background-color: var(--surface-4);
+}
+
+.text-primary {
+  color: var(--text);
+}
+
+.text-muted {
+  color: var(--text-muted);
+}
+
+.text-subtle {
+  color: var(--text-subtle);
+}

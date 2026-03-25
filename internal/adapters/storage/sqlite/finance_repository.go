@@ -1,0 +1,275 @@
+package sqlite
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"fmt"
+	"time"
+
+	"github.com/guarzo/slabledger/internal/domain/campaigns"
+)
+
+// --- Invoices ---
+
+func (r *CampaignsRepository) CreateInvoice(ctx context.Context, inv *campaigns.Invoice) error {
+	query := `INSERT INTO invoices (id, invoice_date, total_cents, paid_cents, due_date, paid_date, status, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	_, err := r.db.ExecContext(ctx, query,
+		inv.ID, inv.InvoiceDate, inv.TotalCents, inv.PaidCents,
+		inv.DueDate, inv.PaidDate, inv.Status, inv.CreatedAt, inv.UpdatedAt,
+	)
+	return err
+}
+
+func (r *CampaignsRepository) GetInvoice(ctx context.Context, id string) (*campaigns.Invoice, error) {
+	query := `SELECT id, invoice_date, total_cents, paid_cents, due_date, paid_date, status, created_at, updated_at
+		FROM invoices WHERE id = ?`
+	var inv campaigns.Invoice
+	err := r.db.QueryRowContext(ctx, query, id).Scan(
+		&inv.ID, &inv.InvoiceDate, &inv.TotalCents, &inv.PaidCents,
+		&inv.DueDate, &inv.PaidDate, &inv.Status, &inv.CreatedAt, &inv.UpdatedAt,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, campaigns.ErrInvoiceNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &inv, nil
+}
+
+func (r *CampaignsRepository) ListInvoices(ctx context.Context) (result []campaigns.Invoice, err error) {
+	query := `SELECT id, invoice_date, total_cents, paid_cents, due_date, paid_date, status, created_at, updated_at
+		FROM invoices ORDER BY invoice_date DESC`
+	rows, err := r.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if cerr := rows.Close(); err == nil && cerr != nil {
+			err = cerr
+		}
+	}()
+
+	for rows.Next() {
+		var inv campaigns.Invoice
+		if err := rows.Scan(
+			&inv.ID, &inv.InvoiceDate, &inv.TotalCents, &inv.PaidCents,
+			&inv.DueDate, &inv.PaidDate, &inv.Status, &inv.CreatedAt, &inv.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		result = append(result, inv)
+	}
+	return result, rows.Err()
+}
+
+func (r *CampaignsRepository) UpdateInvoice(ctx context.Context, inv *campaigns.Invoice) error {
+	result, err := r.db.ExecContext(ctx,
+		`UPDATE invoices SET total_cents = ?, paid_cents = ?, due_date = ?, paid_date = ?, status = ?, updated_at = ? WHERE id = ?`,
+		inv.TotalCents, inv.PaidCents, inv.DueDate, inv.PaidDate, inv.Status, inv.UpdatedAt, inv.ID,
+	)
+	if err != nil {
+		return err
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return campaigns.ErrInvoiceNotFound
+	}
+	return nil
+}
+
+// --- Cashflow Config ---
+
+func (r *CampaignsRepository) GetCashflowConfig(ctx context.Context) (*campaigns.CashflowConfig, error) {
+	query := `SELECT credit_limit_cents, cash_buffer_cents, updated_at FROM cashflow_config WHERE id = 1`
+	var cfg campaigns.CashflowConfig
+	err := r.db.QueryRowContext(ctx, query).Scan(&cfg.CreditLimitCents, &cfg.CashBufferCents, &cfg.UpdatedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return &campaigns.CashflowConfig{CreditLimitCents: 5000000, CashBufferCents: 1000000}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &cfg, nil
+}
+
+func (r *CampaignsRepository) UpdateCashflowConfig(ctx context.Context, cfg *campaigns.CashflowConfig) error {
+	_, err := r.db.ExecContext(ctx,
+		`INSERT INTO cashflow_config (id, credit_limit_cents, cash_buffer_cents, updated_at) VALUES (1, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET credit_limit_cents = ?, cash_buffer_cents = ?, updated_at = ?`,
+		cfg.CreditLimitCents, cfg.CashBufferCents, cfg.UpdatedAt,
+		cfg.CreditLimitCents, cfg.CashBufferCents, cfg.UpdatedAt,
+	)
+	return err
+}
+
+// --- Credit Summary ---
+
+func (r *CampaignsRepository) GetCreditSummary(ctx context.Context) (*campaigns.CreditSummary, error) {
+	cfg, err := r.GetCashflowConfig(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// Combined purchase-table query:
+	//   outstanding = total invoiced spend (non-refunded) before payment adjustments
+	//   refunded    = total spend on refunded purchases
+	//   avgDailySpend = outstanding spend / days since first invoiced purchase (for projection)
+	var outstanding, refunded int
+	var avgDailySpend float64
+	err = r.db.QueryRowContext(ctx,
+		`SELECT
+			COALESCE(SUM(CASE WHEN was_refunded = 0 AND invoice_date != '' THEN buy_cost_cents + psa_sourcing_fee_cents ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN was_refunded = 1 THEN buy_cost_cents + psa_sourcing_fee_cents ELSE 0 END), 0),
+			COALESCE(
+				CAST(SUM(CASE WHEN was_refunded = 0 AND invoice_date != '' THEN buy_cost_cents + psa_sourcing_fee_cents ELSE 0 END) AS REAL) /
+				MAX(1, JULIANDAY('now') - JULIANDAY(MIN(CASE WHEN was_refunded = 0 AND invoice_date != '' THEN purchase_date END))),
+			0)
+		FROM campaign_purchases WHERE invoice_date != ''`,
+	).Scan(&outstanding, &refunded, &avgDailySpend)
+	if err != nil {
+		return nil, err
+	}
+
+	// Combined invoice-table query: paid total + unpaid count + next due date
+	var paidTotal, unpaidCount int
+	var dueDateStr sql.NullString
+	err = r.db.QueryRowContext(ctx,
+		`SELECT
+			COALESCE(SUM(CASE WHEN status IN ('paid', 'partial') THEN paid_cents ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN status != 'paid' THEN 1 ELSE 0 END), 0),
+			MIN(CASE WHEN status != 'paid' AND due_date != '' THEN due_date END)
+		FROM invoices`,
+	).Scan(&paidTotal, &unpaidCount, &dueDateStr)
+	if err != nil {
+		return nil, err
+	}
+
+	outstanding -= paidTotal
+	if outstanding < 0 {
+		outstanding = 0
+	}
+
+	utilization := float64(0)
+	if cfg.CreditLimitCents > 0 {
+		utilization = (float64(outstanding) / float64(cfg.CreditLimitCents)) * 100
+	}
+
+	alertLevel := "ok"
+	if utilization >= 90 {
+		alertLevel = "critical"
+	} else if utilization >= 80 {
+		alertLevel = "warning"
+	}
+
+	// Find days to next unpaid invoice due date (default 30)
+	daysToNext := 30
+	if dueDateStr.Valid && dueDateStr.String != "" {
+		if dueDate, err := time.Parse("2006-01-02", dueDateStr.String); err == nil {
+			diff := int(time.Until(dueDate).Hours() / 24)
+			if diff > 0 {
+				daysToNext = diff
+			}
+		}
+	}
+
+	projectedExposure := outstanding + int(avgDailySpend*float64(daysToNext))
+
+	return &campaigns.CreditSummary{
+		CreditLimitCents:       cfg.CreditLimitCents,
+		OutstandingCents:       outstanding,
+		UtilizationPct:         utilization,
+		RefundedCents:          refunded,
+		PaidCents:              paidTotal,
+		UnpaidInvoiceCount:     unpaidCount,
+		AlertLevel:             alertLevel,
+		ProjectedExposureCents: projectedExposure,
+		DaysToNextInvoice:      daysToNext,
+	}, nil
+}
+
+// --- Revocation Flags ---
+
+func (r *CampaignsRepository) CreateRevocationFlag(ctx context.Context, flag *campaigns.RevocationFlag) error {
+	query := `
+		INSERT INTO revocation_flags (id, segment_label, segment_dimension, reason, status, email_text, created_at, sent_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	`
+	_, err := r.db.ExecContext(ctx, query,
+		flag.ID, flag.SegmentLabel, flag.SegmentDimension, flag.Reason,
+		flag.Status, flag.EmailText, flag.CreatedAt, flag.SentAt,
+	)
+	return err
+}
+
+func (r *CampaignsRepository) ListRevocationFlags(ctx context.Context) ([]campaigns.RevocationFlag, error) {
+	query := `
+		SELECT id, segment_label, segment_dimension, reason, status, email_text, created_at, sent_at
+		FROM revocation_flags
+		ORDER BY created_at DESC
+	`
+	rows, err := r.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if cerr := rows.Close(); err == nil && cerr != nil {
+			err = cerr
+		}
+	}()
+
+	result := make([]campaigns.RevocationFlag, 0, 64)
+	for rows.Next() {
+		var f campaigns.RevocationFlag
+		if err := rows.Scan(
+			&f.ID, &f.SegmentLabel, &f.SegmentDimension, &f.Reason,
+			&f.Status, &f.EmailText, &f.CreatedAt, &f.SentAt,
+		); err != nil {
+			return nil, err
+		}
+		result = append(result, f)
+	}
+	return result, rows.Err()
+}
+
+func (r *CampaignsRepository) GetLatestRevocationFlag(ctx context.Context) (*campaigns.RevocationFlag, error) {
+	query := `
+		SELECT id, segment_label, segment_dimension, reason, status, email_text, created_at, sent_at
+		FROM revocation_flags
+		ORDER BY created_at DESC
+		LIMIT 1
+	`
+	var f campaigns.RevocationFlag
+	err := r.db.QueryRowContext(ctx, query).Scan(
+		&f.ID, &f.SegmentLabel, &f.SegmentDimension, &f.Reason,
+		&f.Status, &f.EmailText, &f.CreatedAt, &f.SentAt,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &f, nil
+}
+
+func (r *CampaignsRepository) UpdateRevocationFlagStatus(ctx context.Context, id string, status string, sentAt *time.Time) error {
+	query := `UPDATE revocation_flags SET status = ?, sent_at = ? WHERE id = ?`
+	result, err := r.db.ExecContext(ctx, query, status, sentAt, id)
+	if err != nil {
+		return err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return fmt.Errorf("revocation flag %q: %w", id, campaigns.ErrRevocationFlagNotFound)
+	}
+	return nil
+}

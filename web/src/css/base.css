@@ -1,0 +1,509 @@
+/**
+ * Base CSS - Essential styles with no Tailwind alternative
+ *
+ * This file contains only:
+ * 1. Tailwind directives
+ * 2. CSS design tokens (custom properties)
+ * 3. Body defaults (font, color, background)
+ * 4. Base typography (h1-h6, p, a)
+ * 5. Accessibility styles (focus-visible, reduced motion, screen reader)
+ *
+ * All design tokens are managed in tailwind.config.cjs + tokens.css
+ */
+
+@import "tailwindcss";
+@import "./tokens.css";
+
+@utility scrollbar-none {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@utility scrollbar-dark {
+  scrollbar-width: thin;
+  scrollbar-color: var(--surface-3) var(--surface-0);
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+  &::-webkit-scrollbar-track {
+    background: var(--surface-0);
+    border-radius: 3px;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: var(--surface-3);
+    border-radius: 3px;
+    &:hover {
+      background: var(--surface-4);
+    }
+  }
+}
+
+/* ===================================
+   DATA TABLE STYLES
+   =================================== */
+
+/* Reusable glass table container */
+.glass-table {
+  border-radius: 12px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: none;
+}
+
+/* Table header row */
+.glass-table-header {
+  background: transparent;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* Glass table header cell */
+.glass-table-th {
+  padding: 0.75rem 0.75rem;
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+/* Glass table body row */
+.glass-table-row {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  transition: background-color 150ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-table-row:hover {
+  background-color: rgba(255, 255, 255, 0.02);
+}
+
+.glass-table-row:nth-child(even) {
+  background-color: transparent;
+}
+
+.glass-table-row:nth-child(even):hover {
+  background-color: rgba(255, 255, 255, 0.02);
+}
+
+/* Glass table body cell */
+.glass-table-td {
+  padding: 0.75rem 0.75rem;
+}
+
+/* Virtualized row variant — data attributes instead of :nth-child */
+.glass-vrow {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  transition: background-color 150ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.glass-vrow:hover {
+  background-color: rgba(255, 255, 255, 0.02);
+}
+.glass-vrow[data-stripe="true"] {
+  background-color: transparent;
+}
+.glass-vrow[data-stripe="true"]:hover {
+  background-color: rgba(255, 255, 255, 0.02);
+}
+.glass-vrow[data-selected="true"] {
+  background-color: var(--table-row-selected);
+}
+.glass-vrow[data-selected="true"]:hover {
+  background-color: var(--table-row-selected-hover);
+}
+
+/* P/L status indicators */
+.glass-vrow[data-pl="positive"] {
+  border-left: 2px solid var(--success);
+}
+.glass-vrow[data-pl="negative"] {
+  border-left: 2px solid var(--danger);
+}
+.glass-vrow[data-pl="neutral"] {
+  border-left: 2px solid transparent;
+}
+
+/* Expanded detail panel within virtualized rows */
+.glass-vrow-expanded {
+  background: rgba(255, 255, 255, 0.015);
+  animation: inventory-expand-in 200ms ease-out;
+  transform-origin: top;
+}
+
+@keyframes inventory-expand-in {
+  from {
+    opacity: 0;
+    transform: scaleY(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  @keyframes inventory-expand-in {
+    from { opacity: 1; transform: scaleY(1); }
+    to { opacity: 1; transform: scaleY(1); }
+  }
+}
+
+/* Scroll shadow overlays for table containers */
+.scroll-shadow-container {
+  position: relative;
+  &::before,
+  &::after {
+    content: '';
+    position: sticky;
+    left: 0;
+    right: 0;
+    height: 24px;
+    pointer-events: none;
+    z-index: 5;
+    display: block;
+  }
+  &::before {
+    top: 0;
+    background: linear-gradient(to bottom, var(--surface-1), transparent);
+    margin-bottom: -24px;
+  }
+  &::after {
+    bottom: 0;
+    background: linear-gradient(to top, var(--surface-1), transparent);
+    margin-top: -24px;
+  }
+}
+
+/* ===================================
+   DYNAMIC BACKGROUND
+   =================================== */
+
+/**
+ * Modern multi-layered background with radial gradients
+ * Creates depth and visual interest without being distracting
+ */
+body {
+  font-size: 1rem;
+  line-height: 1.5;
+  background:
+    radial-gradient(ellipse at top, var(--bg-gradient-top), transparent),
+    radial-gradient(ellipse at bottom, var(--bg-gradient-bottom), transparent),
+    linear-gradient(180deg, var(--bg-gradient-start) 0%, var(--bg-gradient-end) 100%);
+  background-attachment: fixed;
+}
+
+/* ===================================
+   BASE TYPOGRAPHY
+   =================================== */
+
+@layer base {
+  h1, h2, h3, h4, h5, h6 {
+    font-weight: 600;
+    line-height: 1.25;
+    color: var(--color-heading);
+  }
+
+  h1 { font-size: 2.25rem; }
+  h2 { font-size: 1.875rem; }
+  h3 { font-size: 1.5rem; }
+  h4 { font-size: 1.25rem; }
+  h5 { font-size: 1.125rem; }
+  h6 { font-size: 1rem; }
+
+  p {
+    margin-bottom: 1rem;
+    color: var(--color-paragraph);
+  }
+
+  a {
+    color: var(--color-link);
+    text-decoration: none;
+    transition: color 150ms;
+  }
+
+  a:hover {
+    color: var(--color-link-hover);
+  }
+}
+
+
+/* ===================================
+   ACCESSIBILITY
+   =================================== */
+
+/* Screen reader only text */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* Skip to main content - only visible on focus */
+.skip-to-main {
+  position: absolute;
+  top: -40px;
+  left: 0;
+  background: var(--primary);
+  color: var(--color-white);
+  padding: 8px 16px;
+  text-decoration: none;
+  z-index: 100;
+  border-radius: 0 0 4px 0;
+}
+
+.skip-to-main:focus {
+  top: 0;
+}
+
+/* Focus indicators for keyboard navigation */
+*:focus {
+  outline: none;
+}
+
+*:focus-visible {
+  outline: 3px solid var(--color-focus);
+  outline-offset: 3px;
+  border-radius: 0.25rem;
+  box-shadow: 0 0 0 4px var(--color-focus-ring);
+}
+
+/* Enhanced focus for interactive elements */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[role="button"]:focus-visible,
+[role="link"]:focus-visible {
+  outline: 3px solid var(--color-focus);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px var(--color-focus-ring-subtle);
+}
+
+
+/* Focus indicators for cards and interactive containers */
+[data-interactive="true"]:focus-visible {
+  outline: 3px solid var(--color-focus);
+  outline-offset: 4px;
+  box-shadow: 0 0 0 6px var(--color-focus-ring-subtle);
+}
+
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ===================================
+   TYPOGRAPHY ENHANCEMENTS
+   =================================== */
+
+/**
+ * Tabular numbers for consistent alignment
+ * Perfect for prices, percentages, and metrics
+ */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/**
+ * Gradient text utilities
+ * Uses Pokémon-themed gradients from tokens.css
+ */
+.text-gradient {
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-color: transparent;
+}
+
+/**
+ * Gradient text for premium/high-value items
+ */
+.text-gradient-premium {
+  background-image: linear-gradient(135deg, var(--brand-400) 0%, var(--brand-600) 100%);
+}
+
+/* Light mode removed — dark mode only */
+
+/* ===================================
+   ANIMATIONS
+   =================================== */
+
+/**
+ * Ripple animation for button clicks
+ * Used by useRipple hook
+ */
+@keyframes ripple-animation {
+  to {
+    transform: scale(4);
+    opacity: 0;
+  }
+}
+
+/* Respect reduced motion for ripple */
+@media (prefers-reduced-motion: reduce) {
+  @keyframes ripple-animation {
+    to {
+      transform: scale(1);
+      opacity: 0;
+    }
+  }
+}
+
+/**
+ * Toast slide-in animation (from right edge)
+ * Used by Radix Toast component
+ */
+@keyframes slide-in {
+  from { transform: translateX(calc(100% + 1rem)); }
+  to { transform: translateX(0); }
+}
+
+/**
+ * Toast swipe-out animation
+ * Used by Radix Toast swipe-to-dismiss
+ */
+@keyframes swipe-out {
+  from { transform: translateX(var(--radix-toast-swipe-end-x)); }
+  to { transform: translateX(calc(100% + 1rem)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  @keyframes slide-in {
+    from { transform: translateX(0); }
+    to { transform: translateX(0); }
+  }
+  @keyframes swipe-out {
+    from { transform: translateX(0); }
+    to { transform: translateX(0); }
+  }
+}
+
+/**
+ * Fade-in animation for split-view layout
+ * Used in PricingPage results
+ */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-in {
+  animation: fade-in 0.4s ease-out;
+}
+
+/* Respect reduced motion for fade-in */
+@media (prefers-reduced-motion: reduce) {
+  .fade-in {
+    animation: none;
+  }
+}
+
+/**
+ * Drawer slide animations (from right edge)
+ * Used by PriceLookupDrawer
+ */
+@keyframes slideInFromRight {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+@keyframes slideOutToRight {
+  from { transform: translateX(0); }
+  to { transform: translateX(100%); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  @keyframes slideInFromRight {
+    from { transform: translateX(0); }
+    to { transform: translateX(0); }
+  }
+  @keyframes slideOutToRight {
+    from { transform: translateX(0); }
+    to { transform: translateX(0); }
+  }
+}
+
+/* ===================================
+   PRINT STYLES
+   =================================== */
+@media print {
+  @page {
+    margin: 0.4in 0.35in;
+    size: portrait;
+  }
+
+  body {
+    background: white !important;
+    color: black !important;
+  }
+
+  .print\:hidden,
+  header,
+  nav,
+  .no-print {
+    display: none !important;
+  }
+
+  #main-content {
+    padding: 0 !important;
+    min-height: auto !important;
+  }
+
+  .sell-sheet {
+    padding: 0;
+    max-width: 100% !important;
+    font-size: 9pt;
+  }
+
+  .sell-sheet table {
+    border-collapse: collapse;
+    width: 100%;
+  }
+
+  .sell-sheet th,
+  .sell-sheet td {
+    border: 1px solid #ddd;
+    padding: 4px 6px;
+    line-height: 1.35;
+  }
+
+  .sell-sheet tr {
+    break-inside: avoid;
+  }
+
+  .print-color-adjust {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}

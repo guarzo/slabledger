@@ -1,0 +1,57 @@
+/**
+ * Navigation Component
+ *
+ * Minimal text-link navigation with subtle active state styling.
+ */
+import { Link, useLocation } from 'react-router-dom';
+
+export default function Navigation() {
+  const location = useLocation();
+
+  const navItems = [
+    { path: '/', label: 'Dashboard', shortLabel: 'Home' },
+    { path: '/campaigns', label: 'Campaigns', shortLabel: 'Campaigns' },
+    { path: '/inventory', label: 'Inventory', shortLabel: 'Inv' },
+    { path: '/insights', label: 'Insights', shortLabel: 'Stats' },
+    { path: '/content', label: 'Content', shortLabel: 'Content' },
+    { path: '/tools', label: 'Tools', shortLabel: 'Tools' },
+  ];
+
+  const isActive = (path: string) => {
+    if (path === '/') return location.pathname === '/';
+    return location.pathname === path || location.pathname.startsWith(path + '/');
+  };
+
+  return (
+    <nav
+      className="flex items-center gap-1"
+      role="navigation"
+      aria-label="Main navigation"
+    >
+      {navItems.map((item) => (
+        <Link
+          key={item.path}
+          to={item.path}
+          className={`
+            relative inline-flex items-center px-3.5 py-2
+            text-sm rounded-md transition-all duration-200
+            ${isActive(item.path)
+              ? 'text-white font-semibold bg-[rgba(99,102,241,0.15)] border border-[rgba(99,102,241,0.2)]'
+              : 'text-[#94a3b8] font-medium hover:text-[var(--text)] hover:bg-[rgba(255,255,255,0.04)] border border-transparent'
+            }
+          `}
+          title={item.label}
+          aria-label={`Navigate to ${item.label}`}
+          aria-current={isActive(item.path) ? 'page' : undefined}
+        >
+          <span className="hidden lg:inline leading-none whitespace-nowrap">
+            {item.label}
+          </span>
+          <span className="lg:hidden leading-none whitespace-nowrap">
+            {item.shortLabel}
+          </span>
+        </Link>
+      ))}
+    </nav>
+  );
+}

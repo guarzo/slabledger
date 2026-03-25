@@ -1,0 +1,36 @@
+version: "2"
+
+linters:
+  default: none
+  enable:
+    - govet
+    - staticcheck
+    - errcheck
+    - ineffassign
+    - unused
+    - gocritic
+    - unconvert
+    - misspell
+  settings:
+    gocritic:
+      disabled-checks:
+        - ifElseChain
+        - elseif
+        - exitAfterDefer
+    errcheck:
+      check-blank: true  # Check blank assignments like _ = foo()
+      check-type-assertions: true  # Check type assertions
+    staticcheck:
+      checks: ["all", "-SA5011", "-SA9003", "-ST1000", "-ST1020", "-ST1021", "-ST1016", "-ST1003"]  # Disable nil-after-fatal and comment format/naming checks
+  exclusions:
+    paths:
+      - web/node_modules
+    rules:
+      - path: _test\.go
+        linters:
+          - errcheck
+          - gocritic
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

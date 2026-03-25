@@ -1,0 +1,425 @@
+package azureai
+
+import (
+	"bufio"
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"strings"
+	"time"
+
+	"github.com/guarzo/slabledger/internal/adapters/clients/httpx"
+	"github.com/guarzo/slabledger/internal/domain/ai"
+	"github.com/guarzo/slabledger/internal/domain/observability"
+)
+
+// Config configures the Azure AI Foundry client.
+type Config struct {
+	Endpoint       string // https://<resource>.openai.azure.com
+	APIKey         string // Azure API key
+	DeploymentName string // e.g. "gpt-4o"
+	APIVersion     string // e.g. "2024-12-01-preview"
+}
+
+// Option configures the client.
+type Option func(*Client)
+
+// WithLogger sets the logger.
+func WithLogger(l observability.Logger) Option {
+	return func(c *Client) { c.logger = l }
+}
+
+// Client implements ai.LLMProvider for Azure AI Foundry (OpenAI-compatible).
+type Client struct {
+	config     Config
+	httpClient *http.Client
+	logger     observability.Logger
+}
+
+// NewClient creates a new Azure AI Foundry client.
+// This client only supports API-key authentication. For Azure OpenAI endpoints
+// (*.openai.azure.com, *.cognitiveservices.azure.com, *.services.ai.azure.com)
+// the key is sent via the "api-key" header. Bearer-token (Entra ID / managed
+// identity) auth is not supported — use a separate client or extend Config if
+// needed.
+func NewClient(cfg Config, opts ...Option) (*Client, error) {
+	if cfg.Endpoint == "" {
+		return nil, fmt.Errorf("azureai: Endpoint is required")
+	}
+	if cfg.APIKey == "" {
+		return nil, fmt.Errorf("azureai: APIKey is required (bearer-token auth is not supported)")
+	}
+	if cfg.DeploymentName == "" {
+		return nil, fmt.Errorf("azureai: DeploymentName is required")
+	}
+	if cfg.APIVersion == "" {
+		cfg.APIVersion = "2024-12-01-preview"
+	}
+
+	c := &Client{
+		config: cfg,
+		// No http.Client.Timeout — it covers the entire response lifetime
+		// and would abort long-running SSE streams. Connection-level timeouts
+		// are configured on the Transport; stream deadlines come from ctx.
+		httpClient: &http.Client{
+			Transport: httpx.DefaultTransport(),
+		},
+	}
+	for _, opt := range opts {
+		opt(c)
+	}
+	return c, nil
+}
+
+var _ ai.LLMProvider = (*Client)(nil)
+
+// rateLimitError signals a 429 from the API (HTTP or SSE stream).
+type rateLimitError struct{ raw string }
+
+func (e *rateLimitError) Error() string {
+	return "responses API rate limited: " + e.raw
+}
+
+const maxStreamRetries = 3
+
+// useResponsesAPI returns true for AI Foundry endpoints that require the Responses API
+// (newer models like gpt-5.4-pro only support this API).
+func (c *Client) useResponsesAPI() bool {
+	return strings.Contains(c.config.Endpoint, ".services.ai.azure.com")
+}
+
+// StreamCompletion streams a chat completion response from Azure AI.
+// Automatically selects the Responses API for AI Foundry endpoints
+// and the Chat Completions API for Azure OpenAI endpoints.
+// Retries automatically on transient errors (rate limits, connection resets)
+// with exponential backoff when no chunks have been emitted yet.
+func (c *Client) StreamCompletion(ctx context.Context, req ai.CompletionRequest, stream func(ai.CompletionChunk)) error {
+	var lastErr error
+	for attempt := range maxStreamRetries {
+		emitted := false
+		wrappedStream := func(chunk ai.CompletionChunk) {
+			emitted = true
+			stream(chunk)
+		}
+		lastErr = c.doStreamCompletion(ctx, req, wrappedStream)
+		if lastErr == nil {
+			return nil
+		}
+		// Only retry pre-stream errors (no chunks emitted yet).
+		if emitted || attempt == maxStreamRetries-1 {
+			break
+		}
+		// Don't retry permanent client errors (4xx except 429).
+		if isPermanentError(lastErr) {
+			break
+		}
+		// Rate limits need longer backoff; other transient errors use shorter.
+		var rlErr *rateLimitError
+		var backoff time.Duration
+		if errors.As(lastErr, &rlErr) {
+			backoff = time.Duration(30<<attempt) * time.Second // 30s, 60s, 120s
+		} else {
+			backoff = time.Duration(5<<attempt) * time.Second // 5s, 10s, 20s
+		}
+		if c.logger != nil {
+			c.logger.Warn(ctx, "retrying after transient error",
+				observability.Int("attempt", attempt+1),
+				observability.Int("backoffSec", int(backoff.Seconds())),
+				observability.Err(lastErr),
+			)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(backoff):
+		}
+	}
+	return lastErr
+}
+
+func (c *Client) doStreamCompletion(ctx context.Context, req ai.CompletionRequest, stream func(ai.CompletionChunk)) error {
+	endpoint := strings.TrimRight(c.config.Endpoint, "/")
+
+	var body []byte
+	var url string
+	var err error
+
+	if c.useResponsesAPI() {
+		apiReq := c.buildResponsesRequest(req)
+		// Log request shape for diagnostics.
+		if c.logger != nil {
+			fcCount := 0
+			fcoCount := 0
+			msgCount := 0
+			for _, item := range apiReq.Input {
+				if v, ok := item.(responsesInputItem); ok {
+					switch v.Type {
+					case "function_call":
+						fcCount++
+					case "function_call_output":
+						fcoCount++
+					case "message":
+						msgCount++
+					}
+				}
+			}
+			c.logger.Info(ctx, "responses api request",
+				observability.String("previousResponseID", apiReq.PreviousResponseID),
+				observability.Int("inputItems", len(apiReq.Input)),
+				observability.Int("functionCalls", fcCount),
+				observability.Int("functionCallOutputs", fcoCount),
+				observability.Int("messages", msgCount),
+			)
+		}
+		body, err = json.Marshal(apiReq)
+		url = c.buildResponsesURL(endpoint)
+	} else {
+		apiReq := c.buildRequest(req)
+		body, err = json.Marshal(apiReq)
+		url = c.buildURL(endpoint)
+	}
+	if err != nil {
+		return fmt.Errorf("marshal request: %w", err)
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("create request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	// Azure OpenAI domains use "api-key" header; other endpoints use Bearer token.
+	if isAzureOpenAI(endpoint) {
+		httpReq.Header.Set("api-key", c.config.APIKey)
+	} else {
+		httpReq.Header.Set("Authorization", "Bearer "+c.config.APIKey)
+	}
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return fmt.Errorf("http request: %w", err)
+	}
+	defer resp.Body.Close() //nolint:errcheck // best-effort close on HTTP response
+
+	if resp.StatusCode == http.StatusTooManyRequests {
+		respBody, _ := io.ReadAll(resp.Body) //nolint:errcheck
+		return &rateLimitError{raw: string(respBody)}
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body) //nolint:errcheck // best-effort read for error message
+		if c.logger != nil {
+			c.logger.Error(ctx, "azure ai request failed",
+				observability.Int("status", resp.StatusCode),
+				observability.Int("request_body_size", len(body)),
+			)
+		}
+		return fmt.Errorf("azure ai returned %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	if c.useResponsesAPI() {
+		return c.parseResponsesSSEStream(ctx, resp.Body, stream)
+	}
+	return c.parseSSEStream(ctx, resp.Body, stream)
+}
+
+// buildRequest converts our domain types to the Azure OpenAI API format.
+func (c *Client) buildRequest(req ai.CompletionRequest) chatCompletionRequest {
+	var messages []apiMessage
+
+	if req.SystemPrompt != "" {
+		messages = append(messages, apiMessage{
+			Role:    "system",
+			Content: req.SystemPrompt,
+		})
+	}
+
+	for _, msg := range req.Messages {
+		apiMsg := apiMessage{
+			Role:    string(msg.Role),
+			Content: msg.Content,
+		}
+		if msg.ToolCallID != "" {
+			apiMsg.ToolCallID = msg.ToolCallID
+		}
+		if len(msg.ToolCalls) > 0 {
+			for _, tc := range msg.ToolCalls {
+				apiMsg.ToolCalls = append(apiMsg.ToolCalls, apiToolCall{
+					ID:   tc.ID,
+					Type: "function",
+					Function: apiFunction{
+						Name:      tc.Name,
+						Arguments: tc.Arguments,
+					},
+				})
+			}
+		}
+		messages = append(messages, apiMsg)
+	}
+
+	var tools []apiTool
+	for _, td := range req.Tools {
+		tools = append(tools, apiTool{
+			Type: "function",
+			Function: apiToolFunction{
+				Name:        td.Name,
+				Description: td.Description,
+				Parameters:  td.Parameters,
+			},
+		})
+	}
+
+	ccr := chatCompletionRequest{
+		Messages:    messages,
+		Tools:       tools,
+		Stream:      true,
+		Temperature: req.Temperature,
+		MaxTokens:   req.MaxTokens,
+	}
+
+	// AI Foundry inference API requires the model name in the request body.
+	// Azure OpenAI encodes it in the URL path instead.
+	if !isAzureOpenAI(c.config.Endpoint) {
+		ccr.Model = c.config.DeploymentName
+	}
+
+	return ccr
+}
+
+// isAzureOpenAI returns true if the endpoint is an Azure OpenAI-compatible service
+// that uses the /openai/deployments/{name}/chat/completions URL pattern and api-key auth.
+// Matches: .openai.azure.com, .cognitiveservices.azure.com, and .services.ai.azure.com (AI Foundry).
+func isAzureOpenAI(endpoint string) bool {
+	return strings.Contains(endpoint, ".openai.azure.com") ||
+		strings.Contains(endpoint, ".cognitiveservices.azure.com") ||
+		strings.Contains(endpoint, ".services.ai.azure.com")
+}
+
+// buildURL returns the chat completions URL for the configured endpoint.
+// Azure OpenAI: {endpoint}/openai/deployments/{deployment}/chat/completions?api-version={version}
+// AI Foundry:   {endpoint}/chat/completions
+func (c *Client) buildURL(endpoint string) string {
+	if isAzureOpenAI(endpoint) {
+		return fmt.Sprintf("%s/openai/deployments/%s/chat/completions?api-version=%s",
+			endpoint, c.config.DeploymentName, c.config.APIVersion)
+	}
+	return endpoint + "/chat/completions"
+}
+
+// parseSSEStream reads the SSE event stream and emits CompletionChunks.
+func (c *Client) parseSSEStream(ctx context.Context, body io.Reader, stream func(ai.CompletionChunk)) error {
+	scanner := bufio.NewScanner(body)
+	// Increase buffer for potentially large tool call arguments.
+	scanner.Buffer(make([]byte, 0, 64*1024), 256*1024)
+
+	// Accumulate tool calls across chunks (they arrive incrementally).
+	toolCalls := make(map[int]*ai.ToolCall)
+
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		if !strings.HasPrefix(line, "data: ") {
+			continue
+		}
+		data := strings.TrimPrefix(line, "data: ")
+
+		if data == "[DONE]" {
+			// Emit any accumulated tool calls with the final chunk.
+			if len(toolCalls) > 0 {
+				stream(ai.CompletionChunk{
+					ToolCalls: flattenToolCalls(toolCalls),
+					Done:      true,
+				})
+			} else {
+				stream(ai.CompletionChunk{Done: true})
+			}
+			return nil
+		}
+
+		var chunk chatCompletionChunk
+		if err := json.Unmarshal([]byte(data), &chunk); err != nil {
+			if c.logger != nil {
+				c.logger.Warn(ctx, "failed to parse SSE chunk",
+					observability.String("data", data),
+					observability.Err(err),
+				)
+			}
+			continue
+		}
+
+		if len(chunk.Choices) == 0 {
+			continue
+		}
+		delta := chunk.Choices[0].Delta
+
+		// Stream text content.
+		if delta.Content != "" {
+			stream(ai.CompletionChunk{Delta: delta.Content})
+		}
+
+		// Accumulate tool calls (they arrive as partial deltas).
+		for _, tc := range delta.ToolCalls {
+			existing, ok := toolCalls[tc.Index]
+			if !ok {
+				existing = &ai.ToolCall{}
+				toolCalls[tc.Index] = existing
+			}
+			if tc.ID != "" {
+				existing.ID = tc.ID
+			}
+			if tc.Function.Name != "" {
+				existing.Name = tc.Function.Name
+			}
+			existing.Arguments += tc.Function.Arguments
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return fmt.Errorf("reading SSE stream: %w", err)
+	}
+
+	// Stream ended without [DONE] — emit what we have.
+	if c.logger != nil {
+		c.logger.Warn(ctx, "SSE stream ended without [DONE]",
+			observability.Int("pending_tool_calls", len(toolCalls)),
+		)
+	}
+	if len(toolCalls) > 0 {
+		stream(ai.CompletionChunk{
+			ToolCalls: flattenToolCalls(toolCalls),
+			Done:      true,
+		})
+	}
+	return nil
+}
+
+// isPermanentError returns true for non-retriable client errors (4xx except 429).
+func isPermanentError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var rlErr *rateLimitError
+	if errors.As(err, &rlErr) {
+		return false // 429 is retriable
+	}
+	msg := err.Error()
+	// Match "azure ai returned 4XX:" where XX is not 29
+	if strings.HasPrefix(msg, "azure ai returned 4") && !strings.HasPrefix(msg, "azure ai returned 429") {
+		return true
+	}
+	return false
+}
+
+func flattenToolCalls(m map[int]*ai.ToolCall) []ai.ToolCall {
+	result := make([]ai.ToolCall, 0, len(m))
+	for i := 0; i < len(m); i++ {
+		if tc, ok := m[i]; ok {
+			result = append(result, *tc)
+		}
+	}
+	return result
+}

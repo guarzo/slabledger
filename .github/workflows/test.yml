@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    - cron: '0 6 * * 1'  # Weekly on Monday at 06:00 UTC
+  workflow_dispatch:
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v6
+
+    - name: Set up Go
+      uses: actions/setup-go@v6
+      with:
+        go-version: '1.26'
+        cache: true
+
+    - name: Download dependencies
+      run: go mod download
+
+    - name: Run tests with coverage and race detection
+      run: go test -race -timeout 10m -coverprofile=coverage.out -covermode=atomic ./...
+
+    - name: Run linter
+      uses: golangci/golangci-lint-action@v9
+      with:
+        version: latest
+        args: --timeout=3m
+
+    - name: Build binary
+      run: go build -o slabledger ./cmd/slabledger
+
+    - name: Verify build
+      run: ./slabledger --help
+
+    - name: Upload coverage
+      uses: codecov/codecov-action@v5
+      if: always()
+      continue-on-error: true
+      with:
+        file: ./coverage.out
+        fail_ci_if_error: false
+
+  integration:
+    runs-on: ubuntu-latest
+    # Run weekly on Mondays at 06:00 UTC, or on-demand via workflow_dispatch
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    environment: integration-tests
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v6
+
+    - name: Set up Go
+      uses: actions/setup-go@v6
+      with:
+        go-version: '1.26'
+        cache: true
+
+    - name: Download dependencies
+      run: go mod download
+
+    - name: Run integration tests
+      env:
+        PRICECHARTING_TOKEN: ${{ secrets.PRICECHARTING_TOKEN }}
+        CARD_HEDGER_API_KEY: ${{ secrets.CARD_HEDGER_API_KEY }}
+      run: go test -race -timeout 20m -tags integration ./internal/integration/...

@@ -1,0 +1,107 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VERSION: ${VERSION:-dev}
+    container_name: slabledger
+    ports:
+      - "${PORT:-8081}:8081"
+    environment:
+      # =====================================================================
+      # Required API Tokens
+      # =====================================================================
+      PRICECHARTING_TOKEN: ${PRICECHARTING_TOKEN}
+      PSA_ACCESS_TOKEN: ${PSA_ACCESS_TOKEN}
+
+      # =====================================================================
+      # Security (REQUIRED for production)
+      # =====================================================================
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+
+      # =====================================================================
+      # Google OAuth Configuration (REQUIRED for authentication)
+      # =====================================================================
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-http://localhost:8081/auth/google/callback}
+
+      # =====================================================================
+      # Optional: Multi-Source Price Fusion
+      # =====================================================================
+      # PokemonPriceTracker (primary graded price source)
+      POKEMONPRICE_TRACKER_API_KEY: ${POKEMONPRICE_TRACKER_API_KEY:-}
+
+      # CardHedger (supplementary pricing — unlimited plan)
+      CARD_HEDGER_API_KEY: ${CARD_HEDGER_API_KEY:-}
+
+      # =====================================================================
+      # Database Configuration
+      # =====================================================================
+      DATABASE_PATH: /app/data/slabledger.db
+
+      # =====================================================================
+      # Background Scheduler Configuration
+      # =====================================================================
+      PRICE_REFRESH_INTERVAL: ${PRICE_REFRESH_INTERVAL:-1h}
+      PRICE_BATCH_SIZE: ${PRICE_BATCH_SIZE:-50}
+      PRICE_BATCH_DELAY: ${PRICE_BATCH_DELAY:-1s}
+      PRICE_MAX_BURST_CALLS: ${PRICE_MAX_BURST_CALLS:-10}
+
+      # CardHedger scheduler
+      CARD_HEDGER_POLL_INTERVAL: ${CARD_HEDGER_POLL_INTERVAL:-1h}
+      CARD_HEDGER_BATCH_INTERVAL: ${CARD_HEDGER_BATCH_INTERVAL:-24h}
+      CARD_HEDGER_MAX_CARDS_PER_RUN: ${CARD_HEDGER_MAX_CARDS_PER_RUN:-200}
+
+      # =====================================================================
+      # Server Configuration
+      # =====================================================================
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LOG_JSON: ${LOG_JSON:-true}
+      PORT: 8081
+      HTTP_LISTEN_ADDR: "0.0.0.0:8081"
+      RATE_LIMIT_REQUESTS: ${RATE_LIMIT_REQUESTS:-300}
+      RATE_LIMIT_TRUST_PROXY: ${RATE_LIMIT_TRUST_PROXY:-false}
+
+    volumes:
+      # Persistent data storage (bind mount for proper permissions)
+      - ./data:/app/data
+      # Cache storage (bind mount for proper permissions)
+      - ./cache:/app/cache
+
+    # Run as current user to match bind mount permissions
+    user: "${UID:-1000}:${GID:-1000}"
+
+    restart: unless-stopped
+
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8081/api/health"]
+      interval: 30s
+      timeout: 3s
+      start_period: 10s
+      retries: 3
+
+    networks:
+      - app_network
+
+    # Resource limits (adjust based on your server capacity)
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: '2'
+    #       memory: 2G
+    #     reservations:
+    #       cpus: '1'
+    #       memory: 1G
+
+  # =========================================================================
+  # Note: Caddy reverse proxy runs separately on the host
+  # See Caddyfile.example for Caddy configuration with automatic SSL
+  # =========================================================================
+
+networks:
+  app_network:
+    driver: bridge

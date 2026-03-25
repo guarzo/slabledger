@@ -1,0 +1,33 @@
+#!/bin/bash
+# Pre-commit hook: runs fast lint checks on staged files only.
+# Install: make hooks (or: git config core.hooksPath .githooks)
+# Skip:   git commit --no-verify
+
+set -e
+
+STAGED_GO=$(git diff --cached --name-only --diff-filter=ACMR | grep '\.go$' || true)
+STAGED_WEB=$(git diff --cached --name-only --diff-filter=ACMR | grep '^web/' || true)
+
+if [ -z "$STAGED_GO" ] && [ -z "$STAGED_WEB" ]; then
+    exit 0
+fi
+
+# Go checks
+if [ -n "$STAGED_GO" ]; then
+    echo "[pre-commit] go vet..."
+    go vet ./...
+
+    echo "[pre-commit] golangci-lint (changed files only)..."
+    golangci-lint run --new-from-rev=HEAD --timeout=60s
+fi
+
+# Frontend checks
+if [ -n "$STAGED_WEB" ]; then
+    echo "[pre-commit] npm typecheck..."
+    (cd web && npm run typecheck)
+
+    echo "[pre-commit] npm lint..."
+    (cd web && npm run lint)
+fi
+
+echo "[pre-commit] All checks passed."

@@ -1,0 +1,131 @@
+{
+  "name": "SlabLedger Development",
+  "dockerComposeFile": ["docker-compose.yml", "docker-compose.override.yml"],
+  "service": "app",
+  "workspaceFolder": "/workspace",
+  "shutdownAction": "stopCompose",
+
+  // VS Code customizations
+  "customizations": {
+    "vscode": {
+      // Extensions to install
+      "extensions": [
+        // Go development
+        "golang.go",
+        "golang.go-nightly",
+
+        // Docker
+        "ms-azuretools.vscode-docker",
+
+        // Web development
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "bradlc.vscode-tailwindcss",
+
+        // SQL
+        "qwtel.sqlite-viewer",
+
+        // Utilities
+        "christian-kohler.path-intellisense",
+        "eamodio.gitlens",
+        "humao.rest-client",
+        "streetsidesoftware.code-spell-checker",
+        "gruntfuggly.todo-tree"
+      ],
+
+      // VS Code settings
+      "settings": {
+        // Go settings
+        "go.toolsManagement.autoUpdate": true,
+        "go.useLanguageServer": true,
+        "go.lintTool": "golangci-lint",
+        "go.lintOnSave": "workspace",
+        "go.testFlags": ["-v", "-race"],
+        "go.coverOnSave": false,
+        "go.buildOnSave": "off",
+        "go.vetOnSave": "off",
+        "[go]": {
+          "editor.formatOnSave": true,
+          "editor.codeActionsOnSave": {
+            "source.organizeImports": "explicit"
+          },
+          "editor.defaultFormatter": "golang.go"
+        },
+
+        // TypeScript/JavaScript settings
+        "[typescript]": {
+          "editor.formatOnSave": true,
+          "editor.defaultFormatter": "esbenp.prettier-vscode"
+        },
+        "[typescriptreact]": {
+          "editor.formatOnSave": true,
+          "editor.defaultFormatter": "esbenp.prettier-vscode"
+        },
+        "[javascript]": {
+          "editor.formatOnSave": true,
+          "editor.defaultFormatter": "esbenp.prettier-vscode"
+        },
+
+        // General editor settings
+        "editor.formatOnSave": true,
+        "editor.rulers": [100, 120],
+        "editor.tabSize": 2,
+        "files.insertFinalNewline": true,
+        "files.trimTrailingWhitespace": true,
+
+        // Terminal
+        "terminal.integrated.defaultProfile.linux": "zsh",
+
+        // Git
+        "git.autofetch": true,
+        "git.confirmSync": false
+      }
+    }
+  },
+
+  // Container features
+  "features": {
+    // Node.js for web development
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "24",
+      "installYarnUsingApt": false
+    },
+
+    // GitHub CLI
+    "ghcr.io/devcontainers/features/github-cli:1": {
+      "version": "latest"
+    }
+  },
+
+  // Forward ports
+  "forwardPorts": [
+    8080  // Main application
+  ],
+
+  // Port attributes
+  "portsAttributes": {
+    "8080": {
+      "label": "Application",
+      "onAutoForward": "notify"
+    }
+  },
+
+  // Commands to run after container is created (one-time setup)
+  "postCreateCommand": "sudo chown -R vscode:vscode /go && bash .devcontainer/post-create.sh",
+
+  // Commands to run after container starts (every time)
+  "postStartCommand": "bash .devcontainer/post-start.sh",
+
+  // Environment variables
+  "remoteEnv": {
+    "CGO_ENABLED": "1",
+    "GOOS": "linux",
+    "PATH": "${containerEnv:PATH}:/workspace/bin:${containerEnv:HOME}/.local/bin"
+  },
+
+  // Run as non-root user
+  "remoteUser": "vscode",
+
+  // Container user
+  "containerUser": "vscode"
+}

@@ -1,0 +1,77 @@
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: .devcontainer/Dockerfile
+
+    volumes:
+      # Mount the entire workspace
+      - ..:/workspace:cached
+
+      # Mount Go module cache for faster builds
+      - go-modules:/go/pkg/mod
+
+      # Mount command history
+      - command-history:/commandhistory
+
+      # Mount host Claude Code directory (config, commands, plugins, settings).
+      # This gives the container access to host-defined slash commands
+      # (~/.claude/commands/), installed plugins, and user settings.
+      # NOTE: Claude Code writes absolute host paths in its config files (e.g.
+      # /home/<host-user>/.claude/...) which won't resolve if the container user
+      # differs. post-start.sh auto-creates a symlink to fix this.
+      - ~/.claude:/home/vscode/.claude:cached
+
+      # Mount host dotfiles (used by Claude Code commands symlink, etc.)
+      - ~/.dotfiles:/home/vscode/.dotfiles:cached,ro
+
+      # NOTE: Host config mounts (~/.gitconfig, ~/.ssh) moved to
+      # docker-compose.override.yml. Copy docker-compose.override.yml.example
+      # to docker-compose.override.yml to enable them.
+
+    # Keep container running
+    command: sleep infinity
+
+    # Environment variables (loaded from .env in root)
+    env_file:
+      - ../.env
+
+    environment:
+      # Development-specific overrides
+      LOG_LEVEL: debug
+      LOG_JSON: "false"
+      DATABASE_PATH: /workspace/data/slabledger.db
+
+      # OAuth redirect for local development
+      EBAY_REDIRECT_URI: http://localhost:8081/auth/ebay/callback
+      EBAY_OAUTH_ENV: sandbox
+
+      # Development secrets - CHANGE THESE for local development
+      # These are intentionally invalid placeholders. Set real values in .env
+      SESSION_SECRET: CHANGE-ME-dev-session-secret
+      ENCRYPTION_KEY: CHANGE-ME-dev-encryption-key-32b
+
+    # Network
+    networks:
+      - dev_network
+
+    # Ports
+    ports:
+      - "8081:8081"      # Application
+      - "2345:2345"      # Delve debugger
+      - "6060:6060"      # pprof profiling (if enabled)
+
+    # Resource limits (adjust as needed)
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: '4'
+    #       memory: 8G
+
+volumes:
+  go-modules:
+  command-history:
+
+networks:
+  dev_network:
+    driver: bridge

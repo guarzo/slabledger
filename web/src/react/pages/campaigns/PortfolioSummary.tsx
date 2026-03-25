@@ -1,0 +1,44 @@
+import type { CampaignPNL } from '../../../types/campaigns';
+import { formatCents, formatPct } from '../../utils/formatters';
+import StatCard from '../../ui/StatCard';
+
+interface PortfolioSummaryProps {
+  campaignCount: number;
+  pnlMap: Record<string, CampaignPNL>;
+}
+
+export default function PortfolioSummary({ campaignCount, pnlMap }: PortfolioSummaryProps) {
+  const pnls = Object.values(pnlMap);
+  if (pnls.length === 0) return null;
+
+  const totalSpent = pnls.reduce((sum, p) => sum + p.totalSpendCents, 0);
+  const totalRevenue = pnls.reduce((sum, p) => sum + p.totalRevenueCents, 0);
+  const totalProfit = pnls.reduce((sum, p) => sum + p.netProfitCents, 0);
+  const totalUnsold = pnls.reduce((sum, p) => sum + p.totalPurchases - p.totalSold, 0);
+  const roi = totalSpent > 0 ? totalProfit / totalSpent : 0;
+
+  return (
+    <div className="mb-6 space-y-3">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <StatCard label="Campaigns" value={`${campaignCount}`} />
+        <StatCard label="Invested" value={formatCents(totalSpent)} />
+        <StatCard label="Revenue" value={formatCents(totalRevenue)} />
+        <StatCard label="P&L" value={`${formatCents(totalProfit)} (${formatPct(roi)})`} color={totalProfit >= 0 ? 'green' : 'red'} />
+        <StatCard label="Unsold" value={`${totalUnsold}`} />
+      </div>
+      {totalSpent > 0 && (
+        <div className="w-full h-1.5 rounded-full bg-[var(--surface-2)] overflow-hidden">
+          <div
+            className="h-full rounded-full transition-all duration-500"
+            style={{
+              width: `${Math.min((totalRevenue / totalSpent) * 100, 100)}%`,
+              background: totalRevenue >= totalSpent
+                ? 'linear-gradient(90deg, var(--success), #34d399)'
+                : 'linear-gradient(90deg, var(--warning), #fbbf24)',
+            }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}

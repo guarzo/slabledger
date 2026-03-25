@@ -1,0 +1,237 @@
+package scheduler
+
+import (
+	"github.com/guarzo/slabledger/internal/domain/advisor"
+	"github.com/guarzo/slabledger/internal/domain/ai"
+	"github.com/guarzo/slabledger/internal/domain/auth"
+	domainCampaigns "github.com/guarzo/slabledger/internal/domain/campaigns"
+	domainCards "github.com/guarzo/slabledger/internal/domain/cards"
+	"github.com/guarzo/slabledger/internal/domain/observability"
+	"github.com/guarzo/slabledger/internal/domain/pricing"
+	"github.com/guarzo/slabledger/internal/platform/config"
+)
+
+// CardHedgerClient combines the interfaces used by both CardHedger schedulers.
+// *cardhedger.Client satisfies this interface.
+type CardHedgerClient interface {
+	CardHedgerBatchClient
+	CardHedgerRefreshClient
+}
+
+// BuildDeps holds the dependencies needed to build the scheduler group.
+type BuildDeps struct {
+	PriceRepo     pricing.PriceRepository
+	APITracker    pricing.APITracker
+	HealthChecker pricing.HealthChecker
+	AccessTracker pricing.AccessTracker
+	PriceProvider pricing.PriceProvider
+	CardProvider  domainCards.CardProvider
+	AuthService   auth.Service // may be nil if auth is not configured
+	Logger        observability.Logger
+
+	// CardHedger dependencies (all optional; schedulers skipped if nil)
+	CardHedgerClient    CardHedgerClient
+	SyncStateStore      SyncStateStore
+	CardIDMappingLookup CardIDMappingLookup
+
+	// CardHedger daily batch dependencies (optional)
+	CardIDMappingLister     CardIDMappingLister
+	CardIDMappingSaver      CardIDMappingSaver
+	DiscoveryFailureTracker pricing.DiscoveryFailureTracker
+	FavoritesLister         FavoritesLister
+	CampaignCardLister      CampaignCardLister
+
+	// Cache warmup dependencies (optional)
+	NewSetsProvider NewSetIDsProvider
+
+	// Inventory snapshot refresh dependencies (optional)
+	InventoryLister   InventoryLister
+	SnapshotRefresher SnapshotRefresher
+
+	// Snapshot enrichment dependencies (optional)
+	SnapshotEnrichService SnapshotEnrichService
+
+	// Snapshot history archival dependencies (optional)
+	SnapshotHistoryLister   SnapshotHistoryLister
+	SnapshotHistoryRecorder domainCampaigns.SnapshotHistoryRecorder
+
+	// Advisor refresh dependencies (optional)
+	AdvisorCollector AdvisorCollector
+	AdvisorCache     advisor.CacheStore
+	AICallTracker    ai.AICallTracker
+
+	// Social content dependencies (optional)
+	SocialContentDetector   SocialContentDetector
+	InstagramTokenRefresher InstagramTokenRefresher
+}
+
+// BuildResult holds the scheduler group and optional auxiliary references.
+type BuildResult struct {
+	Group          *Group
+	CardDiscoverer CardDiscoverer // nil if CardHedger batch is not configured
+}
+
+// BuildGroup constructs a scheduler Group from centralized configuration and dependencies.
+func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
+	var schedulers []Scheduler
+	var cardDiscoverer CardDiscoverer
+
+	// Price refresh scheduler
+	schedulerConfig := Config{
+		RefreshInterval:    cfg.PriceRefresh.RefreshInterval,
+		BatchSize:          cfg.PriceRefresh.BatchSize,
+		BatchDelay:         cfg.PriceRefresh.BatchDelay,
+		MaxBurstCalls:      cfg.PriceRefresh.MaxBurstCalls,
+		MaxCallsPerHour:    cfg.PriceRefresh.MaxCallsPerHour,
+		BurstPauseDuration: cfg.PriceRefresh.BurstPauseDuration,
+		Enabled:            cfg.PriceRefresh.Enabled,
+	}
+	priceScheduler := NewPriceRefreshScheduler(
+		deps.PriceRepo, deps.APITracker, deps.HealthChecker, deps.PriceProvider,
+		deps.Logger, schedulerConfig,
+	)
+	schedulers = append(schedulers, priceScheduler)
+
+	// Session cleanup scheduler (if auth is enabled)
+	if deps.AuthService != nil {
+		cleanupConfig := SessionCleanupConfig{
+			Enabled:  cfg.SessionCleanup.Enabled,
+			Interval: cfg.SessionCleanup.Interval,
+		}
+		sessionCleanupScheduler := NewSessionCleanupScheduler(
+			deps.AuthService, deps.Logger, cleanupConfig,
+		)
+		schedulers = append(schedulers, sessionCleanupScheduler)
+	}
+
+	// Access log cleanup scheduler (if enabled)
+	if cfg.Maintenance.AccessLogCleanupEnabled && cfg.Maintenance.AccessLogRetentionDays > 0 {
+		accessLogConfig := AccessLogCleanupConfig{
+			Enabled:       cfg.Maintenance.AccessLogCleanupEnabled,
+			Interval:      cfg.Maintenance.AccessLogCleanupInterval,
+			RetentionDays: cfg.Maintenance.AccessLogRetentionDays,
+		}
+		accessLogCleanupScheduler := NewAccessLogCleanupScheduler(
+			deps.AccessTracker, deps.Logger, accessLogConfig,
+		)
+		schedulers = append(schedulers, accessLogCleanupScheduler)
+	}
+
+	// Card cache warmup scheduler (if enabled)
+	if cfg.CacheWarmup.Enabled {
+		warmupConfig := CacheWarmupConfig{
+			Enabled:        cfg.CacheWarmup.Enabled,
+			Interval:       cfg.CacheWarmup.Interval,
+			RateLimitDelay: cfg.CacheWarmup.RateLimitDelay,
+		}
+		warmupScheduler := NewCacheWarmupScheduler(
+			deps.CardProvider, deps.Logger, warmupConfig, deps.NewSetsProvider,
+		)
+		schedulers = append(schedulers, warmupScheduler)
+	}
+
+	// Inventory snapshot refresh scheduler (if dependencies are provided)
+	if deps.InventoryLister != nil && deps.SnapshotRefresher != nil {
+		invConfig := config.InventoryRefreshConfig{
+			Enabled:        cfg.InventoryRefresh.Enabled,
+			Interval:       cfg.InventoryRefresh.Interval,
+			StaleThreshold: cfg.InventoryRefresh.StaleThreshold,
+			BatchSize:      cfg.InventoryRefresh.BatchSize,
+			BatchDelay:     cfg.InventoryRefresh.BatchDelay,
+		}
+		inventoryScheduler := NewInventoryRefreshScheduler(
+			deps.InventoryLister, deps.SnapshotRefresher,
+			deps.Logger, invConfig,
+		)
+		schedulers = append(schedulers, inventoryScheduler)
+	}
+
+	// Snapshot enrichment scheduler (processes pending snapshots from async imports)
+	if deps.SnapshotEnrichService != nil {
+		enrichScheduler := NewSnapshotEnrichScheduler(
+			deps.SnapshotEnrichService, deps.Logger, cfg.SnapshotEnrich,
+		)
+		schedulers = append(schedulers, enrichScheduler)
+	}
+
+	// Snapshot history archival scheduler (if dependencies are provided)
+	if deps.SnapshotHistoryLister != nil && deps.SnapshotHistoryRecorder != nil {
+		historyConfig := SnapshotHistoryConfig{
+			Enabled:  cfg.SnapshotHistory.Enabled,
+			Interval: cfg.SnapshotHistory.Interval,
+		}
+		historyScheduler := NewSnapshotHistoryScheduler(
+			deps.SnapshotHistoryLister, deps.SnapshotHistoryRecorder,
+			deps.Logger, historyConfig,
+		)
+		schedulers = append(schedulers, historyScheduler)
+	}
+
+	// CardHedger delta poll scheduler (if all dependencies are provided)
+	if deps.CardHedgerClient != nil && deps.SyncStateStore != nil && deps.CardIDMappingLookup != nil {
+		chConfig := CardHedgerRefreshConfig{
+			Enabled:      cfg.CardHedger.Enabled,
+			PollInterval: cfg.CardHedger.PollInterval,
+		}
+		var refreshOpts []RefreshOption
+		if deps.APITracker != nil {
+			refreshOpts = append(refreshOpts, WithRefreshAPITracker(deps.APITracker))
+		}
+		chScheduler := NewCardHedgerRefreshScheduler(
+			deps.CardHedgerClient, deps.PriceRepo, deps.SyncStateStore,
+			deps.CardIDMappingLookup, deps.Logger, chConfig, refreshOpts...,
+		)
+		schedulers = append(schedulers, chScheduler)
+	}
+
+	// CardHedger daily batch scheduler (if client + mapping lister are provided)
+	if deps.CardHedgerClient != nil && deps.CardIDMappingLister != nil {
+		batchConfig := CardHedgerBatchConfig{
+			Enabled:        cfg.CardHedger.Enabled,
+			RunInterval:    cfg.CardHedger.BatchInterval,
+			MaxCardsPerRun: cfg.CardHedger.MaxCardsPerRun,
+		}
+		var batchOpts []BatchOption
+		if deps.APITracker != nil {
+			batchOpts = append(batchOpts, WithBatchAPITracker(deps.APITracker))
+		}
+		if deps.CardIDMappingSaver != nil {
+			batchOpts = append(batchOpts, WithBatchMappingSaver(deps.CardIDMappingSaver))
+		}
+		if deps.DiscoveryFailureTracker != nil {
+			batchOpts = append(batchOpts, WithDiscoveryFailureTracker(deps.DiscoveryFailureTracker))
+		}
+		batchScheduler := NewCardHedgerBatchScheduler(
+			deps.CardHedgerClient, deps.PriceRepo, deps.CardIDMappingLister,
+			deps.FavoritesLister, deps.CampaignCardLister,
+			deps.Logger, batchConfig, batchOpts...,
+		)
+		schedulers = append(schedulers, batchScheduler)
+		cardDiscoverer = batchScheduler
+	}
+
+	// Advisor refresh scheduler (if advisor service and cache store are provided)
+	if deps.AdvisorCollector != nil && deps.AdvisorCache != nil {
+		schedulers = append(schedulers, NewAdvisorRefreshScheduler(
+			deps.AdvisorCollector, deps.AdvisorCache,
+			deps.AICallTracker,
+			deps.Logger, cfg.AdvisorRefresh,
+		))
+	}
+
+	// Social content scheduler (if detector is provided)
+	if deps.SocialContentDetector != nil {
+		var socialOpts []SocialContentOption
+		if deps.InstagramTokenRefresher != nil {
+			socialOpts = append(socialOpts, WithTokenRefresher(deps.InstagramTokenRefresher))
+		}
+		schedulers = append(schedulers, NewSocialContentScheduler(
+			deps.SocialContentDetector, deps.Logger, cfg.SocialContent, socialOpts...,
+		))
+	}
+
+	return BuildResult{
+		Group:          NewGroup(schedulers...),
+		CardDiscoverer: cardDiscoverer,
+	}
+}

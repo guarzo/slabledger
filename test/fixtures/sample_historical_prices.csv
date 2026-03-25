@@ -1,0 +1,156 @@
+date,card_name,set_name,grade,price_usd
+2023-07-01,Charizard ex,Paldean Fates,PSA 10,420.00
+2023-07-01,Charizard ex,Paldean Fates,PSA 9,260.00
+2023-07-01,Charizard ex,Paldean Fates,Raw,85.00
+2023-07-01,Pikachu ex,Surging Sparks,PSA 10,180.00
+2023-07-01,Pikachu ex,Surging Sparks,PSA 9,95.00
+2023-07-01,Pikachu ex,Surging Sparks,Raw,32.00
+2023-07-15,Charizard ex,Paldean Fates,PSA 10,415.00
+2023-07-15,Charizard ex,Paldean Fates,PSA 9,255.00
+2023-07-15,Umbreon VMAX,Evolving Skies,PSA 10,650.00
+2023-07-15,Umbreon VMAX,Evolving Skies,PSA 9,380.00
+2023-08-01,Charizard ex,Paldean Fates,PSA 10,430.00
+2023-08-01,Charizard ex,Paldean Fates,PSA 9,268.00
+2023-08-01,Charizard ex,Paldean Fates,Raw,88.00
+2023-08-01,Pikachu ex,Surging Sparks,PSA 10,188.00
+2023-08-01,Pikachu ex,Surging Sparks,PSA 9,100.00
+2023-08-15,Charizard ex,Paldean Fates,PSA 10,435.00
+2023-08-15,Umbreon VMAX,Evolving Skies,PSA 10,665.00
+2023-08-15,Umbreon VMAX,Evolving Skies,PSA 9,390.00
+2023-09-01,Charizard ex,Paldean Fates,PSA 10,445.00
+2023-09-01,Charizard ex,Paldean Fates,PSA 9,275.00
+2023-09-01,Charizard ex,Paldean Fates,Raw,92.00
+2023-09-01,Pikachu ex,Surging Sparks,PSA 10,195.00
+2023-09-01,Pikachu ex,Surging Sparks,PSA 9,105.00
+2023-09-01,Pikachu ex,Surging Sparks,Raw,35.00
+2023-09-15,Charizard ex,Paldean Fates,PSA 10,450.00
+2023-09-15,Umbreon VMAX,Evolving Skies,PSA 10,680.00
+2023-10-01,Charizard ex,Paldean Fates,PSA 10,455.00
+2023-10-01,Charizard ex,Paldean Fates,PSA 9,280.00
+2023-10-01,Charizard ex,Paldean Fates,Raw,95.00
+2023-10-01,Pikachu ex,Surging Sparks,PSA 10,200.00
+2023-10-01,Pikachu ex,Surging Sparks,PSA 9,108.00
+2023-10-15,Umbreon VMAX,Evolving Skies,PSA 10,695.00
+2023-10-15,Umbreon VMAX,Evolving Skies,PSA 9,405.00
+2023-11-01,Charizard ex,Paldean Fates,PSA 10,485.00
+2023-11-01,Charizard ex,Paldean Fates,PSA 9,298.00
+2023-11-01,Charizard ex,Paldean Fates,Raw,102.00
+2023-11-01,Pikachu ex,Surging Sparks,PSA 10,218.00
+2023-11-01,Pikachu ex,Surging Sparks,PSA 9,118.00
+2023-11-01,Pikachu ex,Surging Sparks,Raw,38.00
+2023-11-15,Charizard ex,Paldean Fates,PSA 10,495.00
+2023-11-15,Umbreon VMAX,Evolving Skies,PSA 10,745.00
+2023-11-15,Umbreon VMAX,Evolving Skies,PSA 9,435.00
+2023-12-01,Charizard ex,Paldean Fates,PSA 10,520.00
+2023-12-01,Charizard ex,Paldean Fates,PSA 9,320.00
+2023-12-01,Charizard ex,Paldean Fates,Raw,110.00
+2023-12-01,Pikachu ex,Surging Sparks,PSA 10,235.00
+2023-12-01,Pikachu ex,Surging Sparks,PSA 9,128.00
+2023-12-01,Pikachu ex,Surging Sparks,Raw,42.00
+2023-12-15,Charizard ex,Paldean Fates,PSA 10,535.00
+2023-12-15,Charizard ex,Paldean Fates,PSA 9,330.00
+2023-12-15,Umbreon VMAX,Evolving Skies,PSA 10,780.00
+2023-12-15,Umbreon VMAX,Evolving Skies,PSA 9,455.00
+2024-01-01,Charizard ex,Paldean Fates,PSA 10,510.00
+2024-01-01,Charizard ex,Paldean Fates,PSA 9,315.00
+2024-01-01,Charizard ex,Paldean Fates,Raw,105.00
+2024-01-01,Pikachu ex,Surging Sparks,PSA 10,225.00
+2024-01-01,Pikachu ex,Surging Sparks,PSA 9,122.00
+2024-01-01,Pikachu ex,Surging Sparks,Raw,40.00
+2024-01-15,Charizard ex,Paldean Fates,PSA 10,495.00
+2024-01-15,Umbreon VMAX,Evolving Skies,PSA 10,755.00
+2024-01-15,Umbreon VMAX,Evolving Skies,PSA 9,440.00
+2024-02-01,Charizard ex,Paldean Fates,PSA 10,480.00
+2024-02-01,Charizard ex,Paldean Fates,PSA 9,295.00
+2024-02-01,Charizard ex,Paldean Fates,Raw,98.00
+2024-02-01,Pikachu ex,Surging Sparks,PSA 10,212.00
+2024-02-01,Pikachu ex,Surging Sparks,PSA 9,115.00
+2024-02-15,Charizard ex,Paldean Fates,PSA 10,475.00
+2024-02-15,Umbreon VMAX,Evolving Skies,PSA 10,725.00
+2024-03-01,Charizard ex,Paldean Fates,PSA 10,470.00
+2024-03-01,Charizard ex,Paldean Fates,PSA 9,290.00
+2024-03-01,Charizard ex,Paldean Fates,Raw,95.00
+2024-03-01,Pikachu ex,Surging Sparks,PSA 10,208.00
+2024-03-01,Pikachu ex,Surging Sparks,PSA 9,112.00
+2024-03-01,Pikachu ex,Surging Sparks,Raw,36.00
+2024-03-15,Charizard ex,Paldean Fates,PSA 10,465.00
+2024-03-15,Umbreon VMAX,Evolving Skies,PSA 10,710.00
+2024-03-15,Umbreon VMAX,Evolving Skies,PSA 9,415.00
+2024-04-01,Charizard ex,Paldean Fates,PSA 10,460.00
+2024-04-01,Charizard ex,Paldean Fates,PSA 9,285.00
+2024-04-01,Charizard ex,Paldean Fates,Raw,93.00
+2024-04-01,Pikachu ex,Surging Sparks,PSA 10,205.00
+2024-04-01,Pikachu ex,Surging Sparks,PSA 9,110.00
+2024-04-15,Charizard ex,Paldean Fates,PSA 10,455.00
+2024-04-15,Umbreon VMAX,Evolving Skies,PSA 10,700.00
+2024-05-01,Charizard ex,Paldean Fates,PSA 10,450.00
+2024-05-01,Charizard ex,Paldean Fates,PSA 9,278.00
+2024-05-01,Charizard ex,Paldean Fates,Raw,90.00
+2024-05-01,Pikachu ex,Surging Sparks,PSA 10,198.00
+2024-05-01,Pikachu ex,Surging Sparks,PSA 9,106.00
+2024-05-01,Pikachu ex,Surging Sparks,Raw,34.00
+2024-05-15,Charizard ex,Paldean Fates,PSA 10,445.00
+2024-05-15,Umbreon VMAX,Evolving Skies,PSA 10,685.00
+2024-05-15,Umbreon VMAX,Evolving Skies,PSA 9,400.00
+2024-06-01,Charizard ex,Paldean Fates,PSA 10,425.00
+2024-06-01,Charizard ex,Paldean Fates,PSA 9,262.00
+2024-06-01,Charizard ex,Paldean Fates,Raw,86.00
+2024-06-01,Pikachu ex,Surging Sparks,PSA 10,182.00
+2024-06-01,Pikachu ex,Surging Sparks,PSA 9,96.00
+2024-06-01,Pikachu ex,Surging Sparks,Raw,31.00
+2024-06-15,Charizard ex,Paldean Fates,PSA 10,418.00
+2024-06-15,Umbreon VMAX,Evolving Skies,PSA 10,655.00
+2024-06-15,Umbreon VMAX,Evolving Skies,PSA 9,382.00
+2024-07-01,Charizard ex,Paldean Fates,PSA 10,412.00
+2024-07-01,Charizard ex,Paldean Fates,PSA 9,255.00
+2024-07-01,Charizard ex,Paldean Fates,Raw,84.00
+2024-07-01,Pikachu ex,Surging Sparks,PSA 10,178.00
+2024-07-01,Pikachu ex,Surging Sparks,PSA 9,94.00
+2024-07-01,Pikachu ex,Surging Sparks,Raw,30.00
+2024-07-15,Charizard ex,Paldean Fates,PSA 10,408.00
+2024-07-15,Umbreon VMAX,Evolving Skies,PSA 10,640.00
+2024-07-15,Umbreon VMAX,Evolving Skies,PSA 9,375.00
+2024-08-01,Charizard ex,Paldean Fates,PSA 10,425.00
+2024-08-01,Charizard ex,Paldean Fates,PSA 9,265.00
+2024-08-01,Charizard ex,Paldean Fates,Raw,87.00
+2024-08-01,Pikachu ex,Surging Sparks,PSA 10,186.00
+2024-08-01,Pikachu ex,Surging Sparks,PSA 9,99.00
+2024-08-01,Pikachu ex,Surging Sparks,Raw,33.00
+2024-08-15,Charizard ex,Paldean Fates,PSA 10,432.00
+2024-08-15,Umbreon VMAX,Evolving Skies,PSA 10,662.00
+2024-08-15,Umbreon VMAX,Evolving Skies,PSA 9,388.00
+2024-09-01,Charizard ex,Paldean Fates,PSA 10,442.00
+2024-09-01,Charizard ex,Paldean Fates,PSA 9,273.00
+2024-09-01,Charizard ex,Paldean Fates,Raw,91.00
+2024-09-01,Pikachu ex,Surging Sparks,PSA 10,193.00
+2024-09-01,Pikachu ex,Surging Sparks,PSA 9,104.00
+2024-09-01,Pikachu ex,Surging Sparks,Raw,35.00
+2024-09-15,Charizard ex,Paldean Fates,PSA 10,448.00
+2024-09-15,Umbreon VMAX,Evolving Skies,PSA 10,678.00
+2024-09-15,Umbreon VMAX,Evolving Skies,PSA 9,396.00
+2024-10-01,Charizard ex,Paldean Fates,PSA 10,452.00
+2024-10-01,Charizard ex,Paldean Fates,PSA 9,279.00
+2024-10-01,Charizard ex,Paldean Fates,Raw,93.00
+2024-10-01,Pikachu ex,Surging Sparks,PSA 10,198.00
+2024-10-01,Pikachu ex,Surging Sparks,PSA 9,107.00
+2024-10-15,Umbreon VMAX,Evolving Skies,PSA 10,692.00
+2024-10-15,Umbreon VMAX,Evolving Skies,PSA 9,404.00
+2024-11-01,Charizard ex,Paldean Fates,PSA 10,482.00
+2024-11-01,Charizard ex,Paldean Fates,PSA 9,296.00
+2024-11-01,Charizard ex,Paldean Fates,Raw,101.00
+2024-11-01,Pikachu ex,Surging Sparks,PSA 10,216.00
+2024-11-01,Pikachu ex,Surging Sparks,PSA 9,117.00
+2024-11-01,Pikachu ex,Surging Sparks,Raw,38.00
+2024-11-15,Charizard ex,Paldean Fates,PSA 10,492.00
+2024-11-15,Umbreon VMAX,Evolving Skies,PSA 10,742.00
+2024-11-15,Umbreon VMAX,Evolving Skies,PSA 9,433.00
+2024-12-01,Charizard ex,Paldean Fates,PSA 10,518.00
+2024-12-01,Charizard ex,Paldean Fates,PSA 9,318.00
+2024-12-01,Charizard ex,Paldean Fates,Raw,108.00
+2024-12-01,Pikachu ex,Surging Sparks,PSA 10,232.00
+2024-12-01,Pikachu ex,Surging Sparks,PSA 9,126.00
+2024-12-01,Pikachu ex,Surging Sparks,Raw,41.00
+2024-12-15,Charizard ex,Paldean Fates,PSA 10,532.00
+2024-12-15,Charizard ex,Paldean Fates,PSA 9,328.00
+2024-12-15,Umbreon VMAX,Evolving Skies,PSA 10,778.00
+2024-12-15,Umbreon VMAX,Evolving Skies,PSA 9,453.00

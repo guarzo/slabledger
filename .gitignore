@@ -1,0 +1,88 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+
+# Dependency directories (remove the comment below to include it)
+vendor/
+
+# Go workspace file
+go.work
+go.work.sum
+
+# env file
+.env
+
+# IDE specific files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# DevContainer - keep configuration, ignore runtime
+.devcontainer/.env
+.devcontainer/commandhistory/
+.devcontainer/docker-compose.override.yml
+
+# Project binary
+/slabledger
+pokeprice
+
+# Build directories
+dist/
+build/
+
+# Debug files
+*.log
+debug
+
+# Temporary files
+*.tmp
+tmp/
+
+# Config files
+.claude.env
+
+# Data files (all runtime data stored in ./data/)
+data/cache/
+data/snapshots/
+data/volatility.json
+data/cache.json
+data/ai_cache.json
+data/targets.csv
+
+# Prevent cache from being created in test/cmd directories
+cmd/**/data/
+
+.claude/*
+!.claude/commands/
+
+web/node_modules
+
+data/slabledger.db
+data/slabledger.db-shm
+data/slabledger.db-wal
+web/slabledger.db
+web/slabledger.db-shm
+web/slabledger.db-wal
+
+# Frontend build output
+web/dist/
+
+# Docker bind mount directories
+/cache/
+.superpowers/
+
+# Private docs (sensitive business data, kept locally only)
+docs/private/
+.claude/commands/campaign-analysis.md

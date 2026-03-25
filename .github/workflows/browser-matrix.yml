@@ -1,0 +1,189 @@
+name: Full Browser Matrix Tests
+
+# Run comprehensive cross-browser tests on-demand or weekly
+# This tests all browsers (Chromium, Firefox, WebKit, Mobile) but doesn't block regular CI
+on:
+  # Manual trigger
+  workflow_dispatch:
+  # Weekly on Sunday at 2 AM UTC
+  schedule:
+    - cron: '0 2 * * 0'
+  # Trigger on release branches
+  push:
+    branches:
+      - 'release/**'
+
+jobs:
+  full-browser-matrix:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox, webkit]
+        # Optional: Enable sharding for faster parallel execution
+        # Uncomment the shard line to split tests across 2 runners per browser
+        # shard: [1, 2]
+        include:
+          - browser: chromium
+            device: 'Desktop Chrome'
+          - browser: firefox
+            device: 'Desktop Firefox'
+          - browser: webkit
+            device: 'Desktop Safari'
+
+    defaults:
+      run:
+        working-directory: ./web
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v6
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v6
+      with:
+        node-version: '24'
+        cache: 'npm'
+        cache-dependency-path: web/package-lock.json
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Cache Playwright browsers
+      uses: actions/cache@v5
+      with:
+        path: ~/.cache/ms-playwright
+        key: ${{ runner.os }}-playwright-${{ matrix.browser }}-${{ hashFiles('web/package-lock.json') }}
+        restore-keys: ${{ runner.os }}-playwright-${{ matrix.browser }}-
+
+    - name: Install Playwright browser - ${{ matrix.browser }}
+      run: npx playwright install ${{ matrix.browser }} --with-deps
+
+    - name: Build application
+      run: npm run build
+
+    - name: Start preview server
+      run: |
+        npm run preview > preview-server.log 2>&1 &
+        echo $! > preview-server.pid
+        echo "Preview server started with PID: $(cat preview-server.pid)"
+      env:
+        CI: true
+
+    - name: Wait for server
+      run: npx wait-on http://localhost:4173 --timeout 60000
+
+    - name: Run Playwright tests on ${{ matrix.device }}
+      run: |
+        # If sharding is enabled, add --shard flag
+        if [ -n "${{ matrix.shard }}" ]; then
+          npx playwright test --project=${{ matrix.browser }} --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+        else
+          npx playwright test --project=${{ matrix.browser }}
+        fi
+      env:
+        CI: true
+
+    - name: Upload test results - ${{ matrix.browser }}
+      uses: actions/upload-artifact@v7
+      if: always()
+      with:
+        name: playwright-report-${{ matrix.browser }}${{ matrix.shard && format('-shard-{0}', matrix.shard) || '' }}
+        path: web/playwright-report/
+        retention-days: 14
+
+    - name: Upload test videos - ${{ matrix.browser }}
+      uses: actions/upload-artifact@v7
+      if: failure()
+      with:
+        name: playwright-videos-${{ matrix.browser }}${{ matrix.shard && format('-shard-{0}', matrix.shard) || '' }}
+        path: web/test-results/
+        retention-days: 7
+
+    - name: Cleanup preview server
+      if: always()
+      run: |
+        if [ -f preview-server.pid ]; then
+          PID=$(cat preview-server.pid)
+          kill -TERM -$PID 2>/dev/null || true
+          sleep 2
+          kill -KILL -$PID 2>/dev/null || true
+          rm -f preview-server.pid
+        fi
+
+  mobile-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        device: ['Mobile Chrome', 'Mobile Safari']
+        include:
+          - device: 'Mobile Chrome'
+            browser: chromium
+          - device: 'Mobile Safari'
+            browser: webkit
+
+    defaults:
+      run:
+        working-directory: ./web
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v6
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v6
+      with:
+        node-version: '24'
+        cache: 'npm'
+        cache-dependency-path: web/package-lock.json
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Cache Playwright browsers
+      uses: actions/cache@v5
+      with:
+        path: ~/.cache/ms-playwright
+        key: ${{ runner.os }}-playwright-${{ matrix.browser }}-${{ hashFiles('web/package-lock.json') }}
+        restore-keys: ${{ runner.os }}-playwright-${{ matrix.browser }}-
+
+    - name: Install Playwright browser for mobile
+      run: npx playwright install ${{ matrix.browser }} --with-deps
+
+    - name: Build application
+      run: npm run build
+
+    - name: Start preview server
+      run: |
+        npm run preview > preview-server.log 2>&1 &
+        echo $! > preview-server.pid
+      env:
+        CI: true
+
+    - name: Wait for server
+      run: npx wait-on http://localhost:4173 --timeout 60000
+
+    - name: Run Playwright tests on ${{ matrix.device }}
+      run: npx playwright test --project="${{ matrix.device }}"
+      env:
+        CI: true
+
+    - name: Upload test results - ${{ matrix.device }}
+      uses: actions/upload-artifact@v7
+      if: always()
+      with:
+        name: playwright-report-mobile-${{ matrix.device }}
+        path: web/playwright-report/
+        retention-days: 14
+
+    - name: Cleanup preview server
+      if: always()
+      run: |
+        if [ -f preview-server.pid ]; then
+          PID=$(cat preview-server.pid)
+          kill -TERM -$PID 2>/dev/null || true
+          sleep 2
+          kill -KILL -$PID 2>/dev/null || true
+          rm -f preview-server.pid
+        fi

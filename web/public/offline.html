@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Offline - SlabLedger</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: linear-gradient(180deg, #0a0e27 0%, #050812 100%);
+      color: #e5e7eb;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .container {
+      text-align: center;
+      max-width: 500px;
+    }
+
+    .icon {
+      font-size: 80px;
+      margin-bottom: 24px;
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% {
+        opacity: 1;
+      }
+      50% {
+        opacity: 0.5;
+      }
+    }
+
+    h1 {
+      font-size: 32px;
+      font-weight: 700;
+      margin-bottom: 16px;
+      color: #f9fafb;
+    }
+
+    p {
+      font-size: 16px;
+      line-height: 1.6;
+      color: #9ca3af;
+      margin-bottom: 32px;
+    }
+
+    .button {
+      display: inline-block;
+      padding: 12px 24px;
+      background: #6366f1;
+      color: white;
+      text-decoration: none;
+      border-radius: 8px;
+      font-weight: 600;
+      transition: all 0.2s;
+      border: none;
+      cursor: pointer;
+      font-size: 16px;
+    }
+
+    .button:hover {
+      background: #4f46e5;
+      transform: translateY(-2px);
+      box-shadow: 0 8px 16px rgba(99, 102, 241, 0.3);
+    }
+
+    .button:active {
+      transform: translateY(0);
+    }
+
+    .features {
+      margin-top: 48px;
+      text-align: left;
+    }
+
+    .feature {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+      padding: 12px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .feature-icon {
+      font-size: 24px;
+    }
+
+    .feature-text {
+      font-size: 14px;
+      color: #d1d5db;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .icon {
+        animation: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="icon">📡</div>
+    <h1>You're Offline</h1>
+    <p>
+      It looks like you've lost your internet connection. Some features may not be available until you're back online.
+    </p>
+
+    <button class="button" id="retry-btn">
+      Try Again
+    </button>
+
+    <div class="features">
+      <div class="feature">
+        <div class="feature-icon">💾</div>
+        <div class="feature-text">
+          Cached data is still available for viewing
+        </div>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">🔄</div>
+        <div class="feature-text">
+          Your changes will sync when you're back online
+        </div>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">⚡</div>
+        <div class="feature-text">
+          App will automatically reconnect when possible
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Retry button click handler
+    document.getElementById('retry-btn').addEventListener('click', function() {
+      window.location.reload();
+    });
+
+    // Auto-reload when connectivity returns
+    window.addEventListener('online', function() {
+      window.location.reload();
+    });
+  </script>
+</body>
+</html>
