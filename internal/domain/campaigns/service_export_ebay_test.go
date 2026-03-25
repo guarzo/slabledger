@@ -60,6 +60,33 @@ func TestGenerateEbayCSV_Success(t *testing.T) {
 	}
 }
 
+func TestListEbayExportItems_ExcludesNonPSA(t *testing.T) {
+	now := time.Now()
+	repo := newMockRepo()
+	repo.purchases["psa1"] = &Purchase{
+		ID: "psa1", CertNumber: "111", CardName: "Charizard", SetName: "Base Set",
+		CardNumber: "4", GradeValue: 8, Grader: "PSA",
+		CLValueCents: 25000, EbayExportFlaggedAt: &now,
+	}
+	repo.purchases["cgc1"] = &Purchase{
+		ID: "cgc1", CertNumber: "222", CardName: "Pikachu", SetName: "Base Set",
+		CardNumber: "58", GradeValue: 9, Grader: "CGC",
+		CLValueCents: 10000, EbayExportFlaggedAt: &now,
+	}
+
+	svc := &service{repo: repo, idGen: func() string { return "id" }}
+	resp, err := svc.ListEbayExportItems(context.Background(), true)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(resp.Items) != 1 {
+		t.Fatalf("items = %d, want 1 (only PSA)", len(resp.Items))
+	}
+	if resp.Items[0].CertNumber != "111" {
+		t.Errorf("expected PSA cert 111, got %s", resp.Items[0].CertNumber)
+	}
+}
+
 func TestGenerateEbayCSV_RejectsZeroPrice(t *testing.T) {
 	svc := &service{idGen: func() string { return "id" }}
 	_, err := svc.GenerateEbayCSV(context.Background(), []EbayExportGenerateItem{

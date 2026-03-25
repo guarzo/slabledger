@@ -28,12 +28,17 @@ func (s *service) ImportCerts(ctx context.Context, certNumbers []string) (*CertI
 		return nil, fmt.Errorf("ensure external campaign: %w", err)
 	}
 
-	result := &CertImportResult{}
+	// Batch lookup: find all certs that already exist in one query
+	existingMap, err := s.repo.GetPurchasesByGraderAndCertNumbers(ctx, "PSA", cleaned)
+	if err != nil {
+		return nil, fmt.Errorf("batch cert lookup: %w", err)
+	}
+
+	result := &CertImportResult{Errors: []CertImportError{}}
 	now := time.Now()
 
 	for _, certNum := range cleaned {
-		existing, lookupErr := s.repo.GetPurchaseByCertNumber(ctx, "PSA", certNum)
-		if lookupErr == nil && existing != nil {
+		if existing, ok := existingMap[certNum]; ok {
 			if flagErr := s.repo.SetEbayExportFlag(ctx, existing.ID, now); flagErr != nil && s.logger != nil {
 				s.logger.Warn(ctx, "cert import: failed to set ebay export flag",
 					observability.String("cert", certNum),
@@ -49,10 +54,10 @@ func (s *service) ImportCerts(ctx context.Context, certNumbers []string) (*CertI
 			continue
 		}
 
-		info, lookupErr := s.certLookup.LookupCert(ctx, certNum)
-		if lookupErr != nil {
+		info, certErr := s.certLookup.LookupCert(ctx, certNum)
+		if certErr != nil {
 			result.Failed++
-			result.Errors = append(result.Errors, CertImportError{CertNumber: certNum, Error: lookupErr.Error()})
+			result.Errors = append(result.Errors, CertImportError{CertNumber: certNum, Error: certErr.Error()})
 			continue
 		}
 		if info == nil {
@@ -105,6 +110,10 @@ func (s *service) ImportCerts(ctx context.Context, certNumbers []string) (*CertI
 			select {
 			case s.certEnrichCh <- certNum:
 			default:
+				if s.logger != nil {
+					s.logger.Warn(ctx, "cert enrichment channel full, skipping enrichment",
+						observability.String("cert", certNum))
+				}
 			}
 		}
 

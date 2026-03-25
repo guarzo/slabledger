@@ -1,11 +1,11 @@
 package campaigns
 
-// CertImportRequest holds the input for cert-based import.
+// CertImportRequest is the input for POST /api/purchases/import-certs.
 type CertImportRequest struct {
 	CertNumbers []string `json:"certNumbers"`
 }
 
-// CertImportResult holds the outcome of a cert-based import.
+// CertImportResult tallies imported, already-existing, and failed certs.
 type CertImportResult struct {
 	Imported       int               `json:"imported"`
 	AlreadyExisted int               `json:"alreadyExisted"`
@@ -13,13 +13,13 @@ type CertImportResult struct {
 	Errors         []CertImportError `json:"errors"`
 }
 
-// CertImportError describes a single cert that failed to import.
 type CertImportError struct {
 	CertNumber string `json:"certNumber"`
 	Error      string `json:"error"`
 }
 
-// EbayExportItem holds one purchase's data for the eBay export review screen.
+// EbayExportItem is one row in the eBay export review screen.
+// SuggestedPriceCents defaults to CLValueCents, falling back to MedianCents.
 type EbayExportItem struct {
 	PurchaseID          string  `json:"purchaseId"`
 	CertNumber          string  `json:"certNumber"`
@@ -38,18 +38,16 @@ type EbayExportItem struct {
 	BackImageURL        string  `json:"backImageUrl,omitempty"`
 }
 
-// EbayExportListResponse is the API response for listing items to export.
 type EbayExportListResponse struct {
 	Items []EbayExportItem `json:"items"`
 }
 
-// EbayExportGenerateItem is one item in the generate request with the user's chosen price.
+// EbayExportGenerateItem pairs a purchase with the user's chosen listing price.
 type EbayExportGenerateItem struct {
 	PurchaseID string `json:"purchaseId"`
 	PriceCents int    `json:"priceCents"`
 }
 
-// EbayExportGenerateRequest is the request body for generating the eBay CSV.
 type EbayExportGenerateRequest struct {
 	Items []EbayExportGenerateItem `json:"items"`
 }

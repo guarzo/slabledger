@@ -1,17 +1,10 @@
 import { useState, useCallback } from 'react';
 import { api } from '@/js/api';
 import type { EbayExportItem, EbayExportGenerateItem } from '@/types/campaigns/core';
+import { centsToDollars, dollarsToCents } from '@/react/utils/formatters';
 
 type Decision = { action: 'accept' | 'edit'; priceCents: number } | { action: 'skip' };
 type Phase = 'review' | 'export';
-
-function centsToDollars(cents: number): string {
-  return (cents / 100).toFixed(2);
-}
-
-function dollarsToCents(dollars: string): number {
-  return Math.round(parseFloat(dollars) * 100);
-}
 
 export default function EbayExportTab() {
   const [phase, setPhase] = useState<Phase>('review');
@@ -110,7 +103,7 @@ export default function EbayExportTab() {
           {exportCount} items exported to ebay_import.csv
         </p>
         <button
-          onClick={() => { setPhase('review'); setItems([]); setDecisions(new Map()); }}
+          onClick={() => { setPhase('review'); setItems([]); setDecisions(new Map()); setEditingId(null); setEditPrice(''); }}
           className="mt-4 rounded bg-gray-700 px-4 py-2 text-sm text-gray-200 hover:bg-gray-600"
         >
           Start Over

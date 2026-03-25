@@ -59,6 +59,23 @@ export function formatCents(cents: number | null | undefined): string {
 }
 
 /**
+ * Convert cents to a plain dollar string without currency symbol (e.g., "250.00").
+ * Use for editable price fields where the "$" is rendered separately.
+ */
+export function centsToDollars(cents: number): string {
+  return (cents / 100).toFixed(2);
+}
+
+/**
+ * Parse a dollar string to cents (e.g., "250.00" → 25000).
+ * Use for converting user-entered dollar values back to cents.
+ */
+export function dollarsToCents(dollars: string): number {
+  const n = parseFloat(dollars);
+  return isNaN(n) ? 0 : Math.round(n * 100);
+}
+
+/**
  * Format a decimal ratio as a percentage string
  * @param pct - Ratio value (e.g., 0.125 for 12.5%)
  * @returns Formatted percentage (e.g., "12.5%")

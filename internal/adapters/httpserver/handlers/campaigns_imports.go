@@ -647,6 +647,8 @@ func (h *CampaignsHandler) HandleGlobalImportExternal(w http.ResponseWriter, r *
 
 // HandleImportCerts handles POST /api/purchases/import-certs.
 func (h *CampaignsHandler) HandleImportCerts(w http.ResponseWriter, r *http.Request) {
+	const maxBytes = 1 << 20 // 1MB — cert numbers are short strings
+	r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
 	var req campaigns.CertImportRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "Invalid JSON body")
@@ -694,7 +696,7 @@ func (h *CampaignsHandler) HandleGenerateEbayCSV(w http.ResponseWriter, r *http.
 	csvBytes, err := h.service.GenerateEbayCSV(r.Context(), req.Items)
 	if err != nil {
 		h.logger.Error(r.Context(), "generate ebay CSV failed", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
 

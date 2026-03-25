@@ -52,6 +52,8 @@ export interface Purchase {
   overrideSetAt?: string;
   aiSuggestedPriceCents?: number;
   aiSuggestedAt?: string;
+  cardYear?: string;
+  ebayExportFlaggedAt?: string;
   createdAt: string;
   updatedAt: string;
   // Market snapshot at time of purchase

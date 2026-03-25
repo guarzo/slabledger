@@ -308,10 +308,7 @@ func (r *CampaignsRepository) GetPurchasesByIDs(ctx context.Context, ids []strin
 	result := make(map[string]*campaigns.Purchase, len(ids))
 
 	for start := 0; start < len(ids); start += chunkSize {
-		end := start + chunkSize
-		if end > len(ids) {
-			end = len(ids)
-		}
+		end := min(start+chunkSize, len(ids))
 		chunk := ids[start:end]
 
 		placeholders := make([]string, len(chunk))
@@ -749,7 +746,7 @@ func (r *CampaignsRepository) ListEbayFlaggedPurchases(ctx context.Context) ([]c
 		FROM campaign_purchases p
 		INNER JOIN campaigns c ON c.id = p.campaign_id
 		LEFT JOIN campaign_sales s ON s.purchase_id = p.id
-		WHERE s.id IS NULL AND c.phase != 'closed' AND p.ebay_export_flagged_at IS NOT NULL
+		WHERE s.id IS NULL AND c.phase != 'closed' AND p.ebay_export_flagged_at IS NOT NULL AND p.grader = 'PSA'
 		ORDER BY c.created_at DESC, p.purchase_date DESC`
 	rows, err := r.db.QueryContext(ctx, query)
 	if err != nil {
