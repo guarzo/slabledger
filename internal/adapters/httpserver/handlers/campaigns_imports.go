@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/csv"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -642,6 +643,65 @@ func (h *CampaignsHandler) HandleGlobalImportExternal(w http.ResponseWriter, r *
 	}
 
 	writeJSON(w, http.StatusOK, result)
+}
+
+// HandleImportCerts handles POST /api/purchases/import-certs.
+func (h *CampaignsHandler) HandleImportCerts(w http.ResponseWriter, r *http.Request) {
+	var req campaigns.CertImportRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "Invalid JSON body")
+		return
+	}
+	if len(req.CertNumbers) == 0 {
+		writeError(w, http.StatusBadRequest, "No certificate numbers provided")
+		return
+	}
+
+	result, err := h.service.ImportCerts(r.Context(), req.CertNumbers)
+	if err != nil {
+		h.logger.Error(r.Context(), "cert import failed", observability.Err(err))
+		writeError(w, http.StatusInternalServerError, "Internal server error")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, result)
+}
+
+// HandleListEbayExport handles GET /api/purchases/export-ebay.
+func (h *CampaignsHandler) HandleListEbayExport(w http.ResponseWriter, r *http.Request) {
+	flaggedOnly := r.URL.Query().Get("flagged_only") == "true"
+	resp, err := h.service.ListEbayExportItems(r.Context(), flaggedOnly)
+	if err != nil {
+		h.logger.Error(r.Context(), "list ebay export items failed", observability.Err(err))
+		writeError(w, http.StatusInternalServerError, "Internal server error")
+		return
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// HandleGenerateEbayCSV handles POST /api/purchases/export-ebay/generate.
+func (h *CampaignsHandler) HandleGenerateEbayCSV(w http.ResponseWriter, r *http.Request) {
+	var req campaigns.EbayExportGenerateRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "Invalid JSON body")
+		return
+	}
+	if len(req.Items) == 0 {
+		writeError(w, http.StatusBadRequest, "No items provided")
+		return
+	}
+
+	csvBytes, err := h.service.GenerateEbayCSV(r.Context(), req.Items)
+	if err != nil {
+		h.logger.Error(r.Context(), "generate ebay CSV failed", observability.Err(err))
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/csv")
+	w.Header().Set("Content-Disposition", "attachment; filename=ebay_import.csv")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(csvBytes) //nolint:errcheck // response already committed; write error unactionable
 }
 
 // parseGlobalCSVUpload reads and validates an uploaded CSV file (no campaign ID in path).
