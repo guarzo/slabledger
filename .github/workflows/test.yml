@@ -9,9 +9,16 @@ on:
     - cron: '0 6 * * 1'  # Weekly on Monday at 06:00 UTC
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   ci:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
 
     steps:
     - name: Checkout code
@@ -32,7 +39,7 @@ jobs:
     - name: Run linter
       uses: golangci/golangci-lint-action@v9
       with:
-        version: latest
+        version: v2.1.6
         args: --timeout=3m
 
     - name: Build binary
@@ -51,6 +58,9 @@ jobs:
 
   integration:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
     # Run weekly on Mondays at 06:00 UTC, or on-demand via workflow_dispatch
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     environment: integration-tests
