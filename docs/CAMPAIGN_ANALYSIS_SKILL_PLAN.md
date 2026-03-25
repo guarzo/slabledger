@@ -66,7 +66,7 @@ The command file will instruct Claude to:
 
 1. **Verify server** — `curl -sf http://localhost:8081/api/health`. If down, suggest starting it.
 
-2. **Read strategy doc** — `Read docs/CAMPAIGN_STRATEGY.md` for business context (margin model, exit channels, campaign design intent, operational cadence, risk triggers).
+2. **Read strategy doc** — `Read docs/private/CAMPAIGN_STRATEGY.md` for business context (margin model, exit channels, campaign design intent, operational cadence, risk triggers).
 
 3. **Fetch data** — Parallel `curl` calls to the appropriate endpoints for the selected mode. All endpoints require auth (`session_id` cookie) except `/api/health`. The command instructs Claude to try without auth first, prompt for the cookie on 401.
 
@@ -104,7 +104,7 @@ All API responses use **cents**. The command instructs Claude to:
 | File | Role |
 |---|---|
 | `.claude/commands/campaign-analysis.md` | **CREATE** — The custom command |
-| `docs/CAMPAIGN_STRATEGY.md` | Read at runtime for business context |
+| `docs/private/CAMPAIGN_STRATEGY.md` | Read at runtime for business context |
 | `internal/adapters/httpserver/router.go` | Reference for all API endpoint paths |
 | `internal/domain/campaigns/analytics_types.go` | JSON response shapes for analytics endpoints |
 | `internal/domain/campaigns/tuning_types.go` | JSON response shapes for tuning endpoint |
