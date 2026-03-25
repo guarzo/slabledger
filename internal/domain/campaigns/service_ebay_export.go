@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/guarzo/slabledger/internal/adapters/clients/cardutil"
 	"github.com/guarzo/slabledger/internal/domain/mathutil"
-	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
 // ListEbayExportItems returns items eligible for eBay export.
@@ -67,17 +67,17 @@ func (s *service) GenerateEbayCSV(ctx context.Context, items []EbayExportGenerat
 		return nil, fmt.Errorf("no items to export")
 	}
 
+	seen := make(map[string]bool, len(items))
+	purchaseIDs := make([]string, 0, len(items))
 	for _, item := range items {
 		if item.PriceCents <= 0 {
 			return nil, fmt.Errorf("item %s has invalid price %d: must be > 0", item.PurchaseID, item.PriceCents)
 		}
-	}
-
-	purchaseIDs := make([]string, len(items))
-	priceMap := make(map[string]int, len(items))
-	for i, item := range items {
-		purchaseIDs[i] = item.PurchaseID
-		priceMap[item.PurchaseID] = item.PriceCents
+		if seen[item.PurchaseID] {
+			return nil, fmt.Errorf("duplicate purchase ID %s in export request", item.PurchaseID)
+		}
+		seen[item.PurchaseID] = true
+		purchaseIDs = append(purchaseIDs, item.PurchaseID)
 	}
 
 	purchases := make(map[string]*Purchase, len(items))
@@ -109,7 +109,7 @@ func (s *service) GenerateEbayCSV(ctx context.Context, items []EbayExportGenerat
 		priceDollars := mathutil.ToDollars(int64(item.PriceCents))
 
 		setPrefix := "Pokemon "
-		if isJapaneseSet(p.SetName) {
+		if cardutil.IsJapaneseSet(p.SetName) {
 			setPrefix = "Pokemon Japanese "
 		}
 
@@ -153,18 +153,11 @@ func (s *service) GenerateEbayCSV(ctx context.Context, items []EbayExportGenerat
 		return nil, fmt.Errorf("csv flush: %w", err)
 	}
 
-	// Best-effort: clear flags after successful CSV generation
-	if err := s.repo.ClearEbayExportFlags(ctx, purchaseIDs); err != nil && s.logger != nil {
-		s.logger.Warn(ctx, "failed to clear ebay export flags",
-			observability.Err(err))
+	if err := s.repo.ClearEbayExportFlags(ctx, purchaseIDs); err != nil {
+		return nil, fmt.Errorf("csv generated but failed to clear export flags (re-export may cause duplicates): %w", err)
 	}
 
 	return buf.Bytes(), nil
-}
-
-func isJapaneseSet(setName string) bool {
-	upper := strings.ToUpper(setName)
-	return strings.Contains(upper, "JAPANESE") || strings.HasPrefix(upper, "JA ")
 }
 
 func formatGrade(grade float64) string {
@@ -174,6 +167,18 @@ func formatGrade(grade float64) string {
 	return fmt.Sprintf("%.1f", grade)
 }
 
+const ebayMaxTitleLen = 80
+
 func buildEbayTitle(cardName, setName, cardNumber, grade string) string {
-	return fmt.Sprintf("%s Pokemon %s %s PSA %s", cardName, setName, cardNumber, grade)
+	title := fmt.Sprintf("%s Pokemon %s %s PSA %s", cardName, setName, cardNumber, grade)
+	if len(title) <= ebayMaxTitleLen {
+		return title
+	}
+	// Try without "Pokemon " prefix to save space.
+	title = fmt.Sprintf("%s %s %s PSA %s", cardName, setName, cardNumber, grade)
+	if len(title) <= ebayMaxTitleLen {
+		return title
+	}
+	// Truncate to fit eBay's limit.
+	return title[:ebayMaxTitleLen]
 }
