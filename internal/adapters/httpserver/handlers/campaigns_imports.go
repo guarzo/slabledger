@@ -683,6 +683,8 @@ func (h *CampaignsHandler) HandleListEbayExport(w http.ResponseWriter, r *http.R
 
 // HandleGenerateEbayCSV handles POST /api/purchases/export-ebay/generate.
 func (h *CampaignsHandler) HandleGenerateEbayCSV(w http.ResponseWriter, r *http.Request) {
+	const maxBytes = 1 << 20 // 1MB
+	r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
 	var req campaigns.EbayExportGenerateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "Invalid JSON body")

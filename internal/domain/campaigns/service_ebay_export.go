@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/guarzo/slabledger/internal/adapters/clients/cardutil"
 	"github.com/guarzo/slabledger/internal/domain/mathutil"
 )
 
@@ -110,7 +109,7 @@ func (s *service) GenerateEbayCSV(ctx context.Context, items []EbayExportGenerat
 		priceDollars := mathutil.ToDollars(int64(item.PriceCents))
 
 		setPrefix := "Pokemon "
-		if cardutil.IsJapaneseSet(p.SetName) {
+		if isJapaneseSet(p.SetName) {
 			setPrefix = "Pokemon Japanese "
 		}
 
@@ -161,6 +160,11 @@ func (s *service) GenerateEbayCSV(ctx context.Context, items []EbayExportGenerat
 	return buf.Bytes(), nil
 }
 
+func isJapaneseSet(setName string) bool {
+	lower := strings.ToLower(setName)
+	return strings.Contains(lower, "japanese") || strings.HasPrefix(lower, "ja ")
+}
+
 func formatGrade(grade float64) string {
 	if grade == float64(int(grade)) {
 		return fmt.Sprintf("%d", int(grade))
@@ -172,14 +176,14 @@ const ebayMaxTitleLen = 80
 
 func buildEbayTitle(cardName, setName, cardNumber, grade string) string {
 	title := fmt.Sprintf("%s Pokemon %s %s PSA %s", cardName, setName, cardNumber, grade)
-	if len(title) <= ebayMaxTitleLen {
+	if len([]rune(title)) <= ebayMaxTitleLen {
 		return title
 	}
 	// Try without "Pokemon " prefix to save space.
 	title = fmt.Sprintf("%s %s %s PSA %s", cardName, setName, cardNumber, grade)
-	if len(title) <= ebayMaxTitleLen {
+	if len([]rune(title)) <= ebayMaxTitleLen {
 		return title
 	}
-	// Truncate to fit eBay's limit.
-	return title[:ebayMaxTitleLen]
+	// Truncate to fit eBay's limit (rune-safe for multi-byte characters).
+	return string([]rune(title)[:ebayMaxTitleLen])
 }

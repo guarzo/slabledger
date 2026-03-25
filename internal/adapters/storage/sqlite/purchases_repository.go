@@ -720,25 +720,44 @@ func (r *CampaignsRepository) AcceptAISuggestion(ctx context.Context, purchaseID
 // --- eBay Export ---
 
 func (r *CampaignsRepository) SetEbayExportFlag(ctx context.Context, purchaseID string, flaggedAt time.Time) error {
-	_, err := r.db.ExecContext(ctx,
+	result, err := r.db.ExecContext(ctx,
 		`UPDATE campaign_purchases SET ebay_export_flagged_at = ? WHERE id = ?`,
 		flaggedAt, purchaseID)
-	return err
+	if err != nil {
+		return err
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return campaigns.ErrPurchaseNotFound
+	}
+	return nil
 }
 
 func (r *CampaignsRepository) ClearEbayExportFlags(ctx context.Context, purchaseIDs []string) error {
 	if len(purchaseIDs) == 0 {
 		return nil
 	}
-	placeholders := make([]string, len(purchaseIDs))
-	args := make([]any, len(purchaseIDs))
-	for i, id := range purchaseIDs {
-		placeholders[i] = "?"
-		args[i] = id
+
+	const chunkSize = 500
+	for start := 0; start < len(purchaseIDs); start += chunkSize {
+		end := min(start+chunkSize, len(purchaseIDs))
+		chunk := purchaseIDs[start:end]
+
+		placeholders := make([]string, len(chunk))
+		args := make([]any, len(chunk))
+		for i, id := range chunk {
+			placeholders[i] = "?"
+			args[i] = id
+		}
+		query := `UPDATE campaign_purchases SET ebay_export_flagged_at = NULL WHERE id IN (` + strings.Join(placeholders, ",") + `)`
+		if _, err := r.db.ExecContext(ctx, query, args...); err != nil {
+			return err
+		}
 	}
-	query := `UPDATE campaign_purchases SET ebay_export_flagged_at = NULL WHERE id IN (` + strings.Join(placeholders, ",") + `)`
-	_, err := r.db.ExecContext(ctx, query, args...)
-	return err
+	return nil
 }
 
 func (r *CampaignsRepository) ListEbayFlaggedPurchases(ctx context.Context) ([]campaigns.Purchase, error) {

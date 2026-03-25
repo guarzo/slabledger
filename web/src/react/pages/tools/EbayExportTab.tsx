@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { api } from '@/js/api';
 import type { EbayExportItem, EbayExportGenerateItem } from '@/types/campaigns/core';
 import { centsToDollars, dollarsToCents } from '@/react/utils/formatters';
@@ -15,15 +15,17 @@ export default function EbayExportTab() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editPrice, setEditPrice] = useState('');
   const [exportCount, setExportCount] = useState(0);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchItems = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const resp = await api.listEbayExportItems(flaggedOnly);
       setItems(resp.items);
       setDecisions(new Map());
     } catch (err) {
-      console.error('Failed to fetch export items:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load items');
     } finally {
       setLoading(false);
     }
@@ -74,6 +76,7 @@ export default function EbayExportTab() {
     if (exportItems.length === 0) return;
 
     setLoading(true);
+    setError(null);
     try {
       const blob = await api.generateEbayCSV(exportItems);
       const url = URL.createObjectURL(blob);
@@ -85,15 +88,18 @@ export default function EbayExportTab() {
       setExportCount(exportItems.length);
       setPhase('export');
     } catch (err) {
-      console.error('Failed to generate CSV:', err);
+      setError(err instanceof Error ? err.message : 'Failed to generate CSV');
     } finally {
       setLoading(false);
     }
   };
 
-  const acceptedCount = Array.from(decisions.values()).filter(
-    d => d.action === 'accept' || d.action === 'edit'
-  ).length;
+  const acceptedCount = useMemo(() =>
+    Array.from(decisions.values()).filter(
+      d => d.action === 'accept' || d.action === 'edit'
+    ).length,
+    [decisions]
+  );
 
   if (phase === 'export') {
     return (
@@ -132,6 +138,12 @@ export default function EbayExportTab() {
           {loading ? 'Loading...' : items.length > 0 ? 'Refresh' : 'Load Items'}
         </button>
       </div>
+
+      {error && (
+        <div className="rounded border border-red-700 bg-red-900/30 p-3 text-sm text-red-300">
+          {error}
+        </div>
+      )}
 
       {items.length > 0 && (
         <>
