@@ -384,6 +384,16 @@ func (m *MockCampaignRepository) GetPurchasesByCertNumbers(ctx context.Context, 
 	return result, nil
 }
 
+func (m *MockCampaignRepository) GetPurchasesByIDs(_ context.Context, ids []string) (map[string]*campaigns.Purchase, error) {
+	result := make(map[string]*campaigns.Purchase, len(ids))
+	for _, id := range ids {
+		if p, ok := m.Purchases[id]; ok {
+			result[id] = p
+		}
+	}
+	return result, nil
+}
+
 func (m *MockCampaignRepository) UpdatePurchaseCLValue(ctx context.Context, id string, clValueCents int, population int) error {
 	if m.UpdatePurchaseCLValueFn != nil {
 		return m.UpdatePurchaseCLValueFn(ctx, id, clValueCents, population)

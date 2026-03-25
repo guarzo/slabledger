@@ -29,6 +29,7 @@ type PurchaseRepository interface {
 	GetPurchaseByCertNumber(ctx context.Context, grader string, certNumber string) (*Purchase, error)
 	GetPurchasesByGraderAndCertNumbers(ctx context.Context, grader string, certNumbers []string) (map[string]*Purchase, error)
 	GetPurchasesByCertNumbers(ctx context.Context, certNumbers []string) (map[string]*Purchase, error)
+	GetPurchasesByIDs(ctx context.Context, ids []string) (map[string]*Purchase, error)
 
 	// Field updates
 	UpdatePurchaseCLValue(ctx context.Context, id string, clValueCents int, population int) error

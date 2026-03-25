@@ -276,6 +276,16 @@ func (m *mockRepo) GetPurchasesByCertNumbers(_ context.Context, certNumbers []st
 	return result, nil
 }
 
+func (m *mockRepo) GetPurchasesByIDs(_ context.Context, ids []string) (map[string]*Purchase, error) {
+	result := make(map[string]*Purchase, len(ids))
+	for _, id := range ids {
+		if p, ok := m.purchases[id]; ok {
+			result[id] = p
+		}
+	}
+	return result, nil
+}
+
 func (m *mockRepo) UpdatePurchaseCLValue(_ context.Context, id string, clValueCents int, population int) error {
 	p, ok := m.purchases[id]
 	if !ok {

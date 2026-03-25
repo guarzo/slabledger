@@ -297,6 +297,52 @@ func (r *CampaignsRepository) GetPurchasesByCertNumbers(ctx context.Context, cer
 	return result, nil
 }
 
+// GetPurchasesByIDs retrieves multiple purchases by their IDs in a single query.
+// Large inputs are chunked to stay within SQLite's parameter limit.
+func (r *CampaignsRepository) GetPurchasesByIDs(ctx context.Context, ids []string) (map[string]*campaigns.Purchase, error) {
+	if len(ids) == 0 {
+		return make(map[string]*campaigns.Purchase), nil
+	}
+
+	const chunkSize = 500
+	result := make(map[string]*campaigns.Purchase, len(ids))
+
+	for start := 0; start < len(ids); start += chunkSize {
+		end := start + chunkSize
+		if end > len(ids) {
+			end = len(ids)
+		}
+		chunk := ids[start:end]
+
+		placeholders := make([]string, len(chunk))
+		args := make([]any, len(chunk))
+		for i, id := range chunk {
+			placeholders[i] = "?"
+			args[i] = id
+		}
+
+		query := `SELECT ` + purchaseColumns + ` FROM campaign_purchases WHERE id IN (` + strings.Join(placeholders, ",") + `)`
+		rows, err := r.db.QueryContext(ctx, query, args...)
+		if err != nil {
+			return nil, err
+		}
+
+		purchases, err := scanRows(ctx, rows, func(rs *sql.Rows) (campaigns.Purchase, error) {
+			var p campaigns.Purchase
+			err := scanPurchase(rs, &p)
+			return p, err
+		})
+		if err != nil {
+			return nil, err
+		}
+		for i := range purchases {
+			result[purchases[i].ID] = &purchases[i]
+		}
+	}
+
+	return result, nil
+}
+
 func (r *CampaignsRepository) UpdatePurchaseCLValue(ctx context.Context, id string, clValueCents int, population int) error {
 	result, err := r.db.ExecContext(ctx,
 		`UPDATE campaign_purchases SET cl_value_cents = ?, population = ?, updated_at = ? WHERE id = ?`,
