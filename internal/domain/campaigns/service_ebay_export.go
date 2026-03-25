@@ -80,13 +80,14 @@ func (s *service) GenerateEbayCSV(ctx context.Context, items []EbayExportGenerat
 		purchaseIDs = append(purchaseIDs, item.PurchaseID)
 	}
 
-	purchases := make(map[string]*Purchase, len(items))
+	purchases, err := s.repo.GetPurchasesByIDs(ctx, purchaseIDs)
+	if err != nil {
+		return nil, fmt.Errorf("get purchases for export: %w", err)
+	}
 	for _, id := range purchaseIDs {
-		p, err := s.repo.GetPurchase(ctx, id)
-		if err != nil {
-			return nil, fmt.Errorf("get purchase %s: %w", id, err)
+		if _, ok := purchases[id]; !ok {
+			return nil, fmt.Errorf("purchase %s not found", id)
 		}
-		purchases[id] = p
 	}
 
 	var buf bytes.Buffer
