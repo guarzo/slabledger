@@ -148,7 +148,7 @@ func (s *AdvisorRefreshScheduler) runAnalysis(ctx context.Context, analysisType 
 
 	start := time.Now()
 	// Use a generous timeout for the LLM call.
-	analysisCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+	analysisCtx, cancel := context.WithTimeout(ctx, 15*time.Minute)
 	defer cancel()
 
 	content, collectErr := collect(analysisCtx)
