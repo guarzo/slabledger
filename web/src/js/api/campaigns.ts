@@ -11,6 +11,7 @@ import type {
   PortfolioInsights, SuggestionsResponse, RevocationFlag, CapitalTimeline,
   WeeklyReviewSummary, CrackAnalysis, EVPortfolio, ActivationChecklist,
   MonteCarloComparison, BulkSaleResult, ShopifyPriceSyncResponse,
+  CertImportResult, EbayExportListResponse, EbayExportGenerateItem,
 } from '../../types/campaigns';
 import type { CardPricingResponse, PriceHint } from '../../types/pricing';
 import type { APIClient, APIRequestOptions, SearchCardsResponse } from './client';
@@ -117,6 +118,11 @@ declare module './client' {
 
     // Price hints
     savePriceHint(hint: PriceHint): Promise<{ status: string }>;
+
+    // Cert entry & eBay export
+    importCerts(certNumbers: string[]): Promise<CertImportResult>;
+    listEbayExportItems(flaggedOnly: boolean): Promise<EbayExportListResponse>;
+    generateEbayCSV(items: EbayExportGenerateItem[]): Promise<Blob>;
   }
 }
 
@@ -419,4 +425,33 @@ proto.createBulkSales = async function (this: APIClient, campaignId: string, sal
 // Price hints endpoints
 proto.savePriceHint = async function (this: APIClient, hint: PriceHint): Promise<{ status: string }> {
   return this.post<{ status: string }>('/price-hints', hint);
+};
+
+// Cert entry
+proto.importCerts = async function (
+  this: APIClient, certNumbers: string[],
+): Promise<CertImportResult> {
+  return this.post<CertImportResult>('/purchases/import-certs', { certNumbers });
+};
+
+// eBay export
+proto.listEbayExportItems = async function (
+  this: APIClient, flaggedOnly: boolean,
+): Promise<EbayExportListResponse> {
+  const params = flaggedOnly ? '?flagged_only=true' : '';
+  return this.get<EbayExportListResponse>(`/purchases/export-ebay${params}`);
+};
+
+proto.generateEbayCSV = async function (
+  this: APIClient, items: EbayExportGenerateItem[],
+): Promise<Blob> {
+  const response = await this.fetchWithRetry(
+    `${this.baseURL}/purchases/export-ebay/generate`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items }),
+    },
+  );
+  return response.blob();
 };

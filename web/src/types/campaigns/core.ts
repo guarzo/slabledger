@@ -411,3 +411,46 @@ export interface ExternalImportItemResult {
   status: 'imported' | 'skipped' | 'updated' | 'failed';
   error?: string;
 }
+
+// Cert entry
+
+export interface CertImportError {
+  certNumber: string;
+  error: string;
+}
+
+export interface CertImportResult {
+  imported: number;
+  alreadyExisted: number;
+  failed: number;
+  errors: CertImportError[];
+}
+
+// eBay export
+
+export interface EbayExportItem {
+  purchaseId: string;
+  certNumber: string;
+  cardName: string;
+  setName: string;
+  cardNumber: string;
+  cardYear: string;
+  gradeValue: number;
+  grader: string;
+  clValueCents: number;
+  marketMedianCents: number;
+  suggestedPriceCents: number;
+  hasCLValue: boolean;
+  hasMarketData: boolean;
+  frontImageUrl?: string;
+  backImageUrl?: string;
+}
+
+export interface EbayExportListResponse {
+  items: EbayExportItem[];
+}
+
+export interface EbayExportGenerateItem {
+  purchaseId: string;
+  priceCents: number;
+}

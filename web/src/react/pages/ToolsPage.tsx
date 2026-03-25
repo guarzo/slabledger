@@ -3,6 +3,8 @@ import { Tabs } from 'radix-ui';
 import { useCampaigns } from '../queries/useCampaignQueries';
 import OperationsTab, { type OperationState } from './campaigns/OperationsTab';
 import ShopifySyncPage from './ShopifySyncPage';
+import CertEntryTab from './tools/CertEntryTab';
+import EbayExportTab from './tools/EbayExportTab';
 import type { GlobalImportResult, PSAImportResult, ExternalImportResult } from '../../types/campaigns';
 import TabNavigation from '../ui/TabNavigation';
 import { SectionErrorBoundary } from '../ui';
@@ -10,6 +12,8 @@ import { SectionErrorBoundary } from '../ui';
 const TABS = [
   { id: 'operations', label: 'Operations' },
   { id: 'price-sync', label: 'Price Sync' },
+  { id: 'cert-entry', label: 'Cert Entry' },
+  { id: 'ebay-export', label: 'eBay Export' },
 ] as const;
 
 export default function ToolsPage() {
@@ -48,6 +52,18 @@ export default function ToolsPage() {
         <Tabs.Content value="price-sync">
           <SectionErrorBoundary sectionName="Price Sync">
             <ShopifySyncPage embedded />
+          </SectionErrorBoundary>
+        </Tabs.Content>
+
+        <Tabs.Content value="cert-entry">
+          <SectionErrorBoundary sectionName="Cert Entry">
+            <CertEntryTab />
+          </SectionErrorBoundary>
+        </Tabs.Content>
+
+        <Tabs.Content value="ebay-export">
+          <SectionErrorBoundary sectionName="eBay Export">
+            <EbayExportTab />
           </SectionErrorBoundary>
         </Tabs.Content>
       </Tabs.Root>
