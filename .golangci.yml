@@ -28,9 +28,7 @@ linters:
         - ifElseChain
         - elseif
         - emptyStringTest
-        - importShadow
         - returnAfterHttpError
-        - builtinShadow
         - commentedOutCode
     revive:
       rules:
