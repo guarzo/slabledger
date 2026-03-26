@@ -54,6 +54,9 @@ export interface Purchase {
   aiSuggestedAt?: string;
   cardYear?: string;
   ebayExportFlaggedAt?: string;
+  reviewedPriceCents?: number;
+  reviewedAt?: string;
+  reviewSource?: string;
   createdAt: string;
   updatedAt: string;
   // Market snapshot at time of purchase
@@ -296,6 +299,9 @@ export interface ShopifyPriceSyncMatch {
   overridePriceCents?: number;
   overrideSource?: string;
   aiSuggestedPriceCents?: number;
+  recommendedPriceCents: number;
+  recommendedSource: string;
+  reviewedAt?: string;
 }
 
 export interface ShopifyPriceSyncResponse {

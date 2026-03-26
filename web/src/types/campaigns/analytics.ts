@@ -61,6 +61,9 @@ export interface AgingItem {
   currentMarket?: MarketSnapshot;
   priceAnomaly?: boolean;
   anomalyReason?: string;
+  hasOpenFlag?: boolean;
+  recommendedPriceCents?: number;
+  recommendedSource?: string;
 }
 
 // Tuning types

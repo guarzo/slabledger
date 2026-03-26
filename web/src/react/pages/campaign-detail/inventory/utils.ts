@@ -158,3 +158,99 @@ export function displayGrade(purchase: { grader?: string; gradeValue: number }):
   }
   return String(grade);
 }
+
+export type ReviewStatus = 'needs_review' | 'large_gap' | 'no_data' | 'flagged' | 'reviewed';
+
+export function getReviewStatus(item: AgingItem): ReviewStatus {
+  if (item.hasOpenFlag) return 'flagged';
+  const snap = item.currentMarket;
+  const p = item.purchase;
+
+  if (!snap && p.clValueCents === 0) return 'no_data';
+  if (p.reviewedAt) return 'reviewed';
+  if (hasLargeGap(item)) return 'large_gap';
+
+  return 'needs_review';
+}
+
+export function hasLargeGap(item: AgingItem): boolean {
+  const prices: number[] = [];
+  const p = item.purchase;
+  const snap = item.currentMarket;
+
+  if (p.clValueCents > 0) prices.push(p.clValueCents);
+  if (snap?.medianCents) prices.push(snap.medianCents);
+  const costBasis = p.buyCostCents + p.psaSourcingFeeCents;
+  if (costBasis > 0) prices.push(costBasis);
+  if (snap?.lowestListCents) prices.push(snap.lowestListCents);
+
+  if (prices.length < 2) return false;
+
+  for (let i = 0; i < prices.length; i++) {
+    for (let j = i + 1; j < prices.length; j++) {
+      const max = Math.max(prices[i], prices[j]);
+      const min = Math.min(prices[i], prices[j]);
+      if (max > 0 && (max - min) / max > 0.3) return true;
+    }
+  }
+  return false;
+}
+
+const STATUS_PRIORITY: Record<ReviewStatus, number> = {
+  flagged: 0,
+  large_gap: 1,
+  no_data: 2,
+  needs_review: 3,
+  reviewed: 4,
+};
+
+export function reviewUrgencySort(a: AgingItem, b: AgingItem): number {
+  const statusA = getReviewStatus(a);
+  const statusB = getReviewStatus(b);
+  const priorityDiff = STATUS_PRIORITY[statusA] - STATUS_PRIORITY[statusB];
+  if (priorityDiff !== 0) return priorityDiff;
+  return b.daysHeld - a.daysHeld;
+}
+
+export function statusBorderColor(status: ReviewStatus): string {
+  switch (status) {
+    case 'flagged':
+    case 'large_gap':
+      return 'var(--danger)';
+    case 'needs_review':
+      return 'var(--warning)';
+    case 'reviewed':
+      return 'var(--success)';
+    case 'no_data':
+      return 'var(--text-muted)';
+  }
+}
+
+export function statusBadge(item: AgingItem): { label: string; color: string } {
+  const status = getReviewStatus(item);
+  switch (status) {
+    case 'flagged':
+      return { label: 'Flagged', color: 'var(--danger)' };
+    case 'large_gap':
+      return { label: 'Large Gap', color: 'var(--danger)' };
+    case 'no_data':
+      return { label: 'No Data', color: 'var(--text-muted)' };
+    case 'needs_review':
+      return { label: 'Review', color: 'var(--warning)' };
+    case 'reviewed': {
+      const reviewedAt = item.purchase.reviewedAt;
+      const relTime = reviewedAt ? relativeTime(reviewedAt) : '';
+      return { label: `✓ ${relTime}`, color: 'var(--success)' };
+    }
+  }
+}
+
+function relativeTime(isoDate: string): string {
+  const diff = Date.now() - new Date(isoDate).getTime();
+  const days = Math.floor(diff / 86400000);
+  if (days === 0) return 'today';
+  if (days === 1) return '1d ago';
+  if (days < 30) return `${days}d ago`;
+  if (days < 365) return `${Math.floor(days / 30)}mo ago`;
+  return `${Math.floor(days / 365)}y ago`;
+}
