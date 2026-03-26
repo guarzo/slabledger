@@ -3,6 +3,7 @@ package social
 import (
 	"fmt"
 	"strings"
+	"time"
 )
 
 const captionSystemPrompt = `You are a social media expert for Card Yeti, a PSA-graded Pokemon card resale business.
@@ -122,9 +123,7 @@ func buildUserPrompt(postType PostType, cards []PostCardDetail) string {
 	}
 }
 
-// --- LLM post suggestion prompts ---
-
-const postSuggestionSystemPrompt = `You are a social media strategist for Card Yeti, a PSA-graded Pokemon card resale business. Your job is to group available inventory cards into engaging Instagram carousel posts.
+const postSuggestionSystemPromptTemplate = `You are a social media strategist for Card Yeti, a PSA-graded Pokemon card resale business. Your job is to group available inventory cards into engaging Instagram carousel posts.
 
 ## Rules
 - Each post should have 3-8 cards with a clear theme (validation allows minCards=1 to maxCards=10; this range guides the LLM toward ideal groupings)
@@ -132,6 +131,15 @@ const postSuggestionSystemPrompt = `You are a social media strategist for Card Y
 - Every card can only appear in ONE post
 - Use the card's purchaseId (the first field) to reference it
 - Return valid JSON only, no markdown or explanation
+
+## Post Type Classification
+Each card has data to help you classify: cost, market price, cost/market ratio, 30-day trend %%, and days since acquisition. Use these criteria:
+
+- "hot_deals": cards where cost/market ratio is %.0f%% or below — these are priced well below market value. Prioritize this type when the data supports it.
+- "price_movers": cards with a 30-day trend of +%.0f%% or more (or -%.0f%% or more) — significant recent market movement. Group upward and downward movers separately when possible.
+- "new_arrivals": cards acquired within the last %d days. Use this ONLY for genuinely recent additions.
+
+A card may qualify for multiple types. Choose the most compelling angle for engagement. If a card is both a hot deal and new, prefer "hot_deals" since the value story is stronger. Aim for a diverse mix of post types across your suggestions — do NOT make all posts the same type.
 
 ## Output Format
 Return a JSON object:
@@ -144,25 +152,36 @@ Return a JSON object:
       "theme": "brief description of why these cards go together"
     }
   ]
-}
+}`
 
-Use "new_arrivals" for recently acquired cards, "price_movers" for cards with notable market movement, and "hot_deals" for cards priced well below market value. Default to "new_arrivals" if unsure.`
+var postSuggestionSystemPrompt = fmt.Sprintf(postSuggestionSystemPromptTemplate,
+	hotDealThreshold*100,
+	priceChangeThreshold*100, priceChangeThreshold*100,
+	newArrivalsWindow)
 
 func buildPostSuggestionPrompt(cards []PostCardDetail) string {
 	var sb strings.Builder
 	sb.WriteString("Here are the available PSA-graded Pokemon cards. Suggest 2-5 Instagram carousel post groupings:\n\n")
+	now := time.Now().UTC()
 	for _, c := range cards {
 		fmt.Fprintf(&sb, "- %s | %s | %s | %s %.0f",
 			c.PurchaseID, c.CardName, c.SetName, c.Grader, c.GradeValue)
+		if c.BuyCostCents > 0 {
+			fmt.Fprintf(&sb, " | cost $%.0f", float64(c.BuyCostCents)/100)
+		}
 		if c.MedianCents > 0 {
-			fmt.Fprintf(&sb, " | ~$%.0f", float64(c.MedianCents)/100)
+			fmt.Fprintf(&sb, " | market ~$%.0f", float64(c.MedianCents)/100)
+		}
+		if c.BuyCostCents > 0 && c.MedianCents > 0 {
+			ratio := float64(c.BuyCostCents) / float64(c.MedianCents)
+			fmt.Fprintf(&sb, " | cost/market %.0f%%", ratio*100)
 		}
 		if c.Trend30d != 0 {
-			direction := "up"
-			if c.Trend30d < 0 {
-				direction = "down"
-			}
-			fmt.Fprintf(&sb, " | trending %s", direction)
+			fmt.Fprintf(&sb, " | 30d trend %+.0f%%", c.Trend30d*100)
+		}
+		if !c.CreatedAt.IsZero() {
+			daysAgo := int(now.Sub(c.CreatedAt).Hours() / 24)
+			fmt.Fprintf(&sb, " | acquired %dd ago", daysAgo)
 		}
 		sb.WriteString("\n")
 	}
