@@ -274,6 +274,7 @@ type mockSocialRepo struct {
 	setPublishingFunc            func(ctx context.Context, id string) error
 	updateSlideURLsFunc          func(ctx context.Context, id string, urls []string) error
 	updateCoverTitleFunc         func(ctx context.Context, id string, title string) error
+	updateBackgroundURLsFunc     func(ctx context.Context, id string, urls []string) error
 }
 
 func (m *mockSocialRepo) GetPost(ctx context.Context, id string) (*SocialPost, error) {
@@ -387,6 +388,13 @@ func (m *mockSocialRepo) UpdateCoverTitle(ctx context.Context, id string, title 
 	return nil
 }
 
+func (m *mockSocialRepo) UpdateBackgroundURLs(ctx context.Context, id string, urls []string) error {
+	if m.updateBackgroundURLsFunc != nil {
+		return m.updateBackgroundURLsFunc(ctx, id, urls)
+	}
+	return nil
+}
+
 type mockPublisher struct{}
 
 func (m *mockPublisher) PublishCarousel(_ context.Context, _, _ string, _ []string, _ string) (*PublishResultInfo, error) {
@@ -485,5 +493,103 @@ func TestPublish_NoPublisherConfigured(t *testing.T) {
 	err := svc.Publish(context.Background(), "p1")
 	if err == nil {
 		t.Error("expected error when publisher not configured")
+	}
+}
+
+func TestDeduplicateByCardIdentity(t *testing.T) {
+	tests := []struct {
+		name    string
+		ids     []string
+		cards   []PostCardDetail
+		wantIDs []string
+	}{
+		{
+			name: "no duplicates — all kept",
+			ids:  []string{"p1", "p2"},
+			cards: []PostCardDetail{
+				{PurchaseID: "p1", CardName: "Charizard", SetName: "Base Set", GradeValue: 10},
+				{PurchaseID: "p2", CardName: "Pikachu", SetName: "Jungle", GradeValue: 9},
+			},
+			wantIDs: []string{"p1", "p2"},
+		},
+		{
+			name: "duplicate identity — second removed",
+			ids:  []string{"p1", "p2", "p3"},
+			cards: []PostCardDetail{
+				{PurchaseID: "p1", CardName: "Charizard", SetName: "Base Set", GradeValue: 10},
+				{PurchaseID: "p2", CardName: "Charizard", SetName: "Base Set", GradeValue: 10},
+				{PurchaseID: "p3", CardName: "Pikachu", SetName: "Jungle", GradeValue: 9},
+			},
+			wantIDs: []string{"p1", "p3"},
+		},
+		{
+			name: "same name different grade — both kept",
+			ids:  []string{"p1", "p2"},
+			cards: []PostCardDetail{
+				{PurchaseID: "p1", CardName: "Charizard", SetName: "Base Set", GradeValue: 10},
+				{PurchaseID: "p2", CardName: "Charizard", SetName: "Base Set", GradeValue: 9},
+			},
+			wantIDs: []string{"p1", "p2"},
+		},
+		{
+			name: "same name different set — both kept",
+			ids:  []string{"p1", "p2"},
+			cards: []PostCardDetail{
+				{PurchaseID: "p1", CardName: "Charizard", SetName: "Base Set", GradeValue: 10},
+				{PurchaseID: "p2", CardName: "Charizard", SetName: "Evolutions", GradeValue: 10},
+			},
+			wantIDs: []string{"p1", "p2"},
+		},
+		{
+			name: "duplicate purchase ID — second removed",
+			ids:  []string{"p1", "p1", "p2"},
+			cards: []PostCardDetail{
+				{PurchaseID: "p1", CardName: "Charizard", SetName: "Base Set", GradeValue: 10},
+				{PurchaseID: "p2", CardName: "Pikachu", SetName: "Jungle", GradeValue: 9},
+			},
+			wantIDs: []string{"p1", "p2"},
+		},
+		{
+			name:    "empty input",
+			ids:     nil,
+			cards:   nil,
+			wantIDs: nil,
+		},
+		{
+			name: "tiebreaker — prefer card with image",
+			ids:  []string{"p1", "p2"},
+			cards: []PostCardDetail{
+				{PurchaseID: "p1", CardName: "Charizard", SetName: "Base Set", GradeValue: 10, FrontImageURL: ""},
+				{PurchaseID: "p2", CardName: "Charizard", SetName: "Base Set", GradeValue: 10, FrontImageURL: "http://img.jpg", MedianCents: 5000},
+			},
+			wantIDs: []string{"p2"},
+		},
+		{
+			name: "tiebreaker — prefer higher market value",
+			ids:  []string{"p1", "p2"},
+			cards: []PostCardDetail{
+				{PurchaseID: "p1", CardName: "Charizard", SetName: "Base Set", GradeValue: 10, FrontImageURL: "http://a.jpg", MedianCents: 3000},
+				{PurchaseID: "p2", CardName: "Charizard", SetName: "Base Set", GradeValue: 10, FrontImageURL: "http://b.jpg", MedianCents: 5000},
+			},
+			wantIDs: []string{"p2"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cardLookup := make(map[string]PostCardDetail, len(tt.cards))
+			for _, c := range tt.cards {
+				cardLookup[c.PurchaseID] = c
+			}
+			got := deduplicateByCardIdentity(tt.ids, cardLookup)
+			if len(got) != len(tt.wantIDs) {
+				t.Fatalf("got %d IDs %v, want %d IDs %v", len(got), got, len(tt.wantIDs), tt.wantIDs)
+			}
+			for i, id := range got {
+				if id != tt.wantIDs[i] {
+					t.Errorf("got[%d] = %q, want %q", i, id, tt.wantIDs[i])
+				}
+			}
+		})
 	}
 }

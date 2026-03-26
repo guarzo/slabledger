@@ -333,6 +333,12 @@ func FromEnv(base Config) Config {
 	if cfg.Adapters.SocialAIDeployment == "" {
 		cfg.Adapters.SocialAIDeployment = cfg.Adapters.AzureAIDeployment
 	}
+	cfg.Adapters.ImageAIDeployment = os.Getenv("IMAGE_AI_DEPLOYMENT")
+	cfg.Adapters.ImageAIQuality = os.Getenv("IMAGE_AI_QUALITY")
+	if cfg.Adapters.ImageAIQuality == "" {
+		cfg.Adapters.ImageAIQuality = "medium"
+	}
+	cfg.Adapters.ImageAIEnabled = parseBool(os.Getenv("IMAGE_AI_ENABLED"), false)
 
 	return cfg
 }

@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import type { AgingItem, ExpectedValue, Purchase } from '../../../types/campaigns';
+import type { AgingItem, ExpectedValue, Purchase, ReviewStats } from '../../../types/campaigns';
 import PokeballLoader from '../../PokeballLoader';
 import { formatCents, formatPct } from '../../utils/formatters';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
@@ -13,13 +13,14 @@ import { useExpectedValues } from '../../queries/useCampaignQueries';
 import RecordSaleModal from './RecordSaleModal';
 import PriceHintDialog from '../../PriceHintDialog';
 import PriceOverrideDialog from '../../PriceOverrideDialog';
-import { bestPrice, unrealizedPL, formatPL, deriveSignalDelta } from './inventory/utils';
+import { bestPrice, unrealizedPL, formatPL, getReviewStatus, reviewUrgencySort } from './inventory/utils';
 import type { SortKey, SortDir } from './inventory/utils';
 import DesktopRow from './inventory/DesktopRow';
 import MobileCard from './inventory/MobileCard';
 import CrackCandidatesBanner from './inventory/CrackCandidatesBanner';
 import SortableHeader from './inventory/SortableHeader';
 import ExpandedDetail from './inventory/ExpandedDetail';
+import ReviewSummaryBar from './inventory/ReviewSummaryBar';
 
 export interface InventoryTabProps {
   items: AgingItem[];
@@ -50,10 +51,30 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [searchQuery, setSearchQuery] = useState('');
   const [statsExpanded, setStatsExpanded] = useState(false);
+  const [filterTab, setFilterTab] = useState<'needs_review' | 'large_gap' | 'no_data' | 'flagged' | 'all'>('needs_review');
+  const [showAll, setShowAll] = useState(false);
   const debouncedSearch = useDebounce(searchQuery, 300);
   const isMobile = useMediaQuery('(max-width: 768px)');
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const mobileScrollRef = useRef<HTMLDivElement>(null);
+
+  // Compute review stats and filter tab counts in a single pass
+  const { reviewStats, tabCounts } = useMemo(() => {
+    const stats: ReviewStats = { total: items.length, needsReview: 0, reviewed: 0, flagged: 0 };
+    const counts = { needs_review: 0, large_gap: 0, no_data: 0, flagged: 0, all: items.length };
+    for (const item of items) {
+      if (item.hasOpenFlag) stats.flagged++;
+      if (item.purchase.reviewedAt) stats.reviewed++;
+      else stats.needsReview++;
+
+      const status = getReviewStatus(item);
+      if (status === 'needs_review') { counts.needs_review++; }
+      else if (status === 'large_gap') { counts.needs_review++; counts.large_gap++; }
+      else if (status === 'no_data') { counts.needs_review++; counts.no_data++; }
+      else if (status === 'flagged') counts.flagged++;
+    }
+    return { reviewStats: stats, tabCounts: counts };
+  }, [items]);
 
   function handleSort(key: SortKey) {
     if (sortKey === key) {
@@ -69,7 +90,16 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
     setExpandedId(null);
     scrollContainerRef.current?.scrollTo({ top: 0 });
     mobileScrollRef.current?.scrollTo({ top: 0 });
-  }, [sortKey, sortDir, debouncedSearch]);
+  }, [sortKey, sortDir, debouncedSearch, filterTab, showAll]);
+
+  const handleReviewed = useCallback(() => {
+    if (campaignId) {
+      queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.inventory(campaignId) });
+    } else {
+      queryClient.invalidateQueries({ predicate: (query) => query.queryKey[0] === 'campaigns' });
+    }
+    setExpandedId(null);
+  }, [campaignId, queryClient]);
 
   // Build EV lookup map by certNumber; hide if insufficient data points or no campaignId
   const showEV = !!campaignId && evPortfolio && evPortfolio.items?.length > 0 && evPortfolio.minDataPoints >= 30;
@@ -84,7 +114,8 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
 
   const filteredAndSortedItems = useMemo(() => {
     let result = items;
-    // Filter
+
+    // Search always overrides: if search query is set, search all items regardless of tab
     if (debouncedSearch.trim()) {
       const q = debouncedSearch.toLowerCase();
       result = result.filter(i =>
@@ -92,8 +123,25 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
         (i.purchase.certNumber && i.purchase.certNumber.toLowerCase().includes(q)) ||
         (i.purchase.setName && i.purchase.setName.toLowerCase().includes(q))
       );
+    } else if (!showAll) {
+      // Filter by active tab using getReviewStatus
+      if (filterTab !== 'all') {
+        result = result.filter(i => {
+          const status = getReviewStatus(i);
+          if (filterTab === 'large_gap') return status === 'large_gap';
+          if (filterTab === 'no_data') return status === 'no_data';
+          if (filterTab === 'flagged') return status === 'flagged';
+          // 'needs_review' tab shows needs_review + large_gap + no_data (all unreviewed/unflagged)
+          return status === 'needs_review' || status === 'large_gap' || status === 'no_data';
+        });
+      }
     }
-    // Sort
+
+    // Sort: when !showAll and no search, use queue urgency sort; otherwise use user-selected sort
+    if (!showAll && !debouncedSearch.trim()) {
+      return [...result].sort(reviewUrgencySort);
+    }
+
     const dir = sortDir === 'asc' ? 1 : -1;
     return [...result].sort((a, b) => {
       switch (sortKey) {
@@ -127,7 +175,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
           return 0;
       }
     });
-  }, [items, debouncedSearch, sortKey, sortDir, evMap]);
+  }, [items, debouncedSearch, sortKey, sortDir, evMap, showAll, filterTab]);
 
   const rowVirtualizer = useVirtualizer({
     count: filteredAndSortedItems.length,
@@ -361,40 +409,57 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
       {/* Crack Candidates Banner */}
       {campaignId && <CrackCandidatesBanner campaignId={campaignId} />}
 
-      {/* Search bar — always visible */}
-      <div className="mb-3">
-        <div className="relative">
-          <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
-            <title>Search</title>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
-          <input
-            type="text"
-            placeholder="Search by card name, cert #, or set..."
-            aria-label="Search by card name, cert number, or set"
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            className="w-full bg-[var(--surface-0)]/60 text-[var(--text)] text-sm rounded-[10px] pl-10 pr-3 py-2.5 border border-[var(--surface-2)]/50 placeholder-[var(--text-subtle)] focus:outline-none focus:border-[var(--brand-500)]/50 focus:bg-[var(--surface-0)] transition-all duration-200"
-          />
-          {searchQuery && (
-            <button
-              type="button"
-              onClick={() => setSearchQuery('')}
-              aria-label="Clear search"
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--text)] transition-colors"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          )}
-        </div>
-        {debouncedSearch && (
-          <div className="text-xs text-[var(--text-subtle)] mt-1.5 pl-1">
-            {filteredAndSortedItems.length} of {items.length} cards
-          </div>
-        )}
+      {/* Review Summary Bar */}
+      <div className="mb-4">
+        <ReviewSummaryBar
+          stats={reviewStats}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          showAll={showAll}
+          onToggleShowAll={() => setShowAll(prev => !prev)}
+        />
       </div>
+
+      {/* Filter tabs — visible when not in showAll mode */}
+      {!showAll && (
+        <div className="flex items-center gap-2 mb-3 flex-wrap">
+          {([
+            { key: 'needs_review' as const, label: 'Needs Review', color: 'var(--warning)' },
+            { key: 'large_gap' as const, label: 'Large Gap', color: 'var(--danger)' },
+            { key: 'no_data' as const, label: 'No Data', color: 'var(--text-muted)' },
+            { key: 'flagged' as const, label: 'Flagged', color: 'var(--danger)' },
+            { key: 'all' as const, label: 'All', color: 'var(--text)' },
+          ] as const).map(tab => (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => setFilterTab(tab.key)}
+              className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-colors ${
+                filterTab === tab.key
+                  ? 'border-[var(--brand-500)] bg-[var(--brand-500)]/10 text-[var(--brand-400)]'
+                  : 'border-[var(--surface-2)] text-[var(--text-muted)] hover:text-[var(--text)] hover:border-[var(--text-muted)]'
+              }`}
+            >
+              {tab.label}
+              <span
+                className="ml-1.5 inline-block min-w-[18px] text-center text-[10px] font-semibold px-1 py-[1px] rounded-full"
+                style={{
+                  background: filterTab === tab.key ? `color-mix(in srgb, ${tab.color} 15%, transparent)` : 'rgba(255,255,255,0.06)',
+                  color: filterTab === tab.key ? tab.color : 'var(--text-muted)',
+                }}
+              >
+                {tabCounts[tab.key]}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {debouncedSearch && (
+        <div className="text-xs text-[var(--text-subtle)] mb-2 pl-1">
+          {filteredAndSortedItems.length} of {items.length} cards
+        </div>
+      )}
 
       {isMobile ? (
         <div className="space-y-3">
@@ -437,19 +502,22 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
       ) : (
         <div className="glass-table">
           {/* Sticky header */}
-          <div className="glass-table-header flex items-center sticky top-0 z-10">
+          <div className="glass-table-header flex items-center sticky top-0 z-10" style={{ paddingLeft: '3px' }}>
             <div className="glass-table-th flex-shrink-0 !px-1" style={{ width: '28px' }}>
               <input type="checkbox" aria-label="Select all visible cards" checked={filteredAndSortedItems.length > 0 && filteredAndSortedItems.every(i => selected.has(i.purchase.id))}
                 onChange={toggleAll} className="rounded accent-[var(--brand-500)]" />
             </div>
             <SortableHeader label="Card" sortKey="name" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="flex-1 min-w-0" />
             <SortableHeader label="Gr" sortKey="grade" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-center" style={{ width: '36px' }} />
-            <SortableHeader label="Cost" sortKey="cost" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-right" style={{ width: '82px' }} />
-            <SortableHeader label="Market" sortKey="market" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-right" style={{ width: '96px' }} />
-            <SortableHeader label="P/L" sortKey="pl" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-right" style={{ width: '80px' }} />
-            <SortableHeader label="Days" sortKey="days" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-center" style={{ width: '44px' }} />
-            <div className="glass-table-th flex-shrink-0 text-center" style={{ width: '64px' }}>Signal</div>
-            {showEV && <SortableHeader label="EV" sortKey="ev" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-right" style={{ width: '68px' }} />}
+            <SortableHeader label="Cost" sortKey="cost" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-right" style={{ width: '72px' }} />
+            <SortableHeader label="Market" sortKey="market" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-right" style={{ width: '88px' }} />
+            <div className="glass-table-th flex-shrink-0 text-right" style={{ width: '68px' }}>CL</div>
+            <SortableHeader label="P/L" sortKey="pl" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-right" style={{ width: '72px' }} />
+            <SortableHeader label="Days" sortKey="days" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-center" style={{ width: '40px' }} />
+            <div className="glass-table-th flex-shrink-0 text-center" style={{ width: '56px' }}>Signal</div>
+            <div className="glass-table-th flex-shrink-0 text-right" style={{ width: '68px' }}>Rec.</div>
+            <div className="glass-table-th flex-shrink-0 text-center" style={{ width: '72px' }}>Status</div>
+            {showEV && <SortableHeader label="EV" sortKey="ev" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-right" style={{ width: '64px' }} />}
             <div className="glass-table-th flex-shrink-0 !px-1" style={{ width: '28px' }}></div>
           </div>
           {/* Rows */}
@@ -490,7 +558,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                         showCampaignColumn={showCampaignColumn}
                       />
                     </div>
-                    {isExpanded && <ExpandedDetail item={item} ev={evMap.get(item.purchase.certNumber)} showCampaignColumn={showCampaignColumn} deltaPct={deriveSignalDelta(item)} />}
+                    {isExpanded && <ExpandedDetail item={item} onReviewed={handleReviewed} campaignId={campaignId} />}
                   </div>
                 );
               })}

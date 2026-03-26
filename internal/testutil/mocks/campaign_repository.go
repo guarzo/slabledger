@@ -712,3 +712,49 @@ func (m *MockCampaignRepository) UpdatePurchaseCardYear(_ context.Context, id st
 	p.CardYear = year
 	return nil
 }
+
+// --- PriceReviewRepository stubs ---
+
+func (m *MockCampaignRepository) UpdateReviewedPrice(_ context.Context, purchaseID string, priceCents int, source string) error {
+	p, ok := m.Purchases[purchaseID]
+	if !ok {
+		return campaigns.ErrPurchaseNotFound
+	}
+	p.ReviewedPriceCents = priceCents
+	if priceCents > 0 {
+		p.ReviewedAt = time.Now().Format(time.RFC3339)
+		p.ReviewSource = campaigns.ReviewSource(source)
+	} else {
+		p.ReviewedAt = ""
+		p.ReviewSource = ""
+	}
+	return nil
+}
+
+func (m *MockCampaignRepository) GetReviewStats(_ context.Context, _ string) (campaigns.ReviewStats, error) {
+	return campaigns.ReviewStats{}, nil
+}
+
+func (m *MockCampaignRepository) GetGlobalReviewStats(_ context.Context) (campaigns.ReviewStats, error) {
+	return campaigns.ReviewStats{}, nil
+}
+
+func (m *MockCampaignRepository) CreatePriceFlag(_ context.Context, _ *campaigns.PriceFlag) (int64, error) {
+	return 0, nil
+}
+
+func (m *MockCampaignRepository) ListPriceFlags(_ context.Context, _ string) ([]campaigns.PriceFlagWithContext, error) {
+	return []campaigns.PriceFlagWithContext{}, nil
+}
+
+func (m *MockCampaignRepository) ResolvePriceFlag(_ context.Context, _ int64, _ int64) error {
+	return nil
+}
+
+func (m *MockCampaignRepository) HasOpenFlag(_ context.Context, _ string) (bool, error) {
+	return false, nil
+}
+
+func (m *MockCampaignRepository) OpenFlagPurchaseIDs(_ context.Context) (map[string]bool, error) {
+	return map[string]bool{}, nil
+}

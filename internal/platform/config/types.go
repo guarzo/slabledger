@@ -127,6 +127,9 @@ type AdapterConfig struct {
 	AzureAIKey            string // AZURE_AI_API_KEY - Azure AI API key
 	AzureAIDeployment     string // AZURE_AI_DEPLOYMENT - Model deployment name (default: gpt-5.4)
 	SocialAIDeployment    string // SOCIAL_AI_DEPLOYMENT - Separate model for social content (default: same as AzureAIDeployment)
+	ImageAIDeployment     string // IMAGE_AI_DEPLOYMENT - Image generation model deployment name
+	ImageAIQuality        string // IMAGE_AI_QUALITY - Image quality: low, medium, high (default: medium)
+	ImageAIEnabled        bool   // IMAGE_AI_ENABLED - Enable AI background generation (default: false)
 }
 
 // CardHedgerSchedulerConfig controls CardHedger-specific scheduler intervals

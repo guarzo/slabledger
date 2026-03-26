@@ -16,6 +16,7 @@ const (
 	ErrCodeRevocationTooSoon      errors.ErrorCode = "ERR_REVOCATION_TOO_SOON"
 	ErrCodeRevocationFlagNotFound errors.ErrorCode = "ERR_REVOCATION_FLAG_NOT_FOUND"
 	ErrCodeNoAISuggestion         errors.ErrorCode = "ERR_NO_AI_SUGGESTION"
+	ErrCodePriceFlagNotFound      errors.ErrorCode = "ERR_PRICE_FLAG_NOT_FOUND"
 )
 
 // Sentinel errors for campaign operations
@@ -29,6 +30,7 @@ var (
 	ErrRevocationTooSoon      = errors.NewAppError(ErrCodeRevocationTooSoon, "revocation already submitted within the past 7 days")
 	ErrRevocationFlagNotFound = errors.NewAppError(ErrCodeRevocationFlagNotFound, "revocation flag not found")
 	ErrNoAISuggestion         = errors.NewAppError(ErrCodeNoAISuggestion, "no AI suggestion to accept or suggestion has changed")
+	ErrPriceFlagNotFound      = errors.NewAppError(ErrCodePriceFlagNotFound, "price flag not found or already resolved")
 )
 
 // IsCampaignNotFound checks if the error is a "campaign not found" error.
@@ -53,3 +55,6 @@ func IsValidationError(err error) bool { return errors.HasErrorCode(err, ErrCode
 
 // IsNoAISuggestion checks if the error indicates a missing or stale AI suggestion.
 func IsNoAISuggestion(err error) bool { return errors.HasErrorCode(err, ErrCodeNoAISuggestion) }
+
+// IsPriceFlagNotFound checks if the error is a "price flag not found" error.
+func IsPriceFlagNotFound(err error) bool { return errors.HasErrorCode(err, ErrCodePriceFlagNotFound) }

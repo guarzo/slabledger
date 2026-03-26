@@ -87,3 +87,13 @@ func WithPublisher(p Publisher, tp InstagramTokenProvider) ServiceOption {
 func WithAITracker(t ai.AICallTracker) ServiceOption {
 	return func(s *service) { s.tracker = t }
 }
+
+// WithImageGenerator enables AI background image generation.
+func WithImageGenerator(ig ai.ImageGenerator, quality, mediaDir, baseURL string) ServiceOption {
+	return func(s *service) {
+		s.imageGen = ig
+		s.imageQuality = quality
+		s.mediaDir = mediaDir
+		s.baseURL = baseURL
+	}
+}

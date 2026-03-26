@@ -54,3 +54,25 @@ func TestCalculateNetProfit_LocalSale(t *testing.T) {
 		t.Errorf("CalculateNetProfit local = %d, want %d", net, want)
 	}
 }
+
+func TestCalculateSaleFee_WebsiteChannel(t *testing.T) {
+	campaign := &Campaign{EbayFeePct: 0.1235}
+
+	// Website channel should charge 3% fee
+	fee := CalculateSaleFee(SaleChannelWebsite, 10000, campaign)
+	if fee != 300 {
+		t.Errorf("website fee: got %d, want 300 (3%% of 10000)", fee)
+	}
+
+	// eBay should still charge 12.35%
+	ebayFee := CalculateSaleFee(SaleChannelEbay, 10000, campaign)
+	if ebayFee != 1235 {
+		t.Errorf("ebay fee: got %d, want 1235", ebayFee)
+	}
+
+	// Local should still be 0%
+	localFee := CalculateSaleFee(SaleChannelLocal, 10000, campaign)
+	if localFee != 0 {
+		t.Errorf("local fee: got %d, want 0", localFee)
+	}
+}

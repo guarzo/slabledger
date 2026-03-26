@@ -278,6 +278,57 @@ func ExtractGraderAndGrade(title string) (string, float64) {
 	return grader, grade
 }
 
+// OrdersExportRow represents a single row parsed from an orders export CSV.
+type OrdersExportRow struct {
+	OrderNumber  string
+	Date         string      // YYYY-MM-DD
+	SalesChannel SaleChannel // Mapped from CSV value
+	ProductTitle string
+	Grader       string
+	CertNumber   string
+	Grade        float64
+	UnitPrice    float64 // Dollars
+}
+
+// OrdersImportResult categorizes parsed order rows by match status.
+type OrdersImportResult struct {
+	Matched     []OrdersImportMatch `json:"matched"`
+	AlreadySold []OrdersImportSkip  `json:"alreadySold"`
+	NotFound    []OrdersImportSkip  `json:"notFound"`
+	Skipped     []OrdersImportSkip  `json:"skipped"`
+}
+
+// OrdersImportMatch represents a CSV row matched to an unsold inventory purchase.
+type OrdersImportMatch struct {
+	CertNumber           string      `json:"certNumber"`
+	ProductTitle         string      `json:"productTitle"`
+	SaleChannel          SaleChannel `json:"saleChannel"`
+	SaleDate             string      `json:"saleDate"`
+	SalePriceCents       int         `json:"salePriceCents"`
+	SaleFeeCents         int         `json:"saleFeeCents"`
+	PurchaseID           string      `json:"purchaseId"`
+	CampaignID           string      `json:"campaignId"`
+	CardName             string      `json:"cardName"`
+	BuyCostCents         int         `json:"buyCostCents"`
+	NetProfitCents       int         `json:"netProfitCents"`
+	CampaignLookupFailed bool        `json:"campaignLookupFailed,omitempty"`
+}
+
+// OrdersImportSkip represents a CSV row that was skipped or couldn't be matched.
+type OrdersImportSkip struct {
+	CertNumber   string `json:"certNumber"`
+	ProductTitle string `json:"productTitle"`
+	Reason       string `json:"reason"` // "already_sold", "not_found", "duplicate", "not_psa", "unknown_channel"
+}
+
+// OrdersConfirmItem carries the data needed to create a sale from a confirmed import match.
+type OrdersConfirmItem struct {
+	PurchaseID     string      `json:"purchaseId"`
+	SaleChannel    SaleChannel `json:"saleChannel"`
+	SaleDate       string      `json:"saleDate"`
+	SalePriceCents int         `json:"salePriceCents"`
+}
+
 // cardNumberPattern matches expected card number formats (digits, alphanumeric, with optional slash separator).
 var cardNumberPattern = regexp.MustCompile(`^[A-Za-z0-9]+([/\-][A-Za-z0-9]+)?$`)
 

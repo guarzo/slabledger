@@ -129,6 +129,7 @@ const postSuggestionSystemPromptTemplate = `You are a social media strategist fo
 - Each post should have 3-8 cards with a clear theme (validation allows minCards=1 to maxCards=10; this range guides the LLM toward ideal groupings)
 - Themes can be: character (evolution line, same Pokemon), era (vintage, modern), set, grade (PSA 10 collection), price range (hot deals), visual variety, or any creative angle
 - Every card can only appear in ONE post
+- Never include multiple copies of the same card (same name, set, and grade) in a single post. If you have two "Charizard Base Set PSA 10" from different purchases, put them in separate posts.
 - Use the card's purchaseId (the first field) to reference it
 - Return valid JSON only, no markdown or explanation
 

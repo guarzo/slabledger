@@ -12,6 +12,7 @@ export interface SocialPost {
   instagramPostId?: string;
   errorMessage?: string;
   slideUrls?: string[];
+  backgroundUrls?: string[];
   createdAt: string;
   updatedAt: string;
 }

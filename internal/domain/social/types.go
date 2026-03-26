@@ -37,6 +37,7 @@ type SocialPost struct {
 	InstagramPostID string     `json:"instagramPostId,omitempty"`
 	ErrorMessage    string     `json:"errorMessage,omitempty"`
 	SlideURLs       []string   `json:"slideUrls,omitempty"`
+	BackgroundURLs  []string   `json:"backgroundUrls,omitempty"`
 	CreatedAt       time.Time  `json:"createdAt"`
 	UpdatedAt       time.Time  `json:"updatedAt"`
 }

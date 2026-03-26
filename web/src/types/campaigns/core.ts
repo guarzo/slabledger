@@ -54,6 +54,9 @@ export interface Purchase {
   aiSuggestedAt?: string;
   cardYear?: string;
   ebayExportFlaggedAt?: string;
+  reviewedPriceCents?: number;
+  reviewedAt?: string;
+  reviewSource?: string;
   createdAt: string;
   updatedAt: string;
   // Market snapshot at time of purchase
@@ -296,6 +299,9 @@ export interface ShopifyPriceSyncMatch {
   overridePriceCents?: number;
   overrideSource?: string;
   aiSuggestedPriceCents?: number;
+  recommendedPriceCents: number;
+  recommendedSource: string;
+  reviewedAt?: string;
 }
 
 export interface ShopifyPriceSyncResponse {
@@ -455,4 +461,41 @@ export interface EbayExportListResponse {
 export interface EbayExportGenerateItem {
   purchaseId: string;
   priceCents: number;
+}
+
+// Orders sales import types
+
+export interface OrdersImportMatch {
+  certNumber: string;
+  productTitle: string;
+  saleChannel: SaleChannel;
+  saleDate: string;
+  salePriceCents: number;
+  saleFeeCents: number;
+  purchaseId: string;
+  campaignId: string;
+  cardName: string;
+  buyCostCents: number;
+  netProfitCents: number;
+  campaignLookupFailed?: boolean;
+}
+
+export interface OrdersImportSkip {
+  certNumber: string;
+  productTitle: string;
+  reason: string;
+}
+
+export interface OrdersImportResult {
+  matched: OrdersImportMatch[];
+  alreadySold: OrdersImportSkip[];
+  notFound: OrdersImportSkip[];
+  skipped: OrdersImportSkip[];
+}
+
+export interface OrdersConfirmItem {
+  purchaseId: string;
+  saleChannel: SaleChannel;
+  saleDate: string;
+  salePriceCents: number;
 }
