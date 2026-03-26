@@ -21,7 +21,7 @@ func newTestExecutor(svc campaigns.Service) *CampaignToolExecutor {
 func TestDefinitions_Count(t *testing.T) {
 	e := newTestExecutor(&mocks.MockCampaignService{})
 	defs := e.Definitions()
-	const want = 21
+	const want = 22
 	if len(defs) != want {
 		t.Errorf("Definitions() returned %d tools, want %d", len(defs), want)
 	}
@@ -196,5 +196,58 @@ func TestToJSON_TruncatesAt8KB(t *testing.T) {
 	result := toJSON(items)
 	if len(result) > 8000 {
 		t.Errorf("toJSON output = %d bytes, want <= 8000", len(result))
+	}
+}
+
+func TestExecute_GetDashboardSummary(t *testing.T) {
+	svc := &mocks.MockCampaignService{
+		GetWeeklyReviewSummaryFn: func(_ context.Context) (*campaigns.WeeklyReviewSummary, error) {
+			return &campaigns.WeeklyReviewSummary{
+				PurchasesThisWeek:    10,
+				PurchasesLastWeek:    8,
+				SpendThisWeekCents:   50000,
+				SalesThisWeek:        5,
+				SalesLastWeek:        3,
+				RevenueThisWeekCents: 30000,
+				ProfitThisWeekCents:  5000,
+				ProfitLastWeekCents:  3000,
+			}, nil
+		},
+		GetCreditSummaryFn: func(_ context.Context) (*campaigns.CreditSummary, error) {
+			return &campaigns.CreditSummary{
+				CreditLimitCents:  5000000,
+				OutstandingCents:  2500000,
+				UtilizationPct:    50.0,
+				AlertLevel:        "ok",
+				DaysToNextInvoice: 7,
+			}, nil
+		},
+		GetPortfolioHealthFn: func(_ context.Context) (*campaigns.PortfolioHealth, error) {
+			return &campaigns.PortfolioHealth{
+				Campaigns: []campaigns.CampaignHealth{
+					{CampaignName: "Test", HealthStatus: "healthy", HealthReason: "good", CapitalAtRisk: 1000},
+				},
+			}, nil
+		},
+		GetPortfolioChannelVelocityFn: func(_ context.Context) ([]campaigns.ChannelVelocity, error) {
+			return []campaigns.ChannelVelocity{
+				{Channel: "ebay", AvgDaysToSell: 14.5, SaleCount: 5},
+			}, nil
+		},
+	}
+	e := newTestExecutor(svc)
+
+	result, err := e.Execute(context.Background(), "get_dashboard_summary", "{}")
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+	if !strings.Contains(result, `"purchaseCount":10`) {
+		t.Errorf("missing purchaseCount in result: %s", result)
+	}
+	if !strings.Contains(result, `"alertLevel":"ok"`) {
+		t.Errorf("missing alertLevel in result: %s", result)
+	}
+	if !strings.Contains(result, `"purchaseCountWoW":2`) {
+		t.Errorf("missing WoW delta in result: %s", result)
 	}
 }
