@@ -102,6 +102,7 @@ export default function PostPreview({ postId, onBack, igConnected }: PostPreview
                   psa10Count={psa10Count}
                   totalValueCents={totalValueCents}
                   cards={detail.cards}
+                  backgroundUrls={detail.backgroundUrls}
                 />
               ) : (
                 detail.cards && detail.cards[currentSlide - 1] && (
@@ -110,6 +111,7 @@ export default function PostPreview({ postId, onBack, igConnected }: PostPreview
                     postType={detail.postType}
                     slideIndex={currentSlide}
                     totalSlides={totalSlides}
+                    backgroundUrl={detail.backgroundUrls?.[currentSlide]}
                   />
                 )
               )}

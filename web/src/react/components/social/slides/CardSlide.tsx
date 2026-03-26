@@ -7,6 +7,7 @@ import CardArtHero from './primitives/CardArtHero';
 import Flames from './primitives/Flames';
 import Sparkles from './primitives/Sparkles';
 import TrendLines from './primitives/TrendLines';
+import AIBackground from './primitives/AIBackground';
 import { getTheme } from './primitives/theme';
 
 interface CardSlideProps {
@@ -14,14 +15,16 @@ interface CardSlideProps {
   postType: PostType;
   slideIndex: number;
   totalSlides: number;
+  backgroundUrl?: string;
 }
 
-export default function CardSlide({ card, postType, slideIndex, totalSlides }: CardSlideProps) {
+export default function CardSlide({ card, postType, slideIndex, totalSlides, backgroundUrl }: CardSlideProps) {
   const theme = getTheme(postType);
   const isHero = postType === 'new_arrivals';
 
   return (
     <SlideCanvas dataSlide="card">
+      <AIBackground url={backgroundUrl} dimming={isHero ? 0.3 : 0.4} />
       <div className="flex flex-col p-6 h-full">
         <AccentBar gradientBar={theme.gradientBar} />
 
@@ -43,6 +46,7 @@ export default function CardSlide({ card, postType, slideIndex, totalSlides }: C
             cardName={card.cardName}
             grader={card.grader}
             grade={card.gradeValue}
+            backgroundUrl={backgroundUrl}
           />
         ) : (
           <SlabAccent

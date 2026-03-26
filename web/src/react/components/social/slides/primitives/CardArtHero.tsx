@@ -3,13 +3,23 @@ interface CardArtHeroProps {
   cardName: string;
   grader: string;
   grade: number;
+  backgroundUrl?: string;
 }
 
-export default function CardArtHero({ imageUrl, cardName, grader, grade }: CardArtHeroProps) {
+export default function CardArtHero({ imageUrl, cardName, grader, grade, backgroundUrl }: CardArtHeroProps) {
   return (
     <div className="flex-1 flex items-center justify-center w-full mb-4 min-h-0 max-h-[65%] relative">
-      {/* Blurred background from same image */}
-      {imageUrl && (
+      {/* Background: AI-generated or blurred card image */}
+      {backgroundUrl ? (
+        <img
+          src={backgroundUrl}
+          alt=""
+          aria-hidden
+          className="absolute inset-0 w-full h-full object-cover"
+          crossOrigin="anonymous"
+          style={{ filter: 'brightness(0.5)' }}
+        />
+      ) : imageUrl ? (
         <img
           src={imageUrl}
           alt=""
@@ -18,7 +28,7 @@ export default function CardArtHero({ imageUrl, cardName, grader, grade }: CardA
           crossOrigin="anonymous"
           style={{ filter: 'blur(30px) brightness(0.4)', transform: 'scale(1.2)' }}
         />
-      )}
+      ) : null}
 
       {/* Card image — centered, clean */}
       <div className="relative z-[2] flex items-center justify-center w-full h-full">

@@ -100,6 +100,7 @@ export function usePublishWithSlides(
           psa10Count={psa10Count}
           totalValueCents={totalValueCents}
           cards={detail.cards}
+          backgroundUrls={detail.backgroundUrls}
         />,
       );
       slides.push(coverBlob);
@@ -113,6 +114,7 @@ export function usePublishWithSlides(
             postType={detail.postType}
             slideIndex={i + 1}
             totalSlides={totalSlides}
+            backgroundUrl={detail.backgroundUrls?.[i + 1]}
           />,
         );
         slides.push(cardBlob);

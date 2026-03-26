@@ -9,6 +9,7 @@ import DynamicScatter from './primitives/DynamicScatter';
 import Flames from './primitives/Flames';
 import Sparkles from './primitives/Sparkles';
 import TrendLines from './primitives/TrendLines';
+import AIBackground from './primitives/AIBackground';
 import { getTheme } from './primitives/theme';
 
 interface CoverSlideProps {
@@ -19,6 +20,7 @@ interface CoverSlideProps {
   psa10Count: number;
   totalValueCents: number;
   cards?: PostCardDetail[];
+  backgroundUrls?: string[];
 }
 
 function buildSubtitle(postType: PostType, cardCount: number, psa10Count: number, cards?: PostCardDetail[]): string {
@@ -55,12 +57,14 @@ export default function CoverSlide({
   cardCount,
   psa10Count,
   cards,
+  backgroundUrls,
 }: CoverSlideProps) {
   const theme = getTheme(postType);
   const subtitle = buildSubtitle(postType, cardCount, psa10Count, cards);
 
   return (
     <SlideCanvas dataSlide="cover">
+      <AIBackground url={backgroundUrls?.[0]} dimming={0.2} />
       <AccentBar gradientBar={theme.gradientBar} />
 
       {/* Radial glow */}
