@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/campaigns"
 	"github.com/guarzo/slabledger/internal/domain/observability"
@@ -308,6 +309,76 @@ func (h *CampaignsHandler) HandleProjections(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	writeJSON(w, http.StatusOK, result)
+}
+
+// HandleSetReviewedPrice handles PATCH /api/purchases/{purchaseId}/review-price.
+func (h *CampaignsHandler) HandleSetReviewedPrice(w http.ResponseWriter, r *http.Request) {
+	purchaseID, ok := pathID(w, r, "purchaseId", "Purchase ID")
+	if !ok {
+		return
+	}
+	var req struct {
+		PriceCents int    `json:"priceCents"`
+		Source     string `json:"source"`
+	}
+	if !decodeBody(w, r, &req) {
+		return
+	}
+	if err := h.service.SetReviewedPrice(r.Context(), purchaseID, req.PriceCents, req.Source); err != nil {
+		if campaigns.IsPurchaseNotFound(err) {
+			writeError(w, http.StatusNotFound, "Purchase not found")
+			return
+		}
+		if campaigns.IsValidationError(err) {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		h.logger.Error(r.Context(), "failed to set reviewed price", observability.Err(err),
+			observability.String("purchase_id", purchaseID), observability.String("source", req.Source))
+		writeError(w, http.StatusInternalServerError, "Internal server error")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"success":    true,
+		"reviewedAt": time.Now().Format(time.RFC3339),
+	})
+}
+
+// HandleCreatePriceFlag handles POST /api/purchases/{purchaseId}/flag.
+func (h *CampaignsHandler) HandleCreatePriceFlag(w http.ResponseWriter, r *http.Request) {
+	purchaseID, ok := pathID(w, r, "purchaseId", "Purchase ID")
+	if !ok {
+		return
+	}
+	user := requireUser(w, r)
+	if user == nil {
+		return
+	}
+	var req struct {
+		Reason string `json:"reason"`
+	}
+	if !decodeBody(w, r, &req) {
+		return
+	}
+	flagID, err := h.service.CreatePriceFlag(r.Context(), purchaseID, user.ID, req.Reason)
+	if err != nil {
+		if campaigns.IsPurchaseNotFound(err) {
+			writeError(w, http.StatusNotFound, "Purchase not found")
+			return
+		}
+		if campaigns.IsValidationError(err) {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		h.logger.Error(r.Context(), "failed to create price flag", observability.Err(err),
+			observability.String("purchase_id", purchaseID))
+		writeError(w, http.StatusInternalServerError, "Internal server error")
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{
+		"id":        flagID,
+		"flaggedAt": time.Now().Format(time.RFC3339),
+	})
 }
 
 // HandleShopifyPriceSync handles POST /api/shopify/price-sync.

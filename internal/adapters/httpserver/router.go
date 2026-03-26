@@ -37,6 +37,7 @@ type Router struct {
 	socialHandler             *handlers.SocialHandler
 	instagramHandler          *handlers.InstagramHandler
 	aiUsageHandler            *handlers.AIStatusHandler
+	priceFlagsHandler         *handlers.PriceFlagsHandler
 	pricingAPIKey             string
 	logger                    observability.Logger
 	databasePath              string
@@ -63,6 +64,7 @@ type RouterConfig struct {
 	SocialHandler             *handlers.SocialHandler    // Social content; nil = disabled
 	InstagramHandler          *handlers.InstagramHandler // Instagram publishing; nil = disabled
 	AIStatusHandler           *handlers.AIStatusHandler  // AI usage stats; nil = disabled
+	PriceFlagsHandler         *handlers.PriceFlagsHandler // Price flag admin; nil = disabled
 	Logger                    observability.Logger
 	AdminEmails               []string
 	DatabasePath              string
@@ -136,6 +138,10 @@ func NewRouter(cfg RouterConfig) *Router {
 
 	if cfg.AIStatusHandler != nil {
 		rt.aiUsageHandler = cfg.AIStatusHandler
+	}
+
+	if cfg.PriceFlagsHandler != nil {
+		rt.priceFlagsHandler = cfg.PriceFlagsHandler
 	}
 
 	if cfg.PricingAPIKey != "" && cfg.CampaignsRepo != nil {
@@ -290,6 +296,10 @@ func (rt *Router) Setup() http.Handler {
 		if rt.aiUsageHandler != nil {
 			mux.Handle("GET /api/admin/ai-usage", rt.authMW.RequireAdmin(http.HandlerFunc(rt.aiUsageHandler.HandleAIUsage)))
 		}
+		if rt.priceFlagsHandler != nil {
+			mux.Handle("GET /api/admin/price-flags", rt.authMW.RequireAdmin(http.HandlerFunc(rt.priceFlagsHandler.HandleListPriceFlags)))
+			mux.Handle("PATCH /api/admin/price-flags/{flagId}/resolve", rt.authMW.RequireAdmin(http.HandlerFunc(rt.priceFlagsHandler.HandleResolvePriceFlag)))
+		}
 		rt.logger.Info(context.Background(), "admin routes registered")
 	}
 
@@ -371,6 +381,10 @@ func (rt *Router) Setup() http.Handler {
 		mux.Handle("DELETE /api/purchases/{purchaseId}/price-override", authRoute(rt.campaignsHandler.HandleClearPriceOverride))
 		mux.Handle("POST /api/purchases/{purchaseId}/accept-ai-suggestion", authRoute(rt.campaignsHandler.HandleAcceptAISuggestion))
 		mux.Handle("DELETE /api/purchases/{purchaseId}/ai-suggestion", authRoute(rt.campaignsHandler.HandleDismissAISuggestion))
+
+		// Price review & flag endpoints
+		mux.Handle("PATCH /api/purchases/{purchaseId}/review-price", authRoute(rt.campaignsHandler.HandleSetReviewedPrice))
+		mux.Handle("POST /api/purchases/{purchaseId}/flag", authRoute(rt.campaignsHandler.HandleCreatePriceFlag))
 
 		// Credit & Invoice endpoints
 		mux.Handle("GET /api/credit/summary", authRoute(rt.campaignsHandler.HandleCreditSummary))
