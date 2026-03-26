@@ -100,7 +100,7 @@ func (s *service) ImportCerts(ctx context.Context, certNumbers []string) (*CertI
 			CardYear:            info.Year,
 			BuyCostCents:        0,
 			CLValueCents:        0,
-			PSASourcingFeeCents:  0,
+			PSASourcingFeeCents: 0,
 			PurchaseDate:        now.Format("2006-01-02"),
 			PSAListingTitle:     info.Subject,
 			EbayExportFlaggedAt: &now,

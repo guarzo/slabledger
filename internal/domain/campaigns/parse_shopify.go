@@ -33,7 +33,7 @@ func ParseShopifyExportRows(records [][]string) ([]ShopifyExportRow, []ParseErro
 	// the same handle but different certs are preserved. Image-only rows
 	// (empty title) are tracked separately by handle for back-image merging.
 	products := make(map[string]*ShopifyExportRow) // keyed by handle+"|"+certNumber
-	backImages := make(map[string]string) // back images keyed by handle
+	backImages := make(map[string]string)          // back images keyed by handle
 	var order []string
 	var parseErrors []ParseError
 

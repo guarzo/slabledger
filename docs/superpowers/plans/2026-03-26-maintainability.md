@@ -510,7 +510,232 @@ flag methods into service_sell_sheet.go. PNL, aging, and tuning stay."
 
 ---
 
-## Task 7: A — Documentation improvements
+## Task 7: B7 — Migrate `azureai/image_client.go` from raw `http.Client` to `httpx.Client`
+
+**Files:**
+- Modify: `internal/adapters/clients/azureai/image_client.go`
+
+The `ImageClient` uses a raw `*http.Client` (line 30) while every other API client in the codebase uses `httpx.Client` for retry + circuit breaker. This is an architectural inconsistency — the image client silently lacks resilience that all other clients get.
+
+**Pattern to follow:** See `internal/adapters/clients/pokemonprice/client.go` lines 46–49 for the canonical `httpx.NewClient` usage.
+
+- [ ] **Step 1: Change `httpClient` field from `*http.Client` to `*httpx.Client`**
+
+In `image_client.go`, change line 30:
+```go
+// Before:
+httpClient *http.Client
+
+// After:
+httpClient *httpx.Client
+```
+
+- [ ] **Step 2: Update `NewImageClient` constructor to create an `httpx.Client`**
+
+Replace the raw `http.Client` construction (lines 51–55) with:
+```go
+config := httpx.DefaultConfig("AzureAIImage")
+config.DefaultTimeout = 2 * time.Minute // image generation is slow
+c := &ImageClient{
+    config:     cfg,
+    httpClient: httpx.NewClient(config),
+}
+```
+
+Add `"time"` to imports and ensure `httpx` import is present (it already is for `httpx.DefaultTransport()`).
+
+- [ ] **Step 3: Update `GenerateImage` to use `httpx.Client.Post`**
+
+Replace the manual HTTP request construction + `c.httpClient.Do(httpReq)` block (lines 111–132) with a call to `c.httpClient.Post`:
+
+```go
+headers := map[string]string{
+    "Content-Type": "application/json",
+}
+if isAzureOpenAI(endpoint) {
+    headers["api-key"] = c.config.APIKey
+} else {
+    headers["Authorization"] = "Bearer " + c.config.APIKey
+}
+
+resp, err := c.httpClient.Post(ctx, url, headers, body, 2*time.Minute)
+if err != nil {
+    return nil, fmt.Errorf("azureai image: http request: %w", err)
+}
+respBody := resp.Body
+```
+
+Remove the `resp.Body.Close()` defer since `httpx.Client` reads and closes the body internally (it returns `Response.Body` as `[]byte`). Remove the `io.ReadAll` call since `resp.Body` is already `[]byte`. Also remove the manual status code check since `httpx.Client.Post` returns an error for non-2xx status codes.
+
+Check `httpx.Response` struct — if it wraps status code differently, adjust the error handling accordingly.
+
+- [ ] **Step 4: Clean up unused imports**
+
+Remove `"bytes"`, `"io"`, and `"net/http"` if they are no longer used. Add `"time"` if not already present.
+
+- [ ] **Step 5: Verify compilation**
+
+Run: `go build ./internal/adapters/clients/azureai/...`
+Expected: SUCCESS
+
+- [ ] **Step 6: Run tests**
+
+Run: `go test ./internal/adapters/clients/azureai/...`
+Expected: PASS
+
+- [ ] **Step 7: Run linter**
+
+Run: `golangci-lint run ./internal/adapters/clients/azureai/...`
+Expected: No new issues
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add internal/adapters/clients/azureai/image_client.go
+git commit -m "refactor: migrate image_client.go from raw http.Client to httpx.Client
+
+Gives the image generation client retry + circuit breaker resilience,
+consistent with all other API clients in the codebase."
+```
+
+---
+
+## Task 8: B8 — Remove `os` import from domain `social/service_impl.go` via `MediaStore` interface
+
+**Files:**
+- Create: `internal/domain/social/media.go` (new `MediaStore` interface)
+- Modify: `internal/domain/social/service.go` (add `WithMediaStore` option)
+- Modify: `internal/domain/social/service_impl.go` (add `mediaStore` field to `service` struct)
+- Modify: `internal/domain/social/caption.go` (replace `os.MkdirAll`/`os.WriteFile` calls — this file is created in Task 5)
+- Create: `internal/adapters/storage/mediafs/store.go` (filesystem implementation)
+- Modify: `cmd/slabledger/init.go` (wire the adapter)
+
+The domain package `internal/domain/social/` imports `os` for writing image files to disk. Domain code should depend only on interfaces, not concrete I/O. This task introduces a `MediaStore` interface in the domain and a filesystem adapter.
+
+- [ ] **Step 1: Create `internal/domain/social/media.go`**
+
+```go
+package social
+
+// MediaStore abstracts file storage for generated media (backgrounds, slides).
+// Domain code uses this interface instead of os.MkdirAll / os.WriteFile directly.
+type MediaStore interface {
+	// EnsureDir creates a directory (and parents) if it doesn't exist.
+	EnsureDir(path string) error
+	// WriteFile writes data to a file, creating it if necessary.
+	WriteFile(path string, data []byte) error
+}
+```
+
+- [ ] **Step 2: Add `mediaStore` field to `service` struct and option**
+
+In `service_impl.go`, add field to the `service` struct:
+```go
+mediaStore   MediaStore
+```
+
+In `service.go`, add a new option after `WithImageGenerator`:
+```go
+// WithMediaStore sets the media storage backend for generated images.
+func WithMediaStore(ms MediaStore) ServiceOption {
+	return func(s *service) { s.mediaStore = ms }
+}
+```
+
+- [ ] **Step 3: Replace `os` calls in `caption.go` with `mediaStore`**
+
+In `caption.go` (created by Task 5), the `generateBackgroundsAsync` method uses:
+- `os.MkdirAll(postDir, 0o755)` → `s.mediaStore.EnsureDir(postDir)`
+- `os.WriteFile(coverPath, coverResult.ImageData, 0o644)` → `s.mediaStore.WriteFile(coverPath, coverResult.ImageData)`
+- `os.WriteFile(cardPath, cardResult.ImageData, 0o644)` → `s.mediaStore.WriteFile(cardPath, cardResult.ImageData)`
+
+Add a guard at the top of `generateBackgroundsAsync`:
+```go
+if s.mediaStore == nil {
+    return
+}
+```
+
+Remove `"os"` from `caption.go` imports.
+
+- [ ] **Step 4: Remove `"os"` from `service_impl.go` imports**
+
+After Task 5 splits the file, `service_impl.go` should no longer import `os` (the `os` calls moved to `caption.go`). If it still does, remove it. Verify `service_impl.go` has no remaining `os.` references.
+
+- [ ] **Step 5: Create filesystem adapter `internal/adapters/storage/mediafs/store.go`**
+
+```go
+package mediafs
+
+import "os"
+
+// Store implements social.MediaStore using the local filesystem.
+type Store struct{}
+
+// NewStore creates a new filesystem-backed media store.
+func NewStore() *Store { return &Store{} }
+
+// EnsureDir creates a directory (and parents) if it doesn't exist.
+func (s *Store) EnsureDir(path string) error {
+	return os.MkdirAll(path, 0o755)
+}
+
+// WriteFile writes data to a file, creating it if necessary.
+func (s *Store) WriteFile(path string, data []byte) error {
+	return os.WriteFile(path, data, 0o644)
+}
+```
+
+- [ ] **Step 6: Wire in `cmd/slabledger/init.go`**
+
+In the social service initialization (around line 224 where `WithImageGenerator` is appended), add:
+```go
+socialOpts = append(socialOpts, social.WithMediaStore(mediafs.NewStore()))
+```
+
+Add import:
+```go
+"github.com/guarzo/slabledger/internal/adapters/storage/mediafs"
+```
+
+- [ ] **Step 7: Verify no `os` import in domain/social**
+
+Run: `grep -rn '"os"' internal/domain/social/`
+Expected: No matches
+
+- [ ] **Step 8: Verify compilation**
+
+Run: `go build ./...`
+Expected: SUCCESS
+
+- [ ] **Step 9: Run tests**
+
+Run: `go test ./internal/domain/social/... ./internal/adapters/storage/mediafs/...`
+Expected: PASS
+
+- [ ] **Step 10: Run linter**
+
+Run: `golangci-lint run ./internal/domain/social/... ./internal/adapters/storage/mediafs/...`
+Expected: No new issues
+
+- [ ] **Step 11: Commit**
+
+```bash
+git add internal/domain/social/media.go \
+       internal/domain/social/service.go \
+       internal/domain/social/service_impl.go \
+       internal/domain/social/caption.go \
+       internal/adapters/storage/mediafs/store.go \
+       cmd/slabledger/init.go
+git commit -m "refactor: remove os import from social domain via MediaStore interface
+
+Introduce MediaStore interface in domain/social and filesystem adapter
+in adapters/storage/mediafs. Domain code no longer depends on os package."
+```
+
+---
+
+## Task 9: A — Documentation improvements
 
 **Files:**
 - Modify: `CLAUDE.md` (add Testing & Mocks section, error recipe, key reference files, file size guidance, fix migration count)
@@ -596,7 +821,7 @@ file size guidance. Fix migration count (17→19) and Go version (1.25.2→1.26)
 
 ---
 
-## Task 8: C — CI guardrails
+## Task 10: C — CI guardrails
 
 **Files:**
 - Create: `scripts/check-imports.sh`
@@ -726,7 +951,7 @@ CI workflow and Makefile 'check' target."
 
 ---
 
-## Task 9: Final verification
+## Task 11: Final verification
 
 - [ ] **Step 1: Full build**
 

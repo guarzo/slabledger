@@ -28,13 +28,14 @@ function buildSubtitle(postType: PostType, cardCount: number, psa10Count: number
       let totalDiscount = 0;
       let countWithPrices = 0;
       for (const c of cards) {
-        if (c.medianCents > 0 && c.buyCostCents > 0) {
-          totalDiscount += 1 - c.buyCostCents / c.medianCents;
+        if (c.clValueCents > 0 && c.askingPriceCents > 0 && c.askingPriceCents < c.clValueCents) {
+          totalDiscount += 1 - c.askingPriceCents / c.clValueCents;
           countWithPrices++;
         }
       }
-      const avgDiscount = countWithPrices > 0 ? totalDiscount / countWithPrices : 0;
-      return `${cardCount} cards \u00B7 avg ${Math.round(avgDiscount * 100)}% below market`;
+      if (countWithPrices === 0) return `${cardCount} cards`;
+      const avgDiscount = totalDiscount / countWithPrices;
+      return `${cardCount} cards \u00B7 avg ${Math.round(avgDiscount * 100)}% below CL`;
     }
     case 'new_arrivals':
       return `${cardCount} cards \u00B7 ${psa10Count}\u00D7 PSA 10`;

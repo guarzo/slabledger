@@ -1,14 +1,12 @@
 package azureai
 
 import (
-	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"strings"
+	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/httpx"
 	"github.com/guarzo/slabledger/internal/domain/ai"
@@ -27,7 +25,7 @@ func WithImageLogger(l observability.Logger) ImageOption {
 // It reuses the same Config type as the LLM client.
 type ImageClient struct {
 	config     Config
-	httpClient *http.Client
+	httpClient *httpx.Client
 	logger     observability.Logger
 }
 
@@ -48,11 +46,11 @@ func NewImageClient(cfg Config, opts ...ImageOption) (*ImageClient, error) {
 		cfg.APIVersion = "2024-12-01-preview"
 	}
 
+	httpCfg := httpx.DefaultConfig("AzureAIImage")
+	httpCfg.DefaultTimeout = 2 * time.Minute // image generation is slow
 	c := &ImageClient{
-		config: cfg,
-		httpClient: &http.Client{
-			Transport: httpx.DefaultTransport(),
-		},
+		config:     cfg,
+		httpClient: httpx.NewClient(httpCfg),
 	}
 	for _, opt := range opts {
 		opt(c)
@@ -108,38 +106,18 @@ func (c *ImageClient) GenerateImage(ctx context.Context, req ai.ImageRequest) (*
 	url := fmt.Sprintf("%s/openai/deployments/%s/images/generations?api-version=%s",
 		endpoint, c.config.DeploymentName, c.config.APIVersion)
 
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
-	if err != nil {
-		return nil, fmt.Errorf("azureai image: create request: %w", err)
-	}
-	httpReq.Header.Set("Content-Type", "application/json")
-
+	headers := map[string]string{"Content-Type": "application/json"}
 	if isAzureOpenAI(endpoint) {
-		httpReq.Header.Set("api-key", c.config.APIKey)
+		headers["api-key"] = c.config.APIKey
 	} else {
-		httpReq.Header.Set("Authorization", "Bearer "+c.config.APIKey)
+		headers["Authorization"] = "Bearer " + c.config.APIKey
 	}
 
-	resp, err := c.httpClient.Do(httpReq)
+	resp, err := c.httpClient.Post(ctx, url, headers, body, 2*time.Minute)
 	if err != nil {
 		return nil, fmt.Errorf("azureai image: http request: %w", err)
 	}
-	defer resp.Body.Close() //nolint:errcheck
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("azureai image: read response: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		if c.logger != nil {
-			c.logger.Error(ctx, "azure ai image request failed",
-				observability.Int("status", resp.StatusCode),
-				observability.String("body", string(respBody)),
-			)
-		}
-		return nil, fmt.Errorf("azureai image: returned %d: %s", resp.StatusCode, string(respBody))
-	}
+	respBody := resp.Body
 
 	var imageResp imageGenerationResponse
 	if err := json.Unmarshal(respBody, &imageResp); err != nil {

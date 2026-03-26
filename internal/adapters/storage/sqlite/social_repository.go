@@ -242,8 +242,8 @@ func scanPostCardDetail(rows *sql.Rows) (social.PostCardDetail, error) {
 	var c social.PostCardDetail
 	var createdAt string
 	err := rows.Scan(&c.PurchaseID, &c.SlideOrder, &c.CardName, &c.SetName, &c.CardNumber,
-		&c.GradeValue, &c.Grader, &c.CertNumber, &c.FrontImageURL, &c.BuyCostCents,
-		&c.MedianCents, &c.Trend30d, &createdAt)
+		&c.GradeValue, &c.Grader, &c.CertNumber, &c.FrontImageURL, &c.AskingPriceCents,
+		&c.CLValueCents, &c.Trend30d, &createdAt)
 	c.CreatedAt = parseSQLiteTime(createdAt)
 	return c, err
 }
@@ -253,8 +253,8 @@ func (r *SocialRepository) ListPostCards(ctx context.Context, postID string) ([]
 		`SELECT spc.purchase_id, spc.slide_order,
 		        p.card_name, COALESCE(p.set_name, ''), COALESCE(p.card_number, ''),
 		        p.grade_value, COALESCE(p.grader, 'PSA'), COALESCE(p.cert_number, ''),
-		        COALESCE(p.front_image_url, ''), p.buy_cost_cents,
-		        COALESCE(p.median_cents, 0), COALESCE(p.trend_30d, 0),
+		        COALESCE(p.front_image_url, ''), COALESCE(p.reviewed_price_cents, 0),
+		        COALESCE(p.cl_value_cents, 0), COALESCE(p.trend_30d, 0),
 		        p.created_at
 		 FROM social_post_cards spc
 		 JOIN campaign_purchases p ON p.id = spc.purchase_id
@@ -347,8 +347,8 @@ func (r *SocialRepository) GetAvailableCardsForPosts(ctx context.Context) ([]soc
 		`SELECT p.id, 0 as slide_order,
 		        p.card_name, COALESCE(p.set_name, ''), COALESCE(p.card_number, ''),
 		        p.grade_value, COALESCE(p.grader, 'PSA'), COALESCE(p.cert_number, ''),
-		        COALESCE(p.front_image_url, ''), p.buy_cost_cents,
-		        COALESCE(p.median_cents, 0), COALESCE(p.trend_30d, 0),
+		        COALESCE(p.front_image_url, ''), COALESCE(p.reviewed_price_cents, 0),
+		        COALESCE(p.cl_value_cents, 0), COALESCE(p.trend_30d, 0),
 		        p.created_at
 		 FROM campaign_purchases p
 		 WHERE p.front_image_url <> ''

@@ -39,12 +39,12 @@ type ServerDependencies struct {
 	CardHedgerStats           handlers.CardHedgerStats // optional: live CardHedger counters
 	CardRequestHandler        *handlers.CardRequestHandlers
 	PricingDiagnosticsHandler *handlers.PricingDiagnosticsHandler
-	CampaignsRepo             domainCampaigns.Repository // For pricing API (cert price lookup)
-	PricingAPIKey             string                     // Bearer token; empty = pricing API disabled
-	AdvisorHandler            *handlers.AdvisorHandler   // AI advisor; nil = disabled
-	SocialHandler             *handlers.SocialHandler    // Social content; nil = disabled
-	InstagramHandler          *handlers.InstagramHandler // Instagram publishing; nil = disabled
-	AIStatusHandler           *handlers.AIStatusHandler  // AI usage stats; nil = disabled
+	CampaignsRepo             domainCampaigns.Repository  // For pricing API (cert price lookup)
+	PricingAPIKey             string                      // Bearer token; empty = pricing API disabled
+	AdvisorHandler            *handlers.AdvisorHandler    // AI advisor; nil = disabled
+	SocialHandler             *handlers.SocialHandler     // Social content; nil = disabled
+	InstagramHandler          *handlers.InstagramHandler  // Instagram publishing; nil = disabled
+	AIStatusHandler           *handlers.AIStatusHandler   // AI usage stats; nil = disabled
 	PriceFlagsHandler         *handlers.PriceFlagsHandler // Price flag admin; nil = disabled
 }
 

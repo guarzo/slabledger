@@ -33,6 +33,11 @@ jobs:
     - name: Download dependencies
       run: go mod download
 
+    - name: Check architecture and file size invariants
+      run: |
+        ./scripts/check-imports.sh
+        ./scripts/check-file-size.sh
+
     - name: Run tests with coverage and race detection
       run: go test -race -timeout 10m -coverprofile=coverage.out -covermode=atomic ./...
 

@@ -1,6 +1,6 @@
 # SlabLedger - Makefile
 
-.PHONY: all help build test test-verbose coverage lint fmt clean install web web-build web-dev web-clean web-rebuild db-push db-pull ci hooks
+.PHONY: all help build test test-verbose coverage lint check fmt clean install web web-build web-dev web-clean web-rebuild db-push db-pull ci hooks
 
 # Default target
 all: help
@@ -19,6 +19,7 @@ help:
 	@echo "  test-verbose  Run all tests with verbose output"
 	@echo "  coverage      Run tests with coverage report"
 	@echo "  lint          Run linting and formatting"
+	@echo "  check         Run full quality check (lint + architecture + file size)"
 	@echo "  clean         Clean build artifacts"
 	@echo "  install       Install dependencies"
 	@echo ""
@@ -83,6 +84,11 @@ lint:
 	go fmt ./...
 	go vet ./...
 	golangci-lint run
+
+# Full quality check (lint + architecture + file size)
+check: lint
+	./scripts/check-imports.sh
+	./scripts/check-file-size.sh
 
 fmt:
 	go fmt ./...
