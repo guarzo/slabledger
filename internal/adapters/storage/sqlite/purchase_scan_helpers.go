@@ -16,7 +16,8 @@ const purchaseColumns = `id, campaign_id, card_name, cert_number, card_number, s
 	vault_status, invoice_date, was_refunded, front_image_url, back_image_url, purchase_source,
 	psa_listing_title, snapshot_status, snapshot_retry_count,
 	override_price_cents, override_source, override_set_at,
-	ai_suggested_price_cents, ai_suggested_at`
+	ai_suggested_price_cents, ai_suggested_at,
+	card_year, ebay_export_flagged_at`
 
 // purchaseColumnsAliased is the same column list with the "p." table alias for JOIN queries.
 const purchaseColumnsAliased = `p.id, p.campaign_id, p.card_name, p.cert_number, p.card_number, p.set_name,
@@ -28,7 +29,8 @@ const purchaseColumnsAliased = `p.id, p.campaign_id, p.card_name, p.cert_number,
 	p.vault_status, p.invoice_date, p.was_refunded, p.front_image_url, p.back_image_url, p.purchase_source,
 	p.psa_listing_title, p.snapshot_status, p.snapshot_retry_count,
 	p.override_price_cents, p.override_source, p.override_set_at,
-	p.ai_suggested_price_cents, p.ai_suggested_at`
+	p.ai_suggested_price_cents, p.ai_suggested_at,
+	p.card_year, p.ebay_export_flagged_at`
 
 // saleColumnsAliased is the SELECT column list for campaign_sales with "s." alias, used in LEFT JOIN queries.
 const saleColumnsAliased = `s.id, s.purchase_id, s.sale_channel, s.sale_price_cents, s.sale_fee_cents,
@@ -55,6 +57,7 @@ func purchaseScanDests(p *campaigns.Purchase) []any {
 		&p.PSAListingTitle, &p.SnapshotStatus, &p.SnapshotRetryCount,
 		&p.OverridePriceCents, &p.OverrideSource, &p.OverrideSetAt,
 		&p.AISuggestedPriceCents, &p.AISuggestedAt,
+		&p.CardYear, &p.EbayExportFlaggedAt,
 	}
 }
 

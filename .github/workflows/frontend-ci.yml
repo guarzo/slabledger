@@ -6,7 +6,6 @@ on:
     paths:
       - 'web/**'
       - '.github/workflows/frontend-ci.yml'
-      # Ignore documentation-only changes
       - '!web/**.md'
       - '!web/README.md'
       - '!web/CHANGELOG.md'
@@ -15,14 +14,20 @@ on:
     paths:
       - 'web/**'
       - '.github/workflows/frontend-ci.yml'
-      # Ignore documentation-only changes
       - '!web/**.md'
       - '!web/README.md'
       - '!web/CHANGELOG.md'
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   frontend:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
     defaults:
       run:
         working-directory: ./web
@@ -53,9 +58,15 @@ jobs:
     - name: Build
       run: npm run build
 
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v7
+      with:
+        name: web-dist
+        path: web/dist/
+        retention-days: 1
+
     - name: Install Lighthouse CI
       run: npm install -g @lhci/cli@0.15.x
-      # Using 0.15.x for Node.js 24 compatibility and latest features
 
     # Lighthouse CI is expensive, only run on main branch or when requested
     - name: Run Lighthouse CI
@@ -76,7 +87,11 @@ jobs:
   smoke-tests:
     # Fast smoke tests for quick feedback (~30-60 seconds)
     # Tests critical paths only (tagged with @smoke)
+    needs: frontend
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
     defaults:
       run:
         working-directory: ./web
@@ -95,6 +110,12 @@ jobs:
     - name: Install dependencies
       run: npm ci
 
+    - name: Download build artifacts
+      uses: actions/download-artifact@v7
+      with:
+        name: web-dist
+        path: web/dist/
+
     - name: Cache Playwright browsers
       uses: actions/cache@v5
       with:
@@ -105,9 +126,6 @@ jobs:
     - name: Install Playwright Chromium
       run: npx playwright install chromium --with-deps
 
-    - name: Build application
-      run: npm run build
-
     - name: Start preview server
       run: |
         npm run preview > preview-server.log 2>&1 &
@@ -116,10 +134,11 @@ jobs:
         CI: true
 
     - name: Wait for server
-      run: npx wait-on http://localhost:4173 --timeout 60000
+      run: npx wait-on http://localhost:4173 --timeout 90000
 
     - name: Run smoke tests only
       run: npx playwright test --grep @smoke
+      timeout-minutes: 5
       env:
         CI: true
         SMOKE_ONLY: true
@@ -130,7 +149,7 @@ jobs:
       with:
         name: smoke-test-results
         path: web/playwright-report/
-        retention-days: 3
+        retention-days: 7
 
     - name: Cleanup preview server
       if: always()
@@ -147,6 +166,9 @@ jobs:
     # Full E2E test suite (runs only if smoke tests pass)
     needs: smoke-tests
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
     defaults:
       run:
         working-directory: ./web
@@ -165,6 +187,12 @@ jobs:
     - name: Install dependencies
       run: npm ci
 
+    - name: Download build artifacts
+      uses: actions/download-artifact@v7
+      with:
+        name: web-dist
+        path: web/dist/
+
     - name: Cache Playwright browsers
       uses: actions/cache@v5
       with:
@@ -174,9 +202,6 @@ jobs:
 
     - name: Install Playwright Chromium (fast)
       run: npx playwright install chromium --with-deps
-
-    - name: Build application
-      run: npm run build
 
     - name: Start preview server
       run: |
@@ -191,6 +216,7 @@ jobs:
 
     - name: Run Playwright tests
       run: npx playwright test
+      timeout-minutes: 15
       env:
         CI: true
 
@@ -216,11 +242,8 @@ jobs:
         if [ -f preview-server.pid ]; then
           PID=$(cat preview-server.pid)
           echo "Stopping preview server (PID: $PID)"
-          # Kill the process group to ensure child processes are terminated
           kill -TERM -$PID 2>/dev/null || true
-          # Wait briefly for graceful shutdown
           sleep 2
-          # Force kill if still running
           kill -KILL -$PID 2>/dev/null || true
           rm -f preview-server.pid
           echo "Preview server cleanup complete"

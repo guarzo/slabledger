@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useMemo } from 'react';
 import { api } from '../../js/api';
 import type { ShopifyPriceSyncMatch, ShopifyPriceSyncResponse } from '../../types/campaigns';
-import { formatCents } from '../utils/formatters';
+import { formatCents, centsToDollars, dollarsToCents } from '../utils/formatters';
 import { Button, CardShell, TrendArrow } from '../ui';
 import { useToast } from '../contexts/ToastContext';
 
@@ -181,15 +181,6 @@ function detectAndParseCSV(text: string): ParsedCSV {
   }
 
   return { format, headers, prefixLines, items, certIdx, priceIdx };
-}
-
-function dollarsToCents(dollars: string): number {
-  const n = parseFloat(dollars);
-  return isNaN(n) ? 0 : Math.round(n * 100);
-}
-
-function centsToDollars(cents: number): string {
-  return (cents / 100).toFixed(2);
 }
 
 /* ── Exception Classification ─────────────────────────────────────── */

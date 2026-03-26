@@ -29,8 +29,9 @@ func (r *CampaignsRepository) CreatePurchase(ctx context.Context, p *campaigns.P
 			vault_status, invoice_date, was_refunded, front_image_url, back_image_url, purchase_source,
 			psa_listing_title, snapshot_status, snapshot_retry_count,
 			override_price_cents, override_source, override_set_at,
-			ai_suggested_price_cents, ai_suggested_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			ai_suggested_price_cents, ai_suggested_at,
+			card_year, ebay_export_flagged_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 	_, err := r.db.ExecContext(ctx, query,
 		p.ID, p.CampaignID, p.CardName, p.CertNumber,
@@ -44,6 +45,7 @@ func (r *CampaignsRepository) CreatePurchase(ctx context.Context, p *campaigns.P
 		p.PSAListingTitle, p.SnapshotStatus, p.SnapshotRetryCount,
 		p.OverridePriceCents, p.OverrideSource, p.OverrideSetAt,
 		p.AISuggestedPriceCents, p.AISuggestedAt,
+		p.CardYear, p.EbayExportFlaggedAt,
 	)
 	if err != nil && isUniqueConstraintError(err) {
 		return campaigns.ErrDuplicateCertNumber
@@ -289,6 +291,49 @@ func (r *CampaignsRepository) GetPurchasesByCertNumbers(ctx context.Context, cer
 		}
 		if cerr := rows.Close(); cerr != nil {
 			return nil, cerr
+		}
+	}
+
+	return result, nil
+}
+
+// GetPurchasesByIDs retrieves multiple purchases by their IDs in a single query.
+// Large inputs are chunked to stay within SQLite's parameter limit.
+func (r *CampaignsRepository) GetPurchasesByIDs(ctx context.Context, ids []string) (map[string]*campaigns.Purchase, error) {
+	if len(ids) == 0 {
+		return make(map[string]*campaigns.Purchase), nil
+	}
+
+	const chunkSize = 500
+	result := make(map[string]*campaigns.Purchase, len(ids))
+
+	for start := 0; start < len(ids); start += chunkSize {
+		end := min(start+chunkSize, len(ids))
+		chunk := ids[start:end]
+
+		placeholders := make([]string, len(chunk))
+		args := make([]any, len(chunk))
+		for i, id := range chunk {
+			placeholders[i] = "?"
+			args[i] = id
+		}
+
+		query := `SELECT ` + purchaseColumns + ` FROM campaign_purchases WHERE id IN (` + strings.Join(placeholders, ",") + `)`
+		rows, err := r.db.QueryContext(ctx, query, args...)
+		if err != nil {
+			return nil, err
+		}
+
+		purchases, err := scanRows(ctx, rows, func(rs *sql.Rows) (campaigns.Purchase, error) {
+			var p campaigns.Purchase
+			err := scanPurchase(rs, &p)
+			return p, err
+		})
+		if err != nil {
+			return nil, err
+		}
+		for i := range purchases {
+			result[purchases[i].ID] = &purchases[i]
 		}
 	}
 
@@ -670,4 +715,88 @@ func (r *CampaignsRepository) AcceptAISuggestion(ctx context.Context, purchaseID
 		return campaigns.ErrNoAISuggestion
 	}
 	return tx.Commit()
+}
+
+// --- eBay Export ---
+
+func (r *CampaignsRepository) SetEbayExportFlag(ctx context.Context, purchaseID string, flaggedAt time.Time) error {
+	result, err := r.db.ExecContext(ctx,
+		`UPDATE campaign_purchases SET ebay_export_flagged_at = ? WHERE id = ?`,
+		flaggedAt, purchaseID)
+	if err != nil {
+		return err
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return campaigns.ErrPurchaseNotFound
+	}
+	return nil
+}
+
+func (r *CampaignsRepository) ClearEbayExportFlags(ctx context.Context, purchaseIDs []string) error {
+	if len(purchaseIDs) == 0 {
+		return nil
+	}
+
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback() //nolint:errcheck // rollback after commit is a no-op
+
+	const chunkSize = 500
+	for start := 0; start < len(purchaseIDs); start += chunkSize {
+		end := min(start+chunkSize, len(purchaseIDs))
+		chunk := purchaseIDs[start:end]
+
+		placeholders := make([]string, len(chunk))
+		args := make([]any, len(chunk))
+		for i, id := range chunk {
+			placeholders[i] = "?"
+			args[i] = id
+		}
+		query := `UPDATE campaign_purchases SET ebay_export_flagged_at = NULL WHERE id IN (` + strings.Join(placeholders, ",") + `)`
+		if _, err := tx.ExecContext(ctx, query, args...); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func (r *CampaignsRepository) ListEbayFlaggedPurchases(ctx context.Context) ([]campaigns.Purchase, error) {
+	query := `SELECT ` + purchaseColumnsAliased + `
+		FROM campaign_purchases p
+		INNER JOIN campaigns c ON c.id = p.campaign_id
+		LEFT JOIN campaign_sales s ON s.purchase_id = p.id
+		WHERE s.id IS NULL AND c.phase != 'closed' AND p.ebay_export_flagged_at IS NOT NULL AND p.grader = 'PSA'
+		ORDER BY c.created_at DESC, p.purchase_date DESC`
+	rows, err := r.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	return scanRows(ctx, rows, func(rs *sql.Rows) (campaigns.Purchase, error) {
+		var p campaigns.Purchase
+		err := scanPurchase(rs, &p)
+		return p, err
+	})
+}
+
+func (r *CampaignsRepository) UpdatePurchaseCardYear(ctx context.Context, id string, year string) error {
+	result, err := r.db.ExecContext(ctx,
+		`UPDATE campaign_purchases SET card_year = ? WHERE id = ?`,
+		year, id)
+	if err != nil {
+		return err
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return campaigns.ErrPurchaseNotFound
+	}
+	return nil
 }

@@ -11,6 +11,7 @@ import type {
   PortfolioInsights, SuggestionsResponse, RevocationFlag, CapitalTimeline,
   WeeklyReviewSummary, CrackAnalysis, EVPortfolio, ActivationChecklist,
   MonteCarloComparison, BulkSaleResult, ShopifyPriceSyncResponse,
+  CertImportResult, EbayExportListResponse, EbayExportGenerateItem,
 } from '../../types/campaigns';
 import type { CardPricingResponse, PriceHint } from '../../types/pricing';
 import type { APIClient, APIRequestOptions, SearchCardsResponse } from './client';
@@ -117,6 +118,11 @@ declare module './client' {
 
     // Price hints
     savePriceHint(hint: PriceHint): Promise<{ status: string }>;
+
+    // Cert entry & eBay export
+    importCerts(certNumbers: string[]): Promise<CertImportResult>;
+    listEbayExportItems(flaggedOnly: boolean): Promise<EbayExportListResponse>;
+    generateEbayCSV(items: EbayExportGenerateItem[]): Promise<Blob>;
   }
 }
 
@@ -419,4 +425,59 @@ proto.createBulkSales = async function (this: APIClient, campaignId: string, sal
 // Price hints endpoints
 proto.savePriceHint = async function (this: APIClient, hint: PriceHint): Promise<{ status: string }> {
   return this.post<{ status: string }>('/price-hints', hint);
+};
+
+// Cert entry
+proto.importCerts = async function (
+  this: APIClient, certNumbers: string[],
+): Promise<CertImportResult> {
+  return this.post<CertImportResult>('/purchases/import-certs', { certNumbers });
+};
+
+// eBay export
+proto.listEbayExportItems = async function (
+  this: APIClient, flaggedOnly: boolean,
+): Promise<EbayExportListResponse> {
+  const params = flaggedOnly ? '?flagged_only=true' : '';
+  return this.get<EbayExportListResponse>(`/purchases/export-ebay${params}`);
+};
+
+proto.generateEbayCSV = async function (
+  this: APIClient, items: EbayExportGenerateItem[],
+): Promise<Blob> {
+  // No retry — export clears ebay_export_flagged_at on the server; retrying
+  // a failed request could produce duplicate side effects.
+  const { controller, cleanup } = this.createTimeoutController(this.defaultTimeoutMs);
+  try {
+    const response = await fetch(
+      `${this.baseURL}/purchases/export-ebay/generate`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items }),
+        signal: controller.signal,
+        credentials: 'include',
+      },
+    );
+    cleanup();
+    if (!response.ok) {
+      let data: { message?: string; code?: string; error?: string } = { error: response.statusText };
+      try { data = await response.json(); } catch { /* keep default */ }
+      throw new APIError(
+        data.message || `API error: ${response.status} ${response.statusText}`,
+        response.status,
+        data.code,
+        data,
+      );
+    }
+    return response.blob();
+  } catch (err) {
+    cleanup();
+    if (isAPIError(err)) throw err;
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new APIError('Request was cancelled', 0, 'CANCELLED');
+    }
+    const message = err instanceof Error ? err.message : 'Network error';
+    throw new APIError(message, 0, 'NETWORK_ERROR');
+  }
 };

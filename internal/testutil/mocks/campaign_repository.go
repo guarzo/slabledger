@@ -384,6 +384,16 @@ func (m *MockCampaignRepository) GetPurchasesByCertNumbers(ctx context.Context, 
 	return result, nil
 }
 
+func (m *MockCampaignRepository) GetPurchasesByIDs(_ context.Context, ids []string) (map[string]*campaigns.Purchase, error) {
+	result := make(map[string]*campaigns.Purchase, len(ids))
+	for _, id := range ids {
+		if p, ok := m.Purchases[id]; ok {
+			result[id] = p
+		}
+	}
+	return result, nil
+}
+
 func (m *MockCampaignRepository) UpdatePurchaseCLValue(ctx context.Context, id string, clValueCents int, population int) error {
 	if m.UpdatePurchaseCLValueFn != nil {
 		return m.UpdatePurchaseCLValueFn(ctx, id, clValueCents, population)
@@ -657,5 +667,48 @@ func (m *MockCampaignRepository) AcceptAISuggestion(_ context.Context, purchaseI
 	p.OverrideSetAt = time.Now().Format(time.RFC3339)
 	p.AISuggestedPriceCents = 0
 	p.AISuggestedAt = ""
+	return nil
+}
+
+func (m *MockCampaignRepository) SetEbayExportFlag(_ context.Context, purchaseID string, flaggedAt time.Time) error {
+	p, ok := m.Purchases[purchaseID]
+	if !ok {
+		return campaigns.ErrPurchaseNotFound
+	}
+	p.EbayExportFlaggedAt = &flaggedAt
+	return nil
+}
+
+func (m *MockCampaignRepository) ClearEbayExportFlags(_ context.Context, purchaseIDs []string) error {
+	for _, id := range purchaseIDs {
+		if p, ok := m.Purchases[id]; ok {
+			p.EbayExportFlaggedAt = nil
+		}
+	}
+	return nil
+}
+
+func (m *MockCampaignRepository) ListEbayFlaggedPurchases(_ context.Context) ([]campaigns.Purchase, error) {
+	var result []campaigns.Purchase
+	for _, p := range m.Purchases {
+		if p.EbayExportFlaggedAt == nil || m.PurchaseSales[p.ID] || p.Grader != "PSA" {
+			continue
+		}
+		// Exclude purchases with missing or closed campaigns (matches INNER JOIN in real SQL).
+		c, ok := m.Campaigns[p.CampaignID]
+		if !ok || c.Phase == campaigns.PhaseClosed {
+			continue
+		}
+		result = append(result, *p)
+	}
+	return result, nil
+}
+
+func (m *MockCampaignRepository) UpdatePurchaseCardYear(_ context.Context, id string, year string) error {
+	p, ok := m.Purchases[id]
+	if !ok {
+		return campaigns.ErrPurchaseNotFound
+	}
+	p.CardYear = year
 	return nil
 }

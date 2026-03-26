@@ -128,7 +128,9 @@ func isTransientAIError(err error) bool {
 		strings.Contains(msg, "connection refused") ||
 		strings.Contains(msg, "broken pipe") ||
 		strings.Contains(msg, "i/o timeout") ||
-		strings.Contains(msg, "EOF")
+		strings.Contains(msg, "EOF") ||
+		strings.Contains(msg, "SSE stream ended without") ||
+		strings.Contains(msg, "context deadline exceeded")
 }
 
 func (s *AdvisorRefreshScheduler) runAnalysis(ctx context.Context, analysisType advisor.AnalysisType, collect func(context.Context) (string, error)) error {
@@ -146,7 +148,7 @@ func (s *AdvisorRefreshScheduler) runAnalysis(ctx context.Context, analysisType 
 
 	start := time.Now()
 	// Use a generous timeout for the LLM call.
-	analysisCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+	analysisCtx, cancel := context.WithTimeout(ctx, 15*time.Minute)
 	defer cancel()
 
 	content, collectErr := collect(analysisCtx)

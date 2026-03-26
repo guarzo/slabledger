@@ -137,6 +137,8 @@ type Purchase struct {
 	OverrideSetAt         string         `json:"overrideSetAt,omitempty"`
 	AISuggestedPriceCents int            `json:"aiSuggestedPriceCents,omitempty"`
 	AISuggestedAt         string         `json:"aiSuggestedAt,omitempty"`
+	CardYear              string         `json:"cardYear,omitempty"`
+	EbayExportFlaggedAt   *time.Time     `json:"ebayExportFlaggedAt,omitempty"`
 	CreatedAt             time.Time      `json:"createdAt"`
 	UpdatedAt             time.Time      `json:"updatedAt"`
 

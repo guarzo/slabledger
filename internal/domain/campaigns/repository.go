@@ -29,6 +29,7 @@ type PurchaseRepository interface {
 	GetPurchaseByCertNumber(ctx context.Context, grader string, certNumber string) (*Purchase, error)
 	GetPurchasesByGraderAndCertNumbers(ctx context.Context, grader string, certNumbers []string) (map[string]*Purchase, error)
 	GetPurchasesByCertNumbers(ctx context.Context, certNumbers []string) (map[string]*Purchase, error)
+	GetPurchasesByIDs(ctx context.Context, ids []string) (map[string]*Purchase, error)
 
 	// Field updates
 	UpdatePurchaseCLValue(ctx context.Context, id string, clValueCents int, population int) error
@@ -45,6 +46,12 @@ type PurchaseRepository interface {
 	ClearPurchaseAISuggestion(ctx context.Context, purchaseID string) error
 	AcceptAISuggestion(ctx context.Context, purchaseID string, priceCents int) error
 	GetPriceOverrideStats(ctx context.Context) (*PriceOverrideStats, error)
+
+	// eBay export
+	SetEbayExportFlag(ctx context.Context, purchaseID string, flaggedAt time.Time) error
+	ClearEbayExportFlags(ctx context.Context, purchaseIDs []string) error
+	ListEbayFlaggedPurchases(ctx context.Context) ([]Purchase, error)
+	UpdatePurchaseCardYear(ctx context.Context, id string, year string) error
 
 	// Snapshot status
 	ListSnapshotPurchasesByStatus(ctx context.Context, status SnapshotStatus, limit int) ([]Purchase, error)
