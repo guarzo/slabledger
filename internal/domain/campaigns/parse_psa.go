@@ -39,7 +39,7 @@ func ParsePSAExportRows(records [][]string) ([]PSAExportRow, []ParseError, error
 			return ""
 		}
 
-		certNumber := getField(colIdx("cert number"))
+		certNumber := NormalizePSACert(getField(colIdx("cert number")))
 		if certNumber == "" {
 			continue // Skip empty template rows
 		}

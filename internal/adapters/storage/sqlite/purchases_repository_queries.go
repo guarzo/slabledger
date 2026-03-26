@@ -26,50 +26,59 @@ func (r *CampaignsRepository) GetPurchaseByCertNumber(ctx context.Context, grade
 	return &p, nil
 }
 
-// GetPurchasesByGraderAndCertNumbers retrieves multiple purchases by grader and cert numbers in a single query.
+// GetPurchasesByGraderAndCertNumbers retrieves multiple purchases by grader and cert numbers.
+// Large inputs are chunked to stay within SQLite's parameter limit.
 // Returns a map keyed by cert number.
-func (r *CampaignsRepository) GetPurchasesByGraderAndCertNumbers(ctx context.Context, grader string, certNumbers []string) (result map[string]*campaigns.Purchase, err error) {
+func (r *CampaignsRepository) GetPurchasesByGraderAndCertNumbers(ctx context.Context, grader string, certNumbers []string) (map[string]*campaigns.Purchase, error) {
 	if len(certNumbers) == 0 {
 		return make(map[string]*campaigns.Purchase), nil
 	}
 
-	placeholders := make([]string, len(certNumbers))
-	args := make([]any, 0, len(certNumbers)+1)
-	args = append(args, grader)
-	for i, cn := range certNumbers {
-		placeholders[i] = "?"
-		args = append(args, cn)
-	}
+	const chunkSize = 500
+	result := make(map[string]*campaigns.Purchase, len(certNumbers))
 
-	query := `SELECT ` + purchaseColumns + ` FROM campaign_purchases
-		WHERE grader = ? AND cert_number IN (` + strings.Join(placeholders, ",") + `)`
+	for start := 0; start < len(certNumbers); start += chunkSize {
+		end := min(start+chunkSize, len(certNumbers))
+		chunk := certNumbers[start:end]
 
-	rows, err := r.db.QueryContext(ctx, query, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		if cerr := rows.Close(); cerr != nil && err == nil {
-			err = cerr
-		}
-	}()
-
-	result = make(map[string]*campaigns.Purchase, len(certNumbers))
-	for rows.Next() {
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		default:
+		placeholders := make([]string, len(chunk))
+		args := make([]any, 0, len(chunk)+1)
+		args = append(args, grader)
+		for i, cn := range chunk {
+			placeholders[i] = "?"
+			args = append(args, cn)
 		}
 
-		var p campaigns.Purchase
-		if err := scanPurchase(rows, &p); err != nil {
+		query := `SELECT ` + purchaseColumns + ` FROM campaign_purchases
+			WHERE grader = ? AND cert_number IN (` + strings.Join(placeholders, ",") + `)`
+
+		rows, err := r.db.QueryContext(ctx, query, args...)
+		if err != nil {
 			return nil, err
 		}
-		result[p.CertNumber] = &p
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
+
+		for rows.Next() {
+			select {
+			case <-ctx.Done():
+				rows.Close() //nolint:errcheck // best-effort close on ctx cancel
+				return nil, ctx.Err()
+			default:
+			}
+
+			var p campaigns.Purchase
+			if err := scanPurchase(rows, &p); err != nil {
+				rows.Close() //nolint:errcheck // best-effort close on scan error
+				return nil, err
+			}
+			result[p.CertNumber] = &p
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close() //nolint:errcheck // best-effort close on iteration error
+			return nil, err
+		}
+		if cerr := rows.Close(); cerr != nil {
+			return nil, cerr
+		}
 	}
 	return result, nil
 }
@@ -344,7 +353,7 @@ func (r *CampaignsRepository) UpdatePurchaseImageURLs(ctx context.Context, id, f
 		return fmt.Errorf("check rows affected: %w", err)
 	}
 	if n == 0 {
-		return fmt.Errorf("purchase %s not found", id)
+		return campaigns.ErrPurchaseNotFound
 	}
 	return nil
 }
@@ -356,6 +365,8 @@ func (r *CampaignsRepository) UpdatePurchasePriceOverride(ctx context.Context, p
 	setAt := ""
 	if priceCents > 0 {
 		setAt = now.Format(time.RFC3339)
+	} else {
+		source = ""
 	}
 	result, err := r.db.ExecContext(ctx,
 		`UPDATE campaign_purchases SET override_price_cents = ?, override_source = ?, override_set_at = ?, updated_at = ? WHERE id = ?`,
@@ -399,9 +410,9 @@ func (r *CampaignsRepository) GetPriceOverrideStats(ctx context.Context) (*campa
 		SELECT
 			COUNT(*),
 			COALESCE(SUM(CASE WHEN p.override_price_cents > 0 THEN 1 ELSE 0 END), 0),
-			COALESCE(SUM(CASE WHEN p.override_source = 'manual' THEN 1 ELSE 0 END), 0),
-			COALESCE(SUM(CASE WHEN p.override_source = 'cost_markup' THEN 1 ELSE 0 END), 0),
-			COALESCE(SUM(CASE WHEN p.override_source = 'ai_accepted' THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN p.override_price_cents > 0 AND p.override_source = 'manual' THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN p.override_price_cents > 0 AND p.override_source = 'cost_markup' THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN p.override_price_cents > 0 AND p.override_source = 'ai_accepted' THEN 1 ELSE 0 END), 0),
 			COALESCE(SUM(CASE WHEN p.ai_suggested_price_cents > 0 THEN 1 ELSE 0 END), 0),
 			COALESCE(SUM(p.override_price_cents), 0),
 			COALESCE(SUM(p.ai_suggested_price_cents), 0)

@@ -151,7 +151,6 @@ func initializeAdvisorService(
 	advisorCacheRepo = sqlite.NewAdvisorCacheRepository(db.DB, logger)
 	advisorSvc = advisor.NewService(client, toolExec,
 		advisor.WithLogger(logger),
-		advisor.WithMaxToolRounds(5),
 		advisor.WithAITracker(aiCallRepo),
 		advisor.WithCacheStore(advisorCacheRepo),
 	)

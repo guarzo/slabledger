@@ -63,7 +63,7 @@ func TestRunAnalysis_UsesExpectedTimeout(t *testing.T) {
 		},
 	}
 	cache := &mockCache{}
-	s := NewAdvisorRefreshScheduler(collector, cache, nil, nopLogger{}, config.AdvisorRefreshConfig{Enabled: true})
+	s := NewAdvisorRefreshScheduler(collector, cache, nil, nopLogger{}, config.AdvisorRefreshConfig{Enabled: true, RefreshHour: -1})
 
 	start := time.Now()
 	err := s.runAnalysis(context.Background(), "digest", collector.collectFn)
@@ -133,8 +133,8 @@ func TestIsTransientAIError(t *testing.T) {
 		{"EOF", fmt.Errorf("unexpected EOF"), true},
 		{"i/o timeout", fmt.Errorf("i/o timeout"), true},
 		{"SSE stream incomplete", fmt.Errorf("SSE stream ended without response.completed (possible network interruption)"), true},
-		{"context deadline in LLM round", fmt.Errorf("llm completion (round 3): context deadline exceeded"), true},
-		{"context deadline bare", fmt.Errorf("context deadline exceeded"), true},
+		{"context deadline in LLM round", fmt.Errorf("llm completion (round 3): context deadline exceeded"), false},
+		{"context deadline bare", fmt.Errorf("context deadline exceeded"), false},
 		{"permanent 400 error", fmt.Errorf("azure ai returned 400: bad request"), false},
 		{"unknown error", fmt.Errorf("something unexpected"), false},
 	}

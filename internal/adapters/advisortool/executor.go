@@ -568,6 +568,7 @@ type dashboardSummary struct {
 		AvgDays   float64 `json:"avgDaysToSell"`
 		SaleCount int     `json:"saleCount"`
 	} `json:"channelVelocity"`
+	Errors []string `json:"errors,omitempty"`
 }
 
 func (e *CampaignToolExecutor) registerGetDashboardSummary() {
@@ -578,7 +579,9 @@ func (e *CampaignToolExecutor) registerGetDashboardSummary() {
 	}, func(ctx context.Context, _ string) (string, error) {
 		var ds dashboardSummary
 
-		if wr, err := e.svc.GetWeeklyReviewSummary(ctx); err == nil && wr != nil {
+		if wr, err := e.svc.GetWeeklyReviewSummary(ctx); err != nil {
+			ds.Errors = append(ds.Errors, "weeklyReview: "+err.Error())
+		} else if wr != nil {
 			ds.WeeklyReview.PurchaseCount = wr.PurchasesThisWeek
 			ds.WeeklyReview.PurchaseSpend = wr.SpendThisWeekCents
 			ds.WeeklyReview.SaleCount = wr.SalesThisWeek
@@ -589,7 +592,9 @@ func (e *CampaignToolExecutor) registerGetDashboardSummary() {
 			ds.WeeklyReview.ProfitWoW = wr.ProfitThisWeekCents - wr.ProfitLastWeekCents
 		}
 
-		if cs, err := e.svc.GetCreditSummary(ctx); err == nil && cs != nil {
+		if cs, err := e.svc.GetCreditSummary(ctx); err != nil {
+			ds.Errors = append(ds.Errors, "creditSummary: "+err.Error())
+		} else if cs != nil {
 			ds.Credit.BalanceCents = cs.OutstandingCents
 			ds.Credit.LimitCents = cs.CreditLimitCents
 			ds.Credit.UtilizationPct = cs.UtilizationPct
@@ -597,7 +602,9 @@ func (e *CampaignToolExecutor) registerGetDashboardSummary() {
 			ds.Credit.DaysToInvoice = cs.DaysToNextInvoice
 		}
 
-		if ph, err := e.svc.GetPortfolioHealth(ctx); err == nil && ph != nil {
+		if ph, err := e.svc.GetPortfolioHealth(ctx); err != nil {
+			ds.Errors = append(ds.Errors, "portfolioHealth: "+err.Error())
+		} else if ph != nil {
 			for _, ch := range ph.Campaigns {
 				ds.PortfolioHealth = append(ds.PortfolioHealth, struct {
 					CampaignName  string `json:"campaignName"`
@@ -613,7 +620,9 @@ func (e *CampaignToolExecutor) registerGetDashboardSummary() {
 			}
 		}
 
-		if cv, err := e.svc.GetPortfolioChannelVelocity(ctx); err == nil {
+		if cv, err := e.svc.GetPortfolioChannelVelocity(ctx); err != nil {
+			ds.Errors = append(ds.Errors, "channelVelocity: "+err.Error())
+		} else {
 			for _, v := range cv {
 				ds.ChannelVelocity = append(ds.ChannelVelocity, struct {
 					Channel   string  `json:"channel"`

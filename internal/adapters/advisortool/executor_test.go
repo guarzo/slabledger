@@ -17,13 +17,30 @@ func newTestExecutor(svc campaigns.Service) *CampaignToolExecutor {
 	return NewCampaignToolExecutor(svc)
 }
 
-// TestDefinitions_Count verifies the exact number of tools registered.
-func TestDefinitions_Count(t *testing.T) {
+// TestDefinitions_RequiredTools verifies that all required tools are registered.
+func TestDefinitions_RequiredTools(t *testing.T) {
 	e := newTestExecutor(&mocks.MockCampaignService{})
 	defs := e.Definitions()
-	const want = 22
-	if len(defs) != want {
-		t.Errorf("Definitions() returned %d tools, want %d", len(defs), want)
+
+	requiredTools := []string{
+		"list_campaigns", "get_campaign_pnl", "get_pnl_by_channel",
+		"get_campaign_tuning", "get_inventory_aging", "get_global_inventory",
+		"get_sell_sheet", "get_portfolio_health", "get_portfolio_insights",
+		"get_credit_summary", "get_weekly_review", "get_capital_timeline",
+		"get_channel_velocity", "get_dashboard_summary", "get_expected_values",
+		"get_crack_candidates", "get_campaign_suggestions", "run_projection",
+		"suggest_price", "get_cert_lookup", "get_suggestion_stats",
+		"evaluate_purchase",
+	}
+
+	registered := make(map[string]bool, len(defs))
+	for _, d := range defs {
+		registered[d.Name] = true
+	}
+	for _, name := range requiredTools {
+		if !registered[name] {
+			t.Errorf("Definitions() is missing required tool %q", name)
+		}
 	}
 }
 

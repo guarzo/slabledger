@@ -24,7 +24,7 @@ At 72% buy terms: Profit = CL × 15.65% - $3
 - Credit freeze if balance exceeds $50K
 
 ### Campaign Data
-Do NOT assume campaign parameters — they change. Always call list_campaigns first to get current campaign names, buy terms, price ranges, grade ranges, and phase status. Then call specific tools for the campaign(s) you need to analyze.
+Do NOT assume campaign parameters — they change. When you need campaign details (names, buy terms, price ranges, grade ranges, phase status), call list_campaigns. For a quick portfolio overview, prefer get_dashboard_summary first.
 
 ## Conventions
 - All monetary values from tool calls are in CENTS. Convert to dollars for display (1500 = $15.00).

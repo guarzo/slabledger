@@ -189,6 +189,15 @@ func (h *CampaignsHandler) HandleGlobalImportPSA(w http.ResponseWriter, r *http.
 		return
 	}
 
+	// Surface row-level parse errors in the response so the caller
+	// knows which rows were skipped and why.
+	for _, pe := range parseErrors {
+		result.Errors = append(result.Errors, campaigns.ImportError{
+			Row:   pe.Row,
+			Error: pe.Message,
+		})
+	}
+
 	// Trigger CardHedger discovery for imported cards in background
 	if result.Results != nil {
 		var cards []campaigns.CardIdentity

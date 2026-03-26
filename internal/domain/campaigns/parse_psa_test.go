@@ -120,11 +120,14 @@ func TestParsePSAExportRows_NoValidRows(t *testing.T) {
 		{"", "Another no cert", "10", "$75.00", "Pokemon"},
 	}
 
-	_, _, err := ParsePSAExportRows(records)
-	// The function itself does not return an error for empty cert rows — it just
-	// silently skips them. But the caller expects rows. Let's verify no fatal error
-	// and that we get zero valid rows.
+	rows, errs, err := ParsePSAExportRows(records)
 	if err != nil {
 		t.Fatalf("ParsePSAExportRows: unexpected fatal error: %v", err)
+	}
+	if len(rows) != 0 {
+		t.Errorf("expected 0 valid rows, got %d", len(rows))
+	}
+	if len(errs) != 0 {
+		t.Errorf("expected 0 parse errors, got %d", len(errs))
 	}
 }

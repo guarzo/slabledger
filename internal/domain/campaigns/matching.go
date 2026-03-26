@@ -7,7 +7,7 @@ import (
 
 // ParseRange parses a "min-max" range string into its integer bounds.
 // Returns (0, 0, false) if the string is empty or malformed.
-func ParseRange(s string) (min, max int, ok bool) {
+func ParseRange(s string) (lo, hi int, ok bool) {
 	s = strings.TrimSpace(s)
 	if s == "" {
 		return 0, 0, false
@@ -20,11 +20,12 @@ func ParseRange(s string) (min, max int, ok bool) {
 	if len(parts) != 2 {
 		return 0, 0, false
 	}
-	lo, err := strconv.Atoi(strings.TrimSpace(parts[0]))
+	var err error
+	lo, err = strconv.Atoi(strings.TrimSpace(parts[0]))
 	if err != nil {
 		return 0, 0, false
 	}
-	hi, err := strconv.Atoi(strings.TrimSpace(parts[1]))
+	hi, err = strconv.Atoi(strings.TrimSpace(parts[1]))
 	if err != nil {
 		return 0, 0, false
 	}

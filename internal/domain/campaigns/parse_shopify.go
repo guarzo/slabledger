@@ -32,10 +32,7 @@ func ParseShopifyExportRows(records [][]string) ([]ShopifyExportRow, []ParseErro
 	// Consolidate multi-row products by Handle+CertNumber so rows with
 	// the same handle but different certs are preserved. Image-only rows
 	// (empty title) are tracked separately by handle for back-image merging.
-	type product struct {
-		row ShopifyExportRow
-	}
-	products := make(map[string]*product) // keyed by handle+"|"+certNumber
+	products := make(map[string]*ShopifyExportRow) // keyed by handle+"|"+certNumber
 	backImages := make(map[string]string) // back images keyed by handle
 	var order []string
 	var parseErrors []ParseError
@@ -95,10 +92,7 @@ func ParseShopifyExportRows(records [][]string) ([]ShopifyExportRow, []ParseErro
 
 		tags := getField(colIdx("tags"))
 		cardName, cardNumber, setName, _, tagErr := ParseShopifyTags(tags)
-		if tagErr != nil {
-			// Tags parse failed -- will fall back to title-based extraction below.
-			_ = tagErr
-		}
+		_ = tagErr // Tags parse failed; fall back to title-based extraction below.
 
 		// Fall back to title-based extraction if tags don't have card name
 		if cardName == "" {
@@ -143,20 +137,18 @@ func ParseShopifyExportRows(records [][]string) ([]ShopifyExportRow, []ParseErro
 			costPerItem = v
 		}
 
-		products[productKey] = &product{
-			row: ShopifyExportRow{
-				Handle:        handle,
-				CertNumber:    certNumber,
-				Title:         title,
-				CardName:      cardName,
-				CardNumber:    cardNumber,
-				SetName:       setName,
-				Grader:        grader,
-				GradeValue:    gradeValue,
-				VariantPrice:  variantPrice,
-				CostPerItem:   costPerItem,
-				FrontImageURL: imageURL,
-			},
+		products[productKey] = &ShopifyExportRow{
+			Handle:        handle,
+			CertNumber:    certNumber,
+			Title:         title,
+			CardName:      cardName,
+			CardNumber:    cardNumber,
+			SetName:       setName,
+			Grader:        grader,
+			GradeValue:    gradeValue,
+			VariantPrice:  variantPrice,
+			CostPerItem:   costPerItem,
+			FrontImageURL: imageURL,
 		}
 		order = append(order, productKey)
 	}
@@ -164,10 +156,10 @@ func ParseShopifyExportRows(records [][]string) ([]ShopifyExportRow, []ParseErro
 	var shopifyRows []ShopifyExportRow
 	for _, key := range order {
 		p := products[key]
-		if img, ok := backImages[p.row.Handle]; ok {
-			p.row.BackImageURL = img
+		if img, ok := backImages[p.Handle]; ok {
+			p.BackImageURL = img
 		}
-		shopifyRows = append(shopifyRows, p.row)
+		shopifyRows = append(shopifyRows, *p)
 	}
 
 	return shopifyRows, parseErrors, nil

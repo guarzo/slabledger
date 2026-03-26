@@ -229,14 +229,14 @@ func (h *SocialHandler) HandleBackfillImages(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	updated, errors, err := h.backfiller.BackfillImages(r.Context())
+	updated, backfillErrors, err := h.backfiller.BackfillImages(r.Context())
 	if err != nil {
 		h.logger.Error(r.Context(), "image backfill failed", observability.Err(err))
 		writeError(w, http.StatusInternalServerError, "Image backfill failed")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]int{"updated": updated, "errors": errors})
+	writeJSON(w, http.StatusOK, map[string]int{"updated": updated, "errors": backfillErrors})
 }
 
 // HandleUploadSlides accepts rendered slide images and saves them to disk.

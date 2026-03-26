@@ -17,6 +17,7 @@ var digitsOnly = regexp.MustCompile(`^\d+$`)
 func BuildHeaderMap(header []string) map[string]int {
 	m := make(map[string]int, len(header))
 	for i, col := range header {
+		col = strings.TrimPrefix(col, "\uFEFF")
 		m[strings.TrimSpace(strings.ToLower(col))] = i
 	}
 	return m

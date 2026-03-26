@@ -134,9 +134,7 @@ func isTransientAIError(err error) bool {
 		strings.Contains(msg, "broken pipe") ||
 		strings.Contains(msg, "i/o timeout") ||
 		strings.Contains(msg, "EOF") ||
-		strings.Contains(msg, "SSE stream ended without") ||
-		strings.Contains(msg, "context deadline exceeded") ||
-		strings.Contains(msg, "capacity exceeded")
+		strings.Contains(msg, "SSE stream ended without")
 }
 
 func (s *AdvisorRefreshScheduler) runAnalysis(ctx context.Context, analysisType advisor.AnalysisType, collect func(context.Context) (string, error)) error {
@@ -189,11 +187,12 @@ func (s *AdvisorRefreshScheduler) runAnalysis(ctx context.Context, analysisType 
 // timeUntilHour returns the duration from now until the next occurrence
 // of the given hour (0-23) in UTC.
 func timeUntilHour(now time.Time, hour int) time.Duration {
-	target := time.Date(now.Year(), now.Month(), now.Day(), hour, 0, 0, 0, time.UTC)
-	if !target.After(now) {
+	nowUTC := now.UTC()
+	target := time.Date(nowUTC.Year(), nowUTC.Month(), nowUTC.Day(), hour, 0, 0, 0, time.UTC)
+	if !target.After(nowUTC) {
 		target = target.Add(24 * time.Hour)
 	}
-	return target.Sub(now)
+	return target.Sub(nowUTC)
 }
 
 // checkAIHealth logs warnings if AI metrics indicate degradation.

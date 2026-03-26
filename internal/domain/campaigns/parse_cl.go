@@ -127,12 +127,13 @@ func ParseCLImportRows(records [][]string) ([]CLExportRow, []ParseError, error) 
 			continue
 		}
 
-		investment, err := strconv.ParseFloat(getField(colIdx("investment")), 64)
+		investmentStr := getField(colIdx("investment"))
+		investment, err := strconv.ParseFloat(investmentStr, 64)
 		if err != nil {
 			parseErrors = append(parseErrors, ParseError{
 				Row:     rowNum,
 				Field:   "investment",
-				Message: fmt.Sprintf("Row %d: invalid Investment %q", rowNum, getField(colIdx("investment"))),
+				Message: fmt.Sprintf("Row %d: invalid Investment %q", rowNum, investmentStr),
 			})
 			continue
 		}
