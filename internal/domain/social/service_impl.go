@@ -139,6 +139,13 @@ func (s *service) llmGenerate(ctx context.Context) (int, error) {
 			}
 		}
 
+		// Deduplicate by card identity (name + set + grade)
+		cardLookup := make(map[string]PostCardDetail, len(cards))
+		for _, c := range cards {
+			cardLookup[c.PurchaseID] = c
+		}
+		validIDs = deduplicateByCardIdentity(validIDs, cardLookup)
+
 		if len(validIDs) < s.minCards {
 			continue
 		}
@@ -258,6 +265,18 @@ func (s *service) detectPostType(ctx context.Context, postType PostType, snapsho
 		}
 	}
 
+	// Deduplicate by card identity (name + set + grade)
+	if len(filtered) > 0 {
+		available, err := s.repo.GetAvailableCardsForPosts(ctx)
+		if err == nil {
+			cardLookup := make(map[string]PostCardDetail, len(available))
+			for _, c := range available {
+				cardLookup[c.PurchaseID] = c
+			}
+			filtered = deduplicateByCardIdentity(filtered, cardLookup)
+		}
+	}
+
 	if len(filtered) < s.minCards {
 		return nil, nil
 	}
@@ -333,6 +352,72 @@ func filterHotDeals(snapshots []PurchaseSnapshot) []string {
 		}
 	}
 	return ids
+}
+
+// deduplicateByCardIdentity removes cards with the same (name, set, grade)
+// identity from a post's card list. Also deduplicates by purchase ID.
+// When duplicates exist, prefers the card with an image, then higher market value.
+func deduplicateByCardIdentity(ids []string, cardLookup map[string]PostCardDetail) []string {
+	type cardIdentity struct {
+		name  string
+		set   string
+		grade float64
+	}
+
+	best := make(map[cardIdentity]string)
+	bestCard := make(map[cardIdentity]PostCardDetail)
+
+	seenPurchase := make(map[string]bool)
+	for _, pid := range ids {
+		if seenPurchase[pid] {
+			continue
+		}
+		seenPurchase[pid] = true
+
+		card, ok := cardLookup[pid]
+		if !ok {
+			continue
+		}
+
+		key := cardIdentity{name: card.CardName, set: card.SetName, grade: card.GradeValue}
+		existing, exists := bestCard[key]
+		if !exists {
+			best[key] = pid
+			bestCard[key] = card
+			continue
+		}
+
+		if card.FrontImageURL != "" && existing.FrontImageURL == "" {
+			best[key] = pid
+			bestCard[key] = card
+			continue
+		}
+		if card.FrontImageURL == "" && existing.FrontImageURL != "" {
+			continue
+		}
+		if card.MedianCents > existing.MedianCents {
+			best[key] = pid
+			bestCard[key] = card
+		}
+	}
+
+	bestSet := make(map[string]bool, len(best))
+	for _, pid := range best {
+		bestSet[pid] = true
+	}
+
+	seenPurchase = make(map[string]bool)
+	var result []string
+	for _, pid := range ids {
+		if seenPurchase[pid] {
+			continue
+		}
+		seenPurchase[pid] = true
+		if bestSet[pid] {
+			result = append(result, pid)
+		}
+	}
+	return result
 }
 
 // generateCaptionAsync runs caption generation in a background goroutine with its own context.
