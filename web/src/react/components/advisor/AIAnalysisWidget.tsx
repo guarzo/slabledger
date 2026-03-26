@@ -14,7 +14,27 @@ interface AIAnalysisWidgetProps {
   cacheType?: AdvisorAnalysisType; // when set, use cached mode instead of streaming
 }
 
-const AI_PROSE_CLASSES = "ai-prose prose prose-sm prose-invert max-w-none text-[var(--text)] text-sm leading-relaxed [&_h1]:text-base [&_h1]:font-bold [&_h1]:text-[var(--text)] [&_h1]:mt-4 [&_h1]:mb-2 [&_h2]:text-sm [&_h2]:font-bold [&_h2]:text-[var(--text)] [&_h2]:mt-3 [&_h2]:mb-2 [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:text-[var(--text-muted)] [&_h3]:mt-2 [&_h3]:mb-1 [&_strong]:text-[var(--text)] [&_ul]:space-y-1 [&_ol]:space-y-1 [&_li]:text-[var(--text)] [&_p]:mb-2 [&_table]:w-full [&_table]:text-xs [&_th]:text-left [&_th]:text-[var(--text-muted)] [&_th]:pb-1 [&_th]:border-b [&_th]:border-[var(--surface-2)] [&_td]:py-1 [&_td]:pr-3 [&_code]:text-[var(--brand-400)] [&_code]:text-xs [&_hr]:border-[var(--surface-2)] [&_hr]:my-3";
+const AI_PROSE_CLASSES = [
+  "ai-prose prose prose-sm prose-invert max-w-none text-[var(--text)] text-sm leading-relaxed",
+  // h1 — report title
+  "[&_h1]:text-lg [&_h1]:font-bold [&_h1]:text-[var(--text)] [&_h1]:mt-6 [&_h1]:mb-4 [&_h1]:pb-2 [&_h1]:border-b [&_h1]:border-[var(--surface-2)]",
+  // h2 — major sections (Performance, Credit, Top Actions, etc.)
+  "[&_h2]:text-[15px] [&_h2]:font-bold [&_h2]:text-[var(--brand-400)] [&_h2]:mt-6 [&_h2]:mb-3 [&_h2]:pt-3 [&_h2]:border-t [&_h2]:border-[var(--surface-2)]",
+  // h3 — subsections
+  "[&_h3]:text-sm [&_h3]:font-semibold [&_h3]:text-[var(--text)] [&_h3]:mt-4 [&_h3]:mb-2",
+  // h4 — minor labels
+  "[&_h4]:text-xs [&_h4]:font-semibold [&_h4]:text-[var(--text-muted)] [&_h4]:uppercase [&_h4]:tracking-wide [&_h4]:mt-3 [&_h4]:mb-1",
+  // inline
+  "[&_strong]:text-[var(--text)]",
+  // lists
+  "[&_ul]:space-y-1.5 [&_ul]:my-2 [&_ol]:space-y-1.5 [&_ol]:my-2 [&_li]:text-[var(--text)] [&_li]:leading-relaxed",
+  // paragraphs
+  "[&_p]:mb-3 [&_p]:leading-relaxed",
+  // tables
+  "[&_table]:w-full [&_table]:text-xs [&_table]:my-3 [&_th]:text-left [&_th]:text-[var(--text-muted)] [&_th]:pb-1 [&_th]:border-b [&_th]:border-[var(--surface-2)] [&_td]:py-1 [&_td]:pr-3",
+  // code + hr
+  "[&_code]:text-[var(--brand-400)] [&_code]:text-xs [&_hr]:border-[var(--surface-2)] [&_hr]:my-5",
+].join(" ");
 
 function formatAge(updatedAt?: string): string {
   if (!updatedAt) return '';

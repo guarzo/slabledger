@@ -17,6 +17,8 @@ type CompletionRequest struct {
 	Temperature       *float64
 	MaxTokens         int
 	ConversationState any
+	ReasoningEffort   string // "low", "medium", "high" — controls reasoning token budget (empty = provider default)
+	Store             bool   // when true, enables server-side response storage for retrieval/resume
 }
 
 // TokenUsage reports token consumption for a completion request.

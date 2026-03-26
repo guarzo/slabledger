@@ -34,7 +34,7 @@ export default function TabNavigation<T extends string = string>({
           <Tabs.Trigger
             key={t.id}
             value={t.id}
-            className="px-4 py-2.5 text-sm font-medium transition-colors
+            className="px-3 py-2.5 text-sm font-medium transition-colors
                        whitespace-nowrap text-[var(--text-muted)]
                        hover:text-[var(--text)]
                        border-b-2 border-transparent -mb-px

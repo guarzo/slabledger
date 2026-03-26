@@ -111,8 +111,8 @@ func (s *service) llmGenerate(ctx context.Context) (int, error) {
 	}
 	ai.RecordCall(ctx, s.tracker, s.logger, ai.OpSocialSuggestion, nil, start, 0, &usage)
 
-	// Parse JSON response — strip any markdown fences
-	raw := stripMarkdownFences(result.String())
+	// Parse JSON response — strip markdown fences and fix control characters
+	raw := sanitizeLLMJSON(stripMarkdownFences(result.String()))
 
 	var resp postSuggestionResponse
 	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
@@ -704,7 +704,7 @@ func parseCaptionResponse(raw string) (title, caption, hashtags string) {
 		return "", "", ""
 	}
 
-	cleaned := stripMarkdownFences(raw)
+	cleaned := sanitizeLLMJSON(stripMarkdownFences(raw))
 
 	var resp captionResponse
 	if err := json.Unmarshal([]byte(cleaned), &resp); err == nil && resp.Caption != "" {
@@ -723,6 +723,48 @@ func stripMarkdownFences(s string) string {
 	s = strings.TrimPrefix(s, "```")
 	s = strings.TrimSuffix(s, "```")
 	return strings.TrimSpace(s)
+}
+
+// sanitizeLLMJSON fixes common JSON issues from LLM output, such as
+// literal newlines and tabs inside string values that break json.Unmarshal.
+func sanitizeLLMJSON(s string) string {
+	var buf strings.Builder
+	buf.Grow(len(s))
+	inString := false
+	escaped := false
+	for i := 0; i < len(s); i++ {
+		ch := s[i]
+		if escaped {
+			buf.WriteByte(ch)
+			escaped = false
+			continue
+		}
+		if ch == '\\' && inString {
+			buf.WriteByte(ch)
+			escaped = true
+			continue
+		}
+		if ch == '"' {
+			inString = !inString
+			buf.WriteByte(ch)
+			continue
+		}
+		if inString {
+			switch ch {
+			case '\n':
+				buf.WriteString(`\n`)
+			case '\r':
+				buf.WriteString(`\r`)
+			case '\t':
+				buf.WriteString(`\t`)
+			default:
+				buf.WriteByte(ch)
+			}
+		} else {
+			buf.WriteByte(ch)
+		}
+	}
+	return buf.String()
 }
 
 // generateID creates a unique ID using UUID v4.
