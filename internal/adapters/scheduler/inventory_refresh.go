@@ -50,15 +50,15 @@ func NewInventoryRefreshScheduler(
 	lister InventoryLister,
 	refresher SnapshotRefresher,
 	logger observability.Logger,
-	config config.InventoryRefreshConfig,
+	cfg config.InventoryRefreshConfig,
 ) *InventoryRefreshScheduler {
-	config.ApplyDefaults()
+	cfg.ApplyDefaults()
 	return &InventoryRefreshScheduler{
 		StopHandle: NewStopHandle(),
 		lister:     lister,
 		refresher:  refresher,
 		logger:     logger.With(context.Background(), observability.String("component", "inventory-refresh")),
-		config:     config,
+		config:     cfg,
 	}
 }
 

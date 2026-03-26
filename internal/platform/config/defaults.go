@@ -97,11 +97,13 @@ func Default() Config {
 			Enabled:      true,
 			Interval:     24 * time.Hour,
 			InitialDelay: 2 * time.Minute,
+			RefreshHour:  4, // 4 AM UTC
 		},
 		SocialContent: SocialContentConfig{
 			Enabled:      false, // disabled by default
 			Interval:     24 * time.Hour,
 			InitialDelay: 5 * time.Minute,
+			ContentHour:  5, // 5 AM UTC
 		},
 	}
 }

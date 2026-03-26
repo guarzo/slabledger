@@ -45,6 +45,10 @@ func NewSocialContentScheduler(
 	if cfg.InitialDelay <= 0 {
 		cfg.InitialDelay = 5 * time.Minute
 	}
+	// Compute initial delay from ContentHour if set (>= 0).
+	if cfg.ContentHour >= 0 {
+		cfg.InitialDelay = timeUntilHour(time.Now(), cfg.ContentHour)
+	}
 	s := &SocialContentScheduler{
 		StopHandle: NewStopHandle(),
 		detector:   detector,

@@ -1,27 +1,41 @@
 version: "2"
 
+run:
+  timeout: 5m
+
 linters:
   default: none
   enable:
+    - errcheck
     - govet
     - staticcheck
-    - errcheck
-    - ineffassign
     - unused
+    - ineffassign
     - gocritic
-    - unconvert
     - misspell
+    - revive
   settings:
     gocritic:
+      enabled-tags:
+        - diagnostic
+        - style
       disabled-checks:
+        - paramTypeCombine
+        - whyNoLint
+        - unnamedResult
+        - httpNoBody
+        - octalLiteral
         - ifElseChain
         - elseif
-        - exitAfterDefer
-    errcheck:
-      check-blank: true  # Check blank assignments like _ = foo()
-      check-type-assertions: true  # Check type assertions
-    staticcheck:
-      checks: ["all", "-SA5011", "-SA9003", "-ST1000", "-ST1020", "-ST1021", "-ST1016", "-ST1003"]  # Disable nil-after-fatal and comment format/naming checks
+        - emptyStringTest
+        - returnAfterHttpError
+        - commentedOutCode
+    revive:
+      rules:
+        - name: exported
+          disabled: true
+        - name: unexported-return
+          disabled: true
   exclusions:
     paths:
       - web/node_modules
@@ -30,6 +44,10 @@ linters:
         linters:
           - errcheck
           - gocritic
+      - path: testutil/mocks/
+        linters:
+          - unused
+          - revive
 
 issues:
   max-issues-per-linter: 0

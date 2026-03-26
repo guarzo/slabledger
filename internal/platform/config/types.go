@@ -193,6 +193,7 @@ type AdvisorRefreshConfig struct {
 	Enabled      bool
 	Interval     time.Duration // how often to run analysis (default: 24h)
 	InitialDelay time.Duration // delay before first run (default: 2m)
+	RefreshHour  int           // hour (0-23 UTC) to schedule runs; -1 = use InitialDelay (default: 4)
 }
 
 // SnapshotHistoryConfig controls daily archival of market snapshots.
@@ -231,4 +232,5 @@ type SocialContentConfig struct {
 	Enabled      bool
 	Interval     time.Duration // how often to run detection (default: 24h)
 	InitialDelay time.Duration // delay before first run (default: 5m)
+	ContentHour  int           // hour (0-23 UTC) to schedule runs; -1 = use InitialDelay (default: 5)
 }

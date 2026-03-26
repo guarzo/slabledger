@@ -25,12 +25,12 @@ func TestParseRange(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			min, max, ok := ParseRange(tt.input)
+			lo, hi, ok := ParseRange(tt.input)
 			if ok != tt.wantOK {
 				t.Errorf("ParseRange(%q) ok = %v, want %v", tt.input, ok, tt.wantOK)
 			}
-			if ok && (min != tt.wantMin || max != tt.wantMax) {
-				t.Errorf("ParseRange(%q) = (%d, %d), want (%d, %d)", tt.input, min, max, tt.wantMin, tt.wantMax)
+			if ok && (lo != tt.wantMin || hi != tt.wantMax) {
+				t.Errorf("ParseRange(%q) = (%d, %d), want (%d, %d)", tt.input, lo, hi, tt.wantMin, tt.wantMax)
 			}
 		})
 	}

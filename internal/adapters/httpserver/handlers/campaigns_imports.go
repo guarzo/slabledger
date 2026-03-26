@@ -8,36 +8,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"regexp"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/campaigns"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
-
-// psaCertFromSKU extracts a PSA cert number from a SKU like "PSA-192060238".
-var psaCertFromSKU = regexp.MustCompile(`(?i)^PSA-(\d+)$`)
-
-// digitsOnly matches a string that is entirely digits.
-var digitsOnly = regexp.MustCompile(`^\d+$`)
-
-// normalizePSACert returns a digits-only cert number from a raw field value.
-// It handles plain digits, "PSA-XXXXX" format, and trims whitespace.
-func normalizePSACert(raw string) string {
-	s := strings.TrimSpace(raw)
-	if s == "" {
-		return ""
-	}
-	if digitsOnly.MatchString(s) {
-		return s
-	}
-	if m := psaCertFromSKU.FindStringSubmatch(s); len(m) == 2 {
-		return m[1]
-	}
-	return ""
-}
 
 // CardDiscoverer discovers and prices cards via CardHedger on demand.
 type CardDiscoverer interface {
@@ -87,64 +62,19 @@ func (h *CampaignsHandler) HandleGlobalRefreshCL(w http.ResponseWriter, r *http.
 		return
 	}
 
-	// Parse CL refresh rows
-	headerMap := buildHeaderMap(rows[0])
-
-	if _, exists := headerMap["slab serial #"]; !exists {
-		writeError(w, http.StatusBadRequest, `Missing required column: "slab serial #"`)
+	clRows, parseErrors, err := campaigns.ParseCLRefreshRows(rows)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if len(parseErrors) > 0 {
+		writeError(w, http.StatusBadRequest, parseErrors[0].Message)
 		return
 	}
 
-	colIdx := func(name string) int {
-		if idx, ok := headerMap[name]; ok {
-			return idx
-		}
-		return -1
-	}
-
-	var clRows []campaigns.CLExportRow
-	for i, rec := range rows[1:] {
-		getField := func(idx int) string {
-			if idx >= 0 && idx < len(rec) {
-				return strings.TrimSpace(rec[idx])
-			}
-			return ""
-		}
-
-		slabSerial := getField(colIdx("slab serial #"))
-		if slabSerial == "" {
-			continue
-		}
-
-		cvStr := getField(colIdx("current value"))
-		if cvStr == "" {
-			writeError(w, http.StatusBadRequest, fmt.Sprintf("Row %d: missing 'current value' for slab serial %s", i+2, slabSerial))
-			return
-		}
-		currentValue, err := strconv.ParseFloat(cvStr, 64)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, fmt.Sprintf("Row %d: invalid 'current value' %q for slab serial %s", i+2, cvStr, slabSerial))
-			return
-		}
-
-		var population int
-		if pop := getField(colIdx("population")); pop != "" {
-			population, _ = strconv.Atoi(pop) //nolint:errcheck
-		}
-
-		clRows = append(clRows, campaigns.CLExportRow{
-			SlabSerial:   slabSerial,
-			Card:         getField(colIdx("card")),
-			Set:          getField(colIdx("set")),
-			Number:       getField(colIdx("number")),
-			CurrentValue: currentValue,
-			Population:   population,
-		})
-	}
-
-	result, err := h.service.RefreshCLValuesGlobal(r.Context(), clRows)
-	if err != nil {
-		h.logger.Error(r.Context(), "global CL refresh failed", observability.Err(err))
+	result, svcErr := h.service.RefreshCLValuesGlobal(r.Context(), clRows)
+	if svcErr != nil {
+		h.logger.Error(r.Context(), "global CL refresh failed", observability.Err(svcErr))
 		writeError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
@@ -159,89 +89,19 @@ func (h *CampaignsHandler) HandleGlobalImportCL(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	headerMap := buildHeaderMap(rows[0])
-
-	requiredHeaders := []string{"slab serial #", "investment", "current value"}
-	for _, hdr := range requiredHeaders {
-		if _, ok := headerMap[hdr]; !ok {
-			writeError(w, http.StatusBadRequest, fmt.Sprintf("Missing required column: %q", hdr))
-			return
-		}
-	}
-
-	colIdx := func(name string) int {
-		if idx, ok := headerMap[name]; ok {
-			return idx
-		}
-		return -1
-	}
-
-	var clRows []campaigns.CLExportRow
-	for i, rec := range rows[1:] {
-		rowNum := i + 2
-
-		getField := func(idx int) string {
-			if idx >= 0 && idx < len(rec) {
-				return strings.TrimSpace(rec[idx])
-			}
-			return ""
-		}
-
-		slabSerial := getField(colIdx("slab serial #"))
-		if slabSerial == "" {
-			writeError(w, http.StatusBadRequest, fmt.Sprintf("Row %d: missing Slab Serial #", rowNum))
-			return
-		}
-
-		investment, err := strconv.ParseFloat(getField(colIdx("investment")), 64)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, fmt.Sprintf("Row %d: invalid Investment %q", rowNum, getField(colIdx("investment"))))
-			return
-		}
-
-		cvStr := getField(colIdx("current value"))
-		if cvStr == "" {
-			writeError(w, http.StatusBadRequest, fmt.Sprintf("Row %d: missing Current Value", rowNum))
-			return
-		}
-		currentValue, err := strconv.ParseFloat(cvStr, 64)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, fmt.Sprintf("Row %d: invalid Current Value %q", rowNum, cvStr))
-			return
-		}
-
-		var population int
-		if pop := getField(colIdx("population")); pop != "" {
-			population, _ = strconv.Atoi(pop) //nolint:errcheck
-		}
-
-		datePurchased := getField(colIdx("date purchased"))
-		if datePurchased != "" {
-			converted, err := campaigns.ParseCLDate(datePurchased)
-			if err != nil {
-				writeError(w, http.StatusBadRequest, fmt.Sprintf("Row %d: invalid Date Purchased %q: expected M/D/YYYY", rowNum, datePurchased))
-				return
-			}
-			datePurchased = converted
-		}
-
-		clRows = append(clRows, campaigns.CLExportRow{
-			DatePurchased: datePurchased,
-			Card:          getField(colIdx("card")),
-			Player:        getField(colIdx("player")),
-			Set:           getField(colIdx("set")),
-			Number:        getField(colIdx("number")),
-			Condition:     getField(colIdx("condition")),
-			Investment:    investment,
-			CurrentValue:  currentValue,
-			SlabSerial:    slabSerial,
-			Population:    population,
-		})
-	}
-
-	result, err := h.service.ImportCLExportGlobal(r.Context(), clRows)
+	clRows, parseErrors, err := campaigns.ParseCLImportRows(rows)
 	if err != nil {
-		h.logger.Error(r.Context(), "global CL import failed", observability.Err(err))
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if len(parseErrors) > 0 {
+		writeError(w, http.StatusBadRequest, parseErrors[0].Message)
+		return
+	}
+
+	result, svcErr := h.service.ImportCLExportGlobal(r.Context(), clRows)
+	if svcErr != nil {
+		h.logger.Error(r.Context(), "global CL import failed", observability.Err(svcErr))
 		writeError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
@@ -306,114 +166,36 @@ func (h *CampaignsHandler) HandleGlobalImportPSA(w http.ResponseWriter, r *http.
 		return
 	}
 
-	// Dynamically find the header row by scanning for known PSA column names.
-	headerIdx := findHeaderRow(rows)
-	if headerIdx < 0 {
-		writeError(w, http.StatusBadRequest,
-			"Could not find PSA header row (expected columns: cert number, listing title, grade)")
-		return
-	}
-
-	headerMap := buildHeaderMap(rows[headerIdx])
-	dataRows := rows[headerIdx+1:]
-
-	colIdx := func(name string) int {
-		if idx, ok := headerMap[name]; ok {
-			return idx
-		}
-		return -1
-	}
-
-	var psaRows []campaigns.PSAExportRow
-	for i, rec := range dataRows {
-		rowNum := headerIdx + 2 + i // 1-based row number for error reporting
-
-		getField := func(idx int) string {
-			if idx >= 0 && idx < len(rec) {
-				return strings.TrimSpace(rec[idx])
-			}
-			return ""
-		}
-
-		certNumber := getField(colIdx("cert number"))
-		if certNumber == "" {
-			continue // Skip empty template rows
-		}
-
-		var pricePaid float64
-		if pp := getField(colIdx("price paid")); pp != "" {
-			var parseErr error
-			pricePaid, parseErr = parseCurrencyString(pp)
-			if parseErr != nil {
-				writeError(w, http.StatusBadRequest, fmt.Sprintf("Row %d: invalid price paid %q: %v", rowNum, pp, parseErr))
-				return
-			}
-		}
-
-		var grade float64
-		if g := getField(colIdx("grade")); g != "" {
-			var parseErr error
-			grade, parseErr = strconv.ParseFloat(g, 64)
-			if parseErr != nil {
-				writeError(w, http.StatusBadRequest, fmt.Sprintf("Row %d: invalid grade %q: %v", rowNum, g, parseErr))
-				return
-			}
-		}
-
-		dateStr := getField(colIdx("date"))
-		purchaseDate := ""
-		if dateStr != "" {
-			converted, dateErr := campaigns.ParsePSADate(dateStr)
-			if dateErr != nil {
-				writeError(w, http.StatusBadRequest, fmt.Sprintf("Row %d: invalid date %q: %v", rowNum, dateStr, dateErr))
-				return
-			}
-			purchaseDate = converted
-		}
-
-		invoiceDateStr := getField(colIdx("invoice date"))
-		invoiceDate := ""
-		if invoiceDateStr != "" {
-			converted, dateErr := campaigns.ParsePSADate(invoiceDateStr)
-			if dateErr != nil {
-				writeError(w, http.StatusBadRequest, fmt.Sprintf("Row %d: invalid invoice date %q: %v", rowNum, invoiceDateStr, dateErr))
-				return
-			}
-			invoiceDate = converted
-		}
-
-		wasRefunded := false
-		refundedStr := strings.ToLower(getField(colIdx("was refunded?")))
-		if refundedStr == "yes" || refundedStr == "true" || refundedStr == "1" {
-			wasRefunded = true
-		}
-
-		psaRows = append(psaRows, campaigns.PSAExportRow{
-			Date:           purchaseDate,
-			Category:       getField(colIdx("category")),
-			CertNumber:     certNumber,
-			ListingTitle:   getField(colIdx("listing title")),
-			Grade:          grade,
-			PricePaid:      pricePaid,
-			PurchaseSource: getField(colIdx("purchase source")),
-			VaultStatus:    getField(colIdx("vault status")),
-			InvoiceDate:    invoiceDate,
-			WasRefunded:    wasRefunded,
-			FrontImageURL:  getField(colIdx("front image url")),
-			BackImageURL:   getField(colIdx("back image url")),
-		})
-	}
-
-	if len(psaRows) == 0 {
-		writeError(w, http.StatusBadRequest, "No valid PSA data rows found in CSV")
-		return
-	}
-
-	result, err := h.service.ImportPSAExportGlobal(r.Context(), psaRows)
+	psaRows, parseErrors, err := campaigns.ParsePSAExportRows(rows)
 	if err != nil {
-		h.logger.Error(r.Context(), "global PSA import failed", observability.Err(err))
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	// For PSA: continue with valid rows even if there are parse errors.
+	// Only fail if no valid rows at all.
+	if len(psaRows) == 0 {
+		if len(parseErrors) > 0 {
+			writeError(w, http.StatusBadRequest, parseErrors[0].Message)
+		} else {
+			writeError(w, http.StatusBadRequest, "No valid PSA data rows found in CSV")
+		}
+		return
+	}
+
+	result, svcErr := h.service.ImportPSAExportGlobal(r.Context(), psaRows)
+	if svcErr != nil {
+		h.logger.Error(r.Context(), "global PSA import failed", observability.Err(svcErr))
 		writeError(w, http.StatusInternalServerError, "Internal server error")
 		return
+	}
+
+	// Surface row-level parse errors in the response so the caller
+	// knows which rows were skipped and why.
+	for _, pe := range parseErrors {
+		result.Errors = append(result.Errors, campaigns.ImportError{
+			Row:   pe.Row,
+			Error: pe.Message,
+		})
 	}
 
 	// Trigger CardHedger discovery for imported cards in background
@@ -438,178 +220,26 @@ func (h *CampaignsHandler) HandleGlobalImportExternal(w http.ResponseWriter, r *
 		return
 	}
 
-	headerMap := buildHeaderMap(rows[0])
-	colIdx := func(name string) int {
-		if idx, ok := headerMap[name]; ok {
-			return idx
-		}
-		return -1
-	}
-
-	// Validate required Shopify columns exist.
-	if _, hasHandle := headerMap["handle"]; !hasHandle {
-		writeError(w, http.StatusBadRequest, "CSV is missing required column: handle")
-		return
-	}
-	if _, hasTitle := headerMap["title"]; !hasTitle {
-		writeError(w, http.StatusBadRequest, "CSV is missing required column: title")
+	shopifyRows, parseErrors, err := campaigns.ParseShopifyExportRows(rows)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	// Consolidate multi-row products by Handle+CertNumber so rows with
-	// the same handle but different certs are preserved. Image-only rows
-	// (empty title) are tracked separately by handle for back-image merging.
-	type product struct {
-		row campaigns.ShopifyExportRow
-	}
-	products := make(map[string]*product) // keyed by handle+"|"+certNumber
-	backImages := make(map[string]string) // back images keyed by handle
-	var order []string
-	var parseErrors []campaigns.ImportError
-
-	for rowIdx, rec := range rows[1:] {
-		getField := func(idx int) string {
-			if idx >= 0 && idx < len(rec) {
-				return strings.TrimSpace(rec[idx])
-			}
-			return ""
-		}
-
-		handle := getField(colIdx("handle"))
-		if handle == "" {
-			continue
-		}
-
-		title := getField(colIdx("title"))
-		imageURL := getField(colIdx("image src"))
-
-		if title == "" {
-			// Variant-only row — capture back image by handle for later merging.
-			if imageURL != "" {
-				if _, exists := backImages[handle]; !exists {
-					backImages[handle] = imageURL
-				}
-			}
-			continue
-		}
-
-		// Extract PSA cert number from explicit column or SKU pattern.
-		// Only PSA-graded cards with valid cert numbers are imported.
-		certNumber := normalizePSACert(getField(colIdx("cert number")))
-		if certNumber == "" {
-			certNumber = normalizePSACert(getField(colIdx("cert")))
-		}
-		if certNumber == "" {
-			// Fallback: extract from SKU pattern PSA-XXXXX
-			certNumber = normalizePSACert(getField(colIdx("sku")))
-		}
-		if certNumber == "" {
-			// No PSA cert number — skip this row (CGC, raw, etc.)
-			continue
-		}
-
-		// Use composite key so rows with same handle but different certs are preserved.
-		productKey := handle + "|" + certNumber
-		if _, exists := products[productKey]; exists {
-			// Duplicate handle+cert row — capture additional image by handle.
-			if imageURL != "" {
-				if _, hasBack := backImages[handle]; !hasBack {
-					backImages[handle] = imageURL
-				}
-			}
-			continue
-		}
-
-		tags := getField(colIdx("tags"))
-		cardName, cardNumber, setName, _, tagErr := campaigns.ParseShopifyTags(tags)
-		if tagErr != nil {
-			h.logger.Debug(r.Context(), "shopify import: tags parse failed, falling back to title",
-				observability.String("handle", handle),
-				observability.String("tags", tags),
-				observability.Err(tagErr))
-		}
-
-		// Fall back to title-based extraction if tags don't have card name
-		if cardName == "" {
-			cardName = campaigns.ExtractCardNameFromTitle(title)
-		}
-
-		grader, gradeValue := campaigns.ExtractGraderAndGrade(title)
-		if grader == "" {
-			grader = "PSA" // cert number implies PSA
-		}
-
-		var variantPrice float64
-		// Try "variant price" first (standard Shopify export), fall back to "price"
-		priceField := getField(colIdx("variant price"))
-		if priceField == "" {
-			priceField = getField(colIdx("price"))
-		}
-		if priceField != "" {
-			v, err := parseCurrencyString(priceField)
-			if err != nil {
-				h.logger.Warn(r.Context(), "shopify import: invalid price",
-					observability.String("handle", handle),
-					observability.String("value", priceField),
-					observability.Int("row", rowIdx+2))
-				parseErrors = append(parseErrors, campaigns.ImportError{
-					Row:   rowIdx + 2,
-					Error: fmt.Sprintf("invalid price %q for handle %s: %v", priceField, handle, err),
-				})
-				continue
-			}
-			variantPrice = v
-		}
-
-		var costPerItem float64
-		if cp := getField(colIdx("cost per item")); cp != "" {
-			v, err := parseCurrencyString(cp)
-			if err != nil {
-				h.logger.Warn(r.Context(), "shopify import: invalid cost per item",
-					observability.String("handle", handle),
-					observability.String("value", cp),
-					observability.Int("row", rowIdx+2))
-				parseErrors = append(parseErrors, campaigns.ImportError{
-					Row:   rowIdx + 2,
-					Error: fmt.Sprintf("invalid cost per item %q for handle %s: %v", cp, handle, err),
-				})
-				continue
-			}
-			costPerItem = v
-		}
-
-		products[productKey] = &product{
-			row: campaigns.ShopifyExportRow{
-				Handle:        handle,
-				CertNumber:    certNumber,
-				Title:         title,
-				CardName:      cardName,
-				CardNumber:    cardNumber,
-				SetName:       setName,
-				Grader:        grader,
-				GradeValue:    gradeValue,
-				VariantPrice:  variantPrice,
-				CostPerItem:   costPerItem,
-				FrontImageURL: imageURL,
-			},
-		}
-		order = append(order, productKey)
-	}
-
-	var shopifyRows []campaigns.ShopifyExportRow
-	for _, key := range order {
-		p := products[key]
-		if img, ok := backImages[p.row.Handle]; ok {
-			p.row.BackImageURL = img
-		}
-		shopifyRows = append(shopifyRows, p.row)
+	// Convert ParseErrors to ImportErrors for the response.
+	var importErrors []campaigns.ImportError
+	for _, pe := range parseErrors {
+		importErrors = append(importErrors, campaigns.ImportError{
+			Row:   pe.Row,
+			Error: pe.Message,
+		})
 	}
 
 	if len(shopifyRows) == 0 {
-		if len(parseErrors) > 0 {
+		if len(importErrors) > 0 {
 			writeJSON(w, http.StatusOK, campaigns.ExternalImportResult{
-				Failed: len(parseErrors),
-				Errors: parseErrors,
+				Failed: len(importErrors),
+				Errors: importErrors,
 			})
 		} else {
 			writeJSON(w, http.StatusBadRequest, campaigns.ExternalImportResult{
@@ -620,15 +250,15 @@ func (h *CampaignsHandler) HandleGlobalImportExternal(w http.ResponseWriter, r *
 		return
 	}
 
-	result, err := h.service.ImportExternalCSV(r.Context(), shopifyRows)
-	if err != nil {
-		h.logger.Error(r.Context(), "external import failed", observability.Err(err))
+	result, svcErr := h.service.ImportExternalCSV(r.Context(), shopifyRows)
+	if svcErr != nil {
+		h.logger.Error(r.Context(), "external import failed", observability.Err(svcErr))
 		writeError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
-	if len(parseErrors) > 0 {
-		result.Errors = append(result.Errors, parseErrors...)
-		result.Failed += len(parseErrors)
+	if len(importErrors) > 0 {
+		result.Errors = append(result.Errors, importErrors...)
+		result.Failed += len(importErrors)
 	}
 
 	// Trigger CardHedger discovery for imported cards in background
@@ -746,40 +376,4 @@ func (h *CampaignsHandler) parseGlobalCSVUpload(w http.ResponseWriter, r *http.R
 	}
 
 	return records, true
-}
-
-// buildHeaderMap creates a lowercase header name → column index map.
-func buildHeaderMap(header []string) map[string]int {
-	m := make(map[string]int, len(header))
-	for i, col := range header {
-		m[strings.TrimSpace(strings.ToLower(col))] = i
-	}
-	return m
-}
-
-// findHeaderRow scans the first few rows for known PSA column names.
-// Returns the header row index, or -1 if not found.
-func findHeaderRow(rows [][]string) int {
-	knownColumns := map[string]bool{
-		"cert number":   true,
-		"listing title": true,
-		"grade":         true,
-		"price paid":    true,
-	}
-	for i, row := range rows {
-		if i > 5 { // Don't scan more than 6 rows
-			break
-		}
-		headerMap := buildHeaderMap(row)
-		matches := 0
-		for col := range knownColumns {
-			if _, ok := headerMap[col]; ok {
-				matches++
-			}
-		}
-		if matches >= 3 { // At least 3 known columns found
-			return i
-		}
-	}
-	return -1
 }

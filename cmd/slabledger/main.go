@@ -16,31 +16,18 @@ import (
 	"github.com/joho/godotenv"
 
 	// Concrete implementations (only imported in main for wiring - Hexagonal Architecture)
-	"github.com/guarzo/slabledger/internal/adapters/advisortool"
-	"github.com/guarzo/slabledger/internal/adapters/clients/azureai"
-	"github.com/guarzo/slabledger/internal/adapters/clients/cardhedger"
-	"github.com/guarzo/slabledger/internal/adapters/clients/fusionprice"
 	"github.com/guarzo/slabledger/internal/adapters/clients/google"
-	igclient "github.com/guarzo/slabledger/internal/adapters/clients/instagram"
-	"github.com/guarzo/slabledger/internal/adapters/clients/pokemonprice"
-	"github.com/guarzo/slabledger/internal/adapters/clients/pricecharting"
-	"github.com/guarzo/slabledger/internal/adapters/clients/pricelookup"
 	"github.com/guarzo/slabledger/internal/adapters/clients/psa"
 	"github.com/guarzo/slabledger/internal/adapters/clients/tcgdex"
 	"github.com/guarzo/slabledger/internal/adapters/httpserver/handlers"
 	"github.com/guarzo/slabledger/internal/adapters/scheduler"
 	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
-	"github.com/guarzo/slabledger/internal/domain/advisor"
 	"github.com/guarzo/slabledger/internal/domain/ai"
 	"github.com/guarzo/slabledger/internal/domain/auth"
 	"github.com/guarzo/slabledger/internal/domain/campaigns"
 	"github.com/guarzo/slabledger/internal/domain/favorites"
-	"github.com/guarzo/slabledger/internal/domain/fusion"
-	"github.com/guarzo/slabledger/internal/domain/social"
 	"github.com/guarzo/slabledger/internal/platform/cache"
 	"github.com/guarzo/slabledger/internal/platform/crypto"
-
-	"github.com/google/uuid"
 )
 
 // favoritesListAdapter adapts sqlite.FavoritesRepository to the scheduler.FavoritesLister interface.
@@ -381,12 +368,11 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	// Discovery failure tracker (persists CardHedger discovery failures for diagnostics)
 	discoveryFailureRepo := sqlite.NewDiscoveryFailureRepository(db.DB)
 
-	pcProvider, err := pricecharting.NewPriceCharting(
-		pricecharting.DefaultConfig(cfg.Adapters.PriceChartingToken), appCache, logger,
-		pricecharting.WithHintResolver(cardIDMappingRepo),
+	priceProvImpl, _, cardHedgerClientImpl, pcProvider, err := initializePriceProviders(
+		ctx, cfg, appCache, logger, cardProvImpl, priceRepo, cardIDMappingRepo,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to initialize PriceCharting provider: %w", err)
+		return err
 	}
 	defer func() {
 		if err := pcProvider.Close(); err != nil {
@@ -394,63 +380,9 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		}
 	}()
 
-	pokemonPriceClientImpl := pokemonprice.NewClient(cfg.Adapters.PokemonPriceKey, pokemonprice.WithLogger(logger))
-	cardHedgerClientImpl := cardhedger.NewClient(cfg.Adapters.CardHedgerKey, cardhedger.WithLogger(logger))
-
-	// Wrap secondary clients in adapters that implement fusion.SecondaryPriceSource
-	secondarySources := []fusion.SecondaryPriceSource{
-		fusionprice.NewPokemonPriceAdapter(pokemonPriceClientImpl, fusionprice.WithPPLogger(logger)),
-		fusionprice.NewCardHedgerAdapter(cardHedgerClientImpl, cardIDMappingRepo, logger,
-			fusionprice.WithCardHedgerHintResolver(cardIDMappingRepo)),
-	}
-
-	priceProvImpl := fusionprice.NewFusionProviderWithRepo(
-		pcProvider, secondarySources,
-		appCache, priceRepo, priceRepo, priceRepo, logger,
-		fusionprice.DefaultFreshnessDuration,
-		cfg.Fusion.CacheTTL,
-		cfg.Fusion.PriceChartingTimeout,
-		cfg.Fusion.SecondarySourceTimeout,
-		fusionprice.WithCardProvider(cardProvImpl),
+	campaignsService, campaignsRepo, cardRequestRepo := initializeCampaignsService(
+		ctx, cfg, logger, db, priceProvImpl, cardHedgerClientImpl, cardIDMappingRepo,
 	)
-	logger.Info(ctx, "Fusion price provider initialized with 3 sources",
-		observability.Bool("pokemonprice_available", pokemonPriceClientImpl.Available()),
-		observability.Bool("cardhedger_available", cardHedgerClientImpl.Available()))
-
-	// Initialize campaigns
-	campaignsRepo := sqlite.NewCampaignsRepository(db.DB)
-	priceLookupAdapter := pricelookup.NewAdapter(priceProvImpl)
-	campaignOpts := []campaigns.ServiceOption{
-		campaigns.WithPriceLookup(priceLookupAdapter),
-		campaigns.WithIDGenerator(uuid.NewString),
-		campaigns.WithMaxSnapshotRetries(cfg.SnapshotEnrich.MaxRetries),
-	}
-
-	if cfg.Adapters.PSAToken != "" {
-		psaClient := psa.NewClient(cfg.Adapters.PSAToken, logger)
-		certAdapter := psa.NewCertAdapter(psaClient)
-		campaignOpts = append(campaignOpts, campaigns.WithCertLookup(certAdapter))
-		logger.Info(ctx, "PSA cert lookup enabled")
-	}
-
-	// Card request repository (tracks certs without linked cards in CardHedger)
-	cardRequestRepo := sqlite.NewCardRequestRepository(db.DB)
-
-	// Wire cert→card_id resolver if CardHedger is available
-	if cardHedgerClientImpl.Available() {
-		certResolverOpts := []cardhedger.CertResolverOption{
-			cardhedger.WithMissingCardTracker(cardRequestRepo),
-		}
-		certResolver := cardhedger.NewCertResolver(cardHedgerClientImpl, cardIDMappingRepo, logger, certResolverOpts...)
-		campaignOpts = append(campaignOpts, campaigns.WithCardIDResolver(certResolver))
-	}
-
-	// History recorders — track CL values and population changes during CSV imports.
-	campaignOpts = append(campaignOpts,
-		campaigns.WithCLValueRecorder(campaignsRepo),
-		campaigns.WithPopulationRecorder(campaignsRepo),
-	)
-	campaignsService := campaigns.NewService(campaignsRepo, campaignOpts...)
 
 	// Sync state repository (for delta poll timestamps)
 	syncStateRepo := sqlite.NewSyncStateRepository(db.DB)
@@ -458,106 +390,37 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	// AI call tracking
 	aiCallRepo := sqlite.NewAICallRepository(db)
 
-	// Initialize shared Azure AI client (used by advisor + social caption generation)
-	var azureAIClient advisor.LLMProvider
-	var advisorService advisor.Service
-	var advisorCacheRepo *sqlite.AdvisorCacheRepository
-	if cfg.Adapters.AzureAIEndpoint != "" && cfg.Adapters.AzureAIKey != "" {
-		client, err := azureai.NewClient(azureai.Config{
-			Endpoint:       cfg.Adapters.AzureAIEndpoint,
-			APIKey:         cfg.Adapters.AzureAIKey,
-			DeploymentName: cfg.Adapters.AzureAIDeployment,
-		}, azureai.WithLogger(logger))
-		if err != nil {
-			return fmt.Errorf("initialize azure ai client: %w", err)
-		}
-		azureAIClient = client
-
-		toolExec := advisortool.NewCampaignToolExecutor(campaignsService)
-		advisorCacheRepo = sqlite.NewAdvisorCacheRepository(db.DB, logger)
-		advisorService = advisor.NewService(client, toolExec,
-			advisor.WithLogger(logger),
-			advisor.WithMaxToolRounds(5),
-			advisor.WithAITracker(aiCallRepo),
-			advisor.WithCacheStore(advisorCacheRepo),
-		)
-		logger.Info(ctx, "AI advisor initialized",
-			observability.String("deployment", cfg.Adapters.AzureAIDeployment))
+	azureAIClient, advisorService, advisorCacheRepo, err := initializeAdvisorService(
+		ctx, cfg, logger, db, aiCallRepo, campaignsService,
+	)
+	if err != nil {
+		return err
 	}
 
-	mediaDir := os.Getenv("MEDIA_DIR")
-	if mediaDir == "" {
-		mediaDir = "./data/media"
-	}
-	baseURL := os.Getenv("BASE_URL")
+	socialService, socialRepo, igClient, igStore, igTokenRefresher := initializeSocialService(
+		ctx, cfg, logger, db, azureAIClient, aiCallRepo,
+	)
 
-	// Initialize social content service
-	socialRepo := sqlite.NewSocialRepository(db.DB)
-	var socialService social.Service
-	var socialOpts []social.ServiceOption
-	socialOpts = append(socialOpts, social.WithLogger(logger))
-	socialOpts = append(socialOpts, social.WithAITracker(aiCallRepo))
-	if azureAIClient != nil {
-		socialOpts = append(socialOpts, social.WithLLM(azureAIClient))
-	}
-	// Initialize Instagram integration (requires encryption + Instagram config)
-	igConfig := config.LoadInstagramOAuthConfig()
-	var igClient *igclient.Client
-	var igStore *sqlite.InstagramStore
-	var igTokenRefresher scheduler.InstagramTokenRefresher
-
-	if igConfig.IsConfigured() && cfg.Auth.EncryptionKey != "" {
-		igEncryptor, igErr := crypto.NewAESEncryptor(cfg.Auth.EncryptionKey)
-		if igErr != nil {
-			logger.Error(ctx, "Instagram encryption init failed — Instagram integration disabled",
-				observability.Err(igErr))
-		} else {
-			igClient = igclient.NewClient(igConfig.AppID, igConfig.AppSecret, igConfig.RedirectURI, logger)
-			igStore = sqlite.NewInstagramStore(db.DB, igEncryptor)
-
-			publisher := igclient.NewPublisherAdapter(igClient)
-			tokenProvider := igclient.NewTokenProvider(igStore)
-			socialOpts = append(socialOpts, social.WithPublisher(publisher, tokenProvider))
-
-			igTokenRefresher = igclient.NewTokenRefresher(igClient, igStore, logger)
-			logger.Info(ctx, "Instagram integration initialized")
-		}
-	}
-
-	socialService = social.NewService(socialRepo, socialOpts...)
-
-	// Build and start scheduler group
-	schedulerCtx, cancelScheduler := context.WithCancel(ctx)
-	schedulerResult := scheduler.BuildGroup(cfg, scheduler.BuildDeps{
-		PriceRepo:               priceRepo,
-		APITracker:              priceRepo,
-		HealthChecker:           priceRepo,
-		AccessTracker:           priceRepo,
-		PriceProvider:           priceProvImpl,
-		CardProvider:            cardProvImpl,
-		AuthService:             authService,
-		Logger:                  logger,
-		CardHedgerClient:        cardHedgerClientImpl,
-		SyncStateStore:          syncStateRepo,
-		CardIDMappingLookup:     cardIDMappingRepo,
-		CardIDMappingLister:     &cardIDMappingListAdapter{repo: cardIDMappingRepo},
-		CardIDMappingSaver:      cardIDMappingRepo,
-		DiscoveryFailureTracker: discoveryFailureRepo,
-		FavoritesLister:         &favoritesListAdapter{repo: favoritesRepo},
-		CampaignCardLister:      &campaignCardListAdapter{repo: campaignsRepo},
-		NewSetsProvider:         cardProvImpl.RegistryManager(),
-		InventoryLister:         &inventoryListAdapter{repo: campaignsRepo},
-		SnapshotRefresher:       &snapshotRefreshAdapter{svc: campaignsService},
-		SnapshotEnrichService:   campaignsService,
-		SnapshotHistoryLister:   campaignsRepo,
-		SnapshotHistoryRecorder: campaignsRepo,
-		AdvisorCollector:        advisorService,
-		AdvisorCache:            advisorCacheRepo,
-		AICallTracker:           aiCallRepo,
-		SocialContentDetector:   socialService,
-		InstagramTokenRefresher: igTokenRefresher,
+	schedulerResult, cancelScheduler := initializeSchedulers(ctx, schedulerDeps{
+		Config:               cfg,
+		Logger:               logger,
+		PriceRepo:            priceRepo,
+		PriceProvImpl:        priceProvImpl,
+		CardProvImpl:         cardProvImpl,
+		AuthService:          authService,
+		CardHedgerClientImpl: cardHedgerClientImpl,
+		SyncStateRepo:        syncStateRepo,
+		CardIDMappingRepo:    cardIDMappingRepo,
+		DiscoveryFailureRepo: discoveryFailureRepo,
+		FavoritesRepo:        favoritesRepo,
+		CampaignsRepo:        campaignsRepo,
+		CampaignsService:     campaignsService,
+		AdvisorService:       advisorService,
+		AdvisorCacheRepo:     advisorCacheRepo,
+		AICallRepo:           aiCallRepo,
+		SocialService:        socialService,
+		IGTokenRefresher:     igTokenRefresher,
 	})
-	schedulerResult.Group.StartAll(schedulerCtx)
 
 	// Create price hints handler
 	priceHintsHandler := handlers.NewPriceHintsHandler(cardIDMappingRepo, logger)
@@ -585,6 +448,11 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	}
 
 	// Create social handler
+	mediaDir := os.Getenv("MEDIA_DIR")
+	if mediaDir == "" {
+		mediaDir = "./data/media"
+	}
+	baseURL := os.Getenv("BASE_URL")
 	socialHandler := handlers.NewSocialHandler(socialService, socialRepo, logger, mediaDir, baseURL)
 
 	// Wire image backfiller if PSA image token is available

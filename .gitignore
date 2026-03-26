@@ -66,6 +66,7 @@ cmd/**/data/
 
 .claude/*
 !.claude/commands/
+!.claude/skills/
 
 web/node_modules
 

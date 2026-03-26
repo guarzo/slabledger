@@ -120,6 +120,8 @@ INSTAGRAM_APP_SECRET="..."    # Instagram OAuth app secret
 INSTAGRAM_REDIRECT_URI="..."  # Instagram OAuth redirect URI
 SOCIAL_CONTENT_ENABLED="true" # Enable/disable social content scheduler
 SOCIAL_CONTENT_INTERVAL="24h" # Social content detection interval
+ADVISOR_REFRESH_HOUR="4"     # Hour (0-23 UTC) to run advisor; -1 = use InitialDelay
+SOCIAL_CONTENT_HOUR="5"      # Hour (0-23 UTC) to run social content; -1 = use InitialDelay
 AZURE_AI_ENDPOINT="..."       # Azure OpenAI endpoint URL
 AZURE_AI_API_KEY="..."        # Azure OpenAI API key
 AZURE_AI_DEPLOYMENT="..."     # Azure OpenAI deployment name
@@ -189,6 +191,156 @@ Simplest reference: `internal/adapters/clients/pokemonprice/`
 - **Type sync**: Frontend types in `web/src/types/` are manually maintained to match Go struct JSON tags. When modifying Go response structs, update corresponding TS interfaces.
 - **API client**: `web/src/js/api.ts` — singleton with retry, 30s timeout (5min for uploads), credential inclusion
 
+## API Routes
+
+See [docs/API.md](docs/API.md) for detailed request/response shapes.
+
+| Group | Routes | Auth | Prefix |
+|-------|--------|------|--------|
+| Authentication | 4 | AuthRateLimit | `/auth/`, `/api/auth/` |
+| Health & Admin | 10 | None/Admin | `/api/health`, `/api/admin/` |
+| Favorites | 5 | Auth | `/api/favorites/` |
+| Cards & Pricing | 3 | Auth/Admin | `/api/cards/`, `/api/price-hints` |
+| Campaign CRUD | 5 | Auth | `/api/campaigns/` |
+| Campaign Analytics | 12 | Auth | `/api/campaigns/{id}/` |
+| Global Purchases | 9 | Auth | `/api/purchases/` |
+| Price Override & AI | 4 | Auth | `/api/purchases/{id}/` |
+| Credit & Invoices | 5 | Auth | `/api/credit/` |
+| Portfolio | 9 | Auth | `/api/portfolio/` |
+| Utilities | 2 | Auth | `/api/certs/`, `/api/shopify/` |
+| AI Advisor | 6 | Auth | `/api/advisor/` |
+| Social & Instagram | 14 | Admin | `/api/social/`, `/api/instagram/` |
+| Pricing API v1 | 3 | APIKey | `/api/v1/` |
+
+**Middleware stack:** CORS → Gzip → Logging → Timing → Security Headers → Recovery → Rate Limiter
+
+## Database Schema
+
+See [docs/SCHEMA.md](docs/SCHEMA.md) for full column definitions and indexes.
+
+SQLite WAL mode. All monetary values in **cents**. 19 migration pairs (`000001`–`000019`).
+
+| Table | Purpose | Key FKs |
+|-------|---------|---------|
+| `users` | Google OAuth accounts | — |
+| `oauth_states` | Short-lived CSRF tokens for OAuth flow | — |
+| `api_rate_limits` | Per-provider 429-block and rate state | — |
+| `api_calls` | Outbound pricing API call log | — |
+| `ai_calls` | Azure OpenAI call log with token usage | — |
+| `sync_state` | Key-value scheduler checkpoints | — |
+| `cashflow_config` | Singleton global cashflow parameters | — |
+| `allowed_emails` | Login access allowlist | `added_by → users` |
+| `revocation_flags` | Access revocation notices | — |
+| `card_id_mappings` | Cached provider external IDs | — |
+| `price_history` | Time-series card prices per source | — |
+| `price_refresh_queue` | Background price-refresh work queue | `source → api_rate_limits` |
+| `card_access_log` | Recent access log for staleness prioritization | — |
+| `discovery_failures` | Failed card discovery records | — |
+| `card_request_submissions` | Cards submitted to CardHedger | — |
+| `market_snapshot_history` | Daily archive of unsold inventory snapshots | — |
+| `population_history` | PSA population counts over time | — |
+| `cl_value_history` | Card Ladder valuations per cert | — |
+| `advisor_cache` | Cached AI advisor analysis results | — |
+| `instagram_config` | Singleton Instagram account credentials | — |
+| `invoices` | PSA Partner Offers purchase invoices | — |
+| `campaigns` | Acquisition campaign definitions | — |
+| `user_sessions` | Active browser sessions | `user_id → users` |
+| `user_tokens` | OAuth tokens scoped to sessions | `user_id → users`, `session_id → user_sessions` |
+| `favorites` | User-saved favorite cards | `user_id → users` |
+| `campaign_purchases` | Individual graded cards per campaign | `campaign_id → campaigns` |
+| `campaign_sales` | Sale records for purchased cards | `purchase_id → campaign_purchases` |
+| `social_posts` | Instagram carousel draft posts | — |
+| `social_post_cards` | Junction: posts ↔ purchases (slides) | `post_id → social_posts` |
+
+**8 views**: `stale_prices`, `api_usage_summary`, `api_hourly_distribution`, `api_daily_summary`, `active_sessions`, `expired_sessions`, `ai_usage_summary`, `ai_usage_by_operation`
+
+---
+
+## Domain Interfaces
+
+| Package | Interface | File | Methods | Purpose |
+|---------|-----------|------|---------|---------|
+| `campaigns` | `Service` | `service.go` | ~40 | Full campaign business logic |
+| `campaigns` | `Repository` | `repository.go` | composed | Composed: CRUD + Purchase + Sale + Analytics + Finance + Revocation |
+| `campaigns` | `PriceLookup` | `service.go` | 2 | Market signals for inventory aging |
+| `campaigns` | `CertLookup` | `service.go` | 1 | PSA cert → card details |
+| `campaigns` | `CardIDResolver` | `service.go` | 1 | Batch cert → external card ID |
+| `pricing` | `PriceProvider` | `provider.go` | 5 | Card price lookup (PriceCharting) |
+| `pricing` | `PriceRepository` | `repository.go` | ~10 | Price history persistence |
+| `pricing` | `APITracker` | `repository.go` | 3 | Rate limit state tracking |
+| `pricing` | `AccessTracker` | `repository.go` | 1 | Card access log |
+| `pricing` | `HealthChecker` | `repository.go` | 1 | Provider health |
+| `pricing` | `DiscoveryFailureTracker` | `repository.go` | 3 | Failed discovery persistence |
+| `pricing` | `PricingDiagnosticsProvider` | `repository.go` | 1 | Diagnostics data |
+| `auth` | `Service` | `service.go` | 14 | OAuth flow, session management, allowlist |
+| `auth` | `Repository` | `repository.go` | ~14 | Auth persistence |
+| `social` | `Service` | `service.go` | 8 | Social post generation and publishing |
+| `social` | `Publisher` | `service.go` | 1 | Instagram carousel publish |
+| `social` | `InstagramTokenProvider` | `service.go` | 1 | Instagram credentials |
+| `social` | `Repository` | `repository.go` | ~8 | Social post persistence |
+| `advisor` | `Service` | `service.go` | 6 | AI advisor analysis (streaming) |
+| `advisor` | `CacheStore` | `cache.go` | 5 | Advisor result persistence |
+| `ai` | `LLMProvider` | `llm.go` | 1 | LLM completion (Azure AI) |
+| `ai` | `AICallTracker` | `tracking.go` | 1 | AI call metrics |
+| `ai` | `ToolExecutor` | `tools.go` | 1 | Tool call execution |
+| `ai` | `FilteredToolExecutor` | `tools.go` | 1 | Subset tool execution |
+| `cards` | `CardProvider` | `provider.go` | 5 | Card/set search (TCGdex) |
+| `cards` | `NewSetIDsProvider` | `provider.go` | 1 | New set discovery |
+| `fusion` | `SecondaryPriceSource` | `source.go` | 3 | Price fusion data (PokemonPrice, CardHedger) |
+| `fusion` | `CardIDResolver` | `source.go` | 3 | External ID cache |
+| `fusion` | `PriceHintResolver` | `source.go` | 4 | User-provided price hints |
+| `favorites` | `Service` | `service.go` | 6 | Favorites CRUD |
+| `favorites` | `Repository` | `repository.go` | ~6 | Favorites persistence |
+| `observability` | `Logger` | `logger.go` | 5 | Structured logging |
+
+---
+
+## Common Recipes
+
+### Add a new API endpoint
+
+1. Create a handler method on an existing handler struct in `internal/adapters/httpserver/handlers/`, or create a new handler file.
+2. Register the route in `internal/adapters/httpserver/router.go` under the appropriate group (use Go 1.22 method+path patterns: `"GET /api/foo/{id}"`).
+3. Wire any new handler dependencies through `RouterConfig` in `router.go` and `NewRouter`.
+4. Update `docs/API.md` with the request/response shape and update the route table in this file.
+
+### Add a new scheduler
+
+1. Create a new file in `internal/adapters/scheduler/` following the existing pattern (a struct with `Run(ctx)` and `BuildGroup`).
+2. Define any domain interface the scheduler needs in the relevant `internal/domain/<package>/` file.
+3. Add the scheduler to the `BuildGroup` call in `cmd/slabledger/main.go` alongside the other schedulers.
+4. Add any new env vars to `internal/platform/config/loader.go` (env overlay) and `internal/platform/config/` (struct + defaults).
+5. Document the scheduler and its env vars in this file and `docs/DEVELOPMENT.md`.
+
+### Add a new domain interface
+
+1. Define the interface in `internal/domain/<package>/` — no external imports allowed in domain code.
+2. Create a concrete adapter in `internal/adapters/clients/<name>/` or `internal/adapters/storage/sqlite/` that implements it.
+3. Wire the adapter in `cmd/slabledger/main.go` via a functional option (`With<Name>(impl)`).
+4. Add a mock in `internal/testutil/mocks/` and update any composed mocks in `domain/<package>/mock_repo_test.go`.
+
+### Add a new migration
+
+1. Check the highest existing migration number: `ls internal/adapters/storage/sqlite/migrations/ | sort -n | tail -2`
+2. Create the pair (zero-pad to 6 digits):
+   ```bash
+   touch internal/adapters/storage/sqlite/migrations/000020_description.up.sql
+   touch internal/adapters/storage/sqlite/migrations/000020_description.down.sql
+   ```
+3. Update the table count in `internal/adapters/storage/sqlite/migrations/` and add the new table to `docs/SCHEMA.md`.
+4. Update the migration count in the "## Database" section of this file.
+
+---
+
+## Configuration
+
+- **Precedence**: CLI flags > env vars > `.env` > defaults
+- **Loaded in**: `internal/platform/config/loader.go` — `Default()` → `FromEnv()` → `FromFlags()` → `Validate()`
+- **Validated in**: `internal/platform/config/validation.go`
+- **All variables**: see `.env.example` for the complete list with comments
+
+---
+
 ## Troubleshooting
 
 | Error | Likely Cause | Fix |
@@ -221,6 +373,8 @@ Command definition: `.claude/commands/campaign-analysis.md`
 - [User Guide](docs/USER_GUIDE.md) - End-user documentation
 - [Architecture](docs/ARCHITECTURE.md) - System design and key decisions
 - [Development](docs/DEVELOPMENT.md) - Caching, rate limiting, API integrations
+- [Database Schema](docs/SCHEMA.md) - Table definitions, indexes, relationships
+- [API Reference](docs/API.md) - All endpoints with request/response shapes
 - [Roadmap](docs/ROADMAP.md) - Development roadmap (EV calculator, Monte Carlo, crack arbitrage, capital visibility)
 - [Campaign Analysis Plan](docs/CAMPAIGN_ANALYSIS_SKILL_PLAN.md) - Design rationale for the /campaign-analysis command
 - [Campaign Strategy](docs/private/CAMPAIGN_STRATEGY.md) - Business strategy (private, not tracked in git)
