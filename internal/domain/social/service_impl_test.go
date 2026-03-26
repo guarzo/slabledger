@@ -274,6 +274,7 @@ type mockSocialRepo struct {
 	setPublishingFunc            func(ctx context.Context, id string) error
 	updateSlideURLsFunc          func(ctx context.Context, id string, urls []string) error
 	updateCoverTitleFunc         func(ctx context.Context, id string, title string) error
+	updateBackgroundURLsFunc     func(ctx context.Context, id string, urls []string) error
 }
 
 func (m *mockSocialRepo) GetPost(ctx context.Context, id string) (*SocialPost, error) {
@@ -383,6 +384,13 @@ func (m *mockSocialRepo) UpdateSlideURLs(ctx context.Context, id string, urls []
 func (m *mockSocialRepo) UpdateCoverTitle(ctx context.Context, id string, title string) error {
 	if m.updateCoverTitleFunc != nil {
 		return m.updateCoverTitleFunc(ctx, id, title)
+	}
+	return nil
+}
+
+func (m *mockSocialRepo) UpdateBackgroundURLs(ctx context.Context, id string, urls []string) error {
+	if m.updateBackgroundURLsFunc != nil {
+		return m.updateBackgroundURLsFunc(ctx, id, urls)
 	}
 	return nil
 }
