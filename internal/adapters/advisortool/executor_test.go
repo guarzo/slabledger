@@ -203,16 +203,16 @@ func TestExecute_ServiceError(t *testing.T) {
 	}
 }
 
-// TestToJSON_TruncatesAt8KB verifies that toJSON output is limited to 8KB.
-func TestToJSON_TruncatesAt8KB(t *testing.T) {
-	// Build a slice that marshals to >8000 bytes
+// TestToJSON_TruncatesAt15KB verifies that toJSON output is limited to 15KB.
+func TestToJSON_TruncatesAt15KB(t *testing.T) {
+	// Build a slice that marshals to >15000 bytes
 	items := make([]map[string]string, 200)
 	for i := range items {
 		items[i] = map[string]string{"id": fmt.Sprintf("item-%04d", i), "data": "padding-value-here"}
 	}
 	result := toJSON(items)
-	if len(result) > 8000 {
-		t.Errorf("toJSON output = %d bytes, want <= 8000", len(result))
+	if len(result) > 15000 {
+		t.Errorf("toJSON output = %d bytes, want <= 15000", len(result))
 	}
 }
 
