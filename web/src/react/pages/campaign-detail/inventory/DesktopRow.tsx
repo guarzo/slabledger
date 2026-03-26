@@ -8,6 +8,7 @@ import {
   bestPrice, unrealizedPL, marketTrend,
   getSourceByType, marketTooltip,
   formatPL, deriveSignalDirection, deriveSignalDelta, displayGrade,
+  getReviewStatus, statusBorderColor, statusBadge,
 } from './utils';
 
 const BADGE_COLORS = [
@@ -57,8 +58,21 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
     }
   };
 
+  const reviewStatus = getReviewStatus(item);
+  const badge = statusBadge(item);
+  const clValue = item.purchase.clValueCents ?? 0;
+  const clIsHigher = clValue > 0 && price > 0 && clValue > price;
+  const recPrice = item.purchase.reviewedPriceCents ?? 0;
+
   return (
-    <div className="flex items-center cursor-pointer" role="row" tabIndex={0} onClick={onExpand} onKeyDown={handleKeyDown}>
+    <div
+      className="flex items-center cursor-pointer"
+      role="row"
+      tabIndex={0}
+      onClick={onExpand}
+      onKeyDown={handleKeyDown}
+      style={{ borderLeft: `3px solid ${statusBorderColor(reviewStatus)}` }}
+    >
       <div className="glass-table-td flex-shrink-0 !px-1" style={{ width: '28px' }} onClick={e => e.stopPropagation()}>
         <input type="checkbox" checked={selected} onChange={onToggle} onKeyDown={e => e.stopPropagation()} className="rounded accent-[var(--brand-500)]" />
       </div>
@@ -99,8 +113,8 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
         )}
       </div>
       <div className="glass-table-td flex-shrink-0 text-center text-[var(--text)]" style={{ width: '36px' }}>{displayGrade(item.purchase)}</div>
-      <div className="glass-table-td flex-shrink-0 text-right text-[var(--text)] tabular-nums" style={{ width: '82px' }}>{formatCents(costBasis)}</div>
-      <div className="glass-table-td flex-shrink-0 text-right" style={{ width: '96px' }}
+      <div className="glass-table-td flex-shrink-0 text-right text-[var(--text)] tabular-nums" style={{ width: '72px' }}>{formatCents(costBasis)}</div>
+      <div className="glass-table-td flex-shrink-0 text-right" style={{ width: '88px' }}
         title={snap ? marketTooltip(snap, costBasis) : undefined}>
         {snap && price > 0 ? (() => {
           const displaySource = getSourceByType(snap.sourcePrices, 'ebay') || getSourceByType(snap.sourcePrices, 'estimate');
@@ -116,8 +130,16 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
           <span className="text-xs text-[var(--text-muted)]">-</span>
         )}
       </div>
+      {/* CL Value */}
+      <div className="glass-table-td flex-shrink-0 text-right tabular-nums" style={{ width: '68px' }}>
+        {clValue > 0 ? (
+          <span className={clIsHigher ? 'text-[var(--success)]' : 'text-[var(--text)]'}>{formatCents(clValue)}</span>
+        ) : (
+          <span className="text-xs text-[var(--text-muted)]">&mdash;</span>
+        )}
+      </div>
       {/* Unrealized P/L */}
-      <div className="glass-table-td flex-shrink-0 text-right tabular-nums" style={{ width: '80px' }}>
+      <div className="glass-table-td flex-shrink-0 text-right tabular-nums" style={{ width: '72px' }}>
         {pl != null ? (
           <span className={`text-xs font-medium px-2 py-[3px] rounded-md ${
             pl > 0 ? 'bg-[rgba(52,211,153,0.1)] text-[#34d399]' :
@@ -129,18 +151,38 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
         )}
       </div>
       {/* Days held */}
-      <div className={`glass-table-td flex-shrink-0 text-center ${daysColor}`} style={{ width: '44px' }}>{item.daysHeld}</div>
+      <div className={`glass-table-td flex-shrink-0 text-center ${daysColor}`} style={{ width: '40px' }}>{item.daysHeld}</div>
       {/* Signal */}
-      <div className="glass-table-td flex-shrink-0 text-center" style={{ width: '64px' }}>
+      <div className="glass-table-td flex-shrink-0 text-center" style={{ width: '56px' }}>
         {direction ? (
           <SignalBadge direction={direction} deltaPct={deltaPct} />
         ) : (
           <span className="text-xs text-[var(--text-muted)]">-</span>
         )}
       </div>
+      {/* Rec. Price */}
+      <div className="glass-table-td flex-shrink-0 text-right tabular-nums" style={{ width: '68px' }}>
+        {recPrice > 0 ? (
+          <span className="text-[var(--success)]">{formatCents(recPrice)}</span>
+        ) : (
+          <span className="text-xs text-[var(--text-muted)] italic">&mdash;</span>
+        )}
+      </div>
+      {/* Status */}
+      <div className="glass-table-td flex-shrink-0 text-center" style={{ width: '72px' }}>
+        <span
+          className="inline-block text-[10px] font-medium px-1.5 py-0.5 rounded-full whitespace-nowrap"
+          style={{
+            color: badge.color,
+            background: `color-mix(in srgb, ${badge.color} 12%, transparent)`,
+          }}
+        >
+          {badge.label}
+        </span>
+      </div>
       {/* EV */}
       {showEV && (
-        <div className="glass-table-td flex-shrink-0 text-right" style={{ width: '68px' }}>
+        <div className="glass-table-td flex-shrink-0 text-right" style={{ width: '64px' }}>
           {ev ? (
             <span className={`${ev.evCents >= 0 ? 'text-[var(--success)]' : 'text-[var(--danger)]'}`}>{formatPL(ev.evCents)}</span>
           ) : (
