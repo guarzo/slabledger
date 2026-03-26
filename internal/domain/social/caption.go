@@ -103,8 +103,8 @@ func (s *service) generateBackgroundsAsync(post *SocialPost) {
 		return
 	}
 
-	postDir := fmt.Sprintf("%s/social/%s", s.mediaDir, post.ID)
-	if err := s.mediaStore.EnsureDir(postDir); err != nil {
+	postDir := fmt.Sprintf("social/%s", post.ID)
+	if err := s.mediaStore.EnsureDir(ctx, postDir); err != nil {
 		s.logError(ctx, "create background dir", post.PostType, err)
 		return
 	}
@@ -132,7 +132,7 @@ func (s *service) generateBackgroundsAsync(post *SocialPost) {
 		urls = append(urls, "")
 	} else {
 		coverPath := fmt.Sprintf("%s/bg-cover.%s", postDir, coverResult.Format)
-		if err := s.mediaStore.WriteFile(coverPath, coverResult.ImageData); err != nil {
+		if err := s.mediaStore.WriteFile(ctx, coverPath, coverResult.ImageData); err != nil {
 			s.logError(ctx, "save cover background", post.PostType, err)
 			urls = append(urls, "")
 		} else {
@@ -168,7 +168,7 @@ func (s *service) generateBackgroundsAsync(post *SocialPost) {
 		}
 
 		cardPath := fmt.Sprintf("%s/bg-%d.%s", postDir, i+1, cardResult.Format)
-		if err := s.mediaStore.WriteFile(cardPath, cardResult.ImageData); err != nil {
+		if err := s.mediaStore.WriteFile(ctx, cardPath, cardResult.ImageData); err != nil {
 			s.logError(ctx, "save card background", post.PostType, err)
 			urls = append(urls, "")
 			continue
@@ -264,11 +264,19 @@ func truncateCaption(caption string) string {
 	if len(runes) <= maxCaptionLen {
 		return caption
 	}
-	truncated := string(runes[:maxCaptionLen])
-	if idx := strings.LastIndex(truncated, " "); idx > len(string(runes[:maxCaptionLen/2])) {
-		truncated = truncated[:idx]
+	truncated := runes[:maxCaptionLen]
+	// Find last space in rune-space to avoid splitting words.
+	lastSpace := -1
+	for i := len(truncated) - 1; i >= maxCaptionLen/2; i-- {
+		if truncated[i] == ' ' {
+			lastSpace = i
+			break
+		}
 	}
-	return strings.TrimSpace(truncated) + "…"
+	if lastSpace > 0 {
+		truncated = truncated[:lastSpace]
+	}
+	return strings.TrimSpace(string(truncated)) + "…"
 }
 
 // captionResponse is the expected JSON structure from the LLM.

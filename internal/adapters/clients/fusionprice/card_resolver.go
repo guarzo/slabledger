@@ -15,6 +15,11 @@ import (
 // LookupCard implements pricing.PriceProvider interface.
 // Uses TCGdex as primary resolver when possible, then falls back to
 // PriceCharting for fuzzy matching. Runs the full fusion pipeline for pricing.
+//
+// On fusion errors, LookupCard logs the error and returns the PriceCharting-only
+// result with a nil error (degraded-mode behavior). Callers receive a valid
+// *pricing.Price from PriceCharting without secondary source data rather than
+// an error, so they should check the Sources field to determine data completeness.
 func (f *FusionPriceProvider) LookupCard(ctx context.Context, setName string, card domainCards.Card) (*pricing.Price, error) {
 	if f.priceCharting == nil {
 		return nil, apperrors.ProviderUnavailable("pricecharting", fmt.Errorf("provider not configured"))
@@ -79,19 +84,11 @@ func (f *FusionPriceProvider) LookupCard(ctx context.Context, setName string, ca
 			resolvedNumber = canonicalCard.Number
 		}
 	} else if f.cardProvider != nil {
-		// No canonical card from TCGdex — cross-validate PriceCharting result
+		// No canonical card from TCGdex — cross-validate PriceCharting result.
+		// ValidateCardResolution currently always returns Valid:true (it can't
+		// disprove card existence due to incomplete DB coverage), so the
+		// canonical-name path below is the only meaningful branch.
 		validation := ValidateCardResolution(ctx, f.cardProvider, pcPrice.ProductName, card.Number, setName)
-		if !validation.Valid {
-			if f.logger != nil {
-				f.logger.Warn(ctx, "card validation failed, rejecting PriceCharting result",
-					observability.String("card", card.Name),
-					observability.String("resolved_product", pcPrice.ProductName),
-					observability.String("number", card.Number),
-					observability.String("set", setName),
-					observability.String("reason", validation.Reason))
-			}
-			return nil, nil
-		}
 		if validation.CanonicalCard != nil && validation.CanonicalCard.Name != "" {
 			if f.logger != nil && pcPrice.ProductName != validation.CanonicalCard.Name {
 				f.logger.Debug(ctx, "using canonical card name from database",

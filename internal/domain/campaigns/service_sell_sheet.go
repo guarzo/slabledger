@@ -109,18 +109,20 @@ func (s *service) GenerateSellSheet(ctx context.Context, campaignID string, purc
 		return nil, fmt.Errorf("campaign lookup: %w", err)
 	}
 
+	// Batch fetch all purchases in one query instead of N separate calls.
+	purchaseMap, err := s.repo.GetPurchasesByIDs(ctx, purchaseIDs)
+	if err != nil {
+		return nil, fmt.Errorf("batch purchase lookup: %w", err)
+	}
+
 	sheet := &SellSheet{
 		GeneratedAt:  time.Now().Format(time.RFC3339),
 		CampaignName: campaign.Name,
 	}
 
 	for _, pid := range purchaseIDs {
-		purchase, err := s.repo.GetPurchase(ctx, pid)
-		if err != nil {
-			sheet.Totals.SkippedItems++
-			continue
-		}
-		if purchase.CampaignID != campaignID {
+		purchase, ok := purchaseMap[pid]
+		if !ok || purchase.CampaignID != campaignID {
 			sheet.Totals.SkippedItems++
 			continue
 		}

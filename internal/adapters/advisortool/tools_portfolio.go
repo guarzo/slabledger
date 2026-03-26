@@ -185,6 +185,12 @@ func (e *CampaignToolExecutor) registerEvaluatePurchase() {
 		if err := json.Unmarshal([]byte(args), &p); err != nil {
 			return "", fmt.Errorf("invalid arguments: %w", err)
 		}
+		if p.CampaignID == "" {
+			return "", fmt.Errorf("campaignId is required")
+		}
+		if p.CardName == "" {
+			return "", fmt.Errorf("cardName is required")
+		}
 		result, err := e.svc.EvaluatePurchase(ctx, p.CampaignID, p.CardName, p.Grade, p.BuyCostCents)
 		if err != nil {
 			return "", err

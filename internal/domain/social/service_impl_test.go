@@ -560,7 +560,7 @@ func TestDeduplicateByCardIdentity(t *testing.T) {
 			ids:  []string{"p1", "p2"},
 			cards: []PostCardDetail{
 				{PurchaseID: "p1", CardName: "Charizard", SetName: "Base Set", GradeValue: 10, FrontImageURL: ""},
-				{PurchaseID: "p2", CardName: "Charizard", SetName: "Base Set", GradeValue: 10, FrontImageURL: "http://img.jpg", CLValueCents: 5000},
+				{PurchaseID: "p2", CardName: "Charizard", SetName: "Base Set", GradeValue: 10, FrontImageURL: "http://img.jpg"},
 			},
 			wantIDs: []string{"p2"},
 		},

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 
 	"github.com/guarzo/slabledger/internal/domain/ai"
@@ -91,12 +92,10 @@ func (c *Client) parseSSEStream(ctx context.Context, body io.Reader, stream func
 			observability.Int("pending_tool_calls", len(toolCalls)),
 		)
 	}
-	if len(toolCalls) > 0 {
-		stream(ai.CompletionChunk{
-			ToolCalls: flattenToolCalls(toolCalls),
-			Done:      true,
-		})
-	}
+	stream(ai.CompletionChunk{
+		ToolCalls: flattenToolCalls(toolCalls),
+		Done:      true,
+	})
 	return nil
 }
 
@@ -117,11 +116,17 @@ func isPermanentError(err error) bool {
 }
 
 func flattenToolCalls(m map[int]*ai.ToolCall) []ai.ToolCall {
-	result := make([]ai.ToolCall, 0, len(m))
-	for i := 0; i < len(m); i++ {
-		if tc, ok := m[i]; ok {
-			result = append(result, *tc)
-		}
+	if len(m) == 0 {
+		return nil
+	}
+	keys := make([]int, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Ints(keys)
+	result := make([]ai.ToolCall, 0, len(keys))
+	for _, k := range keys {
+		result = append(result, *m[k])
 	}
 	return result
 }

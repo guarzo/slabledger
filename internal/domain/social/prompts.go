@@ -134,9 +134,9 @@ const postSuggestionSystemPromptTemplate = `You are a social media strategist fo
 - Return valid JSON only, no markdown or explanation
 
 ## Post Type Classification
-Each card has data to help you classify: cost, market price, cost/market ratio, 30-day trend %%, and days since acquisition. Use these criteria:
+Each card has data to help you classify: asking price, CL (Card Ladder) value, 30-day trend %%, and days since acquisition. Use these criteria:
 
-- "hot_deals": cards where cost/market ratio is %.0f%% or below — these are priced well below market value. Prioritize this type when the data supports it.
+- "hot_deals": cards where asking price is %.0f%% or below of CL value — these are priced well below market value. Prioritize this type when the data supports it.
 - "price_movers": cards with a 30-day trend of +%.0f%% or more (or -%.0f%% or more) — significant recent market movement. Group upward and downward movers separately when possible.
 - "new_arrivals": cards acquired within the last %d days. Use this ONLY for genuinely recent additions.
 

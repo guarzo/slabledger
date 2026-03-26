@@ -49,7 +49,9 @@ func (p *PriceCharting) tryUPC(ctx context.Context, card domainCards.Card, setNa
 	}
 
 	if match != nil {
-		// Cache the result
+		// Enrich with historical data before caching so the cached
+		// object has Conservative, Distributions, LastSoldByGrade.
+		p.enrichMatch(ctx, match)
 		p.cacheManager.CacheMatch(ctx, setName, card, match)
 		return match, true, nil
 	}
@@ -282,8 +284,11 @@ func (p *PriceCharting) tryFuzzy(ctx context.Context, card domainCards.Card, set
 				continue
 			}
 
-			// Reject fuzzy matches where the set name doesn't overlap
-			if setName != "" && match.ConsoleName != "" && !VerifySetOverlap(ctx, match.ConsoleName, setName) {
+			// Reject fuzzy matches where the set name doesn't overlap.
+			// Normalize expected set to strip PSA codes before comparing
+			// (consistent with tryAPI's normalization).
+			normalizedSet := cardutil.NormalizeSetNameForSearch(setName)
+			if setName != "" && match.ConsoleName != "" && !VerifySetOverlap(ctx, match.ConsoleName, normalizedSet) {
 				if p.logger != nil {
 					p.logger.Warn(ctx, "fuzzy match rejected: set mismatch",
 						observability.String("card", card.Name),
