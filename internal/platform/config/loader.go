@@ -285,6 +285,11 @@ func FromEnv(base Config) Config {
 			cfg.AdvisorRefresh.InitialDelay = d
 		}
 	}
+	if v := os.Getenv("ADVISOR_REFRESH_HOUR"); v != "" {
+		if h, err := strconv.Atoi(v); err == nil && h >= -1 && h <= 23 {
+			cfg.AdvisorRefresh.RefreshHour = h
+		}
+	}
 
 	// Social content scheduler
 	if v := os.Getenv("SOCIAL_CONTENT_ENABLED"); v != "" {
@@ -298,6 +303,11 @@ func FromEnv(base Config) Config {
 	if v := os.Getenv("SOCIAL_CONTENT_INITIAL_DELAY"); v != "" {
 		if d, err := time.ParseDuration(v); err == nil && d > 0 {
 			cfg.SocialContent.InitialDelay = d
+		}
+	}
+	if v := os.Getenv("SOCIAL_CONTENT_HOUR"); v != "" {
+		if h, err := strconv.Atoi(v); err == nil && h >= -1 && h <= 23 {
+			cfg.SocialContent.ContentHour = h
 		}
 	}
 	// Adapter API keys and tokens
