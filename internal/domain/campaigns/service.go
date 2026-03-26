@@ -145,6 +145,10 @@ type Service interface {
 	EnsureExternalCampaign(ctx context.Context) (*Campaign, error)
 	ImportExternalCSV(ctx context.Context, rows []ShopifyExportRow) (*ExternalImportResult, error)
 
+	// Orders sales import
+	ImportOrdersSales(ctx context.Context, rows []OrdersExportRow) (*OrdersImportResult, error)
+	ConfirmOrdersSales(ctx context.Context, items []OrdersConfirmItem) (*BulkSaleResult, error)
+
 	// Credit & Invoice management
 	GetCreditSummary(ctx context.Context) (*CreditSummary, error)
 	GetCashflowConfig(ctx context.Context) (*CashflowConfig, error)

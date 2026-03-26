@@ -116,6 +116,10 @@ type MockCampaignService struct {
 	// External purchases
 	EnsureExternalCampaignFn func(ctx context.Context) (*campaigns.Campaign, error)
 	ImportExternalCSVFn      func(ctx context.Context, rows []campaigns.ShopifyExportRow) (*campaigns.ExternalImportResult, error)
+
+	// Orders sales import
+	ImportOrdersSalesFn  func(ctx context.Context, rows []campaigns.OrdersExportRow) (*campaigns.OrdersImportResult, error)
+	ConfirmOrdersSalesFn func(ctx context.Context, items []campaigns.OrdersConfirmItem) (*campaigns.BulkSaleResult, error)
 }
 
 var _ campaigns.Service = (*MockCampaignService)(nil)
@@ -509,6 +513,20 @@ func (m *MockCampaignService) ImportExternalCSV(ctx context.Context, rows []camp
 		return m.ImportExternalCSVFn(ctx, rows)
 	}
 	return &campaigns.ExternalImportResult{}, nil
+}
+
+func (m *MockCampaignService) ImportOrdersSales(ctx context.Context, rows []campaigns.OrdersExportRow) (*campaigns.OrdersImportResult, error) {
+	if m.ImportOrdersSalesFn != nil {
+		return m.ImportOrdersSalesFn(ctx, rows)
+	}
+	return &campaigns.OrdersImportResult{}, nil
+}
+
+func (m *MockCampaignService) ConfirmOrdersSales(ctx context.Context, items []campaigns.OrdersConfirmItem) (*campaigns.BulkSaleResult, error) {
+	if m.ConfirmOrdersSalesFn != nil {
+		return m.ConfirmOrdersSalesFn(ctx, items)
+	}
+	return &campaigns.BulkSaleResult{}, nil
 }
 
 // Price overrides & AI suggestions
