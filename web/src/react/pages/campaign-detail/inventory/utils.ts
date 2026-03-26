@@ -246,7 +246,10 @@ export function statusBadge(item: AgingItem): { label: string; color: string } {
 }
 
 function relativeTime(isoDate: string): string {
-  const diff = Date.now() - new Date(isoDate).getTime();
+  if (!isoDate) return 'unknown';
+  const ts = new Date(isoDate).getTime();
+  if (isNaN(ts)) return 'unknown';
+  const diff = Date.now() - ts;
   const days = Math.floor(diff / 86400000);
   if (days === 0) return 'today';
   if (days === 1) return '1d ago';

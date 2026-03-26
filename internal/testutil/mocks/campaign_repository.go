@@ -721,11 +721,12 @@ func (m *MockCampaignRepository) UpdateReviewedPrice(_ context.Context, purchase
 		return campaigns.ErrPurchaseNotFound
 	}
 	p.ReviewedPriceCents = priceCents
-	p.ReviewSource = campaigns.ReviewSource(source)
 	if priceCents > 0 {
 		p.ReviewedAt = time.Now().Format(time.RFC3339)
+		p.ReviewSource = campaigns.ReviewSource(source)
 	} else {
 		p.ReviewedAt = ""
+		p.ReviewSource = ""
 	}
 	return nil
 }

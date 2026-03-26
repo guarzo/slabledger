@@ -59,6 +59,10 @@ func (h *PriceFlagsHandler) HandleResolvePriceFlag(w http.ResponseWriter, r *htt
 		return
 	}
 	if err := h.service.ResolvePriceFlag(r.Context(), flagID, user.ID); err != nil {
+		if campaigns.IsPriceFlagNotFound(err) {
+			writeError(w, http.StatusNotFound, "Price flag not found or already resolved")
+			return
+		}
 		h.logger.Error(r.Context(), "failed to resolve price flag", observability.Err(err))
 		writeError(w, http.StatusInternalServerError, "Internal server error")
 		return

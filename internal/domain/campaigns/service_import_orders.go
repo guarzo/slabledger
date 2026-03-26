@@ -63,32 +63,35 @@ func (s *service) ImportOrdersSales(ctx context.Context, rows []OrdersExportRow)
 		// Compute fee and net profit preview
 		salePriceCents := mathutil.ToCentsInt(r.UnitPrice)
 
+		var campaignLookupFailed bool
 		campaign, err := s.repo.GetCampaign(ctx, purchase.CampaignID)
 		if err != nil {
 			if s.logger != nil {
-				s.logger.Warn(ctx, "campaign lookup failed for import preview",
+				s.logger.Error(ctx, "campaign lookup failed for import preview, fees are estimated",
 					observability.String("campaignID", purchase.CampaignID),
 					observability.Err(err))
 			}
 			// Use a zero-fee campaign as fallback
 			campaign = &Campaign{}
+			campaignLookupFailed = true
 		}
 
 		saleFeeCents := CalculateSaleFee(r.SalesChannel, salePriceCents, campaign)
 		netProfit := CalculateNetProfit(salePriceCents, purchase.BuyCostCents, purchase.PSASourcingFeeCents, saleFeeCents)
 
 		result.Matched = append(result.Matched, OrdersImportMatch{
-			CertNumber:     r.CertNumber,
-			ProductTitle:   r.ProductTitle,
-			SaleChannel:    r.SalesChannel,
-			SaleDate:       r.Date,
-			SalePriceCents: salePriceCents,
-			SaleFeeCents:   saleFeeCents,
-			PurchaseID:     purchase.ID,
-			CampaignID:     purchase.CampaignID,
-			CardName:       purchase.CardName,
-			BuyCostCents:   purchase.BuyCostCents,
-			NetProfitCents: netProfit,
+			CertNumber:           r.CertNumber,
+			ProductTitle:         r.ProductTitle,
+			SaleChannel:          r.SalesChannel,
+			SaleDate:             r.Date,
+			SalePriceCents:       salePriceCents,
+			SaleFeeCents:         saleFeeCents,
+			PurchaseID:           purchase.ID,
+			CampaignID:           purchase.CampaignID,
+			CardName:             purchase.CardName,
+			BuyCostCents:         purchase.BuyCostCents,
+			NetProfitCents:       netProfit,
+			CampaignLookupFailed: campaignLookupFailed,
 		})
 	}
 

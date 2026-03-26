@@ -54,7 +54,7 @@ export default function ReviewActionBar({ quickPicks, onConfirm, onFlag, isSubmi
           onClick={() => handlePickClick(pick)}
           disabled={isSubmitting}
           className={`text-xs px-2.5 py-1.5 rounded-md border transition-colors ${
-            selectedPick?.source === pick.source
+            selectedPick?.source === pick.source && selectedPick?.priceCents === pick.priceCents
               ? 'border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]'
               : 'border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text)] hover:border-[var(--text-muted)]'
           } disabled:opacity-40 disabled:cursor-not-allowed`}

@@ -136,21 +136,35 @@ func (s *service) llmGenerate(ctx context.Context) (int, error) {
 		cardLookup[c.PurchaseID] = c
 	}
 
+	type cardIdentityKey struct {
+		name  string
+		set   string
+		grade float64
+	}
+
 	created := 0
-	usedIDs := make(map[string]bool) // prevent cards from appearing in multiple posts
+	usedIDs := make(map[string]bool)              // prevent purchase IDs from appearing in multiple posts
+	usedIdentities := make(map[cardIdentityKey]bool) // prevent same logical card across posts
 
 	for _, suggestion := range resp.Posts {
-		// Validate and filter purchase IDs (dedup within this suggestion too)
+		// Validate and filter purchase IDs, also excluding cards whose identity is already used
 		seen := make(map[string]bool)
 		var validIDs []string
 		for _, pid := range suggestion.PurchaseIDs {
-			if cardMap[pid] && !usedIDs[pid] && !seen[pid] {
-				seen[pid] = true
-				validIDs = append(validIDs, pid)
+			if !cardMap[pid] || usedIDs[pid] || seen[pid] {
+				continue
 			}
+			if card, ok := cardLookup[pid]; ok {
+				key := cardIdentityKey{name: card.CardName, set: card.SetName, grade: card.GradeValue}
+				if usedIdentities[key] {
+					continue
+				}
+			}
+			seen[pid] = true
+			validIDs = append(validIDs, pid)
 		}
 
-		// Deduplicate by card identity (name + set + grade)
+		// Deduplicate by card identity (name + set + grade) within this suggestion
 		validIDs = deduplicateByCardIdentity(validIDs, cardLookup)
 
 		if len(validIDs) < s.minCards {
@@ -160,9 +174,12 @@ func (s *service) llmGenerate(ctx context.Context) (int, error) {
 			validIDs = validIDs[:s.maxCards]
 		}
 
-		// Mark these IDs as used
+		// Mark these IDs and identities as used
 		for _, pid := range validIDs {
 			usedIDs[pid] = true
+			if card, ok := cardLookup[pid]; ok {
+				usedIdentities[cardIdentityKey{name: card.CardName, set: card.SetName, grade: card.GradeValue}] = true
+			}
 		}
 
 		// Create the post
@@ -561,6 +578,10 @@ func (s *service) generateBackgroundsAsync(post *SocialPost) {
 	// Generate card backgrounds sequentially
 	for i, card := range cards {
 		if ctx.Err() != nil {
+			// Fill remaining slots with empty strings to preserve [cover, card1, ...] alignment
+			for j := i; j < len(cards); j++ {
+				urls = append(urls, "")
+			}
 			break
 		}
 		cardPrompt := buildCardBackgroundPrompt(post.PostType, card)

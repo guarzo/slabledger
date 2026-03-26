@@ -29,7 +29,7 @@ export default function ExpandedDetail({ item, onReviewed, campaignId }: Expande
   const quickPicks = [
     { label: 'CL', priceCents: purchase.clValueCents, source: 'cl' },
     { label: 'Market', priceCents: snap?.medianCents ?? 0, source: 'market' },
-    { label: 'Last Sold', priceCents: snap?.lastSoldCents ?? 0, source: 'manual' },
+    { label: 'Last Sold', priceCents: snap?.lastSoldCents ?? 0, source: 'last_sold' },
   ];
 
   const invalidateQueries = () => {

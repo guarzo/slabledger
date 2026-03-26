@@ -64,13 +64,15 @@ export default function ImportSalesTab() {
       setConfirmResult(res);
       toast.success(`${res.created} sales created${res.failed > 0 ? `, ${res.failed} failed` : ''}`);
 
-      queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.all });
-      queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.health });
-      queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.globalInventory });
-      queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.sellSheet });
-      queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.insights });
-      queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.capitalTimeline });
-      queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.weeklyReview });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.all }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.health }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.globalInventory }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.sellSheet }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.insights }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.capitalTimeline }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.weeklyReview }),
+      ]);
 
       setPhase('upload');
       setResult(null);
@@ -202,6 +204,7 @@ export default function ImportSalesTab() {
                       type="checkbox"
                       checked={selectedCount === matchedCount}
                       onChange={toggleAll}
+                      aria-label="Select all matched sales"
                       className="accent-[var(--brand-500)]"
                     />
                   </th>

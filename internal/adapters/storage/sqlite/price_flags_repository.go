@@ -147,7 +147,7 @@ func (r *CampaignsRepository) ResolvePriceFlag(ctx context.Context, flagID int64
 		return fmt.Errorf("rows affected: %w", err)
 	}
 	if n == 0 {
-		return fmt.Errorf("flag not found or already resolved")
+		return campaigns.ErrPriceFlagNotFound
 	}
 	return nil
 }

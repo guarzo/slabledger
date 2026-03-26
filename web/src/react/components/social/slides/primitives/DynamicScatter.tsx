@@ -26,8 +26,9 @@ export default function DynamicScatter({ cards }: DynamicScatterProps) {
     <div className="absolute top-[48%] left-1/2 -translate-x-1/2 -translate-y-[45%] w-[85%] h-[60%] z-[5]">
       {visibleCards.map((card, i) => {
         const pos = SCATTER_POSITIONS[i] ?? SCATTER_POSITIONS[0];
-        const trendPct = card.trend30d !== 0 ? `${card.trend30d > 0 ? '+' : ''}${(card.trend30d * 100).toFixed(0)}%` : null;
-        const isUp = card.trend30d > 0;
+        const roundedPct = Math.round(card.trend30d * 100);
+        const trendPct = roundedPct !== 0 ? `${roundedPct > 0 ? '+' : ''}${roundedPct}%` : null;
+        const isUp = roundedPct > 0;
         return (
           <div key={card.purchaseId} className="absolute" style={{ left: pos.left, right: pos.right, top: pos.top, width: pos.width, zIndex: pos.zIndex }}>
             <div

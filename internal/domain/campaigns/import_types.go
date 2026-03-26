@@ -300,17 +300,18 @@ type OrdersImportResult struct {
 
 // OrdersImportMatch represents a CSV row matched to an unsold inventory purchase.
 type OrdersImportMatch struct {
-	CertNumber     string      `json:"certNumber"`
-	ProductTitle   string      `json:"productTitle"`
-	SaleChannel    SaleChannel `json:"saleChannel"`
-	SaleDate       string      `json:"saleDate"`
-	SalePriceCents int         `json:"salePriceCents"`
-	SaleFeeCents   int         `json:"saleFeeCents"`
-	PurchaseID     string      `json:"purchaseId"`
-	CampaignID     string      `json:"campaignId"`
-	CardName       string      `json:"cardName"`
-	BuyCostCents   int         `json:"buyCostCents"`
-	NetProfitCents int         `json:"netProfitCents"`
+	CertNumber           string      `json:"certNumber"`
+	ProductTitle         string      `json:"productTitle"`
+	SaleChannel          SaleChannel `json:"saleChannel"`
+	SaleDate             string      `json:"saleDate"`
+	SalePriceCents       int         `json:"salePriceCents"`
+	SaleFeeCents         int         `json:"saleFeeCents"`
+	PurchaseID           string      `json:"purchaseId"`
+	CampaignID           string      `json:"campaignId"`
+	CardName             string      `json:"cardName"`
+	BuyCostCents         int         `json:"buyCostCents"`
+	NetProfitCents       int         `json:"netProfitCents"`
+	CampaignLookupFailed bool        `json:"campaignLookupFailed,omitempty"`
 }
 
 // OrdersImportSkip represents a CSV row that was skipped or couldn't be matched.

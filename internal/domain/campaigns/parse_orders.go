@@ -8,7 +8,9 @@ import (
 )
 
 // mapOrdersChannel maps CSV "Sales Channel" values to SaleChannel constants.
-// Returns empty string for unknown channels.
+// This currently handles Shopify orders export CSVs which use "eBay" and "Online Store"
+// as channel values. Unknown channel values return empty string, causing the row to be
+// skipped during parsing.
 func mapOrdersChannel(raw string) SaleChannel {
 	switch strings.TrimSpace(raw) {
 	case "eBay":

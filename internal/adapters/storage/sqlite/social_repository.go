@@ -358,8 +358,7 @@ func (r *SocialRepository) GetAvailableCardsForPosts(ctx context.Context) ([]soc
 		     JOIN social_posts sp ON sp.id = spc.post_id
 		     WHERE sp.status NOT IN (?, ?)
 		 )
-		 ORDER BY p.created_at DESC
-		 LIMIT 100`,
+		 ORDER BY p.created_at DESC`,
 		string(social.PostStatusRejected), string(social.PostStatusFailed))
 	if err != nil {
 		return nil, err

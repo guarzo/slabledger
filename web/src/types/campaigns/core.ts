@@ -468,7 +468,7 @@ export interface EbayExportGenerateItem {
 export interface OrdersImportMatch {
   certNumber: string;
   productTitle: string;
-  saleChannel: string;
+  saleChannel: SaleChannel;
   saleDate: string;
   salePriceCents: number;
   saleFeeCents: number;
@@ -477,6 +477,7 @@ export interface OrdersImportMatch {
   cardName: string;
   buyCostCents: number;
   netProfitCents: number;
+  campaignLookupFailed?: boolean;
 }
 
 export interface OrdersImportSkip {
@@ -494,7 +495,7 @@ export interface OrdersImportResult {
 
 export interface OrdersConfirmItem {
   purchaseId: string;
-  saleChannel: string;
+  saleChannel: SaleChannel;
   saleDate: string;
   salePriceCents: number;
 }
