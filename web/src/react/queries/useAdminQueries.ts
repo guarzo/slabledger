@@ -111,3 +111,22 @@ export function useAIUsage(options?: { enabled?: boolean }) {
     enabled: options?.enabled ?? true,
   });
 }
+
+export function usePriceFlags(status: 'open' | 'resolved' | 'all', options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: queryKeys.admin.priceFlags(status),
+    queryFn: () => api.listPriceFlags(status),
+    staleTime: 30_000,
+    enabled: options?.enabled ?? true,
+  });
+}
+
+export function useResolvePriceFlag() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (flagId: number) => api.resolvePriceFlag(flagId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'priceFlags'] });
+    },
+  });
+}
