@@ -1,9 +1,20 @@
 import { useCallback, useMemo, useState } from 'react';
 import Markdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { useAdvisorStream } from '../../hooks/useAdvisorStream';
 import { useAdvisorCache } from '../../hooks/useAdvisorCache';
 import { Button } from '../../ui';
 import type { AdvisorAnalysisType } from '../../../types/apiStatus';
+
+const remarkPlugins = [remarkGfm];
+
+const markdownComponents = {
+  table: ({ children, ...props }: React.ComponentPropsWithoutRef<'table'>) => (
+    <div className="table-wrap">
+      <table {...props}>{children}</table>
+    </div>
+  ),
+};
 
 interface AIAnalysisWidgetProps {
   endpoint: string;
@@ -12,6 +23,7 @@ interface AIAnalysisWidgetProps {
   buttonLabel: string;
   description?: string;
   cacheType?: AdvisorAnalysisType; // when set, use cached mode instead of streaming
+  collapsible?: boolean; // when true, content can be collapsed to save space
 }
 
 const AI_PROSE_CLASSES = [
@@ -30,8 +42,13 @@ const AI_PROSE_CLASSES = [
   "[&_ul]:space-y-1.5 [&_ul]:my-2 [&_ol]:space-y-1.5 [&_ol]:my-2 [&_li]:text-[var(--text)] [&_li]:leading-relaxed",
   // paragraphs
   "[&_p]:mb-3 [&_p]:leading-relaxed",
-  // tables
-  "[&_table]:w-full [&_table]:text-xs [&_table]:my-3 [&_th]:text-left [&_th]:text-[var(--text-muted)] [&_th]:pb-1 [&_th]:border-b [&_th]:border-[var(--surface-2)] [&_td]:py-1 [&_td]:pr-3",
+  // tables — wrapped in scrollable container via component override
+  "[&_.table-wrap]:overflow-x-auto [&_.table-wrap]:my-3 [&_.table-wrap]:rounded-lg [&_.table-wrap]:border [&_.table-wrap]:border-[var(--surface-2)]",
+  "[&_table]:w-full [&_table]:text-xs [&_table]:border-collapse",
+  "[&_th]:text-left [&_th]:text-[var(--text-muted)] [&_th]:font-semibold [&_th]:px-3 [&_th]:py-2 [&_th]:border-b [&_th]:border-[var(--surface-2)] [&_th]:bg-[var(--surface-2)]/50 [&_th]:whitespace-nowrap",
+  "[&_td]:px-3 [&_td]:py-2 [&_td]:border-b [&_td]:border-[var(--surface-2)]/50 [&_td]:align-top",
+  "[&_tr:last-child_td]:border-b-0",
+  "[&_tr:hover_td]:bg-[var(--surface-2)]/30",
   // code + hr
   "[&_code]:text-[var(--brand-400)] [&_code]:text-xs [&_hr]:border-[var(--surface-2)] [&_hr]:my-5",
 ].join(" ");
@@ -101,7 +118,7 @@ function CachedAnalysisWidget({
 
   const content = data?.content ?? '';
   const renderedMarkdown = useMemo(
-    () => hasContent ? <Markdown>{content}</Markdown> : null,
+    () => hasContent ? <Markdown remarkPlugins={remarkPlugins} components={markdownComponents}>{content}</Markdown> : null,
     [hasContent, content],
   );
 
@@ -187,7 +204,7 @@ function StreamingAnalysisWidget({
   }, [run, endpoint, body]);
 
   const hasContent = content.length > 0;
-  const renderedMarkdown = useMemo(() => <Markdown>{content}</Markdown>, [content]);
+  const renderedMarkdown = useMemo(() => <Markdown remarkPlugins={remarkPlugins} components={markdownComponents}>{content}</Markdown>, [content]);
 
   return (
     <div className="p-4 bg-[var(--surface-1)] rounded-xl border border-[var(--surface-2)]">

@@ -12,6 +12,7 @@ import type {
   WeeklyReviewSummary, CrackAnalysis, EVPortfolio, ActivationChecklist,
   MonteCarloComparison, BulkSaleResult, ShopifyPriceSyncResponse,
   CertImportResult, EbayExportListResponse, EbayExportGenerateItem,
+  OrdersImportResult, OrdersConfirmItem,
 } from '../../types/campaigns';
 import type { PriceFlagsResponse } from '../../types/campaigns/priceReview';
 import type { CardPricingResponse, PriceHint } from '../../types/pricing';
@@ -81,6 +82,10 @@ declare module './client' {
     // PSA / External imports
     globalImportPSA(file: File): Promise<PSAImportResult>;
     globalImportExternal(file: File): Promise<ExternalImportResult>;
+
+    // Orders sales import
+    importOrdersSales(file: File): Promise<OrdersImportResult>;
+    confirmOrdersSales(items: OrdersConfirmItem[]): Promise<BulkSaleResult>;
 
     // Shopify
     shopifyPriceSync(items: { certNumber: string; currentPriceCents: number; grader: string }[]): Promise<ShopifyPriceSyncResponse>;
@@ -344,6 +349,16 @@ proto.globalImportPSA = async function (this: APIClient, file: File): Promise<PS
 // External (Shopify) CSV import
 proto.globalImportExternal = async function (this: APIClient, file: File): Promise<ExternalImportResult> {
   return this.uploadFile<ExternalImportResult>('/purchases/import-external', file);
+};
+
+// Orders sales import (upload CSV, get categorized matches)
+proto.importOrdersSales = async function (this: APIClient, file: File): Promise<OrdersImportResult> {
+  return this.uploadFile<OrdersImportResult>('/purchases/import-orders', file);
+};
+
+// Orders sales confirm (create sales for confirmed matches)
+proto.confirmOrdersSales = async function (this: APIClient, items: OrdersConfirmItem[]): Promise<BulkSaleResult> {
+  return this.post<BulkSaleResult>('/purchases/import-orders/confirm', items);
 };
 
 // Shopify price sync
