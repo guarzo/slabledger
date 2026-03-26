@@ -154,6 +154,11 @@ func (s *service) llmGenerate(ctx context.Context) (int, error) {
 		// Create the post
 		postID := generateID()
 		pt := parsePostType(suggestion.PostType)
+		if pt != PostType(suggestion.PostType) && s.logger != nil {
+			s.logger.Warn(ctx, "social: LLM returned unrecognized postType, defaulting to new_arrivals",
+				observability.String("raw", suggestion.PostType),
+				observability.String("resolved", string(pt)))
+		}
 		post := &SocialPost{
 			ID:         postID,
 			PostType:   pt,

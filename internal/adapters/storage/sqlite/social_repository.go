@@ -234,7 +234,8 @@ func (r *SocialRepository) ListPostCards(ctx context.Context, postID string) ([]
 		        p.card_name, COALESCE(p.set_name, ''), COALESCE(p.card_number, ''),
 		        p.grade_value, COALESCE(p.grader, 'PSA'), COALESCE(p.cert_number, ''),
 		        COALESCE(p.front_image_url, ''), p.buy_cost_cents,
-		        COALESCE(p.median_cents, 0), COALESCE(p.trend_30d, 0)
+		        COALESCE(p.median_cents, 0), COALESCE(p.trend_30d, 0),
+		        p.created_at
 		 FROM social_post_cards spc
 		 JOIN campaign_purchases p ON p.id = spc.purchase_id
 		 WHERE spc.post_id = ?
@@ -246,7 +247,7 @@ func (r *SocialRepository) ListPostCards(ctx context.Context, postID string) ([]
 		var c social.PostCardDetail
 		err := rows.Scan(&c.PurchaseID, &c.SlideOrder, &c.CardName, &c.SetName, &c.CardNumber,
 			&c.GradeValue, &c.Grader, &c.CertNumber, &c.FrontImageURL, &c.BuyCostCents,
-			&c.MedianCents, &c.Trend30d)
+			&c.MedianCents, &c.Trend30d, &c.CreatedAt)
 		return c, err
 	})
 }
@@ -333,7 +334,8 @@ func (r *SocialRepository) GetAvailableCardsForPosts(ctx context.Context) ([]soc
 		        p.card_name, COALESCE(p.set_name, ''), COALESCE(p.card_number, ''),
 		        p.grade_value, COALESCE(p.grader, 'PSA'), COALESCE(p.cert_number, ''),
 		        COALESCE(p.front_image_url, ''), p.buy_cost_cents,
-		        COALESCE(p.median_cents, 0), COALESCE(p.trend_30d, 0)
+		        COALESCE(p.median_cents, 0), COALESCE(p.trend_30d, 0),
+		        p.created_at
 		 FROM campaign_purchases p
 		 WHERE p.front_image_url <> ''
 		 AND p.id NOT IN (SELECT purchase_id FROM campaign_sales)
@@ -350,7 +352,7 @@ func (r *SocialRepository) GetAvailableCardsForPosts(ctx context.Context) ([]soc
 		var c social.PostCardDetail
 		err := rows.Scan(&c.PurchaseID, &c.SlideOrder, &c.CardName, &c.SetName, &c.CardNumber,
 			&c.GradeValue, &c.Grader, &c.CertNumber, &c.FrontImageURL, &c.BuyCostCents,
-			&c.MedianCents, &c.Trend30d)
+			&c.MedianCents, &c.Trend30d, &c.CreatedAt)
 		return c, err
 	})
 }
