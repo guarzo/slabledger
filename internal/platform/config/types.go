@@ -123,9 +123,10 @@ type AdapterConfig struct {
 	PSAToken           string // PSA_ACCESS_TOKEN - PSA cert lookup
 	PSAImageToken      string // PAO_API - Separate PSA token for image lookups
 	PricingAPIKey      string // PRICING_API_KEY - Bearer token for pricing API auth
-	AzureAIEndpoint    string // AZURE_AI_ENDPOINT - Azure AI Foundry endpoint URL
-	AzureAIKey         string // AZURE_AI_API_KEY - Azure AI API key
-	AzureAIDeployment  string // AZURE_AI_DEPLOYMENT - Model deployment name (default: gpt-5.4)
+	AzureAIEndpoint       string // AZURE_AI_ENDPOINT - Azure AI Foundry endpoint URL
+	AzureAIKey            string // AZURE_AI_API_KEY - Azure AI API key
+	AzureAIDeployment     string // AZURE_AI_DEPLOYMENT - Model deployment name (default: gpt-5.4)
+	SocialAIDeployment    string // SOCIAL_AI_DEPLOYMENT - Separate model for social content (default: same as AzureAIDeployment)
 }
 
 // CardHedgerSchedulerConfig controls CardHedger-specific scheduler intervals
@@ -190,10 +191,11 @@ type Config struct {
 
 // AdvisorRefreshConfig controls the background AI advisor analysis scheduler.
 type AdvisorRefreshConfig struct {
-	Enabled      bool
-	Interval     time.Duration // how often to run analysis (default: 24h)
-	InitialDelay time.Duration // delay before first run (default: 2m)
-	RefreshHour  int           // hour (0-23 UTC) to schedule runs; -1 = use InitialDelay (default: 4)
+	Enabled       bool
+	Interval      time.Duration // how often to run analysis (default: 24h)
+	InitialDelay  time.Duration // delay before first run (default: 2m)
+	RefreshHour   int           // hour (0-23 UTC) to schedule runs; -1 = use InitialDelay (default: 4)
+	MaxToolRounds int           // max LLM tool-calling rounds per analysis (default: 5)
 }
 
 // SnapshotHistoryConfig controls daily archival of market snapshots.

@@ -94,10 +94,11 @@ func Default() Config {
 			Interval: 24 * time.Hour,
 		},
 		AdvisorRefresh: AdvisorRefreshConfig{
-			Enabled:      true,
-			Interval:     24 * time.Hour,
-			InitialDelay: 2 * time.Minute,
-			RefreshHour:  4, // 4 AM UTC
+			Enabled:       true,
+			Interval:      24 * time.Hour,
+			InitialDelay:  2 * time.Minute,
+			RefreshHour:   4,  // 4 AM UTC
+			MaxToolRounds: 5,  // LLM needs ~4 rounds for complex digests
 		},
 		SocialContent: SocialContentConfig{
 			Enabled:      false, // disabled by default

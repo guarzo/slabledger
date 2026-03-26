@@ -148,6 +148,8 @@ func (s *service) toolCallingLoop(ctx context.Context, operation AIOperation, sy
 			Temperature:       &temp,
 			MaxTokens:         s.maxTokens,
 			ConversationState: conversationState,
+			ReasoningEffort:   "medium",
+			Store:             true,
 		}
 
 		var fullContent strings.Builder

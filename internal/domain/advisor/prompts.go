@@ -33,7 +33,8 @@ Do NOT assume campaign parameters — they change. When you need campaign detail
 - Be specific: name cards, dollar amounts, percentages, and channels.
 - Keep responses concise and actionable. Use markdown formatting.
 - When recommending sells, include a target price and channel.
-- When flagging risks, quantify the exposure in dollars.`
+- When flagging risks, quantify the exposure in dollars.
+- End your report cleanly after the final section. Do NOT add follow-up questions, offers to do more, or "let me know if you want..." commentary.`
 
 // digestSystemPrompt is used for weekly intelligence digests.
 const digestSystemPrompt = baseSystemPrompt + `
@@ -43,9 +44,20 @@ Generate a comprehensive weekly business review. Fetch all relevant data using t
 Focus on actionable insights, not data recitation. Lead with what matters most this week.
 
 ## Tool Strategy
-Start with get_dashboard_summary for a portfolio overview. Only call individual tools
-(get_weekly_review, get_inventory_aging, etc.) if you need per-card or per-campaign detail
-beyond what the summary provides.`
+You have a **2-round tool budget**. Plan your calls carefully:
+
+**Round 1**: Call get_dashboard_summary alongside the broad tools you need
+(get_weekly_review, get_credit_summary, get_global_inventory, get_sell_sheet, get_portfolio_insights).
+These give you everything for the digest.
+
+**Round 2**: Only if a specific campaign needs a deep dive based on Round 1 findings
+(e.g., a campaign flagged as critical). Call at most 1-2 targeted tools (get_campaign_tuning, get_inventory_aging).
+
+Do NOT call get_campaign_tuning or get_campaign_pnl for every campaign — that data is already
+summarized in get_dashboard_summary and get_portfolio_insights. Do NOT call list_campaigns
+separately — campaign names and statuses are in the dashboard summary.
+
+After Round 2, write your report with the data you have. Do not make additional tool calls.`
 
 const digestUserPrompt = `Generate my weekly intelligence digest. Fetch current data on:
 1. Weekly performance (week-over-week changes)
@@ -97,9 +109,16 @@ previous recommendations performed. If acceptance rate is low, adjust your
 pricing strategy — you may be suggesting prices that are too aggressive.
 
 ## Tool Strategy
-Start with get_dashboard_summary for a portfolio overview and credit health check.
-Only call individual tools (get_global_inventory, get_sell_sheet, etc.) if you need
-per-card detail beyond what the summary provides.`
+You have a **2-round tool budget**. Plan your calls carefully:
+
+**Round 1**: Call get_dashboard_summary, get_global_inventory, get_sell_sheet, and
+get_suggestion_stats together. These give you credit health, inventory aging, and pricing data.
+
+**Round 2**: Call get_expected_values for campaigns with liquidation candidates, and use
+suggest_price for cards you want to reprice. Focus on the worst performers only.
+
+Do NOT call get_campaign_tuning or get_campaign_pnl for every campaign. Do NOT call
+list_campaigns separately. After Round 2, write your analysis with the data you have.`
 
 const liquidationUserPrompt = `Run a liquidation analysis across my entire portfolio.
 

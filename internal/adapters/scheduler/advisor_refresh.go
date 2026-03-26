@@ -152,7 +152,7 @@ func (s *AdvisorRefreshScheduler) runAnalysis(ctx context.Context, analysisType 
 
 	start := time.Now()
 	// Use a generous timeout for the LLM call.
-	analysisCtx, cancel := context.WithTimeout(ctx, 15*time.Minute)
+	analysisCtx, cancel := context.WithTimeout(ctx, 20*time.Minute)
 	defer cancel()
 
 	content, collectErr := collect(analysisCtx)
@@ -176,7 +176,7 @@ func (s *AdvisorRefreshScheduler) runAnalysis(ctx context.Context, analysisType 
 
 	// Use a background context for the save — the parent ctx may be canceled during shutdown
 	// but we still want to persist the result so the row doesn't stay "running" forever.
-	saveCtx, saveCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	saveCtx, saveCancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer saveCancel()
 	if saveErr := s.cache.SaveResult(saveCtx, analysisType, lease, content, errMsg); saveErr != nil {
 		s.logger.Error(saveCtx, "failed to save analysis result", observability.String("type", string(analysisType)), observability.Err(saveErr))
