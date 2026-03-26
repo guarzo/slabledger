@@ -304,9 +304,7 @@ func (c *Client) parseResponsesSSEStream(ctx context.Context, body io.Reader, st
 			return nil
 
 		case "error":
-			// All SSE-level errors before content are transient (rate limits,
-			// server overload). Return rateLimitError to trigger retry with backoff.
-			return &rateLimitError{raw: data}
+			return c.parseSSEError(ctx, data)
 		}
 
 		currentEvent = ""
@@ -407,6 +405,30 @@ func ensurePropertiesMap(m map[string]any) map[string]any {
 		}
 	}
 	return result
+}
+
+// parseSSEError extracts the error type from an SSE error event and returns an
+// appropriate error. Azure AI Foundry sends "no_capacity" when the request exceeds
+// the pay-as-you-go tier's maximum usage size during peak load — this is distinct
+// from a simple rate limit (429) and benefits from longer backoff.
+func (c *Client) parseSSEError(ctx context.Context, data string) error {
+	var sseErr struct {
+		Error struct {
+			Type string `json:"type"`
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal([]byte(data), &sseErr); err == nil {
+		if sseErr.Error.Code == "no_capacity" {
+			if c.logger != nil {
+				c.logger.Warn(ctx, "azure ai capacity exceeded (no_capacity)",
+					observability.String("data", data))
+			}
+			return &capacityError{raw: data}
+		}
+	}
+	// Default: treat as rate limit (429-equivalent) for retry purposes.
+	return &rateLimitError{raw: data}
 }
 
 func (c *Client) logWarn(ctx context.Context, msg, data string, err error) {

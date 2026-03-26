@@ -40,20 +40,20 @@ func (r *AdvisorCacheRepository) Get(ctx context.Context, analysisType advisor.A
 		return nil, err
 	}
 	if startedAt.Valid {
-		if t, parseErr := time.Parse(time.RFC3339, startedAt.String); parseErr != nil {
+		if t, parseErr := parseFlexibleTimestamp(startedAt.String); parseErr != nil {
 			r.logParseWarn(ctx, analysisType, "started_at", startedAt.String, parseErr)
 		} else {
 			ca.StartedAt = t
 		}
 	}
 	if completedAt.Valid {
-		if t, parseErr := time.Parse(time.RFC3339, completedAt.String); parseErr != nil {
+		if t, parseErr := parseFlexibleTimestamp(completedAt.String); parseErr != nil {
 			r.logParseWarn(ctx, analysisType, "completed_at", completedAt.String, parseErr)
 		} else {
 			ca.CompletedAt = t
 		}
 	}
-	if t, parseErr := time.Parse(time.RFC3339, updatedAt); parseErr != nil {
+	if t, parseErr := parseFlexibleTimestamp(updatedAt); parseErr != nil {
 		r.logParseWarn(ctx, analysisType, "updated_at", updatedAt, parseErr)
 	} else {
 		ca.UpdatedAt = t
@@ -165,6 +165,16 @@ func (r *AdvisorCacheRepository) logSuperseded(ctx context.Context, analysisType
 			observability.String("lease", lease),
 		)
 	}
+}
+
+// parseFlexibleTimestamp parses timestamps in either RFC3339 ("2006-01-02T15:04:05Z")
+// or SQLite datetime format ("2006-01-02 15:04:05"). The SQLite format arises from the
+// trg_advisor_cache_updated_at trigger which uses datetime('now').
+func parseFlexibleTimestamp(s string) (time.Time, error) {
+	if t, err := time.Parse(time.RFC3339, s); err == nil {
+		return t, nil
+	}
+	return time.Parse("2006-01-02 15:04:05", s)
 }
 
 func (r *AdvisorCacheRepository) logParseWarn(ctx context.Context, analysisType advisor.AnalysisType, field, value string, err error) {
