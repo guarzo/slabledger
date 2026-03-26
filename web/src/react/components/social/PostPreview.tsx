@@ -36,7 +36,6 @@ export default function PostPreview({ postId, onBack, igConnected }: PostPreview
 
   const totalSlides = (detail.cards?.length ?? 0) + 1;
   const psa10Count = detail.cards?.filter(c => c.gradeValue === 10).length ?? 0;
-  const totalValueCents = detail.cards?.reduce((sum, c) => sum + c.medianCents, 0) ?? 0;
   const isPublishable = detail.status === 'draft' || detail.status === 'failed' || detail.status === 'approved';
 
   const handlePublish = async () => {
@@ -98,9 +97,9 @@ export default function PostPreview({ postId, onBack, igConnected }: PostPreview
                   postType={detail.postType}
                   coverTitle={coverTitleOverride ?? detail.coverTitle}
                   cardCount={detail.cardCount}
-                  createdAt={detail.createdAt}
                   psa10Count={psa10Count}
-                  totalValueCents={totalValueCents}
+                  cards={detail.cards}
+                  backgroundUrls={detail.backgroundUrls}
                 />
               ) : (
                 detail.cards && detail.cards[currentSlide - 1] && (
@@ -109,6 +108,7 @@ export default function PostPreview({ postId, onBack, igConnected }: PostPreview
                     postType={detail.postType}
                     slideIndex={currentSlide}
                     totalSlides={totalSlides}
+                    backgroundUrl={detail.backgroundUrls?.[currentSlide]}
                   />
                 )
               )}

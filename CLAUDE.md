@@ -203,7 +203,7 @@ See [docs/API.md](docs/API.md) for detailed request/response shapes.
 | Cards & Pricing | 3 | Auth/Admin | `/api/cards/`, `/api/price-hints` |
 | Campaign CRUD | 5 | Auth | `/api/campaigns/` |
 | Campaign Analytics | 12 | Auth | `/api/campaigns/{id}/` |
-| Global Purchases | 9 | Auth | `/api/purchases/` |
+| Global Purchases | 11 | Auth | `/api/purchases/` |
 | Price Override & AI | 4 | Auth | `/api/purchases/{id}/` |
 | Credit & Invoices | 5 | Auth | `/api/credit/` |
 | Portfolio | 9 | Auth | `/api/portfolio/` |

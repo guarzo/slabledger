@@ -541,6 +541,52 @@ func (m *mockRepo) UpdatePurchaseCardYear(_ context.Context, id string, year str
 	return nil
 }
 
+// --- PriceReviewRepository stubs ---
+
+func (m *mockRepo) UpdateReviewedPrice(_ context.Context, purchaseID string, priceCents int, source string) error {
+	p, ok := m.purchases[purchaseID]
+	if !ok {
+		return ErrPurchaseNotFound
+	}
+	p.ReviewedPriceCents = priceCents
+	if priceCents > 0 {
+		p.ReviewedAt = time.Now().Format(time.RFC3339)
+		p.ReviewSource = ReviewSource(source)
+	} else {
+		p.ReviewedAt = ""
+		p.ReviewSource = ""
+	}
+	return nil
+}
+
+func (m *mockRepo) GetReviewStats(_ context.Context, _ string) (ReviewStats, error) {
+	return ReviewStats{}, nil
+}
+
+func (m *mockRepo) GetGlobalReviewStats(_ context.Context) (ReviewStats, error) {
+	return ReviewStats{}, nil
+}
+
+func (m *mockRepo) CreatePriceFlag(_ context.Context, _ *PriceFlag) (int64, error) {
+	return 0, nil
+}
+
+func (m *mockRepo) ListPriceFlags(_ context.Context, _ string) ([]PriceFlagWithContext, error) {
+	return []PriceFlagWithContext{}, nil
+}
+
+func (m *mockRepo) ResolvePriceFlag(_ context.Context, _ int64, _ int64) error {
+	return nil
+}
+
+func (m *mockRepo) HasOpenFlag(_ context.Context, _ string) (bool, error) {
+	return false, nil
+}
+
+func (m *mockRepo) OpenFlagPurchaseIDs(_ context.Context) (map[string]bool, error) {
+	return map[string]bool{}, nil
+}
+
 // mockPriceLookup is a test double for PriceLookup used by in-package tests
 // (import_test.go, tuning_test.go) that access unexported symbols.
 // Service-layer tests in campaigns_test use the version in service_test.go.

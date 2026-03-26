@@ -28,8 +28,9 @@ func (r *CampaignsRepository) CreatePurchase(ctx context.Context, p *campaigns.P
 			psa_listing_title, snapshot_status, snapshot_retry_count,
 			override_price_cents, override_source, override_set_at,
 			ai_suggested_price_cents, ai_suggested_at,
-			card_year, ebay_export_flagged_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			card_year, ebay_export_flagged_at,
+			reviewed_price_cents, reviewed_at, review_source)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 	_, err := r.db.ExecContext(ctx, query,
 		p.ID, p.CampaignID, p.CardName, p.CertNumber,
@@ -44,6 +45,7 @@ func (r *CampaignsRepository) CreatePurchase(ctx context.Context, p *campaigns.P
 		p.OverridePriceCents, p.OverrideSource, p.OverrideSetAt,
 		p.AISuggestedPriceCents, p.AISuggestedAt,
 		p.CardYear, p.EbayExportFlaggedAt,
+		p.ReviewedPriceCents, p.ReviewedAt, string(p.ReviewSource),
 	)
 	if err != nil && isUniqueConstraintError(err) {
 		return campaigns.ErrDuplicateCertNumber

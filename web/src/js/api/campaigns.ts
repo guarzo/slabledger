@@ -12,7 +12,9 @@ import type {
   WeeklyReviewSummary, CrackAnalysis, EVPortfolio, ActivationChecklist,
   MonteCarloComparison, BulkSaleResult, ShopifyPriceSyncResponse,
   CertImportResult, EbayExportListResponse, EbayExportGenerateItem,
+  OrdersImportResult, OrdersConfirmItem,
 } from '../../types/campaigns';
+import type { PriceFlagsResponse } from '../../types/campaigns/priceReview';
 import type { CardPricingResponse, PriceHint } from '../../types/pricing';
 import type { APIClient, APIRequestOptions, SearchCardsResponse } from './client';
 import { APIError, isAPIError } from './client';
@@ -81,6 +83,10 @@ declare module './client' {
     globalImportPSA(file: File): Promise<PSAImportResult>;
     globalImportExternal(file: File): Promise<ExternalImportResult>;
 
+    // Orders sales import
+    importOrdersSales(file: File): Promise<OrdersImportResult>;
+    confirmOrdersSales(items: OrdersConfirmItem[]): Promise<BulkSaleResult>;
+
     // Shopify
     shopifyPriceSync(items: { certNumber: string; currentPriceCents: number; grader: string }[]): Promise<ShopifyPriceSyncResponse>;
 
@@ -123,6 +129,12 @@ declare module './client' {
     importCerts(certNumbers: string[]): Promise<CertImportResult>;
     listEbayExportItems(flaggedOnly: boolean): Promise<EbayExportListResponse>;
     generateEbayCSV(items: EbayExportGenerateItem[]): Promise<Blob>;
+
+    // Price review & flags
+    setReviewedPrice(purchaseId: string, priceCents: number, source: string): Promise<{ success: boolean; reviewedAt: string }>;
+    createPriceFlag(purchaseId: string, reason: string): Promise<{ id: number; flaggedAt: string }>;
+    listPriceFlags(status?: string): Promise<PriceFlagsResponse>;
+    resolvePriceFlag(flagId: number): Promise<void>;
   }
 }
 
@@ -339,6 +351,16 @@ proto.globalImportExternal = async function (this: APIClient, file: File): Promi
   return this.uploadFile<ExternalImportResult>('/purchases/import-external', file);
 };
 
+// Orders sales import (upload CSV, get categorized matches)
+proto.importOrdersSales = async function (this: APIClient, file: File): Promise<OrdersImportResult> {
+  return this.uploadFile<OrdersImportResult>('/purchases/import-orders', file);
+};
+
+// Orders sales confirm (create sales for confirmed matches)
+proto.confirmOrdersSales = async function (this: APIClient, items: OrdersConfirmItem[]): Promise<BulkSaleResult> {
+  return this.post<BulkSaleResult>('/purchases/import-orders/confirm', items);
+};
+
 // Shopify price sync
 proto.shopifyPriceSync = async function (this: APIClient, items: { certNumber: string; currentPriceCents: number; grader: string }[]): Promise<ShopifyPriceSyncResponse> {
   return this.post<ShopifyPriceSyncResponse>('/shopify/price-sync', { items });
@@ -440,6 +462,46 @@ proto.listEbayExportItems = async function (
 ): Promise<EbayExportListResponse> {
   const params = flaggedOnly ? '?flagged_only=true' : '';
   return this.get<EbayExportListResponse>(`/purchases/export-ebay${params}`);
+};
+
+// Price review & flag endpoints
+proto.setReviewedPrice = async function (
+  this: APIClient, purchaseId: string, priceCents: number, source: string,
+): Promise<{ success: boolean; reviewedAt: string }> {
+  const response = await this.fetchWithRetry(
+    `${this.baseURL}/purchases/${purchaseId}/review-price`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ priceCents, source }),
+    }
+  );
+  return response.json() as Promise<{ success: boolean; reviewedAt: string }>;
+};
+
+proto.createPriceFlag = async function (
+  this: APIClient, purchaseId: string, reason: string,
+): Promise<{ id: number; flaggedAt: string }> {
+  return this.post<{ id: number; flaggedAt: string }>(
+    `/purchases/${purchaseId}/flag`,
+    { reason },
+  );
+};
+
+proto.listPriceFlags = async function (
+  this: APIClient, status = 'open',
+): Promise<PriceFlagsResponse> {
+  return this.get<PriceFlagsResponse>(`/admin/price-flags?status=${encodeURIComponent(status)}`);
+};
+
+proto.resolvePriceFlag = async function (
+  this: APIClient, flagId: number,
+): Promise<void> {
+  const response = await this.fetchWithRetry(
+    `${this.baseURL}/admin/price-flags/${flagId}/resolve`,
+    { method: 'PATCH' }
+  );
+  await this.expectNoContent(response);
 };
 
 proto.generateEbayCSV = async function (

@@ -100,6 +100,14 @@ type MockCampaignService struct {
 	AcceptAISuggestionFn    func(ctx context.Context, purchaseID string) error
 	DismissAISuggestionFn   func(ctx context.Context, purchaseID string) error
 
+	// Price review & flags
+	SetReviewedPriceFn    func(ctx context.Context, purchaseID string, priceCents int, source string) error
+	GetReviewStatsFn      func(ctx context.Context, campaignID string) (campaigns.ReviewStats, error)
+	GetGlobalReviewStatsFn func(ctx context.Context) (campaigns.ReviewStats, error)
+	CreatePriceFlagFn     func(ctx context.Context, purchaseID string, userID int64, reason string) (int64, error)
+	ListPriceFlagsFn      func(ctx context.Context, status string) ([]campaigns.PriceFlagWithContext, error)
+	ResolvePriceFlagFn    func(ctx context.Context, flagID int64, resolvedBy int64) error
+
 	// Snapshot refresh
 	RefreshPurchaseSnapshotFn func(ctx context.Context, purchaseID string, card campaigns.CardIdentity, grade float64, clValueCents int) bool
 	ProcessPendingSnapshotsFn func(ctx context.Context, limit int) (int, int, int)
@@ -108,6 +116,10 @@ type MockCampaignService struct {
 	// External purchases
 	EnsureExternalCampaignFn func(ctx context.Context) (*campaigns.Campaign, error)
 	ImportExternalCSVFn      func(ctx context.Context, rows []campaigns.ShopifyExportRow) (*campaigns.ExternalImportResult, error)
+
+	// Orders sales import
+	ImportOrdersSalesFn  func(ctx context.Context, rows []campaigns.OrdersExportRow) (*campaigns.OrdersImportResult, error)
+	ConfirmOrdersSalesFn func(ctx context.Context, items []campaigns.OrdersConfirmItem) (*campaigns.BulkSaleResult, error)
 }
 
 var _ campaigns.Service = (*MockCampaignService)(nil)
@@ -503,6 +515,20 @@ func (m *MockCampaignService) ImportExternalCSV(ctx context.Context, rows []camp
 	return &campaigns.ExternalImportResult{}, nil
 }
 
+func (m *MockCampaignService) ImportOrdersSales(ctx context.Context, rows []campaigns.OrdersExportRow) (*campaigns.OrdersImportResult, error) {
+	if m.ImportOrdersSalesFn != nil {
+		return m.ImportOrdersSalesFn(ctx, rows)
+	}
+	return &campaigns.OrdersImportResult{}, nil
+}
+
+func (m *MockCampaignService) ConfirmOrdersSales(ctx context.Context, items []campaigns.OrdersConfirmItem) (*campaigns.BulkSaleResult, error) {
+	if m.ConfirmOrdersSalesFn != nil {
+		return m.ConfirmOrdersSalesFn(ctx, items)
+	}
+	return &campaigns.BulkSaleResult{}, nil
+}
+
 // Price overrides & AI suggestions
 
 func (m *MockCampaignService) GetPriceOverrideStats(ctx context.Context) (*campaigns.PriceOverrideStats, error) {
@@ -536,6 +562,50 @@ func (m *MockCampaignService) AcceptAISuggestion(ctx context.Context, purchaseID
 func (m *MockCampaignService) DismissAISuggestion(ctx context.Context, purchaseID string) error {
 	if m.DismissAISuggestionFn != nil {
 		return m.DismissAISuggestionFn(ctx, purchaseID)
+	}
+	return nil
+}
+
+// Price review & flags
+
+func (m *MockCampaignService) SetReviewedPrice(ctx context.Context, purchaseID string, priceCents int, source string) error {
+	if m.SetReviewedPriceFn != nil {
+		return m.SetReviewedPriceFn(ctx, purchaseID, priceCents, source)
+	}
+	return nil
+}
+
+func (m *MockCampaignService) GetReviewStats(ctx context.Context, campaignID string) (campaigns.ReviewStats, error) {
+	if m.GetReviewStatsFn != nil {
+		return m.GetReviewStatsFn(ctx, campaignID)
+	}
+	return campaigns.ReviewStats{}, nil
+}
+
+func (m *MockCampaignService) GetGlobalReviewStats(ctx context.Context) (campaigns.ReviewStats, error) {
+	if m.GetGlobalReviewStatsFn != nil {
+		return m.GetGlobalReviewStatsFn(ctx)
+	}
+	return campaigns.ReviewStats{}, nil
+}
+
+func (m *MockCampaignService) CreatePriceFlag(ctx context.Context, purchaseID string, userID int64, reason string) (int64, error) {
+	if m.CreatePriceFlagFn != nil {
+		return m.CreatePriceFlagFn(ctx, purchaseID, userID, reason)
+	}
+	return 0, nil
+}
+
+func (m *MockCampaignService) ListPriceFlags(ctx context.Context, status string) ([]campaigns.PriceFlagWithContext, error) {
+	if m.ListPriceFlagsFn != nil {
+		return m.ListPriceFlagsFn(ctx, status)
+	}
+	return []campaigns.PriceFlagWithContext{}, nil
+}
+
+func (m *MockCampaignService) ResolvePriceFlag(ctx context.Context, flagID int64, resolvedBy int64) error {
+	if m.ResolvePriceFlagFn != nil {
+		return m.ResolvePriceFlagFn(ctx, flagID, resolvedBy)
 	}
 	return nil
 }

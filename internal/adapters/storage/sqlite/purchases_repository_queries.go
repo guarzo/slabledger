@@ -385,6 +385,31 @@ func (r *CampaignsRepository) UpdatePurchasePriceOverride(ctx context.Context, p
 	return nil
 }
 
+func (r *CampaignsRepository) UpdateReviewedPrice(ctx context.Context, purchaseID string, priceCents int, source string) error {
+	now := time.Now()
+	reviewedAt := ""
+	if priceCents > 0 {
+		reviewedAt = now.Format(time.RFC3339)
+	} else {
+		source = ""
+	}
+	result, err := r.db.ExecContext(ctx,
+		`UPDATE campaign_purchases SET reviewed_price_cents = ?, reviewed_at = ?, review_source = ?, updated_at = ? WHERE id = ?`,
+		priceCents, reviewedAt, source, now, purchaseID,
+	)
+	if err != nil {
+		return fmt.Errorf("update reviewed price: %w", err)
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("rows affected: %w", err)
+	}
+	if n == 0 {
+		return campaigns.ErrPurchaseNotFound
+	}
+	return nil
+}
+
 func (r *CampaignsRepository) UpdatePurchaseAISuggestion(ctx context.Context, purchaseID string, priceCents int) error {
 	now := time.Now()
 	result, err := r.db.ExecContext(ctx,

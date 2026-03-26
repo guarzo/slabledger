@@ -104,6 +104,7 @@ export default function DashboardPage() {
             title="Weekly Intelligence"
             buttonLabel="Generate Digest"
             description="Get an AI-powered weekly review with performance insights, credit health assessment, and prioritized action items."
+            collapsible
           />
         </SectionErrorBoundary>
       </div>

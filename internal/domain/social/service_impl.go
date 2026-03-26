@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -36,6 +37,10 @@ type service struct {
 	tokenProvider InstagramTokenProvider
 	logger        observability.Logger
 	tracker       ai.AICallTracker
+	imageGen      ai.ImageGenerator
+	imageQuality  string
+	mediaDir      string
+	baseURL       string
 	minCards      int
 	maxCards      int
 	wg            sync.WaitGroup
@@ -125,19 +130,42 @@ func (s *service) llmGenerate(ctx context.Context) (int, error) {
 		cardMap[c.PurchaseID] = true
 	}
 
+	// Build card lookup once for deduplication across all suggestions
+	cardLookup := make(map[string]PostCardDetail, len(cards))
+	for _, c := range cards {
+		cardLookup[c.PurchaseID] = c
+	}
+
+	type cardIdentityKey struct {
+		name  string
+		set   string
+		grade float64
+	}
+
 	created := 0
-	usedIDs := make(map[string]bool) // prevent cards from appearing in multiple posts
+	usedIDs := make(map[string]bool)              // prevent purchase IDs from appearing in multiple posts
+	usedIdentities := make(map[cardIdentityKey]bool) // prevent same logical card across posts
 
 	for _, suggestion := range resp.Posts {
-		// Validate and filter purchase IDs (dedup within this suggestion too)
+		// Validate and filter purchase IDs, also excluding cards whose identity is already used
 		seen := make(map[string]bool)
 		var validIDs []string
 		for _, pid := range suggestion.PurchaseIDs {
-			if cardMap[pid] && !usedIDs[pid] && !seen[pid] {
-				seen[pid] = true
-				validIDs = append(validIDs, pid)
+			if !cardMap[pid] || usedIDs[pid] || seen[pid] {
+				continue
 			}
+			if card, ok := cardLookup[pid]; ok {
+				key := cardIdentityKey{name: card.CardName, set: card.SetName, grade: card.GradeValue}
+				if usedIdentities[key] {
+					continue
+				}
+			}
+			seen[pid] = true
+			validIDs = append(validIDs, pid)
 		}
+
+		// Deduplicate by card identity (name + set + grade) within this suggestion
+		validIDs = deduplicateByCardIdentity(validIDs, cardLookup)
 
 		if len(validIDs) < s.minCards {
 			continue
@@ -146,9 +174,12 @@ func (s *service) llmGenerate(ctx context.Context) (int, error) {
 			validIDs = validIDs[:s.maxCards]
 		}
 
-		// Mark these IDs as used
+		// Mark these IDs and identities as used
 		for _, pid := range validIDs {
 			usedIDs[pid] = true
+			if card, ok := cardLookup[pid]; ok {
+				usedIdentities[cardIdentityKey{name: card.CardName, set: card.SetName, grade: card.GradeValue}] = true
+			}
 		}
 
 		// Create the post
@@ -186,6 +217,7 @@ func (s *service) llmGenerate(ctx context.Context) (int, error) {
 
 		// Generate caption in background
 		s.safeGo("generateCaptionAsync", post.ID, func() { s.generateCaptionAsync(post) })
+		s.safeGo("generateBackgroundsAsync", post.ID, func() { s.generateBackgroundsAsync(post) })
 		created++
 	}
 
@@ -258,6 +290,18 @@ func (s *service) detectPostType(ctx context.Context, postType PostType, snapsho
 		}
 	}
 
+	// Deduplicate by card identity (name + set + grade)
+	if len(filtered) > 0 {
+		available, err := s.repo.GetAvailableCardsForPosts(ctx)
+		if err == nil {
+			cardLookup := make(map[string]PostCardDetail, len(available))
+			for _, c := range available {
+				cardLookup[c.PurchaseID] = c
+			}
+			filtered = deduplicateByCardIdentity(filtered, cardLookup)
+		}
+	}
+
 	if len(filtered) < s.minCards {
 		return nil, nil
 	}
@@ -298,6 +342,7 @@ func (s *service) detectPostType(ctx context.Context, postType PostType, snapsho
 
 	// Generate AI caption in background — don't block the HTTP request
 	s.safeGo("generateCaptionAsync", post.ID, func() { s.generateCaptionAsync(post) })
+	s.safeGo("generateBackgroundsAsync", post.ID, func() { s.generateBackgroundsAsync(post) })
 
 	return post, nil
 }
@@ -333,6 +378,72 @@ func filterHotDeals(snapshots []PurchaseSnapshot) []string {
 		}
 	}
 	return ids
+}
+
+// deduplicateByCardIdentity removes cards with the same (name, set, grade)
+// identity from a post's card list. Also deduplicates by purchase ID.
+// When duplicates exist, prefers the card with an image, then higher market value.
+func deduplicateByCardIdentity(ids []string, cardLookup map[string]PostCardDetail) []string {
+	type cardIdentity struct {
+		name  string
+		set   string
+		grade float64
+	}
+
+	best := make(map[cardIdentity]string)
+	bestCard := make(map[cardIdentity]PostCardDetail)
+
+	seenPurchase := make(map[string]bool)
+	for _, pid := range ids {
+		if seenPurchase[pid] {
+			continue
+		}
+		seenPurchase[pid] = true
+
+		card, ok := cardLookup[pid]
+		if !ok {
+			continue
+		}
+
+		key := cardIdentity{name: card.CardName, set: card.SetName, grade: card.GradeValue}
+		existing, exists := bestCard[key]
+		if !exists {
+			best[key] = pid
+			bestCard[key] = card
+			continue
+		}
+
+		if card.FrontImageURL != "" && existing.FrontImageURL == "" {
+			best[key] = pid
+			bestCard[key] = card
+			continue
+		}
+		if card.FrontImageURL == "" && existing.FrontImageURL != "" {
+			continue
+		}
+		if card.MedianCents > existing.MedianCents {
+			best[key] = pid
+			bestCard[key] = card
+		}
+	}
+
+	bestSet := make(map[string]bool, len(best))
+	for _, pid := range best {
+		bestSet[pid] = true
+	}
+
+	seenPurchase = make(map[string]bool)
+	var result []string
+	for _, pid := range ids {
+		if seenPurchase[pid] {
+			continue
+		}
+		seenPurchase[pid] = true
+		if bestSet[pid] {
+			result = append(result, pid)
+		}
+	}
+	return result
 }
 
 // generateCaptionAsync runs caption generation in a background goroutine with its own context.
@@ -408,6 +519,121 @@ func (s *service) generateCaptionAsync(post *SocialPost) {
 		s.logger.Info(ctx, "social caption generated",
 			observability.String("postType", string(post.PostType)),
 			observability.Int("captionLen", len(caption)))
+	}
+}
+
+// generateBackgroundsAsync generates AI background images for a post in a background goroutine.
+func (s *service) generateBackgroundsAsync(post *SocialPost) {
+	if s.imageGen == nil {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+
+	cards, err := s.repo.ListPostCards(ctx, post.ID)
+	if err != nil {
+		s.logError(ctx, "list cards for backgrounds", post.PostType, err)
+		return
+	}
+
+	postDir := fmt.Sprintf("%s/social/%s", s.mediaDir, post.ID)
+	if err := os.MkdirAll(postDir, 0o755); err != nil {
+		s.logError(ctx, "create background dir", post.PostType, err)
+		return
+	}
+
+	quality := s.imageQuality
+	if quality == "" {
+		quality = "medium"
+	}
+
+	var urls []string
+
+	// Generate cover background
+	coverPrompt := buildBackgroundPrompt(post.PostType, cards)
+	coverResult, err := s.imageGen.GenerateImage(ctx, ai.ImageRequest{
+		Prompt:  coverPrompt,
+		Size:    "1024x1024",
+		Quality: quality,
+	})
+	if err != nil {
+		if s.logger != nil {
+			s.logger.Warn(ctx, "social: cover background generation failed, skipping",
+				observability.String("postId", post.ID),
+				observability.Err(err))
+		}
+		urls = append(urls, "")
+	} else {
+		coverPath := fmt.Sprintf("%s/bg-cover.%s", postDir, coverResult.Format)
+		if err := os.WriteFile(coverPath, coverResult.ImageData, 0o644); err != nil {
+			s.logError(ctx, "save cover background", post.PostType, err)
+			urls = append(urls, "")
+		} else {
+			coverURL := fmt.Sprintf("%s/api/media/social/%s/bg-cover.%s", s.baseURL, post.ID, coverResult.Format)
+			urls = append(urls, coverURL)
+		}
+	}
+
+	// Generate card backgrounds sequentially
+	for i, card := range cards {
+		if ctx.Err() != nil {
+			// Fill remaining slots with empty strings to preserve [cover, card1, ...] alignment
+			for j := i; j < len(cards); j++ {
+				urls = append(urls, "")
+			}
+			break
+		}
+		cardPrompt := buildCardBackgroundPrompt(post.PostType, card)
+		cardResult, err := s.imageGen.GenerateImage(ctx, ai.ImageRequest{
+			Prompt:  cardPrompt,
+			Size:    "1024x1024",
+			Quality: quality,
+		})
+		if err != nil {
+			if s.logger != nil {
+				s.logger.Warn(ctx, "social: card background generation failed, skipping",
+					observability.String("postId", post.ID),
+					observability.Int("cardIndex", i),
+					observability.Err(err))
+			}
+			urls = append(urls, "")
+			continue
+		}
+
+		cardPath := fmt.Sprintf("%s/bg-%d.%s", postDir, i+1, cardResult.Format)
+		if err := os.WriteFile(cardPath, cardResult.ImageData, 0o644); err != nil {
+			s.logError(ctx, "save card background", post.PostType, err)
+			urls = append(urls, "")
+			continue
+		}
+		cardURL := fmt.Sprintf("%s/api/media/social/%s/bg-%d.%s", s.baseURL, post.ID, i+1, cardResult.Format)
+		urls = append(urls, cardURL)
+	}
+
+	// Store URLs in DB
+	dbCtx, dbCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer dbCancel()
+
+	if err := s.repo.UpdateBackgroundURLs(dbCtx, post.ID, urls); err != nil {
+		if s.logger != nil {
+			s.logger.Error(dbCtx, "social: failed to save background URLs",
+				observability.String("postId", post.ID),
+				observability.Err(err))
+		}
+	}
+
+	if s.logger != nil {
+		nonEmpty := 0
+		for _, u := range urls {
+			if u != "" {
+				nonEmpty++
+			}
+		}
+		s.logger.Info(ctx, "social backgrounds generated",
+			observability.String("postId", post.ID),
+			observability.Int("total", len(urls)),
+			observability.Int("success", nonEmpty))
 	}
 }
 

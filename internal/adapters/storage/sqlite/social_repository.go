@@ -13,13 +13,13 @@ import (
 
 var _ social.Repository = (*SocialRepository)(nil)
 
-const socialPostColumns = `id, post_type, status, caption, hashtags, cover_title, card_count, instagram_post_id, error_message, created_at, updated_at, slide_urls`
+const socialPostColumns = `id, post_type, status, caption, hashtags, cover_title, card_count, instagram_post_id, error_message, created_at, updated_at, slide_urls, background_urls`
 
 func scanSocialPost(rows *sql.Rows) (social.SocialPost, error) {
 	var p social.SocialPost
 	var postType, status, createdAt, updatedAt string
-	var slideURLsJSON sql.NullString
-	if err := rows.Scan(&p.ID, &postType, &status, &p.Caption, &p.Hashtags, &p.CoverTitle, &p.CardCount, &p.InstagramPostID, &p.ErrorMessage, &createdAt, &updatedAt, &slideURLsJSON); err != nil {
+	var slideURLsJSON, backgroundURLsJSON sql.NullString
+	if err := rows.Scan(&p.ID, &postType, &status, &p.Caption, &p.Hashtags, &p.CoverTitle, &p.CardCount, &p.InstagramPostID, &p.ErrorMessage, &createdAt, &updatedAt, &slideURLsJSON, &backgroundURLsJSON); err != nil {
 		return p, err
 	}
 	p.PostType = social.PostType(postType)
@@ -29,6 +29,11 @@ func scanSocialPost(rows *sql.Rows) (social.SocialPost, error) {
 	if slideURLsJSON.Valid && slideURLsJSON.String != "" {
 		if err := json.Unmarshal([]byte(slideURLsJSON.String), &p.SlideURLs); err != nil {
 			return p, fmt.Errorf("unmarshal slide URLs: %w", err)
+		}
+	}
+	if backgroundURLsJSON.Valid && backgroundURLsJSON.String != "" {
+		if err := json.Unmarshal([]byte(backgroundURLsJSON.String), &p.BackgroundURLs); err != nil {
+			return p, fmt.Errorf("unmarshal background URLs: %w", err)
 		}
 	}
 	return p, nil
@@ -58,10 +63,10 @@ func (r *SocialRepository) CreatePost(ctx context.Context, post *social.SocialPo
 func (r *SocialRepository) GetPost(ctx context.Context, id string) (*social.SocialPost, error) {
 	var p social.SocialPost
 	var postType, status, createdAt, updatedAt string
-	var slideURLsJSON sql.NullString
+	var slideURLsJSON, backgroundURLsJSON sql.NullString
 	err := r.db.QueryRowContext(ctx,
 		`SELECT `+socialPostColumns+` FROM social_posts WHERE id = ?`, id,
-	).Scan(&p.ID, &postType, &status, &p.Caption, &p.Hashtags, &p.CoverTitle, &p.CardCount, &p.InstagramPostID, &p.ErrorMessage, &createdAt, &updatedAt, &slideURLsJSON)
+	).Scan(&p.ID, &postType, &status, &p.Caption, &p.Hashtags, &p.CoverTitle, &p.CardCount, &p.InstagramPostID, &p.ErrorMessage, &createdAt, &updatedAt, &slideURLsJSON, &backgroundURLsJSON)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -75,6 +80,11 @@ func (r *SocialRepository) GetPost(ctx context.Context, id string) (*social.Soci
 	if slideURLsJSON.Valid && slideURLsJSON.String != "" {
 		if err := json.Unmarshal([]byte(slideURLsJSON.String), &p.SlideURLs); err != nil {
 			return nil, fmt.Errorf("unmarshal slide URLs: %w", err)
+		}
+	}
+	if backgroundURLsJSON.Valid && backgroundURLsJSON.String != "" {
+		if err := json.Unmarshal([]byte(backgroundURLsJSON.String), &p.BackgroundURLs); err != nil {
+			return nil, fmt.Errorf("unmarshal background URLs: %w", err)
 		}
 	}
 	return &p, nil
@@ -348,8 +358,7 @@ func (r *SocialRepository) GetAvailableCardsForPosts(ctx context.Context) ([]soc
 		     JOIN social_posts sp ON sp.id = spc.post_id
 		     WHERE sp.status NOT IN (?, ?)
 		 )
-		 ORDER BY p.created_at DESC
-		 LIMIT 100`,
+		 ORDER BY p.created_at DESC`,
 		string(social.PostStatusRejected), string(social.PostStatusFailed))
 	if err != nil {
 		return nil, err
@@ -372,6 +381,28 @@ func (r *SocialRepository) UpdateSlideURLs(ctx context.Context, id string, urls 
 	n, err := res.RowsAffected()
 	if err != nil {
 		return fmt.Errorf("check rows affected: %w", err)
+	}
+	if n == 0 {
+		return fmt.Errorf("post %s not found", id)
+	}
+	return nil
+}
+
+func (r *SocialRepository) UpdateBackgroundURLs(ctx context.Context, id string, urls []string) error {
+	urlsJSON, err := json.Marshal(urls)
+	if err != nil {
+		return fmt.Errorf("marshal background URLs: %w", err)
+	}
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE social_posts SET background_urls = ?, updated_at = ? WHERE id = ?`,
+		string(urlsJSON), time.Now().UTC().Format(time.RFC3339), id,
+	)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("rows affected: %w", err)
 	}
 	if n == 0 {
 		return fmt.Errorf("post %s not found", id)

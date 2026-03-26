@@ -16,6 +16,7 @@ import { PricingCoverageTab } from './admin/PricingCoverageTab';
 import { AIPricingTab } from './admin/AIPricingTab';
 import { AIStatusTab } from './admin/AIStatusTab';
 import { InstagramTab } from './admin/InstagramTab';
+import { PriceFlagsTab } from './admin/PriceFlagsTab';
 
 const adminTabs: readonly Tab<string>[] = [
   { id: 'allowlist', label: 'Allowlist' },
@@ -27,6 +28,7 @@ const adminTabs: readonly Tab<string>[] = [
   { id: 'ai-pricing', label: 'AI Pricing' },
   { id: 'ai-status', label: 'AI Status' },
   { id: 'instagram', label: 'Instagram' },
+  { id: 'price-flags', label: 'Price Flags' },
 ] as const;
 
 export default function AdminPage() {
@@ -83,6 +85,7 @@ export default function AdminPage() {
         <Tabs.Content value="ai-pricing"><AIPricingTab enabled={activeTab === 'ai-pricing'} /></Tabs.Content>
         <Tabs.Content value="ai-status"><AIStatusTab enabled={activeTab === 'ai-status'} /></Tabs.Content>
         <Tabs.Content value="instagram"><InstagramTab /></Tabs.Content>
+        <Tabs.Content value="price-flags"><PriceFlagsTab enabled={activeTab === 'price-flags'} /></Tabs.Content>
       </Tabs.Root>
     </div>
   );

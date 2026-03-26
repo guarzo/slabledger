@@ -34,6 +34,9 @@ type Repository interface {
 
 	// UpdateCoverTitle updates the cover title of a post.
 	UpdateCoverTitle(ctx context.Context, id string, title string) error
+
+	// UpdateBackgroundURLs stores the AI-generated background image URLs for a post.
+	UpdateBackgroundURLs(ctx context.Context, id string, urls []string) error
 }
 
 // PurchaseSnapshot holds the fields needed for price mover and hot deal detection.

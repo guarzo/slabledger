@@ -5,6 +5,9 @@ import "math"
 // DefaultMarketplaceFeePct is the default fee percentage for eBay and TCGPlayer (12.35%).
 const DefaultMarketplaceFeePct = 0.1235
 
+// DefaultWebsiteFeePct is the fee percentage for website/online store sales (3% credit card processing).
+const DefaultWebsiteFeePct = 0.03
+
 // grossModeFee signals enrichSellSheetItem to skip fee deduction, returning gross prices.
 const grossModeFee = -1.0
 
@@ -23,7 +26,9 @@ func CalculateSaleFee(channel SaleChannel, salePriceCents int, campaign *Campaig
 			feePct = DefaultMarketplaceFeePct
 		}
 		return int(math.Round(float64(salePriceCents) * feePct))
-	case SaleChannelLocal, SaleChannelOther, SaleChannelGameStop, SaleChannelCardShow, SaleChannelWebsite:
+	case SaleChannelWebsite:
+		return int(math.Round(float64(salePriceCents) * DefaultWebsiteFeePct))
+	case SaleChannelLocal, SaleChannelOther, SaleChannelGameStop, SaleChannelCardShow:
 		return 0
 	default:
 		return 0

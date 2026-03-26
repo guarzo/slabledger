@@ -475,6 +475,9 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	}
 	aiStatusHandler := handlers.NewAIStatusHandler(aiTracker, logger)
 
+	// Create price flags handler
+	priceFlagsHandler := handlers.NewPriceFlagsHandler(campaignsService, logger)
+
 	// Create Instagram handler (if client + store were initialized)
 	var igHandler *handlers.InstagramHandler
 	if igClient != nil && igStore != nil && authService != nil {
@@ -504,6 +507,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		SocialHandler:             socialHandler,
 		InstagramHandler:          igHandler,
 		AIStatusHandler:           aiStatusHandler,
+		PriceFlagsHandler:         priceFlagsHandler,
 	}
 	serverErr := startWebServer(ctx, deps)
 
