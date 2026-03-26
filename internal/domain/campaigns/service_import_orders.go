@@ -3,6 +3,7 @@ package campaigns
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
@@ -96,6 +97,9 @@ func (s *service) ConfirmOrdersSales(ctx context.Context, items []OrdersConfirmI
 			continue
 		}
 
+		// Create sale inline without captureMarketSnapshot to avoid hitting
+		// external pricing APIs for every card (which causes timeouts on bulk imports).
+		// The purchase already has a market snapshot from when it was created.
 		sa := &Sale{
 			PurchaseID:     item.PurchaseID,
 			SaleChannel:    item.SaleChannel,
@@ -103,7 +107,35 @@ func (s *service) ConfirmOrdersSales(ctx context.Context, items []OrdersConfirmI
 			SaleDate:       item.SaleDate,
 		}
 
-		if err := s.CreateSale(ctx, sa, campaign, purchase); err != nil {
+		if err := ValidateSale(sa); err != nil {
+			result.Failed++
+			result.Errors = append(result.Errors, BulkSaleError{PurchaseID: item.PurchaseID, Error: err.Error()})
+			continue
+		}
+
+		sa.ID = s.idGen()
+		sa.SaleFeeCents = CalculateSaleFee(sa.SaleChannel, sa.SalePriceCents, campaign)
+
+		purchaseDate, parseErr := time.Parse("2006-01-02", purchase.PurchaseDate)
+		if parseErr == nil {
+			saleDate, parseErr2 := time.Parse("2006-01-02", sa.SaleDate)
+			if parseErr2 == nil {
+				if saleDate.Before(purchaseDate) {
+					result.Failed++
+					result.Errors = append(result.Errors, BulkSaleError{PurchaseID: item.PurchaseID, Error: ErrSaleDateBeforePurchase.Error()})
+					continue
+				}
+				sa.DaysToSell = int(saleDate.Sub(purchaseDate).Hours() / 24)
+			}
+		}
+
+		sa.NetProfitCents = CalculateNetProfit(sa.SalePriceCents, purchase.BuyCostCents, purchase.PSASourcingFeeCents, sa.SaleFeeCents)
+
+		now := time.Now()
+		sa.CreatedAt = now
+		sa.UpdatedAt = now
+
+		if err := s.repo.CreateSale(ctx, sa); err != nil {
 			result.Failed++
 			result.Errors = append(result.Errors, BulkSaleError{PurchaseID: item.PurchaseID, Error: err.Error()})
 			continue
