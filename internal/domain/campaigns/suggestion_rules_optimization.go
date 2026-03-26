@@ -1,12 +1,13 @@
 package campaigns
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strings"
 )
 
-func suggestSpendCapRebalancing(insights *PortfolioInsights, campaigns []Campaign) []CampaignSuggestion {
+func suggestSpendCapRebalancing(_ context.Context, insights *PortfolioInsights, campaigns []Campaign) []CampaignSuggestion {
 	var suggestions []CampaignSuggestion
 
 	if insights.DataSummary.TotalPurchases < suggMinPurchasesSpendCap || insights.DataSummary.OverallROI < 0 {
@@ -23,12 +24,16 @@ func suggestSpendCapRebalancing(insights *PortfolioInsights, campaigns []Campaig
 		cap      int
 		roi      float64
 	}
+	hasROIData := len(campaignROI) > 0
 	var active []capEntry
 	for _, c := range campaigns {
 		if c.Phase != PhaseActive || c.DailySpendCapCents <= 0 {
 			continue
 		}
-		roi := campaignROI[c.ID]
+		roi, ok := campaignROI[c.ID]
+		if hasROIData && !ok {
+			continue
+		}
 		active = append(active, capEntry{campaign: c, cap: c.DailySpendCapCents, roi: roi})
 	}
 
@@ -57,7 +62,6 @@ func suggestSpendCapRebalancing(insights *PortfolioInsights, campaigns []Campaig
 			totalBudget += e.cap
 		}
 
-		hasROIData := len(campaignROI) > 0
 		if hasROIData {
 			avgROI := insights.DataSummary.OverallROI
 			var adjustments []string
@@ -109,7 +113,7 @@ func suggestSpendCapRebalancing(insights *PortfolioInsights, campaigns []Campaig
 	return suggestions
 }
 
-func suggestCharacterAdjustments(insights *PortfolioInsights, campaigns []Campaign) []CampaignSuggestion {
+func suggestCharacterAdjustments(_ context.Context, insights *PortfolioInsights, campaigns []Campaign) []CampaignSuggestion {
 	var suggestions []CampaignSuggestion
 
 	if len(insights.ByCharacter) < suggMinCharacterSegments {
@@ -192,48 +196,47 @@ func suggestCharacterAdjustments(insights *PortfolioInsights, campaigns []Campai
 	return suggestions
 }
 
-func suggestPhaseTransitions(insights *PortfolioInsights, campaigns []Campaign) []CampaignSuggestion {
+func suggestPhaseTransitions(_ context.Context, insights *PortfolioInsights, campaigns []Campaign) []CampaignSuggestion {
 	var suggestions []CampaignSuggestion
 
-	if len(insights.CampaignMetrics) == 0 {
-		return nil
-	}
-
+	// metricsMap is only needed for PhaseActive close suggestions
 	metricsMap := make(map[string]CampaignPNLBrief)
 	for _, m := range insights.CampaignMetrics {
 		metricsMap[m.CampaignID] = m
 	}
 
 	for _, c := range campaigns {
-		m, ok := metricsMap[c.ID]
-		if !ok {
-			continue
+		if c.Phase == PhaseActive {
+			m, ok := metricsMap[c.ID]
+			if !ok {
+				continue
+			}
+			if m.PurchaseCount >= suggArchiveMinPurchases && m.ROI < suggArchiveROIThreshold {
+				sellThrough := 0.0
+				if m.PurchaseCount > 0 {
+					sellThrough = float64(m.SoldCount) / float64(m.PurchaseCount)
+				}
+				if sellThrough < suggLowSellThroughPct {
+					suggestions = append(suggestions, CampaignSuggestion{
+						Type:  "adjust",
+						Title: fmt.Sprintf("Consider closing %s", c.Name),
+						Rationale: fmt.Sprintf("%s has %.0f%% ROI with %.0f%% sell-through across %d purchases. Performance is below viable thresholds.",
+							c.Name, m.ROI*100, sellThrough*100, m.PurchaseCount),
+						Confidence: confidenceLabel(m.SoldCount),
+						DataPoints: m.PurchaseCount,
+						SuggestedParams: CampaignSuggestionParams{
+							Name: c.Name,
+						},
+						ExpectedMetrics: ExpectedMetrics{
+							ExpectedROI:    m.ROI,
+							DataConfidence: confidenceLabel(m.SoldCount),
+						},
+					})
+				}
+			}
 		}
 
-		if c.Phase == PhaseActive && m.PurchaseCount >= suggArchiveMinPurchases && m.ROI < suggArchiveROIThreshold {
-			sellThrough := 0.0
-			if m.PurchaseCount > 0 {
-				sellThrough = float64(m.SoldCount) / float64(m.PurchaseCount)
-			}
-			if sellThrough < suggLowSellThroughPct {
-				suggestions = append(suggestions, CampaignSuggestion{
-					Type:  "adjust",
-					Title: fmt.Sprintf("Consider closing %s", c.Name),
-					Rationale: fmt.Sprintf("%s has %.0f%% ROI with %.0f%% sell-through across %d purchases. Performance is below viable thresholds.",
-						c.Name, m.ROI*100, sellThrough*100, m.PurchaseCount),
-					Confidence: confidenceLabel(m.SoldCount),
-					DataPoints: m.PurchaseCount,
-					SuggestedParams: CampaignSuggestionParams{
-						Name: c.Name,
-					},
-					ExpectedMetrics: ExpectedMetrics{
-						ExpectedROI:    m.ROI,
-						DataConfidence: confidenceLabel(m.SoldCount),
-					},
-				})
-			}
-		}
-
+		// PhasePending activation uses insights.ByCharacter directly — no metrics needed
 		if c.Phase == PhasePending && c.InclusionList != "" {
 			var profitableChars []string
 			for _, seg := range insights.ByCharacter {

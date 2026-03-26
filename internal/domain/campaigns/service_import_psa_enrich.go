@@ -36,6 +36,10 @@ func (s *service) certEnrichWorker(ctx context.Context) {
 			if !ok {
 				return
 			}
+			// Stop processing buffered certs after shutdown
+			if ctx.Err() != nil {
+				return
+			}
 			s.enrichSingleCert(ctx, certNum)
 		}
 	}
@@ -49,7 +53,7 @@ func (s *service) enrichSingleCert(ctx context.Context, certNum string) {
 	info, err := s.certLookup.LookupCert(ctx, certNum)
 	if err != nil {
 		if s.logger != nil {
-			s.logger.Debug(ctx, "cert enrichment failed",
+			s.logger.Warn(ctx, "cert enrichment: PSA lookup failed",
 				observability.String("cert", certNum),
 				observability.Err(err))
 		}
@@ -60,7 +64,15 @@ func (s *service) enrichSingleCert(ctx context.Context, certNum string) {
 	}
 
 	purchase, lookupErr := s.repo.GetPurchaseByCertNumber(ctx, "PSA", certNum)
-	if lookupErr != nil || purchase == nil {
+	if lookupErr != nil {
+		if s.logger != nil {
+			s.logger.Warn(ctx, "cert enrichment: failed to lookup purchase",
+				observability.String("cert", certNum),
+				observability.Err(lookupErr))
+		}
+		return
+	}
+	if purchase == nil {
 		return
 	}
 
@@ -102,10 +114,24 @@ func (s *service) enrichSingleCert(ctx context.Context, certNum string) {
 		}
 	}
 
-	// Persist grade from cert if it differs from the purchase
+	// Persist grade from cert if it differs from the purchase.
+	// Fallback chain: cert info → existing purchase → parsed from PSA listing title.
 	grade := info.Grade
 	if grade == 0 {
 		grade = purchase.GradeValue
+	}
+	if grade == 0 {
+		grade = ExtractGrade(purchase.PSAListingTitle)
+		if grade != 0 {
+			if err := s.repo.UpdatePurchaseGrade(ctx, purchase.ID, grade); err != nil {
+				if s.logger != nil {
+					s.logger.Warn(ctx, "cert enrichment: failed to persist title-extracted grade",
+						observability.String("cert", certNum),
+						observability.Err(err))
+				}
+				grade = 0
+			}
+		}
 	}
 	if info.Grade != 0 && info.Grade != purchase.GradeValue {
 		if err := s.repo.UpdatePurchaseGrade(ctx, purchase.ID, info.Grade); err != nil {

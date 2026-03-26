@@ -175,7 +175,9 @@ func (c *Client) doRequest(ctx context.Context, opName, path, certNumber string)
 		url := fmt.Sprintf("%s/%s/%s", c.baseURL, path, certNumber)
 		headers := map[string]string{"Authorization": "Bearer " + token}
 
-		resp, err := c.httpClient.Get(ctx, url, headers, 15*time.Second)
+		// httpx returns both (*Response, error) on HTTP 4xx/5xx, allowing us
+		// to inspect the status code even when err != nil.
+		resp, err := c.httpClient.Get(ctx, url, headers, 0)
 		if err != nil {
 			// 429: rotate to the next token and retry rather than giving up immediately.
 			if resp != nil && resp.StatusCode == http.StatusTooManyRequests {

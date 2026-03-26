@@ -135,7 +135,7 @@ func (s *service) GetCampaignSuggestions(ctx context.Context) (*SuggestionsRespo
 		return nil, fmt.Errorf("list campaigns: %w", err)
 	}
 
-	return GenerateSuggestions(insights, campaigns), nil
+	return GenerateSuggestions(ctx, insights, campaigns), nil
 }
 
 // --- Capital Timeline ---

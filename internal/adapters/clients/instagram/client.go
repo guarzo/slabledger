@@ -336,8 +336,6 @@ func (c *Client) publishContainer(ctx context.Context, token, igUserID, containe
 	return resp.ID, nil
 }
 
-// postForm sends a form-encoded POST and decodes the JSON response into dest.
-// Instagram API errors are parsed and returned as descriptive errors.
 func (c *Client) postForm(ctx context.Context, endpoint string, params url.Values, dest any) error {
 	headers := map[string]string{
 		"Content-Type": "application/x-www-form-urlencoded",
@@ -345,35 +343,35 @@ func (c *Client) postForm(ctx context.Context, endpoint string, params url.Value
 	body := []byte(params.Encode())
 	resp, err := c.httpClient.Post(ctx, endpoint, headers, body, 0)
 	if err != nil {
-		// Even on error, resp may contain the Instagram error body
 		if resp != nil {
 			if apiErr := parseInstagramError(resp.Body); apiErr != "" {
-				return fmt.Errorf("%s", apiErr)
+				return fmt.Errorf("%s: %w", apiErr, err)
 			}
 		}
 		return err
 	}
-	return json.Unmarshal(resp.Body, dest)
+	if err := json.Unmarshal(resp.Body, dest); err != nil {
+		return fmt.Errorf("decode Instagram response from %s: %w", endpoint, err)
+	}
+	return nil
 }
 
-// doGet sends a GET request and decodes the JSON response into dest.
-// Instagram API errors are parsed and returned as descriptive errors.
 func (c *Client) doGet(ctx context.Context, reqURL string, dest any) error {
 	resp, err := c.httpClient.Get(ctx, reqURL, nil, 0)
 	if err != nil {
-		// Even on error, resp may contain the Instagram error body
 		if resp != nil {
 			if apiErr := parseInstagramError(resp.Body); apiErr != "" {
-				return fmt.Errorf("%s", apiErr)
+				return fmt.Errorf("%s: %w", apiErr, err)
 			}
 		}
 		return err
 	}
-	return json.Unmarshal(resp.Body, dest)
+	if err := json.Unmarshal(resp.Body, dest); err != nil {
+		return fmt.Errorf("decode Instagram response from %s: %w", reqURL, err)
+	}
+	return nil
 }
 
-// parseInstagramError attempts to extract a human-readable error from an Instagram API response body.
-// Returns empty string if no Instagram error is present.
 func parseInstagramError(body []byte) string {
 	if len(body) == 0 {
 		return ""

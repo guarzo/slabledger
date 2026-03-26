@@ -2,9 +2,8 @@ package google
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"crypto/tls"
+	"encoding/json"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -18,219 +17,8 @@ import (
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
 )
 
-// Mock repository for testing
-type mockRepository struct {
-	users    map[string]*auth.User
-	tokens   map[int64]*auth.UserTokens
-	sessions map[string]*auth.Session
-
-	createUserErr    error
-	getUserErr       error
-	updateUserErr    error
-	storeTokensErr   error
-	getTokensErr     error
-	updateTokensErr  error
-	createSessionErr error
-	getSessionErr    error
-	updateSessionErr error
-	deleteSessionErr error
-	deleteExpiredErr error
-}
-
-func newMockRepository() *mockRepository {
-	return &mockRepository{
-		users:    make(map[string]*auth.User),
-		tokens:   make(map[int64]*auth.UserTokens),
-		sessions: make(map[string]*auth.Session),
-	}
-}
-
-func (m *mockRepository) CreateUser(ctx context.Context, googleID, username, email, avatarURL string) (*auth.User, error) {
-	if m.createUserErr != nil {
-		return nil, m.createUserErr
-	}
-	user := &auth.User{
-		ID:        int64(len(m.users) + 1),
-		GoogleID:  googleID,
-		Username:  username,
-		Email:     email,
-		AvatarURL: avatarURL,
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
-	}
-	m.users[googleID] = user
-	return user, nil
-}
-
-func (m *mockRepository) GetUserByGoogleID(ctx context.Context, googleID string) (*auth.User, error) {
-	if m.getUserErr != nil {
-		return nil, m.getUserErr
-	}
-	user, ok := m.users[googleID]
-	if !ok {
-		return nil, auth.ErrUserNotFound
-	}
-	return user, nil
-}
-
-func (m *mockRepository) GetUserByID(ctx context.Context, userID int64) (*auth.User, error) {
-	if m.getUserErr != nil {
-		return nil, m.getUserErr
-	}
-	for _, user := range m.users {
-		if user.ID == userID {
-			return user, nil
-		}
-	}
-	return nil, auth.ErrUserNotFound
-}
-
-func (m *mockRepository) UpdateUser(ctx context.Context, user *auth.User) error {
-	if m.updateUserErr != nil {
-		return m.updateUserErr
-	}
-	m.users[user.GoogleID] = user
-	return nil
-}
-
-func (m *mockRepository) StoreTokens(ctx context.Context, userID int64, sessionID string, tokens *auth.UserTokens) error {
-	if m.storeTokensErr != nil {
-		return m.storeTokensErr
-	}
-	m.tokens[userID] = tokens
-	return nil
-}
-
-func (m *mockRepository) GetTokens(ctx context.Context, userID int64, sessionID string) (*auth.UserTokens, error) {
-	if m.getTokensErr != nil {
-		return nil, m.getTokensErr
-	}
-	tokens, ok := m.tokens[userID]
-	if !ok {
-		return nil, errors.New("tokens not found")
-	}
-	return tokens, nil
-}
-
-func (m *mockRepository) GetTokensByUserID(ctx context.Context, userID int64) (*auth.UserTokens, error) {
-	if m.getTokensErr != nil {
-		return nil, m.getTokensErr
-	}
-	tokens, ok := m.tokens[userID]
-	if !ok {
-		return nil, errors.New("tokens not found")
-	}
-	return tokens, nil
-}
-
-func (m *mockRepository) UpdateTokens(ctx context.Context, userID int64, sessionID string, tokens *auth.UserTokens) error {
-	if m.updateTokensErr != nil {
-		return m.updateTokensErr
-	}
-	m.tokens[userID] = tokens
-	return nil
-}
-
-func (m *mockRepository) DeleteTokens(ctx context.Context, userID int64, sessionID string) error {
-	delete(m.tokens, userID)
-	return nil
-}
-
-func (m *mockRepository) DeleteAllUserTokens(ctx context.Context, userID int64) error {
-	delete(m.tokens, userID)
-	return nil
-}
-
-func (m *mockRepository) CreateSession(ctx context.Context, session *auth.Session) error {
-	if m.createSessionErr != nil {
-		return m.createSessionErr
-	}
-	m.sessions[session.ID] = session
-	return nil
-}
-
-func (m *mockRepository) GetSession(ctx context.Context, sessionID string) (*auth.Session, error) {
-	if m.getSessionErr != nil {
-		return nil, m.getSessionErr
-	}
-	session, ok := m.sessions[sessionID]
-	if !ok {
-		return nil, errors.New("session not found")
-	}
-	return session, nil
-}
-
-func (m *mockRepository) UpdateSessionAccess(ctx context.Context, sessionID string) error {
-	if m.updateSessionErr != nil {
-		return m.updateSessionErr
-	}
-	if session, ok := m.sessions[sessionID]; ok {
-		session.LastAccessedAt = time.Now()
-	}
-	return nil
-}
-
-func (m *mockRepository) DeleteSession(ctx context.Context, sessionID string) error {
-	if m.deleteSessionErr != nil {
-		return m.deleteSessionErr
-	}
-	delete(m.sessions, sessionID)
-	return nil
-}
-
-func (m *mockRepository) DeleteExpiredSessions(ctx context.Context) (int, error) {
-	if m.deleteExpiredErr != nil {
-		return 0, m.deleteExpiredErr
-	}
-	count := 0
-	now := time.Now()
-	for id, session := range m.sessions {
-		if session.ExpiresAt.Before(now) {
-			delete(m.sessions, id)
-			count++
-		}
-	}
-	return count, nil
-}
-
-// OAuth State methods
-func (m *mockRepository) StoreOAuthState(ctx context.Context, state string, expiresAt time.Time) error {
-	// No-op for tests - state validation handled differently in tests
-	return nil
-}
-
-func (m *mockRepository) ConsumeOAuthState(ctx context.Context, state string) (bool, error) {
-	// Always return true for tests - actual state validation tested elsewhere
-	return true, nil
-}
-
-func (m *mockRepository) CleanupExpiredOAuthStates(ctx context.Context) (int, error) {
-	// No-op for tests
-	return 0, nil
-}
-
-func (m *mockRepository) IsEmailAllowed(ctx context.Context, email string) (bool, error) {
-	return false, nil
-}
-
-func (m *mockRepository) ListAllowedEmails(ctx context.Context) ([]auth.AllowedEmail, error) {
-	return nil, nil
-}
-
-func (m *mockRepository) AddAllowedEmail(ctx context.Context, email string, addedBy int64, notes string) error {
-	return nil
-}
-
-func (m *mockRepository) RemoveAllowedEmail(ctx context.Context, email string) error {
-	return nil
-}
-
-func (m *mockRepository) ListUsers(ctx context.Context) ([]auth.User, error) {
-	return nil, nil
-}
-
-func (m *mockRepository) SetUserAdmin(ctx context.Context, userID int64, isAdmin bool) error {
-	return nil
+func newMockRepository() *mocks.MockAuthRepository {
+	return mocks.NewMockAuthRepository()
 }
 
 func TestNewOAuthService(t *testing.T) {
@@ -377,7 +165,7 @@ func TestValidateSession(t *testing.T) {
 		Username: "testuser",
 		Email:    "test@example.com",
 	}
-	repo.users["test-google-user"] = user
+	repo.Users["test-google-user"] = user
 
 	// Create a valid session
 	validSession := &auth.Session{
@@ -387,7 +175,7 @@ func TestValidateSession(t *testing.T) {
 		CreatedAt:      time.Now(),
 		LastAccessedAt: time.Now(),
 	}
-	repo.sessions["valid-session-id"] = validSession
+	repo.Sessions["valid-session-id"] = validSession
 
 	// Create an expired session
 	expiredSession := &auth.Session{
@@ -397,7 +185,7 @@ func TestValidateSession(t *testing.T) {
 		CreatedAt:      time.Now().Add(-2 * time.Hour),
 		LastAccessedAt: time.Now().Add(-2 * time.Hour),
 	}
-	repo.sessions["expired-session-id"] = expiredSession
+	repo.Sessions["expired-session-id"] = expiredSession
 
 	tests := []struct {
 		name      string
@@ -457,7 +245,7 @@ func TestDeleteSession(t *testing.T) {
 	ctx := context.Background()
 
 	// Create a test session
-	repo.sessions["test-session"] = &auth.Session{
+	repo.Sessions["test-session"] = &auth.Session{
 		ID:     "test-session",
 		UserID: 1,
 	}
@@ -468,7 +256,7 @@ func TestDeleteSession(t *testing.T) {
 	}
 
 	// Verify session was deleted
-	if _, exists := repo.sessions["test-session"]; exists {
+	if _, exists := repo.Sessions["test-session"]; exists {
 		t.Error("Expected session to be deleted")
 	}
 }
@@ -488,17 +276,17 @@ func TestCleanupExpiredSessions(t *testing.T) {
 	ctx := context.Background()
 
 	// Create mix of valid and expired sessions
-	repo.sessions["valid-1"] = &auth.Session{
+	repo.Sessions["valid-1"] = &auth.Session{
 		ID:        "valid-1",
 		UserID:    1,
 		ExpiresAt: time.Now().Add(24 * time.Hour),
 	}
-	repo.sessions["expired-1"] = &auth.Session{
+	repo.Sessions["expired-1"] = &auth.Session{
 		ID:        "expired-1",
 		UserID:    2,
 		ExpiresAt: time.Now().Add(-1 * time.Hour),
 	}
-	repo.sessions["expired-2"] = &auth.Session{
+	repo.Sessions["expired-2"] = &auth.Session{
 		ID:        "expired-2",
 		UserID:    3,
 		ExpiresAt: time.Now().Add(-2 * time.Hour),
@@ -514,8 +302,8 @@ func TestCleanupExpiredSessions(t *testing.T) {
 	}
 
 	// Verify only valid session remains
-	if len(repo.sessions) != 1 {
-		t.Errorf("Expected 1 session remaining, got %d", len(repo.sessions))
+	if len(repo.Sessions) != 1 {
+		t.Errorf("Expected 1 session remaining, got %d", len(repo.Sessions))
 	}
 }
 
@@ -563,7 +351,7 @@ func TestGetOrCreateUser(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Pre-create user if testing existing user
 			if tt.existing {
-				repo.users[tt.googleID] = &auth.User{
+				repo.Users[tt.googleID] = &auth.User{
 					ID:        1,
 					GoogleID:  tt.googleID,
 					Username:  tt.username,
@@ -618,7 +406,7 @@ func TestStoreTokens(t *testing.T) {
 	}
 
 	// Verify tokens were stored
-	stored, ok := repo.tokens[1]
+	stored, ok := repo.Tokens[1]
 	if !ok {
 		t.Error("Expected tokens to be stored")
 		return

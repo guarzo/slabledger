@@ -1,11 +1,12 @@
 package campaigns
 
 import (
+	"context"
 	"fmt"
 	"strings"
 )
 
-func suggestTopCharacterExpansion(insights *PortfolioInsights, campaigns []Campaign) []CampaignSuggestion {
+func suggestTopCharacterExpansion(_ context.Context, insights *PortfolioInsights, campaigns []Campaign) []CampaignSuggestion {
 	var suggestions []CampaignSuggestion
 
 	for _, seg := range insights.ByCharacter {
@@ -73,7 +74,7 @@ func suggestTopCharacterExpansion(insights *PortfolioInsights, campaigns []Campa
 	return suggestions
 }
 
-func suggestGradeSweetSpot(insights *PortfolioInsights, campaigns []Campaign) []CampaignSuggestion {
+func suggestGradeSweetSpot(_ context.Context, insights *PortfolioInsights, campaigns []Campaign) []CampaignSuggestion {
 	var suggestions []CampaignSuggestion
 
 	var bestGrade *SegmentPerformance
@@ -124,7 +125,7 @@ func suggestGradeSweetSpot(insights *PortfolioInsights, campaigns []Campaign) []
 	return suggestions
 }
 
-func suggestCoverageGapCampaigns(insights *PortfolioInsights) []CampaignSuggestion {
+func suggestCoverageGapCampaigns(_ context.Context, insights *PortfolioInsights) []CampaignSuggestion {
 	var suggestions []CampaignSuggestion
 
 	for _, gap := range insights.CoverageGaps {
@@ -156,7 +157,7 @@ func suggestCoverageGapCampaigns(insights *PortfolioInsights) []CampaignSuggesti
 	return suggestions
 }
 
-func suggestChannelInformedBuyTerms(insights *PortfolioInsights, campaigns []Campaign, now string) []CampaignSuggestion {
+func suggestChannelInformedBuyTerms(_ context.Context, insights *PortfolioInsights, campaigns []Campaign, now string) []CampaignSuggestion {
 	var suggestions []CampaignSuggestion
 
 	if len(insights.ByChannel) < 2 || insights.DataSummary.TotalSales < suggMinTotalSalesChannelAnalysis {

@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"time"
 
@@ -192,9 +191,9 @@ func (h *InstagramHandler) HandlePublish(w http.ResponseWriter, r *http.Request)
 			observability.String("postId", id),
 			observability.Err(err))
 		switch {
-		case errors.Is(err, social.ErrNotConfigured):
+		case social.IsNotConfigured(err):
 			writeError(w, http.StatusServiceUnavailable, "Instagram publishing is not configured")
-		case errors.Is(err, social.ErrPostNotFound), errors.Is(err, social.ErrNotPublishable):
+		case social.IsPostNotFound(err), social.IsNotPublishable(err):
 			writeError(w, http.StatusBadRequest, "Post not found or not in a publishable state")
 		default:
 			writeError(w, http.StatusInternalServerError, "Failed to publish post")

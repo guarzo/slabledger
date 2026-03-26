@@ -12,11 +12,13 @@ import (
 
 func (r *CampaignsRepository) UpdatePurchasePriceOverride(ctx context.Context, purchaseID string, priceCents int, source string) error {
 	now := time.Now()
+	if priceCents <= 0 {
+		priceCents = 0
+		source = ""
+	}
 	setAt := ""
 	if priceCents > 0 {
 		setAt = now.Format(time.RFC3339)
-	} else {
-		source = ""
 	}
 	result, err := r.db.ExecContext(ctx,
 		`UPDATE campaign_purchases SET override_price_cents = ?, override_source = ?, override_set_at = ?, updated_at = ? WHERE id = ?`,
@@ -37,11 +39,13 @@ func (r *CampaignsRepository) UpdatePurchasePriceOverride(ctx context.Context, p
 
 func (r *CampaignsRepository) UpdateReviewedPrice(ctx context.Context, purchaseID string, priceCents int, source string) error {
 	now := time.Now()
+	if priceCents <= 0 {
+		priceCents = 0
+		source = ""
+	}
 	reviewedAt := ""
 	if priceCents > 0 {
 		reviewedAt = now.Format(time.RFC3339)
-	} else {
-		source = ""
 	}
 	result, err := r.db.ExecContext(ctx,
 		`UPDATE campaign_purchases SET reviewed_price_cents = ?, reviewed_at = ?, review_source = ?, updated_at = ? WHERE id = ?`,
@@ -62,9 +66,15 @@ func (r *CampaignsRepository) UpdateReviewedPrice(ctx context.Context, purchaseI
 
 func (r *CampaignsRepository) UpdatePurchaseAISuggestion(ctx context.Context, purchaseID string, priceCents int) error {
 	now := time.Now()
+	suggestedAt := ""
+	if priceCents > 0 {
+		suggestedAt = now.Format(time.RFC3339)
+	} else {
+		priceCents = 0
+	}
 	result, err := r.db.ExecContext(ctx,
 		`UPDATE campaign_purchases SET ai_suggested_price_cents = ?, ai_suggested_at = ?, updated_at = ? WHERE id = ?`,
-		priceCents, now.Format(time.RFC3339), now, purchaseID,
+		priceCents, suggestedAt, now, purchaseID,
 	)
 	if err != nil {
 		return err
@@ -108,6 +118,8 @@ func (r *CampaignsRepository) GetPriceOverrideStats(ctx context.Context) (*campa
 	if err != nil {
 		return nil, err
 	}
+	stats.OverrideTotalUsd = float64(stats.OverrideTotalCents) / 100
+	stats.SuggestionTotalUsd = float64(stats.SuggestionTotalCents) / 100
 	return &stats, nil
 }
 

@@ -122,11 +122,11 @@ func (s *OAuthService) ExchangeCodeForTokens(ctx context.Context, code string) (
 	}
 
 	if err := json.Unmarshal(resp.Body, &tokenResp); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("decode Google token response: %w", err)
 	}
 
 	if tokenResp.AccessToken == "" {
-		return nil, apperrors.ProviderAuthFailed("Google", fmt.Errorf("received empty access token (status %d, body: %s)", resp.StatusCode, sanitizeResponseBody(resp.Body, 200)))
+		return nil, apperrors.ProviderAuthFailed("Google", fmt.Errorf("received empty access token in response: %s", sanitizeResponseBody(resp.Body, 200)))
 	}
 
 	tokens := &auth.UserTokens{
@@ -158,7 +158,7 @@ func (s *OAuthService) GetUserInfo(ctx context.Context, accessToken string) (*au
 	}
 
 	if err := json.Unmarshal(resp.Body, &userInfo); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("decode Google userinfo response: %w", err)
 	}
 
 	if userInfo.ID == "" || userInfo.Email == "" {
