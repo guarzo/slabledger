@@ -62,7 +62,7 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
   const badge = statusBadge(item);
   const clValue = item.purchase.clValueCents ?? 0;
   const clIsHigher = clValue > 0 && price > 0 && clValue > price;
-  const recPrice = item.purchase.reviewedPriceCents ?? 0;
+  const recPrice = item.recommendedPriceCents ?? item.purchase.reviewedPriceCents ?? 0;
 
   return (
     <div

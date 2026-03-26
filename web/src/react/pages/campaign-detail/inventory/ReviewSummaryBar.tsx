@@ -53,7 +53,7 @@ export default function ReviewSummaryBar({ stats, searchQuery, onSearchChange, s
           size="sm"
           onClick={onToggleShowAll}
         >
-          {showAll ? 'Show All' : 'Needs Review'}
+          {showAll ? 'Show Needs Review' : 'Show All'}
         </Button>
       </div>
     </div>

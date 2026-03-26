@@ -658,9 +658,13 @@ func (s *service) SetReviewedPrice(ctx context.Context, purchaseID string, price
 	if priceCents < 0 {
 		return errors.NewAppError(ErrCodeCampaignValidation, "price must be non-negative")
 	}
-	validSources := map[string]bool{"manual": true, "cl": true, "market": true, "cost_markup": true}
-	if priceCents > 0 && !validSources[source] {
-		return errors.NewAppError(ErrCodeCampaignValidation, "invalid review source: "+source)
+	if priceCents > 0 {
+		switch ReviewSource(source) {
+		case ReviewSourceManual, ReviewSourceCL, ReviewSourceMarket, ReviewSourceCostMarkup:
+			// valid
+		default:
+			return errors.NewAppError(ErrCodeCampaignValidation, "invalid review source: "+source)
+		}
 	}
 	return s.repo.UpdateReviewedPrice(ctx, purchaseID, priceCents, source)
 }
@@ -676,7 +680,7 @@ func (s *service) GetGlobalReviewStats(ctx context.Context) (ReviewStats, error)
 // --- Price Flags ---
 
 func (s *service) CreatePriceFlag(ctx context.Context, purchaseID string, userID int64, reason string) (int64, error) {
-	if !ValidPriceFlagReasons[PriceFlagReason(reason)] {
+	if !PriceFlagReason(reason).Valid() {
 		return 0, errors.NewAppError(ErrCodeCampaignValidation, "invalid flag reason: "+reason)
 	}
 	// Verify purchase exists

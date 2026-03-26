@@ -549,11 +549,12 @@ func (m *mockRepo) UpdateReviewedPrice(_ context.Context, purchaseID string, pri
 		return ErrPurchaseNotFound
 	}
 	p.ReviewedPriceCents = priceCents
-	p.ReviewSource = ReviewSource(source)
 	if priceCents > 0 {
 		p.ReviewedAt = time.Now().Format(time.RFC3339)
+		p.ReviewSource = ReviewSource(source)
 	} else {
 		p.ReviewedAt = ""
+		p.ReviewSource = ""
 	}
 	return nil
 }

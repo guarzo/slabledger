@@ -126,7 +126,8 @@ export function useResolvePriceFlag() {
   return useMutation({
     mutationFn: (flagId: number) => api.resolvePriceFlag(flagId),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['admin', 'priceFlags'] });
+      qc.invalidateQueries({ queryKey: queryKeys.admin.priceFlags('open') });
+      qc.invalidateQueries({ queryKey: queryKeys.admin.priceFlags('resolved') });
     },
   });
 }

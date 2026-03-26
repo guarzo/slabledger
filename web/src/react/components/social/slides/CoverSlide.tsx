@@ -16,9 +16,7 @@ interface CoverSlideProps {
   postType: PostType;
   coverTitle: string;
   cardCount: number;
-  createdAt: string;
   psa10Count: number;
-  totalValueCents: number;
   cards?: PostCardDetail[];
   backgroundUrls?: string[];
 }

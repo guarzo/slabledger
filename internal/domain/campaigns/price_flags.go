@@ -13,13 +13,18 @@ const (
 	PriceFlagOther              PriceFlagReason = "other"
 )
 
-// ValidPriceFlagReasons is the set of valid flag reasons.
-var ValidPriceFlagReasons = map[PriceFlagReason]bool{
+// validPriceFlagReasons is the set of valid flag reasons.
+var validPriceFlagReasons = map[PriceFlagReason]bool{
 	PriceFlagWrongMatch:         true,
 	PriceFlagStaleData:          true,
 	PriceFlagWrongGrade:         true,
 	PriceFlagSourceDisagreement: true,
 	PriceFlagOther:              true,
+}
+
+// Valid reports whether r is a recognized price-flag reason.
+func (r PriceFlagReason) Valid() bool {
+	return validPriceFlagReasons[r]
 }
 
 // ReviewSource identifies how a reviewed price was chosen.

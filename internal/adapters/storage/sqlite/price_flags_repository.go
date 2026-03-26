@@ -15,11 +15,12 @@ func (r *CampaignsRepository) GetReviewStats(ctx context.Context, campaignID str
 	err := r.db.QueryRowContext(ctx, `
 		SELECT
 			COUNT(*) as total,
-			SUM(CASE WHEN cp.reviewed_at = '' THEN 1 ELSE 0 END) as needs_review,
-			SUM(CASE WHEN cp.reviewed_at != '' THEN 1 ELSE 0 END) as reviewed,
+			COALESCE(SUM(CASE WHEN cp.reviewed_at = '' THEN 1 ELSE 0 END), 0) as needs_review,
+			COALESCE(SUM(CASE WHEN cp.reviewed_at != '' THEN 1 ELSE 0 END), 0) as reviewed,
 			(SELECT COUNT(DISTINCT pf.purchase_id) FROM price_flags pf
 			 JOIN campaign_purchases cp2 ON pf.purchase_id = cp2.id
-			 WHERE cp2.campaign_id = ? AND pf.resolved_at IS NULL) as flagged
+			 LEFT JOIN campaign_sales cs2 ON cs2.purchase_id = cp2.id
+			 WHERE cp2.campaign_id = ? AND pf.resolved_at IS NULL AND cs2.id IS NULL) as flagged
 		FROM campaign_purchases cp
 		LEFT JOIN campaign_sales cs ON cs.purchase_id = cp.id
 		WHERE cp.campaign_id = ? AND cs.id IS NULL`,
@@ -36,9 +37,12 @@ func (r *CampaignsRepository) GetGlobalReviewStats(ctx context.Context) (campaig
 	err := r.db.QueryRowContext(ctx, `
 		SELECT
 			COUNT(*) as total,
-			SUM(CASE WHEN cp.reviewed_at = '' THEN 1 ELSE 0 END) as needs_review,
-			SUM(CASE WHEN cp.reviewed_at != '' THEN 1 ELSE 0 END) as reviewed,
-			(SELECT COUNT(DISTINCT pf.purchase_id) FROM price_flags pf WHERE pf.resolved_at IS NULL) as flagged
+			COALESCE(SUM(CASE WHEN cp.reviewed_at = '' THEN 1 ELSE 0 END), 0) as needs_review,
+			COALESCE(SUM(CASE WHEN cp.reviewed_at != '' THEN 1 ELSE 0 END), 0) as reviewed,
+			(SELECT COUNT(DISTINCT pf.purchase_id) FROM price_flags pf
+			 JOIN campaign_purchases cp2 ON pf.purchase_id = cp2.id
+			 LEFT JOIN campaign_sales cs2 ON cs2.purchase_id = cp2.id
+			 WHERE pf.resolved_at IS NULL AND cs2.id IS NULL) as flagged
 		FROM campaign_purchases cp
 		LEFT JOIN campaign_sales cs ON cs.purchase_id = cp.id
 		WHERE cs.id IS NULL`,

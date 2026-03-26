@@ -22,8 +22,14 @@ func NewPriceFlagsHandler(service campaigns.Service, logger observability.Logger
 // HandleListPriceFlags handles GET /api/admin/price-flags?status=open|resolved|all.
 func (h *PriceFlagsHandler) HandleListPriceFlags(w http.ResponseWriter, r *http.Request) {
 	status := r.URL.Query().Get("status")
-	if status == "" {
+	switch status {
+	case "open", "resolved", "all":
+		// valid
+	case "":
 		status = "open"
+	default:
+		writeError(w, http.StatusBadRequest, "invalid status: must be open, resolved, or all")
+		return
 	}
 	flags, err := h.service.ListPriceFlags(r.Context(), status)
 	if err != nil {

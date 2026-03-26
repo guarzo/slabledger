@@ -218,10 +218,14 @@ func initializeSocialService(
 				mediaDir = "./data/media"
 			}
 			baseURL := os.Getenv("BASE_URL")
-			socialOpts = append(socialOpts, social.WithImageGenerator(imgClient, cfg.Adapters.ImageAIQuality, mediaDir, baseURL))
-			logger.Info(ctx, "AI background generation enabled",
-				observability.String("deployment", cfg.Adapters.ImageAIDeployment),
-				observability.String("quality", cfg.Adapters.ImageAIQuality))
+			if baseURL == "" {
+				logger.Warn(ctx, "BASE_URL not set; AI background generation disabled (cannot construct public URLs)")
+			} else {
+				socialOpts = append(socialOpts, social.WithImageGenerator(imgClient, cfg.Adapters.ImageAIQuality, mediaDir, baseURL))
+				logger.Info(ctx, "AI background generation enabled",
+					observability.String("deployment", cfg.Adapters.ImageAIDeployment),
+					observability.String("quality", cfg.Adapters.ImageAIQuality))
+			}
 		}
 	}
 

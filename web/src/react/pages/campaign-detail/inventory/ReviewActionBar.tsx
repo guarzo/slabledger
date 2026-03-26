@@ -49,7 +49,7 @@ export default function ReviewActionBar({ quickPicks, onConfirm, onFlag, isSubmi
 
       {visiblePicks.map(pick => (
         <button
-          key={pick.source}
+          key={`${pick.source}-${pick.priceCents}`}
           type="button"
           onClick={() => handlePickClick(pick)}
           disabled={isSubmitting}

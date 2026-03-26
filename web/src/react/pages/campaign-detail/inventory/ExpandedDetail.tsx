@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import type { AgingItem, ExpectedValue } from '../../../../types/campaigns';
+import type { AgingItem } from '../../../../types/campaigns';
 import type { PriceFlagReason } from '../../../../types/campaigns/priceReview';
 import { api } from '../../../../js/api';
 import { useToast } from '../../../contexts/ToastContext';
@@ -11,9 +11,6 @@ import PriceFlagDialog from './PriceFlagDialog';
 
 interface ExpandedDetailProps {
   item: AgingItem;
-  ev?: ExpectedValue;
-  showCampaignColumn?: boolean;
-  deltaPct?: number | null;
   onReviewed?: () => void;
   campaignId?: string;
 }
@@ -38,10 +35,11 @@ export default function ExpandedDetail({ item, onReviewed, campaignId }: Expande
   const invalidateQueries = () => {
     if (campaignId) {
       queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.inventory(campaignId) });
+    } else {
+      queryClient.invalidateQueries({
+        predicate: (query) => query.queryKey[0] === 'campaigns' && query.queryKey[2] === 'inventory',
+      });
     }
-    queryClient.invalidateQueries({
-      predicate: (query) => query.queryKey[0] === 'campaigns' && query.queryKey[2] === 'inventory',
-    });
     queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.globalInventory });
   };
 

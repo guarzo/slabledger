@@ -166,8 +166,8 @@ export function getReviewStatus(item: AgingItem): ReviewStatus {
   const snap = item.currentMarket;
   const p = item.purchase;
 
-  if (!snap && p.clValueCents === 0) return 'no_data';
   if (p.reviewedAt) return 'reviewed';
+  if (!snap && (p.clValueCents ?? 0) === 0) return 'no_data';
   if (hasLargeGap(item)) return 'large_gap';
 
   return 'needs_review';

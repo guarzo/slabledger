@@ -6,7 +6,7 @@ interface PriceSignalCardProps {
   highlight?: 'success' | 'warning' | 'danger' | 'muted';
 }
 
-const highlightColor: Record<string, string> = {
+const highlightColor: Record<NonNullable<PriceSignalCardProps['highlight']>, string> = {
   success: 'text-[var(--success)]',
   warning: 'text-[var(--warning)]',
   danger: 'text-[var(--danger)]',

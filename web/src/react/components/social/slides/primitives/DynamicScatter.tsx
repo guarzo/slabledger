@@ -29,13 +29,12 @@ export default function DynamicScatter({ cards }: DynamicScatterProps) {
         const trendPct = card.trend30d !== 0 ? `${card.trend30d > 0 ? '+' : ''}${(card.trend30d * 100).toFixed(0)}%` : null;
         const isUp = card.trend30d > 0;
         return (
-          <div key={card.purchaseId} className="absolute" style={{ left: pos.left, right: pos.right, top: pos.top, width: pos.width }}>
+          <div key={card.purchaseId} className="absolute" style={{ left: pos.left, right: pos.right, top: pos.top, width: pos.width, zIndex: pos.zIndex }}>
             <div
               className="rounded-lg overflow-hidden"
               style={{
                 aspectRatio: '0.65',
                 transform: `rotate(${pos.rotate}deg)`,
-                zIndex: pos.zIndex,
                 boxShadow: `0 ${8 + i * 2}px ${25 + i * 5}px rgba(0,0,0,0.5)`,
               }}
             >

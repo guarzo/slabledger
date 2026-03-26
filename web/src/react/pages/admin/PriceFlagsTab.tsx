@@ -84,14 +84,6 @@ function FlagCard({ flag }: { flag: PriceFlagWithContext }) {
                     <td className="py-1 text-right text-[var(--text-muted)]">{sp.saleCount ?? '—'}</td>
                   </tr>
                 ))}
-                {flag.clValueCents > 0 && (
-                  <tr>
-                    <td className="py-1 pr-3 text-[var(--text)]">Card Ladder</td>
-                    <td className="py-1 pr-3 text-right text-[var(--text)]">{formatCents(flag.clValueCents)}</td>
-                    <td className="py-1 pr-3 text-right text-[var(--text-muted)]">—</td>
-                    <td className="py-1 text-right text-[var(--text-muted)]">—</td>
-                  </tr>
-                )}
               </tbody>
             </table>
           </div>

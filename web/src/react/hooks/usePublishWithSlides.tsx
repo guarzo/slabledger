@@ -83,10 +83,6 @@ export function usePublishWithSlides(
     try {
       const totalSlides = detail.cards.length + 1;
       const psa10Count = detail.cards.filter((c) => c.gradeValue === 10).length;
-      const totalValueCents = detail.cards.reduce(
-        (sum, c) => sum + c.medianCents,
-        0,
-      );
       const slides: Blob[] = [];
 
       // Render cover slide
@@ -96,9 +92,7 @@ export function usePublishWithSlides(
           postType={detail.postType}
           coverTitle={detail.coverTitle}
           cardCount={detail.cardCount}
-          createdAt={detail.createdAt}
           psa10Count={psa10Count}
-          totalValueCents={totalValueCents}
           cards={detail.cards}
           backgroundUrls={detail.backgroundUrls}
         />,

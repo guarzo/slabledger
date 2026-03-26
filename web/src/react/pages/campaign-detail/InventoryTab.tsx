@@ -13,7 +13,7 @@ import { useExpectedValues } from '../../queries/useCampaignQueries';
 import RecordSaleModal from './RecordSaleModal';
 import PriceHintDialog from '../../PriceHintDialog';
 import PriceOverrideDialog from '../../PriceOverrideDialog';
-import { bestPrice, unrealizedPL, formatPL, deriveSignalDelta, getReviewStatus, reviewUrgencySort } from './inventory/utils';
+import { bestPrice, unrealizedPL, formatPL, getReviewStatus, reviewUrgencySort } from './inventory/utils';
 import type { SortKey, SortDir } from './inventory/utils';
 import DesktopRow from './inventory/DesktopRow';
 import MobileCard from './inventory/MobileCard';
@@ -74,9 +74,9 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
     const counts = { needs_review: 0, large_gap: 0, no_data: 0, flagged: 0, all: items.length };
     for (const item of items) {
       const status = getReviewStatus(item);
-      if (status === 'needs_review') counts.needs_review++;
-      else if (status === 'large_gap') counts.large_gap++;
-      else if (status === 'no_data') counts.no_data++;
+      if (status === 'needs_review') { counts.needs_review++; }
+      else if (status === 'large_gap') { counts.needs_review++; counts.large_gap++; }
+      else if (status === 'no_data') { counts.needs_review++; counts.no_data++; }
       else if (status === 'flagged') counts.flagged++;
     }
     return counts;
@@ -564,7 +564,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                         showCampaignColumn={showCampaignColumn}
                       />
                     </div>
-                    {isExpanded && <ExpandedDetail item={item} ev={evMap.get(item.purchase.certNumber)} showCampaignColumn={showCampaignColumn} deltaPct={deriveSignalDelta(item)} onReviewed={handleReviewed} campaignId={campaignId} />}
+                    {isExpanded && <ExpandedDetail item={item} onReviewed={handleReviewed} campaignId={campaignId} />}
                   </div>
                 );
               })}
