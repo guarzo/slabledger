@@ -228,6 +228,16 @@ func (r *SocialRepository) AddPostCards(ctx context.Context, postID string, card
 	return tx.Commit()
 }
 
+func scanPostCardDetail(rows *sql.Rows) (social.PostCardDetail, error) {
+	var c social.PostCardDetail
+	var createdAt string
+	err := rows.Scan(&c.PurchaseID, &c.SlideOrder, &c.CardName, &c.SetName, &c.CardNumber,
+		&c.GradeValue, &c.Grader, &c.CertNumber, &c.FrontImageURL, &c.BuyCostCents,
+		&c.MedianCents, &c.Trend30d, &createdAt)
+	c.CreatedAt = parseSQLiteTime(createdAt)
+	return c, err
+}
+
 func (r *SocialRepository) ListPostCards(ctx context.Context, postID string) ([]social.PostCardDetail, error) {
 	rows, err := r.db.QueryContext(ctx,
 		`SELECT spc.purchase_id, spc.slide_order,
@@ -243,13 +253,7 @@ func (r *SocialRepository) ListPostCards(ctx context.Context, postID string) ([]
 	if err != nil {
 		return nil, err
 	}
-	return scanRows(ctx, rows, func(rows *sql.Rows) (social.PostCardDetail, error) {
-		var c social.PostCardDetail
-		err := rows.Scan(&c.PurchaseID, &c.SlideOrder, &c.CardName, &c.SetName, &c.CardNumber,
-			&c.GradeValue, &c.Grader, &c.CertNumber, &c.FrontImageURL, &c.BuyCostCents,
-			&c.MedianCents, &c.Trend30d, &c.CreatedAt)
-		return c, err
-	})
+	return scanRows(ctx, rows, scanPostCardDetail)
 }
 
 func (r *SocialRepository) GetRecentPurchaseIDs(ctx context.Context, since string) ([]string, error) {
@@ -342,19 +346,15 @@ func (r *SocialRepository) GetAvailableCardsForPosts(ctx context.Context) ([]soc
 		 AND p.id NOT IN (
 		     SELECT spc.purchase_id FROM social_post_cards spc
 		     JOIN social_posts sp ON sp.id = spc.post_id
-		     WHERE sp.status NOT IN ('rejected', 'failed')
+		     WHERE sp.status NOT IN (?, ?)
 		 )
-		 ORDER BY p.created_at DESC`)
+		 ORDER BY p.created_at DESC
+		 LIMIT 100`,
+		string(social.PostStatusRejected), string(social.PostStatusFailed))
 	if err != nil {
 		return nil, err
 	}
-	return scanRows(ctx, rows, func(rows *sql.Rows) (social.PostCardDetail, error) {
-		var c social.PostCardDetail
-		err := rows.Scan(&c.PurchaseID, &c.SlideOrder, &c.CardName, &c.SetName, &c.CardNumber,
-			&c.GradeValue, &c.Grader, &c.CertNumber, &c.FrontImageURL, &c.BuyCostCents,
-			&c.MedianCents, &c.Trend30d, &c.CreatedAt)
-		return c, err
-	})
+	return scanRows(ctx, rows, scanPostCardDetail)
 }
 
 func (r *SocialRepository) UpdateSlideURLs(ctx context.Context, id string, urls []string) error {

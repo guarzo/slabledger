@@ -123,9 +123,7 @@ func buildUserPrompt(postType PostType, cards []PostCardDetail) string {
 	}
 }
 
-// --- LLM post suggestion prompts ---
-
-const postSuggestionSystemPrompt = `You are a social media strategist for Card Yeti, a PSA-graded Pokemon card resale business. Your job is to group available inventory cards into engaging Instagram carousel posts.
+const postSuggestionSystemPromptTemplate = `You are a social media strategist for Card Yeti, a PSA-graded Pokemon card resale business. Your job is to group available inventory cards into engaging Instagram carousel posts.
 
 ## Rules
 - Each post should have 3-8 cards with a clear theme (validation allows minCards=1 to maxCards=10; this range guides the LLM toward ideal groupings)
@@ -135,11 +133,11 @@ const postSuggestionSystemPrompt = `You are a social media strategist for Card Y
 - Return valid JSON only, no markdown or explanation
 
 ## Post Type Classification
-Each card has data to help you classify: cost, market price, cost/market ratio, 30-day trend %, and days since acquisition. Use these criteria:
+Each card has data to help you classify: cost, market price, cost/market ratio, 30-day trend %%, and days since acquisition. Use these criteria:
 
-- "hot_deals": cards where cost/market ratio is 70% or below — these are priced well below market value. Prioritize this type when the data supports it.
-- "price_movers": cards with a 30-day trend of +15% or more (or -15% or more) — significant recent market movement. Group upward and downward movers separately when possible.
-- "new_arrivals": cards acquired within the last 7 days. Use this ONLY for genuinely recent additions.
+- "hot_deals": cards where cost/market ratio is %.0f%% or below — these are priced well below market value. Prioritize this type when the data supports it.
+- "price_movers": cards with a 30-day trend of +%.0f%% or more (or -%.0f%% or more) — significant recent market movement. Group upward and downward movers separately when possible.
+- "new_arrivals": cards acquired within the last %d days. Use this ONLY for genuinely recent additions.
 
 A card may qualify for multiple types. Choose the most compelling angle for engagement. If a card is both a hot deal and new, prefer "hot_deals" since the value story is stronger. Aim for a diverse mix of post types across your suggestions — do NOT make all posts the same type.
 
@@ -155,6 +153,11 @@ Return a JSON object:
     }
   ]
 }`
+
+var postSuggestionSystemPrompt = fmt.Sprintf(postSuggestionSystemPromptTemplate,
+	hotDealThreshold*100,
+	priceChangeThreshold*100, priceChangeThreshold*100,
+	newArrivalsWindow)
 
 func buildPostSuggestionPrompt(cards []PostCardDetail) string {
 	var sb strings.Builder
