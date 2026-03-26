@@ -98,6 +98,18 @@ type RevocationRepository interface {
 	UpdateRevocationFlagStatus(ctx context.Context, id string, status string, sentAt *time.Time) error
 }
 
+// PriceReviewRepository handles price review and flag persistence.
+type PriceReviewRepository interface {
+	UpdateReviewedPrice(ctx context.Context, purchaseID string, priceCents int, source string) error
+	GetReviewStats(ctx context.Context, campaignID string) (ReviewStats, error)
+	GetGlobalReviewStats(ctx context.Context) (ReviewStats, error)
+	CreatePriceFlag(ctx context.Context, flag *PriceFlag) (int64, error)
+	ListPriceFlags(ctx context.Context, status string) ([]PriceFlagWithContext, error)
+	ResolvePriceFlag(ctx context.Context, flagID int64, resolvedBy int64) error
+	HasOpenFlag(ctx context.Context, purchaseID string) (bool, error)
+	OpenFlagPurchaseIDs(ctx context.Context) (map[string]bool, error)
+}
+
 // Repository is the composed interface for all campaign persistence.
 // New code should prefer accepting specific sub-interfaces where possible.
 type Repository interface {
@@ -107,6 +119,7 @@ type Repository interface {
 	AnalyticsRepository
 	FinanceRepository
 	RevocationRepository
+	PriceReviewRepository
 }
 
 // PSAUpdateFields contains the PSA-specific fields that can be updated on an existing purchase.
