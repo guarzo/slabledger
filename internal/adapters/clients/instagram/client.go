@@ -137,14 +137,13 @@ func (c *Client) PublishCarousel(ctx context.Context, token, igUserID string, im
 		if err != nil {
 			return nil, fmt.Errorf("create item container for %s: %w", imgURL, err)
 		}
-		containerIDs = append(containerIDs, containerID)
 
-		// Brief pause between container creation to avoid rate limits
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-time.After(500 * time.Millisecond):
+		// Wait for Instagram to finish fetching and processing this image
+		// before creating the next container or the carousel.
+		if err := c.waitForContainer(ctx, token, containerID); err != nil {
+			return nil, fmt.Errorf("wait for item container %s: %w", containerID, err)
 		}
+		containerIDs = append(containerIDs, containerID)
 	}
 
 	carouselID, err := c.createCarouselContainer(ctx, token, igUserID, containerIDs, caption)
