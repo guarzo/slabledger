@@ -43,6 +43,10 @@ func NewAdvisorRefreshScheduler(
 	if cfg.InitialDelay < 0 {
 		cfg.InitialDelay = 0
 	}
+	// Compute initial delay from RefreshHour if set (>= 0).
+	if cfg.RefreshHour >= 0 {
+		cfg.InitialDelay = timeUntilHour(time.Now(), cfg.RefreshHour)
+	}
 	return &AdvisorRefreshScheduler{
 		StopHandle: NewStopHandle(),
 		collector:  collector,
@@ -77,7 +81,7 @@ func (s *AdvisorRefreshScheduler) tick(ctx context.Context) {
 	select {
 	case <-ctx.Done():
 		return
-	case <-time.After(10 * time.Second):
+	case <-time.After(interAnalysisPause):
 	}
 
 	s.runWithRetry(ctx, advisor.AnalysisLiquidation, s.collector.CollectLiquidation)
@@ -88,6 +92,7 @@ func (s *AdvisorRefreshScheduler) tick(ctx context.Context) {
 const (
 	schedulerTransientRetries = 2
 	schedulerRetryBackoff     = 5 * time.Minute
+	interAnalysisPause        = 5 * time.Minute
 )
 
 func (s *AdvisorRefreshScheduler) runWithRetry(ctx context.Context, analysisType advisor.AnalysisType, collect func(context.Context) (string, error)) {
@@ -179,6 +184,16 @@ func (s *AdvisorRefreshScheduler) runAnalysis(ctx context.Context, analysisType 
 		s.logger.Error(saveCtx, "failed to save analysis result", observability.String("type", string(analysisType)), observability.Err(saveErr))
 	}
 	return collectErr
+}
+
+// timeUntilHour returns the duration from now until the next occurrence
+// of the given hour (0-23) in UTC.
+func timeUntilHour(now time.Time, hour int) time.Duration {
+	target := time.Date(now.Year(), now.Month(), now.Day(), hour, 0, 0, 0, time.UTC)
+	if !target.After(now) {
+		target = target.Add(24 * time.Hour)
+	}
+	return target.Sub(now)
 }
 
 // checkAIHealth logs warnings if AI metrics indicate degradation.

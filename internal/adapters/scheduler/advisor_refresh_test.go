@@ -80,6 +80,47 @@ func TestRunAnalysis_UsesExpectedTimeout(t *testing.T) {
 	}
 }
 
+func TestTimeUntilHour(t *testing.T) {
+	tests := []struct {
+		name    string
+		now     time.Time
+		hour    int
+		wantMin time.Duration
+		wantMax time.Duration
+	}{
+		{
+			name:    "target hour is later today",
+			now:     time.Date(2026, 3, 26, 2, 0, 0, 0, time.UTC),
+			hour:    4,
+			wantMin: 1*time.Hour + 59*time.Minute,
+			wantMax: 2*time.Hour + 1*time.Minute,
+		},
+		{
+			name:    "target hour already passed today",
+			now:     time.Date(2026, 3, 26, 10, 0, 0, 0, time.UTC),
+			hour:    4,
+			wantMin: 17*time.Hour + 59*time.Minute,
+			wantMax: 18*time.Hour + 1*time.Minute,
+		},
+		{
+			name:    "target hour is current hour",
+			now:     time.Date(2026, 3, 26, 4, 30, 0, 0, time.UTC),
+			hour:    4,
+			wantMin: 23*time.Hour + 29*time.Minute,
+			wantMax: 23*time.Hour + 31*time.Minute,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := timeUntilHour(tt.now, tt.hour)
+			if got < tt.wantMin || got > tt.wantMax {
+				t.Errorf("timeUntilHour(%v, %d) = %v, want between %v and %v",
+					tt.now, tt.hour, got, tt.wantMin, tt.wantMax)
+			}
+		})
+	}
+}
+
 func TestIsTransientAIError(t *testing.T) {
 	tests := []struct {
 		name string
