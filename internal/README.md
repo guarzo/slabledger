@@ -322,6 +322,103 @@ newClient := newprovider.NewClient(httpClient, cfg.NewProviderAPIKey)
 
 ---
 
+### Example: Adding a New HTTP Handler
+
+**Scenario**: Add a new endpoint to an existing or new handler struct.
+
+**Step 1**: Create the handler method on the appropriate handler struct in `internal/adapters/httpserver/handlers/`
+```go
+// internal/adapters/httpserver/handlers/snapshots.go
+func (h *SnapshotHandler) GetSummary(c *gin.Context) {
+    ctx := c.Request.Context()
+    summary, err := h.snapshotService.GetSummary(ctx)
+    if err != nil {
+        h.logger.Error("get summary failed", observability.Error(err))
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+        return
+    }
+    c.JSON(http.StatusOK, summary)
+}
+```
+
+**Step 2**: Define request/response types in the handler file (or a `types.go` in the same package)
+```go
+// internal/adapters/httpserver/handlers/snapshots.go
+type SnapshotSummaryResponse struct {
+    TotalCount int     `json:"total_count"`
+    TotalValue float64 `json:"total_value"`
+}
+```
+
+**Step 3**: Register the route in `router.go` using the correct middleware chain
+```go
+// internal/adapters/httpserver/router.go
+// Use authRoute() for endpoints that require an authenticated session.
+authRoute(rg, "GET", "/snapshots/summary", handlers.Snapshot.GetSummary)
+```
+
+**Step 4**: If a new handler struct is needed, wire its dependencies in `main.go`
+```go
+// cmd/slabledger/main.go
+snapshotHandler := handlers.NewSnapshotHandler(snapshotService, logger)
+```
+
+**Step 5**: If the response shape is new, add matching TypeScript types in `web/src/types/` to keep the frontend in sync with the Go JSON tags.
+
+---
+
+### Example: Adding a New Scheduler
+
+**Scenario**: Add a background job that runs on a fixed interval.
+
+**Step 1**: Create a scheduler file in `internal/adapters/scheduler/`
+```go
+// internal/adapters/scheduler/myworker.go
+package scheduler
+
+type MyWorker struct {
+    service domain.MyService
+    logger  observability.Logger
+    cfg     MyWorkerConfig
+}
+```
+
+**Step 2**: Define a config struct and implement the `Run(ctx)` loop using `RunLoop`
+```go
+// internal/adapters/scheduler/myworker.go
+type MyWorkerConfig struct {
+    Interval time.Duration
+}
+
+func (w *MyWorker) Run(ctx context.Context) {
+    RunLoop(ctx, w.logger, "myworker", w.cfg.Interval, func() {
+        if err := w.service.DoWork(ctx); err != nil {
+            w.logger.Error("myworker failed", observability.Error(err))
+        }
+    })
+}
+```
+
+**Step 3**: Register the worker in `BuildGroup()` with any prerequisite checks
+```go
+// internal/adapters/scheduler/group.go
+if cfg.MyWorkerEnabled {
+    g.workers = append(g.workers, &MyWorker{
+        service: svc,
+        logger:  logger,
+        cfg:     MyWorkerConfig{Interval: cfg.MyWorkerInterval},
+    })
+}
+```
+
+**Step 4**: If the scheduler needs a domain type that doesn't match an existing adapter directly, add a thin wrapper in `main.go` to convert between types before passing the service in.
+
+**Step 5**: Configure the startup delay in the group timing sequence so the new worker doesn't race with database migrations or other workers that must finish first.
+
+**Step 6**: Document the new scheduler (env vars, interval, purpose) in `docs/SCHEDULERS.md`.
+
+---
+
 ## Common Anti-Patterns to Avoid
 
 ### ❌ Anti-Pattern 1: Business Logic in Adapters
@@ -404,6 +501,19 @@ func TestClient_GetPrice(t *testing.T) {
     assert.NoError(t, err)
 }
 ```
+
+---
+
+## Large File Awareness
+
+Several files in this codebase exceed 500 lines of code. Before adding code to any of them, consider whether the new logic belongs in a separate file.
+
+| File | LOC | Why it's large |
+|------|-----|----------------|
+| `adapters/clients/pricecharting/domain_adapter.go` | 637 | 6-strategy matching pipeline (cohesive) |
+| `adapters/clients/fusionprice/fusion_provider.go` | 635 | Multi-source fusion (single purpose) |
+| `domain/social/service_impl.go` | 731 | Social content orchestration |
+| `domain/campaigns/service_analytics.go` | 609 | Campaign analytics computations |
 
 ---
 

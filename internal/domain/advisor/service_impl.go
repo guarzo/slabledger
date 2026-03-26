@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	defaultMaxToolRounds = 5
+	defaultMaxToolRounds = 3
 	defaultMaxTokens     = 4096
 	defaultTemperature   = 0.3
 	toolCallTimeout      = 30 * time.Second
@@ -26,7 +26,7 @@ var operationTools = map[string][]string{
 		"get_campaign_tuning", "get_inventory_aging", "get_global_inventory",
 		"get_sell_sheet", "get_portfolio_health", "get_portfolio_insights",
 		"get_credit_summary", "get_weekly_review", "get_capital_timeline",
-		"get_channel_velocity",
+		"get_channel_velocity", "get_dashboard_summary",
 	},
 	"campaign_analysis": {
 		"list_campaigns", "get_campaign_pnl", "get_pnl_by_channel",
@@ -39,6 +39,7 @@ var operationTools = map[string][]string{
 		"get_credit_summary", "get_expected_values", "get_inventory_aging",
 		"get_portfolio_health", "suggest_price", "get_cert_lookup",
 		"get_channel_velocity", "get_capital_timeline", "get_suggestion_stats",
+		"get_dashboard_summary",
 	},
 	"purchase_assessment": {
 		"list_campaigns", "get_campaign_tuning", "get_portfolio_insights",
@@ -288,7 +289,7 @@ func (s *service) toolCallingLoop(ctx context.Context, operation AIOperation, sy
 
 // maxPriorContextLen caps the prior analysis content appended to the system prompt.
 // This prevents old, large analyses from consuming too many input tokens.
-const maxPriorContextLen = 4000
+const maxPriorContextLen = 2000
 
 // priorContext fetches the most recent completed analysis of the given type from
 // the cache and returns a system prompt section summarizing it. Returns "" if no

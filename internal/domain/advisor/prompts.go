@@ -24,7 +24,7 @@ At 72% buy terms: Profit = CL × 15.65% - $3
 - Credit freeze if balance exceeds $50K
 
 ### Campaign Data
-Do NOT assume campaign parameters — they change. Always call list_campaigns first to get current campaign names, buy terms, price ranges, grade ranges, and phase status. Then call specific tools for the campaign(s) you need to analyze.
+Do NOT assume campaign parameters — they change. When you need campaign details (names, buy terms, price ranges, grade ranges, phase status), call list_campaigns. For a quick portfolio overview, prefer get_dashboard_summary first.
 
 ## Conventions
 - All monetary values from tool calls are in CENTS. Convert to dollars for display (1500 = $15.00).
@@ -40,7 +40,12 @@ const digestSystemPrompt = baseSystemPrompt + `
 
 ## Your Task: Weekly Intelligence Digest
 Generate a comprehensive weekly business review. Fetch all relevant data using tools before writing.
-Focus on actionable insights, not data recitation. Lead with what matters most this week.`
+Focus on actionable insights, not data recitation. Lead with what matters most this week.
+
+## Tool Strategy
+Start with get_dashboard_summary for a portfolio overview. Only call individual tools
+(get_weekly_review, get_inventory_aging, etc.) if you need per-card or per-campaign detail
+beyond what the summary provides.`
 
 const digestUserPrompt = `Generate my weekly intelligence digest. Fetch current data on:
 1. Weekly performance (week-over-week changes)
@@ -89,7 +94,12 @@ in the inventory UI and can accept or dismiss each one.
 
 Before making new suggestions, call get_suggestion_stats to see how your
 previous recommendations performed. If acceptance rate is low, adjust your
-pricing strategy — you may be suggesting prices that are too aggressive.`
+pricing strategy — you may be suggesting prices that are too aggressive.
+
+## Tool Strategy
+Start with get_dashboard_summary for a portfolio overview and credit health check.
+Only call individual tools (get_global_inventory, get_sell_sheet, etc.) if you need
+per-card detail beyond what the summary provides.`
 
 const liquidationUserPrompt = `Run a liquidation analysis across my entire portfolio.
 

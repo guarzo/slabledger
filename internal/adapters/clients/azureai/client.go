@@ -84,6 +84,14 @@ func (e *rateLimitError) Error() string {
 	return "responses API rate limited: " + e.raw
 }
 
+// capacityError signals an Azure "no_capacity" error — the request exceeds the
+// maximum usage size allowed during peak load on pay-as-you-go tier.
+type capacityError struct{ raw string }
+
+func (e *capacityError) Error() string {
+	return "azure ai capacity exceeded: " + e.raw
+}
+
 const maxStreamRetries = 3
 
 // useResponsesAPI returns true for AI Foundry endpoints that require the Responses API
@@ -133,10 +141,14 @@ func (c *Client) StreamCompletion(ctx context.Context, req ai.CompletionRequest,
 		if isPermanentError(lastErr) {
 			break
 		}
-		// Rate limits need longer backoff; other transient errors use shorter.
+		// Capacity errors need the longest backoff (request too large for peak load).
+		// Rate limits need moderate backoff; other transient errors use shorter.
+		var capErr *capacityError
 		var rlErr *rateLimitError
 		var backoff time.Duration
-		if errors.As(lastErr, &rlErr) {
+		if errors.As(lastErr, &capErr) {
+			backoff = time.Duration(60<<attempt) * time.Second // 60s, 120s, 240s
+		} else if errors.As(lastErr, &rlErr) {
 			backoff = time.Duration(30<<attempt) * time.Second // 30s, 60s, 120s
 		} else {
 			backoff = time.Duration(5<<attempt) * time.Second // 5s, 10s, 20s
@@ -418,9 +430,8 @@ func isPermanentError(err error) bool {
 	if err == nil {
 		return false
 	}
-	var rlErr *rateLimitError
-	if errors.As(err, &rlErr) {
-		return false // 429 is retriable
+	if errors.As(err, new(*rateLimitError)) || errors.As(err, new(*capacityError)) {
+		return false // retriable
 	}
 	msg := err.Error()
 	// Match "azure ai returned 4XX:" where XX is not 29

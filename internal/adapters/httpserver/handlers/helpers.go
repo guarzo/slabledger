@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -64,23 +63,6 @@ func truncateID(id string) string {
 		return id
 	}
 	return id[:8] + "..."
-}
-
-// parseCurrencyString parses a currency string (e.g. "$1,234.56", "1234.56")
-// into a float64 value. Handles whitespace trimming, optional "$" prefix,
-// and comma removal.
-func parseCurrencyString(s string) (float64, error) {
-	s = strings.TrimSpace(s)
-	s = strings.TrimPrefix(s, "$")
-	s = strings.ReplaceAll(s, ",", "")
-	if s == "" {
-		return 0, fmt.Errorf("empty currency string")
-	}
-	v, err := strconv.ParseFloat(s, 64)
-	if err != nil {
-		return 0, fmt.Errorf("invalid currency value %q: %w", s, err)
-	}
-	return v, nil
 }
 
 // extractDomain extracts the domain part from an email address.

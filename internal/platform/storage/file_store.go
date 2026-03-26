@@ -73,10 +73,7 @@ func (s *JSONFileStore) Write(path string, data any) error {
 	}
 
 	if err := os.Rename(tmpPath, path); err != nil {
-		if removeErr := os.Remove(tmpPath); removeErr != nil {
-			// Best effort cleanup - log but don't fail if cleanup fails
-			// Original rename error is more important to return
-		}
+		_ = os.Remove(tmpPath) // Best-effort cleanup; original rename error is more important
 		return fmt.Errorf("failed to rename temp file: %w", err)
 	}
 

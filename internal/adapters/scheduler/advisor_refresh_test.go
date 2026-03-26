@@ -63,7 +63,7 @@ func TestRunAnalysis_UsesExpectedTimeout(t *testing.T) {
 		},
 	}
 	cache := &mockCache{}
-	s := NewAdvisorRefreshScheduler(collector, cache, nil, nopLogger{}, config.AdvisorRefreshConfig{Enabled: true})
+	s := NewAdvisorRefreshScheduler(collector, cache, nil, nopLogger{}, config.AdvisorRefreshConfig{Enabled: true, RefreshHour: -1})
 
 	start := time.Now()
 	err := s.runAnalysis(context.Background(), "digest", collector.collectFn)
@@ -80,6 +80,47 @@ func TestRunAnalysis_UsesExpectedTimeout(t *testing.T) {
 	}
 }
 
+func TestTimeUntilHour(t *testing.T) {
+	tests := []struct {
+		name    string
+		now     time.Time
+		hour    int
+		wantMin time.Duration
+		wantMax time.Duration
+	}{
+		{
+			name:    "target hour is later today",
+			now:     time.Date(2026, 3, 26, 2, 0, 0, 0, time.UTC),
+			hour:    4,
+			wantMin: 1*time.Hour + 59*time.Minute,
+			wantMax: 2*time.Hour + 1*time.Minute,
+		},
+		{
+			name:    "target hour already passed today",
+			now:     time.Date(2026, 3, 26, 10, 0, 0, 0, time.UTC),
+			hour:    4,
+			wantMin: 17*time.Hour + 59*time.Minute,
+			wantMax: 18*time.Hour + 1*time.Minute,
+		},
+		{
+			name:    "target hour is current hour",
+			now:     time.Date(2026, 3, 26, 4, 30, 0, 0, time.UTC),
+			hour:    4,
+			wantMin: 23*time.Hour + 29*time.Minute,
+			wantMax: 23*time.Hour + 31*time.Minute,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := timeUntilHour(tt.now, tt.hour)
+			if got < tt.wantMin || got > tt.wantMax {
+				t.Errorf("timeUntilHour(%v, %d) = %v, want between %v and %v",
+					tt.now, tt.hour, got, tt.wantMin, tt.wantMax)
+			}
+		})
+	}
+}
+
 func TestIsTransientAIError(t *testing.T) {
 	tests := []struct {
 		name string
@@ -92,8 +133,8 @@ func TestIsTransientAIError(t *testing.T) {
 		{"EOF", fmt.Errorf("unexpected EOF"), true},
 		{"i/o timeout", fmt.Errorf("i/o timeout"), true},
 		{"SSE stream incomplete", fmt.Errorf("SSE stream ended without response.completed (possible network interruption)"), true},
-		{"context deadline in LLM round", fmt.Errorf("llm completion (round 3): context deadline exceeded"), true},
-		{"context deadline bare", fmt.Errorf("context deadline exceeded"), true},
+		{"context deadline in LLM round", fmt.Errorf("llm completion (round 3): context deadline exceeded"), false},
+		{"context deadline bare", fmt.Errorf("context deadline exceeded"), false},
 		{"permanent 400 error", fmt.Errorf("azure ai returned 400: bad request"), false},
 		{"unknown error", fmt.Errorf("something unexpected"), false},
 	}

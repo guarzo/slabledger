@@ -108,7 +108,8 @@ func ClassifyAIError(err error) (AIStatus, string) {
 		return AIStatusSuccess, ""
 	}
 	errMsg := err.Error()
-	if strings.Contains(errMsg, "rate limit") || strings.Contains(errMsg, "too_many_requests") || strings.Contains(errMsg, "429") {
+	if strings.Contains(errMsg, "rate limit") || strings.Contains(errMsg, "too_many_requests") ||
+		strings.Contains(errMsg, "429") || strings.Contains(errMsg, "capacity exceeded") {
 		return AIStatusRateLimited, errMsg
 	}
 	return AIStatusError, errMsg

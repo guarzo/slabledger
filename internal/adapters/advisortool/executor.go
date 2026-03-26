@@ -109,7 +109,7 @@ func toJSON(v any) string {
 		}{Error: fmt.Sprintf("marshal failed: %s", err)})
 		return string(errResult)
 	}
-	const maxLen = 30000
+	const maxLen = 8000
 	if len(b) <= maxLen {
 		return string(b)
 	}
@@ -225,6 +225,7 @@ func (e *CampaignToolExecutor) registerTools() {
 	e.registerEvaluatePurchase()
 	e.registerSuggestPrice()
 	e.registerGetSuggestionStats()
+	e.registerGetDashboardSummary()
 }
 
 // --- Tool registrations ---
@@ -533,6 +534,109 @@ func (e *CampaignToolExecutor) registerGetSuggestionStats() {
 			return "", err
 		}
 		return toJSON(result), nil
+	})
+}
+
+// dashboardSummary is a compact aggregate of the four most commonly requested
+// portfolio-level data sources. Adapter-level orchestration — not domain logic.
+type dashboardSummary struct {
+	WeeklyReview struct {
+		PurchaseCount    int `json:"purchaseCount"`
+		PurchaseSpend    int `json:"purchaseSpendCents"`
+		SaleCount        int `json:"saleCount"`
+		SaleRevenue      int `json:"saleRevenueCents"`
+		NetProfit        int `json:"netProfitCents"`
+		PurchaseCountWoW int `json:"purchaseCountWoW"`
+		SaleCountWoW     int `json:"saleCountWoW"`
+		ProfitWoW        int `json:"profitWoWCents"`
+	} `json:"weeklyReview"`
+	Credit struct {
+		BalanceCents   int     `json:"balanceCents"`
+		LimitCents     int     `json:"limitCents"`
+		UtilizationPct float64 `json:"utilizationPct"`
+		AlertLevel     string  `json:"alertLevel"`
+		DaysToInvoice  int     `json:"daysToInvoice"`
+	} `json:"credit"`
+	PortfolioHealth []struct {
+		CampaignName  string `json:"campaignName"`
+		Status        string `json:"status"`
+		Reason        string `json:"reason"`
+		CapitalAtRisk int    `json:"capitalAtRiskCents"`
+	} `json:"portfolioHealth"`
+	ChannelVelocity []struct {
+		Channel   string  `json:"channel"`
+		AvgDays   float64 `json:"avgDaysToSell"`
+		SaleCount int     `json:"saleCount"`
+	} `json:"channelVelocity"`
+	Errors []string `json:"errors,omitempty"`
+}
+
+func (e *CampaignToolExecutor) registerGetDashboardSummary() {
+	e.register(ai.ToolDefinition{
+		Name:        "get_dashboard_summary",
+		Description: "Get a compact portfolio overview: weekly performance, credit health, campaign statuses, and channel velocity. Start here before drilling into specific tools.",
+		Parameters:  emptyObjectParams,
+	}, func(ctx context.Context, _ string) (string, error) {
+		var ds dashboardSummary
+
+		if wr, err := e.svc.GetWeeklyReviewSummary(ctx); err != nil {
+			ds.Errors = append(ds.Errors, "weeklyReview: "+err.Error())
+		} else if wr != nil {
+			ds.WeeklyReview.PurchaseCount = wr.PurchasesThisWeek
+			ds.WeeklyReview.PurchaseSpend = wr.SpendThisWeekCents
+			ds.WeeklyReview.SaleCount = wr.SalesThisWeek
+			ds.WeeklyReview.SaleRevenue = wr.RevenueThisWeekCents
+			ds.WeeklyReview.NetProfit = wr.ProfitThisWeekCents
+			ds.WeeklyReview.PurchaseCountWoW = wr.PurchasesThisWeek - wr.PurchasesLastWeek
+			ds.WeeklyReview.SaleCountWoW = wr.SalesThisWeek - wr.SalesLastWeek
+			ds.WeeklyReview.ProfitWoW = wr.ProfitThisWeekCents - wr.ProfitLastWeekCents
+		}
+
+		if cs, err := e.svc.GetCreditSummary(ctx); err != nil {
+			ds.Errors = append(ds.Errors, "creditSummary: "+err.Error())
+		} else if cs != nil {
+			ds.Credit.BalanceCents = cs.OutstandingCents
+			ds.Credit.LimitCents = cs.CreditLimitCents
+			ds.Credit.UtilizationPct = cs.UtilizationPct
+			ds.Credit.AlertLevel = cs.AlertLevel
+			ds.Credit.DaysToInvoice = cs.DaysToNextInvoice
+		}
+
+		if ph, err := e.svc.GetPortfolioHealth(ctx); err != nil {
+			ds.Errors = append(ds.Errors, "portfolioHealth: "+err.Error())
+		} else if ph != nil {
+			for _, ch := range ph.Campaigns {
+				ds.PortfolioHealth = append(ds.PortfolioHealth, struct {
+					CampaignName  string `json:"campaignName"`
+					Status        string `json:"status"`
+					Reason        string `json:"reason"`
+					CapitalAtRisk int    `json:"capitalAtRiskCents"`
+				}{
+					CampaignName:  ch.CampaignName,
+					Status:        ch.HealthStatus,
+					Reason:        ch.HealthReason,
+					CapitalAtRisk: ch.CapitalAtRisk,
+				})
+			}
+		}
+
+		if cv, err := e.svc.GetPortfolioChannelVelocity(ctx); err != nil {
+			ds.Errors = append(ds.Errors, "channelVelocity: "+err.Error())
+		} else {
+			for _, v := range cv {
+				ds.ChannelVelocity = append(ds.ChannelVelocity, struct {
+					Channel   string  `json:"channel"`
+					AvgDays   float64 `json:"avgDaysToSell"`
+					SaleCount int     `json:"saleCount"`
+				}{
+					Channel:   string(v.Channel),
+					AvgDays:   v.AvgDaysToSell,
+					SaleCount: v.SaleCount,
+				})
+			}
+		}
+
+		return toJSON(ds), nil
 	})
 }
 
