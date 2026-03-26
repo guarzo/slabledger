@@ -1,5 +1,9 @@
 # SlabLedger
 
+[![CI](https://github.com/guarzo/slabledger/actions/workflows/test.yml/badge.svg)](https://github.com/guarzo/slabledger/actions/workflows/test.yml)
+[![Frontend CI](https://github.com/guarzo/slabledger/actions/workflows/frontend-ci.yml/badge.svg)](https://github.com/guarzo/slabledger/actions/workflows/frontend-ci.yml)
+[![Docker Build](https://github.com/guarzo/slabledger/actions/workflows/docker-build.yml/badge.svg)](https://github.com/guarzo/slabledger/actions/workflows/docker-build.yml)
+
 Track PSA Direct Buy campaigns, manage card inventory across multiple sell channels, and analyze profitability with market direction signals.
 
 ## Quick Start

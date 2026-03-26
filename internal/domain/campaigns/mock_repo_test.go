@@ -276,6 +276,16 @@ func (m *mockRepo) GetPurchasesByCertNumbers(_ context.Context, certNumbers []st
 	return result, nil
 }
 
+func (m *mockRepo) GetPurchasesByIDs(_ context.Context, ids []string) (map[string]*Purchase, error) {
+	result := make(map[string]*Purchase, len(ids))
+	for _, id := range ids {
+		if p, ok := m.purchases[id]; ok {
+			result[id] = p
+		}
+	}
+	return result, nil
+}
+
 func (m *mockRepo) UpdatePurchaseCLValue(_ context.Context, id string, clValueCents int, population int) error {
 	p, ok := m.purchases[id]
 	if !ok {
@@ -486,6 +496,48 @@ func (m *mockRepo) AcceptAISuggestion(_ context.Context, purchaseID string, pric
 	p.OverrideSetAt = time.Now().Format(time.RFC3339)
 	p.AISuggestedPriceCents = 0
 	p.AISuggestedAt = ""
+	return nil
+}
+
+func (m *mockRepo) SetEbayExportFlag(_ context.Context, purchaseID string, flaggedAt time.Time) error {
+	p, ok := m.purchases[purchaseID]
+	if !ok {
+		return ErrPurchaseNotFound
+	}
+	p.EbayExportFlaggedAt = &flaggedAt
+	return nil
+}
+
+func (m *mockRepo) ClearEbayExportFlags(_ context.Context, purchaseIDs []string) error {
+	for _, id := range purchaseIDs {
+		if p, ok := m.purchases[id]; ok {
+			p.EbayExportFlaggedAt = nil
+		}
+	}
+	return nil
+}
+
+func (m *mockRepo) ListEbayFlaggedPurchases(_ context.Context) ([]Purchase, error) {
+	var result []Purchase
+	for _, p := range m.purchases {
+		if p.EbayExportFlaggedAt == nil || m.purchaseSales[p.ID] || p.Grader != "PSA" {
+			continue
+		}
+		c, ok := m.campaigns[p.CampaignID]
+		if !ok || c.Phase == PhaseClosed {
+			continue
+		}
+		result = append(result, *p)
+	}
+	return result, nil
+}
+
+func (m *mockRepo) UpdatePurchaseCardYear(_ context.Context, id string, year string) error {
+	p, ok := m.purchases[id]
+	if !ok {
+		return ErrPurchaseNotFound
+	}
+	p.CardYear = year
 	return nil
 }
 

@@ -418,6 +418,14 @@ func (s *service) enrichSingleCert(ctx context.Context, certNum string) {
 		return
 	}
 
+	if info.Year != "" && purchase.CardYear == "" {
+		if err := s.repo.UpdatePurchaseCardYear(ctx, purchase.ID, info.Year); err != nil && s.logger != nil {
+			s.logger.Warn(ctx, "cert enrichment: failed to update card year",
+				observability.String("cert", certNum),
+				observability.Err(err))
+		}
+	}
+
 	// Persist grade from cert if it differs from the purchase
 	grade := info.Grade
 	if grade == 0 {

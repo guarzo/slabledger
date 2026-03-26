@@ -3,26 +3,27 @@ name: Full Browser Matrix Tests
 # Run comprehensive cross-browser tests on-demand or weekly
 # This tests all browsers (Chromium, Firefox, WebKit, Mobile) but doesn't block regular CI
 on:
-  # Manual trigger
   workflow_dispatch:
-  # Weekly on Sunday at 2 AM UTC
   schedule:
-    - cron: '0 2 * * 0'
-  # Trigger on release branches
+    - cron: '0 2 * * 0'  # Weekly on Sunday at 2 AM UTC
   push:
     branches:
       - 'release/**'
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   full-browser-matrix:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
         browser: [chromium, firefox, webkit]
-        # Optional: Enable sharding for faster parallel execution
-        # Uncomment the shard line to split tests across 2 runners per browser
-        # shard: [1, 2]
         include:
           - browser: chromium
             device: 'Desktop Chrome'
@@ -71,9 +72,10 @@ jobs:
         CI: true
 
     - name: Wait for server
-      run: npx wait-on http://localhost:4173 --timeout 60000
+      run: npx wait-on http://localhost:4173 --timeout 90000
 
     - name: Run Playwright tests on ${{ matrix.device }}
+      timeout-minutes: 15
       run: |
         # If sharding is enabled, add --shard flag
         if [ -n "${{ matrix.shard }}" ]; then
@@ -90,7 +92,7 @@ jobs:
       with:
         name: playwright-report-${{ matrix.browser }}${{ matrix.shard && format('-shard-{0}', matrix.shard) || '' }}
         path: web/playwright-report/
-        retention-days: 14
+        retention-days: 7
 
     - name: Upload test videos - ${{ matrix.browser }}
       uses: actions/upload-artifact@v7
@@ -113,6 +115,9 @@ jobs:
 
   mobile-tests:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -162,9 +167,10 @@ jobs:
         CI: true
 
     - name: Wait for server
-      run: npx wait-on http://localhost:4173 --timeout 60000
+      run: npx wait-on http://localhost:4173 --timeout 90000
 
     - name: Run Playwright tests on ${{ matrix.device }}
+      timeout-minutes: 15
       run: npx playwright test --project="${{ matrix.device }}"
       env:
         CI: true
@@ -175,7 +181,7 @@ jobs:
       with:
         name: playwright-report-mobile-${{ matrix.device }}
         path: web/playwright-report/
-        retention-days: 14
+        retention-days: 7
 
     - name: Cleanup preview server
       if: always()

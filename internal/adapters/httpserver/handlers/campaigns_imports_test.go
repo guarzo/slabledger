@@ -336,3 +336,86 @@ func TestHandleGlobalImportCL_ServiceError(t *testing.T) {
 		t.Fatalf("expected 500, got %d; body: %s", rec.Code, rec.Body.String())
 	}
 }
+
+// --- HandleImportCerts ---
+
+func TestHandleImportCerts_Success(t *testing.T) {
+	svc := &mocks.MockCampaignService{
+		ImportCertsFn: func(_ context.Context, certs []string) (*campaigns.CertImportResult, error) {
+			return &campaigns.CertImportResult{
+				Imported:       len(certs),
+				AlreadyExisted: 0,
+				Failed:         0,
+			}, nil
+		},
+	}
+	h := newTestHandler(svc)
+
+	body := strings.NewReader(`{"certNumbers":["111","222"]}`)
+	req := httptest.NewRequest("POST", "/api/purchases/import-certs", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	h.HandleImportCerts(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", rec.Code, rec.Body.String())
+	}
+	var result campaigns.CertImportResult
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Imported != 2 {
+		t.Errorf("imported = %d, want 2", result.Imported)
+	}
+}
+
+func TestHandleImportCerts_EmptyCerts(t *testing.T) {
+	h := newTestHandler(&mocks.MockCampaignService{})
+
+	body := strings.NewReader(`{"certNumbers":[]}`)
+	req := httptest.NewRequest("POST", "/api/purchases/import-certs", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	h.HandleImportCerts(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandleImportCerts_InvalidJSON(t *testing.T) {
+	h := newTestHandler(&mocks.MockCampaignService{})
+
+	body := strings.NewReader(`not json`)
+	req := httptest.NewRequest("POST", "/api/purchases/import-certs", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	h.HandleImportCerts(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandleImportCerts_ServiceError(t *testing.T) {
+	svc := &mocks.MockCampaignService{
+		ImportCertsFn: func(_ context.Context, _ []string) (*campaigns.CertImportResult, error) {
+			return nil, fmt.Errorf("database failure")
+		},
+	}
+	h := newTestHandler(svc)
+
+	body := strings.NewReader(`{"certNumbers":["111"]}`)
+	req := httptest.NewRequest("POST", "/api/purchases/import-certs", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	h.HandleImportCerts(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500; body: %s", rec.Code, rec.Body.String())
+	}
+}

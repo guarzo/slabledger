@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS idx_campaign_purchases_ebay_export_flagged_at;
