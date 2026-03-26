@@ -206,9 +206,10 @@ func TestExecute_ServiceError(t *testing.T) {
 // TestToJSON_TruncatesAt15KB verifies that toJSON output is limited to 15KB.
 func TestToJSON_TruncatesAt15KB(t *testing.T) {
 	// Build a slice that marshals to >15000 bytes
-	items := make([]map[string]string, 200)
+	padding := strings.Repeat("x", 100)
+	items := make([]map[string]string, 300)
 	for i := range items {
-		items[i] = map[string]string{"id": fmt.Sprintf("item-%04d", i), "data": "padding-value-here"}
+		items[i] = map[string]string{"id": fmt.Sprintf("item-%04d", i), "data": padding}
 	}
 	result := toJSON(items)
 	if len(result) > 15000 {

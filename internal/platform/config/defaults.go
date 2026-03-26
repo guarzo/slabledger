@@ -98,7 +98,7 @@ func Default() Config {
 			Interval:      24 * time.Hour,
 			InitialDelay:  2 * time.Minute,
 			RefreshHour:   4,  // 4 AM UTC
-			MaxToolRounds: 5,  // LLM needs ~4 rounds for complex digests
+			MaxToolRounds: 5,  // hard cap; prompt guides LLM to 2 rounds, service default is 3, 5 is safety margin
 		},
 		SocialContent: SocialContentConfig{
 			Enabled:      false, // disabled by default

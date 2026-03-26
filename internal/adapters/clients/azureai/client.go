@@ -146,6 +146,11 @@ func (c *Client) StreamCompletion(ctx context.Context, req ai.CompletionRequest,
 		if isPermanentError(lastErr) {
 			break
 		}
+		// If we captured a response ID and store is enabled, skip further
+		// retries and go straight to poll fallback to avoid duplicate POSTs.
+		if lastResponseID != "" && req.Store && responsesAPI {
+			goto pollFallback
+		}
 		// Capacity errors need the longest backoff (request too large for peak load).
 		// Rate limits need moderate backoff; other transient errors use shorter.
 		var capErr *capacityError
@@ -188,8 +193,11 @@ pollFallback:
 		}
 		if pollErr := c.pollResponseFallback(pollCtx, lastResponseID, stream); pollErr == nil {
 			return nil
-		} else if c.logger != nil {
-			c.logger.Warn(pollCtx, "poll fallback failed", observability.Err(pollErr))
+		} else {
+			if c.logger != nil {
+				c.logger.Warn(pollCtx, "poll fallback failed", observability.Err(pollErr))
+			}
+			return pollErr
 		}
 	}
 
@@ -305,7 +313,7 @@ func (c *Client) pollResponseFallback(ctx context.Context, responseID string, st
 			}
 			stream(chunk)
 			return nil
-		case "failed", "cancelled":
+		case "failed", "cancelled", "incomplete":
 			return fmt.Errorf("response %s: status %s", responseID, result.Status)
 		default:
 			// "queued", "in_progress" — keep polling

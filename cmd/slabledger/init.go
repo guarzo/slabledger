@@ -181,7 +181,7 @@ func initializeSocialService(
 
 	// Use a separate model for social content if SOCIAL_AI_DEPLOYMENT is configured.
 	socialLLM := azureAIClient
-	if azureAIClient != nil && cfg.Adapters.SocialAIDeployment != cfg.Adapters.AzureAIDeployment {
+	if cfg.Adapters.SocialAIDeployment != "" && cfg.Adapters.SocialAIDeployment != cfg.Adapters.AzureAIDeployment {
 		socialClient, socialErr := azureai.NewClient(azureai.Config{
 			Endpoint:       cfg.Adapters.AzureAIEndpoint,
 			APIKey:         cfg.Adapters.AzureAIKey,

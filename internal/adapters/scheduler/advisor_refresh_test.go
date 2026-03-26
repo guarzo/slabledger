@@ -51,7 +51,7 @@ func (m *mockCache) ForceAcquireStale(_ context.Context, _ advisor.AnalysisType,
 }
 
 func TestRunAnalysis_UsesExpectedTimeout(t *testing.T) {
-	const expectedTimeout = 20 * time.Minute
+	expectedTimeout := AnalysisCollectTimeout
 
 	var capturedDeadline time.Time
 	var hasDeadline bool

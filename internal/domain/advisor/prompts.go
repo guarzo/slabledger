@@ -54,8 +54,11 @@ These give you everything for the digest.
 (e.g., a campaign flagged as critical). Call at most 1-2 targeted tools (get_campaign_tuning, get_inventory_aging).
 
 Do NOT call get_campaign_tuning or get_campaign_pnl for every campaign — that data is already
-summarized in get_dashboard_summary and get_portfolio_insights. Do NOT call list_campaigns
-separately — campaign names and statuses are in the dashboard summary.
+summarized in get_dashboard_summary and get_portfolio_insights.
+
+If you need campaign UUIDs for targeted Round 2 calls (get_campaign_tuning, get_inventory_aging),
+you may call list_campaigns in Round 2 as an escape hatch. But prefer using IDs from the
+dashboard summary or portfolio insights when available.
 
 After Round 2, write your report with the data you have. Do not make additional tool calls.`
 

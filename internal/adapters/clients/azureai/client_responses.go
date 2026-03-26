@@ -305,6 +305,11 @@ func (c *Client) parseResponsesSSEStream(ctx context.Context, body io.Reader, st
 				}
 			}
 
+			// Prefer the completed payload's ID, but fall back to the
+			// response.created ID if the completed payload is missing it.
+			if respID == "" {
+				respID = result.responseID
+			}
 			chunk := ai.CompletionChunk{
 				Done: true,
 			}
