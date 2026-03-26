@@ -4,12 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"crypto/tls"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/guarzo/slabledger/internal/adapters/clients/httpx"
 	"github.com/guarzo/slabledger/internal/domain/auth"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
 )
@@ -675,7 +679,7 @@ func TestGetUserInfo(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				// Verify authorization header
 				authHeader := r.Header.Get("Authorization")
 				if authHeader != "Bearer test-access-token" {
@@ -690,18 +694,23 @@ func TestGetUserInfo(t *testing.T) {
 			repo := newMockRepository()
 			logger := mocks.NewMockLogger()
 			service := NewOAuthService(repo, logger, "id", "secret", "http://localhost/cb", nil)
-			service.httpClient = server.Client()
 
-			// We need to make the service call the test server instead of Google.
-			// Since googleUserURL is a const, we'll create a custom test by directly
-			// testing the HTTP mechanics via a wrapper approach.
-			// Instead, we'll test by making the service's httpClient point at our server
-			// and using a custom transport to redirect requests.
-			transport := &urlRewriteTransport{
-				targetURL: server.URL,
-				base:      server.Client().Transport,
+			parsed, err := url.Parse(server.URL)
+			if err != nil {
+				t.Fatalf("parse test server URL: %v", err)
 			}
-			service.httpClient = &http.Client{Transport: transport}
+			testHost := parsed.Host
+			dialer := &net.Dialer{Timeout: 5 * time.Second, KeepAlive: 5 * time.Second}
+			transport := &http.Transport{
+				DialContext: func(ctx context.Context, network, _ string) (net.Conn, error) {
+					return dialer.DialContext(ctx, network, testHost)
+				},
+				TLSClientConfig:     &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // test-only
+				TLSHandshakeTimeout: 5 * time.Second,
+			}
+			httpCfg := httpx.DefaultConfig("test")
+			httpCfg.Transport = transport
+			service.httpClient = httpx.NewClient(httpCfg)
 
 			ctx := context.Background()
 			info, err := service.GetUserInfo(ctx, "test-access-token")
@@ -733,19 +742,3 @@ func TestGetUserInfo(t *testing.T) {
 	}
 }
 
-// urlRewriteTransport rewrites request URLs to point at the test server.
-type urlRewriteTransport struct {
-	targetURL string
-	base      http.RoundTripper
-}
-
-func (t *urlRewriteTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	req = req.Clone(req.Context())
-	req.URL.Scheme = "http"
-	req.URL.Host = strings.TrimPrefix(t.targetURL, "http://")
-	base := t.base
-	if base == nil {
-		base = http.DefaultTransport
-	}
-	return base.RoundTrip(req)
-}

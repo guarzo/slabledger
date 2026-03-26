@@ -5,14 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"net/http"
 	"net/url"
 	"regexp"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/guarzo/slabledger/internal/adapters/clients/httpx"
 	"github.com/guarzo/slabledger/internal/domain/auth"
 	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
 	"github.com/guarzo/slabledger/internal/domain/observability"
@@ -55,7 +54,7 @@ type OAuthService struct {
 	clientSecret string
 	redirectURI  string
 	scopes       []string
-	httpClient   *http.Client
+	httpClient   *httpx.Client
 }
 
 // NewOAuthService creates a new Google OAuth service
@@ -67,6 +66,8 @@ func NewOAuthService(
 	redirectURI string,
 	scopes []string,
 ) *OAuthService {
+	httpCfg := httpx.DefaultConfig("GoogleOAuth")
+	httpCfg.DefaultTimeout = 10 * time.Second
 	return &OAuthService{
 		repo:         repo,
 		logger:       logger,
@@ -74,7 +75,7 @@ func NewOAuthService(
 		clientSecret: clientSecret,
 		redirectURI:  redirectURI,
 		scopes:       scopes,
-		httpClient:   &http.Client{Timeout: 10 * time.Second},
+		httpClient:   httpx.NewClient(httpCfg),
 	}
 }
 
@@ -104,35 +105,12 @@ func (s *OAuthService) ExchangeCodeForTokens(ctx context.Context, code string) (
 	data.Set("redirect_uri", s.redirectURI)
 	data.Set("grant_type", "authorization_code")
 
-	req, err := http.NewRequestWithContext(
-		ctx,
-		http.MethodPost,
-		googleTokenURL,
-		strings.NewReader(data.Encode()),
-	)
+	headers := map[string]string{
+		"Content-Type": "application/x-www-form-urlencoded",
+	}
+	resp, err := s.httpClient.Post(ctx, googleTokenURL, headers, []byte(data.Encode()), 0)
 	if err != nil {
 		return nil, err
-	}
-
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			s.logger.Warn(ctx, "failed to close response body", observability.Err(err))
-		}
-	}()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, apperrors.ProviderAuthFailed("Google", fmt.Errorf("oauth error: status %d, body: %s", resp.StatusCode, sanitizeResponseBody(body, 200)))
 	}
 
 	var tokenResp struct {
@@ -143,12 +121,12 @@ func (s *OAuthService) ExchangeCodeForTokens(ctx context.Context, code string) (
 		Scope        string `json:"scope"`
 	}
 
-	if err := json.Unmarshal(body, &tokenResp); err != nil {
+	if err := json.Unmarshal(resp.Body, &tokenResp); err != nil {
 		return nil, err
 	}
 
 	if tokenResp.AccessToken == "" {
-		return nil, apperrors.ProviderAuthFailed("Google", fmt.Errorf("received empty access token (status %d, body: %s)", resp.StatusCode, sanitizeResponseBody(body, 200)))
+		return nil, apperrors.ProviderAuthFailed("Google", fmt.Errorf("received empty access token (status %d, body: %s)", resp.StatusCode, sanitizeResponseBody(resp.Body, 200)))
 	}
 
 	tokens := &auth.UserTokens{
@@ -164,29 +142,12 @@ func (s *OAuthService) ExchangeCodeForTokens(ctx context.Context, code string) (
 
 // GetUserInfo fetches user profile information from Google using the access token
 func (s *OAuthService) GetUserInfo(ctx context.Context, accessToken string) (*auth.UserInfo, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, googleUserURL, nil)
+	headers := map[string]string{
+		"Authorization": "Bearer " + accessToken,
+	}
+	resp, err := s.httpClient.Get(ctx, googleUserURL, headers, 0)
 	if err != nil {
 		return nil, err
-	}
-	req.Header.Set("Authorization", "Bearer "+accessToken)
-
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			s.logger.Warn(ctx, "failed to close response body", observability.Err(err))
-		}
-	}()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, apperrors.ProviderAuthFailed("Google", fmt.Errorf("userinfo request failed: status %d, body: %s", resp.StatusCode, sanitizeResponseBody(body, 200)))
 	}
 
 	var userInfo struct {
@@ -196,7 +157,7 @@ func (s *OAuthService) GetUserInfo(ctx context.Context, accessToken string) (*au
 		Picture string `json:"picture"`
 	}
 
-	if err := json.Unmarshal(body, &userInfo); err != nil {
+	if err := json.Unmarshal(resp.Body, &userInfo); err != nil {
 		return nil, err
 	}
 
