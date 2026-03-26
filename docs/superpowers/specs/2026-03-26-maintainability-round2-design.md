@@ -8,6 +8,24 @@
 
 Address remaining maintainability issues found during post-refactor review: documentation gaps, error pattern inconsistency, httpx migration for 3 more clients, and 3 file splits.
 
+## Cross-Cutting: Remove Redundant Comments
+
+During every code task (D2–D6), remove comments that merely restate what the code does. Keep only comments that explain *why* something is non-obvious or warn about gotchas.
+
+**Remove** (restates the code):
+```go
+// CreatePurchase creates a new purchase.
+func (s *service) CreatePurchase(...) { ... }
+```
+
+**Keep** (explains why):
+```go
+// Chinese sets: mapChineseNumber translates PSA printed numbers to
+// PC species-based numbers (CBB1=700+n, CBB2=600+n).
+```
+
+Apply this judgment to every file touched in D2–D6. Do not go hunting through untouched files.
+
 ## D1. Documentation fixes (CLAUDE.md)
 
 ### D1a. Fix migration count
