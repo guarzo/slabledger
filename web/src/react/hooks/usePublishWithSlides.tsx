@@ -53,9 +53,13 @@ async function renderSlideToJpeg(
       backgroundColor: '#0a0e1a',
     });
 
-    // Convert data URL to Blob
-    const response = await fetch(dataUrl);
-    return await response.blob();
+    // Convert data URL to Blob without fetch (avoids CSP connect-src restriction)
+    const [header, base64] = dataUrl.split(',');
+    const mime = header.match(/:(.*?);/)?.[1] ?? 'image/jpeg';
+    const bytes = atob(base64);
+    const buf = new Uint8Array(bytes.length);
+    for (let i = 0; i < bytes.length; i++) buf[i] = bytes.charCodeAt(i);
+    return new Blob([buf], { type: mime });
   } finally {
     root.unmount();
     document.body.removeChild(container);
