@@ -6,12 +6,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"net/url"
 	"strings"
 	"time"
 
+	"github.com/guarzo/slabledger/internal/adapters/clients/httpx"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
@@ -44,17 +43,19 @@ type Client struct {
 	appID       string
 	appSecret   string
 	redirectURI string
-	httpClient  *http.Client
+	httpClient  *httpx.Client
 	logger      observability.Logger
 }
 
 // NewClient creates a new Instagram API client.
 func NewClient(appID, appSecret, redirectURI string, logger observability.Logger) *Client {
+	httpCfg := httpx.DefaultConfig("Instagram")
+	httpCfg.DefaultTimeout = 30 * time.Second
 	return &Client{
 		appID:       appID,
 		appSecret:   appSecret,
 		redirectURI: redirectURI,
-		httpClient:  &http.Client{Timeout: 30 * time.Second},
+		httpClient:  httpx.NewClient(httpCfg),
 		logger:      logger,
 	}
 }
@@ -74,19 +75,16 @@ func (c *Client) GetLoginURL(state string) string {
 // ExchangeCode exchanges an authorization code for a long-lived access token.
 // Flow: code → short-lived token → long-lived token, plus fetches user profile.
 func (c *Client) ExchangeCode(ctx context.Context, code string) (*TokenInfo, error) {
-	// Step 1: Exchange code for short-lived token
 	shortToken, userID, err := c.exchangeCodeForShortLived(ctx, code)
 	if err != nil {
 		return nil, fmt.Errorf("exchange code: %w", err)
 	}
 
-	// Step 2: Exchange short-lived for long-lived token
 	longToken, expiresIn, err := c.exchangeForLongLived(ctx, shortToken)
 	if err != nil {
 		return nil, fmt.Errorf("exchange for long-lived: %w", err)
 	}
 
-	// Step 3: Get user profile
 	username, err := c.getUsername(ctx, longToken, userID)
 	if err != nil {
 		c.logger.Warn(ctx, "failed to get Instagram username", observability.Err(err))
@@ -108,17 +106,12 @@ func (c *Client) RefreshToken(ctx context.Context, token string) (*TokenInfo, er
 		"access_token": {token},
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, refreshTokenURL+"?"+params.Encode(), nil)
-	if err != nil {
-		return nil, err
-	}
-
 	var resp struct {
 		AccessToken string `json:"access_token"`
 		TokenType   string `json:"token_type"`
 		ExpiresIn   int64  `json:"expires_in"`
 	}
-	if err := c.doJSON(req, &resp); err != nil {
+	if err := c.doGet(ctx, refreshTokenURL+"?"+params.Encode(), &resp); err != nil {
 		return nil, fmt.Errorf("refresh token: %w", err)
 	}
 
@@ -138,7 +131,6 @@ func (c *Client) PublishCarousel(ctx context.Context, token, igUserID string, im
 		return c.PublishSingleImage(ctx, token, igUserID, imageURLs[0], caption)
 	}
 
-	// Step 1: Create item containers for each image
 	var containerIDs []string
 	for _, imgURL := range imageURLs {
 		containerID, err := c.createItemContainer(ctx, token, igUserID, imgURL)
@@ -155,13 +147,11 @@ func (c *Client) PublishCarousel(ctx context.Context, token, igUserID string, im
 		}
 	}
 
-	// Step 2: Create carousel container
 	carouselID, err := c.createCarouselContainer(ctx, token, igUserID, containerIDs, caption)
 	if err != nil {
 		return nil, fmt.Errorf("create carousel container: %w", err)
 	}
 
-	// Step 3: Wait for container to be ready, then publish
 	if err := c.waitForContainer(ctx, token, carouselID); err != nil {
 		return nil, fmt.Errorf("wait for carousel: %w", err)
 	}
@@ -176,7 +166,6 @@ func (c *Client) PublishCarousel(ctx context.Context, token, igUserID string, im
 
 // PublishSingleImage publishes a single image post.
 func (c *Client) PublishSingleImage(ctx context.Context, token, igUserID, imageURL, caption string) (*PublishResult, error) {
-	// Create media container
 	params := url.Values{
 		"image_url":    {imageURL},
 		"caption":      {caption},
@@ -190,12 +179,10 @@ func (c *Client) PublishSingleImage(ctx context.Context, token, igUserID, imageU
 		return nil, fmt.Errorf("create media container: %w", err)
 	}
 
-	// Wait for ready
 	if err := c.waitForContainer(ctx, token, resp.ID); err != nil {
 		return nil, fmt.Errorf("wait for media: %w", err)
 	}
 
-	// Publish
 	postID, err := c.publishContainer(ctx, token, igUserID, resp.ID)
 	if err != nil {
 		return nil, fmt.Errorf("publish: %w", err)
@@ -242,17 +229,12 @@ func (c *Client) exchangeForLongLived(ctx context.Context, shortToken string) (t
 		"access_token":  {shortToken},
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, longLivedURL+"?"+params.Encode(), nil)
-	if err != nil {
-		return "", 0, err
-	}
-
 	var resp struct {
 		AccessToken string `json:"access_token"`
 		TokenType   string `json:"token_type"`
 		ExpiresIn   int64  `json:"expires_in"`
 	}
-	if err := c.doJSON(req, &resp); err != nil {
+	if err := c.doGet(ctx, longLivedURL+"?"+params.Encode(), &resp); err != nil {
 		return "", 0, err
 	}
 
@@ -261,15 +243,11 @@ func (c *Client) exchangeForLongLived(ctx context.Context, shortToken string) (t
 
 func (c *Client) getUsername(ctx context.Context, token, userID string) (string, error) {
 	reqURL := fmt.Sprintf("%s/%s?fields=username&access_token=%s", graphURL, userID, url.QueryEscape(token))
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
-	if err != nil {
-		return "", err
-	}
 
 	var resp struct {
 		Username string `json:"username"`
 	}
-	if err := c.doJSON(req, &resp); err != nil {
+	if err := c.doGet(ctx, reqURL, &resp); err != nil {
 		return "", err
 	}
 	return resp.Username, nil
@@ -311,15 +289,11 @@ func (c *Client) createCarouselContainer(ctx context.Context, token, igUserID st
 func (c *Client) waitForContainer(ctx context.Context, token, containerID string) error {
 	for range 30 { // max ~30 seconds
 		reqURL := fmt.Sprintf("%s/%s?fields=status_code&access_token=%s", graphURL, containerID, url.QueryEscape(token))
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
-		if err != nil {
-			return err
-		}
 
 		var resp struct {
 			StatusCode string `json:"status_code"`
 		}
-		if err := c.doJSON(req, &resp); err != nil {
+		if err := c.doGet(ctx, reqURL, &resp); err != nil {
 			return err
 		}
 
@@ -362,46 +336,57 @@ func (c *Client) publishContainer(ctx context.Context, token, igUserID, containe
 	return resp.ID, nil
 }
 
+// postForm sends a form-encoded POST and decodes the JSON response into dest.
+// Instagram API errors are parsed and returned as descriptive errors.
 func (c *Client) postForm(ctx context.Context, endpoint string, params url.Values, dest any) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(params.Encode()))
+	headers := map[string]string{
+		"Content-Type": "application/x-www-form-urlencoded",
+	}
+	body := []byte(params.Encode())
+	resp, err := c.httpClient.Post(ctx, endpoint, headers, body, 0)
 	if err != nil {
+		// Even on error, resp may contain the Instagram error body
+		if resp != nil {
+			if apiErr := parseInstagramError(resp.Body); apiErr != "" {
+				return fmt.Errorf("%s", apiErr)
+			}
+		}
 		return err
 	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	return c.doJSON(req, dest)
+	return json.Unmarshal(resp.Body, dest)
 }
 
-func (c *Client) doJSON(req *http.Request, dest any) error {
-	resp, err := c.httpClient.Do(req)
+// doGet sends a GET request and decodes the JSON response into dest.
+// Instagram API errors are parsed and returned as descriptive errors.
+func (c *Client) doGet(ctx context.Context, reqURL string, dest any) error {
+	resp, err := c.httpClient.Get(ctx, reqURL, nil, 0)
 	if err != nil {
+		// Even on error, resp may contain the Instagram error body
+		if resp != nil {
+			if apiErr := parseInstagramError(resp.Body); apiErr != "" {
+				return fmt.Errorf("%s", apiErr)
+			}
+		}
 		return err
 	}
-	defer resp.Body.Close() //nolint:errcheck
+	return json.Unmarshal(resp.Body, dest)
+}
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("read response: %w", err)
+// parseInstagramError attempts to extract a human-readable error from an Instagram API response body.
+// Returns empty string if no Instagram error is present.
+func parseInstagramError(body []byte) string {
+	if len(body) == 0 {
+		return ""
 	}
-
-	if resp.StatusCode >= 400 {
-		// Try to extract error message from Instagram API response
-		var apiErr struct {
-			Error struct {
-				Message string `json:"message"`
-				Type    string `json:"type"`
-				Code    int    `json:"code"`
-			} `json:"error"`
-		}
-		if json.Unmarshal(body, &apiErr) == nil && apiErr.Error.Message != "" {
-			return fmt.Errorf("instagram API error %d: %s", apiErr.Error.Code, apiErr.Error.Message)
-		}
-		// Truncate body for safety
-		truncated := string(body)
-		if len(truncated) > 200 {
-			truncated = truncated[:200]
-		}
-		return fmt.Errorf("instagram API HTTP %d: %s", resp.StatusCode, truncated)
+	var apiErr struct {
+		Error struct {
+			Message string `json:"message"`
+			Type    string `json:"type"`
+			Code    int    `json:"code"`
+		} `json:"error"`
 	}
-
-	return json.Unmarshal(body, dest)
+	if json.Unmarshal(body, &apiErr) == nil && apiErr.Error.Message != "" {
+		return fmt.Sprintf("instagram API error %d: %s", apiErr.Error.Code, apiErr.Error.Message)
+	}
+	return ""
 }
