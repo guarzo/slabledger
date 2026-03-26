@@ -4,7 +4,7 @@
 
 slabledger is a graded card portfolio tracker and pricing tool using Hexagonal Architecture. The system manages PSA grading campaigns, tracks multi-channel sales (eBay, TCGPlayer, local), computes P&L analytics, and provides market direction signals via fused pricing from multiple sources.
 
-**Stack**: Go 1.25.2 | SQLite (WAL) | stdlib net/http mux | slog logging | React + TypeScript + Vite + Tailwind
+**Stack**: Go 1.26 | SQLite (WAL) | stdlib net/http mux | slog logging | React + TypeScript + Vite + Tailwind
 
 ## Hexagonal Architecture
 
