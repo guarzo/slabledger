@@ -371,6 +371,8 @@ func (rt *Router) Setup() http.Handler {
 		mux.Handle("POST /api/purchases/import-psa", authRoute(rt.campaignsHandler.HandleGlobalImportPSA))
 		mux.Handle("GET /api/purchases/export-cl", authRoute(rt.campaignsHandler.HandleGlobalExportCL))
 		mux.Handle("POST /api/purchases/import-external", authRoute(rt.campaignsHandler.HandleGlobalImportExternal))
+		mux.Handle("POST /api/purchases/import-orders", authRoute(rt.campaignsHandler.HandleImportOrders))
+		mux.Handle("POST /api/purchases/import-orders/confirm", authRoute(rt.campaignsHandler.HandleConfirmOrdersSales))
 		mux.Handle("POST /api/purchases/import-certs", authRoute(rt.campaignsHandler.HandleImportCerts))
 		mux.Handle("GET /api/purchases/export-ebay", authRoute(rt.campaignsHandler.HandleListEbayExport))
 		mux.Handle("POST /api/purchases/export-ebay/generate", authRoute(rt.campaignsHandler.HandleGenerateEbayCSV))

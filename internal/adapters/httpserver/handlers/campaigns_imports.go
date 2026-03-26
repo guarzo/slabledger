@@ -338,6 +338,68 @@ func (h *CampaignsHandler) HandleGenerateEbayCSV(w http.ResponseWriter, r *http.
 	_, _ = w.Write(csvBytes) //nolint:errcheck // response already committed; write error unactionable
 }
 
+// HandleImportOrders handles POST /api/purchases/import-orders.
+// Accepts an orders export CSV, matches PSA certs against inventory, and returns
+// categorized results for review before confirmation.
+func (h *CampaignsHandler) HandleImportOrders(w http.ResponseWriter, r *http.Request) {
+	rows, ok := h.parseGlobalCSVUpload(w, r)
+	if !ok {
+		return
+	}
+
+	orderRows, skipped, err := campaigns.ParseOrdersExportRows(rows)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	if len(orderRows) == 0 {
+		// No valid PSA rows — return result with only skipped items
+		writeJSON(w, http.StatusOK, &campaigns.OrdersImportResult{
+			Skipped: skipped,
+		})
+		return
+	}
+
+	result, svcErr := h.service.ImportOrdersSales(r.Context(), orderRows)
+	if svcErr != nil {
+		h.logger.Error(r.Context(), "orders import failed", observability.Err(svcErr))
+		writeError(w, http.StatusInternalServerError, "Internal server error")
+		return
+	}
+
+	// Merge parser-level skips into the result
+	result.Skipped = append(result.Skipped, skipped...)
+
+	writeJSON(w, http.StatusOK, result)
+}
+
+// HandleConfirmOrdersSales handles POST /api/purchases/import-orders/confirm.
+// Accepts confirmed matches and creates sale records.
+func (h *CampaignsHandler) HandleConfirmOrdersSales(w http.ResponseWriter, r *http.Request) {
+	const maxBytes = 1 << 20 // 1MB
+	r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
+
+	var items []campaigns.OrdersConfirmItem
+	if err := json.NewDecoder(r.Body).Decode(&items); err != nil {
+		writeError(w, http.StatusBadRequest, "Invalid JSON body")
+		return
+	}
+	if len(items) == 0 {
+		writeError(w, http.StatusBadRequest, "No items provided")
+		return
+	}
+
+	result, err := h.service.ConfirmOrdersSales(r.Context(), items)
+	if err != nil {
+		h.logger.Error(r.Context(), "confirm orders sales failed", observability.Err(err))
+		writeError(w, http.StatusInternalServerError, "Internal server error")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, result)
+}
+
 // parseGlobalCSVUpload reads and validates an uploaded CSV file (no campaign ID in path).
 func (h *CampaignsHandler) parseGlobalCSVUpload(w http.ResponseWriter, r *http.Request) (records [][]string, ok bool) {
 	ctx := r.Context()
