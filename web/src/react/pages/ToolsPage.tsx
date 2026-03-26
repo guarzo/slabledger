@@ -5,6 +5,7 @@ import OperationsTab, { type OperationState } from './campaigns/OperationsTab';
 import ShopifySyncPage from './ShopifySyncPage';
 import CertEntryTab from './tools/CertEntryTab';
 import EbayExportTab from './tools/EbayExportTab';
+import ImportSalesTab from './tools/ImportSalesTab';
 import type { GlobalImportResult, PSAImportResult, ExternalImportResult } from '../../types/campaigns';
 import TabNavigation from '../ui/TabNavigation';
 import { SectionErrorBoundary } from '../ui';
@@ -14,6 +15,7 @@ const TABS = [
   { id: 'price-sync', label: 'Price Sync' },
   { id: 'cert-entry', label: 'Cert Entry' },
   { id: 'ebay-export', label: 'eBay Export' },
+  { id: 'import-sales', label: 'Import Sales' },
 ] as const;
 
 export default function ToolsPage() {
@@ -64,6 +66,12 @@ export default function ToolsPage() {
         <Tabs.Content value="ebay-export">
           <SectionErrorBoundary sectionName="eBay Export">
             <EbayExportTab />
+          </SectionErrorBoundary>
+        </Tabs.Content>
+
+        <Tabs.Content value="import-sales">
+          <SectionErrorBoundary sectionName="Import Sales">
+            <ImportSalesTab />
           </SectionErrorBoundary>
         </Tabs.Content>
       </Tabs.Root>
