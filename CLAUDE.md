@@ -120,6 +120,8 @@ INSTAGRAM_APP_SECRET="..."    # Instagram OAuth app secret
 INSTAGRAM_REDIRECT_URI="..."  # Instagram OAuth redirect URI
 SOCIAL_CONTENT_ENABLED="true" # Enable/disable social content scheduler
 SOCIAL_CONTENT_INTERVAL="24h" # Social content detection interval
+ADVISOR_REFRESH_HOUR="4"     # Hour (0-23 UTC) to run advisor; -1 = use InitialDelay
+SOCIAL_CONTENT_HOUR="5"      # Hour (0-23 UTC) to run social content; -1 = use InitialDelay
 AZURE_AI_ENDPOINT="..."       # Azure OpenAI endpoint URL
 AZURE_AI_API_KEY="..."        # Azure OpenAI API key
 AZURE_AI_DEPLOYMENT="..."     # Azure OpenAI deployment name
@@ -193,164 +195,24 @@ Simplest reference: `internal/adapters/clients/pokemonprice/`
 
 See [docs/API.md](docs/API.md) for detailed request/response shapes.
 
-**Middleware stack** (outside-in): RateLimiter → Recovery → SecurityHeaders → Timing → Logging → Gzip → CORS
+| Group | Routes | Auth | Prefix |
+|-------|--------|------|--------|
+| Authentication | 4 | AuthRateLimit | `/auth/`, `/api/auth/` |
+| Health & Admin | 10 | None/Admin | `/api/health`, `/api/admin/` |
+| Favorites | 5 | Auth | `/api/favorites/` |
+| Cards & Pricing | 3 | Auth/Admin | `/api/cards/`, `/api/price-hints` |
+| Campaign CRUD | 5 | Auth | `/api/campaigns/` |
+| Campaign Analytics | 12 | Auth | `/api/campaigns/{id}/` |
+| Global Purchases | 9 | Auth | `/api/purchases/` |
+| Price Override & AI | 4 | Auth | `/api/purchases/{id}/` |
+| Credit & Invoices | 5 | Auth | `/api/credit/` |
+| Portfolio | 9 | Auth | `/api/portfolio/` |
+| Utilities | 2 | Auth | `/api/certs/`, `/api/shopify/` |
+| AI Advisor | 6 | Auth | `/api/advisor/` |
+| Social & Instagram | 14 | Admin | `/api/social/`, `/api/instagram/` |
+| Pricing API v1 | 3 | APIKey | `/api/v1/` |
 
-**Authentication** — Routes marked `session` require a valid browser session cookie; `admin` additionally requires `is_admin = true`; `api-key` uses `Authorization: Bearer <PRICING_API_KEY>`; `public` has no auth requirement.
-
-### Authentication
-
-| Route | Method | Auth | Handler |
-|-------|--------|------|---------|
-| `/auth/google/login` | GET | public | `HandleGoogleLogin` |
-| `/auth/google/callback` | GET | public | `HandleGoogleCallback` |
-| `/auth/instagram/callback` | GET | public | `HandleCallback` |
-| `/api/auth/logout` | POST | public | `HandleLogout` |
-| `/api/auth/user` | GET | session | `HandleGetCurrentUser` |
-
-### Health / Admin
-
-| Route | Method | Auth | Handler |
-|-------|--------|------|---------|
-| `/api/health` | GET | public | `HandleHealthCheck` |
-| `/api/admin/allowlist` | GET, POST | admin | `HandleListAllowedEmails`, `HandleAddAllowedEmail` |
-| `/api/admin/allowlist/{email}` | DELETE | admin | `HandleRemoveAllowedEmail` |
-| `/api/admin/users` | GET | admin | `HandleListUsers` |
-| `/api/admin/api-usage` | GET | admin | `HandleAPIUsage` |
-| `/api/admin/cache-stats` | GET | admin | `HandleCacheStats` |
-| `/api/admin/backup` | GET | admin | `HandleBackup` |
-| `/api/admin/metrics` | GET | admin | `HandleMetrics` |
-| `/api/admin/pricing-diagnostics` | GET | admin | `HandlePricingDiagnostics` |
-| `/api/admin/card-requests` | GET | admin | `HandleListCardRequests` |
-| `/api/admin/card-requests/{id}/submit` | POST | admin | `HandleSubmitCardRequest` |
-| `/api/admin/card-requests/submit-all` | POST | admin | `HandleSubmitAllCardRequests` |
-| `/api/admin/price-override-stats` | GET | admin | `HandlePriceOverrideStats` |
-| `/api/admin/ai-usage` | GET | admin | `HandleAIUsage` |
-| `/api/price-hints` | GET/POST/DELETE | admin | `HandlePriceHints` |
-
-### Favorites
-
-| Route | Method | Auth | Handler |
-|-------|--------|------|---------|
-| `/api/favorites` | GET, POST, DELETE | session | `HandleListFavorites`, `HandleAddFavorite`, `HandleRemoveFavorite` |
-| `/api/favorites/toggle` | POST | session | `HandleToggleFavorite` |
-| `/api/favorites/check` | POST | session | `HandleCheckFavorites` |
-
-### Cards / Pricing
-
-| Route | Method | Auth | Handler |
-|-------|--------|------|---------|
-| `/api/cards/search` | GET | session | `HandleCardSearch` |
-| `/api/cards/pricing` | GET | session | `HandleCardPricing` |
-
-### Campaign CRUD
-
-| Route | Method | Auth | Handler |
-|-------|--------|------|---------|
-| `/api/campaigns` | GET | session | `HandleListCampaigns` |
-| `/api/campaigns` | POST | session | `HandleCreateCampaign` |
-| `/api/campaigns/{id}` | GET | session | `HandleGetCampaign` |
-| `/api/campaigns/{id}` | PUT | session | `HandleUpdateCampaign` |
-| `/api/campaigns/{id}` | DELETE | session | `HandleDelete` |
-| `/api/campaigns/{id}/purchases` | GET | session | `HandleListPurchases` |
-| `/api/campaigns/{id}/purchases` | POST | session | `HandleCreatePurchase` |
-| `/api/campaigns/{id}/purchases/quick-add` | POST | session | `HandleQuickAdd` |
-| `/api/campaigns/{id}/purchases/{purchaseId}` | DELETE | session | `HandleDeletePurchase` |
-| `/api/campaigns/{id}/sales` | GET | session | `HandleListSales` |
-| `/api/campaigns/{id}/sales` | POST | session | `HandleCreateSale` |
-| `/api/campaigns/{id}/sales/bulk` | POST | session | `HandleBulkSales` |
-
-### Campaign Analytics
-
-| Route | Method | Auth | Handler |
-|-------|--------|------|---------|
-| `/api/campaigns/{id}/pnl` | GET | session | `HandleCampaignPNL` |
-| `/api/campaigns/{id}/pnl-by-channel` | GET | session | `HandlePNLByChannel` |
-| `/api/campaigns/{id}/fill-rate` | GET | session | `HandleFillRate` |
-| `/api/campaigns/{id}/days-to-sell` | GET | session | `HandleDaysToSell` |
-| `/api/campaigns/{id}/inventory` | GET | session | `HandleInventory` |
-| `/api/campaigns/{id}/sell-sheet` | POST | session | `HandleSellSheet` |
-| `/api/campaigns/{id}/tuning` | GET | session | `HandleTuning` |
-| `/api/campaigns/{id}/crack-candidates` | GET | session | `HandleCrackCandidates` |
-| `/api/campaigns/{id}/expected-values` | GET | session | `HandleExpectedValues` |
-| `/api/campaigns/{id}/evaluate-purchase` | POST | session | `HandleEvaluatePurchase` |
-| `/api/campaigns/{id}/activation-checklist` | GET | session | `HandleActivationChecklist` |
-| `/api/campaigns/{id}/projections` | GET | session | `HandleProjections` |
-
-### Portfolio
-
-| Route | Method | Auth | Handler |
-|-------|--------|------|---------|
-| `/api/portfolio/health` | GET | session | `HandlePortfolioHealth` |
-| `/api/portfolio/channel-velocity` | GET | session | `HandlePortfolioChannelVelocity` |
-| `/api/portfolio/insights` | GET | session | `HandlePortfolioInsights` |
-| `/api/portfolio/suggestions` | GET | session | `HandleCampaignSuggestions` |
-| `/api/portfolio/revocations` | GET, POST | session | `HandleListRevocationFlags`, `HandleCreateRevocationFlag` |
-| `/api/portfolio/revocations/{flagId}/email` | GET | session | `HandleRevocationEmail` |
-| `/api/portfolio/capital-timeline` | GET | session | `HandleCapitalTimeline` |
-| `/api/portfolio/weekly-review` | GET | session | `HandleWeeklyReview` |
-| `/api/sell-sheet` | GET | session | `HandleGlobalSellSheet` |
-| `/api/inventory` | GET | session | `HandleGlobalInventory` |
-
-### Global Purchases
-
-| Route | Method | Auth | Handler |
-|-------|--------|------|---------|
-| `/api/purchases/refresh-cl` | POST | session | `HandleGlobalRefreshCL` |
-| `/api/purchases/import-cl` | POST | session | `HandleGlobalImportCL` |
-| `/api/purchases/import-psa` | POST | session | `HandleGlobalImportPSA` |
-| `/api/purchases/export-cl` | GET | session | `HandleGlobalExportCL` |
-| `/api/purchases/import-external` | POST | session | `HandleGlobalImportExternal` |
-| `/api/purchases/import-certs` | POST | session | `HandleImportCerts` |
-| `/api/purchases/export-ebay` | GET | session | `HandleListEbayExport` |
-| `/api/purchases/export-ebay/generate` | POST | session | `HandleGenerateEbayCSV` |
-| `/api/purchases/{purchaseId}/campaign` | PATCH | session | `HandleReassignPurchase` |
-| `/api/purchases/{purchaseId}/price-override` | PATCH, DELETE | session | `HandleSetPriceOverride`, `HandleClearPriceOverride` |
-| `/api/purchases/{purchaseId}/accept-ai-suggestion` | POST | session | `HandleAcceptAISuggestion` |
-| `/api/purchases/{purchaseId}/ai-suggestion` | DELETE | session | `HandleDismissAISuggestion` |
-| `/api/certs/{certNumber}` | GET | session | `HandleCertLookup` |
-| `/api/credit/summary` | GET | session | `HandleCreditSummary` |
-| `/api/credit/config` | GET, PUT | session | `HandleGetCashflowConfig`, `HandleUpdateCashflowConfig` |
-| `/api/credit/invoices` | GET, PUT | session | `HandleListInvoices`, `HandleUpdateInvoice` |
-| `/api/shopify/price-sync` | POST | session | `HandleShopifyPriceSync` |
-
-### AI Advisor
-
-| Route | Method | Auth | Handler |
-|-------|--------|------|---------|
-| `/api/advisor/digest` | POST | session | `HandleDigest` |
-| `/api/advisor/campaign-analysis` | POST | session | `HandleCampaignAnalysis` |
-| `/api/advisor/liquidation-analysis` | POST | session | `HandleLiquidationAnalysis` |
-| `/api/advisor/purchase-assessment` | POST | session | `HandlePurchaseAssessment` |
-| `/api/advisor/cache/{type}` | GET | session | `HandleGetCached` |
-| `/api/advisor/refresh/{type}` | POST | session | `HandleRefreshTrigger` |
-
-### Social / Instagram
-
-| Route | Method | Auth | Handler |
-|-------|--------|------|---------|
-| `/api/social/posts` | GET | admin | `HandleListPosts` |
-| `/api/social/posts/{id}` | GET | admin | `HandleGetPost` |
-| `/api/social/posts/generate` | POST | admin | `HandleGenerate` |
-| `/api/social/posts/{id}/caption` | PATCH | admin | `HandleUpdateCaption` |
-| `/api/social/posts/{id}` | DELETE | admin | `HandleDelete` |
-| `/api/social/backfill-images` | POST | admin | `HandleBackfillImages` |
-| `/api/social/posts/{id}/regenerate-caption` | POST | admin | `HandleRegenerateCaption` |
-| `/api/social/posts/{id}/upload-slides` | POST | admin | `HandleUploadSlides` |
-| `/api/social/posts/{id}/publish` | POST | admin | `HandlePublish` |
-| `/api/media/social/{postId}/{filename}` | GET | public | `HandleServeMedia` |
-| `/api/instagram/status` | GET | admin | `HandleStatus` |
-| `/api/instagram/connect` | POST | admin | `HandleConnect` |
-| `/api/instagram/disconnect` | POST | admin | `HandleDisconnect` |
-
-### Pricing API v1
-
-| Route | Method | Auth | Handler |
-|-------|--------|------|---------|
-| `/api/v1/health` | GET | public | `HandleHealth` |
-| `/api/v1/prices/{certNumber}` | GET | api-key | `HandleSinglePrice` |
-| `/api/v1/prices/batch` | POST | api-key | `HandleBatchPrices` |
-
----
+**Middleware stack:** CORS → Gzip → Logging → Timing → Security Headers → Recovery → Rate Limiter
 
 ## Database Schema
 
