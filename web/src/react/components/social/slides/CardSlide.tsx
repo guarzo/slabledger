@@ -28,18 +28,15 @@ export default function CardSlide({ card, postType, slideIndex, totalSlides, bac
       <div className="flex flex-col p-6 h-full">
         <AccentBar gradientBar={theme.gradientBar} />
 
-        {/* Header: logo + slide counter */}
         <div className="flex items-center justify-between mb-4 mt-1 relative z-10">
           <Logo size="sm" />
           <SlideCounter current={slideIndex + 1} total={totalSlides} />
         </div>
 
-        {/* Subtle overlay behind card */}
         {postType === 'hot_deals' && <Flames intensity="subtle" />}
         {postType === 'new_arrivals' && <Sparkles />}
         {postType === 'price_movers' && <TrendLines intensity="subtle" />}
 
-        {/* Card layout — hero for new arrivals, slab accent for others */}
         {isHero ? (
           <CardArtHero
             imageUrl={card.frontImageUrl}
@@ -56,10 +53,8 @@ export default function CardSlide({ card, postType, slideIndex, totalSlides, bac
           />
         )}
 
-        {/* Info panel */}
         <CardInfoPanel card={card} postType={postType} />
 
-        {/* Footer */}
         <div className="mt-3 text-center">
           <span className="text-xs text-white/40">cardyeti.com</span>
         </div>

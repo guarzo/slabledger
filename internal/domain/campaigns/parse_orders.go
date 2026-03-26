@@ -2,8 +2,9 @@ package campaigns
 
 import (
 	"fmt"
-	"math"
+	"strconv"
 	"strings"
+	"time"
 )
 
 // mapOrdersChannel maps CSV "Sales Channel" values to SaleChannel constants.
@@ -108,6 +109,16 @@ func ParseOrdersExportRows(records [][]string) ([]OrdersExportRow, []OrdersImpor
 		}
 		seen[cert] = true
 
+		// Validate date format
+		if _, err := time.Parse("2006-01-02", date); err != nil {
+			skipped = append(skipped, OrdersImportSkip{
+				CertNumber:   cert,
+				ProductTitle: productTitle,
+				Reason:       fmt.Sprintf("invalid_date: %s", date),
+			})
+			continue
+		}
+
 		// Parse price
 		price, err := ParseCurrencyString(priceRaw)
 		if err != nil {
@@ -122,7 +133,7 @@ func ParseOrdersExportRows(records [][]string) ([]OrdersExportRow, []OrdersImpor
 		// Parse grade (best-effort, 0 if unparseable)
 		var grade float64
 		if gradeRaw != "" {
-			if v, err := ParseCurrencyString(gradeRaw); err == nil {
+			if v, err := strconv.ParseFloat(gradeRaw, 64); err == nil {
 				grade = v
 			}
 		}
@@ -140,9 +151,4 @@ func ParseOrdersExportRows(records [][]string) ([]OrdersExportRow, []OrdersImpor
 	}
 
 	return rows, skipped, nil
-}
-
-// DollarsToCents converts a dollar amount to cents with rounding.
-func DollarsToCents(dollars float64) int {
-	return int(math.Round(dollars * 100))
 }

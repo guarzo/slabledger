@@ -204,7 +204,7 @@ func initializeSocialService(
 	// Initialize image generation if enabled
 	if cfg.Adapters.ImageAIEnabled && cfg.Adapters.ImageAIDeployment != "" &&
 		cfg.Adapters.AzureAIEndpoint != "" && cfg.Adapters.AzureAIKey != "" {
-		imgClient, imgErr := azureai.NewImageClient(azureai.ImageConfig{
+		imgClient, imgErr := azureai.NewImageClient(azureai.Config{
 			Endpoint:       cfg.Adapters.AzureAIEndpoint,
 			APIKey:         cfg.Adapters.AzureAIKey,
 			DeploymentName: cfg.Adapters.ImageAIDeployment,

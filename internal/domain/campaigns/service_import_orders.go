@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/guarzo/slabledger/internal/domain/errors"
+	"github.com/guarzo/slabledger/internal/domain/mathutil"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
@@ -20,7 +22,12 @@ func (s *service) ImportOrdersSales(ctx context.Context, rows []OrdersExportRow)
 		return nil, fmt.Errorf("batch cert lookup failed: %w", err)
 	}
 
-	result := &OrdersImportResult{}
+	result := &OrdersImportResult{
+		Matched:     []OrdersImportMatch{},
+		AlreadySold: []OrdersImportSkip{},
+		NotFound:    []OrdersImportSkip{},
+		Skipped:     []OrdersImportSkip{},
+	}
 
 	for _, r := range rows {
 		purchase, found := purchaseMap[r.CertNumber]
@@ -34,7 +41,16 @@ func (s *service) ImportOrdersSales(ctx context.Context, rows []OrdersExportRow)
 		}
 
 		// Check if already sold
-		existingSale, _ := s.repo.GetSaleByPurchaseID(ctx, purchase.ID)
+		existingSale, saleErr := s.repo.GetSaleByPurchaseID(ctx, purchase.ID)
+		if saleErr != nil && !errors.HasErrorCode(saleErr, ErrCodeSaleNotFound) {
+			// Unexpected DB error — skip to avoid potential duplicate sales
+			result.NotFound = append(result.NotFound, OrdersImportSkip{
+				CertNumber:   r.CertNumber,
+				ProductTitle: r.ProductTitle,
+				Reason:       "lookup_error",
+			})
+			continue
+		}
 		if existingSale != nil {
 			result.AlreadySold = append(result.AlreadySold, OrdersImportSkip{
 				CertNumber:   r.CertNumber,
@@ -45,7 +61,7 @@ func (s *service) ImportOrdersSales(ctx context.Context, rows []OrdersExportRow)
 		}
 
 		// Compute fee and net profit preview
-		salePriceCents := DollarsToCents(r.UnitPrice)
+		salePriceCents := mathutil.ToCentsInt(r.UnitPrice)
 
 		campaign, err := s.repo.GetCampaign(ctx, purchase.CampaignID)
 		if err != nil {
@@ -87,6 +103,19 @@ func (s *service) ConfirmOrdersSales(ctx context.Context, items []OrdersConfirmI
 		if err != nil {
 			result.Failed++
 			result.Errors = append(result.Errors, BulkSaleError{PurchaseID: item.PurchaseID, Error: "purchase not found"})
+			continue
+		}
+
+		// Check for existing sale to prevent duplicates (e.g. double-submit)
+		existingSale, saleErr := s.repo.GetSaleByPurchaseID(ctx, item.PurchaseID)
+		if saleErr != nil && !errors.HasErrorCode(saleErr, ErrCodeSaleNotFound) {
+			result.Failed++
+			result.Errors = append(result.Errors, BulkSaleError{PurchaseID: item.PurchaseID, Error: "sale lookup failed"})
+			continue
+		}
+		if existingSale != nil {
+			result.Failed++
+			result.Errors = append(result.Errors, BulkSaleError{PurchaseID: item.PurchaseID, Error: "already sold"})
 			continue
 		}
 

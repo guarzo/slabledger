@@ -6,6 +6,7 @@ import { queryKeys } from '../../queries/queryKeys';
 import { useToast } from '../../contexts/ToastContext';
 import { Button, CardShell } from '../../ui';
 import { formatCents, getErrorMessage } from '../../utils/formatters';
+import { saleChannelLabels } from '../../utils/campaignConstants';
 
 type Phase = 'upload' | 'review' | 'confirming';
 
@@ -26,6 +27,11 @@ export default function ImportSalesTab() {
       setResult(null);
       setConfirmResult(null);
       const res = await api.importOrdersSales(file);
+      // Go nil slices serialize to JSON null — normalize to empty arrays
+      res.matched = res.matched ?? [];
+      res.alreadySold = res.alreadySold ?? [];
+      res.notFound = res.notFound ?? [];
+      res.skipped = res.skipped ?? [];
       setResult(res);
       setSelected(new Set(res.matched.map(m => m.purchaseId)));
       setPhase('review');
@@ -99,14 +105,6 @@ export default function ImportSalesTab() {
       setSelected(new Set(result.matched.map(m => m.purchaseId)));
     }
   }
-
-  const channelLabel = (ch: string) => {
-    switch (ch) {
-      case 'ebay': return 'eBay';
-      case 'website': return 'Website';
-      default: return ch;
-    }
-  };
 
   if (phase === 'upload') {
     return (
@@ -233,7 +231,7 @@ export default function ImportSalesTab() {
                       <div className="text-[var(--text-muted)] text-[10px]">{m.productTitle}</div>
                     </td>
                     <td className="py-2 px-3 text-xs text-[var(--text-muted)] font-mono">{m.certNumber}</td>
-                    <td className="py-2 px-3 text-xs text-[var(--text)]">{channelLabel(m.saleChannel)}</td>
+                    <td className="py-2 px-3 text-xs text-[var(--text)]">{saleChannelLabels[m.saleChannel as keyof typeof saleChannelLabels] ?? m.saleChannel}</td>
                     <td className="py-2 px-3 text-xs text-[var(--text-muted)]">{m.saleDate}</td>
                     <td className="py-2 px-3 text-xs text-right text-[var(--text)]">{formatCents(m.salePriceCents)}</td>
                     <td className="py-2 px-3 text-xs text-right text-[var(--text-muted)]">{formatCents(m.saleFeeCents)}</td>

@@ -130,6 +130,12 @@ func (s *service) llmGenerate(ctx context.Context) (int, error) {
 		cardMap[c.PurchaseID] = true
 	}
 
+	// Build card lookup once for deduplication across all suggestions
+	cardLookup := make(map[string]PostCardDetail, len(cards))
+	for _, c := range cards {
+		cardLookup[c.PurchaseID] = c
+	}
+
 	created := 0
 	usedIDs := make(map[string]bool) // prevent cards from appearing in multiple posts
 
@@ -145,10 +151,6 @@ func (s *service) llmGenerate(ctx context.Context) (int, error) {
 		}
 
 		// Deduplicate by card identity (name + set + grade)
-		cardLookup := make(map[string]PostCardDetail, len(cards))
-		for _, c := range cards {
-			cardLookup[c.PurchaseID] = c
-		}
 		validIDs = deduplicateByCardIdentity(validIDs, cardLookup)
 
 		if len(validIDs) < s.minCards {

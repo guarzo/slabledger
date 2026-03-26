@@ -58,28 +58,22 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const mobileScrollRef = useRef<HTMLDivElement>(null);
 
-  const reviewStats = useMemo<ReviewStats>(() => {
-    let total = 0, needsReview = 0, reviewed = 0, flagged = 0;
-    for (const item of items) {
-      total++;
-      if (item.hasOpenFlag) flagged++;
-      if (item.purchase.reviewedAt) reviewed++;
-      else needsReview++;
-    }
-    return { total, needsReview, reviewed, flagged };
-  }, [items]);
-
-  // Counts per filter tab (for badge display)
-  const tabCounts = useMemo(() => {
+  // Compute review stats and filter tab counts in a single pass
+  const { reviewStats, tabCounts } = useMemo(() => {
+    const stats: ReviewStats = { total: items.length, needsReview: 0, reviewed: 0, flagged: 0 };
     const counts = { needs_review: 0, large_gap: 0, no_data: 0, flagged: 0, all: items.length };
     for (const item of items) {
+      if (item.hasOpenFlag) stats.flagged++;
+      if (item.purchase.reviewedAt) stats.reviewed++;
+      else stats.needsReview++;
+
       const status = getReviewStatus(item);
       if (status === 'needs_review') { counts.needs_review++; }
       else if (status === 'large_gap') { counts.needs_review++; counts.large_gap++; }
       else if (status === 'no_data') { counts.needs_review++; counts.no_data++; }
       else if (status === 'flagged') counts.flagged++;
     }
-    return counts;
+    return { reviewStats: stats, tabCounts: counts };
   }, [items]);
 
   function handleSort(key: SortKey) {

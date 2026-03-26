@@ -15,14 +15,6 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
-// ImageConfig configures the Azure AI image generation client.
-type ImageConfig struct {
-	Endpoint       string // https://<resource>.openai.azure.com
-	APIKey         string // Azure API key
-	DeploymentName string // e.g. "gpt-image-1"
-	APIVersion     string // e.g. "2024-12-01-preview"
-}
-
 // ImageOption configures the ImageClient.
 type ImageOption func(*ImageClient)
 
@@ -32,8 +24,9 @@ func WithImageLogger(l observability.Logger) ImageOption {
 }
 
 // ImageClient implements ai.ImageGenerator for Azure AI Foundry image generation.
+// It reuses the same Config type as the LLM client.
 type ImageClient struct {
-	config     ImageConfig
+	config     Config
 	httpClient *http.Client
 	logger     observability.Logger
 }
@@ -41,15 +34,15 @@ type ImageClient struct {
 // NewImageClient creates a new Azure AI image generation client.
 // Required fields: Endpoint, APIKey, DeploymentName.
 // APIVersion defaults to "2024-12-01-preview" if not set.
-func NewImageClient(cfg ImageConfig, opts ...ImageOption) (*ImageClient, error) {
+func NewImageClient(cfg Config, opts ...ImageOption) (*ImageClient, error) {
 	if cfg.Endpoint == "" {
-		return nil, fmt.Errorf("azureai: ImageConfig.Endpoint is required")
+		return nil, fmt.Errorf("azureai: Endpoint is required")
 	}
 	if cfg.APIKey == "" {
-		return nil, fmt.Errorf("azureai: ImageConfig.APIKey is required")
+		return nil, fmt.Errorf("azureai: APIKey is required")
 	}
 	if cfg.DeploymentName == "" {
-		return nil, fmt.Errorf("azureai: ImageConfig.DeploymentName is required")
+		return nil, fmt.Errorf("azureai: DeploymentName is required")
 	}
 	if cfg.APIVersion == "" {
 		cfg.APIVersion = "2024-12-01-preview"

@@ -128,6 +128,7 @@ export function useResolvePriceFlag() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.admin.priceFlags('open') });
       qc.invalidateQueries({ queryKey: queryKeys.admin.priceFlags('resolved') });
+      qc.invalidateQueries({ queryKey: queryKeys.admin.priceFlags('all') });
     },
   });
 }

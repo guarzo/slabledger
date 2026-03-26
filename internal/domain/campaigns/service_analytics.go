@@ -222,18 +222,7 @@ func (s *service) GetInventoryAging(ctx context.Context, campaignID string) ([]A
 		items = append(items, s.enrichAgingItem(ctx, &unsold[i], ""))
 	}
 
-	// Batch-load open flag status
-	flaggedIDs, err := s.repo.OpenFlagPurchaseIDs(ctx)
-	if err != nil {
-		s.logger.Warn(ctx, "failed to load open flags", observability.Err(err))
-	} else {
-		for i := range items {
-			if flaggedIDs[items[i].Purchase.ID] {
-				items[i].HasOpenFlag = true
-			}
-		}
-	}
-
+	s.applyOpenFlags(ctx, items)
 	return items, nil
 }
 
@@ -258,19 +247,22 @@ func (s *service) GetGlobalInventoryAging(ctx context.Context) ([]AgingItem, err
 		items = append(items, s.enrichAgingItem(ctx, &purchases[i], campaignNames[purchases[i].CampaignID]))
 	}
 
-	// Batch-load open flag status
+	s.applyOpenFlags(ctx, items)
+	return items, nil
+}
+
+// applyOpenFlags batch-loads open price flag status and sets HasOpenFlag on matching items.
+func (s *service) applyOpenFlags(ctx context.Context, items []AgingItem) {
 	flaggedIDs, err := s.repo.OpenFlagPurchaseIDs(ctx)
 	if err != nil {
 		s.logger.Warn(ctx, "failed to load open flags", observability.Err(err))
-	} else {
-		for i := range items {
-			if flaggedIDs[items[i].Purchase.ID] {
-				items[i].HasOpenFlag = true
-			}
+		return
+	}
+	for i := range items {
+		if flaggedIDs[items[i].Purchase.ID] {
+			items[i].HasOpenFlag = true
 		}
 	}
-
-	return items, nil
 }
 
 // --- Sell Sheet ---

@@ -65,22 +65,18 @@ export default function CoverSlide({
       <AIBackground url={backgroundUrls?.[0]} dimming={0.2} />
       <AccentBar gradientBar={theme.gradientBar} />
 
-      {/* Radial glow */}
       <div className="absolute top-[30%] left-1/2 -translate-x-1/2 w-[300px] h-[300px] rounded-full blur-3xl pointer-events-none"
         style={{ background: theme.overlayAccent }} />
 
-      {/* Header */}
       <div className="absolute top-3 left-4 right-4 flex justify-between items-center z-10">
         <LogoText />
         <PostTypeBadge postType={postType} />
       </div>
 
-      {/* Overlays */}
       {postType === 'hot_deals' && <Flames />}
       {postType === 'new_arrivals' && <Sparkles />}
       {postType === 'price_movers' && <TrendLines />}
 
-      {/* Card layout */}
       {cards && cards.length > 0 && (
         <>
           {postType === 'hot_deals' && <FanSpread cards={cards} />}
@@ -89,7 +85,6 @@ export default function CoverSlide({
         </>
       )}
 
-      {/* Bottom info */}
       <InfoPanel title={coverTitle} subtitle={subtitle} />
     </SlideCanvas>
   );
