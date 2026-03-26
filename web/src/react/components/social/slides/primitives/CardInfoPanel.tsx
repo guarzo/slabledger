@@ -7,8 +7,9 @@ interface CardInfoPanelProps {
 }
 
 export default function CardInfoPanel({ card, postType }: CardInfoPanelProps) {
-  const marketPrice = card.medianCents > 0 ? `$${(card.medianCents / 100).toFixed(0)}` : null;
-  const buyPrice = card.buyCostCents > 0 ? `$${(card.buyCostCents / 100).toFixed(0)}` : null;
+  const askingPrice = card.askingPriceCents > 0 ? `$${(card.askingPriceCents / 100).toFixed(0)}` : null;
+  const clPrice = card.clValueCents > 0 ? `$${(card.clValueCents / 100).toFixed(0)}` : null;
+  const showBothPrices = askingPrice && clPrice && card.askingPriceCents <= card.clValueCents;
 
   return (
     <div className="bg-white/[0.04] border border-white/[0.08] rounded-xl p-4 space-y-2">
@@ -29,14 +30,14 @@ export default function CardInfoPanel({ card, postType }: CardInfoPanelProps) {
       <div className="flex items-center justify-between pt-1">
         {postType === 'new_arrivals' && (
           <>
-            {marketPrice && <span className="text-lg font-bold text-emerald-400">{marketPrice}</span>}
+            {askingPrice && <span className="text-lg font-bold text-emerald-400">{askingPrice}</span>}
             <span className="text-xs text-white/40">Cert #{card.certNumber}</span>
           </>
         )}
         {postType === 'price_movers' && (
           <>
             <div className="flex items-center gap-2">
-              {marketPrice && <span className="text-lg font-bold text-white">{marketPrice}</span>}
+              {askingPrice && <span className="text-lg font-bold text-white">{askingPrice}</span>}
               {card.trend30d !== 0 && (
                 <span className={`text-sm font-medium ${card.trend30d > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                   {card.trend30d > 0 ? '+' : ''}{(card.trend30d * 100).toFixed(1)}%
@@ -49,8 +50,8 @@ export default function CardInfoPanel({ card, postType }: CardInfoPanelProps) {
         {postType === 'hot_deals' && (
           <>
             <div className="flex items-center gap-2">
-              {marketPrice && <span className="text-lg font-bold text-emerald-400">{marketPrice}</span>}
-              {buyPrice && <span className="text-sm text-white/40 line-through">{buyPrice}</span>}
+              {askingPrice && <span className="text-lg font-bold text-emerald-400">{askingPrice}</span>}
+              {showBothPrices && <span className="text-sm text-white/40">CL {clPrice}</span>}
             </div>
             <span className="text-xs text-white/40">Cert #{card.certNumber}</span>
           </>

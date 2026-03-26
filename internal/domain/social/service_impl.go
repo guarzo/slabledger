@@ -142,7 +142,7 @@ func (s *service) llmGenerate(ctx context.Context) (int, error) {
 	}
 
 	created := 0
-	usedIDs := make(map[string]bool)               // prevent purchase IDs from appearing in multiple posts
+	usedIDs := make(map[string]bool)                 // prevent purchase IDs from appearing in multiple posts
 	usedIdentities := make(map[cardIdentityKey]bool) // prevent same logical card across posts
 
 	for _, suggestion := range resp.Posts {
@@ -420,7 +420,7 @@ func deduplicateByCardIdentity(ids []string, cardLookup map[string]PostCardDetai
 		if card.FrontImageURL == "" && existing.FrontImageURL != "" {
 			continue
 		}
-		if card.MedianCents > existing.MedianCents {
+		if card.CLValueCents > existing.CLValueCents {
 			best[key] = pid
 			bestCard[key] = card
 		}

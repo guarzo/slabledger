@@ -44,16 +44,16 @@ type DaysToSellBucket struct {
 
 // AgingItem represents an unsold card with days held.
 type AgingItem struct {
-	Purchase      Purchase        `json:"purchase"`
-	DaysHeld      int             `json:"daysHeld"`
-	CampaignName  string          `json:"campaignName,omitempty"`
-	Signal        *MarketSignal   `json:"signal,omitempty"`
-	CurrentMarket *MarketSnapshot `json:"currentMarket,omitempty"`
-	PriceAnomaly          bool   `json:"priceAnomaly,omitempty"`
-	AnomalyReason         string `json:"anomalyReason,omitempty"`
-	HasOpenFlag           bool   `json:"hasOpenFlag,omitempty"`
-	RecommendedPriceCents int    `json:"recommendedPriceCents,omitempty"`
-	RecommendedSource     string `json:"recommendedSource,omitempty"`
+	Purchase              Purchase        `json:"purchase"`
+	DaysHeld              int             `json:"daysHeld"`
+	CampaignName          string          `json:"campaignName,omitempty"`
+	Signal                *MarketSignal   `json:"signal,omitempty"`
+	CurrentMarket         *MarketSnapshot `json:"currentMarket,omitempty"`
+	PriceAnomaly          bool            `json:"priceAnomaly,omitempty"`
+	AnomalyReason         string          `json:"anomalyReason,omitempty"`
+	HasOpenFlag           bool            `json:"hasOpenFlag,omitempty"`
+	RecommendedPriceCents int             `json:"recommendedPriceCents,omitempty"`
+	RecommendedSource     string          `json:"recommendedSource,omitempty"`
 }
 
 // SellSheet contains data for a printable sell sheet.
@@ -172,10 +172,10 @@ type ShopifyPriceSyncMatch struct {
 	HasMarketData         bool           `json:"hasMarketData"`
 	OverridePriceCents    int            `json:"overridePriceCents,omitempty"`
 	OverrideSource        OverrideSource `json:"overrideSource,omitempty"`
-	AISuggestedPriceCents int    `json:"aiSuggestedPriceCents,omitempty"`
-	RecommendedPriceCents int    `json:"recommendedPriceCents"`
-	RecommendedSource     string `json:"recommendedSource"`
-	ReviewedAt            string `json:"reviewedAt,omitempty"`
+	AISuggestedPriceCents int            `json:"aiSuggestedPriceCents,omitempty"`
+	RecommendedPriceCents int            `json:"recommendedPriceCents"`
+	RecommendedSource     string         `json:"recommendedSource"`
+	ReviewedAt            string         `json:"reviewedAt,omitempty"`
 }
 
 // ShopifyPriceSyncResponse contains the results of matching Shopify CSV items against inventory.

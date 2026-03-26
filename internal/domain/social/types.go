@@ -60,8 +60,8 @@ type PostCardDetail struct {
 	Grader        string    `json:"grader"`
 	CertNumber    string    `json:"certNumber"`
 	FrontImageURL string    `json:"frontImageUrl"`
-	BuyCostCents  int       `json:"buyCostCents"`
-	MedianCents   int       `json:"medianCents"`
+	AskingPriceCents int       `json:"askingPriceCents"`
+	CLValueCents     int       `json:"clValueCents"`
 	Trend30d      float64   `json:"trend30d"`
 	CreatedAt     time.Time `json:"createdAt"`
 }

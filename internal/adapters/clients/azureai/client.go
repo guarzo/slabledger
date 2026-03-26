@@ -318,4 +318,3 @@ func (c *Client) pollResponseFallback(ctx context.Context, responseID string, st
 	}
 	return fmt.Errorf("response %s still not completed after polling", responseID)
 }
-
