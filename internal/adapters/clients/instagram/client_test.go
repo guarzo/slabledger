@@ -240,7 +240,7 @@ func TestPublishCarousel_StatusError(t *testing.T) {
 		"caption")
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "wait for carousel")
+	assert.Contains(t, err.Error(), "wait for item container")
 	assert.Contains(t, err.Error(), "failed processing")
 }
 
