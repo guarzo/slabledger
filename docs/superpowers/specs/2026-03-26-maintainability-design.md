@@ -69,6 +69,25 @@ File grew from 609L to 715L (added `SetReviewedPrice`, `GetReviewStats`, `GetGlo
 | `service_analytics.go` | PNL (`GetCampaignPNL`, `GetPNLByChannel`, `GetDailySpend`, `GetDaysToSellDistribution`), snapshot helpers (`hasAnyPriceData`, `snapshotFromPurchase`), aging (`enrichAgingItem`, `applyCLSignal`, `GetInventoryAging`, `GetGlobalInventoryAging`, `applyOpenFlags`), tuning (`GetCampaignTuning`) | ~380 |
 | `service_sell_sheet.go` | `enrichSellSheetItem`, `recommendChannel`, `GenerateSellSheet`, `GenerateGlobalSellSheet`, `computeRecommendation`, `computeTargetPrice`, `MatchShopifyPrices`, `SetReviewedPrice`, `GetReviewStats`, `GetGlobalReviewStats`, `CreatePriceFlag`, `ListPriceFlags`, `ResolvePriceFlag`, `recommendedPrice` | ~335 |
 
+### B7. `internal/adapters/clients/azureai/image_client.go` — httpx migration
+
+The `ImageClient` uses a raw `*http.Client` (line 30) while every other API client uses `httpx.Client` for retry + circuit breaker. Migrate to `httpx.Client` for consistency and resilience.
+
+- Change `httpClient *http.Client` to `*httpx.Client`
+- Construct via `httpx.NewClient(httpx.DefaultConfig("AzureAIImage"))` with 2-minute timeout
+- Replace manual `http.NewRequestWithContext` + `c.httpClient.Do` with `c.httpClient.Post`
+- Remove manual status code handling (httpx handles it)
+
+### B8. `internal/domain/social/service_impl.go` — remove `os` import via `MediaStore` interface
+
+The domain package imports `os` for `MkdirAll` and `WriteFile` in `generateBackgroundsAsync`. Domain code should depend only on interfaces.
+
+- Define `MediaStore` interface in `internal/domain/social/media.go` with `EnsureDir(path)` and `WriteFile(path, data)`
+- Add `WithMediaStore` option and `mediaStore` field to `service` struct
+- Replace `os.MkdirAll`/`os.WriteFile` calls with `s.mediaStore.EnsureDir`/`s.mediaStore.WriteFile`
+- Create filesystem adapter at `internal/adapters/storage/mediafs/store.go`
+- Wire in `cmd/slabledger/init.go`
+
 ### Scope boundaries
 
 - **No campaigns package split** — 49 files are already well-factored internally; splitting the domain package cascades through every consumer

@@ -101,12 +101,12 @@ type MockCampaignService struct {
 	DismissAISuggestionFn   func(ctx context.Context, purchaseID string) error
 
 	// Price review & flags
-	SetReviewedPriceFn    func(ctx context.Context, purchaseID string, priceCents int, source string) error
-	GetReviewStatsFn      func(ctx context.Context, campaignID string) (campaigns.ReviewStats, error)
+	SetReviewedPriceFn     func(ctx context.Context, purchaseID string, priceCents int, source string) error
+	GetReviewStatsFn       func(ctx context.Context, campaignID string) (campaigns.ReviewStats, error)
 	GetGlobalReviewStatsFn func(ctx context.Context) (campaigns.ReviewStats, error)
-	CreatePriceFlagFn     func(ctx context.Context, purchaseID string, userID int64, reason string) (int64, error)
-	ListPriceFlagsFn      func(ctx context.Context, status string) ([]campaigns.PriceFlagWithContext, error)
-	ResolvePriceFlagFn    func(ctx context.Context, flagID int64, resolvedBy int64) error
+	CreatePriceFlagFn      func(ctx context.Context, purchaseID string, userID int64, reason string) (int64, error)
+	ListPriceFlagsFn       func(ctx context.Context, status string) ([]campaigns.PriceFlagWithContext, error)
+	ResolvePriceFlagFn     func(ctx context.Context, flagID int64, resolvedBy int64) error
 
 	// Snapshot refresh
 	RefreshPurchaseSnapshotFn func(ctx context.Context, purchaseID string, card campaigns.CardIdentity, grade float64, clValueCents int) bool

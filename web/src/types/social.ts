@@ -27,8 +27,8 @@ export interface PostCardDetail {
   grader: string;
   certNumber: string;
   frontImageUrl: string;
-  buyCostCents: number;
-  medianCents: number;
+  askingPriceCents: number;
+  clValueCents: number;
   trend30d: number;
 }
 

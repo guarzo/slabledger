@@ -83,7 +83,7 @@ SQLite with WAL mode. Migrations managed by `golang-migrate/migrate/v4`
 and embedded in the binary via `embed.FS`. Migrations run automatically
 on startup — no manual step required.
 
-Migration files: `internal/adapters/storage/sqlite/migrations/` (17 pairs, 000001–000017)
+Migration files: `internal/adapters/storage/sqlite/migrations/` (19 pairs, 000001–000019)
 
 **Creating a new migration:**
 ```bash
@@ -155,6 +155,12 @@ Card names flow through a multi-stage normalization and matching pipeline:
 
 ## Testing
 
+- **Pattern**: Table-driven tests with `[]struct` for all test cases
+- **Mocks**: Import from `internal/testutil/mocks/` — never create inline mocks
+  - Uses Fn-field pattern: override any method by setting `mock.CreateCampaignFn = func(...) { ... }`
+  - Full guide: `internal/testutil/mocks/README.md`
+- **Error assertions**: Use `errors.Is(err, campaigns.ErrCampaignNotFound)` with sentinel errors
+- **Deterministic data**: Use fixed seeds for Monte Carlo, atomic counters for IDs
 - **Unit tests**: Mock all external deps, use `internal/testutil/mocks`
 - **Integration tests**: `internal/integration/` with `-tags integration` flag, requires API keys in `.env`
 - Always run `go test -race` before committing
@@ -168,6 +174,7 @@ Card names flow through a multi-stage normalization and matching pipeline:
 - Cost/prior calculations use simple functions, not manager structs
 - Use builtin min/max (Go 1.21+), not custom implementations
 - Functional options pattern for optional dependencies (e.g. `WithPriceLookup`)
+- Keep source files under 500 lines. If a file grows beyond this, look for natural split points (separate strategies, separate concerns, utilities)
 
 ## Resilience Patterns
 
@@ -319,6 +326,13 @@ SQLite WAL mode. All monetary values in **cents**. 19 migration pairs (`000001`�
 3. Wire the adapter in `cmd/slabledger/main.go` via a functional option (`With<Name>(impl)`).
 4. Add a mock in `internal/testutil/mocks/` and update any composed mocks in `domain/<package>/mock_repo_test.go`.
 
+### Add a new domain error
+
+1. Add error code in `internal/domain/<package>/errors.go`: `ErrCodeMyError errors.ErrorCode = "ERR_MY_ERROR"`
+2. Add sentinel: `var ErrMyError = errors.NewAppError(ErrCodeMyError, "description")`
+3. Add predicate: `func IsMyError(err error) bool { return errors.HasErrorCode(err, ErrCodeMyError) }`
+4. Test with `errors.Is(err, ErrMyError)` in callers
+
 ### Add a new migration
 
 1. Check the highest existing migration number: `ls internal/adapters/storage/sqlite/migrations/ | sort -n | tail -2`
@@ -378,3 +392,11 @@ Command definition: `.claude/commands/campaign-analysis.md`
 - [Roadmap](docs/ROADMAP.md) - Development roadmap (EV calculator, Monte Carlo, crack arbitrage, capital visibility)
 - [Campaign Analysis Plan](docs/CAMPAIGN_ANALYSIS_SKILL_PLAN.md) - Design rationale for the /campaign-analysis command
 - [Campaign Strategy](docs/private/CAMPAIGN_STRATEGY.md) - Business strategy (private, not tracked in git)
+
+## Key Reference Files
+
+- `internal/README.md` — Architecture rules, decision tree for code placement, anti-patterns
+- `internal/testutil/mocks/README.md` — Mock patterns with examples
+- `docs/API.md` — All endpoint request/response shapes
+- `docs/SCHEMA.md` — Full database schema with indexes
+- `.env.example` — All environment variables with comments

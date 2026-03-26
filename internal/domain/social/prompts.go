@@ -80,8 +80,8 @@ func writeCardList(sb *strings.Builder, cards []PostCardDetail, includeTrend boo
 		if gradeLabel != "" {
 			fmt.Fprintf(sb, " (%s)", gradeLabel)
 		}
-		if c.MedianCents > 0 {
-			fmt.Fprintf(sb, " — Market ~$%.0f", float64(c.MedianCents)/100)
+		if c.CLValueCents > 0 {
+			fmt.Fprintf(sb, " — CL ~$%.0f", float64(c.CLValueCents)/100)
 		}
 		if includeTrend && c.Trend30d != 0 {
 			fmt.Fprintf(sb, " (30d: %+.0f%%)", c.Trend30d*100)
@@ -134,9 +134,9 @@ const postSuggestionSystemPromptTemplate = `You are a social media strategist fo
 - Return valid JSON only, no markdown or explanation
 
 ## Post Type Classification
-Each card has data to help you classify: cost, market price, cost/market ratio, 30-day trend %%, and days since acquisition. Use these criteria:
+Each card has data to help you classify: asking price, CL (Card Ladder) value, 30-day trend %%, and days since acquisition. Use these criteria:
 
-- "hot_deals": cards where cost/market ratio is %.0f%% or below — these are priced well below market value. Prioritize this type when the data supports it.
+- "hot_deals": cards where asking price is %.0f%% or below of CL value — these are priced well below market value. Prioritize this type when the data supports it.
 - "price_movers": cards with a 30-day trend of +%.0f%% or more (or -%.0f%% or more) — significant recent market movement. Group upward and downward movers separately when possible.
 - "new_arrivals": cards acquired within the last %d days. Use this ONLY for genuinely recent additions.
 
@@ -167,15 +167,11 @@ func buildPostSuggestionPrompt(cards []PostCardDetail) string {
 	for _, c := range cards {
 		fmt.Fprintf(&sb, "- %s | %s | %s | %s %.0f",
 			c.PurchaseID, c.CardName, c.SetName, c.Grader, c.GradeValue)
-		if c.BuyCostCents > 0 {
-			fmt.Fprintf(&sb, " | cost $%.0f", float64(c.BuyCostCents)/100)
+		if c.AskingPriceCents > 0 {
+			fmt.Fprintf(&sb, " | asking $%.0f", float64(c.AskingPriceCents)/100)
 		}
-		if c.MedianCents > 0 {
-			fmt.Fprintf(&sb, " | market ~$%.0f", float64(c.MedianCents)/100)
-		}
-		if c.BuyCostCents > 0 && c.MedianCents > 0 {
-			ratio := float64(c.BuyCostCents) / float64(c.MedianCents)
-			fmt.Fprintf(&sb, " | cost/market %.0f%%", ratio*100)
+		if c.CLValueCents > 0 {
+			fmt.Fprintf(&sb, " | CL ~$%.0f", float64(c.CLValueCents)/100)
 		}
 		if c.Trend30d != 0 {
 			fmt.Fprintf(&sb, " | 30d trend %+.0f%%", c.Trend30d*100)
