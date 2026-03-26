@@ -93,6 +93,11 @@ const (
 	schedulerTransientRetries = 2
 	schedulerRetryBackoff     = 5 * time.Minute
 	interAnalysisPause        = 5 * time.Minute
+	// AnalysisCollectTimeout is the max duration for an LLM analysis call.
+	// Exported so tests can assert against the same value.
+	AnalysisCollectTimeout = 20 * time.Minute
+	// AnalysisSaveTimeout is the max duration for persisting analysis results.
+	AnalysisSaveTimeout = 15 * time.Second
 )
 
 func (s *AdvisorRefreshScheduler) runWithRetry(ctx context.Context, analysisType advisor.AnalysisType, collect func(context.Context) (string, error)) {
@@ -152,7 +157,7 @@ func (s *AdvisorRefreshScheduler) runAnalysis(ctx context.Context, analysisType 
 
 	start := time.Now()
 	// Use a generous timeout for the LLM call.
-	analysisCtx, cancel := context.WithTimeout(ctx, 15*time.Minute)
+	analysisCtx, cancel := context.WithTimeout(ctx, AnalysisCollectTimeout)
 	defer cancel()
 
 	content, collectErr := collect(analysisCtx)
@@ -176,7 +181,7 @@ func (s *AdvisorRefreshScheduler) runAnalysis(ctx context.Context, analysisType 
 
 	// Use a background context for the save — the parent ctx may be canceled during shutdown
 	// but we still want to persist the result so the row doesn't stay "running" forever.
-	saveCtx, saveCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	saveCtx, saveCancel := context.WithTimeout(context.Background(), AnalysisSaveTimeout)
 	defer saveCancel()
 	if saveErr := s.cache.SaveResult(saveCtx, analysisType, lease, content, errMsg); saveErr != nil {
 		s.logger.Error(saveCtx, "failed to save analysis result", observability.String("type", string(analysisType)), observability.Err(saveErr))

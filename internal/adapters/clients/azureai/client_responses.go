@@ -19,13 +19,19 @@ const responsesAPIVersion = "2025-04-01-preview"
 // --- Request types ---
 
 type responsesRequest struct {
-	Model              string          `json:"model,omitempty"`
-	Instructions       string          `json:"instructions,omitempty"`
-	Input              []any           `json:"input"`
-	Tools              []responsesTool `json:"tools,omitempty"`
-	Stream             bool            `json:"stream"`
-	MaxOutputTokens    int             `json:"max_output_tokens,omitempty"`
-	PreviousResponseID string          `json:"previous_response_id,omitempty"`
+	Model              string              `json:"model,omitempty"`
+	Instructions       string              `json:"instructions,omitempty"`
+	Input              []any               `json:"input"`
+	Tools              []responsesTool     `json:"tools,omitempty"`
+	Stream             bool                `json:"stream"`
+	MaxOutputTokens    int                 `json:"max_output_tokens,omitempty"`
+	PreviousResponseID string              `json:"previous_response_id,omitempty"`
+	Store              *bool               `json:"store,omitempty"`
+	Reasoning          *responsesReasoning `json:"reasoning,omitempty"`
+}
+
+type responsesReasoning struct {
+	Effort string `json:"effort"` // "low", "medium", "high"
 }
 
 // responsesTool is the Responses API tool format — name/description/parameters
@@ -89,6 +95,13 @@ func (c *Client) buildResponsesRequest(req ai.CompletionRequest) responsesReques
 	// Note: temperature is omitted — some models (e.g. gpt-5.4-pro) don't support it.
 	if req.MaxTokens > 0 {
 		r.MaxOutputTokens = req.MaxTokens
+	}
+	if req.ReasoningEffort != "" {
+		r.Reasoning = &responsesReasoning{Effort: req.ReasoningEffort}
+	}
+	if req.Store {
+		t := true
+		r.Store = &t
 	}
 
 	// AI Foundry uses /openai/v1/responses (model in body).
@@ -166,8 +179,15 @@ func (c *Client) buildResponsesURL(endpoint string) string {
 
 // --- SSE stream parsing ---
 
-func (c *Client) parseResponsesSSEStream(ctx context.Context, body io.Reader, stream func(ai.CompletionChunk)) error {
+// streamResult captures the response ID from an interrupted SSE stream
+// so the caller can attempt a poll-based fallback via GET /responses/{id}.
+type streamResult struct {
+	responseID string
+}
+
+func (c *Client) parseResponsesSSEStream(ctx context.Context, body io.Reader, stream func(ai.CompletionChunk)) (streamResult, error) {
 	reader := bufio.NewReader(body)
+	var result streamResult
 
 	var currentEvent string
 	toolCalls := make(map[string]*ai.ToolCall) // keyed by item ID
@@ -175,7 +195,7 @@ func (c *Client) parseResponsesSSEStream(ctx context.Context, body io.Reader, st
 
 	for {
 		if ctx.Err() != nil {
-			return ctx.Err()
+			return result, ctx.Err()
 		}
 
 		line, err := reader.ReadString('\n')
@@ -187,7 +207,7 @@ func (c *Client) parseResponsesSSEStream(ctx context.Context, body io.Reader, st
 			if err == io.EOF {
 				break
 			}
-			return fmt.Errorf("reading responses SSE stream: %w", err)
+			return result, fmt.Errorf("reading responses SSE stream: %w", err)
 		}
 
 		if strings.HasPrefix(line, "event: ") {
@@ -207,6 +227,17 @@ func (c *Client) parseResponsesSSEStream(ctx context.Context, body io.Reader, st
 		data := strings.TrimPrefix(line, "data: ")
 
 		switch currentEvent {
+		case "response.created":
+			// Capture response ID early for poll-based fallback on stream failure.
+			var created struct {
+				Response struct {
+					ID string `json:"id"`
+				} `json:"response"`
+			}
+			if jsonErr := json.Unmarshal([]byte(data), &created); jsonErr == nil && created.Response.ID != "" {
+				result.responseID = created.Response.ID
+			}
+
 		case "response.output_text.delta":
 			var d responsesTextDelta
 			if jsonErr := json.Unmarshal([]byte(data), &d); jsonErr != nil {
@@ -274,6 +305,11 @@ func (c *Client) parseResponsesSSEStream(ctx context.Context, body io.Reader, st
 				}
 			}
 
+			// Prefer the completed payload's ID, but fall back to the
+			// response.created ID if the completed payload is missing it.
+			if respID == "" {
+				respID = result.responseID
+			}
 			chunk := ai.CompletionChunk{
 				Done: true,
 			}
@@ -301,10 +337,10 @@ func (c *Client) parseResponsesSSEStream(ctx context.Context, body io.Reader, st
 				chunk.ToolCalls = append(chunk.ToolCalls, *s.tc)
 			}
 			stream(chunk)
-			return nil
+			return result, nil
 
 		case "error":
-			return c.parseSSEError(ctx, data)
+			return result, c.parseSSEError(ctx, data)
 		}
 
 		currentEvent = ""
@@ -318,7 +354,7 @@ func (c *Client) parseResponsesSSEStream(ctx context.Context, body io.Reader, st
 	// disconnect, server timeout, or other interruption. Return an error
 	// so the caller knows the response is incomplete.
 	c.logWarn(ctx, "SSE stream ended without response.completed", fmt.Sprintf("pending_tool_calls=%d", len(toolCalls)), nil)
-	return fmt.Errorf("SSE stream ended without response.completed (possible network interruption)")
+	return result, fmt.Errorf("SSE stream ended without response.completed (possible network interruption)")
 }
 
 // ensureProperties ensures all "object" schemas in a tool's parameters have

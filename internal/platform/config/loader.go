@@ -290,6 +290,11 @@ func FromEnv(base Config) Config {
 			cfg.AdvisorRefresh.RefreshHour = h
 		}
 	}
+	if v := os.Getenv("ADVISOR_MAX_TOOL_ROUNDS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			cfg.AdvisorRefresh.MaxToolRounds = n
+		}
+	}
 
 	// Social content scheduler
 	if v := os.Getenv("SOCIAL_CONTENT_ENABLED"); v != "" {
@@ -323,6 +328,10 @@ func FromEnv(base Config) Config {
 	cfg.Adapters.AzureAIDeployment = os.Getenv("AZURE_AI_DEPLOYMENT")
 	if cfg.Adapters.AzureAIDeployment == "" {
 		cfg.Adapters.AzureAIDeployment = "gpt-5.4"
+	}
+	cfg.Adapters.SocialAIDeployment = os.Getenv("SOCIAL_AI_DEPLOYMENT")
+	if cfg.Adapters.SocialAIDeployment == "" {
+		cfg.Adapters.SocialAIDeployment = cfg.Adapters.AzureAIDeployment
 	}
 
 	return cfg

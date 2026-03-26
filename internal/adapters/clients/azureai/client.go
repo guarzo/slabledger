@@ -92,7 +92,7 @@ func (e *capacityError) Error() string {
 	return "azure ai capacity exceeded: " + e.raw
 }
 
-const maxStreamRetries = 3
+const maxStreamRetries = 5
 
 // useResponsesAPI returns true for AI Foundry endpoints that require the Responses API
 // (newer models like gpt-5.4-pro only support this API).
@@ -110,6 +110,7 @@ func (c *Client) useResponsesAPI() bool {
 func (c *Client) StreamCompletion(ctx context.Context, req ai.CompletionRequest, stream func(ai.CompletionChunk)) error {
 	responsesAPI := c.useResponsesAPI()
 	var lastErr error
+	var lastResponseID string
 	for attempt := range maxStreamRetries {
 		emitted := false
 		completed := false
@@ -120,7 +121,11 @@ func (c *Client) StreamCompletion(ctx context.Context, req ai.CompletionRequest,
 			}
 			stream(chunk)
 		}
-		lastErr = c.doStreamCompletion(ctx, req, wrappedStream)
+		var respID string
+		respID, lastErr = c.doStreamCompletion(ctx, req, wrappedStream)
+		if respID != "" {
+			lastResponseID = respID
+		}
 		if lastErr == nil {
 			return nil
 		}
@@ -140,6 +145,11 @@ func (c *Client) StreamCompletion(ctx context.Context, req ai.CompletionRequest,
 		// Don't retry permanent client errors (4xx except 429).
 		if isPermanentError(lastErr) {
 			break
+		}
+		// If we captured a response ID and store is enabled, skip further
+		// retries and go straight to poll fallback to avoid duplicate POSTs.
+		if lastResponseID != "" && req.Store && responsesAPI {
+			goto pollFallback
 		}
 		// Capacity errors need the longest backoff (request too large for peak load).
 		// Rate limits need moderate backoff; other transient errors use shorter.
@@ -162,14 +172,164 @@ func (c *Client) StreamCompletion(ctx context.Context, req ai.CompletionRequest,
 		}
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			lastErr = ctx.Err()
+			goto pollFallback
 		case <-time.After(backoff):
 		}
 	}
+
+pollFallback:
+	// Poll-based fallback: if streaming failed but we captured a response ID
+	// and the request used store=true, the response may have completed server-side.
+	// Try to retrieve it via GET /responses/{id}.
+	if lastResponseID != "" && req.Store && responsesAPI {
+		// Use a fresh context for the poll — the original may be deadline-exceeded,
+		// but the response may still have completed server-side.
+		pollCtx, pollCancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer pollCancel()
+		if c.logger != nil {
+			c.logger.Info(pollCtx, "attempting poll fallback for stored response",
+				observability.String("responseID", lastResponseID))
+		}
+		if pollErr := c.pollResponseFallback(pollCtx, lastResponseID, stream); pollErr == nil {
+			return nil
+		} else {
+			if c.logger != nil {
+				c.logger.Warn(pollCtx, "poll fallback failed", observability.Err(pollErr))
+			}
+			return pollErr
+		}
+	}
+
 	return lastErr
 }
 
-func (c *Client) doStreamCompletion(ctx context.Context, req ai.CompletionRequest, stream func(ai.CompletionChunk)) error {
+// pollResponseFallback retrieves a stored response via GET when streaming failed.
+// It polls up to 5 times (15s apart, with a 30s initial wait to let Azure finish processing).
+func (c *Client) pollResponseFallback(ctx context.Context, responseID string, stream func(ai.CompletionChunk)) error {
+	endpoint := strings.TrimRight(c.config.Endpoint, "/")
+	var url string
+	if strings.Contains(endpoint, ".services.ai.azure.com") {
+		url = endpoint + "/openai/v1/responses/" + responseID
+	} else {
+		url = fmt.Sprintf("%s/openai/deployments/%s/responses/%s?api-version=%s",
+			endpoint, c.config.DeploymentName, responseID, responsesAPIVersion)
+	}
+
+	for poll := range 5 {
+		// Wait before each poll — give Azure time to finish processing.
+		wait := 15 * time.Second
+		if poll == 0 {
+			wait = 30 * time.Second // longer initial wait
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(wait):
+		}
+
+		httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		if err != nil {
+			return err
+		}
+		// Use the same auth method as streaming requests.
+		if isAzureOpenAI(endpoint) {
+			httpReq.Header.Set("api-key", c.config.APIKey)
+		} else {
+			httpReq.Header.Set("Authorization", "Bearer "+c.config.APIKey)
+		}
+
+		resp, err := c.httpClient.Do(httpReq)
+		if err != nil {
+			return err
+		}
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close() //nolint:errcheck
+
+		if resp.StatusCode == http.StatusNotFound {
+			// Response not stored yet — keep polling.
+			if c.logger != nil {
+				c.logger.Info(ctx, "poll fallback: response not found yet, will retry",
+					observability.Int("poll", poll+1))
+			}
+			continue
+		}
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("poll response returned %d", resp.StatusCode)
+		}
+
+		var result struct {
+			ID     string `json:"id"`
+			Status string `json:"status"`
+			Output []struct {
+				Type    string `json:"type"`
+				Content []struct {
+					Type string `json:"type"`
+					Text string `json:"text"`
+				} `json:"content"`
+				Name      string `json:"name"`
+				CallID    string `json:"call_id"`
+				Arguments string `json:"arguments"`
+			} `json:"output"`
+			Usage struct {
+				InputTokens  int `json:"input_tokens"`
+				OutputTokens int `json:"output_tokens"`
+				TotalTokens  int `json:"total_tokens"`
+			} `json:"usage"`
+		}
+		if err := json.Unmarshal(body, &result); err != nil {
+			return fmt.Errorf("parse poll response: %w", err)
+		}
+
+		switch result.Status {
+		case "completed":
+			// Emit the completed response as chunks.
+			chunk := ai.CompletionChunk{
+				Done:              true,
+				ConversationState: result.ID,
+			}
+			if result.Usage.TotalTokens > 0 {
+				chunk.Usage = &ai.TokenUsage{
+					InputTokens:  result.Usage.InputTokens,
+					OutputTokens: result.Usage.OutputTokens,
+					TotalTokens:  result.Usage.TotalTokens,
+				}
+			}
+			for _, out := range result.Output {
+				switch out.Type {
+				case "message":
+					for _, c := range out.Content {
+						if c.Type == "output_text" && c.Text != "" {
+							chunk.Delta += c.Text
+						}
+					}
+				case "function_call":
+					chunk.ToolCalls = append(chunk.ToolCalls, ai.ToolCall{
+						ID:        out.CallID,
+						Name:      out.Name,
+						Arguments: out.Arguments,
+					})
+				}
+			}
+			stream(chunk)
+			return nil
+		case "failed", "cancelled", "incomplete":
+			return fmt.Errorf("response %s: status %s", responseID, result.Status)
+		default:
+			// "queued", "in_progress" — keep polling
+			if c.logger != nil {
+				c.logger.Info(ctx, "poll fallback waiting",
+					observability.String("status", result.Status),
+					observability.Int("poll", poll+1))
+			}
+		}
+	}
+	return fmt.Errorf("response %s still not completed after polling", responseID)
+}
+
+// doStreamCompletion performs a single streaming completion call.
+// Returns the server-assigned response ID (Responses API only, empty otherwise) and any error.
+func (c *Client) doStreamCompletion(ctx context.Context, req ai.CompletionRequest, stream func(ai.CompletionChunk)) (string, error) {
 	endpoint := strings.TrimRight(c.config.Endpoint, "/")
 
 	var body []byte
@@ -211,12 +371,12 @@ func (c *Client) doStreamCompletion(ctx context.Context, req ai.CompletionReques
 		url = c.buildURL(endpoint)
 	}
 	if err != nil {
-		return fmt.Errorf("marshal request: %w", err)
+		return "", fmt.Errorf("marshal request: %w", err)
 	}
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
-		return fmt.Errorf("create request: %w", err)
+		return "", fmt.Errorf("create request: %w", err)
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 
@@ -229,13 +389,13 @@ func (c *Client) doStreamCompletion(ctx context.Context, req ai.CompletionReques
 
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
-		return fmt.Errorf("http request: %w", err)
+		return "", fmt.Errorf("http request: %w", err)
 	}
 	defer resp.Body.Close() //nolint:errcheck // best-effort close on HTTP response
 
 	if resp.StatusCode == http.StatusTooManyRequests {
 		respBody, _ := io.ReadAll(resp.Body) //nolint:errcheck
-		return &rateLimitError{raw: string(respBody)}
+		return "", &rateLimitError{raw: string(respBody)}
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -246,13 +406,14 @@ func (c *Client) doStreamCompletion(ctx context.Context, req ai.CompletionReques
 				observability.Int("request_body_size", len(body)),
 			)
 		}
-		return fmt.Errorf("azure ai returned %d: %s", resp.StatusCode, string(respBody))
+		return "", fmt.Errorf("azure ai returned %d: %s", resp.StatusCode, string(respBody))
 	}
 
 	if c.useResponsesAPI() {
-		return c.parseResponsesSSEStream(ctx, resp.Body, stream)
+		sr, parseErr := c.parseResponsesSSEStream(ctx, resp.Body, stream)
+		return sr.responseID, parseErr
 	}
-	return c.parseSSEStream(ctx, resp.Body, stream)
+	return "", c.parseSSEStream(ctx, resp.Body, stream)
 }
 
 // buildRequest converts our domain types to the Azure OpenAI API format.

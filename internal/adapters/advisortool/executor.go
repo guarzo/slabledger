@@ -109,7 +109,7 @@ func toJSON(v any) string {
 		}{Error: fmt.Sprintf("marshal failed: %s", err)})
 		return string(errResult)
 	}
-	const maxLen = 8000
+	const maxLen = 15000
 	if len(b) <= maxLen {
 		return string(b)
 	}

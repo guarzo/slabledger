@@ -149,11 +149,15 @@ func initializeAdvisorService(
 
 	toolExec := advisortool.NewCampaignToolExecutor(campaignsService)
 	advisorCacheRepo = sqlite.NewAdvisorCacheRepository(db.DB, logger)
-	advisorSvc = advisor.NewService(client, toolExec,
+	advisorOpts := []advisor.ServiceOption{
 		advisor.WithLogger(logger),
 		advisor.WithAITracker(aiCallRepo),
 		advisor.WithCacheStore(advisorCacheRepo),
-	)
+	}
+	if cfg.AdvisorRefresh.MaxToolRounds > 0 {
+		advisorOpts = append(advisorOpts, advisor.WithMaxToolRounds(cfg.AdvisorRefresh.MaxToolRounds))
+	}
+	advisorSvc = advisor.NewService(client, toolExec, advisorOpts...)
 	logger.Info(ctx, "AI advisor initialized",
 		observability.String("deployment", cfg.Adapters.AzureAIDeployment))
 
@@ -174,8 +178,26 @@ func initializeSocialService(
 	var socialOpts []social.ServiceOption
 	socialOpts = append(socialOpts, social.WithLogger(logger))
 	socialOpts = append(socialOpts, social.WithAITracker(aiCallRepo))
-	if azureAIClient != nil {
-		socialOpts = append(socialOpts, social.WithLLM(azureAIClient))
+
+	// Use a separate model for social content if SOCIAL_AI_DEPLOYMENT is configured.
+	socialLLM := azureAIClient
+	if cfg.Adapters.SocialAIDeployment != "" && cfg.Adapters.SocialAIDeployment != cfg.Adapters.AzureAIDeployment {
+		socialClient, socialErr := azureai.NewClient(azureai.Config{
+			Endpoint:       cfg.Adapters.AzureAIEndpoint,
+			APIKey:         cfg.Adapters.AzureAIKey,
+			DeploymentName: cfg.Adapters.SocialAIDeployment,
+		}, azureai.WithLogger(logger))
+		if socialErr != nil {
+			logger.Warn(ctx, "social AI client init failed, falling back to advisor model",
+				observability.Err(socialErr))
+		} else {
+			socialLLM = socialClient
+			logger.Info(ctx, "social content using separate model",
+				observability.String("deployment", cfg.Adapters.SocialAIDeployment))
+		}
+	}
+	if socialLLM != nil {
+		socialOpts = append(socialOpts, social.WithLLM(socialLLM))
 	}
 
 	// Initialize Instagram integration (requires encryption + Instagram config)
