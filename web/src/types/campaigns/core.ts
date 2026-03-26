@@ -462,3 +462,39 @@ export interface EbayExportGenerateItem {
   purchaseId: string;
   priceCents: number;
 }
+
+// Orders sales import types
+
+export interface OrdersImportMatch {
+  certNumber: string;
+  productTitle: string;
+  saleChannel: string;
+  saleDate: string;
+  salePriceCents: number;
+  saleFeeCents: number;
+  purchaseId: string;
+  campaignId: string;
+  cardName: string;
+  buyCostCents: number;
+  netProfitCents: number;
+}
+
+export interface OrdersImportSkip {
+  certNumber: string;
+  productTitle: string;
+  reason: string;
+}
+
+export interface OrdersImportResult {
+  matched: OrdersImportMatch[];
+  alreadySold: OrdersImportSkip[];
+  notFound: OrdersImportSkip[];
+  skipped: OrdersImportSkip[];
+}
+
+export interface OrdersConfirmItem {
+  purchaseId: string;
+  saleChannel: string;
+  saleDate: string;
+  salePriceCents: number;
+}
