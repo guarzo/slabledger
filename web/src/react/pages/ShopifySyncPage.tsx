@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useMemo } from 'react';
 import { api } from '../../js/api';
 import type { ShopifyPriceSyncMatch, ShopifyPriceSyncResponse } from '../../types/campaigns';
 import { formatCents, centsToDollars, dollarsToCents } from '../utils/formatters';
-import { Button, CardShell, TrendArrow } from '../ui';
+import { Button, CardShell } from '../ui';
 import { useToast } from '../contexts/ToastContext';
 
 /* ── Types ────────────────────────────────────────────────────────── */
@@ -26,17 +26,9 @@ interface ParsedCSV {
   priceIdx: number;
 }
 
-type ItemDecision = { action: 'accept'; priceCents: number } | { action: 'edit'; priceCents: number } | { action: 'skip' };
+type ItemDecision = { action: 'update'; priceCents: number } | { action: 'skip' };
 
 type Phase = 'upload' | 'review' | 'export';
-
-type ExceptionSeverity = 'danger' | 'warning' | 'info';
-type FilterMode = 'review' | 'all' | 'danger' | 'warning' | 'no-data' | 'clean';
-
-interface ExceptionTag {
-  label: string;
-  severity: ExceptionSeverity;
-}
 
 /* ── CSV Parsing ──────────────────────────────────────────────────── */
 
@@ -183,72 +175,19 @@ function detectAndParseCSV(text: string): ParsedCSV {
   return { format, headers, prefixLines, items, certIdx, priceIdx };
 }
 
-/* ── Exception Classification ─────────────────────────────────────── */
+/* ── Helpers ──────────────────────────────────────────────────────── */
 
-function classifyExceptions(m: ShopifyPriceSyncMatch): ExceptionTag[] {
-  const tags: ExceptionTag[] = [];
-
-  // Danger conditions
-  if (m.marketPriceCents > 0 && m.costBasisCents > 0 && m.marketPriceCents < m.costBasisCents) {
-    tags.push({ label: 'Underwater', severity: 'danger' });
-  }
-  if (m.costBasisCents > 0 && m.currentPriceCents > 0 && m.currentPriceCents < m.costBasisCents) {
-    tags.push({ label: 'Below Cost', severity: 'danger' });
-  }
-  if (m.minimumPriceCents > 0 && m.currentPriceCents > 0 && m.currentPriceCents < m.minimumPriceCents) {
-    tags.push({ label: 'Below Min', severity: 'danger' });
-  }
-
-  // Warning conditions
-  if (m.priceDeltaPct < -0.15) {
-    tags.push({ label: 'Large Drop', severity: 'warning' });
-  }
-  if (!m.hasMarketData) {
-    tags.push({ label: 'No Data', severity: 'warning' });
-  }
-
-  // Info conditions
-  const hasDanger = tags.some(t => t.severity === 'danger');
-  if (m.clValueCents > 0 && m.marketPriceCents > 0) {
-    const maxVal = Math.max(m.clValueCents, m.marketPriceCents);
-    const divergence = Math.abs(m.clValueCents - m.marketPriceCents) / maxVal;
-    if (divergence > 0.30) {
-      tags.push({ label: 'CL/Mkt Gap', severity: 'info' });
-    }
-  }
-  if (!hasDanger && Math.abs(m.priceDeltaPct) > 0.10) {
-    tags.push({ label: 'Needs Update', severity: 'info' });
-  }
-
-  return tags;
-}
-
-function highestSeverity(tags: ExceptionTag[]): ExceptionSeverity | null {
-  if (tags.some(t => t.severity === 'danger')) return 'danger';
-  if (tags.some(t => t.severity === 'warning')) return 'warning';
-  if (tags.some(t => t.severity === 'info')) return 'info';
-  return null;
-}
-
-const severityRank: Record<ExceptionSeverity, number> = { danger: 0, warning: 1, info: 2 };
-
-/** Returns true when current/market/CL prices are close enough that no action is needed. */
-function isAligned(m: ShopifyPriceSyncMatch): boolean {
-  const cur = m.currentPriceCents;
-  const mkt = m.marketPriceCents;
-  const cl = m.clValueCents;
-  if (cur <= 0) return false;
-
-  const within = (a: number, b: number, pct: number) =>
-    Math.abs(a - b) / Math.max(a, b) <= pct;
-
-  const hasMkt = m.hasMarketData && mkt > 0;
-  const hasCL = cl > 0;
-
-  if (hasMkt && hasCL) return within(cur, mkt, 0.05) && within(cur, cl, 0.05);
-  if (hasMkt) return within(cur, mkt, 0.05);
-  if (hasCL) return within(cur, cl, 0.05);
-  return false;
+/** Format a relative time string from an ISO date, e.g. "2d ago", "3h ago". */
+function relativeTime(iso: string | undefined): string {
+  if (!iso) return '\u2014';
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60_000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days}d ago`;
 }
 
 /* ── Upload Phase ─────────────────────────────────────────────────── */
@@ -290,176 +229,64 @@ function UploadZone({ onFile }: { onFile: (file: File) => void }) {
   );
 }
 
-/* ── Review Table ─────────────────────────────────────────────────── */
+/* ── Review Row ───────────────────────────────────────────────────── */
 
-function DeltaBadge({ pct }: { pct: number }) {
-  const sign = pct >= 0 ? '+' : '';
-  const color = pct > 0 ? 'text-[var(--success)]' : pct < 0 ? 'text-[var(--danger)]' : 'text-[var(--text-muted)]';
-  return <span className={`text-xs font-medium ${color}`}>{sign}{(pct * 100).toFixed(1)}%</span>;
-}
-
-function ExceptionBadge({ label, severity }: ExceptionTag) {
-  const styles: Record<ExceptionSeverity, string> = {
-    danger: 'bg-[var(--danger-bg)] text-[var(--danger)] border-[var(--danger-border)]',
-    warning: 'bg-[var(--warning-bg)] text-[var(--warning)] border-[var(--warning-border)]',
-    info: 'bg-[var(--info-bg)] text-[var(--info)] border-[var(--info-border)]',
-  };
-  return (
-    <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full border ${styles[severity]}`}>
-      {label}
-    </span>
-  );
-}
-
-function costColor(m: ShopifyPriceSyncMatch): string {
-  if (m.costBasisCents > 0 && m.currentPriceCents > 0 && m.costBasisCents > m.currentPriceCents) return 'text-[var(--danger)]';
-  return 'text-[var(--text-muted)]';
-}
-
-/** Current price vs market: orange if overpriced, blue if underpriced. */
-function currentColor(m: ShopifyPriceSyncMatch): string {
-  const mkt = m.marketPriceCents;
-  const cur = m.currentPriceCents;
-  if (!m.hasMarketData || mkt <= 0 || cur <= 0) return 'text-[var(--text)]';
-  if (cur > mkt * 1.10) return 'text-[var(--warning)]';   // priced above market
-  if (cur < mkt * 0.90) return 'text-[var(--info)]';      // priced below market
-  return 'text-[var(--text)]';
-}
-
-/** Market vs current: green if market above you, red if market below you. */
-function marketColor(m: ShopifyPriceSyncMatch): string {
-  const mkt = m.marketPriceCents;
-  const cur = m.currentPriceCents;
-  if (!m.hasMarketData || mkt <= 0 || cur <= 0) return 'text-[var(--text-muted)]';
-  if (mkt > cur * 1.05) return 'text-[var(--success)]';   // market above → room to raise
-  if (mkt < cur * 0.95) return 'text-[var(--danger)]';    // market below → may need to lower
-  return 'text-[var(--text-muted)]';
-}
-
-/** CL vs market (or current if no market): blue if CL above, orange if CL below. */
-function clColor(m: ShopifyPriceSyncMatch): string {
-  const cl = m.clValueCents;
-  if (cl <= 0) return 'text-[var(--text-muted)]';
-  const ref = (m.hasMarketData && m.marketPriceCents > 0) ? m.marketPriceCents : m.currentPriceCents;
-  if (ref <= 0) return 'text-[var(--text-muted)]';
-  if (cl > ref * 1.10) return 'text-[var(--info)]';       // CL above market
-  if (cl < ref * 0.90) return 'text-[var(--warning)]';    // CL below market
-  return 'text-[var(--text-muted)]';
-}
-
-function ReviewRow({ match, exceptions, decision, onDecide }: {
+function ReviewRow({ match, decision, onDecide }: {
   match: ShopifyPriceSyncMatch;
-  exceptions: ExceptionTag[];
   decision: ItemDecision | undefined;
   onDecide: (d: ItemDecision) => void;
 }) {
-  const [editing, setEditing] = useState(false);
-  const [editValue, setEditValue] = useState('');
-
   const effectiveAction = decision?.action || 'pending';
-  const effectivePrice = decision && decision.action !== 'skip' ? decision.priceCents : match.suggestedPriceCents;
 
-  const severity = highestSeverity(exceptions);
-  const borderColor = severity === 'danger' ? 'var(--danger)'
-    : severity === 'warning' ? 'var(--warning)'
-    : severity === 'info' ? 'var(--info)'
-    : 'transparent';
+  const diffCents = match.recommendedPriceCents - match.currentPriceCents;
+  const diffColor = diffCents > 0 ? 'text-[var(--success)]' : diffCents < 0 ? 'text-[var(--danger)]' : 'text-[var(--text-muted)]';
+  const diffSign = diffCents > 0 ? '+' : '';
 
-  // Action state background takes precedence over exception tint
   let rowBg = '';
-  if (effectiveAction === 'accept' || effectiveAction === 'edit') {
+  if (effectiveAction === 'update') {
     rowBg = 'bg-[var(--success-bg)]/30';
   } else if (effectiveAction === 'skip') {
     rowBg = 'bg-[var(--surface-2)]/30';
   }
 
-  const exceptionBg = effectiveAction === 'pending'
-    ? severity === 'danger' ? 'var(--danger-bg)' : severity === 'warning' ? 'var(--warning-bg)' : undefined
-    : undefined;
-
-  const trendDir = match.recommendation === 'rising' ? 'up' as const
-    : match.recommendation === 'falling' ? 'down' as const
-    : 'stable' as const;
-
-  const suggestedDimmed = !match.hasMarketData;
+  const isCL = match.recommendedSource !== 'user_reviewed';
 
   return (
-    <tr
-      className={`border-b border-[var(--surface-2)]/50 ${rowBg}`}
-      style={{ borderLeft: `3px solid ${borderColor}`, background: exceptionBg }}
-    >
+    <tr className={`border-b border-[var(--surface-2)]/50 ${rowBg}`}>
       <td className="py-2 px-2">
         <div className="text-sm font-medium text-[var(--text)]">{match.cardName}</div>
-        {match.setName && <div className="text-[10px] text-[var(--text-muted)]">{match.setName}{match.cardNumber ? ` #${match.cardNumber}` : ''}</div>}
-        {exceptions.length > 0 && (
-          <div className="flex gap-1 flex-wrap mt-0.5">
-            {exceptions.map(e => <ExceptionBadge key={e.label} label={e.label} severity={e.severity} />)}
+        {match.setName && (
+          <div className="text-[10px] text-[var(--text-muted)]">
+            {match.setName}{match.cardNumber ? ` #${match.cardNumber}` : ''}
           </div>
         )}
       </td>
-      <td className="py-2 px-2 text-xs text-[var(--text-muted)]">{match.certNumber}</td>
-      <td className="py-2 px-2 text-xs text-center text-[var(--text)]">{match.grader} {match.grade}</td>
-      <td className={`py-2 px-2 text-right text-sm ${currentColor(match)}`}>{formatCents(match.currentPriceCents)}</td>
-      <td className={`py-2 px-2 text-right text-xs ${costColor(match)}`}>{match.costBasisCents > 0 ? formatCents(match.costBasisCents) : '—'}</td>
-      <td className={`py-2 px-2 text-right text-xs ${marketColor(match)}`}>{match.hasMarketData ? formatCents(match.marketPriceCents) : '—'}</td>
-      <td className={`py-2 px-2 text-right text-xs ${clColor(match)}`}>{match.clValueCents > 0 ? formatCents(match.clValueCents) : '—'}</td>
+      <td className="py-2 px-2 text-xs text-center text-[var(--text)]">
+        {match.grader ? `${match.grader} ` : ''}{match.grade}
+      </td>
+      <td className="py-2 px-2 text-right text-sm text-[var(--text)]">{formatCents(match.currentPriceCents)}</td>
       <td className="py-2 px-2 text-right">
-        {editing ? (
-          <div className="flex items-center justify-end gap-1">
-            <span className="text-xs text-[var(--text-muted)]">$</span>
-            <input
-              type="number"
-              step="0.01"
-              className="w-20 px-1.5 py-0.5 text-sm text-right bg-[var(--surface-1)] border border-[var(--surface-2)] rounded"
-              value={editValue}
-              onChange={e => setEditValue(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === 'Enter') {
-                  const cents = dollarsToCents(editValue);
-                  if (cents > 0) {
-                    onDecide({ action: 'edit', priceCents: cents });
-                    setEditing(false);
-                  }
-                } else if (e.key === 'Escape') {
-                  setEditing(false);
-                }
-              }}
-              autoFocus
-            />
-            <button
-              className="text-xs text-[var(--success)] hover:underline"
-              onClick={() => {
-                const cents = dollarsToCents(editValue);
-                if (cents > 0) {
-                  onDecide({ action: 'edit', priceCents: cents });
-                  setEditing(false);
-                }
-              }}
-            >OK</button>
-          </div>
-        ) : (
-          <div
-            className="flex items-center justify-end gap-1"
-            title={suggestedDimmed ? 'No market data — suggested price may be inaccurate' : undefined}
-          >
-            <span className={`text-sm font-medium ${suggestedDimmed ? 'text-[var(--text-muted)]' : 'text-[var(--text)]'}`}>
-              {formatCents(effectivePrice)}
+        <div className="flex items-center justify-end gap-1">
+          <span className="text-sm font-medium text-[var(--text)]">{formatCents(match.recommendedPriceCents)}</span>
+          {isCL && (
+            <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-[var(--warning-bg)] text-[var(--warning)] border border-[var(--warning-border)]">
+              CL
             </span>
-            <DeltaBadge pct={match.priceDeltaPct} />
-            <TrendArrow trend={trendDir} size="sm" />
-          </div>
-        )}
+          )}
+        </div>
+      </td>
+      <td className={`py-2 px-2 text-right text-sm font-medium ${diffColor}`}>
+        {diffSign}{formatCents(diffCents)}
+      </td>
+      <td className="py-2 px-2 text-center text-xs text-[var(--text-muted)]">
+        {!isCL ? relativeTime(match.reviewedAt) : '\u2014'}
       </td>
       <td className="py-2 px-2 text-right">
         <div className="flex items-center justify-end gap-1">
           <button
-            className={`px-2 py-0.5 text-xs rounded ${effectiveAction === 'accept' ? 'bg-[var(--success)] text-white' : 'bg-[var(--surface-2)] text-[var(--text)] hover:bg-[var(--success)]/20'}`}
-            onClick={() => onDecide({ action: 'accept', priceCents: match.suggestedPriceCents })}
-          >Accept</button>
-          <button
-            className={`px-2 py-0.5 text-xs rounded ${effectiveAction === 'edit' ? 'bg-[var(--brand-500)] text-white' : 'bg-[var(--surface-2)] text-[var(--text)] hover:bg-[var(--brand-500)]/20'}`}
-            onClick={() => { setEditValue(centsToDollars(match.suggestedPriceCents)); setEditing(true); }}
-          >Edit</button>
+            className={`px-2 py-0.5 text-xs rounded ${effectiveAction === 'update' ? 'bg-[var(--success)] text-white' : 'bg-[var(--surface-2)] text-[var(--text)] hover:bg-[var(--success)]/20'}`}
+            onClick={() => onDecide({ action: 'update', priceCents: match.recommendedPriceCents })}
+          >Update</button>
           <button
             className={`px-2 py-0.5 text-xs rounded ${effectiveAction === 'skip' ? 'bg-[var(--text-muted)] text-white' : 'bg-[var(--surface-2)] text-[var(--text)] hover:bg-[var(--text-muted)]/20'}`}
             onClick={() => onDecide({ action: 'skip' })}
@@ -470,18 +297,49 @@ function ReviewRow({ match, exceptions, decision, onDecide }: {
   );
 }
 
-/* ── Filter Toggle ────────────────────────────────────────────────── */
+/* ── Section Table ────────────────────────────────────────────────── */
 
-function FilterToggle({ label, count, active, onClick }: { label: string; count: number; active: boolean; onClick: () => void }) {
+function SectionTable({ title, titleColor, items, decisions, onDecide }: {
+  title: string;
+  titleColor: string;
+  items: ShopifyPriceSyncMatch[];
+  decisions: Map<string, ItemDecision>;
+  onDecide: (certNumber: string, d: ItemDecision) => void;
+}) {
+  if (items.length === 0) return null;
   return (
-    <button
-      className={`px-2.5 py-1 text-xs rounded-full transition-colors ${
-        active ? 'bg-[var(--brand-500)] text-white' : 'bg-[var(--surface-2)] text-[var(--text-muted)] hover:text-[var(--text)]'
-      }`}
-      onClick={onClick}
-    >
-      {label} ({count})
-    </button>
+    <div className="mb-6">
+      <div className={`text-sm font-semibold mb-2 ${titleColor}`}>
+        {title} — {items.length} update{items.length !== 1 ? 's' : ''}
+      </div>
+      <CardShell variant="default" padding="none">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b-2 border-[var(--surface-2)]">
+                <th className="text-left py-2 px-2 text-[var(--text-muted)] font-medium text-xs">Card</th>
+                <th className="text-center py-2 px-2 text-[var(--text-muted)] font-medium text-xs">Grade</th>
+                <th className="text-right py-2 px-2 text-[var(--text-muted)] font-medium text-xs">Store Price</th>
+                <th className="text-right py-2 px-2 text-[var(--text-muted)] font-medium text-xs">Rec. Price</th>
+                <th className="text-right py-2 px-2 text-[var(--text-muted)] font-medium text-xs">Diff</th>
+                <th className="text-center py-2 px-2 text-[var(--text-muted)] font-medium text-xs">Reviewed</th>
+                <th className="text-right py-2 px-2 text-[var(--text-muted)] font-medium text-xs">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map(m => (
+                <ReviewRow
+                  key={m.certNumber}
+                  match={m}
+                  decision={decisions.get(m.certNumber)}
+                  onDecide={d => onDecide(m.certNumber, d)}
+                />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </CardShell>
+    </div>
   );
 }
 
@@ -491,7 +349,6 @@ export default function ShopifySyncPage({ embedded = false }: { embedded?: boole
   const toast = useToast();
   const [phase, setPhase] = useState<Phase>('upload');
   const [loading, setLoading] = useState(false);
-  const [filterMode, setFilterMode] = useState<FilterMode>('review');
 
   // CSV state
   const [parsedCSV, setParsedCSV] = useState<ParsedCSV | null>(null);
@@ -502,46 +359,27 @@ export default function ShopifySyncPage({ embedded = false }: { embedded?: boole
   const [noCertCount, setNoCertCount] = useState(0);
   const [decisions, setDecisions] = useState<Map<string, ItemDecision>>(new Map());
 
-  // Classify, count, and sort matches in two passes (classify+count, then sort)
-  const { sortedMatches, dangerCount, warningCount, noDataCount, cleanCount, alignedCount } = useMemo(() => {
-    let danger = 0, warning = 0, noData = 0, clean = 0, aligned = 0;
-    const classified = matched.map(m => {
-      const exceptions = classifyExceptions(m);
-      const itemAligned = exceptions.length === 0 && isAligned(m);
-      if (exceptions.some(e => e.severity === 'danger')) danger++;
-      if (exceptions.some(e => e.severity === 'warning')) warning++;
-      if (exceptions.some(e => e.label === 'No Data')) noData++;
-      if (exceptions.length === 0) clean++;
-      if (itemAligned) aligned++;
-      return { match: m, exceptions, aligned: itemAligned };
-    });
+  // Filter to mismatches only, split into two sections
+  const { userReviewed, clDerived, alignedCount } = useMemo(() => {
+    const mismatches = matched.filter(
+      (m) => m.recommendedPriceCents > 0 && m.currentPriceCents !== m.recommendedPriceCents
+    );
+    const aligned = matched.length - mismatches.length;
 
-    const sorted = classified.sort((a, b) => {
-      const aSev = highestSeverity(a.exceptions);
-      const bSev = highestSeverity(b.exceptions);
-      const aRank = aSev != null ? severityRank[aSev] : 3;
-      const bRank = bSev != null ? severityRank[bSev] : 3;
-      if (aRank !== bRank) return aRank - bRank;
-      return Math.abs(b.match.priceDeltaPct) - Math.abs(a.match.priceDeltaPct);
-    });
+    const sortByDiff = (a: ShopifyPriceSyncMatch, b: ShopifyPriceSyncMatch) =>
+      Math.abs(b.recommendedPriceCents - b.currentPriceCents) -
+      Math.abs(a.recommendedPriceCents - a.currentPriceCents);
 
-    return { sortedMatches: sorted, dangerCount: danger, warningCount: warning, noDataCount: noData, cleanCount: clean, alignedCount: aligned };
+    const reviewed = mismatches.filter((m) => m.recommendedSource === 'user_reviewed');
+    const cl = mismatches.filter((m) => m.recommendedSource !== 'user_reviewed');
+
+    reviewed.sort(sortByDiff);
+    cl.sort(sortByDiff);
+
+    return { userReviewed: reviewed, clDerived: cl, alignedCount: aligned };
   }, [matched]);
 
-  // Reviewable = has exceptions OR not aligned (i.e., prices diverge enough to warrant a look)
-  const reviewCount = matched.length - alignedCount;
-
-  // Filter
-  const filteredMatches = useMemo(() => {
-    switch (filterMode) {
-      case 'review': return sortedMatches.filter(c => c.exceptions.length > 0 || !c.aligned);
-      case 'danger': return sortedMatches.filter(c => c.exceptions.some(e => e.severity === 'danger'));
-      case 'warning': return sortedMatches.filter(c => c.exceptions.some(e => e.severity === 'warning'));
-      case 'no-data': return sortedMatches.filter(c => c.exceptions.some(e => e.label === 'No Data'));
-      case 'clean': return sortedMatches.filter(c => c.exceptions.length === 0);
-      default: return sortedMatches;
-    }
-  }, [sortedMatches, filterMode]);
+  const allMismatches = useMemo(() => [...userReviewed, ...clDerived], [userReviewed, clDerived]);
 
   const handleFile = useCallback(async (file: File) => {
     try {
@@ -578,7 +416,6 @@ export default function ShopifySyncPage({ embedded = false }: { embedded?: boole
       setMatched(resp.matched);
       setUnmatched(resp.unmatched);
       setPhase('review');
-      setFilterMode('review');
       const formatLabel = csv.format === 'ebay' ? 'eBay' : 'Shopify';
       toast.success(`${formatLabel} CSV: matched ${resp.matched.length} items, ${resp.unmatched.length} unmatched`);
     } catch (err) {
@@ -588,7 +425,7 @@ export default function ShopifySyncPage({ embedded = false }: { embedded?: boole
     }
   }, [toast]);
 
-  const setDecision = useCallback((certNumber: string, decision: ItemDecision) => {
+  const setDecisionFor = useCallback((certNumber: string, decision: ItemDecision) => {
     setDecisions(prev => {
       const next = new Map(prev);
       next.set(certNumber, decision);
@@ -596,25 +433,19 @@ export default function ShopifySyncPage({ embedded = false }: { embedded?: boole
     });
   }, []);
 
-  // Bulk actions always operate on full matched array, not filtered view
-  const acceptAll = useCallback(() => {
+  // Bulk: mark all remaining unskipped items as update
+  const updateAll = useCallback(() => {
     const next = new Map(decisions);
-    for (const m of matched) {
-      next.set(m.certNumber, { action: 'accept', priceCents: m.suggestedPriceCents });
+    for (const m of allMismatches) {
+      const existing = next.get(m.certNumber);
+      if (!existing || existing.action !== 'skip') {
+        next.set(m.certNumber, { action: 'update', priceCents: m.recommendedPriceCents });
+      }
     }
     setDecisions(next);
-  }, [matched, decisions]);
+  }, [allMismatches, decisions]);
 
-  const skipAll = useCallback(() => {
-    const next = new Map(decisions);
-    for (const m of matched) {
-      next.set(m.certNumber, { action: 'skip' });
-    }
-    setDecisions(next);
-  }, [matched, decisions]);
-
-  const reviewedCount = decisions.size;
-  const acceptedCount = Array.from(decisions.values()).filter(d => d.action !== 'skip').length;
+  const updatedCount = Array.from(decisions.values()).filter(d => d.action === 'update').length;
 
   const handleExport = useCallback(() => {
     if (!parsedCSV) return;
@@ -624,7 +455,7 @@ export default function ShopifySyncPage({ embedded = false }: { embedded?: boole
     const priceUpdates = new Map<string, string>();
     for (const m of matched) {
       const d = decisions.get(m.certNumber);
-      if (d && d.action !== 'skip') {
+      if (d && d.action === 'update') {
         priceUpdates.set(m.certNumber, centsToDollars(d.priceCents));
       }
     }
@@ -671,7 +502,6 @@ export default function ShopifySyncPage({ embedded = false }: { embedded?: boole
     setUnmatched([]);
     setNoCertCount(0);
     setDecisions(new Map());
-    setFilterMode('review');
   }, []);
 
   const content = (
@@ -727,85 +557,50 @@ export default function ShopifySyncPage({ embedded = false }: { embedded?: boole
                 <span className="text-[var(--text-muted)]">{noCertCount} items without certs (pass-through)</span>
               </div>
             )}
-            {dangerCount > 0 && (
-              <div className="text-sm">
-                <span className="text-[var(--danger)] font-medium">{dangerCount}</span>
-                <span className="text-[var(--text-muted)]"> need attention</span>
-              </div>
-            )}
-            {warningCount > 0 && (
-              <div className="text-sm">
-                <span className="text-[var(--warning)] font-medium">{warningCount}</span>
-                <span className="text-[var(--text-muted)]"> warnings</span>
-              </div>
-            )}
-            {alignedCount > 0 && (
-              <div className="text-sm">
-                <span className="text-[var(--text-muted)]">{alignedCount} aligned (hidden)</span>
-              </div>
-            )}
             <div className="ml-auto text-sm text-[var(--text-muted)]">
-              {reviewedCount} of {matched.length} reviewed
+              {updatedCount} of {allMismatches.length} marked for update
             </div>
           </div>
 
-          {/* Filter toggles */}
-          <div className="flex items-center gap-1.5 mb-3">
-            <FilterToggle label="Review" count={reviewCount} active={filterMode === 'review'} onClick={() => setFilterMode('review')} />
-            {dangerCount > 0 && <FilterToggle label="Attention" count={dangerCount} active={filterMode === 'danger'} onClick={() => setFilterMode('danger')} />}
-            {warningCount > 0 && <FilterToggle label="Warnings" count={warningCount} active={filterMode === 'warning'} onClick={() => setFilterMode('warning')} />}
-            {noDataCount > 0 && <FilterToggle label="No Data" count={noDataCount} active={filterMode === 'no-data'} onClick={() => setFilterMode('no-data')} />}
-            <FilterToggle label="Clean" count={cleanCount} active={filterMode === 'clean'} onClick={() => setFilterMode('clean')} />
-            <FilterToggle label="All" count={matched.length} active={filterMode === 'all'} onClick={() => setFilterMode('all')} />
-          </div>
-
           {/* Bulk actions */}
-          <div className="flex items-center gap-2 mb-3">
-            <Button size="sm" variant="success" onClick={acceptAll}>Accept All</Button>
-            <Button size="sm" variant="ghost" onClick={skipAll}>Skip All</Button>
+          <div className="flex items-center gap-2 mb-4">
+            <Button size="sm" variant="success" onClick={updateAll}>Update All</Button>
             <div className="ml-auto">
               <Button
                 size="sm"
                 variant="primary"
-                disabled={acceptedCount === 0}
+                disabled={updatedCount === 0}
                 onClick={() => { setPhase('export'); handleExport(); }}
               >
-                Export Updated CSV ({acceptedCount} changes)
+                Export ({updatedCount} changes)
               </Button>
             </div>
           </div>
 
-          {/* Review table */}
-          <CardShell variant="default" padding="none">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b-2 border-[var(--surface-2)]">
-                    <th className="text-left py-2 px-2 text-[var(--text-muted)] font-medium text-xs">Card</th>
-                    <th className="text-left py-2 px-2 text-[var(--text-muted)] font-medium text-xs">Cert</th>
-                    <th className="text-center py-2 px-2 text-[var(--text-muted)] font-medium text-xs">Grade</th>
-                    <th className="text-right py-2 px-2 text-[var(--text-muted)] font-medium text-xs">Current</th>
-                    <th className="text-right py-2 px-2 text-[var(--text-muted)] font-medium text-xs">Cost</th>
-                    <th className="text-right py-2 px-2 text-[var(--text-muted)] font-medium text-xs">Market</th>
-                    <th className="text-right py-2 px-2 text-[var(--text-muted)] font-medium text-xs">CL</th>
-                    <th className="text-right py-2 px-2 text-[var(--text-muted)] font-medium text-xs">Suggested</th>
-                    <th className="text-right py-2 px-2 text-[var(--text-muted)] font-medium text-xs">Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredMatches.map(({ match: m, exceptions }) => (
-                    <ReviewRow
-                      key={m.certNumber}
-                      match={m}
-                      exceptions={exceptions}
-                      decision={decisions.get(m.certNumber)}
-                      onDecide={d => setDecision(m.certNumber, d)}
-                    />
-                  ))}
-                </tbody>
-              </table>
+          {/* User-reviewed section */}
+          <SectionTable
+            title="User-Reviewed Prices"
+            titleColor="text-[var(--success)]"
+            items={userReviewed}
+            decisions={decisions}
+            onDecide={setDecisionFor}
+          />
+
+          {/* CL-derived section */}
+          <SectionTable
+            title="Card Ladder Prices — Not Yet Reviewed"
+            titleColor="text-[var(--warning)]"
+            items={clDerived}
+            decisions={decisions}
+            onDecide={setDecisionFor}
+          />
+
+          {/* Aligned footer */}
+          {alignedCount > 0 && (
+            <div className="text-center text-sm text-[var(--text-muted)] py-3 mt-2 border-t border-[var(--surface-2)]">
+              {alignedCount} card{alignedCount !== 1 ? 's' : ''} already aligned — not shown
             </div>
-          </CardShell>
+          )}
 
           {/* Unmatched section */}
           {unmatched.length > 0 && (
@@ -830,7 +625,7 @@ export default function ShopifySyncPage({ embedded = false }: { embedded?: boole
               <polyline points="22 4 12 14.01 9 11.01" />
             </svg>
             <div className="text-lg font-medium text-[var(--text)] mb-1">Export Complete</div>
-            <div className="text-sm text-[var(--text-muted)] mb-4">{acceptedCount} prices updated in the exported CSV</div>
+            <div className="text-sm text-[var(--text-muted)] mb-4">{updatedCount} prices updated in the exported CSV</div>
             <div className="flex items-center justify-center gap-3">
               <Button size="sm" variant="primary" onClick={handleExport}>Download Again</Button>
               <Button size="sm" variant="ghost" onClick={reset}>Start Over</Button>
