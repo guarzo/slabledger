@@ -741,6 +741,12 @@ func (r *CampaignsRepository) ClearEbayExportFlags(ctx context.Context, purchase
 		return nil
 	}
 
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback() //nolint:errcheck // rollback after commit is a no-op
+
 	const chunkSize = 500
 	for start := 0; start < len(purchaseIDs); start += chunkSize {
 		end := min(start+chunkSize, len(purchaseIDs))
@@ -753,11 +759,11 @@ func (r *CampaignsRepository) ClearEbayExportFlags(ctx context.Context, purchase
 			args[i] = id
 		}
 		query := `UPDATE campaign_purchases SET ebay_export_flagged_at = NULL WHERE id IN (` + strings.Join(placeholders, ",") + `)`
-		if _, err := r.db.ExecContext(ctx, query, args...); err != nil {
+		if _, err := tx.ExecContext(ctx, query, args...); err != nil {
 			return err
 		}
 	}
-	return nil
+	return tx.Commit()
 }
 
 func (r *CampaignsRepository) ListEbayFlaggedPurchases(ctx context.Context) ([]campaigns.Purchase, error) {

@@ -523,7 +523,8 @@ func (m *mockRepo) ListEbayFlaggedPurchases(_ context.Context) ([]Purchase, erro
 		if p.EbayExportFlaggedAt == nil || m.purchaseSales[p.ID] || p.Grader != "PSA" {
 			continue
 		}
-		if c, ok := m.campaigns[p.CampaignID]; ok && c.Phase == PhaseClosed {
+		c, ok := m.campaigns[p.CampaignID]
+		if !ok || c.Phase == PhaseClosed {
 			continue
 		}
 		result = append(result, *p)

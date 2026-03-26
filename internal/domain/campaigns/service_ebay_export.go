@@ -98,7 +98,7 @@ func (s *service) GenerateEbayCSV(ctx context.Context, items []EbayExportGenerat
 		"CustomLabel", "*Title", "*C:Card Name", "*C:Set", "*C:Card Number",
 		"CD:Grade - (ID: 27502)", "CD:Professional Grader - (ID: 27501)",
 		"CDA:Certification Number - (ID: 27503)", "CD:Card Condition - (ID: 40001)",
-		"*C:Rarity", "C:Year Manufactured", "C:Language", "*StartPrice", "PicURL", "*Description",
+		"C:Rarity", "C:Year Manufactured", "C:Language", "*StartPrice", "PicURL", "*Description",
 	}
 	if err := w.Write(headers); err != nil {
 		return nil, fmt.Errorf("write headers: %w", err)
@@ -106,6 +106,9 @@ func (s *service) GenerateEbayCSV(ctx context.Context, items []EbayExportGenerat
 
 	for _, item := range items {
 		p := purchases[item.PurchaseID]
+		if p.Grader != "PSA" {
+			return nil, fmt.Errorf("purchase %s is graded by %s, not PSA", item.PurchaseID, p.Grader)
+		}
 		priceDollars := mathutil.ToDollars(int64(item.PriceCents))
 
 		setPrefix := "Pokemon "

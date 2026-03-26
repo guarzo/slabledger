@@ -10,8 +10,9 @@ import (
 func TestListEbayExportItems_FlaggedOnly(t *testing.T) {
 	now := time.Now()
 	repo := newMockRepo()
+	repo.campaigns["c1"] = &Campaign{ID: "c1", Phase: PhaseActive}
 	repo.purchases["p1"] = &Purchase{
-		ID: "p1", CertNumber: "111", CardName: "Charizard", SetName: "Base Set",
+		ID: "p1", CampaignID: "c1", CertNumber: "111", CardName: "Charizard", SetName: "Base Set",
 		CardNumber: "4", CardYear: "1999", GradeValue: 8, Grader: "PSA",
 		CLValueCents: 25000, EbayExportFlaggedAt: &now,
 		MarketSnapshotData: MarketSnapshotData{MedianCents: 27500},
@@ -63,13 +64,14 @@ func TestGenerateEbayCSV_Success(t *testing.T) {
 func TestListEbayExportItems_ExcludesNonPSA(t *testing.T) {
 	now := time.Now()
 	repo := newMockRepo()
+	repo.campaigns["c1"] = &Campaign{ID: "c1", Phase: PhaseActive}
 	repo.purchases["psa1"] = &Purchase{
-		ID: "psa1", CertNumber: "111", CardName: "Charizard", SetName: "Base Set",
+		ID: "psa1", CampaignID: "c1", CertNumber: "111", CardName: "Charizard", SetName: "Base Set",
 		CardNumber: "4", GradeValue: 8, Grader: "PSA",
 		CLValueCents: 25000, EbayExportFlaggedAt: &now,
 	}
 	repo.purchases["cgc1"] = &Purchase{
-		ID: "cgc1", CertNumber: "222", CardName: "Pikachu", SetName: "Base Set",
+		ID: "cgc1", CampaignID: "c1", CertNumber: "222", CardName: "Pikachu", SetName: "Base Set",
 		CardNumber: "58", GradeValue: 9, Grader: "CGC",
 		CLValueCents: 10000, EbayExportFlaggedAt: &now,
 	}

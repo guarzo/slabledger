@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { api } from '@/js/api';
 import type { EbayExportItem, EbayExportGenerateItem } from '@/types/campaigns/core';
 import { centsToDollars, dollarsToCents } from '@/react/utils/formatters';
@@ -16,23 +16,32 @@ export default function EbayExportTab() {
   const [editPrice, setEditPrice] = useState('');
   const [exportCount, setExportCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const fetchControllerRef = useRef<AbortController | null>(null);
 
   const fetchItems = useCallback(async () => {
+    // Abort any in-flight fetch so stale responses can't overwrite state.
+    fetchControllerRef.current?.abort();
+    const controller = new AbortController();
+    fetchControllerRef.current = controller;
+
     setLoading(true);
     setError(null);
     try {
       const resp = await api.listEbayExportItems(flaggedOnly);
+      if (controller.signal.aborted) return;
       setItems(resp.items);
       setDecisions(new Map());
     } catch (err) {
+      if (controller.signal.aborted) return;
       setError(err instanceof Error ? err.message : 'Failed to load items');
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted) setLoading(false);
     }
   }, [flaggedOnly]);
 
   // Clear stale items when the filter toggle changes.
   useEffect(() => {
+    fetchControllerRef.current?.abort();
     setItems([]);
     setDecisions(new Map());
     setError(null);

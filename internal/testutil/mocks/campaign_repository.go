@@ -694,8 +694,9 @@ func (m *MockCampaignRepository) ListEbayFlaggedPurchases(_ context.Context) ([]
 		if p.EbayExportFlaggedAt == nil || m.PurchaseSales[p.ID] || p.Grader != "PSA" {
 			continue
 		}
-		// Exclude purchases from closed campaigns (matches real SQL query).
-		if c, ok := m.Campaigns[p.CampaignID]; ok && c.Phase == campaigns.PhaseClosed {
+		// Exclude purchases with missing or closed campaigns (matches INNER JOIN in real SQL).
+		c, ok := m.Campaigns[p.CampaignID]
+		if !ok || c.Phase == campaigns.PhaseClosed {
 			continue
 		}
 		result = append(result, *p)
