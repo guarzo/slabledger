@@ -99,6 +99,7 @@ export function usePublishWithSlides(
           createdAt={detail.createdAt}
           psa10Count={psa10Count}
           totalValueCents={totalValueCents}
+          cards={detail.cards}
         />,
       );
       slides.push(coverBlob);

@@ -101,6 +101,7 @@ export default function PostPreview({ postId, onBack, igConnected }: PostPreview
                   createdAt={detail.createdAt}
                   psa10Count={psa10Count}
                   totalValueCents={totalValueCents}
+                  cards={detail.cards}
                 />
               ) : (
                 detail.cards && detail.cards[currentSlide - 1] && (
