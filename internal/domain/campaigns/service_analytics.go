@@ -7,6 +7,8 @@ import (
 	"math"
 	"time"
 
+	"github.com/guarzo/slabledger/internal/domain/errors"
+	"github.com/guarzo/slabledger/internal/domain/observability"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -153,6 +155,11 @@ func (s *service) enrichAgingItem(_ context.Context, p *Purchase, campaignName s
 		}
 	}
 
+	// Resolve recommended price from hierarchy
+	recPrice, recSource := recommendedPrice(p, item.CurrentMarket)
+	item.RecommendedPriceCents = recPrice
+	item.RecommendedSource = recSource
+
 	return item
 }
 
@@ -214,6 +221,19 @@ func (s *service) GetInventoryAging(ctx context.Context, campaignID string) ([]A
 	for i := range unsold {
 		items = append(items, s.enrichAgingItem(ctx, &unsold[i], ""))
 	}
+
+	// Batch-load open flag status
+	flaggedIDs, err := s.repo.OpenFlagPurchaseIDs(ctx)
+	if err != nil {
+		s.logger.Warn(ctx, "failed to load open flags", observability.Err(err))
+	} else {
+		for i := range items {
+			if flaggedIDs[items[i].Purchase.ID] {
+				items[i].HasOpenFlag = true
+			}
+		}
+	}
+
 	return items, nil
 }
 
@@ -237,6 +257,19 @@ func (s *service) GetGlobalInventoryAging(ctx context.Context) ([]AgingItem, err
 	for i := range purchases {
 		items = append(items, s.enrichAgingItem(ctx, &purchases[i], campaignNames[purchases[i].CampaignID]))
 	}
+
+	// Batch-load open flag status
+	flaggedIDs, err := s.repo.OpenFlagPurchaseIDs(ctx)
+	if err != nil {
+		s.logger.Warn(ctx, "failed to load open flags", observability.Err(err))
+	} else {
+		for i := range items {
+			if flaggedIDs[items[i].Purchase.ID] {
+				items[i].HasOpenFlag = true
+			}
+		}
+	}
+
 	return items, nil
 }
 
@@ -593,6 +626,17 @@ func (s *service) MatchShopifyPrices(ctx context.Context, items []ShopifyPriceSy
 		if sellItem.CurrentMarket != nil {
 			match.MarketPriceCents = sellItem.CurrentMarket.MedianCents
 		}
+
+		// Compute recommended price using resolution hierarchy
+		var snap *MarketSnapshot
+		if sellItem.CurrentMarket != nil {
+			snap = sellItem.CurrentMarket
+		}
+		recPrice, recSource := recommendedPrice(purchase, snap)
+		match.RecommendedPriceCents = recPrice
+		match.RecommendedSource = recSource
+		match.ReviewedAt = purchase.ReviewedAt
+
 		if item.CurrentPriceCents > 0 && match.SuggestedPriceCents > 0 {
 			match.PriceDeltaPct = float64(match.SuggestedPriceCents-item.CurrentPriceCents) / float64(item.CurrentPriceCents)
 		}
@@ -606,4 +650,69 @@ func (s *service) MatchShopifyPrices(ctx context.Context, items []ShopifyPriceSy
 		resp.Matched = []ShopifyPriceSyncMatch{}
 	}
 	return resp, nil
+}
+
+// --- Price Review ---
+
+func (s *service) SetReviewedPrice(ctx context.Context, purchaseID string, priceCents int, source string) error {
+	if priceCents < 0 {
+		return errors.NewAppError(ErrCodeCampaignValidation, "price must be non-negative")
+	}
+	validSources := map[string]bool{"manual": true, "cl": true, "market": true, "cost_markup": true}
+	if priceCents > 0 && !validSources[source] {
+		return errors.NewAppError(ErrCodeCampaignValidation, "invalid review source: "+source)
+	}
+	return s.repo.UpdateReviewedPrice(ctx, purchaseID, priceCents, source)
+}
+
+func (s *service) GetReviewStats(ctx context.Context, campaignID string) (ReviewStats, error) {
+	return s.repo.GetReviewStats(ctx, campaignID)
+}
+
+func (s *service) GetGlobalReviewStats(ctx context.Context) (ReviewStats, error) {
+	return s.repo.GetGlobalReviewStats(ctx)
+}
+
+// --- Price Flags ---
+
+func (s *service) CreatePriceFlag(ctx context.Context, purchaseID string, userID int64, reason string) (int64, error) {
+	if !ValidPriceFlagReasons[PriceFlagReason(reason)] {
+		return 0, errors.NewAppError(ErrCodeCampaignValidation, "invalid flag reason: "+reason)
+	}
+	// Verify purchase exists
+	if _, err := s.repo.GetPurchase(ctx, purchaseID); err != nil {
+		return 0, err
+	}
+	flag := &PriceFlag{
+		PurchaseID: purchaseID,
+		FlaggedBy:  userID,
+		FlaggedAt:  time.Now(),
+		Reason:     PriceFlagReason(reason),
+	}
+	return s.repo.CreatePriceFlag(ctx, flag)
+}
+
+func (s *service) ListPriceFlags(ctx context.Context, status string) ([]PriceFlagWithContext, error) {
+	return s.repo.ListPriceFlags(ctx, status)
+}
+
+func (s *service) ResolvePriceFlag(ctx context.Context, flagID int64, resolvedBy int64) error {
+	return s.repo.ResolvePriceFlag(ctx, flagID, resolvedBy)
+}
+
+// recommendedPrice resolves the recommended price for a purchase using the hierarchy:
+// 1. User-reviewed price (if set)
+// 2. CL value (if > 0)
+// 3. Market median (if > 0)
+func recommendedPrice(p *Purchase, snapshot *MarketSnapshot) (int, string) {
+	if p.ReviewedPriceCents > 0 {
+		return p.ReviewedPriceCents, "user_reviewed"
+	}
+	if p.CLValueCents > 0 {
+		return p.CLValueCents, "card_ladder"
+	}
+	if snapshot != nil && snapshot.MedianCents > 0 {
+		return snapshot.MedianCents, "market"
+	}
+	return 0, ""
 }

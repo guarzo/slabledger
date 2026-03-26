@@ -210,6 +210,16 @@ type Service interface {
 	DismissAISuggestion(ctx context.Context, purchaseID string) error
 	GetPriceOverrideStats(ctx context.Context) (*PriceOverrideStats, error)
 
+	// Price review
+	SetReviewedPrice(ctx context.Context, purchaseID string, priceCents int, source string) error
+	GetReviewStats(ctx context.Context, campaignID string) (ReviewStats, error)
+	GetGlobalReviewStats(ctx context.Context) (ReviewStats, error)
+
+	// Price flags
+	CreatePriceFlag(ctx context.Context, purchaseID string, userID int64, reason string) (int64, error)
+	ListPriceFlags(ctx context.Context, status string) ([]PriceFlagWithContext, error)
+	ResolvePriceFlag(ctx context.Context, flagID int64, resolvedBy int64) error
+
 	// Cert entry
 	ImportCerts(ctx context.Context, certNumbers []string) (*CertImportResult, error)
 
