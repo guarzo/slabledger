@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/google/uuid"
 
@@ -198,6 +199,30 @@ func initializeSocialService(
 	}
 	if socialLLM != nil {
 		socialOpts = append(socialOpts, social.WithLLM(socialLLM))
+	}
+
+	// Initialize image generation if enabled
+	if cfg.Adapters.ImageAIEnabled && cfg.Adapters.ImageAIDeployment != "" &&
+		cfg.Adapters.AzureAIEndpoint != "" && cfg.Adapters.AzureAIKey != "" {
+		imgClient, imgErr := azureai.NewImageClient(azureai.ImageConfig{
+			Endpoint:       cfg.Adapters.AzureAIEndpoint,
+			APIKey:         cfg.Adapters.AzureAIKey,
+			DeploymentName: cfg.Adapters.ImageAIDeployment,
+		}, azureai.WithImageLogger(logger))
+		if imgErr != nil {
+			logger.Warn(ctx, "image generation client init failed",
+				observability.Err(imgErr))
+		} else {
+			mediaDir := os.Getenv("MEDIA_DIR")
+			if mediaDir == "" {
+				mediaDir = "./data/media"
+			}
+			baseURL := os.Getenv("BASE_URL")
+			socialOpts = append(socialOpts, social.WithImageGenerator(imgClient, cfg.Adapters.ImageAIQuality, mediaDir, baseURL))
+			logger.Info(ctx, "AI background generation enabled",
+				observability.String("deployment", cfg.Adapters.ImageAIDeployment),
+				observability.String("quality", cfg.Adapters.ImageAIQuality))
+		}
 	}
 
 	// Initialize Instagram integration (requires encryption + Instagram config)

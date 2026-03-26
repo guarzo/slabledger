@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -36,6 +37,10 @@ type service struct {
 	tokenProvider InstagramTokenProvider
 	logger        observability.Logger
 	tracker       ai.AICallTracker
+	imageGen      ai.ImageGenerator
+	imageQuality  string
+	mediaDir      string
+	baseURL       string
 	minCards      int
 	maxCards      int
 	wg            sync.WaitGroup
@@ -193,6 +198,7 @@ func (s *service) llmGenerate(ctx context.Context) (int, error) {
 
 		// Generate caption in background
 		s.safeGo("generateCaptionAsync", post.ID, func() { s.generateCaptionAsync(post) })
+		s.safeGo("generateBackgroundsAsync", post.ID, func() { s.generateBackgroundsAsync(post) })
 		created++
 	}
 
@@ -317,6 +323,7 @@ func (s *service) detectPostType(ctx context.Context, postType PostType, snapsho
 
 	// Generate AI caption in background — don't block the HTTP request
 	s.safeGo("generateCaptionAsync", post.ID, func() { s.generateCaptionAsync(post) })
+	s.safeGo("generateBackgroundsAsync", post.ID, func() { s.generateBackgroundsAsync(post) })
 
 	return post, nil
 }
@@ -493,6 +500,117 @@ func (s *service) generateCaptionAsync(post *SocialPost) {
 		s.logger.Info(ctx, "social caption generated",
 			observability.String("postType", string(post.PostType)),
 			observability.Int("captionLen", len(caption)))
+	}
+}
+
+// generateBackgroundsAsync generates AI background images for a post in a background goroutine.
+func (s *service) generateBackgroundsAsync(post *SocialPost) {
+	if s.imageGen == nil {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+
+	cards, err := s.repo.ListPostCards(ctx, post.ID)
+	if err != nil {
+		s.logError(ctx, "list cards for backgrounds", post.PostType, err)
+		return
+	}
+
+	postDir := fmt.Sprintf("%s/social/%s", s.mediaDir, post.ID)
+	if err := os.MkdirAll(postDir, 0o755); err != nil {
+		s.logError(ctx, "create background dir", post.PostType, err)
+		return
+	}
+
+	quality := s.imageQuality
+	if quality == "" {
+		quality = "medium"
+	}
+
+	var urls []string
+
+	// Generate cover background
+	coverPrompt := buildBackgroundPrompt(post.PostType, cards)
+	coverResult, err := s.imageGen.GenerateImage(ctx, ai.ImageRequest{
+		Prompt:  coverPrompt,
+		Size:    "1024x1024",
+		Quality: quality,
+	})
+	if err != nil {
+		if s.logger != nil {
+			s.logger.Warn(ctx, "social: cover background generation failed, skipping",
+				observability.String("postId", post.ID),
+				observability.Err(err))
+		}
+		urls = append(urls, "")
+	} else {
+		coverPath := fmt.Sprintf("%s/bg-cover.%s", postDir, coverResult.Format)
+		if err := os.WriteFile(coverPath, coverResult.ImageData, 0o644); err != nil {
+			s.logError(ctx, "save cover background", post.PostType, err)
+			urls = append(urls, "")
+		} else {
+			coverURL := fmt.Sprintf("%s/api/media/social/%s/bg-cover.%s", s.baseURL, post.ID, coverResult.Format)
+			urls = append(urls, coverURL)
+		}
+	}
+
+	// Generate card backgrounds sequentially
+	for i, card := range cards {
+		if ctx.Err() != nil {
+			break
+		}
+		cardPrompt := buildCardBackgroundPrompt(post.PostType, card)
+		cardResult, err := s.imageGen.GenerateImage(ctx, ai.ImageRequest{
+			Prompt:  cardPrompt,
+			Size:    "1024x1024",
+			Quality: quality,
+		})
+		if err != nil {
+			if s.logger != nil {
+				s.logger.Warn(ctx, "social: card background generation failed, skipping",
+					observability.String("postId", post.ID),
+					observability.Int("cardIndex", i),
+					observability.Err(err))
+			}
+			urls = append(urls, "")
+			continue
+		}
+
+		cardPath := fmt.Sprintf("%s/bg-%d.%s", postDir, i+1, cardResult.Format)
+		if err := os.WriteFile(cardPath, cardResult.ImageData, 0o644); err != nil {
+			s.logError(ctx, "save card background", post.PostType, err)
+			urls = append(urls, "")
+			continue
+		}
+		cardURL := fmt.Sprintf("%s/api/media/social/%s/bg-%d.%s", s.baseURL, post.ID, i+1, cardResult.Format)
+		urls = append(urls, cardURL)
+	}
+
+	// Store URLs in DB
+	dbCtx, dbCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer dbCancel()
+
+	if err := s.repo.UpdateBackgroundURLs(dbCtx, post.ID, urls); err != nil {
+		if s.logger != nil {
+			s.logger.Error(dbCtx, "social: failed to save background URLs",
+				observability.String("postId", post.ID),
+				observability.Err(err))
+		}
+	}
+
+	if s.logger != nil {
+		nonEmpty := 0
+		for _, u := range urls {
+			if u != "" {
+				nonEmpty++
+			}
+		}
+		s.logger.Info(ctx, "social backgrounds generated",
+			observability.String("postId", post.ID),
+			observability.Int("total", len(urls)),
+			observability.Int("success", nonEmpty))
 	}
 }
 
