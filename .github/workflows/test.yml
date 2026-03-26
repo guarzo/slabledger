@@ -33,6 +33,9 @@ jobs:
     - name: Download dependencies
       run: go mod download
 
+    - name: Check architecture invariants
+      run: ./scripts/check-imports.sh
+
     - name: Run tests with coverage and race detection
       run: go test -race -timeout 10m -coverprofile=coverage.out -covermode=atomic ./...
 
