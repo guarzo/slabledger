@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -91,7 +90,7 @@ func (s *service) generateCaptionAsync(post *SocialPost) {
 
 // generateBackgroundsAsync generates AI background images for a post in a background goroutine.
 func (s *service) generateBackgroundsAsync(post *SocialPost) {
-	if s.imageGen == nil {
+	if s.imageGen == nil || s.mediaStore == nil {
 		return
 	}
 
@@ -105,7 +104,7 @@ func (s *service) generateBackgroundsAsync(post *SocialPost) {
 	}
 
 	postDir := fmt.Sprintf("%s/social/%s", s.mediaDir, post.ID)
-	if err := os.MkdirAll(postDir, 0o755); err != nil {
+	if err := s.mediaStore.EnsureDir(postDir); err != nil {
 		s.logError(ctx, "create background dir", post.PostType, err)
 		return
 	}
@@ -133,7 +132,7 @@ func (s *service) generateBackgroundsAsync(post *SocialPost) {
 		urls = append(urls, "")
 	} else {
 		coverPath := fmt.Sprintf("%s/bg-cover.%s", postDir, coverResult.Format)
-		if err := os.WriteFile(coverPath, coverResult.ImageData, 0o644); err != nil {
+		if err := s.mediaStore.WriteFile(coverPath, coverResult.ImageData); err != nil {
 			s.logError(ctx, "save cover background", post.PostType, err)
 			urls = append(urls, "")
 		} else {
@@ -169,7 +168,7 @@ func (s *service) generateBackgroundsAsync(post *SocialPost) {
 		}
 
 		cardPath := fmt.Sprintf("%s/bg-%d.%s", postDir, i+1, cardResult.Format)
-		if err := os.WriteFile(cardPath, cardResult.ImageData, 0o644); err != nil {
+		if err := s.mediaStore.WriteFile(cardPath, cardResult.ImageData); err != nil {
 			s.logError(ctx, "save card background", post.PostType, err)
 			urls = append(urls, "")
 			continue

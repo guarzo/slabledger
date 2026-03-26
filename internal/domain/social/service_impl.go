@@ -36,6 +36,7 @@ type service struct {
 	logger        observability.Logger
 	tracker       ai.AICallTracker
 	imageGen      ai.ImageGenerator
+	mediaStore    MediaStore
 	imageQuality  string
 	mediaDir      string
 	baseURL       string

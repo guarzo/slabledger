@@ -18,6 +18,7 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/clients/psa"
 	"github.com/guarzo/slabledger/internal/adapters/clients/tcgdex"
 	"github.com/guarzo/slabledger/internal/adapters/scheduler"
+	"github.com/guarzo/slabledger/internal/adapters/storage/mediafs"
 	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
 	"github.com/guarzo/slabledger/internal/domain/advisor"
 	"github.com/guarzo/slabledger/internal/domain/auth"
@@ -222,6 +223,7 @@ func initializeSocialService(
 				logger.Warn(ctx, "BASE_URL not set; AI background generation disabled (cannot construct public URLs)")
 			} else {
 				socialOpts = append(socialOpts, social.WithImageGenerator(imgClient, cfg.Adapters.ImageAIQuality, mediaDir, baseURL))
+				socialOpts = append(socialOpts, social.WithMediaStore(mediafs.NewStore()))
 				logger.Info(ctx, "AI background generation enabled",
 					observability.String("deployment", cfg.Adapters.ImageAIDeployment),
 					observability.String("quality", cfg.Adapters.ImageAIQuality))

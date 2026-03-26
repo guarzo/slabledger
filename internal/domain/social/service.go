@@ -97,3 +97,8 @@ func WithImageGenerator(ig ai.ImageGenerator, quality, mediaDir, baseURL string)
 		s.baseURL = baseURL
 	}
 }
+
+// WithMediaStore sets the media storage backend for generated images.
+func WithMediaStore(ms MediaStore) ServiceOption {
+	return func(s *service) { s.mediaStore = ms }
+}
