@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/guarzo/slabledger/internal/adapters/clients/httpx"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
@@ -84,7 +85,7 @@ type CertInfo struct {
 // Supports multiple API tokens for higher throughput — when one token
 // hits its daily limit, the client rotates to the next.
 type Client struct {
-	httpClient  *http.Client
+	httpClient  *httpx.Client
 	baseURL     string
 	tokens      []string // one or more API tokens
 	logger      observability.Logger
@@ -104,8 +105,10 @@ func NewClient(token string, logger observability.Logger) *Client {
 			tokens = append(tokens, t)
 		}
 	}
+	httpCfg := httpx.DefaultConfig("PSA")
+	httpCfg.DefaultTimeout = 15 * time.Second
 	return &Client{
-		httpClient:  &http.Client{Timeout: 15 * time.Second},
+		httpClient:  httpx.NewClient(httpCfg),
 		baseURL:     defaultBaseURL,
 		tokens:      tokens,
 		logger:      logger,
@@ -136,7 +139,7 @@ func (c *Client) rotateToken() bool {
 
 // doRequest handles the shared logic for PSA API calls: budget enforcement,
 // request pacing, token rotation on 429, and response reading.
-func (c *Client) doRequest(ctx context.Context, opName, path, certNumber string) (*http.Response, error) {
+func (c *Client) doRequest(ctx context.Context, opName, path, certNumber string) (*httpx.Response, error) {
 	if len(c.tokens) == 0 {
 		return nil, fmt.Errorf("PSA API token not configured")
 	}
@@ -170,41 +173,27 @@ func (c *Client) doRequest(ctx context.Context, opName, path, certNumber string)
 		c.lastCall.Store(time.Now().UnixNano())
 
 		url := fmt.Sprintf("%s/%s/%s", c.baseURL, path, certNumber)
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-		if err != nil {
-			c.logger.Info(ctx, "PSA "+opName+": failed to create request",
-				observability.String("cert", certNumber),
-				observability.Err(err))
-			return nil, fmt.Errorf("create request: %w", err)
-		}
-		req.Header.Set("Authorization", "Bearer "+token)
+		headers := map[string]string{"Authorization": "Bearer " + token}
 
-		resp, err := c.httpClient.Do(req)
+		// httpx returns both (*Response, error) on HTTP 4xx/5xx, allowing us
+		// to inspect the status code even when err != nil.
+		resp, err := c.httpClient.Get(ctx, url, headers, 0)
 		if err != nil {
+			// 429: rotate to the next token and retry rather than giving up immediately.
+			if resp != nil && resp.StatusCode == http.StatusTooManyRequests {
+				if c.rotateToken() {
+					c.logger.Info(ctx, "PSA "+opName+": rate limited, retrying with backup key",
+						observability.String("cert", certNumber))
+					continue
+				}
+				c.logger.Warn(ctx, "PSA "+opName+": rate limited, no backup keys available",
+					observability.String("cert", certNumber))
+				return nil, fmt.Errorf("PSA API returned 429 for cert %s (all keys exhausted)", certNumber)
+			}
 			c.logger.Info(ctx, "PSA "+opName+": request failed",
 				observability.String("cert", certNumber),
 				observability.Err(err))
 			return nil, fmt.Errorf("PSA API request: %w", err)
-		}
-
-		if resp.StatusCode == http.StatusTooManyRequests {
-			_ = resp.Body.Close() //nolint:errcheck
-			if c.rotateToken() {
-				c.logger.Info(ctx, "PSA "+opName+": rate limited, retrying with backup key",
-					observability.String("cert", certNumber))
-				continue
-			}
-			c.logger.Warn(ctx, "PSA "+opName+": rate limited, no backup keys available",
-				observability.String("cert", certNumber))
-			return nil, fmt.Errorf("PSA API returned 429 for cert %s (all keys exhausted)", certNumber)
-		}
-
-		if resp.StatusCode != http.StatusOK {
-			_ = resp.Body.Close() //nolint:errcheck
-			c.logger.Info(ctx, "PSA "+opName+": non-OK status",
-				observability.String("cert", certNumber),
-				observability.Int("status", resp.StatusCode))
-			return nil, fmt.Errorf("PSA API returned %d for cert %s", resp.StatusCode, certNumber)
 		}
 
 		return resp, nil
@@ -221,14 +210,12 @@ func (c *Client) GetCert(ctx context.Context, certNumber string) (*CertInfo, err
 	}
 
 	var certResp CertResponse
-	if decErr := json.NewDecoder(resp.Body).Decode(&certResp); decErr != nil {
-		_ = resp.Body.Close() //nolint:errcheck
+	if decErr := json.Unmarshal(resp.Body, &certResp); decErr != nil {
 		c.logger.Info(ctx, "PSA cert lookup: decode error",
 			observability.String("cert", certNumber),
 			observability.Err(decErr))
 		return nil, fmt.Errorf("decode PSA response: %w", decErr)
 	}
-	_ = resp.Body.Close() //nolint:errcheck
 
 	if certResp.PSACert.CertNumber == "" {
 		return nil, fmt.Errorf("cert %s not found", certNumber)
@@ -256,14 +243,12 @@ func (c *Client) GetImages(ctx context.Context, certNumber string) ([]ImageInfo,
 	}
 
 	var images []ImageInfo
-	if decErr := json.NewDecoder(resp.Body).Decode(&images); decErr != nil {
-		_ = resp.Body.Close() //nolint:errcheck
+	if decErr := json.Unmarshal(resp.Body, &images); decErr != nil {
 		c.logger.Info(ctx, "PSA image fetch: decode error",
 			observability.String("cert", certNumber),
 			observability.Err(decErr))
 		return nil, fmt.Errorf("decode PSA images response: %w", decErr)
 	}
-	_ = resp.Body.Close() //nolint:errcheck
 
 	return images, nil
 }

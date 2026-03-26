@@ -18,6 +18,9 @@ make test                                  # Via Makefile
 cd web && npm install && npm run dev       # Dev server on :5173
 npm run build                              # Production build
 npm test                                   # Run tests
+
+# Quality
+make check                                 # Full quality check (lint + architecture + file size)
 ```
 
 ## Architecture
@@ -83,7 +86,7 @@ SQLite with WAL mode. Migrations managed by `golang-migrate/migrate/v4`
 and embedded in the binary via `embed.FS`. Migrations run automatically
 on startup — no manual step required.
 
-Migration files: `internal/adapters/storage/sqlite/migrations/` (19 pairs, 000001–000019)
+Migration files: `internal/adapters/storage/sqlite/migrations/` (21 pairs, 000001–000021)
 
 **Creating a new migration:**
 ```bash
@@ -98,34 +101,14 @@ touch internal/adapters/storage/sqlite/migrations/000018_description.down.sql
 
 ## Environment Variables
 
-```bash
-# Required
-PRICECHARTING_TOKEN="..."    # Graded prices + sales data
+See `.env.example` for the complete list with descriptions. Key groups:
 
-# Optional
-LOG_LEVEL="info"             # debug, info, warn, error
-ADMIN_EMAILS="a@b.com,c@d.com" # Comma-separated admin email addresses
-CARD_HEDGER_API_KEY="..."    # Supplementary pricing source
-CARD_HEDGER_CLIENT_ID="..."  # Card request submission token
-CARD_HEDGER_POLL_INTERVAL    # Delta poll interval (default: 1h)
-CARD_HEDGER_BATCH_INTERVAL   # Batch interval (default: 24h)
-CARD_HEDGER_MAX_CARDS_PER_RUN # Max cards per batch (default: 200)
-LOCAL_API_TOKEN="..."        # Bearer token for CLI/curl access without browser OAuth
-PRICE_REFRESH_ENABLED="true" # Enable/disable price refresh scheduler
-SESSION_CLEANUP_ENABLED="true" # Enable/disable session cleanup scheduler
-SNAPSHOT_ENRICH_RETRY_INTERVAL # Retry interval for failed snapshots (default: 30m)
-SNAPSHOT_ENRICH_MAX_RETRIES    # Max retries before marking exhausted (default: 5)
-INSTAGRAM_APP_ID="..."        # Instagram OAuth app ID
-INSTAGRAM_APP_SECRET="..."    # Instagram OAuth app secret
-INSTAGRAM_REDIRECT_URI="..."  # Instagram OAuth redirect URI
-SOCIAL_CONTENT_ENABLED="true" # Enable/disable social content scheduler
-SOCIAL_CONTENT_INTERVAL="24h" # Social content detection interval
-ADVISOR_REFRESH_HOUR="4"     # Hour (0-23 UTC) to run advisor; -1 = use InitialDelay
-SOCIAL_CONTENT_HOUR="5"      # Hour (0-23 UTC) to run social content; -1 = use InitialDelay
-AZURE_AI_ENDPOINT="..."       # Azure OpenAI endpoint URL
-AZURE_AI_API_KEY="..."        # Azure OpenAI API key
-AZURE_AI_DEPLOYMENT="..."     # Azure OpenAI deployment name
-```
+- **Required**: `PRICECHARTING_TOKEN`
+- **AI**: `AZURE_AI_ENDPOINT`, `AZURE_AI_API_KEY`, `AZURE_AI_DEPLOYMENT`
+- **Auth**: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `ENCRYPTION_KEY`
+- **Schedulers**: `PRICE_REFRESH_ENABLED`, `ADVISOR_REFRESH_HOUR`, `SOCIAL_CONTENT_HOUR`
+
+Full reference: [.env.example](.env.example)
 
 ## Pricing Pipeline
 
@@ -183,6 +166,12 @@ Card names flow through a multi-stage normalization and matching pipeline:
 - **Rate limits**: PriceCharting 1 req/sec, CardHedger 100 req/min + 700ms pause, pricing API 60 req/min, auth 10 req/sec
 - **429 handling**: `APITracker.UpdateRateLimit` blocks provider-level requests until expiry
 
+## Quality Checks
+
+- `make check` — runs lint + architecture import check + file size check
+- `scripts/check-imports.sh` — fails if domain packages import adapter packages (hexagonal invariant)
+- `scripts/check-file-size.sh` — warns at 500 lines, fails at 600 lines (excludes test files and mocks)
+
 ## Adding a New API Client
 
 1. Define domain interface in `internal/domain/<package>/`
@@ -225,7 +214,7 @@ See [docs/API.md](docs/API.md) for detailed request/response shapes.
 
 See [docs/SCHEMA.md](docs/SCHEMA.md) for full column definitions and indexes.
 
-SQLite WAL mode. All monetary values in **cents**. 19 migration pairs (`000001`–`000019`).
+SQLite WAL mode. All monetary values in **cents**. 21 migration pairs (`000001`–`000021`).
 
 | Table | Purpose | Key FKs |
 |-------|---------|---------|

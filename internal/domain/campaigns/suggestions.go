@@ -1,6 +1,7 @@
 package campaigns
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
@@ -81,20 +82,20 @@ const (
 )
 
 // GenerateSuggestions produces data-driven campaign recommendations from portfolio insights.
-func GenerateSuggestions(insights *PortfolioInsights, campaigns []Campaign) *SuggestionsResponse {
+func GenerateSuggestions(ctx context.Context, insights *PortfolioInsights, campaigns []Campaign) *SuggestionsResponse {
 	resp := &SuggestionsResponse{
 		DataSummary: insights.DataSummary,
 	}
 
 	now := time.Now().Format("2006-01-02")
 
-	resp.NewCampaigns = append(resp.NewCampaigns, suggestTopCharacterExpansion(insights, campaigns)...)
-	resp.NewCampaigns = append(resp.NewCampaigns, suggestGradeSweetSpot(insights, campaigns)...)
-	resp.NewCampaigns = append(resp.NewCampaigns, suggestCoverageGapCampaigns(insights)...)
-	resp.Adjustments = append(resp.Adjustments, suggestChannelInformedBuyTerms(insights, campaigns, now)...)
-	resp.Adjustments = append(resp.Adjustments, suggestSpendCapRebalancing(insights, campaigns)...)
-	resp.Adjustments = append(resp.Adjustments, suggestCharacterAdjustments(insights, campaigns)...)
-	resp.Adjustments = append(resp.Adjustments, suggestPhaseTransitions(insights, campaigns)...)
+	resp.NewCampaigns = append(resp.NewCampaigns, suggestTopCharacterExpansion(ctx, insights, campaigns)...)
+	resp.NewCampaigns = append(resp.NewCampaigns, suggestGradeSweetSpot(ctx, insights, campaigns)...)
+	resp.NewCampaigns = append(resp.NewCampaigns, suggestCoverageGapCampaigns(ctx, insights)...)
+	resp.Adjustments = append(resp.Adjustments, suggestChannelInformedBuyTerms(ctx, insights, campaigns, now)...)
+	resp.Adjustments = append(resp.Adjustments, suggestSpendCapRebalancing(ctx, insights, campaigns)...)
+	resp.Adjustments = append(resp.Adjustments, suggestCharacterAdjustments(ctx, insights, campaigns)...)
+	resp.Adjustments = append(resp.Adjustments, suggestPhaseTransitions(ctx, insights, campaigns)...)
 
 	// De-duplicate conflicting suggestions
 	resp.NewCampaigns = deduplicateSuggestions(resp.NewCampaigns)

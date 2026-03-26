@@ -2,8 +2,10 @@ package instagram
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -12,39 +14,38 @@ import (
 	"testing"
 	"time"
 
+	"github.com/guarzo/slabledger/internal/adapters/clients/httpx"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// redirectTransport rewrites requests destined for Instagram's production URLs
-// to a local test server, preserving the path and query string.
-type redirectTransport struct {
-	testServerURL string
-}
-
-func (t *redirectTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	// Clone the request so we can safely mutate the URL.
-	cloned := req.Clone(req.Context())
-
-	parsed, err := url.Parse(t.testServerURL)
-	if err != nil {
-		return nil, fmt.Errorf("parse test server URL: %w", err)
-	}
-	cloned.URL.Scheme = parsed.Scheme
-	cloned.URL.Host = parsed.Host
-
-	return http.DefaultTransport.RoundTrip(cloned)
-}
-
-// newTestClient builds an Instagram Client whose HTTP calls are redirected to
-// the provided test server instead of graph.instagram.com / api.instagram.com.
+// newTestClient builds an Instagram Client whose HTTPS calls are redirected to
+// the provided TLS test server instead of graph.instagram.com / api.instagram.com.
+// It uses a custom DialContext that routes all connections to the test server's
+// host:port, plus InsecureSkipVerify to accept the self-signed test certificate.
 func newTestClient(serverURL string) *Client {
-	c := NewClient("app-id", "app-secret", "https://example.com/callback", observability.NewNoopLogger())
-	c.httpClient = &http.Client{
-		Timeout:   10 * time.Second,
-		Transport: &redirectTransport{testServerURL: serverURL},
+	parsed, err := url.Parse(serverURL)
+	if err != nil {
+		panic(fmt.Sprintf("parse test server URL: %v", err))
 	}
+	testHost := parsed.Host
+
+	dialer := &net.Dialer{Timeout: 5 * time.Second, KeepAlive: 5 * time.Second}
+	transport := &http.Transport{
+		DialContext: func(ctx context.Context, network, _ string) (net.Conn, error) {
+			return dialer.DialContext(ctx, network, testHost)
+		},
+		TLSClientConfig:     &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // test-only
+		TLSHandshakeTimeout: 5 * time.Second,
+	}
+
+	cfg := httpx.DefaultConfig("Instagram")
+	cfg.DefaultTimeout = 10 * time.Second
+	cfg.Transport = transport
+
+	c := NewClient("app-id", "app-secret", "https://example.com/callback", observability.NewNoopLogger())
+	c.httpClient = httpx.NewClient(cfg)
 	return c
 }
 
@@ -77,7 +78,7 @@ func TestPublishCarousel_Success(t *testing.T) {
 	// For the carousel container, we need to poll FINISHED once, then publish.
 	var pollCount int32
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
 
 		switch {
@@ -138,7 +139,7 @@ func TestPublishCarousel_SingleImage(t *testing.T) {
 
 	var pollCount int32
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
 
 		switch {
@@ -177,7 +178,7 @@ func TestPublishCarousel_SingleImage(t *testing.T) {
 func TestPublishCarousel_ContainerCreateError(t *testing.T) {
 	const igUserID = "user789"
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// All POSTs to /media fail with an API error.
 		if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/media") {
 			errorResponse(w, http.StatusBadRequest, "invalid image URL provided")
@@ -204,7 +205,7 @@ func TestPublishCarousel_StatusError(t *testing.T) {
 
 	var itemCount int32
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
 
 		switch {
@@ -246,7 +247,7 @@ func TestPublishCarousel_StatusError(t *testing.T) {
 func TestRefreshToken_Success(t *testing.T) {
 	expiresIn := int64(5184000) // 60 days in seconds
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, http.MethodGet, r.Method)
 		// refreshTokenURL path is /refresh_access_token
 		assert.Equal(t, "/refresh_access_token", r.URL.Path)
@@ -279,7 +280,7 @@ func TestRefreshToken_Success(t *testing.T) {
 }
 
 func TestRefreshToken_Error(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/refresh_access_token", r.URL.Path)
 		errorResponse(w, http.StatusUnauthorized, "The access token has expired")
 	}))

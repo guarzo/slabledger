@@ -13,6 +13,20 @@ interface UsePublishWithSlidesResult {
   progress: string;
 }
 
+/**
+ * Fetches an external image through our backend proxy and returns a blob URL.
+ * This avoids CORS issues when html-to-image tries to inline cross-origin images.
+ */
+async function proxyImageToBlobUrl(externalUrl: string): Promise<string> {
+  const resp = await fetch(`/api/image-proxy?url=${encodeURIComponent(externalUrl)}`);
+  if (!resp.ok) {
+    console.warn(`Image proxy returned ${resp.status} for ${externalUrl}`);
+    return externalUrl;
+  }
+  const blob = await resp.blob();
+  return URL.createObjectURL(blob);
+}
+
 async function renderSlideToJpeg(
   element: React.ReactElement,
 ): Promise<Blob> {
@@ -80,9 +94,26 @@ export function usePublishWithSlides(
 
     isPublishingRef.current = true;
     setIsPublishing(true);
+    const blobUrls: string[] = [];
     try {
-      const totalSlides = detail.cards.length + 1;
-      const psa10Count = detail.cards.filter((c) => c.gradeValue === 10).length;
+      // Pre-fetch card images through backend proxy to avoid CORS issues
+      setProgress('Loading card images...');
+      const proxiedCards = await Promise.all(
+        detail.cards.map(async (card) => {
+          if (!card.frontImageUrl || card.frontImageUrl.startsWith('blob:')) return card;
+          try {
+            const blobUrl = await proxyImageToBlobUrl(card.frontImageUrl);
+            if (blobUrl !== card.frontImageUrl) blobUrls.push(blobUrl);
+            return { ...card, frontImageUrl: blobUrl };
+          } catch (err) {
+            console.warn('Image proxy failed for', card.frontImageUrl, err);
+            return card;
+          }
+        }),
+      );
+
+      const totalSlides = proxiedCards.length + 1;
+      const psa10Count = proxiedCards.filter((c) => c.gradeValue === 10).length;
       const slides: Blob[] = [];
 
       // Render cover slide
@@ -93,18 +124,18 @@ export function usePublishWithSlides(
           coverTitle={detail.coverTitle}
           cardCount={detail.cardCount}
           psa10Count={psa10Count}
-          cards={detail.cards}
+          cards={proxiedCards}
           backgroundUrls={detail.backgroundUrls}
         />,
       );
       slides.push(coverBlob);
 
       // Render each card slide
-      for (let i = 0; i < detail.cards.length; i++) {
+      for (let i = 0; i < proxiedCards.length; i++) {
         setProgress(`Rendering slide ${i + 2} of ${totalSlides}...`);
         const cardBlob = await renderSlideToJpeg(
           <CardSlide
-            card={detail.cards[i] as PostCardDetail}
+            card={proxiedCards[i] as PostCardDetail}
             postType={detail.postType}
             slideIndex={i + 1}
             totalSlides={totalSlides}
@@ -130,6 +161,7 @@ export function usePublishWithSlides(
       setProgress('');
       throw error;
     } finally {
+      blobUrls.forEach((u) => URL.revokeObjectURL(u));
       isPublishingRef.current = false;
       setIsPublishing(false);
     }

@@ -456,6 +456,11 @@ func (rt *Router) Setup() http.Handler {
 		mux.HandleFunc("GET /api/media/social/{postId}/{filename}", rt.socialHandler.HandleServeMedia)
 	}
 
+	// Image proxy — requires admin (only used by social content publish UI)
+	if rt.socialHandler != nil && rt.authMW != nil {
+		mux.Handle("GET /api/image-proxy", rt.authMW.RequireAdmin(http.HandlerFunc(rt.socialHandler.HandleImageProxy)))
+	}
+
 	// Instagram integration routes — require admin
 	if rt.instagramHandler != nil && rt.authMW != nil {
 		mux.Handle("GET /api/instagram/status", rt.authMW.RequireAdmin(http.HandlerFunc(rt.instagramHandler.HandleStatus)))
