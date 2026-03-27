@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
+import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { useQueryClient } from '@tanstack/react-query';
 import { api } from '../../js/api';
@@ -14,17 +15,23 @@ interface UsePublishWithSlidesResult {
 }
 
 /**
- * Fetches an external image through our backend proxy and returns a blob URL.
- * This avoids CORS issues when html-to-image tries to inline cross-origin images.
+ * Fetches an external image through our backend proxy and returns a data URL.
+ * Data URLs are already inline so html-to-image can embed them in the SVG
+ * foreignObject without needing to fetch — avoids CSP connect-src issues.
  */
-async function proxyImageToBlobUrl(externalUrl: string): Promise<string> {
+async function proxyImageToDataUrl(externalUrl: string): Promise<string> {
   const resp = await fetch(`/api/image-proxy?url=${encodeURIComponent(externalUrl)}`);
   if (!resp.ok) {
     console.warn(`Image proxy returned ${resp.status} for ${externalUrl}`);
     return externalUrl;
   }
   const blob = await resp.blob();
-  return URL.createObjectURL(blob);
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
 }
 
 async function renderSlideToJpeg(
@@ -38,12 +45,14 @@ async function renderSlideToJpeg(
     'position:fixed;left:-9999px;top:0;width:1080px;height:1080px;overflow:hidden;';
   document.body.appendChild(container);
 
-  // Mount the React component
+  // Mount the React component synchronously so the DOM is populated before
+  // we query for <img> elements and capture with html-to-image.
   const root = createRoot(container);
-  root.render(element);
+  flushSync(() => {
+    root.render(element);
+  });
 
-  // Wait for all images in the container to finish loading (or fail), then
-  // allow one extra frame for the browser to paint.
+  // Wait for all images in the container to finish loading (or fail).
   await Promise.all(
     Array.from(container.querySelectorAll('img')).map(
       (img) =>
@@ -55,8 +64,8 @@ async function renderSlideToJpeg(
             }),
     ),
   );
-  // Fallback minimum wait to handle images added after initial render
-  await new Promise((resolve) => setTimeout(resolve, 200));
+  // Extra frame for the browser to paint after images load
+  await new Promise((resolve) => setTimeout(resolve, 100));
 
   try {
     const dataUrl = await toJpeg(container, {
@@ -94,17 +103,17 @@ export function usePublishWithSlides(
 
     isPublishingRef.current = true;
     setIsPublishing(true);
-    const blobUrls: string[] = [];
     try {
-      // Pre-fetch card images through backend proxy to avoid CORS issues
+      // Pre-fetch card images through backend proxy and convert to data URLs.
+      // Data URLs are already inline so html-to-image can embed them directly
+      // in the SVG foreignObject without any fetch — avoids CSP issues entirely.
       setProgress('Loading card images...');
       const proxiedCards = await Promise.all(
         detail.cards.map(async (card) => {
-          if (!card.frontImageUrl || card.frontImageUrl.startsWith('blob:')) return card;
+          if (!card.frontImageUrl || card.frontImageUrl.startsWith('data:')) return card;
           try {
-            const blobUrl = await proxyImageToBlobUrl(card.frontImageUrl);
-            if (blobUrl !== card.frontImageUrl) blobUrls.push(blobUrl);
-            return { ...card, frontImageUrl: blobUrl };
+            const dataUrl = await proxyImageToDataUrl(card.frontImageUrl);
+            return { ...card, frontImageUrl: dataUrl };
           } catch (err) {
             console.warn('Image proxy failed for', card.frontImageUrl, err);
             return card;
@@ -161,7 +170,6 @@ export function usePublishWithSlides(
       setProgress('');
       throw error;
     } finally {
-      blobUrls.forEach((u) => URL.revokeObjectURL(u));
       isPublishingRef.current = false;
       setIsPublishing(false);
     }
