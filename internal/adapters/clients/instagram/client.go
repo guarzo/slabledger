@@ -131,18 +131,32 @@ func (c *Client) PublishCarousel(ctx context.Context, token, igUserID string, im
 		return c.PublishSingleImage(ctx, token, igUserID, imageURLs[0], caption)
 	}
 
+	c.logger.Info(ctx, "publishing carousel",
+		observability.Int("imageCount", len(imageURLs)))
+	for i, u := range imageURLs {
+		c.logger.Info(ctx, "carousel image URL",
+			observability.Int("index", i),
+			observability.String("url", u))
+	}
+
 	var containerIDs []string
-	for _, imgURL := range imageURLs {
+	for i, imgURL := range imageURLs {
 		containerID, err := c.createItemContainer(ctx, token, igUserID, imgURL)
 		if err != nil {
 			return nil, fmt.Errorf("create item container for %s: %w", imgURL, err)
 		}
+		c.logger.Info(ctx, "item container created",
+			observability.Int("index", i),
+			observability.String("containerID", containerID))
 
 		// Wait for Instagram to finish fetching and processing this image
 		// before creating the next container or the carousel.
 		if err := c.waitForContainer(ctx, token, containerID); err != nil {
 			return nil, fmt.Errorf("wait for item container %s: %w", containerID, err)
 		}
+		c.logger.Info(ctx, "item container ready",
+			observability.Int("index", i),
+			observability.String("containerID", containerID))
 		containerIDs = append(containerIDs, containerID)
 	}
 
