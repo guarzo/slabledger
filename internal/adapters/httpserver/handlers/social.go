@@ -331,6 +331,11 @@ func (h *SocialHandler) HandleUploadSlides(w http.ResponseWriter, r *http.Reques
 
 		slideURL := fmt.Sprintf("%s/api/media/social/%s/%s", h.baseURL, id, filename)
 		urls = append(urls, slideURL)
+		h.logger.Info(r.Context(), "slide uploaded",
+			observability.String("postId", id),
+			observability.String("file", filename),
+			observability.Int("bytes", len(data)),
+			observability.String("url", slideURL))
 	}
 
 	if len(urls) == 0 {
@@ -344,6 +349,9 @@ func (h *SocialHandler) HandleUploadSlides(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	h.logger.Info(r.Context(), "all slides saved",
+		observability.String("postId", id),
+		observability.Int("count", len(urls)))
 	writeJSON(w, http.StatusOK, map[string]int{"slides": len(urls)})
 }
 
@@ -378,6 +386,22 @@ func (h *SocialHandler) HandleServeMedia(w http.ResponseWriter, r *http.Request)
 		http.NotFound(w, r)
 		return
 	}
+
+	info, statErr := os.Stat(filePath)
+	if statErr != nil {
+		h.logger.Warn(r.Context(), "media serve: file not found",
+			observability.String("path", filePath),
+			observability.Err(statErr))
+		http.NotFound(w, r)
+		return
+	}
+
+	h.logger.Info(r.Context(), "media serve",
+		observability.String("postId", postID),
+		observability.String("file", filename),
+		observability.Int("bytes", int(info.Size())),
+		observability.String("userAgent", r.UserAgent()),
+		observability.String("remoteAddr", r.RemoteAddr))
 
 	w.Header().Set("Content-Type", "image/jpeg")
 	w.Header().Set("Cache-Control", "public, max-age=86400")

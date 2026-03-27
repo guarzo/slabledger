@@ -22,13 +22,18 @@ interface UsePublishWithSlidesResult {
 async function proxyImageToDataUrl(externalUrl: string): Promise<string> {
   const resp = await fetch(`/api/image-proxy?url=${encodeURIComponent(externalUrl)}`);
   if (!resp.ok) {
-    console.warn(`Image proxy returned ${resp.status} for ${externalUrl}`);
+    console.warn(`[publish] proxy FAILED ${resp.status} for ${externalUrl}`);
     return externalUrl;
   }
   const blob = await resp.blob();
+  console.log(`[publish] proxied ${externalUrl} → blob ${blob.size} bytes, type=${blob.type}`);
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
-    reader.onloadend = () => resolve(reader.result as string);
+    reader.onloadend = () => {
+      const dataUrl = reader.result as string;
+      console.log(`[publish] data URL length=${dataUrl.length}, prefix=${dataUrl.substring(0, 40)}...`);
+      resolve(dataUrl);
+    };
     reader.onerror = reject;
     reader.readAsDataURL(blob);
   });
@@ -52,20 +57,32 @@ async function renderSlideToJpeg(
     root.render(element);
   });
 
+  const imgs = Array.from(container.querySelectorAll('img'));
+  console.log(`[publish] renderSlide: found ${imgs.length} <img> elements after flushSync`);
+  imgs.forEach((img, i) => {
+    const srcPreview = img.src.substring(0, 60);
+    console.log(`[publish]   img[${i}]: complete=${img.complete}, naturalWidth=${img.naturalWidth}, src=${srcPreview}...`);
+  });
+
   // Wait for all images in the container to finish loading (or fail).
   await Promise.all(
-    Array.from(container.querySelectorAll('img')).map(
+    imgs.map(
       (img) =>
         img.complete
           ? Promise.resolve()
           : new Promise<void>((resolve) => {
               img.addEventListener('load', () => resolve(), { once: true });
-              img.addEventListener('error', () => resolve(), { once: true });
+              img.addEventListener('error', () => {
+                console.warn(`[publish]   img FAILED to load: ${img.src.substring(0, 60)}...`);
+                resolve();
+              }, { once: true });
             }),
     ),
   );
   // Extra frame for the browser to paint after images load
   await new Promise((resolve) => setTimeout(resolve, 100));
+
+  console.log(`[publish] renderSlide: all images settled, container innerHTML length=${container.innerHTML.length}`);
 
   try {
     const dataUrl = await toJpeg(container, {
@@ -76,13 +93,17 @@ async function renderSlideToJpeg(
       backgroundColor: '#0a0e1a',
     });
 
+    console.log(`[publish] toJpeg returned dataUrl length=${dataUrl.length}`);
+
     // Convert data URL to Blob without fetch (avoids CSP connect-src restriction)
     const [header, base64] = dataUrl.split(',');
     const mime = header.match(/:(.*?);/)?.[1] ?? 'image/jpeg';
     const bytes = atob(base64);
     const buf = new Uint8Array(bytes.length);
     for (let i = 0; i < bytes.length; i++) buf[i] = bytes.charCodeAt(i);
-    return new Blob([buf], { type: mime });
+    const blob = new Blob([buf], { type: mime });
+    console.log(`[publish] slide blob: ${blob.size} bytes, type=${blob.type}`);
+    return blob;
   } finally {
     root.unmount();
     document.body.removeChild(container);
