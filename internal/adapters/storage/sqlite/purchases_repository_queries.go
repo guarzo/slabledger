@@ -357,4 +357,3 @@ func (r *CampaignsRepository) UpdatePurchaseImageURLs(ctx context.Context, id, f
 	}
 	return nil
 }
-

@@ -41,6 +41,22 @@ func NewSocialHandler(service social.Service, repo social.Repository, logger obs
 // WithBackfiller sets the optional image backfiller.
 func (h *SocialHandler) WithBackfiller(b ImageBackfiller) { h.backfiller = b }
 
+// resolveBaseURL returns the configured base URL or derives one from the request.
+func (h *SocialHandler) resolveBaseURL(r *http.Request) string {
+	if h.baseURL != "" {
+		return h.baseURL
+	}
+	scheme := r.Header.Get("X-Forwarded-Proto")
+	if scheme == "" {
+		if r.TLS != nil {
+			scheme = "https"
+		} else {
+			scheme = "http"
+		}
+	}
+	return scheme + "://" + r.Host
+}
+
 // HandleListPosts returns posts filtered by optional status query param.
 func (h *SocialHandler) HandleListPosts(w http.ResponseWriter, r *http.Request) {
 	if requireUser(w, r) == nil {
@@ -329,7 +345,8 @@ func (h *SocialHandler) HandleUploadSlides(w http.ResponseWriter, r *http.Reques
 			return
 		}
 
-		slideURL := fmt.Sprintf("%s/api/media/social/%s/%s", h.baseURL, id, filename)
+		base := h.resolveBaseURL(r)
+		slideURL := fmt.Sprintf("%s/api/media/social/%s/%s", base, id, filename)
 		urls = append(urls, slideURL)
 		h.logger.Info(r.Context(), "slide uploaded",
 			observability.String("postId", id),

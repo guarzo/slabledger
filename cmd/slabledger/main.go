@@ -453,6 +453,12 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		mediaDir = "./data/media"
 	}
 	baseURL := os.Getenv("BASE_URL")
+	if baseURL == "" {
+		logger.Warn(context.Background(), "BASE_URL is not set — slide URLs will be derived from request headers")
+	} else {
+		logger.Info(context.Background(), "BASE_URL configured",
+			observability.String("baseURL", baseURL))
+	}
 	socialHandler := handlers.NewSocialHandler(socialService, socialRepo, logger, mediaDir, baseURL)
 
 	// Wire image backfiller if PSA image token is available

@@ -11,7 +11,7 @@ func TestGenerateSuggestions_Empty(t *testing.T) {
 	insights := &PortfolioInsights{
 		DataSummary: InsightsDataSummary{TotalPurchases: 0},
 	}
-	resp := GenerateSuggestions(context.Background(),insights, nil)
+	resp := GenerateSuggestions(context.Background(), insights, nil)
 	if resp == nil {
 		t.Fatal("expected non-nil response")
 	}
@@ -34,7 +34,7 @@ func TestGenerateSuggestions_TopCharacterExpansion(t *testing.T) {
 		{Name: "Campaign A", Phase: PhaseActive, InclusionList: "Pikachu, Blastoise"},
 	}
 
-	resp := GenerateSuggestions(context.Background(),insights, campaigns)
+	resp := GenerateSuggestions(context.Background(), insights, campaigns)
 
 	found := false
 	for _, s := range resp.NewCampaigns {
@@ -66,7 +66,7 @@ func TestGenerateSuggestions_CharacterAdjustments(t *testing.T) {
 		{Name: "Test Campaign", Phase: PhaseActive, InclusionList: "Pikachu, Blastoise"},
 	}
 
-	resp := GenerateSuggestions(context.Background(),insights, campaigns)
+	resp := GenerateSuggestions(context.Background(), insights, campaigns)
 
 	// Should suggest removing Pikachu (negative ROI)
 	foundRemove := false
@@ -103,7 +103,7 @@ func TestGenerateSuggestions_CoverageGap(t *testing.T) {
 		DataSummary: InsightsDataSummary{TotalPurchases: 50},
 	}
 
-	resp := GenerateSuggestions(context.Background(),insights, nil)
+	resp := GenerateSuggestions(context.Background(), insights, nil)
 
 	found := false
 	for _, s := range resp.NewCampaigns {
@@ -128,7 +128,7 @@ func TestGenerateSuggestions_ChannelInformedBuyTerms(t *testing.T) {
 		{Name: "Aggressive Campaign", Phase: PhaseActive, BuyTermsCLPct: 0.85, EbayFeePct: 0.1235},
 	}
 
-	resp := GenerateSuggestions(context.Background(),insights, campaigns)
+	resp := GenerateSuggestions(context.Background(), insights, campaigns)
 
 	// Local channel has 50% margin (15000/30000), eBay has 30%
 	// Best channel margin = 50%, maxBuy = 50% - 10% - 12.35% = 27.65%
@@ -153,7 +153,7 @@ func TestGenerateSuggestions_SpendCapRebalancing(t *testing.T) {
 		{Name: "High Cap", Phase: PhaseActive, DailySpendCapCents: 50000}, // $500/day
 	}
 
-	resp := GenerateSuggestions(context.Background(),insights, campaigns)
+	resp := GenerateSuggestions(context.Background(), insights, campaigns)
 
 	// Caps differ by 10x, should suggest rebalancing
 	found := false
@@ -183,7 +183,7 @@ func TestGenerateSuggestions_GradeSweetSpot(t *testing.T) {
 		{Phase: PhaseActive, GradeRange: "8-10"},
 	}
 
-	resp := GenerateSuggestions(context.Background(),insights, campaigns)
+	resp := GenerateSuggestions(context.Background(), insights, campaigns)
 
 	found := false
 	for _, s := range resp.NewCampaigns {
@@ -259,7 +259,7 @@ func TestGameStopPayoutRange(t *testing.T) {
 		{Name: "GS Campaign", Phase: PhaseActive, BuyTermsCLPct: 0.80, EbayFeePct: 0.1235},
 	}
 
-	resp := GenerateSuggestions(context.Background(),insights, campaigns)
+	resp := GenerateSuggestions(context.Background(), insights, campaigns)
 
 	found := false
 	for _, s := range resp.Adjustments {
@@ -294,7 +294,7 @@ func TestROIWeightedSpendCaps(t *testing.T) {
 		{ID: "c2", Name: "Low ROI", Phase: PhaseActive, DailySpendCapCents: 50000},
 	}
 
-	resp := GenerateSuggestions(context.Background(),insights, campaigns)
+	resp := GenerateSuggestions(context.Background(), insights, campaigns)
 
 	found := false
 	for _, s := range resp.Adjustments {
@@ -322,7 +322,7 @@ func TestPhaseTransition_ArchiveUnderperformer(t *testing.T) {
 		{ID: "c1", Name: "Losing Campaign", Phase: PhaseActive},
 	}
 
-	resp := GenerateSuggestions(context.Background(),insights, campaigns)
+	resp := GenerateSuggestions(context.Background(), insights, campaigns)
 
 	found := false
 	for _, s := range resp.Adjustments {
@@ -349,7 +349,7 @@ func TestPhaseTransition_ActivatePending(t *testing.T) {
 		{ID: "c1", Name: "Pending Charizard", Phase: PhasePending, InclusionList: "Charizard"},
 	}
 
-	resp := GenerateSuggestions(context.Background(),insights, campaigns)
+	resp := GenerateSuggestions(context.Background(), insights, campaigns)
 
 	found := false
 	for _, s := range resp.Adjustments {

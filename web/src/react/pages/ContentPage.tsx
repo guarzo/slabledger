@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useSocialPosts, useGenerateSocialPosts, useDeleteSocialPost, usePublishSocialPost, useInstagramStatus } from '../queries/useSocialQueries';
+import { useSocialPosts, useGenerateSocialPosts, useDeleteSocialPost, useInstagramStatus } from '../queries/useSocialQueries';
 import { useToast } from '../contexts/ToastContext';
 import type { SocialPost } from '../../types/social';
 import PostCard from '../components/social/PostCard';
@@ -14,7 +14,6 @@ export default function ContentPage() {
   const { data: posts, isLoading } = useSocialPosts();
   const generateMutation = useGenerateSocialPosts();
   const deleteMutation = useDeleteSocialPost();
-  const publishMutation = usePublishSocialPost();
   const { data: igStatus } = useInstagramStatus();
 
   const handleGenerate = async () => {
@@ -23,15 +22,6 @@ export default function ContentPage() {
       toast.success('Generating posts... new content will appear shortly');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to generate posts');
-    }
-  };
-
-  const handlePublish = async (id: string) => {
-    try {
-      await publishMutation.mutateAsync(id);
-      toast.info('Publishing started — check back shortly');
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to publish');
     }
   };
 
@@ -101,7 +91,6 @@ export default function ContentPage() {
               key={post.id}
               post={post}
               onPreview={() => setPreviewPostId(post.id)}
-              onPublish={igStatus?.connected ? () => handlePublish(post.id) : undefined}
               onDelete={() => handleDelete(post.id)}
             />
           ))}
