@@ -36,6 +36,20 @@ export default function CertEntryTab() {
     }
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      const textarea = e.currentTarget;
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const newValue = input.substring(0, start) + '\n' + input.substring(end);
+      setInput(newValue);
+      requestAnimationFrame(() => {
+        textarea.selectionStart = textarea.selectionEnd = start + 1;
+      });
+    }
+  };
+
   return (
     <div className="space-y-4">
       <p className="text-sm text-gray-400">
@@ -46,6 +60,7 @@ export default function CertEntryTab() {
       <textarea
         value={input}
         onChange={e => setInput(e.target.value)}
+        onKeyDown={handleKeyDown}
         placeholder={"12345678\n87654321\n11223344"}
         rows={10}
         className="w-full rounded border border-gray-700 bg-gray-900 p-3 font-mono text-sm text-gray-100 placeholder-gray-600 focus:border-blue-500 focus:outline-none"
