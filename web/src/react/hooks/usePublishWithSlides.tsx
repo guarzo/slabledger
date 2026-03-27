@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
+import html2canvas from 'html2canvas';
 import { useQueryClient } from '@tanstack/react-query';
 import { api } from '../../js/api';
 import { queryKeys } from '../queries/queryKeys';
@@ -15,35 +16,23 @@ interface UsePublishWithSlidesResult {
 }
 
 /**
- * Fetches an external image through our backend proxy and returns a data URL.
- * Data URLs are already inline so html-to-image can embed them in the SVG
- * foreignObject without needing to fetch — avoids CSP connect-src issues.
+ * Fetches an external image through our backend proxy and returns a blob URL.
+ * Blob URLs are small references that html2canvas can render directly from
+ * the DOM without inflating the HTML size.
  */
-async function proxyImageToDataUrl(externalUrl: string): Promise<string> {
+async function proxyImageToBlobUrl(externalUrl: string): Promise<string> {
   const resp = await fetch(`/api/image-proxy?url=${encodeURIComponent(externalUrl)}`);
   if (!resp.ok) {
     console.warn(`[publish] proxy FAILED ${resp.status} for ${externalUrl}`);
     return externalUrl;
   }
   const blob = await resp.blob();
-  console.warn(`[publish] proxied ${externalUrl} → blob ${blob.size} bytes, type=${blob.type}`);
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const dataUrl = reader.result as string;
-      console.warn(`[publish] data URL length=${dataUrl.length}, prefix=${dataUrl.substring(0, 40)}...`);
-      resolve(dataUrl);
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
+  return URL.createObjectURL(blob);
 }
 
 async function renderSlideToJpeg(
   element: React.ReactElement,
 ): Promise<Blob> {
-  const { toJpeg } = await import('html-to-image');
-
   // Create offscreen container at Instagram's native 1080x1080
   const container = document.createElement('div');
   container.style.cssText =
@@ -51,20 +40,14 @@ async function renderSlideToJpeg(
   document.body.appendChild(container);
 
   // Mount the React component synchronously so the DOM is populated before
-  // we query for <img> elements and capture with html-to-image.
+  // we query for <img> elements and capture with html2canvas.
   const root = createRoot(container);
   flushSync(() => {
     root.render(element);
   });
 
-  const imgs = Array.from(container.querySelectorAll('img'));
-  console.warn(`[publish] renderSlide: found ${imgs.length} <img> elements after flushSync`);
-  imgs.forEach((img, i) => {
-    const srcPreview = img.src.substring(0, 60);
-    console.warn(`[publish]   img[${i}]: complete=${img.complete}, naturalWidth=${img.naturalWidth}, src=${srcPreview}...`);
-  });
-
   // Wait for all images in the container to finish loading (or fail).
+  const imgs = Array.from(container.querySelectorAll('img'));
   await Promise.all(
     imgs.map(
       (img) =>
@@ -73,7 +56,7 @@ async function renderSlideToJpeg(
           : new Promise<void>((resolve) => {
               img.addEventListener('load', () => resolve(), { once: true });
               img.addEventListener('error', () => {
-                console.warn(`[publish]   img FAILED to load: ${img.src.substring(0, 60)}...`);
+                console.warn(`[publish] img FAILED to load: ${img.src.substring(0, 80)}`);
                 resolve();
               }, { once: true });
             }),
@@ -82,28 +65,33 @@ async function renderSlideToJpeg(
   // Extra frame for the browser to paint after images load
   await new Promise((resolve) => setTimeout(resolve, 100));
 
-  console.warn(`[publish] renderSlide: all images settled, container innerHTML length=${container.innerHTML.length}`);
-
   try {
-    const dataUrl = await toJpeg(container, {
+    // html2canvas rasterizes directly to a canvas element — no SVG foreignObject
+    // intermediate step, so there's no data URL size limit that causes blank output.
+    const canvas = await html2canvas(container, {
       width: 1080,
       height: 1080,
-      pixelRatio: 2,
-      quality: 0.92,
+      scale: 2,
       backgroundColor: '#0a0e1a',
+      useCORS: true,
+      allowTaint: false,
+      logging: false,
     });
 
-    console.warn(`[publish] toJpeg returned dataUrl length=${dataUrl.length}`);
-
-    // Convert data URL to Blob without fetch (avoids CSP connect-src restriction)
-    const [header, base64] = dataUrl.split(',');
-    const mime = header.match(/:(.*?);/)?.[1] ?? 'image/jpeg';
-    const bytes = atob(base64);
-    const buf = new Uint8Array(bytes.length);
-    for (let i = 0; i < bytes.length; i++) buf[i] = bytes.charCodeAt(i);
-    const blob = new Blob([buf], { type: mime });
-    console.warn(`[publish] slide blob: ${blob.size} bytes, type=${blob.type}`);
-    return blob;
+    return new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob(
+        (blob) => {
+          if (blob) {
+            console.warn(`[publish] slide blob: ${blob.size} bytes`);
+            resolve(blob);
+          } else {
+            reject(new Error('canvas.toBlob returned null'));
+          }
+        },
+        'image/jpeg',
+        0.92,
+      );
+    });
   } finally {
     root.unmount();
     document.body.removeChild(container);
@@ -124,17 +112,18 @@ export function usePublishWithSlides(
 
     isPublishingRef.current = true;
     setIsPublishing(true);
+    const blobUrls: string[] = [];
     try {
-      // Pre-fetch card images through backend proxy and convert to data URLs.
-      // Data URLs are already inline so html-to-image can embed them directly
-      // in the SVG foreignObject without any fetch — avoids CSP issues entirely.
+      // Pre-fetch card images through backend proxy to get same-origin blob URLs.
+      // html2canvas renders directly from the DOM so blob URLs work fine.
       setProgress('Loading card images...');
       const proxiedCards = await Promise.all(
         detail.cards.map(async (card) => {
-          if (!card.frontImageUrl || card.frontImageUrl.startsWith('data:')) return card;
+          if (!card.frontImageUrl || card.frontImageUrl.startsWith('blob:')) return card;
           try {
-            const dataUrl = await proxyImageToDataUrl(card.frontImageUrl);
-            return { ...card, frontImageUrl: dataUrl };
+            const blobUrl = await proxyImageToBlobUrl(card.frontImageUrl);
+            if (blobUrl !== card.frontImageUrl) blobUrls.push(blobUrl);
+            return { ...card, frontImageUrl: blobUrl };
           } catch (err) {
             console.warn('Image proxy failed for', card.frontImageUrl, err);
             return card;
@@ -191,6 +180,7 @@ export function usePublishWithSlides(
       setProgress('');
       throw error;
     } finally {
+      blobUrls.forEach((u) => URL.revokeObjectURL(u));
       isPublishingRef.current = false;
       setIsPublishing(false);
     }
