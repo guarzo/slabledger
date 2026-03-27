@@ -51,19 +51,19 @@ type PostCard struct {
 
 // PostCardDetail is PostCard enriched with purchase data for API responses.
 type PostCardDetail struct {
-	PurchaseID    string    `json:"purchaseId"`
-	SlideOrder    int       `json:"slideOrder"`
-	CardName      string    `json:"cardName"`
-	SetName       string    `json:"setName"`
-	CardNumber    string    `json:"cardNumber"`
-	GradeValue    float64   `json:"gradeValue"`
-	Grader        string    `json:"grader"`
-	CertNumber    string    `json:"certNumber"`
-	FrontImageURL string    `json:"frontImageUrl"`
+	PurchaseID       string    `json:"purchaseId"`
+	SlideOrder       int       `json:"slideOrder"`
+	CardName         string    `json:"cardName"`
+	SetName          string    `json:"setName"`
+	CardNumber       string    `json:"cardNumber"`
+	GradeValue       float64   `json:"gradeValue"`
+	Grader           string    `json:"grader"`
+	CertNumber       string    `json:"certNumber"`
+	FrontImageURL    string    `json:"frontImageUrl"`
 	AskingPriceCents int       `json:"askingPriceCents"`
 	CLValueCents     int       `json:"clValueCents"`
-	Trend30d      float64   `json:"trend30d"`
-	CreatedAt     time.Time `json:"createdAt"`
+	Trend30d         float64   `json:"trend30d"`
+	CreatedAt        time.Time `json:"createdAt"`
 }
 
 // PostDetail is a SocialPost with its associated card details.

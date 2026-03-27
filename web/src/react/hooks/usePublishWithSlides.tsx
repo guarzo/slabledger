@@ -1,12 +1,8 @@
 import { useState, useCallback, useRef } from 'react';
-import { flushSync } from 'react-dom';
-import { createRoot } from 'react-dom/client';
 import { useQueryClient } from '@tanstack/react-query';
 import { api } from '../../js/api';
 import { queryKeys } from '../queries/queryKeys';
-import CoverSlide from '../components/social/slides/CoverSlide';
-import CardSlide from '../components/social/slides/CardSlide';
-import type { SocialPostDetail, PostCardDetail } from '../../types/social';
+import type { SocialPostDetail } from '../../types/social';
 
 interface UsePublishWithSlidesResult {
   publish: () => Promise<void>;
@@ -15,103 +11,79 @@ interface UsePublishWithSlidesResult {
 }
 
 /**
- * Fetches an external image through our backend proxy and returns a data URL.
- * Data URLs are already inline so html-to-image can embed them in the SVG
- * foreignObject without needing to fetch — avoids CSP connect-src issues.
+ * Captures the currently visible [data-slide] element as a JPEG blob.
+ * Uses the same html-to-image path as the working download feature.
  */
-async function proxyImageToDataUrl(externalUrl: string): Promise<string> {
-  const resp = await fetch(`/api/image-proxy?url=${encodeURIComponent(externalUrl)}`);
-  if (!resp.ok) {
-    console.warn(`[publish] proxy FAILED ${resp.status} for ${externalUrl}`);
-    return externalUrl;
-  }
-  const blob = await resp.blob();
-  console.warn(`[publish] proxied ${externalUrl} → blob ${blob.size} bytes, type=${blob.type}`);
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const dataUrl = reader.result as string;
-      console.warn(`[publish] data URL length=${dataUrl.length}, prefix=${dataUrl.substring(0, 40)}...`);
-      resolve(dataUrl);
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
-}
-
-async function renderSlideToJpeg(
-  element: React.ReactElement,
-): Promise<Blob> {
+async function captureVisibleSlide(): Promise<Blob> {
   const { toJpeg } = await import('html-to-image');
 
-  // Create offscreen container at Instagram's native 1080x1080
-  const container = document.createElement('div');
-  container.style.cssText =
-    'position:fixed;left:-9999px;top:0;width:1080px;height:1080px;overflow:hidden;';
-  document.body.appendChild(container);
+  const el = document.querySelector('[data-slide]') as HTMLElement | null;
+  if (!el) throw new Error('No [data-slide] element found in DOM');
 
-  // Mount the React component synchronously so the DOM is populated before
-  // we query for <img> elements and capture with html-to-image.
-  const root = createRoot(container);
-  flushSync(() => {
-    root.render(element);
+  // Temporarily force the element (and its parent container) to 1080x1080
+  // so html-to-image captures at Instagram's native resolution.
+  const parent = el.parentElement;
+  const savedParentStyle = parent?.style.cssText ?? '';
+  const savedElStyle = el.style.cssText;
+  if (parent) {
+    parent.style.cssText += ';width:1080px!important;height:1080px!important;max-width:none!important;';
+  }
+  el.style.cssText += ';width:1080px!important;height:1080px!important;';
+
+  // Let the browser reflow at the new size
+  await new Promise((resolve) => setTimeout(resolve, 50));
+
+  const dataUrl = await toJpeg(el, {
+    width: 1080,
+    height: 1080,
+    pixelRatio: 2,
+    quality: 0.92,
+    backgroundColor: '#0a0e1a',
   });
 
-  const imgs = Array.from(container.querySelectorAll('img'));
-  console.warn(`[publish] renderSlide: found ${imgs.length} <img> elements after flushSync`);
-  imgs.forEach((img, i) => {
-    const srcPreview = img.src.substring(0, 60);
-    console.warn(`[publish]   img[${i}]: complete=${img.complete}, naturalWidth=${img.naturalWidth}, src=${srcPreview}...`);
-  });
+  // Restore original styles
+  if (parent) parent.style.cssText = savedParentStyle;
+  el.style.cssText = savedElStyle;
 
-  // Wait for all images in the container to finish loading (or fail).
+  const [header, base64] = dataUrl.split(',');
+  const mime = header.match(/:(.*?);/)?.[1] ?? 'image/jpeg';
+  const bytes = atob(base64);
+  const buf = new Uint8Array(bytes.length);
+  for (let i = 0; i < bytes.length; i++) buf[i] = bytes.charCodeAt(i);
+  const blob = new Blob([buf], { type: mime });
+
+  if (blob.size < 50_000) {
+    console.error(`[publish] slide capture suspiciously small (${blob.size} bytes)`);
+  }
+  return blob;
+}
+
+/** Wait for the next [data-slide] to appear and its images to load. */
+async function waitForSlideReady(): Promise<void> {
+  // Wait for React to commit the new slide to the DOM
+  await new Promise((resolve) => setTimeout(resolve, 150));
+
+  const el = document.querySelector('[data-slide]') as HTMLElement | null;
+  if (!el) return;
+
+  const imgs = Array.from(el.querySelectorAll('img'));
   await Promise.all(
-    imgs.map(
-      (img) =>
-        img.complete
-          ? Promise.resolve()
-          : new Promise<void>((resolve) => {
-              img.addEventListener('load', () => resolve(), { once: true });
-              img.addEventListener('error', () => {
-                console.warn(`[publish]   img FAILED to load: ${img.src.substring(0, 60)}...`);
-                resolve();
-              }, { once: true });
-            }),
+    imgs.map((img) =>
+      img.complete
+        ? Promise.resolve()
+        : new Promise<void>((resolve) => {
+            img.addEventListener('load', () => resolve(), { once: true });
+            img.addEventListener('error', () => resolve(), { once: true });
+          }),
     ),
   );
-  // Extra frame for the browser to paint after images load
+  // Extra frame for paint
   await new Promise((resolve) => setTimeout(resolve, 100));
-
-  console.warn(`[publish] renderSlide: all images settled, container innerHTML length=${container.innerHTML.length}`);
-
-  try {
-    const dataUrl = await toJpeg(container, {
-      width: 1080,
-      height: 1080,
-      pixelRatio: 2,
-      quality: 0.92,
-      backgroundColor: '#0a0e1a',
-    });
-
-    console.warn(`[publish] toJpeg returned dataUrl length=${dataUrl.length}`);
-
-    // Convert data URL to Blob without fetch (avoids CSP connect-src restriction)
-    const [header, base64] = dataUrl.split(',');
-    const mime = header.match(/:(.*?);/)?.[1] ?? 'image/jpeg';
-    const bytes = atob(base64);
-    const buf = new Uint8Array(bytes.length);
-    for (let i = 0; i < bytes.length; i++) buf[i] = bytes.charCodeAt(i);
-    const blob = new Blob([buf], { type: mime });
-    console.warn(`[publish] slide blob: ${blob.size} bytes, type=${blob.type}`);
-    return blob;
-  } finally {
-    root.unmount();
-    document.body.removeChild(container);
-  }
 }
 
 export function usePublishWithSlides(
   detail: SocialPostDetail | undefined,
+  setCurrentSlide?: (index: number) => void,
 ): UsePublishWithSlidesResult {
   const [isPublishing, setIsPublishing] = useState(false);
   const [progress, setProgress] = useState('');
@@ -119,60 +91,27 @@ export function usePublishWithSlides(
   const queryClient = useQueryClient();
 
   const publish = useCallback(async () => {
-    if (!detail || !detail.cards?.length) return;
+    if (!detail || !detail.cards?.length || !setCurrentSlide) return;
     if (isPublishingRef.current) return;
 
     isPublishingRef.current = true;
     setIsPublishing(true);
     try {
-      // Pre-fetch card images through backend proxy and convert to data URLs.
-      // Data URLs are already inline so html-to-image can embed them directly
-      // in the SVG foreignObject without any fetch — avoids CSP issues entirely.
-      setProgress('Loading card images...');
-      const proxiedCards = await Promise.all(
-        detail.cards.map(async (card) => {
-          if (!card.frontImageUrl || card.frontImageUrl.startsWith('data:')) return card;
-          try {
-            const dataUrl = await proxyImageToDataUrl(card.frontImageUrl);
-            return { ...card, frontImageUrl: dataUrl };
-          } catch (err) {
-            console.warn('Image proxy failed for', card.frontImageUrl, err);
-            return card;
-          }
-        }),
-      );
-
-      const totalSlides = proxiedCards.length + 1;
-      const psa10Count = proxiedCards.filter((c) => c.gradeValue === 10).length;
+      const totalSlides = detail.cards.length + 1;
       const slides: Blob[] = [];
 
-      // Render cover slide
+      // Capture cover slide (index 0)
       setProgress('Rendering cover slide...');
-      const coverBlob = await renderSlideToJpeg(
-        <CoverSlide
-          postType={detail.postType}
-          coverTitle={detail.coverTitle}
-          cardCount={detail.cardCount}
-          psa10Count={psa10Count}
-          cards={proxiedCards}
-          backgroundUrls={detail.backgroundUrls}
-        />,
-      );
-      slides.push(coverBlob);
+      setCurrentSlide(0);
+      await waitForSlideReady();
+      slides.push(await captureVisibleSlide());
 
-      // Render each card slide
-      for (let i = 0; i < proxiedCards.length; i++) {
+      // Capture each card slide
+      for (let i = 0; i < detail.cards.length; i++) {
         setProgress(`Rendering slide ${i + 2} of ${totalSlides}...`);
-        const cardBlob = await renderSlideToJpeg(
-          <CardSlide
-            card={proxiedCards[i] as PostCardDetail}
-            postType={detail.postType}
-            slideIndex={i + 1}
-            totalSlides={totalSlides}
-            backgroundUrl={detail.backgroundUrls?.[i + 1]}
-          />,
-        );
-        slides.push(cardBlob);
+        setCurrentSlide(i + 1);
+        await waitForSlideReady();
+        slides.push(await captureVisibleSlide());
       }
 
       // Upload slides
@@ -183,9 +122,7 @@ export function usePublishWithSlides(
       setProgress('Publishing to Instagram...');
       await api.publishSocialPost(detail.id);
 
-      // Invalidate queries to pick up new status
       queryClient.invalidateQueries({ queryKey: queryKeys.social.all });
-
       setProgress('Published!');
     } catch (error) {
       setProgress('');
@@ -194,7 +131,7 @@ export function usePublishWithSlides(
       isPublishingRef.current = false;
       setIsPublishing(false);
     }
-  }, [detail, queryClient]);
+  }, [detail, setCurrentSlide, queryClient]);
 
   return { publish, isPublishing, progress };
 }

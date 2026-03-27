@@ -529,4 +529,3 @@ func TestGetUserInfo(t *testing.T) {
 		})
 	}
 }
-

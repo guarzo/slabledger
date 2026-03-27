@@ -38,7 +38,7 @@ export default function PostCard({ post, onPreview, onPublish, onDelete }: PostC
     : 'No caption generated';
 
   const isPublishable = post.status === 'draft' || post.status === 'failed' || post.status === 'approved';
-  const isDeletable = post.status === 'draft' || post.status === 'failed';
+  const isDeletable = post.status !== 'publishing';
 
   return (
     <CardShell variant="interactive" onClick={onPreview}>

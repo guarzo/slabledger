@@ -20,7 +20,7 @@ export default function PostPreview({ postId, onBack, igConnected }: PostPreview
   const { data: detail, isLoading } = useSocialPost(postId);
   const [currentSlide, setCurrentSlide] = useState(0);
   const [coverTitleOverride, setCoverTitleOverride] = useState<string | null>(null);
-  const { publish, isPublishing, progress } = usePublishWithSlides(detail);
+  const { publish, isPublishing, progress } = usePublishWithSlides(detail, setCurrentSlide);
   const toast = useToast();
   const handleTitleChange = useCallback((title: string) => {
     setCoverTitleOverride(title);

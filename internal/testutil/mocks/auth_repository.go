@@ -22,30 +22,30 @@ type MockAuthRepository struct {
 	Tokens   map[int64]*auth.UserTokens
 	Sessions map[string]*auth.Session
 
-	CreateUserFn             func(ctx context.Context, googleID, username, email, avatarURL string) (*auth.User, error)
-	GetUserByGoogleIDFn      func(ctx context.Context, googleID string) (*auth.User, error)
-	GetUserByIDFn            func(ctx context.Context, userID int64) (*auth.User, error)
-	UpdateUserFn             func(ctx context.Context, user *auth.User) error
-	StoreTokensFn            func(ctx context.Context, userID int64, sessionID string, tokens *auth.UserTokens) error
-	GetTokensFn              func(ctx context.Context, userID int64, sessionID string) (*auth.UserTokens, error)
-	GetTokensByUserIDFn      func(ctx context.Context, userID int64) (*auth.UserTokens, error)
-	UpdateTokensFn           func(ctx context.Context, userID int64, sessionID string, tokens *auth.UserTokens) error
-	DeleteTokensFn           func(ctx context.Context, userID int64, sessionID string) error
-	DeleteAllUserTokensFn    func(ctx context.Context, userID int64) error
-	CreateSessionFn          func(ctx context.Context, session *auth.Session) error
-	GetSessionFn             func(ctx context.Context, sessionID string) (*auth.Session, error)
-	UpdateSessionAccessFn    func(ctx context.Context, sessionID string) error
-	DeleteSessionFn          func(ctx context.Context, sessionID string) error
-	DeleteExpiredSessionsFn  func(ctx context.Context) (int, error)
-	StoreOAuthStateFn        func(ctx context.Context, state string, expiresAt time.Time) error
-	ConsumeOAuthStateFn      func(ctx context.Context, state string) (bool, error)
+	CreateUserFn                func(ctx context.Context, googleID, username, email, avatarURL string) (*auth.User, error)
+	GetUserByGoogleIDFn         func(ctx context.Context, googleID string) (*auth.User, error)
+	GetUserByIDFn               func(ctx context.Context, userID int64) (*auth.User, error)
+	UpdateUserFn                func(ctx context.Context, user *auth.User) error
+	StoreTokensFn               func(ctx context.Context, userID int64, sessionID string, tokens *auth.UserTokens) error
+	GetTokensFn                 func(ctx context.Context, userID int64, sessionID string) (*auth.UserTokens, error)
+	GetTokensByUserIDFn         func(ctx context.Context, userID int64) (*auth.UserTokens, error)
+	UpdateTokensFn              func(ctx context.Context, userID int64, sessionID string, tokens *auth.UserTokens) error
+	DeleteTokensFn              func(ctx context.Context, userID int64, sessionID string) error
+	DeleteAllUserTokensFn       func(ctx context.Context, userID int64) error
+	CreateSessionFn             func(ctx context.Context, session *auth.Session) error
+	GetSessionFn                func(ctx context.Context, sessionID string) (*auth.Session, error)
+	UpdateSessionAccessFn       func(ctx context.Context, sessionID string) error
+	DeleteSessionFn             func(ctx context.Context, sessionID string) error
+	DeleteExpiredSessionsFn     func(ctx context.Context) (int, error)
+	StoreOAuthStateFn           func(ctx context.Context, state string, expiresAt time.Time) error
+	ConsumeOAuthStateFn         func(ctx context.Context, state string) (bool, error)
 	CleanupExpiredOAuthStatesFn func(ctx context.Context) (int, error)
-	IsEmailAllowedFn         func(ctx context.Context, email string) (bool, error)
-	ListAllowedEmailsFn      func(ctx context.Context) ([]auth.AllowedEmail, error)
-	AddAllowedEmailFn        func(ctx context.Context, email string, addedBy int64, notes string) error
-	RemoveAllowedEmailFn     func(ctx context.Context, email string) error
-	ListUsersFn              func(ctx context.Context) ([]auth.User, error)
-	SetUserAdminFn           func(ctx context.Context, userID int64, isAdmin bool) error
+	IsEmailAllowedFn            func(ctx context.Context, email string) (bool, error)
+	ListAllowedEmailsFn         func(ctx context.Context) ([]auth.AllowedEmail, error)
+	AddAllowedEmailFn           func(ctx context.Context, email string, addedBy int64, notes string) error
+	RemoveAllowedEmailFn        func(ctx context.Context, email string) error
+	ListUsersFn                 func(ctx context.Context) ([]auth.User, error)
+	SetUserAdminFn              func(ctx context.Context, userID int64, isAdmin bool) error
 }
 
 var _ auth.Repository = (*MockAuthRepository)(nil)
