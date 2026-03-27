@@ -2,10 +2,16 @@
  * Navigation Component
  *
  * Minimal text-link navigation with subtle active state styling.
+ * Supports mobile (vertical) and desktop (inline) layouts.
  */
 import { Link, useLocation } from 'react-router-dom';
 
-export default function Navigation() {
+interface NavigationProps {
+  mobile?: boolean;
+  onNavigate?: () => void;
+}
+
+export default function Navigation({ mobile, onNavigate }: NavigationProps) {
   const location = useLocation();
 
   const navItems = [
@@ -21,6 +27,37 @@ export default function Navigation() {
     if (path === '/') return location.pathname === '/';
     return location.pathname === path || location.pathname.startsWith(path + '/');
   };
+
+  if (mobile) {
+    return (
+      <nav
+        className="flex flex-col gap-1 px-4 py-3"
+        role="navigation"
+        aria-label="Main navigation"
+      >
+        {navItems.map((item) => (
+          <Link
+            key={item.path}
+            to={item.path}
+            onClick={onNavigate}
+            className={`
+              flex items-center px-3.5 py-2.5
+              text-sm rounded-md transition-all duration-200
+              ${isActive(item.path)
+                ? 'text-white font-semibold bg-[rgba(99,102,241,0.15)] border border-[rgba(99,102,241,0.2)]'
+                : 'text-[#94a3b8] font-medium hover:text-[var(--text)] hover:bg-[rgba(255,255,255,0.04)] border border-transparent'
+              }
+            `}
+            title={item.label}
+            aria-label={`Navigate to ${item.label}`}
+            aria-current={isActive(item.path) ? 'page' : undefined}
+          >
+            {item.label}
+          </Link>
+        ))}
+      </nav>
+    );
+  }
 
   return (
     <nav
