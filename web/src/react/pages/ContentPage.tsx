@@ -9,6 +9,7 @@ import Button from '../ui/Button';
 
 export default function ContentPage() {
   const [previewPostId, setPreviewPostId] = useState<string | null>(null);
+  const [showPublished, setShowPublished] = useState(false);
   const toast = useToast();
 
   const { data: posts, isLoading } = useSocialPosts();
@@ -33,6 +34,10 @@ export default function ContentPage() {
       toast.error(err instanceof Error ? err.message : 'Failed to delete post');
     }
   };
+
+  const filteredPosts = (posts ?? []).filter(
+    (post: SocialPost) => showPublished || post.status !== 'published'
+  );
 
   if (previewPostId) {
     return (
@@ -71,6 +76,33 @@ export default function ContentPage() {
         </Button>
       </div>
 
+      {posts && posts.length > 0 && (
+        <div className="flex items-center gap-3 mb-4">
+          <button
+            type="button"
+            onClick={() => setShowPublished(false)}
+            className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-colors ${
+              !showPublished
+                ? 'border-[var(--brand-500)] bg-[var(--brand-500)]/10 text-[var(--brand-400)]'
+                : 'border-[var(--surface-2)] text-[var(--text-muted)] hover:text-[var(--text)]'
+            }`}
+          >
+            Drafts
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowPublished(true)}
+            className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-colors ${
+              showPublished
+                ? 'border-[var(--brand-500)] bg-[var(--brand-500)]/10 text-[var(--brand-400)]'
+                : 'border-[var(--surface-2)] text-[var(--text-muted)] hover:text-[var(--text)]'
+            }`}
+          >
+            All Posts
+          </button>
+        </div>
+      )}
+
       {/* Post list — single flat list, no tabs */}
       {isLoading ? (
         <CardShell padding="lg">
@@ -84,9 +116,26 @@ export default function ContentPage() {
             </p>
           </div>
         </CardShell>
+      ) : filteredPosts.length === 0 ? (
+        <CardShell padding="lg">
+          <div className="text-center py-8">
+            <p className="text-[var(--text-muted)] mb-4">
+              {showPublished ? 'No posts yet.' : 'No draft posts. All posts have been published.'}
+            </p>
+            {!showPublished && (
+              <button
+                type="button"
+                onClick={() => setShowPublished(true)}
+                className="text-sm text-[var(--brand-400)] hover:text-[var(--brand-300)]"
+              >
+                Show all posts
+              </button>
+            )}
+          </div>
+        </CardShell>
       ) : (
         <div className="grid gap-4">
-          {posts.map((post: SocialPost) => (
+          {filteredPosts.map((post: SocialPost) => (
             <PostCard
               key={post.id}
               post={post}
