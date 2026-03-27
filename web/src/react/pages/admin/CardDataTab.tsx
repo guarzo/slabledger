@@ -80,7 +80,7 @@ export function CardDataTab() {
       </div>
 
       {/* Sets table */}
-      <div className="glass-table max-h-[500px] overflow-y-auto scrollbar-dark">
+      <div className="glass-table max-h-[min(500px,calc(100vh-400px))] overflow-y-auto scrollbar-dark">
         <table className="w-full text-sm">
           <thead className="sticky top-0 z-10">
             <tr className="glass-table-header" style={{ backdropFilter: 'blur(12px)' }}>
