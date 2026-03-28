@@ -468,7 +468,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
               onChange={toggleAll} className="rounded" />
             Select all
           </label>
-          <div ref={mobileScrollRef} className="max-h-[600px] overflow-y-auto scrollbar-dark">
+          <div ref={mobileScrollRef} className="max-h-[calc(100vh-280px)] max-h-[calc(100dvh-280px)] overflow-y-auto scrollbar-dark overscroll-contain touch-pan-y">
             <div style={{ height: `${mobileVirtualizer.getTotalSize()}px`, position: 'relative' }}>
               {mobileVirtualizer.getVirtualItems().map(virtualRow => {
                 const item = filteredAndSortedItems[virtualRow.index];

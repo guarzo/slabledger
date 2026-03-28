@@ -75,7 +75,12 @@ Structure your report as:
 3. **Credit Health** — utilization, outstanding, days to next invoice, risk level
 4. **Top Actions** — 3-5 specific prioritized recommendations
 5. **Segment Insights** — outperformers and underperformers by character/grade/era
-6. **Watch List** — cards or segments that need attention soon`
+6. **Watch List** — cards or segments that need attention soon
+
+Format guidelines:
+- Use markdown tables for any list of cards, contributors, or comparable data (e.g. best profit contributors, weakest sales, watch list cards). Example: | Card | Grade | Profit | Channel |
+- Keep paragraphs concise. Prefer bullet points for action items.
+- Do NOT use bold text as a substitute for structured tables when presenting ranked lists.`
 
 // campaignAnalysisSystemPrompt is used for per-campaign health narratives.
 const campaignAnalysisSystemPrompt = baseSystemPrompt + `

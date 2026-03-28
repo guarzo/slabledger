@@ -5,7 +5,6 @@ import { formatCents } from '../utils/formatters';
 import { useCampaigns, usePortfolioHealth, useWeeklyReview, useCreditSummary } from '../queries/useCampaignQueries';
 import HeroStatsBar from '../components/portfolio/HeroStatsBar';
 import WeeklyReviewSection from '../components/portfolio/WeeklyReviewSection';
-import CreditHealthPanel from '../components/portfolio/CreditHealthPanel';
 import WatchlistSection from '../components/watchlist/WatchlistSection';
 import AIAnalysisWidget from '../components/advisor/AIAnalysisWidget';
 import { SectionErrorBoundary } from '../ui';
@@ -43,17 +42,16 @@ export default function DashboardPage() {
       </div>
 
       {/* Tier 1: Hero Stats Bar */}
-      <HeroStatsBar health={healthData} />
+      <HeroStatsBar health={healthData} credit={creditData} />
 
-      {/* Tier 2: Two-column grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 mb-6 items-stretch">
-        {/* Left column (3/5) */}
-        <div className="lg:col-span-3 space-y-6">
+      {/* Tier 2: Campaigns + Weekly Review */}
+      <div className="mb-6">
+        <div className="space-y-6">
           {/* Active Campaigns */}
           {activeCampaigns.length > 0 && (
             <div>
               <h2 className="text-sm font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-3">Active Campaigns</h2>
-              <div className="grid gap-3 grid-cols-1 sm:grid-cols-2">
+              <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
                 {activeCampaigns.map(c => {
                   const health = healthMap[c.id];
                   const healthColor = health === 'critical' ? 'bg-[var(--danger)]' : health === 'warning' ? 'bg-[var(--warning)]' : 'bg-[var(--success)]';
@@ -84,13 +82,6 @@ export default function DashboardPage() {
           {/* Weekly Activity */}
           <SectionErrorBoundary sectionName="Weekly Review">
             {weeklyReview && <WeeklyReviewSection data={weeklyReview} />}
-          </SectionErrorBoundary>
-        </div>
-
-        {/* Right column (2/5) */}
-        <div className="lg:col-span-2">
-          <SectionErrorBoundary sectionName="Credit Health">
-            <CreditHealthPanel credit={creditData} />
           </SectionErrorBoundary>
         </div>
       </div>

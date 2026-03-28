@@ -138,9 +138,14 @@ test.describe('Mobile Accessibility', () => {
     const lookupButton = page.locator(selectors.priceLookupButton);
     await expect(lookupButton).toBeVisible();
 
-    // Navigation should be visible
-    const nav = page.locator(selectors.nav);
-    await expect(nav).toBeVisible();
+    // Desktop nav is hidden on mobile; hamburger menu button should be visible
+    const hamburger = page.locator('button[aria-label="Open menu"]');
+    await expect(hamburger).toBeVisible();
+
+    // Clicking hamburger should reveal mobile navigation
+    await hamburger.click();
+    const mobileNav = page.locator('nav[role="navigation"].flex.flex-col');
+    await expect(mobileNav).toBeVisible();
   });
 
   test('should be scrollable on mobile', async ({ page }) => {
