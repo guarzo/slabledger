@@ -64,6 +64,7 @@ type PostCardDetail struct {
 	CLValueCents     int       `json:"clValueCents"`
 	Trend30d         float64   `json:"trend30d"`
 	CreatedAt        time.Time `json:"createdAt"`
+	Sold             bool      `json:"sold"`
 }
 
 // PostDetail is a SocialPost with its associated card details.
