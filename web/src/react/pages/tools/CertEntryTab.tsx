@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { api } from '@/js/api';
 import type { CertImportResult } from '@/types/campaigns/core';
 
@@ -36,26 +36,6 @@ export default function CertEntryTab() {
     }
   };
 
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const cursorRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    if (cursorRef.current != null && textareaRef.current) {
-      textareaRef.current.selectionStart = textareaRef.current.selectionEnd = cursorRef.current;
-      cursorRef.current = null;
-    }
-  }, [input]);
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Tab') {
-      e.preventDefault();
-      const start = e.currentTarget.selectionStart;
-      const end = e.currentTarget.selectionEnd;
-      cursorRef.current = start + 1;
-      setInput(input.substring(0, start) + '\n' + input.substring(end));
-    }
-  };
-
   return (
     <div className="space-y-4">
       <p className="text-sm text-gray-400">
@@ -64,10 +44,8 @@ export default function CertEntryTab() {
       </p>
 
       <textarea
-        ref={textareaRef}
         value={input}
         onChange={e => setInput(e.target.value)}
-        onKeyDown={handleKeyDown}
         placeholder={"12345678\n87654321\n11223344"}
         rows={10}
         className="w-full rounded border border-gray-700 bg-gray-900 p-3 font-mono text-sm text-gray-100 placeholder-gray-600 focus:border-blue-500 focus:outline-none"

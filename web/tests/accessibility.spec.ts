@@ -144,8 +144,8 @@ test.describe('Mobile Accessibility', () => {
 
     // Clicking hamburger should reveal mobile navigation
     await hamburger.click();
-    const nav = page.locator(selectors.nav);
-    await expect(nav).toBeVisible();
+    const mobileNav = page.locator('nav[role="navigation"].flex.flex-col');
+    await expect(mobileNav).toBeVisible();
   });
 
   test('should be scrollable on mobile', async ({ page }) => {

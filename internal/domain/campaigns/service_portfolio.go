@@ -3,6 +3,7 @@ package campaigns
 import (
 	"context"
 	"fmt"
+	"math"
 	"sort"
 	"time"
 
@@ -58,7 +59,7 @@ func (s *service) GetPortfolioHealth(ctx context.Context) (*PortfolioHealth, err
 		}
 
 		if pnl.TotalSold > 0 && pnl.TotalPurchases > 0 {
-			soldCostBasis := pnl.TotalSpendCents * pnl.TotalSold / pnl.TotalPurchases
+			soldCostBasis := int(math.Round(float64(pnl.TotalSpendCents) * float64(pnl.TotalSold) / float64(pnl.TotalPurchases)))
 			soldProfit := pnl.TotalRevenueCents - pnl.TotalFeesCents - soldCostBasis
 			totalSoldCostBasis += soldCostBasis
 			totalSoldNetProfit += soldProfit

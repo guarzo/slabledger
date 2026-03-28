@@ -36,7 +36,7 @@ export default function ContentPage() {
   };
 
   const filteredPosts = useMemo(
-    () => (posts ?? []).filter((post: SocialPost) => showPublished || post.status !== 'published'),
+    () => (posts ?? []).filter((post: SocialPost) => showPublished || post.status === 'draft'),
     [posts, showPublished],
   );
 
@@ -87,6 +87,7 @@ export default function ContentPage() {
               key={btn.label}
               type="button"
               onClick={btn.onClick}
+              aria-pressed={btn.active}
               className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-colors ${
                 btn.active
                   ? 'border-[var(--brand-500)] bg-[var(--brand-500)]/10 text-[var(--brand-400)]'
@@ -116,17 +117,15 @@ export default function ContentPage() {
         <CardShell padding="lg">
           <div className="text-center py-8">
             <p className="text-[var(--text-muted)] mb-4">
-              {showPublished ? 'No posts yet.' : 'No draft posts. All posts have been published.'}
+              No draft posts. All posts have been published.
             </p>
-            {!showPublished && (
-              <button
-                type="button"
-                onClick={() => setShowPublished(true)}
-                className="text-sm text-[var(--brand-400)] hover:text-[var(--brand-300)]"
-              >
-                Show all posts
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => setShowPublished(true)}
+              className="text-sm text-[var(--brand-400)] hover:text-[var(--brand-300)]"
+            >
+              Show all posts
+            </button>
           </div>
         </CardShell>
       ) : (

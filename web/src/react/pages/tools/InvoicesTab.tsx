@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useInvoices, useUpdateInvoice } from '../../queries/useCampaignQueries';
 import { useToast } from '../../contexts/ToastContext';
 import { formatCents, getErrorMessage, localToday } from '../../utils/formatters';
@@ -7,6 +8,7 @@ export default function InvoicesTab() {
   const { data: invoices = [], isLoading, error } = useInvoices();
   const updateInvoice = useUpdateInvoice();
   const toast = useToast();
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
 
   if (isLoading) {
     return (
@@ -38,12 +40,13 @@ export default function InvoicesTab() {
       toast.error('Invoice not found. Please refresh the page.');
       return;
     }
+    setUpdatingId(id);
     const paidDate = localToday();
     updateInvoice.mutate(
-      { id, data: { ...inv, status: 'paid', paidDate, paidCents: inv.totalCents } },
+      { id, data: { status: 'paid', paidDate, paidCents: inv.totalCents } },
       {
-        onSuccess: () => toast.success('Invoice marked as paid'),
-        onError: (err) => toast.error(getErrorMessage(err, 'Failed to update invoice')),
+        onSuccess: () => { setUpdatingId(null); toast.success('Invoice marked as paid'); },
+        onError: (err) => { setUpdatingId(null); toast.error(getErrorMessage(err, 'Failed to update invoice')); },
       },
     );
   }
@@ -84,7 +87,7 @@ export default function InvoicesTab() {
                   <Button
                     size="sm"
                     variant="success"
-                    loading={updateInvoice.isPending}
+                    loading={updateInvoice.isPending && updatingId === inv.id}
                     onClick={() => handleMarkPaid(inv.id)}
                   >
                     Mark Paid
