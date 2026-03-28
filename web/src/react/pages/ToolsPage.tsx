@@ -49,10 +49,12 @@ export default function ToolsPage() {
               externalResult={externalResult}
               setExternalResult={setExternalResult}
             />
-            <div className="mt-6">
-              <ShopifySyncPage embedded />
-            </div>
           </SectionErrorBoundary>
+          <div className="mt-6">
+            <SectionErrorBoundary sectionName="Price Sync">
+              <ShopifySyncPage embedded />
+            </SectionErrorBoundary>
+          </div>
         </Tabs.Content>
 
         <Tabs.Content value="cert-entry">

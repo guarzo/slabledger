@@ -4,7 +4,7 @@
  * Sticky header with logo, navigation, and user dropdown menu.
  */
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { DropdownMenu } from 'radix-ui';
 import Navigation from './Navigation';
 import StatusIndicator from './StatusIndicator';
@@ -29,6 +29,18 @@ export default function Header() {
   const [lookupOpen, setLookupOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const closeMenu = useCallback(() => setMenuOpen(false), []);
+  const location = useLocation();
+
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMenuOpen(false); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [menuOpen]);
 
   useEffect(() => {
     setAvatarError(false);

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '@/js/api';
 import type { CertImportResult } from '@/types/campaigns/core';
 
@@ -36,17 +36,23 @@ export default function CertEntryTab() {
     }
   };
 
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const cursorRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (cursorRef.current != null && textareaRef.current) {
+      textareaRef.current.selectionStart = textareaRef.current.selectionEnd = cursorRef.current;
+      cursorRef.current = null;
+    }
+  }, [input]);
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Tab') {
       e.preventDefault();
-      const textarea = e.currentTarget;
-      const start = textarea.selectionStart;
-      const end = textarea.selectionEnd;
-      const newValue = input.substring(0, start) + '\n' + input.substring(end);
-      setInput(newValue);
-      requestAnimationFrame(() => {
-        textarea.selectionStart = textarea.selectionEnd = start + 1;
-      });
+      const start = e.currentTarget.selectionStart;
+      const end = e.currentTarget.selectionEnd;
+      cursorRef.current = start + 1;
+      setInput(input.substring(0, start) + '\n' + input.substring(end));
     }
   };
 
@@ -58,6 +64,7 @@ export default function CertEntryTab() {
       </p>
 
       <textarea
+        ref={textareaRef}
         value={input}
         onChange={e => setInput(e.target.value)}
         onKeyDown={handleKeyDown}

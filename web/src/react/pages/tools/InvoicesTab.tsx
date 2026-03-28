@@ -1,12 +1,28 @@
 import { useInvoices, useUpdateInvoice } from '../../queries/useCampaignQueries';
 import { useToast } from '../../contexts/ToastContext';
-import { formatCents, getErrorMessage } from '../../utils/formatters';
+import { formatCents, getErrorMessage, localToday } from '../../utils/formatters';
 import { Button } from '../../ui';
 
 export default function InvoicesTab() {
-  const { data: invoices = [] } = useInvoices();
+  const { data: invoices = [], isLoading, error } = useInvoices();
   const updateInvoice = useUpdateInvoice();
   const toast = useToast();
+
+  if (isLoading) {
+    return (
+      <div className="text-center text-[var(--text-muted)] py-8 text-sm">
+        Loading invoices...
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="text-center text-[var(--danger)] py-8 text-sm">
+        Failed to load invoices. Please try again.
+      </div>
+    );
+  }
 
   if (invoices.length === 0) {
     return (
@@ -18,9 +34,11 @@ export default function InvoicesTab() {
 
   function handleMarkPaid(id: string) {
     const inv = invoices.find(i => i.id === id);
-    if (!inv) return;
-    const now = new Date();
-    const paidDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    if (!inv) {
+      toast.error('Invoice not found. Please refresh the page.');
+      return;
+    }
+    const paidDate = localToday();
     updateInvoice.mutate(
       { id, data: { ...inv, status: 'paid', paidDate, paidCents: inv.totalCents } },
       {

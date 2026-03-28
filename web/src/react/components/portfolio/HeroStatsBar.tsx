@@ -11,12 +11,6 @@ export default function HeroStatsBar({ health, credit }: HeroStatsBarProps) {
 
   const roi = health.realizedROI ?? 0;
 
-  const creditColor = credit
-    ? credit.alertLevel === 'critical' ? 'text-[var(--danger)]'
-      : credit.alertLevel === 'warning' ? 'text-[var(--warning)]'
-      : 'text-[var(--success)]'
-    : '';
-
   return (
     <div className="mb-7 pb-6 border-b border-[rgba(255,255,255,0.05)]">
       <div className="flex items-end gap-7 flex-wrap">
@@ -45,13 +39,17 @@ export default function HeroStatsBar({ health, credit }: HeroStatsBarProps) {
             <>
               <div className="border-l border-[rgba(255,255,255,0.08)] pl-6">
                 <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Credit Used</div>
-                <div className={`text-base font-semibold ${creditColor}`}>
+                <div className={`text-base font-semibold ${
+                  credit.alertLevel === 'critical' ? 'text-[var(--danger)]'
+                    : credit.alertLevel === 'warning' ? 'text-[var(--warning)]'
+                    : 'text-[var(--success)]'
+                }`}>
                   {formatPctFromWhole(credit.utilizationPct)}
                 </div>
               </div>
               <div>
                 <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Outstanding</div>
-                <div className="text-base font-semibold text-[#cbd5e1]">{formatCents(credit.outstandingCents)}</div>
+                <div className="text-base font-semibold text-[#cbd5e1]">{formatCents(credit.outstandingCents ?? 0)}</div>
               </div>
             </>
           )}

@@ -44,7 +44,7 @@ export default function DashboardPage() {
       {/* Tier 1: Hero Stats Bar */}
       <HeroStatsBar health={healthData} credit={creditData} />
 
-      {/* Tier 2: Main content */}
+      {/* Tier 2: Campaigns + Weekly Review */}
       <div className="mb-6">
         <div className="space-y-6">
           {/* Active Campaigns */}

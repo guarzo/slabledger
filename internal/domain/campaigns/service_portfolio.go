@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"sort"
 	"time"
+
+	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
 // --- Portfolio Health ---
@@ -21,6 +23,12 @@ func (s *service) GetPortfolioHealth(ctx context.Context) (*PortfolioHealth, err
 	for _, c := range allCampaigns {
 		pnl, err := s.repo.GetCampaignPNL(ctx, c.ID)
 		if err != nil {
+			if s.logger != nil {
+				s.logger.Error(ctx, "skipping campaign in portfolio health",
+					observability.String("campaignID", c.ID),
+					observability.String("campaignName", c.Name),
+					observability.Err(err))
+			}
 			continue
 		}
 
@@ -49,8 +57,8 @@ func (s *service) GetPortfolioHealth(ctx context.Context) (*PortfolioHealth, err
 			reason += fmt.Sprintf("; slow sell-through (avg %.0f days)", pnl.AvgDaysToSell)
 		}
 
-		if pnl.TotalSold > 0 {
-			soldCostBasis := pnl.TotalSpendCents - capitalAtRisk
+		if pnl.TotalSold > 0 && pnl.TotalPurchases > 0 {
+			soldCostBasis := pnl.TotalSpendCents * pnl.TotalSold / pnl.TotalPurchases
 			soldProfit := pnl.TotalRevenueCents - pnl.TotalFeesCents - soldCostBasis
 			totalSoldCostBasis += soldCostBasis
 			totalSoldNetProfit += soldProfit

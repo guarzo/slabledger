@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useSocialPosts, useGenerateSocialPosts, useDeleteSocialPost, useInstagramStatus } from '../queries/useSocialQueries';
 import { useToast } from '../contexts/ToastContext';
 import type { SocialPost } from '../../types/social';
@@ -35,8 +35,9 @@ export default function ContentPage() {
     }
   };
 
-  const filteredPosts = (posts ?? []).filter(
-    (post: SocialPost) => showPublished || post.status !== 'published'
+  const filteredPosts = useMemo(
+    () => (posts ?? []).filter((post: SocialPost) => showPublished || post.status !== 'published'),
+    [posts, showPublished],
   );
 
   if (previewPostId) {
@@ -78,32 +79,27 @@ export default function ContentPage() {
 
       {posts && posts.length > 0 && (
         <div className="flex items-center gap-3 mb-4">
-          <button
-            type="button"
-            onClick={() => setShowPublished(false)}
-            className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-colors ${
-              !showPublished
-                ? 'border-[var(--brand-500)] bg-[var(--brand-500)]/10 text-[var(--brand-400)]'
-                : 'border-[var(--surface-2)] text-[var(--text-muted)] hover:text-[var(--text)]'
-            }`}
-          >
-            Drafts
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowPublished(true)}
-            className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-colors ${
-              showPublished
-                ? 'border-[var(--brand-500)] bg-[var(--brand-500)]/10 text-[var(--brand-400)]'
-                : 'border-[var(--surface-2)] text-[var(--text-muted)] hover:text-[var(--text)]'
-            }`}
-          >
-            All Posts
-          </button>
+          {[
+            { label: 'Drafts', active: !showPublished, onClick: () => setShowPublished(false) },
+            { label: 'All Posts', active: showPublished, onClick: () => setShowPublished(true) },
+          ].map(btn => (
+            <button
+              key={btn.label}
+              type="button"
+              onClick={btn.onClick}
+              className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-colors ${
+                btn.active
+                  ? 'border-[var(--brand-500)] bg-[var(--brand-500)]/10 text-[var(--brand-400)]'
+                  : 'border-[var(--surface-2)] text-[var(--text-muted)] hover:text-[var(--text)]'
+              }`}
+            >
+              {btn.label}
+            </button>
+          ))}
         </div>
       )}
 
-      {/* Post list — single flat list, no tabs */}
+      {/* Post list — flat list with draft/published filter */}
       {isLoading ? (
         <CardShell padding="lg">
           <p className="text-[var(--text-muted)] text-center">Loading posts...</p>
