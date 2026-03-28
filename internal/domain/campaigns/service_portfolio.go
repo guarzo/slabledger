@@ -3,8 +3,11 @@ package campaigns
 import (
 	"context"
 	"fmt"
+	"math"
 	"sort"
 	"time"
+
+	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
 // --- Portfolio Health ---
@@ -16,9 +19,17 @@ func (s *service) GetPortfolioHealth(ctx context.Context) (*PortfolioHealth, err
 	}
 
 	health := &PortfolioHealth{}
+	totalSoldCostBasis := 0
+	totalSoldNetProfit := 0
 	for _, c := range allCampaigns {
 		pnl, err := s.repo.GetCampaignPNL(ctx, c.ID)
 		if err != nil {
+			if s.logger != nil {
+				s.logger.Error(ctx, "skipping campaign in portfolio health",
+					observability.String("campaignID", c.ID),
+					observability.String("campaignName", c.Name),
+					observability.Err(err))
+			}
 			continue
 		}
 
@@ -47,6 +58,13 @@ func (s *service) GetPortfolioHealth(ctx context.Context) (*PortfolioHealth, err
 			reason += fmt.Sprintf("; slow sell-through (avg %.0f days)", pnl.AvgDaysToSell)
 		}
 
+		if pnl.TotalSold > 0 && pnl.TotalPurchases > 0 {
+			soldCostBasis := int(math.Round(float64(pnl.TotalSpendCents) * float64(pnl.TotalSold) / float64(pnl.TotalPurchases)))
+			soldProfit := pnl.TotalRevenueCents - pnl.TotalFeesCents - soldCostBasis
+			totalSoldCostBasis += soldCostBasis
+			totalSoldNetProfit += soldProfit
+		}
+
 		ch := CampaignHealth{
 			CampaignID:     c.ID,
 			CampaignName:   c.Name,
@@ -68,6 +86,9 @@ func (s *service) GetPortfolioHealth(ctx context.Context) (*PortfolioHealth, err
 
 	if health.TotalDeployed > 0 {
 		health.OverallROI = float64(health.TotalRecovered-health.TotalDeployed) / float64(health.TotalDeployed)
+	}
+	if totalSoldCostBasis > 0 {
+		health.RealizedROI = float64(totalSoldNetProfit) / float64(totalSoldCostBasis)
 	}
 
 	return health, nil

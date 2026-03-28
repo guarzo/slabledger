@@ -854,6 +854,106 @@ func TestService_GetPortfolioHealth_OverallROI(t *testing.T) {
 	}
 }
 
+func TestService_GetPortfolioHealth_RealizedROI(t *testing.T) {
+	repo := mocks.NewMockCampaignRepository()
+	svc := campaigns.NewService(repo, withTestIDGen())
+	ctx := context.Background()
+
+	c1 := &campaigns.Campaign{Name: "Fully Sold", BuyTermsCLPct: 0.78}
+	if err := svc.CreateCampaign(ctx, c1); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+	c2 := &campaigns.Campaign{Name: "Mixed", BuyTermsCLPct: 0.78}
+	if err := svc.CreateCampaign(ctx, c2); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+
+	// Campaign 1: all sold (5/5), no unsold
+	// soldCostBasis = 100000 * 5/5 = 100000
+	// soldProfit = 120000 - 10000 - 100000 = 10000
+	repo.PNLData[c1.ID] = &campaigns.CampaignPNL{
+		CampaignID: c1.ID, TotalSpendCents: 100000, TotalRevenueCents: 120000, TotalFeesCents: 10000,
+		ROI: 0.10, TotalSold: 5, TotalUnsold: 0, TotalPurchases: 5,
+	}
+
+	// Campaign 2: partially sold (2/5)
+	// soldCostBasis = 50000 * 2/5 = 20000
+	// soldProfit = 30000 - 3000 - 20000 = 7000
+	repo.PNLData[c2.ID] = &campaigns.CampaignPNL{
+		CampaignID: c2.ID, TotalSpendCents: 50000, TotalRevenueCents: 30000, TotalFeesCents: 3000,
+		ROI: -0.20, TotalSold: 2, TotalUnsold: 3, TotalPurchases: 5,
+	}
+
+	health, err := svc.GetPortfolioHealth(ctx)
+	if err != nil {
+		t.Fatalf("GetPortfolioHealth: %v", err)
+	}
+
+	// totalSoldCostBasis = 100000 + 20000 = 120000
+	// totalSoldNetProfit = 10000 + 7000 = 17000
+	// RealizedROI = 17000 / 120000 ≈ 0.14167
+	wantROI := float64(17000) / float64(120000)
+	if diff := health.RealizedROI - wantROI; diff > 0.0001 || diff < -0.0001 {
+		t.Errorf("RealizedROI = %f, want ~%f", health.RealizedROI, wantROI)
+	}
+}
+
+func TestService_GetPortfolioHealth_RealizedROI_Rounding(t *testing.T) {
+	repo := mocks.NewMockCampaignRepository()
+	svc := campaigns.NewService(repo, withTestIDGen())
+	ctx := context.Background()
+
+	c1 := &campaigns.Campaign{Name: "Odd Split", BuyTermsCLPct: 0.78}
+	if err := svc.CreateCampaign(ctx, c1); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+
+	// 1000 cents spent, 1 of 3 sold → soldCostBasis = round(1000*1/3) = round(333.33) = 333
+	// soldProfit = 500 - 50 - 333 = 117
+	repo.PNLData[c1.ID] = &campaigns.CampaignPNL{
+		CampaignID: c1.ID, TotalSpendCents: 1000, TotalRevenueCents: 500, TotalFeesCents: 50,
+		ROI: 0, TotalSold: 1, TotalUnsold: 2, TotalPurchases: 3,
+	}
+
+	health, err := svc.GetPortfolioHealth(ctx)
+	if err != nil {
+		t.Fatalf("GetPortfolioHealth: %v", err)
+	}
+
+	// With float64 rounding: soldCostBasis = 333, profit = 117
+	// RealizedROI = 117 / 333 ≈ 0.35135
+	wantROI := float64(117) / float64(333)
+	if diff := health.RealizedROI - wantROI; diff > 0.001 || diff < -0.001 {
+		t.Errorf("RealizedROI = %f, want ~%f", health.RealizedROI, wantROI)
+	}
+}
+
+func TestService_GetPortfolioHealth_RealizedROI_NoSales(t *testing.T) {
+	repo := mocks.NewMockCampaignRepository()
+	svc := campaigns.NewService(repo, withTestIDGen())
+	ctx := context.Background()
+
+	c1 := &campaigns.Campaign{Name: "No Sales", BuyTermsCLPct: 0.78}
+	if err := svc.CreateCampaign(ctx, c1); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+
+	repo.PNLData[c1.ID] = &campaigns.CampaignPNL{
+		CampaignID: c1.ID, TotalSpendCents: 50000, TotalRevenueCents: 0, TotalFeesCents: 0,
+		ROI: 0, TotalSold: 0, TotalUnsold: 5, TotalPurchases: 5,
+	}
+
+	health, err := svc.GetPortfolioHealth(ctx)
+	if err != nil {
+		t.Fatalf("GetPortfolioHealth: %v", err)
+	}
+
+	// No sales → totalSoldCostBasis stays 0 → RealizedROI stays 0
+	if health.RealizedROI != 0 {
+		t.Errorf("RealizedROI = %f, want 0 (no sales)", health.RealizedROI)
+	}
+}
+
 // --- GetPortfolioChannelVelocity tests ---
 
 func TestService_GetPortfolioChannelVelocity_Empty(t *testing.T) {

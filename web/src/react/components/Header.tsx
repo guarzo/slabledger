@@ -3,8 +3,8 @@
  *
  * Sticky header with logo, navigation, and user dropdown menu.
  */
-import { lazy, Suspense, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { DropdownMenu } from 'radix-ui';
 import Navigation from './Navigation';
 import StatusIndicator from './StatusIndicator';
@@ -27,6 +27,20 @@ export default function Header() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [avatarError, setAvatarError] = useState(false);
   const [lookupOpen, setLookupOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const closeMenu = useCallback(() => setMenuOpen(false), []);
+  const location = useLocation();
+
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMenuOpen(false); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [menuOpen]);
 
   useEffect(() => {
     setAvatarError(false);
@@ -69,8 +83,30 @@ export default function Header() {
           </div>
         </Link>
 
-        {/* Navigation - Centered */}
-        <div className="flex-1 flex justify-center max-w-4xl min-w-0">
+        {/* Hamburger button - mobile only */}
+        <button
+          type="button"
+          className="md:hidden p-2 rounded-[var(--radius-md)] text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface-2)]/60 transition-colors"
+          onClick={() => setMenuOpen((prev) => !prev)}
+          aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+          aria-expanded={menuOpen}
+        >
+          {menuOpen ? (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          ) : (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+              <line x1="3" y1="6" x2="21" y2="6" />
+              <line x1="3" y1="12" x2="21" y2="12" />
+              <line x1="3" y1="18" x2="21" y2="18" />
+            </svg>
+          )}
+        </button>
+
+        {/* Navigation - Centered, desktop only */}
+        <div className="hidden md:flex flex-1 justify-center max-w-4xl min-w-0">
           <Navigation />
         </div>
 
@@ -152,6 +188,13 @@ export default function Header() {
           )}
         </div>
       </div>
+
+      {/* Mobile navigation dropdown */}
+      {menuOpen && (
+        <div className="md:hidden border-t border-[rgba(255,255,255,0.06)] bg-[var(--surface-1)]/95 backdrop-blur-xl">
+          <Navigation mobile onNavigate={closeMenu} />
+        </div>
+      )}
 
       {lookupOpen && (
         <Suspense fallback={null}>

@@ -68,7 +68,7 @@ export function MissingCardsTab() {
       )}
 
       {/* Table */}
-      <div className="glass-table max-h-[600px] overflow-y-auto scrollbar-dark">
+      <div className="glass-table max-h-[min(600px,calc(100vh-300px))] overflow-y-auto scrollbar-dark">
         {!items || items.length === 0 ? (
           <div className="px-5 py-8 text-center text-[var(--text-muted)] text-sm">
             No missing cards detected. Cards will appear here when CardHedger knows the cert but hasn't linked it to a card.

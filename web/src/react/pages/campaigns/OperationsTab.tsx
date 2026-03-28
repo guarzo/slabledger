@@ -3,9 +3,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { api } from '../../../js/api';
 import type { Campaign, GlobalImportResult, PSAImportResult, ExternalImportResult } from '../../../types/campaigns';
 import { queryKeys } from '../../queries/queryKeys';
-import { formatCents, getErrorMessage } from '../../utils/formatters';
+import { getErrorMessage } from '../../utils/formatters';
 import { useToast } from '../../contexts/ToastContext';
-import { useInvoices, useUpdateInvoice } from '../../queries/useCampaignQueries';
 import { Button, CardShell } from '../../ui';
 import ImportResultsDetail from './ImportResultsDetail';
 
@@ -132,96 +131,6 @@ function ShopBagIcon() {
         <path d="M16 10a4 4 0 01-8 0" />
       </svg>
     </IconCircle>
-  );
-}
-
-function ReceiptIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--text-muted)]" aria-hidden="true" focusable="false">
-      <path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1-2-1z" />
-      <line x1="8" y1="10" x2="16" y2="10" />
-      <line x1="8" y1="14" x2="16" y2="14" />
-    </svg>
-  );
-}
-
-/* ── InvoiceSection ───────────────────────────────────────────────── */
-
-function InvoiceSection() {
-  const { data: invoices = [] } = useInvoices();
-  const updateInvoice = useUpdateInvoice();
-  const toast = useToast();
-
-  if (invoices.length === 0) return null;
-
-  function handleMarkPaid(id: string) {
-    const inv = invoices.find(i => i.id === id);
-    if (!inv) return;
-    const now = new Date();
-    const paidDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    updateInvoice.mutate(
-      { id, data: { ...inv, status: 'paid', paidDate, paidCents: inv.totalCents } },
-      {
-        onSuccess: () => toast.success('Invoice marked as paid'),
-        onError: (err) => toast.error(getErrorMessage(err, 'Failed to update invoice')),
-      },
-    );
-  }
-
-  const statusBadge = (status: string) => {
-    if (status === 'paid') return 'bg-[var(--success-bg)] text-[var(--success)]';
-    if (status === 'partial') return 'bg-[var(--warning-bg)] text-[var(--warning)]';
-    return 'bg-[var(--danger-bg)] text-[var(--danger)]';
-  };
-
-  return (
-    <div className="mb-6 p-4 bg-[var(--surface-1)] rounded-xl border border-[var(--surface-2)]">
-      <h3 className="text-sm font-semibold text-[var(--text)] mb-3 flex items-center gap-2">
-        <ReceiptIcon />
-        Invoices
-      </h3>
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-[var(--surface-2)]">
-              <th className="text-left py-2 px-3 text-[var(--text-muted)] font-medium text-xs">Date</th>
-              <th className="text-right py-2 px-3 text-[var(--text-muted)] font-medium text-xs">Total</th>
-              <th className="text-right py-2 px-3 text-[var(--text-muted)] font-medium text-xs">Paid</th>
-              <th className="text-center py-2 px-3 text-[var(--text-muted)] font-medium text-xs">Status</th>
-              <th className="text-right py-2 px-3 text-[var(--text-muted)] font-medium text-xs">Due</th>
-              <th className="py-2 px-3"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {invoices.map(inv => (
-              <tr key={inv.id} className="border-b border-[var(--surface-2)]/50">
-                <td className="py-2 px-3 text-xs text-[var(--text)]">{inv.invoiceDate}</td>
-                <td className="py-2 px-3 text-xs text-right text-[var(--text)]">{formatCents(inv.totalCents)}</td>
-                <td className="py-2 px-3 text-xs text-right text-[var(--text)]">{formatCents(inv.paidCents)}</td>
-                <td className="py-2 px-3 text-xs text-center">
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusBadge(inv.status)}`}>
-                    {inv.status}
-                  </span>
-                </td>
-                <td className="py-2 px-3 text-xs text-right text-[var(--text-muted)]">{inv.dueDate || '-'}</td>
-                <td className="py-2 px-3 text-right">
-                  {inv.status !== 'paid' && (
-                    <Button
-                      size="sm"
-                      variant="success"
-                      loading={updateInvoice.isPending}
-                      onClick={() => handleMarkPaid(inv.id)}
-                    >
-                      Mark Paid
-                    </Button>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
   );
 }
 
@@ -491,7 +400,6 @@ export default function OperationsTab({ campaigns, operationState, setOperationS
         </div>
       )}
 
-      <InvoiceSection />
     </>
   );
 }
