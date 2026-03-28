@@ -1,14 +1,21 @@
-import type { PortfolioHealth } from '../../../types/campaigns';
-import { formatCents, formatPct } from '../../utils/formatters';
+import type { PortfolioHealth, CreditSummary } from '../../../types/campaigns';
+import { formatCents, formatPct, formatPctFromWhole } from '../../utils/formatters';
 
 interface HeroStatsBarProps {
   health?: PortfolioHealth;
+  credit?: CreditSummary;
 }
 
-export default function HeroStatsBar({ health }: HeroStatsBarProps) {
+export default function HeroStatsBar({ health, credit }: HeroStatsBarProps) {
   if (!health) return null;
 
   const roi = health.realizedROI ?? 0;
+
+  const creditColor = credit
+    ? credit.alertLevel === 'critical' ? 'text-[var(--danger)]'
+      : credit.alertLevel === 'warning' ? 'text-[var(--warning)]'
+      : 'text-[var(--success)]'
+    : '';
 
   return (
     <div className="mb-7 pb-6 border-b border-[rgba(255,255,255,0.05)]">
@@ -34,6 +41,20 @@ export default function HeroStatsBar({ health }: HeroStatsBarProps) {
             <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">At Risk</div>
             <div className="text-base font-semibold text-[#cbd5e1]">{formatCents(health.totalAtRiskCents ?? 0)}</div>
           </div>
+          {credit && (
+            <>
+              <div className="border-l border-[rgba(255,255,255,0.08)] pl-6">
+                <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Credit Used</div>
+                <div className={`text-base font-semibold ${creditColor}`}>
+                  {formatPctFromWhole(credit.utilizationPct)}
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Outstanding</div>
+                <div className="text-base font-semibold text-[#cbd5e1]">{formatCents(credit.outstandingCents)}</div>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>
