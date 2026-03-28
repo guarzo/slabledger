@@ -8,14 +8,14 @@ interface HeroStatsBarProps {
 export default function HeroStatsBar({ health }: HeroStatsBarProps) {
   if (!health) return null;
 
-  const roi = health.overallROI ?? 0;
+  const roi = health.realizedROI ?? 0;
 
   return (
     <div className="mb-7 pb-6 border-b border-[rgba(255,255,255,0.05)]">
       <div className="flex items-end gap-7 flex-wrap">
         <div>
           <div className="text-[11px] font-semibold text-[var(--brand-400)] uppercase tracking-wider mb-0.5">
-            Overall ROI
+            Realized ROI
           </div>
           <div className={`text-[32px] font-extrabold tracking-tight leading-none ${roi >= 0 ? 'text-[var(--success)]' : 'text-[var(--danger)]'}`}>
             {formatPct(roi)}

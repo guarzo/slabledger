@@ -16,6 +16,8 @@ func (s *service) GetPortfolioHealth(ctx context.Context) (*PortfolioHealth, err
 	}
 
 	health := &PortfolioHealth{}
+	totalSoldCostBasis := 0
+	totalSoldNetProfit := 0
 	for _, c := range allCampaigns {
 		pnl, err := s.repo.GetCampaignPNL(ctx, c.ID)
 		if err != nil {
@@ -47,6 +49,13 @@ func (s *service) GetPortfolioHealth(ctx context.Context) (*PortfolioHealth, err
 			reason += fmt.Sprintf("; slow sell-through (avg %.0f days)", pnl.AvgDaysToSell)
 		}
 
+		if pnl.TotalSold > 0 {
+			soldCostBasis := pnl.TotalSpendCents - capitalAtRisk
+			soldProfit := pnl.TotalRevenueCents - pnl.TotalFeesCents - soldCostBasis
+			totalSoldCostBasis += soldCostBasis
+			totalSoldNetProfit += soldProfit
+		}
+
 		ch := CampaignHealth{
 			CampaignID:     c.ID,
 			CampaignName:   c.Name,
@@ -68,6 +77,9 @@ func (s *service) GetPortfolioHealth(ctx context.Context) (*PortfolioHealth, err
 
 	if health.TotalDeployed > 0 {
 		health.OverallROI = float64(health.TotalRecovered-health.TotalDeployed) / float64(health.TotalDeployed)
+	}
+	if totalSoldCostBasis > 0 {
+		health.RealizedROI = float64(totalSoldNetProfit) / float64(totalSoldCostBasis)
 	}
 
 	return health, nil

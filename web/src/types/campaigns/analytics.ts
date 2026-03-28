@@ -203,6 +203,7 @@ export interface PortfolioHealth {
   totalRecoveredCents: number;
   totalAtRiskCents: number;
   overallROI: number;
+  realizedROI: number;
 }
 
 // Crack Arbitrage types

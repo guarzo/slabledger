@@ -226,6 +226,7 @@ type PortfolioHealth struct {
 	TotalRecovered int              `json:"totalRecoveredCents"`
 	TotalAtRisk    int              `json:"totalAtRiskCents"`
 	OverallROI     float64          `json:"overallROI"`
+	RealizedROI    float64          `json:"realizedROI"`
 }
 
 // CampaignHealth represents health status for a single campaign.
