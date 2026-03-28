@@ -241,10 +241,12 @@ func (r *SocialRepository) AddPostCards(ctx context.Context, postID string, card
 func scanPostCardDetail(rows *sql.Rows) (social.PostCardDetail, error) {
 	var c social.PostCardDetail
 	var createdAt string
+	var sold int
 	err := rows.Scan(&c.PurchaseID, &c.SlideOrder, &c.CardName, &c.SetName, &c.CardNumber,
 		&c.GradeValue, &c.Grader, &c.CertNumber, &c.FrontImageURL, &c.AskingPriceCents,
-		&c.CLValueCents, &c.Trend30d, &createdAt)
+		&c.CLValueCents, &c.Trend30d, &createdAt, &sold)
 	c.CreatedAt = parseSQLiteTime(createdAt)
+	c.Sold = sold != 0
 	return c, err
 }
 
@@ -255,9 +257,11 @@ func (r *SocialRepository) ListPostCards(ctx context.Context, postID string) ([]
 		        p.grade_value, COALESCE(p.grader, 'PSA'), COALESCE(p.cert_number, ''),
 		        COALESCE(p.front_image_url, ''), COALESCE(p.reviewed_price_cents, 0),
 		        COALESCE(p.cl_value_cents, 0), COALESCE(p.trend_30d, 0),
-		        p.created_at
+		        p.created_at,
+		        CASE WHEN cs.purchase_id IS NOT NULL THEN 1 ELSE 0 END as sold
 		 FROM social_post_cards spc
 		 JOIN campaign_purchases p ON p.id = spc.purchase_id
+		 LEFT JOIN campaign_sales cs ON cs.purchase_id = p.id
 		 WHERE spc.post_id = ?
 		 ORDER BY spc.slide_order`, postID)
 	if err != nil {
@@ -349,7 +353,8 @@ func (r *SocialRepository) GetAvailableCardsForPosts(ctx context.Context) ([]soc
 		        p.grade_value, COALESCE(p.grader, 'PSA'), COALESCE(p.cert_number, ''),
 		        COALESCE(p.front_image_url, ''), COALESCE(p.reviewed_price_cents, 0),
 		        COALESCE(p.cl_value_cents, 0), COALESCE(p.trend_30d, 0),
-		        p.created_at
+		        p.created_at,
+		        0 as sold
 		 FROM campaign_purchases p
 		 WHERE p.front_image_url <> ''
 		 AND p.id NOT IN (SELECT purchase_id FROM campaign_sales)
