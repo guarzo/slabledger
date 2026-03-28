@@ -6,16 +6,17 @@ import ShopifySyncPage from './ShopifySyncPage';
 import CertEntryTab from './tools/CertEntryTab';
 import EbayExportTab from './tools/EbayExportTab';
 import ImportSalesTab from './tools/ImportSalesTab';
+import InvoicesTab from './tools/InvoicesTab';
 import type { GlobalImportResult, PSAImportResult, ExternalImportResult } from '../../types/campaigns';
 import TabNavigation from '../ui/TabNavigation';
 import { SectionErrorBoundary } from '../ui';
 
 const TABS = [
-  { id: 'operations', label: 'Operations' },
-  { id: 'price-sync', label: 'Price Sync' },
+  { id: 'import-export', label: 'Import / Export' },
   { id: 'cert-entry', label: 'Cert Entry' },
   { id: 'ebay-export', label: 'eBay Export' },
   { id: 'import-sales', label: 'Import Sales' },
+  { id: 'invoices', label: 'Invoices' },
 ] as const;
 
 export default function ToolsPage() {
@@ -32,11 +33,11 @@ export default function ToolsPage() {
         <p className="mt-1 text-sm text-[var(--text-muted)]">Import, export, and sync operations</p>
       </div>
 
-      <Tabs.Root defaultValue="operations">
+      <Tabs.Root defaultValue="import-export">
         <TabNavigation tabs={TABS} ariaLabel="Tools tabs" />
 
-        <Tabs.Content value="operations">
-          <SectionErrorBoundary sectionName="Operations">
+        <Tabs.Content value="import-export">
+          <SectionErrorBoundary sectionName="Import / Export">
             <OperationsTab
               campaigns={allCampaigns}
               operationState={operationState}
@@ -48,12 +49,9 @@ export default function ToolsPage() {
               externalResult={externalResult}
               setExternalResult={setExternalResult}
             />
-          </SectionErrorBoundary>
-        </Tabs.Content>
-
-        <Tabs.Content value="price-sync">
-          <SectionErrorBoundary sectionName="Price Sync">
-            <ShopifySyncPage embedded />
+            <div className="mt-6">
+              <ShopifySyncPage embedded />
+            </div>
           </SectionErrorBoundary>
         </Tabs.Content>
 
@@ -72,6 +70,12 @@ export default function ToolsPage() {
         <Tabs.Content value="import-sales">
           <SectionErrorBoundary sectionName="Import Sales">
             <ImportSalesTab />
+          </SectionErrorBoundary>
+        </Tabs.Content>
+
+        <Tabs.Content value="invoices">
+          <SectionErrorBoundary sectionName="Invoices">
+            <InvoicesTab />
           </SectionErrorBoundary>
         </Tabs.Content>
       </Tabs.Root>
