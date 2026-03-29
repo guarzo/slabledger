@@ -379,6 +379,77 @@ func (s *service) GetActivationChecklist(ctx context.Context, campaignID string)
 	return checklist, nil
 }
 
+func (s *service) GetCrackOpportunities(ctx context.Context) ([]CrackAnalysis, error) {
+	allCampaigns, err := s.repo.ListCampaigns(ctx, true)
+	if err != nil {
+		return nil, fmt.Errorf("list active campaigns: %w", err)
+	}
+	var allResults []CrackAnalysis
+	for _, campaign := range allCampaigns {
+		results, err := s.GetCrackCandidates(ctx, campaign.ID)
+		if err != nil {
+			continue
+		}
+		allResults = append(allResults, results...)
+	}
+	sort.Slice(allResults, func(i, j int) bool {
+		return allResults[i].CrackAdvantage > allResults[j].CrackAdvantage
+	})
+	return allResults, nil
+}
+
+func (s *service) GetAcquisitionTargets(ctx context.Context) ([]AcquisitionOpportunity, error) {
+	if s.priceProv == nil {
+		return nil, nil
+	}
+	allCampaigns, err := s.repo.ListCampaigns(ctx, true)
+	if err != nil {
+		return nil, fmt.Errorf("list active campaigns: %w", err)
+	}
+	var opportunities []AcquisitionOpportunity
+	seen := make(map[string]bool)
+	for _, campaign := range allCampaigns {
+		ebayFee := campaign.EbayFeePct
+		if ebayFee == 0 {
+			ebayFee = DefaultMarketplaceFeePct
+		}
+		unsold, err := s.repo.ListUnsoldPurchases(ctx, campaign.ID)
+		if err != nil {
+			continue
+		}
+		for _, p := range unsold {
+			key := p.CardName + "|" + p.SetName + "|" + p.CardNumber
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			card := p.ToCardIdentity()
+			rawNMCents := 0
+			if v, err := s.priceProv.GetLastSoldCents(ctx, card, 0); err == nil && v > 0 {
+				rawNMCents = v
+			}
+			if rawNMCents == 0 {
+				continue
+			}
+			gradedEstimates := make(map[string]int)
+			for _, grade := range []float64{8, 9, 10} {
+				if v, err := s.priceProv.GetLastSoldCents(ctx, card, grade); err == nil && v > 0 {
+					gradedEstimates[fmt.Sprintf("PSA %g", grade)] = v
+				}
+			}
+			opp := computeAcquisitionOpportunity(
+				p.CardName, p.SetName, p.CardNumber, p.CertNumber,
+				rawNMCents, gradedEstimates, ebayFee, "inventory",
+			)
+			if opp != nil {
+				opportunities = append(opportunities, *opp)
+			}
+		}
+	}
+	sortAcquisitionByProfit(opportunities)
+	return opportunities, nil
+}
+
 func (s *service) RunProjection(ctx context.Context, campaignID string) (*MonteCarloComparison, error) {
 	campaign, err := s.repo.GetCampaign(ctx, campaignID)
 	if err != nil {
