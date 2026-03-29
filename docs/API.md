@@ -115,14 +115,14 @@ Returns pricing API status.
 
 Auth: RequireAdmin
 
-Returns API call statistics for all pricing providers (pokemonprice, cardhedger, pricecharting).
+Returns API call statistics for all pricing providers (cardhedger, pricecharting).
 
 **Response:** `200 OK`
 ```json
 {
   "providers": [
     {
-      "name": "pokemonprice",
+      "name": "cardhedger",
       "today": {
         "calls": 50,
         "limit": 1000,
@@ -368,7 +368,7 @@ Looks up fusion price data for a specific card.
   },
   "market": { "activeListings": 8, "lowestListing": 1100.00, "sales30d": 4, "sales90d": 12 },
   "velocity": { "dailyAverage": 0.15, "weeklyAverage": 1.0, "monthlyTotal": 4 },
-  "sources": ["pokemonprice", "cardhedger"]
+  "sources": ["cardhedger"]
 }
 ```
 

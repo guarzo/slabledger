@@ -23,6 +23,12 @@ const (
 	cardHedgerRateInterval = 700 * time.Millisecond
 )
 
+// CertSweeper resolves unmapped purchase certs to CardHedger card_ids.
+// Called periodically by the batch scheduler to fill gaps in card_id_mappings.
+type CertSweeper interface {
+	SweepUnmappedCerts(ctx context.Context) (resolved int, err error)
+}
+
 // CardDiscoverer discovers and prices cards via CardHedger on demand.
 // Used after imports to immediately populate CardHedger data for new cards.
 type CardDiscoverer interface {
@@ -96,6 +102,7 @@ type CardHedgerBatchScheduler struct {
 	apiTracker     pricing.APITracker
 	mappingLister  CardIDMappingLister
 	mappingSaver   CardIDMappingSaver
+	certSweeper    CertSweeper
 	failureTracker pricing.DiscoveryFailureTracker
 	favLister      FavoritesLister
 	campLister     CampaignCardLister
@@ -117,6 +124,11 @@ func WithBatchAPITracker(t pricing.APITracker) BatchOption {
 // WithBatchMappingSaver injects a CardIDMappingSaver for persisting discovered card mappings.
 func WithBatchMappingSaver(saver CardIDMappingSaver) BatchOption {
 	return func(s *CardHedgerBatchScheduler) { s.mappingSaver = saver }
+}
+
+// WithCertSweeper injects a CertSweeper for periodic cert resolution.
+func WithCertSweeper(sweeper CertSweeper) BatchOption {
+	return func(s *CardHedgerBatchScheduler) { s.certSweeper = sweeper }
 }
 
 // WithDiscoveryFailureTracker injects a tracker for persisting discovery failures.
@@ -230,6 +242,25 @@ func (s *CardHedgerBatchScheduler) runBatch(ctx context.Context) {
 	if err != nil {
 		s.logger.Warn(ctx, "failed to list card ID mappings", observability.Err(err))
 		return
+	}
+
+	// Sweep unmapped purchase certs via DetailsByCerts (authoritative resolution).
+	// Runs before discovery so newly resolved certs don't waste CardMatch budget.
+	if s.certSweeper != nil {
+		resolved, sweepErr := s.certSweeper.SweepUnmappedCerts(ctx)
+		if sweepErr != nil {
+			s.logger.Warn(ctx, "cert sweep failed", observability.Err(sweepErr))
+		} else if resolved > 0 {
+			s.logger.Info(ctx, "cert sweep resolved new mappings",
+				observability.Int("resolved", resolved))
+			// Reload mappings to include newly resolved certs
+			newMappings, reloadErr := s.mappingLister.ListByProvider(ctx, "cardhedger")
+			if reloadErr != nil {
+				s.logger.Warn(ctx, "failed to reload mappings after cert sweep", observability.Err(reloadErr))
+			} else {
+				mappings = newMappings
+			}
+		}
 	}
 
 	// Build priority set: favorites and campaign cards first

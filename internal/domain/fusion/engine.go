@@ -46,8 +46,7 @@ func DefaultFusionConfig() FusionConfig {
 		MinSources:       2,   // At least 2 sources for good confidence
 		OutlierThreshold: 1.5, // Standard IQR multiplier for outlier detection
 		SourceWeights: map[string]float64{
-			"pokemonprice": 0.90, // Primary: eBay graded data via smartMarketPrice
-			"cardhedger":   0.85, // Supplementary: multi-platform price estimates
+			"cardhedger": 0.85, // Multi-platform price estimates
 		},
 		DefaultWeight: 0.6, // Default for unknown sources
 	}

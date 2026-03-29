@@ -115,7 +115,7 @@ type DiscoveryFailure struct {
 	CardName      string
 	SetName       string
 	CardNumber    string
-	Provider      string // "cardhedger", "pokemonprice"
+	Provider      string // "cardhedger"
 	FailureReason string // "no_match", "low_confidence", "api_error"
 	Query         string // The query string attempted
 	Attempts      int

@@ -40,6 +40,7 @@ type BuildDeps struct {
 	DiscoveryFailureTracker pricing.DiscoveryFailureTracker
 	FavoritesLister         FavoritesLister
 	CampaignCardLister      CampaignCardLister
+	CertSweeper             CertSweeper
 
 	// Cache warmup dependencies (optional)
 	NewSetsProvider NewSetIDsProvider
@@ -200,6 +201,9 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 		}
 		if deps.DiscoveryFailureTracker != nil {
 			batchOpts = append(batchOpts, WithDiscoveryFailureTracker(deps.DiscoveryFailureTracker))
+		}
+		if deps.CertSweeper != nil {
+			batchOpts = append(batchOpts, WithCertSweeper(deps.CertSweeper))
 		}
 		batchScheduler := NewCardHedgerBatchScheduler(
 			deps.CardHedgerClient, deps.PriceRepo, deps.CardIDMappingLister,

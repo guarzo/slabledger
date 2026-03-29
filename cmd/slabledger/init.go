@@ -12,7 +12,6 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardhedger"
 	"github.com/guarzo/slabledger/internal/adapters/clients/fusionprice"
 	igclient "github.com/guarzo/slabledger/internal/adapters/clients/instagram"
-	"github.com/guarzo/slabledger/internal/adapters/clients/pokemonprice"
 	"github.com/guarzo/slabledger/internal/adapters/clients/pricecharting"
 	"github.com/guarzo/slabledger/internal/adapters/clients/pricelookup"
 	"github.com/guarzo/slabledger/internal/adapters/clients/psa"
@@ -31,8 +30,8 @@ import (
 	"github.com/guarzo/slabledger/internal/platform/crypto"
 )
 
-// initializePriceProviders creates the PriceCharting, PokemonPrice, CardHedger
-// clients and wires them together into the FusionProvider.
+// initializePriceProviders creates the PriceCharting and CardHedger clients
+// and wires them together into the FusionProvider.
 func initializePriceProviders(
 	ctx context.Context,
 	cfg *config.Config,
@@ -41,21 +40,19 @@ func initializePriceProviders(
 	cardProvImpl *tcgdex.TCGdex,
 	priceRepo *sqlite.PriceRepository,
 	cardIDMappingRepo *sqlite.CardIDMappingRepository,
-) (priceProvider *fusionprice.FusionPriceProvider, pokemonPriceClient *pokemonprice.Client, cardHedgerClient *cardhedger.Client, pcProvider *pricecharting.PriceCharting, err error) {
+) (priceProvider *fusionprice.FusionPriceProvider, cardHedgerClient *cardhedger.Client, pcProvider *pricecharting.PriceCharting, err error) {
 	pcProvider, err = pricecharting.NewPriceCharting(
 		pricecharting.DefaultConfig(cfg.Adapters.PriceChartingToken), appCache, logger,
 		pricecharting.WithHintResolver(cardIDMappingRepo),
 	)
 	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("failed to initialize PriceCharting provider: %w", err)
+		return nil, nil, nil, fmt.Errorf("failed to initialize PriceCharting provider: %w", err)
 	}
 
-	pokemonPriceClient = pokemonprice.NewClient(cfg.Adapters.PokemonPriceKey, pokemonprice.WithLogger(logger))
 	cardHedgerClient = cardhedger.NewClient(cfg.Adapters.CardHedgerKey, cardhedger.WithLogger(logger))
 
 	// Wrap secondary clients in adapters that implement fusion.SecondaryPriceSource
 	secondarySources := []fusion.SecondaryPriceSource{
-		fusionprice.NewPokemonPriceAdapter(pokemonPriceClient, fusionprice.WithPPLogger(logger)),
 		fusionprice.NewCardHedgerAdapter(cardHedgerClient, cardIDMappingRepo, logger,
 			fusionprice.WithCardHedgerHintResolver(cardIDMappingRepo)),
 	}
@@ -69,11 +66,10 @@ func initializePriceProviders(
 		cfg.Fusion.SecondarySourceTimeout,
 		fusionprice.WithCardProvider(cardProvImpl),
 	)
-	logger.Info(ctx, "Fusion price provider initialized with 3 sources",
-		observability.Bool("pokemonprice_available", pokemonPriceClient.Available()),
+	logger.Info(ctx, "Fusion price provider initialized with 2 sources",
 		observability.Bool("cardhedger_available", cardHedgerClient.Available()))
 
-	return priceProvider, pokemonPriceClient, cardHedgerClient, pcProvider, nil
+	return priceProvider, cardHedgerClient, pcProvider, nil
 }
 
 // initializeCampaignsService creates the campaigns service with all options
@@ -280,6 +276,7 @@ type schedulerDeps struct {
 	AICallRepo           *sqlite.AICallRepository
 	SocialService        social.Service
 	IGTokenRefresher     scheduler.InstagramTokenRefresher
+	CertSweeper          scheduler.CertSweeper
 }
 
 // initializeSchedulers builds and starts the scheduler group, returning the
@@ -314,6 +311,7 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 		AICallTracker:           deps.AICallRepo,
 		SocialContentDetector:   deps.SocialService,
 		InstagramTokenRefresher: deps.IGTokenRefresher,
+		CertSweeper:             deps.CertSweeper,
 	})
 	schedulerResult.Group.StartAll(schedulerCtx)
 

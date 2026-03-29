@@ -32,8 +32,8 @@ func StripPSASetCode(setName string) string {
 }
 
 // NormalizeSetNameSimple normalizes a Pokemon TCG set name without adding "Pokemon" prefix.
-// This is for Pokemon-specific APIs (like PokemonPriceTracker) that already
-// know they're dealing with Pokemon cards and use standard TCG set naming.
+// This is for Pokemon-specific APIs that already know they're dealing with
+// Pokemon cards and use standard TCG set naming.
 // Strips "JAPANESE" prefix (use NormalizeSetNameForSearch to preserve it).
 //
 // Examples:
@@ -293,6 +293,22 @@ func MissingSetTokens(resultSet, expectedSet string) []string {
 		}
 	}
 	return missing
+}
+
+// SignificantSetTokenCount returns the number of significant tokens in a set name,
+// using the same filtering rules as MissingSetTokens (skip len<2 and genericSetWords).
+func SignificantSetTokenCount(set string) int {
+	count := 0
+	for _, t := range normalizeSetTokens(set) {
+		if len(t) < 2 {
+			continue
+		}
+		if genericSetWords[t] {
+			continue
+		}
+		count++
+	}
+	return count
 }
 
 // NormalizeChineseSetName normalizes Chinese PSA set code prefixes to a canonical form.

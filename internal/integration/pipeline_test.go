@@ -18,7 +18,6 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardhedger"
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardutil"
 	"github.com/guarzo/slabledger/internal/adapters/clients/fusionprice"
-	"github.com/guarzo/slabledger/internal/adapters/clients/pokemonprice"
 	"github.com/guarzo/slabledger/internal/adapters/clients/pricecharting"
 	"github.com/guarzo/slabledger/internal/adapters/clients/tcgdex"
 	domainCards "github.com/guarzo/slabledger/internal/domain/cards"
@@ -51,21 +50,21 @@ func TestNormalizationAudit(t *testing.T) {
 				}
 			}
 
-			// --- PokemonPrice normalization ---
+			// --- Secondary source normalization ---
 			ppName := cardutil.NormalizePurchaseName(card.CardName)
 			ppName = cardutil.StripVariantSuffix(ppName)
-			ppSet := cardutil.NormalizeSetNameSimple(card.SetName)
-			t.Logf("PP: name=%q set=%q", ppName, ppSet)
+			ppSet := cardutil.NormalizeSetNameForSearch(card.SetName)
+			t.Logf("Secondary: name=%q set=%q", ppName, ppSet)
 
 			if strings.Contains(ppName, "-HOLO") || strings.Contains(ppName, "-REV.FOIL") {
-				t.Errorf("PP name has unexpanded abbreviation: %s", ppName)
+				t.Errorf("name has unexpanded abbreviation: %s", ppName)
 			}
 			if strings.HasPrefix(strings.ToUpper(ppSet), "JAPANESE ") {
-				t.Errorf("PP set still has JAPANESE prefix: %s", ppSet)
+				t.Logf("  NOTE: set preserves JAPANESE prefix (NormalizeSetNameForSearch retains it by design): %s", ppSet)
 			}
 			for _, code := range []string{"PRE EN", "M24 EN", "MEW EN", "SVP EN"} {
 				if strings.Contains(strings.ToUpper(ppSet), code) {
-					t.Errorf("PP set contains PSA code %q: %s", code, ppSet)
+					t.Errorf("set contains PSA code %q: %s", code, ppSet)
 				}
 			}
 
@@ -218,7 +217,7 @@ func TestCardHedgerLookup(t *testing.T) {
 
 // TestFullMultiSourceFusion exercises all available price sources through the
 // fusion engine. Requires PRICECHARTING_TOKEN; optionally uses
-// POKEMONPRICE_TRACKER_API_KEY and CARD_HEDGER_API_KEY.
+// CARD_HEDGER_API_KEY.
 func TestFullMultiSourceFusion(t *testing.T) {
 	token := os.Getenv("PRICECHARTING_TOKEN")
 	if token == "" {
@@ -243,11 +242,6 @@ func TestFullMultiSourceFusion(t *testing.T) {
 	// Secondary sources (optional)
 	var secondarySources []fusion.SecondaryPriceSource
 
-	if ppKey := os.Getenv("POKEMONPRICE_TRACKER_API_KEY"); ppKey != "" {
-		ppClient := pokemonprice.NewClient(ppKey)
-		secondarySources = append(secondarySources, fusionprice.NewPokemonPriceAdapter(ppClient))
-		t.Log("PokemonPrice: available")
-	}
 	if chKey := os.Getenv("CARD_HEDGER_API_KEY"); chKey != "" {
 		chClient := cardhedger.NewClient(chKey)
 		secondarySources = append(secondarySources, fusionprice.NewCardHedgerAdapter(chClient, nil, logger))

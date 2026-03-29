@@ -4,22 +4,18 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/guarzo/slabledger/internal/adapters/clients/pokemonprice"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/domain/pricing"
 )
 
 // Known daily limits per provider.
 var providerDailyLimits = map[string]*int{
-	"pokemonprice":  intPtr(pokemonprice.DailyLimit),
 	"cardhedger":    nil, // Unlimited plan — monitored via 429 tracking
 	"pricecharting": nil, // No hard daily limit
 }
 
-func intPtr(v int) *int { return &v }
-
 // knownProviders is the ordered list of providers shown in the status response.
-var knownProviders = []string{"pokemonprice", "cardhedger", "pricecharting"}
+var knownProviders = []string{"cardhedger", "pricecharting"}
 
 // CardHedgerStats provides live observability counters from the CardHedger client.
 type CardHedgerStats interface {

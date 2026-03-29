@@ -170,43 +170,6 @@ func (f *FusionPriceProvider) persistToDatabase(ctx context.Context, card pricin
 		}
 	}
 
-	// Persist PokemonPrice eBay grade prices so they survive cache expiry.
-	if price.GradeDetails != nil {
-		ppGrades := []struct {
-			detailKey string
-			dbGrade   string
-		}{
-			{"psa10", "PSA 10"},
-			{"psa9", "PSA 9"},
-			{"psa8", "PSA 8"},
-			{"raw", "Raw"},
-		}
-		for _, gp := range ppGrades {
-			detail, ok := price.GradeDetails[gp.detailKey]
-			if !ok || detail.Ebay == nil || detail.Ebay.PriceCents <= 0 {
-				continue
-			}
-			ppEntry := &pricing.PriceEntry{
-				CardName:   card.Name,
-				SetName:    card.Set,
-				CardNumber: card.Number,
-				Grade:      gp.dbGrade,
-				PriceCents: detail.Ebay.PriceCents,
-				Confidence: 0.85,
-				Source:     "pokemonprice",
-				PriceDate:  now,
-			}
-			if err := f.priceRepo.StorePrice(ctx, ppEntry); err != nil {
-				if f.logger != nil {
-					f.logger.Warn(ctx, "failed to persist pokemonprice grade",
-						observability.Err(err),
-						observability.String("card", card.Name),
-						observability.String("grade", gp.dbGrade))
-				}
-			}
-		}
-	}
-
 	// Also persist PriceCharting's raw grade prices so they survive cache expiry.
 	if price.PCGrades != nil {
 		pcGrades := []struct {

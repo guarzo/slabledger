@@ -212,9 +212,9 @@ func initializePriceProviders(
     appCache cache.Cache,
     logger observability.Logger,
     cardProv *tcgdex.TCGdex,
-) (*fusionprice.FusionProvider, *pokemonprice.Client, *cardhedger.Client, error)
+) (*fusionprice.FusionProvider, *cardhedger.Client, error)
 ```
-Covers: PriceCharting client, PokemonPrice client, CardHedger client, FusionProvider assembly with secondary sources.
+Covers: PriceCharting client, CardHedger client, FusionProvider assembly with secondary sources.
 
 #### `initializeCampaignsService()`
 ```go

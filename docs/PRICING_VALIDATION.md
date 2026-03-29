@@ -17,11 +17,8 @@ go test -tags integration ./internal/integration/ -run TestParseCardMetadataFrom
 # PriceCharting direct lookup (3s rate limit per card, ~2 min)
 go test -tags integration ./internal/integration/ -run TestPriceChartingLookup -v -timeout 3m
 
-# Full pipeline: parse → PriceCharting + TCGdex validation (no PokemonPrice)
+# Full pipeline: parse → PriceCharting + TCGdex validation
 go test -tags integration ./internal/integration/ -run TestImportToPricing -v -timeout 5m
-
-# PokemonPrice lookup (1s rate limit, ~30s — requires daily quota)
-go test -tags integration ./internal/integration/ -run TestPokemonPriceLookup -v -timeout 3m
 
 # TCGdex card validation
 go test -tags integration ./internal/integration/ -run TestCardValidation -v -timeout 3m
@@ -89,16 +86,6 @@ All 26 priceable cards (excluding 2 Ancient Mew + Dark Mewtwo with no card numbe
 | PIKACHU S #236 | 132537172 | Pikachu #236 | PSA10=$110 | ✅ |
 | TEAM ROCKET'S MIMIKYU #087 | 121986129 | Team Rocket's Mimikyu #87 | PSA9=$25 | ✅ |
 
-### PokemonPrice — PARTIALLY VALIDATED ⚠️
-
-Rate limited (429) after ~5 cards. Sylveon ex (Prismatic Evolutions) returned correct data. Japanese/niche cards expected to not be found.
-
-| Card | Status | Notes |
-|------|--------|-------|
-| Sylveon ex #156 | ✅ Found | $298 market, correct set match |
-| Snorlax JP, Rayquaza JP, Charizard Neo JP, Dark Gyarados, Dragonite JP | ❌ Not found | Expected — Japanese/older sets |
-| Remaining 21 cards | ⚠️ Rate limited | 429 errors after Sylveon; retry when quota resets |
-
 ### CardHedger — VALIDATED ✅
 
 17 of 26 priceable cards found with grade data. 9 not found (expected — Japanese/Chinese/niche cards).
@@ -144,15 +131,12 @@ Ancient Mew PSA titles contain `"GAME MOVIE"` as the inferred set name. Added ma
 ## Known Pricing Gaps
 
 ### Cards with single-source pricing (PriceCharting only)
-Japanese cards will likely only get PriceCharting pricing since PokemonPrice and CardHedger primarily index English sets. This is acceptable — PriceCharting has good coverage of Japanese graded cards.
+Japanese cards will likely only get PriceCharting pricing since CardHedger primarily indexes English sets. This is acceptable — PriceCharting has good coverage of Japanese graded cards.
 
 ### Charizard Japanese Neo #006 — wrong card match
 PriceCharting matches "Charizard [Holo] #6" from Japanese CD Promo ($1029 PSA9) instead of Japanese Neo Premium File ($305 PSA9). Both are Japanese Charizard #6 — disambiguation requires the exact set name. The current set name "JAPANESE NEO 2 PROMO" doesn't overlap with "Japanese CD Promo" OR "Japanese Neo Premium File" well enough to disambiguate.
 
 **Potential fix**: Add the specific PriceCharting product ID to `psaCategoryToSetName` or use PriceCharting's ID-based lookup once the correct product is identified.
-
-### Dark Gyarados 1st Edition — PokemonPrice may return unlimited pricing
-PokemonPrice may not distinguish 1st Edition from unlimited for Team Rocket cards. When PokemonPrice IS available, the fusion engine may blend the unlimited eBay price ($59 PSA8) with PriceCharting's 1st Edition price ($89 PSA8), producing a lower fused price.
 
 ### Tohoku's Pikachu PSA 8 — no grade data
 PriceCharting has PSA 9 ($123) and PSA 10 ($422) but no PSA 8 data. The grade fallback in `GetMarketSnapshot` estimates PSA 8 at 65% of PSA 9 ≈ $80. This is an estimate, not market data.
@@ -166,7 +150,6 @@ This Japanese Pokken Tournament promo is correctly parsed (name="DARK MEWTWO", s
 
 | Source | Daily Limit | Credits/Call | Effective Calls | Reset |
 |--------|------------|-------------|-----------------|-------|
-| PokemonPrice | 20,000 credits | 2 (with eBay) | 10,000 | Midnight UTC |
 | PriceCharting | ~30/min | 1 | ~1,800/hour | Per-minute rolling |
 | CardHedger | 1,000 calls | 1 | 1,000 | Midnight UTC |
 | PSA Cert | 100/day per key | 1 | 200 (2 keys) | Midnight UTC |

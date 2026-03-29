@@ -36,6 +36,7 @@ func (s *service) ImportCerts(ctx context.Context, certNumbers []string) (*CertI
 
 	result := &CertImportResult{Errors: []CertImportError{}}
 	now := time.Now()
+	var importedCerts []string
 
 	for _, certNum := range cleaned {
 		if existing, ok := existingMap[certNum]; ok {
@@ -125,7 +126,20 @@ func (s *service) ImportCerts(ctx context.Context, certNumbers []string) (*CertI
 			}
 		}
 
+		importedCerts = append(importedCerts, certNum)
 		result.Imported++
+	}
+
+	// Kick off background cert→card_id resolution for imported certs.
+	if s.cardIDResolver != nil && len(importedCerts) > 0 {
+		certs := append([]string(nil), importedCerts...)
+		s.wg.Add(1)
+		go func() {
+			defer s.wg.Done()
+			ctx, cancel := context.WithTimeout(s.baseCtx, 2*time.Minute)
+			defer cancel()
+			s.batchResolveCardIDs(ctx, certs)
+		}()
 	}
 
 	return result, nil

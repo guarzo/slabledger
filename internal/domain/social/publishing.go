@@ -61,11 +61,17 @@ func (s *service) publishAsync(id string) {
 		return
 	}
 
-	// Prefer rendered slide URLs; fall back to raw card images for legacy posts
+	// Prefer rendered slide URLs; fall back to raw card images.
+	// Filter empty strings — background generation failures can leave empty
+	// entries in SlideURLs (see generateBackgroundsAsync). If all slide URLs
+	// are empty after filtering, fall back to card front images.
 	var imageURLs []string
-	if len(post.SlideURLs) > 0 {
-		imageURLs = post.SlideURLs
-	} else {
+	for _, u := range post.SlideURLs {
+		if u != "" {
+			imageURLs = append(imageURLs, u)
+		}
+	}
+	if len(imageURLs) == 0 {
 		for _, c := range cards {
 			if c.FrontImageURL != "" {
 				imageURLs = append(imageURLs, c.FrontImageURL)

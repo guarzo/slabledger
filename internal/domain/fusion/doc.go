@@ -1,8 +1,7 @@
 // Package fusion implements multi-source data aggregation with confidence scoring.
 //
-// The fusion engine combines price data from multiple sources (PokemonPriceTracker
-// and CardHedger) to produce more accurate and
-// confident price estimates.
+// The fusion engine combines price data from secondary sources (currently
+// CardHedger) to produce more accurate and confident price estimates.
 //
 // # Fusion Algorithm
 //
@@ -13,7 +12,6 @@
 //
 // # Source Weights
 //
-//   - PokemonPriceTracker: 0.90 (eBay graded data via smartMarketPrice)
 //   - CardHedger: 0.85 (price estimates with confidence ranges)
 //
 // PriceCharting provides market data only; it is not included as a fusion source.

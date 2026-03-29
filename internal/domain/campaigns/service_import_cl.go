@@ -113,6 +113,30 @@ func (s *service) RefreshCLValuesGlobal(ctx context.Context, rows []CLExportRow)
 		summary.Updated++
 		result.ByCampaign[purchase.CampaignID] = summary
 	}
+	// Kick off background cert→card_id resolution for successfully updated purchases.
+	if s.cardIDResolver != nil {
+		var certs []string
+		seen := make(map[string]struct{})
+		for _, res := range result.Results {
+			if res.Status != "updated" || res.CertNumber == "" {
+				continue
+			}
+			if _, ok := seen[res.CertNumber]; !ok {
+				seen[res.CertNumber] = struct{}{}
+				certs = append(certs, res.CertNumber)
+			}
+		}
+		if len(certs) > 0 {
+			s.wg.Add(1)
+			go func() {
+				defer s.wg.Done()
+				ctx, cancel := context.WithTimeout(s.baseCtx, 2*time.Minute)
+				defer cancel()
+				s.batchResolveCardIDs(ctx, certs)
+			}()
+		}
+	}
+
 	return result, nil
 }
 
@@ -297,6 +321,34 @@ func (s *service) ImportCLExportGlobal(ctx context.Context, rows []CLExportRow) 
 				PurchaseDate: row.DatePurchased, SetName: row.Set, CardNumber: row.Number,
 				Population: row.Population,
 			})
+		}
+	}
+
+	// Kick off background cert→card_id resolution for successfully persisted purchases.
+	if s.cardIDResolver != nil {
+		var certs []string
+		seen := make(map[string]struct{})
+		for _, res := range result.Results {
+			if res.CertNumber == "" {
+				continue
+			}
+			// Only resolve certs for rows that were actually persisted
+			if res.Status != "refreshed" && res.Status != "allocated" {
+				continue
+			}
+			if _, ok := seen[res.CertNumber]; !ok {
+				seen[res.CertNumber] = struct{}{}
+				certs = append(certs, res.CertNumber)
+			}
+		}
+		if len(certs) > 0 {
+			s.wg.Add(1)
+			go func() {
+				defer s.wg.Done()
+				ctx, cancel := context.WithTimeout(s.baseCtx, 2*time.Minute)
+				defer cancel()
+				s.batchResolveCardIDs(ctx, certs)
+			}()
 		}
 	}
 

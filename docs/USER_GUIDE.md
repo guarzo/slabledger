@@ -236,7 +236,7 @@ Based on market direction:
 
 The **Pricing** page lets you look up current card prices across all grades and sources. Useful for:
 - Checking current market value before buying or selling
-- Comparing prices across PriceCharting, PokemonPrice, and CardHedger
+- Comparing prices across PriceCharting and CardHedger
 - Viewing price trends and sales history
 
 ---
@@ -257,8 +257,7 @@ The status page shows real-time API usage for each pricing provider:
 
 | Provider | Daily Limit | Description |
 |----------|-------------|-------------|
-| **PokemonPriceTracker** | 10,000 | Primary graded prices via eBay smartMarketPrice |
-| **CardHedger** | 1,000 | Supplementary price estimates with confidence ranges |
+| **CardHedger** | 1,000 | Secondary graded price estimates with confidence ranges |
 | **PriceCharting** | No hard limit | Market data (active listings, sales velocity) |
 
 For each provider, the page displays:

@@ -103,7 +103,7 @@ func TestCardSyncCollector_SuccessfulSync(t *testing.T) {
 
 	// Record successful sources
 	collector.RecordSource(SourcePriceCharting, true, nil, 100*time.Millisecond, false)
-	collector.RecordSource(SourcePokemonPriceTracker, true, nil, 150*time.Millisecond, false)
+	collector.RecordSource(SourceCardHedger, true, nil, 150*time.Millisecond, false)
 
 	// Record prices
 	collector.RecordPrices(PriceResult{
@@ -138,8 +138,8 @@ func TestCardSyncCollector_SuccessfulSync(t *testing.T) {
 	if !strings.Contains(sources, "PC:✓") {
 		t.Errorf("expected sources to contain 'PC:✓', got %q", sources)
 	}
-	if !strings.Contains(sources, "PP:✓") {
-		t.Errorf("expected sources to contain 'PP:✓', got %q", sources)
+	if !strings.Contains(sources, "CH:✓") {
+		t.Errorf("expected sources to contain 'CH:✓', got %q", sources)
 	}
 
 	// Check prices
@@ -162,7 +162,7 @@ func TestCardSyncCollector_PartialFailure(t *testing.T) {
 
 	// Record mixed results
 	collector.RecordSource(SourcePriceCharting, true, nil, 100*time.Millisecond, false)
-	collector.RecordSource(SourcePokemonPriceTracker, false, errors.New("card not found"), 50*time.Millisecond, false)
+	collector.RecordSource(SourceCardHedger, false, errors.New("card not found"), 50*time.Millisecond, false)
 
 	// Record prices (from successful source only)
 	collector.RecordPrices(PriceResult{
@@ -183,8 +183,8 @@ func TestCardSyncCollector_PartialFailure(t *testing.T) {
 	if !strings.Contains(sources, "PC:✓") {
 		t.Errorf("expected PC:✓ in sources, got %q", sources)
 	}
-	if !strings.Contains(sources, "PP:✗") {
-		t.Errorf("expected PP:✗ in sources, got %q", sources)
+	if !strings.Contains(sources, "CH:✗") {
+		t.Errorf("expected CH:✗ in sources, got %q", sources)
 	}
 
 	// Check errors field
@@ -192,8 +192,8 @@ func TestCardSyncCollector_PartialFailure(t *testing.T) {
 	if !ok {
 		t.Errorf("expected errors string, got %T", entry.fields["errors"])
 	}
-	if !strings.Contains(errorsStr, "PP:not_found") {
-		t.Errorf("expected 'PP:not_found' in errors, got %q", errorsStr)
+	if !strings.Contains(errorsStr, "CH:not_found") {
+		t.Errorf("expected 'CH:not_found' in errors, got %q", errorsStr)
 	}
 }
 
@@ -203,7 +203,7 @@ func TestCardSyncCollector_AllSourcesFailed(t *testing.T) {
 
 	// Record all failures
 	collector.RecordSource(SourcePriceCharting, false, errors.New("card not found"), 100*time.Millisecond, false)
-	collector.RecordSource(SourcePokemonPriceTracker, false, errors.New("rate limit exceeded"), 50*time.Millisecond, false)
+	collector.RecordSource(SourceCardHedger, false, errors.New("rate limit exceeded"), 50*time.Millisecond, false)
 
 	collector.Complete(context.Background())
 
@@ -258,7 +258,7 @@ func TestCardSyncCollector_ThreadSafety(t *testing.T) {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
-			sources := []string{SourcePriceCharting, SourcePokemonPriceTracker}
+			sources := []string{SourcePriceCharting, SourceCardHedger}
 			collector.RecordSource(sources[idx], true, nil, time.Duration(idx)*time.Millisecond, false)
 		}(i)
 	}
@@ -270,7 +270,7 @@ func TestCardSyncCollector_ThreadSafety(t *testing.T) {
 	sources := entry.fields["sources"].(string)
 
 	// All 2 sources should be recorded
-	for _, src := range []string{"PC:✓", "PP:✓"} {
+	for _, src := range []string{"PC:✓", "CH:✓"} {
 		if !strings.Contains(sources, src) {
 			t.Errorf("expected %s in sources, got %q", src, sources)
 		}
@@ -382,7 +382,7 @@ func TestSourceOrderConsistency(t *testing.T) {
 	collector := NewCardSyncCollector(logger, "Test", "1", "Test Set")
 
 	// Add sources in reverse order
-	collector.RecordSource(SourcePokemonPriceTracker, true, nil, 10*time.Millisecond, false)
+	collector.RecordSource(SourceCardHedger, true, nil, 10*time.Millisecond, false)
 	collector.RecordSource(SourcePriceCharting, true, nil, 10*time.Millisecond, false)
 
 	collector.Complete(context.Background())
@@ -390,8 +390,8 @@ func TestSourceOrderConsistency(t *testing.T) {
 	entry := logger.lastEntry()
 	sources := entry.fields["sources"].(string)
 
-	// Should be in canonical order: PC PP
-	expected := "PC:✓ PP:✓"
+	// Should be in canonical order: PC CH
+	expected := "PC:✓ CH:✓"
 	if sources != expected {
 		t.Errorf("expected sources in order %q, got %q", expected, sources)
 	}
