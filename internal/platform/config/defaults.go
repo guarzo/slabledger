@@ -107,7 +107,7 @@ func Default() Config {
 			ContentHour:  5, // 5 AM UTC
 		},
 		PicksRefresh: PicksRefreshConfig{
-			Enabled:     false,
+			Enabled:     true,
 			Interval:    24 * time.Hour,
 			ContentHour: 3,
 		},

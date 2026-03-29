@@ -34,6 +34,7 @@ const (
 	ReviewSourceManual     ReviewSource = "manual"
 	ReviewSourceCL         ReviewSource = "cl"
 	ReviewSourceMarket     ReviewSource = "market"
+	ReviewSourceLastSold   ReviewSource = "last_sold"
 	ReviewSourceCostMarkup ReviewSource = "cost_markup"
 )
 
