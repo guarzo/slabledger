@@ -1,6 +1,8 @@
 package scheduler
 
 import (
+	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
+	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
 	"github.com/guarzo/slabledger/internal/domain/advisor"
 	"github.com/guarzo/slabledger/internal/domain/ai"
 	"github.com/guarzo/slabledger/internal/domain/auth"
@@ -64,6 +66,13 @@ type BuildDeps struct {
 	// Social content dependencies (optional)
 	SocialContentDetector   SocialContentDetector
 	InstagramTokenRefresher InstagramTokenRefresher
+
+	// Card Ladder dependencies (optional)
+	CardLadderClient         *cardladder.Client
+	CardLadderStore          *sqlite.CardLadderStore
+	CardLadderPurchaseLister CardLadderPurchaseLister
+	CardLadderValueUpdater   CardLadderValueUpdater
+	CardLadderCLRecorder     domainCampaigns.CLValueHistoryRecorder
 }
 
 // BuildResult holds the scheduler group and optional auxiliary references.
@@ -232,6 +241,17 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 		schedulers = append(schedulers, NewSocialContentScheduler(
 			deps.SocialContentDetector, deps.Logger, cfg.SocialContent, socialOpts...,
 		))
+	}
+
+	// Card Ladder value refresh scheduler (if client + store are provided)
+	if deps.CardLadderClient != nil && deps.CardLadderStore != nil && deps.CardLadderPurchaseLister != nil && deps.CardLadderValueUpdater != nil {
+		clScheduler := NewCardLadderRefreshScheduler(
+			deps.CardLadderClient, deps.CardLadderStore,
+			deps.CardLadderPurchaseLister, deps.CardLadderValueUpdater,
+			deps.CardLadderCLRecorder,
+			deps.Logger, cfg.CardLadder,
+		)
+		schedulers = append(schedulers, clScheduler)
 	}
 
 	return BuildResult{
