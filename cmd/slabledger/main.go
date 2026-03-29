@@ -409,8 +409,11 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	}
 	clClient, clAuth, clStore := initializeCardLadder(ctx, logger, db, clEncryptor)
 	var clHandler *handlers.CardLadderHandler
+	var salesCompsHandler *handlers.SalesCompsHandler
 	if clStore != nil {
 		clHandler = handlers.NewCardLadderHandler(clStore, clClient, clAuth, logger)
+		salesStore := sqlite.NewCLSalesStore(db.DB)
+		salesCompsHandler = handlers.NewSalesCompsHandler(salesStore, clStore, campaignsService, logger)
 	}
 
 	// Create cert sweeper for periodic cert→card_id resolution in the CardHedger batch scheduler.
@@ -540,6 +543,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		AIStatusHandler:           aiStatusHandler,
 		PriceFlagsHandler:         priceFlagsHandler,
 		CardLadderHandler:         clHandler,
+		SalesCompsHandler:         salesCompsHandler,
 	}
 	serverErr := startWebServer(ctx, deps)
 

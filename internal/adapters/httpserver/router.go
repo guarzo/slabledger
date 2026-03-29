@@ -39,6 +39,7 @@ type Router struct {
 	aiUsageHandler            *handlers.AIStatusHandler
 	priceFlagsHandler         *handlers.PriceFlagsHandler
 	cardLadderHandler         *handlers.CardLadderHandler
+	salesCompsHandler         *handlers.SalesCompsHandler
 	pricingAPIKey             string
 	logger                    observability.Logger
 	databasePath              string
@@ -66,7 +67,8 @@ type RouterConfig struct {
 	InstagramHandler          *handlers.InstagramHandler  // Instagram publishing; nil = disabled
 	AIStatusHandler           *handlers.AIStatusHandler   // AI usage stats; nil = disabled
 	PriceFlagsHandler         *handlers.PriceFlagsHandler // Price flag admin; nil = disabled
-	CardLadderHandler         *handlers.CardLadderHandler // Card Ladder admin; nil = disabled
+	CardLadderHandler         *handlers.CardLadderHandler  // Card Ladder admin; nil = disabled
+	SalesCompsHandler         *handlers.SalesCompsHandler // Sales comps; nil = disabled
 	Logger                    observability.Logger
 	AdminEmails               []string
 	DatabasePath              string
@@ -148,6 +150,10 @@ func NewRouter(cfg RouterConfig) *Router {
 
 	if cfg.CardLadderHandler != nil {
 		rt.cardLadderHandler = cfg.CardLadderHandler
+	}
+
+	if cfg.SalesCompsHandler != nil {
+		rt.salesCompsHandler = cfg.SalesCompsHandler
 	}
 
 	if cfg.PricingAPIKey != "" && cfg.CampaignsRepo != nil {
@@ -401,6 +407,11 @@ func (rt *Router) Setup() http.Handler {
 		// Price review & flag endpoints
 		mux.Handle("PATCH /api/purchases/{purchaseId}/review-price", authRoute(rt.campaignsHandler.HandleSetReviewedPrice))
 		mux.Handle("POST /api/purchases/{purchaseId}/flag", authRoute(rt.campaignsHandler.HandleCreatePriceFlag))
+
+		// Sales comps endpoint
+		if rt.salesCompsHandler != nil {
+			mux.Handle("GET /api/purchases/{id}/sales-comps", authRoute(rt.salesCompsHandler.HandleGetSalesComps))
+		}
 
 		// Credit & Invoice endpoints
 		mux.Handle("GET /api/credit/summary", authRoute(rt.campaignsHandler.HandleCreditSummary))
