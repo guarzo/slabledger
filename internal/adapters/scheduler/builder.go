@@ -81,14 +81,16 @@ type BuildDeps struct {
 
 // BuildResult holds the scheduler group and optional auxiliary references.
 type BuildResult struct {
-	Group          *Group
-	CardDiscoverer CardDiscoverer // nil if CardHedger batch is not configured
+	Group             *Group
+	CardDiscoverer    CardDiscoverer              // nil if CardHedger batch is not configured
+	CardLadderRefresh *CardLadderRefreshScheduler // nil if Card Ladder is not configured
 }
 
 // BuildGroup constructs a scheduler Group from centralized configuration and dependencies.
 func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 	var schedulers []Scheduler
 	var cardDiscoverer CardDiscoverer
+	var clRefresh *CardLadderRefreshScheduler
 
 	// Price refresh scheduler
 	schedulerConfig := Config{
@@ -256,18 +258,19 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 
 	// Card Ladder value refresh scheduler (if client + store are provided)
 	if deps.CardLadderClient != nil && deps.CardLadderStore != nil && deps.CardLadderPurchaseLister != nil && deps.CardLadderValueUpdater != nil {
-		clScheduler := NewCardLadderRefreshScheduler(
+		clRefresh = NewCardLadderRefreshScheduler(
 			deps.CardLadderClient, deps.CardLadderStore,
 			deps.CardLadderPurchaseLister, deps.CardLadderValueUpdater,
 			deps.CardLadderCLRecorder,
 			deps.CardLadderSalesStore,
 			deps.Logger, cfg.CardLadder,
 		)
-		schedulers = append(schedulers, clScheduler)
+		schedulers = append(schedulers, clRefresh)
 	}
 
 	return BuildResult{
-		Group:          NewGroup(schedulers...),
-		CardDiscoverer: cardDiscoverer,
+		Group:             NewGroup(schedulers...),
+		CardDiscoverer:    cardDiscoverer,
+		CardLadderRefresh: clRefresh,
 	}
 }

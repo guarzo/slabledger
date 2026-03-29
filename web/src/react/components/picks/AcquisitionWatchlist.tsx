@@ -8,6 +8,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../../js/api';
 import type { WatchlistItem } from '../../../types/picks';
 
+const glassStyle = { background: 'var(--glass-bg)', backdropFilter: 'blur(12px)' } as const;
+const inputClass = 'w-full px-3 py-1.5 text-sm rounded-lg border border-[var(--surface-2)] bg-[var(--surface-1)] text-[var(--text)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--brand-500)]/60';
+
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
 /* ------------------------------------------------------------------ */
@@ -61,7 +64,7 @@ function AddCardForm({ onCancel, onSuccess }: AddCardFormProps) {
     <form
       onSubmit={handleSubmit}
       className="mt-3 p-4 rounded-xl border border-[var(--brand-500)]/20 space-y-3"
-      style={{ background: 'var(--glass-bg)', backdropFilter: 'blur(12px)' }}
+      style={glassStyle}
     >
       <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">Add to Watchlist</p>
 
@@ -73,7 +76,7 @@ function AddCardForm({ onCancel, onSuccess }: AddCardFormProps) {
             value={cardName}
             onChange={e => setCardName(e.target.value)}
             placeholder="Charizard"
-            className="w-full px-3 py-1.5 text-sm rounded-lg border border-[var(--surface-2)] bg-[var(--surface-1)] text-[var(--text)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--brand-500)]/60"
+            className={inputClass}
             required
           />
         </div>
@@ -84,7 +87,7 @@ function AddCardForm({ onCancel, onSuccess }: AddCardFormProps) {
             value={setName}
             onChange={e => setSetName(e.target.value)}
             placeholder="Base Set"
-            className="w-full px-3 py-1.5 text-sm rounded-lg border border-[var(--surface-2)] bg-[var(--surface-1)] text-[var(--text)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--brand-500)]/60"
+            className={inputClass}
             required
           />
         </div>
@@ -95,7 +98,7 @@ function AddCardForm({ onCancel, onSuccess }: AddCardFormProps) {
             value={grade}
             onChange={e => setGrade(e.target.value)}
             placeholder="10"
-            className="w-full px-3 py-1.5 text-sm rounded-lg border border-[var(--surface-2)] bg-[var(--surface-1)] text-[var(--text)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--brand-500)]/60"
+            className={inputClass}
             required
           />
         </div>
@@ -159,14 +162,19 @@ function WatchlistRow({ item }: { item: WatchlistItem }) {
           </p>
         )}
       </div>
-      <button
-        onClick={() => removeMutation.mutate()}
-        disabled={removeMutation.isPending}
-        className="shrink-0 text-xs text-[var(--text-muted)] hover:text-red-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        aria-label={`Remove ${item.card_name} from watchlist`}
-      >
-        {removeMutation.isPending ? 'Removing…' : 'Remove'}
-      </button>
+      <div className="shrink-0 flex flex-col items-end gap-1">
+        <button
+          onClick={() => removeMutation.mutate()}
+          disabled={removeMutation.isPending}
+          className="text-xs text-[var(--text-muted)] hover:text-red-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          aria-label={`Remove ${item.card_name} from watchlist`}
+        >
+          {removeMutation.isPending ? 'Removing…' : 'Remove'}
+        </button>
+        {removeMutation.isError && (
+          <span className="text-xs text-[var(--danger)]">Failed to remove</span>
+        )}
+      </div>
     </div>
   );
 }
@@ -189,7 +197,7 @@ export default function AcquisitionWatchlist() {
   return (
     <div
       className="p-4 rounded-2xl border border-[var(--surface-2)]/50 space-y-1"
-      style={{ background: 'var(--glass-bg)', backdropFilter: 'blur(12px)' }}
+      style={glassStyle}
     >
       {/* Header */}
       <div className="flex items-center justify-between mb-2">
@@ -221,7 +229,7 @@ export default function AcquisitionWatchlist() {
 
       {/* Error */}
       {isError && (
-        <div className="p-3 rounded-lg border border-red-500/30 bg-red-500/10 text-sm text-red-400">
+        <div className="p-3 rounded-lg border border-[var(--danger-border)] bg-[var(--danger-bg)] text-sm text-[var(--danger)]">
           Failed to load watchlist.
         </div>
       )}

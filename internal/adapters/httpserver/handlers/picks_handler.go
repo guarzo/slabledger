@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/guarzo/slabledger/internal/domain/mathutil"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/domain/picks"
 )
@@ -18,6 +19,47 @@ func NewPicksHandler(service picks.Service, logger observability.Logger) *PicksH
 	return &PicksHandler{service: service, logger: logger}
 }
 
+// pickResponse mirrors picks.Pick but with dollar-denominated prices for the API.
+type pickResponse struct {
+	ID                int              `json:"id"`
+	Date              string           `json:"date"`
+	CardName          string           `json:"card_name"`
+	SetName           string           `json:"set_name"`
+	Grade             string           `json:"grade"`
+	Direction         picks.Direction  `json:"direction"`
+	Confidence        picks.Confidence `json:"confidence"`
+	BuyThesis         string           `json:"buy_thesis"`
+	TargetBuyPrice    float64          `json:"target_buy_price"`
+	ExpectedSellPrice float64          `json:"expected_sell_price"`
+	Signals           []picks.Signal   `json:"signals"`
+	Rank              int              `json:"rank"`
+	Source            picks.PickSource `json:"source"`
+	CreatedAt         string           `json:"created_at"`
+}
+
+func toPickResponses(pp []picks.Pick) []pickResponse {
+	out := make([]pickResponse, len(pp))
+	for i, p := range pp {
+		out[i] = pickResponse{
+			ID:                p.ID,
+			Date:              p.Date.Format("2006-01-02"),
+			CardName:          p.CardName,
+			SetName:           p.SetName,
+			Grade:             p.Grade,
+			Direction:         p.Direction,
+			Confidence:        p.Confidence,
+			BuyThesis:         p.BuyThesis,
+			TargetBuyPrice:    mathutil.ToDollars(int64(p.TargetBuyPrice)),
+			ExpectedSellPrice: mathutil.ToDollars(int64(p.ExpectedSellPrice)),
+			Signals:           p.Signals,
+			Rank:              p.Rank,
+			Source:            p.Source,
+			CreatedAt:         p.CreatedAt.Format("2006-01-02T15:04:05Z"),
+		}
+	}
+	return out
+}
+
 func (h *PicksHandler) HandleGetPicks(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	result, err := h.service.GetLatestPicks(ctx)
@@ -29,7 +71,7 @@ func (h *PicksHandler) HandleGetPicks(w http.ResponseWriter, r *http.Request) {
 	if result == nil {
 		result = []picks.Pick{}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"picks": result})
+	writeJSON(w, http.StatusOK, map[string]any{"picks": toPickResponses(result)})
 }
 
 func (h *PicksHandler) HandleGetPickHistory(w http.ResponseWriter, r *http.Request) {
@@ -49,7 +91,7 @@ func (h *PicksHandler) HandleGetPickHistory(w http.ResponseWriter, r *http.Reque
 	if result == nil {
 		result = []picks.Pick{}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"picks": result})
+	writeJSON(w, http.StatusOK, map[string]any{"picks": toPickResponses(result)})
 }
 
 func (h *PicksHandler) HandleGetWatchlist(w http.ResponseWriter, r *http.Request) {

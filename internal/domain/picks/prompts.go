@@ -81,7 +81,7 @@ func BuildCandidatePrompt(profile ProfitabilityProfile, watchlist []WatchlistIte
 }
 
 // BuildScoringPrompt constructs the system prompt for scoring & ranking.
-func BuildScoringPrompt(candidates []candidateRequest, profile ProfitabilityProfile) string {
+func BuildScoringPrompt(candidates []candidateRequest, profile ProfitabilityProfile) (string, error) {
 	var sb strings.Builder
 
 	sb.WriteString("You are an expert Pokemon TCG card market analyst. Score and rank these acquisition candidates.\n\n")
@@ -95,7 +95,10 @@ func BuildScoringPrompt(candidates []candidateRequest, profile ProfitabilityProf
 	}
 
 	sb.WriteString("\n## Candidates\n")
-	candidatesJSON, _ := json.Marshal(candidates)
+	candidatesJSON, err := json.Marshal(candidates)
+	if err != nil {
+		return "", fmt.Errorf("marshal candidates: %w", err)
+	}
 	sb.WriteString(string(candidatesJSON))
 
 	sb.WriteString("\n\n## Instructions\n")
@@ -110,7 +113,7 @@ func BuildScoringPrompt(candidates []candidateRequest, profile ProfitabilityProf
 	sb.WriteString("Return ONLY a JSON array, no markdown fences:\n")
 	sb.WriteString(`[{"card_name": "...", "set_name": "...", "grade": "...", "direction": "buy", "confidence": "high", "buy_thesis": "...", "target_buy_price_cents": 15000, "expected_sell_price_cents": 22500, "rank": 1, "signals": [{"factor": "population", "direction": "bullish", "title": "Low PSA 10 pop", "detail": "Only 847 graded"}]}]`)
 
-	return sb.String()
+	return sb.String(), nil
 }
 
 // ParseCandidates parses the LLM's candidate generation response.
@@ -121,6 +124,45 @@ func ParseCandidates(raw string) ([]candidateRequest, error) {
 		return nil, fmt.Errorf("parse candidates: %w", err)
 	}
 	return candidates, nil
+}
+
+func parseDirection(s string) Direction {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "buy":
+		return DirectionBuy
+	case "watch":
+		return DirectionWatch
+	case "avoid":
+		return DirectionAvoid
+	default:
+		return DirectionWatch
+	}
+}
+
+func parseConfidence(s string) Confidence {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "high":
+		return ConfidenceHigh
+	case "medium":
+		return ConfidenceMedium
+	case "low":
+		return ConfidenceLow
+	default:
+		return ConfidenceMedium
+	}
+}
+
+func parseSignalDirection(s string) SignalDirection {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "bullish":
+		return SignalBullish
+	case "bearish":
+		return SignalBearish
+	case "neutral":
+		return SignalNeutral
+	default:
+		return SignalNeutral
+	}
 }
 
 // ParseScoredPicks parses the LLM's scoring response into domain Pick objects.
@@ -137,7 +179,7 @@ func ParseScoredPicks(raw string) ([]Pick, error) {
 		for _, sig := range s.Signals {
 			signals = append(signals, Signal{
 				Factor:    sig.Factor,
-				Direction: SignalDirection(sig.Direction),
+				Direction: parseSignalDirection(sig.Direction),
 				Title:     sig.Title,
 				Detail:    sig.Detail,
 			})
@@ -146,8 +188,8 @@ func ParseScoredPicks(raw string) ([]Pick, error) {
 			CardName:          s.CardName,
 			SetName:           s.SetName,
 			Grade:             s.Grade,
-			Direction:         Direction(s.Direction),
-			Confidence:        Confidence(s.Confidence),
+			Direction:         parseDirection(s.Direction),
+			Confidence:        parseConfidence(s.Confidence),
 			BuyThesis:         s.BuyThesis,
 			TargetBuyPrice:    s.TargetBuyPrice,
 			ExpectedSellPrice: s.ExpectedSellPrice,

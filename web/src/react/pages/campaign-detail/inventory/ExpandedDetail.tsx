@@ -108,7 +108,7 @@ export default function ExpandedDetail({ item, onReviewed, campaignId, onOpenFla
         selectedPick={selectedPick}
         onPickSelect={setSelectedPick}
         onConfirm={handleConfirm}
-        onFlag={onOpenFlagDialog ?? (() => {})}
+        onFlag={onOpenFlagDialog}
         isSubmitting={isSubmitting}
       />
     </div>

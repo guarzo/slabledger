@@ -112,6 +112,7 @@ func (r *PicksRepository) PicksExistForDate(ctx context.Context, date time.Time)
 // SaveWatchlistItem inserts a new active watchlist entry.
 // Returns picks.ErrWatchlistDuplicate if the card/set/grade is already active.
 func (r *PicksRepository) SaveWatchlistItem(ctx context.Context, item picks.WatchlistItem) error {
+	now := time.Now().UTC().Format(time.RFC3339)
 	_, err := r.db.ExecContext(ctx, `
 		INSERT INTO acquisition_watchlist (card_name, set_name, grade, source, active, added_at, updated_at)
 		VALUES (?, ?, ?, ?, 1, ?, ?)`,
@@ -119,8 +120,8 @@ func (r *PicksRepository) SaveWatchlistItem(ctx context.Context, item picks.Watc
 		item.SetName,
 		item.Grade,
 		string(item.Source),
-		time.Now().UTC().Format(time.RFC3339),
-		time.Now().UTC().Format(time.RFC3339),
+		now,
+		now,
 	)
 	if err != nil {
 		if isUniqueConstraintError(err) {
@@ -185,20 +186,20 @@ func (r *PicksRepository) GetActiveWatchlist(ctx context.Context) ([]picks.Watch
 			source    string
 
 			// nullable pick columns (LEFT JOIN)
-			pickID              sql.NullInt64
-			pickDate            sql.NullString
-			pickCardName        sql.NullString
-			pickSetName         sql.NullString
-			pickGrade           sql.NullString
-			pickDirection       sql.NullString
-			pickConfidence      sql.NullString
-			pickBuyThesis       sql.NullString
-			pickTargetBuy       sql.NullInt64
-			pickExpectedSell    sql.NullInt64
-			pickSignalsJSON     sql.NullString
-			pickRank            sql.NullInt64
-			pickSource          sql.NullString
-			pickCreatedAt       sql.NullString
+			pickID           sql.NullInt64
+			pickDate         sql.NullString
+			pickCardName     sql.NullString
+			pickSetName      sql.NullString
+			pickGrade        sql.NullString
+			pickDirection    sql.NullString
+			pickConfidence   sql.NullString
+			pickBuyThesis    sql.NullString
+			pickTargetBuy    sql.NullInt64
+			pickExpectedSell sql.NullInt64
+			pickSignalsJSON  sql.NullString
+			pickRank         sql.NullInt64
+			pickSource       sql.NullString
+			pickCreatedAt    sql.NullString
 		)
 
 		if err := rows.Scan(

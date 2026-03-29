@@ -59,11 +59,7 @@ func (s *CLSalesStore) GetSaleComps(ctx context.Context, gemRateID string, limit
 	if err != nil {
 		return nil, err
 	}
-	defer func() {
-		if cerr := rows.Close(); cerr != nil && err == nil {
-			err = cerr
-		}
-	}()
+	defer rows.Close() //nolint:errcheck
 
 	var comps []CLSaleCompRecord
 	for rows.Next() {

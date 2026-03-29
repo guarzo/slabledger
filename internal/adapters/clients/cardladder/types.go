@@ -10,26 +10,26 @@ type SearchResponse[T any] struct {
 
 // CollectionCard represents one card from the collectioncards index.
 type CollectionCard struct {
-	CollectionCardID   string  `json:"collectionCardId"`
-	CollectionID       string  `json:"collectionId"`
-	Category           string  `json:"category"`
-	Condition          string  `json:"condition"`
-	Year               string  `json:"year"`
-	Number             string  `json:"number"`
-	Set                string  `json:"set"`
-	Variation          string  `json:"variation"`
-	Label              string  `json:"label"`
-	Player             string  `json:"player"`
-	Image              string  `json:"image"`
-	ImageBack          string  `json:"imageBack"`
-	CurrentValue       float64 `json:"currentValue"`
-	Investment         float64 `json:"investment"`
-	Profit             float64 `json:"profit"`
-	WeeklyPctChange    float64 `json:"weeklyPercentChange"`
-	MonthlyPctChange   float64 `json:"monthlyPercentChange"`
-	DateAdded          string  `json:"dateAdded"`
-	HasQuantityAvail   bool    `json:"hasQuantityAvailable"`
-	Sold               bool    `json:"sold"`
+	CollectionCardID string  `json:"collectionCardId"`
+	CollectionID     string  `json:"collectionId"`
+	Category         string  `json:"category"`
+	Condition        string  `json:"condition"`
+	Year             string  `json:"year"`
+	Number           string  `json:"number"`
+	Set              string  `json:"set"`
+	Variation        string  `json:"variation"`
+	Label            string  `json:"label"`
+	Player           string  `json:"player"`
+	Image            string  `json:"image"`
+	ImageBack        string  `json:"imageBack"`
+	CurrentValue     float64 `json:"currentValue"`
+	Investment       float64 `json:"investment"`
+	Profit           float64 `json:"profit"`
+	WeeklyPctChange  float64 `json:"weeklyPercentChange"`
+	MonthlyPctChange float64 `json:"monthlyPercentChange"`
+	DateAdded        string  `json:"dateAdded"`
+	HasQuantityAvail bool    `json:"hasQuantityAvailable"`
+	Sold             bool    `json:"sold"`
 }
 
 // SaleComp represents one sold listing from the salesarchive index.

@@ -254,3 +254,17 @@ type CardLadderConfig struct {
 	Interval    time.Duration // How often to run refresh (default: 24h)
 	RefreshHour int           // Hour (0-23 UTC) to schedule runs; -1 = use Interval (default: 4)
 }
+
+// ApplyDefaults sets zero-valued fields to sensible defaults.
+func (c *PicksRefreshConfig) ApplyDefaults() {
+	if c.Interval <= 0 {
+		c.Interval = 24 * time.Hour
+	}
+}
+
+// ApplyDefaults sets zero-valued fields to sensible defaults.
+func (c *CardLadderConfig) ApplyDefaults() {
+	if c.Interval <= 0 {
+		c.Interval = 24 * time.Hour
+	}
+}

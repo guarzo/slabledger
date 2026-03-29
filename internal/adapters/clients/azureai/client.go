@@ -198,7 +198,7 @@ pollFallback:
 
 // pollResponseFallback retrieves a stored response via GET when streaming failed.
 // It polls up to 10 times (10s apart, with a 20s initial wait to let Azure finish processing).
-// Total budget: ~110s, fitting within the 2-minute poll context.
+// Total budget: ~110s, fitting within the 3-minute poll context.
 func (c *Client) pollResponseFallback(ctx context.Context, responseID string, stream func(ai.CompletionChunk)) error {
 	endpoint := strings.TrimRight(c.config.Endpoint, "/")
 	var url string

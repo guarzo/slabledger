@@ -8,13 +8,13 @@ import (
 )
 
 type MockPicksRepository struct {
-	SavePicksFn                func(ctx context.Context, p []picks.Pick) error
-	GetPicksByDateFn           func(ctx context.Context, date time.Time) ([]picks.Pick, error)
-	GetPicksRangeFn            func(ctx context.Context, from, to time.Time) ([]picks.Pick, error)
-	PicksExistForDateFn        func(ctx context.Context, date time.Time) (bool, error)
-	SaveWatchlistItemFn        func(ctx context.Context, item picks.WatchlistItem) error
-	DeleteWatchlistItemFn      func(ctx context.Context, id int) error
-	GetActiveWatchlistFn       func(ctx context.Context) ([]picks.WatchlistItem, error)
+	SavePicksFn                 func(ctx context.Context, p []picks.Pick) error
+	GetPicksByDateFn            func(ctx context.Context, date time.Time) ([]picks.Pick, error)
+	GetPicksRangeFn             func(ctx context.Context, from, to time.Time) ([]picks.Pick, error)
+	PicksExistForDateFn         func(ctx context.Context, date time.Time) (bool, error)
+	SaveWatchlistItemFn         func(ctx context.Context, item picks.WatchlistItem) error
+	DeleteWatchlistItemFn       func(ctx context.Context, id int) error
+	GetActiveWatchlistFn        func(ctx context.Context) ([]picks.WatchlistItem, error)
 	UpdateWatchlistAssessmentFn func(ctx context.Context, watchlistID int, pickID int) error
 }
 

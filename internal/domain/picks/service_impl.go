@@ -52,22 +52,31 @@ func (s *service) GenerateDailyPicks(ctx context.Context) error {
 	}
 
 	// --- Stage 1: Gather context (non-fatal on individual errors) ---
+	var contextFailures int
+
 	profile, err := s.profitability.GetProfitablePatterns(ctx)
 	if err != nil {
 		s.logger.Warn(ctx, "failed to fetch profitability profile, proceeding with empty", observability.Err(err))
 		profile = ProfitabilityProfile{}
+		contextFailures++
 	}
 
 	heldCards, err := s.inventory.GetHeldCardNames(ctx)
 	if err != nil {
 		s.logger.Warn(ctx, "failed to fetch held card names, proceeding with empty", observability.Err(err))
 		heldCards = nil
+		contextFailures++
 	}
 
 	watchlist, err := s.repo.GetActiveWatchlist(ctx)
 	if err != nil {
 		s.logger.Warn(ctx, "failed to fetch active watchlist, proceeding with empty", observability.Err(err))
 		watchlist = nil
+		contextFailures++
+	}
+
+	if contextFailures == 3 {
+		return fmt.Errorf("all context sources failed; aborting to avoid context-free picks")
 	}
 
 	s.logger.Info(ctx, "picks context gathered",
@@ -98,7 +107,10 @@ func (s *service) GenerateDailyPicks(ctx context.Context) error {
 	s.logger.Info(ctx, "candidates generated", observability.Int("count", len(candidates)))
 
 	// --- Stage 3: LLM scoring & ranking ---
-	scoringPrompt := BuildScoringPrompt(candidates, profile)
+	scoringPrompt, err := BuildScoringPrompt(candidates, profile)
+	if err != nil {
+		return fmt.Errorf("build scoring prompt: %w", err)
+	}
 	scoredRaw, err := s.callLLM(ctx, scoringPrompt)
 	if err != nil {
 		return fmt.Errorf("%w: scoring: %w", ErrLLMFailure, err)
@@ -150,13 +162,13 @@ func (s *service) GenerateDailyPicks(ctx context.Context) error {
 	}
 
 	// --- Update watchlist assessments for matched items ---
-	s.updateWatchlistAssessments(ctx, picks, watchlist)
+	s.updateWatchlistAssessments(ctx, watchlist)
 
 	return nil
 }
 
 // updateWatchlistAssessments links saved picks back to watchlist items by card name.
-func (s *service) updateWatchlistAssessments(ctx context.Context, _ []Pick, watchlist []WatchlistItem) {
+func (s *service) updateWatchlistAssessments(ctx context.Context, watchlist []WatchlistItem) {
 	if len(watchlist) == 0 {
 		return
 	}
@@ -196,18 +208,18 @@ func normalizeCardKey(cardName, setName, grade string) string {
 
 // callLLM streams a completion from the LLM and returns the full response text.
 func (s *service) callLLM(ctx context.Context, systemPrompt string) (string, error) {
-	var response string
+	var sb strings.Builder
 	err := s.llm.StreamCompletion(ctx, ai.CompletionRequest{
 		SystemPrompt: systemPrompt,
 		Messages:     []ai.Message{{Role: ai.RoleUser, Content: "Generate the recommendations now."}},
 		MaxTokens:    4096,
 	}, func(chunk ai.CompletionChunk) {
-		response += chunk.Delta
+		sb.WriteString(chunk.Delta)
 	})
 	if err != nil {
 		return "", fmt.Errorf("LLM call failed: %w", err)
 	}
-	return response, nil
+	return sb.String(), nil
 }
 
 // retryWithFix sends the malformed response back as an assistant message and
@@ -215,7 +227,7 @@ func (s *service) callLLM(ctx context.Context, systemPrompt string) (string, err
 func (s *service) retryWithFix(ctx context.Context, systemPrompt, badResponse string) (string, error) {
 	const fixPrompt = "Your previous response was not valid JSON. Please return ONLY a valid JSON array with no markdown fences or extra text."
 
-	var response string
+	var sb strings.Builder
 	err := s.llm.StreamCompletion(ctx, ai.CompletionRequest{
 		SystemPrompt: systemPrompt,
 		Messages: []ai.Message{
@@ -225,12 +237,12 @@ func (s *service) retryWithFix(ctx context.Context, systemPrompt, badResponse st
 		},
 		MaxTokens: 4096,
 	}, func(chunk ai.CompletionChunk) {
-		response += chunk.Delta
+		sb.WriteString(chunk.Delta)
 	})
 	if err != nil {
 		return "", fmt.Errorf("LLM retry call failed: %w", err)
 	}
-	return response, nil
+	return sb.String(), nil
 }
 
 // GetLatestPicks returns the most recent set of picks.

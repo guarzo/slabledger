@@ -270,7 +270,12 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	// Initialize Card Ladder
 	var clEncryptor crypto.Encryptor
 	if cfg.Auth.EncryptionKey != "" {
-		clEncryptor, _ = crypto.NewAESEncryptor(cfg.Auth.EncryptionKey)
+		var encErr error
+		clEncryptor, encErr = crypto.NewAESEncryptor(cfg.Auth.EncryptionKey)
+		if encErr != nil {
+			logger.Warn(ctx, "Card Ladder encryptor initialization failed, token persistence disabled",
+				observability.Err(encErr))
+		}
 	}
 	clClient, clAuth, clStore := initializeCardLadder(ctx, logger, db, clEncryptor)
 	var clHandler *handlers.CardLadderHandler
@@ -329,6 +334,11 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		CardLadderStore:      clStore,
 		CardLadderSalesStore: clSalesStore,
 	})
+
+	// Wire Card Ladder manual refresh into the handler
+	if clHandler != nil && schedulerResult.CardLadderRefresh != nil {
+		clHandler.SetRefresher(schedulerResult.CardLadderRefresh)
+	}
 
 	// Create price hints handler
 	priceHintsHandler := handlers.NewPriceHintsHandler(cardIDMappingRepo, logger)

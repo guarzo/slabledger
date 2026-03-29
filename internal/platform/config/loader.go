@@ -331,7 +331,7 @@ func FromEnv(base Config) Config {
 		cfg.CardLadder.Enabled = parseBool(v, false)
 	}
 	if v := os.Getenv("CARDLADDER_REFRESH_HOUR"); v != "" {
-		if i, err := strconv.Atoi(v); err == nil && i >= 0 && i <= 23 {
+		if i, err := strconv.Atoi(v); err == nil && i >= -1 && i <= 23 {
 			cfg.CardLadder.RefreshHour = i
 		}
 	}

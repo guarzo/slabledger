@@ -27,9 +27,7 @@ func NewPicksRefreshScheduler(
 	logger observability.Logger,
 	cfg config.PicksRefreshConfig,
 ) *PicksRefreshScheduler {
-	if cfg.Interval <= 0 {
-		cfg.Interval = 24 * time.Hour
-	}
+	cfg.ApplyDefaults()
 	return &PicksRefreshScheduler{
 		StopHandle: NewStopHandle(),
 		generator:  generator,

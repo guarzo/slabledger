@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
@@ -52,13 +53,23 @@ func (h *SalesCompsHandler) HandleGetSalesComps(w http.ResponseWriter, r *http.R
 	// Look up the purchase to get its cert number.
 	purchase, err := h.campService.GetPurchase(r.Context(), purchaseID)
 	if err != nil {
-		writeError(w, http.StatusNotFound, "purchase not found")
+		if errors.Is(err, campaigns.ErrPurchaseNotFound) {
+			writeError(w, http.StatusNotFound, "purchase not found")
+			return
+		}
+		h.logger.Error(r.Context(), "failed to get purchase", observability.Err(err))
+		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
 
 	// Look up the CL mapping to get gemRateID.
 	mapping, err := h.mappingStore.GetMapping(r.Context(), purchase.CertNumber)
-	if err != nil || mapping == nil || mapping.CLGemRateID == "" {
+	if err != nil {
+		h.logger.Error(r.Context(), "failed to get CL mapping", observability.String("cert", purchase.CertNumber), observability.Err(err))
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	if mapping == nil || mapping.CLGemRateID == "" {
 		writeJSON(w, http.StatusOK, []saleCompResponse{})
 		return
 	}

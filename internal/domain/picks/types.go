@@ -41,20 +41,20 @@ const (
 )
 
 type Pick struct {
-	ID                int            `json:"id"`
-	Date              time.Time      `json:"date"`
-	CardName          string         `json:"card_name"`
-	SetName           string         `json:"set_name"`
-	Grade             string         `json:"grade"`
-	Direction         Direction      `json:"direction"`
-	Confidence        Confidence     `json:"confidence"`
-	BuyThesis         string         `json:"buy_thesis"`
-	TargetBuyPrice    int            `json:"target_buy_price"`
-	ExpectedSellPrice int            `json:"expected_sell_price"`
-	Signals           []Signal       `json:"signals"`
-	Rank              int            `json:"rank"`
-	Source            PickSource     `json:"source"`
-	CreatedAt         time.Time      `json:"created_at"`
+	ID                int        `json:"id"`
+	Date              time.Time  `json:"date"`
+	CardName          string     `json:"card_name"`
+	SetName           string     `json:"set_name"`
+	Grade             string     `json:"grade"`
+	Direction         Direction  `json:"direction"`
+	Confidence        Confidence `json:"confidence"`
+	BuyThesis         string     `json:"buy_thesis"`
+	TargetBuyPrice    int        `json:"target_buy_price"`
+	ExpectedSellPrice int        `json:"expected_sell_price"`
+	Signals           []Signal   `json:"signals"`
+	Rank              int        `json:"rank"`
+	Source            PickSource `json:"source"`
+	CreatedAt         time.Time  `json:"created_at"`
 }
 
 type Signal struct {

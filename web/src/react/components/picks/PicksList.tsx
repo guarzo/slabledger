@@ -5,7 +5,10 @@
  */
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../../js/api';
+import { currency } from '../../utils/formatters';
 import type { Pick, Signal } from '../../../types/picks';
+
+const glassStyle = { background: 'var(--glass-bg)', backdropFilter: 'blur(12px)' } as const;
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
@@ -43,10 +46,6 @@ function signalChipClass(direction: Signal['direction']): string {
   }
 }
 
-function formatUSD(cents: number): string {
-  return `$${(cents / 100).toFixed(2)}`;
-}
-
 /* ------------------------------------------------------------------ */
 /*  Sub-components                                                     */
 /* ------------------------------------------------------------------ */
@@ -60,7 +59,7 @@ function PickCard({ pick }: { pick: Pick }) {
   return (
     <div
       className="p-4 rounded-xl border border-[var(--surface-2)]/50 space-y-3"
-      style={{ background: 'var(--glass-bg)', backdropFilter: 'blur(12px)' }}
+      style={glassStyle}
     >
       {/* Header row */}
       <div className="flex items-start justify-between gap-3">
@@ -99,15 +98,17 @@ function PickCard({ pick }: { pick: Pick }) {
       <div className="flex items-center gap-4 text-xs">
         <div>
           <span className="text-[var(--text-muted)]">Target buy </span>
-          <span className="font-semibold text-[var(--text)]">{formatUSD(pick.target_buy_price)}</span>
+          <span className="font-semibold text-[var(--text)]">{currency(pick.target_buy_price)}</span>
         </div>
         <div>
           <span className="text-[var(--text-muted)]">Expected sell </span>
-          <span className="font-semibold text-[var(--text)]">{formatUSD(pick.expected_sell_price)}</span>
+          <span className="font-semibold text-[var(--text)]">{currency(pick.expected_sell_price)}</span>
         </div>
         {margin !== null && (
           <div>
-            <span className="font-semibold text-emerald-400">+{margin}% margin</span>
+            <span className={`font-semibold ${Number(margin) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+              {Number(margin) >= 0 ? '+' : ''}{margin}% margin
+            </span>
           </div>
         )}
       </div>
@@ -148,7 +149,7 @@ export default function PicksList() {
           <div
             key={n}
             className="h-28 rounded-xl animate-pulse border border-[var(--surface-2)]/40"
-            style={{ background: 'var(--glass-bg)' }}
+            style={glassStyle}
           />
         ))}
       </div>
@@ -157,7 +158,7 @@ export default function PicksList() {
 
   if (isError) {
     return (
-      <div className="p-4 rounded-xl border border-red-500/30 bg-red-500/10 text-sm text-red-400">
+      <div className="p-4 rounded-xl border border-[var(--danger-border)] bg-[var(--danger-bg)] text-sm text-[var(--danger)]">
         Failed to load picks. Please try again later.
       </div>
     );
@@ -169,7 +170,7 @@ export default function PicksList() {
     return (
       <div
         className="p-6 rounded-xl border border-[var(--surface-2)]/50 text-center text-sm text-[var(--text-muted)]"
-        style={{ background: 'var(--glass-bg)', backdropFilter: 'blur(12px)' }}
+        style={glassStyle}
       >
         No picks available yet. Check back after the daily AI analysis runs.
       </div>

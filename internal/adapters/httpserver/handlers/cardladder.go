@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
@@ -8,12 +9,23 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
+// CLRefresher runs a Card Ladder value refresh cycle on demand.
+type CLRefresher interface {
+	RunOnce(ctx context.Context) error
+}
+
 // CardLadderHandler manages Card Ladder admin endpoints.
 type CardLadderHandler struct {
-	store  *sqlite.CardLadderStore
-	client *cardladder.Client
-	auth   *cardladder.FirebaseAuth
-	logger observability.Logger
+	store     *sqlite.CardLadderStore
+	client    *cardladder.Client
+	auth      *cardladder.FirebaseAuth
+	refresher CLRefresher
+	logger    observability.Logger
+}
+
+// SetRefresher injects the refresh trigger after scheduler construction.
+func (h *CardLadderHandler) SetRefresher(r CLRefresher) {
+	h.refresher = r
 }
 
 // NewCardLadderHandler creates a new Card Ladder admin handler.
@@ -44,7 +56,7 @@ func (h *CardLadderHandler) HandleSaveConfig(w http.ResponseWriter, r *http.Requ
 	authResp, err := tempAuth.Login(r.Context(), req.Email, req.Password)
 	if err != nil {
 		h.logger.Error(r.Context(), "Card Ladder Firebase login failed", observability.Err(err))
-		writeError(w, http.StatusUnauthorized, "Firebase authentication failed: "+err.Error())
+		writeError(w, http.StatusUnauthorized, "Firebase authentication failed")
 		return
 	}
 
@@ -90,5 +102,14 @@ func (h *CardLadderHandler) HandleStatus(w http.ResponseWriter, r *http.Request)
 
 // HandleRefresh triggers a manual CL value sync.
 func (h *CardLadderHandler) HandleRefresh(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]string{"status": "refresh triggered"})
+	if h.refresher == nil {
+		writeError(w, http.StatusServiceUnavailable, "Card Ladder refresh scheduler not available")
+		return
+	}
+	if err := h.refresher.RunOnce(r.Context()); err != nil {
+		h.logger.Error(r.Context(), "manual CL refresh failed", observability.Err(err))
+		writeError(w, http.StatusInternalServerError, "refresh failed")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "refresh complete"})
 }

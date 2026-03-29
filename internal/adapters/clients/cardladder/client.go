@@ -183,7 +183,10 @@ func (c *Client) getToken(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("refresh token: %w", err)
 	}
 
-	expSec, _ := strconv.Atoi(resp.ExpiresIn)
+	expSec, err := strconv.Atoi(resp.ExpiresIn)
+	if err != nil || expSec <= 0 {
+		expSec = 3600
+	}
 	c.token = TokenState{
 		IDToken:   resp.IDToken,
 		ExpiresAt: time.Now().Add(time.Duration(expSec) * time.Second),

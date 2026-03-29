@@ -68,7 +68,7 @@ type RouterConfig struct {
 	InstagramHandler          *handlers.InstagramHandler  // Instagram publishing; nil = disabled
 	AIStatusHandler           *handlers.AIStatusHandler   // AI usage stats; nil = disabled
 	PriceFlagsHandler         *handlers.PriceFlagsHandler // Price flag admin; nil = disabled
-	CardLadderHandler         *handlers.CardLadderHandler  // Card Ladder admin; nil = disabled
+	CardLadderHandler         *handlers.CardLadderHandler // Card Ladder admin; nil = disabled
 	SalesCompsHandler         *handlers.SalesCompsHandler // Sales comps; nil = disabled
 	PicksHandler              *handlers.PicksHandler      // AI picks; nil = disabled
 	Logger                    observability.Logger

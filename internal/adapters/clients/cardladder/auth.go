@@ -82,7 +82,7 @@ func (a *FirebaseAuth) Login(ctx context.Context, email, password string) (*Fire
 		return nil, fmt.Errorf("read login response: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("firebase login failed (status %d): %s", resp.StatusCode, respBody)
+		return nil, fmt.Errorf("firebase login failed (status %d)", resp.StatusCode)
 	}
 
 	var authResp FirebaseAuthResponse
@@ -120,7 +120,7 @@ func (a *FirebaseAuth) RefreshToken(ctx context.Context, refreshToken string) (*
 		return nil, fmt.Errorf("read refresh response: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("firebase refresh failed (status %d): %s", resp.StatusCode, respBody)
+		return nil, fmt.Errorf("firebase refresh failed (status %d)", resp.StatusCode)
 	}
 
 	var refreshResp FirebaseRefreshResponse

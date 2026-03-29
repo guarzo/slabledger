@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"math"
 
@@ -56,11 +57,7 @@ func (p *ProfitabilityProvider) GetProfitablePatterns(ctx context.Context) (pick
 	// ProfitablePriceTiers intentionally left empty for MVP.
 
 	if len(errs) > 0 {
-		combined := errs[0]
-		for _, e := range errs[1:] {
-			combined = fmt.Errorf("%w; %v", combined, e)
-		}
-		return profile, combined
+		return profile, errors.Join(errs...)
 	}
 	return profile, nil
 }

@@ -4,7 +4,6 @@ import (
 	"context"
 	"regexp"
 	"strconv"
-	"sync"
 	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
@@ -27,6 +26,7 @@ type CardLadderValueUpdater interface {
 
 // CardLadderRefreshScheduler refreshes CL values from the Card Ladder API daily.
 type CardLadderRefreshScheduler struct {
+	StopHandle
 	client         *cardladder.Client
 	store          *sqlite.CardLadderStore
 	purchaseLister CardLadderPurchaseLister
@@ -35,9 +35,6 @@ type CardLadderRefreshScheduler struct {
 	salesStore     *sqlite.CLSalesStore
 	logger         observability.Logger
 	config         config.CardLadderConfig
-
-	stopChan chan struct{}
-	wg       sync.WaitGroup
 }
 
 // NewCardLadderRefreshScheduler creates a new CL refresh scheduler.
@@ -51,7 +48,9 @@ func NewCardLadderRefreshScheduler(
 	logger observability.Logger,
 	cfg config.CardLadderConfig,
 ) *CardLadderRefreshScheduler {
+	cfg.ApplyDefaults()
 	return &CardLadderRefreshScheduler{
+		StopHandle:     NewStopHandle(),
 		client:         client,
 		store:          store,
 		purchaseLister: purchaseLister,
@@ -60,7 +59,6 @@ func NewCardLadderRefreshScheduler(
 		salesStore:     salesStore,
 		logger:         logger,
 		config:         cfg,
-		stopChan:       make(chan struct{}),
 	}
 }
 
@@ -71,48 +69,17 @@ func (s *CardLadderRefreshScheduler) Start(ctx context.Context) {
 		return
 	}
 
-	s.wg.Add(1)
-	go func() {
-		defer s.wg.Done()
-		s.logger.Info(ctx, "Card Ladder refresh scheduler started",
-			observability.Int("refreshHour", s.config.RefreshHour))
-
-		// Calculate initial delay to target hour
-		delay := timeUntilHour(time.Now(), s.config.RefreshHour)
-		select {
-		case <-time.After(delay):
-		case <-s.stopChan:
-			return
-		case <-ctx.Done():
-			return
-		}
-
-		// Run first tick
+	RunLoop(ctx, LoopConfig{
+		Name:         "card-ladder-refresh",
+		Interval:     s.config.Interval,
+		InitialDelay: timeUntilHour(time.Now(), s.config.RefreshHour),
+		WG:           s.WG(),
+		StopChan:     s.Done(),
+		Logger:       s.logger,
+		LogFields:    []observability.Field{observability.Int("refreshHour", s.config.RefreshHour)},
+	}, func(ctx context.Context) {
 		s.runOnce(ctx) //nolint:errcheck
-
-		ticker := time.NewTicker(s.config.Interval)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				s.runOnce(ctx) //nolint:errcheck
-			case <-s.stopChan:
-				return
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
-}
-
-// Stop signals the scheduler to shut down.
-func (s *CardLadderRefreshScheduler) Stop() {
-	close(s.stopChan)
-}
-
-// Wait blocks until the scheduler goroutine exits.
-func (s *CardLadderRefreshScheduler) Wait() {
-	s.wg.Wait()
+	})
 }
 
 // RunOnce runs a single refresh cycle. Exported for manual trigger.
@@ -121,6 +88,7 @@ func (s *CardLadderRefreshScheduler) RunOnce(ctx context.Context) error {
 }
 
 var certFromImageRe = regexp.MustCompile(`/cert/(\d+)/`)
+var gradeDigitsRe = regexp.MustCompile(`(\d+)`)
 
 func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 	cfg, err := s.store.GetConfig(ctx)
@@ -226,7 +194,7 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 		// Record history
 		if s.clRecorder != nil {
 			gradeValue := extractGradeValue(card.Condition)
-			_ = s.clRecorder.RecordCLValue(ctx, campaigns.CLValueEntry{
+			if err := s.clRecorder.RecordCLValue(ctx, campaigns.CLValueEntry{
 				CertNumber:      purchase.CertNumber,
 				CardName:        purchase.CardName,
 				SetName:         purchase.SetName,
@@ -235,14 +203,18 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 				CLValueCents:    newCLCents,
 				ObservationDate: today,
 				Source:          "api_sync",
-			})
+			}); err != nil {
+				s.logger.Debug(ctx, "CL refresh: failed to record CL value history",
+					observability.String("cert", purchase.CertNumber),
+					observability.Err(err))
+			}
 		}
 		updated++
 	}
 
 	// Phase 2: fetch sales comps for mapped cards with gemRateIDs
 	if s.salesStore != nil {
-		s.refreshSalesComps(ctx)
+		s.refreshSalesComps(ctx, existingMappings)
 	}
 
 	s.logger.Info(ctx, "CL refresh: complete",
@@ -253,13 +225,7 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 	return nil
 }
 
-func (s *CardLadderRefreshScheduler) refreshSalesComps(ctx context.Context) {
-	mappings, err := s.store.ListMappings(ctx)
-	if err != nil {
-		s.logger.Error(ctx, "CL sales: failed to list mappings", observability.Err(err))
-		return
-	}
-
+func (s *CardLadderRefreshScheduler) refreshSalesComps(ctx context.Context, mappings []sqlite.CLCardMapping) {
 	fetched := 0
 	for _, m := range mappings {
 		if m.CLGemRateID == "" || m.CLCondition == "" {
@@ -281,12 +247,12 @@ func (s *CardLadderRefreshScheduler) refreshSalesComps(ctx context.Context) {
 		}
 
 		for _, comp := range resp.Hits {
-			priceCents := int(comp.Price * 100)
+			priceCents := mathutil.ToCentsInt(comp.Price)
 			saleDate := comp.Date
 			if len(saleDate) > 10 {
 				saleDate = saleDate[:10]
 			}
-			_ = s.salesStore.UpsertSaleComp(ctx, sqlite.CLSaleCompRecord{
+			if err := s.salesStore.UpsertSaleComp(ctx, sqlite.CLSaleCompRecord{
 				GemRateID:   comp.GemRateID,
 				ItemID:      comp.ItemID,
 				SaleDate:    saleDate,
@@ -296,7 +262,11 @@ func (s *CardLadderRefreshScheduler) refreshSalesComps(ctx context.Context) {
 				Seller:      comp.Seller,
 				ItemURL:     comp.URL,
 				SlabSerial:  comp.SlabSerial,
-			})
+			}); err != nil {
+				s.logger.Debug(ctx, "CL sales: upsert failed",
+					observability.String("itemId", comp.ItemID),
+					observability.Err(err))
+			}
 		}
 		fetched++
 	}
@@ -307,8 +277,7 @@ func (s *CardLadderRefreshScheduler) refreshSalesComps(ctx context.Context) {
 
 // extractGradeValue parses "PSA 9" or "g9" → 9.0
 func extractGradeValue(condition string) float64 {
-	re := regexp.MustCompile(`(\d+)`)
-	if m := re.FindString(condition); m != "" {
+	if m := gradeDigitsRe.FindString(condition); m != "" {
 		v, _ := strconv.ParseFloat(m, 64)
 		return v
 	}
