@@ -188,6 +188,8 @@ type Config struct {
 	SnapshotHistory  SnapshotHistoryConfig
 	AdvisorRefresh   AdvisorRefreshConfig
 	SocialContent    SocialContentConfig
+	PicksRefresh     PicksRefreshConfig
+	CardLadder       CardLadderConfig
 	Adapters         AdapterConfig
 }
 
@@ -237,4 +239,32 @@ type SocialContentConfig struct {
 	Interval     time.Duration // how often to run detection (default: 24h)
 	InitialDelay time.Duration // delay before first run (default: 5m)
 	ContentHour  int           // hour (0-23 UTC) to schedule runs; -1 = use InitialDelay (default: 5)
+}
+
+// PicksRefreshConfig controls the daily AI picks generation scheduler.
+type PicksRefreshConfig struct {
+	Enabled     bool
+	Interval    time.Duration // how often to run (default: 24h)
+	ContentHour int           // hour (0-23 UTC) to schedule runs; -1 = use default delay (default: 3)
+}
+
+// CardLadderConfig controls the Card Ladder value refresh scheduler.
+type CardLadderConfig struct {
+	Enabled     bool          // Enable CL refresh scheduler (default: false)
+	Interval    time.Duration // How often to run refresh (default: 24h)
+	RefreshHour int           // Hour (0-23 UTC) to schedule runs; -1 = use Interval (default: 4)
+}
+
+// ApplyDefaults sets zero-valued fields to sensible defaults.
+func (c *PicksRefreshConfig) ApplyDefaults() {
+	if c.Interval <= 0 {
+		c.Interval = 24 * time.Hour
+	}
+}
+
+// ApplyDefaults sets zero-valued fields to sensible defaults.
+func (c *CardLadderConfig) ApplyDefaults() {
+	if c.Interval <= 0 {
+		c.Interval = 24 * time.Hour
+	}
 }

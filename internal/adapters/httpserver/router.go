@@ -38,6 +38,9 @@ type Router struct {
 	instagramHandler          *handlers.InstagramHandler
 	aiUsageHandler            *handlers.AIStatusHandler
 	priceFlagsHandler         *handlers.PriceFlagsHandler
+	cardLadderHandler         *handlers.CardLadderHandler
+	salesCompsHandler         *handlers.SalesCompsHandler
+	picksHandler              *handlers.PicksHandler
 	pricingAPIKey             string
 	logger                    observability.Logger
 	databasePath              string
@@ -65,6 +68,9 @@ type RouterConfig struct {
 	InstagramHandler          *handlers.InstagramHandler  // Instagram publishing; nil = disabled
 	AIStatusHandler           *handlers.AIStatusHandler   // AI usage stats; nil = disabled
 	PriceFlagsHandler         *handlers.PriceFlagsHandler // Price flag admin; nil = disabled
+	CardLadderHandler         *handlers.CardLadderHandler // Card Ladder admin; nil = disabled
+	SalesCompsHandler         *handlers.SalesCompsHandler // Sales comps; nil = disabled
+	PicksHandler              *handlers.PicksHandler      // AI picks; nil = disabled
 	Logger                    observability.Logger
 	AdminEmails               []string
 	DatabasePath              string
@@ -142,6 +148,18 @@ func NewRouter(cfg RouterConfig) *Router {
 
 	if cfg.PriceFlagsHandler != nil {
 		rt.priceFlagsHandler = cfg.PriceFlagsHandler
+	}
+
+	if cfg.CardLadderHandler != nil {
+		rt.cardLadderHandler = cfg.CardLadderHandler
+	}
+
+	if cfg.SalesCompsHandler != nil {
+		rt.salesCompsHandler = cfg.SalesCompsHandler
+	}
+
+	if cfg.PicksHandler != nil {
+		rt.picksHandler = cfg.PicksHandler
 	}
 
 	if cfg.PricingAPIKey != "" && cfg.CampaignsRepo != nil {
@@ -300,6 +318,11 @@ func (rt *Router) Setup() http.Handler {
 			mux.Handle("GET /api/admin/price-flags", rt.authMW.RequireAdmin(http.HandlerFunc(rt.priceFlagsHandler.HandleListPriceFlags)))
 			mux.Handle("PATCH /api/admin/price-flags/{flagId}/resolve", rt.authMW.RequireAdmin(http.HandlerFunc(rt.priceFlagsHandler.HandleResolvePriceFlag)))
 		}
+		if rt.cardLadderHandler != nil {
+			mux.Handle("POST /api/admin/cardladder/config", rt.authMW.RequireAdmin(http.HandlerFunc(rt.cardLadderHandler.HandleSaveConfig)))
+			mux.Handle("GET /api/admin/cardladder/status", rt.authMW.RequireAdmin(http.HandlerFunc(rt.cardLadderHandler.HandleStatus)))
+			mux.Handle("POST /api/admin/cardladder/refresh", rt.authMW.RequireAdmin(http.HandlerFunc(rt.cardLadderHandler.HandleRefresh)))
+		}
 		rt.logger.Info(context.Background(), "admin routes registered")
 	}
 
@@ -391,6 +414,11 @@ func (rt *Router) Setup() http.Handler {
 		mux.Handle("PATCH /api/purchases/{purchaseId}/review-price", authRoute(rt.campaignsHandler.HandleSetReviewedPrice))
 		mux.Handle("POST /api/purchases/{purchaseId}/flag", authRoute(rt.campaignsHandler.HandleCreatePriceFlag))
 
+		// Sales comps endpoint
+		if rt.salesCompsHandler != nil {
+			mux.Handle("GET /api/purchases/{id}/sales-comps", authRoute(rt.salesCompsHandler.HandleGetSalesComps))
+		}
+
 		// Credit & Invoice endpoints
 		mux.Handle("GET /api/credit/summary", authRoute(rt.campaignsHandler.HandleCreditSummary))
 		mux.Handle("GET /api/credit/config", authRoute(rt.campaignsHandler.HandleGetCashflowConfig))
@@ -438,6 +466,9 @@ func (rt *Router) Setup() http.Handler {
 		mux.HandleFunc("/advisor", rt.spaHandler.HandleIndex)
 		rt.logger.Info(context.Background(), "AI advisor routes registered")
 	}
+
+	// AI Picks routes
+	rt.registerPicksRoutes(mux)
 
 	// Social content routes — require admin
 	if rt.socialHandler != nil && rt.authMW != nil {
@@ -488,6 +519,20 @@ func (rt *Router) Setup() http.Handler {
 	}
 
 	return mux
+}
+
+// registerPicksRoutes wires the AI picks and acquisition watchlist endpoints.
+func (rt *Router) registerPicksRoutes(mux *http.ServeMux) {
+	if rt.picksHandler == nil || rt.authMW == nil {
+		return
+	}
+	mux.Handle("GET /api/picks", rt.authMW.RequireAuth(http.HandlerFunc(rt.picksHandler.HandleGetPicks)))
+	mux.Handle("GET /api/picks/history", rt.authMW.RequireAuth(http.HandlerFunc(rt.picksHandler.HandleGetPickHistory)))
+	mux.Handle("GET /api/picks/watchlist", rt.authMW.RequireAuth(http.HandlerFunc(rt.picksHandler.HandleGetWatchlist)))
+	mux.Handle("POST /api/picks/watchlist", rt.authMW.RequireAuth(http.HandlerFunc(rt.picksHandler.HandleAddWatchlistItem)))
+	mux.Handle("DELETE /api/picks/watchlist/{id}", rt.authMW.RequireAuth(http.HandlerFunc(rt.picksHandler.HandleDeleteWatchlistItem)))
+	mux.HandleFunc("/opportunities", rt.spaHandler.HandleIndex)
+	rt.logger.Info(context.Background(), "picks routes registered")
 }
 
 // TrackedEndpoints lists the endpoints whose response times are recorded.

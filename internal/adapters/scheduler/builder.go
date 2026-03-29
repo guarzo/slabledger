@@ -1,6 +1,8 @@
 package scheduler
 
 import (
+	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
+	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
 	"github.com/guarzo/slabledger/internal/domain/advisor"
 	"github.com/guarzo/slabledger/internal/domain/ai"
 	"github.com/guarzo/slabledger/internal/domain/auth"
@@ -64,18 +66,31 @@ type BuildDeps struct {
 	// Social content dependencies (optional)
 	SocialContentDetector   SocialContentDetector
 	InstagramTokenRefresher InstagramTokenRefresher
+
+	// Picks generation dependencies (optional)
+	PicksGenerator PicksGenerator
+
+	// Card Ladder dependencies (optional)
+	CardLadderClient         *cardladder.Client
+	CardLadderStore          *sqlite.CardLadderStore
+	CardLadderPurchaseLister CardLadderPurchaseLister
+	CardLadderValueUpdater   CardLadderValueUpdater
+	CardLadderCLRecorder     domainCampaigns.CLValueHistoryRecorder
+	CardLadderSalesStore     *sqlite.CLSalesStore
 }
 
 // BuildResult holds the scheduler group and optional auxiliary references.
 type BuildResult struct {
-	Group          *Group
-	CardDiscoverer CardDiscoverer // nil if CardHedger batch is not configured
+	Group             *Group
+	CardDiscoverer    CardDiscoverer              // nil if CardHedger batch is not configured
+	CardLadderRefresh *CardLadderRefreshScheduler // nil if Card Ladder is not configured
 }
 
 // BuildGroup constructs a scheduler Group from centralized configuration and dependencies.
 func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 	var schedulers []Scheduler
 	var cardDiscoverer CardDiscoverer
+	var clRefresh *CardLadderRefreshScheduler
 
 	// Price refresh scheduler
 	schedulerConfig := Config{
@@ -234,8 +249,28 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 		))
 	}
 
+	// Picks refresh scheduler (if generator is provided)
+	if deps.PicksGenerator != nil {
+		schedulers = append(schedulers, NewPicksRefreshScheduler(
+			deps.PicksGenerator, deps.Logger, cfg.PicksRefresh,
+		))
+	}
+
+	// Card Ladder value refresh scheduler (if client + store are provided)
+	if deps.CardLadderClient != nil && deps.CardLadderStore != nil && deps.CardLadderPurchaseLister != nil && deps.CardLadderValueUpdater != nil {
+		clRefresh = NewCardLadderRefreshScheduler(
+			deps.CardLadderClient, deps.CardLadderStore,
+			deps.CardLadderPurchaseLister, deps.CardLadderValueUpdater,
+			deps.CardLadderCLRecorder,
+			deps.CardLadderSalesStore,
+			deps.Logger, cfg.CardLadder,
+		)
+		schedulers = append(schedulers, clRefresh)
+	}
+
 	return BuildResult{
-		Group:          NewGroup(schedulers...),
-		CardDiscoverer: cardDiscoverer,
+		Group:             NewGroup(schedulers...),
+		CardDiscoverer:    cardDiscoverer,
+		CardLadderRefresh: clRefresh,
 	}
 }

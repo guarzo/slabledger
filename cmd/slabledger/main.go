@@ -25,146 +25,11 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
 	"github.com/guarzo/slabledger/internal/domain/ai"
 	"github.com/guarzo/slabledger/internal/domain/auth"
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
 	"github.com/guarzo/slabledger/internal/domain/favorites"
+	"github.com/guarzo/slabledger/internal/domain/picks"
 	"github.com/guarzo/slabledger/internal/platform/cache"
 	"github.com/guarzo/slabledger/internal/platform/crypto"
 )
-
-// favoritesListAdapter adapts sqlite.FavoritesRepository to the scheduler.FavoritesLister interface.
-type favoritesListAdapter struct {
-	repo *sqlite.FavoritesRepository
-}
-
-func (a *favoritesListAdapter) ListAllDistinctCards(ctx context.Context) ([]scheduler.FavoriteCard, error) {
-	cards, err := a.repo.ListAllDistinctCards(ctx)
-	if err != nil {
-		return nil, err
-	}
-	result := make([]scheduler.FavoriteCard, len(cards))
-	for i, c := range cards {
-		result[i] = scheduler.FavoriteCard{
-			CardName:   c.CardName,
-			SetName:    c.SetName,
-			CardNumber: c.CardNumber,
-		}
-	}
-	return result, nil
-}
-
-// inventoryListAdapter adapts sqlite.CampaignsRepository to the scheduler.InventoryLister interface.
-type inventoryListAdapter struct {
-	repo *sqlite.CampaignsRepository
-}
-
-func (a *inventoryListAdapter) ListUnsoldInventory(ctx context.Context) ([]scheduler.InventoryPurchase, error) {
-	purchases, err := a.repo.ListAllUnsoldPurchases(ctx)
-	if err != nil {
-		return nil, err
-	}
-	result := make([]scheduler.InventoryPurchase, len(purchases))
-	for i, p := range purchases {
-		result[i] = scheduler.InventoryPurchase{
-			ID:              p.ID,
-			CardName:        p.CardName,
-			CardNumber:      p.CardNumber,
-			SetName:         p.SetName,
-			GradeValue:      p.GradeValue,
-			Grader:          p.Grader,
-			BuyCostCents:    p.BuyCostCents,
-			CLValueCents:    p.CLValueCents,
-			PSAListingTitle: p.PSAListingTitle,
-			SnapshotDate:    p.SnapshotDate,
-		}
-	}
-	return result, nil
-}
-
-// snapshotRefreshAdapter adapts campaigns.Service to the scheduler.SnapshotRefresher interface.
-type snapshotRefreshAdapter struct {
-	svc campaigns.Service
-}
-
-func (a *snapshotRefreshAdapter) RefreshSnapshot(ctx context.Context, p scheduler.InventoryPurchase) bool {
-	return a.svc.RefreshPurchaseSnapshot(ctx, p.ID, campaigns.CardIdentity{
-		CardName: p.CardName, CardNumber: p.CardNumber, SetName: p.SetName, PSAListingTitle: p.PSAListingTitle,
-	}, p.GradeValue, p.CLValueCents)
-}
-
-// campaignCardListAdapter adapts sqlite.CampaignsRepository to the scheduler.CampaignCardLister interface.
-type campaignCardListAdapter struct {
-	repo *sqlite.CampaignsRepository
-}
-
-func (a *campaignCardListAdapter) ListUnsoldCards(ctx context.Context) ([]scheduler.UnsoldCard, error) {
-	infos, err := a.repo.ListUnsoldCards(ctx)
-	if err != nil {
-		return nil, err
-	}
-	result := make([]scheduler.UnsoldCard, len(infos))
-	for i, info := range infos {
-		result[i] = scheduler.UnsoldCard{CardName: info.CardName, SetName: info.SetName, CardNumber: info.CardNumber}
-	}
-	return result, nil
-}
-
-// cardIDMappingListAdapter adapts sqlite.CardIDMappingRepository to the scheduler.CardIDMappingLister interface.
-type cardIDMappingListAdapter struct {
-	repo *sqlite.CardIDMappingRepository
-}
-
-func (a *cardIDMappingListAdapter) ListByProvider(ctx context.Context, provider string) ([]scheduler.CardIDMapping, error) {
-	mappings, err := a.repo.ListByProvider(ctx, provider)
-	if err != nil {
-		return nil, err
-	}
-	result := make([]scheduler.CardIDMapping, len(mappings))
-	for i, m := range mappings {
-		result[i] = scheduler.CardIDMapping{
-			CardName:        m.CardName,
-			SetName:         m.SetName,
-			CollectorNumber: m.CollectorNumber,
-			ExternalID:      m.ExternalID,
-		}
-	}
-	return result, nil
-}
-
-// --- PSA image backfill adapters ---
-
-type psaImageListerAdapter struct {
-	repo *sqlite.CampaignsRepository
-}
-
-func (a *psaImageListerAdapter) ListPurchasesMissingImages(ctx context.Context, limit int) ([]psa.PurchaseImageRow, error) {
-	rows, err := a.repo.ListPurchasesMissingImages(ctx, limit)
-	if err != nil {
-		return nil, err
-	}
-	result := make([]psa.PurchaseImageRow, len(rows))
-	for i, r := range rows {
-		result[i] = psa.PurchaseImageRow{ID: r.ID, CertNumber: r.CertNumber}
-	}
-	return result, nil
-}
-
-type psaImageUpdaterAdapter struct {
-	repo *sqlite.CampaignsRepository
-}
-
-func (a *psaImageUpdaterAdapter) UpdatePurchaseImageURLs(ctx context.Context, id, frontURL, backURL string) error {
-	return a.repo.UpdatePurchaseImageURLs(ctx, id, frontURL, backURL)
-}
-
-// newCardDiscovererAdapter returns the scheduler.CardDiscoverer directly as a
-// handlers.CardDiscoverer. Both interfaces now use campaigns.CardIdentity, so no
-// conversion is needed — the scheduler type satisfies the handler interface.
-func newCardDiscovererAdapter(d scheduler.CardDiscoverer) handlers.CardDiscoverer {
-	if d == nil {
-		return nil
-	}
-	return d
-}
 
 // initLogger creates a new logger with the specified level and format
 func initLogger(level string, jsonFormat bool) observability.Logger {
@@ -402,6 +267,34 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		ctx, cfg, logger, db, azureAIClient, aiCallRepo,
 	)
 
+	// Initialize Card Ladder
+	var clEncryptor crypto.Encryptor
+	if cfg.Auth.EncryptionKey != "" {
+		var encErr error
+		clEncryptor, encErr = crypto.NewAESEncryptor(cfg.Auth.EncryptionKey)
+		if encErr != nil {
+			logger.Warn(ctx, "Card Ladder encryptor initialization failed, token persistence disabled",
+				observability.Err(encErr))
+		}
+	}
+	clClient, _, clStore := initializeCardLadder(ctx, logger, db, clEncryptor)
+	var clHandler *handlers.CardLadderHandler
+	var salesCompsHandler *handlers.SalesCompsHandler
+	var clSalesStore *sqlite.CLSalesStore
+	if clStore != nil {
+		clHandler = handlers.NewCardLadderHandler(clStore, clClient, logger)
+		clSalesStore = sqlite.NewCLSalesStore(db.DB)
+		salesCompsHandler = handlers.NewSalesCompsHandler(clSalesStore, clStore, campaignsService, logger)
+	}
+
+	// Initialize picks
+	picksRepo := sqlite.NewPicksRepository(db.DB)
+	profitabilityProv := sqlite.NewProfitabilityProvider(db.DB)
+	inventoryProv := sqlite.NewInventoryProvider(db.DB)
+
+	picksService := picks.NewService(picksRepo, azureAIClient, profitabilityProv, inventoryProv, logger)
+	picksHandler := handlers.NewPicksHandler(picksService, logger)
+
 	// Create cert sweeper for periodic cert→card_id resolution in the CardHedger batch scheduler.
 	var certSweeper scheduler.CertSweeper
 	if cardHedgerClientImpl.Available() {
@@ -432,7 +325,16 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		SocialService:        socialService,
 		IGTokenRefresher:     igTokenRefresher,
 		CertSweeper:          certSweeper,
+		PicksService:         picksService,
+		CardLadderClient:     clClient,
+		CardLadderStore:      clStore,
+		CardLadderSalesStore: clSalesStore,
 	})
+
+	// Wire Card Ladder manual refresh into the handler
+	if clHandler != nil && schedulerResult.CardLadderRefresh != nil {
+		clHandler.SetRefresher(schedulerResult.CardLadderRefresh)
+	}
 
 	// Create price hints handler
 	priceHintsHandler := handlers.NewPriceHintsHandler(cardIDMappingRepo, logger)
@@ -526,6 +428,9 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		InstagramHandler:          igHandler,
 		AIStatusHandler:           aiStatusHandler,
 		PriceFlagsHandler:         priceFlagsHandler,
+		CardLadderHandler:         clHandler,
+		SalesCompsHandler:         salesCompsHandler,
+		PicksHandler:              picksHandler,
 	}
 	serverErr := startWebServer(ctx, deps)
 

@@ -4,12 +4,14 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/guarzo/slabledger/internal/adapters/advisortool"
 	"github.com/guarzo/slabledger/internal/adapters/clients/azureai"
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardhedger"
+	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
 	"github.com/guarzo/slabledger/internal/adapters/clients/fusionprice"
 	igclient "github.com/guarzo/slabledger/internal/adapters/clients/instagram"
 	"github.com/guarzo/slabledger/internal/adapters/clients/pricecharting"
@@ -24,6 +26,7 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/campaigns"
 	"github.com/guarzo/slabledger/internal/domain/fusion"
 	"github.com/guarzo/slabledger/internal/domain/observability"
+	"github.com/guarzo/slabledger/internal/domain/picks"
 	"github.com/guarzo/slabledger/internal/domain/social"
 	"github.com/guarzo/slabledger/internal/platform/cache"
 	"github.com/guarzo/slabledger/internal/platform/config"
@@ -256,6 +259,43 @@ func initializeSocialService(
 	return socialService, socialRepo, igClient, igStore, igTokenRefresher
 }
 
+// initializeCardLadder creates the Card Ladder client, auth, and store.
+// Returns nil values if encryption key is not configured.
+func initializeCardLadder(
+	ctx context.Context,
+	logger observability.Logger,
+	db *sqlite.DB,
+	encryptor crypto.Encryptor,
+) (*cardladder.Client, *cardladder.FirebaseAuth, *sqlite.CardLadderStore) {
+	if encryptor == nil {
+		logger.Info(ctx, "Card Ladder disabled: encryption key not configured")
+		return nil, nil, nil
+	}
+
+	store := sqlite.NewCardLadderStore(db.DB, encryptor)
+
+	// Try to load existing config to set up the client
+	clCfg, err := store.GetConfig(ctx)
+	if err != nil {
+		logger.Warn(ctx, "failed to load Card Ladder config", observability.Err(err))
+	}
+
+	if clCfg == nil {
+		logger.Info(ctx, "Card Ladder not configured; use POST /api/admin/cardladder/config to set up")
+		return nil, nil, store
+	}
+
+	fbAuth := cardladder.NewFirebaseAuth(clCfg.FirebaseAPIKey)
+	client := cardladder.NewClient(
+		cardladder.WithTokenManager(fbAuth, clCfg.RefreshToken, time.Time{}),
+	)
+	logger.Info(ctx, "Card Ladder client initialized",
+		observability.Bool("hasEmail", clCfg.Email != ""),
+		observability.String("collectionId", clCfg.CollectionID))
+
+	return client, fbAuth, store
+}
+
 // schedulerDeps bundles all dependencies needed by initializeSchedulers.
 type schedulerDeps struct {
 	Config               *config.Config
@@ -277,6 +317,10 @@ type schedulerDeps struct {
 	SocialService        social.Service
 	IGTokenRefresher     scheduler.InstagramTokenRefresher
 	CertSweeper          scheduler.CertSweeper
+	PicksService         picks.Service
+	CardLadderClient     *cardladder.Client
+	CardLadderStore      *sqlite.CardLadderStore
+	CardLadderSalesStore *sqlite.CLSalesStore
 }
 
 // initializeSchedulers builds and starts the scheduler group, returning the
@@ -284,34 +328,41 @@ type schedulerDeps struct {
 func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.BuildResult, context.CancelFunc) {
 	schedulerCtx, cancelScheduler := context.WithCancel(ctx)
 	schedulerResult := scheduler.BuildGroup(deps.Config, scheduler.BuildDeps{
-		PriceRepo:               deps.PriceRepo,
-		APITracker:              deps.PriceRepo,
-		HealthChecker:           deps.PriceRepo,
-		AccessTracker:           deps.PriceRepo,
-		PriceProvider:           deps.PriceProvImpl,
-		CardProvider:            deps.CardProvImpl,
-		AuthService:             deps.AuthService,
-		Logger:                  deps.Logger,
-		CardHedgerClient:        deps.CardHedgerClientImpl,
-		SyncStateStore:          deps.SyncStateRepo,
-		CardIDMappingLookup:     deps.CardIDMappingRepo,
-		CardIDMappingLister:     &cardIDMappingListAdapter{repo: deps.CardIDMappingRepo},
-		CardIDMappingSaver:      deps.CardIDMappingRepo,
-		DiscoveryFailureTracker: deps.DiscoveryFailureRepo,
-		FavoritesLister:         &favoritesListAdapter{repo: deps.FavoritesRepo},
-		CampaignCardLister:      &campaignCardListAdapter{repo: deps.CampaignsRepo},
-		NewSetsProvider:         deps.CardProvImpl.RegistryManager(),
-		InventoryLister:         &inventoryListAdapter{repo: deps.CampaignsRepo},
-		SnapshotRefresher:       &snapshotRefreshAdapter{svc: deps.CampaignsService},
-		SnapshotEnrichService:   deps.CampaignsService,
-		SnapshotHistoryLister:   deps.CampaignsRepo,
-		SnapshotHistoryRecorder: deps.CampaignsRepo,
-		AdvisorCollector:        deps.AdvisorService,
-		AdvisorCache:            deps.AdvisorCacheRepo,
-		AICallTracker:           deps.AICallRepo,
-		SocialContentDetector:   deps.SocialService,
-		InstagramTokenRefresher: deps.IGTokenRefresher,
-		CertSweeper:             deps.CertSweeper,
+		PriceRepo:                deps.PriceRepo,
+		APITracker:               deps.PriceRepo,
+		HealthChecker:            deps.PriceRepo,
+		AccessTracker:            deps.PriceRepo,
+		PriceProvider:            deps.PriceProvImpl,
+		CardProvider:             deps.CardProvImpl,
+		AuthService:              deps.AuthService,
+		Logger:                   deps.Logger,
+		CardHedgerClient:         deps.CardHedgerClientImpl,
+		SyncStateStore:           deps.SyncStateRepo,
+		CardIDMappingLookup:      deps.CardIDMappingRepo,
+		CardIDMappingLister:      &cardIDMappingListAdapter{repo: deps.CardIDMappingRepo},
+		CardIDMappingSaver:       deps.CardIDMappingRepo,
+		DiscoveryFailureTracker:  deps.DiscoveryFailureRepo,
+		FavoritesLister:          &favoritesListAdapter{repo: deps.FavoritesRepo},
+		CampaignCardLister:       &campaignCardListAdapter{repo: deps.CampaignsRepo},
+		NewSetsProvider:          deps.CardProvImpl.RegistryManager(),
+		InventoryLister:          &inventoryListAdapter{repo: deps.CampaignsRepo},
+		SnapshotRefresher:        &snapshotRefreshAdapter{svc: deps.CampaignsService},
+		SnapshotEnrichService:    deps.CampaignsService,
+		SnapshotHistoryLister:    deps.CampaignsRepo,
+		SnapshotHistoryRecorder:  deps.CampaignsRepo,
+		AdvisorCollector:         deps.AdvisorService,
+		AdvisorCache:             deps.AdvisorCacheRepo,
+		AICallTracker:            deps.AICallRepo,
+		SocialContentDetector:    deps.SocialService,
+		InstagramTokenRefresher:  deps.IGTokenRefresher,
+		CertSweeper:              deps.CertSweeper,
+		PicksGenerator:           deps.PicksService,
+		CardLadderClient:         deps.CardLadderClient,
+		CardLadderStore:          deps.CardLadderStore,
+		CardLadderPurchaseLister: deps.CampaignsRepo,
+		CardLadderValueUpdater:   deps.CampaignsRepo,
+		CardLadderCLRecorder:     deps.CampaignsRepo,
+		CardLadderSalesStore:     deps.CardLadderSalesStore,
 	})
 	schedulerResult.Group.StartAll(schedulerCtx)
 

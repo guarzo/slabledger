@@ -13,7 +13,7 @@ interface ReviewActionBarProps {
   selectedPick: QuickPick | null;
   onPickSelect: (pick: QuickPick | null) => void;
   onConfirm: (priceCents: number, source: string) => void;
-  onFlag: () => void;
+  onFlag?: () => void;
   isSubmitting?: boolean;
 }
 
@@ -91,16 +91,18 @@ export default function ReviewActionBar({ quickPicks, selectedPick, onPickSelect
         Confirm
       </Button>
 
-      <div className="ml-auto">
-        <Button
-          variant="danger"
-          size="sm"
-          onClick={onFlag}
-          disabled={isSubmitting}
-        >
-          Flag Price Issue
-        </Button>
-      </div>
+      {onFlag && (
+        <div className="ml-auto">
+          <Button
+            variant="danger"
+            size="sm"
+            onClick={onFlag}
+            disabled={isSubmitting}
+          >
+            Flag Price Issue
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
