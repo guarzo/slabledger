@@ -67,6 +67,9 @@ type BuildDeps struct {
 	SocialContentDetector   SocialContentDetector
 	InstagramTokenRefresher InstagramTokenRefresher
 
+	// Picks generation dependencies (optional)
+	PicksGenerator PicksGenerator
+
 	// Card Ladder dependencies (optional)
 	CardLadderClient         *cardladder.Client
 	CardLadderStore          *sqlite.CardLadderStore
@@ -240,6 +243,13 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 		}
 		schedulers = append(schedulers, NewSocialContentScheduler(
 			deps.SocialContentDetector, deps.Logger, cfg.SocialContent, socialOpts...,
+		))
+	}
+
+	// Picks refresh scheduler (if generator is provided)
+	if deps.PicksGenerator != nil {
+		schedulers = append(schedulers, NewPicksRefreshScheduler(
+			deps.PicksGenerator, deps.Logger, cfg.PicksRefresh,
 		))
 	}
 
