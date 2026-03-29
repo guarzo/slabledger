@@ -1,6 +1,6 @@
 /** Pricing types for the card pricing API response */
 
-/** eBay sold data from PokemonPriceTracker's smartMarketPrice */
+/** eBay sold data (smart market price) */
 export interface EbayGradeData {
   price: number;
   confidence: 'high' | 'medium' | 'low' | null;

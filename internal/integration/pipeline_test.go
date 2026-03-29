@@ -217,7 +217,7 @@ func TestCardHedgerLookup(t *testing.T) {
 
 // TestFullMultiSourceFusion exercises all available price sources through the
 // fusion engine. Requires PRICECHARTING_TOKEN; optionally uses
-// POKEMONPRICE_TRACKER_API_KEY and CARD_HEDGER_API_KEY.
+// CARD_HEDGER_API_KEY.
 func TestFullMultiSourceFusion(t *testing.T) {
 	token := os.Getenv("PRICECHARTING_TOKEN")
 	if token == "" {

@@ -7,7 +7,6 @@ function UsageBar({ used, limit }: { used: number; limit: number }) {
 }
 
 const providerLabels: Record<string, string> = {
-  pokemonprice: 'PokemonPriceTracker',
   cardhedger: 'CardHedger',
   pricecharting: 'PriceCharting',
 };
