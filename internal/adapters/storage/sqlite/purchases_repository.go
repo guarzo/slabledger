@@ -170,6 +170,44 @@ func (r *CampaignsRepository) ListUnsoldCards(ctx context.Context) ([]UnsoldCard
 	return result, nil
 }
 
+// ListUnmappedPurchaseCerts returns cert numbers of unsold purchases that don't have
+// a card_id_mapping for the given provider and aren't tracked as missing in card_request_submissions.
+func (r *CampaignsRepository) ListUnmappedPurchaseCerts(ctx context.Context, provider string) ([]string, error) {
+	query := `
+		SELECT DISTINCT cp.cert_number
+		FROM campaign_purchases cp
+		LEFT JOIN campaign_sales cs ON cs.purchase_id = cp.id
+		WHERE cp.was_refunded = 0
+		  AND cs.id IS NULL
+		  AND cp.cert_number != ''
+		  AND NOT EXISTS (
+		    SELECT 1 FROM card_id_mappings m
+		    WHERE m.provider = ?
+		      AND m.collector_number = cp.card_number
+		      AND m.set_name = cp.set_name
+		  )
+		  AND NOT EXISTS (
+		    SELECT 1 FROM card_request_submissions crs
+		    WHERE crs.cert_number = cp.cert_number
+		  )
+	`
+	rows, err := r.db.QueryContext(ctx, query, provider)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close() //nolint:errcheck // best-effort close
+
+	var certs []string
+	for rows.Next() {
+		var cert string
+		if err := rows.Scan(&cert); err != nil {
+			return certs, err
+		}
+		certs = append(certs, cert)
+	}
+	return certs, rows.Err()
+}
+
 func (r *CampaignsRepository) CountPurchasesByCampaign(ctx context.Context, campaignID string) (int, error) {
 	var count int
 	err := r.db.QueryRowContext(ctx,

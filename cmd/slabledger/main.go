@@ -16,6 +16,7 @@ import (
 	"github.com/joho/godotenv"
 
 	// Concrete implementations (only imported in main for wiring - Hexagonal Architecture)
+	"github.com/guarzo/slabledger/internal/adapters/clients/cardhedger"
 	"github.com/guarzo/slabledger/internal/adapters/clients/google"
 	"github.com/guarzo/slabledger/internal/adapters/clients/psa"
 	"github.com/guarzo/slabledger/internal/adapters/clients/tcgdex"
@@ -401,6 +402,16 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		ctx, cfg, logger, db, azureAIClient, aiCallRepo,
 	)
 
+	// Create cert sweeper for periodic cert→card_id resolution in the CardHedger batch scheduler.
+	var certSweeper scheduler.CertSweeper
+	if cardHedgerClientImpl.Available() {
+		certResolverOpts := []cardhedger.CertResolverOption{
+			cardhedger.WithMissingCardTracker(cardRequestRepo),
+		}
+		batchCertResolver := cardhedger.NewCertResolver(cardHedgerClientImpl, cardIDMappingRepo, logger, certResolverOpts...)
+		certSweeper = scheduler.NewCertSweepAdapter(campaignsRepo, batchCertResolver, logger)
+	}
+
 	schedulerResult, cancelScheduler := initializeSchedulers(ctx, schedulerDeps{
 		Config:               cfg,
 		Logger:               logger,
@@ -420,6 +431,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		AICallRepo:           aiCallRepo,
 		SocialService:        socialService,
 		IGTokenRefresher:     igTokenRefresher,
+		CertSweeper:          certSweeper,
 	})
 
 	// Create price hints handler

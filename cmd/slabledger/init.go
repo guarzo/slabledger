@@ -276,6 +276,7 @@ type schedulerDeps struct {
 	AICallRepo           *sqlite.AICallRepository
 	SocialService        social.Service
 	IGTokenRefresher     scheduler.InstagramTokenRefresher
+	CertSweeper          scheduler.CertSweeper
 }
 
 // initializeSchedulers builds and starts the scheduler group, returning the
@@ -310,6 +311,7 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 		AICallTracker:           deps.AICallRepo,
 		SocialContentDetector:   deps.SocialService,
 		InstagramTokenRefresher: deps.IGTokenRefresher,
+		CertSweeper:             deps.CertSweeper,
 	})
 	schedulerResult.Group.StartAll(schedulerCtx)
 
