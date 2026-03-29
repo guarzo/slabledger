@@ -26,6 +26,7 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/campaigns"
 	"github.com/guarzo/slabledger/internal/domain/fusion"
 	"github.com/guarzo/slabledger/internal/domain/observability"
+	"github.com/guarzo/slabledger/internal/domain/picks"
 	"github.com/guarzo/slabledger/internal/domain/social"
 	"github.com/guarzo/slabledger/internal/platform/cache"
 	"github.com/guarzo/slabledger/internal/platform/config"
@@ -320,8 +321,10 @@ type schedulerDeps struct {
 	SocialService        social.Service
 	IGTokenRefresher     scheduler.InstagramTokenRefresher
 	CertSweeper          scheduler.CertSweeper
+	PicksService         picks.Service
 	CardLadderClient     *cardladder.Client
 	CardLadderStore      *sqlite.CardLadderStore
+	CardLadderSalesStore *sqlite.CLSalesStore
 }
 
 // initializeSchedulers builds and starts the scheduler group, returning the
@@ -357,11 +360,13 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 		SocialContentDetector:   deps.SocialService,
 		InstagramTokenRefresher: deps.IGTokenRefresher,
 		CertSweeper:             deps.CertSweeper,
+		PicksGenerator:          deps.PicksService,
 		CardLadderClient:         deps.CardLadderClient,
 		CardLadderStore:          deps.CardLadderStore,
 		CardLadderPurchaseLister: deps.CampaignsRepo,
 		CardLadderValueUpdater:   deps.CampaignsRepo,
 		CardLadderCLRecorder:     deps.CampaignsRepo,
+		CardLadderSalesStore:     deps.CardLadderSalesStore,
 	})
 	schedulerResult.Group.StartAll(schedulerCtx)
 

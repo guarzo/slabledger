@@ -76,6 +76,7 @@ type BuildDeps struct {
 	CardLadderPurchaseLister CardLadderPurchaseLister
 	CardLadderValueUpdater   CardLadderValueUpdater
 	CardLadderCLRecorder     domainCampaigns.CLValueHistoryRecorder
+	CardLadderSalesStore     *sqlite.CLSalesStore
 }
 
 // BuildResult holds the scheduler group and optional auxiliary references.
@@ -259,6 +260,7 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 			deps.CardLadderClient, deps.CardLadderStore,
 			deps.CardLadderPurchaseLister, deps.CardLadderValueUpdater,
 			deps.CardLadderCLRecorder,
+			deps.CardLadderSalesStore,
 			deps.Logger, cfg.CardLadder,
 		)
 		schedulers = append(schedulers, clScheduler)

@@ -40,6 +40,7 @@ type Router struct {
 	priceFlagsHandler         *handlers.PriceFlagsHandler
 	cardLadderHandler         *handlers.CardLadderHandler
 	salesCompsHandler         *handlers.SalesCompsHandler
+	picksHandler              *handlers.PicksHandler
 	pricingAPIKey             string
 	logger                    observability.Logger
 	databasePath              string
@@ -69,6 +70,7 @@ type RouterConfig struct {
 	PriceFlagsHandler         *handlers.PriceFlagsHandler // Price flag admin; nil = disabled
 	CardLadderHandler         *handlers.CardLadderHandler  // Card Ladder admin; nil = disabled
 	SalesCompsHandler         *handlers.SalesCompsHandler // Sales comps; nil = disabled
+	PicksHandler              *handlers.PicksHandler      // AI picks; nil = disabled
 	Logger                    observability.Logger
 	AdminEmails               []string
 	DatabasePath              string
@@ -154,6 +156,10 @@ func NewRouter(cfg RouterConfig) *Router {
 
 	if cfg.SalesCompsHandler != nil {
 		rt.salesCompsHandler = cfg.SalesCompsHandler
+	}
+
+	if cfg.PicksHandler != nil {
+		rt.picksHandler = cfg.PicksHandler
 	}
 
 	if cfg.PricingAPIKey != "" && cfg.CampaignsRepo != nil {
@@ -459,6 +465,17 @@ func (rt *Router) Setup() http.Handler {
 
 		mux.HandleFunc("/advisor", rt.spaHandler.HandleIndex)
 		rt.logger.Info(context.Background(), "AI advisor routes registered")
+	}
+
+	// AI Picks routes
+	if rt.picksHandler != nil && rt.authMW != nil {
+		mux.Handle("GET /api/picks", rt.authMW.RequireAuth(http.HandlerFunc(rt.picksHandler.HandleGetPicks)))
+		mux.Handle("GET /api/picks/history", rt.authMW.RequireAuth(http.HandlerFunc(rt.picksHandler.HandleGetPickHistory)))
+		mux.Handle("GET /api/picks/watchlist", rt.authMW.RequireAuth(http.HandlerFunc(rt.picksHandler.HandleGetWatchlist)))
+		mux.Handle("POST /api/picks/watchlist", rt.authMW.RequireAuth(http.HandlerFunc(rt.picksHandler.HandleAddWatchlistItem)))
+		mux.Handle("DELETE /api/picks/watchlist/{id}", rt.authMW.RequireAuth(http.HandlerFunc(rt.picksHandler.HandleDeleteWatchlistItem)))
+		mux.HandleFunc("/opportunities", rt.spaHandler.HandleIndex)
+		rt.logger.Info(context.Background(), "picks routes registered")
 	}
 
 	// Social content routes — require admin

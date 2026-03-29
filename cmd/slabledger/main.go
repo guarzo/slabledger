@@ -27,6 +27,7 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/auth"
 	"github.com/guarzo/slabledger/internal/domain/campaigns"
 	"github.com/guarzo/slabledger/internal/domain/favorites"
+	"github.com/guarzo/slabledger/internal/domain/picks"
 	"github.com/guarzo/slabledger/internal/platform/cache"
 	"github.com/guarzo/slabledger/internal/platform/crypto"
 )
@@ -410,10 +411,23 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	clClient, clAuth, clStore := initializeCardLadder(ctx, logger, db, clEncryptor)
 	var clHandler *handlers.CardLadderHandler
 	var salesCompsHandler *handlers.SalesCompsHandler
+	var clSalesStore *sqlite.CLSalesStore
 	if clStore != nil {
 		clHandler = handlers.NewCardLadderHandler(clStore, clClient, clAuth, logger)
-		salesStore := sqlite.NewCLSalesStore(db.DB)
-		salesCompsHandler = handlers.NewSalesCompsHandler(salesStore, clStore, campaignsService, logger)
+		clSalesStore = sqlite.NewCLSalesStore(db.DB)
+		salesCompsHandler = handlers.NewSalesCompsHandler(clSalesStore, clStore, campaignsService, logger)
+	}
+
+	// Initialize picks
+	picksRepo := sqlite.NewPicksRepository(db.DB)
+	profitabilityProv := sqlite.NewProfitabilityProvider(db.DB)
+	inventoryProv := sqlite.NewInventoryProvider(db.DB)
+
+	var picksService picks.Service
+	var picksHandler *handlers.PicksHandler
+	if azureAIClient != nil {
+		picksService = picks.NewService(picksRepo, azureAIClient, profitabilityProv, inventoryProv, logger)
+		picksHandler = handlers.NewPicksHandler(picksService, logger)
 	}
 
 	// Create cert sweeper for periodic cert→card_id resolution in the CardHedger batch scheduler.
@@ -446,8 +460,10 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		SocialService:        socialService,
 		IGTokenRefresher:     igTokenRefresher,
 		CertSweeper:          certSweeper,
+		PicksService:         picksService,
 		CardLadderClient:     clClient,
 		CardLadderStore:      clStore,
+		CardLadderSalesStore: clSalesStore,
 	})
 
 	// Create price hints handler
@@ -544,6 +560,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		PriceFlagsHandler:         priceFlagsHandler,
 		CardLadderHandler:         clHandler,
 		SalesCompsHandler:         salesCompsHandler,
+		PicksHandler:              picksHandler,
 	}
 	serverErr := startWebServer(ctx, deps)
 
