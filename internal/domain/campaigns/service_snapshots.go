@@ -95,8 +95,9 @@ func applyCLCorrection(snapshot *MarketSnapshot, clValueCents int) {
 	// under $5 (500 cents) to avoid noise on cheap cards.
 	const estimateDeviationThreshold = 0.50
 	const estimateMinCents = 500
-	if snapshot.EstimatedValueCents > 0 && clValueCents > estimateMinCents &&
-		snapshot.EstimatedValueCents > estimateMinCents && snapshot.EstimateSource != "cl_fallback" {
+	if snapshot.EstimatedValueCents > 0 &&
+		(clValueCents >= estimateMinCents || snapshot.EstimatedValueCents >= estimateMinCents) &&
+		snapshot.EstimateSource != "cl_fallback" {
 		estDeviation := math.Abs(float64(snapshot.EstimatedValueCents-clValueCents)) / float64(clValueCents)
 		if estDeviation > estimateDeviationThreshold {
 			snapshot.EstimatedValueCents = clValueCents

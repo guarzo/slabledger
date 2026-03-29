@@ -333,8 +333,7 @@ func TestTruncateToolResult(t *testing.T) {
 		name       string
 		input      string
 		maxLen     int
-		want       string // empty means expect input unchanged
-		wantCutLen int    // if non-zero, assert noticeIdx == this value
+		wantCutLen int // if non-zero, assert noticeIdx == this value
 	}{
 		{
 			name:   "short result unchanged",

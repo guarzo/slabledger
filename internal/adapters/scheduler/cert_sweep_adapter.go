@@ -27,6 +27,10 @@ func NewCertSweepAdapter(repo PurchaseCertLister, resolver campaigns.CardIDResol
 
 // SweepUnmappedCerts finds purchases without a CardHedger card_id mapping
 // and resolves their cert numbers via DetailsByCerts.
+//
+// Only PSA certs are processed because CardHedger's details-by-certs API
+// exclusively supports PSA cert numbers. The "cardhedger" source is the
+// only provider that offers cert-based resolution.
 func (a *CertSweepAdapter) SweepUnmappedCerts(ctx context.Context) (int, error) {
 	certs, err := a.repo.ListUnmappedPurchaseCerts(ctx, "cardhedger", "PSA")
 	if err != nil {
@@ -41,6 +45,9 @@ func (a *CertSweepAdapter) SweepUnmappedCerts(ctx context.Context) (int, error) 
 			observability.Int("count", len(certs)))
 	}
 
+	// ResolveCardIDsByCerts may return a partially-populated map alongside a
+	// non-nil error (e.g. API timeout after some certs succeed). The returned
+	// count is best-effort and used only for logging/metrics.
 	resolved, err := a.resolver.ResolveCardIDsByCerts(ctx, certs, "PSA")
 	if err != nil {
 		return len(resolved), err

@@ -189,6 +189,12 @@ func (s *service) generateBackgroundsAsync(post *SocialPost) {
 
 	// Store URLs in DB — skip when empty to preserve existing entries
 	if len(validURLs) == 0 {
+		if s.logger != nil {
+			s.logger.Warn(ctx, "social backgrounds generated",
+				observability.String("postId", post.ID),
+				observability.Int("attempted", len(urls)),
+				observability.Int("success", 0))
+		}
 		return
 	}
 	dbCtx, dbCancel := context.WithTimeout(context.Background(), 30*time.Second)
