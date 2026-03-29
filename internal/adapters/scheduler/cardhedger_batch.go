@@ -254,9 +254,11 @@ func (s *CardHedgerBatchScheduler) runBatch(ctx context.Context) {
 			s.logger.Info(ctx, "cert sweep resolved new mappings",
 				observability.Int("resolved", resolved))
 			// Reload mappings to include newly resolved certs
-			mappings, err = s.mappingLister.ListByProvider(ctx, "cardhedger")
-			if err != nil {
-				s.logger.Warn(ctx, "failed to reload mappings after cert sweep", observability.Err(err))
+			newMappings, reloadErr := s.mappingLister.ListByProvider(ctx, "cardhedger")
+			if reloadErr != nil {
+				s.logger.Warn(ctx, "failed to reload mappings after cert sweep", observability.Err(reloadErr))
+			} else {
+				mappings = newMappings
 			}
 		}
 	}

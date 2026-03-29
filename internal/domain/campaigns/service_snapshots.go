@@ -76,19 +76,18 @@ func applyCLCorrection(snapshot *MarketSnapshot, clValueCents int) {
 		// Record the pre-correction deviation (100% when median is zero).
 		snapshot.CLDeviationPct = 1.0
 		setCLAnchoredPrices(snapshot, clValueCents)
-		return
-	}
+		// Fall through so the estimate fallback below can also run.
+	} else {
+		// Compute deviation between snapshot median and CL.
+		deviation := math.Abs(float64(snapshot.MedianCents-clValueCents)) / float64(clValueCents)
+		snapshot.CLDeviationPct = deviation
 
-	// Compute deviation between snapshot median and CL.
-	// MedianCents is guaranteed > 0 here (zero case returned above).
-	deviation := math.Abs(float64(snapshot.MedianCents-clValueCents)) / float64(clValueCents)
-	snapshot.CLDeviationPct = deviation
-
-	// Only correct single-source results when market price is BELOW CL with high deviation.
-	// When market is above CL, trust the market — the card may be worth more than CL thinks.
-	// Multi-source fusion that diverges from CL is more likely correct (CL may be stale).
-	if deviation > clDeviationThreshold && snapshot.SourceCount <= 1 && snapshot.MedianCents < clValueCents {
-		setCLAnchoredPrices(snapshot, clValueCents)
+		// Only correct single-source results when market price is BELOW CL with high deviation.
+		// When market is above CL, trust the market — the card may be worth more than CL thinks.
+		// Multi-source fusion that diverges from CL is more likely correct (CL may be stale).
+		if deviation > clDeviationThreshold && snapshot.SourceCount <= 1 && snapshot.MedianCents < clValueCents {
+			setCLAnchoredPrices(snapshot, clValueCents)
+		}
 	}
 
 	// Estimate fallback: when CardHedger's estimate deviates >50% from CL in either

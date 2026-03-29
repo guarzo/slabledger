@@ -330,10 +330,11 @@ func TestMaxToolRounds_Exceeded(t *testing.T) {
 
 func TestTruncateToolResult(t *testing.T) {
 	tests := []struct {
-		name   string
-		input  string
-		maxLen int
-		want   string // empty means expect input unchanged
+		name       string
+		input      string
+		maxLen     int
+		want       string // empty means expect input unchanged
+		wantCutLen int    // if non-zero, assert noticeIdx == this value
 	}{
 		{
 			name:   "short result unchanged",
@@ -351,9 +352,10 @@ func TestTruncateToolResult(t *testing.T) {
 			maxLen: 100,
 		},
 		{
-			name:   "truncates at newline boundary",
-			input:  strings.Repeat("x", 60) + "\n" + strings.Repeat("y", 60),
-			maxLen: 100,
+			name:       "truncates at newline boundary",
+			input:      strings.Repeat("x", 60) + "\n" + strings.Repeat("y", 60),
+			maxLen:     100,
+			wantCutLen: 60,
 		},
 	}
 	for _, tt := range tests {
@@ -373,6 +375,9 @@ func TestTruncateToolResult(t *testing.T) {
 			noticeIdx := strings.Index(got, "\n\n[... truncated")
 			if noticeIdx > tt.maxLen {
 				t.Errorf("body before notice is %d chars, exceeds maxLen %d", noticeIdx, tt.maxLen)
+			}
+			if tt.wantCutLen != 0 && noticeIdx != tt.wantCutLen {
+				t.Errorf("expected truncation at %d chars, got %d", tt.wantCutLen, noticeIdx)
 			}
 		})
 	}

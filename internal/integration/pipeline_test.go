@@ -53,7 +53,7 @@ func TestNormalizationAudit(t *testing.T) {
 			// --- Secondary source normalization ---
 			ppName := cardutil.NormalizePurchaseName(card.CardName)
 			ppName = cardutil.StripVariantSuffix(ppName)
-			ppSet := cardutil.NormalizeSetNameSimple(card.SetName)
+			ppSet := cardutil.NormalizeSetNameForSearch(card.SetName)
 			t.Logf("Secondary: name=%q set=%q", ppName, ppSet)
 
 			if strings.Contains(ppName, "-HOLO") || strings.Contains(ppName, "-REV.FOIL") {

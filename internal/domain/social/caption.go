@@ -187,7 +187,10 @@ func (s *service) generateBackgroundsAsync(post *SocialPost) {
 		}
 	}
 
-	// Store URLs in DB
+	// Store URLs in DB — skip when empty to preserve existing entries
+	if len(validURLs) == 0 {
+		return
+	}
 	dbCtx, dbCancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer dbCancel()
 

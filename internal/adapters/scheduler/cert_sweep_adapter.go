@@ -9,7 +9,7 @@ import (
 
 // PurchaseCertLister lists cert numbers of purchases missing external ID mappings.
 type PurchaseCertLister interface {
-	ListUnmappedPurchaseCerts(ctx context.Context, provider string) ([]string, error)
+	ListUnmappedPurchaseCerts(ctx context.Context, provider string, grader string) ([]string, error)
 }
 
 // CertSweepAdapter implements CertSweeper by querying unmapped purchases
@@ -28,7 +28,7 @@ func NewCertSweepAdapter(repo PurchaseCertLister, resolver campaigns.CardIDResol
 // SweepUnmappedCerts finds purchases without a CardHedger card_id mapping
 // and resolves their cert numbers via DetailsByCerts.
 func (a *CertSweepAdapter) SweepUnmappedCerts(ctx context.Context) (int, error) {
-	certs, err := a.repo.ListUnmappedPurchaseCerts(ctx, "cardhedger")
+	certs, err := a.repo.ListUnmappedPurchaseCerts(ctx, "cardhedger", "PSA")
 	if err != nil {
 		return 0, err
 	}

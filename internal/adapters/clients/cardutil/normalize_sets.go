@@ -295,6 +295,22 @@ func MissingSetTokens(resultSet, expectedSet string) []string {
 	return missing
 }
 
+// SignificantSetTokenCount returns the number of significant tokens in a set name,
+// using the same filtering rules as MissingSetTokens (skip len<2 and genericSetWords).
+func SignificantSetTokenCount(set string) int {
+	count := 0
+	for _, t := range normalizeSetTokens(set) {
+		if len(t) < 2 {
+			continue
+		}
+		if genericSetWords[t] {
+			continue
+		}
+		count++
+	}
+	return count
+}
+
 // NormalizeChineseSetName normalizes Chinese PSA set code prefixes to a canonical form.
 // Handles "SIMPLIFIED CHINESE CBBx C ...", "TRADITIONAL CHINESE CBBx C ...", "CN CBBx C ...",
 // and "CHINESE CBBx C ..." patterns. Returns the normalized name and whether it was Chinese.

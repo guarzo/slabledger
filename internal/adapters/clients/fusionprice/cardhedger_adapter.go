@@ -349,10 +349,10 @@ func shouldRejectSetMismatch(matchedSet, requestedSet string) bool {
 	normalizedRequested := cardutil.NormalizeSetNameForSearch(requestedSet)
 
 	missing := cardutil.MissingSetTokens(normalizedMatched, normalizedRequested)
-	expectedTokens := strings.Fields(normalizedRequested)
+	significantCount := cardutil.SignificantSetTokenCount(normalizedRequested)
 
-	// Reject when more than half the expected tokens are missing
-	return len(expectedTokens) > 0 && len(missing) > len(expectedTokens)/2
+	// Reject when more than half the significant tokens are missing
+	return significantCount > 0 && len(missing) > significantCount/2
 }
 
 // hasLetterPrefix returns true if the string starts with a letter (e.g., "SM162", "SWSH029").

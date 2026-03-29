@@ -172,7 +172,8 @@ func (r *CampaignsRepository) ListUnsoldCards(ctx context.Context) ([]UnsoldCard
 
 // ListUnmappedPurchaseCerts returns cert numbers of unsold purchases that don't have
 // a card_id_mapping for the given provider and aren't tracked as missing in card_request_submissions.
-func (r *CampaignsRepository) ListUnmappedPurchaseCerts(ctx context.Context, provider string) ([]string, error) {
+// When grader is non-empty, only purchases with that grader are returned.
+func (r *CampaignsRepository) ListUnmappedPurchaseCerts(ctx context.Context, provider string, grader string) ([]string, error) {
 	query := `
 		SELECT DISTINCT cp.cert_number
 		FROM campaign_purchases cp
@@ -180,6 +181,7 @@ func (r *CampaignsRepository) ListUnmappedPurchaseCerts(ctx context.Context, pro
 		WHERE cp.was_refunded = 0
 		  AND cs.id IS NULL
 		  AND cp.cert_number != ''
+		  AND (? = '' OR cp.grader = ?)
 		  AND NOT EXISTS (
 		    SELECT 1 FROM card_id_mappings m
 		    WHERE m.provider = ?
@@ -191,7 +193,7 @@ func (r *CampaignsRepository) ListUnmappedPurchaseCerts(ctx context.Context, pro
 		    WHERE crs.cert_number = cp.cert_number
 		  )
 	`
-	rows, err := r.db.QueryContext(ctx, query, provider)
+	rows, err := r.db.QueryContext(ctx, query, grader, grader, provider)
 	if err != nil {
 		return nil, err
 	}
