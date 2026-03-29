@@ -429,6 +429,52 @@ func TestGetLastSoldCents_PSA7(t *testing.T) {
 	}
 }
 
+func TestGetLastSoldCents_PrefersRawNM(t *testing.T) {
+	mock := &mockPriceProvider{
+		lookupFn: func(_ context.Context, _ string, _ domainCards.Card) (*pricing.Price, error) {
+			return &pricing.Price{
+				Grades: pricing.GradedPrices{
+					RawCents:   500,
+					RawNMCents: 800,
+				},
+				LastSoldByGrade: &pricing.LastSoldByGrade{},
+			}, nil
+		},
+	}
+	adapter := NewAdapter(mock)
+	cents, err := adapter.GetLastSoldCents(context.Background(), testCard, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cents != 800 {
+		t.Errorf("GetLastSoldCents(grade=0) = %d, want 800 (RawNMCents preferred)", cents)
+	}
+}
+
+func TestGetLastSoldCents_FallsBackWhenNoNM(t *testing.T) {
+	mock := &mockPriceProvider{
+		lookupFn: func(_ context.Context, _ string, _ domainCards.Card) (*pricing.Price, error) {
+			return &pricing.Price{
+				Grades: pricing.GradedPrices{
+					RawCents:   500,
+					RawNMCents: 0,
+				},
+				LastSoldByGrade: &pricing.LastSoldByGrade{
+					Raw: &pricing.GradeSaleInfo{LastSoldPrice: 5.00},
+				},
+			}, nil
+		},
+	}
+	adapter := NewAdapter(mock)
+	cents, err := adapter.GetLastSoldCents(context.Background(), testCard, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cents != 500 {
+		t.Errorf("GetLastSoldCents(grade=0) = %d, want 500 (fallback to LastSoldByGrade.Raw)", cents)
+	}
+}
+
 func TestGetMarketSnapshot_FullSnapshot(t *testing.T) {
 	mock := &mockPriceProvider{
 		lookupFn: func(_ context.Context, _ string, _ domainCards.Card) (*pricing.Price, error) {
