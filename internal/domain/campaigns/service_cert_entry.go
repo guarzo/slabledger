@@ -128,5 +128,19 @@ func (s *service) ImportCerts(ctx context.Context, certNumbers []string) (*CertI
 		result.Imported++
 	}
 
+	// Kick off background cert→card_id resolution for imported certs.
+	if s.cardIDResolver != nil && result.Imported > 0 {
+		importedCerts := append([]string(nil), cleaned...)
+		if len(importedCerts) > 0 {
+			s.wg.Add(1)
+			go func() {
+				defer s.wg.Done()
+				ctx, cancel := context.WithTimeout(s.baseCtx, 2*time.Minute)
+				defer cancel()
+				s.batchResolveCardIDs(ctx, importedCerts)
+			}()
+		}
+	}
+
 	return result, nil
 }

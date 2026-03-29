@@ -90,6 +90,20 @@ func applyCLCorrection(snapshot *MarketSnapshot, clValueCents int) {
 	if deviation > clDeviationThreshold && snapshot.SourceCount <= 1 && snapshot.MedianCents < clValueCents {
 		setCLAnchoredPrices(snapshot, clValueCents)
 	}
+
+	// Estimate fallback: when CardHedger's estimate deviates >50% from CL in either
+	// direction, fall back to CL value. Skips when either value is zero or both are
+	// under $5 (500 cents) to avoid noise on cheap cards.
+	const estimateDeviationThreshold = 0.50
+	const estimateMinCents = 500
+	if snapshot.EstimatedValueCents > 0 && clValueCents > estimateMinCents &&
+		snapshot.EstimatedValueCents > estimateMinCents && snapshot.EstimateSource != "cl_fallback" {
+		estDeviation := math.Abs(float64(snapshot.EstimatedValueCents-clValueCents)) / float64(clValueCents)
+		if estDeviation > estimateDeviationThreshold {
+			snapshot.EstimatedValueCents = clValueCents
+			snapshot.EstimateSource = "cl_fallback"
+		}
+	}
 }
 
 // captureMarketSnapshot performs a best-effort market snapshot lookup and applies it to the receiver.
