@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '../../../ui';
-import { formatCents, dollarsToCents } from '../../../utils/formatters';
+import { formatCents, dollarsToCents, centsToDollars } from '../../../utils/formatters';
 
-interface QuickPick {
+export interface QuickPick {
   label: string;
   priceCents: number;
   source: string;
@@ -10,14 +10,21 @@ interface QuickPick {
 
 interface ReviewActionBarProps {
   quickPicks: QuickPick[];
+  selectedPick: QuickPick | null;
+  onPickSelect: (pick: QuickPick | null) => void;
   onConfirm: (priceCents: number, source: string) => void;
   onFlag: () => void;
   isSubmitting?: boolean;
 }
 
-export default function ReviewActionBar({ quickPicks, onConfirm, onFlag, isSubmitting }: ReviewActionBarProps) {
+export default function ReviewActionBar({ quickPicks, selectedPick, onPickSelect, onConfirm, onFlag, isSubmitting }: ReviewActionBarProps) {
   const [customValue, setCustomValue] = useState('');
-  const [selectedPick, setSelectedPick] = useState<QuickPick | null>(null);
+
+  useEffect(() => {
+    if (selectedPick) {
+      setCustomValue(centsToDollars(selectedPick.priceCents));
+    }
+  }, [selectedPick]);
 
   const handleConfirm = () => {
     if (selectedPick) {
@@ -31,35 +38,34 @@ export default function ReviewActionBar({ quickPicks, onConfirm, onFlag, isSubmi
   };
 
   const handlePickClick = (pick: QuickPick) => {
-    setSelectedPick(pick);
-    setCustomValue('');
+    onPickSelect(pick);
+    setCustomValue(centsToDollars(pick.priceCents));
   };
 
   const handleCustomChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setCustomValue(e.target.value);
-    setSelectedPick(null);
+    onPickSelect(null);
   };
 
   const hasSelection = selectedPick !== null || (customValue !== '' && dollarsToCents(customValue) > 0);
-  const visiblePicks = quickPicks.filter(p => p.priceCents > 0);
 
   return (
     <div className="flex items-center gap-3 flex-wrap">
       <span className="text-xs font-medium text-[var(--text-muted)] whitespace-nowrap">Set Price:</span>
 
-      {visiblePicks.map(pick => (
+      {quickPicks.map(pick => (
         <button
-          key={`${pick.source}-${pick.priceCents}`}
+          key={pick.source}
           type="button"
           onClick={() => handlePickClick(pick)}
-          disabled={isSubmitting}
+          disabled={isSubmitting || pick.priceCents === 0}
           className={`text-xs px-2.5 py-1.5 rounded-md border transition-colors ${
-            selectedPick?.source === pick.source && selectedPick?.priceCents === pick.priceCents
+            selectedPick?.source === pick.source
               ? 'border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]'
               : 'border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text)] hover:border-[var(--text-muted)]'
           } disabled:opacity-40 disabled:cursor-not-allowed`}
         >
-          {pick.label} {formatCents(pick.priceCents)}
+          {pick.label} {pick.priceCents > 0 ? formatCents(pick.priceCents) : '\u2014'}
         </button>
       ))}
 

@@ -257,3 +257,21 @@ function relativeTime(isoDate: string): string {
   if (days < 365) return `${Math.floor(days / 30)}mo ago`;
   return `${Math.floor(days / 365)}y ago`;
 }
+
+/** A card is a "hot seller" if it has 3+ sales in the last 30 days and the last sold price >= target price. */
+export function isHotSeller(item: AgingItem): boolean {
+  const snap = item.currentMarket;
+  if (!snap || !snap.salesLast30d || snap.salesLast30d < 3) return false;
+  if (!snap.lastSoldCents || snap.lastSoldCents <= 0) return false;
+  const targetPrice = item.recommendedPriceCents ?? 0;
+  if (targetPrice <= 0) return false;
+  return snap.lastSoldCents >= targetPrice;
+}
+
+/** A card is a "card show candidate" if it's a hot seller or matches the card show channel heuristic. */
+export function isCardShowCandidate(item: AgingItem): boolean {
+  if (isHotSeller(item)) return true;
+  if (item.purchase.gradeValue === 7) return true;
+  if (item.currentMarket?.trend30d != null && item.currentMarket.trend30d > 0.05) return true;
+  return false;
+}

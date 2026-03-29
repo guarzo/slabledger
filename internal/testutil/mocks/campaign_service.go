@@ -17,34 +17,35 @@ import (
 //	    },
 //	}
 type MockCampaignService struct {
-	CreateCampaignFn          func(ctx context.Context, c *campaigns.Campaign) error
-	GetCampaignFn             func(ctx context.Context, id string) (*campaigns.Campaign, error)
-	ListCampaignsFn           func(ctx context.Context, activeOnly bool) ([]campaigns.Campaign, error)
-	UpdateCampaignFn          func(ctx context.Context, c *campaigns.Campaign) error
-	DeleteCampaignFn          func(ctx context.Context, id string) error
-	CreatePurchaseFn          func(ctx context.Context, p *campaigns.Purchase) error
-	GetPurchaseFn             func(ctx context.Context, id string) (*campaigns.Purchase, error)
-	DeletePurchaseFn          func(ctx context.Context, id string) error
-	ListPurchasesByCampaignFn func(ctx context.Context, campaignID string, limit, offset int) ([]campaigns.Purchase, error)
-	CreateSaleFn              func(ctx context.Context, s *campaigns.Sale, campaign *campaigns.Campaign, purchase *campaigns.Purchase) error
-	CreateBulkSalesFn         func(ctx context.Context, campaignID string, channel campaigns.SaleChannel, saleDate string, items []campaigns.BulkSaleInput) (*campaigns.BulkSaleResult, error)
-	ListSalesByCampaignFn     func(ctx context.Context, campaignID string, limit, offset int) ([]campaigns.Sale, error)
-	LookupCertFn              func(ctx context.Context, certNumber string) (*campaigns.CertInfo, *campaigns.MarketSnapshot, error)
-	QuickAddPurchaseFn        func(ctx context.Context, campaignID string, req campaigns.QuickAddRequest) (*campaigns.Purchase, error)
-	GetCampaignPNLFn          func(ctx context.Context, campaignID string) (*campaigns.CampaignPNL, error)
-	GetPNLByChannelFn         func(ctx context.Context, campaignID string) ([]campaigns.ChannelPNL, error)
-	GetDailySpendFn           func(ctx context.Context, campaignID string, days int) ([]campaigns.DailySpend, error)
-	GetDaysToSellDistFn       func(ctx context.Context, campaignID string) ([]campaigns.DaysToSellBucket, error)
-	GetInventoryAgingFn       func(ctx context.Context, campaignID string) ([]campaigns.AgingItem, error)
-	GetGlobalInventoryAgingFn func(ctx context.Context) ([]campaigns.AgingItem, error)
-	GenerateSellSheetFn       func(ctx context.Context, campaignID string, purchaseIDs []string) (*campaigns.SellSheet, error)
-	GenerateGlobalSellSheetFn func(ctx context.Context) (*campaigns.SellSheet, error)
-	GetCampaignTuningFn       func(ctx context.Context, campaignID string) (*campaigns.TuningResponse, error)
-	RefreshCLValuesGlobalFn   func(ctx context.Context, rows []campaigns.CLExportRow) (*campaigns.GlobalCLRefreshResult, error)
-	ImportCLExportGlobalFn    func(ctx context.Context, rows []campaigns.CLExportRow) (*campaigns.GlobalImportResult, error)
-	ImportPSAExportGlobalFn   func(ctx context.Context, rows []campaigns.PSAExportRow) (*campaigns.PSAImportResult, error)
-	ExportCLFormatGlobalFn    func(ctx context.Context, missingCLOnly bool) ([]campaigns.CLExportEntry, error)
-	ReassignPurchaseFn        func(ctx context.Context, purchaseID string, newCampaignID string) error
+	CreateCampaignFn            func(ctx context.Context, c *campaigns.Campaign) error
+	GetCampaignFn               func(ctx context.Context, id string) (*campaigns.Campaign, error)
+	ListCampaignsFn             func(ctx context.Context, activeOnly bool) ([]campaigns.Campaign, error)
+	UpdateCampaignFn            func(ctx context.Context, c *campaigns.Campaign) error
+	DeleteCampaignFn            func(ctx context.Context, id string) error
+	CreatePurchaseFn            func(ctx context.Context, p *campaigns.Purchase) error
+	GetPurchaseFn               func(ctx context.Context, id string) (*campaigns.Purchase, error)
+	DeletePurchaseFn            func(ctx context.Context, id string) error
+	ListPurchasesByCampaignFn   func(ctx context.Context, campaignID string, limit, offset int) ([]campaigns.Purchase, error)
+	CreateSaleFn                func(ctx context.Context, s *campaigns.Sale, campaign *campaigns.Campaign, purchase *campaigns.Purchase) error
+	CreateBulkSalesFn           func(ctx context.Context, campaignID string, channel campaigns.SaleChannel, saleDate string, items []campaigns.BulkSaleInput) (*campaigns.BulkSaleResult, error)
+	ListSalesByCampaignFn       func(ctx context.Context, campaignID string, limit, offset int) ([]campaigns.Sale, error)
+	LookupCertFn                func(ctx context.Context, certNumber string) (*campaigns.CertInfo, *campaigns.MarketSnapshot, error)
+	QuickAddPurchaseFn          func(ctx context.Context, campaignID string, req campaigns.QuickAddRequest) (*campaigns.Purchase, error)
+	GetCampaignPNLFn            func(ctx context.Context, campaignID string) (*campaigns.CampaignPNL, error)
+	GetPNLByChannelFn           func(ctx context.Context, campaignID string) ([]campaigns.ChannelPNL, error)
+	GetDailySpendFn             func(ctx context.Context, campaignID string, days int) ([]campaigns.DailySpend, error)
+	GetDaysToSellDistFn         func(ctx context.Context, campaignID string) ([]campaigns.DaysToSellBucket, error)
+	GetInventoryAgingFn         func(ctx context.Context, campaignID string) ([]campaigns.AgingItem, error)
+	GetGlobalInventoryAgingFn   func(ctx context.Context) ([]campaigns.AgingItem, error)
+	GenerateSellSheetFn         func(ctx context.Context, campaignID string, purchaseIDs []string) (*campaigns.SellSheet, error)
+	GenerateGlobalSellSheetFn   func(ctx context.Context) (*campaigns.SellSheet, error)
+	GenerateSelectedSellSheetFn func(ctx context.Context, purchaseIDs []string) (*campaigns.SellSheet, error)
+	GetCampaignTuningFn         func(ctx context.Context, campaignID string) (*campaigns.TuningResponse, error)
+	RefreshCLValuesGlobalFn     func(ctx context.Context, rows []campaigns.CLExportRow) (*campaigns.GlobalCLRefreshResult, error)
+	ImportCLExportGlobalFn      func(ctx context.Context, rows []campaigns.CLExportRow) (*campaigns.GlobalImportResult, error)
+	ImportPSAExportGlobalFn     func(ctx context.Context, rows []campaigns.PSAExportRow) (*campaigns.PSAImportResult, error)
+	ExportCLFormatGlobalFn      func(ctx context.Context, missingCLOnly bool) ([]campaigns.CLExportEntry, error)
+	ReassignPurchaseFn          func(ctx context.Context, purchaseID string, newCampaignID string) error
 
 	// Credit & Invoice
 	GetCreditSummaryFn     func(ctx context.Context) (*campaigns.CreditSummary, error)
@@ -274,6 +275,13 @@ func (m *MockCampaignService) GenerateSellSheet(ctx context.Context, campaignID 
 func (m *MockCampaignService) GenerateGlobalSellSheet(ctx context.Context) (*campaigns.SellSheet, error) {
 	if m.GenerateGlobalSellSheetFn != nil {
 		return m.GenerateGlobalSellSheetFn(ctx)
+	}
+	return &campaigns.SellSheet{}, nil
+}
+
+func (m *MockCampaignService) GenerateSelectedSellSheet(ctx context.Context, purchaseIDs []string) (*campaigns.SellSheet, error) {
+	if m.GenerateSelectedSellSheetFn != nil {
+		return m.GenerateSelectedSellSheetFn(ctx, purchaseIDs)
 	}
 	return &campaigns.SellSheet{}, nil
 }

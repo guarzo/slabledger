@@ -1051,3 +1051,61 @@ func TestService_CreateSale_WasCracked(t *testing.T) {
 		t.Error("expected WasCracked to be true after CreateSale")
 	}
 }
+
+func TestGenerateSelectedSellSheet(t *testing.T) {
+	repo := mocks.NewMockCampaignRepository()
+	svc := campaigns.NewService(repo, withTestIDGen())
+	ctx := context.Background()
+
+	c := &campaigns.Campaign{Name: "Test Campaign", Phase: campaigns.PhaseActive}
+	if err := svc.CreateCampaign(ctx, c); err != nil {
+		t.Fatalf("setup CreateCampaign: %v", err)
+	}
+
+	p1 := &campaigns.Purchase{CampaignID: c.ID, CardName: "Card A", CertNumber: "111", GradeValue: 9, BuyCostCents: 5000, CLValueCents: 8000, PurchaseDate: "2026-01-01"}
+	p2 := &campaigns.Purchase{CampaignID: c.ID, CardName: "Card B", CertNumber: "222", GradeValue: 10, BuyCostCents: 10000, CLValueCents: 15000, PurchaseDate: "2026-01-02"}
+	if err := svc.CreatePurchase(ctx, p1); err != nil {
+		t.Fatalf("setup CreatePurchase p1: %v", err)
+	}
+	if err := svc.CreatePurchase(ctx, p2); err != nil {
+		t.Fatalf("setup CreatePurchase p2: %v", err)
+	}
+
+	sheet, err := svc.GenerateSelectedSellSheet(ctx, []string{p1.ID, p2.ID})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if sheet.Totals.ItemCount != 2 {
+		t.Errorf("expected 2 items, got %d", sheet.Totals.ItemCount)
+	}
+	if sheet.CampaignName != "Selected Inventory" {
+		t.Errorf("expected campaign name 'Selected Inventory', got %q", sheet.CampaignName)
+	}
+}
+
+func TestGenerateSelectedSellSheet_SkipsMissing(t *testing.T) {
+	repo := mocks.NewMockCampaignRepository()
+	svc := campaigns.NewService(repo, withTestIDGen())
+	ctx := context.Background()
+
+	c := &campaigns.Campaign{Name: "Test Campaign", Phase: campaigns.PhaseActive}
+	if err := svc.CreateCampaign(ctx, c); err != nil {
+		t.Fatalf("setup CreateCampaign: %v", err)
+	}
+
+	p1 := &campaigns.Purchase{CampaignID: c.ID, CardName: "Card A", CertNumber: "111", GradeValue: 9, BuyCostCents: 5000, PurchaseDate: "2026-01-01"}
+	if err := svc.CreatePurchase(ctx, p1); err != nil {
+		t.Fatalf("setup CreatePurchase: %v", err)
+	}
+
+	sheet, err := svc.GenerateSelectedSellSheet(ctx, []string{p1.ID, "nonexistent"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if sheet.Totals.ItemCount != 1 {
+		t.Errorf("expected 1 item, got %d", sheet.Totals.ItemCount)
+	}
+	if sheet.Totals.SkippedItems != 1 {
+		t.Errorf("expected 1 skipped, got %d", sheet.Totals.SkippedItems)
+	}
+}

@@ -178,6 +178,52 @@ func (s *service) GenerateGlobalSellSheet(ctx context.Context) (*SellSheet, erro
 	return sheet, nil
 }
 
+func (s *service) GenerateSelectedSellSheet(ctx context.Context, purchaseIDs []string) (*SellSheet, error) {
+	purchaseMap, err := s.repo.GetPurchasesByIDs(ctx, purchaseIDs)
+	if err != nil {
+		return nil, fmt.Errorf("batch purchase lookup: %w", err)
+	}
+
+	// Build campaign lookup for names and fee percentages
+	campaignList, err := s.repo.ListCampaigns(ctx, false)
+	if err != nil {
+		return nil, fmt.Errorf("list campaigns: %w", err)
+	}
+	campaignMap := make(map[string]*Campaign, len(campaignList))
+	for i := range campaignList {
+		campaignMap[campaignList[i].ID] = &campaignList[i]
+	}
+
+	sheet := &SellSheet{
+		GeneratedAt:  time.Now().Format(time.RFC3339),
+		CampaignName: "Selected Inventory",
+	}
+
+	for _, pid := range purchaseIDs {
+		purchase, ok := purchaseMap[pid]
+		if !ok {
+			sheet.Totals.SkippedItems++
+			continue
+		}
+
+		campName := ""
+		var feePct float64
+		if c := campaignMap[purchase.CampaignID]; c != nil {
+			campName = c.Name
+			feePct = c.EbayFeePct
+		}
+
+		item, _ := s.enrichSellSheetItem(ctx, purchase, campName, feePct)
+		sheet.Totals.TotalExpectedRevenue += item.TargetSellPrice
+		sheet.Items = append(sheet.Items, item)
+		sheet.Totals.TotalCostBasis += item.CostBasisCents
+		sheet.Totals.ItemCount++
+	}
+
+	sheet.Totals.TotalProjectedProfit = sheet.Totals.TotalExpectedRevenue - sheet.Totals.TotalCostBasis
+	return sheet, nil
+}
+
 func computeRecommendation(snapshot *MarketSnapshot, clValueCents int) string {
 	if clValueCents <= 0 || snapshot.LastSoldCents <= 0 {
 		return "stable"

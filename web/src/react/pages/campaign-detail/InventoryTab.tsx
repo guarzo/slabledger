@@ -13,7 +13,7 @@ import { useExpectedValues } from '../../queries/useCampaignQueries';
 import RecordSaleModal from './RecordSaleModal';
 import PriceHintDialog from '../../PriceHintDialog';
 import PriceOverrideDialog from '../../PriceOverrideDialog';
-import { bestPrice, unrealizedPL, formatPL, getReviewStatus, reviewUrgencySort } from './inventory/utils';
+import { bestPrice, unrealizedPL, formatPL, getReviewStatus, reviewUrgencySort, isCardShowCandidate } from './inventory/utils';
 import type { SortKey, SortDir } from './inventory/utils';
 import DesktopRow from './inventory/DesktopRow';
 import MobileCard from './inventory/MobileCard';
@@ -51,7 +51,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [searchQuery, setSearchQuery] = useState('');
   const [statsExpanded, setStatsExpanded] = useState(false);
-  const [filterTab, setFilterTab] = useState<'needs_review' | 'large_gap' | 'no_data' | 'flagged' | 'all'>('needs_review');
+  const [filterTab, setFilterTab] = useState<'needs_review' | 'large_gap' | 'no_data' | 'flagged' | 'card_show' | 'all'>('needs_review');
   const [showAll, setShowAll] = useState(false);
   const debouncedSearch = useDebounce(searchQuery, 300);
   const isMobile = useMediaQuery('(max-width: 768px)');
@@ -61,7 +61,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
   // Compute review stats and filter tab counts in a single pass
   const { reviewStats, tabCounts } = useMemo(() => {
     const stats: ReviewStats = { total: items.length, needsReview: 0, reviewed: 0, flagged: 0 };
-    const counts = { needs_review: 0, large_gap: 0, no_data: 0, flagged: 0, all: items.length };
+    const counts = { needs_review: 0, large_gap: 0, no_data: 0, flagged: 0, card_show: 0, all: items.length };
     for (const item of items) {
       if (item.hasOpenFlag) stats.flagged++;
       if (item.purchase.reviewedAt) stats.reviewed++;
@@ -72,6 +72,9 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
       else if (status === 'large_gap') { counts.needs_review++; counts.large_gap++; }
       else if (status === 'no_data') { counts.needs_review++; counts.no_data++; }
       else if (status === 'flagged') counts.flagged++;
+    }
+    for (const item of items) {
+      if (isCardShowCandidate(item)) counts.card_show++;
     }
     return { reviewStats: stats, tabCounts: counts };
   }, [items]);
@@ -131,6 +134,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
           if (filterTab === 'large_gap') return status === 'large_gap';
           if (filterTab === 'no_data') return status === 'no_data';
           if (filterTab === 'flagged') return status === 'flagged';
+          if (filterTab === 'card_show') return isCardShowCandidate(i);
           // 'needs_review' tab shows needs_review + large_gap + no_data (all unreviewed/unflagged)
           return status === 'needs_review' || status === 'large_gap' || status === 'no_data';
         });
@@ -397,12 +401,25 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
       {selected.size > 0 && (
         <div className="flex items-center justify-between mb-3">
           <span className="text-sm text-[var(--text-muted)]">{selected.size} selected</span>
-          <Button
-            size="sm"
-            onClick={() => openSaleModal(items.filter(i => selected.has(i.purchase.id)))}
-          >
-            Record Sale ({selected.size})
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => {
+                const ids = Array.from(selected);
+                const params = new URLSearchParams({ ids: ids.join(','), campaignId: campaignId ?? '' });
+                window.open(`/sell-sheet?${params.toString()}`, '_blank');
+              }}
+            >
+              Sell Sheet ({selected.size})
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => openSaleModal(items.filter(i => selected.has(i.purchase.id)))}
+            >
+              Record Sale ({selected.size})
+            </Button>
+          </div>
         </div>
       )}
 
@@ -428,6 +445,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
             { key: 'large_gap' as const, label: 'Large Gap', color: 'var(--danger)' },
             { key: 'no_data' as const, label: 'No Data', color: 'var(--text-muted)' },
             { key: 'flagged' as const, label: 'Flagged', color: 'var(--danger)' },
+            { key: 'card_show' as const, label: 'Card Show', color: 'var(--brand-400)' },
             { key: 'all' as const, label: 'All', color: 'var(--text)' },
           ] as const).map(tab => (
             <button
@@ -510,11 +528,11 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
             <SortableHeader label="Card" sortKey="name" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="flex-1 min-w-0" />
             <SortableHeader label="Gr" sortKey="grade" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-center" style={{ width: '36px' }} />
             <SortableHeader label="Cost" sortKey="cost" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-right" style={{ width: '72px' }} />
-            <SortableHeader label="Market" sortKey="market" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-right" style={{ width: '88px' }} />
+            <SortableHeader label="Market" sortKey="market" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-right" style={{ width: '100px' }} />
             <div className="glass-table-th flex-shrink-0 text-right" style={{ width: '68px' }}>CL</div>
             <SortableHeader label="P/L" sortKey="pl" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-right" style={{ width: '72px' }} />
             <SortableHeader label="Days" sortKey="days" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-center" style={{ width: '40px' }} />
-            <div className="glass-table-th flex-shrink-0 text-center" style={{ width: '56px' }}>Signal</div>
+            <div className="glass-table-th flex-shrink-0 text-center" style={{ width: '48px' }}>Signal</div>
             <div className="glass-table-th flex-shrink-0 text-right" style={{ width: '68px' }}>Rec.</div>
             <div className="glass-table-th flex-shrink-0 text-center" style={{ width: '72px' }}>Status</div>
             {showEV && <SortableHeader label="EV" sortKey="ev" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-right" style={{ width: '64px' }} />}

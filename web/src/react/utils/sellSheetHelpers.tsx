@@ -35,3 +35,20 @@ export function cardSubtitle(item: SellSheetItem): string | null {
   if (item.cardNumber) parts.push(`#${item.cardNumber}`);
   return parts.length > 0 ? parts.join(' · ') : null;
 }
+
+/** Compute margin percentage code for the sell sheet. Returns "[XX]" where XX is the margin %. */
+export function marginCode(targetSellPrice: number, costBasisCents: number): string {
+  if (costBasisCents <= 0 || targetSellPrice <= 0) return '[0]';
+  const pct = Math.floor(((targetSellPrice - costBasisCents) / costBasisCents) * 100);
+  return `[${Math.max(pct, 0)}]`;
+}
+
+/** Check if a SellSheetItem is a "hot seller" based on market data. */
+export function isHotSellerFromSellSheet(item: SellSheetItem): boolean {
+  const snap = item.currentMarket;
+  if (!snap || !snap.salesLast30d || snap.salesLast30d < 3) return false;
+  if (!snap.lastSoldCents || snap.lastSoldCents <= 0) return false;
+  const target = item.targetSellPrice ?? 0;
+  if (target <= 0) return false;
+  return snap.lastSoldCents >= target;
+}
