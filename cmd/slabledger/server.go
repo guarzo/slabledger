@@ -46,9 +46,10 @@ type ServerDependencies struct {
 	InstagramHandler          *handlers.InstagramHandler  // Instagram publishing; nil = disabled
 	AIStatusHandler           *handlers.AIStatusHandler   // AI usage stats; nil = disabled
 	PriceFlagsHandler         *handlers.PriceFlagsHandler // Price flag admin; nil = disabled
-	CardLadderHandler         *handlers.CardLadderHandler // Card Ladder admin; nil = disabled
-	SalesCompsHandler         *handlers.SalesCompsHandler // Sales comps; nil = disabled
-	PicksHandler              *handlers.PicksHandler      // AI picks; nil = disabled
+	CardLadderHandler         *handlers.CardLadderHandler         // Card Ladder admin; nil = disabled
+	SalesCompsHandler         *handlers.SalesCompsHandler         // Sales comps; nil = disabled
+	PicksHandler              *handlers.PicksHandler              // AI picks; nil = disabled
+	OpportunitiesHandler      *handlers.OpportunitiesHandler      // Arbitrage opportunities; nil = disabled
 }
 
 // EnvVarValidation holds the result of environment variable validation
@@ -211,6 +212,7 @@ func startWebServer(ctx context.Context, deps ServerDependencies) error {
 		CardLadderHandler:         deps.CardLadderHandler,
 		SalesCompsHandler:         deps.SalesCompsHandler,
 		PicksHandler:              deps.PicksHandler,
+		OpportunitiesHandler:      deps.OpportunitiesHandler,
 		Logger:                    logger,
 		AdminEmails:               cfg.Auth.AdminEmails,
 		DatabasePath:              cfg.Database.Path,
