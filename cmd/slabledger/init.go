@@ -4,12 +4,14 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/guarzo/slabledger/internal/adapters/advisortool"
 	"github.com/guarzo/slabledger/internal/adapters/clients/azureai"
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardhedger"
+	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
 	"github.com/guarzo/slabledger/internal/adapters/clients/fusionprice"
 	igclient "github.com/guarzo/slabledger/internal/adapters/clients/instagram"
 	"github.com/guarzo/slabledger/internal/adapters/clients/pricecharting"
@@ -256,6 +258,47 @@ func initializeSocialService(
 	return socialService, socialRepo, igClient, igStore, igTokenRefresher
 }
 
+// initializeCardLadder creates the Card Ladder client, auth, and store.
+// Returns nil values if encryption key is not configured.
+func initializeCardLadder(
+	ctx context.Context,
+	logger observability.Logger,
+	db *sqlite.DB,
+	encryptor crypto.Encryptor,
+) (*cardladder.Client, *cardladder.FirebaseAuth, *sqlite.CardLadderStore) {
+	if encryptor == nil {
+		logger.Info(ctx, "Card Ladder disabled: encryption key not configured")
+		return nil, nil, nil
+	}
+
+	store := sqlite.NewCardLadderStore(db.DB, encryptor)
+
+	// Try to load existing config to set up the client
+	clCfg, err := store.GetConfig(ctx)
+	if err != nil {
+		logger.Warn(ctx, "failed to load Card Ladder config", observability.Err(err))
+	}
+
+	var fbAuth *cardladder.FirebaseAuth
+	var client *cardladder.Client
+
+	if clCfg != nil {
+		fbAuth = cardladder.NewFirebaseAuth(clCfg.FirebaseAPIKey)
+		client = cardladder.NewClient(
+			cardladder.WithTokenManager(fbAuth, clCfg.RefreshToken, time.Time{}),
+		)
+		logger.Info(ctx, "Card Ladder client initialized",
+			observability.String("email", clCfg.Email),
+			observability.String("collectionId", clCfg.CollectionID))
+	} else {
+		fbAuth = cardladder.NewFirebaseAuth("")
+		client = cardladder.NewClient()
+		logger.Info(ctx, "Card Ladder not configured; use POST /api/admin/cardladder/config to set up")
+	}
+
+	return client, fbAuth, store
+}
+
 // schedulerDeps bundles all dependencies needed by initializeSchedulers.
 type schedulerDeps struct {
 	Config               *config.Config
@@ -277,6 +320,8 @@ type schedulerDeps struct {
 	SocialService        social.Service
 	IGTokenRefresher     scheduler.InstagramTokenRefresher
 	CertSweeper          scheduler.CertSweeper
+	CardLadderClient     *cardladder.Client
+	CardLadderStore      *sqlite.CardLadderStore
 }
 
 // initializeSchedulers builds and starts the scheduler group, returning the
@@ -312,6 +357,11 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 		SocialContentDetector:   deps.SocialService,
 		InstagramTokenRefresher: deps.IGTokenRefresher,
 		CertSweeper:             deps.CertSweeper,
+		CardLadderClient:         deps.CardLadderClient,
+		CardLadderStore:          deps.CardLadderStore,
+		CardLadderPurchaseLister: deps.CampaignsRepo,
+		CardLadderValueUpdater:   deps.CampaignsRepo,
+		CardLadderCLRecorder:     deps.CampaignsRepo,
 	})
 	schedulerResult.Group.StartAll(schedulerCtx)
 

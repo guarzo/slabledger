@@ -38,6 +38,7 @@ type Router struct {
 	instagramHandler          *handlers.InstagramHandler
 	aiUsageHandler            *handlers.AIStatusHandler
 	priceFlagsHandler         *handlers.PriceFlagsHandler
+	cardLadderHandler         *handlers.CardLadderHandler
 	pricingAPIKey             string
 	logger                    observability.Logger
 	databasePath              string
@@ -65,6 +66,7 @@ type RouterConfig struct {
 	InstagramHandler          *handlers.InstagramHandler  // Instagram publishing; nil = disabled
 	AIStatusHandler           *handlers.AIStatusHandler   // AI usage stats; nil = disabled
 	PriceFlagsHandler         *handlers.PriceFlagsHandler // Price flag admin; nil = disabled
+	CardLadderHandler         *handlers.CardLadderHandler // Card Ladder admin; nil = disabled
 	Logger                    observability.Logger
 	AdminEmails               []string
 	DatabasePath              string
@@ -142,6 +144,10 @@ func NewRouter(cfg RouterConfig) *Router {
 
 	if cfg.PriceFlagsHandler != nil {
 		rt.priceFlagsHandler = cfg.PriceFlagsHandler
+	}
+
+	if cfg.CardLadderHandler != nil {
+		rt.cardLadderHandler = cfg.CardLadderHandler
 	}
 
 	if cfg.PricingAPIKey != "" && cfg.CampaignsRepo != nil {
@@ -299,6 +305,11 @@ func (rt *Router) Setup() http.Handler {
 		if rt.priceFlagsHandler != nil {
 			mux.Handle("GET /api/admin/price-flags", rt.authMW.RequireAdmin(http.HandlerFunc(rt.priceFlagsHandler.HandleListPriceFlags)))
 			mux.Handle("PATCH /api/admin/price-flags/{flagId}/resolve", rt.authMW.RequireAdmin(http.HandlerFunc(rt.priceFlagsHandler.HandleResolvePriceFlag)))
+		}
+		if rt.cardLadderHandler != nil {
+			mux.Handle("POST /api/admin/cardladder/config", rt.authMW.RequireAdmin(http.HandlerFunc(rt.cardLadderHandler.HandleSaveConfig)))
+			mux.Handle("GET /api/admin/cardladder/status", rt.authMW.RequireAdmin(http.HandlerFunc(rt.cardLadderHandler.HandleStatus)))
+			mux.Handle("POST /api/admin/cardladder/refresh", rt.authMW.RequireAdmin(http.HandlerFunc(rt.cardLadderHandler.HandleRefresh)))
 		}
 		rt.logger.Info(context.Background(), "admin routes registered")
 	}

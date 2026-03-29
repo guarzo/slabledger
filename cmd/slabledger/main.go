@@ -402,6 +402,17 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		ctx, cfg, logger, db, azureAIClient, aiCallRepo,
 	)
 
+	// Initialize Card Ladder
+	var clEncryptor crypto.Encryptor
+	if cfg.Auth.EncryptionKey != "" {
+		clEncryptor, _ = crypto.NewAESEncryptor(cfg.Auth.EncryptionKey)
+	}
+	clClient, clAuth, clStore := initializeCardLadder(ctx, logger, db, clEncryptor)
+	var clHandler *handlers.CardLadderHandler
+	if clStore != nil {
+		clHandler = handlers.NewCardLadderHandler(clStore, clClient, clAuth, logger)
+	}
+
 	// Create cert sweeper for periodic cert→card_id resolution in the CardHedger batch scheduler.
 	var certSweeper scheduler.CertSweeper
 	if cardHedgerClientImpl.Available() {
@@ -432,6 +443,8 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		SocialService:        socialService,
 		IGTokenRefresher:     igTokenRefresher,
 		CertSweeper:          certSweeper,
+		CardLadderClient:     clClient,
+		CardLadderStore:      clStore,
 	})
 
 	// Create price hints handler
@@ -526,6 +539,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		InstagramHandler:          igHandler,
 		AIStatusHandler:           aiStatusHandler,
 		PriceFlagsHandler:         priceFlagsHandler,
+		CardLadderHandler:         clHandler,
 	}
 	serverErr := startWebServer(ctx, deps)
 
