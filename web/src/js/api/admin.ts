@@ -28,6 +28,9 @@ declare module './client' {
     getCardRequests(): Promise<CardRequestSubmission[]>;
     submitCardRequest(id: number): Promise<{ status: string; requestId: string }>;
     submitAllCardRequests(): Promise<{ submitted: number; errors: number }>;
+    getCardLadderStatus(): Promise<{ configured: boolean; email?: string; collectionId?: string; cardsMapped?: number }>;
+    saveCardLadderConfig(config: { email: string; password: string; collectionId: string; firebaseApiKey: string }): Promise<{ status: string }>;
+    triggerCardLadderRefresh(): Promise<{ status: string }>;
   }
 }
 
@@ -109,4 +112,16 @@ proto.submitCardRequest = async function (this: APIClient, id: number): Promise<
 
 proto.submitAllCardRequests = async function (this: APIClient): Promise<{ submitted: number; errors: number }> {
   return this.post<{ submitted: number; errors: number }>('/admin/card-requests/submit-all');
+};
+
+proto.getCardLadderStatus = async function (this: APIClient) {
+  return this.get<{ configured: boolean; email?: string; collectionId?: string; cardsMapped?: number }>('/admin/cardladder/status');
+};
+
+proto.saveCardLadderConfig = async function (this: APIClient, config: { email: string; password: string; collectionId: string; firebaseApiKey: string }) {
+  return this.post<{ status: string }>('/admin/cardladder/config', config);
+};
+
+proto.triggerCardLadderRefresh = async function (this: APIClient) {
+  return this.post<{ status: string }>('/admin/cardladder/refresh');
 };
