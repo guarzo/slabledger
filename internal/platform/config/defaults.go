@@ -106,5 +106,10 @@ func Default() Config {
 			InitialDelay: 5 * time.Minute,
 			ContentHour:  5, // 5 AM UTC
 		},
+		CardLadder: CardLadderConfig{
+			Enabled:     false, // requires manual setup via admin endpoint
+			Interval:    24 * time.Hour,
+			RefreshHour: 4, // 4 AM UTC
+		},
 	}
 }

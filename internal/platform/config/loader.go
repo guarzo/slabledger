@@ -315,6 +315,17 @@ func FromEnv(base Config) Config {
 			cfg.SocialContent.ContentHour = h
 		}
 	}
+
+	// Card Ladder scheduler configuration
+	if v := os.Getenv("CARDLADDER_REFRESH_ENABLED"); v != "" {
+		cfg.CardLadder.Enabled = parseBool(v, false)
+	}
+	if v := os.Getenv("CARDLADDER_REFRESH_HOUR"); v != "" {
+		if i, err := strconv.Atoi(v); err == nil && i >= 0 && i <= 23 {
+			cfg.CardLadder.RefreshHour = i
+		}
+	}
+
 	// Adapter API keys and tokens
 	cfg.Adapters.PriceChartingToken = os.Getenv("PRICECHARTING_TOKEN")
 	cfg.Adapters.CardHedgerKey = os.Getenv("CARD_HEDGER_API_KEY")
