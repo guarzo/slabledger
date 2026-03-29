@@ -10,6 +10,8 @@ import { useToast } from '../../contexts/ToastContext';
 import { EmptyState, Button } from '../../ui';
 import { queryKeys } from '../../queries/queryKeys';
 import { useExpectedValues } from '../../queries/useCampaignQueries';
+import { api } from '../../../js/api';
+import type { PriceFlagReason } from '../../../types/campaigns/priceReview';
 import RecordSaleModal from './RecordSaleModal';
 import PriceHintDialog from '../../PriceHintDialog';
 import PriceOverrideDialog from '../../PriceOverrideDialog';
@@ -20,6 +22,7 @@ import MobileCard from './inventory/MobileCard';
 import CrackCandidatesBanner from './inventory/CrackCandidatesBanner';
 import SortableHeader from './inventory/SortableHeader';
 import ExpandedDetail from './inventory/ExpandedDetail';
+import PriceFlagDialog from './inventory/PriceFlagDialog';
 import ReviewSummaryBar from './inventory/ReviewSummaryBar';
 
 export interface InventoryTabProps {
@@ -47,6 +50,8 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
     currentOverrideSource?: string;
     aiSuggestedCents?: number;
   } | null>(null);
+  const [flagTarget, setFlagTarget] = useState<{ purchaseId: string; cardName: string; grade: number } | null>(null);
+  const [flagSubmitting, setFlagSubmitting] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>('name');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [searchQuery, setSearchQuery] = useState('');
@@ -101,6 +106,22 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
     }
     setExpandedId(null);
   }, [campaignId, queryClient]);
+
+  const handleFlagSubmit = useCallback(async (reason: PriceFlagReason) => {
+    if (!flagTarget) return;
+    setFlagSubmitting(true);
+    try {
+      await api.createPriceFlag(flagTarget.purchaseId, reason);
+      toast.success('Price flag submitted');
+      setFlagTarget(null);
+      handleReviewed();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to submit price flag';
+      toast.error(message);
+    } finally {
+      setFlagSubmitting(false);
+    }
+  }, [flagTarget, toast, handleReviewed]);
 
   // Build EV lookup map by certNumber; hide if insufficient data points or no campaignId
   const showEV = !!campaignId && evPortfolio && evPortfolio.items?.length > 0 && evPortfolio.minDataPoints >= 30;
@@ -532,7 +553,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
             <SortableHeader label="Card" sortKey="name" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="flex-1 min-w-0" />
             <SortableHeader label="Gr" sortKey="grade" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-center" style={{ width: '36px' }} />
             <SortableHeader label="Cost" sortKey="cost" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-right" style={{ width: '72px' }} />
-            <SortableHeader label="Market" sortKey="market" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-right" style={{ width: '100px' }} />
+            <SortableHeader label="Market" sortKey="market" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-right" style={{ width: '120px' }} />
             <div className="glass-table-th flex-shrink-0 text-right" style={{ width: '68px' }}>CL</div>
             <SortableHeader label="P/L" sortKey="pl" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-right" style={{ width: '72px' }} />
             <SortableHeader label="Days" sortKey="days" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-center" style={{ width: '40px' }} />
@@ -580,7 +601,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                         showCampaignColumn={showCampaignColumn}
                       />
                     </div>
-                    {isExpanded && <ExpandedDetail item={item} onReviewed={handleReviewed} campaignId={campaignId} />}
+                    {isExpanded && <ExpandedDetail item={item} onReviewed={handleReviewed} campaignId={campaignId} onOpenFlagDialog={() => setFlagTarget({ purchaseId: item.purchase.id, cardName: item.purchase.cardName, grade: item.purchase.gradeValue })} />}
                   </div>
                 );
               })}
@@ -623,6 +644,16 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
           aiSuggestedCents={priceTarget.aiSuggestedCents}
           onClose={() => setPriceTarget(null)}
           onSaved={handlePriceSaved}
+        />
+      )}
+
+      {flagTarget && (
+        <PriceFlagDialog
+          cardName={flagTarget.cardName}
+          grade={flagTarget.grade}
+          onSubmit={handleFlagSubmit}
+          onCancel={() => setFlagTarget(null)}
+          isSubmitting={flagSubmitting}
         />
       )}
     </div>

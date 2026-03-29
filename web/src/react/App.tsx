@@ -31,6 +31,7 @@ const ToolsPage = lazy(() => import('./pages/ToolsPage'));
 const WatchlistPage = lazy(() => import('./pages/WatchlistPage'));
 const ContentPage = lazy(() => import('./pages/ContentPage'));
 const SellSheetPrintPage = lazy(() => import('./pages/SellSheetPrintPage'));
+const OpportunitiesPage = lazy(() => import('./pages/OpportunitiesPage'));
 
 function AppContent() {
   const location = useLocation();
@@ -67,6 +68,14 @@ function AppContent() {
                 <ProtectedRoute>
                   <PageTransition>
                     <WatchlistPage />
+                  </PageTransition>
+                </ProtectedRoute>
+              } />
+              {/* Opportunities */}
+              <Route path="/opportunities" element={
+                <ProtectedRoute>
+                  <PageTransition>
+                    <OpportunitiesPage />
                   </PageTransition>
                 </ProtectedRoute>
               } />

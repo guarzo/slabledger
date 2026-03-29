@@ -177,7 +177,7 @@ pollFallback:
 	if lastResponseID != "" && req.Store && responsesAPI {
 		// Use a fresh context for the poll — the original may be deadline-exceeded,
 		// but the response may still have completed server-side.
-		pollCtx, pollCancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		pollCtx, pollCancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		defer pollCancel()
 		if c.logger != nil {
 			c.logger.Info(pollCtx, "attempting poll fallback for stored response",
@@ -197,7 +197,8 @@ pollFallback:
 }
 
 // pollResponseFallback retrieves a stored response via GET when streaming failed.
-// It polls up to 5 times (15s apart, with a 30s initial wait to let Azure finish processing).
+// It polls up to 10 times (10s apart, with a 20s initial wait to let Azure finish processing).
+// Total budget: ~110s, fitting within the 3-minute poll context.
 func (c *Client) pollResponseFallback(ctx context.Context, responseID string, stream func(ai.CompletionChunk)) error {
 	endpoint := strings.TrimRight(c.config.Endpoint, "/")
 	var url string
@@ -208,11 +209,11 @@ func (c *Client) pollResponseFallback(ctx context.Context, responseID string, st
 			endpoint, c.config.DeploymentName, responseID, responsesAPIVersion)
 	}
 
-	for poll := range 5 {
+	for poll := range 10 {
 		// Wait before each poll — give Azure time to finish processing.
-		wait := 15 * time.Second
+		wait := 10 * time.Second
 		if poll == 0 {
-			wait = 30 * time.Second // longer initial wait
+			wait = 20 * time.Second // longer initial wait
 		}
 		select {
 		case <-ctx.Done():
