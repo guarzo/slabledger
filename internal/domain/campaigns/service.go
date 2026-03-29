@@ -175,6 +175,7 @@ type Service interface {
 	// Sell sheet
 	GenerateSellSheet(ctx context.Context, campaignID string, purchaseIDs []string) (*SellSheet, error)
 	GenerateGlobalSellSheet(ctx context.Context) (*SellSheet, error)
+	GenerateSelectedSellSheet(ctx context.Context, purchaseIDs []string) (*SellSheet, error)
 
 	// Tuning
 	GetCampaignTuning(ctx context.Context, campaignID string) (*TuningResponse, error)

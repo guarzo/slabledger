@@ -1,5 +1,6 @@
 import { Button } from '../../../ui';
 import type { ReviewStats } from '../../../../types/campaigns/priceReview';
+import { useMediaQuery } from '../../../hooks/useMediaQuery';
 
 interface ReviewSummaryBarProps {
   stats: ReviewStats;
@@ -29,14 +30,19 @@ function StatBlock({ label, value, colorClass }: StatBlockProps) {
 }
 
 export default function ReviewSummaryBar({ stats, searchQuery, onSearchChange, showAll, onToggleShowAll }: ReviewSummaryBarProps) {
+  const isMobile = useMediaQuery('(max-width: 768px)');
   return (
-    <div className="flex items-center justify-between gap-4 rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] px-4 py-3">
+    <div className={`rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] px-4 py-3 ${isMobile ? 'space-y-3' : 'flex items-center justify-between gap-4'}`}>
       {/* Stats */}
       <div className="flex items-center gap-1 divide-x divide-[var(--border)]">
         <StatBlock label="Cards" value={stats.total} />
-        <StatBlock label="Need Review" value={stats.needsReview} colorClass="text-[var(--warning)]" />
-        <StatBlock label="Reviewed" value={stats.reviewed} colorClass="text-[var(--success)]" />
-        <StatBlock label="Flagged" value={stats.flagged} colorClass="text-[var(--danger)]" />
+        {!isMobile && (
+          <>
+            <StatBlock label="Need Review" value={stats.needsReview} colorClass="text-[var(--warning)]" />
+            <StatBlock label="Reviewed" value={stats.reviewed} colorClass="text-[var(--success)]" />
+            <StatBlock label="Flagged" value={stats.flagged} colorClass="text-[var(--danger)]" />
+          </>
+        )}
       </div>
 
       {/* Controls */}
@@ -46,7 +52,7 @@ export default function ReviewSummaryBar({ stats, searchQuery, onSearchChange, s
           placeholder="Search cards..."
           value={searchQuery}
           onChange={e => onSearchChange(e.target.value)}
-          className="w-48 px-3 py-1.5 text-sm rounded-md border border-[var(--border)] bg-[var(--surface-raised)] text-[var(--text)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent)]"
+          className={`${isMobile ? 'flex-1' : 'w-48'} px-3 py-1.5 text-sm rounded-md border border-[var(--border)] bg-[var(--surface-raised)] text-[var(--text)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent)]`}
         />
         <Button
           variant={showAll ? 'primary' : 'secondary'}

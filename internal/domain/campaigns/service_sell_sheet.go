@@ -144,7 +144,43 @@ func (s *service) GenerateGlobalSellSheet(ctx context.Context) (*SellSheet, erro
 		return nil, fmt.Errorf("list unsold purchases: %w", err)
 	}
 
-	// Build campaign lookup for name and fee
+	// Convert slice to pointer slice for buildCrossCampaignSellSheet
+	ptrs := make([]*Purchase, len(purchases))
+	for i := range purchases {
+		ptrs[i] = &purchases[i]
+	}
+
+	return s.buildCrossCampaignSellSheet(ctx, ptrs, "All Inventory")
+}
+
+func (s *service) GenerateSelectedSellSheet(ctx context.Context, purchaseIDs []string) (*SellSheet, error) {
+	purchaseMap, err := s.repo.GetPurchasesByIDs(ctx, purchaseIDs)
+	if err != nil {
+		return nil, fmt.Errorf("batch purchase lookup: %w", err)
+	}
+
+	var ptrs []*Purchase
+	skipped := 0
+	for _, pid := range purchaseIDs {
+		purchase, ok := purchaseMap[pid]
+		if !ok {
+			skipped++
+			continue
+		}
+		ptrs = append(ptrs, purchase)
+	}
+
+	sheet, err := s.buildCrossCampaignSellSheet(ctx, ptrs, "Selected Inventory")
+	if err != nil {
+		return nil, err
+	}
+	sheet.Totals.SkippedItems = skipped
+	return sheet, nil
+}
+
+// buildCrossCampaignSellSheet builds a sell sheet from purchases that may span
+// multiple campaigns, looking up each campaign's name and fee percentage.
+func (s *service) buildCrossCampaignSellSheet(ctx context.Context, purchases []*Purchase, sheetName string) (*SellSheet, error) {
 	campaignList, err := s.repo.ListCampaigns(ctx, false)
 	if err != nil {
 		return nil, fmt.Errorf("list campaigns: %w", err)
@@ -156,11 +192,10 @@ func (s *service) GenerateGlobalSellSheet(ctx context.Context) (*SellSheet, erro
 
 	sheet := &SellSheet{
 		GeneratedAt:  time.Now().Format(time.RFC3339),
-		CampaignName: "All Inventory",
+		CampaignName: sheetName,
 	}
 
-	for i := range purchases {
-		purchase := &purchases[i]
+	for _, purchase := range purchases {
 		campName := ""
 		var feePct float64
 		if c := campaignMap[purchase.CampaignID]; c != nil {

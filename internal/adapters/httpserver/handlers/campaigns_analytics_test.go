@@ -440,3 +440,67 @@ func TestHandlePNLByChannel_NilReturnsEmptyArray(t *testing.T) {
 		t.Error("expected non-nil array, got nil")
 	}
 }
+
+// --- HandleSelectedSellSheet ---
+
+func TestHandleSelectedSellSheet_Success(t *testing.T) {
+	svc := &mocks.MockCampaignService{
+		GenerateSelectedSellSheetFn: func(_ context.Context, pids []string) (*campaigns.SellSheet, error) {
+			return &campaigns.SellSheet{CampaignName: "All Inventory", Items: make([]campaigns.SellSheetItem, len(pids))}, nil
+		},
+	}
+	h := newTestHandler(svc)
+
+	body := `{"purchaseIds":["p1","p2","p3"]}`
+	req := httptest.NewRequest(http.MethodPost, "/api/portfolio/sell-sheet", bytes.NewBufferString(body))
+	rec := httptest.NewRecorder()
+	h.HandleSelectedSellSheet(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandleSelectedSellSheet_EmptyIDs(t *testing.T) {
+	h := newTestHandler(&mocks.MockCampaignService{})
+
+	body := `{"purchaseIds":[]}`
+	req := httptest.NewRequest(http.MethodPost, "/api/portfolio/sell-sheet", bytes.NewBufferString(body))
+	rec := httptest.NewRecorder()
+	h.HandleSelectedSellSheet(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rec.Code)
+	}
+	decodeErrorResponse(t, rec)
+}
+
+func TestHandleSelectedSellSheet_InvalidBody(t *testing.T) {
+	h := newTestHandler(&mocks.MockCampaignService{})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/portfolio/sell-sheet", bytes.NewBufferString("{bad"))
+	rec := httptest.NewRecorder()
+	h.HandleSelectedSellSheet(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rec.Code)
+	}
+	decodeErrorResponse(t, rec)
+}
+
+func TestHandleSelectedSellSheet_TooManyIDs(t *testing.T) {
+	h := newTestHandler(&mocks.MockCampaignService{})
+
+	ids := make([]string, 5001)
+	for i := range ids {
+		ids[i] = fmt.Sprintf("id-%d", i)
+	}
+	body, _ := json.Marshal(map[string]any{"purchaseIds": ids})
+	req := httptest.NewRequest(http.MethodPost, "/api/portfolio/sell-sheet", bytes.NewBuffer(body))
+	rec := httptest.NewRecorder()
+	h.HandleSelectedSellSheet(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rec.Code)
+	}
+}

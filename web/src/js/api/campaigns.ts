@@ -68,6 +68,12 @@ declare module './client' {
     // Sell sheet
     generateGlobalSellSheet(): Promise<SellSheet>;
 
+    // Per-campaign sell sheet
+    generateSellSheet(campaignId: string, purchaseIds: string[]): Promise<SellSheet>;
+
+    // Selected sell sheet (cross-campaign)
+    generateSelectedSellSheet(purchaseIds: string[]): Promise<SellSheet>;
+
     // Global imports
     globalImportCL(file: File): Promise<GlobalImportResult>;
     globalExportCL(missingCLOnly?: boolean): Promise<Blob>;
@@ -250,6 +256,16 @@ proto.quickAddPurchase = async function (this: APIClient, campaignId: string, re
 // Generate global sell sheet (all unsold inventory)
 proto.generateGlobalSellSheet = async function (this: APIClient): Promise<SellSheet> {
   return this.post<SellSheet>('/sell-sheet', {});
+};
+
+// Per-campaign sell sheet
+proto.generateSellSheet = async function (this: APIClient, campaignId: string, purchaseIds: string[]): Promise<SellSheet> {
+  return this.post<SellSheet>(`/campaigns/${campaignId}/sell-sheet`, { purchaseIds });
+};
+
+// Selected sell sheet (cross-campaign, filtered by purchase IDs)
+proto.generateSelectedSellSheet = async function (this: APIClient, purchaseIds: string[]): Promise<SellSheet> {
+  return this.post<SellSheet>('/portfolio/sell-sheet', { purchaseIds });
 };
 
 // Global purchase endpoints (cross-campaign)

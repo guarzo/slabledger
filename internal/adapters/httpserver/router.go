@@ -311,12 +311,15 @@ func (rt *Router) Setup() http.Handler {
 	// Global sell sheet & inventory endpoints
 	if rt.campaignsHandler != nil {
 		sellSheetRoute := http.HandlerFunc(rt.campaignsHandler.HandleGlobalSellSheet)
+		selectedSellSheetRoute := http.HandlerFunc(rt.campaignsHandler.HandleSelectedSellSheet)
 		inventoryRoute := http.HandlerFunc(rt.campaignsHandler.HandleGlobalInventory)
 		if rt.authMW != nil {
 			mux.Handle("/api/sell-sheet", rt.authMW.RequireAuth(sellSheetRoute))
+			mux.Handle("POST /api/portfolio/sell-sheet", rt.authMW.RequireAuth(selectedSellSheetRoute))
 			mux.Handle("/api/inventory", rt.authMW.RequireAuth(inventoryRoute))
 		} else {
 			mux.HandleFunc("/api/sell-sheet", rt.campaignsHandler.HandleGlobalSellSheet)
+			mux.HandleFunc("POST /api/portfolio/sell-sheet", rt.campaignsHandler.HandleSelectedSellSheet)
 			mux.HandleFunc("/api/inventory", rt.campaignsHandler.HandleGlobalInventory)
 		}
 		mux.HandleFunc("/sell-sheet", rt.spaHandler.HandleIndex)
