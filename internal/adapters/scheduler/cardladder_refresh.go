@@ -32,6 +32,7 @@ type CardLadderRefreshScheduler struct {
 	purchaseLister CardLadderPurchaseLister
 	valueUpdater   CardLadderValueUpdater
 	clRecorder     campaigns.CLValueHistoryRecorder
+	salesStore     *sqlite.CLSalesStore
 	logger         observability.Logger
 	config         config.CardLadderConfig
 
@@ -46,6 +47,7 @@ func NewCardLadderRefreshScheduler(
 	purchaseLister CardLadderPurchaseLister,
 	valueUpdater CardLadderValueUpdater,
 	clRecorder campaigns.CLValueHistoryRecorder,
+	salesStore *sqlite.CLSalesStore,
 	logger observability.Logger,
 	cfg config.CardLadderConfig,
 ) *CardLadderRefreshScheduler {
@@ -55,6 +57,7 @@ func NewCardLadderRefreshScheduler(
 		purchaseLister: purchaseLister,
 		valueUpdater:   valueUpdater,
 		clRecorder:     clRecorder,
+		salesStore:     salesStore,
 		logger:         logger,
 		config:         cfg,
 		stopChan:       make(chan struct{}),
@@ -237,12 +240,69 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 		updated++
 	}
 
+	// Phase 2: fetch sales comps for mapped cards with gemRateIDs
+	if s.salesStore != nil {
+		s.refreshSalesComps(ctx)
+	}
+
 	s.logger.Info(ctx, "CL refresh: complete",
 		observability.Int("updated", updated),
 		observability.Int("mapped", mapped),
 		observability.Int("skipped", skipped),
 		observability.Int("totalCLCards", len(cards)))
 	return nil
+}
+
+func (s *CardLadderRefreshScheduler) refreshSalesComps(ctx context.Context) {
+	mappings, err := s.store.ListMappings(ctx)
+	if err != nil {
+		s.logger.Error(ctx, "CL sales: failed to list mappings", observability.Err(err))
+		return
+	}
+
+	fetched := 0
+	for _, m := range mappings {
+		if m.CLGemRateID == "" || m.CLCondition == "" {
+			continue
+		}
+
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
+		resp, err := s.client.FetchSalesComps(ctx, m.CLGemRateID, m.CLCondition, "psa", 0, 100)
+		if err != nil {
+			s.logger.Warn(ctx, "CL sales: fetch failed",
+				observability.String("gemRateId", m.CLGemRateID),
+				observability.Err(err))
+			continue
+		}
+
+		for _, comp := range resp.Hits {
+			priceCents := int(comp.Price * 100)
+			saleDate := comp.Date
+			if len(saleDate) > 10 {
+				saleDate = saleDate[:10]
+			}
+			_ = s.salesStore.UpsertSaleComp(ctx, sqlite.CLSaleCompRecord{
+				GemRateID:   comp.GemRateID,
+				ItemID:      comp.ItemID,
+				SaleDate:    saleDate,
+				PriceCents:  priceCents,
+				Platform:    comp.Platform,
+				ListingType: comp.ListingType,
+				Seller:      comp.Seller,
+				ItemURL:     comp.URL,
+				SlabSerial:  comp.SlabSerial,
+			})
+		}
+		fetched++
+	}
+
+	s.logger.Info(ctx, "CL sales: refresh complete",
+		observability.Int("cardsProcessed", fetched))
 }
 
 // extractGradeValue parses "PSA 9" or "g9" → 9.0
