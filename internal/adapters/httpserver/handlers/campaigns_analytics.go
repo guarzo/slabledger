@@ -177,6 +177,33 @@ func (h *CampaignsHandler) HandleGlobalSellSheet(w http.ResponseWriter, r *http.
 	writeJSON(w, http.StatusOK, sheet)
 }
 
+// HandleSelectedSellSheet handles POST /api/portfolio/sell-sheet.
+func (h *CampaignsHandler) HandleSelectedSellSheet(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		PurchaseIDs []string `json:"purchaseIds"`
+	}
+	if !decodeBody(w, r, &req) {
+		return
+	}
+	if len(req.PurchaseIDs) == 0 {
+		writeError(w, http.StatusBadRequest, "At least one purchase ID is required")
+		return
+	}
+	const maxSelectedSellSheetItems = 5000
+	if len(req.PurchaseIDs) > maxSelectedSellSheetItems {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("Too many purchase IDs (max %d)", maxSelectedSellSheetItems))
+		return
+	}
+
+	sheet, err := h.service.GenerateSelectedSellSheet(r.Context(), req.PurchaseIDs)
+	if err != nil {
+		h.logger.Error(r.Context(), "selected sell sheet generation failed", observability.Err(err))
+		writeError(w, http.StatusInternalServerError, "Internal server error")
+		return
+	}
+	writeJSON(w, http.StatusOK, sheet)
+}
+
 // HandleTuning handles GET /api/campaigns/{id}/tuning.
 func (h *CampaignsHandler) HandleTuning(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathID(w, r, "id", "Campaign ID")

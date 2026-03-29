@@ -1,5 +1,6 @@
 import type { MarketSnapshot, AgingItem, SourcePrice } from '../../../../types/campaigns';
 import { formatCents } from '../../../utils/formatters';
+import { checkHotSeller } from '../../../utils/sellSheetHelpers';
 
 export type SortKey = 'name' | 'grade' | 'cost' | 'market' | 'pl' | 'days' | 'ev';
 export type SortDir = 'asc' | 'desc';
@@ -256,4 +257,18 @@ function relativeTime(isoDate: string): string {
   if (days < 30) return `${days}d ago`;
   if (days < 365) return `${Math.floor(days / 30)}mo ago`;
   return `${Math.floor(days / 365)}y ago`;
+}
+
+/** A card is a "hot seller" if it has 3+ sales in the last 30 days and the last sold price >= target price. */
+export function isHotSeller(item: AgingItem): boolean {
+  return checkHotSeller(item.currentMarket, item.recommendedPriceCents ?? 0);
+}
+
+/** A card is a "card show candidate" if it's a hot seller or matches the card show channel heuristic. */
+export function isCardShowCandidate(item: AgingItem): boolean {
+  if (isHotSeller(item)) return true;
+  // Grade 7 doesn't qualify for GameStop (requires 8+) and moves better at card shows than online
+  if (item.purchase.gradeValue === 7) return true;
+  if (item.currentMarket?.trend30d != null && item.currentMarket.trend30d > 0.05) return true;
+  return false;
 }

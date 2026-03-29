@@ -454,6 +454,65 @@ select:focus-visible,
   }
 }
 
+/* Sell sheet print page — screen preview */
+.sell-sheet-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 4px 0 4px 12px;
+  border-bottom: 1px solid var(--surface-2);
+}
+
+.sell-sheet-row--hot {
+  border-left: 4px solid var(--text);
+  padding-left: 8px;
+}
+
+.sell-sheet-row--hot .sell-sheet-title {
+  font-weight: bold;
+}
+
+.sell-sheet-title {
+  font-size: 0.875rem;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.sell-sheet-meta {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.sell-sheet-price {
+  font-size: 1rem;
+  font-weight: bold;
+  margin-left: auto;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.sell-sheet-notes {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  margin-left: 8px;
+}
+
+.sell-sheet-separator {
+  border-bottom: 2px dashed var(--surface-3);
+  margin: 6px 0;
+}
+
+.sell-sheet-footer {
+  margin-top: 10px;
+  padding-top: 6px;
+  border-top: 1px solid var(--surface-2);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-align: right;
+}
+
 /* ===================================
    PRINT STYLES
    =================================== */
@@ -505,5 +564,67 @@ select:focus-visible,
   .print-color-adjust {
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
+  }
+
+  .sell-sheet-print {
+    padding: 0;
+    max-width: 100% !important;
+    font-family: 'Courier New', monospace;
+    font-size: 10pt;
+    color: #000;
+  }
+
+  .sell-sheet-row {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    padding: 3px 0 3px 12px;
+    border-bottom: 1px solid #ddd;
+    break-inside: avoid;
+  }
+
+  .sell-sheet-row--hot {
+    border-left: 4px solid #000;
+    padding-left: 8px;
+    font-weight: bold;
+  }
+
+  .sell-sheet-title {
+    font-size: 10pt;
+    white-space: nowrap;
+  }
+
+  .sell-sheet-meta {
+    font-size: 8pt;
+    color: #555;
+    white-space: nowrap;
+  }
+
+  .sell-sheet-price {
+    font-size: 12pt;
+    font-weight: bold;
+    margin-left: auto;
+    white-space: nowrap;
+  }
+
+  .sell-sheet-notes {
+    font-size: 8pt;
+    color: #bbb;
+    white-space: nowrap;
+    margin-left: 8px;
+  }
+
+  .sell-sheet-separator {
+    border-bottom: 2px dashed #999;
+    margin: 4px 0;
+  }
+
+  .sell-sheet-footer {
+    margin-top: 8px;
+    padding-top: 4px;
+    border-top: 1px solid #999;
+    font-size: 8pt;
+    color: #888;
+    text-align: right;
   }
 }

@@ -1,3 +1,4 @@
+import type { MarketSnapshot } from '../../types/campaigns';
 import type { SellSheetItem } from '../../types/campaigns';
 
 /** Upper-case suffixes that should stay uppercase in Pokemon card names. */
@@ -34,4 +35,27 @@ export function cardSubtitle(item: SellSheetItem): string | null {
   if (item.setName) parts.push(item.setName);
   if (item.cardNumber) parts.push(`#${item.cardNumber}`);
   return parts.length > 0 ? parts.join(' · ') : null;
+}
+
+/** Compute margin percentage code for the sell sheet. Returns "[XX]" where XX is the margin %. Negative means underwater. */
+export function marginCode(targetSellPrice: number, costBasisCents: number): string {
+  if (costBasisCents <= 0 || targetSellPrice <= 0) return '[0]';
+  const pct = Math.floor(((targetSellPrice - costBasisCents) / costBasisCents) * 100);
+  return `[${pct}]`;
+}
+
+/**
+ * Check if a card is a "hot seller": 3+ sales in 30 days and last sold >= target price.
+ * Works with any type that has the required fields (SellSheetItem, AgingItem, etc.).
+ */
+export function checkHotSeller(snap: MarketSnapshot | undefined, targetPriceCents: number): boolean {
+  if (!snap || !snap.salesLast30d || snap.salesLast30d < 3) return false;
+  if (!snap.lastSoldCents || snap.lastSoldCents <= 0) return false;
+  if (targetPriceCents <= 0) return false;
+  return snap.lastSoldCents >= targetPriceCents;
+}
+
+/** Check if a SellSheetItem is a "hot seller" based on market data. */
+export function isHotSellerFromSellSheet(item: SellSheetItem): boolean {
+  return checkHotSeller(item.currentMarket, item.targetSellPrice ?? 0);
 }

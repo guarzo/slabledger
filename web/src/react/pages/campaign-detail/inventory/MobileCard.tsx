@@ -5,7 +5,7 @@ import MarketplaceLinks from './MarketplaceLinks';
 import {
   bestPrice, unrealizedPL, marketTrend, velocityLabel,
   getSourceByType, fmtDateShort, plColor, formatPL,
-  deriveSignalDirection, deriveSignalDelta,
+  deriveSignalDirection, deriveSignalDelta, isHotSeller,
 } from './utils';
 
 interface MobileCardProps {
@@ -29,6 +29,7 @@ export default function MobileCard({ item, selected, onToggle, onRecordSale, onF
   const velocity = snap ? velocityLabel(snap) : null;
   const direction = deriveSignalDirection(item);
   const deltaPct = deriveSignalDelta(item);
+  const hotSeller = isHotSeller(item);
 
   return (
     <div className={`p-3 bg-[var(--surface-1)] rounded-xl border ${selected ? 'border-[var(--brand-500)]' : 'border-[var(--surface-2)]'}`}>
@@ -37,6 +38,7 @@ export default function MobileCard({ item, selected, onToggle, onRecordSale, onF
           <input type="checkbox" checked={selected} onChange={onToggle} className="rounded mt-0.5" />
           <div>
             <div className="text-sm font-medium text-[var(--text)]">
+              {hotSeller && <span className="text-amber-400 mr-1" title="High demand">★</span>}
               {item.purchase.cardName}
               {item.purchase.cardName && item.purchase.setName && (
                 <MarketplaceLinks

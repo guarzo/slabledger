@@ -8,7 +8,7 @@ import {
   bestPrice, unrealizedPL, marketTrend,
   getSourceByType, marketTooltip,
   formatPL, deriveSignalDirection, deriveSignalDelta, displayGrade,
-  getReviewStatus, statusBorderColor, statusBadge,
+  getReviewStatus, statusBorderColor, statusBadge, isHotSeller,
 } from './utils';
 
 const BADGE_COLORS = [
@@ -63,6 +63,7 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
   const clValue = item.purchase.clValueCents ?? 0;
   const clIsHigher = clValue > 0 && price > 0 && clValue > price;
   const recPrice = item.recommendedPriceCents ?? item.purchase.reviewedPriceCents ?? 0;
+  const hotSeller = isHotSeller(item);
 
   return (
     <div
@@ -89,6 +90,7 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
             );
           })()}
           <span className="text-[var(--text)] truncate">
+            {hotSeller && <span className="text-amber-400 mr-1" title="High demand">★</span>}
             {item.purchase.cardName}
           </span>
           {item.priceAnomaly && (
@@ -105,16 +107,15 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
             />
           )}
         </div>
-        {item.purchase.setName && (
-          <div className="text-xs text-[var(--text-muted)] truncate leading-tight">
-            {item.purchase.setName}
-            {item.purchase.cardNumber && <> &middot; #{item.purchase.cardNumber}</>}
-          </div>
-        )}
+        <div className="text-xs text-[var(--text-muted)] truncate leading-tight">
+          {item.purchase.setName && <>{item.purchase.setName}</>}
+          {item.purchase.cardNumber && <> &middot; #{item.purchase.cardNumber}</>}
+          {item.purchase.certNumber && <> &middot; {item.purchase.certNumber}</>}
+        </div>
       </div>
       <div className="glass-table-td flex-shrink-0 text-center text-[var(--text)]" style={{ width: '36px' }}>{displayGrade(item.purchase)}</div>
       <div className="glass-table-td flex-shrink-0 text-right text-[var(--text)] tabular-nums" style={{ width: '72px' }}>{formatCents(costBasis)}</div>
-      <div className="glass-table-td flex-shrink-0 text-right" style={{ width: '88px' }}
+      <div className="glass-table-td flex-shrink-0 text-right" style={{ width: '100px' }}
         title={snap ? marketTooltip(snap, costBasis) : undefined}>
         {snap && price > 0 ? (() => {
           const displaySource = getSourceByType(snap.sourcePrices, 'ebay') || getSourceByType(snap.sourcePrices, 'estimate');
@@ -153,7 +154,7 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
       {/* Days held */}
       <div className={`glass-table-td flex-shrink-0 text-center ${daysColor}`} style={{ width: '40px' }}>{item.daysHeld}</div>
       {/* Signal */}
-      <div className="glass-table-td flex-shrink-0 text-center" style={{ width: '56px' }}>
+      <div className="glass-table-td flex-shrink-0 text-center" style={{ width: '48px' }}>
         {direction ? (
           <SignalBadge direction={direction} deltaPct={deltaPct} />
         ) : (
