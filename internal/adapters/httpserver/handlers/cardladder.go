@@ -3,6 +3,8 @@ package handlers
 import (
 	"context"
 	"net/http"
+	"sync"
+	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
 	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
@@ -16,6 +18,7 @@ type CLRefresher interface {
 
 // CardLadderHandler manages Card Ladder admin endpoints.
 type CardLadderHandler struct {
+	mu        sync.Mutex
 	store     *sqlite.CardLadderStore
 	client    *cardladder.Client
 	refresher CLRefresher
@@ -65,11 +68,23 @@ func (h *CardLadderHandler) HandleSaveConfig(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	// Atomically update the live client's auth credentials
-	h.client.UpdateCredentials(
-		cardladder.NewFirebaseAuth(req.FirebaseAPIKey),
-		authResp.RefreshToken,
-	)
+	// Atomically update or create the live client
+	h.mu.Lock()
+	if h.client != nil {
+		h.client.UpdateCredentials(
+			cardladder.NewFirebaseAuth(req.FirebaseAPIKey),
+			authResp.RefreshToken,
+		)
+	} else {
+		h.client = cardladder.NewClient(
+			cardladder.WithTokenManager(
+				cardladder.NewFirebaseAuth(req.FirebaseAPIKey),
+				authResp.RefreshToken,
+				time.Time{},
+			),
+		)
+	}
+	h.mu.Unlock()
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "connected"})
 }
