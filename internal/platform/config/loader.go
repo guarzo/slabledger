@@ -316,6 +316,16 @@ func FromEnv(base Config) Config {
 		}
 	}
 
+	// Picks refresh scheduler
+	if v := os.Getenv("PICKS_REFRESH_ENABLED"); v != "" {
+		cfg.PicksRefresh.Enabled = parseBool(v, false)
+	}
+	if v := os.Getenv("PICKS_REFRESH_HOUR"); v != "" {
+		if h, err := strconv.Atoi(v); err == nil && h >= -1 && h <= 23 {
+			cfg.PicksRefresh.ContentHour = h
+		}
+	}
+
 	// Card Ladder scheduler configuration
 	if v := os.Getenv("CARDLADDER_REFRESH_ENABLED"); v != "" {
 		cfg.CardLadder.Enabled = parseBool(v, false)
