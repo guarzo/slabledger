@@ -47,6 +47,7 @@ type Card struct {
 // GradedPrices contains prices for each grade level.
 type GradedPrices struct {
 	RawCents     int64
+	RawNMCents   int64 // JustTCG Near Mint specific (condition-specific, not blended)
 	PSA6Cents    int64
 	PSA7Cents    int64
 	PSA8Cents    int64
