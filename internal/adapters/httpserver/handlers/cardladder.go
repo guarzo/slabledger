@@ -18,7 +18,6 @@ type CLRefresher interface {
 type CardLadderHandler struct {
 	store     *sqlite.CardLadderStore
 	client    *cardladder.Client
-	auth      *cardladder.FirebaseAuth
 	refresher CLRefresher
 	logger    observability.Logger
 }
@@ -29,8 +28,8 @@ func (h *CardLadderHandler) SetRefresher(r CLRefresher) {
 }
 
 // NewCardLadderHandler creates a new Card Ladder admin handler.
-func NewCardLadderHandler(store *sqlite.CardLadderStore, client *cardladder.Client, auth *cardladder.FirebaseAuth, logger observability.Logger) *CardLadderHandler {
-	return &CardLadderHandler{store: store, client: client, auth: auth, logger: logger}
+func NewCardLadderHandler(store *sqlite.CardLadderStore, client *cardladder.Client, logger observability.Logger) *CardLadderHandler {
+	return &CardLadderHandler{store: store, client: client, logger: logger}
 }
 
 type cardLadderConfigRequest struct {
@@ -66,11 +65,11 @@ func (h *CardLadderHandler) HandleSaveConfig(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	// Update the live client's auth credentials
-	if h.auth != nil {
-		*h.auth = *cardladder.NewFirebaseAuth(req.FirebaseAPIKey)
-	}
-	h.client.SetRefreshToken(authResp.RefreshToken)
+	// Atomically update the live client's auth credentials
+	h.client.UpdateCredentials(
+		cardladder.NewFirebaseAuth(req.FirebaseAPIKey),
+		authResp.RefreshToken,
+	)
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "connected"})
 }

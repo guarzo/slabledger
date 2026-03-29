@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"time"
 
 	"github.com/guarzo/slabledger/internal/platform/crypto"
@@ -87,17 +88,28 @@ func (s *CardLadderStore) SaveConfig(ctx context.Context, email, refreshToken, c
 }
 
 // UpdateRefreshToken updates just the refresh token (after token refresh).
+// Returns an error if the singleton config row does not exist.
 func (s *CardLadderStore) UpdateRefreshToken(ctx context.Context, refreshToken string) error {
 	encToken, err := s.encryptor.Encrypt(refreshToken)
 	if err != nil {
 		return err
 	}
 
-	_, err = s.db.ExecContext(ctx,
+	res, err := s.db.ExecContext(ctx,
 		`UPDATE cardladder_config SET encrypted_refresh_token = ?, updated_at = ? WHERE id = 1`,
 		encToken, time.Now().UTC().Format(time.RFC3339),
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("check rows affected: %w", err)
+	}
+	if n == 0 {
+		return fmt.Errorf("cardladder_config row not found")
+	}
+	return nil
 }
 
 // DeleteConfig removes the CL configuration.

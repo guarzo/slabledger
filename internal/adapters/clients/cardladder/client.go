@@ -69,7 +69,7 @@ func NewClient(opts ...ClientOption) *Client {
 
 // Available returns true if the client has valid credentials.
 func (c *Client) Available() bool {
-	return c.staticToken != "" || c.auth != nil
+	return c.staticToken != "" || (c.auth != nil && c.refreshToken != "")
 }
 
 // FetchCollectionPage fetches one page of collection cards.
@@ -209,4 +209,15 @@ func (c *Client) SetRefreshToken(refreshToken string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.refreshToken = refreshToken
+}
+
+// UpdateCredentials atomically replaces the auth instance and refresh token.
+// This avoids a race between writing auth fields and getToken reading them.
+func (c *Client) UpdateCredentials(auth *FirebaseAuth, refreshToken string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.auth = auth
+	c.refreshToken = refreshToken
+	// Invalidate cached token so the next call uses the new credentials.
+	c.token = TokenState{}
 }

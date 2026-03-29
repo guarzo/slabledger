@@ -50,7 +50,7 @@ func (s *CLSalesStore) UpsertSaleComp(ctx context.Context, rec CLSaleCompRecord)
 }
 
 // GetSaleComps returns recent sales for a gemRateID, ordered by date descending.
-func (s *CLSalesStore) GetSaleComps(ctx context.Context, gemRateID string, limit int) ([]CLSaleCompRecord, error) {
+func (s *CLSalesStore) GetSaleComps(ctx context.Context, gemRateID string, limit int) (_ []CLSaleCompRecord, err error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT gem_rate_id, item_id, sale_date, price_cents, platform, listing_type, seller, item_url, slab_serial
 		 FROM cl_sales_comps WHERE gem_rate_id = ? ORDER BY sale_date DESC LIMIT ?`,
@@ -59,7 +59,11 @@ func (s *CLSalesStore) GetSaleComps(ctx context.Context, gemRateID string, limit
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close() //nolint:errcheck
+	defer func() {
+		if closeErr := rows.Close(); closeErr != nil && err == nil {
+			err = closeErr
+		}
+	}()
 
 	var comps []CLSaleCompRecord
 	for rows.Next() {

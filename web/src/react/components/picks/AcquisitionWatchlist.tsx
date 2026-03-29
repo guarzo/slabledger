@@ -70,8 +70,9 @@ function AddCardForm({ onCancel, onSuccess }: AddCardFormProps) {
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
         <div className="sm:col-span-1">
-          <label className="block text-xs text-[var(--text-muted)] mb-1">Card Name</label>
+          <label htmlFor="watchlist-card-name" className="block text-xs text-[var(--text-muted)] mb-1">Card Name</label>
           <input
+            id="watchlist-card-name"
             type="text"
             value={cardName}
             onChange={e => setCardName(e.target.value)}
@@ -81,8 +82,9 @@ function AddCardForm({ onCancel, onSuccess }: AddCardFormProps) {
           />
         </div>
         <div className="sm:col-span-1">
-          <label className="block text-xs text-[var(--text-muted)] mb-1">Set Name</label>
+          <label htmlFor="watchlist-set-name" className="block text-xs text-[var(--text-muted)] mb-1">Set Name</label>
           <input
+            id="watchlist-set-name"
             type="text"
             value={setName}
             onChange={e => setSetName(e.target.value)}
@@ -92,8 +94,9 @@ function AddCardForm({ onCancel, onSuccess }: AddCardFormProps) {
           />
         </div>
         <div>
-          <label className="block text-xs text-[var(--text-muted)] mb-1">Grade</label>
+          <label htmlFor="watchlist-grade" className="block text-xs text-[var(--text-muted)] mb-1">Grade</label>
           <input
+            id="watchlist-grade"
             type="text"
             value={grade}
             onChange={e => setGrade(e.target.value)}

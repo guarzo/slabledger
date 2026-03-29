@@ -43,8 +43,11 @@ func (s *PicksRefreshScheduler) Start(ctx context.Context) {
 	}
 
 	initialDelay := 5 * time.Minute
-	if s.config.ContentHour >= 0 {
+	if s.config.ContentHour >= 0 && s.config.ContentHour <= 23 {
 		initialDelay = timeUntilHour(time.Now(), s.config.ContentHour)
+	} else if s.config.ContentHour > 23 {
+		s.logger.Warn(ctx, "invalid ContentHour, using default 5m delay",
+			observability.Int("contentHour", s.config.ContentHour))
 	}
 
 	RunLoop(ctx, LoopConfig{

@@ -47,6 +47,7 @@ proto.addToAcquisitionWatchlist = async function (this: APIClient, cardName: str
       body: JSON.stringify({ card_name: cardName, set_name: setName, grade: grade }),
     }
   );
+  if (response.status === 201 || response.status === 204) return;
   await this.expectNoContent(response);
 };
 

@@ -40,6 +40,10 @@ func NewService(
 //  2. LLM candidate generation (~20-30 candidates)
 //  3. LLM scoring & ranking (top 10 picks)
 func (s *service) GenerateDailyPicks(ctx context.Context) error {
+	if s.llm == nil {
+		return fmt.Errorf("AI client not configured: daily picks generation unavailable")
+	}
+
 	today := time.Now().UTC().Truncate(24 * time.Hour)
 
 	// Idempotency check.

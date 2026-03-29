@@ -37,6 +37,40 @@ type pickResponse struct {
 	CreatedAt         string           `json:"created_at"`
 }
 
+// watchlistItemResponse mirrors picks.WatchlistItem but with dollar-denominated prices for the API.
+type watchlistItemResponse struct {
+	ID               int                   `json:"id"`
+	CardName         string                `json:"card_name"`
+	SetName          string                `json:"set_name"`
+	Grade            string                `json:"grade"`
+	Source           picks.WatchlistSource `json:"source"`
+	Active           bool                  `json:"active"`
+	LatestAssessment *pickResponse         `json:"latest_assessment,omitempty"`
+	AddedAt          string                `json:"added_at"`
+	UpdatedAt        string                `json:"updated_at"`
+}
+
+func toWatchlistItemResponses(items []picks.WatchlistItem) []watchlistItemResponse {
+	out := make([]watchlistItemResponse, len(items))
+	for i, item := range items {
+		out[i] = watchlistItemResponse{
+			ID:        item.ID,
+			CardName:  item.CardName,
+			SetName:   item.SetName,
+			Grade:     item.Grade,
+			Source:    item.Source,
+			Active:    item.Active,
+			AddedAt:   item.AddedAt.Format("2006-01-02T15:04:05Z"),
+			UpdatedAt: item.UpdatedAt.Format("2006-01-02T15:04:05Z"),
+		}
+		if item.LatestAssessment != nil {
+			resp := toPickResponses([]picks.Pick{*item.LatestAssessment})
+			out[i].LatestAssessment = &resp[0]
+		}
+	}
+	return out
+}
+
 func toPickResponses(pp []picks.Pick) []pickResponse {
 	out := make([]pickResponse, len(pp))
 	for i, p := range pp {
@@ -105,7 +139,7 @@ func (h *PicksHandler) HandleGetWatchlist(w http.ResponseWriter, r *http.Request
 	if items == nil {
 		items = []picks.WatchlistItem{}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": items})
+	writeJSON(w, http.StatusOK, map[string]any{"items": toWatchlistItemResponses(items)})
 }
 
 func (h *PicksHandler) HandleAddWatchlistItem(w http.ResponseWriter, r *http.Request) {

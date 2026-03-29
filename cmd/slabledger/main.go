@@ -277,12 +277,12 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 				observability.Err(encErr))
 		}
 	}
-	clClient, clAuth, clStore := initializeCardLadder(ctx, logger, db, clEncryptor)
+	clClient, _, clStore := initializeCardLadder(ctx, logger, db, clEncryptor)
 	var clHandler *handlers.CardLadderHandler
 	var salesCompsHandler *handlers.SalesCompsHandler
 	var clSalesStore *sqlite.CLSalesStore
 	if clStore != nil {
-		clHandler = handlers.NewCardLadderHandler(clStore, clClient, clAuth, logger)
+		clHandler = handlers.NewCardLadderHandler(clStore, clClient, logger)
 		clSalesStore = sqlite.NewCLSalesStore(db.DB)
 		salesCompsHandler = handlers.NewSalesCompsHandler(clSalesStore, clStore, campaignsService, logger)
 	}
@@ -292,12 +292,8 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	profitabilityProv := sqlite.NewProfitabilityProvider(db.DB)
 	inventoryProv := sqlite.NewInventoryProvider(db.DB)
 
-	var picksService picks.Service
-	var picksHandler *handlers.PicksHandler
-	if azureAIClient != nil {
-		picksService = picks.NewService(picksRepo, azureAIClient, profitabilityProv, inventoryProv, logger)
-		picksHandler = handlers.NewPicksHandler(picksService, logger)
-	}
+	picksService := picks.NewService(picksRepo, azureAIClient, profitabilityProv, inventoryProv, logger)
+	picksHandler := handlers.NewPicksHandler(picksService, logger)
 
 	// Create cert sweeper for periodic cert→card_id resolution in the CardHedger batch scheduler.
 	var certSweeper scheduler.CertSweeper

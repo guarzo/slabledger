@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS acquisition_watchlist (
     grade TEXT NOT NULL,
     source TEXT NOT NULL CHECK(source IN ('manual', 'auto_from_pick')),
     active INTEGER NOT NULL DEFAULT 1,
-    latest_pick_id INTEGER REFERENCES ai_picks(id),
+    latest_pick_id INTEGER REFERENCES ai_picks(id) ON DELETE SET NULL,
     added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );

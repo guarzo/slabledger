@@ -257,14 +257,25 @@ func (r *PicksRepository) GetActiveWatchlist(ctx context.Context) ([]picks.Watch
 }
 
 // UpdateWatchlistAssessment links a watchlist entry to a new pick assessment.
+// Only updates active rows. Returns ErrWatchlistItemNotFound if no row was affected.
 func (r *PicksRepository) UpdateWatchlistAssessment(ctx context.Context, watchlistID int, pickID int) error {
-	_, err := r.db.ExecContext(ctx,
-		`UPDATE acquisition_watchlist SET latest_pick_id = ?, updated_at = ? WHERE id = ?`,
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE acquisition_watchlist SET latest_pick_id = ?, updated_at = ? WHERE id = ? AND active = 1`,
 		pickID,
 		time.Now().UTC().Format(time.RFC3339),
 		watchlistID,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("check rows affected: %w", err)
+	}
+	if n == 0 {
+		return picks.ErrWatchlistItemNotFound
+	}
+	return nil
 }
 
 // scanPicks is a shared helper that reads rows from ai_picks queries.

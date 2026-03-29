@@ -88,7 +88,7 @@ func (s *CardLadderRefreshScheduler) RunOnce(ctx context.Context) error {
 }
 
 var certFromImageRe = regexp.MustCompile(`/cert/(\d+)/`)
-var gradeDigitsRe = regexp.MustCompile(`(\d+)`)
+var gradeDigitsRe = regexp.MustCompile(`(\d+(?:\.\d+)?)`)
 
 func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 	cfg, err := s.store.GetConfig(ctx)
@@ -275,7 +275,7 @@ func (s *CardLadderRefreshScheduler) refreshSalesComps(ctx context.Context, mapp
 		observability.Int("cardsProcessed", fetched))
 }
 
-// extractGradeValue parses "PSA 9" or "g9" → 9.0
+// extractGradeValue parses "PSA 9", "PSA 9.5", or "g9" → numeric grade value.
 func extractGradeValue(condition string) float64 {
 	if m := gradeDigitsRe.FindString(condition); m != "" {
 		v, _ := strconv.ParseFloat(m, 64)
