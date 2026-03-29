@@ -39,7 +39,6 @@ export default function ReviewActionBar({ quickPicks, selectedPick, onPickSelect
 
   const handlePickClick = (pick: QuickPick) => {
     onPickSelect(pick);
-    setCustomValue(centsToDollars(pick.priceCents));
   };
 
   const handleCustomChange = (e: React.ChangeEvent<HTMLInputElement>) => {

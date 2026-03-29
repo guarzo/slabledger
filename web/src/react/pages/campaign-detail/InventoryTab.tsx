@@ -72,8 +72,6 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
       else if (status === 'large_gap') { counts.needs_review++; counts.large_gap++; }
       else if (status === 'no_data') { counts.needs_review++; counts.no_data++; }
       else if (status === 'flagged') counts.flagged++;
-    }
-    for (const item of items) {
       if (isCardShowCandidate(item)) counts.card_show++;
     }
     return { reviewStats: stats, tabCounts: counts };
@@ -407,8 +405,14 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
               variant="secondary"
               onClick={() => {
                 const ids = Array.from(selected);
-                const params = new URLSearchParams({ ids: ids.join(','), campaignId: campaignId ?? '' });
-                window.open(`/sell-sheet?${params.toString()}`, '_blank');
+                sessionStorage.setItem('sellSheetIds', JSON.stringify(ids));
+                if (campaignId) {
+                  sessionStorage.setItem('sellSheetCampaignId', campaignId);
+                } else {
+                  sessionStorage.removeItem('sellSheetCampaignId');
+                }
+                const win = window.open('/sell-sheet', '_blank');
+                if (!win) toast.error('Popup blocked — please allow popups for this site');
               }}
             >
               Sell Sheet ({selected.size})

@@ -189,6 +189,11 @@ func (h *CampaignsHandler) HandleSelectedSellSheet(w http.ResponseWriter, r *htt
 		writeError(w, http.StatusBadRequest, "At least one purchase ID is required")
 		return
 	}
+	const maxSelectedSellSheetItems = 5000
+	if len(req.PurchaseIDs) > maxSelectedSellSheetItems {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("Too many purchase IDs (max %d)", maxSelectedSellSheetItems))
+		return
+	}
 
 	sheet, err := h.service.GenerateSelectedSellSheet(r.Context(), req.PurchaseIDs)
 	if err != nil {

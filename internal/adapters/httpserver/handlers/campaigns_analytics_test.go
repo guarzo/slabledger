@@ -485,4 +485,22 @@ func TestHandleSelectedSellSheet_InvalidBody(t *testing.T) {
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", rec.Code)
 	}
+	decodeErrorResponse(t, rec)
+}
+
+func TestHandleSelectedSellSheet_TooManyIDs(t *testing.T) {
+	h := newTestHandler(&mocks.MockCampaignService{})
+
+	ids := make([]string, 5001)
+	for i := range ids {
+		ids[i] = fmt.Sprintf("id-%d", i)
+	}
+	body, _ := json.Marshal(map[string]any{"purchaseIds": ids})
+	req := httptest.NewRequest(http.MethodPost, "/api/portfolio/sell-sheet", bytes.NewBuffer(body))
+	rec := httptest.NewRecorder()
+	h.HandleSelectedSellSheet(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rec.Code)
+	}
 }

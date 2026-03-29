@@ -61,10 +61,12 @@ export default function ExpandedDetail({ item, onReviewed, campaignId }: Expande
     try {
       await api.setReviewedPrice(purchase.id, priceCents, source);
       toast.success('Reviewed price saved');
+      setSelectedPick(null);
       invalidateQueries();
       onReviewed?.();
-    } catch {
-      toast.error('Failed to save reviewed price');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to save reviewed price';
+      toast.error(message);
     } finally {
       setIsSubmitting(false);
     }
@@ -78,8 +80,9 @@ export default function ExpandedDetail({ item, onReviewed, campaignId }: Expande
       setFlagDialogOpen(false);
       invalidateQueries();
       onReviewed?.();
-    } catch {
-      toast.error('Failed to submit price flag');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to submit price flag';
+      toast.error(message);
     } finally {
       setIsSubmitting(false);
     }

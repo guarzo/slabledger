@@ -144,38 +144,13 @@ func (s *service) GenerateGlobalSellSheet(ctx context.Context) (*SellSheet, erro
 		return nil, fmt.Errorf("list unsold purchases: %w", err)
 	}
 
-	// Build campaign lookup for name and fee
-	campaignList, err := s.repo.ListCampaigns(ctx, false)
-	if err != nil {
-		return nil, fmt.Errorf("list campaigns: %w", err)
-	}
-	campaignMap := make(map[string]*Campaign, len(campaignList))
-	for i := range campaignList {
-		campaignMap[campaignList[i].ID] = &campaignList[i]
-	}
-
-	sheet := &SellSheet{
-		GeneratedAt:  time.Now().Format(time.RFC3339),
-		CampaignName: "All Inventory",
-	}
-
+	// Convert slice to pointer slice for buildCrossCampaignSellSheet
+	ptrs := make([]*Purchase, len(purchases))
 	for i := range purchases {
-		purchase := &purchases[i]
-		campName := ""
-		var feePct float64
-		if c := campaignMap[purchase.CampaignID]; c != nil {
-			campName = c.Name
-			feePct = c.EbayFeePct
-		}
-		item, _ := s.enrichSellSheetItem(ctx, purchase, campName, feePct)
-		sheet.Totals.TotalExpectedRevenue += item.TargetSellPrice
-		sheet.Items = append(sheet.Items, item)
-		sheet.Totals.TotalCostBasis += item.CostBasisCents
-		sheet.Totals.ItemCount++
+		ptrs[i] = &purchases[i]
 	}
 
-	sheet.Totals.TotalProjectedProfit = sheet.Totals.TotalExpectedRevenue - sheet.Totals.TotalCostBasis
-	return sheet, nil
+	return s.buildCrossCampaignSellSheet(ctx, ptrs, "All Inventory")
 }
 
 func (s *service) GenerateSelectedSellSheet(ctx context.Context, purchaseIDs []string) (*SellSheet, error) {
@@ -184,7 +159,28 @@ func (s *service) GenerateSelectedSellSheet(ctx context.Context, purchaseIDs []s
 		return nil, fmt.Errorf("batch purchase lookup: %w", err)
 	}
 
-	// Build campaign lookup for names and fee percentages
+	var ptrs []*Purchase
+	skipped := 0
+	for _, pid := range purchaseIDs {
+		purchase, ok := purchaseMap[pid]
+		if !ok {
+			skipped++
+			continue
+		}
+		ptrs = append(ptrs, purchase)
+	}
+
+	sheet, err := s.buildCrossCampaignSellSheet(ctx, ptrs, "Selected Inventory")
+	if err != nil {
+		return nil, err
+	}
+	sheet.Totals.SkippedItems = skipped
+	return sheet, nil
+}
+
+// buildCrossCampaignSellSheet builds a sell sheet from purchases that may span
+// multiple campaigns, looking up each campaign's name and fee percentage.
+func (s *service) buildCrossCampaignSellSheet(ctx context.Context, purchases []*Purchase, sheetName string) (*SellSheet, error) {
 	campaignList, err := s.repo.ListCampaigns(ctx, false)
 	if err != nil {
 		return nil, fmt.Errorf("list campaigns: %w", err)
@@ -196,23 +192,16 @@ func (s *service) GenerateSelectedSellSheet(ctx context.Context, purchaseIDs []s
 
 	sheet := &SellSheet{
 		GeneratedAt:  time.Now().Format(time.RFC3339),
-		CampaignName: "Selected Inventory",
+		CampaignName: sheetName,
 	}
 
-	for _, pid := range purchaseIDs {
-		purchase, ok := purchaseMap[pid]
-		if !ok {
-			sheet.Totals.SkippedItems++
-			continue
-		}
-
+	for _, purchase := range purchases {
 		campName := ""
 		var feePct float64
 		if c := campaignMap[purchase.CampaignID]; c != nil {
 			campName = c.Name
 			feePct = c.EbayFeePct
 		}
-
 		item, _ := s.enrichSellSheetItem(ctx, purchase, campName, feePct)
 		sheet.Totals.TotalExpectedRevenue += item.TargetSellPrice
 		sheet.Items = append(sheet.Items, item)
