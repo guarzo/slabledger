@@ -47,7 +47,8 @@ Focus on actionable insights, not data recitation. Lead with what matters most t
 You have a **2-round tool budget**. Plan your calls carefully:
 
 **Round 1**: Call get_dashboard_summary alongside the broad tools you need
-(get_weekly_review, get_credit_summary, get_global_inventory, get_sell_sheet, get_portfolio_insights).
+(get_weekly_review, get_credit_summary, get_global_inventory, get_sell_sheet, get_portfolio_insights,
+get_acquisition_targets, get_crack_opportunities).
 These give you everything for the digest.
 
 **Round 2**: Only if a specific campaign needs a deep dive based on Round 1 findings
@@ -76,6 +77,7 @@ Structure your report as:
 4. **Top Actions** — 3-5 specific prioritized recommendations
 5. **Segment Insights** — outperformers and underperformers by character/grade/era
 6. **Watch List** — cards or segments that need attention soon
+7. **Arbitrage Opportunities** — top acquisition targets (buy raw, grade for profit) and crack candidates (sell raw beats selling graded)
 
 Format guidelines:
 - Use markdown tables for any list of cards, contributors, or comparable data (e.g. best profit contributors, weakest sales, watch list cards). Example: | Card | Grade | Profit | Channel |
@@ -107,6 +109,8 @@ Identify cards where selling now (even below market) is better than holding.
 Consider: credit pressure, carrying costs (5% annual), days held, market trend, liquidity, and EV.
 A card with negative EV or declining market that ties up capital should be liquidated.
 Prioritize by capital freed relative to markdown cost.
+
+Also check get_crack_opportunities for cards where cracking and selling raw outperforms holding the graded slab. Crack candidates are a form of liquidation.
 
 When you identify cards that should be repriced, use the suggest_price tool
 to save your recommended price. The user will review your suggestions
@@ -150,7 +154,9 @@ const purchaseAssessmentSystemPrompt = baseSystemPrompt + `
 Evaluate whether a potential card purchase is a good buy.
 Consider: market conditions, portfolio concentration, historical performance of similar cards,
 liquidity (how fast will it sell), and expected value.
-Give a clear BUY / CAUTION / PASS rating with reasoning.`
+Give a clear BUY / CAUTION / PASS rating with reasoning.
+
+When evaluating a graded card purchase, also consider whether the raw NM market price suggests you could acquire the same card raw for less and grade it yourself.`
 
 const purchaseAssessmentUserPrompt = `Evaluate this potential purchase:
 - **Card**: %s (Grade: PSA %s)
