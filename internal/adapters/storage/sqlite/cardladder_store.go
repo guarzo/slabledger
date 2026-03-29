@@ -15,6 +15,7 @@ type CardLadderConfig struct {
 	RefreshToken   string // decrypted
 	CollectionID   string
 	FirebaseAPIKey string
+	FirebaseUID    string
 }
 
 // CLCardMapping maps a purchase cert to a CL collection card.
@@ -39,12 +40,12 @@ func NewCardLadderStore(db *sql.DB, encryptor crypto.Encryptor) *CardLadderStore
 // GetConfig returns the current CL config, or nil if not configured.
 func (s *CardLadderStore) GetConfig(ctx context.Context) (*CardLadderConfig, error) {
 	var (
-		email, encToken, collectionID, apiKey string
+		email, encToken, collectionID, apiKey, uid string
 	)
 	err := s.db.QueryRowContext(ctx,
-		`SELECT email, encrypted_refresh_token, collection_id, firebase_api_key
+		`SELECT email, encrypted_refresh_token, collection_id, firebase_api_key, firebase_uid
 		 FROM cardladder_config WHERE id = 1`,
-	).Scan(&email, &encToken, &collectionID, &apiKey)
+	).Scan(&email, &encToken, &collectionID, &apiKey, &uid)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -62,11 +63,12 @@ func (s *CardLadderStore) GetConfig(ctx context.Context) (*CardLadderConfig, err
 		RefreshToken:   token,
 		CollectionID:   collectionID,
 		FirebaseAPIKey: apiKey,
+		FirebaseUID:    uid,
 	}, nil
 }
 
 // SaveConfig stores CL connection info. Upserts the singleton row.
-func (s *CardLadderStore) SaveConfig(ctx context.Context, email, refreshToken, collectionID, firebaseAPIKey string) error {
+func (s *CardLadderStore) SaveConfig(ctx context.Context, email, refreshToken, collectionID, firebaseAPIKey, firebaseUID string) error {
 	encToken, err := s.encryptor.Encrypt(refreshToken)
 	if err != nil {
 		return err
@@ -74,15 +76,16 @@ func (s *CardLadderStore) SaveConfig(ctx context.Context, email, refreshToken, c
 
 	now := time.Now().UTC().Format(time.RFC3339)
 	_, err = s.db.ExecContext(ctx,
-		`INSERT INTO cardladder_config (id, email, encrypted_refresh_token, collection_id, firebase_api_key, updated_at)
-		 VALUES (1, ?, ?, ?, ?, ?)
+		`INSERT INTO cardladder_config (id, email, encrypted_refresh_token, collection_id, firebase_api_key, firebase_uid, updated_at)
+		 VALUES (1, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(id) DO UPDATE SET
 		   email = excluded.email,
 		   encrypted_refresh_token = excluded.encrypted_refresh_token,
 		   collection_id = excluded.collection_id,
 		   firebase_api_key = excluded.firebase_api_key,
+		   firebase_uid = excluded.firebase_uid,
 		   updated_at = excluded.updated_at`,
-		email, encToken, collectionID, firebaseAPIKey, now,
+		email, encToken, collectionID, firebaseAPIKey, firebaseUID, now,
 	)
 	return err
 }

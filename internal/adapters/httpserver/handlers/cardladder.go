@@ -62,7 +62,7 @@ func (h *CardLadderHandler) HandleSaveConfig(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	if err := h.store.SaveConfig(r.Context(), req.Email, authResp.RefreshToken, req.CollectionID, req.FirebaseAPIKey); err != nil {
+	if err := h.store.SaveConfig(r.Context(), req.Email, authResp.RefreshToken, req.CollectionID, req.FirebaseAPIKey, authResp.LocalID); err != nil {
 		h.logger.Error(r.Context(), "failed to save Card Ladder config", observability.Err(err))
 		writeError(w, http.StatusInternalServerError, "failed to save config")
 		return
