@@ -177,11 +177,21 @@ func (s *service) generateBackgroundsAsync(post *SocialPost) {
 		urls = append(urls, cardURL)
 	}
 
+	// Filter out empty strings from failed generations before saving.
+	// Empty entries were used for positional alignment, but storing them
+	// causes broken image links in the frontend and publishing pipeline.
+	var validURLs []string
+	for _, u := range urls {
+		if u != "" {
+			validURLs = append(validURLs, u)
+		}
+	}
+
 	// Store URLs in DB
 	dbCtx, dbCancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer dbCancel()
 
-	if err := s.repo.UpdateBackgroundURLs(dbCtx, post.ID, urls); err != nil {
+	if err := s.repo.UpdateBackgroundURLs(dbCtx, post.ID, validURLs); err != nil {
 		if s.logger != nil {
 			s.logger.Error(dbCtx, "social: failed to save background URLs",
 				observability.String("postId", post.ID),
@@ -190,16 +200,10 @@ func (s *service) generateBackgroundsAsync(post *SocialPost) {
 	}
 
 	if s.logger != nil {
-		nonEmpty := 0
-		for _, u := range urls {
-			if u != "" {
-				nonEmpty++
-			}
-		}
 		s.logger.Info(ctx, "social backgrounds generated",
 			observability.String("postId", post.ID),
-			observability.Int("total", len(urls)),
-			observability.Int("success", nonEmpty))
+			observability.Int("attempted", len(urls)),
+			observability.Int("success", len(validURLs)))
 	}
 }
 

@@ -1,3 +1,5 @@
+import { corsUrl } from './corsUrl';
+
 interface CardArtHeroProps {
   imageUrl: string;
   cardName: string;
@@ -21,7 +23,7 @@ export default function CardArtHero({ imageUrl, cardName, grader, grade, backgro
         />
       ) : imageUrl ? (
         <img
-          src={imageUrl}
+          src={corsUrl(imageUrl)}
           alt=""
           aria-hidden
           className="absolute inset-0 w-full h-full object-cover"
@@ -34,7 +36,7 @@ export default function CardArtHero({ imageUrl, cardName, grader, grade, backgro
       <div className="relative z-[2] flex items-center justify-center w-full h-full">
         {imageUrl ? (
           <img
-            src={imageUrl}
+            src={corsUrl(imageUrl)}
             alt={cardName}
             className="max-h-full max-w-[58%] object-contain rounded-lg shadow-2xl"
             crossOrigin="anonymous"

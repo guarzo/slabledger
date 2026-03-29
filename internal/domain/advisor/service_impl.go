@@ -16,6 +16,13 @@ const (
 	defaultMaxTokens     = 4096
 	defaultTemperature   = 0.3
 	toolCallTimeout      = 30 * time.Second
+
+	// maxToolResultChars caps individual tool results to prevent input token
+	// bloat. Large tool outputs (full inventory, sell sheets) can push round-2
+	// input tokens past 100K, causing Azure to time out and return "status
+	// incomplete". 12 000 chars ≈ 3 000 tokens — enough for detailed data
+	// while keeping total input manageable across multiple tool calls.
+	maxToolResultChars = 12_000
 )
 
 // Tool subsets per operation — only send relevant tools to reduce prompt tokens
@@ -266,6 +273,7 @@ func (s *service) toolCallingLoop(ctx context.Context, operation AIOperation, sy
 						)
 					}
 				}
+				res = truncateToolResult(res, maxToolResultChars)
 				results[idx] = toolResult{tc: call, result: res}
 			}(i, tc)
 		}
@@ -327,4 +335,20 @@ Below is your previous %s analysis. Reference it to track changes, follow up on 
 <prior_analysis>
 %s
 </prior_analysis>`, age, analysisType, content)
+}
+
+// truncateToolResult caps a tool result string at maxLen characters.
+// If truncated, it tries to cut at the last newline within the limit to
+// avoid splitting a JSON line, and appends a notice so the LLM knows
+// the data was cut short.
+func truncateToolResult(result string, maxLen int) string {
+	if len(result) <= maxLen {
+		return result
+	}
+	cut := result[:maxLen]
+	// Try to cut at a newline boundary to avoid splitting a JSON object mid-field.
+	if idx := strings.LastIndex(cut, "\n"); idx > maxLen/2 {
+		cut = cut[:idx]
+	}
+	return cut + "\n\n[... truncated — tool returned " + fmt.Sprintf("%d", len(result)) + " chars, showing first " + fmt.Sprintf("%d", len(cut)) + "]"
 }

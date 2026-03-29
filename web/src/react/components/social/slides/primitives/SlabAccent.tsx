@@ -1,5 +1,6 @@
 import type { PostType } from '../../../../../types/social';
 import { getTheme } from './theme';
+import { corsUrl } from './corsUrl';
 
 interface SlabAccentProps {
   imageUrl: string;
@@ -13,7 +14,7 @@ export default function SlabAccent({ imageUrl, cardName, postType }: SlabAccentP
     <div className="flex-1 flex items-center justify-center w-full mb-4 min-h-0 max-h-[60%]">
       {imageUrl ? (
         <img
-          src={imageUrl}
+          src={corsUrl(imageUrl)}
           alt={cardName}
           className="max-h-full max-w-[55%] object-contain rounded-lg"
           crossOrigin="anonymous"

@@ -1,4 +1,5 @@
 import type { PostCardDetail } from '../../../../../types/social';
+import { corsUrl } from './corsUrl';
 
 interface DynamicScatterProps {
   cards: PostCardDetail[];
@@ -41,7 +42,7 @@ export default function DynamicScatter({ cards }: DynamicScatterProps) {
             >
               {card.frontImageUrl ? (
                 <img
-                  src={card.frontImageUrl}
+                  src={corsUrl(card.frontImageUrl)}
                   alt={card.cardName}
                   className="w-full h-full object-cover"
                   crossOrigin="anonymous"
