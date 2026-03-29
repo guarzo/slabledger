@@ -132,3 +132,31 @@ export function useResolvePriceFlag() {
     },
   });
 }
+
+export function useCardLadderStatus() {
+  return useQuery({
+    queryKey: queryKeys.admin.cardLadderStatus,
+    queryFn: () => api.getCardLadderStatus(),
+  });
+}
+
+export function useSaveCardLadderConfig() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (config: { email: string; password: string; collectionId: string; firebaseApiKey: string }) =>
+      api.saveCardLadderConfig(config),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.admin.cardLadderStatus });
+    },
+  });
+}
+
+export function useTriggerCardLadderRefresh() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.triggerCardLadderRefresh(),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.admin.cardLadderStatus });
+    },
+  });
+}
