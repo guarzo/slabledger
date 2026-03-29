@@ -318,7 +318,7 @@ func FromEnv(base Config) Config {
 
 	// Picks refresh scheduler
 	if v := os.Getenv("PICKS_REFRESH_ENABLED"); v != "" {
-		cfg.PicksRefresh.Enabled = parseBool(v, false)
+		cfg.PicksRefresh.Enabled = parseBool(v, true)
 	}
 	if v := os.Getenv("PICKS_REFRESH_HOUR"); v != "" {
 		if h, err := strconv.Atoi(v); err == nil && h >= -1 && h <= 23 {

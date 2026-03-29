@@ -115,7 +115,7 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
       </div>
       <div className="glass-table-td flex-shrink-0 text-center text-[var(--text)]" style={{ width: '36px' }}>{displayGrade(item.purchase)}</div>
       <div className="glass-table-td flex-shrink-0 text-right text-[var(--text)] tabular-nums" style={{ width: '72px' }}>{formatCents(costBasis)}</div>
-      <div className="glass-table-td flex-shrink-0 text-right" style={{ width: '100px' }}
+      <div className="glass-table-td flex-shrink-0 text-right" style={{ width: '120px' }}
         title={snap ? marketTooltip(snap, costBasis) : undefined}>
         {snap && price > 0 ? (() => {
           const displaySource = getSourceByType(snap.sourcePrices, 'ebay') || getSourceByType(snap.sourcePrices, 'estimate');

@@ -1,26 +1,24 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import type { AgingItem } from '../../../../types/campaigns';
-import type { PriceFlagReason } from '../../../../types/campaigns/priceReview';
 import { api } from '../../../../js/api';
 import { useToast } from '../../../contexts/ToastContext';
 import { queryKeys } from '../../../queries/queryKeys';
 import PriceSignalCard from './PriceSignalCard';
 import ReviewActionBar from './ReviewActionBar';
 import type { QuickPick } from './ReviewActionBar';
-import PriceFlagDialog from './PriceFlagDialog';
 
 interface ExpandedDetailProps {
   item: AgingItem;
   onReviewed?: () => void;
   campaignId?: string;
+  onOpenFlagDialog?: () => void;
 }
 
-export default function ExpandedDetail({ item, onReviewed, campaignId }: ExpandedDetailProps) {
+export default function ExpandedDetail({ item, onReviewed, campaignId, onOpenFlagDialog }: ExpandedDetailProps) {
   const queryClient = useQueryClient();
   const toast = useToast();
 
-  const [flagDialogOpen, setFlagDialogOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedPick, setSelectedPick] = useState<QuickPick | null>(null);
 
@@ -72,22 +70,6 @@ export default function ExpandedDetail({ item, onReviewed, campaignId }: Expande
     }
   };
 
-  const handleFlagSubmit = async (reason: PriceFlagReason) => {
-    setIsSubmitting(true);
-    try {
-      await api.createPriceFlag(purchase.id, reason);
-      toast.success('Price flag submitted');
-      setFlagDialogOpen(false);
-      invalidateQueries();
-      onReviewed?.();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to submit price flag';
-      toast.error(message);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
   return (
     <div className="glass-vrow-expanded px-6 py-4 border-t border-[rgba(255,255,255,0.05)]">
       {/* 3x2 price signal grid */}
@@ -126,20 +108,9 @@ export default function ExpandedDetail({ item, onReviewed, campaignId }: Expande
         selectedPick={selectedPick}
         onPickSelect={setSelectedPick}
         onConfirm={handleConfirm}
-        onFlag={() => setFlagDialogOpen(true)}
+        onFlag={onOpenFlagDialog ?? (() => {})}
         isSubmitting={isSubmitting}
       />
-
-      {/* Price flag dialog */}
-      {flagDialogOpen && (
-        <PriceFlagDialog
-          cardName={purchase.cardName}
-          grade={purchase.gradeValue}
-          onSubmit={handleFlagSubmit}
-          onCancel={() => setFlagDialogOpen(false)}
-          isSubmitting={isSubmitting}
-        />
-      )}
     </div>
   );
 }
