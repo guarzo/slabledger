@@ -35,7 +35,7 @@ The full variable list by category:
 
 **Google OAuth:** `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URL` (from `config.LoadGoogleOAuthConfig()`)
 
-**Pricing Sources:** `POKEMONPRICE_TRACKER_API_KEY`, `CARD_HEDGER_API_KEY`, `CARD_HEDGER_CLIENT_ID`, `PSA_ACCESS_TOKEN`, `PAO_API`, `PRICING_API_KEY`
+**Pricing Sources:** `CARD_HEDGER_API_KEY`, `CARD_HEDGER_CLIENT_ID`, `PSA_ACCESS_TOKEN`, `PAO_API`, `PRICING_API_KEY`
 
 **Price Refresh Scheduler:** `PRICE_REFRESH_ENABLED`, `PRICE_REFRESH_INTERVAL`, `PRICE_BATCH_SIZE`, `PRICE_BATCH_DELAY`, `PRICE_MAX_BURST_CALLS`, `PRICE_MAX_CALLS_PER_HOUR`, `PRICE_BURST_PAUSE_DURATION`
 
@@ -1190,7 +1190,7 @@ Replace the extracted code blocks in `runServer()` with calls:
 
 ```go
 // Initialize price providers
-priceProvImpl, pokemonPriceClientImpl, cardHedgerClientImpl, pcProvider, err := initializePriceProviders(cfg, appCache, logger, cardProvImpl)
+priceProvImpl, cardHedgerClientImpl, pcProvider, err := initializePriceProviders(cfg, appCache, logger, cardProvImpl)
 if err != nil {
     return err
 }

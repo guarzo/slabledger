@@ -46,11 +46,10 @@ internal/
   adapters/         # Interface implementations
     httpserver/     # HTTP handlers, middleware, router
     clients/        # External API clients
-      fusionprice/  # Multi-source price fusion (PokemonPrice + CardHedger + PriceCharting)
+      fusionprice/  # Multi-source price fusion (CardHedger + PriceCharting)
       pricelookup/  # PriceLookup adapter (wraps PriceProvider for campaigns)
       tcgdex/       # TCGdex.dev card/set metadata (EN + JA, no API key)
       pricecharting/ # PriceCharting graded prices + market data
-      pokemonprice/ # PokemonPrice primary graded price source
       google/       # Google OAuth
       httpx/        # Unified HTTP client (retry + circuit breaker)
       cardutil/     # Card utility functions
@@ -163,7 +162,7 @@ Card names flow through a multi-stage normalization and matching pipeline:
 
 - **Retry**: Exponential backoff with jitter (`platform/resilience/retry.go`), used by `httpx.Client`
 - **Circuit breaker**: Per-provider via `sony/gobreaker` in `httpx/`. States: closed → open (after N failures) → half-open
-- **Rate limits**: PriceCharting 1 req/sec, CardHedger 100 req/min + 700ms pause, pricing API 60 req/min, auth 10 req/sec
+- **Rate limits**: PriceCharting 1 req/sec, CardHedger 100 req/min + 700ms pause, auth 10 req/sec
 - **429 handling**: `APITracker.UpdateRateLimit` blocks provider-level requests until expiry
 
 ## Quality Checks
@@ -179,7 +178,7 @@ Card names flow through a multi-stage normalization and matching pipeline:
 3. Wire in `cmd/slabledger/main.go` via functional option (`WithMyProvider(client)`)
 4. Update this file with the new package and env vars
 
-Simplest reference: `internal/adapters/clients/pokemonprice/`
+Simplest reference: `internal/adapters/clients/cardhedger/`
 
 ## Frontend-Backend Integration
 
@@ -282,7 +281,7 @@ SQLite WAL mode. All monetary values in **cents**. 21 migration pairs (`000001`�
 | `ai` | `FilteredToolExecutor` | `tools.go` | 1 | Subset tool execution |
 | `cards` | `CardProvider` | `provider.go` | 5 | Card/set search (TCGdex) |
 | `cards` | `NewSetIDsProvider` | `provider.go` | 1 | New set discovery |
-| `fusion` | `SecondaryPriceSource` | `source.go` | 3 | Price fusion data (PokemonPrice, CardHedger) |
+| `fusion` | `SecondaryPriceSource` | `source.go` | 3 | Price fusion data (CardHedger) |
 | `fusion` | `CardIDResolver` | `source.go` | 3 | External ID cache |
 | `fusion` | `PriceHintResolver` | `source.go` | 4 | User-provided price hints |
 | `favorites` | `Service` | `service.go` | 6 | Favorites CRUD |

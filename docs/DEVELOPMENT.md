@@ -108,8 +108,7 @@ cards, err := cardCache.GetOrLoad(ctx, key, func() ([]model.Card, error) {
 | Provider | Limit | Notes |
 |----------|-------|-------|
 | PriceCharting | 60/min, 20k/day | Market data (listings, sales velocity) |
-| PokemonPriceTracker | 60/min | Primary graded price source (2 credits with eBay data) |
-| CardHedger | 60/min (unlimited plan) | Supplementary pricing estimates (429-monitored) |
+| CardHedger | 60/min (unlimited plan) | Secondary pricing estimates (429-monitored) |
 
 ---
 
@@ -170,7 +169,7 @@ Code: `internal/adapters/clients/tcgdex/`
 export CARD_HEDGER_API_KEY="your_key"  # Supplementary pricing (unlimited plan)
 ```
 
-Provides multi-platform price estimates with confidence ranges. Used as a secondary fusion source alongside PokemonPrice.
+Provides multi-platform price estimates with confidence ranges. Used as the sole secondary fusion source.
 - Daily limit tracked via atomic counter with CAS-based daily reset
 - Card ID mapping cached in SQLite (`card_id_mappings` table)
 - Background schedulers: delta poll (1h) + daily batch refresh
@@ -179,7 +178,7 @@ Code: `internal/adapters/clients/cardhedger/`
 
 ### Fusion Price Provider
 
-Merges data from PokemonPrice (primary graded prices), CardHedger (supplementary estimates), and PriceCharting (market data) into a single `Price` struct with confidence scores and fusion metadata. Uses `fusion.FetchResult` pattern to avoid shared mutable state.
+Merges data from CardHedger (graded price estimates) and PriceCharting (market data) into a single `Price` struct with confidence scores and fusion metadata. Uses `fusion.FetchResult` pattern to avoid shared mutable state.
 
 Code: `internal/adapters/clients/fusionprice/`
 

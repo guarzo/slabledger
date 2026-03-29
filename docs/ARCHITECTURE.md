@@ -12,8 +12,8 @@ slabledger is a graded card portfolio tracker and pricing tool using Hexagonal A
 ┌─────────────────────────────────────────────────────────────┐
 │                        ADAPTERS LAYER                       │
 │  Inbound:                    Outbound:                      │
-│  • HTTP Handlers             • PriceCharting, PokemonPrice, │
-│  • Web Server                • CardHedger                   │
+│  • HTTP Handlers             • PriceCharting, CardHedger,   │
+│  • Web Server                • TCGdex.dev                   │
 │                              • TCGdex.dev                   │
 │                              • Google OAuth                 │
 │                              • SQLite Storage               │
@@ -71,11 +71,10 @@ internal/
       middleware/           # Auth, CORS, rate limiting, recovery
       router.go             # Route registration with auth gating
     clients/
-      fusionprice/          # Multi-source price fusion (PokemonPrice + CardHedger + PriceCharting market data)
+      fusionprice/          # Multi-source price fusion (CardHedger + PriceCharting market data)
       pricelookup/          # PriceLookup adapter (wraps PriceProvider for campaigns)
       pricecharting/        # PriceCharting API client
-      pokemonprice/         # PokemonPrice primary graded price source
-      cardhedger/           # CardHedger supplementary pricing
+      cardhedger/           # CardHedger secondary pricing
       tcgdex/               # TCGdex.dev card/set metadata (EN + JA)
       google/               # Google OAuth service
       httpx/                # Unified HTTP client with retry + circuit breaker
@@ -164,11 +163,10 @@ type CardIDResolver interface {
 
 ### Price Fusion
 ```
-1. PokemonPrice (primary) → graded prices via eBay smartMarketPrice
-2. CardHedger → price estimates with confidence ranges
-3. PriceCharting → market data (active listings, sales velocity)
-4. Fusion provider merges, detects outliers, computes confidence
-5. Result cached in SQLite + memory with configurable TTL
+1. CardHedger → graded price estimates with confidence ranges
+2. PriceCharting → market data (active listings, sales velocity, grade prices)
+3. Fusion provider merges, detects outliers, computes confidence
+4. Result cached in SQLite + memory with configurable TTL
 ```
 
 ## Dependency Injection
@@ -273,11 +271,11 @@ To support multi-tenant usage, the following changes would be required:
 
 ### CardHedger Integration (Mar 2026)
 
-**Problem**: Single secondary price source (PokemonPrice) limited fusion confidence.
+**Problem**: Needed a reliable secondary price source for fusion confidence.
 
-**Decision**: Added CardHedger as a second fusion source with dedicated background schedulers (delta poll + daily batch), card ID mapping cache in SQLite, and configurable scheduler intervals via environment variables.
+**Decision**: Added CardHedger as the secondary fusion source with dedicated background schedulers (delta poll + daily batch), card ID mapping cache in SQLite, and configurable scheduler intervals via environment variables.
 
-**Result**: Three-source fusion with improved confidence scoring. CardHedger usage tracked via atomic counters and CAS-based daily reset with 429 monitoring.
+**Result**: Two-source fusion (CardHedger + PriceCharting market data) with confidence scoring. CardHedger usage tracked via atomic counters and CAS-based daily reset with 429 monitoring.
 
 ### Codebase Simplification (Feb 2026)
 

@@ -42,31 +42,9 @@ Comprehensive reference for how price data flows from external APIs through the 
 
 **Key behavior**: PriceCharting data is used for market context (listings, velocity, conservative exits, last sold) but its grade prices are stored as `PCGrades` on `pricing.Price` separately from the fused grades. This ensures `buildSourcePrices()` shows PriceCharting's actual price, not the fused result.
 
-### PokemonPrice (eBay Sales Data)
-
-**Role**: Primary graded pricing source via eBay completed sales.
-
-**Client**: `internal/adapters/clients/pokemonprice/`
-
-| Field | Description |
-|-------|-------------|
-| `SmartMarketPrice.Price` | Weighted market estimate per grade |
-| `SmartMarketPrice.Confidence` | `"high"` / `"medium"` / `"low"` |
-| `Count` | Number of eBay sales in lookback window |
-| `MedianPrice`, `MinPrice`, `MaxPrice` | Price distribution |
-| `MarketPrice7Day` | 7-day rolling average |
-| `MarketTrend` | `"up"` / `"down"` / `"stable"` |
-| `DailyVolume7Day` | 7-day daily volume |
-| `SalesVelocity.DailyAverage` | Cards sold per day |
-| `SalesVelocity.MonthlyTotal` | Total monthly sales |
-
-**Set name normalization**: PSA categories (e.g. "2013 Pokemon Black & White Promos") don't match PokemonPrice naming. Fixed with `cardutil.NormalizeSetNameSimple()` stripping year + "Pokemon" prefix, plus retry-without-set fallback.
-
-**Stored as**: `pricing.Price.GradeDetails["psa10"].Ebay` (EbayGradeDetail struct, prices in cents).
-
 ### CardHedger (Multi-platform Estimate)
 
-**Role**: Supplementary pricing from cross-platform aggregation.
+**Role**: Secondary pricing source from cross-platform aggregation. Sole secondary source in the fusion engine.
 
 **Client**: `internal/adapters/clients/cardhedger/`
 
@@ -96,7 +74,7 @@ Comprehensive reference for how price data flows from external APIs through the 
 
    | Factor | Multiplier |
    |--------|-----------|
-   | **Base weight** | PriceCharting: 0.9, PokemonPrice: 0.90, CardHedger: 0.85 |
+   | **Base weight** | PriceCharting: 0.9, CardHedger: 0.85 |
    | **Freshness** | < 1h: 1.0, < 24h: 0.9, < 7d: 0.7, > 7d: 0.5 |
    | **Volume** | 1–5 items: 0.6, 6–20: 0.8, 21+: 1.0 |
    | **Confidence** | Direct multiplier from source |
@@ -115,11 +93,10 @@ Comprehensive reference for how price data flows from external APIs through the 
 
 | Source | Enters fusion engine? | Why |
 |--------|----------------------|-----|
-| PokemonPrice | Yes | Primary graded pricing |
-| CardHedger | Yes (when available) | Supplementary estimate |
+| CardHedger | Yes (when available) | Secondary graded pricing estimate |
 | PriceCharting | **No** | Used for market data only (listings, velocity, conservative exits, last sold) |
 
-This means `pricing.Price.Grades` (the fused result) is driven by PokemonPrice and CardHedger. PriceCharting's raw grade prices are carried separately in `pricing.Price.PCGrades`.
+This means `pricing.Price.Grades` (the fused result) is driven by CardHedger. PriceCharting's raw grade prices are carried separately in `pricing.Price.PCGrades`.
 
 ---
 
@@ -128,21 +105,20 @@ This means `pricing.Price.Grades` (the fused result) is driven by PokemonPrice a
 ```
 ┌──────────────────────────────────────────────────────┐
 │                   EXTERNAL APIs                       │
-├─────────────────┬──────────────────┬─────────────────┤
-│  PriceCharting  │  PokemonPrice    │  CardHedger     │
-│  (market data)  │  (eBay sales)    │  (estimates)    │
-└────────┬────────┴────────┬─────────┴────────┬────────┘
-         │                 │                   │
-         ▼                 ▼                   ▼
+├──────────────────────────────┬────────────────────────┤
+│  PriceCharting               │  CardHedger            │
+│  (market data)               │  (estimates)           │
+└────────────┬─────────────────┴───────────┬───────────┘
+             │                             │
+             ▼                             ▼
 ┌──────────────────────────────────────────────────────┐
 │  Source Adapters (fusionprice/source_adapters.go)     │
-│  convertPokemonPriceWithDetails()                     │
 │  convertCardHedgerWithDetails()                       │
 └──────────┬──────────────────────────┬────────────────┘
            │ fusion.PriceData[]       │ FetchResult
-           ▼                          │ (EbayDetails,
-┌──────────────────────┐              │  EstimateDetails,
-│  Fusion Engine       │              │  Velocity)
+           ▼                          │ (EstimateDetails)
+┌──────────────────────┐              │
+│  Fusion Engine       │              │
 │  (domain/fusion/)    │              │
 │  Weighted median     │              │
 │  per grade           │              │
@@ -152,14 +128,13 @@ This means `pricing.Price.Grades` (the fused result) is driven by PokemonPrice a
 │  FusionPriceProvider.GetPrice()                       │
 │  (fusionprice/fusion_provider.go)                     │
 │                                                       │
-│  result.Grades ← fused prices (PokemonPrice+CH)      │
+│  result.Grades ← fused prices (CardHedger)            │
 │  result.PCGrades ← PriceCharting raw grade prices     │
 │  result.GradeDetails ← per-source detail data         │
 │  result.Market ← PriceCharting market data            │
 │  result.LastSoldByGrade ← PriceCharting sales history │
 │  result.Conservative ← PriceCharting P25 exits        │
 │  result.Distributions ← PriceCharting percentiles     │
-│  result.Velocity ← PokemonPrice sales velocity        │
 └──────────┬───────────────────────────┬───────────────┘
            │                           │
     ┌──────▼──────┐          ┌─────────▼──────────┐
@@ -201,8 +176,8 @@ This means `pricing.Price.Grades` (the fused result) is driven by PokemonPrice a
 | `ActiveListings` | `Market.ActiveListings` | From PriceCharting |
 | `SalesLast30d`, `SalesLast90d` | `Market` | From PriceCharting |
 | `Volatility` | `Market.Volatility` | From PriceCharting |
-| `DailyVelocity`, `MonthlyVelocity` | `Velocity` | From PokemonPrice |
-| `Avg7DayCents` | First `SourcePrice` with value | From PokemonPrice |
+| `DailyVelocity`, `MonthlyVelocity` | `Velocity` | From secondary source |
+| `Avg7DayCents` | First `SourcePrice` with value | From secondary source |
 | `FusionConfidence` | `price.Confidence` | 0–1 composite score |
 | `SourceCount` | `FusionMetadata.SourceCount` | Number of sources in fusion |
 | `SourcePrices[]` | `buildSourcePrices()` | See below |
@@ -214,7 +189,6 @@ Builds the per-source price breakdown displayed in expanded detail and sell shee
 | Source label | Data origin | Fields populated |
 |-------------|-------------|-----------------|
 | `"PriceCharting"` | `price.PCGrades` (raw API price) | `PriceCents` only |
-| `"PokemonPrice"` | `GradeDetails[grade].Ebay` | `PriceCents`, `SaleCount`, `Trend`, `Confidence`, `MinCents`, `MaxCents` |
 | `"CardHedger"` | `GradeDetails[grade].Estimate` | `PriceCents`, `MinCents`, `MaxCents`, `Confidence` (bucketed to high/medium/low) |
 
 ---
@@ -280,12 +254,12 @@ Rate-limited via circuit breaker in `httpx`. No daily call limit but throttled t
 
 ### Call Path Summary
 
-| Path | PriceCharting | PokemonPrice | CardHedger |
-|------|:---:|:---:|:---:|
-| On-demand (user views inventory) | Yes | Yes | Yes |
-| Batch scheduler (background) | Yes | Yes | Yes |
-| Delta poll (background) | — | — | Yes |
-| Post-import cert resolution | — | — | Yes |
+| Path | PriceCharting | CardHedger |
+|------|:---:|:---:|
+| On-demand (user views inventory) | Yes | Yes |
+| Batch scheduler (background) | Yes | Yes |
+| Delta poll (background) | — | Yes |
+| Post-import cert resolution | — | Yes |
 
 ---
 
@@ -354,7 +328,7 @@ Buyer-facing — hides internal cost data, shows market justification.
 
 **Summary cards**: Items count, Total Market Value, Data Sources count.
 
-**Footer**: "Prices based on recent completed sales from multiple verified sources including PriceCharting and PokemonPrice."
+**Footer**: "Prices based on recent completed sales from multiple verified sources including PriceCharting and CardHedger."
 
 ### Other Components Using Price Data
 
@@ -377,7 +351,6 @@ Buyer-facing — hides internal cost data, shows market justification.
 | Aspect | Path |
 |--------|------|
 | PriceCharting client | `internal/adapters/clients/pricecharting/` |
-| PokemonPrice client | `internal/adapters/clients/pokemonprice/` |
 | CardHedger client | `internal/adapters/clients/cardhedger/` |
 | Source adapters | `internal/adapters/clients/fusionprice/source_adapters.go` |
 | Fusion engine | `internal/domain/fusion/engine.go` |
@@ -405,15 +378,13 @@ Buyer-facing — hides internal cost data, shows market justification.
 
 2. **Still no data**: Inner guard `snap.LastSoldCents > 0` was too restrictive for cards where PriceCharting has grade price but no per-grade last-sold. Changed to `snap.LastSoldCents > 0 || snap.MedianCents > 0 || snap.GradePriceCents > 0`.
 
-3. **PokemonPrice set mismatch**: PSA category format vs PokemonPrice naming. Fixed with `cardutil.NormalizeSetNameSimple()` + retry-without-set fallback.
-
-4. **PriceCharting and PokemonPrice showing identical prices**: `buildSourcePrices()` was using the fused `price.Grades` for the "PriceCharting" entry, but PriceCharting prices aren't in the fusion engine — so both entries showed PokemonPrice's price. Fixed by adding `PCGrades` field to carry PriceCharting's raw grade prices separately.
+3. **PriceCharting showing fused prices instead of raw**: `buildSourcePrices()` was using the fused `price.Grades` for the "PriceCharting" entry, but PriceCharting prices aren't in the fusion engine. Fixed by adding `PCGrades` field to carry PriceCharting's raw grade prices separately.
 
 5. **CardHedger data never appearing in sourcePrices**: On-demand calls skip CardHedger (by design), and when DB-cached data was loaded, `convertEntryToPrice()` never populated `GradeDetails` with `EstimateGradeDetail`. Fixed by adding `supplementCardHedgerFromDB()` to reconstruct from stored batch data.
 
 6. **`LastSoldCents = 0` for all 21 cards**: PriceCharting's `sales-data` API field is never populated ("Historic prices and historic sales are not supported"). `LastSoldByGrade` was always nil → `LastSoldCents` always 0. Fixed with a fallback chain (see [LastSold Fallback Chain](#lastsold-fallback-chain)).
 
-7. **CardHedger set matching too strict**: `resolveCardID()` used `strings.EqualFold()` for exact set name match. CardHedger returns decorated names like `"2021 Pokemon Celebrations Classic Collection"` while purchases have `"CELEBRATIONS CLASSIC COLLECTION"`. Fixed by switching to `cardutil.MatchesSetOverlap()` (token overlap, same as PokemonPrice).
+7. **CardHedger set matching too strict**: `resolveCardID()` used `strings.EqualFold()` for exact set name match. CardHedger returns decorated names like `"2021 Pokemon Celebrations Classic Collection"` while purchases have `"CELEBRATIONS CLASSIC COLLECTION"`. Fixed by switching to `cardutil.MatchesSetOverlap()` (token overlap).
 
 8. **Card name suffixes break DB/cache lookups**: PSA-style names like `"DARK GYARADOS-HOLO"` or `"MEWTWO-REV.FOIL"` store data under normalized name (`"DARK GYARADOS Holo"`) but subsequent lookups use the original name → cache miss. Fixed by applying `cardutil.NormalizePurchaseName()` at the start of `GetPrice()`.
 
@@ -421,7 +392,7 @@ Buyer-facing — hides internal cost data, shows market justification.
 
 10. **PriceCharting wrong variant matches (card number mismatch)**: `tryAPI()` didn't validate card numbers. `Pikachu #002` matched `Pikachu [Holo] #5` (wrong card entirely). Fixed by adding `VerifyProductMatch()` check in `tryAPI()`.
 
-11. **Inventory page making live API calls on every load**: `enrichAgingItem` was calling `batchFetchSnapshots()` which made N concurrent `GetMarketSnapshot` calls (each potentially hitting PriceCharting + PokemonPrice APIs). Fixed by reverting to stored snapshot data only — the inventory refresh scheduler (runs on startup + hourly) keeps snapshots fresh. Full `MarketSnapshot` now persisted as JSON in `snapshot_json` DB column.
+11. **Inventory page making live API calls on every load**: `enrichAgingItem` was calling `batchFetchSnapshots()` which made N concurrent `GetMarketSnapshot` calls (each potentially hitting PriceCharting + CardHedger APIs). Fixed by reverting to stored snapshot data only — the inventory refresh scheduler (runs on startup + hourly) keeps snapshots fresh. Full `MarketSnapshot` now persisted as JSON in `snapshot_json` DB column.
 
 12. **`EnrichWithHistoricalData` removed**: PriceCharting's `/api/product/history` endpoint returns 404. The no-op method and all callers were removed.
 
@@ -435,8 +406,7 @@ Buyer-facing — hides internal cost data, shows market justification.
 
 1. **`LastSoldByGrade`** — actual per-grade last sold data (PriceCharting `sales-data`). **Never populated** because PriceCharting's API doesn't return it.
 2. **`PCGrades`** — PriceCharting grade prices (`manual-only-price` = PSA 10, `graded-price` = PSA 9, `loose-price` = Raw). These are based on recent eBay sold listings and serve as effective "last sold" proxies.
-3. **`GradeDetails[grade].Ebay.PriceCents`** — PokemonPrice `smartMarketPrice` (median of recent eBay sales). Also sets `SaleCount`.
-4. **`GradeDetails[grade].Estimate.PriceCents`** — CardHedger price estimate.
+3. **`GradeDetails[grade].Estimate.PriceCents`** — CardHedger price estimate.
 
 This ensures every card with **any** pricing data shows a non-zero `LastSoldCents`.
 
