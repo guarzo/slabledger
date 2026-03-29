@@ -156,7 +156,7 @@ func (s *service) GenerateDailyPicks(ctx context.Context) error {
 }
 
 // updateWatchlistAssessments links saved picks back to watchlist items by card name.
-func (s *service) updateWatchlistAssessments(ctx context.Context, picks []Pick, watchlist []WatchlistItem) {
+func (s *service) updateWatchlistAssessments(ctx context.Context, _ []Pick, watchlist []WatchlistItem) {
 	if len(watchlist) == 0 {
 		return
 	}
@@ -256,6 +256,8 @@ func (s *service) GetPickHistory(ctx context.Context, days int) ([]Pick, error) 
 
 // AddToWatchlist adds a card to the watchlist.
 func (s *service) AddToWatchlist(ctx context.Context, item WatchlistItem) error {
+	item.Source = WatchlistManual
+	item.Active = true
 	if err := s.repo.SaveWatchlistItem(ctx, item); err != nil {
 		return fmt.Errorf("add to watchlist: %w", err)
 	}

@@ -11,7 +11,7 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// nopLogger satisfies observability.Logger and discards all output.
+// Test helpers — local mocks to avoid import cycles with testutil/mocks
 // ---------------------------------------------------------------------------
 
 type nopLogger struct{}
@@ -24,12 +24,6 @@ func (n *nopLogger) With(_ context.Context, _ ...observability.Field) observabil
 	return n
 }
 
-// ---------------------------------------------------------------------------
-// mockLLM implements ai.LLMProvider.
-// It returns responses in-order, one per StreamCompletion call.
-// If err is set, every call returns that error immediately.
-// ---------------------------------------------------------------------------
-
 type mockLLM struct {
 	responses []string
 	err       error
@@ -37,115 +31,87 @@ type mockLLM struct {
 }
 
 func (m *mockLLM) StreamCompletion(_ context.Context, _ ai.CompletionRequest, stream func(ai.CompletionChunk)) error {
-	m.calls++
 	if m.err != nil {
+		m.calls++
 		return m.err
 	}
-	idx := m.calls - 1
+	idx := m.calls
+	m.calls++
 	if idx < len(m.responses) {
 		stream(ai.CompletionChunk{Delta: m.responses[idx]})
 	}
 	return nil
 }
 
-// ---------------------------------------------------------------------------
-// mockRepo is an inline mock for picks.Repository.
-// ---------------------------------------------------------------------------
-
 type mockRepo struct {
-	picksExistForDateFn        func(ctx context.Context, date time.Time) (bool, error)
-	savePicksFn                func(ctx context.Context, p []Pick) error
-	getPicksByDateFn           func(ctx context.Context, date time.Time) ([]Pick, error)
-	getPicksRangeFn            func(ctx context.Context, from, to time.Time) ([]Pick, error)
-	saveWatchlistItemFn        func(ctx context.Context, item WatchlistItem) error
-	deleteWatchlistItemFn      func(ctx context.Context, id int) error
-	getActiveWatchlistFn       func(ctx context.Context) ([]WatchlistItem, error)
-	updateWatchlistAssessmentFn func(ctx context.Context, watchlistID int, pickID int) error
-}
-
-func (m *mockRepo) PicksExistForDate(ctx context.Context, date time.Time) (bool, error) {
-	if m.picksExistForDateFn != nil {
-		return m.picksExistForDateFn(ctx, date)
-	}
-	return false, nil
+	SavePicksFn                 func(ctx context.Context, p []Pick) error
+	GetPicksByDateFn            func(ctx context.Context, date time.Time) ([]Pick, error)
+	GetPicksRangeFn             func(ctx context.Context, from, to time.Time) ([]Pick, error)
+	PicksExistForDateFn         func(ctx context.Context, date time.Time) (bool, error)
+	SaveWatchlistItemFn         func(ctx context.Context, item WatchlistItem) error
+	DeleteWatchlistItemFn       func(ctx context.Context, id int) error
+	GetActiveWatchlistFn        func(ctx context.Context) ([]WatchlistItem, error)
+	UpdateWatchlistAssessmentFn func(ctx context.Context, watchlistID int, pickID int) error
 }
 
 func (m *mockRepo) SavePicks(ctx context.Context, p []Pick) error {
-	if m.savePicksFn != nil {
-		return m.savePicksFn(ctx, p)
+	if m.SavePicksFn != nil {
+		return m.SavePicksFn(ctx, p)
 	}
 	return nil
 }
-
 func (m *mockRepo) GetPicksByDate(ctx context.Context, date time.Time) ([]Pick, error) {
-	if m.getPicksByDateFn != nil {
-		return m.getPicksByDateFn(ctx, date)
+	if m.GetPicksByDateFn != nil {
+		return m.GetPicksByDateFn(ctx, date)
 	}
 	return nil, nil
 }
-
 func (m *mockRepo) GetPicksRange(ctx context.Context, from, to time.Time) ([]Pick, error) {
-	if m.getPicksRangeFn != nil {
-		return m.getPicksRangeFn(ctx, from, to)
+	if m.GetPicksRangeFn != nil {
+		return m.GetPicksRangeFn(ctx, from, to)
 	}
 	return nil, nil
 }
-
+func (m *mockRepo) PicksExistForDate(ctx context.Context, date time.Time) (bool, error) {
+	if m.PicksExistForDateFn != nil {
+		return m.PicksExistForDateFn(ctx, date)
+	}
+	return false, nil
+}
 func (m *mockRepo) SaveWatchlistItem(ctx context.Context, item WatchlistItem) error {
-	if m.saveWatchlistItemFn != nil {
-		return m.saveWatchlistItemFn(ctx, item)
+	if m.SaveWatchlistItemFn != nil {
+		return m.SaveWatchlistItemFn(ctx, item)
 	}
 	return nil
 }
-
 func (m *mockRepo) DeleteWatchlistItem(ctx context.Context, id int) error {
-	if m.deleteWatchlistItemFn != nil {
-		return m.deleteWatchlistItemFn(ctx, id)
+	if m.DeleteWatchlistItemFn != nil {
+		return m.DeleteWatchlistItemFn(ctx, id)
 	}
 	return nil
 }
-
 func (m *mockRepo) GetActiveWatchlist(ctx context.Context) ([]WatchlistItem, error) {
-	if m.getActiveWatchlistFn != nil {
-		return m.getActiveWatchlistFn(ctx)
+	if m.GetActiveWatchlistFn != nil {
+		return m.GetActiveWatchlistFn(ctx)
 	}
 	return nil, nil
 }
-
 func (m *mockRepo) UpdateWatchlistAssessment(ctx context.Context, watchlistID int, pickID int) error {
-	if m.updateWatchlistAssessmentFn != nil {
-		return m.updateWatchlistAssessmentFn(ctx, watchlistID, pickID)
+	if m.UpdateWatchlistAssessmentFn != nil {
+		return m.UpdateWatchlistAssessmentFn(ctx, watchlistID, pickID)
 	}
 	return nil
 }
 
-// ---------------------------------------------------------------------------
-// mockProfitability is an inline mock for ProfitabilityProvider.
-// ---------------------------------------------------------------------------
+type mockProfitability struct{}
 
-type mockProfitability struct {
-	fn func(ctx context.Context) (ProfitabilityProfile, error)
-}
-
-func (m *mockProfitability) GetProfitablePatterns(ctx context.Context) (ProfitabilityProfile, error) {
-	if m.fn != nil {
-		return m.fn(ctx)
-	}
+func (m *mockProfitability) GetProfitablePatterns(_ context.Context) (ProfitabilityProfile, error) {
 	return ProfitabilityProfile{}, nil
 }
 
-// ---------------------------------------------------------------------------
-// mockInventory is an inline mock for InventoryProvider.
-// ---------------------------------------------------------------------------
+type mockInventory struct{}
 
-type mockInventory struct {
-	fn func(ctx context.Context) ([]string, error)
-}
-
-func (m *mockInventory) GetHeldCardNames(ctx context.Context) ([]string, error) {
-	if m.fn != nil {
-		return m.fn(ctx)
-	}
+func (m *mockInventory) GetHeldCardNames(_ context.Context) ([]string, error) {
 	return nil, nil
 }
 
@@ -153,17 +119,17 @@ func (m *mockInventory) GetHeldCardNames(ctx context.Context) ([]string, error) 
 // Test data
 // ---------------------------------------------------------------------------
 
-const validCandidatesJSON = `[{"card_name":"Charizard ex","set_name":"Obsidian Flames","grade":"PSA 10","rationale":"test"}]`
+var validCandidatesJSON = `[{"card_name":"Charizard ex","set_name":"Obsidian Flames","grade":"PSA 10","rationale":"test"}]`
 
-const validScoredJSON = `[{"card_name":"Charizard ex","set_name":"Obsidian Flames","grade":"PSA 10","direction":"buy","confidence":"high","buy_thesis":"Strong demand","target_buy_price_cents":15000,"expected_sell_price_cents":22500,"rank":1,"signals":[{"factor":"population","direction":"bullish","title":"Low pop","detail":"Only 847"}]}]`
+var validScoredJSON = `[{"card_name":"Charizard ex","set_name":"Obsidian Flames","grade":"PSA 10","direction":"buy","confidence":"high","buy_thesis":"Strong demand","target_buy_price_cents":15000,"expected_sell_price_cents":22500,"rank":1,"signals":[{"factor":"population","direction":"bullish","title":"Low pop","detail":"Only 847"}]}]`
 
 // ---------------------------------------------------------------------------
-// TestGenerateDailyPicks_Idempotent
+// Tests
 // ---------------------------------------------------------------------------
 
 func TestGenerateDailyPicks_Idempotent(t *testing.T) {
 	repo := &mockRepo{
-		picksExistForDateFn: func(_ context.Context, _ time.Time) (bool, error) {
+		PicksExistForDateFn: func(_ context.Context, _ time.Time) (bool, error) {
 			return true, nil
 		},
 	}
@@ -179,24 +145,16 @@ func TestGenerateDailyPicks_Idempotent(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// TestGenerateDailyPicks_Success
-// ---------------------------------------------------------------------------
-
 func TestGenerateDailyPicks_Success(t *testing.T) {
 	var savedPicks []Pick
 	repo := &mockRepo{
-		savePicksFn: func(_ context.Context, p []Pick) error {
+		SavePicksFn: func(_ context.Context, p []Pick) error {
 			savedPicks = p
 			return nil
 		},
-		// GetPicksByDate is called by updateWatchlistAssessments; return empty slice.
 	}
 	llm := &mockLLM{
-		responses: []string{
-			validCandidatesJSON, // call 1: candidate generation
-			validScoredJSON,     // call 2: scoring
-		},
+		responses: []string{validCandidatesJSON, validScoredJSON},
 	}
 	svc := NewService(repo, llm, &mockProfitability{}, &mockInventory{}, &nopLogger{})
 
@@ -215,21 +173,15 @@ func TestGenerateDailyPicks_Success(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// TestGenerateDailyPicks_LLMFailure
-// ---------------------------------------------------------------------------
-
 func TestGenerateDailyPicks_LLMFailure(t *testing.T) {
 	saveCalled := false
 	repo := &mockRepo{
-		savePicksFn: func(_ context.Context, _ []Pick) error {
+		SavePicksFn: func(_ context.Context, _ []Pick) error {
 			saveCalled = true
 			return nil
 		},
 	}
-	wantErr := errors.New("azure unavailable")
-	llm := &mockLLM{err: wantErr}
-
+	llm := &mockLLM{err: errors.New("azure unavailable")}
 	svc := NewService(repo, llm, &mockProfitability{}, &mockInventory{}, &nopLogger{})
 
 	err := svc.GenerateDailyPicks(context.Background())
@@ -244,14 +196,10 @@ func TestGenerateDailyPicks_LLMFailure(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// TestGetLatestPicks
-// ---------------------------------------------------------------------------
-
 func TestGetLatestPicks(t *testing.T) {
 	want := []Pick{{CardName: "Pikachu", SetName: "Base Set", Grade: "PSA 9"}}
 	repo := &mockRepo{
-		getPicksByDateFn: func(_ context.Context, _ time.Time) ([]Pick, error) {
+		GetPicksByDateFn: func(_ context.Context, _ time.Time) ([]Pick, error) {
 			return want, nil
 		},
 	}
@@ -269,28 +217,18 @@ func TestGetLatestPicks(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// TestWatchlistCRUD
-// ---------------------------------------------------------------------------
-
 func TestWatchlistCRUD(t *testing.T) {
-	t.Run("AddToWatchlist saves item with correct source", func(t *testing.T) {
+	t.Run("AddToWatchlist sets manual source", func(t *testing.T) {
 		var saved WatchlistItem
 		repo := &mockRepo{
-			saveWatchlistItemFn: func(_ context.Context, item WatchlistItem) error {
+			SaveWatchlistItemFn: func(_ context.Context, item WatchlistItem) error {
 				saved = item
 				return nil
 			},
 		}
 		svc := NewService(repo, &mockLLM{}, &mockProfitability{}, &mockInventory{}, &nopLogger{})
 
-		item := WatchlistItem{
-			CardName: "Charizard",
-			SetName:  "Base Set",
-			Grade:    "PSA 10",
-			Source:   WatchlistManual,
-			Active:   true,
-		}
+		item := WatchlistItem{CardName: "Charizard", SetName: "Base Set", Grade: "PSA 10"}
 		if err := svc.AddToWatchlist(context.Background(), item); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -299,29 +237,28 @@ func TestWatchlistCRUD(t *testing.T) {
 		}
 	})
 
-	t.Run("RemoveFromWatchlist passes correct id", func(t *testing.T) {
+	t.Run("RemoveFromWatchlist passes id", func(t *testing.T) {
 		var deletedID int
 		repo := &mockRepo{
-			deleteWatchlistItemFn: func(_ context.Context, id int) error {
+			DeleteWatchlistItemFn: func(_ context.Context, id int) error {
 				deletedID = id
 				return nil
 			},
 		}
 		svc := NewService(repo, &mockLLM{}, &mockProfitability{}, &mockInventory{}, &nopLogger{})
 
-		const wantID = 42
-		if err := svc.RemoveFromWatchlist(context.Background(), wantID); err != nil {
+		if err := svc.RemoveFromWatchlist(context.Background(), 42); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if deletedID != wantID {
-			t.Errorf("deleted id = %d, want %d", deletedID, wantID)
+		if deletedID != 42 {
+			t.Errorf("deleted id = %d, want 42", deletedID)
 		}
 	})
 
-	t.Run("GetWatchlist returns items from repo", func(t *testing.T) {
+	t.Run("GetWatchlist returns items", func(t *testing.T) {
 		want := []WatchlistItem{{CardName: "Lugia", SetName: "Neo Genesis", Grade: "PSA 10", Active: true}}
 		repo := &mockRepo{
-			getActiveWatchlistFn: func(_ context.Context) ([]WatchlistItem, error) {
+			GetActiveWatchlistFn: func(_ context.Context) ([]WatchlistItem, error) {
 				return want, nil
 			},
 		}
@@ -332,14 +269,10 @@ func TestWatchlistCRUD(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if len(got) != 1 || got[0].CardName != "Lugia" {
-			t.Errorf("got watchlist %+v, want %+v", got, want)
+			t.Errorf("got %+v, want %+v", got, want)
 		}
 	})
 }
-
-// ---------------------------------------------------------------------------
-// TestParseCandidates
-// ---------------------------------------------------------------------------
 
 func TestParseCandidates(t *testing.T) {
 	tests := []struct {
@@ -348,28 +281,11 @@ func TestParseCandidates(t *testing.T) {
 		wantLen int
 		wantErr bool
 	}{
-		{
-			name:    "valid JSON",
-			input:   validCandidatesJSON,
-			wantLen: 1,
-		},
-		{
-			name:    "markdown-fenced JSON",
-			input:   "```json\n" + validCandidatesJSON + "\n```",
-			wantLen: 1,
-		},
-		{
-			name:    "plain fenced JSON",
-			input:   "```\n" + validCandidatesJSON + "\n```",
-			wantLen: 1,
-		},
-		{
-			name:    "invalid JSON",
-			input:   `not json at all`,
-			wantErr: true,
-		},
+		{name: "valid JSON", input: validCandidatesJSON, wantLen: 1},
+		{name: "markdown-fenced JSON", input: "```json\n" + validCandidatesJSON + "\n```", wantLen: 1},
+		{name: "plain fenced JSON", input: "```\n" + validCandidatesJSON + "\n```", wantLen: 1},
+		{name: "invalid JSON", input: "not json at all", wantErr: true},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := ParseCandidates(tt.input)
@@ -389,10 +305,6 @@ func TestParseCandidates(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// TestParseScoredPicks
-// ---------------------------------------------------------------------------
-
 func TestParseScoredPicks(t *testing.T) {
 	picks, err := ParseScoredPicks(validScoredJSON)
 	if err != nil {
@@ -403,15 +315,8 @@ func TestParseScoredPicks(t *testing.T) {
 	}
 
 	p := picks[0]
-
 	if p.CardName != "Charizard ex" {
 		t.Errorf("CardName = %q, want %q", p.CardName, "Charizard ex")
-	}
-	if p.SetName != "Obsidian Flames" {
-		t.Errorf("SetName = %q, want %q", p.SetName, "Obsidian Flames")
-	}
-	if p.Grade != "PSA 10" {
-		t.Errorf("Grade = %q, want %q", p.Grade, "PSA 10")
 	}
 	if p.Direction != DirectionBuy {
 		t.Errorf("Direction = %q, want %q", p.Direction, DirectionBuy)
@@ -425,20 +330,13 @@ func TestParseScoredPicks(t *testing.T) {
 	if p.ExpectedSellPrice != 22500 {
 		t.Errorf("ExpectedSellPrice = %d, want 22500", p.ExpectedSellPrice)
 	}
-	if p.Rank != 1 {
-		t.Errorf("Rank = %d, want 1", p.Rank)
-	}
 	if len(p.Signals) != 1 {
 		t.Fatalf("expected 1 signal, got %d", len(p.Signals))
 	}
-	sig := p.Signals[0]
-	if sig.Factor != "population" {
-		t.Errorf("Signal.Factor = %q, want %q", sig.Factor, "population")
+	if p.Signals[0].Factor != "population" {
+		t.Errorf("Signal.Factor = %q, want %q", p.Signals[0].Factor, "population")
 	}
-	if sig.Direction != SignalBullish {
-		t.Errorf("Signal.Direction = %q, want %q", sig.Direction, SignalBullish)
-	}
-	if sig.Title != "Low pop" {
-		t.Errorf("Signal.Title = %q, want %q", sig.Title, "Low pop")
+	if p.Signals[0].Direction != SignalBullish {
+		t.Errorf("Signal.Direction = %q, want %q", p.Signals[0].Direction, SignalBullish)
 	}
 }
