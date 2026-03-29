@@ -401,6 +401,16 @@ func (m *mockPublisher) PublishCarousel(_ context.Context, _, _ string, _ []stri
 	return &PublishResultInfo{InstagramPostID: "ig_123"}, nil
 }
 
+// capturingPublisher records the imageURLs passed to PublishCarousel.
+type capturingPublisher struct {
+	capturedURLs []string
+}
+
+func (p *capturingPublisher) PublishCarousel(_ context.Context, _, _ string, imageURLs []string, _ string) (*PublishResultInfo, error) {
+	p.capturedURLs = imageURLs
+	return &PublishResultInfo{InstagramPostID: "ig_123"}, nil
+}
+
 type mockTokenProvider struct{}
 
 func (m *mockTokenProvider) GetToken(_ context.Context) (string, string, error) {
@@ -493,6 +503,74 @@ func TestPublish_NoPublisherConfigured(t *testing.T) {
 	err := svc.Publish(context.Background(), "p1")
 	if err == nil {
 		t.Error("expected error when publisher not configured")
+	}
+}
+
+func TestPublishAsync_FiltersEmptySlideURLs(t *testing.T) {
+	publisher := &capturingPublisher{}
+	repo := &mockSocialRepo{}
+	repo.getPostFunc = func(_ context.Context, _ string) (*SocialPost, error) {
+		return &SocialPost{
+			ID:        "p1",
+			Caption:   "Test caption",
+			SlideURLs: []string{"http://img1.jpg", "", "http://img2.jpg", ""},
+		}, nil
+	}
+	repo.listPostCardsFunc = func(_ context.Context, _ string) ([]PostCardDetail, error) {
+		return []PostCardDetail{{PurchaseID: "p1", FrontImageURL: "http://front.jpg"}}, nil
+	}
+	repo.setPublishingFunc = func(_ context.Context, _ string) error { return nil }
+	repo.setPublishedFunc = func(_ context.Context, _, _ string) error { return nil }
+
+	svc := NewService(repo, WithPublisher(publisher, &mockTokenProvider{}))
+	err := svc.Publish(context.Background(), "p1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	svc.Wait()
+
+	if len(publisher.capturedURLs) != 2 {
+		t.Errorf("expected 2 URLs after filtering, got %d: %v", len(publisher.capturedURLs), publisher.capturedURLs)
+	}
+	for _, u := range publisher.capturedURLs {
+		if u == "" {
+			t.Error("empty URL should have been filtered from SlideURLs")
+		}
+	}
+}
+
+func TestPublishAsync_AllEmptySlideURLsFallsBackToCards(t *testing.T) {
+	publisher := &capturingPublisher{}
+	repo := &mockSocialRepo{}
+	repo.getPostFunc = func(_ context.Context, _ string) (*SocialPost, error) {
+		return &SocialPost{
+			ID:        "p1",
+			Caption:   "Test caption",
+			SlideURLs: []string{"", "", ""},
+		}, nil
+	}
+	repo.listPostCardsFunc = func(_ context.Context, _ string) ([]PostCardDetail, error) {
+		return []PostCardDetail{
+			{PurchaseID: "p1", FrontImageURL: "http://card1.jpg"},
+			{PurchaseID: "p2", FrontImageURL: "http://card2.jpg"},
+		}, nil
+	}
+	repo.setPublishingFunc = func(_ context.Context, _ string) error { return nil }
+	repo.setPublishedFunc = func(_ context.Context, _, _ string) error { return nil }
+
+	svc := NewService(repo, WithPublisher(publisher, &mockTokenProvider{}))
+	err := svc.Publish(context.Background(), "p1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	svc.Wait()
+
+	// When all SlideURLs are empty, should fall back to card front images.
+	if len(publisher.capturedURLs) != 2 {
+		t.Errorf("expected 2 card image URLs, got %d: %v", len(publisher.capturedURLs), publisher.capturedURLs)
+	}
+	if len(publisher.capturedURLs) > 0 && publisher.capturedURLs[0] != "http://card1.jpg" {
+		t.Errorf("expected card image fallback, got %q", publisher.capturedURLs[0])
 	}
 }
 

@@ -25,7 +25,6 @@ This codebase follows **Hexagonal Architecture** (also known as Ports and Adapte
 │    │   ├── fusionprice/    (multi-source fusion)│
 │    │   ├── google/         (Google OAuth)       │
 │    │   ├── httpx/          (shared HTTP client) │
-│    │   ├── pokemonprice/   (primary graded prices) │
 │    │   ├── tcgdex/         (card metadata)      │
 │    │   ├── pricecharting/  (graded prices + market) │
 │    │   ├── pricelookup/    (PriceLookup adapter)│
@@ -150,10 +149,9 @@ internal/adapters/
 ├── clients/             # Outbound: External APIs
 │   ├── cardhedger/      # CardHedger supplementary pricing
 │   ├── cardutil/        # Card utility functions
-│   ├── fusionprice/     # Multi-source price fusion (PokemonPrice + CardHedger)
+│   ├── fusionprice/     # Multi-source price fusion (CardHedger + PriceCharting)
 │   ├── google/          # Google OAuth client
 │   ├── httpx/           # Shared HTTP client (retry, circuit breaker)
-│   ├── pokemonprice/    # PokemonPrice primary graded price source
 │   ├── tcgdex/          # TCGdex.dev card/set metadata (EN + JA)
 │   ├── pricecharting/   # PriceCharting graded prices + market data
 │   ├── pricelookup/     # PriceLookup adapter (wraps PriceProvider for campaigns)

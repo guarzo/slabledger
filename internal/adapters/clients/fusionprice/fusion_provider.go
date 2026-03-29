@@ -45,8 +45,7 @@ type FusionPriceProvider struct {
 // NewFusionProviderWithRepo creates a new fusion provider with database support.
 // The freshnessDuration parameter specifies the maximum age for database prices to be
 // considered fresh. If zero or negative, DefaultFreshnessDuration (48 hours) is used.
-// The secondarySources parameter accepts any implementations of SecondaryPriceSource
-// (e.g., PokemonPriceAdapter).
+// The secondarySources parameter accepts any implementations of SecondaryPriceSource.
 // Optional cacheTTL, pcTimeout, and secondaryTimeout override defaults (4h, 30s, 20s).
 func NewFusionProviderWithRepo(
 	pcProvider pricing.PriceProvider,
@@ -64,8 +63,7 @@ func NewFusionProviderWithRepo(
 ) *FusionPriceProvider {
 	// Configure fusion engine with custom weights
 	fusionConfig := fusion.DefaultFusionConfig()
-	fusionConfig.SourceWeights["pokemonprice"] = 0.90 // Primary: eBay graded data via smartMarketPrice
-	fusionConfig.SourceWeights["cardhedger"] = 0.85   // Supplementary: multi-platform price estimates
+	fusionConfig.SourceWeights["cardhedger"] = 0.85 // Multi-platform price estimates
 
 	// Fall back to defaults for zero values
 	if freshnessDuration <= 0 {

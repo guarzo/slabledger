@@ -328,6 +328,108 @@ func TestMaxToolRounds_Exceeded(t *testing.T) {
 	}
 }
 
+func TestTruncateToolResult(t *testing.T) {
+	tests := []struct {
+		name       string
+		input      string
+		maxLen     int
+		wantCutLen int // if non-zero, assert noticeIdx == this value
+	}{
+		{
+			name:   "short result unchanged",
+			input:  `{"campaigns": []}`,
+			maxLen: 100,
+		},
+		{
+			name:   "exactly at limit unchanged",
+			input:  strings.Repeat("a", 100),
+			maxLen: 100,
+		},
+		{
+			name:   "over limit truncated with notice",
+			input:  strings.Repeat("x", 200),
+			maxLen: 100,
+		},
+		{
+			name:       "truncates at newline boundary",
+			input:      strings.Repeat("x", 60) + "\n" + strings.Repeat("y", 60),
+			maxLen:     100,
+			wantCutLen: 60,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := truncateToolResult(tt.input, tt.maxLen)
+			if len(tt.input) <= tt.maxLen {
+				if got != tt.input {
+					t.Errorf("expected input unchanged, got %q", got)
+				}
+				return
+			}
+			// Truncated result should contain the notice.
+			if !strings.Contains(got, "[... truncated") {
+				t.Errorf("truncated result missing notice: %q", got)
+			}
+			// The body before the notice should not exceed maxLen.
+			noticeIdx := strings.Index(got, "\n\n[... truncated")
+			if noticeIdx > tt.maxLen {
+				t.Errorf("body before notice is %d chars, exceeds maxLen %d", noticeIdx, tt.maxLen)
+			}
+			if tt.wantCutLen != 0 && noticeIdx != tt.wantCutLen {
+				t.Errorf("expected truncation at %d chars, got %d", tt.wantCutLen, noticeIdx)
+			}
+		})
+	}
+}
+
+func TestLargeToolResult_Truncated(t *testing.T) {
+	// Verify that the tool-calling loop truncates large tool results.
+	largeResult := strings.Repeat(`{"id":"card-1","name":"Charizard"},`, 1000) // ~35K chars
+	var round2Messages []Message
+	llm := &mockLLMProvider{
+		responses: []func(CompletionRequest, func(CompletionChunk)) error{
+			chunkToolCall("tc-1", "get_global_inventory", `{}`),
+			func(req CompletionRequest, stream func(CompletionChunk)) error {
+				round2Messages = req.Messages
+				stream(CompletionChunk{Delta: "Analysis complete."})
+				return nil
+			},
+		},
+	}
+	executor := &mockToolExecutor{
+		definitions: []ai.ToolDefinition{
+			{Name: "get_global_inventory", Description: "Gets inventory"},
+		},
+		executeFunc: func(_ context.Context, _, _ string) (string, error) {
+			return largeResult, nil
+		},
+	}
+	svc := NewService(llm, executor)
+
+	err := svc.GenerateDigest(context.Background(), func(StreamEvent) {})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Find the tool result message.
+	var toolMsg *Message
+	for i, msg := range round2Messages {
+		if msg.Role == RoleTool {
+			toolMsg = &round2Messages[i]
+			break
+		}
+	}
+	if toolMsg == nil {
+		t.Fatal("expected tool result message in round 2")
+	}
+	if len(toolMsg.Content) > maxToolResultChars+200 { // allow some slack for truncation notice
+		t.Errorf("tool result not truncated: got %d chars, expected ≤ %d", len(toolMsg.Content), maxToolResultChars+200)
+	}
+	if !strings.Contains(toolMsg.Content, "[... truncated") {
+		t.Errorf("truncated result missing notice")
+	}
+}
+
 func TestToolExecutionError_WrappedInJSON(t *testing.T) {
 	// Tool returns an error; service should convert it to JSON and continue to next LLM round.
 	toolErr := errors.New("tool database unavailable")

@@ -205,7 +205,7 @@ func TestBuildSourcePrices(t *testing.T) {
 
 	sources := buildSourcePrices(price, 10)
 
-	// Expect 3 sources: PriceCharting, PokemonPrice, CardHedger
+	// Expect 3 sources: PriceCharting, eBay, CardHedger
 	if len(sources) != 3 {
 		t.Fatalf("buildSourcePrices returned %d sources, want 3", len(sources))
 	}
@@ -219,34 +219,34 @@ func TestBuildSourcePrices(t *testing.T) {
 		t.Errorf("PriceCharting PriceCents = %d, want 5000", pc.PriceCents)
 	}
 
-	// Verify PokemonPrice source
+	// Verify eBay source
 	pp := sources[1]
-	if pp.Source != "PokemonPrice" {
-		t.Errorf("sources[1].Source = %q, want %q", pp.Source, "PokemonPrice")
+	if pp.Source != "eBay" {
+		t.Errorf("sources[1].Source = %q, want %q", pp.Source, "eBay")
 	}
 	if pp.PriceCents != 4800 {
-		t.Errorf("PokemonPrice PriceCents = %d, want 4800", pp.PriceCents)
+		t.Errorf("eBay PriceCents = %d, want 4800", pp.PriceCents)
 	}
 	if pp.SaleCount != 12 {
-		t.Errorf("PokemonPrice SaleCount = %d, want 12", pp.SaleCount)
+		t.Errorf("eBay SaleCount = %d, want 12", pp.SaleCount)
 	}
 	if pp.Trend != "up" {
-		t.Errorf("PokemonPrice Trend = %q, want %q", pp.Trend, "up")
+		t.Errorf("eBay Trend = %q, want %q", pp.Trend, "up")
 	}
 	if pp.Confidence != "high" {
-		t.Errorf("PokemonPrice Confidence = %q, want %q", pp.Confidence, "high")
+		t.Errorf("eBay Confidence = %q, want %q", pp.Confidence, "high")
 	}
 	if pp.MinCents != 4000 {
-		t.Errorf("PokemonPrice MinCents = %d, want 4000", pp.MinCents)
+		t.Errorf("eBay MinCents = %d, want 4000", pp.MinCents)
 	}
 	if pp.MaxCents != 5500 {
-		t.Errorf("PokemonPrice MaxCents = %d, want 5500", pp.MaxCents)
+		t.Errorf("eBay MaxCents = %d, want 5500", pp.MaxCents)
 	}
 	if pp.Avg7DayCents != 4900 {
-		t.Errorf("PokemonPrice Avg7DayCents = %d, want 4900", pp.Avg7DayCents)
+		t.Errorf("eBay Avg7DayCents = %d, want 4900", pp.Avg7DayCents)
 	}
 	if pp.Volume7Day != 2.5 {
-		t.Errorf("PokemonPrice Volume7Day = %v, want 2.5", pp.Volume7Day)
+		t.Errorf("eBay Volume7Day = %v, want 2.5", pp.Volume7Day)
 	}
 
 	// Verify CardHedger source

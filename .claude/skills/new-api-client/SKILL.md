@@ -158,4 +158,4 @@ func TestClient_GetData(t *testing.T) {
 
 ## Reference
 
-See `references/example-client.md` for an annotated walkthrough of `pokemonprice/` as the simplest real example.
+See `references/example-client.md` for an annotated walkthrough of a simple API client example.

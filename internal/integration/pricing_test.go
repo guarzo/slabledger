@@ -16,7 +16,6 @@ import (
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardutil"
 	"github.com/guarzo/slabledger/internal/adapters/clients/fusionprice"
-	"github.com/guarzo/slabledger/internal/adapters/clients/pokemonprice"
 	"github.com/guarzo/slabledger/internal/adapters/clients/pricecharting"
 	"github.com/guarzo/slabledger/internal/adapters/clients/tcgdex"
 	domainCards "github.com/guarzo/slabledger/internal/domain/cards"
@@ -161,44 +160,6 @@ func TestCardValidation(t *testing.T) {
 	}
 }
 
-func TestPokemonPriceLookup(t *testing.T) {
-	apiKey := os.Getenv("POKEMONPRICE_TRACKER_API_KEY")
-	if apiKey == "" {
-		t.Skip("POKEMONPRICE_TRACKER_API_KEY not set")
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
-	defer cancel()
-
-	client := pokemonprice.NewClient(apiKey)
-
-	for _, card := range currentInventory() {
-		t.Run(card.CertNumber+"_"+card.CardName, func(t *testing.T) {
-			cleanName := cardutil.NormalizePurchaseName(card.CardName)
-			cleanName = cardutil.StripVariantSuffix(cleanName)
-			normalizedSet := cardutil.NormalizeSetNameSimple(card.SetName)
-
-			data, statusCode, _, err := client.GetPriceWithGraded(ctx, card.SetName, card.CardName, card.CardNumber)
-			if err != nil {
-				t.Logf("  PokemonPrice: no result (status=%d, err=%v)", statusCode, err)
-				t.Logf("  Search: name=%q set=%q number=%q", cleanName, normalizedSet, card.CardNumber)
-				return // Many Japanese cards won't be found — that's OK
-			}
-
-			t.Logf("  PokemonPrice: %s #%s [%s] market=$%.2f",
-				data.Name, data.CardNumber, data.SetName, data.Prices.Market)
-
-			// Verify it found the right card
-			if card.ExpectedProduct != "" && !containsCI(data.Name, card.ExpectedProduct) {
-				t.Errorf("WRONG CARD: %q does not contain %q", data.Name, card.ExpectedProduct)
-			}
-
-			// Rate limit
-			time.Sleep(1100 * time.Millisecond)
-		})
-	}
-}
-
 func TestFullLookupPipeline(t *testing.T) {
 	token := os.Getenv("PRICECHARTING_TOKEN")
 	if token == "" {
@@ -223,10 +184,10 @@ func TestFullLookupPipeline(t *testing.T) {
 	// Create TCGdex provider
 	cardProv := tcgdex.NewTCGdex(appCache, logger)
 
-	// Create FusionPriceProvider (without PokemonPrice — simulates rate-limited scenario)
+	// Create FusionPriceProvider (without secondary sources — simulates rate-limited scenario)
 	fusionProv := fusionprice.NewFusionProviderWithRepo(
 		pc,
-		nil, // no secondary sources (PokemonPrice rate limited)
+		nil, // no secondary sources
 		appCache,
 		nil, // no price repo
 		nil, // no API tracker

@@ -97,7 +97,7 @@ type FusionConfig struct {
 	PriceChartingTimeout time.Duration
 
 	// SecondarySourceTimeout is the per-request timeout for all secondary
-	// pricing sources (e.g., PokemonPrice, CardHedger) (default: 20s)
+	// pricing sources (e.g., CardHedger) (default: 20s)
 	SecondarySourceTimeout time.Duration
 }
 
@@ -117,7 +117,6 @@ type AuthConfig struct {
 // constructors — adapters never read env vars directly.
 type AdapterConfig struct {
 	PriceChartingToken string // PRICECHARTING_TOKEN - Required for graded card pricing data
-	PokemonPriceKey    string // POKEMONPRICE_TRACKER_API_KEY - Additional pricing source
 	CardHedgerKey      string // CARD_HEDGER_API_KEY - CardHedger supplementary pricing
 	CardHedgerClientID string // CARD_HEDGER_CLIENT_ID - CardHedger card request client ID
 	PSAToken           string // PSA_ACCESS_TOKEN - PSA cert lookup

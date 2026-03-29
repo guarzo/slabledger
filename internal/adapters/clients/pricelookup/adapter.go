@@ -101,7 +101,7 @@ func (a *Adapter) GetMarketSnapshot(ctx context.Context, card campaigns.CardIden
 			snap.LastSoldCents = pc
 		}
 	}
-	// 2. PokemonPrice eBay smartMarketPrice (median of recent eBay sales)
+	// 2. eBay smartMarketPrice (median of recent eBay sales)
 	if snap.LastSoldCents == 0 && price.GradeDetails != nil {
 		key := gradeDetailKey(grade)
 		if detail, ok := price.GradeDetails[key]; ok && detail != nil && detail.Ebay != nil && detail.Ebay.PriceCents > 0 {
@@ -118,7 +118,7 @@ func (a *Adapter) GetMarketSnapshot(ctx context.Context, card campaigns.CardIden
 		}
 	}
 
-	// Grade-specific price (fused result, primarily PokemonPrice)
+	// Grade-specific price (fused result)
 	snap.GradePriceCents = gradePrice(price.Grades, grade)
 	// Fallback to PriceCharting graded price when fusion Grades is empty
 	if snap.GradePriceCents == 0 && price.PCGrades != nil {
@@ -246,7 +246,7 @@ func (a *Adapter) GetMarketSnapshot(ctx context.Context, card campaigns.CardIden
 	// Per-source pricing data (includes 7-day avg)
 	snap.SourcePrices = buildSourcePrices(price, grade)
 
-	// Extract 7-day avg from PokemonPrice source if available
+	// Extract 7-day avg from source prices if available
 	for _, sp := range snap.SourcePrices {
 		if sp.Avg7DayCents > 0 {
 			snap.Avg7DayCents = sp.Avg7DayCents
@@ -309,10 +309,10 @@ func buildSourcePrices(price *pricing.Price, grade float64) []campaigns.SourcePr
 	key := gradeDetailKey(grade)
 	if price.GradeDetails != nil {
 		if detail, ok := price.GradeDetails[key]; ok && detail != nil {
-			// PokemonPrice (eBay sales data)
+			// eBay sales data
 			if detail.Ebay != nil && detail.Ebay.PriceCents > 0 {
 				sp := campaigns.SourcePrice{
-					Source:     "PokemonPrice",
+					Source:     "eBay",
 					PriceCents: int(detail.Ebay.PriceCents),
 					SaleCount:  detail.Ebay.SalesCount,
 					Trend:      detail.Ebay.Trend,

@@ -7,7 +7,7 @@
 import { clsx } from 'clsx';
 
 interface ConfidenceIndicatorProps {
-  /** String confidence from PokemonPriceTracker eBay data, or numeric 0-1 */
+  /** String confidence from eBay data, or numeric 0-1 */
   confidence: 'high' | 'medium' | 'low' | number | null;
   /** Size variant */
   size?: 'sm' | 'md';

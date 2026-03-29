@@ -1,14 +1,16 @@
-# Example Client: PokemonPrice
+# Example Client: CardHedger
 
-The simplest real API client in the codebase. Located at `internal/adapters/clients/pokemonprice/`.
+A real API client in the codebase demonstrating all key patterns. Located at `internal/adapters/clients/cardhedger/`.
 
 ## File Structure
 
 ```
-pokemonprice/
-├── client.go      # Client struct, constructor, API methods (308 LOC)
-├── types.go       # API response types (CardsResponse, CardPriceData, EbayGradeData)
-└── client_test.go # Tests with httptest.NewServer
+cardhedger/
+├── client.go           # Client struct, constructor, API methods
+├── source_adapters.go  # Fusion source adapter (implements SecondaryPriceSource)
+├── cert_resolver.go    # Batch cert→card_id resolution
+├── types.go            # API response types
+└── client_test.go      # Tests with httptest.NewServer
 ```
 
 ## Key Patterns
@@ -17,6 +19,7 @@ pokemonprice/
 ```go
 type Client struct {
     apiKey      string
+    clientID    string
     httpClient  *httpx.Client
     rateLimiter *rate.Limiter
     logger      observability.Logger
@@ -28,13 +31,14 @@ func WithLogger(logger observability.Logger) ClientOption {
     return func(c *Client) { c.logger = logger }
 }
 
-func NewClient(apiKey string, opts ...ClientOption) *Client {
-    config := httpx.DefaultConfig("PokemonPriceTracker")
+func NewClient(apiKey, clientID string, opts ...ClientOption) *Client {
+    config := httpx.DefaultConfig("CardHedger")
     config.DefaultTimeout = 15 * time.Second
     c := &Client{
         apiKey:      apiKey,
+        clientID:    clientID,
         httpClient:  httpx.NewClient(config),
-        rateLimiter: rate.NewLimiter(rate.Limit(8), 4), // 8/sec, burst 4
+        rateLimiter: rate.NewLimiter(rate.Every(700*time.Millisecond), 1),
     }
     for _, opt := range opts {
         opt(c)
@@ -45,7 +49,7 @@ func NewClient(apiKey string, opts ...ClientOption) *Client {
 
 ### Available() for graceful degradation
 ```go
-func (c *Client) Available() bool { return c.apiKey != "" }
+func (c *Client) Available() bool { return c.apiKey != "" && c.clientID != "" }
 ```
 When the API key isn't configured, the client reports itself as unavailable. The fusion engine and schedulers check this before making calls.
 
@@ -77,7 +81,7 @@ return nil, statusCode, headers, apperrors.ProviderUnavailable(c.Name(), err)
 return nil, statusCode, headers, apperrors.ProviderInvalidResponse(c.Name(), err)
 
 // Missing config
-return nil, 0, nil, apperrors.ConfigMissing("pokemonprice_api_key", "POKEMONPRICE_TRACKER_API_KEY")
+return nil, 0, nil, apperrors.ConfigMissing("card_hedger_api_key", "CARD_HEDGER_API_KEY")
 ```
 
 ### Card name normalization before API calls
@@ -88,9 +92,9 @@ normalizedSet := cardutil.NormalizeSetNameForSearch(setName)
 ```
 Always normalize card/set names before sending to external APIs. The `cardutil` package handles PSA abbreviation expansion, variant stripping, and set code removal.
 
-## More Complex Example: CardHedger
+## Additional Patterns in CardHedger
 
-For a more complex client with batch operations and cert resolution, see `internal/adapters/clients/cardhedger/`. Key differences:
+Beyond the basics, CardHedger demonstrates:
 - Multiple API endpoints (search, details-by-certs, batch)
 - Cert-to-card-ID resolution with caching via `CardIDMappingRepository`
 - 3-tier query fallback in `source_adapters.go`

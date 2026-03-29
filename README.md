@@ -30,7 +30,7 @@ export PRICECHARTING_TOKEN="your_token"
 - **P&L Analytics** - Campaign-level and channel-level profit/loss, ROI, sell-through rate, and average days-to-sell
 - **Inventory Aging** - Track unsold cards with days held and market direction signals (rising/falling/stable)
 - **Market Signals** - Compare real-time sold prices against Card Ladder valuations to inform sell-channel decisions
-- **Multi-Source Price Fusion** - Aggregates PokemonPrice, CardHedger, and PriceCharting for accurate graded pricing
+- **Multi-Source Price Fusion** - Aggregates CardHedger and PriceCharting for accurate graded pricing
 - **Card Pricing** - Look up current prices across all grades and sources
 - **Favorites** - Save and track cards of interest
 - **Archive** - Soft-delete campaigns while preserving history

@@ -87,7 +87,6 @@ func validateEnvironmentVariables(ctx context.Context, logger observability.Logg
 		description string
 	}
 	optionalVars := []optionalCheck{
-		{"POKEMONPRICE_TRACKER_API_KEY", cfg.Adapters.PokemonPriceKey, "Enables PokemonPriceTracker as additional pricing source"},
 		{"CARD_HEDGER_API_KEY", cfg.Adapters.CardHedgerKey, "Enables CardHedger as supplementary pricing source"},
 		{"ENCRYPTION_KEY", cfg.Auth.EncryptionKey, "Enables user authentication and secure session storage"},
 	}

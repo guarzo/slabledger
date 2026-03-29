@@ -184,3 +184,90 @@ func TestApplyCLCorrection(t *testing.T) {
 		})
 	}
 }
+
+func TestApplyCLCorrection_EstimateFallback(t *testing.T) {
+	tests := []struct {
+		name                    string
+		estimatedValueCents     int
+		estimateSource          string
+		clValueCents            int
+		wantEstimatedValueCents int
+		wantEstimateSource      string
+	}{
+		{
+			name:                    "estimate within 50% of CL keeps estimate",
+			estimatedValueCents:     12000,
+			estimateSource:          "cardhedger",
+			clValueCents:            10000,
+			wantEstimatedValueCents: 12000,
+			wantEstimateSource:      "cardhedger",
+		},
+		{
+			name:                    "estimate >50% above CL falls back",
+			estimatedValueCents:     20000,
+			estimateSource:          "cardhedger",
+			clValueCents:            10000,
+			wantEstimatedValueCents: 10000,
+			wantEstimateSource:      "cl_fallback",
+		},
+		{
+			name:                    "estimate >50% below CL falls back",
+			estimatedValueCents:     3000,
+			estimateSource:          "cardhedger",
+			clValueCents:            10000,
+			wantEstimatedValueCents: 10000,
+			wantEstimateSource:      "cl_fallback",
+		},
+		{
+			name:                    "CL value zero skips fallback",
+			estimatedValueCents:     20000,
+			estimateSource:          "cardhedger",
+			clValueCents:            0,
+			wantEstimatedValueCents: 20000,
+			wantEstimateSource:      "cardhedger",
+		},
+		{
+			name:                    "estimate zero skips fallback",
+			estimatedValueCents:     0,
+			estimateSource:          "",
+			clValueCents:            10000,
+			wantEstimatedValueCents: 0,
+			wantEstimateSource:      "",
+		},
+		{
+			name:                    "both under $5 skips fallback",
+			estimatedValueCents:     200,
+			estimateSource:          "cardhedger",
+			clValueCents:            400,
+			wantEstimatedValueCents: 200,
+			wantEstimateSource:      "cardhedger",
+		},
+		{
+			name:                    "exactly at 50% threshold no fallback",
+			estimatedValueCents:     5000,
+			estimateSource:          "cardhedger",
+			clValueCents:            10000,
+			wantEstimatedValueCents: 5000,
+			wantEstimateSource:      "cardhedger",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			snapshot := &MarketSnapshot{
+				MedianCents:         10000,
+				SourceCount:         2,
+				EstimatedValueCents: tc.estimatedValueCents,
+				EstimateSource:      tc.estimateSource,
+			}
+			applyCLCorrection(snapshot, tc.clValueCents)
+
+			if snapshot.EstimatedValueCents != tc.wantEstimatedValueCents {
+				t.Errorf("EstimatedValueCents = %d, want %d", snapshot.EstimatedValueCents, tc.wantEstimatedValueCents)
+			}
+			if snapshot.EstimateSource != tc.wantEstimateSource {
+				t.Errorf("EstimateSource = %q, want %q", snapshot.EstimateSource, tc.wantEstimateSource)
+			}
+		})
+	}
+}

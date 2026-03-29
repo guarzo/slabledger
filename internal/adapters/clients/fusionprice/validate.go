@@ -7,25 +7,9 @@ import (
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardhedger"
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardutil"
-	"github.com/guarzo/slabledger/internal/adapters/clients/pokemonprice"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/domain/pricing"
 )
-
-// warnUnknownPPGrades logs a warning if a PokemonPrice response contains grade
-// keys not in psaGradeKeys or extraPPGradeKeys. This signals a new grade format
-// or API change that could cause silent data loss in the fusion pipeline.
-func warnUnknownPPGrades(ctx context.Context, logger observability.Logger, ppData *pokemonprice.CardPriceData) {
-	if logger == nil || ppData == nil || ppData.Ebay == nil {
-		return
-	}
-	for apiGrade := range ppData.Ebay.SalesByGrade {
-		if _, ok := psaGradeKeys[apiGrade]; !ok && !extraPPGradeKeys[apiGrade] {
-			logger.Warn(ctx, "pokemonprice: unknown grade key in API response",
-				observability.String("grade_key", apiGrade))
-		}
-	}
-}
 
 // warnUnknownCHGrades logs a warning if a CardHedger response contains grade
 // strings not recognized by pricing.IsCardHedgerGrade (PSA 1-10 + Raw).
@@ -38,25 +22,6 @@ func warnUnknownCHGrades(ctx context.Context, logger observability.Logger, resp 
 		if !pricing.IsCardHedgerGrade(gp.Grade) {
 			logger.Warn(ctx, "cardhedger: unknown grade key in API response",
 				observability.String("grade_key", gp.Grade))
-		}
-	}
-}
-
-// warnUnknownPPConfidence logs a warning if a PokemonPrice response contains
-// confidence strings not in the expected set (high/medium/low).
-// knownPPConfidenceValues is the set of expected confidence strings from PokemonPrice.
-var knownPPConfidenceValues = map[string]bool{"high": true, "medium": true, "low": true, "": true}
-
-func warnUnknownPPConfidence(ctx context.Context, logger observability.Logger, ppData *pokemonprice.CardPriceData) {
-	if logger == nil || ppData == nil || ppData.Ebay == nil {
-		return
-	}
-	for _, salesData := range ppData.Ebay.SalesByGrade {
-		conf := salesData.SmartMarketPrice.Confidence
-		if !knownPPConfidenceValues[conf] {
-			logger.Warn(ctx, "pokemonprice: unknown confidence value in API response",
-				observability.String("confidence", conf))
-			return // log once per response, not per grade
 		}
 	}
 }

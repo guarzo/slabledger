@@ -317,7 +317,6 @@ func FromEnv(base Config) Config {
 	}
 	// Adapter API keys and tokens
 	cfg.Adapters.PriceChartingToken = os.Getenv("PRICECHARTING_TOKEN")
-	cfg.Adapters.PokemonPriceKey = os.Getenv("POKEMONPRICE_TRACKER_API_KEY")
 	cfg.Adapters.CardHedgerKey = os.Getenv("CARD_HEDGER_API_KEY")
 	cfg.Adapters.CardHedgerClientID = os.Getenv("CARD_HEDGER_CLIENT_ID")
 	cfg.Adapters.PSAToken = os.Getenv("PSA_ACCESS_TOKEN")

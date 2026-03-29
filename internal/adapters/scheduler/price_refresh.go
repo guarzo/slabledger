@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardutil"
-	"github.com/guarzo/slabledger/internal/adapters/clients/pokemonprice"
 	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/domain/pricing"
@@ -345,18 +344,13 @@ func (s *PriceRefreshScheduler) logSourceStats(ctx context.Context, stats map[st
 	}
 }
 
-// Known daily limits for budget warning thresholds.
-var knownDailyLimits = map[string]int64{
-	"pokemonprice": pokemonprice.DailyLimit,
-}
-
 // logAPIUsageSummary logs daily API usage for each provider after a refresh cycle.
 func (s *PriceRefreshScheduler) logAPIUsageSummary(ctx context.Context) {
 	if s.apiTracker == nil {
 		return
 	}
 
-	providers := []string{"pokemonprice", "cardhedger", "pricecharting"}
+	providers := []string{"cardhedger", "pricecharting"}
 	for _, provider := range providers {
 		usage, err := s.apiTracker.GetAPIUsage(ctx, provider)
 		if err != nil {
@@ -368,26 +362,12 @@ func (s *PriceRefreshScheduler) logAPIUsageSummary(ctx context.Context) {
 
 		successRate := float64(usage.TotalCalls-usage.ErrorCalls) / float64(usage.TotalCalls) * 100.0
 
-		fields := []observability.Field{
+		s.logger.Info(ctx, "API daily usage",
 			observability.String("provider", provider),
 			observability.Int("calls", int(usage.TotalCalls)),
 			observability.Float64("success_rate_pct", successRate),
 			observability.Float64("avg_latency_ms", usage.AvgLatencyMS),
-		}
-
-		if limit, ok := knownDailyLimits[provider]; ok {
-			pct := float64(usage.TotalCalls) / float64(limit) * 100.0
-			fields = append(fields,
-				observability.Int("limit", int(limit)),
-				observability.Float64("budget_pct", pct),
-			)
-			if pct >= 80.0 {
-				s.logger.Warn(ctx, "API budget warning: approaching daily limit", fields...)
-				continue
-			}
-		}
-
-		s.logger.Info(ctx, "API daily usage", fields...)
+		)
 	}
 }
 
