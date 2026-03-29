@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardutil"
-	"github.com/guarzo/slabledger/internal/adapters/clients/pokemonprice"
 	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/domain/pricing"
@@ -346,9 +345,7 @@ func (s *PriceRefreshScheduler) logSourceStats(ctx context.Context, stats map[st
 }
 
 // Known daily limits for budget warning thresholds.
-var knownDailyLimits = map[string]int64{
-	"pokemonprice": pokemonprice.DailyLimit,
-}
+var knownDailyLimits = map[string]int64{}
 
 // logAPIUsageSummary logs daily API usage for each provider after a refresh cycle.
 func (s *PriceRefreshScheduler) logAPIUsageSummary(ctx context.Context) {
@@ -356,7 +353,7 @@ func (s *PriceRefreshScheduler) logAPIUsageSummary(ctx context.Context) {
 		return
 	}
 
-	providers := []string{"pokemonprice", "cardhedger", "pricecharting"}
+	providers := []string{"cardhedger", "pricecharting"}
 	for _, provider := range providers {
 		usage, err := s.apiTracker.GetAPIUsage(ctx, provider)
 		if err != nil {

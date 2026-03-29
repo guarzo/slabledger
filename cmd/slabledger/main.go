@@ -368,7 +368,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	// Discovery failure tracker (persists CardHedger discovery failures for diagnostics)
 	discoveryFailureRepo := sqlite.NewDiscoveryFailureRepository(db.DB)
 
-	priceProvImpl, _, cardHedgerClientImpl, pcProvider, err := initializePriceProviders(
+	priceProvImpl, cardHedgerClientImpl, pcProvider, err := initializePriceProviders(
 		ctx, cfg, appCache, logger, cardProvImpl, priceRepo, cardIDMappingRepo,
 	)
 	if err != nil {

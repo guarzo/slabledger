@@ -124,7 +124,7 @@ type Price struct {
 	// Card-level sales velocity
 	Velocity *SalesVelocity
 
-	// Which sources contributed to this price (e.g., ["pokemonprice", "cardhedger", "pricecharting"])
+	// Which sources contributed to this price (e.g., ["cardhedger", "pricecharting"])
 	Sources []string
 }
 
@@ -141,7 +141,7 @@ type FusionMetadata struct {
 
 // SourceResult tracks the outcome of a price lookup from a specific source
 type SourceResult struct {
-	Source  string // Source name (e.g., "pricecharting", "pokemonprice")
+	Source  string // Source name (e.g., "pricecharting", "cardhedger")
 	Success bool   // Whether the lookup succeeded
 	Error   string // Error message if failed (empty on success)
 }
@@ -163,8 +163,7 @@ type LastSoldByGrade struct {
 	Raw   *GradeSaleInfo
 }
 
-// EbayGradeDetail contains eBay sold data from PokemonPriceTracker's smartMarketPrice
-// for a single grade. All price fields are in cents.
+// EbayGradeDetail contains eBay sold data for a single grade. All price fields are in cents.
 type EbayGradeDetail struct {
 	PriceCents   int64   // smartMarketPrice.price (cents)
 	Confidence   string  // "high", "medium", "low", or ""
@@ -188,7 +187,7 @@ type EstimateGradeDetail struct {
 
 // GradeDetail combines eBay sold data and estimate data for a single grade.
 type GradeDetail struct {
-	Ebay     *EbayGradeDetail     // nil if no PokemonPrice data for this grade
+	Ebay     *EbayGradeDetail     // nil if no eBay data for this grade
 	Estimate *EstimateGradeDetail // nil if no CardHedger data for this grade
 }
 

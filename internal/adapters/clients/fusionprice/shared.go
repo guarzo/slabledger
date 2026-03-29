@@ -8,7 +8,6 @@ import (
 )
 
 // Compile-time interface checks for adapter types
-var _ fusion.SecondaryPriceSource = (*PokemonPriceAdapter)(nil)
 var _ fusion.SecondaryPriceSource = (*CardHedgerAdapter)(nil)
 
 // buildResponseMeta converts HTTP status code and headers into transport-agnostic ResponseMeta.
@@ -32,6 +31,5 @@ func detailsCacheKey(card pricing.Card) string {
 // fetchFromAvailableSources for metrics labels, log fields, and collector/telemetry tags.
 // Update this map when adding a new secondary source or changing instrumentation.
 var observabilitySourceName = map[string]string{
-	"pokemonprice": "PP",
-	"cardhedger":   "CH",
+	"cardhedger": "CH",
 }

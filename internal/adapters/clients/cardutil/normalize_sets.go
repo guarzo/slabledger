@@ -32,8 +32,8 @@ func StripPSASetCode(setName string) string {
 }
 
 // NormalizeSetNameSimple normalizes a Pokemon TCG set name without adding "Pokemon" prefix.
-// This is for Pokemon-specific APIs (like PokemonPriceTracker) that already
-// know they're dealing with Pokemon cards and use standard TCG set naming.
+// This is for Pokemon-specific APIs that already know they're dealing with
+// Pokemon cards and use standard TCG set naming.
 // Strips "JAPANESE" prefix (use NormalizeSetNameForSearch to preserve it).
 //
 // Examples:

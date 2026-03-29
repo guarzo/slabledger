@@ -61,7 +61,7 @@ func NormalizePurchaseName(name string) string {
 }
 
 // StripVariantSuffix removes trailing variant descriptors from card names
-// so that search APIs (e.g., PokemonPrice) can match the base card name.
+// so that search APIs can match the base card name.
 // Card number matching handles finding the correct variant.
 //
 // Examples:

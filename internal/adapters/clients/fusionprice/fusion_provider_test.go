@@ -433,8 +433,8 @@ func TestComputeRateLimitReset_FarFutureTimestamp(t *testing.T) {
 // TestFusionProvider_AttachSourceDetails tests the extracted attachSourceDetails method.
 // Detail data is passed via FetchResult values (no shared mutable state on adapters).
 func TestFusionProvider_AttachSourceDetails(t *testing.T) {
-	// Build FetchResults representing data from PokemonPrice and CardHedger
-	ppResult := &fusion.FetchResult{
+	// Build FetchResults representing data from eBay and CardHedger
+	ebayResult := &fusion.FetchResult{
 		EbayDetails: map[string]*pricing.EbayGradeDetail{
 			"raw":   {PriceCents: 48700, Confidence: "low", SalesCount: 63, Trend: "down"},
 			"psa8":  {PriceCents: 117499, Confidence: "high", SalesCount: 26, Trend: "up"},
@@ -462,7 +462,6 @@ func TestFusionProvider_AttachSourceDetails(t *testing.T) {
 	result := &pricing.Price{
 		FusionMetadata: &pricing.FusionMetadata{
 			SourceResults: []pricing.SourceResult{
-				{Source: "pokemonprice", Success: true},
 				{Source: "cardhedger", Success: true},
 			},
 		},
@@ -471,7 +470,7 @@ func TestFusionProvider_AttachSourceDetails(t *testing.T) {
 	// Use a non-nil pcPrice to include "pricecharting" in Sources
 	pcPrice := &pricing.Price{}
 
-	fp.attachSourceDetails(result, []*fusion.FetchResult{ppResult, chResult}, pcPrice)
+	fp.attachSourceDetails(result, []*fusion.FetchResult{ebayResult, chResult}, pcPrice)
 
 	// Verify GradeDetails
 	require.NotNil(t, result.GradeDetails, "expected GradeDetails to be non-nil")
@@ -494,8 +493,7 @@ func TestFusionProvider_AttachSourceDetails(t *testing.T) {
 	assert.Equal(t, 7.44, result.Velocity.WeeklyAverage)
 	assert.Equal(t, 32, result.Velocity.MonthlyTotal)
 
-	// Verify Sources contains all three
-	assert.Contains(t, result.Sources, "pokemonprice", "Sources should contain pokemonprice")
+	// Verify Sources contains cardhedger and pricecharting
 	assert.Contains(t, result.Sources, "cardhedger", "Sources should contain cardhedger")
 	assert.Contains(t, result.Sources, "pricecharting", "Sources should contain pricecharting")
 }

@@ -125,9 +125,6 @@ func (f *FusionPriceProvider) supplementWithCachedDetails(ctx context.Context, p
 	// Reconstruct CardHedger EstimateGradeDetail from DB-stored batch data
 	f.supplementCardHedgerFromDB(ctx, price, card, fd)
 
-	// Reconstruct PokemonPrice EbayGradeDetail from DB
-	f.supplementPokemonPriceFromDB(ctx, price, card, fd)
-
 	// Rebuild Sources from the data we actually found
 	price.Sources = buildSourcesFromData(price)
 }
@@ -202,26 +199,6 @@ func (f *FusionPriceProvider) supplementCardHedgerFromDB(ctx context.Context, pr
 	})
 }
 
-// supplementPokemonPriceFromDB queries the DB for PokemonPrice prices stored by
-// persistToDatabase and adds them as EbayGradeDetail entries.
-func (f *FusionPriceProvider) supplementPokemonPriceFromDB(ctx context.Context, price *pricing.Price, card pricing.Card, freshness time.Duration) {
-	f.supplementFromDB(ctx, card, "pokemonprice", freshness, func(gk gradeDBKey, entry *pricing.PriceEntry) {
-		if price.GradeDetails == nil {
-			price.GradeDetails = make(map[string]*pricing.GradeDetail)
-		}
-		detail, ok := price.GradeDetails[gk.grade.String()]
-		if !ok {
-			detail = &pricing.GradeDetail{}
-			price.GradeDetails[gk.grade.String()] = detail
-		}
-		if detail.Ebay == nil {
-			detail.Ebay = &pricing.EbayGradeDetail{
-				PriceCents: entry.PriceCents,
-			}
-		}
-	})
-}
-
 // supplementPCGradesFromDB queries the DB for PriceCharting prices and populates
 // PCGrades so buildSourcePrices can show PriceCharting's actual grade prices.
 func (f *FusionPriceProvider) supplementPCGradesFromDB(ctx context.Context, price *pricing.Price, card pricing.Card, freshness time.Duration) {
@@ -290,20 +267,14 @@ func buildSourcesFromData(price *pricing.Price) []string {
 		sources = append(sources, "pricecharting")
 	}
 	if price.GradeDetails != nil {
-		hasEbay, hasEstimate := false, false
+		hasEstimate := false
 		for _, gd := range price.GradeDetails {
 			if gd == nil {
 				continue
 			}
-			if gd.Ebay != nil {
-				hasEbay = true
-			}
 			if gd.Estimate != nil {
 				hasEstimate = true
 			}
-		}
-		if hasEbay {
-			sources = append(sources, "pokemonprice")
 		}
 		if hasEstimate {
 			sources = append(sources, "cardhedger")

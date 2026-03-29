@@ -116,7 +116,7 @@ func (f *FusionPriceProvider) LookupCard(ctx context.Context, setName string, ca
 	// fusion engine. PriceCharting product names include collector numbers
 	// (e.g., "Charizard ex #161") that may refer to different physical cards in
 	// other providers' databases — especially for promo sets where numbering
-	// diverges between PriceCharting and PokemonPrice. The explicit
+	// diverges between providers. The explicit
 	// resolvedNumber (from the purchase or canonical card DB) is passed
 	// separately and is the only number downstream providers should use.
 	cleanResolvedName := cardutil.NormalizeCardName(resolvedName)
@@ -159,7 +159,7 @@ func (f *FusionPriceProvider) LookupCard(ctx context.Context, setName string, ca
 	f.cleanupStaleName(ctx, resolvedName, fusedCard.Name, setName, resolvedNumber)
 
 	// Supplement from DB under original name when names differ — batch data
-	// (CardHedger, PokemonPrice) may be stored under the original purchase name.
+	// (CardHedger) may be stored under the original purchase name.
 	if card.Name != fusedCard.Name && f.priceRepo != nil {
 		originalCard := pricing.Card{Name: card.Name, Number: card.Number, Set: setName}
 		fd := f.freshnessDuration
@@ -167,7 +167,6 @@ func (f *FusionPriceProvider) LookupCard(ctx context.Context, setName string, ca
 			fd = DefaultFreshnessDuration
 		}
 		f.supplementCardHedgerFromDB(ctx, result, originalCard, fd)
-		f.supplementPokemonPriceFromDB(ctx, result, originalCard, fd)
 	}
 
 	return result, nil
