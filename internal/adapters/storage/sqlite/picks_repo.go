@@ -99,6 +99,25 @@ func (r *PicksRepository) GetPicksRange(ctx context.Context, from, to time.Time)
 	return scanPicks(ctx, rows)
 }
 
+// GetLatestPickDate returns the most recent pick_date, or zero time if none exist.
+func (r *PicksRepository) GetLatestPickDate(ctx context.Context) (time.Time, error) {
+	var dateStr sql.NullString
+	err := r.db.QueryRowContext(ctx,
+		`SELECT MAX(pick_date) FROM ai_picks`,
+	).Scan(&dateStr)
+	if err != nil {
+		return time.Time{}, err
+	}
+	if !dateStr.Valid || dateStr.String == "" {
+		return time.Time{}, nil
+	}
+	t, err := time.Parse("2006-01-02", dateStr.String)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("parse latest pick date: %w", err)
+	}
+	return t, nil
+}
+
 // PicksExistForDate reports whether any picks have been stored for date.
 func (r *PicksRepository) PicksExistForDate(ctx context.Context, date time.Time) (bool, error) {
 	var exists bool

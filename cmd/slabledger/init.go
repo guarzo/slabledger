@@ -280,22 +280,18 @@ func initializeCardLadder(
 		logger.Warn(ctx, "failed to load Card Ladder config", observability.Err(err))
 	}
 
-	var fbAuth *cardladder.FirebaseAuth
-	var client *cardladder.Client
-
-	if clCfg != nil {
-		fbAuth = cardladder.NewFirebaseAuth(clCfg.FirebaseAPIKey)
-		client = cardladder.NewClient(
-			cardladder.WithTokenManager(fbAuth, clCfg.RefreshToken, time.Time{}),
-		)
-		logger.Info(ctx, "Card Ladder client initialized",
-			observability.String("email", clCfg.Email),
-			observability.String("collectionId", clCfg.CollectionID))
-	} else {
-		fbAuth = cardladder.NewFirebaseAuth("")
-		client = cardladder.NewClient()
+	if clCfg == nil {
 		logger.Info(ctx, "Card Ladder not configured; use POST /api/admin/cardladder/config to set up")
+		return nil, nil, store
 	}
+
+	fbAuth := cardladder.NewFirebaseAuth(clCfg.FirebaseAPIKey)
+	client := cardladder.NewClient(
+		cardladder.WithTokenManager(fbAuth, clCfg.RefreshToken, time.Time{}),
+	)
+	logger.Info(ctx, "Card Ladder client initialized",
+		observability.Bool("hasEmail", clCfg.Email != ""),
+		observability.String("collectionId", clCfg.CollectionID))
 
 	return client, fbAuth, store
 }

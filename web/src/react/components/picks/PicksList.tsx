@@ -51,10 +51,13 @@ function signalChipClass(direction: Signal['direction']): string {
 /* ------------------------------------------------------------------ */
 
 function PickCard({ pick }: { pick: Pick }) {
-  const margin =
+  const marginPct =
     pick.target_buy_price > 0
-      ? (((pick.expected_sell_price - pick.target_buy_price) / pick.target_buy_price) * 100).toFixed(0)
+      ? ((pick.expected_sell_price - pick.target_buy_price) / pick.target_buy_price) * 100
       : null;
+  const marginDisplay = marginPct !== null
+    ? `${marginPct >= 0 ? '+' : ''}${Math.round(marginPct)}%`
+    : null;
 
   return (
     <div
@@ -104,10 +107,10 @@ function PickCard({ pick }: { pick: Pick }) {
           <span className="text-[var(--text-muted)]">Expected sell </span>
           <span className="font-semibold text-[var(--text)]">{currency(pick.expected_sell_price)}</span>
         </div>
-        {margin !== null && (
+        {marginDisplay !== null && (
           <div>
-            <span className={`font-semibold ${Number(margin) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-              {Number(margin) >= 0 ? '+' : ''}{margin}% margin
+            <span className={`font-semibold ${marginPct! >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+              {marginDisplay} margin
             </span>
           </div>
         )}

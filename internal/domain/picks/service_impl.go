@@ -166,7 +166,13 @@ func (s *service) GenerateDailyPicks(ctx context.Context) error {
 	}
 
 	// --- Update watchlist assessments for matched items ---
-	s.updateWatchlistAssessments(ctx, watchlist)
+	// Re-fetch the active watchlist so auto-watchlist entries created above are included.
+	freshWatchlist, err := s.repo.GetActiveWatchlist(ctx)
+	if err != nil {
+		s.logger.Warn(ctx, "failed to re-fetch watchlist for assessment linking", observability.Err(err))
+		freshWatchlist = watchlist // fall back to original
+	}
+	s.updateWatchlistAssessments(ctx, freshWatchlist)
 
 	return nil
 }
@@ -250,9 +256,16 @@ func (s *service) retryWithFix(ctx context.Context, systemPrompt, badResponse st
 }
 
 // GetLatestPicks returns the most recent set of picks.
+// If today's picks haven't been generated yet, returns the most recent available date.
 func (s *service) GetLatestPicks(ctx context.Context) ([]Pick, error) {
-	today := time.Now().UTC().Truncate(24 * time.Hour)
-	picks, err := s.repo.GetPicksByDate(ctx, today)
+	latestDate, err := s.repo.GetLatestPickDate(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("get latest pick date: %w", err)
+	}
+	if latestDate.IsZero() {
+		return nil, nil
+	}
+	picks, err := s.repo.GetPicksByDate(ctx, latestDate)
 	if err != nil {
 		return nil, fmt.Errorf("get latest picks: %w", err)
 	}

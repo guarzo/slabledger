@@ -48,6 +48,7 @@ type mockRepo struct {
 	GetPicksByDateFn            func(ctx context.Context, date time.Time) ([]Pick, error)
 	GetPicksRangeFn             func(ctx context.Context, from, to time.Time) ([]Pick, error)
 	PicksExistForDateFn         func(ctx context.Context, date time.Time) (bool, error)
+	GetLatestPickDateFn         func(ctx context.Context) (time.Time, error)
 	SaveWatchlistItemFn         func(ctx context.Context, item WatchlistItem) error
 	DeleteWatchlistItemFn       func(ctx context.Context, id int) error
 	GetActiveWatchlistFn        func(ctx context.Context) ([]WatchlistItem, error)
@@ -77,6 +78,12 @@ func (m *mockRepo) PicksExistForDate(ctx context.Context, date time.Time) (bool,
 		return m.PicksExistForDateFn(ctx, date)
 	}
 	return false, nil
+}
+func (m *mockRepo) GetLatestPickDate(ctx context.Context) (time.Time, error) {
+	if m.GetLatestPickDateFn != nil {
+		return m.GetLatestPickDateFn(ctx)
+	}
+	return time.Time{}, nil
 }
 func (m *mockRepo) SaveWatchlistItem(ctx context.Context, item WatchlistItem) error {
 	if m.SaveWatchlistItemFn != nil {
@@ -199,6 +206,9 @@ func TestGenerateDailyPicks_LLMFailure(t *testing.T) {
 func TestGetLatestPicks(t *testing.T) {
 	want := []Pick{{CardName: "Pikachu", SetName: "Base Set", Grade: "PSA 9"}}
 	repo := &mockRepo{
+		GetLatestPickDateFn: func(_ context.Context) (time.Time, error) {
+			return time.Date(2026, 3, 29, 0, 0, 0, 0, time.UTC), nil
+		},
 		GetPicksByDateFn: func(_ context.Context, _ time.Time) ([]Pick, error) {
 			return want, nil
 		},

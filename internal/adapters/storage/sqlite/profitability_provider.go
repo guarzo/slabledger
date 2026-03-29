@@ -71,6 +71,7 @@ func (p *ProfitabilityProvider) queryTopEras(ctx context.Context) ([]string, err
 		WHERE p.buy_cost_cents > 0
 		GROUP BY p.set_name
 		HAVING COUNT(*) >= 3
+		   AND AVG(CAST(s.net_profit_cents AS REAL) / CAST(p.buy_cost_cents AS REAL) * 100) > 0
 		ORDER BY AVG(CAST(s.net_profit_cents AS REAL) / CAST(p.buy_cost_cents AS REAL) * 100) DESC
 		LIMIT 5
 	`
@@ -104,6 +105,7 @@ func (p *ProfitabilityProvider) queryProfitableGrades(ctx context.Context) ([]pi
 		WHERE p.buy_cost_cents > 0
 		GROUP BY p.grade_value
 		HAVING COUNT(*) >= 2
+		   AND AVG(CAST(s.net_profit_cents AS REAL) / CAST(p.buy_cost_cents AS REAL) * 100) > 0
 		ORDER BY avg_roi DESC
 	`
 	rows, err := p.db.QueryContext(ctx, q)

@@ -12,6 +12,7 @@ type MockPicksRepository struct {
 	GetPicksByDateFn            func(ctx context.Context, date time.Time) ([]picks.Pick, error)
 	GetPicksRangeFn             func(ctx context.Context, from, to time.Time) ([]picks.Pick, error)
 	PicksExistForDateFn         func(ctx context.Context, date time.Time) (bool, error)
+	GetLatestPickDateFn         func(ctx context.Context) (time.Time, error)
 	SaveWatchlistItemFn         func(ctx context.Context, item picks.WatchlistItem) error
 	DeleteWatchlistItemFn       func(ctx context.Context, id int) error
 	GetActiveWatchlistFn        func(ctx context.Context) ([]picks.WatchlistItem, error)
@@ -46,6 +47,13 @@ func (m *MockPicksRepository) PicksExistForDate(ctx context.Context, date time.T
 		return m.PicksExistForDateFn(ctx, date)
 	}
 	return false, nil
+}
+
+func (m *MockPicksRepository) GetLatestPickDate(ctx context.Context) (time.Time, error) {
+	if m.GetLatestPickDateFn != nil {
+		return m.GetLatestPickDateFn(ctx)
+	}
+	return time.Time{}, nil
 }
 
 func (m *MockPicksRepository) SaveWatchlistItem(ctx context.Context, item picks.WatchlistItem) error {
