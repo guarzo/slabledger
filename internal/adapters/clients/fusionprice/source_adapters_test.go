@@ -125,6 +125,68 @@ func TestTruncateAtVariant(t *testing.T) {
 	}
 }
 
+func TestShouldRejectSetMismatch(t *testing.T) {
+	tests := []struct {
+		name         string
+		matchedSet   string
+		requestedSet string
+		wantReject   bool
+	}{
+		{
+			name:         "matching sets accepted",
+			matchedSet:   "Base Set",
+			requestedSet: "Base Set",
+			wantReject:   false,
+		},
+		{
+			name:         "normalized matching accepted",
+			matchedSet:   "2024 Pokemon Scarlet & Violet Paldean Fates",
+			requestedSet: "PAF EN-PALDEAN FATES",
+			wantReject:   false,
+		},
+		{
+			name:         "completely different set rejected",
+			matchedSet:   "CELEBRATIONS CLASSIC COLLECTION",
+			requestedSet: "PROMO BLACK STAR",
+			wantReject:   true,
+		},
+		{
+			name:         "same card number different set rejected",
+			matchedSet:   "EX EMERALD",
+			requestedSet: "SWSH BLACK STAR PROMO",
+			wantReject:   true,
+		},
+		{
+			name:         "both promo sets accepted",
+			matchedSet:   "2024 Pokemon Scarlet & Violet Black Star Promos",
+			requestedSet: "SVP EN-SV BLACK STAR PROMO",
+			wantReject:   false,
+		},
+		{
+			name:         "empty matched set accepted",
+			matchedSet:   "",
+			requestedSet: "Base Set",
+			wantReject:   false,
+		},
+		{
+			name:         "empty requested set accepted",
+			matchedSet:   "Base Set",
+			requestedSet: "",
+			wantReject:   false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := shouldRejectSetMismatch(tc.matchedSet, tc.requestedSet)
+			if got != tc.wantReject {
+				t.Errorf("shouldRejectSetMismatch(%q, %q) = %v, want %v",
+					tc.matchedSet, tc.requestedSet, got, tc.wantReject)
+			}
+		})
+	}
+}
+
 // Test: Verify grades with unparseable or zero/negative prices are skipped.
 func TestConvertCardHedgerWithDetails_InvalidPrice(t *testing.T) {
 	resp := &cardhedger.AllPricesByCardResponse{

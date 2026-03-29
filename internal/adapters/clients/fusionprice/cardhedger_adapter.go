@@ -295,6 +295,19 @@ func (a *CardHedgerAdapter) evaluateAndCacheResult(
 		return "", statusCode, headers, fmt.Errorf("cardhedger: match confidence too low (%.2f) for %q / %q", confidence, cardName, setName)
 	}
 
+	// Validate set name match — reject high-confidence matches to wrong cards
+	if resp.Match.Set != "" && shouldRejectSetMismatch(resp.Match.Set, setName) {
+		trace.AddStep("resolveCardID:setMismatch", resp.Match.Set, setName)
+		if a.logger != nil {
+			a.logger.Warn(ctx, "cardhedger: rejecting match due to set mismatch",
+				observability.String("matched_set", resp.Match.Set),
+				observability.String("requested_set", setName),
+				observability.String("card", cardName),
+				observability.Float64("confidence", confidence))
+		}
+		return "", statusCode, headers, fmt.Errorf("cardhedger: set mismatch for %q (matched=%q, expected=%q)", cardName, resp.Match.Set, setName)
+	}
+
 	externalID := resp.Match.CardID
 
 	if cardhedger.ShouldCacheMatch(confidence) && a.resolver != nil {
@@ -314,6 +327,32 @@ func (a *CardHedgerAdapter) evaluateAndCacheResult(
 // logTrace emits the normalization trace at Debug level if one exists on the context.
 func (a *CardHedgerAdapter) logTrace(ctx context.Context, cardName, setName string) {
 	cardutil.LogNormalizationTrace(ctx, a.logger, cardName, setName)
+}
+
+// shouldRejectSetMismatch returns true if the CardMatch result's set name
+// is significantly different from the requested set, indicating a wrong-card match.
+// Uses MissingSetTokens to compare normalized token overlap.
+// Returns false (accept) when either set is empty or both are promo sets.
+func shouldRejectSetMismatch(matchedSet, requestedSet string) bool {
+	if matchedSet == "" || requestedSet == "" {
+		return false
+	}
+
+	// Both promo sets bypass comparison (PriceCharting convention)
+	matchedLower := strings.ToLower(matchedSet)
+	requestedLower := strings.ToLower(requestedSet)
+	if strings.Contains(matchedLower, "promo") && strings.Contains(requestedLower, "promo") {
+		return false
+	}
+
+	normalizedMatched := cardutil.NormalizeSetNameForSearch(matchedSet)
+	normalizedRequested := cardutil.NormalizeSetNameForSearch(requestedSet)
+
+	missing := cardutil.MissingSetTokens(normalizedMatched, normalizedRequested)
+	expectedTokens := strings.Fields(normalizedRequested)
+
+	// Reject when more than half the expected tokens are missing
+	return len(expectedTokens) > 0 && len(missing) > len(expectedTokens)/2
 }
 
 // hasLetterPrefix returns true if the string starts with a letter (e.g., "SM162", "SWSH029").
