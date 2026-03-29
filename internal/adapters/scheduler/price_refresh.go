@@ -350,7 +350,7 @@ func (s *PriceRefreshScheduler) logAPIUsageSummary(ctx context.Context) {
 		return
 	}
 
-	providers := []string{"cardhedger", "pricecharting"}
+	providers := []string{"cardhedger", "pricecharting", "justtcg"}
 	for _, provider := range providers {
 		usage, err := s.apiTracker.GetAPIUsage(ctx, provider)
 		if err != nil {
