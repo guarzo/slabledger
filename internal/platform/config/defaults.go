@@ -112,7 +112,7 @@ func Default() Config {
 			ContentHour: 3,
 		},
 		CardLadder: CardLadderConfig{
-			Enabled:     false, // requires manual setup via admin endpoint
+			Enabled:     true, // runs automatically when credentials are configured
 			Interval:    24 * time.Hour,
 			RefreshHour: 4, // 4 AM UTC
 		},
