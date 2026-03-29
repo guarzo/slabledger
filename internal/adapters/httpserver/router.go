@@ -41,6 +41,7 @@ type Router struct {
 	cardLadderHandler         *handlers.CardLadderHandler
 	salesCompsHandler         *handlers.SalesCompsHandler
 	picksHandler              *handlers.PicksHandler
+	opportunitiesHandler      *handlers.OpportunitiesHandler
 	pricingAPIKey             string
 	logger                    observability.Logger
 	databasePath              string
@@ -70,7 +71,8 @@ type RouterConfig struct {
 	PriceFlagsHandler         *handlers.PriceFlagsHandler // Price flag admin; nil = disabled
 	CardLadderHandler         *handlers.CardLadderHandler // Card Ladder admin; nil = disabled
 	SalesCompsHandler         *handlers.SalesCompsHandler // Sales comps; nil = disabled
-	PicksHandler              *handlers.PicksHandler      // AI picks; nil = disabled
+	PicksHandler              *handlers.PicksHandler             // AI picks; nil = disabled
+	OpportunitiesHandler      *handlers.OpportunitiesHandler     // Arbitrage opportunities; nil = disabled
 	Logger                    observability.Logger
 	AdminEmails               []string
 	DatabasePath              string
@@ -160,6 +162,10 @@ func NewRouter(cfg RouterConfig) *Router {
 
 	if cfg.PicksHandler != nil {
 		rt.picksHandler = cfg.PicksHandler
+	}
+
+	if cfg.OpportunitiesHandler != nil {
+		rt.opportunitiesHandler = cfg.OpportunitiesHandler
 	}
 
 	if cfg.PricingAPIKey != "" && cfg.CampaignsRepo != nil {
@@ -470,6 +476,9 @@ func (rt *Router) Setup() http.Handler {
 	// AI Picks routes
 	rt.registerPicksRoutes(mux)
 
+	// Arbitrage opportunities routes
+	rt.registerOpportunitiesRoutes(mux)
+
 	// Social content routes — require admin
 	if rt.socialHandler != nil && rt.authMW != nil {
 		mux.Handle("GET /api/social/posts", rt.authMW.RequireAdmin(http.HandlerFunc(rt.socialHandler.HandleListPosts)))
@@ -519,6 +528,16 @@ func (rt *Router) Setup() http.Handler {
 	}
 
 	return mux
+}
+
+// registerOpportunitiesRoutes wires the cross-campaign arbitrage opportunity endpoints.
+func (rt *Router) registerOpportunitiesRoutes(mux *http.ServeMux) {
+	if rt.opportunitiesHandler == nil || rt.authMW == nil {
+		return
+	}
+	mux.Handle("GET /api/opportunities/acquisition", rt.authMW.RequireAuth(http.HandlerFunc(rt.opportunitiesHandler.HandleGetAcquisitionTargets)))
+	mux.Handle("GET /api/opportunities/crack", rt.authMW.RequireAuth(http.HandlerFunc(rt.opportunitiesHandler.HandleGetCrackOpportunities)))
+	rt.logger.Info(context.Background(), "opportunities routes registered")
 }
 
 // registerPicksRoutes wires the AI picks and acquisition watchlist endpoints.
