@@ -40,6 +40,7 @@ type Client struct {
 	httpClient  *httpx.Client
 	rateLimiter *rate.Limiter
 	logger      observability.Logger
+	timeout     time.Duration
 
 	// Daily counter
 	dailyCalls atomic.Int64
@@ -48,7 +49,6 @@ type Client struct {
 // NewClient creates a new JustTCG API client.
 func NewClient(apiKey string, opts ...ClientOption) *Client {
 	config := httpx.DefaultConfig("JustTCG")
-	config.DefaultTimeout = 30 * time.Second
 	config.RetryPolicy = resilience.RetryPolicy{
 		MaxRetries:     2,
 		InitialBackoff: 200 * time.Millisecond,
@@ -61,6 +61,7 @@ func NewClient(apiKey string, opts ...ClientOption) *Client {
 		apiKey:     apiKey,
 		baseURL:    defaultBaseURL,
 		httpClient: httpClient,
+		timeout:    30 * time.Second,
 		// 100 req/min with burst of 5 (Pro plan)
 		rateLimiter: rate.NewLimiter(rate.Limit(100.0/60.0), 5),
 	}
@@ -147,6 +148,31 @@ func (c *Client) BatchLookup(ctx context.Context, cardIDs []string) ([]Card, err
 
 // get makes a GET request to the JustTCG API.
 func (c *Client) get(ctx context.Context, path string, result any) (int, error) {
+	headers := map[string]string{
+		"X-API-Key": c.apiKey,
+		"Accept":    "application/json",
+	}
+	fullURL := c.baseURL + path
+	return c.doRequest(ctx, path, func() (*httpx.Response, error) {
+		return c.httpClient.Get(ctx, fullURL, headers, c.timeout)
+	}, result)
+}
+
+// post makes a POST request to the JustTCG API.
+func (c *Client) post(ctx context.Context, path string, body []byte, result any) (int, error) {
+	headers := map[string]string{
+		"X-API-Key":    c.apiKey,
+		"Content-Type": "application/json",
+		"Accept":       "application/json",
+	}
+	fullURL := c.baseURL + path
+	return c.doRequest(ctx, path, func() (*httpx.Response, error) {
+		return c.httpClient.Post(ctx, fullURL, headers, body, c.timeout)
+	}, result)
+}
+
+// doRequest handles availability check, rate limiting, 429 detection, and JSON unmarshaling.
+func (c *Client) doRequest(ctx context.Context, path string, call func() (*httpx.Response, error), result any) (int, error) {
 	if !c.Available() {
 		return 0, apperrors.ConfigMissing("justtcg_api_key", "JUSTTCG_API_KEY")
 	}
@@ -158,24 +184,10 @@ func (c *Client) get(ctx context.Context, path string, result any) (int, error) 
 		return 0, apperrors.ProviderUnavailable("justtcg", err)
 	}
 
-	headers := map[string]string{
-		"X-API-Key": c.apiKey,
-		"Accept":    "application/json",
-	}
+	resp, err := call()
 
-	fullURL := c.baseURL + path
-	resp, err := c.httpClient.Get(ctx, fullURL, headers, 30*time.Second)
-
-	if resp != nil {
-		c.dailyCalls.Add(1)
-		if resp.StatusCode == http.StatusTooManyRequests {
-			c.log429(ctx, path)
-			retryAfter := ""
-			if resp.Headers != nil {
-				retryAfter = resp.Headers.Get("Retry-After")
-			}
-			return resp.StatusCode, apperrors.ProviderRateLimited("justtcg", retryAfter)
-		}
+	if statusCode, rateLimitErr := c.handle429(ctx, path, resp); rateLimitErr != nil {
+		return statusCode, rateLimitErr
 	}
 
 	if err != nil {
@@ -193,53 +205,22 @@ func (c *Client) get(ctx context.Context, path string, result any) (int, error) 
 	return resp.StatusCode, nil
 }
 
-// post makes a POST request to the JustTCG API.
-func (c *Client) post(ctx context.Context, path string, body []byte, result any) (int, error) {
-	if !c.Available() {
-		return 0, apperrors.ConfigMissing("justtcg_api_key", "JUSTTCG_API_KEY")
+// handle429 checks for rate-limit responses and returns the appropriate error.
+// Returns (0, nil) when the response is not a 429.
+func (c *Client) handle429(ctx context.Context, path string, resp *httpx.Response) (int, error) {
+	if resp == nil {
+		return 0, nil
 	}
-
-	if err := c.rateLimiter.Wait(ctx); err != nil {
-		if goerrors.Is(err, context.Canceled) || goerrors.Is(err, context.DeadlineExceeded) {
-			return 0, err
-		}
-		return 0, apperrors.ProviderUnavailable("justtcg", err)
+	c.dailyCalls.Add(1)
+	if resp.StatusCode != http.StatusTooManyRequests {
+		return 0, nil
 	}
-
-	headers := map[string]string{
-		"X-API-Key":    c.apiKey,
-		"Content-Type": "application/json",
-		"Accept":       "application/json",
+	c.log429(ctx, path)
+	retryAfter := ""
+	if resp.Headers != nil {
+		retryAfter = resp.Headers.Get("Retry-After")
 	}
-
-	fullURL := c.baseURL + path
-	resp, err := c.httpClient.Post(ctx, fullURL, headers, body, 30*time.Second)
-
-	if resp != nil {
-		c.dailyCalls.Add(1)
-		if resp.StatusCode == http.StatusTooManyRequests {
-			c.log429(ctx, path)
-			retryAfter := ""
-			if resp.Headers != nil {
-				retryAfter = resp.Headers.Get("Retry-After")
-			}
-			return resp.StatusCode, apperrors.ProviderRateLimited("justtcg", retryAfter)
-		}
-	}
-
-	if err != nil {
-		statusCode := 500
-		if resp != nil {
-			statusCode = resp.StatusCode
-		}
-		return statusCode, err
-	}
-
-	if err := json.Unmarshal(resp.Body, result); err != nil {
-		return resp.StatusCode, apperrors.ProviderInvalidResponse("justtcg", err)
-	}
-
-	return resp.StatusCode, nil
+	return resp.StatusCode, apperrors.ProviderRateLimited("justtcg", retryAfter)
 }
 
 func (c *Client) log429(ctx context.Context, path string) {

@@ -18,7 +18,6 @@ import (
 	// Concrete implementations (only imported in main for wiring - Hexagonal Architecture)
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardhedger"
 	"github.com/guarzo/slabledger/internal/adapters/clients/google"
-	"github.com/guarzo/slabledger/internal/adapters/clients/justtcg"
 	"github.com/guarzo/slabledger/internal/adapters/clients/psa"
 	"github.com/guarzo/slabledger/internal/adapters/clients/tcgdex"
 	"github.com/guarzo/slabledger/internal/adapters/httpserver/handlers"
@@ -246,14 +245,6 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 			logger.Warn(ctx, "failed to close PriceCharting provider", observability.Err(err))
 		}
 	}()
-
-	// Initialize JustTCG client (raw NM pricing for arbitrage)
-	var justTCGClient *justtcg.Client
-	if cfg.Adapters.JustTCGKey != "" {
-		justTCGClient = justtcg.NewClient(cfg.Adapters.JustTCGKey, justtcg.WithLogger(logger))
-		logger.Info(ctx, "JustTCG client initialized")
-	}
-	_ = justTCGClient // reserved for future scheduler wiring
 
 	campaignsService, campaignsRepo, cardRequestRepo := initializeCampaignsService(
 		ctx, cfg, logger, db, priceProvImpl, cardHedgerClientImpl, cardIDMappingRepo,

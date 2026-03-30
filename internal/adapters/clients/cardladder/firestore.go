@@ -54,7 +54,10 @@ func (c *Client) FetchFirestoreCards(ctx context.Context, uid, collectionID stri
 			return nil, fmt.Errorf("get auth token: %w", err)
 		}
 
-		u, _ := url.Parse(defaultFirestoreBaseURL + "/" + basePath)
+		u, err := url.Parse(defaultFirestoreBaseURL + "/" + basePath)
+		if err != nil {
+			return nil, fmt.Errorf("parse firestore URL: %w", err)
+		}
 		q := u.Query()
 		q.Set("pageSize", "100")
 		if pageToken != "" {

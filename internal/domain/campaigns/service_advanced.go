@@ -388,6 +388,11 @@ func (s *service) GetCrackOpportunities(ctx context.Context) ([]CrackAnalysis, e
 	for _, campaign := range allCampaigns {
 		results, err := s.GetCrackCandidates(ctx, campaign.ID)
 		if err != nil {
+			if s.logger != nil {
+				s.logger.Warn(ctx, "crack candidates failed for campaign",
+					observability.String("campaignId", campaign.ID),
+					observability.Err(err))
+			}
 			continue
 		}
 		allResults = append(allResults, results...)
@@ -415,6 +420,11 @@ func (s *service) GetAcquisitionTargets(ctx context.Context) ([]AcquisitionOppor
 		}
 		unsold, err := s.repo.ListUnsoldPurchases(ctx, campaign.ID)
 		if err != nil {
+			if s.logger != nil {
+				s.logger.Warn(ctx, "list unsold purchases failed for campaign",
+					observability.String("campaignId", campaign.ID),
+					observability.Err(err))
+			}
 			continue
 		}
 		for _, p := range unsold {

@@ -54,11 +54,14 @@ type responseMeta struct {
 	PageSize int `json:"pageSize"`
 }
 
+// ConditionNearMint is the JustTCG condition label for Near Mint cards.
+const ConditionNearMint = "NM"
+
 // NMPrice returns the price for a Near Mint card with the given printing.
 // Returns 0 if no matching NM variant is found.
 func (c Card) NMPrice(printing string) float64 {
 	for _, v := range c.Variants {
-		if v.Condition == "NM" && v.Printing == printing {
+		if v.Condition == ConditionNearMint && v.Printing == printing {
 			return v.Price
 		}
 	}
@@ -70,7 +73,7 @@ func (c Card) NMPrice(printing string) float64 {
 func (c Card) BestNMPrice() float64 {
 	var best float64
 	for _, v := range c.Variants {
-		if v.Condition == "NM" && v.Price > best {
+		if v.Condition == ConditionNearMint && v.Price > best {
 			best = v.Price
 		}
 	}

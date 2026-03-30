@@ -25,6 +25,7 @@ type AcquisitionOpportunity struct {
 
 // computeAcquisitionOpportunity calculates the arbitrage for a single card.
 // Returns nil if the best profit is below MinAcquisitionProfitCents.
+// If ebayFeePct is invalid (<=0 or >=1), defaults to 12.35%.
 func computeAcquisitionOpportunity(
 	cardName, setName, cardNumber, certNumber string,
 	rawNMCents int,
@@ -60,10 +61,7 @@ func computeAcquisitionOpportunity(
 		return nil
 	}
 
-	roi := 0.0
-	if rawNMCents > 0 {
-		roi = float64(bestProfit) / float64(rawNMCents)
-	}
+	roi := float64(bestProfit) / float64(rawNMCents)
 
 	return &AcquisitionOpportunity{
 		CardName:        cardName,

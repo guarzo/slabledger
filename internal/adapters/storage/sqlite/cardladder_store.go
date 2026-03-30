@@ -3,11 +3,15 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/guarzo/slabledger/internal/platform/crypto"
 )
+
+// ErrConfigNotFound is returned when the singleton cardladder_config row doesn't exist.
+var ErrConfigNotFound = errors.New("cardladder_config row not found")
 
 // CardLadderConfig holds the stored CL connection configuration.
 type CardLadderConfig struct {
@@ -110,7 +114,7 @@ func (s *CardLadderStore) UpdateRefreshToken(ctx context.Context, refreshToken s
 		return fmt.Errorf("check rows affected: %w", err)
 	}
 	if n == 0 {
-		return fmt.Errorf("cardladder_config row not found")
+		return ErrConfigNotFound
 	}
 	return nil
 }

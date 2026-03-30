@@ -235,7 +235,9 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 		updated++
 	}
 
-	// Phase 2: fetch sales comps for mapped cards with gemRateIDs
+	// Phase 2: fetch sales comps for mapped cards with gemRateIDs.
+	// Note: newly created mappings from this run are intentionally deferred
+	// to the next refresh cycle to avoid extra API calls during initial sync.
 	if s.salesStore != nil {
 		s.refreshSalesComps(ctx, existingMappings)
 	}

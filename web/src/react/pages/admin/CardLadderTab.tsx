@@ -95,6 +95,7 @@ export function CardLadderTab() {
               onChange={(e) => setEmail(e.target.value)}
               placeholder={status?.email ?? 'your@email.com'}
               required
+              autoComplete="email"
               className="w-full rounded-md bg-[var(--surface-2)] border border-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--brand-500)]"
             />
           </div>
@@ -105,6 +106,7 @@ export function CardLadderTab() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
+              autoComplete="current-password"
               className="w-full rounded-md bg-[var(--surface-2)] border border-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--brand-500)]"
             />
           </div>

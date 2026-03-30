@@ -218,7 +218,7 @@ func FromEnv(base Config) Config {
 		}
 	}
 	if v := os.Getenv("JUSTTCG_RATE_INTERVAL"); v != "" {
-		if d, err := time.ParseDuration(v); err == nil {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
 			cfg.JustTCG.RateInterval = d
 		}
 	}

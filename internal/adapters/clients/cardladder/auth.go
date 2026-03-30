@@ -82,6 +82,14 @@ func (a *FirebaseAuth) Login(ctx context.Context, email, password string) (*Fire
 		return nil, fmt.Errorf("read login response: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
+		var fbErr struct {
+			Error struct {
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if json.Unmarshal(respBody, &fbErr) == nil && fbErr.Error.Message != "" {
+			return nil, fmt.Errorf("firebase login failed: %s (status %d)", fbErr.Error.Message, resp.StatusCode)
+		}
 		return nil, fmt.Errorf("firebase login failed (status %d)", resp.StatusCode)
 	}
 
@@ -120,6 +128,14 @@ func (a *FirebaseAuth) RefreshToken(ctx context.Context, refreshToken string) (*
 		return nil, fmt.Errorf("read refresh response: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
+		var fbErr struct {
+			Error struct {
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if json.Unmarshal(respBody, &fbErr) == nil && fbErr.Error.Message != "" {
+			return nil, fmt.Errorf("firebase refresh failed: %s (status %d)", fbErr.Error.Message, resp.StatusCode)
+		}
 		return nil, fmt.Errorf("firebase refresh failed (status %d)", resp.StatusCode)
 	}
 

@@ -137,6 +137,7 @@ export function useCardLadderStatus() {
   return useQuery({
     queryKey: queryKeys.admin.cardLadderStatus,
     queryFn: () => api.getCardLadderStatus(),
+    staleTime: 60_000,
   });
 }
 
