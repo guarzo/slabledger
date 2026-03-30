@@ -25,7 +25,6 @@ Now that Phase 1 (value refresh) and Phase 2 (sales comps) are implemented:
 - [ ] **Phase 3: Fusion Engine Integration** — Wire CL sales comp data into the fusion engine as a `SecondaryPriceSource`. CL comps would contribute to fused price calculations alongside CardHedger. Deferred because CL values already dominate reviewed prices (74% set directly to CL value) — feeding them into fusion risks over-indexing. Revisit once Phase 2 is stable and the value of blending CL comps with CH is understood.
 - [ ] **Sell sheet enrichment** — Surface "last 5 sold prices" from CL comps alongside the CL value in the sell sheet for fuller negotiation context.
 - [ ] **gemRateID population** — Currently mappings store gemRateID as empty string since the collection endpoint doesn't return it. Investigate whether the card detail page or another endpoint provides gemRateID to enable Phase 2 sales comp fetching. Without gemRateID, sales comps can't be queried.
-- [ ] **Card Ladder official API migration** — CL support confirmed they'll offer an API in the future. When available, migrate from the internal Cloud Run search endpoints to the official API.
 
 ## TCGPlayer for Raw Pricing
 

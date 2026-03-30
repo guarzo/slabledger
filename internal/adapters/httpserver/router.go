@@ -62,17 +62,17 @@ type RouterConfig struct {
 	PriceHintsHandler         *handlers.PriceHintsHandler
 	CardRequestHandler        *handlers.CardRequestHandlers
 	PricingDiagnosticsHandler *handlers.PricingDiagnosticsHandler
-	PricingAPIKey             string                      // Bearer token; empty = pricing API disabled
-	CampaignsRepo             handlers.CertPriceLookup    // For pricing API handler
-	AdvisorHandler            *handlers.AdvisorHandler    // AI advisor; nil = disabled
-	SocialHandler             *handlers.SocialHandler     // Social content; nil = disabled
-	InstagramHandler          *handlers.InstagramHandler  // Instagram publishing; nil = disabled
-	AIStatusHandler           *handlers.AIStatusHandler   // AI usage stats; nil = disabled
-	PriceFlagsHandler         *handlers.PriceFlagsHandler // Price flag admin; nil = disabled
-	CardLadderHandler         *handlers.CardLadderHandler // Card Ladder admin; nil = disabled
-	SalesCompsHandler         *handlers.SalesCompsHandler // Sales comps; nil = disabled
-	PicksHandler              *handlers.PicksHandler             // AI picks; nil = disabled
-	OpportunitiesHandler      *handlers.OpportunitiesHandler     // Arbitrage opportunities; nil = disabled
+	PricingAPIKey             string                         // Bearer token; empty = pricing API disabled
+	CampaignsRepo             handlers.CertPriceLookup       // For pricing API handler
+	AdvisorHandler            *handlers.AdvisorHandler       // AI advisor; nil = disabled
+	SocialHandler             *handlers.SocialHandler        // Social content; nil = disabled
+	InstagramHandler          *handlers.InstagramHandler     // Instagram publishing; nil = disabled
+	AIStatusHandler           *handlers.AIStatusHandler      // AI usage stats; nil = disabled
+	PriceFlagsHandler         *handlers.PriceFlagsHandler    // Price flag admin; nil = disabled
+	CardLadderHandler         *handlers.CardLadderHandler    // Card Ladder admin; nil = disabled
+	SalesCompsHandler         *handlers.SalesCompsHandler    // Sales comps; nil = disabled
+	PicksHandler              *handlers.PicksHandler         // AI picks; nil = disabled
+	OpportunitiesHandler      *handlers.OpportunitiesHandler // Arbitrage opportunities; nil = disabled
 	Logger                    observability.Logger
 	AdminEmails               []string
 	DatabasePath              string

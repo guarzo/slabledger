@@ -92,8 +92,8 @@ func TestComputeAcquisitionOpportunity_NoGradedEstimates(t *testing.T) {
 }
 
 func TestComputeAcquisitionOpportunity_ROI(t *testing.T) {
-	rawNM := 100000  // $1000
-	psa10 := 250000  // $2500
+	rawNM := 100000 // $1000
+	psa10 := 250000 // $2500
 
 	gradedEstimates := map[string]int{"PSA 10": psa10}
 

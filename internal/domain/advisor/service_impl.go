@@ -13,9 +13,14 @@ import (
 
 const (
 	defaultMaxToolRounds = 3
-	defaultMaxTokens     = 4096
-	defaultTemperature   = 0.3
-	toolCallTimeout      = 30 * time.Second
+	// defaultMaxTokens is the output token limit per LLM round. Digest and
+	// liquidation analyses call 10-14 tools and then produce a comprehensive
+	// multi-section report. 4 096 tokens was consistently too small, causing
+	// Azure to return "status incomplete" on the final analysis round.
+	// 16 384 tokens ≈ 12 000 words — enough for a detailed weekly digest.
+	defaultMaxTokens   = 16_384
+	defaultTemperature = 0.3
+	toolCallTimeout    = 30 * time.Second
 
 	// maxToolResultChars caps individual tool results to prevent input token
 	// bloat. Large tool outputs (full inventory, sell sheets) can push round-2
