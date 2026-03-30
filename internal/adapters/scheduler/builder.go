@@ -1,7 +1,10 @@
 package scheduler
 
 import (
+	"time"
+
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
+	"github.com/guarzo/slabledger/internal/adapters/clients/justtcg"
 	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
 	"github.com/guarzo/slabledger/internal/domain/advisor"
 	"github.com/guarzo/slabledger/internal/domain/ai"
@@ -69,6 +72,9 @@ type BuildDeps struct {
 
 	// Picks generation dependencies (optional)
 	PicksGenerator PicksGenerator
+
+	// JustTCG dependencies (optional)
+	JustTCGClient *justtcg.Client
 
 	// Card Ladder dependencies (optional)
 	CardLadderClient         *cardladder.Client
@@ -266,6 +272,27 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 			deps.Logger, cfg.CardLadder,
 		)
 		schedulers = append(schedulers, clRefresh)
+	}
+
+	// JustTCG NM price refresh scheduler (if client is available)
+	if deps.JustTCGClient != nil && deps.JustTCGClient.Available() && deps.CardIDMappingLister != nil {
+		jtcgConfig := JustTCGRefreshConfig{
+			Enabled:      cfg.JustTCG.Enabled,
+			RunInterval:  24 * time.Hour,
+			DailyBudget:  cfg.JustTCG.DailyBudget,
+			RateInterval: cfg.JustTCG.RateInterval,
+		}
+		var jtcgOpts []JustTCGRefreshOption
+		if deps.APITracker != nil {
+			jtcgOpts = append(jtcgOpts, WithJustTCGAPITracker(deps.APITracker))
+		}
+		jtcgScheduler := NewJustTCGRefreshScheduler(
+			deps.JustTCGClient, deps.PriceRepo,
+			deps.CardIDMappingLister, deps.CardIDMappingSaver,
+			deps.CampaignCardLister,
+			deps.Logger, jtcgConfig, jtcgOpts...,
+		)
+		schedulers = append(schedulers, jtcgScheduler)
 	}
 
 	return BuildResult{

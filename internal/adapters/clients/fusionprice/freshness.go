@@ -125,6 +125,9 @@ func (f *FusionPriceProvider) supplementWithCachedDetails(ctx context.Context, p
 	// Reconstruct CardHedger EstimateGradeDetail from DB-stored batch data
 	f.supplementCardHedgerFromDB(ctx, price, card, fd)
 
+	// Reconstruct JustTCG NM price from DB
+	f.supplementJustTCGFromDB(ctx, price, card, fd)
+
 	// Rebuild Sources from the data we actually found
 	price.Sources = buildSourcesFromData(price)
 }
@@ -214,6 +217,25 @@ func (f *FusionPriceProvider) supplementPCGradesFromDB(ctx context.Context, pric
 	if found {
 		price.PCGrades = &pcg
 	}
+}
+
+// supplementJustTCGFromDB queries the DB for JustTCG NM prices and populates
+// price.Grades.RawNMCents. This is separate from the standard supplementFromDB
+// flow because GradeRawNM is not in CoreGrades (adding it would cause CardHedger
+// to request an unsupported grade).
+func (f *FusionPriceProvider) supplementJustTCGFromDB(ctx context.Context, price *pricing.Price, card pricing.Card, freshness time.Duration) {
+	if f.priceRepo == nil || price.Grades.RawNMCents > 0 {
+		return
+	}
+	entries, err := f.priceRepo.GetLatestPricesBySource(ctx, card.Name, card.Set, card.Number, "justtcg", freshness)
+	if err != nil || len(entries) == 0 {
+		return
+	}
+	entry, ok := entries[pricing.GradeRawNM.DisplayLabel()]
+	if !ok || entry.PriceCents <= 0 {
+		return
+	}
+	pricing.SetGradePrice(&price.Grades, pricing.GradeRawNM, entry.PriceCents)
 }
 
 // loadAllFusionGrades queries the DB for all fusion grade entries and populates price.Grades.
