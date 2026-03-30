@@ -2,9 +2,12 @@ package scheduler
 
 import (
 	"context"
+	"errors"
+	"sync"
 	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/justtcg"
+	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
 	"github.com/guarzo/slabledger/internal/domain/mathutil"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/domain/pricing"
@@ -38,6 +41,10 @@ type JustTCGRefreshScheduler struct {
 	campLister    CampaignCardLister
 	logger        observability.Logger
 	config        JustTCGRefreshConfig
+
+	dayCallsMu   sync.Mutex
+	dayCallsDate string // "2006-01-02" UTC date
+	dayCallsUsed int    // calls made on dayCallsDate
 }
 
 // JustTCGRefreshOption configures optional dependencies on JustTCGRefreshScheduler.
@@ -173,25 +180,23 @@ func (s *JustTCGRefreshScheduler) runBatch(ctx context.Context) {
 		observability.Int("unmapped", len(unmapped)),
 		observability.Int("mapped", len(alreadyMapped)))
 
-	budget := s.config.DailyBudget
 	stored := 0
-	errors := 0
+	errCount := 0
 
 	// Phase 1: resolve unmapped cards via SearchCards.
 	for _, c := range unmapped {
-		if !s.checkBudget(ctx, &budget) {
+		if !s.claimBudget(ctx) {
 			break
 		}
 
 		callStart := time.Now()
 		results, err := s.client.SearchCards(ctx, c.CardName, c.SetName)
 		s.recordAPICall("search", 0, err, time.Since(callStart).Milliseconds())
-		budget--
 		if err != nil {
 			s.logger.Debug(ctx, "justtcg refresh: search failed",
 				observability.String("card", c.CardName),
 				observability.Err(err))
-			errors++
+			errCount++
 			if !s.rateLimitSleep(ctx) {
 				return
 			}
@@ -230,7 +235,7 @@ func (s *JustTCGRefreshScheduler) runBatch(ctx context.Context) {
 		nmPrice := matched.BestNMPrice()
 		if nmPrice > 0 {
 			if err := s.storeNMPrice(ctx, c.CardName, c.SetName, c.CardNumber, nmPrice); err != nil {
-				errors++
+				errCount++
 			} else {
 				stored++
 			}
@@ -247,7 +252,7 @@ func (s *JustTCGRefreshScheduler) runBatch(ctx context.Context) {
 		end := min(i+batchSize, len(alreadyMapped))
 		batch := alreadyMapped[i:end]
 
-		if !s.checkBudget(ctx, &budget) {
+		if !s.claimBudget(ctx) {
 			break
 		}
 
@@ -259,10 +264,9 @@ func (s *JustTCGRefreshScheduler) runBatch(ctx context.Context) {
 		callStart := time.Now()
 		results, err := s.client.BatchLookup(ctx, ids)
 		s.recordAPICall("batch-lookup", 0, err, time.Since(callStart).Milliseconds())
-		budget--
 		if err != nil {
 			s.logger.Warn(ctx, "justtcg refresh: batch lookup failed", observability.Err(err))
-			errors++
+			errCount++
 			if !s.rateLimitSleep(ctx) {
 				return
 			}
@@ -285,7 +289,7 @@ func (s *JustTCGRefreshScheduler) runBatch(ctx context.Context) {
 				continue
 			}
 			if err := s.storeNMPrice(ctx, mc.card.CardName, mc.card.SetName, mc.card.CardNumber, nmPrice); err != nil {
-				errors++
+				errCount++
 			} else {
 				stored++
 			}
@@ -298,7 +302,7 @@ func (s *JustTCGRefreshScheduler) runBatch(ctx context.Context) {
 
 	s.logger.Info(ctx, "justtcg refresh completed",
 		observability.Int("prices_stored", stored),
-		observability.Int("errors", errors),
+		observability.Int("errors", errCount),
 		observability.Duration("duration", time.Since(start)))
 }
 
@@ -328,12 +332,25 @@ func (s *JustTCGRefreshScheduler) storeNMPrice(ctx context.Context, cardName, se
 	return nil
 }
 
-// checkBudget returns true if there is remaining API budget.
-func (s *JustTCGRefreshScheduler) checkBudget(ctx context.Context, budget *int) bool {
-	if *budget <= 0 {
-		s.logger.Info(ctx, "justtcg refresh: daily budget exhausted")
+// claimBudget atomically checks and increments the day-scoped API call counter.
+// Returns true if a call is allowed, false if the daily budget is exhausted.
+// The counter resets automatically when the UTC date changes.
+func (s *JustTCGRefreshScheduler) claimBudget(ctx context.Context) bool {
+	s.dayCallsMu.Lock()
+	defer s.dayCallsMu.Unlock()
+
+	today := time.Now().UTC().Format("2006-01-02")
+	if s.dayCallsDate != today {
+		s.dayCallsUsed = 0
+		s.dayCallsDate = today
+	}
+	if s.dayCallsUsed >= s.config.DailyBudget {
+		s.logger.Info(ctx, "justtcg refresh: daily budget exhausted",
+			observability.Int("used", s.dayCallsUsed),
+			observability.Int("budget", s.config.DailyBudget))
 		return false
 	}
+	s.dayCallsUsed++
 	return true
 }
 
@@ -348,7 +365,7 @@ func (s *JustTCGRefreshScheduler) recordAPICall(endpoint string, statusCode int,
 	}
 	sc := statusCode
 	if sc == 0 && err != nil {
-		sc = 500
+		sc = statusFromError(err)
 	}
 	if sc == 0 && err == nil {
 		sc = 200
@@ -367,6 +384,40 @@ func (s *JustTCGRefreshScheduler) recordAPICall(endpoint string, statusCode int,
 			Timestamp:  ts,
 		})
 	}()
+}
+
+// statusFromError extracts an HTTP status code from an error.
+// It checks for *apperrors.AppError and maps the error code to an HTTP status.
+func statusFromError(err error) int {
+	var appErr *apperrors.AppError
+	if !errors.As(err, &appErr) {
+		return 500
+	}
+
+	// First, check if the AppError has an explicit HTTP status.
+	if s := appErr.HTTPStatus(); s != 0 {
+		return s
+	}
+
+	// Fall back to mapping error codes to HTTP statuses.
+	switch appErr.Code {
+	case apperrors.ErrCodeProviderRateLimit:
+		return 429
+	case apperrors.ErrCodeProviderTimeout:
+		return 408
+	case apperrors.ErrCodeProviderUnavailable, apperrors.ErrCodeProviderCircuitOpen:
+		return 503
+	case apperrors.ErrCodeProviderNotFound:
+		return 404
+	case apperrors.ErrCodeProviderAuth:
+		return 401
+	case apperrors.ErrCodeProviderInvalidReq, apperrors.ErrCodeValidation:
+		return 400
+	case apperrors.ErrCodeProviderInvalidResp:
+		return 502
+	default:
+		return 500
+	}
 }
 
 // rateLimitSleep pauses for the configured rate interval.

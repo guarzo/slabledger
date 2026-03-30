@@ -22,6 +22,14 @@ export function CardLadderTab({ enabled = true }: { enabled?: boolean }) {
     }
   }, [status?.configured, status?.email, status?.collectionId]);
 
+  if (!enabled) {
+    return (
+      <CardShell padding="lg">
+        <p className="text-[var(--text-muted)]">Card Ladder integration is not enabled.</p>
+      </CardShell>
+    );
+  }
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     try {

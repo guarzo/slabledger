@@ -91,28 +91,70 @@ func TestSearchCards(t *testing.T) {
 	}
 }
 
-func TestSearchSets_Success(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		resp := setsResponse{
-			Data: []Set{{ID: "set-1", Name: "Base Set"}},
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp) //nolint:errcheck
-	}))
-	defer server.Close()
-
-	client := NewClient("test-key")
-	client.baseURL = server.URL + "/v1"
-
-	sets, err := client.SearchSets(context.Background(), "base")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+func TestSearchSets(t *testing.T) {
+	tests := []struct {
+		name        string
+		apiKey      string
+		setupServer func(t *testing.T) *httptest.Server
+		wantErr     bool
+		wantCode    apperrors.ErrorCode
+		wantSets    int
+	}{
+		{
+			name:   "success",
+			apiKey: "test-key",
+			setupServer: func(t *testing.T) *httptest.Server {
+				t.Helper()
+				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					resp := setsResponse{
+						Data: []Set{{ID: "set-1", Name: "Base Set"}},
+					}
+					w.Header().Set("Content-Type", "application/json")
+					json.NewEncoder(w).Encode(resp) //nolint:errcheck
+				}))
+			},
+			wantSets: 1,
+		},
+		{
+			name:     "no API key",
+			apiKey:   "",
+			wantErr:  true,
+			wantCode: apperrors.ErrCodeConfigMissing,
+		},
 	}
-	if len(sets) != 1 {
-		t.Fatalf("got %d sets, want 1", len(sets))
-	}
-	if sets[0].Name != "Base Set" {
-		t.Errorf("set name = %q, want Base Set", sets[0].Name)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := NewClient(tt.apiKey)
+			if tt.setupServer != nil {
+				server := tt.setupServer(t)
+				defer server.Close()
+				client.baseURL = server.URL + "/v1"
+			}
+
+			sets, err := client.SearchSets(context.Background(), "base")
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error")
+				}
+				var appErr *apperrors.AppError
+				if !errors.As(err, &appErr) {
+					t.Fatalf("expected *apperrors.AppError, got %T", err)
+				}
+				if appErr.Code != tt.wantCode {
+					t.Errorf("code = %v, want %v", appErr.Code, tt.wantCode)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(sets) != tt.wantSets {
+				t.Fatalf("got %d sets, want %d", len(sets), tt.wantSets)
+			}
+			if tt.wantSets > 0 && sets[0].Name != "Base Set" {
+				t.Errorf("set name = %q, want Base Set", sets[0].Name)
+			}
+		})
 	}
 }
 
@@ -188,26 +230,54 @@ func TestBatchLookup(t *testing.T) {
 	}
 }
 
-func TestClient_429RateLimit(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Retry-After", "30")
-		w.WriteHeader(http.StatusTooManyRequests)
-	}))
-	defer server.Close()
-
-	client := NewClient("test-key")
-	client.baseURL = server.URL + "/v1"
-
-	_, err := client.SearchCards(context.Background(), "test", "")
-	if err == nil {
-		t.Fatal("expected error on 429")
+func TestClient_RateLimit(t *testing.T) {
+	tests := []struct {
+		name        string
+		setupServer func(t *testing.T) *httptest.Server
+		wantCode    apperrors.ErrorCode
+	}{
+		{
+			name: "429 with Retry-After",
+			setupServer: func(t *testing.T) *httptest.Server {
+				t.Helper()
+				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+					w.Header().Set("Retry-After", "30")
+					w.WriteHeader(http.StatusTooManyRequests)
+				}))
+			},
+			wantCode: apperrors.ErrCodeProviderRateLimit,
+		},
+		{
+			name: "429 without Retry-After",
+			setupServer: func(t *testing.T) *httptest.Server {
+				t.Helper()
+				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+					w.WriteHeader(http.StatusTooManyRequests)
+				}))
+			},
+			wantCode: apperrors.ErrCodeProviderRateLimit,
+		},
 	}
-	var appErr *apperrors.AppError
-	if !errors.As(err, &appErr) {
-		t.Fatalf("expected *apperrors.AppError, got %T", err)
-	}
-	if appErr.Code != apperrors.ErrCodeProviderRateLimit {
-		t.Errorf("code = %v, want %v", appErr.Code, apperrors.ErrCodeProviderRateLimit)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := tt.setupServer(t)
+			defer server.Close()
+
+			client := NewClient("test-key")
+			client.baseURL = server.URL + "/v1"
+
+			_, err := client.SearchCards(context.Background(), "test", "")
+			if err == nil {
+				t.Fatal("expected error on 429")
+			}
+			var appErr *apperrors.AppError
+			if !errors.As(err, &appErr) {
+				t.Fatalf("expected *apperrors.AppError, got %T", err)
+			}
+			if appErr.Code != tt.wantCode {
+				t.Errorf("code = %v, want %v", appErr.Code, tt.wantCode)
+			}
+		})
 	}
 }
 

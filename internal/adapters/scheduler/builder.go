@@ -1,8 +1,6 @@
 package scheduler
 
 import (
-	"time"
-
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
 	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
 	"github.com/guarzo/slabledger/internal/domain/advisor"
@@ -277,7 +275,7 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 	if deps.JustTCGClient != nil && deps.JustTCGClient.Available() && deps.CardIDMappingLister != nil {
 		jtcgConfig := JustTCGRefreshConfig{
 			Enabled:      cfg.JustTCG.Enabled,
-			RunInterval:  24 * time.Hour,
+			RunInterval:  cfg.JustTCG.RunInterval,
 			DailyBudget:  cfg.JustTCG.DailyBudget,
 			RateInterval: cfg.JustTCG.RateInterval,
 		}

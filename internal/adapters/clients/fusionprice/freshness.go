@@ -100,23 +100,27 @@ func (f *FusionPriceProvider) supplementWithCachedDetails(ctx context.Context, p
 	if price == nil {
 		return
 	}
+
+	fd := f.freshnessDuration
+	if fd <= 0 {
+		fd = DefaultFreshnessDuration
+	}
+
 	detailsKey := detailsCacheKey(card)
 	if cached, err := f.getCached(ctx, detailsKey); err == nil && cached != nil {
 		price.GradeDetails = cached.GradeDetails
 		price.Velocity = cached.Velocity
-		price.Sources = cached.Sources
 		price.PCGrades = cached.PCGrades
+		// RawNMCents is stored separately by the JustTCG scheduler and is not
+		// part of the live-fetch cache; reconstruct from DB.
+		f.supplementJustTCGFromDB(ctx, price, card, fd)
+		price.Sources = buildSourcesFromData(price)
 		return
 	}
 
 	// In-memory cache miss — reconstruct from DB entries.
 	if f.priceRepo == nil {
 		return
-	}
-
-	fd := f.freshnessDuration
-	if fd <= 0 {
-		fd = DefaultFreshnessDuration
 	}
 
 	// Reconstruct PriceCharting raw grades from DB

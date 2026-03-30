@@ -262,6 +262,7 @@ type JustTCGConfig struct {
 	Enabled      bool          // Enable JustTCG refresh (default: true if API key present)
 	DailyBudget  int           // Max API calls per day (default: 2000)
 	RateInterval time.Duration // Minimum time between calls (default: 600ms)
+	RunInterval  time.Duration // How often to run the full refresh cycle (default: 24h)
 }
 
 // ApplyDefaults sets zero-valued fields to sensible defaults.
@@ -271,6 +272,9 @@ func (c *JustTCGConfig) ApplyDefaults() {
 	}
 	if c.RateInterval <= 0 {
 		c.RateInterval = 600 * time.Millisecond
+	}
+	if c.RunInterval <= 0 {
+		c.RunInterval = 24 * time.Hour
 	}
 }
 

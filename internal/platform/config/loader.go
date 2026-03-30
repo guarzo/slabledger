@@ -222,6 +222,11 @@ func FromEnv(base Config) Config {
 			cfg.JustTCG.RateInterval = d
 		}
 	}
+	if v := os.Getenv("JUSTTCG_RUN_INTERVAL"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			cfg.JustTCG.RunInterval = d
+		}
+	}
 	if v := os.Getenv("JUSTTCG_REFRESH_ENABLED"); v != "" {
 		cfg.JustTCG.Enabled = parseBool(v, true)
 	}

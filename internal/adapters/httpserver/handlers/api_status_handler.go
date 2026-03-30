@@ -12,10 +12,11 @@ import (
 var providerDailyLimits = map[string]*int{
 	pricing.SourceCardHedger:    nil, // Unlimited plan — monitored via 429 tracking
 	pricing.SourcePriceCharting: nil, // No hard daily limit
+	pricing.SourceJustTCG:       nil, // Pro plan — scheduler self-limits via DailyBudget
 }
 
 // knownProviders is the ordered list of providers shown in the status response.
-var knownProviders = []string{pricing.SourceCardHedger, pricing.SourcePriceCharting}
+var knownProviders = []string{pricing.SourceCardHedger, pricing.SourcePriceCharting, pricing.SourceJustTCG}
 
 // CardHedgerStats provides live observability counters from the CardHedger client.
 type CardHedgerStats interface {
