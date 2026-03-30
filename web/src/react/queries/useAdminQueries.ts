@@ -133,11 +133,12 @@ export function useResolvePriceFlag() {
   });
 }
 
-export function useCardLadderStatus() {
+export function useCardLadderStatus(enabled = true) {
   return useQuery({
     queryKey: queryKeys.admin.cardLadderStatus,
     queryFn: () => api.getCardLadderStatus(),
     staleTime: 60_000,
+    enabled,
   });
 }
 

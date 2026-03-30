@@ -39,6 +39,7 @@ var operationTools = map[string][]string{
 		"get_sell_sheet", "get_portfolio_health", "get_portfolio_insights",
 		"get_credit_summary", "get_weekly_review", "get_capital_timeline",
 		"get_channel_velocity", "get_dashboard_summary",
+		"get_acquisition_targets", "get_crack_opportunities",
 	},
 	"campaign_analysis": {
 		"list_campaigns", "get_campaign_pnl", "get_pnl_by_channel",
@@ -51,7 +52,7 @@ var operationTools = map[string][]string{
 		"get_credit_summary", "get_expected_values", "get_inventory_aging",
 		"get_portfolio_health", "suggest_price", "get_cert_lookup",
 		"get_channel_velocity", "get_capital_timeline", "get_suggestion_stats",
-		"get_dashboard_summary",
+		"get_dashboard_summary", "get_crack_opportunities",
 	},
 	"purchase_assessment": {
 		"list_campaigns", "get_campaign_tuning", "get_portfolio_insights",

@@ -467,7 +467,9 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	socialService.Wait()
 
 	// Shut down campaign service background workers
-	campaignsService.Close()
+	if campaignsService != nil {
+		campaignsService.Close()
+	}
 
 	return serverErr
 }

@@ -14,14 +14,14 @@ export function IntegrationsTab({ enabled = true }: { enabled?: boolean }) {
 
       <section>
         <h3 className="text-base font-semibold text-[var(--text)] mb-4">Card Ladder</h3>
-        <CardLadderTab />
+        <CardLadderTab enabled={enabled} />
       </section>
 
       <hr className="border-[var(--surface-2)]" />
 
       <section>
         <h3 className="text-base font-semibold text-[var(--text)] mb-4">Instagram</h3>
-        <InstagramTab />
+        <InstagramTab enabled={enabled} />
       </section>
     </div>
   );

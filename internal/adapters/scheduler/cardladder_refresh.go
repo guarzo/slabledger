@@ -183,14 +183,17 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 		}
 
 		// Save/update mapping
-		// Use Firestore gemRate data if available, otherwise fall back to search API condition
-		gemRateID := ""
+		// Use Firestore gemRate data if available, otherwise preserve existing mapping values
 		condition := card.Condition
+		gemRateID := ""
 		if fd, ok := firestoreData[card.CollectionCardID]; ok {
 			gemRateID = fd.GemRateID
 			if fd.GemRateCondition != "" {
 				condition = fd.GemRateCondition
 			}
+		} else if existing, ok := mappingByCLCardID[card.CollectionCardID]; ok {
+			// No Firestore entry — preserve previously stored gemRateID
+			gemRateID = existing.CLGemRateID
 		}
 
 		if err := s.store.SaveMapping(ctx, purchase.CertNumber, card.CollectionCardID, gemRateID, condition); err != nil {

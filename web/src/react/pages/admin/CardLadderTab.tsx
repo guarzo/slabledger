@@ -4,8 +4,8 @@ import { useToast } from '../../contexts/ToastContext';
 import { CardShell } from '../../ui/CardShell';
 import Button from '../../ui/Button';
 
-export function CardLadderTab() {
-  const { data: status, isLoading, error } = useCardLadderStatus();
+export function CardLadderTab({ enabled = true }: { enabled?: boolean }) {
+  const { data: status, isLoading, error } = useCardLadderStatus(enabled);
   const saveMutation = useSaveCardLadderConfig();
   const refreshMutation = useTriggerCardLadderRefresh();
   const toast = useToast();
@@ -88,8 +88,9 @@ export function CardLadderTab() {
         </h3>
         <form onSubmit={handleSave} className="space-y-3">
           <div>
-            <label className="block text-xs text-[var(--text-muted)] mb-1">Email</label>
+            <label htmlFor="cl-email" className="block text-xs text-[var(--text-muted)] mb-1">Email</label>
             <input
+              id="cl-email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -100,8 +101,9 @@ export function CardLadderTab() {
             />
           </div>
           <div>
-            <label className="block text-xs text-[var(--text-muted)] mb-1">Password</label>
+            <label htmlFor="cl-password" className="block text-xs text-[var(--text-muted)] mb-1">Password</label>
             <input
+              id="cl-password"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -111,8 +113,9 @@ export function CardLadderTab() {
             />
           </div>
           <div>
-            <label className="block text-xs text-[var(--text-muted)] mb-1">Collection ID</label>
+            <label htmlFor="cl-collection-id" className="block text-xs text-[var(--text-muted)] mb-1">Collection ID</label>
             <input
+              id="cl-collection-id"
               type="text"
               value={collectionId}
               onChange={(e) => setCollectionId(e.target.value)}
@@ -122,8 +125,9 @@ export function CardLadderTab() {
             />
           </div>
           <div>
-            <label className="block text-xs text-[var(--text-muted)] mb-1">Firebase API Key</label>
+            <label htmlFor="cl-firebase-key" className="block text-xs text-[var(--text-muted)] mb-1">Firebase API Key</label>
             <input
+              id="cl-firebase-key"
               type="text"
               value={firebaseApiKey}
               onChange={(e) => setFirebaseApiKey(e.target.value)}
