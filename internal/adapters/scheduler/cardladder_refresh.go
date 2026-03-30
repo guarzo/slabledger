@@ -110,6 +110,19 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 	s.logger.Info(ctx, "CL refresh: fetched collection",
 		observability.Int("cardCount", len(cards)))
 
+	// Fetch gemRateId data from Firestore
+	var firestoreData map[string]cardladder.FirestoreCardData
+	if cfg.FirebaseUID != "" {
+		firestoreData, err = s.client.FetchFirestoreCards(ctx, cfg.FirebaseUID, cfg.CollectionID)
+		if err != nil {
+			s.logger.Warn(ctx, "CL refresh: failed to fetch Firestore card data", observability.Err(err))
+			// Continue without gemRateId data — values still sync, just no sales comps
+		} else {
+			s.logger.Info(ctx, "CL refresh: fetched Firestore data",
+				observability.Int("cardsWithGemRate", len(firestoreData)))
+		}
+	}
+
 	// Load all unsold purchases for image URL matching
 	purchases, err := s.purchaseLister.ListAllUnsoldPurchases(ctx)
 	if err != nil {
@@ -170,7 +183,20 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 		}
 
 		// Save/update mapping
-		if err := s.store.SaveMapping(ctx, purchase.CertNumber, card.CollectionCardID, "", card.Condition); err != nil {
+		// Use Firestore gemRate data if available, otherwise preserve existing mapping values
+		condition := card.Condition
+		gemRateID := ""
+		if fd, ok := firestoreData[card.CollectionCardID]; ok {
+			gemRateID = fd.GemRateID
+			if fd.GemRateCondition != "" {
+				condition = fd.GemRateCondition
+			}
+		} else if existing, ok := mappingByCLCardID[card.CollectionCardID]; ok {
+			// No Firestore entry — preserve previously stored gemRateID
+			gemRateID = existing.CLGemRateID
+		}
+
+		if err := s.store.SaveMapping(ctx, purchase.CertNumber, card.CollectionCardID, gemRateID, condition); err != nil {
 			s.logger.Warn(ctx, "CL refresh: failed to save mapping",
 				observability.String("cert", purchase.CertNumber),
 				observability.Err(err))
@@ -212,7 +238,9 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 		updated++
 	}
 
-	// Phase 2: fetch sales comps for mapped cards with gemRateIDs
+	// Phase 2: fetch sales comps for mapped cards with gemRateIDs.
+	// Note: newly created mappings from this run are intentionally deferred
+	// to the next refresh cycle to avoid extra API calls during initial sync.
 	if s.salesStore != nil {
 		s.refreshSalesComps(ctx, existingMappings)
 	}

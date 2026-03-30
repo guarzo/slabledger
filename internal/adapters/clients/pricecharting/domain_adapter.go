@@ -143,7 +143,7 @@ func (p *PriceCharting) lookupCardInternal(ctx context.Context, setName string, 
 
 	// Strategy 0: Check for user-provided price hint (highest priority)
 	if p.hintResolver != nil {
-		hint, err := p.hintResolver.GetHint(ctx, c.Name, setName, c.Number, "pricecharting")
+		hint, err := p.hintResolver.GetHint(ctx, c.Name, setName, c.Number, pricing.SourcePriceCharting)
 		if err == nil && hint != "" {
 			match, err := p.LookupByProductID(ctx, hint)
 			if err == nil && match != nil {

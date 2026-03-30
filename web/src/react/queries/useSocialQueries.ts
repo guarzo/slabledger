@@ -80,11 +80,12 @@ export function useUploadSlides() {
   });
 }
 
-export function useInstagramStatus() {
+export function useInstagramStatus(enabled = true) {
   return useQuery({
     queryKey: queryKeys.instagram.status(),
     queryFn: () => api.getInstagramStatus(),
     staleTime: 60_000,
+    enabled,
   });
 }
 

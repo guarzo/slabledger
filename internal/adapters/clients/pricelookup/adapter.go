@@ -57,7 +57,16 @@ func (a *Adapter) GetLastSoldCents(ctx context.Context, card campaigns.CardIdent
 	if err != nil {
 		return 0, err
 	}
-	if price == nil || price.LastSoldByGrade == nil {
+	if price == nil {
+		return 0, nil
+	}
+
+	// For raw (grade 0), prefer JustTCG NM price when available
+	if grade == 0 && price.Grades.RawNMCents > 0 {
+		return int(price.Grades.RawNMCents), nil
+	}
+
+	if price.LastSoldByGrade == nil {
 		return 0, nil
 	}
 
@@ -114,7 +123,7 @@ func (a *Adapter) GetMarketSnapshot(ctx context.Context, card campaigns.CardIden
 		key := gradeDetailKey(grade)
 		if detail, ok := price.GradeDetails[key]; ok && detail != nil && detail.Estimate != nil && detail.Estimate.PriceCents > 0 {
 			snap.EstimatedValueCents = int(detail.Estimate.PriceCents)
-			snap.EstimateSource = "cardhedger"
+			snap.EstimateSource = pricing.SourceCardHedger
 		}
 	}
 

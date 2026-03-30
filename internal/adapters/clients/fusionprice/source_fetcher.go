@@ -74,7 +74,7 @@ type sourceResultEntry struct {
 
 // isProviderClientAvailable checks if the client for a given provider exists and is available
 func (f *FusionPriceProvider) isProviderClientAvailable(provider string) bool {
-	if provider == "pricecharting" {
+	if provider == pricing.SourcePriceCharting {
 		return f.priceCharting != nil && f.priceCharting.Available()
 	}
 	for _, source := range f.secondarySources {
@@ -97,7 +97,7 @@ func (f *FusionPriceProvider) getAvailableSources(ctx context.Context) []string 
 	// Build list of all provider names: pricecharting + secondary sources
 	var providers []string
 	if !onDemand {
-		providers = append(providers, "pricecharting")
+		providers = append(providers, pricing.SourcePriceCharting)
 	}
 	for _, source := range f.secondarySources {
 		providers = append(providers, source.Name())
@@ -172,7 +172,7 @@ func (f *FusionPriceProvider) fetchFromAvailableSources(ctx context.Context, car
 	}
 
 	// Fetch from PriceCharting (if not blocked)
-	if isAvailable("pricecharting") {
+	if isAvailable(pricing.SourcePriceCharting) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -188,11 +188,11 @@ func (f *FusionPriceProvider) fetchFromAvailableSources(ctx context.Context, car
 			if err != nil {
 				statusCode = 500
 				errChan <- fmt.Errorf("pricecharting: %w", err)
-				resultsChan <- sourceResultEntry{source: "pricecharting", success: false, errMsg: err.Error()}
+				resultsChan <- sourceResultEntry{source: pricing.SourcePriceCharting, success: false, errMsg: err.Error()}
 			} else {
-				resultsChan <- sourceResultEntry{source: "pricecharting", success: true}
+				resultsChan <- sourceResultEntry{source: pricing.SourcePriceCharting, success: true}
 			}
-			f.recordAPICall(ctx, "pricecharting", statusCode, err, latency, &fusion.ResponseMeta{StatusCode: statusCode})
+			f.recordAPICall(ctx, pricing.SourcePriceCharting, statusCode, err, latency, &fusion.ResponseMeta{StatusCode: statusCode})
 
 			// Record to collector for unified logging
 			collector.RecordSource(SourcePriceCharting, err == nil, err, latency, false)
@@ -304,7 +304,7 @@ func (f *FusionPriceProvider) fetchFromAvailableSources(ctx context.Context, car
 				Value:    float64(cents) / 100.0,
 				Currency: "USD",
 				Source: fusion.DataSource{
-					Name:       "pricecharting",
+					Name:       pricing.SourcePriceCharting,
 					Confidence: pcFallbackConfidence,
 				},
 			}}

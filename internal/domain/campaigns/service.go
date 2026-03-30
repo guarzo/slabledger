@@ -197,6 +197,10 @@ type Service interface {
 
 	// Crack arbitrage
 	GetCrackCandidates(ctx context.Context, campaignID string) ([]CrackAnalysis, error)
+	GetCrackOpportunities(ctx context.Context) ([]CrackAnalysis, error)
+
+	// Acquisition arbitrage
+	GetAcquisitionTargets(ctx context.Context) ([]AcquisitionOpportunity, error)
 
 	// Expected value
 	GetExpectedValues(ctx context.Context, campaignID string) (*EVPortfolio, error)

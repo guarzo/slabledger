@@ -5,6 +5,7 @@ import (
 
 	"github.com/guarzo/slabledger/internal/domain/campaigns"
 	"github.com/guarzo/slabledger/internal/domain/observability"
+	"github.com/guarzo/slabledger/internal/domain/pricing"
 )
 
 // PurchaseCertLister lists cert numbers of purchases missing external ID mappings.
@@ -32,7 +33,7 @@ func NewCertSweepAdapter(repo PurchaseCertLister, resolver campaigns.CardIDResol
 // exclusively supports PSA cert numbers. The "cardhedger" source is the
 // only provider that offers cert-based resolution.
 func (a *CertSweepAdapter) SweepUnmappedCerts(ctx context.Context) (int, error) {
-	certs, err := a.repo.ListUnmappedPurchaseCerts(ctx, "cardhedger", "PSA")
+	certs, err := a.repo.ListUnmappedPurchaseCerts(ctx, pricing.SourceCardHedger, "PSA")
 	if err != nil {
 		return 0, err
 	}

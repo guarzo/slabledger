@@ -63,8 +63,8 @@ function ProviderCard({ provider }: { provider: ProviderStatus }) {
   );
 }
 
-export function ApiStatusTab() {
-  const { data, error } = useAdminApiUsage();
+export function ApiStatusTab({ enabled = true }: { enabled?: boolean }) {
+  const { data, error } = useAdminApiUsage({ enabled });
   const errorMessage = error instanceof Error ? error.message : error ? 'Failed to load status' : null;
 
   return (

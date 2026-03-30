@@ -63,7 +63,7 @@ func NewFusionProviderWithRepo(
 ) *FusionPriceProvider {
 	// Configure fusion engine with custom weights
 	fusionConfig := fusion.DefaultFusionConfig()
-	fusionConfig.SourceWeights["cardhedger"] = 0.85 // Multi-platform price estimates
+	fusionConfig.SourceWeights[pricing.SourceCardHedger] = 0.85 // Multi-platform price estimates
 
 	// Fall back to defaults for zero values
 	if freshnessDuration <= 0 {
@@ -393,7 +393,7 @@ func (f *FusionPriceProvider) attachSourceDetails(result *pricing.Price, results
 		}
 	}
 	if pcPrice != nil {
-		result.Sources = append(result.Sources, "pricecharting")
+		result.Sources = append(result.Sources, pricing.SourcePriceCharting)
 	}
 }
 

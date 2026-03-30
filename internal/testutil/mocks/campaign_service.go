@@ -74,7 +74,11 @@ type MockCampaignService struct {
 	GetWeeklyReviewSummaryFn func(ctx context.Context) (*campaigns.WeeklyReviewSummary, error)
 
 	// Crack arbitrage
-	GetCrackCandidatesFn func(ctx context.Context, campaignID string) ([]campaigns.CrackAnalysis, error)
+	GetCrackCandidatesFn    func(ctx context.Context, campaignID string) ([]campaigns.CrackAnalysis, error)
+	GetCrackOpportunitiesFn func(ctx context.Context) ([]campaigns.CrackAnalysis, error)
+
+	// Acquisition arbitrage
+	GetAcquisitionTargetsFn func(ctx context.Context) ([]campaigns.AcquisitionOpportunity, error)
 
 	// Expected value
 	GetExpectedValuesFn func(ctx context.Context, campaignID string) (*campaigns.EVPortfolio, error)
@@ -439,6 +443,20 @@ func (m *MockCampaignService) GetCrackCandidates(ctx context.Context, campaignID
 		return m.GetCrackCandidatesFn(ctx, campaignID)
 	}
 	return []campaigns.CrackAnalysis{}, nil
+}
+
+func (m *MockCampaignService) GetCrackOpportunities(ctx context.Context) ([]campaigns.CrackAnalysis, error) {
+	if m.GetCrackOpportunitiesFn != nil {
+		return m.GetCrackOpportunitiesFn(ctx)
+	}
+	return []campaigns.CrackAnalysis{}, nil
+}
+
+func (m *MockCampaignService) GetAcquisitionTargets(ctx context.Context) ([]campaigns.AcquisitionOpportunity, error) {
+	if m.GetAcquisitionTargetsFn != nil {
+		return m.GetAcquisitionTargetsFn(ctx)
+	}
+	return []campaigns.AcquisitionOpportunity{}, nil
 }
 
 // Expected value

@@ -10,6 +10,7 @@ type Grade string
 
 const (
 	GradeRaw     Grade = "raw"
+	GradeRawNM   Grade = "raw_nm" // Near Mint specific (JustTCG)
 	GradePSA6    Grade = "psa6"
 	GradePSA7    Grade = "psa7"
 	GradePSA8    Grade = "psa8"
@@ -49,6 +50,8 @@ func NormalizeGrade(raw string) Grade {
 	switch normalized {
 	case "", "ungraded", "raw", "nm", "nearmint":
 		return GradeRaw
+	case "raw_nm", "rawnm":
+		return GradeRawNM
 	}
 
 	// BGS 10 (Black Label) — check before generic "10" match
@@ -139,6 +142,7 @@ var AllDisplayGrades = []Grade{
 // displayLabels maps each Grade to its human-readable display label.
 var displayLabels = map[Grade]string{
 	GradeRaw:   "Raw",
+	GradeRawNM: "Raw NM",
 	GradePSA1:  "PSA 1",
 	GradePSA2:  "PSA 2",
 	GradePSA3:  "PSA 3",
@@ -250,6 +254,8 @@ func SetGradePrice(grades *GradedPrices, g Grade, cents int64) {
 		grades.Grade95Cents = cents
 	case GradeRaw:
 		grades.RawCents = cents
+	case GradeRawNM:
+		grades.RawNMCents = cents
 	case GradeBGS10:
 		grades.BGS10Cents = cents
 	}
@@ -275,6 +281,8 @@ func GetGradePrice(grades GradedPrices, g Grade) int64 {
 		return grades.Grade95Cents
 	case GradeRaw:
 		return grades.RawCents
+	case GradeRawNM:
+		return grades.RawNMCents
 	case GradeBGS10:
 		return grades.BGS10Cents
 	default:

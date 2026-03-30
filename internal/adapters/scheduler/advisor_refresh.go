@@ -139,7 +139,8 @@ func isTransientAIError(err error) bool {
 		strings.Contains(msg, "broken pipe") ||
 		strings.Contains(msg, "i/o timeout") ||
 		strings.Contains(msg, "EOF") ||
-		strings.Contains(msg, "SSE stream ended without")
+		strings.Contains(msg, "SSE stream ended without") ||
+		strings.Contains(msg, "status incomplete")
 }
 
 func (s *AdvisorRefreshScheduler) runAnalysis(ctx context.Context, analysisType advisor.AnalysisType, collect func(context.Context) (string, error)) error {

@@ -10,12 +10,13 @@ import (
 
 // Known daily limits per provider.
 var providerDailyLimits = map[string]*int{
-	"cardhedger":    nil, // Unlimited plan — monitored via 429 tracking
-	"pricecharting": nil, // No hard daily limit
+	pricing.SourceCardHedger:    nil, // Unlimited plan — monitored via 429 tracking
+	pricing.SourcePriceCharting: nil, // No hard daily limit
+	pricing.SourceJustTCG:       nil, // Pro plan — scheduler self-limits via DailyBudget
 }
 
 // knownProviders is the ordered list of providers shown in the status response.
-var knownProviders = []string{"cardhedger", "pricecharting"}
+var knownProviders = []string{pricing.SourceCardHedger, pricing.SourcePriceCharting, pricing.SourceJustTCG}
 
 // CardHedgerStats provides live observability counters from the CardHedger client.
 type CardHedgerStats interface {
@@ -133,7 +134,7 @@ func (h *APIStatusHandler) HandleAPIUsage(w http.ResponseWriter, r *http.Request
 		}
 
 		// Populate live CardHedger counters from client
-		if name == "cardhedger" && h.cardHedgerStats != nil {
+		if name == pricing.SourceCardHedger && h.cardHedgerStats != nil {
 			ps.Today.MinuteCalls = int64(h.cardHedgerStats.MinuteCallsUsed())
 			if t := h.cardHedgerStats.Last429Time(); !t.IsZero() {
 				utc := t.UTC()

@@ -225,6 +225,22 @@ curl http://localhost:8081/api/status/api-usage
 | CSV import skipping all rows | Check CSV format: 3 columns, header row required |
 | Duplicate cert errors | Certificate numbers are unique across all campaigns |
 | CardHedger 429 errors | Unlimited plan; 429s indicate actual rate limiting. Check via /api/status/api-usage |
+| `database is locked` | WAL mode issue or concurrent write contention. Check `PRAGMA journal_mode=wal;` runs on startup |
+| `429 rate limited` on PriceCharting | Exceeded 1 req/sec. Wait for block expiry; check `rate_limiter.go` |
+| `mock does not implement interface` | Repository interface changed. Add missing method to both mocks (`testutil/mocks/` and `domain/campaigns/mock_repo_test.go`) |
+| Frontend proxy 502 | Backend not running on :8081. Start backend: `go run ./cmd/slabledger` |
+| `migration: dirty database` | Failed migration left dirty state. Fix version in `schema_migrations` table |
+| CardHedger `Card is null` | Cert's card not in CardHedger DB. Expected for new/rare cards; null handling in `cert_resolver.go` |
+| Chinese set number mapping unknown | New CBB volume not in `mapChineseNumber`. Add volume mapping; falls back to number-less search |
+
+---
+
+## Resilience Patterns
+
+- **Retry**: Exponential backoff with jitter (`platform/resilience/retry.go`), used by `httpx.Client`
+- **Circuit breaker**: Per-provider via `sony/gobreaker` in `httpx/`. States: closed → open (after N failures) → half-open
+- **Rate limits**: PriceCharting 1 req/sec, CardHedger 100 req/min + 700ms pause, auth 10 req/sec
+- **429 handling**: `APITracker.UpdateRateLimit` blocks provider-level requests until expiry
 
 ---
 

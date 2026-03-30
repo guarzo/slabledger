@@ -192,7 +192,7 @@ func (f *FusionPriceProvider) persistToDatabase(ctx context.Context, card pricin
 				Grade:      gp.grade,
 				PriceCents: gp.priceCents,
 				Confidence: 0.90,
-				Source:     "pricecharting",
+				Source:     pricing.SourcePriceCharting,
 				PriceDate:  now,
 			}
 			if err := f.priceRepo.StorePrice(ctx, pcEntry); err != nil {
