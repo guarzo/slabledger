@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/guarzo/slabledger/internal/domain/observability"
+	"github.com/guarzo/slabledger/internal/domain/pricing"
 )
 
 // MappingSaver persists card ID mappings discovered during cert resolution.
@@ -111,7 +112,7 @@ func (r *CertResolver) ResolveCardIDsByCerts(ctx context.Context, certs []string
 				if cardName == "" {
 					cardName = detail.Card.Description
 				}
-				if err := r.mappingSaver.SaveExternalID(ctx, cardName, detail.Card.Set, detail.Card.Number, "cardhedger", detail.Card.CardID); err != nil {
+				if err := r.mappingSaver.SaveExternalID(ctx, cardName, detail.Card.Set, detail.Card.Number, pricing.SourceCardHedger, detail.Card.CardID); err != nil {
 					if r.logger != nil {
 						r.logger.Debug(ctx, "failed to cache cert mapping",
 							observability.String("cert", cert),

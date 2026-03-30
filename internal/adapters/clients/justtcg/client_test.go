@@ -11,59 +11,83 @@ import (
 	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
 )
 
-func TestSearchCards_Success(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/cards" {
-			t.Errorf("unexpected path: %s", r.URL.Path)
-		}
-		q := r.URL.Query()
-		if got := q.Get("q"); got != "charizard" {
-			t.Errorf("q = %q, want charizard", got)
-		}
-		if got := q.Get("game"); got != "pokemon" {
-			t.Errorf("game = %q, want pokemon", got)
-		}
-		if got := q.Get("set"); got != "base-set" {
-			t.Errorf("set = %q, want base-set", got)
-		}
-
-		resp := cardsResponse{
-			Data: []Card{
-				{CardID: "card-1", Name: "Charizard", SetName: "Base Set"},
+func TestSearchCards(t *testing.T) {
+	tests := []struct {
+		name        string
+		apiKey      string
+		setupServer func(t *testing.T) *httptest.Server
+		wantErr     bool
+		wantCode    apperrors.ErrorCode
+		wantCards   int
+	}{
+		{
+			name:   "success",
+			apiKey: "test-key",
+			setupServer: func(t *testing.T) *httptest.Server {
+				t.Helper()
+				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					if r.URL.Path != "/v1/cards" {
+						t.Errorf("unexpected path: %s", r.URL.Path)
+					}
+					q := r.URL.Query()
+					if got := q.Get("q"); got != "charizard" {
+						t.Errorf("q = %q, want charizard", got)
+					}
+					if got := q.Get("game"); got != "pokemon" {
+						t.Errorf("game = %q, want pokemon", got)
+					}
+					if got := q.Get("set"); got != "base-set" {
+						t.Errorf("set = %q, want base-set", got)
+					}
+					resp := cardsResponse{
+						Data: []Card{{CardID: "card-1", Name: "Charizard", SetName: "Base Set"}},
+					}
+					w.Header().Set("Content-Type", "application/json")
+					json.NewEncoder(w).Encode(resp) //nolint:errcheck
+				}))
 			},
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp) //nolint:errcheck
-	}))
-	defer server.Close()
+			wantCards: 1,
+		},
+		{
+			name:     "no API key",
+			apiKey:   "",
+			wantErr:  true,
+			wantCode: apperrors.ErrCodeConfigMissing,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := NewClient(tt.apiKey)
+			if tt.setupServer != nil {
+				server := tt.setupServer(t)
+				defer server.Close()
+				client.baseURL = server.URL + "/v1"
+			}
 
-	client := NewClient("test-key")
-	client.baseURL = server.URL + "/v1"
-
-	cards, err := client.SearchCards(context.Background(), "charizard", "base-set")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(cards) != 1 {
-		t.Fatalf("got %d cards, want 1", len(cards))
-	}
-	if cards[0].CardID != "card-1" {
-		t.Errorf("card ID = %q, want card-1", cards[0].CardID)
-	}
-}
-
-func TestSearchCards_NoAPIKey(t *testing.T) {
-	client := NewClient("")
-	_, err := client.SearchCards(context.Background(), "pikachu", "")
-	if err == nil {
-		t.Fatal("expected error for missing API key")
-	}
-	var appErr *apperrors.AppError
-	if !errors.As(err, &appErr) {
-		t.Fatalf("expected *apperrors.AppError, got %T", err)
-	}
-	if appErr.Code != apperrors.ErrCodeConfigMissing {
-		t.Errorf("code = %v, want %v", appErr.Code, apperrors.ErrCodeConfigMissing)
+			cards, err := client.SearchCards(context.Background(), "charizard", "base-set")
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error")
+				}
+				var appErr *apperrors.AppError
+				if !errors.As(err, &appErr) {
+					t.Fatalf("expected *apperrors.AppError, got %T", err)
+				}
+				if appErr.Code != tt.wantCode {
+					t.Errorf("code = %v, want %v", appErr.Code, tt.wantCode)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(cards) != tt.wantCards {
+				t.Fatalf("got %d cards, want %d", len(cards), tt.wantCards)
+			}
+			if tt.wantCards > 0 && cards[0].CardID != "card-1" {
+				t.Errorf("card ID = %q, want card-1", cards[0].CardID)
+			}
+		})
 	}
 }
 
@@ -92,51 +116,75 @@ func TestSearchSets_Success(t *testing.T) {
 	}
 }
 
-func TestBatchLookup_Success(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			t.Errorf("method = %s, want POST", r.Method)
-		}
-		resp := cardsResponse{
-			Data: []Card{
-				{CardID: "card-1", Name: "Charizard"},
-				{CardID: "card-2", Name: "Blastoise"},
+func TestBatchLookup(t *testing.T) {
+	tests := []struct {
+		name        string
+		ids         []string
+		setupServer func() *httptest.Server
+		wantErr     bool
+		wantCards   int
+		wantNil     bool
+	}{
+		{
+			name: "success",
+			ids:  []string{"card-1", "card-2"},
+			setupServer: func() *httptest.Server {
+				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					if r.Method != http.MethodPost {
+						t.Errorf("method = %s, want POST", r.Method)
+					}
+					resp := cardsResponse{
+						Data: []Card{
+							{CardID: "card-1", Name: "Charizard"},
+							{CardID: "card-2", Name: "Blastoise"},
+						},
+					}
+					w.Header().Set("Content-Type", "application/json")
+					json.NewEncoder(w).Encode(resp) //nolint:errcheck
+				}))
 			},
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp) //nolint:errcheck
-	}))
-	defer server.Close()
-
-	client := NewClient("test-key")
-	client.baseURL = server.URL + "/v1"
-
-	cards, err := client.BatchLookup(context.Background(), []string{"card-1", "card-2"})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+			wantCards: 2,
+		},
+		{
+			name:    "empty input",
+			ids:     nil,
+			wantNil: true,
+		},
+		{
+			name:    "too many IDs",
+			ids:     make([]string, 101),
+			wantErr: true,
+		},
 	}
-	if len(cards) != 2 {
-		t.Fatalf("got %d cards, want 2", len(cards))
-	}
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := NewClient("test-key")
+			if tt.setupServer != nil {
+				server := tt.setupServer()
+				defer server.Close()
+				client.baseURL = server.URL + "/v1"
+			}
 
-func TestBatchLookup_EmptyInput(t *testing.T) {
-	client := NewClient("test-key")
-	cards, err := client.BatchLookup(context.Background(), nil)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if cards != nil {
-		t.Errorf("expected nil for empty input, got %d cards", len(cards))
-	}
-}
-
-func TestBatchLookup_TooMany(t *testing.T) {
-	client := NewClient("test-key")
-	ids := make([]string, 101)
-	_, err := client.BatchLookup(context.Background(), ids)
-	if err == nil {
-		t.Fatal("expected error for >100 items")
+			cards, err := client.BatchLookup(context.Background(), tt.ids)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if tt.wantNil {
+				if cards != nil {
+					t.Errorf("expected nil, got %d cards", len(cards))
+				}
+				return
+			}
+			if len(cards) != tt.wantCards {
+				t.Fatalf("got %d cards, want %d", len(cards), tt.wantCards)
+			}
+		})
 	}
 }
 

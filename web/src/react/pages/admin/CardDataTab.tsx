@@ -21,8 +21,8 @@ function CacheBar({ finalized, total }: { finalized: number; total: number }) {
   return <ProgressBar value={finalized} max={total} warningThreshold={80} dangerThreshold={50} invertColors />;
 }
 
-export function CardDataTab() {
-  const { data, error } = useAdminCacheStats();
+export function CardDataTab({ enabled = true }: { enabled?: boolean }) {
+  const { data, error } = useAdminCacheStats({ enabled });
   const [sortField, setSortField] = useState<'name' | 'totalCards' | 'status' | 'releaseDate'>('name');
   const [sortAsc, setSortAsc] = useState(true);
   const errorMessage = error instanceof Error ? error.message : error ? 'Failed to load cache stats' : null;
@@ -155,7 +155,7 @@ export function CardDataTab() {
 
       <section>
         <h3 className="text-base font-semibold text-[var(--text)] mb-4">Missing Cards</h3>
-        <MissingCardsTab />
+        <MissingCardsTab enabled={enabled} />
       </section>
     </div>
   );

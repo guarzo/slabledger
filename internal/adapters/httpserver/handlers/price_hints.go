@@ -5,6 +5,7 @@ import (
 
 	"github.com/guarzo/slabledger/internal/domain/fusion"
 	"github.com/guarzo/slabledger/internal/domain/observability"
+	"github.com/guarzo/slabledger/internal/domain/pricing"
 )
 
 // PriceHintsHandler handles CRUD operations for user-provided price hints.
@@ -80,7 +81,7 @@ func (h *PriceHintsHandler) handleSave(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "cardName, setName, cardNumber, provider, and externalId are required")
 		return
 	}
-	if req.Provider != "pricecharting" && req.Provider != "cardhedger" {
+	if req.Provider != pricing.SourcePriceCharting && req.Provider != pricing.SourceCardHedger {
 		writeError(w, http.StatusBadRequest, "provider must be 'pricecharting' or 'cardhedger'")
 		return
 	}
@@ -111,7 +112,7 @@ func (h *PriceHintsHandler) handleDelete(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusBadRequest, "cardName, setName, cardNumber, and provider are required")
 		return
 	}
-	if req.Provider != "pricecharting" && req.Provider != "cardhedger" {
+	if req.Provider != pricing.SourcePriceCharting && req.Provider != pricing.SourceCardHedger {
 		writeError(w, http.StatusBadRequest, "provider must be 'pricecharting' or 'cardhedger'")
 		return
 	}

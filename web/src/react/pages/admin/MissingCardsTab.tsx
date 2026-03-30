@@ -17,8 +17,8 @@ const statusBadge: Record<string, { bg: string; text: string; label: string }> =
   rejected: { bg: 'bg-[var(--danger-bg)]', text: 'text-[var(--danger)]', label: 'Rejected' },
 };
 
-export function MissingCardsTab() {
-  const { data: items, error, isLoading } = useCardRequests();
+export function MissingCardsTab({ enabled = true }: { enabled?: boolean }) {
+  const { data: items, error, isLoading } = useCardRequests({ enabled });
   const submitOne = useSubmitCardRequest();
   const submitAll = useSubmitAllCardRequests();
   const [submittingId, setSubmittingId] = useState<number | null>(null);

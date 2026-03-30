@@ -131,7 +131,7 @@ func (a *CardHedgerAdapter) Available() bool {
 
 // Name returns the source identifier.
 func (a *CardHedgerAdapter) Name() string {
-	return "cardhedger"
+	return pricing.SourceCardHedger
 }
 
 // cardHedgerMappingMaxAge is the maximum age for cached CardHedger ID mappings.
@@ -236,7 +236,7 @@ func (a *CardHedgerAdapter) resolveCardID(ctx context.Context, cardName, setName
 // before making any API calls. Returns (id, true) if found, ("", false) otherwise.
 func (a *CardHedgerAdapter) resolveFromHintOrCache(ctx context.Context, cardName, setName, normalizedNumber string) (string, bool) {
 	if a.hintResolver != nil {
-		hint, err := a.hintResolver.GetHint(ctx, cardName, setName, normalizedNumber, "cardhedger")
+		hint, err := a.hintResolver.GetHint(ctx, cardName, setName, normalizedNumber, pricing.SourceCardHedger)
 		if err != nil {
 			if a.logger != nil {
 				a.logger.Debug(ctx, "hint resolution failed",
@@ -250,7 +250,7 @@ func (a *CardHedgerAdapter) resolveFromHintOrCache(ctx context.Context, cardName
 	}
 
 	if a.resolver != nil {
-		cached, err := a.resolver.GetExternalIDFresh(ctx, cardName, setName, normalizedNumber, "cardhedger", cardHedgerMappingMaxAge)
+		cached, err := a.resolver.GetExternalIDFresh(ctx, cardName, setName, normalizedNumber, pricing.SourceCardHedger, cardHedgerMappingMaxAge)
 		if err != nil {
 			if a.logger != nil {
 				a.logger.Warn(ctx, "card ID mapping lookup failed",
@@ -311,7 +311,7 @@ func (a *CardHedgerAdapter) evaluateAndCacheResult(
 	externalID := resp.Match.CardID
 
 	if cardhedger.ShouldCacheMatch(confidence) && a.resolver != nil {
-		if err := a.resolver.SaveExternalID(ctx, cardName, setName, normalizedNumber, "cardhedger", externalID); err != nil {
+		if err := a.resolver.SaveExternalID(ctx, cardName, setName, normalizedNumber, pricing.SourceCardHedger, externalID); err != nil {
 			if a.logger != nil {
 				a.logger.Warn(ctx, "failed to cache card ID mapping",
 					observability.String("card", cardName),
@@ -421,7 +421,7 @@ func convertCardHedgerWithDetails(resp *cardhedger.AllPricesByCardResponse) (map
 				Value:    price,
 				Currency: "USD",
 				Source: fusion.DataSource{
-					Name:       "cardhedger",
+					Name:       pricing.SourceCardHedger,
 					Freshness:  0,
 					Volume:     0,
 					Confidence: 0.85,

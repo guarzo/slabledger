@@ -190,7 +190,7 @@ func (s *CardHedgerBatchScheduler) discoverCard(ctx context.Context, name, setNa
 	// Cache only high-confidence matches; moderate-confidence matches
 	// still get priced in this batch but aren't persisted for future runs.
 	if cardhedger.ShouldCacheMatch(confidence) && s.mappingSaver != nil {
-		if err := s.mappingSaver.SaveExternalID(ctx, name, setName, cardNumber, "cardhedger", externalID); err != nil {
+		if err := s.mappingSaver.SaveExternalID(ctx, name, setName, cardNumber, pricing.SourceCardHedger, externalID); err != nil {
 			s.logger.Warn(ctx, "cardhedger discovery: failed to save mapping",
 				observability.String("card", name),
 				observability.Err(err))
@@ -234,7 +234,7 @@ func (s *CardHedgerBatchScheduler) recordAPICall(endpoint string, statusCode int
 		defer cancelTrack()
 		//nolint:errcheck // best-effort tracking
 		s.apiTracker.RecordAPICall(ctxTrack, &pricing.APICallRecord{
-			Provider:   "cardhedger",
+			Provider:   pricing.SourceCardHedger,
 			Endpoint:   endpoint,
 			StatusCode: sc,
 			Error:      errMsg,
@@ -275,7 +275,7 @@ func (s *CardHedgerBatchScheduler) storePrices(ctx context.Context, cardName, se
 			Grade:             gp.Grade,
 			PriceCents:        mathutil.ToCents(price),
 			Confidence:        0.85,
-			Source:            "cardhedger",
+			Source:            pricing.SourceCardHedger,
 			FusionSourceCount: 1,
 			FusionMethod:      "batch",
 			PriceDate:         now,
@@ -315,7 +315,7 @@ func (s *CardHedgerBatchScheduler) DiscoverAndPrice(ctx context.Context, cards [
 	}
 
 	// Load existing mappings to skip already-mapped cards
-	existingMappings, err := s.mappingLister.ListByProvider(ctx, "cardhedger")
+	existingMappings, err := s.mappingLister.ListByProvider(ctx, pricing.SourceCardHedger)
 	if err != nil {
 		s.logger.Warn(ctx, "cardhedger post-import: failed to list mappings", observability.Err(err))
 		return 0, 0
@@ -410,7 +410,7 @@ func (s *CardHedgerBatchScheduler) recordDiscoveryFailure(ctx context.Context, c
 		CardName:      cardName,
 		SetName:       setName,
 		CardNumber:    cardNumber,
-		Provider:      "cardhedger",
+		Provider:      pricing.SourceCardHedger,
 		FailureReason: reason,
 		Query:         query,
 	})
@@ -422,5 +422,5 @@ func (s *CardHedgerBatchScheduler) clearDiscoveryFailure(ctx context.Context, ca
 		return
 	}
 	//nolint:errcheck // best-effort tracking
-	s.failureTracker.ClearDiscoveryFailure(ctx, cardName, setName, cardNumber, "cardhedger")
+	s.failureTracker.ClearDiscoveryFailure(ctx, cardName, setName, cardNumber, pricing.SourceCardHedger)
 }

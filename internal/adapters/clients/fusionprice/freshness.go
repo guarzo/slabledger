@@ -184,7 +184,7 @@ func (f *FusionPriceProvider) supplementFromDB(ctx context.Context, card pricing
 // supplementCardHedgerFromDB queries the DB for CardHedger prices stored by the
 // batch/delta schedulers and adds them as EstimateGradeDetail entries.
 func (f *FusionPriceProvider) supplementCardHedgerFromDB(ctx context.Context, price *pricing.Price, card pricing.Card, freshness time.Duration) {
-	f.supplementFromDB(ctx, card, "cardhedger", freshness, func(gk gradeDBKey, entry *pricing.PriceEntry) {
+	f.supplementFromDB(ctx, card, pricing.SourceCardHedger, freshness, func(gk gradeDBKey, entry *pricing.PriceEntry) {
 		if price.GradeDetails == nil {
 			price.GradeDetails = make(map[string]*pricing.GradeDetail)
 		}
@@ -210,7 +210,7 @@ func (f *FusionPriceProvider) supplementPCGradesFromDB(ctx context.Context, pric
 	}
 	var pcg pricing.GradedPrices
 	found := false
-	f.supplementFromDB(ctx, card, "pricecharting", freshness, func(gk gradeDBKey, entry *pricing.PriceEntry) {
+	f.supplementFromDB(ctx, card, pricing.SourcePriceCharting, freshness, func(gk gradeDBKey, entry *pricing.PriceEntry) {
 		found = true
 		pricing.SetGradePrice(&pcg, gk.grade, entry.PriceCents)
 	})
@@ -227,7 +227,7 @@ func (f *FusionPriceProvider) supplementJustTCGFromDB(ctx context.Context, price
 	if f.priceRepo == nil || price.Grades.RawNMCents > 0 {
 		return
 	}
-	entries, err := f.priceRepo.GetLatestPricesBySource(ctx, card.Name, card.Set, card.Number, "justtcg", freshness)
+	entries, err := f.priceRepo.GetLatestPricesBySource(ctx, card.Name, card.Set, card.Number, pricing.SourceJustTCG, freshness)
 	if err != nil || len(entries) == 0 {
 		return
 	}
@@ -286,7 +286,7 @@ func (f *FusionPriceProvider) convertEntryToPrice(entry *pricing.PriceEntry) *pr
 func buildSourcesFromData(price *pricing.Price) []string {
 	var sources []string
 	if price.PCGrades != nil {
-		sources = append(sources, "pricecharting")
+		sources = append(sources, pricing.SourcePriceCharting)
 	}
 	if price.GradeDetails != nil {
 		hasEstimate := false
@@ -299,8 +299,11 @@ func buildSourcesFromData(price *pricing.Price) []string {
 			}
 		}
 		if hasEstimate {
-			sources = append(sources, "cardhedger")
+			sources = append(sources, pricing.SourceCardHedger)
 		}
+	}
+	if price.Grades.RawNMCents > 0 {
+		sources = append(sources, pricing.SourceJustTCG)
 	}
 	return sources
 }

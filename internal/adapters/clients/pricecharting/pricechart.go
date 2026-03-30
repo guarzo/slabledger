@@ -166,7 +166,7 @@ func applyCBOverrides(dst *resilience.CircuitBreakerConfig, src *resilience.Circ
 
 // Name implements pricing.PriceProvider interface
 func (p *PriceCharting) Name() string {
-	return "pricecharting"
+	return pricing.SourcePriceCharting
 }
 
 // GetPrice implements pricing.PriceProvider interface

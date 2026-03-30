@@ -306,7 +306,9 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	var justTCGClient *justtcg.Client
 	if cfg.Adapters.JustTCGKey != "" {
 		justTCGClient = justtcg.NewClient(cfg.Adapters.JustTCGKey, justtcg.WithLogger(logger))
-		logger.Info(ctx, "JustTCG client initialized")
+		logger.Info(ctx, "JustTCG client initialized",
+			observability.Bool("scheduler_enabled", cfg.JustTCG.Enabled),
+			observability.Int("daily_budget", cfg.JustTCG.DailyBudget))
 	}
 
 	// Create cert sweeper for periodic cert→card_id resolution in the CardHedger batch scheduler.

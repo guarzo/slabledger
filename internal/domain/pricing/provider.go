@@ -202,6 +202,9 @@ type SalesVelocity struct {
 // Source identifies where a price came from
 type Source string
 
+// Source name constants — untyped so they work with both Source and string fields.
 const (
-	SourcePriceCharting Source = "pricecharting"
+	SourcePriceCharting = "pricecharting"
+	SourceCardHedger    = "cardhedger"
+	SourceJustTCG       = "justtcg"
 )

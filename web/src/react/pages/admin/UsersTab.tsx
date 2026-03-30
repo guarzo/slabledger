@@ -38,8 +38,8 @@ function UserRow({ u }: { u: AdminUser }) {
   );
 }
 
-export function UsersTab() {
-  const { data: users, error, isLoading } = useAdminUsers();
+export function UsersTab({ enabled = true }: { enabled?: boolean }) {
+  const { data: users, error, isLoading } = useAdminUsers({ enabled });
 
   return (
     <div className="space-y-8 mt-4">
@@ -78,7 +78,7 @@ export function UsersTab() {
 
       <section>
         <h3 className="text-base font-semibold text-[var(--text)] mb-4">Email Allowlist</h3>
-        <AllowlistTab />
+        <AllowlistTab enabled={enabled} />
       </section>
     </div>
   );

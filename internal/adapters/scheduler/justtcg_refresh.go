@@ -18,12 +18,19 @@ type JustTCGRefreshConfig struct {
 	RateInterval time.Duration // Pause between calls (default: 600ms)
 }
 
+// JustTCGClient defines the JustTCG API surface used by the refresh scheduler.
+type JustTCGClient interface {
+	Available() bool
+	SearchCards(ctx context.Context, query, set string) ([]justtcg.Card, error)
+	BatchLookup(ctx context.Context, cardIDs []string) ([]justtcg.Card, error)
+}
+
 // JustTCGRefreshScheduler refreshes JustTCG NM prices for unsold campaign cards.
 // Phase 1: resolve unmapped cards via SearchCards + save mapping.
 // Phase 2: batch fetch already-mapped cards via BatchLookup.
 type JustTCGRefreshScheduler struct {
 	StopHandle
-	client        *justtcg.Client
+	client        JustTCGClient
 	priceRepo     pricing.PriceRepository
 	apiTracker    pricing.APITracker
 	mappingLister CardIDMappingLister
@@ -43,7 +50,7 @@ func WithJustTCGAPITracker(t pricing.APITracker) JustTCGRefreshOption {
 
 // NewJustTCGRefreshScheduler creates a new JustTCG NM price refresh scheduler.
 func NewJustTCGRefreshScheduler(
-	client *justtcg.Client,
+	client JustTCGClient,
 	priceRepo pricing.PriceRepository,
 	mappingLister CardIDMappingLister,
 	mappingSaver CardIDMappingSaver,
@@ -132,7 +139,7 @@ func (s *JustTCGRefreshScheduler) runBatch(ctx context.Context) {
 	cards = deduped
 
 	// Load existing JustTCG mappings.
-	mappings, err := s.mappingLister.ListByProvider(ctx, "justtcg")
+	mappings, err := s.mappingLister.ListByProvider(ctx, pricing.SourceJustTCG)
 	if err != nil {
 		s.logger.Warn(ctx, "justtcg refresh: failed to list mappings", observability.Err(err))
 		return
@@ -176,7 +183,9 @@ func (s *JustTCGRefreshScheduler) runBatch(ctx context.Context) {
 			break
 		}
 
-		results, err := s.client.SearchCards(ctx, c.CardName, "")
+		callStart := time.Now()
+		results, err := s.client.SearchCards(ctx, c.CardName, c.SetName)
+		s.recordAPICall("search", 0, err, time.Since(callStart).Milliseconds())
 		budget--
 		if err != nil {
 			s.logger.Debug(ctx, "justtcg refresh: search failed",
@@ -210,7 +219,7 @@ func (s *JustTCGRefreshScheduler) runBatch(ctx context.Context) {
 
 		// Save mapping for future runs.
 		if s.mappingSaver != nil {
-			if err := s.mappingSaver.SaveExternalID(ctx, c.CardName, c.SetName, c.CardNumber, "justtcg", matched.CardID); err != nil {
+			if err := s.mappingSaver.SaveExternalID(ctx, c.CardName, c.SetName, c.CardNumber, pricing.SourceJustTCG, matched.CardID); err != nil {
 				s.logger.Warn(ctx, "justtcg refresh: failed to save mapping",
 					observability.String("card", c.CardName),
 					observability.Err(err))
@@ -235,10 +244,7 @@ func (s *JustTCGRefreshScheduler) runBatch(ctx context.Context) {
 	// Phase 2: batch fetch already-mapped cards (groups of 100).
 	const batchSize = 100
 	for i := 0; i < len(alreadyMapped); i += batchSize {
-		end := i + batchSize
-		if end > len(alreadyMapped) {
-			end = len(alreadyMapped)
-		}
+		end := min(i+batchSize, len(alreadyMapped))
 		batch := alreadyMapped[i:end]
 
 		if !s.checkBudget(ctx, &budget) {
@@ -250,7 +256,9 @@ func (s *JustTCGRefreshScheduler) runBatch(ctx context.Context) {
 			ids[j] = mc.externalID
 		}
 
+		callStart := time.Now()
 		results, err := s.client.BatchLookup(ctx, ids)
+		s.recordAPICall("batch-lookup", 0, err, time.Since(callStart).Milliseconds())
 		budget--
 		if err != nil {
 			s.logger.Warn(ctx, "justtcg refresh: batch lookup failed", observability.Err(err))
@@ -303,8 +311,8 @@ func (s *JustTCGRefreshScheduler) storeNMPrice(ctx context.Context, cardName, se
 		CardNumber:        cardNumber,
 		Grade:             pricing.GradeRawNM.DisplayLabel(),
 		PriceCents:        mathutil.ToCents(nmPrice),
-		Confidence:        0.90,
-		Source:            "justtcg",
+		Confidence:        0.85,
+		Source:            pricing.SourceJustTCG,
 		FusionSourceCount: 1,
 		FusionMethod:      "justtcg-refresh",
 		PriceDate:         now,
@@ -326,12 +334,39 @@ func (s *JustTCGRefreshScheduler) checkBudget(ctx context.Context, budget *int) 
 		s.logger.Info(ctx, "justtcg refresh: daily budget exhausted")
 		return false
 	}
-	if s.client.DailyCalls() >= int64(s.config.DailyBudget) {
-		s.logger.Info(ctx, "justtcg refresh: client daily call limit reached",
-			observability.Int("daily_calls", int(s.client.DailyCalls())))
-		return false
-	}
 	return true
+}
+
+// recordAPICall asynchronously records an API call for dashboard visibility.
+func (s *JustTCGRefreshScheduler) recordAPICall(endpoint string, statusCode int, err error, latencyMS int64) {
+	if s.apiTracker == nil {
+		return
+	}
+	errMsg := ""
+	if err != nil {
+		errMsg = err.Error()
+	}
+	sc := statusCode
+	if sc == 0 && err != nil {
+		sc = 500
+	}
+	if sc == 0 && err == nil {
+		sc = 200
+	}
+	ts := time.Now()
+	go func() {
+		ctxTrack, cancelTrack := context.WithTimeout(context.Background(), 200*time.Millisecond)
+		defer cancelTrack()
+		//nolint:errcheck // best-effort tracking
+		s.apiTracker.RecordAPICall(ctxTrack, &pricing.APICallRecord{
+			Provider:   pricing.SourceJustTCG,
+			Endpoint:   endpoint,
+			StatusCode: sc,
+			Error:      errMsg,
+			LatencyMS:  latencyMS,
+			Timestamp:  ts,
+		})
+	}()
 }
 
 // rateLimitSleep pauses for the configured rate interval.

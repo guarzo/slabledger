@@ -261,7 +261,7 @@ func (s *PriceRefreshScheduler) refreshBatch(ctx context.Context) {
 					}
 					if sr.Success {
 						sourceStatsMap[sr.Source].success++
-						if sr.Source != "pricecharting" {
+						if sr.Source != pricing.SourcePriceCharting {
 							secondaryOK++
 						}
 					} else {
@@ -350,7 +350,7 @@ func (s *PriceRefreshScheduler) logAPIUsageSummary(ctx context.Context) {
 		return
 	}
 
-	providers := []string{"cardhedger", "pricecharting", "justtcg"}
+	providers := []string{pricing.SourceCardHedger, pricing.SourcePriceCharting, pricing.SourceJustTCG}
 	for _, provider := range providers {
 		usage, err := s.apiTracker.GetAPIUsage(ctx, provider)
 		if err != nil {

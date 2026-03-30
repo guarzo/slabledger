@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
-	"github.com/guarzo/slabledger/internal/adapters/clients/justtcg"
 	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
 	"github.com/guarzo/slabledger/internal/domain/advisor"
 	"github.com/guarzo/slabledger/internal/domain/ai"
@@ -74,7 +73,7 @@ type BuildDeps struct {
 	PicksGenerator PicksGenerator
 
 	// JustTCG dependencies (optional)
-	JustTCGClient *justtcg.Client
+	JustTCGClient JustTCGClient
 
 	// Card Ladder dependencies (optional)
 	CardLadderClient         *cardladder.Client

@@ -161,7 +161,7 @@ func (s *CardHedgerRefreshScheduler) pollUpdates(ctx context.Context) {
 		defer cancelTrack()
 		//nolint:errcheck // best-effort tracking
 		s.apiTracker.RecordAPICall(ctxTrack, &pricing.APICallRecord{
-			Provider:   "cardhedger",
+			Provider:   pricing.SourceCardHedger,
 			Endpoint:   "delta/price-updates",
 			StatusCode: statusCode,
 			Error:      errMsg,
@@ -196,7 +196,7 @@ func (s *CardHedgerRefreshScheduler) pollUpdates(ctx context.Context) {
 
 	for _, update := range resp.Updates {
 		// Look up local card identity from the CardHedger card_id
-		cardName, setName, err := s.idLookup.GetLocalCard(ctx, "cardhedger", update.CardID)
+		cardName, setName, err := s.idLookup.GetLocalCard(ctx, pricing.SourceCardHedger, update.CardID)
 		if err != nil {
 			s.logger.Warn(ctx, "failed to look up card mapping",
 				observability.String("card_id", update.CardID),
@@ -239,7 +239,7 @@ func (s *CardHedgerRefreshScheduler) pollUpdates(ctx context.Context) {
 			Grade:             update.Grade,
 			PriceCents:        priceCents,
 			Confidence:        0.85,
-			Source:            "cardhedger",
+			Source:            pricing.SourceCardHedger,
 			FusionSourceCount: 1,
 			FusionMethod:      "delta_poll",
 			PriceDate:         now,

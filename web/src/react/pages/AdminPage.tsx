@@ -66,8 +66,8 @@ export default function AdminPage() {
       <Tabs.Root value={activeTab} onValueChange={setActiveTab}>
         <TabNavigation tabs={adminTabs} ariaLabel="Admin tabs" />
 
-        <Tabs.Content value="users"><UsersTab /></Tabs.Content>
-        <Tabs.Content value="card-data"><CardDataTab /></Tabs.Content>
+        <Tabs.Content value="users"><UsersTab enabled={activeTab === 'users'} /></Tabs.Content>
+        <Tabs.Content value="card-data"><CardDataTab enabled={activeTab === 'card-data'} /></Tabs.Content>
         <Tabs.Content value="pricing"><PricingTab enabled={activeTab === 'pricing'} /></Tabs.Content>
         <Tabs.Content value="ai"><AITab enabled={activeTab === 'ai'} /></Tabs.Content>
         <Tabs.Content value="integrations"><IntegrationsTab enabled={activeTab === 'integrations'} /></Tabs.Content>

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/observability"
+	"github.com/guarzo/slabledger/internal/domain/pricing"
 	"github.com/guarzo/slabledger/internal/domain/pricing/analysis"
 )
 
@@ -46,7 +47,7 @@ func DefaultFusionConfig() FusionConfig {
 		MinSources:       2,   // At least 2 sources for good confidence
 		OutlierThreshold: 1.5, // Standard IQR multiplier for outlier detection
 		SourceWeights: map[string]float64{
-			"cardhedger": 0.85, // Multi-platform price estimates
+			pricing.SourceCardHedger: 0.85, // Multi-platform price estimates
 		},
 		DefaultWeight: 0.6, // Default for unknown sources
 	}

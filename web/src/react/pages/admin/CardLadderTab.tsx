@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useCardLadderStatus, useSaveCardLadderConfig, useTriggerCardLadderRefresh } from '../../queries/useAdminQueries';
 import { useToast } from '../../contexts/ToastContext';
 import { CardShell } from '../../ui/CardShell';
 import Button from '../../ui/Button';
 
 export function CardLadderTab({ enabled = true }: { enabled?: boolean }) {
-  const { data: status, isLoading, error } = useCardLadderStatus(enabled);
+  const { data: status, isLoading, error } = useCardLadderStatus({ enabled });
   const saveMutation = useSaveCardLadderConfig();
   const refreshMutation = useTriggerCardLadderRefresh();
   const toast = useToast();
@@ -14,6 +14,13 @@ export function CardLadderTab({ enabled = true }: { enabled?: boolean }) {
   const [password, setPassword] = useState('');
   const [collectionId, setCollectionId] = useState('');
   const [firebaseApiKey, setFirebaseApiKey] = useState('');
+
+  useEffect(() => {
+    if (status?.configured) {
+      setEmail(status.email ?? '');
+      setCollectionId(status.collectionId ?? '');
+    }
+  }, [status?.configured, status?.email, status?.collectionId]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -128,11 +135,12 @@ export function CardLadderTab({ enabled = true }: { enabled?: boolean }) {
             <label htmlFor="cl-firebase-key" className="block text-xs text-[var(--text-muted)] mb-1">Firebase API Key</label>
             <input
               id="cl-firebase-key"
-              type="text"
+              type="password"
               value={firebaseApiKey}
               onChange={(e) => setFirebaseApiKey(e.target.value)}
               placeholder="AIza..."
               required
+              autoComplete="off"
               className="w-full rounded-md bg-[var(--surface-2)] border border-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--brand-500)]"
             />
             <p className="text-xs text-[var(--text-muted)] mt-1">

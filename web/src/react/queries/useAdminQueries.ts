@@ -2,17 +2,19 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../js/api';
 import { queryKeys } from './queryKeys';
 
-export function useAllowlist() {
+export function useAllowlist(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: queryKeys.admin.allowlist,
     queryFn: () => api.getAdminAllowlist(),
+    enabled: options?.enabled ?? true,
   });
 }
 
-export function useAdminUsers() {
+export function useAdminUsers(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: queryKeys.admin.users,
     queryFn: () => api.getAdminUsers(),
+    enabled: options?.enabled ?? true,
   });
 }
 
@@ -133,12 +135,12 @@ export function useResolvePriceFlag() {
   });
 }
 
-export function useCardLadderStatus(enabled = true) {
+export function useCardLadderStatus(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: queryKeys.admin.cardLadderStatus,
     queryFn: () => api.getCardLadderStatus(),
     staleTime: 60_000,
-    enabled,
+    enabled: options?.enabled ?? true,
   });
 }
 

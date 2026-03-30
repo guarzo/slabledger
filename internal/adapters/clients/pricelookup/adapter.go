@@ -123,7 +123,7 @@ func (a *Adapter) GetMarketSnapshot(ctx context.Context, card campaigns.CardIden
 		key := gradeDetailKey(grade)
 		if detail, ok := price.GradeDetails[key]; ok && detail != nil && detail.Estimate != nil && detail.Estimate.PriceCents > 0 {
 			snap.EstimatedValueCents = int(detail.Estimate.PriceCents)
-			snap.EstimateSource = "cardhedger"
+			snap.EstimateSource = pricing.SourceCardHedger
 		}
 	}
 
