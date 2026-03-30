@@ -15,6 +15,7 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/clients/httpx"
 	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
 	"github.com/guarzo/slabledger/internal/domain/observability"
+	"github.com/guarzo/slabledger/internal/domain/pricing"
 )
 
 const (
@@ -84,7 +85,7 @@ func (c *Client) Available() bool {
 
 // Name returns the client name for logging.
 func (c *Client) Name() string {
-	return "cardhedger"
+	return pricing.SourceCardHedger
 }
 
 // Close closes the client.

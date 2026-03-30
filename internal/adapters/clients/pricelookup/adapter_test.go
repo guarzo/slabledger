@@ -429,6 +429,48 @@ func TestGetLastSoldCents_PSA7(t *testing.T) {
 	}
 }
 
+func TestGetLastSoldCents_RawNMBehavior(t *testing.T) {
+	tests := []struct {
+		name     string
+		price    *pricing.Price
+		expected int
+	}{
+		{
+			name: "prefers RawNMCents when available",
+			price: &pricing.Price{
+				Grades:          pricing.GradedPrices{RawCents: 500, RawNMCents: 800},
+				LastSoldByGrade: &pricing.LastSoldByGrade{},
+			},
+			expected: 800,
+		},
+		{
+			name: "falls back to LastSoldByGrade.Raw when RawNMCents is 0",
+			price: &pricing.Price{
+				Grades:          pricing.GradedPrices{RawCents: 500, RawNMCents: 0},
+				LastSoldByGrade: &pricing.LastSoldByGrade{Raw: &pricing.GradeSaleInfo{LastSoldPrice: 5.00}},
+			},
+			expected: 500,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := &mockPriceProvider{
+				lookupFn: func(_ context.Context, _ string, _ domainCards.Card) (*pricing.Price, error) {
+					return tt.price, nil
+				},
+			}
+			adapter := NewAdapter(mock)
+			cents, err := adapter.GetLastSoldCents(context.Background(), testCard, 0)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if cents != tt.expected {
+				t.Errorf("GetLastSoldCents(grade=0) = %d, want %d", cents, tt.expected)
+			}
+		})
+	}
+}
+
 func TestGetMarketSnapshot_FullSnapshot(t *testing.T) {
 	mock := &mockPriceProvider{
 		lookupFn: func(_ context.Context, _ string, _ domainCards.Card) (*pricing.Price, error) {

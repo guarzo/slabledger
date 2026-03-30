@@ -200,7 +200,7 @@ export function PriceFlagsTab({ enabled = true }: { enabled?: boolean }) {
           <p className="text-sm">No {filter === 'all' ? '' : filter} flags found.</p>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="max-h-[min(600px,calc(100vh-350px))] overflow-y-auto scrollbar-dark space-y-3">
           {flags.map((flag) => (
             <FlagCard key={flag.id} flag={flag} />
           ))}

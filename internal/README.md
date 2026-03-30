@@ -417,6 +417,52 @@ if cfg.MyWorkerEnabled {
 
 ---
 
+### Example: Adding a New Domain Error
+
+**Scenario**: Add a custom error to a domain package.
+
+**Step 1**: Add error code in `internal/domain/<package>/errors.go`:
+```go
+ErrCodeMyError errors.ErrorCode = "ERR_MY_ERROR"
+```
+
+**Step 2**: Add sentinel error:
+```go
+var ErrMyError = errors.NewAppError(ErrCodeMyError, "description")
+```
+
+**Step 3**: Add predicate:
+```go
+func IsMyError(err error) bool { return errors.HasErrorCode(err, ErrCodeMyError) }
+```
+
+**Step 4**: Test with `errors.Is(err, ErrMyError)` in callers.
+
+---
+
+### Example: Adding a New Migration
+
+**Scenario**: Add a schema change to SQLite.
+
+**Step 1**: Check the highest existing migration number:
+```bash
+ls internal/adapters/storage/sqlite/migrations/ | sort -n | tail -2
+```
+
+**Step 2**: Create the pair (zero-pad to 6 digits):
+```bash
+touch internal/adapters/storage/sqlite/migrations/000022_description.up.sql
+touch internal/adapters/storage/sqlite/migrations/000022_description.down.sql
+```
+
+**Step 3**: Write the SQL. The `.up.sql` applies the change, `.down.sql` reverts it.
+
+**Step 4**: Update `docs/SCHEMA.md` with the new table/column.
+
+**Step 5**: Update the migration count in `CLAUDE.md`'s Database section.
+
+---
+
 ## Common Anti-Patterns to Avoid
 
 ### ❌ Anti-Pattern 1: Business Logic in Adapters

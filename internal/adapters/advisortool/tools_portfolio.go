@@ -349,6 +349,40 @@ func (e *CampaignToolExecutor) registerGetDashboardSummary() {
 	})
 }
 
+func (e *CampaignToolExecutor) registerGetAcquisitionTargets() {
+	e.register(ai.ToolDefinition{
+		Name:        "get_acquisition_targets",
+		Description: "Get raw-to-graded arbitrage opportunities: cards where buying raw NM and grading would yield $100+ profit. Shows raw NM price, best graded estimate, profit, and ROI.",
+		Parameters:  emptyObjectParams,
+	}, func(ctx context.Context, _ string) (string, error) {
+		result, err := e.svc.GetAcquisitionTargets(ctx)
+		if err != nil {
+			return "", err
+		}
+		if len(result) > 20 {
+			result = result[:20]
+		}
+		return toJSON(result), nil
+	})
+}
+
+func (e *CampaignToolExecutor) registerGetCrackOpportunities() {
+	e.register(ai.ToolDefinition{
+		Name:        "get_crack_opportunities",
+		Description: "Get cross-campaign crack arbitrage candidates: graded cards where selling raw is more profitable than selling graded. Uses JustTCG NM-specific pricing. Shows crack vs graded net, advantage, and ROI.",
+		Parameters:  emptyObjectParams,
+	}, func(ctx context.Context, _ string) (string, error) {
+		result, err := e.svc.GetCrackOpportunities(ctx)
+		if err != nil {
+			return "", err
+		}
+		if len(result) > 20 {
+			result = result[:20]
+		}
+		return toJSON(result), nil
+	})
+}
+
 // jsonSchema is a minimal JSON Schema representation for tool parameters.
 type jsonSchema struct {
 	Type        string                `json:"type"`

@@ -12,8 +12,8 @@ function formatMutationError(err: unknown): string {
   } catch { return 'unknown error'; }
 }
 
-export function AllowlistTab() {
-  const { data: emails, error, isLoading } = useAllowlist();
+export function AllowlistTab({ enabled = true }: { enabled?: boolean }) {
+  const { data: emails, error, isLoading } = useAllowlist({ enabled });
   const addMutation = useAddAllowedEmail();
   const removeMutation = useRemoveAllowedEmail();
   const [newEmail, setNewEmail] = useState('');

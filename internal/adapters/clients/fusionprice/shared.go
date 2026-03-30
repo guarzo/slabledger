@@ -31,5 +31,5 @@ func detailsCacheKey(card pricing.Card) string {
 // fetchFromAvailableSources for metrics labels, log fields, and collector/telemetry tags.
 // Update this map when adding a new secondary source or changing instrumentation.
 var observabilitySourceName = map[string]string{
-	"cardhedger": "CH",
+	pricing.SourceCardHedger: "CH",
 }

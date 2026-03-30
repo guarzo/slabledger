@@ -100,12 +100,21 @@ func (f *FusionPriceProvider) supplementWithCachedDetails(ctx context.Context, p
 	if price == nil {
 		return
 	}
+
+	fd := f.freshnessDuration
+	if fd <= 0 {
+		fd = DefaultFreshnessDuration
+	}
+
 	detailsKey := detailsCacheKey(card)
 	if cached, err := f.getCached(ctx, detailsKey); err == nil && cached != nil {
 		price.GradeDetails = cached.GradeDetails
 		price.Velocity = cached.Velocity
-		price.Sources = cached.Sources
 		price.PCGrades = cached.PCGrades
+		// RawNMCents is stored separately by the JustTCG scheduler and is not
+		// part of the live-fetch cache; reconstruct from DB.
+		f.supplementJustTCGFromDB(ctx, price, card, fd)
+		price.Sources = buildSourcesFromData(price)
 		return
 	}
 
@@ -114,16 +123,14 @@ func (f *FusionPriceProvider) supplementWithCachedDetails(ctx context.Context, p
 		return
 	}
 
-	fd := f.freshnessDuration
-	if fd <= 0 {
-		fd = DefaultFreshnessDuration
-	}
-
 	// Reconstruct PriceCharting raw grades from DB
 	f.supplementPCGradesFromDB(ctx, price, card, fd)
 
 	// Reconstruct CardHedger EstimateGradeDetail from DB-stored batch data
 	f.supplementCardHedgerFromDB(ctx, price, card, fd)
+
+	// Reconstruct JustTCG NM price from DB
+	f.supplementJustTCGFromDB(ctx, price, card, fd)
 
 	// Rebuild Sources from the data we actually found
 	price.Sources = buildSourcesFromData(price)
@@ -181,7 +188,7 @@ func (f *FusionPriceProvider) supplementFromDB(ctx context.Context, card pricing
 // supplementCardHedgerFromDB queries the DB for CardHedger prices stored by the
 // batch/delta schedulers and adds them as EstimateGradeDetail entries.
 func (f *FusionPriceProvider) supplementCardHedgerFromDB(ctx context.Context, price *pricing.Price, card pricing.Card, freshness time.Duration) {
-	f.supplementFromDB(ctx, card, "cardhedger", freshness, func(gk gradeDBKey, entry *pricing.PriceEntry) {
+	f.supplementFromDB(ctx, card, pricing.SourceCardHedger, freshness, func(gk gradeDBKey, entry *pricing.PriceEntry) {
 		if price.GradeDetails == nil {
 			price.GradeDetails = make(map[string]*pricing.GradeDetail)
 		}
@@ -207,13 +214,32 @@ func (f *FusionPriceProvider) supplementPCGradesFromDB(ctx context.Context, pric
 	}
 	var pcg pricing.GradedPrices
 	found := false
-	f.supplementFromDB(ctx, card, "pricecharting", freshness, func(gk gradeDBKey, entry *pricing.PriceEntry) {
+	f.supplementFromDB(ctx, card, pricing.SourcePriceCharting, freshness, func(gk gradeDBKey, entry *pricing.PriceEntry) {
 		found = true
 		pricing.SetGradePrice(&pcg, gk.grade, entry.PriceCents)
 	})
 	if found {
 		price.PCGrades = &pcg
 	}
+}
+
+// supplementJustTCGFromDB queries the DB for JustTCG NM prices and populates
+// price.Grades.RawNMCents. This is separate from the standard supplementFromDB
+// flow because GradeRawNM is not in CoreGrades (adding it would cause CardHedger
+// to request an unsupported grade).
+func (f *FusionPriceProvider) supplementJustTCGFromDB(ctx context.Context, price *pricing.Price, card pricing.Card, freshness time.Duration) {
+	if f.priceRepo == nil || price.Grades.RawNMCents > 0 {
+		return
+	}
+	entries, err := f.priceRepo.GetLatestPricesBySource(ctx, card.Name, card.Set, card.Number, pricing.SourceJustTCG, freshness)
+	if err != nil || len(entries) == 0 {
+		return
+	}
+	entry, ok := entries[pricing.GradeRawNM.DisplayLabel()]
+	if !ok || entry.PriceCents <= 0 {
+		return
+	}
+	pricing.SetGradePrice(&price.Grades, pricing.GradeRawNM, entry.PriceCents)
 }
 
 // loadAllFusionGrades queries the DB for all fusion grade entries and populates price.Grades.
@@ -264,7 +290,7 @@ func (f *FusionPriceProvider) convertEntryToPrice(entry *pricing.PriceEntry) *pr
 func buildSourcesFromData(price *pricing.Price) []string {
 	var sources []string
 	if price.PCGrades != nil {
-		sources = append(sources, "pricecharting")
+		sources = append(sources, pricing.SourcePriceCharting)
 	}
 	if price.GradeDetails != nil {
 		hasEstimate := false
@@ -277,8 +303,11 @@ func buildSourcesFromData(price *pricing.Price) []string {
 			}
 		}
 		if hasEstimate {
-			sources = append(sources, "cardhedger")
+			sources = append(sources, pricing.SourceCardHedger)
 		}
+	}
+	if price.Grades.RawNMCents > 0 {
+		sources = append(sources, pricing.SourceJustTCG)
 	}
 	return sources
 }

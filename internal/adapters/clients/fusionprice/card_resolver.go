@@ -22,7 +22,7 @@ import (
 // an error, so they should check the Sources field to determine data completeness.
 func (f *FusionPriceProvider) LookupCard(ctx context.Context, setName string, card domainCards.Card) (*pricing.Price, error) {
 	if f.priceCharting == nil {
-		return nil, apperrors.ProviderUnavailable("pricecharting", fmt.Errorf("provider not configured"))
+		return nil, apperrors.ProviderUnavailable(pricing.SourcePriceCharting, fmt.Errorf("provider not configured"))
 	}
 
 	// Try TCGdex first for canonical card identity resolution.
@@ -198,11 +198,11 @@ func applyPCData(result, pcPrice *pricing.Price) {
 	}
 	// Ensure "pricecharting" is in Sources (GetPrice may not have added it)
 	for _, s := range result.Sources {
-		if s == "pricecharting" {
+		if s == pricing.SourcePriceCharting {
 			return
 		}
 	}
-	result.Sources = append(result.Sources, "pricecharting")
+	result.Sources = append(result.Sources, pricing.SourcePriceCharting)
 }
 
 // cleanupStaleName deletes price history stored under oldName when it differs

@@ -3,6 +3,8 @@ package handlers
 import (
 	"context"
 	"net/http"
+	"sync"
+	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
 	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
@@ -16,6 +18,7 @@ type CLRefresher interface {
 
 // CardLadderHandler manages Card Ladder admin endpoints.
 type CardLadderHandler struct {
+	mu        sync.Mutex
 	store     *sqlite.CardLadderStore
 	client    *cardladder.Client
 	refresher CLRefresher
@@ -24,6 +27,8 @@ type CardLadderHandler struct {
 
 // SetRefresher injects the refresh trigger after scheduler construction.
 func (h *CardLadderHandler) SetRefresher(r CLRefresher) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	h.refresher = r
 }
 
@@ -59,17 +64,29 @@ func (h *CardLadderHandler) HandleSaveConfig(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	if err := h.store.SaveConfig(r.Context(), req.Email, authResp.RefreshToken, req.CollectionID, req.FirebaseAPIKey); err != nil {
+	if err := h.store.SaveConfig(r.Context(), req.Email, authResp.RefreshToken, req.CollectionID, req.FirebaseAPIKey, authResp.LocalID); err != nil {
 		h.logger.Error(r.Context(), "failed to save Card Ladder config", observability.Err(err))
 		writeError(w, http.StatusInternalServerError, "failed to save config")
 		return
 	}
 
-	// Atomically update the live client's auth credentials
-	h.client.UpdateCredentials(
-		cardladder.NewFirebaseAuth(req.FirebaseAPIKey),
-		authResp.RefreshToken,
-	)
+	// Atomically update or create the live client
+	h.mu.Lock()
+	if h.client != nil {
+		h.client.UpdateCredentials(
+			cardladder.NewFirebaseAuth(req.FirebaseAPIKey),
+			authResp.RefreshToken,
+		)
+	} else {
+		h.client = cardladder.NewClient(
+			cardladder.WithTokenManager(
+				cardladder.NewFirebaseAuth(req.FirebaseAPIKey),
+				authResp.RefreshToken,
+				time.Time{},
+			),
+		)
+	}
+	h.mu.Unlock()
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "connected"})
 }
@@ -101,11 +118,14 @@ func (h *CardLadderHandler) HandleStatus(w http.ResponseWriter, r *http.Request)
 
 // HandleRefresh triggers a manual CL value sync.
 func (h *CardLadderHandler) HandleRefresh(w http.ResponseWriter, r *http.Request) {
-	if h.refresher == nil {
+	h.mu.Lock()
+	refresher := h.refresher
+	h.mu.Unlock()
+	if refresher == nil {
 		writeError(w, http.StatusServiceUnavailable, "Card Ladder refresh scheduler not available")
 		return
 	}
-	if err := h.refresher.RunOnce(r.Context()); err != nil {
+	if err := refresher.RunOnce(r.Context()); err != nil {
 		h.logger.Error(r.Context(), "manual CL refresh failed", observability.Err(err))
 		writeError(w, http.StatusInternalServerError, "refresh failed")
 		return

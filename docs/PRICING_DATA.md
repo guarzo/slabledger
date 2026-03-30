@@ -61,6 +61,44 @@ Comprehensive reference for how price data flows from external APIs through the 
 
 ---
 
+## Lookup & Normalization Pipeline
+
+Card names flow through a multi-stage normalization and matching pipeline before prices are resolved.
+
+### PriceCharting Lookup (6 strategies)
+
+Resolution order: hint → cache → UPC → API → fuzzy → consoleMismatchFallback.
+
+- `normalizeSetName()` in `pc_query_helpers.go` expands era codes (SWSH→Sword Shield), strips PSA codes, handles Chinese sets
+- `normalizeCardName()` in `pc_query_helpers.go` expands abbreviations (SP.DELIVERY, REV.FOIL), strips PSA boilerplate
+- `VerifyProductMatch` in `pc_verify.go` validates card numbers with `NumericOnly` fallback for prefix mismatches (PSA "075" vs PC "SWSH075")
+- Promo sets: PriceCharting uses "Pokemon Promo" for ALL eras — `tryAPI` detects when both sides are promo and bypasses set-token comparison
+- Chinese sets: `isChineseSet()` + `mapChineseNumber()` translate PSA printed numbers to PC species-based numbers (CBB1=700+n, CBB2=600+n). Unknown volumes fall back to number-less search.
+
+### CardHedger `details-by-certs` (`cert_resolver.go`)
+
+Batch cert→card_id resolution. API returns nested objects (`cert_info` + `card`), not flat fields. `Card` is null when cert's card isn't in CardHedger's DB. Types: `CertDetailResult` → `CertInfo` + `*CardDetail`.
+
+### CardHedger Lookup (`resolveCardID` in `source_adapters.go`)
+
+3-tier query fallback:
+1. Full normalized query: `NormalizeSetNameForSearch(set) + SimplifyForSearch(NormalizePurchaseName(name)) + number`
+2. Minimal query: `truncateAtVariant(name) + eraPrefix + number` (strips variant noise like "Holo CRZ")
+3. Raw PSA title (stripped of grade suffix) — lets CardHedger's LLM parse natural language directly
+
+### Shared Normalization (`cardutil/normalize.go`)
+
+- `NormalizePurchaseName`: expands PSA abbreviations (-HOLO, -REV.FOIL, SP.DELIVERY)
+- `SimplifyForSearch`: deduplicates prefix, truncates after type suffix (ex, GX), strips trailing noise words
+- `NormalizeSetNameForSearch`: strips PSA codes (PRE EN-, M24 EN-), handles Chinese/Japanese prefixes
+- `MissingSetTokens`: compares set token overlap; callers normalize expected set first rather than maintaining exclusion lists
+
+### Integration Tests
+
+`internal/integration/` contains 34 real inventory items with actual PSA cert numbers, run against live APIs with `-tags integration`.
+
+---
+
 ## Fusion Engine
 
 **Location**: `internal/domain/fusion/engine.go`

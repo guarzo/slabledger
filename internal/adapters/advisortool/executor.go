@@ -226,4 +226,6 @@ func (e *CampaignToolExecutor) registerTools() {
 	e.registerSuggestPrice()
 	e.registerGetSuggestionStats()
 	e.registerGetDashboardSummary()
+	e.registerGetAcquisitionTargets()
+	e.registerGetCrackOpportunities()
 }

@@ -2,17 +2,19 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../js/api';
 import { queryKeys } from './queryKeys';
 
-export function useAllowlist() {
+export function useAllowlist(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: queryKeys.admin.allowlist,
     queryFn: () => api.getAdminAllowlist(),
+    enabled: options?.enabled ?? true,
   });
 }
 
-export function useAdminUsers() {
+export function useAdminUsers(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: queryKeys.admin.users,
     queryFn: () => api.getAdminUsers(),
+    enabled: options?.enabled ?? true,
   });
 }
 
@@ -129,6 +131,36 @@ export function useResolvePriceFlag() {
       qc.invalidateQueries({ queryKey: queryKeys.admin.priceFlags('open') });
       qc.invalidateQueries({ queryKey: queryKeys.admin.priceFlags('resolved') });
       qc.invalidateQueries({ queryKey: queryKeys.admin.priceFlags('all') });
+    },
+  });
+}
+
+export function useCardLadderStatus(options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: queryKeys.admin.cardLadderStatus,
+    queryFn: () => api.getCardLadderStatus(),
+    staleTime: 60_000,
+    enabled: options?.enabled ?? true,
+  });
+}
+
+export function useSaveCardLadderConfig() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (config: { email: string; password: string; collectionId: string; firebaseApiKey: string }) =>
+      api.saveCardLadderConfig(config),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.admin.cardLadderStatus });
+    },
+  });
+}
+
+export function useTriggerCardLadderRefresh() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.triggerCardLadderRefresh(),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.admin.cardLadderStatus });
     },
   });
 }

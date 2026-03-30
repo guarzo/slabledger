@@ -14,6 +14,7 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
 	"github.com/guarzo/slabledger/internal/adapters/clients/fusionprice"
 	igclient "github.com/guarzo/slabledger/internal/adapters/clients/instagram"
+	"github.com/guarzo/slabledger/internal/adapters/clients/justtcg"
 	"github.com/guarzo/slabledger/internal/adapters/clients/pricecharting"
 	"github.com/guarzo/slabledger/internal/adapters/clients/pricelookup"
 	"github.com/guarzo/slabledger/internal/adapters/clients/psa"
@@ -321,13 +322,14 @@ type schedulerDeps struct {
 	CardLadderClient     *cardladder.Client
 	CardLadderStore      *sqlite.CardLadderStore
 	CardLadderSalesStore *sqlite.CLSalesStore
+	JustTCGClient        *justtcg.Client
 }
 
 // initializeSchedulers builds and starts the scheduler group, returning the
 // result (including CardDiscoverer) and a cancel function to shut them down.
 func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.BuildResult, context.CancelFunc) {
 	schedulerCtx, cancelScheduler := context.WithCancel(ctx)
-	schedulerResult := scheduler.BuildGroup(deps.Config, scheduler.BuildDeps{
+	buildDeps := scheduler.BuildDeps{
 		PriceRepo:                deps.PriceRepo,
 		APITracker:               deps.PriceRepo,
 		HealthChecker:            deps.PriceRepo,
@@ -363,7 +365,13 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 		CardLadderValueUpdater:   deps.CampaignsRepo,
 		CardLadderCLRecorder:     deps.CampaignsRepo,
 		CardLadderSalesStore:     deps.CardLadderSalesStore,
-	})
+	}
+	// Nil-safe interface conversion: a nil *justtcg.Client assigned to an interface
+	// produces a non-nil interface wrapping a nil pointer, which breaks nil checks.
+	if deps.JustTCGClient != nil {
+		buildDeps.JustTCGClient = deps.JustTCGClient
+	}
+	schedulerResult := scheduler.BuildGroup(deps.Config, buildDeps)
 	schedulerResult.Group.StartAll(schedulerCtx)
 
 	return &schedulerResult, cancelScheduler

@@ -10,6 +10,19 @@ import (
 	"net/url"
 )
 
+// parseFirebaseError attempts to extract an error message from a Firebase error response.
+func parseFirebaseError(body []byte) string {
+	var fbErr struct {
+		Error struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if json.Unmarshal(body, &fbErr) == nil {
+		return fbErr.Error.Message
+	}
+	return ""
+}
+
 const (
 	defaultAuthBaseURL  = "https://identitytoolkit.googleapis.com"
 	defaultTokenBaseURL = "https://securetoken.googleapis.com"
@@ -82,6 +95,9 @@ func (a *FirebaseAuth) Login(ctx context.Context, email, password string) (*Fire
 		return nil, fmt.Errorf("read login response: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
+		if msg := parseFirebaseError(respBody); msg != "" {
+			return nil, fmt.Errorf("firebase login failed: %s (status %d)", msg, resp.StatusCode)
+		}
 		return nil, fmt.Errorf("firebase login failed (status %d)", resp.StatusCode)
 	}
 
@@ -120,6 +136,9 @@ func (a *FirebaseAuth) RefreshToken(ctx context.Context, refreshToken string) (*
 		return nil, fmt.Errorf("read refresh response: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
+		if msg := parseFirebaseError(respBody); msg != "" {
+			return nil, fmt.Errorf("firebase refresh failed: %s (status %d)", msg, resp.StatusCode)
+		}
 		return nil, fmt.Errorf("firebase refresh failed (status %d)", resp.StatusCode)
 	}
 

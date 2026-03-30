@@ -280,3 +280,42 @@ To support multi-tenant usage, the following changes would be required:
 ### Codebase Simplification (Feb 2026)
 
 **Decision**: Removed dead code (scoring engine, opportunity detection, eBay deals, PSA population, marketplace timing, monitoring/alerts), simplified managers to plain functions, consolidated duplicate endpoints.
+
+---
+
+## Domain Interfaces
+
+| Package | Interface | File | Methods | Purpose |
+|---------|-----------|------|---------|---------|
+| `campaigns` | `Service` | `service.go` | ~40 | Full campaign business logic |
+| `campaigns` | `Repository` | `repository.go` | composed | Composed: CRUD + Purchase + Sale + Analytics + Finance + Revocation |
+| `campaigns` | `PriceLookup` | `service.go` | 2 | Market signals for inventory aging |
+| `campaigns` | `CertLookup` | `service.go` | 1 | PSA cert → card details |
+| `campaigns` | `CardIDResolver` | `service.go` | 1 | Batch cert → external card ID |
+| `pricing` | `PriceProvider` | `provider.go` | 5 | Card price lookup (PriceCharting) |
+| `pricing` | `PriceRepository` | `repository.go` | ~10 | Price history persistence |
+| `pricing` | `APITracker` | `repository.go` | 3 | Rate limit state tracking |
+| `pricing` | `AccessTracker` | `repository.go` | 1 | Card access log |
+| `pricing` | `HealthChecker` | `repository.go` | 1 | Provider health |
+| `pricing` | `DiscoveryFailureTracker` | `repository.go` | 3 | Failed discovery persistence |
+| `pricing` | `PricingDiagnosticsProvider` | `repository.go` | 1 | Diagnostics data |
+| `auth` | `Service` | `service.go` | 14 | OAuth flow, session management, allowlist |
+| `auth` | `Repository` | `repository.go` | ~14 | Auth persistence |
+| `social` | `Service` | `service.go` | 8 | Social post generation and publishing |
+| `social` | `Publisher` | `service.go` | 1 | Instagram carousel publish |
+| `social` | `InstagramTokenProvider` | `service.go` | 1 | Instagram credentials |
+| `social` | `Repository` | `repository.go` | ~8 | Social post persistence |
+| `advisor` | `Service` | `service.go` | 6 | AI advisor analysis (streaming) |
+| `advisor` | `CacheStore` | `cache.go` | 5 | Advisor result persistence |
+| `ai` | `LLMProvider` | `llm.go` | 1 | LLM completion (Azure AI) |
+| `ai` | `AICallTracker` | `tracking.go` | 1 | AI call metrics |
+| `ai` | `ToolExecutor` | `tools.go` | 1 | Tool call execution |
+| `ai` | `FilteredToolExecutor` | `tools.go` | 1 | Subset tool execution |
+| `cards` | `CardProvider` | `provider.go` | 5 | Card/set search (TCGdex) |
+| `cards` | `NewSetIDsProvider` | `provider.go` | 1 | New set discovery |
+| `fusion` | `SecondaryPriceSource` | `source.go` | 3 | Price fusion data (CardHedger) |
+| `fusion` | `CardIDResolver` | `source.go` | 3 | External ID cache |
+| `fusion` | `PriceHintResolver` | `source.go` | 4 | User-provided price hints |
+| `favorites` | `Service` | `service.go` | 6 | Favorites CRUD |
+| `favorites` | `Repository` | `repository.go` | ~6 | Favorites persistence |
+| `observability` | `Logger` | `logger.go` | 5 | Structured logging |

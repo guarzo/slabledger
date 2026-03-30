@@ -3,8 +3,8 @@ import { useToast } from '../../contexts/ToastContext';
 import { CardShell } from '../../ui/CardShell';
 import Button from '../../ui/Button';
 
-export function InstagramTab() {
-  const { data: status, isLoading, error } = useInstagramStatus();
+export function InstagramTab({ enabled = true }: { enabled?: boolean }) {
+  const { data: status, isLoading, error } = useInstagramStatus(enabled);
   const connectMutation = useConnectInstagram();
   const disconnectMutation = useDisconnectInstagram();
   const toast = useToast();

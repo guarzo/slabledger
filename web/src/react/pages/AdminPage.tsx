@@ -1,5 +1,5 @@
 /**
- * AdminPage - Admin panel with allowlist management, user list, and API status.
+ * AdminPage - Admin panel with consolidated tabs.
  * Only accessible to admin users.
  */
 import { useState } from 'react';
@@ -7,32 +7,22 @@ import { Tabs } from 'radix-ui';
 import { api } from '../../js/api';
 import { Button, TabNavigation } from '../ui';
 import type { Tab } from '../ui';
-import { AllowlistTab } from './admin/AllowlistTab';
 import { UsersTab } from './admin/UsersTab';
-import { ApiStatusTab } from './admin/ApiStatusTab';
 import { CardDataTab } from './admin/CardDataTab';
-import { MissingCardsTab } from './admin/MissingCardsTab';
-import { PricingCoverageTab } from './admin/PricingCoverageTab';
-import { AIPricingTab } from './admin/AIPricingTab';
-import { AIStatusTab } from './admin/AIStatusTab';
-import { InstagramTab } from './admin/InstagramTab';
-import { PriceFlagsTab } from './admin/PriceFlagsTab';
+import { PricingTab } from './admin/PricingTab';
+import { AITab } from './admin/AITab';
+import { IntegrationsTab } from './admin/IntegrationsTab';
 
 const adminTabs: readonly Tab<string>[] = [
-  { id: 'allowlist', label: 'Allowlist' },
   { id: 'users', label: 'Users' },
-  { id: 'api-status', label: 'API Status' },
   { id: 'card-data', label: 'Card Data' },
-  { id: 'missing-cards', label: 'Missing Cards' },
-  { id: 'pricing-coverage', label: 'Pricing Coverage' },
-  { id: 'ai-pricing', label: 'AI Pricing' },
-  { id: 'ai-status', label: 'AI Status' },
-  { id: 'instagram', label: 'Instagram' },
-  { id: 'price-flags', label: 'Price Flags' },
+  { id: 'pricing', label: 'Pricing' },
+  { id: 'ai', label: 'AI' },
+  { id: 'integrations', label: 'Integrations' },
 ] as const;
 
 export default function AdminPage() {
-  const [activeTab, setActiveTab] = useState('api-status');
+  const [activeTab, setActiveTab] = useState('integrations');
   const [backupLoading, setBackupLoading] = useState<boolean>(false);
   const [backupError, setBackupError] = useState<string | null>(null);
 
@@ -76,16 +66,11 @@ export default function AdminPage() {
       <Tabs.Root value={activeTab} onValueChange={setActiveTab}>
         <TabNavigation tabs={adminTabs} ariaLabel="Admin tabs" />
 
-        <Tabs.Content value="allowlist"><AllowlistTab /></Tabs.Content>
-        <Tabs.Content value="users"><UsersTab /></Tabs.Content>
-        <Tabs.Content value="api-status"><ApiStatusTab /></Tabs.Content>
-        <Tabs.Content value="card-data"><CardDataTab /></Tabs.Content>
-        <Tabs.Content value="missing-cards"><MissingCardsTab /></Tabs.Content>
-        <Tabs.Content value="pricing-coverage"><PricingCoverageTab enabled={activeTab === 'pricing-coverage'} /></Tabs.Content>
-        <Tabs.Content value="ai-pricing"><AIPricingTab enabled={activeTab === 'ai-pricing'} /></Tabs.Content>
-        <Tabs.Content value="ai-status"><AIStatusTab enabled={activeTab === 'ai-status'} /></Tabs.Content>
-        <Tabs.Content value="instagram"><InstagramTab /></Tabs.Content>
-        <Tabs.Content value="price-flags"><PriceFlagsTab enabled={activeTab === 'price-flags'} /></Tabs.Content>
+        <Tabs.Content value="users"><UsersTab enabled={activeTab === 'users'} /></Tabs.Content>
+        <Tabs.Content value="card-data"><CardDataTab enabled={activeTab === 'card-data'} /></Tabs.Content>
+        <Tabs.Content value="pricing"><PricingTab enabled={activeTab === 'pricing'} /></Tabs.Content>
+        <Tabs.Content value="ai"><AITab enabled={activeTab === 'ai'} /></Tabs.Content>
+        <Tabs.Content value="integrations"><IntegrationsTab enabled={activeTab === 'integrations'} /></Tabs.Content>
       </Tabs.Root>
     </div>
   );

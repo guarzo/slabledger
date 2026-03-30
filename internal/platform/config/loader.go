@@ -211,6 +211,26 @@ func FromEnv(base Config) Config {
 		cfg.CardHedger.Enabled = parseBool(v, true)
 	}
 
+	// JustTCG scheduler configuration
+	if v := os.Getenv("JUSTTCG_DAILY_BUDGET"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			cfg.JustTCG.DailyBudget = n
+		}
+	}
+	if v := os.Getenv("JUSTTCG_RATE_INTERVAL"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			cfg.JustTCG.RateInterval = d
+		}
+	}
+	if v := os.Getenv("JUSTTCG_RUN_INTERVAL"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			cfg.JustTCG.RunInterval = d
+		}
+	}
+	if v := os.Getenv("JUSTTCG_REFRESH_ENABLED"); v != "" {
+		cfg.JustTCG.Enabled = parseBool(v, true)
+	}
+
 	// Inventory refresh scheduler configuration
 	if v := os.Getenv("INVENTORY_REFRESH_ENABLED"); v != "" {
 		cfg.InventoryRefresh.Enabled = parseBool(v, true)
@@ -359,6 +379,14 @@ func FromEnv(base Config) Config {
 		cfg.Adapters.ImageAIQuality = "medium"
 	}
 	cfg.Adapters.ImageAIEnabled = parseBool(os.Getenv("IMAGE_AI_ENABLED"), false)
+	cfg.Adapters.JustTCGKey = os.Getenv("JUSTTCG_API_KEY")
+
+	cfg.JustTCG.ApplyDefaults()
+
+	// Auto-enable JustTCG if API key is present and not explicitly disabled
+	if cfg.Adapters.JustTCGKey != "" && os.Getenv("JUSTTCG_REFRESH_ENABLED") == "" {
+		cfg.JustTCG.Enabled = true
+	}
 
 	return cfg
 }
