@@ -18,6 +18,7 @@ import (
 	// Concrete implementations (only imported in main for wiring - Hexagonal Architecture)
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardhedger"
 	"github.com/guarzo/slabledger/internal/adapters/clients/google"
+	"github.com/guarzo/slabledger/internal/adapters/clients/justtcg"
 	"github.com/guarzo/slabledger/internal/adapters/clients/psa"
 	"github.com/guarzo/slabledger/internal/adapters/clients/tcgdex"
 	"github.com/guarzo/slabledger/internal/adapters/httpserver/handlers"
@@ -301,6 +302,13 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		opportunitiesHandler = handlers.NewOpportunitiesHandler(campaignsService, logger)
 	}
 
+	// Initialize JustTCG client (optional — raw NM price refresh)
+	var justTCGClient *justtcg.Client
+	if cfg.Adapters.JustTCGKey != "" {
+		justTCGClient = justtcg.NewClient(cfg.Adapters.JustTCGKey, justtcg.WithLogger(logger))
+		logger.Info(ctx, "JustTCG client initialized")
+	}
+
 	// Create cert sweeper for periodic cert→card_id resolution in the CardHedger batch scheduler.
 	var certSweeper scheduler.CertSweeper
 	if cardHedgerClientImpl.Available() {
@@ -335,6 +343,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		CardLadderClient:     clClient,
 		CardLadderStore:      clStore,
 		CardLadderSalesStore: clSalesStore,
+		JustTCGClient:        justTCGClient,
 	})
 
 	// Wire Card Ladder manual refresh into the handler

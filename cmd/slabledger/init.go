@@ -14,6 +14,7 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
 	"github.com/guarzo/slabledger/internal/adapters/clients/fusionprice"
 	igclient "github.com/guarzo/slabledger/internal/adapters/clients/instagram"
+	"github.com/guarzo/slabledger/internal/adapters/clients/justtcg"
 	"github.com/guarzo/slabledger/internal/adapters/clients/pricecharting"
 	"github.com/guarzo/slabledger/internal/adapters/clients/pricelookup"
 	"github.com/guarzo/slabledger/internal/adapters/clients/psa"
@@ -321,6 +322,7 @@ type schedulerDeps struct {
 	CardLadderClient     *cardladder.Client
 	CardLadderStore      *sqlite.CardLadderStore
 	CardLadderSalesStore *sqlite.CLSalesStore
+	JustTCGClient        *justtcg.Client
 }
 
 // initializeSchedulers builds and starts the scheduler group, returning the
@@ -363,6 +365,7 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 		CardLadderValueUpdater:   deps.CampaignsRepo,
 		CardLadderCLRecorder:     deps.CampaignsRepo,
 		CardLadderSalesStore:     deps.CardLadderSalesStore,
+		JustTCGClient:            deps.JustTCGClient,
 	})
 	schedulerResult.Group.StartAll(schedulerCtx)
 
