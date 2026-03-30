@@ -60,15 +60,16 @@ type ParsedCampaign = Partial<CreateCampaignInput> & { name: string; inclusionLi
 function parseExportText(text: string): ParsedCampaign[] {
   // Split at campaign boundaries (before "Campaign N — ..." lines) instead of
   // blank lines, so the parser handles both compact and spaced-out clipboard formats.
-  const blocks = text.trim().split(/(?=^Campaign\s+\d+\s*[-\u2013\u2014])/m);
+  // Allow optional leading whitespace (^\s*) so indented clipboard text still splits.
+  const blocks = text.trim().split(/(?=^\s*Campaign\s+\d+\s*[-\u2013\u2014])/m);
   const campaigns: ParsedCampaign[] = [];
 
   for (const block of blocks) {
     const lines = block.split('\n').map(l => l.trim()).filter(Boolean);
     if (lines.length === 0) continue;
 
-    // First line must match "Campaign N — Name"
-    const headerMatch = lines[0].match(/^Campaign\s+\d+\s*[-\u2013\u2014]\s*(.+)$/);
+    // First line must match "Campaign N — Name" (allow leading whitespace)
+    const headerMatch = lines[0].match(/^\s*Campaign\s+\d+\s*[-\u2013\u2014]\s*(.+)$/);
     if (!headerMatch) continue;
 
     // Only set fields that actually appear in the text. When updating an
