@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Button } from '../ui';
 import { formatCents, dollarsToCents, centsToDollars } from '../utils/formatters';
+import type { PreSelection } from './priceDecisionHelpers';
 
 export interface PriceSource {
   label: string;
@@ -10,7 +11,7 @@ export interface PriceSource {
 
 export interface PriceDecisionBarProps {
   sources: PriceSource[];
-  preSelected?: string;
+  preSelected?: PreSelection;
   onConfirm: (priceCents: number, source: string) => void;
   onSkip?: () => void;
   onFlag?: () => void;
@@ -19,6 +20,8 @@ export interface PriceDecisionBarProps {
   isSubmitting?: boolean;
   confirmLabel?: string;
   onReset?: () => void;
+  /** Price to display in accepted state when set externally (e.g. Accept All). */
+  acceptedPriceCents?: number;
 }
 
 export default function PriceDecisionBar({
@@ -32,17 +35,23 @@ export default function PriceDecisionBar({
   isSubmitting = false,
   confirmLabel = 'Confirm',
   onReset,
+  acceptedPriceCents,
 }: PriceDecisionBarProps) {
   const [selectedSource, setSelectedSource] = useState<string | null>(null);
   const [customValue, setCustomValue] = useState('');
+  const [lastConfirmedCents, setLastConfirmedCents] = useState(0);
 
   useEffect(() => {
-    if (preSelected) {
-      const match = sources.find(s => s.source === preSelected && s.priceCents > 0);
+    if (!preSelected) return;
+    if (preSelected.kind === 'source') {
+      const match = sources.find(s => s.source === preSelected.source && s.priceCents > 0);
       if (match) {
         setSelectedSource(match.source);
         setCustomValue(centsToDollars(match.priceCents));
       }
+    } else if (preSelected.kind === 'manual') {
+      setSelectedSource(null);
+      setCustomValue(centsToDollars(preSelected.priceCents));
     }
   }, [preSelected, sources]);
 
@@ -73,6 +82,7 @@ export default function PriceDecisionBar({
   const handleConfirm = () => {
     const values = getConfirmValues();
     if (values) {
+      setLastConfirmedCents(values.priceCents);
       onConfirm(values.priceCents, values.source);
     }
   };
@@ -86,10 +96,8 @@ export default function PriceDecisionBar({
   const hasSelection = selectedSource !== null || (customValue !== '' && dollarsToCents(customValue) > 0);
   const allDisabled = disabled || isSubmitting;
 
-  // --- Accepted state ---
   if (status === 'accepted') {
-    const values = getConfirmValues();
-    const displayCents = values?.priceCents ?? 0;
+    const displayCents = acceptedPriceCents || lastConfirmedCents || (getConfirmValues()?.priceCents ?? 0);
     return (
       <div className="flex items-center gap-3 flex-wrap opacity-60">
         <span className="text-xs font-medium text-[var(--text-muted)] whitespace-nowrap">Set Price:</span>
@@ -98,6 +106,7 @@ export default function PriceDecisionBar({
             key={src.source}
             type="button"
             disabled
+            aria-pressed={selectedSource === src.source}
             className={`text-xs px-2.5 py-1.5 rounded-md border transition-colors ${
               selectedSource === src.source
                 ? 'border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]'
@@ -119,7 +128,6 @@ export default function PriceDecisionBar({
     );
   }
 
-  // --- Skipped state ---
   if (status === 'skipped') {
     return (
       <div className="flex items-center gap-3 flex-wrap opacity-50">
@@ -140,7 +148,6 @@ export default function PriceDecisionBar({
     );
   }
 
-  // --- Pending state (default) ---
   return (
     <div className="flex items-center gap-3 flex-wrap">
       <span className="text-xs font-medium text-[var(--text-muted)] whitespace-nowrap">Set Price:</span>
@@ -151,6 +158,7 @@ export default function PriceDecisionBar({
           type="button"
           onClick={() => handleSourceClick(src)}
           disabled={allDisabled || src.priceCents === 0}
+          aria-pressed={selectedSource === src.source}
           className={`text-xs px-2.5 py-1.5 rounded-md border transition-colors ${
             selectedSource === src.source
               ? 'border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]'
@@ -167,6 +175,7 @@ export default function PriceDecisionBar({
           type="text"
           inputMode="decimal"
           placeholder="0.00"
+          aria-label="Custom price in dollars"
           value={customValue}
           onChange={handleCustomChange}
           onKeyDown={handleKeyDown}

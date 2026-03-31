@@ -43,6 +43,8 @@ export type { FavoriteButtonProps } from './FavoriteButton';
 // Price Decision
 export { default as PriceDecisionBar } from './PriceDecisionBar';
 export type { PriceSource, PriceDecisionBarProps } from './PriceDecisionBar';
+export type { PreSelection } from './priceDecisionHelpers';
+export { buildPriceSources, preSelectSource } from './priceDecisionHelpers';
 
 // Icons & Dropdowns
 export { ExternalLinkIcon } from './ExternalLinkIcon';

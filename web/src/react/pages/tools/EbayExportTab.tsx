@@ -1,31 +1,58 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { api } from '@/js/api';
 import type { EbayExportItem, EbayExportGenerateItem } from '@/types/campaigns/core';
-import PriceDecisionBar from '@/react/ui/PriceDecisionBar';
-import type { PriceSource } from '@/react/ui/PriceDecisionBar';
+import { PriceDecisionBar, buildPriceSources, preSelectSource } from '@/react/ui';
 
 type Decision = { action: 'accept'; priceCents: number; source: string } | { action: 'skip' };
 type Phase = 'review' | 'export';
 
-function buildSources(item: EbayExportItem): PriceSource[] {
-  return [
-    { label: 'CL', priceCents: item.clValueCents, source: 'cl' },
-    { label: 'Market', priceCents: item.marketMedianCents, source: 'market' },
-    { label: 'Cost', priceCents: item.costBasisCents, source: 'cost_basis' },
-    { label: 'Last Sold', priceCents: item.lastSoldCents, source: 'last_sold' },
-  ];
+function sourcesForItem(item: EbayExportItem) {
+  return buildPriceSources({
+    clCents: item.clValueCents,
+    marketCents: item.marketMedianCents,
+    costCents: item.costBasisCents,
+    lastSoldCents: item.lastSoldCents,
+  });
 }
 
-function preSelectSource(item: EbayExportItem): string | undefined {
-  const sources = buildSources(item);
-  if (item.reviewedPriceCents && item.reviewedPriceCents > 0) {
-    const match = sources.find(s => s.priceCents === item.reviewedPriceCents && s.priceCents > 0);
-    if (match) return match.source;
-  }
-  if (item.clValueCents > 0) return 'cl';
-  if (item.marketMedianCents > 0) return 'market';
-  if (item.costBasisCents > 0) return 'cost_basis';
-  return undefined;
+function ExportRow({ item, decision, onDecide }: {
+  item: EbayExportItem;
+  decision: Decision | undefined;
+  onDecide: (d: Decision | undefined) => void;
+}) {
+  const sources = useMemo(() => sourcesForItem(item), [item]);
+
+  const preSelected = useMemo(
+    () => preSelectSource(sources, item.reviewedPriceCents),
+    [sources, item.reviewedPriceCents],
+  );
+
+  const status: 'pending' | 'accepted' | 'skipped' =
+    decision?.action === 'accept' ? 'accepted' :
+    decision?.action === 'skip' ? 'skipped' : 'pending';
+
+  const acceptedPriceCents = decision?.action === 'accept' ? decision.priceCents : undefined;
+
+  return (
+    <div className="rounded border border-[var(--border)] bg-[var(--surface-1)] p-3">
+      <div className="flex items-center gap-4 mb-2 text-sm">
+        <span className="font-medium text-[var(--text)]">{item.cardName}</span>
+        <span className="text-[var(--text-muted)]">{item.setName}</span>
+        <span className="text-[var(--text-muted)]">#{item.cardNumber}</span>
+        <span className="text-[var(--text)]">PSA {item.gradeValue}</span>
+        <span className="font-mono text-xs text-[var(--text-muted)]">{item.certNumber}</span>
+      </div>
+      <PriceDecisionBar
+        sources={sources}
+        preSelected={preSelected}
+        status={status}
+        acceptedPriceCents={acceptedPriceCents}
+        onConfirm={(priceCents, source) => onDecide({ action: 'accept', priceCents, source })}
+        onSkip={() => onDecide({ action: 'skip' })}
+        onReset={() => onDecide(undefined)}
+      />
+    </div>
+  );
 }
 
 export default function EbayExportTab() {
@@ -74,11 +101,15 @@ export default function EbayExportTab() {
     for (const item of items) {
       const existing = next.get(item.purchaseId);
       if (existing?.action === 'skip') continue;
-      const sources = buildSources(item);
-      const preKey = preSelectSource(item);
-      const source = sources.find(s => s.source === preKey && s.priceCents > 0);
-      if (source) {
-        next.set(item.purchaseId, { action: 'accept', priceCents: source.priceCents, source: source.source });
+      const sources = sourcesForItem(item);
+      const pre = preSelectSource(sources, item.reviewedPriceCents);
+      if (pre.kind === 'source') {
+        const source = sources.find(s => s.source === pre.source && s.priceCents > 0);
+        if (source) {
+          next.set(item.purchaseId, { action: 'accept', priceCents: source.priceCents, source: source.source });
+        }
+      } else if (pre.kind === 'manual') {
+        next.set(item.purchaseId, { action: 'accept', priceCents: pre.priceCents, source: 'manual' });
       }
     }
     setDecisions(next);
@@ -127,14 +158,14 @@ export default function EbayExportTab() {
 
   if (phase === 'export') {
     return (
-      <div className="rounded border border-green-700 bg-green-900/20 p-6 text-center">
-        <h3 className="text-lg font-medium text-green-300">Export Complete</h3>
-        <p className="mt-2 text-sm text-gray-400">
+      <div className="rounded border border-[var(--success)]/30 bg-[var(--success)]/10 p-6 text-center">
+        <h3 className="text-lg font-medium text-[var(--success)]">Export Complete</h3>
+        <p className="mt-2 text-sm text-[var(--text-muted)]">
           {exportCount} items exported to ebay_import.csv
         </p>
         <button
           onClick={() => { setPhase('review'); setItems([]); setDecisions(new Map()); }}
-          className="mt-4 rounded bg-gray-700 px-4 py-2 text-sm text-gray-200 hover:bg-gray-600"
+          className="mt-4 rounded bg-[var(--surface-2)] px-4 py-2 text-sm text-[var(--text)] hover:bg-[var(--surface-2)]/80"
         >
           Start Over
         </button>
@@ -145,26 +176,26 @@ export default function EbayExportTab() {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-4">
-        <label className="flex items-center gap-2 text-sm text-gray-300">
+        <label className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
           <input
             type="checkbox"
             checked={flaggedOnly}
             onChange={e => setFlaggedOnly(e.target.checked)}
-            className="rounded border-gray-600"
+            className="rounded border-[var(--border)]"
           />
           Flagged for export only
         </label>
         <button
           onClick={fetchItems}
           disabled={loading}
-          className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-50"
+          className="rounded bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--accent)]/80 disabled:opacity-50"
         >
           {loading ? 'Loading...' : items.length > 0 ? 'Refresh' : 'Load Items'}
         </button>
       </div>
 
       {error && (
-        <div className="rounded border border-red-700 bg-red-900/30 p-3 text-sm text-red-300">
+        <div className="rounded border border-[var(--danger)]/30 bg-[var(--danger)]/10 p-3 text-sm text-[var(--danger)]">
           {error}
         </div>
       )}
@@ -173,60 +204,44 @@ export default function EbayExportTab() {
         <>
           <div className="flex items-center justify-between">
             <div className="flex gap-2">
-              <button onClick={acceptAll} className="rounded bg-green-700 px-3 py-1 text-xs text-white hover:bg-green-600">
+              <button onClick={acceptAll} className="rounded bg-[var(--success)] px-3 py-1 text-xs text-white hover:bg-[var(--success)]/80">
                 Accept All
               </button>
-              <button onClick={skipAll} className="rounded bg-gray-700 px-3 py-1 text-xs text-gray-200 hover:bg-gray-600">
+              <button onClick={skipAll} className="rounded bg-[var(--surface-2)] px-3 py-1 text-xs text-[var(--text)] hover:bg-[var(--surface-2)]/80">
                 Skip All
               </button>
             </div>
-            <div className="text-sm text-gray-400">
+            <div className="text-sm text-[var(--text-muted)]">
               {items.length} items · {acceptedCount} accepted
             </div>
           </div>
 
           <div className="space-y-2">
-            {items.map(item => {
-              const decision = decisions.get(item.purchaseId);
-              const status: 'pending' | 'accepted' | 'skipped' =
-                decision?.action === 'accept' ? 'accepted' :
-                decision?.action === 'skip' ? 'skipped' : 'pending';
-
-              return (
-                <div key={item.purchaseId} className="rounded border border-[var(--border)] bg-[var(--surface-1)] p-3">
-                  <div className="flex items-center gap-4 mb-2 text-sm">
-                    <span className="font-medium text-[var(--text)]">{item.cardName}</span>
-                    <span className="text-[var(--text-muted)]">{item.setName}</span>
-                    <span className="text-[var(--text-muted)]">#{item.cardNumber}</span>
-                    <span className="text-[var(--text)]">PSA {item.gradeValue}</span>
-                    <span className="font-mono text-xs text-[var(--text-muted)]">{item.certNumber}</span>
-                  </div>
-                  <PriceDecisionBar
-                    sources={buildSources(item)}
-                    preSelected={preSelectSource(item)}
-                    status={status}
-                    onConfirm={(priceCents, source) => {
-                      setDecision(item.purchaseId, { action: 'accept', priceCents, source });
-                    }}
-                    onSkip={() => setDecision(item.purchaseId, { action: 'skip' })}
-                    onReset={() => {
-                      setDecisions(prev => {
-                        const next = new Map(prev);
-                        next.delete(item.purchaseId);
-                        return next;
-                      });
-                    }}
-                  />
-                </div>
-              );
-            })}
+            {items.map(item => (
+              <ExportRow
+                key={item.purchaseId}
+                item={item}
+                decision={decisions.get(item.purchaseId)}
+                onDecide={d => {
+                  if (d) {
+                    setDecision(item.purchaseId, d);
+                  } else {
+                    setDecisions(prev => {
+                      const next = new Map(prev);
+                      next.delete(item.purchaseId);
+                      return next;
+                    });
+                  }
+                }}
+              />
+            ))}
           </div>
 
           <div className="flex justify-end">
             <button
               onClick={handleExport}
               disabled={loading || acceptedCount === 0}
-              className="rounded bg-green-600 px-6 py-2 text-sm font-medium text-white hover:bg-green-500 disabled:opacity-50"
+              className="rounded bg-[var(--success)] px-6 py-2 text-sm font-medium text-white hover:bg-[var(--success)]/80 disabled:opacity-50"
             >
               {loading ? 'Generating...' : `Export eBay CSV (${acceptedCount} items)`}
             </button>
@@ -235,7 +250,7 @@ export default function EbayExportTab() {
       )}
 
       {!loading && items.length === 0 && (
-        <p className="text-sm text-gray-500">
+        <p className="text-sm text-[var(--text-muted)]">
           Click &quot;Load Items&quot; to see inventory available for export.
         </p>
       )}

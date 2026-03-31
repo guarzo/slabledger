@@ -1,12 +1,11 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import type { AgingItem } from '../../../../types/campaigns';
 import { api } from '../../../../js/api';
 import { useToast } from '../../../contexts/ToastContext';
 import { queryKeys } from '../../../queries/queryKeys';
 import PriceSignalCard from './PriceSignalCard';
-import PriceDecisionBar from '../../../ui/PriceDecisionBar';
-import type { PriceSource } from '../../../ui/PriceDecisionBar';
+import { PriceDecisionBar, buildPriceSources, preSelectSource } from '../../../ui';
 
 interface ExpandedDetailProps {
   item: AgingItem;
@@ -28,24 +27,15 @@ export default function ExpandedDetail({ item, onReviewed, campaignId, onOpenFla
   const marketCents = snap?.medianCents ?? 0;
   const lastSoldCents = snap?.lastSoldCents ?? 0;
 
-  const sources: PriceSource[] = [
-    { label: 'CL', priceCents: clCents, source: 'cl' },
-    { label: 'Market', priceCents: marketCents, source: 'market' },
-    { label: 'Cost', priceCents: costBasis, source: 'cost_basis' },
-    { label: 'Last Sold', priceCents: lastSoldCents, source: 'last_sold' },
-  ];
+  const sources = useMemo(
+    () => buildPriceSources({ clCents, marketCents, costCents: costBasis, lastSoldCents }),
+    [clCents, marketCents, costBasis, lastSoldCents],
+  );
 
-  // Pre-selection priority: reviewed > cl > market > cost
-  let preSelected: string | undefined;
-  if (purchase.reviewedPriceCents && purchase.reviewedPriceCents > 0) {
-    const matchingSource = sources.find(s => s.priceCents === purchase.reviewedPriceCents && s.priceCents > 0);
-    preSelected = matchingSource?.source;
-  }
-  if (!preSelected) {
-    if (clCents > 0) preSelected = 'cl';
-    else if (marketCents > 0) preSelected = 'market';
-    else if (costBasis > 0) preSelected = 'cost_basis';
-  }
+  const preSelected = useMemo(
+    () => preSelectSource(sources, purchase.reviewedPriceCents),
+    [sources, purchase.reviewedPriceCents],
+  );
 
   const invalidateQueries = () => {
     if (campaignId) {

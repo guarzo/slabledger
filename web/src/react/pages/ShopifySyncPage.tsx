@@ -2,10 +2,8 @@ import { useState, useRef, useCallback, useMemo } from 'react';
 import { api } from '../../js/api';
 import type { ShopifyPriceSyncMatch, ShopifyPriceSyncResponse } from '../../types/campaigns';
 import { formatCents, centsToDollars, dollarsToCents } from '../utils/formatters';
-import { Button, CardShell } from '../ui';
+import { Button, CardShell, PriceDecisionBar, buildPriceSources, preSelectSource } from '../ui';
 import { useToast } from '../contexts/ToastContext';
-import PriceDecisionBar from '@/react/ui/PriceDecisionBar';
-import type { PriceSource } from '@/react/ui/PriceDecisionBar';
 
 /* ── Types ────────────────────────────────────────────────────────── */
 
@@ -224,25 +222,23 @@ function UploadZone({ onFile }: { onFile: (file: File) => void }) {
 function ReviewRow({ match, decision, onDecide }: {
   match: ShopifyPriceSyncMatch;
   decision: ItemDecision | undefined;
-  onDecide: (d: ItemDecision) => void;
+  onDecide: (d: ItemDecision | undefined) => void;
 }) {
-  const sources: PriceSource[] = [
-    { label: 'CL', priceCents: match.clValueCents, source: 'cl' },
-    { label: 'Market', priceCents: match.marketPriceCents, source: 'market' },
-    { label: 'Cost', priceCents: match.costBasisCents, source: 'cost_basis' },
-    { label: 'Last Sold', priceCents: match.lastSoldCents ?? 0, source: 'last_sold' },
-  ];
+  const sources = useMemo(
+    () => buildPriceSources({
+      clCents: match.clValueCents,
+      marketCents: match.marketPriceCents,
+      costCents: match.costBasisCents,
+      lastSoldCents: match.lastSoldCents,
+    }),
+    [match.clValueCents, match.marketPriceCents, match.costBasisCents, match.lastSoldCents],
+  );
 
-  let preSelected: string | undefined;
-  if (match.recommendedSource === 'user_reviewed' && match.recommendedPriceCents > 0) {
-    const matchingSrc = sources.find(s => s.priceCents === match.recommendedPriceCents && s.priceCents > 0);
-    preSelected = matchingSrc?.source;
-  }
-  if (!preSelected) {
-    if (match.clValueCents > 0) preSelected = 'cl';
-    else if (match.marketPriceCents > 0) preSelected = 'market';
-    else if (match.costBasisCents > 0) preSelected = 'cost_basis';
-  }
+  const reviewedCents = match.recommendedSource === 'user_reviewed' ? match.recommendedPriceCents : undefined;
+  const preSelected = useMemo(
+    () => preSelectSource(sources, reviewedCents),
+    [sources, reviewedCents],
+  );
 
   const status: 'pending' | 'accepted' | 'skipped' =
     decision?.action === 'update' ? 'accepted' :
@@ -273,7 +269,7 @@ function ReviewRow({ match, decision, onDecide }: {
           confirmLabel="Update"
           onConfirm={(priceCents) => onDecide({ action: 'update', priceCents })}
           onSkip={() => onDecide({ action: 'skip' })}
-          onReset={() => onDecide(undefined as unknown as ItemDecision)}
+          onReset={() => onDecide(undefined)}
         />
       </td>
     </tr>
@@ -287,7 +283,7 @@ function SectionTable({ title, titleColor, items, decisions, onDecide }: {
   titleColor: string;
   items: ShopifyPriceSyncMatch[];
   decisions: Map<string, ItemDecision>;
-  onDecide: (certNumber: string, d: ItemDecision) => void;
+  onDecide: (certNumber: string, d: ItemDecision | undefined) => void;
 }) {
   if (items.length === 0) return null;
   return (
@@ -405,7 +401,7 @@ export default function ShopifySyncPage({ embedded = false }: { embedded?: boole
     }
   }, [toast]);
 
-  const setDecisionFor = useCallback((certNumber: string, decision: ItemDecision) => {
+  const setDecisionFor = useCallback((certNumber: string, decision: ItemDecision | undefined) => {
     setDecisions(prev => {
       const next = new Map(prev);
       if (!decision) {
@@ -417,30 +413,32 @@ export default function ShopifySyncPage({ embedded = false }: { embedded?: boole
     });
   }, []);
 
-  // Bulk: mark all remaining unskipped items as update
   const updateAll = useCallback(() => {
     const next = new Map(decisions);
     for (const m of allMismatches) {
       const existing = next.get(m.certNumber);
       if (existing?.action === 'skip') continue;
-      let priceCents = 0;
-      if (m.recommendedSource === 'user_reviewed' && m.recommendedPriceCents > 0) {
-        priceCents = m.recommendedPriceCents;
-      } else if (m.clValueCents > 0) {
-        priceCents = m.clValueCents;
-      } else if (m.marketPriceCents > 0) {
-        priceCents = m.marketPriceCents;
-      } else if (m.costBasisCents > 0) {
-        priceCents = m.costBasisCents;
-      }
-      if (priceCents > 0) {
-        next.set(m.certNumber, { action: 'update', priceCents });
+      const sources = buildPriceSources({
+        clCents: m.clValueCents,
+        marketCents: m.marketPriceCents,
+        costCents: m.costBasisCents,
+        lastSoldCents: m.lastSoldCents,
+      });
+      const reviewedCents = m.recommendedSource === 'user_reviewed' ? m.recommendedPriceCents : undefined;
+      const pre = preSelectSource(sources, reviewedCents);
+      if (pre.kind === 'source') {
+        const source = sources.find(s => s.source === pre.source && s.priceCents > 0);
+        if (source) {
+          next.set(m.certNumber, { action: 'update', priceCents: source.priceCents });
+        }
+      } else if (pre.kind === 'manual') {
+        next.set(m.certNumber, { action: 'update', priceCents: pre.priceCents });
       }
     }
     setDecisions(next);
   }, [allMismatches, decisions]);
 
-  const updatedCount = Array.from(decisions.values()).filter(d => d.action === 'update').length;
+  const updatedCount = Array.from(decisions.values()).filter(d => d?.action === 'update').length;
 
   const handleExport = useCallback(() => {
     if (!parsedCSV) return;
