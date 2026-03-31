@@ -272,6 +272,24 @@ func (r *CampaignsRepository) UpdatePurchaseGrade(ctx context.Context, id string
 	return nil
 }
 
+func (r *CampaignsRepository) UpdatePurchaseBuyCost(ctx context.Context, id string, buyCostCents int) error {
+	result, err := r.db.ExecContext(ctx,
+		`UPDATE campaign_purchases SET buy_cost_cents = ?, updated_at = ? WHERE id = ?`,
+		buyCostCents, time.Now(), id,
+	)
+	if err != nil {
+		return err
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return campaigns.ErrPurchaseNotFound
+	}
+	return nil
+}
+
 func (r *CampaignsRepository) UpdatePurchaseCampaign(ctx context.Context, purchaseID string, campaignID string, sourcingFeeCents int) error {
 	result, err := r.db.ExecContext(ctx,
 		`UPDATE campaign_purchases SET campaign_id = ?, psa_sourcing_fee_cents = ?, updated_at = ? WHERE id = ?`,

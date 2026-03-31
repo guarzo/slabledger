@@ -14,6 +14,13 @@ var validOverrideSources = map[string]bool{
 	string(OverrideSourceCostMarkup): true,
 }
 
+func (s *service) UpdateBuyCost(ctx context.Context, purchaseID string, buyCostCents int) error {
+	if buyCostCents < 0 {
+		return errors.NewAppError(ErrCodeCampaignValidation, "buyCostCents must be >= 0")
+	}
+	return s.repo.UpdatePurchaseBuyCost(ctx, purchaseID, buyCostCents)
+}
+
 func (s *service) SetPriceOverride(ctx context.Context, purchaseID string, priceCents int, source string) error {
 	if priceCents < 0 {
 		return errors.NewAppError(ErrCodeCampaignValidation, "priceCents must be >= 0")

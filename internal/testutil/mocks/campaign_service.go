@@ -100,6 +100,7 @@ type MockCampaignService struct {
 
 	// Price overrides & AI suggestions
 	GetPriceOverrideStatsFn func(ctx context.Context) (*campaigns.PriceOverrideStats, error)
+	UpdateBuyCostFn         func(ctx context.Context, purchaseID string, buyCostCents int) error
 	SetPriceOverrideFn      func(ctx context.Context, purchaseID string, priceCents int, source string) error
 	SetAISuggestedPriceFn   func(ctx context.Context, purchaseID string, priceCents int) error
 	AcceptAISuggestionFn    func(ctx context.Context, purchaseID string) error
@@ -562,6 +563,13 @@ func (m *MockCampaignService) GetPriceOverrideStats(ctx context.Context) (*campa
 		return m.GetPriceOverrideStatsFn(ctx)
 	}
 	return &campaigns.PriceOverrideStats{}, nil
+}
+
+func (m *MockCampaignService) UpdateBuyCost(ctx context.Context, purchaseID string, buyCostCents int) error {
+	if m.UpdateBuyCostFn != nil {
+		return m.UpdateBuyCostFn(ctx, purchaseID, buyCostCents)
+	}
+	return nil
 }
 
 func (m *MockCampaignService) SetPriceOverride(ctx context.Context, purchaseID string, priceCents int, source string) error {

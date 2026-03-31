@@ -127,8 +127,9 @@ func (s *service) ImportPSAExportGlobal(ctx context.Context, rows []PSAExportRow
 	}
 
 	// Auto-detect invoices from newly imported purchases with invoice dates
-	invoicesCreated := s.autoDetectInvoices(ctx, rows)
-	result.InvoicesCreated = invoicesCreated
+	created, updated := s.autoDetectInvoices(ctx, rows)
+	result.InvoicesCreated = created
+	result.InvoicesUpdated = updated
 
 	// Submit cert numbers to the bounded enrichment worker.
 	// Cert lookups are rate-limited (100/day), so they run in the background
@@ -205,6 +206,23 @@ func (s *service) handleExistingPSAPurchase(ctx context.Context, existing *Purch
 		return PSAImportItemResult{
 			CertNumber: row.CertNumber, CardName: existing.CardName, Grade: existing.GradeValue,
 			Status: "failed", Error: err.Error(),
+		}
+	}
+
+	// Backfill buy cost when existing purchase has $0 and PSA CSV has a real price.
+	if existing.BuyCostCents == 0 && row.PricePaid > 0 {
+		buyCostCents := mathutil.ToCentsInt(row.PricePaid)
+		if err := s.repo.UpdatePurchaseBuyCost(ctx, existing.ID, buyCostCents); err != nil {
+			if s.logger != nil {
+				s.logger.Warn(ctx, "failed to backfill buy cost",
+					observability.String("purchaseID", existing.ID),
+					observability.String("cert", row.CertNumber),
+					observability.Err(err))
+			}
+			return PSAImportItemResult{
+				CertNumber: row.CertNumber, CardName: existing.CardName, Grade: existing.GradeValue,
+				Status: "failed", Error: fmt.Sprintf("backfill buy cost for cert %s: %v", row.CertNumber, err),
+			}
 		}
 	}
 
@@ -322,40 +340,71 @@ func (s *service) handleNewPSAPurchase(ctx context.Context, row PSAExportRow, gr
 	}
 }
 
-func (s *service) autoDetectInvoices(ctx context.Context, rows []PSAExportRow) int {
-	// Group by invoice date, deduplicating by cert number to avoid
-	// double-counting when the export contains repeated rows.
-	groups := make(map[string]int)    // invoiceDate -> totalCents
-	seen := make(map[string]struct{}) // certNumber -> already counted
+func (s *service) autoDetectInvoices(ctx context.Context, rows []PSAExportRow) (int, int) {
+	// Collect all unique invoice dates touched by this import so we reconcile
+	// totals even when the CSV row has PricePaid == 0 (existing purchase may
+	// already have a stored BuyCostCents, or purchases may have been refunded).
+	dates := make(map[string]bool)
 	for _, row := range rows {
-		if row.InvoiceDate == "" || row.PricePaid <= 0 || row.CertNumber == "" {
-			continue
+		if row.InvoiceDate != "" {
+			dates[row.InvoiceDate] = true
 		}
-		if _, dup := seen[row.CertNumber]; dup {
-			continue
-		}
-		seen[row.CertNumber] = struct{}{}
-		cents := mathutil.ToCentsInt(row.PricePaid)
-		groups[row.InvoiceDate] += cents
 	}
 
-	created := 0
 	existingInvoices, err := s.repo.ListInvoices(ctx)
 	if err != nil {
 		if s.logger != nil {
 			s.logger.Warn(ctx, "autoDetectInvoices: failed to list existing invoices", observability.Err(err))
 		}
-		return 0
+		return 0, 0
 	}
-	existingDates := make(map[string]bool, len(existingInvoices))
-	for _, inv := range existingInvoices {
-		existingDates[inv.InvoiceDate] = true
+	// Use a slice-based map so duplicate invoice dates don't silently overwrite.
+	existingByDate := make(map[string][]*Invoice, len(existingInvoices))
+	for i := range existingInvoices {
+		d := existingInvoices[i].InvoiceDate
+		existingByDate[d] = append(existingByDate[d], &existingInvoices[i])
 	}
 
-	for invoiceDate, totalCents := range groups {
-		if existingDates[invoiceDate] {
+	created, updated := 0, 0
+	for invoiceDate := range dates {
+		// Recalculate total from the DB — the source of truth after purchases
+		// have been created/updated earlier in the import.
+		totalCents, err := s.repo.SumPurchaseCostByInvoiceDate(ctx, invoiceDate)
+		if err != nil {
+			if s.logger != nil {
+				s.logger.Warn(ctx, "autoDetectInvoices: failed to sum purchases",
+					observability.String("invoiceDate", invoiceDate),
+					observability.Err(err))
+			}
 			continue
 		}
+
+		if existing := existingByDate[invoiceDate]; len(existing) > 0 {
+			// Update existing invoice totals if purchases changed the amount
+			// (including zeroing out when all purchases were refunded).
+			for _, inv := range existing {
+				if inv.TotalCents != totalCents {
+					inv.TotalCents = totalCents
+					inv.UpdatedAt = time.Now()
+					if err := s.repo.UpdateInvoice(ctx, inv); err != nil {
+						if s.logger != nil {
+							s.logger.Warn(ctx, "autoDetectInvoices: failed to update invoice",
+								observability.String("invoiceDate", invoiceDate),
+								observability.Err(err))
+						}
+					} else {
+						updated++
+					}
+				}
+			}
+			continue
+		}
+
+		// No existing invoice for this date — only create one when there is a positive total.
+		if totalCents <= 0 {
+			continue
+		}
+
 		dueDate := ""
 		if t, err := time.Parse("2006-01-02", invoiceDate); err == nil {
 			dueDate = t.AddDate(0, 0, defaultPSAPaymentTermDays).Format("2006-01-02")
@@ -379,5 +428,5 @@ func (s *service) autoDetectInvoices(ctx context.Context, rows []PSAExportRow) i
 			created++
 		}
 	}
-	return created
+	return created, updated
 }
