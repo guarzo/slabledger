@@ -353,73 +353,81 @@ func TestHandleCertLookup(t *testing.T) {
 
 // --- HandleUpdateBuyCost ---
 
-func TestHandleUpdateBuyCost_Success(t *testing.T) {
-	var capturedID string
-	var capturedCents int
-	svc := &mocks.MockCampaignService{
-		UpdateBuyCostFn: func(_ context.Context, purchaseID string, buyCostCents int) error {
-			capturedID = purchaseID
-			capturedCents = buyCostCents
-			return nil
+func TestHandleUpdateBuyCost(t *testing.T) {
+	tests := []struct {
+		name           string
+		purchaseID     string
+		body           string
+		updateFn       func(context.Context, string, int) error
+		expectedStatus int
+		checkCaptures  func(t *testing.T, id string, cents int)
+	}{
+		{
+			name:       "success",
+			purchaseID: "p1",
+			body:       `{"buyCostCents":18699}`,
+			updateFn: func(_ context.Context, _ string, _ int) error {
+				return nil
+			},
+			expectedStatus: http.StatusNoContent,
+			checkCaptures: func(t *testing.T, id string, cents int) {
+				if id != "p1" {
+					t.Errorf("purchaseID = %q, want p1", id)
+				}
+				if cents != 18699 {
+					t.Errorf("buyCostCents = %d, want 18699", cents)
+				}
+			},
+		},
+		{
+			name:       "not found",
+			purchaseID: "missing",
+			body:       `{"buyCostCents":18699}`,
+			updateFn: func(_ context.Context, _ string, _ int) error {
+				return fmt.Errorf("purchase lookup: %w", campaigns.ErrPurchaseNotFound)
+			},
+			expectedStatus: http.StatusNotFound,
+		},
+		{
+			name:       "validation error",
+			purchaseID: "p1",
+			body:       `{"buyCostCents":0}`,
+			updateFn: func(_ context.Context, _ string, _ int) error {
+				return domainerrors.NewAppError(campaigns.ErrCodeCampaignValidation, "buyCostCents must be > 0")
+			},
+			expectedStatus: http.StatusBadRequest,
 		},
 	}
-	h := newTestHandler(svc)
 
-	body := `{"buyCostCents":18699}`
-	req := httptest.NewRequest(http.MethodPatch, "/api/purchases/p1/buy-cost", strings.NewReader(body))
-	req.SetPathValue("purchaseId", "p1")
-	rec := httptest.NewRecorder()
-	h.HandleUpdateBuyCost(rec, req)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var capturedID string
+			var capturedCents int
+			svc := &mocks.MockCampaignService{
+				UpdateBuyCostFn: func(_ context.Context, purchaseID string, buyCostCents int) error {
+					capturedID = purchaseID
+					capturedCents = buyCostCents
+					return tt.updateFn(context.Background(), purchaseID, buyCostCents)
+				},
+			}
+			h := newTestHandler(svc)
 
-	if rec.Code != http.StatusNoContent {
-		t.Fatalf("expected 204, got %d; body: %s", rec.Code, rec.Body.String())
+			req := httptest.NewRequest(http.MethodPatch, "/api/purchases/"+tt.purchaseID+"/buy-cost", strings.NewReader(tt.body))
+			req.SetPathValue("purchaseId", tt.purchaseID)
+			rec := httptest.NewRecorder()
+			h.HandleUpdateBuyCost(rec, req)
+
+			if rec.Code != tt.expectedStatus {
+				t.Fatalf("expected %d, got %d; body: %s", tt.expectedStatus, rec.Code, rec.Body.String())
+			}
+			if tt.expectedStatus >= 400 {
+				decodeErrorResponse(t, rec)
+			}
+			if tt.checkCaptures != nil {
+				tt.checkCaptures(t, capturedID, capturedCents)
+			}
+		})
 	}
-	if capturedID != "p1" {
-		t.Errorf("purchaseID = %q, want p1", capturedID)
-	}
-	if capturedCents != 18699 {
-		t.Errorf("buyCostCents = %d, want 18699", capturedCents)
-	}
-}
-
-func TestHandleUpdateBuyCost_NotFound(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		UpdateBuyCostFn: func(_ context.Context, _ string, _ int) error {
-			return fmt.Errorf("purchase lookup: %w", campaigns.ErrPurchaseNotFound)
-		},
-	}
-	h := newTestHandler(svc)
-
-	body := `{"buyCostCents":18699}`
-	req := httptest.NewRequest(http.MethodPatch, "/api/purchases/missing/buy-cost", strings.NewReader(body))
-	req.SetPathValue("purchaseId", "missing")
-	rec := httptest.NewRecorder()
-	h.HandleUpdateBuyCost(rec, req)
-
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("expected 404, got %d; body: %s", rec.Code, rec.Body.String())
-	}
-	decodeErrorResponse(t, rec)
-}
-
-func TestHandleUpdateBuyCost_ValidationError(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		UpdateBuyCostFn: func(_ context.Context, _ string, _ int) error {
-			return domainerrors.NewAppError(campaigns.ErrCodeCampaignValidation, "buyCostCents must be > 0")
-		},
-	}
-	h := newTestHandler(svc)
-
-	body := `{"buyCostCents":0}`
-	req := httptest.NewRequest(http.MethodPatch, "/api/purchases/p1/buy-cost", strings.NewReader(body))
-	req.SetPathValue("purchaseId", "p1")
-	rec := httptest.NewRecorder()
-	h.HandleUpdateBuyCost(rec, req)
-
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d; body: %s", rec.Code, rec.Body.String())
-	}
-	decodeErrorResponse(t, rec)
 }
 
 // --- HandleReassignPurchase ---

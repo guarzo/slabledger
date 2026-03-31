@@ -516,13 +516,12 @@ func (m *MockCampaignRepository) ListInvoices(_ context.Context) ([]campaigns.In
 	return result, nil
 }
 func (m *MockCampaignRepository) UpdateInvoice(_ context.Context, inv *campaigns.Invoice) error {
-	for _, existing := range m.Invoices {
-		if existing.ID == inv.ID {
-			*existing = *inv
-			return nil
-		}
+	existing, ok := m.Invoices[inv.ID]
+	if !ok {
+		return campaigns.ErrInvoiceNotFound
 	}
-	return campaigns.ErrInvoiceNotFound
+	*existing = *inv
+	return nil
 }
 func (m *MockCampaignRepository) SumPurchaseCostByInvoiceDate(_ context.Context, invoiceDate string) (int, error) {
 	total := 0

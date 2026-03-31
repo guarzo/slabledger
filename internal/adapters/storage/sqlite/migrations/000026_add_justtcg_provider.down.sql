@@ -5,6 +5,11 @@ DELETE FROM price_refresh_queue WHERE source = 'justtcg';
 DELETE FROM api_calls WHERE provider = 'justtcg';
 DELETE FROM api_rate_limits WHERE provider = 'justtcg';
 
+-- Drop views first (they depend on api_calls)
+DROP VIEW IF EXISTS api_daily_summary;
+DROP VIEW IF EXISTS api_hourly_distribution;
+DROP VIEW IF EXISTS api_usage_summary;
+
 -- 1. api_calls
 CREATE TABLE api_calls_new (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -77,11 +82,7 @@ CREATE INDEX idx_refresh_queue_priority ON price_refresh_queue(priority ASC, sch
     WHERE status = 'pending';
 CREATE INDEX idx_refresh_queue_status ON price_refresh_queue(status, last_attempted_at);
 
--- 4. Recreate views
-DROP VIEW IF EXISTS api_usage_summary;
-DROP VIEW IF EXISTS api_hourly_distribution;
-DROP VIEW IF EXISTS api_daily_summary;
-
+-- 4. Recreate views (already dropped above)
 CREATE VIEW api_usage_summary AS
 SELECT
     provider,

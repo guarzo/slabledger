@@ -387,13 +387,12 @@ func (m *mockRepo) ListInvoices(_ context.Context) ([]Invoice, error) {
 	return result, nil
 }
 func (m *mockRepo) UpdateInvoice(_ context.Context, inv *Invoice) error {
-	for _, existing := range m.invoices {
-		if existing.ID == inv.ID {
-			*existing = *inv
-			return nil
-		}
+	existing, ok := m.invoices[inv.ID]
+	if !ok {
+		return ErrInvoiceNotFound
 	}
-	return ErrInvoiceNotFound
+	*existing = *inv
+	return nil
 }
 func (m *mockRepo) SumPurchaseCostByInvoiceDate(_ context.Context, invoiceDate string) (int, error) {
 	total := 0
