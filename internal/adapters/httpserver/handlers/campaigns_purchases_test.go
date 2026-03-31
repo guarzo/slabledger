@@ -391,9 +391,9 @@ func TestHandleUpdateBuyCost(t *testing.T) {
 		{
 			name:       "validation error",
 			purchaseID: "p1",
-			body:       `{"buyCostCents":0}`,
+			body:       `{"buyCostCents":-1}`,
 			updateFn: func(_ context.Context, _ string, _ int) error {
-				return domainerrors.NewAppError(campaigns.ErrCodeCampaignValidation, "buyCostCents must be > 0")
+				return domainerrors.NewAppError(campaigns.ErrCodeCampaignValidation, "buyCostCents must be >= 0")
 			},
 			expectedStatus: http.StatusBadRequest,
 		},

@@ -219,6 +219,10 @@ func (s *service) handleExistingPSAPurchase(ctx context.Context, existing *Purch
 					observability.String("cert", row.CertNumber),
 					observability.Err(err))
 			}
+			return PSAImportItemResult{
+				CertNumber: row.CertNumber, CardName: existing.CardName, Grade: existing.GradeValue,
+				Status: "failed", Error: fmt.Sprintf("backfill buy cost for cert %s: %v", row.CertNumber, err),
+			}
 		}
 	}
 
@@ -337,10 +341,12 @@ func (s *service) handleNewPSAPurchase(ctx context.Context, row PSAExportRow, gr
 }
 
 func (s *service) autoDetectInvoices(ctx context.Context, rows []PSAExportRow) (int, int) {
-	// Collect unique invoice dates from the import.
+	// Collect all unique invoice dates touched by this import so we reconcile
+	// totals even when the CSV row has PricePaid == 0 (existing purchase may
+	// already have a stored BuyCostCents, or purchases may have been refunded).
 	dates := make(map[string]bool)
 	for _, row := range rows {
-		if row.InvoiceDate != "" && row.PricePaid > 0 && row.CertNumber != "" {
+		if row.InvoiceDate != "" {
 			dates[row.InvoiceDate] = true
 		}
 	}
@@ -352,9 +358,11 @@ func (s *service) autoDetectInvoices(ctx context.Context, rows []PSAExportRow) (
 		}
 		return 0, 0
 	}
-	existingByDate := make(map[string]*Invoice, len(existingInvoices))
+	// Use a slice-based map so duplicate invoice dates don't silently overwrite.
+	existingByDate := make(map[string][]*Invoice, len(existingInvoices))
 	for i := range existingInvoices {
-		existingByDate[existingInvoices[i].InvoiceDate] = &existingInvoices[i]
+		d := existingInvoices[i].InvoiceDate
+		existingByDate[d] = append(existingByDate[d], &existingInvoices[i])
 	}
 
 	created, updated := 0, 0
@@ -370,25 +378,30 @@ func (s *service) autoDetectInvoices(ctx context.Context, rows []PSAExportRow) (
 			}
 			continue
 		}
-		if totalCents <= 0 {
+
+		if existing := existingByDate[invoiceDate]; len(existing) > 0 {
+			// Update existing invoice totals if purchases changed the amount
+			// (including zeroing out when all purchases were refunded).
+			for _, inv := range existing {
+				if inv.TotalCents != totalCents {
+					inv.TotalCents = totalCents
+					inv.UpdatedAt = time.Now()
+					if err := s.repo.UpdateInvoice(ctx, inv); err != nil {
+						if s.logger != nil {
+							s.logger.Warn(ctx, "autoDetectInvoices: failed to update invoice",
+								observability.String("invoiceDate", invoiceDate),
+								observability.Err(err))
+						}
+					} else {
+						updated++
+					}
+				}
+			}
 			continue
 		}
 
-		if existing := existingByDate[invoiceDate]; existing != nil {
-			// Update existing invoice total if purchases changed the amount.
-			if existing.TotalCents != totalCents {
-				existing.TotalCents = totalCents
-				existing.UpdatedAt = time.Now()
-				if err := s.repo.UpdateInvoice(ctx, existing); err != nil {
-					if s.logger != nil {
-						s.logger.Warn(ctx, "autoDetectInvoices: failed to update invoice",
-							observability.String("invoiceDate", invoiceDate),
-							observability.Err(err))
-					}
-				} else {
-					updated++
-				}
-			}
+		// No existing invoice for this date — only create one when there is a positive total.
+		if totalCents <= 0 {
 			continue
 		}
 

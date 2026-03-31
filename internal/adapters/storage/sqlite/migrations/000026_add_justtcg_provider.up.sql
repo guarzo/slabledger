@@ -1,12 +1,14 @@
 -- Add 'justtcg' to provider CHECK constraints on api_calls, api_rate_limits, and price_refresh_queue.
 -- SQLite cannot ALTER CHECK constraints, so we recreate the tables.
+-- price_refresh_queue has a FK to api_rate_limits (ON DELETE RESTRICT),
+-- so we must drop the child table before replacing the parent.
 
 -- Drop views first (they depend on api_calls)
 DROP VIEW IF EXISTS api_daily_summary;
 DROP VIEW IF EXISTS api_hourly_distribution;
 DROP VIEW IF EXISTS api_usage_summary;
 
--- 1. api_calls: recreate with updated CHECK constraint
+-- 1. api_calls: recreate with updated CHECK constraint (no FK references to this table)
 CREATE TABLE api_calls_new (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     provider TEXT NOT NULL CHECK(provider IN (
@@ -27,7 +29,11 @@ CREATE INDEX idx_api_calls_provider ON api_calls(provider, timestamp DESC);
 CREATE INDEX idx_api_calls_timestamp ON api_calls(timestamp DESC);
 CREATE INDEX idx_api_calls_errors ON api_calls(provider, status_code) WHERE status_code >= 400;
 
--- 2. api_rate_limits: recreate with updated CHECK constraint
+-- 2. price_refresh_queue: save data and drop child table before touching api_rate_limits
+CREATE TABLE price_refresh_queue_save AS SELECT * FROM price_refresh_queue;
+DROP TABLE price_refresh_queue;
+
+-- 3. api_rate_limits: now safe to recreate (no FK children remain)
 CREATE TABLE api_rate_limits_new (
     provider TEXT PRIMARY KEY CHECK(provider IN (
         'pricecharting', 'pokemonprice', 'cardmarket', 'cardhedger', 'fusion', 'justtcg'
@@ -44,8 +50,8 @@ INSERT INTO api_rate_limits_new SELECT * FROM api_rate_limits;
 DROP TABLE api_rate_limits;
 ALTER TABLE api_rate_limits_new RENAME TO api_rate_limits;
 
--- 3. price_refresh_queue: recreate with updated source CHECK constraint
-CREATE TABLE price_refresh_queue_new (
+-- 4. price_refresh_queue: recreate with updated CHECK and FK to new api_rate_limits
+CREATE TABLE price_refresh_queue (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     card_name TEXT NOT NULL,
     set_name TEXT NOT NULL,
@@ -70,15 +76,14 @@ CREATE TABLE price_refresh_queue_new (
     FOREIGN KEY (source) REFERENCES api_rate_limits(provider) ON UPDATE CASCADE ON DELETE RESTRICT
 );
 
-INSERT INTO price_refresh_queue_new SELECT * FROM price_refresh_queue;
-DROP TABLE price_refresh_queue;
-ALTER TABLE price_refresh_queue_new RENAME TO price_refresh_queue;
+INSERT INTO price_refresh_queue SELECT * FROM price_refresh_queue_save;
+DROP TABLE price_refresh_queue_save;
 
 CREATE INDEX idx_refresh_queue_priority ON price_refresh_queue(priority ASC, scheduled_at ASC)
     WHERE status = 'pending';
 CREATE INDEX idx_refresh_queue_status ON price_refresh_queue(status, last_attempted_at);
 
--- 4. Recreate views that depend on api_calls
+-- 5. Recreate views that depend on api_calls
 CREATE VIEW api_usage_summary AS
 SELECT
     provider,
