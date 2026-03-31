@@ -1,10 +1,32 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { api } from '@/js/api';
 import type { EbayExportItem, EbayExportGenerateItem } from '@/types/campaigns/core';
-import { centsToDollars, dollarsToCents } from '@/react/utils/formatters';
+import PriceDecisionBar from '@/react/ui/PriceDecisionBar';
+import type { PriceSource } from '@/react/ui/PriceDecisionBar';
 
-type Decision = { action: 'accept' | 'edit'; priceCents: number } | { action: 'skip' };
+type Decision = { action: 'accept'; priceCents: number; source: string } | { action: 'skip' };
 type Phase = 'review' | 'export';
+
+function buildSources(item: EbayExportItem): PriceSource[] {
+  return [
+    { label: 'CL', priceCents: item.clValueCents, source: 'cl' },
+    { label: 'Market', priceCents: item.marketMedianCents, source: 'market' },
+    { label: 'Cost', priceCents: item.costBasisCents, source: 'cost_basis' },
+    { label: 'Last Sold', priceCents: item.lastSoldCents, source: 'last_sold' },
+  ];
+}
+
+function preSelectSource(item: EbayExportItem): string | undefined {
+  const sources = buildSources(item);
+  if (item.reviewedPriceCents && item.reviewedPriceCents > 0) {
+    const match = sources.find(s => s.priceCents === item.reviewedPriceCents && s.priceCents > 0);
+    if (match) return match.source;
+  }
+  if (item.clValueCents > 0) return 'cl';
+  if (item.marketMedianCents > 0) return 'market';
+  if (item.costBasisCents > 0) return 'cost_basis';
+  return undefined;
+}
 
 export default function EbayExportTab() {
   const [phase, setPhase] = useState<Phase>('review');
@@ -12,14 +34,11 @@ export default function EbayExportTab() {
   const [decisions, setDecisions] = useState<Map<string, Decision>>(new Map());
   const [flaggedOnly, setFlaggedOnly] = useState(true);
   const [loading, setLoading] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editPrice, setEditPrice] = useState('');
   const [exportCount, setExportCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const fetchControllerRef = useRef<AbortController | null>(null);
 
   const fetchItems = useCallback(async () => {
-    // Abort any in-flight fetch so stale responses can't overwrite state.
     fetchControllerRef.current?.abort();
     const controller = new AbortController();
     fetchControllerRef.current = controller;
@@ -39,7 +58,6 @@ export default function EbayExportTab() {
     }
   }, [flaggedOnly]);
 
-  // Clear stale items when the filter toggle changes.
   useEffect(() => {
     fetchControllerRef.current?.abort();
     setItems([]);
@@ -54,8 +72,13 @@ export default function EbayExportTab() {
   const acceptAll = () => {
     const next = new Map(decisions);
     for (const item of items) {
-      if (item.suggestedPriceCents > 0) {
-        next.set(item.purchaseId, { action: 'accept', priceCents: item.suggestedPriceCents });
+      const existing = next.get(item.purchaseId);
+      if (existing?.action === 'skip') continue;
+      const sources = buildSources(item);
+      const preKey = preSelectSource(item);
+      const source = sources.find(s => s.source === preKey && s.priceCents > 0);
+      if (source) {
+        next.set(item.purchaseId, { action: 'accept', priceCents: source.priceCents, source: source.source });
       }
     }
     setDecisions(next);
@@ -69,23 +92,10 @@ export default function EbayExportTab() {
     setDecisions(next);
   };
 
-  const handleEdit = (id: string, currentCents: number) => {
-    setEditingId(id);
-    setEditPrice(centsToDollars(currentCents));
-  };
-
-  const confirmEdit = (id: string) => {
-    const cents = dollarsToCents(editPrice);
-    if (cents > 0) {
-      setDecision(id, { action: 'edit', priceCents: cents });
-    }
-    setEditingId(null);
-  };
-
   const handleExport = async () => {
     const exportItems: EbayExportGenerateItem[] = [];
     for (const [purchaseId, decision] of decisions) {
-      if (decision.action === 'accept' || decision.action === 'edit') {
+      if (decision.action === 'accept') {
         exportItems.push({ purchaseId, priceCents: decision.priceCents });
       }
     }
@@ -111,9 +121,7 @@ export default function EbayExportTab() {
   };
 
   const acceptedCount = useMemo(() =>
-    Array.from(decisions.values()).filter(
-      d => d.action === 'accept' || d.action === 'edit'
-    ).length,
+    Array.from(decisions.values()).filter(d => d.action === 'accept').length,
     [decisions]
   );
 
@@ -125,7 +133,7 @@ export default function EbayExportTab() {
           {exportCount} items exported to ebay_import.csv
         </p>
         <button
-          onClick={() => { setPhase('review'); setItems([]); setDecisions(new Map()); setEditingId(null); setEditPrice(''); }}
+          onClick={() => { setPhase('review'); setItems([]); setDecisions(new Map()); }}
           className="mt-4 rounded bg-gray-700 px-4 py-2 text-sm text-gray-200 hover:bg-gray-600"
         >
           Start Over
@@ -177,109 +185,41 @@ export default function EbayExportTab() {
             </div>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="border-b border-gray-700 text-xs text-gray-400">
-                <tr>
-                  <th className="pb-2 pr-4">Card</th>
-                  <th className="pb-2 pr-4">Set</th>
-                  <th className="pb-2 pr-4">#</th>
-                  <th className="pb-2 pr-4">Grade</th>
-                  <th className="pb-2 pr-4">Cert</th>
-                  <th className="pb-2 pr-4 text-right">CL Value</th>
-                  <th className="pb-2 pr-4 text-right">Market</th>
-                  <th className="pb-2 pr-4 text-right">Price</th>
-                  <th className="pb-2">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-800">
-                {items.map(item => {
-                  const decision = decisions.get(item.purchaseId);
-                  const priceCents = decision && decision.action !== 'skip'
-                    ? decision.priceCents
-                    : item.suggestedPriceCents;
-                  const isEditing = editingId === item.purchaseId;
+          <div className="space-y-2">
+            {items.map(item => {
+              const decision = decisions.get(item.purchaseId);
+              const status: 'pending' | 'accepted' | 'skipped' =
+                decision?.action === 'accept' ? 'accepted' :
+                decision?.action === 'skip' ? 'skipped' : 'pending';
 
-                  return (
-                    <tr key={item.purchaseId} className="text-gray-300">
-                      <td className="py-2 pr-4 font-medium">{item.cardName}</td>
-                      <td className="py-2 pr-4">{item.setName}</td>
-                      <td className="py-2 pr-4">{item.cardNumber}</td>
-                      <td className="py-2 pr-4">PSA {item.gradeValue}</td>
-                      <td className="py-2 pr-4 font-mono text-xs">{item.certNumber}</td>
-                      <td className="py-2 pr-4 text-right">
-                        {item.hasCLValue ? `$${centsToDollars(item.clValueCents)}` : (
-                          <span className="text-yellow-500">No CL</span>
-                        )}
-                      </td>
-                      <td className="py-2 pr-4 text-right">
-                        {item.hasMarketData ? `$${centsToDollars(item.marketMedianCents)}` : (
-                          <span className="text-yellow-500">No Data</span>
-                        )}
-                      </td>
-                      <td className="py-2 pr-4 text-right">
-                        {isEditing ? (
-                          <div className="flex items-center justify-end gap-1">
-                            <span className="text-gray-400">$</span>
-                            <input
-                              type="number"
-                              aria-label={`Edit price for ${item.cardName}`}
-                              value={editPrice}
-                              onChange={e => setEditPrice(e.target.value)}
-                              onKeyDown={e => {
-                                if (e.key === 'Enter') confirmEdit(item.purchaseId);
-                                if (e.key === 'Escape') setEditingId(null);
-                              }}
-                              className="w-20 rounded border border-gray-600 bg-gray-800 px-2 py-1 text-right text-sm"
-                              autoFocus
-                            />
-                          </div>
-                        ) : (
-                          priceCents > 0 ? `$${centsToDollars(priceCents)}` : (
-                            <span className="text-red-400">$0</span>
-                          )
-                        )}
-                      </td>
-                      <td className="py-2">
-                        <div className="flex gap-1">
-                          <button
-                            onClick={() => setDecision(item.purchaseId, { action: 'accept', priceCents: item.suggestedPriceCents })}
-                            disabled={item.suggestedPriceCents <= 0}
-                            className={`rounded px-2 py-1 text-xs ${
-                              decision?.action === 'accept'
-                                ? 'bg-green-600 text-white'
-                                : 'bg-gray-700 text-gray-300 hover:bg-green-700 disabled:opacity-30'
-                            }`}
-                          >
-                            Accept
-                          </button>
-                          <button
-                            onClick={() => handleEdit(item.purchaseId, priceCents || item.suggestedPriceCents)}
-                            className={`rounded px-2 py-1 text-xs ${
-                              decision?.action === 'edit'
-                                ? 'bg-blue-600 text-white'
-                                : 'bg-gray-700 text-gray-300 hover:bg-blue-700'
-                            }`}
-                          >
-                            Edit
-                          </button>
-                          <button
-                            onClick={() => setDecision(item.purchaseId, { action: 'skip' })}
-                            className={`rounded px-2 py-1 text-xs ${
-                              decision?.action === 'skip'
-                                ? 'bg-red-600 text-white'
-                                : 'bg-gray-700 text-gray-300 hover:bg-red-700'
-                            }`}
-                          >
-                            Skip
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+              return (
+                <div key={item.purchaseId} className="rounded border border-[var(--border)] bg-[var(--surface-1)] p-3">
+                  <div className="flex items-center gap-4 mb-2 text-sm">
+                    <span className="font-medium text-[var(--text)]">{item.cardName}</span>
+                    <span className="text-[var(--text-muted)]">{item.setName}</span>
+                    <span className="text-[var(--text-muted)]">#{item.cardNumber}</span>
+                    <span className="text-[var(--text)]">PSA {item.gradeValue}</span>
+                    <span className="font-mono text-xs text-[var(--text-muted)]">{item.certNumber}</span>
+                  </div>
+                  <PriceDecisionBar
+                    sources={buildSources(item)}
+                    preSelected={preSelectSource(item)}
+                    status={status}
+                    onConfirm={(priceCents, source) => {
+                      setDecision(item.purchaseId, { action: 'accept', priceCents, source });
+                    }}
+                    onSkip={() => setDecision(item.purchaseId, { action: 'skip' })}
+                    onReset={() => {
+                      setDecisions(prev => {
+                        const next = new Map(prev);
+                        next.delete(item.purchaseId);
+                        return next;
+                      });
+                    }}
+                  />
+                </div>
+              );
+            })}
           </div>
 
           <div className="flex justify-end">
