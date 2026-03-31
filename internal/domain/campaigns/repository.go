@@ -40,6 +40,9 @@ type PurchaseRepository interface {
 	UpdatePurchaseCampaign(ctx context.Context, purchaseID string, campaignID string, sourcingFeeCents int) error
 	UpdatePurchasePSAFields(ctx context.Context, id string, fields PSAUpdateFields) error
 
+	// Buy cost correction
+	UpdatePurchaseBuyCost(ctx context.Context, id string, buyCostCents int) error
+
 	// Price overrides & AI suggestions
 	UpdatePurchasePriceOverride(ctx context.Context, purchaseID string, priceCents int, source string) error
 	UpdatePurchaseAISuggestion(ctx context.Context, purchaseID string, priceCents int) error
@@ -85,6 +88,7 @@ type FinanceRepository interface {
 	GetInvoice(ctx context.Context, id string) (*Invoice, error)
 	ListInvoices(ctx context.Context) ([]Invoice, error)
 	UpdateInvoice(ctx context.Context, inv *Invoice) error
+	SumPurchaseCostByInvoiceDate(ctx context.Context, invoiceDate string) (int, error)
 	GetCashflowConfig(ctx context.Context) (*CashflowConfig, error)
 	UpdateCashflowConfig(ctx context.Context, cfg *CashflowConfig) error
 	GetCreditSummary(ctx context.Context) (*CreditSummary, error)

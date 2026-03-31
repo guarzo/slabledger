@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	domainerrors "github.com/guarzo/slabledger/internal/domain/errors"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
 )
 
@@ -345,6 +346,85 @@ func TestHandleCertLookup(t *testing.T) {
 			}
 			if tt.checkBody != nil {
 				tt.checkBody(t, rec)
+			}
+		})
+	}
+}
+
+// --- HandleUpdateBuyCost ---
+
+func TestHandleUpdateBuyCost(t *testing.T) {
+	tests := []struct {
+		name           string
+		purchaseID     string
+		body           string
+		updateFn       func(context.Context, string, int) error
+		expectedStatus int
+		checkCaptures  func(t *testing.T, id string, cents int)
+	}{
+		{
+			name:       "success",
+			purchaseID: "p1",
+			body:       `{"buyCostCents":18699}`,
+			updateFn: func(_ context.Context, _ string, _ int) error {
+				return nil
+			},
+			expectedStatus: http.StatusNoContent,
+			checkCaptures: func(t *testing.T, id string, cents int) {
+				if id != "p1" {
+					t.Errorf("purchaseID = %q, want p1", id)
+				}
+				if cents != 18699 {
+					t.Errorf("buyCostCents = %d, want 18699", cents)
+				}
+			},
+		},
+		{
+			name:       "not found",
+			purchaseID: "missing",
+			body:       `{"buyCostCents":18699}`,
+			updateFn: func(_ context.Context, _ string, _ int) error {
+				return fmt.Errorf("purchase lookup: %w", campaigns.ErrPurchaseNotFound)
+			},
+			expectedStatus: http.StatusNotFound,
+		},
+		{
+			name:       "validation error",
+			purchaseID: "p1",
+			body:       `{"buyCostCents":-1}`,
+			updateFn: func(_ context.Context, _ string, _ int) error {
+				return domainerrors.NewAppError(campaigns.ErrCodeCampaignValidation, "buyCostCents must be >= 0")
+			},
+			expectedStatus: http.StatusBadRequest,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var capturedID string
+			var capturedCents int
+			svc := &mocks.MockCampaignService{
+				UpdateBuyCostFn: func(_ context.Context, purchaseID string, buyCostCents int) error {
+					capturedID = purchaseID
+					capturedCents = buyCostCents
+					return tt.updateFn(context.Background(), purchaseID, buyCostCents)
+				},
+			}
+			h := newTestHandler(svc)
+
+			req := httptest.NewRequest(http.MethodPatch, "/api/purchases/"+tt.purchaseID+"/buy-cost", strings.NewReader(tt.body))
+			req.SetPathValue("purchaseId", tt.purchaseID)
+			rec := httptest.NewRecorder()
+			h.HandleUpdateBuyCost(rec, req)
+
+			if rec.Code != tt.expectedStatus {
+				t.Fatalf("expected %d, got %d; body: %s", tt.expectedStatus, rec.Code, rec.Body.String())
+			}
+			if tt.expectedStatus >= 400 {
+				decodeErrorResponse(t, rec)
+			}
+			if tt.checkCaptures != nil {
+				tt.checkCaptures(t, capturedID, capturedCents)
 			}
 		})
 	}

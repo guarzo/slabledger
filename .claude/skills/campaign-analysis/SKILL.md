@@ -17,13 +17,15 @@ Read docs/private/CAMPAIGN_STRATEGY.md
 
 This contains campaign design intent, margin formulas, exit channel hierarchy, operational cadence, risk triggers. Cross-reference throughout.
 
-## Step 2: Verify server is running
+## Step 2: Connect to production instance
+
+Use the **production instance** for analysis — it has the most current data:
 
 ```bash
-curl -sf http://localhost:8081/api/health
+curl -sf -H "Authorization: Bearer $LOCAL_API_TOKEN" https://slabledger.dpao.la/api/health
 ```
 
-If this fails, suggest: `go build -o slabledger ./cmd/slabledger && ./slabledger`
+Set `BASE_URL=https://slabledger.dpao.la` for all subsequent requests. If production is unreachable, fall back to `http://localhost:8081` (verify with `curl -sf http://localhost:8081/api/health`; if that also fails, suggest: `go build -o slabledger ./cmd/slabledger && ./slabledger`).
 
 ## Step 3: Determine analysis mode
 
@@ -41,7 +43,7 @@ Parse arguments:
 
 All endpoints except `/api/health` require auth:
 ```bash
-curl -s -H "Authorization: Bearer $LOCAL_API_TOKEN" http://localhost:8081/api/campaigns
+curl -s -H "Authorization: Bearer $LOCAL_API_TOKEN" $BASE_URL/api/campaigns
 ```
 
 If `LOCAL_API_TOKEN` is not set and you get 401, ask the user to set it in `.env` and restart.
@@ -86,7 +88,30 @@ Present: identity + strategy intent, P&L summary, channel performance, fill rate
 - **ROI** is a decimal ratio (0.08 = 8%)
 - **Margin at 80% terms:** CL x 7.65% - $3 per card on eBay (12.35% fees)
 - **PSA 7 cards have NO GameStop exit** (PSA 8-10 only, $1,500 cash cap)
-- **Credit limit:** $50,000 with PSA, bimonthly invoicing, 14-day payment terms
+- **Credit limit:** $50,000 with PSA, bimonthly invoicing, 14-day payment terms. PSA has discretion to allow higher utilization — check with user before flagging credit as critical.
+- **~1 week delay** between PSA purchase consummation and card receipt. Campaigns with <2 weeks of history and 0% sell-through are not necessarily underperforming — cards may not be in hand yet.
+
+## Key API field names
+
+When reading purchase data from the API, use the correct JSON field names:
+
+| Field | JSON key | Notes |
+|-------|----------|-------|
+| Buy cost | `buyCostCents` | NOT `purchasePriceCents` |
+| Grade | `gradeValue` | Float (supports half-grades like 8.5) |
+| CL Value | `clValueCents` | Card Ladder value at time of purchase |
+| Card name | `cardName` | Cleaned name from cert lookup |
+| PSA title | `psaListingTitle` | Full PSA label text |
+| Cert number | `certNumber` | PSA cert number |
+| Purchase ID | `id` | UUID — use this for API operations, NOT cert number |
+
+## Available purchase operations
+
+- **Reassign**: `PATCH /api/purchases/{id}/campaign` — body: `{"campaignId":"..."}` — moves a purchase between campaigns
+- **Update buy cost**: `PATCH /api/purchases/{id}/buy-cost` — body: `{"buyCostCents":18699}` — fixes missing/incorrect purchase prices
+- **Price override**: `PATCH /api/purchases/{id}/price-override` — body: `{"priceCents":..., "source":"manual"}` — overrides sale price
+
+Note: Use the purchase **UUID** (`id` field), not the cert number, for all API operations.
 
 ## Conversational guidelines
 
@@ -94,9 +119,10 @@ Present: identity + strategy intent, P&L summary, channel performance, fill rate
 2. Use specific dollar amounts and percentages
 3. Connect data to strategy document sections
 4. Ask what the user wants to explore next
-5. Flag risks proactively (credit proximity, slow inventory, duplicates)
+5. Flag risks proactively (slow inventory, duplicates, $0 buy costs)
 6. Be direct about what's not working
 7. Caveat small sample sizes (<10 transactions)
+8. When checking for campaign mismatches, compare purchase era/grade/character against the campaign's parameters from the strategy doc
 
 ## Reference
 

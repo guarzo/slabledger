@@ -14,6 +14,7 @@ type mockRepo struct {
 	campaigns       map[string]*Campaign
 	purchases       map[string]*Purchase
 	sales           map[string]*Sale
+	invoices        map[string]*Invoice // keyed by ID
 	certNumbers     map[string]bool
 	purchaseSales   map[string]bool // purchaseID -> has sale
 	pnlData         map[string]*CampaignPNL
@@ -25,6 +26,7 @@ func newMockRepo() *mockRepo {
 		campaigns:     make(map[string]*Campaign),
 		purchases:     make(map[string]*Purchase),
 		sales:         make(map[string]*Sale),
+		invoices:      make(map[string]*Invoice),
 		certNumbers:   make(map[string]bool),
 		purchaseSales: make(map[string]bool),
 		pnlData:       make(map[string]*CampaignPNL),
@@ -367,10 +369,40 @@ func (m *mockRepo) UpdatePurchasePSAFields(_ context.Context, id string, fields 
 	return nil
 }
 
-func (m *mockRepo) CreateInvoice(_ context.Context, _ *Invoice) error        { return nil }
-func (m *mockRepo) GetInvoice(_ context.Context, _ string) (*Invoice, error) { return &Invoice{}, nil }
-func (m *mockRepo) ListInvoices(_ context.Context) ([]Invoice, error)        { return nil, nil }
-func (m *mockRepo) UpdateInvoice(_ context.Context, _ *Invoice) error        { return nil }
+func (m *mockRepo) CreateInvoice(_ context.Context, inv *Invoice) error {
+	m.invoices[inv.ID] = inv
+	return nil
+}
+func (m *mockRepo) GetInvoice(_ context.Context, id string) (*Invoice, error) {
+	if inv, ok := m.invoices[id]; ok {
+		return inv, nil
+	}
+	return nil, ErrInvoiceNotFound
+}
+func (m *mockRepo) ListInvoices(_ context.Context) ([]Invoice, error) {
+	result := make([]Invoice, 0, len(m.invoices))
+	for _, inv := range m.invoices {
+		result = append(result, *inv)
+	}
+	return result, nil
+}
+func (m *mockRepo) UpdateInvoice(_ context.Context, inv *Invoice) error {
+	existing, ok := m.invoices[inv.ID]
+	if !ok {
+		return ErrInvoiceNotFound
+	}
+	*existing = *inv
+	return nil
+}
+func (m *mockRepo) SumPurchaseCostByInvoiceDate(_ context.Context, invoiceDate string) (int, error) {
+	total := 0
+	for _, p := range m.purchases {
+		if p.InvoiceDate == invoiceDate && !p.WasRefunded {
+			total += p.BuyCostCents + p.PSASourcingFeeCents
+		}
+	}
+	return total, nil
+}
 
 func (m *mockRepo) GetCashflowConfig(_ context.Context) (*CashflowConfig, error) {
 	return &CashflowConfig{CreditLimitCents: 5000000, CashBufferCents: 1000000}, nil
@@ -446,6 +478,15 @@ func (m *mockRepo) UpdateRevocationFlagStatus(_ context.Context, _ string, _ str
 
 func (m *mockRepo) GetPriceOverrideStats(_ context.Context) (*PriceOverrideStats, error) {
 	return &PriceOverrideStats{}, nil
+}
+
+func (m *mockRepo) UpdatePurchaseBuyCost(_ context.Context, id string, buyCostCents int) error {
+	p, ok := m.purchases[id]
+	if !ok {
+		return ErrPurchaseNotFound
+	}
+	p.BuyCostCents = buyCostCents
+	return nil
 }
 
 func (m *mockRepo) UpdatePurchasePriceOverride(_ context.Context, purchaseID string, priceCents int, source string) error {

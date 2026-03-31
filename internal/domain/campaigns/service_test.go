@@ -678,6 +678,75 @@ func TestService_ImportPSAExportGlobal_ExtractGrade(t *testing.T) {
 	}
 }
 
+func TestService_ImportPSAExportGlobal_InvoiceUpdatesOnReimport(t *testing.T) {
+	repo := mocks.NewMockCampaignRepository()
+	svc := campaigns.NewService(repo, withTestIDGen())
+	ctx := context.Background()
+
+	c := &campaigns.Campaign{Name: "Test", Sport: "Pokemon", BuyTermsCLPct: 0.78, GradeRange: "8-10", PSASourcingFeeCents: 300}
+	if err := svc.CreateCampaign(ctx, c); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+	c.Phase = campaigns.PhaseActive
+	if err := svc.UpdateCampaign(ctx, c); err != nil {
+		t.Fatalf("setup activate: %v", err)
+	}
+
+	// First import: one purchase with invoice date
+	rows1 := []campaigns.PSAExportRow{
+		{CertNumber: "INV001", ListingTitle: "2022 POKEMON CHARIZARD PSA 9", Grade: 9, PricePaid: 200, Date: "2026-03-01", InvoiceDate: "2026-03-15", Category: "Pokemon"},
+	}
+	result1, err := svc.ImportPSAExportGlobal(ctx, rows1)
+	if err != nil {
+		t.Fatalf("first import: %v", err)
+	}
+	if result1.InvoicesCreated != 1 {
+		t.Errorf("first import InvoicesCreated = %d, want 1", result1.InvoicesCreated)
+	}
+
+	// Find the created invoice and verify its total
+	var firstInvoice *campaigns.Invoice
+	for _, inv := range repo.Invoices {
+		if inv.InvoiceDate == "2026-03-15" {
+			firstInvoice = inv
+			break
+		}
+	}
+	if firstInvoice == nil {
+		t.Fatal("expected invoice for 2026-03-15 to exist after first import")
+	}
+	// 200 * 100 (cents) + 300 (sourcing fee) = 20300
+	if firstInvoice.TotalCents != 20300 {
+		t.Errorf("first invoice TotalCents = %d, want 20300", firstInvoice.TotalCents)
+	}
+
+	// Second import: new purchase for the same invoice date
+	rows2 := []campaigns.PSAExportRow{
+		{CertNumber: "INV001", ListingTitle: "2022 POKEMON CHARIZARD PSA 9", Grade: 9, PricePaid: 200, Date: "2026-03-01", InvoiceDate: "2026-03-15", Category: "Pokemon"},
+		{CertNumber: "INV002", ListingTitle: "2022 POKEMON PIKACHU PSA 10", Grade: 10, PricePaid: 150, Date: "2026-03-02", InvoiceDate: "2026-03-15", Category: "Pokemon"},
+	}
+	result2, err := svc.ImportPSAExportGlobal(ctx, rows2)
+	if err != nil {
+		t.Fatalf("second import: %v", err)
+	}
+
+	// Should update the existing invoice, not create a new one
+	if result2.InvoicesCreated != 0 {
+		t.Errorf("second import InvoicesCreated = %d, want 0", result2.InvoicesCreated)
+	}
+	if result2.InvoicesUpdated != 1 {
+		t.Errorf("second import InvoicesUpdated = %d, want 1", result2.InvoicesUpdated)
+	}
+
+	// Verify the invoice total now includes both purchases
+	// Purchase 1: 20000 cents + 300 fee = 20300
+	// Purchase 2: 15000 cents + 300 fee = 15300
+	// Total: 35600
+	if firstInvoice.TotalCents != 35600 {
+		t.Errorf("updated invoice TotalCents = %d, want 35600", firstInvoice.TotalCents)
+	}
+}
+
 // --- GetPortfolioHealth tests ---
 
 func TestService_GetPortfolioHealth_Healthy(t *testing.T) {
