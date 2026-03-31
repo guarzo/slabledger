@@ -98,3 +98,47 @@ func TestGenerateEbayCSV_RejectsZeroPrice(t *testing.T) {
 		t.Fatal("expected error for zero price")
 	}
 }
+
+func TestListEbayExportItems_IncludesNewPriceFields(t *testing.T) {
+	now := time.Now()
+	repo := newMockRepo()
+	repo.campaigns["c1"] = &Campaign{ID: "c1", Phase: PhaseActive}
+	repo.purchases["p1"] = &Purchase{
+		ID: "p1", CampaignID: "c1", CertNumber: "111",
+		CardName: "Charizard", SetName: "Base Set",
+		CardNumber: "4", CardYear: "1999",
+		GradeValue: 8, Grader: "PSA",
+		CLValueCents:        25000,
+		BuyCostCents:        10000,
+		PSASourcingFeeCents: 300,
+		ReviewedPriceCents:  24000,
+		ReviewedAt:          "2026-03-30T10:00:00Z",
+		EbayExportFlaggedAt: &now,
+		MarketSnapshotData: MarketSnapshotData{
+			MedianCents:   27500,
+			LastSoldCents: 26000,
+		},
+	}
+
+	svc := &service{repo: repo, idGen: func() string { return "id" }}
+	resp, err := svc.ListEbayExportItems(context.Background(), true)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(resp.Items) != 1 {
+		t.Fatalf("items = %d, want 1", len(resp.Items))
+	}
+	item := resp.Items[0]
+	if item.CostBasisCents != 10300 {
+		t.Errorf("CostBasisCents = %d, want 10300", item.CostBasisCents)
+	}
+	if item.LastSoldCents != 26000 {
+		t.Errorf("LastSoldCents = %d, want 26000", item.LastSoldCents)
+	}
+	if item.ReviewedPriceCents != 24000 {
+		t.Errorf("ReviewedPriceCents = %d, want 24000", item.ReviewedPriceCents)
+	}
+	if item.ReviewedAt != "2026-03-30T10:00:00Z" {
+		t.Errorf("ReviewedAt = %q, want 2026-03-30T10:00:00Z", item.ReviewedAt)
+	}
+}
