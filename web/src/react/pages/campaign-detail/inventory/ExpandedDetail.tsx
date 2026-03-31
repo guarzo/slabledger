@@ -5,8 +5,8 @@ import { api } from '../../../../js/api';
 import { useToast } from '../../../contexts/ToastContext';
 import { queryKeys } from '../../../queries/queryKeys';
 import PriceSignalCard from './PriceSignalCard';
-import ReviewActionBar from './ReviewActionBar';
-import type { QuickPick } from './ReviewActionBar';
+import PriceDecisionBar from '../../../ui/PriceDecisionBar';
+import type { PriceSource } from '../../../ui/PriceDecisionBar';
 
 interface ExpandedDetailProps {
   item: AgingItem;
@@ -18,9 +18,7 @@ interface ExpandedDetailProps {
 export default function ExpandedDetail({ item, onReviewed, campaignId, onOpenFlagDialog }: ExpandedDetailProps) {
   const queryClient = useQueryClient();
   const toast = useToast();
-
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [selectedPick, setSelectedPick] = useState<QuickPick | null>(null);
 
   const snap = item.currentMarket;
   const purchase = item.purchase;
@@ -30,18 +28,24 @@ export default function ExpandedDetail({ item, onReviewed, campaignId, onOpenFla
   const marketCents = snap?.medianCents ?? 0;
   const lastSoldCents = snap?.lastSoldCents ?? 0;
 
-  const quickPicks: QuickPick[] = [
+  const sources: PriceSource[] = [
     { label: 'CL', priceCents: clCents, source: 'cl' },
     { label: 'Market', priceCents: marketCents, source: 'market' },
+    { label: 'Cost', priceCents: costBasis, source: 'cost_basis' },
     { label: 'Last Sold', priceCents: lastSoldCents, source: 'last_sold' },
   ];
 
-  const handleCardSelect = (source: string) => {
-    const pick = quickPicks.find(p => p.source === source);
-    if (pick && pick.priceCents > 0) {
-      setSelectedPick(pick);
-    }
-  };
+  // Pre-selection priority: reviewed > cl > market > cost
+  let preSelected: string | undefined;
+  if (purchase.reviewedPriceCents && purchase.reviewedPriceCents > 0) {
+    const matchingSource = sources.find(s => s.priceCents === purchase.reviewedPriceCents && s.priceCents > 0);
+    preSelected = matchingSource?.source;
+  }
+  if (!preSelected) {
+    if (clCents > 0) preSelected = 'cl';
+    else if (marketCents > 0) preSelected = 'market';
+    else if (costBasis > 0) preSelected = 'cost_basis';
+  }
 
   const invalidateQueries = () => {
     if (campaignId) {
@@ -59,7 +63,6 @@ export default function ExpandedDetail({ item, onReviewed, campaignId, onOpenFla
     try {
       await api.setReviewedPrice(purchase.id, priceCents, source);
       toast.success('Reviewed price saved');
-      setSelectedPick(null);
       invalidateQueries();
       onReviewed?.();
     } catch (err) {
@@ -75,25 +78,13 @@ export default function ExpandedDetail({ item, onReviewed, campaignId, onOpenFla
       {/* 3x2 price signal grid */}
       <div className="grid grid-cols-3 gap-3 mb-4">
         <PriceSignalCard label="Cost Basis" valueCents={costBasis} />
-        <PriceSignalCard
-          label="Card Ladder"
-          valueCents={clCents}
-          onClick={clCents > 0 ? () => handleCardSelect('cl') : undefined}
-          selected={selectedPick?.source === 'cl'}
-        />
+        <PriceSignalCard label="Card Ladder" valueCents={clCents} />
         <PriceSignalCard
           label="Market (Median)"
           valueCents={marketCents}
           highlight={marketCents > 0 && marketCents > costBasis ? 'success' : marketCents > 0 && marketCents < costBasis ? 'danger' : undefined}
-          onClick={marketCents > 0 ? () => handleCardSelect('market') : undefined}
-          selected={selectedPick?.source === 'market'}
         />
-        <PriceSignalCard
-          label="Last Sold"
-          valueCents={lastSoldCents}
-          onClick={lastSoldCents > 0 ? () => handleCardSelect('last_sold') : undefined}
-          selected={selectedPick?.source === 'last_sold'}
-        />
+        <PriceSignalCard label="Last Sold" valueCents={lastSoldCents} />
         <PriceSignalCard label="Lowest eBay Listing" valueCents={snap?.lowestListCents ?? 0} />
         <PriceSignalCard
           label="Current Override"
@@ -102,11 +93,10 @@ export default function ExpandedDetail({ item, onReviewed, campaignId, onOpenFla
         />
       </div>
 
-      {/* Review action bar */}
-      <ReviewActionBar
-        quickPicks={quickPicks}
-        selectedPick={selectedPick}
-        onPickSelect={setSelectedPick}
+      {/* Price decision bar */}
+      <PriceDecisionBar
+        sources={sources}
+        preSelected={preSelected}
         onConfirm={handleConfirm}
         onFlag={onOpenFlagDialog}
         isSubmitting={isSubmitting}
