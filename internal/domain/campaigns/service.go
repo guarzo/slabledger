@@ -212,6 +212,9 @@ type Service interface {
 	// Monte Carlo projection
 	RunProjection(ctx context.Context, campaignID string) (*MonteCarloComparison, error)
 
+	// Buy cost correction
+	UpdateBuyCost(ctx context.Context, purchaseID string, buyCostCents int) error
+
 	// Price overrides & AI suggestions
 	SetPriceOverride(ctx context.Context, purchaseID string, priceCents int, source string) error
 	SetAISuggestedPrice(ctx context.Context, purchaseID string, priceCents int) error

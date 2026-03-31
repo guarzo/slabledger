@@ -203,7 +203,11 @@ export default function OperationsTab({ campaigns, operationState, setOperationS
       setPsaResult(null);
       const result = await api.globalImportPSA(file);
       setPsaResult(result);
-      toast.success(`PSA import: ${result.allocated} allocated, ${result.updated} updated, ${result.refunded} refunded${result.invoicesCreated ? `, ${result.invoicesCreated} invoices created` : ''}. Market pricing will update in the background.`);
+      const invoiceParts: string[] = [];
+      if (result.invoicesCreated) invoiceParts.push(`${result.invoicesCreated} invoices created`);
+      if (result.invoicesUpdated) invoiceParts.push(`${result.invoicesUpdated} invoices updated`);
+      const invoiceMsg = invoiceParts.length ? `, ${invoiceParts.join(', ')}` : '';
+      toast.success(`PSA import: ${result.allocated} allocated, ${result.updated} updated, ${result.refunded} refunded${invoiceMsg}. Market pricing will update in the background.`);
       invalidateAll();
     } catch (err) {
       toast.error(getErrorMessage(err, 'Failed to import PSA data'));
@@ -356,6 +360,7 @@ export default function OperationsTab({ campaigns, operationState, setOperationS
             {psaResult.updated > 0 && <span className="text-[var(--info)]">{psaResult.updated} updated</span>}
             {psaResult.refunded > 0 && <span className="text-orange-400">{psaResult.refunded} refunded</span>}
             {psaResult.invoicesCreated != null && psaResult.invoicesCreated > 0 && <span className="text-cyan-400">{psaResult.invoicesCreated} invoices created</span>}
+            {psaResult.invoicesUpdated != null && psaResult.invoicesUpdated > 0 && <span className="text-cyan-400">{psaResult.invoicesUpdated} invoices updated</span>}
             {psaResult.unmatched > 0 && <span className="text-[var(--warning)]">{psaResult.unmatched} unmatched</span>}
             {psaResult.ambiguous > 0 && <span className="text-orange-400">{psaResult.ambiguous} ambiguous</span>}
             {psaResult.skipped > 0 && <span className="text-[var(--text-muted)]">{psaResult.skipped} skipped</span>}

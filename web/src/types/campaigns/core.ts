@@ -320,6 +320,7 @@ export interface PSAImportResult {
   skipped: number;
   failed: number;
   invoicesCreated?: number;
+  invoicesUpdated?: number;
   errors?: { row?: number; error: string }[];
   results?: ImportResultItem[];
   byCampaign?: Record<string, { campaignName: string; allocated: number; refreshed: number }>;

@@ -352,6 +352,36 @@ func (h *CampaignsHandler) HandleDismissAISuggestion(w http.ResponseWriter, r *h
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// HandleUpdateBuyCost handles PATCH /api/purchases/{purchaseId}/buy-cost.
+func (h *CampaignsHandler) HandleUpdateBuyCost(w http.ResponseWriter, r *http.Request) {
+	purchaseID, ok := pathID(w, r, "purchaseId", "Purchase ID")
+	if !ok {
+		return
+	}
+
+	var req struct {
+		BuyCostCents int `json:"buyCostCents"`
+	}
+	if !decodeBody(w, r, &req) {
+		return
+	}
+
+	if err := h.service.UpdateBuyCost(r.Context(), purchaseID, req.BuyCostCents); err != nil {
+		if campaigns.IsPurchaseNotFound(err) {
+			writeError(w, http.StatusNotFound, "Purchase not found")
+			return
+		}
+		if campaigns.IsValidationError(err) {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		h.logger.Error(r.Context(), "failed to update buy cost", observability.Err(err), observability.String("purchase_id", purchaseID))
+		writeError(w, http.StatusInternalServerError, "Internal server error")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // HandleReassignPurchase handles PATCH /api/purchases/{purchaseId}/campaign.
 func (h *CampaignsHandler) HandleReassignPurchase(w http.ResponseWriter, r *http.Request) {
 	purchaseID, ok := pathID(w, r, "purchaseId", "Purchase ID")

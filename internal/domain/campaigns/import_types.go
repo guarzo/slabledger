@@ -145,6 +145,7 @@ type PSAImportResult struct {
 	Skipped               int                              `json:"skipped"`
 	Failed                int                              `json:"failed"`
 	InvoicesCreated       int                              `json:"invoicesCreated,omitempty"`
+	InvoicesUpdated       int                              `json:"invoicesUpdated,omitempty"`
 	CertEnrichmentPending int                              `json:"certEnrichmentPending,omitempty"`
 	Errors                []ImportError                    `json:"errors,omitempty"`
 	Results               []PSAImportItemResult            `json:"results,omitempty"`

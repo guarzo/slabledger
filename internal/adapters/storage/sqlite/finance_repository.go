@@ -83,6 +83,19 @@ func (r *CampaignsRepository) UpdateInvoice(ctx context.Context, inv *campaigns.
 	return nil
 }
 
+// SumPurchaseCostByInvoiceDate returns the total (buy_cost_cents + psa_sourcing_fee_cents)
+// for all non-refunded purchases with the given invoice date.
+func (r *CampaignsRepository) SumPurchaseCostByInvoiceDate(ctx context.Context, invoiceDate string) (int, error) {
+	var total int
+	err := r.db.QueryRowContext(ctx,
+		`SELECT COALESCE(SUM(buy_cost_cents + psa_sourcing_fee_cents), 0)
+		 FROM campaign_purchases
+		 WHERE invoice_date = ? AND was_refunded = 0`,
+		invoiceDate,
+	).Scan(&total)
+	return total, err
+}
+
 // --- Cashflow Config ---
 
 func (r *CampaignsRepository) GetCashflowConfig(ctx context.Context) (*campaigns.CashflowConfig, error) {

@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	domainerrors "github.com/guarzo/slabledger/internal/domain/errors"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
 )
 
@@ -348,6 +349,77 @@ func TestHandleCertLookup(t *testing.T) {
 			}
 		})
 	}
+}
+
+// --- HandleUpdateBuyCost ---
+
+func TestHandleUpdateBuyCost_Success(t *testing.T) {
+	var capturedID string
+	var capturedCents int
+	svc := &mocks.MockCampaignService{
+		UpdateBuyCostFn: func(_ context.Context, purchaseID string, buyCostCents int) error {
+			capturedID = purchaseID
+			capturedCents = buyCostCents
+			return nil
+		},
+	}
+	h := newTestHandler(svc)
+
+	body := `{"buyCostCents":18699}`
+	req := httptest.NewRequest(http.MethodPatch, "/api/purchases/p1/buy-cost", strings.NewReader(body))
+	req.SetPathValue("purchaseId", "p1")
+	rec := httptest.NewRecorder()
+	h.HandleUpdateBuyCost(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d; body: %s", rec.Code, rec.Body.String())
+	}
+	if capturedID != "p1" {
+		t.Errorf("purchaseID = %q, want p1", capturedID)
+	}
+	if capturedCents != 18699 {
+		t.Errorf("buyCostCents = %d, want 18699", capturedCents)
+	}
+}
+
+func TestHandleUpdateBuyCost_NotFound(t *testing.T) {
+	svc := &mocks.MockCampaignService{
+		UpdateBuyCostFn: func(_ context.Context, _ string, _ int) error {
+			return fmt.Errorf("purchase lookup: %w", campaigns.ErrPurchaseNotFound)
+		},
+	}
+	h := newTestHandler(svc)
+
+	body := `{"buyCostCents":18699}`
+	req := httptest.NewRequest(http.MethodPatch, "/api/purchases/missing/buy-cost", strings.NewReader(body))
+	req.SetPathValue("purchaseId", "missing")
+	rec := httptest.NewRecorder()
+	h.HandleUpdateBuyCost(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d; body: %s", rec.Code, rec.Body.String())
+	}
+	decodeErrorResponse(t, rec)
+}
+
+func TestHandleUpdateBuyCost_ValidationError(t *testing.T) {
+	svc := &mocks.MockCampaignService{
+		UpdateBuyCostFn: func(_ context.Context, _ string, _ int) error {
+			return domainerrors.NewAppError(campaigns.ErrCodeCampaignValidation, "buyCostCents must be > 0")
+		},
+	}
+	h := newTestHandler(svc)
+
+	body := `{"buyCostCents":0}`
+	req := httptest.NewRequest(http.MethodPatch, "/api/purchases/p1/buy-cost", strings.NewReader(body))
+	req.SetPathValue("purchaseId", "p1")
+	rec := httptest.NewRecorder()
+	h.HandleUpdateBuyCost(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d; body: %s", rec.Code, rec.Body.String())
+	}
+	decodeErrorResponse(t, rec)
 }
 
 // --- HandleReassignPurchase ---

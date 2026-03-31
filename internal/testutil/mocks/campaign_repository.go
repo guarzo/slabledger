@@ -16,6 +16,7 @@ type MockCampaignRepository struct {
 	Campaigns       map[string]*campaigns.Campaign
 	Purchases       map[string]*campaigns.Purchase
 	Sales           map[string]*campaigns.Sale
+	Invoices        map[string]*campaigns.Invoice
 	CertNumbers     map[string]bool
 	PurchaseSales   map[string]bool // purchaseID -> has sale
 	PNLData         map[string]*campaigns.CampaignPNL
@@ -62,6 +63,7 @@ func NewMockCampaignRepository() *MockCampaignRepository {
 		Campaigns:     make(map[string]*campaigns.Campaign),
 		Purchases:     make(map[string]*campaigns.Purchase),
 		Sales:         make(map[string]*campaigns.Sale),
+		Invoices:      make(map[string]*campaigns.Invoice),
 		CertNumbers:   make(map[string]bool),
 		PurchaseSales: make(map[string]bool),
 		PNLData:       make(map[string]*campaigns.CampaignPNL),
@@ -496,17 +498,40 @@ func (m *MockCampaignRepository) UpdatePurchasePSAFields(ctx context.Context, id
 	return nil
 }
 
-func (m *MockCampaignRepository) CreateInvoice(_ context.Context, _ *campaigns.Invoice) error {
+func (m *MockCampaignRepository) CreateInvoice(_ context.Context, inv *campaigns.Invoice) error {
+	m.Invoices[inv.ID] = inv
 	return nil
 }
-func (m *MockCampaignRepository) GetInvoice(_ context.Context, _ string) (*campaigns.Invoice, error) {
-	return &campaigns.Invoice{}, nil
+func (m *MockCampaignRepository) GetInvoice(_ context.Context, id string) (*campaigns.Invoice, error) {
+	if inv, ok := m.Invoices[id]; ok {
+		return inv, nil
+	}
+	return nil, campaigns.ErrInvoiceNotFound
 }
 func (m *MockCampaignRepository) ListInvoices(_ context.Context) ([]campaigns.Invoice, error) {
-	return nil, nil
+	result := make([]campaigns.Invoice, 0, len(m.Invoices))
+	for _, inv := range m.Invoices {
+		result = append(result, *inv)
+	}
+	return result, nil
 }
-func (m *MockCampaignRepository) UpdateInvoice(_ context.Context, _ *campaigns.Invoice) error {
-	return nil
+func (m *MockCampaignRepository) UpdateInvoice(_ context.Context, inv *campaigns.Invoice) error {
+	for _, existing := range m.Invoices {
+		if existing.ID == inv.ID {
+			*existing = *inv
+			return nil
+		}
+	}
+	return campaigns.ErrInvoiceNotFound
+}
+func (m *MockCampaignRepository) SumPurchaseCostByInvoiceDate(_ context.Context, invoiceDate string) (int, error) {
+	total := 0
+	for _, p := range m.Purchases {
+		if p.InvoiceDate == invoiceDate && !p.WasRefunded {
+			total += p.BuyCostCents + p.PSASourcingFeeCents
+		}
+	}
+	return total, nil
 }
 
 func (m *MockCampaignRepository) GetCashflowConfig(_ context.Context) (*campaigns.CashflowConfig, error) {
@@ -617,6 +642,15 @@ func (m *MockCampaignRepository) GetPriceOverrideStats(_ context.Context) (*camp
 		}
 	}
 	return &stats, nil
+}
+
+func (m *MockCampaignRepository) UpdatePurchaseBuyCost(_ context.Context, id string, buyCostCents int) error {
+	p, ok := m.Purchases[id]
+	if !ok {
+		return campaigns.ErrPurchaseNotFound
+	}
+	p.BuyCostCents = buyCostCents
+	return nil
 }
 
 func (m *MockCampaignRepository) UpdatePurchasePriceOverride(_ context.Context, purchaseID string, priceCents int, source string) error {
