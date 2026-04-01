@@ -281,6 +281,7 @@ func (s *service) MatchShopifyPrices(ctx context.Context, items []ShopifyPriceSy
 		}
 		if sellItem.CurrentMarket != nil {
 			match.MarketPriceCents = sellItem.CurrentMarket.MedianCents
+			match.LastSoldCents = sellItem.CurrentMarket.LastSoldCents
 		}
 
 		// Compute recommended price using resolution hierarchy

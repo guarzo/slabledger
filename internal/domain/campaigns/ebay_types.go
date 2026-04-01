@@ -36,6 +36,10 @@ type EbayExportItem struct {
 	HasMarketData       bool    `json:"hasMarketData"`
 	FrontImageURL       string  `json:"frontImageUrl,omitempty"`
 	BackImageURL        string  `json:"backImageUrl,omitempty"`
+	CostBasisCents      int     `json:"costBasisCents"`
+	LastSoldCents       int     `json:"lastSoldCents"`
+	ReviewedPriceCents  int     `json:"reviewedPriceCents,omitempty"`
+	ReviewedAt          string  `json:"reviewedAt,omitempty"`
 }
 
 type EbayExportListResponse struct {

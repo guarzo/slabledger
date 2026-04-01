@@ -167,6 +167,7 @@ type ShopifyPriceSyncMatch struct {
 	CostBasisCents        int            `json:"costBasisCents"`
 	CLValueCents          int            `json:"clValueCents"`
 	MarketPriceCents      int            `json:"marketPriceCents"`
+	LastSoldCents         int            `json:"lastSoldCents"`
 	Recommendation        string         `json:"recommendation"`
 	PriceDeltaPct         float64        `json:"priceDeltaPct"`
 	HasMarketData         bool           `json:"hasMarketData"`

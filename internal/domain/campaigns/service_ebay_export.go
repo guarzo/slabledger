@@ -54,6 +54,10 @@ func (s *service) ListEbayExportItems(ctx context.Context, flaggedOnly bool) (*E
 			HasMarketData:       hasMarket,
 			FrontImageURL:       p.FrontImageURL,
 			BackImageURL:        p.BackImageURL,
+			CostBasisCents:      p.BuyCostCents + p.PSASourcingFeeCents,
+			LastSoldCents:       p.LastSoldCents,
+			ReviewedPriceCents:  p.ReviewedPriceCents,
+			ReviewedAt:          p.ReviewedAt,
 		})
 	}
 
