@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useMemo } from 'react';
 import { api } from '../../js/api';
 import type { ShopifyPriceSyncMatch, ShopifyPriceSyncResponse } from '../../types/campaigns';
 import { formatCents, centsToDollars, dollarsToCents } from '../utils/formatters';
-import { Button, CardShell } from '../ui';
+import { Button, CardShell, PriceDecisionBar, buildPriceSources, preSelectSource } from '../ui';
 import { useToast } from '../contexts/ToastContext';
 
 /* ── Types ────────────────────────────────────────────────────────── */
@@ -177,18 +177,6 @@ function detectAndParseCSV(text: string): ParsedCSV {
 
 /* ── Helpers ──────────────────────────────────────────────────────── */
 
-/** Format a relative time string from an ISO date, e.g. "2d ago", "3h ago". */
-function relativeTime(iso: string | undefined): string {
-  if (!iso) return '\u2014';
-  const diff = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(diff / 60_000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  return `${days}d ago`;
-}
 
 /* ── Upload Phase ─────────────────────────────────────────────────── */
 
@@ -234,25 +222,33 @@ function UploadZone({ onFile }: { onFile: (file: File) => void }) {
 function ReviewRow({ match, decision, onDecide }: {
   match: ShopifyPriceSyncMatch;
   decision: ItemDecision | undefined;
-  onDecide: (d: ItemDecision) => void;
+  onDecide: (d: ItemDecision | undefined) => void;
 }) {
-  const effectiveAction = decision?.action || 'pending';
+  const sources = useMemo(
+    () => buildPriceSources({
+      clCents: match.clValueCents,
+      marketCents: match.marketPriceCents,
+      costCents: match.costBasisCents,
+      lastSoldCents: match.lastSoldCents,
+    }),
+    [match.clValueCents, match.marketPriceCents, match.costBasisCents, match.lastSoldCents],
+  );
 
-  const diffCents = match.recommendedPriceCents - match.currentPriceCents;
-  const diffColor = diffCents > 0 ? 'text-[var(--success)]' : diffCents < 0 ? 'text-[var(--danger)]' : 'text-[var(--text-muted)]';
-  const diffSign = diffCents > 0 ? '+' : '';
+  const reviewedCents = match.recommendedSource === 'user_reviewed' ? match.recommendedPriceCents : undefined;
+  const preSelected = useMemo(
+    () => preSelectSource(sources, reviewedCents),
+    [sources, reviewedCents],
+  );
 
-  let rowBg = '';
-  if (effectiveAction === 'update') {
-    rowBg = 'bg-[var(--success-bg)]/30';
-  } else if (effectiveAction === 'skip') {
-    rowBg = 'bg-[var(--surface-2)]/30';
-  }
-
-  const isCL = match.recommendedSource !== 'user_reviewed';
+  const status: 'pending' | 'accepted' | 'skipped' =
+    decision?.action === 'update' ? 'accepted' :
+    decision?.action === 'skip' ? 'skipped' : 'pending';
 
   return (
-    <tr className={`border-b border-[var(--surface-2)]/50 ${rowBg}`}>
+    <tr className={`border-b border-[var(--surface-2)]/50 ${
+      status === 'accepted' ? 'bg-[var(--success-bg)]/30' :
+      status === 'skipped' ? 'bg-[var(--surface-2)]/30' : ''
+    }`}>
       <td className="py-2 px-2">
         <div className="text-sm font-medium text-[var(--text)]">{match.cardName}</div>
         {match.setName && (
@@ -265,33 +261,16 @@ function ReviewRow({ match, decision, onDecide }: {
         {match.grader ? `${match.grader} ` : ''}{match.grade}
       </td>
       <td className="py-2 px-2 text-right text-sm text-[var(--text)]">{formatCents(match.currentPriceCents)}</td>
-      <td className="py-2 px-2 text-right">
-        <div className="flex items-center justify-end gap-1">
-          <span className="text-sm font-medium text-[var(--text)]">{formatCents(match.recommendedPriceCents)}</span>
-          {isCL && (
-            <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-[var(--warning-bg)] text-[var(--warning)] border border-[var(--warning-border)]">
-              CL
-            </span>
-          )}
-        </div>
-      </td>
-      <td className={`py-2 px-2 text-right text-sm font-medium ${diffColor}`}>
-        {diffSign}{formatCents(diffCents)}
-      </td>
-      <td className="py-2 px-2 text-center text-xs text-[var(--text-muted)]">
-        {!isCL ? relativeTime(match.reviewedAt) : '\u2014'}
-      </td>
-      <td className="py-2 px-2 text-right">
-        <div className="flex items-center justify-end gap-1">
-          <button
-            className={`px-2 py-0.5 text-xs rounded ${effectiveAction === 'update' ? 'bg-[var(--success)] text-white' : 'bg-[var(--surface-2)] text-[var(--text)] hover:bg-[var(--success)]/20'}`}
-            onClick={() => onDecide({ action: 'update', priceCents: match.recommendedPriceCents })}
-          >Update</button>
-          <button
-            className={`px-2 py-0.5 text-xs rounded ${effectiveAction === 'skip' ? 'bg-[var(--text-muted)] text-white' : 'bg-[var(--surface-2)] text-[var(--text)] hover:bg-[var(--text-muted)]/20'}`}
-            onClick={() => onDecide({ action: 'skip' })}
-          >Skip</button>
-        </div>
+      <td className="py-2 px-2" colSpan={4}>
+        <PriceDecisionBar
+          sources={sources}
+          preSelected={preSelected}
+          status={status}
+          confirmLabel="Update"
+          onConfirm={(priceCents) => onDecide({ action: 'update', priceCents })}
+          onSkip={() => onDecide({ action: 'skip' })}
+          onReset={() => onDecide(undefined)}
+        />
       </td>
     </tr>
   );
@@ -304,7 +283,7 @@ function SectionTable({ title, titleColor, items, decisions, onDecide }: {
   titleColor: string;
   items: ShopifyPriceSyncMatch[];
   decisions: Map<string, ItemDecision>;
-  onDecide: (certNumber: string, d: ItemDecision) => void;
+  onDecide: (certNumber: string, d: ItemDecision | undefined) => void;
 }) {
   if (items.length === 0) return null;
   return (
@@ -320,10 +299,7 @@ function SectionTable({ title, titleColor, items, decisions, onDecide }: {
                 <th className="text-left py-2 px-2 text-[var(--text-muted)] font-medium text-xs">Card</th>
                 <th className="text-center py-2 px-2 text-[var(--text-muted)] font-medium text-xs">Grade</th>
                 <th className="text-right py-2 px-2 text-[var(--text-muted)] font-medium text-xs">Store Price</th>
-                <th className="text-right py-2 px-2 text-[var(--text-muted)] font-medium text-xs">Rec. Price</th>
-                <th className="text-right py-2 px-2 text-[var(--text-muted)] font-medium text-xs">Diff</th>
-                <th className="text-center py-2 px-2 text-[var(--text-muted)] font-medium text-xs">Reviewed</th>
-                <th className="text-right py-2 px-2 text-[var(--text-muted)] font-medium text-xs">Action</th>
+                <th className="text-left py-2 px-2 text-[var(--text-muted)] font-medium text-xs" colSpan={4}>Price Decision</th>
               </tr>
             </thead>
             <tbody>
@@ -425,27 +401,44 @@ export default function ShopifySyncPage({ embedded = false }: { embedded?: boole
     }
   }, [toast]);
 
-  const setDecisionFor = useCallback((certNumber: string, decision: ItemDecision) => {
+  const setDecisionFor = useCallback((certNumber: string, decision: ItemDecision | undefined) => {
     setDecisions(prev => {
       const next = new Map(prev);
-      next.set(certNumber, decision);
+      if (!decision) {
+        next.delete(certNumber);
+      } else {
+        next.set(certNumber, decision);
+      }
       return next;
     });
   }, []);
 
-  // Bulk: mark all remaining unskipped items as update
   const updateAll = useCallback(() => {
     const next = new Map(decisions);
     for (const m of allMismatches) {
       const existing = next.get(m.certNumber);
-      if (!existing || existing.action !== 'skip') {
-        next.set(m.certNumber, { action: 'update', priceCents: m.recommendedPriceCents });
+      if (existing?.action === 'skip') continue;
+      const sources = buildPriceSources({
+        clCents: m.clValueCents,
+        marketCents: m.marketPriceCents,
+        costCents: m.costBasisCents,
+        lastSoldCents: m.lastSoldCents,
+      });
+      const reviewedCents = m.recommendedSource === 'user_reviewed' ? m.recommendedPriceCents : undefined;
+      const pre = preSelectSource(sources, reviewedCents);
+      if (pre.kind === 'source') {
+        const source = sources.find(s => s.source === pre.source && s.priceCents > 0);
+        if (source) {
+          next.set(m.certNumber, { action: 'update', priceCents: source.priceCents });
+        }
+      } else if (pre.kind === 'manual') {
+        next.set(m.certNumber, { action: 'update', priceCents: pre.priceCents });
       }
     }
     setDecisions(next);
   }, [allMismatches, decisions]);
 
-  const updatedCount = Array.from(decisions.values()).filter(d => d.action === 'update').length;
+  const updatedCount = Array.from(decisions.values()).filter(d => d?.action === 'update').length;
 
   const handleExport = useCallback(() => {
     if (!parsedCSV) return;

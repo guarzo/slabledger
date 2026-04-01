@@ -293,6 +293,7 @@ export interface ShopifyPriceSyncMatch {
   costBasisCents: number;
   clValueCents: number;
   marketPriceCents: number;
+  lastSoldCents: number;
   recommendation: string;
   priceDeltaPct: number;
   hasMarketData: boolean;
@@ -453,6 +454,10 @@ export interface EbayExportItem {
   hasMarketData: boolean;
   frontImageUrl?: string;
   backImageUrl?: string;
+  costBasisCents: number;
+  lastSoldCents: number;
+  reviewedPriceCents?: number;
+  reviewedAt?: string;
 }
 
 export interface EbayExportListResponse {
