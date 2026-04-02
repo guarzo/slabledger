@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/guarzo/slabledger/internal/domain/observability"
+	"github.com/guarzo/slabledger/internal/domain/scoring"
 )
 
 // Service defines the AI advisor analysis capabilities.
@@ -60,4 +61,22 @@ func WithAITracker(t AICallTracker) ServiceOption {
 // WithCacheStore enables injecting prior analysis context into prompts.
 func WithCacheStore(c CacheStore) ServiceOption {
 	return func(s *service) { s.cache = c }
+}
+
+// ScoringDataProvider gathers raw data needed by factor computers.
+type ScoringDataProvider interface {
+	PurchaseData(ctx context.Context, req PurchaseAssessmentRequest) (*PurchaseFactorData, error)
+	CampaignData(ctx context.Context, campaignID string) (*CampaignFactorData, error)
+	LiquidationData(ctx context.Context, purchaseID string) (*LiquidationFactorData, error)
+	SuggestionData(ctx context.Context, segment string) (*SuggestionFactorData, error)
+}
+
+// WithScoringDataProvider injects the data provider used by the scoring orchestrator.
+func WithScoringDataProvider(p ScoringDataProvider) ServiceOption {
+	return func(s *service) { s.scoringData = p }
+}
+
+// WithGapStore injects the gap store for recording data gaps during scoring.
+func WithGapStore(gs scoring.GapStore) ServiceOption {
+	return func(s *service) { s.gapStore = gs }
 }

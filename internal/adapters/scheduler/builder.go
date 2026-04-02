@@ -1,15 +1,20 @@
 package scheduler
 
 import (
+	"time"
+
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
+	"github.com/guarzo/slabledger/internal/adapters/clients/doubleholo"
 	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
 	"github.com/guarzo/slabledger/internal/domain/advisor"
 	"github.com/guarzo/slabledger/internal/domain/ai"
 	"github.com/guarzo/slabledger/internal/domain/auth"
 	domainCampaigns "github.com/guarzo/slabledger/internal/domain/campaigns"
 	domainCards "github.com/guarzo/slabledger/internal/domain/cards"
+	"github.com/guarzo/slabledger/internal/domain/intelligence"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/domain/pricing"
+	"github.com/guarzo/slabledger/internal/domain/scoring"
 	"github.com/guarzo/slabledger/internal/platform/config"
 )
 
@@ -73,6 +78,14 @@ type BuildDeps struct {
 	// JustTCG dependencies (optional)
 	JustTCGClient JustTCGClient
 
+	// DoubleHolo dependencies (optional)
+	DHClient           *doubleholo.Client
+	DHIntelligenceRepo intelligence.Repository
+	DHSuggestionsRepo  intelligence.SuggestionsRepository
+
+	// Scoring gap cleanup dependencies (optional)
+	GapStore scoring.GapStore
+
 	// Card Ladder dependencies (optional)
 	CardLadderClient         *cardladder.Client
 	CardLadderStore          *sqlite.CardLadderStore
@@ -134,6 +147,11 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 			deps.AccessTracker, deps.Logger, accessLogConfig,
 		)
 		schedulers = append(schedulers, accessLogCleanupScheduler)
+	}
+
+	// Scoring data gap cleanup scheduler (if gap store is provided)
+	if deps.GapStore != nil {
+		schedulers = append(schedulers, NewGapCleanupScheduler(deps.GapStore, deps.Logger))
 	}
 
 	// Card cache warmup scheduler (if enabled)
@@ -290,6 +308,30 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 			deps.Logger, jtcgConfig, jtcgOpts...,
 		)
 		schedulers = append(schedulers, jtcgScheduler)
+	}
+
+	// DoubleHolo intelligence refresh scheduler (if client + repo are provided)
+	if deps.DHClient != nil && deps.DHClient.Available() && deps.DHIntelligenceRepo != nil {
+		dhIntelConfig := DHIntelligenceRefreshConfig{
+			Enabled:   cfg.DoubleHolo.Enabled,
+			Interval:  1 * time.Hour,
+			CacheTTL:  time.Duration(cfg.DoubleHolo.CacheTTLHours) * time.Hour,
+			MaxPerRun: 50,
+		}
+		schedulers = append(schedulers, NewDHIntelligenceRefreshScheduler(
+			deps.DHClient, deps.DHIntelligenceRepo, deps.Logger, dhIntelConfig,
+		))
+	}
+
+	// DoubleHolo suggestions scheduler (if client + repo are provided)
+	if deps.DHClient != nil && deps.DHClient.Available() && deps.DHSuggestionsRepo != nil {
+		dhSuggestConfig := DHSuggestionsConfig{
+			Enabled:  cfg.DoubleHolo.Enabled,
+			Interval: 6 * time.Hour,
+		}
+		schedulers = append(schedulers, NewDHSuggestionsScheduler(
+			deps.DHClient, deps.DHSuggestionsRepo, deps.Logger, dhSuggestConfig,
+		))
 	}
 
 	return BuildResult{

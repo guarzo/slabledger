@@ -48,6 +48,7 @@ func DefaultFusionConfig() FusionConfig {
 		OutlierThreshold: 1.5, // Standard IQR multiplier for outlier detection
 		SourceWeights: map[string]float64{
 			pricing.SourceCardHedger: 0.85, // Multi-platform price estimates
+			pricing.SourceDoubleHolo: 0.90, // DoubleHolo recent sales data
 		},
 		DefaultWeight: 0.6, // Default for unknown sources
 	}

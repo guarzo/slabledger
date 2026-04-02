@@ -155,28 +155,67 @@ type ShopifyPriceSyncItem struct {
 
 // ShopifyPriceSyncMatch is a matched item with current and suggested prices.
 type ShopifyPriceSyncMatch struct {
-	CertNumber            string         `json:"certNumber"`
-	CardName              string         `json:"cardName"`
-	SetName               string         `json:"setName,omitempty"`
-	CardNumber            string         `json:"cardNumber,omitempty"`
-	Grade                 float64        `json:"grade"`
-	Grader                string         `json:"grader,omitempty"`
-	CurrentPriceCents     int            `json:"currentPriceCents"`
-	SuggestedPriceCents   int            `json:"suggestedPriceCents"`
-	MinimumPriceCents     int            `json:"minimumPriceCents"`
-	CostBasisCents        int            `json:"costBasisCents"`
-	CLValueCents          int            `json:"clValueCents"`
-	MarketPriceCents      int            `json:"marketPriceCents"`
-	LastSoldCents         int            `json:"lastSoldCents"`
-	Recommendation        string         `json:"recommendation"`
-	PriceDeltaPct         float64        `json:"priceDeltaPct"`
-	HasMarketData         bool           `json:"hasMarketData"`
-	OverridePriceCents    int            `json:"overridePriceCents,omitempty"`
-	OverrideSource        OverrideSource `json:"overrideSource,omitempty"`
-	AISuggestedPriceCents int            `json:"aiSuggestedPriceCents,omitempty"`
-	RecommendedPriceCents int            `json:"recommendedPriceCents"`
-	RecommendedSource     string         `json:"recommendedSource"`
-	ReviewedAt            string         `json:"reviewedAt,omitempty"`
+	CertNumber            string          `json:"certNumber"`
+	CardName              string          `json:"cardName"`
+	SetName               string          `json:"setName,omitempty"`
+	CardNumber            string          `json:"cardNumber,omitempty"`
+	Grade                 float64         `json:"grade"`
+	Grader                string          `json:"grader,omitempty"`
+	CurrentPriceCents     int             `json:"currentPriceCents"`
+	SuggestedPriceCents   int             `json:"suggestedPriceCents"`
+	MinimumPriceCents     int             `json:"minimumPriceCents"`
+	CostBasisCents        int             `json:"costBasisCents"`
+	CLValueCents          int             `json:"clValueCents"`
+	MarketPriceCents      int             `json:"marketPriceCents"`
+	LastSoldCents         int             `json:"lastSoldCents"`
+	Recommendation        string          `json:"recommendation"`
+	PriceDeltaPct         float64         `json:"priceDeltaPct"`
+	HasMarketData         bool            `json:"hasMarketData"`
+	OverridePriceCents    int             `json:"overridePriceCents,omitempty"`
+	OverrideSource        OverrideSource  `json:"overrideSource,omitempty"`
+	AISuggestedPriceCents int             `json:"aiSuggestedPriceCents,omitempty"`
+	RecommendedPriceCents int             `json:"recommendedPriceCents"`
+	RecommendedSource     string          `json:"recommendedSource"`
+	ReviewedAt            string          `json:"reviewedAt,omitempty"`
+	Intel                 *PriceSyncIntel `json:"intel,omitempty"`
+}
+
+// PriceSyncSale is a recent sale for display in the price-sync UI.
+type PriceSyncSale struct {
+	SoldAt     string `json:"soldAt"`
+	Grade      string `json:"grade"`
+	PriceCents int64  `json:"priceCents"`
+	Platform   string `json:"platform"`
+}
+
+// PriceSyncPop is a population entry for display in the price-sync UI.
+type PriceSyncPop struct {
+	Grade string `json:"grade"`
+	Count int    `json:"count"`
+}
+
+// PriceSyncROI is a grading ROI entry for display in the price-sync UI.
+type PriceSyncROI struct {
+	Grade        string  `json:"grade"`
+	AvgSaleCents int64   `json:"avgSaleCents"`
+	ROI          float64 `json:"roi"`
+}
+
+// PriceSyncIntel holds DH market intelligence attached to a price-sync match.
+type PriceSyncIntel struct {
+	SentimentScore     float64         `json:"sentimentScore"`
+	SentimentTrend     string          `json:"sentimentTrend"`
+	SentimentMentions  int             `json:"sentimentMentions"`
+	ForecastCents      int64           `json:"forecastCents"`
+	ForecastConfidence float64         `json:"forecastConfidence"`
+	ForecastDate       string          `json:"forecastDate,omitempty"`
+	RecentSalesCount   int             `json:"recentSalesCount"`
+	RecentSales        []PriceSyncSale `json:"recentSales,omitempty"`
+	Population         []PriceSyncPop  `json:"population,omitempty"`
+	GradingROI         []PriceSyncROI  `json:"gradingROI,omitempty"`
+	InsightHeadline    string          `json:"insightHeadline,omitempty"`
+	InsightDetail      string          `json:"insightDetail,omitempty"`
+	FetchedAt          string          `json:"fetchedAt,omitempty"`
 }
 
 // ShopifyPriceSyncResponse contains the results of matching Shopify CSV items against inventory.

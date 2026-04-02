@@ -140,6 +140,19 @@ export function formatLatency(ms: number): string {
   return `${Math.round(ms)}ms`;
 }
 
+/**
+ * Convert ALL CAPS card names to Title Case for readability.
+ * Preserves known card game acronyms (EX, GX, V, VMAX, etc.) in uppercase.
+ */
+const PRESERVE_UPPER = new Set(['EX', 'GX', 'V', 'VMAX', 'VSTAR', 'DX', 'PM', 'HP', 'TG', 'FA', 'AA', 'SIR', 'SR', 'AR', 'SAR', 'IR']);
+
+export function toTitleCase(text: string): string {
+  return text.replace(/\p{L}+/gu, (word) => {
+    if (PRESERVE_UPPER.has(word.toUpperCase())) return word.toUpperCase();
+    return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+  });
+}
+
 export type SignalDirection = 'rising' | 'falling' | 'stable';
 
 /** Display label for a market signal direction. */
