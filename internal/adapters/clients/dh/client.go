@@ -1,4 +1,4 @@
-package doubleholo
+package dh
 
 import (
 	"context"
@@ -16,7 +16,6 @@ import (
 )
 
 const (
-	defaultBaseURL    = "https://api.doubleholo.com"
 	defaultTimeout    = 30 * time.Second
 	defaultRateLimRPS = 1
 	providerName      = "doubleholo"
@@ -43,7 +42,7 @@ func WithRateLimitRPS(rps int) ClientOption {
 	}
 }
 
-// Client provides access to the DoubleHolo API.
+// Client provides access to the DH market intelligence API.
 type Client struct {
 	apiKey     string
 	baseURL    string
@@ -53,13 +52,9 @@ type Client struct {
 	timeout    time.Duration
 }
 
-// NewClient creates a new DoubleHolo API client.
+// NewClient creates a new DH API client.
 func NewClient(baseURL, apiKey string, opts ...ClientOption) *Client {
-	if baseURL == "" {
-		baseURL = defaultBaseURL
-	}
-
-	config := httpx.DefaultConfig("DoubleHolo")
+	config := httpx.DefaultConfig("DH")
 	config.DefaultTimeout = defaultTimeout
 	httpClient := httpx.NewClient(config)
 
@@ -83,7 +78,7 @@ func (c *Client) Available() bool {
 	return c.apiKey != ""
 }
 
-// Search queries the DoubleHolo catalog for cards matching the query string.
+// Search queries the DH catalog for cards matching the query string.
 func (c *Client) Search(ctx context.Context, query string, limit int) (*SearchResponse, error) {
 	params := url.Values{}
 	params.Set("q", query)
@@ -139,7 +134,7 @@ func (c *Client) Suggestions(ctx context.Context) (*SuggestionsResponse, error) 
 // get performs a GET request with rate limiting, auth headers, and JSON unmarshal.
 func (c *Client) get(ctx context.Context, fullURL string, dest any) error {
 	if !c.Available() {
-		return apperrors.ConfigMissing("doubleholo_api_key", "DOUBLEHOLO_API_KEY")
+		return apperrors.ConfigMissing("dh_api_key", "DH_INTEGRATION_API_KEY")
 	}
 
 	if err := c.limiter.Wait(ctx); err != nil {
@@ -168,7 +163,7 @@ func (c *Client) get(ctx context.Context, fullURL string, dest any) error {
 // post performs a POST request with rate limiting, auth headers, and JSON unmarshal.
 func (c *Client) post(ctx context.Context, fullURL string, body any, dest any) error {
 	if !c.Available() {
-		return apperrors.ConfigMissing("doubleholo_api_key", "DOUBLEHOLO_API_KEY")
+		return apperrors.ConfigMissing("dh_api_key", "DH_INTEGRATION_API_KEY")
 	}
 
 	if err := c.limiter.Wait(ctx); err != nil {

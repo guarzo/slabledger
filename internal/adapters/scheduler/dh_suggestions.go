@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/guarzo/slabledger/internal/adapters/clients/doubleholo"
+	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	"github.com/guarzo/slabledger/internal/domain/intelligence"
 	"github.com/guarzo/slabledger/internal/domain/mathutil"
 	"github.com/guarzo/slabledger/internal/domain/observability"
@@ -21,10 +21,10 @@ type DHSuggestionsConfig struct {
 }
 
 // DHSuggestionsScheduler periodically fetches daily buy/sell suggestions from
-// the DoubleHolo API and stores them locally.
+// the DH API and stores them locally.
 type DHSuggestionsScheduler struct {
 	StopHandle
-	dhClient    *doubleholo.Client
+	dhClient    *dh.Client
 	suggestRepo intelligence.SuggestionsRepository
 	logger      observability.Logger
 	config      DHSuggestionsConfig
@@ -32,7 +32,7 @@ type DHSuggestionsScheduler struct {
 
 // NewDHSuggestionsScheduler creates a new DH suggestions scheduler.
 func NewDHSuggestionsScheduler(
-	dhClient *doubleholo.Client,
+	dhClient *dh.Client,
 	suggestRepo intelligence.SuggestionsRepository,
 	logger observability.Logger,
 	config DHSuggestionsConfig,
@@ -95,11 +95,11 @@ func (s *DHSuggestionsScheduler) fetch(ctx context.Context) {
 }
 
 // convertSuggestionsResponse flattens a SuggestionsResponse into a slice of domain suggestions.
-func convertSuggestionsResponse(resp *doubleholo.SuggestionsResponse, fetchedAt time.Time) []intelligence.Suggestion {
+func convertSuggestionsResponse(resp *dh.SuggestionsResponse, fetchedAt time.Time) []intelligence.Suggestion {
 	var suggestions []intelligence.Suggestion
 
 	type groupDef struct {
-		group    doubleholo.SuggestionGroup
+		group    dh.SuggestionGroup
 		typeName string
 	}
 
@@ -110,7 +110,7 @@ func convertSuggestionsResponse(resp *doubleholo.SuggestionsResponse, fetchedAt 
 
 	for _, g := range groups {
 		type categoryDef struct {
-			items    []doubleholo.SuggestionItem
+			items    []dh.SuggestionItem
 			category string
 		}
 		categories := []categoryDef{

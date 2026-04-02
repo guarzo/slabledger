@@ -18,7 +18,7 @@ import (
 	// Concrete implementations (only imported in main for wiring - Hexagonal Architecture)
 	"github.com/guarzo/slabledger/internal/adapters/advisortool"
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardhedger"
-	"github.com/guarzo/slabledger/internal/adapters/clients/doubleholo"
+	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	"github.com/guarzo/slabledger/internal/adapters/clients/google"
 	"github.com/guarzo/slabledger/internal/adapters/clients/justtcg"
 	"github.com/guarzo/slabledger/internal/adapters/clients/psa"
@@ -237,18 +237,18 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	// Discovery failure tracker (persists CardHedger discovery failures for diagnostics)
 	discoveryFailureRepo := sqlite.NewDiscoveryFailureRepository(db.DB)
 
-	// Initialize DoubleHolo client (optional — market intelligence + fusion source)
-	var dhClient *doubleholo.Client
-	if cfg.Adapters.DoubleHoloKey != "" {
-		dhClient = doubleholo.NewClient(
-			cfg.Adapters.DoubleHoloBaseURL, cfg.Adapters.DoubleHoloKey,
-			doubleholo.WithLogger(logger),
-			doubleholo.WithRateLimitRPS(cfg.DoubleHolo.RateLimitRPS),
+	// Initialize DH client (optional — market intelligence + fusion source)
+	var dhClient *dh.Client
+	if cfg.Adapters.DHKey != "" && cfg.Adapters.DHBaseURL != "" {
+		dhClient = dh.NewClient(
+			cfg.Adapters.DHBaseURL, cfg.Adapters.DHKey,
+			dh.WithLogger(logger),
+			dh.WithRateLimitRPS(cfg.DH.RateLimitRPS),
 		)
-		logger.Info(ctx, "DoubleHolo client initialized")
+		logger.Info(ctx, "DH client initialized")
 	}
 
-	// DoubleHolo repositories (always created — tables exist after migration 000028)
+	// DH repositories (always created — tables exist after migration 000028)
 	intelRepo := sqlite.NewMarketIntelligenceRepository(db.DB)
 	suggestionsRepo := sqlite.NewDHSuggestionsRepository(db.DB)
 
@@ -327,14 +327,14 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		opportunitiesHandler = handlers.NewOpportunitiesHandler(campaignsService, logger)
 	}
 
-	// Create DoubleHolo handler (bulk match + intelligence; nil when client is not configured)
-	var dhHandler *handlers.DoubleHoloHandler
+	// Create DH handler (bulk match + intelligence; nil when client is not configured)
+	var dhHandler *handlers.DHHandler
 	if dhClient != nil && dhClient.Available() {
-		dhHandler = handlers.NewDoubleHoloHandler(
+		dhHandler = handlers.NewDHHandler(
 			dhClient, cardIDMappingRepo, campaignsRepo,
 			intelRepo, suggestionsRepo, logger,
 		)
-		logger.Info(ctx, "DoubleHolo handler initialized")
+		logger.Info(ctx, "DH handler initialized")
 	}
 
 	// Initialize JustTCG client (optional — raw NM price refresh)
@@ -488,7 +488,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		SalesCompsHandler:         salesCompsHandler,
 		PicksHandler:              picksHandler,
 		OpportunitiesHandler:      opportunitiesHandler,
-		DoubleHoloHandler:         dhHandler,
+		DHHandler:                 dhHandler,
 	}
 	serverErr := startWebServer(ctx, deps)
 

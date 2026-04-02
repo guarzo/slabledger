@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
-	"github.com/guarzo/slabledger/internal/adapters/clients/doubleholo"
+	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
 	"github.com/guarzo/slabledger/internal/domain/advisor"
 	"github.com/guarzo/slabledger/internal/domain/ai"
@@ -78,8 +78,8 @@ type BuildDeps struct {
 	// JustTCG dependencies (optional)
 	JustTCGClient JustTCGClient
 
-	// DoubleHolo dependencies (optional)
-	DHClient           *doubleholo.Client
+	// DH dependencies (optional)
+	DHClient           *dh.Client
 	DHIntelligenceRepo intelligence.Repository
 	DHSuggestionsRepo  intelligence.SuggestionsRepository
 
@@ -310,12 +310,12 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 		schedulers = append(schedulers, jtcgScheduler)
 	}
 
-	// DoubleHolo intelligence refresh scheduler (if client + repo are provided)
+	// DH intelligence refresh scheduler (if client + repo are provided)
 	if deps.DHClient != nil && deps.DHClient.Available() && deps.DHIntelligenceRepo != nil {
 		dhIntelConfig := DHIntelligenceRefreshConfig{
-			Enabled:   cfg.DoubleHolo.Enabled,
+			Enabled:   cfg.DH.Enabled,
 			Interval:  1 * time.Hour,
-			CacheTTL:  time.Duration(cfg.DoubleHolo.CacheTTLHours) * time.Hour,
+			CacheTTL:  time.Duration(cfg.DH.CacheTTLHours) * time.Hour,
 			MaxPerRun: 50,
 		}
 		schedulers = append(schedulers, NewDHIntelligenceRefreshScheduler(
@@ -323,10 +323,10 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 		))
 	}
 
-	// DoubleHolo suggestions scheduler (if client + repo are provided)
+	// DH suggestions scheduler (if client + repo are provided)
 	if deps.DHClient != nil && deps.DHClient.Available() && deps.DHSuggestionsRepo != nil {
 		dhSuggestConfig := DHSuggestionsConfig{
-			Enabled:  cfg.DoubleHolo.Enabled,
+			Enabled:  cfg.DH.Enabled,
 			Interval: 6 * time.Hour,
 		}
 		schedulers = append(schedulers, NewDHSuggestionsScheduler(

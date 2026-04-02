@@ -207,5 +207,5 @@ const (
 	SourcePriceCharting = "pricecharting"
 	SourceCardHedger    = "cardhedger"
 	SourceJustTCG       = "justtcg"
-	SourceDoubleHolo    = "doubleholo"
+	SourceDH            = "doubleholo" // DB provider key — do not change the string value
 )

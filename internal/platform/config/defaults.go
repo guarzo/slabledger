@@ -116,7 +116,7 @@ func Default() Config {
 			Interval:    24 * time.Hour,
 			RefreshHour: 4, // 4 AM UTC
 		},
-		DoubleHolo: DoubleHoloConfig{
+		DH: DHConfig{
 			Enabled:       true,
 			CacheTTLHours: 24,
 			RateLimitRPS:  1,

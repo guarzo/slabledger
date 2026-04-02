@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/guarzo/slabledger/internal/adapters/clients/doubleholo"
+	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	"github.com/guarzo/slabledger/internal/domain/campaigns"
 	"github.com/guarzo/slabledger/internal/domain/intelligence"
 	"github.com/guarzo/slabledger/internal/domain/observability"
@@ -17,7 +17,7 @@ import (
 
 // DHMatchClient is the subset of the DH client needed for card matching.
 type DHMatchClient interface {
-	Match(ctx context.Context, title, sku string) (*doubleholo.MatchResponse, error)
+	Match(ctx context.Context, title, sku string) (*dh.MatchResponse, error)
 	Available() bool
 }
 
@@ -33,8 +33,8 @@ type DHPurchaseLister interface {
 	ListAllUnsoldPurchases(ctx context.Context) ([]campaigns.Purchase, error)
 }
 
-// DoubleHoloHandler handles DH bulk match, export, intelligence, and suggestions endpoints.
-type DoubleHoloHandler struct {
+// DHHandler handles DH bulk match, export, intelligence, and suggestions endpoints.
+type DHHandler struct {
 	matchClient     DHMatchClient
 	cardIDSaver     DHCardIDSaver
 	purchaseLister  DHPurchaseLister
@@ -43,16 +43,16 @@ type DoubleHoloHandler struct {
 	logger          observability.Logger
 }
 
-// NewDoubleHoloHandler creates a new DoubleHoloHandler with the given dependencies.
-func NewDoubleHoloHandler(
+// NewDHHandler creates a new DHHandler with the given dependencies.
+func NewDHHandler(
 	matchClient DHMatchClient,
 	cardIDSaver DHCardIDSaver,
 	purchaseLister DHPurchaseLister,
 	intelRepo intelligence.Repository,
 	suggestionsRepo intelligence.SuggestionsRepository,
 	logger observability.Logger,
-) *DoubleHoloHandler {
-	return &DoubleHoloHandler{
+) *DHHandler {
+	return &DHHandler{
 		matchClient:     matchClient,
 		cardIDSaver:     cardIDSaver,
 		purchaseLister:  purchaseLister,
@@ -72,7 +72,7 @@ type bulkMatchResponse struct {
 }
 
 // HandleBulkMatch matches all unmatched inventory cards against the DH catalog.
-func (h *DoubleHoloHandler) HandleBulkMatch(w http.ResponseWriter, r *http.Request) {
+func (h *DHHandler) HandleBulkMatch(w http.ResponseWriter, r *http.Request) {
 	if requireUser(w, r) == nil {
 		return
 	}
@@ -86,7 +86,7 @@ func (h *DoubleHoloHandler) HandleBulkMatch(w http.ResponseWriter, r *http.Reque
 	}
 
 	// Pre-load all existing DH mappings in a single query.
-	mappedSet, err := h.cardIDSaver.GetMappedSet(ctx, pricing.SourceDoubleHolo)
+	mappedSet, err := h.cardIDSaver.GetMappedSet(ctx, pricing.SourceDH)
 	if err != nil {
 		h.logger.Error(ctx, "bulk match: load mapped set", observability.Err(err))
 		writeError(w, http.StatusInternalServerError, "failed to load mappings")
@@ -124,7 +124,7 @@ func (h *DoubleHoloHandler) HandleBulkMatch(w http.ResponseWriter, r *http.Reque
 		}
 
 		externalID := strconv.Itoa(matchResp.CardID)
-		if err := h.cardIDSaver.SaveExternalID(ctx, ci.CardName, ci.SetName, ci.CardNumber, pricing.SourceDoubleHolo, externalID); err != nil {
+		if err := h.cardIDSaver.SaveExternalID(ctx, ci.CardName, ci.SetName, ci.CardNumber, pricing.SourceDH, externalID); err != nil {
 			h.logger.Error(ctx, "bulk match: save external ID", observability.Err(err),
 				observability.String("card", ci.CardName))
 			result.Failed++
@@ -150,7 +150,7 @@ type unmatchedCard struct {
 }
 
 // HandleUnmatched returns cards that do not yet have a DH mapping.
-func (h *DoubleHoloHandler) HandleUnmatched(w http.ResponseWriter, r *http.Request) {
+func (h *DHHandler) HandleUnmatched(w http.ResponseWriter, r *http.Request) {
 	if requireUser(w, r) == nil {
 		return
 	}
@@ -163,7 +163,7 @@ func (h *DoubleHoloHandler) HandleUnmatched(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	mappedSet, err := h.cardIDSaver.GetMappedSet(ctx, pricing.SourceDoubleHolo)
+	mappedSet, err := h.cardIDSaver.GetMappedSet(ctx, pricing.SourceDH)
 	if err != nil {
 		h.logger.Error(ctx, "unmatched: load mapped set", observability.Err(err))
 		writeError(w, http.StatusInternalServerError, "failed to load mappings")
@@ -198,7 +198,7 @@ func (h *DoubleHoloHandler) HandleUnmatched(w http.ResponseWriter, r *http.Reque
 }
 
 // HandleExportUnmatched generates a CSV download of unmatched cards.
-func (h *DoubleHoloHandler) HandleExportUnmatched(w http.ResponseWriter, r *http.Request) {
+func (h *DHHandler) HandleExportUnmatched(w http.ResponseWriter, r *http.Request) {
 	if requireUser(w, r) == nil {
 		return
 	}
@@ -211,7 +211,7 @@ func (h *DoubleHoloHandler) HandleExportUnmatched(w http.ResponseWriter, r *http
 		return
 	}
 
-	mappedSet, err := h.cardIDSaver.GetMappedSet(ctx, pricing.SourceDoubleHolo)
+	mappedSet, err := h.cardIDSaver.GetMappedSet(ctx, pricing.SourceDH)
 	if err != nil {
 		h.logger.Error(ctx, "export unmatched: load mapped set", observability.Err(err))
 		writeError(w, http.StatusInternalServerError, "failed to load mappings")
@@ -274,7 +274,7 @@ func sanitizeCSVCell(s string) string {
 }
 
 // HandleGetIntelligence returns market intelligence for a specific card.
-func (h *DoubleHoloHandler) HandleGetIntelligence(w http.ResponseWriter, r *http.Request) {
+func (h *DHHandler) HandleGetIntelligence(w http.ResponseWriter, r *http.Request) {
 	if requireUser(w, r) == nil {
 		return
 	}
@@ -303,7 +303,7 @@ func (h *DoubleHoloHandler) HandleGetIntelligence(w http.ResponseWriter, r *http
 }
 
 // HandleGetSuggestions returns the latest DH buy/sell suggestions.
-func (h *DoubleHoloHandler) HandleGetSuggestions(w http.ResponseWriter, r *http.Request) {
+func (h *DHHandler) HandleGetSuggestions(w http.ResponseWriter, r *http.Request) {
 	if requireUser(w, r) == nil {
 		return
 	}
@@ -323,7 +323,7 @@ func (h *DoubleHoloHandler) HandleGetSuggestions(w http.ResponseWriter, r *http.
 }
 
 // HandleInventoryAlerts cross-references latest DH suggestions against current inventory.
-func (h *DoubleHoloHandler) HandleInventoryAlerts(w http.ResponseWriter, r *http.Request) {
+func (h *DHHandler) HandleInventoryAlerts(w http.ResponseWriter, r *http.Request) {
 	if requireUser(w, r) == nil {
 		return
 	}
@@ -373,7 +373,7 @@ func (h *DoubleHoloHandler) HandleInventoryAlerts(w http.ResponseWriter, r *http
 }
 
 // uniqueCardIdentities returns deduplicated card identities from all unsold purchases.
-func (h *DoubleHoloHandler) uniqueCardIdentities(ctx context.Context) ([]campaigns.CardIdentity, error) {
+func (h *DHHandler) uniqueCardIdentities(ctx context.Context) ([]campaigns.CardIdentity, error) {
 	purchases, err := h.purchaseLister.ListAllUnsoldPurchases(ctx)
 	if err != nil {
 		return nil, err

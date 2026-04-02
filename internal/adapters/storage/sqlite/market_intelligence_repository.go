@@ -91,7 +91,7 @@ func (r *MarketIntelligenceRepository) GetByCard(ctx context.Context, cardName, 
 	)
 }
 
-// GetByDHCardID returns the market intelligence for the given DoubleHolo card ID, or nil if not found.
+// GetByDHCardID returns the market intelligence for the given DH card ID, or nil if not found.
 func (r *MarketIntelligenceRepository) GetByDHCardID(ctx context.Context, dhCardID string) (*intelligence.MarketIntelligence, error) {
 	return r.scanOne(ctx,
 		`SELECT card_name, set_name, card_number, dh_card_id,

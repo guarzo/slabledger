@@ -1,4 +1,4 @@
-package doubleholo
+package dh
 
 import (
 	"context"
@@ -15,7 +15,7 @@ import (
 )
 
 func newTestClient(serverURL string) *Client {
-	config := httpx.DefaultConfig("DoubleHolo")
+	config := httpx.DefaultConfig("DH")
 	config.DefaultTimeout = 5 * time.Second
 	config.RetryPolicy = resilience.RetryPolicy{
 		MaxRetries:     0,

@@ -12,7 +12,7 @@ import (
 func (e *CampaignToolExecutor) registerGetMarketIntelligence() {
 	e.register(ai.ToolDefinition{
 		Name:        "get_market_intelligence",
-		Description: "Get DoubleHolo market intelligence for a card: sentiment, price forecast, grading ROI by grade, recent sales, population data, and AI insights.",
+		Description: "Get DH market intelligence for a card: sentiment, price forecast, grading ROI by grade, recent sales, population data, and AI insights.",
 		Parameters: jsonSchema{
 			Type: "object",
 			Properties: map[string]jsonSchema{
@@ -24,7 +24,7 @@ func (e *CampaignToolExecutor) registerGetMarketIntelligence() {
 		},
 	}, func(ctx context.Context, args string) (string, error) {
 		if e.intelRepo == nil {
-			return `{"error":"market intelligence not available (DoubleHolo not configured)"}`, nil
+			return `{"error":"market intelligence not available (DH not configured)"}`, nil
 		}
 		var p struct {
 			CardName   string `json:"cardName"`
@@ -54,11 +54,11 @@ func (e *CampaignToolExecutor) registerGetMarketIntelligence() {
 func (e *CampaignToolExecutor) registerGetDHSuggestions() {
 	e.register(ai.ToolDefinition{
 		Name:        "get_dh_suggestions",
-		Description: "Get the latest DoubleHolo daily buy/sell suggestions: hottest cards to buy and cards to consider selling, with confidence scores and reasoning.",
+		Description: "Get the latest DH daily buy/sell suggestions: hottest cards to buy and cards to consider selling, with confidence scores and reasoning.",
 		Parameters:  emptyObjectParams,
 	}, func(ctx context.Context, _ string) (string, error) {
 		if e.suggestRepo == nil {
-			return `{"error":"DH suggestions not available (DoubleHolo not configured)"}`, nil
+			return `{"error":"DH suggestions not available (DH not configured)"}`, nil
 		}
 		suggestions, err := e.suggestRepo.GetLatest(ctx)
 		if err != nil {
@@ -87,11 +87,11 @@ type inventoryAlert struct {
 func (e *CampaignToolExecutor) registerGetInventoryAlerts() {
 	e.register(ai.ToolDefinition{
 		Name:        "get_inventory_alerts",
-		Description: "Cross-reference DoubleHolo buy/sell suggestions with current inventory to find actionable alerts: cards you hold that DH recommends selling, or cards DH recommends buying that you already own.",
+		Description: "Cross-reference DH buy/sell suggestions with current inventory to find actionable alerts: cards you hold that DH recommends selling, or cards DH recommends buying that you already own.",
 		Parameters:  emptyObjectParams,
 	}, func(ctx context.Context, _ string) (string, error) {
 		if e.suggestRepo == nil {
-			return `{"error":"inventory alerts not available (DoubleHolo not configured)"}`, nil
+			return `{"error":"inventory alerts not available (DH not configured)"}`, nil
 		}
 
 		suggestions, err := e.suggestRepo.GetLatest(ctx)

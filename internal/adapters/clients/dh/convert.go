@@ -1,4 +1,4 @@
-package doubleholo
+package dh
 
 import (
 	"time"
