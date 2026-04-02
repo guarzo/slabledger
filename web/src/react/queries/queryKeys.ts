@@ -51,6 +51,7 @@ export const queryKeys = {
     aiUsage: ['admin', 'aiUsage'] as const,
     priceFlags: (status: string) => ['admin', 'priceFlags', status] as const,
     cardLadderStatus: ['admin', 'cardLadderStatus'] as const,
+    dhStatus: ['admin', 'dhStatus'] as const,
   },
   social: {
     all: ['social'] as const,

@@ -7,6 +7,23 @@ import type { AllowedEmail, AdminUser } from '../../types/admin';
 import type { APIClient, CardRequestSubmission } from './client';
 import { APIError } from './client';
 
+export interface DHStatusResponse {
+  intelligence_count: number;
+  intelligence_last_fetch: string;
+  suggestions_count: number;
+  suggestions_last_fetch: string;
+  unmatched_count: number;
+  mapped_count: number;
+}
+
+export interface DHBulkMatchResponse {
+  total: number;
+  matched: number;
+  skipped: number;
+  low_confidence: number;
+  failed: number;
+}
+
 /* ------------------------------------------------------------------ */
 /*  Declaration merging — tells TypeScript about the methods we add   */
 /* ------------------------------------------------------------------ */
@@ -31,6 +48,8 @@ declare module './client' {
     getCardLadderStatus(): Promise<{ configured: boolean; email?: string; collectionId?: string; cardsMapped?: number }>;
     saveCardLadderConfig(config: { email: string; password: string; collectionId: string; firebaseApiKey: string }): Promise<{ status: string }>;
     triggerCardLadderRefresh(): Promise<{ status: string }>;
+    getDHStatus(): Promise<DHStatusResponse>;
+    triggerDHBulkMatch(): Promise<DHBulkMatchResponse>;
   }
 }
 
@@ -124,4 +143,12 @@ proto.saveCardLadderConfig = async function (this: APIClient, config: { email: s
 
 proto.triggerCardLadderRefresh = async function (this: APIClient) {
   return this.post<{ status: string }>('/admin/cardladder/refresh');
+};
+
+proto.getDHStatus = async function (this: APIClient): Promise<DHStatusResponse> {
+  return this.get<DHStatusResponse>('/dh/status');
+};
+
+proto.triggerDHBulkMatch = async function (this: APIClient): Promise<DHBulkMatchResponse> {
+  return this.post<DHBulkMatchResponse>('/dh/match');
 };

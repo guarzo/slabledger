@@ -164,3 +164,22 @@ export function useTriggerCardLadderRefresh() {
     },
   });
 }
+
+export function useDHStatus(options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: queryKeys.admin.dhStatus,
+    queryFn: () => api.getDHStatus(),
+    staleTime: 60_000,
+    enabled: options?.enabled ?? true,
+  });
+}
+
+export function useTriggerDHBulkMatch() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.triggerDHBulkMatch(),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.admin.dhStatus });
+    },
+  });
+}
