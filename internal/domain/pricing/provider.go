@@ -207,4 +207,5 @@ const (
 	SourcePriceCharting = "pricecharting"
 	SourceCardHedger    = "cardhedger"
 	SourceJustTCG       = "justtcg"
+	SourceDoubleHolo    = "doubleholo"
 )
