@@ -266,7 +266,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	}()
 
 	campaignsService, campaignsRepo, cardRequestRepo := initializeCampaignsService(
-		ctx, cfg, logger, db, priceProvImpl, cardHedgerClientImpl, cardIDMappingRepo,
+		ctx, cfg, logger, db, priceProvImpl, cardHedgerClientImpl, cardIDMappingRepo, intelRepo,
 	)
 
 	// Sync state repository (for delta poll timestamps)

@@ -105,6 +105,7 @@ func initializeCampaignsService(
 	priceProvImpl *fusionprice.FusionPriceProvider,
 	cardHedgerClientImpl *cardhedger.Client,
 	cardIDMappingRepo *sqlite.CardIDMappingRepository,
+	intelRepo *sqlite.MarketIntelligenceRepository,
 ) (campaigns.Service, *sqlite.CampaignsRepository, *sqlite.CardRequestRepository) {
 	campaignsRepo := sqlite.NewCampaignsRepository(db.DB)
 	priceLookupAdapter := pricelookup.NewAdapter(priceProvImpl)
@@ -138,6 +139,10 @@ func initializeCampaignsService(
 		campaigns.WithCLValueRecorder(campaignsRepo),
 		campaigns.WithPopulationRecorder(campaignsRepo),
 	)
+
+	if intelRepo != nil {
+		campaignOpts = append(campaignOpts, campaigns.WithIntelligenceRepo(intelRepo))
+	}
 	campaignsService := campaigns.NewService(campaignsRepo, campaignOpts...)
 
 	return campaignsService, campaignsRepo, cardRequestRepo

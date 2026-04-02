@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/errors"
+	"github.com/guarzo/slabledger/internal/domain/intelligence"
 )
 
 // --- Sell Sheet ---
@@ -306,7 +307,90 @@ func (s *service) MatchShopifyPrices(ctx context.Context, items []ShopifyPriceSy
 	if resp.Matched == nil {
 		resp.Matched = []ShopifyPriceSyncMatch{}
 	}
+
+	// Batch-enrich with DH market intelligence (best-effort — skip on error)
+	if s.intelRepo != nil && len(resp.Matched) > 0 {
+		keys := make([]intelligence.CardKey, len(resp.Matched))
+		for i, m := range resp.Matched {
+			keys[i] = intelligence.CardKey{
+				CardName:   m.CardName,
+				SetName:    m.SetName,
+				CardNumber: m.CardNumber,
+			}
+		}
+		if intelMap, err := s.intelRepo.GetByCards(ctx, keys); err == nil {
+			for i := range resp.Matched {
+				m := &resp.Matched[i]
+				key := intelligence.CardKey{CardName: m.CardName, SetName: m.SetName, CardNumber: m.CardNumber}
+				if mi, ok := intelMap[key]; ok {
+					m.Intel = convertIntel(mi)
+				}
+			}
+		}
+	}
+
 	return resp, nil
+}
+
+// convertIntel converts a domain MarketIntelligence into the API-facing PriceSyncIntel.
+// Returns nil if the input is nil.
+func convertIntel(mi *intelligence.MarketIntelligence) *PriceSyncIntel {
+	if mi == nil {
+		return nil
+	}
+	out := &PriceSyncIntel{
+		FetchedAt: mi.FetchedAt.Format(time.RFC3339),
+	}
+	if mi.Sentiment != nil {
+		out.SentimentScore = mi.Sentiment.Score
+		out.SentimentTrend = mi.Sentiment.Trend
+		out.SentimentMentions = mi.Sentiment.MentionCount
+	}
+	if mi.Forecast != nil {
+		out.ForecastCents = mi.Forecast.PredictedPriceCents
+		out.ForecastConfidence = mi.Forecast.Confidence
+		if !mi.Forecast.ForecastDate.IsZero() {
+			out.ForecastDate = mi.Forecast.ForecastDate.Format(time.RFC3339)
+		}
+	}
+	if mi.Insights != nil {
+		out.InsightHeadline = mi.Insights.Headline
+		out.InsightDetail = mi.Insights.Detail
+	}
+
+	// Recent sales — last 5, newest first
+	out.RecentSalesCount = len(mi.RecentSales)
+	limit := min(5, len(mi.RecentSales))
+	for i := 0; i < limit; i++ {
+		s := mi.RecentSales[i]
+		out.RecentSales = append(out.RecentSales, PriceSyncSale{
+			SoldAt:     s.SoldAt.Format(time.RFC3339),
+			Grade:      s.Grade,
+			PriceCents: s.PriceCents,
+			Platform:   s.Platform,
+		})
+	}
+
+	// Population — PSA entries only
+	for _, p := range mi.Population {
+		if p.GradingCompany == "PSA" {
+			out.Population = append(out.Population, PriceSyncPop{
+				Grade: p.Grade,
+				Count: p.Count,
+			})
+		}
+	}
+
+	// Grading ROI
+	for _, r := range mi.GradingROI {
+		out.GradingROI = append(out.GradingROI, PriceSyncROI{
+			Grade:        r.Grade,
+			AvgSaleCents: r.AvgSaleCents,
+			ROI:          r.ROI,
+		})
+	}
+
+	return out
 }
 
 // --- Price Review ---
