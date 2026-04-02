@@ -34,6 +34,7 @@ const (
 	EventToolResult EventType = "tool_result"
 	EventDone       EventType = "done"
 	EventError      EventType = "error"
+	EventScore      EventType = "score"
 )
 
 // StreamEvent is a single event in the SSE response stream.

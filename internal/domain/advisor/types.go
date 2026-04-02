@@ -21,6 +21,7 @@ const (
 	EventToolResult = ai.EventToolResult
 	EventDone       = ai.EventDone
 	EventError      = ai.EventError
+	EventScore      = ai.EventScore
 )
 
 type StreamEvent = ai.StreamEvent
