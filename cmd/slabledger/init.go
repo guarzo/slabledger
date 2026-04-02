@@ -20,6 +20,7 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/clients/pricelookup"
 	"github.com/guarzo/slabledger/internal/adapters/clients/psa"
 	"github.com/guarzo/slabledger/internal/adapters/clients/tcgdex"
+	scoringadapter "github.com/guarzo/slabledger/internal/adapters/scoring"
 	"github.com/guarzo/slabledger/internal/adapters/scheduler"
 	"github.com/guarzo/slabledger/internal/adapters/storage/mediafs"
 	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
@@ -178,6 +179,15 @@ func initializeAdvisorService(
 	if cfg.AdvisorRefresh.MaxToolRounds > 0 {
 		advisorOpts = append(advisorOpts, advisor.WithMaxToolRounds(cfg.AdvisorRefresh.MaxToolRounds))
 	}
+
+	// Scoring engine: pre-compute factor scores for advisor flows
+	scoringProvider := scoringadapter.NewProvider(campaignsService)
+	advisorOpts = append(advisorOpts, advisor.WithScoringDataProvider(scoringProvider))
+
+	// Data gap tracking for scoring quality reports
+	gapStore := sqlite.NewGapStore(db.DB)
+	advisorOpts = append(advisorOpts, advisor.WithGapStore(gapStore))
+
 	advisorSvc = advisor.NewService(client, toolExec, advisorOpts...)
 	logger.Info(ctx, "AI advisor initialized",
 		observability.String("deployment", cfg.Adapters.AzureAIDeployment))
