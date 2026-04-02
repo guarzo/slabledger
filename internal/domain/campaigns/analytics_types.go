@@ -177,6 +177,45 @@ type ShopifyPriceSyncMatch struct {
 	RecommendedPriceCents int            `json:"recommendedPriceCents"`
 	RecommendedSource     string         `json:"recommendedSource"`
 	ReviewedAt            string         `json:"reviewedAt,omitempty"`
+	Intel                 *PriceSyncIntel `json:"intel,omitempty"`
+}
+
+// PriceSyncSale is a recent sale for display in the price-sync UI.
+type PriceSyncSale struct {
+	SoldAt     string `json:"soldAt"`
+	Grade      string `json:"grade"`
+	PriceCents int64  `json:"priceCents"`
+	Platform   string `json:"platform"`
+}
+
+// PriceSyncPop is a population entry for display in the price-sync UI.
+type PriceSyncPop struct {
+	Grade string `json:"grade"`
+	Count int    `json:"count"`
+}
+
+// PriceSyncROI is a grading ROI entry for display in the price-sync UI.
+type PriceSyncROI struct {
+	Grade        string  `json:"grade"`
+	AvgSaleCents int64   `json:"avgSaleCents"`
+	ROI          float64 `json:"roi"`
+}
+
+// PriceSyncIntel holds DH market intelligence attached to a price-sync match.
+type PriceSyncIntel struct {
+	SentimentScore     float64         `json:"sentimentScore"`
+	SentimentTrend     string          `json:"sentimentTrend"`
+	SentimentMentions  int             `json:"sentimentMentions"`
+	ForecastCents      int64           `json:"forecastCents"`
+	ForecastConfidence float64         `json:"forecastConfidence"`
+	ForecastDate       string          `json:"forecastDate,omitempty"`
+	RecentSalesCount   int             `json:"recentSalesCount"`
+	RecentSales        []PriceSyncSale `json:"recentSales,omitempty"`
+	Population         []PriceSyncPop  `json:"population,omitempty"`
+	GradingROI         []PriceSyncROI  `json:"gradingROI,omitempty"`
+	InsightHeadline    string          `json:"insightHeadline,omitempty"`
+	InsightDetail      string          `json:"insightDetail,omitempty"`
+	FetchedAt          string          `json:"fetchedAt,omitempty"`
 }
 
 // ShopifyPriceSyncResponse contains the results of matching Shopify CSV items against inventory.
