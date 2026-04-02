@@ -74,7 +74,7 @@ type RouterConfig struct {
 	SalesCompsHandler         *handlers.SalesCompsHandler    // Sales comps; nil = disabled
 	PicksHandler              *handlers.PicksHandler         // AI picks; nil = disabled
 	OpportunitiesHandler      *handlers.OpportunitiesHandler // Arbitrage opportunities; nil = disabled
-	DoubleHoloHandler         *handlers.DoubleHoloHandler   // DH bulk match + intelligence; nil = disabled
+	DoubleHoloHandler         *handlers.DoubleHoloHandler    // DH bulk match + intelligence; nil = disabled
 	Logger                    observability.Logger
 	AdminEmails               []string
 	DatabasePath              string

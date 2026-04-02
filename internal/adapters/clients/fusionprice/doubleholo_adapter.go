@@ -189,4 +189,3 @@ func dhGradeToFusionKey(company, grade string) string {
 		return ""
 	}
 }
-

@@ -223,10 +223,10 @@ func TestComputeConcentration(t *testing.T) {
 		cardName string
 		want     string
 	}{
-		{"Charizard VMAX", "high"},     // 50/100 = 50% > 40%
-		{"Pikachu V", "medium"},        // 30/100 = 30%
-		{"Mewtwo GX", "low"},           // 0/100 = 0% < 15%
-		{"Blastoise EX", "medium"},     // 20/100 = 20%
+		{"Charizard VMAX", "high"}, // 50/100 = 50% > 40%
+		{"Pikachu V", "medium"},    // 30/100 = 30%
+		{"Mewtwo GX", "low"},       // 0/100 = 0% < 15%
+		{"Blastoise EX", "medium"}, // 20/100 = 20%
 	}
 
 	for _, tt := range tests {

@@ -84,6 +84,33 @@ func (r *CardIDMappingRepository) ListByProvider(ctx context.Context, provider s
 	return mappings, rows.Err()
 }
 
+// GetMappedSet returns the set of card keys that have an external ID mapping for
+// the given provider. The returned map is keyed by "cardName|setName|collectorNumber".
+func (r *CardIDMappingRepository) GetMappedSet(ctx context.Context, provider string) (_ map[string]string, err error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT card_name, set_name, collector_number, external_id FROM card_id_mappings WHERE provider = ?`,
+		provider,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if cerr := rows.Close(); err == nil && cerr != nil {
+			err = cerr
+		}
+	}()
+
+	result := make(map[string]string, 64)
+	for rows.Next() {
+		var cardName, setName, collectorNumber, externalID string
+		if err := rows.Scan(&cardName, &setName, &collectorNumber, &externalID); err != nil {
+			return nil, err
+		}
+		result[cardName+"|"+setName+"|"+collectorNumber] = externalID
+	}
+	return result, rows.Err()
+}
+
 // GetExternalIDFresh returns the cached external ID only if it was updated within maxAge.
 // Returns "" if no mapping exists or the mapping is stale.
 func (r *CardIDMappingRepository) GetExternalIDFresh(ctx context.Context, cardName, setName, collectorNumber, provider string, maxAge time.Duration) (string, error) {

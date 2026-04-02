@@ -30,9 +30,21 @@ func (m *MockSuggestionsRepository) StoreSuggestions(ctx context.Context, sugges
 	if m.StoreSuggestionsFn != nil {
 		return m.StoreSuggestionsFn(ctx, suggestions)
 	}
+	if len(suggestions) == 0 {
+		return nil
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.Suggestions = append(m.Suggestions, suggestions...)
+	// Mirror real implementation: replace all suggestions for the date.
+	date := suggestions[0].SuggestionDate
+	n := 0
+	for _, s := range m.Suggestions {
+		if s.SuggestionDate != date {
+			m.Suggestions[n] = s
+			n++
+		}
+	}
+	m.Suggestions = append(m.Suggestions[:n], suggestions...)
 	return nil
 }
 

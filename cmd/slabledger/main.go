@@ -283,6 +283,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	if suggestionsRepo != nil {
 		advisorToolOpts = append(advisorToolOpts, advisortool.WithSuggestionsRepo(suggestionsRepo))
 	}
+	advisorToolOpts = append(advisorToolOpts, advisortool.WithGapStore(sqlite.NewGapStore(db.DB)))
 
 	azureAIClient, advisorService, advisorCacheRepo, err := initializeAdvisorService(
 		ctx, cfg, logger, db, aiCallRepo, campaignsService, advisorToolOpts...,

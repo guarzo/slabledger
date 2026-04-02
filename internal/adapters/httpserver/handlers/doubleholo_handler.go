@@ -12,6 +12,7 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/campaigns"
 	"github.com/guarzo/slabledger/internal/domain/intelligence"
 	"github.com/guarzo/slabledger/internal/domain/observability"
+	"github.com/guarzo/slabledger/internal/domain/pricing"
 )
 
 // DHMatchClient is the subset of the DH client needed for card matching.
@@ -24,6 +25,7 @@ type DHMatchClient interface {
 type DHCardIDSaver interface {
 	GetExternalID(ctx context.Context, cardName, setName, collectorNumber, provider string) (string, error)
 	SaveExternalID(ctx context.Context, cardName, setName, collectorNumber, provider, externalID string) error
+	GetMappedSet(ctx context.Context, provider string) (map[string]string, error)
 }
 
 // DHPurchaseLister lists all unsold purchases for bulk match and export operations.
@@ -60,8 +62,6 @@ func NewDoubleHoloHandler(
 	}
 }
 
-const dhProvider = "doubleholo"
-
 // bulkMatchResponse is the JSON shape returned by HandleBulkMatch.
 type bulkMatchResponse struct {
 	Total         int `json:"total"`
@@ -85,6 +85,14 @@ func (h *DoubleHoloHandler) HandleBulkMatch(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	// Pre-load all existing DH mappings in a single query.
+	mappedSet, err := h.cardIDSaver.GetMappedSet(ctx, pricing.SourceDoubleHolo)
+	if err != nil {
+		h.logger.Error(ctx, "bulk match: load mapped set", observability.Err(err))
+		writeError(w, http.StatusInternalServerError, "failed to load mappings")
+		return
+	}
+
 	result := bulkMatchResponse{Total: len(identities)}
 
 	for _, ci := range identities {
@@ -92,14 +100,7 @@ func (h *DoubleHoloHandler) HandleBulkMatch(w http.ResponseWriter, r *http.Reque
 			break
 		}
 
-		existing, err := h.cardIDSaver.GetExternalID(ctx, ci.CardName, ci.SetName, ci.CardNumber, dhProvider)
-		if err != nil {
-			h.logger.Error(ctx, "bulk match: get external ID", observability.Err(err),
-				observability.String("card", ci.CardName))
-			result.Failed++
-			continue
-		}
-		if existing != "" {
+		if mappedSet[dhCardKey(ci.CardName, ci.SetName, ci.CardNumber)] != "" {
 			result.Skipped++
 			continue
 		}
@@ -123,7 +124,7 @@ func (h *DoubleHoloHandler) HandleBulkMatch(w http.ResponseWriter, r *http.Reque
 		}
 
 		externalID := strconv.Itoa(matchResp.CardID)
-		if err := h.cardIDSaver.SaveExternalID(ctx, ci.CardName, ci.SetName, ci.CardNumber, dhProvider, externalID); err != nil {
+		if err := h.cardIDSaver.SaveExternalID(ctx, ci.CardName, ci.SetName, ci.CardNumber, pricing.SourceDoubleHolo, externalID); err != nil {
 			h.logger.Error(ctx, "bulk match: save external ID", observability.Err(err),
 				observability.String("card", ci.CardName))
 			result.Failed++
@@ -162,21 +163,23 @@ func (h *DoubleHoloHandler) HandleUnmatched(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	mappedSet, err := h.cardIDSaver.GetMappedSet(ctx, pricing.SourceDoubleHolo)
+	if err != nil {
+		h.logger.Error(ctx, "unmatched: load mapped set", observability.Err(err))
+		writeError(w, http.StatusInternalServerError, "failed to load mappings")
+		return
+	}
+
 	var unmatched []unmatchedCard
 	seen := make(map[string]bool)
 	for _, p := range purchases {
-		key := p.CardName + "|" + p.SetName + "|" + p.CardNumber
+		key := dhCardKey(p.CardName, p.SetName, p.CardNumber)
 		if seen[key] {
 			continue
 		}
 		seen[key] = true
 
-		existing, err := h.cardIDSaver.GetExternalID(ctx, p.CardName, p.SetName, p.CardNumber, dhProvider)
-		if err != nil {
-			h.logger.Warn(ctx, "unmatched: get external ID", observability.Err(err))
-			continue
-		}
-		if existing != "" {
+		if mappedSet[key] != "" {
 			continue
 		}
 
@@ -208,7 +211,13 @@ func (h *DoubleHoloHandler) HandleExportUnmatched(w http.ResponseWriter, r *http
 		return
 	}
 
-	// Collect unmatched purchases (not deduplicated — one row per card)
+	mappedSet, err := h.cardIDSaver.GetMappedSet(ctx, pricing.SourceDoubleHolo)
+	if err != nil {
+		h.logger.Error(ctx, "export unmatched: load mapped set", observability.Err(err))
+		writeError(w, http.StatusInternalServerError, "failed to load mappings")
+		return
+	}
+
 	type exportRow struct {
 		certNumber string
 		cardName   string
@@ -218,11 +227,7 @@ func (h *DoubleHoloHandler) HandleExportUnmatched(w http.ResponseWriter, r *http
 	}
 	var rows []exportRow
 	for _, p := range purchases {
-		existing, err := h.cardIDSaver.GetExternalID(ctx, p.CardName, p.SetName, p.CardNumber, dhProvider)
-		if err != nil {
-			continue
-		}
-		if existing != "" {
+		if mappedSet[dhCardKey(p.CardName, p.SetName, p.CardNumber)] != "" {
 			continue
 		}
 		price := p.CLValueCents
@@ -383,6 +388,11 @@ func buildMatchTitle(cardName, setName, cardNumber string) string {
 		parts = append(parts, cardNumber)
 	}
 	return strings.Join(parts, " ")
+}
+
+// dhCardKey builds the pipe-delimited key used by GetMappedSet.
+func dhCardKey(cardName, setName, cardNumber string) string {
+	return cardName + "|" + setName + "|" + cardNumber
 }
 
 // centsToDollarStr formats cents as a dollar string (e.g. 12345 -> "123.45").

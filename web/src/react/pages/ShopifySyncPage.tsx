@@ -1,9 +1,12 @@
 import { useState, useRef, useCallback, useMemo } from 'react';
 import { api } from '../../js/api';
 import type { ShopifyPriceSyncMatch, ShopifyPriceSyncResponse } from '../../types/campaigns';
-import { formatCents, centsToDollars, dollarsToCents } from '../utils/formatters';
+import { formatCents, centsToDollars, dollarsToCents, toTitleCase } from '../utils/formatters';
 import { Button, CardShell, PriceDecisionBar, buildPriceSources, preSelectSource } from '../ui';
 import { useToast } from '../contexts/ToastContext';
+
+type SyncFilter = 'all' | 'price_drop' | 'price_increase' | 'no_market_data';
+type SyncSort = 'delta' | 'value' | 'margin' | 'name';
 
 /* ── Types ────────────────────────────────────────────────────────── */
 
@@ -244,15 +247,21 @@ function ReviewRow({ match, decision, onDecide }: {
     decision?.action === 'update' ? 'accepted' :
     decision?.action === 'skip' ? 'skipped' : 'pending';
 
+  // Delta between recommended and current price
+  const deltaCents = match.recommendedPriceCents - match.currentPriceCents;
+  const deltaPct = match.currentPriceCents > 0
+    ? ((deltaCents / match.currentPriceCents) * 100) : 0;
+  const isIncrease = deltaCents > 0;
+
   return (
     <tr className={`border-b border-[var(--surface-2)]/50 ${
-      status === 'accepted' ? 'bg-[var(--success-bg)]/30' :
-      status === 'skipped' ? 'bg-[var(--surface-2)]/30' : ''
+      status === 'accepted' ? 'bg-[var(--success)]/[0.04]' :
+      status === 'skipped' ? 'bg-[var(--surface-2)]/30 opacity-50' : ''
     }`}>
       <td className="py-2 px-2">
-        <div className="text-sm font-medium text-[var(--text)]">{match.cardName}</div>
+        <div className="text-sm font-medium text-[var(--text)]">{toTitleCase(match.cardName)}</div>
         {match.setName && (
-          <div className="text-[10px] text-[var(--text-muted)]">
+          <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wide">
             {match.setName}{match.cardNumber ? ` #${match.cardNumber}` : ''}
           </div>
         )}
@@ -260,13 +269,25 @@ function ReviewRow({ match, decision, onDecide }: {
       <td className="py-2 px-2 text-xs text-center text-[var(--text)]">
         {match.grader ? `${match.grader} ` : ''}{match.grade}
       </td>
-      <td className="py-2 px-2 text-right text-sm text-[var(--text)]">{formatCents(match.currentPriceCents)}</td>
+      <td className="py-2 px-2 text-right">
+        <div className="text-sm font-semibold text-[var(--text)]">{formatCents(match.currentPriceCents)}</div>
+        {deltaCents !== 0 && (
+          <div className={`text-[11px] font-semibold flex items-center justify-end gap-0.5 ${
+            isIncrease ? 'text-[var(--success)]' : 'text-red-400'
+          }`}>
+            <span className="text-[9px]">{isIncrease ? '\u25B2' : '\u25BC'}</span>
+            {isIncrease ? '+' : ''}{formatCents(deltaCents)} ({deltaPct > 0 ? '+' : ''}{deltaPct.toFixed(1)}%)
+          </div>
+        )}
+      </td>
       <td className="py-2 px-2" colSpan={4}>
         <PriceDecisionBar
           sources={sources}
           preSelected={preSelected}
           status={status}
           confirmLabel="Update"
+          recommendedSource={match.recommendedSource === 'user_reviewed' ? undefined : match.recommendedSource}
+          costBasisCents={match.costBasisCents}
           onConfirm={(priceCents) => onDecide({ action: 'update', priceCents })}
           onSkip={() => onDecide({ action: 'skip' })}
           onReset={() => onDecide(undefined)}
@@ -335,25 +356,49 @@ export default function ShopifySyncPage({ embedded = false }: { embedded?: boole
   const [noCertCount, setNoCertCount] = useState(0);
   const [decisions, setDecisions] = useState<Map<string, ItemDecision>>(new Map());
 
-  // Filter to mismatches only, split into two sections
-  const { userReviewed, clDerived, alignedCount } = useMemo(() => {
+  // Sort & filter controls
+  const [filter, setFilter] = useState<SyncFilter>('all');
+  const [sort, setSort] = useState<SyncSort>('delta');
+
+  // Filter to mismatches, apply user sort/filter, split into two sections
+  const { userReviewed, clDerived, alignedCount, filterCounts } = useMemo(() => {
     const mismatches = matched.filter(
       (m) => m.recommendedPriceCents > 0 && m.currentPriceCents !== m.recommendedPriceCents
     );
     const aligned = matched.length - mismatches.length;
 
-    const sortByDiff = (a: ShopifyPriceSyncMatch, b: ShopifyPriceSyncMatch) =>
-      Math.abs(b.recommendedPriceCents - b.currentPriceCents) -
-      Math.abs(a.recommendedPriceCents - a.currentPriceCents);
+    // Compute filter counts before filtering
+    const counts = {
+      all: mismatches.length,
+      price_drop: mismatches.filter(m => m.recommendedPriceCents < m.currentPriceCents).length,
+      price_increase: mismatches.filter(m => m.recommendedPriceCents > m.currentPriceCents).length,
+      no_market_data: mismatches.filter(m => !m.hasMarketData).length,
+    };
 
-    const reviewed = mismatches.filter((m) => m.recommendedSource === 'user_reviewed');
-    const cl = mismatches.filter((m) => m.recommendedSource !== 'user_reviewed');
+    // Apply filter
+    let filtered = mismatches;
+    if (filter === 'price_drop') filtered = mismatches.filter(m => m.recommendedPriceCents < m.currentPriceCents);
+    else if (filter === 'price_increase') filtered = mismatches.filter(m => m.recommendedPriceCents > m.currentPriceCents);
+    else if (filter === 'no_market_data') filtered = mismatches.filter(m => !m.hasMarketData);
 
-    reviewed.sort(sortByDiff);
-    cl.sort(sortByDiff);
+    // Apply sort
+    const sortFn = (a: ShopifyPriceSyncMatch, b: ShopifyPriceSyncMatch) => {
+      switch (sort) {
+        case 'value': return Math.max(b.currentPriceCents, b.recommendedPriceCents) - Math.max(a.currentPriceCents, a.recommendedPriceCents);
+        case 'margin': return (b.recommendedPriceCents - b.costBasisCents) - (a.recommendedPriceCents - a.costBasisCents);
+        case 'name': return a.cardName.localeCompare(b.cardName);
+        default: return Math.abs(b.recommendedPriceCents - b.currentPriceCents) - Math.abs(a.recommendedPriceCents - a.currentPriceCents);
+      }
+    };
 
-    return { userReviewed: reviewed, clDerived: cl, alignedCount: aligned };
-  }, [matched]);
+    const reviewed = filtered.filter((m) => m.recommendedSource === 'user_reviewed');
+    const cl = filtered.filter((m) => m.recommendedSource !== 'user_reviewed');
+
+    reviewed.sort(sortFn);
+    cl.sort(sortFn);
+
+    return { userReviewed: reviewed, clDerived: cl, alignedCount: aligned, filterCounts: counts };
+  }, [matched, filter, sort]);
 
   const allMismatches = useMemo(() => [...userReviewed, ...clDerived], [userReviewed, clDerived]);
 
@@ -440,6 +485,18 @@ export default function ShopifySyncPage({ embedded = false }: { embedded?: boole
 
   const updatedCount = Array.from(decisions.values()).filter(d => d?.action === 'update').length;
 
+  // Total dollar impact of marked updates
+  const totalImpactCents = useMemo(() => {
+    let total = 0;
+    for (const m of matched) {
+      const d = decisions.get(m.certNumber);
+      if (d?.action === 'update') {
+        total += d.priceCents - m.currentPriceCents;
+      }
+    }
+    return total;
+  }, [matched, decisions]);
+
   const handleExport = useCallback(() => {
     if (!parsedCSV) return;
     const { format, headers, prefixLines, items, priceIdx } = parsedCSV;
@@ -495,6 +552,8 @@ export default function ShopifySyncPage({ embedded = false }: { embedded?: boole
     setUnmatched([]);
     setNoCertCount(0);
     setDecisions(new Map());
+    setFilter('all');
+    setSort('delta');
   }, []);
 
   const content = (
@@ -534,7 +593,7 @@ export default function ShopifySyncPage({ embedded = false }: { embedded?: boole
       {phase === 'review' && (
         <>
           {/* Summary bar */}
-          <div className="flex flex-wrap items-center gap-4 mb-4 p-3 bg-[var(--surface-1)] rounded-xl border border-[var(--surface-2)]">
+          <div className="flex flex-wrap items-center gap-4 mb-3 p-3 bg-[var(--surface-1)] rounded-xl border border-[var(--surface-2)]">
             <div className="text-sm">
               <span className="text-[var(--success)] font-medium">{matched.length}</span>
               <span className="text-[var(--text-muted)]"> matched</span>
@@ -547,27 +606,65 @@ export default function ShopifySyncPage({ embedded = false }: { embedded?: boole
             )}
             {noCertCount > 0 && (
               <div className="text-sm">
-                <span className="text-[var(--text-muted)]">{noCertCount} items without certs (pass-through)</span>
+                <span className="text-[var(--text-muted)]">{noCertCount} without certs</span>
               </div>
             )}
-            <div className="ml-auto text-sm text-[var(--text-muted)]">
-              {updatedCount} of {allMismatches.length} marked for update
+            <div className="ml-auto flex items-center gap-4 text-sm">
+              <span className="text-[var(--text-muted)]">
+                {updatedCount} of {filterCounts.all} marked
+              </span>
+              {updatedCount > 0 && (
+                <span className={`font-semibold border-l border-[var(--surface-2)] pl-4 ${
+                  totalImpactCents >= 0 ? 'text-[var(--success)]' : 'text-red-400'
+                }`}>
+                  Impact: {totalImpactCents >= 0 ? '+' : ''}{formatCents(totalImpactCents)}
+                </span>
+              )}
             </div>
           </div>
 
-          {/* Bulk actions */}
-          <div className="flex items-center gap-2 mb-4">
-            <Button size="sm" variant="success" onClick={updateAll}>Update All</Button>
-            <div className="ml-auto">
-              <Button
-                size="sm"
-                variant="primary"
-                disabled={updatedCount === 0}
-                onClick={() => { setPhase('export'); handleExport(); }}
+          {/* Filter / sort toolbar */}
+          <div className="flex flex-wrap items-center gap-2 mb-4">
+            <span className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wide mr-1">Show:</span>
+            {([
+              ['all', `All (${filterCounts.all})`],
+              ['price_drop', `Drops (${filterCounts.price_drop})`],
+              ['price_increase', `Increases (${filterCounts.price_increase})`],
+              ['no_market_data', `No Market (${filterCounts.no_market_data})`],
+            ] as [SyncFilter, string][]).map(([key, label]) => (
+              <button
+                key={key}
+                onClick={() => setFilter(key)}
+                className={`text-xs px-3 py-1 rounded-md border transition-colors ${
+                  filter === key
+                    ? 'border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]'
+                    : 'border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text)] hover:border-[var(--text-muted)]'
+                }`}
               >
-                Export ({updatedCount} changes)
-              </Button>
-            </div>
+                {label}
+              </button>
+            ))}
+
+            <select
+              value={sort}
+              onChange={e => setSort(e.target.value as SyncSort)}
+              className="ml-auto text-xs px-2 py-1 rounded-md border border-[var(--border)] bg-[var(--surface-raised)] text-[var(--text-muted)] cursor-pointer"
+            >
+              <option value="delta">Sort: Largest Delta</option>
+              <option value="value">Sort: Highest Value</option>
+              <option value="margin">Sort: Most Margin</option>
+              <option value="name">Sort: Card Name</option>
+            </select>
+
+            <Button size="sm" variant="success" onClick={updateAll}>Update All</Button>
+            <Button
+              size="sm"
+              variant="primary"
+              disabled={updatedCount === 0}
+              onClick={() => { setPhase('export'); handleExport(); }}
+            >
+              Export ({updatedCount})
+            </Button>
           </div>
 
           {/* User-reviewed section */}

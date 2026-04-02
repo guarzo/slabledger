@@ -5,10 +5,8 @@ import (
 	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/doubleholo"
-	"github.com/guarzo/slabledger/internal/adapters/clients/fusionprice"
 	"github.com/guarzo/slabledger/internal/domain/intelligence"
 	"github.com/guarzo/slabledger/internal/domain/observability"
-	"github.com/guarzo/slabledger/internal/domain/pricing"
 )
 
 var _ Scheduler = (*DHIntelligenceRefreshScheduler)(nil)
@@ -105,12 +103,7 @@ func (s *DHIntelligenceRefreshScheduler) refresh(ctx context.Context) {
 			continue
 		}
 
-		card := pricing.Card{
-			Name:   entry.CardName,
-			Set:    entry.SetName,
-			Number: entry.CardNumber,
-		}
-		intel := fusionprice.ConvertDHToIntelligence(resp, card, entry.DHCardID)
+		intel := doubleholo.ConvertToIntelligence(resp, entry.CardName, entry.SetName, entry.CardNumber, entry.DHCardID)
 
 		if storeErr := s.intelRepo.Store(ctx, intel); storeErr != nil {
 			s.logger.Warn(ctx, "failed to store refreshed intelligence",

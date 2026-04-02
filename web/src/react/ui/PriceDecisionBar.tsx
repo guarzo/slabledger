@@ -22,6 +22,10 @@ export interface PriceDecisionBarProps {
   onReset?: () => void;
   /** Price to display in accepted state when set externally (e.g. Accept All). */
   acceptedPriceCents?: number;
+  /** Source key to highlight as recommended (thicker border). */
+  recommendedSource?: string;
+  /** Cost basis in cents — shows live margin badge when set. */
+  costBasisCents?: number;
 }
 
 export default function PriceDecisionBar({
@@ -36,6 +40,8 @@ export default function PriceDecisionBar({
   confirmLabel = 'Confirm',
   onReset,
   acceptedPriceCents,
+  recommendedSource,
+  costBasisCents,
 }: PriceDecisionBarProps) {
   const [selectedSource, setSelectedSource] = useState<string | null>(null);
   const [customValue, setCustomValue] = useState('');
@@ -96,29 +102,48 @@ export default function PriceDecisionBar({
   const hasSelection = selectedSource !== null || (customValue !== '' && dollarsToCents(customValue) > 0);
   const allDisabled = disabled || isSubmitting;
 
+  // Compute live margin from current selection vs cost basis
+  const currentCents = dollarsToCents(customValue);
+  const marginCents = costBasisCents != null && costBasisCents > 0 && currentCents > 0
+    ? currentCents - costBasisCents : null;
+
+  const marginBadge = marginCents != null ? (
+    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+      marginCents >= 0
+        ? 'text-[var(--success)] bg-[var(--success)]/10'
+        : 'text-red-400 bg-red-400/10'
+    }`}>
+      {marginCents >= 0 ? '+' : ''}{formatCents(marginCents)} margin
+    </span>
+  ) : null;
+
+  const pillClass = (src: PriceSource, isDisabled: boolean) => {
+    const isSelected = selectedSource === src.source;
+    const isRecommended = recommendedSource === src.source;
+    const base = 'text-xs rounded-md border transition-colors flex flex-col items-center min-w-[68px] px-2 py-1.5 disabled:opacity-40 disabled:cursor-not-allowed';
+    if (isSelected) return `${base} border-[var(--accent)] ${isRecommended ? 'border-2' : ''} bg-[var(--accent)]/10 text-[var(--accent)]`;
+    if (isRecommended && !isDisabled) return `${base} border-2 border-[var(--accent)]/50 text-[var(--text-muted)] hover:text-[var(--text)] hover:border-[var(--accent)]`;
+    return `${base} border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text)] hover:border-[var(--text-muted)]`;
+  };
+
   if (status === 'accepted') {
     const displayCents = acceptedPriceCents || lastConfirmedCents || (getConfirmValues()?.priceCents ?? 0);
+    const acceptedMargin = costBasisCents != null && costBasisCents > 0 && displayCents > 0
+      ? displayCents - costBasisCents : null;
     return (
-      <div className="flex items-center gap-3 flex-wrap opacity-60">
-        <span className="text-xs font-medium text-[var(--text-muted)] whitespace-nowrap">Set Price:</span>
-        {sources.map(src => (
-          <button
-            key={src.source}
-            type="button"
-            disabled
-            aria-pressed={selectedSource === src.source}
-            className={`text-xs px-2.5 py-1.5 rounded-md border transition-colors ${
-              selectedSource === src.source
-                ? 'border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]'
-                : 'border-[var(--border)] text-[var(--text-muted)]'
-            } disabled:cursor-not-allowed`}
-          >
-            {src.label} {src.priceCents > 0 ? formatCents(src.priceCents) : '\u2014'}
-          </button>
-        ))}
-        <span className="text-xs px-2.5 py-1.5 rounded-md bg-[var(--success)]/15 text-[var(--success)] font-medium border border-[var(--success)]/30">
+      <div className="flex items-center gap-3 flex-wrap">
+        <span className="text-xs px-2.5 py-1.5 rounded-md bg-[var(--success)]/15 text-[var(--success)] font-semibold border border-[var(--success)]/30">
           &#10003; {formatCents(displayCents)}
         </span>
+        {acceptedMargin != null && (
+          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+            acceptedMargin >= 0
+              ? 'text-[var(--success)] bg-[var(--success)]/10'
+              : 'text-red-400 bg-red-400/10'
+          }`}>
+            {acceptedMargin >= 0 ? '+' : ''}{formatCents(acceptedMargin)} margin
+          </span>
+        )}
         {onReset && (
           <Button variant="ghost" size="sm" onClick={onReset} disabled={disabled}>
             Change
@@ -131,13 +156,6 @@ export default function PriceDecisionBar({
   if (status === 'skipped') {
     return (
       <div className="flex items-center gap-3 flex-wrap opacity-50">
-        <span className="text-xs font-medium text-[var(--text-muted)] whitespace-nowrap">Set Price:</span>
-        {sources.map(src => (
-          <button key={src.source} type="button" disabled
-            className="text-xs px-2.5 py-1.5 rounded-md border border-[var(--border)] text-[var(--text-muted)] disabled:cursor-not-allowed">
-            {src.label} {src.priceCents > 0 ? formatCents(src.priceCents) : '\u2014'}
-          </button>
-        ))}
         <span className="text-xs text-[var(--text-muted)] italic">Skipped</span>
         {onReset && (
           <Button variant="ghost" size="sm" onClick={onReset} disabled={disabled}>
@@ -149,7 +167,7 @@ export default function PriceDecisionBar({
   }
 
   return (
-    <div className="flex items-center gap-3 flex-wrap">
+    <div className="flex items-center gap-2.5 flex-wrap">
       <span className="text-xs font-medium text-[var(--text-muted)] whitespace-nowrap">Set Price:</span>
 
       {sources.map(src => (
@@ -159,13 +177,10 @@ export default function PriceDecisionBar({
           onClick={() => handleSourceClick(src)}
           disabled={allDisabled || src.priceCents === 0}
           aria-pressed={selectedSource === src.source}
-          className={`text-xs px-2.5 py-1.5 rounded-md border transition-colors ${
-            selectedSource === src.source
-              ? 'border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]'
-              : 'border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text)] hover:border-[var(--text-muted)]'
-          } disabled:opacity-40 disabled:cursor-not-allowed`}
+          className={pillClass(src, allDisabled || src.priceCents === 0)}
         >
-          {src.label} {src.priceCents > 0 ? formatCents(src.priceCents) : '\u2014'}
+          <span className="leading-none text-[9px] uppercase tracking-wide opacity-70">{src.label}</span>
+          <span className="leading-tight font-semibold text-xs">{src.priceCents > 0 ? formatCents(src.priceCents) : '\u2014'}</span>
         </button>
       ))}
 
@@ -199,6 +214,8 @@ export default function PriceDecisionBar({
           Skip
         </Button>
       )}
+
+      {marginBadge}
 
       {onFlag && (
         <div className="ml-auto">

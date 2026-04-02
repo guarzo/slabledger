@@ -3,7 +3,6 @@ package sqlite
 import (
 	"context"
 	"database/sql"
-	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/intelligence"
 )
@@ -59,8 +58,8 @@ func (r *DHSuggestionsRepository) StoreSuggestions(ctx context.Context, suggesti
 		if _, err := stmt.ExecContext(ctx,
 			s.SuggestionDate, s.Type, s.Category, s.Rank, s.IsManual,
 			s.DHCardID, s.CardName, s.SetName, s.CardNumber,
-			nullString(s.ImageURL), s.CurrentPriceCents, s.ConfidenceScore,
-			nullString(s.Reasoning), nullString(s.StructuredReasoning), nullString(s.Metrics),
+			toNullString(s.ImageURL), s.CurrentPriceCents, s.ConfidenceScore,
+			toNullString(s.Reasoning), toNullString(s.StructuredReasoning), toNullString(s.Metrics),
 			s.SentimentScore, s.SentimentTrend, s.SentimentMentions,
 			s.FetchedAt,
 		); err != nil {
@@ -169,14 +168,3 @@ func scanSuggestionRow(row scanner) (*intelligence.Suggestion, error) {
 
 	return &s, nil
 }
-
-// nullString returns a sql.NullString that is NULL for empty strings.
-func nullString(s string) sql.NullString {
-	if s == "" {
-		return sql.NullString{}
-	}
-	return sql.NullString{String: s, Valid: true}
-}
-
-// Compile-time check that time.Time is compatible with TIMESTAMP scanning.
-var _ = time.Time{}

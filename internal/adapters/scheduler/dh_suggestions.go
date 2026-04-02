@@ -24,10 +24,10 @@ type DHSuggestionsConfig struct {
 // the DoubleHolo API and stores them locally.
 type DHSuggestionsScheduler struct {
 	StopHandle
-	dhClient   *doubleholo.Client
+	dhClient    *doubleholo.Client
 	suggestRepo intelligence.SuggestionsRepository
-	logger     observability.Logger
-	config     DHSuggestionsConfig
+	logger      observability.Logger
+	config      DHSuggestionsConfig
 }
 
 // NewDHSuggestionsScheduler creates a new DH suggestions scheduler.
