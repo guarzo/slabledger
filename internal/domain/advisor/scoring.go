@@ -1,6 +1,10 @@
 package advisor
 
-import "github.com/guarzo/slabledger/internal/domain/scoring"
+import (
+	"fmt"
+
+	"github.com/guarzo/slabledger/internal/domain/scoring"
+)
 
 // PurchaseFactorData contains raw inputs for purchase assessment factor computers.
 type PurchaseFactorData struct {
@@ -69,6 +73,8 @@ func BuildScoreCard(entityID, entityType string, data any, profile scoring.Weigh
 		factors, gaps = liquidationFactors(d)
 	case *SuggestionFactorData:
 		factors, gaps = suggestionFactors(d)
+	default:
+		return scoring.ScoreCard{}, fmt.Errorf("unsupported factor data type: %T", data)
 	}
 
 	req := scoring.ScoreRequest{

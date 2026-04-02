@@ -13,6 +13,29 @@ func TestConvertIntel_Nil(t *testing.T) {
 	assert.Nil(t, convertIntel(nil))
 }
 
+func TestConvertIntel_Sparse(t *testing.T) {
+	now := time.Date(2026, 4, 2, 12, 0, 0, 0, time.UTC)
+	mi := &intelligence.MarketIntelligence{
+		CardName:  "Pikachu",
+		SetName:   "Jungle",
+		FetchedAt: now,
+	}
+
+	out := convertIntel(mi)
+	require.NotNil(t, out)
+
+	assert.Zero(t, out.SentimentScore)
+	assert.Empty(t, out.SentimentTrend)
+	assert.Zero(t, out.ForecastCents)
+	assert.Empty(t, out.ForecastDate)
+	assert.Empty(t, out.InsightHeadline)
+	assert.Equal(t, 0, out.RecentSalesCount)
+	assert.Nil(t, out.RecentSales)
+	assert.Nil(t, out.Population)
+	assert.Nil(t, out.GradingROI)
+	assert.Contains(t, out.FetchedAt, "2026-04-02")
+}
+
 func TestConvertIntel_Full(t *testing.T) {
 	now := time.Date(2026, 4, 2, 12, 0, 0, 0, time.UTC)
 	mi := &intelligence.MarketIntelligence{

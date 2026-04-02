@@ -34,8 +34,8 @@ const (
 
 // Tool subsets per operation — only send relevant tools to reduce prompt tokens
 // and prevent the LLM from calling irrelevant tools.
-var operationTools = map[string][]string{
-	"digest": {
+var operationTools = map[AIOperation][]string{
+	OpDigest: {
 		"list_campaigns", "get_campaign_pnl", "get_pnl_by_channel",
 		"get_campaign_tuning", "get_inventory_aging", "get_global_inventory",
 		"get_sell_sheet", "get_portfolio_health", "get_portfolio_insights",
@@ -45,14 +45,14 @@ var operationTools = map[string][]string{
 		"get_dh_suggestions", "get_inventory_alerts",
 		"get_data_gap_report",
 	},
-	"campaign_analysis": {
+	OpCampaignAnalysis: {
 		"list_campaigns", "get_campaign_pnl", "get_pnl_by_channel",
 		"get_campaign_tuning", "get_inventory_aging", "get_expected_values",
 		"get_crack_candidates", "get_campaign_suggestions", "run_projection",
 		"get_channel_velocity", "get_credit_summary",
 		"get_market_intelligence",
 	},
-	"liquidation": {
+	OpLiquidation: {
 		"list_campaigns", "get_global_inventory", "get_sell_sheet",
 		"get_credit_summary", "get_expected_values", "get_inventory_aging",
 		"get_portfolio_health", "suggest_price", "get_cert_lookup",
@@ -60,7 +60,7 @@ var operationTools = map[string][]string{
 		"get_dashboard_summary", "get_crack_opportunities",
 		"get_market_intelligence", "get_inventory_alerts",
 	},
-	"purchase_assessment": {
+	OpPurchaseAssessment: {
 		"list_campaigns", "get_campaign_tuning", "get_portfolio_insights",
 		"get_cert_lookup", "evaluate_purchase", "get_campaign_pnl",
 		"get_channel_velocity",
@@ -157,14 +157,14 @@ func (s *service) AssessPurchase(ctx context.Context, req PurchaseAssessmentRequ
 		return err
 	}
 
-	content, err := s.runScoredAnalysis(ctx, OpPurchaseAssessment, purchaseAssessmentSystemPrompt, userPrompt, scoreCard, purchaseAssessmentSchema, stream)
-	if err != nil && scoreCard != nil {
+	_, err := s.runScoredAnalysis(ctx, OpPurchaseAssessment, purchaseAssessmentSystemPrompt, userPrompt, scoreCard, purchaseAssessmentSchema, stream)
+	if err != nil {
 		fallback := scoring.FallbackResult(*scoreCard)
 		if fbJSON, fbErr := json.Marshal(fallback); fbErr == nil {
 			stream(StreamEvent{Type: EventDelta, Content: string(fbJSON)})
+			return nil
 		}
 	}
-	_ = content
 	return err
 }
 
@@ -178,16 +178,12 @@ func (s *service) runAnalysis(ctx context.Context, operation AIOperation, system
 // runScoredAnalysis augments the system prompt with a pre-computed ScoreCard and
 // structured output schema, then delegates to the tool-calling loop.
 func (s *service) runScoredAnalysis(ctx context.Context, operation AIOperation, baseSystemPrompt, userPrompt string, scoreCard *scoring.ScoreCard, schema string, stream func(StreamEvent)) (string, error) {
-	if scoreCard != nil {
-		scoreJSON, err := json.Marshal(scoreCard)
-		if err == nil {
-			stream(StreamEvent{Type: EventScore, Content: string(scoreJSON)})
-		}
-	}
 	sysPrompt := baseSystemPrompt
 	if scoreCard != nil {
-		scoreJSON, _ := json.Marshal(scoreCard)
-		sysPrompt += fmt.Sprintf(scoreCardInjectionTemplate, string(scoreJSON))
+		if scoreJSON, err := json.Marshal(scoreCard); err == nil {
+			stream(StreamEvent{Type: EventScore, Content: string(scoreJSON)})
+			sysPrompt += fmt.Sprintf(scoreCardInjectionTemplate, string(scoreJSON))
+		}
 	}
 	sysPrompt += fmt.Sprintf(structuredOutputInstruction, schema)
 	messages := []Message{{Role: RoleUser, Content: userPrompt}}
@@ -213,7 +209,12 @@ func (s *service) recordGaps(ctx context.Context, sc scoring.ScoreCard, cardName
 	go func() {
 		bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		_ = s.gapStore.RecordGaps(bgCtx, records)
+		if err := s.gapStore.RecordGaps(bgCtx, records); err != nil && s.logger != nil {
+			s.logger.Warn(bgCtx, "failed to record data gaps",
+				observability.Err(err),
+				observability.String("entityID", sc.EntityID),
+			)
+		}
 	}()
 }
 
@@ -229,21 +230,20 @@ func (s *service) CollectLiquidation(ctx context.Context) (string, error) {
 
 // operationMaxRounds overrides s.maxToolRounds when scoring is active.
 // With pre-computed scores injected, fewer tool rounds are needed.
-var operationMaxRounds = map[string]int{
-	"purchase_assessment":  1,
-	"campaign_analysis":    2,
-	"liquidation":          2,
-	"campaign_suggestions": 1,
+var operationMaxRounds = map[AIOperation]int{
+	OpPurchaseAssessment: 1,
+	OpCampaignAnalysis:   2,
+	OpLiquidation:        2,
 }
 
 // toolCallingLoop orchestrates the LLM -> tool -> LLM cycle.
 func (s *service) toolCallingLoop(ctx context.Context, operation AIOperation, systemPrompt string, messages []Message, stream func(StreamEvent)) (string, error) {
 	maxRounds := s.maxToolRounds
-	if override, ok := operationMaxRounds[string(operation)]; ok && s.scoringData != nil {
+	if override, ok := operationMaxRounds[operation]; ok && s.scoringData != nil {
 		maxRounds = override
 	}
 	var tools []ToolDefinition
-	if names, ok := operationTools[string(operation)]; ok {
+	if names, ok := operationTools[operation]; ok {
 		if filtered, fOk := s.executor.(FilteredToolExecutor); fOk {
 			tools = filtered.DefinitionsFor(names)
 		} else {

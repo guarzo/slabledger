@@ -9,6 +9,10 @@ func ApplySafetyFilters(sc ScoreCard) ScoreCard {
 	return sc
 }
 
+// clampByConfidence restricts verdict extremity based on model confidence:
+//   - <0.3: low confidence → restrict to lean_sell..lean_buy (prevent strong calls on weak data)
+//   - <0.5: medium confidence → restrict to sell..buy (allow moderate calls)
+//   - >=0.5: high confidence → no restriction
 func clampByConfidence(confidence float64, v Verdict) Verdict {
 	switch {
 	case confidence < 0.3:

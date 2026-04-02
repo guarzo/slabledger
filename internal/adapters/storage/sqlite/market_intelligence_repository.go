@@ -142,7 +142,7 @@ func (r *MarketIntelligenceRepository) GetStale(ctx context.Context, maxAge time
 
 // GetByCards returns market intelligence for all matching cards in a single query.
 // Keys not found in the database are omitted from the result map.
-func (r *MarketIntelligenceRepository) GetByCards(ctx context.Context, keys []intelligence.CardKey) (map[intelligence.CardKey]*intelligence.MarketIntelligence, error) {
+func (r *MarketIntelligenceRepository) GetByCards(ctx context.Context, keys []intelligence.CardKey) (_ map[intelligence.CardKey]*intelligence.MarketIntelligence, err error) {
 	if len(keys) == 0 {
 		return map[intelligence.CardKey]*intelligence.MarketIntelligence{}, nil
 	}
@@ -166,7 +166,11 @@ func (r *MarketIntelligenceRepository) GetByCards(ctx context.Context, keys []in
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rows.Close() }()
+	defer func() {
+		if cerr := rows.Close(); err == nil && cerr != nil {
+			err = cerr
+		}
+	}()
 
 	result := make(map[intelligence.CardKey]*intelligence.MarketIntelligence, len(keys))
 	for rows.Next() {

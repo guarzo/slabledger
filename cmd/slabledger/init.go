@@ -190,8 +190,7 @@ func initializeAdvisorService(
 	advisorOpts = append(advisorOpts, advisor.WithScoringDataProvider(scoringProvider))
 
 	// Data gap tracking for scoring quality reports
-	gapStore := sqlite.NewGapStore(db.DB)
-	advisorOpts = append(advisorOpts, advisor.WithGapStore(gapStore))
+	advisorOpts = append(advisorOpts, advisor.WithGapStore(sqlite.NewGapStore(db.DB)))
 
 	advisorSvc = advisor.NewService(client, toolExec, advisorOpts...)
 	logger.Info(ctx, "AI advisor initialized",
@@ -360,6 +359,7 @@ type schedulerDeps struct {
 	DHClient             *doubleholo.Client
 	DHIntelligenceRepo   *sqlite.MarketIntelligenceRepository
 	DHSuggestionsRepo    *sqlite.DHSuggestionsRepository
+	GapStore             *sqlite.GapStore
 }
 
 // initializeSchedulers builds and starts the scheduler group, returning the
@@ -417,6 +417,9 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 	}
 	if deps.DHSuggestionsRepo != nil {
 		buildDeps.DHSuggestionsRepo = deps.DHSuggestionsRepo
+	}
+	if deps.GapStore != nil {
+		buildDeps.GapStore = deps.GapStore
 	}
 	schedulerResult := scheduler.BuildGroup(deps.Config, buildDeps)
 	schedulerResult.Group.StartAll(schedulerCtx)

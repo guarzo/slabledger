@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { type ScoreCard, type Verdict } from '../../../types/scoring';
+import { type ScoreCard, type Verdict, FACTOR_DISPLAY_NAMES } from '../../../types/scoring';
 import { FactorBar } from './FactorBar';
 
 const VERDICT_CONFIG: Record<Verdict, { label: string; color: string; bg: string }> = {
@@ -12,19 +12,11 @@ const VERDICT_CONFIG: Record<Verdict, { label: string; color: string; bg: string
   strong_sell: { label: 'STRONG SELL', color: 'var(--danger)',  bg: 'rgba(248, 113, 113, 0.15)' },
 };
 
-const FACTOR_NAMES: Record<string, string> = {
-  market_trend: 'Market Trend', liquidity: 'Liquidity', roi_potential: 'ROI Potential',
-  scarcity: 'Scarcity', market_alignment: 'Market Alignment', portfolio_fit: 'Portfolio Fit',
-  grade_fit: 'Grade Fit', credit_pressure: 'Credit Pressure', carrying_cost: 'Carrying Cost',
-  crack_advantage: 'Crack Advantage', sell_through: 'Sell-Through', spend_efficiency: 'Spend Efficiency',
-  coverage_impact: 'Coverage Impact',
-};
-
 function generateInsight(sc: ScoreCard): string {
   if (sc.factors.length === 0) return 'Insufficient data for analysis.';
   const strongest = sc.factors.reduce((a, b) => Math.abs(a.value) > Math.abs(b.value) ? a : b);
   const dir = strongest.value > 0.1 ? 'bullish' : strongest.value < -0.1 ? 'bearish' : 'neutral';
-  const name = FACTOR_NAMES[strongest.name] ?? strongest.name;
+  const name = FACTOR_DISPLAY_NAMES[strongest.name] ?? strongest.name;
   return `${name} is ${dir} (${strongest.value >= 0 ? '+' : ''}${strongest.value.toFixed(2)}), driving an overall ${sc.engine_verdict.replace(/_/g, ' ')} signal.`;
 }
 

@@ -1,7 +1,5 @@
 package scoring
 
-import "math"
-
 func ComputeMarketTrend(priceChangePct, confidence float64, source string) Factor {
 	return Factor{
 		Name:       FactorMarketTrend,
@@ -126,7 +124,7 @@ func ComputeCreditPressure(utilizationPct, confidence float64, source string) Fa
 }
 
 func ComputeCarryingCost(daysHeld int, confidence float64, source string) Factor {
-	v := math.Min(float64(daysHeld)/180.0, 1.0)
+	v := min(float64(daysHeld)/180.0, 1.0)
 	return Factor{
 		Name:       FactorCarryingCost,
 		Value:      v,

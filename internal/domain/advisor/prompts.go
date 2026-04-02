@@ -177,7 +177,6 @@ Provide:
 5. **Risks**: What could go wrong (CL overvaluation, low liquidity, concentration)
 6. **Verdict**: One-sentence summary`
 
-// Ensure schema constants are referenced (used by remaining flows in Task 17).
 var (
 	_ = liquidationSchema
 	_ = campaignSuggestionSchema

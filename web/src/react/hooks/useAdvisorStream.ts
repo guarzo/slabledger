@@ -148,8 +148,8 @@ export function useAdvisorStream(): UseAdvisorStreamResult {
                 if (event.content) {
                   try {
                     setScoreCard(JSON.parse(event.content) as ScoreCard);
-                  } catch {
-                    // Ignore malformed score events
+                  } catch (e) {
+                    console.warn('Failed to parse score event:', event.content, e);
                   }
                 }
                 break;

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/scoring"
@@ -50,26 +51,23 @@ func (s *GapStore) RecordGaps(ctx context.Context, gaps []scoring.GapRecord) err
 }
 
 func (s *GapStore) GetGapReport(ctx context.Context, since time.Time) (*scoring.GapReport, error) {
-	var totalEntities int
+	var totalEntities, totalGaps int
 	err := s.db.QueryRowContext(ctx,
-		`SELECT COUNT(DISTINCT entity_id) FROM scoring_data_gaps WHERE recorded_at >= ?`, since).Scan(&totalEntities)
-	if err != nil {
-		return nil, err
-	}
-
-	var totalGaps int
-	err = s.db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM scoring_data_gaps WHERE recorded_at >= ?`, since).Scan(&totalGaps)
+		`SELECT COUNT(DISTINCT entity_id), COUNT(*) FROM scoring_data_gaps WHERE recorded_at >= ?`, since).
+		Scan(&totalEntities, &totalGaps)
 	if err != nil {
 		return nil, err
 	}
 
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT factor_name, COUNT(*) as cnt, reason
-		 FROM scoring_data_gaps
-		 WHERE recorded_at >= ?
-		 GROUP BY factor_name
-		 ORDER BY cnt DESC`, since)
+		`SELECT g.factor_name, COUNT(*) as cnt,
+		        (SELECT reason FROM scoring_data_gaps r
+		         WHERE r.factor_name = g.factor_name AND r.recorded_at >= ?
+		         GROUP BY reason ORDER BY COUNT(*) DESC LIMIT 1) as top_reason
+		 FROM scoring_data_gaps g
+		 WHERE g.recorded_at >= ?
+		 GROUP BY g.factor_name
+		 ORDER BY cnt DESC`, since, since)
 	if err != nil {
 		return nil, err
 	}
@@ -91,7 +89,7 @@ func (s *GapStore) GetGapReport(ctx context.Context, since time.Time) (*scoring.
 	}
 
 	setRows, err := s.db.QueryContext(ctx,
-		`SELECT set_name, COUNT(*) as cnt
+		`SELECT set_name, COUNT(*) as cnt, GROUP_CONCAT(DISTINCT factor_name) as factors
 		 FROM scoring_data_gaps
 		 WHERE recorded_at >= ? AND set_name != ''
 		 GROUP BY set_name
@@ -105,24 +103,13 @@ func (s *GapStore) GetGapReport(ctx context.Context, since time.Time) (*scoring.
 	var mostAffected []scoring.GapSetSummary
 	for setRows.Next() {
 		var ss scoring.GapSetSummary
-		if err := setRows.Scan(&ss.SetName, &ss.GapCount); err != nil {
+		var factors string
+		if err := setRows.Scan(&ss.SetName, &ss.GapCount, &factors); err != nil {
 			return nil, err
 		}
-		factorRows, err := s.db.QueryContext(ctx,
-			`SELECT DISTINCT factor_name FROM scoring_data_gaps
-			 WHERE recorded_at >= ? AND set_name = ?`, since, ss.SetName)
-		if err != nil {
-			return nil, err
+		if factors != "" {
+			ss.MissingFactors = strings.Split(factors, ",")
 		}
-		for factorRows.Next() {
-			var f string
-			if err := factorRows.Scan(&f); err != nil {
-				_ = factorRows.Close()
-				return nil, err
-			}
-			ss.MissingFactors = append(ss.MissingFactors, f)
-		}
-		_ = factorRows.Close()
 		mostAffected = append(mostAffected, ss)
 	}
 	if err := setRows.Err(); err != nil {
@@ -140,7 +127,7 @@ func (s *GapStore) GetGapReport(ctx context.Context, since time.Time) (*scoring.
 	}
 
 	return &scoring.GapReport{
-		Period:        "7d",
+		Period:        fmt.Sprintf("%dd", int(time.Since(since).Hours()/24)),
 		TotalScorings: totalEntities,
 		TotalGaps:     totalGaps,
 		GapRate:       gapRate,

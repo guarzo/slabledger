@@ -283,7 +283,8 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	if suggestionsRepo != nil {
 		advisorToolOpts = append(advisorToolOpts, advisortool.WithSuggestionsRepo(suggestionsRepo))
 	}
-	advisorToolOpts = append(advisorToolOpts, advisortool.WithGapStore(sqlite.NewGapStore(db.DB)))
+	gapStore := sqlite.NewGapStore(db.DB)
+	advisorToolOpts = append(advisorToolOpts, advisortool.WithGapStore(gapStore))
 
 	azureAIClient, advisorService, advisorCacheRepo, err := initializeAdvisorService(
 		ctx, cfg, logger, db, aiCallRepo, campaignsService, advisorToolOpts...,
@@ -387,6 +388,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		DHClient:             dhClient,
 		DHIntelligenceRepo:   intelRepo,
 		DHSuggestionsRepo:    suggestionsRepo,
+		GapStore:             gapStore,
 	})
 
 	// Wire Card Ladder manual refresh into the handler

@@ -229,17 +229,23 @@ func extractGradeROI(grades []campaigns.GradePerformance, target float64) (grade
 }
 
 // computeConcentration determines concentration risk by comparing character purchases to total.
+// Matches segment labels against whole words in the card name to avoid false positives
+// (e.g. "Char" matching "Charged Up Pikachu").
 func computeConcentration(segments []campaigns.SegmentPerformance, cardName string) string {
 	if len(segments) == 0 {
 		return "low"
 	}
-	cardLower := strings.ToLower(cardName)
+	cardWords := strings.Fields(strings.ToLower(cardName))
 	matchCount := 0
 	totalCount := 0
 	for _, seg := range segments {
 		totalCount += seg.PurchaseCount
-		if strings.Contains(cardLower, strings.ToLower(seg.Label)) {
-			matchCount += seg.PurchaseCount
+		segLower := strings.ToLower(seg.Label)
+		for _, word := range cardWords {
+			if word == segLower {
+				matchCount += seg.PurchaseCount
+				break
+			}
 		}
 	}
 	if totalCount == 0 {

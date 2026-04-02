@@ -72,39 +72,29 @@ func computeConfidence(factors []Factor, weights []FactorWeight) float64 {
 
 	coverage := float64(len(factors)) / float64(totalExpected) * 0.3
 
-	var sumAbs float64
-	for _, f := range factors {
-		sumAbs += math.Abs(f.Value)
-	}
-	strength := 0.0
-	if len(factors) > 0 {
-		strength = (sumAbs / float64(len(factors))) * 0.3
-	}
-
-	var sumConf float64
-	for _, f := range factors {
-		sumConf += f.Confidence
-	}
-	quality := 0.0
-	if len(factors) > 0 {
-		quality = (sumConf / float64(len(factors))) * 0.2
-	}
-
+	var sumAbs, sumConf float64
 	var positive, negative int
 	for _, f := range factors {
+		sumAbs += math.Abs(f.Value)
+		sumConf += f.Confidence
 		if f.Value > 0.1 {
 			positive++
 		} else if f.Value < -0.1 {
 			negative++
 		}
 	}
+	strength := 0.0
+	if len(factors) > 0 {
+		strength = (sumAbs / float64(len(factors))) * 0.3
+	}
+	quality := 0.0
+	if len(factors) > 0 {
+		quality = (sumConf / float64(len(factors))) * 0.2
+	}
 	significant := positive + negative
 	agreement := 0.0
 	if significant > 0 {
-		majority := positive
-		if negative > majority {
-			majority = negative
-		}
+		majority := max(positive, negative)
 		agreement = float64(majority) / float64(significant) * 0.2
 	}
 

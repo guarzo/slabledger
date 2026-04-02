@@ -26,3 +26,19 @@ export interface ScoreCard {
   mixed_signals?: boolean;
   scored_at: string;
 }
+
+export const FACTOR_DISPLAY_NAMES: Record<string, string> = {
+  market_trend: 'Market Trend',
+  liquidity: 'Liquidity',
+  roi_potential: 'ROI Potential',
+  scarcity: 'Scarcity',
+  market_alignment: 'Market Alignment',
+  portfolio_fit: 'Portfolio Fit',
+  grade_fit: 'Grade Fit',
+  credit_pressure: 'Credit Pressure',
+  carrying_cost: 'Carrying Cost',
+  crack_advantage: 'Crack Advantage',
+  sell_through: 'Sell-Through',
+  spend_efficiency: 'Spend Efficiency',
+  coverage_impact: 'Coverage Impact',
+};

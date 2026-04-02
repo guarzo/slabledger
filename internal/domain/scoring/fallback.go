@@ -1,6 +1,9 @@
 package scoring
 
-import "fmt"
+import (
+	"fmt"
+	"math"
+)
 
 var factorDisplayNames = map[string]string{
 	FactorMarketTrend:     "Market Trend",
@@ -19,8 +22,15 @@ var factorDisplayNames = map[string]string{
 }
 
 func FallbackResult(sc ScoreCard) StructuredResult {
+	if len(sc.Factors) == 0 {
+		return StructuredResult{
+			ScoreCard:  sc,
+			Verdict:    sc.Verdict,
+			KeyInsight: fmt.Sprintf("No factor data available; overall signal is %s", string(sc.Verdict)),
+		}
+	}
 	signals := make([]Signal, 0, len(sc.Factors))
-	var strongest Factor
+	strongest := sc.Factors[0]
 	for _, f := range sc.Factors {
 		dir := factorDirection(f.Value)
 		title := factorDisplayNames[f.Name]
@@ -34,7 +44,7 @@ func FallbackResult(sc ScoreCard) StructuredResult {
 			Detail:    fmt.Sprintf("Score: %.2f (confidence: %.0f%%)", f.Value, f.Confidence*100),
 			Metric:    fmt.Sprintf("%.2f", f.Value),
 		})
-		if absFloat(f.Value) > absFloat(strongest.Value) {
+		if math.Abs(f.Value) > math.Abs(strongest.Value) {
 			strongest = f
 		}
 	}
@@ -66,11 +76,4 @@ func generateInsight(strongest Factor, verdict Verdict) string {
 	}
 	dir := factorDirection(strongest.Value)
 	return fmt.Sprintf("%s is %s (%.2f), driving an overall %s signal", name, dir, strongest.Value, string(verdict))
-}
-
-func absFloat(f float64) float64 {
-	if f < 0 {
-		return -f
-	}
-	return f
 }

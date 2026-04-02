@@ -155,28 +155,28 @@ type ShopifyPriceSyncItem struct {
 
 // ShopifyPriceSyncMatch is a matched item with current and suggested prices.
 type ShopifyPriceSyncMatch struct {
-	CertNumber            string         `json:"certNumber"`
-	CardName              string         `json:"cardName"`
-	SetName               string         `json:"setName,omitempty"`
-	CardNumber            string         `json:"cardNumber,omitempty"`
-	Grade                 float64        `json:"grade"`
-	Grader                string         `json:"grader,omitempty"`
-	CurrentPriceCents     int            `json:"currentPriceCents"`
-	SuggestedPriceCents   int            `json:"suggestedPriceCents"`
-	MinimumPriceCents     int            `json:"minimumPriceCents"`
-	CostBasisCents        int            `json:"costBasisCents"`
-	CLValueCents          int            `json:"clValueCents"`
-	MarketPriceCents      int            `json:"marketPriceCents"`
-	LastSoldCents         int            `json:"lastSoldCents"`
-	Recommendation        string         `json:"recommendation"`
-	PriceDeltaPct         float64        `json:"priceDeltaPct"`
-	HasMarketData         bool           `json:"hasMarketData"`
-	OverridePriceCents    int            `json:"overridePriceCents,omitempty"`
-	OverrideSource        OverrideSource `json:"overrideSource,omitempty"`
-	AISuggestedPriceCents int            `json:"aiSuggestedPriceCents,omitempty"`
-	RecommendedPriceCents int            `json:"recommendedPriceCents"`
-	RecommendedSource     string         `json:"recommendedSource"`
-	ReviewedAt            string         `json:"reviewedAt,omitempty"`
+	CertNumber            string          `json:"certNumber"`
+	CardName              string          `json:"cardName"`
+	SetName               string          `json:"setName,omitempty"`
+	CardNumber            string          `json:"cardNumber,omitempty"`
+	Grade                 float64         `json:"grade"`
+	Grader                string          `json:"grader,omitempty"`
+	CurrentPriceCents     int             `json:"currentPriceCents"`
+	SuggestedPriceCents   int             `json:"suggestedPriceCents"`
+	MinimumPriceCents     int             `json:"minimumPriceCents"`
+	CostBasisCents        int             `json:"costBasisCents"`
+	CLValueCents          int             `json:"clValueCents"`
+	MarketPriceCents      int             `json:"marketPriceCents"`
+	LastSoldCents         int             `json:"lastSoldCents"`
+	Recommendation        string          `json:"recommendation"`
+	PriceDeltaPct         float64         `json:"priceDeltaPct"`
+	HasMarketData         bool            `json:"hasMarketData"`
+	OverridePriceCents    int             `json:"overridePriceCents,omitempty"`
+	OverrideSource        OverrideSource  `json:"overrideSource,omitempty"`
+	AISuggestedPriceCents int             `json:"aiSuggestedPriceCents,omitempty"`
+	RecommendedPriceCents int             `json:"recommendedPriceCents"`
+	RecommendedSource     string          `json:"recommendedSource"`
+	ReviewedAt            string          `json:"reviewedAt,omitempty"`
 	Intel                 *PriceSyncIntel `json:"intel,omitempty"`
 }
 

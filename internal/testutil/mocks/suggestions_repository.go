@@ -36,6 +36,7 @@ func (m *MockSuggestionsRepository) StoreSuggestions(ctx context.Context, sugges
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	// Mirror real implementation: replace all suggestions for the date.
+	// Precondition: all suggestions in the slice share the same SuggestionDate.
 	date := suggestions[0].SuggestionDate
 	n := 0
 	for _, s := range m.Suggestions {

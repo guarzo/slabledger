@@ -1,6 +1,9 @@
 package scoring
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 // Verdict represents the scoring engine's classification of an entity.
 type Verdict string
@@ -110,7 +113,7 @@ type ErrInsufficientData struct {
 }
 
 func (e *ErrInsufficientData) Error() string {
-	return "insufficient data for scoring"
+	return fmt.Sprintf("insufficient data for scoring: %d factors available, %d required", e.Available, e.Required)
 }
 
 // MinFactors is the minimum number of non-gap factors required to produce a score.

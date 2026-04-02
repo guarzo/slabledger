@@ -14,6 +14,7 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/intelligence"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/domain/pricing"
+	"github.com/guarzo/slabledger/internal/domain/scoring"
 	"github.com/guarzo/slabledger/internal/platform/config"
 )
 
@@ -82,6 +83,9 @@ type BuildDeps struct {
 	DHIntelligenceRepo intelligence.Repository
 	DHSuggestionsRepo  intelligence.SuggestionsRepository
 
+	// Scoring gap cleanup dependencies (optional)
+	GapStore scoring.GapStore
+
 	// Card Ladder dependencies (optional)
 	CardLadderClient         *cardladder.Client
 	CardLadderStore          *sqlite.CardLadderStore
@@ -143,6 +147,11 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 			deps.AccessTracker, deps.Logger, accessLogConfig,
 		)
 		schedulers = append(schedulers, accessLogCleanupScheduler)
+	}
+
+	// Scoring data gap cleanup scheduler (if gap store is provided)
+	if deps.GapStore != nil {
+		schedulers = append(schedulers, NewGapCleanupScheduler(deps.GapStore, deps.Logger))
 	}
 
 	// Card cache warmup scheduler (if enabled)

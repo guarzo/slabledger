@@ -368,7 +368,7 @@ func (h *DoubleHoloHandler) uniqueCardIdentities(ctx context.Context) ([]campaig
 	seen := make(map[string]bool, len(purchases))
 	var identities []campaigns.CardIdentity
 	for _, p := range purchases {
-		key := p.CardName + "|" + p.SetName + "|" + p.CardNumber
+		key := dhCardKey(p.CardName, p.SetName, p.CardNumber)
 		if seen[key] {
 			continue
 		}

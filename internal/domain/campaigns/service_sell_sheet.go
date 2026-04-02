@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"sort"
 	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/errors"
 	"github.com/guarzo/slabledger/internal/domain/intelligence"
+	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
 // --- Sell Sheet ---
@@ -320,12 +322,12 @@ func (s *service) MatchShopifyPrices(ctx context.Context, items []ShopifyPriceSy
 		}
 		if intelMap, err := s.intelRepo.GetByCards(ctx, keys); err == nil {
 			for i := range resp.Matched {
-				m := &resp.Matched[i]
-				key := intelligence.CardKey{CardName: m.CardName, SetName: m.SetName, CardNumber: m.CardNumber}
-				if mi, ok := intelMap[key]; ok {
-					m.Intel = convertIntel(mi)
+				if mi, ok := intelMap[keys[i]]; ok {
+					resp.Matched[i].Intel = convertIntel(mi)
 				}
 			}
+		} else if s.logger != nil {
+			s.logger.Warn(ctx, "intel enrichment failed", observability.Err(err))
 		}
 	}
 
@@ -359,15 +361,18 @@ func convertIntel(mi *intelligence.MarketIntelligence) *PriceSyncIntel {
 	}
 
 	// Recent sales — last 5, newest first
+	sort.Slice(mi.RecentSales, func(i, j int) bool {
+		return mi.RecentSales[i].SoldAt.After(mi.RecentSales[j].SoldAt)
+	})
 	out.RecentSalesCount = len(mi.RecentSales)
 	limit := min(5, len(mi.RecentSales))
 	for i := 0; i < limit; i++ {
-		s := mi.RecentSales[i]
+		sale := mi.RecentSales[i]
 		out.RecentSales = append(out.RecentSales, PriceSyncSale{
-			SoldAt:     s.SoldAt.Format(time.RFC3339),
-			Grade:      s.Grade,
-			PriceCents: s.PriceCents,
-			Platform:   s.Platform,
+			SoldAt:     sale.SoldAt.Format(time.RFC3339),
+			Grade:      sale.Grade,
+			PriceCents: sale.PriceCents,
+			Platform:   sale.Platform,
 		})
 	}
 

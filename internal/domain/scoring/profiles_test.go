@@ -5,19 +5,23 @@ import (
 	"testing"
 )
 
+var testProfiles = []WeightProfile{
+	PurchaseAssessmentProfile,
+	CampaignAnalysisProfile,
+	LiquidationProfile,
+	CampaignSuggestionsProfile,
+}
+
 func TestWeightProfiles_SumToOne(t *testing.T) {
-	profiles := []WeightProfile{
-		PurchaseAssessmentProfile,
-		CampaignAnalysisProfile,
-		LiquidationProfile,
-		CampaignSuggestionsProfile,
-	}
-	for _, p := range profiles {
+	for _, p := range testProfiles {
 		t.Run(p.Name, func(t *testing.T) {
 			var sum float64
 			for _, w := range p.Weights {
-				if w.Weight <= 0 {
-					t.Errorf("weight for %s is non-positive: %f", w.Name, w.Weight)
+				if w.Weight < 0 {
+					t.Errorf("weight for %s is negative: %f", w.Name, w.Weight)
+				}
+				if w.Weight == 0 {
+					t.Errorf("weight for %s is zero", w.Name)
 				}
 				sum += w.Weight
 			}
@@ -29,13 +33,7 @@ func TestWeightProfiles_SumToOne(t *testing.T) {
 }
 
 func TestWeightProfiles_NoDuplicateFactors(t *testing.T) {
-	profiles := []WeightProfile{
-		PurchaseAssessmentProfile,
-		CampaignAnalysisProfile,
-		LiquidationProfile,
-		CampaignSuggestionsProfile,
-	}
-	for _, p := range profiles {
+	for _, p := range testProfiles {
 		t.Run(p.Name, func(t *testing.T) {
 			seen := make(map[string]bool)
 			for _, w := range p.Weights {

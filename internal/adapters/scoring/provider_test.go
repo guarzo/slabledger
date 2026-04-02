@@ -171,26 +171,28 @@ func TestCampaignData(t *testing.T) {
 	assertPtrFloat(t, "CampaignROI", data.CampaignROI, 22.0)
 }
 
-func TestLiquidationData_ReturnsNil(t *testing.T) {
+func TestStubMethods_ReturnNil(t *testing.T) {
 	p := NewProvider(&mocks.MockCampaignService{})
-	data, err := p.LiquidationData(context.Background(), "p-1")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if data != nil {
-		t.Error("expected nil, got non-nil LiquidationFactorData")
-	}
-}
 
-func TestSuggestionData_ReturnsNil(t *testing.T) {
-	p := NewProvider(&mocks.MockCampaignService{})
-	data, err := p.SuggestionData(context.Background(), "segment-1")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if data != nil {
-		t.Error("expected nil, got non-nil SuggestionFactorData")
-	}
+	t.Run("LiquidationData", func(t *testing.T) {
+		data, err := p.LiquidationData(context.Background(), "p-1")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if data != nil {
+			t.Error("expected nil, got non-nil LiquidationFactorData")
+		}
+	})
+
+	t.Run("SuggestionData", func(t *testing.T) {
+		data, err := p.SuggestionData(context.Background(), "segment-1")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if data != nil {
+			t.Error("expected nil, got non-nil SuggestionFactorData")
+		}
+	})
 }
 
 func TestParseGrade(t *testing.T) {

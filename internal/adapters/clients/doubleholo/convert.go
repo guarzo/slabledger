@@ -9,6 +9,15 @@ import (
 
 // ConvertToIntelligence converts a MarketDataResponse to domain intelligence.
 func ConvertToIntelligence(resp *MarketDataResponse, cardName, setName, cardNumber, dhCardID string) *intelligence.MarketIntelligence {
+	if resp == nil {
+		return &intelligence.MarketIntelligence{
+			CardName:   cardName,
+			SetName:    setName,
+			CardNumber: cardNumber,
+			DHCardID:   dhCardID,
+			FetchedAt:  time.Now(),
+		}
+	}
 	intel := &intelligence.MarketIntelligence{
 		CardName:   cardName,
 		SetName:    setName,
