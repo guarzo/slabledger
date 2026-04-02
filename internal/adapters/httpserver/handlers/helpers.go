@@ -48,6 +48,15 @@ func writeJSON(w http.ResponseWriter, status int, data any) {
 	_ = json.NewEncoder(w).Encode(data) //nolint:errcheck // response already committed; write error unactionable
 }
 
+// writeJSONList writes a JSON array response, converting nil slices to empty
+// arrays so the client always receives [] instead of null.
+func writeJSONList[T any](w http.ResponseWriter, status int, list []T) {
+	if list == nil {
+		list = []T{}
+	}
+	writeJSON(w, status, list)
+}
+
 // writeError writes a structured JSON error response.
 func writeError(w http.ResponseWriter, status int, message string) {
 	writeJSON(w, status, map[string]string{"error": message})

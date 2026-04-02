@@ -36,10 +36,7 @@ func (h *AdminHandlers) HandleListAllowedEmails(w http.ResponseWriter, r *http.R
 		writeError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
-	if emails == nil {
-		emails = []auth.AllowedEmail{}
-	}
-	writeJSON(w, http.StatusOK, emails)
+	writeJSONList(w, http.StatusOK, emails)
 }
 
 // HandleAddAllowedEmail adds an email to the allowlist

@@ -81,10 +81,7 @@ func (h *SocialHandler) HandleListPosts(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
-	if posts == nil {
-		posts = []social.SocialPost{}
-	}
-	writeJSON(w, http.StatusOK, posts)
+	writeJSONList(w, http.StatusOK, posts)
 }
 
 // HandleGetPost returns a single post with card details.
