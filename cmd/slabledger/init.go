@@ -12,6 +12,7 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/clients/azureai"
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardhedger"
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
+	"github.com/guarzo/slabledger/internal/adapters/clients/doubleholo"
 	"github.com/guarzo/slabledger/internal/adapters/clients/fusionprice"
 	igclient "github.com/guarzo/slabledger/internal/adapters/clients/instagram"
 	"github.com/guarzo/slabledger/internal/adapters/clients/justtcg"
@@ -20,6 +21,7 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/clients/psa"
 	"github.com/guarzo/slabledger/internal/adapters/clients/tcgdex"
 	"github.com/guarzo/slabledger/internal/adapters/scheduler"
+	scoringadapter "github.com/guarzo/slabledger/internal/adapters/scoring"
 	"github.com/guarzo/slabledger/internal/adapters/storage/mediafs"
 	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
 	"github.com/guarzo/slabledger/internal/domain/advisor"
@@ -44,6 +46,8 @@ func initializePriceProviders(
 	cardProvImpl *tcgdex.TCGdex,
 	priceRepo *sqlite.PriceRepository,
 	cardIDMappingRepo *sqlite.CardIDMappingRepository,
+	dhClient *doubleholo.Client,
+	intelRepo *sqlite.MarketIntelligenceRepository,
 ) (priceProvider *fusionprice.FusionPriceProvider, cardHedgerClient *cardhedger.Client, pcProvider *pricecharting.PriceCharting, err error) {
 	pcProvider, err = pricecharting.NewPriceCharting(
 		pricecharting.DefaultConfig(cfg.Adapters.PriceChartingToken), appCache, logger,
@@ -61,6 +65,19 @@ func initializePriceProviders(
 			fusionprice.WithCardHedgerHintResolver(cardIDMappingRepo)),
 	}
 
+	// Add DoubleHolo as a secondary fusion source if available
+	dhAvailable := false
+	if dhClient != nil && dhClient.Available() {
+		dhOpts := []fusionprice.DoubleHoloAdapterOption{}
+		if intelRepo != nil {
+			dhOpts = append(dhOpts, fusionprice.WithDHIntelligenceStore(intelRepo))
+		}
+		dhAdapter := fusionprice.NewDoubleHoloAdapter(dhClient, cardIDMappingRepo, logger, dhOpts...)
+		secondarySources = append(secondarySources, dhAdapter)
+		dhAvailable = true
+		logger.Info(ctx, "DoubleHolo adapter registered as secondary fusion source")
+	}
+
 	priceProvider = fusionprice.NewFusionProviderWithRepo(
 		pcProvider, secondarySources,
 		appCache, priceRepo, priceRepo, priceRepo, logger,
@@ -70,8 +87,10 @@ func initializePriceProviders(
 		cfg.Fusion.SecondarySourceTimeout,
 		fusionprice.WithCardProvider(cardProvImpl),
 	)
-	logger.Info(ctx, "Fusion price provider initialized with 2 sources",
-		observability.Bool("cardhedger_available", cardHedgerClient.Available()))
+	logger.Info(ctx, "Fusion price provider initialized",
+		observability.Int("secondary_sources", len(secondarySources)),
+		observability.Bool("cardhedger_available", cardHedgerClient.Available()),
+		observability.Bool("doubleholo_available", dhAvailable))
 
 	return priceProvider, cardHedgerClient, pcProvider, nil
 }
@@ -86,6 +105,7 @@ func initializeCampaignsService(
 	priceProvImpl *fusionprice.FusionPriceProvider,
 	cardHedgerClientImpl *cardhedger.Client,
 	cardIDMappingRepo *sqlite.CardIDMappingRepository,
+	intelRepo *sqlite.MarketIntelligenceRepository,
 ) (campaigns.Service, *sqlite.CampaignsRepository, *sqlite.CardRequestRepository) {
 	campaignsRepo := sqlite.NewCampaignsRepository(db.DB)
 	priceLookupAdapter := pricelookup.NewAdapter(priceProvImpl)
@@ -119,6 +139,10 @@ func initializeCampaignsService(
 		campaigns.WithCLValueRecorder(campaignsRepo),
 		campaigns.WithPopulationRecorder(campaignsRepo),
 	)
+
+	if intelRepo != nil {
+		campaignOpts = append(campaignOpts, campaigns.WithIntelligenceRepo(intelRepo))
+	}
 	campaignsService := campaigns.NewService(campaignsRepo, campaignOpts...)
 
 	return campaignsService, campaignsRepo, cardRequestRepo
@@ -134,6 +158,7 @@ func initializeAdvisorService(
 	db *sqlite.DB,
 	aiCallRepo *sqlite.AICallRepository,
 	campaignsService campaigns.Service,
+	toolOpts ...advisortool.ExecutorOption,
 ) (llmProvider advisor.LLMProvider, advisorSvc advisor.Service, advisorCacheRepo *sqlite.AdvisorCacheRepository, err error) {
 	if cfg.Adapters.AzureAIEndpoint == "" || cfg.Adapters.AzureAIKey == "" {
 		return nil, nil, nil, nil
@@ -149,7 +174,7 @@ func initializeAdvisorService(
 	}
 	llmProvider = client
 
-	toolExec := advisortool.NewCampaignToolExecutor(campaignsService)
+	toolExec := advisortool.NewCampaignToolExecutor(campaignsService, toolOpts...)
 	advisorCacheRepo = sqlite.NewAdvisorCacheRepository(db.DB, logger)
 	advisorOpts := []advisor.ServiceOption{
 		advisor.WithLogger(logger),
@@ -159,6 +184,14 @@ func initializeAdvisorService(
 	if cfg.AdvisorRefresh.MaxToolRounds > 0 {
 		advisorOpts = append(advisorOpts, advisor.WithMaxToolRounds(cfg.AdvisorRefresh.MaxToolRounds))
 	}
+
+	// Scoring engine: pre-compute factor scores for advisor flows
+	scoringProvider := scoringadapter.NewProvider(campaignsService)
+	advisorOpts = append(advisorOpts, advisor.WithScoringDataProvider(scoringProvider))
+
+	// Data gap tracking for scoring quality reports
+	advisorOpts = append(advisorOpts, advisor.WithGapStore(sqlite.NewGapStore(db.DB)))
+
 	advisorSvc = advisor.NewService(client, toolExec, advisorOpts...)
 	logger.Info(ctx, "AI advisor initialized",
 		observability.String("deployment", cfg.Adapters.AzureAIDeployment))
@@ -323,6 +356,10 @@ type schedulerDeps struct {
 	CardLadderStore      *sqlite.CardLadderStore
 	CardLadderSalesStore *sqlite.CLSalesStore
 	JustTCGClient        *justtcg.Client
+	DHClient             *doubleholo.Client
+	DHIntelligenceRepo   *sqlite.MarketIntelligenceRepository
+	DHSuggestionsRepo    *sqlite.DHSuggestionsRepository
+	GapStore             *sqlite.GapStore
 }
 
 // initializeSchedulers builds and starts the scheduler group, returning the
@@ -370,6 +407,19 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 	// produces a non-nil interface wrapping a nil pointer, which breaks nil checks.
 	if deps.JustTCGClient != nil {
 		buildDeps.JustTCGClient = deps.JustTCGClient
+	}
+	// Same nil-safety for DoubleHolo dependencies.
+	if deps.DHClient != nil {
+		buildDeps.DHClient = deps.DHClient
+	}
+	if deps.DHIntelligenceRepo != nil {
+		buildDeps.DHIntelligenceRepo = deps.DHIntelligenceRepo
+	}
+	if deps.DHSuggestionsRepo != nil {
+		buildDeps.DHSuggestionsRepo = deps.DHSuggestionsRepo
+	}
+	if deps.GapStore != nil {
+		buildDeps.GapStore = deps.GapStore
 	}
 	schedulerResult := scheduler.BuildGroup(deps.Config, buildDeps)
 	schedulerResult.Group.StartAll(schedulerCtx)

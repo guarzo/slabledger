@@ -4,9 +4,12 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"sort"
 	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/errors"
+	"github.com/guarzo/slabledger/internal/domain/intelligence"
+	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
 // --- Sell Sheet ---
@@ -306,7 +309,95 @@ func (s *service) MatchShopifyPrices(ctx context.Context, items []ShopifyPriceSy
 	if resp.Matched == nil {
 		resp.Matched = []ShopifyPriceSyncMatch{}
 	}
+
+	// Batch-enrich with DH market intelligence (best-effort — skip on error)
+	if s.intelRepo != nil && len(resp.Matched) > 0 {
+		keys := make([]intelligence.CardKey, len(resp.Matched))
+		for i, m := range resp.Matched {
+			keys[i] = intelligence.CardKey{
+				CardName:   m.CardName,
+				SetName:    m.SetName,
+				CardNumber: m.CardNumber,
+			}
+		}
+		if intelMap, err := s.intelRepo.GetByCards(ctx, keys); err == nil {
+			for i := range resp.Matched {
+				if mi, ok := intelMap[keys[i]]; ok {
+					resp.Matched[i].Intel = convertIntel(mi)
+				}
+			}
+		} else if s.logger != nil {
+			s.logger.Warn(ctx, "intel enrichment failed", observability.Err(err))
+		}
+	}
+
 	return resp, nil
+}
+
+// convertIntel converts a domain MarketIntelligence into the API-facing PriceSyncIntel.
+// Returns nil if the input is nil.
+func convertIntel(mi *intelligence.MarketIntelligence) *PriceSyncIntel {
+	if mi == nil {
+		return nil
+	}
+	out := &PriceSyncIntel{
+		FetchedAt: mi.FetchedAt.Format(time.RFC3339),
+	}
+	if mi.Sentiment != nil {
+		out.SentimentScore = mi.Sentiment.Score
+		out.SentimentTrend = mi.Sentiment.Trend
+		out.SentimentMentions = mi.Sentiment.MentionCount
+	}
+	if mi.Forecast != nil {
+		out.ForecastCents = mi.Forecast.PredictedPriceCents
+		out.ForecastConfidence = mi.Forecast.Confidence
+		if !mi.Forecast.ForecastDate.IsZero() {
+			out.ForecastDate = mi.Forecast.ForecastDate.Format(time.RFC3339)
+		}
+	}
+	if mi.Insights != nil {
+		out.InsightHeadline = mi.Insights.Headline
+		out.InsightDetail = mi.Insights.Detail
+	}
+
+	// Recent sales — last 5, newest first (defensive copy to avoid mutating input)
+	recentSales := make([]intelligence.Sale, len(mi.RecentSales))
+	copy(recentSales, mi.RecentSales)
+	sort.Slice(recentSales, func(i, j int) bool {
+		return recentSales[i].SoldAt.After(recentSales[j].SoldAt)
+	})
+	out.RecentSalesCount = len(recentSales)
+	limit := min(5, len(recentSales))
+	for i := 0; i < limit; i++ {
+		sale := recentSales[i]
+		out.RecentSales = append(out.RecentSales, PriceSyncSale{
+			SoldAt:     sale.SoldAt.Format(time.RFC3339),
+			Grade:      sale.Grade,
+			PriceCents: sale.PriceCents,
+			Platform:   sale.Platform,
+		})
+	}
+
+	// Population — PSA entries only
+	for _, p := range mi.Population {
+		if p.GradingCompany == "PSA" {
+			out.Population = append(out.Population, PriceSyncPop{
+				Grade: p.Grade,
+				Count: p.Count,
+			})
+		}
+	}
+
+	// Grading ROI
+	for _, r := range mi.GradingROI {
+		out.GradingROI = append(out.GradingROI, PriceSyncROI{
+			Grade:        r.Grade,
+			AvgSaleCents: r.AvgSaleCents,
+			ROI:          r.ROI,
+		})
+	}
+
+	return out
 }
 
 // --- Price Review ---

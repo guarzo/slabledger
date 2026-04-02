@@ -4,9 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/ai"
 	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	"github.com/guarzo/slabledger/internal/domain/intelligence"
+	"github.com/guarzo/slabledger/internal/domain/scoring"
 )
 
 // toolHandler is a function that executes a tool and returns JSON.
@@ -14,16 +17,40 @@ type toolHandler func(ctx context.Context, args string) (string, error)
 
 // CampaignToolExecutor implements ai.ToolExecutor by calling campaigns.Service methods.
 type CampaignToolExecutor struct {
-	svc      campaigns.Service
-	handlers map[string]toolHandler
-	defs     []ai.ToolDefinition
+	svc         campaigns.Service
+	intelRepo   intelligence.Repository
+	suggestRepo intelligence.SuggestionsRepository
+	gapStore    scoring.GapStore
+	handlers    map[string]toolHandler
+	defs        []ai.ToolDefinition
+}
+
+// ExecutorOption configures optional dependencies on CampaignToolExecutor.
+type ExecutorOption func(*CampaignToolExecutor)
+
+// WithIntelligenceRepo injects the market intelligence repository.
+func WithIntelligenceRepo(repo intelligence.Repository) ExecutorOption {
+	return func(e *CampaignToolExecutor) { e.intelRepo = repo }
+}
+
+// WithSuggestionsRepo injects the DH suggestions repository.
+func WithSuggestionsRepo(repo intelligence.SuggestionsRepository) ExecutorOption {
+	return func(e *CampaignToolExecutor) { e.suggestRepo = repo }
+}
+
+// WithGapStore injects the scoring gap store for data gap reports.
+func WithGapStore(gs scoring.GapStore) ExecutorOption {
+	return func(e *CampaignToolExecutor) { e.gapStore = gs }
 }
 
 // NewCampaignToolExecutor creates a ToolExecutor backed by the campaigns service.
-func NewCampaignToolExecutor(svc campaigns.Service) *CampaignToolExecutor {
+func NewCampaignToolExecutor(svc campaigns.Service, opts ...ExecutorOption) *CampaignToolExecutor {
 	e := &CampaignToolExecutor{
 		svc:      svc,
 		handlers: make(map[string]toolHandler),
+	}
+	for _, opt := range opts {
+		opt(e)
 	}
 	e.registerTools()
 	return e
@@ -228,4 +255,27 @@ func (e *CampaignToolExecutor) registerTools() {
 	e.registerGetDashboardSummary()
 	e.registerGetAcquisitionTargets()
 	e.registerGetCrackOpportunities()
+	e.registerGetMarketIntelligence()
+	e.registerGetDHSuggestions()
+	e.registerGetInventoryAlerts()
+	e.registerGetDataGapReport()
+}
+
+// registerGetDataGapReport registers the get_data_gap_report tool.
+func (e *CampaignToolExecutor) registerGetDataGapReport() {
+	e.register(ai.ToolDefinition{
+		Name:        "get_data_gap_report",
+		Description: "Get a report of scoring data gaps over the last 7 days. Shows which factors are missing most often and which card sets are most affected. Use this in the digest to surface data quality issues.",
+		Parameters:  emptyObjectParams,
+	}, func(ctx context.Context, args string) (string, error) {
+		if e.gapStore == nil {
+			return `{"error": "gap store not configured"}`, nil
+		}
+		since := time.Now().AddDate(0, 0, -7)
+		report, err := e.gapStore.GetGapReport(ctx, since)
+		if err != nil {
+			return "", err
+		}
+		return toJSON(report), nil
+	})
 }

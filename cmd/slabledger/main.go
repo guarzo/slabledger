@@ -16,7 +16,9 @@ import (
 	"github.com/joho/godotenv"
 
 	// Concrete implementations (only imported in main for wiring - Hexagonal Architecture)
+	"github.com/guarzo/slabledger/internal/adapters/advisortool"
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardhedger"
+	"github.com/guarzo/slabledger/internal/adapters/clients/doubleholo"
 	"github.com/guarzo/slabledger/internal/adapters/clients/google"
 	"github.com/guarzo/slabledger/internal/adapters/clients/justtcg"
 	"github.com/guarzo/slabledger/internal/adapters/clients/psa"
@@ -235,8 +237,24 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	// Discovery failure tracker (persists CardHedger discovery failures for diagnostics)
 	discoveryFailureRepo := sqlite.NewDiscoveryFailureRepository(db.DB)
 
+	// Initialize DoubleHolo client (optional — market intelligence + fusion source)
+	var dhClient *doubleholo.Client
+	if cfg.Adapters.DoubleHoloKey != "" {
+		dhClient = doubleholo.NewClient(
+			cfg.Adapters.DoubleHoloBaseURL, cfg.Adapters.DoubleHoloKey,
+			doubleholo.WithLogger(logger),
+			doubleholo.WithRateLimitRPS(cfg.DoubleHolo.RateLimitRPS),
+		)
+		logger.Info(ctx, "DoubleHolo client initialized")
+	}
+
+	// DoubleHolo repositories (always created — tables exist after migration 000028)
+	intelRepo := sqlite.NewMarketIntelligenceRepository(db.DB)
+	suggestionsRepo := sqlite.NewDHSuggestionsRepository(db.DB)
+
 	priceProvImpl, cardHedgerClientImpl, pcProvider, err := initializePriceProviders(
 		ctx, cfg, appCache, logger, cardProvImpl, priceRepo, cardIDMappingRepo,
+		dhClient, intelRepo,
 	)
 	if err != nil {
 		return err
@@ -248,7 +266,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	}()
 
 	campaignsService, campaignsRepo, cardRequestRepo := initializeCampaignsService(
-		ctx, cfg, logger, db, priceProvImpl, cardHedgerClientImpl, cardIDMappingRepo,
+		ctx, cfg, logger, db, priceProvImpl, cardHedgerClientImpl, cardIDMappingRepo, intelRepo,
 	)
 
 	// Sync state repository (for delta poll timestamps)
@@ -257,8 +275,15 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	// AI call tracking
 	aiCallRepo := sqlite.NewAICallRepository(db)
 
+	// Build advisor tool options — inject intelligence repos.
+	var advisorToolOpts []advisortool.ExecutorOption
+	advisorToolOpts = append(advisorToolOpts, advisortool.WithIntelligenceRepo(intelRepo))
+	advisorToolOpts = append(advisorToolOpts, advisortool.WithSuggestionsRepo(suggestionsRepo))
+	gapStore := sqlite.NewGapStore(db.DB)
+	advisorToolOpts = append(advisorToolOpts, advisortool.WithGapStore(gapStore))
+
 	azureAIClient, advisorService, advisorCacheRepo, err := initializeAdvisorService(
-		ctx, cfg, logger, db, aiCallRepo, campaignsService,
+		ctx, cfg, logger, db, aiCallRepo, campaignsService, advisorToolOpts...,
 	)
 	if err != nil {
 		return err
@@ -300,6 +325,16 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	var opportunitiesHandler *handlers.OpportunitiesHandler
 	if campaignsService != nil {
 		opportunitiesHandler = handlers.NewOpportunitiesHandler(campaignsService, logger)
+	}
+
+	// Create DoubleHolo handler (bulk match + intelligence; nil when client is not configured)
+	var dhHandler *handlers.DoubleHoloHandler
+	if dhClient != nil && dhClient.Available() {
+		dhHandler = handlers.NewDoubleHoloHandler(
+			dhClient, cardIDMappingRepo, campaignsRepo,
+			intelRepo, suggestionsRepo, logger,
+		)
+		logger.Info(ctx, "DoubleHolo handler initialized")
 	}
 
 	// Initialize JustTCG client (optional — raw NM price refresh)
@@ -346,6 +381,10 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		CardLadderStore:      clStore,
 		CardLadderSalesStore: clSalesStore,
 		JustTCGClient:        justTCGClient,
+		DHClient:             dhClient,
+		DHIntelligenceRepo:   intelRepo,
+		DHSuggestionsRepo:    suggestionsRepo,
+		GapStore:             gapStore,
 	})
 
 	// Wire Card Ladder manual refresh into the handler
@@ -449,6 +488,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		SalesCompsHandler:         salesCompsHandler,
 		PicksHandler:              picksHandler,
 		OpportunitiesHandler:      opportunitiesHandler,
+		DoubleHoloHandler:         dhHandler,
 	}
 	serverErr := startWebServer(ctx, deps)
 

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"sync"
 
+	"github.com/guarzo/slabledger/internal/domain/intelligence"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
@@ -265,6 +266,8 @@ type service struct {
 	popRecorder PopulationHistoryRecorder
 	clRecorder  CLValueHistoryRecorder
 
+	intelRepo intelligence.Repository // optional — DH market intelligence for price-sync enrichment
+
 	// certEnrichCh is a bounded channel for cert enrichment requests.
 	// A single background worker processes cert numbers sequentially,
 	// respecting PSA API rate limits (100/day).
@@ -323,6 +326,11 @@ func WithPopulationRecorder(r PopulationHistoryRecorder) ServiceOption {
 // WithCLValueRecorder enables CL value history tracking during CSV imports.
 func WithCLValueRecorder(r CLValueHistoryRecorder) ServiceOption {
 	return func(s *service) { s.clRecorder = r }
+}
+
+// WithIntelligenceRepo enables DH market intelligence enrichment in price-sync.
+func WithIntelligenceRepo(r intelligence.Repository) ServiceOption {
+	return func(s *service) { s.intelRepo = r }
 }
 
 func NewService(repo Repository, opts ...ServiceOption) Service {

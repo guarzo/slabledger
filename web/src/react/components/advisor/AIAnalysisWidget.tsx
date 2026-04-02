@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useAdvisorStream } from '../../hooks/useAdvisorStream';
+import { ScoreCardHeader } from './ScoreCardHeader';
 import { useAdvisorCache } from '../../hooks/useAdvisorCache';
 import { Button } from '../../ui';
 import type { AdvisorAnalysisType } from '../../../types/apiStatus';
@@ -258,7 +259,7 @@ function StreamingAnalysisWidget({
   description?: string;
   collapsible?: boolean;
 }) {
-  const { content, isStreaming, error, toolStatus, run, reset } = useAdvisorStream();
+  const { content, isStreaming, error, toolStatus, scoreCard, run, reset } = useAdvisorStream();
   const [collapsed, setCollapsed] = useCollapsed(endpoint, true);
 
   const handleGenerate = useCallback(() => {
@@ -324,12 +325,15 @@ function StreamingAnalysisWidget({
           )}
 
           {hasContent ? (
-            <div className={AI_PROSE_CLASSES}>
-              {renderedMarkdown}
-              {isStreaming && (
-                <span className="inline-block w-1.5 h-4 bg-[var(--brand-500)] animate-pulse ml-0.5 align-text-bottom" />
-              )}
-            </div>
+            <>
+              {scoreCard && <ScoreCardHeader scoreCard={scoreCard} />}
+              <div className={AI_PROSE_CLASSES}>
+                {renderedMarkdown}
+                {isStreaming && (
+                  <span className="inline-block w-1.5 h-4 bg-[var(--brand-500)] animate-pulse ml-0.5 align-text-bottom" />
+                )}
+              </div>
+            </>
           ) : !isStreaming && !error ? (
             <p className="text-xs text-[var(--text-muted)]">
               {description ?? 'Click the button to generate an AI-powered analysis.'}

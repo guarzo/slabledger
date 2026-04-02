@@ -42,6 +42,7 @@ type Router struct {
 	salesCompsHandler         *handlers.SalesCompsHandler
 	picksHandler              *handlers.PicksHandler
 	opportunitiesHandler      *handlers.OpportunitiesHandler
+	doubleHoloHandler         *handlers.DoubleHoloHandler
 	pricingAPIKey             string
 	logger                    observability.Logger
 	databasePath              string
@@ -73,6 +74,7 @@ type RouterConfig struct {
 	SalesCompsHandler         *handlers.SalesCompsHandler    // Sales comps; nil = disabled
 	PicksHandler              *handlers.PicksHandler         // AI picks; nil = disabled
 	OpportunitiesHandler      *handlers.OpportunitiesHandler // Arbitrage opportunities; nil = disabled
+	DoubleHoloHandler         *handlers.DoubleHoloHandler    // DH bulk match + intelligence; nil = disabled
 	Logger                    observability.Logger
 	AdminEmails               []string
 	DatabasePath              string
@@ -166,6 +168,10 @@ func NewRouter(cfg RouterConfig) *Router {
 
 	if cfg.OpportunitiesHandler != nil {
 		rt.opportunitiesHandler = cfg.OpportunitiesHandler
+	}
+
+	if cfg.DoubleHoloHandler != nil {
+		rt.doubleHoloHandler = cfg.DoubleHoloHandler
 	}
 
 	if cfg.PricingAPIKey != "" && cfg.CampaignsRepo != nil {
@@ -280,6 +286,9 @@ func (rt *Router) Setup() http.Handler {
 
 	// Arbitrage opportunities routes
 	rt.registerOpportunitiesRoutes(mux)
+
+	// DoubleHolo routes
+	rt.registerDoubleHoloRoutes(mux)
 
 	// Social content & Instagram routes
 	rt.registerSocialRoutes(mux)

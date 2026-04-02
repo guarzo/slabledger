@@ -176,3 +176,72 @@ Provide:
 4. **Expected Outcome**: Estimated profit, days to sell, recommended exit channel
 5. **Risks**: What could go wrong (CL overvaluation, low liquidity, concentration)
 6. **Verdict**: One-sentence summary`
+
+const scoreCardInjectionTemplate = `
+
+## Pre-Computed Score Card
+
+The scoring engine has analyzed this entity. Use these scores as your quantitative
+foundation. You MUST use the engine_verdict as your starting point. You may adjust
+the verdict by at most one step if you have strong qualitative reasons — if you do,
+you MUST populate adjustment_reason.
+
+Do NOT contradict factor values or confidence. Your job is to interpret the scores:
+explain WHY the factors look the way they do, identify the key insight, and produce
+actionable signals.
+
+%s
+`
+
+const structuredOutputInstruction = `
+
+## Output Format
+
+You MUST respond with valid JSON matching this schema. Do NOT include markdown formatting
+or code fences around the JSON. The response must be parseable as raw JSON.
+
+%s
+`
+
+const purchaseAssessmentSchema = `{
+  "score_card": "... echo back unchanged ...",
+  "verdict": "strong_buy | buy | lean_buy | hold | lean_sell | sell | strong_sell",
+  "adjustment_reason": "string or null — required if verdict differs from engine_verdict",
+  "key_insight": "Single most important takeaway (1 sentence)",
+  "signals": [
+    {
+      "factor": "factor_name",
+      "direction": "bullish | bearish | neutral",
+      "title": "3-5 word title",
+      "detail": "1-sentence explanation with numbers",
+      "metric": "display value like '+17.2%%' or '42 sales/mo'"
+    }
+  ],
+  "expected_roi": 0.23,
+  "portfolio_impact": {
+    "character_concentration": "low | medium | high",
+    "grade_concentration": "low | medium | high",
+    "campaign_grade_roi": 0.18
+  },
+  "grade_fit": {
+    "grade": "PSA 10",
+    "campaign_avg_roi_for_grade": 0.15,
+    "campaign_sell_through_for_grade": 0.72
+  }
+}`
+
+const campaignAnalysisSchema = `{
+  "score_card": "... echo back unchanged ...",
+  "verdict": "strong_buy | buy | lean_buy | hold | lean_sell | sell | strong_sell",
+  "adjustment_reason": "string or null",
+  "key_insight": "Single most important takeaway",
+  "signals": [{"factor": "", "direction": "", "title": "", "detail": "", "metric": ""}],
+  "health_status": "healthy | caution | warning | critical",
+  "recommendations": [
+    {"type": "buy_threshold | grade | tier | spend_cap | channel | market", "action": "...", "expected_impact": "...", "priority": "high | medium | low"}
+  ],
+  "problem_areas": [
+    {"area": "...", "issue": "...", "suggestion": "..."}
+  ]
+}`
+

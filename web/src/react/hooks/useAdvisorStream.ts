@@ -1,7 +1,8 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { type ScoreCard } from '../../types/scoring';
 
 interface StreamEvent {
-  type: 'delta' | 'tool_start' | 'tool_result' | 'done' | 'error';
+  type: 'delta' | 'tool_start' | 'tool_result' | 'score' | 'done' | 'error';
   content?: string;
   toolName?: string;
 }
@@ -11,6 +12,7 @@ interface UseAdvisorStreamResult {
   isStreaming: boolean;
   error: string | null;
   toolStatus: string | null;
+  scoreCard: ScoreCard | null;
   run: (endpoint: string, body?: Record<string, unknown>) => Promise<void>;
   reset: () => void;
 }
@@ -29,6 +31,7 @@ export function useAdvisorStream(): UseAdvisorStreamResult {
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toolStatus, setToolStatus] = useState<string | null>(null);
+  const [scoreCard, setScoreCard] = useState<ScoreCard | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const contentRef = useRef('');
 
@@ -49,6 +52,7 @@ export function useAdvisorStream(): UseAdvisorStreamResult {
     setIsStreaming(false);
     setError(null);
     setToolStatus(null);
+    setScoreCard(null);
   }, []);
 
   const run = useCallback(async (endpoint: string, body?: Record<string, unknown>) => {
@@ -64,6 +68,7 @@ export function useAdvisorStream(): UseAdvisorStreamResult {
     setIsStreaming(true);
     setError(null);
     setToolStatus(null);
+    setScoreCard(null);
 
     // Apply a connection timeout — once streaming starts, the abort is only manual.
     const connectTimeout = setTimeout(() => {
@@ -139,6 +144,15 @@ export function useAdvisorStream(): UseAdvisorStreamResult {
               case 'error':
                 setError(event.content ?? 'Unknown error');
                 break;
+              case 'score':
+                if (event.content) {
+                  try {
+                    setScoreCard(JSON.parse(event.content) as ScoreCard);
+                  } catch (e) {
+                    console.warn('Failed to parse score event:', event.content, e);
+                  }
+                }
+                break;
               case 'done':
                 // Some endpoints send final data in the done event content
                 if (event.content) {
@@ -168,7 +182,7 @@ export function useAdvisorStream(): UseAdvisorStreamResult {
     }
   }, []);
 
-  return { content, isStreaming, error, toolStatus, run, reset };
+  return { content, isStreaming, error, toolStatus, scoreCard, run, reset };
 }
 
 /** Converts tool names like "get_campaign_pnl" to "Fetching campaign P&L..." */

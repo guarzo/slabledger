@@ -103,52 +103,52 @@ func TestListEbayExportItems_IncludesNewPriceFields(t *testing.T) {
 	now := time.Now()
 
 	tests := []struct {
-		name               string
-		buyCostCents       int
+		name                string
+		buyCostCents        int
 		psaSourcingFeeCents int
-		lastSoldCents      int
-		reviewedPriceCents int
-		reviewedAt         string
-		wantCostBasis      int
-		wantLastSold       int
-		wantReviewedPrice  int
-		wantReviewedAt     string
+		lastSoldCents       int
+		reviewedPriceCents  int
+		reviewedAt          string
+		wantCostBasis       int
+		wantLastSold        int
+		wantReviewedPrice   int
+		wantReviewedAt      string
 	}{
 		{
-			name:               "all fields populated",
-			buyCostCents:       10000,
+			name:                "all fields populated",
+			buyCostCents:        10000,
 			psaSourcingFeeCents: 300,
-			lastSoldCents:      26000,
-			reviewedPriceCents: 24000,
-			reviewedAt:         "2026-03-30T10:00:00Z",
-			wantCostBasis:      10300,
-			wantLastSold:       26000,
-			wantReviewedPrice:  24000,
-			wantReviewedAt:     "2026-03-30T10:00:00Z",
+			lastSoldCents:       26000,
+			reviewedPriceCents:  24000,
+			reviewedAt:          "2026-03-30T10:00:00Z",
+			wantCostBasis:       10300,
+			wantLastSold:        26000,
+			wantReviewedPrice:   24000,
+			wantReviewedAt:      "2026-03-30T10:00:00Z",
 		},
 		{
-			name:               "zero sourcing fee",
-			buyCostCents:       15000,
+			name:                "zero sourcing fee",
+			buyCostCents:        15000,
 			psaSourcingFeeCents: 0,
-			lastSoldCents:      18000,
-			reviewedPriceCents: 0,
-			reviewedAt:         "",
-			wantCostBasis:      15000,
-			wantLastSold:       18000,
-			wantReviewedPrice:  0,
-			wantReviewedAt:     "",
+			lastSoldCents:       18000,
+			reviewedPriceCents:  0,
+			reviewedAt:          "",
+			wantCostBasis:       15000,
+			wantLastSold:        18000,
+			wantReviewedPrice:   0,
+			wantReviewedAt:      "",
 		},
 		{
-			name:               "no market data",
-			buyCostCents:       5000,
+			name:                "no market data",
+			buyCostCents:        5000,
 			psaSourcingFeeCents: 200,
-			lastSoldCents:      0,
-			reviewedPriceCents: 6000,
-			reviewedAt:         "2026-03-29T08:00:00Z",
-			wantCostBasis:      5200,
-			wantLastSold:       0,
-			wantReviewedPrice:  6000,
-			wantReviewedAt:     "2026-03-29T08:00:00Z",
+			lastSoldCents:       0,
+			reviewedPriceCents:  6000,
+			reviewedAt:          "2026-03-29T08:00:00Z",
+			wantCostBasis:       5200,
+			wantLastSold:        0,
+			wantReviewedPrice:   6000,
+			wantReviewedAt:      "2026-03-29T08:00:00Z",
 		},
 	}
 

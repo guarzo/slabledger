@@ -2,6 +2,7 @@ package advisor
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/guarzo/slabledger/internal/domain/ai"
 	"github.com/guarzo/slabledger/internal/domain/observability"
+	"github.com/guarzo/slabledger/internal/domain/scoring"
 )
 
 const (
@@ -32,32 +34,37 @@ const (
 
 // Tool subsets per operation — only send relevant tools to reduce prompt tokens
 // and prevent the LLM from calling irrelevant tools.
-var operationTools = map[string][]string{
-	"digest": {
+var operationTools = map[AIOperation][]string{
+	OpDigest: {
 		"list_campaigns", "get_campaign_pnl", "get_pnl_by_channel",
 		"get_campaign_tuning", "get_inventory_aging", "get_global_inventory",
 		"get_sell_sheet", "get_portfolio_health", "get_portfolio_insights",
 		"get_credit_summary", "get_weekly_review", "get_capital_timeline",
 		"get_channel_velocity", "get_dashboard_summary",
 		"get_acquisition_targets", "get_crack_opportunities",
+		"get_dh_suggestions", "get_inventory_alerts",
+		"get_data_gap_report",
 	},
-	"campaign_analysis": {
+	OpCampaignAnalysis: {
 		"list_campaigns", "get_campaign_pnl", "get_pnl_by_channel",
 		"get_campaign_tuning", "get_inventory_aging", "get_expected_values",
 		"get_crack_candidates", "get_campaign_suggestions", "run_projection",
 		"get_channel_velocity", "get_credit_summary",
+		"get_market_intelligence",
 	},
-	"liquidation": {
+	OpLiquidation: {
 		"list_campaigns", "get_global_inventory", "get_sell_sheet",
 		"get_credit_summary", "get_expected_values", "get_inventory_aging",
 		"get_portfolio_health", "suggest_price", "get_cert_lookup",
 		"get_channel_velocity", "get_capital_timeline", "get_suggestion_stats",
 		"get_dashboard_summary", "get_crack_opportunities",
+		"get_market_intelligence", "get_inventory_alerts",
 	},
-	"purchase_assessment": {
+	OpPurchaseAssessment: {
 		"list_campaigns", "get_campaign_tuning", "get_portfolio_insights",
 		"get_cert_lookup", "evaluate_purchase", "get_campaign_pnl",
 		"get_channel_velocity",
+		"get_market_intelligence",
 	},
 }
 
@@ -67,6 +74,8 @@ type service struct {
 	logger        observability.Logger
 	tracker       AICallTracker
 	cache         CacheStore
+	scoringData   ScoringDataProvider
+	gapStore      scoring.GapStore
 	maxToolRounds int
 	maxTokens     int
 	temperature   float64
@@ -97,7 +106,25 @@ func (s *service) GenerateDigest(ctx context.Context, stream func(StreamEvent)) 
 
 func (s *service) AnalyzeCampaign(ctx context.Context, campaignID string, stream func(StreamEvent)) error {
 	userPrompt := fmt.Sprintf(campaignAnalysisUserPrompt, campaignID)
-	_, err := s.runAnalysis(ctx, OpCampaignAnalysis, campaignAnalysisSystemPrompt, userPrompt, stream)
+
+	var scoreCard *scoring.ScoreCard
+	if s.scoringData != nil {
+		data, err := s.scoringData.CampaignData(ctx, campaignID)
+		if err == nil && data != nil {
+			sc, scErr := BuildScoreCard(campaignID, "campaign", data, scoring.CampaignAnalysisProfile)
+			if scErr == nil {
+				scoreCard = &sc
+				s.recordGaps(ctx, sc, "", "")
+			}
+		}
+	}
+
+	if scoreCard == nil {
+		_, err := s.runAnalysis(ctx, OpCampaignAnalysis, campaignAnalysisSystemPrompt, userPrompt, stream)
+		return err
+	}
+
+	_, err := s.runScoredAnalysis(ctx, OpCampaignAnalysis, campaignAnalysisSystemPrompt, userPrompt, scoreCard, campaignAnalysisSchema, stream)
 	return err
 }
 
@@ -112,7 +139,32 @@ func (s *service) AssessPurchase(ctx context.Context, req PurchaseAssessmentRequ
 		req.CardName, req.Grade, float64(req.BuyCostCents)/100,
 		req.CampaignName, req.CampaignID, req.SetName, req.CertNumber, float64(req.CLValueCents)/100,
 	)
-	_, err := s.runAnalysis(ctx, OpPurchaseAssessment, purchaseAssessmentSystemPrompt, userPrompt, stream)
+
+	var scoreCard *scoring.ScoreCard
+	if s.scoringData != nil {
+		data, err := s.scoringData.PurchaseData(ctx, req)
+		if err == nil && data != nil {
+			sc, scErr := BuildScoreCard(req.CertNumber, "purchase", data, scoring.PurchaseAssessmentProfile)
+			if scErr == nil {
+				scoreCard = &sc
+				s.recordGaps(ctx, sc, req.CardName, req.SetName)
+			}
+		}
+	}
+
+	if scoreCard == nil {
+		_, err := s.runAnalysis(ctx, OpPurchaseAssessment, purchaseAssessmentSystemPrompt, userPrompt, stream)
+		return err
+	}
+
+	_, err := s.runScoredAnalysis(ctx, OpPurchaseAssessment, purchaseAssessmentSystemPrompt, userPrompt, scoreCard, purchaseAssessmentSchema, stream)
+	if err != nil {
+		fallback := scoring.FallbackResult(*scoreCard)
+		if fbJSON, fbErr := json.Marshal(fallback); fbErr == nil {
+			stream(StreamEvent{Type: EventDelta, Content: string(fbJSON)})
+			return nil
+		}
+	}
 	return err
 }
 
@@ -121,6 +173,49 @@ func (s *service) runAnalysis(ctx context.Context, operation AIOperation, system
 		{Role: RoleUser, Content: userPrompt},
 	}
 	return s.toolCallingLoop(ctx, operation, systemPrompt, messages, stream)
+}
+
+// runScoredAnalysis augments the system prompt with a pre-computed ScoreCard and
+// structured output schema, then delegates to the tool-calling loop.
+func (s *service) runScoredAnalysis(ctx context.Context, operation AIOperation, baseSystemPrompt, userPrompt string, scoreCard *scoring.ScoreCard, schema string, stream func(StreamEvent)) (string, error) {
+	sysPrompt := baseSystemPrompt
+	if scoreCard != nil {
+		if scoreJSON, err := json.Marshal(scoreCard); err == nil {
+			stream(StreamEvent{Type: EventScore, Content: string(scoreJSON)})
+			sysPrompt += fmt.Sprintf(scoreCardInjectionTemplate, string(scoreJSON))
+		}
+	}
+	sysPrompt += fmt.Sprintf(structuredOutputInstruction, schema)
+	messages := []Message{{Role: RoleUser, Content: userPrompt}}
+	return s.toolCallingLoop(ctx, operation, sysPrompt, messages, stream)
+}
+
+// recordGaps persists data gaps from a ScoreCard in the background.
+func (s *service) recordGaps(ctx context.Context, sc scoring.ScoreCard, cardName, setName string) {
+	if s.gapStore == nil || len(sc.DataGaps) == 0 {
+		return
+	}
+	records := make([]scoring.GapRecord, len(sc.DataGaps))
+	for i, g := range sc.DataGaps {
+		records[i] = scoring.GapRecord{
+			FactorName: g.FactorName,
+			Reason:     g.Reason,
+			EntityType: sc.EntityType,
+			EntityID:   sc.EntityID,
+			CardName:   cardName,
+			SetName:    setName,
+		}
+	}
+	go func() {
+		bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := s.gapStore.RecordGaps(bgCtx, records); err != nil && s.logger != nil {
+			s.logger.Warn(bgCtx, "failed to record data gaps",
+				observability.Err(err),
+				observability.String("entityID", sc.EntityID),
+			)
+		}
+	}()
 }
 
 func (s *service) CollectDigest(ctx context.Context) (string, error) {
@@ -133,10 +228,22 @@ func (s *service) CollectLiquidation(ctx context.Context) (string, error) {
 	return s.runAnalysis(ctx, OpLiquidation, sysPrompt, liquidationUserPrompt, func(StreamEvent) {})
 }
 
+// operationMaxRounds overrides s.maxToolRounds when scoring is active.
+// With pre-computed scores injected, fewer tool rounds are needed.
+var operationMaxRounds = map[AIOperation]int{
+	OpPurchaseAssessment: 1,
+	OpCampaignAnalysis:   2,
+	OpLiquidation:        2,
+}
+
 // toolCallingLoop orchestrates the LLM -> tool -> LLM cycle.
 func (s *service) toolCallingLoop(ctx context.Context, operation AIOperation, systemPrompt string, messages []Message, stream func(StreamEvent)) (string, error) {
+	maxRounds := s.maxToolRounds
+	if override, ok := operationMaxRounds[operation]; ok && s.scoringData != nil {
+		maxRounds = override
+	}
 	var tools []ToolDefinition
-	if names, ok := operationTools[string(operation)]; ok {
+	if names, ok := operationTools[operation]; ok {
 		if filtered, fOk := s.executor.(FilteredToolExecutor); fOk {
 			tools = filtered.DefinitionsFor(names)
 		} else {
@@ -151,7 +258,7 @@ func (s *service) toolCallingLoop(ctx context.Context, operation AIOperation, sy
 	lastRound := 0
 	var lastToolNames []string
 
-	for round := 0; round < s.maxToolRounds; round++ {
+	for round := 0; round < maxRounds; round++ {
 		lastRound = round
 		temp := s.temperature
 		completionReq := CompletionRequest{
@@ -298,8 +405,8 @@ func (s *service) toolCallingLoop(ctx context.Context, operation AIOperation, sy
 	}
 
 	err := fmt.Errorf("exceeded maximum tool rounds (%d); last tools called: %s",
-		s.maxToolRounds, strings.Join(lastToolNames, ", "))
-	ai.RecordCall(ctx, s.tracker, s.logger, operation, err, start, s.maxToolRounds, &totalUsage)
+		maxRounds, strings.Join(lastToolNames, ", "))
+	ai.RecordCall(ctx, s.tracker, s.logger, operation, err, start, maxRounds, &totalUsage)
 	return "", err
 }
 
