@@ -184,7 +184,7 @@ func (c *Client) post(ctx context.Context, fullURL string, body any, dest any) e
 	}
 
 	headers := map[string]string{
-		apiKeyHeader: c.apiKey,
+		apiKeyHeader:   c.apiKey,
 		"Content-Type": "application/json",
 		"Accept":       "application/json",
 	}
