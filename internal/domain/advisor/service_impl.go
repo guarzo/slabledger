@@ -2,6 +2,7 @@ package advisor
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
@@ -105,7 +106,25 @@ func (s *service) GenerateDigest(ctx context.Context, stream func(StreamEvent)) 
 
 func (s *service) AnalyzeCampaign(ctx context.Context, campaignID string, stream func(StreamEvent)) error {
 	userPrompt := fmt.Sprintf(campaignAnalysisUserPrompt, campaignID)
-	_, err := s.runAnalysis(ctx, OpCampaignAnalysis, campaignAnalysisSystemPrompt, userPrompt, stream)
+
+	var scoreCard *scoring.ScoreCard
+	if s.scoringData != nil {
+		data, err := s.scoringData.CampaignData(ctx, campaignID)
+		if err == nil && data != nil {
+			sc, scErr := BuildScoreCard(campaignID, "campaign", data, scoring.CampaignAnalysisProfile)
+			if scErr == nil {
+				scoreCard = &sc
+				s.recordGaps(ctx, sc, "", "")
+			}
+		}
+	}
+
+	if scoreCard == nil {
+		_, err := s.runAnalysis(ctx, OpCampaignAnalysis, campaignAnalysisSystemPrompt, userPrompt, stream)
+		return err
+	}
+
+	_, err := s.runScoredAnalysis(ctx, OpCampaignAnalysis, campaignAnalysisSystemPrompt, userPrompt, scoreCard, campaignAnalysisSchema, stream)
 	return err
 }
 
@@ -120,7 +139,32 @@ func (s *service) AssessPurchase(ctx context.Context, req PurchaseAssessmentRequ
 		req.CardName, req.Grade, float64(req.BuyCostCents)/100,
 		req.CampaignName, req.CampaignID, req.SetName, req.CertNumber, float64(req.CLValueCents)/100,
 	)
-	_, err := s.runAnalysis(ctx, OpPurchaseAssessment, purchaseAssessmentSystemPrompt, userPrompt, stream)
+
+	var scoreCard *scoring.ScoreCard
+	if s.scoringData != nil {
+		data, err := s.scoringData.PurchaseData(ctx, req)
+		if err == nil && data != nil {
+			sc, scErr := BuildScoreCard(req.CertNumber, "purchase", data, scoring.PurchaseAssessmentProfile)
+			if scErr == nil {
+				scoreCard = &sc
+				s.recordGaps(ctx, sc, req.CardName, req.SetName)
+			}
+		}
+	}
+
+	if scoreCard == nil {
+		_, err := s.runAnalysis(ctx, OpPurchaseAssessment, purchaseAssessmentSystemPrompt, userPrompt, stream)
+		return err
+	}
+
+	content, err := s.runScoredAnalysis(ctx, OpPurchaseAssessment, purchaseAssessmentSystemPrompt, userPrompt, scoreCard, purchaseAssessmentSchema, stream)
+	if err != nil && scoreCard != nil {
+		fallback := scoring.FallbackResult(*scoreCard)
+		if fbJSON, fbErr := json.Marshal(fallback); fbErr == nil {
+			stream(StreamEvent{Type: EventDelta, Content: string(fbJSON)})
+		}
+	}
+	_ = content
 	return err
 }
 
@@ -129,6 +173,48 @@ func (s *service) runAnalysis(ctx context.Context, operation AIOperation, system
 		{Role: RoleUser, Content: userPrompt},
 	}
 	return s.toolCallingLoop(ctx, operation, systemPrompt, messages, stream)
+}
+
+// runScoredAnalysis augments the system prompt with a pre-computed ScoreCard and
+// structured output schema, then delegates to the tool-calling loop.
+func (s *service) runScoredAnalysis(ctx context.Context, operation AIOperation, baseSystemPrompt, userPrompt string, scoreCard *scoring.ScoreCard, schema string, stream func(StreamEvent)) (string, error) {
+	if scoreCard != nil {
+		scoreJSON, err := json.Marshal(scoreCard)
+		if err == nil {
+			stream(StreamEvent{Type: EventScore, Content: string(scoreJSON)})
+		}
+	}
+	sysPrompt := baseSystemPrompt
+	if scoreCard != nil {
+		scoreJSON, _ := json.Marshal(scoreCard)
+		sysPrompt += fmt.Sprintf(scoreCardInjectionTemplate, string(scoreJSON))
+	}
+	sysPrompt += fmt.Sprintf(structuredOutputInstruction, schema)
+	messages := []Message{{Role: RoleUser, Content: userPrompt}}
+	return s.toolCallingLoop(ctx, operation, sysPrompt, messages, stream)
+}
+
+// recordGaps persists data gaps from a ScoreCard in the background.
+func (s *service) recordGaps(ctx context.Context, sc scoring.ScoreCard, cardName, setName string) {
+	if s.gapStore == nil || len(sc.DataGaps) == 0 {
+		return
+	}
+	records := make([]scoring.GapRecord, len(sc.DataGaps))
+	for i, g := range sc.DataGaps {
+		records[i] = scoring.GapRecord{
+			FactorName: g.FactorName,
+			Reason:     g.Reason,
+			EntityType: sc.EntityType,
+			EntityID:   sc.EntityID,
+			CardName:   cardName,
+			SetName:    setName,
+		}
+	}
+	go func() {
+		bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = s.gapStore.RecordGaps(bgCtx, records)
+	}()
 }
 
 func (s *service) CollectDigest(ctx context.Context) (string, error) {
@@ -141,8 +227,21 @@ func (s *service) CollectLiquidation(ctx context.Context) (string, error) {
 	return s.runAnalysis(ctx, OpLiquidation, sysPrompt, liquidationUserPrompt, func(StreamEvent) {})
 }
 
+// operationMaxRounds overrides s.maxToolRounds when scoring is active.
+// With pre-computed scores injected, fewer tool rounds are needed.
+var operationMaxRounds = map[string]int{
+	"purchase_assessment":  1,
+	"campaign_analysis":    2,
+	"liquidation":          2,
+	"campaign_suggestions": 1,
+}
+
 // toolCallingLoop orchestrates the LLM -> tool -> LLM cycle.
 func (s *service) toolCallingLoop(ctx context.Context, operation AIOperation, systemPrompt string, messages []Message, stream func(StreamEvent)) (string, error) {
+	maxRounds := s.maxToolRounds
+	if override, ok := operationMaxRounds[string(operation)]; ok && s.scoringData != nil {
+		maxRounds = override
+	}
 	var tools []ToolDefinition
 	if names, ok := operationTools[string(operation)]; ok {
 		if filtered, fOk := s.executor.(FilteredToolExecutor); fOk {
@@ -159,7 +258,7 @@ func (s *service) toolCallingLoop(ctx context.Context, operation AIOperation, sy
 	lastRound := 0
 	var lastToolNames []string
 
-	for round := 0; round < s.maxToolRounds; round++ {
+	for round := 0; round < maxRounds; round++ {
 		lastRound = round
 		temp := s.temperature
 		completionReq := CompletionRequest{
@@ -306,8 +405,8 @@ func (s *service) toolCallingLoop(ctx context.Context, operation AIOperation, sy
 	}
 
 	err := fmt.Errorf("exceeded maximum tool rounds (%d); last tools called: %s",
-		s.maxToolRounds, strings.Join(lastToolNames, ", "))
-	ai.RecordCall(ctx, s.tracker, s.logger, operation, err, start, s.maxToolRounds, &totalUsage)
+		maxRounds, strings.Join(lastToolNames, ", "))
+	ai.RecordCall(ctx, s.tracker, s.logger, operation, err, start, maxRounds, &totalUsage)
 	return "", err
 }
 
