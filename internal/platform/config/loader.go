@@ -380,6 +380,23 @@ func FromEnv(base Config) Config {
 	}
 	cfg.Adapters.ImageAIEnabled = parseBool(os.Getenv("IMAGE_AI_ENABLED"), false)
 	cfg.Adapters.JustTCGKey = os.Getenv("JUSTTCG_API_KEY")
+	cfg.Adapters.DoubleHoloKey = os.Getenv("DH_INTEGRATION_API_KEY")
+	if v := os.Getenv("DH_API_BASE_URL"); v != "" {
+		cfg.Adapters.DoubleHoloBaseURL = v
+	} else {
+		cfg.Adapters.DoubleHoloBaseURL = "https://api.doubleholo.com"
+	}
+	if v := os.Getenv("DH_CACHE_TTL_HOURS"); v != "" {
+		if i, err := strconv.Atoi(v); err == nil {
+			cfg.DoubleHolo.CacheTTLHours = i
+		}
+	}
+	if v := os.Getenv("DH_RATE_LIMIT_RPS"); v != "" {
+		if i, err := strconv.Atoi(v); err == nil {
+			cfg.DoubleHolo.RateLimitRPS = i
+		}
+	}
+	cfg.DoubleHolo.Enabled = parseBool(os.Getenv("DH_ENABLED"), cfg.DoubleHolo.Enabled)
 
 	cfg.JustTCG.ApplyDefaults()
 
