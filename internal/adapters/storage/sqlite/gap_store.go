@@ -53,14 +53,14 @@ func (s *GapStore) RecordGaps(ctx context.Context, gaps []scoring.GapRecord) err
 func (s *GapStore) GetGapReport(ctx context.Context, since time.Time) (*scoring.GapReport, error) {
 	var totalEntities, totalGaps int
 	err := s.db.QueryRowContext(ctx,
-		`SELECT COUNT(DISTINCT entity_id), COUNT(*) FROM scoring_data_gaps WHERE recorded_at >= ?`, since).
+		`SELECT COUNT(DISTINCT entity_type || '|' || entity_id), COUNT(*) FROM scoring_data_gaps WHERE recorded_at >= ?`, since).
 		Scan(&totalEntities, &totalGaps)
 	if err != nil {
 		return nil, err
 	}
 
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT g.factor_name, COUNT(*) as cnt,
+		`SELECT g.factor_name, COUNT(DISTINCT g.entity_type || '|' || g.entity_id) as cnt,
 		        (SELECT reason FROM scoring_data_gaps r
 		         WHERE r.factor_name = g.factor_name AND r.recorded_at >= ?
 		         GROUP BY reason ORDER BY COUNT(*) DESC LIMIT 1) as top_reason

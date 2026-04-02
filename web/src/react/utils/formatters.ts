@@ -147,7 +147,7 @@ export function formatLatency(ms: number): string {
 const PRESERVE_UPPER = new Set(['EX', 'GX', 'V', 'VMAX', 'VSTAR', 'DX', 'PM', 'HP', 'TG', 'FA', 'AA', 'SIR', 'SR', 'AR', 'SAR', 'IR']);
 
 export function toTitleCase(text: string): string {
-  return text.replace(/[A-Za-z]+/g, (word) => {
+  return text.replace(/\p{L}+/gu, (word) => {
     if (PRESERVE_UPPER.has(word.toUpperCase())) return word.toUpperCase();
     return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
   });

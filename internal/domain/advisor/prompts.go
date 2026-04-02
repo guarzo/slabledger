@@ -177,11 +177,6 @@ Provide:
 5. **Risks**: What could go wrong (CL overvaluation, low liquidity, concentration)
 6. **Verdict**: One-sentence summary`
 
-var (
-	_ = liquidationSchema
-	_ = campaignSuggestionSchema
-)
-
 const scoreCardInjectionTemplate = `
 
 ## Pre-Computed Score Card

@@ -277,6 +277,9 @@ func (rt *Router) registerPricingAPIRoutes(mux *http.ServeMux) {
 // registerDoubleHoloRoutes wires the DH bulk match, export, intelligence, and suggestions endpoints.
 func (rt *Router) registerDoubleHoloRoutes(mux *http.ServeMux) {
 	if rt.doubleHoloHandler == nil || rt.authMW == nil {
+		if rt.doubleHoloHandler != nil {
+			rt.logger.Warn(context.Background(), "skipping DoubleHolo route registration: auth middleware not configured")
+		}
 		return
 	}
 	mux.Handle("POST /api/dh/match", rt.authMW.RequireAuth(http.HandlerFunc(rt.doubleHoloHandler.HandleBulkMatch)))

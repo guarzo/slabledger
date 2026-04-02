@@ -275,14 +275,10 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	// AI call tracking
 	aiCallRepo := sqlite.NewAICallRepository(db)
 
-	// Build advisor tool options — inject intelligence repos when available.
+	// Build advisor tool options — inject intelligence repos.
 	var advisorToolOpts []advisortool.ExecutorOption
-	if intelRepo != nil {
-		advisorToolOpts = append(advisorToolOpts, advisortool.WithIntelligenceRepo(intelRepo))
-	}
-	if suggestionsRepo != nil {
-		advisorToolOpts = append(advisorToolOpts, advisortool.WithSuggestionsRepo(suggestionsRepo))
-	}
+	advisorToolOpts = append(advisorToolOpts, advisortool.WithIntelligenceRepo(intelRepo))
+	advisorToolOpts = append(advisorToolOpts, advisortool.WithSuggestionsRepo(suggestionsRepo))
 	gapStore := sqlite.NewGapStore(db.DB)
 	advisorToolOpts = append(advisorToolOpts, advisortool.WithGapStore(gapStore))
 

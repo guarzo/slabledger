@@ -42,6 +42,9 @@ func NewDHIntelligenceRefreshScheduler(
 	if config.MaxPerRun == 0 {
 		config.MaxPerRun = 50
 	}
+	if config.CacheTTL == 0 {
+		config.CacheTTL = 24 * time.Hour
+	}
 
 	return &DHIntelligenceRefreshScheduler{
 		StopHandle: NewStopHandle(),
@@ -100,6 +103,13 @@ func (s *DHIntelligenceRefreshScheduler) refresh(ctx context.Context) {
 		if !resp.HasData {
 			s.logger.Debug(ctx, "DH market data has no data",
 				observability.String("dh_card_id", entry.DHCardID))
+			// Update fetched_at so this entry isn't re-selected every run
+			entry.FetchedAt = time.Now()
+			if storeErr := s.intelRepo.Store(ctx, &entry); storeErr != nil {
+				s.logger.Warn(ctx, "failed to update fetched_at for empty DH entry",
+					observability.String("dh_card_id", entry.DHCardID),
+					observability.Err(storeErr))
+			}
 			continue
 		}
 

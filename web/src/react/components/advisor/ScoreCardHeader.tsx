@@ -67,9 +67,11 @@ export function ScoreCardHeader({ scoreCard }: ScoreCardHeaderProps) {
 
       <div className="mt-2.5 pt-2.5" style={{ borderTop: '1px solid var(--surface-3)' }}>
         <button
+          type="button"
           onClick={() => setExpanded(!expanded)}
           className="text-[11px] bg-transparent border-none cursor-pointer p-0"
           style={{ color: 'var(--text-muted)' }}
+          aria-expanded={expanded}
         >
           {expanded ? '\u25BC' : '\u25B6'} {expanded ? 'Hide' : 'Show'} {factorCount} factor{factorCount !== 1 ? 's' : ''}
           {gapCount > 0 && ` (${gapCount} data gap${gapCount !== 1 ? 's' : ''})`}

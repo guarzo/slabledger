@@ -227,7 +227,7 @@ func TestDHSuggestions_RoundTrip_AllFields(t *testing.T) {
 	require.Equal(t, "Base Set", g.SetName)
 	require.Equal(t, "4", g.CardNumber)
 	require.Equal(t, "https://example.com/charizard.jpg", g.ImageURL)
-	require.Equal(t, 150000, g.CurrentPriceCents)
+	require.Equal(t, int64(150000), g.CurrentPriceCents)
 	require.InDelta(t, 0.92, g.ConfidenceScore, 0.001)
 	require.Equal(t, "Historic high demand", g.Reasoning)
 	require.Equal(t, `{"factor":"demand","weight":0.8}`, g.StructuredReasoning)

@@ -73,7 +73,20 @@ func (m *MockSuggestionsRepository) GetLatest(ctx context.Context) ([]intelligen
 	if len(m.Suggestions) == 0 {
 		return []intelligence.Suggestion{}, nil
 	}
-	return m.Suggestions, nil
+	// Return only suggestions from the most recent date (mirrors real repo behavior)
+	maxDate := ""
+	for _, s := range m.Suggestions {
+		if s.SuggestionDate > maxDate {
+			maxDate = s.SuggestionDate
+		}
+	}
+	var result []intelligence.Suggestion
+	for _, s := range m.Suggestions {
+		if s.SuggestionDate == maxDate {
+			result = append(result, s)
+		}
+	}
+	return result, nil
 }
 
 func (m *MockSuggestionsRepository) GetCardSuggestions(ctx context.Context, cardName, setName string) ([]intelligence.Suggestion, error) {

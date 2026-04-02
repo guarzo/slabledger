@@ -140,13 +140,32 @@ func (r *MarketIntelligenceRepository) GetStale(ctx context.Context, maxAge time
 	return results, rows.Err()
 }
 
-// GetByCards returns market intelligence for all matching cards in a single query.
+// GetByCards returns market intelligence for all matching cards.
 // Keys not found in the database are omitted from the result map.
+// Large key sets are automatically chunked to stay within SQLite's parameter limit.
 func (r *MarketIntelligenceRepository) GetByCards(ctx context.Context, keys []intelligence.CardKey) (_ map[intelligence.CardKey]*intelligence.MarketIntelligence, err error) {
 	if len(keys) == 0 {
 		return map[intelligence.CardKey]*intelligence.MarketIntelligence{}, nil
 	}
 
+	const maxKeysPerChunk = 333 // floor(999 / 3 placeholders per key)
+	result := make(map[intelligence.CardKey]*intelligence.MarketIntelligence, len(keys))
+
+	for start := 0; start < len(keys); start += maxKeysPerChunk {
+		end := start + maxKeysPerChunk
+		if end > len(keys) {
+			end = len(keys)
+		}
+		chunk := keys[start:end]
+
+		if err := r.getByCardsChunk(ctx, chunk, result); err != nil {
+			return nil, err
+		}
+	}
+	return result, nil
+}
+
+func (r *MarketIntelligenceRepository) getByCardsChunk(ctx context.Context, keys []intelligence.CardKey, result map[intelligence.CardKey]*intelligence.MarketIntelligence) (err error) {
 	var args []any
 	conditions := make([]string, 0, len(keys))
 	for _, k := range keys {
@@ -164,7 +183,7 @@ func (r *MarketIntelligenceRepository) GetByCards(ctx context.Context, keys []in
 
 	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer func() {
 		if cerr := rows.Close(); err == nil && cerr != nil {
@@ -172,11 +191,10 @@ func (r *MarketIntelligenceRepository) GetByCards(ctx context.Context, keys []in
 		}
 	}()
 
-	result := make(map[intelligence.CardKey]*intelligence.MarketIntelligence, len(keys))
 	for rows.Next() {
 		intel, err := scanIntelRow(rows)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		key := intelligence.CardKey{
 			CardName:   intel.CardName,
@@ -185,7 +203,7 @@ func (r *MarketIntelligenceRepository) GetByCards(ctx context.Context, keys []in
 		}
 		result[key] = intel
 	}
-	return result, rows.Err()
+	return rows.Err()
 }
 
 // scanOne executes a query expected to return zero or one row and scans it into a MarketIntelligence.

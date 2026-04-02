@@ -131,7 +131,7 @@ func convertSuggestionsResponse(resp *doubleholo.SuggestionsResponse, fetchedAt 
 					SetName:           item.Card.SetName,
 					CardNumber:        item.Card.Number,
 					ImageURL:          item.Card.ImageURL,
-					CurrentPriceCents: mathutil.ToCentsInt(item.Card.CurrentPrice),
+					CurrentPriceCents: mathutil.ToCents(item.Card.CurrentPrice),
 					ConfidenceScore:   item.ConfidenceScore,
 					Reasoning:         item.Reasoning,
 					FetchedAt:         fetchedAt,

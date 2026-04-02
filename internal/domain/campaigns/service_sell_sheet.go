@@ -360,14 +360,16 @@ func convertIntel(mi *intelligence.MarketIntelligence) *PriceSyncIntel {
 		out.InsightDetail = mi.Insights.Detail
 	}
 
-	// Recent sales — last 5, newest first
-	sort.Slice(mi.RecentSales, func(i, j int) bool {
-		return mi.RecentSales[i].SoldAt.After(mi.RecentSales[j].SoldAt)
+	// Recent sales — last 5, newest first (defensive copy to avoid mutating input)
+	recentSales := make([]intelligence.Sale, len(mi.RecentSales))
+	copy(recentSales, mi.RecentSales)
+	sort.Slice(recentSales, func(i, j int) bool {
+		return recentSales[i].SoldAt.After(recentSales[j].SoldAt)
 	})
-	out.RecentSalesCount = len(mi.RecentSales)
-	limit := min(5, len(mi.RecentSales))
+	out.RecentSalesCount = len(recentSales)
+	limit := min(5, len(recentSales))
 	for i := 0; i < limit; i++ {
-		sale := mi.RecentSales[i]
+		sale := recentSales[i]
 		out.RecentSales = append(out.RecentSales, PriceSyncSale{
 			SoldAt:     sale.SoldAt.Format(time.RFC3339),
 			Grade:      sale.Grade,

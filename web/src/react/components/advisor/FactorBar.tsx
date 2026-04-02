@@ -21,7 +21,8 @@ export function FactorBar({ factor, gap }: FactorBarProps) {
   if (!factor) return null;
 
   const label = FACTOR_DISPLAY_NAMES[factor.name] ?? factor.name;
-  const pct = Math.abs(factor.value) * 50;
+  const clamped = Math.max(-1, Math.min(1, factor.value));
+  const pct = Math.abs(clamped) * 50;
   const isPositive = factor.value >= 0;
   const color = isPositive ? 'var(--success)' : 'var(--danger)';
 

@@ -387,12 +387,12 @@ func FromEnv(base Config) Config {
 		cfg.Adapters.DoubleHoloBaseURL = "https://api.doubleholo.com"
 	}
 	if v := os.Getenv("DH_CACHE_TTL_HOURS"); v != "" {
-		if i, err := strconv.Atoi(v); err == nil {
+		if i, err := strconv.Atoi(v); err == nil && i > 0 {
 			cfg.DoubleHolo.CacheTTLHours = i
 		}
 	}
 	if v := os.Getenv("DH_RATE_LIMIT_RPS"); v != "" {
-		if i, err := strconv.Atoi(v); err == nil {
+		if i, err := strconv.Atoi(v); err == nil && i > 0 {
 			cfg.DoubleHolo.RateLimitRPS = i
 		}
 	}

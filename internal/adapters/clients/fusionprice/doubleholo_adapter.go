@@ -76,6 +76,9 @@ func (a *DoubleHoloAdapter) FetchFusionData(ctx context.Context, card pricing.Ca
 	if a.client == nil {
 		return nil, &fusion.ResponseMeta{StatusCode: 0}, fmt.Errorf("doubleholo: client not configured")
 	}
+	if a.idResolver == nil {
+		return nil, &fusion.ResponseMeta{StatusCode: 0}, fmt.Errorf("doubleholo: idResolver not configured")
+	}
 
 	// Step 1: Look up DH card ID.
 	dhCardID, err := a.idResolver.GetExternalID(ctx, card.Name, card.Set, card.Number, pricing.SourceDoubleHolo)

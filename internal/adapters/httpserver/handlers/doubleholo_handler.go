@@ -251,14 +251,26 @@ func (h *DoubleHoloHandler) HandleExportUnmatched(w http.ResponseWriter, r *http
 	_ = cw.Write([]string{"cert_number", "card_name", "set_name", "price", "cost"})
 	for _, row := range rows {
 		_ = cw.Write([]string{
-			row.certNumber,
-			row.cardName,
-			row.setName,
+			sanitizeCSVCell(row.certNumber),
+			sanitizeCSVCell(row.cardName),
+			sanitizeCSVCell(row.setName),
 			centsToDollarStr(row.priceCents),
 			centsToDollarStr(row.costCents),
 		})
 	}
 	cw.Flush()
+}
+
+// sanitizeCSVCell prefixes values that start with formula-triggering characters
+// to prevent CSV injection when opened in spreadsheet software.
+func sanitizeCSVCell(s string) string {
+	if len(s) > 0 {
+		switch s[0] {
+		case '=', '+', '-', '@':
+			return "'" + s
+		}
+	}
+	return s
 }
 
 // HandleGetIntelligence returns market intelligence for a specific card.
@@ -331,21 +343,23 @@ func (h *DoubleHoloHandler) HandleInventoryAlerts(w http.ResponseWriter, r *http
 		return
 	}
 
-	// Build lookup set of inventory cards by name+set for efficient matching
-	type inventoryKey struct{ name, set string }
+	// Build lookup set of inventory cards by name+set+number for efficient matching
+	type inventoryKey struct{ name, set, cardNumber string }
 	inventorySet := make(map[inventoryKey]bool, len(purchases))
 	for _, p := range purchases {
 		inventorySet[inventoryKey{
-			name: strings.ToLower(p.CardName),
-			set:  strings.ToLower(p.SetName),
+			name:       strings.ToLower(p.CardName),
+			set:        strings.ToLower(p.SetName),
+			cardNumber: strings.ToLower(p.CardNumber),
 		}] = true
 	}
 
 	var alerts []intelligence.Suggestion
 	for _, s := range suggestions {
 		key := inventoryKey{
-			name: strings.ToLower(s.CardName),
-			set:  strings.ToLower(s.SetName),
+			name:       strings.ToLower(s.CardName),
+			set:        strings.ToLower(s.SetName),
+			cardNumber: strings.ToLower(s.CardNumber),
 		}
 		if inventorySet[key] {
 			alerts = append(alerts, s)

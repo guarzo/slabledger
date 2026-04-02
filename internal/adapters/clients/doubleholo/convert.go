@@ -54,16 +54,17 @@ func ConvertToIntelligence(resp *MarketDataResponse, cardName, setName, cardNumb
 	}
 
 	for _, sale := range resp.RecentSales {
-		s := intelligence.Sale{
+		t, err := time.Parse(time.RFC3339, sale.SoldAt)
+		if err != nil {
+			continue // skip sales with unparseable timestamps
+		}
+		intel.RecentSales = append(intel.RecentSales, intelligence.Sale{
+			SoldAt:         t,
 			GradingCompany: sale.GradingCompany,
 			Grade:          sale.Grade,
 			PriceCents:     mathutil.ToCents(sale.Price),
 			Platform:       sale.Platform,
-		}
-		if t, err := time.Parse(time.RFC3339, sale.SoldAt); err == nil {
-			s.SoldAt = t
-		}
-		intel.RecentSales = append(intel.RecentSales, s)
+		})
 	}
 
 	for _, pop := range resp.Population {

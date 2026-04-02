@@ -181,6 +181,7 @@ func liquidationFactors(d *LiquidationFactorData) ([]scoring.Factor, []scoring.D
 		gaps = append(gaps, scoring.DataGap{FactorName: scoring.FactorCreditPressure, Reason: "no_market_data"})
 	}
 	if d.PriceChangePct != nil {
+		// Negate: a falling market (negative price change) increases liquidation urgency
 		factors = append(factors, scoring.ComputeMarketTrend(-*d.PriceChangePct, d.PriceConfidence, d.MarketSource))
 	} else {
 		gaps = append(gaps, scoring.DataGap{FactorName: scoring.FactorMarketTrend, Reason: "no_market_data"})

@@ -124,7 +124,7 @@ func ComputeCreditPressure(utilizationPct, confidence float64, source string) Fa
 }
 
 func ComputeCarryingCost(daysHeld int, confidence float64, source string) Factor {
-	v := min(float64(daysHeld)/180.0, 1.0)
+	v := min(max(float64(daysHeld), 0)/180.0, 1.0)
 	return Factor{
 		Name:       FactorCarryingCost,
 		Value:      v,

@@ -74,7 +74,7 @@ type Suggestion struct {
 	SetName             string
 	CardNumber          string
 	ImageURL            string
-	CurrentPriceCents   int
+	CurrentPriceCents   int64
 	ConfidenceScore     float64
 	Reasoning           string
 	StructuredReasoning string // JSON
