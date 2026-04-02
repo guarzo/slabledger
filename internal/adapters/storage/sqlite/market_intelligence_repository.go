@@ -140,6 +140,23 @@ func (r *MarketIntelligenceRepository) GetStale(ctx context.Context, maxAge time
 	return results, rows.Err()
 }
 
+// CountAll returns the total number of market intelligence records.
+func (r *MarketIntelligenceRepository) CountAll(ctx context.Context) (int, error) {
+	var count int
+	err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM market_intelligence`).Scan(&count)
+	return count, err
+}
+
+// LatestFetchedAt returns the most recent fetched_at timestamp, or empty string if no records exist.
+func (r *MarketIntelligenceRepository) LatestFetchedAt(ctx context.Context) (string, error) {
+	var ts *string
+	err := r.db.QueryRowContext(ctx, `SELECT MAX(fetched_at) FROM market_intelligence`).Scan(&ts)
+	if err != nil || ts == nil {
+		return "", err
+	}
+	return *ts, nil
+}
+
 // GetByCards returns market intelligence for all matching cards.
 // Keys not found in the database are omitted from the result map.
 // Large key sets are automatically chunked to stay within SQLite's parameter limit.

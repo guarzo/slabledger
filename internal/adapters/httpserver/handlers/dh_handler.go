@@ -33,6 +33,18 @@ type DHPurchaseLister interface {
 	ListAllUnsoldPurchases(ctx context.Context) ([]campaigns.Purchase, error)
 }
 
+// DHIntelligenceCounter returns aggregate stats for market intelligence.
+type DHIntelligenceCounter interface {
+	CountAll(ctx context.Context) (int, error)
+	LatestFetchedAt(ctx context.Context) (string, error)
+}
+
+// DHSuggestionsCounter returns aggregate stats for DH suggestions.
+type DHSuggestionsCounter interface {
+	CountLatest(ctx context.Context) (int, error)
+	LatestFetchedAt(ctx context.Context) (string, error)
+}
+
 // DHHandler handles DH bulk match, export, intelligence, and suggestions endpoints.
 type DHHandler struct {
 	matchClient     DHMatchClient
@@ -40,6 +52,8 @@ type DHHandler struct {
 	purchaseLister  DHPurchaseLister
 	intelRepo       intelligence.Repository
 	suggestionsRepo intelligence.SuggestionsRepository
+	intelCounter    DHIntelligenceCounter
+	suggestCounter  DHSuggestionsCounter
 	logger          observability.Logger
 }
 
@@ -50,6 +64,8 @@ func NewDHHandler(
 	purchaseLister DHPurchaseLister,
 	intelRepo intelligence.Repository,
 	suggestionsRepo intelligence.SuggestionsRepository,
+	intelCounter DHIntelligenceCounter,
+	suggestCounter DHSuggestionsCounter,
 	logger observability.Logger,
 ) *DHHandler {
 	return &DHHandler{
@@ -58,6 +74,8 @@ func NewDHHandler(
 		purchaseLister:  purchaseLister,
 		intelRepo:       intelRepo,
 		suggestionsRepo: suggestionsRepo,
+		intelCounter:    intelCounter,
+		suggestCounter:  suggestCounter,
 		logger:          logger,
 	}
 }
@@ -370,6 +388,73 @@ func (h *DHHandler) HandleInventoryAlerts(w http.ResponseWriter, r *http.Request
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"alerts": alerts, "count": len(alerts)})
+}
+
+type dhStatusResponse struct {
+	IntelligenceCount     int    `json:"intelligence_count"`
+	IntelligenceLastFetch string `json:"intelligence_last_fetch"`
+	SuggestionsCount      int    `json:"suggestions_count"`
+	SuggestionsLastFetch  string `json:"suggestions_last_fetch"`
+	UnmatchedCount        int    `json:"unmatched_count"`
+	MappedCount           int    `json:"mapped_count"`
+}
+
+// HandleGetStatus returns aggregate stats for the DH integration.
+func (h *DHHandler) HandleGetStatus(w http.ResponseWriter, r *http.Request) {
+	if requireUser(w, r) == nil {
+		return
+	}
+	ctx := r.Context()
+
+	resp := dhStatusResponse{}
+
+	if h.intelCounter != nil {
+		if n, err := h.intelCounter.CountAll(ctx); err == nil {
+			resp.IntelligenceCount = n
+		}
+		if t, err := h.intelCounter.LatestFetchedAt(ctx); err == nil {
+			resp.IntelligenceLastFetch = t
+		}
+	}
+
+	if h.suggestCounter != nil {
+		if n, err := h.suggestCounter.CountLatest(ctx); err == nil {
+			resp.SuggestionsCount = n
+		}
+		if t, err := h.suggestCounter.LatestFetchedAt(ctx); err == nil {
+			resp.SuggestionsLastFetch = t
+		}
+	}
+
+	purchases, err := h.purchaseLister.ListAllUnsoldPurchases(ctx)
+	if err != nil {
+		h.logger.Error(ctx, "dh status: list purchases", observability.Err(err))
+		writeError(w, http.StatusInternalServerError, "failed to list purchases")
+		return
+	}
+
+	mappedSet, err := h.cardIDSaver.GetMappedSet(ctx, pricing.SourceDH)
+	if err != nil {
+		h.logger.Error(ctx, "dh status: load mapped set", observability.Err(err))
+		writeError(w, http.StatusInternalServerError, "failed to load mappings")
+		return
+	}
+
+	seen := make(map[string]bool, len(purchases))
+	for _, p := range purchases {
+		key := dhCardKey(p.CardName, p.SetName, p.CardNumber)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		if mappedSet[key] != "" {
+			resp.MappedCount++
+		} else {
+			resp.UnmatchedCount++
+		}
+	}
+
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // uniqueCardIdentities returns deduplicated card identities from all unsold purchases.
