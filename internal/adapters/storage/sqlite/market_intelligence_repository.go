@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"strings"
 	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/intelligence"
@@ -137,6 +138,50 @@ func (r *MarketIntelligenceRepository) GetStale(ctx context.Context, maxAge time
 		results = append(results, *intel)
 	}
 	return results, rows.Err()
+}
+
+// GetByCards returns market intelligence for all matching cards in a single query.
+// Keys not found in the database are omitted from the result map.
+func (r *MarketIntelligenceRepository) GetByCards(ctx context.Context, keys []intelligence.CardKey) (map[intelligence.CardKey]*intelligence.MarketIntelligence, error) {
+	if len(keys) == 0 {
+		return map[intelligence.CardKey]*intelligence.MarketIntelligence{}, nil
+	}
+
+	var args []any
+	conditions := make([]string, 0, len(keys))
+	for _, k := range keys {
+		conditions = append(conditions, "(card_name = ? AND set_name = ? AND card_number = ?)")
+		args = append(args, k.CardName, k.SetName, k.CardNumber)
+	}
+
+	query := `SELECT card_name, set_name, card_number, dh_card_id,
+		sentiment_score, sentiment_mentions, sentiment_trend,
+		forecast_price_cents, forecast_confidence, forecast_date,
+		grading_roi, recent_sales, population,
+		insights_headline, insights_detail, fetched_at
+	FROM market_intelligence
+	WHERE ` + strings.Join(conditions, " OR ")
+
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	result := make(map[intelligence.CardKey]*intelligence.MarketIntelligence, len(keys))
+	for rows.Next() {
+		intel, err := scanIntelRow(rows)
+		if err != nil {
+			return nil, err
+		}
+		key := intelligence.CardKey{
+			CardName:   intel.CardName,
+			SetName:    intel.SetName,
+			CardNumber: intel.CardNumber,
+		}
+		result[key] = intel
+	}
+	return result, rows.Err()
 }
 
 // scanOne executes a query expected to return zero or one row and scans it into a MarketIntelligence.

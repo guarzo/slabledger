@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/intelligence"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -237,6 +238,56 @@ func TestMarketIntelligence_StoreUpsert(t *testing.T) {
 	require.Equal(t, "dh-001-updated", got.DHCardID)
 	require.InDelta(t, 0.9, got.Sentiment.Score, 0.001)
 	require.Equal(t, 99, got.Sentiment.MentionCount)
+}
+
+func TestMarketIntelligence_GetByCards(t *testing.T) {
+	repo, cleanup := newIntelRepo(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	now := time.Now().Truncate(time.Second).UTC()
+	a := &intelligence.MarketIntelligence{
+		CardName: "Charizard", SetName: "Base Set", CardNumber: "4",
+		DHCardID:  "dh-1",
+		Sentiment: &intelligence.Sentiment{Score: 0.8, MentionCount: 42, Trend: "rising"},
+		FetchedAt: now,
+	}
+	b := &intelligence.MarketIntelligence{
+		CardName: "Pikachu", SetName: "Jungle", CardNumber: "60",
+		DHCardID:  "dh-2",
+		Forecast:  &intelligence.Forecast{PredictedPriceCents: 5000, Confidence: 0.75, ForecastDate: now},
+		FetchedAt: now,
+	}
+	require.NoError(t, repo.Store(ctx, a))
+	require.NoError(t, repo.Store(ctx, b))
+
+	keys := []intelligence.CardKey{
+		{CardName: "Charizard", SetName: "Base Set", CardNumber: "4"},
+		{CardName: "Pikachu", SetName: "Jungle", CardNumber: "60"},
+		{CardName: "Missing", SetName: "None", CardNumber: "0"},
+	}
+	results, err := repo.GetByCards(ctx, keys)
+	require.NoError(t, err)
+	assert.Len(t, results, 2)
+
+	charizard := results[intelligence.CardKey{CardName: "Charizard", SetName: "Base Set", CardNumber: "4"}]
+	require.NotNil(t, charizard)
+	assert.Equal(t, "rising", charizard.Sentiment.Trend)
+
+	pikachu := results[intelligence.CardKey{CardName: "Pikachu", SetName: "Jungle", CardNumber: "60"}]
+	require.NotNil(t, pikachu)
+	assert.Equal(t, int64(5000), pikachu.Forecast.PredictedPriceCents)
+
+	_, exists := results[intelligence.CardKey{CardName: "Missing", SetName: "None", CardNumber: "0"}]
+	assert.False(t, exists)
+}
+
+func TestMarketIntelligence_GetByCards_Empty(t *testing.T) {
+	repo, cleanup := newIntelRepo(t)
+	defer cleanup()
+	results, err := repo.GetByCards(context.Background(), nil)
+	require.NoError(t, err)
+	assert.Empty(t, results)
 }
 
 func TestMarketIntelligence_GetStale_LimitRespected(t *testing.T) {

@@ -18,6 +18,7 @@ type MockIntelligenceRepository struct {
 
 	StoreFn         func(ctx context.Context, intel *intelligence.MarketIntelligence) error
 	GetByCardFn     func(ctx context.Context, cardName, setName, cardNumber string) (*intelligence.MarketIntelligence, error)
+	GetByCardsFn    func(ctx context.Context, keys []intelligence.CardKey) (map[intelligence.CardKey]*intelligence.MarketIntelligence, error)
 	GetByDHCardIDFn func(ctx context.Context, dhCardID string) (*intelligence.MarketIntelligence, error)
 	GetStaleFn      func(ctx context.Context, maxAge time.Duration, limit int) ([]intelligence.MarketIntelligence, error)
 }
@@ -48,6 +49,22 @@ func (m *MockIntelligenceRepository) GetByCard(ctx context.Context, cardName, se
 	defer m.mu.Unlock()
 	key := cardName + "|" + setName + "|" + cardNumber
 	return m.store[key], nil
+}
+
+func (m *MockIntelligenceRepository) GetByCards(ctx context.Context, keys []intelligence.CardKey) (map[intelligence.CardKey]*intelligence.MarketIntelligence, error) {
+	if m.GetByCardsFn != nil {
+		return m.GetByCardsFn(ctx, keys)
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	result := make(map[intelligence.CardKey]*intelligence.MarketIntelligence)
+	for _, k := range keys {
+		key := k.CardName + "|" + k.SetName + "|" + k.CardNumber
+		if intel, ok := m.store[key]; ok {
+			result[k] = intel
+		}
+	}
+	return result, nil
 }
 
 func (m *MockIntelligenceRepository) GetByDHCardID(ctx context.Context, dhCardID string) (*intelligence.MarketIntelligence, error) {
