@@ -274,21 +274,21 @@ func (rt *Router) registerPricingAPIRoutes(mux *http.ServeMux) {
 	rt.logger.Info(context.Background(), "pricing API routes registered")
 }
 
-// registerDoubleHoloRoutes wires the DH bulk match, export, intelligence, and suggestions endpoints.
-func (rt *Router) registerDoubleHoloRoutes(mux *http.ServeMux) {
-	if rt.doubleHoloHandler == nil || rt.authMW == nil {
-		if rt.doubleHoloHandler != nil {
-			rt.logger.Warn(context.Background(), "skipping DoubleHolo route registration: auth middleware not configured")
+// registerDHRoutes wires the DH bulk match, export, intelligence, and suggestions endpoints.
+func (rt *Router) registerDHRoutes(mux *http.ServeMux) {
+	if rt.dhHandler == nil || rt.authMW == nil {
+		if rt.dhHandler != nil {
+			rt.logger.Warn(context.Background(), "skipping DH route registration: auth middleware not configured")
 		}
 		return
 	}
-	mux.Handle("POST /api/dh/match", rt.authMW.RequireAuth(http.HandlerFunc(rt.doubleHoloHandler.HandleBulkMatch)))
-	mux.Handle("GET /api/dh/unmatched", rt.authMW.RequireAuth(http.HandlerFunc(rt.doubleHoloHandler.HandleUnmatched)))
-	mux.Handle("GET /api/dh/export-unmatched", rt.authMW.RequireAuth(http.HandlerFunc(rt.doubleHoloHandler.HandleExportUnmatched)))
-	mux.Handle("GET /api/dh/intelligence", rt.authMW.RequireAuth(http.HandlerFunc(rt.doubleHoloHandler.HandleGetIntelligence)))
-	mux.Handle("GET /api/dh/suggestions", rt.authMW.RequireAuth(http.HandlerFunc(rt.doubleHoloHandler.HandleGetSuggestions)))
-	mux.Handle("GET /api/dh/suggestions/inventory-alerts", rt.authMW.RequireAuth(http.HandlerFunc(rt.doubleHoloHandler.HandleInventoryAlerts)))
-	rt.logger.Info(context.Background(), "DoubleHolo routes registered")
+	mux.Handle("POST /api/dh/match", rt.authMW.RequireAuth(http.HandlerFunc(rt.dhHandler.HandleBulkMatch)))
+	mux.Handle("GET /api/dh/unmatched", rt.authMW.RequireAuth(http.HandlerFunc(rt.dhHandler.HandleUnmatched)))
+	mux.Handle("GET /api/dh/export-unmatched", rt.authMW.RequireAuth(http.HandlerFunc(rt.dhHandler.HandleExportUnmatched)))
+	mux.Handle("GET /api/dh/intelligence", rt.authMW.RequireAuth(http.HandlerFunc(rt.dhHandler.HandleGetIntelligence)))
+	mux.Handle("GET /api/dh/suggestions", rt.authMW.RequireAuth(http.HandlerFunc(rt.dhHandler.HandleGetSuggestions)))
+	mux.Handle("GET /api/dh/suggestions/inventory-alerts", rt.authMW.RequireAuth(http.HandlerFunc(rt.dhHandler.HandleInventoryAlerts)))
+	rt.logger.Info(context.Background(), "DH routes registered")
 }
 
 // registerOpportunitiesRoutes wires the cross-campaign arbitrage opportunity endpoints.

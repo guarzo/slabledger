@@ -1,5 +1,5 @@
-// Package doubleholo provides a client for the DoubleHolo pricing and market data API.
-package doubleholo
+// Package dh provides a client for the DH pricing and market data API.
+package dh
 
 // SearchResponse is the response from GET /catalog/search.
 type SearchResponse struct {
