@@ -9,6 +9,7 @@ import (
 
 	"github.com/guarzo/slabledger/internal/domain/ai"
 	"github.com/guarzo/slabledger/internal/domain/observability"
+	"github.com/guarzo/slabledger/internal/domain/scoring"
 )
 
 const (
@@ -72,6 +73,8 @@ type service struct {
 	logger        observability.Logger
 	tracker       AICallTracker
 	cache         CacheStore
+	scoringData   ScoringDataProvider
+	gapStore      scoring.GapStore
 	maxToolRounds int
 	maxTokens     int
 	temperature   float64
