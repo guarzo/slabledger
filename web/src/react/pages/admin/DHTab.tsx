@@ -40,14 +40,14 @@ export function DHTab({ enabled = true }: { enabled?: boolean }) {
     );
   }
 
+  const isRunning = status?.bulk_match_running ?? false;
+
   const handleBulkMatch = async () => {
     try {
-      const result = await bulkMatchMutation.mutateAsync();
-      toast.success(
-        `Bulk match complete: ${result.matched} matched, ${result.skipped} skipped, ${result.low_confidence} low confidence, ${result.failed} failed`
-      );
+      await bulkMatchMutation.mutateAsync();
+      toast.success('Bulk match started — progress will update automatically.');
     } catch {
-      toast.error('Bulk match failed');
+      toast.error('Failed to start bulk match');
     }
   };
 
@@ -87,14 +87,14 @@ export function DHTab({ enabled = true }: { enabled?: boolean }) {
           size="sm"
           onClick={handleBulkMatch}
           loading={bulkMatchMutation.isPending}
+          disabled={isRunning}
         >
-          Run Bulk Match
+          {isRunning ? 'Bulk Match Running...' : 'Run Bulk Match'}
         </Button>
-        {bulkMatchMutation.data && !bulkMatchMutation.isPending && (
-          <div className="mt-3 text-xs text-[var(--text-muted)] space-y-1">
-            <p>Total: {bulkMatchMutation.data.total} | Matched: {bulkMatchMutation.data.matched} | Skipped: {bulkMatchMutation.data.skipped}</p>
-            <p>Low confidence: {bulkMatchMutation.data.low_confidence} | Failed: {bulkMatchMutation.data.failed}</p>
-          </div>
+        {isRunning && (
+          <p className="mt-2 text-xs text-[var(--text-muted)]">
+            Matching in progress — mapped/unmatched counts will update automatically.
+          </p>
         )}
       </CardShell>
     </div>

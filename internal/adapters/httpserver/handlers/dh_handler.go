@@ -3,6 +3,8 @@ package handlers
 import (
 	"context"
 	"strings"
+	"sync"
+	"sync/atomic"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	"github.com/guarzo/slabledger/internal/domain/campaigns"
@@ -50,6 +52,9 @@ type DHHandler struct {
 	intelCounter    DHIntelligenceCounter
 	suggestCounter  DHSuggestionsCounter
 	logger          observability.Logger
+
+	bulkMatchMu      sync.Mutex
+	bulkMatchRunning atomic.Bool
 }
 
 // NewDHHandler creates a new DHHandler with the given dependencies.
