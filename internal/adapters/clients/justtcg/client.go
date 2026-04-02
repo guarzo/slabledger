@@ -57,11 +57,11 @@ func NewClient(apiKey string, opts ...ClientOption) *Client {
 	httpClient := httpx.NewClient(config)
 
 	c := &Client{
-		apiKey:      apiKey,
-		baseURL:     defaultBaseURL,
-		httpClient:  httpClient,
-		timeout:     30 * time.Second,
-		dailyCalls:  resilience.NewResettingCounter(24 * time.Hour),
+		apiKey:     apiKey,
+		baseURL:    defaultBaseURL,
+		httpClient: httpClient,
+		timeout:    30 * time.Second,
+		dailyCalls: resilience.NewResettingCounter(24 * time.Hour),
 		// 100 req/min with burst of 5 (Pro plan)
 		rateLimiter: rate.NewLimiter(rate.Limit(100.0/60.0), 5),
 	}
