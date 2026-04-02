@@ -2,27 +2,10 @@
  * Admin-related API methods
  */
 
-import type { APIUsageResponse, CacheStatsResponse, PricingDiagnosticsResponse, PriceOverrideStats, CachedAnalysis, AdvisorAnalysisType, AIUsageResponse } from '../../types/apiStatus';
+import type { APIUsageResponse, CacheStatsResponse, PricingDiagnosticsResponse, PriceOverrideStats, CachedAnalysis, AdvisorAnalysisType, AIUsageResponse, DHStatusResponse, DHBulkMatchResponse } from '../../types/apiStatus';
 import type { AllowedEmail, AdminUser } from '../../types/admin';
 import type { APIClient, CardRequestSubmission } from './client';
 import { APIError } from './client';
-
-export interface DHStatusResponse {
-  intelligence_count: number;
-  intelligence_last_fetch: string;
-  suggestions_count: number;
-  suggestions_last_fetch: string;
-  unmatched_count: number;
-  mapped_count: number;
-}
-
-export interface DHBulkMatchResponse {
-  total: number;
-  matched: number;
-  skipped: number;
-  low_confidence: number;
-  failed: number;
-}
 
 /* ------------------------------------------------------------------ */
 /*  Declaration merging — tells TypeScript about the methods we add   */
