@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/guarzo/slabledger/internal/adapters/clients/doubleholo"
+	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	"github.com/guarzo/slabledger/internal/domain/intelligence"
 	"github.com/guarzo/slabledger/internal/domain/pricing"
 )
@@ -13,10 +13,10 @@ import (
 // --- mock types ---
 
 type mockDHMarketDataClient struct {
-	MarketDataFn func(ctx context.Context, cardID string) (*doubleholo.MarketDataResponse, error)
+	MarketDataFn func(ctx context.Context, cardID string) (*dh.MarketDataResponse, error)
 }
 
-func (m *mockDHMarketDataClient) MarketData(ctx context.Context, cardID string) (*doubleholo.MarketDataResponse, error) {
+func (m *mockDHMarketDataClient) MarketData(ctx context.Context, cardID string) (*dh.MarketDataResponse, error) {
 	return m.MarketDataFn(ctx, cardID)
 }
 
@@ -43,17 +43,17 @@ func (m *mockDHIntelligenceStore) Store(ctx context.Context, intel *intelligence
 
 // --- tests ---
 
-func TestDoubleHoloAdapter_FetchFusionData_WithSales(t *testing.T) {
+func TestDHAdapter_FetchFusionData_WithSales(t *testing.T) {
 	client := &mockDHMarketDataClient{
-		MarketDataFn: func(_ context.Context, cardID string) (*doubleholo.MarketDataResponse, error) {
+		MarketDataFn: func(_ context.Context, cardID string) (*dh.MarketDataResponse, error) {
 			if cardID != "dh-12345" {
 				t.Fatalf("unexpected cardID: %s", cardID)
 			}
-			return &doubleholo.MarketDataResponse{
+			return &dh.MarketDataResponse{
 				HasData:   true,
 				CardID:    "dh-12345",
 				CardTitle: "Charizard",
-				RecentSales: []doubleholo.RecentSale{
+				RecentSales: []dh.RecentSale{
 					{SoldAt: "2026-03-15T10:00:00Z", GradingCompany: "PSA", Grade: "10", Price: 500.00, Platform: "eBay"},
 					{SoldAt: "2026-03-14T10:00:00Z", GradingCompany: "PSA", Grade: "10", Price: 480.00, Platform: "eBay"},
 					{SoldAt: "2026-03-13T10:00:00Z", GradingCompany: "PSA", Grade: "9", Price: 250.00, Platform: "TCGPlayer"},
@@ -69,7 +69,7 @@ func TestDoubleHoloAdapter_FetchFusionData_WithSales(t *testing.T) {
 
 	idLookup := &mockDHCardIDLookup{
 		GetExternalIDFn: func(_ context.Context, _, _, _, provider string) (string, error) {
-			if provider != pricing.SourceDoubleHolo {
+			if provider != pricing.SourceDH {
 				t.Fatalf("unexpected provider: %s", provider)
 			}
 			return "dh-12345", nil
@@ -78,7 +78,7 @@ func TestDoubleHoloAdapter_FetchFusionData_WithSales(t *testing.T) {
 
 	intelStore := &mockDHIntelligenceStore{}
 
-	adapter := NewDoubleHoloAdapter(client, idLookup, nil, WithDHIntelligenceStore(intelStore))
+	adapter := NewDHAdapter(client, idLookup, nil, WithDHIntelligenceStore(intelStore))
 
 	card := pricing.Card{Name: "Charizard", Set: "Base Set", Number: "4"}
 	result, meta, err := adapter.FetchFusionData(context.Background(), card)
@@ -104,8 +104,8 @@ func TestDoubleHoloAdapter_FetchFusionData_WithSales(t *testing.T) {
 	if psa10[1].Value != 480.00 {
 		t.Errorf("psa10[1].Value = %v, want 480.00", psa10[1].Value)
 	}
-	if psa10[0].Source.Name != pricing.SourceDoubleHolo {
-		t.Errorf("psa10[0].Source.Name = %q, want %q", psa10[0].Source.Name, pricing.SourceDoubleHolo)
+	if psa10[0].Source.Name != pricing.SourceDH {
+		t.Errorf("psa10[0].Source.Name = %q, want %q", psa10[0].Source.Name, pricing.SourceDH)
 	}
 	if psa10[0].Source.Confidence != 0.90 {
 		t.Errorf("psa10[0].Source.Confidence = %v, want 0.90", psa10[0].Source.Confidence)
@@ -178,9 +178,9 @@ func TestDoubleHoloAdapter_FetchFusionData_WithSales(t *testing.T) {
 	}
 }
 
-func TestDoubleHoloAdapter_FetchFusionData_NoMapping(t *testing.T) {
+func TestDHAdapter_FetchFusionData_NoMapping(t *testing.T) {
 	client := &mockDHMarketDataClient{
-		MarketDataFn: func(_ context.Context, _ string) (*doubleholo.MarketDataResponse, error) {
+		MarketDataFn: func(_ context.Context, _ string) (*dh.MarketDataResponse, error) {
 			t.Fatal("MarketData should not be called when there is no mapping")
 			return nil, nil
 		},
@@ -192,7 +192,7 @@ func TestDoubleHoloAdapter_FetchFusionData_NoMapping(t *testing.T) {
 		},
 	}
 
-	adapter := NewDoubleHoloAdapter(client, idLookup, nil)
+	adapter := NewDHAdapter(client, idLookup, nil)
 
 	card := pricing.Card{Name: "Unknown Card", Set: "Unknown Set", Number: "999"}
 	result, meta, err := adapter.FetchFusionData(context.Background(), card)
@@ -208,10 +208,10 @@ func TestDoubleHoloAdapter_FetchFusionData_NoMapping(t *testing.T) {
 	}
 }
 
-func TestDoubleHoloAdapter_FetchFusionData_NoData(t *testing.T) {
+func TestDHAdapter_FetchFusionData_NoData(t *testing.T) {
 	client := &mockDHMarketDataClient{
-		MarketDataFn: func(_ context.Context, _ string) (*doubleholo.MarketDataResponse, error) {
-			return &doubleholo.MarketDataResponse{
+		MarketDataFn: func(_ context.Context, _ string) (*dh.MarketDataResponse, error) {
+			return &dh.MarketDataResponse{
 				HasData: false,
 				CardID:  "dh-999",
 			}, nil
@@ -224,7 +224,7 @@ func TestDoubleHoloAdapter_FetchFusionData_NoData(t *testing.T) {
 		},
 	}
 
-	adapter := NewDoubleHoloAdapter(client, idLookup, nil)
+	adapter := NewDHAdapter(client, idLookup, nil)
 
 	card := pricing.Card{Name: "Some Card", Set: "Some Set", Number: "1"}
 	result, meta, err := adapter.FetchFusionData(context.Background(), card)
@@ -240,9 +240,9 @@ func TestDoubleHoloAdapter_FetchFusionData_NoData(t *testing.T) {
 	}
 }
 
-func TestDoubleHoloAdapter_FetchFusionData_LookupError(t *testing.T) {
+func TestDHAdapter_FetchFusionData_LookupError(t *testing.T) {
 	client := &mockDHMarketDataClient{
-		MarketDataFn: func(_ context.Context, _ string) (*doubleholo.MarketDataResponse, error) {
+		MarketDataFn: func(_ context.Context, _ string) (*dh.MarketDataResponse, error) {
 			t.Fatal("MarketData should not be called when lookup errors")
 			return nil, nil
 		},
@@ -254,7 +254,7 @@ func TestDoubleHoloAdapter_FetchFusionData_LookupError(t *testing.T) {
 		},
 	}
 
-	adapter := NewDoubleHoloAdapter(client, idLookup, nil)
+	adapter := NewDHAdapter(client, idLookup, nil)
 
 	card := pricing.Card{Name: "Card", Set: "Set", Number: "1"}
 	result, meta, err := adapter.FetchFusionData(context.Background(), card)
@@ -271,7 +271,7 @@ func TestDoubleHoloAdapter_FetchFusionData_LookupError(t *testing.T) {
 	}
 }
 
-func TestDoubleHoloAdapter_Available(t *testing.T) {
+func TestDHAdapter_Available(t *testing.T) {
 	tests := []struct {
 		name       string
 		client     DHMarketDataClient
@@ -305,7 +305,7 @@ func TestDoubleHoloAdapter_Available(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			a := NewDoubleHoloAdapter(tc.client, tc.idResolver, nil)
+			a := NewDHAdapter(tc.client, tc.idResolver, nil)
 			if got := a.Available(); got != tc.want {
 				t.Errorf("Available() = %v, want %v", got, tc.want)
 			}
@@ -313,10 +313,10 @@ func TestDoubleHoloAdapter_Available(t *testing.T) {
 	}
 }
 
-func TestDoubleHoloAdapter_Name(t *testing.T) {
-	a := NewDoubleHoloAdapter(nil, nil, nil)
-	if got := a.Name(); got != pricing.SourceDoubleHolo {
-		t.Errorf("Name() = %q, want %q", got, pricing.SourceDoubleHolo)
+func TestDHAdapter_Name(t *testing.T) {
+	a := NewDHAdapter(nil, nil, nil)
+	if got := a.Name(); got != pricing.SourceDH {
+		t.Errorf("Name() = %q, want %q", got, pricing.SourceDH)
 	}
 }
 
@@ -352,12 +352,12 @@ func TestDHGradeToFusionKey(t *testing.T) {
 	}
 }
 
-func TestDoubleHoloAdapter_FetchFusionData_SkipsZeroPriceSales(t *testing.T) {
+func TestDHAdapter_FetchFusionData_SkipsZeroPriceSales(t *testing.T) {
 	client := &mockDHMarketDataClient{
-		MarketDataFn: func(_ context.Context, _ string) (*doubleholo.MarketDataResponse, error) {
-			return &doubleholo.MarketDataResponse{
+		MarketDataFn: func(_ context.Context, _ string) (*dh.MarketDataResponse, error) {
+			return &dh.MarketDataResponse{
 				HasData: true,
-				RecentSales: []doubleholo.RecentSale{
+				RecentSales: []dh.RecentSale{
 					{GradingCompany: "PSA", Grade: "10", Price: 0, Platform: "eBay"},
 					{GradingCompany: "PSA", Grade: "9", Price: -10, Platform: "eBay"},
 					{GradingCompany: "PSA", Grade: "8", Price: 100.00, Platform: "eBay"},
@@ -372,7 +372,7 @@ func TestDoubleHoloAdapter_FetchFusionData_SkipsZeroPriceSales(t *testing.T) {
 		},
 	}
 
-	adapter := NewDoubleHoloAdapter(client, idLookup, nil)
+	adapter := NewDHAdapter(client, idLookup, nil)
 	result, _, err := adapter.FetchFusionData(context.Background(), pricing.Card{Name: "X", Set: "Y", Number: "1"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

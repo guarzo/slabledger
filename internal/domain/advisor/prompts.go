@@ -244,4 +244,3 @@ const campaignAnalysisSchema = `{
     {"area": "...", "issue": "...", "suggestion": "..."}
   ]
 }`
-

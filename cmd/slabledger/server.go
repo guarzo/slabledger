@@ -50,7 +50,7 @@ type ServerDependencies struct {
 	SalesCompsHandler         *handlers.SalesCompsHandler    // Sales comps; nil = disabled
 	PicksHandler              *handlers.PicksHandler         // AI picks; nil = disabled
 	OpportunitiesHandler      *handlers.OpportunitiesHandler // Arbitrage opportunities; nil = disabled
-	DoubleHoloHandler         *handlers.DoubleHoloHandler    // DH bulk match + intelligence; nil = disabled
+	DHHandler                 *handlers.DHHandler            // DH bulk match + intelligence; nil = disabled
 }
 
 // EnvVarValidation holds the result of environment variable validation
@@ -214,7 +214,7 @@ func startWebServer(ctx context.Context, deps ServerDependencies) error {
 		SalesCompsHandler:         deps.SalesCompsHandler,
 		PicksHandler:              deps.PicksHandler,
 		OpportunitiesHandler:      deps.OpportunitiesHandler,
-		DoubleHoloHandler:         deps.DoubleHoloHandler,
+		DHHandler:                 deps.DHHandler,
 		Logger:                    logger,
 		AdminEmails:               cfg.Auth.AdminEmails,
 		DatabasePath:              cfg.Database.Path,

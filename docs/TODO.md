@@ -28,7 +28,7 @@ Now that Phase 1 (value refresh) and Phase 2 (sales comps) are implemented:
 
 ## TCGPlayer for Raw Pricing
 
-Future consideration for card acquisition decisions. The double-holo-api project uses TCGPlayer as primary source for Raw NM card prices via a separate PostgreSQL database with daily snapshots.
+Future consideration for card acquisition decisions. The DH API project uses TCGPlayer as primary source for Raw NM card prices via a separate PostgreSQL database with daily snapshots.
 
 - Would help evaluate whether to acquire ungraded cards for grading
 - See `tmp/PRICE_DATA_SOURCES.md` for implementation pattern

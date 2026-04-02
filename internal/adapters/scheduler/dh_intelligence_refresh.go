@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/guarzo/slabledger/internal/adapters/clients/doubleholo"
+	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	"github.com/guarzo/slabledger/internal/domain/intelligence"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
@@ -15,15 +15,15 @@ var _ Scheduler = (*DHIntelligenceRefreshScheduler)(nil)
 type DHIntelligenceRefreshConfig struct {
 	Enabled   bool
 	Interval  time.Duration // default 1h
-	CacheTTL  time.Duration // from config.DoubleHolo.CacheTTLHours
+	CacheTTL  time.Duration // from config.DH.CacheTTLHours
 	MaxPerRun int           // default 50
 }
 
 // DHIntelligenceRefreshScheduler periodically refreshes stale market intelligence
-// by re-fetching data from the DoubleHolo API.
+// by re-fetching data from the DH API.
 type DHIntelligenceRefreshScheduler struct {
 	StopHandle
-	dhClient  *doubleholo.Client
+	dhClient  *dh.Client
 	intelRepo intelligence.Repository
 	logger    observability.Logger
 	config    DHIntelligenceRefreshConfig
@@ -31,7 +31,7 @@ type DHIntelligenceRefreshScheduler struct {
 
 // NewDHIntelligenceRefreshScheduler creates a new DH intelligence refresh scheduler.
 func NewDHIntelligenceRefreshScheduler(
-	dhClient *doubleholo.Client,
+	dhClient *dh.Client,
 	intelRepo intelligence.Repository,
 	logger observability.Logger,
 	config DHIntelligenceRefreshConfig,
@@ -113,7 +113,7 @@ func (s *DHIntelligenceRefreshScheduler) refresh(ctx context.Context) {
 			continue
 		}
 
-		intel := doubleholo.ConvertToIntelligence(resp, entry.CardName, entry.SetName, entry.CardNumber, entry.DHCardID)
+		intel := dh.ConvertToIntelligence(resp, entry.CardName, entry.SetName, entry.CardNumber, entry.DHCardID)
 
 		if storeErr := s.intelRepo.Store(ctx, intel); storeErr != nil {
 			s.logger.Warn(ctx, "failed to store refreshed intelligence",

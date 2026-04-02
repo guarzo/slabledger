@@ -5,61 +5,61 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/guarzo/slabledger/internal/adapters/clients/doubleholo"
+	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	"github.com/guarzo/slabledger/internal/domain/fusion"
 	"github.com/guarzo/slabledger/internal/domain/intelligence"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/domain/pricing"
 )
 
-// Compile-time check that DoubleHoloAdapter implements SecondaryPriceSource.
-var _ fusion.SecondaryPriceSource = (*DoubleHoloAdapter)(nil)
+// Compile-time check that DHAdapter implements SecondaryPriceSource.
+var _ fusion.SecondaryPriceSource = (*DHAdapter)(nil)
 
-// dhSourceConfidence is the confidence score assigned to DoubleHolo price data.
+// dhSourceConfidence is the confidence score assigned to DH price data.
 const dhSourceConfidence = 0.90
 
-// DHMarketDataClient is the subset of the doubleholo.Client used by the adapter.
+// DHMarketDataClient is the subset of the dh.Client used by the adapter.
 type DHMarketDataClient interface {
-	MarketData(ctx context.Context, cardID string) (*doubleholo.MarketDataResponse, error)
+	MarketData(ctx context.Context, cardID string) (*dh.MarketDataResponse, error)
 }
 
-// DHCardIDLookup resolves card names to DoubleHolo card IDs.
+// DHCardIDLookup resolves card names to DH card IDs.
 type DHCardIDLookup interface {
 	GetExternalID(ctx context.Context, cardName, setName, collectorNumber, provider string) (string, error)
 }
 
-// DHIntelligenceStore persists market intelligence data from DoubleHolo.
+// DHIntelligenceStore persists market intelligence data from DH.
 type DHIntelligenceStore interface {
 	Store(ctx context.Context, intel *intelligence.MarketIntelligence) error
 }
 
-// DoubleHoloAdapter wraps a DoubleHolo market data client and implements
+// DHAdapter wraps a DH market data client and implements
 // SecondaryPriceSource. It resolves card names to DH card IDs via a
 // DHCardIDLookup, fetches market data, and converts recent sales to
 // fusion-compatible grade data.
-type DoubleHoloAdapter struct {
+type DHAdapter struct {
 	client     DHMarketDataClient
 	idResolver DHCardIDLookup
 	intelStore DHIntelligenceStore
 	logger     observability.Logger
 }
 
-// DoubleHoloAdapterOption is a functional option for DoubleHoloAdapter.
-type DoubleHoloAdapterOption func(*DoubleHoloAdapter)
+// DHAdapterOption is a functional option for DHAdapter.
+type DHAdapterOption func(*DHAdapter)
 
 // WithDHIntelligenceStore sets the intelligence store for persisting DH market data.
-func WithDHIntelligenceStore(s DHIntelligenceStore) DoubleHoloAdapterOption {
-	return func(a *DoubleHoloAdapter) { a.intelStore = s }
+func WithDHIntelligenceStore(s DHIntelligenceStore) DHAdapterOption {
+	return func(a *DHAdapter) { a.intelStore = s }
 }
 
-// NewDoubleHoloAdapter creates a new adapter.
-func NewDoubleHoloAdapter(
+// NewDHAdapter creates a new adapter.
+func NewDHAdapter(
 	client DHMarketDataClient,
 	idResolver DHCardIDLookup,
 	logger observability.Logger,
-	opts ...DoubleHoloAdapterOption,
-) *DoubleHoloAdapter {
-	a := &DoubleHoloAdapter{
+	opts ...DHAdapterOption,
+) *DHAdapter {
+	a := &DHAdapter{
 		client:     client,
 		idResolver: idResolver,
 		logger:     logger,
@@ -70,21 +70,21 @@ func NewDoubleHoloAdapter(
 	return a
 }
 
-// FetchFusionData fetches market data from DoubleHolo and converts recent sales
+// FetchFusionData fetches market data from DH and converts recent sales
 // to fusion format. If no card ID mapping exists the card is silently skipped.
-func (a *DoubleHoloAdapter) FetchFusionData(ctx context.Context, card pricing.Card) (*fusion.FetchResult, *fusion.ResponseMeta, error) {
+func (a *DHAdapter) FetchFusionData(ctx context.Context, card pricing.Card) (*fusion.FetchResult, *fusion.ResponseMeta, error) {
 	if a.client == nil {
-		return nil, &fusion.ResponseMeta{StatusCode: 0}, fmt.Errorf("doubleholo: client not configured")
+		return nil, &fusion.ResponseMeta{StatusCode: 0}, fmt.Errorf("dh: client not configured")
 	}
 	if a.idResolver == nil {
-		return nil, &fusion.ResponseMeta{StatusCode: 0}, fmt.Errorf("doubleholo: idResolver not configured")
+		return nil, &fusion.ResponseMeta{StatusCode: 0}, fmt.Errorf("dh: idResolver not configured")
 	}
 
 	// Step 1: Look up DH card ID.
-	dhCardID, err := a.idResolver.GetExternalID(ctx, card.Name, card.Set, card.Number, pricing.SourceDoubleHolo)
+	dhCardID, err := a.idResolver.GetExternalID(ctx, card.Name, card.Set, card.Number, pricing.SourceDH)
 	if err != nil {
 		if a.logger != nil {
-			a.logger.Debug(ctx, "doubleholo: card ID lookup failed",
+			a.logger.Debug(ctx, "dh: card ID lookup failed",
 				observability.String("card", card.Name),
 				observability.String("set", card.Set),
 				observability.Err(err))
@@ -98,7 +98,7 @@ func (a *DoubleHoloAdapter) FetchFusionData(ctx context.Context, card pricing.Ca
 	// Step 2: Fetch market data.
 	resp, err := a.client.MarketData(ctx, dhCardID)
 	if err != nil {
-		return nil, &fusion.ResponseMeta{StatusCode: 0}, fmt.Errorf("doubleholo: market data failed for card_id=%s: %w", dhCardID, err)
+		return nil, &fusion.ResponseMeta{StatusCode: 0}, fmt.Errorf("dh: market data failed for card_id=%s: %w", dhCardID, err)
 	}
 
 	// Step 3: Check for data.
@@ -111,10 +111,10 @@ func (a *DoubleHoloAdapter) FetchFusionData(ctx context.Context, card pricing.Ca
 
 	// Step 5: Optionally store intelligence data.
 	if a.intelStore != nil {
-		intel := doubleholo.ConvertToIntelligence(resp, card.Name, card.Set, card.Number, dhCardID)
+		intel := dh.ConvertToIntelligence(resp, card.Name, card.Set, card.Number, dhCardID)
 		if storeErr := a.intelStore.Store(ctx, intel); storeErr != nil {
 			if a.logger != nil {
-				a.logger.Warn(ctx, "doubleholo: failed to store intelligence",
+				a.logger.Warn(ctx, "dh: failed to store intelligence",
 					observability.String("card", card.Name),
 					observability.String("dh_card_id", dhCardID),
 					observability.Err(storeErr))
@@ -128,18 +128,18 @@ func (a *DoubleHoloAdapter) FetchFusionData(ctx context.Context, card pricing.Ca
 }
 
 // Available returns true if the underlying client and ID resolver are set.
-func (a *DoubleHoloAdapter) Available() bool {
+func (a *DHAdapter) Available() bool {
 	return a.client != nil && a.idResolver != nil
 }
 
 // Name returns the source identifier.
-func (a *DoubleHoloAdapter) Name() string {
-	return pricing.SourceDoubleHolo
+func (a *DHAdapter) Name() string {
+	return pricing.SourceDH
 }
 
 // convertDHSalesToGradeData groups recent sales by grade and returns
 // fusion-compatible price data keyed by grade string.
-func convertDHSalesToGradeData(sales []doubleholo.RecentSale) map[string][]fusion.PriceData {
+func convertDHSalesToGradeData(sales []dh.RecentSale) map[string][]fusion.PriceData {
 	result := make(map[string][]fusion.PriceData)
 
 	for _, sale := range sales {
@@ -155,7 +155,7 @@ func convertDHSalesToGradeData(sales []doubleholo.RecentSale) map[string][]fusio
 			Value:    sale.Price,
 			Currency: "USD",
 			Source: fusion.DataSource{
-				Name:       pricing.SourceDoubleHolo,
+				Name:       pricing.SourceDH,
 				Confidence: dhSourceConfidence,
 			},
 		})

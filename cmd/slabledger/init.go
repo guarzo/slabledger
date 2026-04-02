@@ -12,7 +12,7 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/clients/azureai"
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardhedger"
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
-	"github.com/guarzo/slabledger/internal/adapters/clients/doubleholo"
+	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	"github.com/guarzo/slabledger/internal/adapters/clients/fusionprice"
 	igclient "github.com/guarzo/slabledger/internal/adapters/clients/instagram"
 	"github.com/guarzo/slabledger/internal/adapters/clients/justtcg"
@@ -46,7 +46,7 @@ func initializePriceProviders(
 	cardProvImpl *tcgdex.TCGdex,
 	priceRepo *sqlite.PriceRepository,
 	cardIDMappingRepo *sqlite.CardIDMappingRepository,
-	dhClient *doubleholo.Client,
+	dhClient *dh.Client,
 	intelRepo *sqlite.MarketIntelligenceRepository,
 ) (priceProvider *fusionprice.FusionPriceProvider, cardHedgerClient *cardhedger.Client, pcProvider *pricecharting.PriceCharting, err error) {
 	pcProvider, err = pricecharting.NewPriceCharting(
@@ -65,17 +65,17 @@ func initializePriceProviders(
 			fusionprice.WithCardHedgerHintResolver(cardIDMappingRepo)),
 	}
 
-	// Add DoubleHolo as a secondary fusion source if available
+	// Add DH as a secondary fusion source if available
 	dhAvailable := false
 	if dhClient != nil && dhClient.Available() {
-		dhOpts := []fusionprice.DoubleHoloAdapterOption{}
+		dhOpts := []fusionprice.DHAdapterOption{}
 		if intelRepo != nil {
 			dhOpts = append(dhOpts, fusionprice.WithDHIntelligenceStore(intelRepo))
 		}
-		dhAdapter := fusionprice.NewDoubleHoloAdapter(dhClient, cardIDMappingRepo, logger, dhOpts...)
+		dhAdapter := fusionprice.NewDHAdapter(dhClient, cardIDMappingRepo, logger, dhOpts...)
 		secondarySources = append(secondarySources, dhAdapter)
 		dhAvailable = true
-		logger.Info(ctx, "DoubleHolo adapter registered as secondary fusion source")
+		logger.Info(ctx, "DH adapter registered as secondary fusion source")
 	}
 
 	priceProvider = fusionprice.NewFusionProviderWithRepo(
@@ -90,7 +90,7 @@ func initializePriceProviders(
 	logger.Info(ctx, "Fusion price provider initialized",
 		observability.Int("secondary_sources", len(secondarySources)),
 		observability.Bool("cardhedger_available", cardHedgerClient.Available()),
-		observability.Bool("doubleholo_available", dhAvailable))
+		observability.Bool("dh_available", dhAvailable))
 
 	return priceProvider, cardHedgerClient, pcProvider, nil
 }
@@ -356,7 +356,7 @@ type schedulerDeps struct {
 	CardLadderStore      *sqlite.CardLadderStore
 	CardLadderSalesStore *sqlite.CLSalesStore
 	JustTCGClient        *justtcg.Client
-	DHClient             *doubleholo.Client
+	DHClient             *dh.Client
 	DHIntelligenceRepo   *sqlite.MarketIntelligenceRepository
 	DHSuggestionsRepo    *sqlite.DHSuggestionsRepository
 	GapStore             *sqlite.GapStore
@@ -408,7 +408,7 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 	if deps.JustTCGClient != nil {
 		buildDeps.JustTCGClient = deps.JustTCGClient
 	}
-	// Same nil-safety for DoubleHolo dependencies.
+	// Same nil-safety for DH dependencies.
 	if deps.DHClient != nil {
 		buildDeps.DHClient = deps.DHClient
 	}
