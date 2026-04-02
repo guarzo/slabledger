@@ -250,7 +250,6 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	// DoubleHolo repositories (always created — tables exist after migration 000028)
 	intelRepo := sqlite.NewMarketIntelligenceRepository(db.DB)
 	suggestionsRepo := sqlite.NewDHSuggestionsRepository(db.DB)
-	_ = suggestionsRepo // used by future schedulers
 
 	priceProvImpl, cardHedgerClientImpl, pcProvider, err := initializePriceProviders(
 		ctx, cfg, appCache, logger, cardProvImpl, priceRepo, cardIDMappingRepo,
@@ -318,6 +317,16 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	var opportunitiesHandler *handlers.OpportunitiesHandler
 	if campaignsService != nil {
 		opportunitiesHandler = handlers.NewOpportunitiesHandler(campaignsService, logger)
+	}
+
+	// Create DoubleHolo handler (bulk match + intelligence; nil when client is not configured)
+	var dhHandler *handlers.DoubleHoloHandler
+	if dhClient != nil && dhClient.Available() {
+		dhHandler = handlers.NewDoubleHoloHandler(
+			dhClient, cardIDMappingRepo, campaignsRepo,
+			intelRepo, suggestionsRepo, logger,
+		)
+		logger.Info(ctx, "DoubleHolo handler initialized")
 	}
 
 	// Initialize JustTCG client (optional — raw NM price refresh)
@@ -467,6 +476,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		SalesCompsHandler:         salesCompsHandler,
 		PicksHandler:              picksHandler,
 		OpportunitiesHandler:      opportunitiesHandler,
+		DoubleHoloHandler:         dhHandler,
 	}
 	serverErr := startWebServer(ctx, deps)
 

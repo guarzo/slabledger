@@ -274,6 +274,20 @@ func (rt *Router) registerPricingAPIRoutes(mux *http.ServeMux) {
 	rt.logger.Info(context.Background(), "pricing API routes registered")
 }
 
+// registerDoubleHoloRoutes wires the DH bulk match, export, intelligence, and suggestions endpoints.
+func (rt *Router) registerDoubleHoloRoutes(mux *http.ServeMux) {
+	if rt.doubleHoloHandler == nil || rt.authMW == nil {
+		return
+	}
+	mux.Handle("POST /api/dh/match", rt.authMW.RequireAuth(http.HandlerFunc(rt.doubleHoloHandler.HandleBulkMatch)))
+	mux.Handle("GET /api/dh/unmatched", rt.authMW.RequireAuth(http.HandlerFunc(rt.doubleHoloHandler.HandleUnmatched)))
+	mux.Handle("GET /api/dh/export-unmatched", rt.authMW.RequireAuth(http.HandlerFunc(rt.doubleHoloHandler.HandleExportUnmatched)))
+	mux.Handle("GET /api/dh/intelligence", rt.authMW.RequireAuth(http.HandlerFunc(rt.doubleHoloHandler.HandleGetIntelligence)))
+	mux.Handle("GET /api/dh/suggestions", rt.authMW.RequireAuth(http.HandlerFunc(rt.doubleHoloHandler.HandleGetSuggestions)))
+	mux.Handle("GET /api/dh/suggestions/inventory-alerts", rt.authMW.RequireAuth(http.HandlerFunc(rt.doubleHoloHandler.HandleInventoryAlerts)))
+	rt.logger.Info(context.Background(), "DoubleHolo routes registered")
+}
+
 // registerOpportunitiesRoutes wires the cross-campaign arbitrage opportunity endpoints.
 func (rt *Router) registerOpportunitiesRoutes(mux *http.ServeMux) {
 	if rt.opportunitiesHandler == nil || rt.authMW == nil {
