@@ -245,33 +245,3 @@ const campaignAnalysisSchema = `{
   ]
 }`
 
-const liquidationSchema = `{
-  "score_card": "... echo back unchanged ...",
-  "verdict": "strong_buy | buy | lean_buy | hold | lean_sell | sell | strong_sell",
-  "adjustment_reason": "string or null",
-  "key_insight": "Single most important takeaway",
-  "signals": [{"factor": "", "direction": "", "title": "", "detail": "", "metric": ""}],
-  "capital_freed_cents": 45000,
-  "urgency": "high | medium | low",
-  "crack_opportunity": {"is_candidate": true, "crack_roi": 0.35, "graded_roi": 0.08, "advantage_cents": 1200},
-  "recommended_action": "sell_now | hold | crack",
-  "recommended_channel": "eBay | GameStop | TCGPlayer | local",
-  "recommended_price_cents": 8500
-}`
-
-const campaignSuggestionSchema = `{
-  "score_card": "... echo back unchanged ...",
-  "verdict": "strong_buy | buy | lean_buy | hold | lean_sell | sell | strong_sell",
-  "adjustment_reason": "string or null",
-  "key_insight": "Single most important takeaway",
-  "signals": [{"factor": "", "direction": "", "title": "", "detail": "", "metric": ""}],
-  "suggestion_type": "new_campaign | adjustment",
-  "projected_roi": 0.22,
-  "margin_estimate": 0.14,
-  "coverage_impact": {
-    "fills_gap": true,
-    "character": "Charizard",
-    "segments_covered": ["PSA 9", "PSA 10"],
-    "existing_campaign_overlap": 0
-  }
-}`
