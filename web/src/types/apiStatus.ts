@@ -136,12 +136,9 @@ export interface DHStatusResponse {
   suggestions_last_fetch: string;
   unmatched_count: number;
   mapped_count: number;
+  bulk_match_running: boolean;
 }
 
 export interface DHBulkMatchResponse {
-  total: number;
-  matched: number;
-  skipped: number;
-  low_confidence: number;
-  failed: number;
+  status: string;
 }

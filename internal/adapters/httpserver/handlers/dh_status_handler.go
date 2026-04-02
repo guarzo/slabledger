@@ -115,6 +115,7 @@ type dhStatusResponse struct {
 	SuggestionsLastFetch  string `json:"suggestions_last_fetch"`
 	UnmatchedCount        int    `json:"unmatched_count"`
 	MappedCount           int    `json:"mapped_count"`
+	BulkMatchRunning      bool   `json:"bulk_match_running"`
 }
 
 // HandleGetStatus returns aggregate stats for the DH integration.
@@ -124,7 +125,9 @@ func (h *DHHandler) HandleGetStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx := r.Context()
 
-	resp := dhStatusResponse{}
+	resp := dhStatusResponse{
+		BulkMatchRunning: h.bulkMatchRunning.Load(),
+	}
 
 	if h.intelCounter != nil {
 		if n, err := h.intelCounter.CountAll(ctx); err != nil {

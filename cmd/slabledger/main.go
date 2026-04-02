@@ -335,6 +335,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 			intelRepo, suggestionsRepo,
 			intelRepo, suggestionsRepo,
 			logger,
+			ctx,
 		)
 		logger.Info(ctx, "DH handler initialized")
 	}
@@ -509,6 +510,11 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		// Schedulers shut down cleanly
 	case <-time.After(30 * time.Second):
 		logger.Warn(ctx, "scheduler shutdown timed out after 30s")
+	}
+
+	// Wait for any in-flight background DH bulk match to finish
+	if dhHandler != nil {
+		dhHandler.Wait()
 	}
 
 	// Wait for any in-flight background advisor analyses to finish

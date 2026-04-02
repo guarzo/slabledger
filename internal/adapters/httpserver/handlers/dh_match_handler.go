@@ -10,38 +10,55 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/pricing"
 )
 
-// bulkMatchResponse is the JSON shape returned by HandleBulkMatch.
-type bulkMatchResponse struct {
-	Total         int `json:"total"`
-	Matched       int `json:"matched"`
-	Skipped       int `json:"skipped"`
-	LowConfidence int `json:"low_confidence"`
-	Failed        int `json:"failed"`
-}
-
-// HandleBulkMatch matches all unmatched inventory cards against the DH catalog.
+// HandleBulkMatch kicks off an async bulk match of unmatched inventory cards against the DH catalog.
+// Returns 202 immediately; progress is visible via the GET /api/dh/status endpoint.
 func (h *DHHandler) HandleBulkMatch(w http.ResponseWriter, r *http.Request) {
 	if requireUser(w, r) == nil {
 		return
 	}
+
+	if !h.bulkMatchMu.TryLock() {
+		writeJSON(w, http.StatusConflict, map[string]string{"status": "already_running"})
+		return
+	}
+
+	// Gather identities and mappings synchronously so we can report errors to the caller.
 	ctx := r.Context()
 
 	identities, err := h.uniqueCardIdentities(ctx)
 	if err != nil {
+		h.bulkMatchMu.Unlock()
 		h.logger.Error(ctx, "bulk match: list purchases", observability.Err(err))
 		writeError(w, http.StatusInternalServerError, "failed to list purchases")
 		return
 	}
 
-	// Pre-load all existing DH mappings in a single query.
 	mappedSet, err := h.cardIDSaver.GetMappedSet(ctx, pricing.SourceDH)
 	if err != nil {
+		h.bulkMatchMu.Unlock()
 		h.logger.Error(ctx, "bulk match: load mapped set", observability.Err(err))
 		writeError(w, http.StatusInternalServerError, "failed to load mappings")
 		return
 	}
 
-	result := bulkMatchResponse{Total: len(identities)}
+	h.bulkMatchRunning.Store(true)
+	writeJSON(w, http.StatusAccepted, map[string]string{"status": "started"})
+
+	// Run the actual matching in the background using a context derived from the server lifecycle.
+	h.bgWG.Add(1)
+	go func() {
+		defer h.bgWG.Done()
+		defer h.bulkMatchMu.Unlock()
+		defer h.bulkMatchRunning.Store(false)
+		ctx, cancel := context.WithCancel(h.baseCtx)
+		defer cancel()
+		h.runBulkMatch(ctx, identities, mappedSet)
+	}()
+}
+
+// runBulkMatch processes all card identities against DH matching, logging results.
+func (h *DHHandler) runBulkMatch(ctx context.Context, identities []campaigns.CardIdentity, mappedSet map[string]string) {
+	var matched, skipped, lowConf, failed int
 
 	for _, ci := range identities {
 		if ctx.Err() != nil {
@@ -49,7 +66,7 @@ func (h *DHHandler) HandleBulkMatch(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if mappedSet[dhCardKey(ci.CardName, ci.SetName, ci.CardNumber)] != "" {
-			result.Skipped++
+			skipped++
 			continue
 		}
 
@@ -62,12 +79,12 @@ func (h *DHHandler) HandleBulkMatch(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			h.logger.Warn(ctx, "bulk match: DH match failed",
 				observability.String("card", ci.CardName), observability.Err(err))
-			result.Failed++
+			failed++
 			continue
 		}
 
 		if !matchResp.Success || matchResp.Confidence < 0.90 {
-			result.LowConfidence++
+			lowConf++
 			continue
 		}
 
@@ -75,13 +92,18 @@ func (h *DHHandler) HandleBulkMatch(w http.ResponseWriter, r *http.Request) {
 		if err := h.cardIDSaver.SaveExternalID(ctx, ci.CardName, ci.SetName, ci.CardNumber, pricing.SourceDH, externalID); err != nil {
 			h.logger.Error(ctx, "bulk match: save external ID", observability.Err(err),
 				observability.String("card", ci.CardName))
-			result.Failed++
+			failed++
 			continue
 		}
-		result.Matched++
+		matched++
 	}
 
-	writeJSON(w, http.StatusOK, result)
+	h.logger.Info(ctx, "bulk match completed",
+		observability.Int("total", len(identities)),
+		observability.Int("matched", matched),
+		observability.Int("skipped", skipped),
+		observability.Int("low_confidence", lowConf),
+		observability.Int("failed", failed))
 }
 
 // uniqueCardIdentities returns deduplicated card identities from all unsold purchases.

@@ -171,6 +171,9 @@ export function useDHStatus(options?: { enabled?: boolean }) {
     queryFn: () => api.getDHStatus(),
     staleTime: 60_000,
     enabled: options?.enabled ?? true,
+    // Poll every 5s while bulk match is running so mapped/unmatched counts update live.
+    refetchInterval: (query) =>
+      query.state.data?.bulk_match_running ? 5_000 : false,
   });
 }
 
