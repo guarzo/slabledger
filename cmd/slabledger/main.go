@@ -17,6 +17,7 @@ import (
 
 	// Concrete implementations (only imported in main for wiring - Hexagonal Architecture)
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardhedger"
+	"github.com/guarzo/slabledger/internal/adapters/clients/doubleholo"
 	"github.com/guarzo/slabledger/internal/adapters/clients/google"
 	"github.com/guarzo/slabledger/internal/adapters/clients/justtcg"
 	"github.com/guarzo/slabledger/internal/adapters/clients/psa"
@@ -235,8 +236,25 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	// Discovery failure tracker (persists CardHedger discovery failures for diagnostics)
 	discoveryFailureRepo := sqlite.NewDiscoveryFailureRepository(db.DB)
 
+	// Initialize DoubleHolo client (optional — market intelligence + fusion source)
+	var dhClient *doubleholo.Client
+	if cfg.Adapters.DoubleHoloKey != "" {
+		dhClient = doubleholo.NewClient(
+			cfg.Adapters.DoubleHoloBaseURL, cfg.Adapters.DoubleHoloKey,
+			doubleholo.WithLogger(logger),
+			doubleholo.WithRateLimitRPS(cfg.DoubleHolo.RateLimitRPS),
+		)
+		logger.Info(ctx, "DoubleHolo client initialized")
+	}
+
+	// DoubleHolo repositories (always created — tables exist after migration 000028)
+	intelRepo := sqlite.NewMarketIntelligenceRepository(db.DB)
+	suggestionsRepo := sqlite.NewDHSuggestionsRepository(db.DB)
+	_ = suggestionsRepo // used by future schedulers
+
 	priceProvImpl, cardHedgerClientImpl, pcProvider, err := initializePriceProviders(
 		ctx, cfg, appCache, logger, cardProvImpl, priceRepo, cardIDMappingRepo,
+		dhClient, intelRepo,
 	)
 	if err != nil {
 		return err

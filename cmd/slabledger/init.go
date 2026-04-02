@@ -12,6 +12,7 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/clients/azureai"
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardhedger"
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
+	"github.com/guarzo/slabledger/internal/adapters/clients/doubleholo"
 	"github.com/guarzo/slabledger/internal/adapters/clients/fusionprice"
 	igclient "github.com/guarzo/slabledger/internal/adapters/clients/instagram"
 	"github.com/guarzo/slabledger/internal/adapters/clients/justtcg"
@@ -44,6 +45,8 @@ func initializePriceProviders(
 	cardProvImpl *tcgdex.TCGdex,
 	priceRepo *sqlite.PriceRepository,
 	cardIDMappingRepo *sqlite.CardIDMappingRepository,
+	dhClient *doubleholo.Client,
+	intelRepo *sqlite.MarketIntelligenceRepository,
 ) (priceProvider *fusionprice.FusionPriceProvider, cardHedgerClient *cardhedger.Client, pcProvider *pricecharting.PriceCharting, err error) {
 	pcProvider, err = pricecharting.NewPriceCharting(
 		pricecharting.DefaultConfig(cfg.Adapters.PriceChartingToken), appCache, logger,
@@ -61,6 +64,19 @@ func initializePriceProviders(
 			fusionprice.WithCardHedgerHintResolver(cardIDMappingRepo)),
 	}
 
+	// Add DoubleHolo as a secondary fusion source if available
+	dhAvailable := false
+	if dhClient != nil && dhClient.Available() {
+		dhOpts := []fusionprice.DoubleHoloAdapterOption{}
+		if intelRepo != nil {
+			dhOpts = append(dhOpts, fusionprice.WithDHIntelligenceStore(intelRepo))
+		}
+		dhAdapter := fusionprice.NewDoubleHoloAdapter(dhClient, cardIDMappingRepo, logger, dhOpts...)
+		secondarySources = append(secondarySources, dhAdapter)
+		dhAvailable = true
+		logger.Info(ctx, "DoubleHolo adapter registered as secondary fusion source")
+	}
+
 	priceProvider = fusionprice.NewFusionProviderWithRepo(
 		pcProvider, secondarySources,
 		appCache, priceRepo, priceRepo, priceRepo, logger,
@@ -70,8 +86,10 @@ func initializePriceProviders(
 		cfg.Fusion.SecondarySourceTimeout,
 		fusionprice.WithCardProvider(cardProvImpl),
 	)
-	logger.Info(ctx, "Fusion price provider initialized with 2 sources",
-		observability.Bool("cardhedger_available", cardHedgerClient.Available()))
+	logger.Info(ctx, "Fusion price provider initialized",
+		observability.Int("secondary_sources", len(secondarySources)),
+		observability.Bool("cardhedger_available", cardHedgerClient.Available()),
+		observability.Bool("doubleholo_available", dhAvailable))
 
 	return priceProvider, cardHedgerClient, pcProvider, nil
 }
