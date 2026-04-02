@@ -52,12 +52,15 @@ type DHHandler struct {
 	intelCounter    DHIntelligenceCounter
 	suggestCounter  DHSuggestionsCounter
 	logger          observability.Logger
+	baseCtx         context.Context
 
+	bgWG             sync.WaitGroup
 	bulkMatchMu      sync.Mutex
 	bulkMatchRunning atomic.Bool
 }
 
 // NewDHHandler creates a new DHHandler with the given dependencies.
+// baseCtx is a server-lifecycle context; background goroutines derive from it.
 func NewDHHandler(
 	matchClient DHMatchClient,
 	cardIDSaver DHCardIDSaver,
@@ -67,7 +70,11 @@ func NewDHHandler(
 	intelCounter DHIntelligenceCounter,
 	suggestCounter DHSuggestionsCounter,
 	logger observability.Logger,
+	baseCtx context.Context,
 ) *DHHandler {
+	if baseCtx == nil {
+		baseCtx = context.Background()
+	}
 	return &DHHandler{
 		matchClient:     matchClient,
 		cardIDSaver:     cardIDSaver,
@@ -77,8 +84,13 @@ func NewDHHandler(
 		intelCounter:    intelCounter,
 		suggestCounter:  suggestCounter,
 		logger:          logger,
+		baseCtx:         baseCtx,
 	}
 }
+
+// Wait blocks until all background goroutines (e.g. bulk match) have completed.
+// Call during graceful shutdown to avoid writing to a closed database.
+func (h *DHHandler) Wait() { h.bgWG.Wait() }
 
 // dhCardKey builds the pipe-delimited key used by GetMappedSet.
 func dhCardKey(cardName, setName, cardNumber string) string {

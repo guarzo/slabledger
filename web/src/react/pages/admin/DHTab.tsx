@@ -87,7 +87,7 @@ export function DHTab({ enabled = true }: { enabled?: boolean }) {
           size="sm"
           onClick={handleBulkMatch}
           loading={bulkMatchMutation.isPending}
-          disabled={isRunning}
+          disabled={isRunning || bulkMatchMutation.isPending}
         >
           {isRunning ? 'Bulk Match Running...' : 'Run Bulk Match'}
         </Button>

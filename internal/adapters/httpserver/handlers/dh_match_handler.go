@@ -44,11 +44,15 @@ func (h *DHHandler) HandleBulkMatch(w http.ResponseWriter, r *http.Request) {
 	h.bulkMatchRunning.Store(true)
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "started"})
 
-	// Run the actual matching in the background (detached from request context).
+	// Run the actual matching in the background using a context derived from the server lifecycle.
+	h.bgWG.Add(1)
 	go func() {
+		defer h.bgWG.Done()
 		defer h.bulkMatchMu.Unlock()
 		defer h.bulkMatchRunning.Store(false)
-		h.runBulkMatch(context.Background(), identities, mappedSet)
+		ctx, cancel := context.WithCancel(h.baseCtx)
+		defer cancel()
+		h.runBulkMatch(ctx, identities, mappedSet)
 	}()
 }
 
