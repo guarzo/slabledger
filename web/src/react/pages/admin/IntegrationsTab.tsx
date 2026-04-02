@@ -1,5 +1,6 @@
 import { ApiStatusTab } from './ApiStatusTab';
 import { CardLadderTab } from './CardLadderTab';
+import { DHTab } from './DHTab';
 import { InstagramTab } from './InstagramTab';
 
 export function IntegrationsTab({ enabled = true }: { enabled?: boolean }) {
@@ -8,6 +9,13 @@ export function IntegrationsTab({ enabled = true }: { enabled?: boolean }) {
       <section>
         <h3 className="text-base font-semibold text-[var(--text)] mb-4">API Providers</h3>
         <ApiStatusTab enabled={enabled} />
+      </section>
+
+      <hr className="border-[var(--surface-2)]" />
+
+      <section>
+        <h3 className="text-base font-semibold text-[var(--text)] mb-4">DH</h3>
+        <DHTab enabled={enabled} />
       </section>
 
       <hr className="border-[var(--surface-2)]" />

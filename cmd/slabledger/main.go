@@ -332,7 +332,9 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	if dhClient != nil && dhClient.Available() {
 		dhHandler = handlers.NewDHHandler(
 			dhClient, cardIDMappingRepo, campaignsRepo,
-			intelRepo, suggestionsRepo, logger,
+			intelRepo, suggestionsRepo,
+			intelRepo, suggestionsRepo,
+			logger,
 		)
 		logger.Info(ctx, "DH handler initialized")
 	}
