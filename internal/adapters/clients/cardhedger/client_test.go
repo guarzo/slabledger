@@ -31,8 +31,9 @@ func newTestClient(serverURL string) *Client {
 		baseURL:     serverURL,
 		httpClient:  httpClient,
 		rateLimiter: rate.NewLimiter(rate.Inf, 1),
+		dailyCalls:  resilience.NewResettingCounter(24 * time.Hour),
+		minuteCalls: resilience.NewResettingCounter(time.Minute),
 	}
-	c.resetDailyCounterIfNeeded()
 	return c
 }
 
@@ -209,9 +210,9 @@ func TestClient_DailyCallsCounter(t *testing.T) {
 		t.Errorf("initial daily calls = %d, want 0", c.DailyCallsUsed())
 	}
 
-	c.incrementDailyCounter()
-	c.incrementDailyCounter()
-	c.incrementDailyCounter()
+	c.dailyCalls.Inc()
+	c.dailyCalls.Inc()
+	c.dailyCalls.Inc()
 	if c.DailyCallsUsed() != 3 {
 		t.Errorf("after 3 increments, daily calls = %d, want 3", c.DailyCallsUsed())
 	}
@@ -223,8 +224,8 @@ func TestClient_MinuteCallsCounter(t *testing.T) {
 		t.Errorf("initial minute calls = %d, want 0", c.MinuteCallsUsed())
 	}
 
-	c.incrementMinuteCounter()
-	c.incrementMinuteCounter()
+	c.minuteCalls.Inc()
+	c.minuteCalls.Inc()
 	if c.MinuteCallsUsed() != 2 {
 		t.Errorf("after 2 increments, minute calls = %d, want 2", c.MinuteCallsUsed())
 	}

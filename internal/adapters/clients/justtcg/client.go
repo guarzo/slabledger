@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"sync/atomic"
 	"time"
 
 	"golang.org/x/time/rate"
@@ -43,9 +42,7 @@ type Client struct {
 	logger      observability.Logger
 	timeout     time.Duration
 
-	// Daily counter – resets at UTC day boundary.
-	dailyCalls   atomic.Int64
-	lastResetDay atomic.Int64
+	dailyCalls *resilience.ResettingCounter
 }
 
 // NewClient creates a new JustTCG API client.
@@ -60,14 +57,14 @@ func NewClient(apiKey string, opts ...ClientOption) *Client {
 	httpClient := httpx.NewClient(config)
 
 	c := &Client{
-		apiKey:     apiKey,
-		baseURL:    defaultBaseURL,
-		httpClient: httpClient,
-		timeout:    30 * time.Second,
+		apiKey:      apiKey,
+		baseURL:     defaultBaseURL,
+		httpClient:  httpClient,
+		timeout:     30 * time.Second,
+		dailyCalls:  resilience.NewResettingCounter(24 * time.Hour),
 		// 100 req/min with burst of 5 (Pro plan)
 		rateLimiter: rate.NewLimiter(rate.Limit(100.0/60.0), 5),
 	}
-	c.lastResetDay.Store(time.Now().UTC().Unix() / 86400)
 	for _, opt := range opts {
 		if opt != nil {
 			opt(c)
@@ -83,18 +80,7 @@ func (c *Client) Available() bool {
 
 // DailyCalls returns the approximate number of API calls made today (UTC).
 func (c *Client) DailyCalls() int64 {
-	c.checkDayReset()
 	return c.dailyCalls.Load()
-}
-
-// checkDayReset resets dailyCalls to 0 when a new UTC day begins.
-// Safe for concurrent use via CompareAndSwap.
-func (c *Client) checkDayReset() {
-	today := time.Now().UTC().Unix() / 86400
-	prev := c.lastResetDay.Load()
-	if today > prev && c.lastResetDay.CompareAndSwap(prev, today) {
-		c.dailyCalls.Store(0)
-	}
 }
 
 // SearchCards searches for cards matching the query and optional set filter.
@@ -225,8 +211,7 @@ func (c *Client) handle429(ctx context.Context, path string, resp *httpx.Respons
 	if resp == nil {
 		return 0, nil
 	}
-	c.checkDayReset()
-	c.dailyCalls.Add(1)
+	c.dailyCalls.Inc()
 	if resp.StatusCode != http.StatusTooManyRequests {
 		return 0, nil
 	}

@@ -6,7 +6,6 @@ import (
 	goerrors "errors"
 	"fmt"
 	"net/http"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -16,6 +15,7 @@ import (
 	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/domain/pricing"
+	"github.com/guarzo/slabledger/internal/platform/resilience"
 )
 
 const (
@@ -41,15 +41,8 @@ type Client struct {
 	rateLimiter *rate.Limiter
 	logger      observability.Logger
 
-	// Daily counter
-	dailyCalls atomic.Int64
-	dailyReset atomic.Int64 // unix timestamp of next daily reset
-	resetMu    sync.Mutex   // protects the daily reset-and-zero operation
-
-	// Per-minute counter (same CAS pattern as daily)
-	minuteCalls   atomic.Int64
-	minuteReset   atomic.Int64
-	minuteResetMu sync.Mutex // protects the minute reset-and-zero operation
+	dailyCalls  *resilience.ResettingCounter
+	minuteCalls *resilience.ResettingCounter
 
 	// 429 tracking
 	rateLimitHits429 atomic.Int64
@@ -63,9 +56,11 @@ func NewClient(apiKey string, opts ...ClientOption) *Client {
 	httpClient := httpx.NewClient(config)
 
 	c := &Client{
-		apiKey:     apiKey,
-		baseURL:    baseURL,
-		httpClient: httpClient,
+		apiKey:      apiKey,
+		baseURL:     baseURL,
+		httpClient:  httpClient,
+		dailyCalls:  resilience.NewResettingCounter(24 * time.Hour),
+		minuteCalls: resilience.NewResettingCounter(time.Minute),
 		// 100 req/min with burst of 5
 		rateLimiter: rate.NewLimiter(rate.Limit(100.0/60.0), 5),
 	}
@@ -74,7 +69,6 @@ func NewClient(apiKey string, opts ...ClientOption) *Client {
 			opt(c)
 		}
 	}
-	c.resetDailyCounterIfNeeded()
 	return c
 }
 
@@ -95,19 +89,16 @@ func (c *Client) Close() error {
 
 // DailyCallsUsed returns the approximate number of API calls made today.
 func (c *Client) DailyCallsUsed() int {
-	c.resetDailyCounterIfNeeded()
 	return int(c.dailyCalls.Load())
 }
 
 // MinuteCallsUsed returns the approximate number of API calls made this minute.
 func (c *Client) MinuteCallsUsed() int {
-	c.resetMinuteCounterIfNeeded()
 	return int(c.minuteCalls.Load())
 }
 
 // RateLimitHits returns the number of 429 responses received today.
 func (c *Client) RateLimitHits() int {
-	c.resetDailyCounterIfNeeded()
 	return int(c.rateLimitHits429.Load())
 }
 
@@ -120,58 +111,7 @@ func (c *Client) Last429Time() time.Time {
 	return time.Unix(ts, 0)
 }
 
-func (c *Client) resetDailyCounterIfNeeded() {
-	now := time.Now()
-	if !now.After(time.Unix(c.dailyReset.Load(), 0)) {
-		return
-	}
-
-	// Mutex ensures the CAS + Store(0) pair is atomic, preventing a concurrent
-	// Add(1) from being wiped by Store(0) between the two operations.
-	c.resetMu.Lock()
-	defer c.resetMu.Unlock()
-
-	oldReset := c.dailyReset.Load()
-	if now.After(time.Unix(oldReset, 0)) {
-		tomorrow := now.UTC().Truncate(24 * time.Hour).Add(24 * time.Hour)
-		if c.dailyReset.CompareAndSwap(oldReset, tomorrow.Unix()) {
-			c.dailyCalls.Store(0)
-			c.rateLimitHits429.Store(0)
-		}
-	}
-}
-
-func (c *Client) incrementDailyCounter() {
-	c.resetDailyCounterIfNeeded()
-	// Add is safe outside the mutex — the mutex only protects the reset+zero pair.
-	c.dailyCalls.Add(1)
-}
-
-func (c *Client) resetMinuteCounterIfNeeded() {
-	now := time.Now()
-	if !now.After(time.Unix(c.minuteReset.Load(), 0)) {
-		return
-	}
-	c.minuteResetMu.Lock()
-	defer c.minuteResetMu.Unlock()
-
-	oldReset := c.minuteReset.Load()
-	if now.After(time.Unix(oldReset, 0)) {
-		nextMinute := now.Truncate(time.Minute).Add(time.Minute)
-		if c.minuteReset.CompareAndSwap(oldReset, nextMinute.Unix()) {
-			c.minuteCalls.Store(0)
-		}
-	}
-}
-
-func (c *Client) incrementMinuteCounter() {
-	c.resetMinuteCounterIfNeeded()
-	c.minuteCalls.Add(1)
-}
-
 func (c *Client) record429(ctx context.Context, path string) {
-	c.resetDailyCounterIfNeeded()
-	c.resetMinuteCounterIfNeeded()
 	c.rateLimitHits429.Add(1)
 	c.last429Time.Store(time.Now().Unix())
 	if c.logger != nil {
@@ -309,8 +249,8 @@ func (c *Client) post(ctx context.Context, path string, body any, result any) (i
 
 	// Count every response from the server (including errors like 429)
 	if resp != nil {
-		c.incrementDailyCounter()
-		c.incrementMinuteCounter()
+		c.dailyCalls.Inc()
+		c.minuteCalls.Inc()
 		if resp.StatusCode == 429 {
 			c.record429(ctx, path)
 		}
