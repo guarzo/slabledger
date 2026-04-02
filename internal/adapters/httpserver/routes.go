@@ -288,6 +288,7 @@ func (rt *Router) registerDHRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/dh/intelligence", rt.authMW.RequireAuth(http.HandlerFunc(rt.dhHandler.HandleGetIntelligence)))
 	mux.Handle("GET /api/dh/suggestions", rt.authMW.RequireAuth(http.HandlerFunc(rt.dhHandler.HandleGetSuggestions)))
 	mux.Handle("GET /api/dh/suggestions/inventory-alerts", rt.authMW.RequireAuth(http.HandlerFunc(rt.dhHandler.HandleInventoryAlerts)))
+	mux.Handle("GET /api/dh/status", rt.authMW.RequireAuth(http.HandlerFunc(rt.dhHandler.HandleGetStatus)))
 	rt.logger.Info(context.Background(), "DH routes registered")
 }
 

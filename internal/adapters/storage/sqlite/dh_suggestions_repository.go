@@ -117,6 +117,25 @@ func (r *DHSuggestionsRepository) GetCardSuggestions(ctx context.Context, cardNa
 	)
 }
 
+// CountLatest returns the number of suggestions for the most recent suggestion_date.
+func (r *DHSuggestionsRepository) CountLatest(ctx context.Context) (int, error) {
+	var count int
+	err := r.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM dh_suggestions
+		 WHERE suggestion_date = (SELECT MAX(suggestion_date) FROM dh_suggestions)`).Scan(&count)
+	return count, err
+}
+
+// LatestFetchedAt returns the most recent fetched_at timestamp across all suggestions, or empty string if none exist.
+func (r *DHSuggestionsRepository) LatestFetchedAt(ctx context.Context) (string, error) {
+	var ts *string
+	err := r.db.QueryRowContext(ctx, `SELECT MAX(fetched_at) FROM dh_suggestions`).Scan(&ts)
+	if err != nil || ts == nil {
+		return "", err
+	}
+	return *ts, nil
+}
+
 // queryMany executes a query and scans all rows into Suggestion slices.
 func (r *DHSuggestionsRepository) queryMany(ctx context.Context, query string, args ...any) (_ []intelligence.Suggestion, err error) {
 	rows, err := r.db.QueryContext(ctx, query, args...)

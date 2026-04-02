@@ -126,3 +126,22 @@ export interface AIUsageResponse {
   operations: AIOperationSummary[];
   timestamp: string;
 }
+
+/** DH integration status types */
+
+export interface DHStatusResponse {
+  intelligence_count: number;
+  intelligence_last_fetch: string;
+  suggestions_count: number;
+  suggestions_last_fetch: string;
+  unmatched_count: number;
+  mapped_count: number;
+}
+
+export interface DHBulkMatchResponse {
+  total: number;
+  matched: number;
+  skipped: number;
+  low_confidence: number;
+  failed: number;
+}
