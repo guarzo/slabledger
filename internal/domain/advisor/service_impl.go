@@ -41,6 +41,7 @@ var operationTools = map[string][]string{
 		"get_channel_velocity", "get_dashboard_summary",
 		"get_acquisition_targets", "get_crack_opportunities",
 		"get_dh_suggestions", "get_inventory_alerts",
+		"get_data_gap_report",
 	},
 	"campaign_analysis": {
 		"list_campaigns", "get_campaign_pnl", "get_pnl_by_channel",
