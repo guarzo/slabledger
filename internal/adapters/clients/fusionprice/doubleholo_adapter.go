@@ -110,7 +110,7 @@ func (a *DoubleHoloAdapter) FetchFusionData(ctx context.Context, card pricing.Ca
 
 	// Step 5: Optionally store intelligence data.
 	if a.intelStore != nil {
-		intel := convertDHToIntelligence(resp, card, dhCardID)
+		intel := ConvertDHToIntelligence(resp, card, dhCardID)
 		if storeErr := a.intelStore.Store(ctx, intel); storeErr != nil {
 			if a.logger != nil {
 				a.logger.Warn(ctx, "doubleholo: failed to store intelligence",
@@ -192,8 +192,8 @@ func dhGradeToFusionKey(company, grade string) string {
 	}
 }
 
-// convertDHToIntelligence converts a MarketDataResponse to domain intelligence.
-func convertDHToIntelligence(resp *doubleholo.MarketDataResponse, card pricing.Card, dhCardID string) *intelligence.MarketIntelligence {
+// ConvertDHToIntelligence converts a MarketDataResponse to domain intelligence.
+func ConvertDHToIntelligence(resp *doubleholo.MarketDataResponse, card pricing.Card, dhCardID string) *intelligence.MarketIntelligence {
 	intel := &intelligence.MarketIntelligence{
 		CardName:   card.Name,
 		SetName:    card.Set,

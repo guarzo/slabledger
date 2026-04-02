@@ -373,6 +373,9 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		CardLadderStore:      clStore,
 		CardLadderSalesStore: clSalesStore,
 		JustTCGClient:        justTCGClient,
+		DHClient:             dhClient,
+		DHIntelligenceRepo:   intelRepo,
+		DHSuggestionsRepo:    suggestionsRepo,
 	})
 
 	// Wire Card Ladder manual refresh into the handler

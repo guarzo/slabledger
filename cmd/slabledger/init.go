@@ -341,6 +341,9 @@ type schedulerDeps struct {
 	CardLadderStore      *sqlite.CardLadderStore
 	CardLadderSalesStore *sqlite.CLSalesStore
 	JustTCGClient        *justtcg.Client
+	DHClient             *doubleholo.Client
+	DHIntelligenceRepo   *sqlite.MarketIntelligenceRepository
+	DHSuggestionsRepo    *sqlite.DHSuggestionsRepository
 }
 
 // initializeSchedulers builds and starts the scheduler group, returning the
@@ -388,6 +391,16 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 	// produces a non-nil interface wrapping a nil pointer, which breaks nil checks.
 	if deps.JustTCGClient != nil {
 		buildDeps.JustTCGClient = deps.JustTCGClient
+	}
+	// Same nil-safety for DoubleHolo dependencies.
+	if deps.DHClient != nil {
+		buildDeps.DHClient = deps.DHClient
+	}
+	if deps.DHIntelligenceRepo != nil {
+		buildDeps.DHIntelligenceRepo = deps.DHIntelligenceRepo
+	}
+	if deps.DHSuggestionsRepo != nil {
+		buildDeps.DHSuggestionsRepo = deps.DHSuggestionsRepo
 	}
 	schedulerResult := scheduler.BuildGroup(deps.Config, buildDeps)
 	schedulerResult.Group.StartAll(schedulerCtx)
