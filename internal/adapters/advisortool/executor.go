@@ -7,6 +7,7 @@ import (
 
 	"github.com/guarzo/slabledger/internal/domain/ai"
 	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	"github.com/guarzo/slabledger/internal/domain/intelligence"
 )
 
 // toolHandler is a function that executes a tool and returns JSON.
@@ -14,16 +15,34 @@ type toolHandler func(ctx context.Context, args string) (string, error)
 
 // CampaignToolExecutor implements ai.ToolExecutor by calling campaigns.Service methods.
 type CampaignToolExecutor struct {
-	svc      campaigns.Service
-	handlers map[string]toolHandler
-	defs     []ai.ToolDefinition
+	svc         campaigns.Service
+	intelRepo   intelligence.Repository
+	suggestRepo intelligence.SuggestionsRepository
+	handlers    map[string]toolHandler
+	defs        []ai.ToolDefinition
+}
+
+// ExecutorOption configures optional dependencies on CampaignToolExecutor.
+type ExecutorOption func(*CampaignToolExecutor)
+
+// WithIntelligenceRepo injects the market intelligence repository.
+func WithIntelligenceRepo(repo intelligence.Repository) ExecutorOption {
+	return func(e *CampaignToolExecutor) { e.intelRepo = repo }
+}
+
+// WithSuggestionsRepo injects the DH suggestions repository.
+func WithSuggestionsRepo(repo intelligence.SuggestionsRepository) ExecutorOption {
+	return func(e *CampaignToolExecutor) { e.suggestRepo = repo }
 }
 
 // NewCampaignToolExecutor creates a ToolExecutor backed by the campaigns service.
-func NewCampaignToolExecutor(svc campaigns.Service) *CampaignToolExecutor {
+func NewCampaignToolExecutor(svc campaigns.Service, opts ...ExecutorOption) *CampaignToolExecutor {
 	e := &CampaignToolExecutor{
 		svc:      svc,
 		handlers: make(map[string]toolHandler),
+	}
+	for _, opt := range opts {
+		opt(e)
 	}
 	e.registerTools()
 	return e
@@ -228,4 +247,7 @@ func (e *CampaignToolExecutor) registerTools() {
 	e.registerGetDashboardSummary()
 	e.registerGetAcquisitionTargets()
 	e.registerGetCrackOpportunities()
+	e.registerGetMarketIntelligence()
+	e.registerGetDHSuggestions()
+	e.registerGetInventoryAlerts()
 }

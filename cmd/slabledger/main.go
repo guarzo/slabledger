@@ -16,6 +16,7 @@ import (
 	"github.com/joho/godotenv"
 
 	// Concrete implementations (only imported in main for wiring - Hexagonal Architecture)
+	"github.com/guarzo/slabledger/internal/adapters/advisortool"
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardhedger"
 	"github.com/guarzo/slabledger/internal/adapters/clients/doubleholo"
 	"github.com/guarzo/slabledger/internal/adapters/clients/google"
@@ -274,8 +275,17 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	// AI call tracking
 	aiCallRepo := sqlite.NewAICallRepository(db)
 
+	// Build advisor tool options — inject intelligence repos when available.
+	var advisorToolOpts []advisortool.ExecutorOption
+	if intelRepo != nil {
+		advisorToolOpts = append(advisorToolOpts, advisortool.WithIntelligenceRepo(intelRepo))
+	}
+	if suggestionsRepo != nil {
+		advisorToolOpts = append(advisorToolOpts, advisortool.WithSuggestionsRepo(suggestionsRepo))
+	}
+
 	azureAIClient, advisorService, advisorCacheRepo, err := initializeAdvisorService(
-		ctx, cfg, logger, db, aiCallRepo, campaignsService,
+		ctx, cfg, logger, db, aiCallRepo, campaignsService, advisorToolOpts...,
 	)
 	if err != nil {
 		return err

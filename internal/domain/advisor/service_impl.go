@@ -40,12 +40,14 @@ var operationTools = map[string][]string{
 		"get_credit_summary", "get_weekly_review", "get_capital_timeline",
 		"get_channel_velocity", "get_dashboard_summary",
 		"get_acquisition_targets", "get_crack_opportunities",
+		"get_dh_suggestions", "get_inventory_alerts",
 	},
 	"campaign_analysis": {
 		"list_campaigns", "get_campaign_pnl", "get_pnl_by_channel",
 		"get_campaign_tuning", "get_inventory_aging", "get_expected_values",
 		"get_crack_candidates", "get_campaign_suggestions", "run_projection",
 		"get_channel_velocity", "get_credit_summary",
+		"get_market_intelligence",
 	},
 	"liquidation": {
 		"list_campaigns", "get_global_inventory", "get_sell_sheet",
@@ -53,11 +55,13 @@ var operationTools = map[string][]string{
 		"get_portfolio_health", "suggest_price", "get_cert_lookup",
 		"get_channel_velocity", "get_capital_timeline", "get_suggestion_stats",
 		"get_dashboard_summary", "get_crack_opportunities",
+		"get_market_intelligence", "get_inventory_alerts",
 	},
 	"purchase_assessment": {
 		"list_campaigns", "get_campaign_tuning", "get_portfolio_insights",
 		"get_cert_lookup", "evaluate_purchase", "get_campaign_pnl",
 		"get_channel_velocity",
+		"get_market_intelligence",
 	},
 }
 

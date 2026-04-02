@@ -152,6 +152,7 @@ func initializeAdvisorService(
 	db *sqlite.DB,
 	aiCallRepo *sqlite.AICallRepository,
 	campaignsService campaigns.Service,
+	toolOpts ...advisortool.ExecutorOption,
 ) (llmProvider advisor.LLMProvider, advisorSvc advisor.Service, advisorCacheRepo *sqlite.AdvisorCacheRepository, err error) {
 	if cfg.Adapters.AzureAIEndpoint == "" || cfg.Adapters.AzureAIKey == "" {
 		return nil, nil, nil, nil
@@ -167,7 +168,7 @@ func initializeAdvisorService(
 	}
 	llmProvider = client
 
-	toolExec := advisortool.NewCampaignToolExecutor(campaignsService)
+	toolExec := advisortool.NewCampaignToolExecutor(campaignsService, toolOpts...)
 	advisorCacheRepo = sqlite.NewAdvisorCacheRepository(db.DB, logger)
 	advisorOpts := []advisor.ServiceOption{
 		advisor.WithLogger(logger),
