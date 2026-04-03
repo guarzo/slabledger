@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
 
 	"github.com/guarzo/slabledger/internal/domain/ai"
 	"github.com/guarzo/slabledger/internal/domain/campaigns"
@@ -389,4 +390,86 @@ type jsonSchema struct {
 	Description string                `json:"description,omitempty"`
 	Properties  map[string]jsonSchema `json:"properties,omitempty"`
 	Required    []string              `json:"required,omitempty"`
+	Items       *jsonSchema           `json:"items,omitempty"`
+}
+
+// maxBatchResultChars matches maxToolResultChars from the advisor service.
+// Each campaign's share of this budget is maxBatchResultChars / len(campaignIds).
+const maxBatchResultChars = 12_000
+
+func (e *CampaignToolExecutor) registerGetExpectedValuesBatch() {
+	e.register(ai.ToolDefinition{
+		Name:        "get_expected_values_batch",
+		Description: "Get expected values for multiple campaigns in one call. Returns a map of campaignId to EV data. Omit campaignIds to get all active campaigns.",
+		Parameters: jsonSchema{
+			Type: "object",
+			Properties: map[string]jsonSchema{
+				"campaignIds": {
+					Type:        "array",
+					Description: "Campaign IDs to fetch EVs for. Omit for all active campaigns.",
+					Items:       &jsonSchema{Type: "string"},
+				},
+			},
+		},
+	}, func(ctx context.Context, args string) (string, error) {
+		var p struct {
+			CampaignIDs []string `json:"campaignIds"`
+		}
+		_ = json.Unmarshal([]byte(args), &p) //nolint:errcheck
+
+		// Default to all active campaigns if none specified.
+		if len(p.CampaignIDs) == 0 {
+			all, err := e.svc.ListCampaigns(ctx, true)
+			if err != nil {
+				return "", fmt.Errorf("list active campaigns: %w", err)
+			}
+			for _, c := range all {
+				p.CampaignIDs = append(p.CampaignIDs, c.ID)
+			}
+		}
+		if len(p.CampaignIDs) == 0 {
+			return `{}`, nil
+		}
+
+		type evResult struct {
+			id   string
+			data json.RawMessage
+		}
+
+		perCampaignBudget := maxBatchResultChars / len(p.CampaignIDs)
+		results := make([]evResult, len(p.CampaignIDs))
+		var wg sync.WaitGroup
+		for i, id := range p.CampaignIDs {
+			wg.Add(1)
+			go func(idx int, campaignID string) {
+				defer wg.Done()
+				ev, err := e.svc.GetExpectedValues(ctx, campaignID)
+				if err != nil {
+					errJSON, _ := json.Marshal(struct { //nolint:errcheck
+						Error string `json:"error"`
+					}{Error: err.Error()})
+					results[idx] = evResult{id: campaignID, data: errJSON}
+					return
+				}
+				b, _ := json.Marshal(ev) //nolint:errcheck
+				if len(b) > perCampaignBudget {
+					if truncated := truncateJSON(b, perCampaignBudget); truncated != nil {
+						b = truncated
+					}
+				}
+				results[idx] = evResult{id: campaignID, data: b}
+			}(i, id)
+		}
+		wg.Wait()
+
+		merged := make(map[string]json.RawMessage, len(results))
+		for _, r := range results {
+			merged[r.id] = r.data
+		}
+		b, err := json.Marshal(merged)
+		if err != nil {
+			return "", fmt.Errorf("marshal batch result: %w", err)
+		}
+		return string(b), nil
+	})
 }

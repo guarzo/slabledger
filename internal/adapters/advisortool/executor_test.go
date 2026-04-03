@@ -217,6 +217,95 @@ func TestToJSON_TruncatesAt15KB(t *testing.T) {
 	}
 }
 
+func TestExecute_GetExpectedValuesBatch_WithIDs(t *testing.T) {
+	svc := &mocks.MockCampaignService{
+		GetExpectedValuesFn: func(_ context.Context, campaignID string) (*campaigns.EVPortfolio, error) {
+			return &campaigns.EVPortfolio{
+				TotalEVCents:  1000,
+				PositiveCount: 2,
+				Items: []campaigns.ExpectedValue{
+					{CardName: "Charizard-" + campaignID, EVCents: 500},
+				},
+			}, nil
+		},
+	}
+	e := newTestExecutor(svc)
+	result, err := e.Execute(context.Background(), "get_expected_values_batch", `{"campaignIds":["camp-1","camp-2"]}`)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	var got map[string]*campaigns.EVPortfolio
+	if err := json.Unmarshal([]byte(result), &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("got %d campaigns, want 2", len(got))
+	}
+	if got["camp-1"].Items[0].CardName != "Charizard-camp-1" {
+		t.Errorf("camp-1 card = %q, want Charizard-camp-1", got["camp-1"].Items[0].CardName)
+	}
+	if got["camp-2"].Items[0].CardName != "Charizard-camp-2" {
+		t.Errorf("camp-2 card = %q, want Charizard-camp-2", got["camp-2"].Items[0].CardName)
+	}
+}
+
+func TestExecute_GetExpectedValuesBatch_AllActive(t *testing.T) {
+	svc := &mocks.MockCampaignService{
+		ListCampaignsFn: func(_ context.Context, activeOnly bool) ([]campaigns.Campaign, error) {
+			if !activeOnly {
+				t.Error("expected activeOnly=true")
+			}
+			return []campaigns.Campaign{
+				{ID: "a1", Name: "Alpha"},
+				{ID: "a2", Name: "Beta"},
+			}, nil
+		},
+		GetExpectedValuesFn: func(_ context.Context, campaignID string) (*campaigns.EVPortfolio, error) {
+			return &campaigns.EVPortfolio{TotalEVCents: 100}, nil
+		},
+	}
+	e := newTestExecutor(svc)
+	result, err := e.Execute(context.Background(), "get_expected_values_batch", `{}`)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	var got map[string]*campaigns.EVPortfolio
+	if err := json.Unmarshal([]byte(result), &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("got %d campaigns, want 2", len(got))
+	}
+	if _, ok := got["a1"]; !ok {
+		t.Error("missing campaign a1")
+	}
+	if _, ok := got["a2"]; !ok {
+		t.Error("missing campaign a2")
+	}
+}
+
+func TestExecute_GetExpectedValuesBatch_PartialFailure(t *testing.T) {
+	svc := &mocks.MockCampaignService{
+		GetExpectedValuesFn: func(_ context.Context, campaignID string) (*campaigns.EVPortfolio, error) {
+			if campaignID == "bad" {
+				return nil, errors.New("not found")
+			}
+			return &campaigns.EVPortfolio{TotalEVCents: 200}, nil
+		},
+	}
+	e := newTestExecutor(svc)
+	result, err := e.Execute(context.Background(), "get_expected_values_batch", `{"campaignIds":["good","bad"]}`)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if !strings.Contains(result, `"good"`) {
+		t.Errorf("result missing 'good' campaign: %s", result)
+	}
+	if !strings.Contains(result, `"error"`) {
+		t.Errorf("result missing error for 'bad' campaign: %s", result)
+	}
+}
+
 func TestExecute_GetDashboardSummary(t *testing.T) {
 	svc := &mocks.MockCampaignService{
 		GetWeeklyReviewSummaryFn: func(_ context.Context) (*campaigns.WeeklyReviewSummary, error) {
