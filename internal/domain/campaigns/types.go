@@ -24,7 +24,8 @@ const (
 	SaleChannelOther     SaleChannel = "other"
 	SaleChannelGameStop  SaleChannel = "gamestop"
 	SaleChannelWebsite   SaleChannel = "website"
-	SaleChannelCardShow  SaleChannel = "cardshow"
+	SaleChannelCardShow   SaleChannel = "cardshow"
+	SaleChannelDoubleHolo SaleChannel = "doubleholo"
 )
 
 const (
@@ -142,6 +143,12 @@ type Purchase struct {
 	ReviewedPriceCents    int            `json:"reviewedPriceCents,omitempty"`
 	ReviewedAt            string         `json:"reviewedAt,omitempty"`
 	ReviewSource          ReviewSource   `json:"reviewSource,omitempty"`
+	// DoubleHolo v2 integration fields
+	DHCardID            int    `json:"dhCardId,omitempty"`            // DH card identity (from cert resolution)
+	DHInventoryID       int    `json:"dhInventoryId,omitempty"`       // DH inventory item ID (from inventory push)
+	DHCertStatus        string `json:"dhCertStatus,omitempty"`        // Resolution state: matched, ambiguous, not_found, unresolved, resolving
+	DHListingPriceCents int    `json:"dhListingPriceCents,omitempty"` // Current DH listing price
+	DHChannelsJSON      string `json:"dhChannelsJson,omitempty"`      // Per-channel sync status JSON blob
 	CreatedAt             time.Time      `json:"createdAt"`
 	UpdatedAt             time.Time      `json:"updatedAt"`
 
@@ -256,6 +263,8 @@ type Sale struct {
 	NetProfitCents int         `json:"netProfitCents"` // Computed: salePrice - buyCost - sourcingFee - saleFee
 	CreatedAt      time.Time   `json:"createdAt"`
 	UpdatedAt      time.Time   `json:"updatedAt"`
+	// DoubleHolo v2 order tracking
+	OrderID string `json:"orderId,omitempty"` // DH order_id for idempotency
 
 	// Sale outcome enrichment — captures HOW the card sold
 	OriginalListPriceCents int  `json:"originalListPriceCents,omitempty"` // Initial listing price
