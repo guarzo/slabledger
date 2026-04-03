@@ -27,10 +27,10 @@ func newTestClient(serverURL string) *Client {
 	httpClient := httpx.NewClient(config)
 
 	c := &Client{
-		apiKey:      "test_api_key",
-		baseURL:     serverURL,
-		httpClient:  httpClient,
-		rateLimiter: rate.NewLimiter(rate.Inf, 1),
+		apiKey:           "test_api_key",
+		baseURL:          serverURL,
+		httpClient:       httpClient,
+		rateLimiter:      rate.NewLimiter(rate.Inf, 1),
 		dailyCalls:       resilience.NewResettingCounter(24 * time.Hour),
 		minuteCalls:      resilience.NewResettingCounter(time.Minute),
 		rateLimitHits429: resilience.NewResettingCounter(24 * time.Hour),

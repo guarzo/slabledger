@@ -56,9 +56,9 @@ func NewClient(apiKey string, opts ...ClientOption) *Client {
 	httpClient := httpx.NewClient(config)
 
 	c := &Client{
-		apiKey:      apiKey,
-		baseURL:     baseURL,
-		httpClient:  httpClient,
+		apiKey:           apiKey,
+		baseURL:          baseURL,
+		httpClient:       httpClient,
 		dailyCalls:       resilience.NewResettingCounter(24 * time.Hour),
 		minuteCalls:      resilience.NewResettingCounter(time.Minute),
 		rateLimitHits429: resilience.NewResettingCounter(24 * time.Hour),

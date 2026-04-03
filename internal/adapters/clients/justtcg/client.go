@@ -39,7 +39,7 @@ type Client struct {
 	baseURL     string
 	httpClient  *httpx.Client
 	rateLimiter *rate.Limiter
-	logger observability.Logger
+	logger      observability.Logger
 
 	dailyCalls *resilience.ResettingCounter
 }

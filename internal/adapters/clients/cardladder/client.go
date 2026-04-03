@@ -57,7 +57,6 @@ func WithTokenManager(auth *FirebaseAuth, refreshToken string, tokenExpiry time.
 // NewClient creates a Card Ladder API client.
 func NewClient(opts ...ClientOption) *Client {
 	config := httpx.DefaultConfig("CardLadder")
-	config.DefaultTimeout = 30 * time.Second
 
 	c := &Client{
 		searchURL:   defaultSearchURL,

@@ -25,10 +25,15 @@ func TestResettingCounter_ResetAfterInterval(t *testing.T) {
 	if got := c.Load(); got != 2 {
 		t.Fatalf("expected 2, got %d", got)
 	}
-	time.Sleep(5 * time.Millisecond)
-	if got := c.Load(); got != 0 {
-		t.Fatalf("expected 0 after reset, got %d", got)
+	// Poll until the counter resets (avoids flaky fixed sleeps on CI).
+	deadline := time.Now().Add(500 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		if c.Load() == 0 {
+			return
+		}
+		time.Sleep(time.Millisecond)
 	}
+	t.Fatalf("expected 0 after reset, got %d", c.Load())
 }
 
 func TestResettingCounter_ConcurrentAccess(t *testing.T) {

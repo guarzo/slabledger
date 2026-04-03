@@ -182,10 +182,6 @@ func (h *AdminHandlers) HandleListUsers(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
-	if users == nil {
-		users = []auth.User{}
-	}
-
 	type userResponse struct {
 		ID          int64      `json:"id"`
 		Username    string     `json:"username"`
@@ -206,5 +202,5 @@ func (h *AdminHandlers) HandleListUsers(w http.ResponseWriter, r *http.Request) 
 			LastLoginAt: u.LastLoginAt,
 		}
 	}
-	writeJSON(w, http.StatusOK, resp)
+	writeJSONList(w, http.StatusOK, resp)
 }
