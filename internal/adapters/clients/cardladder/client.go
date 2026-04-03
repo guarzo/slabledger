@@ -4,14 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"net/url"
 	"strconv"
 	"sync"
 	"time"
 
 	"golang.org/x/time/rate"
+
+	"github.com/guarzo/slabledger/internal/adapters/clients/httpx"
 )
 
 const defaultSearchURL = "https://search-zzvl7ri3bq-uc.a.run.app/search"
@@ -20,7 +20,7 @@ const defaultSearchURL = "https://search-zzvl7ri3bq-uc.a.run.app/search"
 type Client struct {
 	searchURL   string
 	rateLimiter *rate.Limiter
-	httpClient  *http.Client
+	httpClient  *httpx.Client
 
 	// Token management
 	mu           sync.Mutex
@@ -56,10 +56,12 @@ func WithTokenManager(auth *FirebaseAuth, refreshToken string, tokenExpiry time.
 
 // NewClient creates a Card Ladder API client.
 func NewClient(opts ...ClientOption) *Client {
+	config := httpx.DefaultConfig("CardLadder")
+
 	c := &Client{
 		searchURL:   defaultSearchURL,
 		rateLimiter: rate.NewLimiter(rate.Limit(1), 1), // 1 req/sec
-		httpClient:  &http.Client{Timeout: 30 * time.Second},
+		httpClient:  httpx.NewClient(config),
 	}
 	for _, opt := range opts {
 		opt(c)
@@ -135,27 +137,16 @@ func (c *Client) doGet(ctx context.Context, params url.Values, result any) error
 	}
 
 	u := c.searchURL + "?" + params.Encode()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
-	if err != nil {
-		return fmt.Errorf("create request: %w", err)
+	headers := map[string]string{
+		"Authorization": "Bearer " + token,
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.httpClient.Get(ctx, u, headers, 0)
 	if err != nil {
 		return fmt.Errorf("http request: %w", err)
 	}
-	defer resp.Body.Close() //nolint:errcheck // best-effort close on HTTP response
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("read response: %w", err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("search API returned status %d: %s", resp.StatusCode, body)
-	}
-
-	if err := json.Unmarshal(body, result); err != nil {
+	if err := json.Unmarshal(resp.Body, result); err != nil {
 		return fmt.Errorf("unmarshal response: %w", err)
 	}
 	return nil

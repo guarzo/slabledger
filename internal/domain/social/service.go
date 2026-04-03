@@ -50,16 +50,6 @@ func WithLogger(l observability.Logger) ServiceOption {
 	return func(s *service) { s.logger = l }
 }
 
-// WithMinCards sets the minimum number of cards required to create a post.
-func WithMinCards(n int) ServiceOption {
-	return func(s *service) { s.minCards = n }
-}
-
-// WithMaxCards sets the maximum number of cards per post.
-func WithMaxCards(n int) ServiceOption {
-	return func(s *service) { s.maxCards = n }
-}
-
 // Publisher abstracts Instagram publishing so the domain doesn't depend on the client directly.
 type Publisher interface {
 	PublishCarousel(ctx context.Context, token, igUserID string, imageURLs []string, caption string) (*PublishResultInfo, error)

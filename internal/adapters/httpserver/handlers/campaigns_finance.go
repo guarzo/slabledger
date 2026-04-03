@@ -53,10 +53,7 @@ func (h *CampaignsHandler) HandleListInvoices(w http.ResponseWriter, r *http.Req
 		writeError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
-	if invoices == nil {
-		invoices = []campaigns.Invoice{}
-	}
-	writeJSON(w, http.StatusOK, invoices)
+	writeJSONList(w, http.StatusOK, invoices)
 }
 
 // HandleUpdateInvoice handles PUT /api/credit/invoices.
@@ -151,10 +148,7 @@ func (h *CampaignsHandler) HandleListRevocationFlags(w http.ResponseWriter, r *h
 		writeError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
-	if flags == nil {
-		flags = []campaigns.RevocationFlag{}
-	}
-	writeJSON(w, http.StatusOK, flags)
+	writeJSONList(w, http.StatusOK, flags)
 }
 
 // HandleCreateRevocationFlag handles POST /api/portfolio/revocations.

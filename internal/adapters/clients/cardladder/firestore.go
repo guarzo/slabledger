@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"net/url"
 )
 
@@ -65,28 +63,17 @@ func (c *Client) FetchFirestoreCards(ctx context.Context, uid, collectionID stri
 		}
 		u.RawQuery = q.Encode()
 
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
-		if err != nil {
-			return nil, fmt.Errorf("create firestore request: %w", err)
+		headers := map[string]string{
+			"Authorization": "Bearer " + token,
 		}
-		req.Header.Set("Authorization", "Bearer "+token)
 
-		resp, err := c.httpClient.Do(req)
+		resp, err := c.httpClient.Get(ctx, u.String(), headers, 0)
 		if err != nil {
 			return nil, fmt.Errorf("firestore request: %w", err)
 		}
 
-		body, err := io.ReadAll(resp.Body)
-		resp.Body.Close() //nolint:errcheck
-		if err != nil {
-			return nil, fmt.Errorf("read firestore response: %w", err)
-		}
-		if resp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("firestore returned status %d: %s", resp.StatusCode, body)
-		}
-
 		var listResp firestoreListResponse
-		if err := json.Unmarshal(body, &listResp); err != nil {
+		if err := json.Unmarshal(resp.Body, &listResp); err != nil {
 			return nil, fmt.Errorf("unmarshal firestore response: %w", err)
 		}
 

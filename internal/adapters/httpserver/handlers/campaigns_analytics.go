@@ -38,10 +38,7 @@ func (h *CampaignsHandler) HandlePNLByChannel(w http.ResponseWriter, r *http.Req
 		writeError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
-	if channels == nil {
-		channels = []campaigns.ChannelPNL{}
-	}
-	writeJSON(w, http.StatusOK, channels)
+	writeJSONList(w, http.StatusOK, channels)
 }
 
 // HandleFillRate handles GET /api/campaigns/{id}/fill-rate.
@@ -75,10 +72,7 @@ func (h *CampaignsHandler) HandleFillRate(w http.ResponseWriter, r *http.Request
 			}
 		}
 	}
-	if daily == nil {
-		daily = []campaigns.DailySpend{}
-	}
-	writeJSON(w, http.StatusOK, daily)
+	writeJSONList(w, http.StatusOK, daily)
 }
 
 // HandleDaysToSell handles GET /api/campaigns/{id}/days-to-sell.
@@ -93,10 +87,7 @@ func (h *CampaignsHandler) HandleDaysToSell(w http.ResponseWriter, r *http.Reque
 		writeError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
-	if buckets == nil {
-		buckets = []campaigns.DaysToSellBucket{}
-	}
-	writeJSON(w, http.StatusOK, buckets)
+	writeJSONList(w, http.StatusOK, buckets)
 }
 
 // HandleInventory handles GET /api/campaigns/{id}/inventory.
@@ -111,10 +102,7 @@ func (h *CampaignsHandler) HandleInventory(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
-	if items == nil {
-		items = []campaigns.AgingItem{}
-	}
-	writeJSON(w, http.StatusOK, items)
+	writeJSONList(w, http.StatusOK, items)
 }
 
 // HandleSellSheet handles POST /api/campaigns/{id}/sell-sheet.
@@ -160,10 +148,7 @@ func (h *CampaignsHandler) HandleGlobalInventory(w http.ResponseWriter, r *http.
 		writeError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
-	if items == nil {
-		items = []campaigns.AgingItem{}
-	}
-	writeJSON(w, http.StatusOK, items)
+	writeJSONList(w, http.StatusOK, items)
 }
 
 // HandleGlobalSellSheet handles POST /api/sell-sheet.
@@ -239,10 +224,7 @@ func (h *CampaignsHandler) HandleCrackCandidates(w http.ResponseWriter, r *http.
 		writeError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
-	if candidates == nil {
-		candidates = []campaigns.CrackAnalysis{}
-	}
-	writeJSON(w, http.StatusOK, candidates)
+	writeJSONList(w, http.StatusOK, candidates)
 }
 
 // HandleExpectedValues handles GET /api/campaigns/{id}/expected-values.

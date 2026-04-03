@@ -60,10 +60,7 @@ func (h *CardRequestHandlers) HandleListCardRequests(w http.ResponseWriter, r *h
 		writeError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
-	if items == nil {
-		items = []sqlite.CardRequestSubmission{}
-	}
-	writeJSON(w, http.StatusOK, items)
+	writeJSONList(w, http.StatusOK, items)
 }
 
 // HandleSubmitCardRequest submits a single card request to CardHedger.
