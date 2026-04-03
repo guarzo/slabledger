@@ -8,7 +8,6 @@ import (
 	"net"
 	"net/url"
 	"strings"
-	"time"
 )
 
 // This file contains HTTP client methods for PriceCharting API calls.
@@ -35,7 +34,7 @@ func (p *PriceCharting) lookupByQueryInternal(ctx context.Context, q string) (*P
 	optimizedQuery := p.queryHelper.OptimizeQueryForDirectLookup(q)
 	u := fmt.Sprintf("https://www.pricecharting.com/api/product?t=%s&q=%s", url.QueryEscape(p.token), url.QueryEscape(optimizedQuery))
 	var apiResp PriceChartingAPIResponse
-	err := p.httpClient.GetJSON(ctx, u, nil, 30*time.Second, &apiResp)
+	err := p.httpClient.GetJSON(ctx, u, nil, 0, &apiResp)
 	if err == nil && strings.EqualFold(apiResp.Status, "success") && hasPriceKeysTyped(&apiResp) {
 		jsonBytes, marshalErr := json.Marshal(apiResp)
 		if marshalErr != nil {
@@ -85,7 +84,7 @@ func (p *PriceCharting) lookupByQueryInternal(ctx context.Context, q string) (*P
 			ProductName string `json:"product-name"`
 		} `json:"products"`
 	}
-	if err := p.httpClient.GetJSON(ctx, u, nil, 30*time.Second, &many); err != nil {
+	if err := p.httpClient.GetJSON(ctx, u, nil, 0, &many); err != nil {
 		return nil, err
 	}
 	if !strings.EqualFold(many.Status, "success") || len(many.Products) == 0 {
@@ -95,7 +94,7 @@ func (p *PriceCharting) lookupByQueryInternal(ctx context.Context, q string) (*P
 	id := many.Products[0].ID
 	u = fmt.Sprintf("https://www.pricecharting.com/api/product?t=%s&id=%s", url.QueryEscape(p.token), url.QueryEscape(id))
 	var fullResp PriceChartingAPIResponse
-	if err := p.httpClient.GetJSON(ctx, u, nil, 30*time.Second, &fullResp); err != nil {
+	if err := p.httpClient.GetJSON(ctx, u, nil, 0, &fullResp); err != nil {
 		return nil, err
 	}
 	if !strings.EqualFold(fullResp.Status, "success") {
@@ -132,7 +131,7 @@ func (p *PriceCharting) LookupByUPC(ctx context.Context, upc string) (*PCMatch, 
 		url.QueryEscape(p.token), url.QueryEscape(upc))
 
 	var apiResp PriceChartingAPIResponse
-	if err := p.httpClient.GetJSON(ctx, u, nil, 30*time.Second, &apiResp); err != nil {
+	if err := p.httpClient.GetJSON(ctx, u, nil, 0, &apiResp); err != nil {
 		return nil, fmt.Errorf("UPC lookup failed: %w", err)
 	}
 
@@ -180,7 +179,7 @@ func (p *PriceCharting) LookupByProductID(ctx context.Context, productID string)
 	u := fmt.Sprintf("https://www.pricecharting.com/api/product?t=%s&id=%s",
 		url.QueryEscape(p.token), url.QueryEscape(productID))
 	var fullResp PriceChartingAPIResponse
-	if err := p.httpClient.GetJSON(ctx, u, nil, 30*time.Second, &fullResp); err != nil {
+	if err := p.httpClient.GetJSON(ctx, u, nil, 0, &fullResp); err != nil {
 		return nil, err
 	}
 	if !strings.EqualFold(fullResp.Status, "success") {

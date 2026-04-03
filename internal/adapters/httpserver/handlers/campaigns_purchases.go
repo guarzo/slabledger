@@ -20,10 +20,7 @@ func (h *CampaignsHandler) HandleListPurchases(w http.ResponseWriter, r *http.Re
 		writeError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
-	if list == nil {
-		list = []campaigns.Purchase{}
-	}
-	writeJSON(w, http.StatusOK, list)
+	writeJSONList(w, http.StatusOK, list)
 }
 
 // HandleCreatePurchase handles POST /api/campaigns/{id}/purchases.
@@ -67,10 +64,7 @@ func (h *CampaignsHandler) HandleListSales(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
-	if list == nil {
-		list = []campaigns.Sale{}
-	}
-	writeJSON(w, http.StatusOK, list)
+	writeJSONList(w, http.StatusOK, list)
 }
 
 // HandleCreateSale handles POST /api/campaigns/{id}/sales.

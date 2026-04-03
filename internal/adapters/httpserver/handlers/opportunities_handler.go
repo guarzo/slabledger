@@ -26,10 +26,7 @@ func (h *OpportunitiesHandler) HandleGetAcquisitionTargets(w http.ResponseWriter
 		writeError(w, http.StatusInternalServerError, "failed to get acquisition targets")
 		return
 	}
-	if targets == nil {
-		targets = []campaigns.AcquisitionOpportunity{}
-	}
-	writeJSON(w, http.StatusOK, targets)
+	writeJSONList(w, http.StatusOK, targets)
 }
 
 // HandleGetCrackOpportunities returns cross-campaign crack arbitrage candidates.
@@ -40,8 +37,5 @@ func (h *OpportunitiesHandler) HandleGetCrackOpportunities(w http.ResponseWriter
 		writeError(w, http.StatusInternalServerError, "failed to get crack opportunities")
 		return
 	}
-	if results == nil {
-		results = []campaigns.CrackAnalysis{}
-	}
-	writeJSON(w, http.StatusOK, results)
+	writeJSONList(w, http.StatusOK, results)
 }

@@ -43,10 +43,7 @@ func (h *CampaignsHandler) HandleListCampaigns(w http.ResponseWriter, r *http.Re
 		writeError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
-	if list == nil {
-		list = []campaigns.Campaign{}
-	}
-	writeJSON(w, http.StatusOK, list)
+	writeJSONList(w, http.StatusOK, list)
 }
 
 // HandleCreateCampaign handles POST /api/campaigns.

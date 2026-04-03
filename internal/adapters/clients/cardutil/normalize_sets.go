@@ -355,12 +355,6 @@ func IsChineseSet(setName string) bool {
 	return strings.HasPrefix(lower, "cn ") || strings.Contains(lower, "chinese")
 }
 
-// IsJapaneseSet returns true if the set name indicates a Japanese set.
-func IsJapaneseSet(setName string) bool {
-	lower := strings.ToLower(setName)
-	return strings.Contains(lower, "japanese") || strings.HasPrefix(lower, "ja ")
-}
-
 // IsChineseGemPackSet returns true if the set name matches a known Chinese Gem Pack volume
 // (CBB1/Vol 1, CBB2/Vol 2, CBB3/Vol 3). Only these volumes have species-based numbering
 // in PriceCharting. Requires the set to also be Chinese to avoid false positives on
