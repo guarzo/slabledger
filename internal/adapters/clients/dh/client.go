@@ -16,10 +16,11 @@ import (
 )
 
 const (
-	defaultTimeout    = 30 * time.Second
-	defaultRateLimRPS = 1
-	providerName      = "doubleholo"
-	apiKeyHeader      = "X-Integration-API-Key"
+	defaultTimeout      = 30 * time.Second
+	defaultRateLimRPS   = 1
+	providerName        = "doubleholo"
+	apiKeyHeader        = "X-Integration-API-Key"
+	enterpriseAuthHeader = "Authorization"
 )
 
 // ClientOption configures a Client after construction.
@@ -150,6 +151,70 @@ func (c *Client) get(ctx context.Context, fullURL string, dest any) error {
 	}
 
 	resp, err := c.httpClient.Get(ctx, fullURL, headers, c.timeout)
+	if err != nil {
+		return err
+	}
+
+	if err := json.Unmarshal(resp.Body, dest); err != nil {
+		return apperrors.ProviderInvalidResponse(providerName, err)
+	}
+	return nil
+}
+
+// getEnterprise performs a GET request with Bearer auth for the enterprise API.
+func (c *Client) getEnterprise(ctx context.Context, fullURL string, dest any) error {
+	if !c.Available() {
+		return apperrors.ConfigMissing("dh_api_key", "DH_INTEGRATION_API_KEY")
+	}
+
+	if err := c.limiter.Wait(ctx); err != nil {
+		if goerrors.Is(err, context.Canceled) || goerrors.Is(err, context.DeadlineExceeded) {
+			return err
+		}
+		return apperrors.ProviderUnavailable(providerName, err)
+	}
+
+	headers := map[string]string{
+		enterpriseAuthHeader: "Bearer " + c.apiKey,
+		"Accept":             "application/json",
+	}
+
+	resp, err := c.httpClient.Get(ctx, fullURL, headers, c.timeout)
+	if err != nil {
+		return err
+	}
+
+	if err := json.Unmarshal(resp.Body, dest); err != nil {
+		return apperrors.ProviderInvalidResponse(providerName, err)
+	}
+	return nil
+}
+
+// postEnterprise performs a POST request with Bearer auth for the enterprise API.
+func (c *Client) postEnterprise(ctx context.Context, fullURL string, body any, dest any) error {
+	if !c.Available() {
+		return apperrors.ConfigMissing("dh_api_key", "DH_INTEGRATION_API_KEY")
+	}
+
+	if err := c.limiter.Wait(ctx); err != nil {
+		if goerrors.Is(err, context.Canceled) || goerrors.Is(err, context.DeadlineExceeded) {
+			return err
+		}
+		return apperrors.ProviderUnavailable(providerName, err)
+	}
+
+	bodyBytes, err := json.Marshal(body)
+	if err != nil {
+		return apperrors.ProviderInvalidRequest(providerName, err)
+	}
+
+	headers := map[string]string{
+		enterpriseAuthHeader: "Bearer " + c.apiKey,
+		"Content-Type":       "application/json",
+		"Accept":             "application/json",
+	}
+
+	resp, err := c.httpClient.Post(ctx, fullURL, headers, bodyBytes, c.timeout)
 	if err != nil {
 		return err
 	}
