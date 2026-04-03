@@ -14,7 +14,7 @@ const saleColumns = `id, purchase_id, sale_channel, sale_price_cents, sale_fee_c
 	last_sold_cents, lowest_list_cents, conservative_cents, median_cents,
 	active_listings, sales_last_30d, trend_30d, snapshot_date, snapshot_json,
 	original_list_price_cents, price_reductions, days_listed, sold_at_asking_price,
-	was_cracked`
+	was_cracked, order_id`
 
 // scanSale scans a single Sale row matching saleColumns order.
 func scanSale(scanner interface{ Scan(dest ...any) error }) (campaigns.Sale, error) {
@@ -25,7 +25,7 @@ func scanSale(scanner interface{ Scan(dest ...any) error }) (campaigns.Sale, err
 		&s.LastSoldCents, &s.LowestListCents, &s.ConservativeCents, &s.MedianCents,
 		&s.ActiveListings, &s.SalesLast30d, &s.Trend30d, &s.SnapshotDate, &s.SnapshotJSON,
 		&s.OriginalListPriceCents, &s.PriceReductions, &s.DaysListed, &s.SoldAtAskingPrice,
-		&s.WasCracked,
+		&s.WasCracked, &s.OrderID,
 	)
 	return s, err
 }
@@ -35,7 +35,7 @@ func scanSale(scanner interface{ Scan(dest ...any) error }) (campaigns.Sale, err
 func (r *CampaignsRepository) CreateSale(ctx context.Context, s *campaigns.Sale) error {
 	query := `
 		INSERT INTO campaign_sales (` + saleColumns + `)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 	_, err := r.db.ExecContext(ctx, query,
 		s.ID, s.PurchaseID, s.SaleChannel, s.SalePriceCents,
@@ -44,7 +44,7 @@ func (r *CampaignsRepository) CreateSale(ctx context.Context, s *campaigns.Sale)
 		s.LastSoldCents, s.LowestListCents, s.ConservativeCents, s.MedianCents,
 		s.ActiveListings, s.SalesLast30d, s.Trend30d, s.SnapshotDate, s.SnapshotJSON,
 		s.OriginalListPriceCents, s.PriceReductions, s.DaysListed, s.SoldAtAskingPrice,
-		s.WasCracked,
+		s.WasCracked, s.OrderID,
 	)
 	if err != nil && isUniqueConstraintError(err) {
 		return campaigns.ErrDuplicateSale

@@ -59,6 +59,10 @@ type PurchaseRepository interface {
 	// Snapshot status
 	ListSnapshotPurchasesByStatus(ctx context.Context, status SnapshotStatus, limit int) ([]Purchase, error)
 	UpdatePurchaseSnapshotStatus(ctx context.Context, id string, status SnapshotStatus, retryCount int) error
+
+	// DH v2 fields
+	UpdatePurchaseDHFields(ctx context.Context, id string, cardID, inventoryID int, certStatus string, listingPriceCents int, channelsJSON string) error
+	GetPurchasesByDHCertStatus(ctx context.Context, status string, limit int) ([]Purchase, error)
 }
 
 // SaleRepository handles sale persistence.
