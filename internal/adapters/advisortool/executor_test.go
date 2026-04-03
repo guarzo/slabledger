@@ -306,6 +306,98 @@ func TestExecute_GetExpectedValuesBatch_PartialFailure(t *testing.T) {
 	}
 }
 
+func TestExecute_SuggestPriceBatch_AllOK(t *testing.T) {
+	var called []string
+	svc := &mocks.MockCampaignService{
+		SetAISuggestedPriceFn: func(_ context.Context, purchaseID string, priceCents int) error {
+			called = append(called, purchaseID)
+			return nil
+		},
+	}
+	e := newTestExecutor(svc)
+	result, err := e.Execute(context.Background(), "suggest_price_batch",
+		`{"suggestions":[{"purchaseId":"p1","priceCents":1500},{"purchaseId":"p2","priceCents":2000}]}`)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if len(called) != 2 {
+		t.Fatalf("expected 2 calls, got %d", len(called))
+	}
+	var got struct {
+		Results []struct {
+			PurchaseID string `json:"purchaseId"`
+			Status     string `json:"status"`
+		} `json:"results"`
+	}
+	if err := json.Unmarshal([]byte(result), &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(got.Results) != 2 {
+		t.Fatalf("got %d results, want 2", len(got.Results))
+	}
+	for _, r := range got.Results {
+		if r.Status != "ok" {
+			t.Errorf("purchaseId %s: status = %q, want ok", r.PurchaseID, r.Status)
+		}
+	}
+}
+
+func TestExecute_SuggestPriceBatch_PartialFailure(t *testing.T) {
+	svc := &mocks.MockCampaignService{
+		SetAISuggestedPriceFn: func(_ context.Context, purchaseID string, priceCents int) error {
+			if purchaseID == "bad" {
+				return errors.New("purchase not found")
+			}
+			return nil
+		},
+	}
+	e := newTestExecutor(svc)
+	result, err := e.Execute(context.Background(), "suggest_price_batch",
+		`{"suggestions":[{"purchaseId":"good","priceCents":1500},{"purchaseId":"bad","priceCents":2000}]}`)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	var got struct {
+		Results []struct {
+			PurchaseID string `json:"purchaseId"`
+			Status     string `json:"status"`
+			Error      string `json:"error,omitempty"`
+		} `json:"results"`
+	}
+	if err := json.Unmarshal([]byte(result), &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(got.Results) != 2 {
+		t.Fatalf("got %d results, want 2", len(got.Results))
+	}
+	if got.Results[0].Status != "ok" {
+		t.Errorf("good: status = %q, want ok", got.Results[0].Status)
+	}
+	if got.Results[1].Status != "error" {
+		t.Errorf("bad: status = %q, want error", got.Results[1].Status)
+	}
+	if got.Results[1].Error == "" {
+		t.Error("bad: expected error message")
+	}
+}
+
+func TestExecute_SuggestPriceBatch_Empty(t *testing.T) {
+	e := newTestExecutor(&mocks.MockCampaignService{})
+	_, err := e.Execute(context.Background(), "suggest_price_batch", `{"suggestions":[]}`)
+	if err == nil {
+		t.Fatal("expected error for empty suggestions")
+	}
+}
+
+func TestExecute_SuggestPriceBatch_InvalidItem(t *testing.T) {
+	e := newTestExecutor(&mocks.MockCampaignService{})
+	_, err := e.Execute(context.Background(), "suggest_price_batch",
+		`{"suggestions":[{"purchaseId":"","priceCents":1500}]}`)
+	if err == nil {
+		t.Fatal("expected error for empty purchaseId")
+	}
+}
+
 func TestExecute_GetDashboardSummary(t *testing.T) {
 	svc := &mocks.MockCampaignService{
 		GetWeeklyReviewSummaryFn: func(_ context.Context) (*campaigns.WeeklyReviewSummary, error) {

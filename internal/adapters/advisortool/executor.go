@@ -260,6 +260,7 @@ func (e *CampaignToolExecutor) registerTools() {
 	e.registerGetInventoryAlerts()
 	e.registerGetDataGapReport()
 	e.registerGetExpectedValuesBatch()
+	e.registerSuggestPriceBatch()
 }
 
 // registerGetDataGapReport registers the get_data_gap_report tool.

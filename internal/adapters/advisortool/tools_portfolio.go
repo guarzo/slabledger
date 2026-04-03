@@ -384,6 +384,74 @@ func (e *CampaignToolExecutor) registerGetCrackOpportunities() {
 	})
 }
 
+func (e *CampaignToolExecutor) registerSuggestPriceBatch() {
+	e.register(ai.ToolDefinition{
+		Name:        "suggest_price_batch",
+		Description: "Suggest sell prices for multiple purchases in one call. Each suggestion is saved for user review. Returns per-item status.",
+		Parameters: jsonSchema{
+			Type: "object",
+			Properties: map[string]jsonSchema{
+				"suggestions": {
+					Type:        "array",
+					Description: "Array of price suggestions",
+					Items: &jsonSchema{
+						Type: "object",
+						Properties: map[string]jsonSchema{
+							"purchaseId": {Type: "string", Description: "Purchase ID to suggest a price for"},
+							"priceCents": {Type: "integer", Description: "Suggested price in cents"},
+						},
+						Required: []string{"purchaseId", "priceCents"},
+					},
+				},
+			},
+			Required: []string{"suggestions"},
+		},
+	}, func(ctx context.Context, args string) (string, error) {
+		var p struct {
+			Suggestions []struct {
+				PurchaseID string `json:"purchaseId"`
+				PriceCents int    `json:"priceCents"`
+			} `json:"suggestions"`
+		}
+		if err := json.Unmarshal([]byte(args), &p); err != nil {
+			return "", fmt.Errorf("invalid arguments: %w", err)
+		}
+		if len(p.Suggestions) == 0 {
+			return "", fmt.Errorf("suggestions array is required and must not be empty")
+		}
+
+		// Validate all items before executing any.
+		for _, s := range p.Suggestions {
+			if s.PurchaseID == "" {
+				return "", fmt.Errorf("purchaseId is required for each suggestion")
+			}
+			if s.PriceCents <= 0 {
+				return "", fmt.Errorf("priceCents must be positive for purchaseId %s", s.PurchaseID)
+			}
+		}
+
+		type itemResult struct {
+			PurchaseID string `json:"purchaseId"`
+			Status     string `json:"status"`
+			Error      string `json:"error,omitempty"`
+		}
+		results := make([]itemResult, len(p.Suggestions))
+		for i, s := range p.Suggestions {
+			if err := e.svc.SetAISuggestedPrice(ctx, s.PurchaseID, s.PriceCents); err != nil {
+				results[i] = itemResult{PurchaseID: s.PurchaseID, Status: "error", Error: err.Error()}
+			} else {
+				results[i] = itemResult{PurchaseID: s.PurchaseID, Status: "ok"}
+			}
+		}
+
+		resp := struct {
+			Results []itemResult `json:"results"`
+		}{Results: results}
+		b, _ := json.Marshal(resp) //nolint:errcheck
+		return string(b), nil
+	})
+}
+
 // jsonSchema is a minimal JSON Schema representation for tool parameters.
 type jsonSchema struct {
 	Type        string                `json:"type"`
