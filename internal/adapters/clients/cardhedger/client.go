@@ -45,7 +45,7 @@ type Client struct {
 	minuteCalls *resilience.ResettingCounter
 
 	// 429 tracking
-	rateLimitHits429 atomic.Int64
+	rateLimitHits429 *resilience.ResettingCounter
 	last429Time      atomic.Int64 // unix timestamp
 }
 
@@ -59,8 +59,9 @@ func NewClient(apiKey string, opts ...ClientOption) *Client {
 		apiKey:      apiKey,
 		baseURL:     baseURL,
 		httpClient:  httpClient,
-		dailyCalls:  resilience.NewResettingCounter(24 * time.Hour),
-		minuteCalls: resilience.NewResettingCounter(time.Minute),
+		dailyCalls:       resilience.NewResettingCounter(24 * time.Hour),
+		minuteCalls:      resilience.NewResettingCounter(time.Minute),
+		rateLimitHits429: resilience.NewResettingCounter(24 * time.Hour),
 		// 100 req/min with burst of 5
 		rateLimiter: rate.NewLimiter(rate.Limit(100.0/60.0), 5),
 	}
@@ -97,7 +98,7 @@ func (c *Client) MinuteCallsUsed() int {
 	return int(c.minuteCalls.Load())
 }
 
-// RateLimitHits returns the number of 429 responses received today.
+// RateLimitHits returns the number of 429 responses received since the last daily reset.
 func (c *Client) RateLimitHits() int {
 	return int(c.rateLimitHits429.Load())
 }
@@ -112,7 +113,7 @@ func (c *Client) Last429Time() time.Time {
 }
 
 func (c *Client) record429(ctx context.Context, path string) {
-	c.rateLimitHits429.Add(1)
+	c.rateLimitHits429.Inc()
 	c.last429Time.Store(time.Now().Unix())
 	if c.logger != nil {
 		c.logger.Warn(ctx, "cardhedger 429 rate limit hit",

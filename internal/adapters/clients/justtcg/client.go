@@ -39,8 +39,7 @@ type Client struct {
 	baseURL     string
 	httpClient  *httpx.Client
 	rateLimiter *rate.Limiter
-	logger      observability.Logger
-	timeout     time.Duration
+	logger observability.Logger
 
 	dailyCalls *resilience.ResettingCounter
 }
@@ -60,7 +59,6 @@ func NewClient(apiKey string, opts ...ClientOption) *Client {
 		apiKey:     apiKey,
 		baseURL:    defaultBaseURL,
 		httpClient: httpClient,
-		timeout:    30 * time.Second,
 		dailyCalls: resilience.NewResettingCounter(24 * time.Hour),
 		// 100 req/min with burst of 5 (Pro plan)
 		rateLimiter: rate.NewLimiter(rate.Limit(100.0/60.0), 5),
@@ -154,7 +152,7 @@ func (c *Client) get(ctx context.Context, path string, result any) (int, error) 
 	}
 	fullURL := c.baseURL + path
 	return c.doRequest(ctx, path, func() (*httpx.Response, error) {
-		return c.httpClient.Get(ctx, fullURL, headers, c.timeout)
+		return c.httpClient.Get(ctx, fullURL, headers, 0)
 	}, result)
 }
 
@@ -167,7 +165,7 @@ func (c *Client) post(ctx context.Context, path string, body []byte, result any)
 	}
 	fullURL := c.baseURL + path
 	return c.doRequest(ctx, path, func() (*httpx.Response, error) {
-		return c.httpClient.Post(ctx, fullURL, headers, body, c.timeout)
+		return c.httpClient.Post(ctx, fullURL, headers, body, 0)
 	}, result)
 }
 

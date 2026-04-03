@@ -31,8 +31,9 @@ func newTestClient(serverURL string) *Client {
 		baseURL:     serverURL,
 		httpClient:  httpClient,
 		rateLimiter: rate.NewLimiter(rate.Inf, 1),
-		dailyCalls:  resilience.NewResettingCounter(24 * time.Hour),
-		minuteCalls: resilience.NewResettingCounter(time.Minute),
+		dailyCalls:       resilience.NewResettingCounter(24 * time.Hour),
+		minuteCalls:      resilience.NewResettingCounter(time.Minute),
+		rateLimitHits429: resilience.NewResettingCounter(24 * time.Hour),
 	}
 	return c
 }

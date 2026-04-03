@@ -35,11 +35,6 @@ func (rc *ResettingCounter) Load() int64 {
 	return rc.count.Load()
 }
 
-// Store sets the counter to a specific value (e.g. for resetting 429 counts).
-func (rc *ResettingCounter) Store(val int64) {
-	rc.count.Store(val)
-}
-
 func (rc *ResettingCounter) resetIfNeeded() {
 	now := time.Now().UnixNano()
 	if now < rc.resetAt.Load() {
