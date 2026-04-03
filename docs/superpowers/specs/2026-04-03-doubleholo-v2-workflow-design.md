@@ -29,11 +29,98 @@ Based on DH's accepted proposal. All monetary values are in **cents** (integer, 
 
 ### 1. Cert Resolution
 
-`POST /certs/resolve`
+Three endpoints covering sync single-cert lookup, async batch submission, and batch result polling. All resolve PSA cert numbers to DoubleHolo card identities via PSA's API using our PSA API key (configured in DH account).
 
-Resolves PSA cert numbers to DoubleHolo card identities via PSA's API using our PSA API key (configured in DH account). Accepts optional hint fields to improve match rates.
+**Prerequisite:** PSA API key must be configured in DH account. Endpoints return an error if not configured.
 
-**Limits:** Max 50 certs per request (constrained by PSA API rate limit of 100/batch).
+#### Shared Cert Object
+
+All cert resolution endpoints accept the same cert object shape:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `cert_number` | string | yes | PSA certification number |
+| `card_name` | string | no | Hint to improve matching |
+| `set_name` | string | no | Hint to improve matching |
+| `card_number` | string | no | Card number within set |
+| `year` | string | no | Release year hint |
+| `variant` | string | no | e.g., "Holofoil", "1st Edition" |
+| `language` | string | no | e.g., "English", "Japanese" |
+
+#### Shared Result Shape
+
+Each resolved cert returns one of three statuses:
+
+| Status | Description |
+|--------|-------------|
+| `matched` | Single confident match. Full card details and market price included. |
+| `ambiguous` | Multiple possible matches. Candidates returned for disambiguation. |
+| `not_found` | No match in DH database. |
+
+```json
+[
+  {
+    "cert_number": "12345678",
+    "status": "matched",
+    "dh_card_id": 51942,
+    "card_name": "Charizard",
+    "set_name": "Base Set",
+    "card_number": "4/102",
+    "grade": 9,
+    "image_url": "https://...",
+    "current_market_price_cents": 45000
+  },
+  {
+    "cert_number": "87654321",
+    "status": "ambiguous",
+    "candidates": [
+      {
+        "dh_card_id": 12001,
+        "card_name": "Pikachu",
+        "set_name": "Base Set",
+        "card_number": "58/102",
+        "image_url": "https://..."
+      },
+      {
+        "dh_card_id": 12002,
+        "card_name": "Pikachu",
+        "set_name": "Base Set 2",
+        "card_number": "87/130",
+        "image_url": "https://..."
+      }
+    ]
+  },
+  {
+    "cert_number": "99999999",
+    "status": "not_found"
+  }
+]
+```
+
+#### 1a. Sync Single Cert
+
+`POST /enterprise/certs/resolve`
+
+Resolves a single cert synchronously. Calls PSA API once, returns immediately. Fast for one-off lookups and individual reconciliation.
+
+**Request:** A single cert object (not an array).
+```json
+{
+  "cert_number": "12345678",
+  "card_name": "Charizard",
+  "set_name": "Base Set"
+}
+```
+
+**Response:** A single result object (same shape as the shared result above).
+
+#### 1b. Async Batch Submit
+
+`POST /enterprise/certs/resolve_batch`
+
+Submits up to 500 certs for asynchronous resolution. Returns a job ID immediately.
+
+**Limits:** Max 500 certs per request.
 
 **Request:**
 ```json
@@ -53,70 +140,45 @@ Resolves PSA cert numbers to DoubleHolo card identities via PSA's API using our 
 }
 ```
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `cert_number` | string | yes | PSA certification number |
-| `card_name` | string | no | Hint to improve matching |
-| `set_name` | string | no | Hint to improve matching |
-| `card_number` | string | no | Card number within set |
-| `year` | string | no | Release year hint |
-| `variant` | string | no | e.g., "Holofoil", "1st Edition" |
-| `language` | string | no | e.g., "English", "Japanese" |
+**Response:**
+```json
+{
+  "job_id": "job_abc123",
+  "status": "queued",
+  "total_certs": 200
+}
+```
+
+#### 1c. Batch Result Poll
+
+`GET /enterprise/certs/resolve_batch/:job_id`
+
+Returns the current status and any available results for a batch resolution job. Supports partial results — resolved certs appear as they complete.
 
 **Response:**
 ```json
 {
-  "results": [
-    {
-      "cert_number": "12345678",
-      "status": "matched",
-      "dh_card_id": 51942,
-      "card_name": "Charizard",
-      "set_name": "Base Set",
-      "card_number": "4/102",
-      "grade": 9,
-      "image_url": "https://...",
-      "current_market_price_cents": 45000
-    },
-    {
-      "cert_number": "87654321",
-      "status": "ambiguous",
-      "candidates": [
-        {
-          "dh_card_id": 12001,
-          "card_name": "Pikachu",
-          "set_name": "Base Set",
-          "card_number": "58/102",
-          "image_url": "https://..."
-        },
-        {
-          "dh_card_id": 12002,
-          "card_name": "Pikachu",
-          "set_name": "Base Set 2",
-          "card_number": "87/130",
-          "image_url": "https://..."
-        }
-      ]
-    },
-    {
-      "cert_number": "99999999",
-      "status": "not_found"
-    }
-  ]
+  "job_id": "job_abc123",
+  "status": "completed",
+  "total_certs": 200,
+  "resolved_count": 185,
+  "results": [ ... ]
 }
 ```
 
-| Status | Description |
-|--------|-------------|
-| `matched` | Single confident match. Full card details and market price included. |
-| `ambiguous` | Multiple possible matches. Candidates returned for disambiguation. |
-| `not_found` | No match in DH database. |
+| Field | Type | Description |
+|-------|------|-------------|
+| `job_id` | string | Job identifier |
+| `status` | string | `queued`, `processing`, `completed`, `failed` |
+| `total_certs` | integer | Number of certs submitted |
+| `resolved_count` | integer | Number of certs with results so far |
+| `results` | array | Available results (partial during `processing`, complete when `completed`) |
 
-**Usage pattern:**
-- First pass at PSA import: cert number only (PSA sheet has no structured card metadata)
-- Reconciliation pass: re-submit unmatched/ambiguous certs with enriched metadata (card name, set, number, year, variant, language) gathered from Card Ladder data or manual correction
+#### Usage Patterns
 
-**Prerequisite:** PSA API key must be configured in DH account. Endpoint returns an error if not configured.
+- **PSA import (batch):** Submit all certs via `resolve_batch` (up to 500 per job, so a typical PSA sheet fits in one job). Poll for results. A 200-cert sheet is a single submission.
+- **Reconciliation (single):** User fixes one cert at a time — use the sync `resolve` endpoint with enriched hints (card name, set, number, year, variant, language) gathered from Card Ladder data or manual correction.
+- **Reconciliation (batch):** Re-submit multiple unmatched/ambiguous certs with hints via `resolve_batch`.
 
 ### 2. Inventory Management
 
@@ -148,7 +210,7 @@ Push inventory to DoubleHolo with upsert semantics — if a cert number already 
 {
   "results": [
     {
-      "dh_inventory_id": "inv_98765",
+      "dh_inventory_id": 98765,
       "cert_number": "12345678",
       "status": "active",
       "assigned_price_cents": 7500,
@@ -163,7 +225,7 @@ Push inventory to DoubleHolo with upsert semantics — if a cert number already 
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `dh_inventory_id` | string | Unique inventory item ID |
+| `dh_inventory_id` | integer | Unique inventory item ID |
 | `cert_number` | string | Echoed back for correlation |
 | `status` | string | `active`, `pending`, or `failed` |
 | `assigned_price_cents` | integer | Price set by auto-pricing (null if still pending) |
@@ -188,7 +250,7 @@ Channel status values: `pending` (sync queued), `active` (live on channel), `err
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `dh_inventory_id` | string | Inventory item ID |
+| `dh_inventory_id` | integer | Inventory item ID |
 | `dh_card_id` | integer | DH card ID |
 | `cert_number` | string | PSA cert number |
 | `card_name` | string | Card name |
@@ -284,7 +346,7 @@ The existing DH client (`internal/adapters/clients/dh/client.go`) currently uses
 | Current (Integration API) | Enterprise API Equivalent | Notes |
 |---|---|---|
 | `GET /api/v1/integrations/catalog/search` | `GET /search` | Query param changes: `q` → `query`, `limit` → `per_page` |
-| `POST /api/v1/integrations/match` | `POST /certs/resolve` | Title/SKU matching replaced by cert-based resolution. Match endpoint may still be useful as a fallback for non-cert scenarios — confirm with DH if it will exist on enterprise. |
+| `POST /api/v1/integrations/match` | `POST /enterprise/certs/resolve` (single) or `POST /enterprise/certs/resolve_batch` (batch) | Title/SKU matching replaced by cert-based resolution (sync for single lookups, async for batches). Match endpoint may still be useful as a fallback for non-cert scenarios — confirm with DH if it will exist on enterprise. |
 | `GET /api/v1/integrations/market_data/{id}?tier=tier3` | `GET /cards/{cardId}/insights` | Enterprise returns a unified insights package (AI summary, forecast, sentiment, population, grading ROI) instead of the tiered market data response. Response schema changes significantly. |
 | `GET /api/v1/integrations/suggestions` | **Not in enterprise spec** | Need to confirm with DH whether suggestions will be available on enterprise, or if this stays on the integration API. |
 
@@ -303,7 +365,7 @@ The existing DH client (`internal/adapters/clients/dh/client.go`) currently uses
 - Update rate limiter to align with enterprise limits (100 req/min instead of 1 RPS)
 - Refactor `Search` to map to enterprise search params and response schema
 - Refactor `MarketData` to consume the unified `CardInsightsResponse` instead of tiered market data
-- Replace `Match` usage with `ResolveCerts` where cert numbers are available
+- Replace `Match` usage with `ResolveCert` (single) or `ResolveCertsBatch` (batch) where cert numbers are available
 - Update `convert.go` to handle new response schemas for intelligence storage
 - Confirm with DH: will `suggestions` and `match` endpoints be available on enterprise?
 
@@ -320,7 +382,13 @@ This can be done as a separate task from the new v2 inventory/orders integration
 
 ### Enhanced PSA Import Flow
 
-After parsing the PSA sheet and creating purchases, the system automatically calls `ResolveCerts` in batches of 50. For a typical 200-cert PSA sheet this means 4 sequential API calls. Matched certs enrich purchases with the DH card ID and canonical card metadata. This replaces the async CardHedger discovery as the primary card identity source for newly imported cards.
+After parsing the PSA sheet and creating purchases, the system submits all certs via `ResolveCertsBatch` (up to 500 per job). A typical 200-cert PSA sheet fits in a single batch submission. The system then polls `GetCertResolutionJob` for results.
+
+**Polling strategy:** Poll every 3 seconds, max 2-minute timeout. Partial results are available during processing, enabling progressive UI updates (e.g., "Resolving certs... 150/200 matched"). On timeout, store whatever partial results are available and flag remaining certs as `unresolved`.
+
+Matched certs enrich purchases with the DH card ID and canonical card metadata. This replaces the async CardHedger discovery as the primary card identity source for newly imported cards.
+
+**Field handling:** When DH returns a match, the canonical DH card metadata (`card_name`, `set_name`, `card_number`) is written to the existing Purchase fields, overwriting the PSA sheet's title-parsed values. The raw PSA listing title is preserved in `PSAListingTitle` for reference. The `DHCardID` field stores the DH card identity for inventory push.
 
 Ambiguous results are stored with their candidates so the user can disambiguate via UI.
 
@@ -338,17 +406,19 @@ The single upsert endpoint handles both cases — no need for separate create vs
 
 For certs that returned `ambiguous` or `not_found`:
 1. User disambiguates candidates (for ambiguous) or enriches card metadata (for not_found) via Card Ladder data, manual input, or other sources
-2. Re-submit to `ResolveCerts` with hints (card name, set name, card number, year, variant, language)
+2. Re-submit individually via `ResolveCert` (sync endpoint) with hints (card name, set name, card number, year, variant, language), or in bulk via `ResolveCertsBatch` (async endpoint)
 3. Successfully resolved certs can then be pushed to inventory
 
 ### New DH Client Methods
 
 Extending `internal/adapters/clients/dh/client.go`:
-- `ResolveCerts(ctx, []CertResolveRequest) → []CertResolution`
+- `ResolveCert(ctx, CertResolveRequest) → CertResolution` — Sync single-cert resolution
+- `ResolveCertsBatch(ctx, []CertResolveRequest) → CertResolutionJob` — Submit async batch (up to 500), returns job ID
+- `GetCertResolutionJob(ctx, jobID string) → CertResolutionJobStatus` — Poll batch job for partial/complete results
 - `PushInventory(ctx, []InventoryItem) → []InventoryResult`
 - `ListInventory(ctx, InventoryFilters) → InventoryPage`
-- `UpdateInventory(ctx, id, InventoryUpdate) → error`
-- `DelistInventory(ctx, id) → error`
+- `UpdateInventory(ctx, id int, InventoryUpdate) → error`
+- `DelistInventory(ctx, id int) → error`
 - `GetOrders(ctx, OrderFilters) → OrdersPage`
 
 ### New Schedulers
@@ -362,8 +432,9 @@ Extending `internal/adapters/clients/dh/client.go`:
 **Orders Poll** (`dh_orders_poll.go`):
 - Interval: configurable (e.g. every 30 minutes)
 - Calls `GET /orders?since=<checkpoint>`
-- Converts DH order responses to `OrdersExportRow`
-- Feeds through existing `ImportOrdersSales` → `ConfirmOrdersSales` pipeline
+- Converts DH order responses to `OrdersExportRow` and feeds through `ImportOrdersSales` for cert matching and validation
+- **Auto-confirms** matched orders via `ConfirmOrdersSales` — no user review step. DH is the authoritative sales source, so manual confirmation is unnecessary. Orders that fail matching (`NotFound`, `AlreadySold`) are logged as warnings for the user to review in the UI, not silently dropped.
+- **Fee mapping:** DH provides `channel_fee_cents` and `commission_cents`, which may be `null`. Sum all non-null fee components into `SaleFeeCents`. When all fees are null, fall back to the campaign's configured `ebayFeePct` for eBay/TCGPlayer channels (0% for local/other), consistent with the existing manual import behavior.
 - Stores `order_id` on sale record for idempotency
 - Updates checkpoint on success
 
@@ -372,21 +443,25 @@ Extending `internal/adapters/clients/dh/client.go`:
 Minimal:
 - Add `OrderID` field to `Sale` for idempotency (matches DH's `order_id` field)
 - Add `DHInventoryID` (integer), `ListingPriceCents`, and `DHCardID` fields to `Purchase` for tracking
-- Add `DHCertStatus` field to `Purchase` for tracking resolution state (`matched`, `ambiguous`, `not_found`, `unresolved`)
+- Add `DHCertStatus` field to `Purchase` for tracking resolution state (`matched`, `ambiguous`, `not_found`, `unresolved`, `resolving`)
+- Add `DHChannelsJSON` text field to `Purchase` — stores per-channel sync status as a JSON blob (e.g., `[{"name":"ebay","status":"active"}]`). Updated by the inventory status poll. Parsed at the API boundary for display.
 - New unique constraint on `order_id` in sales table
-- The existing order import / sale recording logic (`ImportOrdersSales`, `ConfirmOrdersSales`) is reused as-is
+- **SaleChannel mapping:** DH uses `"dh"`, `"ebay"`, `"shopify"`. Map to existing `SaleChannel` values: `"ebay"` → eBay, `"shopify"` → TCGPlayer (our Shopify is TCGPlayer Direct), `"dh"` → new `SaleChannelDoubleHolo` constant. Confirm the Shopify mapping assumption with the business — if DH's Shopify channel is a separate storefront, it may need its own channel with its own fee structure.
+- The existing order import / sale recording logic (`ImportOrdersSales`, `ConfirmOrdersSales`) is reused for cert matching and validation. The orders poll auto-confirms matched orders (see Orders Poll section above).
 
 ## Error Handling
 
 **Cert resolution failures:** Unresolved certs still create purchases in SlabLedger with title-parsed metadata. They are flagged with `DHCertStatus` for reconciliation but do not block the import.
 
-**Ambiguous certs:** Candidates stored locally. User can select the correct match via UI, then re-submit or directly push to inventory with the chosen DH card ID.
+**Batch job failures:** If `resolve_batch` submission fails, all certs in the batch are flagged as `unresolved`. If polling times out (2 minutes), any partial results received are applied and remaining certs are flagged `unresolved`. If the job returns `failed` status, all certs without results are flagged `unresolved`. In all cases, the PSA import succeeds — cert resolution is best-effort enrichment.
+
+**Ambiguous certs:** Candidates stored locally. User can select the correct match via UI, then re-submit via sync endpoint or directly push to inventory with the chosen DH card ID.
 
 **Inventory push failures:** Per-item status reporting. Partial success is expected and handled — same pattern as existing PSA import results. Per-channel sync status lets us show granular progress.
 
 **Order polling idempotency:** DH `order_id` values stored on sale records with unique constraint. Overlapping poll windows or retries cannot create duplicate sales.
 
-**Polling state:** High-water mark timestamp stored in SQLite (e.g. `scheduler_state` table). Each poll cycle: fetch → match → record → update checkpoint.
+**Polling state:** High-water mark timestamp stored in the existing `sync_state` table via the `SyncStateStore` interface (same mechanism used by the CardHedger refresh scheduler). Each poll cycle: fetch → match → record → update checkpoint.
 
 **Reconciliation:** Periodic `GET /inventory` call verifies SlabLedger's view matches DH's view. Discrepancies (missed sales, manual delists, price changes) are flagged for the user.
 
