@@ -411,6 +411,11 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 	// Same nil-safety for DH dependencies.
 	if deps.DHClient != nil {
 		buildDeps.DHClient = deps.DHClient
+		buildDeps.DHOrdersClient = deps.DHClient
+		buildDeps.DHInventoryListClient = deps.DHClient
+		buildDeps.DHFieldsUpdater = deps.CampaignsRepo
+		buildDeps.PurchaseByCertLookup = deps.CampaignsRepo
+		buildDeps.CampaignService = deps.CampaignsService
 	}
 	if deps.DHIntelligenceRepo != nil {
 		buildDeps.DHIntelligenceRepo = deps.DHIntelligenceRepo

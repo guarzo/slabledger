@@ -395,6 +395,16 @@ func FromEnv(base Config) Config {
 		}
 	}
 	cfg.DH.Enabled = parseBool(os.Getenv("DH_ENABLED"), cfg.DH.Enabled)
+	if v := os.Getenv("DH_ORDERS_POLL_INTERVAL"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			cfg.DH.OrdersPollInterval = d
+		}
+	}
+	if v := os.Getenv("DH_INVENTORY_POLL_INTERVAL"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			cfg.DH.InventoryPollInterval = d
+		}
+	}
 
 	cfg.JustTCG.ApplyDefaults()
 

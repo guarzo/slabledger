@@ -136,9 +136,11 @@ type AdapterConfig struct {
 
 // DHConfig holds DH scheduler and rate limiting settings.
 type DHConfig struct {
-	Enabled       bool
-	CacheTTLHours int
-	RateLimitRPS  int
+	Enabled               bool
+	CacheTTLHours         int
+	RateLimitRPS          int
+	OrdersPollInterval    time.Duration // default: 30m
+	InventoryPollInterval time.Duration // default: 2h
 }
 
 // CardHedgerSchedulerConfig controls CardHedger-specific scheduler intervals
