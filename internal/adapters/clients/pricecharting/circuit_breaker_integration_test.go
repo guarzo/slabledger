@@ -119,7 +119,7 @@ func TestPriceCharting_LookupWithCircuitBreaker(t *testing.T) {
 	query := pc.queryHelper.OptimizeQuery("Test Set", card.Name, card.Number)
 
 	// This will fail (mock server returns error), but should demonstrate circuit breaker behavior
-	_, err = pc.lookupByQueryWithRetry(ctx, query)
+	_, err = pc.lookupByQueryInternal(ctx, query)
 
 	// We expect an error from the mock server
 	if err == nil {
@@ -173,7 +173,7 @@ func TestPriceCharting_CacheFallbackWhenCircuitOpen(t *testing.T) {
 	ctx := context.Background()
 	query := pc.queryHelper.OptimizeQuery("Test Set", card.Name, card.Number)
 
-	match, err := pc.lookupByQueryWithRetry(ctx, query)
+	match, err := pc.lookupByQueryInternal(ctx, query)
 
 	// Should successfully retrieve from cache when API is unavailable
 	if match != nil {
@@ -208,7 +208,7 @@ func TestPriceCharting_HttpClientConfiguration(t *testing.T) {
 	}
 }
 
-func TestPriceCharting_LookupByQueryWithRetry(t *testing.T) {
+func TestPriceCharting_LookupByQueryInternal(t *testing.T) {
 	// Create mock server that returns success
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -241,11 +241,11 @@ func TestPriceCharting_LookupByQueryWithRetry(t *testing.T) {
 	query := "pokemon test pikachu #025"
 	ctx := context.Background()
 
-	_, err = pc.lookupByQueryWithRetry(ctx, query)
+	_, err = pc.lookupByQueryInternal(ctx, query)
 
 	// Since we can't easily mock the httpClient's transport, we just verify no panic
 	// The error is expected since we're not actually hitting the mock server
-	t.Logf("lookupByQueryWithRetry completed with result: %v", err)
+	t.Logf("lookupByQueryInternal completed with result: %v", err)
 
 	// Should not panic or cause issues - httpClient should remain functional
 	if pc.httpClient == nil {

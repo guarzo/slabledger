@@ -20,15 +20,6 @@ func hasPriceKeysTyped(resp *PriceChartingAPIResponse) bool {
 		resp.PSA8Price != nil || resp.BoxOnlyPrice != nil || resp.BGS10Price != nil
 }
 
-// lookupByQueryWithRetry performs lookup with retry logic.
-// This is a stable API boundary that delegates to the internal implementation.
-// The httpx.Client handles retry and circuit breaker logic internally.
-// Kept as a wrapper for API stability and potential future custom retry logic.
-func (p *PriceCharting) lookupByQueryWithRetry(ctx context.Context, query string) (*PCMatch, error) {
-	return p.lookupByQueryInternal(ctx, query)
-}
-
-// lookupByQueryInternal is the internal lookup implementation
 func (p *PriceCharting) lookupByQueryInternal(ctx context.Context, q string) (*PCMatch, error) {
 	// First try /api/product?q=... (best match) with improved query
 	optimizedQuery := p.queryHelper.OptimizeQueryForDirectLookup(q)
