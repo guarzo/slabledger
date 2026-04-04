@@ -34,12 +34,26 @@ func (s *service) ImportCerts(ctx context.Context, certNumbers []string) (*CertI
 		return nil, fmt.Errorf("batch cert lookup: %w", err)
 	}
 
-	result := &CertImportResult{Errors: []CertImportError{}}
+	result := &CertImportResult{Errors: []CertImportError{}, SoldItems: []CertImportSoldItem{}}
 	now := time.Now()
 	var importedCerts []string
 
 	for _, certNum := range cleaned {
 		if existing, ok := existingMap[certNum]; ok {
+			// Check if this purchase has been sold
+			_, saleErr := s.repo.GetSaleByPurchaseID(ctx, existing.ID)
+			if saleErr == nil {
+				// Has a sale — flag as sold, skip ebay export flag
+				result.SoldExisting++
+				result.SoldItems = append(result.SoldItems, CertImportSoldItem{
+					CertNumber: certNum,
+					PurchaseID: existing.ID,
+					CardName:   existing.CardName,
+					CampaignID: existing.CampaignID,
+				})
+				continue
+			}
+			// No sale (or error) — treat as normal existing cert
 			if flagErr := s.repo.SetEbayExportFlag(ctx, existing.ID, now); flagErr != nil {
 				if s.logger != nil {
 					s.logger.Warn(ctx, "cert import: failed to set ebay export flag",

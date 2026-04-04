@@ -97,3 +97,74 @@ func TestImportCerts_Deduplication(t *testing.T) {
 		t.Errorf("lookup called %d times, want 1", lookupCount)
 	}
 }
+
+func TestImportCerts_SoldCert(t *testing.T) {
+	repo := newMockRepo()
+	repo.purchases["sold-id"] = &Purchase{
+		ID: "sold-id", CertNumber: "99999999", Grader: "PSA",
+		CardName: "Pikachu", CampaignID: "camp-1",
+	}
+	repo.certNumbers["99999999"] = true
+	repo.sales["sale-1"] = &Sale{ID: "sale-1", PurchaseID: "sold-id"}
+	repo.purchaseSales["sold-id"] = true
+
+	svc := &service{repo: repo, idGen: func() string { return "test-id" }}
+	result, err := svc.ImportCerts(context.Background(), []string{"99999999"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.SoldExisting != 1 {
+		t.Errorf("soldExisting = %d, want 1", result.SoldExisting)
+	}
+	if result.AlreadyExisted != 0 {
+		t.Errorf("alreadyExisted = %d, want 0", result.AlreadyExisted)
+	}
+	if len(result.SoldItems) != 1 {
+		t.Fatalf("soldItems length = %d, want 1", len(result.SoldItems))
+	}
+	item := result.SoldItems[0]
+	if item.CertNumber != "99999999" {
+		t.Errorf("certNumber = %q, want 99999999", item.CertNumber)
+	}
+	if item.PurchaseID != "sold-id" {
+		t.Errorf("purchaseID = %q, want sold-id", item.PurchaseID)
+	}
+	if item.CardName != "Pikachu" {
+		t.Errorf("cardName = %q, want Pikachu", item.CardName)
+	}
+	if item.CampaignID != "camp-1" {
+		t.Errorf("campaignID = %q, want camp-1", item.CampaignID)
+	}
+	if repo.purchases["sold-id"].EbayExportFlaggedAt != nil {
+		t.Error("ebay export flag should not be set on sold item")
+	}
+}
+
+func TestImportCerts_MixedSoldAndUnsold(t *testing.T) {
+	repo := newMockRepo()
+	repo.purchases["unsold-id"] = &Purchase{
+		ID: "unsold-id", CertNumber: "11111111", Grader: "PSA",
+		CardName: "Charizard", CampaignID: "camp-1",
+	}
+	repo.certNumbers["11111111"] = true
+
+	repo.purchases["sold-id"] = &Purchase{
+		ID: "sold-id", CertNumber: "22222222", Grader: "PSA",
+		CardName: "Blastoise", CampaignID: "camp-1",
+	}
+	repo.certNumbers["22222222"] = true
+	repo.sales["sale-1"] = &Sale{ID: "sale-1", PurchaseID: "sold-id"}
+	repo.purchaseSales["sold-id"] = true
+
+	svc := &service{repo: repo, idGen: func() string { return "test-id" }}
+	result, err := svc.ImportCerts(context.Background(), []string{"11111111", "22222222"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.AlreadyExisted != 1 {
+		t.Errorf("alreadyExisted = %d, want 1", result.AlreadyExisted)
+	}
+	if result.SoldExisting != 1 {
+		t.Errorf("soldExisting = %d, want 1", result.SoldExisting)
+	}
+}
