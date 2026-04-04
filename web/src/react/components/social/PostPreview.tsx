@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { useSocialPost } from '../../queries/useSocialQueries';
+import { useSocialPost, usePostMetrics } from '../../queries/useSocialQueries';
 import { usePublishWithSlides } from '../../hooks/usePublishWithSlides';
 import { useToast } from '../../contexts/ToastContext';
 import { CardShell } from '../../ui/CardShell';
@@ -9,6 +9,21 @@ import CoverSlide from './slides/CoverSlide';
 import CardSlide from './slides/CardSlide';
 import SlideRenderer from './slides/SlideRenderer';
 import type { PostCardDetail } from '../../../types/social';
+
+function MetricsBar({ postId }: { postId: string }) {
+  const { data: metrics } = usePostMetrics(postId);
+  const latest = metrics?.[0]; // most recent snapshot (ordered DESC by polledAt)
+  if (!latest) return null;
+
+  return (
+    <div className="flex items-center gap-3 text-xs text-white/50 mt-1">
+      <span title="Likes">♥ {latest.likes}</span>
+      <span title="Comments">💬 {latest.comments}</span>
+      <span title="Saves">🔖 {latest.saves}</span>
+      <span title="Reach">👁 {latest.reach}</span>
+    </div>
+  );
+}
 
 interface PostPreviewProps {
   postId: string;
@@ -74,9 +89,12 @@ export default function PostPreview({ postId, onBack, igConnected }: PostPreview
             </Button>
           )}
           {detail.status === 'published' && (
-            <span className="text-xs bg-purple-500/10 text-purple-400 px-3 py-2 rounded-lg font-medium">
-              Published
-            </span>
+            <div className="flex flex-col items-end">
+              <span className="text-xs bg-purple-500/10 text-purple-400 px-3 py-2 rounded-lg font-medium">
+                Published
+              </span>
+              <MetricsBar postId={detail.id} />
+            </div>
           )}
         </div>
       </div>

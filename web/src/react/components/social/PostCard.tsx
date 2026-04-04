@@ -1,6 +1,22 @@
 import { CardShell } from '../../ui/CardShell';
 import Button from '../../ui/Button';
+import { usePostMetrics } from '../../queries/useSocialQueries';
 import type { SocialPost, PostType, PostStatus } from '../../../types/social';
+
+function MetricsBar({ postId }: { postId: string }) {
+  const { data: metrics } = usePostMetrics(postId);
+  const latest = metrics?.[0]; // most recent snapshot (ordered DESC by polledAt)
+  if (!latest) return null;
+
+  return (
+    <div className="flex items-center gap-3 text-xs text-white/50 mt-1">
+      <span title="Likes">♥ {latest.likes}</span>
+      <span title="Comments">💬 {latest.comments}</span>
+      <span title="Saves">🔖 {latest.saves}</span>
+      <span title="Reach">👁 {latest.reach}</span>
+    </div>
+  );
+}
 
 const POST_TYPE_CONFIG: Record<PostType, { label: string; color: string; bg: string }> = {
   new_arrivals: { label: 'New Arrivals', color: 'text-blue-400', bg: 'bg-blue-500/10' },
@@ -59,6 +75,7 @@ export default function PostCard({ post, onPreview, onPublish, onDelete }: PostC
           {post.status === 'failed' && post.errorMessage && (
             <p className="text-xs text-red-400 mt-1">{post.errorMessage}</p>
           )}
+          {post.status === 'published' && <MetricsBar postId={post.id} />}
         </div>
 
         <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
