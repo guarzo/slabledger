@@ -43,7 +43,7 @@ var operationTools = map[AIOperation][]string{
 		"get_channel_velocity", "get_dashboard_summary",
 		"get_acquisition_targets", "get_crack_opportunities",
 		"get_dh_suggestions", "get_inventory_alerts",
-		"get_data_gap_report",
+		"get_data_gap_report", "get_expected_values_batch",
 	},
 	OpCampaignAnalysis: {
 		"list_campaigns", "get_campaign_pnl", "get_pnl_by_channel",
@@ -59,6 +59,7 @@ var operationTools = map[AIOperation][]string{
 		"get_channel_velocity", "get_capital_timeline", "get_suggestion_stats",
 		"get_dashboard_summary", "get_crack_opportunities",
 		"get_market_intelligence", "get_inventory_alerts",
+		"get_expected_values_batch", "suggest_price_batch",
 	},
 	OpPurchaseAssessment: {
 		"list_campaigns", "get_campaign_tuning", "get_portfolio_insights",
@@ -229,11 +230,13 @@ func (s *service) CollectLiquidation(ctx context.Context) (string, error) {
 }
 
 // operationMaxRounds overrides s.maxToolRounds when scoring is active.
-// With pre-computed scores injected, fewer tool rounds are needed.
+// PurchaseAssessment needs only 1 round since scores are pre-computed.
+// CampaignAnalysis and Liquidation use 3 rounds to accommodate batch tools
+// and larger workflows despite pre-computed scores.
 var operationMaxRounds = map[AIOperation]int{
 	OpPurchaseAssessment: 1,
-	OpCampaignAnalysis:   2,
-	OpLiquidation:        2,
+	OpCampaignAnalysis:   3,
+	OpLiquidation:        3,
 }
 
 // toolCallingLoop orchestrates the LLM -> tool -> LLM cycle.

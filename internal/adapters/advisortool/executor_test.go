@@ -31,6 +31,7 @@ func TestDefinitions_RequiredTools(t *testing.T) {
 		"get_crack_candidates", "get_campaign_suggestions", "run_projection",
 		"suggest_price", "get_cert_lookup", "get_suggestion_stats",
 		"evaluate_purchase",
+		"get_expected_values_batch", "suggest_price_batch",
 	}
 
 	registered := make(map[string]bool, len(defs))
@@ -214,6 +215,251 @@ func TestToJSON_TruncatesAt15KB(t *testing.T) {
 	result := toJSON(items)
 	if len(result) > 15000 {
 		t.Errorf("toJSON output = %d bytes, want <= 15000", len(result))
+	}
+}
+
+func TestExecute_GetExpectedValuesBatch(t *testing.T) {
+	tests := []struct {
+		name      string
+		mockSetup func(*mocks.MockCampaignService)
+		payload   string
+		wantErr   bool
+		validate  func(t *testing.T, result string)
+	}{
+		{
+			name: "WithIDs",
+			mockSetup: func(svc *mocks.MockCampaignService) {
+				svc.GetExpectedValuesFn = func(_ context.Context, campaignID string) (*campaigns.EVPortfolio, error) {
+					return &campaigns.EVPortfolio{
+						TotalEVCents:  1000,
+						PositiveCount: 2,
+						Items: []campaigns.ExpectedValue{
+							{CardName: "Charizard-" + campaignID, EVCents: 500},
+						},
+					}, nil
+				}
+			},
+			payload: `{"campaignIds":["camp-1","camp-2"]}`,
+			validate: func(t *testing.T, result string) {
+				var got map[string]*campaigns.EVPortfolio
+				if err := json.Unmarshal([]byte(result), &got); err != nil {
+					t.Fatalf("unmarshal: %v", err)
+				}
+				if len(got) != 2 {
+					t.Fatalf("got %d campaigns, want 2", len(got))
+				}
+				if got["camp-1"].Items[0].CardName != "Charizard-camp-1" {
+					t.Errorf("camp-1 card = %q, want Charizard-camp-1", got["camp-1"].Items[0].CardName)
+				}
+				if got["camp-2"].Items[0].CardName != "Charizard-camp-2" {
+					t.Errorf("camp-2 card = %q, want Charizard-camp-2", got["camp-2"].Items[0].CardName)
+				}
+			},
+		},
+		{
+			name: "AllActive",
+			mockSetup: func(svc *mocks.MockCampaignService) {
+				svc.ListCampaignsFn = func(_ context.Context, activeOnly bool) ([]campaigns.Campaign, error) {
+					if !activeOnly {
+						return nil, fmt.Errorf("expected activeOnly=true, got false")
+					}
+					return []campaigns.Campaign{
+						{ID: "a1", Name: "Alpha"},
+						{ID: "a2", Name: "Beta"},
+					}, nil
+				}
+				svc.GetExpectedValuesFn = func(_ context.Context, campaignID string) (*campaigns.EVPortfolio, error) {
+					return &campaigns.EVPortfolio{TotalEVCents: 100}, nil
+				}
+			},
+			payload: `{}`,
+			validate: func(t *testing.T, result string) {
+				var got map[string]*campaigns.EVPortfolio
+				if err := json.Unmarshal([]byte(result), &got); err != nil {
+					t.Fatalf("unmarshal: %v", err)
+				}
+				if len(got) != 2 {
+					t.Fatalf("got %d campaigns, want 2", len(got))
+				}
+				if _, ok := got["a1"]; !ok {
+					t.Error("missing campaign a1")
+				}
+				if _, ok := got["a2"]; !ok {
+					t.Error("missing campaign a2")
+				}
+			},
+		},
+		{
+			name: "PartialFailure",
+			mockSetup: func(svc *mocks.MockCampaignService) {
+				svc.GetExpectedValuesFn = func(_ context.Context, campaignID string) (*campaigns.EVPortfolio, error) {
+					if campaignID == "bad" {
+						return nil, errors.New("not found")
+					}
+					return &campaigns.EVPortfolio{TotalEVCents: 200}, nil
+				}
+			},
+			payload: `{"campaignIds":["good","bad"]}`,
+			validate: func(t *testing.T, result string) {
+				var got map[string]json.RawMessage
+				if err := json.Unmarshal([]byte(result), &got); err != nil {
+					t.Fatalf("unmarshal top-level: %v", err)
+				}
+				// Verify "good" has TotalEVCents
+				goodRaw, ok := got["good"]
+				if !ok {
+					t.Fatal("result missing 'good' campaign")
+				}
+				var goodObj map[string]json.RawMessage
+				if err := json.Unmarshal(goodRaw, &goodObj); err != nil {
+					t.Fatalf("unmarshal good: %v", err)
+				}
+				if _, hasTotalEV := goodObj["totalEvCents"]; !hasTotalEV {
+					t.Error("good campaign missing totalEvCents")
+				}
+				// Verify "bad" has an "error" key
+				badRaw, ok := got["bad"]
+				if !ok {
+					t.Fatal("result missing 'bad' campaign")
+				}
+				var badObj map[string]json.RawMessage
+				if err := json.Unmarshal(badRaw, &badObj); err != nil {
+					t.Fatalf("unmarshal bad: %v", err)
+				}
+				if _, hasError := badObj["error"]; !hasError {
+					t.Error("bad campaign missing error key")
+				}
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			svc := &mocks.MockCampaignService{}
+			tc.mockSetup(svc)
+			e := newTestExecutor(svc)
+			result, err := e.Execute(context.Background(), "get_expected_values_batch", tc.payload)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Execute: %v", err)
+			}
+			if tc.validate != nil {
+				tc.validate(t, result)
+			}
+		})
+	}
+}
+
+func TestExecute_SuggestPriceBatch(t *testing.T) {
+	tests := []struct {
+		name      string
+		mockSetup func(*mocks.MockCampaignService)
+		payload   string
+		wantErr   bool
+		validate  func(t *testing.T, result string)
+	}{
+		{
+			name: "AllOK",
+			mockSetup: func(svc *mocks.MockCampaignService) {
+				svc.SetAISuggestedPriceFn = func(_ context.Context, purchaseID string, priceCents int) error {
+					return nil
+				}
+			},
+			payload: `{"suggestions":[{"purchaseId":"p1","priceCents":1500},{"purchaseId":"p2","priceCents":2000}]}`,
+			validate: func(t *testing.T, result string) {
+				var got struct {
+					Results []struct {
+						PurchaseID string `json:"purchaseId"`
+						Status     string `json:"status"`
+					} `json:"results"`
+				}
+				if err := json.Unmarshal([]byte(result), &got); err != nil {
+					t.Fatalf("unmarshal: %v", err)
+				}
+				if len(got.Results) != 2 {
+					t.Fatalf("got %d results, want 2", len(got.Results))
+				}
+				for _, r := range got.Results {
+					if r.Status != "ok" {
+						t.Errorf("purchaseId %s: status = %q, want ok", r.PurchaseID, r.Status)
+					}
+				}
+			},
+		},
+		{
+			name: "PartialFailure",
+			mockSetup: func(svc *mocks.MockCampaignService) {
+				svc.SetAISuggestedPriceFn = func(_ context.Context, purchaseID string, priceCents int) error {
+					if purchaseID == "bad" {
+						return errors.New("purchase not found")
+					}
+					return nil
+				}
+			},
+			payload: `{"suggestions":[{"purchaseId":"good","priceCents":1500},{"purchaseId":"bad","priceCents":2000}]}`,
+			validate: func(t *testing.T, result string) {
+				var got struct {
+					Results []struct {
+						PurchaseID string `json:"purchaseId"`
+						Status     string `json:"status"`
+						Error      string `json:"error,omitempty"`
+					} `json:"results"`
+				}
+				if err := json.Unmarshal([]byte(result), &got); err != nil {
+					t.Fatalf("unmarshal: %v", err)
+				}
+				if len(got.Results) != 2 {
+					t.Fatalf("got %d results, want 2", len(got.Results))
+				}
+				if got.Results[0].Status != "ok" {
+					t.Errorf("good: status = %q, want ok", got.Results[0].Status)
+				}
+				if got.Results[1].Status != "error" {
+					t.Errorf("bad: status = %q, want error", got.Results[1].Status)
+				}
+				if got.Results[1].Error == "" {
+					t.Error("bad: expected error message")
+				}
+			},
+		},
+		{
+			name:      "Empty",
+			mockSetup: func(svc *mocks.MockCampaignService) {},
+			payload:   `{"suggestions":[]}`,
+			wantErr:   true,
+		},
+		{
+			name:      "InvalidItem",
+			mockSetup: func(svc *mocks.MockCampaignService) {},
+			payload:   `{"suggestions":[{"purchaseId":"","priceCents":1500}]}`,
+			wantErr:   true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			svc := &mocks.MockCampaignService{}
+			tc.mockSetup(svc)
+			e := newTestExecutor(svc)
+			result, err := e.Execute(context.Background(), "suggest_price_batch", tc.payload)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Execute: %v", err)
+			}
+			if tc.validate != nil {
+				tc.validate(t, result)
+			}
+		})
 	}
 }
 

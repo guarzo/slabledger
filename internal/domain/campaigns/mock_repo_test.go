@@ -628,6 +628,14 @@ func (m *mockRepo) OpenFlagPurchaseIDs(_ context.Context) (map[string]bool, erro
 	return map[string]bool{}, nil
 }
 
+func (m *mockRepo) UpdatePurchaseDHFields(_ context.Context, _ string, _ DHFieldsUpdate) error {
+	return nil
+}
+
+func (m *mockRepo) GetPurchasesByDHCertStatus(_ context.Context, _ string, _ int) ([]Purchase, error) {
+	return nil, nil
+}
+
 // mockPriceLookup is a test double for PriceLookup used by in-package tests
 // (import_test.go, tuning_test.go) that access unexported symbols.
 // Service-layer tests in campaigns_test use the version in service_test.go.

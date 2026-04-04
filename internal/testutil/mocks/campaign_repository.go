@@ -55,6 +55,8 @@ type MockCampaignRepository struct {
 	GetAllPurchasesWithSalesFn     func(ctx context.Context, opts ...campaigns.PurchaseFilterOpt) ([]campaigns.PurchaseWithSale, error)
 	GetGlobalPNLByChannelFn        func(ctx context.Context) ([]campaigns.ChannelPNL, error)
 	GetPurchasesByCertNumbersFn    func(ctx context.Context, certNumbers []string) (map[string]*campaigns.Purchase, error)
+	UpdatePurchaseDHFieldsFn       func(ctx context.Context, id string, update campaigns.DHFieldsUpdate) error
+	GetPurchasesByDHCertStatusFn   func(ctx context.Context, status string, limit int) ([]campaigns.Purchase, error)
 }
 
 // NewMockCampaignRepository creates a ready-to-use MockCampaignRepository with initialized maps.
@@ -790,4 +792,18 @@ func (m *MockCampaignRepository) HasOpenFlag(_ context.Context, _ string) (bool,
 
 func (m *MockCampaignRepository) OpenFlagPurchaseIDs(_ context.Context) (map[string]bool, error) {
 	return map[string]bool{}, nil
+}
+
+func (m *MockCampaignRepository) UpdatePurchaseDHFields(ctx context.Context, id string, update campaigns.DHFieldsUpdate) error {
+	if m.UpdatePurchaseDHFieldsFn != nil {
+		return m.UpdatePurchaseDHFieldsFn(ctx, id, update)
+	}
+	return nil
+}
+
+func (m *MockCampaignRepository) GetPurchasesByDHCertStatus(ctx context.Context, status string, limit int) ([]campaigns.Purchase, error) {
+	if m.GetPurchasesByDHCertStatusFn != nil {
+		return m.GetPurchasesByDHCertStatusFn(ctx, status, limit)
+	}
+	return nil, nil
 }
