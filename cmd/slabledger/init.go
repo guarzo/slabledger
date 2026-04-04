@@ -350,6 +350,9 @@ type schedulerDeps struct {
 	AICallRepo           *sqlite.AICallRepository
 	SocialService        social.Service
 	IGTokenRefresher     scheduler.InstagramTokenRefresher
+	MetricsPostLister    scheduler.MetricsPostLister
+	MetricsSaver         scheduler.MetricsSaver
+	InsightsPoller       scheduler.InsightsPoller
 	CertSweeper          scheduler.CertSweeper
 	PicksService         picks.Service
 	CardLadderClient     *cardladder.Client
@@ -394,6 +397,9 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 		AICallTracker:            deps.AICallRepo,
 		SocialContentDetector:    deps.SocialService,
 		InstagramTokenRefresher:  deps.IGTokenRefresher,
+		MetricsPostLister:        deps.MetricsPostLister,
+		MetricsSaver:             deps.MetricsSaver,
+		InsightsPoller:           deps.InsightsPoller,
 		CertSweeper:              deps.CertSweeper,
 		PicksGenerator:           deps.PicksService,
 		CardLadderClient:         deps.CardLadderClient,

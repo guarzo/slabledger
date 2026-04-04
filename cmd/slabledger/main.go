@@ -20,6 +20,7 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardhedger"
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	"github.com/guarzo/slabledger/internal/adapters/clients/google"
+	igclient "github.com/guarzo/slabledger/internal/adapters/clients/instagram"
 	"github.com/guarzo/slabledger/internal/adapters/clients/justtcg"
 	"github.com/guarzo/slabledger/internal/adapters/clients/psa"
 	"github.com/guarzo/slabledger/internal/adapters/clients/tcgdex"
@@ -294,6 +295,14 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		ctx, cfg, logger, db, azureAIClient, aiCallRepo,
 	)
 
+	// Initialize metrics repository and poller adapter for Instagram insights
+	metricsRepo := sqlite.NewMetricsRepository(db.DB)
+	var insightsPoller scheduler.InsightsPoller
+	if igClient != nil && igStore != nil {
+		insightsPoller = igclient.NewInsightsPollerAdapter(igClient, igStore)
+		logger.Info(ctx, "Instagram insights poller initialized")
+	}
+
 	// Initialize Card Ladder
 	var clEncryptor crypto.Encryptor
 	if cfg.Auth.EncryptionKey != "" {
@@ -379,6 +388,9 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		AICallRepo:           aiCallRepo,
 		SocialService:        socialService,
 		IGTokenRefresher:     igTokenRefresher,
+		MetricsPostLister:    metricsRepo,
+		MetricsSaver:         metricsRepo,
+		InsightsPoller:       insightsPoller,
 		CertSweeper:          certSweeper,
 		PicksService:         picksService,
 		CardLadderClient:     clClient,
@@ -447,6 +459,9 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		socialHandler.WithBackfiller(backfiller)
 		logger.Info(ctx, "PSA image backfill enabled")
 	}
+
+	// Wire metrics repository into social handler for API endpoints
+	socialHandler.WithMetricsRepo(metricsRepo)
 
 	// Create AI status handler — only wire tracker when an LLM provider is configured
 	var aiTracker ai.AICallTracker

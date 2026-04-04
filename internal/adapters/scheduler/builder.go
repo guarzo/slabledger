@@ -72,6 +72,11 @@ type BuildDeps struct {
 	SocialContentDetector   SocialContentDetector
 	InstagramTokenRefresher InstagramTokenRefresher
 
+	// Metrics poll dependencies (optional)
+	MetricsPostLister MetricsPostLister
+	MetricsSaver      MetricsSaver
+	InsightsPoller    InsightsPoller
+
 	// Picks generation dependencies (optional)
 	PicksGenerator PicksGenerator
 
@@ -274,6 +279,14 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 		}
 		schedulers = append(schedulers, NewSocialContentScheduler(
 			deps.SocialContentDetector, deps.Logger, cfg.SocialContent, socialOpts...,
+		))
+	}
+
+	// Metrics poll scheduler (if all dependencies are provided)
+	if deps.MetricsPostLister != nil && deps.MetricsSaver != nil && deps.InsightsPoller != nil {
+		schedulers = append(schedulers, NewMetricsPollScheduler(
+			deps.MetricsPostLister, deps.MetricsSaver, deps.InsightsPoller,
+			deps.Logger, cfg.MetricsPoll,
 		))
 	}
 
