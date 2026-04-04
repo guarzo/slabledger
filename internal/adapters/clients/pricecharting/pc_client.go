@@ -2,7 +2,6 @@ package pricecharting
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -25,11 +24,7 @@ func (p *PriceCharting) lookupByQueryInternal(ctx context.Context, q string) (*P
 	var apiResp PriceChartingAPIResponse
 	err := p.httpClient.GetJSON(ctx, u, nil, 0, &apiResp)
 	if err == nil && strings.EqualFold(apiResp.Status, "success") && hasPriceKeysTyped(&apiResp) {
-		jsonBytes, marshalErr := json.Marshal(apiResp)
-		if marshalErr != nil {
-			return nil, fmt.Errorf("marshal API response: %w", marshalErr)
-		}
-		match, parseErr := parseAPIResponseWithLogger(jsonBytes, p.logger, ctx)
+		match, parseErr := convertAPIResponse(&apiResp, p.logger, ctx)
 		if parseErr != nil {
 			return nil, fmt.Errorf("parse API response: %w", parseErr)
 		}
@@ -89,11 +84,7 @@ func (p *PriceCharting) lookupByQueryInternal(ctx context.Context, q string) (*P
 	if !strings.EqualFold(fullResp.Status, "success") {
 		return nil, fmt.Errorf("product fetch failed")
 	}
-	jsonBytes, marshalErr := json.Marshal(fullResp)
-	if marshalErr != nil {
-		return nil, fmt.Errorf("marshal API response: %w", marshalErr)
-	}
-	match, parseErr := parseAPIResponseWithLogger(jsonBytes, p.logger, ctx)
+	match, parseErr := convertAPIResponse(&fullResp, p.logger, ctx)
 	if parseErr != nil {
 		return nil, fmt.Errorf("parse API response: %w", parseErr)
 	}
@@ -128,11 +119,7 @@ func (p *PriceCharting) LookupByUPC(ctx context.Context, upc string) (*PCMatch, 
 		return nil, fmt.Errorf("UPC not found")
 	}
 
-	jsonBytes, marshalErr := json.Marshal(apiResp)
-	if marshalErr != nil {
-		return nil, fmt.Errorf("marshal API response: %w", marshalErr)
-	}
-	match, parseErr := parseAPIResponseWithLogger(jsonBytes, p.logger, ctx)
+	match, parseErr := convertAPIResponse(&apiResp, p.logger, ctx)
 	if parseErr != nil {
 		return nil, fmt.Errorf("parse API response: %w", parseErr)
 	}
@@ -174,11 +161,7 @@ func (p *PriceCharting) LookupByProductID(ctx context.Context, productID string)
 	if !strings.EqualFold(fullResp.Status, "success") {
 		return nil, fmt.Errorf("product fetch failed for id %s", productID)
 	}
-	jsonBytes, marshalErr := json.Marshal(fullResp)
-	if marshalErr != nil {
-		return nil, fmt.Errorf("marshal API response: %w", marshalErr)
-	}
-	match, parseErr := parseAPIResponseWithLogger(jsonBytes, p.logger, ctx)
+	match, parseErr := convertAPIResponse(&fullResp, p.logger, ctx)
 	if parseErr != nil {
 		return nil, fmt.Errorf("parse API response: %w", parseErr)
 	}

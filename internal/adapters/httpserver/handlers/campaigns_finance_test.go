@@ -303,54 +303,117 @@ func TestHandlePortfolioHealth(t *testing.T) {
 	}
 }
 
-func TestHandlePortfolioChannelVelocity_Success(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		GetPortfolioChannelVelocityFn: func(_ context.Context) ([]campaigns.ChannelVelocity, error) {
-			return []campaigns.ChannelVelocity{{Channel: "ebay"}}, nil
+func TestHandlePortfolioChannelVelocity(t *testing.T) {
+	tests := []struct {
+		name       string
+		mockFn     func(_ context.Context) ([]campaigns.ChannelVelocity, error)
+		wantStatus int
+	}{
+		{
+			name: "success",
+			mockFn: func(_ context.Context) ([]campaigns.ChannelVelocity, error) {
+				return []campaigns.ChannelVelocity{{Channel: "ebay"}}, nil
+			},
+			wantStatus: http.StatusOK,
+		},
+		{
+			name: "error",
+			mockFn: func(_ context.Context) ([]campaigns.ChannelVelocity, error) {
+				return nil, fmt.Errorf("service error")
+			},
+			wantStatus: http.StatusInternalServerError,
 		},
 	}
-	h := newTestHandler(svc)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/portfolio/channel-velocity", nil)
-	rec := httptest.NewRecorder()
-	h.HandlePortfolioChannelVelocity(rec, req)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := &mocks.MockCampaignService{GetPortfolioChannelVelocityFn: tt.mockFn}
+			h := newTestHandler(svc)
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rec.Code)
+			req := httptest.NewRequest(http.MethodGet, "/api/portfolio/channel-velocity", nil)
+			rec := httptest.NewRecorder()
+			h.HandlePortfolioChannelVelocity(rec, req)
+
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("expected %d, got %d", tt.wantStatus, rec.Code)
+			}
+		})
 	}
 }
 
-func TestHandlePortfolioInsights_Success(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		GetPortfolioInsightsFn: func(_ context.Context) (*campaigns.PortfolioInsights, error) {
-			return &campaigns.PortfolioInsights{}, nil
+func TestHandlePortfolioInsights(t *testing.T) {
+	tests := []struct {
+		name       string
+		mockFn     func(_ context.Context) (*campaigns.PortfolioInsights, error)
+		wantStatus int
+	}{
+		{
+			name: "success",
+			mockFn: func(_ context.Context) (*campaigns.PortfolioInsights, error) {
+				return &campaigns.PortfolioInsights{}, nil
+			},
+			wantStatus: http.StatusOK,
+		},
+		{
+			name: "error",
+			mockFn: func(_ context.Context) (*campaigns.PortfolioInsights, error) {
+				return nil, fmt.Errorf("service error")
+			},
+			wantStatus: http.StatusInternalServerError,
 		},
 	}
-	h := newTestHandler(svc)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/portfolio/insights", nil)
-	rec := httptest.NewRecorder()
-	h.HandlePortfolioInsights(rec, req)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := &mocks.MockCampaignService{GetPortfolioInsightsFn: tt.mockFn}
+			h := newTestHandler(svc)
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rec.Code)
+			req := httptest.NewRequest(http.MethodGet, "/api/portfolio/insights", nil)
+			rec := httptest.NewRecorder()
+			h.HandlePortfolioInsights(rec, req)
+
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("expected %d, got %d", tt.wantStatus, rec.Code)
+			}
+		})
 	}
 }
 
-func TestHandleCampaignSuggestions_Success(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		GetCampaignSuggestionsFn: func(_ context.Context) (*campaigns.SuggestionsResponse, error) {
-			return &campaigns.SuggestionsResponse{}, nil
+func TestHandleCampaignSuggestions(t *testing.T) {
+	tests := []struct {
+		name       string
+		mockFn     func(_ context.Context) (*campaigns.SuggestionsResponse, error)
+		wantStatus int
+	}{
+		{
+			name: "success",
+			mockFn: func(_ context.Context) (*campaigns.SuggestionsResponse, error) {
+				return &campaigns.SuggestionsResponse{}, nil
+			},
+			wantStatus: http.StatusOK,
+		},
+		{
+			name: "error",
+			mockFn: func(_ context.Context) (*campaigns.SuggestionsResponse, error) {
+				return nil, fmt.Errorf("service error")
+			},
+			wantStatus: http.StatusInternalServerError,
 		},
 	}
-	h := newTestHandler(svc)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/portfolio/suggestions", nil)
-	rec := httptest.NewRecorder()
-	h.HandleCampaignSuggestions(rec, req)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := &mocks.MockCampaignService{GetCampaignSuggestionsFn: tt.mockFn}
+			h := newTestHandler(svc)
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rec.Code)
+			req := httptest.NewRequest(http.MethodGet, "/api/portfolio/suggestions", nil)
+			rec := httptest.NewRecorder()
+			h.HandleCampaignSuggestions(rec, req)
+
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("expected %d, got %d", tt.wantStatus, rec.Code)
+			}
+		})
 	}
 }
 

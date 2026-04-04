@@ -200,254 +200,222 @@ func TestHandleGetPickHistory_Error(t *testing.T) {
 	h.HandleGetPickHistory(rec, req)
 
 	if rec.Code != http.StatusInternalServerError {
-		t.Fatalf("expected 500, got %d", rec.Code)
+		t.Fatalf("expected 500, got %d; body: %s", rec.Code, rec.Body.String())
 	}
 }
 
-func TestHandleGetWatchlist_Success(t *testing.T) {
-	svc := &mocks.MockPicksService{
-		GetWatchlistFn: func(_ context.Context) ([]picks.WatchlistItem, error) {
-			return []picks.WatchlistItem{
-				{
-					ID:        1,
-					CardName:  "Pikachu",
-					SetName:   "Base Set",
-					Grade:     "PSA 9",
-					Source:    picks.WatchlistManual,
-					Active:    true,
-					AddedAt:   time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC),
-					UpdatedAt: time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC),
-				},
-			}, nil
-		},
-	}
-	h := newTestPicksHandler(svc)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/picks/watchlist", nil)
-	rec := httptest.NewRecorder()
-	h.HandleGetWatchlist(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rec.Code)
-	}
-	var result struct {
-		Items []watchlistItemResponse `json:"items"`
-	}
-	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if len(result.Items) != 1 {
-		t.Fatalf("expected 1 item, got %d", len(result.Items))
-	}
-	if result.Items[0].CardName != "Pikachu" {
-		t.Errorf("expected CardName=Pikachu, got %q", result.Items[0].CardName)
-	}
-}
-
-func TestHandleGetWatchlist_Empty(t *testing.T) {
-	svc := &mocks.MockPicksService{
-		GetWatchlistFn: func(_ context.Context) ([]picks.WatchlistItem, error) {
-			return nil, nil
-		},
-	}
-	h := newTestPicksHandler(svc)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/picks/watchlist", nil)
-	rec := httptest.NewRecorder()
-	h.HandleGetWatchlist(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rec.Code)
-	}
-	var result struct {
-		Items []watchlistItemResponse `json:"items"`
-	}
-	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if len(result.Items) != 0 {
-		t.Errorf("expected 0 items, got %d", len(result.Items))
-	}
-}
-
-func TestHandleGetWatchlist_Error(t *testing.T) {
-	svc := &mocks.MockPicksService{
-		GetWatchlistFn: func(_ context.Context) ([]picks.WatchlistItem, error) {
-			return nil, fmt.Errorf("db error")
-		},
-	}
-	h := newTestPicksHandler(svc)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/picks/watchlist", nil)
-	rec := httptest.NewRecorder()
-	h.HandleGetWatchlist(rec, req)
-
-	if rec.Code != http.StatusInternalServerError {
-		t.Fatalf("expected 500, got %d", rec.Code)
-	}
-}
-
-func TestHandleAddWatchlistItem_Success(t *testing.T) {
-	svc := &mocks.MockPicksService{
-		AddToWatchlistFn: func(_ context.Context, item picks.WatchlistItem) error {
-			if item.CardName != "Charizard" {
-				t.Errorf("expected CardName=Charizard, got %q", item.CardName)
-			}
-			return nil
-		},
-	}
-	h := newTestPicksHandler(svc)
-
-	body := `{"card_name":"Charizard","set_name":"Base Set","grade":"PSA 10"}`
-	req := httptest.NewRequest(http.MethodPost, "/api/picks/watchlist", bytes.NewBufferString(body))
-	rec := httptest.NewRecorder()
-	h.HandleAddWatchlistItem(rec, req)
-
-	if rec.Code != http.StatusCreated {
-		t.Fatalf("expected 201, got %d; body: %s", rec.Code, rec.Body.String())
-	}
-}
-
-func TestHandleAddWatchlistItem_MissingFields(t *testing.T) {
+func TestHandleGetWatchlist(t *testing.T) {
 	tests := []struct {
-		name string
-		body string
+		name          string
+		mockFn        func(_ context.Context) ([]picks.WatchlistItem, error)
+		wantStatus    int
+		wantCount     int
+		wantFirstCard string
 	}{
-		{"missing card_name", `{"set_name":"Base Set","grade":"PSA 10"}`},
-		{"missing set_name", `{"card_name":"Charizard","grade":"PSA 10"}`},
-		{"missing grade", `{"card_name":"Charizard","set_name":"Base Set"}`},
-		{"all empty", `{"card_name":"","set_name":"","grade":""}`},
+		{
+			name: "success",
+			mockFn: func(_ context.Context) ([]picks.WatchlistItem, error) {
+				return []picks.WatchlistItem{
+					{
+						ID:        1,
+						CardName:  "Pikachu",
+						SetName:   "Base Set",
+						Grade:     "PSA 9",
+						Source:    picks.WatchlistManual,
+						Active:    true,
+						AddedAt:   time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC),
+						UpdatedAt: time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC),
+					},
+				}, nil
+			},
+			wantStatus:    http.StatusOK,
+			wantCount:     1,
+			wantFirstCard: "Pikachu",
+		},
+		{
+			name: "empty",
+			mockFn: func(_ context.Context) ([]picks.WatchlistItem, error) {
+				return nil, nil
+			},
+			wantStatus: http.StatusOK,
+			wantCount:  0,
+		},
+		{
+			name: "error",
+			mockFn: func(_ context.Context) ([]picks.WatchlistItem, error) {
+				return nil, fmt.Errorf("db error")
+			},
+			wantStatus: http.StatusInternalServerError,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := newTestPicksHandler(&mocks.MockPicksService{})
+			svc := &mocks.MockPicksService{GetWatchlistFn: tt.mockFn}
+			h := newTestPicksHandler(svc)
 
-			req := httptest.NewRequest(http.MethodPost, "/api/picks/watchlist", bytes.NewBufferString(tt.body))
+			req := httptest.NewRequest(http.MethodGet, "/api/picks/watchlist", nil)
 			rec := httptest.NewRecorder()
-			h.HandleAddWatchlistItem(rec, req)
+			h.HandleGetWatchlist(rec, req)
 
-			if rec.Code != http.StatusBadRequest {
-				t.Fatalf("expected 400, got %d; body: %s", rec.Code, rec.Body.String())
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("expected %d, got %d", tt.wantStatus, rec.Code)
+			}
+			if tt.wantStatus == http.StatusOK {
+				var result struct {
+					Items []watchlistItemResponse `json:"items"`
+				}
+				if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+					t.Fatalf("decode: %v", err)
+				}
+				if len(result.Items) != tt.wantCount {
+					t.Errorf("expected %d item(s), got %d", tt.wantCount, len(result.Items))
+				}
+				if tt.wantFirstCard != "" && len(result.Items) > 0 && result.Items[0].CardName != tt.wantFirstCard {
+					t.Errorf("expected CardName=%s, got %q", tt.wantFirstCard, result.Items[0].CardName)
+				}
 			}
 		})
 	}
 }
 
-func TestHandleAddWatchlistItem_Duplicate(t *testing.T) {
-	svc := &mocks.MockPicksService{
-		AddToWatchlistFn: func(_ context.Context, _ picks.WatchlistItem) error {
-			return picks.ErrWatchlistDuplicate
+func TestHandleAddWatchlistItem(t *testing.T) {
+	tests := []struct {
+		name       string
+		body       string
+		mockFn     func(_ context.Context, _ picks.WatchlistItem) error
+		wantStatus int
+	}{
+		{
+			name: "success",
+			body: `{"card_name":"Charizard","set_name":"Base Set","grade":"PSA 10"}`,
+			mockFn: func(_ context.Context, item picks.WatchlistItem) error {
+				if item.CardName != "Charizard" {
+					t.Errorf("expected CardName=Charizard, got %q", item.CardName)
+				}
+				return nil
+			},
+			wantStatus: http.StatusCreated,
+		},
+		{
+			name:       "invalid body",
+			body:       "{bad",
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "missing card_name",
+			body:       `{"set_name":"Base Set","grade":"PSA 10"}`,
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "missing set_name",
+			body:       `{"card_name":"Charizard","grade":"PSA 10"}`,
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "missing grade",
+			body:       `{"card_name":"Charizard","set_name":"Base Set"}`,
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "all empty",
+			body:       `{"card_name":"","set_name":"","grade":""}`,
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name: "duplicate",
+			body: `{"card_name":"Charizard","set_name":"Base Set","grade":"PSA 10"}`,
+			mockFn: func(_ context.Context, _ picks.WatchlistItem) error {
+				return picks.ErrWatchlistDuplicate
+			},
+			wantStatus: http.StatusConflict,
+		},
+		{
+			name: "service error",
+			body: `{"card_name":"Charizard","set_name":"Base Set","grade":"PSA 10"}`,
+			mockFn: func(_ context.Context, _ picks.WatchlistItem) error {
+				return fmt.Errorf("db error")
+			},
+			wantStatus: http.StatusInternalServerError,
 		},
 	}
-	h := newTestPicksHandler(svc)
 
-	body := `{"card_name":"Charizard","set_name":"Base Set","grade":"PSA 10"}`
-	req := httptest.NewRequest(http.MethodPost, "/api/picks/watchlist", bytes.NewBufferString(body))
-	rec := httptest.NewRecorder()
-	h.HandleAddWatchlistItem(rec, req)
-
-	if rec.Code != http.StatusConflict {
-		t.Fatalf("expected 409, got %d", rec.Code)
-	}
-}
-
-func TestHandleAddWatchlistItem_InvalidBody(t *testing.T) {
-	h := newTestPicksHandler(&mocks.MockPicksService{})
-
-	req := httptest.NewRequest(http.MethodPost, "/api/picks/watchlist", bytes.NewBufferString("{bad"))
-	rec := httptest.NewRecorder()
-	h.HandleAddWatchlistItem(rec, req)
-
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d", rec.Code)
-	}
-}
-
-func TestHandleAddWatchlistItem_ServiceError(t *testing.T) {
-	svc := &mocks.MockPicksService{
-		AddToWatchlistFn: func(_ context.Context, _ picks.WatchlistItem) error {
-			return fmt.Errorf("db error")
-		},
-	}
-	h := newTestPicksHandler(svc)
-
-	body := `{"card_name":"Charizard","set_name":"Base Set","grade":"PSA 10"}`
-	req := httptest.NewRequest(http.MethodPost, "/api/picks/watchlist", bytes.NewBufferString(body))
-	rec := httptest.NewRecorder()
-	h.HandleAddWatchlistItem(rec, req)
-
-	if rec.Code != http.StatusInternalServerError {
-		t.Fatalf("expected 500, got %d", rec.Code)
-	}
-}
-
-func TestHandleDeleteWatchlistItem_Success(t *testing.T) {
-	svc := &mocks.MockPicksService{
-		RemoveFromWatchlistFn: func(_ context.Context, id int) error {
-			if id != 42 {
-				t.Errorf("expected id=42, got %d", id)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := &mocks.MockPicksService{}
+			if tt.mockFn != nil {
+				svc.AddToWatchlistFn = tt.mockFn
 			}
-			return nil
-		},
-	}
-	h := newTestPicksHandler(svc)
+			h := newTestPicksHandler(svc)
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/picks/watchlist/42", nil)
-	req.SetPathValue("id", "42")
-	rec := httptest.NewRecorder()
-	h.HandleDeleteWatchlistItem(rec, req)
+			req := httptest.NewRequest(http.MethodPost, "/api/picks/watchlist", bytes.NewBufferString(tt.body))
+			rec := httptest.NewRecorder()
+			h.HandleAddWatchlistItem(rec, req)
 
-	if rec.Code != http.StatusNoContent {
-		t.Fatalf("expected 204, got %d; body: %s", rec.Code, rec.Body.String())
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("expected %d, got %d; body: %s", tt.wantStatus, rec.Code, rec.Body.String())
+			}
+		})
 	}
 }
 
-func TestHandleDeleteWatchlistItem_InvalidID(t *testing.T) {
-	h := newTestPicksHandler(&mocks.MockPicksService{})
-
-	req := httptest.NewRequest(http.MethodDelete, "/api/picks/watchlist/abc", nil)
-	req.SetPathValue("id", "abc")
-	rec := httptest.NewRecorder()
-	h.HandleDeleteWatchlistItem(rec, req)
-
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d", rec.Code)
-	}
-}
-
-func TestHandleDeleteWatchlistItem_NotFound(t *testing.T) {
-	svc := &mocks.MockPicksService{
-		RemoveFromWatchlistFn: func(_ context.Context, _ int) error {
-			return picks.ErrWatchlistItemNotFound
+func TestHandleDeleteWatchlistItem(t *testing.T) {
+	tests := []struct {
+		name       string
+		pathID     string
+		mockFn     func(_ context.Context, _ int) error
+		wantStatus int
+	}{
+		{
+			name:   "success",
+			pathID: "42",
+			mockFn: func(_ context.Context, id int) error {
+				if id != 42 {
+					t.Errorf("expected id=42, got %d", id)
+				}
+				return nil
+			},
+			wantStatus: http.StatusNoContent,
+		},
+		{
+			name:       "invalid ID",
+			pathID:     "abc",
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:   "not found",
+			pathID: "99",
+			mockFn: func(_ context.Context, _ int) error {
+				return picks.ErrWatchlistItemNotFound
+			},
+			wantStatus: http.StatusNotFound,
+		},
+		{
+			name:   "service error",
+			pathID: "1",
+			mockFn: func(_ context.Context, _ int) error {
+				return fmt.Errorf("db error")
+			},
+			wantStatus: http.StatusInternalServerError,
 		},
 	}
-	h := newTestPicksHandler(svc)
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/picks/watchlist/99", nil)
-	req.SetPathValue("id", "99")
-	rec := httptest.NewRecorder()
-	h.HandleDeleteWatchlistItem(rec, req)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := &mocks.MockPicksService{}
+			if tt.mockFn != nil {
+				svc.RemoveFromWatchlistFn = tt.mockFn
+			}
+			h := newTestPicksHandler(svc)
 
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("expected 404, got %d", rec.Code)
-	}
-}
+			req := httptest.NewRequest(http.MethodDelete, "/api/picks/watchlist/"+tt.pathID, nil)
+			req.SetPathValue("id", tt.pathID)
+			rec := httptest.NewRecorder()
+			h.HandleDeleteWatchlistItem(rec, req)
 
-func TestHandleDeleteWatchlistItem_ServiceError(t *testing.T) {
-	svc := &mocks.MockPicksService{
-		RemoveFromWatchlistFn: func(_ context.Context, _ int) error {
-			return fmt.Errorf("db error")
-		},
-	}
-	h := newTestPicksHandler(svc)
-
-	req := httptest.NewRequest(http.MethodDelete, "/api/picks/watchlist/1", nil)
-	req.SetPathValue("id", "1")
-	rec := httptest.NewRecorder()
-	h.HandleDeleteWatchlistItem(rec, req)
-
-	if rec.Code != http.StatusInternalServerError {
-		t.Fatalf("expected 500, got %d", rec.Code)
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("expected %d, got %d; body: %s", tt.wantStatus, rec.Code, rec.Body.String())
+			}
+		})
 	}
 }

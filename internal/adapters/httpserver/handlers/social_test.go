@@ -43,13 +43,13 @@ func samplePost() social.SocialPost {
 
 func TestHandleListPosts(t *testing.T) {
 	tests := []struct {
-		name           string
-		query          string
-		authenticated  bool
-		setupMock      func(*mocks.MockSocialService)
-		wantStatus     int
-		wantCount      int
-		wantDecodeErr  bool
+		name          string
+		query         string
+		authenticated bool
+		setupMock     func(*mocks.MockSocialService)
+		wantStatus    int
+		wantCount     int
+		wantDecodeErr bool
 	}{
 		{
 			name:          "success",
@@ -405,27 +405,37 @@ func TestHandleDelete_Social(t *testing.T) {
 	}
 }
 
-func TestHandleBackfillImages_NotConfigured(t *testing.T) {
-	h := newTestSocialHandler(&mocks.MockSocialService{})
-
-	req := httptest.NewRequest(http.MethodPost, "/api/social/backfill-images", nil)
-	req = req.WithContext(authenticatedContext())
-	rec := httptest.NewRecorder()
-	h.HandleBackfillImages(rec, req)
-
-	if rec.Code != http.StatusServiceUnavailable {
-		t.Fatalf("expected 503, got %d", rec.Code)
+func TestHandleBackfillImages(t *testing.T) {
+	tests := []struct {
+		name          string
+		authenticated bool
+		wantStatus    int
+	}{
+		{
+			name:          "not configured",
+			authenticated: true,
+			wantStatus:    http.StatusServiceUnavailable,
+		},
+		{
+			name:       "unauthenticated",
+			wantStatus: http.StatusUnauthorized,
+		},
 	}
-}
 
-func TestHandleBackfillImages_Unauthenticated(t *testing.T) {
-	h := newTestSocialHandler(&mocks.MockSocialService{})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := newTestSocialHandler(&mocks.MockSocialService{})
 
-	req := httptest.NewRequest(http.MethodPost, "/api/social/backfill-images", nil)
-	rec := httptest.NewRecorder()
-	h.HandleBackfillImages(rec, req)
+			req := httptest.NewRequest(http.MethodPost, "/api/social/backfill-images", nil)
+			if tt.authenticated {
+				req = req.WithContext(authenticatedContext())
+			}
+			rec := httptest.NewRecorder()
+			h.HandleBackfillImages(rec, req)
 
-	if rec.Code != http.StatusUnauthorized {
-		t.Fatalf("expected 401, got %d", rec.Code)
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("expected %d, got %d", tt.wantStatus, rec.Code)
+			}
+		})
 	}
 }

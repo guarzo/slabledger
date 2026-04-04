@@ -13,8 +13,13 @@ func (s *service) GetCrackCandidates(ctx context.Context, campaignID string) ([]
 	if err != nil {
 		return nil, err
 	}
+	return s.crackCandidatesForCampaign(ctx, campaign)
+}
 
-	unsold, err := s.repo.ListUnsoldPurchases(ctx, campaignID)
+// crackCandidatesForCampaign computes crack candidates using an already-loaded campaign,
+// avoiding a redundant GetCampaign call when the caller already has the campaign.
+func (s *service) crackCandidatesForCampaign(ctx context.Context, campaign *Campaign) ([]CrackAnalysis, error) {
+	unsold, err := s.repo.ListUnsoldPurchases(ctx, campaign.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -27,7 +32,7 @@ func (s *service) GetCrackCandidates(ctx context.Context, campaignID string) ([]
 	var results []CrackAnalysis
 	for _, p := range unsold {
 		if p.GradeValue > 8 {
-			continue // Only analyze PSA 8 and below
+			continue
 		}
 
 		card := p.ToCardIdentity()
@@ -44,10 +49,10 @@ func (s *service) GetCrackCandidates(ctx context.Context, campaignID string) ([]
 		}
 
 		if rawCents == 0 {
-			continue // Can't analyze without raw price
+			continue
 		}
 		if gradedCents == 0 {
-			gradedCents = p.CLValueCents // Fall back to CL value
+			gradedCents = p.CLValueCents
 		}
 
 		analysis := computeCrackAnalysis(
@@ -176,7 +181,7 @@ func (s *service) GetCrackOpportunities(ctx context.Context) ([]CrackAnalysis, e
 	}
 	var allResults []CrackAnalysis
 	for _, campaign := range allCampaigns {
-		results, err := s.GetCrackCandidates(ctx, campaign.ID)
+		results, err := s.crackCandidatesForCampaign(ctx, &campaign)
 		if err != nil {
 			if s.logger != nil {
 				s.logger.Warn(ctx, "crack candidates failed for campaign",
