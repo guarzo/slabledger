@@ -65,21 +65,28 @@ func TestClient_ListInventory(t *testing.T) {
 		require.Equal(t, "/api/v1/enterprise/inventory", r.URL.Path)
 		require.Equal(t, "active", r.URL.Query().Get("status"))
 
-		resp := InventoryListResponse{
-			Items: []InventoryListItem{
-				{
-					DHInventoryID: 98765,
-					CertNumber:    "12345678",
-				},
-			},
-			Meta: PaginationMeta{
-				Page:       1,
-				PerPage:    25,
-				TotalCount: 1,
-			},
-		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(resp)
+		_, _ = w.Write([]byte(`{
+			"results": [
+				{
+					"dh_inventory_id": 98765,
+					"dh_card_id": 52304,
+					"cert_number": "12345678",
+					"card_name": "Dreepy",
+					"set_name": "Pokemon Ascended Heroes",
+					"card_number": "247",
+					"grading_company": "psa",
+					"grade": "9.0",
+					"status": "active",
+					"listing_price_cents": 10688,
+					"cost_basis_cents": 893,
+					"channels": [{"name": "ebay", "status": "error"}],
+					"created_at": "2026-04-04T21:50:42Z",
+					"updated_at": "2026-04-04T21:50:42Z"
+				}
+			],
+			"meta": {"page": 1, "per_page": 25, "total_count": 1}
+		}`))
 	}))
 	defer server.Close()
 
@@ -89,7 +96,15 @@ func TestClient_ListInventory(t *testing.T) {
 	require.Len(t, resp.Items, 1)
 	item := resp.Items[0]
 	require.Equal(t, 98765, item.DHInventoryID)
+	require.Equal(t, 52304, item.DHCardID)
 	require.Equal(t, "12345678", item.CertNumber)
+	require.Equal(t, "Dreepy", item.CardName)
+	require.Equal(t, "psa", item.GradingCompany)
+	require.Equal(t, "9.0", item.Grade)
+	require.Equal(t, "active", item.Status)
+	require.Equal(t, 10688, item.ListingPriceCents)
+	require.Len(t, item.Channels, 1)
+	require.Equal(t, "ebay", item.Channels[0].Name)
 }
 
 func TestClient_GetOrders(t *testing.T) {

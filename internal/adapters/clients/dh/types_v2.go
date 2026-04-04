@@ -116,7 +116,7 @@ type InventoryListItem struct {
 	SetName           string                   `json:"set_name"`
 	CardNumber        string                   `json:"card_number"`
 	GradingCompany    string                   `json:"grading_company"`
-	Grade             float64                  `json:"grade"`
+	Grade             string                   `json:"grade"`
 	Status            string                   `json:"status"`
 	ListingPriceCents int                      `json:"listing_price_cents"`
 	CostBasisCents    int                      `json:"cost_basis_cents"`
@@ -127,7 +127,7 @@ type InventoryListItem struct {
 
 // InventoryListResponse is the response from GET /inventory.
 type InventoryListResponse struct {
-	Items []InventoryListItem `json:"items"`
+	Items []InventoryListItem `json:"results"`
 	Meta  PaginationMeta      `json:"meta"`
 }
 

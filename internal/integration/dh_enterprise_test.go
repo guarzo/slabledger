@@ -68,19 +68,19 @@ func TestDHEnterprise_ResolveCertsBatch(t *testing.T) {
 		{CertNumber: "84149614", CardName: "Pikachu"},
 	}
 
-	results, err := c.ResolveCertsBatch(ctx, certs)
+	resp, err := c.ResolveCertsBatch(ctx, certs)
 	if err != nil {
 		t.Fatalf("ResolveCertsBatch: %v", err)
 	}
 
-	t.Logf("Batch resolved %d certs:", len(results))
-	for _, r := range results {
-		t.Logf("  cert=%s status=%s dh_card_id=%d card=%q set=%q",
-			r.CertNumber, r.Status, r.DHCardID, r.CardName, r.SetName)
-	}
+	t.Logf("Batch submitted: job_id=%s status=%s total_certs=%d",
+		resp.JobID, resp.Status, resp.TotalCerts)
 
-	if len(results) != 2 {
-		t.Errorf("expected 2 results, got %d", len(results))
+	if resp.JobID == "" {
+		t.Error("expected non-empty JobID")
+	}
+	if resp.TotalCerts != 2 {
+		t.Errorf("expected TotalCerts=2, got %d", resp.TotalCerts)
 	}
 }
 

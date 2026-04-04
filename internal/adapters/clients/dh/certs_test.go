@@ -59,7 +59,7 @@ func TestClient_ResolveCert(t *testing.T) {
 func TestClient_ResolveCertsBatch(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, http.MethodPost, r.Method)
-		require.Equal(t, "/api/v1/enterprise/certs/resolve", r.URL.Path)
+		require.Equal(t, "/api/v1/enterprise/certs/resolve_batch", r.URL.Path)
 		require.Equal(t, "Bearer test_api_key", r.Header.Get(enterpriseAuthHeader))
 
 		var req CertResolveBatchRequest
@@ -68,23 +68,10 @@ func TestClient_ResolveCertsBatch(t *testing.T) {
 		require.Equal(t, "12345678", req.Certs[0].CertNumber)
 		require.Equal(t, "87654321", req.Certs[1].CertNumber)
 
-		resp := []CertResolution{
-			{
-				CertNumber: "12345678",
-				Status:     "matched",
-				DHCardID:   42,
-				CardName:   "Charizard",
-				SetName:    "Base Set",
-				Grade:      10.0,
-			},
-			{
-				CertNumber: "87654321",
-				Status:     "matched",
-				DHCardID:   101,
-				CardName:   "Pikachu",
-				SetName:    "Jungle",
-				Grade:      9.0,
-			},
+		resp := CertResolveBatchResponse{
+			JobID:      "job_xyz789",
+			Status:     "queued",
+			TotalCerts: 2,
 		}
 		w.Header().Set("Content-Type", "application/json")
 		require.NoError(t, json.NewEncoder(w).Encode(resp))
@@ -98,12 +85,9 @@ func TestClient_ResolveCertsBatch(t *testing.T) {
 	}
 	resp, err := c.ResolveCertsBatch(context.Background(), certs)
 	require.NoError(t, err)
-	require.Len(t, resp, 2)
-	require.Equal(t, "12345678", resp[0].CertNumber)
-	require.Equal(t, "matched", resp[0].Status)
-	require.Equal(t, 42, resp[0].DHCardID)
-	require.Equal(t, "87654321", resp[1].CertNumber)
-	require.Equal(t, 9.0, resp[1].Grade)
+	require.Equal(t, "job_xyz789", resp.JobID)
+	require.Equal(t, "queued", resp.Status)
+	require.Equal(t, 2, resp.TotalCerts)
 }
 
 func TestClient_GetCertResolutionJob(t *testing.T) {
