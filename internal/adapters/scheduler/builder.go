@@ -83,6 +83,13 @@ type BuildDeps struct {
 	DHIntelligenceRepo intelligence.Repository
 	DHSuggestionsRepo  intelligence.SuggestionsRepository
 
+	// DH v2 dependencies (optional)
+	DHOrdersClient        DHOrdersClient
+	DHInventoryListClient DHInventoryListClient
+	DHFieldsUpdater       DHFieldsUpdater
+	PurchaseByCertLookup  PurchaseByCertLookup
+	CampaignService       domainCampaigns.Service
+
 	// Scoring gap cleanup dependencies (optional)
 	GapStore scoring.GapStore
 
@@ -331,6 +338,37 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 		}
 		schedulers = append(schedulers, NewDHSuggestionsScheduler(
 			deps.DHClient, deps.DHSuggestionsRepo, deps.Logger, dhSuggestConfig,
+		))
+	}
+
+	// DH v2: Orders poll scheduler
+	if deps.DHOrdersClient != nil && deps.SyncStateStore != nil && deps.CampaignService != nil {
+		ordersPollCfg := DHOrdersPollConfig{
+			Enabled:  cfg.DH.Enabled,
+			Interval: cfg.DH.OrdersPollInterval,
+		}
+		schedulers = append(schedulers, NewDHOrdersPollScheduler(
+			deps.DHOrdersClient,
+			deps.SyncStateStore,
+			deps.CampaignService,
+			deps.Logger,
+			ordersPollCfg,
+		))
+	}
+
+	// DH v2: Inventory status poll scheduler
+	if deps.DHInventoryListClient != nil && deps.SyncStateStore != nil && deps.DHFieldsUpdater != nil && deps.PurchaseByCertLookup != nil {
+		inventoryPollCfg := DHInventoryPollConfig{
+			Enabled:  cfg.DH.Enabled,
+			Interval: cfg.DH.InventoryPollInterval,
+		}
+		schedulers = append(schedulers, NewDHInventoryPollScheduler(
+			deps.DHInventoryListClient,
+			deps.SyncStateStore,
+			deps.DHFieldsUpdater,
+			deps.PurchaseByCertLookup,
+			deps.Logger,
+			inventoryPollCfg,
 		))
 	}
 

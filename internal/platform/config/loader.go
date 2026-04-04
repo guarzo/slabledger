@@ -381,6 +381,7 @@ func FromEnv(base Config) Config {
 	cfg.Adapters.ImageAIEnabled = parseBool(os.Getenv("IMAGE_AI_ENABLED"), false)
 	cfg.Adapters.JustTCGKey = os.Getenv("JUSTTCG_API_KEY")
 	cfg.Adapters.DHKey = os.Getenv("DH_INTEGRATION_API_KEY")
+	cfg.Adapters.DHEnterpriseKey = os.Getenv("DH_ENTERPRISE_API_KEY")
 	if v := os.Getenv("DH_API_BASE_URL"); v != "" {
 		cfg.Adapters.DHBaseURL = v
 	}
@@ -395,6 +396,16 @@ func FromEnv(base Config) Config {
 		}
 	}
 	cfg.DH.Enabled = parseBool(os.Getenv("DH_ENABLED"), cfg.DH.Enabled)
+	if v := os.Getenv("DH_ORDERS_POLL_INTERVAL"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			cfg.DH.OrdersPollInterval = d
+		}
+	}
+	if v := os.Getenv("DH_INVENTORY_POLL_INTERVAL"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			cfg.DH.InventoryPollInterval = d
+		}
+	}
 
 	cfg.JustTCG.ApplyDefaults()
 

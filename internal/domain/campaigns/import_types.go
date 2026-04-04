@@ -328,6 +328,7 @@ type OrdersConfirmItem struct {
 	SaleChannel    SaleChannel `json:"saleChannel"`
 	SaleDate       string      `json:"saleDate"`
 	SalePriceCents int         `json:"salePriceCents"`
+	OrderID        string      `json:"orderId,omitempty"`
 }
 
 // cardNumberPattern matches expected card number formats (digits, alphanumeric, with optional slash separator).

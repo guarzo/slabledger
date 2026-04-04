@@ -244,6 +244,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 			cfg.Adapters.DHBaseURL, cfg.Adapters.DHKey,
 			dh.WithLogger(logger),
 			dh.WithRateLimitRPS(cfg.DH.RateLimitRPS),
+			dh.WithEnterpriseKey(cfg.Adapters.DHEnterpriseKey),
 		)
 		logger.Info(ctx, "DH client initialized")
 	}

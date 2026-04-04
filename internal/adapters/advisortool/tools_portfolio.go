@@ -383,10 +383,3 @@ func (e *CampaignToolExecutor) registerGetCrackOpportunities() {
 	})
 }
 
-// jsonSchema is a minimal JSON Schema representation for tool parameters.
-type jsonSchema struct {
-	Type        string                `json:"type"`
-	Description string                `json:"description,omitempty"`
-	Properties  map[string]jsonSchema `json:"properties,omitempty"`
-	Required    []string              `json:"required,omitempty"`
-}

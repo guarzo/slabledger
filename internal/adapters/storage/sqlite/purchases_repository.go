@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardutil"
@@ -29,8 +30,9 @@ func (r *CampaignsRepository) CreatePurchase(ctx context.Context, p *campaigns.P
 			override_price_cents, override_source, override_set_at,
 			ai_suggested_price_cents, ai_suggested_at,
 			card_year, ebay_export_flagged_at,
-			reviewed_price_cents, reviewed_at, review_source)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			reviewed_price_cents, reviewed_at, review_source,
+			dh_card_id, dh_inventory_id, dh_cert_status, dh_listing_price_cents, dh_channels_json)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 	_, err := r.db.ExecContext(ctx, query,
 		p.ID, p.CampaignID, p.CardName, p.CertNumber,
@@ -46,6 +48,7 @@ func (r *CampaignsRepository) CreatePurchase(ctx context.Context, p *campaigns.P
 		p.AISuggestedPriceCents, p.AISuggestedAt,
 		p.CardYear, p.EbayExportFlaggedAt,
 		p.ReviewedPriceCents, p.ReviewedAt, string(p.ReviewSource),
+		p.DHCardID, p.DHInventoryID, p.DHCertStatus, p.DHListingPriceCents, p.DHChannelsJSON,
 	)
 	if err != nil && isUniqueConstraintError(err) {
 		return campaigns.ErrDuplicateCertNumber
@@ -323,4 +326,61 @@ func (r *CampaignsRepository) UpdatePurchaseCardYear(ctx context.Context, id str
 		return campaigns.ErrPurchaseNotFound
 	}
 	return nil
+}
+
+// UpdatePurchaseDHFields updates DH v2 tracking fields on a purchase.
+func (r *CampaignsRepository) UpdatePurchaseDHFields(ctx context.Context, id string, update campaigns.DHFieldsUpdate) error {
+	result, err := r.db.ExecContext(ctx,
+		`UPDATE campaign_purchases
+		 SET dh_card_id = ?, dh_inventory_id = ?, dh_cert_status = ?,
+		     dh_listing_price_cents = ?, dh_channels_json = ?, updated_at = ?
+		 WHERE id = ?`,
+		update.CardID, update.InventoryID, update.CertStatus, update.ListingPriceCents, update.ChannelsJSON, time.Now(), id,
+	)
+	if err != nil {
+		return err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return campaigns.ErrPurchaseNotFound
+	}
+	return nil
+}
+
+// GetPurchasesByDHCertStatus returns purchases with the given DH cert resolution status.
+func (r *CampaignsRepository) GetPurchasesByDHCertStatus(ctx context.Context, status string, limit int) ([]campaigns.Purchase, error) {
+	query := fmt.Sprintf(
+		`SELECT %s FROM campaign_purchases WHERE dh_cert_status = ? ORDER BY updated_at ASC LIMIT ?`,
+		purchaseColumns,
+	)
+	rows, err := r.db.QueryContext(ctx, query, status, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close() //nolint:errcheck // best-effort close
+
+	var purchases []campaigns.Purchase
+	for rows.Next() {
+		var p campaigns.Purchase
+		if err := scanPurchase(rows, &p); err != nil {
+			return nil, err
+		}
+		purchases = append(purchases, p)
+	}
+	return purchases, rows.Err()
+}
+
+// GetPurchaseIDByCertNumber returns the purchase ID for a given cert number.
+func (r *CampaignsRepository) GetPurchaseIDByCertNumber(ctx context.Context, certNumber string) (string, error) {
+	var id string
+	err := r.db.QueryRowContext(ctx,
+		`SELECT id FROM campaign_purchases WHERE cert_number = ?`, certNumber,
+	).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return id, err
 }

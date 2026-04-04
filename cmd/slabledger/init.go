@@ -411,6 +411,17 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 	// Same nil-safety for DH dependencies.
 	if deps.DHClient != nil {
 		buildDeps.DHClient = deps.DHClient
+		buildDeps.DHOrdersClient = deps.DHClient
+		buildDeps.DHInventoryListClient = deps.DHClient
+		// Guard against typed-nil pointers: a nil *sqlite.CampaignsRepository
+		// assigned to an interface produces a non-nil interface wrapping a nil pointer.
+		if deps.CampaignsRepo != nil {
+			buildDeps.DHFieldsUpdater = deps.CampaignsRepo
+			buildDeps.PurchaseByCertLookup = deps.CampaignsRepo
+		}
+		if deps.CampaignsService != nil {
+			buildDeps.CampaignService = deps.CampaignsService
+		}
 	}
 	if deps.DHIntelligenceRepo != nil {
 		buildDeps.DHIntelligenceRepo = deps.DHIntelligenceRepo

@@ -137,6 +137,7 @@ func (s *service) ConfirmOrdersSales(ctx context.Context, items []OrdersConfirmI
 			SaleChannel:    item.SaleChannel,
 			SalePriceCents: item.SalePriceCents,
 			SaleDate:       item.SaleDate,
+			OrderID:        item.OrderID,
 		}
 
 		if err := ValidateSale(sa); err != nil {

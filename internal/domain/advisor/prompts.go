@@ -44,24 +44,25 @@ Generate a comprehensive weekly business review. Fetch all relevant data using t
 Focus on actionable insights, not data recitation. Lead with what matters most this week.
 
 ## Tool Strategy
-You have a **2-round tool budget**. Plan your calls carefully:
+You have a **3-round tool budget**. Plan your calls carefully:
 
 **Round 1**: Call get_dashboard_summary alongside the broad tools you need
 (get_weekly_review, get_credit_summary, get_global_inventory, get_sell_sheet, get_portfolio_insights,
 get_acquisition_targets, get_crack_opportunities).
 These give you everything for the digest.
 
-**Round 2**: Only if a specific campaign needs a deep dive based on Round 1 findings
-(e.g., a campaign flagged as critical). Call at most 1-2 targeted tools (get_campaign_tuning, get_inventory_aging).
+**Round 2**: Use get_expected_values_batch (one call, all campaigns) for portfolio-wide EV data.
+Only if a specific campaign needs a deep dive based on Round 1 findings
+(e.g., a campaign flagged as critical), call at most 1-2 targeted tools (get_campaign_tuning, get_inventory_aging).
+
+**Round 3**: Escape hatch for follow-up calls if needed. Prefer completing the report after Round 2.
 
 Do NOT call get_campaign_tuning or get_campaign_pnl for every campaign — that data is already
 summarized in get_dashboard_summary and get_portfolio_insights.
 
-If you need campaign UUIDs for targeted Round 2 calls (get_campaign_tuning, get_inventory_aging),
-you may call list_campaigns in Round 2 as an escape hatch. But prefer using IDs from the
-dashboard summary or portfolio insights when available.
+Do NOT call get_expected_values per-campaign — use get_expected_values_batch instead.
 
-After Round 2, write your report with the data you have. Do not make additional tool calls.`
+After your tool rounds, write your report with the data you have. Do not make additional tool calls.`
 
 const digestUserPrompt = `Generate my weekly intelligence digest. Fetch current data on:
 1. Weekly performance (week-over-week changes)
@@ -121,16 +122,20 @@ previous recommendations performed. If acceptance rate is low, adjust your
 pricing strategy — you may be suggesting prices that are too aggressive.
 
 ## Tool Strategy
-You have a **2-round tool budget**. Plan your calls carefully:
+You have a **3-round tool budget**. Plan your calls carefully:
 
 **Round 1**: Call get_dashboard_summary, get_global_inventory, get_sell_sheet, and
 get_suggestion_stats together. These give you credit health, inventory aging, and pricing data.
 
-**Round 2**: Call get_expected_values for campaigns with liquidation candidates, and use
-suggest_price for cards you want to reprice. Focus on the worst performers only.
+**Round 2**: Call get_expected_values_batch (one call, all campaigns or specific ones) for EV data,
+and use suggest_price_batch (one call) for all cards you want to reprice. Focus on the worst performers only.
 
+**Round 3**: Escape hatch for follow-up calls. Prefer completing the analysis after Round 2.
+
+Do NOT call get_expected_values per-campaign — use get_expected_values_batch instead.
+Do NOT call suggest_price per-card — use suggest_price_batch instead.
 Do NOT call get_campaign_tuning or get_campaign_pnl for every campaign. Do NOT call
-list_campaigns separately. After Round 2, write your analysis with the data you have.`
+list_campaigns separately. After your tool rounds, write your analysis with the data you have.`
 
 const liquidationUserPrompt = `Run a liquidation analysis across my entire portfolio.
 

@@ -26,11 +26,12 @@ func newTestClient(serverURL string) *Client {
 	httpClient := httpx.NewClient(config)
 
 	return &Client{
-		apiKey:     "test_api_key",
-		baseURL:    serverURL,
-		httpClient: httpClient,
-		limiter:    rate.NewLimiter(rate.Inf, 1),
-		timeout:    5 * time.Second,
+		apiKey:        "test_api_key",
+		enterpriseKey: "test_api_key",
+		baseURL:       serverURL,
+		httpClient:    httpClient,
+		limiter:       rate.NewLimiter(rate.Inf, 1),
+		timeout:       5 * time.Second,
 	}
 }
 
