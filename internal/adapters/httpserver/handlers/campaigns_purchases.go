@@ -192,6 +192,29 @@ func (h *CampaignsHandler) HandleDeletePurchase(w http.ResponseWriter, r *http.R
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// HandleDeleteSale handles DELETE /api/campaigns/{id}/purchases/{purchaseId}/sale.
+func (h *CampaignsHandler) HandleDeleteSale(w http.ResponseWriter, r *http.Request) {
+	_, ok := pathID(w, r, "id", "Campaign ID")
+	if !ok {
+		return
+	}
+	purchaseID, ok := pathID(w, r, "purchaseId", "Purchase ID")
+	if !ok {
+		return
+	}
+
+	if err := h.service.DeleteSaleByPurchaseID(r.Context(), purchaseID); err != nil {
+		if campaigns.IsSaleNotFound(err) {
+			writeError(w, http.StatusNotFound, "No sale found for this purchase")
+			return
+		}
+		h.logger.Error(r.Context(), "failed to delete sale", observability.Err(err), observability.String("purchase_id", purchaseID))
+		writeError(w, http.StatusInternalServerError, "Internal server error")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // HandleCertLookup handles GET /api/certs/{certNumber}.
 func (h *CampaignsHandler) HandleCertLookup(w http.ResponseWriter, r *http.Request) {
 	certNumber, ok := pathID(w, r, "certNumber", "Cert number")
