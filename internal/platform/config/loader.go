@@ -336,6 +336,21 @@ func FromEnv(base Config) Config {
 		}
 	}
 
+	// Metrics poll scheduler
+	if v := os.Getenv("METRICS_POLL_ENABLED"); v != "" {
+		cfg.MetricsPoll.Enabled = parseBool(v, false)
+	}
+	if v := os.Getenv("METRICS_POLL_INTERVAL"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			cfg.MetricsPoll.Interval = d
+		}
+	}
+	if v := os.Getenv("METRICS_POLL_MAX_AGE"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			cfg.MetricsPoll.MaxAge = d
+		}
+	}
+
 	// Picks refresh scheduler
 	if v := os.Getenv("PICKS_REFRESH_ENABLED"); v != "" {
 		cfg.PicksRefresh.Enabled = parseBool(v, true)

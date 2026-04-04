@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../js/api';
 import { queryKeys } from './queryKeys';
+import type { PostMetricsSnapshot, MetricsSummary } from '../../types/social';
 
 const SOCIAL_STALE_TIME = 30_000;
 
@@ -102,5 +103,22 @@ export function useDisconnectInstagram() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.instagram.all });
     },
+  });
+}
+
+export function usePostMetrics(postId: string | undefined) {
+  return useQuery<PostMetricsSnapshot[]>({
+    queryKey: [...queryKeys.social.all, 'metrics', postId],
+    queryFn: () => api.getPostMetrics(postId!),
+    enabled: !!postId,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
+}
+
+export function useMetricsSummary() {
+  return useQuery<MetricsSummary[]>({
+    queryKey: [...queryKeys.social.all, 'metrics-summary'],
+    queryFn: () => api.getMetricsSummary(),
+    staleTime: 5 * 60 * 1000,
   });
 }

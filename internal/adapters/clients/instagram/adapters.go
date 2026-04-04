@@ -59,6 +59,47 @@ func (p *TokenProvider) GetToken(ctx context.Context) (string, string, error) {
 	return token, igUserID, nil
 }
 
+// InsightsPollerAdapter wraps the Instagram Client to implement scheduler.InsightsPoller.
+// It fetches the current access token from the TokenStore and converts the
+// instagram.MediaInsights response into a social.PostMetrics value.
+type InsightsPollerAdapter struct {
+	client *Client
+	store  TokenStore
+}
+
+// NewInsightsPollerAdapter creates a new insights poller adapter.
+func NewInsightsPollerAdapter(client *Client, store TokenStore) *InsightsPollerAdapter {
+	return &InsightsPollerAdapter{client: client, store: store}
+}
+
+// PollInsights fetches engagement metrics for a published Instagram post.
+func (a *InsightsPollerAdapter) PollInsights(ctx context.Context, mediaID string) (*social.PostMetrics, error) {
+	token, _, expiresAt, connected, err := a.store.GetToken(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("get instagram token: %w", err)
+	}
+	if !connected {
+		return nil, fmt.Errorf("instagram not connected")
+	}
+	if time.Now().After(expiresAt) {
+		return nil, fmt.Errorf("instagram token expired")
+	}
+
+	insights, err := a.client.GetMediaInsights(ctx, token, mediaID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &social.PostMetrics{
+		Impressions: insights.Impressions,
+		Reach:       insights.Reach,
+		Likes:       insights.Likes,
+		Comments:    insights.Comments,
+		Saves:       insights.Saves,
+		Shares:      insights.Shares,
+	}, nil
+}
+
 // TokenRefresher implements scheduler.InstagramTokenRefresher.
 type TokenRefresher struct {
 	client *Client

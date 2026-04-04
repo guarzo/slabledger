@@ -42,3 +42,28 @@ export interface InstagramStatus {
   expiresAt?: string;
   connectedAt?: string;
 }
+
+export interface PostMetricsSnapshot {
+  id: number;
+  postId: string;
+  impressions: number;
+  reach: number;
+  likes: number;
+  comments: number;
+  saves: number;
+  shares: number;
+  polledAt: string;
+}
+
+export interface MetricsSummary {
+  postId: string;
+  postType: PostType;
+  coverTitle: string;
+  impressions: number;
+  reach: number;
+  likes: number;
+  comments: number;
+  saves: number;
+  shares: number;
+  publishedAt: string;
+}

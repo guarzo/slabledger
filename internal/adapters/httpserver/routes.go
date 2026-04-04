@@ -233,6 +233,8 @@ func (rt *Router) registerSocialRoutes(mux *http.ServeMux) {
 		mux.Handle("POST /api/social/backfill-images", rt.authMW.RequireAdmin(http.HandlerFunc(rt.socialHandler.HandleBackfillImages)))
 		mux.Handle("POST /api/social/posts/{id}/regenerate-caption", rt.authMW.RequireAdmin(http.HandlerFunc(rt.socialHandler.HandleRegenerateCaption)))
 		mux.Handle("POST /api/social/posts/{id}/upload-slides", rt.authMW.RequireAdmin(http.HandlerFunc(rt.socialHandler.HandleUploadSlides)))
+		mux.Handle("GET /api/social/posts/{id}/metrics", rt.authMW.RequireAdmin(http.HandlerFunc(rt.socialHandler.HandleGetMetrics)))
+		mux.Handle("GET /api/social/metrics/summary", rt.authMW.RequireAdmin(http.HandlerFunc(rt.socialHandler.HandleGetMetricsSummary)))
 		mux.Handle("/content", rt.authMW.RequireAdmin(http.HandlerFunc(rt.spaHandler.HandleIndex)))
 		rt.logger.Info(context.Background(), "social content routes registered")
 	}
