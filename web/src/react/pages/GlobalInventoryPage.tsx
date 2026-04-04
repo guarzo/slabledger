@@ -1,12 +1,13 @@
+import { useMemo } from 'react';
 import { useSellSheet } from '../hooks/useSellSheet';
 import { useGlobalInventory } from '../queries/useCampaignQueries';
 import InventoryTab from './campaign-detail/InventoryTab';
 import AIAnalysisWidget from '../components/advisor/AIAnalysisWidget';
-import '../../styles/print-sell-sheet.css';
 
 export default function GlobalInventoryPage() {
   const { data: items = [], isLoading, isError, error } = useGlobalInventory();
   const sellSheet = useSellSheet();
+  const pageSellSheetCount = useMemo(() => items.filter(i => sellSheet.has(i.purchase.id)).length, [items, sellSheet]);
 
   if (isError) {
     return (
@@ -29,7 +30,7 @@ export default function GlobalInventoryPage() {
       <div className="sell-sheet-print-header">
         <h1>Sell Sheet</h1>
         <div className="print-meta">
-          {new Date().toLocaleDateString()} &middot; {sellSheet.count} items
+          {new Date().toLocaleDateString()} &middot; {pageSellSheetCount} items
         </div>
       </div>
 
@@ -43,7 +44,7 @@ export default function GlobalInventoryPage() {
 
       {/* Print footer — visible only when printing */}
       <div className="sell-sheet-print-footer">
-        {sellSheet.count} items &middot; {new Date().toLocaleDateString()} &middot; card-yeti.com
+        {pageSellSheetCount} items &middot; {new Date().toLocaleDateString()} &middot; card-yeti.com
       </div>
 
       {/* AI Liquidation Analysis — hidden when printing */}
