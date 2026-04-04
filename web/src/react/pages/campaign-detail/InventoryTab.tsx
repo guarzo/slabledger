@@ -597,6 +597,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                       onSetPrice={() => handleSetPrice(item)}
                       ev={evMap.get(item.purchase.certNumber)}
                       showCampaignColumn={showCampaignColumn}
+                      onSellSheet={filterTab !== 'sell_sheet' && sellSheet.has(item.purchase.id)}
                     />
                   </div>
                 );
@@ -661,6 +662,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                         ev={evMap.get(item.purchase.certNumber)}
                         showEV={!!showEV}
                         showCampaignColumn={showCampaignColumn}
+                        onSellSheet={filterTab !== 'sell_sheet' && sellSheet.has(item.purchase.id)}
                       />
                     </div>
                     {isExpanded && <ExpandedDetail item={item} onReviewed={handleReviewed} campaignId={campaignId} onOpenFlagDialog={() => setFlagTarget({ purchaseId: item.purchase.id, cardName: item.purchase.cardName, grade: item.purchase.gradeValue })} />}
