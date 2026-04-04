@@ -45,3 +45,18 @@ type PublishedPost struct {
 	InstagramPostID string
 	PublishedAt     time.Time
 }
+
+// MetricsPostLister retrieves recently published posts for metrics polling.
+type MetricsPostLister interface {
+	GetPublishedPostIDs(ctx context.Context, since time.Time) ([]PublishedPost, error)
+}
+
+// MetricsSaver persists polled metrics snapshots.
+type MetricsSaver interface {
+	SaveMetrics(ctx context.Context, m *PostMetrics) error
+}
+
+// InsightsPoller fetches engagement metrics from Instagram for a media ID.
+type InsightsPoller interface {
+	PollInsights(ctx context.Context, mediaID string) (*PostMetrics, error)
+}

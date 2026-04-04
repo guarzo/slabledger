@@ -293,6 +293,24 @@ func initializeSocialService(
 	return socialService, socialRepo, igClient, igStore, igTokenRefresher
 }
 
+// initializeMetricsPoller creates the metrics repository and, when an Instagram
+// client and token store are available, the insights poller adapter.
+func initializeMetricsPoller(
+	ctx context.Context,
+	db *sqlite.DB,
+	igClient *igclient.Client,
+	igStore *sqlite.InstagramStore,
+	logger observability.Logger,
+) (*sqlite.MetricsRepository, social.InsightsPoller) {
+	metricsRepo := sqlite.NewMetricsRepository(db.DB)
+	var poller social.InsightsPoller
+	if igClient != nil && igStore != nil {
+		poller = igclient.NewInsightsPollerAdapter(igClient, igStore)
+		logger.Info(ctx, "Instagram insights poller initialized")
+	}
+	return metricsRepo, poller
+}
+
 // initializeCardLadder creates the Card Ladder client, auth, and store.
 // Returns nil values if encryption key is not configured.
 func initializeCardLadder(
@@ -350,9 +368,9 @@ type schedulerDeps struct {
 	AICallRepo           *sqlite.AICallRepository
 	SocialService        social.Service
 	IGTokenRefresher     scheduler.InstagramTokenRefresher
-	MetricsPostLister    scheduler.MetricsPostLister
-	MetricsSaver         scheduler.MetricsSaver
-	InsightsPoller       scheduler.InsightsPoller
+	MetricsPostLister    social.MetricsPostLister
+	MetricsSaver         social.MetricsSaver
+	InsightsPoller       social.InsightsPoller
 	CertSweeper          scheduler.CertSweeper
 	PicksService         picks.Service
 	CardLadderClient     *cardladder.Client

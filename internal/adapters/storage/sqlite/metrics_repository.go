@@ -20,6 +20,9 @@ func NewMetricsRepository(db *sql.DB) *MetricsRepository {
 }
 
 func (r *MetricsRepository) SaveMetrics(ctx context.Context, m *social.PostMetrics) error {
+	if m == nil {
+		return fmt.Errorf("cannot save nil metrics")
+	}
 	_, err := r.db.ExecContext(ctx,
 		`INSERT INTO instagram_post_metrics (post_id, impressions, reach, likes, comments, saves, shares, polled_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,

@@ -20,7 +20,6 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardhedger"
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	"github.com/guarzo/slabledger/internal/adapters/clients/google"
-	igclient "github.com/guarzo/slabledger/internal/adapters/clients/instagram"
 	"github.com/guarzo/slabledger/internal/adapters/clients/justtcg"
 	"github.com/guarzo/slabledger/internal/adapters/clients/psa"
 	"github.com/guarzo/slabledger/internal/adapters/clients/tcgdex"
@@ -295,13 +294,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		ctx, cfg, logger, db, azureAIClient, aiCallRepo,
 	)
 
-	// Initialize metrics repository and poller adapter for Instagram insights
-	metricsRepo := sqlite.NewMetricsRepository(db.DB)
-	var insightsPoller scheduler.InsightsPoller
-	if igClient != nil && igStore != nil {
-		insightsPoller = igclient.NewInsightsPollerAdapter(igClient, igStore)
-		logger.Info(ctx, "Instagram insights poller initialized")
-	}
+	metricsRepo, insightsPoller := initializeMetricsPoller(ctx, db, igClient, igStore, logger)
 
 	// Initialize Card Ladder
 	var clEncryptor crypto.Encryptor

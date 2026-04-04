@@ -9,38 +9,23 @@ import (
 	"github.com/guarzo/slabledger/internal/platform/config"
 )
 
-// MetricsPostLister retrieves recently published posts for metrics polling.
-type MetricsPostLister interface {
-	GetPublishedPostIDs(ctx context.Context, since time.Time) ([]social.PublishedPost, error)
-}
-
-// MetricsSaver persists polled metrics snapshots.
-type MetricsSaver interface {
-	SaveMetrics(ctx context.Context, m *social.PostMetrics) error
-}
-
-// InsightsPoller fetches engagement metrics from Instagram for a media ID.
-type InsightsPoller interface {
-	PollInsights(ctx context.Context, mediaID string) (*social.PostMetrics, error)
-}
-
 var _ Scheduler = (*MetricsPollScheduler)(nil)
 
 // MetricsPollScheduler polls Instagram for engagement metrics on recently published posts.
 type MetricsPollScheduler struct {
 	StopHandle
-	lister MetricsPostLister
-	saver  MetricsSaver
-	poller InsightsPoller
+	lister social.MetricsPostLister
+	saver  social.MetricsSaver
+	poller social.InsightsPoller
 	logger observability.Logger
 	config config.MetricsPollConfig
 }
 
 // NewMetricsPollScheduler creates a new metrics poll scheduler.
 func NewMetricsPollScheduler(
-	lister MetricsPostLister,
-	saver MetricsSaver,
-	poller InsightsPoller,
+	lister social.MetricsPostLister,
+	saver social.MetricsSaver,
+	poller social.InsightsPoller,
 	logger observability.Logger,
 	cfg config.MetricsPollConfig,
 ) *MetricsPollScheduler {
@@ -95,6 +80,11 @@ func (s *MetricsPollScheduler) Tick(ctx context.Context) {
 				observability.String("post_id", post.PostID),
 				observability.String("instagram_post_id", post.InstagramPostID),
 				observability.Err(err))
+			continue
+		}
+		if metrics == nil {
+			s.logger.Warn(ctx, "metrics poll: poller returned nil metrics, skipping",
+				observability.String("post_id", post.PostID))
 			continue
 		}
 

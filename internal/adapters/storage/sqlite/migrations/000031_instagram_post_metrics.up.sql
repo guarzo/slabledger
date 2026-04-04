@@ -13,3 +13,4 @@ CREATE TABLE IF NOT EXISTS instagram_post_metrics (
 
 CREATE INDEX IF NOT EXISTS idx_post_metrics_post_id ON instagram_post_metrics(post_id);
 CREATE INDEX IF NOT EXISTS idx_post_metrics_polled_at ON instagram_post_metrics(polled_at);
+CREATE INDEX IF NOT EXISTS idx_post_metrics_post_id_polled_at ON instagram_post_metrics(post_id, polled_at DESC);

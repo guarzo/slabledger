@@ -63,19 +63,28 @@ export default function CoverSlide({
 
   // Use new post-type-specific covers when cards are available
   if (cards && cards.length > 0) {
-    return (
-      <SlideCanvas dataSlide="cover">
-        {postType === 'hot_deals' && (
+    if (postType === 'hot_deals') {
+      return (
+        <SlideCanvas dataSlide="cover">
           <HotDealsCover postType={postType} coverTitle={coverTitle} cards={cards} backgroundUrl={backgroundUrls?.[0]} />
-        )}
-        {postType === 'new_arrivals' && (
+        </SlideCanvas>
+      );
+    }
+    if (postType === 'new_arrivals') {
+      return (
+        <SlideCanvas dataSlide="cover">
           <NewArrivalsCover postType={postType} coverTitle={coverTitle} cards={cards} backgroundUrl={backgroundUrls?.[0]} />
-        )}
-        {postType === 'price_movers' && (
+        </SlideCanvas>
+      );
+    }
+    if (postType === 'price_movers') {
+      return (
+        <SlideCanvas dataSlide="cover">
           <PriceMoversCover postType={postType} coverTitle={coverTitle} cards={cards} backgroundUrl={backgroundUrls?.[0]} />
-        )}
-      </SlideCanvas>
-    );
+        </SlideCanvas>
+      );
+    }
+    // Unknown postType — fall through to legacy cover below
   }
 
   return (

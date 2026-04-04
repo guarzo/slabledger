@@ -15,6 +15,7 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/domain/pricing"
 	"github.com/guarzo/slabledger/internal/domain/scoring"
+	"github.com/guarzo/slabledger/internal/domain/social"
 	"github.com/guarzo/slabledger/internal/platform/config"
 )
 
@@ -73,9 +74,9 @@ type BuildDeps struct {
 	InstagramTokenRefresher InstagramTokenRefresher
 
 	// Metrics poll dependencies (optional)
-	MetricsPostLister MetricsPostLister
-	MetricsSaver      MetricsSaver
-	InsightsPoller    InsightsPoller
+	MetricsPostLister social.MetricsPostLister
+	MetricsSaver      social.MetricsSaver
+	InsightsPoller    social.InsightsPoller
 
 	// Picks generation dependencies (optional)
 	PicksGenerator PicksGenerator

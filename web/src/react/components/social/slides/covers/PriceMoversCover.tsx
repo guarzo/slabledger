@@ -19,16 +19,19 @@ export default function PriceMoversCover({
   if (cards.length === 0) return null;
   const hero = cards[0];
 
-  const gradeLabel = hero
+  const gradeLabel = hero?.gradeValue
     ? `${hero.grader || 'PSA'} ${hero.gradeValue}`
     : '';
 
-  const trendUp = hero ? hero.trend30d > 0 : true;
-  const trendPct = hero ? Math.round(hero.trend30d * 100) : 0;
-  const trendDisplay = trendPct >= 0 ? `+${trendPct}%` : `${trendPct}%`;
-  const trendColor = trendUp ? '#22c55e' : '#ef4444';
+  const hasTrend = hero != null && hero.trend30d != null && hero.trend30d !== 0;
+  const trendUp = hasTrend && hero.trend30d > 0;
+  const trendPct = hasTrend ? Math.round(hero.trend30d * 100) : null;
+  const trendDisplay = trendPct != null ? (trendPct >= 0 ? `+${trendPct}%` : `${trendPct}%`) : null;
+  const trendColor = hasTrend ? (trendUp ? '#22c55e' : '#ef4444') : '#9ca3af';
 
-  const svgPoints = trendUp
+  const svgPoints = !hasTrend
+    ? '0,16 15,16 30,16 45,16 55,16 65,16 80,16'
+    : trendUp
     ? '0,28 15,25 30,22 45,18 55,12 65,8 80,4'
     : '0,4 15,8 30,12 45,18 55,22 65,25 80,28';
 
@@ -130,12 +133,21 @@ export default function PriceMoversCover({
         {/* Trend data — right side */}
         <div className="flex flex-col items-start justify-center gap-3 flex-1">
           {/* Large trend percentage */}
-          <span
-            className="font-black leading-none"
-            style={{ fontSize: '56px', color: trendColor }}
-          >
-            {trendDisplay}
-          </span>
+          {trendDisplay != null ? (
+            <span
+              className="font-black leading-none"
+              style={{ fontSize: '56px', color: trendColor }}
+            >
+              {trendDisplay}
+            </span>
+          ) : (
+            <span
+              className="font-black leading-none text-white/30"
+              style={{ fontSize: '36px' }}
+            >
+              —
+            </span>
+          )}
 
           {/* "30-day trend" label */}
           <span className="text-white/50 text-[13px] font-medium tracking-wide">
@@ -169,7 +181,7 @@ export default function PriceMoversCover({
           className="text-[10px] font-black tracking-[2px] uppercase"
           style={{ color: '#fbbf24' }}
         >
-          {trendUp ? 'TRENDING UP' : 'TRENDING DOWN'}
+          {trendDisplay != null ? (trendUp ? 'TRENDING UP' : 'TRENDING DOWN') : 'MARKET DATA'}
         </span>
 
         {/* Hero card name */}
