@@ -220,6 +220,7 @@ func (m *mockRepo) DeleteSaleByPurchaseID(_ context.Context, purchaseID string) 
 	return ErrSaleNotFound
 }
 
+
 func (m *mockRepo) ListSalesByCampaign(_ context.Context, campaignID string, limit, offset int) ([]Sale, error) {
 	var result []Sale
 	for _, s := range m.sales {
