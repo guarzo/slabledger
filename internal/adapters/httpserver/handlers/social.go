@@ -24,7 +24,7 @@ type SocialHandler struct {
 	service     social.Service
 	repo        social.Repository
 	logger      observability.Logger
-	backfiller  ImageBackfiller        // optional — nil if PSA image API not configured
+	backfiller  ImageBackfiller          // optional — nil if PSA image API not configured
 	metricsRepo social.MetricsRepository // optional — nil if metrics not configured
 	mediaDir    string
 	baseURL     string

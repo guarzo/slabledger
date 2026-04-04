@@ -4,23 +4,22 @@ import { usePublishWithSlides } from '../../hooks/usePublishWithSlides';
 import { useToast } from '../../contexts/ToastContext';
 import { CardShell } from '../../ui/CardShell';
 import Button from '../../ui/Button';
+import MetricsBar from './MetricsBar';
 import CaptionEditor from './CaptionEditor';
 import CoverSlide from './slides/CoverSlide';
 import CardSlide from './slides/CardSlide';
 import SlideRenderer from './slides/SlideRenderer';
 import type { PostCardDetail } from '../../../types/social';
 
-function MetricsBar({ postId }: { postId: string }) {
+function PublishedMetrics({ postId }: { postId: string }) {
   const { data: metrics } = usePostMetrics(postId);
-  const latest = metrics?.[0]; // most recent snapshot (ordered DESC by polledAt)
-  if (!latest) return null;
-
+  const latest = metrics?.[0];
   return (
-    <div className="flex items-center gap-3 text-xs text-white/50 mt-1">
-      <span title="Likes">♥ {latest.likes}</span>
-      <span title="Comments">💬 {latest.comments}</span>
-      <span title="Saves">🔖 {latest.saves}</span>
-      <span title="Reach">👁 {latest.reach}</span>
+    <div className="flex flex-col items-end">
+      <span className="text-xs bg-purple-500/10 text-purple-400 px-3 py-2 rounded-lg font-medium">
+        Published
+      </span>
+      <MetricsBar latest={latest} />
     </div>
   );
 }
@@ -89,12 +88,7 @@ export default function PostPreview({ postId, onBack, igConnected }: PostPreview
             </Button>
           )}
           {detail.status === 'published' && (
-            <div className="flex flex-col items-end">
-              <span className="text-xs bg-purple-500/10 text-purple-400 px-3 py-2 rounded-lg font-medium">
-                Published
-              </span>
-              <MetricsBar postId={detail.id} />
-            </div>
+            <PublishedMetrics postId={detail.id} />
           )}
         </div>
       </div>

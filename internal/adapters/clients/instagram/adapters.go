@@ -73,15 +73,16 @@ func NewInsightsPollerAdapter(client *Client, store TokenStore) *InsightsPollerA
 }
 
 // PollInsights fetches engagement metrics for a published Instagram post.
-// The accessToken parameter is ignored — the adapter fetches the current token
-// from the store to match how the rest of the Instagram integration works.
-func (a *InsightsPollerAdapter) PollInsights(ctx context.Context, mediaID, _ string) (*social.PostMetrics, error) {
-	token, _, _, connected, err := a.store.GetToken(ctx)
+func (a *InsightsPollerAdapter) PollInsights(ctx context.Context, mediaID string) (*social.PostMetrics, error) {
+	token, _, expiresAt, connected, err := a.store.GetToken(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("get instagram token: %w", err)
 	}
 	if !connected {
 		return nil, fmt.Errorf("instagram not connected")
+	}
+	if time.Now().After(expiresAt) {
+		return nil, fmt.Errorf("instagram token expired")
 	}
 
 	insights, err := a.client.GetMediaInsights(ctx, token, mediaID)

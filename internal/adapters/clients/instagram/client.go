@@ -217,10 +217,11 @@ type MediaInsights struct {
 // GetMediaInsights fetches engagement metrics for a published post.
 // It calls two endpoints: the insights endpoint (impressions, reach, saves, shares)
 // and the media endpoint (likes, comments). Partial data is returned if one endpoint fails.
+// Returns an error only when both endpoints fail.
 func (c *Client) GetMediaInsights(ctx context.Context, token, mediaID string) (*MediaInsights, error) {
 	result := &MediaInsights{}
+	var insightsErr, mediaErr error
 
-	// Fetch impressions, reach, saves, shares from the insights endpoint.
 	insightsURL := fmt.Sprintf("%s/%s/insights?metric=impressions,reach,saved,shares&access_token=%s",
 		graphURL, mediaID, url.QueryEscape(token))
 
@@ -232,10 +233,10 @@ func (c *Client) GetMediaInsights(ctx context.Context, token, mediaID string) (*
 			} `json:"values"`
 		} `json:"data"`
 	}
-	if err := c.doGet(ctx, insightsURL, &insightsResp); err != nil {
+	if insightsErr = c.doGet(ctx, insightsURL, &insightsResp); insightsErr != nil {
 		c.logger.Warn(ctx, "failed to fetch media insights",
 			observability.String("mediaID", mediaID),
-			observability.Err(err))
+			observability.Err(insightsErr))
 	} else {
 		for _, item := range insightsResp.Data {
 			if len(item.Values) == 0 {
@@ -255,7 +256,6 @@ func (c *Client) GetMediaInsights(ctx context.Context, token, mediaID string) (*
 		}
 	}
 
-	// Fetch likes and comments from the media endpoint.
 	mediaURL := fmt.Sprintf("%s/%s?fields=like_count,comments_count&access_token=%s",
 		graphURL, mediaID, url.QueryEscape(token))
 
@@ -263,13 +263,17 @@ func (c *Client) GetMediaInsights(ctx context.Context, token, mediaID string) (*
 		LikeCount     int `json:"like_count"`
 		CommentsCount int `json:"comments_count"`
 	}
-	if err := c.doGet(ctx, mediaURL, &mediaResp); err != nil {
+	if mediaErr = c.doGet(ctx, mediaURL, &mediaResp); mediaErr != nil {
 		c.logger.Warn(ctx, "failed to fetch media like/comment counts",
 			observability.String("mediaID", mediaID),
-			observability.Err(err))
+			observability.Err(mediaErr))
 	} else {
 		result.Likes = mediaResp.LikeCount
 		result.Comments = mediaResp.CommentsCount
+	}
+
+	if insightsErr != nil && mediaErr != nil {
+		return nil, fmt.Errorf("all metrics endpoints failed for %s: insights: %w, media: %v", mediaID, insightsErr, mediaErr)
 	}
 
 	return result, nil

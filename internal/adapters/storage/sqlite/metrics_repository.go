@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/social"
@@ -44,7 +45,11 @@ func (r *MetricsRepository) GetMetrics(ctx context.Context, postID string) ([]so
 			&m.Comments, &m.Saves, &m.Shares, &polledAt); err != nil {
 			return nil, err
 		}
-		m.PolledAt, _ = time.Parse(time.RFC3339, polledAt)
+		var parseErr error
+		m.PolledAt, parseErr = time.Parse(time.RFC3339, polledAt)
+		if parseErr != nil {
+			return nil, fmt.Errorf("parse polled_at for post %s: %w", m.PostID, parseErr)
+		}
 		result = append(result, m)
 	}
 	return result, rows.Err()
@@ -57,9 +62,10 @@ func (r *MetricsRepository) GetMetricsSummary(ctx context.Context) ([]social.Met
 		        sp.updated_at
 		 FROM instagram_post_metrics m
 		 JOIN social_posts sp ON sp.id = m.post_id
-		 WHERE sp.status = 'published'
+		 WHERE sp.status = ?
 		   AND m.id = (SELECT MAX(m2.id) FROM instagram_post_metrics m2 WHERE m2.post_id = m.post_id)
-		 ORDER BY sp.updated_at DESC`)
+		 ORDER BY sp.updated_at DESC`,
+		string(social.PostStatusPublished))
 	if err != nil {
 		return nil, err
 	}
@@ -68,10 +74,16 @@ func (r *MetricsRepository) GetMetricsSummary(ctx context.Context) ([]social.Met
 	var result []social.MetricsSummary
 	for rows.Next() {
 		var s social.MetricsSummary
+		var publishedAt string
 		if err := rows.Scan(&s.PostID, &s.PostType, &s.CoverTitle,
 			&s.Impressions, &s.Reach, &s.Likes, &s.Comments, &s.Saves, &s.Shares,
-			&s.PublishedAt); err != nil {
+			&publishedAt); err != nil {
 			return nil, err
+		}
+		var parseErr error
+		s.PublishedAt, parseErr = time.Parse(time.RFC3339, publishedAt)
+		if parseErr != nil {
+			return nil, fmt.Errorf("parse published_at for post %s: %w", s.PostID, parseErr)
 		}
 		result = append(result, s)
 	}
@@ -82,9 +94,9 @@ func (r *MetricsRepository) GetPublishedPostIDs(ctx context.Context, since time.
 	rows, err := r.db.QueryContext(ctx,
 		`SELECT id, instagram_post_id, updated_at
 		 FROM social_posts
-		 WHERE status = 'published' AND instagram_post_id != '' AND updated_at >= ?
+		 WHERE status = ? AND instagram_post_id != '' AND updated_at >= ?
 		 ORDER BY updated_at DESC`,
-		since.Format(time.RFC3339))
+		string(social.PostStatusPublished), since.Format(time.RFC3339))
 	if err != nil {
 		return nil, err
 	}
@@ -97,7 +109,11 @@ func (r *MetricsRepository) GetPublishedPostIDs(ctx context.Context, since time.
 		if err := rows.Scan(&p.PostID, &p.InstagramPostID, &updatedAt); err != nil {
 			return nil, err
 		}
-		p.PublishedAt, _ = time.Parse(time.RFC3339, updatedAt)
+		var parseErr error
+		p.PublishedAt, parseErr = time.Parse(time.RFC3339, updatedAt)
+		if parseErr != nil {
+			return nil, fmt.Errorf("parse updated_at for post %s: %w", p.PostID, parseErr)
+		}
 		result = append(result, p)
 	}
 	return result, rows.Err()

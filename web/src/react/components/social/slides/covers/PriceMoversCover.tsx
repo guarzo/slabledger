@@ -16,6 +16,7 @@ export default function PriceMoversCover({
   backgroundUrl,
 }: PriceMoversCoverProps) {
   const theme = getTheme(postType);
+  if (cards.length === 0) return null;
   const hero = cards[0];
 
   const gradeLabel = hero

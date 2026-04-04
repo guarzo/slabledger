@@ -21,7 +21,7 @@ type MetricsSaver interface {
 
 // InsightsPoller fetches engagement metrics from Instagram for a media ID.
 type InsightsPoller interface {
-	PollInsights(ctx context.Context, mediaID, accessToken string) (*social.PostMetrics, error)
+	PollInsights(ctx context.Context, mediaID string) (*social.PostMetrics, error)
 }
 
 var _ Scheduler = (*MetricsPollScheduler)(nil)
@@ -87,8 +87,9 @@ func (s *MetricsPollScheduler) Tick(ctx context.Context) {
 		return
 	}
 
+	now := time.Now()
 	for _, post := range posts {
-		metrics, err := s.poller.PollInsights(ctx, post.InstagramPostID, "")
+		metrics, err := s.poller.PollInsights(ctx, post.InstagramPostID)
 		if err != nil {
 			s.logger.Error(ctx, "metrics poll: failed to poll insights",
 				observability.String("post_id", post.PostID),
@@ -98,7 +99,7 @@ func (s *MetricsPollScheduler) Tick(ctx context.Context) {
 		}
 
 		metrics.PostID = post.PostID
-		metrics.PolledAt = time.Now()
+		metrics.PolledAt = now
 
 		if err := s.saver.SaveMetrics(ctx, metrics); err != nil {
 			s.logger.Error(ctx, "metrics poll: failed to save metrics",

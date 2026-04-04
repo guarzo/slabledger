@@ -1,4 +1,5 @@
 import type { PostCardDetail, PostType } from '../../../../../types/social';
+import { formatCents } from '../../../../utils/formatters';
 import { getTheme } from '../primitives/theme';
 import { corsUrl } from '../primitives/corsUrl';
 
@@ -7,10 +8,6 @@ interface HotDealsCoverProps {
   coverTitle: string;
   cards: PostCardDetail[];
   backgroundUrl?: string;
-}
-
-function formatPrice(cents: number): string {
-  return `$${(cents / 100).toFixed(2)}`;
 }
 
 function discountPct(askingCents: number, marketCents: number): number {
@@ -25,6 +22,7 @@ export default function HotDealsCover({
   backgroundUrl,
 }: HotDealsCoverProps) {
   const theme = getTheme(postType);
+  if (cards.length === 0) return null;
   const hero = cards[0];
   const left = cards[1];
   const right = cards[2];
@@ -185,13 +183,13 @@ export default function HotDealsCover({
           <div className="flex items-baseline gap-3 flex-wrap">
             {/* Asking price */}
             <span className="text-red-400 font-black text-[28px] leading-none">
-              {formatPrice(hero.askingPriceCents)}
+              {formatCents(hero.askingPriceCents)}
             </span>
 
             {/* Market price strikethrough */}
             {hero.clValueCents > 0 && (
               <span className="text-white/40 text-[14px] line-through">
-                {formatPrice(hero.clValueCents)}
+                {formatCents(hero.clValueCents)}
               </span>
             )}
 

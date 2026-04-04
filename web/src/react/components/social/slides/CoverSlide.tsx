@@ -3,9 +3,6 @@ import SlideCanvas from './primitives/SlideCanvas';
 import { AccentBar, LogoText } from './primitives/Branding';
 import PostTypeBadge from './primitives/PostTypeBadge';
 import InfoPanel from './primitives/InfoPanel';
-import FanSpread from './primitives/FanSpread';
-import CascadeStack from './primitives/CascadeStack';
-import DynamicScatter from './primitives/DynamicScatter';
 import Flames from './primitives/Flames';
 import Sparkles from './primitives/Sparkles';
 import TrendLines from './primitives/TrendLines';
@@ -97,14 +94,6 @@ export default function CoverSlide({
       {postType === 'hot_deals' && <Flames />}
       {postType === 'new_arrivals' && <Sparkles />}
       {postType === 'price_movers' && <TrendLines />}
-
-      {cards && cards.length > 0 && (
-        <>
-          {postType === 'hot_deals' && <FanSpread cards={cards} />}
-          {postType === 'new_arrivals' && <CascadeStack cards={cards} />}
-          {postType === 'price_movers' && <DynamicScatter cards={cards} />}
-        </>
-      )}
 
       <InfoPanel title={coverTitle} subtitle={subtitle} />
     </SlideCanvas>

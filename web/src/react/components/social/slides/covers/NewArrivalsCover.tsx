@@ -35,6 +35,7 @@ export default function NewArrivalsCover({
   backgroundUrl,
 }: NewArrivalsCoverProps) {
   const theme = getTheme(postType);
+  if (cards.length === 0) return null;
   const hero = cards[0];
   const extraCount = cards.length - 1;
 
@@ -83,7 +84,7 @@ export default function NewArrivalsCover({
       {/* Spotlight glow behind hero card */}
       <div
         className="absolute left-1/2 top-[40%] -translate-x-1/2 -translate-y-1/2 w-[380px] h-[380px] rounded-full blur-3xl pointer-events-none"
-        style={{ background: `rgba(13, 148, 136, 0.18)` }}
+        style={{ background: theme.coverGlow }}
       />
 
       {/* ── TOP BAR ── */}
