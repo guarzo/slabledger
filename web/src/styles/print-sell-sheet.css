@@ -72,7 +72,8 @@
     break-inside: avoid;
   }
 
-  /* Remove virtual scroll container height constraint */
+  /* Remove virtual scroll container height constraint.
+     Targets inline max-height set by the virtual scroll library. */
   .glass-table > div[style*="max-height"] {
     max-height: none !important;
     overflow: visible !important;

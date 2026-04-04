@@ -37,10 +37,10 @@ interface DesktopRowProps {
   ev?: ExpectedValue;
   showEV?: boolean;
   showCampaignColumn?: boolean;
-  onSellSheet?: boolean;
+  isOnSellSheet?: boolean;
 }
 
-export default function DesktopRow({ item, selected, onToggle, onExpand, onRecordSale, onFixPricing, onSetPrice, ev, showEV, showCampaignColumn, onSellSheet }: DesktopRowProps) {
+export default function DesktopRow({ item, selected, onToggle, onExpand, onRecordSale, onFixPricing, onSetPrice, ev, showEV, showCampaignColumn, isOnSellSheet }: DesktopRowProps) {
   const costBasis = item.purchase.buyCostCents + item.purchase.psaSourcingFeeCents;
   const snap = item.currentMarket;
   const daysColor = daysHeldColor(item.daysHeld);
@@ -92,7 +92,7 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
           })()}
           <span className="text-[var(--text)] truncate">
             {hotSeller && <span className="text-amber-400 mr-1" title="High demand">★</span>}
-            {onSellSheet && <span className="text-gray-400 mr-1 text-xs" title="On sell sheet">&#9864;</span>}
+            {isOnSellSheet && <span className="text-gray-400 mr-1 text-xs" title="On sell sheet">&#9864;</span>}
             {item.purchase.cardName}
           </span>
           {item.priceAnomaly && (

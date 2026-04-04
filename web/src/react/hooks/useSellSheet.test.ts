@@ -82,7 +82,7 @@ describe('useSellSheet', () => {
     expect(result.current.count).toBe(0);
   });
 
-  it('syncs across hooks via storage event', () => {
+  it('shares state across multiple hook instances', () => {
     const { result: hook1 } = renderHook(() => useSellSheet());
     const { result: hook2 } = renderHook(() => useSellSheet());
     act(() => hook1.current.add(['x']));

@@ -293,7 +293,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
       queryClient.invalidateQueries({ predicate: (query) => query.queryKey[0] === 'campaigns' });
     }
     // Always invalidate sell sheet — overrides affect global sell sheet regardless of view
-    queryClient.invalidateQueries({ queryKey: ['portfolio', 'sellSheet'] });
+    queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.sellSheet });
   }
 
   function handleHintSaved() {
@@ -426,46 +426,36 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
           <span className="text-sm text-[var(--text-muted)]">{selected.size} selected</span>
           <div className="flex items-center gap-2">
             {filterTab === 'sell_sheet' ? (
-              <>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => {
-                    sellSheet.remove(Array.from(selected));
-                    setSelected(new Set());
-                    toast.success(`Removed ${selected.size} item${selected.size > 1 ? 's' : ''} from sell sheet`);
-                  }}
-                >
-                  Remove from Sell Sheet ({selected.size})
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={() => openSaleModal(items.filter(i => selected.has(i.purchase.id)))}
-                >
-                  Record Sale ({selected.size})
-                </Button>
-              </>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => {
+                  sellSheet.remove(Array.from(selected));
+                  setSelected(new Set());
+                  toast.success(`Removed ${selected.size} item${selected.size > 1 ? 's' : ''} from sell sheet`);
+                }}
+              >
+                Remove from Sell Sheet ({selected.size})
+              </Button>
             ) : (
-              <>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => {
-                    sellSheet.add(Array.from(selected));
-                    setSelected(new Set());
-                    toast.success(`Added ${selected.size} item${selected.size > 1 ? 's' : ''} to sell sheet`);
-                  }}
-                >
-                  Add to Sell Sheet ({selected.size})
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={() => openSaleModal(items.filter(i => selected.has(i.purchase.id)))}
-                >
-                  Record Sale ({selected.size})
-                </Button>
-              </>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => {
+                  sellSheet.add(Array.from(selected));
+                  setSelected(new Set());
+                  toast.success(`Added ${selected.size} item${selected.size > 1 ? 's' : ''} to sell sheet`);
+                }}
+              >
+                Add to Sell Sheet ({selected.size})
+              </Button>
             )}
+            <Button
+              size="sm"
+              onClick={() => openSaleModal(items.filter(i => selected.has(i.purchase.id)))}
+            >
+              Record Sale ({selected.size})
+            </Button>
           </div>
         </div>
       )}
@@ -530,7 +520,6 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
             </button>
           ))}
           <button
-            key="sell_sheet"
             type="button"
             onClick={() => setFilterTab('sell_sheet')}
             className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-colors ${
@@ -597,7 +586,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                       onSetPrice={() => handleSetPrice(item)}
                       ev={evMap.get(item.purchase.certNumber)}
                       showCampaignColumn={showCampaignColumn}
-                      onSellSheet={filterTab !== 'sell_sheet' && sellSheet.has(item.purchase.id)}
+                      isOnSellSheet={filterTab !== 'sell_sheet' && sellSheet.has(item.purchase.id)}
                     />
                   </div>
                 );
@@ -662,7 +651,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                         ev={evMap.get(item.purchase.certNumber)}
                         showEV={!!showEV}
                         showCampaignColumn={showCampaignColumn}
-                        onSellSheet={filterTab !== 'sell_sheet' && sellSheet.has(item.purchase.id)}
+                        isOnSellSheet={filterTab !== 'sell_sheet' && sellSheet.has(item.purchase.id)}
                       />
                     </div>
                     {isExpanded && <ExpandedDetail item={item} onReviewed={handleReviewed} campaignId={campaignId} onOpenFlagDialog={() => setFlagTarget({ purchaseId: item.purchase.id, cardName: item.purchase.cardName, grade: item.purchase.gradeValue })} />}
