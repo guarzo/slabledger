@@ -16,24 +16,23 @@ func TestClient_ResolveCert(t *testing.T) {
 		require.Equal(t, "/api/v1/enterprise/certs/resolve", r.URL.Path)
 		require.Equal(t, "Bearer test_api_key", r.Header.Get(enterpriseAuthHeader))
 
-		var req CertResolveBatchRequest
+		var req struct {
+			Cert CertResolveRequest `json:"cert"`
+		}
 		require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
-		require.Len(t, req.Certs, 1)
-		require.Equal(t, "12345678", req.Certs[0].CertNumber)
-		require.Equal(t, "Charizard", req.Certs[0].CardName)
+		require.Equal(t, "12345678", req.Cert.CertNumber)
+		require.Equal(t, "Charizard", req.Cert.CardName)
 
-		resp := []CertResolution{
-			{
-				CertNumber:              "12345678",
-				Status:                  "matched",
-				DHCardID:                42,
-				CardName:                "Charizard",
-				SetName:                 "Base Set",
-				CardNumber:              "4/102",
-				Grade:                   10.0,
-				ImageURL:                "https://example.com/charizard.png",
-				CurrentMarketPriceCents: 1487500,
-			},
+		resp := CertResolution{
+			CertNumber:              "12345678",
+			Status:                  "matched",
+			DHCardID:                42,
+			CardName:                "Charizard",
+			SetName:                 "Base Set",
+			CardNumber:              "4/102",
+			Grade:                   10.0,
+			ImageURL:                "https://example.com/charizard.png",
+			CurrentMarketPriceCents: 1487500,
 		}
 		w.Header().Set("Content-Type", "application/json")
 		require.NoError(t, json.NewEncoder(w).Encode(resp))

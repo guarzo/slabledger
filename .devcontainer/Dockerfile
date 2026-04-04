@@ -6,6 +6,12 @@ FROM golang:1.26
 # Avoid warnings by switching to noninteractive
 ENV DEBIAN_FRONTEND=noninteractive
 
+# Use AWS-backed Debian mirror (Fastly CDN IPs for deb.debian.org are
+# unreachable from some WSL2/Docker Desktop networks)
+RUN sed -i 's|deb.debian.org|cdn-aws.deb.debian.org|g' /etc/apt/sources.list.d/*.sources 2>/dev/null; \
+    sed -i 's|deb.debian.org|cdn-aws.deb.debian.org|g' /etc/apt/sources.list 2>/dev/null; \
+    true
+
 # Install base development tools
 RUN apt-get update && apt-get install -y \
     # Build essentials
@@ -35,6 +41,8 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     # Locales
     locales \
+    # User management (needed later for vscode user)
+    sudo \
     # Clean up
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
@@ -66,13 +74,8 @@ ARG USER_GID=$USER_UID
 
 RUN groupadd --gid $USER_GID $USERNAME \
     && useradd --uid $USER_UID --gid $USER_GID -m -s /bin/zsh $USERNAME \
-    # Add sudo support
-    && apt-get update \
-    && apt-get install -y sudo \
     && echo $USERNAME ALL=\(root\) NOPASSWD:ALL > /etc/sudoers.d/$USERNAME \
-    && chmod 0440 /etc/sudoers.d/$USERNAME \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+    && chmod 0440 /etc/sudoers.d/$USERNAME
 
 # Create workspace directory
 RUN mkdir -p /workspace && chown -R $USERNAME:$USERNAME /workspace
@@ -93,6 +96,9 @@ RUN echo "alias ll='ls -lah'" >> /home/$USERNAME/.bashrc \
     && echo "alias gd='git diff'" >> /home/$USERNAME/.bashrc \
     && echo "alias gt='go test ./...'" >> /home/$USERNAME/.bashrc \
     && echo "alias gtr='go test -race ./...'" >> /home/$USERNAME/.bashrc
+
+# Ensure ~/.local/bin is on PATH for bash (Claude Code, etc.)
+RUN echo 'export PATH="$HOME/.local/bin:$PATH"' >> /home/$USERNAME/.bashrc
 
 # Enable bash completion
 RUN echo "source /etc/bash_completion" >> /home/$USERNAME/.bashrc

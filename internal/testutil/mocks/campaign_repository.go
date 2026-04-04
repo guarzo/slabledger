@@ -272,14 +272,13 @@ func (m *MockCampaignRepository) DeleteSale(ctx context.Context, saleID string) 
 	if m.DeleteSaleFn != nil {
 		return m.DeleteSaleFn(ctx, saleID)
 	}
-	for id, s := range m.Sales {
-		if id == saleID {
-			delete(m.PurchaseSales, s.PurchaseID)
-			delete(m.Sales, id)
-			return nil
-		}
+	s, ok := m.Sales[saleID]
+	if !ok {
+		return campaigns.ErrSaleNotFound
 	}
-	return campaigns.ErrSaleNotFound
+	delete(m.PurchaseSales, s.PurchaseID)
+	delete(m.Sales, saleID)
+	return nil
 }
 
 func (m *MockCampaignRepository) ListSalesByCampaign(ctx context.Context, campaignID string, limit, offset int) ([]campaigns.Sale, error) {

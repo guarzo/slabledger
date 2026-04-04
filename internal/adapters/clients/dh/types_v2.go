@@ -44,6 +44,11 @@ type CertResolutionCandidate struct {
 	ImageURL   string `json:"image_url"`
 }
 
+// CertResolveBody is the request body for POST /enterprise/certs/resolve (single cert).
+type CertResolveBody struct {
+	Cert CertResolveRequest `json:"cert"`
+}
+
 // CertResolveBatchRequest is the request body for POST /enterprise/certs/resolve_batch.
 type CertResolveBatchRequest struct {
 	Certs []CertResolveRequest `json:"certs"`
