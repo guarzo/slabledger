@@ -194,12 +194,28 @@ func (h *CampaignsHandler) HandleDeletePurchase(w http.ResponseWriter, r *http.R
 
 // HandleDeleteSale handles DELETE /api/campaigns/{id}/purchases/{purchaseId}/sale.
 func (h *CampaignsHandler) HandleDeleteSale(w http.ResponseWriter, r *http.Request) {
-	_, ok := pathID(w, r, "id", "Campaign ID")
+	campaignID, ok := pathID(w, r, "id", "Campaign ID")
 	if !ok {
 		return
 	}
 	purchaseID, ok := pathID(w, r, "purchaseId", "Purchase ID")
 	if !ok {
+		return
+	}
+
+	// Verify the purchase belongs to this campaign
+	purchase, err := h.service.GetPurchase(r.Context(), purchaseID)
+	if err != nil {
+		if campaigns.IsPurchaseNotFound(err) {
+			writeError(w, http.StatusNotFound, "Purchase not found")
+			return
+		}
+		h.logger.Error(r.Context(), "failed to get purchase", observability.Err(err))
+		writeError(w, http.StatusInternalServerError, "Internal server error")
+		return
+	}
+	if purchase.CampaignID != campaignID {
+		writeError(w, http.StatusForbidden, "Purchase does not belong to this campaign")
 		return
 	}
 

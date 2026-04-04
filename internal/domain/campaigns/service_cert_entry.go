@@ -53,7 +53,16 @@ func (s *service) ImportCerts(ctx context.Context, certNumbers []string) (*CertI
 				})
 				continue
 			}
-			// No sale (or error) — treat as normal existing cert
+			if !IsSaleNotFound(saleErr) {
+				// Unexpected repo error — fail this cert rather than make a wrong assumption
+				result.Failed++
+				result.Errors = append(result.Errors, CertImportError{
+					CertNumber: certNum,
+					Error:      fmt.Sprintf("sale lookup failed: %v", saleErr),
+				})
+				continue
+			}
+			// Confirmed no sale — treat as normal existing cert
 			if flagErr := s.repo.SetEbayExportFlag(ctx, existing.ID, now); flagErr != nil {
 				if s.logger != nil {
 					s.logger.Warn(ctx, "cert import: failed to set ebay export flag",
