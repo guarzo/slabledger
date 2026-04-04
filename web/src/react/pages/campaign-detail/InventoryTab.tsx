@@ -342,7 +342,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
     <div>
       {/* Summary stat cards — collapsible on mobile */}
       {isMobile ? (
-        <div className="mb-4">
+        <div className="mb-4 sell-sheet-no-print">
           <button
             type="button"
             onClick={() => setStatsExpanded(prev => !prev)}
@@ -394,7 +394,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
           )}
         </div>
       ) : (
-        <div className="mb-7 pb-6 border-b border-[rgba(255,255,255,0.05)]">
+        <div className="mb-7 pb-6 border-b border-[rgba(255,255,255,0.05)] sell-sheet-no-print">
           <div className="flex items-end gap-7">
             <div>
               <div className="text-[11px] font-semibold text-[var(--brand-400)] uppercase tracking-wider mb-0.5">
@@ -436,7 +436,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
       )}
 
       {selected.size > 0 && (
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center justify-between mb-3 sell-sheet-no-print">
           <span className="text-sm text-[var(--text-muted)]">{selected.size} selected</span>
           <div className="flex items-center gap-2">
             {sellSheetActive ? (
@@ -475,7 +475,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
       )}
 
       {sellSheetActive && pageSellSheetCount > 0 && (
-        <div className="flex justify-end mb-3">
+        <div className="flex justify-end mb-3 sell-sheet-no-print">
           <Button
             size="sm"
             variant="secondary"
@@ -494,10 +494,10 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
       )}
 
       {/* Crack Candidates Banner */}
-      {campaignId && <CrackCandidatesBanner campaignId={campaignId} />}
+      {campaignId && <div className="sell-sheet-no-print"><CrackCandidatesBanner campaignId={campaignId} /></div>}
 
       {/* Review Summary Bar */}
-      <div className="mb-4">
+      <div className="mb-4 sell-sheet-no-print">
         <ReviewSummaryBar
           stats={reviewStats}
           searchQuery={searchQuery}
@@ -509,7 +509,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
 
       {/* Filter tabs — visible when not in showAll mode */}
       {!showAll && (
-        <div className="flex items-center gap-2 mb-3 flex-wrap">
+        <div className="flex items-center gap-2 mb-3 flex-wrap sell-sheet-no-print">
           {([
             { key: 'needs_review' as const, label: 'Needs Review', color: 'var(--warning)' },
             { key: 'large_gap' as const, label: 'Large Gap', color: 'var(--danger)' },
@@ -564,7 +564,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
       )}
 
       {debouncedSearch && (
-        <div className="text-xs text-[var(--text-subtle)] mb-2 pl-1">
+        <div className="text-xs text-[var(--text-subtle)] mb-2 pl-1 sell-sheet-no-print">
           {filteredAndSortedItems.length} of {items.length} cards
         </div>
       )}
@@ -578,7 +578,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
 
       {isMobile ? (
         <div className="space-y-3">
-          <label className="flex items-center gap-2 text-xs text-[var(--text-muted)] px-1">
+          <label className="flex items-center gap-2 text-xs text-[var(--text-muted)] px-1 sell-sheet-no-print">
             <input type="checkbox" checked={filteredAndSortedItems.length > 0 && filteredAndSortedItems.every(i => selected.has(i.purchase.id))}
               onChange={toggleAll} className="rounded" />
             Select all
