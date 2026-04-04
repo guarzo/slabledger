@@ -83,6 +83,7 @@ web/dist/
 # Docker bind mount directories
 /cache/
 .superpowers/
+.worktrees/
 docs/superpowers/
 
 # Private docs (sensitive business data, kept locally only)

@@ -1,14 +1,7 @@
 package auth
 
 import (
-	"errors"
 	"time"
-)
-
-// Sentinel errors for auth operations
-var (
-	// ErrUserNotFound is returned when a user is not found in the repository
-	ErrUserNotFound = errors.New("user not found")
 )
 
 // User represents an authenticated user

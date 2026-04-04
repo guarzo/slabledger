@@ -319,8 +319,8 @@ func TestMaxToolRounds_Exceeded(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error when max tool rounds exceeded, got nil")
 	}
-	if !strings.Contains(err.Error(), "exceeded maximum tool rounds") {
-		t.Errorf("error message %q does not mention 'exceeded maximum tool rounds'", err.Error())
+	if !IsMaxRoundsExceeded(err) {
+		t.Errorf("expected IsMaxRoundsExceeded error, got: %v", err)
 	}
 	// With maxToolRounds=1, LLM should have been called exactly once.
 	if llm.calls != 1 {
