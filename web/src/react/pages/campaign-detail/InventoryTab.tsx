@@ -7,6 +7,7 @@ import { formatCents, formatPct } from '../../utils/formatters';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { useDebounce } from '../../hooks/useDebounce';
 import { useToast } from '../../contexts/ToastContext';
+import { useSellSheet } from '../../hooks/useSellSheet';
 import { EmptyState, Button } from '../../ui';
 import { queryKeys } from '../../queries/queryKeys';
 import { useExpectedValues } from '../../queries/useCampaignQueries';
@@ -35,6 +36,7 @@ export interface InventoryTabProps {
 export default function InventoryTab({ items, isLoading: loading, campaignId, showCampaignColumn }: InventoryTabProps) {
   const queryClient = useQueryClient();
   const toast = useToast();
+  const sellSheet = useSellSheet();
   const { data: evPortfolio } = useExpectedValues(campaignId ?? '');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -56,7 +58,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [searchQuery, setSearchQuery] = useState('');
   const [statsExpanded, setStatsExpanded] = useState(false);
-  const [filterTab, setFilterTab] = useState<'needs_review' | 'large_gap' | 'no_data' | 'flagged' | 'card_show' | 'all'>('needs_review');
+  const [filterTab, setFilterTab] = useState<'needs_review' | 'large_gap' | 'no_data' | 'flagged' | 'card_show' | 'all' | 'sell_sheet'>('needs_review');
   const [showAll, setShowAll] = useState(false);
   const debouncedSearch = useDebounce(searchQuery, 300);
   const isMobile = useMediaQuery('(max-width: 768px)');
@@ -147,7 +149,9 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
       );
     } else if (!showAll) {
       // Filter by active tab using getReviewStatus
-      if (filterTab !== 'all') {
+      if (filterTab === 'sell_sheet') {
+        result = result.filter(i => sellSheet.has(i.purchase.id));
+      } else if (filterTab !== 'all') {
         result = result.filter(i => {
           const status = getReviewStatus(i);
           if (filterTab === 'large_gap') return status === 'large_gap';
@@ -198,7 +202,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
           return 0;
       }
     });
-  }, [items, debouncedSearch, sortKey, sortDir, evMap, showAll, filterTab]);
+  }, [items, debouncedSearch, sortKey, sortDir, evMap, showAll, filterTab, sellSheet]);
 
   const rowVirtualizer = useVirtualizer({
     count: filteredAndSortedItems.length,
@@ -421,30 +425,60 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
         <div className="flex items-center justify-between mb-3">
           <span className="text-sm text-[var(--text-muted)]">{selected.size} selected</span>
           <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => {
-                const ids = Array.from(selected);
-                sessionStorage.setItem('sellSheetIds', JSON.stringify(ids));
-                if (campaignId) {
-                  sessionStorage.setItem('sellSheetCampaignId', campaignId);
-                } else {
-                  sessionStorage.removeItem('sellSheetCampaignId');
-                }
-                const win = window.open('/sell-sheet', '_blank');
-                if (!win) toast.error('Popup blocked — please allow popups for this site');
-              }}
-            >
-              Sell Sheet ({selected.size})
-            </Button>
-            <Button
-              size="sm"
-              onClick={() => openSaleModal(items.filter(i => selected.has(i.purchase.id)))}
-            >
-              Record Sale ({selected.size})
-            </Button>
+            {filterTab === 'sell_sheet' ? (
+              <>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => {
+                    sellSheet.remove(Array.from(selected));
+                    setSelected(new Set());
+                    toast.success(`Removed ${selected.size} item${selected.size > 1 ? 's' : ''} from sell sheet`);
+                  }}
+                >
+                  Remove from Sell Sheet ({selected.size})
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => openSaleModal(items.filter(i => selected.has(i.purchase.id)))}
+                >
+                  Record Sale ({selected.size})
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => {
+                    sellSheet.add(Array.from(selected));
+                    setSelected(new Set());
+                    toast.success(`Added ${selected.size} item${selected.size > 1 ? 's' : ''} to sell sheet`);
+                  }}
+                >
+                  Add to Sell Sheet ({selected.size})
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => openSaleModal(items.filter(i => selected.has(i.purchase.id)))}
+                >
+                  Record Sale ({selected.size})
+                </Button>
+              </>
+            )}
           </div>
+        </div>
+      )}
+
+      {filterTab === 'sell_sheet' && sellSheet.count > 0 && (
+        <div className="flex justify-end mb-3">
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => window.print()}
+          >
+            Print Sell Sheet
+          </Button>
         </div>
       )}
 
@@ -495,12 +529,40 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
               </span>
             </button>
           ))}
+          <button
+            key="sell_sheet"
+            type="button"
+            onClick={() => setFilterTab('sell_sheet')}
+            className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-colors ${
+              filterTab === 'sell_sheet'
+                ? 'border-[var(--brand-500)] bg-[var(--brand-500)]/10 text-[var(--brand-400)]'
+                : 'border-[var(--surface-2)] text-[var(--text-muted)] hover:text-[var(--text)] hover:border-[var(--text-muted)]'
+            }`}
+          >
+            Sell Sheet
+            <span
+              className="ml-1.5 inline-block min-w-[18px] text-center text-[10px] font-semibold px-1 py-[1px] rounded-full"
+              style={{
+                background: filterTab === 'sell_sheet' ? 'color-mix(in srgb, var(--brand-400) 15%, transparent)' : 'rgba(255,255,255,0.06)',
+                color: filterTab === 'sell_sheet' ? 'var(--brand-400)' : 'var(--text-muted)',
+              }}
+            >
+              {sellSheet.count}
+            </span>
+          </button>
         </div>
       )}
 
       {debouncedSearch && (
         <div className="text-xs text-[var(--text-subtle)] mb-2 pl-1">
           {filteredAndSortedItems.length} of {items.length} cards
+        </div>
+      )}
+
+      {filterTab === 'sell_sheet' && filteredAndSortedItems.length === 0 && !debouncedSearch && (
+        <div className="text-center py-12">
+          <div className="text-[var(--text-muted)] text-sm">No items on your sell sheet.</div>
+          <div className="text-[var(--text-muted)] text-xs mt-1">Select items from any tab and click &ldquo;Add to Sell Sheet&rdquo;.</div>
         </div>
       )}
 
