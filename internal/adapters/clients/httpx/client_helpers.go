@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"net"
 	"net/http"
 	"strings"
@@ -149,25 +150,22 @@ func sanitizeResponseBody(body []byte, maxLength int) string {
 }
 
 // extractHTMLSummary extracts meaningful info from HTML error pages
-func extractHTMLSummary(html string) string {
-	if idx := strings.Index(html, "<title>"); idx != -1 {
-		end := strings.Index(html[idx:], "</title>")
+func extractHTMLSummary(htmlStr string) string {
+	if idx := strings.Index(htmlStr, "<title>"); idx != -1 {
+		end := strings.Index(htmlStr[idx:], "</title>")
 		if end != -1 {
-			title := strings.TrimSpace(html[idx+7 : idx+end])
-			title = strings.ReplaceAll(title, "&amp;", "&")
-			title = strings.ReplaceAll(title, "&lt;", "<")
-			title = strings.ReplaceAll(title, "&gt;", ">")
-			return title
+			title := strings.TrimSpace(htmlStr[idx+7 : idx+end])
+			return html.UnescapeString(title)
 		}
 	}
 
-	if idx := strings.Index(html, "<h1"); idx != -1 {
-		start := strings.Index(html[idx:], ">")
+	if idx := strings.Index(htmlStr, "<h1"); idx != -1 {
+		start := strings.Index(htmlStr[idx:], ">")
 		if start != -1 {
 			start = idx + start + 1
-			end := strings.Index(html[start:], "</h1>")
+			end := strings.Index(htmlStr[start:], "</h1>")
 			if end != -1 {
-				return strings.TrimSpace(html[start : start+end])
+				return html.UnescapeString(strings.TrimSpace(htmlStr[start : start+end]))
 			}
 		}
 	}

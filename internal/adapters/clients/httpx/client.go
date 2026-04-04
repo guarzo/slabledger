@@ -71,6 +71,9 @@ func DefaultTransport() *http.Transport {
 			KeepAlive: 30 * time.Second,
 		}).DialContext,
 		TLSHandshakeTimeout:   10 * time.Second,
+		// ResponseHeaderTimeout is intentionally 0: header timeouts are enforced
+		// at the client level via DefaultConfig's 30s timeout and per-request
+		// context deadlines, not at the transport layer.
 		ResponseHeaderTimeout: 0,
 		ExpectContinueTimeout: 1 * time.Second,
 

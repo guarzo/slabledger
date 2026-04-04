@@ -73,7 +73,10 @@ func TestGetSaleByPurchaseID(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, campaigns.SaleChannelEbay, got.SaleChannel)
 		assert.Equal(t, 95000, got.SalePriceCents)
+		assert.Equal(t, 11733, got.SaleFeeCents)
+		assert.Equal(t, 2967, got.NetProfitCents)
 		assert.Equal(t, 17, got.DaysToSell)
+		assert.Equal(t, "2026-02-01", got.SaleDate)
 	})
 
 	t.Run("not found", func(t *testing.T) {

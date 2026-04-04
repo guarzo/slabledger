@@ -8,6 +8,20 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
+const (
+	// CreditUtilizationThresholdPct is the maximum credit utilization percentage
+	// before activation is blocked.
+	CreditUtilizationThresholdPct = 70
+
+	// DailyExposureDivisor is the fraction of credit limit that total daily
+	// exposure must stay below (e.g. 10 means daily exposure < limit/10 = 10%).
+	DailyExposureDivisor = 10
+
+	// HighSpendCapCents is the daily spend cap threshold (in cents) above which
+	// a warning is emitted that a single fill could be significant.
+	HighSpendCapCents = 500000 // $5,000/day
+)
+
 func (s *service) GetCrackCandidates(ctx context.Context, campaignID string) ([]CrackAnalysis, error) {
 	campaign, err := s.repo.GetCampaign(ctx, campaignID)
 	if err != nil {
@@ -97,11 +111,11 @@ func (s *service) GetActivationChecklist(ctx context.Context, campaignID string)
 		AllPassed:    true,
 	}
 
-	utilizationOK := credit.UtilizationPct < 70
+	utilizationOK := credit.UtilizationPct < CreditUtilizationThresholdPct
 	checklist.Checks = append(checklist.Checks, ActivationCheck{
 		Name:    "Credit Utilization",
 		Passed:  utilizationOK,
-		Message: fmt.Sprintf("Current utilization: %.0f%% (threshold: 70%%)", credit.UtilizationPct),
+		Message: fmt.Sprintf("Current utilization: %.0f%% (threshold: %d%%)", credit.UtilizationPct, CreditUtilizationThresholdPct),
 	})
 	if !utilizationOK {
 		checklist.AllPassed = false
@@ -140,7 +154,7 @@ func (s *service) GetActivationChecklist(ctx context.Context, campaignID string)
 		totalDailyExposure += campaign.DailySpendCapCents
 	}
 
-	exposureOK := credit.CreditLimitCents == 0 || totalDailyExposure < credit.CreditLimitCents/10 // daily exposure < 10% of limit; skip if unconfigured
+	exposureOK := credit.CreditLimitCents == 0 || totalDailyExposure < credit.CreditLimitCents/DailyExposureDivisor // skip if unconfigured
 	exposureMsg := fmt.Sprintf("Total daily exposure with activation: $%d/day (credit limit: $%d)", totalDailyExposure/100, credit.CreditLimitCents/100)
 	if credit.CreditLimitCents == 0 {
 		exposureMsg = fmt.Sprintf("Total daily exposure with activation: $%d/day (credit limit: not configured)", totalDailyExposure/100)
@@ -155,7 +169,7 @@ func (s *service) GetActivationChecklist(ctx context.Context, campaignID string)
 	}
 
 	// Warn on high-value campaigns: a single fill could be significant
-	if campaign.DailySpendCapCents >= 500000 { // $5,000/day
+	if campaign.DailySpendCapCents >= HighSpendCapCents {
 		checklist.Warnings = append(checklist.Warnings,
 			fmt.Sprintf("This campaign has a $%d/day spend cap — a single fill could be significant", campaign.DailySpendCapCents/100))
 	}

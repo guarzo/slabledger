@@ -185,7 +185,8 @@ func stripCollectionSuffix(name string) string {
 	// Loop until no more match so stacked suffixes are fully removed.
 	// Recompute upper after each strip to keep byte offsets in sync
 	// (strings.ToUpper can change byte length for non-ASCII runes).
-	for {
+	const maxSuffixIterations = 100
+	for iter := 0; iter < maxSuffixIterations; iter++ {
 		matched := false
 		for _, cs := range trailingSuffixes {
 			pat := " " + cs.Pattern
