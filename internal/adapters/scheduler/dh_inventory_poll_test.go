@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
+	"github.com/guarzo/slabledger/internal/domain/campaigns"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
 	"github.com/stretchr/testify/require"
 )
@@ -22,31 +23,17 @@ func (m *mockDHInventoryClient) ListInventory(_ context.Context, _ dh.InventoryF
 
 // mockDHFieldsUpdater implements DHFieldsUpdater and captures calls for verification.
 type mockDHFieldsUpdater struct {
-	calls []dhFieldsUpdate
+	calls []campaigns.DHFieldsUpdate
+	ids   []string
 	err   error
 }
 
-type dhFieldsUpdate struct {
-	id                string
-	cardID            int
-	inventoryID       int
-	certStatus        string
-	listingPriceCents int
-	channelsJSON      string
-}
-
-func (m *mockDHFieldsUpdater) UpdatePurchaseDHFields(_ context.Context, id string, cardID, inventoryID int, certStatus string, listingPriceCents int, channelsJSON string) error {
+func (m *mockDHFieldsUpdater) UpdatePurchaseDHFields(_ context.Context, id string, update campaigns.DHFieldsUpdate) error {
 	if m.err != nil {
 		return m.err
 	}
-	m.calls = append(m.calls, dhFieldsUpdate{
-		id:                id,
-		cardID:            cardID,
-		inventoryID:       inventoryID,
-		certStatus:        certStatus,
-		listingPriceCents: listingPriceCents,
-		channelsJSON:      channelsJSON,
-	})
+	m.ids = append(m.ids, id)
+	m.calls = append(m.calls, update)
 	return nil
 }
 
@@ -79,6 +66,7 @@ func TestDHInventoryPoll_UpdatesPurchase(t *testing.T) {
 					UpdatedAt: "2026-04-03T10:00:00Z",
 				},
 			},
+			Meta: dh.PaginationMeta{Page: 1, PerPage: 100, TotalCount: 1},
 		},
 	}
 
@@ -97,13 +85,13 @@ func TestDHInventoryPoll_UpdatesPurchase(t *testing.T) {
 	s.poll(context.Background())
 
 	require.Len(t, updater.calls, 1)
+	require.Equal(t, "purchase-1", updater.ids[0])
 	call := updater.calls[0]
-	require.Equal(t, "purchase-1", call.id)
-	require.Equal(t, 111, call.cardID)
-	require.Equal(t, 98765, call.inventoryID)
-	require.Equal(t, "matched", call.certStatus)
-	require.Equal(t, 7500, call.listingPriceCents)
-	require.Contains(t, call.channelsJSON, "ebay")
+	require.Equal(t, 111, call.CardID)
+	require.Equal(t, 98765, call.InventoryID)
+	require.Equal(t, dh.CertStatusMatched, call.CertStatus)
+	require.Equal(t, 7500, call.ListingPriceCents)
+	require.Contains(t, call.ChannelsJSON, "ebay")
 
 	// Verify checkpoint was updated
 	require.Equal(t, "2026-04-03T10:00:00Z", syncStore.values[syncStateKeyDHInventoryPoll])
@@ -122,6 +110,7 @@ func TestDHInventoryPoll_SkipUnknownCert(t *testing.T) {
 					UpdatedAt:         "2026-04-03T10:00:00Z",
 				},
 			},
+			Meta: dh.PaginationMeta{Page: 1, PerPage: 100, TotalCount: 1},
 		},
 	}
 

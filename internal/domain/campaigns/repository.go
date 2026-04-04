@@ -61,7 +61,7 @@ type PurchaseRepository interface {
 	UpdatePurchaseSnapshotStatus(ctx context.Context, id string, status SnapshotStatus, retryCount int) error
 
 	// DH v2 fields
-	UpdatePurchaseDHFields(ctx context.Context, id string, cardID, inventoryID int, certStatus string, listingPriceCents int, channelsJSON string) error
+	UpdatePurchaseDHFields(ctx context.Context, id string, update DHFieldsUpdate) error
 	GetPurchasesByDHCertStatus(ctx context.Context, status string, limit int) ([]Purchase, error)
 }
 
@@ -128,6 +128,15 @@ type Repository interface {
 	FinanceRepository
 	RevocationRepository
 	PriceReviewRepository
+}
+
+// DHFieldsUpdate contains the DH v2 tracking fields to update on a purchase.
+type DHFieldsUpdate struct {
+	CardID            int
+	InventoryID       int
+	CertStatus        string
+	ListingPriceCents int
+	ChannelsJSON      string
 }
 
 // PSAUpdateFields contains the PSA-specific fields that can be updated on an existing purchase.

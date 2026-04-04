@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
+	"github.com/guarzo/slabledger/internal/domain/campaigns"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
@@ -18,7 +19,7 @@ type DHInventoryListClient interface {
 
 // DHFieldsUpdater updates DH tracking fields on a purchase.
 type DHFieldsUpdater interface {
-	UpdatePurchaseDHFields(ctx context.Context, id string, cardID, inventoryID int, certStatus string, listingPriceCents int, channelsJSON string) error
+	UpdatePurchaseDHFields(ctx context.Context, id string, update campaigns.DHFieldsUpdate) error
 }
 
 // PurchaseByCertLookup resolves a cert number to a purchase ID.
@@ -86,19 +87,13 @@ func (s *DHInventoryPollScheduler) Start(ctx context.Context) {
 
 // poll fetches inventory status from DH and writes updates back to local purchase records.
 func (s *DHInventoryPollScheduler) poll(ctx context.Context) {
-	// 1. Read checkpoint from sync_state
 	since, err := s.syncState.Get(ctx, syncStateKeyDHInventoryPoll)
 	if err != nil {
 		s.logger.Warn(ctx, "failed to read dh inventory sync state, defaulting to no filter",
 			observability.Err(err))
 	}
 
-	// 2. Fetch inventory from DH
-	resp, err := s.client.ListInventory(ctx, dh.InventoryFilters{
-		Status:       "active",
-		UpdatedSince: since,
-		PerPage:      100,
-	})
+	allItems, err := s.fetchAllPages(ctx, since)
 	if err != nil {
 		s.logger.Warn(ctx, "dh inventory poll failed",
 			observability.String("since", since),
@@ -106,20 +101,17 @@ func (s *DHInventoryPollScheduler) poll(ctx context.Context) {
 		return
 	}
 
-	// 3. No items — nothing to do
-	if len(resp.Items) == 0 {
+	if len(allItems) == 0 {
 		s.logger.Debug(ctx, "dh inventory poll: no items",
 			observability.String("since", since))
 		return
 	}
 
-	// 4. Process each item
 	updated := 0
 	skipped := 0
 	var latestUpdatedAt string
 
-	for _, item := range resp.Items {
-		// a. Look up purchase ID by cert number
+	for _, item := range allItems {
 		purchaseID, lookupErr := s.lookup.GetPurchaseIDByCertNumber(ctx, item.CertNumber)
 		if lookupErr != nil {
 			s.logger.Warn(ctx, "dh inventory poll: cert lookup error",
@@ -133,30 +125,15 @@ func (s *DHInventoryPollScheduler) poll(ctx context.Context) {
 			continue
 		}
 
-		// c. Marshal channels to JSON string
-		channelsJSON := "[]"
-		if len(item.Channels) > 0 {
-			b, marshalErr := json.Marshal(item.Channels)
-			if marshalErr != nil {
-				s.logger.Warn(ctx, "dh inventory poll: failed to marshal channels",
-					observability.String("cert", item.CertNumber),
-					observability.Err(marshalErr))
-				channelsJSON = "[]"
-			} else {
-				channelsJSON = string(b)
-			}
-		}
+		channelsJSON := marshalChannels(item.Channels)
 
-		// d. Update purchase DH fields
-		if updateErr := s.updater.UpdatePurchaseDHFields(
-			ctx,
-			purchaseID,
-			item.DHCardID,
-			item.DHInventoryID,
-			"matched",
-			item.ListingPriceCents,
-			channelsJSON,
-		); updateErr != nil {
+		if updateErr := s.updater.UpdatePurchaseDHFields(ctx, purchaseID, campaigns.DHFieldsUpdate{
+			CardID:            item.DHCardID,
+			InventoryID:       item.DHInventoryID,
+			CertStatus:        dh.CertStatusMatched,
+			ListingPriceCents: item.ListingPriceCents,
+			ChannelsJSON:      channelsJSON,
+		}); updateErr != nil {
 			s.logger.Warn(ctx, "dh inventory poll: failed to update purchase",
 				observability.String("purchaseID", purchaseID),
 				observability.String("cert", item.CertNumber),
@@ -167,18 +144,15 @@ func (s *DHInventoryPollScheduler) poll(ctx context.Context) {
 
 		updated++
 
-		// e. Track the latest UpdatedAt
 		if item.UpdatedAt > latestUpdatedAt {
 			latestUpdatedAt = item.UpdatedAt
 		}
 	}
 
-	// 5. Log counts
 	s.logger.Info(ctx, "dh inventory poll completed",
 		observability.Int("updated", updated),
 		observability.Int("skipped", skipped))
 
-	// 6. Update checkpoint to latest UpdatedAt
 	if latestUpdatedAt != "" {
 		if setErr := s.syncState.Set(ctx, syncStateKeyDHInventoryPoll, latestUpdatedAt); setErr != nil {
 			s.logger.Warn(ctx, "failed to update dh inventory sync state",
@@ -186,6 +160,41 @@ func (s *DHInventoryPollScheduler) poll(ctx context.Context) {
 				observability.Err(setErr))
 		}
 	}
+}
+
+// fetchAllPages retrieves all inventory pages from DH.
+func (s *DHInventoryPollScheduler) fetchAllPages(ctx context.Context, since string) ([]dh.InventoryListItem, error) {
+	var allItems []dh.InventoryListItem
+	page := 1
+	for {
+		resp, err := s.client.ListInventory(ctx, dh.InventoryFilters{
+			Status:       "active",
+			UpdatedSince: since,
+			Page:         page,
+			PerPage:      100,
+		})
+		if err != nil {
+			return nil, err
+		}
+		allItems = append(allItems, resp.Items...)
+		if len(allItems) >= resp.Meta.TotalCount || len(resp.Items) == 0 {
+			break
+		}
+		page++
+	}
+	return allItems, nil
+}
+
+// marshalChannels serializes channel statuses to JSON, defaulting to "[]".
+func marshalChannels(channels []dh.InventoryChannelStatus) string {
+	if len(channels) == 0 {
+		return "[]"
+	}
+	b, err := json.Marshal(channels)
+	if err != nil {
+		return "[]"
+	}
+	return string(b)
 }
 
 // Compile-time check that dh.Client satisfies DHInventoryListClient.

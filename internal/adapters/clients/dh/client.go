@@ -16,10 +16,10 @@ import (
 )
 
 const (
-	defaultTimeout      = 30 * time.Second
-	defaultRateLimRPS   = 1
-	providerName        = "doubleholo"
-	apiKeyHeader        = "X-Integration-API-Key"
+	defaultTimeout       = 30 * time.Second
+	defaultRateLimRPS    = 1
+	providerName         = "doubleholo"
+	apiKeyHeader         = "X-Integration-API-Key"
 	enterpriseAuthHeader = "Authorization"
 )
 
@@ -43,14 +43,20 @@ func WithRateLimitRPS(rps int) ClientOption {
 	}
 }
 
+// WithEnterpriseKey sets the Bearer token for enterprise API endpoints.
+func WithEnterpriseKey(key string) ClientOption {
+	return func(c *Client) { c.enterpriseKey = key }
+}
+
 // Client provides access to the DH market intelligence API.
 type Client struct {
-	apiKey     string
-	baseURL    string
-	httpClient *httpx.Client
-	limiter    *rate.Limiter
-	logger     observability.Logger
-	timeout    time.Duration
+	apiKey        string
+	enterpriseKey string
+	baseURL       string
+	httpClient    *httpx.Client
+	limiter       *rate.Limiter
+	logger        observability.Logger
+	timeout       time.Duration
 }
 
 // NewClient creates a new DH API client.
@@ -161,10 +167,15 @@ func (c *Client) get(ctx context.Context, fullURL string, dest any) error {
 	return nil
 }
 
+// EnterpriseAvailable returns true if the enterprise API key is configured.
+func (c *Client) EnterpriseAvailable() bool {
+	return c.enterpriseKey != ""
+}
+
 // getEnterprise performs a GET request with Bearer auth for the enterprise API.
 func (c *Client) getEnterprise(ctx context.Context, fullURL string, dest any) error {
-	if !c.Available() {
-		return apperrors.ConfigMissing("dh_api_key", "DH_INTEGRATION_API_KEY")
+	if !c.EnterpriseAvailable() {
+		return apperrors.ConfigMissing("dh_enterprise_api_key", "DH_ENTERPRISE_API_KEY")
 	}
 
 	if err := c.limiter.Wait(ctx); err != nil {
@@ -175,7 +186,7 @@ func (c *Client) getEnterprise(ctx context.Context, fullURL string, dest any) er
 	}
 
 	headers := map[string]string{
-		enterpriseAuthHeader: "Bearer " + c.apiKey,
+		enterpriseAuthHeader: "Bearer " + c.enterpriseKey,
 		"Accept":             "application/json",
 	}
 
@@ -192,8 +203,8 @@ func (c *Client) getEnterprise(ctx context.Context, fullURL string, dest any) er
 
 // postEnterprise performs a POST request with Bearer auth for the enterprise API.
 func (c *Client) postEnterprise(ctx context.Context, fullURL string, body any, dest any) error {
-	if !c.Available() {
-		return apperrors.ConfigMissing("dh_api_key", "DH_INTEGRATION_API_KEY")
+	if !c.EnterpriseAvailable() {
+		return apperrors.ConfigMissing("dh_enterprise_api_key", "DH_ENTERPRISE_API_KEY")
 	}
 
 	if err := c.limiter.Wait(ctx); err != nil {
@@ -209,7 +220,7 @@ func (c *Client) postEnterprise(ctx context.Context, fullURL string, body any, d
 	}
 
 	headers := map[string]string{
-		enterpriseAuthHeader: "Bearer " + c.apiKey,
+		enterpriseAuthHeader: "Bearer " + c.enterpriseKey,
 		"Content-Type":       "application/json",
 		"Accept":             "application/json",
 	}

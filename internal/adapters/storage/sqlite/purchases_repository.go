@@ -329,13 +329,13 @@ func (r *CampaignsRepository) UpdatePurchaseCardYear(ctx context.Context, id str
 }
 
 // UpdatePurchaseDHFields updates DH v2 tracking fields on a purchase.
-func (r *CampaignsRepository) UpdatePurchaseDHFields(ctx context.Context, id string, cardID, inventoryID int, certStatus string, listingPriceCents int, channelsJSON string) error {
+func (r *CampaignsRepository) UpdatePurchaseDHFields(ctx context.Context, id string, update campaigns.DHFieldsUpdate) error {
 	result, err := r.db.ExecContext(ctx,
 		`UPDATE campaign_purchases
 		 SET dh_card_id = ?, dh_inventory_id = ?, dh_cert_status = ?,
 		     dh_listing_price_cents = ?, dh_channels_json = ?, updated_at = ?
 		 WHERE id = ?`,
-		cardID, inventoryID, certStatus, listingPriceCents, channelsJSON, time.Now(), id,
+		update.CardID, update.InventoryID, update.CertStatus, update.ListingPriceCents, update.ChannelsJSON, time.Now(), id,
 	)
 	if err != nil {
 		return err

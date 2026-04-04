@@ -636,6 +636,11 @@ Individual graded cards bought under a campaign.
 | `ai_suggested_at` | TEXT | NOT NULL DEFAULT '' | Added migration 000008 |
 | `card_year` | TEXT | NOT NULL DEFAULT '' | Added migration 000018 |
 | `ebay_export_flagged_at` | TIMESTAMP | NULL | When flagged for eBay export; added migration 000018 |
+| `dh_card_id` | INTEGER | NOT NULL DEFAULT 0 | DH card identity from cert resolution; added migration 000030 |
+| `dh_inventory_id` | INTEGER | NOT NULL DEFAULT 0 | DH inventory item ID; added migration 000030 |
+| `dh_cert_status` | TEXT | NOT NULL DEFAULT '' | Resolution state: matched, ambiguous, not_found; added migration 000030 |
+| `dh_listing_price_cents` | INTEGER | NOT NULL DEFAULT 0 | Current DH listing price; added migration 000030 |
+| `dh_channels_json` | TEXT | NOT NULL DEFAULT '' | Per-channel sync status JSON; added migration 000030 |
 
 **Unique:** `(grader, cert_number)`
 
@@ -645,6 +650,7 @@ Individual graded cards bought under a campaign.
 - `idx_purchases_campaign_date` on `(campaign_id, purchase_date DESC)`
 - `idx_purchases_snapshot_pending` on `(snapshot_status)` WHERE `snapshot_status != ''` (partial)
 - `idx_campaign_purchases_ebay_export_flagged_at` on `(ebay_export_flagged_at)` WHERE `ebay_export_flagged_at IS NOT NULL` (partial); added migration 000019
+- `idx_purchases_dh_cert_status` on `(dh_cert_status)` WHERE `dh_cert_status != ''` (partial); added migration 000030
 
 **Foreign Keys:** `campaign_id → campaigns(id)` ON DELETE CASCADE
 
@@ -679,12 +685,14 @@ Sale records for purchased cards (one per purchase, enforced by UNIQUE).
 | `days_listed` | INTEGER | NOT NULL DEFAULT 0 | Added migration 000007 |
 | `sold_at_asking_price` | INTEGER | NOT NULL DEFAULT 0 | Boolean; added migration 000007 |
 | `was_cracked` | INTEGER | NOT NULL DEFAULT 0 | 1 if slab was cracked out; added migration 000012 |
+| `order_id` | TEXT | NOT NULL DEFAULT '' | DH order ID for poll idempotency; added migration 000030 |
 
 **Unique:** `(purchase_id)` — one sale record per purchase
 
 **Indexes:**
 - `idx_sales_channel` on `(sale_channel)`
 - `idx_sales_date` on `(sale_date)`
+- `idx_sales_order_id` on `(order_id)` WHERE `order_id != ''` (partial unique); added migration 000030
 
 **Foreign Keys:** `purchase_id → campaign_purchases(id)` ON DELETE CASCADE
 

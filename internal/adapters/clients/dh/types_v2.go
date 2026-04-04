@@ -1,5 +1,13 @@
 package dh
 
+// --- Cert Resolution Status Constants ---
+
+const (
+	CertStatusMatched   = "matched"
+	CertStatusAmbiguous = "ambiguous"
+	CertStatusNotFound  = "not_found"
+)
+
 // --- Cert Resolution Types ---
 
 // CertResolveRequest is a single cert to resolve.

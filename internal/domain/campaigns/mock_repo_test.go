@@ -628,7 +628,7 @@ func (m *mockRepo) OpenFlagPurchaseIDs(_ context.Context) (map[string]bool, erro
 	return map[string]bool{}, nil
 }
 
-func (m *mockRepo) UpdatePurchaseDHFields(_ context.Context, _ string, _, _ int, _ string, _ int, _ string) error {
+func (m *mockRepo) UpdatePurchaseDHFields(_ context.Context, _ string, _ DHFieldsUpdate) error {
 	return nil
 }
 

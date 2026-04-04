@@ -29,7 +29,7 @@ func (m *mockDHOrdersClient) GetOrders(_ context.Context, filters dh.OrderFilter
 
 func TestDHOrdersPoll_NoOrders(t *testing.T) {
 	client := &mockDHOrdersClient{
-		resp: &dh.OrdersResponse{Orders: nil},
+		resp: &dh.OrdersResponse{Orders: nil, Meta: dh.PaginationMeta{Page: 1, PerPage: 100, TotalCount: 0}},
 	}
 	syncStore := newMockSyncStateStore()
 	svc := &mocks.MockCampaignService{}
@@ -61,6 +61,7 @@ func TestDHOrdersPoll_RecordsSale(t *testing.T) {
 					},
 				},
 			},
+			Meta: dh.PaginationMeta{Page: 1, PerPage: 100, TotalCount: 1},
 		},
 	}
 	syncStore := newMockSyncStateStore()

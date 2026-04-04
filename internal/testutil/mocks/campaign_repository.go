@@ -55,7 +55,7 @@ type MockCampaignRepository struct {
 	GetAllPurchasesWithSalesFn     func(ctx context.Context, opts ...campaigns.PurchaseFilterOpt) ([]campaigns.PurchaseWithSale, error)
 	GetGlobalPNLByChannelFn        func(ctx context.Context) ([]campaigns.ChannelPNL, error)
 	GetPurchasesByCertNumbersFn    func(ctx context.Context, certNumbers []string) (map[string]*campaigns.Purchase, error)
-	UpdatePurchaseDHFieldsFn       func(ctx context.Context, id string, cardID, inventoryID int, certStatus string, listingPriceCents int, channelsJSON string) error
+	UpdatePurchaseDHFieldsFn       func(ctx context.Context, id string, update campaigns.DHFieldsUpdate) error
 	GetPurchasesByDHCertStatusFn   func(ctx context.Context, status string, limit int) ([]campaigns.Purchase, error)
 }
 
@@ -794,9 +794,9 @@ func (m *MockCampaignRepository) OpenFlagPurchaseIDs(_ context.Context) (map[str
 	return map[string]bool{}, nil
 }
 
-func (m *MockCampaignRepository) UpdatePurchaseDHFields(ctx context.Context, id string, cardID, inventoryID int, certStatus string, listingPriceCents int, channelsJSON string) error {
+func (m *MockCampaignRepository) UpdatePurchaseDHFields(ctx context.Context, id string, update campaigns.DHFieldsUpdate) error {
 	if m.UpdatePurchaseDHFieldsFn != nil {
-		return m.UpdatePurchaseDHFieldsFn(ctx, id, cardID, inventoryID, certStatus, listingPriceCents, channelsJSON)
+		return m.UpdatePurchaseDHFieldsFn(ctx, id, update)
 	}
 	return nil
 }
