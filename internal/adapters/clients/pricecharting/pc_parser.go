@@ -16,13 +16,16 @@ func parseAPIResponseWithLogger(data []byte, log observability.Logger, ctx ...co
 	if err := json.Unmarshal(data, &apiResp); err != nil {
 		return nil, apperrors.ProviderInvalidResponse("PriceCharting", err)
 	}
+	return convertAPIResponse(&apiResp, log, ctx...)
+}
 
-	// Validate required fields
+// convertAPIResponse validates and converts a typed API response to PCMatch directly,
+// avoiding a marshal/unmarshal roundtrip when the response is already deserialized.
+func convertAPIResponse(apiResp *PriceChartingAPIResponse, log observability.Logger, ctx ...context.Context) (*PCMatch, error) {
 	if err := apiResp.Validate(); err != nil {
 		return nil, apperrors.ProviderInvalidResponse("PriceCharting", err)
 	}
 
-	// Convert to domain model with explicit conversions
 	match := &PCMatch{
 		ID:          apiResp.ID,
 		ProductName: apiResp.ProductName,

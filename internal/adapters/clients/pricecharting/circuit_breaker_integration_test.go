@@ -119,7 +119,7 @@ func TestPriceCharting_LookupWithCircuitBreaker(t *testing.T) {
 	query := pc.queryHelper.OptimizeQuery("Test Set", card.Name, card.Number)
 
 	// This will fail (mock server returns error), but should demonstrate circuit breaker behavior
-	_, err = pc.lookupByQueryWithRetry(ctx, query)
+	_, err = pc.lookupByQueryInternal(ctx, query)
 
 	// We expect an error from the mock server
 	if err == nil {
@@ -132,11 +132,11 @@ func TestPriceCharting_LookupWithCircuitBreaker(t *testing.T) {
 	}
 }
 
-func TestPriceCharting_CacheFallbackWhenCircuitOpen(t *testing.T) {
-	// NOTE: This test verifies cache fallback when API is unavailable.
-	// The mock server below is not injected into the client because the PriceCharting
-	// client uses a fixed base URL. The test relies on pre-populated cache to demonstrate
-	// fallback behavior when lookups fail (from real API unavailability or rate limiting).
+func TestPriceCharting_LookupInternalWithAPIUnavailable(t *testing.T) {
+	// NOTE: This test verifies lookupByQueryInternal behavior when the API is unavailable.
+	// lookupByQueryInternal does NOT consult cache (that path goes through tryCache).
+	// The test pre-populates cache for reference but the lookup will hit the real API,
+	// which is expected to fail in test environments.
 	// TODO: To enable mock server injection, NewPriceCharting would need a WithBaseURL option.
 
 	c, err := cache.NewFileCacheBackend(t.TempDir(), cache.SimpleCacheConfig{})
@@ -169,23 +169,20 @@ func TestPriceCharting_CacheFallbackWhenCircuitOpen(t *testing.T) {
 	// Pre-populate cache
 	pc.cacheManager.CacheMatch(context.Background(), "Test Set", card, cachedMatch)
 
-	// Attempt lookup - will fail to reach API but should use cache
+	// Attempt direct API lookup — this bypasses cache entirely.
+	// In test environments without a valid API key, this is expected to fail.
 	ctx := context.Background()
 	query := pc.queryHelper.OptimizeQuery("Test Set", card.Name, card.Number)
 
-	match, err := pc.lookupByQueryWithRetry(ctx, query)
+	match, err := pc.lookupByQueryInternal(ctx, query)
 
-	// Should successfully retrieve from cache when API is unavailable
-	if match != nil {
-		if match.ID != "cached-001" {
-			t.Errorf("Expected cached match ID 'cached-001', got '%s'", match.ID)
-		}
-		if match.ProductName != "Test Cached Product" {
-			t.Errorf("Expected cached product name, got '%s'", match.ProductName)
-		}
-		t.Log("Cache fallback working correctly")
-	} else if err != nil {
-		t.Logf("Lookup failed (expected with mock failure), error: %v", err)
+	// lookupByQueryInternal hits the API directly; without a valid token
+	// or reachable server, it should return an error or nil match.
+	if err != nil {
+		t.Logf("lookupByQueryInternal returned expected error: %v", err)
+	} else if match != nil {
+		// If the API unexpectedly returned data, log it for debugging.
+		t.Logf("lookupByQueryInternal unexpectedly returned match: %s", match.ProductName)
 	}
 }
 
@@ -208,7 +205,7 @@ func TestPriceCharting_HttpClientConfiguration(t *testing.T) {
 	}
 }
 
-func TestPriceCharting_LookupByQueryWithRetry(t *testing.T) {
+func TestPriceCharting_LookupByQueryInternal(t *testing.T) {
 	// Create mock server that returns success
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -241,11 +238,11 @@ func TestPriceCharting_LookupByQueryWithRetry(t *testing.T) {
 	query := "pokemon test pikachu #025"
 	ctx := context.Background()
 
-	_, err = pc.lookupByQueryWithRetry(ctx, query)
+	_, err = pc.lookupByQueryInternal(ctx, query)
 
 	// Since we can't easily mock the httpClient's transport, we just verify no panic
 	// The error is expected since we're not actually hitting the mock server
-	t.Logf("lookupByQueryWithRetry completed with result: %v", err)
+	t.Logf("lookupByQueryInternal completed with result: %v", err)
 
 	// Should not panic or cause issues - httpClient should remain functional
 	if pc.httpClient == nil {

@@ -3,7 +3,15 @@ package advisor
 import (
 	"fmt"
 
+	"github.com/guarzo/slabledger/internal/domain/errors"
 	"github.com/guarzo/slabledger/internal/domain/scoring"
+)
+
+// Gap reason constants used when optional market data is missing.
+const (
+	gapNoMarketData      = "no_market_data"
+	gapInsufficientSales = "insufficient_sales"
+	gapNoPopulationData  = "no_population_data"
 )
 
 // PurchaseFactorData contains raw inputs for purchase assessment factor computers.
@@ -74,7 +82,8 @@ func BuildScoreCard(entityID, entityType string, data any, profile scoring.Weigh
 	case *SuggestionFactorData:
 		factors, gaps = suggestionFactors(d)
 	default:
-		return scoring.ScoreCard{}, fmt.Errorf("unsupported factor data type: %T", data)
+		return scoring.ScoreCard{}, errors.NewAppError(ErrCodeUnsupportedType, "unsupported factor data type").
+			WithContext("type", fmt.Sprintf("%T", data))
 	}
 
 	req := scoring.ScoreRequest{
@@ -91,41 +100,46 @@ func BuildScoreCard(entityID, entityType string, data any, profile scoring.Weigh
 	return scoring.ApplySafetyFilters(sc), nil
 }
 
+// addOrGap appends a computed factor when present is true, otherwise records a data gap.
+// The compute closure is only called when present is true, making nil-pointer dereferences safe.
+func addOrGap(factors *[]scoring.Factor, gaps *[]scoring.DataGap, present bool, compute func() scoring.Factor, name, reason string) {
+	if present {
+		*factors = append(*factors, compute())
+	} else {
+		*gaps = append(*gaps, scoring.DataGap{FactorName: name, Reason: reason})
+	}
+}
+
 func purchaseFactors(d *PurchaseFactorData) ([]scoring.Factor, []scoring.DataGap) {
 	var factors []scoring.Factor
 	var gaps []scoring.DataGap
 
-	if d.PriceChangePct != nil {
-		factors = append(factors, scoring.ComputeMarketTrend(*d.PriceChangePct, d.PriceConfidence, d.MarketSource))
-	} else {
-		gaps = append(gaps, scoring.DataGap{FactorName: scoring.FactorMarketTrend, Reason: "no_market_data"})
-	}
-	if d.SalesPerMonth != nil {
-		factors = append(factors, scoring.ComputeLiquidity(*d.SalesPerMonth, d.PriceConfidence, d.MarketSource))
-	} else {
-		gaps = append(gaps, scoring.DataGap{FactorName: scoring.FactorLiquidity, Reason: "insufficient_sales"})
-	}
-	if d.ROIPct != nil {
-		factors = append(factors, scoring.ComputeROIPotential(*d.ROIPct, d.PriceConfidence, d.MarketSource))
-	} else {
-		gaps = append(gaps, scoring.DataGap{FactorName: scoring.FactorROIPotential, Reason: "no_market_data"})
-	}
+	addOrGap(&factors, &gaps, d.PriceChangePct != nil, func() scoring.Factor {
+		return scoring.ComputeMarketTrend(*d.PriceChangePct, d.PriceConfidence, d.MarketSource)
+	}, scoring.FactorMarketTrend, gapNoMarketData)
+
+	addOrGap(&factors, &gaps, d.SalesPerMonth != nil, func() scoring.Factor {
+		return scoring.ComputeLiquidity(*d.SalesPerMonth, d.PriceConfidence, d.MarketSource)
+	}, scoring.FactorLiquidity, gapInsufficientSales)
+
+	addOrGap(&factors, &gaps, d.ROIPct != nil, func() scoring.Factor {
+		return scoring.ComputeROIPotential(*d.ROIPct, d.PriceConfidence, d.MarketSource)
+	}, scoring.FactorROIPotential, gapNoMarketData)
+
 	factors = append(factors, scoring.ComputePortfolioFit(d.ConcentrationRisk, 1.0, "portfolio"))
-	if d.PSA10Pop != nil {
-		factors = append(factors, scoring.ComputeScarcity(*d.PSA10Pop, d.PriceConfidence, d.MarketSource))
-	} else {
-		gaps = append(gaps, scoring.DataGap{FactorName: scoring.FactorScarcity, Reason: "no_population_data"})
-	}
-	if d.GradeROI != nil && d.CampaignAvgROI != nil {
-		factors = append(factors, scoring.ComputeGradeFit(*d.GradeROI, *d.CampaignAvgROI, d.PriceConfidence, d.MarketSource))
-	} else {
-		gaps = append(gaps, scoring.DataGap{FactorName: scoring.FactorGradeFit, Reason: "insufficient_sales"})
-	}
-	if d.Trend30dPct != nil {
-		factors = append(factors, scoring.ComputeMarketAlignment(*d.Trend30dPct, d.PriceConfidence, d.MarketSource))
-	} else {
-		gaps = append(gaps, scoring.DataGap{FactorName: scoring.FactorMarketAlignment, Reason: "no_market_data"})
-	}
+
+	addOrGap(&factors, &gaps, d.PSA10Pop != nil, func() scoring.Factor {
+		return scoring.ComputeScarcity(*d.PSA10Pop, d.PriceConfidence, d.MarketSource)
+	}, scoring.FactorScarcity, gapNoPopulationData)
+
+	addOrGap(&factors, &gaps, d.GradeROI != nil && d.CampaignAvgROI != nil, func() scoring.Factor {
+		return scoring.ComputeGradeFit(*d.GradeROI, *d.CampaignAvgROI, d.PriceConfidence, d.MarketSource)
+	}, scoring.FactorGradeFit, gapInsufficientSales)
+
+	addOrGap(&factors, &gaps, d.Trend30dPct != nil, func() scoring.Factor {
+		return scoring.ComputeMarketAlignment(*d.Trend30dPct, d.PriceConfidence, d.MarketSource)
+	}, scoring.FactorMarketAlignment, gapNoMarketData)
+
 	return factors, gaps
 }
 
@@ -133,40 +147,34 @@ func campaignFactors(d *CampaignFactorData) ([]scoring.Factor, []scoring.DataGap
 	var factors []scoring.Factor
 	var gaps []scoring.DataGap
 
-	if d.ROIPct != nil {
-		factors = append(factors, scoring.ComputeROIPotential(*d.ROIPct, d.PriceConfidence, d.MarketSource))
-	} else {
-		gaps = append(gaps, scoring.DataGap{FactorName: scoring.FactorROIPotential, Reason: "no_market_data"})
-	}
-	if d.SellThroughPct != nil {
-		factors = append(factors, scoring.ComputeSellThrough(*d.SellThroughPct, 1.0, "campaigns"))
-	} else {
-		gaps = append(gaps, scoring.DataGap{FactorName: scoring.FactorSellThrough, Reason: "insufficient_sales"})
-	}
-	if d.Trend30dPct != nil {
-		factors = append(factors, scoring.ComputeMarketAlignment(*d.Trend30dPct, d.PriceConfidence, d.MarketSource))
-	} else {
-		gaps = append(gaps, scoring.DataGap{FactorName: scoring.FactorMarketAlignment, Reason: "no_market_data"})
-	}
-	if d.SalesPerMonth != nil {
-		factors = append(factors, scoring.ComputeLiquidity(*d.SalesPerMonth, d.PriceConfidence, d.MarketSource))
-	} else {
-		gaps = append(gaps, scoring.DataGap{FactorName: scoring.FactorLiquidity, Reason: "insufficient_sales"})
-	}
-	if d.FillRatePct != nil {
+	addOrGap(&factors, &gaps, d.ROIPct != nil, func() scoring.Factor {
+		return scoring.ComputeROIPotential(*d.ROIPct, d.PriceConfidence, d.MarketSource)
+	}, scoring.FactorROIPotential, gapNoMarketData)
+
+	addOrGap(&factors, &gaps, d.SellThroughPct != nil, func() scoring.Factor {
+		return scoring.ComputeSellThrough(*d.SellThroughPct, 1.0, "campaigns")
+	}, scoring.FactorSellThrough, gapInsufficientSales)
+
+	addOrGap(&factors, &gaps, d.Trend30dPct != nil, func() scoring.Factor {
+		return scoring.ComputeMarketAlignment(*d.Trend30dPct, d.PriceConfidence, d.MarketSource)
+	}, scoring.FactorMarketAlignment, gapNoMarketData)
+
+	addOrGap(&factors, &gaps, d.SalesPerMonth != nil, func() scoring.Factor {
+		return scoring.ComputeLiquidity(*d.SalesPerMonth, d.PriceConfidence, d.MarketSource)
+	}, scoring.FactorLiquidity, gapInsufficientSales)
+
+	addOrGap(&factors, &gaps, d.FillRatePct != nil, func() scoring.Factor {
 		roi := 0.0
 		if d.CampaignROI != nil {
 			roi = *d.CampaignROI
 		}
-		factors = append(factors, scoring.ComputeSpendEfficiency(*d.FillRatePct, roi, 1.0, "campaigns"))
-	} else {
-		gaps = append(gaps, scoring.DataGap{FactorName: scoring.FactorSpendEfficiency, Reason: "insufficient_sales"})
-	}
-	if d.PriceChangePct != nil {
-		factors = append(factors, scoring.ComputeMarketTrend(*d.PriceChangePct, d.PriceConfidence, d.MarketSource))
-	} else {
-		gaps = append(gaps, scoring.DataGap{FactorName: scoring.FactorMarketTrend, Reason: "no_market_data"})
-	}
+		return scoring.ComputeSpendEfficiency(*d.FillRatePct, roi, 1.0, "campaigns")
+	}, scoring.FactorSpendEfficiency, gapInsufficientSales)
+
+	addOrGap(&factors, &gaps, d.PriceChangePct != nil, func() scoring.Factor {
+		return scoring.ComputeMarketTrend(*d.PriceChangePct, d.PriceConfidence, d.MarketSource)
+	}, scoring.FactorMarketTrend, gapNoMarketData)
+
 	return factors, gaps
 }
 
@@ -175,37 +183,32 @@ func liquidationFactors(d *LiquidationFactorData) ([]scoring.Factor, []scoring.D
 	var gaps []scoring.DataGap
 
 	factors = append(factors, scoring.ComputeCarryingCost(d.DaysHeld, 1.0, "purchase"))
-	if d.CreditUtilPct != nil {
-		factors = append(factors, scoring.ComputeCreditPressure(*d.CreditUtilPct, 1.0, "credit"))
-	} else {
-		gaps = append(gaps, scoring.DataGap{FactorName: scoring.FactorCreditPressure, Reason: "no_market_data"})
-	}
-	if d.PriceChangePct != nil {
+
+	addOrGap(&factors, &gaps, d.CreditUtilPct != nil, func() scoring.Factor {
+		return scoring.ComputeCreditPressure(*d.CreditUtilPct, 1.0, "credit")
+	}, scoring.FactorCreditPressure, gapNoMarketData)
+
+	addOrGap(&factors, &gaps, d.PriceChangePct != nil, func() scoring.Factor {
 		// Negate: a falling market (negative price change) increases liquidation urgency
-		factors = append(factors, scoring.ComputeMarketTrend(-*d.PriceChangePct, d.PriceConfidence, d.MarketSource))
-	} else {
-		gaps = append(gaps, scoring.DataGap{FactorName: scoring.FactorMarketTrend, Reason: "no_market_data"})
-	}
-	if d.SalesPerMonth != nil {
-		factors = append(factors, scoring.ComputeLiquidity(*d.SalesPerMonth, d.PriceConfidence, d.MarketSource))
-	} else {
-		gaps = append(gaps, scoring.DataGap{FactorName: scoring.FactorLiquidity, Reason: "insufficient_sales"})
-	}
-	if d.CrackROI != nil && d.GradedROI != nil {
-		factors = append(factors, scoring.ComputeCrackAdvantage(*d.CrackROI, *d.GradedROI, d.PriceConfidence, d.MarketSource))
-	} else {
-		gaps = append(gaps, scoring.DataGap{FactorName: scoring.FactorCrackAdvantage, Reason: "no_market_data"})
-	}
-	if d.ROIPct != nil {
-		factors = append(factors, scoring.ComputeROIPotential(*d.ROIPct, d.PriceConfidence, d.MarketSource))
-	} else {
-		gaps = append(gaps, scoring.DataGap{FactorName: scoring.FactorROIPotential, Reason: "no_market_data"})
-	}
-	if d.PSA10Pop != nil {
-		factors = append(factors, scoring.ComputeScarcity(*d.PSA10Pop, d.PriceConfidence, d.MarketSource))
-	} else {
-		gaps = append(gaps, scoring.DataGap{FactorName: scoring.FactorScarcity, Reason: "no_population_data"})
-	}
+		return scoring.ComputeMarketTrend(-*d.PriceChangePct, d.PriceConfidence, d.MarketSource)
+	}, scoring.FactorMarketTrend, gapNoMarketData)
+
+	addOrGap(&factors, &gaps, d.SalesPerMonth != nil, func() scoring.Factor {
+		return scoring.ComputeLiquidity(*d.SalesPerMonth, d.PriceConfidence, d.MarketSource)
+	}, scoring.FactorLiquidity, gapInsufficientSales)
+
+	addOrGap(&factors, &gaps, d.CrackROI != nil && d.GradedROI != nil, func() scoring.Factor {
+		return scoring.ComputeCrackAdvantage(*d.CrackROI, *d.GradedROI, d.PriceConfidence, d.MarketSource)
+	}, scoring.FactorCrackAdvantage, gapNoMarketData)
+
+	addOrGap(&factors, &gaps, d.ROIPct != nil, func() scoring.Factor {
+		return scoring.ComputeROIPotential(*d.ROIPct, d.PriceConfidence, d.MarketSource)
+	}, scoring.FactorROIPotential, gapNoMarketData)
+
+	addOrGap(&factors, &gaps, d.PSA10Pop != nil, func() scoring.Factor {
+		return scoring.ComputeScarcity(*d.PSA10Pop, d.PriceConfidence, d.MarketSource)
+	}, scoring.FactorScarcity, gapNoPopulationData)
+
 	return factors, gaps
 }
 
@@ -213,26 +216,23 @@ func suggestionFactors(d *SuggestionFactorData) ([]scoring.Factor, []scoring.Dat
 	var factors []scoring.Factor
 	var gaps []scoring.DataGap
 
-	if d.ProjectedROIPct != nil {
-		factors = append(factors, scoring.ComputeROIPotential(*d.ProjectedROIPct, d.PriceConfidence, d.MarketSource))
-	} else {
-		gaps = append(gaps, scoring.DataGap{FactorName: scoring.FactorROIPotential, Reason: "no_market_data"})
-	}
+	addOrGap(&factors, &gaps, d.ProjectedROIPct != nil, func() scoring.Factor {
+		return scoring.ComputeROIPotential(*d.ProjectedROIPct, d.PriceConfidence, d.MarketSource)
+	}, scoring.FactorROIPotential, gapNoMarketData)
+
 	factors = append(factors, scoring.ComputeCoverageImpact(d.FillsGap, d.OverlapCount, 1.0, "portfolio"))
-	if d.Trend30dPct != nil {
-		factors = append(factors, scoring.ComputeMarketAlignment(*d.Trend30dPct, d.PriceConfidence, d.MarketSource))
-	} else {
-		gaps = append(gaps, scoring.DataGap{FactorName: scoring.FactorMarketAlignment, Reason: "no_market_data"})
-	}
-	if d.SalesPerMonth != nil {
-		factors = append(factors, scoring.ComputeLiquidity(*d.SalesPerMonth, d.PriceConfidence, d.MarketSource))
-	} else {
-		gaps = append(gaps, scoring.DataGap{FactorName: scoring.FactorLiquidity, Reason: "insufficient_sales"})
-	}
-	if d.PriceChangePct != nil {
-		factors = append(factors, scoring.ComputeMarketTrend(*d.PriceChangePct, d.PriceConfidence, d.MarketSource))
-	} else {
-		gaps = append(gaps, scoring.DataGap{FactorName: scoring.FactorMarketTrend, Reason: "no_market_data"})
-	}
+
+	addOrGap(&factors, &gaps, d.Trend30dPct != nil, func() scoring.Factor {
+		return scoring.ComputeMarketAlignment(*d.Trend30dPct, d.PriceConfidence, d.MarketSource)
+	}, scoring.FactorMarketAlignment, gapNoMarketData)
+
+	addOrGap(&factors, &gaps, d.SalesPerMonth != nil, func() scoring.Factor {
+		return scoring.ComputeLiquidity(*d.SalesPerMonth, d.PriceConfidence, d.MarketSource)
+	}, scoring.FactorLiquidity, gapInsufficientSales)
+
+	addOrGap(&factors, &gaps, d.PriceChangePct != nil, func() scoring.Factor {
+		return scoring.ComputeMarketTrend(*d.PriceChangePct, d.PriceConfidence, d.MarketSource)
+	}, scoring.FactorMarketTrend, gapNoMarketData)
+
 	return factors, gaps
 }

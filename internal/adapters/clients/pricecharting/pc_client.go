@@ -2,15 +2,12 @@ package pricecharting
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
 	"net/url"
 	"strings"
 )
-
-// This file contains HTTP client methods for PriceCharting API calls.
 
 // hasPriceKeysTyped checks if the typed API response contains graded price data.
 // Requires at least one graded price field — a response with only LoosePrice (raw)
@@ -20,15 +17,6 @@ func hasPriceKeysTyped(resp *PriceChartingAPIResponse) bool {
 		resp.PSA8Price != nil || resp.BoxOnlyPrice != nil || resp.BGS10Price != nil
 }
 
-// lookupByQueryWithRetry performs lookup with retry logic.
-// This is a stable API boundary that delegates to the internal implementation.
-// The httpx.Client handles retry and circuit breaker logic internally.
-// Kept as a wrapper for API stability and potential future custom retry logic.
-func (p *PriceCharting) lookupByQueryWithRetry(ctx context.Context, query string) (*PCMatch, error) {
-	return p.lookupByQueryInternal(ctx, query)
-}
-
-// lookupByQueryInternal is the internal lookup implementation
 func (p *PriceCharting) lookupByQueryInternal(ctx context.Context, q string) (*PCMatch, error) {
 	// First try /api/product?q=... (best match) with improved query
 	optimizedQuery := p.queryHelper.OptimizeQueryForDirectLookup(q)
@@ -36,11 +24,7 @@ func (p *PriceCharting) lookupByQueryInternal(ctx context.Context, q string) (*P
 	var apiResp PriceChartingAPIResponse
 	err := p.httpClient.GetJSON(ctx, u, nil, 0, &apiResp)
 	if err == nil && strings.EqualFold(apiResp.Status, "success") && hasPriceKeysTyped(&apiResp) {
-		jsonBytes, marshalErr := json.Marshal(apiResp)
-		if marshalErr != nil {
-			return nil, fmt.Errorf("marshal API response: %w", marshalErr)
-		}
-		match, parseErr := parseAPIResponseWithLogger(jsonBytes, p.logger, ctx)
+		match, parseErr := convertAPIResponse(&apiResp, p.logger, ctx)
 		if parseErr != nil {
 			return nil, fmt.Errorf("parse API response: %w", parseErr)
 		}
@@ -100,11 +84,7 @@ func (p *PriceCharting) lookupByQueryInternal(ctx context.Context, q string) (*P
 	if !strings.EqualFold(fullResp.Status, "success") {
 		return nil, fmt.Errorf("product fetch failed")
 	}
-	jsonBytes, marshalErr := json.Marshal(fullResp)
-	if marshalErr != nil {
-		return nil, fmt.Errorf("marshal API response: %w", marshalErr)
-	}
-	match, parseErr := parseAPIResponseWithLogger(jsonBytes, p.logger, ctx)
+	match, parseErr := convertAPIResponse(&fullResp, p.logger, ctx)
 	if parseErr != nil {
 		return nil, fmt.Errorf("parse API response: %w", parseErr)
 	}
@@ -139,11 +119,7 @@ func (p *PriceCharting) LookupByUPC(ctx context.Context, upc string) (*PCMatch, 
 		return nil, fmt.Errorf("UPC not found")
 	}
 
-	jsonBytes, marshalErr := json.Marshal(apiResp)
-	if marshalErr != nil {
-		return nil, fmt.Errorf("marshal API response: %w", marshalErr)
-	}
-	match, parseErr := parseAPIResponseWithLogger(jsonBytes, p.logger, ctx)
+	match, parseErr := convertAPIResponse(&apiResp, p.logger, ctx)
 	if parseErr != nil {
 		return nil, fmt.Errorf("parse API response: %w", parseErr)
 	}
@@ -185,11 +161,7 @@ func (p *PriceCharting) LookupByProductID(ctx context.Context, productID string)
 	if !strings.EqualFold(fullResp.Status, "success") {
 		return nil, fmt.Errorf("product fetch failed for id %s", productID)
 	}
-	jsonBytes, marshalErr := json.Marshal(fullResp)
-	if marshalErr != nil {
-		return nil, fmt.Errorf("marshal API response: %w", marshalErr)
-	}
-	match, parseErr := parseAPIResponseWithLogger(jsonBytes, p.logger, ctx)
+	match, parseErr := convertAPIResponse(&fullResp, p.logger, ctx)
 	if parseErr != nil {
 		return nil, fmt.Errorf("parse API response: %w", parseErr)
 	}

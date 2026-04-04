@@ -20,10 +20,10 @@ import (
 // secretRedactPattern matches common secret patterns in response bodies
 var secretRedactPattern = regexp.MustCompile(`(?i)(key|token|secret|password|auth|credential)[=:]["']?[^&\s"']+`)
 
-// sanitizeResponseBody redacts potential secrets and truncates response bodies.
+// redactSecrets redacts potential secrets and truncates response bodies.
 // Redaction is done BEFORE truncation to prevent partial secret exposure at truncation boundary.
 // Used to prevent sensitive information leaking into error messages/logs.
-func sanitizeResponseBody(body []byte, maxLen int) string {
+func redactSecrets(body []byte, maxLen int) string {
 	// Redact potential secrets first to prevent partial exposure at truncation boundary
 	s := string(body)
 	s = secretRedactPattern.ReplaceAllString(s, "$1=[REDACTED]")
@@ -126,7 +126,7 @@ func (s *OAuthService) ExchangeCodeForTokens(ctx context.Context, code string) (
 	}
 
 	if tokenResp.AccessToken == "" {
-		return nil, apperrors.ProviderAuthFailed("Google", fmt.Errorf("received empty access token in response: %s", sanitizeResponseBody(resp.Body, 200)))
+		return nil, apperrors.ProviderAuthFailed("Google", fmt.Errorf("received empty access token in response: %s", redactSecrets(resp.Body, 200)))
 	}
 
 	tokens := &auth.UserTokens{

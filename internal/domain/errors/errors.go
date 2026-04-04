@@ -131,6 +131,25 @@ func (e *AppError) Unwrap() error {
 	return e.Cause
 }
 
+// Is supports errors.Is matching by error code, so that sentinel values
+// like auth.ErrUserNotFound match across wrapping and different instances.
+func (e *AppError) Is(target error) bool {
+	var t *AppError
+	if errors.As(target, &t) {
+		return e.Code == t.Code
+	}
+	return false
+}
+
+// Clone returns a fresh AppError with the same Code and Message,
+// safe to mutate (WithContext, WithHTTPStatus) without affecting the original.
+func (e *AppError) Clone() *AppError {
+	return &AppError{
+		Code:    e.Code,
+		Message: e.Message,
+	}
+}
+
 // WithContext adds context data to the error
 func (e *AppError) WithContext(key string, value any) *AppError {
 	if e.Context == nil {

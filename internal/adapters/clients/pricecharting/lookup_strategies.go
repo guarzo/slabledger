@@ -91,8 +91,7 @@ func (p *PriceCharting) tryAPI(ctx context.Context, card domainCards.Card, setNa
 		}
 	}
 
-	// Perform API lookup with retry logic
-	apiMatch, lookupErr := p.lookupByQueryWithRetry(ctx, q)
+	apiMatch, lookupErr := p.lookupByQueryInternal(ctx, q)
 	p.incrementRequestCount()
 
 	if lookupErr != nil {
@@ -251,7 +250,7 @@ func (p *PriceCharting) tryFuzzy(ctx context.Context, card domainCards.Card, set
 			}
 		}
 
-		match, err := p.lookupByQueryWithRetry(ctx, altQuery)
+		match, err := p.lookupByQueryInternal(ctx, altQuery)
 		p.incrementRequestCount()
 
 		if err != nil {

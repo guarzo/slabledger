@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	domainerrors "github.com/guarzo/slabledger/internal/domain/errors"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
@@ -102,12 +103,16 @@ type AICallTracker interface {
 // Must stay in sync with the CHECK constraint in migration 000015_ai_calls.
 var AIOperations = []AIOperation{OpDigest, OpCampaignAnalysis, OpLiquidation, OpPurchaseAssessment, OpSocialCaption, OpSocialSuggestion}
 
-// ClassifyAIError returns (StatusSuccess, "") for nil errors, or (StatusError/StatusRateLimited, errMsg) for failures.
 func ClassifyAIError(err error) (AIStatus, string) {
 	if err == nil {
 		return AIStatusSuccess, ""
 	}
 	errMsg := err.Error()
+	// Prefer structured error code check when available
+	if domainerrors.HasErrorCode(err, domainerrors.ErrCodeProviderRateLimit) {
+		return AIStatusRateLimited, errMsg
+	}
+	// Fallback: string matching for errors from providers that don't use AppError yet
 	if strings.Contains(errMsg, "rate limit") || strings.Contains(errMsg, "too_many_requests") ||
 		strings.Contains(errMsg, "429") || strings.Contains(errMsg, "capacity exceeded") {
 		return AIStatusRateLimited, errMsg
