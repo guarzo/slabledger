@@ -3,6 +3,7 @@ package scheduler
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
@@ -11,6 +12,9 @@ import (
 )
 
 const syncStateKeyDHInventoryPoll = "dh_inventory_last_poll"
+
+// maxPagesPerPoll prevents unbounded pagination if the DH API misreports totals.
+const maxPagesPerPoll = 100
 
 // DHInventoryListClient is the subset of dh.Client used by the inventory poll scheduler.
 type DHInventoryListClient interface {
@@ -112,6 +116,11 @@ func (s *DHInventoryPollScheduler) poll(ctx context.Context) {
 	var latestUpdatedAt string
 
 	for _, item := range allItems {
+		// Always advance the checkpoint so persistent failures don't block progress.
+		if item.UpdatedAt > latestUpdatedAt {
+			latestUpdatedAt = item.UpdatedAt
+		}
+
 		purchaseID, lookupErr := s.lookup.GetPurchaseIDByCertNumber(ctx, item.CertNumber)
 		if lookupErr != nil {
 			s.logger.Warn(ctx, "dh inventory poll: cert lookup error",
@@ -121,6 +130,8 @@ func (s *DHInventoryPollScheduler) poll(ctx context.Context) {
 			continue
 		}
 		if purchaseID == "" {
+			s.logger.Debug(ctx, "dh inventory poll: cert not found in local system",
+				observability.String("cert", item.CertNumber))
 			skipped++
 			continue
 		}
@@ -143,10 +154,6 @@ func (s *DHInventoryPollScheduler) poll(ctx context.Context) {
 		}
 
 		updated++
-
-		if item.UpdatedAt > latestUpdatedAt {
-			latestUpdatedAt = item.UpdatedAt
-		}
 	}
 
 	s.logger.Info(ctx, "dh inventory poll completed",
@@ -167,6 +174,9 @@ func (s *DHInventoryPollScheduler) fetchAllPages(ctx context.Context, since stri
 	var allItems []dh.InventoryListItem
 	page := 1
 	for {
+		if page > maxPagesPerPoll {
+			return nil, fmt.Errorf("fetchAllPages: exceeded max pages (%d), possible API total miscount", maxPagesPerPoll)
+		}
 		resp, err := s.client.ListInventory(ctx, dh.InventoryFilters{
 			Status:       "active",
 			UpdatedSince: since,

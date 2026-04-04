@@ -96,7 +96,7 @@ func TestClient_GetOrders(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, http.MethodGet, r.Method)
 		require.Equal(t, "/api/v1/enterprise/orders", r.URL.Path)
-		require.NotEmpty(t, r.URL.Query().Get("since"))
+		require.Equal(t, "2026-01-01T00:00:00Z", r.URL.Query().Get("since"))
 
 		resp := OrdersResponse{
 			Orders: []Order{

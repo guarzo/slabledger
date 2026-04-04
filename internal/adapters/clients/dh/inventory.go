@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"strings"
 )
 
 // InventoryFilters are query parameters for GET /inventory.
@@ -65,8 +66,13 @@ func (c *Client) ListInventory(ctx context.Context, filters InventoryFilters) (*
 
 // GetOrders retrieves completed sales from DH.
 func (c *Client) GetOrders(ctx context.Context, filters OrderFilters) (*OrdersResponse, error) {
+	since := strings.TrimSpace(filters.Since)
+	if since == "" {
+		return nil, fmt.Errorf("OrderFilters.Since is required")
+	}
+
 	params := url.Values{}
-	params.Set("since", filters.Since)
+	params.Set("since", since)
 	if filters.Channel != "" {
 		params.Set("channel", filters.Channel)
 	}

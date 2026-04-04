@@ -230,7 +230,9 @@ func (s *service) CollectLiquidation(ctx context.Context) (string, error) {
 }
 
 // operationMaxRounds overrides s.maxToolRounds when scoring is active.
-// With pre-computed scores injected, fewer tool rounds are needed.
+// PurchaseAssessment needs only 1 round since scores are pre-computed.
+// CampaignAnalysis and Liquidation use 3 rounds to accommodate batch tools
+// and larger workflows despite pre-computed scores.
 var operationMaxRounds = map[AIOperation]int{
 	OpPurchaseAssessment: 1,
 	OpCampaignAnalysis:   3,

@@ -12,24 +12,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// mockDHOrdersClient implements DHOrdersClient for testing.
-type mockDHOrdersClient struct {
-	resp *dh.OrdersResponse
-	err  error
-
-	calledWith dh.OrderFilters
-	callCount  int
-}
-
-func (m *mockDHOrdersClient) GetOrders(_ context.Context, filters dh.OrderFilters) (*dh.OrdersResponse, error) {
-	m.callCount++
-	m.calledWith = filters
-	return m.resp, m.err
-}
-
 func TestDHOrdersPoll_NoOrders(t *testing.T) {
-	client := &mockDHOrdersClient{
-		resp: &dh.OrdersResponse{Orders: nil, Meta: dh.PaginationMeta{Page: 1, PerPage: 100, TotalCount: 0}},
+	client := &mocks.MockDHOrdersClient{
+		GetOrdersFn: func(_ context.Context, _ dh.OrderFilters) (*dh.OrdersResponse, error) {
+			return &dh.OrdersResponse{Orders: nil, Meta: dh.PaginationMeta{Page: 1, PerPage: 100, TotalCount: 0}}, nil
+		},
 	}
 	syncStore := newMockSyncStateStore()
 	svc := &mocks.MockCampaignService{}
@@ -41,27 +28,29 @@ func TestDHOrdersPoll_NoOrders(t *testing.T) {
 
 	s.poll(context.Background())
 
-	assert.Equal(t, 1, client.callCount, "client should be called once")
+	assert.Equal(t, 1, client.CallCount, "client should be called once")
 }
 
 func TestDHOrdersPoll_RecordsSale(t *testing.T) {
-	client := &mockDHOrdersClient{
-		resp: &dh.OrdersResponse{
-			Orders: []dh.Order{
-				{
-					OrderID:        "dh-12345",
-					CertNumber:     "99998888",
-					CardName:       "Charizard PSA 10",
-					SalePriceCents: 7500,
-					Channel:        "ebay",
-					SoldAt:         "2026-04-02T14:30:00Z",
-					Grade:          10,
-					Fees: dh.OrderFees{
-						ChannelFeeCents: intPtr(994),
+	client := &mocks.MockDHOrdersClient{
+		GetOrdersFn: func(_ context.Context, _ dh.OrderFilters) (*dh.OrdersResponse, error) {
+			return &dh.OrdersResponse{
+				Orders: []dh.Order{
+					{
+						OrderID:        "dh-12345",
+						CertNumber:     "99998888",
+						CardName:       "Charizard PSA 10",
+						SalePriceCents: 7500,
+						Channel:        "ebay",
+						SoldAt:         "2026-04-02T14:30:00Z",
+						Grade:          10,
+						Fees: dh.OrderFees{
+							ChannelFeeCents: intPtr(994),
+						},
 					},
 				},
-			},
-			Meta: dh.PaginationMeta{Page: 1, PerPage: 100, TotalCount: 1},
+				Meta: dh.PaginationMeta{Page: 1, PerPage: 100, TotalCount: 1},
+			}, nil
 		},
 	}
 	syncStore := newMockSyncStateStore()
@@ -122,7 +111,7 @@ func TestDHOrdersPoll_RecordsSale(t *testing.T) {
 
 func TestDHOrdersPoll_Disabled(t *testing.T) {
 	s := NewDHOrdersPollScheduler(
-		&mockDHOrdersClient{},
+		&mocks.MockDHOrdersClient{},
 		newMockSyncStateStore(),
 		&mocks.MockCampaignService{},
 		mocks.NewMockLogger(),
@@ -143,3 +132,6 @@ func TestDHOrdersPoll_Disabled(t *testing.T) {
 }
 
 func intPtr(v int) *int { return &v }
+
+// Compile-time interface check.
+var _ DHOrdersClient = (*mocks.MockDHOrdersClient)(nil)

@@ -40,13 +40,14 @@ var validPhases = map[Phase]bool{
 }
 
 var validSaleChannels = map[SaleChannel]bool{
-	SaleChannelEbay:      true,
-	SaleChannelTCGPlayer: true,
-	SaleChannelLocal:     true,
-	SaleChannelOther:     true,
-	SaleChannelGameStop:  true,
-	SaleChannelWebsite:   true,
-	SaleChannelCardShow:  true,
+	SaleChannelEbay:       true,
+	SaleChannelTCGPlayer:  true,
+	SaleChannelLocal:      true,
+	SaleChannelOther:      true,
+	SaleChannelGameStop:   true,
+	SaleChannelWebsite:    true,
+	SaleChannelCardShow:   true,
+	SaleChannelDoubleHolo: true,
 }
 
 // ValidateAndNormalizeCampaign validates and normalizes campaign fields (trims whitespace).

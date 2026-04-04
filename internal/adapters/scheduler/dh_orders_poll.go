@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
@@ -10,6 +11,9 @@ import (
 )
 
 const syncStateKeyDHOrdersPoll = "dh_orders_last_poll"
+
+// maxOrderPagesPerPoll prevents unbounded pagination if the DH API misreports totals.
+const maxOrderPagesPerPoll = 100
 
 // DHOrdersClient is the subset of dh.Client used by the orders poll scheduler.
 type DHOrdersClient interface {
@@ -174,6 +178,9 @@ func (s *DHOrdersPollScheduler) fetchAllPages(ctx context.Context, since string)
 	var allOrders []dh.Order
 	page := 1
 	for {
+		if page > maxOrderPagesPerPoll {
+			return nil, fmt.Errorf("fetchAllPages: exceeded max pages (%d), possible API total miscount", maxOrderPagesPerPoll)
+		}
 		resp, err := s.client.GetOrders(ctx, dh.OrderFilters{Since: since, Page: page, PerPage: 100})
 		if err != nil {
 			return nil, err
@@ -201,6 +208,10 @@ func (s *DHOrdersPollScheduler) updateDHOrdersCheckpoint(ctx context.Context, or
 }
 
 // mapDHChannel converts a DH channel string to a campaigns.SaleChannel.
+// NOTE: "shopify" maps to TCGPlayer because in the DH v2 spec our Shopify
+// integration represents TCGPlayer Direct orders. If DH's Shopify channel
+// becomes a separate storefront, this may need its own SaleChannel and fee
+// structure — confirm with the business before changing.
 func mapDHChannel(channel string) campaigns.SaleChannel {
 	switch channel {
 	case "ebay":
