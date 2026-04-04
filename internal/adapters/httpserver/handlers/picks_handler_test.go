@@ -206,13 +206,13 @@ func TestHandleGetWatchlist_Success(t *testing.T) {
 		GetWatchlistFn: func(_ context.Context) ([]picks.WatchlistItem, error) {
 			return []picks.WatchlistItem{
 				{
-					ID:       1,
-					CardName: "Pikachu",
-					SetName:  "Base Set",
-					Grade:    "PSA 9",
-					Source:   picks.WatchlistManual,
-					Active:   true,
-					AddedAt:  time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC),
+					ID:        1,
+					CardName:  "Pikachu",
+					SetName:   "Base Set",
+					Grade:     "PSA 9",
+					Source:    picks.WatchlistManual,
+					Active:    true,
+					AddedAt:   time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC),
 					UpdatedAt: time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC),
 				},
 			}, nil

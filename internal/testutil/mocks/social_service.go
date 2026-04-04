@@ -8,14 +8,14 @@ import (
 )
 
 type MockSocialService struct {
-	DetectAndGenerateFn  func(ctx context.Context) (int, error)
-	ListPostsFn          func(ctx context.Context, status *social.PostStatus, limit, offset int) ([]social.SocialPost, error)
-	GetPostFn            func(ctx context.Context, id string) (*social.PostDetail, error)
-	UpdateCaptionFn      func(ctx context.Context, id string, caption, hashtags string) error
-	DeleteFn             func(ctx context.Context, id string) error
-	PublishFn            func(ctx context.Context, id string) error
-	RegenerateCaptionFn  func(ctx context.Context, id string, stream func(ai.StreamEvent)) error
-	WaitFn               func()
+	DetectAndGenerateFn func(ctx context.Context) (int, error)
+	ListPostsFn         func(ctx context.Context, status *social.PostStatus, limit, offset int) ([]social.SocialPost, error)
+	GetPostFn           func(ctx context.Context, id string) (*social.PostDetail, error)
+	UpdateCaptionFn     func(ctx context.Context, id string, caption, hashtags string) error
+	DeleteFn            func(ctx context.Context, id string) error
+	PublishFn           func(ctx context.Context, id string) error
+	RegenerateCaptionFn func(ctx context.Context, id string, stream func(ai.StreamEvent)) error
+	WaitFn              func()
 }
 
 var _ social.Service = (*MockSocialService)(nil)
