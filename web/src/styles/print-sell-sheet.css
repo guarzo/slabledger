@@ -1,0 +1,98 @@
+@media print {
+  /* Hide all chrome: nav, header, sidebar, controls */
+  header,
+  nav,
+  .print\:hidden,
+  [class*="print:hidden"] {
+    display: none !important;
+  }
+
+  /* Hide inventory controls that shouldn't print */
+  .sell-sheet-no-print {
+    display: none !important;
+  }
+
+  /* Reset page background */
+  body,
+  main,
+  #main-content {
+    background: white !important;
+    color: black !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* Print header — injected above inventory table when printing */
+  .sell-sheet-print-header {
+    display: flex !important;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 0;
+    margin-bottom: 8px;
+    border-bottom: 2px solid #333;
+  }
+
+  .sell-sheet-print-header h1 {
+    font-size: 14pt;
+    font-weight: bold;
+    color: black;
+  }
+
+  .sell-sheet-print-header .print-meta {
+    font-size: 8pt;
+    color: #666;
+  }
+
+  /* Make table fit the page */
+  .glass-table {
+    border: none !important;
+    background: none !important;
+    box-shadow: none !important;
+  }
+
+  .glass-table-header {
+    border-bottom: 2px solid #333 !important;
+    background: none !important;
+  }
+
+  .glass-table-th {
+    color: #333 !important;
+    font-size: 8pt !important;
+  }
+
+  .glass-table-td {
+    font-size: 8pt !important;
+    color: black !important;
+    padding: 2px 4px !important;
+  }
+
+  .glass-vrow {
+    border-bottom: 1px solid #ddd !important;
+    background: none !important;
+    break-inside: avoid;
+  }
+
+  /* Remove virtual scroll container height constraint.
+     Targets inline max-height set by the virtual scroll library. */
+  .glass-table > div[style*="max-height"] {
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  /* Print footer */
+  .sell-sheet-print-footer {
+    display: block !important;
+    margin-top: 12px;
+    padding-top: 8px;
+    border-top: 1px solid #999;
+    font-size: 7pt;
+    color: #666;
+    text-align: center;
+  }
+}
+
+/* Hide print-only elements on screen */
+.sell-sheet-print-header,
+.sell-sheet-print-footer {
+  display: none;
+}

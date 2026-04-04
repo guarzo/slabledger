@@ -30,7 +30,6 @@ const InsightsPage = lazy(() => import('./pages/InsightsPage'));
 const ToolsPage = lazy(() => import('./pages/ToolsPage'));
 const WatchlistPage = lazy(() => import('./pages/WatchlistPage'));
 const ContentPage = lazy(() => import('./pages/ContentPage'));
-const SellSheetPrintPage = lazy(() => import('./pages/SellSheetPrintPage'));
 const OpportunitiesPage = lazy(() => import('./pages/OpportunitiesPage'));
 
 function AppContent() {
@@ -138,12 +137,6 @@ function AppContent() {
                     <AdminPage />
                   </PageTransition>
                 </AdminRoute>
-              } />
-              {/* Sell Sheet Print */}
-              <Route path="/sell-sheet" element={
-                <ProtectedRoute>
-                  <SellSheetPrintPage />
-                </ProtectedRoute>
               } />
               <Route path="*" element={<Navigate to="/login" replace />} />
             </Routes>
