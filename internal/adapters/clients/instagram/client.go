@@ -204,6 +204,77 @@ func (c *Client) PublishSingleImage(ctx context.Context, token, igUserID, imageU
 	return &PublishResult{InstagramPostID: postID}, nil
 }
 
+// MediaInsights holds engagement metrics for a published post.
+type MediaInsights struct {
+	Impressions int
+	Reach       int
+	Likes       int
+	Comments    int
+	Saves       int
+	Shares      int
+}
+
+// GetMediaInsights fetches engagement metrics for a published post.
+// It calls two endpoints: the insights endpoint (impressions, reach, saves, shares)
+// and the media endpoint (likes, comments). Partial data is returned if one endpoint fails.
+func (c *Client) GetMediaInsights(ctx context.Context, token, mediaID string) (*MediaInsights, error) {
+	result := &MediaInsights{}
+
+	// Fetch impressions, reach, saves, shares from the insights endpoint.
+	insightsURL := fmt.Sprintf("%s/%s/insights?metric=impressions,reach,saved,shares&access_token=%s",
+		graphURL, mediaID, url.QueryEscape(token))
+
+	var insightsResp struct {
+		Data []struct {
+			Name   string `json:"name"`
+			Values []struct {
+				Value int `json:"value"`
+			} `json:"values"`
+		} `json:"data"`
+	}
+	if err := c.doGet(ctx, insightsURL, &insightsResp); err != nil {
+		c.logger.Warn(ctx, "failed to fetch media insights",
+			observability.String("mediaID", mediaID),
+			observability.Err(err))
+	} else {
+		for _, item := range insightsResp.Data {
+			if len(item.Values) == 0 {
+				continue
+			}
+			v := item.Values[0].Value
+			switch item.Name {
+			case "impressions":
+				result.Impressions = v
+			case "reach":
+				result.Reach = v
+			case "saved":
+				result.Saves = v
+			case "shares":
+				result.Shares = v
+			}
+		}
+	}
+
+	// Fetch likes and comments from the media endpoint.
+	mediaURL := fmt.Sprintf("%s/%s?fields=like_count,comments_count&access_token=%s",
+		graphURL, mediaID, url.QueryEscape(token))
+
+	var mediaResp struct {
+		LikeCount     int `json:"like_count"`
+		CommentsCount int `json:"comments_count"`
+	}
+	if err := c.doGet(ctx, mediaURL, &mediaResp); err != nil {
+		c.logger.Warn(ctx, "failed to fetch media like/comment counts",
+			observability.String("mediaID", mediaID),
+			observability.Err(err))
+	} else {
+		result.Likes = mediaResp.LikeCount
+		result.Comments = mediaResp.CommentsCount
+	}
+
+	return result, nil
+}
+
 // GetStatus returns the connection status (connected username or empty).
 func (c *Client) GetStatus(ctx context.Context, token, igUserID string) (string, error) {
 	username, err := c.getUsername(ctx, token, igUserID)
