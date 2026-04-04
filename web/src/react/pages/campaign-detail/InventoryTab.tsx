@@ -7,6 +7,7 @@ import { formatCents, formatPct } from '../../utils/formatters';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { useDebounce } from '../../hooks/useDebounce';
 import { useToast } from '../../contexts/ToastContext';
+import { useSellSheet } from '../../hooks/useSellSheet';
 import { EmptyState, Button } from '../../ui';
 import { queryKeys } from '../../queries/queryKeys';
 import { useExpectedValues } from '../../queries/useCampaignQueries';
@@ -17,6 +18,7 @@ import PriceHintDialog from '../../PriceHintDialog';
 import PriceOverrideDialog from '../../PriceOverrideDialog';
 import { bestPrice, unrealizedPL, formatPL, getReviewStatus, reviewUrgencySort, isCardShowCandidate } from './inventory/utils';
 import type { SortKey, SortDir } from './inventory/utils';
+import '../../../styles/print-sell-sheet.css';
 import DesktopRow from './inventory/DesktopRow';
 import MobileCard from './inventory/MobileCard';
 import CrackCandidatesBanner from './inventory/CrackCandidatesBanner';
@@ -35,6 +37,7 @@ export interface InventoryTabProps {
 export default function InventoryTab({ items, isLoading: loading, campaignId, showCampaignColumn }: InventoryTabProps) {
   const queryClient = useQueryClient();
   const toast = useToast();
+  const sellSheet = useSellSheet();
   const { data: evPortfolio } = useExpectedValues(campaignId ?? '');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -55,8 +58,9 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
   const [sortKey, setSortKey] = useState<SortKey>('name');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [searchQuery, setSearchQuery] = useState('');
+  const [isPrinting, setIsPrinting] = useState(false);
   const [statsExpanded, setStatsExpanded] = useState(false);
-  const [filterTab, setFilterTab] = useState<'needs_review' | 'large_gap' | 'no_data' | 'flagged' | 'card_show' | 'all'>('needs_review');
+  const [filterTab, setFilterTab] = useState<'needs_review' | 'large_gap' | 'no_data' | 'flagged' | 'card_show' | 'all' | 'sell_sheet'>('needs_review');
   const [showAll, setShowAll] = useState(false);
   const debouncedSearch = useDebounce(searchQuery, 300);
   const isMobile = useMediaQuery('(max-width: 768px)');
@@ -134,6 +138,18 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
     return map;
   }, [showEV, evPortfolio]);
 
+  // Page-scoped sell-sheet count: only count items actually present on this page
+  const pageSellSheetCount = useMemo(() => {
+    let count = 0;
+    for (const item of items) {
+      if (sellSheet.has(item.purchase.id)) count++;
+    }
+    return count;
+  }, [items, sellSheet]);
+
+  // Whether the sell-sheet filter is truly active (not bypassed by showAll or search)
+  const sellSheetActive = filterTab === 'sell_sheet' && !showAll && !debouncedSearch.trim();
+
   const filteredAndSortedItems = useMemo(() => {
     let result = items;
 
@@ -147,7 +163,9 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
       );
     } else if (!showAll) {
       // Filter by active tab using getReviewStatus
-      if (filterTab !== 'all') {
+      if (filterTab === 'sell_sheet') {
+        result = result.filter(i => sellSheet.has(i.purchase.id));
+      } else if (filterTab !== 'all') {
         result = result.filter(i => {
           const status = getReviewStatus(i);
           if (filterTab === 'large_gap') return status === 'large_gap';
@@ -198,7 +216,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
           return 0;
       }
     });
-  }, [items, debouncedSearch, sortKey, sortDir, evMap, showAll, filterTab]);
+  }, [items, debouncedSearch, sortKey, sortDir, evMap, showAll, filterTab, sellSheet]);
 
   const rowVirtualizer = useVirtualizer({
     count: filteredAndSortedItems.length,
@@ -289,7 +307,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
       queryClient.invalidateQueries({ predicate: (query) => query.queryKey[0] === 'campaigns' });
     }
     // Always invalidate sell sheet — overrides affect global sell sheet regardless of view
-    queryClient.invalidateQueries({ queryKey: ['portfolio', 'sellSheet'] });
+    queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.sellSheet });
   }
 
   function handleHintSaved() {
@@ -421,23 +439,31 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
         <div className="flex items-center justify-between mb-3">
           <span className="text-sm text-[var(--text-muted)]">{selected.size} selected</span>
           <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => {
-                const ids = Array.from(selected);
-                sessionStorage.setItem('sellSheetIds', JSON.stringify(ids));
-                if (campaignId) {
-                  sessionStorage.setItem('sellSheetCampaignId', campaignId);
-                } else {
-                  sessionStorage.removeItem('sellSheetCampaignId');
-                }
-                const win = window.open('/sell-sheet', '_blank');
-                if (!win) toast.error('Popup blocked — please allow popups for this site');
-              }}
-            >
-              Sell Sheet ({selected.size})
-            </Button>
+            {sellSheetActive ? (
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => {
+                  sellSheet.remove(Array.from(selected));
+                  setSelected(new Set());
+                  toast.success(`Removed ${selected.size} item${selected.size > 1 ? 's' : ''} from sell sheet`);
+                }}
+              >
+                Remove from Sell Sheet ({selected.size})
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => {
+                  sellSheet.add(Array.from(selected));
+                  setSelected(new Set());
+                  toast.success(`Added ${selected.size} item${selected.size > 1 ? 's' : ''} to sell sheet`);
+                }}
+              >
+                Add to Sell Sheet ({selected.size})
+              </Button>
+            )}
             <Button
               size="sm"
               onClick={() => openSaleModal(items.filter(i => selected.has(i.purchase.id)))}
@@ -445,6 +471,25 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
               Record Sale ({selected.size})
             </Button>
           </div>
+        </div>
+      )}
+
+      {sellSheetActive && pageSellSheetCount > 0 && (
+        <div className="flex justify-end mb-3">
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={isPrinting}
+            onClick={() => {
+              setIsPrinting(true);
+              requestAnimationFrame(() => {
+                window.print();
+                setIsPrinting(false);
+              });
+            }}
+          >
+            {isPrinting ? 'Preparing…' : 'Print Sell Sheet'}
+          </Button>
         </div>
       )}
 
@@ -495,12 +540,39 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
               </span>
             </button>
           ))}
+          <button
+            type="button"
+            onClick={() => setFilterTab('sell_sheet')}
+            className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-colors ${
+              filterTab === 'sell_sheet'
+                ? 'border-[var(--brand-500)] bg-[var(--brand-500)]/10 text-[var(--brand-400)]'
+                : 'border-[var(--surface-2)] text-[var(--text-muted)] hover:text-[var(--text)] hover:border-[var(--text-muted)]'
+            }`}
+          >
+            Sell Sheet
+            <span
+              className="ml-1.5 inline-block min-w-[18px] text-center text-[10px] font-semibold px-1 py-[1px] rounded-full"
+              style={{
+                background: filterTab === 'sell_sheet' ? 'color-mix(in srgb, var(--brand-400) 15%, transparent)' : 'rgba(255,255,255,0.06)',
+                color: filterTab === 'sell_sheet' ? 'var(--brand-400)' : 'var(--text-muted)',
+              }}
+            >
+              {pageSellSheetCount}
+            </span>
+          </button>
         </div>
       )}
 
       {debouncedSearch && (
         <div className="text-xs text-[var(--text-subtle)] mb-2 pl-1">
           {filteredAndSortedItems.length} of {items.length} cards
+        </div>
+      )}
+
+      {sellSheetActive && filteredAndSortedItems.length === 0 && (
+        <div className="text-center py-12">
+          <div className="text-[var(--text-muted)] text-sm">No items on your sell sheet.</div>
+          <div className="text-[var(--text-muted)] text-xs mt-1">Select items from any tab and click &ldquo;Add to Sell Sheet&rdquo;.</div>
         </div>
       )}
 
@@ -511,35 +583,54 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
               onChange={toggleAll} className="rounded" />
             Select all
           </label>
-          <div ref={mobileScrollRef} className="max-h-[calc(100vh-280px)] max-h-[calc(100dvh-280px)] overflow-y-auto scrollbar-dark overscroll-contain touch-pan-y">
-            <div style={{ height: `${mobileVirtualizer.getTotalSize()}px`, position: 'relative' }}>
-              {mobileVirtualizer.getVirtualItems().map(virtualRow => {
-                const item = filteredAndSortedItems[virtualRow.index];
-                return (
-                  <div key={item.purchase.id}
-                    data-index={virtualRow.index}
-                    ref={mobileVirtualizer.measureElement}
-                    style={{
-                      position: 'absolute',
-                      top: 0,
-                      left: 0,
-                      width: '100%',
-                      transform: `translateY(${virtualRow.start}px)`,
-                    }}>
-                    <MobileCard
-                      item={item}
-                      selected={selected.has(item.purchase.id)}
-                      onToggle={() => toggleSelect(item.purchase.id)}
-                      onRecordSale={() => openSaleModal([item])}
-                      onFixPricing={() => handleFixPricing(item.purchase)}
-                      onSetPrice={() => handleSetPrice(item)}
-                      ev={evMap.get(item.purchase.certNumber)}
-                      showCampaignColumn={showCampaignColumn}
-                    />
-                  </div>
-                );
-              })}
-            </div>
+          <div ref={mobileScrollRef} className={isPrinting ? '' : 'max-h-[calc(100vh-280px)] max-h-[calc(100dvh-280px)] overflow-y-auto scrollbar-dark overscroll-contain touch-pan-y'}>
+            {isPrinting ? (
+              filteredAndSortedItems.map((item) => (
+                <div key={item.purchase.id}>
+                  <MobileCard
+                    item={item}
+                    selected={selected.has(item.purchase.id)}
+                    onToggle={() => toggleSelect(item.purchase.id)}
+                    onRecordSale={() => openSaleModal([item])}
+                    onFixPricing={() => handleFixPricing(item.purchase)}
+                    onSetPrice={() => handleSetPrice(item)}
+                    ev={evMap.get(item.purchase.certNumber)}
+                    showCampaignColumn={showCampaignColumn}
+                    isOnSellSheet={!sellSheetActive && sellSheet.has(item.purchase.id)}
+                  />
+                </div>
+              ))
+            ) : (
+              <div style={{ height: `${mobileVirtualizer.getTotalSize()}px`, position: 'relative' }}>
+                {mobileVirtualizer.getVirtualItems().map(virtualRow => {
+                  const item = filteredAndSortedItems[virtualRow.index];
+                  return (
+                    <div key={item.purchase.id}
+                      data-index={virtualRow.index}
+                      ref={mobileVirtualizer.measureElement}
+                      style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        width: '100%',
+                        transform: `translateY(${virtualRow.start}px)`,
+                      }}>
+                      <MobileCard
+                        item={item}
+                        selected={selected.has(item.purchase.id)}
+                        onToggle={() => toggleSelect(item.purchase.id)}
+                        onRecordSale={() => openSaleModal([item])}
+                        onFixPricing={() => handleFixPricing(item.purchase)}
+                        onSetPrice={() => handleSetPrice(item)}
+                        ev={evMap.get(item.purchase.certNumber)}
+                        showCampaignColumn={showCampaignColumn}
+                        isOnSellSheet={!sellSheetActive && sellSheet.has(item.purchase.id)}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       ) : (
@@ -564,29 +655,15 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
             <div className="glass-table-th flex-shrink-0 !px-1" style={{ width: '28px' }}></div>
           </div>
           {/* Rows */}
-          <div ref={scrollContainerRef} className="max-h-[600px] overflow-y-auto overflow-x-hidden scrollbar-dark">
-            <div style={{ height: `${rowVirtualizer.getTotalSize()}px`, position: 'relative' }}>
-              {rowVirtualizer.getVirtualItems().map(virtualRow => {
-                const item = filteredAndSortedItems[virtualRow.index];
+          <div ref={scrollContainerRef} className={isPrinting ? '' : 'max-h-[600px] overflow-y-auto overflow-x-hidden scrollbar-dark'}>
+            {isPrinting ? (
+              filteredAndSortedItems.map((item, index) => {
                 const isExpanded = expandedId === item.purchase.id;
                 const rowPl = unrealizedPL(item.purchase.buyCostCents + item.purchase.psaSourcingFeeCents, item.currentMarket);
                 const plStatus = rowPl != null ? (rowPl > 0 ? 'positive' : rowPl < 0 ? 'negative' : 'neutral') : 'neutral';
                 const isSelected = selected.has(item.purchase.id);
                 return (
-                  <div key={item.purchase.id}
-                    data-index={virtualRow.index}
-                    ref={rowVirtualizer.measureElement}
-                    className="glass-vrow"
-                    data-stripe={virtualRow.index % 2 === 1}
-                    data-selected={isSelected}
-                    data-pl={plStatus}
-                    style={{
-                      position: 'absolute',
-                      top: 0,
-                      left: 0,
-                      width: '100%',
-                      transform: `translateY(${virtualRow.start}px)`,
-                    }}>
+                  <div key={item.purchase.id} className="glass-vrow" data-stripe={index % 2 === 1} data-selected={isSelected} data-pl={plStatus}>
                     <div className="text-sm">
                       <DesktopRow
                         item={item}
@@ -599,13 +676,57 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                         ev={evMap.get(item.purchase.certNumber)}
                         showEV={!!showEV}
                         showCampaignColumn={showCampaignColumn}
+                        isOnSellSheet={!sellSheetActive && sellSheet.has(item.purchase.id)}
                       />
                     </div>
                     {isExpanded && <ExpandedDetail item={item} onReviewed={handleReviewed} campaignId={campaignId} onOpenFlagDialog={() => setFlagTarget({ purchaseId: item.purchase.id, cardName: item.purchase.cardName, grade: item.purchase.gradeValue })} />}
                   </div>
                 );
-              })}
-            </div>
+              })
+            ) : (
+              <div style={{ height: `${rowVirtualizer.getTotalSize()}px`, position: 'relative' }}>
+                {rowVirtualizer.getVirtualItems().map(virtualRow => {
+                  const item = filteredAndSortedItems[virtualRow.index];
+                  const isExpanded = expandedId === item.purchase.id;
+                  const rowPl = unrealizedPL(item.purchase.buyCostCents + item.purchase.psaSourcingFeeCents, item.currentMarket);
+                  const plStatus = rowPl != null ? (rowPl > 0 ? 'positive' : rowPl < 0 ? 'negative' : 'neutral') : 'neutral';
+                  const isSelected = selected.has(item.purchase.id);
+                  return (
+                    <div key={item.purchase.id}
+                      data-index={virtualRow.index}
+                      ref={rowVirtualizer.measureElement}
+                      className="glass-vrow"
+                      data-stripe={virtualRow.index % 2 === 1}
+                      data-selected={isSelected}
+                      data-pl={plStatus}
+                      style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        width: '100%',
+                        transform: `translateY(${virtualRow.start}px)`,
+                      }}>
+                      <div className="text-sm">
+                        <DesktopRow
+                          item={item}
+                          selected={isSelected}
+                          onToggle={() => toggleSelect(item.purchase.id)}
+                          onExpand={() => toggleExpand(item.purchase.id)}
+                          onRecordSale={() => openSaleModal([item])}
+                          onFixPricing={() => handleFixPricing(item.purchase)}
+                          onSetPrice={() => handleSetPrice(item)}
+                          ev={evMap.get(item.purchase.certNumber)}
+                          showEV={!!showEV}
+                          showCampaignColumn={showCampaignColumn}
+                          isOnSellSheet={!sellSheetActive && sellSheet.has(item.purchase.id)}
+                        />
+                      </div>
+                      {isExpanded && <ExpandedDetail item={item} onReviewed={handleReviewed} campaignId={campaignId} onOpenFlagDialog={() => setFlagTarget({ purchaseId: item.purchase.id, cardName: item.purchase.cardName, grade: item.purchase.gradeValue })} />}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       )}

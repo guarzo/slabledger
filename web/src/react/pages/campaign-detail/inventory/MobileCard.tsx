@@ -17,9 +17,10 @@ interface MobileCardProps {
   onSetPrice?: () => void;
   ev?: ExpectedValue;
   showCampaignColumn?: boolean;
+  isOnSellSheet?: boolean;
 }
 
-export default function MobileCard({ item, selected, onToggle, onRecordSale, onFixPricing, onSetPrice, ev, showCampaignColumn }: MobileCardProps) {
+export default function MobileCard({ item, selected, onToggle, onRecordSale, onFixPricing, onSetPrice, ev, showCampaignColumn, isOnSellSheet }: MobileCardProps) {
   const costBasis = item.purchase.buyCostCents + item.purchase.psaSourcingFeeCents;
   const snap = item.currentMarket;
   const daysColor = daysHeldColor(item.daysHeld);
@@ -39,6 +40,7 @@ export default function MobileCard({ item, selected, onToggle, onRecordSale, onF
           <div>
             <div className="text-sm font-medium text-[var(--text)]">
               {hotSeller && <span className="text-amber-400 mr-1" title="High demand">★</span>}
+              {isOnSellSheet && <span className="text-gray-400 mr-1 text-xs" title="On sell sheet">&#9864;</span>}
               {item.purchase.cardName}
               {item.purchase.cardName && item.purchase.setName && (
                 <MarketplaceLinks
