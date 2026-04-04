@@ -2,7 +2,7 @@
  * Social media and Instagram API methods
  */
 
-import type { SocialPost, SocialPostDetail, InstagramStatus } from '../../types/social';
+import type { SocialPost, SocialPostDetail, InstagramStatus, PostMetricsSnapshot, MetricsSummary } from '../../types/social';
 import type { APIClient } from './client';
 import { UPLOAD_TIMEOUT_MS } from './client';
 
@@ -20,6 +20,8 @@ declare module './client' {
     deleteSocialPost(id: string): Promise<void>;
     publishSocialPost(id: string): Promise<{ status: string }>;
     uploadSlides(id: string, slides: Blob[]): Promise<{ slides: number }>;
+    getPostMetrics(id: string): Promise<PostMetricsSnapshot[]>;
+    getMetricsSummary(): Promise<MetricsSummary[]>;
 
     // Instagram integration
     getInstagramStatus(): Promise<InstagramStatus>;
@@ -112,4 +114,12 @@ proto.disconnectInstagram = async function (this: APIClient): Promise<void> {
     { method: 'POST' }
   );
   await this.expectNoContent(response);
+};
+
+proto.getPostMetrics = async function (this: APIClient, id: string): Promise<PostMetricsSnapshot[]> {
+  return this.get<PostMetricsSnapshot[]>(`/social/posts/${id}/metrics`);
+};
+
+proto.getMetricsSummary = async function (this: APIClient): Promise<MetricsSummary[]> {
+  return this.get<MetricsSummary[]>('/social/metrics/summary');
 };
