@@ -11,6 +11,9 @@ import Sparkles from './primitives/Sparkles';
 import TrendLines from './primitives/TrendLines';
 import AIBackground from './primitives/AIBackground';
 import { getTheme } from './primitives/theme';
+import HotDealsCover from './covers/HotDealsCover';
+import NewArrivalsCover from './covers/NewArrivalsCover';
+import PriceMoversCover from './covers/PriceMoversCover';
 
 interface CoverSlideProps {
   postType: PostType;
@@ -60,6 +63,23 @@ export default function CoverSlide({
 }: CoverSlideProps) {
   const theme = getTheme(postType);
   const subtitle = buildSubtitle(postType, cardCount, psa10Count, cards);
+
+  // Use new post-type-specific covers when cards are available
+  if (cards && cards.length > 0) {
+    return (
+      <SlideCanvas dataSlide="cover">
+        {postType === 'hot_deals' && (
+          <HotDealsCover postType={postType} coverTitle={coverTitle} cards={cards} backgroundUrl={backgroundUrls?.[0]} />
+        )}
+        {postType === 'new_arrivals' && (
+          <NewArrivalsCover postType={postType} coverTitle={coverTitle} cards={cards} backgroundUrl={backgroundUrls?.[0]} />
+        )}
+        {postType === 'price_movers' && (
+          <PriceMoversCover postType={postType} coverTitle={coverTitle} cards={cards} backgroundUrl={backgroundUrls?.[0]} />
+        )}
+      </SlideCanvas>
+    );
+  }
 
   return (
     <SlideCanvas dataSlide="cover">
