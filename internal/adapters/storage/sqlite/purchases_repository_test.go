@@ -199,15 +199,22 @@ func TestUpdatePurchaseGrade(t *testing.T) {
 
 	createTestCampaign(t, db, "camp-1", "Test Campaign")
 
-	p := newTestPurchase("camp-1", "81000001")
-	require.NoError(t, repo.CreatePurchase(ctx, p))
+	t.Run("success", func(t *testing.T) {
+		p := newTestPurchase("camp-1", "81000001")
+		require.NoError(t, repo.CreatePurchase(ctx, p))
 
-	err := repo.UpdatePurchaseGrade(ctx, p.ID, 10.0)
-	require.NoError(t, err)
+		err := repo.UpdatePurchaseGrade(ctx, p.ID, 10.0)
+		require.NoError(t, err)
 
-	got, err := repo.GetPurchase(ctx, p.ID)
-	require.NoError(t, err)
-	assert.Equal(t, 10.0, got.GradeValue)
+		got, err := repo.GetPurchase(ctx, p.ID)
+		require.NoError(t, err)
+		assert.Equal(t, 10.0, got.GradeValue)
+	})
+
+	t.Run("not found", func(t *testing.T) {
+		err := repo.UpdatePurchaseGrade(ctx, "nonexistent", 10.0)
+		assert.ErrorIs(t, err, campaigns.ErrPurchaseNotFound)
+	})
 }
 
 func TestUpdatePurchaseCardMetadata(t *testing.T) {
@@ -218,17 +225,24 @@ func TestUpdatePurchaseCardMetadata(t *testing.T) {
 
 	createTestCampaign(t, db, "camp-1", "Test Campaign")
 
-	p := newTestPurchase("camp-1", "82000001")
-	require.NoError(t, repo.CreatePurchase(ctx, p))
+	t.Run("success", func(t *testing.T) {
+		p := newTestPurchase("camp-1", "82000001")
+		require.NoError(t, repo.CreatePurchase(ctx, p))
 
-	err := repo.UpdatePurchaseCardMetadata(ctx, p.ID, "Blastoise", "2/102", "Base Set")
-	require.NoError(t, err)
+		err := repo.UpdatePurchaseCardMetadata(ctx, p.ID, "Blastoise", "2/102", "Base Set")
+		require.NoError(t, err)
 
-	got, err := repo.GetPurchase(ctx, p.ID)
-	require.NoError(t, err)
-	assert.Equal(t, "Blastoise", got.CardName)
-	assert.Equal(t, "2/102", got.CardNumber)
-	assert.Equal(t, "Base Set", got.SetName)
+		got, err := repo.GetPurchase(ctx, p.ID)
+		require.NoError(t, err)
+		assert.Equal(t, "Blastoise", got.CardName)
+		assert.Equal(t, "2/102", got.CardNumber)
+		assert.Equal(t, "Base Set", got.SetName)
+	})
+
+	t.Run("not found", func(t *testing.T) {
+		err := repo.UpdatePurchaseCardMetadata(ctx, "nonexistent", "Blastoise", "2/102", "Base Set")
+		assert.ErrorIs(t, err, campaigns.ErrPurchaseNotFound)
+	})
 }
 
 func TestUpdatePurchaseCampaign(t *testing.T) {

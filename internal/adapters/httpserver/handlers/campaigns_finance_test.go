@@ -14,275 +14,292 @@ import (
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
 )
 
-func TestHandleCreditSummary_Success(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		GetCreditSummaryFn: func(_ context.Context) (*campaigns.CreditSummary, error) {
-			return &campaigns.CreditSummary{CreditLimitCents: 5000000}, nil
+func TestHandleCreditSummary(t *testing.T) {
+	tests := []struct {
+		name            string
+		mockFn          func(_ context.Context) (*campaigns.CreditSummary, error)
+		wantStatus      int
+		wantCreditCents int
+	}{
+		{
+			name: "success",
+			mockFn: func(_ context.Context) (*campaigns.CreditSummary, error) {
+				return &campaigns.CreditSummary{CreditLimitCents: 5000000}, nil
+			},
+			wantStatus:      http.StatusOK,
+			wantCreditCents: 5000000,
+		},
+		{
+			name: "database error",
+			mockFn: func(_ context.Context) (*campaigns.CreditSummary, error) {
+				return nil, fmt.Errorf("database error")
+			},
+			wantStatus: http.StatusInternalServerError,
 		},
 	}
-	h := newTestHandler(svc)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/credit/summary", nil)
-	rec := httptest.NewRecorder()
-	h.HandleCreditSummary(rec, req)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := &mocks.MockCampaignService{GetCreditSummaryFn: tt.mockFn}
+			h := newTestHandler(svc)
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rec.Code)
-	}
-	var result campaigns.CreditSummary
-	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if result.CreditLimitCents != 5000000 {
-		t.Errorf("expected CreditLimitCents=5000000, got %d", result.CreditLimitCents)
+			req := httptest.NewRequest(http.MethodGet, "/api/credit/summary", nil)
+			rec := httptest.NewRecorder()
+			h.HandleCreditSummary(rec, req)
+
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("expected %d, got %d", tt.wantStatus, rec.Code)
+			}
+			if tt.wantStatus == http.StatusOK {
+				var result campaigns.CreditSummary
+				if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+					t.Fatalf("decode: %v", err)
+				}
+				if result.CreditLimitCents != tt.wantCreditCents {
+					t.Errorf("expected CreditLimitCents=%d, got %d", tt.wantCreditCents, result.CreditLimitCents)
+				}
+			} else {
+				decodeErrorResponse(t, rec)
+			}
+		})
 	}
 }
 
-func TestHandleCreditSummary_Error(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		GetCreditSummaryFn: func(_ context.Context) (*campaigns.CreditSummary, error) {
-			return nil, fmt.Errorf("database error")
+func TestHandleGetCashflowConfig(t *testing.T) {
+	tests := []struct {
+		name       string
+		mockFn     func(_ context.Context) (*campaigns.CashflowConfig, error)
+		wantStatus int
+	}{
+		{
+			name: "success",
+			mockFn: func(_ context.Context) (*campaigns.CashflowConfig, error) {
+				return &campaigns.CashflowConfig{CreditLimitCents: 5000000, CashBufferCents: 1000000}, nil
+			},
+			wantStatus: http.StatusOK,
+		},
+		{
+			name: "error",
+			mockFn: func(_ context.Context) (*campaigns.CashflowConfig, error) {
+				return nil, fmt.Errorf("db error")
+			},
+			wantStatus: http.StatusInternalServerError,
 		},
 	}
-	h := newTestHandler(svc)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/credit/summary", nil)
-	rec := httptest.NewRecorder()
-	h.HandleCreditSummary(rec, req)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := &mocks.MockCampaignService{GetCashflowConfigFn: tt.mockFn}
+			h := newTestHandler(svc)
 
-	if rec.Code != http.StatusInternalServerError {
-		t.Fatalf("expected 500, got %d", rec.Code)
+			req := httptest.NewRequest(http.MethodGet, "/api/credit/config", nil)
+			rec := httptest.NewRecorder()
+			h.HandleGetCashflowConfig(rec, req)
+
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("expected %d, got %d", tt.wantStatus, rec.Code)
+			}
+		})
 	}
-	decodeErrorResponse(t, rec)
 }
 
-func TestHandleGetCashflowConfig_Success(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		GetCashflowConfigFn: func(_ context.Context) (*campaigns.CashflowConfig, error) {
-			return &campaigns.CashflowConfig{CreditLimitCents: 5000000, CashBufferCents: 1000000}, nil
+func TestHandleUpdateCashflowConfig(t *testing.T) {
+	tests := []struct {
+		name       string
+		body       string
+		mockFn     func(_ context.Context, _ *campaigns.CashflowConfig) error
+		wantStatus int
+	}{
+		{
+			name: "success",
+			body: `{"creditLimitCents":6000000,"cashBufferCents":1500000}`,
+			mockFn: func(_ context.Context, _ *campaigns.CashflowConfig) error {
+				return nil
+			},
+			wantStatus: http.StatusOK,
+		},
+		{
+			name:       "invalid body",
+			body:       "{bad",
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name: "write error",
+			body: `{"creditLimitCents":6000000}`,
+			mockFn: func(_ context.Context, _ *campaigns.CashflowConfig) error {
+				return fmt.Errorf("write error")
+			},
+			wantStatus: http.StatusInternalServerError,
 		},
 	}
-	h := newTestHandler(svc)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/credit/config", nil)
-	rec := httptest.NewRecorder()
-	h.HandleGetCashflowConfig(rec, req)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := &mocks.MockCampaignService{}
+			if tt.mockFn != nil {
+				svc.UpdateCashflowConfigFn = tt.mockFn
+			}
+			h := newTestHandler(svc)
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rec.Code)
+			req := httptest.NewRequest(http.MethodPut, "/api/credit/config", bytes.NewBufferString(tt.body))
+			if tt.name == "success" {
+				req.Header.Set("Content-Type", "application/json")
+			}
+			rec := httptest.NewRecorder()
+			h.HandleUpdateCashflowConfig(rec, req)
+
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("expected %d, got %d; body: %s", tt.wantStatus, rec.Code, rec.Body.String())
+			}
+		})
 	}
 }
 
-func TestHandleGetCashflowConfig_Error(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		GetCashflowConfigFn: func(_ context.Context) (*campaigns.CashflowConfig, error) {
-			return nil, fmt.Errorf("db error")
+func TestHandleListInvoices(t *testing.T) {
+	tests := []struct {
+		name        string
+		mockFn      func(_ context.Context) ([]campaigns.Invoice, error)
+		wantStatus  int
+		wantCount   int
+		checkNotNil bool
+	}{
+		{
+			name: "success",
+			mockFn: func(_ context.Context) ([]campaigns.Invoice, error) {
+				return []campaigns.Invoice{{ID: "inv-1"}}, nil
+			},
+			wantStatus: http.StatusOK,
+			wantCount:  1,
+		},
+		{
+			name: "empty",
+			mockFn: func(_ context.Context) ([]campaigns.Invoice, error) {
+				return nil, nil
+			},
+			wantStatus:  http.StatusOK,
+			checkNotNil: true,
+		},
+		{
+			name: "error",
+			mockFn: func(_ context.Context) ([]campaigns.Invoice, error) {
+				return nil, fmt.Errorf("db error")
+			},
+			wantStatus: http.StatusInternalServerError,
 		},
 	}
-	h := newTestHandler(svc)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/credit/config", nil)
-	rec := httptest.NewRecorder()
-	h.HandleGetCashflowConfig(rec, req)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := &mocks.MockCampaignService{ListInvoicesFn: tt.mockFn}
+			h := newTestHandler(svc)
 
-	if rec.Code != http.StatusInternalServerError {
-		t.Fatalf("expected 500, got %d", rec.Code)
+			req := httptest.NewRequest(http.MethodGet, "/api/credit/invoices", nil)
+			rec := httptest.NewRecorder()
+			h.HandleListInvoices(rec, req)
+
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("expected %d, got %d", tt.wantStatus, rec.Code)
+			}
+			if tt.wantStatus == http.StatusOK {
+				var result []campaigns.Invoice
+				if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+					t.Fatalf("decode: %v", err)
+				}
+				if tt.wantCount > 0 && len(result) != tt.wantCount {
+					t.Errorf("expected %d invoice(s), got %d", tt.wantCount, len(result))
+				}
+				if tt.checkNotNil && result == nil {
+					t.Error("expected empty array, got nil")
+				}
+			}
+		})
 	}
 }
 
-func TestHandleUpdateCashflowConfig_Success(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		UpdateCashflowConfigFn: func(_ context.Context, cfg *campaigns.CashflowConfig) error {
-			return nil
+func TestHandleUpdateInvoice(t *testing.T) {
+	tests := []struct {
+		name       string
+		body       string
+		mockFn     func(_ context.Context, _ *campaigns.Invoice) error
+		wantStatus int
+	}{
+		{
+			name: "success",
+			body: `{"id":"inv-1","totalCents":10000}`,
+			mockFn: func(_ context.Context, _ *campaigns.Invoice) error {
+				return nil
+			},
+			wantStatus: http.StatusOK,
+		},
+		{
+			name: "not found",
+			body: `{"id":"missing"}`,
+			mockFn: func(_ context.Context, _ *campaigns.Invoice) error {
+				return campaigns.ErrInvoiceNotFound
+			},
+			wantStatus: http.StatusNotFound,
+		},
+		{
+			name:       "invalid body",
+			body:       "{bad",
+			wantStatus: http.StatusBadRequest,
 		},
 	}
-	h := newTestHandler(svc)
 
-	body := `{"creditLimitCents":6000000,"cashBufferCents":1500000}`
-	req := httptest.NewRequest(http.MethodPut, "/api/credit/config", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
-	rec := httptest.NewRecorder()
-	h.HandleUpdateCashflowConfig(rec, req)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := &mocks.MockCampaignService{}
+			if tt.mockFn != nil {
+				svc.UpdateInvoiceFn = tt.mockFn
+			}
+			h := newTestHandler(svc)
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d; body: %s", rec.Code, rec.Body.String())
+			req := httptest.NewRequest(http.MethodPut, "/api/credit/invoices", bytes.NewBufferString(tt.body))
+			rec := httptest.NewRecorder()
+			h.HandleUpdateInvoice(rec, req)
+
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("expected %d, got %d; body: %s", tt.wantStatus, rec.Code, rec.Body.String())
+			}
+		})
 	}
 }
 
-func TestHandleUpdateCashflowConfig_InvalidBody(t *testing.T) {
-	h := newTestHandler(&mocks.MockCampaignService{})
-
-	req := httptest.NewRequest(http.MethodPut, "/api/credit/config", bytes.NewBufferString("{bad"))
-	rec := httptest.NewRecorder()
-	h.HandleUpdateCashflowConfig(rec, req)
-
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d", rec.Code)
-	}
-}
-
-func TestHandleUpdateCashflowConfig_Error(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		UpdateCashflowConfigFn: func(_ context.Context, _ *campaigns.CashflowConfig) error {
-			return fmt.Errorf("write error")
+func TestHandlePortfolioHealth(t *testing.T) {
+	tests := []struct {
+		name       string
+		mockFn     func(_ context.Context) (*campaigns.PortfolioHealth, error)
+		wantStatus int
+	}{
+		{
+			name: "success",
+			mockFn: func(_ context.Context) (*campaigns.PortfolioHealth, error) {
+				return &campaigns.PortfolioHealth{}, nil
+			},
+			wantStatus: http.StatusOK,
+		},
+		{
+			name: "error",
+			mockFn: func(_ context.Context) (*campaigns.PortfolioHealth, error) {
+				return nil, fmt.Errorf("service error")
+			},
+			wantStatus: http.StatusInternalServerError,
 		},
 	}
-	h := newTestHandler(svc)
 
-	body := `{"creditLimitCents":6000000}`
-	req := httptest.NewRequest(http.MethodPut, "/api/credit/config", bytes.NewBufferString(body))
-	rec := httptest.NewRecorder()
-	h.HandleUpdateCashflowConfig(rec, req)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := &mocks.MockCampaignService{GetPortfolioHealthFn: tt.mockFn}
+			h := newTestHandler(svc)
 
-	if rec.Code != http.StatusInternalServerError {
-		t.Fatalf("expected 500, got %d", rec.Code)
-	}
-}
+			req := httptest.NewRequest(http.MethodGet, "/api/portfolio/health", nil)
+			rec := httptest.NewRecorder()
+			h.HandlePortfolioHealth(rec, req)
 
-func TestHandleListInvoices_Success(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		ListInvoicesFn: func(_ context.Context) ([]campaigns.Invoice, error) {
-			return []campaigns.Invoice{{ID: "inv-1"}}, nil
-		},
-	}
-	h := newTestHandler(svc)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/credit/invoices", nil)
-	rec := httptest.NewRecorder()
-	h.HandleListInvoices(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rec.Code)
-	}
-	var result []campaigns.Invoice
-	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if len(result) != 1 {
-		t.Errorf("expected 1 invoice, got %d", len(result))
-	}
-}
-
-func TestHandleListInvoices_Empty(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		ListInvoicesFn: func(_ context.Context) ([]campaigns.Invoice, error) {
-			return nil, nil
-		},
-	}
-	h := newTestHandler(svc)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/credit/invoices", nil)
-	rec := httptest.NewRecorder()
-	h.HandleListInvoices(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rec.Code)
-	}
-	var result []campaigns.Invoice
-	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if result == nil {
-		t.Error("expected empty array, got nil")
-	}
-}
-
-func TestHandleListInvoices_Error(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		ListInvoicesFn: func(_ context.Context) ([]campaigns.Invoice, error) {
-			return nil, fmt.Errorf("db error")
-		},
-	}
-	h := newTestHandler(svc)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/credit/invoices", nil)
-	rec := httptest.NewRecorder()
-	h.HandleListInvoices(rec, req)
-
-	if rec.Code != http.StatusInternalServerError {
-		t.Fatalf("expected 500, got %d", rec.Code)
-	}
-}
-
-func TestHandleUpdateInvoice_Success(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		UpdateInvoiceFn: func(_ context.Context, inv *campaigns.Invoice) error {
-			return nil
-		},
-	}
-	h := newTestHandler(svc)
-
-	body := `{"id":"inv-1","totalCents":10000}`
-	req := httptest.NewRequest(http.MethodPut, "/api/credit/invoices", bytes.NewBufferString(body))
-	rec := httptest.NewRecorder()
-	h.HandleUpdateInvoice(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d; body: %s", rec.Code, rec.Body.String())
-	}
-}
-
-func TestHandleUpdateInvoice_NotFound(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		UpdateInvoiceFn: func(_ context.Context, _ *campaigns.Invoice) error {
-			return campaigns.ErrInvoiceNotFound
-		},
-	}
-	h := newTestHandler(svc)
-
-	body := `{"id":"missing"}`
-	req := httptest.NewRequest(http.MethodPut, "/api/credit/invoices", bytes.NewBufferString(body))
-	rec := httptest.NewRecorder()
-	h.HandleUpdateInvoice(rec, req)
-
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("expected 404, got %d", rec.Code)
-	}
-}
-
-func TestHandleUpdateInvoice_InvalidBody(t *testing.T) {
-	h := newTestHandler(&mocks.MockCampaignService{})
-
-	req := httptest.NewRequest(http.MethodPut, "/api/credit/invoices", bytes.NewBufferString("{bad"))
-	rec := httptest.NewRecorder()
-	h.HandleUpdateInvoice(rec, req)
-
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d", rec.Code)
-	}
-}
-
-func TestHandlePortfolioHealth_Success(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		GetPortfolioHealthFn: func(_ context.Context) (*campaigns.PortfolioHealth, error) {
-			return &campaigns.PortfolioHealth{}, nil
-		},
-	}
-	h := newTestHandler(svc)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/portfolio/health", nil)
-	rec := httptest.NewRecorder()
-	h.HandlePortfolioHealth(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rec.Code)
-	}
-}
-
-func TestHandlePortfolioHealth_Error(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		GetPortfolioHealthFn: func(_ context.Context) (*campaigns.PortfolioHealth, error) {
-			return nil, fmt.Errorf("service error")
-		},
-	}
-	h := newTestHandler(svc)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/portfolio/health", nil)
-	rec := httptest.NewRecorder()
-	h.HandlePortfolioHealth(rec, req)
-
-	if rec.Code != http.StatusInternalServerError {
-		t.Fatalf("expected 500, got %d", rec.Code)
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("expected %d, got %d", tt.wantStatus, rec.Code)
+			}
+		})
 	}
 }
 
@@ -337,214 +354,243 @@ func TestHandleCampaignSuggestions_Success(t *testing.T) {
 	}
 }
 
-func TestHandleCapitalTimeline_Success(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		GetCapitalTimelineFn: func(_ context.Context) (*campaigns.CapitalTimeline, error) {
-			return &campaigns.CapitalTimeline{}, nil
+func TestHandleCapitalTimeline(t *testing.T) {
+	tests := []struct {
+		name       string
+		mockFn     func(_ context.Context) (*campaigns.CapitalTimeline, error)
+		wantStatus int
+	}{
+		{
+			name: "success",
+			mockFn: func(_ context.Context) (*campaigns.CapitalTimeline, error) {
+				return &campaigns.CapitalTimeline{}, nil
+			},
+			wantStatus: http.StatusOK,
+		},
+		{
+			name: "error",
+			mockFn: func(_ context.Context) (*campaigns.CapitalTimeline, error) {
+				return nil, fmt.Errorf("service error")
+			},
+			wantStatus: http.StatusInternalServerError,
 		},
 	}
-	h := newTestHandler(svc)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/portfolio/capital-timeline", nil)
-	rec := httptest.NewRecorder()
-	h.HandleCapitalTimeline(rec, req)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := &mocks.MockCampaignService{GetCapitalTimelineFn: tt.mockFn}
+			h := newTestHandler(svc)
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rec.Code)
+			req := httptest.NewRequest(http.MethodGet, "/api/portfolio/capital-timeline", nil)
+			rec := httptest.NewRecorder()
+			h.HandleCapitalTimeline(rec, req)
+
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("expected %d, got %d", tt.wantStatus, rec.Code)
+			}
+		})
 	}
 }
 
-func TestHandleCapitalTimeline_Error(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		GetCapitalTimelineFn: func(_ context.Context) (*campaigns.CapitalTimeline, error) {
-			return nil, fmt.Errorf("service error")
+func TestHandleWeeklyReview(t *testing.T) {
+	tests := []struct {
+		name       string
+		mockFn     func(_ context.Context) (*campaigns.WeeklyReviewSummary, error)
+		wantStatus int
+	}{
+		{
+			name: "success",
+			mockFn: func(_ context.Context) (*campaigns.WeeklyReviewSummary, error) {
+				return &campaigns.WeeklyReviewSummary{}, nil
+			},
+			wantStatus: http.StatusOK,
+		},
+		{
+			name: "error",
+			mockFn: func(_ context.Context) (*campaigns.WeeklyReviewSummary, error) {
+				return nil, fmt.Errorf("service error")
+			},
+			wantStatus: http.StatusInternalServerError,
 		},
 	}
-	h := newTestHandler(svc)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/portfolio/capital-timeline", nil)
-	rec := httptest.NewRecorder()
-	h.HandleCapitalTimeline(rec, req)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := &mocks.MockCampaignService{GetWeeklyReviewSummaryFn: tt.mockFn}
+			h := newTestHandler(svc)
 
-	if rec.Code != http.StatusInternalServerError {
-		t.Fatalf("expected 500, got %d", rec.Code)
+			req := httptest.NewRequest(http.MethodGet, "/api/portfolio/weekly-review", nil)
+			rec := httptest.NewRecorder()
+			h.HandleWeeklyReview(rec, req)
+
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("expected %d, got %d", tt.wantStatus, rec.Code)
+			}
+		})
 	}
 }
 
-func TestHandleWeeklyReview_Success(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		GetWeeklyReviewSummaryFn: func(_ context.Context) (*campaigns.WeeklyReviewSummary, error) {
-			return &campaigns.WeeklyReviewSummary{}, nil
+func TestHandleListRevocationFlags(t *testing.T) {
+	tests := []struct {
+		name        string
+		mockFn      func(_ context.Context) ([]campaigns.RevocationFlag, error)
+		wantStatus  int
+		wantCount   int
+		checkNotNil bool
+	}{
+		{
+			name: "success",
+			mockFn: func(_ context.Context) ([]campaigns.RevocationFlag, error) {
+				return []campaigns.RevocationFlag{{ID: "rf-1"}}, nil
+			},
+			wantStatus: http.StatusOK,
+			wantCount:  1,
+		},
+		{
+			name: "empty",
+			mockFn: func(_ context.Context) ([]campaigns.RevocationFlag, error) {
+				return nil, nil
+			},
+			wantStatus:  http.StatusOK,
+			checkNotNil: true,
 		},
 	}
-	h := newTestHandler(svc)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/portfolio/weekly-review", nil)
-	rec := httptest.NewRecorder()
-	h.HandleWeeklyReview(rec, req)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := &mocks.MockCampaignService{ListRevocationFlagsFn: tt.mockFn}
+			h := newTestHandler(svc)
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rec.Code)
+			req := httptest.NewRequest(http.MethodGet, "/api/portfolio/revocations", nil)
+			rec := httptest.NewRecorder()
+			h.HandleListRevocationFlags(rec, req)
+
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("expected %d, got %d", tt.wantStatus, rec.Code)
+			}
+			if tt.wantStatus == http.StatusOK {
+				var result []campaigns.RevocationFlag
+				if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+					t.Fatalf("decode: %v", err)
+				}
+				if tt.wantCount > 0 && len(result) != tt.wantCount {
+					t.Errorf("expected %d flag(s), got %d", tt.wantCount, len(result))
+				}
+				if tt.checkNotNil && result == nil {
+					t.Error("expected empty array, got nil")
+				}
+			}
+		})
 	}
 }
 
-func TestHandleWeeklyReview_Error(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		GetWeeklyReviewSummaryFn: func(_ context.Context) (*campaigns.WeeklyReviewSummary, error) {
-			return nil, fmt.Errorf("service error")
+func TestHandleCreateRevocationFlag(t *testing.T) {
+	tests := []struct {
+		name       string
+		body       string
+		mockFn     func(_ context.Context, label, dim, reason string) (*campaigns.RevocationFlag, error)
+		wantStatus int
+	}{
+		{
+			name: "success",
+			body: `{"segmentLabel":"low-margin","segmentDimension":"channel","reason":"underperforming"}`,
+			mockFn: func(_ context.Context, label, dim, reason string) (*campaigns.RevocationFlag, error) {
+				return &campaigns.RevocationFlag{SegmentLabel: label, SegmentDimension: dim, Reason: reason}, nil
+			},
+			wantStatus: http.StatusCreated,
+		},
+		{
+			name: "too soon",
+			body: `{"segmentLabel":"x","segmentDimension":"y","reason":"z"}`,
+			mockFn: func(_ context.Context, _, _, _ string) (*campaigns.RevocationFlag, error) {
+				return nil, errors.NewAppError(campaigns.ErrCodeRevocationTooSoon, "revocation already submitted within the past 7 days")
+			},
+			wantStatus: http.StatusConflict,
+		},
+		{
+			name:       "invalid body",
+			body:       "{bad",
+			wantStatus: http.StatusBadRequest,
 		},
 	}
-	h := newTestHandler(svc)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/portfolio/weekly-review", nil)
-	rec := httptest.NewRecorder()
-	h.HandleWeeklyReview(rec, req)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := &mocks.MockCampaignService{}
+			if tt.mockFn != nil {
+				svc.FlagForRevocationFn = tt.mockFn
+			}
+			h := newTestHandler(svc)
 
-	if rec.Code != http.StatusInternalServerError {
-		t.Fatalf("expected 500, got %d", rec.Code)
+			req := httptest.NewRequest(http.MethodPost, "/api/portfolio/revocations", bytes.NewBufferString(tt.body))
+			rec := httptest.NewRecorder()
+			h.HandleCreateRevocationFlag(rec, req)
+
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("expected %d, got %d; body: %s", tt.wantStatus, rec.Code, rec.Body.String())
+			}
+		})
 	}
 }
 
-func TestHandleListRevocationFlags_Success(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		ListRevocationFlagsFn: func(_ context.Context) ([]campaigns.RevocationFlag, error) {
-			return []campaigns.RevocationFlag{{ID: "rf-1"}}, nil
+func TestHandleRevocationEmail(t *testing.T) {
+	tests := []struct {
+		name       string
+		flagID     string
+		mockFn     func(_ context.Context, flagID string) (string, error)
+		wantStatus int
+		wantBody   bool
+	}{
+		{
+			name:   "success",
+			flagID: "rf-1",
+			mockFn: func(_ context.Context, _ string) (string, error) {
+				return "Dear partner, we are revoking...", nil
+			},
+			wantStatus: http.StatusOK,
+			wantBody:   true,
+		},
+		{
+			name:       "missing flag ID",
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:   "error",
+			flagID: "rf-1",
+			mockFn: func(_ context.Context, _ string) (string, error) {
+				return "", fmt.Errorf("generation failed")
+			},
+			wantStatus: http.StatusInternalServerError,
 		},
 	}
-	h := newTestHandler(svc)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/portfolio/revocations", nil)
-	rec := httptest.NewRecorder()
-	h.HandleListRevocationFlags(rec, req)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := &mocks.MockCampaignService{}
+			if tt.mockFn != nil {
+				svc.GenerateRevocationEmailFn = tt.mockFn
+			}
+			h := newTestHandler(svc)
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rec.Code)
-	}
-}
+			req := httptest.NewRequest(http.MethodGet, "/api/portfolio/revocations/"+tt.flagID+"/email", nil)
+			if tt.flagID != "" {
+				req.SetPathValue("flagId", tt.flagID)
+			}
+			rec := httptest.NewRecorder()
+			h.HandleRevocationEmail(rec, req)
 
-func TestHandleListRevocationFlags_Empty(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		ListRevocationFlagsFn: func(_ context.Context) ([]campaigns.RevocationFlag, error) {
-			return nil, nil
-		},
-	}
-	h := newTestHandler(svc)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/portfolio/revocations", nil)
-	rec := httptest.NewRecorder()
-	h.HandleListRevocationFlags(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rec.Code)
-	}
-	var result []campaigns.RevocationFlag
-	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if result == nil {
-		t.Error("expected empty array, got nil")
-	}
-}
-
-func TestHandleCreateRevocationFlag_Success(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		FlagForRevocationFn: func(_ context.Context, label, dim, reason string) (*campaigns.RevocationFlag, error) {
-			return &campaigns.RevocationFlag{SegmentLabel: label, SegmentDimension: dim, Reason: reason}, nil
-		},
-	}
-	h := newTestHandler(svc)
-
-	body := `{"segmentLabel":"low-margin","segmentDimension":"channel","reason":"underperforming"}`
-	req := httptest.NewRequest(http.MethodPost, "/api/portfolio/revocations", bytes.NewBufferString(body))
-	rec := httptest.NewRecorder()
-	h.HandleCreateRevocationFlag(rec, req)
-
-	if rec.Code != http.StatusCreated {
-		t.Fatalf("expected 201, got %d; body: %s", rec.Code, rec.Body.String())
-	}
-}
-
-func TestHandleCreateRevocationFlag_TooSoon(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		FlagForRevocationFn: func(_ context.Context, _, _, _ string) (*campaigns.RevocationFlag, error) {
-			return nil, errors.NewAppError(campaigns.ErrCodeRevocationTooSoon, "revocation already submitted within the past 7 days")
-		},
-	}
-	h := newTestHandler(svc)
-
-	body := `{"segmentLabel":"x","segmentDimension":"y","reason":"z"}`
-	req := httptest.NewRequest(http.MethodPost, "/api/portfolio/revocations", bytes.NewBufferString(body))
-	rec := httptest.NewRecorder()
-	h.HandleCreateRevocationFlag(rec, req)
-
-	if rec.Code != http.StatusConflict {
-		t.Fatalf("expected 409, got %d", rec.Code)
-	}
-}
-
-func TestHandleCreateRevocationFlag_InvalidBody(t *testing.T) {
-	h := newTestHandler(&mocks.MockCampaignService{})
-
-	req := httptest.NewRequest(http.MethodPost, "/api/portfolio/revocations", bytes.NewBufferString("{bad"))
-	rec := httptest.NewRecorder()
-	h.HandleCreateRevocationFlag(rec, req)
-
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d", rec.Code)
-	}
-}
-
-func TestHandleRevocationEmail_Success(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		GenerateRevocationEmailFn: func(_ context.Context, flagID string) (string, error) {
-			return "Dear partner, we are revoking...", nil
-		},
-	}
-	h := newTestHandler(svc)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/portfolio/revocations/rf-1/email", nil)
-	req.SetPathValue("flagId", "rf-1")
-	rec := httptest.NewRecorder()
-	h.HandleRevocationEmail(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rec.Code)
-	}
-	var result map[string]string
-	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if result["emailText"] == "" {
-		t.Error("expected non-empty emailText")
-	}
-}
-
-func TestHandleRevocationEmail_MissingFlagID(t *testing.T) {
-	h := newTestHandler(&mocks.MockCampaignService{})
-
-	req := httptest.NewRequest(http.MethodGet, "/api/portfolio/revocations//email", nil)
-	rec := httptest.NewRecorder()
-	h.HandleRevocationEmail(rec, req)
-
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d", rec.Code)
-	}
-}
-
-func TestHandleRevocationEmail_Error(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		GenerateRevocationEmailFn: func(_ context.Context, _ string) (string, error) {
-			return "", fmt.Errorf("generation failed")
-		},
-	}
-	h := newTestHandler(svc)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/portfolio/revocations/rf-1/email", nil)
-	req.SetPathValue("flagId", "rf-1")
-	rec := httptest.NewRecorder()
-	h.HandleRevocationEmail(rec, req)
-
-	if rec.Code != http.StatusInternalServerError {
-		t.Fatalf("expected 500, got %d", rec.Code)
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("expected %d, got %d", tt.wantStatus, rec.Code)
+			}
+			if tt.wantBody {
+				var result map[string]string
+				if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+					t.Fatalf("decode: %v", err)
+				}
+				if result["emailText"] == "" {
+					t.Error("expected non-empty emailText")
+				}
+			}
+		})
 	}
 }

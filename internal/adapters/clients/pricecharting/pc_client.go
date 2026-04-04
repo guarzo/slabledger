@@ -10,8 +10,6 @@ import (
 	"strings"
 )
 
-// This file contains HTTP client methods for PriceCharting API calls.
-
 // hasPriceKeysTyped checks if the typed API response contains graded price data.
 // Requires at least one graded price field — a response with only LoosePrice (raw)
 // is not useful for grading analysis and should fall through to fallback or no-match.

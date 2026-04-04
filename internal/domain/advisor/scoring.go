@@ -3,6 +3,7 @@ package advisor
 import (
 	"fmt"
 
+	"github.com/guarzo/slabledger/internal/domain/errors"
 	"github.com/guarzo/slabledger/internal/domain/scoring"
 )
 
@@ -74,7 +75,8 @@ func BuildScoreCard(entityID, entityType string, data any, profile scoring.Weigh
 	case *SuggestionFactorData:
 		factors, gaps = suggestionFactors(d)
 	default:
-		return scoring.ScoreCard{}, ErrUnsupportedType.WithContext("type", fmt.Sprintf("%T", data))
+		return scoring.ScoreCard{}, errors.NewAppError(ErrCodeUnsupportedType, "unsupported factor data type").
+			WithContext("type", fmt.Sprintf("%T", data))
 	}
 
 	req := scoring.ScoreRequest{

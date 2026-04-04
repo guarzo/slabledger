@@ -121,6 +121,12 @@ func (e *CampaignToolExecutor) registerEvaluatePurchase() {
 		if p.CardName == "" {
 			return "", fmt.Errorf("cardName is required")
 		}
+		if p.Grade <= 0 {
+			return "", fmt.Errorf("grade must be positive")
+		}
+		if p.BuyCostCents < 0 {
+			return "", fmt.Errorf("buyCostCents must be non-negative")
+		}
 		result, err := e.svc.EvaluatePurchase(ctx, p.CampaignID, p.CardName, p.Grade, p.BuyCostCents)
 		if err != nil {
 			return "", err

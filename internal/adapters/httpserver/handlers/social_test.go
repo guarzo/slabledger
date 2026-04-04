@@ -41,96 +41,98 @@ func samplePost() social.SocialPost {
 	}
 }
 
-func TestHandleListPosts_Success(t *testing.T) {
-	svc := &mocks.MockSocialService{
-		ListPostsFn: func(_ context.Context, status *social.PostStatus, limit, offset int) ([]social.SocialPost, error) {
-			if status != nil {
-				t.Errorf("expected nil status, got %v", *status)
+func TestHandleListPosts(t *testing.T) {
+	tests := []struct {
+		name           string
+		query          string
+		authenticated  bool
+		setupMock      func(*mocks.MockSocialService)
+		wantStatus     int
+		wantCount      int
+		wantDecodeErr  bool
+	}{
+		{
+			name:          "success",
+			authenticated: true,
+			setupMock: func(m *mocks.MockSocialService) {
+				m.ListPostsFn = func(_ context.Context, status *social.PostStatus, _, _ int) ([]social.SocialPost, error) {
+					if status != nil {
+						t.Errorf("expected nil status, got %v", *status)
+					}
+					return []social.SocialPost{samplePost()}, nil
+				}
+			},
+			wantStatus: http.StatusOK,
+			wantCount:  1,
+		},
+		{
+			name:          "filter by status",
+			query:         "?status=draft",
+			authenticated: true,
+			setupMock: func(m *mocks.MockSocialService) {
+				m.ListPostsFn = func(_ context.Context, status *social.PostStatus, _, _ int) ([]social.SocialPost, error) {
+					if status == nil || *status != social.PostStatusDraft {
+						t.Errorf("expected status=draft, got %v", status)
+					}
+					return []social.SocialPost{samplePost()}, nil
+				}
+			},
+			wantStatus: http.StatusOK,
+		},
+		{
+			name:          "invalid filter",
+			query:         "?status=bogus",
+			authenticated: true,
+			wantStatus:    http.StatusBadRequest,
+			wantDecodeErr: true,
+		},
+		{
+			name:       "unauthenticated",
+			wantStatus: http.StatusUnauthorized,
+		},
+		{
+			name:          "service error",
+			authenticated: true,
+			setupMock: func(m *mocks.MockSocialService) {
+				m.ListPostsFn = func(_ context.Context, _ *social.PostStatus, _, _ int) ([]social.SocialPost, error) {
+					return nil, fmt.Errorf("db error")
+				}
+			},
+			wantStatus: http.StatusInternalServerError,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := &mocks.MockSocialService{}
+			if tt.setupMock != nil {
+				tt.setupMock(svc)
 			}
-			return []social.SocialPost{samplePost()}, nil
-		},
-	}
-	h := newTestSocialHandler(svc)
+			h := newTestSocialHandler(svc)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/social/posts", nil)
-	req = req.WithContext(authenticatedContext())
-	rec := httptest.NewRecorder()
-	h.HandleListPosts(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rec.Code)
-	}
-	var result []social.SocialPost
-	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if len(result) != 1 {
-		t.Errorf("expected 1 post, got %d", len(result))
-	}
-}
-
-func TestHandleListPosts_Filter(t *testing.T) {
-	svc := &mocks.MockSocialService{
-		ListPostsFn: func(_ context.Context, status *social.PostStatus, _, _ int) ([]social.SocialPost, error) {
-			if status == nil || *status != social.PostStatusDraft {
-				t.Errorf("expected status=draft, got %v", status)
+			req := httptest.NewRequest(http.MethodGet, "/api/social/posts"+tt.query, nil)
+			if tt.authenticated {
+				req = req.WithContext(authenticatedContext())
 			}
-			return []social.SocialPost{samplePost()}, nil
-		},
-	}
-	h := newTestSocialHandler(svc)
+			rec := httptest.NewRecorder()
+			h.HandleListPosts(rec, req)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/social/posts?status=draft", nil)
-	req = req.WithContext(authenticatedContext())
-	rec := httptest.NewRecorder()
-	h.HandleListPosts(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rec.Code)
-	}
-}
-
-func TestHandleListPosts_InvalidFilter(t *testing.T) {
-	h := newTestSocialHandler(&mocks.MockSocialService{})
-
-	req := httptest.NewRequest(http.MethodGet, "/api/social/posts?status=bogus", nil)
-	req = req.WithContext(authenticatedContext())
-	rec := httptest.NewRecorder()
-	h.HandleListPosts(rec, req)
-
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d", rec.Code)
-	}
-	decodeErrorResponse(t, rec)
-}
-
-func TestHandleListPosts_Unauthenticated(t *testing.T) {
-	h := newTestSocialHandler(&mocks.MockSocialService{})
-
-	req := httptest.NewRequest(http.MethodGet, "/api/social/posts", nil)
-	rec := httptest.NewRecorder()
-	h.HandleListPosts(rec, req)
-
-	if rec.Code != http.StatusUnauthorized {
-		t.Fatalf("expected 401, got %d", rec.Code)
-	}
-}
-
-func TestHandleListPosts_Error(t *testing.T) {
-	svc := &mocks.MockSocialService{
-		ListPostsFn: func(_ context.Context, _ *social.PostStatus, _, _ int) ([]social.SocialPost, error) {
-			return nil, fmt.Errorf("db error")
-		},
-	}
-	h := newTestSocialHandler(svc)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/social/posts", nil)
-	req = req.WithContext(authenticatedContext())
-	rec := httptest.NewRecorder()
-	h.HandleListPosts(rec, req)
-
-	if rec.Code != http.StatusInternalServerError {
-		t.Fatalf("expected 500, got %d", rec.Code)
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("expected %d, got %d", tt.wantStatus, rec.Code)
+			}
+			if tt.wantDecodeErr {
+				decodeErrorResponse(t, rec)
+			}
+			if tt.wantCount > 0 {
+				var result []social.SocialPost
+				if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+					t.Fatalf("decode: %v", err)
+				}
+				if len(result) != tt.wantCount {
+					t.Errorf("expected %d post(s), got %d", tt.wantCount, len(result))
+				}
+			}
+		})
 	}
 }
 
@@ -170,239 +172,236 @@ func TestHandleListPosts_ValidStatuses(t *testing.T) {
 	}
 }
 
-func TestHandleGetPost_Success(t *testing.T) {
-	svc := &mocks.MockSocialService{
-		GetPostFn: func(_ context.Context, id string) (*social.PostDetail, error) {
-			return &social.PostDetail{
-				SocialPost: samplePost(),
-				Cards:      []social.PostCardDetail{},
-			}, nil
+func TestHandleGetPost(t *testing.T) {
+	tests := []struct {
+		name          string
+		pathID        string
+		authenticated bool
+		setupMock     func(*mocks.MockSocialService)
+		wantStatus    int
+	}{
+		{
+			name:          "success",
+			pathID:        "post-abc",
+			authenticated: true,
+			setupMock: func(m *mocks.MockSocialService) {
+				m.GetPostFn = func(_ context.Context, id string) (*social.PostDetail, error) {
+					return &social.PostDetail{
+						SocialPost: samplePost(),
+						Cards:      []social.PostCardDetail{},
+					}, nil
+				}
+			},
+			wantStatus: http.StatusOK,
+		},
+		{
+			name:          "not found",
+			pathID:        "missing",
+			authenticated: true,
+			setupMock: func(m *mocks.MockSocialService) {
+				m.GetPostFn = func(_ context.Context, _ string) (*social.PostDetail, error) {
+					return nil, nil
+				}
+			},
+			wantStatus: http.StatusNotFound,
+		},
+		{
+			name:          "service error",
+			pathID:        "post-abc",
+			authenticated: true,
+			setupMock: func(m *mocks.MockSocialService) {
+				m.GetPostFn = func(_ context.Context, _ string) (*social.PostDetail, error) {
+					return nil, fmt.Errorf("db error")
+				}
+			},
+			wantStatus: http.StatusInternalServerError,
+		},
+		{
+			name:       "unauthenticated",
+			pathID:     "post-abc",
+			wantStatus: http.StatusUnauthorized,
+		},
+		{
+			name:          "missing ID",
+			authenticated: true,
+			wantStatus:    http.StatusBadRequest,
 		},
 	}
-	h := newTestSocialHandler(svc)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/social/posts/post-abc", nil)
-	req = req.WithContext(authenticatedContext())
-	req.SetPathValue("id", "post-abc")
-	rec := httptest.NewRecorder()
-	h.HandleGetPost(rec, req)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := &mocks.MockSocialService{}
+			if tt.setupMock != nil {
+				tt.setupMock(svc)
+			}
+			h := newTestSocialHandler(svc)
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rec.Code)
+			req := httptest.NewRequest(http.MethodGet, "/api/social/posts/"+tt.pathID, nil)
+			if tt.authenticated {
+				req = req.WithContext(authenticatedContext())
+			}
+			if tt.pathID != "" {
+				req.SetPathValue("id", tt.pathID)
+			}
+			rec := httptest.NewRecorder()
+			h.HandleGetPost(rec, req)
+
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("expected %d, got %d", tt.wantStatus, rec.Code)
+			}
+		})
 	}
 }
 
-func TestHandleGetPost_NotFound(t *testing.T) {
-	svc := &mocks.MockSocialService{
-		GetPostFn: func(_ context.Context, _ string) (*social.PostDetail, error) {
-			return nil, nil
+func TestHandleUpdateCaption(t *testing.T) {
+	tests := []struct {
+		name          string
+		body          string
+		authenticated bool
+		setupMock     func(*mocks.MockSocialService)
+		wantStatus    int
+		validate      func(t *testing.T)
+	}{
+		{
+			name:          "success",
+			body:          `{"caption":"Updated caption","hashtags":"#updated"}`,
+			authenticated: true,
+			wantStatus:    http.StatusNoContent,
+		},
+		{
+			name:          "service error",
+			body:          `{"caption":"new","hashtags":"#test"}`,
+			authenticated: true,
+			setupMock: func(m *mocks.MockSocialService) {
+				m.UpdateCaptionFn = func(_ context.Context, _ string, _, _ string) error {
+					return fmt.Errorf("update failed")
+				}
+			},
+			wantStatus: http.StatusInternalServerError,
+		},
+		{
+			name:          "invalid body",
+			body:          "{bad",
+			authenticated: true,
+			wantStatus:    http.StatusBadRequest,
+		},
+		{
+			name:       "unauthenticated",
+			body:       `{"caption":"new","hashtags":"#test"}`,
+			wantStatus: http.StatusUnauthorized,
 		},
 	}
-	h := newTestSocialHandler(svc)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/social/posts/missing", nil)
-	req = req.WithContext(authenticatedContext())
-	req.SetPathValue("id", "missing")
-	rec := httptest.NewRecorder()
-	h.HandleGetPost(rec, req)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var capturedID, capturedCaption, capturedHashtags string
+			svc := &mocks.MockSocialService{}
+			if tt.setupMock != nil {
+				tt.setupMock(svc)
+			} else {
+				svc.UpdateCaptionFn = func(_ context.Context, id string, caption, hashtags string) error {
+					capturedID = id
+					capturedCaption = caption
+					capturedHashtags = hashtags
+					return nil
+				}
+			}
+			h := newTestSocialHandler(svc)
 
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("expected 404, got %d", rec.Code)
+			req := httptest.NewRequest(http.MethodPut, "/api/social/posts/post-abc/caption", bytes.NewBufferString(tt.body))
+			if tt.authenticated {
+				req = req.WithContext(authenticatedContext())
+			}
+			req.SetPathValue("id", "post-abc")
+			rec := httptest.NewRecorder()
+			h.HandleUpdateCaption(rec, req)
+
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("expected %d, got %d; body: %s", tt.wantStatus, rec.Code, rec.Body.String())
+			}
+			if tt.wantStatus == http.StatusNoContent {
+				if capturedID != "post-abc" {
+					t.Errorf("expected id=post-abc, got %q", capturedID)
+				}
+				if capturedCaption != "Updated caption" {
+					t.Errorf("expected caption=Updated caption, got %q", capturedCaption)
+				}
+				if capturedHashtags != "#updated" {
+					t.Errorf("expected hashtags=#updated, got %q", capturedHashtags)
+				}
+			}
+		})
 	}
 }
 
-func TestHandleGetPost_Error(t *testing.T) {
-	svc := &mocks.MockSocialService{
-		GetPostFn: func(_ context.Context, _ string) (*social.PostDetail, error) {
-			return nil, fmt.Errorf("db error")
+func TestHandleDelete_Social(t *testing.T) {
+	tests := []struct {
+		name          string
+		pathID        string
+		authenticated bool
+		setupMock     func(*mocks.MockSocialService)
+		wantStatus    int
+	}{
+		{
+			name:          "success",
+			pathID:        "post-abc",
+			authenticated: true,
+			wantStatus:    http.StatusNoContent,
+		},
+		{
+			name:          "service error",
+			pathID:        "post-abc",
+			authenticated: true,
+			setupMock: func(m *mocks.MockSocialService) {
+				m.DeleteFn = func(_ context.Context, _ string) error {
+					return fmt.Errorf("delete failed")
+				}
+			},
+			wantStatus: http.StatusInternalServerError,
+		},
+		{
+			name:       "unauthenticated",
+			pathID:     "post-abc",
+			wantStatus: http.StatusUnauthorized,
+		},
+		{
+			name:          "missing ID",
+			authenticated: true,
+			wantStatus:    http.StatusBadRequest,
 		},
 	}
-	h := newTestSocialHandler(svc)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/social/posts/post-abc", nil)
-	req = req.WithContext(authenticatedContext())
-	req.SetPathValue("id", "post-abc")
-	rec := httptest.NewRecorder()
-	h.HandleGetPost(rec, req)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var capturedID string
+			svc := &mocks.MockSocialService{}
+			if tt.setupMock != nil {
+				tt.setupMock(svc)
+			} else {
+				svc.DeleteFn = func(_ context.Context, id string) error {
+					capturedID = id
+					return nil
+				}
+			}
+			h := newTestSocialHandler(svc)
 
-	if rec.Code != http.StatusInternalServerError {
-		t.Fatalf("expected 500, got %d", rec.Code)
-	}
-}
+			req := httptest.NewRequest(http.MethodDelete, "/api/social/posts/"+tt.pathID, nil)
+			if tt.authenticated {
+				req = req.WithContext(authenticatedContext())
+			}
+			if tt.pathID != "" {
+				req.SetPathValue("id", tt.pathID)
+			}
+			rec := httptest.NewRecorder()
+			h.HandleDelete(rec, req)
 
-func TestHandleGetPost_Unauthenticated(t *testing.T) {
-	h := newTestSocialHandler(&mocks.MockSocialService{})
-
-	req := httptest.NewRequest(http.MethodGet, "/api/social/posts/post-abc", nil)
-	req.SetPathValue("id", "post-abc")
-	rec := httptest.NewRecorder()
-	h.HandleGetPost(rec, req)
-
-	if rec.Code != http.StatusUnauthorized {
-		t.Fatalf("expected 401, got %d", rec.Code)
-	}
-}
-
-func TestHandleGetPost_MissingID(t *testing.T) {
-	h := newTestSocialHandler(&mocks.MockSocialService{})
-
-	req := httptest.NewRequest(http.MethodGet, "/api/social/posts/", nil)
-	req = req.WithContext(authenticatedContext())
-	rec := httptest.NewRecorder()
-	h.HandleGetPost(rec, req)
-
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d", rec.Code)
-	}
-}
-
-func TestHandleUpdateCaption_Success(t *testing.T) {
-	var capturedID, capturedCaption, capturedHashtags string
-	svc := &mocks.MockSocialService{
-		UpdateCaptionFn: func(_ context.Context, id string, caption, hashtags string) error {
-			capturedID = id
-			capturedCaption = caption
-			capturedHashtags = hashtags
-			return nil
-		},
-	}
-	h := newTestSocialHandler(svc)
-
-	body := `{"caption":"Updated caption","hashtags":"#updated"}`
-	req := httptest.NewRequest(http.MethodPut, "/api/social/posts/post-abc/caption", bytes.NewBufferString(body))
-	req = req.WithContext(authenticatedContext())
-	req.SetPathValue("id", "post-abc")
-	rec := httptest.NewRecorder()
-	h.HandleUpdateCaption(rec, req)
-
-	if rec.Code != http.StatusNoContent {
-		t.Fatalf("expected 204, got %d; body: %s", rec.Code, rec.Body.String())
-	}
-	if capturedID != "post-abc" {
-		t.Errorf("expected id=post-abc, got %q", capturedID)
-	}
-	if capturedCaption != "Updated caption" {
-		t.Errorf("expected caption=Updated caption, got %q", capturedCaption)
-	}
-	if capturedHashtags != "#updated" {
-		t.Errorf("expected hashtags=#updated, got %q", capturedHashtags)
-	}
-}
-
-func TestHandleUpdateCaption_Error(t *testing.T) {
-	svc := &mocks.MockSocialService{
-		UpdateCaptionFn: func(_ context.Context, _ string, _, _ string) error {
-			return fmt.Errorf("update failed")
-		},
-	}
-	h := newTestSocialHandler(svc)
-
-	body := `{"caption":"new","hashtags":"#test"}`
-	req := httptest.NewRequest(http.MethodPut, "/api/social/posts/post-abc/caption", bytes.NewBufferString(body))
-	req = req.WithContext(authenticatedContext())
-	req.SetPathValue("id", "post-abc")
-	rec := httptest.NewRecorder()
-	h.HandleUpdateCaption(rec, req)
-
-	if rec.Code != http.StatusInternalServerError {
-		t.Fatalf("expected 500, got %d", rec.Code)
-	}
-}
-
-func TestHandleUpdateCaption_InvalidBody(t *testing.T) {
-	h := newTestSocialHandler(&mocks.MockSocialService{})
-
-	req := httptest.NewRequest(http.MethodPut, "/api/social/posts/post-abc/caption", bytes.NewBufferString("{bad"))
-	req = req.WithContext(authenticatedContext())
-	req.SetPathValue("id", "post-abc")
-	rec := httptest.NewRecorder()
-	h.HandleUpdateCaption(rec, req)
-
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d", rec.Code)
-	}
-}
-
-func TestHandleUpdateCaption_Unauthenticated(t *testing.T) {
-	h := newTestSocialHandler(&mocks.MockSocialService{})
-
-	body := `{"caption":"new","hashtags":"#test"}`
-	req := httptest.NewRequest(http.MethodPut, "/api/social/posts/post-abc/caption", bytes.NewBufferString(body))
-	req.SetPathValue("id", "post-abc")
-	rec := httptest.NewRecorder()
-	h.HandleUpdateCaption(rec, req)
-
-	if rec.Code != http.StatusUnauthorized {
-		t.Fatalf("expected 401, got %d", rec.Code)
-	}
-}
-
-func TestHandleDelete_Social_Success(t *testing.T) {
-	var capturedID string
-	svc := &mocks.MockSocialService{
-		DeleteFn: func(_ context.Context, id string) error {
-			capturedID = id
-			return nil
-		},
-	}
-	h := newTestSocialHandler(svc)
-
-	req := httptest.NewRequest(http.MethodDelete, "/api/social/posts/post-abc", nil)
-	req = req.WithContext(authenticatedContext())
-	req.SetPathValue("id", "post-abc")
-	rec := httptest.NewRecorder()
-	h.HandleDelete(rec, req)
-
-	if rec.Code != http.StatusNoContent {
-		t.Fatalf("expected 204, got %d; body: %s", rec.Code, rec.Body.String())
-	}
-	if capturedID != "post-abc" {
-		t.Errorf("expected id=post-abc, got %q", capturedID)
-	}
-}
-
-func TestHandleDelete_Social_Error(t *testing.T) {
-	svc := &mocks.MockSocialService{
-		DeleteFn: func(_ context.Context, _ string) error {
-			return fmt.Errorf("delete failed")
-		},
-	}
-	h := newTestSocialHandler(svc)
-
-	req := httptest.NewRequest(http.MethodDelete, "/api/social/posts/post-abc", nil)
-	req = req.WithContext(authenticatedContext())
-	req.SetPathValue("id", "post-abc")
-	rec := httptest.NewRecorder()
-	h.HandleDelete(rec, req)
-
-	if rec.Code != http.StatusInternalServerError {
-		t.Fatalf("expected 500, got %d", rec.Code)
-	}
-}
-
-func TestHandleDelete_Social_Unauthenticated(t *testing.T) {
-	h := newTestSocialHandler(&mocks.MockSocialService{})
-
-	req := httptest.NewRequest(http.MethodDelete, "/api/social/posts/post-abc", nil)
-	req.SetPathValue("id", "post-abc")
-	rec := httptest.NewRecorder()
-	h.HandleDelete(rec, req)
-
-	if rec.Code != http.StatusUnauthorized {
-		t.Fatalf("expected 401, got %d", rec.Code)
-	}
-}
-
-func TestHandleDelete_Social_MissingID(t *testing.T) {
-	h := newTestSocialHandler(&mocks.MockSocialService{})
-
-	req := httptest.NewRequest(http.MethodDelete, "/api/social/posts/", nil)
-	req = req.WithContext(authenticatedContext())
-	rec := httptest.NewRecorder()
-	h.HandleDelete(rec, req)
-
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d", rec.Code)
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("expected %d, got %d; body: %s", tt.wantStatus, rec.Code, rec.Body.String())
+			}
+			if tt.wantStatus == http.StatusNoContent && capturedID != "post-abc" {
+				t.Errorf("expected id=post-abc, got %q", capturedID)
+			}
+		})
 	}
 }
 

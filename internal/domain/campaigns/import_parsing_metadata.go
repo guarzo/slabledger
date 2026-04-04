@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/guarzo/slabledger/internal/domain/constants"
 )
@@ -189,8 +190,9 @@ func stripCollectionSuffix(name string) string {
 		for _, cs := range trailingSuffixes {
 			pat := " " + cs.Pattern
 			if strings.HasSuffix(upper, pat) {
-				cutLen := len(pat)
-				stripped := strings.TrimSpace(name[:len(name)-cutLen])
+				runeCount := utf8.RuneCountInString(pat)
+				nameRunes := []rune(name)
+				stripped := strings.TrimSpace(string(nameRunes[:len(nameRunes)-runeCount]))
 				if stripped == "" {
 					break
 				}
@@ -207,15 +209,11 @@ func stripCollectionSuffix(name string) string {
 	return name
 }
 
-// ExportParseCardMetadataFromTitle is a test-only exported wrapper used by
-// integration tests in internal/integration/. Not for production use.
 func ExportParseCardMetadataFromTitle(listingTitle, category string) (string, string, string) {
 	meta := parseCardMetadataFromTitle(listingTitle, category)
 	return meta.CardName, meta.CardNumber, meta.SetName
 }
 
-// ExportIsGenericSetName is a test-only exported wrapper used by
-// integration tests in internal/integration/. Not for production use.
 func ExportIsGenericSetName(setName string) bool {
 	return isGenericSetName(setName)
 }

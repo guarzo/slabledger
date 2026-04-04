@@ -195,6 +195,9 @@ func (s *service) GetCrackOpportunities(ctx context.Context) ([]CrackAnalysis, e
 
 func (s *service) GetAcquisitionTargets(ctx context.Context) ([]AcquisitionOpportunity, error) {
 	if s.priceProv == nil {
+		if s.logger != nil {
+			s.logger.Info(ctx, "skipping acquisition targets: price provider not configured")
+		}
 		return nil, nil
 	}
 	allCampaigns, err := s.repo.ListCampaigns(ctx, true)

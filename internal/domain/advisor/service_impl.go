@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/ai"
+	"github.com/guarzo/slabledger/internal/domain/errors"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/domain/scoring"
 )
@@ -407,7 +408,8 @@ func (s *service) toolCallingLoop(ctx context.Context, operation AIOperation, sy
 		}
 	}
 
-	err := ErrMaxRoundsExceeded.WithContext("maxRounds", maxRounds).WithContext("lastTools", strings.Join(lastToolNames, ", "))
+	err := errors.NewAppError(ErrCodeMaxRoundsExceeded, "exceeded maximum tool call rounds").
+		WithContext("maxRounds", maxRounds).WithContext("lastTools", strings.Join(lastToolNames, ", "))
 	ai.RecordCall(ctx, s.tracker, s.logger, operation, err, start, maxRounds, &totalUsage)
 	return "", err
 }

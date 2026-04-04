@@ -37,83 +37,86 @@ func samplePick() picks.Pick {
 	}
 }
 
-func TestHandleGetPicks_Success(t *testing.T) {
-	svc := &mocks.MockPicksService{
-		GetLatestPicksFn: func(_ context.Context) ([]picks.Pick, error) {
-			return []picks.Pick{samplePick()}, nil
+func TestHandleGetPicks(t *testing.T) {
+	tests := []struct {
+		name           string
+		getLatestFn    func(context.Context) ([]picks.Pick, error)
+		expectedStatus int
+		expectedCount  int
+		expectError    bool
+		checkNotNil    bool
+	}{
+		{
+			name: "success returns picks",
+			getLatestFn: func(_ context.Context) ([]picks.Pick, error) {
+				return []picks.Pick{samplePick()}, nil
+			},
+			expectedStatus: http.StatusOK,
+			expectedCount:  1,
+		},
+		{
+			name: "empty returns empty array",
+			getLatestFn: func(_ context.Context) ([]picks.Pick, error) {
+				return nil, nil
+			},
+			expectedStatus: http.StatusOK,
+			expectedCount:  0,
+			checkNotNil:    true,
+		},
+		{
+			name: "service error returns 500",
+			getLatestFn: func(_ context.Context) ([]picks.Pick, error) {
+				return nil, fmt.Errorf("database error")
+			},
+			expectedStatus: http.StatusInternalServerError,
+			expectError:    true,
 		},
 	}
-	h := newTestPicksHandler(svc)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/picks", nil)
-	rec := httptest.NewRecorder()
-	h.HandleGetPicks(rec, req)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := &mocks.MockPicksService{
+				GetLatestPicksFn: tt.getLatestFn,
+			}
+			h := newTestPicksHandler(svc)
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rec.Code)
-	}
-	var result struct {
-		Picks []pickResponse `json:"picks"`
-	}
-	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if len(result.Picks) != 1 {
-		t.Fatalf("expected 1 pick, got %d", len(result.Picks))
-	}
-	if result.Picks[0].CardName != "Charizard" {
-		t.Errorf("expected CardName=Charizard, got %q", result.Picks[0].CardName)
-	}
-	if result.Picks[0].TargetBuyPrice != 150.00 {
-		t.Errorf("expected TargetBuyPrice=150.00, got %v", result.Picks[0].TargetBuyPrice)
-	}
-}
+			req := httptest.NewRequest(http.MethodGet, "/api/picks", nil)
+			rec := httptest.NewRecorder()
+			h.HandleGetPicks(rec, req)
 
-func TestHandleGetPicks_Empty(t *testing.T) {
-	svc := &mocks.MockPicksService{
-		GetLatestPicksFn: func(_ context.Context) ([]picks.Pick, error) {
-			return nil, nil
-		},
-	}
-	h := newTestPicksHandler(svc)
+			if rec.Code != tt.expectedStatus {
+				t.Fatalf("expected %d, got %d", tt.expectedStatus, rec.Code)
+			}
 
-	req := httptest.NewRequest(http.MethodGet, "/api/picks", nil)
-	rec := httptest.NewRecorder()
-	h.HandleGetPicks(rec, req)
+			if tt.expectError {
+				decodeErrorResponse(t, rec)
+				return
+			}
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rec.Code)
-	}
-	var result struct {
-		Picks []pickResponse `json:"picks"`
-	}
-	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if result.Picks == nil {
-		t.Error("expected empty array, got nil")
-	}
-	if len(result.Picks) != 0 {
-		t.Errorf("expected 0 picks, got %d", len(result.Picks))
-	}
-}
+			var result struct {
+				Picks []pickResponse `json:"picks"`
+			}
+			if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+				t.Fatalf("decode: %v", err)
+			}
 
-func TestHandleGetPicks_Error(t *testing.T) {
-	svc := &mocks.MockPicksService{
-		GetLatestPicksFn: func(_ context.Context) ([]picks.Pick, error) {
-			return nil, fmt.Errorf("database error")
-		},
-	}
-	h := newTestPicksHandler(svc)
+			if tt.checkNotNil && result.Picks == nil {
+				t.Error("expected empty array, got nil")
+			}
+			if len(result.Picks) != tt.expectedCount {
+				t.Fatalf("expected %d pick(s), got %d", tt.expectedCount, len(result.Picks))
+			}
 
-	req := httptest.NewRequest(http.MethodGet, "/api/picks", nil)
-	rec := httptest.NewRecorder()
-	h.HandleGetPicks(rec, req)
-
-	if rec.Code != http.StatusInternalServerError {
-		t.Fatalf("expected 500, got %d", rec.Code)
+			if tt.expectedCount > 0 {
+				if result.Picks[0].CardName != "Charizard" {
+					t.Errorf("expected CardName=Charizard, got %q", result.Picks[0].CardName)
+				}
+				if result.Picks[0].TargetBuyPrice != 150.00 {
+					t.Errorf("expected TargetBuyPrice=150.00, got %v", result.Picks[0].TargetBuyPrice)
+				}
+			}
+		})
 	}
-	decodeErrorResponse(t, rec)
 }
 
 func TestHandleGetPickHistory(t *testing.T) {
