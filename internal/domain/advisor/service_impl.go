@@ -407,8 +407,7 @@ func (s *service) toolCallingLoop(ctx context.Context, operation AIOperation, sy
 		}
 	}
 
-	err := fmt.Errorf("exceeded maximum tool rounds (%d); last tools called: %s",
-		maxRounds, strings.Join(lastToolNames, ", "))
+	err := ErrMaxRoundsExceeded.WithContext("maxRounds", maxRounds).WithContext("lastTools", strings.Join(lastToolNames, ", "))
 	ai.RecordCall(ctx, s.tracker, s.logger, operation, err, start, maxRounds, &totalUsage)
 	return "", err
 }

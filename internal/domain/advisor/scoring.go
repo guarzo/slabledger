@@ -74,7 +74,7 @@ func BuildScoreCard(entityID, entityType string, data any, profile scoring.Weigh
 	case *SuggestionFactorData:
 		factors, gaps = suggestionFactors(d)
 	default:
-		return scoring.ScoreCard{}, fmt.Errorf("unsupported factor data type: %T", data)
+		return scoring.ScoreCard{}, ErrUnsupportedType.WithContext("type", fmt.Sprintf("%T", data))
 	}
 
 	req := scoring.ScoreRequest{
