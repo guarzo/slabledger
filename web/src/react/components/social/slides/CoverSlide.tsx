@@ -3,14 +3,14 @@ import SlideCanvas from './primitives/SlideCanvas';
 import { AccentBar, LogoText } from './primitives/Branding';
 import PostTypeBadge from './primitives/PostTypeBadge';
 import InfoPanel from './primitives/InfoPanel';
-import FanSpread from './primitives/FanSpread';
-import CascadeStack from './primitives/CascadeStack';
-import DynamicScatter from './primitives/DynamicScatter';
 import Flames from './primitives/Flames';
 import Sparkles from './primitives/Sparkles';
 import TrendLines from './primitives/TrendLines';
 import AIBackground from './primitives/AIBackground';
 import { getTheme } from './primitives/theme';
+import HotDealsCover from './covers/HotDealsCover';
+import NewArrivalsCover from './covers/NewArrivalsCover';
+import PriceMoversCover from './covers/PriceMoversCover';
 
 interface CoverSlideProps {
   postType: PostType;
@@ -61,6 +61,32 @@ export default function CoverSlide({
   const theme = getTheme(postType);
   const subtitle = buildSubtitle(postType, cardCount, psa10Count, cards);
 
+  // Use new post-type-specific covers when cards are available
+  if (cards && cards.length > 0) {
+    if (postType === 'hot_deals') {
+      return (
+        <SlideCanvas dataSlide="cover">
+          <HotDealsCover postType={postType} coverTitle={coverTitle} cards={cards} backgroundUrl={backgroundUrls?.[0]} />
+        </SlideCanvas>
+      );
+    }
+    if (postType === 'new_arrivals') {
+      return (
+        <SlideCanvas dataSlide="cover">
+          <NewArrivalsCover postType={postType} coverTitle={coverTitle} cards={cards} backgroundUrl={backgroundUrls?.[0]} />
+        </SlideCanvas>
+      );
+    }
+    if (postType === 'price_movers') {
+      return (
+        <SlideCanvas dataSlide="cover">
+          <PriceMoversCover postType={postType} coverTitle={coverTitle} cards={cards} backgroundUrl={backgroundUrls?.[0]} />
+        </SlideCanvas>
+      );
+    }
+    // Unknown postType — fall through to legacy cover below
+  }
+
   return (
     <SlideCanvas dataSlide="cover">
       <AIBackground url={backgroundUrls?.[0]} dimming={0.2} />
@@ -77,14 +103,6 @@ export default function CoverSlide({
       {postType === 'hot_deals' && <Flames />}
       {postType === 'new_arrivals' && <Sparkles />}
       {postType === 'price_movers' && <TrendLines />}
-
-      {cards && cards.length > 0 && (
-        <>
-          {postType === 'hot_deals' && <FanSpread cards={cards} />}
-          {postType === 'new_arrivals' && <CascadeStack cards={cards} />}
-          {postType === 'price_movers' && <DynamicScatter cards={cards} />}
-        </>
-      )}
 
       <InfoPanel title={coverTitle} subtitle={subtitle} />
     </SlideCanvas>

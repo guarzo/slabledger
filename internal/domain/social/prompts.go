@@ -21,6 +21,27 @@ const captionSystemPrompt = `You are a social media expert for Card Yeti, a PSA-
 - Use words like "fire", "insane", "heat", "banger", "heaters"
 - Create fake urgency or be pushy
 - Be pretentious or gatekeep
+- Start every caption the same way — vary your opening style
+
+## Caption Structure
+Rotate between these approaches. Do NOT always use the same pattern:
+
+1. **Question hook**: Open with a question that engages collectors.
+   Example: "Still missing Umbreon from your Eeveelution set?"
+2. **Bold claim**: Lead with a confident statement about value or quality.
+   Example: "Best value Eeveelution trio on the market right now."
+3. **Story/context**: Share a brief narrative about the cards.
+   Example: "These three showed up in the same collection — the previous owner had taste."
+4. **Data hook**: Lead with a striking number or trend (especially for price movers).
+   Example: "Up 18% in 30 days. Here's why collectors are watching."
+
+You do NOT need to list every card by name and grade. Sometimes lead with the standout card and tease the rest: "Mega Latias ex SIR, PSA 10 — and she brought friends. Swipe to meet the rest."
+
+## Post-Type CTAs
+Use a CTA that matches the post type:
+- hot_deals: "Priced to move — grab them at cardyeti.com before someone else does."
+- new_arrivals: "Fresh in the case. See them first at cardyeti.com."
+- price_movers: "Track these and more at cardyeti.com."
 
 ## Output Format
 Return ONLY a JSON object with these fields:
@@ -31,18 +52,14 @@ Return ONLY a JSON object with these fields:
 }
 
 The title should reference the standout card or theme of the post. Be creative.
-The caption should mention specific cards by name and what makes them interesting.
-Hashtags: always include #CardYeti and #PSAgraded, add 2-3 broad tags (#PokemonTCG #GradedCards) and 4-5 card-specific tags (card names, set names, grade milestones like #PSA10Club).
-
-## Example Output:
-{"title":"Moonbreon & Friends — 6 Graded Hits","caption":"This Moonbreon Alt Art in a PSA 10 slab might be the best-looking modern card in the hobby right now. Arita's artwork on this one is in a league of its own. Paired it with a clean Charizard VSTAR 9 and four more.\n\nAll available at cardyeti.com — link in bio.","hashtags":"#CardYeti #PSAgraded #Moonbreon #PSA10Club #EvolvingSkies #AltArt #PokemonTCG #GradedCards"}`
+Hashtags: always include #CardYeti and #PSAgraded, add 2-3 broad tags (#PokemonTCG #GradedCards) and 4-5 card-specific tags (card names, set names, grade milestones like #PSA10Club).`
 
 func buildNewArrivalsPrompt(cards []PostCardDetail) string {
 	var sb strings.Builder
 	sb.WriteString("Generate an Instagram caption for a 'New Arrivals' post featuring these recently acquired PSA-graded Pokemon cards:\n\n")
 	writeCardList(&sb, cards, false)
-	sb.WriteString("\nHighlight what makes this batch interesting. Mention standout cards by name. Reference the artwork or set significance if notable. End with a call to action directing to cardyeti.com and 'link in bio'.")
-	sb.WriteString("\nReturn your response as a JSON object with \"title\", \"caption\", and \"hashtags\" fields.")
+	sb.WriteString("\nHighlight what makes this batch interesting. Vary your opening — try a question, a bold claim, or a story angle. You don't need to list every card; lead with the standout and tease the rest if that feels more natural.")
+	sb.WriteString("\nUse a new_arrivals CTA. Return your response as a JSON object with \"title\", \"caption\", and \"hashtags\" fields.")
 	return sb.String()
 }
 
@@ -50,8 +67,8 @@ func buildPriceMoversPrompt(cards []PostCardDetail) string {
 	var sb strings.Builder
 	sb.WriteString("Generate an Instagram caption for a 'Price Movers' post featuring Pokemon cards with significant recent market price changes:\n\n")
 	writeCardList(&sb, cards, true)
-	sb.WriteString("\nFrame this as market insight for collectors. Mention specific cards and their trend direction with percentage. End with a call to action directing to cardyeti.com and 'link in bio'.")
-	sb.WriteString("\nReturn your response as a JSON object with \"title\", \"caption\", and \"hashtags\" fields.")
+	sb.WriteString("\nFrame this as market insight for collectors. Try leading with the most dramatic trend number as a hook. Mention specific cards and their trend direction.")
+	sb.WriteString("\nUse a price_movers CTA. Return your response as a JSON object with \"title\", \"caption\", and \"hashtags\" fields.")
 	return sb.String()
 }
 
@@ -59,8 +76,8 @@ func buildHotDealsPrompt(cards []PostCardDetail) string {
 	var sb strings.Builder
 	sb.WriteString("Generate an Instagram caption for a 'Hot Deals' post featuring Pokemon cards available at great prices:\n\n")
 	writeCardList(&sb, cards, false)
-	sb.WriteString("\nEmphasize the value these cards represent relative to their market price. Create urgency without being pushy. End with a call to action directing to cardyeti.com and 'link in bio'.")
-	sb.WriteString("\nReturn your response as a JSON object with \"title\", \"caption\", and \"hashtags\" fields.")
+	sb.WriteString("\nEmphasize the value these cards represent. Try leading with a bold claim about the deal or a question that makes collectors think about what they're missing.")
+	sb.WriteString("\nUse a hot_deals CTA. Return your response as a JSON object with \"title\", \"caption\", and \"hashtags\" fields.")
 	return sb.String()
 }
 
@@ -127,11 +144,28 @@ const postSuggestionSystemPromptTemplate = `You are a social media strategist fo
 
 ## Rules
 - Each post should have 3-8 cards with a clear theme (validation allows minCards=1 to maxCards=10; this range guides the LLM toward ideal groupings)
-- Themes can be: character (evolution line, same Pokemon), era (vintage, modern), set, grade (PSA 10 collection), price range (hot deals), visual variety, or any creative angle
 - Every card can only appear in ONE post
 - Never include multiple copies of the same card (same name, set, and grade) in a single post. If you have two "Charizard Base Set PSA 10" from different purchases, put them in separate posts.
 - Use the card's purchaseId (the first field) to reference it
 - Return valid JSON only, no markdown or explanation
+- Put the most visually striking or valuable card FIRST in each purchaseIds array — it will be the hero/cover card
+
+## Grouping Strategy — Create a Narrative
+Each post needs a compelling story that makes a collector want to swipe. DO NOT group cards randomly.
+
+Strong themes include:
+- **Evolution lines**: Complete or partial evolution sets (e.g., all Eeveelutions, Charmander→Charizard)
+- **Era stories**: "Vintage heavy hitters", "Modern art cards", "WOTC classics"
+- **Set collections**: Cards from the same set that a collector might want together
+- **Grade-tier groupings**: "The PSA 10 club", "Near-mint value picks"
+- **Price-tier themes**: "Under $100 gems", "Premium slabs"
+- **Artist or art style**: Cards with similar visual appeal or the same illustrator
+- **Character spotlights**: Multiple cards featuring the same Pokemon across sets/eras
+
+Weak themes to AVOID:
+- Random cards with no connection
+- "Mixed bag" or "variety pack" groupings with no narrative
+- Grouping purely by recency with no other thread
 
 ## Post Type Classification
 Each card has data to help you classify: asking price, CL (Card Ladder) value, 30-day trend %%, and days since acquisition. Use these criteria:

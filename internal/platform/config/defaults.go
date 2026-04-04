@@ -106,6 +106,11 @@ func Default() Config {
 			InitialDelay: 5 * time.Minute,
 			ContentHour:  5, // 5 AM UTC
 		},
+		MetricsPoll: MetricsPollConfig{
+			Enabled:  false, // disabled by default
+			Interval: 6 * time.Hour,
+			MaxAge:   7 * 24 * time.Hour,
+		},
 		PicksRefresh: PicksRefreshConfig{
 			Enabled:     true,
 			Interval:    24 * time.Hour,

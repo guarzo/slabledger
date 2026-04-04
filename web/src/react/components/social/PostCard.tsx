@@ -1,5 +1,7 @@
 import { CardShell } from '../../ui/CardShell';
 import Button from '../../ui/Button';
+import MetricsBar from './MetricsBar';
+import { useMetricsSummary } from '../../queries/useSocialQueries';
 import type { SocialPost, PostType, PostStatus } from '../../../types/social';
 
 const POST_TYPE_CONFIG: Record<PostType, { label: string; color: string; bg: string }> = {
@@ -25,6 +27,19 @@ interface PostCardProps {
 }
 
 export default function PostCard({ post, onPreview, onPublish, onDelete }: PostCardProps) {
+  const { data: summaries } = useMetricsSummary();
+  const metricsSummary = summaries?.find(s => s.postId === post.id);
+  const latestMetrics = metricsSummary ? {
+    id: 0,
+    postId: metricsSummary.postId,
+    impressions: metricsSummary.impressions,
+    reach: metricsSummary.reach,
+    likes: metricsSummary.likes,
+    comments: metricsSummary.comments,
+    saves: metricsSummary.saves,
+    shares: metricsSummary.shares,
+    polledAt: metricsSummary.publishedAt,
+  } : undefined;
   const typeConfig = POST_TYPE_CONFIG[post.postType] ?? POST_TYPE_CONFIG.new_arrivals;
   const statusConfig = STATUS_CONFIG[post.status] ?? STATUS_CONFIG.draft;
   const date = new Date(post.createdAt).toLocaleDateString('en-US', {
@@ -59,6 +74,7 @@ export default function PostCard({ post, onPreview, onPublish, onDelete }: PostC
           {post.status === 'failed' && post.errorMessage && (
             <p className="text-xs text-red-400 mt-1">{post.errorMessage}</p>
           )}
+          {post.status === 'published' && <MetricsBar latest={latestMetrics} />}
         </div>
 
         <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>

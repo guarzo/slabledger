@@ -21,12 +21,13 @@ type ImageBackfiller interface {
 
 // SocialHandler handles social media content endpoints.
 type SocialHandler struct {
-	service    social.Service
-	repo       social.Repository
-	logger     observability.Logger
-	backfiller ImageBackfiller // optional — nil if PSA image API not configured
-	mediaDir   string
-	baseURL    string
+	service     social.Service
+	repo        social.Repository
+	logger      observability.Logger
+	backfiller  ImageBackfiller          // optional — nil if PSA image API not configured
+	metricsRepo social.MetricsRepository // optional — nil if metrics not configured
+	mediaDir    string
+	baseURL     string
 }
 
 // NewSocialHandler creates a new social handler.
@@ -36,6 +37,9 @@ func NewSocialHandler(service social.Service, repo social.Repository, logger obs
 
 // WithBackfiller sets the optional image backfiller.
 func (h *SocialHandler) WithBackfiller(b ImageBackfiller) { h.backfiller = b }
+
+// WithMetricsRepo sets the optional metrics repository.
+func (h *SocialHandler) WithMetricsRepo(r social.MetricsRepository) { h.metricsRepo = r }
 
 // resolveBaseURL returns the configured base URL or derives one from the request.
 func (h *SocialHandler) resolveBaseURL(r *http.Request) string {
@@ -227,6 +231,52 @@ func (h *SocialHandler) HandleRegenerateCaption(w http.ResponseWriter, r *http.R
 
 	_, _ = fmt.Fprintf(w, "data: [DONE]\n\n") //nolint:errcheck
 	flusher.Flush()
+}
+
+// HandleGetMetrics returns metrics snapshots for a single post.
+func (h *SocialHandler) HandleGetMetrics(w http.ResponseWriter, r *http.Request) {
+	if requireUser(w, r) == nil {
+		return
+	}
+	id, ok := pathID(w, r, "id", "post")
+	if !ok {
+		return
+	}
+	if h.metricsRepo == nil {
+		writeError(w, http.StatusServiceUnavailable, "metrics not configured")
+		return
+	}
+	metrics, err := h.metricsRepo.GetMetrics(r.Context(), id)
+	if err != nil {
+		h.logger.Error(r.Context(), "failed to get metrics", observability.Err(err))
+		writeError(w, http.StatusInternalServerError, "failed to get metrics")
+		return
+	}
+	if metrics == nil {
+		metrics = []social.PostMetrics{}
+	}
+	writeJSONList(w, http.StatusOK, metrics)
+}
+
+// HandleGetMetricsSummary returns the latest metrics for all published posts.
+func (h *SocialHandler) HandleGetMetricsSummary(w http.ResponseWriter, r *http.Request) {
+	if requireUser(w, r) == nil {
+		return
+	}
+	if h.metricsRepo == nil {
+		writeError(w, http.StatusServiceUnavailable, "metrics not configured")
+		return
+	}
+	summary, err := h.metricsRepo.GetMetricsSummary(r.Context())
+	if err != nil {
+		h.logger.Error(r.Context(), "failed to get metrics summary", observability.Err(err))
+		writeError(w, http.StatusInternalServerError, "failed to get metrics summary")
+		return
+	}
+	if summary == nil {
+		summary = []social.MetricsSummary{}
+	}
+	writeJSONList(w, http.StatusOK, summary)
 }
 
 // HandleBackfillImages triggers PSA image backfill for purchases missing images.
