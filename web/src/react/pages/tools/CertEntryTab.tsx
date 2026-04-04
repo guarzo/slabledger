@@ -8,7 +8,7 @@ export default function CertEntryTab() {
   const [result, setResult] = useState<CertImportResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [returnedCerts, setReturnedCerts] = useState<Set<string>>(new Set());
-  const [returningCert, setReturningCert] = useState<string | null>(null);
+  const [pendingReturns, setPendingReturns] = useState<Set<string>>(new Set());
 
   const handleImport = async () => {
     const certNumbers = input
@@ -40,14 +40,18 @@ export default function CertEntryTab() {
   };
 
   const handleReturnToInventory = async (item: CertImportSoldItem) => {
-    setReturningCert(item.certNumber);
+    setPendingReturns(prev => new Set(prev).add(item.certNumber));
     try {
       await api.deleteSale(item.campaignId, item.purchaseId);
       setReturnedCerts(prev => new Set(prev).add(item.certNumber));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to return to inventory');
     } finally {
-      setReturningCert(null);
+      setPendingReturns(prev => {
+        const next = new Set(prev);
+        next.delete(item.certNumber);
+        return next;
+      });
     }
   };
 
@@ -140,10 +144,10 @@ export default function CertEntryTab() {
                   </div>
                   <button
                     onClick={() => handleReturnToInventory(item)}
-                    disabled={returningCert === item.certNumber}
+                    disabled={pendingReturns.has(item.certNumber)}
                     className="rounded bg-amber-600 px-3 py-1 text-xs font-medium text-white hover:bg-amber-500 disabled:opacity-50"
                   >
-                    {returningCert === item.certNumber ? 'Returning...' : 'Return to Inventory'}
+                    {pendingReturns.has(item.certNumber) ? 'Returning...' : 'Return to Inventory'}
                   </button>
                 </div>
               ))}

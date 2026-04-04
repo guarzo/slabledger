@@ -60,51 +60,91 @@ func TestClient_PushInventory(t *testing.T) {
 }
 
 func TestClient_ListInventory(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		require.Equal(t, http.MethodGet, r.Method)
-		require.Equal(t, "/api/v1/enterprise/inventory", r.URL.Path)
-		require.Equal(t, "active", r.URL.Query().Get("status"))
+	tests := []struct {
+		name           string
+		filters        InventoryFilters
+		serverResponse string
+		wantLen        int
+		wantFirst      *InventoryListItem
+	}{
+		{
+			name:    "active inventory with channels",
+			filters: InventoryFilters{Status: "active"},
+			serverResponse: `{
+				"results": [
+					{
+						"dh_inventory_id": 98765,
+						"dh_card_id": 52304,
+						"cert_number": "12345678",
+						"card_name": "Dreepy",
+						"set_name": "Pokemon Ascended Heroes",
+						"card_number": "247",
+						"grading_company": "psa",
+						"grade": "9.0",
+						"status": "active",
+						"listing_price_cents": 10688,
+						"cost_basis_cents": 893,
+						"channels": [{"name": "ebay", "status": "error"}],
+						"created_at": "2026-04-04T21:50:42Z",
+						"updated_at": "2026-04-04T21:50:42Z"
+					}
+				],
+				"meta": {"page": 1, "per_page": 25, "total_count": 1}
+			}`,
+			wantLen: 1,
+			wantFirst: &InventoryListItem{
+				DHInventoryID:     98765,
+				DHCardID:          52304,
+				CertNumber:        "12345678",
+				CardName:          "Dreepy",
+				GradingCompany:    "psa",
+				Grade:             "9.0",
+				Status:            "active",
+				ListingPriceCents: 10688,
+				Channels:          []InventoryChannelStatus{{Name: "ebay", Status: "error"}},
+			},
+		},
+		{
+			name:           "empty results",
+			filters:        InventoryFilters{},
+			serverResponse: `{"results":[],"meta":{"page":1,"per_page":25,"total_count":0}}`,
+			wantLen:        0,
+			wantFirst:      nil,
+		},
+	}
 
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{
-			"results": [
-				{
-					"dh_inventory_id": 98765,
-					"dh_card_id": 52304,
-					"cert_number": "12345678",
-					"card_name": "Dreepy",
-					"set_name": "Pokemon Ascended Heroes",
-					"card_number": "247",
-					"grading_company": "psa",
-					"grade": "9.0",
-					"status": "active",
-					"listing_price_cents": 10688,
-					"cost_basis_cents": 893,
-					"channels": [{"name": "ebay", "status": "error"}],
-					"created_at": "2026-04-04T21:50:42Z",
-					"updated_at": "2026-04-04T21:50:42Z"
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				require.Equal(t, http.MethodGet, r.Method)
+				require.Equal(t, "/api/v1/enterprise/inventory", r.URL.Path)
+				if tc.filters.Status != "" {
+					require.Equal(t, tc.filters.Status, r.URL.Query().Get("status"))
 				}
-			],
-			"meta": {"page": 1, "per_page": 25, "total_count": 1}
-		}`))
-	}))
-	defer server.Close()
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(tc.serverResponse))
+			}))
+			defer server.Close()
 
-	c := newTestClient(server.URL)
-	resp, err := c.ListInventory(context.Background(), InventoryFilters{Status: "active"})
-	require.NoError(t, err)
-	require.Len(t, resp.Items, 1)
-	item := resp.Items[0]
-	require.Equal(t, 98765, item.DHInventoryID)
-	require.Equal(t, 52304, item.DHCardID)
-	require.Equal(t, "12345678", item.CertNumber)
-	require.Equal(t, "Dreepy", item.CardName)
-	require.Equal(t, "psa", item.GradingCompany)
-	require.Equal(t, "9.0", item.Grade)
-	require.Equal(t, "active", item.Status)
-	require.Equal(t, 10688, item.ListingPriceCents)
-	require.Len(t, item.Channels, 1)
-	require.Equal(t, "ebay", item.Channels[0].Name)
+			c := newTestClient(server.URL)
+			resp, err := c.ListInventory(context.Background(), tc.filters)
+			require.NoError(t, err)
+			require.Len(t, resp.Items, tc.wantLen)
+			if tc.wantFirst != nil {
+				item := resp.Items[0]
+				require.Equal(t, tc.wantFirst.DHInventoryID, item.DHInventoryID)
+				require.Equal(t, tc.wantFirst.DHCardID, item.DHCardID)
+				require.Equal(t, tc.wantFirst.CertNumber, item.CertNumber)
+				require.Equal(t, tc.wantFirst.CardName, item.CardName)
+				require.Equal(t, tc.wantFirst.GradingCompany, item.GradingCompany)
+				require.Equal(t, tc.wantFirst.Grade, item.Grade)
+				require.Equal(t, tc.wantFirst.Status, item.Status)
+				require.Equal(t, tc.wantFirst.ListingPriceCents, item.ListingPriceCents)
+				require.Len(t, item.Channels, len(tc.wantFirst.Channels))
+				require.Equal(t, tc.wantFirst.Channels[0].Name, item.Channels[0].Name)
+			}
+		})
+	}
 }
 
 func TestClient_GetOrders(t *testing.T) {

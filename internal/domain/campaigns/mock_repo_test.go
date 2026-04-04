@@ -196,6 +196,17 @@ func (m *mockRepo) DeleteSale(_ context.Context, saleID string) error {
 	return nil
 }
 
+func (m *mockRepo) DeleteSaleByPurchaseID(_ context.Context, purchaseID string) error {
+	for id, s := range m.sales {
+		if s.PurchaseID == purchaseID {
+			delete(m.purchaseSales, purchaseID)
+			delete(m.sales, id)
+			return nil
+		}
+	}
+	return ErrSaleNotFound
+}
+
 func (m *mockRepo) ListSalesByCampaign(_ context.Context, campaignID string, limit, offset int) ([]Sale, error) {
 	var result []Sale
 	for _, s := range m.sales {

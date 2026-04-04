@@ -95,3 +95,18 @@ func (r *CampaignsRepository) DeleteSale(ctx context.Context, saleID string) err
 	}
 	return nil
 }
+
+func (r *CampaignsRepository) DeleteSaleByPurchaseID(ctx context.Context, purchaseID string) error {
+	result, err := r.db.ExecContext(ctx, `DELETE FROM campaign_sales WHERE purchase_id = ?`, purchaseID)
+	if err != nil {
+		return err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return campaigns.ErrSaleNotFound
+	}
+	return nil
+}

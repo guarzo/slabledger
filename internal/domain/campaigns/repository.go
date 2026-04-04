@@ -71,6 +71,7 @@ type SaleRepository interface {
 	GetSaleByPurchaseID(ctx context.Context, purchaseID string) (*Sale, error)
 	ListSalesByCampaign(ctx context.Context, campaignID string, limit, offset int) ([]Sale, error)
 	DeleteSale(ctx context.Context, saleID string) error
+	DeleteSaleByPurchaseID(ctx context.Context, purchaseID string) error
 }
 
 // AnalyticsRepository handles analytics and reporting queries.
