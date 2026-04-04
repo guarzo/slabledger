@@ -80,3 +80,18 @@ func (r *CampaignsRepository) ListSalesByCampaign(ctx context.Context, campaignI
 		return scanSale(rs)
 	})
 }
+
+func (r *CampaignsRepository) DeleteSale(ctx context.Context, saleID string) error {
+	result, err := r.db.ExecContext(ctx, `DELETE FROM campaign_sales WHERE id = ?`, saleID)
+	if err != nil {
+		return err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return campaigns.ErrSaleNotFound
+	}
+	return nil
+}
