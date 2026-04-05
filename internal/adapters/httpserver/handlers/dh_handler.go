@@ -59,7 +59,7 @@ type DHHandler struct {
 	cardIDSaver     DHCardIDSaver
 	purchaseLister  DHPurchaseLister
 	inventoryPusher DHInventoryPusher // optional: pushes matched cards to DH inventory
-	dhFieldsUpdater DHFieldsUpdater  // optional: persists DH inventory IDs after push
+	dhFieldsUpdater DHFieldsUpdater   // optional: persists DH inventory IDs after push
 	intelRepo       intelligence.Repository
 	suggestionsRepo intelligence.SuggestionsRepository
 	intelCounter    DHIntelligenceCounter

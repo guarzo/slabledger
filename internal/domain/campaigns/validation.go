@@ -163,4 +163,3 @@ func ValidateSale(s *Sale) error {
 	}
 	return nil
 }
-

@@ -3,7 +3,7 @@ import { Tabs } from 'radix-ui';
 import { useCampaigns } from '../queries/useCampaignQueries';
 import OperationsTab, { type OperationState } from './campaigns/OperationsTab';
 import ShopifySyncPage from './ShopifySyncPage';
-import CertEntryTab from './tools/CertEntryTab';
+import CardIntakeTab from './tools/CardIntakeTab';
 import EbayExportTab from './tools/EbayExportTab';
 import ImportSalesTab from './tools/ImportSalesTab';
 import InvoicesTab from './tools/InvoicesTab';
@@ -13,7 +13,7 @@ import { SectionErrorBoundary } from '../ui';
 
 const TABS = [
   { id: 'import-export', label: 'Import / Export' },
-  { id: 'cert-entry', label: 'Cert Entry' },
+  { id: 'card-intake', label: 'Card Intake' },
   { id: 'ebay-export', label: 'eBay Export' },
   { id: 'import-sales', label: 'Import Sales' },
   { id: 'invoices', label: 'Invoices' },
@@ -57,9 +57,9 @@ export default function ToolsPage() {
           </div>
         </Tabs.Content>
 
-        <Tabs.Content value="cert-entry">
-          <SectionErrorBoundary sectionName="Cert Entry">
-            <CertEntryTab />
+        <Tabs.Content value="card-intake">
+          <SectionErrorBoundary sectionName="Card Intake">
+            <CardIntakeTab />
           </SectionErrorBoundary>
         </Tabs.Content>
 

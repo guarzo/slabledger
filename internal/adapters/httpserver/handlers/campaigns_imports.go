@@ -392,6 +392,61 @@ func (h *CampaignsHandler) HandleImportCerts(w http.ResponseWriter, r *http.Requ
 	writeJSON(w, http.StatusOK, result)
 }
 
+// HandleScanCert handles POST /api/purchases/scan-cert.
+func (h *CampaignsHandler) HandleScanCert(w http.ResponseWriter, r *http.Request) {
+	var req campaigns.ScanCertRequest
+	if !decodeBody(w, r, &req) {
+		return
+	}
+	if req.CertNumber == "" {
+		writeError(w, http.StatusBadRequest, "certNumber is required")
+		return
+	}
+
+	result, err := h.service.ScanCert(r.Context(), req.CertNumber)
+	if err != nil {
+		h.logger.Error(r.Context(), "scan cert failed", observability.Err(err))
+		writeError(w, http.StatusInternalServerError, "Internal server error")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, result)
+}
+
+// HandleResolveCert handles POST /api/purchases/resolve-cert.
+func (h *CampaignsHandler) HandleResolveCert(w http.ResponseWriter, r *http.Request) {
+	var req campaigns.ResolveCertRequest
+	if !decodeBody(w, r, &req) {
+		return
+	}
+	if req.CertNumber == "" {
+		writeError(w, http.StatusBadRequest, "certNumber is required")
+		return
+	}
+
+	info, err := h.service.ResolveCert(r.Context(), req.CertNumber)
+	if err != nil {
+		if campaigns.IsCertNotFound(err) {
+			writeError(w, http.StatusNotFound, "Cert not found")
+			return
+		}
+		h.logger.Error(r.Context(), "resolve cert failed",
+			observability.String("cert", req.CertNumber),
+			observability.Err(err))
+		writeError(w, http.StatusInternalServerError, "Internal server error")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, campaigns.ResolveCertResult{
+		CertNumber: info.CertNumber,
+		CardName:   info.CardName,
+		Grade:      info.Grade,
+		Year:       info.Year,
+		Category:   info.Category,
+		Subject:    info.Subject,
+	})
+}
+
 // HandleListEbayExport handles GET /api/purchases/export-ebay.
 func (h *CampaignsHandler) HandleListEbayExport(w http.ResponseWriter, r *http.Request) {
 	flaggedOnly := r.URL.Query().Get("flagged_only") == "true"
