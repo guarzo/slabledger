@@ -117,30 +117,62 @@ func TestGenerateSuggestions_CoverageGap(t *testing.T) {
 }
 
 func TestGenerateSuggestions_ChannelInformedBuyTerms(t *testing.T) {
-	insights := &PortfolioInsights{
-		ByChannel: []ChannelPNL{
-			{Channel: SaleChannelEbay, SaleCount: 20, RevenueCents: 100000, FeesCents: 12350, NetProfitCents: 30000},
-			{Channel: SaleChannelInPerson, SaleCount: 5, RevenueCents: 30000, FeesCents: 0, NetProfitCents: 15000},
+	cases := []struct {
+		name           string
+		insights       *PortfolioInsights
+		campaigns      []Campaign
+		wantCampaign   string
+		wantMaxBuy     float64
+		wantMaxBuyExact bool // if true, assert exact maxBuy value
+	}{
+		{
+			name: "eBay best channel",
+			insights: &PortfolioInsights{
+				ByChannel: []ChannelPNL{
+					{Channel: SaleChannelEbay, SaleCount: 20, RevenueCents: 100000, FeesCents: 12350, NetProfitCents: 30000},
+					{Channel: SaleChannelInPerson, SaleCount: 5, RevenueCents: 30000, FeesCents: 0, NetProfitCents: 15000},
+				},
+				DataSummary: InsightsDataSummary{TotalPurchases: 50, TotalSales: 25},
+			},
+			campaigns:    []Campaign{{Name: "Aggressive Campaign", Phase: PhaseActive, BuyTermsCLPct: 0.85, EbayFeePct: 0.1235}},
+			wantCampaign: "Aggressive Campaign",
 		},
-		DataSummary: InsightsDataSummary{TotalPurchases: 50, TotalSales: 25},
-	}
-	campaigns := []Campaign{
-		{Name: "Aggressive Campaign", Phase: PhaseActive, BuyTermsCLPct: 0.85, EbayFeePct: 0.1235},
+		{
+			name: "InPerson best channel",
+			insights: &PortfolioInsights{
+				ByChannel: []ChannelPNL{
+					{Channel: SaleChannelInPerson, SaleCount: 15, RevenueCents: 80000, FeesCents: 0, NetProfitCents: 40000},
+					{Channel: SaleChannelEbay, SaleCount: 10, RevenueCents: 50000, FeesCents: 6175, NetProfitCents: 10000},
+				},
+				DataSummary: InsightsDataSummary{TotalPurchases: 50, TotalSales: 25},
+			},
+			campaigns:       []Campaign{{Name: "IP Campaign", Phase: PhaseActive, BuyTermsCLPct: 0.80, EbayFeePct: 0.1235}},
+			wantCampaign:    "IP Campaign",
+			wantMaxBuy:      0.40, // 50% margin - 10% target - 0% fee
+			wantMaxBuyExact: true,
+		},
 	}
 
-	resp := GenerateSuggestions(context.Background(), insights, campaigns)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			resp := GenerateSuggestions(context.Background(), tc.insights, tc.campaigns)
 
-	// Local channel has 50% margin (15000/30000), eBay has 30%
-	// Best channel margin = 50%, maxBuy = 50% - 10% - 12.35% = 27.65%
-	// Campaign buyTerms at 85% is way above, should suggest lowering
-	found := false
-	for _, s := range resp.Adjustments {
-		if s.Type == "adjust" && s.SuggestedParams.Name == "Aggressive Campaign" && s.SuggestedParams.BuyTermsCLPct > 0 {
-			found = true
-		}
-	}
-	if !found {
-		t.Error("expected channel-informed buy terms suggestion for aggressive campaign")
+			found := false
+			for _, s := range resp.Adjustments {
+				if s.Type == "adjust" && s.SuggestedParams.Name == tc.wantCampaign && s.SuggestedParams.BuyTermsCLPct > 0 {
+					found = true
+					if tc.wantMaxBuyExact {
+						const eps = 1e-9
+						if math.Abs(s.SuggestedParams.BuyTermsCLPct-tc.wantMaxBuy) > eps {
+							t.Errorf("expected maxBuy %f, got %f", tc.wantMaxBuy, s.SuggestedParams.BuyTermsCLPct)
+						}
+					}
+				}
+			}
+			if !found {
+				t.Errorf("expected buy terms adjustment suggestion for %s", tc.wantCampaign)
+			}
+		})
 	}
 }
 
@@ -247,38 +279,6 @@ func TestDeduplicateSuggestions(t *testing.T) {
 	}
 }
 
-func TestInPersonBuyTermsSuggestion(t *testing.T) {
-	// InPerson channel has 50% margin (40000/80000), eBay has 20%.
-	// Unified formula: maxBuy = bestMargin - targetMargin(10%) - feePct(0% for InPerson) = 40%
-	// Campaign buyTerms at 80% is above 40% + 5% buffer, so a suggestion should fire.
-	insights := &PortfolioInsights{
-		ByChannel: []ChannelPNL{
-			{Channel: SaleChannelInPerson, SaleCount: 15, RevenueCents: 80000, FeesCents: 0, NetProfitCents: 40000},
-			{Channel: SaleChannelEbay, SaleCount: 10, RevenueCents: 50000, FeesCents: 6175, NetProfitCents: 10000},
-		},
-		DataSummary: InsightsDataSummary{TotalPurchases: 50, TotalSales: 25},
-	}
-	campaigns := []Campaign{
-		{Name: "IP Campaign", Phase: PhaseActive, BuyTermsCLPct: 0.80, EbayFeePct: 0.1235},
-	}
-
-	resp := GenerateSuggestions(context.Background(), insights, campaigns)
-
-	found := false
-	for _, s := range resp.Adjustments {
-		if s.SuggestedParams.Name == "IP Campaign" && s.SuggestedParams.BuyTermsCLPct > 0 {
-			found = true
-			const eps = 1e-9
-			// maxBuy = 0.50 - 0.10 - 0.0 = 0.40
-			if math.Abs(s.SuggestedParams.BuyTermsCLPct-0.40) > eps {
-				t.Errorf("expected maxBuy 0.40 for InPerson channel, got %f", s.SuggestedParams.BuyTermsCLPct)
-			}
-		}
-	}
-	if !found {
-		t.Error("expected InPerson channel buy terms suggestion")
-	}
-}
 
 func TestROIWeightedSpendCaps(t *testing.T) {
 	insights := &PortfolioInsights{

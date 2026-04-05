@@ -48,13 +48,16 @@ const DEFAULT_ROW_LIMIT = 5;
 
 function VelocityChart({ velocity }: { velocity: ChannelVelocity[] }) {
   const chartData = useMemo(() => {
-    return velocity.map(cv => ({
-      label: saleChannelLabels[cv.channel] ?? cv.channel,
-      channel: cv.channel,
-      avgDaysToSell: Number.isFinite(cv.avgDaysToSell) ? Math.round(cv.avgDaysToSell) : null,
-      saleCount: cv.saleCount,
-      revenueCents: cv.revenueCents,
-    }));
+    return velocity.map(cv => {
+      const normalized = normalizeChannel(cv.channel);
+      return {
+        label: saleChannelLabels[normalized] ?? normalized,
+        channel: normalized,
+        avgDaysToSell: Number.isFinite(cv.avgDaysToSell) ? Math.round(cv.avgDaysToSell) : null,
+        saleCount: cv.saleCount,
+        revenueCents: cv.revenueCents,
+      };
+    });
   }, [velocity]);
 
   if (chartData.length === 0) return null;
@@ -77,7 +80,7 @@ function VelocityChart({ velocity }: { velocity: ChannelVelocity[] }) {
           />
           <Bar dataKey="avgDaysToSell" radius={[0, 4, 4, 0]} barSize={14}>
             {chartData.map(d => (
-              <Cell key={d.channel} fill={channelColors[normalizeChannel(d.channel as SaleChannel)] ?? '#6b7280'} />
+              <Cell key={d.channel} fill={channelColors[d.channel] ?? '#6b7280'} />
             ))}
           </Bar>
         </BarChart>

@@ -213,7 +213,7 @@ func mapDHChannel(channel string) campaigns.SaleChannel {
 	case "ebay":
 		return campaigns.SaleChannelEbay
 	case "shopify":
-		return campaigns.SaleChannelEbay
+		return campaigns.SaleChannelWebsite
 	case "dh":
 		return campaigns.SaleChannelInPerson
 	default:

@@ -193,6 +193,8 @@ func suggestChannelInformedBuyTerms(_ context.Context, insights *PortfolioInsigh
 			if feePct == 0 {
 				feePct = DefaultMarketplaceFeePct
 			}
+		} else if NormalizeChannel(bestChannel.Channel) == SaleChannelWebsite {
+			feePct = DefaultWebsiteFeePct
 		}
 
 		targetMargin := suggTargetMargin

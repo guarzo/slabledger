@@ -164,13 +164,3 @@ func ValidateSale(s *Sale) error {
 	return nil
 }
 
-// SaleWarning is a non-fatal advisory for sale creation.
-type SaleWarning struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
-}
-
-// ValidateSaleWarnings returns soft warnings (not errors) for a sale.
-func ValidateSaleWarnings(_ *Sale, _ *Purchase) []SaleWarning {
-	return nil
-}
