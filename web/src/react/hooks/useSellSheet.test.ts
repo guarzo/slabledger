@@ -1,6 +1,32 @@
-import { renderHook, act } from '@testing-library/react';
+import { renderHook, act, waitFor } from '@testing-library/react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { createElement } from 'react';
 import { useSellSheet } from './useSellSheet';
+
+// Shared state so mocks can track mutations
+let serverItems: string[] = [];
+
+// Mock the API module
+vi.mock('../../js/api', () => ({
+  api: {
+    getSellSheetItems: vi.fn().mockImplementation(async () => ({ purchaseIds: [...serverItems] })),
+    addSellSheetItems: vi.fn().mockImplementation(async (ids: string[]) => {
+      const set = new Set(serverItems);
+      for (const id of ids) set.add(id);
+      serverItems = Array.from(set);
+    }),
+    removeSellSheetItems: vi.fn().mockImplementation(async (ids: string[]) => {
+      const removeSet = new Set(ids);
+      serverItems = serverItems.filter(id => !removeSet.has(id));
+    }),
+    clearSellSheetItems: vi.fn().mockImplementation(async () => {
+      serverItems = [];
+    }),
+  },
+}));
+
+import { api } from '../../js/api';
 
 // The global setup.js installs a vi.fn() localStorage stub that doesn't
 // persist data between calls. This test suite needs real storage behaviour,
@@ -17,75 +43,95 @@ function makeLocalStorageMock() {
   };
 }
 
-describe('useSellSheet', () => {
-  let storageMock: ReturnType<typeof makeLocalStorageMock>;
+function createWrapper() {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: 0 } },
+  });
+  return ({ children }: { children: React.ReactNode }) =>
+    createElement(QueryClientProvider, { client: queryClient }, children);
+}
 
+function resetMockImplementations() {
+  (api.getSellSheetItems as ReturnType<typeof vi.fn>).mockImplementation(
+    async () => ({ purchaseIds: [...serverItems] }),
+  );
+  (api.addSellSheetItems as ReturnType<typeof vi.fn>).mockImplementation(
+    async (ids: string[]) => {
+      const set = new Set(serverItems);
+      for (const id of ids) set.add(id);
+      serverItems = Array.from(set);
+    },
+  );
+  (api.removeSellSheetItems as ReturnType<typeof vi.fn>).mockImplementation(
+    async (ids: string[]) => {
+      const removeSet = new Set(ids);
+      serverItems = serverItems.filter(id => !removeSet.has(id));
+    },
+  );
+  (api.clearSellSheetItems as ReturnType<typeof vi.fn>).mockImplementation(
+    async () => { serverItems = []; },
+  );
+}
+
+describe('useSellSheet', () => {
   beforeEach(() => {
-    storageMock = makeLocalStorageMock();
-    vi.stubGlobal('localStorage', storageMock);
+    vi.stubGlobal('localStorage', makeLocalStorageMock());
+    vi.clearAllMocks();
+    serverItems = [];
+    resetMockImplementations();
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
   });
 
-  it('initializes with empty set when localStorage is empty', () => {
-    const { result } = renderHook(() => useSellSheet());
+  it('initializes with empty set', async () => {
+    const { result } = renderHook(() => useSellSheet(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
     expect(result.current.count).toBe(0);
     expect(result.current.has('abc')).toBe(false);
   });
 
-  it('initializes from existing localStorage data', () => {
-    localStorage.setItem('sellSheetIds', JSON.stringify(['id1', 'id2']));
-    const { result } = renderHook(() => useSellSheet());
+  it('loads items from server', async () => {
+    serverItems = ['id1', 'id2'];
+    const { result } = renderHook(() => useSellSheet(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
     expect(result.current.count).toBe(2);
     expect(result.current.has('id1')).toBe(true);
-    expect(result.current.has('id2')).toBe(true);
   });
 
-  it('adds items', () => {
-    const { result } = renderHook(() => useSellSheet());
+  it('adds items optimistically', async () => {
+    const { result } = renderHook(() => useSellSheet(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
     act(() => result.current.add(['a', 'b']));
-    expect(result.current.count).toBe(2);
+    await waitFor(() => expect(result.current.count).toBe(2));
     expect(result.current.has('a')).toBe(true);
-    expect(result.current.has('b')).toBe(true);
-    expect(JSON.parse(localStorage.getItem('sellSheetIds')!)).toEqual(['a', 'b']);
+    expect(api.addSellSheetItems).toHaveBeenCalledWith(['a', 'b']);
   });
 
-  it('does not duplicate existing items on add', () => {
-    const { result } = renderHook(() => useSellSheet());
-    act(() => result.current.add(['a', 'b']));
-    act(() => result.current.add(['b', 'c']));
-    expect(result.current.count).toBe(3);
-  });
-
-  it('removes items', () => {
-    const { result } = renderHook(() => useSellSheet());
-    act(() => result.current.add(['a', 'b', 'c']));
+  it('removes items optimistically', async () => {
+    serverItems = ['a', 'b', 'c'];
+    const { result } = renderHook(() => useSellSheet(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.count).toBe(3));
     act(() => result.current.remove(['b']));
-    expect(result.current.count).toBe(2);
+    await waitFor(() => expect(result.current.count).toBe(2));
     expect(result.current.has('b')).toBe(false);
-    expect(result.current.has('a')).toBe(true);
+    expect(api.removeSellSheetItems).toHaveBeenCalledWith(['b']);
   });
 
-  it('clears all items', () => {
-    const { result } = renderHook(() => useSellSheet());
-    act(() => result.current.add(['a', 'b']));
+  it('clears all items optimistically', async () => {
+    serverItems = ['a', 'b'];
+    const { result } = renderHook(() => useSellSheet(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.count).toBe(2));
     act(() => result.current.clear());
-    expect(result.current.count).toBe(0);
-    expect(JSON.parse(localStorage.getItem('sellSheetIds')!)).toEqual([]);
+    await waitFor(() => expect(result.current.count).toBe(0));
+    expect(api.clearSellSheetItems).toHaveBeenCalled();
   });
 
-  it('handles corrupted localStorage gracefully', () => {
-    localStorage.setItem('sellSheetIds', 'not-json');
-    const { result } = renderHook(() => useSellSheet());
-    expect(result.current.count).toBe(0);
-  });
-
-  it('shares state across multiple hook instances', () => {
-    const { result: hook1 } = renderHook(() => useSellSheet());
-    const { result: hook2 } = renderHook(() => useSellSheet());
-    act(() => hook1.current.add(['x']));
-    expect(hook2.current.has('x')).toBe(true);
+  it('migrates from localStorage when server is empty', async () => {
+    localStorage.setItem('sellSheetIds', JSON.stringify(['legacy1', 'legacy2']));
+    renderHook(() => useSellSheet(), { wrapper: createWrapper() });
+    await waitFor(() => expect(api.addSellSheetItems).toHaveBeenCalledWith(['legacy1', 'legacy2']));
+    expect(localStorage.getItem('sellSheetIds')).toBeNull();
   });
 });

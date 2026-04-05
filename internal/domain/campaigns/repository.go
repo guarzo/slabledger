@@ -121,6 +121,14 @@ type PriceReviewRepository interface {
 	OpenFlagPurchaseIDs(ctx context.Context) (map[string]bool, error)
 }
 
+// SellSheetRepository handles sell sheet item persistence.
+type SellSheetRepository interface {
+	GetSellSheetItems(ctx context.Context, userID int64) ([]string, error)
+	AddSellSheetItems(ctx context.Context, userID int64, purchaseIDs []string) error
+	RemoveSellSheetItems(ctx context.Context, userID int64, purchaseIDs []string) error
+	ClearSellSheet(ctx context.Context, userID int64) error
+}
+
 // Repository is the composed interface for all campaign persistence.
 // New code should prefer accepting specific sub-interfaces where possible.
 type Repository interface {
@@ -131,6 +139,7 @@ type Repository interface {
 	FinanceRepository
 	RevocationRepository
 	PriceReviewRepository
+	SellSheetRepository
 }
 
 // DHFieldsUpdate contains the DH v2 tracking fields to update on a purchase.

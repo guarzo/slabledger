@@ -21,6 +21,7 @@ import type { SortKey, SortDir } from './inventory/utils';
 import '../../../styles/print-sell-sheet.css';
 import DesktopRow from './inventory/DesktopRow';
 import MobileCard from './inventory/MobileCard';
+import MobileSellSheetView from './inventory/MobileSellSheetView';
 import CrackCandidatesBanner from './inventory/CrackCandidatesBanner';
 import SortableHeader from './inventory/SortableHeader';
 import ExpandedDetail from './inventory/ExpandedDetail';
@@ -340,6 +341,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
 
   return (
     <div>
+      {!(isMobile && sellSheetActive) && (<>
       {/* Summary stat cards — collapsible on mobile */}
       {isMobile ? (
         <div className="mb-4 sell-sheet-no-print">
@@ -575,8 +577,26 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
           <div className="text-[var(--text-muted)] text-xs mt-1">Select items from any tab and click &ldquo;Add to Sell Sheet&rdquo;.</div>
         </div>
       )}
+      </>)}
 
-      {isMobile ? (
+      {isMobile && sellSheetActive ? (
+        <MobileSellSheetView
+          items={filteredAndSortedItems}
+          onRecordSale={(item) => openSaleModal([item])}
+          onExit={() => setFilterTab('needs_review')}
+          searchQuery={searchQuery}
+          onSearch={setSearchQuery}
+          sellSheetCount={pageSellSheetCount}
+          isPrinting={isPrinting}
+          onPrint={() => {
+            setIsPrinting(true);
+            requestAnimationFrame(() => {
+              window.print();
+              setIsPrinting(false);
+            });
+          }}
+        />
+      ) : isMobile ? (
         <div className="space-y-3">
           <label className="flex items-center gap-2 text-xs text-[var(--text-muted)] px-1 sell-sheet-no-print">
             <input type="checkbox" checked={filteredAndSortedItems.length > 0 && filteredAndSortedItems.every(i => selected.has(i.purchase.id))}
@@ -637,7 +657,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
         <div className="glass-table">
           {/* Sticky header */}
           <div className="glass-table-header flex items-center sticky top-0 z-10" style={{ paddingLeft: '3px' }}>
-            <div className="glass-table-th flex-shrink-0 !px-1" style={{ width: '28px' }}>
+            <div className="glass-table-th flex-shrink-0 !px-1 print-hide-actions" style={{ width: '28px' }}>
               <input type="checkbox" aria-label="Select all visible cards" checked={filteredAndSortedItems.length > 0 && filteredAndSortedItems.every(i => selected.has(i.purchase.id))}
                 onChange={toggleAll} className="rounded accent-[var(--brand-500)]" />
             </div>
@@ -646,13 +666,13 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
             <SortableHeader label="Cost" sortKey="cost" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-right" style={{ width: '72px' }} />
             <SortableHeader label="Market" sortKey="market" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-right" style={{ width: '120px' }} />
             <div className="glass-table-th flex-shrink-0 text-right" style={{ width: '68px' }}>CL</div>
-            <SortableHeader label="P/L" sortKey="pl" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-right" style={{ width: '72px' }} />
-            <SortableHeader label="Days" sortKey="days" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-center" style={{ width: '40px' }} />
-            <div className="glass-table-th flex-shrink-0 text-center" style={{ width: '48px' }}>Signal</div>
+            <SortableHeader label="P/L" sortKey="pl" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-right print-hide-col" style={{ width: '72px' }} />
+            <SortableHeader label="Days" sortKey="days" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-center print-hide-col" style={{ width: '40px' }} />
+            <div className="glass-table-th flex-shrink-0 text-center print-hide-col" style={{ width: '48px' }}>Signal</div>
             <div className="glass-table-th flex-shrink-0 text-right" style={{ width: '68px' }}>Rec.</div>
-            <div className="glass-table-th flex-shrink-0 text-center" style={{ width: '72px' }}>Status</div>
+            <div className="glass-table-th flex-shrink-0 text-center print-hide-col" style={{ width: '72px' }}>Status</div>
             {showEV && <SortableHeader label="EV" sortKey="ev" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-right" style={{ width: '64px' }} />}
-            <div className="glass-table-th flex-shrink-0 !px-1" style={{ width: '28px' }}></div>
+            <div className="glass-table-th flex-shrink-0 !px-1 print-hide-actions" style={{ width: '28px' }}></div>
           </div>
           {/* Rows */}
           <div ref={scrollContainerRef} className={isPrinting ? '' : 'max-h-[600px] overflow-y-auto overflow-x-hidden scrollbar-dark'}>
