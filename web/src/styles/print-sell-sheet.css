@@ -79,6 +79,23 @@
     overflow: visible !important;
   }
 
+  /* Hide analytics columns when printing */
+  .print-hide-col {
+    display: none !important;
+  }
+
+  /* Allow card name and subtitle to wrap instead of truncate */
+  .glass-table-td .truncate {
+    overflow: visible !important;
+    white-space: normal !important;
+    text-overflow: unset !important;
+  }
+
+  /* Hide actions column and checkbox when printing */
+  .print-hide-actions {
+    display: none !important;
+  }
+
   /* Print footer */
   .sell-sheet-print-footer {
     display: block !important;

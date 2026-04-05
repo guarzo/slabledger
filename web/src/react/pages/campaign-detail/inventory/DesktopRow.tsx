@@ -142,7 +142,7 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
         )}
       </div>
       {/* Unrealized P/L */}
-      <div className="glass-table-td flex-shrink-0 text-right tabular-nums" style={{ width: '72px' }}>
+      <div className="glass-table-td flex-shrink-0 text-right tabular-nums print-hide-col" style={{ width: '72px' }}>
         {pl != null ? (
           <span className={`text-xs font-medium px-2 py-[3px] rounded-md ${
             pl > 0 ? 'bg-[rgba(52,211,153,0.1)] text-[#34d399]' :
@@ -154,9 +154,9 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
         )}
       </div>
       {/* Days held */}
-      <div className={`glass-table-td flex-shrink-0 text-center ${daysColor}`} style={{ width: '40px' }}>{item.daysHeld}</div>
+      <div className={`glass-table-td flex-shrink-0 text-center print-hide-col ${daysColor}`} style={{ width: '40px' }}>{item.daysHeld}</div>
       {/* Signal */}
-      <div className="glass-table-td flex-shrink-0 text-center" style={{ width: '48px' }}>
+      <div className="glass-table-td flex-shrink-0 text-center print-hide-col" style={{ width: '48px' }}>
         {direction ? (
           <SignalBadge direction={direction} deltaPct={deltaPct} />
         ) : (
@@ -172,7 +172,7 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
         )}
       </div>
       {/* Status */}
-      <div className="glass-table-td flex-shrink-0 text-center" style={{ width: '72px' }}>
+      <div className="glass-table-td flex-shrink-0 text-center print-hide-col" style={{ width: '72px' }}>
         <span
           className="inline-block text-[10px] font-medium px-1.5 py-0.5 rounded-full whitespace-nowrap"
           style={{
@@ -194,7 +194,7 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
         </div>
       )}
       {/* Actions overflow menu */}
-      <div className="glass-table-td flex-shrink-0 text-center !px-1" style={{ width: '28px' }}>
+      <div className="glass-table-td flex-shrink-0 text-center !px-1 print-hide-actions" style={{ width: '28px' }}>
         <DropdownMenu.Root>
           <DropdownMenu.Trigger asChild>
             <button

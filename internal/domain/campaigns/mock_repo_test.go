@@ -220,7 +220,6 @@ func (m *mockRepo) DeleteSaleByPurchaseID(_ context.Context, purchaseID string) 
 	return ErrSaleNotFound
 }
 
-
 func (m *mockRepo) ListSalesByCampaign(_ context.Context, campaignID string, limit, offset int) ([]Sale, error) {
 	var result []Sale
 	for _, s := range m.sales {
@@ -669,6 +668,21 @@ func (m *mockRepo) UpdatePurchaseDHFields(_ context.Context, _ string, _ DHField
 
 func (m *mockRepo) GetPurchasesByDHCertStatus(_ context.Context, _ string, _ int) ([]Purchase, error) {
 	return nil, nil
+}
+
+// --- SellSheetRepository stubs ---
+
+func (m *mockRepo) GetSellSheetItems(_ context.Context, _ int64) ([]string, error) {
+	return nil, nil
+}
+func (m *mockRepo) AddSellSheetItems(_ context.Context, _ int64, _ []string) error {
+	return nil
+}
+func (m *mockRepo) RemoveSellSheetItems(_ context.Context, _ int64, _ []string) error {
+	return nil
+}
+func (m *mockRepo) ClearSellSheet(_ context.Context, _ int64) error {
+	return nil
 }
 
 // mockPriceLookup is a test double for PriceLookup used by in-package tests
