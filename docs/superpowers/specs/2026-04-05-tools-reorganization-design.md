@@ -115,7 +115,7 @@ The unmatched fix table (with cert/card/set/grade/value/fix columns) is **remove
 
 - **API Health tracking**: Need to instrument the DH HTTP client to record success/failure counts. Could use a simple rolling counter in the scheduler or a lightweight DB table.
 - **DH counts**: Need a new endpoint or extend the existing DH status endpoint to fetch inventory/listings/orders counts from the DH API.
-- The current Market Intelligence and Suggestions stats are dropped unless they still provide value — confirm with user.
+- The current Market Intelligence and Suggestions stats are kept alongside the new health metrics.
 
 ---
 
@@ -165,8 +165,8 @@ Delete the `activeCampaigns` useMemo, the campaign health lookup, and the grid r
 
 ---
 
-## Open Questions
+## Resolved Questions
 
-1. **Market Intelligence & Suggestions stats** — are these dropped entirely, or do they still provide value in Admin?
-2. **API health tracking granularity** — rolling 7 days? Per-endpoint or aggregate? Simple counter in memory or persisted?
-3. **eBay Export / Import Sales inline expansion** — should these open a modal instead of expanding inline? Inline keeps context but may feel cramped.
+1. **Market Intelligence & Suggestions stats** — keep in Admin alongside the new health metrics for now.
+2. **API health tracking granularity** — rolling 7 days, aggregate (not per-endpoint). Simple approach is fine for now.
+3. **eBay Export / Import Sales inline expansion** — inline expansion within the card, not modals.
