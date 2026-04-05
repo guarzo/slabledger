@@ -237,7 +237,7 @@ func (c *Client) postEnterprise(ctx context.Context, fullURL string, body any, d
 }
 
 // patchEnterprise performs a PATCH request with Bearer auth for the enterprise API.
-func (c *Client) patchEnterprise(ctx context.Context, fullURL string, body any, dest any) error { //nolint:unused // used by Task 3 (UpdateInventory)
+func (c *Client) patchEnterprise(ctx context.Context, fullURL string, body any, dest any) error {
 	if !c.EnterpriseAvailable() {
 		return apperrors.ConfigMissing("dh_enterprise_api_key", "DH_ENTERPRISE_API_KEY")
 	}
@@ -281,7 +281,7 @@ func (c *Client) patchEnterprise(ctx context.Context, fullURL string, body any, 
 
 // deleteEnterprise performs a DELETE request with Bearer auth for the enterprise API.
 // body may be nil for bodyless deletes.
-func (c *Client) deleteEnterprise(ctx context.Context, fullURL string, body any, dest any) error { //nolint:unused // used by Task 3 (DelistChannels)
+func (c *Client) deleteEnterprise(ctx context.Context, fullURL string, body any, dest any) error {
 	if !c.EnterpriseAvailable() {
 		return apperrors.ConfigMissing("dh_enterprise_api_key", "DH_ENTERPRISE_API_KEY")
 	}

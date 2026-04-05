@@ -25,12 +25,13 @@ func TestClient_PushInventory(t *testing.T) {
 		require.Equal(t, "psa", item.GradingCompany)
 		require.Equal(t, 9.0, item.Grade)
 		require.Equal(t, 5000, item.CostBasisCents)
+		require.Equal(t, InventoryStatusInStock, item.Status)
 
 		resp := InventoryPushResponse{
 			Results: []InventoryResult{
 				{
 					DHInventoryID:      98765,
-					Status:             "active",
+					Status:             InventoryStatusInStock,
 					AssignedPriceCents: 7500,
 				},
 			},
@@ -48,6 +49,7 @@ func TestClient_PushInventory(t *testing.T) {
 			GradingCompany: "psa",
 			Grade:          9.0,
 			CostBasisCents: 5000,
+			Status:         InventoryStatusInStock,
 		},
 	}
 	resp, err := c.PushInventory(context.Background(), items)
@@ -55,7 +57,7 @@ func TestClient_PushInventory(t *testing.T) {
 	require.Len(t, resp.Results, 1)
 	result := resp.Results[0]
 	require.Equal(t, 98765, result.DHInventoryID)
-	require.Equal(t, "active", result.Status)
+	require.Equal(t, InventoryStatusInStock, result.Status)
 	require.Equal(t, 7500, result.AssignedPriceCents)
 }
 
@@ -188,6 +190,97 @@ func TestClient_GetOrders(t *testing.T) {
 	require.Equal(t, 994, *order.Fees.ChannelFeeCents)
 	require.NotNil(t, order.NetAmountCents)
 	require.Equal(t, 6506, *order.NetAmountCents)
+}
+
+func TestClient_UpdateInventory(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "PATCH", r.Method)
+		require.Equal(t, "/api/v1/enterprise/inventory/98765", r.URL.Path)
+		require.Equal(t, "Bearer test_api_key", r.Header.Get("Authorization"))
+
+		var req InventoryUpdate
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
+		require.Equal(t, InventoryStatusListed, req.Status)
+
+		resp := InventoryResult{
+			DHInventoryID: 98765,
+			Status:        InventoryStatusListed,
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+
+	c := newTestClient(server.URL)
+	result, err := c.UpdateInventory(context.Background(), 98765, InventoryUpdate{
+		Status: InventoryStatusListed,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 98765, result.DHInventoryID)
+	require.Equal(t, InventoryStatusListed, result.Status)
+}
+
+func TestClient_SyncChannels(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, http.MethodPost, r.Method)
+		require.Equal(t, "/api/v1/enterprise/inventory/98765/sync", r.URL.Path)
+		require.Equal(t, "Bearer test_api_key", r.Header.Get("Authorization"))
+
+		var req ChannelSyncRequest
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
+		require.Equal(t, []string{"ebay", "shopify"}, req.Channels)
+
+		resp := ChannelSyncResponse{
+			DHInventoryID: 98765,
+			Status:        InventoryStatusListed,
+			Channels: []InventoryChannelStatus{
+				{Name: "ebay", Status: "pending"},
+				{Name: "shopify", Status: "pending"},
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+
+	c := newTestClient(server.URL)
+	resp, err := c.SyncChannels(context.Background(), 98765, []string{"ebay", "shopify"})
+	require.NoError(t, err)
+	require.Equal(t, 98765, resp.DHInventoryID)
+	require.Equal(t, InventoryStatusListed, resp.Status)
+	require.Len(t, resp.Channels, 2)
+	require.Equal(t, "ebay", resp.Channels[0].Name)
+	require.Equal(t, "pending", resp.Channels[0].Status)
+}
+
+func TestClient_DelistChannels(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "DELETE", r.Method)
+		require.Equal(t, "/api/v1/enterprise/inventory/98765/sync", r.URL.Path)
+		require.Equal(t, "Bearer test_api_key", r.Header.Get("Authorization"))
+
+		var req ChannelDelistRequest
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
+		require.Equal(t, []string{"ebay"}, req.Channels)
+
+		resp := ChannelSyncResponse{
+			DHInventoryID: 98765,
+			Status:        InventoryStatusListed,
+			Channels: []InventoryChannelStatus{
+				{Name: "shopify", Status: "active"},
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+
+	c := newTestClient(server.URL)
+	resp, err := c.DelistChannels(context.Background(), 98765, []string{"ebay"})
+	require.NoError(t, err)
+	require.Equal(t, 98765, resp.DHInventoryID)
+	require.Len(t, resp.Channels, 1)
+	require.Equal(t, "shopify", resp.Channels[0].Name)
 }
 
 func intPtr(v int) *int { return &v }
