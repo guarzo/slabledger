@@ -2,6 +2,7 @@ package campaigns
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -180,14 +181,12 @@ func (s *service) ScanCert(ctx context.Context, certNumber string) (*ScanCertRes
 		return nil, fmt.Errorf("cert number is required")
 	}
 
-	existingMap, err := s.repo.GetPurchasesByGraderAndCertNumbers(ctx, "PSA", []string{certNumber})
+	existing, err := s.repo.GetPurchaseByCertNumber(ctx, "PSA", certNumber)
 	if err != nil {
+		if errors.Is(err, ErrPurchaseNotFound) {
+			return &ScanCertResult{Status: "new"}, nil
+		}
 		return nil, fmt.Errorf("scan cert lookup: %w", err)
-	}
-
-	existing, found := existingMap[certNumber]
-	if !found {
-		return &ScanCertResult{Status: "new"}, nil
 	}
 
 	// Check if sold
@@ -240,7 +239,7 @@ func (s *service) ResolveCert(ctx context.Context, certNumber string) (*CertInfo
 		return nil, fmt.Errorf("resolve cert %s: %w", certNumber, err)
 	}
 	if info == nil {
-		return nil, fmt.Errorf("cert %s not found", certNumber)
+		return nil, ErrCertNotFound
 	}
 
 	return info, nil

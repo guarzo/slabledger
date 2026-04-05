@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { api } from '@/js/api';
 import type { ScanCertResponse, ResolveCertResponse, CertImportResult } from '@/types/campaigns/core';
 
@@ -18,9 +18,11 @@ export default function CardIntakeTab() {
   const [certs, setCerts] = useState<Map<string, CertRow>>(new Map());
   const [importLoading, setImportLoading] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
+  const [highlightedCert, setHighlightedCert] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const certsRef = useRef(certs);
+  certsRef.current = certs;
 
-  // Keep input focused
   useEffect(() => { inputRef.current?.focus(); }, []);
 
   const updateCert = useCallback((certNumber: string, updates: Partial<CertRow>) => {
@@ -53,12 +55,10 @@ export default function CardIntakeTab() {
     certNumber = certNumber.trim();
     if (!certNumber) return;
 
-    // Duplicate check — scroll to existing row
-    if (certs.has(certNumber)) {
-      const el = document.getElementById(`cert-row-${certNumber}`);
-      el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      el?.classList.add('ring-2', 'ring-yellow-400');
-      setTimeout(() => el?.classList.remove('ring-2', 'ring-yellow-400'), 1500);
+    // Duplicate check via ref to avoid stale closure
+    if (certsRef.current.has(certNumber)) {
+      setHighlightedCert(certNumber);
+      setTimeout(() => setHighlightedCert(prev => prev === certNumber ? null : prev), 1500);
       return;
     }
 
@@ -97,7 +97,7 @@ export default function CardIntakeTab() {
         error: err instanceof Error ? err.message : 'Scan failed',
       });
     }
-  }, [certs, updateCert, resolveInBackground]);
+  }, [updateCert, resolveInBackground]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
@@ -108,7 +108,7 @@ export default function CardIntakeTab() {
   };
 
   const handleReturnToInventory = async (certNumber: string) => {
-    const row = certs.get(certNumber);
+    const row = certsRef.current.get(certNumber);
     if (!row?.purchaseId || !row?.campaignId) return;
 
     updateCert(certNumber, { status: 'scanning' });
@@ -141,45 +141,62 @@ export default function CardIntakeTab() {
     setImportLoading(true);
     setImportError(null);
 
-    for (const cn of resolvedCerts) {
-      updateCert(cn, { status: 'importing' });
-    }
+    // Batch status update to 'importing'
+    setCerts(prev => {
+      const next = new Map(prev);
+      for (const cn of resolvedCerts) {
+        const row = next.get(cn);
+        if (row) next.set(cn, { ...row, status: 'importing' });
+      }
+      return next;
+    });
 
     try {
       const result: CertImportResult = await api.importCerts(resolvedCerts);
 
       const failedSet = new Set(result.errors.map(e => e.certNumber));
-      for (const cn of resolvedCerts) {
-        if (failedSet.has(cn)) {
-          const errMsg = result.errors.find(e => e.certNumber === cn)?.error ?? 'Import failed';
-          updateCert(cn, { status: 'failed', error: errMsg });
-        } else {
-          updateCert(cn, { status: 'imported' });
+      setCerts(prev => {
+        const next = new Map(prev);
+        for (const cn of resolvedCerts) {
+          const row = next.get(cn);
+          if (!row) continue;
+          if (failedSet.has(cn)) {
+            const errMsg = result.errors.find(e => e.certNumber === cn)?.error ?? 'Import failed';
+            next.set(cn, { ...row, status: 'failed', error: errMsg });
+          } else {
+            next.set(cn, { ...row, status: 'imported' });
+          }
         }
-      }
+        return next;
+      });
     } catch (err) {
       setImportError(err instanceof Error ? err.message : 'Import failed');
-      for (const cn of resolvedCerts) {
-        updateCert(cn, { status: 'resolved' });
-      }
+      setCerts(prev => {
+        const next = new Map(prev);
+        for (const cn of resolvedCerts) {
+          const row = next.get(cn);
+          if (row) next.set(cn, { ...row, status: 'resolved' });
+        }
+        return next;
+      });
     } finally {
       setImportLoading(false);
       inputRef.current?.focus();
     }
   };
 
-  // Compute stats
-  const rows = Array.from(certs.values());
-  const stats = {
+  const rows = useMemo(() => Array.from(certs.values()), [certs]);
+
+  const stats = useMemo(() => ({
     existing: rows.filter(r => r.status === 'existing' || r.status === 'returned' || r.status === 'imported').length,
     sold: rows.filter(r => r.status === 'sold').length,
     newCerts: rows.filter(r => r.status === 'resolving' || r.status === 'resolved' || r.status === 'importing').length,
     failed: rows.filter(r => r.status === 'failed').length,
     total: rows.length,
-  };
+  }), [rows]);
 
-  const resolvedCount = rows.filter(r => r.status === 'resolved').length;
-  const displayRows = [...rows].reverse();
+  const resolvedCount = useMemo(() => rows.filter(r => r.status === 'resolved').length, [rows]);
+  const displayRows = useMemo(() => [...rows].reverse(), [rows]);
 
   return (
     <div className="space-y-3">
@@ -216,6 +233,7 @@ export default function CardIntakeTab() {
             <CertRowItem
               key={row.certNumber}
               row={row}
+              highlighted={row.certNumber === highlightedCert}
               onReturn={handleReturnToInventory}
               onDismiss={handleDismiss}
             />
@@ -251,8 +269,9 @@ export default function CardIntakeTab() {
   );
 }
 
-function CertRowItem({ row, onReturn, onDismiss }: {
+function CertRowItem({ row, highlighted, onReturn, onDismiss }: {
   row: CertRow;
+  highlighted?: boolean;
   onReturn: (certNumber: string) => void;
   onDismiss: (certNumber: string) => void;
 }) {
@@ -273,7 +292,7 @@ function CertRowItem({ row, onReturn, onDismiss }: {
   const cfg = statusConfig[row.status];
 
   return (
-    <div id={`cert-row-${row.certNumber}`} className={`${base} ${cfg.bg} ${cfg.border}`}>
+    <div className={`${base} ${cfg.bg} ${cfg.border}${highlighted ? ' ring-2 ring-yellow-400' : ''}`}>
       <div className="flex items-center gap-2 min-w-0">
         <span className={`font-mono ${cfg.certColor} min-w-[80px]`}>{row.certNumber}</span>
         <span className={`${cfg.certColor} min-w-[110px] text-xs`}>{cfg.label}</span>

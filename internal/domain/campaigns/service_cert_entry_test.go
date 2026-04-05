@@ -2,6 +2,7 @@ package campaigns
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 )
@@ -279,11 +280,12 @@ func TestScanCert_ExistingSetsExportFlag(t *testing.T) {
 
 func TestResolveCert(t *testing.T) {
 	tests := []struct {
-		name       string
-		certNumber string
-		lookupFn   func(ctx context.Context, certNumber string) (*CertInfo, error)
-		wantErr    bool
-		wantName   string
+		name         string
+		certNumber   string
+		lookupFn     func(ctx context.Context, certNumber string) (*CertInfo, error)
+		wantErr      bool
+		wantSentinel error
+		wantName     string
 	}{
 		{
 			name:       "successful lookup",
@@ -298,12 +300,21 @@ func TestResolveCert(t *testing.T) {
 			wantName: "Umbreon VMAX",
 		},
 		{
-			name:       "cert not found",
+			name:       "api returns error",
 			certNumber: "00000000",
 			lookupFn: func(_ context.Context, _ string) (*CertInfo, error) {
 				return nil, fmt.Errorf("cert 00000000 not found")
 			},
 			wantErr: true,
+		},
+		{
+			name:       "api returns nil info",
+			certNumber: "00000001",
+			lookupFn: func(_ context.Context, _ string) (*CertInfo, error) {
+				return nil, nil
+			},
+			wantErr:    true,
+			wantSentinel: ErrCertNotFound,
 		},
 		{
 			name:       "no cert lookup configured",
@@ -326,6 +337,9 @@ func TestResolveCert(t *testing.T) {
 			if tc.wantErr {
 				if err == nil {
 					t.Fatal("expected error, got nil")
+				}
+				if tc.wantSentinel != nil && !errors.Is(err, tc.wantSentinel) {
+					t.Errorf("expected error %v, got %v", tc.wantSentinel, err)
 				}
 				return
 			}

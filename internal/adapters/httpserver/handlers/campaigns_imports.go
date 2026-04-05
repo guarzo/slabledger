@@ -394,11 +394,8 @@ func (h *CampaignsHandler) HandleImportCerts(w http.ResponseWriter, r *http.Requ
 
 // HandleScanCert handles POST /api/purchases/scan-cert.
 func (h *CampaignsHandler) HandleScanCert(w http.ResponseWriter, r *http.Request) {
-	const maxBytes = 1 << 10 // 1KB — single cert number
-	r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
 	var req campaigns.ScanCertRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid JSON body")
+	if !decodeBody(w, r, &req) {
 		return
 	}
 	if req.CertNumber == "" {
@@ -418,11 +415,8 @@ func (h *CampaignsHandler) HandleScanCert(w http.ResponseWriter, r *http.Request
 
 // HandleResolveCert handles POST /api/purchases/resolve-cert.
 func (h *CampaignsHandler) HandleResolveCert(w http.ResponseWriter, r *http.Request) {
-	const maxBytes = 1 << 10 // 1KB — single cert number
-	r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
 	var req campaigns.ResolveCertRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid JSON body")
+	if !decodeBody(w, r, &req) {
 		return
 	}
 	if req.CertNumber == "" {
@@ -432,10 +426,14 @@ func (h *CampaignsHandler) HandleResolveCert(w http.ResponseWriter, r *http.Requ
 
 	info, err := h.service.ResolveCert(r.Context(), req.CertNumber)
 	if err != nil {
-		h.logger.Warn(r.Context(), "resolve cert failed",
+		if campaigns.IsCertNotFound(err) {
+			writeError(w, http.StatusNotFound, "Cert not found")
+			return
+		}
+		h.logger.Error(r.Context(), "resolve cert failed",
 			observability.String("cert", req.CertNumber),
 			observability.Err(err))
-		writeError(w, http.StatusNotFound, err.Error())
+		writeError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
 

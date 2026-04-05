@@ -546,7 +546,7 @@ func TestHandleResolveCert_Success(t *testing.T) {
 func TestHandleResolveCert_NotFound(t *testing.T) {
 	svc := &mocks.MockCampaignService{
 		ResolveCertFn: func(_ context.Context, _ string) (*campaigns.CertInfo, error) {
-			return nil, fmt.Errorf("cert 00000000 not found")
+			return nil, campaigns.ErrCertNotFound
 		},
 	}
 	h := newTestHandler(svc)
@@ -560,6 +560,26 @@ func TestHandleResolveCert_NotFound(t *testing.T) {
 
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404; body: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandleResolveCert_ServiceError(t *testing.T) {
+	svc := &mocks.MockCampaignService{
+		ResolveCertFn: func(_ context.Context, _ string) (*campaigns.CertInfo, error) {
+			return nil, fmt.Errorf("PSA API timeout")
+		},
+	}
+	h := newTestHandler(svc)
+
+	body := strings.NewReader(`{"certNumber":"11111111"}`)
+	req := httptest.NewRequest("POST", "/api/purchases/resolve-cert", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	h.HandleResolveCert(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500; body: %s", rec.Code, rec.Body.String())
 	}
 }
 
