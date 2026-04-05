@@ -277,3 +277,65 @@ func TestScanCert_ExistingSetsExportFlag(t *testing.T) {
 	}
 }
 
+func TestResolveCert(t *testing.T) {
+	tests := []struct {
+		name       string
+		certNumber string
+		lookupFn   func(ctx context.Context, certNumber string) (*CertInfo, error)
+		wantErr    bool
+		wantName   string
+	}{
+		{
+			name:       "successful lookup",
+			certNumber: "44444444",
+			lookupFn: func(_ context.Context, cert string) (*CertInfo, error) {
+				return &CertInfo{
+					CertNumber: cert, CardName: "Umbreon VMAX", Grade: 10,
+					Year: "2022", Category: "EVOLVING SKIES", Subject: "2022 Pokemon Evolving Skies Umbreon VMAX",
+				}, nil
+			},
+			wantErr:  false,
+			wantName: "Umbreon VMAX",
+		},
+		{
+			name:       "cert not found",
+			certNumber: "00000000",
+			lookupFn: func(_ context.Context, _ string) (*CertInfo, error) {
+				return nil, fmt.Errorf("cert 00000000 not found")
+			},
+			wantErr: true,
+		},
+		{
+			name:       "no cert lookup configured",
+			certNumber: "55555555",
+			lookupFn:   nil,
+			wantErr:    true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := newMockRepo()
+			var certLookup CertLookup
+			if tc.lookupFn != nil {
+				certLookup = &mockCertLookup{lookupFn: tc.lookupFn}
+			}
+			svc := &service{repo: repo, certLookup: certLookup, idGen: func() string { return "test-id" }}
+
+			info, err := svc.ResolveCert(context.Background(), tc.certNumber)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if info.CardName != tc.wantName {
+				t.Errorf("cardName = %q, want %q", info.CardName, tc.wantName)
+			}
+		})
+	}
+}
+

@@ -223,15 +223,25 @@ func (s *service) ScanCert(ctx context.Context, certNumber string) (*ScanCertRes
 	}, nil
 }
 
-// ResolveCert looks up cert metadata via the external cert lookup service.
-// Implemented in Task 3.
+// ResolveCert looks up a PSA cert number via the external PSA API.
+// Returns card info for preview; does NOT create a purchase.
 func (s *service) ResolveCert(ctx context.Context, certNumber string) (*CertInfo, error) {
 	certNumber = strings.TrimSpace(certNumber)
 	if certNumber == "" {
 		return nil, fmt.Errorf("cert number is required")
 	}
+
 	if s.certLookup == nil {
-		return nil, fmt.Errorf("cert lookup not configured")
+		return nil, ErrCertLookupNotConfigured
 	}
-	return s.certLookup.LookupCert(ctx, certNumber)
+
+	info, err := s.certLookup.LookupCert(ctx, certNumber)
+	if err != nil {
+		return nil, fmt.Errorf("resolve cert %s: %w", certNumber, err)
+	}
+	if info == nil {
+		return nil, fmt.Errorf("cert %s not found", certNumber)
+	}
+
+	return info, nil
 }
