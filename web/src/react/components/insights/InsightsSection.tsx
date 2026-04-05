@@ -41,8 +41,10 @@ const insightTabs: readonly Tab<TabKey>[] = [
 ];
 
 const channelColors: Record<string, string> = {
-  ebay: 'var(--channel-ebay)', tcgplayer: 'var(--channel-tcgplayer)', local: 'var(--channel-local)', other: 'var(--channel-other)',
-  gamestop: 'var(--channel-gamestop)', website: 'var(--channel-website)', cardshow: 'var(--channel-cardshow)',
+  ebay: 'var(--channel-ebay)', website: 'var(--channel-website)', inperson: 'var(--channel-inperson)',
+  // Legacy fallbacks
+  tcgplayer: 'var(--channel-ebay)', local: 'var(--channel-inperson)', other: 'var(--channel-inperson)',
+  gamestop: 'var(--channel-inperson)', cardshow: 'var(--channel-inperson)',
 };
 
 const DEFAULT_ROW_LIMIT = 5;
