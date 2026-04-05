@@ -30,6 +30,7 @@ export const queryKeys = {
     revocations: ['portfolio', 'revocations'] as const,
     sellSheet: ['portfolio', 'sellSheet'] as const,
     globalInventory: ['portfolio', 'globalInventory'] as const,
+    sellSheetItems: ['portfolio', 'sellSheetItems'] as const,
   },
   favorites: {
     all: ['favorites'] as const,

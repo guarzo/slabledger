@@ -43,6 +43,7 @@ type Router struct {
 	picksHandler              *handlers.PicksHandler
 	opportunitiesHandler      *handlers.OpportunitiesHandler
 	dhHandler                 *handlers.DHHandler
+	sellSheetItemsHandler     *handlers.SellSheetItemsHandler
 	pricingAPIKey             string
 	logger                    observability.Logger
 	databasePath              string
@@ -63,18 +64,19 @@ type RouterConfig struct {
 	PriceHintsHandler         *handlers.PriceHintsHandler
 	CardRequestHandler        *handlers.CardRequestHandlers
 	PricingDiagnosticsHandler *handlers.PricingDiagnosticsHandler
-	PricingAPIKey             string                         // Bearer token; empty = pricing API disabled
-	CampaignsRepo             handlers.CertPriceLookup       // For pricing API handler
-	AdvisorHandler            *handlers.AdvisorHandler       // AI advisor; nil = disabled
-	SocialHandler             *handlers.SocialHandler        // Social content; nil = disabled
-	InstagramHandler          *handlers.InstagramHandler     // Instagram publishing; nil = disabled
-	AIStatusHandler           *handlers.AIStatusHandler      // AI usage stats; nil = disabled
-	PriceFlagsHandler         *handlers.PriceFlagsHandler    // Price flag admin; nil = disabled
-	CardLadderHandler         *handlers.CardLadderHandler    // Card Ladder admin; nil = disabled
-	SalesCompsHandler         *handlers.SalesCompsHandler    // Sales comps; nil = disabled
-	PicksHandler              *handlers.PicksHandler         // AI picks; nil = disabled
-	OpportunitiesHandler      *handlers.OpportunitiesHandler // Arbitrage opportunities; nil = disabled
-	DHHandler                 *handlers.DHHandler            // DH bulk match + intelligence; nil = disabled
+	PricingAPIKey             string                          // Bearer token; empty = pricing API disabled
+	CampaignsRepo             handlers.CertPriceLookup        // For pricing API handler
+	AdvisorHandler            *handlers.AdvisorHandler        // AI advisor; nil = disabled
+	SocialHandler             *handlers.SocialHandler         // Social content; nil = disabled
+	InstagramHandler          *handlers.InstagramHandler      // Instagram publishing; nil = disabled
+	AIStatusHandler           *handlers.AIStatusHandler       // AI usage stats; nil = disabled
+	PriceFlagsHandler         *handlers.PriceFlagsHandler     // Price flag admin; nil = disabled
+	CardLadderHandler         *handlers.CardLadderHandler     // Card Ladder admin; nil = disabled
+	SalesCompsHandler         *handlers.SalesCompsHandler     // Sales comps; nil = disabled
+	PicksHandler              *handlers.PicksHandler          // AI picks; nil = disabled
+	OpportunitiesHandler      *handlers.OpportunitiesHandler  // Arbitrage opportunities; nil = disabled
+	DHHandler                 *handlers.DHHandler             // DH bulk match + intelligence; nil = disabled
+	SellSheetItemsHandler     *handlers.SellSheetItemsHandler // Sell sheet persistence; nil = disabled
 	Logger                    observability.Logger
 	AdminEmails               []string
 	DatabasePath              string
@@ -172,6 +174,10 @@ func NewRouter(cfg RouterConfig) *Router {
 
 	if cfg.DHHandler != nil {
 		rt.dhHandler = cfg.DHHandler
+	}
+
+	if cfg.SellSheetItemsHandler != nil {
+		rt.sellSheetItemsHandler = cfg.SellSheetItemsHandler
 	}
 
 	if cfg.PricingAPIKey != "" && cfg.CampaignsRepo != nil {

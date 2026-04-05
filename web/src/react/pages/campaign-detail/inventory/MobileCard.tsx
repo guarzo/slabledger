@@ -3,7 +3,7 @@ import { formatCents, daysHeldColor, signalLabel, signalBgColor } from '../../..
 import { TrendArrow, ConfidenceIndicator } from '../../../ui';
 import MarketplaceLinks from './MarketplaceLinks';
 import {
-  bestPrice, unrealizedPL, marketTrend, velocityLabel,
+  costBasis, bestPrice, unrealizedPL, marketTrend, velocityLabel,
   getSourceByType, fmtDateShort, plColor, formatPL,
   deriveSignalDirection, deriveSignalDelta, isHotSeller,
 } from './utils';
@@ -21,11 +21,11 @@ interface MobileCardProps {
 }
 
 export default function MobileCard({ item, selected, onToggle, onRecordSale, onFixPricing, onSetPrice, ev, showCampaignColumn, isOnSellSheet }: MobileCardProps) {
-  const costBasis = item.purchase.buyCostCents + item.purchase.psaSourcingFeeCents;
+  const cb = costBasis(item.purchase);
   const snap = item.currentMarket;
   const daysColor = daysHeldColor(item.daysHeld);
   const price = snap ? bestPrice(snap) : 0;
-  const pl = unrealizedPL(costBasis, snap);
+  const pl = unrealizedPL(cb, snap);
   const trend = snap ? marketTrend(snap) : null;
   const velocity = snap ? velocityLabel(snap) : null;
   const direction = deriveSignalDirection(item);
@@ -70,7 +70,7 @@ export default function MobileCard({ item, selected, onToggle, onRecordSale, onF
         </div>
       </div>
       <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs ml-6">
-        <div><span className="text-[var(--text-muted)]">Cost:</span> <span className="text-[var(--text)] tabular-nums">{formatCents(costBasis)}</span></div>
+        <div><span className="text-[var(--text-muted)]">Cost:</span> <span className="text-[var(--text)] tabular-nums">{formatCents(cb)}</span></div>
         {item.purchase.clValueCents > 0 && (
           <div><span className="text-[var(--text-muted)]">CL:</span> <span className="text-[var(--text)] tabular-nums">{formatCents(item.purchase.clValueCents)}</span></div>
         )}

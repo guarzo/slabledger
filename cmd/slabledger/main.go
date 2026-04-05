@@ -345,6 +345,9 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		logger.Info(ctx, "DH handler initialized")
 	}
 
+	// Create sell sheet items handler (always available when auth is configured)
+	sellSheetItemsHandler := handlers.NewSellSheetItemsHandler(campaignsRepo, logger)
+
 	// Initialize JustTCG client (optional — raw NM price refresh)
 	var justTCGClient *justtcg.Client
 	if cfg.Adapters.JustTCGKey != "" {
@@ -503,6 +506,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		PicksHandler:              picksHandler,
 		OpportunitiesHandler:      opportunitiesHandler,
 		DHHandler:                 dhHandler,
+		SellSheetItemsHandler:     sellSheetItemsHandler,
 	}
 	// Nil-safe interface conversion: a nil *dh.Client assigned to an interface
 	// produces a non-nil interface wrapping a nil pointer, which breaks nil checks.
