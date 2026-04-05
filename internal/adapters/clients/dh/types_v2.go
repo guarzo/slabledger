@@ -8,6 +8,13 @@ const (
 	CertStatusNotFound  = "not_found"
 )
 
+// --- Inventory Status Constants ---
+
+const (
+	InventoryStatusInStock = "in_stock"
+	InventoryStatusListed  = "listed"
+)
+
 // --- Cert Resolution Types ---
 
 // CertResolveRequest is a single cert to resolve.
@@ -79,6 +86,7 @@ type InventoryItem struct {
 	GradingCompany string  `json:"grading_company"`
 	Grade          float64 `json:"grade"`
 	CostBasisCents int     `json:"cost_basis_cents"`
+	Status         string  `json:"status,omitempty"` // "in_stock" (default) or "listed"
 }
 
 // InventoryPushRequest is the request body for POST /inventory.
@@ -96,7 +104,7 @@ type InventoryChannelStatus struct {
 type InventoryResult struct {
 	DHInventoryID      int                      `json:"dh_inventory_id"`
 	CertNumber         string                   `json:"cert_number"`
-	Status             string                   `json:"status"` // "active", "pending", "failed"
+	Status             string                   `json:"status"` // "in_stock", "listed", "failed"
 	AssignedPriceCents int                      `json:"assigned_price_cents"`
 	Channels           []InventoryChannelStatus `json:"channels,omitempty"`
 	Error              string                   `json:"error,omitempty"`
@@ -140,7 +148,25 @@ type PaginationMeta struct {
 
 // InventoryUpdate is the request body for PATCH /inventory/:id.
 type InventoryUpdate struct {
-	CostBasisCents int `json:"cost_basis_cents"`
+	Status         string `json:"status,omitempty"`
+	CostBasisCents *int   `json:"cost_basis_cents,omitempty"`
+}
+
+// ChannelSyncRequest is the request body for POST /inventory/:id/sync.
+type ChannelSyncRequest struct {
+	Channels []string `json:"channels"`
+}
+
+// ChannelSyncResponse is the response from POST /inventory/:id/sync.
+type ChannelSyncResponse struct {
+	DHInventoryID int                      `json:"dh_inventory_id"`
+	Status        string                   `json:"status"`
+	Channels      []InventoryChannelStatus `json:"channels"`
+}
+
+// ChannelDelistRequest is the request body for DELETE /inventory/:id/sync.
+type ChannelDelistRequest struct {
+	Channels []string `json:"channels,omitempty"` // empty = delist from all
 }
 
 // --- Orders Types ---
