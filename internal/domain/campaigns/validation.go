@@ -40,12 +40,14 @@ var validPhases = map[Phase]bool{
 }
 
 var validSaleChannels = map[SaleChannel]bool{
-	SaleChannelEbay:       true,
+	SaleChannelEbay:     true,
+	SaleChannelWebsite:  true,
+	SaleChannelInPerson: true,
+	// Legacy channels accepted for backward compatibility with existing DB records.
 	SaleChannelTCGPlayer:  true,
 	SaleChannelLocal:      true,
 	SaleChannelOther:      true,
 	SaleChannelGameStop:   true,
-	SaleChannelWebsite:    true,
 	SaleChannelCardShow:   true,
 	SaleChannelDoubleHolo: true,
 }
@@ -169,22 +171,6 @@ type SaleWarning struct {
 }
 
 // ValidateSaleWarnings returns soft warnings (not errors) for a sale.
-// GameStop: grade < 8 is ineligible; CL > $1500 is ineligible.
-func ValidateSaleWarnings(s *Sale, purchase *Purchase) []SaleWarning {
-	var warnings []SaleWarning
-	if s.SaleChannel == SaleChannelGameStop {
-		if purchase.GradeValue < 8 {
-			warnings = append(warnings, SaleWarning{
-				Code:    "gamestop_low_grade",
-				Message: "GameStop typically requires PSA 8 or higher.",
-			})
-		}
-		if purchase.CLValueCents > 150000 {
-			warnings = append(warnings, SaleWarning{
-				Code:    "gamestop_high_cl",
-				Message: "GameStop CL limit is typically $1,500. Consider eBay auction for high-value cards.",
-			})
-		}
-	}
-	return warnings
+func ValidateSaleWarnings(_ *Sale, _ *Purchase) []SaleWarning {
+	return nil
 }
