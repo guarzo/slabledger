@@ -65,3 +65,31 @@ type EbayExportGenerateItem struct {
 type EbayExportGenerateRequest struct {
 	Items []EbayExportGenerateItem `json:"items"`
 }
+
+// ScanCertRequest is the input for POST /api/purchases/scan-cert.
+type ScanCertRequest struct {
+	CertNumber string `json:"certNumber"`
+}
+
+// ScanCertResult is the response from POST /api/purchases/scan-cert.
+type ScanCertResult struct {
+	Status     string `json:"status"`               // "existing", "sold", "new"
+	CardName   string `json:"cardName,omitempty"`
+	PurchaseID string `json:"purchaseId,omitempty"`
+	CampaignID string `json:"campaignId,omitempty"`
+}
+
+// ResolveCertRequest is the input for POST /api/purchases/resolve-cert.
+type ResolveCertRequest struct {
+	CertNumber string `json:"certNumber"`
+}
+
+// ResolveCertResult is the response from POST /api/purchases/resolve-cert.
+type ResolveCertResult struct {
+	CertNumber string  `json:"certNumber"`
+	CardName   string  `json:"cardName"`
+	Grade      float64 `json:"grade"`
+	Year       string  `json:"year"`
+	Category   string  `json:"category"`
+	Subject    string  `json:"subject"`
+}
