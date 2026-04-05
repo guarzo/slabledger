@@ -3,7 +3,7 @@
  */
 
 export type Phase = 'pending' | 'active' | 'closed';
-export type SaleChannel = 'ebay' | 'tcgplayer' | 'local' | 'other' | 'gamestop' | 'website' | 'cardshow';
+export type SaleChannel = 'ebay' | 'website' | 'inperson' | 'tcgplayer' | 'local' | 'other' | 'gamestop' | 'cardshow';
 
 export interface Campaign {
   id: string;
