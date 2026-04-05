@@ -30,6 +30,11 @@ type DHPurchaseLister interface {
 	ListAllUnsoldPurchases(ctx context.Context) ([]campaigns.Purchase, error)
 }
 
+// DHInventoryPusher pushes inventory items to DH.
+type DHInventoryPusher interface {
+	PushInventory(ctx context.Context, items []dh.InventoryItem) (*dh.InventoryPushResponse, error)
+}
+
 // DHIntelligenceCounter returns aggregate stats for market intelligence.
 type DHIntelligenceCounter interface {
 	CountAll(ctx context.Context) (int, error)
@@ -47,6 +52,7 @@ type DHHandler struct {
 	matchClient     DHMatchClient
 	cardIDSaver     DHCardIDSaver
 	purchaseLister  DHPurchaseLister
+	inventoryPusher DHInventoryPusher // optional: pushes matched cards to DH inventory
 	intelRepo       intelligence.Repository
 	suggestionsRepo intelligence.SuggestionsRepository
 	intelCounter    DHIntelligenceCounter
@@ -65,6 +71,7 @@ func NewDHHandler(
 	matchClient DHMatchClient,
 	cardIDSaver DHCardIDSaver,
 	purchaseLister DHPurchaseLister,
+	inventoryPusher DHInventoryPusher,
 	intelRepo intelligence.Repository,
 	suggestionsRepo intelligence.SuggestionsRepository,
 	intelCounter DHIntelligenceCounter,
@@ -79,6 +86,7 @@ func NewDHHandler(
 		matchClient:     matchClient,
 		cardIDSaver:     cardIDSaver,
 		purchaseLister:  purchaseLister,
+		inventoryPusher: inventoryPusher,
 		intelRepo:       intelRepo,
 		suggestionsRepo: suggestionsRepo,
 		intelCounter:    intelCounter,

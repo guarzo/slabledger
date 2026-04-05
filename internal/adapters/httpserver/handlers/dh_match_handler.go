@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	"github.com/guarzo/slabledger/internal/domain/campaigns"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/domain/pricing"
@@ -56,9 +57,16 @@ func (h *DHHandler) HandleBulkMatch(w http.ResponseWriter, r *http.Request) {
 	}()
 }
 
+// matchedCard pairs a card identity with its resolved DH card ID.
+type matchedCard struct {
+	identity campaigns.CardIdentity
+	dhCardID int
+}
+
 // runBulkMatch processes all card identities against DH matching, logging results.
 func (h *DHHandler) runBulkMatch(ctx context.Context, identities []campaigns.CardIdentity, mappedSet map[string]string) {
 	var matched, skipped, lowConf, failed int
+	var matchedCards []matchedCard
 
 	for _, ci := range identities {
 		if ctx.Err() != nil {
@@ -96,6 +104,7 @@ func (h *DHHandler) runBulkMatch(ctx context.Context, identities []campaigns.Car
 			continue
 		}
 		matched++
+		matchedCards = append(matchedCards, matchedCard{identity: ci, dhCardID: matchResp.CardID})
 	}
 
 	h.logger.Info(ctx, "bulk match completed",
@@ -104,6 +113,70 @@ func (h *DHHandler) runBulkMatch(ctx context.Context, identities []campaigns.Car
 		observability.Int("skipped", skipped),
 		observability.Int("low_confidence", lowConf),
 		observability.Int("failed", failed))
+
+	// Push newly matched cards to DH inventory as in_stock.
+	if h.inventoryPusher != nil && len(matchedCards) > 0 {
+		h.pushMatchedToDH(ctx, matchedCards)
+	}
+}
+
+// pushMatchedToDH pushes purchases for newly matched cards to DH as in_stock.
+// It uses the DH card IDs collected during the match loop (since Purchase.DHCardID
+// is not yet populated at this point — it gets set by the inventory poll scheduler).
+func (h *DHHandler) pushMatchedToDH(ctx context.Context, matched []matchedCard) {
+	purchases, err := h.purchaseLister.ListAllUnsoldPurchases(ctx)
+	if err != nil {
+		h.logger.Error(ctx, "push to DH: list purchases failed", observability.Err(err))
+		return
+	}
+
+	// Build lookup: card key → DH card ID from match results.
+	dhCardIDs := make(map[string]int, len(matched))
+	for _, mc := range matched {
+		dhCardIDs[dhCardKey(mc.identity.CardName, mc.identity.SetName, mc.identity.CardNumber)] = mc.dhCardID
+	}
+
+	// Collect pushable purchases: matched identity, has cert, no existing DH inventory ID.
+	var items []dh.InventoryItem
+	for _, p := range purchases {
+		key := dhCardKey(p.CardName, p.SetName, p.CardNumber)
+		dhCardID, ok := dhCardIDs[key]
+		if !ok {
+			continue
+		}
+		if p.CertNumber == "" || p.DHInventoryID != 0 {
+			continue
+		}
+		items = append(items, dh.InventoryItem{
+			DHCardID:       dhCardID,
+			CertNumber:     p.CertNumber,
+			GradingCompany: "psa",
+			Grade:          p.GradeValue,
+			CostBasisCents: p.BuyCostCents,
+			Status:         dh.InventoryStatusInStock,
+		})
+	}
+
+	if len(items) == 0 {
+		return
+	}
+
+	resp, err := h.inventoryPusher.PushInventory(ctx, items)
+	if err != nil {
+		h.logger.Error(ctx, "push to DH failed",
+			observability.Int("items", len(items)), observability.Err(err))
+		return
+	}
+
+	pushed := 0
+	for _, r := range resp.Results {
+		if r.Status != "failed" {
+			pushed++
+		}
+	}
+	h.logger.Info(ctx, "pushed matched inventory to DH",
+		observability.Int("pushed", pushed),
+		observability.Int("total", len(items)))
 }
 
 // uniqueCardIdentities returns deduplicated card identities from all unsold purchases.
