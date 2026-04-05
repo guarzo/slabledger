@@ -236,6 +236,97 @@ func (c *Client) postEnterprise(ctx context.Context, fullURL string, body any, d
 	return nil
 }
 
+// patchEnterprise performs a PATCH request with Bearer auth for the enterprise API.
+func (c *Client) patchEnterprise(ctx context.Context, fullURL string, body any, dest any) error { //nolint:unused // used by Task 3 (UpdateInventory)
+	if !c.EnterpriseAvailable() {
+		return apperrors.ConfigMissing("dh_enterprise_api_key", "DH_ENTERPRISE_API_KEY")
+	}
+
+	if err := c.limiter.Wait(ctx); err != nil {
+		if goerrors.Is(err, context.Canceled) || goerrors.Is(err, context.DeadlineExceeded) {
+			return err
+		}
+		return apperrors.ProviderUnavailable(providerName, err)
+	}
+
+	bodyBytes, err := json.Marshal(body)
+	if err != nil {
+		return apperrors.ProviderInvalidRequest(providerName, err)
+	}
+
+	headers := map[string]string{
+		enterpriseAuthHeader: "Bearer " + c.enterpriseKey,
+		"Content-Type":       "application/json",
+		"Accept":             "application/json",
+	}
+
+	resp, err := c.httpClient.Do(ctx, httpx.Request{
+		Method:  "PATCH",
+		URL:     fullURL,
+		Headers: headers,
+		Body:    bodyBytes,
+		Timeout: c.timeout,
+	})
+	if err != nil {
+		return err
+	}
+
+	if dest != nil {
+		if err := json.Unmarshal(resp.Body, dest); err != nil {
+			return apperrors.ProviderInvalidResponse(providerName, err)
+		}
+	}
+	return nil
+}
+
+// deleteEnterprise performs a DELETE request with Bearer auth for the enterprise API.
+// body may be nil for bodyless deletes.
+func (c *Client) deleteEnterprise(ctx context.Context, fullURL string, body any, dest any) error { //nolint:unused // used by Task 3 (DelistChannels)
+	if !c.EnterpriseAvailable() {
+		return apperrors.ConfigMissing("dh_enterprise_api_key", "DH_ENTERPRISE_API_KEY")
+	}
+
+	if err := c.limiter.Wait(ctx); err != nil {
+		if goerrors.Is(err, context.Canceled) || goerrors.Is(err, context.DeadlineExceeded) {
+			return err
+		}
+		return apperrors.ProviderUnavailable(providerName, err)
+	}
+
+	var bodyBytes []byte
+	if body != nil {
+		var err error
+		bodyBytes, err = json.Marshal(body)
+		if err != nil {
+			return apperrors.ProviderInvalidRequest(providerName, err)
+		}
+	}
+
+	headers := map[string]string{
+		enterpriseAuthHeader: "Bearer " + c.enterpriseKey,
+		"Content-Type":       "application/json",
+		"Accept":             "application/json",
+	}
+
+	resp, err := c.httpClient.Do(ctx, httpx.Request{
+		Method:  "DELETE",
+		URL:     fullURL,
+		Headers: headers,
+		Body:    bodyBytes,
+		Timeout: c.timeout,
+	})
+	if err != nil {
+		return err
+	}
+
+	if dest != nil {
+		if err := json.Unmarshal(resp.Body, dest); err != nil {
+			return apperrors.ProviderInvalidResponse(providerName, err)
+		}
+	}
+	return nil
+}
+
 // post performs a POST request with rate limiting, auth headers, and JSON unmarshal.
 func (c *Client) post(ctx context.Context, fullURL string, body any, dest any) error {
 	if !c.Available() {
