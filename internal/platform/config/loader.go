@@ -421,6 +421,11 @@ func FromEnv(base Config) Config {
 			cfg.DH.InventoryPollInterval = d
 		}
 	}
+	if v := os.Getenv("DH_PUSH_INTERVAL"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			cfg.DH.PushInterval = d
+		}
+	}
 
 	cfg.JustTCG.ApplyDefaults()
 
