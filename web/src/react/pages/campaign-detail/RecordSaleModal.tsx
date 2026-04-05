@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import type { AgingItem, SaleChannel } from '../../../types/campaigns';
 import { api } from '../../../js/api';
 import { formatCents, localToday, getErrorMessage } from '../../utils/formatters';
-import { saleChannelLabels, DEFAULT_SALE_CHANNEL } from '../../utils/campaignConstants';
+import { saleChannelLabels, DEFAULT_SALE_CHANNEL, activeSaleChannels } from '../../utils/campaignConstants';
 import { useToast } from '../../contexts/ToastContext';
 import { Button, Input, Select } from '../../ui';
 import { queryKeys } from '../../queries/queryKeys';
@@ -65,29 +65,6 @@ export default function RecordSaleModal({ open, onClose, onSuccess, items }: Rec
     setSoldAtAskingPrice(false);
     setShowOutcomeFields(false);
     onClose();
-  }
-
-  function gameStopWarnings(item: AgingItem): string[] {
-    const warnings: string[] = [];
-    if (channel !== 'gamestop') return warnings;
-    const grade = item.purchase.gradeValue;
-    const graderLabel = item.purchase.grader ?? 'PSA';
-    if (graderLabel !== 'PSA')
-      warnings.push(`GameStop estimates apply to PSA-graded slabs only (found ${graderLabel}).`);
-    if (grade < 8)
-      warnings.push(`GameStop typically requires grade 8 or higher (${graderLabel} ${grade}).`);
-    if (item.purchase.clValueCents > 150000)
-      warnings.push('GameStop CL limit is typically $1,500. Consider eBay auction.');
-    return warnings;
-  }
-
-  function gameStopPayout(item: AgingItem): { min: number; max: number } | null {
-    if (channel !== 'gamestop') return null;
-    const isPSA = !item.purchase.grader || item.purchase.grader === 'PSA';
-    if (!isPSA) return null;
-    const cl = item.purchase.clValueCents;
-    if (cl <= 0) return null;
-    return { min: Math.round(cl * 0.70), max: Math.round(cl * 0.90) };
   }
 
   async function handleSubmit() {
@@ -226,25 +203,8 @@ export default function RecordSaleModal({ open, onClose, onSuccess, items }: Rec
                 selectSize="sm"
                 value={channel}
                 onChange={e => setChannel(e.target.value as SaleChannel)}
-                options={(Object.entries(saleChannelLabels) as [SaleChannel, string][]).map(([val, label]) => ({ value: val, label }))}
+                options={activeSaleChannels.map(ch => ({ value: ch, label: saleChannelLabels[ch] }))}
               />
-              {/* Single item GameStop payout estimate */}
-              {isSingle && items[0] && (() => {
-                const payout = gameStopPayout(items[0]);
-                if (payout) {
-                  return (
-                    <div className="mt-1 text-xs">
-                      <span className="text-[var(--text-muted)]">Est. payout: </span>
-                      <span className="text-[var(--brand-500)] font-medium">{formatCents(payout.min)} - {formatCents(payout.max)}</span>
-                      <span className="text-[var(--text-muted)]"> (70-90% of {formatCents(items[0].purchase.clValueCents)} CL)</span>
-                    </div>
-                  );
-                }
-                if (channel === 'gamestop') {
-                  return <div className="mt-1 text-xs text-[var(--text-muted)]">GameStop: PSA 8+ only, max $1,500 CL</div>;
-                }
-                return null;
-              })()}
             </div>
             <Input
               label="Sale Date"
@@ -255,16 +215,6 @@ export default function RecordSaleModal({ open, onClose, onSuccess, items }: Rec
               onChange={e => setSaleDate(e.target.value)}
             />
           </div>
-
-          {/* GameStop warnings for single item */}
-          {isSingle && items[0] && (() => {
-            const warnings = gameStopWarnings(items[0]);
-            return warnings.length > 0 ? (
-              <div className="mb-4 p-2 rounded-lg bg-[var(--warning-bg)] border border-[var(--warning-border)] text-xs text-[var(--warning)]">
-                {warnings.map((w, i) => <div key={i}>{w}</div>)}
-              </div>
-            ) : null;
-          })()}
 
           {/* Price input(s) */}
           {isSingle && items[0] ? (
@@ -342,7 +292,6 @@ export default function RecordSaleModal({ open, onClose, onSuccess, items }: Rec
           ) : (
             <div className="space-y-2 max-h-60 overflow-y-auto mb-4">
               {items.map(item => {
-                const warnings = gameStopWarnings(item);
                 return (
                   <div key={item.purchase.id} className="flex items-center gap-3 p-2 rounded-lg border border-[var(--surface-2)] bg-[var(--surface-2)]/20">
                     <div className="flex-1 min-w-0">
@@ -352,9 +301,6 @@ export default function RecordSaleModal({ open, onClose, onSuccess, items }: Rec
                         {item.purchase.clValueCents ? ` | CL: ${formatCents(item.purchase.clValueCents)}` : ''}
                         {item.campaignName ? ` | ${item.campaignName}` : ''}
                       </div>
-                      {warnings.length > 0 && (
-                        <div className="mt-1 text-[10px] text-[var(--warning)]">{warnings.join(' ')}</div>
-                      )}
                     </div>
                     <div className="flex-shrink-0 w-28">
                       <input

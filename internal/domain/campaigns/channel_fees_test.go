@@ -12,9 +12,14 @@ func TestCalculateSaleFee(t *testing.T) {
 		wantFee        int
 	}{
 		{"ebay 100 dollars", SaleChannelEbay, 10000, 1235},
-		{"tcgplayer 100 dollars", SaleChannelTCGPlayer, 10000, 1235},
-		{"local no fee", SaleChannelLocal, 10000, 0},
-		{"other no fee", SaleChannelOther, 10000, 0},
+		{"legacy tcgplayer maps to ebay", SaleChannelTCGPlayer, 10000, 1235},
+		{"website 3pct", SaleChannelWebsite, 10000, 300},
+		{"inperson no fee", SaleChannelInPerson, 10000, 0},
+		{"legacy local maps to inperson", SaleChannelLocal, 10000, 0},
+		{"legacy gamestop maps to inperson", SaleChannelGameStop, 10000, 0},
+		{"legacy other maps to inperson", SaleChannelOther, 10000, 0},
+		{"legacy cardshow maps to inperson", SaleChannelCardShow, 10000, 0},
+		{"legacy doubleholo maps to inperson", SaleChannelDoubleHolo, 10000, 0},
 		{"ebay 500 dollars", SaleChannelEbay, 50000, 6175},
 	}
 
@@ -29,7 +34,6 @@ func TestCalculateSaleFee(t *testing.T) {
 }
 
 func TestCalculateSaleFee_DefaultEbayPct(t *testing.T) {
-	// When EbayFeePct is 0, should use default 12.35%
 	campaign := &Campaign{EbayFeePct: 0}
 	got := CalculateSaleFee(SaleChannelEbay, 10000, campaign)
 	if got != 1235 {
@@ -38,41 +42,36 @@ func TestCalculateSaleFee_DefaultEbayPct(t *testing.T) {
 }
 
 func TestCalculateNetProfit(t *testing.T) {
-	// Sale at $750, bought at $500, $3 sourcing fee, $92.63 eBay fee
 	net := CalculateNetProfit(75000, 50000, 300, 9263)
-	want := 75000 - 50000 - 300 - 9263 // = 15437 ($154.37)
+	want := 75000 - 50000 - 300 - 9263
 	if net != want {
 		t.Errorf("CalculateNetProfit = %d, want %d", net, want)
 	}
 }
 
-func TestCalculateNetProfit_LocalSale(t *testing.T) {
-	// GameStop: sell at 90% CL ($900 on $1000 CL), bought at $800, $3 sourcing, no fees
-	net := CalculateNetProfit(90000, 80000, 300, 0)
-	want := 90000 - 80000 - 300 // = 9700 ($97.00)
-	if net != want {
-		t.Errorf("CalculateNetProfit local = %d, want %d", net, want)
-	}
-}
-
-func TestCalculateSaleFee_WebsiteChannel(t *testing.T) {
-	campaign := &Campaign{EbayFeePct: 0.1235}
-
-	// Website channel should charge 3% fee
-	fee := CalculateSaleFee(SaleChannelWebsite, 10000, campaign)
-	if fee != 300 {
-		t.Errorf("website fee: got %d, want 300 (3%% of 10000)", fee)
-	}
-
-	// eBay should still charge 12.35%
-	ebayFee := CalculateSaleFee(SaleChannelEbay, 10000, campaign)
-	if ebayFee != 1235 {
-		t.Errorf("ebay fee: got %d, want 1235", ebayFee)
+func TestNormalizeChannel(t *testing.T) {
+	tests := []struct {
+		input SaleChannel
+		want  SaleChannel
+	}{
+		{SaleChannelEbay, SaleChannelEbay},
+		{SaleChannelTCGPlayer, SaleChannelEbay},
+		{SaleChannelWebsite, SaleChannelWebsite},
+		{SaleChannelInPerson, SaleChannelInPerson},
+		{SaleChannelLocal, SaleChannelInPerson},
+		{SaleChannelGameStop, SaleChannelInPerson},
+		{SaleChannelCardShow, SaleChannelInPerson},
+		{SaleChannelOther, SaleChannelInPerson},
+		{SaleChannelDoubleHolo, SaleChannelInPerson},
+		{SaleChannel("unknown"), SaleChannelInPerson},
 	}
 
-	// Local should still be 0%
-	localFee := CalculateSaleFee(SaleChannelLocal, 10000, campaign)
-	if localFee != 0 {
-		t.Errorf("local fee: got %d, want 0", localFee)
+	for _, tt := range tests {
+		t.Run(string(tt.input), func(t *testing.T) {
+			got := NormalizeChannel(tt.input)
+			if got != tt.want {
+				t.Errorf("NormalizeChannel(%s) = %s, want %s", tt.input, got, tt.want)
+			}
+		})
 	}
 }

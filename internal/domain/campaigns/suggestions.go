@@ -189,7 +189,7 @@ func betterSuggestion(a, b CampaignSuggestion) bool {
 
 // isMarketplaceChannel returns true for channels that charge marketplace fees.
 func isMarketplaceChannel(ch SaleChannel) bool {
-	return ch == SaleChannelEbay || ch == SaleChannelTCGPlayer
+	return NormalizeChannel(ch) == SaleChannelEbay
 }
 
 // gradeRangeFromLabel converts a grade label like "PSA 9" to a range string like "9-9".

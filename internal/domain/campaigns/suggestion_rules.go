@@ -182,8 +182,6 @@ func suggestChannelInformedBuyTerms(_ context.Context, insights *PortfolioInsigh
 		return nil
 	}
 
-	isGameStop := bestChannel.Channel == SaleChannelGameStop
-
 	for _, c := range campaigns {
 		if c.Phase != PhaseActive {
 			continue
@@ -195,61 +193,36 @@ func suggestChannelInformedBuyTerms(_ context.Context, insights *PortfolioInsigh
 			if feePct == 0 {
 				feePct = DefaultMarketplaceFeePct
 			}
+		} else if NormalizeChannel(bestChannel.Channel) == SaleChannelWebsite {
+			feePct = DefaultWebsiteFeePct
 		}
 
 		targetMargin := suggTargetMargin
 
-		if isGameStop {
-			conservativeMaxBuy := GameStopPayoutMinPct - targetMargin
-			optimisticMaxBuy := GameStopPayoutMaxPct - targetMargin
+		maxBuy := bestMargin - targetMargin - feePct
+		if maxBuy <= 0 {
+			continue
+		}
 
-			if c.BuyTermsCLPct > conservativeMaxBuy+suggBuyTermsBuffer {
-				confidence := confidenceLabelWithAge(bestChannel.SaleCount, "", now)
-				suggestions = append(suggestions, CampaignSuggestion{
-					Type:  "adjust",
-					Title: fmt.Sprintf("Lower buy terms on %s", c.Name),
-					Rationale: fmt.Sprintf("Best channel (GameStop) pays 70-90%% of CL. Conservative max buy: ~%.0f%% CL, optimistic: ~%.0f%% CL. Current: %.0f%%.",
-						conservativeMaxBuy*100, optimisticMaxBuy*100, c.BuyTermsCLPct*100),
-					Confidence: confidence,
-					DataPoints: bestChannel.SaleCount,
-					SuggestedParams: CampaignSuggestionParams{
-						Name:                    c.Name,
-						BuyTermsCLPct:           conservativeMaxBuy,
-						BuyTermsCLPctOptimistic: optimisticMaxBuy,
-					},
-					ExpectedMetrics: ExpectedMetrics{
-						ExpectedMarginPct: targetMargin,
-						DataConfidence:    confidence,
-					},
-				})
-			}
-		} else {
-			maxBuy := bestMargin - targetMargin - feePct
-			if maxBuy <= 0 {
-				continue
-			}
+		if c.BuyTermsCLPct > maxBuy+suggBuyTermsBuffer {
+			confidence := confidenceLabelWithAge(bestChannel.SaleCount, "", now)
 
-			if c.BuyTermsCLPct > maxBuy+suggBuyTermsBuffer {
-				// ChannelPNL does not carry a latest sale date, so age decay is skipped.
-				confidence := confidenceLabelWithAge(bestChannel.SaleCount, "", now)
-
-				suggestions = append(suggestions, CampaignSuggestion{
-					Type:  "adjust",
-					Title: fmt.Sprintf("Lower buy terms on %s", c.Name),
-					Rationale: fmt.Sprintf("Best channel (%s) margin is %.0f%%. With %.0f%% fees and 10%% target margin, max buy should be ~%.0f%% CL. Current: %.0f%%.",
-						bestChannel.Channel, bestMargin*100, feePct*100, maxBuy*100, c.BuyTermsCLPct*100),
-					Confidence: confidence,
-					DataPoints: bestChannel.SaleCount,
-					SuggestedParams: CampaignSuggestionParams{
-						Name:          c.Name,
-						BuyTermsCLPct: maxBuy,
-					},
-					ExpectedMetrics: ExpectedMetrics{
-						ExpectedMarginPct: targetMargin,
-						DataConfidence:    confidence,
-					},
-				})
-			}
+			suggestions = append(suggestions, CampaignSuggestion{
+				Type:  "adjust",
+				Title: fmt.Sprintf("Lower buy terms on %s", c.Name),
+				Rationale: fmt.Sprintf("Best channel (%s) margin is %.0f%%. With %.0f%% fees and 10%% target margin, max buy should be ~%.0f%% CL. Current: %.0f%%.",
+					bestChannel.Channel, bestMargin*100, feePct*100, maxBuy*100, c.BuyTermsCLPct*100),
+				Confidence: confidence,
+				DataPoints: bestChannel.SaleCount,
+				SuggestedParams: CampaignSuggestionParams{
+					Name:          c.Name,
+					BuyTermsCLPct: maxBuy,
+				},
+				ExpectedMetrics: ExpectedMetrics{
+					ExpectedMarginPct: targetMargin,
+					DataConfidence:    confidence,
+				},
+			})
 		}
 	}
 
