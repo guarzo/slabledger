@@ -64,7 +64,7 @@ func (s *service) enrichSellSheetItem(_ context.Context, purchase *Purchase, cam
 
 	// Deduct marketplace fees for eBay/TCGPlayer channels to project net revenue.
 	// grossModeFee skips fee deduction (used by price sync to return gross prices).
-	if ebayFeePct != grossModeFee && item.TargetSellPrice > 0 && (item.RecommendedChannel == SaleChannelEbay || item.RecommendedChannel == SaleChannelTCGPlayer) {
+	if ebayFeePct != grossModeFee && item.TargetSellPrice > 0 && NormalizeChannel(item.RecommendedChannel) == SaleChannelEbay {
 		feePct := ebayFeePct
 		if feePct == 0 {
 			feePct = DefaultMarketplaceFeePct
@@ -93,15 +93,12 @@ func (s *service) enrichSellSheetItem(_ context.Context, purchase *Purchase, cam
 }
 
 // recommendChannel determines the best exit channel for a sell-sheet item.
-func recommendChannel(grade float64, clValueCents int, mkt *MarketSnapshot) (SaleChannel, string) {
-	if grade >= 8 && clValueCents > 0 && clValueCents <= 150000 {
-		return SaleChannelGameStop, "GameStop"
-	}
+func recommendChannel(grade float64, _ int, mkt *MarketSnapshot) (SaleChannel, string) {
 	if grade == 7 {
-		return SaleChannelCardShow, "Card Show"
+		return SaleChannelInPerson, "In Person"
 	}
 	if mkt != nil && mkt.Trend30d > 0.05 {
-		return SaleChannelCardShow, "Card Show"
+		return SaleChannelInPerson, "In Person"
 	}
 	return SaleChannelEbay, "eBay"
 }
