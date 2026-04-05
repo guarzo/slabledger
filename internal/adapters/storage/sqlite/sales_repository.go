@@ -64,6 +64,40 @@ func (r *CampaignsRepository) GetSaleByPurchaseID(ctx context.Context, purchaseI
 	return &s, nil
 }
 
+func (r *CampaignsRepository) GetSalesByPurchaseIDs(ctx context.Context, purchaseIDs []string) (result map[string]*campaigns.Sale, err error) {
+	if len(purchaseIDs) == 0 {
+		return map[string]*campaigns.Sale{}, nil
+	}
+	placeholders := make([]byte, 0, len(purchaseIDs)*2-1)
+	args := make([]any, len(purchaseIDs))
+	for i, id := range purchaseIDs {
+		if i > 0 {
+			placeholders = append(placeholders, ',')
+		}
+		placeholders = append(placeholders, '?')
+		args[i] = id
+	}
+	query := `SELECT ` + saleColumns + ` FROM campaign_sales WHERE purchase_id IN (` + string(placeholders) + `)`
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if cerr := rows.Close(); err == nil && cerr != nil {
+			err = cerr
+		}
+	}()
+	result = make(map[string]*campaigns.Sale, len(purchaseIDs))
+	for rows.Next() {
+		s, scanErr := scanSale(rows)
+		if scanErr != nil {
+			return nil, scanErr
+		}
+		result[s.PurchaseID] = &s
+	}
+	return result, rows.Err()
+}
+
 func (r *CampaignsRepository) ListSalesByCampaign(ctx context.Context, campaignID string, limit, offset int) ([]campaigns.Sale, error) {
 	query := `
 		SELECT ` + saleColumns + `

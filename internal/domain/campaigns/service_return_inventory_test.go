@@ -8,9 +8,9 @@ import (
 
 func TestDeleteSaleByPurchaseID(t *testing.T) {
 	tests := []struct {
-		name        string
-		seed        func(*mockRepo)
-		wantErr     bool
+		name         string
+		seed         func(*mockRepo)
+		wantErr      bool
 		wantSaleGone bool
 	}{
 		{

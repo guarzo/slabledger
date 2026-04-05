@@ -196,6 +196,19 @@ func (m *mockRepo) DeleteSale(_ context.Context, saleID string) error {
 	return nil
 }
 
+func (m *mockRepo) GetSalesByPurchaseIDs(_ context.Context, purchaseIDs []string) (map[string]*Sale, error) {
+	result := make(map[string]*Sale, len(purchaseIDs))
+	for _, pid := range purchaseIDs {
+		for _, s := range m.sales {
+			if s.PurchaseID == pid {
+				result[pid] = s
+				break
+			}
+		}
+	}
+	return result, nil
+}
+
 func (m *mockRepo) DeleteSaleByPurchaseID(_ context.Context, purchaseID string) error {
 	for id, s := range m.sales {
 		if s.PurchaseID == purchaseID {

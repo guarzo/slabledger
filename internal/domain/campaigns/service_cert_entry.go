@@ -38,27 +38,26 @@ func (s *service) ImportCerts(ctx context.Context, certNumbers []string) (*CertI
 	now := time.Now()
 	var importedCerts []string
 
+	// Batch lookup: find which existing purchases have sales
+	var existingPurchaseIDs []string
+	for _, p := range existingMap {
+		existingPurchaseIDs = append(existingPurchaseIDs, p.ID)
+	}
+	salesMap, err := s.repo.GetSalesByPurchaseIDs(ctx, existingPurchaseIDs)
+	if err != nil {
+		return nil, fmt.Errorf("batch sale lookup: %w", err)
+	}
+
 	for _, certNum := range cleaned {
 		if existing, ok := existingMap[certNum]; ok {
-			// Check if this purchase has been sold
-			_, saleErr := s.repo.GetSaleByPurchaseID(ctx, existing.ID)
-			if saleErr == nil {
-				// Has a sale — flag as sold, skip ebay export flag
+			// Check if this purchase has been sold (using batch result)
+			if _, hasSale := salesMap[existing.ID]; hasSale {
 				result.SoldExisting++
 				result.SoldItems = append(result.SoldItems, CertImportSoldItem{
 					CertNumber: certNum,
 					PurchaseID: existing.ID,
 					CardName:   existing.CardName,
 					CampaignID: existing.CampaignID,
-				})
-				continue
-			}
-			if !IsSaleNotFound(saleErr) {
-				// Unexpected repo error — fail this cert rather than make a wrong assumption
-				result.Failed++
-				result.Errors = append(result.Errors, CertImportError{
-					CertNumber: certNum,
-					Error:      fmt.Sprintf("sale lookup failed: %v", saleErr),
 				})
 				continue
 			}

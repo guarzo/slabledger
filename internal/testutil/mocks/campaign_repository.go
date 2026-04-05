@@ -269,6 +269,19 @@ func (m *MockCampaignRepository) GetSaleByPurchaseID(ctx context.Context, purcha
 	return nil, campaigns.ErrSaleNotFound
 }
 
+func (m *MockCampaignRepository) GetSalesByPurchaseIDs(_ context.Context, purchaseIDs []string) (map[string]*campaigns.Sale, error) {
+	result := make(map[string]*campaigns.Sale, len(purchaseIDs))
+	for _, pid := range purchaseIDs {
+		for _, s := range m.Sales {
+			if s.PurchaseID == pid {
+				result[pid] = s
+				break
+			}
+		}
+	}
+	return result, nil
+}
+
 func (m *MockCampaignRepository) DeleteSale(ctx context.Context, saleID string) error {
 	if m.DeleteSaleFn != nil {
 		return m.DeleteSaleFn(ctx, saleID)
