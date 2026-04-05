@@ -26,7 +26,7 @@ func (h *DHHandler) HandleBulkMatch(w http.ResponseWriter, r *http.Request) {
 	// Gather identities and mappings synchronously so we can report errors to the caller.
 	ctx := r.Context()
 
-	identities, err := h.uniqueCardIdentities(ctx)
+	purchases, identities, err := h.uniqueCardIdentities(ctx)
 	if err != nil {
 		h.bulkMatchMu.Unlock()
 		h.logger.Error(ctx, "bulk match: list purchases", observability.Err(err))
@@ -53,7 +53,7 @@ func (h *DHHandler) HandleBulkMatch(w http.ResponseWriter, r *http.Request) {
 		defer h.bulkMatchRunning.Store(false)
 		ctx, cancel := context.WithCancel(h.baseCtx)
 		defer cancel()
-		h.runBulkMatch(ctx, identities, mappedSet)
+		h.runBulkMatch(ctx, purchases, identities, mappedSet)
 	}()
 }
 
@@ -63,7 +63,7 @@ type matchedCard struct {
 }
 
 // runBulkMatch processes all card identities against DH matching, logging results.
-func (h *DHHandler) runBulkMatch(ctx context.Context, identities []campaigns.CardIdentity, mappedSet map[string]string) {
+func (h *DHHandler) runBulkMatch(ctx context.Context, purchases []campaigns.Purchase, identities []campaigns.CardIdentity, mappedSet map[string]string) {
 	var matched, skipped, lowConf, failed int
 	var matchedCards []matchedCard
 
@@ -115,19 +115,13 @@ func (h *DHHandler) runBulkMatch(ctx context.Context, identities []campaigns.Car
 
 	// Push newly matched cards to DH inventory as in_stock.
 	if h.inventoryPusher != nil && len(matchedCards) > 0 {
-		h.pushMatchedToDH(ctx, matchedCards)
+		h.pushMatchedToDH(ctx, purchases, matchedCards)
 	}
 }
 
 // pushMatchedToDH uses DH card IDs from the match loop because Purchase.DHCardID
 // isn't populated yet — that happens later via the inventory poll scheduler.
-func (h *DHHandler) pushMatchedToDH(ctx context.Context, matched []matchedCard) {
-	purchases, err := h.purchaseLister.ListAllUnsoldPurchases(ctx)
-	if err != nil {
-		h.logger.Error(ctx, "push to DH: list purchases failed", observability.Err(err))
-		return
-	}
-
+func (h *DHHandler) pushMatchedToDH(ctx context.Context, purchases []campaigns.Purchase, matched []matchedCard) {
 	dhCardIDs := make(map[string]int, len(matched))
 	for _, mc := range matched {
 		dhCardIDs[dhCardKey(mc.identity.CardName, mc.identity.SetName, mc.identity.CardNumber)] = mc.dhCardID
@@ -175,11 +169,11 @@ func (h *DHHandler) pushMatchedToDH(ctx context.Context, matched []matchedCard) 
 		observability.Int("total", len(items)))
 }
 
-// uniqueCardIdentities returns deduplicated card identities from all unsold purchases.
-func (h *DHHandler) uniqueCardIdentities(ctx context.Context) ([]campaigns.CardIdentity, error) {
+// uniqueCardIdentities returns all unsold purchases and their deduplicated card identities.
+func (h *DHHandler) uniqueCardIdentities(ctx context.Context) ([]campaigns.Purchase, []campaigns.CardIdentity, error) {
 	purchases, err := h.purchaseLister.ListAllUnsoldPurchases(ctx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	seen := make(map[string]bool, len(purchases))
@@ -192,5 +186,5 @@ func (h *DHHandler) uniqueCardIdentities(ctx context.Context) ([]campaigns.CardI
 		seen[key] = true
 		identities = append(identities, p.ToCardIdentity())
 	}
-	return identities, nil
+	return purchases, identities, nil
 }
