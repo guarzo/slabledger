@@ -57,7 +57,6 @@ func (h *DHHandler) HandleBulkMatch(w http.ResponseWriter, r *http.Request) {
 	}()
 }
 
-// matchedCard pairs a card identity with its resolved DH card ID.
 type matchedCard struct {
 	identity campaigns.CardIdentity
 	dhCardID int
@@ -120,9 +119,8 @@ func (h *DHHandler) runBulkMatch(ctx context.Context, identities []campaigns.Car
 	}
 }
 
-// pushMatchedToDH pushes purchases for newly matched cards to DH as in_stock.
-// It uses the DH card IDs collected during the match loop (since Purchase.DHCardID
-// is not yet populated at this point — it gets set by the inventory poll scheduler).
+// pushMatchedToDH uses DH card IDs from the match loop because Purchase.DHCardID
+// isn't populated yet — that happens later via the inventory poll scheduler.
 func (h *DHHandler) pushMatchedToDH(ctx context.Context, matched []matchedCard) {
 	purchases, err := h.purchaseLister.ListAllUnsoldPurchases(ctx)
 	if err != nil {
@@ -130,13 +128,11 @@ func (h *DHHandler) pushMatchedToDH(ctx context.Context, matched []matchedCard) 
 		return
 	}
 
-	// Build lookup: card key → DH card ID from match results.
 	dhCardIDs := make(map[string]int, len(matched))
 	for _, mc := range matched {
 		dhCardIDs[dhCardKey(mc.identity.CardName, mc.identity.SetName, mc.identity.CardNumber)] = mc.dhCardID
 	}
 
-	// Collect pushable purchases: matched identity, has cert, no existing DH inventory ID.
 	var items []dh.InventoryItem
 	for _, p := range purchases {
 		key := dhCardKey(p.CardName, p.SetName, p.CardNumber)
@@ -150,7 +146,7 @@ func (h *DHHandler) pushMatchedToDH(ctx context.Context, matched []matchedCard) 
 		items = append(items, dh.InventoryItem{
 			DHCardID:       dhCardID,
 			CertNumber:     p.CertNumber,
-			GradingCompany: "psa",
+			GradingCompany: dh.GraderPSA,
 			Grade:          p.GradeValue,
 			CostBasisCents: p.BuyCostCents,
 			Status:         dh.InventoryStatusInStock,

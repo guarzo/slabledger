@@ -15,6 +15,14 @@ const (
 	InventoryStatusListed  = "listed"
 )
 
+// --- DH Channel & Grading Constants ---
+
+const (
+	ChannelEbay    = "ebay"
+	ChannelShopify = "shopify"
+	GraderPSA      = "psa"
+)
+
 // --- Cert Resolution Types ---
 
 // CertResolveRequest is a single cert to resolve.

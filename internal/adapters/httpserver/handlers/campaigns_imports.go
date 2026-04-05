@@ -55,8 +55,7 @@ func (h *CampaignsHandler) triggerCardDiscovery(cards []campaigns.CardIdentity) 
 	}()
 }
 
-// triggerDHListing transitions DH inventory items to "listed" and syncs to sales channels
-// in a background goroutine so it doesn't delay the HTTP response.
+// triggerDHListing runs in the background so it doesn't delay the HTTP response.
 func (h *CampaignsHandler) triggerDHListing(certNumbers []string) {
 	if h.dhLister == nil || len(certNumbers) == 0 {
 		return
@@ -98,12 +97,22 @@ func (h *CampaignsHandler) triggerDHListing(certNumbers []string) {
 			}
 			listed++
 
-			_, err = h.dhLister.SyncChannels(ctx, p.DHInventoryID, []string{"ebay", "shopify"})
+			_, err = h.dhLister.SyncChannels(ctx, p.DHInventoryID, []string{dh.ChannelEbay, dh.ChannelShopify})
 			if err != nil {
-				h.logger.Warn(ctx, "dh listing: channel sync failed",
+				h.logger.Warn(ctx, "dh listing: channel sync failed, reverting to in_stock",
 					observability.String("cert", p.CertNumber),
 					observability.Int("inventoryID", p.DHInventoryID),
 					observability.Err(err))
+				// Revert status so the item doesn't stay "listed" without channel sync
+				if _, revertErr := h.dhLister.UpdateInventory(ctx, p.DHInventoryID, dh.InventoryUpdate{
+					Status: dh.InventoryStatusInStock,
+				}); revertErr != nil {
+					h.logger.Error(ctx, "dh listing: failed to revert status after sync failure",
+						observability.String("cert", p.CertNumber),
+						observability.Int("inventoryID", p.DHInventoryID),
+						observability.Err(revertErr))
+				}
+				listed-- // revert the listed count
 				continue
 			}
 			synced++
@@ -113,6 +122,9 @@ func (h *CampaignsHandler) triggerDHListing(certNumbers []string) {
 			h.logger.Info(ctx, "dh listing completed",
 				observability.Int("listed", listed),
 				observability.Int("synced", synced),
+				observability.Int("certs", len(certNumbers)))
+		} else if len(purchases) > 0 {
+			h.logger.Warn(ctx, "dh listing completed with no successful operations",
 				observability.Int("certs", len(certNumbers)))
 		}
 	}()
@@ -360,8 +372,22 @@ func (h *CampaignsHandler) HandleImportCerts(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	// Trigger DH listing for certs that already have DH inventory items as in_stock.
-	h.triggerDHListing(req.CertNumbers)
+	// Trigger DH listing only for certs that were successfully processed.
+	if len(result.Errors) == 0 {
+		h.triggerDHListing(req.CertNumbers)
+	} else {
+		failedCerts := make(map[string]bool, len(result.Errors))
+		for _, e := range result.Errors {
+			failedCerts[e.CertNumber] = true
+		}
+		var successCerts []string
+		for _, c := range req.CertNumbers {
+			if !failedCerts[c] {
+				successCerts = append(successCerts, c)
+			}
+		}
+		h.triggerDHListing(successCerts)
+	}
 
 	writeJSON(w, http.StatusOK, result)
 }
