@@ -97,3 +97,101 @@ func TestImportCerts_Deduplication(t *testing.T) {
 		t.Errorf("lookup called %d times, want 1", lookupCount)
 	}
 }
+
+type expectedSoldItem struct {
+	CertNumber string
+	PurchaseID string
+	CardName   string
+	CampaignID string
+}
+
+func TestImportCerts_SoldCerts(t *testing.T) {
+	tests := []struct {
+		name          string
+		seed          func(*mockRepo)
+		input         []string
+		wantAlready   int
+		wantSold      int
+		wantSoldItems []expectedSoldItem
+	}{
+		{
+			name: "single sold cert",
+			seed: func(r *mockRepo) {
+				r.purchases["sold-id"] = &Purchase{
+					ID: "sold-id", CertNumber: "99999999", Grader: "PSA",
+					CardName: "Pikachu", CampaignID: "camp-1",
+				}
+				r.certNumbers["99999999"] = true
+				r.sales["sale-1"] = &Sale{ID: "sale-1", PurchaseID: "sold-id"}
+				r.purchaseSales["sold-id"] = true
+			},
+			input:       []string{"99999999"},
+			wantAlready: 0,
+			wantSold:    1,
+			wantSoldItems: []expectedSoldItem{
+				{CertNumber: "99999999", PurchaseID: "sold-id", CardName: "Pikachu", CampaignID: "camp-1"},
+			},
+		},
+		{
+			name: "mixed sold and unsold",
+			seed: func(r *mockRepo) {
+				r.purchases["unsold-id"] = &Purchase{
+					ID: "unsold-id", CertNumber: "11111111", Grader: "PSA",
+					CardName: "Charizard", CampaignID: "camp-1",
+				}
+				r.certNumbers["11111111"] = true
+
+				r.purchases["sold-id"] = &Purchase{
+					ID: "sold-id", CertNumber: "22222222", Grader: "PSA",
+					CardName: "Blastoise", CampaignID: "camp-1",
+				}
+				r.certNumbers["22222222"] = true
+				r.sales["sale-1"] = &Sale{ID: "sale-1", PurchaseID: "sold-id"}
+				r.purchaseSales["sold-id"] = true
+			},
+			input:       []string{"11111111", "22222222"},
+			wantAlready: 1,
+			wantSold:    1,
+			wantSoldItems: []expectedSoldItem{
+				{CertNumber: "22222222", PurchaseID: "sold-id", CardName: "Blastoise", CampaignID: "camp-1"},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := newMockRepo()
+			tc.seed(repo)
+			svc := &service{repo: repo, idGen: func() string { return "test-id" }}
+
+			result, err := svc.ImportCerts(context.Background(), tc.input)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if result.AlreadyExisted != tc.wantAlready {
+				t.Errorf("alreadyExisted = %d, want %d", result.AlreadyExisted, tc.wantAlready)
+			}
+			if result.SoldExisting != tc.wantSold {
+				t.Errorf("soldExisting = %d, want %d", result.SoldExisting, tc.wantSold)
+			}
+			if len(result.SoldItems) != len(tc.wantSoldItems) {
+				t.Fatalf("soldItems length = %d, want %d", len(result.SoldItems), len(tc.wantSoldItems))
+			}
+			for i, want := range tc.wantSoldItems {
+				got := result.SoldItems[i]
+				if got.CertNumber != want.CertNumber {
+					t.Errorf("soldItems[%d].certNumber = %q, want %q", i, got.CertNumber, want.CertNumber)
+				}
+				if got.PurchaseID != want.PurchaseID {
+					t.Errorf("soldItems[%d].purchaseID = %q, want %q", i, got.PurchaseID, want.PurchaseID)
+				}
+				if got.CardName != want.CardName {
+					t.Errorf("soldItems[%d].cardName = %q, want %q", i, got.CardName, want.CardName)
+				}
+				if got.CampaignID != want.CampaignID {
+					t.Errorf("soldItems[%d].campaignID = %q, want %q", i, got.CampaignID, want.CampaignID)
+				}
+			}
+		})
+	}
+}

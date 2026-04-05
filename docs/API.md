@@ -1250,10 +1250,26 @@ Imports purchases by cert number list (fetches card metadata via PSA API).
 {
   "imported": 2,
   "alreadyExisted": 0,
+  "soldExisting": 1,
   "failed": 0,
-  "errors": []
+  "errors": [],
+  "soldItems": [
+    { "certNumber": "12345678", "purchaseId": "abc", "cardName": "Charizard", "campaignId": "xyz" }
+  ]
 }
 ```
+
+---
+
+### DELETE /api/campaigns/{id}/purchases/{purchaseId}/sale
+
+Remove the sale record for a purchase, returning the item to unsold inventory.
+
+**Response:** `204 No Content`
+
+**Errors:**
+- `404` — Purchase not found, or no sale exists for this purchase
+- `403` — Purchase does not belong to the specified campaign
 
 ---
 

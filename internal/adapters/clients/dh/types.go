@@ -4,19 +4,15 @@ package dh
 // SearchResponse is the response from GET /catalog/search.
 type SearchResponse struct {
 	Cards []SearchCard `json:"cards"`
-	Total int          `json:"total"`
-	Query string       `json:"query"`
 }
 
 // SearchCard is a single card result from the catalog search.
 type SearchCard struct {
-	ID         string `json:"id"`
-	Title      string `json:"title"`
-	SetName    string `json:"set_name"`
-	SetCode    string `json:"set_code"`
-	CardNumber string `json:"card_number"`
-	Rarity     string `json:"rarity"`
-	ImageURL   string `json:"image_url"`
+	ID       int    `json:"id"`
+	Name     string `json:"name"`
+	SetName  string `json:"set"`
+	Number   string `json:"number"`
+	ImageURL string `json:"image_url"`
 }
 
 // MatchRequest is the body for POST /catalog/match.
@@ -37,23 +33,23 @@ type MatchResponse struct {
 
 // MarketDataResponse is returned from GET /market/{card_id}.
 type MarketDataResponse struct {
-	Tier           int               `json:"tier"`
-	HasData        bool              `json:"has_data"`
-	CardID         string            `json:"card_id"`
-	CardTitle      string            `json:"card_title"`
-	CurrentPrice   float64           `json:"current_price"`
-	PeriodLow      float64           `json:"period_low"`
-	PeriodHigh     float64           `json:"period_high"`
-	PriceChange    float64           `json:"price_change"`
-	PriceChangePct float64           `json:"price_change_pct"`
-	PriceHistory   [][]any           `json:"price_history"`
-	Periods        map[string]Period `json:"periods"`
-	RecentSales    []RecentSale      `json:"recent_sales"`
-	Population     []PopEntry        `json:"population"`
-	Insights       *InsightsData     `json:"insights"`
-	Sentiment      *SentimentData    `json:"sentiment"`
-	GradingROI     []GradingROIData  `json:"grading_roi"`
-	PriceForecast  *ForecastData     `json:"price_forecast"`
+	Tier           int                 `json:"tier"`
+	HasData        bool                `json:"has_data"`
+	CardID         int                 `json:"card_id"`
+	CardTitle      string              `json:"card_title"`
+	CurrentPrice   float64             `json:"current_price"`
+	PeriodLow      float64             `json:"period_low"`
+	PeriodHigh     float64             `json:"period_high"`
+	PriceChange    float64             `json:"price_change"`
+	PriceChangePct float64             `json:"price_change_pct"`
+	PriceHistory   [][]any             `json:"price_history"`
+	Periods        map[string]Period   `json:"periods"`
+	RecentSales    []RecentSale        `json:"recent_sales"`
+	Population     []PopEntry          `json:"population"`
+	Insights       *InsightsData       `json:"insights"`
+	Sentiment      *SentimentData      `json:"sentiment"`
+	GradingROI     *GradingROIResponse `json:"grading_roi"`
+	PriceForecast  *ForecastData       `json:"price_forecast"`
 }
 
 // Period holds price statistics for a named time window (e.g. "7d", "30d", "90d").
@@ -100,6 +96,19 @@ type GradingROIData struct {
 	Grade        string  `json:"grade"`
 	AvgSalePrice float64 `json:"avg_sale_price"`
 	ROI          float64 `json:"roi"`
+}
+
+// GradingROIResponse wraps the grading ROI data from the API.
+type GradingROIResponse struct {
+	Card    GradingROICard   `json:"card"`
+	ROIData []GradingROIData `json:"roi_data"`
+}
+
+// GradingROICard is the card identity within grading ROI data.
+type GradingROICard struct {
+	ID      int    `json:"id"`
+	Name    string `json:"name"`
+	SetName string `json:"set_name"`
 }
 
 // ForecastData holds a price forecast with confidence and date.

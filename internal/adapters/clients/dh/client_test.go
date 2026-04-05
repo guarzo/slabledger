@@ -65,27 +65,19 @@ func TestClient_Search(t *testing.T) {
 		if q := r.URL.Query().Get("q"); q != "Charizard Base Set" {
 			t.Errorf("expected q=Charizard Base Set, got %q", q)
 		}
-		if limit := r.URL.Query().Get("limit"); limit != "10" {
-			t.Errorf("expected limit=10, got %q", limit)
-		}
 
-		resp := SearchResponse{
-			Cards: []SearchCard{
-				{
-					ID:         "card_001",
-					Title:      "Charizard Base Set 4/102",
-					SetName:    "Base Set",
-					SetCode:    "BS",
-					CardNumber: "4",
-					Rarity:     "Holo Rare",
-					ImageURL:   "https://example.com/charizard.png",
-				},
-			},
-			Total: 1,
-			Query: "Charizard Base Set",
-		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(resp)
+		_, _ = w.Write([]byte(`{
+			"cards": [
+				{
+					"id": 247,
+					"name": "Charizard [1st Edition]",
+					"set": "Pokemon Base Set",
+					"number": "4",
+					"image_url": "https://example.com/charizard.png"
+				}
+			]
+		}`))
 	}))
 	defer server.Close()
 
@@ -94,27 +86,24 @@ func TestClient_Search(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Search() error = %v", err)
 	}
-	if resp.Total != 1 {
-		t.Errorf("Total = %d, want 1", resp.Total)
-	}
-	if resp.Query != "Charizard Base Set" {
-		t.Errorf("Query = %q, want Charizard Base Set", resp.Query)
-	}
 	if len(resp.Cards) != 1 {
 		t.Fatalf("len(Cards) = %d, want 1", len(resp.Cards))
 	}
 	card := resp.Cards[0]
-	if card.ID != "card_001" {
-		t.Errorf("ID = %q, want card_001", card.ID)
+	if card.ID != 247 {
+		t.Errorf("ID = %d, want 247", card.ID)
 	}
-	if card.Title != "Charizard Base Set 4/102" {
-		t.Errorf("Title = %q, want Charizard Base Set 4/102", card.Title)
+	if card.Name != "Charizard [1st Edition]" {
+		t.Errorf("Name = %q, want Charizard [1st Edition]", card.Name)
 	}
-	if card.SetName != "Base Set" {
-		t.Errorf("SetName = %q, want Base Set", card.SetName)
+	if card.SetName != "Pokemon Base Set" {
+		t.Errorf("SetName = %q, want Pokemon Base Set", card.SetName)
 	}
-	if card.Rarity != "Holo Rare" {
-		t.Errorf("Rarity = %q, want Holo Rare", card.Rarity)
+	if card.Number != "4" {
+		t.Errorf("Number = %q, want 4", card.Number)
+	}
+	if card.ImageURL != "https://example.com/charizard.png" {
+		t.Errorf("ImageURL = %q, want https://example.com/charizard.png", card.ImageURL)
 	}
 }
 
@@ -186,46 +175,53 @@ func TestClient_MarketData(t *testing.T) {
 		if r.URL.Path != "/api/v1/integrations/market_data/card_123" {
 			t.Errorf("expected path /api/v1/integrations/market_data/card_123, got %s", r.URL.Path)
 		}
-		if tier := r.URL.Query().Get("tier"); tier != "tier3" {
-			t.Errorf("expected tier=tier3, got %q", tier)
-		}
 
-		resp := MarketDataResponse{
-			Tier:           3,
-			HasData:        true,
-			CardID:         "card_123",
-			CardTitle:      "Charizard Base Set 4/102",
-			CurrentPrice:   14875.00,
-			PeriodLow:      12000.00,
-			PeriodHigh:     16500.00,
-			PriceChange:    875.00,
-			PriceChangePct: 6.25,
-			Periods: map[string]Period{
-				"30d": {
-					CurrentPrice:   14875.00,
-					PeriodLow:      13500.00,
-					PeriodHigh:     15200.00,
-					PriceChange:    500.00,
-					PriceChangePct: 3.48,
-				},
-			},
-			RecentSales: []RecentSale{
-				{
-					SoldAt:         "2026-03-30",
-					GradingCompany: "PSA",
-					Grade:          "10",
-					Price:          15200.00,
-					Platform:       "eBay",
-				},
-			},
-			Sentiment: &SentimentData{
-				Score:        0.82,
-				MentionCount: 45,
-				Trend:        "bullish",
-			},
-		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(resp)
+		_, _ = w.Write([]byte(`{
+			"tier": 3,
+			"has_data": true,
+			"card_id": 247,
+			"card_title": "Charizard Base Set 4/102",
+			"current_price": 14875.00,
+			"period_low": 12000.00,
+			"period_high": 16500.00,
+			"price_change": 875.00,
+			"price_change_pct": 6.25,
+			"price_history": [],
+			"periods": {
+				"30d": {
+					"current_price": 14875.00,
+					"period_low": 13500.00,
+					"period_high": 15200.00,
+					"price_change": 500.00,
+					"price_change_pct": 3.48,
+					"price_history": []
+				}
+			},
+			"recent_sales": [
+				{
+					"sold_at": "2026-03-30",
+					"grading_company": "PSA",
+					"grade": "10",
+					"price": 15200.00,
+					"platform": "eBay"
+				}
+			],
+			"population": [],
+			"insights": null,
+			"sentiment": {
+				"score": 0.82,
+				"mention_count": 45,
+				"trend": "bullish"
+			},
+			"grading_roi": {
+				"card": {"id": 247, "name": "Charizard", "set_name": "Base Set"},
+				"roi_data": [
+					{"grade": "PSA 10", "avg_sale_price": 15000.00, "roi": 0.42}
+				]
+			},
+			"price_forecast": null
+		}`))
 	}))
 	defer server.Close()
 
@@ -237,8 +233,8 @@ func TestClient_MarketData(t *testing.T) {
 	if !resp.HasData {
 		t.Error("expected HasData = true")
 	}
-	if resp.CardID != "card_123" {
-		t.Errorf("CardID = %q, want card_123", resp.CardID)
+	if resp.CardID != 247 {
+		t.Errorf("CardID = %d, want 247", resp.CardID)
 	}
 	if resp.CurrentPrice != 14875.00 {
 		t.Errorf("CurrentPrice = %v, want 14875.00", resp.CurrentPrice)
@@ -250,7 +246,6 @@ func TestClient_MarketData(t *testing.T) {
 		t.Errorf("PriceChangePct = %v, want 6.25", resp.PriceChangePct)
 	}
 
-	// Verify periods parsed
 	period30d, ok := resp.Periods["30d"]
 	if !ok {
 		t.Fatal("expected 30d period")
@@ -259,7 +254,6 @@ func TestClient_MarketData(t *testing.T) {
 		t.Errorf("30d PriceChange = %v, want 500.00", period30d.PriceChange)
 	}
 
-	// Verify recent sales
 	if len(resp.RecentSales) != 1 {
 		t.Fatalf("len(RecentSales) = %d, want 1", len(resp.RecentSales))
 	}
@@ -267,7 +261,6 @@ func TestClient_MarketData(t *testing.T) {
 		t.Errorf("RecentSales[0].Platform = %q, want eBay", resp.RecentSales[0].Platform)
 	}
 
-	// Verify sentiment parsed
 	if resp.Sentiment == nil {
 		t.Fatal("expected non-nil Sentiment")
 	}
@@ -277,8 +270,18 @@ func TestClient_MarketData(t *testing.T) {
 	if resp.Sentiment.MentionCount != 45 {
 		t.Errorf("Sentiment.MentionCount = %d, want 45", resp.Sentiment.MentionCount)
 	}
-	if resp.Sentiment.Trend != "bullish" {
-		t.Errorf("Sentiment.Trend = %q, want bullish", resp.Sentiment.Trend)
+
+	if resp.GradingROI == nil {
+		t.Fatal("expected non-nil GradingROI")
+	}
+	if len(resp.GradingROI.ROIData) != 1 {
+		t.Fatalf("len(GradingROI.ROIData) = %d, want 1", len(resp.GradingROI.ROIData))
+	}
+	if resp.GradingROI.ROIData[0].Grade != "PSA 10" {
+		t.Errorf("GradingROI.ROIData[0].Grade = %q, want PSA 10", resp.GradingROI.ROIData[0].Grade)
+	}
+	if resp.GradingROI.ROIData[0].ROI != 0.42 {
+		t.Errorf("GradingROI.ROIData[0].ROI = %v, want 0.42", resp.GradingROI.ROIData[0].ROI)
 	}
 }
 

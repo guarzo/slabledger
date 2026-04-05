@@ -44,6 +44,11 @@ type CertResolutionCandidate struct {
 	ImageURL   string `json:"image_url"`
 }
 
+// CertResolveBody is the request body for POST /enterprise/certs/resolve (single cert).
+type CertResolveBody struct {
+	Cert CertResolveRequest `json:"cert"`
+}
+
 // CertResolveBatchRequest is the request body for POST /enterprise/certs/resolve_batch.
 type CertResolveBatchRequest struct {
 	Certs []CertResolveRequest `json:"certs"`
@@ -111,7 +116,7 @@ type InventoryListItem struct {
 	SetName           string                   `json:"set_name"`
 	CardNumber        string                   `json:"card_number"`
 	GradingCompany    string                   `json:"grading_company"`
-	Grade             float64                  `json:"grade"`
+	Grade             string                   `json:"grade"`
 	Status            string                   `json:"status"`
 	ListingPriceCents int                      `json:"listing_price_cents"`
 	CostBasisCents    int                      `json:"cost_basis_cents"`
@@ -122,7 +127,7 @@ type InventoryListItem struct {
 
 // InventoryListResponse is the response from GET /inventory.
 type InventoryListResponse struct {
-	Items []InventoryListItem `json:"items"`
+	Items []InventoryListItem `json:"results"`
 	Meta  PaginationMeta      `json:"meta"`
 }
 

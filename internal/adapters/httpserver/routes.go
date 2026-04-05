@@ -130,6 +130,7 @@ func (rt *Router) registerCampaignRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/campaigns/{id}/sales", authRoute(rt.campaignsHandler.HandleListSales))
 	mux.Handle("POST /api/campaigns/{id}/sales", authRoute(rt.campaignsHandler.HandleCreateSale))
 	mux.Handle("POST /api/campaigns/{id}/sales/bulk", authRoute(rt.campaignsHandler.HandleBulkSales))
+	mux.Handle("DELETE /api/campaigns/{id}/purchases/{purchaseId}/sale", authRoute(rt.campaignsHandler.HandleDeleteSale))
 
 	// Campaign analytics
 	mux.Handle("GET /api/campaigns/{id}/pnl", authRoute(rt.campaignsHandler.HandleCampaignPNL))

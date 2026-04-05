@@ -64,6 +64,40 @@ func (r *CampaignsRepository) GetSaleByPurchaseID(ctx context.Context, purchaseI
 	return &s, nil
 }
 
+func (r *CampaignsRepository) GetSalesByPurchaseIDs(ctx context.Context, purchaseIDs []string) (result map[string]*campaigns.Sale, err error) {
+	if len(purchaseIDs) == 0 {
+		return map[string]*campaigns.Sale{}, nil
+	}
+	placeholders := make([]byte, 0, len(purchaseIDs)*2-1)
+	args := make([]any, len(purchaseIDs))
+	for i, id := range purchaseIDs {
+		if i > 0 {
+			placeholders = append(placeholders, ',')
+		}
+		placeholders = append(placeholders, '?')
+		args[i] = id
+	}
+	query := `SELECT ` + saleColumns + ` FROM campaign_sales WHERE purchase_id IN (` + string(placeholders) + `)`
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if cerr := rows.Close(); err == nil && cerr != nil {
+			err = cerr
+		}
+	}()
+	result = make(map[string]*campaigns.Sale, len(purchaseIDs))
+	for rows.Next() {
+		s, scanErr := scanSale(rows)
+		if scanErr != nil {
+			return nil, scanErr
+		}
+		result[s.PurchaseID] = &s
+	}
+	return result, rows.Err()
+}
+
 func (r *CampaignsRepository) ListSalesByCampaign(ctx context.Context, campaignID string, limit, offset int) ([]campaigns.Sale, error) {
 	query := `
 		SELECT ` + saleColumns + `
@@ -79,4 +113,34 @@ func (r *CampaignsRepository) ListSalesByCampaign(ctx context.Context, campaignI
 	return scanRows(ctx, rows, func(rs *sql.Rows) (campaigns.Sale, error) {
 		return scanSale(rs)
 	})
+}
+
+func (r *CampaignsRepository) DeleteSale(ctx context.Context, saleID string) error {
+	result, err := r.db.ExecContext(ctx, `DELETE FROM campaign_sales WHERE id = ?`, saleID)
+	if err != nil {
+		return err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return campaigns.ErrSaleNotFound
+	}
+	return nil
+}
+
+func (r *CampaignsRepository) DeleteSaleByPurchaseID(ctx context.Context, purchaseID string) error {
+	result, err := r.db.ExecContext(ctx, `DELETE FROM campaign_sales WHERE purchase_id = ?`, purchaseID)
+	if err != nil {
+		return err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return campaigns.ErrSaleNotFound
+	}
+	return nil
 }

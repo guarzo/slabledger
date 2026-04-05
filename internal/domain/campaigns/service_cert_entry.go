@@ -34,12 +34,34 @@ func (s *service) ImportCerts(ctx context.Context, certNumbers []string) (*CertI
 		return nil, fmt.Errorf("batch cert lookup: %w", err)
 	}
 
-	result := &CertImportResult{Errors: []CertImportError{}}
+	result := &CertImportResult{Errors: []CertImportError{}, SoldItems: []CertImportSoldItem{}}
 	now := time.Now()
 	var importedCerts []string
 
+	// Batch lookup: find which existing purchases have sales
+	var existingPurchaseIDs []string
+	for _, p := range existingMap {
+		existingPurchaseIDs = append(existingPurchaseIDs, p.ID)
+	}
+	salesMap, err := s.repo.GetSalesByPurchaseIDs(ctx, existingPurchaseIDs)
+	if err != nil {
+		return nil, fmt.Errorf("batch sale lookup: %w", err)
+	}
+
 	for _, certNum := range cleaned {
 		if existing, ok := existingMap[certNum]; ok {
+			// Check if this purchase has been sold (using batch result)
+			if _, hasSale := salesMap[existing.ID]; hasSale {
+				result.SoldExisting++
+				result.SoldItems = append(result.SoldItems, CertImportSoldItem{
+					CertNumber: certNum,
+					PurchaseID: existing.ID,
+					CardName:   existing.CardName,
+					CampaignID: existing.CampaignID,
+				})
+				continue
+			}
+			// Confirmed no sale — treat as normal existing cert
 			if flagErr := s.repo.SetEbayExportFlag(ctx, existing.ID, now); flagErr != nil {
 				if s.logger != nil {
 					s.logger.Warn(ctx, "cert import: failed to set ebay export flag",

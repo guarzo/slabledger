@@ -45,12 +45,14 @@ func ConvertToIntelligence(resp *MarketDataResponse, cardName, setName, cardNumb
 		intel.Forecast = fc
 	}
 
-	for _, roi := range resp.GradingROI {
-		intel.GradingROI = append(intel.GradingROI, intelligence.GradeROI{
-			Grade:        roi.Grade,
-			AvgSaleCents: mathutil.ToCents(roi.AvgSalePrice),
-			ROI:          roi.ROI,
-		})
+	if resp.GradingROI != nil {
+		for _, roi := range resp.GradingROI.ROIData {
+			intel.GradingROI = append(intel.GradingROI, intelligence.GradeROI{
+				Grade:        roi.Grade,
+				AvgSaleCents: mathutil.ToCents(roi.AvgSalePrice),
+				ROI:          roi.ROI,
+			})
+		}
 	}
 
 	for _, sale := range resp.RecentSales {
