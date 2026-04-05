@@ -480,6 +480,22 @@ export interface CertImportSoldItem {
   campaignId: string;
 }
 
+export interface ScanCertResponse {
+  status: 'existing' | 'sold' | 'new';
+  cardName?: string;
+  purchaseId?: string;
+  campaignId?: string;
+}
+
+export interface ResolveCertResponse {
+  certNumber: string;
+  cardName: string;
+  grade: number;
+  year: string;
+  category: string;
+  subject: string;
+}
+
 // eBay export
 
 export interface EbayExportItem {

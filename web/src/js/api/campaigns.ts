@@ -13,6 +13,7 @@ import type {
   MonteCarloComparison, BulkSaleResult, ShopifyPriceSyncResponse,
   CertImportResult, EbayExportListResponse, EbayExportGenerateItem,
   OrdersImportResult, OrdersConfirmItem,
+  ScanCertResponse, ResolveCertResponse,
 } from '../../types/campaigns';
 import type { PriceFlagsResponse } from '../../types/campaigns/priceReview';
 import type { CardPricingResponse, PriceHint } from '../../types/pricing';
@@ -133,6 +134,8 @@ declare module './client' {
 
     // Cert entry & eBay export
     importCerts(certNumbers: string[]): Promise<CertImportResult>;
+    scanCert(certNumber: string): Promise<ScanCertResponse>;
+    resolveCert(certNumber: string): Promise<ResolveCertResponse>;
     deleteSale(campaignId: string, purchaseId: string): Promise<void>;
     listEbayExportItems(flaggedOnly: boolean): Promise<EbayExportListResponse>;
     generateEbayCSV(items: EbayExportGenerateItem[]): Promise<Blob>;
@@ -471,6 +474,18 @@ proto.importCerts = async function (
   this: APIClient, certNumbers: string[],
 ): Promise<CertImportResult> {
   return this.post<CertImportResult>('/purchases/import-certs', { certNumbers });
+};
+
+proto.scanCert = async function (
+  this: APIClient, certNumber: string,
+): Promise<ScanCertResponse> {
+  return this.post<ScanCertResponse>('/purchases/scan-cert', { certNumber });
+};
+
+proto.resolveCert = async function (
+  this: APIClient, certNumber: string,
+): Promise<ResolveCertResponse> {
+  return this.post<ResolveCertResponse>('/purchases/resolve-cert', { certNumber });
 };
 
 proto.deleteSale = async function (
