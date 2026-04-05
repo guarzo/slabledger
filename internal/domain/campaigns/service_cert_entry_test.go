@@ -313,7 +313,7 @@ func TestResolveCert(t *testing.T) {
 			lookupFn: func(_ context.Context, _ string) (*CertInfo, error) {
 				return nil, nil
 			},
-			wantErr:    true,
+			wantErr:      true,
 			wantSentinel: ErrCertNotFound,
 		},
 		{

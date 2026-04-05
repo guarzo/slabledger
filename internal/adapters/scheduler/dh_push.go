@@ -51,14 +51,14 @@ type DHPushConfig struct {
 // DHPushScheduler matches pending purchases against DH and pushes inventory.
 type DHPushScheduler struct {
 	StopHandle
-	pendingLister  DHPushPendingLister
-	statusUpdater  DHPushStatusUpdater
-	matchClient    DHPushMatchClient
-	inventoryPush  DHPushInventoryPusher
-	fieldsUpdater  DHFieldsUpdater
-	cardIDSaver    DHPushCardIDSaver
-	logger         observability.Logger
-	config         DHPushConfig
+	pendingLister DHPushPendingLister
+	statusUpdater DHPushStatusUpdater
+	matchClient   DHPushMatchClient
+	inventoryPush DHPushInventoryPusher
+	fieldsUpdater DHFieldsUpdater
+	cardIDSaver   DHPushCardIDSaver
+	logger        observability.Logger
+	config        DHPushConfig
 }
 
 // NewDHPushScheduler creates a new DH push scheduler.

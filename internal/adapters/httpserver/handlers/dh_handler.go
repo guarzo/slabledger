@@ -60,18 +60,18 @@ type DHSuggestionsCounter interface {
 
 // DHHandler handles DH bulk match, export, intelligence, and suggestions endpoints.
 type DHHandler struct {
-	matchClient     DHMatchClient
-	cardIDSaver     DHCardIDSaver
-	purchaseLister  DHPurchaseLister
-	inventoryPusher  DHInventoryPusher  // optional: pushes matched cards to DH inventory
-	dhFieldsUpdater  DHFieldsUpdater    // optional: persists DH inventory IDs after push
+	matchClient       DHMatchClient
+	cardIDSaver       DHCardIDSaver
+	purchaseLister    DHPurchaseLister
+	inventoryPusher   DHInventoryPusher   // optional: pushes matched cards to DH inventory
+	dhFieldsUpdater   DHFieldsUpdater     // optional: persists DH inventory IDs after push
 	pushStatusUpdater DHPushStatusUpdater // optional: sets dh_push_status after bulk match
-	intelRepo        intelligence.Repository
-	suggestionsRepo intelligence.SuggestionsRepository
-	intelCounter    DHIntelligenceCounter
-	suggestCounter  DHSuggestionsCounter
-	logger          observability.Logger
-	baseCtx         context.Context
+	intelRepo         intelligence.Repository
+	suggestionsRepo   intelligence.SuggestionsRepository
+	intelCounter      DHIntelligenceCounter
+	suggestCounter    DHSuggestionsCounter
+	logger            observability.Logger
+	baseCtx           context.Context
 
 	bgWG             sync.WaitGroup
 	bulkMatchMu      sync.Mutex

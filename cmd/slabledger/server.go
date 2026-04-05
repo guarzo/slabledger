@@ -193,13 +193,13 @@ func startWebServer(ctx context.Context, deps ServerDependencies) error {
 	var campaignsHandler *handlers.CampaignsHandler
 	if deps.CampaignsService != nil {
 		campaignsHandler = handlers.NewCampaignsHandler(
-				deps.CampaignsService, logger,
-				deps.CardDiscoverer, deps.DHInventoryLister,
-				deps.DHMatchClient, deps.DHInventoryPusher,
-				deps.DHFieldsUpdater, deps.DHPushStatusUpdater,
-				deps.DHCardIDSaver,
-				ctx,
-			)
+			deps.CampaignsService, logger,
+			deps.CardDiscoverer, deps.DHInventoryLister,
+			deps.DHMatchClient, deps.DHInventoryPusher,
+			deps.DHFieldsUpdater, deps.DHPushStatusUpdater,
+			deps.DHCardIDSaver,
+			ctx,
+		)
 		logger.Info(ctx, "Campaigns handler initialized")
 	}
 

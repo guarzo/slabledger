@@ -57,10 +57,10 @@ type MockCampaignRepository struct {
 	GetAllPurchasesWithSalesFn     func(ctx context.Context, opts ...campaigns.PurchaseFilterOpt) ([]campaigns.PurchaseWithSale, error)
 	GetGlobalPNLByChannelFn        func(ctx context.Context) ([]campaigns.ChannelPNL, error)
 	GetPurchasesByCertNumbersFn    func(ctx context.Context, certNumbers []string) (map[string]*campaigns.Purchase, error)
-	UpdatePurchaseDHFieldsFn         func(ctx context.Context, id string, update campaigns.DHFieldsUpdate) error
-	GetPurchasesByDHCertStatusFn     func(ctx context.Context, status string, limit int) ([]campaigns.Purchase, error)
-	UpdatePurchaseDHPushStatusFn     func(ctx context.Context, id string, status string) error
-	GetPurchasesByDHPushStatusFn     func(ctx context.Context, status string, limit int) ([]campaigns.Purchase, error)
+	UpdatePurchaseDHFieldsFn       func(ctx context.Context, id string, update campaigns.DHFieldsUpdate) error
+	GetPurchasesByDHCertStatusFn   func(ctx context.Context, status string, limit int) ([]campaigns.Purchase, error)
+	UpdatePurchaseDHPushStatusFn   func(ctx context.Context, id string, status string) error
+	GetPurchasesByDHPushStatusFn   func(ctx context.Context, status string, limit int) ([]campaigns.Purchase, error)
 	GetSellSheetItemsFn            func(ctx context.Context, userID int64) ([]string, error)
 	AddSellSheetItemsFn            func(ctx context.Context, userID int64, purchaseIDs []string) error
 	RemoveSellSheetItemsFn         func(ctx context.Context, userID int64, purchaseIDs []string) error

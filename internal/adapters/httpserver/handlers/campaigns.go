@@ -20,13 +20,13 @@ type DHInventoryLister interface {
 type CampaignsHandler struct {
 	service           campaigns.Service
 	logger            observability.Logger
-	discoverer        CardDiscoverer        // optional: triggers CardHedger discovery after imports
-	dhLister          DHInventoryLister     // optional: lists cards on DH after cert import
-	dhMatchClient     DHMatchClient         // optional: matches cards against DH
-	dhPusher          DHInventoryPusher     // optional: pushes inventory to DH
-	dhFieldsUpdater   DHFieldsUpdater       // optional: persists DH fields after push
-	pushStatusUpdater DHPushStatusUpdater   // optional: sets dh_push_status
-	dhCardIDSaver     DHCardIDSaver         // optional: persists DH card ID mappings
+	discoverer        CardDiscoverer      // optional: triggers CardHedger discovery after imports
+	dhLister          DHInventoryLister   // optional: lists cards on DH after cert import
+	dhMatchClient     DHMatchClient       // optional: matches cards against DH
+	dhPusher          DHInventoryPusher   // optional: pushes inventory to DH
+	dhFieldsUpdater   DHFieldsUpdater     // optional: persists DH fields after push
+	pushStatusUpdater DHPushStatusUpdater // optional: sets dh_push_status
+	dhCardIDSaver     DHCardIDSaver       // optional: persists DH card ID mappings
 	baseCtx           context.Context
 	bgWG              sync.WaitGroup // tracks background goroutines (e.g. card discovery)
 }
