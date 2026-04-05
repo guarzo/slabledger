@@ -53,6 +53,7 @@ func TestDHInventoryPoll_UpdatesPurchase(t *testing.T) {
 	require.Equal(t, 98765, call.InventoryID)
 	require.Equal(t, dh.CertStatusMatched, call.CertStatus)
 	require.Equal(t, 7500, call.ListingPriceCents)
+	require.Equal(t, "active", call.DHStatus)
 	require.Contains(t, call.ChannelsJSON, "ebay")
 
 	// Verify checkpoint was updated

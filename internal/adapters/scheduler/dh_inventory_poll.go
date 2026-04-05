@@ -144,6 +144,7 @@ func (s *DHInventoryPollScheduler) poll(ctx context.Context) {
 			CertStatus:        dh.CertStatusMatched,
 			ListingPriceCents: item.ListingPriceCents,
 			ChannelsJSON:      channelsJSON,
+			DHStatus:          item.Status,
 		}); updateErr != nil {
 			s.logger.Warn(ctx, "dh inventory poll: failed to update purchase",
 				observability.String("purchaseID", purchaseID),
@@ -178,7 +179,6 @@ func (s *DHInventoryPollScheduler) fetchAllPages(ctx context.Context, since stri
 			return nil, fmt.Errorf("fetchAllPages: exceeded max pages (%d), possible API total miscount", maxPagesPerPoll)
 		}
 		resp, err := s.client.ListInventory(ctx, dh.InventoryFilters{
-			Status:       "active",
 			UpdatedSince: since,
 			Page:         page,
 			PerPage:      100,

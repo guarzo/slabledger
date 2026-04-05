@@ -149,6 +149,7 @@ type Purchase struct {
 	DHCertStatus        string    `json:"dhCertStatus,omitempty"`        // Resolution state: matched, ambiguous, not_found, unresolved, resolving
 	DHListingPriceCents int       `json:"dhListingPriceCents,omitempty"` // Current DH listing price
 	DHChannelsJSON      string    `json:"dhChannelsJson,omitempty"`      // Per-channel sync status JSON blob
+	DHStatus            string    `json:"dhStatus,omitempty"`            // "in_stock" or "listed" — DH inventory status
 	CreatedAt           time.Time `json:"createdAt"`
 	UpdatedAt           time.Time `json:"updatedAt"`
 

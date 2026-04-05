@@ -140,6 +140,7 @@ type DHFieldsUpdate struct {
 	CertStatus        string
 	ListingPriceCents int
 	ChannelsJSON      string
+	DHStatus          string // "in_stock" or "listed"
 }
 
 // PSAUpdateFields contains the PSA-specific fields that can be updated on an existing purchase.
