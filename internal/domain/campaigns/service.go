@@ -236,6 +236,7 @@ type Service interface {
 
 	// Cert entry
 	ImportCerts(ctx context.Context, certNumbers []string) (*CertImportResult, error)
+	GetPurchasesByCertNumbers(ctx context.Context, certNumbers []string) (map[string]*Purchase, error)
 
 	// eBay export
 	ListEbayExportItems(ctx context.Context, flaggedOnly bool) (*EbayExportListResponse, error)

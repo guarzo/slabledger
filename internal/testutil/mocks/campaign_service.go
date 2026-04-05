@@ -127,6 +127,9 @@ type MockCampaignService struct {
 	// Orders sales import
 	ImportOrdersSalesFn  func(ctx context.Context, rows []campaigns.OrdersExportRow) (*campaigns.OrdersImportResult, error)
 	ConfirmOrdersSalesFn func(ctx context.Context, items []campaigns.OrdersConfirmItem) (*campaigns.BulkSaleResult, error)
+
+	// Cert batch lookup
+	GetPurchasesByCertNumbersFn func(ctx context.Context, certNumbers []string) (map[string]*campaigns.Purchase, error)
 }
 
 var _ campaigns.Service = (*MockCampaignService)(nil)
@@ -671,6 +674,13 @@ func (m *MockCampaignService) RetryFailedSnapshots(ctx context.Context, limit in
 		return m.RetryFailedSnapshotsFn(ctx, limit)
 	}
 	return 0, 0, 0
+}
+
+func (m *MockCampaignService) GetPurchasesByCertNumbers(ctx context.Context, certNumbers []string) (map[string]*campaigns.Purchase, error) {
+	if m.GetPurchasesByCertNumbersFn != nil {
+		return m.GetPurchasesByCertNumbersFn(ctx, certNumbers)
+	}
+	return map[string]*campaigns.Purchase{}, nil
 }
 
 func (m *MockCampaignService) Close() {}

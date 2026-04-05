@@ -51,6 +51,7 @@ type ServerDependencies struct {
 	PicksHandler              *handlers.PicksHandler         // AI picks; nil = disabled
 	OpportunitiesHandler      *handlers.OpportunitiesHandler // Arbitrage opportunities; nil = disabled
 	DHHandler                 *handlers.DHHandler            // DH bulk match + intelligence; nil = disabled
+	DHInventoryLister         handlers.DHInventoryLister     // optional: lists cards on DH after cert import
 }
 
 // EnvVarValidation holds the result of environment variable validation
@@ -185,7 +186,7 @@ func startWebServer(ctx context.Context, deps ServerDependencies) error {
 	// Create campaigns handler if service is available
 	var campaignsHandler *handlers.CampaignsHandler
 	if deps.CampaignsService != nil {
-		campaignsHandler = handlers.NewCampaignsHandler(deps.CampaignsService, logger, deps.CardDiscoverer, ctx)
+		campaignsHandler = handlers.NewCampaignsHandler(deps.CampaignsService, logger, deps.CardDiscoverer, deps.DHInventoryLister, ctx)
 		logger.Info(ctx, "Campaigns handler initialized")
 	}
 

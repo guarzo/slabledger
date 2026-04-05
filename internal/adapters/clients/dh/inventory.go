@@ -64,6 +64,46 @@ func (c *Client) ListInventory(ctx context.Context, filters InventoryFilters) (*
 	return &resp, nil
 }
 
+// UpdateInventory updates an inventory item on DH (status and/or cost basis).
+func (c *Client) UpdateInventory(ctx context.Context, inventoryID int, update InventoryUpdate) (*InventoryResult, error) {
+	fullURL := fmt.Sprintf("%s/api/v1/enterprise/inventory/%d", c.baseURL, inventoryID)
+
+	var resp InventoryResult
+	if err := c.patchEnterprise(ctx, fullURL, update, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// SyncChannels pushes a listed inventory item to external sales channels.
+func (c *Client) SyncChannels(ctx context.Context, inventoryID int, channels []string) (*ChannelSyncResponse, error) {
+	fullURL := fmt.Sprintf("%s/api/v1/enterprise/inventory/%d/sync", c.baseURL, inventoryID)
+	body := ChannelSyncRequest{Channels: channels}
+
+	var resp ChannelSyncResponse
+	if err := c.postEnterprise(ctx, fullURL, body, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// DelistChannels removes a listed inventory item from specific external channels.
+// If channels is empty, delists from all channels.
+func (c *Client) DelistChannels(ctx context.Context, inventoryID int, channels []string) (*ChannelSyncResponse, error) {
+	fullURL := fmt.Sprintf("%s/api/v1/enterprise/inventory/%d/sync", c.baseURL, inventoryID)
+
+	var body *ChannelDelistRequest
+	if len(channels) > 0 {
+		body = &ChannelDelistRequest{Channels: channels}
+	}
+
+	var resp ChannelSyncResponse
+	if err := c.deleteEnterprise(ctx, fullURL, body, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
 // GetOrders retrieves completed sales from DH.
 func (c *Client) GetOrders(ctx context.Context, filters OrderFilters) (*OrdersResponse, error) {
 	since := strings.TrimSpace(filters.Since)

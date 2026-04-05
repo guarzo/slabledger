@@ -335,6 +335,8 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	if dhClient != nil && dhClient.Available() {
 		dhHandler = handlers.NewDHHandler(
 			dhClient, cardIDMappingRepo, campaignsRepo,
+			dhClient,      // DHInventoryPusher
+			campaignsRepo, // DHFieldsUpdater
 			intelRepo, suggestionsRepo,
 			intelRepo, suggestionsRepo,
 			logger,
@@ -501,6 +503,11 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		PicksHandler:              picksHandler,
 		OpportunitiesHandler:      opportunitiesHandler,
 		DHHandler:                 dhHandler,
+	}
+	// Nil-safe interface conversion: a nil *dh.Client assigned to an interface
+	// produces a non-nil interface wrapping a nil pointer, which breaks nil checks.
+	if dhClient != nil {
+		deps.DHInventoryLister = dhClient
 	}
 	serverErr := startWebServer(ctx, deps)
 
