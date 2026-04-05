@@ -354,11 +354,13 @@
      CHANNEL COLORS (Sales Channels)
      =================================== */
   --channel-ebay: #3b82f6;
+  --channel-website: #f59e0b;
+  --channel-inperson: #10b981;
+  /* Legacy channel tokens (kept for historical data display) */
   --channel-tcgplayer: #8b5cf6;
   --channel-local: #10b981;
   --channel-other: #6b7280;
   --channel-gamestop: #ef4444;
-  --channel-website: #f59e0b;
   --channel-cardshow: #ec4899;
 
   /* ===================================

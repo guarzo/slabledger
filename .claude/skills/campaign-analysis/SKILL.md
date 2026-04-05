@@ -87,7 +87,7 @@ Present: identity + strategy intent, P&L summary, channel performance, fill rate
 - **Buy terms** are decimals (0.80 = 80% of CL Value)
 - **ROI** is a decimal ratio (0.08 = 8%)
 - **Margin at 80% terms:** CL x 7.65% - $3 per card on eBay (12.35% fees)
-- **PSA 7 cards have NO GameStop exit** (PSA 8-10 only, $1,500 cash cap)
+- **Exit channels:** eBay (12.35% fees), Website (3% fees), In Person/card shows (0% fees, 80-85% of market)
 - **Credit limit:** $50,000 with PSA, bimonthly invoicing, 14-day payment terms. PSA has discretion to allow higher utilization — check with user before flagging credit as critical.
 - **~1 week delay** between PSA purchase consummation and card receipt. Campaigns with <2 weeks of history and 0% sell-through are not necessarily underperforming — cards may not be in hand yet.
 

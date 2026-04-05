@@ -208,20 +208,16 @@ func (s *DHOrdersPollScheduler) updateDHOrdersCheckpoint(ctx context.Context, or
 }
 
 // mapDHChannel converts a DH channel string to a campaigns.SaleChannel.
-// NOTE: "shopify" maps to TCGPlayer because in the DH v2 spec our Shopify
-// integration represents TCGPlayer Direct orders. If DH's Shopify channel
-// becomes a separate storefront, this may need its own SaleChannel and fee
-// structure — confirm with the business before changing.
 func mapDHChannel(channel string) campaigns.SaleChannel {
 	switch channel {
 	case "ebay":
 		return campaigns.SaleChannelEbay
 	case "shopify":
-		return campaigns.SaleChannelTCGPlayer
+		return campaigns.SaleChannelWebsite
 	case "dh":
-		return campaigns.SaleChannelDoubleHolo
+		return campaigns.SaleChannelInPerson
 	default:
-		return campaigns.SaleChannelOther
+		return campaigns.SaleChannelInPerson
 	}
 }
 

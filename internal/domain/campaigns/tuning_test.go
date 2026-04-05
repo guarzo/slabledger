@@ -92,7 +92,7 @@ func Test_computeCardPerformance(t *testing.T) {
 	data := []PurchaseWithSale{
 		makePWS("winner", 10, 5000, 8000, makeSale(10000, 1200, 3500, 5, SaleChannelEbay)),
 		makePWS("loser", 8, 20000, 22000, makeSale(15000, 1800, -7100, 30, SaleChannelEbay)),
-		makePWS("mid", 9, 10000, 12000, makeSale(13000, 1500, 1200, 12, SaleChannelLocal)),
+		makePWS("mid", 9, 10000, 12000, makeSale(13000, 1500, 1200, 12, SaleChannelInPerson)),
 	}
 
 	top, bottom := computeCardPerformance(data, 2)
@@ -340,7 +340,7 @@ func Test_computeRecommendations_ChannelOptimization(t *testing.T) {
 	campaign := &Campaign{BuyTermsCLPct: 0.85}
 	channelPNL := []ChannelPNL{
 		{Channel: SaleChannelEbay, SaleCount: 10, NetProfitCents: -5000},
-		{Channel: SaleChannelTCGPlayer, SaleCount: 8, NetProfitCents: 16000},
+		{Channel: SaleChannelInPerson, SaleCount: 8, NetProfitCents: 16000},
 	}
 
 	recs := computeRecommendations(&TuningInput{Campaign: campaign, ChannelPNL: channelPNL})
@@ -362,7 +362,7 @@ func Test_computeRecommendations_ChannelOptimization_NoRecWhenProfitable(t *test
 	campaign := &Campaign{BuyTermsCLPct: 0.85}
 	channelPNL := []ChannelPNL{
 		{Channel: SaleChannelEbay, SaleCount: 10, NetProfitCents: 5000},
-		{Channel: SaleChannelTCGPlayer, SaleCount: 8, NetProfitCents: 16000},
+		{Channel: SaleChannelInPerson, SaleCount: 8, NetProfitCents: 16000},
 	}
 
 	recs := computeRecommendations(&TuningInput{Campaign: campaign, ChannelPNL: channelPNL})

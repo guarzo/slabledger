@@ -5,7 +5,7 @@ import type { SegmentPerformance, ChannelVelocity, SaleChannel } from '../../../
 import { formatCents, formatPct } from '../../utils/formatters';
 import { TabNavigation, Section } from '../../ui';
 import { usePortfolioInsights, usePortfolioChannelVelocity } from '../../queries/useCampaignQueries';
-import { saleChannelLabels } from '../../utils/campaignConstants';
+import { saleChannelLabels, normalizeChannel } from '../../utils/campaignConstants';
 import type { Tab } from '../../ui';
 
 type SortField = 'label' | 'purchaseCount' | 'soldCount' | 'sellThroughPct' | 'roi' | 'netProfitCents' | 'avgDaysToSell' | 'bestChannel';
@@ -41,21 +41,23 @@ const insightTabs: readonly Tab<TabKey>[] = [
 ];
 
 const channelColors: Record<string, string> = {
-  ebay: 'var(--channel-ebay)', tcgplayer: 'var(--channel-tcgplayer)', local: 'var(--channel-local)', other: 'var(--channel-other)',
-  gamestop: 'var(--channel-gamestop)', website: 'var(--channel-website)', cardshow: 'var(--channel-cardshow)',
+  ebay: 'var(--channel-ebay)', website: 'var(--channel-website)', inperson: 'var(--channel-inperson)',
 };
 
 const DEFAULT_ROW_LIMIT = 5;
 
 function VelocityChart({ velocity }: { velocity: ChannelVelocity[] }) {
   const chartData = useMemo(() => {
-    return velocity.map(cv => ({
-      label: saleChannelLabels[cv.channel] ?? cv.channel,
-      channel: cv.channel,
-      avgDaysToSell: Number.isFinite(cv.avgDaysToSell) ? Math.round(cv.avgDaysToSell) : null,
-      saleCount: cv.saleCount,
-      revenueCents: cv.revenueCents,
-    }));
+    return velocity.map(cv => {
+      const normalized = normalizeChannel(cv.channel);
+      return {
+        label: saleChannelLabels[normalized] ?? normalized,
+        channel: normalized,
+        avgDaysToSell: Number.isFinite(cv.avgDaysToSell) ? Math.round(cv.avgDaysToSell) : null,
+        saleCount: cv.saleCount,
+        revenueCents: cv.revenueCents,
+      };
+    });
   }, [velocity]);
 
   if (chartData.length === 0) return null;

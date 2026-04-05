@@ -185,7 +185,7 @@ func TestService_CreateSale_SameDateAllowed(t *testing.T) {
 	// Sale on the same day as purchase should succeed
 	s := &campaigns.Sale{
 		PurchaseID:     p.ID,
-		SaleChannel:    campaigns.SaleChannelLocal,
+		SaleChannel:    campaigns.SaleChannelInPerson,
 		SalePriceCents: 40000,
 		SaleDate:       "2026-03-01",
 	}
@@ -384,8 +384,8 @@ func TestService_CreateSale_ComputesFieldsLocal(t *testing.T) {
 		t.Fatalf("setup CreatePurchase: %v", err)
 	}
 
-	// Local sale (e.g., GameStop at 90% CL)
-	s := &campaigns.Sale{PurchaseID: p.ID, SaleChannel: campaigns.SaleChannelLocal, SalePriceCents: 90000, SaleDate: "2026-01-20"}
+	// InPerson sale (no fee)
+	s := &campaigns.Sale{PurchaseID: p.ID, SaleChannel: campaigns.SaleChannelInPerson, SalePriceCents: 90000, SaleDate: "2026-01-20"}
 	if err := svc.CreateSale(ctx, s, c, p); err != nil {
 		t.Fatalf("CreateSale: %v", err)
 	}
@@ -1043,8 +1043,8 @@ func TestService_GetPortfolioChannelVelocity_WithData(t *testing.T) {
 	repo := mocks.NewMockCampaignRepository()
 	repo.ChannelVelocity = []campaigns.ChannelVelocity{
 		{Channel: campaigns.SaleChannelEbay, SaleCount: 10, AvgDaysToSell: 14.5, RevenueCents: 500000},
-		{Channel: campaigns.SaleChannelGameStop, SaleCount: 5, AvgDaysToSell: 0, RevenueCents: 250000},
-		{Channel: campaigns.SaleChannelLocal, SaleCount: 3, AvgDaysToSell: 7.0, RevenueCents: 120000},
+		{Channel: campaigns.SaleChannelInPerson, SaleCount: 5, AvgDaysToSell: 0, RevenueCents: 250000},
+		{Channel: campaigns.SaleChannelWebsite, SaleCount: 3, AvgDaysToSell: 7.0, RevenueCents: 120000},
 	}
 	svc := campaigns.NewService(repo, withTestIDGen())
 	ctx := context.Background()
@@ -1071,15 +1071,15 @@ func TestService_GetPortfolioChannelVelocity_WithData(t *testing.T) {
 		t.Errorf("velocity[0].RevenueCents = %d, want 500000", velocity[0].RevenueCents)
 	}
 
-	if velocity[1].Channel != campaigns.SaleChannelGameStop {
-		t.Errorf("velocity[1].Channel = %q, want gamestop", velocity[1].Channel)
+	if velocity[1].Channel != campaigns.SaleChannelInPerson {
+		t.Errorf("velocity[1].Channel = %q, want inperson", velocity[1].Channel)
 	}
 	if velocity[1].SaleCount != 5 {
 		t.Errorf("velocity[1].SaleCount = %d, want 5", velocity[1].SaleCount)
 	}
 
-	if velocity[2].Channel != campaigns.SaleChannelLocal {
-		t.Errorf("velocity[2].Channel = %q, want local", velocity[2].Channel)
+	if velocity[2].Channel != campaigns.SaleChannelWebsite {
+		t.Errorf("velocity[2].Channel = %q, want website", velocity[2].Channel)
 	}
 	if velocity[2].RevenueCents != 120000 {
 		t.Errorf("velocity[2].RevenueCents = %d, want 120000", velocity[2].RevenueCents)

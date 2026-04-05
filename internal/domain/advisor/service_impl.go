@@ -54,13 +54,10 @@ var operationTools = map[AIOperation][]string{
 		"get_market_intelligence",
 	},
 	OpLiquidation: {
-		"list_campaigns", "get_global_inventory", "get_sell_sheet",
-		"get_credit_summary", "get_expected_values", "get_inventory_aging",
-		"get_portfolio_health", "suggest_price", "get_cert_lookup",
-		"get_channel_velocity", "get_capital_timeline", "get_suggestion_stats",
-		"get_dashboard_summary", "get_crack_opportunities",
-		"get_market_intelligence", "get_inventory_alerts",
+		"get_dashboard_summary", "get_global_inventory", "get_sell_sheet",
+		"get_suggestion_stats", "get_inventory_alerts",
 		"get_expected_values_batch", "suggest_price_batch",
+		"get_crack_opportunities",
 	},
 	OpPurchaseAssessment: {
 		"list_campaigns", "get_campaign_tuning", "get_portfolio_insights",
