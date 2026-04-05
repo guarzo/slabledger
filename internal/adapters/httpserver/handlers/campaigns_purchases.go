@@ -97,8 +97,6 @@ func (h *CampaignsHandler) HandleCreateSale(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	warnings := campaigns.ValidateSaleWarnings(s, purchase)
-
 	if err := h.service.CreateSale(r.Context(), s, campaign, purchase); err != nil {
 		if campaigns.IsDuplicateSale(err) {
 			writeError(w, http.StatusConflict, "Sale already exists for this purchase")
@@ -113,13 +111,6 @@ func (h *CampaignsHandler) HandleCreateSale(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	if len(warnings) > 0 {
-		writeJSON(w, http.StatusCreated, struct {
-			*campaigns.Sale
-			Warnings []campaigns.SaleWarning `json:"warnings,omitempty"`
-		}{Sale: s, Warnings: warnings})
-		return
-	}
 	writeJSON(w, http.StatusCreated, s)
 }
 

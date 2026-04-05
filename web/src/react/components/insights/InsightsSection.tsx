@@ -5,7 +5,7 @@ import type { SegmentPerformance, ChannelVelocity, SaleChannel } from '../../../
 import { formatCents, formatPct } from '../../utils/formatters';
 import { TabNavigation, Section } from '../../ui';
 import { usePortfolioInsights, usePortfolioChannelVelocity } from '../../queries/useCampaignQueries';
-import { saleChannelLabels } from '../../utils/campaignConstants';
+import { saleChannelLabels, normalizeChannel } from '../../utils/campaignConstants';
 import type { Tab } from '../../ui';
 
 type SortField = 'label' | 'purchaseCount' | 'soldCount' | 'sellThroughPct' | 'roi' | 'netProfitCents' | 'avgDaysToSell' | 'bestChannel';
@@ -42,9 +42,6 @@ const insightTabs: readonly Tab<TabKey>[] = [
 
 const channelColors: Record<string, string> = {
   ebay: 'var(--channel-ebay)', website: 'var(--channel-website)', inperson: 'var(--channel-inperson)',
-  // Legacy fallbacks
-  tcgplayer: 'var(--channel-ebay)', local: 'var(--channel-inperson)', other: 'var(--channel-inperson)',
-  gamestop: 'var(--channel-inperson)', cardshow: 'var(--channel-inperson)',
 };
 
 const DEFAULT_ROW_LIMIT = 5;
@@ -80,7 +77,7 @@ function VelocityChart({ velocity }: { velocity: ChannelVelocity[] }) {
           />
           <Bar dataKey="avgDaysToSell" radius={[0, 4, 4, 0]} barSize={14}>
             {chartData.map(d => (
-              <Cell key={d.channel} fill={channelColors[d.channel] ?? '#6b7280'} />
+              <Cell key={d.channel} fill={channelColors[normalizeChannel(d.channel as SaleChannel)] ?? '#6b7280'} />
             ))}
           </Bar>
         </BarChart>

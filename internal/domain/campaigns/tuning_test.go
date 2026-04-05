@@ -340,7 +340,7 @@ func Test_computeRecommendations_ChannelOptimization(t *testing.T) {
 	campaign := &Campaign{BuyTermsCLPct: 0.85}
 	channelPNL := []ChannelPNL{
 		{Channel: SaleChannelEbay, SaleCount: 10, NetProfitCents: -5000},
-		{Channel: SaleChannelEbay, SaleCount: 8, NetProfitCents: 16000},
+		{Channel: SaleChannelInPerson, SaleCount: 8, NetProfitCents: 16000},
 	}
 
 	recs := computeRecommendations(&TuningInput{Campaign: campaign, ChannelPNL: channelPNL})
@@ -362,7 +362,7 @@ func Test_computeRecommendations_ChannelOptimization_NoRecWhenProfitable(t *test
 	campaign := &Campaign{BuyTermsCLPct: 0.85}
 	channelPNL := []ChannelPNL{
 		{Channel: SaleChannelEbay, SaleCount: 10, NetProfitCents: 5000},
-		{Channel: SaleChannelEbay, SaleCount: 8, NetProfitCents: 16000},
+		{Channel: SaleChannelInPerson, SaleCount: 8, NetProfitCents: 16000},
 	}
 
 	recs := computeRecommendations(&TuningInput{Campaign: campaign, ChannelPNL: channelPNL})

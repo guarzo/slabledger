@@ -16,6 +16,7 @@ export const saleChannelLabels: Record<SaleChannel, string> = {
   other: 'In Person',
   gamestop: 'In Person',
   cardshow: 'In Person',
+  doubleholo: 'In Person',
 };
 
 /** Normalizes a legacy channel to one of the 3 active channels. */
@@ -41,6 +42,7 @@ export const saleChannelColors: Record<SaleChannel, string> = {
   other: 'bg-green-500',
   gamestop: 'bg-green-500',
   cardshow: 'bg-green-500',
+  doubleholo: 'bg-green-500',
 };
 
 export const phaseColors: Record<Phase, string> = {

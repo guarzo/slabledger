@@ -41,6 +41,7 @@ export default function CertEntryTab() {
 
   const handleReturnToInventory = async (item: CertImportSoldItem) => {
     setPendingReturns(prev => new Set(prev).add(item.certNumber));
+    setError(null);
     try {
       await api.deleteSale(item.campaignId, item.purchaseId);
       setReturnedCerts(prev => new Set(prev).add(item.certNumber));
