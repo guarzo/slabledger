@@ -1,5 +1,7 @@
 package dh
 
+import "encoding/json"
+
 // --- Cert Resolution Status Constants ---
 
 const (
@@ -106,6 +108,18 @@ type InventoryPushRequest struct {
 type InventoryChannelStatus struct {
 	Name   string `json:"name"`
 	Status string `json:"status"` // "pending", "active", "error"
+}
+
+// MarshalChannels serializes channel statuses to JSON, defaulting to "[]".
+func MarshalChannels(channels []InventoryChannelStatus) string {
+	if len(channels) == 0 {
+		return "[]"
+	}
+	b, err := json.Marshal(channels)
+	if err != nil {
+		return "[]"
+	}
+	return string(b)
 }
 
 // InventoryResult is the per-item response from inventory push.

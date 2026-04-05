@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/guarzo/slabledger/internal/domain/campaigns"
 	"github.com/guarzo/slabledger/internal/domain/observability"
-	"github.com/guarzo/slabledger/internal/domain/pricing"
 )
 
 // unmatchedResponse is the JSON shape returned by HandleUnmatched.
@@ -16,10 +16,13 @@ type unmatchedResponse struct {
 }
 
 type unmatchedCard struct {
-	CardName   string `json:"card_name"`
-	SetName    string `json:"set_name"`
-	CardNumber string `json:"card_number"`
-	CertNumber string `json:"cert_number"`
+	PurchaseID   string  `json:"purchase_id"`
+	CardName     string  `json:"card_name"`
+	SetName      string  `json:"set_name"`
+	CardNumber   string  `json:"card_number"`
+	CertNumber   string  `json:"cert_number"`
+	Grade        float64 `json:"grade"`
+	CLValueCents int     `json:"cl_value_cents"`
 }
 
 // HandleUnmatched returns cards that do not yet have a DH mapping.
@@ -36,31 +39,19 @@ func (h *DHHandler) HandleUnmatched(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	mappedSet, err := h.cardIDSaver.GetMappedSet(ctx, pricing.SourceDH)
-	if err != nil {
-		h.logger.Error(ctx, "unmatched: load mapped set", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "failed to load mappings")
-		return
-	}
-
 	var unmatched []unmatchedCard
-	seen := make(map[string]bool)
 	for _, p := range purchases {
-		key := dhCardKey(p.CardName, p.SetName, p.CardNumber)
-		if seen[key] {
+		if p.DHPushStatus != campaigns.DHPushStatusUnmatched {
 			continue
 		}
-		seen[key] = true
-
-		if mappedSet[key] != "" {
-			continue
-		}
-
 		unmatched = append(unmatched, unmatchedCard{
-			CardName:   p.CardName,
-			SetName:    p.SetName,
-			CardNumber: p.CardNumber,
-			CertNumber: p.CertNumber,
+			PurchaseID:   p.ID,
+			CardName:     p.CardName,
+			SetName:      p.SetName,
+			CardNumber:   p.CardNumber,
+			CertNumber:   p.CertNumber,
+			Grade:        p.GradeValue,
+			CLValueCents: p.CLValueCents,
 		})
 	}
 
@@ -84,13 +75,6 @@ func (h *DHHandler) HandleExportUnmatched(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	mappedSet, err := h.cardIDSaver.GetMappedSet(ctx, pricing.SourceDH)
-	if err != nil {
-		h.logger.Error(ctx, "export unmatched: load mapped set", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "failed to load mappings")
-		return
-	}
-
 	type exportRow struct {
 		certNumber string
 		cardName   string
@@ -100,7 +84,7 @@ func (h *DHHandler) HandleExportUnmatched(w http.ResponseWriter, r *http.Request
 	}
 	var rows []exportRow
 	for _, p := range purchases {
-		if mappedSet[dhCardKey(p.CardName, p.SetName, p.CardNumber)] != "" {
+		if p.DHPushStatus != campaigns.DHPushStatusUnmatched {
 			continue
 		}
 		price := p.CLValueCents

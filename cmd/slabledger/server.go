@@ -52,6 +52,11 @@ type ServerDependencies struct {
 	OpportunitiesHandler      *handlers.OpportunitiesHandler  // Arbitrage opportunities; nil = disabled
 	DHHandler                 *handlers.DHHandler             // DH bulk match + intelligence; nil = disabled
 	DHInventoryLister         handlers.DHInventoryLister      // optional: lists cards on DH after cert import
+	DHMatchClient             handlers.DHMatchClient          // optional: inline DH match for pending certs
+	DHInventoryPusher         handlers.DHInventoryPusher      // optional: inline DH push for pending certs
+	DHFieldsUpdater           handlers.DHFieldsUpdater        // optional: persists DH fields after inline push
+	DHPushStatusUpdater       handlers.DHPushStatusUpdater    // optional: sets dh_push_status after inline push
+	DHCardIDSaver             handlers.DHCardIDSaver          // optional: persists DH card ID mappings
 	SellSheetItemsHandler     *handlers.SellSheetItemsHandler // Sell sheet persistence; nil = disabled
 }
 
@@ -187,7 +192,31 @@ func startWebServer(ctx context.Context, deps ServerDependencies) error {
 	// Create campaigns handler if service is available
 	var campaignsHandler *handlers.CampaignsHandler
 	if deps.CampaignsService != nil {
-		campaignsHandler = handlers.NewCampaignsHandler(deps.CampaignsService, logger, deps.CardDiscoverer, deps.DHInventoryLister, ctx)
+		var opts []handlers.CampaignsHandlerOption
+		if deps.CardDiscoverer != nil {
+			opts = append(opts, handlers.WithCardDiscoverer(deps.CardDiscoverer))
+		}
+		if deps.DHInventoryLister != nil {
+			opts = append(opts, handlers.WithDHLister(deps.DHInventoryLister))
+		}
+		if deps.DHMatchClient != nil {
+			opts = append(opts, handlers.WithDHMatchClient(deps.DHMatchClient))
+		}
+		if deps.DHInventoryPusher != nil {
+			opts = append(opts, handlers.WithDHPusher(deps.DHInventoryPusher))
+		}
+		if deps.DHFieldsUpdater != nil {
+			opts = append(opts, handlers.WithDHFieldsUpdater(deps.DHFieldsUpdater))
+		}
+		if deps.DHPushStatusUpdater != nil {
+			opts = append(opts, handlers.WithDHPushStatusUpdater(deps.DHPushStatusUpdater))
+		}
+		if deps.DHCardIDSaver != nil {
+			opts = append(opts, handlers.WithDHCardIDSaver(deps.DHCardIDSaver))
+		}
+		campaignsHandler = handlers.NewCampaignsHandler(
+			deps.CampaignsService, logger, ctx, opts...,
+		)
 		logger.Info(ctx, "Campaigns handler initialized")
 	}
 

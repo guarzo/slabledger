@@ -2,6 +2,7 @@ package campaigns
 
 import (
 	"encoding/json"
+	"strings"
 	"time"
 )
 
@@ -20,6 +21,16 @@ type DHStatus = string
 const (
 	DHStatusInStock DHStatus = "in_stock"
 	DHStatusListed  DHStatus = "listed"
+)
+
+// DHPushStatus represents the DH inventory push pipeline status.
+type DHPushStatus = string
+
+const (
+	DHPushStatusPending   DHPushStatus = "pending"
+	DHPushStatusMatched   DHPushStatus = "matched"
+	DHPushStatusUnmatched DHPushStatus = "unmatched"
+	DHPushStatusManual    DHPushStatus = "manual"
 )
 
 // SaleChannel represents where a card was sold.
@@ -157,14 +168,15 @@ type Purchase struct {
 	ReviewedAt            string         `json:"reviewedAt,omitempty"`
 	ReviewSource          ReviewSource   `json:"reviewSource,omitempty"`
 	// DoubleHolo v2 integration fields
-	DHCardID            int       `json:"dhCardId,omitempty"`            // DH card identity (from cert resolution)
-	DHInventoryID       int       `json:"dhInventoryId,omitempty"`       // DH inventory item ID (from inventory push)
-	DHCertStatus        string    `json:"dhCertStatus,omitempty"`        // Resolution state: matched, ambiguous, not_found, unresolved, resolving
-	DHListingPriceCents int       `json:"dhListingPriceCents,omitempty"` // Current DH listing price
-	DHChannelsJSON      string    `json:"dhChannelsJson,omitempty"`      // Per-channel sync status JSON blob
-	DHStatus            DHStatus  `json:"dhStatus,omitempty"`            // DH inventory status
-	CreatedAt           time.Time `json:"createdAt"`
-	UpdatedAt           time.Time `json:"updatedAt"`
+	DHCardID            int          `json:"dhCardId,omitempty"`            // DH card identity (from cert resolution)
+	DHInventoryID       int          `json:"dhInventoryId,omitempty"`       // DH inventory item ID (from inventory push)
+	DHCertStatus        string       `json:"dhCertStatus,omitempty"`        // Resolution state: matched, ambiguous, not_found, unresolved, resolving
+	DHListingPriceCents int          `json:"dhListingPriceCents,omitempty"` // Current DH listing price
+	DHChannelsJSON      string       `json:"dhChannelsJson,omitempty"`      // Per-channel sync status JSON blob
+	DHStatus            DHStatus     `json:"dhStatus,omitempty"`            // DH inventory status
+	DHPushStatus        DHPushStatus `json:"dhPushStatus,omitempty"`        // Pipeline status: "", "pending", "matched", "unmatched", "manual"
+	CreatedAt           time.Time    `json:"createdAt"`
+	UpdatedAt           time.Time    `json:"updatedAt"`
 
 	// Market snapshot at time of purchase (best-effort, may be zero)
 	MarketSnapshotData
@@ -178,6 +190,43 @@ func (p *Purchase) ToCardIdentity() CardIdentity {
 		SetName:         p.SetName,
 		PSAListingTitle: p.PSAListingTitle,
 	}
+}
+
+// NeedsDHPush returns true if this purchase is eligible for DH push pipeline enrollment.
+func (p *Purchase) NeedsDHPush() bool {
+	return p.DHInventoryID == 0 &&
+		p.DHPushStatus != DHPushStatusPending &&
+		p.DHPushStatus != DHPushStatusUnmatched &&
+		p.DHPushStatus != DHPushStatusManual
+}
+
+// DHCardKey returns the pipe-delimited identity key used for DH card ID mapping lookups.
+func (p *Purchase) DHCardKey() string {
+	return DHCardKey(p.CardName, p.SetName, p.CardNumber)
+}
+
+// DHCardKey builds the pipe-delimited identity key used by DH card ID mapping lookups.
+func DHCardKey(cardName, setName, cardNumber string) string {
+	return cardName + "|" + setName + "|" + cardNumber
+}
+
+// DHMatchConfidenceThreshold is the minimum confidence for an automatic DH match.
+const DHMatchConfidenceThreshold = 0.90
+
+// BuildDHMatchTitle returns the best title to use for DH matching.
+// If PSAListingTitle is set, it is used directly; otherwise the card name, set, and number are concatenated.
+func BuildDHMatchTitle(cardName, setName, cardNumber, psaListingTitle string) string {
+	if psaListingTitle != "" {
+		return psaListingTitle
+	}
+	parts := []string{cardName}
+	if setName != "" {
+		parts = append(parts, setName)
+	}
+	if cardNumber != "" {
+		parts = append(parts, cardNumber)
+	}
+	return strings.Join(parts, " ")
 }
 
 // Invoice tracks a PSA invoice cycle for credit limit management.

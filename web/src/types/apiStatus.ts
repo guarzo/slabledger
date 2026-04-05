@@ -135,10 +135,37 @@ export interface DHStatusResponse {
   suggestions_count: number;
   suggestions_last_fetch: string;
   unmatched_count: number;
+  pending_count: number;
   mapped_count: number;
   bulk_match_running: boolean;
 }
 
 export interface DHBulkMatchResponse {
   status: string;
+}
+
+export interface DHUnmatchedCard {
+  purchase_id: string;
+  card_name: string;
+  set_name: string;
+  card_number: string;
+  cert_number: string;
+  grade: number;
+  cl_value_cents: number;
+}
+
+export interface DHUnmatchedResponse {
+  unmatched: DHUnmatchedCard[];
+  count: number;
+}
+
+export interface DHFixMatchRequest {
+  purchaseId: string;
+  dhUrl: string;
+}
+
+export interface DHFixMatchResponse {
+  status: string;
+  dhCardId: number;
+  dhInventoryId: number;
 }

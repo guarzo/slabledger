@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS idx_campaign_purchases_dh_push_status;

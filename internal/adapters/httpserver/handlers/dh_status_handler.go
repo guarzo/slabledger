@@ -4,9 +4,9 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/guarzo/slabledger/internal/domain/campaigns"
 	"github.com/guarzo/slabledger/internal/domain/intelligence"
 	"github.com/guarzo/slabledger/internal/domain/observability"
-	"github.com/guarzo/slabledger/internal/domain/pricing"
 )
 
 // HandleGetIntelligence returns market intelligence for a specific card.
@@ -114,6 +114,7 @@ type dhStatusResponse struct {
 	SuggestionsCount      int    `json:"suggestions_count"`
 	SuggestionsLastFetch  string `json:"suggestions_last_fetch"`
 	UnmatchedCount        int    `json:"unmatched_count"`
+	PendingCount          int    `json:"pending_count"`
 	MappedCount           int    `json:"mapped_count"`
 	BulkMatchRunning      bool   `json:"bulk_match_running"`
 }
@@ -155,32 +156,16 @@ func (h *DHHandler) HandleGetStatus(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	purchases, err := h.purchaseLister.ListAllUnsoldPurchases(ctx)
-	if err != nil {
-		h.logger.Error(ctx, "dh status: list purchases", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "failed to list purchases")
-		return
-	}
-
-	mappedSet, err := h.cardIDSaver.GetMappedSet(ctx, pricing.SourceDH)
-	if err != nil {
-		h.logger.Error(ctx, "dh status: load mapped set", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "failed to load mappings")
-		return
-	}
-
-	seen := make(map[string]bool, len(purchases))
-	for _, p := range purchases {
-		key := dhCardKey(p.CardName, p.SetName, p.CardNumber)
-		if seen[key] {
-			continue
+	if h.statusCounter != nil {
+		counts, err := h.statusCounter.CountUnsoldByDHPushStatus(ctx)
+		if err != nil {
+			h.logger.Error(ctx, "dh status: count push statuses", observability.Err(err))
+			writeError(w, http.StatusInternalServerError, "failed to count push statuses")
+			return
 		}
-		seen[key] = true
-		if mappedSet[key] != "" {
-			resp.MappedCount++
-		} else {
-			resp.UnmatchedCount++
-		}
+		resp.UnmatchedCount = counts[campaigns.DHPushStatusUnmatched]
+		resp.PendingCount = counts[campaigns.DHPushStatusPending]
+		resp.MappedCount = counts[campaigns.DHPushStatusMatched] + counts[campaigns.DHPushStatusManual]
 	}
 
 	writeJSON(w, http.StatusOK, resp)

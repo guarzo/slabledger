@@ -25,7 +25,7 @@ func setupTestRouter(t *testing.T) *Router {
 	spaHandler := handlers.NewSPAHandler(logger)
 
 	campaignSvc := &mocks.MockCampaignService{}
-	campaignsHandler := handlers.NewCampaignsHandler(campaignSvc, logger, nil, nil, nil)
+	campaignsHandler := handlers.NewCampaignsHandler(campaignSvc, logger, nil)
 
 	return NewRouter(RouterConfig{
 		Handler:          handler,

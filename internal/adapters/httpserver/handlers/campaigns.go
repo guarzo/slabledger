@@ -18,22 +18,78 @@ type DHInventoryLister interface {
 
 // CampaignsHandler handles campaign-related HTTP requests.
 type CampaignsHandler struct {
-	service    campaigns.Service
-	logger     observability.Logger
-	discoverer CardDiscoverer    // optional: triggers CardHedger discovery after imports
-	dhLister   DHInventoryLister // optional: lists cards on DH after cert import
-	baseCtx    context.Context
-	bgWG       sync.WaitGroup // tracks background goroutines (e.g. card discovery)
+	service           campaigns.Service
+	logger            observability.Logger
+	discoverer        CardDiscoverer      // optional: triggers CardHedger discovery after imports
+	dhLister          DHInventoryLister   // optional: lists cards on DH after cert import
+	dhMatchClient     DHMatchClient       // optional: matches cards against DH
+	dhPusher          DHInventoryPusher   // optional: pushes inventory to DH
+	dhFieldsUpdater   DHFieldsUpdater     // optional: persists DH fields after push
+	pushStatusUpdater DHPushStatusUpdater // optional: sets dh_push_status
+	dhCardIDSaver     DHCardIDSaver       // optional: persists DH card ID mappings
+	baseCtx           context.Context
+	bgWG              sync.WaitGroup // tracks background goroutines (e.g. card discovery)
+}
+
+// CampaignsHandlerOption configures optional dependencies on CampaignsHandler.
+type CampaignsHandlerOption func(*CampaignsHandler)
+
+// WithCardDiscoverer enables CardHedger discovery after imports.
+func WithCardDiscoverer(d CardDiscoverer) CampaignsHandlerOption {
+	return func(h *CampaignsHandler) { h.discoverer = d }
+}
+
+// WithDHLister enables DH listing after cert import.
+func WithDHLister(l DHInventoryLister) CampaignsHandlerOption {
+	return func(h *CampaignsHandler) { h.dhLister = l }
+}
+
+// WithDHMatchClient enables DH card matching for inline push.
+func WithDHMatchClient(c DHMatchClient) CampaignsHandlerOption {
+	return func(h *CampaignsHandler) { h.dhMatchClient = c }
+}
+
+// WithDHPusher enables inventory push to DH.
+func WithDHPusher(p DHInventoryPusher) CampaignsHandlerOption {
+	return func(h *CampaignsHandler) { h.dhPusher = p }
+}
+
+// WithDHFieldsUpdater enables persisting DH fields after push.
+func WithDHFieldsUpdater(u DHFieldsUpdater) CampaignsHandlerOption {
+	return func(h *CampaignsHandler) { h.dhFieldsUpdater = u }
+}
+
+// WithDHPushStatusUpdater enables setting dh_push_status.
+func WithDHPushStatusUpdater(u DHPushStatusUpdater) CampaignsHandlerOption {
+	return func(h *CampaignsHandler) { h.pushStatusUpdater = u }
+}
+
+// WithDHCardIDSaver enables persisting DH card ID mappings.
+func WithDHCardIDSaver(s DHCardIDSaver) CampaignsHandlerOption {
+	return func(h *CampaignsHandler) { h.dhCardIDSaver = s }
 }
 
 // NewCampaignsHandler creates a new campaigns handler.
 // baseCtx is a server-lifecycle context; background goroutines derive from it
 // so they are cancelled on shutdown. If nil, context.Background() is used.
-func NewCampaignsHandler(service campaigns.Service, logger observability.Logger, discoverer CardDiscoverer, dhLister DHInventoryLister, baseCtx context.Context) *CampaignsHandler {
+func NewCampaignsHandler(
+	service campaigns.Service,
+	logger observability.Logger,
+	baseCtx context.Context,
+	opts ...CampaignsHandlerOption,
+) *CampaignsHandler {
 	if baseCtx == nil {
 		baseCtx = context.Background()
 	}
-	return &CampaignsHandler{service: service, logger: logger, discoverer: discoverer, dhLister: dhLister, baseCtx: baseCtx}
+	h := &CampaignsHandler{
+		service: service,
+		logger:  logger,
+		baseCtx: baseCtx,
+	}
+	for _, opt := range opts {
+		opt(h)
+	}
+	return h
 }
 
 // WaitBackground blocks until all background goroutines (e.g. card discovery) complete.

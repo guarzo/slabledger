@@ -59,6 +59,8 @@ type MockCampaignRepository struct {
 	GetPurchasesByCertNumbersFn    func(ctx context.Context, certNumbers []string) (map[string]*campaigns.Purchase, error)
 	UpdatePurchaseDHFieldsFn       func(ctx context.Context, id string, update campaigns.DHFieldsUpdate) error
 	GetPurchasesByDHCertStatusFn   func(ctx context.Context, status string, limit int) ([]campaigns.Purchase, error)
+	UpdatePurchaseDHPushStatusFn   func(ctx context.Context, id string, status string) error
+	GetPurchasesByDHPushStatusFn   func(ctx context.Context, status string, limit int) ([]campaigns.Purchase, error)
 	GetSellSheetItemsFn            func(ctx context.Context, userID int64) ([]string, error)
 	AddSellSheetItemsFn            func(ctx context.Context, userID int64, purchaseIDs []string) error
 	RemoveSellSheetItemsFn         func(ctx context.Context, userID int64, purchaseIDs []string) error
@@ -852,6 +854,24 @@ func (m *MockCampaignRepository) GetPurchasesByDHCertStatus(ctx context.Context,
 		return m.GetPurchasesByDHCertStatusFn(ctx, status, limit)
 	}
 	return nil, nil
+}
+
+func (m *MockCampaignRepository) UpdatePurchaseDHPushStatus(ctx context.Context, id string, status string) error {
+	if m.UpdatePurchaseDHPushStatusFn != nil {
+		return m.UpdatePurchaseDHPushStatusFn(ctx, id, status)
+	}
+	return nil
+}
+
+func (m *MockCampaignRepository) GetPurchasesByDHPushStatus(ctx context.Context, status string, limit int) ([]campaigns.Purchase, error) {
+	if m.GetPurchasesByDHPushStatusFn != nil {
+		return m.GetPurchasesByDHPushStatusFn(ctx, status, limit)
+	}
+	return nil, nil
+}
+
+func (m *MockCampaignRepository) CountUnsoldByDHPushStatus(_ context.Context) (map[string]int, error) {
+	return map[string]int{}, nil
 }
 
 func (m *MockCampaignRepository) GetSellSheetItems(ctx context.Context, userID int64) ([]string, error) {

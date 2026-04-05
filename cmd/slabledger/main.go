@@ -337,6 +337,8 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 			dhClient, cardIDMappingRepo, campaignsRepo,
 			dhClient,      // DHInventoryPusher
 			campaignsRepo, // DHFieldsUpdater
+			campaignsRepo, // DHPushStatusUpdater
+			campaignsRepo, // DHStatusCounter
 			intelRepo, suggestionsRepo,
 			intelRepo, suggestionsRepo,
 			logger,
@@ -512,6 +514,15 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	// produces a non-nil interface wrapping a nil pointer, which breaks nil checks.
 	if dhClient != nil {
 		deps.DHInventoryLister = dhClient
+		deps.DHMatchClient = dhClient
+		deps.DHInventoryPusher = dhClient
+	}
+	if campaignsRepo != nil {
+		deps.DHFieldsUpdater = campaignsRepo
+		deps.DHPushStatusUpdater = campaignsRepo
+	}
+	if cardIDMappingRepo != nil {
+		deps.DHCardIDSaver = cardIDMappingRepo
 	}
 	serverErr := startWebServer(ctx, deps)
 

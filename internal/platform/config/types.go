@@ -142,6 +142,7 @@ type DHConfig struct {
 	RateLimitRPS          int
 	OrdersPollInterval    time.Duration // default: 30m
 	InventoryPollInterval time.Duration // default: 2h
+	PushInterval          time.Duration // default: 5m
 }
 
 // CardHedgerSchedulerConfig controls CardHedger-specific scheduler intervals
