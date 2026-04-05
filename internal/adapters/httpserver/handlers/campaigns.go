@@ -5,15 +5,23 @@ import (
 	"net/http"
 	"sync"
 
+	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	"github.com/guarzo/slabledger/internal/domain/campaigns"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
+
+// DHInventoryLister transitions DH inventory items to listed and syncs channels.
+type DHInventoryLister interface {
+	UpdateInventory(ctx context.Context, inventoryID int, update dh.InventoryUpdate) (*dh.InventoryResult, error)
+	SyncChannels(ctx context.Context, inventoryID int, channels []string) (*dh.ChannelSyncResponse, error)
+}
 
 // CampaignsHandler handles campaign-related HTTP requests.
 type CampaignsHandler struct {
 	service    campaigns.Service
 	logger     observability.Logger
-	discoverer CardDiscoverer // optional: triggers CardHedger discovery after imports
+	discoverer CardDiscoverer    // optional: triggers CardHedger discovery after imports
+	dhLister   DHInventoryLister // optional: lists cards on DH after cert import
 	baseCtx    context.Context
 	bgWG       sync.WaitGroup // tracks background goroutines (e.g. card discovery)
 }
@@ -21,11 +29,11 @@ type CampaignsHandler struct {
 // NewCampaignsHandler creates a new campaigns handler.
 // baseCtx is a server-lifecycle context; background goroutines derive from it
 // so they are cancelled on shutdown. If nil, context.Background() is used.
-func NewCampaignsHandler(service campaigns.Service, logger observability.Logger, discoverer CardDiscoverer, baseCtx context.Context) *CampaignsHandler {
+func NewCampaignsHandler(service campaigns.Service, logger observability.Logger, discoverer CardDiscoverer, dhLister DHInventoryLister, baseCtx context.Context) *CampaignsHandler {
 	if baseCtx == nil {
 		baseCtx = context.Background()
 	}
-	return &CampaignsHandler{service: service, logger: logger, discoverer: discoverer, baseCtx: baseCtx}
+	return &CampaignsHandler{service: service, logger: logger, discoverer: discoverer, dhLister: dhLister, baseCtx: baseCtx}
 }
 
 // WaitBackground blocks until all background goroutines (e.g. card discovery) complete.
@@ -33,6 +41,9 @@ func NewCampaignsHandler(service campaigns.Service, logger observability.Logger,
 func (h *CampaignsHandler) WaitBackground() {
 	h.bgWG.Wait()
 }
+
+// Compile-time checks.
+var _ DHInventoryLister = (*dh.Client)(nil)
 
 // HandleListCampaigns handles GET /api/campaigns.
 func (h *CampaignsHandler) HandleListCampaigns(w http.ResponseWriter, r *http.Request) {

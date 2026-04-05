@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -30,6 +31,16 @@ type DHPurchaseLister interface {
 	ListAllUnsoldPurchases(ctx context.Context) ([]campaigns.Purchase, error)
 }
 
+// DHInventoryPusher pushes inventory items to DH.
+type DHInventoryPusher interface {
+	PushInventory(ctx context.Context, items []dh.InventoryItem) (*dh.InventoryPushResponse, error)
+}
+
+// DHFieldsUpdater persists DH tracking fields on local purchases.
+type DHFieldsUpdater interface {
+	UpdatePurchaseDHFields(ctx context.Context, id string, update campaigns.DHFieldsUpdate) error
+}
+
 // DHIntelligenceCounter returns aggregate stats for market intelligence.
 type DHIntelligenceCounter interface {
 	CountAll(ctx context.Context) (int, error)
@@ -47,6 +58,8 @@ type DHHandler struct {
 	matchClient     DHMatchClient
 	cardIDSaver     DHCardIDSaver
 	purchaseLister  DHPurchaseLister
+	inventoryPusher DHInventoryPusher // optional: pushes matched cards to DH inventory
+	dhFieldsUpdater DHFieldsUpdater  // optional: persists DH inventory IDs after push
 	intelRepo       intelligence.Repository
 	suggestionsRepo intelligence.SuggestionsRepository
 	intelCounter    DHIntelligenceCounter
@@ -65,6 +78,8 @@ func NewDHHandler(
 	matchClient DHMatchClient,
 	cardIDSaver DHCardIDSaver,
 	purchaseLister DHPurchaseLister,
+	inventoryPusher DHInventoryPusher,
+	dhFieldsUpdater DHFieldsUpdater,
 	intelRepo intelligence.Repository,
 	suggestionsRepo intelligence.SuggestionsRepository,
 	intelCounter DHIntelligenceCounter,
@@ -79,6 +94,8 @@ func NewDHHandler(
 		matchClient:     matchClient,
 		cardIDSaver:     cardIDSaver,
 		purchaseLister:  purchaseLister,
+		inventoryPusher: inventoryPusher,
+		dhFieldsUpdater: dhFieldsUpdater,
 		intelRepo:       intelRepo,
 		suggestionsRepo: suggestionsRepo,
 		intelCounter:    intelCounter,
@@ -108,3 +125,18 @@ func buildMatchTitle(cardName, setName, cardNumber string) string {
 	}
 	return strings.Join(parts, " ")
 }
+
+// marshalChannels serializes channel statuses to JSON, defaulting to "[]".
+func marshalChannels(channels []dh.InventoryChannelStatus) string {
+	if len(channels) == 0 {
+		return "[]"
+	}
+	b, err := json.Marshal(channels)
+	if err != nil {
+		return "[]"
+	}
+	return string(b)
+}
+
+// Compile-time checks.
+var _ DHInventoryPusher = (*dh.Client)(nil)

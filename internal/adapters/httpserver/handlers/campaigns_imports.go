@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	"github.com/guarzo/slabledger/internal/domain/campaigns"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
@@ -51,6 +52,81 @@ func (h *CampaignsHandler) triggerCardDiscovery(cards []campaigns.CardIdentity) 
 			observability.Int("discovered", discovered),
 			observability.Int("priced", priced),
 			observability.Int("requested", len(unique)))
+	}()
+}
+
+// triggerDHListing runs in the background so it doesn't delay the HTTP response.
+func (h *CampaignsHandler) triggerDHListing(certNumbers []string) {
+	if h.dhLister == nil || len(certNumbers) == 0 {
+		return
+	}
+
+	h.bgWG.Add(1)
+	go func() {
+		defer h.bgWG.Done()
+		defer func() {
+			if r := recover(); r != nil {
+				h.logger.Error(h.baseCtx, "panic in triggerDHListing",
+					observability.String("panic", fmt.Sprintf("%v", r)))
+			}
+		}()
+		ctx, cancel := context.WithTimeout(h.baseCtx, 5*time.Minute)
+		defer cancel()
+
+		purchases, err := h.service.GetPurchasesByCertNumbers(ctx, certNumbers)
+		if err != nil {
+			h.logger.Warn(ctx, "dh listing: batch cert lookup failed", observability.Err(err))
+			return
+		}
+
+		listed, synced := 0, 0
+		for _, p := range purchases {
+			if p.DHInventoryID == 0 {
+				continue // not yet pushed to DH
+			}
+
+			_, err := h.dhLister.UpdateInventory(ctx, p.DHInventoryID, dh.InventoryUpdate{
+				Status: dh.InventoryStatusListed,
+			})
+			if err != nil {
+				h.logger.Warn(ctx, "dh listing: status update failed",
+					observability.String("cert", p.CertNumber),
+					observability.Int("inventoryID", p.DHInventoryID),
+					observability.Err(err))
+				continue
+			}
+			listed++
+
+			_, err = h.dhLister.SyncChannels(ctx, p.DHInventoryID, []string{dh.ChannelEbay, dh.ChannelShopify})
+			if err != nil {
+				h.logger.Warn(ctx, "dh listing: channel sync failed, reverting to in_stock",
+					observability.String("cert", p.CertNumber),
+					observability.Int("inventoryID", p.DHInventoryID),
+					observability.Err(err))
+				// Revert status so the item doesn't stay "listed" without channel sync
+				if _, revertErr := h.dhLister.UpdateInventory(ctx, p.DHInventoryID, dh.InventoryUpdate{
+					Status: dh.InventoryStatusInStock,
+				}); revertErr != nil {
+					h.logger.Error(ctx, "dh listing: failed to revert status after sync failure",
+						observability.String("cert", p.CertNumber),
+						observability.Int("inventoryID", p.DHInventoryID),
+						observability.Err(revertErr))
+				}
+				listed-- // revert the listed count
+				continue
+			}
+			synced++
+		}
+
+		if listed > 0 || synced > 0 {
+			h.logger.Info(ctx, "dh listing completed",
+				observability.Int("listed", listed),
+				observability.Int("synced", synced),
+				observability.Int("certs", len(certNumbers)))
+		} else if len(purchases) > 0 {
+			h.logger.Warn(ctx, "dh listing completed with no successful operations",
+				observability.Int("certs", len(certNumbers)))
+		}
 	}()
 }
 
@@ -294,6 +370,23 @@ func (h *CampaignsHandler) HandleImportCerts(w http.ResponseWriter, r *http.Requ
 		h.logger.Error(r.Context(), "cert import failed", observability.Err(err))
 		writeError(w, http.StatusInternalServerError, "Internal server error")
 		return
+	}
+
+	// Trigger DH listing only for certs that were successfully processed.
+	if len(result.Errors) == 0 {
+		h.triggerDHListing(req.CertNumbers)
+	} else {
+		failedCerts := make(map[string]bool, len(result.Errors))
+		for _, e := range result.Errors {
+			failedCerts[e.CertNumber] = true
+		}
+		var successCerts []string
+		for _, c := range req.CertNumbers {
+			if !failedCerts[c] {
+				successCerts = append(successCerts, c)
+			}
+		}
+		h.triggerDHListing(successCerts)
 	}
 
 	writeJSON(w, http.StatusOK, result)

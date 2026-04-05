@@ -19,10 +19,10 @@ func TestDHInventoryPoll_UpdatesPurchase(t *testing.T) {
 						DHInventoryID:     98765,
 						DHCardID:          111,
 						CertNumber:        "12345678",
-						Status:            "active",
+						Status:            dh.InventoryStatusListed,
 						ListingPriceCents: 7500,
 						Channels: []dh.InventoryChannelStatus{
-							{Name: "ebay", Status: "active"},
+							{Name: "ebay", Status: dh.InventoryStatusListed},
 						},
 						UpdatedAt: "2026-04-03T10:00:00Z",
 					},
@@ -53,6 +53,7 @@ func TestDHInventoryPoll_UpdatesPurchase(t *testing.T) {
 	require.Equal(t, 98765, call.InventoryID)
 	require.Equal(t, dh.CertStatusMatched, call.CertStatus)
 	require.Equal(t, 7500, call.ListingPriceCents)
+	require.Equal(t, dh.InventoryStatusListed, call.DHStatus)
 	require.Contains(t, call.ChannelsJSON, "ebay")
 
 	// Verify checkpoint was updated
@@ -68,7 +69,7 @@ func TestDHInventoryPoll_SkipUnknownCert(t *testing.T) {
 						DHInventoryID:     98765,
 						DHCardID:          111,
 						CertNumber:        "99999999",
-						Status:            "active",
+						Status:            dh.InventoryStatusListed,
 						ListingPriceCents: 5000,
 						UpdatedAt:         "2026-04-03T10:00:00Z",
 					},

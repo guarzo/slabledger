@@ -166,3 +166,8 @@ func (s *service) ImportCerts(ctx context.Context, certNumbers []string) (*CertI
 
 	return result, nil
 }
+
+// GetPurchasesByCertNumbers delegates to the repository to look up purchases by cert number.
+func (s *service) GetPurchasesByCertNumbers(ctx context.Context, certNumbers []string) (map[string]*Purchase, error) {
+	return s.repo.GetPurchasesByCertNumbers(ctx, certNumbers)
+}
