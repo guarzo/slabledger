@@ -480,12 +480,9 @@ export interface CertImportSoldItem {
   campaignId: string;
 }
 
-export interface ScanCertResponse {
-  status: 'existing' | 'sold' | 'new';
-  cardName?: string;
-  purchaseId?: string;
-  campaignId?: string;
-}
+export type ScanCertResponse =
+  | { status: 'new' }
+  | { status: 'existing' | 'sold'; cardName: string; purchaseId: string; campaignId: string };
 
 export interface ResolveCertResponse {
   certNumber: string;
