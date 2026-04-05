@@ -2,24 +2,45 @@ import type { Phase, SaleChannel, CreateCampaignInput } from '../../types/campai
 
 export const DEFAULT_SALE_CHANNEL: SaleChannel = 'ebay';
 
+/** Channels available for recording new sales. */
+export const activeSaleChannels: SaleChannel[] = ['ebay', 'website', 'inperson'];
+
+/** Maps any channel (including legacy) to its display label. */
 export const saleChannelLabels: Record<SaleChannel, string> = {
   ebay: 'eBay',
-  tcgplayer: 'TCGPlayer',
-  local: 'Local',
-  other: 'Other',
-  gamestop: 'GameStop',
   website: 'Website',
-  cardshow: 'Card Show',
+  inperson: 'In Person',
+  // Legacy channels — displayed for historical data
+  tcgplayer: 'eBay',
+  local: 'In Person',
+  other: 'In Person',
+  gamestop: 'In Person',
+  cardshow: 'In Person',
 };
+
+/** Normalizes a legacy channel to one of the 3 active channels. */
+export function normalizeChannel(ch: SaleChannel): SaleChannel {
+  switch (ch) {
+    case 'ebay':
+    case 'tcgplayer':
+      return 'ebay';
+    case 'website':
+      return 'website';
+    default:
+      return 'inperson';
+  }
+}
 
 export const saleChannelColors: Record<SaleChannel, string> = {
   ebay: 'bg-blue-500',
-  tcgplayer: 'bg-purple-500',
-  local: 'bg-green-500',
-  other: 'bg-gray-500',
-  gamestop: 'bg-red-500',
   website: 'bg-indigo-500',
-  cardshow: 'bg-amber-500',
+  inperson: 'bg-green-500',
+  // Legacy channels map to their normalized color
+  tcgplayer: 'bg-blue-500',
+  local: 'bg-green-500',
+  other: 'bg-green-500',
+  gamestop: 'bg-green-500',
+  cardshow: 'bg-green-500',
 };
 
 export const phaseColors: Record<Phase, string> = {
