@@ -1,6 +1,6 @@
 import type { AgingItem } from '../../../../types/campaigns';
 import { formatCents } from '../../../utils/formatters';
-import { bestPrice } from './utils';
+import { costBasis, bestPrice } from './utils';
 
 interface MobileSellSheetRowProps {
   item: AgingItem;
@@ -8,12 +8,12 @@ interface MobileSellSheetRowProps {
 }
 
 export default function MobileSellSheetRow({ item, onTap }: MobileSellSheetRowProps) {
-  const costBasis = item.purchase.buyCostCents + item.purchase.psaSourcingFeeCents;
+  const cb = costBasis(item.purchase);
   const snap = item.currentMarket;
   const market = snap ? bestPrice(snap) : 0;
   const clValue = item.purchase.clValueCents ?? 0;
   const recPrice = item.recommendedPriceCents ?? item.purchase.reviewedPriceCents ?? 0;
-  const recProfitable = recPrice > 0 && recPrice > costBasis;
+  const recProfitable = recPrice > 0 && recPrice > cb;
 
   return (
     <div
@@ -43,7 +43,7 @@ export default function MobileSellSheetRow({ item, onTap }: MobileSellSheetRowPr
       <span className="text-center text-[var(--text)]">
         {item.purchase.gradeValue % 1 === 0 ? item.purchase.gradeValue.toFixed(0) : item.purchase.gradeValue}
       </span>
-      <span className="text-right tabular-nums text-[var(--text)]">{formatCents(costBasis)}</span>
+      <span className="text-right tabular-nums text-[var(--text)]">{formatCents(cb)}</span>
       <span className="text-right tabular-nums text-[var(--text)]">
         {market > 0 ? formatCents(market) : <span className="text-[var(--text-muted)]">-</span>}
       </span>

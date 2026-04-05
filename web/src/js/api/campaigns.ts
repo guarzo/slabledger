@@ -580,11 +580,18 @@ proto.getSellSheetItems = async function (this: APIClient): Promise<{ purchaseId
 };
 
 proto.addSellSheetItems = async function (this: APIClient, purchaseIds: string[]): Promise<void> {
-  await this.put('/sell-sheet/items', { purchaseIds });
+  await this.fetchWithRetry(
+    `${this.baseURL}/sell-sheet/items`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ purchaseIds }),
+    },
+  );
 };
 
 proto.removeSellSheetItems = async function (this: APIClient, purchaseIds: string[]): Promise<void> {
-  const response = await this.fetchWithRetry(
+  await this.fetchWithRetry(
     `${this.baseURL}/sell-sheet/items`,
     {
       method: 'DELETE',
@@ -592,15 +599,6 @@ proto.removeSellSheetItems = async function (this: APIClient, purchaseIds: strin
       body: JSON.stringify({ purchaseIds }),
     },
   );
-  if (!response.ok) {
-    const data = await response.json().catch(() => ({}));
-    throw new APIError(
-      (data as { error?: string }).error || `HTTP ${response.status}`,
-      response.status,
-      (data as { code?: string }).code,
-      data,
-    );
-  }
 };
 
 proto.clearSellSheetItems = async function (this: APIClient): Promise<void> {

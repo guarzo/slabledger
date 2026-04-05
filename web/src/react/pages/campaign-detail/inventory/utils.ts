@@ -5,17 +5,22 @@ import { checkHotSeller } from '../../../utils/sellSheetHelpers';
 export type SortKey = 'name' | 'grade' | 'cost' | 'market' | 'pl' | 'days' | 'ev';
 export type SortDir = 'asc' | 'desc';
 
+/** Total cost basis for a purchase (buy cost + PSA sourcing fee). */
+export function costBasis(p: { buyCostCents: number; psaSourcingFeeCents: number }): number {
+  return p.buyCostCents + p.psaSourcingFeeCents;
+}
+
 /** Best available market price for a card. */
 export function bestPrice(snap: MarketSnapshot): number {
   return snap.medianCents || snap.gradePriceCents || snap.lastSoldCents || 0;
 }
 
 /** Unrealized P/L in cents relative to cost basis. */
-export function unrealizedPL(costBasis: number, snap: MarketSnapshot | undefined): number | null {
+export function unrealizedPL(costBasisCents: number, snap: MarketSnapshot | undefined): number | null {
   if (!snap) return null;
   const price = bestPrice(snap);
   if (price <= 0) return null;
-  return price - costBasis;
+  return price - costBasisCents;
 }
 
 export function marketTrend(snap: MarketSnapshot): 'up' | 'down' | 'stable' | null {
@@ -54,7 +59,7 @@ export function fmtDateShort(dateStr: string): string {
 }
 
 /** Build a rich tooltip for the market cell. */
-export function marketTooltip(snap: MarketSnapshot, costBasis: number): string {
+export function marketTooltip(snap: MarketSnapshot, costBasisCents: number): string {
   const lines: string[] = [];
 
   // Price range
@@ -98,7 +103,7 @@ export function marketTooltip(snap: MarketSnapshot, costBasis: number): string {
   }
 
   // P/L
-  const pl = unrealizedPL(costBasis, snap);
+  const pl = unrealizedPL(costBasisCents, snap);
   if (pl != null) {
     const sign = pl >= 0 ? '+' : '';
     lines.push(`Est. P/L: ${sign}${formatCents(pl)}`);
@@ -181,8 +186,8 @@ export function hasLargeGap(item: AgingItem): boolean {
 
   if (p.clValueCents > 0) prices.push(p.clValueCents);
   if (snap?.medianCents) prices.push(snap.medianCents);
-  const costBasis = p.buyCostCents + p.psaSourcingFeeCents;
-  if (costBasis > 0) prices.push(costBasis);
+  const cb = costBasis(p);
+  if (cb > 0) prices.push(cb);
   if (snap?.lowestListCents) prices.push(snap.lowestListCents);
 
   if (prices.length < 2) return false;

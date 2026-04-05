@@ -24,7 +24,10 @@ func (r *CampaignsRepository) GetSellSheetItems(ctx context.Context, userID int6
 		}
 		ids = append(ids, id)
 	}
-	return ids, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate sell sheet items: %w", err)
+	}
+	return ids, nil
 }
 
 // AddSellSheetItems adds purchase IDs to the user's sell sheet (idempotent).

@@ -673,7 +673,7 @@ func (m *mockRepo) GetPurchasesByDHCertStatus(_ context.Context, _ string, _ int
 // --- SellSheetRepository stubs ---
 
 func (m *mockRepo) GetSellSheetItems(_ context.Context, _ int64) ([]string, error) {
-	return nil, nil
+	return []string{}, nil
 }
 func (m *mockRepo) AddSellSheetItems(_ context.Context, _ int64, _ []string) error {
 	return nil

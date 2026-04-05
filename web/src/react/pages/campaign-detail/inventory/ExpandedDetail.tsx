@@ -5,6 +5,7 @@ import { api } from '../../../../js/api';
 import { useToast } from '../../../contexts/ToastContext';
 import { queryKeys } from '../../../queries/queryKeys';
 import PriceSignalCard from './PriceSignalCard';
+import { costBasis } from './utils';
 import { PriceDecisionBar, buildPriceSources, preSelectSource } from '../../../ui';
 
 interface ExpandedDetailProps {
@@ -21,15 +22,15 @@ export default function ExpandedDetail({ item, onReviewed, campaignId, onOpenFla
 
   const snap = item.currentMarket;
   const purchase = item.purchase;
-  const costBasis = purchase.buyCostCents + purchase.psaSourcingFeeCents;
+  const cb = costBasis(purchase);
 
   const clCents = purchase.clValueCents;
   const marketCents = snap?.medianCents ?? 0;
   const lastSoldCents = snap?.lastSoldCents ?? 0;
 
   const sources = useMemo(
-    () => buildPriceSources({ clCents, marketCents, costCents: costBasis, lastSoldCents }),
-    [clCents, marketCents, costBasis, lastSoldCents],
+    () => buildPriceSources({ clCents, marketCents, costCents: cb, lastSoldCents }),
+    [clCents, marketCents, cb, lastSoldCents],
   );
 
   const preSelected = useMemo(
@@ -67,12 +68,12 @@ export default function ExpandedDetail({ item, onReviewed, campaignId, onOpenFla
     <div className="glass-vrow-expanded px-6 py-4 border-t border-[rgba(255,255,255,0.05)]">
       {/* 3x2 price signal grid */}
       <div className="grid grid-cols-3 gap-3 mb-4">
-        <PriceSignalCard label="Cost Basis" valueCents={costBasis} />
+        <PriceSignalCard label="Cost Basis" valueCents={cb} />
         <PriceSignalCard label="Card Ladder" valueCents={clCents} />
         <PriceSignalCard
           label="Market (Median)"
           valueCents={marketCents}
-          highlight={marketCents > 0 && marketCents > costBasis ? 'success' : marketCents > 0 && marketCents < costBasis ? 'danger' : undefined}
+          highlight={marketCents > 0 && marketCents > cb ? 'success' : marketCents > 0 && marketCents < cb ? 'danger' : undefined}
         />
         <PriceSignalCard label="Last Sold" valueCents={lastSoldCents} />
         <PriceSignalCard label="Lowest eBay Listing" valueCents={snap?.lowestListCents ?? 0} />

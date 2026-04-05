@@ -61,6 +61,7 @@ export default function MobileSellSheetView({
         <input
           type="text"
           placeholder="Search sell sheet\u2026"
+          aria-label="Search sell sheet"
           value={searchQuery}
           onChange={(e) => onSearch(e.target.value)}
           className="w-full bg-[var(--surface-1)] border border-[var(--surface-2)] rounded-md px-2 py-1.5 text-xs text-[var(--text)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--brand-500)]"
@@ -105,8 +106,6 @@ export default function MobileSellSheetView({
               return (
                 <div
                   key={item.purchase.id}
-                  data-index={virtualRow.index}
-                  ref={virtualizer.measureElement}
                   style={{
                     position: 'absolute',
                     top: 0,
