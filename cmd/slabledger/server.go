@@ -192,13 +192,30 @@ func startWebServer(ctx context.Context, deps ServerDependencies) error {
 	// Create campaigns handler if service is available
 	var campaignsHandler *handlers.CampaignsHandler
 	if deps.CampaignsService != nil {
+		var opts []handlers.CampaignsHandlerOption
+		if deps.CardDiscoverer != nil {
+			opts = append(opts, handlers.WithCardDiscoverer(deps.CardDiscoverer))
+		}
+		if deps.DHInventoryLister != nil {
+			opts = append(opts, handlers.WithDHLister(deps.DHInventoryLister))
+		}
+		if deps.DHMatchClient != nil {
+			opts = append(opts, handlers.WithDHMatchClient(deps.DHMatchClient))
+		}
+		if deps.DHInventoryPusher != nil {
+			opts = append(opts, handlers.WithDHPusher(deps.DHInventoryPusher))
+		}
+		if deps.DHFieldsUpdater != nil {
+			opts = append(opts, handlers.WithDHFieldsUpdater(deps.DHFieldsUpdater))
+		}
+		if deps.DHPushStatusUpdater != nil {
+			opts = append(opts, handlers.WithDHPushStatusUpdater(deps.DHPushStatusUpdater))
+		}
+		if deps.DHCardIDSaver != nil {
+			opts = append(opts, handlers.WithDHCardIDSaver(deps.DHCardIDSaver))
+		}
 		campaignsHandler = handlers.NewCampaignsHandler(
-			deps.CampaignsService, logger,
-			deps.CardDiscoverer, deps.DHInventoryLister,
-			deps.DHMatchClient, deps.DHInventoryPusher,
-			deps.DHFieldsUpdater, deps.DHPushStatusUpdater,
-			deps.DHCardIDSaver,
-			ctx,
+			deps.CampaignsService, logger, ctx, opts...,
 		)
 		logger.Info(ctx, "Campaigns handler initialized")
 	}

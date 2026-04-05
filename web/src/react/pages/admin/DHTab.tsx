@@ -27,6 +27,7 @@ function UnmatchedRow({ card }: UnmatchedRowProps) {
   const [url, setUrl] = useState('');
   const [validationError, setValidationError] = useState('');
   const fixMutation = useFixDHMatch();
+  const toast = useToast();
 
   const handleFix = async () => {
     setValidationError('');
@@ -36,6 +37,8 @@ function UnmatchedRow({ card }: UnmatchedRowProps) {
     }
     try {
       await fixMutation.mutateAsync({ purchaseId: card.purchase_id, dhUrl: url });
+      setUrl('');
+      toast.success('Match fixed');
     } catch {
       setValidationError('Failed to fix match. Please try again.');
     }

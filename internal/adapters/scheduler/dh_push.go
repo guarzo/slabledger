@@ -2,7 +2,7 @@ package scheduler
 
 import (
 	"context"
-	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
@@ -88,8 +88,6 @@ func NewDHPushScheduler(
 // Start begins the DH push loop.
 func (s *DHPushScheduler) Start(ctx context.Context) {
 	if !s.config.Enabled {
-		s.WG().Add(1)
-		defer s.WG().Done()
 		s.logger.Info(ctx, "dh push scheduler disabled")
 		return
 	}
@@ -157,8 +155,11 @@ func (s *DHPushScheduler) processPurchase(ctx context.Context, p campaigns.Purch
 	var dhCardID int
 
 	if alreadyMapped && dhCardIDStr != "" {
-		if _, err := fmt.Sscanf(dhCardIDStr, "%d", &dhCardID); err != nil || dhCardID <= 0 {
+		parsed, err := strconv.Atoi(dhCardIDStr)
+		if err != nil || parsed <= 0 {
 			alreadyMapped = false
+		} else {
+			dhCardID = parsed
 		}
 	} else {
 		alreadyMapped = false
@@ -192,7 +193,7 @@ func (s *DHPushScheduler) processPurchase(ctx context.Context, p campaigns.Purch
 		dhCardID = resp.CardID
 
 		// Persist the mapping so future runs skip the Match call.
-		externalID := fmt.Sprintf("%d", dhCardID)
+		externalID := strconv.Itoa(dhCardID)
 		if saveErr := s.cardIDSaver.SaveExternalID(ctx, p.CardName, p.SetName, p.CardNumber, pricing.SourceDH, externalID); saveErr != nil {
 			s.logger.Warn(ctx, "dh push: failed to save external ID mapping",
 				observability.String("purchaseID", p.ID),

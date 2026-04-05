@@ -7,7 +7,6 @@ import (
 
 	"github.com/guarzo/slabledger/internal/domain/campaigns"
 	"github.com/guarzo/slabledger/internal/domain/observability"
-	"github.com/guarzo/slabledger/internal/domain/pricing"
 )
 
 // unmatchedResponse is the JSON shape returned by HandleUnmatched.
@@ -76,13 +75,6 @@ func (h *DHHandler) HandleExportUnmatched(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	mappedSet, err := h.cardIDSaver.GetMappedSet(ctx, pricing.SourceDH)
-	if err != nil {
-		h.logger.Error(ctx, "export unmatched: load mapped set", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "failed to load mappings")
-		return
-	}
-
 	type exportRow struct {
 		certNumber string
 		cardName   string
@@ -92,7 +84,7 @@ func (h *DHHandler) HandleExportUnmatched(w http.ResponseWriter, r *http.Request
 	}
 	var rows []exportRow
 	for _, p := range purchases {
-		if mappedSet[campaigns.DHCardKey(p.CardName, p.SetName, p.CardNumber)] != "" {
+		if p.DHPushStatus != campaigns.DHPushStatusUnmatched {
 			continue
 		}
 		price := p.CLValueCents
