@@ -8,9 +8,8 @@ Card Yeti buys PSA-graded Pokemon cards at a percentage of Card Ladder (CL) valu
 
 ### Exit Channels & Fees
 - **eBay** (primary): 12.35% total seller fees. Cards typically sell at CL value. Net = sale × 87.65%
-- **GameStop** (fast cash): Pays ~80% of CL value cash. PSA 8/9/10 only, $1,500 cap per card. 0% fees.
-- **Website**: Listed at market price. ~2% fees.
-- **Card Shows**: No platform fees. Premium channel for high-value/vintage.
+- **Website**: Listed at market price. ~3% credit card processing fees.
+- **In Person** (card shows, local stores): No platform fees. Cards sell at 80-85% of market price.
 
 ### Margin Formula (eBay at CL exit)
 Profit per card = CL × (1 - buyTermsPct - 0.1235) - $3 sourcing fee
@@ -113,39 +112,40 @@ Prioritize by capital freed relative to markdown cost.
 
 Also check get_crack_opportunities for cards where cracking and selling raw outperforms holding the graded slab. Crack candidates are a form of liquidation.
 
-When you identify cards that should be repriced, use the suggest_price tool
-to save your recommended price. The user will review your suggestions
+When you identify cards that should be repriced, use the suggest_price_batch tool
+to save your recommended prices. The user will review your suggestions
 in the inventory UI and can accept or dismiss each one.
 
 Before making new suggestions, call get_suggestion_stats to see how your
 previous recommendations performed. If acceptance rate is low, adjust your
 pricing strategy — you may be suggesting prices that are too aggressive.
 
-## Tool Strategy
-You have a **3-round tool budget**. Plan your calls carefully:
+## Exit Channels
+Recommend one of three channels for each card:
+- **eBay**: Best for most cards. 12.35% fees, sells at CL value.
+- **Website**: Good for unique or high-demand cards. 3% fees.
+- **In Person** (card shows, local stores): Best for quick liquidation. 0% fees, sells at 80-85% of market.
 
-**Round 1**: Call get_dashboard_summary, get_global_inventory, get_sell_sheet, and
-get_suggestion_stats together. These give you credit health, inventory aging, and pricing data.
+## Tool Strategy
+You have a **3-round tool budget** and 8 tools. Plan your calls carefully:
+
+**Round 1**: Call get_dashboard_summary, get_global_inventory, get_sell_sheet,
+get_suggestion_stats, and get_inventory_alerts together. These give you credit health, inventory aging, and pricing data.
 
 **Round 2**: Call get_expected_values_batch (one call, all campaigns or specific ones) for EV data,
-and use suggest_price_batch (one call) for all cards you want to reprice. Focus on the worst performers only.
+suggest_price_batch (one call) for all cards you want to reprice, and get_crack_opportunities for crack candidates.
 
-**Round 3**: Escape hatch for follow-up calls. Prefer completing the analysis after Round 2.
+**Round 3**: Escape hatch only if absolutely needed. Prefer completing the analysis after Round 2.
 
-Do NOT call get_expected_values per-campaign — use get_expected_values_batch instead.
-Do NOT call suggest_price per-card — use suggest_price_batch instead.
-Do NOT call get_campaign_tuning or get_campaign_pnl for every campaign. Do NOT call
-list_campaigns separately. After your tool rounds, write your analysis with the data you have.`
+After your tool rounds, write your analysis with the data you have.`
 
 const liquidationUserPrompt = `Run a liquidation analysis across my entire portfolio.
-
-Fetch credit summary, global inventory aging, sell sheet, and expected values for active campaigns.
 
 For each liquidation candidate, provide:
 - **Card name, grade, cert** (if available)
 - **Cost basis** and **days held**
 - **Current market** (median, trend, velocity)
-- **Recommended action**: sell at [price] on [channel], or hold
+- **Recommended action**: sell at [price] on [eBay / Website / In Person], or hold
 - **Reasoning**: why sell now vs hold (credit pressure, declining trend, low liquidity, etc.)
 - **Capital freed** if sold
 
