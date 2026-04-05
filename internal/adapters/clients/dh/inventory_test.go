@@ -71,7 +71,7 @@ func TestClient_ListInventory(t *testing.T) {
 	}{
 		{
 			name:    "active inventory with channels",
-			filters: InventoryFilters{Status: "active"},
+			filters: InventoryFilters{Status: InventoryStatusListed},
 			serverResponse: `{
 				"results": [
 					{
@@ -83,7 +83,7 @@ func TestClient_ListInventory(t *testing.T) {
 						"card_number": "247",
 						"grading_company": "psa",
 						"grade": "9.0",
-						"status": "active",
+						"status": "listed",
 						"listing_price_cents": 10688,
 						"cost_basis_cents": 893,
 						"channels": [{"name": "ebay", "status": "error"}],
@@ -101,7 +101,7 @@ func TestClient_ListInventory(t *testing.T) {
 				CardName:          "Dreepy",
 				GradingCompany:    "psa",
 				Grade:             "9.0",
-				Status:            "active",
+				Status:            InventoryStatusListed,
 				ListingPriceCents: 10688,
 				Channels:          []InventoryChannelStatus{{Name: "ebay", Status: "error"}},
 			},

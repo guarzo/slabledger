@@ -20,8 +20,8 @@ type DHInventoryLister interface {
 type CampaignsHandler struct {
 	service    campaigns.Service
 	logger     observability.Logger
-	discoverer CardDiscoverer     // optional: triggers CardHedger discovery after imports
-	dhLister   DHInventoryLister  // optional: lists cards on DH after cert import
+	discoverer CardDiscoverer    // optional: triggers CardHedger discovery after imports
+	dhLister   DHInventoryLister // optional: lists cards on DH after cert import
 	baseCtx    context.Context
 	bgWG       sync.WaitGroup // tracks background goroutines (e.g. card discovery)
 }
@@ -41,6 +41,9 @@ func NewCampaignsHandler(service campaigns.Service, logger observability.Logger,
 func (h *CampaignsHandler) WaitBackground() {
 	h.bgWG.Wait()
 }
+
+// Compile-time checks.
+var _ DHInventoryLister = (*dh.Client)(nil)
 
 // HandleListCampaigns handles GET /api/campaigns.
 func (h *CampaignsHandler) HandleListCampaigns(w http.ResponseWriter, r *http.Request) {

@@ -116,3 +116,6 @@ func buildMatchTitle(cardName, setName, cardNumber string) string {
 	}
 	return strings.Join(parts, " ")
 }
+
+// Compile-time checks.
+var _ DHInventoryPusher = (*dh.Client)(nil)
