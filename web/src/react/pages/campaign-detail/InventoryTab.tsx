@@ -64,8 +64,10 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
   const handlePrint = useCallback(() => {
     setIsPrinting(true);
     requestAnimationFrame(() => {
-      window.print();
-      setIsPrinting(false);
+      requestAnimationFrame(() => {
+        window.print();
+        setIsPrinting(false);
+      });
     });
   }, []);
   const [statsExpanded, setStatsExpanded] = useState(false);

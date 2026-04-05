@@ -580,7 +580,7 @@ proto.getSellSheetItems = async function (this: APIClient): Promise<{ purchaseId
 };
 
 proto.addSellSheetItems = async function (this: APIClient, purchaseIds: string[]): Promise<void> {
-  await this.fetchWithRetry(
+  const response = await this.fetchWithRetry(
     `${this.baseURL}/sell-sheet/items`,
     {
       method: 'PUT',
@@ -588,10 +588,11 @@ proto.addSellSheetItems = async function (this: APIClient, purchaseIds: string[]
       body: JSON.stringify({ purchaseIds }),
     },
   );
+  await this.expectNoContent(response);
 };
 
 proto.removeSellSheetItems = async function (this: APIClient, purchaseIds: string[]): Promise<void> {
-  await this.fetchWithRetry(
+  const response = await this.fetchWithRetry(
     `${this.baseURL}/sell-sheet/items`,
     {
       method: 'DELETE',
@@ -599,6 +600,7 @@ proto.removeSellSheetItems = async function (this: APIClient, purchaseIds: strin
       body: JSON.stringify({ purchaseIds }),
     },
   );
+  await this.expectNoContent(response);
 };
 
 proto.clearSellSheetItems = async function (this: APIClient): Promise<void> {
