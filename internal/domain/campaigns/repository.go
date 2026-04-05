@@ -63,6 +63,8 @@ type PurchaseRepository interface {
 	// DH v2 fields
 	UpdatePurchaseDHFields(ctx context.Context, id string, update DHFieldsUpdate) error
 	GetPurchasesByDHCertStatus(ctx context.Context, status string, limit int) ([]Purchase, error)
+	UpdatePurchaseDHPushStatus(ctx context.Context, id string, status string) error
+	GetPurchasesByDHPushStatus(ctx context.Context, status string, limit int) ([]Purchase, error)
 }
 
 // SaleRepository handles sale persistence.

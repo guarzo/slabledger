@@ -373,6 +373,48 @@ func (r *CampaignsRepository) GetPurchasesByDHCertStatus(ctx context.Context, st
 	return purchases, rows.Err()
 }
 
+// UpdatePurchaseDHPushStatus updates the dh_push_status field on a purchase.
+func (r *CampaignsRepository) UpdatePurchaseDHPushStatus(ctx context.Context, id string, status string) error {
+	result, err := r.db.ExecContext(ctx,
+		`UPDATE campaign_purchases SET dh_push_status = ?, updated_at = ? WHERE id = ?`,
+		status, time.Now(), id,
+	)
+	if err != nil {
+		return err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return campaigns.ErrPurchaseNotFound
+	}
+	return nil
+}
+
+// GetPurchasesByDHPushStatus returns purchases with the given DH push status.
+func (r *CampaignsRepository) GetPurchasesByDHPushStatus(ctx context.Context, status string, limit int) ([]campaigns.Purchase, error) {
+	query := fmt.Sprintf(
+		`SELECT %s FROM campaign_purchases WHERE dh_push_status = ? ORDER BY updated_at ASC LIMIT ?`,
+		purchaseColumns,
+	)
+	rows, err := r.db.QueryContext(ctx, query, status, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close() //nolint:errcheck // best-effort close
+
+	var purchases []campaigns.Purchase
+	for rows.Next() {
+		var p campaigns.Purchase
+		if err := scanPurchase(rows, &p); err != nil {
+			return nil, err
+		}
+		purchases = append(purchases, p)
+	}
+	return purchases, rows.Err()
+}
+
 // GetPurchaseIDByCertNumber returns the purchase ID for a given cert number.
 func (r *CampaignsRepository) GetPurchaseIDByCertNumber(ctx context.Context, certNumber string) (string, error) {
 	var id string
