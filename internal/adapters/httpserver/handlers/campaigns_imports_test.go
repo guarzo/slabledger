@@ -419,3 +419,161 @@ func TestHandleImportCerts_ServiceError(t *testing.T) {
 		t.Fatalf("status = %d, want 500; body: %s", rec.Code, rec.Body.String())
 	}
 }
+
+// --- HandleScanCert ---
+
+func TestHandleScanCert_Existing(t *testing.T) {
+	svc := &mocks.MockCampaignService{
+		ScanCertFn: func(_ context.Context, cert string) (*campaigns.ScanCertResult, error) {
+			return &campaigns.ScanCertResult{
+				Status:     "existing",
+				CardName:   "Charizard PSA 10",
+				PurchaseID: "p1",
+				CampaignID: "c1",
+			}, nil
+		},
+	}
+	h := newTestHandler(svc)
+
+	body := strings.NewReader(`{"certNumber":"12345678"}`)
+	req := httptest.NewRequest("POST", "/api/purchases/scan-cert", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	h.HandleScanCert(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", rec.Code, rec.Body.String())
+	}
+	var result campaigns.ScanCertResult
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Status != "existing" {
+		t.Errorf("status = %q, want existing", result.Status)
+	}
+	if result.CardName != "Charizard PSA 10" {
+		t.Errorf("cardName = %q, want Charizard PSA 10", result.CardName)
+	}
+}
+
+func TestHandleScanCert_EmptyCert(t *testing.T) {
+	h := newTestHandler(&mocks.MockCampaignService{})
+
+	body := strings.NewReader(`{"certNumber":""}`)
+	req := httptest.NewRequest("POST", "/api/purchases/scan-cert", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	h.HandleScanCert(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandleScanCert_InvalidJSON(t *testing.T) {
+	h := newTestHandler(&mocks.MockCampaignService{})
+
+	body := strings.NewReader(`not json`)
+	req := httptest.NewRequest("POST", "/api/purchases/scan-cert", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	h.HandleScanCert(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandleScanCert_ServiceError(t *testing.T) {
+	svc := &mocks.MockCampaignService{
+		ScanCertFn: func(_ context.Context, _ string) (*campaigns.ScanCertResult, error) {
+			return nil, fmt.Errorf("database failure")
+		},
+	}
+	h := newTestHandler(svc)
+
+	body := strings.NewReader(`{"certNumber":"111"}`)
+	req := httptest.NewRequest("POST", "/api/purchases/scan-cert", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	h.HandleScanCert(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500; body: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// --- HandleResolveCert ---
+
+func TestHandleResolveCert_Success(t *testing.T) {
+	svc := &mocks.MockCampaignService{
+		ResolveCertFn: func(_ context.Context, cert string) (*campaigns.CertInfo, error) {
+			return &campaigns.CertInfo{
+				CertNumber: cert, CardName: "Umbreon VMAX", Grade: 10,
+				Year: "2022", Category: "EVOLVING SKIES",
+				Subject: "2022 Pokemon Evolving Skies Umbreon VMAX",
+			}, nil
+		},
+	}
+	h := newTestHandler(svc)
+
+	body := strings.NewReader(`{"certNumber":"91234567"}`)
+	req := httptest.NewRequest("POST", "/api/purchases/resolve-cert", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	h.HandleResolveCert(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", rec.Code, rec.Body.String())
+	}
+	var result campaigns.ResolveCertResult
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatal(err)
+	}
+	if result.CardName != "Umbreon VMAX" {
+		t.Errorf("cardName = %q, want Umbreon VMAX", result.CardName)
+	}
+	if result.Grade != 10 {
+		t.Errorf("grade = %v, want 10", result.Grade)
+	}
+}
+
+func TestHandleResolveCert_NotFound(t *testing.T) {
+	svc := &mocks.MockCampaignService{
+		ResolveCertFn: func(_ context.Context, _ string) (*campaigns.CertInfo, error) {
+			return nil, fmt.Errorf("cert 00000000 not found")
+		},
+	}
+	h := newTestHandler(svc)
+
+	body := strings.NewReader(`{"certNumber":"00000000"}`)
+	req := httptest.NewRequest("POST", "/api/purchases/resolve-cert", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	h.HandleResolveCert(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404; body: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandleResolveCert_EmptyCert(t *testing.T) {
+	h := newTestHandler(&mocks.MockCampaignService{})
+
+	body := strings.NewReader(`{"certNumber":""}`)
+	req := httptest.NewRequest("POST", "/api/purchases/resolve-cert", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	h.HandleResolveCert(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body: %s", rec.Code, rec.Body.String())
+	}
+}
