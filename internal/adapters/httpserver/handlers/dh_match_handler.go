@@ -92,6 +92,13 @@ func (h *DHHandler) runBulkMatch(ctx context.Context, purchases []campaigns.Purc
 
 		if !matchResp.Success || matchResp.Confidence < 0.90 {
 			lowConf++
+			if h.pushStatusUpdater != nil {
+				for _, p := range purchases {
+					if dhCardKey(p.CardName, p.SetName, p.CardNumber) == dhCardKey(ci.CardName, ci.SetName, ci.CardNumber) {
+						_ = h.pushStatusUpdater.UpdatePurchaseDHPushStatus(ctx, p.ID, campaigns.DHPushStatusUnmatched)
+					}
+				}
+			}
 			continue
 		}
 
@@ -196,6 +203,9 @@ func (h *DHHandler) pushMatchedToDH(ctx context.Context, purchases []campaigns.P
 					observability.String("cert", r.CertNumber),
 					observability.Int("inventoryID", r.DHInventoryID),
 					observability.Err(err))
+			}
+			if h.pushStatusUpdater != nil {
+				_ = h.pushStatusUpdater.UpdatePurchaseDHPushStatus(ctx, purchaseID, campaigns.DHPushStatusMatched)
 			}
 		}
 	}

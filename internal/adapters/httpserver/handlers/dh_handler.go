@@ -41,6 +41,11 @@ type DHFieldsUpdater interface {
 	UpdatePurchaseDHFields(ctx context.Context, id string, update campaigns.DHFieldsUpdate) error
 }
 
+// DHPushStatusUpdater sets the DH push pipeline status on a purchase.
+type DHPushStatusUpdater interface {
+	UpdatePurchaseDHPushStatus(ctx context.Context, id string, status string) error
+}
+
 // DHIntelligenceCounter returns aggregate stats for market intelligence.
 type DHIntelligenceCounter interface {
 	CountAll(ctx context.Context) (int, error)
@@ -58,9 +63,10 @@ type DHHandler struct {
 	matchClient     DHMatchClient
 	cardIDSaver     DHCardIDSaver
 	purchaseLister  DHPurchaseLister
-	inventoryPusher DHInventoryPusher // optional: pushes matched cards to DH inventory
-	dhFieldsUpdater DHFieldsUpdater   // optional: persists DH inventory IDs after push
-	intelRepo       intelligence.Repository
+	inventoryPusher  DHInventoryPusher  // optional: pushes matched cards to DH inventory
+	dhFieldsUpdater  DHFieldsUpdater    // optional: persists DH inventory IDs after push
+	pushStatusUpdater DHPushStatusUpdater // optional: sets dh_push_status after bulk match
+	intelRepo        intelligence.Repository
 	suggestionsRepo intelligence.SuggestionsRepository
 	intelCounter    DHIntelligenceCounter
 	suggestCounter  DHSuggestionsCounter
@@ -80,6 +86,7 @@ func NewDHHandler(
 	purchaseLister DHPurchaseLister,
 	inventoryPusher DHInventoryPusher,
 	dhFieldsUpdater DHFieldsUpdater,
+	pushStatusUpdater DHPushStatusUpdater,
 	intelRepo intelligence.Repository,
 	suggestionsRepo intelligence.SuggestionsRepository,
 	intelCounter DHIntelligenceCounter,
@@ -91,17 +98,18 @@ func NewDHHandler(
 		baseCtx = context.Background()
 	}
 	return &DHHandler{
-		matchClient:     matchClient,
-		cardIDSaver:     cardIDSaver,
-		purchaseLister:  purchaseLister,
-		inventoryPusher: inventoryPusher,
-		dhFieldsUpdater: dhFieldsUpdater,
-		intelRepo:       intelRepo,
-		suggestionsRepo: suggestionsRepo,
-		intelCounter:    intelCounter,
-		suggestCounter:  suggestCounter,
-		logger:          logger,
-		baseCtx:         baseCtx,
+		matchClient:       matchClient,
+		cardIDSaver:       cardIDSaver,
+		purchaseLister:    purchaseLister,
+		inventoryPusher:   inventoryPusher,
+		dhFieldsUpdater:   dhFieldsUpdater,
+		pushStatusUpdater: pushStatusUpdater,
+		intelRepo:         intelRepo,
+		suggestionsRepo:   suggestionsRepo,
+		intelCounter:      intelCounter,
+		suggestCounter:    suggestCounter,
+		logger:            logger,
+		baseCtx:           baseCtx,
 	}
 }
 
