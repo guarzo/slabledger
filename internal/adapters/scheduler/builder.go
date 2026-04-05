@@ -96,6 +96,11 @@ type BuildDeps struct {
 	PurchaseByCertLookup  PurchaseByCertLookup
 	CampaignService       domainCampaigns.Service
 
+	// DH push dependencies (optional)
+	DHPushPendingLister DHPushPendingLister
+	DHPushStatusUpdater DHPushStatusUpdater
+	DHPushCardIDSaver   DHPushCardIDSaver
+
 	// Scoring gap cleanup dependencies (optional)
 	GapStore scoring.GapStore
 
@@ -383,6 +388,26 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 			deps.PurchaseByCertLookup,
 			deps.Logger,
 			inventoryPollCfg,
+		))
+	}
+
+	// DH v2: Push scheduler — matches pending purchases and pushes to DH inventory
+	if deps.DHClient != nil && deps.DHClient.Available() &&
+		deps.DHPushPendingLister != nil && deps.DHPushStatusUpdater != nil &&
+		deps.DHPushCardIDSaver != nil && deps.DHFieldsUpdater != nil {
+		pushCfg := DHPushConfig{
+			Enabled:  cfg.DH.Enabled,
+			Interval: cfg.DH.PushInterval,
+		}
+		schedulers = append(schedulers, NewDHPushScheduler(
+			deps.DHPushPendingLister,
+			deps.DHPushStatusUpdater,
+			deps.DHClient,
+			deps.DHClient,
+			deps.DHFieldsUpdater,
+			deps.DHPushCardIDSaver,
+			deps.Logger,
+			pushCfg,
 		))
 	}
 

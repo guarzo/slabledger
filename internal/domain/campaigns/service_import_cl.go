@@ -78,6 +78,15 @@ func (s *service) RefreshCLValuesGlobal(ctx context.Context, rows []CLExportRow)
 		}
 		purchase.CLValueCents = newCLCents
 
+		// Flag for DH push if eligible
+		if purchase.NeedsDHPush() {
+			if err := s.repo.UpdatePurchaseDHPushStatus(ctx, purchase.ID, DHPushStatusPending); err != nil && s.logger != nil {
+				s.logger.Warn(ctx, "cl refresh: failed to set dh push status",
+					observability.String("purchaseID", purchase.ID),
+					observability.Err(err))
+			}
+		}
+
 		// Backfill card metadata from CL data if needed (DB-only, no external calls).
 		// Must run before history recording so history uses repaired identity.
 		s.backfillMetadataFromCL(ctx, purchase, row)
@@ -221,6 +230,16 @@ func (s *service) ImportCLExportGlobal(ctx context.Context, rows []CLExportRow) 
 				continue
 			}
 			existing.CLValueCents = newCLCents
+
+			// Flag for DH push if eligible
+			if existing.NeedsDHPush() {
+				if err := s.repo.UpdatePurchaseDHPushStatus(ctx, existing.ID, DHPushStatusPending); err != nil && s.logger != nil {
+					s.logger.Warn(ctx, "cl import: failed to set dh push status",
+						observability.String("purchaseID", existing.ID),
+						observability.Err(err))
+				}
+			}
+
 			s.backfillMetadataFromCL(ctx, existing, row)
 			s.recordCLHistory(ctx, existing, newCLCents)
 			s.recordPopHistory(ctx, existing, newPop)
@@ -285,6 +304,11 @@ func (s *service) ImportCLExportGlobal(ctx context.Context, rows []CLExportRow) 
 					})
 				}
 				continue
+			}
+			if err := s.repo.UpdatePurchaseDHPushStatus(ctx, p.ID, DHPushStatusPending); err != nil && s.logger != nil {
+				s.logger.Warn(ctx, "cl import: failed to set dh push status for new purchase",
+					observability.String("purchaseID", p.ID),
+					observability.Err(err))
 			}
 			result.Allocated++
 			result.Results = append(result.Results, GlobalImportItemResult{

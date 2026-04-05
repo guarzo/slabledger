@@ -99,7 +99,7 @@ func NewRouter(cfg RouterConfig) *Router {
 	if cfg.CampaignsHandler != nil {
 		rt.campaignsHandler = cfg.CampaignsHandler
 	} else if cfg.CampaignsService != nil {
-		rt.campaignsHandler = handlers.NewCampaignsHandler(cfg.CampaignsService, cfg.Logger, nil, nil, nil)
+		rt.campaignsHandler = handlers.NewCampaignsHandler(cfg.CampaignsService, cfg.Logger, nil)
 	}
 
 	if cfg.PriceHintsHandler != nil {

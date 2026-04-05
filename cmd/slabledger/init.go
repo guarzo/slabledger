@@ -442,6 +442,11 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 		if deps.CampaignsRepo != nil {
 			buildDeps.DHFieldsUpdater = deps.CampaignsRepo
 			buildDeps.PurchaseByCertLookup = deps.CampaignsRepo
+			buildDeps.DHPushPendingLister = deps.CampaignsRepo
+			buildDeps.DHPushStatusUpdater = deps.CampaignsRepo
+		}
+		if deps.CardIDMappingRepo != nil {
+			buildDeps.DHPushCardIDSaver = deps.CardIDMappingRepo
 		}
 		if deps.CampaignsService != nil {
 			buildDeps.CampaignService = deps.CampaignsService
