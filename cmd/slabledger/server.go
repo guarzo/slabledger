@@ -39,18 +39,19 @@ type ServerDependencies struct {
 	CardHedgerStats           handlers.CardHedgerStats // optional: live CardHedger counters
 	CardRequestHandler        *handlers.CardRequestHandlers
 	PricingDiagnosticsHandler *handlers.PricingDiagnosticsHandler
-	CampaignsRepo             domainCampaigns.Repository     // For pricing API (cert price lookup)
-	PricingAPIKey             string                         // Bearer token; empty = pricing API disabled
-	AdvisorHandler            *handlers.AdvisorHandler       // AI advisor; nil = disabled
-	SocialHandler             *handlers.SocialHandler        // Social content; nil = disabled
-	InstagramHandler          *handlers.InstagramHandler     // Instagram publishing; nil = disabled
-	AIStatusHandler           *handlers.AIStatusHandler      // AI usage stats; nil = disabled
-	PriceFlagsHandler         *handlers.PriceFlagsHandler    // Price flag admin; nil = disabled
-	CardLadderHandler         *handlers.CardLadderHandler    // Card Ladder admin; nil = disabled
-	SalesCompsHandler         *handlers.SalesCompsHandler    // Sales comps; nil = disabled
-	PicksHandler              *handlers.PicksHandler         // AI picks; nil = disabled
-	OpportunitiesHandler      *handlers.OpportunitiesHandler // Arbitrage opportunities; nil = disabled
-	DHHandler                 *handlers.DHHandler            // DH bulk match + intelligence; nil = disabled
+	CampaignsRepo             domainCampaigns.Repository      // For pricing API (cert price lookup)
+	PricingAPIKey             string                          // Bearer token; empty = pricing API disabled
+	AdvisorHandler            *handlers.AdvisorHandler        // AI advisor; nil = disabled
+	SocialHandler             *handlers.SocialHandler         // Social content; nil = disabled
+	InstagramHandler          *handlers.InstagramHandler      // Instagram publishing; nil = disabled
+	AIStatusHandler           *handlers.AIStatusHandler       // AI usage stats; nil = disabled
+	PriceFlagsHandler         *handlers.PriceFlagsHandler     // Price flag admin; nil = disabled
+	CardLadderHandler         *handlers.CardLadderHandler     // Card Ladder admin; nil = disabled
+	SalesCompsHandler         *handlers.SalesCompsHandler     // Sales comps; nil = disabled
+	PicksHandler              *handlers.PicksHandler          // AI picks; nil = disabled
+	OpportunitiesHandler      *handlers.OpportunitiesHandler  // Arbitrage opportunities; nil = disabled
+	DHHandler                 *handlers.DHHandler             // DH bulk match + intelligence; nil = disabled
+	SellSheetItemsHandler     *handlers.SellSheetItemsHandler // Sell sheet persistence; nil = disabled
 }
 
 // EnvVarValidation holds the result of environment variable validation
@@ -215,6 +216,7 @@ func startWebServer(ctx context.Context, deps ServerDependencies) error {
 		PicksHandler:              deps.PicksHandler,
 		OpportunitiesHandler:      deps.OpportunitiesHandler,
 		DHHandler:                 deps.DHHandler,
+		SellSheetItemsHandler:     deps.SellSheetItemsHandler,
 		Logger:                    logger,
 		AdminEmails:               cfg.Auth.AdminEmails,
 		DatabasePath:              cfg.Database.Path,

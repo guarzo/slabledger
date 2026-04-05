@@ -59,6 +59,10 @@ type MockCampaignRepository struct {
 	GetPurchasesByCertNumbersFn    func(ctx context.Context, certNumbers []string) (map[string]*campaigns.Purchase, error)
 	UpdatePurchaseDHFieldsFn       func(ctx context.Context, id string, update campaigns.DHFieldsUpdate) error
 	GetPurchasesByDHCertStatusFn   func(ctx context.Context, status string, limit int) ([]campaigns.Purchase, error)
+	GetSellSheetItemsFn            func(ctx context.Context, userID int64) ([]string, error)
+	AddSellSheetItemsFn            func(ctx context.Context, userID int64, purchaseIDs []string) error
+	RemoveSellSheetItemsFn         func(ctx context.Context, userID int64, purchaseIDs []string) error
+	ClearSellSheetFn               func(ctx context.Context, userID int64) error
 }
 
 // NewMockCampaignRepository creates a ready-to-use MockCampaignRepository with initialized maps.
@@ -848,4 +852,32 @@ func (m *MockCampaignRepository) GetPurchasesByDHCertStatus(ctx context.Context,
 		return m.GetPurchasesByDHCertStatusFn(ctx, status, limit)
 	}
 	return nil, nil
+}
+
+func (m *MockCampaignRepository) GetSellSheetItems(ctx context.Context, userID int64) ([]string, error) {
+	if m.GetSellSheetItemsFn != nil {
+		return m.GetSellSheetItemsFn(ctx, userID)
+	}
+	return nil, nil
+}
+
+func (m *MockCampaignRepository) AddSellSheetItems(ctx context.Context, userID int64, purchaseIDs []string) error {
+	if m.AddSellSheetItemsFn != nil {
+		return m.AddSellSheetItemsFn(ctx, userID, purchaseIDs)
+	}
+	return nil
+}
+
+func (m *MockCampaignRepository) RemoveSellSheetItems(ctx context.Context, userID int64, purchaseIDs []string) error {
+	if m.RemoveSellSheetItemsFn != nil {
+		return m.RemoveSellSheetItemsFn(ctx, userID, purchaseIDs)
+	}
+	return nil
+}
+
+func (m *MockCampaignRepository) ClearSellSheet(ctx context.Context, userID int64) error {
+	if m.ClearSellSheetFn != nil {
+		return m.ClearSellSheetFn(ctx, userID)
+	}
+	return nil
 }

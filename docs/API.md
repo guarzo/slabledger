@@ -2165,3 +2165,56 @@ Auth: RequireAuth (POST not required — uses GET)
 Generates a global sell sheet across all active campaigns.
 
 **Response:** `200 OK` — `SellSheet` object (same shape as campaign sell sheet, `campaignName` set per item)
+
+---
+
+### `GET /api/sell-sheet/items`
+
+Get the authenticated user's sell sheet item IDs.
+
+**Auth:** RequireAuth
+
+**Response:** `200 OK`
+```json
+{
+  "purchaseIds": ["uuid1", "uuid2"]
+}
+```
+
+### `PUT /api/sell-sheet/items`
+
+Add purchase IDs to the sell sheet (idempotent).
+
+**Auth:** RequireAuth
+
+**Request body:**
+```json
+{
+  "purchaseIds": ["uuid1", "uuid2"]
+}
+```
+
+**Response:** `204 No Content`
+
+### `DELETE /api/sell-sheet/items`
+
+Remove specific purchase IDs from the sell sheet.
+
+**Auth:** RequireAuth
+
+**Request body:**
+```json
+{
+  "purchaseIds": ["uuid1", "uuid2"]
+}
+```
+
+**Response:** `204 No Content`
+
+### `DELETE /api/sell-sheet/items/all`
+
+Clear all items from the sell sheet.
+
+**Auth:** RequireAuth
+
+**Response:** `204 No Content`
