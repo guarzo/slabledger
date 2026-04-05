@@ -17,6 +17,7 @@ const (
 	ErrCodeRevocationFlagNotFound errors.ErrorCode = "ERR_REVOCATION_FLAG_NOT_FOUND"
 	ErrCodeNoAISuggestion         errors.ErrorCode = "ERR_NO_AI_SUGGESTION"
 	ErrCodePriceFlagNotFound      errors.ErrorCode = "ERR_PRICE_FLAG_NOT_FOUND"
+	ErrCodeCertNotFound           errors.ErrorCode = "ERR_CERT_NOT_FOUND"
 )
 
 // Sentinel errors for campaign operations
@@ -31,6 +32,7 @@ var (
 	ErrRevocationFlagNotFound = errors.NewAppError(ErrCodeRevocationFlagNotFound, "revocation flag not found")
 	ErrNoAISuggestion         = errors.NewAppError(ErrCodeNoAISuggestion, "no AI suggestion to accept or suggestion has changed")
 	ErrPriceFlagNotFound      = errors.NewAppError(ErrCodePriceFlagNotFound, "price flag not found or already resolved")
+	ErrCertNotFound           = errors.NewAppError(ErrCodeCertNotFound, "cert not found")
 )
 
 // IsCampaignNotFound checks if the error is a "campaign not found" error.
@@ -58,3 +60,6 @@ func IsNoAISuggestion(err error) bool { return errors.HasErrorCode(err, ErrCodeN
 
 // IsPriceFlagNotFound checks if the error is a "price flag not found" error.
 func IsPriceFlagNotFound(err error) bool { return errors.HasErrorCode(err, ErrCodePriceFlagNotFound) }
+
+// IsCertNotFound checks if the error is a "cert not found" error.
+func IsCertNotFound(err error) bool { return errors.HasErrorCode(err, ErrCodeCertNotFound) }

@@ -2,6 +2,7 @@ package campaigns
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 )
@@ -191,6 +192,162 @@ func TestImportCerts_SoldCerts(t *testing.T) {
 				if got.CampaignID != want.CampaignID {
 					t.Errorf("soldItems[%d].campaignID = %q, want %q", i, got.CampaignID, want.CampaignID)
 				}
+			}
+		})
+	}
+}
+
+func TestScanCert(t *testing.T) {
+	tests := []struct {
+		name       string
+		seed       func(*mockRepo)
+		certNumber string
+		wantStatus string
+		wantCard   string
+	}{
+		{
+			name: "existing cert not sold",
+			seed: func(r *mockRepo) {
+				r.purchases["p1"] = &Purchase{
+					ID: "p1", CertNumber: "11111111", Grader: "PSA",
+					CardName: "Charizard", CampaignID: "camp-1",
+				}
+			},
+			certNumber: "11111111",
+			wantStatus: "existing",
+			wantCard:   "Charizard",
+		},
+		{
+			name: "sold cert",
+			seed: func(r *mockRepo) {
+				r.purchases["p1"] = &Purchase{
+					ID: "p1", CertNumber: "22222222", Grader: "PSA",
+					CardName: "Pikachu", CampaignID: "camp-1",
+				}
+				r.sales["s1"] = &Sale{ID: "s1", PurchaseID: "p1"}
+				r.purchaseSales["p1"] = true
+			},
+			certNumber: "22222222",
+			wantStatus: "sold",
+			wantCard:   "Pikachu",
+		},
+		{
+			name:       "new cert not in DB",
+			seed:       func(_ *mockRepo) {},
+			certNumber: "33333333",
+			wantStatus: "new",
+			wantCard:   "",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := newMockRepo()
+			tc.seed(repo)
+			svc := &service{repo: repo, idGen: func() string { return "test-id" }}
+
+			result, err := svc.ScanCert(context.Background(), tc.certNumber)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if result.Status != tc.wantStatus {
+				t.Errorf("status = %q, want %q", result.Status, tc.wantStatus)
+			}
+			if result.CardName != tc.wantCard {
+				t.Errorf("cardName = %q, want %q", result.CardName, tc.wantCard)
+			}
+		})
+	}
+}
+
+func TestScanCert_ExistingSetsExportFlag(t *testing.T) {
+	repo := newMockRepo()
+	repo.purchases["p1"] = &Purchase{
+		ID: "p1", CertNumber: "11111111", Grader: "PSA",
+		CardName: "Charizard", CampaignID: "camp-1",
+	}
+
+	svc := &service{repo: repo, idGen: func() string { return "test-id" }}
+
+	_, err := svc.ScanCert(context.Background(), "11111111")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if repo.purchases["p1"].EbayExportFlaggedAt == nil {
+		t.Error("expected ebay export flag to be set for existing cert")
+	}
+}
+
+func TestResolveCert(t *testing.T) {
+	tests := []struct {
+		name         string
+		certNumber   string
+		lookupFn     func(ctx context.Context, certNumber string) (*CertInfo, error)
+		wantErr      bool
+		wantSentinel error
+		wantName     string
+	}{
+		{
+			name:       "successful lookup",
+			certNumber: "44444444",
+			lookupFn: func(_ context.Context, cert string) (*CertInfo, error) {
+				return &CertInfo{
+					CertNumber: cert, CardName: "Umbreon VMAX", Grade: 10,
+					Year: "2022", Category: "EVOLVING SKIES", Subject: "2022 Pokemon Evolving Skies Umbreon VMAX",
+				}, nil
+			},
+			wantErr:  false,
+			wantName: "Umbreon VMAX",
+		},
+		{
+			name:       "api returns error",
+			certNumber: "00000000",
+			lookupFn: func(_ context.Context, _ string) (*CertInfo, error) {
+				return nil, fmt.Errorf("cert 00000000 not found")
+			},
+			wantErr: true,
+		},
+		{
+			name:       "api returns nil info",
+			certNumber: "00000001",
+			lookupFn: func(_ context.Context, _ string) (*CertInfo, error) {
+				return nil, nil
+			},
+			wantErr:    true,
+			wantSentinel: ErrCertNotFound,
+		},
+		{
+			name:       "no cert lookup configured",
+			certNumber: "55555555",
+			lookupFn:   nil,
+			wantErr:    true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := newMockRepo()
+			var certLookup CertLookup
+			if tc.lookupFn != nil {
+				certLookup = &mockCertLookup{lookupFn: tc.lookupFn}
+			}
+			svc := &service{repo: repo, certLookup: certLookup, idGen: func() string { return "test-id" }}
+
+			info, err := svc.ResolveCert(context.Background(), tc.certNumber)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				if tc.wantSentinel != nil && !errors.Is(err, tc.wantSentinel) {
+					t.Errorf("expected error %v, got %v", tc.wantSentinel, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if info.CardName != tc.wantName {
+				t.Errorf("cardName = %q, want %q", info.CardName, tc.wantName)
 			}
 		})
 	}
