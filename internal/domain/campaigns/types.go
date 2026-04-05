@@ -22,6 +22,14 @@ const (
 	DHStatusListed  DHStatus = "listed"
 )
 
+// DHPushStatus represents the DH inventory push pipeline status.
+const (
+	DHPushStatusPending   = "pending"
+	DHPushStatusMatched   = "matched"
+	DHPushStatusUnmatched = "unmatched"
+	DHPushStatusManual    = "manual"
+)
+
 // SaleChannel represents where a card was sold.
 type SaleChannel string
 
@@ -163,6 +171,7 @@ type Purchase struct {
 	DHListingPriceCents int       `json:"dhListingPriceCents,omitempty"` // Current DH listing price
 	DHChannelsJSON      string    `json:"dhChannelsJson,omitempty"`      // Per-channel sync status JSON blob
 	DHStatus            DHStatus  `json:"dhStatus,omitempty"`            // DH inventory status
+	DHPushStatus        string    `json:"dhPushStatus,omitempty"`        // Pipeline status: "", "pending", "matched", "unmatched", "manual"
 	CreatedAt           time.Time `json:"createdAt"`
 	UpdatedAt           time.Time `json:"updatedAt"`
 

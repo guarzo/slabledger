@@ -31,8 +31,8 @@ func (r *CampaignsRepository) CreatePurchase(ctx context.Context, p *campaigns.P
 			ai_suggested_price_cents, ai_suggested_at,
 			card_year, ebay_export_flagged_at,
 			reviewed_price_cents, reviewed_at, review_source,
-			dh_card_id, dh_inventory_id, dh_cert_status, dh_listing_price_cents, dh_channels_json, dh_status)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			dh_card_id, dh_inventory_id, dh_cert_status, dh_listing_price_cents, dh_channels_json, dh_status, dh_push_status)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 	_, err := r.db.ExecContext(ctx, query,
 		p.ID, p.CampaignID, p.CardName, p.CertNumber,
@@ -48,7 +48,7 @@ func (r *CampaignsRepository) CreatePurchase(ctx context.Context, p *campaigns.P
 		p.AISuggestedPriceCents, p.AISuggestedAt,
 		p.CardYear, p.EbayExportFlaggedAt,
 		p.ReviewedPriceCents, p.ReviewedAt, string(p.ReviewSource),
-		p.DHCardID, p.DHInventoryID, p.DHCertStatus, p.DHListingPriceCents, p.DHChannelsJSON, p.DHStatus,
+		p.DHCardID, p.DHInventoryID, p.DHCertStatus, p.DHListingPriceCents, p.DHChannelsJSON, p.DHStatus, p.DHPushStatus,
 	)
 	if err != nil && isUniqueConstraintError(err) {
 		return campaigns.ErrDuplicateCertNumber
