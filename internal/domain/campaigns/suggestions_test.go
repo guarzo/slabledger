@@ -118,11 +118,11 @@ func TestGenerateSuggestions_CoverageGap(t *testing.T) {
 
 func TestGenerateSuggestions_ChannelInformedBuyTerms(t *testing.T) {
 	cases := []struct {
-		name           string
-		insights       *PortfolioInsights
-		campaigns      []Campaign
-		wantCampaign   string
-		wantMaxBuy     float64
+		name            string
+		insights        *PortfolioInsights
+		campaigns       []Campaign
+		wantCampaign    string
+		wantMaxBuy      float64
 		wantMaxBuyExact bool // if true, assert exact maxBuy value
 	}{
 		{
@@ -278,7 +278,6 @@ func TestDeduplicateSuggestions(t *testing.T) {
 		}
 	}
 }
-
 
 func TestROIWeightedSpendCaps(t *testing.T) {
 	insights := &PortfolioInsights{

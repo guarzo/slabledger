@@ -338,4 +338,3 @@ func TestResolveCert(t *testing.T) {
 		})
 	}
 }
-
