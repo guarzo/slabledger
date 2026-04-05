@@ -5,7 +5,7 @@ import { DropdownMenu } from 'radix-ui';
 import SignalBadge from './SignalBadge';
 import MarketplaceLinks from './MarketplaceLinks';
 import {
-  bestPrice, unrealizedPL, marketTrend,
+  costBasis, bestPrice, unrealizedPL, marketTrend,
   getSourceByType, marketTooltip,
   formatPL, deriveSignalDirection, deriveSignalDelta, displayGrade,
   getReviewStatus, statusBorderColor, statusBadge, isHotSeller,
@@ -41,11 +41,11 @@ interface DesktopRowProps {
 }
 
 export default function DesktopRow({ item, selected, onToggle, onExpand, onRecordSale, onFixPricing, onSetPrice, ev, showEV, showCampaignColumn, isOnSellSheet }: DesktopRowProps) {
-  const costBasis = item.purchase.buyCostCents + item.purchase.psaSourcingFeeCents;
+  const cb = costBasis(item.purchase);
   const snap = item.currentMarket;
   const daysColor = daysHeldColor(item.daysHeld);
   const price = snap ? bestPrice(snap) : 0;
-  const pl = unrealizedPL(costBasis, snap);
+  const pl = unrealizedPL(cb, snap);
   const trend = snap ? marketTrend(snap) : null;
   const direction = deriveSignalDirection(item);
   const deltaPct = deriveSignalDelta(item);
@@ -116,9 +116,9 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
         </div>
       </div>
       <div className="glass-table-td flex-shrink-0 text-center text-[var(--text)]" style={{ width: '36px' }}>{displayGrade(item.purchase)}</div>
-      <div className="glass-table-td flex-shrink-0 text-right text-[var(--text)] tabular-nums" style={{ width: '72px' }}>{formatCents(costBasis)}</div>
+      <div className="glass-table-td flex-shrink-0 text-right text-[var(--text)] tabular-nums" style={{ width: '72px' }}>{formatCents(cb)}</div>
       <div className="glass-table-td flex-shrink-0 text-right" style={{ width: '120px' }}
-        title={snap ? marketTooltip(snap, costBasis) : undefined}>
+        title={snap ? marketTooltip(snap, cb) : undefined}>
         {snap && price > 0 ? (() => {
           const displaySource = getSourceByType(snap.sourcePrices, 'ebay') || getSourceByType(snap.sourcePrices, 'estimate');
           const confidence = displaySource?.confidence ?? snap?.fusionConfidence ?? null;
@@ -142,7 +142,7 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
         )}
       </div>
       {/* Unrealized P/L */}
-      <div className="glass-table-td flex-shrink-0 text-right tabular-nums" style={{ width: '72px' }}>
+      <div className="glass-table-td flex-shrink-0 text-right tabular-nums print-hide-col" style={{ width: '72px' }}>
         {pl != null ? (
           <span className={`text-xs font-medium px-2 py-[3px] rounded-md ${
             pl > 0 ? 'bg-[rgba(52,211,153,0.1)] text-[#34d399]' :
@@ -154,9 +154,9 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
         )}
       </div>
       {/* Days held */}
-      <div className={`glass-table-td flex-shrink-0 text-center ${daysColor}`} style={{ width: '40px' }}>{item.daysHeld}</div>
+      <div className={`glass-table-td flex-shrink-0 text-center print-hide-col ${daysColor}`} style={{ width: '40px' }}>{item.daysHeld}</div>
       {/* Signal */}
-      <div className="glass-table-td flex-shrink-0 text-center" style={{ width: '48px' }}>
+      <div className="glass-table-td flex-shrink-0 text-center print-hide-col" style={{ width: '48px' }}>
         {direction ? (
           <SignalBadge direction={direction} deltaPct={deltaPct} />
         ) : (
@@ -172,7 +172,7 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
         )}
       </div>
       {/* Status */}
-      <div className="glass-table-td flex-shrink-0 text-center" style={{ width: '72px' }}>
+      <div className="glass-table-td flex-shrink-0 text-center print-hide-col" style={{ width: '72px' }}>
         <span
           className="inline-block text-[10px] font-medium px-1.5 py-0.5 rounded-full whitespace-nowrap"
           style={{
@@ -194,7 +194,7 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
         </div>
       )}
       {/* Actions overflow menu */}
-      <div className="glass-table-td flex-shrink-0 text-center !px-1" style={{ width: '28px' }}>
+      <div className="glass-table-td flex-shrink-0 text-center !px-1 print-hide-actions" style={{ width: '28px' }}>
         <DropdownMenu.Root>
           <DropdownMenu.Trigger asChild>
             <button

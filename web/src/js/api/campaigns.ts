@@ -142,6 +142,12 @@ declare module './client' {
     createPriceFlag(purchaseId: string, reason: string): Promise<{ id: number; flaggedAt: string }>;
     listPriceFlags(status?: string): Promise<PriceFlagsResponse>;
     resolvePriceFlag(flagId: number): Promise<void>;
+
+    // Sell sheet item persistence
+    getSellSheetItems(): Promise<{ purchaseIds: string[] }>;
+    addSellSheetItems(purchaseIds: string[]): Promise<void>;
+    removeSellSheetItems(purchaseIds: string[]): Promise<void>;
+    clearSellSheetItems(): Promise<void>;
   }
 }
 
@@ -565,4 +571,38 @@ proto.generateEbayCSV = async function (
     const message = err instanceof Error ? err.message : 'Network error';
     throw new APIError(message, 0, 'NETWORK_ERROR');
   }
+};
+
+// --- Sell sheet item persistence ---
+
+proto.getSellSheetItems = async function (this: APIClient): Promise<{ purchaseIds: string[] }> {
+  return this.get<{ purchaseIds: string[] }>('/sell-sheet/items');
+};
+
+proto.addSellSheetItems = async function (this: APIClient, purchaseIds: string[]): Promise<void> {
+  const response = await this.fetchWithRetry(
+    `${this.baseURL}/sell-sheet/items`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ purchaseIds }),
+    },
+  );
+  await this.expectNoContent(response);
+};
+
+proto.removeSellSheetItems = async function (this: APIClient, purchaseIds: string[]): Promise<void> {
+  const response = await this.fetchWithRetry(
+    `${this.baseURL}/sell-sheet/items`,
+    {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ purchaseIds }),
+    },
+  );
+  await this.expectNoContent(response);
+};
+
+proto.clearSellSheetItems = async function (this: APIClient): Promise<void> {
+  await this.deleteResource('/sell-sheet/items/all');
 };

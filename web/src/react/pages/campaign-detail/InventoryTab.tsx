@@ -16,11 +16,12 @@ import type { PriceFlagReason } from '../../../types/campaigns/priceReview';
 import RecordSaleModal from './RecordSaleModal';
 import PriceHintDialog from '../../PriceHintDialog';
 import PriceOverrideDialog from '../../PriceOverrideDialog';
-import { bestPrice, unrealizedPL, formatPL, getReviewStatus, reviewUrgencySort, isCardShowCandidate } from './inventory/utils';
+import { costBasis, bestPrice, unrealizedPL, formatPL, getReviewStatus, reviewUrgencySort, isCardShowCandidate } from './inventory/utils';
 import type { SortKey, SortDir } from './inventory/utils';
 import '../../../styles/print-sell-sheet.css';
 import DesktopRow from './inventory/DesktopRow';
 import MobileCard from './inventory/MobileCard';
+import MobileSellSheetView from './inventory/MobileSellSheetView';
 import CrackCandidatesBanner from './inventory/CrackCandidatesBanner';
 import SortableHeader from './inventory/SortableHeader';
 import ExpandedDetail from './inventory/ExpandedDetail';
@@ -38,6 +39,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
   const queryClient = useQueryClient();
   const toast = useToast();
   const sellSheet = useSellSheet();
+  const { has: sellSheetHas } = sellSheet;
   const { data: evPortfolio } = useExpectedValues(campaignId ?? '');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -59,6 +61,15 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [searchQuery, setSearchQuery] = useState('');
   const [isPrinting, setIsPrinting] = useState(false);
+  const handlePrint = useCallback(() => {
+    setIsPrinting(true);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        window.print();
+        setIsPrinting(false);
+      });
+    });
+  }, []);
   const [statsExpanded, setStatsExpanded] = useState(false);
   const [filterTab, setFilterTab] = useState<'needs_review' | 'large_gap' | 'no_data' | 'flagged' | 'card_show' | 'all' | 'sell_sheet'>('needs_review');
   const [showAll, setShowAll] = useState(false);
@@ -142,10 +153,10 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
   const pageSellSheetCount = useMemo(() => {
     let count = 0;
     for (const item of items) {
-      if (sellSheet.has(item.purchase.id)) count++;
+      if (sellSheetHas(item.purchase.id)) count++;
     }
     return count;
-  }, [items, sellSheet]);
+  }, [items, sellSheetHas]);
 
   // Whether the sell-sheet filter is truly active (not bypassed by showAll or search)
   const sellSheetActive = filterTab === 'sell_sheet' && !showAll && !debouncedSearch.trim();
@@ -164,7 +175,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
     } else if (!showAll) {
       // Filter by active tab using getReviewStatus
       if (filterTab === 'sell_sheet') {
-        result = result.filter(i => sellSheet.has(i.purchase.id));
+        result = result.filter(i => sellSheetHas(i.purchase.id));
       } else if (filterTab !== 'all') {
         result = result.filter(i => {
           const status = getReviewStatus(i);
@@ -190,19 +201,16 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
           return dir * a.purchase.cardName.localeCompare(b.purchase.cardName);
         case 'grade':
           return dir * (a.purchase.gradeValue - b.purchase.gradeValue);
-        case 'cost': {
-          const ca = a.purchase.buyCostCents + a.purchase.psaSourcingFeeCents;
-          const cb = b.purchase.buyCostCents + b.purchase.psaSourcingFeeCents;
-          return dir * (ca - cb);
-        }
+        case 'cost':
+          return dir * (costBasis(a.purchase) - costBasis(b.purchase));
         case 'market': {
           const ma = a.currentMarket ? bestPrice(a.currentMarket) : 0;
           const mb = b.currentMarket ? bestPrice(b.currentMarket) : 0;
           return dir * (ma - mb);
         }
         case 'pl': {
-          const pa = unrealizedPL(a.purchase.buyCostCents + a.purchase.psaSourcingFeeCents, a.currentMarket) ?? -Infinity;
-          const pb = unrealizedPL(b.purchase.buyCostCents + b.purchase.psaSourcingFeeCents, b.currentMarket) ?? -Infinity;
+          const pa = unrealizedPL(costBasis(a.purchase), a.currentMarket) ?? -Infinity;
+          const pb = unrealizedPL(costBasis(b.purchase), b.currentMarket) ?? -Infinity;
           return dir * (pa - pb);
         }
         case 'days':
@@ -216,7 +224,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
           return 0;
       }
     });
-  }, [items, debouncedSearch, sortKey, sortDir, evMap, showAll, filterTab, sellSheet]);
+  }, [items, debouncedSearch, sortKey, sortDir, evMap, showAll, filterTab, sellSheetHas]);
 
   const rowVirtualizer = useVirtualizer({
     count: filteredAndSortedItems.length,
@@ -287,12 +295,11 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
   }
 
   function handleSetPrice(item: AgingItem) {
-    const costBasis = item.purchase.buyCostCents + item.purchase.psaSourcingFeeCents;
     const currentPrice = item.currentMarket ? bestPrice(item.currentMarket) : 0;
     setPriceTarget({
       purchaseId: item.purchase.id,
       cardName: item.purchase.cardName,
-      costBasisCents: costBasis,
+      costBasisCents: costBasis(item.purchase),
       currentPriceCents: currentPrice,
       currentOverrideCents: item.purchase.overridePriceCents,
       currentOverrideSource: item.purchase.overrideSource,
@@ -319,12 +326,14 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
   }
 
   // Summary stats
-  const totalCost = items.reduce((sum, i) => sum + i.purchase.buyCostCents + i.purchase.psaSourcingFeeCents, 0);
-  const totalMarket = items.reduce((sum, i) => {
-    if (!i.currentMarket) return sum;
-    return sum + bestPrice(i.currentMarket);
-  }, 0);
-  const totalPL = totalMarket > 0 ? totalMarket - totalCost : 0;
+  const { totalCost, totalMarket, totalPL } = useMemo(() => {
+    const cost = items.reduce((sum, i) => sum + costBasis(i.purchase), 0);
+    const market = items.reduce((sum, i) => {
+      if (!i.currentMarket) return sum;
+      return sum + bestPrice(i.currentMarket);
+    }, 0);
+    return { totalCost: cost, totalMarket: market, totalPL: market > 0 ? market - cost : 0 };
+  }, [items]);
 
   if (loading) return <div className="py-8 text-center"><PokeballLoader /></div>;
 
@@ -340,6 +349,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
 
   return (
     <div>
+      {!(isMobile && sellSheetActive) && (<>
       {/* Summary stat cards — collapsible on mobile */}
       {isMobile ? (
         <div className="mb-4 sell-sheet-no-print">
@@ -480,13 +490,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
             size="sm"
             variant="secondary"
             disabled={isPrinting}
-            onClick={() => {
-              setIsPrinting(true);
-              requestAnimationFrame(() => {
-                window.print();
-                setIsPrinting(false);
-              });
-            }}
+            onClick={handlePrint}
           >
             {isPrinting ? 'Preparing…' : 'Print Sell Sheet'}
           </Button>
@@ -575,8 +579,20 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
           <div className="text-[var(--text-muted)] text-xs mt-1">Select items from any tab and click &ldquo;Add to Sell Sheet&rdquo;.</div>
         </div>
       )}
+      </>)}
 
-      {isMobile ? (
+      {isMobile && sellSheetActive ? (
+        <MobileSellSheetView
+          items={filteredAndSortedItems}
+          onRecordSale={(item) => openSaleModal([item])}
+          onExit={() => setFilterTab('needs_review')}
+          searchQuery={searchQuery}
+          onSearch={setSearchQuery}
+          sellSheetCount={pageSellSheetCount}
+          isPrinting={isPrinting}
+          onPrint={handlePrint}
+        />
+      ) : isMobile ? (
         <div className="space-y-3">
           <label className="flex items-center gap-2 text-xs text-[var(--text-muted)] px-1 sell-sheet-no-print">
             <input type="checkbox" checked={filteredAndSortedItems.length > 0 && filteredAndSortedItems.every(i => selected.has(i.purchase.id))}
@@ -637,7 +653,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
         <div className="glass-table">
           {/* Sticky header */}
           <div className="glass-table-header flex items-center sticky top-0 z-10" style={{ paddingLeft: '3px' }}>
-            <div className="glass-table-th flex-shrink-0 !px-1" style={{ width: '28px' }}>
+            <div className="glass-table-th flex-shrink-0 !px-1 print-hide-actions" style={{ width: '28px' }}>
               <input type="checkbox" aria-label="Select all visible cards" checked={filteredAndSortedItems.length > 0 && filteredAndSortedItems.every(i => selected.has(i.purchase.id))}
                 onChange={toggleAll} className="rounded accent-[var(--brand-500)]" />
             </div>
@@ -646,20 +662,20 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
             <SortableHeader label="Cost" sortKey="cost" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-right" style={{ width: '72px' }} />
             <SortableHeader label="Market" sortKey="market" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-right" style={{ width: '120px' }} />
             <div className="glass-table-th flex-shrink-0 text-right" style={{ width: '68px' }}>CL</div>
-            <SortableHeader label="P/L" sortKey="pl" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-right" style={{ width: '72px' }} />
-            <SortableHeader label="Days" sortKey="days" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-center" style={{ width: '40px' }} />
-            <div className="glass-table-th flex-shrink-0 text-center" style={{ width: '48px' }}>Signal</div>
+            <SortableHeader label="P/L" sortKey="pl" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-right print-hide-col" style={{ width: '72px' }} />
+            <SortableHeader label="Days" sortKey="days" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-center print-hide-col" style={{ width: '40px' }} />
+            <div className="glass-table-th flex-shrink-0 text-center print-hide-col" style={{ width: '48px' }}>Signal</div>
             <div className="glass-table-th flex-shrink-0 text-right" style={{ width: '68px' }}>Rec.</div>
-            <div className="glass-table-th flex-shrink-0 text-center" style={{ width: '72px' }}>Status</div>
+            <div className="glass-table-th flex-shrink-0 text-center print-hide-col" style={{ width: '72px' }}>Status</div>
             {showEV && <SortableHeader label="EV" sortKey="ev" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-right" style={{ width: '64px' }} />}
-            <div className="glass-table-th flex-shrink-0 !px-1" style={{ width: '28px' }}></div>
+            <div className="glass-table-th flex-shrink-0 !px-1 print-hide-actions" style={{ width: '28px' }}></div>
           </div>
           {/* Rows */}
           <div ref={scrollContainerRef} className={isPrinting ? '' : 'max-h-[600px] overflow-y-auto overflow-x-hidden scrollbar-dark'}>
             {isPrinting ? (
               filteredAndSortedItems.map((item, index) => {
                 const isExpanded = expandedId === item.purchase.id;
-                const rowPl = unrealizedPL(item.purchase.buyCostCents + item.purchase.psaSourcingFeeCents, item.currentMarket);
+                const rowPl = unrealizedPL(costBasis(item.purchase), item.currentMarket);
                 const plStatus = rowPl != null ? (rowPl > 0 ? 'positive' : rowPl < 0 ? 'negative' : 'neutral') : 'neutral';
                 const isSelected = selected.has(item.purchase.id);
                 return (
@@ -688,7 +704,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                 {rowVirtualizer.getVirtualItems().map(virtualRow => {
                   const item = filteredAndSortedItems[virtualRow.index];
                   const isExpanded = expandedId === item.purchase.id;
-                  const rowPl = unrealizedPL(item.purchase.buyCostCents + item.purchase.psaSourcingFeeCents, item.currentMarket);
+                  const rowPl = unrealizedPL(costBasis(item.purchase), item.currentMarket);
                   const plStatus = rowPl != null ? (rowPl > 0 ? 'positive' : rowPl < 0 ? 'negative' : 'neutral') : 'neutral';
                   const isSelected = selected.has(item.purchase.id);
                   return (
