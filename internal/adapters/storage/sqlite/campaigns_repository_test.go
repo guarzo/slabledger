@@ -278,14 +278,13 @@ func TestGetPortfolioChannelVelocity(t *testing.T) {
 
 	// Create sales across different channels:
 	// eBay: 2 sales (pv-1, pv-2)
-	// gamestop: 2 sales (pv-3, pv-4)
-	// local: 1 sale (pv-5)
+	// inperson: 3 sales (pv-3, pv-4, pv-5) — legacy gamestop and local both normalize to inperson
 	sales := []campaigns.Sale{
 		{ID: "sv-1", PurchaseID: "pv-1", SaleChannel: campaigns.SaleChannelEbay, SalePriceCents: 65000, SaleFeeCents: 8000, SaleDate: "2026-01-15", DaysToSell: 14, NetProfitCents: 7000, CreatedAt: now, UpdatedAt: now},
 		{ID: "sv-2", PurchaseID: "pv-2", SaleChannel: campaigns.SaleChannelEbay, SalePriceCents: 45000, SaleFeeCents: 5500, SaleDate: "2026-01-25", DaysToSell: 20, NetProfitCents: 9500, CreatedAt: now, UpdatedAt: now},
-		{ID: "sv-3", PurchaseID: "pv-3", SaleChannel: campaigns.SaleChannelGameStop, SalePriceCents: 50000, SaleFeeCents: 0, SaleDate: "2026-01-12", DaysToSell: 2, NetProfitCents: 10000, CreatedAt: now, UpdatedAt: now},
-		{ID: "sv-4", PurchaseID: "pv-4", SaleChannel: campaigns.SaleChannelGameStop, SalePriceCents: 30000, SaleFeeCents: 0, SaleDate: "2026-01-18", DaysToSell: 6, NetProfitCents: 5000, CreatedAt: now, UpdatedAt: now},
-		{ID: "sv-5", PurchaseID: "pv-5", SaleChannel: campaigns.SaleChannelLocal, SalePriceCents: 70000, SaleFeeCents: 0, SaleDate: "2026-01-20", DaysToSell: 5, NetProfitCents: 10000, CreatedAt: now, UpdatedAt: now},
+		{ID: "sv-3", PurchaseID: "pv-3", SaleChannel: campaigns.SaleChannelInPerson, SalePriceCents: 50000, SaleFeeCents: 0, SaleDate: "2026-01-12", DaysToSell: 2, NetProfitCents: 10000, CreatedAt: now, UpdatedAt: now},
+		{ID: "sv-4", PurchaseID: "pv-4", SaleChannel: campaigns.SaleChannelInPerson, SalePriceCents: 30000, SaleFeeCents: 0, SaleDate: "2026-01-18", DaysToSell: 6, NetProfitCents: 5000, CreatedAt: now, UpdatedAt: now},
+		{ID: "sv-5", PurchaseID: "pv-5", SaleChannel: campaigns.SaleChannelInPerson, SalePriceCents: 70000, SaleFeeCents: 0, SaleDate: "2026-01-20", DaysToSell: 5, NetProfitCents: 10000, CreatedAt: now, UpdatedAt: now},
 	}
 	for i := range sales {
 		require.NoError(t, repo.CreateSale(ctx, &sales[i]))
@@ -293,13 +292,14 @@ func TestGetPortfolioChannelVelocity(t *testing.T) {
 
 	velocity, err = repo.GetPortfolioChannelVelocity(ctx)
 	require.NoError(t, err)
-	assert.Len(t, velocity, 3, "expected 3 channels")
+	assert.Len(t, velocity, 2, "expected 2 channels: ebay and inperson")
 
-	// Results should be ordered DESC by count: eBay (2), gamestop (2), local (1)
-	// eBay and gamestop both have count=2, so either order is acceptable for them
-	// but local (count=1) must be last
-	assert.Equal(t, 1, velocity[2].SaleCount, "last channel should have fewest sales")
-	assert.Equal(t, campaigns.SaleChannelLocal, velocity[2].Channel)
+	// Results should be ordered DESC by count: inperson (3), eBay (2)
+	assert.Equal(t, campaigns.SaleChannelInPerson, velocity[0].Channel, "inperson should be first with most sales")
+	assert.Equal(t, 3, velocity[0].SaleCount, "inperson should have 3 sales")
+
+	assert.Equal(t, campaigns.SaleChannelEbay, velocity[1].Channel, "ebay should be second")
+	assert.Equal(t, 2, velocity[1].SaleCount, "ebay should have 2 sales")
 
 	// Build a map for easier assertions on each channel
 	chanMap := make(map[campaigns.SaleChannel]campaigns.ChannelVelocity)
@@ -313,17 +313,11 @@ func TestGetPortfolioChannelVelocity(t *testing.T) {
 	assert.InDelta(t, 17.0, ebay.AvgDaysToSell, 0.1)
 	assert.Equal(t, 110000, ebay.RevenueCents)
 
-	// GameStop: 2 sales, avg days = (2+6)/2 = 4, revenue = 50000+30000 = 80000
-	gs := chanMap[campaigns.SaleChannelGameStop]
-	assert.Equal(t, 2, gs.SaleCount)
-	assert.InDelta(t, 4.0, gs.AvgDaysToSell, 0.1)
-	assert.Equal(t, 80000, gs.RevenueCents)
-
-	// Local: 1 sale, avg days = 5, revenue = 70000
-	local := chanMap[campaigns.SaleChannelLocal]
-	assert.Equal(t, 1, local.SaleCount)
-	assert.InDelta(t, 5.0, local.AvgDaysToSell, 0.1)
-	assert.Equal(t, 70000, local.RevenueCents)
+	// InPerson: 3 sales, avg days = (2+6+5)/3 = 4.33, revenue = 50000+30000+70000 = 150000
+	inperson := chanMap[campaigns.SaleChannelInPerson]
+	assert.Equal(t, 3, inperson.SaleCount)
+	assert.InDelta(t, 4.33, inperson.AvgDaysToSell, 0.1)
+	assert.Equal(t, 150000, inperson.RevenueCents)
 }
 
 func TestGetCreditSummary_ProjectedExposure(t *testing.T) {
