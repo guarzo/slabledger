@@ -5,12 +5,22 @@ type CertImportRequest struct {
 	CertNumbers []string `json:"certNumbers"`
 }
 
-// CertImportResult tallies imported, already-existing, and failed certs.
+// CertImportResult tallies imported, already-existing, sold, and failed certs.
 type CertImportResult struct {
-	Imported       int               `json:"imported"`
-	AlreadyExisted int               `json:"alreadyExisted"`
-	Failed         int               `json:"failed"`
-	Errors         []CertImportError `json:"errors"`
+	Imported       int                  `json:"imported"`
+	AlreadyExisted int                  `json:"alreadyExisted"`
+	SoldExisting   int                  `json:"soldExisting"`
+	Failed         int                  `json:"failed"`
+	Errors         []CertImportError    `json:"errors"`
+	SoldItems      []CertImportSoldItem `json:"soldItems,omitempty"`
+}
+
+// CertImportSoldItem represents a cert that exists but is currently sold.
+type CertImportSoldItem struct {
+	CertNumber string `json:"certNumber"`
+	PurchaseID string `json:"purchaseId"`
+	CardName   string `json:"cardName"`
+	CampaignID string `json:"campaignId"`
 }
 
 type CertImportError struct {

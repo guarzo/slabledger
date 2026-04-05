@@ -38,6 +38,8 @@ type MockCampaignRepository struct {
 	CreateSaleFn                   func(ctx context.Context, s *campaigns.Sale) error
 	GetSaleByPurchaseIDFn          func(ctx context.Context, purchaseID string) (*campaigns.Sale, error)
 	ListSalesByCampaignFn          func(ctx context.Context, campaignID string, limit, offset int) ([]campaigns.Sale, error)
+	DeleteSaleFn                   func(ctx context.Context, saleID string) error
+	DeleteSaleByPurchaseIDFn       func(ctx context.Context, purchaseID string) error
 	GetCampaignPNLFn               func(ctx context.Context, campaignID string) (*campaigns.CampaignPNL, error)
 	GetPNLByChannelFn              func(ctx context.Context, campaignID string) ([]campaigns.ChannelPNL, error)
 	GetDailySpendFn                func(ctx context.Context, campaignID string, days int) ([]campaigns.DailySpend, error)
@@ -265,6 +267,46 @@ func (m *MockCampaignRepository) GetSaleByPurchaseID(ctx context.Context, purcha
 		}
 	}
 	return nil, campaigns.ErrSaleNotFound
+}
+
+func (m *MockCampaignRepository) GetSalesByPurchaseIDs(_ context.Context, purchaseIDs []string) (map[string]*campaigns.Sale, error) {
+	result := make(map[string]*campaigns.Sale, len(purchaseIDs))
+	for _, pid := range purchaseIDs {
+		for _, s := range m.Sales {
+			if s.PurchaseID == pid {
+				result[pid] = s
+				break
+			}
+		}
+	}
+	return result, nil
+}
+
+func (m *MockCampaignRepository) DeleteSale(ctx context.Context, saleID string) error {
+	if m.DeleteSaleFn != nil {
+		return m.DeleteSaleFn(ctx, saleID)
+	}
+	s, ok := m.Sales[saleID]
+	if !ok {
+		return campaigns.ErrSaleNotFound
+	}
+	delete(m.PurchaseSales, s.PurchaseID)
+	delete(m.Sales, saleID)
+	return nil
+}
+
+func (m *MockCampaignRepository) DeleteSaleByPurchaseID(ctx context.Context, purchaseID string) error {
+	if m.DeleteSaleByPurchaseIDFn != nil {
+		return m.DeleteSaleByPurchaseIDFn(ctx, purchaseID)
+	}
+	for id, s := range m.Sales {
+		if s.PurchaseID == purchaseID {
+			delete(m.PurchaseSales, purchaseID)
+			delete(m.Sales, id)
+			return nil
+		}
+	}
+	return campaigns.ErrSaleNotFound
 }
 
 func (m *MockCampaignRepository) ListSalesByCampaign(ctx context.Context, campaignID string, limit, offset int) ([]campaigns.Sale, error) {

@@ -467,8 +467,17 @@ export interface CertImportError {
 export interface CertImportResult {
   imported: number;
   alreadyExisted: number;
+  soldExisting: number;
   failed: number;
   errors: CertImportError[];
+  soldItems?: CertImportSoldItem[];
+}
+
+export interface CertImportSoldItem {
+  certNumber: string;
+  purchaseId: string;
+  cardName: string;
+  campaignId: string;
 }
 
 // eBay export

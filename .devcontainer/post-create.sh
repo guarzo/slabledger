@@ -24,10 +24,22 @@ if [ -d "web" ] && [ -f "web/package.json" ]; then
     cd ..
 fi
 
+# Ensure ~/.local/bin is on PATH for this script (and future bash sessions)
+export PATH="$HOME/.local/bin:$PATH"
+
 # Install Claude Code CLI
 echo "🤖 Installing Claude Code CLI..."
-# npm install -g @anthropic-ai/claude-code
 curl -fsSL https://claude.ai/install.sh | bash
+
+# Restore Claude config from backup if the main file is missing but a backup exists
+CLAUDE_CFG="$HOME/.claude.json"
+if [ ! -f "$CLAUDE_CFG" ]; then
+    BACKUP=$(ls -t "$HOME/.claude/backups/.claude.json.backup."* 2>/dev/null | head -1)
+    if [ -n "$BACKUP" ]; then
+        echo "🔧 Restoring Claude config from backup..."
+        cp "$BACKUP" "$CLAUDE_CFG"
+    fi
+fi
 
 # Create data directories if they don't exist
 echo "📁 Creating data directories..."

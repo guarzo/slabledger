@@ -133,6 +133,7 @@ declare module './client' {
 
     // Cert entry & eBay export
     importCerts(certNumbers: string[]): Promise<CertImportResult>;
+    deleteSale(campaignId: string, purchaseId: string): Promise<void>;
     listEbayExportItems(flaggedOnly: boolean): Promise<EbayExportListResponse>;
     generateEbayCSV(items: EbayExportGenerateItem[]): Promise<Blob>;
 
@@ -470,6 +471,12 @@ proto.importCerts = async function (
   this: APIClient, certNumbers: string[],
 ): Promise<CertImportResult> {
   return this.post<CertImportResult>('/purchases/import-certs', { certNumbers });
+};
+
+proto.deleteSale = async function (
+  this: APIClient, campaignId: string, purchaseId: string,
+): Promise<void> {
+  await this.deleteResource(`/campaigns/${campaignId}/purchases/${purchaseId}/sale`);
 };
 
 // eBay export

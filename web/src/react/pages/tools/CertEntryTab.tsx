@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import { api } from '@/js/api';
-import type { CertImportResult } from '@/types/campaigns/core';
+import type { CertImportResult, CertImportSoldItem } from '@/types/campaigns/core';
 
 export default function CertEntryTab() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<CertImportResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [returnedCerts, setReturnedCerts] = useState<Set<string>>(new Set());
+  const [pendingReturns, setPendingReturns] = useState<Set<string>>(new Set());
 
   const handleImport = async () => {
     const certNumbers = input
@@ -22,6 +24,7 @@ export default function CertEntryTab() {
     setLoading(true);
     setError(null);
     setResult(null);
+    setReturnedCerts(new Set());
 
     try {
       const res = await api.importCerts(certNumbers);
@@ -35,6 +38,26 @@ export default function CertEntryTab() {
       setLoading(false);
     }
   };
+
+  const handleReturnToInventory = async (item: CertImportSoldItem) => {
+    setPendingReturns(prev => new Set(prev).add(item.certNumber));
+    try {
+      await api.deleteSale(item.campaignId, item.purchaseId);
+      setReturnedCerts(prev => new Set(prev).add(item.certNumber));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to return to inventory');
+    } finally {
+      setPendingReturns(prev => {
+        const next = new Set(prev);
+        next.delete(item.certNumber);
+        return next;
+      });
+    }
+  };
+
+  const pendingSoldItems = result?.soldItems?.filter(
+    item => !returnedCerts.has(item.certNumber)
+  ) ?? [];
 
   return (
     <div className="space-y-4">
@@ -69,7 +92,7 @@ export default function CertEntryTab() {
       {result && (
         <div className="space-y-2 rounded border border-gray-700 bg-gray-800 p-4">
           <h3 className="text-sm font-medium text-gray-200">Import Results</h3>
-          <div className="grid grid-cols-3 gap-4 text-sm">
+          <div className="grid grid-cols-4 gap-4 text-sm">
             <div>
               <span className="text-green-400">{result.imported}</span>{' '}
               <span className="text-gray-400">imported</span>
@@ -77,6 +100,10 @@ export default function CertEntryTab() {
             <div>
               <span className="text-blue-400">{result.alreadyExisted}</span>{' '}
               <span className="text-gray-400">already existed</span>
+            </div>
+            <div>
+              <span className="text-amber-400">{result.soldExisting}</span>{' '}
+              <span className="text-gray-400">sold</span>
             </div>
             <div>
               <span className="text-red-400">{result.failed}</span>{' '}
@@ -90,6 +117,38 @@ export default function CertEntryTab() {
               {result.errors.map((e, i) => (
                 <div key={i} className="text-xs text-red-400">
                   Cert {e.certNumber}: {e.error}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {returnedCerts.size > 0 && (
+            <div className="mt-2 text-xs text-green-400">
+              {returnedCerts.size} item{returnedCerts.size > 1 ? 's' : ''} returned to inventory
+            </div>
+          )}
+
+          {pendingSoldItems.length > 0 && (
+            <div className="mt-3 space-y-2">
+              <h4 className="text-xs font-medium text-amber-400">
+                Sold items found — return to inventory?
+              </h4>
+              {pendingSoldItems.map(item => (
+                <div
+                  key={item.certNumber}
+                  className="flex items-center justify-between rounded border border-gray-600 bg-gray-700/50 px-3 py-2 text-sm"
+                >
+                  <div>
+                    <span className="font-mono text-gray-300">{item.certNumber}</span>
+                    <span className="ml-2 text-gray-400">{item.cardName}</span>
+                  </div>
+                  <button
+                    onClick={() => handleReturnToInventory(item)}
+                    disabled={pendingReturns.has(item.certNumber)}
+                    className="rounded bg-amber-600 px-3 py-1 text-xs font-medium text-white hover:bg-amber-500 disabled:opacity-50"
+                  >
+                    {pendingReturns.has(item.certNumber) ? 'Returning...' : 'Return to Inventory'}
+                  </button>
                 </div>
               ))}
             </div>

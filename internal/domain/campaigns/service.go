@@ -134,6 +134,7 @@ type Service interface {
 	CreateSale(ctx context.Context, s *Sale, campaign *Campaign, purchase *Purchase) error
 	CreateBulkSales(ctx context.Context, campaignID string, channel SaleChannel, saleDate string, items []BulkSaleInput) (*BulkSaleResult, error)
 	ListSalesByCampaign(ctx context.Context, campaignID string, limit, offset int) ([]Sale, error)
+	DeleteSaleByPurchaseID(ctx context.Context, purchaseID string) error
 
 	// Global (cross-campaign) operations
 	RefreshCLValuesGlobal(ctx context.Context, rows []CLExportRow) (*GlobalCLRefreshResult, error)

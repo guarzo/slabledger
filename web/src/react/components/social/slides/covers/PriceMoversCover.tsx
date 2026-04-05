@@ -1,6 +1,7 @@
 import type { PostCardDetail, PostType } from '../../../../../types/social';
 import { getTheme } from '../primitives/theme';
 import { corsUrl } from '../primitives/corsUrl';
+import logo from '../../../../../assets/card-yeti-business-logo.png';
 
 interface PriceMoversCoverProps {
   postType: PostType;
@@ -68,7 +69,7 @@ export default function PriceMoversCover({
         {/* Logo + brand */}
         <div className="flex items-center gap-2">
           <img
-            src="/card-yeti-business-logo.png"
+            src={logo}
             alt="Card Yeti"
             className="w-[36px] h-auto"
             crossOrigin="anonymous"

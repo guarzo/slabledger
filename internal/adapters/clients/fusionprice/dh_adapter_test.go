@@ -51,7 +51,7 @@ func TestDHAdapter_FetchFusionData_WithSales(t *testing.T) {
 			}
 			return &dh.MarketDataResponse{
 				HasData:   true,
-				CardID:    "dh-12345",
+				CardID:    12345,
 				CardTitle: "Charizard",
 				RecentSales: []dh.RecentSale{
 					{SoldAt: "2026-03-15T10:00:00Z", GradingCompany: "PSA", Grade: "10", Price: 500.00, Platform: "eBay"},
@@ -213,7 +213,7 @@ func TestDHAdapter_FetchFusionData_NoData(t *testing.T) {
 		MarketDataFn: func(_ context.Context, _ string) (*dh.MarketDataResponse, error) {
 			return &dh.MarketDataResponse{
 				HasData: false,
-				CardID:  "dh-999",
+				CardID:  999,
 			}, nil
 		},
 	}

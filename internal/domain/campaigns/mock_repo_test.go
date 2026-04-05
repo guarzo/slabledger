@@ -186,6 +186,40 @@ func (m *mockRepo) GetSaleByPurchaseID(_ context.Context, purchaseID string) (*S
 	return nil, ErrSaleNotFound
 }
 
+func (m *mockRepo) DeleteSale(_ context.Context, saleID string) error {
+	s, ok := m.sales[saleID]
+	if !ok {
+		return ErrSaleNotFound
+	}
+	delete(m.purchaseSales, s.PurchaseID)
+	delete(m.sales, saleID)
+	return nil
+}
+
+func (m *mockRepo) GetSalesByPurchaseIDs(_ context.Context, purchaseIDs []string) (map[string]*Sale, error) {
+	result := make(map[string]*Sale, len(purchaseIDs))
+	for _, pid := range purchaseIDs {
+		for _, s := range m.sales {
+			if s.PurchaseID == pid {
+				result[pid] = s
+				break
+			}
+		}
+	}
+	return result, nil
+}
+
+func (m *mockRepo) DeleteSaleByPurchaseID(_ context.Context, purchaseID string) error {
+	for id, s := range m.sales {
+		if s.PurchaseID == purchaseID {
+			delete(m.purchaseSales, purchaseID)
+			delete(m.sales, id)
+			return nil
+		}
+	}
+	return ErrSaleNotFound
+}
+
 func (m *mockRepo) ListSalesByCampaign(_ context.Context, campaignID string, limit, offset int) ([]Sale, error) {
 	var result []Sale
 	for _, s := range m.sales {

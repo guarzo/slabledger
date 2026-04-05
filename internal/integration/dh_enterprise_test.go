@@ -60,27 +60,42 @@ func TestDHEnterprise_ResolveCert(t *testing.T) {
 // TestDHEnterprise_ResolveCertsBatch verifies batch cert resolution.
 func TestDHEnterprise_ResolveCertsBatch(t *testing.T) {
 	c := newDHEnterpriseClient(t)
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
 
-	certs := []dh.CertResolveRequest{
-		{CertNumber: "84189955", CardName: "Charizard"},
-		{CertNumber: "84149614", CardName: "Pikachu"},
+	tests := []struct {
+		name      string
+		certs     []dh.CertResolveRequest
+		wantTotal int
+	}{
+		{
+			name: "two certs",
+			certs: []dh.CertResolveRequest{
+				{CertNumber: "84189955", CardName: "Charizard"},
+				{CertNumber: "84149614", CardName: "Pikachu"},
+			},
+			wantTotal: 2,
+		},
 	}
 
-	results, err := c.ResolveCertsBatch(ctx, certs)
-	if err != nil {
-		t.Fatalf("ResolveCertsBatch: %v", err)
-	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
 
-	t.Logf("Batch resolved %d certs:", len(results))
-	for _, r := range results {
-		t.Logf("  cert=%s status=%s dh_card_id=%d card=%q set=%q",
-			r.CertNumber, r.Status, r.DHCardID, r.CardName, r.SetName)
-	}
+			resp, err := c.ResolveCertsBatch(ctx, tc.certs)
+			if err != nil {
+				t.Fatalf("ResolveCertsBatch: %v", err)
+			}
 
-	if len(results) != 2 {
-		t.Errorf("expected 2 results, got %d", len(results))
+			t.Logf("Batch submitted: job_id=%s status=%s total_certs=%d",
+				resp.JobID, resp.Status, resp.TotalCerts)
+
+			if resp.JobID == "" {
+				t.Error("expected non-empty JobID")
+			}
+			if resp.TotalCerts != tc.wantTotal {
+				t.Errorf("expected TotalCerts=%d, got %d", tc.wantTotal, resp.TotalCerts)
+			}
+		})
 	}
 }
 

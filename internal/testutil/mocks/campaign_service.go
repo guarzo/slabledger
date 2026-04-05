@@ -29,6 +29,7 @@ type MockCampaignService struct {
 	CreateSaleFn                func(ctx context.Context, s *campaigns.Sale, campaign *campaigns.Campaign, purchase *campaigns.Purchase) error
 	CreateBulkSalesFn           func(ctx context.Context, campaignID string, channel campaigns.SaleChannel, saleDate string, items []campaigns.BulkSaleInput) (*campaigns.BulkSaleResult, error)
 	ListSalesByCampaignFn       func(ctx context.Context, campaignID string, limit, offset int) ([]campaigns.Sale, error)
+	DeleteSaleByPurchaseIDFn    func(ctx context.Context, purchaseID string) error
 	LookupCertFn                func(ctx context.Context, certNumber string) (*campaigns.CertInfo, *campaigns.MarketSnapshot, error)
 	QuickAddPurchaseFn          func(ctx context.Context, campaignID string, req campaigns.QuickAddRequest) (*campaigns.Purchase, error)
 	GetCampaignPNLFn            func(ctx context.Context, campaignID string) (*campaigns.CampaignPNL, error)
@@ -212,6 +213,13 @@ func (m *MockCampaignService) ListSalesByCampaign(ctx context.Context, campaignI
 		return m.ListSalesByCampaignFn(ctx, campaignID, limit, offset)
 	}
 	return []campaigns.Sale{}, nil
+}
+
+func (m *MockCampaignService) DeleteSaleByPurchaseID(ctx context.Context, purchaseID string) error {
+	if m.DeleteSaleByPurchaseIDFn != nil {
+		return m.DeleteSaleByPurchaseIDFn(ctx, purchaseID)
+	}
+	return nil
 }
 
 func (m *MockCampaignService) LookupCert(ctx context.Context, certNumber string) (*campaigns.CertInfo, *campaigns.MarketSnapshot, error) {
