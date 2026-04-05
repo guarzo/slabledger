@@ -18,22 +18,49 @@ type DHInventoryLister interface {
 
 // CampaignsHandler handles campaign-related HTTP requests.
 type CampaignsHandler struct {
-	service    campaigns.Service
-	logger     observability.Logger
-	discoverer CardDiscoverer    // optional: triggers CardHedger discovery after imports
-	dhLister   DHInventoryLister // optional: lists cards on DH after cert import
-	baseCtx    context.Context
-	bgWG       sync.WaitGroup // tracks background goroutines (e.g. card discovery)
+	service           campaigns.Service
+	logger            observability.Logger
+	discoverer        CardDiscoverer        // optional: triggers CardHedger discovery after imports
+	dhLister          DHInventoryLister     // optional: lists cards on DH after cert import
+	dhMatchClient     DHMatchClient         // optional: matches cards against DH
+	dhPusher          DHInventoryPusher     // optional: pushes inventory to DH
+	dhFieldsUpdater   DHFieldsUpdater       // optional: persists DH fields after push
+	pushStatusUpdater DHPushStatusUpdater   // optional: sets dh_push_status
+	dhCardIDSaver     DHCardIDSaver         // optional: persists DH card ID mappings
+	baseCtx           context.Context
+	bgWG              sync.WaitGroup // tracks background goroutines (e.g. card discovery)
 }
 
 // NewCampaignsHandler creates a new campaigns handler.
 // baseCtx is a server-lifecycle context; background goroutines derive from it
 // so they are cancelled on shutdown. If nil, context.Background() is used.
-func NewCampaignsHandler(service campaigns.Service, logger observability.Logger, discoverer CardDiscoverer, dhLister DHInventoryLister, baseCtx context.Context) *CampaignsHandler {
+func NewCampaignsHandler(
+	service campaigns.Service,
+	logger observability.Logger,
+	discoverer CardDiscoverer,
+	dhLister DHInventoryLister,
+	dhMatchClient DHMatchClient,
+	dhPusher DHInventoryPusher,
+	dhFieldsUpdater DHFieldsUpdater,
+	pushStatusUpdater DHPushStatusUpdater,
+	dhCardIDSaver DHCardIDSaver,
+	baseCtx context.Context,
+) *CampaignsHandler {
 	if baseCtx == nil {
 		baseCtx = context.Background()
 	}
-	return &CampaignsHandler{service: service, logger: logger, discoverer: discoverer, dhLister: dhLister, baseCtx: baseCtx}
+	return &CampaignsHandler{
+		service:           service,
+		logger:            logger,
+		discoverer:        discoverer,
+		dhLister:          dhLister,
+		dhMatchClient:     dhMatchClient,
+		dhPusher:          dhPusher,
+		dhFieldsUpdater:   dhFieldsUpdater,
+		pushStatusUpdater: pushStatusUpdater,
+		dhCardIDSaver:     dhCardIDSaver,
+		baseCtx:           baseCtx,
+	}
 }
 
 // WaitBackground blocks until all background goroutines (e.g. card discovery) complete.

@@ -16,7 +16,7 @@ import (
 // --- helpers ---
 
 func newTestHandler(svc *mocks.MockCampaignService) *CampaignsHandler {
-	return NewCampaignsHandler(svc, mocks.NewMockLogger(), nil, nil, nil)
+	return NewCampaignsHandler(svc, mocks.NewMockLogger(), nil, nil, nil, nil, nil, nil, nil, nil)
 }
 
 // decodeErrorResponse decodes a JSON response and returns the "error" field value.

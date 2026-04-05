@@ -8,11 +8,13 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	"github.com/guarzo/slabledger/internal/domain/campaigns"
 	"github.com/guarzo/slabledger/internal/domain/observability"
+	"github.com/guarzo/slabledger/internal/domain/pricing"
 )
 
 // CardDiscoverer discovers and prices cards via CardHedger on demand.
@@ -81,6 +83,20 @@ func (h *CampaignsHandler) triggerDHListing(certNumbers []string) {
 
 		listed, synced := 0, 0
 		for _, p := range purchases {
+			// If pending DH push, do inline match + push first
+			if p.DHInventoryID == 0 && p.DHPushStatus == campaigns.DHPushStatusPending {
+				if h.dhMatchClient != nil && h.dhPusher != nil {
+					invID, _ := h.inlineMatchAndPush(ctx, p)
+					if invID != 0 {
+						p.DHInventoryID = invID
+					} else {
+						continue // unmatched or failed — skip listing
+					}
+				} else {
+					continue // no DH match client — skip
+				}
+			}
+
 			if p.DHInventoryID == 0 {
 				continue // not yet pushed to DH
 			}
@@ -546,6 +562,85 @@ func (h *CampaignsHandler) HandleConfirmOrdersSales(w http.ResponseWriter, r *ht
 	}
 
 	writeJSON(w, http.StatusOK, result)
+}
+
+// inlineMatchAndPush matches a single card against DH and pushes inventory.
+// Returns (inventoryID, cardID) on success, (0, 0) on failure.
+func (h *CampaignsHandler) inlineMatchAndPush(ctx context.Context, p *campaigns.Purchase) (int, int) {
+	title := p.PSAListingTitle
+	if title == "" {
+		title = p.CardName
+		if p.SetName != "" {
+			title += " " + p.SetName
+		}
+		if p.CardNumber != "" {
+			title += " " + p.CardNumber
+		}
+	}
+
+	matchResp, err := h.dhMatchClient.Match(ctx, title, "")
+	if err != nil {
+		h.logger.Warn(ctx, "inline dh match failed",
+			observability.String("cert", p.CertNumber), observability.Err(err))
+		return 0, 0
+	}
+
+	if !matchResp.Success || matchResp.Confidence < 0.90 {
+		if h.pushStatusUpdater != nil {
+			_ = h.pushStatusUpdater.UpdatePurchaseDHPushStatus(ctx, p.ID, campaigns.DHPushStatusUnmatched)
+		}
+		return 0, 0
+	}
+
+	dhCardID := matchResp.CardID
+
+	// Save card ID mapping
+	if h.dhCardIDSaver != nil {
+		externalID := strconv.Itoa(dhCardID)
+		_ = h.dhCardIDSaver.SaveExternalID(ctx, p.CardName, p.SetName, p.CardNumber, pricing.SourceDH, externalID)
+	}
+
+	// Push to DH
+	item := dh.InventoryItem{
+		DHCardID:       dhCardID,
+		CertNumber:     p.CertNumber,
+		GradingCompany: dh.GraderPSA,
+		Grade:          p.GradeValue,
+		CostBasisCents: p.CLValueCents,
+		Status:         dh.InventoryStatusInStock,
+	}
+
+	resp, pushErr := h.dhPusher.PushInventory(ctx, []dh.InventoryItem{item})
+	if pushErr != nil {
+		h.logger.Warn(ctx, "inline dh push failed",
+			observability.String("cert", p.CertNumber), observability.Err(pushErr))
+		return 0, 0
+	}
+
+	for _, r := range resp.Results {
+		if r.Status == "failed" || r.DHInventoryID == 0 {
+			continue
+		}
+
+		if h.dhFieldsUpdater != nil {
+			_ = h.dhFieldsUpdater.UpdatePurchaseDHFields(ctx, p.ID, campaigns.DHFieldsUpdate{
+				CardID:            dhCardID,
+				InventoryID:       r.DHInventoryID,
+				CertStatus:        dh.CertStatusMatched,
+				ListingPriceCents: r.AssignedPriceCents,
+				ChannelsJSON:      marshalChannels(r.Channels),
+				DHStatus:          campaigns.DHStatus(r.Status),
+			})
+		}
+
+		if h.pushStatusUpdater != nil {
+			_ = h.pushStatusUpdater.UpdatePurchaseDHPushStatus(ctx, p.ID, campaigns.DHPushStatusMatched)
+		}
+
+		return r.DHInventoryID, dhCardID
+	}
+
+	return 0, 0
 }
 
 // parseGlobalCSVUpload reads and validates an uploaded CSV file (no campaign ID in path).

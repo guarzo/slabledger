@@ -52,6 +52,11 @@ type ServerDependencies struct {
 	OpportunitiesHandler      *handlers.OpportunitiesHandler  // Arbitrage opportunities; nil = disabled
 	DHHandler                 *handlers.DHHandler             // DH bulk match + intelligence; nil = disabled
 	DHInventoryLister         handlers.DHInventoryLister      // optional: lists cards on DH after cert import
+	DHMatchClient             handlers.DHMatchClient          // optional: inline DH match for pending certs
+	DHInventoryPusher         handlers.DHInventoryPusher      // optional: inline DH push for pending certs
+	DHFieldsUpdater           handlers.DHFieldsUpdater        // optional: persists DH fields after inline push
+	DHPushStatusUpdater       handlers.DHPushStatusUpdater    // optional: sets dh_push_status after inline push
+	DHCardIDSaver             handlers.DHCardIDSaver          // optional: persists DH card ID mappings
 	SellSheetItemsHandler     *handlers.SellSheetItemsHandler // Sell sheet persistence; nil = disabled
 }
 
@@ -187,7 +192,14 @@ func startWebServer(ctx context.Context, deps ServerDependencies) error {
 	// Create campaigns handler if service is available
 	var campaignsHandler *handlers.CampaignsHandler
 	if deps.CampaignsService != nil {
-		campaignsHandler = handlers.NewCampaignsHandler(deps.CampaignsService, logger, deps.CardDiscoverer, deps.DHInventoryLister, ctx)
+		campaignsHandler = handlers.NewCampaignsHandler(
+				deps.CampaignsService, logger,
+				deps.CardDiscoverer, deps.DHInventoryLister,
+				deps.DHMatchClient, deps.DHInventoryPusher,
+				deps.DHFieldsUpdater, deps.DHPushStatusUpdater,
+				deps.DHCardIDSaver,
+				ctx,
+			)
 		logger.Info(ctx, "Campaigns handler initialized")
 	}
 
