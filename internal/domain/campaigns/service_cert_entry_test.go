@@ -195,3 +195,85 @@ func TestImportCerts_SoldCerts(t *testing.T) {
 		})
 	}
 }
+
+func TestScanCert(t *testing.T) {
+	tests := []struct {
+		name       string
+		seed       func(*mockRepo)
+		certNumber string
+		wantStatus string
+		wantCard   string
+	}{
+		{
+			name: "existing cert not sold",
+			seed: func(r *mockRepo) {
+				r.purchases["p1"] = &Purchase{
+					ID: "p1", CertNumber: "11111111", Grader: "PSA",
+					CardName: "Charizard", CampaignID: "camp-1",
+				}
+			},
+			certNumber: "11111111",
+			wantStatus: "existing",
+			wantCard:   "Charizard",
+		},
+		{
+			name: "sold cert",
+			seed: func(r *mockRepo) {
+				r.purchases["p1"] = &Purchase{
+					ID: "p1", CertNumber: "22222222", Grader: "PSA",
+					CardName: "Pikachu", CampaignID: "camp-1",
+				}
+				r.sales["s1"] = &Sale{ID: "s1", PurchaseID: "p1"}
+				r.purchaseSales["p1"] = true
+			},
+			certNumber: "22222222",
+			wantStatus: "sold",
+			wantCard:   "Pikachu",
+		},
+		{
+			name:       "new cert not in DB",
+			seed:       func(_ *mockRepo) {},
+			certNumber: "33333333",
+			wantStatus: "new",
+			wantCard:   "",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := newMockRepo()
+			tc.seed(repo)
+			svc := &service{repo: repo, idGen: func() string { return "test-id" }}
+
+			result, err := svc.ScanCert(context.Background(), tc.certNumber)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if result.Status != tc.wantStatus {
+				t.Errorf("status = %q, want %q", result.Status, tc.wantStatus)
+			}
+			if result.CardName != tc.wantCard {
+				t.Errorf("cardName = %q, want %q", result.CardName, tc.wantCard)
+			}
+		})
+	}
+}
+
+func TestScanCert_ExistingSetsExportFlag(t *testing.T) {
+	repo := newMockRepo()
+	repo.purchases["p1"] = &Purchase{
+		ID: "p1", CertNumber: "11111111", Grader: "PSA",
+		CardName: "Charizard", CampaignID: "camp-1",
+	}
+
+	svc := &service{repo: repo, idGen: func() string { return "test-id" }}
+
+	_, err := svc.ScanCert(context.Background(), "11111111")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if repo.purchases["p1"].EbayExportFlaggedAt == nil {
+		t.Error("expected ebay export flag to be set for existing cert")
+	}
+}
+

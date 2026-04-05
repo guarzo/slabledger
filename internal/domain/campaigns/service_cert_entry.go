@@ -171,3 +171,67 @@ func (s *service) ImportCerts(ctx context.Context, certNumbers []string) (*CertI
 func (s *service) GetPurchasesByCertNumbers(ctx context.Context, certNumbers []string) (map[string]*Purchase, error) {
 	return s.repo.GetPurchasesByCertNumbers(ctx, certNumbers)
 }
+
+// ScanCert checks a single cert against the database and returns its status.
+// For existing (unsold) certs, it also sets the eBay export flag.
+func (s *service) ScanCert(ctx context.Context, certNumber string) (*ScanCertResult, error) {
+	certNumber = strings.TrimSpace(certNumber)
+	if certNumber == "" {
+		return nil, fmt.Errorf("cert number is required")
+	}
+
+	existingMap, err := s.repo.GetPurchasesByGraderAndCertNumbers(ctx, "PSA", []string{certNumber})
+	if err != nil {
+		return nil, fmt.Errorf("scan cert lookup: %w", err)
+	}
+
+	existing, found := existingMap[certNumber]
+	if !found {
+		return &ScanCertResult{Status: "new"}, nil
+	}
+
+	// Check if sold
+	salesMap, err := s.repo.GetSalesByPurchaseIDs(ctx, []string{existing.ID})
+	if err != nil {
+		return nil, fmt.Errorf("scan cert sale check: %w", err)
+	}
+
+	if _, hasSale := salesMap[existing.ID]; hasSale {
+		return &ScanCertResult{
+			Status:     "sold",
+			CardName:   existing.CardName,
+			PurchaseID: existing.ID,
+			CampaignID: existing.CampaignID,
+		}, nil
+	}
+
+	// Existing and not sold — flag for eBay export
+	now := time.Now()
+	if flagErr := s.repo.SetEbayExportFlag(ctx, existing.ID, now); flagErr != nil {
+		if s.logger != nil {
+			s.logger.Warn(ctx, "scan cert: failed to set ebay export flag",
+				observability.String("cert", certNumber),
+				observability.Err(flagErr))
+		}
+	}
+
+	return &ScanCertResult{
+		Status:     "existing",
+		CardName:   existing.CardName,
+		PurchaseID: existing.ID,
+		CampaignID: existing.CampaignID,
+	}, nil
+}
+
+// ResolveCert looks up cert metadata via the external cert lookup service.
+// Implemented in Task 3.
+func (s *service) ResolveCert(ctx context.Context, certNumber string) (*CertInfo, error) {
+	certNumber = strings.TrimSpace(certNumber)
+	if certNumber == "" {
+		return nil, fmt.Errorf("cert number is required")
+	}
+	if s.certLookup == nil {
+		return nil, fmt.Errorf("cert lookup not configured")
+	}
+	return s.certLookup.LookupCert(ctx, certNumber)
+}

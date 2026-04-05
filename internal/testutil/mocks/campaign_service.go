@@ -130,6 +130,8 @@ type MockCampaignService struct {
 
 	// Cert batch lookup
 	GetPurchasesByCertNumbersFn func(ctx context.Context, certNumbers []string) (map[string]*campaigns.Purchase, error)
+	ScanCertFn                  func(ctx context.Context, certNumber string) (*campaigns.ScanCertResult, error)
+	ResolveCertFn               func(ctx context.Context, certNumber string) (*campaigns.CertInfo, error)
 }
 
 var _ campaigns.Service = (*MockCampaignService)(nil)
@@ -681,6 +683,20 @@ func (m *MockCampaignService) GetPurchasesByCertNumbers(ctx context.Context, cer
 		return m.GetPurchasesByCertNumbersFn(ctx, certNumbers)
 	}
 	return map[string]*campaigns.Purchase{}, nil
+}
+
+func (m *MockCampaignService) ScanCert(ctx context.Context, certNumber string) (*campaigns.ScanCertResult, error) {
+	if m.ScanCertFn != nil {
+		return m.ScanCertFn(ctx, certNumber)
+	}
+	return &campaigns.ScanCertResult{Status: "new"}, nil
+}
+
+func (m *MockCampaignService) ResolveCert(ctx context.Context, certNumber string) (*campaigns.CertInfo, error) {
+	if m.ResolveCertFn != nil {
+		return m.ResolveCertFn(ctx, certNumber)
+	}
+	return nil, nil
 }
 
 func (m *MockCampaignService) Close() {}
