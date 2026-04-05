@@ -392,6 +392,63 @@ func (h *CampaignsHandler) HandleImportCerts(w http.ResponseWriter, r *http.Requ
 	writeJSON(w, http.StatusOK, result)
 }
 
+// HandleScanCert handles POST /api/purchases/scan-cert.
+func (h *CampaignsHandler) HandleScanCert(w http.ResponseWriter, r *http.Request) {
+	const maxBytes = 1 << 10 // 1KB — single cert number
+	r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
+	var req campaigns.ScanCertRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "Invalid JSON body")
+		return
+	}
+	if req.CertNumber == "" {
+		writeError(w, http.StatusBadRequest, "certNumber is required")
+		return
+	}
+
+	result, err := h.service.ScanCert(r.Context(), req.CertNumber)
+	if err != nil {
+		h.logger.Error(r.Context(), "scan cert failed", observability.Err(err))
+		writeError(w, http.StatusInternalServerError, "Internal server error")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, result)
+}
+
+// HandleResolveCert handles POST /api/purchases/resolve-cert.
+func (h *CampaignsHandler) HandleResolveCert(w http.ResponseWriter, r *http.Request) {
+	const maxBytes = 1 << 10 // 1KB — single cert number
+	r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
+	var req campaigns.ResolveCertRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "Invalid JSON body")
+		return
+	}
+	if req.CertNumber == "" {
+		writeError(w, http.StatusBadRequest, "certNumber is required")
+		return
+	}
+
+	info, err := h.service.ResolveCert(r.Context(), req.CertNumber)
+	if err != nil {
+		h.logger.Warn(r.Context(), "resolve cert failed",
+			observability.String("cert", req.CertNumber),
+			observability.Err(err))
+		writeError(w, http.StatusNotFound, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, campaigns.ResolveCertResult{
+		CertNumber: info.CertNumber,
+		CardName:   info.CardName,
+		Grade:      info.Grade,
+		Year:       info.Year,
+		Category:   info.Category,
+		Subject:    info.Subject,
+	})
+}
+
 // HandleListEbayExport handles GET /api/purchases/export-ebay.
 func (h *CampaignsHandler) HandleListEbayExport(w http.ResponseWriter, r *http.Request) {
 	flaggedOnly := r.URL.Query().Get("flagged_only") == "true"
