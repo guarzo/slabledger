@@ -1,7 +1,7 @@
 # DH Workflow Review — Before/After Integration Analysis
 
 **Date:** 2026-04-05
-**Status:** In Progress — Awaiting DH API change request
+**Status:** Ready for implementation — DH API changes confirmed
 
 ## Problem Statement
 
@@ -83,45 +83,49 @@ With DH handling pricing and Shopify/eBay integration:
 | Card Ladder daily sync | Yes | CL values still needed for non-DH pricing |
 | Cert import (physical arrival) | Yes | But role changes — becomes the "list now" trigger |
 
-## Gap: Inventory Push & Listing Control
+## DH API Changes (Confirmed 2026-04-05)
 
-### The Problem
-`PushInventory` is never called. Cards never get sent to DH. Even if we wire it up, we need to control WHEN listings go live.
+DH agreed to all requested changes plus additional channel sync control.
 
-### DH API Status Enum (from `enterprise-api.yaml`)
-The inventory `status` field supports: `in_stock`, `listed`, `reserved`, `sold`, `traded_out`, `consigned_out`, `lost`, `damaged`, `returned`
+### Updated Endpoints
 
-- `in_stock` = in possession, NOT listed for sale
-- `listed` = actively for sale on channels
+**`POST /inventory` (upsert)** — new optional `status` field per item:
+- `in_stock` (default): tracked, gets pricing/intelligence, NOT listed for sale
+- `listed`: current behavior — creates MarketOrder + auto-prices on DH marketplace
 
-### API Limitation
-The current `POST /inventory` (upsert) request body only accepts:
-- `dh_card_id` (required)
-- `cert_number` (required)
-- `grading_company` (required)
-- `grade` (required)
-- `cost_basis_cents` (required)
+**`PATCH /inventory/:id` (update)** — `status` now updatable alongside `cost_basis_cents`:
+- `in_stock` → `listed`: creates MarketOrder, item goes live on DH marketplace
+- `listed` → `in_stock`: cancels MarketOrder, delists from all channels, clears price
 
-**No `status` field.** We cannot specify `in_stock` vs `listed` on push.
+**`POST /inventory/:id/sync` (NEW)** — push to external channels:
+- Request: `{"channels": ["ebay", "shopify"]}`
+- Requires `listed` status (422 if `in_stock`)
+- Returns channel statuses (each initially `pending`)
 
-The `PATCH /inventory/{id}` only allows updating `cost_basis_cents`. **No `status` field either.**
+**`DELETE /inventory/:id/sync` (NEW)** — delist from specific channels:
+- Request: `{"channels": ["ebay"]}` (or empty body for all)
+- Item stays `listed` on DH, only removes from external channels
 
-### Required API Changes
-We need DH to add `status` control to:
-1. `POST /inventory` — optional `status` field per item (default: `in_stock` or current behavior)
-2. `PATCH /inventory/{id}` — allow updating `status` (so we can flip `in_stock` -> `listed` when card arrives)
+### Key Design Detail: Decoupled Auto-Sync
 
-## Ideal Workflow (Post-DH, Assuming API Changes)
+For enterprise API inventory, `listed` does NOT auto-push to external channels. Channel sync only happens via explicit `/sync` call. Non-enterprise flows (DH UI) keep auto-sync.
+
+### Terminology Change
+
+DH is updating their serializer: `pending`/`active` → `in_stock`/`listed`. No backward compatibility concern (no existing consumers).
+
+## Ideal Workflow (Post-DH)
 
 ### Card Acquisition
-1. Download PSA CSV -> import into SlabLedger (unchanged)
-2. Export to CL format -> import into CL -> export with prices -> import back (unchanged)
-3. **NEW: Push to DH as `in_stock`** — gets pricing data, intelligence, suggestions, but NO listings created
+1. Download PSA CSV → import into SlabLedger (unchanged)
+2. Export to CL format → import into CL → export with prices → import back (unchanged)
+3. **NEW: Push to DH as `in_stock`** — gets pricing data, intelligence, suggestions, but NO listings
 
 ### Card Arrives (Physical Possession)
 4. Cert import (unchanged trigger)
-5. **NEW: Update DH status to `listed`** — DH creates Shopify/eBay listings automatically
-6. No more eBay CSV export, no more Shopify upload, no more price sync
+5. **NEW: `PATCH status: listed`** — item goes live on DH marketplace
+6. **NEW: `POST /sync channels: [ebay, shopify]`** — auto-triggered, pushes to external channels
+7. No more eBay CSV export, no more Shopify upload, no more price sync
 
 ### Background Pricing (Slimmed Down)
 - **Keep:** Card Ladder daily sync (DH doesn't have CL data)
@@ -130,44 +134,28 @@ We need DH to add `status` control to:
 - **Evaluate removal:** CardHedger, JustTCG, PriceCharting (DH market data may fully replace these)
 - **Keep but simplify:** Fusion engine (fewer sources)
 
-## Open Questions
+## Open Questions (Remaining)
 
-1. Will DH add `status` to upsert and patch endpoints?
-2. What is DH's default behavior when inventory is pushed — does it auto-list or stay `in_stock`?
-3. Can we fully drop CardHedger/JustTCG/PriceCharting, or do they provide data DH doesn't?
-4. Should the eBay CSV export flow be kept as a fallback, or removed entirely?
-5. What happens to the Shopify price sync endpoint — deprecate or repurpose?
+1. Can we fully drop CardHedger/JustTCG/PriceCharting, or do they provide data DH doesn't?
+2. Should the eBay CSV export flow be kept as a fallback, or removed entirely?
+3. What happens to the Shopify price sync endpoint — deprecate or repurpose?
 
+## Implementation Plan
 
-  Subject: Enterprise API — Add status field to inventory upsert and patch endpoints
+### DH Client Changes (`internal/adapters/clients/dh/`)
+1. **`PushInventory`** — add optional `Status` field to request item struct (default `in_stock`)
+2. **`UpdateInventory`** (PATCH) — add `Status` field alongside `CostBasisCents`
+3. **New: `SyncChannels(ctx, inventoryID, channels []string)`** — `POST /inventory/:id/sync`
+4. **New: `DelistChannels(ctx, inventoryID, channels []string)`** — `DELETE /inventory/:id/sync`
+5. **Response types** — update `pending`/`active` → `in_stock`/`listed`
 
-  We're integrating inventory push from our system and need to control when items go live on sales channels. Our workflow has two
-  distinct phases:
+### Workflow Wiring
+6. **Purchase import** — after DH match, call `PushInventory` with `status: in_stock`
+7. **Cert import (card arrives)** — `PATCH status: listed` + auto-trigger `SyncChannels([ebay, shopify])`
+8. **Inventory poll scheduler** — handle new status values in responses
 
-  1. Card purchased but not yet in hand — we want to push to DH early so we get pricing data, market intelligence, and suggestions, but
-   the card should NOT be listed for sale
-  2. Card physically arrives — flip to active listing on Shopify/eBay
-
-  The inventory list endpoint already returns a status field with values like in_stock and listed, but we can't set it:
-
-  Request 1 — POST /api/v1/enterprise/inventory (upsert):
-  Add an optional status field to each item in the request body. Suggested default: in_stock (safe — nothing gets listed until
-  explicitly requested).
-
-  status:
-    type: string
-    enum: [in_stock, listed]
-    default: in_stock
-    description: Initial inventory status. "in_stock" = tracked but not listed. "listed" = active on sales channels.
-
-  Request 2 — PATCH /api/v1/enterprise/inventory/{id} (update):
-  Add status as an updatable field alongside cost_basis_cents, so we can transition in_stock -> listed when we're ready to sell.
-
-  status:
-    type: string
-    enum: [in_stock, listed]
-    description: Update inventory status. Set to "listed" to activate sales channel listings.
-
-  This would let us push inventory early for data enrichment without prematurely creating listings. Let us know if this is feasible or
-  if there's an existing mechanism we're missing.
+### Future Cleanup (After Validation)
+9. Evaluate removing CardHedger/JustTCG/PriceCharting schedulers + clients
+10. Simplify fusion engine to fewer sources
+11. Deprecate eBay CSV export and Shopify price sync endpoints
                                                               
