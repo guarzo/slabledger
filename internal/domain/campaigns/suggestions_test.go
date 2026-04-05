@@ -92,11 +92,11 @@ func TestGenerateSuggestions_CharacterAdjustments(t *testing.T) {
 func TestGenerateSuggestions_CoverageGap(t *testing.T) {
 	insights := &PortfolioInsights{
 		ByCharacter: []SegmentPerformance{
-			{Label: "Gengar", ROI: 0.30, SoldCount: 6, PurchaseCount: 10, CampaignCount: 1, Dimension: "character", BestChannel: SaleChannelLocal},
+			{Label: "Gengar", ROI: 0.30, SoldCount: 6, PurchaseCount: 10, CampaignCount: 1, Dimension: "character", BestChannel: SaleChannelInPerson},
 		},
 		CoverageGaps: []CoverageGap{
 			{
-				Segment: SegmentPerformance{Label: "Gengar", ROI: 0.30, SoldCount: 6, PurchaseCount: 10, Dimension: "character", BestChannel: SaleChannelLocal},
+				Segment: SegmentPerformance{Label: "Gengar", ROI: 0.30, SoldCount: 6, PurchaseCount: 10, Dimension: "character", BestChannel: SaleChannelInPerson},
 				Reason:  "Gengar has 30% ROI but not in any active campaign",
 			},
 		},
@@ -120,7 +120,7 @@ func TestGenerateSuggestions_ChannelInformedBuyTerms(t *testing.T) {
 	insights := &PortfolioInsights{
 		ByChannel: []ChannelPNL{
 			{Channel: SaleChannelEbay, SaleCount: 20, RevenueCents: 100000, FeesCents: 12350, NetProfitCents: 30000},
-			{Channel: SaleChannelLocal, SaleCount: 5, RevenueCents: 30000, FeesCents: 0, NetProfitCents: 15000},
+			{Channel: SaleChannelInPerson, SaleCount: 5, RevenueCents: 30000, FeesCents: 0, NetProfitCents: 15000},
 		},
 		DataSummary: InsightsDataSummary{TotalPurchases: 50, TotalSales: 25},
 	}
@@ -247,37 +247,36 @@ func TestDeduplicateSuggestions(t *testing.T) {
 	}
 }
 
-func TestGameStopPayoutRange(t *testing.T) {
+func TestInPersonBuyTermsSuggestion(t *testing.T) {
+	// InPerson channel has 50% margin (40000/80000), eBay has 20%.
+	// Unified formula: maxBuy = bestMargin - targetMargin(10%) - feePct(0% for InPerson) = 40%
+	// Campaign buyTerms at 80% is above 40% + 5% buffer, so a suggestion should fire.
 	insights := &PortfolioInsights{
 		ByChannel: []ChannelPNL{
-			{Channel: SaleChannelGameStop, SaleCount: 15, RevenueCents: 80000, FeesCents: 0, NetProfitCents: 40000},
+			{Channel: SaleChannelInPerson, SaleCount: 15, RevenueCents: 80000, FeesCents: 0, NetProfitCents: 40000},
 			{Channel: SaleChannelEbay, SaleCount: 10, RevenueCents: 50000, FeesCents: 6175, NetProfitCents: 10000},
 		},
 		DataSummary: InsightsDataSummary{TotalPurchases: 50, TotalSales: 25},
 	}
 	campaigns := []Campaign{
-		{Name: "GS Campaign", Phase: PhaseActive, BuyTermsCLPct: 0.80, EbayFeePct: 0.1235},
+		{Name: "IP Campaign", Phase: PhaseActive, BuyTermsCLPct: 0.80, EbayFeePct: 0.1235},
 	}
 
 	resp := GenerateSuggestions(context.Background(), insights, campaigns)
 
 	found := false
 	for _, s := range resp.Adjustments {
-		if s.SuggestedParams.Name == "GS Campaign" && s.SuggestedParams.BuyTermsCLPct > 0 {
+		if s.SuggestedParams.Name == "IP Campaign" && s.SuggestedParams.BuyTermsCLPct > 0 {
 			found = true
 			const eps = 1e-9
-			// Conservative: 70% - 10% = 60%
-			if math.Abs(s.SuggestedParams.BuyTermsCLPct-0.60) > eps {
-				t.Errorf("expected conservative maxBuy 0.60, got %f", s.SuggestedParams.BuyTermsCLPct)
-			}
-			// Optimistic: 90% - 10% = 80%
-			if math.Abs(s.SuggestedParams.BuyTermsCLPctOptimistic-0.80) > eps {
-				t.Errorf("expected optimistic maxBuy 0.80, got %f", s.SuggestedParams.BuyTermsCLPctOptimistic)
+			// maxBuy = 0.50 - 0.10 - 0.0 = 0.40
+			if math.Abs(s.SuggestedParams.BuyTermsCLPct-0.40) > eps {
+				t.Errorf("expected maxBuy 0.40 for InPerson channel, got %f", s.SuggestedParams.BuyTermsCLPct)
 			}
 		}
 	}
 	if !found {
-		t.Error("expected GameStop payout range suggestion")
+		t.Error("expected InPerson channel buy terms suggestion")
 	}
 }
 
