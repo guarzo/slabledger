@@ -503,6 +503,11 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		OpportunitiesHandler:      opportunitiesHandler,
 		DHHandler:                 dhHandler,
 	}
+	// Nil-safe interface conversion: a nil *dh.Client assigned to an interface
+	// produces a non-nil interface wrapping a nil pointer, which breaks nil checks.
+	if dhClient != nil {
+		deps.DHInventoryLister = dhClient
+	}
 	serverErr := startWebServer(ctx, deps)
 
 	// Graceful scheduler shutdown
