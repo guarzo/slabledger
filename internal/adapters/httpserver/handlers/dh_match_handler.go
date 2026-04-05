@@ -158,10 +158,45 @@ func (h *DHHandler) pushMatchedToDH(ctx context.Context, purchases []campaigns.P
 		return
 	}
 
+	// Build lookups for persisting push results back to local purchases.
+	certToPurchaseID := make(map[string]string, len(purchases))
+	for _, p := range purchases {
+		if p.CertNumber != "" {
+			certToPurchaseID[p.CertNumber] = p.ID
+		}
+	}
+	certToDHCardID := make(map[string]int, len(items))
+	for _, item := range items {
+		certToDHCardID[item.CertNumber] = item.DHCardID
+	}
+
 	pushed := 0
 	for _, r := range resp.Results {
-		if r.Status != "failed" {
-			pushed++
+		if r.Status == "failed" {
+			continue
+		}
+		pushed++
+
+		// Persist the DH fields so duplicate pushes are prevented (DHInventoryID != 0)
+		// and cert import can immediately list this card.
+		if h.dhFieldsUpdater != nil && r.DHInventoryID != 0 && r.CertNumber != "" {
+			purchaseID, ok := certToPurchaseID[r.CertNumber]
+			if !ok {
+				continue
+			}
+			if err := h.dhFieldsUpdater.UpdatePurchaseDHFields(ctx, purchaseID, campaigns.DHFieldsUpdate{
+				CardID:            certToDHCardID[r.CertNumber],
+				InventoryID:       r.DHInventoryID,
+				CertStatus:        dh.CertStatusMatched,
+				ListingPriceCents: r.AssignedPriceCents,
+				ChannelsJSON:      marshalChannels(r.Channels),
+				DHStatus:          campaigns.DHStatus(r.Status),
+			}); err != nil {
+				h.logger.Warn(ctx, "push to DH: failed to persist inventory ID",
+					observability.String("cert", r.CertNumber),
+					observability.Int("inventoryID", r.DHInventoryID),
+					observability.Err(err))
+			}
 		}
 	}
 	h.logger.Info(ctx, "pushed matched inventory to DH",
