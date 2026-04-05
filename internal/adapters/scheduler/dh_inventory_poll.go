@@ -2,7 +2,6 @@ package scheduler
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -136,14 +135,12 @@ func (s *DHInventoryPollScheduler) poll(ctx context.Context) {
 			continue
 		}
 
-		channelsJSON := marshalChannels(item.Channels)
-
 		if updateErr := s.updater.UpdatePurchaseDHFields(ctx, purchaseID, campaigns.DHFieldsUpdate{
 			CardID:            item.DHCardID,
 			InventoryID:       item.DHInventoryID,
 			CertStatus:        dh.CertStatusMatched,
 			ListingPriceCents: item.ListingPriceCents,
-			ChannelsJSON:      channelsJSON,
+			ChannelsJSON:      dh.MarshalChannels(item.Channels),
 			DHStatus:          item.Status,
 		}); updateErr != nil {
 			s.logger.Warn(ctx, "dh inventory poll: failed to update purchase",
@@ -193,18 +190,6 @@ func (s *DHInventoryPollScheduler) fetchAllPages(ctx context.Context, since stri
 		page++
 	}
 	return allItems, nil
-}
-
-// marshalChannels serializes channel statuses to JSON, defaulting to "[]".
-func marshalChannels(channels []dh.InventoryChannelStatus) string {
-	if len(channels) == 0 {
-		return "[]"
-	}
-	b, err := json.Marshal(channels)
-	if err != nil {
-		return "[]"
-	}
-	return string(b)
 }
 
 // Compile-time check that dh.Client satisfies DHInventoryListClient.

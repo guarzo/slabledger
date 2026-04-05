@@ -415,6 +415,41 @@ func (r *CampaignsRepository) GetPurchasesByDHPushStatus(ctx context.Context, st
 	return purchases, rows.Err()
 }
 
+// CountUnsoldByDHPushStatus returns counts of unsold purchases grouped by dh_push_status.
+// Purchases with no status are reported under an empty string key; purchases with a
+// DHCardID but no push status are counted as "matched" for legacy compatibility.
+func (r *CampaignsRepository) CountUnsoldByDHPushStatus(ctx context.Context) (map[string]int, error) {
+	query := `
+		SELECT
+			CASE
+				WHEN p.dh_push_status != '' THEN p.dh_push_status
+				WHEN p.dh_card_id != 0 THEN 'matched'
+				ELSE ''
+			END AS status_bucket,
+			COUNT(*) AS cnt
+		FROM campaign_purchases p
+		INNER JOIN campaigns c ON c.id = p.campaign_id
+		LEFT JOIN campaign_sales s ON s.purchase_id = p.id
+		WHERE s.id IS NULL AND c.phase != 'closed'
+		GROUP BY status_bucket`
+	rows, err := r.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close() //nolint:errcheck // best-effort close
+
+	counts := make(map[string]int)
+	for rows.Next() {
+		var bucket string
+		var cnt int
+		if err := rows.Scan(&bucket, &cnt); err != nil {
+			return nil, err
+		}
+		counts[bucket] = cnt
+	}
+	return counts, rows.Err()
+}
+
 // GetPurchaseIDByCertNumber returns the purchase ID for a given cert number.
 func (r *CampaignsRepository) GetPurchaseIDByCertNumber(ctx context.Context, certNumber string) (string, error) {
 	var id string

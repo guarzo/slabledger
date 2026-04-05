@@ -92,7 +92,7 @@ func (h *DHHandler) HandleExportUnmatched(w http.ResponseWriter, r *http.Request
 	}
 	var rows []exportRow
 	for _, p := range purchases {
-		if mappedSet[dhCardKey(p.CardName, p.SetName, p.CardNumber)] != "" {
+		if mappedSet[campaigns.DHCardKey(p.CardName, p.SetName, p.CardNumber)] != "" {
 			continue
 		}
 		price := p.CLValueCents

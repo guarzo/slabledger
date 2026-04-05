@@ -156,27 +156,16 @@ func (h *DHHandler) HandleGetStatus(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	purchases, err := h.purchaseLister.ListAllUnsoldPurchases(ctx)
-	if err != nil {
-		h.logger.Error(ctx, "dh status: list purchases", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "failed to list purchases")
-		return
-	}
-
-	for _, p := range purchases {
-		switch p.DHPushStatus {
-		case campaigns.DHPushStatusUnmatched:
-			resp.UnmatchedCount++
-		case campaigns.DHPushStatusPending:
-			resp.PendingCount++
-		case campaigns.DHPushStatusMatched, campaigns.DHPushStatusManual:
-			resp.MappedCount++
-		default:
-			// Legacy: no DHPushStatus yet — check if has DHCardID from old bulk match
-			if p.DHCardID != 0 {
-				resp.MappedCount++
-			}
+	if h.statusCounter != nil {
+		counts, err := h.statusCounter.CountUnsoldByDHPushStatus(ctx)
+		if err != nil {
+			h.logger.Error(ctx, "dh status: count push statuses", observability.Err(err))
+			writeError(w, http.StatusInternalServerError, "failed to count push statuses")
+			return
 		}
+		resp.UnmatchedCount = counts[campaigns.DHPushStatusUnmatched]
+		resp.PendingCount = counts[campaigns.DHPushStatusPending]
+		resp.MappedCount = counts[campaigns.DHPushStatusMatched] + counts[campaigns.DHPushStatusManual]
 	}
 
 	writeJSON(w, http.StatusOK, resp)

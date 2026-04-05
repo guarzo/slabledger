@@ -870,6 +870,10 @@ func (m *MockCampaignRepository) GetPurchasesByDHPushStatus(ctx context.Context,
 	return nil, nil
 }
 
+func (m *MockCampaignRepository) CountUnsoldByDHPushStatus(_ context.Context) (map[string]int, error) {
+	return map[string]int{}, nil
+}
+
 func (m *MockCampaignRepository) GetSellSheetItems(ctx context.Context, userID int64) ([]string, error) {
 	if m.GetSellSheetItemsFn != nil {
 		return m.GetSellSheetItemsFn(ctx, userID)

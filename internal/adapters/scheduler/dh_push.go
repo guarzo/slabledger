@@ -2,9 +2,7 @@ package scheduler
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
@@ -14,7 +12,6 @@ import (
 )
 
 const dhPushBatchLimit = 50
-const dhPushConfidenceThreshold = 0.90
 
 // DHPushPendingLister returns purchases pending DH push.
 type DHPushPendingLister interface {
@@ -153,7 +150,7 @@ func (s *DHPushScheduler) push(ctx context.Context) {
 
 // processPurchase handles a single pending purchase. Returns "matched", "unmatched", or "skipped".
 func (s *DHPushScheduler) processPurchase(ctx context.Context, p campaigns.Purchase, mappedSet map[string]string) string {
-	key := dhPushCardKey(p.CardName, p.SetName, p.CardNumber)
+	key := p.DHCardKey()
 
 	// Attempt to reuse an existing DH card ID mapping.
 	dhCardIDStr, alreadyMapped := mappedSet[key]
@@ -169,7 +166,7 @@ func (s *DHPushScheduler) processPurchase(ctx context.Context, p campaigns.Purch
 
 	if !alreadyMapped {
 		// Call DH Match API.
-		title := dhPushMatchTitle(p)
+		title := campaigns.BuildDHMatchTitle(p.CardName, p.SetName, p.CardNumber, p.PSAListingTitle)
 		resp, err := s.matchClient.Match(ctx, title, p.CertNumber)
 		if err != nil {
 			s.logger.Warn(ctx, "dh push: match API error, leaving as pending",
@@ -179,7 +176,7 @@ func (s *DHPushScheduler) processPurchase(ctx context.Context, p campaigns.Purch
 			return "skipped"
 		}
 
-		if !resp.Success || resp.Confidence < dhPushConfidenceThreshold {
+		if !resp.Success || resp.Confidence < campaigns.DHMatchConfidenceThreshold {
 			s.logger.Debug(ctx, "dh push: low confidence match, marking unmatched",
 				observability.String("purchaseID", p.ID),
 				observability.String("cert", p.CertNumber),
@@ -234,14 +231,12 @@ func (s *DHPushScheduler) processPurchase(ctx context.Context, p campaigns.Purch
 
 	result := pushResp.Results[0]
 
-	channelsJSON := dhPushMarshalChannels(result.Channels)
-
 	update := campaigns.DHFieldsUpdate{
 		CardID:            dhCardID,
 		InventoryID:       result.DHInventoryID,
 		CertStatus:        dh.CertStatusMatched,
 		ListingPriceCents: result.AssignedPriceCents,
-		ChannelsJSON:      channelsJSON,
+		ChannelsJSON:      dh.MarshalChannels(result.Channels),
 		DHStatus:          campaigns.DHStatus(result.Status),
 	}
 
@@ -267,39 +262,6 @@ func (s *DHPushScheduler) processPurchase(ctx context.Context, p campaigns.Purch
 	)
 
 	return "matched"
-}
-
-// dhPushCardKey builds the pipe-delimited identity key for a card.
-func dhPushCardKey(cardName, setName, cardNumber string) string {
-	return cardName + "|" + setName + "|" + cardNumber
-}
-
-// dhPushMatchTitle returns the best title to use for DH matching.
-// If PSAListingTitle is set, it is used directly; otherwise the card name, set, and number are concatenated.
-func dhPushMatchTitle(p campaigns.Purchase) string {
-	if p.PSAListingTitle != "" {
-		return p.PSAListingTitle
-	}
-	parts := []string{p.CardName}
-	if p.SetName != "" {
-		parts = append(parts, p.SetName)
-	}
-	if p.CardNumber != "" {
-		parts = append(parts, p.CardNumber)
-	}
-	return strings.Join(parts, " ")
-}
-
-// dhPushMarshalChannels serializes channel statuses to JSON, defaulting to "[]".
-func dhPushMarshalChannels(channels []dh.InventoryChannelStatus) string {
-	if len(channels) == 0 {
-		return "[]"
-	}
-	b, err := json.Marshal(channels)
-	if err != nil {
-		return "[]"
-	}
-	return string(b)
 }
 
 // Compile-time checks that dh.Client satisfies the push client interfaces.

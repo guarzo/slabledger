@@ -2,8 +2,6 @@ package handlers
 
 import (
 	"context"
-	"encoding/json"
-	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -26,9 +24,10 @@ type DHCardIDSaver interface {
 	GetMappedSet(ctx context.Context, provider string) (map[string]string, error)
 }
 
-// DHPurchaseLister lists all unsold purchases for bulk match and export operations.
+// DHPurchaseLister lists and retrieves purchases for DH operations.
 type DHPurchaseLister interface {
 	ListAllUnsoldPurchases(ctx context.Context) ([]campaigns.Purchase, error)
+	GetPurchase(ctx context.Context, id string) (*campaigns.Purchase, error)
 }
 
 // DHInventoryPusher pushes inventory items to DH.
@@ -58,6 +57,11 @@ type DHSuggestionsCounter interface {
 	LatestFetchedAt(ctx context.Context) (string, error)
 }
 
+// DHStatusCounter returns DH push status counts without loading full purchase data.
+type DHStatusCounter interface {
+	CountUnsoldByDHPushStatus(ctx context.Context) (map[string]int, error)
+}
+
 // DHHandler handles DH bulk match, export, intelligence, and suggestions endpoints.
 type DHHandler struct {
 	matchClient       DHMatchClient
@@ -66,6 +70,7 @@ type DHHandler struct {
 	inventoryPusher   DHInventoryPusher   // optional: pushes matched cards to DH inventory
 	dhFieldsUpdater   DHFieldsUpdater     // optional: persists DH inventory IDs after push
 	pushStatusUpdater DHPushStatusUpdater // optional: sets dh_push_status after bulk match
+	statusCounter     DHStatusCounter     // optional: efficient push status counts
 	intelRepo         intelligence.Repository
 	suggestionsRepo   intelligence.SuggestionsRepository
 	intelCounter      DHIntelligenceCounter
@@ -87,6 +92,7 @@ func NewDHHandler(
 	inventoryPusher DHInventoryPusher,
 	dhFieldsUpdater DHFieldsUpdater,
 	pushStatusUpdater DHPushStatusUpdater,
+	statusCounter DHStatusCounter,
 	intelRepo intelligence.Repository,
 	suggestionsRepo intelligence.SuggestionsRepository,
 	intelCounter DHIntelligenceCounter,
@@ -104,6 +110,7 @@ func NewDHHandler(
 		inventoryPusher:   inventoryPusher,
 		dhFieldsUpdater:   dhFieldsUpdater,
 		pushStatusUpdater: pushStatusUpdater,
+		statusCounter:     statusCounter,
 		intelRepo:         intelRepo,
 		suggestionsRepo:   suggestionsRepo,
 		intelCounter:      intelCounter,
@@ -116,35 +123,6 @@ func NewDHHandler(
 // Wait blocks until all background goroutines (e.g. bulk match) have completed.
 // Call during graceful shutdown to avoid writing to a closed database.
 func (h *DHHandler) Wait() { h.bgWG.Wait() }
-
-// dhCardKey builds the pipe-delimited key used by GetMappedSet.
-func dhCardKey(cardName, setName, cardNumber string) string {
-	return cardName + "|" + setName + "|" + cardNumber
-}
-
-// buildMatchTitle constructs a search title from card metadata when PSAListingTitle is empty.
-func buildMatchTitle(cardName, setName, cardNumber string) string {
-	parts := []string{cardName}
-	if setName != "" {
-		parts = append(parts, setName)
-	}
-	if cardNumber != "" {
-		parts = append(parts, cardNumber)
-	}
-	return strings.Join(parts, " ")
-}
-
-// marshalChannels serializes channel statuses to JSON, defaulting to "[]".
-func marshalChannels(channels []dh.InventoryChannelStatus) string {
-	if len(channels) == 0 {
-		return "[]"
-	}
-	b, err := json.Marshal(channels)
-	if err != nil {
-		return "[]"
-	}
-	return string(b)
-}
 
 // Compile-time checks.
 var _ DHInventoryPusher = (*dh.Client)(nil)

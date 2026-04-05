@@ -78,11 +78,8 @@ func (s *service) RefreshCLValuesGlobal(ctx context.Context, rows []CLExportRow)
 		}
 		purchase.CLValueCents = newCLCents
 
-		// Flag for DH push if eligible (no existing DH inventory and not already in terminal state)
-		if purchase.DHInventoryID == 0 &&
-			purchase.DHPushStatus != DHPushStatusPending &&
-			purchase.DHPushStatus != DHPushStatusUnmatched &&
-			purchase.DHPushStatus != DHPushStatusManual {
+		// Flag for DH push if eligible
+		if purchase.NeedsDHPush() {
 			if err := s.repo.UpdatePurchaseDHPushStatus(ctx, purchase.ID, DHPushStatusPending); err != nil && s.logger != nil {
 				s.logger.Warn(ctx, "cl refresh: failed to set dh push status",
 					observability.String("purchaseID", purchase.ID),
@@ -234,11 +231,8 @@ func (s *service) ImportCLExportGlobal(ctx context.Context, rows []CLExportRow) 
 			}
 			existing.CLValueCents = newCLCents
 
-			// Flag for DH push if eligible (no existing DH inventory and not already in terminal state)
-			if existing.DHInventoryID == 0 &&
-				existing.DHPushStatus != DHPushStatusPending &&
-				existing.DHPushStatus != DHPushStatusUnmatched &&
-				existing.DHPushStatus != DHPushStatusManual {
+			// Flag for DH push if eligible
+			if existing.NeedsDHPush() {
 				if err := s.repo.UpdatePurchaseDHPushStatus(ctx, existing.ID, DHPushStatusPending); err != nil && s.logger != nil {
 					s.logger.Warn(ctx, "cl import: failed to set dh push status",
 						observability.String("purchaseID", existing.ID),

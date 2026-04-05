@@ -338,6 +338,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 			dhClient,      // DHInventoryPusher
 			campaignsRepo, // DHFieldsUpdater
 			campaignsRepo, // DHPushStatusUpdater
+			campaignsRepo, // DHStatusCounter
 			intelRepo, suggestionsRepo,
 			intelRepo, suggestionsRepo,
 			logger,

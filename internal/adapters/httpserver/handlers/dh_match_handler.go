@@ -72,15 +72,12 @@ func (h *DHHandler) runBulkMatch(ctx context.Context, purchases []campaigns.Purc
 			break
 		}
 
-		if mappedSet[dhCardKey(ci.CardName, ci.SetName, ci.CardNumber)] != "" {
+		if mappedSet[campaigns.DHCardKey(ci.CardName, ci.SetName, ci.CardNumber)] != "" {
 			skipped++
 			continue
 		}
 
-		title := ci.PSAListingTitle
-		if title == "" {
-			title = buildMatchTitle(ci.CardName, ci.SetName, ci.CardNumber)
-		}
+		title := campaigns.BuildDHMatchTitle(ci.CardName, ci.SetName, ci.CardNumber, ci.PSAListingTitle)
 
 		matchResp, err := h.matchClient.Match(ctx, title, "")
 		if err != nil {
@@ -90,12 +87,16 @@ func (h *DHHandler) runBulkMatch(ctx context.Context, purchases []campaigns.Purc
 			continue
 		}
 
-		if !matchResp.Success || matchResp.Confidence < 0.90 {
+		if !matchResp.Success || matchResp.Confidence < campaigns.DHMatchConfidenceThreshold {
 			lowConf++
 			if h.pushStatusUpdater != nil {
+				ciKey := campaigns.DHCardKey(ci.CardName, ci.SetName, ci.CardNumber)
 				for _, p := range purchases {
-					if dhCardKey(p.CardName, p.SetName, p.CardNumber) == dhCardKey(ci.CardName, ci.SetName, ci.CardNumber) {
-						_ = h.pushStatusUpdater.UpdatePurchaseDHPushStatus(ctx, p.ID, campaigns.DHPushStatusUnmatched)
+					if p.DHCardKey() == ciKey {
+						if err := h.pushStatusUpdater.UpdatePurchaseDHPushStatus(ctx, p.ID, campaigns.DHPushStatusUnmatched); err != nil {
+							h.logger.Warn(ctx, "bulk match: failed to set unmatched status",
+								observability.String("purchaseID", p.ID), observability.Err(err))
+						}
 					}
 				}
 			}
@@ -131,12 +132,12 @@ func (h *DHHandler) runBulkMatch(ctx context.Context, purchases []campaigns.Purc
 func (h *DHHandler) pushMatchedToDH(ctx context.Context, purchases []campaigns.Purchase, matched []matchedCard) {
 	dhCardIDs := make(map[string]int, len(matched))
 	for _, mc := range matched {
-		dhCardIDs[dhCardKey(mc.identity.CardName, mc.identity.SetName, mc.identity.CardNumber)] = mc.dhCardID
+		dhCardIDs[campaigns.DHCardKey(mc.identity.CardName, mc.identity.SetName, mc.identity.CardNumber)] = mc.dhCardID
 	}
 
 	var items []dh.InventoryItem
 	for _, p := range purchases {
-		key := dhCardKey(p.CardName, p.SetName, p.CardNumber)
+		key := campaigns.DHCardKey(p.CardName, p.SetName, p.CardNumber)
 		dhCardID, ok := dhCardIDs[key]
 		if !ok {
 			continue
@@ -149,7 +150,7 @@ func (h *DHHandler) pushMatchedToDH(ctx context.Context, purchases []campaigns.P
 			CertNumber:     p.CertNumber,
 			GradingCompany: dh.GraderPSA,
 			Grade:          p.GradeValue,
-			CostBasisCents: p.BuyCostCents,
+			CostBasisCents: p.CLValueCents,
 			Status:         dh.InventoryStatusInStock,
 		})
 	}
@@ -196,7 +197,7 @@ func (h *DHHandler) pushMatchedToDH(ctx context.Context, purchases []campaigns.P
 				InventoryID:       r.DHInventoryID,
 				CertStatus:        dh.CertStatusMatched,
 				ListingPriceCents: r.AssignedPriceCents,
-				ChannelsJSON:      marshalChannels(r.Channels),
+				ChannelsJSON:      dh.MarshalChannels(r.Channels),
 				DHStatus:          campaigns.DHStatus(r.Status),
 			}); err != nil {
 				h.logger.Warn(ctx, "push to DH: failed to persist inventory ID",
@@ -205,7 +206,10 @@ func (h *DHHandler) pushMatchedToDH(ctx context.Context, purchases []campaigns.P
 					observability.Err(err))
 			}
 			if h.pushStatusUpdater != nil {
-				_ = h.pushStatusUpdater.UpdatePurchaseDHPushStatus(ctx, purchaseID, campaigns.DHPushStatusMatched)
+				if err := h.pushStatusUpdater.UpdatePurchaseDHPushStatus(ctx, purchaseID, campaigns.DHPushStatusMatched); err != nil {
+					h.logger.Warn(ctx, "push to DH: failed to set matched status",
+						observability.String("purchaseID", purchaseID), observability.Err(err))
+				}
 			}
 		}
 	}
@@ -224,7 +228,7 @@ func (h *DHHandler) uniqueCardIdentities(ctx context.Context) ([]campaigns.Purch
 	seen := make(map[string]bool, len(purchases))
 	var identities []campaigns.CardIdentity
 	for _, p := range purchases {
-		key := dhCardKey(p.CardName, p.SetName, p.CardNumber)
+		key := campaigns.DHCardKey(p.CardName, p.SetName, p.CardNumber)
 		if seen[key] {
 			continue
 		}

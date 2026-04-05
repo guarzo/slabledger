@@ -59,23 +59,15 @@ func (h *DHHandler) HandleFixMatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Find the purchase
-	purchases, err := h.purchaseLister.ListAllUnsoldPurchases(ctx)
+	// Find the purchase by ID
+	purchase, err := h.purchaseLister.GetPurchase(ctx, req.PurchaseID)
 	if err != nil {
-		h.logger.Error(ctx, "fix match: list purchases", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "failed to look up purchase")
-		return
-	}
-
-	var purchase *campaigns.Purchase
-	for i := range purchases {
-		if purchases[i].ID == req.PurchaseID {
-			purchase = &purchases[i]
-			break
+		if campaigns.IsPurchaseNotFound(err) {
+			writeError(w, http.StatusNotFound, "purchase not found")
+			return
 		}
-	}
-	if purchase == nil {
-		writeError(w, http.StatusNotFound, "purchase not found")
+		h.logger.Error(ctx, "fix match: get purchase", observability.Err(err))
+		writeError(w, http.StatusInternalServerError, "failed to look up purchase")
 		return
 	}
 
@@ -109,14 +101,18 @@ func (h *DHHandler) HandleFixMatch(w http.ResponseWriter, r *http.Request) {
 		if result.Status != "failed" && result.DHInventoryID != 0 {
 			inventoryID = result.DHInventoryID
 			if h.dhFieldsUpdater != nil {
-				_ = h.dhFieldsUpdater.UpdatePurchaseDHFields(ctx, purchase.ID, campaigns.DHFieldsUpdate{
+				if err := h.dhFieldsUpdater.UpdatePurchaseDHFields(ctx, purchase.ID, campaigns.DHFieldsUpdate{
 					CardID:            dhCardID,
 					InventoryID:       result.DHInventoryID,
 					CertStatus:        dh.CertStatusMatched,
 					ListingPriceCents: result.AssignedPriceCents,
-					ChannelsJSON:      marshalChannels(result.Channels),
+					ChannelsJSON:      dh.MarshalChannels(result.Channels),
 					DHStatus:          campaigns.DHStatus(result.Status),
-				})
+				}); err != nil {
+					h.logger.Warn(ctx, "fix match: failed to persist DH fields",
+						observability.String("purchaseID", purchase.ID),
+						observability.Err(err))
+				}
 			}
 			break
 		}
@@ -129,7 +125,11 @@ func (h *DHHandler) HandleFixMatch(w http.ResponseWriter, r *http.Request) {
 
 	// Set status to manual
 	if h.pushStatusUpdater != nil {
-		_ = h.pushStatusUpdater.UpdatePurchaseDHPushStatus(ctx, purchase.ID, campaigns.DHPushStatusManual)
+		if err := h.pushStatusUpdater.UpdatePurchaseDHPushStatus(ctx, purchase.ID, campaigns.DHPushStatusManual); err != nil {
+			h.logger.Warn(ctx, "fix match: failed to set manual status",
+				observability.String("purchaseID", purchase.ID),
+				observability.Err(err))
+		}
 	}
 
 	writeJSON(w, http.StatusOK, fixMatchResponse{
