@@ -155,6 +155,14 @@ export function DHTab({ enabled = true }: { enabled?: boolean }) {
         </div>
       </div>
 
+      {/* Bulk Match Error */}
+      {status?.bulk_match_error && (
+        <div className="rounded-xl border border-red-500/40 bg-red-500/10 p-4">
+          <h4 className="text-sm font-semibold text-red-400 mb-1">Bulk Match Stopped</h4>
+          <p className="text-sm text-red-300">{status.bulk_match_error}</p>
+        </div>
+      )}
+
       {/* Bulk Match */}
       <CardShell padding="lg">
         <h4 className="text-sm font-semibold text-[var(--text)] mb-2">Bulk Match (Backfill)</h4>

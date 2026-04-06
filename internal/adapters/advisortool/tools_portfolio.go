@@ -104,11 +104,11 @@ type dashboardSummary struct {
 		ProfitWoW        int `json:"profitWoWCents"`
 	} `json:"weeklyReview"`
 	Capital struct {
-		BalanceCents int     `json:"balanceCents"`
-		BudgetCents  int     `json:"budgetCents"`
-		ExposurePct  float64 `json:"exposurePct"`
-		AlertLevel   string  `json:"alertLevel"`
-		DaysToInvoice int    `json:"daysToInvoice"`
+		BalanceCents  int     `json:"balanceCents"`
+		BudgetCents   int     `json:"budgetCents"`
+		ExposurePct   float64 `json:"exposurePct"`
+		AlertLevel    string  `json:"alertLevel"`
+		DaysToInvoice int     `json:"daysToInvoice"`
 	} `json:"capital"`
 	PortfolioHealth []struct {
 		CampaignName  string `json:"campaignName"`

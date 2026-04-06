@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	goerrors "errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"golang.org/x/time/rate"
@@ -46,9 +47,19 @@ func WithEnterpriseKey(key string) ClientOption {
 	return func(c *Client) { c.enterpriseKey = key }
 }
 
+// WithPSAKeys sets comma-separated PSA API keys for cert resolution.
+// Keys are rotated when a PSA rate limit is encountered.
+func WithPSAKeys(keys string) ClientOption {
+	return func(c *Client) {
+		c.psaKeys = parsePSAKeys(keys)
+	}
+}
+
 // Client provides access to the DH market intelligence API.
 type Client struct {
 	enterpriseKey string
+	psaKeys       []string // PSA API keys for cert resolution rotation
+	psaKeyIndex   int      // current key index (not atomic — only used in serial bulk match)
 	baseURL       string
 	httpClient    *httpx.Client
 	limiter       *rate.Limiter
@@ -209,7 +220,8 @@ func (c *Client) getEnterprise(ctx context.Context, fullURL string, dest any) er
 
 // doEnterprise performs an authenticated enterprise API request with rate limiting.
 // body may be nil for bodyless requests (e.g. GET-like deletes).
-func (c *Client) doEnterprise(ctx context.Context, method, fullURL string, body any, dest any) error {
+// extraHeaders are merged into the request (may be nil).
+func (c *Client) doEnterprise(ctx context.Context, method, fullURL string, body any, dest any, extraHeaders ...map[string]string) error {
 	if !c.EnterpriseAvailable() {
 		return apperrors.ConfigMissing("dh_enterprise_api_key", "DH_ENTERPRISE_API_KEY")
 	}
@@ -237,6 +249,11 @@ func (c *Client) doEnterprise(ctx context.Context, method, fullURL string, body 
 	if len(bodyBytes) > 0 {
 		headers["Content-Type"] = "application/json"
 	}
+	for _, eh := range extraHeaders {
+		for k, v := range eh {
+			headers[k] = v
+		}
+	}
 
 	if c.logger != nil {
 		c.logger.Debug(ctx, "dh: enterprise request",
@@ -254,6 +271,12 @@ func (c *Client) doEnterprise(ctx context.Context, method, fullURL string, body 
 	})
 	if err != nil {
 		c.recordHealth(false)
+		if c.logger != nil {
+			c.logger.Error(ctx, "dh: enterprise request failed",
+				observability.String("method", method),
+				observability.String("url", fullURL),
+				observability.Err(err))
+		}
 		return err
 	}
 
@@ -283,4 +306,39 @@ func (c *Client) patchEnterprise(ctx context.Context, fullURL string, body any, 
 
 func (c *Client) deleteEnterprise(ctx context.Context, fullURL string, body any, dest any) error {
 	return c.doEnterprise(ctx, "DELETE", fullURL, body, dest)
+}
+
+// currentPSAKey returns the current PSA API key, or "" if none configured or all exhausted.
+func (c *Client) currentPSAKey() string {
+	if len(c.psaKeys) == 0 || c.psaKeyIndex >= len(c.psaKeys) {
+		return ""
+	}
+	return c.psaKeys[c.psaKeyIndex]
+}
+
+// RotatePSAKey advances to the next PSA API key. Returns true if there are
+// more keys to try, false if we've cycled through all of them.
+func (c *Client) RotatePSAKey() bool {
+	if len(c.psaKeys) <= 1 {
+		return false
+	}
+	c.psaKeyIndex++
+	return c.psaKeyIndex < len(c.psaKeys)
+}
+
+// ResetPSAKeyRotation resets the key index to the first key.
+func (c *Client) ResetPSAKeyRotation() {
+	c.psaKeyIndex = 0
+}
+
+// parsePSAKeys splits a comma-separated key string into trimmed, non-empty keys.
+func parsePSAKeys(raw string) []string {
+	var keys []string
+	for _, k := range strings.Split(raw, ",") {
+		k = strings.TrimSpace(k)
+		if k != "" {
+			keys = append(keys, k)
+		}
+	}
+	return keys
 }
