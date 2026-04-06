@@ -17,7 +17,7 @@ import (
 // enrichSellSheetItem builds a SellSheetItem from a purchase using stored snapshot data.
 // ebayFeePct is applied to eBay/TCGPlayer channel items to compute net revenue.
 // Returns the item and whether market data was available.
-func (s *service) enrichSellSheetItem(_ context.Context, purchase *Purchase, campaignName string, ebayFeePct float64) (SellSheetItem, bool) {
+func (s *service) enrichSellSheetItem(_ context.Context, purchase *Purchase, campaignName string, ebayFeePct float64, crackSet map[string]bool) (SellSheetItem, bool) {
 	costBasis := purchase.BuyCostCents + purchase.PSASourcingFeeCents
 	item := SellSheetItem{
 		PurchaseID:     purchase.ID,
@@ -59,8 +59,22 @@ func (s *service) enrichSellSheetItem(_ context.Context, purchase *Purchase, cam
 		}
 	}
 
+	// Compute inventory signals
+	agingItem := AgingItem{
+		Purchase:      *purchase,
+		CurrentMarket: item.CurrentMarket,
+	}
+	if t, err := time.Parse("2006-01-02", purchase.PurchaseDate); err == nil {
+		agingItem.DaysHeld = int(time.Since(t).Hours() / 24)
+	}
+	isCrack := crackSet != nil && crackSet[purchase.ID]
+	sig := ComputeInventorySignals(&agingItem, isCrack)
+	if sig.HasAnySignal() {
+		item.Signals = &sig
+	}
+
 	// Compute recommended channel server-side
-	item.RecommendedChannel, item.ChannelLabel = recommendChannel(purchase.GradeValue, purchase.CLValueCents, item.CurrentMarket)
+	item.RecommendedChannel, item.ChannelLabel = recommendChannel(purchase.GradeValue, purchase.CLValueCents, item.CurrentMarket, item.Signals)
 
 	// Deduct marketplace fees for eBay/TCGPlayer channels to project net revenue.
 	// grossModeFee skips fee deduction (used by price sync to return gross prices).
@@ -93,9 +107,14 @@ func (s *service) enrichSellSheetItem(_ context.Context, purchase *Purchase, cam
 }
 
 // recommendChannel determines the best exit channel for a sell-sheet item.
-func recommendChannel(grade float64, _ int, mkt *MarketSnapshot) (SaleChannel, string) {
+func recommendChannel(grade float64, _ int, mkt *MarketSnapshot, signals *InventorySignals) (SaleChannel, string) {
 	if grade == 7 {
 		return SaleChannelInPerson, "In Person"
+	}
+	if signals != nil {
+		if signals.ProfitCaptureDeclining || signals.ProfitCaptureSpike || signals.CrackCandidate {
+			return SaleChannelInPerson, "In Person"
+		}
 	}
 	if mkt != nil && mkt.Trend30d > 0.05 {
 		return SaleChannelInPerson, "In Person"
@@ -127,7 +146,7 @@ func (s *service) GenerateSellSheet(ctx context.Context, campaignID string, purc
 			continue
 		}
 
-		item, _ := s.enrichSellSheetItem(ctx, purchase, "", campaign.EbayFeePct)
+		item, _ := s.enrichSellSheetItem(ctx, purchase, "", campaign.EbayFeePct, nil)
 		sheet.Totals.TotalExpectedRevenue += item.TargetSellPrice
 		sheet.Items = append(sheet.Items, item)
 		sheet.Totals.TotalCostBasis += item.CostBasisCents
@@ -202,7 +221,7 @@ func (s *service) buildCrossCampaignSellSheet(ctx context.Context, purchases []*
 			campName = c.Name
 			feePct = c.EbayFeePct
 		}
-		item, _ := s.enrichSellSheetItem(ctx, purchase, campName, feePct)
+		item, _ := s.enrichSellSheetItem(ctx, purchase, campName, feePct, nil)
 		sheet.Totals.TotalExpectedRevenue += item.TargetSellPrice
 		sheet.Items = append(sheet.Items, item)
 		sheet.Totals.TotalCostBasis += item.CostBasisCents
@@ -259,7 +278,7 @@ func (s *service) MatchShopifyPrices(ctx context.Context, items []ShopifyPriceSy
 		}
 
 		// Enrich with sell sheet logic — gross price (no fee deduction) for price sync comparison
-		sellItem, hasMarket := s.enrichSellSheetItem(ctx, purchase, "", grossModeFee)
+		sellItem, hasMarket := s.enrichSellSheetItem(ctx, purchase, "", grossModeFee, nil)
 
 		match := ShopifyPriceSyncMatch{
 			CertNumber:            item.CertNumber,

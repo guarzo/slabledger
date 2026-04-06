@@ -247,7 +247,39 @@ func (s *service) GetGlobalInventoryAging(ctx context.Context) ([]AgingItem, err
 	}
 
 	s.applyOpenFlags(ctx, items)
+
+	// Compute crack candidates for signal enrichment
+	crackSet := s.buildCrackCandidateSet(ctx)
+
+	// Apply inventory signals
+	for i := range items {
+		isCrack := crackSet[items[i].Purchase.ID]
+		sig := ComputeInventorySignals(&items[i], isCrack)
+		if sig.HasAnySignal() {
+			items[i].Signals = &sig
+		}
+	}
+
 	return items, nil
+}
+
+// buildCrackCandidateSet returns a set of purchase IDs that are crack candidates.
+// Best-effort: returns empty set on error.
+func (s *service) buildCrackCandidateSet(ctx context.Context) map[string]bool {
+	cracks, err := s.GetCrackOpportunities(ctx)
+	if err != nil {
+		if s.logger != nil {
+			s.logger.Warn(ctx, "crack candidates failed for signal enrichment", observability.Err(err))
+		}
+		return nil
+	}
+	set := make(map[string]bool, len(cracks))
+	for _, c := range cracks {
+		if c.IsCrackCandidate {
+			set[c.PurchaseID] = true
+		}
+	}
+	return set
 }
 
 // applyOpenFlags batch-loads open price flag status and sets HasOpenFlag on matching items.
