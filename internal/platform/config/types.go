@@ -88,19 +88,6 @@ type SessionCleanupConfig struct {
 	Interval time.Duration // How often to run cleanup (default: 1 hour)
 }
 
-// FusionConfig controls the fusion price provider behavior
-type FusionConfig struct {
-	// CacheTTL is the in-memory cache TTL for fused prices (default: 4 hours)
-	CacheTTL time.Duration
-
-	// PriceChartingTimeout is the per-request timeout for PriceCharting API calls (default: 30s)
-	PriceChartingTimeout time.Duration
-
-	// SecondarySourceTimeout is the per-request timeout for all secondary
-	// pricing sources (e.g., CardHedger) (default: 20s)
-	SecondarySourceTimeout time.Duration
-}
-
 // AuthConfig controls authentication settings
 type AuthConfig struct {
 	// EncryptionKey for encrypting OAuth tokens at rest (AES-256-GCM)
@@ -116,9 +103,6 @@ type AuthConfig struct {
 // These are read from environment variables centrally and passed to adapter
 // constructors — adapters never read env vars directly.
 type AdapterConfig struct {
-	PriceChartingToken string // PRICECHARTING_TOKEN - Required for graded card pricing data
-	CardHedgerKey      string // CARD_HEDGER_API_KEY - CardHedger supplementary pricing
-	CardHedgerClientID string // CARD_HEDGER_CLIENT_ID - CardHedger card request client ID
 	PSAToken           string // PSA_ACCESS_TOKEN - PSA cert lookup
 	PSAImageToken      string // PAO_API - Separate PSA token for image lookups
 	PricingAPIKey      string // PRICING_API_KEY - Bearer token for pricing API auth
@@ -129,7 +113,6 @@ type AdapterConfig struct {
 	ImageAIDeployment  string // IMAGE_AI_DEPLOYMENT - Image generation model deployment name
 	ImageAIQuality     string // IMAGE_AI_QUALITY - Image quality: low, medium, high (default: medium)
 	ImageAIEnabled     bool   // IMAGE_AI_ENABLED - Enable AI background generation (default: false)
-	JustTCGKey         string // JUSTTCG_API_KEY - JustTCG raw NM pricing
 	DHEnterpriseKey    string // DH_ENTERPRISE_API_KEY - Bearer token for enterprise endpoints
 	DHBaseURL          string // DH_API_BASE_URL
 }
@@ -142,14 +125,6 @@ type DHConfig struct {
 	OrdersPollInterval    time.Duration // default: 30m
 	InventoryPollInterval time.Duration // default: 2h
 	PushInterval          time.Duration // default: 5m
-}
-
-// CardHedgerSchedulerConfig controls CardHedger-specific scheduler intervals
-type CardHedgerSchedulerConfig struct {
-	PollInterval   time.Duration // Delta poll interval (default: 1h)
-	BatchInterval  time.Duration // Daily batch interval (default: 24h)
-	MaxCardsPerRun int           // Max cards per batch run (default: 200)
-	Enabled        bool          // Enable CardHedger schedulers (default: true)
 }
 
 // InventoryRefreshConfig controls the inventory snapshot refresh scheduler
@@ -194,8 +169,6 @@ type Config struct {
 	PriceRefresh     PriceRefreshConfig
 	CacheWarmup      CacheWarmupConfig
 	SessionCleanup   SessionCleanupConfig
-	Fusion           FusionConfig
-	CardHedger       CardHedgerSchedulerConfig
 	InventoryRefresh InventoryRefreshConfig
 	SnapshotEnrich   SnapshotEnrichConfig
 	SnapshotHistory  SnapshotHistoryConfig
@@ -204,7 +177,6 @@ type Config struct {
 	MetricsPoll      MetricsPollConfig
 	PicksRefresh     PicksRefreshConfig
 	CardLadder       CardLadderConfig
-	JustTCG          JustTCGConfig
 	DH               DHConfig
 	Adapters         AdapterConfig
 }
@@ -276,27 +248,6 @@ type CardLadderConfig struct {
 	Enabled     bool          // Enable CL refresh scheduler (default: false)
 	Interval    time.Duration // How often to run refresh (default: 24h)
 	RefreshHour int           // Hour (0-23 UTC) to schedule runs; -1 = use Interval (default: 4)
-}
-
-// JustTCGConfig controls the JustTCG raw NM price refresh scheduler.
-type JustTCGConfig struct {
-	Enabled      bool          // Enable JustTCG refresh (default: true if API key present)
-	DailyBudget  int           // Max API calls per day (default: 2000)
-	RateInterval time.Duration // Minimum time between calls (default: 600ms)
-	RunInterval  time.Duration // How often to run the full refresh cycle (default: 24h)
-}
-
-// ApplyDefaults sets zero-valued fields to sensible defaults.
-func (c *JustTCGConfig) ApplyDefaults() {
-	if c.DailyBudget <= 0 {
-		c.DailyBudget = 2000
-	}
-	if c.RateInterval <= 0 {
-		c.RateInterval = 600 * time.Millisecond
-	}
-	if c.RunInterval <= 0 {
-		c.RunInterval = 24 * time.Hour
-	}
 }
 
 // ApplyDefaults sets zero-valued fields to sensible defaults.

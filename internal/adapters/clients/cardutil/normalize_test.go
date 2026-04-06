@@ -699,6 +699,5 @@ func TestNormalizationChain(t *testing.T) {
 	}
 }
 
-// MapChineseNumber, IsChineseSet, and IsChineseGemPackSet tests live in
-// pricecharting/domain_adapter_edge_test.go alongside resolveExpectedNumber
-// tests that exercise the full pipeline with more comprehensive edge cases.
+// MapChineseNumber, IsChineseSet, and IsChineseGemPackSet tests cover
+// Chinese set detection and Chinese Gem Pack card number resolution.

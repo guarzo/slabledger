@@ -60,7 +60,7 @@ group.StopAll()       // signals all to stop
 group.Wait()          // blocks until all have exited
 ```
 
-`BuildGroup` (`builder.go`) is the single construction point. It reads from `config.Config`, wires all dependencies via `BuildDeps`, and returns a `BuildResult` containing the `Group` and an optional `CardDiscoverer` reference.
+`BuildGroup` (`builder.go`) is the single construction point. It reads from `config.Config`, wires all dependencies via `BuildDeps`, and returns a `BuildResult` containing the `Group` and an optional `CardLadderRefresh` reference.
 
 Schedulers are conditionally included based on:
 - Config flags (e.g. `cfg.PriceRefresh.Enabled`)

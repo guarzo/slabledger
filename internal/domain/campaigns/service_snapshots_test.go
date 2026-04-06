@@ -197,15 +197,15 @@ func TestApplyCLCorrection_EstimateFallback(t *testing.T) {
 		{
 			name:                    "estimate within 50% of CL keeps estimate",
 			estimatedValueCents:     12000,
-			estimateSource:          "cardhedger",
+			estimateSource:          "doubleholo",
 			clValueCents:            10000,
 			wantEstimatedValueCents: 12000,
-			wantEstimateSource:      "cardhedger",
+			wantEstimateSource:      "doubleholo",
 		},
 		{
 			name:                    "estimate >50% above CL falls back",
 			estimatedValueCents:     20000,
-			estimateSource:          "cardhedger",
+			estimateSource:          "doubleholo",
 			clValueCents:            10000,
 			wantEstimatedValueCents: 10000,
 			wantEstimateSource:      "cl_fallback",
@@ -213,7 +213,7 @@ func TestApplyCLCorrection_EstimateFallback(t *testing.T) {
 		{
 			name:                    "estimate >50% below CL falls back",
 			estimatedValueCents:     3000,
-			estimateSource:          "cardhedger",
+			estimateSource:          "doubleholo",
 			clValueCents:            10000,
 			wantEstimatedValueCents: 10000,
 			wantEstimateSource:      "cl_fallback",
@@ -221,10 +221,10 @@ func TestApplyCLCorrection_EstimateFallback(t *testing.T) {
 		{
 			name:                    "CL value zero skips fallback",
 			estimatedValueCents:     20000,
-			estimateSource:          "cardhedger",
+			estimateSource:          "doubleholo",
 			clValueCents:            0,
 			wantEstimatedValueCents: 20000,
-			wantEstimateSource:      "cardhedger",
+			wantEstimateSource:      "doubleholo",
 		},
 		{
 			name:                    "estimate zero skips fallback",
@@ -237,18 +237,18 @@ func TestApplyCLCorrection_EstimateFallback(t *testing.T) {
 		{
 			name:                    "both under $5 skips fallback",
 			estimatedValueCents:     200,
-			estimateSource:          "cardhedger",
+			estimateSource:          "doubleholo",
 			clValueCents:            400,
 			wantEstimatedValueCents: 200,
-			wantEstimateSource:      "cardhedger",
+			wantEstimateSource:      "doubleholo",
 		},
 		{
 			name:                    "exactly at 50% threshold no fallback",
 			estimatedValueCents:     5000,
-			estimateSource:          "cardhedger",
+			estimateSource:          "doubleholo",
 			clValueCents:            10000,
 			wantEstimatedValueCents: 5000,
-			wantEstimateSource:      "cardhedger",
+			wantEstimateSource:      "doubleholo",
 		},
 	}
 

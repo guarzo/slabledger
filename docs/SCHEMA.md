@@ -205,63 +205,15 @@ Cached provider-specific external IDs for card name/set/number triples.
 
 ---
 
-### `price_history`
-Time series of card prices from all pricing sources (one row per card+grade+source+date).
+### ~~`price_history`~~ — DROPPED (migration 000038)
 
-| Column | Type | Constraints | Notes |
-|--------|------|-------------|-------|
-| `id` | INTEGER | PK, AUTOINCREMENT | |
-| `card_name` | TEXT | NOT NULL | |
-| `set_name` | TEXT | NOT NULL | |
-| `card_number` | TEXT | NOT NULL DEFAULT '' | Collector number |
-| `grade` | TEXT | NOT NULL | e.g. "PSA 10" |
-| `price_cents` | INTEGER | NOT NULL | |
-| `confidence` | REAL | DEFAULT 1.0 | Source confidence weight |
-| `source` | TEXT | NOT NULL, CHECK IN ('pricecharting','pokemonprice','cardmarket','cardhedger','fusion') | |
-| `fusion_source_count` | INTEGER | | Number of sources fused (fusion rows only) |
-| `fusion_outliers_removed` | INTEGER | | Outlier count removed during fusion |
-| `fusion_method` | TEXT | | Algorithm used (e.g. "weighted_avg") |
-| `price_date` | DATE | NOT NULL | |
-| `created_at` | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | |
-| `updated_at` | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | |
-
-**Unique:** `(card_name, set_name, card_number, grade, source, price_date)`
-
-**Indexes:**
-- `idx_price_history_card` on `(card_name, set_name, grade)`
-- `idx_price_history_staleness` on `(source, updated_at DESC)`
-- `idx_price_history_date` on `(price_date DESC)`
-- `idx_price_history_lookup` on `(card_name, set_name, card_number, grade, source, price_date DESC)`
-
-**Foreign Keys:** none
+Dropped in migration 000038. DH computes prices in-memory; no production code wrote to this table.
 
 ---
 
-### `price_refresh_queue`
-Work queue for the background price-refresh scheduler.
+### ~~`price_refresh_queue`~~ — DROPPED (migration 000038)
 
-| Column | Type | Constraints | Notes |
-|--------|------|-------------|-------|
-| `id` | INTEGER | PK, AUTOINCREMENT | |
-| `card_name` | TEXT | NOT NULL | |
-| `set_name` | TEXT | NOT NULL | |
-| `grade` | TEXT | NOT NULL, CHECK IN (PSA/BGS/CGC grades + Raw/Ungraded) | |
-| `source` | TEXT | NOT NULL, CHECK IN ('pricecharting','pokemonprice','cardmarket','cardhedger','fusion') | |
-| `priority` | INTEGER | DEFAULT 2, CHECK IN (1,2,3) | 1=high, 3=low |
-| `scheduled_at` | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | When to run next |
-| `last_attempted_at` | TIMESTAMP | | |
-| `attempts` | INTEGER | DEFAULT 0 | |
-| `status` | TEXT | DEFAULT 'pending', CHECK IN ('pending','in_progress','completed','failed') | |
-| `error` | TEXT | | Last error message |
-| `created_at` | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | |
-
-**Unique:** `(card_name, set_name, grade, source)`
-
-**Indexes:**
-- `idx_refresh_queue_priority` on `(priority ASC, scheduled_at ASC)` WHERE `status = 'pending'` (partial)
-- `idx_refresh_queue_status` on `(status, last_attempted_at)`
-
-**Foreign Keys:** `source → api_rate_limits(provider)` ON UPDATE CASCADE ON DELETE RESTRICT
+Dropped in migration 000038. Was always empty; replaced by purchase-driven refresh via `campaign_purchases`.
 
 ---
 
@@ -286,26 +238,9 @@ Access log used to prioritize price staleness detection (recently viewed cards g
 
 ---
 
-### `discovery_failures`
-Records of failed card discovery attempts to avoid hammering providers for cards they don't know about.
+### ~~`discovery_failures`~~ — DROPPED (migration 000038)
 
-| Column | Type | Constraints | Notes |
-|--------|------|-------------|-------|
-| `card_name` | TEXT | NOT NULL, PK part | |
-| `set_name` | TEXT | NOT NULL, PK part | |
-| `card_number` | TEXT | NOT NULL DEFAULT '', PK part | |
-| `provider` | TEXT | NOT NULL, PK part | e.g. 'cardhedger' |
-| `failure_reason` | TEXT | NOT NULL | |
-| `query_attempted` | TEXT | NOT NULL DEFAULT '' | The query string that failed |
-| `attempts` | INTEGER | NOT NULL DEFAULT 1 | |
-| `last_attempted_at` | DATETIME | NOT NULL DEFAULT CURRENT_TIMESTAMP | |
-| `created_at` | DATETIME | NOT NULL DEFAULT CURRENT_TIMESTAMP | |
-
-**Primary Key:** `(card_name, set_name, card_number, provider)`
-
-**Indexes:** `idx_discovery_failures_provider` on `(provider, last_attempted_at DESC)`
-
-**Foreign Keys:** none
+Dropped in migration 000038. Was CardHedger-only; source removed.
 
 ---
 
@@ -743,8 +678,9 @@ Junction table linking social posts to the purchases that appear as slides.
 
 ## Views
 
-### `stale_prices`
-Price rows that have exceeded their staleness threshold, used by the refresh scheduler to select work. Prices above $100 go stale after 12 hours; $50–$100 after 24 hours; under $50 after 48 hours. Includes `psa_listing_title` from the most recent matching purchase for the CardHedger LLM fallback.
+### ~~`stale_prices`~~ — DROPPED (migration 000038)
+
+Dropped with `price_history`. The refresh scheduler now queries `campaign_purchases` directly.
 
 ### `api_usage_summary`
 Aggregated API call statistics (total, errors, 429s, latency, call counts) per provider for the last 24 hours.
@@ -779,8 +715,7 @@ users
 ├── favorites              (user_id → users.id CASCADE DELETE)
 └── allowed_emails         (added_by → users.id SET NULL)
 
-api_rate_limits
-└── price_refresh_queue    (source → api_rate_limits.provider UPDATE CASCADE, DELETE RESTRICT)
+api_rate_limits                (standalone after price_refresh_queue dropped)
 
 campaigns
 └── campaign_purchases     (campaign_id → campaigns.id CASCADE DELETE)
@@ -790,7 +725,6 @@ social_posts
 └── social_post_cards      (post_id → social_posts.id CASCADE DELETE)
 
 ── Standalone tables (no FK dependencies) ──
-price_history
 api_calls
 ai_calls
 card_access_log
@@ -799,7 +733,6 @@ sync_state
 cashflow_config
 invoices
 revocation_flags
-discovery_failures
 card_request_submissions
 market_snapshot_history
 population_history

@@ -119,7 +119,7 @@ func (s *SnapshotHistoryScheduler) tick(ctx context.Context) {
 			Trend90d:            snap.Trend90d,
 			Volatility:          snap.Volatility,
 			SourceCount:         snap.SourceCount,
-			FusionConfidence:    snap.FusionConfidence,
+			Confidence:          snap.Confidence,
 			SnapshotJSON:        p.SnapshotJSON,
 			SnapshotDate:        today,
 		}

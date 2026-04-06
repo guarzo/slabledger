@@ -27,7 +27,7 @@ export function MissingCardsTab({ enabled = true }: { enabled?: boolean }) {
   if (isLoading) return <div className="text-center text-[var(--text-muted)] py-8">Loading...</div>;
   if (error) {
     if (isAPIError(error) && error.status === 404) {
-      return <div className="p-3 rounded-lg bg-[var(--surface-2)] border border-[var(--border)] text-[var(--text-muted)] text-sm">CardHedger is not configured. Set <code>CARD_HEDGER_API_KEY</code> to enable missing card tracking.</div>;
+      return <div className="p-3 rounded-lg bg-[var(--surface-2)] border border-[var(--border)] text-[var(--text-muted)] text-sm">Missing card tracking is not available.</div>;
     }
     return <div className="p-3 rounded-lg bg-[var(--danger-bg)] border border-[var(--danger-border)] text-[var(--danger)] text-sm">Failed to load missing cards</div>;
   }
@@ -71,7 +71,7 @@ export function MissingCardsTab({ enabled = true }: { enabled?: boolean }) {
       <div className="glass-table max-h-[min(600px,calc(100vh-300px))] overflow-y-auto scrollbar-dark">
         {!items || items.length === 0 ? (
           <div className="px-5 py-8 text-center text-[var(--text-muted)] text-sm">
-            No missing cards detected. Cards will appear here when CardHedger knows the cert but hasn't linked it to a card.
+            No missing cards detected.
           </div>
         ) : (
           <table className="w-full text-sm">

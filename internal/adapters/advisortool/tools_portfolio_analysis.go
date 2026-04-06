@@ -188,7 +188,7 @@ func (e *CampaignToolExecutor) registerGetAcquisitionTargets() {
 func (e *CampaignToolExecutor) registerGetDeslabOpportunities() {
 	e.register(ai.ToolDefinition{
 		Name:        "get_deslab_opportunities",
-		Description: "Get cross-campaign deslab arbitrage candidates: graded cards where removing from PSA slab and selling raw is more profitable than selling graded. Uses JustTCG NM-specific pricing. Shows deslab vs graded net, advantage, and ROI.",
+		Description: "Get cross-campaign deslab arbitrage candidates: graded cards where removing from slab and selling raw is more profitable than selling graded. Shows deslab vs graded net, advantage, and ROI.",
 		Parameters:  emptyObjectParams,
 	}, func(ctx context.Context, _ string) (string, error) {
 		result, err := e.svc.GetCrackOpportunities(ctx)

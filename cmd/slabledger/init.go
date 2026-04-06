@@ -10,13 +10,10 @@ import (
 
 	"github.com/guarzo/slabledger/internal/adapters/advisortool"
 	"github.com/guarzo/slabledger/internal/adapters/clients/azureai"
-	"github.com/guarzo/slabledger/internal/adapters/clients/cardhedger"
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
-	"github.com/guarzo/slabledger/internal/adapters/clients/fusionprice"
+	"github.com/guarzo/slabledger/internal/adapters/clients/dhprice"
 	igclient "github.com/guarzo/slabledger/internal/adapters/clients/instagram"
-	"github.com/guarzo/slabledger/internal/adapters/clients/justtcg"
-	"github.com/guarzo/slabledger/internal/adapters/clients/pricecharting"
 	"github.com/guarzo/slabledger/internal/adapters/clients/pricelookup"
 	"github.com/guarzo/slabledger/internal/adapters/clients/psa"
 	"github.com/guarzo/slabledger/internal/adapters/clients/tcgdex"
@@ -27,79 +24,38 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/advisor"
 	"github.com/guarzo/slabledger/internal/domain/auth"
 	"github.com/guarzo/slabledger/internal/domain/campaigns"
-	"github.com/guarzo/slabledger/internal/domain/fusion"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/domain/picks"
+	"github.com/guarzo/slabledger/internal/domain/pricing"
 	"github.com/guarzo/slabledger/internal/domain/social"
-	"github.com/guarzo/slabledger/internal/platform/cache"
 	"github.com/guarzo/slabledger/internal/platform/config"
 	"github.com/guarzo/slabledger/internal/platform/crypto"
 )
 
-// initializePriceProviders creates the PriceCharting and CardHedger clients
-// and wires them together into the FusionProvider.
+// initializePriceProviders creates the DH price provider.
 func initializePriceProviders(
 	ctx context.Context,
-	cfg *config.Config,
-	appCache cache.Cache,
 	logger observability.Logger,
-	cardProvImpl *tcgdex.TCGdex,
-	priceRepo *sqlite.PriceRepository,
 	cardIDMappingRepo *sqlite.CardIDMappingRepository,
 	dhClient *dh.Client,
-) (priceProvider *fusionprice.FusionPriceProvider, cardHedgerClient *cardhedger.Client, pcProvider *pricecharting.PriceCharting, err error) {
-	pcProvider, err = pricecharting.NewPriceCharting(
-		pricecharting.DefaultConfig(cfg.Adapters.PriceChartingToken), appCache, logger,
-		pricecharting.WithHintResolver(cardIDMappingRepo),
-	)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to initialize PriceCharting provider: %w", err)
+) (pricing.PriceProvider, error) {
+	if dhClient == nil || !dhClient.EnterpriseAvailable() {
+		logger.Warn(ctx, "DH client not available; price provider will be inactive")
+		return dhprice.New(nil, nil), nil
 	}
-
-	cardHedgerClient = cardhedger.NewClient(cfg.Adapters.CardHedgerKey, cardhedger.WithLogger(logger))
-
-	// Wrap secondary clients in adapters that implement fusion.SecondaryPriceSource
-	secondarySources := []fusion.SecondaryPriceSource{
-		fusionprice.NewCardHedgerAdapter(cardHedgerClient, cardIDMappingRepo, logger,
-			fusionprice.WithCardHedgerHintResolver(cardIDMappingRepo)),
-	}
-
-	// Add DH as a secondary fusion source if available
-	dhAvailable := false
-	if dhClient != nil && dhClient.EnterpriseAvailable() {
-		dhAdapter := fusionprice.NewDHAdapter(dhClient, cardIDMappingRepo, logger)
-		secondarySources = append(secondarySources, dhAdapter)
-		dhAvailable = true
-		logger.Info(ctx, "DH adapter registered as secondary fusion source")
-	}
-
-	priceProvider = fusionprice.NewFusionProviderWithRepo(
-		pcProvider, secondarySources,
-		appCache, priceRepo, priceRepo, priceRepo, logger,
-		fusionprice.DefaultFreshnessDuration,
-		cfg.Fusion.CacheTTL,
-		cfg.Fusion.PriceChartingTimeout,
-		cfg.Fusion.SecondarySourceTimeout,
-		fusionprice.WithCardProvider(cardProvImpl),
-	)
-	logger.Info(ctx, "Fusion price provider initialized",
-		observability.Int("secondary_sources", len(secondarySources)),
-		observability.Bool("cardhedger_available", cardHedgerClient.Available()),
-		observability.Bool("dh_available", dhAvailable))
-
-	return priceProvider, cardHedgerClient, pcProvider, nil
+	provider := dhprice.New(dhClient, cardIDMappingRepo, dhprice.WithLogger(logger))
+	logger.Info(ctx, "DH price provider initialized")
+	return provider, nil
 }
 
 // initializeCampaignsService creates the campaigns service with all options
-// wired, including price lookup, PSA cert lookup, and CardHedger cert resolver.
+// wired, including price lookup and PSA cert lookup.
 func initializeCampaignsService(
 	ctx context.Context,
 	cfg *config.Config,
 	logger observability.Logger,
 	db *sqlite.DB,
-	priceProvImpl *fusionprice.FusionPriceProvider,
-	cardHedgerClientImpl *cardhedger.Client,
-	cardIDMappingRepo *sqlite.CardIDMappingRepository,
+	priceProvImpl pricing.PriceProvider,
 	intelRepo *sqlite.MarketIntelligenceRepository,
 ) (campaigns.Service, *sqlite.CampaignsRepository, *sqlite.CardRequestRepository) {
 	campaignsRepo := sqlite.NewCampaignsRepository(db.DB)
@@ -117,17 +73,8 @@ func initializeCampaignsService(
 		logger.Info(ctx, "PSA cert lookup enabled")
 	}
 
-	// Card request repository (tracks certs without linked cards in CardHedger)
+	// Card request repository (tracks certs without linked cards)
 	cardRequestRepo := sqlite.NewCardRequestRepository(db.DB)
-
-	// Wire cert→card_id resolver if CardHedger is available
-	if cardHedgerClientImpl.Available() {
-		certResolverOpts := []cardhedger.CertResolverOption{
-			cardhedger.WithMissingCardTracker(cardRequestRepo),
-		}
-		certResolver := cardhedger.NewCertResolver(cardHedgerClientImpl, cardIDMappingRepo, logger, certResolverOpts...)
-		campaignOpts = append(campaignOpts, campaigns.WithCardIDResolver(certResolver))
-	}
 
 	// History recorders — track CL values and population changes during CSV imports.
 	campaignOpts = append(campaignOpts,
@@ -347,15 +294,13 @@ func initializeCardLadder(
 type schedulerDeps struct {
 	Config               *config.Config
 	Logger               observability.Logger
-	PriceRepo            *sqlite.PriceRepository
-	PriceProvImpl        *fusionprice.FusionPriceProvider
+	DBTracker            *sqlite.DBTracker
+	RefreshCandidates    pricing.RefreshCandidateProvider
+	PriceProvImpl        pricing.PriceProvider
 	CardProvImpl         *tcgdex.TCGdex
 	AuthService          auth.Service
-	CardHedgerClientImpl *cardhedger.Client
 	SyncStateRepo        *sqlite.SyncStateRepository
 	CardIDMappingRepo    *sqlite.CardIDMappingRepository
-	DiscoveryFailureRepo *sqlite.DiscoveryFailureRepository
-	FavoritesRepo        *sqlite.FavoritesRepository
 	CampaignsRepo        *sqlite.CampaignsRepository
 	CampaignsService     campaigns.Service
 	AdvisorService       advisor.Service
@@ -366,12 +311,10 @@ type schedulerDeps struct {
 	MetricsPostLister    social.MetricsPostLister
 	MetricsSaver         social.MetricsSaver
 	InsightsPoller       social.InsightsPoller
-	CertSweeper          scheduler.CertSweeper
 	PicksService         picks.Service
 	CardLadderClient     *cardladder.Client
 	CardLadderStore      *sqlite.CardLadderStore
 	CardLadderSalesStore *sqlite.CLSalesStore
-	JustTCGClient        *justtcg.Client
 	DHClient             *dh.Client
 	DHIntelligenceRepo   *sqlite.MarketIntelligenceRepository
 	DHSuggestionsRepo    *sqlite.DHSuggestionsRepository
@@ -379,26 +322,19 @@ type schedulerDeps struct {
 }
 
 // initializeSchedulers builds and starts the scheduler group, returning the
-// result (including CardDiscoverer) and a cancel function to shut them down.
+// result and a cancel function to shut them down.
 func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.BuildResult, context.CancelFunc) {
 	schedulerCtx, cancelScheduler := context.WithCancel(ctx)
 	buildDeps := scheduler.BuildDeps{
-		PriceRepo:                deps.PriceRepo,
-		APITracker:               deps.PriceRepo,
-		HealthChecker:            deps.PriceRepo,
-		AccessTracker:            deps.PriceRepo,
+		APITracker:               deps.DBTracker,
+		HealthChecker:            deps.DBTracker,
+		AccessTracker:            deps.DBTracker,
+		RefreshCandidates:        deps.RefreshCandidates,
 		PriceProvider:            deps.PriceProvImpl,
 		CardProvider:             deps.CardProvImpl,
 		AuthService:              deps.AuthService,
 		Logger:                   deps.Logger,
-		CardHedgerClient:         deps.CardHedgerClientImpl,
 		SyncStateStore:           deps.SyncStateRepo,
-		CardIDMappingLookup:      deps.CardIDMappingRepo,
-		CardIDMappingLister:      &cardIDMappingListAdapter{repo: deps.CardIDMappingRepo},
-		CardIDMappingSaver:       deps.CardIDMappingRepo,
-		DiscoveryFailureTracker:  deps.DiscoveryFailureRepo,
-		FavoritesLister:          &favoritesListAdapter{repo: deps.FavoritesRepo},
-		CampaignCardLister:       &campaignCardListAdapter{repo: deps.CampaignsRepo},
 		NewSetsProvider:          deps.CardProvImpl.RegistryManager(),
 		InventoryLister:          &inventoryListAdapter{repo: deps.CampaignsRepo},
 		SnapshotRefresher:        &snapshotRefreshAdapter{svc: deps.CampaignsService},
@@ -413,7 +349,6 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 		MetricsPostLister:        deps.MetricsPostLister,
 		MetricsSaver:             deps.MetricsSaver,
 		InsightsPoller:           deps.InsightsPoller,
-		CertSweeper:              deps.CertSweeper,
 		PicksGenerator:           deps.PicksService,
 		CardLadderClient:         deps.CardLadderClient,
 		CardLadderStore:          deps.CardLadderStore,
@@ -422,12 +357,7 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 		CardLadderCLRecorder:     deps.CampaignsRepo,
 		CardLadderSalesStore:     deps.CardLadderSalesStore,
 	}
-	// Nil-safe interface conversion: a nil *justtcg.Client assigned to an interface
-	// produces a non-nil interface wrapping a nil pointer, which breaks nil checks.
-	if deps.JustTCGClient != nil {
-		buildDeps.JustTCGClient = deps.JustTCGClient
-	}
-	// Same nil-safety for DH dependencies.
+	// Nil-safe interface conversion for DH dependencies.
 	if deps.DHClient != nil {
 		buildDeps.DHClient = deps.DHClient
 		buildDeps.DHOrdersClient = deps.DHClient

@@ -172,12 +172,12 @@ func TestAppError_WithHTTPStatus(t *testing.T) {
 	// Test method chaining
 	err2 := NewAppError(ErrCodeProviderAuth, "Auth failed").
 		WithHTTPStatus(401).
-		WithContext("provider", "PriceCharting")
+		WithContext("provider", "doubleholo")
 
 	if err2.HTTPStatusCode != 401 {
 		t.Errorf("HTTPStatusCode = %d, want 401", err2.HTTPStatusCode)
 	}
-	if err2.Context["provider"] != "PriceCharting" {
+	if err2.Context["provider"] != "doubleholo" {
 		t.Errorf("Context[provider] = %v, want PriceCharting", err2.Context["provider"])
 	}
 }
@@ -398,13 +398,13 @@ func TestAppError_WithCause(t *testing.T) {
 
 func TestProviderAuthFailed(t *testing.T) {
 	cause := fmt.Errorf("401 Unauthorized")
-	err := ProviderAuthFailed("PriceCharting", cause)
+	err := ProviderAuthFailed("doubleholo", cause)
 
 	if err.Code != ErrCodeProviderAuth {
 		t.Errorf("Code = %s, want %s", err.Code, ErrCodeProviderAuth)
 	}
 
-	if !strings.Contains(err.Message, "PriceCharting") {
+	if !strings.Contains(err.Message, "doubleholo") {
 		t.Errorf("Message should contain provider name, got: %s", err.Message)
 	}
 }

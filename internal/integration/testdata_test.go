@@ -47,8 +47,8 @@ type InventoryEntry struct {
 	CardNumber      string // Known/expected card number
 	SetName         string // Known/expected set name
 
-	ExpectedProduct string  // PriceCharting product name substring
-	ExpectedConsole string  // PriceCharting console name substring
+	ExpectedProduct string  // Expected product name substring
+	ExpectedConsole string  // Expected console name substring
 	MinPriceUSD     float64 // Minimum reasonable PSA grade price
 	MaxPriceUSD     float64 // Maximum reasonable PSA grade price
 
@@ -256,7 +256,7 @@ func fullInventory() []InventoryEntry {
 			Category: "POKEMON CARDS", Grade: 9, PricePaid: 111.00,
 			CardName: "DARK MEWTWO", CardNumber: "", SetName: "PROMO POKKEN TOURNAMENT",
 			ExpectedProduct: "Mewtwo", ExpectedConsole: "Promo", MinPriceUSD: 20, MaxPriceUSD: 300,
-			SkipPricing: true, // PriceCharting doesn't index this Japanese Pokken Tournament promo
+			SkipPricing: true, // pricing sources don't index this Japanese Pokken Tournament promo
 		},
 		{
 			CertNumber: "121986129", ListingTitle: "2025 POKEMON DRI EN-DESTINED RIVALS 087 TEAM ROCKET'S MIMIKYU PRERELEASE-STAFF PSA 9",

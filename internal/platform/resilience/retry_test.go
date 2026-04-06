@@ -357,15 +357,15 @@ func TestIsCircuitBreakerSuccess(t *testing.T) {
 		{"no match found (string)", fmt.Errorf("no match found for card: Pikachu"), true},
 		{"no product match (string)", fmt.Errorf("no product match"), true},
 		{"query too short (string)", fmt.Errorf("no product match - query too short"), true},
-		{"AppError ProviderNotFound", apperrors.ProviderNotFound("PriceCharting", "Pikachu"), true},
-		{"AppError ProviderInvalidReq", apperrors.ProviderInvalidRequest("PriceCharting", fmt.Errorf("bad request")), true},
+		{"AppError ProviderNotFound", apperrors.ProviderNotFound("doubleholo", "Pikachu"), true},
+		{"AppError ProviderInvalidReq", apperrors.ProviderInvalidRequest("doubleholo", fmt.Errorf("bad request")), true},
 
 		// Infrastructure errors that SHOULD trip the circuit (count as failure)
-		{"AppError ProviderUnavailable", apperrors.ProviderUnavailable("PriceCharting", fmt.Errorf("HTTP 503")), false},
-		{"AppError ProviderTimeout", apperrors.ProviderTimeout("PriceCharting", fmt.Errorf("timeout")), false},
-		{"AppError ProviderRateLimited", apperrors.ProviderRateLimited("PriceCharting", ""), false},
-		{"AppError ProviderAuthFailed", apperrors.ProviderAuthFailed("PriceCharting", fmt.Errorf("HTTP 401")), false},
-		{"AppError ProviderCircuitOpen", apperrors.ProviderCircuitOpen("PriceCharting"), false},
+		{"AppError ProviderUnavailable", apperrors.ProviderUnavailable("doubleholo", fmt.Errorf("HTTP 503")), false},
+		{"AppError ProviderTimeout", apperrors.ProviderTimeout("doubleholo", fmt.Errorf("timeout")), false},
+		{"AppError ProviderRateLimited", apperrors.ProviderRateLimited("doubleholo", ""), false},
+		{"AppError ProviderAuthFailed", apperrors.ProviderAuthFailed("doubleholo", fmt.Errorf("HTTP 401")), false},
+		{"AppError ProviderCircuitOpen", apperrors.ProviderCircuitOpen("doubleholo"), false},
 		{"generic error", fmt.Errorf("connection refused"), false},
 		{"timeout error", fmt.Errorf("request timeout"), false},
 	}
@@ -431,7 +431,7 @@ func TestCircuitBreakerTripsOnInfrastructureErrors(t *testing.T) {
 	// Simulate multiple infrastructure errors (these SHOULD trip the circuit)
 	for i := 0; i < 10; i++ {
 		_, _ = cb.Execute(func() (any, error) {
-			return nil, apperrors.ProviderUnavailable("PriceCharting", fmt.Errorf("HTTP 503"))
+			return nil, apperrors.ProviderUnavailable("doubleholo", fmt.Errorf("HTTP 503"))
 		})
 	}
 

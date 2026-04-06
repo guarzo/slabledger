@@ -138,13 +138,13 @@ func (s *service) enrichAgingItem(_ context.Context, p *Purchase, campaignName s
 
 	// Flag price anomalies: large buy/market deviations with low-confidence pricing
 	const (
-		minMedianToBuyRatio          = 0.3
-		maxMedianToBuyRatio          = 5.0
-		lowFusionConfidenceThreshold = 0.5
+		minMedianToBuyRatio    = 0.3
+		maxMedianToBuyRatio    = 5.0
+		lowConfidenceThreshold = 0.5
 	)
 	if snap != nil && p.BuyCostCents > 0 && snap.MedianCents > 0 {
 		ratio := float64(snap.MedianCents) / float64(p.BuyCostCents)
-		lowConfidence := snap.SourceCount <= 1 || snap.FusionConfidence < lowFusionConfidenceThreshold || snap.IsEstimated || snap.PricingGap
+		lowConfidence := snap.SourceCount <= 1 || snap.Confidence < lowConfidenceThreshold || snap.IsEstimated || snap.PricingGap
 		if lowConfidence && (ratio < minMedianToBuyRatio || ratio > maxMedianToBuyRatio) {
 			item.PriceAnomaly = true
 			item.AnomalyReason = "low confidence pricing"

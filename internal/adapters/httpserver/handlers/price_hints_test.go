@@ -9,19 +9,19 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/guarzo/slabledger/internal/domain/fusion"
+	"github.com/guarzo/slabledger/internal/domain/pricing"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
 )
 
-// mockPriceHintResolver implements fusion.PriceHintResolver for testing.
+// mockPriceHintResolver implements pricing.PriceHintResolver for testing.
 type mockPriceHintResolver struct {
 	getHintFn    func(ctx context.Context, cardName, setName, collectorNumber, provider string) (string, error)
 	saveHintFn   func(ctx context.Context, cardName, setName, collectorNumber, provider, externalID string) error
 	deleteHintFn func(ctx context.Context, cardName, setName, collectorNumber, provider string) error
-	listHintsFn  func(ctx context.Context) ([]fusion.HintMapping, error)
+	listHintsFn  func(ctx context.Context) ([]pricing.HintMapping, error)
 }
 
-var _ fusion.PriceHintResolver = (*mockPriceHintResolver)(nil)
+var _ pricing.PriceHintResolver = (*mockPriceHintResolver)(nil)
 
 func (m *mockPriceHintResolver) GetHint(ctx context.Context, cardName, setName, collectorNumber, provider string) (string, error) {
 	if m.getHintFn != nil {
@@ -44,7 +44,7 @@ func (m *mockPriceHintResolver) DeleteHint(ctx context.Context, cardName, setNam
 	return nil
 }
 
-func (m *mockPriceHintResolver) ListHints(ctx context.Context) ([]fusion.HintMapping, error) {
+func (m *mockPriceHintResolver) ListHints(ctx context.Context) ([]pricing.HintMapping, error) {
 	if m.listHintsFn != nil {
 		return m.listHintsFn(ctx)
 	}
@@ -59,9 +59,9 @@ func newPriceHintsHandler(resolver *mockPriceHintResolver) *PriceHintsHandler {
 
 func TestHandlePriceHints_GET_ListSuccess(t *testing.T) {
 	resolver := &mockPriceHintResolver{
-		listHintsFn: func(_ context.Context) ([]fusion.HintMapping, error) {
-			return []fusion.HintMapping{
-				{CardName: "Charizard", SetName: "Base Set", CollectorNumber: "4", Provider: "pricecharting", ExternalID: "123"},
+		listHintsFn: func(_ context.Context) ([]pricing.HintMapping, error) {
+			return []pricing.HintMapping{
+				{CardName: "Charizard", SetName: "Base Set", CollectorNumber: "4", Provider: "doubleholo", ExternalID: "123"},
 			}, nil
 		},
 	}
@@ -92,8 +92,8 @@ func TestHandlePriceHints_GET_ListSuccess(t *testing.T) {
 
 func TestHandlePriceHints_GET_EmptyList(t *testing.T) {
 	resolver := &mockPriceHintResolver{
-		listHintsFn: func(_ context.Context) ([]fusion.HintMapping, error) {
-			return []fusion.HintMapping{}, nil
+		listHintsFn: func(_ context.Context) ([]pricing.HintMapping, error) {
+			return []pricing.HintMapping{}, nil
 		},
 	}
 	h := newPriceHintsHandler(resolver)
@@ -114,7 +114,7 @@ func TestHandlePriceHints_GET_EmptyList(t *testing.T) {
 
 func TestHandlePriceHints_GET_ResolverError(t *testing.T) {
 	resolver := &mockPriceHintResolver{
-		listHintsFn: func(_ context.Context) ([]fusion.HintMapping, error) {
+		listHintsFn: func(_ context.Context) ([]pricing.HintMapping, error) {
 			return nil, errors.New("db error")
 		},
 	}
@@ -143,7 +143,7 @@ func TestHandlePriceHints_POST_SaveSuccess(t *testing.T) {
 	}
 	h := newPriceHintsHandler(resolver)
 
-	body := `{"cardName":"Charizard","setName":"Base Set","cardNumber":"4","provider":"pricecharting","externalId":"abc"}`
+	body := `{"cardName":"Charizard","setName":"Base Set","cardNumber":"4","provider":"doubleholo","externalId":"abc"}`
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/price-hints", strings.NewReader(body))
 	h.HandlePriceHints(rec, req)
@@ -154,8 +154,8 @@ func TestHandlePriceHints_POST_SaveSuccess(t *testing.T) {
 	if savedCard != "Charizard" {
 		t.Errorf("expected saved card Charizard, got %s", savedCard)
 	}
-	if savedProvider != "pricecharting" {
-		t.Errorf("expected provider pricecharting, got %s", savedProvider)
+	if savedProvider != "doubleholo" {
+		t.Errorf("expected provider doubleholo, got %s", savedProvider)
 	}
 	if savedID != "abc" {
 		t.Errorf("expected externalId abc, got %s", savedID)
@@ -177,7 +177,7 @@ func TestHandlePriceHints_POST_BadJSON(t *testing.T) {
 func TestHandlePriceHints_POST_MissingCardName(t *testing.T) {
 	h := newPriceHintsHandler(&mockPriceHintResolver{})
 
-	body := `{"setName":"Base Set","cardNumber":"4","provider":"pricecharting","externalId":"abc"}`
+	body := `{"setName":"Base Set","cardNumber":"4","provider":"doubleholo","externalId":"abc"}`
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/price-hints", strings.NewReader(body))
 	h.HandlePriceHints(rec, req)
@@ -190,7 +190,7 @@ func TestHandlePriceHints_POST_MissingCardName(t *testing.T) {
 func TestHandlePriceHints_POST_MissingExternalId(t *testing.T) {
 	h := newPriceHintsHandler(&mockPriceHintResolver{})
 
-	body := `{"cardName":"Charizard","setName":"Base Set","cardNumber":"4","provider":"pricecharting"}`
+	body := `{"cardName":"Charizard","setName":"Base Set","cardNumber":"4","provider":"doubleholo"}`
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/price-hints", strings.NewReader(body))
 	h.HandlePriceHints(rec, req)
@@ -213,19 +213,19 @@ func TestHandlePriceHints_POST_InvalidProvider(t *testing.T) {
 	}
 }
 
-func TestHandlePriceHints_POST_CardhedgerProvider(t *testing.T) {
+func TestHandlePriceHints_POST_ValidProvider(t *testing.T) {
 	resolver := &mockPriceHintResolver{
 		saveHintFn: func(_ context.Context, _, _, _, _, _ string) error { return nil },
 	}
 	h := newPriceHintsHandler(resolver)
 
-	body := `{"cardName":"Pikachu","setName":"Base Set","cardNumber":"58","provider":"cardhedger","externalId":"xyz"}`
+	body := `{"cardName":"Pikachu","setName":"Base Set","cardNumber":"58","provider":"doubleholo","externalId":"xyz"}`
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/price-hints", strings.NewReader(body))
 	h.HandlePriceHints(rec, req)
 
 	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200 for cardhedger provider, got %d", rec.Code)
+		t.Fatalf("expected 200 for doubleholo provider, got %d", rec.Code)
 	}
 }
 
@@ -237,7 +237,7 @@ func TestHandlePriceHints_POST_ResolverError(t *testing.T) {
 	}
 	h := newPriceHintsHandler(resolver)
 
-	body := `{"cardName":"X","setName":"Y","cardNumber":"1","provider":"pricecharting","externalId":"z"}`
+	body := `{"cardName":"X","setName":"Y","cardNumber":"1","provider":"doubleholo","externalId":"z"}`
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/price-hints", strings.NewReader(body))
 	h.HandlePriceHints(rec, req)
@@ -260,7 +260,7 @@ func TestHandlePriceHints_DELETE_Success(t *testing.T) {
 	}
 	h := newPriceHintsHandler(resolver)
 
-	body := `{"cardName":"Charizard","setName":"Base Set","cardNumber":"4","provider":"pricecharting"}`
+	body := `{"cardName":"Charizard","setName":"Base Set","cardNumber":"4","provider":"doubleholo"}`
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodDelete, "/api/price-hints", strings.NewReader(body))
 	h.HandlePriceHints(rec, req)
@@ -271,8 +271,8 @@ func TestHandlePriceHints_DELETE_Success(t *testing.T) {
 	if deletedCard != "Charizard" {
 		t.Errorf("expected deleted card Charizard, got %s", deletedCard)
 	}
-	if deletedProvider != "pricecharting" {
-		t.Errorf("expected provider pricecharting, got %s", deletedProvider)
+	if deletedProvider != "doubleholo" {
+		t.Errorf("expected provider doubleholo, got %s", deletedProvider)
 	}
 }
 
@@ -321,7 +321,7 @@ func TestHandlePriceHints_DELETE_NoExternalIdOK(t *testing.T) {
 	h := newPriceHintsHandler(resolver)
 
 	// externalId is NOT required for delete
-	body := `{"cardName":"Charizard","setName":"Base Set","cardNumber":"4","provider":"pricecharting"}`
+	body := `{"cardName":"Charizard","setName":"Base Set","cardNumber":"4","provider":"doubleholo"}`
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodDelete, "/api/price-hints", strings.NewReader(body))
 	h.HandlePriceHints(rec, req)
@@ -339,7 +339,7 @@ func TestHandlePriceHints_DELETE_ResolverError(t *testing.T) {
 	}
 	h := newPriceHintsHandler(resolver)
 
-	body := `{"cardName":"X","setName":"Y","cardNumber":"1","provider":"pricecharting"}`
+	body := `{"cardName":"X","setName":"Y","cardNumber":"1","provider":"doubleholo"}`
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodDelete, "/api/price-hints", strings.NewReader(body))
 	h.HandlePriceHints(rec, req)

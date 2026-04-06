@@ -8,7 +8,7 @@ import (
 )
 
 // RecordCardAccess records when a card is accessed for priority refresh
-func (r *PriceRepository) RecordCardAccess(ctx context.Context, cardName, setName, accessType string) error {
+func (r *DBTracker) RecordCardAccess(ctx context.Context, cardName, setName, accessType string) error {
 	query := `
 		INSERT INTO card_access_log (card_name, set_name, access_type, accessed_at)
 		VALUES (?, ?, ?, CURRENT_TIMESTAMP)
@@ -28,7 +28,7 @@ func (r *PriceRepository) RecordCardAccess(ctx context.Context, cardName, setNam
 
 // CleanupOldAccessLogs removes access logs older than the specified retention period.
 // Returns the number of deleted records.
-func (r *PriceRepository) CleanupOldAccessLogs(ctx context.Context, retentionDays int) (int64, error) {
+func (r *DBTracker) CleanupOldAccessLogs(ctx context.Context, retentionDays int) (int64, error) {
 	query := `
 		DELETE FROM card_access_log
 		WHERE accessed_at < DATETIME('now', ? || ' days')

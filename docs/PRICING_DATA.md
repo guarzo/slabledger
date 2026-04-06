@@ -1,5 +1,9 @@
 # Pricing Data Architecture
 
+> **Note (2026-04-06):** The fusion engine, PriceCharting, CardHedger, and JustTCG have been removed.
+> DH (DoubleHolo) is now the sole price source. See `docs/superpowers/specs/2026-04-06-pricing-simplification-design.md` for details.
+> This document is retained for historical reference only.
+
 Comprehensive reference for how price data flows from external APIs through the fusion engine to the UI.
 
 ## Table of Contents

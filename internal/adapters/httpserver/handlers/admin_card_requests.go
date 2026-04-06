@@ -6,10 +6,26 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/guarzo/slabledger/internal/adapters/clients/cardhedger"
 	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
+
+// CardRequestBody contains the fields for a card request submission.
+type CardRequestBody struct {
+	Player     string `json:"player"`
+	Set        string `json:"set"`
+	CardNumber string `json:"cardNumber"`
+	ImageURL   string `json:"imageUrl"`
+	ExternalID string `json:"externalId"`
+	Token      string `json:"token"`
+	Variant    string `json:"variant,omitempty"`
+}
+
+// CardRequestResponse contains the response from a card request submission.
+type CardRequestResponse struct {
+	ID     string `json:"id"`
+	Status string `json:"status"`
+}
 
 // CardRequestRepo abstracts the card request storage operations.
 type CardRequestRepo interface {
@@ -23,7 +39,7 @@ type CardRequestRepo interface {
 
 // CardRequester submits card requests to an external provider.
 type CardRequester interface {
-	CardRequest(ctx context.Context, req cardhedger.CardRequestBody) (*cardhedger.CardRequestResponse, int, http.Header, error)
+	CardRequest(ctx context.Context, req CardRequestBody) (*CardRequestResponse, int, http.Header, error)
 }
 
 // CardRequestHandlers handles admin card request endpoints.
@@ -63,10 +79,10 @@ func (h *CardRequestHandlers) HandleListCardRequests(w http.ResponseWriter, r *h
 	writeJSONList(w, http.StatusOK, items)
 }
 
-// HandleSubmitCardRequest submits a single card request to CardHedger.
+// HandleSubmitCardRequest submits a single card request.
 func (h *CardRequestHandlers) HandleSubmitCardRequest(w http.ResponseWriter, r *http.Request) {
 	if h.client == nil || h.clientID == "" {
-		writeError(w, http.StatusServiceUnavailable, "CardHedger client ID is not configured")
+		writeError(w, http.StatusServiceUnavailable, "Card request client is not configured")
 		return
 	}
 	ctx := r.Context()
@@ -105,7 +121,7 @@ func (h *CardRequestHandlers) HandleSubmitCardRequest(w http.ResponseWriter, r *
 		return
 	}
 
-	reqBody := cardhedger.CardRequestBody{
+	reqBody := CardRequestBody{
 		Player:     record.CardName,
 		Set:        record.SetName,
 		CardNumber: record.CardNumber,
@@ -117,7 +133,7 @@ func (h *CardRequestHandlers) HandleSubmitCardRequest(w http.ResponseWriter, r *
 
 	resp, _, _, err := h.client.CardRequest(ctx, reqBody)
 	if err != nil {
-		h.logger.Error(ctx, "CardHedger card-request failed",
+		h.logger.Error(ctx, "card-request submission failed",
 			observability.String("cert", record.CertNumber),
 			observability.Err(err))
 		// Revert the claim so the row can be retried.
@@ -126,7 +142,7 @@ func (h *CardRequestHandlers) HandleSubmitCardRequest(w http.ResponseWriter, r *
 				observability.String("cert", record.CertNumber),
 				observability.Err(revertErr))
 		}
-		writeError(w, http.StatusBadGateway, "CardHedger request failed")
+		writeError(w, http.StatusBadGateway, "Card request submission failed")
 		return
 	}
 
@@ -151,10 +167,10 @@ func (h *CardRequestHandlers) HandleSubmitCardRequest(w http.ResponseWriter, r *
 	})
 }
 
-// HandleSubmitAllCardRequests submits all pending card requests to CardHedger.
+// HandleSubmitAllCardRequests submits all pending card requests.
 func (h *CardRequestHandlers) HandleSubmitAllCardRequests(w http.ResponseWriter, r *http.Request) {
 	if h.client == nil || h.clientID == "" {
-		writeError(w, http.StatusServiceUnavailable, "CardHedger client ID is not configured")
+		writeError(w, http.StatusServiceUnavailable, "Card request client is not configured")
 		return
 	}
 	ctx := r.Context()
@@ -189,7 +205,7 @@ func (h *CardRequestHandlers) HandleSubmitAllCardRequests(w http.ResponseWriter,
 			continue
 		}
 
-		reqBody := cardhedger.CardRequestBody{
+		reqBody := CardRequestBody{
 			Player:     record.CardName,
 			Set:        record.SetName,
 			CardNumber: record.CardNumber,

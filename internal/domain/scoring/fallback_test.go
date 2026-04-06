@@ -21,7 +21,7 @@ func TestFallbackResult(t *testing.T) {
 				EntityID:   "test-1",
 				EntityType: "purchase",
 				Factors: []Factor{
-					{Name: FactorMarketTrend, Value: 0.65, Confidence: 0.9, Source: "pricecharting"},
+					{Name: FactorMarketTrend, Value: 0.65, Confidence: 0.9, Source: "doubleholo"},
 					{Name: FactorLiquidity, Value: 0.5, Confidence: 0.8, Source: "ebay"},
 					{Name: FactorROIPotential, Value: 0.3, Confidence: 0.7, Source: "campaigns"},
 				},

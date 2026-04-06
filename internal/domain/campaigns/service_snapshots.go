@@ -90,7 +90,7 @@ func applyCLCorrection(snapshot *MarketSnapshot, clValueCents int) {
 		}
 	}
 
-	// Estimate fallback: when CardHedger's estimate deviates >50% from CL in either
+	// Estimate fallback: when an estimate deviates >50% from CL in either
 	// direction, fall back to CL value. Skips when either value is zero or both are
 	// under $5 (500 cents) to avoid noise on cheap cards.
 	const estimateDeviationThreshold = 0.50

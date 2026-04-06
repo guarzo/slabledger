@@ -108,7 +108,7 @@ export default function MobileCard({ item, selected, onToggle, onRecordSale, onF
               <span className="text-[var(--text)] tabular-nums inline-flex items-center gap-1">
                 {formatCents(price)}
                 <TrendArrow trend={trend} size="sm" />
-                <ConfidenceIndicator confidence={snap.fusionConfidence ?? null} size="sm" />
+                <ConfidenceIndicator confidence={snap.confidence ?? null} size="sm" />
               </span>
             </div>
           );

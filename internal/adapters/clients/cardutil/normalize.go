@@ -1,21 +1,15 @@
 // Package cardutil provides shared utilities for card name normalization
 // used by multiple price provider clients.
 //
-// Three normalization pipelines flow through functions in this package:
+// Two normalization pipelines flow through functions in this package:
 //
-// Pipeline 1 -- PriceCharting Query Building (pricecharting package):
-//
-//	normalizeSetName(set) -> StripCommonSetPrefixes -> StripPSASetCode -> era expansion
-//	normalizeCardName(name, normalizedSet) -> pcAbbreviations -> strip boilerplate -> strip set prefix
-//	buildQuery(set, name, num) -> "pokemon <set> <name> #<num>"
-//
-// Pipeline 2 -- CardHedger Query Building (fusionprice package):
+// Pipeline 1 -- DoubleHolo / secondary source query building:
 //
 //	BuildCardMatchQuery -> NormalizeSetNameForSearch(set) + SimplifyForSearch(NormalizePurchaseName(name)) + number
 //	Fallback: truncateAtVariant(name) + eraPrefix + number
 //	Fallback: raw PSA listing title (stripped of grade suffix)
 //
-// Pipeline 3 -- Import Title Parsing (campaigns package):
+// Pipeline 2 -- Import Title Parsing (campaigns package):
 //
 //	parseCardMetadataFromTitle -> ParsePSAListingTitle + extractCardNameFromPSATitle
 //	-> stripCollectionSuffix -> extractVariantFromTitle -> resolvePSACategory
@@ -44,10 +38,8 @@ type BaseAbbreviation struct {
 }
 
 // BaseAbbreviations are the canonical PSA abbreviation -> expansion pairs shared
-// across pipelines. Pipeline-specific wrappers (PSAAbbreviations for cardutil,
-// pcAbbreviations for PriceCharting) adapt these to their matching context:
-// cardutil uses dash-prefixed patterns; PriceCharting uses dashless patterns
-// with additional spaced variants.
+// across pipelines. PSAAbbreviations wraps these with dash-prefixed patterns
+// for the card normalization pipeline.
 var BaseAbbreviations = []BaseAbbreviation{
 	{From: "sp.delivery", To: "Special Delivery", NoDashPrefix: true},
 	{From: "rev.foil", To: "Reverse Foil"},
@@ -55,9 +47,8 @@ var BaseAbbreviations = []BaseAbbreviation{
 }
 
 // PSAAbbreviations maps PSA listing abbreviations (dash-prefixed) to expanded
-// forms. Used by NormalizePurchaseName for CardHedger/fusion pipeline.
-// Derived from BaseAbbreviations with dash prefix, plus -holo which is
-// cardutil-specific (PriceCharting relies on hyphen->space conversion instead).
+// forms. Used by NormalizePurchaseName for the price lookup pipeline.
+// Derived from BaseAbbreviations with dash prefix, plus -holo.
 var PSAAbbreviations = func() [][2]string {
 	result := make([][2]string, 0, len(BaseAbbreviations)+1)
 	for _, abbr := range BaseAbbreviations {
@@ -68,7 +59,7 @@ var PSAAbbreviations = func() [][2]string {
 			result = append(result, [2]string{"-" + abbr.From, " " + abbr.To})
 		}
 	}
-	// -holo is cardutil-specific: PriceCharting strips hyphens to spaces later
+	// -holo expands the common PSA abbreviation to " Holo"
 	result = append(result, [2]string{"-holo", " Holo"})
 	return result
 }()
@@ -78,8 +69,7 @@ var VariantKeywords = constants.VariantKeywords
 
 // EraExpansions maps abbreviated Pokemon TCG era codes to their full set name
 // prefixes. This is the single source of truth for era code <-> expansion pairs.
-// Both cardutil (for era detection) and pricecharting (for query building and
-// alternative query generation) import from this map.
+// Used by cardutil for era detection and query building.
 var EraExpansions = map[string]string{
 	"SWSH": "Sword Shield",
 	"SM":   "Sun Moon",
