@@ -124,139 +124,174 @@ func TestBuildCardName(t *testing.T) {
 
 // --- GetCert ---
 
-func TestGetCert_Success(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/cert/GetByCertNumber/12345678" {
-			t.Errorf("unexpected path: %s", r.URL.Path)
-		}
-		if r.Header.Get("Authorization") != "Bearer test-token" {
-			t.Errorf("unexpected auth header: %s", r.Header.Get("Authorization"))
-		}
-		resp := CertResponse{
-			PSACert: CertInfo{
-				CertNumber:       "12345678",
-				Subject:          "CHARIZARD-HOLO",
-				CardGrade:        "GEM MT 10",
-				GradeDescription: "Gem Mint",
-				Year:             "1999",
-				Brand:            "POKEMON",
-				Category:         "BASE SET",
-				TotalPopulation:  120,
-				PopulationHigher: 0,
+func TestGetCert(t *testing.T) {
+	tests := []struct {
+		name           string
+		certNumber     string
+		handler        http.HandlerFunc
+		wantErr        bool
+		wantErrContain string
+		verify         func(t *testing.T, info *CertInfo)
+	}{
+		{
+			name:       "success",
+			certNumber: "12345678",
+			handler: func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != "/cert/GetByCertNumber/12345678" {
+					// Can't use t.Errorf here; write a bad response instead.
+					w.WriteHeader(http.StatusBadRequest)
+					return
+				}
+				if r.Header.Get("Authorization") != "Bearer test-token" {
+					w.WriteHeader(http.StatusUnauthorized)
+					return
+				}
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(CertResponse{
+					PSACert: CertInfo{
+						CertNumber:       "12345678",
+						Subject:          "CHARIZARD-HOLO",
+						CardGrade:        "GEM MT 10",
+						GradeDescription: "Gem Mint",
+						Year:             "1999",
+						Brand:            "POKEMON",
+						Category:         "BASE SET",
+						TotalPopulation:  120,
+						PopulationHigher: 0,
+					},
+				})
 			},
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
-	}))
-	defer server.Close()
+			verify: func(t *testing.T, info *CertInfo) {
+				if info.CertNumber != "12345678" {
+					t.Errorf("CertNumber = %q, want %q", info.CertNumber, "12345678")
+				}
+				if info.Subject != "CHARIZARD-HOLO" {
+					t.Errorf("Subject = %q, want %q", info.Subject, "CHARIZARD-HOLO")
+				}
+				if info.TotalPopulation != 120 {
+					t.Errorf("TotalPopulation = %d, want 120", info.TotalPopulation)
+				}
+			},
+		},
+		{
+			name:       "not found",
+			certNumber: "00000000",
+			handler: func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				fmt.Fprint(w, `{"PSACert":{}}`)
+			},
+			wantErr:        true,
+			wantErrContain: "not found",
+		},
+		{
+			name:       "decode error",
+			certNumber: "12345678",
+			handler: func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				fmt.Fprint(w, `{invalid json}`)
+			},
+			wantErr: true,
+		},
+	}
 
-	c := newTestClient(t, server.URL)
-	info, err := c.GetCert(context.Background(), "12345678")
-	if err != nil {
-		t.Fatalf("GetCert returned error: %v", err)
-	}
-	if info.CertNumber != "12345678" {
-		t.Errorf("CertNumber = %q, want %q", info.CertNumber, "12345678")
-	}
-	if info.Subject != "CHARIZARD-HOLO" {
-		t.Errorf("Subject = %q, want %q", info.Subject, "CHARIZARD-HOLO")
-	}
-	if info.TotalPopulation != 120 {
-		t.Errorf("TotalPopulation = %d, want 120", info.TotalPopulation)
-	}
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(tt.handler)
+			defer server.Close()
 
-func TestGetCert_NotFound(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		// Return empty cert (CertNumber == "")
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{"PSACert":{}}`)
-	}))
-	defer server.Close()
+			c := newTestClient(t, server.URL)
+			info, err := c.GetCert(context.Background(), tt.certNumber)
 
-	c := newTestClient(t, server.URL)
-	_, err := c.GetCert(context.Background(), "00000000")
-	if err == nil {
-		t.Fatal("expected error for not-found cert")
-	}
-	if got := err.Error(); got != "cert 00000000 not found" {
-		t.Errorf("error = %q, want 'cert 00000000 not found'", got)
-	}
-}
-
-func TestGetCert_DecodeError(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{invalid json}`)
-	}))
-	defer server.Close()
-
-	c := newTestClient(t, server.URL)
-	_, err := c.GetCert(context.Background(), "12345678")
-	if err == nil {
-		t.Fatal("expected decode error")
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error")
+				}
+				if tt.wantErrContain != "" && !strings.Contains(err.Error(), tt.wantErrContain) {
+					t.Errorf("error = %q, want containing %q", err.Error(), tt.wantErrContain)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if tt.verify != nil {
+				tt.verify(t, info)
+			}
+		})
 	}
 }
 
 // --- GetImages ---
 
-func TestGetImages_Success(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/cert/GetImagesByCertNumber/12345678" {
-			t.Errorf("unexpected path: %s", r.URL.Path)
-		}
-		images := []ImageInfo{
-			{IsFrontImage: true, ImageURL: "https://example.com/front.jpg"},
-			{IsFrontImage: false, ImageURL: "https://example.com/back.jpg"},
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(images)
-	}))
-	defer server.Close()
+func TestGetImages(t *testing.T) {
+	tests := []struct {
+		name       string
+		handler    http.HandlerFunc
+		wantErr    bool
+		wantLen    int
+		verifyPath string
+	}{
+		{
+			name: "success",
+			handler: func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != "/cert/GetImagesByCertNumber/12345678" {
+					w.WriteHeader(http.StatusBadRequest)
+					return
+				}
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode([]ImageInfo{
+					{IsFrontImage: true, ImageURL: "https://example.com/front.jpg"},
+					{IsFrontImage: false, ImageURL: "https://example.com/back.jpg"},
+				})
+			},
+			wantLen: 2,
+		},
+		{
+			name: "decode error",
+			handler: func(w http.ResponseWriter, _ *http.Request) {
+				fmt.Fprint(w, `not json`)
+			},
+			wantErr: true,
+		},
+		{
+			name: "empty",
+			handler: func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				fmt.Fprint(w, `[]`)
+			},
+			wantLen: 0,
+		},
+	}
 
-	c := newTestClient(t, server.URL)
-	images, err := c.GetImages(context.Background(), "12345678")
-	if err != nil {
-		t.Fatalf("GetImages returned error: %v", err)
-	}
-	if len(images) != 2 {
-		t.Fatalf("got %d images, want 2", len(images))
-	}
-	if !images[0].IsFrontImage {
-		t.Error("first image should be front")
-	}
-	if images[1].IsFrontImage {
-		t.Error("second image should be back")
-	}
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(tt.handler)
+			defer server.Close()
 
-func TestGetImages_DecodeError(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		fmt.Fprint(w, `not json`)
-	}))
-	defer server.Close()
+			c := newTestClient(t, server.URL)
+			images, err := c.GetImages(context.Background(), "12345678")
 
-	c := newTestClient(t, server.URL)
-	_, err := c.GetImages(context.Background(), "12345678")
-	if err == nil {
-		t.Fatal("expected decode error")
-	}
-}
-
-func TestGetImages_Empty(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `[]`)
-	}))
-	defer server.Close()
-
-	c := newTestClient(t, server.URL)
-	images, err := c.GetImages(context.Background(), "12345678")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(images) != 0 {
-		t.Errorf("got %d images, want 0", len(images))
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(images) != tt.wantLen {
+				t.Fatalf("got %d images, want %d", len(images), tt.wantLen)
+			}
+			if tt.wantLen == 2 {
+				if !images[0].IsFrontImage {
+					t.Error("first image should be front")
+				}
+				if images[1].IsFrontImage {
+					t.Error("second image should be back")
+				}
+			}
+		})
 	}
 }
 
@@ -424,9 +459,7 @@ func TestDoRequest_RequestPacing(t *testing.T) {
 	}
 	elapsed := time.Since(start)
 
-	// Should have waited at least some portion of minRequestSpacing.
-	// Use a generous lower bound to avoid flakiness.
-	if elapsed < 200*time.Millisecond {
+	if elapsed < minRequestSpacing/2 {
 		t.Errorf("expected pacing delay, but second call completed in %v", elapsed)
 	}
 }
@@ -455,60 +488,68 @@ func TestDoRequest_ContextCancelledDuringPacing(t *testing.T) {
 
 // --- BackfillImages ---
 
+// mockLister implements PurchaseLister for tests.
+// Inline because PurchaseLister is defined in this adapter package,
+// making it impossible to mock in internal/testutil/mocks/ without a circular import.
 type mockLister struct {
-	rows []PurchaseImageRow
-	err  error
+	ListPurchasesMissingImagesFn func(ctx context.Context, limit int) ([]PurchaseImageRow, error)
 }
 
-func (m *mockLister) ListPurchasesMissingImages(_ context.Context, _ int) ([]PurchaseImageRow, error) {
-	return m.rows, m.err
+func (m *mockLister) ListPurchasesMissingImages(ctx context.Context, limit int) ([]PurchaseImageRow, error) {
+	if m.ListPurchasesMissingImagesFn != nil {
+		return m.ListPurchasesMissingImagesFn(ctx, limit)
+	}
+	return nil, nil
 }
 
+// mockUpdater implements ImageUpdater for tests.
 type mockUpdater struct {
-	updated map[string][2]string // id -> [frontURL, backURL]
-	err     error
+	UpdatePurchaseImageURLsFn func(ctx context.Context, id, frontURL, backURL string) error
 }
 
-func (m *mockUpdater) UpdatePurchaseImageURLs(_ context.Context, id, frontURL, backURL string) error {
-	if m.err != nil {
-		return m.err
+func (m *mockUpdater) UpdatePurchaseImageURLs(ctx context.Context, id, frontURL, backURL string) error {
+	if m.UpdatePurchaseImageURLsFn != nil {
+		return m.UpdatePurchaseImageURLsFn(ctx, id, frontURL, backURL)
 	}
-	if m.updated == nil {
-		m.updated = make(map[string][2]string)
-	}
-	m.updated[id] = [2]string{frontURL, backURL}
 	return nil
 }
 
 func TestBackfillImages_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		images := []ImageInfo{
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode([]ImageInfo{
 			{IsFrontImage: true, ImageURL: "https://example.com/front.jpg"},
 			{IsFrontImage: false, ImageURL: "https://example.com/back.jpg"},
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(images)
+		})
 	}))
 	defer server.Close()
 
 	c := newTestClient(t, server.URL)
-	lister := &mockLister{rows: []PurchaseImageRow{
-		{ID: "p1", CertNumber: "111"},
-	}}
-	updater := &mockUpdater{}
+	updated := make(map[string][2]string)
+	lister := &mockLister{
+		ListPurchasesMissingImagesFn: func(_ context.Context, _ int) ([]PurchaseImageRow, error) {
+			return []PurchaseImageRow{{ID: "p1", CertNumber: "111"}}, nil
+		},
+	}
+	updater := &mockUpdater{
+		UpdatePurchaseImageURLsFn: func(_ context.Context, id, frontURL, backURL string) error {
+			updated[id] = [2]string{frontURL, backURL}
+			return nil
+		},
+	}
 	bf := NewImageBackfiller(c, lister, updater, observability.NewNoopLogger())
 
-	updated, errors, err := bf.BackfillImages(context.Background())
+	count, errCount, err := bf.BackfillImages(context.Background())
 	if err != nil {
 		t.Fatalf("BackfillImages error: %v", err)
 	}
-	if updated != 1 {
-		t.Errorf("updated = %d, want 1", updated)
+	if count != 1 {
+		t.Errorf("updated = %d, want 1", count)
 	}
-	if errors != 0 {
-		t.Errorf("errors = %d, want 0", errors)
+	if errCount != 0 {
+		t.Errorf("errors = %d, want 0", errCount)
 	}
-	if urls, ok := updater.updated["p1"]; !ok {
+	if urls, ok := updated["p1"]; !ok {
 		t.Error("p1 not updated")
 	} else {
 		if urls[0] != "https://example.com/front.jpg" {
@@ -522,22 +563,24 @@ func TestBackfillImages_Success(t *testing.T) {
 
 func TestBackfillImages_NoPurchases(t *testing.T) {
 	c := newTestClient(t, "http://unused")
-	lister := &mockLister{rows: nil}
-	updater := &mockUpdater{}
-	bf := NewImageBackfiller(c, lister, updater, observability.NewNoopLogger())
+	bf := NewImageBackfiller(c, &mockLister{}, &mockUpdater{}, observability.NewNoopLogger())
 
-	updated, errors, err := bf.BackfillImages(context.Background())
+	count, errCount, err := bf.BackfillImages(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if updated != 0 || errors != 0 {
-		t.Errorf("updated=%d errors=%d, want 0,0", updated, errors)
+	if count != 0 || errCount != 0 {
+		t.Errorf("updated=%d errors=%d, want 0,0", count, errCount)
 	}
 }
 
 func TestBackfillImages_ListerError(t *testing.T) {
 	c := newTestClient(t, "http://unused")
-	lister := &mockLister{err: fmt.Errorf("db error")}
+	lister := &mockLister{
+		ListPurchasesMissingImagesFn: func(_ context.Context, _ int) ([]PurchaseImageRow, error) {
+			return nil, fmt.Errorf("db error")
+		},
+	}
 	bf := NewImageBackfiller(c, lister, &mockUpdater{}, observability.NewNoopLogger())
 
 	_, _, err := bf.BackfillImages(context.Background())
@@ -552,13 +595,11 @@ func TestBackfillImages_PartialFailures(t *testing.T) {
 		call := callCount.Add(1)
 		w.Header().Set("Content-Type", "application/json")
 		if call == 1 {
-			// First cert: return images with no front image
 			json.NewEncoder(w).Encode([]ImageInfo{
 				{IsFrontImage: false, ImageURL: "https://example.com/back-only.jpg"},
 			})
 			return
 		}
-		// Second cert: success
 		json.NewEncoder(w).Encode([]ImageInfo{
 			{IsFrontImage: true, ImageURL: "https://example.com/front2.jpg"},
 		})
@@ -566,22 +607,25 @@ func TestBackfillImages_PartialFailures(t *testing.T) {
 	defer server.Close()
 
 	c := newTestClient(t, server.URL)
-	lister := &mockLister{rows: []PurchaseImageRow{
-		{ID: "p1", CertNumber: "aaa"},
-		{ID: "p2", CertNumber: "bbb"},
-	}}
-	updater := &mockUpdater{}
-	bf := NewImageBackfiller(c, lister, updater, observability.NewNoopLogger())
+	lister := &mockLister{
+		ListPurchasesMissingImagesFn: func(_ context.Context, _ int) ([]PurchaseImageRow, error) {
+			return []PurchaseImageRow{
+				{ID: "p1", CertNumber: "aaa"},
+				{ID: "p2", CertNumber: "bbb"},
+			}, nil
+		},
+	}
+	bf := NewImageBackfiller(c, lister, &mockUpdater{}, observability.NewNoopLogger())
 
-	updated, errors, err := bf.BackfillImages(context.Background())
+	count, errCount, err := bf.BackfillImages(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if updated != 1 {
-		t.Errorf("updated = %d, want 1", updated)
+	if count != 1 {
+		t.Errorf("updated = %d, want 1", count)
 	}
-	if errors != 1 {
-		t.Errorf("errors = %d, want 1 (no front image)", errors)
+	if errCount != 1 {
+		t.Errorf("errors = %d, want 1", errCount)
 	}
 }
 
@@ -595,24 +639,37 @@ func TestBackfillImages_UpdaterError(t *testing.T) {
 	defer server.Close()
 
 	c := newTestClient(t, server.URL)
-	lister := &mockLister{rows: []PurchaseImageRow{{ID: "p1", CertNumber: "111"}}}
-	updater := &mockUpdater{err: fmt.Errorf("update failed")}
+	lister := &mockLister{
+		ListPurchasesMissingImagesFn: func(_ context.Context, _ int) ([]PurchaseImageRow, error) {
+			return []PurchaseImageRow{{ID: "p1", CertNumber: "111"}}, nil
+		},
+	}
+	updater := &mockUpdater{
+		UpdatePurchaseImageURLsFn: func(_ context.Context, _, _, _ string) error {
+			return fmt.Errorf("update failed")
+		},
+	}
 	bf := NewImageBackfiller(c, lister, updater, observability.NewNoopLogger())
 
-	updated, errors, err := bf.BackfillImages(context.Background())
+	count, errCount, err := bf.BackfillImages(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if updated != 0 {
-		t.Errorf("updated = %d, want 0", updated)
+	if count != 0 {
+		t.Errorf("updated = %d, want 0", count)
 	}
-	if errors != 1 {
-		t.Errorf("errors = %d, want 1", errors)
+	if errCount != 1 {
+		t.Errorf("errors = %d, want 1", errCount)
 	}
 }
 
 func TestBackfillImages_ContextCancellation(t *testing.T) {
+	handlerCalled := make(chan struct{}, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		select {
+		case handlerCalled <- struct{}{}:
+		default:
+		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode([]ImageInfo{
 			{IsFrontImage: true, ImageURL: "https://example.com/front.jpg"},
@@ -621,21 +678,23 @@ func TestBackfillImages_ContextCancellation(t *testing.T) {
 	defer server.Close()
 
 	c := newTestClient(t, server.URL)
-	lister := &mockLister{rows: []PurchaseImageRow{
-		{ID: "p1", CertNumber: "111"},
-		{ID: "p2", CertNumber: "222"},
-		{ID: "p3", CertNumber: "333"},
-	}}
-	updater := &mockUpdater{}
+	lister := &mockLister{
+		ListPurchasesMissingImagesFn: func(_ context.Context, _ int) ([]PurchaseImageRow, error) {
+			return []PurchaseImageRow{
+				{ID: "p1", CertNumber: "111"},
+				{ID: "p2", CertNumber: "222"},
+				{ID: "p3", CertNumber: "333"},
+			}, nil
+		},
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	// Cancel after the first iteration's throttle delay would start.
 	go func() {
-		time.Sleep(100 * time.Millisecond)
+		<-handlerCalled
 		cancel()
 	}()
 
-	bf := NewImageBackfiller(c, lister, updater, observability.NewNoopLogger())
+	bf := NewImageBackfiller(c, lister, &mockUpdater{}, observability.NewNoopLogger())
 	_, _, err := bf.BackfillImages(ctx)
 	if err == nil {
 		t.Fatal("expected context cancellation error")

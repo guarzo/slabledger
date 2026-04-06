@@ -32,79 +32,80 @@ func newResponsesTestClient(t *testing.T, serverURL string, opts ...Option) *Cli
 
 // --- StreamCompletion: Responses API ---
 
-func TestStreamCompletion_RetriesResponsesAPI_MidStreamFailure(t *testing.T) {
-	var attempts atomic.Int32
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		attempt := attempts.Add(1)
-		w.Header().Set("Content-Type", "text/event-stream")
-		w.WriteHeader(http.StatusOK)
-
-		if attempt == 1 {
-			// Stream a text delta then drop (no response.completed).
-			fmt.Fprint(w, "event: response.output_text.delta\n")
-			fmt.Fprint(w, "data: {\"delta\":\"partial\"}\n\n")
-			return
-		}
-
-		// Second attempt: complete successfully.
-		fmt.Fprint(w, "event: response.output_text.delta\n")
-		fmt.Fprint(w, "data: {\"delta\":\"full result\"}\n\n")
-		fmt.Fprint(w, "event: response.completed\n")
-		fmt.Fprint(w, "data: {\"response\":{\"id\":\"resp_123\",\"usage\":{\"input_tokens\":10,\"output_tokens\":5,\"total_tokens\":15}}}\n\n")
-	}))
-	defer server.Close()
-
-	client := newResponsesTestClient(t, server.URL)
-
-	var chunks []ai.CompletionChunk
-	err := client.StreamCompletion(context.Background(), ai.CompletionRequest{
-		Messages: []ai.Message{{Role: ai.RoleUser, Content: "hello"}},
-	}, func(chunk ai.CompletionChunk) {
-		chunks = append(chunks, chunk)
-	})
-
-	if err != nil {
-		t.Fatalf("StreamCompletion returned error: %v", err)
+func TestStreamCompletion_ResponsesAPI(t *testing.T) {
+	tests := []struct {
+		name             string
+		handler          func(attempts *atomic.Int32) http.HandlerFunc
+		expectedAttempts int32
+		expectDone       bool
+	}{
+		{
+			name: "retries on mid-stream failure",
+			handler: func(attempts *atomic.Int32) http.HandlerFunc {
+				return func(w http.ResponseWriter, r *http.Request) {
+					attempt := attempts.Add(1)
+					w.Header().Set("Content-Type", "text/event-stream")
+					w.WriteHeader(http.StatusOK)
+					if attempt == 1 {
+						fmt.Fprint(w, "event: response.output_text.delta\n")
+						fmt.Fprint(w, "data: {\"delta\":\"partial\"}\n\n")
+						return
+					}
+					fmt.Fprint(w, "event: response.output_text.delta\n")
+					fmt.Fprint(w, "data: {\"delta\":\"full result\"}\n\n")
+					fmt.Fprint(w, "event: response.completed\n")
+					fmt.Fprint(w, "data: {\"response\":{\"id\":\"resp_123\",\"usage\":{\"input_tokens\":10,\"output_tokens\":5,\"total_tokens\":15}}}\n\n")
+				}
+			},
+			expectedAttempts: 2,
+			expectDone:       true,
+		},
+		{
+			name: "no retry after response completed",
+			handler: func(attempts *atomic.Int32) http.HandlerFunc {
+				return func(w http.ResponseWriter, r *http.Request) {
+					attempts.Add(1)
+					w.Header().Set("Content-Type", "text/event-stream")
+					w.WriteHeader(http.StatusOK)
+					fmt.Fprint(w, "event: response.output_text.delta\n")
+					fmt.Fprint(w, "data: {\"delta\":\"result\"}\n\n")
+					fmt.Fprint(w, "event: response.completed\n")
+					fmt.Fprint(w, "data: {\"response\":{\"id\":\"resp_456\",\"usage\":{\"input_tokens\":10,\"output_tokens\":5,\"total_tokens\":15}}}\n\n")
+				}
+			},
+			expectedAttempts: 1,
+			expectDone:       true,
+		},
 	}
-	if attempts.Load() != 2 {
-		t.Errorf("expected 2 attempts, got %d", attempts.Load())
-	}
-	if len(chunks) == 0 {
-		t.Fatal("expected at least one chunk")
-	}
-	lastChunk := chunks[len(chunks)-1]
-	if !lastChunk.Done {
-		t.Error("last chunk should be Done")
-	}
-}
 
-func TestStreamCompletion_NoRetryAfterResponseCompleted(t *testing.T) {
-	var attempts atomic.Int32
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var attempts atomic.Int32
+			server := httptest.NewServer(tt.handler(&attempts))
+			defer server.Close()
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		attempts.Add(1)
-		w.Header().Set("Content-Type", "text/event-stream")
-		w.WriteHeader(http.StatusOK)
+			client := newResponsesTestClient(t, server.URL)
 
-		fmt.Fprint(w, "event: response.output_text.delta\n")
-		fmt.Fprint(w, "data: {\"delta\":\"result\"}\n\n")
-		fmt.Fprint(w, "event: response.completed\n")
-		fmt.Fprint(w, "data: {\"response\":{\"id\":\"resp_456\",\"usage\":{\"input_tokens\":10,\"output_tokens\":5,\"total_tokens\":15}}}\n\n")
-	}))
-	defer server.Close()
+			var chunks []ai.CompletionChunk
+			err := client.StreamCompletion(context.Background(), ai.CompletionRequest{
+				Messages: []ai.Message{{Role: ai.RoleUser, Content: "hello"}},
+			}, func(chunk ai.CompletionChunk) {
+				chunks = append(chunks, chunk)
+			})
 
-	client := newResponsesTestClient(t, server.URL)
-
-	err := client.StreamCompletion(context.Background(), ai.CompletionRequest{
-		Messages: []ai.Message{{Role: ai.RoleUser, Content: "hello"}},
-	}, func(chunk ai.CompletionChunk) {})
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if attempts.Load() != 1 {
-		t.Errorf("expected 1 attempt, got %d", attempts.Load())
+			if err != nil {
+				t.Fatalf("StreamCompletion error: %v", err)
+			}
+			if attempts.Load() != tt.expectedAttempts {
+				t.Errorf("attempts = %d, want %d", attempts.Load(), tt.expectedAttempts)
+			}
+			if len(chunks) == 0 {
+				t.Fatal("expected at least one chunk")
+			}
+			if lastChunk := chunks[len(chunks)-1]; lastChunk.Done != tt.expectDone {
+				t.Errorf("last chunk Done = %v, want %v", lastChunk.Done, tt.expectDone)
+			}
+		})
 	}
 }
 
@@ -606,8 +607,8 @@ func TestParseResponsesSSEStream_StreamEndWithoutCompleted(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for stream ending without response.completed")
 	}
-	if !strings.Contains(err.Error(), "without response.completed") {
-		t.Errorf("unexpected error: %v", err)
+	if !errors.Is(err, ErrResponseIncomplete) {
+		t.Errorf("expected ErrResponseIncomplete, got: %v", err)
 	}
 }
 
