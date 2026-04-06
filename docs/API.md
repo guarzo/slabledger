@@ -1406,6 +1406,81 @@ Dismisses (clears) the pending AI price suggestion without accepting it.
 
 ---
 
+## Price Review & Flags
+
+### `PATCH /api/purchases/{purchaseId}/review-price`
+
+Auth: RequireAuth
+
+Sets a reviewed price for a purchase (human-verified price point).
+
+**Path params:** `purchaseId` (purchase UUID)
+
+**Body:**
+```json
+{ "priceCents": 130000, "source": "manual" }
+```
+
+**Response:** `200 OK`
+```json
+{ "success": true, "reviewedAt": "2025-01-01T00:00:00Z" }
+```
+
+**Errors:** `400` validation error; `404` purchase not found
+
+---
+
+### `POST /api/purchases/{purchaseId}/flag`
+
+Auth: RequireAuth
+
+Creates a price flag for data quality review.
+
+**Path params:** `purchaseId` (purchase UUID)
+
+**Body:**
+```json
+{ "reason": "wrong_match" }
+```
+Valid `reason` values: `wrong_match`, `stale_data`, `wrong_grade`, `source_disagreement`, `other`
+
+**Response:** `201 Created`
+```json
+{ "id": 1, "flaggedAt": "2025-01-01T00:00:00Z" }
+```
+
+**Errors:** `400` validation error; `404` purchase not found
+
+---
+
+### `GET /api/purchases/{id}/sales-comps`
+
+Auth: RequireAuth
+
+Returns Card Ladder sales comparables for a purchase.
+
+**Path params:** `id` (purchase UUID)
+
+**Response:** `200 OK`
+```json
+[
+  {
+    "date": "2025-01-15",
+    "price": 1300.00,
+    "platform": "ebay",
+    "listingType": "auction",
+    "seller": "cardstore123",
+    "url": "https://...",
+    "slabSerial": "12345678"
+  }
+]
+```
+Returns `[]` if no comps found or no CL mapping exists.
+
+**Errors:** `404` purchase not found
+
+---
+
 ## Credit & Invoices
 
 ### `GET /api/credit/summary`
