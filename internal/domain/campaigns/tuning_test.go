@@ -375,7 +375,9 @@ func Test_computeRecommendations_ChannelOptimization_NoRecWhenProfitable(t *test
 
 func TestService_GetCampaignTuning(t *testing.T) {
 	repo := newMockRepo()
-	svc := NewService(repo, WithIDGenerator(internalTestIDGen()), WithPriceLookup(newDefaultPriceLookup(nil, "")))
+	closedCtx, closedCancel := context.WithCancel(context.Background())
+	closedCancel()
+	svc := NewService(repo, WithIDGenerator(internalTestIDGen()), WithBaseContext(closedCtx), WithPriceLookup(newDefaultPriceLookup(nil, "")))
 	ctx := context.Background()
 
 	c := &Campaign{Name: "Tuning Test", BuyTermsCLPct: 0.85, GradeRange: "9-10", EbayFeePct: 0.1235}

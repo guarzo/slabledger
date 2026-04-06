@@ -269,14 +269,35 @@ func (c *Client) pollResponseFallback(ctx context.Context, responseID string, st
 				OutputTokens int `json:"output_tokens"`
 				TotalTokens  int `json:"total_tokens"`
 			} `json:"usage"`
+			IncompleteDetails *struct {
+				Reason string `json:"reason"`
+			} `json:"incomplete_details"`
 		}
 		if err := json.Unmarshal(body, &result); err != nil {
 			return fmt.Errorf("parse poll response: %w", err)
 		}
 
 		switch result.Status {
-		case "completed":
-			// Emit the completed response as chunks.
+		case "completed", "incomplete":
+			if result.Status == "incomplete" {
+				reason := "unknown"
+				if result.IncompleteDetails != nil && result.IncompleteDetails.Reason != "" {
+					reason = result.IncompleteDetails.Reason
+				}
+				if len(result.Output) == 0 {
+					return fmt.Errorf("response %s: incomplete with no output (reason: %s)", responseID, reason)
+				}
+				if c.logger != nil {
+					c.logger.Warn(ctx, "poll fallback: response incomplete, emitting partial output",
+						observability.String("responseID", responseID),
+						observability.String("reason", reason),
+						observability.Int("outputItems", len(result.Output)),
+					)
+				}
+			}
+			// Emit the response as chunks. For "incomplete" responses
+			// (typically max_output_tokens), the partial output is still
+			// useful — a truncated analysis is better than no analysis.
 			chunk := ai.CompletionChunk{
 				Done:              true,
 				ConversationState: result.ID,
@@ -306,7 +327,7 @@ func (c *Client) pollResponseFallback(ctx context.Context, responseID string, st
 			}
 			stream(chunk)
 			return nil
-		case "failed", "cancelled", "incomplete":
+		case "failed", "cancelled":
 			return fmt.Errorf("response %s: status %s", responseID, result.Status)
 		default:
 			// "queued", "in_progress" — keep polling
