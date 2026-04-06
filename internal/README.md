@@ -43,7 +43,6 @@ This codebase follows **Hexagonal Architecture** (also known as Ports and Adapte
 │    ├── mathutil/       (math utilities)         │
 │    ├── observability/  (logger interfaces)      │
 │    ├── pricing/        (price interfaces/models)│
-│    │   └── analysis/   (pricing analysis)       │
 │    └── storage/        (storage interfaces)     │
 └───────────────────┬─────────────────────────────┘
                     │ (uses)
