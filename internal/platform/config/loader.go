@@ -395,7 +395,6 @@ func FromEnv(base Config) Config {
 	}
 	cfg.Adapters.ImageAIEnabled = parseBool(os.Getenv("IMAGE_AI_ENABLED"), false)
 	cfg.Adapters.JustTCGKey = os.Getenv("JUSTTCG_API_KEY")
-	cfg.Adapters.DHKey = os.Getenv("DH_INTEGRATION_API_KEY")
 	cfg.Adapters.DHEnterpriseKey = os.Getenv("DH_ENTERPRISE_API_KEY")
 	if v := os.Getenv("DH_API_BASE_URL"); v != "" {
 		cfg.Adapters.DHBaseURL = v

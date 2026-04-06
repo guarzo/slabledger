@@ -2,7 +2,6 @@ package campaigns
 
 import (
 	"encoding/json"
-	"strings"
 	"time"
 )
 
@@ -208,25 +207,6 @@ func (p *Purchase) DHCardKey() string {
 // DHCardKey builds the pipe-delimited identity key used by DH card ID mapping lookups.
 func DHCardKey(cardName, setName, cardNumber string) string {
 	return cardName + "|" + setName + "|" + cardNumber
-}
-
-// DHMatchConfidenceThreshold is the minimum confidence for an automatic DH match.
-const DHMatchConfidenceThreshold = 0.90
-
-// BuildDHMatchTitle returns the best title to use for DH matching.
-// If PSAListingTitle is set, it is used directly; otherwise the card name, set, and number are concatenated.
-func BuildDHMatchTitle(cardName, setName, cardNumber, psaListingTitle string) string {
-	if psaListingTitle != "" {
-		return psaListingTitle
-	}
-	parts := []string{cardName}
-	if setName != "" {
-		parts = append(parts, setName)
-	}
-	if cardNumber != "" {
-		parts = append(parts, cardNumber)
-	}
-	return strings.Join(parts, " ")
 }
 
 // Invoice tracks a PSA invoice cycle for credit limit management.

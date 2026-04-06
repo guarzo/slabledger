@@ -23,10 +23,9 @@ func (h *DHHandler) HandleBulkMatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Gather identities and mappings synchronously so we can report errors to the caller.
 	ctx := r.Context()
 
-	purchases, identities, err := h.uniqueCardIdentities(ctx)
+	purchases, err := h.purchaseLister.ListAllUnsoldPurchases(ctx)
 	if err != nil {
 		h.bulkMatchMu.Unlock()
 		h.logger.Error(ctx, "bulk match: list purchases", observability.Err(err))
@@ -45,7 +44,6 @@ func (h *DHHandler) HandleBulkMatch(w http.ResponseWriter, r *http.Request) {
 	h.bulkMatchRunning.Store(true)
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "started"})
 
-	// Run the actual matching in the background using a context derived from the server lifecycle.
 	h.bgWG.Add(1)
 	go func() {
 		defer h.bgWG.Done()
@@ -53,7 +51,7 @@ func (h *DHHandler) HandleBulkMatch(w http.ResponseWriter, r *http.Request) {
 		defer h.bulkMatchRunning.Store(false)
 		ctx, cancel := context.WithCancel(h.baseCtx)
 		defer cancel()
-		h.runBulkMatch(ctx, purchases, identities, mappedSet)
+		h.runBulkMatch(ctx, purchases, mappedSet)
 	}()
 }
 
@@ -62,66 +60,75 @@ type matchedCard struct {
 	dhCardID int
 }
 
-// runBulkMatch processes all card identities against DH matching, logging results.
-func (h *DHHandler) runBulkMatch(ctx context.Context, purchases []campaigns.Purchase, identities []campaigns.CardIdentity, mappedSet map[string]string) {
-	var matched, skipped, lowConf, failed int
+// runBulkMatch processes unsold purchases against DH cert resolution, logging results.
+func (h *DHHandler) runBulkMatch(ctx context.Context, purchases []campaigns.Purchase, mappedSet map[string]string) {
+	var matched, skipped, noCert, notFound, failed int
 	var matchedCards []matchedCard
 
-	for _, ci := range identities {
+	for _, p := range purchases {
 		if ctx.Err() != nil {
 			break
 		}
 
-		if mappedSet[campaigns.DHCardKey(ci.CardName, ci.SetName, ci.CardNumber)] != "" {
+		key := p.DHCardKey()
+
+		if mappedSet[key] != "" {
 			skipped++
 			continue
 		}
 
-		title := campaigns.BuildDHMatchTitle(ci.CardName, ci.SetName, ci.CardNumber, ci.PSAListingTitle)
+		if p.CertNumber == "" {
+			noCert++
+			continue
+		}
 
-		matchResp, err := h.matchClient.Match(ctx, title, "")
+		cardName, variant := campaigns.CleanCardNameForDH(p.CardName)
+		resp, err := h.certResolver.ResolveCert(ctx, dh.CertResolveRequest{
+			CertNumber: p.CertNumber,
+			CardName:   cardName,
+			SetName:    p.SetName,
+			CardNumber: p.CardNumber,
+			Year:       p.CardYear,
+			Variant:    variant,
+		})
 		if err != nil {
-			h.logger.Warn(ctx, "bulk match: DH match failed",
-				observability.String("card", ci.CardName), observability.Err(err))
+			h.logger.Warn(ctx, "bulk match: DH cert resolve failed",
+				observability.String("cert", p.CertNumber), observability.Err(err))
 			failed++
 			continue
 		}
 
-		if !matchResp.Success || matchResp.Confidence < campaigns.DHMatchConfidenceThreshold {
-			lowConf++
+		if resp.Status != dh.CertStatusMatched {
+			notFound++
 			if h.pushStatusUpdater != nil {
-				ciKey := campaigns.DHCardKey(ci.CardName, ci.SetName, ci.CardNumber)
-				for _, p := range purchases {
-					if p.DHCardKey() == ciKey {
-						if err := h.pushStatusUpdater.UpdatePurchaseDHPushStatus(ctx, p.ID, campaigns.DHPushStatusUnmatched); err != nil {
-							h.logger.Warn(ctx, "bulk match: failed to set unmatched status",
-								observability.String("purchaseID", p.ID), observability.Err(err))
-						}
-					}
+				if err := h.pushStatusUpdater.UpdatePurchaseDHPushStatus(ctx, p.ID, campaigns.DHPushStatusUnmatched); err != nil {
+					h.logger.Warn(ctx, "bulk match: failed to set unmatched status",
+						observability.String("purchaseID", p.ID), observability.Err(err))
 				}
 			}
 			continue
 		}
 
-		externalID := strconv.Itoa(matchResp.CardID)
-		if err := h.cardIDSaver.SaveExternalID(ctx, ci.CardName, ci.SetName, ci.CardNumber, pricing.SourceDH, externalID); err != nil {
+		externalID := strconv.Itoa(resp.DHCardID)
+		if err := h.cardIDSaver.SaveExternalID(ctx, p.CardName, p.SetName, p.CardNumber, pricing.SourceDH, externalID); err != nil {
 			h.logger.Error(ctx, "bulk match: save external ID", observability.Err(err),
-				observability.String("card", ci.CardName))
+				observability.String("cert", p.CertNumber))
 			failed++
 			continue
 		}
 		matched++
-		matchedCards = append(matchedCards, matchedCard{identity: ci, dhCardID: matchResp.CardID})
+		matchedCards = append(matchedCards, matchedCard{identity: p.ToCardIdentity(), dhCardID: resp.DHCardID})
+		mappedSet[key] = externalID
 	}
 
 	h.logger.Info(ctx, "bulk match completed",
-		observability.Int("total", len(identities)),
+		observability.Int("total", len(purchases)),
 		observability.Int("matched", matched),
 		observability.Int("skipped", skipped),
-		observability.Int("low_confidence", lowConf),
+		observability.Int("no_cert", noCert),
+		observability.Int("not_found", notFound),
 		observability.Int("failed", failed))
 
-	// Push newly matched cards to DH inventory as in_stock.
 	if h.inventoryPusher != nil && len(matchedCards) > 0 {
 		h.pushMatchedToDH(ctx, purchases, matchedCards)
 	}
@@ -178,9 +185,13 @@ func (h *DHHandler) pushMatchedToDH(ctx context.Context, purchases []campaigns.P
 		certToDHCardID[item.CertNumber] = item.DHCardID
 	}
 
-	pushed := 0
+	pushed, failedPush := 0, 0
 	for _, r := range resp.Results {
 		if r.Status == "failed" {
+			failedPush++
+			h.logger.Warn(ctx, "push to DH: item failed",
+				observability.String("cert", r.CertNumber),
+				observability.String("error", r.Error))
 			continue
 		}
 		pushed++
@@ -215,25 +226,6 @@ func (h *DHHandler) pushMatchedToDH(ctx context.Context, purchases []campaigns.P
 	}
 	h.logger.Info(ctx, "pushed matched inventory to DH",
 		observability.Int("pushed", pushed),
+		observability.Int("failed", failedPush),
 		observability.Int("total", len(items)))
-}
-
-// uniqueCardIdentities returns all unsold purchases and their deduplicated card identities.
-func (h *DHHandler) uniqueCardIdentities(ctx context.Context) ([]campaigns.Purchase, []campaigns.CardIdentity, error) {
-	purchases, err := h.purchaseLister.ListAllUnsoldPurchases(ctx)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	seen := make(map[string]bool, len(purchases))
-	var identities []campaigns.CardIdentity
-	for _, p := range purchases {
-		key := campaigns.DHCardKey(p.CardName, p.SetName, p.CardNumber)
-		if seen[key] {
-			continue
-		}
-		seen[key] = true
-		identities = append(identities, p.ToCardIdentity())
-	}
-	return purchases, identities, nil
 }

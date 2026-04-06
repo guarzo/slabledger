@@ -115,9 +115,9 @@ func adminAnalyze(ctx context.Context, args []string) error {
 
 	// Optional DH client
 	var dhClient *dh.Client
-	if cfg.Adapters.DHKey != "" && cfg.Adapters.DHBaseURL != "" {
+	if cfg.Adapters.DHEnterpriseKey != "" && cfg.Adapters.DHBaseURL != "" {
 		dhClient = dh.NewClient(
-			cfg.Adapters.DHBaseURL, cfg.Adapters.DHKey,
+			cfg.Adapters.DHBaseURL,
 			dh.WithLogger(logger),
 			dh.WithRateLimitRPS(cfg.DH.RateLimitRPS),
 			dh.WithEnterpriseKey(cfg.Adapters.DHEnterpriseKey),
@@ -126,7 +126,7 @@ func adminAnalyze(ctx context.Context, args []string) error {
 
 	priceProvImpl, cardHedgerClientImpl, pcProvider, err := initializePriceProviders(
 		ctx, &cfg, appCache, logger, cardProvImpl, priceRepo, cardIDMappingRepo,
-		dhClient, intelRepo,
+		dhClient,
 	)
 	if err != nil {
 		return fmt.Errorf("initialize price providers: %w", err)

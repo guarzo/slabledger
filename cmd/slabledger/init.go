@@ -47,7 +47,6 @@ func initializePriceProviders(
 	priceRepo *sqlite.PriceRepository,
 	cardIDMappingRepo *sqlite.CardIDMappingRepository,
 	dhClient *dh.Client,
-	intelRepo *sqlite.MarketIntelligenceRepository,
 ) (priceProvider *fusionprice.FusionPriceProvider, cardHedgerClient *cardhedger.Client, pcProvider *pricecharting.PriceCharting, err error) {
 	pcProvider, err = pricecharting.NewPriceCharting(
 		pricecharting.DefaultConfig(cfg.Adapters.PriceChartingToken), appCache, logger,
@@ -67,12 +66,8 @@ func initializePriceProviders(
 
 	// Add DH as a secondary fusion source if available
 	dhAvailable := false
-	if dhClient != nil && dhClient.Available() {
-		dhOpts := []fusionprice.DHAdapterOption{}
-		if intelRepo != nil {
-			dhOpts = append(dhOpts, fusionprice.WithDHIntelligenceStore(intelRepo))
-		}
-		dhAdapter := fusionprice.NewDHAdapter(dhClient, cardIDMappingRepo, logger, dhOpts...)
+	if dhClient != nil && dhClient.EnterpriseAvailable() {
+		dhAdapter := fusionprice.NewDHAdapter(dhClient, cardIDMappingRepo, logger)
 		secondarySources = append(secondarySources, dhAdapter)
 		dhAvailable = true
 		logger.Info(ctx, "DH adapter registered as secondary fusion source")

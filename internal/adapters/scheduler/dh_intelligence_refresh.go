@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"context"
+	"strconv"
 	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
@@ -91,7 +92,16 @@ func (s *DHIntelligenceRefreshScheduler) refresh(ctx context.Context) {
 
 	var refreshed, failed int
 	for _, entry := range stale {
-		resp, fetchErr := s.dhClient.MarketData(ctx, entry.DHCardID)
+		cardIDInt, convErr := strconv.Atoi(entry.DHCardID)
+		if convErr != nil {
+			s.logger.Warn(ctx, "skipping non-numeric DH card ID (legacy or malformed)",
+				observability.String("dh_card_id", entry.DHCardID),
+				observability.String("card_name", entry.CardName),
+				observability.Err(convErr))
+			failed++
+			continue
+		}
+		resp, fetchErr := s.dhClient.MarketDataEnterprise(ctx, cardIDInt)
 		if fetchErr != nil {
 			s.logger.Warn(ctx, "failed to fetch DH market data",
 				observability.String("dh_card_id", entry.DHCardID),

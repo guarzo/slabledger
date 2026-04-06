@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/errors"
-	"github.com/guarzo/slabledger/internal/domain/timeutil"
 	"github.com/guarzo/slabledger/internal/domain/intelligence"
 	"github.com/guarzo/slabledger/internal/domain/observability"
+	"github.com/guarzo/slabledger/internal/domain/timeutil"
 )
 
 // --- Sell Sheet ---

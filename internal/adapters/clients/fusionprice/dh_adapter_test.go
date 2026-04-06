@@ -6,79 +6,39 @@ import (
 	"testing"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
-	"github.com/guarzo/slabledger/internal/domain/intelligence"
 	"github.com/guarzo/slabledger/internal/domain/pricing"
+	"github.com/guarzo/slabledger/internal/testutil/mocks"
 )
 
-// --- mock types ---
-
-type mockDHMarketDataClient struct {
-	MarketDataFn func(ctx context.Context, cardID string) (*dh.MarketDataResponse, error)
-}
-
-func (m *mockDHMarketDataClient) MarketData(ctx context.Context, cardID string) (*dh.MarketDataResponse, error) {
-	return m.MarketDataFn(ctx, cardID)
-}
-
-type mockDHCardIDLookup struct {
-	GetExternalIDFn func(ctx context.Context, cardName, setName, collectorNumber, provider string) (string, error)
-}
-
-func (m *mockDHCardIDLookup) GetExternalID(ctx context.Context, cardName, setName, collectorNumber, provider string) (string, error) {
-	return m.GetExternalIDFn(ctx, cardName, setName, collectorNumber, provider)
-}
-
-type mockDHIntelligenceStore struct {
-	StoreFn func(ctx context.Context, intel *intelligence.MarketIntelligence) error
-	stored  []*intelligence.MarketIntelligence
-}
-
-func (m *mockDHIntelligenceStore) Store(ctx context.Context, intel *intelligence.MarketIntelligence) error {
-	m.stored = append(m.stored, intel)
-	if m.StoreFn != nil {
-		return m.StoreFn(ctx, intel)
-	}
-	return nil
-}
-
-// --- tests ---
-
 func TestDHAdapter_FetchFusionData_WithSales(t *testing.T) {
-	client := &mockDHMarketDataClient{
-		MarketDataFn: func(_ context.Context, cardID string) (*dh.MarketDataResponse, error) {
-			if cardID != "dh-12345" {
-				t.Fatalf("unexpected cardID: %s", cardID)
+	client := &mocks.MockDHMarketDataClient{
+		RecentSalesFn: func(_ context.Context, cardID int) ([]dh.RecentSale, error) {
+			if cardID != 12345 {
+				t.Fatalf("unexpected cardID: %d", cardID)
 			}
-			return &dh.MarketDataResponse{
-				HasData:   true,
-				CardID:    12345,
-				CardTitle: "Charizard",
-				RecentSales: []dh.RecentSale{
-					{SoldAt: "2026-03-15T10:00:00Z", GradingCompany: "PSA", Grade: "10", Price: 500.00, Platform: "eBay"},
-					{SoldAt: "2026-03-14T10:00:00Z", GradingCompany: "PSA", Grade: "10", Price: 480.00, Platform: "eBay"},
-					{SoldAt: "2026-03-13T10:00:00Z", GradingCompany: "PSA", Grade: "9", Price: 250.00, Platform: "TCGPlayer"},
-					{SoldAt: "2026-03-12T10:00:00Z", GradingCompany: "BGS", Grade: "10", Price: 700.00, Platform: "eBay"},
-					{SoldAt: "2026-03-11T10:00:00Z", GradingCompany: "PSA", Grade: "8", Price: 120.00, Platform: "eBay"},
-					{SoldAt: "2026-03-10T10:00:00Z", GradingCompany: "PSA", Grade: "7", Price: 80.00, Platform: "eBay"},
-					{SoldAt: "2026-03-09T10:00:00Z", GradingCompany: "PSA", Grade: "6", Price: 50.00, Platform: "eBay"},
-					{SoldAt: "2026-03-08T10:00:00Z", GradingCompany: "BGS", Grade: "9.5", Price: 300.00, Platform: "eBay"},
-				},
+			return []dh.RecentSale{
+				{SoldAt: "2026-03-15T10:00:00Z", GradingCompany: "PSA", Grade: "10", Price: 500.00, Platform: "eBay"},
+				{SoldAt: "2026-03-14T10:00:00Z", GradingCompany: "PSA", Grade: "10", Price: 480.00, Platform: "eBay"},
+				{SoldAt: "2026-03-13T10:00:00Z", GradingCompany: "PSA", Grade: "9", Price: 250.00, Platform: "TCGPlayer"},
+				{SoldAt: "2026-03-12T10:00:00Z", GradingCompany: "BGS", Grade: "10", Price: 700.00, Platform: "eBay"},
+				{SoldAt: "2026-03-11T10:00:00Z", GradingCompany: "PSA", Grade: "8", Price: 120.00, Platform: "eBay"},
+				{SoldAt: "2026-03-10T10:00:00Z", GradingCompany: "PSA", Grade: "7", Price: 80.00, Platform: "eBay"},
+				{SoldAt: "2026-03-09T10:00:00Z", GradingCompany: "PSA", Grade: "6", Price: 50.00, Platform: "eBay"},
+				{SoldAt: "2026-03-08T10:00:00Z", GradingCompany: "BGS", Grade: "9.5", Price: 300.00, Platform: "eBay"},
 			}, nil
 		},
 	}
 
-	idLookup := &mockDHCardIDLookup{
+	idLookup := &mocks.MockDHCardIDLookup{
 		GetExternalIDFn: func(_ context.Context, _, _, _, provider string) (string, error) {
 			if provider != pricing.SourceDH {
 				t.Fatalf("unexpected provider: %s", provider)
 			}
-			return "dh-12345", nil
+			return "12345", nil
 		},
 	}
 
-	intelStore := &mockDHIntelligenceStore{}
-
-	adapter := NewDHAdapter(client, idLookup, nil, WithDHIntelligenceStore(intelStore))
+	adapter := NewDHAdapter(client, idLookup, nil)
 
 	card := pricing.Card{Name: "Charizard", Set: "Base Set", Number: "4"}
 	result, meta, err := adapter.FetchFusionData(context.Background(), card)
@@ -156,7 +116,7 @@ func TestDHAdapter_FetchFusionData_WithSales(t *testing.T) {
 		t.Errorf("psa6[0].Value = %v, want 50.00", psa6[0].Value)
 	}
 
-	// BGS 9.5 → psa95: one sale at 300
+	// BGS 9.5 -> psa95: one sale at 300
 	psa95 := result.GradeData["psa95"]
 	if len(psa95) != 1 {
 		t.Fatalf("expected 1 psa95 entry, got %d", len(psa95))
@@ -164,29 +124,17 @@ func TestDHAdapter_FetchFusionData_WithSales(t *testing.T) {
 	if psa95[0].Value != 300.00 {
 		t.Errorf("psa95[0].Value = %v, want 300.00", psa95[0].Value)
 	}
-
-	// Verify intelligence store was called
-	if len(intelStore.stored) != 1 {
-		t.Fatalf("expected 1 intelligence stored, got %d", len(intelStore.stored))
-	}
-	storedIntel := intelStore.stored[0]
-	if storedIntel.CardName != "Charizard" {
-		t.Errorf("stored CardName = %q, want \"Charizard\"", storedIntel.CardName)
-	}
-	if storedIntel.DHCardID != "dh-12345" {
-		t.Errorf("stored DHCardID = %q, want \"dh-12345\"", storedIntel.DHCardID)
-	}
 }
 
 func TestDHAdapter_FetchFusionData_NoMapping(t *testing.T) {
-	client := &mockDHMarketDataClient{
-		MarketDataFn: func(_ context.Context, _ string) (*dh.MarketDataResponse, error) {
-			t.Fatal("MarketData should not be called when there is no mapping")
+	client := &mocks.MockDHMarketDataClient{
+		RecentSalesFn: func(_ context.Context, _ int) ([]dh.RecentSale, error) {
+			t.Fatal("RecentSales should not be called when there is no mapping")
 			return nil, nil
 		},
 	}
 
-	idLookup := &mockDHCardIDLookup{
+	idLookup := &mocks.MockDHCardIDLookup{
 		GetExternalIDFn: func(_ context.Context, _, _, _, _ string) (string, error) {
 			return "", nil // no mapping
 		},
@@ -209,18 +157,15 @@ func TestDHAdapter_FetchFusionData_NoMapping(t *testing.T) {
 }
 
 func TestDHAdapter_FetchFusionData_NoData(t *testing.T) {
-	client := &mockDHMarketDataClient{
-		MarketDataFn: func(_ context.Context, _ string) (*dh.MarketDataResponse, error) {
-			return &dh.MarketDataResponse{
-				HasData: false,
-				CardID:  999,
-			}, nil
+	client := &mocks.MockDHMarketDataClient{
+		RecentSalesFn: func(_ context.Context, _ int) ([]dh.RecentSale, error) {
+			return []dh.RecentSale{}, nil
 		},
 	}
 
-	idLookup := &mockDHCardIDLookup{
+	idLookup := &mocks.MockDHCardIDLookup{
 		GetExternalIDFn: func(_ context.Context, _, _, _, _ string) (string, error) {
-			return "dh-999", nil
+			return "999", nil
 		},
 	}
 
@@ -241,14 +186,14 @@ func TestDHAdapter_FetchFusionData_NoData(t *testing.T) {
 }
 
 func TestDHAdapter_FetchFusionData_LookupError(t *testing.T) {
-	client := &mockDHMarketDataClient{
-		MarketDataFn: func(_ context.Context, _ string) (*dh.MarketDataResponse, error) {
-			t.Fatal("MarketData should not be called when lookup errors")
+	client := &mocks.MockDHMarketDataClient{
+		RecentSalesFn: func(_ context.Context, _ int) ([]dh.RecentSale, error) {
+			t.Fatal("RecentSales should not be called when lookup errors")
 			return nil, nil
 		},
 	}
 
-	idLookup := &mockDHCardIDLookup{
+	idLookup := &mocks.MockDHCardIDLookup{
 		GetExternalIDFn: func(_ context.Context, _, _, _, _ string) (string, error) {
 			return "", fmt.Errorf("db connection failed")
 		},
@@ -259,15 +204,15 @@ func TestDHAdapter_FetchFusionData_LookupError(t *testing.T) {
 	card := pricing.Card{Name: "Card", Set: "Set", Number: "1"}
 	result, meta, err := adapter.FetchFusionData(context.Background(), card)
 
-	// Lookup errors are treated as skip (no mapping), not hard errors.
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if meta.StatusCode != 0 {
-		t.Errorf("expected status 0, got %d", meta.StatusCode)
+	// Lookup errors are propagated so infrastructure failures are visible.
+	if err == nil {
+		t.Fatal("expected error for lookup failure")
 	}
 	if result != nil {
 		t.Errorf("expected nil result, got %+v", result)
+	}
+	if meta.StatusCode != 0 {
+		t.Errorf("expected status 0, got %d", meta.StatusCode)
 	}
 }
 
@@ -280,19 +225,19 @@ func TestDHAdapter_Available(t *testing.T) {
 	}{
 		{
 			name:       "both set",
-			client:     &mockDHMarketDataClient{},
-			idResolver: &mockDHCardIDLookup{},
+			client:     &mocks.MockDHMarketDataClient{},
+			idResolver: &mocks.MockDHCardIDLookup{},
 			want:       true,
 		},
 		{
 			name:       "nil client",
 			client:     nil,
-			idResolver: &mockDHCardIDLookup{},
+			idResolver: &mocks.MockDHCardIDLookup{},
 			want:       false,
 		},
 		{
 			name:       "nil resolver",
-			client:     &mockDHMarketDataClient{},
+			client:     &mocks.MockDHMarketDataClient{},
 			idResolver: nil,
 			want:       false,
 		},
@@ -353,22 +298,19 @@ func TestDHGradeToFusionKey(t *testing.T) {
 }
 
 func TestDHAdapter_FetchFusionData_SkipsZeroPriceSales(t *testing.T) {
-	client := &mockDHMarketDataClient{
-		MarketDataFn: func(_ context.Context, _ string) (*dh.MarketDataResponse, error) {
-			return &dh.MarketDataResponse{
-				HasData: true,
-				RecentSales: []dh.RecentSale{
-					{GradingCompany: "PSA", Grade: "10", Price: 0, Platform: "eBay"},
-					{GradingCompany: "PSA", Grade: "9", Price: -10, Platform: "eBay"},
-					{GradingCompany: "PSA", Grade: "8", Price: 100.00, Platform: "eBay"},
-				},
+	client := &mocks.MockDHMarketDataClient{
+		RecentSalesFn: func(_ context.Context, _ int) ([]dh.RecentSale, error) {
+			return []dh.RecentSale{
+				{GradingCompany: "PSA", Grade: "10", Price: 0, Platform: "eBay"},
+				{GradingCompany: "PSA", Grade: "9", Price: -10, Platform: "eBay"},
+				{GradingCompany: "PSA", Grade: "8", Price: 100.00, Platform: "eBay"},
 			}, nil
 		},
 	}
 
-	idLookup := &mockDHCardIDLookup{
+	idLookup := &mocks.MockDHCardIDLookup{
 		GetExternalIDFn: func(_ context.Context, _, _, _, _ string) (string, error) {
-			return "dh-1", nil
+			return "1", nil
 		},
 	}
 

@@ -3,11 +3,11 @@ package fusionprice
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	"github.com/guarzo/slabledger/internal/domain/fusion"
-	"github.com/guarzo/slabledger/internal/domain/intelligence"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/domain/pricing"
 )
@@ -20,7 +20,7 @@ const dhSourceConfidence = 0.90
 
 // DHMarketDataClient is the subset of the dh.Client used by the adapter.
 type DHMarketDataClient interface {
-	MarketData(ctx context.Context, cardID string) (*dh.MarketDataResponse, error)
+	RecentSales(ctx context.Context, cardID int) ([]dh.RecentSale, error)
 }
 
 // DHCardIDLookup resolves card names to DH card IDs.
@@ -28,28 +28,14 @@ type DHCardIDLookup interface {
 	GetExternalID(ctx context.Context, cardName, setName, collectorNumber, provider string) (string, error)
 }
 
-// DHIntelligenceStore persists market intelligence data from DH.
-type DHIntelligenceStore interface {
-	Store(ctx context.Context, intel *intelligence.MarketIntelligence) error
-}
-
 // DHAdapter wraps a DH market data client and implements
 // SecondaryPriceSource. It resolves card names to DH card IDs via a
-// DHCardIDLookup, fetches market data, and converts recent sales to
-// fusion-compatible grade data.
+// DHCardIDLookup, fetches recent sales from the enterprise API, and
+// converts them to fusion-compatible grade data.
 type DHAdapter struct {
 	client     DHMarketDataClient
 	idResolver DHCardIDLookup
-	intelStore DHIntelligenceStore
 	logger     observability.Logger
-}
-
-// DHAdapterOption is a functional option for DHAdapter.
-type DHAdapterOption func(*DHAdapter)
-
-// WithDHIntelligenceStore sets the intelligence store for persisting DH market data.
-func WithDHIntelligenceStore(s DHIntelligenceStore) DHAdapterOption {
-	return func(a *DHAdapter) { a.intelStore = s }
 }
 
 // NewDHAdapter creates a new adapter.
@@ -57,17 +43,12 @@ func NewDHAdapter(
 	client DHMarketDataClient,
 	idResolver DHCardIDLookup,
 	logger observability.Logger,
-	opts ...DHAdapterOption,
 ) *DHAdapter {
-	a := &DHAdapter{
+	return &DHAdapter{
 		client:     client,
 		idResolver: idResolver,
 		logger:     logger,
 	}
-	for _, opt := range opts {
-		opt(a)
-	}
-	return a
 }
 
 // FetchFusionData fetches market data from DH and converts recent sales
@@ -84,43 +65,34 @@ func (a *DHAdapter) FetchFusionData(ctx context.Context, card pricing.Card) (*fu
 	dhCardID, err := a.idResolver.GetExternalID(ctx, card.Name, card.Set, card.Number, pricing.SourceDH)
 	if err != nil {
 		if a.logger != nil {
-			a.logger.Debug(ctx, "dh: card ID lookup failed",
+			a.logger.Warn(ctx, "dh: card ID lookup failed",
 				observability.String("card", card.Name),
 				observability.String("set", card.Set),
 				observability.Err(err))
 		}
-		return nil, &fusion.ResponseMeta{StatusCode: 0}, nil
+		return nil, &fusion.ResponseMeta{StatusCode: 0}, fmt.Errorf("dh: card ID lookup: %w", err)
 	}
 	if dhCardID == "" {
 		return nil, &fusion.ResponseMeta{StatusCode: 0}, nil
 	}
 
-	// Step 2: Fetch market data.
-	resp, err := a.client.MarketData(ctx, dhCardID)
-	if err != nil {
-		return nil, &fusion.ResponseMeta{StatusCode: 0}, fmt.Errorf("dh: market data failed for card_id=%s: %w", dhCardID, err)
+	// Step 2: Fetch recent sales from enterprise API.
+	cardIDInt, convErr := strconv.Atoi(dhCardID)
+	if convErr != nil {
+		return nil, &fusion.ResponseMeta{StatusCode: 0}, fmt.Errorf("dh: invalid card ID %q: %w", dhCardID, convErr)
 	}
 
-	// Step 3: Check for data.
-	if !resp.HasData {
+	sales, err := a.client.RecentSales(ctx, cardIDInt)
+	if err != nil {
+		return nil, &fusion.ResponseMeta{StatusCode: 0}, fmt.Errorf("dh: recent sales failed for card_id=%s: %w", dhCardID, err)
+	}
+
+	if len(sales) == 0 {
 		return nil, &fusion.ResponseMeta{StatusCode: 200}, nil
 	}
 
-	// Step 4: Convert recent sales to grade data.
-	gradeData := convertDHSalesToGradeData(resp.RecentSales)
-
-	// Step 5: Optionally store intelligence data.
-	if a.intelStore != nil {
-		intel := dh.ConvertToIntelligence(resp, card.Name, card.Set, card.Number, dhCardID)
-		if storeErr := a.intelStore.Store(ctx, intel); storeErr != nil {
-			if a.logger != nil {
-				a.logger.Warn(ctx, "dh: failed to store intelligence",
-					observability.String("card", card.Name),
-					observability.String("dh_card_id", dhCardID),
-					observability.Err(storeErr))
-			}
-		}
-	}
+	// Step 3: Convert recent sales to grade data.
+	gradeData := convertDHSalesToGradeData(sales)
 
 	return &fusion.FetchResult{
 		GradeData: gradeData,
@@ -184,6 +156,9 @@ func dhGradeToFusionKey(company, grade string) string {
 		return pricing.GradePSA6.String()
 	case "BGS 10":
 		return pricing.GradeBGS10.String()
+	// BGS 9.5 and CGC 9.5 are mapped to PSA 9.5 for pricing interoperability.
+	// This is an approximation — cross-grader equivalence is not exact, but
+	// close enough for market-comparison purposes in the fusion engine.
 	case "BGS 9.5":
 		return pricing.GradePSA95.String()
 	case "CGC 9.5":

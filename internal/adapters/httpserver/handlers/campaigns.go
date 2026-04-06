@@ -22,7 +22,7 @@ type CampaignsHandler struct {
 	logger            observability.Logger
 	discoverer        CardDiscoverer      // optional: triggers CardHedger discovery after imports
 	dhLister          DHInventoryLister   // optional: lists cards on DH after cert import
-	dhMatchClient     DHMatchClient       // optional: matches cards against DH
+	dhCertResolver    DHCertResolver      // optional: resolves certs against DH
 	dhPusher          DHInventoryPusher   // optional: pushes inventory to DH
 	dhFieldsUpdater   DHFieldsUpdater     // optional: persists DH fields after push
 	pushStatusUpdater DHPushStatusUpdater // optional: sets dh_push_status
@@ -44,9 +44,9 @@ func WithDHLister(l DHInventoryLister) CampaignsHandlerOption {
 	return func(h *CampaignsHandler) { h.dhLister = l }
 }
 
-// WithDHMatchClient enables DH card matching for inline push.
-func WithDHMatchClient(c DHMatchClient) CampaignsHandlerOption {
-	return func(h *CampaignsHandler) { h.dhMatchClient = c }
+// WithDHCertResolver enables DH cert resolution for inline push.
+func WithDHCertResolver(c DHCertResolver) CampaignsHandlerOption {
+	return func(h *CampaignsHandler) { h.dhCertResolver = c }
 }
 
 // WithDHPusher enables inventory push to DH.

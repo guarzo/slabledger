@@ -130,7 +130,6 @@ type AdapterConfig struct {
 	ImageAIQuality     string // IMAGE_AI_QUALITY - Image quality: low, medium, high (default: medium)
 	ImageAIEnabled     bool   // IMAGE_AI_ENABLED - Enable AI background generation (default: false)
 	JustTCGKey         string // JUSTTCG_API_KEY - JustTCG raw NM pricing
-	DHKey              string // DH_INTEGRATION_API_KEY
 	DHEnterpriseKey    string // DH_ENTERPRISE_API_KEY - Bearer token for enterprise endpoints
 	DHBaseURL          string // DH_API_BASE_URL
 }

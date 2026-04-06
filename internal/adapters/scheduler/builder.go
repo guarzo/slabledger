@@ -337,7 +337,7 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 	}
 
 	// DH intelligence refresh scheduler (if client + repo are provided)
-	if deps.DHClient != nil && deps.DHClient.Available() && deps.DHIntelligenceRepo != nil {
+	if deps.DHClient != nil && deps.DHClient.EnterpriseAvailable() && deps.DHIntelligenceRepo != nil {
 		dhIntelConfig := DHIntelligenceRefreshConfig{
 			Enabled:   cfg.DH.Enabled,
 			Interval:  1 * time.Hour,
@@ -350,7 +350,7 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 	}
 
 	// DH suggestions scheduler (if client + repo are provided)
-	if deps.DHClient != nil && deps.DHClient.Available() && deps.DHSuggestionsRepo != nil {
+	if deps.DHClient != nil && deps.DHClient.EnterpriseAvailable() && deps.DHSuggestionsRepo != nil {
 		dhSuggestConfig := DHSuggestionsConfig{
 			Enabled:  cfg.DH.Enabled,
 			Interval: 6 * time.Hour,
@@ -392,7 +392,7 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 	}
 
 	// DH v2: Push scheduler — matches pending purchases and pushes to DH inventory
-	if deps.DHClient != nil && deps.DHClient.Available() &&
+	if deps.DHClient != nil && deps.DHClient.EnterpriseAvailable() &&
 		deps.DHPushPendingLister != nil && deps.DHPushStatusUpdater != nil &&
 		deps.DHPushCardIDSaver != nil && deps.DHFieldsUpdater != nil {
 		pushCfg := DHPushConfig{

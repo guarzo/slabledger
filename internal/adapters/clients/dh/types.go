@@ -1,36 +1,6 @@
 // Package dh provides a client for the DH pricing and market data API.
 package dh
 
-// SearchResponse is the response from GET /catalog/search.
-type SearchResponse struct {
-	Cards []SearchCard `json:"cards"`
-}
-
-// SearchCard is a single card result from the catalog search.
-type SearchCard struct {
-	ID       int    `json:"id"`
-	Name     string `json:"name"`
-	SetName  string `json:"set"`
-	Number   string `json:"number"`
-	ImageURL string `json:"image_url"`
-}
-
-// MatchRequest is the body for POST /catalog/match.
-type MatchRequest struct {
-	Title      string            `json:"title"`
-	SKU        string            `json:"sku,omitempty"`
-	Metafields map[string]string `json:"metafields,omitempty"`
-}
-
-// MatchResponse is returned from POST /catalog/match.
-type MatchResponse struct {
-	Success     bool    `json:"success"`
-	CardID      int     `json:"card_id"`
-	CardTitle   string  `json:"card_title"`
-	Confidence  float64 `json:"confidence"`
-	MatchMethod string  `json:"match_method"`
-}
-
 // MarketDataResponse is returned from GET /market/{card_id}.
 type MarketDataResponse struct {
 	Tier           int                 `json:"tier"`
@@ -192,4 +162,45 @@ type SuggestionSentiment struct {
 	Score        float64 `json:"score"`
 	Trend        float64 `json:"trend"`
 	MentionCount int     `json:"mention_count"`
+}
+
+// CardLookupResponse is returned from GET /enterprise/cards/lookup.
+type CardLookupResponse struct {
+	Card       CardLookupCard       `json:"card"`
+	MarketData CardLookupMarketData `json:"market_data"`
+}
+
+// CardLookupCard is the card identity from enterprise lookup.
+type CardLookupCard struct {
+	ID                 int    `json:"id"`
+	Name               string `json:"name"`
+	SetName            string `json:"set_name"`
+	Number             string `json:"number"`
+	Rarity             string `json:"rarity"`
+	Language           string `json:"language"`
+	Era                string `json:"era"`
+	Year               string `json:"year"`
+	Artist             string `json:"artist"`
+	ImageURL           string `json:"image_url"`
+	Slug               string `json:"slug"`
+	PriceChartingID    string `json:"pricecharting_id"`
+	TCGPlayerProductID *int   `json:"tcgplayer_product_id"`
+}
+
+// CardLookupMarketData is the market data from enterprise lookup.
+type CardLookupMarketData struct {
+	BestBid      *float64 `json:"best_bid"`
+	BestAsk      *float64 `json:"best_ask"`
+	Spread       *float64 `json:"spread"`
+	LastSale     *float64 `json:"last_sale"`
+	LastSaleDate *string  `json:"last_sale_date"`
+	LowPrice     *float64 `json:"low_price"`
+	MidPrice     *float64 `json:"mid_price"`
+	HighPrice    *float64 `json:"high_price"`
+	ActiveBids   int      `json:"active_bids"`
+	ActiveAsks   int      `json:"active_asks"`
+	Volume24h    int      `json:"24h_volume"`
+	Change24h    *float64 `json:"24h_change"`
+	Change7d     *float64 `json:"7d_change"`
+	Change30d    *float64 `json:"30d_change"`
 }

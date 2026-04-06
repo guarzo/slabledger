@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -26,7 +27,6 @@ func newTestClient(serverURL string) *Client {
 	httpClient := httpx.NewClient(config)
 
 	return &Client{
-		apiKey:        "test_api_key",
 		enterpriseKey: "test_api_key",
 		baseURL:       serverURL,
 		httpClient:    httpClient,
@@ -35,254 +35,20 @@ func newTestClient(serverURL string) *Client {
 	}
 }
 
-func TestClient_Available(t *testing.T) {
+func TestClient_EnterpriseAvailable(t *testing.T) {
 	t.Run("with key", func(t *testing.T) {
-		c := NewClient("", "test_key")
-		if !c.Available() {
-			t.Error("expected Available() = true")
+		c := NewClient("", WithEnterpriseKey("test_key"))
+		if !c.EnterpriseAvailable() {
+			t.Error("expected EnterpriseAvailable() = true")
 		}
 	})
 
 	t.Run("without key", func(t *testing.T) {
-		c := NewClient("", "")
-		if c.Available() {
-			t.Error("expected Available() = false")
+		c := NewClient("")
+		if c.EnterpriseAvailable() {
+			t.Error("expected EnterpriseAvailable() = false")
 		}
 	})
-}
-
-func TestClient_Search(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			t.Errorf("expected GET, got %s", r.Method)
-		}
-		if r.Header.Get(apiKeyHeader) != "test_api_key" {
-			t.Errorf("expected %s header = test_api_key, got %q", apiKeyHeader, r.Header.Get(apiKeyHeader))
-		}
-		if r.URL.Path != "/api/v1/integrations/catalog/search" {
-			t.Errorf("expected path /api/v1/integrations/catalog/search, got %s", r.URL.Path)
-		}
-		if q := r.URL.Query().Get("q"); q != "Charizard Base Set" {
-			t.Errorf("expected q=Charizard Base Set, got %q", q)
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{
-			"cards": [
-				{
-					"id": 247,
-					"name": "Charizard [1st Edition]",
-					"set": "Pokemon Base Set",
-					"number": "4",
-					"image_url": "https://example.com/charizard.png"
-				}
-			]
-		}`))
-	}))
-	defer server.Close()
-
-	c := newTestClient(server.URL)
-	resp, err := c.Search(context.Background(), "Charizard Base Set", 10)
-	if err != nil {
-		t.Fatalf("Search() error = %v", err)
-	}
-	if len(resp.Cards) != 1 {
-		t.Fatalf("len(Cards) = %d, want 1", len(resp.Cards))
-	}
-	card := resp.Cards[0]
-	if card.ID != 247 {
-		t.Errorf("ID = %d, want 247", card.ID)
-	}
-	if card.Name != "Charizard [1st Edition]" {
-		t.Errorf("Name = %q, want Charizard [1st Edition]", card.Name)
-	}
-	if card.SetName != "Pokemon Base Set" {
-		t.Errorf("SetName = %q, want Pokemon Base Set", card.SetName)
-	}
-	if card.Number != "4" {
-		t.Errorf("Number = %q, want 4", card.Number)
-	}
-	if card.ImageURL != "https://example.com/charizard.png" {
-		t.Errorf("ImageURL = %q, want https://example.com/charizard.png", card.ImageURL)
-	}
-}
-
-func TestClient_Match(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			t.Errorf("expected POST, got %s", r.Method)
-		}
-		if r.Header.Get(apiKeyHeader) != "test_api_key" {
-			t.Errorf("expected %s header = test_api_key, got %q", apiKeyHeader, r.Header.Get(apiKeyHeader))
-		}
-		if r.URL.Path != "/api/v1/integrations/match" {
-			t.Errorf("expected path /api/v1/integrations/match, got %s", r.URL.Path)
-		}
-
-		var req MatchRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			t.Fatalf("failed to decode request body: %v", err)
-		}
-		if req.Title != "Charizard Base Set PSA 10" {
-			t.Errorf("expected title='Charizard Base Set PSA 10', got %q", req.Title)
-		}
-		if req.SKU != "PSA-12345" {
-			t.Errorf("expected sku='PSA-12345', got %q", req.SKU)
-		}
-
-		resp := MatchResponse{
-			Success:     true,
-			CardID:      42,
-			CardTitle:   "Charizard Base Set 4/102",
-			Confidence:  0.95,
-			MatchMethod: "title_match",
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(resp)
-	}))
-	defer server.Close()
-
-	c := newTestClient(server.URL)
-	resp, err := c.Match(context.Background(), "Charizard Base Set PSA 10", "PSA-12345")
-	if err != nil {
-		t.Fatalf("Match() error = %v", err)
-	}
-	if !resp.Success {
-		t.Error("expected Success = true")
-	}
-	if resp.CardID != 42 {
-		t.Errorf("CardID = %d, want 42", resp.CardID)
-	}
-	if resp.CardTitle != "Charizard Base Set 4/102" {
-		t.Errorf("CardTitle = %q, want Charizard Base Set 4/102", resp.CardTitle)
-	}
-	if resp.Confidence != 0.95 {
-		t.Errorf("Confidence = %v, want 0.95", resp.Confidence)
-	}
-	if resp.MatchMethod != "title_match" {
-		t.Errorf("MatchMethod = %q, want title_match", resp.MatchMethod)
-	}
-}
-
-func TestClient_MarketData(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			t.Errorf("expected GET, got %s", r.Method)
-		}
-		if r.Header.Get(apiKeyHeader) != "test_api_key" {
-			t.Errorf("expected %s header = test_api_key, got %q", apiKeyHeader, r.Header.Get(apiKeyHeader))
-		}
-		if r.URL.Path != "/api/v1/integrations/market_data/card_123" {
-			t.Errorf("expected path /api/v1/integrations/market_data/card_123, got %s", r.URL.Path)
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{
-			"tier": 3,
-			"has_data": true,
-			"card_id": 247,
-			"card_title": "Charizard Base Set 4/102",
-			"current_price": 14875.00,
-			"period_low": 12000.00,
-			"period_high": 16500.00,
-			"price_change": 875.00,
-			"price_change_pct": 6.25,
-			"price_history": [],
-			"periods": {
-				"30d": {
-					"current_price": 14875.00,
-					"period_low": 13500.00,
-					"period_high": 15200.00,
-					"price_change": 500.00,
-					"price_change_pct": 3.48,
-					"price_history": []
-				}
-			},
-			"recent_sales": [
-				{
-					"sold_at": "2026-03-30",
-					"grading_company": "PSA",
-					"grade": "10",
-					"price": 15200.00,
-					"platform": "eBay"
-				}
-			],
-			"population": [],
-			"insights": null,
-			"sentiment": {
-				"score": 0.82,
-				"mention_count": 45,
-				"trend": "bullish"
-			},
-			"grading_roi": {
-				"card": {"id": 247, "name": "Charizard", "set_name": "Base Set"},
-				"roi_data": [
-					{"grade": "PSA 10", "avg_sale_price": 15000.00, "roi": 0.42}
-				]
-			},
-			"price_forecast": null
-		}`))
-	}))
-	defer server.Close()
-
-	c := newTestClient(server.URL)
-	resp, err := c.MarketData(context.Background(), "card_123")
-	if err != nil {
-		t.Fatalf("MarketData() error = %v", err)
-	}
-	if !resp.HasData {
-		t.Error("expected HasData = true")
-	}
-	if resp.CardID != 247 {
-		t.Errorf("CardID = %d, want 247", resp.CardID)
-	}
-	if resp.CurrentPrice != 14875.00 {
-		t.Errorf("CurrentPrice = %v, want 14875.00", resp.CurrentPrice)
-	}
-	if resp.Tier != 3 {
-		t.Errorf("Tier = %d, want 3", resp.Tier)
-	}
-	if resp.PriceChangePct != 6.25 {
-		t.Errorf("PriceChangePct = %v, want 6.25", resp.PriceChangePct)
-	}
-
-	period30d, ok := resp.Periods["30d"]
-	if !ok {
-		t.Fatal("expected 30d period")
-	}
-	if period30d.PriceChange != 500.00 {
-		t.Errorf("30d PriceChange = %v, want 500.00", period30d.PriceChange)
-	}
-
-	if len(resp.RecentSales) != 1 {
-		t.Fatalf("len(RecentSales) = %d, want 1", len(resp.RecentSales))
-	}
-	if resp.RecentSales[0].Platform != "eBay" {
-		t.Errorf("RecentSales[0].Platform = %q, want eBay", resp.RecentSales[0].Platform)
-	}
-
-	if resp.Sentiment == nil {
-		t.Fatal("expected non-nil Sentiment")
-	}
-	if resp.Sentiment.Score != 0.82 {
-		t.Errorf("Sentiment.Score = %v, want 0.82", resp.Sentiment.Score)
-	}
-	if resp.Sentiment.MentionCount != 45 {
-		t.Errorf("Sentiment.MentionCount = %d, want 45", resp.Sentiment.MentionCount)
-	}
-
-	if resp.GradingROI == nil {
-		t.Fatal("expected non-nil GradingROI")
-	}
-	if len(resp.GradingROI.ROIData) != 1 {
-		t.Fatalf("len(GradingROI.ROIData) = %d, want 1", len(resp.GradingROI.ROIData))
-	}
-	if resp.GradingROI.ROIData[0].Grade != "PSA 10" {
-		t.Errorf("GradingROI.ROIData[0].Grade = %q, want PSA 10", resp.GradingROI.ROIData[0].Grade)
-	}
-	if resp.GradingROI.ROIData[0].ROI != 0.42 {
-		t.Errorf("GradingROI.ROIData[0].ROI = %v, want 0.42", resp.GradingROI.ROIData[0].ROI)
-	}
 }
 
 func TestClient_Suggestions(t *testing.T) {
@@ -290,11 +56,11 @@ func TestClient_Suggestions(t *testing.T) {
 		if r.Method != http.MethodGet {
 			t.Errorf("expected GET, got %s", r.Method)
 		}
-		if r.Header.Get(apiKeyHeader) != "test_api_key" {
-			t.Errorf("expected %s header = test_api_key, got %q", apiKeyHeader, r.Header.Get(apiKeyHeader))
+		if r.Header.Get("Authorization") != "Bearer test_api_key" {
+			t.Errorf("expected Bearer auth, got %q", r.Header.Get("Authorization"))
 		}
-		if r.URL.Path != "/api/v1/integrations/suggestions" {
-			t.Errorf("expected path /api/v1/integrations/suggestions, got %s", r.URL.Path)
+		if r.URL.Path != "/api/v1/enterprise/suggestions" {
+			t.Errorf("expected path /api/v1/enterprise/suggestions, got %s", r.URL.Path)
 		}
 
 		resp := SuggestionsResponse{
@@ -381,10 +147,192 @@ func TestClient_Suggestions(t *testing.T) {
 	}
 }
 
+func TestClient_CardLookup(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			t.Errorf("expected GET, got %s", r.Method)
+		}
+		if r.Header.Get("Authorization") != "Bearer test_api_key" {
+			t.Errorf("expected Bearer auth, got %q", r.Header.Get("Authorization"))
+		}
+		if r.URL.Path != "/api/v1/enterprise/cards/lookup" {
+			t.Errorf("expected path /api/v1/enterprise/cards/lookup, got %s", r.URL.Path)
+		}
+		if r.URL.Query().Get("card_id") != "247" {
+			t.Errorf("expected card_id=247, got %q", r.URL.Query().Get("card_id"))
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"card": {
+				"id": 247,
+				"name": "Charizard [1st Edition]",
+				"set_name": "Pokemon Base Set",
+				"number": "4",
+				"rarity": "Holo Rare",
+				"language": "en",
+				"era": "WOTC",
+				"year": "1999",
+				"artist": "Mitsuhiro Arita",
+				"image_url": "https://example.com/charizard.png",
+				"slug": "charizard-1st-edition",
+				"pricecharting_id": "pc-123",
+				"tcgplayer_product_id": null
+			},
+			"market_data": {
+				"best_bid": 12000.00,
+				"best_ask": 15000.00,
+				"spread": 3000.00,
+				"last_sale": 14000.00,
+				"last_sale_date": "2026-04-01",
+				"low_price": 11000.00,
+				"mid_price": 13500.00,
+				"high_price": 16000.00,
+				"active_bids": 5,
+				"active_asks": 8,
+				"24h_volume": 2,
+				"24h_change": 3.5,
+				"7d_change": -1.2,
+				"30d_change": 8.0
+			}
+		}`))
+	}))
+	defer server.Close()
+
+	c := newTestClient(server.URL)
+	resp, err := c.CardLookup(context.Background(), 247)
+	if err != nil {
+		t.Fatalf("CardLookup() error = %v", err)
+	}
+	if resp.Card.ID != 247 {
+		t.Errorf("Card.ID = %d, want 247", resp.Card.ID)
+	}
+	if resp.Card.Name != "Charizard [1st Edition]" {
+		t.Errorf("Card.Name = %q, want Charizard [1st Edition]", resp.Card.Name)
+	}
+	if resp.MarketData.MidPrice == nil || *resp.MarketData.MidPrice != 13500.00 {
+		t.Errorf("MarketData.MidPrice = %v, want 13500.00", resp.MarketData.MidPrice)
+	}
+}
+
+func TestClient_RecentSales(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			t.Errorf("expected GET, got %s", r.Method)
+		}
+		if r.Header.Get("Authorization") != "Bearer test_api_key" {
+			t.Errorf("expected Bearer auth, got %q", r.Header.Get("Authorization"))
+		}
+		if r.URL.Path != "/api/v1/enterprise/cards/42/recent-sales" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"sales": [
+				{"sold_at": "2026-04-01T12:00:00Z", "grading_company": "PSA", "grade": "10", "price": 500.00, "platform": "eBay"},
+				{"sold_at": "2026-03-28T10:00:00Z", "grading_company": "PSA", "grade": "9", "price": 250.00, "platform": "TCGPlayer"}
+			]
+		}`))
+	}))
+	defer server.Close()
+
+	c := newTestClient(server.URL)
+	sales, err := c.RecentSales(context.Background(), 42)
+	if err != nil {
+		t.Fatalf("RecentSales() error = %v", err)
+	}
+	if len(sales) != 2 {
+		t.Fatalf("len(sales) = %d, want 2", len(sales))
+	}
+	if sales[0].Price != 500.00 {
+		t.Errorf("sales[0].Price = %v, want 500.00", sales[0].Price)
+	}
+	if sales[1].GradingCompany != "PSA" {
+		t.Errorf("sales[1].GradingCompany = %q, want PSA", sales[1].GradingCompany)
+	}
+}
+
+func TestClient_MarketDataEnterprise(t *testing.T) {
+	t.Run("full response", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			switch {
+			case r.URL.Path == "/api/v1/enterprise/cards/lookup":
+				_, _ = w.Write([]byte(`{
+					"card": {"id": 42, "name": "Charizard"},
+					"market_data": {"mid_price": 500.00, "low_price": 400.00, "high_price": 600.00}
+				}`))
+			case strings.HasSuffix(r.URL.Path, "/recent-sales"):
+				_, _ = w.Write([]byte(`{
+					"sales": [{"sold_at": "2026-04-01T12:00:00Z", "grading_company": "PSA", "grade": "10", "price": 500.00, "platform": "eBay"}]
+				}`))
+			default:
+				t.Errorf("unexpected path: %s", r.URL.Path)
+			}
+		}))
+		defer server.Close()
+
+		c := newTestClient(server.URL)
+		resp, err := c.MarketDataEnterprise(context.Background(), 42)
+		if err != nil {
+			t.Fatalf("error = %v", err)
+		}
+		if !resp.HasData {
+			t.Error("expected HasData = true")
+		}
+		if resp.CurrentPrice != 500.00 {
+			t.Errorf("CurrentPrice = %v, want 500.00", resp.CurrentPrice)
+		}
+		if resp.PeriodLow != 400.00 {
+			t.Errorf("PeriodLow = %v, want 400.00", resp.PeriodLow)
+		}
+		if resp.PeriodHigh != 600.00 {
+			t.Errorf("PeriodHigh = %v, want 600.00", resp.PeriodHigh)
+		}
+		if len(resp.RecentSales) != 1 {
+			t.Fatalf("len(RecentSales) = %d, want 1", len(resp.RecentSales))
+		}
+	})
+
+	t.Run("recent sales failure returns partial data", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			switch {
+			case r.URL.Path == "/api/v1/enterprise/cards/lookup":
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{
+					"card": {"id": 42, "name": "Charizard"},
+					"market_data": {"mid_price": 500.00}
+				}`))
+			case strings.HasSuffix(r.URL.Path, "/recent-sales"):
+				w.WriteHeader(http.StatusInternalServerError)
+			default:
+				t.Errorf("unexpected path: %s", r.URL.Path)
+			}
+		}))
+		defer server.Close()
+
+		c := newTestClient(server.URL)
+		resp, err := c.MarketDataEnterprise(context.Background(), 42)
+		if err != nil {
+			t.Fatalf("error = %v (expected partial success)", err)
+		}
+		if !resp.HasData {
+			t.Error("expected HasData = true")
+		}
+		if resp.CurrentPrice != 500.00 {
+			t.Errorf("CurrentPrice = %v, want 500.00", resp.CurrentPrice)
+		}
+		if len(resp.RecentSales) != 0 {
+			t.Errorf("expected empty RecentSales on failure, got %d", len(resp.RecentSales))
+		}
+	})
+}
+
 func TestClient_NotAvailable(t *testing.T) {
-	c := NewClient("", "")
-	_, err := c.Search(context.Background(), "test", 10)
+	c := NewClient("")
+	_, err := c.CardLookup(context.Background(), 1)
 	if err == nil {
-		t.Error("expected error when not available")
+		t.Error("expected error when enterprise key not available")
 	}
 }
