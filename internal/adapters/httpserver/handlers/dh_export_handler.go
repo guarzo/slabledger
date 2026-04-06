@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	"github.com/guarzo/slabledger/internal/domain/campaigns"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
@@ -16,23 +17,15 @@ type unmatchedResponse struct {
 	Count     int             `json:"count"`
 }
 
-type candidateInfo struct {
-	DHCardID   int    `json:"dh_card_id"`
-	CardName   string `json:"card_name"`
-	SetName    string `json:"set_name"`
-	CardNumber string `json:"card_number"`
-	ImageURL   string `json:"image_url"`
-}
-
 type unmatchedCard struct {
-	PurchaseID   string          `json:"purchase_id"`
-	CardName     string          `json:"card_name"`
-	SetName      string          `json:"set_name"`
-	CardNumber   string          `json:"card_number"`
-	CertNumber   string          `json:"cert_number"`
-	Grade        float64         `json:"grade"`
-	CLValueCents int             `json:"cl_value_cents"`
-	Candidates   []candidateInfo `json:"candidates,omitempty"`
+	PurchaseID   string                       `json:"purchase_id"`
+	CardName     string                       `json:"card_name"`
+	SetName      string                       `json:"set_name"`
+	CardNumber   string                       `json:"card_number"`
+	CertNumber   string                       `json:"cert_number"`
+	Grade        float64                      `json:"grade"`
+	CLValueCents int                          `json:"cl_value_cents"`
+	Candidates   []dh.CertResolutionCandidate `json:"candidates,omitempty"`
 }
 
 // HandleUnmatched returns cards that do not yet have a DH mapping.
@@ -64,8 +57,11 @@ func (h *DHHandler) HandleUnmatched(w http.ResponseWriter, r *http.Request) {
 			CLValueCents: p.CLValueCents,
 		}
 		if p.DHCandidatesJSON != "" {
-			var raw []candidateInfo
-			if err := json.Unmarshal([]byte(p.DHCandidatesJSON), &raw); err == nil {
+			var raw []dh.CertResolutionCandidate
+			if err := json.Unmarshal([]byte(p.DHCandidatesJSON), &raw); err != nil {
+				h.logger.Warn(ctx, "unmatched: failed to parse candidates JSON",
+					observability.String("purchaseID", p.ID), observability.Err(err))
+			} else {
 				card.Candidates = raw
 			}
 		}

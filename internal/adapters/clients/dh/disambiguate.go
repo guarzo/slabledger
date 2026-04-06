@@ -1,6 +1,10 @@
 package dh
 
-import "strings"
+import (
+	"encoding/json"
+	"fmt"
+	"strings"
+)
 
 // Disambiguate attempts to select a single candidate from an ambiguous cert
 // resolution using the submitted card_number hint. Returns the matching
@@ -25,4 +29,23 @@ func Disambiguate(candidates []CertResolutionCandidate, cardNumber string) int {
 		return matchID
 	}
 	return 0
+}
+
+// ResolveAmbiguous tries card-number disambiguation on ambiguous candidates.
+// Returns the matched DHCardID (>0) on success. On failure, marshals
+// candidates to JSON and passes them to saveFn (if non-nil), then returns 0.
+func ResolveAmbiguous(candidates []CertResolutionCandidate, cardNumber string, saveFn func(candidatesJSON string) error) (int, error) {
+	if id := Disambiguate(candidates, cardNumber); id > 0 {
+		return id, nil
+	}
+	if saveFn != nil {
+		b, err := json.Marshal(candidates)
+		if err != nil {
+			return 0, fmt.Errorf("marshal candidates: %w", err)
+		}
+		if err := saveFn(string(b)); err != nil {
+			return 0, err
+		}
+	}
+	return 0, nil
 }

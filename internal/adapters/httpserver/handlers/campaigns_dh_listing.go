@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strconv"
 	"time"
@@ -129,19 +128,19 @@ func (h *CampaignsHandler) inlineMatchAndPush(ctx context.Context, p *campaigns.
 
 	var dhCardID int
 	if resp.Status != dh.CertStatusMatched {
-		// Try card-number disambiguation for ambiguous responses.
 		if resp.Status == dh.CertStatusAmbiguous && len(resp.Candidates) > 0 {
-			if disambiguated := dh.Disambiguate(resp.Candidates, p.CardNumber); disambiguated > 0 {
-				dhCardID = disambiguated
+			var saveFn func(string) error
+			if h.dhCandidatesSaver != nil {
+				saveFn = func(j string) error { return h.dhCandidatesSaver.UpdatePurchaseDHCandidates(ctx, p.ID, j) }
+			}
+			resolved, err := dh.ResolveAmbiguous(resp.Candidates, p.CardNumber, saveFn)
+			if err != nil {
+				h.logger.Warn(ctx, "inline dh resolve: failed to save candidates",
+					observability.String("cert", p.CertNumber), observability.Err(err))
+			}
+			if resolved > 0 {
+				dhCardID = resolved
 			} else {
-				// Store candidates for manual selection
-				if h.dhCandidatesSaver != nil {
-					candidatesJSON, _ := json.Marshal(resp.Candidates)
-					if err := h.dhCandidatesSaver.UpdatePurchaseDHCandidates(ctx, p.ID, string(candidatesJSON)); err != nil {
-						h.logger.Warn(ctx, "inline dh resolve: failed to save candidates",
-							observability.String("cert", p.CertNumber), observability.Err(err))
-					}
-				}
 				if h.pushStatusUpdater != nil {
 					if err := h.pushStatusUpdater.UpdatePurchaseDHPushStatus(ctx, p.ID, campaigns.DHPushStatusUnmatched); err != nil {
 						h.logger.Warn(ctx, "inline dh resolve: failed to set unmatched status",

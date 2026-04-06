@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"strconv"
 
@@ -100,9 +99,17 @@ func (h *DHHandler) runBulkMatch(ctx context.Context, purchases []campaigns.Purc
 		}
 
 		if resp.Status != dh.CertStatusMatched {
-			// Try card-number disambiguation for ambiguous responses.
 			if resp.Status == dh.CertStatusAmbiguous && len(resp.Candidates) > 0 {
-				if dhCardID := dh.Disambiguate(resp.Candidates, p.CardNumber); dhCardID > 0 {
+				var saveFn func(string) error
+				if h.candidatesSaver != nil {
+					saveFn = func(j string) error { return h.candidatesSaver.UpdatePurchaseDHCandidates(ctx, p.ID, j) }
+				}
+				dhCardID, resolveErr := dh.ResolveAmbiguous(resp.Candidates, p.CardNumber, saveFn)
+				if resolveErr != nil {
+					h.logger.Warn(ctx, "bulk match: failed to save candidates",
+						observability.String("cert", p.CertNumber), observability.Err(resolveErr))
+				}
+				if dhCardID > 0 {
 					externalID := strconv.Itoa(dhCardID)
 					if err := h.cardIDSaver.SaveExternalID(ctx, p.CardName, p.SetName, p.CardNumber, pricing.SourceDH, externalID); err != nil {
 						h.logger.Error(ctx, "bulk match: save disambiguated ID", observability.Err(err),
@@ -114,14 +121,6 @@ func (h *DHHandler) runBulkMatch(ctx context.Context, purchases []campaigns.Purc
 					matchedCards = append(matchedCards, matchedCard{identity: p.ToCardIdentity(), dhCardID: dhCardID})
 					mappedSet[key] = externalID
 					continue
-				}
-				// Store candidates for manual selection
-				if h.candidatesSaver != nil {
-					candidatesJSON, _ := json.Marshal(resp.Candidates)
-					if err := h.candidatesSaver.UpdatePurchaseDHCandidates(ctx, p.ID, string(candidatesJSON)); err != nil {
-						h.logger.Warn(ctx, "bulk match: failed to save candidates",
-							observability.String("cert", p.CertNumber), observability.Err(err))
-					}
 				}
 			}
 			notFound++

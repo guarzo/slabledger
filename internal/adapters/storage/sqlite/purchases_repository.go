@@ -48,7 +48,7 @@ func (r *CampaignsRepository) CreatePurchase(ctx context.Context, p *campaigns.P
 		p.AISuggestedPriceCents, p.AISuggestedAt,
 		p.CardYear, p.EbayExportFlaggedAt,
 		p.ReviewedPriceCents, p.ReviewedAt, string(p.ReviewSource),
-		p.DHCardID, p.DHInventoryID, p.DHCertStatus, p.DHListingPriceCents, p.DHChannelsJSON, p.DHStatus, p.DHPushStatus, "",
+		p.DHCardID, p.DHInventoryID, p.DHCertStatus, p.DHListingPriceCents, p.DHChannelsJSON, p.DHStatus, p.DHPushStatus, p.DHCandidatesJSON,
 	)
 	if err != nil && isUniqueConstraintError(err) {
 		return campaigns.ErrDuplicateCertNumber

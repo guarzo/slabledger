@@ -101,7 +101,6 @@ func (h *DHHandler) HandleSelectMatch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Clear stored candidates
 	if h.candidatesSaver != nil {
 		if err := h.candidatesSaver.UpdatePurchaseDHCandidates(ctx, purchase.ID, ""); err != nil {
 			h.logger.Warn(ctx, "select match: failed to clear candidates",
