@@ -5,9 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
-	"time"
-
 	"github.com/guarzo/slabledger/internal/domain/observability"
+	"github.com/guarzo/slabledger/internal/domain/timeutil"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -98,11 +97,7 @@ func snapshotFromPurchase(p *Purchase) *MarketSnapshot {
 // Uses stored snapshot data (no API calls) for fast page loads. The inventory refresh
 // scheduler keeps snapshots fresh in the background.
 func (s *service) enrichAgingItem(_ context.Context, p *Purchase, campaignName string) AgingItem {
-	daysHeld := 0
-	if t, err := time.Parse("2006-01-02", p.PurchaseDate); err == nil {
-		daysHeld = int(time.Since(t).Hours() / 24)
-	}
-	item := AgingItem{Purchase: *p, DaysHeld: daysHeld, CampaignName: campaignName}
+	item := AgingItem{Purchase: *p, DaysHeld: timeutil.DaysSince(p.PurchaseDate), CampaignName: campaignName}
 
 	snap := snapshotFromPurchase(p)
 
@@ -247,7 +242,56 @@ func (s *service) GetGlobalInventoryAging(ctx context.Context) ([]AgingItem, err
 	}
 
 	s.applyOpenFlags(ctx, items)
+
+	// Compute crack candidates for signal enrichment
+	crackSet := s.buildCrackCandidateSet(ctx)
+
+	// Apply inventory signals
+	for i := range items {
+		isCrack := crackSet[items[i].Purchase.ID]
+		sig := ComputeInventorySignals(&items[i], isCrack)
+		if sig.HasAnySignal() {
+			items[i].Signals = &sig
+		}
+	}
+
 	return items, nil
+}
+
+// GetFlaggedInventory returns only unsold cards that have at least one
+// inventory signal set. Used by the liquidation analysis to receive
+// pre-filtered, actionable cards instead of the full inventory.
+func (s *service) GetFlaggedInventory(ctx context.Context) ([]AgingItem, error) {
+	all, err := s.GetGlobalInventoryAging(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var flagged []AgingItem
+	for _, item := range all {
+		if item.Signals.HasAnySignal() {
+			flagged = append(flagged, item)
+		}
+	}
+	return flagged, nil
+}
+
+// buildCrackCandidateSet returns a set of purchase IDs that are crack candidates.
+// Best-effort: returns empty set on error.
+func (s *service) buildCrackCandidateSet(ctx context.Context) map[string]bool {
+	cracks, err := s.GetCrackOpportunities(ctx)
+	if err != nil {
+		if s.logger != nil {
+			s.logger.Warn(ctx, "crack candidates failed for signal enrichment", observability.Err(err))
+		}
+		return nil
+	}
+	set := make(map[string]bool, len(cracks))
+	for _, c := range cracks {
+		if c.IsCrackCandidate {
+			set[c.PurchaseID] = true
+		}
+	}
+	return set
 }
 
 // applyOpenFlags batch-loads open price flag status and sets HasOpenFlag on matching items.

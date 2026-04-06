@@ -105,52 +105,67 @@ Fetch the campaign's tuning data, P&L, and inventory aging. Then provide:
 const liquidationSystemPrompt = baseSystemPrompt + `
 
 ## Your Task: Liquidation Analysis
-Identify cards where selling now (even below market) is better than holding.
-Consider: credit pressure, carrying costs (5% annual), days held, market trend, liquidity, and EV.
-A card with negative EV or declining market that ties up capital should be liquidated.
-Prioritize by capital freed relative to markdown cost.
+You receive pre-flagged inventory — cards already identified by the scoring engine as
+needing action. Your job is to make judgment calls the engine cannot:
 
-Also check get_crack_opportunities for cards where cracking and selling raw outperforms holding the graded slab. Crack candidates are a form of liquidation.
+1. **Reprice stale listings** — cards flagged stale/deep_stale with no recent sales near
+   our price. Determine a new price using market comps, sentiment, and EV data. Save via
+   suggest_price_batch.
 
-When you identify cards that should be repriced, use the suggest_price_batch tool
-to save your recommended prices. The user will review your suggestions
-in the inventory UI and can accept or dismiss each one.
+2. **Auction vs fixed price** — for stale cards, evaluate whether auction is better than
+   fixed price. Favor auction when: fair value is uncertain (wide spread in recent comps),
+   card has been listed 30+ days at fixed, or card is trending with potential for
+   above-market bids. Favor fixed when: price is well-established and we just need a
+   small adjustment.
 
-Before making new suggestions, call get_suggestion_stats to see how your
+3. **Cut-loss decisions** — cards flagged cut_loss. For each: quantify the carrying cost
+   vs expected further decline. Recommend one of:
+   - Drop online price to [specific amount]
+   - Auction (starting price at [amount])
+   - Sell in person at 75-80% of market to free capital immediately
+   Show the math: holding cost per month vs markdown cost.
+
+4. **Credit pressure adjustment** — if credit utilization is high (>80%), lower the bar
+   for all liquidation actions. Cards you would normally hold become sells.
+
+Do NOT re-analyze cards flagged profitCaptureDeclining, profitCaptureSpike, or
+crackCandidate — those have clear procedural actions (sell in person / crack and sell).
+Only mention them in your summary totals.
+
+Before making new price suggestions, call get_suggestion_stats to see how your
 previous recommendations performed. If acceptance rate is low, adjust your
 pricing strategy — you may be suggesting prices that are too aggressive.
 
-## Exit Channels
-Recommend one of three channels for each card:
-- **eBay**: Best for most cards. 12.35% fees, sells at CL value.
-- **Website**: Good for unique or high-demand cards. 3% fees.
-- **In Person** (card shows, local stores): Best for quick liquidation. 0% fees, sells at 80-85% of market.
-
 ## Tool Strategy
-You have a **3-round tool budget** and 8 tools. Plan your calls carefully:
+You have a **3-round tool budget** and 6 tools.
 
-**Round 1**: Call get_dashboard_summary, get_global_inventory, get_sell_sheet,
-get_suggestion_stats, and get_inventory_alerts together. These give you credit health, inventory aging, and pricing data.
+**Round 1**: Call get_dashboard_summary, get_flagged_inventory, get_suggestion_stats,
+and get_inventory_alerts together.
 
-**Round 2**: Call get_expected_values_batch (one call, all campaigns or specific ones) for EV data,
-suggest_price_batch (one call) for all cards you want to reprice, and get_crack_opportunities for crack candidates.
+**Round 2**: Call get_expected_values_batch for campaigns with flagged cards.
+If you have repricing recommendations, call suggest_price_batch in the same round.
 
-**Round 3**: Escape hatch only if absolutely needed. Prefer completing the analysis after Round 2.
+**Round 3**: Escape hatch for follow-up calls if needed. Prefer completing the report after Round 2.
 
-After your tool rounds, write your analysis with the data you have.`
+**After your tool rounds, write your analysis immediately. Do NOT make additional tool calls.**`
 
-const liquidationUserPrompt = `Run a liquidation analysis across my entire portfolio.
+const liquidationUserPrompt = `Run a liquidation analysis on my flagged inventory.
 
-For each liquidation candidate, provide:
-- **Card name, grade, cert** (if available)
-- **Cost basis** and **days held**
-- **Current market** (median, trend, velocity)
-- **Recommended action**: sell at [price] on [eBay / Website / In Person], or hold
-- **Reasoning**: why sell now vs hold (credit pressure, declining trend, low liquidity, etc.)
-- **Capital freed** if sold
+Focus your judgment on three decisions:
+1. What price should stale listings be set to?
+2. Should any cards go to auction instead of fixed price?
+3. Which cards should we take a loss on, and how?
 
-Sort by urgency: credit-critical first, then declining-trend cards, then low-EV holds.
-End with a summary: total capital that could be freed and net cost of liquidation.`
+Do not repeat data from the flags — I can see those in the UI.
+
+Structure your report as:
+1. **Credit Snapshot** — utilization %, alert level, urgency modifier
+2. **Reprice Recommendations** — table: card, current price, new price, reasoning
+3. **Auction Candidates** — table: card, why auction beats fixed, suggested start price
+4. **Cut-Loss Actions** — table: card, cost basis, current market, recommended action, carrying cost math, capital freed
+5. **Summary** — total capital recoverable, total markdown cost, net repricing impact, suggestion stats
+
+End with totals: capital freed, markdown cost, and repricing count.`
 
 // purchaseAssessmentSystemPrompt is used for evaluating potential purchases.
 const purchaseAssessmentSystemPrompt = baseSystemPrompt + `

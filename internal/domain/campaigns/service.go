@@ -173,6 +173,7 @@ type Service interface {
 	GetDaysToSellDistribution(ctx context.Context, campaignID string) ([]DaysToSellBucket, error)
 	GetInventoryAging(ctx context.Context, campaignID string) ([]AgingItem, error)
 	GetGlobalInventoryAging(ctx context.Context) ([]AgingItem, error)
+	GetFlaggedInventory(ctx context.Context) ([]AgingItem, error)
 
 	// Sell sheet
 	GenerateSellSheet(ctx context.Context, campaignID string, purchaseIDs []string) (*SellSheet, error)
