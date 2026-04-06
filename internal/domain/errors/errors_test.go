@@ -178,7 +178,7 @@ func TestAppError_WithHTTPStatus(t *testing.T) {
 		t.Errorf("HTTPStatusCode = %d, want 401", err2.HTTPStatusCode)
 	}
 	if err2.Context["provider"] != "doubleholo" {
-		t.Errorf("Context[provider] = %v, want PriceCharting", err2.Context["provider"])
+		t.Errorf("Context[provider] = %v, want doubleholo", err2.Context["provider"])
 	}
 }
 

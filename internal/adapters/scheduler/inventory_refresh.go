@@ -106,7 +106,7 @@ func (s *InventoryRefreshScheduler) refreshBatch(ctx context.Context) {
 
 	// No dedup here — RefreshSnapshot must run per purchase (each has its
 	// own snapshot record keyed by purchase ID). Identical price lookups
-	// are already coalesced at the fusion provider layer via singleflight
+	// are already coalesced at the DH provider layer via singleflight
 	// and in-memory cache, so duplicate API calls don't happen.
 
 	// Cap at batch size
