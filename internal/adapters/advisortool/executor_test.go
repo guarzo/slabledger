@@ -24,7 +24,7 @@ func TestDefinitions_RequiredTools(t *testing.T) {
 
 	requiredTools := []string{
 		"list_campaigns", "get_campaign_pnl", "get_pnl_by_channel",
-		"get_campaign_tuning", "get_inventory_aging", "get_global_inventory",
+		"get_campaign_tuning", "get_inventory_aging", "get_global_inventory", "get_flagged_inventory",
 		"get_sell_sheet", "get_portfolio_health", "get_portfolio_insights",
 		"get_credit_summary", "get_weekly_review", "get_capital_timeline",
 		"get_channel_velocity", "get_dashboard_summary", "get_expected_values",

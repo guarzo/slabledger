@@ -263,6 +263,23 @@ func (s *service) GetGlobalInventoryAging(ctx context.Context) ([]AgingItem, err
 	return items, nil
 }
 
+// GetFlaggedInventory returns only unsold cards that have at least one
+// inventory signal set. Used by the liquidation analysis to receive
+// pre-filtered, actionable cards instead of the full inventory.
+func (s *service) GetFlaggedInventory(ctx context.Context) ([]AgingItem, error) {
+	all, err := s.GetGlobalInventoryAging(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var flagged []AgingItem
+	for _, item := range all {
+		if item.Signals != nil && item.Signals.HasAnySignal() {
+			flagged = append(flagged, item)
+		}
+	}
+	return flagged, nil
+}
+
 // buildCrackCandidateSet returns a set of purchase IDs that are crack candidates.
 // Best-effort: returns empty set on error.
 func (s *service) buildCrackCandidateSet(ctx context.Context) map[string]bool {
