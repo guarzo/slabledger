@@ -22,6 +22,15 @@ func withTestIDGen() campaigns.ServiceOption {
 	return campaigns.WithIDGenerator(testIDGen())
 }
 
+// withClosedBaseCtx returns a pre-cancelled base context so background workers
+// (crack cache, cert enrichment) exit immediately. The mock repo is not thread-safe,
+// so background workers racing with test operations would trigger the race detector.
+func withClosedBaseCtx() campaigns.ServiceOption {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	return campaigns.WithBaseContext(ctx)
+}
+
 func TestService_CreateCampaign(t *testing.T) {
 	svc := campaigns.NewService(mocks.NewMockCampaignRepository(), withTestIDGen())
 	ctx := context.Background()
@@ -277,7 +286,7 @@ func newDefaultPriceLookup(t *testing.T, expectSetName string) *mockPriceLookup 
 
 func TestService_LookupCert(t *testing.T) {
 	repo := mocks.NewMockCampaignRepository()
-	svc := campaigns.NewService(repo, withTestIDGen(), campaigns.WithCertLookup(newDefaultCertLookup()), campaigns.WithPriceLookup(newDefaultPriceLookup(nil, "")))
+	svc := campaigns.NewService(repo, withTestIDGen(), withClosedBaseCtx(), campaigns.WithCertLookup(newDefaultCertLookup()), campaigns.WithPriceLookup(newDefaultPriceLookup(nil, "")))
 	ctx := context.Background()
 
 	info, snapshot, err := svc.LookupCert(ctx, "12345678")
@@ -337,7 +346,7 @@ func TestService_QuickAddPurchase(t *testing.T) {
 
 func TestService_GenerateSellSheet(t *testing.T) {
 	repo := mocks.NewMockCampaignRepository()
-	svc := campaigns.NewService(repo, withTestIDGen(), campaigns.WithPriceLookup(newDefaultPriceLookup(nil, "")))
+	svc := campaigns.NewService(repo, withTestIDGen(), withClosedBaseCtx(), campaigns.WithPriceLookup(newDefaultPriceLookup(nil, "")))
 	ctx := context.Background()
 
 	c := &campaigns.Campaign{Name: "Test", BuyTermsCLPct: 0.78, EbayFeePct: 0.1235}
@@ -406,7 +415,7 @@ func TestService_CreateSale_ComputesFieldsLocal(t *testing.T) {
 
 func TestService_CreatePurchase_CapturesSnapshot(t *testing.T) {
 	repo := mocks.NewMockCampaignRepository()
-	svc := campaigns.NewService(repo, withTestIDGen(), campaigns.WithPriceLookup(newDefaultPriceLookup(t, "Base Set")))
+	svc := campaigns.NewService(repo, withTestIDGen(), withClosedBaseCtx(), campaigns.WithPriceLookup(newDefaultPriceLookup(t, "Base Set")))
 	ctx := context.Background()
 
 	c := &campaigns.Campaign{Name: "Test", BuyTermsCLPct: 0.78}
@@ -441,7 +450,7 @@ func TestService_CreatePurchase_CapturesSnapshot(t *testing.T) {
 
 func TestService_CreateSale_CapturesSnapshot(t *testing.T) {
 	repo := mocks.NewMockCampaignRepository()
-	svc := campaigns.NewService(repo, withTestIDGen(), campaigns.WithPriceLookup(newDefaultPriceLookup(t, "Base Set")))
+	svc := campaigns.NewService(repo, withTestIDGen(), withClosedBaseCtx(), campaigns.WithPriceLookup(newDefaultPriceLookup(t, "Base Set")))
 	ctx := context.Background()
 
 	c := &campaigns.Campaign{Name: "Test", BuyTermsCLPct: 0.78, EbayFeePct: 0.1235}

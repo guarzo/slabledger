@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"time"
+
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/domain/timeutil"
 	"golang.org/x/sync/errgroup"
@@ -275,15 +277,27 @@ func (s *service) GetFlaggedInventory(ctx context.Context) ([]AgingItem, error) 
 	return flagged, nil
 }
 
-// buildCrackCandidateSet returns a set of purchase IDs that are crack candidates.
-// Best-effort: returns empty set on error.
+// buildCrackCandidateSet returns the cached set of crack candidate purchase IDs.
+// Returns nil on cold start (before the background worker has completed its first run);
+// callers handle nil safely (Go nil-map index returns false).
+//
+// Safe: refreshCrackCandidates replaces the map atomically (never mutates in-place),
+// so callers can iterate the returned reference without holding the lock.
 func (s *service) buildCrackCandidateSet(ctx context.Context) map[string]bool {
+	s.crackCacheMu.RLock()
+	set := s.crackCacheSet
+	s.crackCacheMu.RUnlock()
+	if set == nil && s.logger != nil {
+		s.logger.Info(ctx, "crack cache not yet populated, signals will be incomplete")
+	}
+	return set
+}
+
+// refreshCrackCandidates recomputes the crack candidate set and stores it in the cache.
+func (s *service) refreshCrackCandidates(ctx context.Context) error {
 	cracks, err := s.GetCrackOpportunities(ctx)
 	if err != nil {
-		if s.logger != nil {
-			s.logger.Warn(ctx, "crack candidates failed for signal enrichment", observability.Err(err))
-		}
-		return nil
+		return err
 	}
 	set := make(map[string]bool, len(cracks))
 	for _, c := range cracks {
@@ -291,14 +305,43 @@ func (s *service) buildCrackCandidateSet(ctx context.Context) map[string]bool {
 			set[c.PurchaseID] = true
 		}
 	}
-	return set
+	s.crackCacheMu.Lock()
+	s.crackCacheSet = set
+	s.crackCacheMu.Unlock()
+	return nil
+}
+
+const crackCacheRefreshInterval = 15 * time.Minute
+
+// crackCacheWorker periodically refreshes the crack candidate cache.
+func (s *service) crackCacheWorker(ctx context.Context) {
+	if ctx.Err() != nil {
+		return
+	}
+	if err := s.refreshCrackCandidates(ctx); err != nil && s.logger != nil {
+		s.logger.Error(ctx, "initial crack cache refresh failed — inventory signals unavailable", observability.Err(err))
+	}
+	ticker := time.NewTicker(crackCacheRefreshInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if err := s.refreshCrackCandidates(ctx); err != nil && s.logger != nil {
+				s.logger.Warn(ctx, "crack cache refresh failed", observability.Err(err))
+			}
+		}
+	}
 }
 
 // applyOpenFlags batch-loads open price flag status and sets HasOpenFlag on matching items.
 func (s *service) applyOpenFlags(ctx context.Context, items []AgingItem) {
 	flaggedIDs, err := s.repo.OpenFlagPurchaseIDs(ctx)
 	if err != nil {
-		s.logger.Warn(ctx, "failed to load open flags", observability.Err(err))
+		if s.logger != nil {
+			s.logger.Warn(ctx, "failed to load open flags", observability.Err(err))
+		}
 		return
 	}
 	for i := range items {
