@@ -47,7 +47,7 @@ You have a **4-round tool budget** and 12 tools.
 **Round 1**: Call these together for a complete portfolio picture:
 get_dashboard_summary, get_weekly_review, get_global_inventory, get_portfolio_insights,
 get_flagged_inventory, get_inventory_alerts, get_acquisition_targets,
-get_crack_opportunities, get_dh_suggestions.
+get_deslab_opportunities, get_dh_suggestions.
 
 **Round 2**: Call get_expected_values_batch (one call, all campaigns) for portfolio-wide EV data.
 Only if a specific campaign needs a deep dive based on Round 1 findings,
@@ -65,7 +65,7 @@ const digestUserPrompt = `Generate my weekly intelligence digest. Fetch current 
 2. Cash flow (outstanding balance, projected exposure, payment status)
 3. Portfolio insights (which segments are over/underperforming)
 4. Inventory signals (flagged cards needing action)
-5. Arbitrage opportunities (acquisition targets and crack candidates)
+5. Arbitrage opportunities (acquisition targets and deslab candidates)
 
 Structure your report as:
 1. **Executive Summary** — 2-3 sentence overview of this week
@@ -73,8 +73,8 @@ Structure your report as:
 3. **Cash Flow** — outstanding balance, projected exposure, unpaid invoices, days to next invoice
 4. **Top Actions** — 3-5 specific prioritized recommendations
 5. **Segment Insights** — outperformers and underperformers by character/grade/era
-6. **Watch List** — cards flagged by inventory signals (stale, cut-loss, profit capture) plus any segments needing attention
-7. **Arbitrage Opportunities** — top acquisition targets (buy raw, grade for profit) and crack candidates (sell raw beats selling graded)
+6. **Watch List** — cards flagged by inventory signals (stale, markdown, profit capture) plus any segments needing attention
+7. **Arbitrage Opportunities** — top acquisition targets (buy raw, grade for profit) and deslab candidates (sell raw beats selling graded)
 
 Format guidelines:
 - Use markdown tables for any list of cards, contributors, or comparable data (e.g. best profit contributors, weakest sales, watch list cards). Example: | Card | Grade | Profit | Channel |
@@ -93,7 +93,7 @@ Compare this campaign's performance to its design intent.
 You have a **2-round tool budget** and 6 tools.
 
 **Round 1**: Call get_campaign_tuning, get_campaign_pnl, get_pnl_by_channel,
-get_inventory_aging, get_expected_values, and get_crack_candidates together.
+get_inventory_aging, get_expected_values, and get_deslab_candidates together.
 All take the campaign ID. This gives you everything for the analysis.
 
 **Round 2**: Escape hatch only if a Round 1 tool failed or returned incomplete data.
@@ -108,7 +108,7 @@ Fetch all campaign data in one round, then provide:
 3. **Market Conditions** — Current market alignment for this segment (trending up/down/stable, liquidity from inventory aging data).
 4. **Tuning Recommendations** — Specific parameter adjustments (buy terms, price range, grade range, spend cap) with reasoning and expected impact.
 5. **Problem Cards** — Cards held too long, declining in value, or with negative EV. Include cert, days held, and recommended action.
-6. **Crack Candidates** — Any cards where selling raw beats selling graded (if any found).
+6. **Deslab Candidates** — Any cards where selling raw beats selling graded (if any found).
 7. **Opportunity** — What's working well that could be expanded.`
 
 // liquidationSystemPrompt is used for liquidation analysis.
@@ -128,7 +128,7 @@ needing action. Your job is to make judgment calls the engine cannot:
    above-market bids. Favor fixed when: price is well-established and we just need a
    small adjustment.
 
-3. **Cut-loss decisions** — cards flagged cut_loss. For each: quantify the carrying cost
+3. **Markdown decisions** — cards flagged for markdown. For each: quantify the carrying cost
    vs expected further decline. Recommend one of:
    - Drop online price to [specific amount]
    - Auction (starting price at [amount])
@@ -139,7 +139,7 @@ needing action. Your job is to make judgment calls the engine cannot:
    for all liquidation actions. Cards you would normally hold become sells.
 
 Do NOT re-analyze cards flagged profitCaptureDeclining, profitCaptureSpike, or
-crackCandidate — those have clear procedural actions (sell in person / crack and sell).
+deslabCandidate — those have clear procedural actions (sell in person / deslab and sell raw).
 Only mention them in your summary totals.
 
 Before making new price suggestions, call get_suggestion_stats to see how your
@@ -172,7 +172,7 @@ Structure your report as:
 1. **Credit Snapshot** — utilization %, alert level, urgency modifier
 2. **Reprice Recommendations** — table: card, current price, new price, reasoning
 3. **Auction Candidates** — table: card, why auction beats fixed, suggested start price
-4. **Cut-Loss Actions** — table: card, cost basis, current market, recommended action, carrying cost math, capital freed
+4. **Markdown Actions** — table: card, cost basis, current market, recommended action, carrying cost math, capital freed
 5. **Summary** — total capital recoverable, total markdown cost, net repricing impact, suggestion stats
 
 End with totals: capital freed, markdown cost, and repricing count.`
