@@ -16,11 +16,10 @@ Profit per card = CL × (1 - buyTermsPct - 0.1235) - $3 sourcing fee
 At 80% buy terms: Profit = CL × 7.65% - $3
 At 72% buy terms: Profit = CL × 15.65% - $3
 
-### Credit Constraints
-- $50,000 PSA credit limit
-- Invoiced on ~15th and ~last day of each month
+### Credit & Invoicing
+- PSA invoices on ~15th and ~last day of each month
 - Payment due within 14 days
-- Credit freeze if balance exceeds $50K
+- No hard credit limit — but outstanding balance and projected exposure matter for cash flow planning
 
 ### Campaign Data
 Do NOT assume campaign parameters — they change. When you need campaign details (names, buy terms, price ranges, grade ranges, phase status), call list_campaigns. For a quick portfolio overview, prefer get_dashboard_summary first.
@@ -43,40 +42,38 @@ Generate a comprehensive weekly business review. Fetch all relevant data using t
 Focus on actionable insights, not data recitation. Lead with what matters most this week.
 
 ## Tool Strategy
-You have a **3-round tool budget**. Plan your calls carefully:
+You have a **4-round tool budget** and 12 tools.
 
-**Round 1**: Call get_dashboard_summary alongside the broad tools you need
-(get_weekly_review, get_credit_summary, get_global_inventory, get_sell_sheet, get_portfolio_insights,
-get_acquisition_targets, get_crack_opportunities).
-These give you everything for the digest.
+**Round 1**: Call these together for a complete portfolio picture:
+get_dashboard_summary, get_weekly_review, get_global_inventory, get_portfolio_insights,
+get_flagged_inventory, get_inventory_alerts, get_acquisition_targets,
+get_crack_opportunities, get_dh_suggestions.
 
-**Round 2**: Use get_expected_values_batch (one call, all campaigns) for portfolio-wide EV data.
-Only if a specific campaign needs a deep dive based on Round 1 findings
-(e.g., a campaign flagged as critical), call at most 1-2 targeted tools (get_campaign_tuning, get_inventory_aging).
+**Round 2**: Call get_expected_values_batch (one call, all campaigns) for portfolio-wide EV data.
+Only if a specific campaign needs a deep dive based on Round 1 findings,
+call at most 1-2 targeted tools (get_campaign_tuning, get_campaign_pnl).
 
-**Round 3**: Escape hatch for follow-up calls if needed. Prefer completing the report after Round 2.
+**Round 3**: Escape hatch only if absolutely needed. Prefer completing the report after Round 2.
 
 Do NOT call get_campaign_tuning or get_campaign_pnl for every campaign — that data is already
 summarized in get_dashboard_summary and get_portfolio_insights.
 
-Do NOT call get_expected_values per-campaign — use get_expected_values_batch instead.
-
-After your tool rounds, write your report with the data you have. Do not make additional tool calls.`
+**After your tool rounds, write your report immediately. Do NOT make additional tool calls.**`
 
 const digestUserPrompt = `Generate my weekly intelligence digest. Fetch current data on:
 1. Weekly performance (week-over-week changes)
-2. Credit health and utilization
+2. Cash flow (outstanding balance, projected exposure, payment status)
 3. Portfolio insights (which segments are over/underperforming)
-4. Global inventory aging (what needs attention)
-5. Sell sheet recommendations
+4. Inventory signals (flagged cards needing action)
+5. Arbitrage opportunities (acquisition targets and crack candidates)
 
 Structure your report as:
 1. **Executive Summary** — 2-3 sentence overview of this week
 2. **Performance** — purchases, spend, sales, revenue, profit vs last week
-3. **Credit Health** — utilization, outstanding, days to next invoice, risk level
+3. **Cash Flow** — outstanding balance, projected exposure, unpaid invoices, days to next invoice
 4. **Top Actions** — 3-5 specific prioritized recommendations
 5. **Segment Insights** — outperformers and underperformers by character/grade/era
-6. **Watch List** — cards or segments that need attention soon
+6. **Watch List** — cards flagged by inventory signals (stale, cut-loss, profit capture) plus any segments needing attention
 7. **Arbitrage Opportunities** — top acquisition targets (buy raw, grade for profit) and crack candidates (sell raw beats selling graded)
 
 Format guidelines:
@@ -88,18 +85,31 @@ Format guidelines:
 const campaignAnalysisSystemPrompt = baseSystemPrompt + `
 
 ## Your Task: Campaign Analysis
-Analyze a specific campaign's health and performance. Fetch tuning data, P&L, and inventory.
+Analyze a specific campaign's health and performance. You have 6 campaign-specific tools.
 Provide actionable tuning recommendations with specific parameter suggestions.
-Compare this campaign's performance to its design intent.`
+Compare this campaign's performance to its design intent.
+
+## Tool Strategy
+You have a **2-round tool budget** and 6 tools.
+
+**Round 1**: Call get_campaign_tuning, get_campaign_pnl, get_pnl_by_channel,
+get_inventory_aging, get_expected_values, and get_crack_candidates together.
+All take the campaign ID. This gives you everything for the analysis.
+
+**Round 2**: Escape hatch only if a Round 1 tool failed or returned incomplete data.
+
+**After your tool rounds, write your analysis immediately. Do NOT make additional tool calls.**`
 
 const campaignAnalysisUserPrompt = `Analyze campaign ID: %s
 
-Fetch the campaign's tuning data, P&L, and inventory aging. Then provide:
-1. **Health Assessment** — Is this campaign performing as designed? ROI, sell-through, avg days to sell.
-2. **Market Conditions** — Current market alignment for this segment (trending up/down/stable, liquidity).
-3. **Tuning Recommendations** — Specific parameter adjustments (buy terms, price range, grade range, spend cap) with reasoning.
-4. **Problem Cards** — Any cards held too long or with concerning signals.
-5. **Opportunity** — What's working well that could be expanded.`
+Fetch all campaign data in one round, then provide:
+1. **Health Assessment** — Is this campaign performing as designed? ROI, sell-through, avg days to sell vs expectations.
+2. **Channel Performance** — Which channels are working? Revenue, fees, and net profit per channel.
+3. **Market Conditions** — Current market alignment for this segment (trending up/down/stable, liquidity from inventory aging data).
+4. **Tuning Recommendations** — Specific parameter adjustments (buy terms, price range, grade range, spend cap) with reasoning and expected impact.
+5. **Problem Cards** — Cards held too long, declining in value, or with negative EV. Include cert, days held, and recommended action.
+6. **Crack Candidates** — Any cards where selling raw beats selling graded (if any found).
+7. **Opportunity** — What's working well that could be expanded.`
 
 // liquidationSystemPrompt is used for liquidation analysis.
 const liquidationSystemPrompt = baseSystemPrompt + `
@@ -172,11 +182,18 @@ const purchaseAssessmentSystemPrompt = baseSystemPrompt + `
 
 ## Your Task: Purchase Assessment
 Evaluate whether a potential card purchase is a good buy.
-Consider: market conditions, portfolio concentration, historical performance of similar cards,
+Consider: market conditions, historical performance of similar cards in this campaign,
 liquidity (how fast will it sell), and expected value.
 Give a clear BUY / CAUTION / PASS rating with reasoning.
 
-When evaluating a graded card purchase, also consider whether the raw NM market price suggests you could acquire the same card raw for less and grade it yourself.`
+## Tool Strategy
+You have a **1-round tool budget** and 4 tools. Call all of them together:
+- get_cert_lookup — current market data for this specific card
+- get_campaign_tuning — grade/tier performance for this campaign
+- get_campaign_pnl — campaign health and ROI context
+- evaluate_purchase — pre-computed EV and profitability analysis
+
+**After your tool round, write your assessment immediately.**`
 
 const purchaseAssessmentUserPrompt = `Evaluate this potential purchase:
 - **Card**: %s (Grade: PSA %s)
@@ -186,15 +203,12 @@ const purchaseAssessmentUserPrompt = `Evaluate this potential purchase:
 - **Cert**: %s
 - **CL Value**: $%.2f
 
-Fetch the campaign's tuning data (grade performance, tier performance) and portfolio insights.
-If a cert number is provided, look it up for current market data.
-
-Provide:
+Call all 4 tools in one round, then provide:
 1. **Rating**: BUY / CAUTION / PASS
 2. **Market Assessment**: Current price, trend, velocity, liquidity for this card/grade
-3. **Portfolio Fit**: Do I already hold similar cards? How have they performed?
+3. **Campaign Fit**: How does this grade perform in this campaign? ROI, sell-through, avg days to sell.
 4. **Expected Outcome**: Estimated profit, days to sell, recommended exit channel
-5. **Risks**: What could go wrong (CL overvaluation, low liquidity, concentration)
+5. **Risks**: What could go wrong (CL overvaluation, low liquidity, declining market)
 6. **Verdict**: One-sentence summary`
 
 const scoreCardInjectionTemplate = `

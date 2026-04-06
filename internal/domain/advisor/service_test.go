@@ -300,12 +300,15 @@ func TestCollectDigest_ReturnsContent(t *testing.T) {
 
 func TestMaxToolRounds_Exceeded(t *testing.T) {
 	// LLM always returns a tool call, never content.
-	// With maxToolRounds=1, the loop should exhaust after 1 round.
+	// OpDigest has operationMaxRounds=4, so provide enough responses
+	// to exhaust all rounds and trigger the error.
 	llm := &mockLLMProvider{
 		responses: []func(CompletionRequest, func(CompletionChunk)) error{
 			chunkToolCall("tc-1", "list_campaigns", `{}`),
 			chunkToolCall("tc-2", "list_campaigns", `{}`),
 			chunkToolCall("tc-3", "list_campaigns", `{}`),
+			chunkToolCall("tc-4", "list_campaigns", `{}`),
+			chunkToolCall("tc-5", "list_campaigns", `{}`),
 		},
 	}
 	executor := &mockToolExecutor{
@@ -313,7 +316,7 @@ func TestMaxToolRounds_Exceeded(t *testing.T) {
 			{Name: "list_campaigns", Description: "Lists campaigns"},
 		},
 	}
-	svc := NewService(llm, executor, WithMaxToolRounds(1))
+	svc := NewService(llm, executor)
 
 	err := svc.GenerateDigest(context.Background(), func(StreamEvent) {})
 	if err == nil {
@@ -322,9 +325,9 @@ func TestMaxToolRounds_Exceeded(t *testing.T) {
 	if !IsMaxRoundsExceeded(err) {
 		t.Errorf("expected IsMaxRoundsExceeded error, got: %v", err)
 	}
-	// With maxToolRounds=1, LLM should have been called exactly once.
-	if llm.calls != 1 {
-		t.Errorf("expected 1 LLM call, got %d", llm.calls)
+	// OpDigest maxRounds=4, so LLM should have been called exactly 4 times.
+	if llm.calls != 4 {
+		t.Errorf("expected 4 LLM calls, got %d", llm.calls)
 	}
 }
 
