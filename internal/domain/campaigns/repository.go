@@ -102,7 +102,7 @@ type FinanceRepository interface {
 	SumPurchaseCostByInvoiceDate(ctx context.Context, invoiceDate string) (int, error)
 	GetCashflowConfig(ctx context.Context) (*CashflowConfig, error)
 	UpdateCashflowConfig(ctx context.Context, cfg *CashflowConfig) error
-	GetCreditSummary(ctx context.Context) (*CreditSummary, error)
+	GetCapitalSummary(ctx context.Context) (*CapitalSummary, error)
 }
 
 // RevocationRepository handles revocation flag management.

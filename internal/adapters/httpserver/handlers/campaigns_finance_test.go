@@ -14,24 +14,24 @@ import (
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
 )
 
-func TestHandleCreditSummary(t *testing.T) {
+func TestHandleCapitalSummary(t *testing.T) {
 	tests := []struct {
-		name            string
-		mockFn          func(_ context.Context) (*campaigns.CreditSummary, error)
-		wantStatus      int
-		wantCreditCents int
+		name             string
+		mockFn           func(_ context.Context) (*campaigns.CapitalSummary, error)
+		wantStatus       int
+		wantBudgetCents  int
 	}{
 		{
 			name: "success",
-			mockFn: func(_ context.Context) (*campaigns.CreditSummary, error) {
-				return &campaigns.CreditSummary{CreditLimitCents: 5000000}, nil
+			mockFn: func(_ context.Context) (*campaigns.CapitalSummary, error) {
+				return &campaigns.CapitalSummary{CapitalBudgetCents: 5000000}, nil
 			},
 			wantStatus:      http.StatusOK,
-			wantCreditCents: 5000000,
+			wantBudgetCents: 5000000,
 		},
 		{
 			name: "database error",
-			mockFn: func(_ context.Context) (*campaigns.CreditSummary, error) {
+			mockFn: func(_ context.Context) (*campaigns.CapitalSummary, error) {
 				return nil, fmt.Errorf("database error")
 			},
 			wantStatus: http.StatusInternalServerError,
@@ -40,23 +40,23 @@ func TestHandleCreditSummary(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			svc := &mocks.MockCampaignService{GetCreditSummaryFn: tt.mockFn}
+			svc := &mocks.MockCampaignService{GetCapitalSummaryFn: tt.mockFn}
 			h := newTestHandler(svc)
 
 			req := httptest.NewRequest(http.MethodGet, "/api/credit/summary", nil)
 			rec := httptest.NewRecorder()
-			h.HandleCreditSummary(rec, req)
+			h.HandleCapitalSummary(rec, req)
 
 			if rec.Code != tt.wantStatus {
 				t.Fatalf("expected %d, got %d", tt.wantStatus, rec.Code)
 			}
 			if tt.wantStatus == http.StatusOK {
-				var result campaigns.CreditSummary
+				var result campaigns.CapitalSummary
 				if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
 					t.Fatalf("decode: %v", err)
 				}
-				if result.CreditLimitCents != tt.wantCreditCents {
-					t.Errorf("expected CreditLimitCents=%d, got %d", tt.wantCreditCents, result.CreditLimitCents)
+				if result.CapitalBudgetCents != tt.wantBudgetCents {
+					t.Errorf("expected CapitalBudgetCents=%d, got %d", tt.wantBudgetCents, result.CapitalBudgetCents)
 				}
 			} else {
 				decodeErrorResponse(t, rec)
@@ -74,7 +74,7 @@ func TestHandleGetCashflowConfig(t *testing.T) {
 		{
 			name: "success",
 			mockFn: func(_ context.Context) (*campaigns.CashflowConfig, error) {
-				return &campaigns.CashflowConfig{CreditLimitCents: 5000000, CashBufferCents: 1000000}, nil
+				return &campaigns.CashflowConfig{CapitalBudgetCents: 5000000, CashBufferCents: 1000000}, nil
 			},
 			wantStatus: http.StatusOK,
 		},
@@ -112,7 +112,7 @@ func TestHandleUpdateCashflowConfig(t *testing.T) {
 	}{
 		{
 			name: "success",
-			body: `{"creditLimitCents":6000000,"cashBufferCents":1500000}`,
+			body: `{"capitalBudgetCents":6000000,"cashBufferCents":1500000}`,
 			mockFn: func(_ context.Context, _ *campaigns.CashflowConfig) error {
 				return nil
 			},
@@ -125,7 +125,7 @@ func TestHandleUpdateCashflowConfig(t *testing.T) {
 		},
 		{
 			name: "write error",
-			body: `{"creditLimitCents":6000000}`,
+			body: `{"capitalBudgetCents":6000000}`,
 			mockFn: func(_ context.Context, _ *campaigns.CashflowConfig) error {
 				return fmt.Errorf("write error")
 			},

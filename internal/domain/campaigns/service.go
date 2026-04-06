@@ -151,8 +151,8 @@ type Service interface {
 	ImportOrdersSales(ctx context.Context, rows []OrdersExportRow) (*OrdersImportResult, error)
 	ConfirmOrdersSales(ctx context.Context, items []OrdersConfirmItem) (*BulkSaleResult, error)
 
-	// Credit & Invoice management
-	GetCreditSummary(ctx context.Context) (*CreditSummary, error)
+	// Capital & Invoice management
+	GetCapitalSummary(ctx context.Context) (*CapitalSummary, error)
 	GetCashflowConfig(ctx context.Context) (*CashflowConfig, error)
 	UpdateCashflowConfig(ctx context.Context, cfg *CashflowConfig) error
 	ListInvoices(ctx context.Context) ([]Invoice, error)

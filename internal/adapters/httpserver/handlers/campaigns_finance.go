@@ -9,11 +9,11 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
-// HandleCreditSummary handles GET /api/credit/summary.
-func (h *CampaignsHandler) HandleCreditSummary(w http.ResponseWriter, r *http.Request) {
-	summary, err := h.service.GetCreditSummary(r.Context())
+// HandleCapitalSummary handles GET /api/credit/summary.
+func (h *CampaignsHandler) HandleCapitalSummary(w http.ResponseWriter, r *http.Request) {
+	summary, err := h.service.GetCapitalSummary(r.Context())
 	if err != nil {
-		h.logger.Error(r.Context(), "failed to get credit summary", observability.Err(err))
+		h.logger.Error(r.Context(), "failed to get capital summary", observability.Err(err))
 		writeError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}

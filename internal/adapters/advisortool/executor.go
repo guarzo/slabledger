@@ -241,7 +241,7 @@ func (e *CampaignToolExecutor) registerTools() {
 	e.registerGetSellSheet()
 	e.registerGetPortfolioHealth()
 	e.registerGetPortfolioInsights()
-	e.registerGetCreditSummary()
+	e.registerGetCapitalSummary()
 	e.registerGetWeeklyReview()
 	e.registerGetCapitalTimeline()
 	e.registerGetExpectedValues()

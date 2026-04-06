@@ -9,7 +9,7 @@ const (
 	FactorMarketAlignment = "market_alignment"
 	FactorPortfolioFit    = "portfolio_fit"
 	FactorGradeFit        = "grade_fit"
-	FactorCreditPressure  = "credit_pressure"
+	FactorCapitalPressure  = "credit_pressure"
 	FactorCarryingCost    = "carrying_cost"
 	FactorCrackAdvantage  = "crack_advantage"
 	FactorSellThrough     = "sell_through"
@@ -46,7 +46,7 @@ var LiquidationProfile = WeightProfile{
 	Name: "liquidation",
 	Weights: []FactorWeight{
 		{Name: FactorCarryingCost, Weight: 0.25},
-		{Name: FactorCreditPressure, Weight: 0.20},
+		{Name: FactorCapitalPressure, Weight: 0.20},
 		{Name: FactorMarketTrend, Weight: 0.20},
 		{Name: FactorLiquidity, Weight: 0.15},
 		{Name: FactorCrackAdvantage, Weight: 0.10},

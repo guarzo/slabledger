@@ -72,7 +72,7 @@ func TestBuildScoreCard(t *testing.T) {
 			entityType: "inventory_item",
 			data: &LiquidationFactorData{
 				DaysHeld:        90,
-				CreditUtilPct:   ptrFloat(75.0),
+				CapitalExposurePct: ptrFloat(75.0),
 				PriceChangePct:  ptrFloat(-5.0),
 				SalesPerMonth:   ptrFloat(3.0),
 				PriceConfidence: 0.7,

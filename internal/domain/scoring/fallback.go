@@ -13,7 +13,7 @@ var factorDisplayNames = map[string]string{
 	FactorMarketAlignment: "Market Alignment",
 	FactorPortfolioFit:    "Portfolio Fit",
 	FactorGradeFit:        "Grade Fit",
-	FactorCreditPressure:  "Credit Pressure",
+	FactorCapitalPressure:  "Capital Pressure",
 	FactorCarryingCost:    "Carrying Cost",
 	FactorCrackAdvantage:  "Crack Advantage",
 	FactorSellThrough:     "Sell-Through Rate",

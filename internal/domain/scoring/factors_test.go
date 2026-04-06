@@ -149,20 +149,20 @@ func TestComputePortfolioFit(t *testing.T) {
 	}
 }
 
-func TestComputeCreditPressure(t *testing.T) {
+func TestComputeCapitalPressure(t *testing.T) {
 	tests := []struct {
-		name           string
-		utilizationPct float64
-		wantValue      float64
+		name        string
+		exposurePct float64
+		wantValue   float64
 	}{
-		{"low utilization", 30.0, 0.0},
+		{"low exposure", 30.0, 0.0},
 		{"moderate", 70.0, -0.3},
 		{"high", 85.0, -0.6},
 		{"critical", 96.0, -1.0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			f := ComputeCreditPressure(tt.utilizationPct, 1.0, "test")
+			f := ComputeCapitalPressure(tt.exposurePct, 1.0, "test")
 			if math.Abs(f.Value-tt.wantValue) > 0.01 {
 				t.Errorf("Value = %f, want %f", f.Value, tt.wantValue)
 			}

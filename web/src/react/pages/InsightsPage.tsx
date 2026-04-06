@@ -1,8 +1,8 @@
 import PokeballLoader from '../PokeballLoader';
-import { useWeeklyReview, useCapitalTimeline, useCreditSummary } from '../queries/useCampaignQueries';
+import { useWeeklyReview, useCapitalTimeline, useCapitalSummary } from '../queries/useCampaignQueries';
 import WeeklyReviewSection from '../components/portfolio/WeeklyReviewSection';
 import CapitalTimelineChart from '../components/portfolio/CapitalTimelineChart';
-import CreditHealthPanel from '../components/portfolio/CreditHealthPanel';
+import CapitalExposurePanel from '../components/portfolio/CapitalExposurePanel';
 import InsightsSection from '../components/insights/InsightsSection';
 import InvoicesSection from '../components/insights/InvoicesSection';
 import { SectionErrorBoundary } from '../ui';
@@ -10,7 +10,7 @@ import { SectionErrorBoundary } from '../ui';
 export default function InsightsPage() {
   const { data: weeklyReview, isLoading: weeklyLoading } = useWeeklyReview();
   const { data: capitalTimeline } = useCapitalTimeline();
-  const { data: creditData } = useCreditSummary();
+  const { data: capitalData } = useCapitalSummary();
 
   const hasCapitalTimeline = capitalTimeline && capitalTimeline.dataPoints?.length > 0;
 
@@ -42,8 +42,8 @@ export default function InsightsPage() {
           </SectionErrorBoundary>
         )}
 
-        <SectionErrorBoundary sectionName="Credit Health">
-          <CreditHealthPanel credit={creditData} />
+        <SectionErrorBoundary sectionName="Capital Exposure">
+          <CapitalExposurePanel capital={capitalData} />
         </SectionErrorBoundary>
 
         <SectionErrorBoundary sectionName="PSA Invoices">

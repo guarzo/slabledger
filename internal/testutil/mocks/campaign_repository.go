@@ -585,14 +585,14 @@ func (m *MockCampaignRepository) SumPurchaseCostByInvoiceDate(_ context.Context,
 }
 
 func (m *MockCampaignRepository) GetCashflowConfig(_ context.Context) (*campaigns.CashflowConfig, error) {
-	return &campaigns.CashflowConfig{CreditLimitCents: 5000000, CashBufferCents: 1000000}, nil
+	return &campaigns.CashflowConfig{CapitalBudgetCents: 5000000, CashBufferCents: 1000000}, nil
 }
 func (m *MockCampaignRepository) UpdateCashflowConfig(_ context.Context, _ *campaigns.CashflowConfig) error {
 	return nil
 }
 
-func (m *MockCampaignRepository) GetCreditSummary(_ context.Context) (*campaigns.CreditSummary, error) {
-	return &campaigns.CreditSummary{CreditLimitCents: 5000000}, nil
+func (m *MockCampaignRepository) GetCapitalSummary(_ context.Context) (*campaigns.CapitalSummary, error) {
+	return &campaigns.CapitalSummary{CapitalBudgetCents: 5000000}, nil
 }
 
 func (m *MockCampaignRepository) GetPortfolioChannelVelocity(_ context.Context) ([]campaigns.ChannelVelocity, error) {

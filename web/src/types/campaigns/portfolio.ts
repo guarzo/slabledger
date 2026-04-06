@@ -134,7 +134,7 @@ export interface WeeklyReviewSummary {
   profitThisWeekCents: number;
   profitLastWeekCents: number;
   byChannel: ChannelPNL[];
-  creditUtilizationPct: number;
+  capitalExposurePct: number;
   topPerformers: WeeklyPerformer[];
   bottomPerformers: WeeklyPerformer[];
 }

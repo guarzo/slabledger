@@ -1,12 +1,12 @@
-import type { PortfolioHealth, CreditSummary } from '../../../types/campaigns';
+import type { PortfolioHealth, CapitalSummary } from '../../../types/campaigns';
 import { formatCents, formatPct, formatPctFromWhole } from '../../utils/formatters';
 
 interface HeroStatsBarProps {
   health?: PortfolioHealth;
-  credit?: CreditSummary;
+  capital?: CapitalSummary;
 }
 
-export default function HeroStatsBar({ health, credit }: HeroStatsBarProps) {
+export default function HeroStatsBar({ health, capital }: HeroStatsBarProps) {
   if (!health) return null;
 
   const roi = health.realizedROI ?? 0;
@@ -35,21 +35,21 @@ export default function HeroStatsBar({ health, credit }: HeroStatsBarProps) {
             <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">At Risk</div>
             <div className="text-base font-semibold text-[#cbd5e1]">{formatCents(health.totalAtRiskCents ?? 0)}</div>
           </div>
-          {credit && (
+          {capital && (
             <>
               <div className="border-l border-[rgba(255,255,255,0.08)] pl-6">
-                <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Credit Used</div>
+                <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Capital Exposure</div>
                 <div className={`text-base font-semibold ${
-                  credit.alertLevel === 'critical' ? 'text-[var(--danger)]'
-                    : credit.alertLevel === 'warning' ? 'text-[var(--warning)]'
+                  capital.alertLevel === 'critical' ? 'text-[var(--danger)]'
+                    : capital.alertLevel === 'warning' ? 'text-[var(--warning)]'
                     : 'text-[var(--success)]'
                 }`}>
-                  {formatPctFromWhole(credit.utilizationPct)}
+                  {formatPctFromWhole(capital.exposurePct)}
                 </div>
               </div>
               <div>
                 <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Outstanding</div>
-                <div className="text-base font-semibold text-[#cbd5e1]">{formatCents(credit.outstandingCents ?? 0)}</div>
+                <div className="text-base font-semibold text-[#cbd5e1]">{formatCents(capital.outstandingCents ?? 0)}</div>
               </div>
             </>
           )}

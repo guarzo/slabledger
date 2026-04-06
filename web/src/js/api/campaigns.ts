@@ -7,7 +7,7 @@ import type {
   Campaign, Purchase, Sale, CreateCampaignInput, CreatePurchaseInput, CreateSaleInput,
   CampaignPNL, ChannelPNL, DailySpend, DaysToSellBucket, AgingItem, CertLookupResult,
   QuickAddRequest, SellSheet, TuningResponse, GlobalImportResult, PSAImportResult,
-  ExternalImportResult, CreditSummary, Invoice, PortfolioHealth, ChannelVelocity,
+  ExternalImportResult, CapitalSummary, Invoice, PortfolioHealth, ChannelVelocity,
   PortfolioInsights, SuggestionsResponse, RevocationFlag, CapitalTimeline,
   WeeklyReviewSummary, CrackAnalysis, EVPortfolio, ActivationChecklist,
   MonteCarloComparison, BulkSaleResult, ShopifyPriceSyncResponse,
@@ -97,8 +97,8 @@ declare module './client' {
     // Shopify
     shopifyPriceSync(items: { certNumber: string; currentPriceCents: number; grader: string }[]): Promise<ShopifyPriceSyncResponse>;
 
-    // Credit & Invoices
-    getCreditSummary(): Promise<CreditSummary>;
+    // Capital & Invoices
+    getCapitalSummary(): Promise<CapitalSummary>;
     listInvoices(): Promise<Invoice[]>;
     updateInvoice(id: string, data: Partial<Invoice>): Promise<Invoice>;
 
@@ -392,9 +392,9 @@ proto.shopifyPriceSync = async function (this: APIClient, items: { certNumber: s
   return this.post<ShopifyPriceSyncResponse>('/shopify/price-sync', { items });
 };
 
-// Credit & Invoice endpoints
-proto.getCreditSummary = async function (this: APIClient): Promise<CreditSummary> {
-  return this.get<CreditSummary>('/credit/summary');
+// Capital & Invoice endpoints
+proto.getCapitalSummary = async function (this: APIClient): Promise<CapitalSummary> {
+  return this.get<CapitalSummary>('/credit/summary');
 };
 
 proto.listInvoices = async function (this: APIClient): Promise<Invoice[]> {

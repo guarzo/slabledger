@@ -103,20 +103,20 @@ func ComputeGradeFit(gradeROI, campaignAvgROI, confidence float64, source string
 	}
 }
 
-func ComputeCreditPressure(utilizationPct, confidence float64, source string) Factor {
+func ComputeCapitalPressure(exposurePct, confidence float64, source string) Factor {
 	var v float64
 	switch {
-	case utilizationPct > 95:
+	case exposurePct > 95:
 		v = -1.0
-	case utilizationPct >= 85:
+	case exposurePct >= 85:
 		v = -0.6
-	case utilizationPct >= 70:
+	case exposurePct >= 70:
 		v = -0.3
 	default:
 		v = 0.0
 	}
 	return Factor{
-		Name:       FactorCreditPressure,
+		Name:       FactorCapitalPressure,
 		Value:      v,
 		Confidence: confidence,
 		Source:     source,

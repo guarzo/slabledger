@@ -291,10 +291,10 @@ func (s *service) GetWeeklyReviewSummary(ctx context.Context) (*WeeklyReviewSumm
 		summary.BottomPerformers = nil
 	}
 
-	// Credit utilization
-	credit, err := s.repo.GetCreditSummary(ctx)
-	if err == nil && credit != nil {
-		summary.CreditUtilizationPct = credit.UtilizationPct
+	// Capital exposure
+	capital, err := s.repo.GetCapitalSummary(ctx)
+	if err == nil && capital != nil {
+		summary.CapitalExposurePct = capital.ExposurePct
 	}
 
 	return summary, nil

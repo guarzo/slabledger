@@ -313,8 +313,15 @@ func (s *service) toolCallingLoop(ctx context.Context, operation AIOperation, sy
 		}
 
 		if len(toolCalls) == 0 {
+			content := fullContent.String()
+			if isLLMRefusal(content) {
+				refusalErr := errors.NewAppError(ErrCodeLLMRefusal, "LLM returned a refusal instead of analysis").
+					WithContext("content", truncateToolResult(content, 200))
+				ai.RecordCall(ctx, s.tracker, s.logger, operation, refusalErr, start, lastRound+1, &totalUsage)
+				return "", refusalErr
+			}
 			ai.RecordCall(ctx, s.tracker, s.logger, operation, nil, start, lastRound+1, &totalUsage)
-			return fullContent.String(), nil
+			return content, nil
 		}
 
 		lastToolNames = lastToolNames[:0]
@@ -444,6 +451,28 @@ Below is your previous %s analysis. Reference it to track changes, follow up on 
 <prior_analysis>
 %s
 </prior_analysis>`, age, analysisType, content)
+}
+
+// isLLMRefusal detects common refusal patterns from Azure content filters or
+// model safety systems. These refusals should not be cached as successful results
+// because they poison the prior context for subsequent runs.
+func isLLMRefusal(content string) bool {
+	lower := strings.ToLower(strings.TrimSpace(content))
+	refusalPatterns := []string{
+		"i'm sorry, but i cannot assist",
+		"i'm sorry, but i can't assist",
+		"i cannot assist with that request",
+		"i can't assist with that request",
+		"i'm unable to help with that",
+		"i'm not able to assist",
+		"as an ai, i cannot",
+	}
+	for _, pattern := range refusalPatterns {
+		if strings.Contains(lower, pattern) {
+			return true
+		}
+	}
+	return false
 }
 
 // truncateToolResult caps a tool result string at maxLen characters.

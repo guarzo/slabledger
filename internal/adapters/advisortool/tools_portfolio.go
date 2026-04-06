@@ -34,13 +34,13 @@ func (e *CampaignToolExecutor) registerGetPortfolioInsights() {
 	})
 }
 
-func (e *CampaignToolExecutor) registerGetCreditSummary() {
+func (e *CampaignToolExecutor) registerGetCapitalSummary() {
 	e.register(ai.ToolDefinition{
-		Name:        "get_credit_summary",
-		Description: "Get credit utilization: outstanding balance, credit limit, utilization %, alert level (ok/warning/critical), projected exposure, and days to next invoice.",
+		Name:        "get_capital_summary",
+		Description: "Get capital exposure: outstanding balance, capital budget, exposure %, alert level (ok/warning/critical), projected exposure, and days to next invoice.",
 		Parameters:  emptyObjectParams,
 	}, func(ctx context.Context, _ string) (string, error) {
-		result, err := e.svc.GetCreditSummary(ctx)
+		result, err := e.svc.GetCapitalSummary(ctx)
 		if err != nil {
 			return "", err
 		}
@@ -103,13 +103,13 @@ type dashboardSummary struct {
 		SaleCountWoW     int `json:"saleCountWoW"`
 		ProfitWoW        int `json:"profitWoWCents"`
 	} `json:"weeklyReview"`
-	Credit struct {
-		BalanceCents   int     `json:"balanceCents"`
-		LimitCents     int     `json:"limitCents"`
-		UtilizationPct float64 `json:"utilizationPct"`
-		AlertLevel     string  `json:"alertLevel"`
-		DaysToInvoice  int     `json:"daysToInvoice"`
-	} `json:"credit"`
+	Capital struct {
+		BalanceCents int     `json:"balanceCents"`
+		BudgetCents  int     `json:"budgetCents"`
+		ExposurePct  float64 `json:"exposurePct"`
+		AlertLevel   string  `json:"alertLevel"`
+		DaysToInvoice int    `json:"daysToInvoice"`
+	} `json:"capital"`
 	PortfolioHealth []struct {
 		CampaignName  string `json:"campaignName"`
 		Status        string `json:"status"`
@@ -127,7 +127,7 @@ type dashboardSummary struct {
 func (e *CampaignToolExecutor) registerGetDashboardSummary() {
 	e.register(ai.ToolDefinition{
 		Name:        "get_dashboard_summary",
-		Description: "Get a compact portfolio overview: weekly performance, credit health, campaign statuses, and channel velocity. Start here before drilling into specific tools.",
+		Description: "Get a compact portfolio overview: weekly performance, capital exposure, campaign statuses, and channel velocity. Start here before drilling into specific tools.",
 		Parameters:  emptyObjectParams,
 	}, func(ctx context.Context, _ string) (string, error) {
 		var ds dashboardSummary
@@ -145,14 +145,14 @@ func (e *CampaignToolExecutor) registerGetDashboardSummary() {
 			ds.WeeklyReview.ProfitWoW = wr.ProfitThisWeekCents - wr.ProfitLastWeekCents
 		}
 
-		if cs, err := e.svc.GetCreditSummary(ctx); err != nil {
-			ds.Errors = append(ds.Errors, "creditSummary: "+err.Error())
+		if cs, err := e.svc.GetCapitalSummary(ctx); err != nil {
+			ds.Errors = append(ds.Errors, "capitalSummary: "+err.Error())
 		} else if cs != nil {
-			ds.Credit.BalanceCents = cs.OutstandingCents
-			ds.Credit.LimitCents = cs.CreditLimitCents
-			ds.Credit.UtilizationPct = cs.UtilizationPct
-			ds.Credit.AlertLevel = cs.AlertLevel
-			ds.Credit.DaysToInvoice = cs.DaysToNextInvoice
+			ds.Capital.BalanceCents = cs.OutstandingCents
+			ds.Capital.BudgetCents = cs.CapitalBudgetCents
+			ds.Capital.ExposurePct = cs.ExposurePct
+			ds.Capital.AlertLevel = cs.AlertLevel
+			ds.Capital.DaysToInvoice = cs.DaysToNextInvoice
 		}
 
 		if ph, err := e.svc.GetPortfolioHealth(ctx); err != nil {

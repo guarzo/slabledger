@@ -106,12 +106,12 @@ export function useTuning(campaignId: string) {
   });
 }
 
-// Credit & Invoice queries
+// Capital & Invoice queries
 
-export function useCreditSummary() {
+export function useCapitalSummary() {
   return useQuery({
     queryKey: queryKeys.credit.summary,
-    queryFn: () => api.getCreditSummary(),
+    queryFn: () => api.getCapitalSummary(),
   });
 }
 

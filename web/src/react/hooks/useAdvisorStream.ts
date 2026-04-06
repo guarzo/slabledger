@@ -197,7 +197,7 @@ function formatToolName(name: string): string {
     get_sell_sheet: 'Building sell sheet',
     get_portfolio_health: 'Checking portfolio health',
     get_portfolio_insights: 'Analyzing portfolio segments',
-    get_credit_summary: 'Checking credit health',
+    get_capital_summary: 'Checking capital exposure',
     get_weekly_review: 'Reviewing weekly performance',
     get_capital_timeline: 'Loading capital timeline',
     get_expected_values: 'Computing expected values',
