@@ -95,6 +95,7 @@ export default function InvoicesSection() {
                         size="sm"
                         variant="success"
                         loading={updateInvoice.isPending && updatingId === inv.id}
+                        disabled={updateInvoice.isPending}
                         onClick={() => handleMarkPaid(inv.id)}
                       >
                         Mark Paid

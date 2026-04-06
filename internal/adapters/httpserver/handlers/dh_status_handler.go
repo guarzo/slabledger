@@ -3,11 +3,16 @@ package handlers
 import (
 	"net/http"
 	"strings"
+	"sync"
 
+	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	"github.com/guarzo/slabledger/internal/domain/campaigns"
 	"github.com/guarzo/slabledger/internal/domain/intelligence"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
+
+// ordersEpoch is the earliest date for counting DH orders.
+const ordersEpoch = "2020-01-01T00:00:00Z"
 
 // HandleGetIntelligence returns market intelligence for a specific card.
 func (h *DHHandler) HandleGetIntelligence(w http.ResponseWriter, r *http.Request) {
@@ -109,14 +114,18 @@ func (h *DHHandler) HandleInventoryAlerts(w http.ResponseWriter, r *http.Request
 }
 
 type dhStatusResponse struct {
-	IntelligenceCount     int    `json:"intelligence_count"`
-	IntelligenceLastFetch string `json:"intelligence_last_fetch"`
-	SuggestionsCount      int    `json:"suggestions_count"`
-	SuggestionsLastFetch  string `json:"suggestions_last_fetch"`
-	UnmatchedCount        int    `json:"unmatched_count"`
-	PendingCount          int    `json:"pending_count"`
-	MappedCount           int    `json:"mapped_count"`
-	BulkMatchRunning      bool   `json:"bulk_match_running"`
+	IntelligenceCount     int             `json:"intelligence_count"`
+	IntelligenceLastFetch string          `json:"intelligence_last_fetch"`
+	SuggestionsCount      int             `json:"suggestions_count"`
+	SuggestionsLastFetch  string          `json:"suggestions_last_fetch"`
+	UnmatchedCount        int             `json:"unmatched_count"`
+	PendingCount          int             `json:"pending_count"`
+	MappedCount           int             `json:"mapped_count"`
+	BulkMatchRunning      bool            `json:"bulk_match_running"`
+	APIHealth             *dh.HealthStats `json:"api_health,omitempty"`
+	DHInventoryCount      int             `json:"dh_inventory_count,omitempty"`
+	DHListingsCount       int             `json:"dh_listings_count,omitempty"`
+	DHOrdersCount         int             `json:"dh_orders_count,omitempty"`
 }
 
 // HandleGetStatus returns aggregate stats for the DH integration.
@@ -166,6 +175,52 @@ func (h *DHHandler) HandleGetStatus(w http.ResponseWriter, r *http.Request) {
 		resp.UnmatchedCount = counts[campaigns.DHPushStatusUnmatched]
 		resp.PendingCount = counts[campaigns.DHPushStatusPending]
 		resp.MappedCount = counts[campaigns.DHPushStatusMatched] + counts[campaigns.DHPushStatusManual]
+	}
+
+	// API health metrics
+	if h.healthReporter != nil {
+		if ht := h.healthReporter.Health(); ht != nil {
+			stats := ht.Stats()
+			resp.APIHealth = &stats
+		}
+	}
+
+	// DH counts (best-effort, concurrent — don't fail the whole response)
+	if h.countsFetcher != nil {
+		var wg sync.WaitGroup
+		var mu sync.Mutex
+		wg.Add(3)
+		go func() {
+			defer wg.Done()
+			if invResp, err := h.countsFetcher.ListInventory(ctx, dh.InventoryFilters{PerPage: 1}); err != nil {
+				h.logger.Warn(ctx, "dh status: count inventory", observability.Err(err))
+			} else {
+				mu.Lock()
+				resp.DHInventoryCount = invResp.Meta.TotalCount
+				mu.Unlock()
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			if listResp, err := h.countsFetcher.ListInventory(ctx, dh.InventoryFilters{Status: "listed", PerPage: 1}); err != nil {
+				h.logger.Warn(ctx, "dh status: count listings", observability.Err(err))
+			} else {
+				mu.Lock()
+				resp.DHListingsCount = listResp.Meta.TotalCount
+				mu.Unlock()
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			if ordResp, err := h.countsFetcher.GetOrders(ctx, dh.OrderFilters{Since: ordersEpoch, PerPage: 1}); err != nil {
+				h.logger.Warn(ctx, "dh status: count orders", observability.Err(err))
+			} else {
+				mu.Lock()
+				resp.DHOrdersCount = ordResp.Meta.TotalCount
+				mu.Unlock()
+			}
+		}()
+		wg.Wait()
 	}
 
 	writeJSON(w, http.StatusOK, resp)

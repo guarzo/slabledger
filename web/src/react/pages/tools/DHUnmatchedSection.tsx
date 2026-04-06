@@ -1,14 +1,11 @@
 import { useState } from 'react';
 import { useDHStatus, useDHUnmatched, useFixDHMatch } from '../../queries/useAdminQueries';
 import { useToast } from '../../contexts/ToastContext';
+import { formatCents } from '../../utils/formatters';
 import { Button, CardShell } from '../../ui';
 import type { DHUnmatchedCard } from '../../../types/apiStatus';
 
-const DH_URL_REGEX = /doubleholo\.com\/card\/\d+/;
-
-function formatCents(cents: number): string {
-  return `$${(cents / 100).toFixed(2)}`;
-}
+const DH_URL_REGEX = /^(https?:\/\/)?(www\.)?doubleholo\.com\/card\/\d+/;
 
 /* ── Single unmatched row with inline fix input ──────────────────── */
 
@@ -34,7 +31,7 @@ function UnmatchedRow({ card }: { card: DHUnmatchedCard }) {
   };
 
   return (
-    <tr className="border-t border-[var(--border)] even:bg-[var(--surface-1)]/30">
+    <tr className="border-b border-[var(--surface-2)]/50">
       <td className="py-2 px-3 text-sm font-mono text-[var(--text-muted)]">{card.cert_number}</td>
       <td className="py-2 px-3 text-sm text-[var(--text)]">{card.card_name}</td>
       <td className="py-2 px-3 text-sm text-[var(--text-muted)]">{card.card_number}</td>
@@ -49,6 +46,7 @@ function UnmatchedRow({ card }: { card: DHUnmatchedCard }) {
               value={url}
               onChange={(e) => setUrl(e.target.value)}
               placeholder="doubleholo.com/card/..."
+              aria-label="DoubleHolo card URL"
               className="flex-1 text-xs px-2 py-1 rounded border border-[var(--border)] bg-[var(--bg-secondary)] text-[var(--text)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--info)]"
             />
             <Button
@@ -75,7 +73,7 @@ function UnmatchedRow({ card }: { card: DHUnmatchedCard }) {
 export default function DHUnmatchedSection() {
   const { data: status } = useDHStatus({ enabled: true });
   const unmatchedCount = status?.unmatched_count ?? 0;
-  const { data: unmatchedData } = useDHUnmatched({ enabled: unmatchedCount > 0 });
+  const { data: unmatchedData, isLoading: unmatchedLoading } = useDHUnmatched({ enabled: unmatchedCount > 0 });
 
   if (unmatchedCount === 0) return null;
 
@@ -114,8 +112,10 @@ export default function DHUnmatchedSection() {
             </tbody>
           </table>
         </div>
-      ) : (
+      ) : unmatchedLoading ? (
         <p className="text-sm text-[var(--text-muted)]">Loading unmatched cards...</p>
+      ) : (
+        <p className="text-sm text-[var(--danger)]">Failed to load unmatched cards.</p>
       )}
     </CardShell>
   );

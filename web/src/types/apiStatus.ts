@@ -144,7 +144,6 @@ export interface DHStatusResponse {
   pending_count: number;
   mapped_count: number;
   bulk_match_running: boolean;
-  // New optional fields
   api_health?: DHHealthStats;
   dh_inventory_count?: number;
   dh_listings_count?: number;

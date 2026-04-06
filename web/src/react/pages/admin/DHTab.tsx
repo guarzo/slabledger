@@ -1,19 +1,15 @@
 import { useDHStatus, useTriggerDHBulkMatch } from '../../queries/useAdminQueries';
 import { useToast } from '../../contexts/ToastContext';
+import { formatPct } from '../../utils/formatters';
 import { CardShell } from '../../ui/CardShell';
 import { SummaryCard } from './shared';
 import Button from '../../ui/Button';
-import type { DHHealthStats } from '../../../types/apiStatus';
 
 function formatTimestamp(ts: string): string {
   if (!ts) return 'Never';
   const d = new Date(ts);
   if (isNaN(d.getTime())) return ts;
   return d.toLocaleString();
-}
-
-function formatPct(value: number): string {
-  return `${(value * 100).toFixed(1)}%`;
 }
 
 interface HealthCardProps {
@@ -33,44 +29,6 @@ function HealthCard({ label, value, valueColor, sub }: HealthCardProps) {
       {sub && <div className="text-xs text-[var(--text-muted)] mt-1">{sub}</div>}
     </div>
   );
-}
-
-function apiHealthColor(successRate: number): string {
-  if (successRate >= 0.95) return 'var(--success)';
-  if (successRate >= 0.80) return 'var(--warning)';
-  return 'var(--danger)';
-}
-
-function buildApiHealthCard(apiHealth: DHHealthStats | undefined): { value: string; color: string | undefined; sub: string } {
-  if (!apiHealth) {
-    return { value: '—', color: undefined, sub: 'No data' };
-  }
-  const pct = `${(apiHealth.success_rate * 100).toFixed(1)}%`;
-  const color = apiHealthColor(apiHealth.success_rate);
-  const sub = `${apiHealth.total_calls} calls / ${apiHealth.failures} failures (7d)`;
-  return { value: pct, color, sub };
-}
-
-function buildMatchRateCard(mappedCount: number, unmatchedCount: number): { value: string; sub: string } {
-  const total = mappedCount + unmatchedCount;
-  if (total === 0) {
-    return { value: '—', sub: '0 matched / 0 unmatched' };
-  }
-  const rate = mappedCount / total;
-  return {
-    value: formatPct(rate),
-    sub: `${mappedCount} matched / ${unmatchedCount} unmatched`,
-  };
-}
-
-function buildUnmatchedCard(unmatchedCount: number, mappedCount: number): { value: string; color: string | undefined; sub: string } {
-  const total = mappedCount + unmatchedCount;
-  const pct = total > 0 ? formatPct(unmatchedCount / total) : '0%';
-  return {
-    value: String(unmatchedCount),
-    color: unmatchedCount > 0 ? 'var(--warning)' : undefined,
-    sub: `${pct} of total inventory`,
-  };
 }
 
 export function DHTab({ enabled = true }: { enabled?: boolean }) {
@@ -107,9 +65,14 @@ export function DHTab({ enabled = true }: { enabled?: boolean }) {
   const mappedCount = status?.mapped_count ?? 0;
   const unmatchedCount = status?.unmatched_count ?? 0;
 
-  const apiHealthCard = buildApiHealthCard(status?.api_health);
-  const matchRateCard = buildMatchRateCard(mappedCount, unmatchedCount);
-  const unmatchedCard = buildUnmatchedCard(unmatchedCount, mappedCount);
+  const total = mappedCount + unmatchedCount;
+  const apiHealth = status?.api_health;
+  const apiHealthValue = apiHealth ? formatPct(apiHealth.success_rate) : '—';
+  const apiHealthClr = apiHealth ? (apiHealth.success_rate >= 0.95 ? 'var(--success)' : apiHealth.success_rate >= 0.80 ? 'var(--warning)' : 'var(--danger)') : undefined;
+  const apiHealthSub = apiHealth ? `${apiHealth.total_calls} calls / ${apiHealth.failures} failures (7d)` : 'No data';
+  const matchRateValue = total > 0 ? formatPct(mappedCount / total) : '—';
+  const matchRateSub = total > 0 ? `${mappedCount} matched / ${unmatchedCount} unmatched` : '0 matched / 0 unmatched';
+  const unmatchedPct = total > 0 ? formatPct(unmatchedCount / total) : '0%';
 
   const handleBulkMatch = async () => {
     try {
@@ -128,21 +91,21 @@ export function DHTab({ enabled = true }: { enabled?: boolean }) {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <HealthCard
             label="API Health"
-            value={apiHealthCard.value}
-            valueColor={apiHealthCard.color}
-            sub={apiHealthCard.sub}
+            value={apiHealthValue}
+            valueColor={apiHealthClr}
+            sub={apiHealthSub}
           />
           <HealthCard
             label="Match Rate"
-            value={matchRateCard.value}
+            value={matchRateValue}
             valueColor="var(--brand-500)"
-            sub={matchRateCard.sub}
+            sub={matchRateSub}
           />
           <HealthCard
             label="Unmatched"
-            value={unmatchedCard.value}
-            valueColor={unmatchedCard.color}
-            sub={unmatchedCard.sub}
+            value={String(unmatchedCount)}
+            valueColor={unmatchedCount > 0 ? 'var(--warning)' : undefined}
+            sub={`${unmatchedPct} of total inventory`}
           />
         </div>
       </div>
