@@ -404,32 +404,29 @@ func TestGetPurchasesByDHCertStatus(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	t.Run("filters by status", func(t *testing.T) {
-		pending, err := repo.GetPurchasesByDHCertStatus(ctx, "pending", 100)
-		require.NoError(t, err)
-		assert.Len(t, pending, 3)
-
-		matched, err := repo.GetPurchasesByDHCertStatus(ctx, "matched", 100)
-		require.NoError(t, err)
-		assert.Len(t, matched, 1)
-		assert.Equal(t, "matched", matched[0].DHCertStatus)
-
-		ambiguous, err := repo.GetPurchasesByDHCertStatus(ctx, "ambiguous", 100)
-		require.NoError(t, err)
-		assert.Len(t, ambiguous, 1)
-	})
-
-	t.Run("respects limit", func(t *testing.T) {
-		pending, err := repo.GetPurchasesByDHCertStatus(ctx, "pending", 2)
-		require.NoError(t, err)
-		assert.Len(t, pending, 2)
-	})
-
-	t.Run("no matches returns empty", func(t *testing.T) {
-		result, err := repo.GetPurchasesByDHCertStatus(ctx, "nonexistent_status", 100)
-		require.NoError(t, err)
-		assert.Empty(t, result)
-	})
+	tests := []struct {
+		name          string
+		status        string
+		limit         int
+		expectedCount int
+		checkStatus   bool
+	}{
+		{"pending returns 3", "pending", 100, 3, false},
+		{"matched returns 1", "matched", 100, 1, true},
+		{"ambiguous returns 1", "ambiguous", 100, 1, false},
+		{"respects limit", "pending", 2, 2, false},
+		{"no matches returns empty", "nonexistent_status", 100, 0, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			results, err := repo.GetPurchasesByDHCertStatus(ctx, tt.status, tt.limit)
+			require.NoError(t, err)
+			assert.Len(t, results, tt.expectedCount)
+			if tt.checkStatus && len(results) > 0 {
+				assert.Equal(t, tt.status, results[0].DHCertStatus)
+			}
+		})
+	}
 }
 
 func TestUpdatePurchaseCardYear(t *testing.T) {
@@ -470,16 +467,16 @@ func TestUpdatePurchaseDHPushStatus(t *testing.T) {
 		p := newTestPurchase("camp-push", "PS000001")
 		require.NoError(t, repo.CreatePurchase(ctx, p))
 
-		err := repo.UpdatePurchaseDHPushStatus(ctx, p.ID, "queued")
+		err := repo.UpdatePurchaseDHPushStatus(ctx, p.ID, campaigns.DHPushStatusPending)
 		require.NoError(t, err)
 
 		got, err := repo.GetPurchase(ctx, p.ID)
 		require.NoError(t, err)
-		assert.Equal(t, "queued", got.DHPushStatus)
+		assert.Equal(t, campaigns.DHPushStatusPending, got.DHPushStatus)
 	})
 
 	t.Run("not found", func(t *testing.T) {
-		err := repo.UpdatePurchaseDHPushStatus(ctx, "nonexistent", "queued")
+		err := repo.UpdatePurchaseDHPushStatus(ctx, "nonexistent", campaigns.DHPushStatusPending)
 		assert.ErrorIs(t, err, campaigns.ErrPurchaseNotFound)
 	})
 }
@@ -525,28 +522,28 @@ func TestGetPurchasesByDHPushStatus(t *testing.T) {
 		p := newTestPurchase("camp-pushq", cert)
 		require.NoError(t, repo.CreatePurchase(ctx, p))
 	}
-	require.NoError(t, repo.UpdatePurchaseDHPushStatus(ctx, "purch-PQ000001", "queued"))
-	require.NoError(t, repo.UpdatePurchaseDHPushStatus(ctx, "purch-PQ000002", "queued"))
-	require.NoError(t, repo.UpdatePurchaseDHPushStatus(ctx, "purch-PQ000003", "pushed"))
+	require.NoError(t, repo.UpdatePurchaseDHPushStatus(ctx, "purch-PQ000001", campaigns.DHPushStatusPending))
+	require.NoError(t, repo.UpdatePurchaseDHPushStatus(ctx, "purch-PQ000002", campaigns.DHPushStatusPending))
+	require.NoError(t, repo.UpdatePurchaseDHPushStatus(ctx, "purch-PQ000003", campaigns.DHPushStatusMatched))
 
 	t.Run("filters by push status", func(t *testing.T) {
-		queued, err := repo.GetPurchasesByDHPushStatus(ctx, "queued", 100)
+		pending, err := repo.GetPurchasesByDHPushStatus(ctx, campaigns.DHPushStatusPending, 100)
 		require.NoError(t, err)
-		assert.Len(t, queued, 2)
+		assert.Len(t, pending, 2)
 
-		pushed, err := repo.GetPurchasesByDHPushStatus(ctx, "pushed", 100)
+		matched, err := repo.GetPurchasesByDHPushStatus(ctx, campaigns.DHPushStatusMatched, 100)
 		require.NoError(t, err)
-		assert.Len(t, pushed, 1)
+		assert.Len(t, matched, 1)
 	})
 
 	t.Run("respects limit", func(t *testing.T) {
-		queued, err := repo.GetPurchasesByDHPushStatus(ctx, "queued", 1)
+		pending, err := repo.GetPurchasesByDHPushStatus(ctx, campaigns.DHPushStatusPending, 1)
 		require.NoError(t, err)
-		assert.Len(t, queued, 1)
+		assert.Len(t, pending, 1)
 	})
 
 	t.Run("no matches returns empty", func(t *testing.T) {
-		result, err := repo.GetPurchasesByDHPushStatus(ctx, "none", 100)
+		result, err := repo.GetPurchasesByDHPushStatus(ctx, campaigns.DHPushStatusManual, 100)
 		require.NoError(t, err)
 		assert.Empty(t, result)
 	})

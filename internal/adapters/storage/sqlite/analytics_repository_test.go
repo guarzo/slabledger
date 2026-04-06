@@ -243,5 +243,4 @@ func TestGetPerformanceByGrade_Analytics(t *testing.T) {
 		assert.Equal(t, float64(9), grades[1].Grade)
 		assert.Equal(t, float64(10), grades[2].Grade)
 	})
-
 }
