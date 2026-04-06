@@ -103,7 +103,7 @@ func (r *CampaignsRepository) GetCashflowConfig(ctx context.Context) (*campaigns
 	var cfg campaigns.CashflowConfig
 	err := r.db.QueryRowContext(ctx, query).Scan(&cfg.CreditLimitCents, &cfg.CashBufferCents, &cfg.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
-		return &campaigns.CashflowConfig{CreditLimitCents: 5000000, CashBufferCents: 1000000}, nil
+		return &campaigns.CashflowConfig{CreditLimitCents: 0, CashBufferCents: 1000000}, nil
 	}
 	if err != nil {
 		return nil, err
