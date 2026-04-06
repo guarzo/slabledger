@@ -148,6 +148,16 @@ func (s *DHPushScheduler) push(ctx context.Context) {
 
 // processPurchase handles a single pending purchase. Returns "matched", "unmatched", or "skipped".
 func (s *DHPushScheduler) processPurchase(ctx context.Context, p campaigns.Purchase, mappedSet map[string]string) string {
+	if p.CertNumber == "" {
+		s.logger.Warn(ctx, "dh push: purchase has no cert number, marking unmatched",
+			observability.String("purchaseID", p.ID))
+		if updateErr := s.statusUpdater.UpdatePurchaseDHPushStatus(ctx, p.ID, campaigns.DHPushStatusUnmatched); updateErr != nil {
+			s.logger.Warn(ctx, "dh push: failed to set unmatched status for cert-less purchase",
+				observability.String("purchaseID", p.ID), observability.Err(updateErr))
+		}
+		return "unmatched"
+	}
+
 	key := p.DHCardKey()
 
 	// Attempt to reuse an existing DH card ID mapping.

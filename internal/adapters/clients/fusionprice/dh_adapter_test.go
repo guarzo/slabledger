@@ -223,15 +223,15 @@ func TestDHAdapter_FetchFusionData_LookupError(t *testing.T) {
 	card := pricing.Card{Name: "Card", Set: "Set", Number: "1"}
 	result, meta, err := adapter.FetchFusionData(context.Background(), card)
 
-	// Lookup errors are treated as skip (no mapping), not hard errors.
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if meta.StatusCode != 0 {
-		t.Errorf("expected status 0, got %d", meta.StatusCode)
+	// Lookup errors are propagated so infrastructure failures are visible.
+	if err == nil {
+		t.Fatal("expected error for lookup failure")
 	}
 	if result != nil {
 		t.Errorf("expected nil result, got %+v", result)
+	}
+	if meta.StatusCode != 0 {
+		t.Errorf("expected status 0, got %d", meta.StatusCode)
 	}
 }
 

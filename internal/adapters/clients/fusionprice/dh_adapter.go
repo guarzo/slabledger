@@ -65,12 +65,12 @@ func (a *DHAdapter) FetchFusionData(ctx context.Context, card pricing.Card) (*fu
 	dhCardID, err := a.idResolver.GetExternalID(ctx, card.Name, card.Set, card.Number, pricing.SourceDH)
 	if err != nil {
 		if a.logger != nil {
-			a.logger.Debug(ctx, "dh: card ID lookup failed",
+			a.logger.Warn(ctx, "dh: card ID lookup failed",
 				observability.String("card", card.Name),
 				observability.String("set", card.Set),
 				observability.Err(err))
 		}
-		return nil, &fusion.ResponseMeta{StatusCode: 0}, nil
+		return nil, &fusion.ResponseMeta{StatusCode: 0}, fmt.Errorf("dh: card ID lookup: %w", err)
 	}
 	if dhCardID == "" {
 		return nil, &fusion.ResponseMeta{StatusCode: 0}, nil

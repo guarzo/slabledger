@@ -104,6 +104,12 @@ func (h *CampaignsHandler) triggerDHListing(certNumbers []string) {
 // inlineMatchAndPush resolves a single cert against DH and pushes inventory.
 // Returns the inventory ID on success, 0 on failure.
 func (h *CampaignsHandler) inlineMatchAndPush(ctx context.Context, p *campaigns.Purchase) int {
+	if p.CertNumber == "" {
+		h.logger.Warn(ctx, "inline dh resolve: purchase has no cert number",
+			observability.String("purchaseID", p.ID))
+		return 0
+	}
+
 	cardName, variant := campaigns.CleanCardNameForDH(p.CardName)
 
 	resp, err := h.dhCertResolver.ResolveCert(ctx, dh.CertResolveRequest{

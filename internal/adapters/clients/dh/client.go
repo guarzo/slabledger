@@ -144,7 +144,12 @@ func (c *Client) MarketDataEnterprise(ctx context.Context, cardID int) (*MarketD
 	}
 
 	sales, err := c.RecentSales(ctx, cardID)
-	if err == nil {
+	if err != nil {
+		if c.logger != nil {
+			c.logger.Warn(ctx, "dh: recent sales fetch failed, returning partial market data",
+				observability.Int("card_id", cardID), observability.Err(err))
+		}
+	} else {
 		resp.RecentSales = sales
 	}
 

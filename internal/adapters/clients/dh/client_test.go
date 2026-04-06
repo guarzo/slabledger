@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -212,6 +213,120 @@ func TestClient_CardLookup(t *testing.T) {
 	if resp.MarketData.MidPrice == nil || *resp.MarketData.MidPrice != 13500.00 {
 		t.Errorf("MarketData.MidPrice = %v, want 13500.00", resp.MarketData.MidPrice)
 	}
+}
+
+func TestClient_RecentSales(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			t.Errorf("expected GET, got %s", r.Method)
+		}
+		if r.Header.Get("Authorization") != "Bearer test_api_key" {
+			t.Errorf("expected Bearer auth, got %q", r.Header.Get("Authorization"))
+		}
+		if r.URL.Path != "/api/v1/enterprise/cards/42/recent-sales" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"sales": [
+				{"sold_at": "2026-04-01T12:00:00Z", "grading_company": "PSA", "grade": "10", "price": 500.00, "platform": "eBay"},
+				{"sold_at": "2026-03-28T10:00:00Z", "grading_company": "PSA", "grade": "9", "price": 250.00, "platform": "TCGPlayer"}
+			]
+		}`))
+	}))
+	defer server.Close()
+
+	c := newTestClient(server.URL)
+	sales, err := c.RecentSales(context.Background(), 42)
+	if err != nil {
+		t.Fatalf("RecentSales() error = %v", err)
+	}
+	if len(sales) != 2 {
+		t.Fatalf("len(sales) = %d, want 2", len(sales))
+	}
+	if sales[0].Price != 500.00 {
+		t.Errorf("sales[0].Price = %v, want 500.00", sales[0].Price)
+	}
+	if sales[1].GradingCompany != "PSA" {
+		t.Errorf("sales[1].GradingCompany = %q, want PSA", sales[1].GradingCompany)
+	}
+}
+
+func TestClient_MarketDataEnterprise(t *testing.T) {
+	t.Run("full response", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			switch {
+			case r.URL.Path == "/api/v1/enterprise/cards/lookup":
+				_, _ = w.Write([]byte(`{
+					"card": {"id": 42, "name": "Charizard"},
+					"market_data": {"mid_price": 500.00, "low_price": 400.00, "high_price": 600.00}
+				}`))
+			case strings.HasSuffix(r.URL.Path, "/recent-sales"):
+				_, _ = w.Write([]byte(`{
+					"sales": [{"sold_at": "2026-04-01T12:00:00Z", "grading_company": "PSA", "grade": "10", "price": 500.00, "platform": "eBay"}]
+				}`))
+			default:
+				t.Errorf("unexpected path: %s", r.URL.Path)
+			}
+		}))
+		defer server.Close()
+
+		c := newTestClient(server.URL)
+		resp, err := c.MarketDataEnterprise(context.Background(), 42)
+		if err != nil {
+			t.Fatalf("error = %v", err)
+		}
+		if !resp.HasData {
+			t.Error("expected HasData = true")
+		}
+		if resp.CurrentPrice != 500.00 {
+			t.Errorf("CurrentPrice = %v, want 500.00", resp.CurrentPrice)
+		}
+		if resp.PeriodLow != 400.00 {
+			t.Errorf("PeriodLow = %v, want 400.00", resp.PeriodLow)
+		}
+		if resp.PeriodHigh != 600.00 {
+			t.Errorf("PeriodHigh = %v, want 600.00", resp.PeriodHigh)
+		}
+		if len(resp.RecentSales) != 1 {
+			t.Fatalf("len(RecentSales) = %d, want 1", len(resp.RecentSales))
+		}
+	})
+
+	t.Run("recent sales failure returns partial data", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			switch {
+			case r.URL.Path == "/api/v1/enterprise/cards/lookup":
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{
+					"card": {"id": 42, "name": "Charizard"},
+					"market_data": {"mid_price": 500.00}
+				}`))
+			case strings.HasSuffix(r.URL.Path, "/recent-sales"):
+				w.WriteHeader(http.StatusInternalServerError)
+			default:
+				t.Errorf("unexpected path: %s", r.URL.Path)
+			}
+		}))
+		defer server.Close()
+
+		c := newTestClient(server.URL)
+		resp, err := c.MarketDataEnterprise(context.Background(), 42)
+		if err != nil {
+			t.Fatalf("error = %v (expected partial success)", err)
+		}
+		if !resp.HasData {
+			t.Error("expected HasData = true")
+		}
+		if resp.CurrentPrice != 500.00 {
+			t.Errorf("CurrentPrice = %v, want 500.00", resp.CurrentPrice)
+		}
+		if len(resp.RecentSales) != 0 {
+			t.Errorf("expected empty RecentSales on failure, got %d", len(resp.RecentSales))
+		}
+	})
 }
 
 func TestClient_NotAvailable(t *testing.T) {

@@ -31,12 +31,20 @@ func CleanCardNameForDH(raw string) (name, variant string) {
 }
 
 // toTitleCase converts "DRAGONITE 1ST EDITION" → "Dragonite 1st Edition".
+// Handles apostrophes correctly: "PIKACHU'S VACATION" → "Pikachu's Vacation".
 func toTitleCase(s string) string {
-	words := strings.Fields(strings.ToLower(s))
-	for i, w := range words {
-		if len(w) > 0 {
-			words[i] = strings.ToUpper(w[:1]) + w[1:]
+	lower := strings.ToLower(s)
+	runes := []rune(lower)
+	capitalizeNext := true
+	for i, r := range runes {
+		if r == ' ' || r == '\t' {
+			capitalizeNext = true
+		} else if capitalizeNext && r >= 'a' && r <= 'z' {
+			runes[i] = r - 'a' + 'A'
+			capitalizeNext = false
+		} else {
+			capitalizeNext = false
 		}
 	}
-	return strings.Join(words, " ")
+	return string(runes)
 }

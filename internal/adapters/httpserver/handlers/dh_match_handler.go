@@ -62,7 +62,7 @@ type matchedCard struct {
 
 // runBulkMatch processes unsold purchases against DH cert resolution, logging results.
 func (h *DHHandler) runBulkMatch(ctx context.Context, purchases []campaigns.Purchase, mappedSet map[string]string) {
-	var matched, skipped, notFound, failed int
+	var matched, skipped, noCert, notFound, failed int
 	var matchedCards []matchedCard
 
 	for _, p := range purchases {
@@ -78,6 +78,7 @@ func (h *DHHandler) runBulkMatch(ctx context.Context, purchases []campaigns.Purc
 		}
 
 		if p.CertNumber == "" {
+			noCert++
 			continue
 		}
 
@@ -124,6 +125,7 @@ func (h *DHHandler) runBulkMatch(ctx context.Context, purchases []campaigns.Purc
 		observability.Int("total", len(purchases)),
 		observability.Int("matched", matched),
 		observability.Int("skipped", skipped),
+		observability.Int("no_cert", noCert),
 		observability.Int("not_found", notFound),
 		observability.Int("failed", failed))
 
@@ -183,9 +185,13 @@ func (h *DHHandler) pushMatchedToDH(ctx context.Context, purchases []campaigns.P
 		certToDHCardID[item.CertNumber] = item.DHCardID
 	}
 
-	pushed := 0
+	pushed, failedPush := 0, 0
 	for _, r := range resp.Results {
 		if r.Status == "failed" {
+			failedPush++
+			h.logger.Warn(ctx, "push to DH: item failed",
+				observability.String("cert", r.CertNumber),
+				observability.String("error", r.Error))
 			continue
 		}
 		pushed++
@@ -220,5 +226,6 @@ func (h *DHHandler) pushMatchedToDH(ctx context.Context, purchases []campaigns.P
 	}
 	h.logger.Info(ctx, "pushed matched inventory to DH",
 		observability.Int("pushed", pushed),
+		observability.Int("failed", failedPush),
 		observability.Int("total", len(items)))
 }
