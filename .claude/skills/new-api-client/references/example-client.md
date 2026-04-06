@@ -81,7 +81,7 @@ return nil, statusCode, headers, apperrors.ProviderUnavailable(c.Name(), err)
 return nil, statusCode, headers, apperrors.ProviderInvalidResponse(c.Name(), err)
 
 // Missing config
-return nil, 0, nil, apperrors.ConfigMissing("card_hedger_api_key", "CARD_HEDGER_API_KEY")
+return nil, 0, nil, apperrors.ConfigMissing("dh_enterprise_api_key", "DH_ENTERPRISE_API_KEY")
 ```
 
 ### Card name normalization before API calls
