@@ -34,9 +34,8 @@ type ServerDependencies struct {
 	FavoritesService          domainFavorites.Service
 	CampaignsService          domainCampaigns.Service
 	CacheStatsProvider        handlers.CacheStatsProvider
-	CardDiscoverer            handlers.CardDiscoverer // optional: triggers CardHedger discovery after imports
+	CardDiscoverer            handlers.CardDiscoverer // optional: triggers card discovery after imports
 	PriceHintsHandler         *handlers.PriceHintsHandler
-	CardHedgerStats           handlers.CardHedgerStats // optional: live CardHedger counters
 	CardRequestHandler        *handlers.CardRequestHandlers
 	PricingDiagnosticsHandler *handlers.PricingDiagnosticsHandler
 	CampaignsRepo             domainCampaigns.Repository      // For pricing API (cert price lookup)
@@ -99,7 +98,6 @@ func validateEnvironmentVariables(ctx context.Context, logger observability.Logg
 		description string
 	}
 	optionalVars := []optionalCheck{
-		{"CARD_HEDGER_API_KEY", cfg.Adapters.CardHedgerKey, "Enables CardHedger as supplementary pricing source"},
 		{"ENCRYPTION_KEY", cfg.Auth.EncryptionKey, "Enables user authentication and secure session storage"},
 	}
 
@@ -179,9 +177,6 @@ func startWebServer(ctx context.Context, deps ServerDependencies) error {
 
 	// Create API status handler (returns empty data when tracker is nil)
 	apiStatusHandler := handlers.NewAPIStatusHandler(deps.APITracker, logger)
-	if deps.CardHedgerStats != nil {
-		apiStatusHandler.WithCardHedgerStats(deps.CardHedgerStats)
-	}
 
 	// Create cache status handler
 	var cacheStatusHandler *handlers.CacheStatusHandler
