@@ -45,6 +45,13 @@ export interface MarketSnapshot {
   // Pricing metadata
   sourceCount?: number;
   confidence?: number;
+  sources?: string[];
+  // Estimated value
+  estimatedValueCents?: number;
+  estimateSource?: string;
+  // CL anchor
+  clValueCents?: number;
+  clDeviationPct?: number;
   // Per-source pricing data
   sourcePrices?: SourcePrice[];
   // Grade estimation flag
@@ -59,6 +66,7 @@ export interface CertInfo {
   grade: number;
   year: string;
   brand: string;
+  category?: string;
   subject: string;
   variety?: string;
   cardNumber?: string;
@@ -125,6 +133,7 @@ export interface SellSheet {
     totalExpectedRevenue: number;
     totalProjectedProfit: number;
     itemCount: number;
+    skippedItems: number;
   };
 }
 

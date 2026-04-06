@@ -7,7 +7,7 @@ import type {
   QuickAddRequest, SellSheet,
 } from '../../types/campaigns';
 import type { PriceHint } from '../../types/pricing';
-import { APIClient, APIError, isAPIError } from './client';
+import { APIClient } from './client';
 
 declare module './client' {
   interface APIClient {
@@ -115,35 +115,11 @@ proto.clearPriceOverride = async function (this: APIClient, purchaseId: string):
 };
 
 proto.acceptAISuggestion = async function (this: APIClient, purchaseId: string): Promise<void> {
-  const { controller, cleanup } = this.createTimeoutController(this.defaultTimeoutMs);
-  try {
-    const response = await fetch(
-      `${this.baseURL}/purchases/${purchaseId}/accept-ai-suggestion`,
-      { method: 'POST', signal: controller.signal, credentials: 'include' }
-    );
-    cleanup();
-    if (!response.ok) {
-      let data: { message?: string; code?: string; error?: string } = { error: response.statusText };
-      try { data = await response.json(); } catch { /* keep default */ }
-      throw new APIError(
-        data.message || `API error: ${response.status} ${response.statusText}`,
-        response.status,
-        data.code,
-        data,
-      );
-    }
-    await this.expectNoContent(response);
-  } catch (err) {
-    cleanup();
-    if (isAPIError(err)) {
-      throw err;
-    }
-    if (err instanceof Error && err.name === 'AbortError') {
-      throw new APIError('Request was cancelled', 0, 'CANCELLED');
-    }
-    const message = err instanceof Error ? err.message : 'Network error';
-    throw new APIError(message, 0, 'NETWORK_ERROR');
-  }
+  const response = await this.fetchWithRetry(
+    `${this.baseURL}/purchases/${purchaseId}/accept-ai-suggestion`,
+    { method: 'POST' },
+  );
+  await this.expectNoContent(response);
 };
 
 proto.dismissAISuggestion = async function (this: APIClient, purchaseId: string): Promise<void> {

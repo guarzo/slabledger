@@ -81,7 +81,7 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
     if (campaignId) {
       queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.inventory(campaignId) });
     } else {
-      queryClient.invalidateQueries({ predicate: (query) => query.queryKey[0] === 'campaigns' });
+      queryClient.invalidateQueries({ predicate: (query) => query.queryKey[0] === 'campaigns' && query.queryKey[2] === 'inventory' });
     }
     if (opts?.sellSheet) {
       queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.sellSheet });

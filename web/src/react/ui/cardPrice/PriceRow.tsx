@@ -2,14 +2,14 @@ import { clsx } from 'clsx';
 import { ConfidenceIndicator } from '../ConfidenceIndicator';
 import { LinkDropdown } from '../LinkDropdown';
 import { TrendArrow } from '../TrendArrow';
-import type { GradeKey, GradeData } from '../../../types/pricing';
+import type { GradeData } from '../../../types/pricing';
 import { currency } from '../../utils/formatters';
 import { gradeBorderColors, isNoData, formatEbayDisplay, fmtRange, fmtDateShort } from './priceCardUtils';
-import type { LastSoldEntry } from './priceCardUtils';
+import type { LastSoldEntry, PriceCardGradeKey } from './priceCardUtils';
 
 export interface PriceRowProps {
   label: string;
-  gradeKey: GradeKey;
+  gradeKey: PriceCardGradeKey;
   price: number | undefined;
   gradeDetail?: GradeData;
   ebayHref: string;
@@ -103,11 +103,8 @@ export function PriceRow({
             )}
           </span>
           <span className="flex items-center gap-1">
-            {isRaw ? (
-              <MarketplaceLink href={ebayHref} label="eBay" compact />
-            ) : (
-              <MarketplaceLink href={altHref} label="alt" compact />
-            )}
+            <MarketplaceLink href={ebayHref} label="eBay" compact />
+            {!isRaw && <MarketplaceLink href={altHref} label="alt" compact />}
             <MarketplaceLink href={cardLadderHref} label="CL" compact />
           </span>
         </div>

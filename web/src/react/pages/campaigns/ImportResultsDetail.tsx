@@ -1,15 +1,15 @@
 import { useState, useMemo, useEffect } from 'react';
 import { api } from '../../../js/api';
-import type { Campaign, ImportResultItem } from '../../../types/campaigns';
+import type { Campaign, GlobalImportItemResult } from '../../../types/campaigns';
 import { formatCents, getErrorMessage } from '../../utils/formatters';
 import { isAPIError } from '../../../js/api';
 
-interface ActionableItem extends ImportResultItem {
+interface ActionableItem extends GlobalImportItemResult {
   rowId: string;
 }
 
 interface ImportResultsDetailProps {
-  results: ImportResultItem[];
+  results: GlobalImportItemResult[];
   campaigns: Campaign[];
   onItemResolved: () => void;
 }
@@ -39,7 +39,7 @@ export default function ImportResultsDetail({ results, campaigns, onItemResolved
 
   if (actionable.length === 0) return null;
 
-  function getCampaignOptions(item: ImportResultItem): Campaign[] {
+  function getCampaignOptions(item: GlobalImportItemResult): Campaign[] {
     if (item.status === 'ambiguous' && item.candidates) {
       return item.candidates
         .map(id => campaignMap[id])

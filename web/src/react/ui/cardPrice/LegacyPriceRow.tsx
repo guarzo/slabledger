@@ -1,8 +1,8 @@
 import { clsx } from 'clsx';
 import { LinkDropdown } from '../LinkDropdown';
-import type { GradeKey } from '../../../types/pricing';
 import { currency } from '../../utils/formatters';
 import { gradeBorderColors, isNoData } from './priceCardUtils';
+import type { PriceCardGradeKey } from './priceCardUtils';
 import { MarketplaceLink } from './PriceRow';
 
 export interface LegacyPriceRowProps {
@@ -12,7 +12,7 @@ export interface LegacyPriceRowProps {
   altHref: string;
   cardLadderHref: string;
   compact?: boolean;
-  gradeKey: GradeKey;
+  gradeKey: PriceCardGradeKey;
 }
 
 export function LegacyPriceRow({

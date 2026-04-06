@@ -15,12 +15,12 @@ import { CardShell } from './CardShell';
 import { FavoriteButton } from './FavoriteButton';
 import { LinkDropdown } from './LinkDropdown';
 import { Skeleton } from './Skeleton';
-import type { GradeKey, MarketOverview, SalesVelocity } from '../../types/pricing';
+import type { MarketOverview, SalesVelocity } from '../../types/pricing';
 import {
   defaultEbayUrl, defaultAltUrl, defaultCardLadderUrl,
   localEbayCompletedUrl, gradeRows,
 } from './cardPrice/priceCardUtils';
-import type { LastSoldEntry } from './cardPrice/priceCardUtils';
+import type { LastSoldEntry, PriceCardGradeKey } from './cardPrice/priceCardUtils';
 import { PriceRow } from './cardPrice/PriceRow';
 import { LegacyPriceRow } from './cardPrice/LegacyPriceRow';
 
@@ -31,18 +31,18 @@ export interface CardPriceData {
   imageUrl?: string;
 }
 
-export interface CardPrices extends Partial<Record<GradeKey, number>> {}
+export interface CardPrices extends Partial<Record<PriceCardGradeKey, number>> {}
 
 export interface CardPriceCardProps {
   card: CardPriceData;
   prices?: CardPrices | null;
   pricesLoading?: boolean;
   variant?: 'compact' | 'featured';
-  getEbayUrl?: (card: CardPriceData, grade?: GradeKey) => string;
-  getAltUrl?: (card: CardPriceData, grade?: GradeKey) => string;
-  getCardLadderUrl?: (card: CardPriceData, grade?: GradeKey) => string;
+  getEbayUrl?: (card: CardPriceData, grade?: PriceCardGradeKey) => string;
+  getAltUrl?: (card: CardPriceData, grade?: PriceCardGradeKey) => string;
+  getCardLadderUrl?: (card: CardPriceData, grade?: PriceCardGradeKey) => string;
   className?: string;
-  gradeData?: Partial<Record<GradeKey, import('../../types/pricing').GradeData>>;
+  gradeData?: Partial<Record<PriceCardGradeKey, import('../../types/pricing').GradeData>>;
   market?: MarketOverview;
   velocity?: SalesVelocity;
   lastSold?: Partial<Record<string, LastSoldEntry>>;

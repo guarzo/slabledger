@@ -4,17 +4,23 @@
 
 import type { SaleChannel } from './core';
 
-/** Status values returned by CL and PSA import endpoints. */
-export type ImportResultStatus =
+/** Shared error shape for import results. */
+export interface ImportError {
+  row?: number;
+  error: string;
+}
+
+/** Status values returned by CL import endpoints. */
+export type GlobalImportResultStatus =
   | 'allocated' | 'refreshed' | 'updated' | 'refunded'
   | 'unmatched' | 'ambiguous' | 'skipped' | 'failed';
 
-/** Shared per-row result item used by both CL and PSA imports. */
-export interface ImportResultItem {
+/** Per-row result for CL (global) imports. */
+export interface GlobalImportItemResult {
   certNumber: string;
   cardName?: string;
   grade?: number;
-  status: ImportResultStatus;
+  status: GlobalImportResultStatus;
   campaignId?: string;
   campaignName?: string;
   candidates?: string[];
@@ -27,6 +33,24 @@ export interface ImportResultItem {
   population?: number;
 }
 
+/** Status values returned by PSA import endpoints. */
+export type PSAImportResultStatus =
+  | 'allocated' | 'updated' | 'refunded'
+  | 'unmatched' | 'ambiguous' | 'skipped' | 'failed';
+
+/** Per-row result for PSA imports (no clValueCents). */
+export interface PSAImportItemResult {
+  certNumber: string;
+  cardName?: string;
+  grade?: number;
+  status: PSAImportResultStatus;
+  campaignId?: string;
+  campaignName?: string;
+  candidates?: string[];
+  error?: string;
+  population?: number;
+}
+
 export interface GlobalImportResult {
   allocated: number;
   refreshed: number;
@@ -34,8 +58,8 @@ export interface GlobalImportResult {
   ambiguous: number;
   skipped: number;
   failed: number;
-  errors?: { row?: number; error: string }[];
-  results?: ImportResultItem[];
+  errors?: ImportError[];
+  results?: GlobalImportItemResult[];
   byCampaign?: Record<string, { campaignName: string; allocated: number; refreshed: number }>;
 }
 
@@ -49,8 +73,9 @@ export interface PSAImportResult {
   failed: number;
   invoicesCreated?: number;
   invoicesUpdated?: number;
-  errors?: { row?: number; error: string }[];
-  results?: ImportResultItem[];
+  certEnrichmentPending?: number;
+  errors?: ImportError[];
+  results?: PSAImportItemResult[];
   byCampaign?: Record<string, { campaignName: string; allocated: number; refreshed: number }>;
 }
 
@@ -59,7 +84,7 @@ export interface ExternalImportResult {
   skipped: number;
   updated: number;
   failed: number;
-  errors?: { row?: number; error: string }[];
+  errors?: ImportError[];
   results?: ExternalImportItemResult[];
 }
 
@@ -95,9 +120,12 @@ export interface CertImportSoldItem {
   campaignId: string;
 }
 
-export type ScanCertResponse =
-  | { status: 'new' }
-  | { status: 'existing' | 'sold'; cardName: string; purchaseId: string; campaignId: string };
+export interface ScanCertResponse {
+  status: 'new' | 'existing' | 'sold';
+  cardName?: string;
+  purchaseId?: string;
+  campaignId?: string;
+}
 
 export interface ResolveCertResponse {
   certNumber: string;
@@ -176,6 +204,7 @@ export interface OrdersConfirmItem {
   saleChannel: SaleChannel;
   saleDate: string;
   salePriceCents: number;
+  orderId?: string;
 }
 
 export interface BulkSaleResult {

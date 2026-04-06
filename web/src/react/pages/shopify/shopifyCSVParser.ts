@@ -78,11 +78,24 @@ export function quoteCSVField(field: string): string {
   return field;
 }
 
-/** Find a column index matching any of the candidate names (case-insensitive, trimmed). */
+/** Find a column index matching any of the candidate names (case-insensitive, trimmed).
+ *  Priority: exact match > word-boundary match > substring match. */
 function findColumn(headers: string[], ...candidates: string[]): number {
   const lower = headers.map(h => h.trim().toLowerCase());
+  // Exact match first
   for (const c of candidates) {
-    const idx = lower.findIndex(h => h === c || h.includes(c));
+    const idx = lower.indexOf(c);
+    if (idx >= 0) return idx;
+  }
+  // Word-boundary match
+  for (const c of candidates) {
+    const re = new RegExp(`\\b${c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`);
+    const idx = lower.findIndex(h => re.test(h));
+    if (idx >= 0) return idx;
+  }
+  // Substring fallback
+  for (const c of candidates) {
+    const idx = lower.findIndex(h => h.includes(c));
     if (idx >= 0) return idx;
   }
   return -1;
@@ -120,9 +133,7 @@ export function detectAndParseCSV(text: string): ParsedCSV {
     let certNumber = certIdx >= 0 ? row[certIdx]?.trim() : '';
     let grader = '';
 
-    if (certNumber) {
-      grader = 'PSA';
-    } else if (skuIdx >= 0) {
+    if (!certNumber && skuIdx >= 0) {
       const sku = row[skuIdx]?.trim() || '';
       const psaMatch = sku.match(/^PSA-(\d+)$/i);
       if (psaMatch) {

@@ -208,7 +208,7 @@ export function TierCard({ tier: t }: { tier: PriceTierPerformance }) {
 export function CardPerfRow({ cp }: { cp: CardPerformance }) {
   const pnl = cp.sale ? cp.realizedPnL : cp.unrealizedPnL;
   const pnlLabel = cp.sale ? 'realized' : 'unrealized';
-  const trendArrow = cp.currentMarket?.trend30d
+  const trendArrow = cp.currentMarket?.trend30d != null
     ? cp.currentMarket.trend30d > 0.05 ? '↑' : cp.currentMarket.trend30d < -0.05 ? '↓' : '→'
     : '';
 

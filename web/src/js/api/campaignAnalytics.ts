@@ -89,7 +89,7 @@ proto.listInvoices = async function (this: APIClient): Promise<Invoice[]> {
 };
 
 proto.updateInvoice = async function (this: APIClient, id: string, data: Partial<Invoice>): Promise<Invoice> {
-  return this.put<Invoice>(`/credit/invoices`, { id, ...data });
+  return this.put<Invoice>(`/credit/invoices`, { ...data, id });
 };
 
 // Portfolio health

@@ -1,5 +1,4 @@
-import type { GradeKey, GradeData } from '../../../types/pricing';
-import type { CardPriceData } from '../CardPriceCard';
+import type { GradeData } from '../../../types/pricing';
 import type { SearchableCard } from '../../utils/marketplaceUrls';
 import {
   defaultEbayUrl as sharedDefaultEbayUrl,
@@ -8,6 +7,16 @@ import {
   ebayCompletedUrl,
 } from '../../utils/marketplaceUrls';
 import { currency } from '../../utils/formatters';
+
+/** Narrowed grade key for the grades displayed by CardPriceCard. */
+export type PriceCardGradeKey = 'raw' | 'psa8' | 'psa9' | 'psa10';
+
+/** Minimal card identity used by URL helpers — avoids importing from CardPriceCard. */
+export interface PriceCardData {
+  name: string;
+  setName: string;
+  number: string;
+}
 
 export interface LastSoldEntry {
   lastSoldPrice: number;
@@ -48,36 +57,36 @@ export function fmtDateShort(dateStr: string): string {
 
 /* ---------- URL helpers ---------- */
 
-function toSearchable(card: CardPriceData): SearchableCard {
+function toSearchable(card: PriceCardData): SearchableCard {
   return { name: card.name, setName: card.setName, number: card.number };
 }
 
-export function defaultEbayUrl(card: CardPriceData, grade?: GradeKey): string {
+export function defaultEbayUrl(card: PriceCardData, grade?: PriceCardGradeKey): string {
   return sharedDefaultEbayUrl(toSearchable(card), grade);
 }
 
-export function defaultAltUrl(card: CardPriceData, grade?: GradeKey): string {
+export function defaultAltUrl(card: PriceCardData, grade?: PriceCardGradeKey): string {
   return sharedDefaultAltUrl(toSearchable(card), grade);
 }
 
-export function defaultCardLadderUrl(card: CardPriceData, grade?: GradeKey): string {
+export function defaultCardLadderUrl(card: PriceCardData, grade?: PriceCardGradeKey): string {
   return sharedDefaultCardLadderUrl(toSearchable(card), grade);
 }
 
-export function localEbayCompletedUrl(card: CardPriceData, grade?: GradeKey): string {
+export function localEbayCompletedUrl(card: PriceCardData, grade?: PriceCardGradeKey): string {
   return ebayCompletedUrl(toSearchable(card), grade);
 }
 
 /* ---------- Constants ---------- */
 
-export const gradeRows: { key: GradeKey; label: string }[] = [
+export const gradeRows: { key: PriceCardGradeKey; label: string }[] = [
   { key: 'raw', label: 'Raw' },
   { key: 'psa8', label: 'PSA 8' },
   { key: 'psa9', label: 'PSA 9' },
   { key: 'psa10', label: 'PSA 10' },
 ];
 
-export const gradeBorderColors: Partial<Record<GradeKey, string>> = {
+export const gradeBorderColors: Record<PriceCardGradeKey, string> = {
   raw: 'var(--text-muted)',
   psa8: 'var(--grade-psa8)',
   psa9: 'var(--grade-psa9)',
