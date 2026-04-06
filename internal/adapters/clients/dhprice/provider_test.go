@@ -34,10 +34,10 @@ func (m *mockIDLookup) GetExternalID(_ context.Context, _, _, _, _ string) (stri
 
 func TestGetPrice_NoCardID(t *testing.T) {
 	tests := []struct {
-		name     string
-		lookup   *mockIDLookup
-		wantNil  bool
-		wantErr  bool
+		name    string
+		lookup  *mockIDLookup
+		wantNil bool
+		wantErr bool
 	}{
 		{
 			name:    "unmapped card returns nil",
@@ -103,8 +103,8 @@ func TestGetPrice_WithSales(t *testing.T) {
 	}
 
 	tests := []struct {
-		name     string
-		got      int64
+		name      string
+		got       int64
 		wantCents int64
 	}{
 		{"PSA10 median of 100,110,120", got.Grades.PSA10Cents, 11000},
