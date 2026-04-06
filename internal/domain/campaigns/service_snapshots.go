@@ -52,17 +52,19 @@ func setCLAnchoredPrices(snapshot *MarketSnapshot, clValueCents int) {
 	snapshot.CLAnchorApplied = true
 }
 
-// applyCLCorrection adjusts snapshot values when the fusion pipeline produces unreliable results.
+// applyCLCorrection adjusts snapshot values when market data produces unreliable results.
 // It compares the snapshot median against the purchase's CL value and corrects when:
 //   - The snapshot has a pricing gap (no median) and CL is available
-//   - The market price is BELOW CL with high deviation and only 1 source (likely a variant mismatch)
+//   - The market price is BELOW CL with high deviation and only 1 market source (likely a variant mismatch)
 //
 // CL acts as a price floor: when a single source reports a price ABOVE CL, the market data
 // is trusted (the card may genuinely be worth more than CL's estimate). Anchoring only
 // applies downward to prevent underpricing.
 //
-// When multiple sources agree (sourceCount >= 2), the fusion result is trusted even if
+// When multiple market sources agree (len(Sources) >= 2), the market result is trusted even if
 // it diverges from CL — multi-source agreement is a stronger signal than CL alone.
+//
+// After evaluation, Card Ladder is appended to Sources as an independent price signal.
 func applyCLCorrection(snapshot *MarketSnapshot, clValueCents int) {
 	if snapshot == nil || clValueCents <= 0 {
 		return
@@ -84,8 +86,8 @@ func applyCLCorrection(snapshot *MarketSnapshot, clValueCents int) {
 
 		// Only correct single-source results when market price is BELOW CL with high deviation.
 		// When market is above CL, trust the market — the card may be worth more than CL thinks.
-		// Multi-source fusion that diverges from CL is more likely correct (CL may be stale).
-		if deviation > clDeviationThreshold && snapshot.SourceCount <= 1 && snapshot.MedianCents < clValueCents {
+		// Multi-source market data that diverges from CL is more likely correct (CL may be stale).
+		if deviation > clDeviationThreshold && len(snapshot.Sources) <= 1 && snapshot.MedianCents < clValueCents {
 			setCLAnchoredPrices(snapshot, clValueCents)
 		}
 	}
@@ -104,6 +106,11 @@ func applyCLCorrection(snapshot *MarketSnapshot, clValueCents int) {
 			snapshot.EstimateSource = "cl_fallback"
 		}
 	}
+
+	// Append Card Ladder as a source — CL is an independent price signal
+	// regardless of whether anchoring was applied.
+	snapshot.Sources = append(snapshot.Sources, "cardladder")
+	snapshot.SourceCount = len(snapshot.Sources)
 }
 
 // captureMarketSnapshot performs a best-effort market snapshot lookup and applies it to the receiver.
