@@ -119,7 +119,7 @@ func adminAnalyze(ctx context.Context, args []string) error {
 	}
 
 	priceProvImpl, err := initializePriceProviders(
-		ctx, &cfg, logger, cardIDMappingRepo,
+		ctx, logger, cardIDMappingRepo,
 		dhClient,
 	)
 	if err != nil {

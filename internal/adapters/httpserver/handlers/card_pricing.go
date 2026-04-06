@@ -8,7 +8,7 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
-// CardPricingResponse contains per-card pricing data from the fusion price provider.
+// CardPricingResponse contains per-card pricing data from the price provider.
 // All prices are in USD (dollars), not cents.
 type CardPricingResponse struct {
 	Card   string `json:"card"`

@@ -11,22 +11,33 @@ import (
 )
 
 // --- test doubles ---
+// These mocks live here (not in testutil/mocks) because MarketDataClient and
+// CardIDLookup are defined in the dhprice package — moving them would create a
+// circular import.
 
 type mockMarketData struct {
-	sales []dh.RecentSale
-	err   error
+	RecentSalesFn func(ctx context.Context, cardID int) ([]dh.RecentSale, error)
+	sales         []dh.RecentSale
+	err           error
 }
 
-func (m *mockMarketData) RecentSales(_ context.Context, _ int) ([]dh.RecentSale, error) {
+func (m *mockMarketData) RecentSales(ctx context.Context, cardID int) ([]dh.RecentSale, error) {
+	if m.RecentSalesFn != nil {
+		return m.RecentSalesFn(ctx, cardID)
+	}
 	return m.sales, m.err
 }
 
 type mockIDLookup struct {
-	id  string
-	err error
+	GetExternalIDFn func(ctx context.Context, cardName, setName, collectorNumber, provider string) (string, error)
+	id              string
+	err             error
 }
 
-func (m *mockIDLookup) GetExternalID(_ context.Context, _, _, _, _ string) (string, error) {
+func (m *mockIDLookup) GetExternalID(ctx context.Context, cardName, setName, collectorNumber, provider string) (string, error) {
+	if m.GetExternalIDFn != nil {
+		return m.GetExternalIDFn(ctx, cardName, setName, collectorNumber, provider)
+	}
 	return m.id, m.err
 }
 

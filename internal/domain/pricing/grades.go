@@ -116,7 +116,7 @@ func NormalizeGrade(raw string) Grade {
 	return GradeUnknown
 }
 
-// Additional grade constants for PSA 1-5 (not in core fusion grades).
+// Additional grade constants for PSA 1-5 (not in core grades).
 const (
 	GradePSA1 Grade = "psa1"
 	GradePSA2 Grade = "psa2"
@@ -125,7 +125,7 @@ const (
 	GradePSA5 Grade = "psa5"
 )
 
-// CoreGrades are the grades used for DB operations, fusion output, and detail maps.
+// CoreGrades are the grades used for DB operations and detail maps.
 var CoreGrades = []Grade{GradePSA10, GradePSA9, GradePSA8, GradePSA7, GradePSA6, GradeRaw}
 
 // AllDisplayGrades is the full set of recognized display-format grades (PSA 1-10 + Raw).

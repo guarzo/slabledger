@@ -108,7 +108,7 @@ func isCircuitBreakerSuccess(err error) bool {
 	errStr := strings.ToLower(err.Error())
 
 	// These are business logic errors, not infrastructure failures:
-	// - "no match found" - Card not in PriceCharting database
+	// - "no match found" - Card not in provider database
 	// - "no product match" - Product search returned no results
 	// - "query too short" - Search query validation failed
 	if strings.Contains(errStr, "no match found") ||

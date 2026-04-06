@@ -202,9 +202,9 @@ export interface MarketSnapshot {
   monthlyVelocity?: number;
   // Short-term signal
   avg7DayCents?: number;
-  // Fusion metadata
+  // Pricing metadata
   sourceCount?: number;
-  fusionConfidence?: number;
+  confidence?: number;
   // Per-source pricing data
   sourcePrices?: SourcePrice[];
   // Grade estimation flag

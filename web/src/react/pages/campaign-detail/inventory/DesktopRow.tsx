@@ -121,7 +121,7 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
         title={snap ? marketTooltip(snap, cb) : undefined}>
         {snap && price > 0 ? (() => {
           const displaySource = getSourceByType(snap.sourcePrices, 'ebay') || getSourceByType(snap.sourcePrices, 'estimate');
-          const confidence = displaySource?.confidence ?? snap?.fusionConfidence ?? null;
+          const confidence = displaySource?.confidence ?? snap?.confidence ?? null;
           return (
             <div className="flex items-center justify-end gap-1">
               <span className="text-[var(--text)] tabular-nums">{formatCents(price)}</span>

@@ -23,7 +23,7 @@ type SnapshotHistoryEntry struct {
 	Trend90d            float64
 	Volatility          float64
 	SourceCount         int
-	FusionConfidence    float64
+	Confidence          float64
 	SnapshotJSON        string
 	SnapshotDate        string
 }

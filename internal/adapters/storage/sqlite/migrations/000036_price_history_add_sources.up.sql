@@ -27,7 +27,10 @@ CREATE TABLE price_history_new (
 );
 
 -- Step 2: Copy rows that have valid source values in the new constraint.
--- Rows with 'pokemonprice' or 'cardmarket' are dropped (no longer active sources).
+-- Rows with 'pokemonprice' or 'cardmarket' are intentionally dropped here.
+-- These sources were decommissioned as part of the DH-only pricing simplification
+-- (2026-04-06) and had no active data generation. Any historical rows are
+-- superseded by DH data and are safe to discard.
 INSERT INTO price_history_new
     SELECT id, card_name, set_name, card_number, grade, price_cents, confidence,
            source, fusion_source_count, fusion_outliers_removed, fusion_method,

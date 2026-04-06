@@ -6,7 +6,7 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 )
 
-// MockDHMarketDataClient is a test double for fusionprice.DHMarketDataClient.
+// MockDHMarketDataClient is a test double for dhprice.MarketDataClient.
 type MockDHMarketDataClient struct {
 	RecentSalesFn func(ctx context.Context, cardID int) ([]dh.RecentSale, error)
 }
@@ -18,7 +18,7 @@ func (m *MockDHMarketDataClient) RecentSales(ctx context.Context, cardID int) ([
 	return nil, nil
 }
 
-// MockDHCardIDLookup is a test double for fusionprice.DHCardIDLookup.
+// MockDHCardIDLookup is a test double for dhprice.CardIDLookup.
 type MockDHCardIDLookup struct {
 	GetExternalIDFn func(ctx context.Context, cardName, setName, collectorNumber, provider string) (string, error)
 }

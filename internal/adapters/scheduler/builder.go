@@ -26,9 +26,9 @@ type BuildDeps struct {
 	AccessTracker     pricing.AccessTracker
 	RefreshCandidates pricing.RefreshCandidateProvider
 	PriceProvider     pricing.PriceProvider
-	CardProvider  domainCards.CardProvider
-	AuthService   auth.Service // may be nil if auth is not configured
-	Logger        observability.Logger
+	CardProvider      domainCards.CardProvider
+	AuthService       auth.Service // may be nil if auth is not configured
+	Logger            observability.Logger
 
 	// Sync state (shared by DH schedulers)
 	SyncStateStore SyncStateStore

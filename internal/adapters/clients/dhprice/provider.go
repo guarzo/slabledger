@@ -3,12 +3,12 @@ package dhprice
 
 import (
 	"context"
-	"math"
 	"sort"
 	"strconv"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	domainCards "github.com/guarzo/slabledger/internal/domain/cards"
+	"github.com/guarzo/slabledger/internal/domain/mathutil"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/domain/pricing"
 )
@@ -29,6 +29,9 @@ type CardIDLookup interface {
 }
 
 // gradeKey maps a combined "Company Grade" string to the canonical pricing.Grade.
+// Only high-value grades (PSA 6-10, BGS 10/9.5, CGC 9.5) are tracked because
+// the business focuses on PSA-graded cards in this range. Sales for unmapped
+// grades (e.g. PSA 1-5, raw) are intentionally skipped.
 var gradeKey = map[string]pricing.Grade{
 	"PSA 10":  pricing.GradePSA10,
 	"PSA 9":   pricing.GradePSA9,
@@ -155,15 +158,15 @@ func buildPrice(productName string, sales []dh.RecentSale) *pricing.Price {
 
 	for g, prices := range byGrade {
 		med := median(prices)
-		cents := dollarsToCents(med)
+		cents := mathutil.ToCents(med)
 		pricing.SetGradePrice(&grades, g, cents)
 
 		lo, hi := priceRange(prices)
 		details[g.String()] = &pricing.GradeDetail{
 			Estimate: &pricing.EstimateGradeDetail{
 				PriceCents: cents,
-				LowCents:   dollarsToCents(lo),
-				HighCents:  dollarsToCents(hi),
+				LowCents:   mathutil.ToCents(lo),
+				HighCents:  mathutil.ToCents(hi),
 				Confidence: dhConfidence,
 			},
 		}
@@ -173,7 +176,7 @@ func buildPrice(productName string, sales []dh.RecentSale) *pricing.Price {
 		ProductName:  productName,
 		Amount:       grades.PSA10Cents,
 		Currency:     "USD",
-		Source:       pricing.Source(pricing.SourceDH),
+		Source:       pricing.SourceDH,
 		Grades:       grades,
 		Confidence:   dhConfidence,
 		GradeDetails: details,
@@ -195,14 +198,10 @@ func median(vals []float64) float64 {
 }
 
 // priceRange returns the min and max of a sorted slice.
+// Callers must sort the slice first (median() sorts in place).
 func priceRange(sorted []float64) (float64, float64) {
 	if len(sorted) == 0 {
 		return 0, 0
 	}
 	return sorted[0], sorted[len(sorted)-1]
-}
-
-// dollarsToCents converts a USD dollar amount to cents, rounding to nearest.
-func dollarsToCents(d float64) int64 {
-	return int64(math.Round(d * 100))
 }

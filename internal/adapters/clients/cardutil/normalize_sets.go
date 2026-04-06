@@ -53,10 +53,9 @@ func NormalizeSetNameForSearch(setName string) string {
 	return normalizeSetNameBase(setName, false)
 }
 
-// StripCommonSetPrefixes performs the set name normalization steps shared by
-// both the cardutil and PriceCharting pipelines: strip colons, replace hyphens
-// with spaces, strip leading year, strip "Pokemon"/"Pokémon" prefix, and
-// normalize Chinese PSA set codes.
+// StripCommonSetPrefixes performs shared set name normalization: strip colons,
+// replace hyphens with spaces, strip leading year, strip "Pokemon"/"Pokémon"
+// prefix, and normalize Chinese PSA set codes.
 //
 // Callers handle ampersand treatment differently (&->remove vs &->"and") and
 // apply their own post-processing (Japanese handling, PSA codes, era expansion).
@@ -348,8 +347,8 @@ func NormalizeChineseSetName(setName string) (string, bool) {
 }
 
 // IsChineseSet returns true if the set name indicates a Chinese card.
-// Chinese Gem Pack cards use species-based numbering in PriceCharting
-// (e.g., PSA #09 -> PC #709 where 7 = species position).
+// Chinese Gem Pack cards use species-based numbering in marketplace databases
+// (e.g., PSA #09 -> #709 where 7 = species position).
 func IsChineseSet(setName string) bool {
 	lower := strings.ToLower(setName)
 	return strings.HasPrefix(lower, "cn ") || strings.Contains(lower, "chinese")
@@ -357,7 +356,7 @@ func IsChineseSet(setName string) bool {
 
 // IsChineseGemPackSet returns true if the set name matches a known Chinese Gem Pack volume
 // (CBB1/Vol 1, CBB2/Vol 2, CBB3/Vol 3). Only these volumes have species-based numbering
-// in PriceCharting. Requires the set to also be Chinese to avoid false positives on
+// in marketplace databases. Requires the set to also be Chinese to avoid false positives on
 // non-Chinese sets that happen to contain "Vol 1" etc.
 func IsChineseGemPackSet(setName string) bool {
 	if !IsChineseSet(setName) {
@@ -370,15 +369,11 @@ func IsChineseGemPackSet(setName string) bool {
 }
 
 // chineseGemPackBases maps known Chinese Gem Pack volume identifiers to their
-// PriceCharting species-position base numbers.
-// PriceCharting uses species-position-based numbering (species N -> base N*100),
-// so only volumes with known card->species mappings work here.
+// species-position base numbers used by marketplace databases.
+// Species-position numbering: species N -> base N*100. Only volumes with
+// known card->species mappings work here.
 //
-// To add a new volume: look up the species-position base on PriceCharting's API
-// (search for a card in the new volume and observe its PC number), then add both
-// the CBBx and "vol N" keyword entries here with the corresponding base.
-//
-// Known mappings (from PriceCharting API verification):
+// Known mappings:
 //   - CBB1 / Vol 1: Captain Pikachu is species 7 -> base 700
 //   - CBB2 / Vol 2: Umbreon is species 6 -> base 600
 //   - CBB3 / Vol 3: Gengar is species 3 -> base 300
@@ -391,7 +386,7 @@ var chineseGemPackBases = []struct {
 	{"cbb3", 300}, {"vol 3", 300},
 }
 
-// MapChineseNumber maps PSA printed card numbers to PriceCharting's numbering
+// MapChineseNumber maps PSA printed card numbers to marketplace numbering
 // for known Chinese Gem Pack volumes. Cards not covered need price hints.
 // Returns ("", true) for unknown volumes to signal callers to log a warning.
 func MapChineseNumber(setName, number string) (string, bool) {

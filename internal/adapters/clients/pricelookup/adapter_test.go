@@ -524,8 +524,8 @@ func TestGetMarketSnapshot_FullSnapshot(t *testing.T) {
 	if snap.OptimisticCents != 11000 {
 		t.Errorf("OptimisticCents = %d, want 11000", snap.OptimisticCents)
 	}
-	if snap.FusionConfidence != 0.92 {
-		t.Errorf("FusionConfidence = %v, want 0.92", snap.FusionConfidence)
+	if snap.Confidence != 0.92 {
+		t.Errorf("Confidence = %v, want 0.92", snap.Confidence)
 	}
 	if snap.SourceCount != 2 {
 		t.Errorf("SourceCount = %d, want 2", snap.SourceCount)
@@ -659,8 +659,8 @@ func TestGetMarketSnapshot_LastSoldFallbackChain(t *testing.T) {
 		if snap.EstimatedValueCents != 7000 {
 			t.Errorf("EstimatedValueCents = %d, want 7000 (from estimate)", snap.EstimatedValueCents)
 		}
-		if snap.EstimateSource != "DH" {
-			t.Errorf("EstimateSource = %q, want %q", snap.EstimateSource, "DH")
+		if snap.EstimateSource != pricing.SourceDH {
+			t.Errorf("EstimateSource = %q, want %q", snap.EstimateSource, pricing.SourceDH)
 		}
 	})
 

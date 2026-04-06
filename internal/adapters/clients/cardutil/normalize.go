@@ -38,10 +38,8 @@ type BaseAbbreviation struct {
 }
 
 // BaseAbbreviations are the canonical PSA abbreviation -> expansion pairs shared
-// across pipelines. Pipeline-specific wrappers (PSAAbbreviations for cardutil,
-// pcAbbreviations for PriceCharting) adapt these to their matching context:
-// cardutil uses dash-prefixed patterns; PriceCharting uses dashless patterns
-// with additional spaced variants.
+// across pipelines. PSAAbbreviations wraps these with dash-prefixed patterns
+// for the card normalization pipeline.
 var BaseAbbreviations = []BaseAbbreviation{
 	{From: "sp.delivery", To: "Special Delivery", NoDashPrefix: true},
 	{From: "rev.foil", To: "Reverse Foil"},
@@ -49,9 +47,8 @@ var BaseAbbreviations = []BaseAbbreviation{
 }
 
 // PSAAbbreviations maps PSA listing abbreviations (dash-prefixed) to expanded
-// forms. Used by NormalizePurchaseName for the secondary source/fusion pipeline.
-// Derived from BaseAbbreviations with dash prefix, plus -holo which is
-// cardutil-specific (PriceCharting relies on hyphen->space conversion instead).
+// forms. Used by NormalizePurchaseName for the price lookup pipeline.
+// Derived from BaseAbbreviations with dash prefix, plus -holo.
 var PSAAbbreviations = func() [][2]string {
 	result := make([][2]string, 0, len(BaseAbbreviations)+1)
 	for _, abbr := range BaseAbbreviations {
@@ -62,7 +59,7 @@ var PSAAbbreviations = func() [][2]string {
 			result = append(result, [2]string{"-" + abbr.From, " " + abbr.To})
 		}
 	}
-	// -holo is cardutil-specific: PriceCharting strips hyphens to spaces later
+	// -holo expands the common PSA abbreviation to " Holo"
 	result = append(result, [2]string{"-holo", " Holo"})
 	return result
 }()

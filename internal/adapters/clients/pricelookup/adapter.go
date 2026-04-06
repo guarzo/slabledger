@@ -109,7 +109,7 @@ func (a *Adapter) GetMarketSnapshot(ctx context.Context, card campaigns.CardIden
 		key := gradeDetailKey(grade)
 		if detail, ok := price.GradeDetails[key]; ok && detail != nil && detail.Estimate != nil && detail.Estimate.PriceCents > 0 {
 			snap.EstimatedValueCents = int(detail.Estimate.PriceCents)
-			snap.EstimateSource = "DH"
+			snap.EstimateSource = pricing.SourceDH
 		}
 	}
 
@@ -154,7 +154,7 @@ func (a *Adapter) GetMarketSnapshot(ctx context.Context, card campaigns.CardIden
 	}
 
 	// Confidence and source count
-	snap.FusionConfidence = price.Confidence
+	snap.Confidence = price.Confidence
 	if len(price.Sources) > 0 {
 		snap.SourceCount = len(price.Sources)
 	}
