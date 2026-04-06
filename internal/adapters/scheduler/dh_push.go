@@ -58,6 +58,15 @@ type DHPushConfig struct {
 	Interval time.Duration
 }
 
+// DHPushOption configures optional dependencies on a DHPushScheduler.
+type DHPushOption func(*DHPushScheduler)
+
+// WithDHPushCandidatesSaver injects a candidates saver for storing ambiguous
+// DH cert resolution candidates on purchases.
+func WithDHPushCandidatesSaver(saver DHPushCandidatesSaver) DHPushOption {
+	return func(s *DHPushScheduler) { s.candidatesSaver = saver }
+}
+
 // DHPushScheduler matches pending purchases against DH and pushes inventory.
 type DHPushScheduler struct {
 	StopHandle
@@ -73,6 +82,7 @@ type DHPushScheduler struct {
 }
 
 // NewDHPushScheduler creates a new DH push scheduler.
+// Optional dependencies (e.g. candidates saver) are injected via DHPushOption.
 func NewDHPushScheduler(
 	pendingLister DHPushPendingLister,
 	statusUpdater DHPushStatusUpdater,
@@ -80,25 +90,28 @@ func NewDHPushScheduler(
 	inventoryPush DHPushInventoryPusher,
 	fieldsUpdater DHFieldsUpdater,
 	cardIDSaver DHPushCardIDSaver,
-	candidatesSaver DHPushCandidatesSaver,
 	logger observability.Logger,
 	config DHPushConfig,
+	opts ...DHPushOption,
 ) *DHPushScheduler {
 	if config.Interval <= 0 {
 		config.Interval = 5 * time.Minute
 	}
-	return &DHPushScheduler{
-		StopHandle:      NewStopHandle(),
-		pendingLister:   pendingLister,
-		statusUpdater:   statusUpdater,
-		certResolver:    certResolver,
-		inventoryPush:   inventoryPush,
-		fieldsUpdater:   fieldsUpdater,
-		cardIDSaver:     cardIDSaver,
-		candidatesSaver: candidatesSaver,
-		logger:          logger.With(context.Background(), observability.String("component", "dh-push")),
-		config:          config,
+	s := &DHPushScheduler{
+		StopHandle:    NewStopHandle(),
+		pendingLister: pendingLister,
+		statusUpdater: statusUpdater,
+		certResolver:  certResolver,
+		inventoryPush: inventoryPush,
+		fieldsUpdater: fieldsUpdater,
+		cardIDSaver:   cardIDSaver,
+		logger:        logger.With(context.Background(), observability.String("component", "dh-push")),
+		config:        config,
 	}
+	for _, o := range opts {
+		o(s)
+	}
+	return s
 }
 
 // Start begins the DH push loop.
@@ -215,8 +228,9 @@ func (s *DHPushScheduler) processPurchase(ctx context.Context, p campaigns.Purch
 				}
 				resolved, resolveErr := dh.ResolveAmbiguous(resp.Candidates, p.CardNumber, saveFn)
 				if resolveErr != nil {
-					s.logger.Warn(ctx, "dh push: failed to save candidates",
+					s.logger.Warn(ctx, "dh push: failed to resolve/save candidates, will retry",
 						observability.String("purchaseID", p.ID), observability.Err(resolveErr))
+					return processSkipped
 				}
 				if resolved > 0 {
 					dhCardID = resolved
@@ -291,6 +305,15 @@ func (s *DHPushScheduler) processPurchase(ctx context.Context, p campaigns.Purch
 	}
 
 	result := pushResp.Results[0]
+
+	if result.Status == "failed" || result.DHInventoryID == 0 {
+		s.logger.Warn(ctx, "dh push: push result indicates failure, will retry",
+			observability.String("purchaseID", p.ID),
+			observability.String("cert", p.CertNumber),
+			observability.String("resultStatus", result.Status),
+			observability.Int("dhInventoryID", result.DHInventoryID))
+		return processSkipped
+	}
 
 	update := campaigns.DHFieldsUpdate{
 		CardID:            dhCardID,

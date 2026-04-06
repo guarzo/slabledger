@@ -1,8 +1,10 @@
 package handlers
 
 import (
+	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	"github.com/guarzo/slabledger/internal/domain/campaigns"
@@ -25,12 +27,13 @@ func (h *DHHandler) HandleSelectMatch(w http.ResponseWriter, r *http.Request) {
 	if !decodeBody(w, r, &req) {
 		return
 	}
+	req.PurchaseID = strings.TrimSpace(req.PurchaseID)
 	if req.PurchaseID == "" {
 		writeError(w, http.StatusBadRequest, "purchaseId is required")
 		return
 	}
-	if req.DHCardID == 0 {
-		writeError(w, http.StatusBadRequest, "dhCardId is required")
+	if req.DHCardID <= 0 {
+		writeError(w, http.StatusBadRequest, "dhCardId must be a positive integer")
 		return
 	}
 
@@ -43,6 +46,34 @@ func (h *DHHandler) HandleSelectMatch(w http.ResponseWriter, r *http.Request) {
 		h.logger.Error(ctx, "select match: get purchase", observability.Err(err))
 		writeError(w, http.StatusInternalServerError, "failed to look up purchase")
 		return
+	}
+
+	// Short-circuit if this purchase is already linked to DH.
+	if purchase.DHInventoryID != 0 {
+		writeJSON(w, http.StatusOK, fixMatchResponse{
+			Status:        "ok",
+			DHCardID:      purchase.DHCardID,
+			DHInventoryID: purchase.DHInventoryID,
+		})
+		return
+	}
+
+	// Validate that the chosen card ID is among the purchase's candidates.
+	if purchase.DHCandidatesJSON != "" {
+		var candidates []dh.CertResolutionCandidate
+		if err := json.Unmarshal([]byte(purchase.DHCandidatesJSON), &candidates); err == nil {
+			found := false
+			for _, c := range candidates {
+				if c.DHCardID == req.DHCardID {
+					found = true
+					break
+				}
+			}
+			if !found {
+				writeError(w, http.StatusBadRequest, "dhCardId is not among the purchase's candidates")
+				return
+			}
+		}
 	}
 
 	externalID := strconv.Itoa(req.DHCardID)
@@ -98,13 +129,11 @@ func (h *DHHandler) HandleSelectMatch(w http.ResponseWriter, r *http.Request) {
 		if err := h.pushStatusUpdater.UpdatePurchaseDHPushStatus(ctx, purchase.ID, campaigns.DHPushStatusManual); err != nil {
 			h.logger.Warn(ctx, "select match: failed to set manual status",
 				observability.String("purchaseID", purchase.ID), observability.Err(err))
-		}
-	}
-
-	if h.candidatesSaver != nil {
-		if err := h.candidatesSaver.UpdatePurchaseDHCandidates(ctx, purchase.ID, ""); err != nil {
-			h.logger.Warn(ctx, "select match: failed to clear candidates",
-				observability.String("purchaseID", purchase.ID), observability.Err(err))
+		} else if h.candidatesSaver != nil {
+			if err := h.candidatesSaver.UpdatePurchaseDHCandidates(ctx, purchase.ID, ""); err != nil {
+				h.logger.Warn(ctx, "select match: failed to clear candidates",
+					observability.String("purchaseID", purchase.ID), observability.Err(err))
+			}
 		}
 	}
 

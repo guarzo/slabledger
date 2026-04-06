@@ -31,6 +31,41 @@ func TestDisambiguate(t *testing.T) {
 			"096",
 			0,
 		},
+		{
+			"card number zero matches candidate zero",
+			[]CertResolutionCandidate{
+				{DHCardID: 100, CardNumber: "0"},
+				{DHCardID: 200, CardNumber: "5"},
+			},
+			"0",
+			100,
+		},
+		{
+			"card number double zero matches candidate zero",
+			[]CertResolutionCandidate{
+				{DHCardID: 100, CardNumber: "0"},
+				{DHCardID: 200, CardNumber: "5"},
+			},
+			"00",
+			100,
+		},
+		{
+			"card number triple zero matches candidate zero",
+			[]CertResolutionCandidate{
+				{DHCardID: 100, CardNumber: "0"},
+				{DHCardID: 200, CardNumber: "5"},
+			},
+			"000",
+			100,
+		},
+		{
+			"card number zero no matching candidate",
+			[]CertResolutionCandidate{
+				{DHCardID: 200, CardNumber: "5"},
+			},
+			"0",
+			0,
+		},
 	}
 
 	for _, tc := range tests {

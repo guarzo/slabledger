@@ -311,6 +311,10 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 			Enabled:  cfg.DH.Enabled,
 			Interval: cfg.DH.PushInterval,
 		}
+		var pushOpts []DHPushOption
+		if deps.DHPushCandidatesSaver != nil {
+			pushOpts = append(pushOpts, WithDHPushCandidatesSaver(deps.DHPushCandidatesSaver))
+		}
 		schedulers = append(schedulers, NewDHPushScheduler(
 			deps.DHPushPendingLister,
 			deps.DHPushStatusUpdater,
@@ -318,9 +322,9 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 			deps.DHClient,
 			deps.DHFieldsUpdater,
 			deps.DHPushCardIDSaver,
-			deps.DHPushCandidatesSaver,
 			deps.Logger,
 			pushCfg,
+			pushOpts...,
 		))
 	}
 

@@ -11,7 +11,7 @@ import (
 // candidate's DHCardID if exactly one candidate's card_number matches
 // (after stripping leading zeros), or 0 if disambiguation fails.
 func Disambiguate(candidates []CertResolutionCandidate, cardNumber string) int {
-	normalized := strings.TrimLeft(cardNumber, "0")
+	normalized := normalizeCardNumber(cardNumber)
 	if normalized == "" || len(candidates) == 0 {
 		return 0
 	}
@@ -19,7 +19,7 @@ func Disambiguate(candidates []CertResolutionCandidate, cardNumber string) int {
 	var matchID int
 	matches := 0
 	for _, c := range candidates {
-		if strings.TrimLeft(c.CardNumber, "0") == normalized {
+		if normalizeCardNumber(c.CardNumber) == normalized {
 			matchID = c.DHCardID
 			matches++
 		}
@@ -29,6 +29,16 @@ func Disambiguate(candidates []CertResolutionCandidate, cardNumber string) int {
 		return matchID
 	}
 	return 0
+}
+
+// normalizeCardNumber strips leading zeros, preserving a single "0" for
+// all-zero inputs (e.g. "000" → "0").
+func normalizeCardNumber(s string) string {
+	n := strings.TrimLeft(s, "0")
+	if n == "" && len(s) > 0 {
+		return "0"
+	}
+	return n
 }
 
 // ResolveAmbiguous tries card-number disambiguation on ambiguous candidates.

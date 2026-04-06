@@ -52,6 +52,7 @@ function UnmatchedRow({ card }: { card: DHUnmatchedCard }) {
   const [url, setUrl] = useState('');
   const [validationError, setValidationError] = useState('');
   const [showAll, setShowAll] = useState(false);
+  const [selectingCardId, setSelectingCardId] = useState<number | null>(null);
   const fixMutation = useFixDHMatch();
   const selectMutation = useSelectDHMatch();
   const toast = useToast();
@@ -61,11 +62,14 @@ function UnmatchedRow({ card }: { card: DHUnmatchedCard }) {
   const hiddenCount = Math.max(0, candidates.length - INITIAL_CANDIDATES_SHOWN);
 
   const handleSelect = async (dhCardId: number) => {
+    setSelectingCardId(dhCardId);
     try {
       await selectMutation.mutateAsync({ purchaseId: card.purchase_id, dhCardId });
       toast.success('Match selected');
     } catch {
       toast.error('Failed to select match');
+    } finally {
+      setSelectingCardId(null);
     }
   };
 
@@ -97,7 +101,7 @@ function UnmatchedRow({ card }: { card: DHUnmatchedCard }) {
           {candidates.length > 0 && (
             <div className="flex flex-col gap-1">
               {visibleCandidates.map((c) => (
-                <CandidateCard key={c.dh_card_id} candidate={c} onSelect={handleSelect} isPending={selectMutation.isPending} />
+                <CandidateCard key={c.dh_card_id} candidate={c} onSelect={handleSelect} isPending={selectingCardId === c.dh_card_id && selectMutation.isPending} />
               ))}
               {hiddenCount > 0 && !showAll && (
                 <button
