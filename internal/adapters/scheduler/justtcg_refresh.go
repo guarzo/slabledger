@@ -146,7 +146,7 @@ func (s *JustTCGRefreshScheduler) runBatch(ctx context.Context) {
 	cards = deduped
 
 	// Load existing JustTCG mappings.
-	mappings, err := s.mappingLister.ListByProvider(ctx, pricing.SourceJustTCG)
+	mappings, err := s.mappingLister.ListByProvider(ctx, "justtcg")
 	if err != nil {
 		s.logger.Warn(ctx, "justtcg refresh: failed to list mappings", observability.Err(err))
 		return
@@ -224,7 +224,7 @@ func (s *JustTCGRefreshScheduler) runBatch(ctx context.Context) {
 
 		// Save mapping for future runs.
 		if s.mappingSaver != nil {
-			if err := s.mappingSaver.SaveExternalID(ctx, c.CardName, c.SetName, c.CardNumber, pricing.SourceJustTCG, matched.CardID); err != nil {
+			if err := s.mappingSaver.SaveExternalID(ctx, c.CardName, c.SetName, c.CardNumber, "justtcg", matched.CardID); err != nil {
 				s.logger.Warn(ctx, "justtcg refresh: failed to save mapping",
 					observability.String("card", c.CardName),
 					observability.Err(err))
@@ -316,7 +316,7 @@ func (s *JustTCGRefreshScheduler) storeNMPrice(ctx context.Context, cardName, se
 		Grade:             pricing.GradeRawNM.DisplayLabel(),
 		PriceCents:        mathutil.ToCents(nmPrice),
 		Confidence:        0.85,
-		Source:            pricing.SourceJustTCG,
+		Source:            "justtcg",
 		FusionSourceCount: 1,
 		FusionMethod:      "justtcg-refresh",
 		PriceDate:         now,
@@ -376,7 +376,7 @@ func (s *JustTCGRefreshScheduler) recordAPICall(endpoint string, statusCode int,
 		defer cancelTrack()
 		//nolint:errcheck // best-effort tracking
 		s.apiTracker.RecordAPICall(ctxTrack, &pricing.APICallRecord{
-			Provider:   pricing.SourceJustTCG,
+			Provider:   "justtcg",
 			Endpoint:   endpoint,
 			StatusCode: sc,
 			Error:      errMsg,

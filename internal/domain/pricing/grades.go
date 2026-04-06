@@ -214,8 +214,6 @@ func SetGradePrice(grades *GradedPrices, g Grade, cents int64) {
 		grades.Grade95Cents = cents
 	case GradeRaw:
 		grades.RawCents = cents
-	case GradeRawNM:
-		grades.RawNMCents = cents
 	case GradeBGS10:
 		grades.BGS10Cents = cents
 	}
@@ -241,8 +239,6 @@ func GetGradePrice(grades GradedPrices, g Grade) int64 {
 		return grades.Grade95Cents
 	case GradeRaw:
 		return grades.RawCents
-	case GradeRawNM:
-		return grades.RawNMCents
 	case GradeBGS10:
 		return grades.BGS10Cents
 	default:

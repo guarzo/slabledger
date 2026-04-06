@@ -14,7 +14,6 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/clients/httpx"
 	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
 	"github.com/guarzo/slabledger/internal/domain/observability"
-	"github.com/guarzo/slabledger/internal/domain/pricing"
 	"github.com/guarzo/slabledger/internal/platform/resilience"
 )
 
@@ -123,7 +122,7 @@ func (c *Client) BatchLookup(ctx context.Context, cardIDs []string) ([]Card, err
 		return nil, nil
 	}
 	if len(cardIDs) > 100 {
-		return nil, apperrors.ProviderInvalidRequest(pricing.SourceJustTCG,
+		return nil, apperrors.ProviderInvalidRequest("justtcg",
 			fmt.Errorf("batch-lookup: %d items exceeds max 100", len(cardIDs)))
 	}
 
@@ -134,7 +133,7 @@ func (c *Client) BatchLookup(ctx context.Context, cardIDs []string) ([]Card, err
 
 	bodyBytes, err := json.Marshal(items)
 	if err != nil {
-		return nil, apperrors.ProviderInvalidRequest(pricing.SourceJustTCG, err)
+		return nil, apperrors.ProviderInvalidRequest("justtcg", err)
 	}
 
 	var result cardsResponse
@@ -179,7 +178,7 @@ func (c *Client) doRequest(ctx context.Context, path string, call func() (*httpx
 		if goerrors.Is(err, context.Canceled) || goerrors.Is(err, context.DeadlineExceeded) {
 			return 0, err
 		}
-		return 0, apperrors.ProviderUnavailable(pricing.SourceJustTCG, err)
+		return 0, apperrors.ProviderUnavailable("justtcg", err)
 	}
 
 	resp, err := call()
@@ -197,7 +196,7 @@ func (c *Client) doRequest(ctx context.Context, path string, call func() (*httpx
 	}
 
 	if err := json.Unmarshal(resp.Body, result); err != nil {
-		return resp.StatusCode, apperrors.ProviderInvalidResponse(pricing.SourceJustTCG, err)
+		return resp.StatusCode, apperrors.ProviderInvalidResponse("justtcg", err)
 	}
 
 	return resp.StatusCode, nil
@@ -218,7 +217,7 @@ func (c *Client) handle429(ctx context.Context, path string, resp *httpx.Respons
 	if resp.Headers != nil {
 		retryAfter = resp.Headers.Get("Retry-After")
 	}
-	return resp.StatusCode, apperrors.ProviderRateLimited(pricing.SourceJustTCG, retryAfter)
+	return resp.StatusCode, apperrors.ProviderRateLimited("justtcg", retryAfter)
 }
 
 func (c *Client) log429(ctx context.Context, path string) {

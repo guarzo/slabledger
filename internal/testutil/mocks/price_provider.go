@@ -55,7 +55,7 @@ func (m *MockPriceProvider) GetPrice(ctx context.Context, card pricing.Card) (*p
 	return &pricing.Price{
 		Amount:   basePrice,
 		Currency: "USD",
-		Source:   pricing.SourcePriceCharting,
+		Source:   "pricecharting",
 	}, nil
 }
 
@@ -120,7 +120,7 @@ func generateMockPrice(setName string, card domainCards.Card) *pricing.Price {
 		ProductName: fmt.Sprintf("Pokemon %s %s #%s", setName, card.Name, card.Number),
 		Amount:      psa10Price,
 		Currency:    "USD",
-		Source:      pricing.SourcePriceCharting,
+		Source:      "pricecharting",
 
 		// Price fields in cents
 		Grades: pricing.GradedPrices{

@@ -110,35 +110,13 @@ type APIUsageStats struct {
 	BlockedUntil  *time.Time
 }
 
-// DiscoveryFailure records a card that failed source discovery.
-type DiscoveryFailure struct {
-	CardName      string
-	SetName       string
-	CardNumber    string
-	Provider      string // e.g. "pricecharting"
-	FailureReason string // "no_match", "low_confidence", "api_error"
-	Query         string // The query string attempted
-	Attempts      int
-	LastAttempted time.Time
-	CreatedAt     time.Time
-}
-
-// DiscoveryFailureTracker persists and queries discovery failures for diagnostics.
-type DiscoveryFailureTracker interface {
-	RecordDiscoveryFailure(ctx context.Context, f *DiscoveryFailure) error
-	ClearDiscoveryFailure(ctx context.Context, cardName, setName, cardNumber, provider string) error
-	ListDiscoveryFailures(ctx context.Context, provider string, limit int) ([]DiscoveryFailure, error)
-	CountDiscoveryFailures(ctx context.Context, provider string) (int, error)
-}
-
 // PricingDiagnostics summarizes pricing data quality across the inventory.
 type PricingDiagnostics struct {
 	TotalCards        int              `json:"totalCards"`
-	FullFusionCards   int              `json:"fullFusionCards"`
-	PartialCards      int              `json:"partialCards"`
-	PCOnlyCards       int              `json:"pcOnlyCards"`
+	WithDHData        int              `json:"withDHData"`
+	WithoutDHData     int              `json:"withoutDHData"`
 	SourceCoverage    map[string]int   `json:"sourceCoverage"`
-	PCOnlyCardList    []DiagnosticCard `json:"pcOnlyCardList"`
+	MissingDHList     []DiagnosticCard `json:"missingDHList"`
 	DiscoveryFailures int              `json:"discoveryFailures"`
 	RecentFailures    []FailureSummary `json:"recentFailures"`
 }

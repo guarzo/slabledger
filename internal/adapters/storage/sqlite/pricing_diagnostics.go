@@ -33,13 +33,13 @@ func (r *PricingDiagnosticsRepository) GetPricingDiagnostics(ctx context.Context
 		return nil, err
 	}
 
-	// 2. Card quality breakdown by fusion_source_count
+	// 2. Card quality breakdown: with vs without DH data
 	if err := r.queryCardQuality(ctx, diag); err != nil {
 		return nil, err
 	}
 
-	// 3. PC-only card list (limited to 100)
-	if err := r.queryPCOnlyCards(ctx, diag); err != nil {
+	// 3. Cards missing DH data (limited to 100)
+	if err := r.queryMissingDHCards(ctx, diag); err != nil {
 		return nil, err
 	}
 
@@ -81,10 +81,9 @@ func (r *PricingDiagnosticsRepository) querySourceCoverage(ctx context.Context, 
 
 func (r *PricingDiagnosticsRepository) queryCardQuality(ctx context.Context, diag *pricing.PricingDiagnostics) error {
 	row := r.db.QueryRowContext(ctx, `
-		WITH card_best AS (
+		WITH card_sources AS (
 			SELECT
 				card_name, set_name, card_number,
-				MAX(CASE WHEN source = 'fusion' THEN fusion_source_count ELSE 0 END) AS best_count,
 				GROUP_CONCAT(DISTINCT source) AS sources
 			FROM price_history
 			WHERE updated_at > datetime('now', '-7 days')
@@ -92,20 +91,18 @@ func (r *PricingDiagnosticsRepository) queryCardQuality(ctx context.Context, dia
 		)
 		SELECT
 			COUNT(*) AS total,
-			COALESCE(SUM(CASE WHEN best_count >= 2 THEN 1 ELSE 0 END), 0) AS full_fusion,
-			COALESCE(SUM(CASE WHEN best_count = 1 THEN 1 ELSE 0 END), 0) AS partial,
-			COALESCE(SUM(CASE WHEN best_count < 1 THEN 1 ELSE 0 END), 0) AS pc_only
-		FROM card_best
+			COALESCE(SUM(CASE WHEN sources LIKE '%doubleholo%' THEN 1 ELSE 0 END), 0) AS with_dh,
+			COALESCE(SUM(CASE WHEN sources NOT LIKE '%doubleholo%' THEN 1 ELSE 0 END), 0) AS without_dh
+		FROM card_sources
 	`)
-	return row.Scan(&diag.TotalCards, &diag.FullFusionCards, &diag.PartialCards, &diag.PCOnlyCards)
+	return row.Scan(&diag.TotalCards, &diag.WithDHData, &diag.WithoutDHData)
 }
 
-func (r *PricingDiagnosticsRepository) queryPCOnlyCards(ctx context.Context, diag *pricing.PricingDiagnostics) error {
+func (r *PricingDiagnosticsRepository) queryMissingDHCards(ctx context.Context, diag *pricing.PricingDiagnostics) error {
 	rows, err := r.db.QueryContext(ctx, `
-		WITH card_best AS (
+		WITH card_sources AS (
 			SELECT
 				card_name, set_name, card_number,
-				MAX(CASE WHEN source = 'fusion' THEN fusion_source_count ELSE 0 END) AS best_count,
 				GROUP_CONCAT(DISTINCT source) AS sources,
 				MAX(price_cents) AS max_price,
 				MAX(updated_at) AS last_updated
@@ -114,8 +111,8 @@ func (r *PricingDiagnosticsRepository) queryPCOnlyCards(ctx context.Context, dia
 			GROUP BY card_name, set_name, card_number
 		)
 		SELECT card_name, set_name, card_number, sources, max_price, last_updated
-		FROM card_best
-		WHERE best_count < 1
+		FROM card_sources
+		WHERE sources NOT LIKE '%doubleholo%'
 		ORDER BY max_price DESC
 		LIMIT 100
 	`)
@@ -134,7 +131,7 @@ func (r *PricingDiagnosticsRepository) queryPCOnlyCards(ctx context.Context, dia
 		c.PriceUsd = float64(priceCents) / 100.0
 		c.Sources = strings.Split(sources, ",")
 		c.UpdatedAt = parseSQLiteTime(updatedAt)
-		diag.PCOnlyCardList = append(diag.PCOnlyCardList, c)
+		diag.MissingDHList = append(diag.MissingDHList, c)
 	}
 	return rows.Err()
 }

@@ -80,7 +80,7 @@ func (h *PriceHintsHandler) handleSave(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "cardName, setName, cardNumber, provider, and externalId are required")
 		return
 	}
-	if req.Provider != pricing.SourcePriceCharting && req.Provider != pricing.SourceDH {
+	if req.Provider != pricing.SourceDH && req.Provider != "pricecharting" {
 		writeError(w, http.StatusBadRequest, "provider must be 'pricecharting' or 'doubleholo'")
 		return
 	}
@@ -111,7 +111,7 @@ func (h *PriceHintsHandler) handleDelete(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusBadRequest, "cardName, setName, cardNumber, and provider are required")
 		return
 	}
-	if req.Provider != pricing.SourcePriceCharting && req.Provider != pricing.SourceDH {
+	if req.Provider != pricing.SourceDH && req.Provider != "pricecharting" {
 		writeError(w, http.StatusBadRequest, "provider must be 'pricecharting' or 'doubleholo'")
 		return
 	}
