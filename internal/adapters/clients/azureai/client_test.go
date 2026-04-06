@@ -16,6 +16,20 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
+// newResponsesTestClient creates a Responses API client pointing at a test server.
+func newResponsesTestClient(t *testing.T, serverURL string, opts ...Option) *Client {
+	t.Helper()
+	client, err := NewClient(Config{
+		Endpoint:       serverURL + "/test.services.ai.azure.com",
+		APIKey:         "test-key",
+		DeploymentName: "test-model",
+	}, opts...)
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+	return client
+}
+
 // --- StreamCompletion: Responses API ---
 
 func TestStreamCompletion_RetriesResponsesAPI_MidStreamFailure(t *testing.T) {
@@ -41,17 +55,10 @@ func TestStreamCompletion_RetriesResponsesAPI_MidStreamFailure(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client, err := NewClient(Config{
-		Endpoint:       server.URL + "/test.services.ai.azure.com",
-		APIKey:         "test-key",
-		DeploymentName: "test-model",
-	})
-	if err != nil {
-		t.Fatalf("NewClient: %v", err)
-	}
+	client := newResponsesTestClient(t, server.URL)
 
 	var chunks []ai.CompletionChunk
-	err = client.StreamCompletion(context.Background(), ai.CompletionRequest{
+	err := client.StreamCompletion(context.Background(), ai.CompletionRequest{
 		Messages: []ai.Message{{Role: ai.RoleUser, Content: "hello"}},
 	}, func(chunk ai.CompletionChunk) {
 		chunks = append(chunks, chunk)
@@ -87,16 +94,9 @@ func TestStreamCompletion_NoRetryAfterResponseCompleted(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client, err := NewClient(Config{
-		Endpoint:       server.URL + "/test.services.ai.azure.com",
-		APIKey:         "test-key",
-		DeploymentName: "test-model",
-	})
-	if err != nil {
-		t.Fatalf("NewClient: %v", err)
-	}
+	client := newResponsesTestClient(t, server.URL)
 
-	err = client.StreamCompletion(context.Background(), ai.CompletionRequest{
+	err := client.StreamCompletion(context.Background(), ai.CompletionRequest{
 		Messages: []ai.Message{{Role: ai.RoleUser, Content: "hello"}},
 	}, func(chunk ai.CompletionChunk) {})
 
@@ -126,24 +126,15 @@ func TestStreamCompletion_RateLimitRetryWithBackoff(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client, err := NewClient(Config{
-		Endpoint:       server.URL + "/test.services.ai.azure.com",
-		APIKey:         "test-key",
-		DeploymentName: "test-model",
-	}, WithLogger(observability.NewNoopLogger()))
-	if err != nil {
-		t.Fatalf("NewClient: %v", err)
-	}
+	client := newResponsesTestClient(t, server.URL, WithLogger(observability.NewNoopLogger()))
 
-	// Use a short context so the 30s backoff causes timeout.
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	err = client.StreamCompletion(ctx, ai.CompletionRequest{
+	err := client.StreamCompletion(ctx, ai.CompletionRequest{
 		Messages: []ai.Message{{Role: ai.RoleUser, Content: "hello"}},
 	}, func(chunk ai.CompletionChunk) {})
 
-	// With 30s backoff and 2s timeout, we expect context deadline exceeded.
 	if err == nil {
 		t.Fatal("expected error due to timeout during backoff")
 	}
@@ -172,20 +163,12 @@ func TestStreamCompletion_CapacityErrorBackoff(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client, err := NewClient(Config{
-		Endpoint:       server.URL + "/test.services.ai.azure.com",
-		APIKey:         "test-key",
-		DeploymentName: "test-model",
-	}, WithLogger(observability.NewNoopLogger()))
-	if err != nil {
-		t.Fatalf("NewClient: %v", err)
-	}
+	client := newResponsesTestClient(t, server.URL, WithLogger(observability.NewNoopLogger()))
 
-	// Capacity error has 60s backoff — context should expire.
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	err = client.StreamCompletion(ctx, ai.CompletionRequest{
+	err := client.StreamCompletion(ctx, ai.CompletionRequest{
 		Messages: []ai.Message{{Role: ai.RoleUser, Content: "hello"}},
 	}, func(chunk ai.CompletionChunk) {})
 
@@ -204,16 +187,9 @@ func TestStreamCompletion_PermanentErrorNoRetry(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client, err := NewClient(Config{
-		Endpoint:       server.URL + "/test.services.ai.azure.com",
-		APIKey:         "test-key",
-		DeploymentName: "test-model",
-	}, WithLogger(observability.NewNoopLogger()))
-	if err != nil {
-		t.Fatalf("NewClient: %v", err)
-	}
+	client := newResponsesTestClient(t, server.URL, WithLogger(observability.NewNoopLogger()))
 
-	err = client.StreamCompletion(context.Background(), ai.CompletionRequest{
+	err := client.StreamCompletion(context.Background(), ai.CompletionRequest{
 		Messages: []ai.Message{{Role: ai.RoleUser, Content: "hello"}},
 	}, func(chunk ai.CompletionChunk) {})
 
@@ -787,11 +763,7 @@ func TestPollResponseFallback_CompletedResponse(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client, _ := NewClient(Config{
-		Endpoint:       server.URL + "/test.services.ai.azure.com",
-		APIKey:         "test-key",
-		DeploymentName: "test-model",
-	}, WithLogger(observability.NewNoopLogger()))
+	client := newResponsesTestClient(t, server.URL, WithLogger(observability.NewNoopLogger()))
 
 	var chunks []ai.CompletionChunk
 	// Use a generous timeout since poll has a 20s initial wait.
@@ -827,11 +799,7 @@ func TestPollResponseFallback_FailedStatus(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client, _ := NewClient(Config{
-		Endpoint:       server.URL + "/test.services.ai.azure.com",
-		APIKey:         "test-key",
-		DeploymentName: "test-model",
-	}, WithLogger(observability.NewNoopLogger()))
+	client := newResponsesTestClient(t, server.URL, WithLogger(observability.NewNoopLogger()))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -867,11 +835,7 @@ func TestPollResponseFallback_IncompleteWithOutput(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client, _ := NewClient(Config{
-		Endpoint:       server.URL + "/test.services.ai.azure.com",
-		APIKey:         "test-key",
-		DeploymentName: "test-model",
-	}, WithLogger(observability.NewNoopLogger()))
+	client := newResponsesTestClient(t, server.URL, WithLogger(observability.NewNoopLogger()))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -904,11 +868,7 @@ func TestPollResponseFallback_IncompleteWithNoOutput(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client, _ := NewClient(Config{
-		Endpoint:       server.URL + "/test.services.ai.azure.com",
-		APIKey:         "test-key",
-		DeploymentName: "test-model",
-	}, WithLogger(observability.NewNoopLogger()))
+	client := newResponsesTestClient(t, server.URL, WithLogger(observability.NewNoopLogger()))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -938,11 +898,7 @@ func TestPollResponseFallback_ToolCallParsing(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client, _ := NewClient(Config{
-		Endpoint:       server.URL + "/test.services.ai.azure.com",
-		APIKey:         "test-key",
-		DeploymentName: "test-model",
-	}, WithLogger(observability.NewNoopLogger()))
+	client := newResponsesTestClient(t, server.URL, WithLogger(observability.NewNoopLogger()))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -976,11 +932,7 @@ func TestPollResponseFallback_ContextTimeout(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client, _ := NewClient(Config{
-		Endpoint:       server.URL + "/test.services.ai.azure.com",
-		APIKey:         "test-key",
-		DeploymentName: "test-model",
-	}, WithLogger(observability.NewNoopLogger()))
+	client := newResponsesTestClient(t, server.URL, WithLogger(observability.NewNoopLogger()))
 
 	// Very short timeout — should cancel during the initial 20s wait.
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
@@ -1018,11 +970,7 @@ func TestPollResponseFallback_QueuedThenCompleted(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client, _ := NewClient(Config{
-		Endpoint:       server.URL + "/test.services.ai.azure.com",
-		APIKey:         "test-key",
-		DeploymentName: "test-model",
-	}, WithLogger(observability.NewNoopLogger()))
+	client := newResponsesTestClient(t, server.URL, WithLogger(observability.NewNoopLogger()))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -1046,11 +994,7 @@ func TestPollResponseFallback_HTTP500(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client, _ := NewClient(Config{
-		Endpoint:       server.URL + "/test.services.ai.azure.com",
-		APIKey:         "test-key",
-		DeploymentName: "test-model",
-	}, WithLogger(observability.NewNoopLogger()))
+	client := newResponsesTestClient(t, server.URL, WithLogger(observability.NewNoopLogger()))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

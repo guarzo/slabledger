@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -19,13 +20,7 @@ func newTestClient(t *testing.T, serverURL string, tokens ...string) *Client {
 	t.Helper()
 	tokenStr := "test-token"
 	if len(tokens) > 0 {
-		tokenStr = ""
-		for i, tk := range tokens {
-			if i > 0 {
-				tokenStr += ","
-			}
-			tokenStr += tk
-		}
+		tokenStr = strings.Join(tokens, ",")
 	}
 	c := NewClient(tokenStr, observability.NewNoopLogger())
 	c.baseURL = serverURL
@@ -273,7 +268,6 @@ func TestDoRequest_TokenRotationOn429(t *testing.T) {
 		call := calls.Add(1)
 		auth := r.Header.Get("Authorization")
 		if call == 1 {
-			// First token gets 429
 			if auth != "Bearer token-a" {
 				t.Errorf("call 1: expected token-a, got %s", auth)
 			}
@@ -281,7 +275,6 @@ func TestDoRequest_TokenRotationOn429(t *testing.T) {
 			fmt.Fprint(w, "rate limited")
 			return
 		}
-		// Second token succeeds
 		if auth != "Bearer token-b" {
 			t.Errorf("call 2: expected token-b, got %s", auth)
 		}
@@ -344,19 +337,16 @@ func TestDoRequest_DailyCallLimitEnforced(t *testing.T) {
 	defer server.Close()
 
 	c := newTestClient(t, server.URL)
-	// Pre-fill the daily counter to just under the limit.
 	today := time.Now().UTC().Format("2006-01-02")
 	c.dailyCounts.mu.Lock()
 	c.dailyCounts.counts[tokenDayKey{token: "test-token", day: today}] = dailyCallLimit - 1
 	c.dailyCounts.mu.Unlock()
 
-	// This call should succeed (takes count to dailyCallLimit).
 	_, err := c.GetCert(context.Background(), "111")
 	if err != nil {
 		t.Fatalf("expected first call to succeed: %v", err)
 	}
 
-	// Next call should be rejected (count > dailyCallLimit).
 	_, err = c.GetCert(context.Background(), "222")
 	if err == nil {
 		t.Fatal("expected daily limit error")
@@ -378,7 +368,6 @@ func TestDoRequest_DailyLimitRotatesToNextToken(t *testing.T) {
 	defer server.Close()
 
 	c := newTestClient(t, server.URL, "token-a", "token-b")
-	// Exhaust token-a's daily budget.
 	today := time.Now().UTC().Format("2006-01-02")
 	c.dailyCounts.mu.Lock()
 	c.dailyCounts.counts[tokenDayKey{token: "token-a", day: today}] = dailyCallLimit
@@ -423,13 +412,11 @@ func TestDoRequest_RequestPacing(t *testing.T) {
 
 	c := newTestClient(t, server.URL)
 
-	// First call — sets lastCall.
 	_, err := c.GetCert(context.Background(), "444")
 	if err != nil {
 		t.Fatalf("first call failed: %v", err)
 	}
 
-	// Second call immediately — should be paced by minRequestSpacing.
 	start := time.Now()
 	_, err = c.GetCert(context.Background(), "444")
 	if err != nil {
@@ -456,10 +443,8 @@ func TestDoRequest_ContextCancelledDuringPacing(t *testing.T) {
 
 	c := newTestClient(t, server.URL)
 
-	// Make a call to set lastCall.
 	_, _ = c.GetCert(context.Background(), "555")
 
-	// Cancel context immediately — should abort during pacing wait.
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	_, err := c.GetCert(ctx, "555")

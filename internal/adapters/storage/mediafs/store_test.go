@@ -135,24 +135,15 @@ func TestWriteFile_WritesContent(t *testing.T) {
 	}
 }
 
-func TestWriteFile_CreatesMissingParentDir(t *testing.T) {
+func TestWriteFile_MissingParentDirFails(t *testing.T) {
 	root := t.TempDir()
 	store := NewStore(root)
 
-	// Parent directory "subdir" doesn't exist — WriteFile should fail
-	// because os.WriteFile doesn't create parents.
+	// os.WriteFile does not create parent directories.
 	err := store.WriteFile(context.Background(), "subdir/file.txt", []byte("data"))
 	if err == nil {
-		// If it succeeds, the implementation handles parent creation.
-		got, readErr := os.ReadFile(filepath.Join(root, "subdir", "file.txt"))
-		if readErr != nil {
-			t.Fatalf("file should exist: %v", readErr)
-		}
-		if string(got) != "data" {
-			t.Errorf("content = %q, want %q", string(got), "data")
-		}
+		t.Fatal("expected error when parent directory does not exist")
 	}
-	// Error is acceptable — os.WriteFile doesn't create parent dirs.
 }
 
 func TestWriteFile_PathTraversalRejected(t *testing.T) {
