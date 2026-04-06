@@ -1,19 +1,71 @@
 import { useState } from 'react';
-import { useDHStatus, useDHUnmatched, useFixDHMatch } from '../../queries/useAdminQueries';
+import { useDHStatus, useDHUnmatched, useFixDHMatch, useSelectDHMatch } from '../../queries/useAdminQueries';
 import { useToast } from '../../contexts/ToastContext';
 import { formatCents } from '../../utils/formatters';
 import { Button, CardShell } from '../../ui';
-import type { DHUnmatchedCard } from '../../../types/apiStatus';
+import type { DHUnmatchedCard, DHCandidate } from '../../../types/apiStatus';
 
 const DH_URL_REGEX = /^(https?:\/\/)?(www\.)?doubleholo\.com\/card\/\d+/;
+const INITIAL_CANDIDATES_SHOWN = 3;
 
-/* ── Single unmatched row with inline fix input ──────────────────── */
+/* ── Candidate card ─────────────────────────────────────────────── */
+
+function CandidateCard({ candidate, purchaseId }: { candidate: DHCandidate; purchaseId: string }) {
+  const selectMutation = useSelectDHMatch();
+  const toast = useToast();
+
+  const handleSelect = async () => {
+    try {
+      await selectMutation.mutateAsync({ purchaseId, dhCardId: candidate.dh_card_id });
+      toast.success('Match selected');
+    } catch {
+      toast.error('Failed to select match');
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-2 p-2 rounded border border-[var(--border)] bg-[var(--bg-secondary)]">
+      {candidate.image_url ? (
+        <img
+          src={candidate.image_url}
+          alt={candidate.card_name}
+          className="w-10 h-14 object-cover rounded"
+          loading="lazy"
+        />
+      ) : (
+        <div className="w-10 h-14 rounded bg-[var(--surface-2)] flex items-center justify-center text-[8px] text-[var(--text-muted)]">
+          No img
+        </div>
+      )}
+      <div className="flex-1 min-w-0">
+        <p className="text-xs font-medium text-[var(--text)] truncate">{candidate.card_name}</p>
+        <p className="text-[10px] text-[var(--text-muted)] truncate">{candidate.set_name} #{candidate.card_number}</p>
+      </div>
+      <Button
+        variant="secondary"
+        size="sm"
+        onClick={handleSelect}
+        loading={selectMutation.isPending}
+        disabled={selectMutation.isPending}
+      >
+        Select
+      </Button>
+    </div>
+  );
+}
+
+/* ── Single unmatched row with candidates + fallback URL input ── */
 
 function UnmatchedRow({ card }: { card: DHUnmatchedCard }) {
   const [url, setUrl] = useState('');
   const [validationError, setValidationError] = useState('');
+  const [showAll, setShowAll] = useState(false);
   const fixMutation = useFixDHMatch();
   const toast = useToast();
+
+  const candidates = card.candidates ?? [];
+  const visibleCandidates = showAll ? candidates : candidates.slice(0, INITIAL_CANDIDATES_SHOWN);
+  const hiddenCount = candidates.length - INITIAL_CANDIDATES_SHOWN;
 
   const handleFix = async () => {
     setValidationError('');
@@ -39,29 +91,46 @@ function UnmatchedRow({ card }: { card: DHUnmatchedCard }) {
       <td className="py-2 px-3 text-sm text-[var(--text-muted)] text-right">{card.grade}</td>
       <td className="py-2 px-3 text-sm text-[var(--text-muted)] text-right">{formatCents(card.cl_value_cents)}</td>
       <td className="py-2 px-3">
-        <div className="flex flex-col gap-1 min-w-[260px]">
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              placeholder="doubleholo.com/card/..."
-              aria-label="DoubleHolo card URL"
-              className="flex-1 text-xs px-2 py-1 rounded border border-[var(--border)] bg-[var(--bg-secondary)] text-[var(--text)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--info)]"
-            />
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={handleFix}
-              loading={fixMutation.isPending}
-              disabled={fixMutation.isPending}
-            >
-              Fix
-            </Button>
-          </div>
-          {validationError && (
-            <p className="text-xs text-red-400">{validationError}</p>
+        <div className="flex flex-col gap-2 min-w-[280px]">
+          {candidates.length > 0 && (
+            <div className="flex flex-col gap-1">
+              {visibleCandidates.map((c) => (
+                <CandidateCard key={c.dh_card_id} candidate={c} purchaseId={card.purchase_id} />
+              ))}
+              {hiddenCount > 0 && !showAll && (
+                <button
+                  onClick={() => setShowAll(true)}
+                  className="text-xs text-[var(--info)] hover:underline text-left"
+                >
+                  +{hiddenCount} more candidates
+                </button>
+              )}
+            </div>
           )}
+          <div className="flex flex-col gap-1">
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                placeholder="doubleholo.com/card/..."
+                aria-label="DoubleHolo card URL"
+                className="flex-1 text-xs px-2 py-1 rounded border border-[var(--border)] bg-[var(--bg-secondary)] text-[var(--text)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--info)]"
+              />
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleFix}
+                loading={fixMutation.isPending}
+                disabled={fixMutation.isPending}
+              >
+                Fix
+              </Button>
+            </div>
+            {validationError && (
+              <p className="text-xs text-red-400">{validationError}</p>
+            )}
+          </div>
         </div>
       </td>
     </tr>
