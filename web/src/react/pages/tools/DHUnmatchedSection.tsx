@@ -33,7 +33,6 @@ function CandidateCard({ candidate, onSelect, isPending, isDisabled }: {
           src={candidate.image_url}
           alt={candidate.card_name}
           className="w-10 h-14 object-cover rounded"
-          loading="lazy"
           onError={() => setImgFailed(true)}
         />
       ) : (
