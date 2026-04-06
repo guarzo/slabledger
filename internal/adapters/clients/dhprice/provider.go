@@ -197,11 +197,15 @@ func median(vals []float64) float64 {
 	return (vals[n/2-1] + vals[n/2]) / 2
 }
 
-// priceRange returns the min and max of a sorted slice.
-// Callers must sort the slice first (median() sorts in place).
-func priceRange(sorted []float64) (float64, float64) {
-	if len(sorted) == 0 {
+// priceRange returns the min and max of a float64 slice.
+func priceRange(vals []float64) (float64, float64) {
+	if len(vals) == 0 {
 		return 0, 0
 	}
-	return sorted[0], sorted[len(sorted)-1]
+	mn, mx := vals[0], vals[0]
+	for _, v := range vals[1:] {
+		mn = min(mn, v)
+		mx = max(mx, v)
+	}
+	return mn, mx
 }

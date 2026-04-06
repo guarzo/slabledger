@@ -26,7 +26,7 @@ type CardRequestSubmission struct {
 	FrontImageURL       string     `json:"frontImageUrl"`
 	Variant             string     `json:"variant"`
 	Status              string     `json:"status"`
-	CardHedgerRequestID string     `json:"cardhedgerRequestId"`
+	CardHedgerRequestID string     `json:"cardhedgerRequestId"` // legacy column name; represents external pricing-source request ID
 	SubmittedAt         *time.Time `json:"submittedAt"`
 	CreatedAt           time.Time  `json:"createdAt"`
 	UpdatedAt           time.Time  `json:"updatedAt"`
@@ -174,7 +174,8 @@ func (r *CardRequestRepository) RevertClaim(ctx context.Context, id int64) error
 	return err
 }
 
-// UpdateSubmitted marks a submission as submitted with the external request ID.
+// UpdateSubmitted marks a submission as submitted with the external request ID
+// (stored in the legacy cardhedger_request_id column).
 func (r *CardRequestRepository) UpdateSubmitted(ctx context.Context, id int64, requestID string) error {
 	now := time.Now()
 	_, err := r.db.ExecContext(ctx,

@@ -239,14 +239,10 @@ func (c *Client) doEnterprise(ctx context.Context, method, fullURL string, body 
 	}
 
 	if c.logger != nil {
-		bodyPreview := string(bodyBytes)
-		if len(bodyPreview) > 200 {
-			bodyPreview = bodyPreview[:200] + "...[truncated]"
-		}
 		c.logger.Debug(ctx, "dh: enterprise request",
 			observability.String("method", method),
 			observability.String("url", fullURL),
-			observability.String("body", bodyPreview))
+			observability.Int("body_bytes", len(bodyBytes)))
 	}
 
 	resp, err := c.httpClient.Do(ctx, httpx.Request{
@@ -262,13 +258,9 @@ func (c *Client) doEnterprise(ctx context.Context, method, fullURL string, body 
 	}
 
 	if c.logger != nil {
-		respPreview := string(resp.Body)
-		if len(respPreview) > 200 {
-			respPreview = respPreview[:200] + "...[truncated]"
-		}
 		c.logger.Debug(ctx, "dh: enterprise response",
 			observability.Int("status_code", resp.StatusCode),
-			observability.String("body", respPreview))
+			observability.Int("body_bytes", len(resp.Body)))
 	}
 
 	if dest != nil {

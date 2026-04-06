@@ -34,7 +34,6 @@ type ServerDependencies struct {
 	FavoritesService          domainFavorites.Service
 	CampaignsService          domainCampaigns.Service
 	CacheStatsProvider        handlers.CacheStatsProvider
-	CardDiscoverer            handlers.CardDiscoverer // optional: triggers card discovery after imports
 	PriceHintsHandler         *handlers.PriceHintsHandler
 	CardRequestHandler        *handlers.CardRequestHandlers
 	PricingDiagnosticsHandler *handlers.PricingDiagnosticsHandler
@@ -169,9 +168,6 @@ func startWebServer(ctx context.Context, deps ServerDependencies) error {
 	var campaignsHandler *handlers.CampaignsHandler
 	if deps.CampaignsService != nil {
 		var opts []handlers.CampaignsHandlerOption
-		if deps.CardDiscoverer != nil {
-			opts = append(opts, handlers.WithCardDiscoverer(deps.CardDiscoverer))
-		}
 		if deps.DHInventoryLister != nil {
 			opts = append(opts, handlers.WithDHLister(deps.DHInventoryLister))
 		}

@@ -322,7 +322,7 @@ type schedulerDeps struct {
 }
 
 // initializeSchedulers builds and starts the scheduler group, returning the
-// result (including CardDiscoverer) and a cancel function to shut them down.
+// result and a cancel function to shut them down.
 func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.BuildResult, context.CancelFunc) {
 	schedulerCtx, cancelScheduler := context.WithCancel(ctx)
 	buildDeps := scheduler.BuildDeps{
