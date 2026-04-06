@@ -85,6 +85,5 @@ jobs:
 
     - name: Run integration tests
       env:
-        PRICECHARTING_TOKEN: ${{ secrets.PRICECHARTING_TOKEN }}
-        CARD_HEDGER_API_KEY: ${{ secrets.CARD_HEDGER_API_KEY }}
+        DH_ENTERPRISE_API_KEY: ${{ secrets.DH_ENTERPRISE_API_KEY }}
       run: go test -race -timeout 20m -tags integration ./internal/integration/...
