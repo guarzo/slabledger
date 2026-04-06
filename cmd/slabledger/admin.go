@@ -26,6 +26,8 @@ func handleAdminCommand(args []string) error {
 		return nil
 	case "print-config":
 		return adminPrintConfig(args[1:])
+	case "analyze":
+		return adminAnalyze(ctx, args[1:])
 	case "help", "--help", "-h":
 		return showAdminHelp()
 	default:
@@ -47,12 +49,18 @@ COMMANDS:
         version                  Show version information
         print-config            Print current configuration
 
+    AI Advisor:
+        analyze <type>           Run an advisor analysis locally
+                                 Types: liquidation, digest
+                                 Flags: --verbose, --dry-run
+
     Help:
         help                    Show this help message
 
 EXAMPLES:
     slabledger admin cache-stats
-    slabledger admin print-config`)
+    slabledger admin print-config
+    slabledger admin analyze liquidation --verbose`)
 	return nil
 }
 

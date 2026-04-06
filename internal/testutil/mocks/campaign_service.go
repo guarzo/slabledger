@@ -38,6 +38,7 @@ type MockCampaignService struct {
 	GetDaysToSellDistFn         func(ctx context.Context, campaignID string) ([]campaigns.DaysToSellBucket, error)
 	GetInventoryAgingFn         func(ctx context.Context, campaignID string) ([]campaigns.AgingItem, error)
 	GetGlobalInventoryAgingFn   func(ctx context.Context) ([]campaigns.AgingItem, error)
+	GetFlaggedInventoryFn       func(ctx context.Context) ([]campaigns.AgingItem, error)
 	GenerateSellSheetFn         func(ctx context.Context, campaignID string, purchaseIDs []string) (*campaigns.SellSheet, error)
 	GenerateGlobalSellSheetFn   func(ctx context.Context) (*campaigns.SellSheet, error)
 	GenerateSelectedSellSheetFn func(ctx context.Context, purchaseIDs []string) (*campaigns.SellSheet, error)
@@ -279,6 +280,13 @@ func (m *MockCampaignService) GetInventoryAging(ctx context.Context, campaignID 
 func (m *MockCampaignService) GetGlobalInventoryAging(ctx context.Context) ([]campaigns.AgingItem, error) {
 	if m.GetGlobalInventoryAgingFn != nil {
 		return m.GetGlobalInventoryAgingFn(ctx)
+	}
+	return []campaigns.AgingItem{}, nil
+}
+
+func (m *MockCampaignService) GetFlaggedInventory(ctx context.Context) ([]campaigns.AgingItem, error) {
+	if m.GetFlaggedInventoryFn != nil {
+		return m.GetFlaggedInventoryFn(ctx)
 	}
 	return []campaigns.AgingItem{}, nil
 }

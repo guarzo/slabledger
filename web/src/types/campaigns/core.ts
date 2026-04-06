@@ -238,6 +238,15 @@ export interface QuickAddRequest {
   purchaseDate?: string;
 }
 
+export interface InventorySignals {
+  profitCaptureDeclining?: boolean;
+  profitCaptureSpike?: boolean;
+  crackCandidate?: boolean;
+  staleListing?: boolean;
+  deepStale?: boolean;
+  cutLoss?: boolean;
+}
+
 export interface SellSheetItem {
   purchaseId?: string;
   campaignName?: string;
@@ -264,6 +273,7 @@ export interface SellSheetItem {
   computedPriceCents?: number;
   aiSuggestedPriceCents?: number;
   aiSuggestedAt?: string;
+  signals?: InventorySignals;
 }
 
 export interface SellSheet {

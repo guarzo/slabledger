@@ -2,7 +2,7 @@
  * Analytics, tuning, and performance types
  */
 
-import type { MarketSnapshot, Phase, Purchase, Sale, SaleChannel } from './core';
+import type { InventorySignals, MarketSnapshot, Phase, Purchase, Sale, SaleChannel } from './core';
 
 export interface CampaignPNL {
   campaignId: string;
@@ -64,6 +64,7 @@ export interface AgingItem {
   hasOpenFlag?: boolean;
   recommendedPriceCents?: number;
   recommendedSource?: string;
+  signals?: InventorySignals;
 }
 
 // Tuning types

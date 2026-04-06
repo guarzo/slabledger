@@ -237,6 +237,7 @@ func (e *CampaignToolExecutor) registerTools() {
 	e.registerGetCampaignTuning()
 	e.registerGetInventoryAging()
 	e.registerGetGlobalInventory()
+	e.registerGetFlaggedInventory()
 	e.registerGetSellSheet()
 	e.registerGetPortfolioHealth()
 	e.registerGetPortfolioInsights()

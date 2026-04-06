@@ -54,10 +54,9 @@ var operationTools = map[AIOperation][]string{
 		"get_market_intelligence",
 	},
 	OpLiquidation: {
-		"get_dashboard_summary", "get_global_inventory", "get_sell_sheet",
+		"get_dashboard_summary", "get_flagged_inventory",
 		"get_suggestion_stats", "get_inventory_alerts",
 		"get_expected_values_batch", "suggest_price_batch",
-		"get_crack_opportunities",
 	},
 	OpPurchaseAssessment: {
 		"list_campaigns", "get_campaign_tuning", "get_portfolio_insights",
@@ -230,7 +229,8 @@ func (s *service) CollectLiquidation(ctx context.Context) (string, error) {
 // operationMaxRounds overrides s.maxToolRounds when scoring is active.
 // PurchaseAssessment needs only 1 round since scores are pre-computed.
 // CampaignAnalysis and Liquidation use 3 rounds to accommodate batch tools
-// and larger workflows despite pre-computed scores.
+// and larger workflows (prompt says 2 rounds but suggest_price_batch may
+// need a separate round after reading EV data).
 var operationMaxRounds = map[AIOperation]int{
 	OpPurchaseAssessment: 1,
 	OpCampaignAnalysis:   3,
