@@ -101,9 +101,9 @@ func (r *CampaignsRepository) SumPurchaseCostByInvoiceDate(ctx context.Context, 
 func (r *CampaignsRepository) GetCashflowConfig(ctx context.Context) (*campaigns.CashflowConfig, error) {
 	query := `SELECT credit_limit_cents, cash_buffer_cents, updated_at FROM cashflow_config WHERE id = 1`
 	var cfg campaigns.CashflowConfig
-	err := r.db.QueryRowContext(ctx, query).Scan(&cfg.CreditLimitCents, &cfg.CashBufferCents, &cfg.UpdatedAt)
+	err := r.db.QueryRowContext(ctx, query).Scan(&cfg.CapitalBudgetCents, &cfg.CashBufferCents, &cfg.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
-		return &campaigns.CashflowConfig{CreditLimitCents: 0, CashBufferCents: 1000000}, nil
+		return &campaigns.CashflowConfig{CapitalBudgetCents: 0, CashBufferCents: 1000000}, nil
 	}
 	if err != nil {
 		return nil, err
@@ -115,15 +115,15 @@ func (r *CampaignsRepository) UpdateCashflowConfig(ctx context.Context, cfg *cam
 	_, err := r.db.ExecContext(ctx,
 		`INSERT INTO cashflow_config (id, credit_limit_cents, cash_buffer_cents, updated_at) VALUES (1, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET credit_limit_cents = ?, cash_buffer_cents = ?, updated_at = ?`,
-		cfg.CreditLimitCents, cfg.CashBufferCents, cfg.UpdatedAt,
-		cfg.CreditLimitCents, cfg.CashBufferCents, cfg.UpdatedAt,
+		cfg.CapitalBudgetCents, cfg.CashBufferCents, cfg.UpdatedAt,
+		cfg.CapitalBudgetCents, cfg.CashBufferCents, cfg.UpdatedAt,
 	)
 	return err
 }
 
-// --- Credit Summary ---
+// --- Capital Summary ---
 
-func (r *CampaignsRepository) GetCreditSummary(ctx context.Context) (*campaigns.CreditSummary, error) {
+func (r *CampaignsRepository) GetCapitalSummary(ctx context.Context) (*campaigns.CapitalSummary, error) {
 	cfg, err := r.GetCashflowConfig(ctx)
 	if err != nil {
 		return nil, err
@@ -168,15 +168,15 @@ func (r *CampaignsRepository) GetCreditSummary(ctx context.Context) (*campaigns.
 		outstanding = 0
 	}
 
-	utilization := float64(0)
-	if cfg.CreditLimitCents > 0 {
-		utilization = (float64(outstanding) / float64(cfg.CreditLimitCents)) * 100
+	exposurePct := float64(0)
+	if cfg.CapitalBudgetCents > 0 {
+		exposurePct = (float64(outstanding) / float64(cfg.CapitalBudgetCents)) * 100
 	}
 
 	alertLevel := "ok"
-	if utilization >= 90 {
+	if exposurePct >= 90 {
 		alertLevel = "critical"
-	} else if utilization >= 80 {
+	} else if exposurePct >= 80 {
 		alertLevel = "warning"
 	}
 
@@ -193,10 +193,10 @@ func (r *CampaignsRepository) GetCreditSummary(ctx context.Context) (*campaigns.
 
 	projectedExposure := outstanding + int(avgDailySpend*float64(daysToNext))
 
-	return &campaigns.CreditSummary{
-		CreditLimitCents:       cfg.CreditLimitCents,
+	return &campaigns.CapitalSummary{
+		CapitalBudgetCents:     cfg.CapitalBudgetCents,
 		OutstandingCents:       outstanding,
-		UtilizationPct:         utilization,
+		ExposurePct:            exposurePct,
 		RefundedCents:          refunded,
 		PaidCents:              paidTotal,
 		UnpaidInvoiceCount:     unpaidCount,

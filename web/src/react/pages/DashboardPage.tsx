@@ -1,5 +1,5 @@
 import PokeballLoader from '../PokeballLoader';
-import { usePortfolioHealth, useWeeklyReview, useCreditSummary } from '../queries/useCampaignQueries';
+import { usePortfolioHealth, useWeeklyReview, useCapitalSummary } from '../queries/useCampaignQueries';
 import HeroStatsBar from '../components/portfolio/HeroStatsBar';
 import WeeklyReviewSection from '../components/portfolio/WeeklyReviewSection';
 import WatchlistSection from '../components/watchlist/WatchlistSection';
@@ -9,7 +9,7 @@ import { SectionErrorBoundary } from '../ui';
 export default function DashboardPage() {
   const { data: healthData, isLoading: healthLoading } = usePortfolioHealth();
   const { data: weeklyReview } = useWeeklyReview();
-  const { data: creditData } = useCreditSummary();
+  const { data: capitalData } = useCapitalSummary();
 
   if (healthLoading) {
     return (
@@ -27,7 +27,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Tier 1: Hero Stats Bar */}
-      <HeroStatsBar health={healthData} credit={creditData} />
+      <HeroStatsBar health={healthData} capital={capitalData} />
 
       {/* Weekly Review */}
       <div className="mb-6">
@@ -44,7 +44,7 @@ export default function DashboardPage() {
             cacheType="digest"
             title="Weekly Intelligence"
             buttonLabel="Generate Digest"
-            description="Get an AI-powered weekly review with performance insights, credit health assessment, and prioritized action items."
+            description="Get an AI-powered weekly review with performance insights, capital exposure assessment, and prioritized action items."
             collapsible
           />
         </SectionErrorBoundary>

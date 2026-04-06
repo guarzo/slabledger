@@ -209,7 +209,7 @@ func DHCardKey(cardName, setName, cardNumber string) string {
 	return cardName + "|" + setName + "|" + cardNumber
 }
 
-// Invoice tracks a PSA invoice cycle for credit limit management.
+// Invoice tracks a PSA invoice cycle for capital exposure management.
 type Invoice struct {
 	ID          string    `json:"id"`
 	InvoiceDate string    `json:"invoiceDate"`
@@ -222,20 +222,20 @@ type Invoice struct {
 	UpdatedAt   time.Time `json:"updatedAt"`
 }
 
-// CashflowConfig holds credit and cash management settings.
+// CashflowConfig holds capital allocation and cash management settings.
 type CashflowConfig struct {
-	CreditLimitCents int       `json:"creditLimitCents"`
-	CashBufferCents  int       `json:"cashBufferCents"`
-	UpdatedAt        time.Time `json:"updatedAt"`
+	CapitalBudgetCents int       `json:"capitalBudgetCents"` // User-set target for max outstanding exposure (0 = no target)
+	CashBufferCents    int       `json:"cashBufferCents"`
+	UpdatedAt          time.Time `json:"updatedAt"`
 }
 
-// CreditSummary provides a snapshot of the current credit position.
-type CreditSummary struct {
-	CreditLimitCents       int     `json:"creditLimitCents"`
-	OutstandingCents       int     `json:"outstandingCents"` // Unpaid purchases
-	UtilizationPct         float64 `json:"utilizationPct"`   // (outstanding / limit) * 100
-	RefundedCents          int     `json:"refundedCents"`    // Total refunds
-	PaidCents              int     `json:"paidCents"`        // Total paid
+// CapitalSummary provides a snapshot of current capital exposure.
+type CapitalSummary struct {
+	CapitalBudgetCents     int     `json:"capitalBudgetCents"`     // User-set target (0 = no target)
+	OutstandingCents       int     `json:"outstandingCents"`       // Unpaid purchases
+	ExposurePct            float64 `json:"exposurePct"`            // (outstanding / budget) * 100, 0 if no budget
+	RefundedCents          int     `json:"refundedCents"`          // Total refunds
+	PaidCents              int     `json:"paidCents"`              // Total paid
 	UnpaidInvoiceCount     int     `json:"unpaidInvoiceCount"`
 	AlertLevel             string  `json:"alertLevel"`             // "ok", "warning", "critical"
 	ProjectedExposureCents int     `json:"projectedExposureCents"` // outstanding + avgDailySpend * daysToNextInvoice

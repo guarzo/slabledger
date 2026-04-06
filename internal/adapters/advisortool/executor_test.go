@@ -26,7 +26,7 @@ func TestDefinitions_RequiredTools(t *testing.T) {
 		"list_campaigns", "get_campaign_pnl", "get_pnl_by_channel",
 		"get_campaign_tuning", "get_inventory_aging", "get_global_inventory", "get_flagged_inventory",
 		"get_sell_sheet", "get_portfolio_health", "get_portfolio_insights",
-		"get_credit_summary", "get_weekly_review", "get_capital_timeline",
+		"get_capital_summary", "get_weekly_review", "get_capital_timeline",
 		"get_channel_velocity", "get_dashboard_summary", "get_expected_values",
 		"get_deslab_candidates", "get_campaign_suggestions", "run_projection",
 		"suggest_price", "get_cert_lookup", "get_suggestion_stats",
@@ -480,13 +480,13 @@ func TestExecute_GetDashboardSummary(t *testing.T) {
 				ProfitLastWeekCents:  3000,
 			}, nil
 		},
-		GetCreditSummaryFn: func(_ context.Context) (*campaigns.CreditSummary, error) {
-			return &campaigns.CreditSummary{
-				CreditLimitCents:  5000000,
-				OutstandingCents:  2500000,
-				UtilizationPct:    50.0,
-				AlertLevel:        "ok",
-				DaysToNextInvoice: 7,
+		GetCapitalSummaryFn: func(_ context.Context) (*campaigns.CapitalSummary, error) {
+			return &campaigns.CapitalSummary{
+				CapitalBudgetCents: 5000000,
+				OutstandingCents:   2500000,
+				ExposurePct:        50.0,
+				AlertLevel:         "ok",
+				DaysToNextInvoice:  7,
 			}, nil
 		},
 		GetPortfolioHealthFn: func(_ context.Context) (*campaigns.PortfolioHealth, error) {

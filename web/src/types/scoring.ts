@@ -35,7 +35,7 @@ export const FACTOR_DISPLAY_NAMES: Record<string, string> = {
   market_alignment: 'Market Alignment',
   portfolio_fit: 'Portfolio Fit',
   grade_fit: 'Grade Fit',
-  credit_pressure: 'Credit Pressure',
+  capital_pressure: 'Capital Pressure',
   carrying_cost: 'Carrying Cost',
   crack_advantage: 'Crack Advantage',
   sell_through: 'Sell-Through',

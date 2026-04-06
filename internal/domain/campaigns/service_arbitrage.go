@@ -9,12 +9,12 @@ import (
 )
 
 const (
-	// CreditUtilizationThresholdPct is the maximum credit utilization percentage
+	// CapitalExposureThresholdPct is the maximum capital exposure percentage
 	// before activation is blocked.
-	CreditUtilizationThresholdPct = 70
+	CapitalExposureThresholdPct = 70
 
-	// DailyExposureDivisor is the fraction of credit limit that total daily
-	// exposure must stay below (e.g. 10 means daily exposure < limit/10 = 10%).
+	// DailyExposureDivisor is the fraction of capital budget that total daily
+	// exposure must stay below (e.g. 10 means daily exposure < budget/10 = 10%).
 	DailyExposureDivisor = 10
 
 	// HighSpendCapCents is the daily spend cap threshold (in cents) above which
@@ -90,7 +90,7 @@ func (s *service) GetActivationChecklist(ctx context.Context, campaignID string)
 		return nil, err
 	}
 
-	credit, err := s.repo.GetCreditSummary(ctx)
+	capital, err := s.repo.GetCapitalSummary(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -111,13 +111,13 @@ func (s *service) GetActivationChecklist(ctx context.Context, campaignID string)
 		AllPassed:    true,
 	}
 
-	utilizationOK := credit.UtilizationPct < CreditUtilizationThresholdPct
+	exposureCheckOK := capital.ExposurePct < CapitalExposureThresholdPct
 	checklist.Checks = append(checklist.Checks, ActivationCheck{
-		Name:    "Credit Utilization",
-		Passed:  utilizationOK,
-		Message: fmt.Sprintf("Current utilization: %.0f%% (threshold: %d%%)", credit.UtilizationPct, CreditUtilizationThresholdPct),
+		Name:    "Capital Exposure",
+		Passed:  exposureCheckOK,
+		Message: fmt.Sprintf("Current exposure: %.0f%% (threshold: %d%%)", capital.ExposurePct, CapitalExposureThresholdPct),
 	})
-	if !utilizationOK {
+	if !exposureCheckOK {
 		checklist.AllPassed = false
 	}
 
@@ -154,17 +154,17 @@ func (s *service) GetActivationChecklist(ctx context.Context, campaignID string)
 		totalDailyExposure += campaign.DailySpendCapCents
 	}
 
-	exposureOK := credit.CreditLimitCents == 0 || totalDailyExposure < credit.CreditLimitCents/DailyExposureDivisor // skip if unconfigured
-	exposureMsg := fmt.Sprintf("Total daily exposure with activation: $%d/day (credit limit: $%d)", totalDailyExposure/100, credit.CreditLimitCents/100)
-	if credit.CreditLimitCents == 0 {
-		exposureMsg = fmt.Sprintf("Total daily exposure with activation: $%d/day (credit limit: not configured)", totalDailyExposure/100)
+	dailyExpOK := capital.CapitalBudgetCents == 0 || totalDailyExposure < capital.CapitalBudgetCents/DailyExposureDivisor // skip if unconfigured
+	exposureMsg := fmt.Sprintf("Total daily exposure with activation: $%d/day (capital budget: $%d)", totalDailyExposure/100, capital.CapitalBudgetCents/100)
+	if capital.CapitalBudgetCents == 0 {
+		exposureMsg = fmt.Sprintf("Total daily exposure with activation: $%d/day (capital budget: not configured)", totalDailyExposure/100)
 	}
 	checklist.Checks = append(checklist.Checks, ActivationCheck{
 		Name:    "Daily Exposure",
-		Passed:  exposureOK,
+		Passed:  dailyExpOK,
 		Message: exposureMsg,
 	})
-	if !exposureOK {
+	if !dailyExpOK {
 		checklist.AllPassed = false
 	}
 
