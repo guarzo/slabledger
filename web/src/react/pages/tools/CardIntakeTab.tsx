@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { api } from '@/js/api';
-import type { ScanCertResponse, ResolveCertResponse, CertImportResult } from '@/types/campaigns/core';
+import type { ScanCertResponse, ResolveCertResponse, CertImportResult } from '@/types/campaigns';
 
 type CertStatus = 'scanning' | 'existing' | 'sold' | 'returned' | 'resolving' | 'resolved' | 'failed' | 'importing' | 'imported';
 
