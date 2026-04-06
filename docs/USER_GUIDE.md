@@ -210,7 +210,7 @@ Cards held longer than 30 days are highlighted.
 
 ### Market Direction
 
-For each unsold card, the system compares the most recent sold price (from PriceCharting/fusion sources) against the Card Ladder valuation recorded at purchase:
+For each unsold card, the system compares the most recent sold price against the Card Ladder valuation recorded at purchase:
 
 | Direction | Meaning | Delta |
 |-----------|---------|-------|
@@ -236,7 +236,7 @@ Based on market direction:
 
 The **Pricing** page lets you look up current card prices across all grades and sources. Useful for:
 - Checking current market value before buying or selling
-- Comparing prices across PriceCharting and CardHedger
+- Comparing prices across grades and sources
 - Viewing price trends and sales history
 
 ---
@@ -257,8 +257,7 @@ The status page shows real-time API usage for each pricing provider:
 
 | Provider | Daily Limit | Description |
 |----------|-------------|-------------|
-| **CardHedger** | 1,000 | Secondary graded price estimates with confidence ranges |
-| **PriceCharting** | No hard limit | Market data (active listings, sales velocity) |
+| **DH (DoubleHolo)** | Enterprise plan | Graded pricing, market data, sales history |
 
 For each provider, the page displays:
 - **Calls today** with usage bar (green/amber/red)
