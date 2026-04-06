@@ -66,7 +66,7 @@ func (s *service) enrichSellSheetItem(_ context.Context, purchase *Purchase, cam
 		CurrentMarket: item.CurrentMarket,
 		DaysHeld:      timeutil.DaysSince(purchase.PurchaseDate),
 	}
-	isCrack := crackSet != nil && crackSet[purchase.ID]
+	isCrack := crackSet[purchase.ID]
 	sig := ComputeInventorySignals(&agingItem, isCrack)
 	if sig.HasAnySignal() {
 		item.Signals = &sig

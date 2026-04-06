@@ -278,11 +278,19 @@ func (s *service) GetFlaggedInventory(ctx context.Context) ([]AgingItem, error) 
 }
 
 // buildCrackCandidateSet returns the cached set of crack candidate purchase IDs.
-// Returns nil on cold start (before the background worker has completed its first run).
-func (s *service) buildCrackCandidateSet(_ context.Context) map[string]bool {
+// Returns nil on cold start (before the background worker has completed its first run);
+// callers handle nil safely (Go nil-map index returns false).
+//
+// Safe: refreshCrackCandidates replaces the map atomically (never mutates in-place),
+// so callers can iterate the returned reference without holding the lock.
+func (s *service) buildCrackCandidateSet(ctx context.Context) map[string]bool {
 	s.crackCacheMu.RLock()
-	defer s.crackCacheMu.RUnlock()
-	return s.crackCacheSet
+	set := s.crackCacheSet
+	s.crackCacheMu.RUnlock()
+	if set == nil && s.logger != nil {
+		s.logger.Info(ctx, "crack cache not yet populated, signals will be incomplete")
+	}
+	return set
 }
 
 // refreshCrackCandidates recomputes the crack candidate set and stores it in the cache.
@@ -307,8 +315,11 @@ const crackCacheRefreshInterval = 15 * time.Minute
 
 // crackCacheWorker periodically refreshes the crack candidate cache.
 func (s *service) crackCacheWorker(ctx context.Context) {
+	if ctx.Err() != nil {
+		return
+	}
 	if err := s.refreshCrackCandidates(ctx); err != nil && s.logger != nil {
-		s.logger.Warn(ctx, "initial crack cache refresh failed", observability.Err(err))
+		s.logger.Error(ctx, "initial crack cache refresh failed — inventory signals unavailable", observability.Err(err))
 	}
 	ticker := time.NewTicker(crackCacheRefreshInterval)
 	defer ticker.Stop()
@@ -328,7 +339,9 @@ func (s *service) crackCacheWorker(ctx context.Context) {
 func (s *service) applyOpenFlags(ctx context.Context, items []AgingItem) {
 	flaggedIDs, err := s.repo.OpenFlagPurchaseIDs(ctx)
 	if err != nil {
-		s.logger.Warn(ctx, "failed to load open flags", observability.Err(err))
+		if s.logger != nil {
+			s.logger.Warn(ctx, "failed to load open flags", observability.Err(err))
+		}
 		return
 	}
 	for i := range items {

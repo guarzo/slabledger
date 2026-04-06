@@ -284,6 +284,9 @@ func (c *Client) pollResponseFallback(ctx context.Context, responseID string, st
 				if result.IncompleteDetails != nil && result.IncompleteDetails.Reason != "" {
 					reason = result.IncompleteDetails.Reason
 				}
+				if len(result.Output) == 0 {
+					return fmt.Errorf("response %s: incomplete with no output (reason: %s)", responseID, reason)
+				}
 				if c.logger != nil {
 					c.logger.Warn(ctx, "poll fallback: response incomplete, emitting partial output",
 						observability.String("responseID", responseID),
