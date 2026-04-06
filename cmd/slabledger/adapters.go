@@ -4,32 +4,10 @@ import (
 	"context"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/psa"
-	"github.com/guarzo/slabledger/internal/adapters/httpserver/handlers"
 	"github.com/guarzo/slabledger/internal/adapters/scheduler"
 	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
 	"github.com/guarzo/slabledger/internal/domain/campaigns"
 )
-
-// favoritesListAdapter adapts sqlite.FavoritesRepository to the scheduler.FavoritesLister interface.
-type favoritesListAdapter struct {
-	repo *sqlite.FavoritesRepository
-}
-
-func (a *favoritesListAdapter) ListAllDistinctCards(ctx context.Context) ([]scheduler.FavoriteCard, error) {
-	cards, err := a.repo.ListAllDistinctCards(ctx)
-	if err != nil {
-		return nil, err
-	}
-	result := make([]scheduler.FavoriteCard, len(cards))
-	for i, c := range cards {
-		result[i] = scheduler.FavoriteCard{
-			CardName:   c.CardName,
-			SetName:    c.SetName,
-			CardNumber: c.CardNumber,
-		}
-	}
-	return result, nil
-}
 
 // inventoryListAdapter adapts sqlite.CampaignsRepository to the scheduler.InventoryLister interface.
 type inventoryListAdapter struct {
@@ -135,12 +113,3 @@ func (a *psaImageUpdaterAdapter) UpdatePurchaseImageURLs(ctx context.Context, id
 	return a.repo.UpdatePurchaseImageURLs(ctx, id, frontURL, backURL)
 }
 
-// newCardDiscovererAdapter returns the scheduler.CardDiscoverer directly as a
-// handlers.CardDiscoverer. Both interfaces now use campaigns.CardIdentity, so no
-// conversion is needed — the scheduler type satisfies the handler interface.
-func newCardDiscovererAdapter(d scheduler.CardDiscoverer) handlers.CardDiscoverer {
-	if d == nil {
-		return nil
-	}
-	return d
-}

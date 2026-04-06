@@ -7,9 +7,6 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/pricing"
 )
 
-// Compile-time interface checks for adapter types
-var _ fusion.SecondaryPriceSource = (*CardHedgerAdapter)(nil)
-
 // buildResponseMeta converts HTTP status code and headers into transport-agnostic ResponseMeta.
 // Rate limit headers are only parsed on 429 responses.
 func buildResponseMeta(statusCode int, headers http.Header) *fusion.ResponseMeta {
@@ -30,6 +27,4 @@ func detailsCacheKey(card pricing.Card) string {
 // observabilitySourceName maps adapter source names to short codes used by
 // fetchFromAvailableSources for metrics labels, log fields, and collector/telemetry tags.
 // Update this map when adding a new secondary source or changing instrumentation.
-var observabilitySourceName = map[string]string{
-	pricing.SourceCardHedger: "CH",
-}
+var observabilitySourceName = map[string]string{}

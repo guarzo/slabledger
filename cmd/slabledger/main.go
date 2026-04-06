@@ -17,14 +17,12 @@ import (
 
 	// Concrete implementations (only imported in main for wiring - Hexagonal Architecture)
 	"github.com/guarzo/slabledger/internal/adapters/advisortool"
-	"github.com/guarzo/slabledger/internal/adapters/clients/cardhedger"
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	"github.com/guarzo/slabledger/internal/adapters/clients/google"
 	"github.com/guarzo/slabledger/internal/adapters/clients/justtcg"
 	"github.com/guarzo/slabledger/internal/adapters/clients/psa"
 	"github.com/guarzo/slabledger/internal/adapters/clients/tcgdex"
 	"github.com/guarzo/slabledger/internal/adapters/httpserver/handlers"
-	"github.com/guarzo/slabledger/internal/adapters/scheduler"
 	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
 	"github.com/guarzo/slabledger/internal/domain/ai"
 	"github.com/guarzo/slabledger/internal/domain/auth"
@@ -234,9 +232,6 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	// Card ID mapping repository (caches external provider IDs)
 	cardIDMappingRepo := sqlite.NewCardIDMappingRepository(db.DB)
 
-	// Discovery failure tracker (persists CardHedger discovery failures for diagnostics)
-	discoveryFailureRepo := sqlite.NewDiscoveryFailureRepository(db.DB)
-
 	// Initialize DH client (optional — market intelligence + fusion source)
 	var dhClient *dh.Client
 	if cfg.Adapters.DHEnterpriseKey != "" && cfg.Adapters.DHBaseURL != "" {
@@ -253,7 +248,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	intelRepo := sqlite.NewMarketIntelligenceRepository(db.DB)
 	suggestionsRepo := sqlite.NewDHSuggestionsRepository(db.DB)
 
-	priceProvImpl, cardHedgerClientImpl, pcProvider, err := initializePriceProviders(
+	priceProvImpl, pcProvider, err := initializePriceProviders(
 		ctx, cfg, appCache, logger, cardProvImpl, priceRepo, cardIDMappingRepo,
 		dhClient,
 	)
@@ -267,7 +262,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	}()
 
 	campaignsService, campaignsRepo, cardRequestRepo := initializeCampaignsService(
-		ctx, cfg, logger, db, priceProvImpl, cardHedgerClientImpl, cardIDMappingRepo, intelRepo,
+		ctx, cfg, logger, db, priceProvImpl, intelRepo,
 	)
 
 	// Sync state repository (for delta poll timestamps)
@@ -361,44 +356,30 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 			observability.Int("daily_budget", cfg.JustTCG.DailyBudget))
 	}
 
-	// Create cert sweeper for periodic cert→card_id resolution in the CardHedger batch scheduler.
-	var certSweeper scheduler.CertSweeper
-	if cardHedgerClientImpl.Available() {
-		certResolverOpts := []cardhedger.CertResolverOption{
-			cardhedger.WithMissingCardTracker(cardRequestRepo),
-		}
-		batchCertResolver := cardhedger.NewCertResolver(cardHedgerClientImpl, cardIDMappingRepo, logger, certResolverOpts...)
-		certSweeper = scheduler.NewCertSweepAdapter(campaignsRepo, batchCertResolver, logger)
-	}
-
 	schedulerResult, cancelScheduler := initializeSchedulers(ctx, schedulerDeps{
-		Config:               cfg,
-		Logger:               logger,
-		PriceRepo:            priceRepo,
-		PriceProvImpl:        priceProvImpl,
-		CardProvImpl:         cardProvImpl,
-		AuthService:          authService,
-		CardHedgerClientImpl: cardHedgerClientImpl,
-		SyncStateRepo:        syncStateRepo,
-		CardIDMappingRepo:    cardIDMappingRepo,
-		DiscoveryFailureRepo: discoveryFailureRepo,
-		FavoritesRepo:        favoritesRepo,
-		CampaignsRepo:        campaignsRepo,
-		CampaignsService:     campaignsService,
-		AdvisorService:       advisorService,
-		AdvisorCacheRepo:     advisorCacheRepo,
-		AICallRepo:           aiCallRepo,
-		SocialService:        socialService,
-		IGTokenRefresher:     igTokenRefresher,
-		MetricsPostLister:    metricsRepo,
-		MetricsSaver:         metricsRepo,
-		InsightsPoller:       insightsPoller,
-		CertSweeper:          certSweeper,
-		PicksService:         picksService,
-		CardLadderClient:     clClient,
-		CardLadderStore:      clStore,
+		Config:            cfg,
+		Logger:            logger,
+		PriceRepo:         priceRepo,
+		PriceProvImpl:     priceProvImpl,
+		CardProvImpl:      cardProvImpl,
+		AuthService:       authService,
+		SyncStateRepo:     syncStateRepo,
+		CardIDMappingRepo: cardIDMappingRepo,
+		CampaignsRepo:     campaignsRepo,
+		CampaignsService:  campaignsService,
+		AdvisorService:    advisorService,
+		AdvisorCacheRepo:  advisorCacheRepo,
+		AICallRepo:        aiCallRepo,
+		SocialService:     socialService,
+		IGTokenRefresher:  igTokenRefresher,
+		MetricsPostLister: metricsRepo,
+		MetricsSaver:      metricsRepo,
+		InsightsPoller:    insightsPoller,
+		PicksService:      picksService,
+		CardLadderClient:  clClient,
+		CardLadderStore:   clStore,
 		CardLadderSalesStore: clSalesStore,
-		JustTCGClient:        justTCGClient,
+		JustTCGClient:       justTCGClient,
 		DHClient:             dhClient,
 		DHIntelligenceRepo:   intelRepo,
 		DHSuggestionsRepo:    suggestionsRepo,
@@ -417,17 +398,8 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	pricingDiagRepo := sqlite.NewPricingDiagnosticsRepository(db.DB)
 	pricingDiagHandler := handlers.NewPricingDiagnosticsHandler(pricingDiagRepo, logger)
 
-	// Create card request handler — listing always works; submit endpoints
-	// require both CardHedger availability and a configured client ID.
-	var cardReqClient handlers.CardRequester
-	cardReqClientID := cfg.Adapters.CardHedgerClientID
-	if cardHedgerClientImpl.Available() && cardReqClientID != "" {
-		cardReqClient = cardHedgerClientImpl
-		logger.Info(ctx, "card request handler initialized")
-	} else {
-		logger.Info(ctx, "card request handler initialized (read-only)")
-	}
-	cardRequestHandler := handlers.NewCardRequestHandlers(cardRequestRepo, cardReqClient, cardReqClientID, logger)
+	// Create card request handler (read-only — CardHedger removed)
+	cardRequestHandler := handlers.NewCardRequestHandlers(cardRequestRepo, nil, "", logger)
 
 	// Create advisor handler (if advisor was initialized above)
 	var advisorHandler *handlers.AdvisorHandler
@@ -493,9 +465,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		FavoritesService:          favoritesService,
 		CampaignsService:          campaignsService,
 		CacheStatsProvider:        cardProvImpl,
-		CardDiscoverer:            newCardDiscovererAdapter(schedulerResult.CardDiscoverer),
 		PriceHintsHandler:         priceHintsHandler,
-		CardHedgerStats:           cardHedgerClientImpl,
 		CardRequestHandler:        cardRequestHandler,
 		PricingDiagnosticsHandler: pricingDiagHandler,
 		CampaignsRepo:             campaignsRepo,

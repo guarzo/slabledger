@@ -10,7 +10,6 @@ import (
 
 	"github.com/guarzo/slabledger/internal/adapters/advisortool"
 	"github.com/guarzo/slabledger/internal/adapters/clients/azureai"
-	"github.com/guarzo/slabledger/internal/adapters/clients/cardhedger"
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	"github.com/guarzo/slabledger/internal/adapters/clients/fusionprice"
@@ -36,8 +35,8 @@ import (
 	"github.com/guarzo/slabledger/internal/platform/crypto"
 )
 
-// initializePriceProviders creates the PriceCharting and CardHedger clients
-// and wires them together into the FusionProvider.
+// initializePriceProviders creates the PriceCharting client
+// and wires it together with secondary sources into the FusionProvider.
 func initializePriceProviders(
 	ctx context.Context,
 	cfg *config.Config,
@@ -47,22 +46,17 @@ func initializePriceProviders(
 	priceRepo *sqlite.PriceRepository,
 	cardIDMappingRepo *sqlite.CardIDMappingRepository,
 	dhClient *dh.Client,
-) (priceProvider *fusionprice.FusionPriceProvider, cardHedgerClient *cardhedger.Client, pcProvider *pricecharting.PriceCharting, err error) {
+) (priceProvider *fusionprice.FusionPriceProvider, pcProvider *pricecharting.PriceCharting, err error) {
 	pcProvider, err = pricecharting.NewPriceCharting(
 		pricecharting.DefaultConfig(cfg.Adapters.PriceChartingToken), appCache, logger,
 		pricecharting.WithHintResolver(cardIDMappingRepo),
 	)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to initialize PriceCharting provider: %w", err)
+		return nil, nil, fmt.Errorf("failed to initialize PriceCharting provider: %w", err)
 	}
-
-	cardHedgerClient = cardhedger.NewClient(cfg.Adapters.CardHedgerKey, cardhedger.WithLogger(logger))
 
 	// Wrap secondary clients in adapters that implement fusion.SecondaryPriceSource
-	secondarySources := []fusion.SecondaryPriceSource{
-		fusionprice.NewCardHedgerAdapter(cardHedgerClient, cardIDMappingRepo, logger,
-			fusionprice.WithCardHedgerHintResolver(cardIDMappingRepo)),
-	}
+	var secondarySources []fusion.SecondaryPriceSource
 
 	// Add DH as a secondary fusion source if available
 	dhAvailable := false
@@ -84,22 +78,19 @@ func initializePriceProviders(
 	)
 	logger.Info(ctx, "Fusion price provider initialized",
 		observability.Int("secondary_sources", len(secondarySources)),
-		observability.Bool("cardhedger_available", cardHedgerClient.Available()),
 		observability.Bool("dh_available", dhAvailable))
 
-	return priceProvider, cardHedgerClient, pcProvider, nil
+	return priceProvider, pcProvider, nil
 }
 
 // initializeCampaignsService creates the campaigns service with all options
-// wired, including price lookup, PSA cert lookup, and CardHedger cert resolver.
+// wired, including price lookup and PSA cert lookup.
 func initializeCampaignsService(
 	ctx context.Context,
 	cfg *config.Config,
 	logger observability.Logger,
 	db *sqlite.DB,
 	priceProvImpl *fusionprice.FusionPriceProvider,
-	cardHedgerClientImpl *cardhedger.Client,
-	cardIDMappingRepo *sqlite.CardIDMappingRepository,
 	intelRepo *sqlite.MarketIntelligenceRepository,
 ) (campaigns.Service, *sqlite.CampaignsRepository, *sqlite.CardRequestRepository) {
 	campaignsRepo := sqlite.NewCampaignsRepository(db.DB)
@@ -117,17 +108,8 @@ func initializeCampaignsService(
 		logger.Info(ctx, "PSA cert lookup enabled")
 	}
 
-	// Card request repository (tracks certs without linked cards in CardHedger)
+	// Card request repository (tracks certs without linked cards)
 	cardRequestRepo := sqlite.NewCardRequestRepository(db.DB)
-
-	// Wire cert→card_id resolver if CardHedger is available
-	if cardHedgerClientImpl.Available() {
-		certResolverOpts := []cardhedger.CertResolverOption{
-			cardhedger.WithMissingCardTracker(cardRequestRepo),
-		}
-		certResolver := cardhedger.NewCertResolver(cardHedgerClientImpl, cardIDMappingRepo, logger, certResolverOpts...)
-		campaignOpts = append(campaignOpts, campaigns.WithCardIDResolver(certResolver))
-	}
 
 	// History recorders — track CL values and population changes during CSV imports.
 	campaignOpts = append(campaignOpts,
@@ -345,31 +327,27 @@ func initializeCardLadder(
 
 // schedulerDeps bundles all dependencies needed by initializeSchedulers.
 type schedulerDeps struct {
-	Config               *config.Config
-	Logger               observability.Logger
-	PriceRepo            *sqlite.PriceRepository
-	PriceProvImpl        *fusionprice.FusionPriceProvider
-	CardProvImpl         *tcgdex.TCGdex
-	AuthService          auth.Service
-	CardHedgerClientImpl *cardhedger.Client
-	SyncStateRepo        *sqlite.SyncStateRepository
-	CardIDMappingRepo    *sqlite.CardIDMappingRepository
-	DiscoveryFailureRepo *sqlite.DiscoveryFailureRepository
-	FavoritesRepo        *sqlite.FavoritesRepository
-	CampaignsRepo        *sqlite.CampaignsRepository
-	CampaignsService     campaigns.Service
-	AdvisorService       advisor.Service
-	AdvisorCacheRepo     *sqlite.AdvisorCacheRepository
-	AICallRepo           *sqlite.AICallRepository
-	SocialService        social.Service
-	IGTokenRefresher     scheduler.InstagramTokenRefresher
-	MetricsPostLister    social.MetricsPostLister
-	MetricsSaver         social.MetricsSaver
-	InsightsPoller       social.InsightsPoller
-	CertSweeper          scheduler.CertSweeper
-	PicksService         picks.Service
-	CardLadderClient     *cardladder.Client
-	CardLadderStore      *sqlite.CardLadderStore
+	Config            *config.Config
+	Logger            observability.Logger
+	PriceRepo         *sqlite.PriceRepository
+	PriceProvImpl     *fusionprice.FusionPriceProvider
+	CardProvImpl      *tcgdex.TCGdex
+	AuthService       auth.Service
+	SyncStateRepo     *sqlite.SyncStateRepository
+	CardIDMappingRepo *sqlite.CardIDMappingRepository
+	CampaignsRepo     *sqlite.CampaignsRepository
+	CampaignsService  campaigns.Service
+	AdvisorService    advisor.Service
+	AdvisorCacheRepo  *sqlite.AdvisorCacheRepository
+	AICallRepo        *sqlite.AICallRepository
+	SocialService     social.Service
+	IGTokenRefresher  scheduler.InstagramTokenRefresher
+	MetricsPostLister social.MetricsPostLister
+	MetricsSaver      social.MetricsSaver
+	InsightsPoller    social.InsightsPoller
+	PicksService      picks.Service
+	CardLadderClient  *cardladder.Client
+	CardLadderStore   *sqlite.CardLadderStore
 	CardLadderSalesStore *sqlite.CLSalesStore
 	JustTCGClient        *justtcg.Client
 	DHClient             *dh.Client
@@ -383,40 +361,35 @@ type schedulerDeps struct {
 func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.BuildResult, context.CancelFunc) {
 	schedulerCtx, cancelScheduler := context.WithCancel(ctx)
 	buildDeps := scheduler.BuildDeps{
-		PriceRepo:                deps.PriceRepo,
-		APITracker:               deps.PriceRepo,
-		HealthChecker:            deps.PriceRepo,
-		AccessTracker:            deps.PriceRepo,
-		PriceProvider:            deps.PriceProvImpl,
-		CardProvider:             deps.CardProvImpl,
-		AuthService:              deps.AuthService,
-		Logger:                   deps.Logger,
-		CardHedgerClient:         deps.CardHedgerClientImpl,
-		SyncStateStore:           deps.SyncStateRepo,
-		CardIDMappingLookup:      deps.CardIDMappingRepo,
-		CardIDMappingLister:      &cardIDMappingListAdapter{repo: deps.CardIDMappingRepo},
-		CardIDMappingSaver:       deps.CardIDMappingRepo,
-		DiscoveryFailureTracker:  deps.DiscoveryFailureRepo,
-		FavoritesLister:          &favoritesListAdapter{repo: deps.FavoritesRepo},
-		CampaignCardLister:       &campaignCardListAdapter{repo: deps.CampaignsRepo},
-		NewSetsProvider:          deps.CardProvImpl.RegistryManager(),
-		InventoryLister:          &inventoryListAdapter{repo: deps.CampaignsRepo},
-		SnapshotRefresher:        &snapshotRefreshAdapter{svc: deps.CampaignsService},
-		SnapshotEnrichService:    deps.CampaignsService,
-		SnapshotHistoryLister:    deps.CampaignsRepo,
-		SnapshotHistoryRecorder:  deps.CampaignsRepo,
-		AdvisorCollector:         deps.AdvisorService,
-		AdvisorCache:             deps.AdvisorCacheRepo,
-		AICallTracker:            deps.AICallRepo,
-		SocialContentDetector:    deps.SocialService,
-		InstagramTokenRefresher:  deps.IGTokenRefresher,
-		MetricsPostLister:        deps.MetricsPostLister,
-		MetricsSaver:             deps.MetricsSaver,
-		InsightsPoller:           deps.InsightsPoller,
-		CertSweeper:              deps.CertSweeper,
-		PicksGenerator:           deps.PicksService,
-		CardLadderClient:         deps.CardLadderClient,
-		CardLadderStore:          deps.CardLadderStore,
+		PriceRepo:               deps.PriceRepo,
+		APITracker:              deps.PriceRepo,
+		HealthChecker:           deps.PriceRepo,
+		AccessTracker:           deps.PriceRepo,
+		PriceProvider:           deps.PriceProvImpl,
+		CardProvider:            deps.CardProvImpl,
+		AuthService:             deps.AuthService,
+		Logger:                  deps.Logger,
+		SyncStateStore:          deps.SyncStateRepo,
+		CardIDMappingLister:     &cardIDMappingListAdapter{repo: deps.CardIDMappingRepo},
+		CardIDMappingSaver:      deps.CardIDMappingRepo,
+		CampaignCardLister:      &campaignCardListAdapter{repo: deps.CampaignsRepo},
+		NewSetsProvider:         deps.CardProvImpl.RegistryManager(),
+		InventoryLister:         &inventoryListAdapter{repo: deps.CampaignsRepo},
+		SnapshotRefresher:       &snapshotRefreshAdapter{svc: deps.CampaignsService},
+		SnapshotEnrichService:   deps.CampaignsService,
+		SnapshotHistoryLister:   deps.CampaignsRepo,
+		SnapshotHistoryRecorder: deps.CampaignsRepo,
+		AdvisorCollector:        deps.AdvisorService,
+		AdvisorCache:            deps.AdvisorCacheRepo,
+		AICallTracker:           deps.AICallRepo,
+		SocialContentDetector:   deps.SocialService,
+		InstagramTokenRefresher: deps.IGTokenRefresher,
+		MetricsPostLister:       deps.MetricsPostLister,
+		MetricsSaver:            deps.MetricsSaver,
+		InsightsPoller:          deps.InsightsPoller,
+		PicksGenerator:          deps.PicksService,
+		CardLadderClient:        deps.CardLadderClient,
+		CardLadderStore:         deps.CardLadderStore,
 		CardLadderPurchaseLister: deps.CampaignsRepo,
 		CardLadderValueUpdater:   deps.CampaignsRepo,
 		CardLadderCLRecorder:     deps.CampaignsRepo,
