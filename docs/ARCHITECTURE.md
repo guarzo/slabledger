@@ -95,9 +95,7 @@ type PriceProvider interface {
     GetPrice(ctx context.Context, card Card) (*Price, error)
     Available() bool
     Name() string
-    Close() error
     LookupCard(ctx context.Context, setName string, card Card) (*Price, error)
-    GetStats(ctx context.Context) *ProviderStats
 }
 
 // Card metadata

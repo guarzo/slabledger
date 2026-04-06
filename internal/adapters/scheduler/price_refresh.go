@@ -243,25 +243,25 @@ func (s *PriceRefreshScheduler) logAPIUsageSummary(ctx context.Context) {
 		return
 	}
 
-	providers := []string{pricing.SourceDH}
-	for _, prov := range providers {
-		usage, err := s.apiTracker.GetAPIUsage(ctx, prov)
-		if err != nil {
-			continue
-		}
-		if usage.TotalCalls == 0 {
-			continue
-		}
-
-		successRate := float64(usage.TotalCalls-usage.ErrorCalls) / float64(usage.TotalCalls) * 100.0
-
-		s.logger.Info(ctx, "API daily usage",
-			observability.String("provider", prov),
-			observability.Int("calls", int(usage.TotalCalls)),
-			observability.Float64("success_rate_pct", successRate),
-			observability.Float64("avg_latency_ms", usage.AvgLatencyMS),
-		)
+	usage, err := s.apiTracker.GetAPIUsage(ctx, pricing.SourceDH)
+	if err != nil {
+		s.logger.Warn(ctx, "failed to get API usage",
+			observability.Err(err),
+			observability.String("provider", pricing.SourceDH))
+		return
 	}
+	if usage == nil || usage.TotalCalls == 0 {
+		return
+	}
+
+	successRate := float64(usage.TotalCalls-usage.ErrorCalls) / float64(usage.TotalCalls) * 100.0
+
+	s.logger.Info(ctx, "API daily usage",
+		observability.String("provider", pricing.SourceDH),
+		observability.Int("calls", int(usage.TotalCalls)),
+		observability.Float64("success_rate_pct", successRate),
+		observability.Float64("avg_latency_ms", usage.AvgLatencyMS),
+	)
 }
 
 // Health returns the health status of the scheduler.

@@ -107,16 +107,8 @@ func (m *MockSimplePriceProvider) Name() string {
 	return "mock"
 }
 
-func (m *MockSimplePriceProvider) Close() error {
-	return nil
-}
-
 func (m *MockSimplePriceProvider) LookupCard(_ context.Context, _ string, _ cards.Card) (*pricing.Price, error) {
 	return &pricing.Price{}, nil
-}
-
-func (m *MockSimplePriceProvider) GetStats(_ context.Context) *pricing.ProviderStats {
-	return nil
 }
 
 // CallCount returns the number of GetPrice calls made

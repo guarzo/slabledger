@@ -59,11 +59,6 @@ func (m *MockPriceProvider) GetPrice(ctx context.Context, card pricing.Card) (*p
 	}, nil
 }
 
-// Close is a no-op for the mock provider
-func (m *MockPriceProvider) Close() error {
-	return nil
-}
-
 // LookupCard returns mock price data for a card.
 // The context parameter enables request cancellation and timeout propagation.
 func (m *MockPriceProvider) LookupCard(ctx context.Context, setName string, card domainCards.Card) (*pricing.Price, error) {
@@ -90,11 +85,6 @@ func (m *MockPriceProvider) LookupCard(ctx context.Context, setName string, card
 
 	// Generate deterministic mock data
 	return generateMockPrice(setName, card), nil
-}
-
-// GetStats returns mock provider statistics
-func (m *MockPriceProvider) GetStats(_ context.Context) *pricing.ProviderStats {
-	return &pricing.ProviderStats{}
 }
 
 // SetMockMatch allows customization of mock matches for specific cards

@@ -19,10 +19,8 @@ type mockPriceProvider struct {
 func (m *mockPriceProvider) GetPrice(context.Context, pricing.Card) (*pricing.Price, error) {
 	return nil, nil
 }
-func (m *mockPriceProvider) Available() bool                                 { return true }
-func (m *mockPriceProvider) Name() string                                    { return "mock" }
-func (m *mockPriceProvider) Close() error                                    { return nil }
-func (m *mockPriceProvider) GetStats(context.Context) *pricing.ProviderStats { return nil }
+func (m *mockPriceProvider) Available() bool { return true }
+func (m *mockPriceProvider) Name() string    { return "mock" }
 func (m *mockPriceProvider) LookupCard(ctx context.Context, setName string, card domainCards.Card) (*pricing.Price, error) {
 	return m.lookupFn(ctx, setName, card)
 }

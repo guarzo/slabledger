@@ -7,7 +7,6 @@ import (
 )
 
 // PriceProvider defines what the domain needs from price sources.
-// Implementations live in their own packages (prices/, ebay/, gamestop/)
 type PriceProvider interface {
 	// GetPrice fetches price data for a card
 	GetPrice(ctx context.Context, card Card) (*Price, error)
@@ -18,18 +17,10 @@ type PriceProvider interface {
 	// Name returns provider identifier for logging/metrics
 	Name() string
 
-	// Close releases resources (for cleanup)
-	Close() error
-
 	// LookupCard searches for a card by name and set, returning detailed price match.
 	// This is used by lookup endpoints to provide detailed price information.
 	// The context parameter enables request cancellation and timeout propagation.
 	LookupCard(ctx context.Context, setName string, card domainCards.Card) (*Price, error)
-
-	// GetStats returns provider statistics for monitoring and health checks.
-	// Returns nil if statistics are not available.
-	// The context parameter enables request cancellation and timeout propagation.
-	GetStats(ctx context.Context) *ProviderStats
 }
 
 // Card represents the minimal card information needed for price lookups
