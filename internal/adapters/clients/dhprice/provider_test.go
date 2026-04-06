@@ -279,12 +279,6 @@ func TestSimpleMethods(t *testing.T) {
 	if got := p.Name(); got != "doubleholo" {
 		t.Errorf("Name() = %q, want %q", got, "doubleholo")
 	}
-	if err := p.Close(); err != nil {
-		t.Errorf("Close() = %v, want nil", err)
-	}
-	if got := p.GetStats(context.Background()); got != nil {
-		t.Errorf("GetStats() = %v, want nil", got)
-	}
 }
 
 func TestLookupCard(t *testing.T) {

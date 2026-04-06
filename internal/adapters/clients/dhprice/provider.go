@@ -131,12 +131,6 @@ func (p *Provider) Available() bool {
 // Name returns the provider identifier.
 func (p *Provider) Name() string { return pricing.SourceDH }
 
-// Close is a no-op; the underlying DH client is managed externally.
-func (p *Provider) Close() error { return nil }
-
-// GetStats returns nil (no stats tracking in this provider).
-func (p *Provider) GetStats(_ context.Context) *pricing.ProviderStats { return nil }
-
 // ebayConfidence returns a confidence label based on sale count.
 func ebayConfidence(saleCount int) string {
 	switch {
