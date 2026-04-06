@@ -59,9 +59,7 @@ Mocks the DH price provider interface.
 
 **Methods:**
 - `Available()` - Returns availability status
-- `Close()` - No-op cleanup
 - `LookupCard(ctx, setName, card)` - Returns mock price data
-- `LookupBatch(ctx, setName, cards)` - Returns batch price data
 
 **Example:**
 ```go
