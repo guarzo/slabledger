@@ -182,7 +182,7 @@ func TestPriceRepository_GetStalePrices_FilterBySource(t *testing.T) {
 			SetName:    "Base Set",
 			Grade:      "PSA 10",
 			PriceCents: 80000,
-			Source:     "pokemonprice",
+			Source:     "doubleholo",
 			PriceDate:  time.Now().Add(-48 * time.Hour),
 		},
 	}
@@ -214,7 +214,7 @@ func TestPriceRepository_RecordAPICall(t *testing.T) {
 	ctx := context.Background()
 
 	call := &pricing.APICallRecord{
-		Provider:   "pokemonprice",
+		Provider:   "doubleholo",
 		Endpoint:   "/api/cards",
 		StatusCode: 200,
 		LatencyMS:  150,
@@ -225,7 +225,7 @@ func TestPriceRepository_RecordAPICall(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify recorded
-	stats, err := repo.GetAPIUsage(ctx, "pokemonprice")
+	stats, err := repo.GetAPIUsage(ctx, "doubleholo")
 	require.NoError(t, err)
 	require.NotNil(t, stats)
 	require.Equal(t, int64(1), stats.TotalCalls)
@@ -240,7 +240,7 @@ func TestPriceRepository_RecordAPICall_RateLimit(t *testing.T) {
 
 	// Record successful call
 	call1 := &pricing.APICallRecord{
-		Provider:   "pokemonprice",
+		Provider:   "doubleholo",
 		Endpoint:   "/api/cards",
 		StatusCode: 200,
 		LatencyMS:  150,
@@ -251,7 +251,7 @@ func TestPriceRepository_RecordAPICall_RateLimit(t *testing.T) {
 
 	// Record rate limited call
 	call2 := &pricing.APICallRecord{
-		Provider:   "pokemonprice",
+		Provider:   "doubleholo",
 		Endpoint:   "/api/cards",
 		StatusCode: 429,
 		Error:      "rate limited",
@@ -262,7 +262,7 @@ func TestPriceRepository_RecordAPICall_RateLimit(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify stats
-	stats, err := repo.GetAPIUsage(ctx, "pokemonprice")
+	stats, err := repo.GetAPIUsage(ctx, "doubleholo")
 	require.NoError(t, err)
 	require.Equal(t, int64(2), stats.TotalCalls)
 	require.Equal(t, int64(1), stats.RateLimitHits)
@@ -276,17 +276,17 @@ func TestPriceRepository_IsProviderBlocked(t *testing.T) {
 	ctx := context.Background()
 
 	// Should not be blocked initially
-	blocked, _, err := repo.IsProviderBlocked(ctx, "pokemonprice")
+	blocked, _, err := repo.IsProviderBlocked(ctx, "doubleholo")
 	require.NoError(t, err)
 	require.False(t, blocked)
 
 	// Block provider
 	blockedUntil := time.Now().Add(1 * time.Hour)
-	err = repo.UpdateRateLimit(ctx, "pokemonprice", blockedUntil)
+	err = repo.UpdateRateLimit(ctx, "doubleholo", blockedUntil)
 	require.NoError(t, err)
 
 	// Should be blocked now
-	blocked, until, err := repo.IsProviderBlocked(ctx, "pokemonprice")
+	blocked, until, err := repo.IsProviderBlocked(ctx, "doubleholo")
 	require.NoError(t, err)
 	require.True(t, blocked)
 	require.True(t, until.After(time.Now()))
@@ -301,11 +301,11 @@ func TestPriceRepository_IsProviderBlocked_Expired(t *testing.T) {
 
 	// Block provider with past timestamp (already expired)
 	blockedUntil := time.Now().Add(-1 * time.Hour)
-	err := repo.UpdateRateLimit(ctx, "pokemonprice", blockedUntil)
+	err := repo.UpdateRateLimit(ctx, "doubleholo", blockedUntil)
 	require.NoError(t, err)
 
 	// Should not be blocked (expired)
-	blocked, _, err := repo.IsProviderBlocked(ctx, "pokemonprice")
+	blocked, _, err := repo.IsProviderBlocked(ctx, "doubleholo")
 	require.NoError(t, err)
 	require.False(t, blocked)
 }
@@ -393,7 +393,7 @@ func TestPriceRepository_GetStalePrices_DedupByCard(t *testing.T) {
 
 	// Store multiple grades and sources for the SAME card
 	grades := []string{"PSA 10", "PSA 9", "PSA 8", "Raw"}
-	sources := []string{"pricecharting", "pokemonprice"}
+	sources := []string{"pricecharting", "doubleholo"}
 
 	for _, grade := range grades {
 		for _, source := range sources {
@@ -464,7 +464,7 @@ func TestPriceRepository_GetLatestPricesBySource(t *testing.T) {
 			Grade:      grade,
 			PriceCents: priceCents[i],
 			Confidence: 0.95,
-			Source:     "pokemonprice",
+			Source:     "doubleholo",
 			PriceDate:  now,
 		}
 		err := repo.StorePrice(ctx, entry)
@@ -490,15 +490,15 @@ func TestPriceRepository_GetLatestPricesBySource(t *testing.T) {
 		CardNumber: "4",
 		Grade:      "PSA 10",
 		PriceCents: 999999,
-		Source:     "pokemonprice",
+		Source:     "doubleholo",
 		PriceDate:  now,
 	})
 	require.NoError(t, err)
 
-	// Retrieve all grades for pokemonprice within 48h window — filtered to card_number "4/102"
-	result, err := repo.GetLatestPricesBySource(ctx, "Charizard", "Base Set", "4/102", "pokemonprice", 48*time.Hour)
+	// Retrieve all grades for doubleholo within 48h window — filtered to card_number "4/102"
+	result, err := repo.GetLatestPricesBySource(ctx, "Charizard", "Base Set", "4/102", "doubleholo", 48*time.Hour)
 	require.NoError(t, err)
-	require.Len(t, result, 4, "should return all 4 grades for pokemonprice with card_number 4/102")
+	require.Len(t, result, 4, "should return all 4 grades for doubleholo with card_number 4/102")
 
 	// Verify each grade
 	for i, grade := range grades {
@@ -508,7 +508,7 @@ func TestPriceRepository_GetLatestPricesBySource(t *testing.T) {
 		require.Equal(t, "Charizard", entry.CardName)
 		require.Equal(t, "Base Set", entry.SetName)
 		require.Equal(t, "4/102", entry.CardNumber, "grade %s card number should be populated", grade)
-		require.Equal(t, "pokemonprice", entry.Source)
+		require.Equal(t, "doubleholo", entry.Source)
 	}
 }
 
@@ -523,26 +523,26 @@ func TestPriceRepository_GetLatestPricesBySource_VariantsDoNotCollide(t *testing
 	// Store PSA 10 price for variant #25
 	err := repo.StorePrice(ctx, &pricing.PriceEntry{
 		CardName: "Pikachu", SetName: "Celebrations", CardNumber: "25",
-		Grade: "PSA 10", PriceCents: 5000, Source: "pokemonprice", PriceDate: now,
+		Grade: "PSA 10", PriceCents: 5000, Source: "doubleholo", PriceDate: now,
 	})
 	require.NoError(t, err)
 
 	// Store PSA 10 price for variant #SWSH039 (same name/set, different number)
 	err = repo.StorePrice(ctx, &pricing.PriceEntry{
 		CardName: "Pikachu", SetName: "Celebrations", CardNumber: "SWSH039",
-		Grade: "PSA 10", PriceCents: 12000, Source: "pokemonprice", PriceDate: now,
+		Grade: "PSA 10", PriceCents: 12000, Source: "doubleholo", PriceDate: now,
 	})
 	require.NoError(t, err)
 
 	// Querying for #25 should return 5000, not 12000
-	result25, err := repo.GetLatestPricesBySource(ctx, "Pikachu", "Celebrations", "25", "pokemonprice", 48*time.Hour)
+	result25, err := repo.GetLatestPricesBySource(ctx, "Pikachu", "Celebrations", "25", "doubleholo", 48*time.Hour)
 	require.NoError(t, err)
 	require.Len(t, result25, 1)
 	require.Equal(t, int64(5000), result25["PSA 10"].PriceCents, "variant #25 price should be 5000")
 	require.Equal(t, "25", result25["PSA 10"].CardNumber)
 
 	// Querying for #SWSH039 should return 12000, not 5000
-	resultSW, err := repo.GetLatestPricesBySource(ctx, "Pikachu", "Celebrations", "SWSH039", "pokemonprice", 48*time.Hour)
+	resultSW, err := repo.GetLatestPricesBySource(ctx, "Pikachu", "Celebrations", "SWSH039", "doubleholo", 48*time.Hour)
 	require.NoError(t, err)
 	require.Len(t, resultSW, 1)
 	require.Equal(t, int64(12000), resultSW["PSA 10"].PriceCents, "variant #SWSH039 price should be 12000")
@@ -557,7 +557,7 @@ func TestPriceRepository_GetLatestPricesBySource_Empty(t *testing.T) {
 	ctx := context.Background()
 
 	// No data stored — should return empty map, not error
-	result, err := repo.GetLatestPricesBySource(ctx, "NonExistent", "No Set", "", "pokemonprice", 48*time.Hour)
+	result, err := repo.GetLatestPricesBySource(ctx, "NonExistent", "No Set", "", "doubleholo", 48*time.Hour)
 	require.NoError(t, err)
 	require.Empty(t, result)
 }
@@ -575,7 +575,7 @@ func TestPriceRepository_GetLatestPricesBySource_StaleFiltered(t *testing.T) {
 		SetName:    "Base Set",
 		Grade:      "PSA 10",
 		PriceCents: 100000,
-		Source:     "pokemonprice",
+		Source:     "doubleholo",
 		PriceDate:  time.Now(),
 	})
 	require.NoError(t, err)
@@ -585,12 +585,12 @@ func TestPriceRepository_GetLatestPricesBySource_StaleFiltered(t *testing.T) {
 	require.NoError(t, err)
 
 	// Query with a 24h window — should exclude the stale entry
-	result, err := repo.GetLatestPricesBySource(ctx, "Charizard", "Base Set", "", "pokemonprice", 24*time.Hour)
+	result, err := repo.GetLatestPricesBySource(ctx, "Charizard", "Base Set", "", "doubleholo", 24*time.Hour)
 	require.NoError(t, err)
 	require.Empty(t, result, "stale entries should be filtered out")
 
 	// Query with a 96h window — should include the entry
-	result, err = repo.GetLatestPricesBySource(ctx, "Charizard", "Base Set", "", "pokemonprice", 96*time.Hour)
+	result, err = repo.GetLatestPricesBySource(ctx, "Charizard", "Base Set", "", "doubleholo", 96*time.Hour)
 	require.NoError(t, err)
 	require.Len(t, result, 1, "entry within maxAge should be returned")
 }

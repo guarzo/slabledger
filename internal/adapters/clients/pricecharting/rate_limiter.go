@@ -9,8 +9,7 @@ import (
 // Unlike golang.org/x/time/rate (token-bucket with bursting), a ticker enforces
 // a strict minimum interval between requests. PriceCharting's API requires evenly
 // spaced calls (no bursting), which makes the ticker semantics a better fit than
-// a token-bucket limiter. Other clients (e.g., cardhedger) use
-// golang.org/x/time/rate because their APIs tolerate short bursts.
+// a token-bucket limiter.
 type TickerRateLimiter struct {
 	ticker *time.Ticker
 }

@@ -205,7 +205,7 @@ func TestBuildSourcePrices(t *testing.T) {
 
 	sources := buildSourcePrices(price, 10)
 
-	// Expect 3 sources: PriceCharting, eBay, CardHedger
+	// Expect 3 sources: PriceCharting, eBay, Estimate
 	if len(sources) != 3 {
 		t.Fatalf("buildSourcePrices returned %d sources, want 3", len(sources))
 	}
@@ -249,22 +249,22 @@ func TestBuildSourcePrices(t *testing.T) {
 		t.Errorf("eBay Volume7Day = %v, want 2.5", pp.Volume7Day)
 	}
 
-	// Verify CardHedger source
+	// Verify Estimate source
 	ch := sources[2]
-	if ch.Source != "CardHedger" {
-		t.Errorf("sources[2].Source = %q, want %q", ch.Source, "CardHedger")
+	if ch.Source != "Estimate" {
+		t.Errorf("sources[2].Source = %q, want %q", ch.Source, "Estimate")
 	}
 	if ch.PriceCents != 4700 {
-		t.Errorf("CardHedger PriceCents = %d, want 4700", ch.PriceCents)
+		t.Errorf("Estimate PriceCents = %d, want 4700", ch.PriceCents)
 	}
 	if ch.MinCents != 4200 {
-		t.Errorf("CardHedger MinCents = %d, want 4200", ch.MinCents)
+		t.Errorf("Estimate MinCents = %d, want 4200", ch.MinCents)
 	}
 	if ch.MaxCents != 5200 {
-		t.Errorf("CardHedger MaxCents = %d, want 5200", ch.MaxCents)
+		t.Errorf("Estimate MaxCents = %d, want 5200", ch.MaxCents)
 	}
 	if ch.Confidence != "high" {
-		t.Errorf("CardHedger Confidence = %q, want %q", ch.Confidence, "high")
+		t.Errorf("Estimate Confidence = %q, want %q", ch.Confidence, "high")
 	}
 }
 
@@ -276,7 +276,7 @@ func TestBuildSourcePrices_NilPCGrades(t *testing.T) {
 	}
 }
 
-func TestBuildSourcePrices_CardHedgerConfidenceLevels(t *testing.T) {
+func TestBuildSourcePrices_EstimateConfidenceLevels(t *testing.T) {
 	tests := []struct {
 		name       string
 		confidence float64
@@ -302,20 +302,20 @@ func TestBuildSourcePrices_CardHedgerConfidenceLevels(t *testing.T) {
 				},
 			}
 			sources := buildSourcePrices(price, 10)
-			// Find CardHedger source
+			// Find Estimate source
 			var found *campaigns.SourcePrice
 			for i := range sources {
-				if sources[i].Source == "CardHedger" {
+				if sources[i].Source == "Estimate" {
 					found = &sources[i]
 					break
 				}
 			}
 			if found == nil {
-				t.Fatal("CardHedger source not found")
+				t.Fatal("Estimate source not found")
 				return
 			}
 			if found.Confidence != tt.expected {
-				t.Errorf("CardHedger Confidence = %q, want %q", found.Confidence, tt.expected)
+				t.Errorf("Estimate Confidence = %q, want %q", found.Confidence, tt.expected)
 			}
 		})
 	}
@@ -688,7 +688,7 @@ func TestGetMarketSnapshot_LastSoldFallbackChain(t *testing.T) {
 		}
 	})
 
-	t.Run("fallback to CardHedger estimate when PC and eBay missing", func(t *testing.T) {
+	t.Run("fallback to estimate when PC and eBay missing", func(t *testing.T) {
 		mock := &mockPriceProvider{
 			lookupFn: func(_ context.Context, _ string, _ domainCards.Card) (*pricing.Price, error) {
 				return &pricing.Price{
@@ -706,10 +706,10 @@ func TestGetMarketSnapshot_LastSoldFallbackChain(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if snap.LastSoldCents != 0 {
-			t.Errorf("LastSoldCents = %d, want 0 (CardHedger estimate should not set LastSoldCents)", snap.LastSoldCents)
+			t.Errorf("LastSoldCents = %d, want 0 (estimate should not set LastSoldCents)", snap.LastSoldCents)
 		}
 		if snap.EstimatedValueCents != 7000 {
-			t.Errorf("EstimatedValueCents = %d, want 7000 (from CardHedger)", snap.EstimatedValueCents)
+			t.Errorf("EstimatedValueCents = %d, want 7000 (from estimate)", snap.EstimatedValueCents)
 		}
 		if snap.EstimateSource != "cardhedger" {
 			t.Errorf("EstimateSource = %q, want %q", snap.EstimateSource, "cardhedger")

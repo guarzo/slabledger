@@ -88,7 +88,7 @@ func IsInvalidCardNumber(num string) bool {
 
 // SimplifyForSearch extracts the core TCG card name by removing PSA listing noise.
 // Called after NormalizePurchaseName + StripVariantSuffix to produce a concise
-// search term for APIs like CardHedger.
+// search term for external APIs.
 //
 // Algorithm:
 //  1. Deduplicate repeated name+type pattern (e.g. "Charizard ex Charizard ex SUPER PREM COLL" -> "Charizard ex SUPER PREM COLL")
@@ -228,7 +228,7 @@ func NormalizeCardNumber(number string) string {
 }
 
 // BuildCardMatchQuery normalizes set name and card name, then builds a natural
-// language query for the CardHedger card-match endpoint.
+// language query for card-match endpoints.
 func BuildCardMatchQuery(setName, cardName, cardNumber string) string {
 	normalizedSet := NormalizeSetNameForSearch(setName)
 	simplifiedName := SimplifyForSearch(NormalizePurchaseName(cardName))

@@ -159,14 +159,14 @@ func (f *FusionPriceProvider) LookupCard(ctx context.Context, setName string, ca
 	f.cleanupStaleName(ctx, resolvedName, fusedCard.Name, setName, resolvedNumber)
 
 	// Supplement from DB under original name when names differ — batch data
-	// (CardHedger) may be stored under the original purchase name.
+	// may be stored under the original purchase name.
 	if card.Name != fusedCard.Name && f.priceRepo != nil {
 		originalCard := pricing.Card{Name: card.Name, Number: card.Number, Set: setName}
 		fd := f.freshnessDuration
 		if fd <= 0 {
 			fd = DefaultFreshnessDuration
 		}
-		f.supplementCardHedgerFromDB(ctx, result, originalCard, fd)
+		f.supplementEstimateFromDB(ctx, result, originalCard, fd)
 	}
 
 	return result, nil
@@ -207,7 +207,7 @@ func applyPCData(result, pcPrice *pricing.Price) {
 
 // cleanupStaleName deletes price history stored under oldName when it differs
 // from newName. Card ID mappings are NOT deleted — they're managed by the
-// CardHedger batch scheduler and needed by the delta poll for card resolution.
+// Stale name cleanup is needed by the delta poll for card resolution.
 func (f *FusionPriceProvider) cleanupStaleName(ctx context.Context, oldName, newName, setName, cardNumber string) {
 	if oldName == newName {
 		return

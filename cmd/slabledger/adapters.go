@@ -112,4 +112,3 @@ type psaImageUpdaterAdapter struct {
 func (a *psaImageUpdaterAdapter) UpdatePurchaseImageURLs(ctx context.Context, id, frontURL, backURL string) error {
 	return a.repo.UpdatePurchaseImageURLs(ctx, id, frontURL, backURL)
 }
-

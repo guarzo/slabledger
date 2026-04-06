@@ -1,6 +1,6 @@
 // Package normchain provides end-to-end pinning tests for the full normalization
 // chain: PSA listing title → parseCardMetadataFromTitle → PriceCharting query
-// and CardHedger query. These tests pin current behavior so that refactoring
+// and card-match query. These tests pin current behavior so that refactoring
 // normalization functions in cardutil, pricecharting, or campaigns catches
 // regressions immediately.
 package normchain
@@ -247,7 +247,7 @@ func TestNormalizationChainCHQuery(t *testing.T) {
 			chQuery := cardutil.BuildCardMatchQuery(setName, cardName, cardNumber)
 
 			if chQuery != tc.wantCHQuery {
-				t.Errorf("CardHedger query:\n  got  %q\n  want %q\n  (parsed: name=%q num=%q set=%q)", chQuery, tc.wantCHQuery, cardName, cardNumber, setName)
+				t.Errorf("card-match query:\n  got  %q\n  want %q\n  (parsed: name=%q num=%q set=%q)", chQuery, tc.wantCHQuery, cardName, cardNumber, setName)
 			}
 		})
 	}

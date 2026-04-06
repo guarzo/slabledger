@@ -20,7 +20,7 @@ type DHInventoryLister interface {
 type CampaignsHandler struct {
 	service           campaigns.Service
 	logger            observability.Logger
-	discoverer        CardDiscoverer      // optional: triggers CardHedger discovery after imports
+	discoverer        CardDiscoverer      // optional: triggers card discovery after imports
 	dhLister          DHInventoryLister   // optional: lists cards on DH after cert import
 	dhCertResolver    DHCertResolver      // optional: resolves certs against DH
 	dhPusher          DHInventoryPusher   // optional: pushes inventory to DH
@@ -34,7 +34,7 @@ type CampaignsHandler struct {
 // CampaignsHandlerOption configures optional dependencies on CampaignsHandler.
 type CampaignsHandlerOption func(*CampaignsHandler)
 
-// WithCardDiscoverer enables CardHedger discovery after imports.
+// WithCardDiscoverer enables card discovery after imports.
 func WithCardDiscoverer(d CardDiscoverer) CampaignsHandlerOption {
 	return func(h *CampaignsHandler) { h.discoverer = d }
 }

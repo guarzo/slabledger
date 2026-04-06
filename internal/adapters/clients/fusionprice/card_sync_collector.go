@@ -31,12 +31,11 @@ const (
 // Source abbreviations for compact logging
 const (
 	SourcePriceCharting = "PC"
-	SourceCardHedger    = "CH"
 )
 
 // SourceResult represents the outcome of a price source lookup
 type SourceResult struct {
-	Source   string // Short code: "PC", "CH"
+	Source   string // Short code: "PC"
 	Success  bool
 	ErrCode  ErrorCode
 	Latency  time.Duration
@@ -242,7 +241,7 @@ func (c *CardSyncCollector) buildSourcesString() string {
 	}
 
 	// Define order for consistent output
-	order := []string{SourcePriceCharting, SourceCardHedger}
+	order := []string{SourcePriceCharting}
 	sourceMap := make(map[string]SourceResult)
 	for _, s := range c.sources {
 		sourceMap[s.Source] = s

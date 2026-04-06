@@ -1,7 +1,7 @@
 // Package fusion implements multi-source data aggregation with confidence scoring.
 //
-// The fusion engine combines price data from secondary sources (currently
-// CardHedger) to produce more accurate and confident price estimates.
+// The fusion engine combines price data from secondary sources to produce more
+// accurate and confident price estimates.
 //
 // # Fusion Algorithm
 //
@@ -12,7 +12,7 @@
 //
 // # Source Weights
 //
-//   - CardHedger: 0.85 (price estimates with confidence ranges)
+//   - DoubleHolo: 0.90 (recent sales data)
 //
 // PriceCharting provides market data only; it is not included as a fusion source.
 //

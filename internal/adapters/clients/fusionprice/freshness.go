@@ -94,7 +94,7 @@ func (f *FusionPriceProvider) getStalePrice(ctx context.Context, card pricing.Ca
 // supplementWithCachedDetails applies cached grade details to a price retrieved from DB.
 // The details cache has a longer TTL than the main cache, so details survive between
 // main cache expiry and the DB freshness window.
-// Falls back to querying the DB for CardHedger and PriceCharting prices when the
+// Falls back to querying the DB for PriceCharting and estimate prices when the
 // in-memory cache has expired.
 func (f *FusionPriceProvider) supplementWithCachedDetails(ctx context.Context, price *pricing.Price, card pricing.Card) {
 	if price == nil {
@@ -126,8 +126,8 @@ func (f *FusionPriceProvider) supplementWithCachedDetails(ctx context.Context, p
 	// Reconstruct PriceCharting raw grades from DB
 	f.supplementPCGradesFromDB(ctx, price, card, fd)
 
-	// Reconstruct CardHedger EstimateGradeDetail from DB-stored batch data
-	f.supplementCardHedgerFromDB(ctx, price, card, fd)
+	// Reconstruct estimate grade details from DB-stored batch data
+	f.supplementEstimateFromDB(ctx, price, card, fd)
 
 	// Reconstruct JustTCG NM price from DB
 	f.supplementJustTCGFromDB(ctx, price, card, fd)
@@ -185,10 +185,11 @@ func (f *FusionPriceProvider) supplementFromDB(ctx context.Context, card pricing
 	}
 }
 
-// supplementCardHedgerFromDB queries the DB for CardHedger prices stored by the
-// batch/delta schedulers and adds them as EstimateGradeDetail entries.
-func (f *FusionPriceProvider) supplementCardHedgerFromDB(ctx context.Context, price *pricing.Price, card pricing.Card, freshness time.Duration) {
-	f.supplementFromDB(ctx, card, pricing.SourceCardHedger, freshness, func(gk gradeDBKey, entry *pricing.PriceEntry) {
+// supplementEstimateFromDB queries the DB for estimate prices stored by batch/delta
+// schedulers and adds them as EstimateGradeDetail entries. Reads records stored under
+// any secondary source (currently "cardhedger" legacy records in the DB).
+func (f *FusionPriceProvider) supplementEstimateFromDB(ctx context.Context, price *pricing.Price, card pricing.Card, freshness time.Duration) {
+	f.supplementFromDB(ctx, card, "cardhedger", freshness, func(gk gradeDBKey, entry *pricing.PriceEntry) {
 		if price.GradeDetails == nil {
 			price.GradeDetails = make(map[string]*pricing.GradeDetail)
 		}
@@ -225,8 +226,8 @@ func (f *FusionPriceProvider) supplementPCGradesFromDB(ctx context.Context, pric
 
 // supplementJustTCGFromDB queries the DB for JustTCG NM prices and populates
 // price.Grades.RawNMCents. This is separate from the standard supplementFromDB
-// flow because GradeRawNM is not in CoreGrades (adding it would cause CardHedger
-// to request an unsupported grade).
+// flow because GradeRawNM is not in CoreGrades (it is condition-specific, not a
+// fusion grade).
 func (f *FusionPriceProvider) supplementJustTCGFromDB(ctx context.Context, price *pricing.Price, card pricing.Card, freshness time.Duration) {
 	if f.priceRepo == nil || price.Grades.RawNMCents > 0 {
 		return
@@ -303,7 +304,7 @@ func buildSourcesFromData(price *pricing.Price) []string {
 			}
 		}
 		if hasEstimate {
-			sources = append(sources, pricing.SourceCardHedger)
+			sources = append(sources, "cardhedger")
 		}
 	}
 	if price.Grades.RawNMCents > 0 {

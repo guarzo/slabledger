@@ -7,9 +7,9 @@
 //   - withOnDemand (ctxKeyOnDemand):
 //     Marks the call as user-initiated (e.g. via LookupCard).
 //     When set, PriceCharting is excluded (already queried upstream with the
-//     correct product identity). All secondary sources (CardHedger)
-//     remain available; each has its own rate limiter and
-//     429-block tracking. Set by FusionPriceProvider.LookupCard.
+//     correct product identity). All secondary sources remain available; each
+//     has its own rate limiter and 429-block tracking.
+//     Set by FusionPriceProvider.LookupCard.
 //
 //   - withNoStale (ctxKeyNoStale):
 //     Prevents falling back to stale DB prices.
@@ -88,9 +88,8 @@ func (f *FusionPriceProvider) isProviderClientAvailable(provider string) bool {
 // getAvailableSources checks which providers are available (not blocked).
 // On-demand calls (via LookupCard) exclude PriceCharting (already queried
 // by LookupCard with the correct product identity). All secondary sources
-// (CardHedger) remain available — each has its own rate
-// limiter and 429-block tracking, so individual source failures don't
-// cascade to other sources.
+// remain available — each has its own rate limiter and 429-block tracking,
+// so individual source failures don't cascade to other sources.
 func (f *FusionPriceProvider) getAvailableSources(ctx context.Context) []string {
 	onDemand := isOnDemand(ctx)
 
@@ -206,7 +205,7 @@ func (f *FusionPriceProvider) fetchFromAvailableSources(ctx context.Context, car
 			pcPriceMu.Unlock()
 			// PriceCharting is used for market data only (sales velocity, listings,
 			// conservative exits, last sold). Its prices are NOT fed into the fusion
-			// engine — CardHedger provides graded pricing.
+			// engine — secondary sources provide graded pricing.
 		}()
 	}
 

@@ -9,7 +9,7 @@
 //	normalizeCardName(name, normalizedSet) -> pcAbbreviations -> strip boilerplate -> strip set prefix
 //	buildQuery(set, name, num) -> "pokemon <set> <name> #<num>"
 //
-// Pipeline 2 -- CardHedger Query Building (fusionprice package):
+// Pipeline 2 -- Secondary Source Query Building (fusionprice package):
 //
 //	BuildCardMatchQuery -> NormalizeSetNameForSearch(set) + SimplifyForSearch(NormalizePurchaseName(name)) + number
 //	Fallback: truncateAtVariant(name) + eraPrefix + number
@@ -55,7 +55,7 @@ var BaseAbbreviations = []BaseAbbreviation{
 }
 
 // PSAAbbreviations maps PSA listing abbreviations (dash-prefixed) to expanded
-// forms. Used by NormalizePurchaseName for CardHedger/fusion pipeline.
+// forms. Used by NormalizePurchaseName for the secondary source/fusion pipeline.
 // Derived from BaseAbbreviations with dash prefix, plus -holo which is
 // cardutil-specific (PriceCharting relies on hyphen->space conversion instead).
 var PSAAbbreviations = func() [][2]string {

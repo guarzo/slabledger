@@ -42,7 +42,7 @@ func NewCardRequestRepository(db *sql.DB) *CardRequestRepository {
 	return &CardRequestRepository{db: db}
 }
 
-// TrackMissingCert records a cert whose card is not linked in CardHedger.
+// TrackMissingCert records a cert whose card has not been linked to a pricing source.
 // Only inserts if no row already exists for the (grader, cert) pair.
 func (r *CardRequestRepository) TrackMissingCert(ctx context.Context, cert, grader, grade, description string) error {
 	_, err := r.db.ExecContext(ctx,
@@ -174,7 +174,7 @@ func (r *CardRequestRepository) RevertClaim(ctx context.Context, id int64) error
 	return err
 }
 
-// UpdateSubmitted marks a submission as submitted with the CardHedger request ID.
+// UpdateSubmitted marks a submission as submitted with the external request ID.
 func (r *CardRequestRepository) UpdateSubmitted(ctx context.Context, id int64, requestID string) error {
 	now := time.Now()
 	_, err := r.db.ExecContext(ctx,
