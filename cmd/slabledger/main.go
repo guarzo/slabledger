@@ -194,8 +194,8 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		return fmt.Errorf("run migrations: %w", err)
 	}
 
-	// Create price repository
-	priceRepo := sqlite.NewPriceRepository(db)
+	// Create DB tracker (API tracking, access tracking, health checks)
+	priceRepo := sqlite.NewDBTracker(db)
 
 	// Initialize authentication
 	var authService auth.Service
@@ -248,7 +248,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	suggestionsRepo := sqlite.NewDHSuggestionsRepository(db.DB)
 
 	priceProvImpl, err := initializePriceProviders(
-		ctx, cfg, logger, cardIDMappingRepo,
+		ctx, logger, cardIDMappingRepo,
 		dhClient,
 	)
 	if err != nil {
@@ -344,7 +344,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	schedulerResult, cancelScheduler := initializeSchedulers(ctx, schedulerDeps{
 		Config:               cfg,
 		Logger:               logger,
-		PriceRepo:            priceRepo,
+		DBTracker:            priceRepo,
 		PriceProvImpl:        priceProvImpl,
 		CardProvImpl:         cardProvImpl,
 		AuthService:          authService,

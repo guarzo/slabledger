@@ -35,7 +35,6 @@ import (
 // initializePriceProviders creates the DH price provider.
 func initializePriceProviders(
 	ctx context.Context,
-	_ *config.Config,
 	logger observability.Logger,
 	cardIDMappingRepo *sqlite.CardIDMappingRepository,
 	dhClient *dh.Client,
@@ -295,7 +294,7 @@ func initializeCardLadder(
 type schedulerDeps struct {
 	Config               *config.Config
 	Logger               observability.Logger
-	PriceRepo            *sqlite.PriceRepository
+	DBTracker            *sqlite.DBTracker
 	PriceProvImpl        pricing.PriceProvider
 	CardProvImpl         *tcgdex.TCGdex
 	AuthService          auth.Service
@@ -326,10 +325,9 @@ type schedulerDeps struct {
 func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.BuildResult, context.CancelFunc) {
 	schedulerCtx, cancelScheduler := context.WithCancel(ctx)
 	buildDeps := scheduler.BuildDeps{
-		PriceRepo:                deps.PriceRepo,
-		APITracker:               deps.PriceRepo,
-		HealthChecker:            deps.PriceRepo,
-		AccessTracker:            deps.PriceRepo,
+		APITracker:               deps.DBTracker,
+		HealthChecker:            deps.DBTracker,
+		AccessTracker:            deps.DBTracker,
 		PriceProvider:            deps.PriceProvImpl,
 		CardProvider:             deps.CardProvImpl,
 		AuthService:              deps.AuthService,

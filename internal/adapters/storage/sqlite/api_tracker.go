@@ -11,7 +11,7 @@ import (
 )
 
 // RecordAPICall records an API call for tracking
-func (r *PriceRepository) RecordAPICall(ctx context.Context, call *pricing.APICallRecord) error {
+func (r *DBTracker) RecordAPICall(ctx context.Context, call *pricing.APICallRecord) error {
 
 	query := `
 		INSERT INTO api_calls (provider, endpoint, status_code, error, latency_ms, timestamp)
@@ -38,7 +38,7 @@ func (r *PriceRepository) RecordAPICall(ctx context.Context, call *pricing.APICa
 }
 
 // GetAPIUsage retrieves API usage statistics for a provider.
-func (r *PriceRepository) GetAPIUsage(ctx context.Context, provider string) (*pricing.APIUsageStats, error) {
+func (r *DBTracker) GetAPIUsage(ctx context.Context, provider string) (*pricing.APIUsageStats, error) {
 
 	query := `
 		SELECT
@@ -101,7 +101,7 @@ func (r *PriceRepository) GetAPIUsage(ctx context.Context, provider string) (*pr
 }
 
 // UpdateRateLimit updates the rate limit block status for a provider
-func (r *PriceRepository) UpdateRateLimit(ctx context.Context, provider string, blockedUntil time.Time) error {
+func (r *DBTracker) UpdateRateLimit(ctx context.Context, provider string, blockedUntil time.Time) error {
 
 	query := `
 		INSERT INTO api_rate_limits (provider, blocked_until, last_429_at, updated_at)
@@ -131,7 +131,7 @@ func (r *PriceRepository) UpdateRateLimit(ctx context.Context, provider string, 
 }
 
 // IsProviderBlocked checks if a provider is currently rate limited
-func (r *PriceRepository) IsProviderBlocked(ctx context.Context, provider string) (bool, time.Time, error) {
+func (r *DBTracker) IsProviderBlocked(ctx context.Context, provider string) (bool, time.Time, error) {
 	query := `
 		SELECT blocked_until
 		FROM api_rate_limits

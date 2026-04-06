@@ -21,7 +21,6 @@ import (
 
 // BuildDeps holds the dependencies needed to build the scheduler group.
 type BuildDeps struct {
-	PriceRepo     pricing.PriceRepository
 	APITracker    pricing.APITracker
 	HealthChecker pricing.HealthChecker
 	AccessTracker pricing.AccessTracker
@@ -115,7 +114,7 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 		Enabled:            cfg.PriceRefresh.Enabled,
 	}
 	priceScheduler := NewPriceRefreshScheduler(
-		deps.PriceRepo, deps.APITracker, deps.HealthChecker, deps.PriceProvider,
+		deps.APITracker, deps.HealthChecker, deps.PriceProvider,
 		deps.Logger, schedulerConfig,
 	)
 	schedulers = append(schedulers, priceScheduler)

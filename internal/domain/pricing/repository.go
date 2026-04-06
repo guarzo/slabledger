@@ -5,32 +5,6 @@ import (
 	"time"
 )
 
-// PriceRepository defines the persistence interface for price data.
-// This interface is implemented by adapters (e.g., SQLite) and used by domain services.
-type PriceRepository interface {
-	// Price persistence
-	StorePrice(ctx context.Context, entry *PriceEntry) error
-	GetLatestPrice(ctx context.Context, card Card, grade string, source string) (*PriceEntry, error)
-
-	// GetLatestPricesBySource retrieves the latest price entry per grade for a given
-	// card/source combination. Only entries with updated_at within maxAge are returned.
-	// The returned map is keyed by grade string (e.g. "PSA 10", "Raw").
-	// When cardNumber is non-empty, results are filtered to that specific card variant.
-	GetLatestPricesBySource(ctx context.Context, cardName, setName, cardNumber, source string, maxAge time.Duration) (map[string]PriceEntry, error)
-
-	// DeletePricesByCard removes all price history entries for a specific card identity.
-	// Used to clean up stale entries when card resolution changes (e.g., name correction).
-	// When cardNumber is non-empty, only the specific variant is deleted.
-	DeletePricesByCard(ctx context.Context, cardName, setName, cardNumber string) (int64, error)
-
-	// Stale price detection for selective refresh
-	// Note: Staleness thresholds are defined in the stale_prices VIEW based on price value:
-	// - High value (>$100): stale after 12 hours
-	// - Medium value ($50-$100): stale after 24 hours
-	// - Low value (<$50): stale after 48 hours
-	GetStalePrices(ctx context.Context, source string, limit int) ([]StalePrice, error)
-}
-
 // APITracker defines the interface for tracking API calls and rate limiting.
 type APITracker interface {
 	RecordAPICall(ctx context.Context, call *APICallRecord) error
@@ -50,41 +24,6 @@ type AccessTracker interface {
 // HealthChecker defines the interface for health checks.
 type HealthChecker interface {
 	Ping(ctx context.Context) error
-}
-
-// PriceEntry represents a single price observation
-type PriceEntry struct {
-	CardName   string
-	SetName    string
-	CardNumber string
-	Grade      string
-
-	PriceCents int64
-	Confidence float64
-	Source     string
-
-	// Fusion metadata
-	FusionSourceCount     int
-	FusionOutliersRemoved int
-	FusionMethod          string
-
-	PriceDate time.Time
-	CreatedAt time.Time
-	UpdatedAt time.Time
-}
-
-// StalePrice identifies prices needing refresh
-type StalePrice struct {
-	CardName        string
-	CardNumber      string
-	SetName         string
-	Grade           string
-	Source          string
-	DaysOld         float64
-	HoursOld        float64
-	LastPrice       int64
-	Priority        int
-	PSAListingTitle string // From campaign_purchases (empty if no purchase match)
 }
 
 // APICallRecord tracks individual API calls

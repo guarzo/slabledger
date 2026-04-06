@@ -11,10 +11,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// mockPriceRepository embeds mocks.MockPriceRepository and overrides
+// mockPriceRepository embeds mocks.MockDBTracker and overrides
 // CleanupOldAccessLogs and Ping with custom test-specific behavior.
 type mockPriceRepository struct {
-	mocks.MockPriceRepository
+	mocks.MockDBTracker
 	cleanupCalls       int
 	cleanupReturnCount int64
 	cleanupReturnError error
