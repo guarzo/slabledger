@@ -37,21 +37,16 @@ const (
 // and prevent the LLM from calling irrelevant tools.
 var operationTools = map[AIOperation][]string{
 	OpDigest: {
-		"list_campaigns", "get_campaign_pnl", "get_pnl_by_channel",
-		"get_campaign_tuning", "get_inventory_aging", "get_global_inventory",
-		"get_sell_sheet", "get_portfolio_health", "get_portfolio_insights",
-		"get_credit_summary", "get_weekly_review", "get_capital_timeline",
-		"get_channel_velocity", "get_dashboard_summary",
-		"get_acquisition_targets", "get_crack_opportunities",
-		"get_dh_suggestions", "get_inventory_alerts",
-		"get_data_gap_report", "get_expected_values_batch",
+		"get_dashboard_summary", "get_weekly_review", "get_global_inventory",
+		"get_portfolio_insights", "get_flagged_inventory", "get_inventory_alerts",
+		"get_acquisition_targets", "get_crack_opportunities", "get_dh_suggestions",
+		"get_expected_values_batch",
+		"get_campaign_tuning", "get_campaign_pnl",
 	},
 	OpCampaignAnalysis: {
-		"list_campaigns", "get_campaign_pnl", "get_pnl_by_channel",
-		"get_campaign_tuning", "get_inventory_aging", "get_expected_values",
-		"get_crack_candidates", "get_campaign_suggestions", "run_projection",
-		"get_channel_velocity", "get_credit_summary",
-		"get_market_intelligence",
+		"get_campaign_pnl", "get_pnl_by_channel",
+		"get_campaign_tuning", "get_inventory_aging",
+		"get_expected_values", "get_crack_candidates",
 	},
 	OpLiquidation: {
 		"get_dashboard_summary", "get_flagged_inventory",
@@ -59,10 +54,8 @@ var operationTools = map[AIOperation][]string{
 		"get_expected_values_batch", "suggest_price_batch",
 	},
 	OpPurchaseAssessment: {
-		"list_campaigns", "get_campaign_tuning", "get_portfolio_insights",
-		"get_cert_lookup", "evaluate_purchase", "get_campaign_pnl",
-		"get_channel_velocity",
-		"get_market_intelligence",
+		"get_campaign_tuning", "get_cert_lookup",
+		"evaluate_purchase", "get_campaign_pnl",
 	},
 }
 
@@ -226,21 +219,23 @@ func (s *service) CollectLiquidation(ctx context.Context) (string, error) {
 	return s.runAnalysis(ctx, OpLiquidation, sysPrompt, liquidationUserPrompt, func(StreamEvent) {})
 }
 
-// operationMaxRounds overrides s.maxToolRounds when scoring is active.
+// operationMaxRounds overrides s.maxToolRounds per operation.
 // PurchaseAssessment needs only 1 round since scores are pre-computed.
 // CampaignAnalysis and Liquidation use 3 rounds to accommodate batch tools
 // and larger workflows (prompt says 2 rounds but suggest_price_batch may
 // need a separate round after reading EV data).
+// Digest uses 4 rounds: 9 broad tools, then EV batch, then optional deep dive, plus escape hatch.
 var operationMaxRounds = map[AIOperation]int{
 	OpPurchaseAssessment: 1,
 	OpCampaignAnalysis:   3,
+	OpDigest:             4,
 	OpLiquidation:        3,
 }
 
 // toolCallingLoop orchestrates the LLM -> tool -> LLM cycle.
 func (s *service) toolCallingLoop(ctx context.Context, operation AIOperation, systemPrompt string, messages []Message, stream func(StreamEvent)) (string, error) {
 	maxRounds := s.maxToolRounds
-	if override, ok := operationMaxRounds[operation]; ok && s.scoringData != nil {
+	if override, ok := operationMaxRounds[operation]; ok {
 		maxRounds = override
 	}
 	var tools []ToolDefinition
