@@ -37,14 +37,11 @@ const (
 // and prevent the LLM from calling irrelevant tools.
 var operationTools = map[AIOperation][]string{
 	OpDigest: {
-		"list_campaigns", "get_campaign_pnl", "get_pnl_by_channel",
-		"get_campaign_tuning", "get_inventory_aging", "get_global_inventory",
-		"get_sell_sheet", "get_portfolio_health", "get_portfolio_insights",
-		"get_credit_summary", "get_weekly_review", "get_capital_timeline",
-		"get_channel_velocity", "get_dashboard_summary",
-		"get_acquisition_targets", "get_crack_opportunities",
-		"get_dh_suggestions", "get_inventory_alerts",
-		"get_data_gap_report", "get_expected_values_batch",
+		"get_dashboard_summary", "get_weekly_review", "get_global_inventory",
+		"get_portfolio_insights", "get_flagged_inventory", "get_inventory_alerts",
+		"get_acquisition_targets", "get_crack_opportunities", "get_dh_suggestions",
+		"get_expected_values_batch",
+		"get_campaign_tuning", "get_campaign_pnl",
 	},
 	OpCampaignAnalysis: {
 		"list_campaigns", "get_campaign_pnl", "get_pnl_by_channel",
@@ -234,6 +231,7 @@ func (s *service) CollectLiquidation(ctx context.Context) (string, error) {
 var operationMaxRounds = map[AIOperation]int{
 	OpPurchaseAssessment: 1,
 	OpCampaignAnalysis:   3,
+	OpDigest:             4,
 	OpLiquidation:        3,
 }
 

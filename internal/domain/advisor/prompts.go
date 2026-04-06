@@ -42,40 +42,38 @@ Generate a comprehensive weekly business review. Fetch all relevant data using t
 Focus on actionable insights, not data recitation. Lead with what matters most this week.
 
 ## Tool Strategy
-You have a **3-round tool budget**. Plan your calls carefully:
+You have a **3-round tool budget** and 12 tools.
 
-**Round 1**: Call get_dashboard_summary alongside the broad tools you need
-(get_weekly_review, get_credit_summary, get_global_inventory, get_sell_sheet, get_portfolio_insights,
-get_acquisition_targets, get_crack_opportunities).
-These give you everything for the digest.
+**Round 1**: Call these together for a complete portfolio picture:
+get_dashboard_summary, get_weekly_review, get_global_inventory, get_portfolio_insights,
+get_flagged_inventory, get_inventory_alerts, get_acquisition_targets,
+get_crack_opportunities, get_dh_suggestions.
 
-**Round 2**: Use get_expected_values_batch (one call, all campaigns) for portfolio-wide EV data.
-Only if a specific campaign needs a deep dive based on Round 1 findings
-(e.g., a campaign flagged as critical), call at most 1-2 targeted tools (get_campaign_tuning, get_inventory_aging).
+**Round 2**: Call get_expected_values_batch (one call, all campaigns) for portfolio-wide EV data.
+Only if a specific campaign needs a deep dive based on Round 1 findings,
+call at most 1-2 targeted tools (get_campaign_tuning, get_campaign_pnl).
 
-**Round 3**: Escape hatch for follow-up calls if needed. Prefer completing the report after Round 2.
+**Round 3**: Escape hatch only if absolutely needed. Prefer completing the report after Round 2.
 
 Do NOT call get_campaign_tuning or get_campaign_pnl for every campaign — that data is already
 summarized in get_dashboard_summary and get_portfolio_insights.
 
-Do NOT call get_expected_values per-campaign — use get_expected_values_batch instead.
-
-After your tool rounds, write your report with the data you have. Do not make additional tool calls.`
+**After your tool rounds, write your report immediately. Do NOT make additional tool calls.**`
 
 const digestUserPrompt = `Generate my weekly intelligence digest. Fetch current data on:
 1. Weekly performance (week-over-week changes)
-2. Credit health and utilization
+2. Cash flow (outstanding balance, projected exposure, payment status)
 3. Portfolio insights (which segments are over/underperforming)
-4. Global inventory aging (what needs attention)
-5. Sell sheet recommendations
+4. Inventory signals (flagged cards needing action)
+5. Arbitrage opportunities (acquisition targets and crack candidates)
 
 Structure your report as:
 1. **Executive Summary** — 2-3 sentence overview of this week
 2. **Performance** — purchases, spend, sales, revenue, profit vs last week
-3. **Credit Health** — utilization, outstanding, days to next invoice, risk level
+3. **Cash Flow** — outstanding balance, projected exposure, unpaid invoices, days to next invoice
 4. **Top Actions** — 3-5 specific prioritized recommendations
 5. **Segment Insights** — outperformers and underperformers by character/grade/era
-6. **Watch List** — cards or segments that need attention soon
+6. **Watch List** — cards flagged by inventory signals (stale, cut-loss, profit capture) plus any segments needing attention
 7. **Arbitrage Opportunities** — top acquisition targets (buy raw, grade for profit) and crack candidates (sell raw beats selling graded)
 
 Format guidelines:
