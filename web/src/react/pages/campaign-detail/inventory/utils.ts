@@ -43,13 +43,13 @@ export function velocityLabel(snap: MarketSnapshot): string | null {
   return null;
 }
 
-/** Get a source price by type: 'ebay' matches pokemon/ebay sources, 'estimate' matches cardhedger/estimate. */
+/** Get a source price by type: 'ebay' matches pokemon/ebay sources, 'estimate' matches estimate sources. */
 export function getSourceByType(sources: SourcePrice[] | undefined, type: 'ebay' | 'estimate'): SourcePrice | undefined {
   if (!sources) return undefined;
   if (type === 'ebay') {
     return sources.find(s => /pokemon|ebay/i.test(s.source));
   }
-  return sources.find(s => /cardhedger|estimate/i.test(s.source));
+  return sources.find(s => /estimate/i.test(s.source));
 }
 
 /** Format a YYYY-MM-DD date string to short form (e.g., "3/5"). */

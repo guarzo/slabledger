@@ -213,19 +213,19 @@ func TestHandlePriceHints_POST_InvalidProvider(t *testing.T) {
 	}
 }
 
-func TestHandlePriceHints_POST_CardhedgerProvider(t *testing.T) {
+func TestHandlePriceHints_POST_DoubleHoloProvider(t *testing.T) {
 	resolver := &mockPriceHintResolver{
 		saveHintFn: func(_ context.Context, _, _, _, _, _ string) error { return nil },
 	}
 	h := newPriceHintsHandler(resolver)
 
-	body := `{"cardName":"Pikachu","setName":"Base Set","cardNumber":"58","provider":"cardhedger","externalId":"xyz"}`
+	body := `{"cardName":"Pikachu","setName":"Base Set","cardNumber":"58","provider":"doubleholo","externalId":"xyz"}`
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/price-hints", strings.NewReader(body))
 	h.HandlePriceHints(rec, req)
 
 	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200 for cardhedger provider, got %d", rec.Code)
+		t.Fatalf("expected 200 for doubleholo provider, got %d", rec.Code)
 	}
 }
 
