@@ -156,6 +156,9 @@ func dhGradeToFusionKey(company, grade string) string {
 		return pricing.GradePSA6.String()
 	case "BGS 10":
 		return pricing.GradeBGS10.String()
+	// BGS 9.5 and CGC 9.5 are mapped to PSA 9.5 for pricing interoperability.
+	// This is an approximation — cross-grader equivalence is not exact, but
+	// close enough for market-comparison purposes in the fusion engine.
 	case "BGS 9.5":
 		return pricing.GradePSA95.String()
 	case "CGC 9.5":

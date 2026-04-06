@@ -133,6 +133,9 @@ func (h *CampaignsHandler) inlineMatchAndPush(ctx context.Context, p *campaigns.
 					observability.String("cert", p.CertNumber), observability.Err(err))
 			}
 		}
+		h.logger.Warn(ctx, "inline dh cert resolve: unmatched",
+			observability.String("cert", p.CertNumber),
+			observability.String("dh_status", string(resp.Status)))
 		return 0
 	}
 

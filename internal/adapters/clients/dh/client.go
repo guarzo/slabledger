@@ -128,19 +128,21 @@ func (c *Client) MarketDataEnterprise(ctx context.Context, cardID int) (*MarketD
 	}
 
 	resp := &MarketDataResponse{
-		HasData:   true,
 		CardID:    lookup.Card.ID,
 		CardTitle: lookup.Card.Name,
 	}
 
 	if lookup.MarketData.MidPrice != nil {
 		resp.CurrentPrice = *lookup.MarketData.MidPrice
+		resp.HasData = true
 	}
 	if lookup.MarketData.LowPrice != nil {
 		resp.PeriodLow = *lookup.MarketData.LowPrice
+		resp.HasData = true
 	}
 	if lookup.MarketData.HighPrice != nil {
 		resp.PeriodHigh = *lookup.MarketData.HighPrice
+		resp.HasData = true
 	}
 
 	sales, err := c.RecentSales(ctx, cardID)
@@ -149,8 +151,9 @@ func (c *Client) MarketDataEnterprise(ctx context.Context, cardID int) (*MarketD
 			c.logger.Warn(ctx, "dh: recent sales fetch failed, returning partial market data",
 				observability.Int("card_id", cardID), observability.Err(err))
 		}
-	} else {
+	} else if len(sales) > 0 {
 		resp.RecentSales = sales
+		resp.HasData = true
 	}
 
 	return resp, nil

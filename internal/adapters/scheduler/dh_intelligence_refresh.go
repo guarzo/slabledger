@@ -94,8 +94,9 @@ func (s *DHIntelligenceRefreshScheduler) refresh(ctx context.Context) {
 	for _, entry := range stale {
 		cardIDInt, convErr := strconv.Atoi(entry.DHCardID)
 		if convErr != nil {
-			s.logger.Warn(ctx, "invalid DH card ID",
+			s.logger.Warn(ctx, "skipping non-numeric DH card ID (legacy or malformed)",
 				observability.String("dh_card_id", entry.DHCardID),
+				observability.String("card_name", entry.CardName),
 				observability.Err(convErr))
 			failed++
 			continue

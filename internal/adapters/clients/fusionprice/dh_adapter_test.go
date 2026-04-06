@@ -7,30 +7,11 @@ import (
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	"github.com/guarzo/slabledger/internal/domain/pricing"
+	"github.com/guarzo/slabledger/internal/testutil/mocks"
 )
 
-// --- mock types ---
-
-type mockDHMarketDataClient struct {
-	RecentSalesFn func(ctx context.Context, cardID int) ([]dh.RecentSale, error)
-}
-
-func (m *mockDHMarketDataClient) RecentSales(ctx context.Context, cardID int) ([]dh.RecentSale, error) {
-	return m.RecentSalesFn(ctx, cardID)
-}
-
-type mockDHCardIDLookup struct {
-	GetExternalIDFn func(ctx context.Context, cardName, setName, collectorNumber, provider string) (string, error)
-}
-
-func (m *mockDHCardIDLookup) GetExternalID(ctx context.Context, cardName, setName, collectorNumber, provider string) (string, error) {
-	return m.GetExternalIDFn(ctx, cardName, setName, collectorNumber, provider)
-}
-
-// --- tests ---
-
 func TestDHAdapter_FetchFusionData_WithSales(t *testing.T) {
-	client := &mockDHMarketDataClient{
+	client := &mocks.MockDHMarketDataClient{
 		RecentSalesFn: func(_ context.Context, cardID int) ([]dh.RecentSale, error) {
 			if cardID != 12345 {
 				t.Fatalf("unexpected cardID: %d", cardID)
@@ -48,7 +29,7 @@ func TestDHAdapter_FetchFusionData_WithSales(t *testing.T) {
 		},
 	}
 
-	idLookup := &mockDHCardIDLookup{
+	idLookup := &mocks.MockDHCardIDLookup{
 		GetExternalIDFn: func(_ context.Context, _, _, _, provider string) (string, error) {
 			if provider != pricing.SourceDH {
 				t.Fatalf("unexpected provider: %s", provider)
@@ -146,14 +127,14 @@ func TestDHAdapter_FetchFusionData_WithSales(t *testing.T) {
 }
 
 func TestDHAdapter_FetchFusionData_NoMapping(t *testing.T) {
-	client := &mockDHMarketDataClient{
+	client := &mocks.MockDHMarketDataClient{
 		RecentSalesFn: func(_ context.Context, _ int) ([]dh.RecentSale, error) {
 			t.Fatal("RecentSales should not be called when there is no mapping")
 			return nil, nil
 		},
 	}
 
-	idLookup := &mockDHCardIDLookup{
+	idLookup := &mocks.MockDHCardIDLookup{
 		GetExternalIDFn: func(_ context.Context, _, _, _, _ string) (string, error) {
 			return "", nil // no mapping
 		},
@@ -176,13 +157,13 @@ func TestDHAdapter_FetchFusionData_NoMapping(t *testing.T) {
 }
 
 func TestDHAdapter_FetchFusionData_NoData(t *testing.T) {
-	client := &mockDHMarketDataClient{
+	client := &mocks.MockDHMarketDataClient{
 		RecentSalesFn: func(_ context.Context, _ int) ([]dh.RecentSale, error) {
 			return []dh.RecentSale{}, nil
 		},
 	}
 
-	idLookup := &mockDHCardIDLookup{
+	idLookup := &mocks.MockDHCardIDLookup{
 		GetExternalIDFn: func(_ context.Context, _, _, _, _ string) (string, error) {
 			return "999", nil
 		},
@@ -205,14 +186,14 @@ func TestDHAdapter_FetchFusionData_NoData(t *testing.T) {
 }
 
 func TestDHAdapter_FetchFusionData_LookupError(t *testing.T) {
-	client := &mockDHMarketDataClient{
+	client := &mocks.MockDHMarketDataClient{
 		RecentSalesFn: func(_ context.Context, _ int) ([]dh.RecentSale, error) {
 			t.Fatal("RecentSales should not be called when lookup errors")
 			return nil, nil
 		},
 	}
 
-	idLookup := &mockDHCardIDLookup{
+	idLookup := &mocks.MockDHCardIDLookup{
 		GetExternalIDFn: func(_ context.Context, _, _, _, _ string) (string, error) {
 			return "", fmt.Errorf("db connection failed")
 		},
@@ -244,19 +225,19 @@ func TestDHAdapter_Available(t *testing.T) {
 	}{
 		{
 			name:       "both set",
-			client:     &mockDHMarketDataClient{},
-			idResolver: &mockDHCardIDLookup{},
+			client:     &mocks.MockDHMarketDataClient{},
+			idResolver: &mocks.MockDHCardIDLookup{},
 			want:       true,
 		},
 		{
 			name:       "nil client",
 			client:     nil,
-			idResolver: &mockDHCardIDLookup{},
+			idResolver: &mocks.MockDHCardIDLookup{},
 			want:       false,
 		},
 		{
 			name:       "nil resolver",
-			client:     &mockDHMarketDataClient{},
+			client:     &mocks.MockDHMarketDataClient{},
 			idResolver: nil,
 			want:       false,
 		},
@@ -317,7 +298,7 @@ func TestDHGradeToFusionKey(t *testing.T) {
 }
 
 func TestDHAdapter_FetchFusionData_SkipsZeroPriceSales(t *testing.T) {
-	client := &mockDHMarketDataClient{
+	client := &mocks.MockDHMarketDataClient{
 		RecentSalesFn: func(_ context.Context, _ int) ([]dh.RecentSale, error) {
 			return []dh.RecentSale{
 				{GradingCompany: "PSA", Grade: "10", Price: 0, Platform: "eBay"},
@@ -327,7 +308,7 @@ func TestDHAdapter_FetchFusionData_SkipsZeroPriceSales(t *testing.T) {
 		},
 	}
 
-	idLookup := &mockDHCardIDLookup{
+	idLookup := &mocks.MockDHCardIDLookup{
 		GetExternalIDFn: func(_ context.Context, _, _, _, _ string) (string, error) {
 			return "1", nil
 		},
