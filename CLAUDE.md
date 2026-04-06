@@ -37,7 +37,6 @@ internal/
     constants/      # Shared constants
     errors/         # Error types
     favorites/      # Favorites management
-    fusion/         # Price fusion interfaces
     mathutil/       # Math utility functions
     observability/  # Logger, MetricsRecorder interfaces
     pricing/        # PriceProvider interface, graded prices, market data
@@ -46,14 +45,12 @@ internal/
   adapters/         # Interface implementations
     httpserver/     # HTTP handlers, middleware, router
     clients/        # External API clients
-      fusionprice/  # Multi-source price fusion (CardHedger + PriceCharting)
+      dhprice/      # DH (DoubleHolo) price provider — sole price source
       pricelookup/  # PriceLookup adapter (wraps PriceProvider for campaigns)
       tcgdex/       # TCGdex.dev card/set metadata (EN + JA, no API key)
-      pricecharting/ # PriceCharting graded prices + market data
       google/       # Google OAuth
       httpx/        # Unified HTTP client (retry + circuit breaker)
       cardutil/     # Card utility functions
-      cardhedger/ # CardHedger supplementary pricing (unlimited plan)
       instagram/  # Instagram OAuth + carousel publishing
       azureai/    # Azure AI completions
     storage/sqlite/ # SQLite persistence + migrations
@@ -92,14 +89,15 @@ See [internal/README.md](internal/README.md) for step-by-step migration creation
 
 See `.env.example` for the complete list with descriptions. Key groups:
 
-- **Required**: `PRICECHARTING_TOKEN`
+- **Required**: none (all features optional or DH-keyed)
+- **DH**: `DH_API_BASE_URL`, `DH_ENTERPRISE_API_KEY`
 - **AI**: `AZURE_AI_ENDPOINT`, `AZURE_AI_API_KEY`, `AZURE_AI_DEPLOYMENT`
 - **Auth**: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `ENCRYPTION_KEY`
 - **Schedulers**: `PRICE_REFRESH_ENABLED`, `ADVISOR_REFRESH_HOUR`, `SOCIAL_CONTENT_HOUR`
 
 ## Pricing Pipeline
 
-See [docs/PRICING_DATA.md](docs/PRICING_DATA.md) for the full normalization pipeline, fusion engine, caching, and rate limiting details.
+DH (DoubleHolo) is the sole price source via `DHPriceProvider` (`internal/adapters/clients/dhprice/`). The fusion engine, PriceCharting, CardHedger, and JustTCG were removed on 2026-04-06. See `docs/PRICING_DATA.md` for historical reference (retained as-is).
 
 ## Testing
 
@@ -140,7 +138,7 @@ See [internal/README.md](internal/README.md) for detailed step-by-step examples:
 - Adding a new domain error
 - Adding a new migration
 
-Simplest API client reference: `internal/adapters/clients/cardhedger/`
+Simplest API client reference: `internal/adapters/clients/dhprice/`
 
 ## Frontend-Backend Integration
 
