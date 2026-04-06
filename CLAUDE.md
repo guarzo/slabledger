@@ -79,7 +79,7 @@ The campaigns package (`internal/domain/campaigns/`) is the core business featur
 ## Database
 
 SQLite with WAL mode. All monetary values in **cents**. Migrations managed by `golang-migrate/migrate/v4`
-and embedded in the binary via `embed.FS`. Migrations run automatically on startup. 30 migration pairs (`000001`–`000030`).
+and embedded in the binary via `embed.FS`. Migrations run automatically on startup. 38 migration pairs (`000001`–`000038`).
 
 Migration files: `internal/adapters/storage/sqlite/migrations/`
 
@@ -97,7 +97,7 @@ See `.env.example` for the complete list with descriptions. Key groups:
 
 ## Pricing Pipeline
 
-DH (DoubleHolo) is the sole price source via `DHPriceProvider` (`internal/adapters/clients/dhprice/`). The fusion engine, PriceCharting, CardHedger, and JustTCG were removed on 2026-04-06. See `docs/PRICING_DATA.md` for historical reference (retained as-is).
+DH (DoubleHolo) is the sole price source via `DHPriceProvider` (`internal/adapters/clients/dhprice/`). Prices are computed in-memory from DH API calls — there is no `price_history` table (dropped in migration 000038). The price refresh scheduler warms the DH card ID cache by iterating unsold inventory from `campaign_purchases`. The `DBTracker` struct (`internal/adapters/storage/sqlite/prices.go`) provides API tracking, access tracking, and health checks. The fusion engine, PriceCharting, CardHedger, and JustTCG were removed on 2026-04-06. See `docs/PRICING_DATA.md` for historical reference (retained as-is).
 
 ## Testing
 

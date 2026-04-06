@@ -1,45 +1,33 @@
 # Phase 4: Data Retention & Analytics Rebuild
 
-**Status:** Deferred — implement after Phase 3 is merged and DH matching is stable.
+**Status:** Phase 4a/4b complete (2026-04-06). Phase 4c/4d deferred.
 
-**Context:** Phases 1-3 removed CardHedger, PriceCharting, JustTCG, and the fusion engine. No new rows are written for these sources, but ~374K historical rows remain in `price_history` (365K cardhedger, 6K fusion, 3K pricecharting). The DB is 257MB.
+**Context:** Phases 1-3 removed CardHedger, PriceCharting, JustTCG, and the fusion engine. Phase 4a/4b dropped `price_history` entirely (no production code wrote to it) and rewrote the price refresh scheduler.
 
-## 1. Data Cleanup
+## 1. Data Cleanup — COMPLETE (Phase 4a)
 
-### price_history retention
+Migration `000038_drop_price_history` dropped:
+- `price_history` table (~374K legacy rows, 0 active writes)
+- `stale_prices` VIEW (depended on price_history)
+- `price_refresh_queue` table (empty, unused)
+- `discovery_failures` table (CardHedger-only)
+- Orphan rows in `api_calls`, `api_rate_limits`, `card_id_mappings` for removed providers
 
-| Source | Rows | Action |
-|--------|------|--------|
-| cardhedger | 365,050 | Delete — source removed, data not used |
-| fusion | 6,008 | Delete — source removed, data not used |
-| pricecharting | 3,121 | Delete — source removed, data not used |
-| doubleholo | 0 (new) | Retain with 30-day rolling window |
-
-**Implementation:** Add a retention scheduler (similar to `AccessLogCleanupScheduler`) that runs daily and deletes `price_history` rows older than 30 days. Consider a one-time migration to bulk-delete all rows from removed sources.
-
-### Other tables to clean
-
-| Table | Rows | Action |
-|-------|------|--------|
-| `api_calls` | 27,540 | Delete rows for removed providers (cardhedger, pricecharting, justtcg) |
-| `api_rate_limits` | 2 | Delete rows for removed providers |
-| `discovery_failures` | 538 | Delete all — table was CardHedger-only |
-| `card_id_mappings` | varies | Delete rows where `provider IN ('cardhedger', 'pricecharting', 'justtcg')` |
-| `price_refresh_queue` | 0 | Already empty; evaluate if table is still needed |
+`PriceRepository` interface and struct renamed to `DBTracker` (retains APITracker, AccessTracker, HealthChecker).
 
 ### VACUUM
 
-After bulk deletion, run `VACUUM` to reclaim disk space. This rebuilds the entire database file and should reduce the DB from ~257MB to well under 50MB.
+After deploying migration 000038, run `VACUUM` manually to reclaim disk space (~257MB → expected well under 50MB).
 
-**Warning:** `VACUUM` requires exclusive access and temporarily doubles disk usage. Run during a maintenance window or on a quiet server.
+## 2. price_history — DROPPED (Phase 4b)
 
-## 2. Evaluate price_history usage
+Confirmed: `DHPriceProvider` never wrote to `price_history`. It computes prices in-memory from DH API calls. The table was 100% legacy data.
 
-With DH as the sole source, `price_history` may no longer be the right place to store prices. DH data already lives in `market_intelligence`. Consider:
+The price refresh scheduler was rewritten to use `RefreshCandidateProvider` — queries unsold inventory from `campaign_purchases` instead of the old `stale_prices` VIEW. This is a cache-warming pass: it calls `GetPrice` to resolve DH card IDs for inventory cards.
 
-- Does `DHPriceProvider` write to `price_history` at all? If not, the table may become fully historical.
-- Could the price refresh scheduler be simplified to just refresh `market_intelligence`?
-- Should `price_history` be retained only for the `card_access_log` cleanup pattern, or dropped entirely?
+Two bugs fixed:
+- **Nil provider silent no-op**: Scheduler now checks `priceProvider.Available()` at top of batch and returns early with warning
+- **Nil result counted as success**: `GetPrice` returning `(nil, nil)` now tracked as `noDataCount`, not `successCount`
 
 ## 3. Rebuild Market Analytics on DH + CardLadder
 
