@@ -51,9 +51,27 @@ type AgingItem struct {
 	CurrentMarket         *MarketSnapshot `json:"currentMarket,omitempty"`
 	PriceAnomaly          bool            `json:"priceAnomaly,omitempty"`
 	AnomalyReason         string          `json:"anomalyReason,omitempty"`
-	HasOpenFlag           bool            `json:"hasOpenFlag,omitempty"`
-	RecommendedPriceCents int             `json:"recommendedPriceCents,omitempty"`
-	RecommendedSource     string          `json:"recommendedSource,omitempty"`
+	HasOpenFlag           bool              `json:"hasOpenFlag,omitempty"`
+	RecommendedPriceCents int               `json:"recommendedPriceCents,omitempty"`
+	RecommendedSource     string            `json:"recommendedSource,omitempty"`
+	Signals               *InventorySignals `json:"signals,omitempty"`
+}
+
+// InventorySignals contains procedural flags for an unsold card.
+// Computed server-side from market data, aging, and profitability.
+type InventorySignals struct {
+	ProfitCaptureDeclining bool `json:"profitCaptureDeclining,omitempty"`
+	ProfitCaptureSpike     bool `json:"profitCaptureSpike,omitempty"`
+	CrackCandidate         bool `json:"crackCandidate,omitempty"`
+	StaleListing           bool `json:"staleListing,omitempty"`
+	DeepStale              bool `json:"deepStale,omitempty"`
+	CutLoss                bool `json:"cutLoss,omitempty"`
+}
+
+// HasAnySignal returns true if any signal flag is set.
+func (s *InventorySignals) HasAnySignal() bool {
+	return s.ProfitCaptureDeclining || s.ProfitCaptureSpike ||
+		s.CrackCandidate || s.StaleListing || s.DeepStale || s.CutLoss
 }
 
 // SellSheet contains data for a printable sell sheet.
@@ -89,8 +107,9 @@ type SellSheetItem struct {
 	OverrideSource        OverrideSource  `json:"overrideSource,omitempty"`
 	IsOverridden          bool            `json:"isOverridden,omitempty"`
 	ComputedPriceCents    int             `json:"computedPriceCents,omitempty"`
-	AISuggestedPriceCents int             `json:"aiSuggestedPriceCents,omitempty"`
-	AISuggestedAt         string          `json:"aiSuggestedAt,omitempty"`
+	AISuggestedPriceCents int               `json:"aiSuggestedPriceCents,omitempty"`
+	AISuggestedAt         string            `json:"aiSuggestedAt,omitempty"`
+	Signals               *InventorySignals `json:"signals,omitempty"`
 }
 
 // SellSheetTotals contains aggregate sell sheet metrics.
