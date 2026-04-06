@@ -14,7 +14,6 @@ services:
       # =====================================================================
       # Required API Tokens
       # =====================================================================
-      PRICECHARTING_TOKEN: ${PRICECHARTING_TOKEN}
       PSA_ACCESS_TOKEN: ${PSA_ACCESS_TOKEN}
 
       # =====================================================================
@@ -30,13 +29,10 @@ services:
       GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-http://localhost:8081/auth/google/callback}
 
       # =====================================================================
-      # Optional: Multi-Source Price Fusion
+      # Optional: DH Pricing
       # =====================================================================
-      # PokemonPriceTracker (primary graded price source)
-      POKEMONPRICE_TRACKER_API_KEY: ${POKEMONPRICE_TRACKER_API_KEY:-}
-
-      # CardHedger (supplementary pricing — unlimited plan)
-      CARD_HEDGER_API_KEY: ${CARD_HEDGER_API_KEY:-}
+      DH_API_BASE_URL: ${DH_API_BASE_URL:-}
+      DH_ENTERPRISE_API_KEY: ${DH_ENTERPRISE_API_KEY:-}
 
       # =====================================================================
       # Database Configuration
@@ -50,11 +46,6 @@ services:
       PRICE_BATCH_SIZE: ${PRICE_BATCH_SIZE:-50}
       PRICE_BATCH_DELAY: ${PRICE_BATCH_DELAY:-1s}
       PRICE_MAX_BURST_CALLS: ${PRICE_MAX_BURST_CALLS:-10}
-
-      # CardHedger scheduler
-      CARD_HEDGER_POLL_INTERVAL: ${CARD_HEDGER_POLL_INTERVAL:-1h}
-      CARD_HEDGER_BATCH_INTERVAL: ${CARD_HEDGER_BATCH_INTERVAL:-24h}
-      CARD_HEDGER_MAX_CARDS_PER_RUN: ${CARD_HEDGER_MAX_CARDS_PER_RUN:-200}
 
       # =====================================================================
       # Server Configuration

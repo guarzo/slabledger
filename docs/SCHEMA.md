@@ -53,7 +53,7 @@ Per-provider rate limit state and 429-block tracking.
 
 | Column | Type | Constraints | Notes |
 |--------|------|-------------|-------|
-| `provider` | TEXT | PK, CHECK IN ('pricecharting','pokemonprice','cardmarket','cardhedger','fusion') | |
+| `provider` | TEXT | PK, NOT NULL | |
 | `calls_last_minute` | INTEGER | DEFAULT 0 | |
 | `calls_last_hour` | INTEGER | DEFAULT 0 | |
 | `calls_last_day` | INTEGER | DEFAULT 0 | |
@@ -73,7 +73,7 @@ Log of every outbound pricing API call for observability and rate analysis.
 | Column | Type | Constraints | Notes |
 |--------|------|-------------|-------|
 | `id` | INTEGER | PK, AUTOINCREMENT | |
-| `provider` | TEXT | NOT NULL, CHECK IN ('pricecharting','pokemonprice','cardmarket','cardhedger','fusion') | |
+| `provider` | TEXT | NOT NULL | |
 | `endpoint` | TEXT | | URL path or method name |
 | `status_code` | INTEGER | | HTTP response code |
 | `error` | TEXT | | Error string if failed |
@@ -240,12 +240,12 @@ Access log used to prioritize price staleness detection (recently viewed cards g
 
 ### ~~`discovery_failures`~~ — DROPPED (migration 000038)
 
-Dropped in migration 000038. Was CardHedger-only; source removed.
+Dropped in migration 000038. Was used for external pricing source discovery; source removed.
 
 ---
 
 ### `card_request_submissions`
-Tracks card IDs submitted to CardHedger for inclusion in their database.
+Tracks card IDs submitted to external pricing services.
 
 | Column | Type | Constraints | Notes |
 |--------|------|-------------|-------|
@@ -259,7 +259,7 @@ Tracks card IDs submitted to CardHedger for inclusion in their database.
 | `front_image_url` | TEXT | NOT NULL DEFAULT '' | |
 | `variant` | TEXT | NOT NULL DEFAULT '' | |
 | `status` | TEXT | NOT NULL DEFAULT 'pending' | e.g. 'pending','submitted' |
-| `cardhedger_request_id` | TEXT | NOT NULL DEFAULT '' | Response ID from CardHedger |
+| `cardhedger_request_id` | TEXT | NOT NULL DEFAULT '' | Response ID from external service (legacy column name) |
 | `submitted_at` | DATETIME | | When submitted to provider |
 | `created_at` | DATETIME | NOT NULL DEFAULT CURRENT_TIMESTAMP | |
 | `updated_at` | DATETIME | NOT NULL DEFAULT CURRENT_TIMESTAMP | |

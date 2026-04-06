@@ -72,7 +72,7 @@ Schedulers are conditionally included based on:
 ### Price Refresh
 
 **File:** `price_refresh.go`
-**Purpose:** Refreshes stale card prices by calling the fusion price provider.
+**Purpose:** Refreshes stale card prices by calling the DH price provider.
 
 Fetches cards with the oldest prices (prioritized by value-based staleness thresholds), groups them by provider, respects per-provider rate limits and hourly call caps, then logs per-source fusion statistics and daily API budget usage.
 
@@ -87,39 +87,6 @@ Fetches cards with the oldest prices (prioritized by value-based staleness thres
 | `BurstPauseDuration` | `PRICE_BURST_PAUSE_DURATION` | `30s` | Pause after burst limit |
 
 **Additional features:** `Wait()` method for clean shutdown synchronization, `Health()` for liveness checks.
-
-### CardHedger Delta Refresh
-
-**File:** `cardhedger_refresh.go`
-**Purpose:** Polls CardHedger's price-updates endpoint for delta price changes.
-
-Reads the last poll timestamp from `sync_state`, fetches updates since that point, resolves CardHedger card IDs to local card names via `CardIDMappingLookup`, and stores updated prices. Checks daily API budget before each poll.
-
-| Config | Env Var | Default | Description |
-|--------|---------|---------|-------------|
-| `Enabled` | `CARD_HEDGER_ENABLED` | `true` | Enable/disable |
-| `PollInterval` | `CARD_HEDGER_POLL_INTERVAL` | `1h` | How often to poll |
-| `InitialDelay` | — | `3m` | Delay to let batch scheduler populate mappings first |
-
-**Pre-conditions:** Requires `CardHedgerRefreshClient` to be non-nil and available.
-
-### CardHedger Batch
-
-**File:** `cardhedger_batch.go`
-**Purpose:** Daily batch refresh of CardHedger prices for tracked cards (favorites, campaign purchases, previously mapped cards). Also discovers and maps unmapped priority cards via `SearchCard`.
-
-Collects target cards from three sources (existing mappings, favorites, campaign purchases), prioritizes newly discovered and favorited cards, respects daily API budget (reserves 50 calls for delta polling), and rate-limits between calls.
-
-| Config | Env Var | Default | Description |
-|--------|---------|---------|-------------|
-| `Enabled` | `CARD_HEDGER_ENABLED` | `true` | Enable/disable |
-| `RunInterval` | `CARD_HEDGER_BATCH_INTERVAL` | `24h` | How often to run |
-| `MaxCardsPerRun` | `CARD_HEDGER_MAX_CARDS_PER_RUN` | `200` | Max cards per batch |
-| `InitialDelay` | — | `30s` | Start early to populate mappings before delta poll |
-
-**Pre-conditions:** Requires `CardHedgerBatchClient` to be non-nil and available.
-
-**Extra API:** `DiscoverAndPrice(ctx, cards)` — on-demand discovery used after CSV imports.
 
 ### Inventory Refresh
 
@@ -182,8 +149,6 @@ Schedulers coordinate their startup to avoid conflicts:
 T=0s     All schedulers start
 T=0s     Price refresh, inventory refresh, cache warmup,
          access log cleanup, session cleanup run immediately
-T=30s    CardHedger batch runs (populates card_id_mappings)
-T=3m     CardHedger delta refresh runs (needs mappings from batch)
 ```
 
 ## Shutdown
@@ -191,7 +156,7 @@ T=3m     CardHedger delta refresh runs (needs mappings from batch)
 1. Application cancels the context passed to `StartAll`
 2. Application calls `group.StopAll()` — closes each scheduler's `stopChan`
 3. Application calls `group.Wait()` — blocks until all goroutines exit
-4. Schedulers with their own `Wait()` (PriceRefresh, CardHedger*) can also be waited on individually
+4. Schedulers with their own `Wait()` (PriceRefresh) can also be waited on individually
 
 ## File Layout
 
@@ -204,8 +169,6 @@ internal/adapters/scheduler/
 ├── builder.go               # BuildGroup, BuildDeps, BuildResult
 ├── config.go                # PriceRefresh-specific Config struct
 ├── price_refresh.go         # Price refresh scheduler
-├── cardhedger_refresh.go    # CardHedger delta poll scheduler
-├── cardhedger_batch.go      # CardHedger daily batch scheduler
 ├── inventory_refresh.go     # Inventory snapshot refresh scheduler
 ├── cache_warmup.go          # Card cache warmup scheduler
 ├── access_log_cleanup.go    # Access log cleanup scheduler

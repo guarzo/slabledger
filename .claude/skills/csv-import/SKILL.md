@@ -186,9 +186,9 @@ Status values: `imported`, `updated`, `skipped`, `failed`
 
 **Background enrichment** runs automatically after successful imports:
 
-- **CL Import**: Triggers CardHedger discovery for all `allocated` and `refreshed` rows (5-minute timeout, background goroutine)
-- **PSA Import**: Triggers CardHedger discovery for `allocated` and `updated` rows; cert enrichment queued for card metadata lookup (see `certEnrichmentPending` count in response)
-- **Shopify Import**: Triggers CardHedger discovery for `imported` and `updated` rows
+- **CL Import**: Triggers DH price refresh for all `allocated` and `refreshed` rows (5-minute timeout, background goroutine)
+- **PSA Import**: Triggers DH price refresh for `allocated` and `updated` rows; cert enrichment queued for card metadata lookup (see `certEnrichmentPending` count in response)
+- **Shopify Import**: Triggers DH price refresh for `imported` and `updated` rows
 - **Market snapshots**: Newly imported purchases with `snapshotStatus: "pending"` are enriched by the snapshot scheduler (retries up to `SNAPSHOT_ENRICH_MAX_RETRIES` times at `SNAPSHOT_ENRICH_RETRY_INTERVAL` intervals)
 
 The HTTP response is returned before enrichment completes. Background work does not affect the import result.

@@ -111,7 +111,7 @@ At least 3 of the 4 detection columns above must be present.
 | Column | Type | Notes |
 |---|---|---|
 | `cert number` | string | PSA cert number; rows with empty cert are silently skipped |
-| `listing title` | string | Raw PSA listing title; used for card name extraction and as CardHedger LLM fallback |
+| `listing title` | string | Raw PSA listing title; used for card name extraction |
 | `grade` | float | Numeric grade (e.g. `10`, `9.5`, `8`); parse error skips the row |
 | `price paid` | string | Currency string; accepts `$` prefix and commas (e.g. `$1,234.56`); parse error skips the row |
 | `date` | string | Purchase date; accepts `M/D/YYYY` or `YYYY-MM-DD`; parse error skips the row |
