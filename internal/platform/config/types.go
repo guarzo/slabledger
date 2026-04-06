@@ -88,19 +88,6 @@ type SessionCleanupConfig struct {
 	Interval time.Duration // How often to run cleanup (default: 1 hour)
 }
 
-// FusionConfig controls the fusion price provider behavior
-type FusionConfig struct {
-	// CacheTTL is the in-memory cache TTL for fused prices (default: 4 hours)
-	CacheTTL time.Duration
-
-	// PriceChartingTimeout is the per-request timeout for PriceCharting API calls (default: 30s)
-	PriceChartingTimeout time.Duration
-
-	// SecondarySourceTimeout is the per-request timeout for all secondary
-	// pricing sources (e.g., DH) (default: 20s)
-	SecondarySourceTimeout time.Duration
-}
-
 // AuthConfig controls authentication settings
 type AuthConfig struct {
 	// EncryptionKey for encrypting OAuth tokens at rest (AES-256-GCM)
@@ -184,7 +171,6 @@ type Config struct {
 	PriceRefresh     PriceRefreshConfig
 	CacheWarmup      CacheWarmupConfig
 	SessionCleanup   SessionCleanupConfig
-	Fusion           FusionConfig
 	InventoryRefresh InventoryRefreshConfig
 	SnapshotEnrich   SnapshotEnrichConfig
 	SnapshotHistory  SnapshotHistoryConfig
