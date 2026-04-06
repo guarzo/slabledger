@@ -1,36 +1,6 @@
 // Package dh provides a client for the DH pricing and market data API.
 package dh
 
-// SearchResponse is the response from GET /catalog/search.
-type SearchResponse struct {
-	Cards []SearchCard `json:"cards"`
-}
-
-// SearchCard is a single card result from the catalog search.
-type SearchCard struct {
-	ID       int    `json:"id"`
-	Name     string `json:"name"`
-	SetName  string `json:"set"`
-	Number   string `json:"number"`
-	ImageURL string `json:"image_url"`
-}
-
-// MatchRequest is the body for POST /catalog/match.
-type MatchRequest struct {
-	Title      string            `json:"title"`
-	SKU        string            `json:"sku,omitempty"`
-	Metafields map[string]string `json:"metafields,omitempty"`
-}
-
-// MatchResponse is returned from POST /catalog/match.
-type MatchResponse struct {
-	Success     bool    `json:"success"`
-	CardID      int     `json:"card_id"`
-	CardTitle   string  `json:"card_title"`
-	Confidence  float64 `json:"confidence"`
-	MatchMethod string  `json:"match_method"`
-}
-
 // MarketDataResponse is returned from GET /market/{card_id}.
 type MarketDataResponse struct {
 	Tier           int                 `json:"tier"`
