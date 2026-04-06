@@ -108,7 +108,7 @@ func (s *PriceRefreshScheduler) refreshBatch(ctx context.Context) {
 		return
 	}
 
-	// Check hourly rate limit
+	// Check hourly rate limit and compute remaining budget.
 	usage, err := s.apiTracker.GetAPIUsage(ctx, provider)
 	if err != nil {
 		s.logger.Warn(ctx, "failed to get API usage, skipping to avoid rate-limit risk",
@@ -122,6 +122,11 @@ func (s *PriceRefreshScheduler) refreshBatch(ctx context.Context) {
 			observability.Int("calls_last_hour", int(usage.CallsLastHour)),
 			observability.Int("max_calls_per_hour", s.config.MaxCallsPerHour))
 		return
+	}
+
+	remainingBudget := -1 // unlimited when MaxCallsPerHour is 0
+	if s.config.MaxCallsPerHour > 0 {
+		remainingBudget = s.config.MaxCallsPerHour - int(usage.CallsLastHour)
 	}
 
 	successCount := 0
@@ -164,7 +169,15 @@ func (s *PriceRefreshScheduler) refreshBatch(ctx context.Context) {
 		}
 		seen[dedupeKey] = true
 
-		if apiCalls > 0 && apiCalls%s.config.MaxBurstCalls == 0 {
+		// Enforce hourly rate limit within the batch.
+		if remainingBudget >= 0 && apiCalls >= remainingBudget {
+			s.logger.Info(ctx, "hourly rate limit exhausted mid-batch, stopping",
+				observability.Int("api_calls", apiCalls),
+				observability.Int("max_calls_per_hour", s.config.MaxCallsPerHour))
+			break
+		}
+
+		if apiCalls > 0 && s.config.MaxBurstCalls > 0 && apiCalls%s.config.MaxBurstCalls == 0 {
 			select {
 			case <-ctx.Done():
 				return

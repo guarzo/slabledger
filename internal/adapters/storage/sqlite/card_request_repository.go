@@ -42,7 +42,7 @@ func NewCardRequestRepository(db *sql.DB) *CardRequestRepository {
 	return &CardRequestRepository{db: db}
 }
 
-// TrackMissingCert records a cert whose card has not been linked to a CardHedger request.
+// TrackMissingCert records a cert whose card has not been linked to an external pricing request.
 // Only inserts if no row already exists for the (grader, cert) pair.
 func (r *CardRequestRepository) TrackMissingCert(ctx context.Context, cert, grader, grade, description string) error {
 	_, err := r.db.ExecContext(ctx,

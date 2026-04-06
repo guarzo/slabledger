@@ -171,26 +171,11 @@ func TestGetPrice_WithSales(t *testing.T) {
 	}
 }
 
-func TestGetPrice_NoSales(t *testing.T) {
-	p := New(
-		&mockMarketData{sales: nil},
-		&mockIDLookup{id: "42"},
-	)
-
-	got, err := p.GetPrice(context.Background(), pricing.Card{
-		Name: "Pikachu", Set: "Jungle", Number: "60",
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if got != nil {
-		t.Fatalf("expected nil price for no sales, got %+v", got)
-	}
-}
-
-func TestGetPrice_OnlyUnknownGrades(t *testing.T) {
+func TestGetPrice_AmountFallback(t *testing.T) {
+	// Only PSA 9 sales — Amount should fall back to PSA9Cents.
 	sales := []dh.RecentSale{
-		{GradingCompany: "XYZ", Grade: "99", Price: 999.00},
+		{GradingCompany: "PSA", Grade: "9", Price: 50.00},
+		{GradingCompany: "PSA", Grade: "9", Price: 60.00},
 	}
 
 	p := New(
@@ -199,13 +184,69 @@ func TestGetPrice_OnlyUnknownGrades(t *testing.T) {
 	)
 
 	got, err := p.GetPrice(context.Background(), pricing.Card{
-		Name: "Oddish", Set: "Jungle", Number: "58",
+		Name: "Charizard", Set: "Base Set", Number: "4",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if got != nil {
-		t.Fatalf("expected nil when all grades unknown, got %+v", got)
+	if got == nil {
+		t.Fatal("expected non-nil price")
+	}
+	if got.Grades.PSA10Cents != 0 {
+		t.Errorf("PSA10Cents = %d, want 0", got.Grades.PSA10Cents)
+	}
+	if got.Amount != got.Grades.PSA9Cents {
+		t.Errorf("Amount %d != PSA9Cents %d (expected fallback)", got.Amount, got.Grades.PSA9Cents)
+	}
+	if got.Amount != 5500 {
+		t.Errorf("Amount = %d, want 5500", got.Amount)
+	}
+}
+
+func TestGetPrice_NilResult(t *testing.T) {
+	tests := []struct {
+		name   string
+		client MarketDataClient
+		lookup CardIDLookup
+		card   pricing.Card
+	}{
+		{
+			name:   "no sales returns nil",
+			client: &mockMarketData{sales: nil},
+			lookup: &mockIDLookup{id: "42"},
+			card:   pricing.Card{Name: "Pikachu", Set: "Jungle", Number: "60"},
+		},
+		{
+			name:   "only unknown grades returns nil",
+			client: &mockMarketData{sales: []dh.RecentSale{{GradingCompany: "XYZ", Grade: "99", Price: 999.00}}},
+			lookup: &mockIDLookup{id: "42"},
+			card:   pricing.Card{Name: "Oddish", Set: "Jungle", Number: "58"},
+		},
+		{
+			name:   "invalid card ID returns nil",
+			client: &mockMarketData{},
+			lookup: &mockIDLookup{id: "not-a-number"},
+			card:   pricing.Card{Name: "Test", Set: "Set", Number: "1"},
+		},
+		{
+			name:   "nil dependencies returns nil",
+			client: nil,
+			lookup: nil,
+			card:   pricing.Card{Name: "Test", Set: "Set", Number: "1"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p := New(tc.client, tc.lookup)
+			got, err := p.GetPrice(context.Background(), tc.card)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != nil {
+				t.Fatalf("expected nil price, got %+v", got)
+			}
+		})
 	}
 }
 
@@ -232,10 +273,17 @@ func TestAvailable(t *testing.T) {
 	}
 }
 
-func TestName(t *testing.T) {
+func TestSimpleMethods(t *testing.T) {
 	p := New(nil, nil)
+
 	if got := p.Name(); got != "doubleholo" {
 		t.Errorf("Name() = %q, want %q", got, "doubleholo")
+	}
+	if err := p.Close(); err != nil {
+		t.Errorf("Close() = %v, want nil", err)
+	}
+	if got := p.GetStats(context.Background()); got != nil {
+		t.Errorf("GetStats() = %v, want nil", got)
 	}
 }
 
@@ -267,51 +315,6 @@ func TestLookupCard(t *testing.T) {
 	}
 	if got.ProductName != "Mewtwo" {
 		t.Errorf("ProductName = %q, want %q", got.ProductName, "Mewtwo")
-	}
-}
-
-func TestClose(t *testing.T) {
-	p := New(nil, nil)
-	if err := p.Close(); err != nil {
-		t.Errorf("Close() = %v, want nil", err)
-	}
-}
-
-func TestGetStats(t *testing.T) {
-	p := New(nil, nil)
-	if got := p.GetStats(context.Background()); got != nil {
-		t.Errorf("GetStats() = %v, want nil", got)
-	}
-}
-
-func TestGetPrice_InvalidCardID(t *testing.T) {
-	p := New(
-		&mockMarketData{},
-		&mockIDLookup{id: "not-a-number"},
-	)
-
-	got, err := p.GetPrice(context.Background(), pricing.Card{
-		Name: "Test", Set: "Set", Number: "1",
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if got != nil {
-		t.Fatalf("expected nil for invalid card ID, got %+v", got)
-	}
-}
-
-func TestGetPrice_NilDependencies(t *testing.T) {
-	p := New(nil, nil)
-
-	got, err := p.GetPrice(context.Background(), pricing.Card{
-		Name: "Test", Set: "Set", Number: "1",
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if got != nil {
-		t.Fatalf("expected nil when dependencies are nil, got %+v", got)
 	}
 }
 

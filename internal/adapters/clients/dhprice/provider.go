@@ -172,9 +172,28 @@ func buildPrice(productName string, sales []dh.RecentSale) *pricing.Price {
 		}
 	}
 
+	// Pick the best available grade price for Amount, falling back through
+	// descending grade preference when PSA 10 data is missing.
+	amount := grades.PSA10Cents
+	if amount == 0 {
+		for _, fallback := range []int64{
+			grades.BGS10Cents,
+			grades.Grade95Cents,
+			grades.PSA9Cents,
+			grades.PSA8Cents,
+			grades.PSA7Cents,
+			grades.PSA6Cents,
+		} {
+			if fallback != 0 {
+				amount = fallback
+				break
+			}
+		}
+	}
+
 	return &pricing.Price{
 		ProductName:  productName,
-		Amount:       grades.PSA10Cents,
+		Amount:       amount,
 		Currency:     "USD",
 		Source:       pricing.SourceDH,
 		Grades:       grades,

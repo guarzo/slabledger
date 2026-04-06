@@ -192,12 +192,6 @@ func TestConfig_DefaultConfig(t *testing.T) {
 	require.Equal(t, 1*time.Second, config.BatchDelay)
 	require.Equal(t, 10, config.MaxBurstCalls)
 	require.Equal(t, 30*time.Second, config.BurstPauseDuration)
-	require.True(t, config.Enabled)
-}
-
-func TestConfig_DefaultConfig_Values(t *testing.T) {
-	config := defaultConfig()
-
 	require.Equal(t, 50, config.MaxCallsPerHour)
-	require.Equal(t, 30*time.Second, config.BurstPauseDuration)
+	require.True(t, config.Enabled)
 }
