@@ -682,6 +682,10 @@ func (m *mockRepo) CountUnsoldByDHPushStatus(_ context.Context) (map[string]int,
 	return map[string]int{}, nil
 }
 
+func (m *mockRepo) UpdatePurchaseDHCandidates(_ context.Context, _ string, _ string) error {
+	return nil
+}
+
 // --- SellSheetRepository stubs ---
 
 func (m *mockRepo) GetSellSheetItems(_ context.Context, _ int64) ([]string, error) {
