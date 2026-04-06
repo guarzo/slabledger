@@ -51,23 +51,9 @@ type APIUsageStats struct {
 
 // PricingDiagnostics summarizes pricing data quality across the inventory.
 type PricingDiagnostics struct {
-	TotalCards        int              `json:"totalCards"`
-	WithDHData        int              `json:"withDHData"`
-	WithoutDHData     int              `json:"withoutDHData"`
-	SourceCoverage    map[string]int   `json:"sourceCoverage"`
-	MissingDHList     []DiagnosticCard `json:"missingDHList"`
-	DiscoveryFailures int              `json:"discoveryFailures"`
-	RecentFailures    []FailureSummary `json:"recentFailures"`
-}
-
-// DiagnosticCard identifies a card with limited source coverage.
-type DiagnosticCard struct {
-	CardName   string    `json:"cardName"`
-	SetName    string    `json:"setName"`
-	CardNumber string    `json:"cardNumber"`
-	Sources    []string  `json:"sources"`
-	PriceUsd   float64   `json:"priceUsd"`
-	UpdatedAt  time.Time `json:"updatedAt"`
+	TotalMappedCards int              `json:"totalMappedCards"`
+	UnmappedCards    int              `json:"unmappedCards"`
+	RecentFailures   []FailureSummary `json:"recentFailures"`
 }
 
 // FailureSummary aggregates recent API failures by provider and error type.
