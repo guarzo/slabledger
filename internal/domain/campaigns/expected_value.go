@@ -44,7 +44,7 @@ func computeExpectedValue(
 	dataPoints int,
 	feePctOpts ...float64,
 ) *ExpectedValue {
-	feePct := 0.1235
+	feePct := DefaultMarketplaceFeePct
 	if len(feePctOpts) > 0 && feePctOpts[0] > 0 {
 		feePct = feePctOpts[0]
 	}
