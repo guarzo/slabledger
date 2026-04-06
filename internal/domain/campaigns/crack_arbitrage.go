@@ -31,7 +31,7 @@ func computeCrackAnalysis(
 
 	// Breakeven raw price: costBasis / (1 - ebayFeePct)
 	if ebayFeePct < 0 || ebayFeePct >= 1 {
-		ebayFeePct = 0.1235
+		ebayFeePct = DefaultMarketplaceFeePct
 	}
 	breakevenRaw := int(float64(costBasis) / (1 - ebayFeePct))
 

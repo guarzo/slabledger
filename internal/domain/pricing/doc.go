@@ -13,7 +13,6 @@
 // Price providers are typically injected into domain services:
 //
 //	priceProvider := dhprice.New(client, idResolver)
-//	analysisService := analysis.NewService(priceProvider, ...)
 //
 // # Key Interfaces
 //

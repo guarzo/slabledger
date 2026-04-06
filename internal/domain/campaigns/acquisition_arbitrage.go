@@ -37,7 +37,7 @@ func computeAcquisitionOpportunity(
 		return nil
 	}
 	if ebayFeePct <= 0 || ebayFeePct >= 1 {
-		ebayFeePct = 0.1235
+		ebayFeePct = DefaultMarketplaceFeePct
 	}
 
 	bestGrade := ""
