@@ -129,6 +129,12 @@ export interface AIUsageResponse {
 
 /** DH integration status types */
 
+export interface DHHealthStats {
+  total_calls: number;
+  failures: number;
+  success_rate: number;
+}
+
 export interface DHStatusResponse {
   intelligence_count: number;
   intelligence_last_fetch: string;
@@ -138,6 +144,11 @@ export interface DHStatusResponse {
   pending_count: number;
   mapped_count: number;
   bulk_match_running: boolean;
+  // New optional fields
+  api_health?: DHHealthStats;
+  dh_inventory_count?: number;
+  dh_listings_count?: number;
+  dh_orders_count?: number;
 }
 
 export interface DHBulkMatchResponse {
