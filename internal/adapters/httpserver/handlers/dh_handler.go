@@ -11,7 +11,13 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
-// DHMatchClient is the subset of the DH client needed for card matching.
+// DHCertResolver resolves PSA certs to DH card IDs via the enterprise API.
+type DHCertResolver interface {
+	ResolveCert(ctx context.Context, req dh.CertResolveRequest) (*dh.CertResolution, error)
+}
+
+// DHMatchClient is the legacy match interface, still referenced by campaigns handler.
+// TODO: remove after campaigns_dh_listing.go is migrated to cert resolution.
 type DHMatchClient interface {
 	Match(ctx context.Context, title, sku string) (*dh.MatchResponse, error)
 	Available() bool
@@ -75,7 +81,7 @@ type DHCountsFetcher interface {
 
 // DHHandler handles DH bulk match, export, intelligence, and suggestions endpoints.
 type DHHandler struct {
-	matchClient       DHMatchClient
+	certResolver      DHCertResolver
 	cardIDSaver       DHCardIDSaver
 	purchaseLister    DHPurchaseLister
 	inventoryPusher   DHInventoryPusher   // optional: pushes matched cards to DH inventory
@@ -100,7 +106,7 @@ type DHHandler struct {
 // baseCtx is a server-lifecycle context; background goroutines derive from it.
 // healthReporter and countsFetcher are optional (nil-safe).
 func NewDHHandler(
-	matchClient DHMatchClient,
+	certResolver DHCertResolver,
 	cardIDSaver DHCardIDSaver,
 	purchaseLister DHPurchaseLister,
 	inventoryPusher DHInventoryPusher,
@@ -120,7 +126,7 @@ func NewDHHandler(
 		baseCtx = context.Background()
 	}
 	return &DHHandler{
-		matchClient:       matchClient,
+		certResolver:      certResolver,
 		cardIDSaver:       cardIDSaver,
 		purchaseLister:    purchaseLister,
 		inventoryPusher:   inventoryPusher,
@@ -143,6 +149,7 @@ func NewDHHandler(
 func (h *DHHandler) Wait() { h.bgWG.Wait() }
 
 // Compile-time checks.
+var _ DHCertResolver = (*dh.Client)(nil)
 var _ DHInventoryPusher = (*dh.Client)(nil)
 var _ DHHealthReporter = (*dh.Client)(nil)
 var _ DHCountsFetcher = (*dh.Client)(nil)
