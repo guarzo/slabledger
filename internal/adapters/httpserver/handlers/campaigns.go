@@ -26,6 +26,7 @@ type CampaignsHandler struct {
 	dhFieldsUpdater   DHFieldsUpdater     // optional: persists DH fields after push
 	pushStatusUpdater DHPushStatusUpdater // optional: sets dh_push_status
 	dhCardIDSaver     DHCardIDSaver       // optional: persists DH card ID mappings
+	dhCandidatesSaver DHCandidatesSaver   // optional: stores ambiguous candidates
 	baseCtx           context.Context
 	bgWG              sync.WaitGroup // tracks background goroutines (e.g. DH listing)
 }
@@ -61,6 +62,11 @@ func WithDHPushStatusUpdater(u DHPushStatusUpdater) CampaignsHandlerOption {
 // WithDHCardIDSaver enables persisting DH card ID mappings.
 func WithDHCardIDSaver(s DHCardIDSaver) CampaignsHandlerOption {
 	return func(h *CampaignsHandler) { h.dhCardIDSaver = s }
+}
+
+// WithDHCandidatesSaver enables storing ambiguous DH candidates on purchases.
+func WithDHCandidatesSaver(s DHCandidatesSaver) CampaignsHandlerOption {
+	return func(h *CampaignsHandler) { h.dhCandidatesSaver = s }
 }
 
 // NewCampaignsHandler creates a new campaigns handler.

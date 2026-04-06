@@ -77,9 +77,10 @@ type BuildDeps struct {
 	CampaignService       domainCampaigns.Service
 
 	// DH push dependencies (optional)
-	DHPushPendingLister DHPushPendingLister
-	DHPushStatusUpdater DHPushStatusUpdater
-	DHPushCardIDSaver   DHPushCardIDSaver
+	DHPushPendingLister   DHPushPendingLister
+	DHPushStatusUpdater   DHPushStatusUpdater
+	DHPushCardIDSaver     DHPushCardIDSaver
+	DHPushCandidatesSaver DHPushCandidatesSaver
 
 	// Scoring gap cleanup dependencies (optional)
 	GapStore scoring.GapStore
@@ -317,6 +318,7 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 			deps.DHClient,
 			deps.DHFieldsUpdater,
 			deps.DHPushCardIDSaver,
+			deps.DHPushCandidatesSaver,
 			deps.Logger,
 			pushCfg,
 		))

@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"time"
@@ -126,20 +127,46 @@ func (h *CampaignsHandler) inlineMatchAndPush(ctx context.Context, p *campaigns.
 		return 0
 	}
 
+	var dhCardID int
 	if resp.Status != dh.CertStatusMatched {
-		if h.pushStatusUpdater != nil {
-			if err := h.pushStatusUpdater.UpdatePurchaseDHPushStatus(ctx, p.ID, campaigns.DHPushStatusUnmatched); err != nil {
-				h.logger.Warn(ctx, "inline dh resolve: failed to set unmatched status",
-					observability.String("cert", p.CertNumber), observability.Err(err))
+		// Try card-number disambiguation for ambiguous responses.
+		if resp.Status == dh.CertStatusAmbiguous && len(resp.Candidates) > 0 {
+			if disambiguated := dh.Disambiguate(resp.Candidates, p.CardNumber); disambiguated > 0 {
+				dhCardID = disambiguated
+			} else {
+				// Store candidates for manual selection
+				if h.dhCandidatesSaver != nil {
+					candidatesJSON, _ := json.Marshal(resp.Candidates)
+					if err := h.dhCandidatesSaver.UpdatePurchaseDHCandidates(ctx, p.ID, string(candidatesJSON)); err != nil {
+						h.logger.Warn(ctx, "inline dh resolve: failed to save candidates",
+							observability.String("cert", p.CertNumber), observability.Err(err))
+					}
+				}
+				if h.pushStatusUpdater != nil {
+					if err := h.pushStatusUpdater.UpdatePurchaseDHPushStatus(ctx, p.ID, campaigns.DHPushStatusUnmatched); err != nil {
+						h.logger.Warn(ctx, "inline dh resolve: failed to set unmatched status",
+							observability.String("cert", p.CertNumber), observability.Err(err))
+					}
+				}
+				h.logger.Warn(ctx, "inline dh cert resolve: ambiguous, no card-number match",
+					observability.String("cert", p.CertNumber))
+				return 0
 			}
+		} else {
+			if h.pushStatusUpdater != nil {
+				if err := h.pushStatusUpdater.UpdatePurchaseDHPushStatus(ctx, p.ID, campaigns.DHPushStatusUnmatched); err != nil {
+					h.logger.Warn(ctx, "inline dh resolve: failed to set unmatched status",
+						observability.String("cert", p.CertNumber), observability.Err(err))
+				}
+			}
+			h.logger.Warn(ctx, "inline dh cert resolve: unmatched",
+				observability.String("cert", p.CertNumber),
+				observability.String("dh_status", resp.Status))
+			return 0
 		}
-		h.logger.Warn(ctx, "inline dh cert resolve: unmatched",
-			observability.String("cert", p.CertNumber),
-			observability.String("dh_status", resp.Status))
-		return 0
+	} else {
+		dhCardID = resp.DHCardID
 	}
-
-	dhCardID := resp.DHCardID
 
 	if h.dhCardIDSaver != nil {
 		externalID := strconv.Itoa(dhCardID)

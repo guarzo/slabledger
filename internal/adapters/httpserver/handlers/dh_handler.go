@@ -44,6 +44,11 @@ type DHPushStatusUpdater interface {
 	UpdatePurchaseDHPushStatus(ctx context.Context, id string, status string) error
 }
 
+// DHCandidatesSaver stores DH cert resolution candidates on a purchase.
+type DHCandidatesSaver interface {
+	UpdatePurchaseDHCandidates(ctx context.Context, id string, candidatesJSON string) error
+}
+
 // DHIntelligenceCounter returns aggregate stats for market intelligence.
 type DHIntelligenceCounter interface {
 	CountAll(ctx context.Context) (int, error)
@@ -80,6 +85,7 @@ type DHHandler struct {
 	inventoryPusher   DHInventoryPusher   // optional: pushes matched cards to DH inventory
 	dhFieldsUpdater   DHFieldsUpdater     // optional: persists DH inventory IDs after push
 	pushStatusUpdater DHPushStatusUpdater // optional: sets dh_push_status after bulk match
+	candidatesSaver   DHCandidatesSaver   // optional: stores ambiguous candidates
 	statusCounter     DHStatusCounter     // optional: efficient push status counts
 	intelRepo         intelligence.Repository
 	suggestionsRepo   intelligence.SuggestionsRepository
@@ -105,6 +111,7 @@ func NewDHHandler(
 	inventoryPusher DHInventoryPusher,
 	dhFieldsUpdater DHFieldsUpdater,
 	pushStatusUpdater DHPushStatusUpdater,
+	candidatesSaver DHCandidatesSaver,
 	statusCounter DHStatusCounter,
 	intelRepo intelligence.Repository,
 	suggestionsRepo intelligence.SuggestionsRepository,
@@ -125,6 +132,7 @@ func NewDHHandler(
 		inventoryPusher:   inventoryPusher,
 		dhFieldsUpdater:   dhFieldsUpdater,
 		pushStatusUpdater: pushStatusUpdater,
+		candidatesSaver:   candidatesSaver,
 		statusCounter:     statusCounter,
 		intelRepo:         intelRepo,
 		suggestionsRepo:   suggestionsRepo,

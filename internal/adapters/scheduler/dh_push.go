@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"context"
+	"encoding/json"
 	"strconv"
 	"time"
 
@@ -39,6 +40,11 @@ type DHPushCardIDSaver interface {
 	GetMappedSet(ctx context.Context, provider string) (map[string]string, error)
 }
 
+// DHPushCandidatesSaver stores DH cert resolution candidates on a purchase.
+type DHPushCandidatesSaver interface {
+	UpdatePurchaseDHCandidates(ctx context.Context, id string, candidatesJSON string) error
+}
+
 // DHPushConfig controls the DH push scheduler.
 type DHPushConfig struct {
 	Enabled  bool
@@ -48,14 +54,15 @@ type DHPushConfig struct {
 // DHPushScheduler matches pending purchases against DH and pushes inventory.
 type DHPushScheduler struct {
 	StopHandle
-	pendingLister DHPushPendingLister
-	statusUpdater DHPushStatusUpdater
-	certResolver  DHPushCertResolver
-	inventoryPush DHPushInventoryPusher
-	fieldsUpdater DHFieldsUpdater
-	cardIDSaver   DHPushCardIDSaver
-	logger        observability.Logger
-	config        DHPushConfig
+	pendingLister   DHPushPendingLister
+	statusUpdater   DHPushStatusUpdater
+	certResolver    DHPushCertResolver
+	inventoryPush   DHPushInventoryPusher
+	fieldsUpdater   DHFieldsUpdater
+	cardIDSaver     DHPushCardIDSaver
+	candidatesSaver DHPushCandidatesSaver
+	logger          observability.Logger
+	config          DHPushConfig
 }
 
 // NewDHPushScheduler creates a new DH push scheduler.
@@ -66,6 +73,7 @@ func NewDHPushScheduler(
 	inventoryPush DHPushInventoryPusher,
 	fieldsUpdater DHFieldsUpdater,
 	cardIDSaver DHPushCardIDSaver,
+	candidatesSaver DHPushCandidatesSaver,
 	logger observability.Logger,
 	config DHPushConfig,
 ) *DHPushScheduler {
@@ -73,15 +81,16 @@ func NewDHPushScheduler(
 		config.Interval = 5 * time.Minute
 	}
 	return &DHPushScheduler{
-		StopHandle:    NewStopHandle(),
-		pendingLister: pendingLister,
-		statusUpdater: statusUpdater,
-		certResolver:  certResolver,
-		inventoryPush: inventoryPush,
-		fieldsUpdater: fieldsUpdater,
-		cardIDSaver:   cardIDSaver,
-		logger:        logger.With(context.Background(), observability.String("component", "dh-push")),
-		config:        config,
+		StopHandle:      NewStopHandle(),
+		pendingLister:   pendingLister,
+		statusUpdater:   statusUpdater,
+		certResolver:    certResolver,
+		inventoryPush:   inventoryPush,
+		fieldsUpdater:   fieldsUpdater,
+		cardIDSaver:     cardIDSaver,
+		candidatesSaver: candidatesSaver,
+		logger:          logger.With(context.Background(), observability.String("component", "dh-push")),
+		config:          config,
 	}
 }
 
@@ -195,27 +204,59 @@ func (s *DHPushScheduler) processPurchase(ctx context.Context, p campaigns.Purch
 		}
 
 		if resp.Status != dh.CertStatusMatched {
-			s.logger.Debug(ctx, "dh push: cert not matched, marking unmatched",
-				observability.String("purchaseID", p.ID),
-				observability.String("cert", p.CertNumber),
-				observability.String("status", resp.Status))
-			if updateErr := s.statusUpdater.UpdatePurchaseDHPushStatus(ctx, p.ID, campaigns.DHPushStatusUnmatched); updateErr != nil {
-				s.logger.Warn(ctx, "dh push: failed to set unmatched status",
+			// Try card-number disambiguation for ambiguous responses.
+			if resp.Status == dh.CertStatusAmbiguous && len(resp.Candidates) > 0 {
+				if cardID := dh.Disambiguate(resp.Candidates, p.CardNumber); cardID > 0 {
+					dhCardID = cardID
+					externalID := strconv.Itoa(dhCardID)
+					if saveErr := s.cardIDSaver.SaveExternalID(ctx, p.CardName, p.SetName, p.CardNumber, pricing.SourceDH, externalID); saveErr != nil {
+						s.logger.Warn(ctx, "dh push: failed to save disambiguated ID",
+							observability.String("purchaseID", p.ID), observability.Err(saveErr))
+					} else {
+						mappedSet[key] = externalID
+					}
+					// Fall through to inventory push below
+				} else {
+					if s.candidatesSaver != nil {
+						candidatesJSON, _ := json.Marshal(resp.Candidates)
+						if err := s.candidatesSaver.UpdatePurchaseDHCandidates(ctx, p.ID, string(candidatesJSON)); err != nil {
+							s.logger.Warn(ctx, "dh push: failed to save candidates",
+								observability.String("purchaseID", p.ID), observability.Err(err))
+						}
+					}
+					s.logger.Debug(ctx, "dh push: cert ambiguous, marking unmatched",
+						observability.String("purchaseID", p.ID),
+						observability.String("cert", p.CertNumber))
+					if updateErr := s.statusUpdater.UpdatePurchaseDHPushStatus(ctx, p.ID, campaigns.DHPushStatusUnmatched); updateErr != nil {
+						s.logger.Warn(ctx, "dh push: failed to set unmatched status",
+							observability.String("purchaseID", p.ID),
+							observability.Err(updateErr))
+					}
+					return "unmatched"
+				}
+			} else {
+				s.logger.Debug(ctx, "dh push: cert not matched, marking unmatched",
 					observability.String("purchaseID", p.ID),
-					observability.Err(updateErr))
+					observability.String("cert", p.CertNumber),
+					observability.String("status", resp.Status))
+				if updateErr := s.statusUpdater.UpdatePurchaseDHPushStatus(ctx, p.ID, campaigns.DHPushStatusUnmatched); updateErr != nil {
+					s.logger.Warn(ctx, "dh push: failed to set unmatched status",
+						observability.String("purchaseID", p.ID),
+						observability.Err(updateErr))
+				}
+				return "unmatched"
 			}
-			return "unmatched"
-		}
-
-		dhCardID = resp.DHCardID
-
-		externalID := strconv.Itoa(dhCardID)
-		if saveErr := s.cardIDSaver.SaveExternalID(ctx, p.CardName, p.SetName, p.CardNumber, pricing.SourceDH, externalID); saveErr != nil {
-			s.logger.Warn(ctx, "dh push: failed to save external ID mapping",
-				observability.String("purchaseID", p.ID),
-				observability.Err(saveErr))
 		} else {
-			mappedSet[key] = externalID
+			dhCardID = resp.DHCardID
+
+			externalID := strconv.Itoa(dhCardID)
+			if saveErr := s.cardIDSaver.SaveExternalID(ctx, p.CardName, p.SetName, p.CardNumber, pricing.SourceDH, externalID); saveErr != nil {
+				s.logger.Warn(ctx, "dh push: failed to save external ID mapping",
+					observability.String("purchaseID", p.ID),
+					observability.Err(saveErr))
+			} else {
+				mappedSet[key] = externalID
+			}
 		}
 	}
 
