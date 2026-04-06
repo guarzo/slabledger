@@ -44,13 +44,13 @@ type DaysToSellBucket struct {
 
 // AgingItem represents an unsold card with days held.
 type AgingItem struct {
-	Purchase              Purchase        `json:"purchase"`
-	DaysHeld              int             `json:"daysHeld"`
-	CampaignName          string          `json:"campaignName,omitempty"`
-	Signal                *MarketSignal   `json:"signal,omitempty"`
-	CurrentMarket         *MarketSnapshot `json:"currentMarket,omitempty"`
-	PriceAnomaly          bool            `json:"priceAnomaly,omitempty"`
-	AnomalyReason         string          `json:"anomalyReason,omitempty"`
+	Purchase              Purchase          `json:"purchase"`
+	DaysHeld              int               `json:"daysHeld"`
+	CampaignName          string            `json:"campaignName,omitempty"`
+	Signal                *MarketSignal     `json:"signal,omitempty"`
+	CurrentMarket         *MarketSnapshot   `json:"currentMarket,omitempty"`
+	PriceAnomaly          bool              `json:"priceAnomaly,omitempty"`
+	AnomalyReason         string            `json:"anomalyReason,omitempty"`
 	HasOpenFlag           bool              `json:"hasOpenFlag,omitempty"`
 	RecommendedPriceCents int               `json:"recommendedPriceCents,omitempty"`
 	RecommendedSource     string            `json:"recommendedSource,omitempty"`
@@ -84,29 +84,29 @@ type SellSheet struct {
 
 // SellSheetItem contains sell sheet data for a single card.
 type SellSheetItem struct {
-	PurchaseID            string          `json:"purchaseId,omitempty"`
-	CampaignName          string          `json:"campaignName,omitempty"`
-	CertNumber            string          `json:"certNumber"`
-	CardName              string          `json:"cardName"`
-	SetName               string          `json:"setName,omitempty"`
-	CardNumber            string          `json:"cardNumber,omitempty"`
-	Grade                 float64         `json:"grade"`
-	Grader                string          `json:"grader,omitempty"`
-	Population            int             `json:"population,omitempty"`
-	BuyCostCents          int             `json:"buyCostCents"`
-	CostBasisCents        int             `json:"costBasisCents"`
-	CLValueCents          int             `json:"clValueCents"`
-	CurrentMarket         *MarketSnapshot `json:"currentMarket,omitempty"`
-	Recommendation        string          `json:"recommendation"`
-	TargetSellPrice       int             `json:"targetSellPrice"`
-	MinimumAcceptPrice    int             `json:"minimumAcceptPrice"`
-	PriceLookupError      string          `json:"priceLookupError,omitempty"`
-	RecommendedChannel    SaleChannel     `json:"recommendedChannel,omitempty"`
-	ChannelLabel          string          `json:"channelLabel,omitempty"`
-	OverridePriceCents    int             `json:"overridePriceCents,omitempty"`
-	OverrideSource        OverrideSource  `json:"overrideSource,omitempty"`
-	IsOverridden          bool            `json:"isOverridden,omitempty"`
-	ComputedPriceCents    int             `json:"computedPriceCents,omitempty"`
+	PurchaseID            string            `json:"purchaseId,omitempty"`
+	CampaignName          string            `json:"campaignName,omitempty"`
+	CertNumber            string            `json:"certNumber"`
+	CardName              string            `json:"cardName"`
+	SetName               string            `json:"setName,omitempty"`
+	CardNumber            string            `json:"cardNumber,omitempty"`
+	Grade                 float64           `json:"grade"`
+	Grader                string            `json:"grader,omitempty"`
+	Population            int               `json:"population,omitempty"`
+	BuyCostCents          int               `json:"buyCostCents"`
+	CostBasisCents        int               `json:"costBasisCents"`
+	CLValueCents          int               `json:"clValueCents"`
+	CurrentMarket         *MarketSnapshot   `json:"currentMarket,omitempty"`
+	Recommendation        string            `json:"recommendation"`
+	TargetSellPrice       int               `json:"targetSellPrice"`
+	MinimumAcceptPrice    int               `json:"minimumAcceptPrice"`
+	PriceLookupError      string            `json:"priceLookupError,omitempty"`
+	RecommendedChannel    SaleChannel       `json:"recommendedChannel,omitempty"`
+	ChannelLabel          string            `json:"channelLabel,omitempty"`
+	OverridePriceCents    int               `json:"overridePriceCents,omitempty"`
+	OverrideSource        OverrideSource    `json:"overrideSource,omitempty"`
+	IsOverridden          bool              `json:"isOverridden,omitempty"`
+	ComputedPriceCents    int               `json:"computedPriceCents,omitempty"`
 	AISuggestedPriceCents int               `json:"aiSuggestedPriceCents,omitempty"`
 	AISuggestedAt         string            `json:"aiSuggestedAt,omitempty"`
 	Signals               *InventorySignals `json:"signals,omitempty"`
