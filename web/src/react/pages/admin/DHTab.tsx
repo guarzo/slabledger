@@ -1,10 +1,9 @@
-import { useState } from 'react';
-import { useDHStatus, useTriggerDHBulkMatch, useDHUnmatched, useFixDHMatch } from '../../queries/useAdminQueries';
+import { useDHStatus, useTriggerDHBulkMatch } from '../../queries/useAdminQueries';
 import { useToast } from '../../contexts/ToastContext';
+import { formatPct } from '../../utils/formatters';
 import { CardShell } from '../../ui/CardShell';
 import { SummaryCard } from './shared';
 import Button from '../../ui/Button';
-import type { DHUnmatchedCard } from '../../../types/apiStatus';
 
 function formatTimestamp(ts: string): string {
   if (!ts) return 'Never';
@@ -13,71 +12,22 @@ function formatTimestamp(ts: string): string {
   return d.toLocaleString();
 }
 
-function formatCents(cents: number): string {
-  return `$${(cents / 100).toFixed(2)}`;
+interface HealthCardProps {
+  label: string;
+  value: string;
+  valueColor?: string;
+  sub?: string;
 }
 
-const DH_URL_REGEX = /doubleholo\.com\/card\/\d+/;
-
-interface UnmatchedRowProps {
-  card: DHUnmatchedCard;
-}
-
-function UnmatchedRow({ card }: UnmatchedRowProps) {
-  const [url, setUrl] = useState('');
-  const [validationError, setValidationError] = useState('');
-  const fixMutation = useFixDHMatch();
-  const toast = useToast();
-
-  const handleFix = async () => {
-    setValidationError('');
-    if (!DH_URL_REGEX.test(url)) {
-      setValidationError('Enter a valid DoubleHolo card URL (e.g. doubleholo.com/card/123)');
-      return;
-    }
-    try {
-      await fixMutation.mutateAsync({ purchaseId: card.purchase_id, dhUrl: url });
-      setUrl('');
-      toast.success('Match fixed');
-    } catch {
-      setValidationError('Failed to fix match. Please try again.');
-    }
-  };
-
+function HealthCard({ label, value, valueColor, sub }: HealthCardProps) {
   return (
-    <tr className="border-t border-[var(--border)]">
-      <td className="py-2 px-3 text-sm text-[var(--text-muted)]">{card.cert_number}</td>
-      <td className="py-2 px-3 text-sm text-[var(--text)]">{card.card_name}</td>
-      <td className="py-2 px-3 text-sm text-[var(--text-muted)]">{card.card_number}</td>
-      <td className="py-2 px-3 text-sm text-[var(--text-muted)]">{card.set_name}</td>
-      <td className="py-2 px-3 text-sm text-[var(--text-muted)]">{card.grade}</td>
-      <td className="py-2 px-3 text-sm text-[var(--text-muted)]">{formatCents(card.cl_value_cents)}</td>
-      <td className="py-2 px-3">
-        <div className="flex flex-col gap-1 min-w-[260px]">
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              placeholder="doubleholo.com/card/..."
-              className="flex-1 text-xs px-2 py-1 rounded border border-[var(--border)] bg-[var(--bg-secondary)] text-[var(--text)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--info)]"
-            />
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={handleFix}
-              loading={fixMutation.isPending}
-              disabled={fixMutation.isPending}
-            >
-              Fix
-            </Button>
-          </div>
-          {validationError && (
-            <p className="text-xs text-red-400">{validationError}</p>
-          )}
-        </div>
-      </td>
-    </tr>
+    <div className="rounded-xl bg-[var(--surface-1)] border border-[var(--surface-2)] p-4">
+      <div className="text-xs text-[var(--text-muted)] mb-1">{label}</div>
+      <div className="text-2xl font-bold" style={valueColor ? { color: valueColor } : undefined}>
+        {value}
+      </div>
+      {sub && <div className="text-xs text-[var(--text-muted)] mt-1">{sub}</div>}
+    </div>
   );
 }
 
@@ -85,9 +35,6 @@ export function DHTab({ enabled = true }: { enabled?: boolean }) {
   const { data: status, isLoading, error } = useDHStatus({ enabled });
   const bulkMatchMutation = useTriggerDHBulkMatch();
   const toast = useToast();
-
-  const unmatchedCount = status?.unmatched_count ?? 0;
-  const { data: unmatchedData } = useDHUnmatched({ enabled: enabled && unmatchedCount > 0 });
 
   if (!enabled) {
     return (
@@ -115,6 +62,17 @@ export function DHTab({ enabled = true }: { enabled?: boolean }) {
 
   const isRunning = status?.bulk_match_running ?? false;
   const pendingCount = status?.pending_count ?? 0;
+  const mappedCount = status?.mapped_count ?? 0;
+  const unmatchedCount = status?.unmatched_count ?? 0;
+
+  const total = mappedCount + unmatchedCount;
+  const apiHealth = status?.api_health;
+  const apiHealthValue = apiHealth ? formatPct(apiHealth.success_rate) : '—';
+  const apiHealthClr = apiHealth ? (apiHealth.success_rate >= 0.95 ? 'var(--success)' : apiHealth.success_rate >= 0.80 ? 'var(--warning)' : 'var(--danger)') : undefined;
+  const apiHealthSub = apiHealth ? `${apiHealth.total_calls} calls / ${apiHealth.failures} failures (7d)` : 'No data';
+  const matchRateValue = total > 0 ? formatPct(mappedCount / total) : '—';
+  const matchRateSub = total > 0 ? `${mappedCount} matched / ${unmatchedCount} unmatched` : '0 matched / 0 unmatched';
+  const unmatchedPct = total > 0 ? formatPct(unmatchedCount / total) : '0%';
 
   const handleBulkMatch = async () => {
     try {
@@ -127,32 +85,74 @@ export function DHTab({ enabled = true }: { enabled?: boolean }) {
 
   return (
     <div className="space-y-4 mt-4">
-      {/* Summary Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-        <SummaryCard
-          label="Market Intelligence"
-          value={status?.intelligence_count ?? 0}
-          sub={`Last: ${formatTimestamp(status?.intelligence_last_fetch ?? '')}`}
-        />
-        <SummaryCard
-          label="Suggestions"
-          value={status?.suggestions_count ?? 0}
-          sub={`Last: ${formatTimestamp(status?.suggestions_last_fetch ?? '')}`}
-        />
-        <SummaryCard
-          label="Mapped Cards"
-          value={status?.mapped_count ?? 0}
-        />
-        <SummaryCard
-          label="Pending Push"
-          value={pendingCount}
-          color={pendingCount > 0 ? 'var(--info)' : undefined}
-        />
-        <SummaryCard
-          label="Unmatched Cards"
-          value={unmatchedCount}
-          color={unmatchedCount > 0 ? 'var(--warning)' : undefined}
-        />
+      {/* Integration Health */}
+      <div>
+        <h4 className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide mb-2">Integration Health</h4>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <HealthCard
+            label="API Health"
+            value={apiHealthValue}
+            valueColor={apiHealthClr}
+            sub={apiHealthSub}
+          />
+          <HealthCard
+            label="Match Rate"
+            value={matchRateValue}
+            valueColor="var(--brand-500)"
+            sub={matchRateSub}
+          />
+          <HealthCard
+            label="Unmatched"
+            value={String(unmatchedCount)}
+            valueColor={unmatchedCount > 0 ? 'var(--warning)' : undefined}
+            sub={`${unmatchedPct} of total inventory`}
+          />
+        </div>
+      </div>
+
+      {/* DoubleHolo Counts */}
+      <div>
+        <h4 className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide mb-2">DoubleHolo Counts</h4>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <SummaryCard
+            label="Inventory"
+            value={status?.dh_inventory_count ?? '—'}
+          />
+          <SummaryCard
+            label="Listings"
+            value={status?.dh_listings_count ?? '—'}
+          />
+          <SummaryCard
+            label="Orders"
+            value={status?.dh_orders_count ?? '—'}
+          />
+        </div>
+      </div>
+
+      {/* Market Data */}
+      <div>
+        <h4 className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide mb-2">Market Data</h4>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <SummaryCard
+            label="Market Intelligence"
+            value={status?.intelligence_count ?? 0}
+            sub={`Last: ${formatTimestamp(status?.intelligence_last_fetch ?? '')}`}
+          />
+          <SummaryCard
+            label="Suggestions"
+            value={status?.suggestions_count ?? 0}
+            sub={`Last: ${formatTimestamp(status?.suggestions_last_fetch ?? '')}`}
+          />
+          <SummaryCard
+            label="Pending Push"
+            value={pendingCount}
+            color={pendingCount > 0 ? 'var(--info)' : undefined}
+          />
+          <SummaryCard
+            label="Mapped Cards"
+            value={mappedCount}
+          />
+        </div>
       </div>
 
       {/* Bulk Match */}
@@ -176,39 +176,6 @@ export function DHTab({ enabled = true }: { enabled?: boolean }) {
           </p>
         )}
       </CardShell>
-
-      {/* Unmatched Cards Fix UI */}
-      {unmatchedCount > 0 && (
-        <CardShell padding="lg">
-          <h4 className="text-sm font-semibold text-[var(--text)] mb-3">
-            Unmatched Cards ({unmatchedCount})
-          </h4>
-          {unmatchedData?.unmatched && unmatchedData.unmatched.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr>
-                    <th className="pb-2 px-3 text-xs font-medium text-[var(--text-muted)]">Cert</th>
-                    <th className="pb-2 px-3 text-xs font-medium text-[var(--text-muted)]">Card Name</th>
-                    <th className="pb-2 px-3 text-xs font-medium text-[var(--text-muted)]">Number</th>
-                    <th className="pb-2 px-3 text-xs font-medium text-[var(--text-muted)]">Set</th>
-                    <th className="pb-2 px-3 text-xs font-medium text-[var(--text-muted)]">Grade</th>
-                    <th className="pb-2 px-3 text-xs font-medium text-[var(--text-muted)]">CL Value</th>
-                    <th className="pb-2 px-3 text-xs font-medium text-[var(--text-muted)]">Fix</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {unmatchedData.unmatched.map((card) => (
-                    <UnmatchedRow key={card.purchase_id} card={card} />
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <p className="text-sm text-[var(--text-muted)]">Loading unmatched cards...</p>
-          )}
-        </CardShell>
-      )}
     </div>
   );
 }

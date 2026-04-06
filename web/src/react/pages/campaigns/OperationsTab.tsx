@@ -1,14 +1,15 @@
 import { useRef, useState, ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { api } from '../../../js/api';
-import type { Campaign, GlobalImportResult, PSAImportResult, ExternalImportResult } from '../../../types/campaigns';
+import type { Campaign, GlobalImportResult, PSAImportResult } from '../../../types/campaigns';
 import { queryKeys } from '../../queries/queryKeys';
 import { getErrorMessage } from '../../utils/formatters';
 import { useToast } from '../../contexts/ToastContext';
 import { Button, CardShell } from '../../ui';
 import ImportResultsDetail from './ImportResultsDetail';
+import DHUnmatchedSection from '../tools/DHUnmatchedSection';
 
-export type OperationState = 'idle' | 'importing' | 'exporting' | 'importing-psa' | 'importing-external';
+export type OperationState = 'idle' | 'importing' | 'exporting' | 'importing-psa';
 
 /* ── FileUploadButton ─────────────────────────────────────────────── */
 
@@ -122,21 +123,9 @@ function FileTextIcon() {
   );
 }
 
-function ShopBagIcon() {
-  return (
-    <IconCircle color="bg-[var(--success-bg)] text-[var(--success)]">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
-        <path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z" />
-        <line x1="3" y1="6" x2="21" y2="6" />
-        <path d="M16 10a4 4 0 01-8 0" />
-      </svg>
-    </IconCircle>
-  );
-}
-
 /* ── OperationsTab ────────────────────────────────────────────────── */
 
-export default function OperationsTab({ campaigns, operationState, setOperationState, importResult, setImportResult, psaResult, setPsaResult, externalResult, setExternalResult }: {
+export default function OperationsTab({ campaigns, operationState, setOperationState, importResult, setImportResult, psaResult, setPsaResult }: {
   campaigns: Campaign[];
   operationState: OperationState;
   setOperationState: (state: OperationState) => void;
@@ -144,8 +133,6 @@ export default function OperationsTab({ campaigns, operationState, setOperationS
   setImportResult: (result: GlobalImportResult | null) => void;
   psaResult: PSAImportResult | null;
   setPsaResult: (result: PSAImportResult | null) => void;
-  externalResult: ExternalImportResult | null;
-  setExternalResult: (result: ExternalImportResult | null) => void;
 }) {
   const toast = useToast();
   const queryClient = useQueryClient();
@@ -162,6 +149,8 @@ export default function OperationsTab({ campaigns, operationState, setOperationS
     queryClient.invalidateQueries({ queryKey: queryKeys.credit.invoices });
     queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.capitalTimeline });
     queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.weeklyReview });
+    queryClient.invalidateQueries({ queryKey: queryKeys.admin.dhStatus });
+    queryClient.invalidateQueries({ queryKey: queryKeys.admin.dhUnmatched });
   }
 
   async function handleGlobalImport(file: File) {
@@ -216,31 +205,16 @@ export default function OperationsTab({ campaigns, operationState, setOperationS
     }
   }
 
-  async function handleExternalImport(file: File) {
-    try {
-      setOperationState('importing-external');
-      setExternalResult(null);
-      const result = await api.globalImportExternal(file);
-      setExternalResult(result);
-      toast.success(`External import: ${result.imported} imported, ${result.updated} updated, ${result.skipped} skipped, ${result.failed} failed`);
-      invalidateAll();
-    } catch (err) {
-      toast.error(getErrorMessage(err, 'Failed to import external data'));
-    } finally {
-      setOperationState('idle');
-    }
-  }
-
   return (
     <>
       {/* Section header */}
       <div className="mb-4">
-        <h2 className="text-base font-semibold text-[var(--text)]">Data Operations</h2>
-        <p className="text-xs text-[var(--text-muted)] mt-0.5">Import and export campaign data</p>
+        <h2 className="text-base font-semibold text-[var(--text)]">Daily Operations</h2>
+        <p className="text-xs text-[var(--text-muted)] mt-0.5">Daily import, export, and matching workflow</p>
       </div>
 
-      {/* Action card grid — ordered by typical workflow: PSA → Export → Import → External */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      {/* Action card grid — ordered by typical workflow: PSA → Export → Import */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
         <OperationCard
           icon={<FileTextIcon />}
           title="PSA Import"
@@ -295,21 +269,6 @@ export default function OperationsTab({ campaigns, operationState, setOperationS
               loading={operationState === 'importing'}
               accept=".csv"
               onFile={handleGlobalImport}
-              busy={busy}
-            />
-          }
-        />
-
-        <OperationCard
-          icon={<ShopBagIcon />}
-          title="External Import"
-          description="Import a Shopify product export CSV for external purchases"
-          action={
-            <FileUploadButton
-              label="Upload Shopify CSV"
-              loading={operationState === 'importing-external'}
-              accept=".csv"
-              onFile={handleExternalImport}
               busy={busy}
             />
           }
@@ -383,28 +342,7 @@ export default function OperationsTab({ campaigns, operationState, setOperationS
         </div>
       )}
 
-      {externalResult && (
-        <div className="mb-4 p-3 rounded-lg bg-[var(--surface-2)]/50 text-sm">
-          <div className="flex items-center justify-between mb-1">
-            <span className="font-medium text-[var(--text)]">External Import Complete</span>
-            <button type="button" onClick={() => setExternalResult(null)} className="text-[var(--text-muted)] hover:text-[var(--text)] text-xs">Dismiss</button>
-          </div>
-          <div className="flex flex-wrap gap-3 text-xs">
-            {externalResult.imported > 0 && <span className="text-[var(--success)]">{externalResult.imported} imported</span>}
-            {externalResult.updated > 0 && <span className="text-[var(--info)]">{externalResult.updated} updated</span>}
-            {externalResult.skipped > 0 && <span className="text-[var(--text-muted)]">{externalResult.skipped} skipped</span>}
-            {externalResult.failed > 0 && <span className="text-[var(--danger)]">{externalResult.failed} failed</span>}
-          </div>
-          {externalResult.errors && externalResult.errors.length > 0 && (
-            <div className="mt-2 text-xs text-[var(--danger)]">
-              {externalResult.errors.map((e, idx) => (
-                <div key={idx}>{e.row != null ? `Row ${e.row}: ` : ''}{e.error}</div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
+      <DHUnmatchedSection />
     </>
   );
 }

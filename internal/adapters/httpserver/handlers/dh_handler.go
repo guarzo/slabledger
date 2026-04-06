@@ -62,6 +62,17 @@ type DHStatusCounter interface {
 	CountUnsoldByDHPushStatus(ctx context.Context) (map[string]int, error)
 }
 
+// DHHealthReporter provides API health metrics.
+type DHHealthReporter interface {
+	Health() *dh.HealthTracker
+}
+
+// DHCountsFetcher retrieves inventory and order counts from DH.
+type DHCountsFetcher interface {
+	ListInventory(ctx context.Context, filters dh.InventoryFilters) (*dh.InventoryListResponse, error)
+	GetOrders(ctx context.Context, filters dh.OrderFilters) (*dh.OrdersResponse, error)
+}
+
 // DHHandler handles DH bulk match, export, intelligence, and suggestions endpoints.
 type DHHandler struct {
 	matchClient       DHMatchClient
@@ -77,6 +88,8 @@ type DHHandler struct {
 	suggestCounter    DHSuggestionsCounter
 	logger            observability.Logger
 	baseCtx           context.Context
+	healthReporter    DHHealthReporter // optional: API health metrics
+	countsFetcher     DHCountsFetcher  // optional: DH inventory/order counts
 
 	bgWG             sync.WaitGroup
 	bulkMatchMu      sync.Mutex
@@ -85,6 +98,7 @@ type DHHandler struct {
 
 // NewDHHandler creates a new DHHandler with the given dependencies.
 // baseCtx is a server-lifecycle context; background goroutines derive from it.
+// healthReporter and countsFetcher are optional (nil-safe).
 func NewDHHandler(
 	matchClient DHMatchClient,
 	cardIDSaver DHCardIDSaver,
@@ -99,6 +113,8 @@ func NewDHHandler(
 	suggestCounter DHSuggestionsCounter,
 	logger observability.Logger,
 	baseCtx context.Context,
+	healthReporter DHHealthReporter,
+	countsFetcher DHCountsFetcher,
 ) *DHHandler {
 	if baseCtx == nil {
 		baseCtx = context.Background()
@@ -117,6 +133,8 @@ func NewDHHandler(
 		suggestCounter:    suggestCounter,
 		logger:            logger,
 		baseCtx:           baseCtx,
+		healthReporter:    healthReporter,
+		countsFetcher:     countsFetcher,
 	}
 }
 
@@ -126,3 +144,5 @@ func (h *DHHandler) Wait() { h.bgWG.Wait() }
 
 // Compile-time checks.
 var _ DHInventoryPusher = (*dh.Client)(nil)
+var _ DHHealthReporter = (*dh.Client)(nil)
+var _ DHCountsFetcher = (*dh.Client)(nil)

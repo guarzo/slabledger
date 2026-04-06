@@ -57,6 +57,7 @@ type Client struct {
 	limiter       *rate.Limiter
 	logger        observability.Logger
 	timeout       time.Duration
+	health        *HealthTracker
 }
 
 // NewClient creates a new DH API client.
@@ -71,6 +72,7 @@ func NewClient(baseURL, apiKey string, opts ...ClientOption) *Client {
 		httpClient: httpClient,
 		limiter:    rate.NewLimiter(rate.Limit(defaultRateLimRPS), defaultRateLimRPS),
 		timeout:    defaultTimeout,
+		health:     NewHealthTracker(),
 	}
 	for _, opt := range opts {
 		if opt != nil {
@@ -83,6 +85,23 @@ func NewClient(baseURL, apiKey string, opts ...ClientOption) *Client {
 // Available returns true if the API key is configured.
 func (c *Client) Available() bool {
 	return c.apiKey != ""
+}
+
+// Health returns the API health tracker for this client.
+func (c *Client) Health() *HealthTracker {
+	return c.health
+}
+
+// recordHealth safely records a success or failure, handling nil tracker.
+func (c *Client) recordHealth(success bool) {
+	if c.health == nil {
+		return
+	}
+	if success {
+		c.health.RecordSuccess()
+	} else {
+		c.health.RecordFailure()
+	}
 }
 
 // Search queries the DH catalog for cards matching the query string.
@@ -158,12 +177,15 @@ func (c *Client) get(ctx context.Context, fullURL string, dest any) error {
 
 	resp, err := c.httpClient.Get(ctx, fullURL, headers, c.timeout)
 	if err != nil {
+		c.recordHealth(false)
 		return err
 	}
 
 	if err := json.Unmarshal(resp.Body, dest); err != nil {
+		c.recordHealth(false)
 		return apperrors.ProviderInvalidResponse(providerName, err)
 	}
+	c.recordHealth(true)
 	return nil
 }
 
@@ -192,12 +214,15 @@ func (c *Client) getEnterprise(ctx context.Context, fullURL string, dest any) er
 
 	resp, err := c.httpClient.Get(ctx, fullURL, headers, c.timeout)
 	if err != nil {
+		c.recordHealth(false)
 		return err
 	}
 
 	if err := json.Unmarshal(resp.Body, dest); err != nil {
+		c.recordHealth(false)
 		return apperrors.ProviderInvalidResponse(providerName, err)
 	}
+	c.recordHealth(true)
 	return nil
 }
 
@@ -240,14 +265,17 @@ func (c *Client) doEnterprise(ctx context.Context, method, fullURL string, body 
 		Timeout: c.timeout,
 	})
 	if err != nil {
+		c.recordHealth(false)
 		return err
 	}
 
 	if dest != nil {
 		if err := json.Unmarshal(resp.Body, dest); err != nil {
+			c.recordHealth(false)
 			return apperrors.ProviderInvalidResponse(providerName, err)
 		}
 	}
+	c.recordHealth(true)
 	return nil
 }
 
@@ -289,11 +317,14 @@ func (c *Client) post(ctx context.Context, fullURL string, body any, dest any) e
 
 	resp, err := c.httpClient.Post(ctx, fullURL, headers, bodyBytes, c.timeout)
 	if err != nil {
+		c.recordHealth(false)
 		return err
 	}
 
 	if err := json.Unmarshal(resp.Body, dest); err != nil {
+		c.recordHealth(false)
 		return apperrors.ProviderInvalidResponse(providerName, err)
 	}
+	c.recordHealth(true)
 	return nil
 }
