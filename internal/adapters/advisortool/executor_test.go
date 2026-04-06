@@ -28,11 +28,11 @@ func TestDefinitions_RequiredTools(t *testing.T) {
 		"get_sell_sheet", "get_portfolio_health", "get_portfolio_insights",
 		"get_credit_summary", "get_weekly_review", "get_capital_timeline",
 		"get_channel_velocity", "get_dashboard_summary", "get_expected_values",
-		"get_crack_candidates", "get_campaign_suggestions", "run_projection",
+		"get_deslab_candidates", "get_campaign_suggestions", "run_projection",
 		"suggest_price", "get_cert_lookup", "get_suggestion_stats",
 		"evaluate_purchase",
 		"get_expected_values_batch", "suggest_price_batch",
-		"get_acquisition_targets", "get_crack_opportunities",
+		"get_acquisition_targets", "get_deslab_opportunities",
 		"get_market_intelligence", "get_dh_suggestions",
 		"get_inventory_alerts", "get_data_gap_report",
 	}
