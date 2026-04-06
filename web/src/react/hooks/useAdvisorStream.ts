@@ -201,7 +201,7 @@ function formatToolName(name: string): string {
     get_weekly_review: 'Reviewing weekly performance',
     get_capital_timeline: 'Loading capital timeline',
     get_expected_values: 'Computing expected values',
-    get_crack_candidates: 'Analyzing crack candidates',
+    get_deslab_candidates: 'Analyzing deslab candidates',
     get_campaign_suggestions: 'Generating suggestions',
     run_projection: 'Running Monte Carlo simulation',
     get_channel_velocity: 'Checking channel velocity',
