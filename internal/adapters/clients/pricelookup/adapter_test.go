@@ -484,7 +484,7 @@ func TestGetMarketSnapshot_FullSnapshot(t *testing.T) {
 					},
 				},
 				Confidence: 0.92,
-				Sources:    []string{"doubleholo", "ebay"},
+				Sources:    []string{"ebay"},
 			}, nil
 		},
 	}
@@ -527,8 +527,11 @@ func TestGetMarketSnapshot_FullSnapshot(t *testing.T) {
 	if snap.Confidence != 0.92 {
 		t.Errorf("Confidence = %v, want 0.92", snap.Confidence)
 	}
-	if snap.SourceCount != 2 {
-		t.Errorf("SourceCount = %d, want 2", snap.SourceCount)
+	if snap.SourceCount != 1 {
+		t.Errorf("SourceCount = %d, want 1", snap.SourceCount)
+	}
+	if len(snap.Sources) != 1 || snap.Sources[0] != "ebay" {
+		t.Errorf("Sources = %v, want [ebay]", snap.Sources)
 	}
 }
 
@@ -709,4 +712,52 @@ func TestGetMarketSnapshot_LastSoldFallbackChain(t *testing.T) {
 			t.Errorf("LastSoldCents = %d, want 20000 (from actual LastSoldByGrade)", snap.LastSoldCents)
 		}
 	})
+}
+
+func TestGetMarketSnapshot_SourcesPassthrough(t *testing.T) {
+	mock := &mockPriceProvider{
+		lookupFn: func(_ context.Context, _ string, _ domainCards.Card) (*pricing.Price, error) {
+			return &pricing.Price{
+				Grades:  pricing.GradedPrices{PSA10Cents: 10000},
+				Sources: []string{"ebay", "tcgplayer"},
+				GradeDetails: map[string]*pricing.GradeDetail{
+					"psa10": {
+						Ebay: &pricing.EbayGradeDetail{
+							PriceCents: 10500,
+							SalesCount: 5,
+							Confidence: "medium",
+						},
+						Estimate: &pricing.EstimateGradeDetail{
+							PriceCents: 10000,
+							Confidence: 0.9,
+						},
+					},
+				},
+			}, nil
+		},
+	}
+	adapter := NewAdapter(mock)
+	snap, err := adapter.GetMarketSnapshot(context.Background(), testCard, 10)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if snap == nil {
+		t.Fatal("expected non-nil snapshot")
+	}
+
+	// Sources should be passed through from Price
+	if len(snap.Sources) != 2 {
+		t.Fatalf("Sources = %v, want [ebay tcgplayer]", snap.Sources)
+	}
+	if snap.Sources[0] != "ebay" || snap.Sources[1] != "tcgplayer" {
+		t.Errorf("Sources = %v, want [ebay tcgplayer]", snap.Sources)
+	}
+	if snap.SourceCount != 2 {
+		t.Errorf("SourceCount = %d, want 2", snap.SourceCount)
+	}
+
+	// Ebay data should flow through to LastSoldCents fallback
+	if snap.LastSoldCents != 10500 {
+		t.Errorf("LastSoldCents = %d, want 10500 (from Ebay fallback)", snap.LastSoldCents)
+	}
 }

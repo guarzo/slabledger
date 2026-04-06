@@ -5,6 +5,7 @@ import (
 	"context"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	domainCards "github.com/guarzo/slabledger/internal/domain/cards"
@@ -136,17 +137,42 @@ func (p *Provider) Close() error { return nil }
 // GetStats returns nil (no stats tracking in this provider).
 func (p *Provider) GetStats(_ context.Context) *pricing.ProviderStats { return nil }
 
-// buildPrice groups sales by grade, computes medians, and assembles a Price.
+// ebayConfidence returns a confidence label based on sale count.
+func ebayConfidence(saleCount int) string {
+	switch {
+	case saleCount >= 10:
+		return "high"
+	case saleCount >= 3:
+		return "medium"
+	default:
+		return "low"
+	}
+}
+
+// buildPrice groups sales by grade, computes per-platform and aggregate medians, and assembles a Price.
 func buildPrice(productName string, sales []dh.RecentSale) *pricing.Price {
-	// Group sale prices by canonical grade.
+	type gradeplatform struct {
+		grade    pricing.Grade
+		platform string
+	}
+
+	// Group sale prices by (grade, platform) and by grade (aggregate).
+	byGradePlatform := make(map[gradeplatform][]float64)
 	byGrade := make(map[pricing.Grade][]float64)
+	platforms := make(map[string]bool)
+
 	for _, s := range sales {
 		key := s.GradingCompany + " " + s.Grade
 		g, ok := gradeKey[key]
 		if !ok {
 			continue
 		}
+		platform := strings.ToLower(s.Platform)
 		byGrade[g] = append(byGrade[g], s.Price)
+		if platform != "" {
+			byGradePlatform[gradeplatform{g, platform}] = append(byGradePlatform[gradeplatform{g, platform}], s.Price)
+			platforms[platform] = true
+		}
 	}
 
 	if len(byGrade) == 0 {
@@ -162,7 +188,7 @@ func buildPrice(productName string, sales []dh.RecentSale) *pricing.Price {
 		pricing.SetGradePrice(&grades, g, cents)
 
 		lo, hi := priceRange(prices)
-		details[g.String()] = &pricing.GradeDetail{
+		detail := &pricing.GradeDetail{
 			Estimate: &pricing.EstimateGradeDetail{
 				PriceCents: cents,
 				LowCents:   mathutil.ToCents(lo),
@@ -170,10 +196,25 @@ func buildPrice(productName string, sales []dh.RecentSale) *pricing.Price {
 				Confidence: dhConfidence,
 			},
 		}
+
+		// Populate eBay-specific detail from eBay sales for this grade.
+		if ebayPrices, ok := byGradePlatform[gradeplatform{g, "ebay"}]; ok && len(ebayPrices) > 0 {
+			eMed := median(ebayPrices)
+			eLo, eHi := priceRange(ebayPrices)
+			detail.Ebay = &pricing.EbayGradeDetail{
+				PriceCents:  mathutil.ToCents(eMed),
+				MedianCents: mathutil.ToCents(eMed),
+				MinCents:    mathutil.ToCents(eLo),
+				MaxCents:    mathutil.ToCents(eHi),
+				SalesCount:  len(ebayPrices),
+				Confidence:  ebayConfidence(len(ebayPrices)),
+			}
+		}
+
+		details[g.String()] = detail
 	}
 
-	// Pick the best available grade price for Amount, falling back through
-	// descending grade preference when PSA 10 data is missing.
+	// Pick the best available grade price for Amount.
 	amount := grades.PSA10Cents
 	if amount == 0 {
 		for _, fallback := range []int64{
@@ -191,6 +232,13 @@ func buildPrice(productName string, sales []dh.RecentSale) *pricing.Price {
 		}
 	}
 
+	// Sources = distinct platforms seen in sales data (sorted for deterministic output).
+	sources := make([]string, 0, len(platforms))
+	for p := range platforms {
+		sources = append(sources, p)
+	}
+	sort.Strings(sources)
+
 	return &pricing.Price{
 		ProductName:  productName,
 		Amount:       amount,
@@ -199,7 +247,7 @@ func buildPrice(productName string, sales []dh.RecentSale) *pricing.Price {
 		Grades:       grades,
 		Confidence:   dhConfidence,
 		GradeDetails: details,
-		Sources:      []string{pricing.SourceDH},
+		Sources:      sources,
 	}
 }
 

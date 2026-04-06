@@ -58,8 +58,9 @@ type MarketSnapshot struct {
 	Avg7DayCents int `json:"avg7DayCents,omitempty"`
 
 	// Pricing metadata
-	SourceCount int     `json:"sourceCount,omitempty"`
-	Confidence  float64 `json:"confidence,omitempty"`
+	SourceCount int      `json:"sourceCount,omitempty"`
+	Sources     []string `json:"sources,omitempty"`
+	Confidence  float64  `json:"confidence,omitempty"`
 
 	// Per-source pricing data
 	SourcePrices []SourcePrice `json:"sourcePrices,omitempty"`

@@ -86,16 +86,16 @@ func TestGetPrice_NoCardID(t *testing.T) {
 
 func TestGetPrice_WithSales(t *testing.T) {
 	sales := []dh.RecentSale{
-		{GradingCompany: "PSA", Grade: "10", Price: 100.00},
-		{GradingCompany: "PSA", Grade: "10", Price: 120.00},
-		{GradingCompany: "PSA", Grade: "10", Price: 110.00},
-		{GradingCompany: "PSA", Grade: "9", Price: 50.00},
-		{GradingCompany: "PSA", Grade: "9", Price: 60.00},
-		{GradingCompany: "PSA", Grade: "8", Price: 30.00},
-		{GradingCompany: "BGS", Grade: "10", Price: 200.00},
-		{GradingCompany: "BGS", Grade: "9.5", Price: 80.00},
-		{GradingCompany: "CGC", Grade: "9.5", Price: 70.00},
-		{GradingCompany: "XYZ", Grade: "99", Price: 999.00}, // unknown, should be skipped
+		{GradingCompany: "PSA", Grade: "10", Price: 100.00, Platform: "ebay"},
+		{GradingCompany: "PSA", Grade: "10", Price: 120.00, Platform: "ebay"},
+		{GradingCompany: "PSA", Grade: "10", Price: 110.00, Platform: "ebay"},
+		{GradingCompany: "PSA", Grade: "9", Price: 50.00, Platform: "ebay"},
+		{GradingCompany: "PSA", Grade: "9", Price: 60.00, Platform: "ebay"},
+		{GradingCompany: "PSA", Grade: "8", Price: 30.00, Platform: "ebay"},
+		{GradingCompany: "BGS", Grade: "10", Price: 200.00, Platform: "ebay"},
+		{GradingCompany: "BGS", Grade: "9.5", Price: 80.00, Platform: "ebay"},
+		{GradingCompany: "CGC", Grade: "9.5", Price: 70.00, Platform: "ebay"},
+		{GradingCompany: "XYZ", Grade: "99", Price: 999.00, Platform: "ebay"}, // unknown, should be skipped
 	}
 
 	p := New(
@@ -163,8 +163,8 @@ func TestGetPrice_WithSales(t *testing.T) {
 	if got.Source != pricing.Source(pricing.SourceDH) {
 		t.Errorf("Source = %q, want %q", got.Source, pricing.SourceDH)
 	}
-	if len(got.Sources) != 1 || got.Sources[0] != pricing.SourceDH {
-		t.Errorf("Sources = %v, want [%q]", got.Sources, pricing.SourceDH)
+	if len(got.Sources) != 1 || got.Sources[0] != "ebay" {
+		t.Errorf("Sources = %v, want [ebay]", got.Sources)
 	}
 	if got.Currency != "USD" {
 		t.Errorf("Currency = %q, want USD", got.Currency)
@@ -174,8 +174,8 @@ func TestGetPrice_WithSales(t *testing.T) {
 func TestGetPrice_AmountFallback(t *testing.T) {
 	// Only PSA 9 sales — Amount should fall back to PSA9Cents.
 	sales := []dh.RecentSale{
-		{GradingCompany: "PSA", Grade: "9", Price: 50.00},
-		{GradingCompany: "PSA", Grade: "9", Price: 60.00},
+		{GradingCompany: "PSA", Grade: "9", Price: 50.00, Platform: "ebay"},
+		{GradingCompany: "PSA", Grade: "9", Price: 60.00, Platform: "ebay"},
 	}
 
 	p := New(
@@ -289,7 +289,7 @@ func TestSimpleMethods(t *testing.T) {
 
 func TestLookupCard(t *testing.T) {
 	sales := []dh.RecentSale{
-		{GradingCompany: "PSA", Grade: "10", Price: 50.00},
+		{GradingCompany: "PSA", Grade: "10", Price: 50.00, Platform: "ebay"},
 	}
 
 	p := New(
@@ -315,6 +315,126 @@ func TestLookupCard(t *testing.T) {
 	}
 	if got.ProductName != "Mewtwo" {
 		t.Errorf("ProductName = %q, want %q", got.ProductName, "Mewtwo")
+	}
+}
+
+func TestBuildPrice_PlatformBreakdown(t *testing.T) {
+	sales := []dh.RecentSale{
+		{GradingCompany: "PSA", Grade: "10", Price: 100.00, Platform: "ebay"},
+		{GradingCompany: "PSA", Grade: "10", Price: 120.00, Platform: "ebay"},
+		{GradingCompany: "PSA", Grade: "10", Price: 110.00, Platform: "ebay"},
+		{GradingCompany: "PSA", Grade: "9", Price: 50.00, Platform: "ebay"},
+		{GradingCompany: "PSA", Grade: "9", Price: 60.00, Platform: "ebay"},
+	}
+
+	got := buildPrice("Charizard", sales)
+	if got == nil {
+		t.Fatal("expected non-nil price")
+	}
+
+	// Sources should list distinct platforms, not "doubleholo"
+	if len(got.Sources) != 1 || got.Sources[0] != "ebay" {
+		t.Errorf("Sources = %v, want [ebay]", got.Sources)
+	}
+
+	// PSA10 Ebay detail should be populated
+	psa10 := got.GradeDetails[pricing.GradePSA10.String()]
+	if psa10 == nil {
+		t.Fatal("missing PSA10 grade detail")
+	}
+	if psa10.Ebay == nil {
+		t.Fatal("PSA10 Ebay detail is nil")
+	}
+	if psa10.Ebay.PriceCents != 11000 {
+		t.Errorf("PSA10 Ebay.PriceCents = %d, want 11000", psa10.Ebay.PriceCents)
+	}
+	if psa10.Ebay.MinCents != 10000 {
+		t.Errorf("PSA10 Ebay.MinCents = %d, want 10000", psa10.Ebay.MinCents)
+	}
+	if psa10.Ebay.MaxCents != 12000 {
+		t.Errorf("PSA10 Ebay.MaxCents = %d, want 12000", psa10.Ebay.MaxCents)
+	}
+	if psa10.Ebay.SalesCount != 3 {
+		t.Errorf("PSA10 Ebay.SalesCount = %d, want 3", psa10.Ebay.SalesCount)
+	}
+	if psa10.Ebay.Confidence != "medium" {
+		t.Errorf("PSA10 Ebay.Confidence = %q, want medium", psa10.Ebay.Confidence)
+	}
+
+	// Estimate should still contain cross-platform aggregate (same values here since all eBay)
+	if psa10.Estimate == nil {
+		t.Fatal("PSA10 Estimate is nil")
+	}
+	if psa10.Estimate.PriceCents != 11000 {
+		t.Errorf("PSA10 Estimate.PriceCents = %d, want 11000", psa10.Estimate.PriceCents)
+	}
+}
+
+func TestBuildPrice_MixedPlatforms(t *testing.T) {
+	sales := []dh.RecentSale{
+		{GradingCompany: "PSA", Grade: "10", Price: 100.00, Platform: "ebay"},
+		{GradingCompany: "PSA", Grade: "10", Price: 120.00, Platform: "ebay"},
+		{GradingCompany: "PSA", Grade: "10", Price: 90.00, Platform: "tcgplayer"},
+		{GradingCompany: "PSA", Grade: "10", Price: 95.00, Platform: "tcgplayer"},
+	}
+
+	got := buildPrice("Pikachu", sales)
+	if got == nil {
+		t.Fatal("expected non-nil price")
+	}
+
+	// Sources should contain both platforms (sorted)
+	if len(got.Sources) != 2 {
+		t.Fatalf("Sources = %v, want 2 platforms", got.Sources)
+	}
+	wantSources := map[string]bool{"ebay": true, "tcgplayer": true}
+	for _, s := range got.Sources {
+		if !wantSources[s] {
+			t.Errorf("unexpected source %q", s)
+		}
+	}
+
+	// Estimate is cross-platform aggregate: median of [90, 95, 100, 120] = 97.50
+	psa10 := got.GradeDetails[pricing.GradePSA10.String()]
+	if psa10 == nil || psa10.Estimate == nil {
+		t.Fatal("missing PSA10 Estimate detail")
+	}
+	if psa10.Estimate.PriceCents != 9750 {
+		t.Errorf("Estimate.PriceCents = %d, want 9750 (cross-platform median)", psa10.Estimate.PriceCents)
+	}
+
+	// Ebay detail: median of [100, 120] = 110
+	if psa10.Ebay == nil {
+		t.Fatal("PSA10 Ebay detail is nil")
+	}
+	if psa10.Ebay.PriceCents != 11000 {
+		t.Errorf("Ebay.PriceCents = %d, want 11000", psa10.Ebay.PriceCents)
+	}
+	if psa10.Ebay.SalesCount != 2 {
+		t.Errorf("Ebay.SalesCount = %d, want 2", psa10.Ebay.SalesCount)
+	}
+}
+
+func TestBuildPrice_NoPlatform(t *testing.T) {
+	// Sales with empty platform string should still work (treated as unknown platform)
+	sales := []dh.RecentSale{
+		{GradingCompany: "PSA", Grade: "10", Price: 100.00, Platform: ""},
+	}
+
+	got := buildPrice("Mewtwo", sales)
+	if got == nil {
+		t.Fatal("expected non-nil price")
+	}
+
+	// Estimate should still be populated
+	psa10 := got.GradeDetails[pricing.GradePSA10.String()]
+	if psa10 == nil || psa10.Estimate == nil {
+		t.Fatal("missing PSA10 Estimate")
+	}
+
+	// Ebay should NOT be populated (platform is not "ebay")
+	if psa10.Ebay != nil {
+		t.Error("Ebay detail should be nil for empty platform")
 	}
 }
 
