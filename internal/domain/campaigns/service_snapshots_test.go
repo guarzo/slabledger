@@ -21,6 +21,7 @@ func TestApplyCLCorrection(t *testing.T) {
 		wantCLDeviationPct  float64
 		wantCLAnchorApplied bool
 		wantPricingGap      bool
+		wantSources         []string
 	}{
 		{
 			name:         "nil snapshot does not panic",
@@ -33,6 +34,7 @@ func TestApplyCLCorrection(t *testing.T) {
 			clValueCents:     0,
 			wantMedian:       5000,
 			wantCLValueCents: 0,
+			wantSources:      nil,
 		},
 		{
 			name:             "clValueCents negative leaves snapshot unchanged",
@@ -40,6 +42,7 @@ func TestApplyCLCorrection(t *testing.T) {
 			clValueCents:     -1,
 			wantMedian:       5000,
 			wantCLValueCents: 0,
+			wantSources:      nil,
 		},
 		{
 			name:                "pricing gap fills from CL",
@@ -55,18 +58,20 @@ func TestApplyCLCorrection(t *testing.T) {
 			wantCLDeviationPct:  1.0,
 			wantCLAnchorApplied: true,
 			wantPricingGap:      false,
+			wantSources:         []string{"cardladder"},
 		},
 		{
 			name:               "low deviation single source no correction",
-			snapshot:           &MarketSnapshot{MedianCents: 9000, SourceCount: 1},
+			snapshot:           &MarketSnapshot{MedianCents: 9000, SourceCount: 1, Sources: []string{"ebay"}},
 			clValueCents:       10000,
 			wantMedian:         9000, // unchanged
 			wantCLValueCents:   10000,
 			wantCLDeviationPct: 0.10,
+			wantSources:        []string{"ebay", "cardladder"},
 		},
 		{
 			name:                "high deviation single source corrects",
-			snapshot:            &MarketSnapshot{MedianCents: 5000, SourceCount: 1},
+			snapshot:            &MarketSnapshot{MedianCents: 5000, SourceCount: 1, Sources: []string{"ebay"}},
 			clValueCents:        10000,
 			wantMedian:          10000,
 			wantGradePriceCents: 10000,
@@ -77,42 +82,47 @@ func TestApplyCLCorrection(t *testing.T) {
 			wantCLValueCents:    10000,
 			wantCLDeviationPct:  0.50,
 			wantCLAnchorApplied: true,
+			wantSources:         []string{"ebay", "cardladder"},
 		},
 		{
 			name:               "high deviation single source market above CL trusts market",
-			snapshot:           &MarketSnapshot{MedianCents: 5700, SourceCount: 1},
+			snapshot:           &MarketSnapshot{MedianCents: 5700, SourceCount: 1, Sources: []string{"ebay"}},
 			clValueCents:       900,
 			wantMedian:         5700, // NOT corrected — market is above CL
 			wantCLValueCents:   900,
 			wantCLDeviationPct: 5.333,
+			wantSources:        []string{"ebay", "cardladder"},
 		},
 		{
-			name:               "high deviation multi-source trusts fusion",
-			snapshot:           &MarketSnapshot{MedianCents: 5000, SourceCount: 2},
+			name:               "high deviation multi-source trusts market",
+			snapshot:           &MarketSnapshot{MedianCents: 5000, SourceCount: 2, Sources: []string{"ebay", "tcgplayer"}},
 			clValueCents:       10000,
 			wantMedian:         5000, // NOT corrected
 			wantCLValueCents:   10000,
 			wantCLDeviationPct: 0.50,
+			wantSources:        []string{"ebay", "tcgplayer", "cardladder"},
 		},
 		{
 			name:               "exactly at threshold no correction",
-			snapshot:           &MarketSnapshot{MedianCents: 6000, SourceCount: 1},
+			snapshot:           &MarketSnapshot{MedianCents: 6000, SourceCount: 1, Sources: []string{"ebay"}},
 			clValueCents:       10000,
 			wantMedian:         6000, // 40% deviation, threshold is > 0.40
 			wantCLValueCents:   10000,
 			wantCLDeviationPct: 0.40,
+			wantSources:        []string{"ebay", "cardladder"},
 		},
 		{
 			name:               "CLValueCents always set on snapshot",
-			snapshot:           &MarketSnapshot{MedianCents: 9500, SourceCount: 3},
+			snapshot:           &MarketSnapshot{MedianCents: 9500, SourceCount: 3, Sources: []string{"ebay", "tcgplayer", "other"}},
 			clValueCents:       10000,
 			wantMedian:         9500,
 			wantCLValueCents:   10000,
 			wantCLDeviationPct: 0.05,
+			wantSources:        []string{"ebay", "tcgplayer", "other", "cardladder"},
 		},
 		{
 			name:                "no median but GradePriceCents present still anchors",
-			snapshot:            &MarketSnapshot{MedianCents: 0, GradePriceCents: 8000, SourceCount: 1},
+			snapshot:            &MarketSnapshot{MedianCents: 0, GradePriceCents: 8000, SourceCount: 1, Sources: []string{"ebay"}},
 			clValueCents:        10000,
 			wantMedian:          10000,
 			wantGradePriceCents: 10000,
@@ -123,10 +133,11 @@ func TestApplyCLCorrection(t *testing.T) {
 			wantCLValueCents:    10000,
 			wantCLDeviationPct:  1.0,
 			wantCLAnchorApplied: true,
+			wantSources:         []string{"ebay", "cardladder"},
 		},
 		{
 			name:                "CL anchor clears IsEstimated",
-			snapshot:            &MarketSnapshot{MedianCents: 5000, SourceCount: 1, IsEstimated: true},
+			snapshot:            &MarketSnapshot{MedianCents: 5000, SourceCount: 1, Sources: []string{"ebay"}, IsEstimated: true},
 			clValueCents:        10000,
 			wantMedian:          10000,
 			wantGradePriceCents: 10000,
@@ -137,6 +148,7 @@ func TestApplyCLCorrection(t *testing.T) {
 			wantCLValueCents:    10000,
 			wantCLDeviationPct:  0.50,
 			wantCLAnchorApplied: true,
+			wantSources:         []string{"ebay", "cardladder"},
 		},
 	}
 
@@ -180,6 +192,20 @@ func TestApplyCLCorrection(t *testing.T) {
 			}
 			if tc.snapshot.PricingGap != tc.wantPricingGap {
 				t.Errorf("PricingGap = %v, want %v", tc.snapshot.PricingGap, tc.wantPricingGap)
+			}
+			if tc.wantSources != nil {
+				if len(tc.snapshot.Sources) != len(tc.wantSources) {
+					t.Errorf("Sources = %v, want %v", tc.snapshot.Sources, tc.wantSources)
+				} else {
+					for i, s := range tc.wantSources {
+						if tc.snapshot.Sources[i] != s {
+							t.Errorf("Sources[%d] = %q, want %q", i, tc.snapshot.Sources[i], s)
+						}
+					}
+				}
+				if tc.snapshot.SourceCount != len(tc.wantSources) {
+					t.Errorf("SourceCount = %d, want %d", tc.snapshot.SourceCount, len(tc.wantSources))
+				}
 			}
 		})
 	}
@@ -257,6 +283,7 @@ func TestApplyCLCorrection_EstimateFallback(t *testing.T) {
 			snapshot := &MarketSnapshot{
 				MedianCents:         10000,
 				SourceCount:         2,
+				Sources:             []string{"ebay", "tcgplayer"},
 				EstimatedValueCents: tc.estimatedValueCents,
 				EstimateSource:      tc.estimateSource,
 			}

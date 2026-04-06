@@ -156,6 +156,7 @@ func (a *Adapter) GetMarketSnapshot(ctx context.Context, card campaigns.CardIden
 	// Confidence and source count
 	snap.Confidence = price.Confidence
 	if len(price.Sources) > 0 {
+		snap.Sources = price.Sources
 		snap.SourceCount = len(price.Sources)
 	}
 

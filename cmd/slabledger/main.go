@@ -232,7 +232,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	// Card ID mapping repository (caches external provider IDs)
 	cardIDMappingRepo := sqlite.NewCardIDMappingRepository(db.DB)
 
-	// Initialize DH client (optional — market intelligence + fusion source)
+	// Initialize DH client (optional — market intelligence + pricing source)
 	var dhClient *dh.Client
 	if cfg.Adapters.DHEnterpriseKey != "" && cfg.Adapters.DHBaseURL != "" {
 		dhClient = dh.NewClient(
