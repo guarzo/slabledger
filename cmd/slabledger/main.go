@@ -239,9 +239,9 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 
 	// Initialize DH client (optional — market intelligence + fusion source)
 	var dhClient *dh.Client
-	if cfg.Adapters.DHKey != "" && cfg.Adapters.DHBaseURL != "" {
+	if cfg.Adapters.DHEnterpriseKey != "" && cfg.Adapters.DHBaseURL != "" {
 		dhClient = dh.NewClient(
-			cfg.Adapters.DHBaseURL, cfg.Adapters.DHKey,
+			cfg.Adapters.DHBaseURL,
 			dh.WithLogger(logger),
 			dh.WithRateLimitRPS(cfg.DH.RateLimitRPS),
 			dh.WithEnterpriseKey(cfg.Adapters.DHEnterpriseKey),
@@ -332,7 +332,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 
 	// Create DH handler (bulk match + intelligence; nil when client is not configured)
 	var dhHandler *handlers.DHHandler
-	if dhClient != nil && dhClient.Available() {
+	if dhClient != nil && dhClient.EnterpriseAvailable() {
 		dhHandler = handlers.NewDHHandler(
 			dhClient, cardIDMappingRepo, campaignsRepo,
 			dhClient,      // DHInventoryPusher
@@ -516,7 +516,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	// produces a non-nil interface wrapping a nil pointer, which breaks nil checks.
 	if dhClient != nil {
 		deps.DHInventoryLister = dhClient
-		deps.DHMatchClient = dhClient
+		deps.DHCertResolver = dhClient
 		deps.DHInventoryPusher = dhClient
 	}
 	if campaignsRepo != nil {

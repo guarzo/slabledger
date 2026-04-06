@@ -67,7 +67,7 @@ func initializePriceProviders(
 
 	// Add DH as a secondary fusion source if available
 	dhAvailable := false
-	if dhClient != nil && dhClient.Available() {
+	if dhClient != nil && dhClient.EnterpriseAvailable() {
 		dhAdapter := fusionprice.NewDHAdapter(dhClient, cardIDMappingRepo, logger)
 		secondarySources = append(secondarySources, dhAdapter)
 		dhAvailable = true

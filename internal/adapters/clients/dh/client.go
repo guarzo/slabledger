@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	goerrors "errors"
 	"fmt"
-	"net/url"
 	"time"
 
 	"golang.org/x/time/rate"
@@ -19,7 +18,6 @@ const (
 	defaultTimeout       = 30 * time.Second
 	defaultRateLimRPS    = 1
 	providerName         = "doubleholo"
-	apiKeyHeader         = "X-Integration-API-Key"
 	enterpriseAuthHeader = "Authorization"
 )
 
@@ -50,7 +48,6 @@ func WithEnterpriseKey(key string) ClientOption {
 
 // Client provides access to the DH market intelligence API.
 type Client struct {
-	apiKey        string
 	enterpriseKey string
 	baseURL       string
 	httpClient    *httpx.Client
@@ -61,13 +58,12 @@ type Client struct {
 }
 
 // NewClient creates a new DH API client.
-func NewClient(baseURL, apiKey string, opts ...ClientOption) *Client {
+func NewClient(baseURL string, opts ...ClientOption) *Client {
 	config := httpx.DefaultConfig("DH")
 	config.DefaultTimeout = defaultTimeout
 	httpClient := httpx.NewClient(config)
 
 	c := &Client{
-		apiKey:     apiKey,
 		baseURL:    baseURL,
 		httpClient: httpClient,
 		limiter:    rate.NewLimiter(rate.Limit(defaultRateLimRPS), defaultRateLimRPS),
@@ -80,11 +76,6 @@ func NewClient(baseURL, apiKey string, opts ...ClientOption) *Client {
 		}
 	}
 	return c
-}
-
-// Available returns true if the API key is configured.
-func (c *Client) Available() bool {
-	return c.apiKey != ""
 }
 
 // Health returns the API health tracker for this client.
@@ -102,48 +93,6 @@ func (c *Client) recordHealth(success bool) {
 	} else {
 		c.health.RecordFailure()
 	}
-}
-
-// Search queries the DH catalog for cards matching the query string.
-func (c *Client) Search(ctx context.Context, query string, limit int) (*SearchResponse, error) {
-	params := url.Values{}
-	params.Set("q", query)
-	if limit > 0 {
-		params.Set("limit", fmt.Sprintf("%d", limit))
-	}
-	fullURL := fmt.Sprintf("%s/api/v1/integrations/catalog/search?%s", c.baseURL, params.Encode())
-
-	var resp SearchResponse
-	if err := c.get(ctx, fullURL, &resp); err != nil {
-		return nil, err
-	}
-	return &resp, nil
-}
-
-// Match uses AI-powered matching to find the best card for a title/SKU pair.
-func (c *Client) Match(ctx context.Context, title, sku string) (*MatchResponse, error) {
-	fullURL := fmt.Sprintf("%s/api/v1/integrations/match", c.baseURL)
-	body := MatchRequest{
-		Title: title,
-		SKU:   sku,
-	}
-
-	var resp MatchResponse
-	if err := c.post(ctx, fullURL, body, &resp); err != nil {
-		return nil, err
-	}
-	return &resp, nil
-}
-
-// MarketData returns market data for a specific card at tier3.
-func (c *Client) MarketData(ctx context.Context, cardID string) (*MarketDataResponse, error) {
-	fullURL := fmt.Sprintf("%s/api/v1/integrations/market_data/%s?tier=tier3", c.baseURL, url.PathEscape(cardID))
-
-	var resp MarketDataResponse
-	if err := c.get(ctx, fullURL, &resp); err != nil {
-		return nil, err
-	}
-	return &resp, nil
 }
 
 // CardLookup returns card details and market data from the enterprise API.
@@ -211,38 +160,6 @@ func (c *Client) Suggestions(ctx context.Context) (*SuggestionsResponse, error) 
 		return nil, err
 	}
 	return &resp, nil
-}
-
-// get performs a GET request with rate limiting, auth headers, and JSON unmarshal.
-func (c *Client) get(ctx context.Context, fullURL string, dest any) error {
-	if !c.Available() {
-		return apperrors.ConfigMissing("dh_api_key", "DH_INTEGRATION_API_KEY")
-	}
-
-	if err := c.limiter.Wait(ctx); err != nil {
-		if goerrors.Is(err, context.Canceled) || goerrors.Is(err, context.DeadlineExceeded) {
-			return err
-		}
-		return apperrors.ProviderUnavailable(providerName, err)
-	}
-
-	headers := map[string]string{
-		apiKeyHeader: c.apiKey,
-		"Accept":     "application/json",
-	}
-
-	resp, err := c.httpClient.Get(ctx, fullURL, headers, c.timeout)
-	if err != nil {
-		c.recordHealth(false)
-		return err
-	}
-
-	if err := json.Unmarshal(resp.Body, dest); err != nil {
-		c.recordHealth(false)
-		return apperrors.ProviderInvalidResponse(providerName, err)
-	}
-	c.recordHealth(true)
-	return nil
 }
 
 // EnterpriseAvailable returns true if the enterprise API key is configured.
@@ -347,40 +264,3 @@ func (c *Client) deleteEnterprise(ctx context.Context, fullURL string, body any,
 	return c.doEnterprise(ctx, "DELETE", fullURL, body, dest)
 }
 
-// post performs a POST request with rate limiting, auth headers, and JSON unmarshal.
-func (c *Client) post(ctx context.Context, fullURL string, body any, dest any) error {
-	if !c.Available() {
-		return apperrors.ConfigMissing("dh_api_key", "DH_INTEGRATION_API_KEY")
-	}
-
-	if err := c.limiter.Wait(ctx); err != nil {
-		if goerrors.Is(err, context.Canceled) || goerrors.Is(err, context.DeadlineExceeded) {
-			return err
-		}
-		return apperrors.ProviderUnavailable(providerName, err)
-	}
-
-	bodyBytes, err := json.Marshal(body)
-	if err != nil {
-		return apperrors.ProviderInvalidRequest(providerName, err)
-	}
-
-	headers := map[string]string{
-		apiKeyHeader:   c.apiKey,
-		"Content-Type": "application/json",
-		"Accept":       "application/json",
-	}
-
-	resp, err := c.httpClient.Post(ctx, fullURL, headers, bodyBytes, c.timeout)
-	if err != nil {
-		c.recordHealth(false)
-		return err
-	}
-
-	if err := json.Unmarshal(resp.Body, dest); err != nil {
-		c.recordHealth(false)
-		return apperrors.ProviderInvalidResponse(providerName, err)
-	}
-	c.recordHealth(true)
-	return nil
-}

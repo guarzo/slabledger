@@ -18,14 +18,13 @@ import (
 func newDHEnterpriseClient(t *testing.T) *dh.Client {
 	t.Helper()
 	baseURL := os.Getenv("DH_API_BASE_URL")
-	integrationKey := os.Getenv("DH_INTEGRATION_API_KEY")
 	enterpriseKey := os.Getenv("DH_ENTERPRISE_API_KEY")
 
 	if baseURL == "" || enterpriseKey == "" {
 		t.Skip("DH_API_BASE_URL and DH_ENTERPRISE_API_KEY required")
 	}
 
-	return dh.NewClient(baseURL, integrationKey,
+	return dh.NewClient(baseURL,
 		dh.WithEnterpriseKey(enterpriseKey),
 		dh.WithRateLimitRPS(1),
 	)
