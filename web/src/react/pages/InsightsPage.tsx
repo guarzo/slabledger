@@ -4,6 +4,7 @@ import WeeklyReviewSection from '../components/portfolio/WeeklyReviewSection';
 import CapitalTimelineChart from '../components/portfolio/CapitalTimelineChart';
 import CreditHealthPanel from '../components/portfolio/CreditHealthPanel';
 import InsightsSection from '../components/insights/InsightsSection';
+import InvoicesSection from '../components/insights/InvoicesSection';
 import { SectionErrorBoundary } from '../ui';
 
 export default function InsightsPage() {
@@ -43,6 +44,10 @@ export default function InsightsPage() {
 
         <SectionErrorBoundary sectionName="Credit Health">
           <CreditHealthPanel credit={creditData} />
+        </SectionErrorBoundary>
+
+        <SectionErrorBoundary sectionName="PSA Invoices">
+          <InvoicesSection />
         </SectionErrorBoundary>
 
         <SectionErrorBoundary sectionName="Portfolio Insights">
