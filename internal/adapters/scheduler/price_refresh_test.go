@@ -34,7 +34,7 @@ func TestPriceRefreshScheduler_Health(t *testing.T) {
 		provider := mocks.NewMockSimplePriceProvider(true)
 		config := defaultConfig()
 
-		scheduler := NewPriceRefreshScheduler(tracker, tracker, provider, logger, config)
+		scheduler := NewPriceRefreshScheduler(&mocks.MockRefreshCandidateProvider{}, tracker, tracker, provider, logger, config)
 		ctx := context.Background()
 
 		err := scheduler.Health(ctx)
@@ -47,7 +47,7 @@ func TestPriceRefreshScheduler_Health(t *testing.T) {
 		config := defaultConfig()
 		config.Enabled = false
 
-		scheduler := NewPriceRefreshScheduler(tracker, tracker, provider, logger, config)
+		scheduler := NewPriceRefreshScheduler(&mocks.MockRefreshCandidateProvider{}, tracker, tracker, provider, logger, config)
 		ctx := context.Background()
 
 		err := scheduler.Health(ctx)
@@ -59,7 +59,7 @@ func TestPriceRefreshScheduler_Health(t *testing.T) {
 		provider := mocks.NewMockSimplePriceProvider(false)
 		config := defaultConfig()
 
-		scheduler := NewPriceRefreshScheduler(tracker, tracker, provider, logger, config)
+		scheduler := NewPriceRefreshScheduler(&mocks.MockRefreshCandidateProvider{}, tracker, tracker, provider, logger, config)
 		ctx := context.Background()
 
 		err := scheduler.Health(ctx)
@@ -81,7 +81,7 @@ func TestPriceRefreshScheduler_DisabledScheduler(t *testing.T) {
 		Enabled:         false,
 	}
 
-	scheduler := NewPriceRefreshScheduler(tracker, tracker, provider, logger, config)
+	scheduler := NewPriceRefreshScheduler(&mocks.MockRefreshCandidateProvider{}, tracker, tracker, provider, logger, config)
 	ctx := context.Background()
 
 	done := make(chan struct{})
@@ -115,7 +115,7 @@ func TestPriceRefreshScheduler_Stop(t *testing.T) {
 		Enabled:            true,
 	}
 
-	scheduler := NewPriceRefreshScheduler(tracker, tracker, provider, logger, config)
+	scheduler := NewPriceRefreshScheduler(&mocks.MockRefreshCandidateProvider{}, tracker, tracker, provider, logger, config)
 	ctx := context.Background()
 
 	done := make(chan struct{})
@@ -150,7 +150,7 @@ func TestPriceRefreshScheduler_ContextCancellation(t *testing.T) {
 		Enabled:            true,
 	}
 
-	scheduler := NewPriceRefreshScheduler(tracker, tracker, provider, logger, config)
+	scheduler := NewPriceRefreshScheduler(&mocks.MockRefreshCandidateProvider{}, tracker, tracker, provider, logger, config)
 	ctx, cancel := context.WithCancel(context.Background())
 
 	done := make(chan struct{})
@@ -177,7 +177,7 @@ func TestPriceRefreshScheduler_StopIdempotent(t *testing.T) {
 	config := defaultConfig()
 	config.Enabled = false
 
-	scheduler := NewPriceRefreshScheduler(tracker, tracker, provider, logger, config)
+	scheduler := NewPriceRefreshScheduler(&mocks.MockRefreshCandidateProvider{}, tracker, tracker, provider, logger, config)
 
 	scheduler.Stop()
 	scheduler.Stop()

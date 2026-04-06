@@ -3,17 +3,18 @@ package scheduler
 import (
 	"context"
 	"fmt"
+	"time"
 
+	"github.com/guarzo/slabledger/internal/adapters/clients/cardutil"
 	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/domain/pricing"
 )
 
-// PriceRefreshScheduler handles background price refresh with rate limiting.
-// TODO(Task 4): Rewrite as purchase-driven scheduler — stale_prices VIEW and
-// price_history table were dropped in migration 000038.
+// PriceRefreshScheduler refreshes prices for unsold inventory cards.
 type PriceRefreshScheduler struct {
 	StopHandle
+	candidates          pricing.RefreshCandidateProvider
 	apiTracker          pricing.APITracker
 	healthChecker       pricing.HealthChecker
 	priceProvider       pricing.PriceProvider
@@ -22,8 +23,9 @@ type PriceRefreshScheduler struct {
 	consecutiveFailures int
 }
 
-// NewPriceRefreshScheduler creates a new price refresh scheduler
+// NewPriceRefreshScheduler creates a new price refresh scheduler.
 func NewPriceRefreshScheduler(
+	candidates pricing.RefreshCandidateProvider,
 	apiTracker pricing.APITracker,
 	healthChecker pricing.HealthChecker,
 	priceProvider pricing.PriceProvider,
@@ -32,6 +34,7 @@ func NewPriceRefreshScheduler(
 ) *PriceRefreshScheduler {
 	return &PriceRefreshScheduler{
 		StopHandle:    NewStopHandle(),
+		candidates:    candidates,
 		apiTracker:    apiTracker,
 		healthChecker: healthChecker,
 		priceProvider: priceProvider,
@@ -41,7 +44,6 @@ func NewPriceRefreshScheduler(
 }
 
 // Start begins the background refresh scheduler.
-// Callers can use Wait() to block until Start returns after Stop is called.
 func (s *PriceRefreshScheduler) Start(ctx context.Context) {
 	if !s.config.Enabled {
 		s.WG().Add(1)
@@ -62,10 +64,164 @@ func (s *PriceRefreshScheduler) Start(ctx context.Context) {
 	}, s.refreshBatch)
 }
 
-// refreshBatch is a placeholder — Task 4 will rewrite this as a purchase-driven
-// refresh that iterates campaign_purchases instead of the removed stale_prices VIEW.
+// refreshBatch processes one batch of inventory cards needing price refresh.
 func (s *PriceRefreshScheduler) refreshBatch(ctx context.Context) {
-	s.logger.Debug(ctx, "price refresh batch: no-op pending Task 4 rewrite")
+	// Guard: skip entire batch if provider is unavailable (e.g. missing DH credentials).
+	if !s.priceProvider.Available() {
+		s.logger.Warn(ctx, "price provider unavailable, skipping refresh batch")
+		return
+	}
+
+	start := time.Now()
+
+	cards, err := s.candidates.GetRefreshCandidates(ctx, s.config.BatchSize)
+	if err != nil {
+		s.consecutiveFailures++
+		s.logger.Error(ctx, "failed to get refresh candidates",
+			observability.Err(err),
+			observability.Int("consecutive_failures", s.consecutiveFailures))
+		return
+	}
+	s.consecutiveFailures = 0
+
+	if len(cards) == 0 {
+		s.logger.Debug(ctx, "no cards to refresh")
+		return
+	}
+
+	s.logger.Info(ctx, "refreshing prices",
+		observability.Int("count", len(cards)))
+
+	// Check if DH provider is blocked
+	provider := pricing.SourceDH
+	blocked, until, err := s.apiTracker.IsProviderBlocked(ctx, provider)
+	if err != nil {
+		s.logger.Warn(ctx, "failed to check provider block status",
+			observability.String("provider", provider),
+			observability.Err(err))
+		return
+	}
+	if blocked {
+		s.logger.Warn(ctx, "provider blocked, skipping",
+			observability.String("provider", provider),
+			observability.Time("blocked_until", until))
+		return
+	}
+
+	// Check hourly rate limit
+	usage, err := s.apiTracker.GetAPIUsage(ctx, provider)
+	if err != nil {
+		s.logger.Warn(ctx, "failed to get API usage, skipping to avoid rate-limit risk",
+			observability.String("provider", provider),
+			observability.Err(err))
+		return
+	}
+	if s.config.MaxCallsPerHour > 0 && usage.CallsLastHour >= int64(s.config.MaxCallsPerHour) {
+		s.logger.Warn(ctx, "hourly rate limit reached, skipping",
+			observability.String("provider", provider),
+			observability.Int("calls_last_hour", int(usage.CallsLastHour)),
+			observability.Int("max_calls_per_hour", s.config.MaxCallsPerHour))
+		return
+	}
+
+	successCount := 0
+	noDataCount := 0
+	errorCount := 0
+	skippedCount := 0
+	apiCalls := 0
+
+	seen := make(map[string]bool)
+	for _, card := range cards {
+		select {
+		case <-ctx.Done():
+			s.logger.Info(ctx, "refresh batch cancelled")
+			return
+		default:
+		}
+
+		cleanName := cardutil.NormalizePurchaseName(card.CardName)
+		cardNumber := card.CardNumber
+		if cardutil.IsInvalidCardNumber(cardNumber) {
+			cardNumber = ""
+		}
+		if cardNumber == "" {
+			if extracted := cardutil.ExtractCollectorNumber(card.CardName); extracted != "" {
+				cardNumber = extracted
+			}
+		}
+
+		if cleanName == "" {
+			s.logger.Warn(ctx, "skipping refresh: normalized card name is empty",
+				observability.String("original_name", card.CardName))
+			skippedCount++
+			continue
+		}
+
+		dedupeKey := cleanName + "|" + card.SetName + "|" + cardNumber
+		if seen[dedupeKey] {
+			skippedCount++
+			continue
+		}
+		seen[dedupeKey] = true
+
+		if apiCalls > 0 && apiCalls%s.config.MaxBurstCalls == 0 {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(s.config.BurstPauseDuration):
+			}
+		}
+
+		if apiCalls > 0 {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(s.config.BatchDelay):
+			}
+		}
+
+		pc := pricing.Card{
+			Name:            cleanName,
+			Set:             card.SetName,
+			Number:          cardNumber,
+			PSAListingTitle: card.PSAListingTitle,
+		}
+
+		result, err := s.priceProvider.GetPrice(ctx, pc)
+		apiCalls++
+		if err != nil {
+			s.logger.Warn(ctx, "failed to refresh price",
+				observability.String("card", cleanName),
+				observability.Err(err))
+			errorCount++
+			continue
+		}
+
+		if result == nil {
+			noDataCount++
+			continue
+		}
+
+		successCount++
+	}
+
+	duration := time.Since(start)
+	s.logAPIUsageSummary(ctx)
+
+	if errorCount > 0 {
+		s.consecutiveFailures++
+	} else {
+		s.consecutiveFailures = 0
+	}
+
+	s.logger.Info(ctx, "refresh batch completed",
+		observability.Int("total", len(cards)),
+		observability.Int("success", successCount),
+		observability.Int("no_data", noDataCount),
+		observability.Int("errors", errorCount),
+		observability.Int("skipped", skippedCount),
+		observability.Int("consecutive_failures", s.consecutiveFailures),
+		observability.Duration("duration", duration))
 }
 
 // logAPIUsageSummary logs daily API usage for each provider after a refresh cycle.
@@ -75,8 +231,8 @@ func (s *PriceRefreshScheduler) logAPIUsageSummary(ctx context.Context) {
 	}
 
 	providers := []string{pricing.SourceDH}
-	for _, provider := range providers {
-		usage, err := s.apiTracker.GetAPIUsage(ctx, provider)
+	for _, prov := range providers {
+		usage, err := s.apiTracker.GetAPIUsage(ctx, prov)
 		if err != nil {
 			continue
 		}
@@ -87,7 +243,7 @@ func (s *PriceRefreshScheduler) logAPIUsageSummary(ctx context.Context) {
 		successRate := float64(usage.TotalCalls-usage.ErrorCalls) / float64(usage.TotalCalls) * 100.0
 
 		s.logger.Info(ctx, "API daily usage",
-			observability.String("provider", provider),
+			observability.String("provider", prov),
 			observability.Int("calls", int(usage.TotalCalls)),
 			observability.Float64("success_rate_pct", successRate),
 			observability.Float64("avg_latency_ms", usage.AvgLatencyMS),
@@ -95,20 +251,17 @@ func (s *PriceRefreshScheduler) logAPIUsageSummary(ctx context.Context) {
 	}
 }
 
-// Health returns the health status of the scheduler
+// Health returns the health status of the scheduler.
 func (s *PriceRefreshScheduler) Health(ctx context.Context) error {
-	// Disabled scheduler is intentionally inactive, not unhealthy
 	if !s.config.Enabled {
 		s.logger.Debug(ctx, "scheduler disabled, skipping health checks")
 		return nil
 	}
 
-	// Check if repository is accessible
 	if err := s.healthChecker.Ping(ctx); err != nil {
 		return apperrors.StorageError("repository health check", err)
 	}
 
-	// Check if provider is available
 	if !s.priceProvider.Available() {
 		return apperrors.ProviderUnavailable("price_provider", fmt.Errorf("provider not configured or not available"))
 	}

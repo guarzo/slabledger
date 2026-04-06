@@ -64,6 +64,22 @@ func (m *MockDBTracker) Ping(_ context.Context) error {
 	return m.PingError
 }
 
+// MockRefreshCandidateProvider implements pricing.RefreshCandidateProvider for testing.
+type MockRefreshCandidateProvider struct {
+	Candidates []pricing.RefreshCandidate
+	Err        error
+}
+
+func (m *MockRefreshCandidateProvider) GetRefreshCandidates(_ context.Context, limit int) ([]pricing.RefreshCandidate, error) {
+	if m.Err != nil {
+		return nil, m.Err
+	}
+	if len(m.Candidates) <= limit {
+		return m.Candidates, nil
+	}
+	return m.Candidates[:limit], nil
+}
+
 // MockSimplePriceProvider implements pricing.PriceProvider with call tracking for testing
 type MockSimplePriceProvider struct {
 	mu        sync.Mutex

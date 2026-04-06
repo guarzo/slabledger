@@ -295,6 +295,7 @@ type schedulerDeps struct {
 	Config               *config.Config
 	Logger               observability.Logger
 	DBTracker            *sqlite.DBTracker
+	RefreshCandidates    pricing.RefreshCandidateProvider
 	PriceProvImpl        pricing.PriceProvider
 	CardProvImpl         *tcgdex.TCGdex
 	AuthService          auth.Service
@@ -328,6 +329,7 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 		APITracker:               deps.DBTracker,
 		HealthChecker:            deps.DBTracker,
 		AccessTracker:            deps.DBTracker,
+		RefreshCandidates:        deps.RefreshCandidates,
 		PriceProvider:            deps.PriceProvImpl,
 		CardProvider:             deps.CardProvImpl,
 		AuthService:              deps.AuthService,

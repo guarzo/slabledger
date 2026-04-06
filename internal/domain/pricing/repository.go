@@ -82,3 +82,17 @@ type FailureSummary struct {
 type PricingDiagnosticsProvider interface {
 	GetPricingDiagnostics(ctx context.Context) (*PricingDiagnostics, error)
 }
+
+// RefreshCandidate identifies a card needing a price refresh.
+// Derived from campaign inventory (unsold purchases) rather than price_history.
+type RefreshCandidate struct {
+	CardName        string
+	CardNumber      string
+	SetName         string
+	PSAListingTitle string
+}
+
+// RefreshCandidateProvider lists cards whose prices should be refreshed.
+type RefreshCandidateProvider interface {
+	GetRefreshCandidates(ctx context.Context, limit int) ([]RefreshCandidate, error)
+}

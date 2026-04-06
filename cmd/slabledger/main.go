@@ -196,6 +196,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 
 	// Create DB tracker (API tracking, access tracking, health checks)
 	priceRepo := sqlite.NewDBTracker(db)
+	refreshCandidateRepo := sqlite.NewRefreshCandidateRepository(db.DB)
 
 	// Initialize authentication
 	var authService auth.Service
@@ -345,6 +346,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		Config:               cfg,
 		Logger:               logger,
 		DBTracker:            priceRepo,
+		RefreshCandidates:    refreshCandidateRepo,
 		PriceProvImpl:        priceProvImpl,
 		CardProvImpl:         cardProvImpl,
 		AuthService:          authService,
