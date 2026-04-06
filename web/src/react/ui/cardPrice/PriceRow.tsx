@@ -5,12 +5,7 @@ import { TrendArrow } from '../TrendArrow';
 import type { GradeKey, GradeData } from '../../../types/pricing';
 import { currency } from '../../utils/formatters';
 import { gradeBorderColors, isNoData, formatEbayDisplay, fmtRange, fmtDateShort } from './priceCardUtils';
-
-interface LastSoldEntry {
-  lastSoldPrice: number;
-  lastSoldDate: string;
-  saleCount: number;
-}
+import type { LastSoldEntry } from './priceCardUtils';
 
 export interface PriceRowProps {
   label: string;
@@ -28,7 +23,7 @@ export interface PriceRowProps {
   conservativePrice?: number;
 }
 
-function MarketplaceLink({
+export function MarketplaceLink({
   href,
   label,
   compact,

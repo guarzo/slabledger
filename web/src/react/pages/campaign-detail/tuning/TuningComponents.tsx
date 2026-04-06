@@ -365,7 +365,7 @@ function MonteCarloCard({ result, isCurrent, isBest }: {
   );
 }
 
-export function Stat({ label, value }: { label: string; value: string }) {
+function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <div className="text-[var(--text-muted)]">{label}</div>

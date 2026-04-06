@@ -20,6 +20,7 @@ import {
   defaultEbayUrl, defaultAltUrl, defaultCardLadderUrl,
   localEbayCompletedUrl, gradeRows,
 } from './cardPrice/priceCardUtils';
+import type { LastSoldEntry } from './cardPrice/priceCardUtils';
 import { PriceRow } from './cardPrice/PriceRow';
 import { LegacyPriceRow } from './cardPrice/LegacyPriceRow';
 
@@ -31,12 +32,6 @@ export interface CardPriceData {
 }
 
 export interface CardPrices extends Partial<Record<GradeKey, number>> {}
-
-interface LastSoldEntry {
-  lastSoldPrice: number;
-  lastSoldDate: string;
-  saleCount: number;
-}
 
 export interface CardPriceCardProps {
   card: CardPriceData;

@@ -2,12 +2,13 @@ import type { ShopifyPriceSyncMatch } from '../../../types/campaigns';
 import type { SyncFilter, SyncSort, FilterCounts, SortFn } from './shopifyTypes';
 
 export function computeFilterCounts(mismatches: ShopifyPriceSyncMatch[]): FilterCounts {
-  return {
-    all: mismatches.length,
-    price_drop: mismatches.filter(m => m.recommendedPriceCents < m.currentPriceCents).length,
-    price_increase: mismatches.filter(m => m.recommendedPriceCents > m.currentPriceCents).length,
-    no_market_data: mismatches.filter(m => !m.hasMarketData).length,
-  };
+  let price_drop = 0, price_increase = 0, no_market_data = 0;
+  for (const m of mismatches) {
+    if (m.recommendedPriceCents < m.currentPriceCents) price_drop++;
+    if (m.recommendedPriceCents > m.currentPriceCents) price_increase++;
+    if (!m.hasMarketData) no_market_data++;
+  }
+  return { all: mismatches.length, price_drop, price_increase, no_market_data };
 }
 
 export function applyFilter(mismatches: ShopifyPriceSyncMatch[], filter: SyncFilter): ShopifyPriceSyncMatch[] {

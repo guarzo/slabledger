@@ -10,7 +10,7 @@ import { useExpectedValues } from '../../../queries/useCampaignQueries';
 import { api } from '../../../../js/api';
 import { costBasis, bestPrice } from './utils';
 import type { SortKey, SortDir } from './utils';
-import { computeReviewStatsAndCounts, computeSummaryStats, filterAndSortItems } from './inventoryCalcs';
+import { computeInventoryMeta, filterAndSortItems } from './inventoryCalcs';
 import type { FilterTab } from './inventoryCalcs';
 
 export function useInventoryState(items: AgingItem[], campaignId?: string) {
@@ -56,8 +56,8 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
     });
   }, []);
 
-  const { reviewStats, tabCounts } = useMemo(
-    () => computeReviewStatsAndCounts(items),
+  const { reviewStats, tabCounts, summary } = useMemo(
+    () => computeInventoryMeta(items),
     [items],
   );
 
@@ -77,14 +77,21 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
     mobileScrollRef.current?.scrollTo({ top: 0 });
   }, [sortKey, sortDir, debouncedSearch, filterTab, showAll]);
 
-  const handleReviewed = useCallback(() => {
+  const invalidateInventory = useCallback((opts?: { sellSheet?: boolean }) => {
     if (campaignId) {
       queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.inventory(campaignId) });
     } else {
       queryClient.invalidateQueries({ predicate: (query) => query.queryKey[0] === 'campaigns' });
     }
-    setExpandedId(null);
+    if (opts?.sellSheet) {
+      queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.sellSheet });
+    }
   }, [campaignId, queryClient]);
+
+  const handleReviewed = useCallback(() => {
+    invalidateInventory();
+    setExpandedId(null);
+  }, [invalidateInventory]);
 
   const handleFlagSubmit = useCallback(async (reason: PriceFlagReason) => {
     if (!flagTarget) return;
@@ -197,27 +204,14 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
   }
 
   function handlePriceSaved() {
-    if (campaignId) {
-      queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.inventory(campaignId) });
-    } else {
-      queryClient.invalidateQueries({ predicate: (query) => query.queryKey[0] === 'campaigns' });
-    }
-    // Always invalidate sell sheet — overrides affect global sell sheet regardless of view
-    queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.sellSheet });
+    invalidateInventory({ sellSheet: true });
   }
 
   function handleHintSaved() {
-    if (campaignId) {
-      queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.inventory(campaignId) });
-    } else {
-      queryClient.invalidateQueries({ predicate: (query) => query.queryKey[0] === 'campaigns' && query.queryKey[2] === 'inventory' });
-    }
+    invalidateInventory();
   }
 
-  const { totalCost, totalMarket, totalPL } = useMemo(
-    () => computeSummaryStats(items),
-    [items],
-  );
+  const { totalCost, totalMarket, totalPL } = summary;
 
   return {
     // Refs

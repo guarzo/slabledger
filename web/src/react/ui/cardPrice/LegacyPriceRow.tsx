@@ -3,6 +3,7 @@ import { LinkDropdown } from '../LinkDropdown';
 import type { GradeKey } from '../../../types/pricing';
 import { currency } from '../../utils/formatters';
 import { gradeBorderColors, isNoData } from './priceCardUtils';
+import { MarketplaceLink } from './PriceRow';
 
 export interface LegacyPriceRowProps {
   label: string;
@@ -46,15 +47,9 @@ export function LegacyPriceRow({
           <span className={clsx('text-xs', priceEmpty ? 'text-[var(--text-subtle)]' : 'font-semibold text-[var(--text)]')}>
             {priceEmpty ? '\u2014' : currency(price)}
           </span>
-          <a href={ebayHref} target="_blank" rel="noopener noreferrer"
-            className="inline-flex items-center rounded px-1 py-0.5 text-[var(--text-muted)] hover:text-[var(--brand-400)] hover:bg-[var(--surface-hover)] transition-colors text-[10px]"
-            title="Search on eBay">eBay</a>
-          <a href={altHref} target="_blank" rel="noopener noreferrer"
-            className="inline-flex items-center rounded px-1 py-0.5 text-[var(--text-muted)] hover:text-[var(--brand-400)] hover:bg-[var(--surface-hover)] transition-colors text-[10px]"
-            title="Search on Alt">Alt</a>
-          <a href={cardLadderHref} target="_blank" rel="noopener noreferrer"
-            className="inline-flex items-center rounded px-1 py-0.5 text-[var(--text-muted)] hover:text-[var(--brand-400)] hover:bg-[var(--surface-hover)] transition-colors text-[10px]"
-            title="Search on CL">CL</a>
+          <MarketplaceLink href={ebayHref} label="eBay" compact />
+          <MarketplaceLink href={altHref} label="Alt" compact />
+          <MarketplaceLink href={cardLadderHref} label="CL" compact />
         </span>
       </div>
     );

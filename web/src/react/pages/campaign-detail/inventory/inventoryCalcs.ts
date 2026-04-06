@@ -17,9 +17,17 @@ export interface SummaryStats {
   totalPL: number;
 }
 
-export function computeReviewStatsAndCounts(items: AgingItem[]): { reviewStats: ReviewStats; tabCounts: TabCounts } {
+export interface InventoryMeta {
+  reviewStats: ReviewStats;
+  tabCounts: TabCounts;
+  summary: SummaryStats;
+}
+
+export function computeInventoryMeta(items: AgingItem[]): InventoryMeta {
   const stats: ReviewStats = { total: items.length, needsReview: 0, reviewed: 0, flagged: 0 };
   const counts: TabCounts = { needs_review: 0, large_gap: 0, no_data: 0, flagged: 0, card_show: 0, all: items.length };
+  let totalCost = 0;
+  let totalMarket = 0;
   for (const item of items) {
     if (item.hasOpenFlag) stats.flagged++;
     if (item.purchase.reviewedAt) stats.reviewed++;
@@ -31,17 +39,15 @@ export function computeReviewStatsAndCounts(items: AgingItem[]): { reviewStats: 
     else if (status === 'no_data') { counts.needs_review++; counts.no_data++; }
     else if (status === 'flagged') counts.flagged++;
     if (isCardShowCandidate(item)) counts.card_show++;
-  }
-  return { reviewStats: stats, tabCounts: counts };
-}
 
-export function computeSummaryStats(items: AgingItem[]): SummaryStats {
-  const totalCost = items.reduce((sum, i) => sum + costBasis(i.purchase), 0);
-  const totalMarket = items.reduce((sum, i) => {
-    if (!i.currentMarket) return sum;
-    return sum + bestPrice(i.currentMarket);
-  }, 0);
-  return { totalCost, totalMarket, totalPL: totalMarket > 0 ? totalMarket - totalCost : 0 };
+    totalCost += costBasis(item.purchase);
+    if (item.currentMarket) totalMarket += bestPrice(item.currentMarket);
+  }
+  return {
+    reviewStats: stats,
+    tabCounts: counts,
+    summary: { totalCost, totalMarket, totalPL: totalMarket > 0 ? totalMarket - totalCost : 0 },
+  };
 }
 
 export type FilterTab = 'needs_review' | 'large_gap' | 'no_data' | 'flagged' | 'card_show' | 'all' | 'sell_sheet';

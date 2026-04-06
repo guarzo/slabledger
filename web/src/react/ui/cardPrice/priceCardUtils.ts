@@ -9,6 +9,12 @@ import {
 } from '../../utils/marketplaceUrls';
 import { currency } from '../../utils/formatters';
 
+export interface LastSoldEntry {
+  lastSoldPrice: number;
+  lastSoldDate: string;
+  saleCount: number;
+}
+
 /* ---------- Formatters ---------- */
 
 export function fmtRange(low: number, high: number): string {
