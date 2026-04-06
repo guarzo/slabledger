@@ -10,25 +10,34 @@ const INITIAL_CANDIDATES_SHOWN = 3;
 
 /* ── Candidate card ─────────────────────────────────────────────── */
 
+function ImagePlaceholder() {
+  return (
+    <div className="w-10 h-14 rounded bg-[var(--surface-2)] flex items-center justify-center text-[8px] text-[var(--text-muted)]">
+      No img
+    </div>
+  );
+}
+
 function CandidateCard({ candidate, onSelect, isPending, isDisabled }: {
   candidate: DHCandidate;
   onSelect: (dhCardId: number) => void;
   isPending: boolean;
   isDisabled: boolean;
 }) {
+  const [imgFailed, setImgFailed] = useState(false);
+
   return (
     <div className="flex items-center gap-2 p-2 rounded border border-[var(--border)] bg-[var(--bg-secondary)]">
-      {candidate.image_url ? (
+      {candidate.image_url && !imgFailed ? (
         <img
           src={candidate.image_url}
           alt={candidate.card_name}
           className="w-10 h-14 object-cover rounded"
           loading="lazy"
+          onError={() => setImgFailed(true)}
         />
       ) : (
-        <div className="w-10 h-14 rounded bg-[var(--surface-2)] flex items-center justify-center text-[8px] text-[var(--text-muted)]">
-          No img
-        </div>
+        <ImagePlaceholder />
       )}
       <div className="flex-1 min-w-0">
         <p className="text-xs font-medium text-[var(--text)] truncate">{candidate.card_name}</p>

@@ -16,6 +16,13 @@ type DHCertResolver interface {
 	ResolveCert(ctx context.Context, req dh.CertResolveRequest) (*dh.CertResolution, error)
 }
 
+// PSAKeyRotator can rotate PSA API keys when rate limited. Optional interface
+// implemented by dh.Client when PSA keys are configured.
+type PSAKeyRotator interface {
+	RotatePSAKey() bool
+	ResetPSAKeyRotation()
+}
+
 // DHCardIDSaver reads and writes DH card ID mappings.
 type DHCardIDSaver interface {
 	GetExternalID(ctx context.Context, cardName, setName, collectorNumber, provider string) (string, error)
@@ -99,7 +106,8 @@ type DHHandler struct {
 	bgWG             sync.WaitGroup
 	bulkMatchMu      sync.Mutex
 	bulkMatchRunning atomic.Bool
-	selectLocks      sync.Map // per-purchaseID mutex for select-match serialization
+	bulkMatchError   atomic.Value // stores last bulk match error string (or "")
+	selectLocks      sync.Map     // per-purchaseID mutex for select-match serialization
 }
 
 // selectMatchLock returns a per-purchase mutex for serializing select-match requests.

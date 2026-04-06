@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	"github.com/guarzo/slabledger/internal/domain/campaigns"
@@ -42,6 +43,7 @@ func (h *DHHandler) HandleBulkMatch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.bulkMatchRunning.Store(true)
+	h.bulkMatchError.Store("")
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "started"})
 
 	h.bgWG.Add(1)
@@ -62,6 +64,11 @@ type matchedCard struct {
 
 // runBulkMatch processes unsold purchases against DH cert resolution, logging results.
 func (h *DHHandler) runBulkMatch(ctx context.Context, purchases []campaigns.Purchase, mappedSet map[string]string) {
+	// Reset PSA key rotation to start from the first key.
+	if rotator, ok := h.certResolver.(PSAKeyRotator); ok {
+		rotator.ResetPSAKeyRotation()
+	}
+
 	var matched, skipped, noCert, notFound, failed int
 	var matchedCards []matchedCard
 
@@ -83,6 +90,14 @@ func (h *DHHandler) runBulkMatch(ctx context.Context, purchases []campaigns.Purc
 		}
 
 		cardName, variant := campaigns.CleanCardNameForDH(p.CardName)
+		h.logger.Info(ctx, "bulk match: resolving cert",
+			observability.String("cert", p.CertNumber),
+			observability.String("raw_name", p.CardName),
+			observability.String("clean_name", cardName),
+			observability.String("variant", variant),
+			observability.String("set", p.SetName),
+			observability.String("card_number", p.CardNumber),
+			observability.String("year", p.CardYear))
 		resp, err := h.certResolver.ResolveCert(ctx, dh.CertResolveRequest{
 			CertNumber: p.CertNumber,
 			CardName:   cardName,
@@ -92,11 +107,47 @@ func (h *DHHandler) runBulkMatch(ctx context.Context, purchases []campaigns.Purc
 			Variant:    variant,
 		})
 		if err != nil {
-			h.logger.Warn(ctx, "bulk match: DH cert resolve failed",
-				observability.String("cert", p.CertNumber), observability.Err(err))
-			failed++
-			continue
+			isPSARateLimit := strings.Contains(err.Error(), "PSA API rate limit") || strings.Contains(err.Error(), "daily limit reached")
+
+			// On PSA rate limit, try rotating to the next key and retrying this card.
+			if isPSARateLimit {
+				if rotator, ok := h.certResolver.(PSAKeyRotator); ok && rotator.RotatePSAKey() {
+					h.logger.Info(ctx, "bulk match: PSA key rate limited, rotated to next key",
+						observability.String("cert", p.CertNumber))
+					resp, err = h.certResolver.ResolveCert(ctx, dh.CertResolveRequest{
+						CertNumber: p.CertNumber,
+						CardName:   cardName,
+						SetName:    p.SetName,
+						CardNumber: p.CardNumber,
+						Year:       p.CardYear,
+						Variant:    variant,
+					})
+				}
+				// If still failing after rotation (or no rotator), abort.
+				if err != nil {
+					failed++
+					errMsg := "DH cert resolution stopped: PSA API daily rate limit reached. All configured PSA keys exhausted."
+					h.logger.Error(ctx, errMsg, observability.Err(err))
+					h.bulkMatchError.Store(errMsg)
+					break
+				}
+			} else {
+				h.logger.Warn(ctx, "bulk match: DH cert resolve failed",
+					observability.String("cert", p.CertNumber), observability.Err(err))
+				failed++
+				// Mark non-rate-limit failures as unmatched so they appear in the manual fix UI.
+				if h.pushStatusUpdater != nil {
+					_ = h.pushStatusUpdater.UpdatePurchaseDHPushStatus(ctx, p.ID, campaigns.DHPushStatusUnmatched)
+				}
+				continue
+			}
 		}
+
+		h.logger.Info(ctx, "bulk match: cert resolve result",
+			observability.String("cert", p.CertNumber),
+			observability.String("status", resp.Status),
+			observability.Int("dh_card_id", resp.DHCardID),
+			observability.Int("candidates", len(resp.Candidates)))
 
 		if resp.Status != dh.CertStatusMatched {
 			if resp.Status == dh.CertStatusAmbiguous && len(resp.Candidates) > 0 {
