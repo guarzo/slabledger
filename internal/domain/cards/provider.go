@@ -54,7 +54,7 @@ type Card struct {
 	Language string // Language of the card (e.g., "English", "Japanese")
 	ImageURL string
 
-	// Raw PSA listing title (optional). Used by CardHedger's LLM matcher
+	// Raw PSA listing title (optional). Reserved for secondary source matching
 	// as a fallback query when normalized queries return no candidates.
 	PSAListingTitle string
 

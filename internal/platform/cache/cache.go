@@ -327,7 +327,3 @@ func buildKey(parts ...string) string {
 func CardsKey(setID string) string {
 	return buildKey("cards", "set", setID)
 }
-
-func PriceChartingKey(setName, cardName, number string) string {
-	return buildKey("pc", setName, cardName, number)
-}

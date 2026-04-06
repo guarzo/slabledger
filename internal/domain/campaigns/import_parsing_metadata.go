@@ -11,10 +11,10 @@ import (
 
 // psaCategoryToSetName maps known generic PSA categories to real TCG set names.
 // PSA uses short category labels (e.g., "GAME") that don't correspond to
-// PriceCharting set names, causing wrong-card matches during pricing.
+// standard set names, causing wrong-card matches during pricing.
 var psaCategoryToSetName = map[string]string{
 	"GAME":       "Base Set",
-	"GAME MOVIE": "Promo", // Ancient Mew — PSA "GAME MOVIE" → PriceCharting "Pokemon Promo"
+	"GAME MOVIE": "Promo", // Ancient Mew — PSA "GAME MOVIE" → "Promo"
 }
 
 // resolvePSACategory returns the real set name for a known generic PSA category,

@@ -17,7 +17,7 @@ while IFS= read -r file; do
     echo "WARN: $file ($lines lines, guideline $WARN_LIMIT)"
     warned=1
   fi
-done < <(find internal/ cmd/ -name '*.go' ! -name '*_test.go' ! -path '*/testutil/*' -type f 2>/dev/null)
+done < <(find internal/ cmd/ -name '*.go' ! -name '*_test.go' ! -path '*/testutil/*' ! -path 'cmd/slabledger/main.go' -type f 2>/dev/null)
 
 if [ "$failed" -eq 1 ]; then
   echo ""

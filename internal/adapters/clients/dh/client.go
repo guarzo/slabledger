@@ -238,6 +238,13 @@ func (c *Client) doEnterprise(ctx context.Context, method, fullURL string, body 
 		headers["Content-Type"] = "application/json"
 	}
 
+	if c.logger != nil {
+		c.logger.Debug(ctx, "dh: enterprise request",
+			observability.String("method", method),
+			observability.String("url", fullURL),
+			observability.Int("body_bytes", len(bodyBytes)))
+	}
+
 	resp, err := c.httpClient.Do(ctx, httpx.Request{
 		Method:  method,
 		URL:     fullURL,
@@ -248,6 +255,12 @@ func (c *Client) doEnterprise(ctx context.Context, method, fullURL string, body 
 	if err != nil {
 		c.recordHealth(false)
 		return err
+	}
+
+	if c.logger != nil {
+		c.logger.Debug(ctx, "dh: enterprise response",
+			observability.Int("status_code", resp.StatusCode),
+			observability.Int("body_bytes", len(resp.Body)))
 	}
 
 	if dest != nil {

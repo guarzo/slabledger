@@ -61,11 +61,6 @@ func (a *Adapter) GetLastSoldCents(ctx context.Context, card campaigns.CardIdent
 		return 0, nil
 	}
 
-	// For raw (grade 0), prefer JustTCG NM price when available
-	if grade == 0 && price.Grades.RawNMCents > 0 {
-		return int(price.Grades.RawNMCents), nil
-	}
-
 	if price.LastSoldByGrade == nil {
 		return 0, nil
 	}
@@ -93,9 +88,7 @@ func (a *Adapter) GetMarketSnapshot(ctx context.Context, card campaigns.CardIden
 
 	snap := &campaigns.MarketSnapshot{}
 
-	// Last sold data — prefer actual LastSoldByGrade, but PriceCharting's
-	// sales-data is never populated by the API. Fall back to grade prices
-	// from all available sources which are derived from recent sold listings.
+	// Last sold data from actual sales records.
 	if price.LastSoldByGrade != nil {
 		if info := gradeInfo(price.LastSoldByGrade, grade); info != nil {
 			snap.LastSoldCents = int(mathutil.ToCents(info.LastSoldPrice))
@@ -103,14 +96,7 @@ func (a *Adapter) GetMarketSnapshot(ctx context.Context, card campaigns.CardIden
 			snap.SaleCount = info.SaleCount
 		}
 	}
-	// Fallback chain when LastSoldCents is still 0:
-	// 1. PriceCharting grade prices (based on recent eBay sold listings)
-	if snap.LastSoldCents == 0 && price.PCGrades != nil {
-		if pc := gradePrice(*price.PCGrades, grade); pc > 0 {
-			snap.LastSoldCents = pc
-		}
-	}
-	// 2. eBay smartMarketPrice (median of recent eBay sales)
+	// Fallback: eBay smartMarketPrice (median of recent eBay sales)
 	if snap.LastSoldCents == 0 && price.GradeDetails != nil {
 		key := gradeDetailKey(grade)
 		if detail, ok := price.GradeDetails[key]; ok && detail != nil && detail.Ebay != nil && detail.Ebay.PriceCents > 0 {
@@ -118,21 +104,17 @@ func (a *Adapter) GetMarketSnapshot(ctx context.Context, card campaigns.CardIden
 			snap.SaleCount = detail.Ebay.SalesCount
 		}
 	}
-	// 3. CardHedger price estimate (stored separately to distinguish from actual sales)
+	// 3. Price estimate (stored separately to distinguish from actual sales)
 	if price.GradeDetails != nil {
 		key := gradeDetailKey(grade)
 		if detail, ok := price.GradeDetails[key]; ok && detail != nil && detail.Estimate != nil && detail.Estimate.PriceCents > 0 {
 			snap.EstimatedValueCents = int(detail.Estimate.PriceCents)
-			snap.EstimateSource = pricing.SourceCardHedger
+			snap.EstimateSource = pricing.SourceDH
 		}
 	}
 
-	// Grade-specific price (fused result)
+	// Grade-specific price
 	snap.GradePriceCents = gradePrice(price.Grades, grade)
-	// Fallback to PriceCharting graded price when fusion Grades is empty
-	if snap.GradePriceCents == 0 && price.PCGrades != nil {
-		snap.GradePriceCents = gradePrice(*price.PCGrades, grade)
-	}
 
 	// Mark half-grade results as estimated since we interpolate
 	if isHalfGrade(grade) && snap.GradePriceCents > 0 {
@@ -148,9 +130,6 @@ func (a *Adapter) GetMarketSnapshot(ctx context.Context, card campaigns.CardIden
 		}
 		if fallbackGrade <= 10 {
 			pUp := gradePrice(price.Grades, fallbackGrade)
-			if pUp == 0 && price.PCGrades != nil {
-				pUp = gradePrice(*price.PCGrades, fallbackGrade)
-			}
 			if pUp > 0 {
 				snap.GradePriceCents = int(math.Round(float64(pUp) * 0.65))
 				snap.IsEstimated = true
@@ -174,11 +153,9 @@ func (a *Adapter) GetMarketSnapshot(ctx context.Context, card campaigns.CardIden
 		snap.MonthlyVelocity = price.Velocity.MonthlyTotal
 	}
 
-	// Fusion metadata
-	snap.FusionConfidence = price.Confidence
-	if price.FusionMetadata != nil {
-		snap.SourceCount = price.FusionMetadata.SourceCount
-	} else if len(price.Sources) > 0 {
+	// Confidence and source count
+	snap.Confidence = price.Confidence
+	if len(price.Sources) > 0 {
 		snap.SourceCount = len(price.Sources)
 	}
 
@@ -302,19 +279,7 @@ func gradeToCanonical(grade float64) pricing.Grade {
 func buildSourcePrices(price *pricing.Price, grade float64) []campaigns.SourcePrice {
 	var sources []campaigns.SourcePrice
 
-	// PriceCharting: raw grade price from PriceCharting's own API (not the fused price).
-	// price.PCGrades carries PriceCharting's original prices; price.Grades is the fused result.
-	if price.PCGrades != nil {
-		gp := gradePrice(*price.PCGrades, grade)
-		if gp > 0 {
-			sources = append(sources, campaigns.SourcePrice{
-				Source:     "PriceCharting",
-				PriceCents: gp,
-			})
-		}
-	}
-
-	// Per-grade detail data from secondary sources
+	// Per-grade detail data from DH and other sources
 	key := gradeDetailKey(grade)
 	if price.GradeDetails != nil {
 		if detail, ok := price.GradeDetails[key]; ok && detail != nil {
@@ -342,10 +307,10 @@ func buildSourcePrices(price *pricing.Price, grade float64) []campaigns.SourcePr
 				sources = append(sources, sp)
 			}
 
-			// CardHedger (multi-platform estimate)
+			// Price estimate
 			if detail.Estimate != nil && detail.Estimate.PriceCents > 0 {
 				sp := campaigns.SourcePrice{
-					Source:     "CardHedger",
+					Source:     "Estimate",
 					PriceCents: int(detail.Estimate.PriceCents),
 				}
 				if detail.Estimate.LowCents > 0 {

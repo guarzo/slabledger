@@ -7,7 +7,7 @@ import (
 )
 
 // Ping checks database connectivity
-func (r *PriceRepository) Ping(ctx context.Context) error {
+func (r *DBTracker) Ping(ctx context.Context) error {
 	err := r.db.PingContext(ctx)
 	if err != nil {
 		r.logger.Error(ctx, "database ping failed",

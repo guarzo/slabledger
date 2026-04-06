@@ -50,7 +50,7 @@ func (r *CampaignsRepository) RecordSnapshot(ctx context.Context, e campaigns.Sn
 		e.LastSoldCents, e.LowestListCents, e.EstimatedValueCents,
 		e.ActiveListings, e.SalesLast30d, e.SalesLast90d,
 		e.DailyVelocity, e.WeeklyVelocity, e.Trend30d, e.Trend90d, e.Volatility,
-		e.SourceCount, e.FusionConfidence, e.SnapshotJSON, e.SnapshotDate,
+		e.SourceCount, e.Confidence, e.SnapshotJSON, e.SnapshotDate,
 	)
 	return err
 }

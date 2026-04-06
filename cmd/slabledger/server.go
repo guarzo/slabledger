@@ -34,9 +34,7 @@ type ServerDependencies struct {
 	FavoritesService          domainFavorites.Service
 	CampaignsService          domainCampaigns.Service
 	CacheStatsProvider        handlers.CacheStatsProvider
-	CardDiscoverer            handlers.CardDiscoverer // optional: triggers CardHedger discovery after imports
 	PriceHintsHandler         *handlers.PriceHintsHandler
-	CardHedgerStats           handlers.CardHedgerStats // optional: live CardHedger counters
 	CardRequestHandler        *handlers.CardRequestHandlers
 	PricingDiagnosticsHandler *handlers.PricingDiagnosticsHandler
 	CampaignsRepo             domainCampaigns.Repository      // For pricing API (cert price lookup)
@@ -73,25 +71,6 @@ type EnvVarValidation struct {
 func validateEnvironmentVariables(ctx context.Context, logger observability.Logger, cfg *config.Config) EnvVarValidation {
 	result := EnvVarValidation{}
 
-	// Check required adapter keys via config struct
-	type requiredCheck struct {
-		name        string
-		value       string
-		description string
-	}
-	requiredVars := []requiredCheck{
-		{"PRICECHARTING_TOKEN", cfg.Adapters.PriceChartingToken, "Required for graded card pricing data. Get your API token from pricecharting.com"},
-	}
-
-	for _, rv := range requiredVars {
-		if rv.value == "" {
-			result.MissingRequired = append(result.MissingRequired, rv.name)
-			logger.Error(ctx, "Missing required configuration",
-				observability.String("variable", rv.name),
-				observability.String("description", rv.description))
-		}
-	}
-
 	// Check optional adapter keys via config struct
 	type optionalCheck struct {
 		name        string
@@ -99,7 +78,6 @@ func validateEnvironmentVariables(ctx context.Context, logger observability.Logg
 		description string
 	}
 	optionalVars := []optionalCheck{
-		{"CARD_HEDGER_API_KEY", cfg.Adapters.CardHedgerKey, "Enables CardHedger as supplementary pricing source"},
 		{"ENCRYPTION_KEY", cfg.Auth.EncryptionKey, "Enables user authentication and secure session storage"},
 	}
 
@@ -179,9 +157,6 @@ func startWebServer(ctx context.Context, deps ServerDependencies) error {
 
 	// Create API status handler (returns empty data when tracker is nil)
 	apiStatusHandler := handlers.NewAPIStatusHandler(deps.APITracker, logger)
-	if deps.CardHedgerStats != nil {
-		apiStatusHandler.WithCardHedgerStats(deps.CardHedgerStats)
-	}
 
 	// Create cache status handler
 	var cacheStatusHandler *handlers.CacheStatusHandler
@@ -193,9 +168,6 @@ func startWebServer(ctx context.Context, deps ServerDependencies) error {
 	var campaignsHandler *handlers.CampaignsHandler
 	if deps.CampaignsService != nil {
 		var opts []handlers.CampaignsHandlerOption
-		if deps.CardDiscoverer != nil {
-			opts = append(opts, handlers.WithCardDiscoverer(deps.CardDiscoverer))
-		}
 		if deps.DHInventoryLister != nil {
 			opts = append(opts, handlers.WithDHLister(deps.DHInventoryLister))
 		}

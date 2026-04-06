@@ -2,57 +2,15 @@ package handlers
 
 import (
 	"bytes"
-	"context"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/campaigns"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
-
-// CardDiscoverer discovers and prices cards via CardHedger on demand.
-type CardDiscoverer interface {
-	DiscoverAndPrice(ctx context.Context, cards []campaigns.CardIdentity) (discovered, priced int)
-}
-
-// triggerCardDiscovery runs CardHedger discovery for imported cards in a background
-// goroutine so it doesn't delay the HTTP response.
-func (h *CampaignsHandler) triggerCardDiscovery(cards []campaigns.CardIdentity) {
-	if h.discoverer == nil || len(cards) == 0 {
-		return
-	}
-	// Deduplicate
-	seen := make(map[string]bool, len(cards))
-	var unique []campaigns.CardIdentity
-	for _, c := range cards {
-		key := c.CardName + "|" + c.SetName + "|" + c.CardNumber
-		if !seen[key] {
-			seen[key] = true
-			unique = append(unique, c)
-		}
-	}
-	h.bgWG.Add(1)
-	go func() {
-		defer h.bgWG.Done()
-		defer func() {
-			if r := recover(); r != nil {
-				h.logger.Error(h.baseCtx, "panic in triggerCardDiscovery",
-					observability.String("panic", fmt.Sprintf("%v", r)))
-			}
-		}()
-		ctx, cancel := context.WithTimeout(h.baseCtx, 5*time.Minute)
-		defer cancel()
-		discovered, priced := h.discoverer.DiscoverAndPrice(ctx, unique)
-		h.logger.Info(ctx, "card discovery completed",
-			observability.Int("discovered", discovered),
-			observability.Int("priced", priced),
-			observability.Int("requested", len(unique)))
-	}()
-}
 
 // HandleGlobalRefreshCL handles POST /api/purchases/refresh-cl.
 // Accepts a full CL export CSV and refreshes CL values across all campaigns.
@@ -104,17 +62,6 @@ func (h *CampaignsHandler) HandleGlobalImportCL(w http.ResponseWriter, r *http.R
 		h.logger.Error(r.Context(), "global CL import failed", observability.Err(svcErr))
 		writeError(w, http.StatusInternalServerError, "Internal server error")
 		return
-	}
-
-	// Trigger CardHedger discovery for imported cards in background
-	if result.Results != nil {
-		var cards []campaigns.CardIdentity
-		for _, res := range result.Results {
-			if res.CardName != "" && res.SetName != "" && (res.Status == "allocated" || res.Status == "refreshed") {
-				cards = append(cards, campaigns.CardIdentity{CardName: res.CardName, SetName: res.SetName, CardNumber: res.CardNumber})
-			}
-		}
-		h.triggerCardDiscovery(cards)
 	}
 
 	writeJSON(w, http.StatusOK, result)
@@ -198,17 +145,6 @@ func (h *CampaignsHandler) HandleGlobalImportPSA(w http.ResponseWriter, r *http.
 		})
 	}
 
-	// Trigger CardHedger discovery for imported cards in background
-	if result.Results != nil {
-		var cards []campaigns.CardIdentity
-		for _, res := range result.Results {
-			if res.CardName != "" && res.SetName != "" && (res.Status == "allocated" || res.Status == "updated") {
-				cards = append(cards, campaigns.CardIdentity{CardName: res.CardName, SetName: res.SetName, CardNumber: res.CardNumber})
-			}
-		}
-		h.triggerCardDiscovery(cards)
-	}
-
 	writeJSON(w, http.StatusOK, result)
 }
 
@@ -259,17 +195,6 @@ func (h *CampaignsHandler) HandleGlobalImportExternal(w http.ResponseWriter, r *
 	if len(importErrors) > 0 {
 		result.Errors = append(result.Errors, importErrors...)
 		result.Failed += len(importErrors)
-	}
-
-	// Trigger CardHedger discovery for imported cards in background
-	if result.Results != nil {
-		var cards []campaigns.CardIdentity
-		for _, res := range result.Results {
-			if res.CardName != "" && res.SetName != "" && (res.Status == "imported" || res.Status == "updated") {
-				cards = append(cards, campaigns.CardIdentity{CardName: res.CardName, SetName: res.SetName, CardNumber: res.CardNumber})
-			}
-		}
-		h.triggerCardDiscovery(cards)
 	}
 
 	writeJSON(w, http.StatusOK, result)

@@ -174,63 +174,6 @@ func FromEnv(base Config) Config {
 		}
 	}
 
-	// Fusion provider configuration
-	if v := os.Getenv("FUSION_CACHE_TTL"); v != "" {
-		if d, err := time.ParseDuration(v); err == nil {
-			cfg.Fusion.CacheTTL = d
-		}
-	}
-	if v := os.Getenv("FUSION_PRICECHARTING_TIMEOUT"); v != "" {
-		if d, err := time.ParseDuration(v); err == nil {
-			cfg.Fusion.PriceChartingTimeout = d
-		}
-	}
-	if v := os.Getenv("FUSION_SECONDARY_TIMEOUT"); v != "" {
-		if d, err := time.ParseDuration(v); err == nil {
-			cfg.Fusion.SecondarySourceTimeout = d
-		}
-	}
-
-	// CardHedger scheduler configuration
-	if v := os.Getenv("CARD_HEDGER_POLL_INTERVAL"); v != "" {
-		if d, err := time.ParseDuration(v); err == nil {
-			cfg.CardHedger.PollInterval = d
-		}
-	}
-	if v := os.Getenv("CARD_HEDGER_BATCH_INTERVAL"); v != "" {
-		if d, err := time.ParseDuration(v); err == nil {
-			cfg.CardHedger.BatchInterval = d
-		}
-	}
-	if v := os.Getenv("CARD_HEDGER_MAX_CARDS_PER_RUN"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			cfg.CardHedger.MaxCardsPerRun = n
-		}
-	}
-	if v := os.Getenv("CARD_HEDGER_ENABLED"); v != "" {
-		cfg.CardHedger.Enabled = parseBool(v, true)
-	}
-
-	// JustTCG scheduler configuration
-	if v := os.Getenv("JUSTTCG_DAILY_BUDGET"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			cfg.JustTCG.DailyBudget = n
-		}
-	}
-	if v := os.Getenv("JUSTTCG_RATE_INTERVAL"); v != "" {
-		if d, err := time.ParseDuration(v); err == nil && d > 0 {
-			cfg.JustTCG.RateInterval = d
-		}
-	}
-	if v := os.Getenv("JUSTTCG_RUN_INTERVAL"); v != "" {
-		if d, err := time.ParseDuration(v); err == nil && d > 0 {
-			cfg.JustTCG.RunInterval = d
-		}
-	}
-	if v := os.Getenv("JUSTTCG_REFRESH_ENABLED"); v != "" {
-		cfg.JustTCG.Enabled = parseBool(v, true)
-	}
-
 	// Inventory refresh scheduler configuration
 	if v := os.Getenv("INVENTORY_REFRESH_ENABLED"); v != "" {
 		cfg.InventoryRefresh.Enabled = parseBool(v, true)
@@ -372,9 +315,6 @@ func FromEnv(base Config) Config {
 	}
 
 	// Adapter API keys and tokens
-	cfg.Adapters.PriceChartingToken = os.Getenv("PRICECHARTING_TOKEN")
-	cfg.Adapters.CardHedgerKey = os.Getenv("CARD_HEDGER_API_KEY")
-	cfg.Adapters.CardHedgerClientID = os.Getenv("CARD_HEDGER_CLIENT_ID")
 	cfg.Adapters.PSAToken = os.Getenv("PSA_ACCESS_TOKEN")
 	cfg.Adapters.PSAImageToken = os.Getenv("PAO_API")
 	cfg.Adapters.PricingAPIKey = os.Getenv("PRICING_API_KEY")
@@ -394,7 +334,6 @@ func FromEnv(base Config) Config {
 		cfg.Adapters.ImageAIQuality = "medium"
 	}
 	cfg.Adapters.ImageAIEnabled = parseBool(os.Getenv("IMAGE_AI_ENABLED"), false)
-	cfg.Adapters.JustTCGKey = os.Getenv("JUSTTCG_API_KEY")
 	cfg.Adapters.DHEnterpriseKey = os.Getenv("DH_ENTERPRISE_API_KEY")
 	if v := os.Getenv("DH_API_BASE_URL"); v != "" {
 		cfg.Adapters.DHBaseURL = v
@@ -424,13 +363,6 @@ func FromEnv(base Config) Config {
 		if d, err := time.ParseDuration(v); err == nil {
 			cfg.DH.PushInterval = d
 		}
-	}
-
-	cfg.JustTCG.ApplyDefaults()
-
-	// Auto-enable JustTCG if API key is present and not explicitly disabled
-	if cfg.Adapters.JustTCGKey != "" && os.Getenv("JUSTTCG_REFRESH_ENABLED") == "" {
-		cfg.JustTCG.Enabled = true
 	}
 
 	return cfg

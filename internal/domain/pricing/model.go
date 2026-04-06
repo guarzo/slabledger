@@ -12,7 +12,7 @@ type SalesDistribution struct {
 
 	SampleSize int    // Number of recent sales
 	Period     int    // Days of data (30, 60, 90)
-	Source     string // "pricecharting", "csv_history"
+	Source     string // "doubleholo", "csv_history"
 }
 
 // ProviderStats represents statistics from a price provider.

@@ -110,6 +110,7 @@ install:
 PROD_HOST ?= wanderer
 PROD_DB   ?= /app/wanderer/data/slabledger.db
 LOCAL_DB  ?= /workspace/data/slabledger.db
+SSH_OPTS  ?= -o ServerAliveInterval=60 -o ServerAliveCountMax=10
 
 db-push:
 	@echo "Pushing local DB to $(PROD_HOST):$(PROD_DB)..."
@@ -117,23 +118,23 @@ db-push:
 	@printf 'This will OVERWRITE the prod database. Continue? [y/N] ' && read confirm && [ "$$confirm" = "y" ] || { printf 'Aborted.\n'; exit 1; }
 	@LOCAL_SNAPSHOT="$(LOCAL_DB).snapshot" && \
 	TIMESTAMP=$$(date +%Y%m%d%H%M%S) && TMP_REMOTE="$(PROD_DB).tmp.$$$$" && \
-	cleanup() { rm -f "$$LOCAL_SNAPSHOT"; ssh "$(PROD_HOST)" "rm -f '$$TMP_REMOTE'" 2>/dev/null; } && \
+	cleanup() { rm -f "$$LOCAL_SNAPSHOT"; ssh $(SSH_OPTS) "$(PROD_HOST)" "rm -f '$$TMP_REMOTE'" 2>/dev/null; } && \
 	trap cleanup EXIT && \
 	echo "Creating consistent local snapshot (sqlite3 .backup)..." && \
 	sqlite3 "$(LOCAL_DB)" ".backup '$$LOCAL_SNAPSHOT'" && \
 	echo "Backing up remote DB to $(PROD_DB).bak.$$TIMESTAMP (sqlite3 backup)..." && \
-	ssh "$(PROD_HOST)" "sqlite3 '$(PROD_DB)' \".backup '$(PROD_DB).bak.$$TIMESTAMP'\"" && \
+	ssh $(SSH_OPTS) "$(PROD_HOST)" "sqlite3 '$(PROD_DB)' \".backup '$(PROD_DB).bak.$$TIMESTAMP'\"" && \
 	echo "Uploading snapshot to temporary path..." && \
-	scp "$$LOCAL_SNAPSHOT" "$(PROD_HOST):$$TMP_REMOTE" && \
+	scp $(SSH_OPTS) "$$LOCAL_SNAPSHOT" "$(PROD_HOST):$$TMP_REMOTE" && \
 	echo "Verifying transfer..." && \
 	LOCAL_SIZE=$$(wc -c < "$$LOCAL_SNAPSHOT") && \
-	REMOTE_SIZE=$$(ssh "$(PROD_HOST)" "wc -c < '$$TMP_REMOTE'") && \
+	REMOTE_SIZE=$$(ssh $(SSH_OPTS) "$(PROD_HOST)" "wc -c < '$$TMP_REMOTE'") && \
 	if [ "$$LOCAL_SIZE" != "$$REMOTE_SIZE" ]; then \
 		echo "Error: size mismatch (local=$$LOCAL_SIZE, remote=$$REMOTE_SIZE). Cleaning up."; \
 		exit 1; \
 	fi && \
 	echo "Restoring snapshot into production DB (WAL-safe)..." && \
-	ssh "$(PROD_HOST)" "sqlite3 '$(PROD_DB)' '.restore $$TMP_REMOTE' && rm -f '$$TMP_REMOTE'" && \
+	ssh $(SSH_OPTS) "$(PROD_HOST)" "sqlite3 '$(PROD_DB)' '.restore $$TMP_REMOTE' && rm -f '$$TMP_REMOTE'" && \
 	rm -f "$$LOCAL_SNAPSHOT" && \
 	trap - EXIT && \
 	echo "Done."
@@ -144,14 +145,14 @@ db-pull:
 	@mkdir -p "$(shell dirname $(LOCAL_DB))" && \
 	TMP_REMOTE="/tmp/slabledger_backup_$$$$.db" && \
 	TMP_LOCAL="$(LOCAL_DB).tmp.$$$$" && \
-	cleanup() { rm -f "$$TMP_LOCAL" 2>/dev/null; ssh "$(PROD_HOST)" "rm -f '$$TMP_REMOTE'" 2>/dev/null; } && \
+	cleanup() { rm -f "$$TMP_LOCAL" 2>/dev/null; ssh $(SSH_OPTS) "$(PROD_HOST)" "rm -f '$$TMP_REMOTE'" 2>/dev/null; } && \
 	trap cleanup EXIT && \
 	echo "Creating consistent backup on remote (sqlite3 .backup)..." && \
-	ssh "$(PROD_HOST)" "sqlite3 '$(PROD_DB)' \".backup '$$TMP_REMOTE'\"" && \
-	REMOTE_SIZE=$$(ssh "$(PROD_HOST)" "wc -c < '$$TMP_REMOTE'") && \
+	ssh $(SSH_OPTS) "$(PROD_HOST)" "sqlite3 '$(PROD_DB)' \".backup '$$TMP_REMOTE'\"" && \
+	REMOTE_SIZE=$$(ssh $(SSH_OPTS) "$(PROD_HOST)" "wc -c < '$$TMP_REMOTE'") && \
 	echo "Downloading backup to temporary file..." && \
-	scp "$(PROD_HOST):$$TMP_REMOTE" "$$TMP_LOCAL" && \
-	ssh "$(PROD_HOST)" "rm -f '$$TMP_REMOTE'" && \
+	scp $(SSH_OPTS) "$(PROD_HOST):$$TMP_REMOTE" "$$TMP_LOCAL" && \
+	ssh $(SSH_OPTS) "$(PROD_HOST)" "rm -f '$$TMP_REMOTE'" && \
 	TMP_SIZE=$$(wc -c < "$$TMP_LOCAL") && \
 	if [ "$$TMP_SIZE" != "$$REMOTE_SIZE" ]; then \
 		echo "Error: size mismatch (local=$$TMP_SIZE, remote=$$REMOTE_SIZE). Cleaning up."; \

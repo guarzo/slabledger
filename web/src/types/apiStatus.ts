@@ -48,15 +48,6 @@ export interface CacheStatsResponse {
 
 /** Pricing diagnostics types for the /api/admin/pricing-diagnostics endpoint */
 
-export interface DiagnosticCard {
-  cardName: string;
-  setName: string;
-  cardNumber: string;
-  sources: string[];
-  priceUsd: number;
-  updatedAt: string;
-}
-
 export interface FailureSummary {
   provider: string;
   errorType: string;
@@ -65,13 +56,8 @@ export interface FailureSummary {
 }
 
 export interface PricingDiagnosticsResponse {
-  totalCards: number;
-  fullFusionCards: number;
-  partialCards: number;
-  pcOnlyCards: number;
-  sourceCoverage: Record<string, number>;
-  pcOnlyCardList: DiagnosticCard[];
-  discoveryFailures: number;
+  totalMappedCards: number;
+  unmappedCards: number;
   recentFailures: FailureSummary[];
 }
 

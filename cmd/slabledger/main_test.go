@@ -26,29 +26,13 @@ func TestValidateEnvironmentVariables(t *testing.T) {
 		wantWarningsContains string
 	}{
 		{
-			name: "missing required PRICECHARTING_TOKEN",
-			cfg: config.Config{
-				Adapters: config.AdapterConfig{
-					PriceChartingToken: "",
-				},
-			},
-			wantMissingRequired: true,
-		},
-		{
-			name: "valid config with token present",
-			cfg: config.Config{
-				Adapters: config.AdapterConfig{
-					PriceChartingToken: "some-token",
-				},
-			},
+			name:                "empty config has no required failures",
+			cfg:                 config.Config{},
 			wantMissingRequired: false,
 		},
 		{
 			name: "encryption key set but no Google OAuth triggers warning",
 			cfg: config.Config{
-				Adapters: config.AdapterConfig{
-					PriceChartingToken: "some-token",
-				},
 				Auth: config.AuthConfig{
 					EncryptionKey: "a]32-char-encryption-key-for-test",
 				},
