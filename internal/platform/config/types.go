@@ -97,7 +97,7 @@ type FusionConfig struct {
 	PriceChartingTimeout time.Duration
 
 	// SecondarySourceTimeout is the per-request timeout for all secondary
-	// pricing sources (e.g., CardHedger) (default: 20s)
+	// pricing sources (e.g., DH) (default: 20s)
 	SecondarySourceTimeout time.Duration
 }
 
@@ -117,8 +117,6 @@ type AuthConfig struct {
 // constructors — adapters never read env vars directly.
 type AdapterConfig struct {
 	PriceChartingToken string // PRICECHARTING_TOKEN - Required for graded card pricing data
-	CardHedgerKey      string // CARD_HEDGER_API_KEY - CardHedger supplementary pricing
-	CardHedgerClientID string // CARD_HEDGER_CLIENT_ID - CardHedger card request client ID
 	PSAToken           string // PSA_ACCESS_TOKEN - PSA cert lookup
 	PSAImageToken      string // PAO_API - Separate PSA token for image lookups
 	PricingAPIKey      string // PRICING_API_KEY - Bearer token for pricing API auth
@@ -142,14 +140,6 @@ type DHConfig struct {
 	OrdersPollInterval    time.Duration // default: 30m
 	InventoryPollInterval time.Duration // default: 2h
 	PushInterval          time.Duration // default: 5m
-}
-
-// CardHedgerSchedulerConfig controls CardHedger-specific scheduler intervals
-type CardHedgerSchedulerConfig struct {
-	PollInterval   time.Duration // Delta poll interval (default: 1h)
-	BatchInterval  time.Duration // Daily batch interval (default: 24h)
-	MaxCardsPerRun int           // Max cards per batch run (default: 200)
-	Enabled        bool          // Enable CardHedger schedulers (default: true)
 }
 
 // InventoryRefreshConfig controls the inventory snapshot refresh scheduler
@@ -195,7 +185,6 @@ type Config struct {
 	CacheWarmup      CacheWarmupConfig
 	SessionCleanup   SessionCleanupConfig
 	Fusion           FusionConfig
-	CardHedger       CardHedgerSchedulerConfig
 	InventoryRefresh InventoryRefreshConfig
 	SnapshotEnrich   SnapshotEnrichConfig
 	SnapshotHistory  SnapshotHistoryConfig

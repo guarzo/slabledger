@@ -34,9 +34,9 @@ func Default() Config {
 			AccessLogCleanupEnabled:  true,           // Enable by default
 		},
 		// PriceRefresh controls the background scheduler that keeps cached prices fresh.
-		// Each source (PriceCharting, CardHedger) enforces its own per-request
-		// rate limit at the client level. These settings add coarser-grained scheduling
-		// controls to prevent sustained bursts from saturating upstream APIs.
+		// Each source (PriceCharting) enforces its own per-request rate limit at the
+		// client level. These settings add coarser-grained scheduling controls to
+		// prevent sustained bursts from saturating upstream APIs.
 		PriceRefresh: PriceRefreshConfig{
 			RefreshInterval: 1 * time.Hour,
 			// BatchSize: max cards to refresh per scheduler tick.
@@ -68,12 +68,6 @@ func Default() Config {
 			CacheTTL:               4 * time.Hour,
 			PriceChartingTimeout:   30 * time.Second,
 			SecondarySourceTimeout: 20 * time.Second,
-		},
-		CardHedger: CardHedgerSchedulerConfig{
-			PollInterval:   1 * time.Hour,
-			BatchInterval:  24 * time.Hour,
-			MaxCardsPerRun: 200,
-			Enabled:        true,
 		},
 		InventoryRefresh: InventoryRefreshConfig{
 			Enabled:        true,

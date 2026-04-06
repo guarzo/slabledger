@@ -191,26 +191,6 @@ func FromEnv(base Config) Config {
 		}
 	}
 
-	// CardHedger scheduler configuration
-	if v := os.Getenv("CARD_HEDGER_POLL_INTERVAL"); v != "" {
-		if d, err := time.ParseDuration(v); err == nil {
-			cfg.CardHedger.PollInterval = d
-		}
-	}
-	if v := os.Getenv("CARD_HEDGER_BATCH_INTERVAL"); v != "" {
-		if d, err := time.ParseDuration(v); err == nil {
-			cfg.CardHedger.BatchInterval = d
-		}
-	}
-	if v := os.Getenv("CARD_HEDGER_MAX_CARDS_PER_RUN"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			cfg.CardHedger.MaxCardsPerRun = n
-		}
-	}
-	if v := os.Getenv("CARD_HEDGER_ENABLED"); v != "" {
-		cfg.CardHedger.Enabled = parseBool(v, true)
-	}
-
 	// JustTCG scheduler configuration
 	if v := os.Getenv("JUSTTCG_DAILY_BUDGET"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
@@ -373,8 +353,6 @@ func FromEnv(base Config) Config {
 
 	// Adapter API keys and tokens
 	cfg.Adapters.PriceChartingToken = os.Getenv("PRICECHARTING_TOKEN")
-	cfg.Adapters.CardHedgerKey = os.Getenv("CARD_HEDGER_API_KEY")
-	cfg.Adapters.CardHedgerClientID = os.Getenv("CARD_HEDGER_CLIENT_ID")
 	cfg.Adapters.PSAToken = os.Getenv("PSA_ACCESS_TOKEN")
 	cfg.Adapters.PSAImageToken = os.Getenv("PAO_API")
 	cfg.Adapters.PricingAPIKey = os.Getenv("PRICING_API_KEY")
