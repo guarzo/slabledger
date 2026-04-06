@@ -146,12 +146,68 @@ func (c *Client) MarketData(ctx context.Context, cardID string) (*MarketDataResp
 	return &resp, nil
 }
 
-// Suggestions returns AI-generated buy/sell suggestions.
+// CardLookup returns card details and market data from the enterprise API.
+func (c *Client) CardLookup(ctx context.Context, cardID int) (*CardLookupResponse, error) {
+	fullURL := fmt.Sprintf("%s/api/v1/enterprise/cards/lookup?card_id=%d", c.baseURL, cardID)
+
+	var resp CardLookupResponse
+	if err := c.getEnterprise(ctx, fullURL, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// RecentSales returns recent sales for a card from the enterprise API.
+func (c *Client) RecentSales(ctx context.Context, cardID int) ([]RecentSale, error) {
+	fullURL := fmt.Sprintf("%s/api/v1/enterprise/cards/%d/recent-sales", c.baseURL, cardID)
+
+	var resp struct {
+		Sales []RecentSale `json:"sales"`
+	}
+	if err := c.getEnterprise(ctx, fullURL, &resp); err != nil {
+		return nil, err
+	}
+	return resp.Sales, nil
+}
+
+// MarketDataEnterprise fetches market data from enterprise endpoints and
+// assembles a MarketDataResponse compatible with existing consumer code.
+func (c *Client) MarketDataEnterprise(ctx context.Context, cardID int) (*MarketDataResponse, error) {
+	lookup, err := c.CardLookup(ctx, cardID)
+	if err != nil {
+		return nil, err
+	}
+
+	resp := &MarketDataResponse{
+		HasData:   true,
+		CardID:    lookup.Card.ID,
+		CardTitle: lookup.Card.Name,
+	}
+
+	if lookup.MarketData.MidPrice != nil {
+		resp.CurrentPrice = *lookup.MarketData.MidPrice
+	}
+	if lookup.MarketData.LowPrice != nil {
+		resp.PeriodLow = *lookup.MarketData.LowPrice
+	}
+	if lookup.MarketData.HighPrice != nil {
+		resp.PeriodHigh = *lookup.MarketData.HighPrice
+	}
+
+	sales, err := c.RecentSales(ctx, cardID)
+	if err == nil {
+		resp.RecentSales = sales
+	}
+
+	return resp, nil
+}
+
+// Suggestions returns AI-generated buy/sell suggestions via the enterprise API.
 func (c *Client) Suggestions(ctx context.Context) (*SuggestionsResponse, error) {
-	fullURL := fmt.Sprintf("%s/api/v1/integrations/suggestions", c.baseURL)
+	fullURL := fmt.Sprintf("%s/api/v1/enterprise/suggestions", c.baseURL)
 
 	var resp SuggestionsResponse
-	if err := c.get(ctx, fullURL, &resp); err != nil {
+	if err := c.getEnterprise(ctx, fullURL, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil

@@ -290,11 +290,11 @@ func TestClient_Suggestions(t *testing.T) {
 		if r.Method != http.MethodGet {
 			t.Errorf("expected GET, got %s", r.Method)
 		}
-		if r.Header.Get(apiKeyHeader) != "test_api_key" {
-			t.Errorf("expected %s header = test_api_key, got %q", apiKeyHeader, r.Header.Get(apiKeyHeader))
+		if r.Header.Get("Authorization") != "Bearer test_api_key" {
+			t.Errorf("expected Bearer auth, got %q", r.Header.Get("Authorization"))
 		}
-		if r.URL.Path != "/api/v1/integrations/suggestions" {
-			t.Errorf("expected path /api/v1/integrations/suggestions, got %s", r.URL.Path)
+		if r.URL.Path != "/api/v1/enterprise/suggestions" {
+			t.Errorf("expected path /api/v1/enterprise/suggestions, got %s", r.URL.Path)
 		}
 
 		resp := SuggestionsResponse{
@@ -378,6 +378,74 @@ func TestClient_Suggestions(t *testing.T) {
 	}
 	if sell.Sentiment.MentionCount != 12 {
 		t.Errorf("ConsiderSelling[0].Sentiment.MentionCount = %d, want 12", sell.Sentiment.MentionCount)
+	}
+}
+
+func TestClient_CardLookup(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			t.Errorf("expected GET, got %s", r.Method)
+		}
+		if r.Header.Get("Authorization") != "Bearer test_api_key" {
+			t.Errorf("expected Bearer auth, got %q", r.Header.Get("Authorization"))
+		}
+		if r.URL.Path != "/api/v1/enterprise/cards/lookup" {
+			t.Errorf("expected path /api/v1/enterprise/cards/lookup, got %s", r.URL.Path)
+		}
+		if r.URL.Query().Get("card_id") != "247" {
+			t.Errorf("expected card_id=247, got %q", r.URL.Query().Get("card_id"))
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"card": {
+				"id": 247,
+				"name": "Charizard [1st Edition]",
+				"set_name": "Pokemon Base Set",
+				"number": "4",
+				"rarity": "Holo Rare",
+				"language": "en",
+				"era": "WOTC",
+				"year": "1999",
+				"artist": "Mitsuhiro Arita",
+				"image_url": "https://example.com/charizard.png",
+				"slug": "charizard-1st-edition",
+				"pricecharting_id": "pc-123",
+				"tcgplayer_product_id": null
+			},
+			"market_data": {
+				"best_bid": 12000.00,
+				"best_ask": 15000.00,
+				"spread": 3000.00,
+				"last_sale": 14000.00,
+				"last_sale_date": "2026-04-01",
+				"low_price": 11000.00,
+				"mid_price": 13500.00,
+				"high_price": 16000.00,
+				"active_bids": 5,
+				"active_asks": 8,
+				"24h_volume": 2,
+				"24h_change": 3.5,
+				"7d_change": -1.2,
+				"30d_change": 8.0
+			}
+		}`))
+	}))
+	defer server.Close()
+
+	c := newTestClient(server.URL)
+	resp, err := c.CardLookup(context.Background(), 247)
+	if err != nil {
+		t.Fatalf("CardLookup() error = %v", err)
+	}
+	if resp.Card.ID != 247 {
+		t.Errorf("Card.ID = %d, want 247", resp.Card.ID)
+	}
+	if resp.Card.Name != "Charizard [1st Edition]" {
+		t.Errorf("Card.Name = %q, want Charizard [1st Edition]", resp.Card.Name)
+	}
+	if resp.MarketData.MidPrice == nil || *resp.MarketData.MidPrice != 13500.00 {
+		t.Errorf("MarketData.MidPrice = %v, want 13500.00", resp.MarketData.MidPrice)
 	}
 }
 
