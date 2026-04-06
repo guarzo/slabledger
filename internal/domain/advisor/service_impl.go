@@ -39,14 +39,14 @@ var operationTools = map[AIOperation][]string{
 	OpDigest: {
 		"get_dashboard_summary", "get_weekly_review", "get_global_inventory",
 		"get_portfolio_insights", "get_flagged_inventory", "get_inventory_alerts",
-		"get_acquisition_targets", "get_crack_opportunities", "get_dh_suggestions",
+		"get_acquisition_targets", "get_deslab_opportunities", "get_dh_suggestions",
 		"get_expected_values_batch",
 		"get_campaign_tuning", "get_campaign_pnl",
 	},
 	OpCampaignAnalysis: {
 		"get_campaign_pnl", "get_pnl_by_channel",
 		"get_campaign_tuning", "get_inventory_aging",
-		"get_expected_values", "get_crack_candidates",
+		"get_expected_values", "get_deslab_candidates",
 	},
 	OpLiquidation: {
 		"get_dashboard_summary", "get_flagged_inventory",

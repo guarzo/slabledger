@@ -15,9 +15,9 @@ func (e *CampaignToolExecutor) registerGetExpectedValues() {
 		func(ctx context.Context, id string) (any, error) { return e.svc.GetExpectedValues(ctx, id) })
 }
 
-func (e *CampaignToolExecutor) registerGetCrackCandidates() {
-	e.registerCampaignTool("get_crack_candidates",
-		"Get crack arbitrage analysis: cards where selling raw may be more profitable than selling graded. Shows graded vs crack net, advantage, and ROI comparison.",
+func (e *CampaignToolExecutor) registerGetDeslabCandidates() {
+	e.registerCampaignTool("get_deslab_candidates",
+		"Get deslab arbitrage analysis: cards where removing from PSA slab and selling raw may be more profitable than selling graded. Shows graded vs deslab net, advantage, and ROI comparison.",
 		func(ctx context.Context, id string) (any, error) { return e.svc.GetCrackCandidates(ctx, id) })
 }
 
@@ -185,10 +185,10 @@ func (e *CampaignToolExecutor) registerGetAcquisitionTargets() {
 	})
 }
 
-func (e *CampaignToolExecutor) registerGetCrackOpportunities() {
+func (e *CampaignToolExecutor) registerGetDeslabOpportunities() {
 	e.register(ai.ToolDefinition{
-		Name:        "get_crack_opportunities",
-		Description: "Get cross-campaign crack arbitrage candidates: graded cards where selling raw is more profitable than selling graded. Uses JustTCG NM-specific pricing. Shows crack vs graded net, advantage, and ROI.",
+		Name:        "get_deslab_opportunities",
+		Description: "Get cross-campaign deslab arbitrage candidates: graded cards where removing from PSA slab and selling raw is more profitable than selling graded. Uses JustTCG NM-specific pricing. Shows deslab vs graded net, advantage, and ROI.",
 		Parameters:  emptyObjectParams,
 	}, func(ctx context.Context, _ string) (string, error) {
 		result, err := e.svc.GetCrackOpportunities(ctx)
