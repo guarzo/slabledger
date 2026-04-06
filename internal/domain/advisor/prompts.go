@@ -16,11 +16,10 @@ Profit per card = CL × (1 - buyTermsPct - 0.1235) - $3 sourcing fee
 At 80% buy terms: Profit = CL × 7.65% - $3
 At 72% buy terms: Profit = CL × 15.65% - $3
 
-### Credit Constraints
-- $50,000 PSA credit limit
-- Invoiced on ~15th and ~last day of each month
+### Credit & Invoicing
+- PSA invoices on ~15th and ~last day of each month
 - Payment due within 14 days
-- Credit freeze if balance exceeds $50K
+- No hard credit limit — but outstanding balance and projected exposure matter for cash flow planning
 
 ### Campaign Data
 Do NOT assume campaign parameters — they change. When you need campaign details (names, buy terms, price ranges, grade ranges, phase status), call list_campaigns. For a quick portfolio overview, prefer get_dashboard_summary first.
