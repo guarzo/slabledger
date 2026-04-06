@@ -220,7 +220,8 @@ func (c *Client) getEnterprise(ctx context.Context, fullURL string, dest any) er
 
 // doEnterprise performs an authenticated enterprise API request with rate limiting.
 // body may be nil for bodyless requests (e.g. GET-like deletes).
-func (c *Client) doEnterprise(ctx context.Context, method, fullURL string, body any, dest any) error {
+// extraHeaders are merged into the request (may be nil).
+func (c *Client) doEnterprise(ctx context.Context, method, fullURL string, body any, dest any, extraHeaders ...map[string]string) error {
 	if !c.EnterpriseAvailable() {
 		return apperrors.ConfigMissing("dh_enterprise_api_key", "DH_ENTERPRISE_API_KEY")
 	}
@@ -248,13 +249,17 @@ func (c *Client) doEnterprise(ctx context.Context, method, fullURL string, body 
 	if len(bodyBytes) > 0 {
 		headers["Content-Type"] = "application/json"
 	}
+	for _, eh := range extraHeaders {
+		for k, v := range eh {
+			headers[k] = v
+		}
+	}
 
 	if c.logger != nil {
-		c.logger.Info(ctx, "dh: enterprise request",
+		c.logger.Debug(ctx, "dh: enterprise request",
 			observability.String("method", method),
 			observability.String("url", fullURL),
-			observability.Int("body_bytes", len(bodyBytes)),
-			observability.String("body", string(bodyBytes)))
+			observability.Int("body_bytes", len(bodyBytes)))
 	}
 
 	resp, err := c.httpClient.Do(ctx, httpx.Request{
@@ -276,95 +281,9 @@ func (c *Client) doEnterprise(ctx context.Context, method, fullURL string, body 
 	}
 
 	if c.logger != nil {
-		// Log response body (truncated for large responses)
-		bodyStr := string(resp.Body)
-		if len(bodyStr) > 500 {
-			bodyStr = bodyStr[:500] + "..."
-		}
-		c.logger.Info(ctx, "dh: enterprise response",
+		c.logger.Debug(ctx, "dh: enterprise response",
 			observability.Int("status_code", resp.StatusCode),
-			observability.Int("body_bytes", len(resp.Body)),
-			observability.String("body", bodyStr))
-	}
-
-	if dest != nil {
-		if err := json.Unmarshal(resp.Body, dest); err != nil {
-			c.recordHealth(false)
-			return apperrors.ProviderInvalidResponse(providerName, err)
-		}
-	}
-	c.recordHealth(true)
-	return nil
-}
-
-// doEnterpriseWithHeaders is like doEnterprise but merges additional headers into the request.
-func (c *Client) doEnterpriseWithHeaders(ctx context.Context, method, fullURL string, body any, dest any, extraHeaders map[string]string) error {
-	if !c.EnterpriseAvailable() {
-		return apperrors.ConfigMissing("dh_enterprise_api_key", "DH_ENTERPRISE_API_KEY")
-	}
-
-	if err := c.limiter.Wait(ctx); err != nil {
-		if goerrors.Is(err, context.Canceled) || goerrors.Is(err, context.DeadlineExceeded) {
-			return err
-		}
-		return apperrors.ProviderUnavailable(providerName, err)
-	}
-
-	var bodyBytes []byte
-	if body != nil {
-		var err error
-		bodyBytes, err = json.Marshal(body)
-		if err != nil {
-			return apperrors.ProviderInvalidRequest(providerName, err)
-		}
-	}
-
-	headers := map[string]string{
-		enterpriseAuthHeader: "Bearer " + c.enterpriseKey,
-		"Accept":             "application/json",
-	}
-	if len(bodyBytes) > 0 {
-		headers["Content-Type"] = "application/json"
-	}
-	for k, v := range extraHeaders {
-		headers[k] = v
-	}
-
-	if c.logger != nil {
-		c.logger.Info(ctx, "dh: enterprise request",
-			observability.String("method", method),
-			observability.String("url", fullURL),
-			observability.Int("body_bytes", len(bodyBytes)),
-			observability.String("body", string(bodyBytes)))
-	}
-
-	resp, err := c.httpClient.Do(ctx, httpx.Request{
-		Method:  method,
-		URL:     fullURL,
-		Headers: headers,
-		Body:    bodyBytes,
-		Timeout: c.timeout,
-	})
-	if err != nil {
-		c.recordHealth(false)
-		if c.logger != nil {
-			c.logger.Error(ctx, "dh: enterprise request failed",
-				observability.String("method", method),
-				observability.String("url", fullURL),
-				observability.Err(err))
-		}
-		return err
-	}
-
-	if c.logger != nil {
-		bodyStr := string(resp.Body)
-		if len(bodyStr) > 500 {
-			bodyStr = bodyStr[:500] + "..."
-		}
-		c.logger.Info(ctx, "dh: enterprise response",
-			observability.Int("status_code", resp.StatusCode),
-			observability.Int("body_bytes", len(resp.Body)),
-			observability.String("body", bodyStr))
+			observability.Int("body_bytes", len(resp.Body)))
 	}
 
 	if dest != nil {
@@ -389,12 +308,12 @@ func (c *Client) deleteEnterprise(ctx context.Context, fullURL string, body any,
 	return c.doEnterprise(ctx, "DELETE", fullURL, body, dest)
 }
 
-// currentPSAKey returns the current PSA API key, or "" if none configured.
+// currentPSAKey returns the current PSA API key, or "" if none configured or all exhausted.
 func (c *Client) currentPSAKey() string {
-	if len(c.psaKeys) == 0 {
+	if len(c.psaKeys) == 0 || c.psaKeyIndex >= len(c.psaKeys) {
 		return ""
 	}
-	return c.psaKeys[c.psaKeyIndex%len(c.psaKeys)]
+	return c.psaKeys[c.psaKeyIndex]
 }
 
 // RotatePSAKey advances to the next PSA API key. Returns true if there are

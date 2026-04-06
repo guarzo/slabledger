@@ -8,6 +8,7 @@ import (
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/domain/pricing"
 )
@@ -90,60 +91,64 @@ func (h *DHHandler) runBulkMatch(ctx context.Context, purchases []campaigns.Purc
 		}
 
 		cardName, variant := campaigns.CleanCardNameForDH(p.CardName)
-		h.logger.Info(ctx, "bulk match: resolving cert",
-			observability.String("cert", p.CertNumber),
-			observability.String("raw_name", p.CardName),
-			observability.String("clean_name", cardName),
-			observability.String("variant", variant),
-			observability.String("set", p.SetName),
-			observability.String("card_number", p.CardNumber),
-			observability.String("year", p.CardYear))
-		resp, err := h.certResolver.ResolveCert(ctx, dh.CertResolveRequest{
+		req := dh.CertResolveRequest{
 			CertNumber: p.CertNumber,
 			CardName:   cardName,
 			SetName:    p.SetName,
 			CardNumber: p.CardNumber,
 			Year:       p.CardYear,
 			Variant:    variant,
-		})
+		}
+		h.logger.Debug(ctx, "bulk match: resolving cert",
+			observability.String("cert", p.CertNumber),
+			observability.String("clean_name", cardName),
+			observability.String("variant", variant))
+		resp, err := h.certResolver.ResolveCert(ctx, req)
 		if err != nil {
-			isPSARateLimit := strings.Contains(err.Error(), "PSA API rate limit") || strings.Contains(err.Error(), "daily limit reached")
-
-			// On PSA rate limit, try rotating to the next key and retrying this card.
-			if isPSARateLimit {
-				if rotator, ok := h.certResolver.(PSAKeyRotator); ok && rotator.RotatePSAKey() {
-					h.logger.Info(ctx, "bulk match: PSA key rate limited, rotated to next key",
-						observability.String("cert", p.CertNumber))
-					resp, err = h.certResolver.ResolveCert(ctx, dh.CertResolveRequest{
-						CertNumber: p.CertNumber,
-						CardName:   cardName,
-						SetName:    p.SetName,
-						CardNumber: p.CardNumber,
-						Year:       p.CardYear,
-						Variant:    variant,
-					})
+			// On PSA rate limit, loop through all available keys before giving up.
+			rateLimitAbort := false
+			for {
+				isPSARateLimit := apperrors.HasErrorCode(err, apperrors.ErrCodeProviderRateLimit) ||
+					strings.Contains(err.Error(), "PSA API rate limit") ||
+					strings.Contains(err.Error(), "daily limit reached")
+				if !isPSARateLimit {
+					break
 				}
-				// If still failing after rotation (or no rotator), abort.
-				if err != nil {
+				rotator, ok := h.certResolver.(PSAKeyRotator)
+				if !ok || !rotator.RotatePSAKey() {
+					// No more keys to try — abort the entire batch.
 					failed++
 					errMsg := "DH cert resolution stopped: PSA API daily rate limit reached. All configured PSA keys exhausted."
 					h.logger.Error(ctx, errMsg, observability.Err(err))
 					h.bulkMatchError.Store(errMsg)
+					rateLimitAbort = true
 					break
 				}
-			} else {
+				h.logger.Info(ctx, "bulk match: PSA key rate limited, rotated to next key",
+					observability.String("cert", p.CertNumber))
+				resp, err = h.certResolver.ResolveCert(ctx, req)
+				if err == nil {
+					break
+				}
+			}
+			if rateLimitAbort {
+				break
+			}
+			if err != nil {
 				h.logger.Warn(ctx, "bulk match: DH cert resolve failed",
 					observability.String("cert", p.CertNumber), observability.Err(err))
 				failed++
-				// Mark non-rate-limit failures as unmatched so they appear in the manual fix UI.
 				if h.pushStatusUpdater != nil {
-					_ = h.pushStatusUpdater.UpdatePurchaseDHPushStatus(ctx, p.ID, campaigns.DHPushStatusUnmatched)
+					if statusErr := h.pushStatusUpdater.UpdatePurchaseDHPushStatus(ctx, p.ID, campaigns.DHPushStatusUnmatched); statusErr != nil {
+						h.logger.Warn(ctx, "bulk match: failed to set unmatched status",
+							observability.String("purchaseID", p.ID), observability.Err(statusErr))
+					}
 				}
 				continue
 			}
 		}
 
-		h.logger.Info(ctx, "bulk match: cert resolve result",
+		h.logger.Debug(ctx, "bulk match: cert resolve result",
 			observability.String("cert", p.CertNumber),
 			observability.String("status", resp.Status),
 			observability.Int("dh_card_id", resp.DHCardID),

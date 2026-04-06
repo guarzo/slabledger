@@ -16,10 +16,10 @@ import (
 
 func TestHandleCapitalSummary(t *testing.T) {
 	tests := []struct {
-		name             string
-		mockFn           func(_ context.Context) (*campaigns.CapitalSummary, error)
-		wantStatus       int
-		wantBudgetCents  int
+		name            string
+		mockFn          func(_ context.Context) (*campaigns.CapitalSummary, error)
+		wantStatus      int
+		wantBudgetCents int
 	}{
 		{
 			name: "success",

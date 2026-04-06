@@ -15,23 +15,16 @@ func CleanCardNameForDH(raw string) (name, variant string) {
 
 	s := raw
 
-	// Handle structured format: "Name - Set - #Number [Language]"
 	if n, ok := parseStructuredName(s); ok {
 		return strings.TrimSpace(n), ""
 	}
 
-	// Strip FA/ and FULL ART/ prefixes (full art indicator).
 	s = stripArtPrefix(s)
 
-	// Extract variant suffix and discard everything after it.
-	// The text after the variant is almost always set/product/edition info
-	// which is already provided in the separate set_name field.
+	// Text after the variant is set/product/edition info already in set_name.
 	s, variant = extractVariant(s)
 
-	// Strip rarity suffixes (SPECIAL ILLUSTRATION RARE, ULTRA RARE, etc.)
 	s = stripRaritySuffix(s)
-
-	// Strip edition/promo suffixes that aren't part of the card name.
 	s = stripEditionSuffix(s)
 
 	name = strings.Join(strings.Fields(toTitleCase(strings.TrimSpace(s))), " ")
@@ -48,11 +41,6 @@ func parseStructuredName(s string) (string, bool) {
 	// Verify the second part looks like set info (contains #, [, or a known set pattern).
 	second := parts[1]
 	if strings.Contains(second, "#") || strings.Contains(second, "[") {
-		return toTitleCase(strings.TrimSpace(parts[0])), true
-	}
-	// Also match "Set - #Number" patterns without brackets.
-	subparts := strings.SplitN(second, " - ", 2)
-	if len(subparts) >= 2 && (strings.HasPrefix(subparts[1], "#") || strings.Contains(subparts[1], "[")) {
 		return toTitleCase(strings.TrimSpace(parts[0])), true
 	}
 	return "", false

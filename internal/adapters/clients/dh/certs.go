@@ -12,13 +12,13 @@ func (c *Client) ResolveCert(ctx context.Context, req CertResolveRequest) (*Cert
 	fullURL := fmt.Sprintf("%s/api/v1/enterprise/certs/resolve", c.baseURL)
 	body := CertResolveBody{Cert: req}
 
-	var extraHeaders map[string]string
+	var psaHeaders map[string]string
 	if key := c.currentPSAKey(); key != "" {
-		extraHeaders = map[string]string{"X-PSA-API-Key": key}
+		psaHeaders = map[string]string{"X-PSA-API-Key": key}
 	}
 
 	var resp CertResolution
-	if err := c.doEnterpriseWithHeaders(ctx, "POST", fullURL, body, &resp, extraHeaders); err != nil {
+	if err := c.doEnterprise(ctx, "POST", fullURL, body, &resp, psaHeaders); err != nil {
 		return nil, err
 	}
 	return &resp, nil
