@@ -77,9 +77,10 @@ type BuildDeps struct {
 	CampaignService       domainCampaigns.Service
 
 	// DH push dependencies (optional)
-	DHPushPendingLister DHPushPendingLister
-	DHPushStatusUpdater DHPushStatusUpdater
-	DHPushCardIDSaver   DHPushCardIDSaver
+	DHPushPendingLister   DHPushPendingLister
+	DHPushStatusUpdater   DHPushStatusUpdater
+	DHPushCardIDSaver     DHPushCardIDSaver
+	DHPushCandidatesSaver DHPushCandidatesSaver
 
 	// Scoring gap cleanup dependencies (optional)
 	GapStore scoring.GapStore
@@ -310,6 +311,10 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 			Enabled:  cfg.DH.Enabled,
 			Interval: cfg.DH.PushInterval,
 		}
+		var pushOpts []DHPushOption
+		if deps.DHPushCandidatesSaver != nil {
+			pushOpts = append(pushOpts, WithDHPushCandidatesSaver(deps.DHPushCandidatesSaver))
+		}
 		schedulers = append(schedulers, NewDHPushScheduler(
 			deps.DHPushPendingLister,
 			deps.DHPushStatusUpdater,
@@ -319,6 +324,7 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 			deps.DHPushCardIDSaver,
 			deps.Logger,
 			pushCfg,
+			pushOpts...,
 		))
 	}
 

@@ -55,6 +55,7 @@ type ServerDependencies struct {
 	DHFieldsUpdater           handlers.DHFieldsUpdater        // optional: persists DH fields after inline push
 	DHPushStatusUpdater       handlers.DHPushStatusUpdater    // optional: sets dh_push_status after inline push
 	DHCardIDSaver             handlers.DHCardIDSaver          // optional: persists DH card ID mappings
+	DHCandidatesSaver         handlers.DHCandidatesSaver      // optional: stores ambiguous DH candidates
 	SellSheetItemsHandler     *handlers.SellSheetItemsHandler // Sell sheet persistence; nil = disabled
 }
 
@@ -185,6 +186,9 @@ func startWebServer(ctx context.Context, deps ServerDependencies) error {
 		}
 		if deps.DHCardIDSaver != nil {
 			opts = append(opts, handlers.WithDHCardIDSaver(deps.DHCardIDSaver))
+		}
+		if deps.DHCandidatesSaver != nil {
+			opts = append(opts, handlers.WithDHCandidatesSaver(deps.DHCandidatesSaver))
 		}
 		campaignsHandler = handlers.NewCampaignsHandler(
 			deps.CampaignsService, logger, ctx, opts...,

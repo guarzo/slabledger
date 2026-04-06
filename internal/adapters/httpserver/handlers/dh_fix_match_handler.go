@@ -132,6 +132,15 @@ func (h *DHHandler) HandleFixMatch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Clear stored candidates (if any) now that a manual match has been applied
+	if h.candidatesSaver != nil {
+		if err := h.candidatesSaver.UpdatePurchaseDHCandidates(ctx, purchase.ID, ""); err != nil {
+			h.logger.Warn(ctx, "fix match: failed to clear candidates",
+				observability.String("purchaseID", purchase.ID),
+				observability.Err(err))
+		}
+	}
+
 	writeJSON(w, http.StatusOK, fixMatchResponse{
 		Status:        "ok",
 		DHCardID:      dhCardID,

@@ -140,6 +140,14 @@ export interface DHBulkMatchResponse {
   status: string;
 }
 
+export interface DHCandidate {
+  dh_card_id: number;
+  card_name: string;
+  set_name: string;
+  card_number: string;
+  image_url: string;
+}
+
 export interface DHUnmatchedCard {
   purchase_id: string;
   card_name: string;
@@ -148,6 +156,7 @@ export interface DHUnmatchedCard {
   cert_number: string;
   grade: number;
   cl_value_cents: number;
+  candidates?: DHCandidate[];
 }
 
 export interface DHUnmatchedResponse {
@@ -164,4 +173,9 @@ export interface DHFixMatchResponse {
   status: string;
   dhCardId: number;
   dhInventoryId: number;
+}
+
+export interface DHSelectMatchRequest {
+  purchaseId: string;
+  dhCardId: number;
 }

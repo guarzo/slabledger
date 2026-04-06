@@ -303,6 +303,7 @@ func (rt *Router) registerDHRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/dh/suggestions/inventory-alerts", rt.authMW.RequireAuth(http.HandlerFunc(rt.dhHandler.HandleInventoryAlerts)))
 	mux.Handle("GET /api/dh/status", rt.authMW.RequireAuth(http.HandlerFunc(rt.dhHandler.HandleGetStatus)))
 	mux.Handle("POST /api/dh/fix-match", rt.authMW.RequireAuth(http.HandlerFunc(rt.dhHandler.HandleFixMatch)))
+	mux.Handle("POST /api/dh/select-match", rt.authMW.RequireAuth(http.HandlerFunc(rt.dhHandler.HandleSelectMatch)))
 	rt.logger.Info(context.Background(), "DH routes registered")
 }
 

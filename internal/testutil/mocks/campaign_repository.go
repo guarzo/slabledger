@@ -60,6 +60,7 @@ type MockCampaignRepository struct {
 	UpdatePurchaseDHFieldsFn       func(ctx context.Context, id string, update campaigns.DHFieldsUpdate) error
 	GetPurchasesByDHCertStatusFn   func(ctx context.Context, status string, limit int) ([]campaigns.Purchase, error)
 	UpdatePurchaseDHPushStatusFn   func(ctx context.Context, id string, status string) error
+	UpdatePurchaseDHCandidatesFn   func(ctx context.Context, id string, candidatesJSON string) error
 	GetPurchasesByDHPushStatusFn   func(ctx context.Context, status string, limit int) ([]campaigns.Purchase, error)
 	GetSellSheetItemsFn            func(ctx context.Context, userID int64) ([]string, error)
 	AddSellSheetItemsFn            func(ctx context.Context, userID int64, purchaseIDs []string) error
@@ -859,6 +860,13 @@ func (m *MockCampaignRepository) GetPurchasesByDHCertStatus(ctx context.Context,
 func (m *MockCampaignRepository) UpdatePurchaseDHPushStatus(ctx context.Context, id string, status string) error {
 	if m.UpdatePurchaseDHPushStatusFn != nil {
 		return m.UpdatePurchaseDHPushStatusFn(ctx, id, status)
+	}
+	return nil
+}
+
+func (m *MockCampaignRepository) UpdatePurchaseDHCandidates(ctx context.Context, id string, candidatesJSON string) error {
+	if m.UpdatePurchaseDHCandidatesFn != nil {
+		return m.UpdatePurchaseDHCandidatesFn(ctx, id, candidatesJSON)
 	}
 	return nil
 }

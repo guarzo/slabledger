@@ -2,7 +2,7 @@
  * Admin-related API methods
  */
 
-import type { APIUsageResponse, CacheStatsResponse, PricingDiagnosticsResponse, PriceOverrideStats, CachedAnalysis, AdvisorAnalysisType, AIUsageResponse, DHStatusResponse, DHBulkMatchResponse, DHUnmatchedResponse, DHFixMatchRequest, DHFixMatchResponse } from '../../types/apiStatus';
+import type { APIUsageResponse, CacheStatsResponse, PricingDiagnosticsResponse, PriceOverrideStats, CachedAnalysis, AdvisorAnalysisType, AIUsageResponse, DHStatusResponse, DHBulkMatchResponse, DHUnmatchedResponse, DHFixMatchRequest, DHFixMatchResponse, DHSelectMatchRequest } from '../../types/apiStatus';
 import type { AllowedEmail, AdminUser } from '../../types/admin';
 import type { APIClient, CardRequestSubmission } from './client';
 import { APIError } from './client';
@@ -35,6 +35,7 @@ declare module './client' {
     triggerDHBulkMatch(): Promise<DHBulkMatchResponse>;
     getDHUnmatched(): Promise<DHUnmatchedResponse>;
     fixDHMatch(req: DHFixMatchRequest): Promise<DHFixMatchResponse>;
+    selectDHMatch(req: DHSelectMatchRequest): Promise<DHFixMatchResponse>;
   }
 }
 
@@ -144,4 +145,8 @@ proto.getDHUnmatched = async function (this: APIClient): Promise<DHUnmatchedResp
 
 proto.fixDHMatch = async function (this: APIClient, req: DHFixMatchRequest): Promise<DHFixMatchResponse> {
   return this.post<DHFixMatchResponse>('/dh/fix-match', req);
+};
+
+proto.selectDHMatch = async function (this: APIClient, req: DHSelectMatchRequest): Promise<DHFixMatchResponse> {
+  return this.post<DHFixMatchResponse>('/dh/select-match', req);
 };

@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../js/api';
 import { queryKeys } from './queryKeys';
-import type { DHFixMatchRequest } from '../../types/apiStatus';
+import type { DHFixMatchRequest, DHSelectMatchRequest } from '../../types/apiStatus';
 
 export function useAllowlist(options?: { enabled?: boolean }) {
   return useQuery({
@@ -201,6 +201,17 @@ export function useFixDHMatch() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (req: DHFixMatchRequest) => api.fixDHMatch(req),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.admin.dhUnmatched });
+      qc.invalidateQueries({ queryKey: queryKeys.admin.dhStatus });
+    },
+  });
+}
+
+export function useSelectDHMatch() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (req: DHSelectMatchRequest) => api.selectDHMatch(req),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.admin.dhUnmatched });
       qc.invalidateQueries({ queryKey: queryKeys.admin.dhStatus });

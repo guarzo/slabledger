@@ -328,6 +328,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 			dhClient,      // DHInventoryPusher
 			campaignsRepo, // DHFieldsUpdater
 			campaignsRepo, // DHPushStatusUpdater
+			campaignsRepo, // DHCandidatesSaver
 			campaignsRepo, // DHStatusCounter
 			intelRepo, suggestionsRepo,
 			intelRepo, suggestionsRepo,
@@ -478,6 +479,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	if campaignsRepo != nil {
 		deps.DHFieldsUpdater = campaignsRepo
 		deps.DHPushStatusUpdater = campaignsRepo
+		deps.DHCandidatesSaver = campaignsRepo
 	}
 	if cardIDMappingRepo != nil {
 		deps.DHCardIDSaver = cardIDMappingRepo
