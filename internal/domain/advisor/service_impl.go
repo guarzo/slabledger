@@ -54,10 +54,8 @@ var operationTools = map[AIOperation][]string{
 		"get_expected_values_batch", "suggest_price_batch",
 	},
 	OpPurchaseAssessment: {
-		"list_campaigns", "get_campaign_tuning", "get_portfolio_insights",
-		"get_cert_lookup", "evaluate_purchase", "get_campaign_pnl",
-		"get_channel_velocity",
-		"get_market_intelligence",
+		"get_campaign_tuning", "get_cert_lookup",
+		"evaluate_purchase", "get_campaign_pnl",
 	},
 }
 
@@ -221,11 +219,12 @@ func (s *service) CollectLiquidation(ctx context.Context) (string, error) {
 	return s.runAnalysis(ctx, OpLiquidation, sysPrompt, liquidationUserPrompt, func(StreamEvent) {})
 }
 
-// operationMaxRounds overrides s.maxToolRounds when scoring is active.
+// operationMaxRounds overrides s.maxToolRounds per operation.
 // PurchaseAssessment needs only 1 round since scores are pre-computed.
 // CampaignAnalysis and Liquidation use 3 rounds to accommodate batch tools
 // and larger workflows (prompt says 2 rounds but suggest_price_batch may
 // need a separate round after reading EV data).
+// Digest uses 4 rounds: 9 broad tools, then EV batch, then optional deep dive, plus escape hatch.
 var operationMaxRounds = map[AIOperation]int{
 	OpPurchaseAssessment: 1,
 	OpCampaignAnalysis:   3,
@@ -236,7 +235,7 @@ var operationMaxRounds = map[AIOperation]int{
 // toolCallingLoop orchestrates the LLM -> tool -> LLM cycle.
 func (s *service) toolCallingLoop(ctx context.Context, operation AIOperation, systemPrompt string, messages []Message, stream func(StreamEvent)) (string, error) {
 	maxRounds := s.maxToolRounds
-	if override, ok := operationMaxRounds[operation]; ok && s.scoringData != nil {
+	if override, ok := operationMaxRounds[operation]; ok {
 		maxRounds = override
 	}
 	var tools []ToolDefinition

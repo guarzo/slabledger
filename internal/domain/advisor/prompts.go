@@ -42,7 +42,7 @@ Generate a comprehensive weekly business review. Fetch all relevant data using t
 Focus on actionable insights, not data recitation. Lead with what matters most this week.
 
 ## Tool Strategy
-You have a **3-round tool budget** and 12 tools.
+You have a **4-round tool budget** and 12 tools.
 
 **Round 1**: Call these together for a complete portfolio picture:
 get_dashboard_summary, get_weekly_review, get_global_inventory, get_portfolio_insights,
@@ -182,11 +182,18 @@ const purchaseAssessmentSystemPrompt = baseSystemPrompt + `
 
 ## Your Task: Purchase Assessment
 Evaluate whether a potential card purchase is a good buy.
-Consider: market conditions, portfolio concentration, historical performance of similar cards,
+Consider: market conditions, historical performance of similar cards in this campaign,
 liquidity (how fast will it sell), and expected value.
 Give a clear BUY / CAUTION / PASS rating with reasoning.
 
-When evaluating a graded card purchase, also consider whether the raw NM market price suggests you could acquire the same card raw for less and grade it yourself.`
+## Tool Strategy
+You have a **1-round tool budget** and 4 tools. Call all of them together:
+- get_cert_lookup — current market data for this specific card
+- get_campaign_tuning — grade/tier performance for this campaign
+- get_campaign_pnl — campaign health and ROI context
+- evaluate_purchase — pre-computed EV and profitability analysis
+
+**After your tool round, write your assessment immediately.**`
 
 const purchaseAssessmentUserPrompt = `Evaluate this potential purchase:
 - **Card**: %s (Grade: PSA %s)
@@ -196,15 +203,12 @@ const purchaseAssessmentUserPrompt = `Evaluate this potential purchase:
 - **Cert**: %s
 - **CL Value**: $%.2f
 
-Fetch the campaign's tuning data (grade performance, tier performance) and portfolio insights.
-If a cert number is provided, look it up for current market data.
-
-Provide:
+Call all 4 tools in one round, then provide:
 1. **Rating**: BUY / CAUTION / PASS
 2. **Market Assessment**: Current price, trend, velocity, liquidity for this card/grade
-3. **Portfolio Fit**: Do I already hold similar cards? How have they performed?
+3. **Campaign Fit**: How does this grade perform in this campaign? ROI, sell-through, avg days to sell.
 4. **Expected Outcome**: Estimated profit, days to sell, recommended exit channel
-5. **Risks**: What could go wrong (CL overvaluation, low liquidity, concentration)
+5. **Risks**: What could go wrong (CL overvaluation, low liquidity, declining market)
 6. **Verdict**: One-sentence summary`
 
 const scoreCardInjectionTemplate = `
