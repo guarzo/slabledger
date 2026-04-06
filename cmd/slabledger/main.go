@@ -240,6 +240,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 			dh.WithLogger(logger),
 			dh.WithRateLimitRPS(cfg.DH.RateLimitRPS),
 			dh.WithEnterpriseKey(cfg.Adapters.DHEnterpriseKey),
+			dh.WithPSAKeys(cfg.Adapters.PSAToken),
 		)
 		logger.Info(ctx, "DH client initialized")
 	}

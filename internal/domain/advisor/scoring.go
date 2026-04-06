@@ -43,16 +43,16 @@ type CampaignFactorData struct {
 
 // LiquidationFactorData contains raw inputs for liquidation factor computers.
 type LiquidationFactorData struct {
-	DaysHeld        int
+	DaysHeld           int
 	CapitalExposurePct *float64
-	PriceChangePct  *float64
-	SalesPerMonth   *float64
-	CrackROI        *float64
-	GradedROI       *float64
-	ROIPct          *float64
-	PSA10Pop        *int
-	PriceConfidence float64
-	MarketSource    string
+	PriceChangePct     *float64
+	SalesPerMonth      *float64
+	CrackROI           *float64
+	GradedROI          *float64
+	ROIPct             *float64
+	PSA10Pop           *int
+	PriceConfidence    float64
+	MarketSource       string
 }
 
 // SuggestionFactorData contains raw inputs for suggestion factor computers.

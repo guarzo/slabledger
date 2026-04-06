@@ -7,12 +7,18 @@ import (
 )
 
 // ResolveCert resolves a single PSA cert synchronously via the enterprise API.
+// If PSA API keys are configured, the current key is sent via X-PSA-API-Key header.
 func (c *Client) ResolveCert(ctx context.Context, req CertResolveRequest) (*CertResolution, error) {
 	fullURL := fmt.Sprintf("%s/api/v1/enterprise/certs/resolve", c.baseURL)
 	body := CertResolveBody{Cert: req}
 
+	var psaHeaders map[string]string
+	if key := c.currentPSAKey(); key != "" {
+		psaHeaders = map[string]string{"X-PSA-API-Key": key}
+	}
+
 	var resp CertResolution
-	if err := c.postEnterprise(ctx, fullURL, body, &resp); err != nil {
+	if err := c.doEnterprise(ctx, "POST", fullURL, body, &resp, psaHeaders); err != nil {
 		return nil, err
 	}
 	return &resp, nil

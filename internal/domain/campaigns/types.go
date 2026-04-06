@@ -232,11 +232,11 @@ type CashflowConfig struct {
 
 // CapitalSummary provides a snapshot of current capital exposure.
 type CapitalSummary struct {
-	CapitalBudgetCents     int     `json:"capitalBudgetCents"`     // User-set target (0 = no target)
-	OutstandingCents       int     `json:"outstandingCents"`       // Unpaid purchases
-	ExposurePct            float64 `json:"exposurePct"`            // (outstanding / budget) * 100, 0 if no budget
-	RefundedCents          int     `json:"refundedCents"`          // Total refunds
-	PaidCents              int     `json:"paidCents"`              // Total paid
+	CapitalBudgetCents     int     `json:"capitalBudgetCents"` // User-set target (0 = no target)
+	OutstandingCents       int     `json:"outstandingCents"`   // Unpaid purchases
+	ExposurePct            float64 `json:"exposurePct"`        // (outstanding / budget) * 100, 0 if no budget
+	RefundedCents          int     `json:"refundedCents"`      // Total refunds
+	PaidCents              int     `json:"paidCents"`          // Total paid
 	UnpaidInvoiceCount     int     `json:"unpaidInvoiceCount"`
 	AlertLevel             string  `json:"alertLevel"`             // "ok", "warning", "critical"
 	ProjectedExposureCents int     `json:"projectedExposureCents"` // outstanding + avgDailySpend * daysToNextInvoice
