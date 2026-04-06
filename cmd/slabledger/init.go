@@ -12,10 +12,9 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/clients/azureai"
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
-	"github.com/guarzo/slabledger/internal/adapters/clients/fusionprice"
+	"github.com/guarzo/slabledger/internal/adapters/clients/dhprice"
 	igclient "github.com/guarzo/slabledger/internal/adapters/clients/instagram"
 	"github.com/guarzo/slabledger/internal/adapters/clients/justtcg"
-	"github.com/guarzo/slabledger/internal/adapters/clients/pricecharting"
 	"github.com/guarzo/slabledger/internal/adapters/clients/pricelookup"
 	"github.com/guarzo/slabledger/internal/adapters/clients/psa"
 	"github.com/guarzo/slabledger/internal/adapters/clients/tcgdex"
@@ -26,61 +25,29 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/advisor"
 	"github.com/guarzo/slabledger/internal/domain/auth"
 	"github.com/guarzo/slabledger/internal/domain/campaigns"
-	"github.com/guarzo/slabledger/internal/domain/fusion"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/domain/picks"
+	"github.com/guarzo/slabledger/internal/domain/pricing"
 	"github.com/guarzo/slabledger/internal/domain/social"
-	"github.com/guarzo/slabledger/internal/platform/cache"
 	"github.com/guarzo/slabledger/internal/platform/config"
 	"github.com/guarzo/slabledger/internal/platform/crypto"
 )
 
-// initializePriceProviders creates the PriceCharting client
-// and wires it together with secondary sources into the FusionProvider.
+// initializePriceProviders creates the DH price provider.
 func initializePriceProviders(
 	ctx context.Context,
-	cfg *config.Config,
-	appCache cache.Cache,
+	_ *config.Config,
 	logger observability.Logger,
-	cardProvImpl *tcgdex.TCGdex,
-	priceRepo *sqlite.PriceRepository,
 	cardIDMappingRepo *sqlite.CardIDMappingRepository,
 	dhClient *dh.Client,
-) (priceProvider *fusionprice.FusionPriceProvider, pcProvider *pricecharting.PriceCharting, err error) {
-	pcProvider, err = pricecharting.NewPriceCharting(
-		pricecharting.DefaultConfig(cfg.Adapters.PriceChartingToken), appCache, logger,
-		pricecharting.WithHintResolver(cardIDMappingRepo),
-	)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to initialize PriceCharting provider: %w", err)
+) (pricing.PriceProvider, error) {
+	if dhClient == nil || !dhClient.EnterpriseAvailable() {
+		logger.Warn(ctx, "DH client not available; price provider will be inactive")
+		return dhprice.New(nil, nil), nil
 	}
-
-	// Wrap secondary clients in adapters that implement fusion.SecondaryPriceSource
-	var secondarySources []fusion.SecondaryPriceSource
-
-	// Add DH as a secondary fusion source if available
-	dhAvailable := false
-	if dhClient != nil && dhClient.EnterpriseAvailable() {
-		dhAdapter := fusionprice.NewDHAdapter(dhClient, cardIDMappingRepo, logger)
-		secondarySources = append(secondarySources, dhAdapter)
-		dhAvailable = true
-		logger.Info(ctx, "DH adapter registered as secondary fusion source")
-	}
-
-	priceProvider = fusionprice.NewFusionProviderWithRepo(
-		pcProvider, secondarySources,
-		appCache, priceRepo, priceRepo, priceRepo, logger,
-		fusionprice.DefaultFreshnessDuration,
-		cfg.Fusion.CacheTTL,
-		cfg.Fusion.PriceChartingTimeout,
-		cfg.Fusion.SecondarySourceTimeout,
-		fusionprice.WithCardProvider(cardProvImpl),
-	)
-	logger.Info(ctx, "Fusion price provider initialized",
-		observability.Int("secondary_sources", len(secondarySources)),
-		observability.Bool("dh_available", dhAvailable))
-
-	return priceProvider, pcProvider, nil
+	provider := dhprice.New(dhClient, cardIDMappingRepo, dhprice.WithLogger(logger))
+	logger.Info(ctx, "DH price provider initialized")
+	return provider, nil
 }
 
 // initializeCampaignsService creates the campaigns service with all options
@@ -90,7 +57,7 @@ func initializeCampaignsService(
 	cfg *config.Config,
 	logger observability.Logger,
 	db *sqlite.DB,
-	priceProvImpl *fusionprice.FusionPriceProvider,
+	priceProvImpl pricing.PriceProvider,
 	intelRepo *sqlite.MarketIntelligenceRepository,
 ) (campaigns.Service, *sqlite.CampaignsRepository, *sqlite.CardRequestRepository) {
 	campaignsRepo := sqlite.NewCampaignsRepository(db.DB)
@@ -330,7 +297,7 @@ type schedulerDeps struct {
 	Config               *config.Config
 	Logger               observability.Logger
 	PriceRepo            *sqlite.PriceRepository
-	PriceProvImpl        *fusionprice.FusionPriceProvider
+	PriceProvImpl        pricing.PriceProvider
 	CardProvImpl         *tcgdex.TCGdex
 	AuthService          auth.Service
 	SyncStateRepo        *sqlite.SyncStateRepository

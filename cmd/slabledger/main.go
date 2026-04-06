@@ -248,18 +248,13 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	intelRepo := sqlite.NewMarketIntelligenceRepository(db.DB)
 	suggestionsRepo := sqlite.NewDHSuggestionsRepository(db.DB)
 
-	priceProvImpl, pcProvider, err := initializePriceProviders(
-		ctx, cfg, appCache, logger, cardProvImpl, priceRepo, cardIDMappingRepo,
+	priceProvImpl, err := initializePriceProviders(
+		ctx, cfg, logger, cardIDMappingRepo,
 		dhClient,
 	)
 	if err != nil {
 		return err
 	}
-	defer func() {
-		if err := pcProvider.Close(); err != nil {
-			logger.Warn(ctx, "failed to close PriceCharting provider", observability.Err(err))
-		}
-	}()
 
 	campaignsService, campaignsRepo, cardRequestRepo := initializeCampaignsService(
 		ctx, cfg, logger, db, priceProvImpl, intelRepo,

@@ -10,7 +10,6 @@ import (
 
 	"github.com/guarzo/slabledger/internal/adapters/advisortool"
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
-	"github.com/guarzo/slabledger/internal/adapters/clients/tcgdex"
 	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
 	"github.com/guarzo/slabledger/internal/domain/advisor"
 	"github.com/guarzo/slabledger/internal/domain/observability"
@@ -81,9 +80,6 @@ func adminAnalyze(ctx context.Context, args []string) error {
 		return nil
 	}
 
-	// Initialize cache
-	appCache := initializeCache(cfg.Cache.Path)
-
 	// Open database
 	dbPath, err := resolveDatabasePath(cfg.Database.Path)
 	if err != nil {
@@ -107,8 +103,6 @@ func adminAnalyze(ctx context.Context, args []string) error {
 	}
 
 	// Initialize providers (mirrors runServer wiring order)
-	cardProvImpl := tcgdex.NewTCGdex(appCache, logger)
-	priceRepo := sqlite.NewPriceRepository(db)
 	cardIDMappingRepo := sqlite.NewCardIDMappingRepository(db.DB)
 	intelRepo := sqlite.NewMarketIntelligenceRepository(db.DB)
 	suggestionsRepo := sqlite.NewDHSuggestionsRepository(db.DB)
@@ -124,18 +118,13 @@ func adminAnalyze(ctx context.Context, args []string) error {
 		)
 	}
 
-	priceProvImpl, pcProvider, err := initializePriceProviders(
-		ctx, &cfg, appCache, logger, cardProvImpl, priceRepo, cardIDMappingRepo,
+	priceProvImpl, err := initializePriceProviders(
+		ctx, &cfg, logger, cardIDMappingRepo,
 		dhClient,
 	)
 	if err != nil {
 		return fmt.Errorf("initialize price providers: %w", err)
 	}
-	defer func() {
-		if cerr := pcProvider.Close(); cerr != nil {
-			logger.Debug(ctx, "failed to close price provider", observability.Err(cerr))
-		}
-	}()
 
 	campaignsService, _, _ := initializeCampaignsService(
 		ctx, &cfg, logger, db, priceProvImpl, intelRepo,
