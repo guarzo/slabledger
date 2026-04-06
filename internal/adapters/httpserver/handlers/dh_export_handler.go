@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/csv"
+	"encoding/json"
 	"fmt"
 	"net/http"
 
@@ -15,14 +16,23 @@ type unmatchedResponse struct {
 	Count     int             `json:"count"`
 }
 
+type candidateInfo struct {
+	DHCardID   int    `json:"dh_card_id"`
+	CardName   string `json:"card_name"`
+	SetName    string `json:"set_name"`
+	CardNumber string `json:"card_number"`
+	ImageURL   string `json:"image_url"`
+}
+
 type unmatchedCard struct {
-	PurchaseID   string  `json:"purchase_id"`
-	CardName     string  `json:"card_name"`
-	SetName      string  `json:"set_name"`
-	CardNumber   string  `json:"card_number"`
-	CertNumber   string  `json:"cert_number"`
-	Grade        float64 `json:"grade"`
-	CLValueCents int     `json:"cl_value_cents"`
+	PurchaseID   string          `json:"purchase_id"`
+	CardName     string          `json:"card_name"`
+	SetName      string          `json:"set_name"`
+	CardNumber   string          `json:"card_number"`
+	CertNumber   string          `json:"cert_number"`
+	Grade        float64         `json:"grade"`
+	CLValueCents int             `json:"cl_value_cents"`
+	Candidates   []candidateInfo `json:"candidates,omitempty"`
 }
 
 // HandleUnmatched returns cards that do not yet have a DH mapping.
@@ -44,7 +54,7 @@ func (h *DHHandler) HandleUnmatched(w http.ResponseWriter, r *http.Request) {
 		if p.DHPushStatus != campaigns.DHPushStatusUnmatched {
 			continue
 		}
-		unmatched = append(unmatched, unmatchedCard{
+		card := unmatchedCard{
 			PurchaseID:   p.ID,
 			CardName:     p.CardName,
 			SetName:      p.SetName,
@@ -52,7 +62,14 @@ func (h *DHHandler) HandleUnmatched(w http.ResponseWriter, r *http.Request) {
 			CertNumber:   p.CertNumber,
 			Grade:        p.GradeValue,
 			CLValueCents: p.CLValueCents,
-		})
+		}
+		if p.DHCandidatesJSON != "" {
+			var raw []candidateInfo
+			if err := json.Unmarshal([]byte(p.DHCandidatesJSON), &raw); err == nil {
+				card.Candidates = raw
+			}
+		}
+		unmatched = append(unmatched, card)
 	}
 
 	if unmatched == nil {
