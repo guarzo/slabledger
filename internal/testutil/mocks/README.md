@@ -55,7 +55,7 @@ func TestWithCards(t *testing.T) {
 ```
 
 ### MockPriceProvider
-Mocks the PriceCharting price provider interface.
+Mocks the DH price provider interface.
 
 **Methods:**
 - `Available()` - Returns availability status
