@@ -2,7 +2,7 @@
 
 ## Overview
 
-slabledger is a graded card portfolio tracker and pricing tool using Hexagonal Architecture. The system manages PSA grading campaigns, tracks multi-channel sales (eBay, TCGPlayer, local), computes P&L analytics, and provides market direction signals via fused pricing from multiple sources.
+slabledger is a graded card portfolio tracker and pricing tool using Hexagonal Architecture. The system manages PSA grading campaigns, tracks multi-channel sales (eBay, TCGPlayer, local), computes P&L analytics, and provides market direction signals via DH (DoubleHolo) pricing.
 
 **Stack**: Go 1.26 | SQLite (WAL) | stdlib net/http mux | slog logging | React + TypeScript + Vite + Tailwind
 
@@ -12,9 +12,8 @@ slabledger is a graded card portfolio tracker and pricing tool using Hexagonal A
 ┌─────────────────────────────────────────────────────────────┐
 │                        ADAPTERS LAYER                       │
 │  Inbound:                    Outbound:                      │
-│  • HTTP Handlers             • PriceCharting, CardHedger,   │
-│  • Web Server                • TCGdex.dev                   │
-│                              • TCGdex.dev                   │
+│  • HTTP Handlers             • DH (DoubleHolo) Pricing      │
+│  • Web Server                • TCGdex.dev (card metadata)   │
 │                              • Google OAuth                 │
 │                              • SQLite Storage               │
 │                              • PriceLookup (market signals) │
@@ -25,7 +24,7 @@ slabledger is a graded card portfolio tracker and pricing tool using Hexagonal A
 │          (Pure Business Logic - NO external deps)           │
 │                                                             │
 │  • Campaigns Service       • P&L Analytics                  │
-│  • Price Fusion            • Market Direction Signals       │
+│  • DH Pricing              • Market Direction Signals       │
 │  • Favorites               • CSV Import                     │
 │  • Authentication          • Channel Fee Calculation        │
 │                                                             │
@@ -62,7 +61,6 @@ internal/
     favorites/              # Favorites service
     observability/          # Logger, MetricsRecorder interfaces
     pricing/                # PriceProvider, Price, GradedPrices, LastSoldByGrade
-    fusion/                 # Price fusion interfaces
     mathutil/               # CalculateTrend, CalculatePercentChange, etc.
 
   adapters/                 # Interface implementations
@@ -71,15 +69,13 @@ internal/
       middleware/           # Auth, CORS, rate limiting, recovery
       router.go             # Route registration with auth gating
     clients/
-      fusionprice/          # Multi-source price fusion (CardHedger + PriceCharting market data)
+      dhprice/            # DH (DoubleHolo) pricing
       pricelookup/          # PriceLookup adapter (wraps PriceProvider for campaigns)
-      pricecharting/        # PriceCharting API client
-      cardhedger/           # CardHedger secondary pricing
       tcgdex/               # TCGdex.dev card/set metadata (EN + JA)
       google/               # Google OAuth service
       httpx/                # Unified HTTP client with retry + circuit breaker
       cardutil/             # Card name normalization
-    storage/sqlite/         # SQLite repository implementations + migrations + card_id_mappings + sync_state
+    storage/sqlite/         # SQLite repository implementations + migrations
     scheduler/              # Background jobs (price refresh, session cleanup)
 
   platform/                 # Cross-cutting concerns
@@ -126,18 +122,6 @@ type Repository interface {
     // Purchase + Sale CRUD
     // Analytics queries (PNL, channel breakdown, fill rate, etc.)
 }
-
-// Fusion domain interfaces (internal/domain/fusion/source.go)
-type SecondaryPriceSource interface {
-    FetchFusionData(ctx, setName, cardName, cardNumber string) (*FetchResult, int, http.Header, error)
-    Available() bool
-    Name() string
-}
-
-type CardIDResolver interface {
-    GetExternalID(ctx, cardName, setName, provider string) (string, error)
-    SaveExternalID(ctx, cardName, setName, provider, externalID string) error
-}
 ```
 
 ## Data Flow
@@ -161,12 +145,10 @@ type CardIDResolver interface {
 6. Within ±5%: "stable" → either channel works
 ```
 
-### Price Fusion
+### Pricing
 ```
-1. CardHedger → graded price estimates with confidence ranges
-2. PriceCharting → market data (active listings, sales velocity, grade prices)
-3. Fusion provider merges, detects outliers, computes confidence
-4. Result cached in SQLite + memory with configurable TTL
+1. DH (DoubleHolo) → graded price estimates, market data, sales history
+2. Results cached in SQLite + memory with configurable TTL
 ```
 
 ## Dependency Injection
@@ -174,9 +156,8 @@ type CardIDResolver interface {
 All dependencies injected via constructors in `main.go`:
 
 ```go
-// Secondary sources (each implements fusion.SecondaryPriceSource)
-secondarySources := []fusion.SecondaryPriceSource{ppSource, chSource}
-priceProvImpl := fusionprice.NewFusionProviderWithRepo(pcProvider, secondarySources, ...)
+// Pricing via DH
+priceProvImpl := dhprice.NewProvider(dhClient, ...)
 
 // Campaigns with optional market signals
 priceLookupAdapter := pricelookup.NewAdapter(priceProvImpl)
@@ -261,22 +242,6 @@ To support multi-tenant usage, the following changes would be required:
 
 **Decision**: Remove JSON from hot path, use direct type assertions with `TypedCache[T]` generics. Cache Get() <50us.
 
-### FetchResult Pattern (Mar 2026)
-
-**Problem**: Secondary price sources used shared mutable maps for side-channel data, causing data races in concurrent fusion calls.
-
-**Decision**: Introduced `fusion.FetchResult` struct that bundles grade data with optional per-grade details. Each `FetchFusionData` call returns its own result, eliminating shared state.
-
-**Result**: No shared mutable state between concurrent calls. Domain interfaces (`SecondaryPriceSource`, `CardIDResolver`) moved from adapter to `internal/domain/fusion/source.go`.
-
-### CardHedger Integration (Mar 2026)
-
-**Problem**: Needed a reliable secondary price source for fusion confidence.
-
-**Decision**: Added CardHedger as the secondary fusion source with dedicated background schedulers (delta poll + daily batch), card ID mapping cache in SQLite, and configurable scheduler intervals via environment variables.
-
-**Result**: Two-source fusion (CardHedger + PriceCharting market data) with confidence scoring. CardHedger usage tracked via atomic counters and CAS-based daily reset with 429 monitoring.
-
 ### Codebase Simplification (Feb 2026)
 
 **Decision**: Removed dead code (scoring engine, opportunity detection, eBay deals, PSA population, marketplace timing, monitoring/alerts), simplified managers to plain functions, consolidated duplicate endpoints.
@@ -292,7 +257,7 @@ To support multi-tenant usage, the following changes would be required:
 | `campaigns` | `PriceLookup` | `service.go` | 2 | Market signals for inventory aging |
 | `campaigns` | `CertLookup` | `service.go` | 1 | PSA cert → card details |
 | `campaigns` | `CardIDResolver` | `service.go` | 1 | Batch cert → external card ID |
-| `pricing` | `PriceProvider` | `provider.go` | 5 | Card price lookup (PriceCharting) |
+| `pricing` | `PriceProvider` | `provider.go` | 5 | Card price lookup (DH) |
 | `pricing` | `PriceRepository` | `repository.go` | ~10 | Price history persistence |
 | `pricing` | `APITracker` | `repository.go` | 3 | Rate limit state tracking |
 | `pricing` | `AccessTracker` | `repository.go` | 1 | Card access log |
@@ -313,9 +278,6 @@ To support multi-tenant usage, the following changes would be required:
 | `ai` | `FilteredToolExecutor` | `tools.go` | 1 | Subset tool execution |
 | `cards` | `CardProvider` | `provider.go` | 5 | Card/set search (TCGdex) |
 | `cards` | `NewSetIDsProvider` | `provider.go` | 1 | New set discovery |
-| `fusion` | `SecondaryPriceSource` | `source.go` | 3 | Price fusion data (CardHedger) |
-| `fusion` | `CardIDResolver` | `source.go` | 3 | External ID cache |
-| `fusion` | `PriceHintResolver` | `source.go` | 4 | User-provided price hints |
 | `favorites` | `Service` | `service.go` | 6 | Favorites CRUD |
 | `favorites` | `Repository` | `repository.go` | ~6 | Favorites persistence |
 | `observability` | `Logger` | `logger.go` | 5 | Structured logging |
