@@ -6,10 +6,10 @@ import (
 	"time"
 )
 
-// --- Credit & Invoice ---
+// --- Capital & Invoice ---
 
-func (s *service) GetCreditSummary(ctx context.Context) (*CreditSummary, error) {
-	return s.repo.GetCreditSummary(ctx)
+func (s *service) GetCapitalSummary(ctx context.Context) (*CapitalSummary, error) {
+	return s.repo.GetCapitalSummary(ctx)
 }
 
 func (s *service) GetCashflowConfig(ctx context.Context) (*CashflowConfig, error) {

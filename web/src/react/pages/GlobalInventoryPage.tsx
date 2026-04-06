@@ -54,7 +54,7 @@ export default function GlobalInventoryPage() {
           cacheType="liquidation"
           title="Liquidation Analysis"
           buttonLabel="Analyze Liquidation"
-          description="Identify cards where selling now — even below market — frees capital more efficiently than holding. Factors in credit pressure, carrying costs, trends, and liquidity."
+          description="Identify cards where selling now — even below market — frees capital more efficiently than holding. Factors in capital pressure, carrying costs, trends, and liquidity."
           collapsible
         />
       </div>

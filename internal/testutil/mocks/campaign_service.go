@@ -49,8 +49,8 @@ type MockCampaignService struct {
 	ExportCLFormatGlobalFn      func(ctx context.Context, missingCLOnly bool) ([]campaigns.CLExportEntry, error)
 	ReassignPurchaseFn          func(ctx context.Context, purchaseID string, newCampaignID string) error
 
-	// Credit & Invoice
-	GetCreditSummaryFn     func(ctx context.Context) (*campaigns.CreditSummary, error)
+	// Capital & Invoice
+	GetCapitalSummaryFn    func(ctx context.Context) (*campaigns.CapitalSummary, error)
 	GetCashflowConfigFn    func(ctx context.Context) (*campaigns.CashflowConfig, error)
 	UpdateCashflowConfigFn func(ctx context.Context, cfg *campaigns.CashflowConfig) error
 	ListInvoicesFn         func(ctx context.Context) ([]campaigns.Invoice, error)
@@ -354,18 +354,18 @@ func (m *MockCampaignService) ReassignPurchase(ctx context.Context, purchaseID s
 	return nil
 }
 
-func (m *MockCampaignService) GetCreditSummary(ctx context.Context) (*campaigns.CreditSummary, error) {
-	if m.GetCreditSummaryFn != nil {
-		return m.GetCreditSummaryFn(ctx)
+func (m *MockCampaignService) GetCapitalSummary(ctx context.Context) (*campaigns.CapitalSummary, error) {
+	if m.GetCapitalSummaryFn != nil {
+		return m.GetCapitalSummaryFn(ctx)
 	}
-	return &campaigns.CreditSummary{CreditLimitCents: 5000000}, nil
+	return &campaigns.CapitalSummary{CapitalBudgetCents: 5000000}, nil
 }
 
 func (m *MockCampaignService) GetCashflowConfig(ctx context.Context) (*campaigns.CashflowConfig, error) {
 	if m.GetCashflowConfigFn != nil {
 		return m.GetCashflowConfigFn(ctx)
 	}
-	return &campaigns.CashflowConfig{CreditLimitCents: 5000000, CashBufferCents: 1000000}, nil
+	return &campaigns.CashflowConfig{CapitalBudgetCents: 5000000, CashBufferCents: 1000000}, nil
 }
 
 func (m *MockCampaignService) UpdateCashflowConfig(ctx context.Context, cfg *campaigns.CashflowConfig) error {

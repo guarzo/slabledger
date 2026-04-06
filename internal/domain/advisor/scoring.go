@@ -44,7 +44,7 @@ type CampaignFactorData struct {
 // LiquidationFactorData contains raw inputs for liquidation factor computers.
 type LiquidationFactorData struct {
 	DaysHeld        int
-	CreditUtilPct   *float64
+	CapitalExposurePct *float64
 	PriceChangePct  *float64
 	SalesPerMonth   *float64
 	CrackROI        *float64
@@ -184,9 +184,9 @@ func liquidationFactors(d *LiquidationFactorData) ([]scoring.Factor, []scoring.D
 
 	factors = append(factors, scoring.ComputeCarryingCost(d.DaysHeld, 1.0, "purchase"))
 
-	addOrGap(&factors, &gaps, d.CreditUtilPct != nil, func() scoring.Factor {
-		return scoring.ComputeCreditPressure(*d.CreditUtilPct, 1.0, "credit")
-	}, scoring.FactorCreditPressure, gapNoMarketData)
+	addOrGap(&factors, &gaps, d.CapitalExposurePct != nil, func() scoring.Factor {
+		return scoring.ComputeCapitalPressure(*d.CapitalExposurePct, 1.0, "capital")
+	}, scoring.FactorCapitalPressure, gapNoMarketData)
 
 	addOrGap(&factors, &gaps, d.PriceChangePct != nil, func() scoring.Factor {
 		// Negate: a falling market (negative price change) increases liquidation urgency

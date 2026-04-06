@@ -439,12 +439,12 @@ func (m *mockRepo) SumPurchaseCostByInvoiceDate(_ context.Context, invoiceDate s
 }
 
 func (m *mockRepo) GetCashflowConfig(_ context.Context) (*CashflowConfig, error) {
-	return &CashflowConfig{CreditLimitCents: 5000000, CashBufferCents: 1000000}, nil
+	return &CashflowConfig{CapitalBudgetCents: 5000000, CashBufferCents: 1000000}, nil
 }
 func (m *mockRepo) UpdateCashflowConfig(_ context.Context, _ *CashflowConfig) error { return nil }
 
-func (m *mockRepo) GetCreditSummary(_ context.Context) (*CreditSummary, error) {
-	return &CreditSummary{CreditLimitCents: 5000000}, nil
+func (m *mockRepo) GetCapitalSummary(_ context.Context) (*CapitalSummary, error) {
+	return &CapitalSummary{CapitalBudgetCents: 5000000}, nil
 }
 
 func (m *mockRepo) GetPortfolioChannelVelocity(_ context.Context) ([]ChannelVelocity, error) {

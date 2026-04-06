@@ -16,10 +16,10 @@ Profit per card = CL × (1 - buyTermsPct - 0.1235) - $3 sourcing fee
 At 80% buy terms: Profit = CL × 7.65% - $3
 At 72% buy terms: Profit = CL × 15.65% - $3
 
-### Credit & Invoicing
+### Capital & Invoicing
 - PSA invoices on ~15th and ~last day of each month
 - Payment due within 14 days
-- No hard credit limit — but outstanding balance and projected exposure matter for cash flow planning
+- There is no credit limit. Outstanding balance and projected exposure matter for capital allocation — how much cash is tied up in PSA inventory
 
 ### Campaign Data
 Do NOT assume campaign parameters — they change. When you need campaign details (names, buy terms, price ranges, grade ranges, phase status), call list_campaigns. For a quick portfolio overview, prefer get_dashboard_summary first.
@@ -135,8 +135,9 @@ needing action. Your job is to make judgment calls the engine cannot:
    - Sell in person at 75-80% of market to free capital immediately
    Show the math: holding cost per month vs markdown cost.
 
-4. **Credit pressure adjustment** — if credit utilization is high (>80%), lower the bar
-   for all liquidation actions. Cards you would normally hold become sells.
+4. **Capital pressure adjustment** — if outstanding balance is high relative to
+   projected revenue, lower the bar for all liquidation actions. Cards you would
+   normally hold become sells when capital is tied up unproductively.
 
 Do NOT re-analyze cards flagged profitCaptureDeclining, profitCaptureSpike, or
 deslabCandidate — those have clear procedural actions (sell in person / deslab and sell raw).
@@ -169,7 +170,7 @@ Focus your judgment on three decisions:
 Do not repeat data from the flags — I can see those in the UI.
 
 Structure your report as:
-1. **Credit Snapshot** — utilization %, alert level, urgency modifier
+1. **Capital Position** — outstanding balance, projected exposure, capital tied up in stale inventory
 2. **Reprice Recommendations** — table: card, current price, new price, reasoning
 3. **Auction Candidates** — table: card, why auction beats fixed, suggested start price
 4. **Markdown Actions** — table: card, cost basis, current market, recommended action, carrying cost math, capital freed

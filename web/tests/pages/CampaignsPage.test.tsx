@@ -35,10 +35,10 @@ vi.mock('../../src/js/api', () => ({
       totalUnsold: 0,
       sellThroughPct: 0,
     })),
-    getCreditSummary: vi.fn(() => Promise.resolve({
-      creditLimitCents: 100000,
+    getCapitalSummary: vi.fn(() => Promise.resolve({
+      capitalBudgetCents: 100000,
       outstandingCents: 0,
-      utilizationPct: 0,
+      exposurePct: 0,
       refundedCents: 0,
       paidCents: 0,
       unpaidInvoiceCount: 0,
@@ -68,7 +68,7 @@ vi.mock('../../src/js/api', () => ({
       profitThisWeekCents: 0,
       profitLastWeekCents: 0,
       byChannel: [],
-      creditUtilizationPct: 0,
+      capitalExposurePct: 0,
       topPerformers: [],
       bottomPerformers: [],
     })),

@@ -387,15 +387,15 @@ export interface Invoice {
 }
 
 export interface CashflowConfig {
-  creditLimitCents: number;
+  capitalBudgetCents: number;
   cashBufferCents: number;
   updatedAt: string;
 }
 
-export interface CreditSummary {
-  creditLimitCents: number;
+export interface CapitalSummary {
+  capitalBudgetCents: number;
   outstandingCents: number;
-  utilizationPct: number;
+  exposurePct: number;
   refundedCents: number;
   paidCents: number;
   unpaidInvoiceCount: number;

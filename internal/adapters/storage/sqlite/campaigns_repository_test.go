@@ -320,13 +320,13 @@ func TestGetPortfolioChannelVelocity(t *testing.T) {
 	assert.Equal(t, 150000, inperson.RevenueCents)
 }
 
-func TestGetCreditSummary_ProjectedExposure(t *testing.T) {
+func TestGetCapitalSummary_ProjectedExposure(t *testing.T) {
 	repo := setupCampaignsRepo(t)
 	ctx := context.Background()
 	now := time.Now().Truncate(time.Second)
 
 	// Test with no purchases → projectedExposure = 0
-	summary, err := repo.GetCreditSummary(ctx)
+	summary, err := repo.GetCapitalSummary(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, 0, summary.OutstandingCents, "no purchases → zero outstanding")
 	assert.Equal(t, 0, summary.ProjectedExposureCents, "no purchases → zero projected exposure")
@@ -359,7 +359,7 @@ func TestGetCreditSummary_ProjectedExposure(t *testing.T) {
 	require.NoError(t, repo.CreatePurchase(ctx, p2))
 
 	// With no invoices paid, outstanding = total invoiced spend = (50000+300) + (30000+300) = 80600
-	summary, err = repo.GetCreditSummary(ctx)
+	summary, err = repo.GetCapitalSummary(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, 80600, summary.OutstandingCents, "outstanding = total invoiced spend with no payments")
 
@@ -386,7 +386,7 @@ func TestGetCreditSummary_ProjectedExposure(t *testing.T) {
 	}
 	require.NoError(t, repo.CreateInvoice(ctx, inv))
 
-	summary, err = repo.GetCreditSummary(ctx)
+	summary, err = repo.GetCapitalSummary(ctx)
 	require.NoError(t, err)
 
 	// daysToNextInvoice should now reflect the due date (~15 days)
@@ -403,7 +403,7 @@ func TestGetCreditSummary_ProjectedExposure(t *testing.T) {
 	inv.UpdatedAt = now
 	require.NoError(t, repo.UpdateInvoice(ctx, inv))
 
-	summary, err = repo.GetCreditSummary(ctx)
+	summary, err = repo.GetCapitalSummary(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, 80600-20000, summary.OutstandingCents,
 		"outstanding should be reduced by paid amount")
@@ -423,7 +423,7 @@ func TestGetCreditSummary_ProjectedExposure(t *testing.T) {
 	}
 	require.NoError(t, repo.CreatePurchase(ctx, p3))
 
-	summary, err = repo.GetCreditSummary(ctx)
+	summary, err = repo.GetCapitalSummary(ctx)
 	require.NoError(t, err)
 	// Refunded purchase (40000+300=40300) should NOT increase outstanding
 	assert.Equal(t, 80600-20000, summary.OutstandingCents,
@@ -450,7 +450,7 @@ func TestGetCreditSummary_ProjectedExposure(t *testing.T) {
 	inv.UpdatedAt = now
 	require.NoError(t, repo.UpdateInvoice(ctx, inv))
 
-	summary, err = repo.GetCreditSummary(ctx)
+	summary, err = repo.GetCapitalSummary(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, 0, summary.OutstandingCents,
 		"fully paid should result in zero outstanding")
