@@ -245,9 +245,12 @@ func (s *PriceRefreshScheduler) logAPIUsageSummary(ctx context.Context) {
 
 	usage, err := s.apiTracker.GetAPIUsage(ctx, pricing.SourceDH)
 	if err != nil {
+		s.logger.Warn(ctx, "failed to get API usage",
+			observability.Err(err),
+			observability.String("provider", pricing.SourceDH))
 		return
 	}
-	if usage.TotalCalls == 0 {
+	if usage == nil || usage.TotalCalls == 0 {
 		return
 	}
 
