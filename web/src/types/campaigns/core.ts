@@ -58,7 +58,6 @@ export interface Purchase {
   reviewedAt?: string;
   reviewSource?: string;
   snapshotRetryCount?: number;
-  // DoubleHolo v2 integration fields
   dhCardId?: number;
   dhInventoryId?: number;
   dhCertStatus?: string;

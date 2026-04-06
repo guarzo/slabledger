@@ -576,12 +576,12 @@ Individual graded cards bought under a campaign.
 | `dh_cert_status` | TEXT | NOT NULL DEFAULT '' | Resolution state: matched, ambiguous, not_found; added migration 000030 |
 | `dh_listing_price_cents` | INTEGER | NOT NULL DEFAULT 0 | Current DH listing price; added migration 000030 |
 | `dh_channels_json` | TEXT | NOT NULL DEFAULT '' | Per-channel sync status JSON; added migration 000030 |
-| `dh_status` | TEXT | NOT NULL DEFAULT '' | DH inventory status; added migration 000032 |
-| `dh_push_status` | TEXT | NOT NULL DEFAULT '' | Pipeline status: "", "pending", "matched", "unmatched", "manual"; added migration 000034 |
-| `dh_candidates` | TEXT | NOT NULL DEFAULT '' | Ambiguous cert resolution candidates JSON; added migration 000039 |
 | `reviewed_price_cents` | INTEGER | NOT NULL DEFAULT 0 | Human-reviewed price; added migration 000020 |
 | `reviewed_at` | TEXT | NOT NULL DEFAULT '' | ISO datetime of review; added migration 000020 |
 | `review_source` | TEXT | NOT NULL DEFAULT '' | Source label for review; added migration 000020 |
+| `dh_status` | TEXT | NOT NULL DEFAULT '' | DH inventory status; added migration 000032 |
+| `dh_push_status` | TEXT | NOT NULL DEFAULT '' | Pipeline status: "", "pending", "matched", "unmatched", "manual"; added migration 000034 |
+| `dh_candidates` | TEXT | NOT NULL DEFAULT '' | Ambiguous cert resolution candidates JSON; added migration 000039 |
 
 **Unique:** `(grader, cert_number)`
 
@@ -591,8 +591,8 @@ Individual graded cards bought under a campaign.
 - `idx_purchases_campaign_date` on `(campaign_id, purchase_date DESC)`
 - `idx_purchases_snapshot_pending` on `(snapshot_status)` WHERE `snapshot_status != ''` (partial)
 - `idx_campaign_purchases_ebay_export_flagged_at` on `(ebay_export_flagged_at)` WHERE `ebay_export_flagged_at IS NOT NULL` (partial); added migration 000019
-- `idx_purchases_dh_cert_status` on `(dh_cert_status)` WHERE `dh_cert_status != ''` (partial); added migration 000030
 - `idx_purchases_invoice_date` on `(invoice_date)` WHERE `invoice_date != ''` (partial); added migration 000027
+- `idx_purchases_dh_cert_status` on `(dh_cert_status)` WHERE `dh_cert_status != ''` (partial); added migration 000030
 - `idx_campaign_purchases_dh_push_status` on `(dh_push_status)` WHERE `dh_push_status != ''` (partial); added migration 000035
 
 **Foreign Keys:** `campaign_id → campaigns(id)` ON DELETE CASCADE
@@ -864,7 +864,7 @@ Daily buy/sell suggestions from DoubleHolo.
 | `type` | TEXT | NOT NULL, PK part | |
 | `category` | TEXT | NOT NULL, PK part | |
 | `rank` | INTEGER | NOT NULL, PK part | |
-| `is_manual` | BOOLEAN | NOT NULL | |
+| `is_manual` | INTEGER | NOT NULL | Boolean |
 | `dh_card_id` | TEXT | NOT NULL | |
 | `card_name` | TEXT | NOT NULL | |
 | `set_name` | TEXT | NOT NULL | |
