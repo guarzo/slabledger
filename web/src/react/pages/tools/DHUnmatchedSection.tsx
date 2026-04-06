@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useDHStatus, useDHUnmatched, useFixDHMatch, useSelectDHMatch } from '../../queries/useAdminQueries';
 import { useToast } from '../../contexts/ToastContext';
 import { formatCents } from '../../utils/formatters';
@@ -25,6 +25,9 @@ function CandidateCard({ candidate, onSelect, isPending, isDisabled }: {
   isDisabled: boolean;
 }) {
   const [imgFailed, setImgFailed] = useState(false);
+
+  // Reset failure state when the image URL changes (e.g., after re-match).
+  useEffect(() => { setImgFailed(false); }, [candidate.image_url]);
 
   return (
     <div className="flex items-center gap-2 p-2 rounded border border-[var(--border)] bg-[var(--bg-secondary)]">

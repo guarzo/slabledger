@@ -140,7 +140,7 @@ func NewDHHandler(
 	if baseCtx == nil {
 		baseCtx = context.Background()
 	}
-	return &DHHandler{
+	h := &DHHandler{
 		certResolver:      certResolver,
 		cardIDSaver:       cardIDSaver,
 		purchaseLister:    purchaseLister,
@@ -158,6 +158,8 @@ func NewDHHandler(
 		healthReporter:    healthReporter,
 		countsFetcher:     countsFetcher,
 	}
+	h.bulkMatchError.Store("")
+	return h
 }
 
 // Wait blocks until all background goroutines (e.g. bulk match) have completed.

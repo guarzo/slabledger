@@ -13,6 +13,12 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/pricing"
 )
 
+// PSA rate limit error substrings returned by the DH enterprise API.
+const (
+	psaRateLimitMsg      = "PSA API rate limit"
+	psaDailyLimitReached = "daily limit reached"
+)
+
 // HandleBulkMatch kicks off an async bulk match of unmatched inventory cards against the DH catalog.
 // Returns 202 immediately; progress is visible via the GET /api/dh/status endpoint.
 func (h *DHHandler) HandleBulkMatch(w http.ResponseWriter, r *http.Request) {
@@ -109,8 +115,8 @@ func (h *DHHandler) runBulkMatch(ctx context.Context, purchases []campaigns.Purc
 			rateLimitAbort := false
 			for {
 				isPSARateLimit := apperrors.HasErrorCode(err, apperrors.ErrCodeProviderRateLimit) ||
-					strings.Contains(err.Error(), "PSA API rate limit") ||
-					strings.Contains(err.Error(), "daily limit reached")
+					strings.Contains(err.Error(), psaRateLimitMsg) ||
+					strings.Contains(err.Error(), psaDailyLimitReached)
 				if !isPSARateLimit {
 					break
 				}
