@@ -23,9 +23,9 @@ type DHPushStatusUpdater interface {
 	UpdatePurchaseDHPushStatus(ctx context.Context, id string, status string) error
 }
 
-// DHPushMatchClient matches cards against DH catalog.
-type DHPushMatchClient interface {
-	Match(ctx context.Context, title, sku string) (*dh.MatchResponse, error)
+// DHPushCertResolver resolves PSA certs to DH card IDs.
+type DHPushCertResolver interface {
+	ResolveCert(ctx context.Context, req dh.CertResolveRequest) (*dh.CertResolution, error)
 }
 
 // DHPushInventoryPusher pushes inventory items to DH.
@@ -50,7 +50,7 @@ type DHPushScheduler struct {
 	StopHandle
 	pendingLister DHPushPendingLister
 	statusUpdater DHPushStatusUpdater
-	matchClient   DHPushMatchClient
+	certResolver  DHPushCertResolver
 	inventoryPush DHPushInventoryPusher
 	fieldsUpdater DHFieldsUpdater
 	cardIDSaver   DHPushCardIDSaver
@@ -62,7 +62,7 @@ type DHPushScheduler struct {
 func NewDHPushScheduler(
 	pendingLister DHPushPendingLister,
 	statusUpdater DHPushStatusUpdater,
-	matchClient DHPushMatchClient,
+	certResolver DHPushCertResolver,
 	inventoryPush DHPushInventoryPusher,
 	fieldsUpdater DHFieldsUpdater,
 	cardIDSaver DHPushCardIDSaver,
@@ -76,7 +76,7 @@ func NewDHPushScheduler(
 		StopHandle:    NewStopHandle(),
 		pendingLister: pendingLister,
 		statusUpdater: statusUpdater,
-		matchClient:   matchClient,
+		certResolver:  certResolver,
 		inventoryPush: inventoryPush,
 		fieldsUpdater: fieldsUpdater,
 		cardIDSaver:   cardIDSaver,
@@ -148,6 +148,16 @@ func (s *DHPushScheduler) push(ctx context.Context) {
 
 // processPurchase handles a single pending purchase. Returns "matched", "unmatched", or "skipped".
 func (s *DHPushScheduler) processPurchase(ctx context.Context, p campaigns.Purchase, mappedSet map[string]string) string {
+	if p.CertNumber == "" {
+		s.logger.Warn(ctx, "dh push: purchase has no cert number, marking unmatched",
+			observability.String("purchaseID", p.ID))
+		if updateErr := s.statusUpdater.UpdatePurchaseDHPushStatus(ctx, p.ID, campaigns.DHPushStatusUnmatched); updateErr != nil {
+			s.logger.Warn(ctx, "dh push: failed to set unmatched status for cert-less purchase",
+				observability.String("purchaseID", p.ID), observability.Err(updateErr))
+		}
+		return "unmatched"
+	}
+
 	key := p.DHCardKey()
 
 	// Attempt to reuse an existing DH card ID mapping.
@@ -166,22 +176,29 @@ func (s *DHPushScheduler) processPurchase(ctx context.Context, p campaigns.Purch
 	}
 
 	if !alreadyMapped {
-		// Call DH Match API.
-		title := campaigns.BuildDHMatchTitle(p.CardName, p.SetName, p.CardNumber, p.PSAListingTitle)
-		resp, err := s.matchClient.Match(ctx, title, p.CertNumber)
+		// Call DH Cert Resolution API.
+		cardName, variant := campaigns.CleanCardNameForDH(p.CardName)
+		resp, err := s.certResolver.ResolveCert(ctx, dh.CertResolveRequest{
+			CertNumber: p.CertNumber,
+			CardName:   cardName,
+			SetName:    p.SetName,
+			CardNumber: p.CardNumber,
+			Year:       p.CardYear,
+			Variant:    variant,
+		})
 		if err != nil {
-			s.logger.Warn(ctx, "dh push: match API error, leaving as pending",
+			s.logger.Warn(ctx, "dh push: cert resolve error, leaving as pending",
 				observability.String("purchaseID", p.ID),
 				observability.String("cert", p.CertNumber),
 				observability.Err(err))
 			return "skipped"
 		}
 
-		if !resp.Success || resp.Confidence < campaigns.DHMatchConfidenceThreshold {
-			s.logger.Debug(ctx, "dh push: low confidence match, marking unmatched",
+		if resp.Status != dh.CertStatusMatched {
+			s.logger.Debug(ctx, "dh push: cert not matched, marking unmatched",
 				observability.String("purchaseID", p.ID),
 				observability.String("cert", p.CertNumber),
-				observability.Float64("confidence", resp.Confidence))
+				observability.String("status", resp.Status))
 			if updateErr := s.statusUpdater.UpdatePurchaseDHPushStatus(ctx, p.ID, campaigns.DHPushStatusUnmatched); updateErr != nil {
 				s.logger.Warn(ctx, "dh push: failed to set unmatched status",
 					observability.String("purchaseID", p.ID),
@@ -190,15 +207,13 @@ func (s *DHPushScheduler) processPurchase(ctx context.Context, p campaigns.Purch
 			return "unmatched"
 		}
 
-		dhCardID = resp.CardID
+		dhCardID = resp.DHCardID
 
-		// Persist the mapping so future runs skip the Match call.
 		externalID := strconv.Itoa(dhCardID)
 		if saveErr := s.cardIDSaver.SaveExternalID(ctx, p.CardName, p.SetName, p.CardNumber, pricing.SourceDH, externalID); saveErr != nil {
 			s.logger.Warn(ctx, "dh push: failed to save external ID mapping",
 				observability.String("purchaseID", p.ID),
 				observability.Err(saveErr))
-			// Non-fatal: continue with the push.
 		} else {
 			mappedSet[key] = externalID
 		}
@@ -266,5 +281,5 @@ func (s *DHPushScheduler) processPurchase(ctx context.Context, p campaigns.Purch
 }
 
 // Compile-time checks that dh.Client satisfies the push client interfaces.
-var _ DHPushMatchClient = (*dh.Client)(nil)
+var _ DHPushCertResolver = (*dh.Client)(nil)
 var _ DHPushInventoryPusher = (*dh.Client)(nil)
