@@ -327,27 +327,27 @@ func initializeCardLadder(
 
 // schedulerDeps bundles all dependencies needed by initializeSchedulers.
 type schedulerDeps struct {
-	Config            *config.Config
-	Logger            observability.Logger
-	PriceRepo         *sqlite.PriceRepository
-	PriceProvImpl     *fusionprice.FusionPriceProvider
-	CardProvImpl      *tcgdex.TCGdex
-	AuthService       auth.Service
-	SyncStateRepo     *sqlite.SyncStateRepository
-	CardIDMappingRepo *sqlite.CardIDMappingRepository
-	CampaignsRepo     *sqlite.CampaignsRepository
-	CampaignsService  campaigns.Service
-	AdvisorService    advisor.Service
-	AdvisorCacheRepo  *sqlite.AdvisorCacheRepository
-	AICallRepo        *sqlite.AICallRepository
-	SocialService     social.Service
-	IGTokenRefresher  scheduler.InstagramTokenRefresher
-	MetricsPostLister social.MetricsPostLister
-	MetricsSaver      social.MetricsSaver
-	InsightsPoller    social.InsightsPoller
-	PicksService      picks.Service
-	CardLadderClient  *cardladder.Client
-	CardLadderStore   *sqlite.CardLadderStore
+	Config               *config.Config
+	Logger               observability.Logger
+	PriceRepo            *sqlite.PriceRepository
+	PriceProvImpl        *fusionprice.FusionPriceProvider
+	CardProvImpl         *tcgdex.TCGdex
+	AuthService          auth.Service
+	SyncStateRepo        *sqlite.SyncStateRepository
+	CardIDMappingRepo    *sqlite.CardIDMappingRepository
+	CampaignsRepo        *sqlite.CampaignsRepository
+	CampaignsService     campaigns.Service
+	AdvisorService       advisor.Service
+	AdvisorCacheRepo     *sqlite.AdvisorCacheRepository
+	AICallRepo           *sqlite.AICallRepository
+	SocialService        social.Service
+	IGTokenRefresher     scheduler.InstagramTokenRefresher
+	MetricsPostLister    social.MetricsPostLister
+	MetricsSaver         social.MetricsSaver
+	InsightsPoller       social.InsightsPoller
+	PicksService         picks.Service
+	CardLadderClient     *cardladder.Client
+	CardLadderStore      *sqlite.CardLadderStore
 	CardLadderSalesStore *sqlite.CLSalesStore
 	JustTCGClient        *justtcg.Client
 	DHClient             *dh.Client
@@ -361,35 +361,35 @@ type schedulerDeps struct {
 func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.BuildResult, context.CancelFunc) {
 	schedulerCtx, cancelScheduler := context.WithCancel(ctx)
 	buildDeps := scheduler.BuildDeps{
-		PriceRepo:               deps.PriceRepo,
-		APITracker:              deps.PriceRepo,
-		HealthChecker:           deps.PriceRepo,
-		AccessTracker:           deps.PriceRepo,
-		PriceProvider:           deps.PriceProvImpl,
-		CardProvider:            deps.CardProvImpl,
-		AuthService:             deps.AuthService,
-		Logger:                  deps.Logger,
-		SyncStateStore:          deps.SyncStateRepo,
-		CardIDMappingLister:     &cardIDMappingListAdapter{repo: deps.CardIDMappingRepo},
-		CardIDMappingSaver:      deps.CardIDMappingRepo,
-		CampaignCardLister:      &campaignCardListAdapter{repo: deps.CampaignsRepo},
-		NewSetsProvider:         deps.CardProvImpl.RegistryManager(),
-		InventoryLister:         &inventoryListAdapter{repo: deps.CampaignsRepo},
-		SnapshotRefresher:       &snapshotRefreshAdapter{svc: deps.CampaignsService},
-		SnapshotEnrichService:   deps.CampaignsService,
-		SnapshotHistoryLister:   deps.CampaignsRepo,
-		SnapshotHistoryRecorder: deps.CampaignsRepo,
-		AdvisorCollector:        deps.AdvisorService,
-		AdvisorCache:            deps.AdvisorCacheRepo,
-		AICallTracker:           deps.AICallRepo,
-		SocialContentDetector:   deps.SocialService,
-		InstagramTokenRefresher: deps.IGTokenRefresher,
-		MetricsPostLister:       deps.MetricsPostLister,
-		MetricsSaver:            deps.MetricsSaver,
-		InsightsPoller:          deps.InsightsPoller,
-		PicksGenerator:          deps.PicksService,
-		CardLadderClient:        deps.CardLadderClient,
-		CardLadderStore:         deps.CardLadderStore,
+		PriceRepo:                deps.PriceRepo,
+		APITracker:               deps.PriceRepo,
+		HealthChecker:            deps.PriceRepo,
+		AccessTracker:            deps.PriceRepo,
+		PriceProvider:            deps.PriceProvImpl,
+		CardProvider:             deps.CardProvImpl,
+		AuthService:              deps.AuthService,
+		Logger:                   deps.Logger,
+		SyncStateStore:           deps.SyncStateRepo,
+		CardIDMappingLister:      &cardIDMappingListAdapter{repo: deps.CardIDMappingRepo},
+		CardIDMappingSaver:       deps.CardIDMappingRepo,
+		CampaignCardLister:       &campaignCardListAdapter{repo: deps.CampaignsRepo},
+		NewSetsProvider:          deps.CardProvImpl.RegistryManager(),
+		InventoryLister:          &inventoryListAdapter{repo: deps.CampaignsRepo},
+		SnapshotRefresher:        &snapshotRefreshAdapter{svc: deps.CampaignsService},
+		SnapshotEnrichService:    deps.CampaignsService,
+		SnapshotHistoryLister:    deps.CampaignsRepo,
+		SnapshotHistoryRecorder:  deps.CampaignsRepo,
+		AdvisorCollector:         deps.AdvisorService,
+		AdvisorCache:             deps.AdvisorCacheRepo,
+		AICallTracker:            deps.AICallRepo,
+		SocialContentDetector:    deps.SocialService,
+		InstagramTokenRefresher:  deps.IGTokenRefresher,
+		MetricsPostLister:        deps.MetricsPostLister,
+		MetricsSaver:             deps.MetricsSaver,
+		InsightsPoller:           deps.InsightsPoller,
+		PicksGenerator:           deps.PicksService,
+		CardLadderClient:         deps.CardLadderClient,
+		CardLadderStore:          deps.CardLadderStore,
 		CardLadderPurchaseLister: deps.CampaignsRepo,
 		CardLadderValueUpdater:   deps.CampaignsRepo,
 		CardLadderCLRecorder:     deps.CampaignsRepo,

@@ -63,7 +63,7 @@ func NewFusionProviderWithRepo(
 ) *FusionPriceProvider {
 	// Configure fusion engine with custom weights
 	fusionConfig := fusion.DefaultFusionConfig()
-	fusionConfig.SourceWeights[pricing.SourceCardHedger] = 0.85 // Multi-platform price estimates
+	// No additional source weights beyond defaults
 
 	// Fall back to defaults for zero values
 	if freshnessDuration <= 0 {

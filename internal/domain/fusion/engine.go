@@ -47,8 +47,7 @@ func DefaultFusionConfig() FusionConfig {
 		MinSources:       2,   // At least 2 sources for good confidence
 		OutlierThreshold: 1.5, // Standard IQR multiplier for outlier detection
 		SourceWeights: map[string]float64{
-			pricing.SourceCardHedger: 0.85, // Multi-platform price estimates
-			pricing.SourceDH:         0.90, // DH recent sales data
+			pricing.SourceDH: 0.90, // DH recent sales data
 		},
 		DefaultWeight: 0.6, // Default for unknown sources
 	}

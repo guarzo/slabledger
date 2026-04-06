@@ -433,7 +433,7 @@ func TestComputeRateLimitReset_FarFutureTimestamp(t *testing.T) {
 // TestFusionProvider_AttachSourceDetails tests the extracted attachSourceDetails method.
 // Detail data is passed via FetchResult values (no shared mutable state on adapters).
 func TestFusionProvider_AttachSourceDetails(t *testing.T) {
-	// Build FetchResults representing data from eBay and CardHedger
+	// Build FetchResults representing data from eBay and a secondary source
 	ebayResult := &fusion.FetchResult{
 		EbayDetails: map[string]*pricing.EbayGradeDetail{
 			"raw":   {PriceCents: 48700, Confidence: "low", SalesCount: 63, Trend: "down"},
@@ -462,7 +462,7 @@ func TestFusionProvider_AttachSourceDetails(t *testing.T) {
 	result := &pricing.Price{
 		FusionMetadata: &pricing.FusionMetadata{
 			SourceResults: []pricing.SourceResult{
-				{Source: "cardhedger", Success: true},
+				{Source: "doubleholo", Success: true},
 			},
 		},
 	}
@@ -493,8 +493,8 @@ func TestFusionProvider_AttachSourceDetails(t *testing.T) {
 	assert.Equal(t, 7.44, result.Velocity.WeeklyAverage)
 	assert.Equal(t, 32, result.Velocity.MonthlyTotal)
 
-	// Verify Sources contains cardhedger and pricecharting
-	assert.Contains(t, result.Sources, "cardhedger", "Sources should contain cardhedger")
+	// Verify Sources contains doubleholo and pricecharting
+	assert.Contains(t, result.Sources, "doubleholo", "Sources should contain doubleholo")
 	assert.Contains(t, result.Sources, "pricecharting", "Sources should contain pricecharting")
 }
 

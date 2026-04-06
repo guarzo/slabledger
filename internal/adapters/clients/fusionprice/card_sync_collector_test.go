@@ -103,7 +103,7 @@ func TestCardSyncCollector_SuccessfulSync(t *testing.T) {
 
 	// Record successful sources
 	collector.RecordSource(SourcePriceCharting, true, nil, 100*time.Millisecond, false)
-	collector.RecordSource(SourceCardHedger, true, nil, 150*time.Millisecond, false)
+	collector.RecordSource("CH", true, nil, 150*time.Millisecond, false)
 
 	// Record prices
 	collector.RecordPrices(PriceResult{
@@ -162,7 +162,7 @@ func TestCardSyncCollector_PartialFailure(t *testing.T) {
 
 	// Record mixed results
 	collector.RecordSource(SourcePriceCharting, true, nil, 100*time.Millisecond, false)
-	collector.RecordSource(SourceCardHedger, false, errors.New("card not found"), 50*time.Millisecond, false)
+	collector.RecordSource("CH", false, errors.New("card not found"), 50*time.Millisecond, false)
 
 	// Record prices (from successful source only)
 	collector.RecordPrices(PriceResult{
@@ -203,7 +203,7 @@ func TestCardSyncCollector_AllSourcesFailed(t *testing.T) {
 
 	// Record all failures
 	collector.RecordSource(SourcePriceCharting, false, errors.New("card not found"), 100*time.Millisecond, false)
-	collector.RecordSource(SourceCardHedger, false, errors.New("rate limit exceeded"), 50*time.Millisecond, false)
+	collector.RecordSource("CH", false, errors.New("rate limit exceeded"), 50*time.Millisecond, false)
 
 	collector.Complete(context.Background())
 
@@ -258,7 +258,7 @@ func TestCardSyncCollector_ThreadSafety(t *testing.T) {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
-			sources := []string{SourcePriceCharting, SourceCardHedger}
+			sources := []string{SourcePriceCharting, "CH"}
 			collector.RecordSource(sources[idx], true, nil, time.Duration(idx)*time.Millisecond, false)
 		}(i)
 	}
@@ -382,7 +382,7 @@ func TestSourceOrderConsistency(t *testing.T) {
 	collector := NewCardSyncCollector(logger, "Test", "1", "Test Set")
 
 	// Add sources in reverse order
-	collector.RecordSource(SourceCardHedger, true, nil, 10*time.Millisecond, false)
+	collector.RecordSource("CH", true, nil, 10*time.Millisecond, false)
 	collector.RecordSource(SourcePriceCharting, true, nil, 10*time.Millisecond, false)
 
 	collector.Complete(context.Background())

@@ -110,12 +110,12 @@ type APIUsageStats struct {
 	BlockedUntil  *time.Time
 }
 
-// DiscoveryFailure records a card that failed source discovery (e.g., CardHedger card-match).
+// DiscoveryFailure records a card that failed source discovery.
 type DiscoveryFailure struct {
 	CardName      string
 	SetName       string
 	CardNumber    string
-	Provider      string // "cardhedger"
+	Provider      string // e.g. "pricecharting"
 	FailureReason string // "no_match", "low_confidence", "api_error"
 	Query         string // The query string attempted
 	Attempts      int

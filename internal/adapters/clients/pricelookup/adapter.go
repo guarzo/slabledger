@@ -118,12 +118,12 @@ func (a *Adapter) GetMarketSnapshot(ctx context.Context, card campaigns.CardIden
 			snap.SaleCount = detail.Ebay.SalesCount
 		}
 	}
-	// 3. CardHedger price estimate (stored separately to distinguish from actual sales)
+	// 3. Price estimate (stored separately to distinguish from actual sales)
 	if price.GradeDetails != nil {
 		key := gradeDetailKey(grade)
 		if detail, ok := price.GradeDetails[key]; ok && detail != nil && detail.Estimate != nil && detail.Estimate.PriceCents > 0 {
 			snap.EstimatedValueCents = int(detail.Estimate.PriceCents)
-			snap.EstimateSource = pricing.SourceCardHedger
+			snap.EstimateSource = "cardhedger"
 		}
 	}
 
@@ -342,10 +342,10 @@ func buildSourcePrices(price *pricing.Price, grade float64) []campaigns.SourcePr
 				sources = append(sources, sp)
 			}
 
-			// CardHedger (multi-platform estimate)
+			// Price estimate
 			if detail.Estimate != nil && detail.Estimate.PriceCents > 0 {
 				sp := campaigns.SourcePrice{
-					Source:     "CardHedger",
+					Source:     "Estimate",
 					PriceCents: int(detail.Estimate.PriceCents),
 				}
 				if detail.Estimate.LowCents > 0 {

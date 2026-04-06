@@ -119,7 +119,7 @@ func NormalizeGrade(raw string) Grade {
 	return GradeUnknown
 }
 
-// Additional grade constants for PSA 1-5 (used by CardHedger but not in core fusion).
+// Additional grade constants for PSA 1-5 (not in core fusion grades).
 const (
 	GradePSA1 Grade = "psa1"
 	GradePSA2 Grade = "psa2"
@@ -132,7 +132,6 @@ const (
 var CoreGrades = []Grade{GradePSA10, GradePSA9, GradePSA8, GradePSA7, GradePSA6, GradeRaw}
 
 // AllDisplayGrades is the full set of recognized display-format grades (PSA 1-10 + Raw).
-// Used for CardHedger grade validation.
 var AllDisplayGrades = []Grade{
 	GradePSA10, GradePSA9, GradePSA8, GradePSA7, GradePSA6,
 	GradePSA5, GradePSA4, GradePSA3, GradePSA2, GradePSA1,
@@ -194,50 +193,11 @@ func IsKnownDisplayGrade(display string) bool {
 	return ok
 }
 
-// extraCardHedgerGrades lists non-PSA grade strings that CardHedger returns
-// for other grading companies. These are recognized as valid API responses
-// but only a subset maps to fusion Grade values (via displayToGrade).
-var extraCardHedgerGrades = func() []string {
-	companies := []string{"CGC", "BGS", "AGS", "TAG", "SGC", "HGA"}
-	numericGrades := []string{
-		"10", "9.5", "9", "8.5", "8", "7.5", "7", "6.5", "6",
-		"5.5", "5", "4.5", "4", "3.5", "3", "2.5", "2", "1.5", "1",
-	}
-	out := make([]string, 0, len(companies)*len(numericGrades)+1)
-	out = append(out, "CGC 10 PRISTINE")
-	for _, co := range companies {
-		for _, g := range numericGrades {
-			out = append(out, co+" "+g)
-		}
-	}
-	return out
-}()
-
-// knownCardHedgerGrades is the set of display labels that CardHedger returns.
-// Includes PSA grades + Raw plus non-PSA grading companies (CGC, BGS, AGS, TAG).
-var knownCardHedgerGrades = func() map[string]bool {
-	m := make(map[string]bool, len(AllDisplayGrades)+len(extraCardHedgerGrades))
-	for _, g := range AllDisplayGrades {
-		m[g.DisplayLabel()] = true
-	}
-	for _, s := range extraCardHedgerGrades {
-		m[s] = true
-	}
-	return m
-}()
-
-// IsCardHedgerGrade reports whether the display string is a recognized
-// CardHedger grade: PSA 1-10, Raw, and non-PSA grading company labels
-// (CGC, BGS, AGS, TAG with various numeric grades).
-func IsCardHedgerGrade(display string) bool {
-	return knownCardHedgerGrades[display]
-}
-
 // SetGradePrice sets the price for a given grade on a GradedPrices struct.
 // Supported grades: GradePSA10, GradePSA9, GradePSA8, GradePSA7, GradePSA6,
 // GradePSA95, GradeRaw, GradeBGS10.
 // Grades outside this set (e.g., PSA 1-5) are silently ignored because GradedPrices
-// has no fields for them — they are only used for CardHedger API validation, not storage.
+// has no fields for them.
 func SetGradePrice(grades *GradedPrices, g Grade, cents int64) {
 	switch g {
 	case GradePSA10:

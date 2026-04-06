@@ -39,8 +39,7 @@ type Card struct {
 	Set    string
 
 	// PSAListingTitle is the raw PSA listing title (optional).
-	// Used by CardHedger's LLM matcher as a fallback query when normalized
-	// queries return no candidates.
+	// Reserved for future secondary source matching when normalized queries return no candidates.
 	PSAListingTitle string
 }
 
@@ -125,7 +124,7 @@ type Price struct {
 	// Card-level sales velocity
 	Velocity *SalesVelocity
 
-	// Which sources contributed to this price (e.g., ["cardhedger", "pricecharting"])
+	// Which sources contributed to this price (e.g., ["pricecharting", "doubleholo"])
 	Sources []string
 }
 
@@ -142,7 +141,7 @@ type FusionMetadata struct {
 
 // SourceResult tracks the outcome of a price lookup from a specific source
 type SourceResult struct {
-	Source  string // Source name (e.g., "pricecharting", "cardhedger")
+	Source  string // Source name (e.g., "pricecharting", "doubleholo")
 	Success bool   // Whether the lookup succeeded
 	Error   string // Error message if failed (empty on success)
 }
@@ -177,7 +176,7 @@ type EbayGradeDetail struct {
 	Volume7Day   float64 // 7-day daily volume (0 if unavailable)
 }
 
-// EstimateGradeDetail contains multi-platform estimate from CardHedger for a single grade.
+// EstimateGradeDetail contains a price estimate for a single grade.
 // All price fields are in cents.
 type EstimateGradeDetail struct {
 	PriceCents int64   // Estimated value (cents)
@@ -189,7 +188,7 @@ type EstimateGradeDetail struct {
 // GradeDetail combines eBay sold data and estimate data for a single grade.
 type GradeDetail struct {
 	Ebay     *EbayGradeDetail     // nil if no eBay data for this grade
-	Estimate *EstimateGradeDetail // nil if no CardHedger data for this grade
+	Estimate *EstimateGradeDetail // nil if no estimate data for this grade
 }
 
 // SalesVelocity contains card-level sales velocity metrics.
@@ -205,7 +204,6 @@ type Source string
 // Source name constants — untyped so they work with both Source and string fields.
 const (
 	SourcePriceCharting = "pricecharting"
-	SourceCardHedger    = "cardhedger"
 	SourceJustTCG       = "justtcg"
 	SourceDH            = "doubleholo" // DB provider key — do not change the string value
 )

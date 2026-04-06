@@ -14,12 +14,12 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
-// CardDiscoverer discovers and prices cards via CardHedger on demand.
+// CardDiscoverer discovers and prices cards on demand.
 type CardDiscoverer interface {
 	DiscoverAndPrice(ctx context.Context, cards []campaigns.CardIdentity) (discovered, priced int)
 }
 
-// triggerCardDiscovery runs CardHedger discovery for imported cards in a background
+// triggerCardDiscovery runs card discovery for imported cards in a background
 // goroutine so it doesn't delay the HTTP response.
 func (h *CampaignsHandler) triggerCardDiscovery(cards []campaigns.CardIdentity) {
 	if h.discoverer == nil || len(cards) == 0 {
@@ -106,7 +106,7 @@ func (h *CampaignsHandler) HandleGlobalImportCL(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	// Trigger CardHedger discovery for imported cards in background
+	// Trigger card discovery for imported cards in background
 	if result.Results != nil {
 		var cards []campaigns.CardIdentity
 		for _, res := range result.Results {
@@ -198,7 +198,7 @@ func (h *CampaignsHandler) HandleGlobalImportPSA(w http.ResponseWriter, r *http.
 		})
 	}
 
-	// Trigger CardHedger discovery for imported cards in background
+	// Trigger card discovery for imported cards in background
 	if result.Results != nil {
 		var cards []campaigns.CardIdentity
 		for _, res := range result.Results {
@@ -261,7 +261,7 @@ func (h *CampaignsHandler) HandleGlobalImportExternal(w http.ResponseWriter, r *
 		result.Failed += len(importErrors)
 	}
 
-	// Trigger CardHedger discovery for imported cards in background
+	// Trigger card discovery for imported cards in background
 	if result.Results != nil {
 		var cards []campaigns.CardIdentity
 		for _, res := range result.Results {

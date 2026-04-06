@@ -11,7 +11,7 @@ import (
 
 // CardIDMappingRepository provides access to the card_id_mappings table.
 // This caches the mapping from (card_name, set_name, provider) → external_id
-// so external API search calls (e.g., CardHedger card-search) are not repeated.
+// so external API search calls are not repeated.
 type CardIDMappingRepository struct {
 	db *sql.DB
 }

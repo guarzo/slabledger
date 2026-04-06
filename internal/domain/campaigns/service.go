@@ -64,7 +64,7 @@ type MarketSnapshot struct {
 	// Per-source pricing data
 	SourcePrices []SourcePrice `json:"sourcePrices,omitempty"`
 
-	// Estimated value (e.g. CardHedger) — kept separate from LastSoldCents
+	// Estimated value (from a secondary source) — kept separate from LastSoldCents
 	// so actual sale data is never overwritten by model estimates.
 	EstimatedValueCents int    `json:"estimatedValueCents,omitempty"`
 	EstimateSource      string `json:"estimateSource,omitempty"`
@@ -82,7 +82,7 @@ type MarketSnapshot struct {
 
 // SourcePrice contains pricing data from a single data source.
 type SourcePrice struct {
-	Source       string  `json:"source"`                 // e.g. "PriceCharting", "CardHedger"
+	Source       string  `json:"source"`                 // e.g. "PriceCharting", "eBay"
 	PriceCents   int     `json:"priceCents"`             // This source's price for the grade
 	SaleCount    int     `json:"saleCount,omitempty"`    // Number of sales this is based on
 	Trend        string  `json:"trend,omitempty"`        // "up", "down", "stable"

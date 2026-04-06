@@ -357,29 +357,29 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	}
 
 	schedulerResult, cancelScheduler := initializeSchedulers(ctx, schedulerDeps{
-		Config:            cfg,
-		Logger:            logger,
-		PriceRepo:         priceRepo,
-		PriceProvImpl:     priceProvImpl,
-		CardProvImpl:      cardProvImpl,
-		AuthService:       authService,
-		SyncStateRepo:     syncStateRepo,
-		CardIDMappingRepo: cardIDMappingRepo,
-		CampaignsRepo:     campaignsRepo,
-		CampaignsService:  campaignsService,
-		AdvisorService:    advisorService,
-		AdvisorCacheRepo:  advisorCacheRepo,
-		AICallRepo:        aiCallRepo,
-		SocialService:     socialService,
-		IGTokenRefresher:  igTokenRefresher,
-		MetricsPostLister: metricsRepo,
-		MetricsSaver:      metricsRepo,
-		InsightsPoller:    insightsPoller,
-		PicksService:      picksService,
-		CardLadderClient:  clClient,
-		CardLadderStore:   clStore,
+		Config:               cfg,
+		Logger:               logger,
+		PriceRepo:            priceRepo,
+		PriceProvImpl:        priceProvImpl,
+		CardProvImpl:         cardProvImpl,
+		AuthService:          authService,
+		SyncStateRepo:        syncStateRepo,
+		CardIDMappingRepo:    cardIDMappingRepo,
+		CampaignsRepo:        campaignsRepo,
+		CampaignsService:     campaignsService,
+		AdvisorService:       advisorService,
+		AdvisorCacheRepo:     advisorCacheRepo,
+		AICallRepo:           aiCallRepo,
+		SocialService:        socialService,
+		IGTokenRefresher:     igTokenRefresher,
+		MetricsPostLister:    metricsRepo,
+		MetricsSaver:         metricsRepo,
+		InsightsPoller:       insightsPoller,
+		PicksService:         picksService,
+		CardLadderClient:     clClient,
+		CardLadderStore:      clStore,
 		CardLadderSalesStore: clSalesStore,
-		JustTCGClient:       justTCGClient,
+		JustTCGClient:        justTCGClient,
 		DHClient:             dhClient,
 		DHIntelligenceRepo:   intelRepo,
 		DHSuggestionsRepo:    suggestionsRepo,
@@ -398,7 +398,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	pricingDiagRepo := sqlite.NewPricingDiagnosticsRepository(db.DB)
 	pricingDiagHandler := handlers.NewPricingDiagnosticsHandler(pricingDiagRepo, logger)
 
-	// Create card request handler (read-only — CardHedger removed)
+	// Create card request handler (read-only)
 	cardRequestHandler := handlers.NewCardRequestHandlers(cardRequestRepo, nil, "", logger)
 
 	// Create advisor handler (if advisor was initialized above)
