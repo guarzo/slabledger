@@ -9,7 +9,7 @@ const (
 	FactorMarketAlignment = "market_alignment"
 	FactorPortfolioFit    = "portfolio_fit"
 	FactorGradeFit        = "grade_fit"
-	FactorCapitalPressure  = "credit_pressure"
+	FactorCapitalPressure = "credit_pressure"
 	FactorCarryingCost    = "carrying_cost"
 	FactorCrackAdvantage  = "crack_advantage"
 	FactorSellThrough     = "sell_through"
