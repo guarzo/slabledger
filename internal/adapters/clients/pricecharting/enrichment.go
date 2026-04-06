@@ -29,7 +29,7 @@ func (p *PriceCharting) applyConservativeExits(ctx context.Context, match *PCMat
 
 	records := saleRecordsFromRecentSales(match.RecentSales)
 
-	exits := analysis.CalculateConservativeExits(records, analysis.MinSalesThreshold, pricing.SourcePriceCharting)
+	exits := analysis.CalculateConservativeExits(records, analysis.MinSalesThreshold, "pricecharting")
 	if exits == nil {
 		return
 	}

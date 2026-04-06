@@ -175,12 +175,6 @@ func TestGradeInfo(t *testing.T) {
 
 func TestBuildSourcePrices(t *testing.T) {
 	price := &pricing.Price{
-		PCGrades: &pricing.GradedPrices{
-			PSA10Cents: 5000,
-			PSA9Cents:  3000,
-			PSA8Cents:  1500,
-			RawCents:   800,
-		},
 		GradeDetails: map[string]*pricing.GradeDetail{
 			"psa10": {
 				Ebay: &pricing.EbayGradeDetail{
@@ -205,24 +199,15 @@ func TestBuildSourcePrices(t *testing.T) {
 
 	sources := buildSourcePrices(price, 10)
 
-	// Expect 3 sources: PriceCharting, eBay, Estimate
-	if len(sources) != 3 {
-		t.Fatalf("buildSourcePrices returned %d sources, want 3", len(sources))
-	}
-
-	// Verify PriceCharting source
-	pc := sources[0]
-	if pc.Source != "PriceCharting" {
-		t.Errorf("sources[0].Source = %q, want %q", pc.Source, "PriceCharting")
-	}
-	if pc.PriceCents != 5000 {
-		t.Errorf("PriceCharting PriceCents = %d, want 5000", pc.PriceCents)
+	// Expect 2 sources: eBay, Estimate
+	if len(sources) != 2 {
+		t.Fatalf("buildSourcePrices returned %d sources, want 2", len(sources))
 	}
 
 	// Verify eBay source
-	pp := sources[1]
+	pp := sources[0]
 	if pp.Source != "eBay" {
-		t.Errorf("sources[1].Source = %q, want %q", pp.Source, "eBay")
+		t.Errorf("sources[0].Source = %q, want %q", pp.Source, "eBay")
 	}
 	if pp.PriceCents != 4800 {
 		t.Errorf("eBay PriceCents = %d, want 4800", pp.PriceCents)
@@ -250,9 +235,9 @@ func TestBuildSourcePrices(t *testing.T) {
 	}
 
 	// Verify Estimate source
-	ch := sources[2]
+	ch := sources[1]
 	if ch.Source != "Estimate" {
-		t.Errorf("sources[2].Source = %q, want %q", ch.Source, "Estimate")
+		t.Errorf("sources[1].Source = %q, want %q", ch.Source, "Estimate")
 	}
 	if ch.PriceCents != 4700 {
 		t.Errorf("Estimate PriceCents = %d, want 4700", ch.PriceCents)
@@ -268,11 +253,11 @@ func TestBuildSourcePrices(t *testing.T) {
 	}
 }
 
-func TestBuildSourcePrices_NilPCGrades(t *testing.T) {
+func TestBuildSourcePrices_NoGradeDetails(t *testing.T) {
 	price := &pricing.Price{}
 	sources := buildSourcePrices(price, 10)
 	if len(sources) != 0 {
-		t.Errorf("buildSourcePrices with nil PCGrades returned %d sources, want 0", len(sources))
+		t.Errorf("buildSourcePrices with no GradeDetails returned %d sources, want 0", len(sources))
 	}
 }
 
@@ -429,27 +414,27 @@ func TestGetLastSoldCents_PSA7(t *testing.T) {
 	}
 }
 
-func TestGetLastSoldCents_RawNMBehavior(t *testing.T) {
+func TestGetLastSoldCents_RawBehavior(t *testing.T) {
 	tests := []struct {
 		name     string
 		price    *pricing.Price
 		expected int
 	}{
 		{
-			name: "prefers RawNMCents when available",
+			name: "uses LastSoldByGrade.Raw when available",
 			price: &pricing.Price{
-				Grades:          pricing.GradedPrices{RawCents: 500, RawNMCents: 800},
-				LastSoldByGrade: &pricing.LastSoldByGrade{},
+				Grades:          pricing.GradedPrices{RawCents: 500},
+				LastSoldByGrade: &pricing.LastSoldByGrade{Raw: &pricing.GradeSaleInfo{LastSoldPrice: 8.00}},
 			},
 			expected: 800,
 		},
 		{
-			name: "falls back to LastSoldByGrade.Raw when RawNMCents is 0",
+			name: "returns 0 when LastSoldByGrade has no Raw entry",
 			price: &pricing.Price{
-				Grades:          pricing.GradedPrices{RawCents: 500, RawNMCents: 0},
-				LastSoldByGrade: &pricing.LastSoldByGrade{Raw: &pricing.GradeSaleInfo{LastSoldPrice: 5.00}},
+				Grades:          pricing.GradedPrices{RawCents: 500},
+				LastSoldByGrade: &pricing.LastSoldByGrade{},
 			},
-			expected: 500,
+			expected: 0,
 		},
 	}
 	for _, tt := range tests {
@@ -498,9 +483,8 @@ func TestGetMarketSnapshot_FullSnapshot(t *testing.T) {
 						SampleSize: 25, Period: 90,
 					},
 				},
-				Confidence:     0.92,
-				FusionMetadata: &pricing.FusionMetadata{SourceCount: 3},
-				PCGrades:       &pricing.GradedPrices{PSA10Cents: 9200},
+				Confidence: 0.92,
+				Sources:    []string{"doubleholo", "ebay", "pricecharting"},
 			}, nil
 		},
 	}
@@ -625,48 +609,12 @@ func TestGetMarketSnapshot_FallbackLogic(t *testing.T) {
 }
 
 // TestGetMarketSnapshot_LastSoldFallbackChain validates that LastSoldCents is populated
-// from fallback sources when LastSoldByGrade is nil (PriceCharting sales-data never returned).
+// from fallback sources when LastSoldByGrade is nil or missing data.
 func TestGetMarketSnapshot_LastSoldFallbackChain(t *testing.T) {
-	t.Run("fallback to PCGrades when LastSoldByGrade is nil", func(t *testing.T) {
+	t.Run("fallback to eBay when LastSoldByGrade is nil", func(t *testing.T) {
 		mock := &mockPriceProvider{
 			lookupFn: func(_ context.Context, _ string, _ domainCards.Card) (*pricing.Price, error) {
 				return &pricing.Price{
-					// No LastSoldByGrade (PriceCharting sales-data never populated)
-					PCGrades: &pricing.GradedPrices{
-						PSA10Cents: 19400,
-						PSA9Cents:  15100,
-						PSA8Cents:  6000,
-						RawCents:   3000,
-					},
-				}, nil
-			},
-		}
-		adapter := NewAdapter(mock)
-		for _, tc := range []struct {
-			grade    float64
-			expected int
-		}{
-			{10, 19400},
-			{9, 15100},
-			{8, 6000},
-			{0, 3000},
-		} {
-			snap, err := adapter.GetMarketSnapshot(context.Background(), testCard, tc.grade)
-			if err != nil {
-				t.Fatalf("grade %g: unexpected error: %v", tc.grade, err)
-			}
-			if snap.LastSoldCents != tc.expected {
-				t.Errorf("grade %g: LastSoldCents = %d, want %d (from PCGrades)", tc.grade, snap.LastSoldCents, tc.expected)
-			}
-		}
-	})
-
-	t.Run("fallback to eBay when PCGrades missing for grade", func(t *testing.T) {
-		mock := &mockPriceProvider{
-			lookupFn: func(_ context.Context, _ string, _ domainCards.Card) (*pricing.Price, error) {
-				return &pricing.Price{
-					// PCGrades has no PSA8
-					PCGrades: &pricing.GradedPrices{PSA10Cents: 5000},
 					GradeDetails: map[string]*pricing.GradeDetail{
 						"psa8": {
 							Ebay: &pricing.EbayGradeDetail{PriceCents: 2500, SalesCount: 4},
@@ -688,7 +636,7 @@ func TestGetMarketSnapshot_LastSoldFallbackChain(t *testing.T) {
 		}
 	})
 
-	t.Run("fallback to estimate when PC and eBay missing", func(t *testing.T) {
+	t.Run("fallback to estimate when eBay missing", func(t *testing.T) {
 		mock := &mockPriceProvider{
 			lookupFn: func(_ context.Context, _ string, _ domainCards.Card) (*pricing.Price, error) {
 				return &pricing.Price{
@@ -711,8 +659,8 @@ func TestGetMarketSnapshot_LastSoldFallbackChain(t *testing.T) {
 		if snap.EstimatedValueCents != 7000 {
 			t.Errorf("EstimatedValueCents = %d, want 7000 (from estimate)", snap.EstimatedValueCents)
 		}
-		if snap.EstimateSource != "cardhedger" {
-			t.Errorf("EstimateSource = %q, want %q", snap.EstimateSource, "cardhedger")
+		if snap.EstimateSource != "DH" {
+			t.Errorf("EstimateSource = %q, want %q", snap.EstimateSource, "DH")
 		}
 	})
 
@@ -724,7 +672,6 @@ func TestGetMarketSnapshot_LastSoldFallbackChain(t *testing.T) {
 					GradeDetails: map[string]*pricing.GradeDetail{
 						"psa9": nil,
 					},
-					PCGrades: &pricing.GradedPrices{PSA9Cents: 8800},
 				}, nil
 			},
 		}
@@ -733,20 +680,23 @@ func TestGetMarketSnapshot_LastSoldFallbackChain(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		// Should fall back to PCGrades since GradeDetail is nil
-		if snap.LastSoldCents != 8800 {
-			t.Errorf("LastSoldCents = %d, want 8800 (from PCGrades fallback)", snap.LastSoldCents)
+		if snap.LastSoldCents != 0 {
+			t.Errorf("LastSoldCents = %d, want 0 (nil GradeDetail)", snap.LastSoldCents)
 		}
 	})
 
-	t.Run("actual LastSoldByGrade takes priority over fallbacks", func(t *testing.T) {
+	t.Run("actual LastSoldByGrade takes priority over eBay fallback", func(t *testing.T) {
 		mock := &mockPriceProvider{
 			lookupFn: func(_ context.Context, _ string, _ domainCards.Card) (*pricing.Price, error) {
 				return &pricing.Price{
 					LastSoldByGrade: &pricing.LastSoldByGrade{
 						PSA10: &pricing.GradeSaleInfo{LastSoldPrice: 200.0, SaleCount: 5},
 					},
-					PCGrades: &pricing.GradedPrices{PSA10Cents: 19000},
+					GradeDetails: map[string]*pricing.GradeDetail{
+						"psa10": {
+							Ebay: &pricing.EbayGradeDetail{PriceCents: 19000},
+						},
+					},
 				}, nil
 			},
 		}
@@ -756,7 +706,7 @@ func TestGetMarketSnapshot_LastSoldFallbackChain(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if snap.LastSoldCents != 20000 {
-			t.Errorf("LastSoldCents = %d, want 20000 (from actual LastSoldByGrade, not PCGrades)", snap.LastSoldCents)
+			t.Errorf("LastSoldCents = %d, want 20000 (from actual LastSoldByGrade)", snap.LastSoldCents)
 		}
 	})
 }

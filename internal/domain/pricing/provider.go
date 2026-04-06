@@ -46,7 +46,6 @@ type Card struct {
 // GradedPrices contains prices for each grade level.
 type GradedPrices struct {
 	RawCents     int64
-	RawNMCents   int64 // JustTCG Near Mint specific (condition-specific, not blended)
 	PSA6Cents    int64
 	PSA7Cents    int64
 	PSA8Cents    int64
@@ -107,16 +106,11 @@ type Price struct {
 	// Sales distributions (percentile data)
 	Distributions *Distributions
 
-	// Fusion metadata
-	Confidence     float64         // 0.0-1.0 confidence score
-	FusionMetadata *FusionMetadata // nil for single-source
+	// Confidence score (0.0-1.0)
+	Confidence float64
 
 	// Last sold data by grade
 	LastSoldByGrade *LastSoldByGrade // Recent sales info per grade
-
-	// PriceCharting's raw grade prices (before fusion), used by buildSourcePrices
-	// to display the actual PriceCharting price separately from the fused price.
-	PCGrades *GradedPrices
 
 	// Per-grade detail data from individual sources (eBay + estimates)
 	GradeDetails map[string]*GradeDetail // Keys: "raw", "psa8", "psa9", "psa10"
@@ -124,26 +118,8 @@ type Price struct {
 	// Card-level sales velocity
 	Velocity *SalesVelocity
 
-	// Which sources contributed to this price (e.g., ["pricecharting", "doubleholo"])
+	// Which sources contributed to this price (e.g., ["doubleholo"])
 	Sources []string
-}
-
-// FusionMetadata captures multi-source fusion information
-type FusionMetadata struct {
-	SourceCount   int      // Number of sources used
-	OutliersFound int      // Outliers detected and removed
-	Method        string   // "weighted_median" or "single_source"
-	Sources       []string // ["pricecharting", "ebay"]
-
-	// Per-source results for tracking success/failure rates
-	SourceResults []SourceResult
-}
-
-// SourceResult tracks the outcome of a price lookup from a specific source
-type SourceResult struct {
-	Source  string // Source name (e.g., "pricecharting", "doubleholo")
-	Success bool   // Whether the lookup succeeded
-	Error   string // Error message if failed (empty on success)
 }
 
 // GradeSaleInfo contains last sold information for a specific grade
@@ -221,7 +197,5 @@ type Source string
 
 // Source name constants — untyped so they work with both Source and string fields.
 const (
-	SourcePriceCharting = "pricecharting"
-	SourceJustTCG       = "justtcg"
-	SourceDH            = "doubleholo" // DB provider key — do not change the string value
+	SourceDH = "doubleholo" // DB provider key — do not change the string value
 )

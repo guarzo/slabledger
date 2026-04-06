@@ -10,12 +10,11 @@ import (
 
 // Known daily limits per provider.
 var providerDailyLimits = map[string]*int{
-	pricing.SourcePriceCharting: nil, // No hard daily limit
-	pricing.SourceJustTCG:       nil, // Pro plan — scheduler self-limits via DailyBudget
+	pricing.SourceDH: nil, // No hard daily limit
 }
 
 // knownProviders is the ordered list of providers shown in the status response.
-var knownProviders = []string{pricing.SourcePriceCharting, pricing.SourceJustTCG}
+var knownProviders = []string{pricing.SourceDH}
 
 // APIStatusHandler serves API usage status information.
 type APIStatusHandler struct {

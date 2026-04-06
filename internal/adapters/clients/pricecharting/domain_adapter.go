@@ -57,7 +57,7 @@ func toLookupPrice(pcMatch *PCMatch) *pricing.Price {
 		// Primary price (PSA 10 for backward compatibility)
 		Amount:   int64(pcMatch.PSA10Cents),
 		Currency: "USD",
-		Source:   pricing.SourcePriceCharting,
+		Source:   "pricecharting",
 
 		// Graded prices (in cents, converted to int64)
 		Grades: pricing.GradedPrices{
@@ -143,7 +143,7 @@ func (p *PriceCharting) lookupCardInternal(ctx context.Context, setName string, 
 
 	// Strategy 0: Check for user-provided price hint (highest priority)
 	if p.hintResolver != nil {
-		hint, err := p.hintResolver.GetHint(ctx, c.Name, setName, c.Number, pricing.SourcePriceCharting)
+		hint, err := p.hintResolver.GetHint(ctx, c.Name, setName, c.Number, "pricecharting")
 		if err == nil && hint != "" {
 			match, err := p.LookupByProductID(ctx, hint)
 			if err == nil && match != nil {
