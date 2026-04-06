@@ -54,10 +54,9 @@ var operationTools = map[AIOperation][]string{
 		"get_market_intelligence",
 	},
 	OpLiquidation: {
-		"get_dashboard_summary", "get_global_inventory", "get_sell_sheet",
+		"get_dashboard_summary", "get_flagged_inventory",
 		"get_suggestion_stats", "get_inventory_alerts",
 		"get_expected_values_batch", "suggest_price_batch",
-		"get_crack_opportunities",
 	},
 	OpPurchaseAssessment: {
 		"list_campaigns", "get_campaign_tuning", "get_portfolio_insights",
@@ -234,7 +233,7 @@ func (s *service) CollectLiquidation(ctx context.Context) (string, error) {
 var operationMaxRounds = map[AIOperation]int{
 	OpPurchaseAssessment: 1,
 	OpCampaignAnalysis:   3,
-	OpLiquidation:        3,
+	OpLiquidation:        4,
 }
 
 // toolCallingLoop orchestrates the LLM -> tool -> LLM cycle.
