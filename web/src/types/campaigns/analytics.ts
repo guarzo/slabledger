@@ -2,7 +2,8 @@
  * Analytics, tuning, and performance types
  */
 
-import type { InventorySignals, MarketSnapshot, Phase, Purchase, Sale, SaleChannel } from './core';
+import type { Phase, Purchase, Sale, SaleChannel } from './core';
+import type { InventorySignals, MarketSnapshot } from './market';
 
 export interface CampaignPNL {
   campaignId: string;

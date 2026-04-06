@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { api } from '@/js/api';
-import type { EbayExportItem, EbayExportGenerateItem } from '@/types/campaigns/core';
+import type { EbayExportItem, EbayExportGenerateItem } from '@/types/campaigns';
 import { PriceDecisionBar, buildPriceSources, preSelectSource } from '@/react/ui';
 
 type Decision = { action: 'accept'; priceCents: number; source: string } | { action: 'skip' };
