@@ -82,7 +82,7 @@ type MarketSnapshot struct {
 
 // SourcePrice contains pricing data from a single data source.
 type SourcePrice struct {
-	Source       string  `json:"source"`                 // e.g. "PriceCharting", "eBay"
+	Source       string  `json:"source"`                 // e.g. "eBay", "Estimate"
 	PriceCents   int     `json:"priceCents"`             // This source's price for the grade
 	SaleCount    int     `json:"saleCount,omitempty"`    // Number of sales this is based on
 	Trend        string  `json:"trend,omitempty"`        // "up", "down", "stable"

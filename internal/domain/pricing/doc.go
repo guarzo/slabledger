@@ -1,8 +1,7 @@
 // Package pricing defines interfaces for fetching Pokemon card prices from various sources.
 //
 // The core interface is PriceProvider, which abstracts price fetching from different
-// marketplaces and data sources. Implementations include PriceCharting, eBay,
-// and the multi-source FusionProvider.
+// marketplaces and data sources. The primary implementation is the DH price provider.
 //
 // # Architecture
 //
