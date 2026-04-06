@@ -67,7 +67,7 @@ Migrations are in `internal/adapters/storage/sqlite/migrations/`. Current migrat
 | Migration | Description |
 |-----------|-------------|
 | 000001 | Complete initial schema (campaigns, purchases, sales, price_history, price_refresh_queue, favorites, sessions, api_calls, etc.) |
-| 000002 | Card ID mappings table + sync state (for CardHedger external ID caching and delta poll state) |
+| 000002 | Card ID mappings table + sync state |
 | 000003 | API daily summary view (aggregates api_calls by provider and date for status endpoint) |
 
 ---
@@ -107,8 +107,7 @@ cards, err := cardCache.GetOrLoad(ctx, key, func() ([]model.Card, error) {
 
 | Provider | Limit | Notes |
 |----------|-------|-------|
-| PriceCharting | 60/min, 20k/day | Market data (listings, sales velocity) |
-| CardHedger | 60/min (unlimited plan) | Secondary pricing estimates (429-monitored) |
+| DH (DoubleHolo) | Enterprise plan | Graded pricing and market data |
 
 ---
 
@@ -139,48 +138,17 @@ CircuitBreakerConfig{
 
 ## API Integrations
 
-### PriceCharting
-
-```bash
-export PRICECHARTING_TOKEN="your_token"
-```
-
-**Price field mapping** (all returned in cents):
-
-| API Field | Grade |
-|-----------|-------|
-| `loose-price` | Raw/Ungraded |
-| `new-price` | PSA 8 |
-| `graded-price` | PSA 9 |
-| `manual-only-price` | PSA 10 |
-| `bgs-10-price` | BGS 10 Black Label |
-
-Code: `internal/adapters/clients/pricecharting/`
-
 ### TCGdex.dev
 
 No API key required. Provides card metadata (name, set, number, image URL) for English and Japanese cards.
 
 Code: `internal/adapters/clients/tcgdex/`
 
-### CardHedger
+### DH Price Provider
 
-```bash
-export CARD_HEDGER_API_KEY="your_key"  # Supplementary pricing (unlimited plan)
-```
+Provides graded card pricing via the DoubleHolo enterprise API. Returns price estimates, market data, and sales history for PSA-graded cards.
 
-Provides multi-platform price estimates with confidence ranges. Used as the sole secondary fusion source.
-- Daily limit tracked via atomic counter with CAS-based daily reset
-- Card ID mapping cached in SQLite (`card_id_mappings` table)
-- Background schedulers: delta poll (1h) + daily batch refresh
-
-Code: `internal/adapters/clients/cardhedger/`
-
-### Fusion Price Provider
-
-Merges data from CardHedger (graded price estimates) and PriceCharting (market data) into a single `Price` struct with confidence scores and fusion metadata. Uses `fusion.FetchResult` pattern to avoid shared mutable state.
-
-Code: `internal/adapters/clients/fusionprice/`
+Code: `internal/adapters/clients/dhprice/`
 
 ### PriceLookup Adapter
 
@@ -221,16 +189,13 @@ curl http://localhost:8081/api/status/api-usage
 | High memory usage | Decrease cache limits, clear `data/cache/*` |
 | Circuit breaker stuck open | Wait 60s, check API status, review logs |
 | Rate limit errors | Reduce concurrent workers, check quotas |
-| Market signals missing | Verify PriceCharting token is set; check `PriceLookup` wiring |
+| Market signals missing | Verify DH_ENTERPRISE_API_KEY is set; check `PriceLookup` wiring |
 | CSV import skipping all rows | Check CSV format: 3 columns, header row required |
 | Duplicate cert errors | Certificate numbers are unique across all campaigns |
-| CardHedger 429 errors | Unlimited plan; 429s indicate actual rate limiting. Check via /api/status/api-usage |
 | `database is locked` | WAL mode issue or concurrent write contention. Check `PRAGMA journal_mode=wal;` runs on startup |
-| `429 rate limited` on PriceCharting | Exceeded 1 req/sec. Wait for block expiry; check `rate_limiter.go` |
 | `mock does not implement interface` | Repository interface changed. Add missing method to both mocks (`testutil/mocks/` and `domain/campaigns/mock_repo_test.go`) |
 | Frontend proxy 502 | Backend not running on :8081. Start backend: `go run ./cmd/slabledger` |
 | `migration: dirty database` | Failed migration left dirty state. Fix version in `schema_migrations` table |
-| CardHedger `Card is null` | Cert's card not in CardHedger DB. Expected for new/rare cards; null handling in `cert_resolver.go` |
 | Chinese set number mapping unknown | New CBB volume not in `mapChineseNumber`. Add volume mapping; falls back to number-less search |
 
 ---
@@ -239,7 +204,7 @@ curl http://localhost:8081/api/status/api-usage
 
 - **Retry**: Exponential backoff with jitter (`platform/resilience/retry.go`), used by `httpx.Client`
 - **Circuit breaker**: Per-provider via `sony/gobreaker` in `httpx/`. States: closed → open (after N failures) → half-open
-- **Rate limits**: PriceCharting 1 req/sec, CardHedger 100 req/min + 700ms pause, auth 10 req/sec
+- **Rate limits**: DH enterprise (managed by provider), auth 10 req/sec
 - **429 handling**: `APITracker.UpdateRateLimit` blocks provider-level requests until expiry
 
 ---

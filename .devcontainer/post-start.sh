@@ -50,12 +50,12 @@ fi
 # Check if .env file exists and has required variables
 if [ -f ".env" ]; then
     # Check for required API keys
-    if ! grep -q "PRICECHARTING_TOKEN=your_pricecharting_token_here" .env && \
+    if ! grep -q "DH_ENTERPRISE_API_KEY=your_dh_key_here" .env && \
        ! grep -q "PSA_ACCESS_TOKEN=your_psa_token_here" .env; then
         echo "✅ API keys configured"
     else
         echo "⚠️  Warning: API keys not configured in .env file"
-        echo "   Update PRICECHARTING_TOKEN and PSA_ACCESS_TOKEN"
+        echo "   Update DH_ENTERPRISE_API_KEY and PSA_ACCESS_TOKEN"
     fi
 else
     echo "⚠️  Warning: .env file not found"

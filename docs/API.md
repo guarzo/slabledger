@@ -115,14 +115,14 @@ Returns pricing API status.
 
 Auth: RequireAdmin
 
-Returns API call statistics for all pricing providers (cardhedger, pricecharting).
+Returns API call statistics for all pricing providers.
 
 **Response:** `200 OK`
 ```json
 {
   "providers": [
     {
-      "name": "cardhedger",
+      "name": "doubleholo",
       "today": {
         "calls": 50,
         "limit": 1000,
@@ -338,7 +338,7 @@ Searches cards by name, set, or number. Also accepts `POST` with JSON body.
 
 Auth: RequireAuth
 
-Looks up fusion price data for a specific card.
+Looks up price data for a specific card.
 
 **Query params:** `name` (required, max 200), `set` (optional, max 200), `number` (optional, max 50)
 
@@ -368,7 +368,7 @@ Looks up fusion price data for a specific card.
   },
   "market": { "activeListings": 8, "lowestListing": 1100.00, "sales30d": 4, "sales90d": 12 },
   "velocity": { "dailyAverage": 0.15, "weeklyAverage": 1.0, "monthlyTotal": 4 },
-  "sources": ["cardhedger"]
+  "sources": ["doubleholo"]
 }
 ```
 
@@ -391,7 +391,7 @@ Lists all saved price hints (manual provider ID overrides).
     "cardName": "Charizard",
     "setName": "Base Set",
     "cardNumber": "4",
-    "provider": "pricecharting",
+    "provider": "doubleholo",
     "externalId": "12345"
   }
 ]
@@ -411,11 +411,11 @@ Saves a price hint (upserts).
   "cardName": "Charizard",
   "setName": "Base Set",
   "cardNumber": "4",
-  "provider": "pricecharting",
+  "provider": "doubleholo",
   "externalId": "12345"
 }
 ```
-`provider` must be `"pricecharting"` or `"cardhedger"`.
+`provider` must be `"doubleholo"`.
 
 **Response:** `200 OK` — `{ "status": "ok" }`
 
@@ -532,7 +532,7 @@ Returns pricing data quality diagnostics (coverage rates, match quality distribu
 
 Auth: RequireAdmin
 
-Lists all CardHedger card request submissions. Enriches pending rows from current purchases before returning.
+Lists all card request submissions. Enriches pending rows from current purchases before returning.
 
 **Response:** `200 OK` — Array of `sqlite.CardRequestSubmission`
 
@@ -542,7 +542,7 @@ Lists all CardHedger card request submissions. Enriches pending rows from curren
 
 Auth: RequireAdmin
 
-Submits a single pending card request to CardHedger.
+Submits a single pending card request.
 
 **Path params:** `id` (int64)
 
@@ -551,7 +551,7 @@ Submits a single pending card request to CardHedger.
 { "status": "submitted", "requestId": "ch-req-abc123" }
 ```
 
-**Errors:** `400` invalid ID; `404` not found; `409` already claimed; `503` client not configured; `502` CardHedger API error
+**Errors:** `400` invalid ID; `404` not found; `409` already claimed; `503` client not configured; `502` external API error
 
 ---
 
@@ -559,7 +559,7 @@ Submits a single pending card request to CardHedger.
 
 Auth: RequireAdmin
 
-Submits all pending card requests to CardHedger.
+Submits all pending card requests.
 
 **Response:** `200 OK`
 ```json

@@ -88,7 +88,7 @@ cp .env.example .env
 Update the following in `.env`:
 ```bash
 # Required for application
-PRICECHARTING_TOKEN=your_actual_token
+DH_ENTERPRISE_API_KEY=your_actual_key
 PSA_ACCESS_TOKEN=your_actual_token
 
 # Required for Claude Code CLI

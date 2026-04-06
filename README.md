@@ -14,8 +14,8 @@ git clone https://github.com/guarzo/slabledger.git
 cd slabledger
 go build -o slabledger ./cmd/slabledger
 
-# Set required API tokens
-export PRICECHARTING_TOKEN="your_token"
+# Set API tokens (optional — enables pricing features)
+export DH_ENTERPRISE_API_KEY="your_key"
 
 # Start the web interface
 ./slabledger
@@ -30,7 +30,7 @@ export PRICECHARTING_TOKEN="your_token"
 - **P&L Analytics** - Campaign-level and channel-level profit/loss, ROI, sell-through rate, and average days-to-sell
 - **Inventory Aging** - Track unsold cards with days held and market direction signals (rising/falling/stable)
 - **Market Signals** - Compare real-time sold prices against Card Ladder valuations to inform sell-channel decisions
-- **Multi-Source Price Fusion** - Aggregates CardHedger and PriceCharting for accurate graded pricing
+- **DH Pricing** - Graded card pricing via DoubleHolo enterprise API
 - **Card Pricing** - Look up current prices across all grades and sources
 - **Favorites** - Save and track cards of interest
 - **Archive** - Soft-delete campaigns while preserving history
@@ -47,7 +47,7 @@ PSA sources already-graded cards through automated campaigns. You configure buy 
 | **Local** (GameStop, card shows) | 90% of Card Ladder value, no listing fees |
 | **Other** | Website sales, direct sales, etc. |
 
-The system compares real-time sold data (from PriceCharting/fusion) against Card Ladder valuations to reveal market direction, helping you choose the optimal sell channel.
+The system compares real-time sold data against Card Ladder valuations to reveal market direction, helping you choose the optimal sell channel.
 
 ## Stack
 
@@ -56,18 +56,18 @@ Go backend with SQLite, React + Radix UI + TanStack Query + Vite + Tailwind fron
 ## Requirements
 
 - Go 1.25.2+
-- [PriceCharting API token](https://www.pricecharting.com/api) (required)
+- DH Enterprise API key (optional — enables pricing)
 - Node.js 18+ (for frontend development)
 
 ## Environment Variables
 
 ```bash
-# Required
-PRICECHARTING_TOKEN="..."    # Graded prices and sales data
+# Pricing (optional)
+DH_API_BASE_URL="..."           # DoubleHolo API base URL
+DH_ENTERPRISE_API_KEY="..."     # DoubleHolo enterprise API key
 
-# Optional
-CARD_HEDGER_API_KEY="..."    # Supplementary pricing (unlimited plan)
-LOG_LEVEL="info"             # debug, info, warn, error
+# General
+LOG_LEVEL="info"                # debug, info, warn, error
 ```
 
 ## API Endpoints
@@ -123,7 +123,6 @@ Key frontend libraries: React, TanStack React Query, Radix UI, TanStack React Vi
 - [User Guide](docs/USER_GUIDE.md) - How to use the application
 - [Architecture](docs/ARCHITECTURE.md) - System design and key decisions
 - [Development](docs/DEVELOPMENT.md) - Caching, rate limiting, API integrations
-- [Next Steps](docs/NEXT_STEPS.md) - Planned features
 
 ## License
 
