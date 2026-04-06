@@ -279,6 +279,11 @@ type service struct {
 	certEnrichCh     chan string
 	certEnrichCancel context.CancelFunc
 	wg               sync.WaitGroup // tracks background goroutines (e.g. batchResolveCardIDs)
+
+	// Crack candidate cache — refreshed in background, read by inventory endpoint.
+	crackCacheMu     sync.RWMutex
+	crackCacheSet    map[string]bool
+	crackCacheCancel context.CancelFunc
 }
 
 // ServiceOption configures optional service dependencies.
@@ -364,6 +369,19 @@ func NewService(repo Repository, opts ...ServiceOption) Service {
 		}()
 	}
 
+	// Start background crack candidate cache refresher if price lookup is configured.
+	// The inventory endpoint reads from this cache instead of computing live,
+	// avoiding hundreds of sequential external API calls per request.
+	if s.priceProv != nil {
+		ctx, cancel := context.WithCancel(s.baseCtx)
+		s.crackCacheCancel = cancel
+		s.wg.Add(1)
+		go func() {
+			defer s.wg.Done()
+			s.crackCacheWorker(ctx)
+		}()
+	}
+
 	return s
 }
 
@@ -371,6 +389,9 @@ func NewService(repo Repository, opts ...ServiceOption) Service {
 func (s *service) Close() {
 	if s.certEnrichCancel != nil {
 		s.certEnrichCancel()
+	}
+	if s.crackCacheCancel != nil {
+		s.crackCacheCancel()
 	}
 	s.wg.Wait()
 }
