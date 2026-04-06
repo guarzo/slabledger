@@ -20,13 +20,11 @@ This codebase follows **Hexagonal Architecture** (also known as Ports and Adapte
 │    internal/adapters/                           │
 │    ├── httpserver/      (inbound: web API)      │
 │    ├── clients/         (outbound: APIs)        │
-│    │   ├── cardhedger/     (supplementary pricing) │
 │    │   ├── cardutil/       (card utilities)     │
-│    │   ├── fusionprice/    (multi-source fusion)│
+│    │   ├── dhprice/        (DH pricing)         │
 │    │   ├── google/         (Google OAuth)       │
 │    │   ├── httpx/          (shared HTTP client) │
 │    │   ├── tcgdex/         (card metadata)      │
-│    │   ├── pricecharting/  (graded prices + market) │
 │    │   ├── pricelookup/    (PriceLookup adapter)│
 │    │   └── psa/            (PSA data)           │
 │    ├── scheduler/       (background jobs)       │
@@ -42,7 +40,6 @@ This codebase follows **Hexagonal Architecture** (also known as Ports and Adapte
 │    ├── cards/          (card interfaces)        │
 │    ├── constants/      (shared constants)       │
 │    ├── favorites/      (favorites management)   │
-│    ├── fusion/         (price fusion interfaces)│
 │    ├── mathutil/       (math utilities)         │
 │    ├── observability/  (logger interfaces)      │
 │    ├── pricing/        (price interfaces/models)│
@@ -91,7 +88,6 @@ This codebase follows **Hexagonal Architecture** (also known as Ports and Adapte
 | `cards/` | `CardRepository` interface for card metadata |
 | `constants/` | Shared application constants |
 | `favorites/` | Favorites management |
-| `fusion/` | Price fusion interfaces |
 | `mathutil/` | Math utility functions |
 | `observability/` | Logger, MetricsRecorder interfaces |
 | `pricing/` | `PriceProvider` interface, graded prices, market data models |
@@ -115,17 +111,17 @@ type PriceProvider interface {
 }
 
 // 2. Implement in adapter layer
-package pricecharting
+package dhprice
 
-type Client struct { ... }
+type Provider struct { ... }
 
-func (c *Client) GetPrice(ctx context.Context, card pricing.Card) (*pricing.Price, error) {
+func (p *Provider) GetPrice(ctx context.Context, card pricing.Card) (*pricing.Price, error) {
     // API call implementation
 }
 
 // 3. Wire in main.go
-priceClient := pricecharting.NewClient(...)
-service := someservice.NewService(priceClient) // Inject interface
+dhProvider := dhprice.NewProvider(...)
+service := someservice.NewService(dhProvider) // Inject interface
 ```
 
 ---
@@ -147,13 +143,11 @@ internal/adapters/
 │   ├── middleware/       # Authentication, CORS, etc.
 │   └── router.go        # Route configuration
 ├── clients/             # Outbound: External APIs
-│   ├── cardhedger/      # CardHedger supplementary pricing
 │   ├── cardutil/        # Card utility functions
-│   ├── fusionprice/     # Multi-source price fusion (CardHedger + PriceCharting)
+│   ├── dhprice/         # DH (DoubleHolo) pricing
 │   ├── google/          # Google OAuth client
 │   ├── httpx/           # Shared HTTP client (retry, circuit breaker)
 │   ├── tcgdex/          # TCGdex.dev card/set metadata (EN + JA)
-│   ├── pricecharting/   # PriceCharting graded prices + market data
 │   ├── pricelookup/     # PriceLookup adapter (wraps PriceProvider for campaigns)
 │   └── psa/             # PSA data client
 ├── scheduler/           # Background jobs (price refresh, session cleanup)
@@ -168,20 +162,20 @@ internal/adapters/
 
 **Example Adapter**:
 ```go
-package pricecharting
+package dhprice
 
 import "github.com/guarzo/slabledger/internal/domain/pricing"
 
-// Client implements pricing.PriceProvider interface
-type Client struct {
+// Provider implements pricing.PriceProvider interface
+type Provider struct {
     httpClient *httpx.Client
-    apiToken   string
+    apiKey     string
     logger     observability.Logger
 }
 
-var _ pricing.PriceProvider = (*Client)(nil) // Compile-time interface check
+var _ pricing.PriceProvider = (*Provider)(nil) // Compile-time interface check
 
-func (c *Client) GetPrice(ctx context.Context, card pricing.Card) (*pricing.Price, error) {
+func (p *Provider) GetPrice(ctx context.Context, card pricing.Card) (*pricing.Price, error) {
     // 1. Build API request
     // 2. Make HTTP call
     // 3. Parse response
@@ -494,10 +488,10 @@ func (h *Handler) GetPNL(c *gin.Context) {
 **Bad**:
 ```go
 // internal/domain/campaigns/service.go
-import "github.com/guarzo/slabledger/internal/adapters/clients/pricecharting"
+import "github.com/guarzo/slabledger/internal/adapters/clients/dhprice"
 
 type Service struct {
-    priceClient *pricecharting.Client // ❌ Direct dependency on adapter
+    priceClient *dhprice.Provider // ❌ Direct dependency on adapter
 }
 ```
 
@@ -534,14 +528,14 @@ func TestService_GetPNL(t *testing.T) {
 
 ### Adapter Layer Testing
 ```go
-// internal/adapters/clients/pricecharting/client_test.go
-func TestClient_GetPrice(t *testing.T) {
+// internal/adapters/clients/dhprice/provider_test.go
+func TestProvider_GetPrice(t *testing.T) {
     // ✅ Use mock HTTP client (no real network calls)
     mockHTTP := mocks.NewMockHTTPClientWithResponse(`{"price": 100}`)
 
-    client := pricecharting.NewClientWithHTTP(mockHTTP, "test-token")
+    provider := dhprice.NewProviderWithHTTP(mockHTTP, "test-key")
 
-    price, err := client.GetPrice(context.Background(), testCard)
+    price, err := provider.GetPrice(context.Background(), testCard)
     assert.NoError(t, err)
 }
 ```
@@ -554,8 +548,6 @@ Several files in this codebase exceed 500 lines of code. Before adding code to a
 
 | File | LOC | Why it's large |
 |------|-----|----------------|
-| `adapters/clients/pricecharting/domain_adapter.go` | 637 | 6-strategy matching pipeline (cohesive) |
-| `adapters/clients/fusionprice/fusion_provider.go` | 635 | Multi-source fusion (single purpose) |
 | `domain/social/service_impl.go` | 731 | Social content orchestration |
 | `domain/campaigns/service_analytics.go` | 609 | Campaign analytics computations |
 
