@@ -44,11 +44,9 @@ var operationTools = map[AIOperation][]string{
 		"get_campaign_tuning", "get_campaign_pnl",
 	},
 	OpCampaignAnalysis: {
-		"list_campaigns", "get_campaign_pnl", "get_pnl_by_channel",
-		"get_campaign_tuning", "get_inventory_aging", "get_expected_values",
-		"get_crack_candidates", "get_campaign_suggestions", "run_projection",
-		"get_channel_velocity", "get_credit_summary",
-		"get_market_intelligence",
+		"get_campaign_pnl", "get_pnl_by_channel",
+		"get_campaign_tuning", "get_inventory_aging",
+		"get_expected_values", "get_crack_candidates",
 	},
 	OpLiquidation: {
 		"get_dashboard_summary", "get_flagged_inventory",

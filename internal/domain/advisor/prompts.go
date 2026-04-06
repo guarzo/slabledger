@@ -85,18 +85,31 @@ Format guidelines:
 const campaignAnalysisSystemPrompt = baseSystemPrompt + `
 
 ## Your Task: Campaign Analysis
-Analyze a specific campaign's health and performance. Fetch tuning data, P&L, and inventory.
+Analyze a specific campaign's health and performance. You have 6 campaign-specific tools.
 Provide actionable tuning recommendations with specific parameter suggestions.
-Compare this campaign's performance to its design intent.`
+Compare this campaign's performance to its design intent.
+
+## Tool Strategy
+You have a **2-round tool budget** and 6 tools.
+
+**Round 1**: Call get_campaign_tuning, get_campaign_pnl, get_pnl_by_channel,
+get_inventory_aging, get_expected_values, and get_crack_candidates together.
+All take the campaign ID. This gives you everything for the analysis.
+
+**Round 2**: Escape hatch only if a Round 1 tool failed or returned incomplete data.
+
+**After your tool rounds, write your analysis immediately. Do NOT make additional tool calls.**`
 
 const campaignAnalysisUserPrompt = `Analyze campaign ID: %s
 
-Fetch the campaign's tuning data, P&L, and inventory aging. Then provide:
-1. **Health Assessment** — Is this campaign performing as designed? ROI, sell-through, avg days to sell.
-2. **Market Conditions** — Current market alignment for this segment (trending up/down/stable, liquidity).
-3. **Tuning Recommendations** — Specific parameter adjustments (buy terms, price range, grade range, spend cap) with reasoning.
-4. **Problem Cards** — Any cards held too long or with concerning signals.
-5. **Opportunity** — What's working well that could be expanded.`
+Fetch all campaign data in one round, then provide:
+1. **Health Assessment** — Is this campaign performing as designed? ROI, sell-through, avg days to sell vs expectations.
+2. **Channel Performance** — Which channels are working? Revenue, fees, and net profit per channel.
+3. **Market Conditions** — Current market alignment for this segment (trending up/down/stable, liquidity from inventory aging data).
+4. **Tuning Recommendations** — Specific parameter adjustments (buy terms, price range, grade range, spend cap) with reasoning and expected impact.
+5. **Problem Cards** — Cards held too long, declining in value, or with negative EV. Include cert, days held, and recommended action.
+6. **Crack Candidates** — Any cards where selling raw beats selling graded (if any found).
+7. **Opportunity** — What's working well that could be expanded.`
 
 // liquidationSystemPrompt is used for liquidation analysis.
 const liquidationSystemPrompt = baseSystemPrompt + `
