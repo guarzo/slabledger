@@ -1,4 +1,4 @@
-import type { SourcePrice } from './core';
+import type { SourcePrice } from './market';
 
 export type PriceFlagReason =
   | 'wrong_match'

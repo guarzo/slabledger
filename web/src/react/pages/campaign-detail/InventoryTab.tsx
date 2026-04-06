@@ -1,23 +1,14 @@
-import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useEffect } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import type { AgingItem, ExpectedValue, Purchase, ReviewStats } from '../../../types/campaigns';
+import type { AgingItem } from '../../../types/campaigns';
 import PokeballLoader from '../../PokeballLoader';
 import { formatCents, formatPct } from '../../utils/formatters';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
-import { useDebounce } from '../../hooks/useDebounce';
-import { useToast } from '../../contexts/ToastContext';
-import { useSellSheet } from '../../hooks/useSellSheet';
 import { EmptyState, Button } from '../../ui';
-import { queryKeys } from '../../queries/queryKeys';
-import { useExpectedValues } from '../../queries/useCampaignQueries';
-import { api } from '../../../js/api';
-import type { PriceFlagReason } from '../../../types/campaigns/priceReview';
 import RecordSaleModal from './RecordSaleModal';
 import PriceHintDialog from '../../PriceHintDialog';
 import PriceOverrideDialog from '../../PriceOverrideDialog';
-import { costBasis, bestPrice, unrealizedPL, formatPL, getReviewStatus, reviewUrgencySort, isCardShowCandidate } from './inventory/utils';
-import type { SortKey, SortDir } from './inventory/utils';
+import { costBasis, unrealizedPL, formatPL } from './inventory/utils';
 import '../../../styles/print-sell-sheet.css';
 import DesktopRow from './inventory/DesktopRow';
 import MobileCard from './inventory/MobileCard';
@@ -27,6 +18,7 @@ import SortableHeader from './inventory/SortableHeader';
 import ExpandedDetail from './inventory/ExpandedDetail';
 import PriceFlagDialog from './inventory/PriceFlagDialog';
 import ReviewSummaryBar from './inventory/ReviewSummaryBar';
+import { useInventoryState } from './inventory/useInventoryState';
 
 export interface InventoryTabProps {
   items: AgingItem[];
@@ -36,195 +28,25 @@ export interface InventoryTabProps {
 }
 
 export default function InventoryTab({ items, isLoading: loading, campaignId, showCampaignColumn }: InventoryTabProps) {
-  const queryClient = useQueryClient();
-  const toast = useToast();
-  const sellSheet = useSellSheet();
-  const { has: sellSheetHas } = sellSheet;
-  const { data: evPortfolio } = useExpectedValues(campaignId ?? '');
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [saleModalOpen, setSaleModalOpen] = useState(false);
-  const [saleModalItems, setSaleModalItems] = useState<AgingItem[]>([]);
-  const [hintTarget, setHintTarget] = useState<{ cardName: string; setName: string; cardNumber: string } | null>(null);
-  const [priceTarget, setPriceTarget] = useState<{
-    purchaseId: string;
-    cardName: string;
-    costBasisCents: number;
-    currentPriceCents: number;
-    currentOverrideCents?: number;
-    currentOverrideSource?: string;
-    aiSuggestedCents?: number;
-  } | null>(null);
-  const [flagTarget, setFlagTarget] = useState<{ purchaseId: string; cardName: string; grade: number } | null>(null);
-  const [flagSubmitting, setFlagSubmitting] = useState(false);
-  const [sortKey, setSortKey] = useState<SortKey>('name');
-  const [sortDir, setSortDir] = useState<SortDir>('asc');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [isPrinting, setIsPrinting] = useState(false);
-  const handlePrint = useCallback(() => {
-    setIsPrinting(true);
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        window.print();
-        setIsPrinting(false);
-      });
-    });
-  }, []);
-  const [statsExpanded, setStatsExpanded] = useState(false);
-  const [filterTab, setFilterTab] = useState<'needs_review' | 'large_gap' | 'no_data' | 'flagged' | 'card_show' | 'all' | 'sell_sheet'>('needs_review');
-  const [showAll, setShowAll] = useState(false);
-  const debouncedSearch = useDebounce(searchQuery, 300);
   const isMobile = useMediaQuery('(max-width: 768px)');
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const mobileScrollRef = useRef<HTMLDivElement>(null);
-
-  // Compute review stats and filter tab counts in a single pass
-  const { reviewStats, tabCounts } = useMemo(() => {
-    const stats: ReviewStats = { total: items.length, needsReview: 0, reviewed: 0, flagged: 0 };
-    const counts = { needs_review: 0, large_gap: 0, no_data: 0, flagged: 0, card_show: 0, all: items.length };
-    for (const item of items) {
-      if (item.hasOpenFlag) stats.flagged++;
-      if (item.purchase.reviewedAt) stats.reviewed++;
-      else stats.needsReview++;
-
-      const status = getReviewStatus(item);
-      if (status === 'needs_review') { counts.needs_review++; }
-      else if (status === 'large_gap') { counts.needs_review++; counts.large_gap++; }
-      else if (status === 'no_data') { counts.needs_review++; counts.no_data++; }
-      else if (status === 'flagged') counts.flagged++;
-      if (isCardShowCandidate(item)) counts.card_show++;
-    }
-    return { reviewStats: stats, tabCounts: counts };
-  }, [items]);
-
-  function handleSort(key: SortKey) {
-    if (sortKey === key) {
-      setSortDir(prev => prev === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortKey(key);
-      setSortDir('asc');
-    }
-  }
-
-  // Reset scroll + collapse expanded row on sort/filter change
-  useEffect(() => {
-    setExpandedId(null);
-    scrollContainerRef.current?.scrollTo({ top: 0 });
-    mobileScrollRef.current?.scrollTo({ top: 0 });
-  }, [sortKey, sortDir, debouncedSearch, filterTab, showAll]);
-
-  const handleReviewed = useCallback(() => {
-    if (campaignId) {
-      queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.inventory(campaignId) });
-    } else {
-      queryClient.invalidateQueries({ predicate: (query) => query.queryKey[0] === 'campaigns' });
-    }
-    setExpandedId(null);
-  }, [campaignId, queryClient]);
-
-  const handleFlagSubmit = useCallback(async (reason: PriceFlagReason) => {
-    if (!flagTarget) return;
-    setFlagSubmitting(true);
-    try {
-      await api.createPriceFlag(flagTarget.purchaseId, reason);
-      toast.success('Price flag submitted');
-      setFlagTarget(null);
-      handleReviewed();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to submit price flag';
-      toast.error(message);
-    } finally {
-      setFlagSubmitting(false);
-    }
-  }, [flagTarget, toast, handleReviewed]);
-
-  // Build EV lookup map by certNumber; hide if insufficient data points or no campaignId
-  const showEV = !!campaignId && evPortfolio && evPortfolio.items?.length > 0 && evPortfolio.minDataPoints >= 30;
-  const evMap = useMemo(() => {
-    if (!showEV) return new Map<string, ExpectedValue>();
-    const map = new Map<string, ExpectedValue>();
-    for (const ev of evPortfolio.items) {
-      map.set(ev.certNumber, ev);
-    }
-    return map;
-  }, [showEV, evPortfolio]);
-
-  // Page-scoped sell-sheet count: only count items actually present on this page
-  const pageSellSheetCount = useMemo(() => {
-    let count = 0;
-    for (const item of items) {
-      if (sellSheetHas(item.purchase.id)) count++;
-    }
-    return count;
-  }, [items, sellSheetHas]);
-
-  // Whether the sell-sheet filter is truly active (not bypassed by showAll or search)
-  const sellSheetActive = filterTab === 'sell_sheet' && !showAll && !debouncedSearch.trim();
-
-  const filteredAndSortedItems = useMemo(() => {
-    let result = items;
-
-    // Search always overrides: if search query is set, search all items regardless of tab
-    if (debouncedSearch.trim()) {
-      const q = debouncedSearch.toLowerCase();
-      result = result.filter(i =>
-        i.purchase.cardName.toLowerCase().includes(q) ||
-        (i.purchase.certNumber && i.purchase.certNumber.toLowerCase().includes(q)) ||
-        (i.purchase.setName && i.purchase.setName.toLowerCase().includes(q))
-      );
-    } else if (!showAll) {
-      // Filter by active tab using getReviewStatus
-      if (filterTab === 'sell_sheet') {
-        result = result.filter(i => sellSheetHas(i.purchase.id));
-      } else if (filterTab !== 'all') {
-        result = result.filter(i => {
-          const status = getReviewStatus(i);
-          if (filterTab === 'large_gap') return status === 'large_gap';
-          if (filterTab === 'no_data') return status === 'no_data';
-          if (filterTab === 'flagged') return status === 'flagged';
-          if (filterTab === 'card_show') return isCardShowCandidate(i);
-          // 'needs_review' tab shows needs_review + large_gap + no_data (all unreviewed/unflagged)
-          return status === 'needs_review' || status === 'large_gap' || status === 'no_data';
-        });
-      }
-    }
-
-    // Sort: when !showAll and no search, use queue urgency sort; otherwise use user-selected sort
-    if (!showAll && !debouncedSearch.trim()) {
-      return [...result].sort(reviewUrgencySort);
-    }
-
-    const dir = sortDir === 'asc' ? 1 : -1;
-    return [...result].sort((a, b) => {
-      switch (sortKey) {
-        case 'name':
-          return dir * a.purchase.cardName.localeCompare(b.purchase.cardName);
-        case 'grade':
-          return dir * (a.purchase.gradeValue - b.purchase.gradeValue);
-        case 'cost':
-          return dir * (costBasis(a.purchase) - costBasis(b.purchase));
-        case 'market': {
-          const ma = a.currentMarket ? bestPrice(a.currentMarket) : 0;
-          const mb = b.currentMarket ? bestPrice(b.currentMarket) : 0;
-          return dir * (ma - mb);
-        }
-        case 'pl': {
-          const pa = unrealizedPL(costBasis(a.purchase), a.currentMarket) ?? -Infinity;
-          const pb = unrealizedPL(costBasis(b.purchase), b.currentMarket) ?? -Infinity;
-          return dir * (pa - pb);
-        }
-        case 'days':
-          return dir * (a.daysHeld - b.daysHeld);
-        case 'ev': {
-          const ea = evMap.get(a.purchase.certNumber)?.evCents ?? -Infinity;
-          const eb = evMap.get(b.purchase.certNumber)?.evCents ?? -Infinity;
-          return dir * (ea - eb);
-        }
-        default:
-          return 0;
-      }
-    });
-  }, [items, debouncedSearch, sortKey, sortDir, evMap, showAll, filterTab, sellSheetHas]);
+  const state = useInventoryState(items, campaignId);
+  const {
+    scrollContainerRef, mobileScrollRef,
+    selected, setSelected, expandedId,
+    saleModalOpen, saleModalItems,
+    hintTarget, setHintTarget, priceTarget, setPriceTarget,
+    flagTarget, setFlagTarget, flagSubmitting,
+    sortKey, sortDir, searchQuery, setSearchQuery,
+    isPrinting, statsExpanded, setStatsExpanded,
+    filterTab, setFilterTab, showAll, setShowAll, debouncedSearch,
+    reviewStats, tabCounts, showEV, evPortfolio, evMap,
+    pageSellSheetCount, sellSheetActive, filteredAndSortedItems,
+    totalCost, totalMarket, totalPL,
+    handleSort, handleReviewed, handleFlagSubmit, handlePrint,
+    toggleSelect, toggleAll, toggleExpand,
+    openSaleModal, closeSaleModal, handleFixPricing, handleSetPrice,
+    handlePriceSaved, handleHintSaved, sellSheet, toast,
+  } = state;
 
   const rowVirtualizer = useVirtualizer({
     count: filteredAndSortedItems.length,
@@ -237,7 +59,6 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
   });
 
   // Force virtualizer to recalculate sizes when a row expands/collapses
-  // so getTotalSize() is correct and the scroll container adjusts its height.
   useEffect(() => {
     rowVirtualizer.measure();
   }, [expandedId, rowVirtualizer]);
@@ -248,92 +69,6 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
     estimateSize: () => 140,
     overscan: 5,
   });
-
-  function toggleSelect(purchaseId: string) {
-    setSelected(prev => {
-      const next = new Set(prev);
-      if (next.has(purchaseId)) next.delete(purchaseId);
-      else next.add(purchaseId);
-      return next;
-    });
-  }
-
-  function toggleAll() {
-    const visibleIds = filteredAndSortedItems.map(i => i.purchase.id);
-    const allVisibleSelected = visibleIds.length > 0 && visibleIds.every(id => selected.has(id));
-    setSelected(prev => {
-      const next = new Set(prev);
-      if (allVisibleSelected) {
-        for (const id of visibleIds) next.delete(id);
-      } else {
-        for (const id of visibleIds) next.add(id);
-      }
-      return next;
-    });
-  }
-
-  function toggleExpand(purchaseId: string) {
-    setExpandedId(prev => prev === purchaseId ? null : purchaseId);
-  }
-
-  function openSaleModal(saleItems: AgingItem[]) {
-    setSaleModalItems(saleItems);
-    setSaleModalOpen(true);
-  }
-
-  function closeSaleModal() {
-    setSaleModalOpen(false);
-    setSaleModalItems([]);
-  }
-
-  function handleFixPricing(purchase: Purchase) {
-    if (!purchase.setName || !purchase.cardNumber) {
-      toast.error('Cannot create hint: set name and card number are required');
-      return;
-    }
-    setHintTarget({ cardName: purchase.cardName, setName: purchase.setName, cardNumber: purchase.cardNumber });
-  }
-
-  function handleSetPrice(item: AgingItem) {
-    const currentPrice = item.currentMarket ? bestPrice(item.currentMarket) : 0;
-    setPriceTarget({
-      purchaseId: item.purchase.id,
-      cardName: item.purchase.cardName,
-      costBasisCents: costBasis(item.purchase),
-      currentPriceCents: currentPrice,
-      currentOverrideCents: item.purchase.overridePriceCents,
-      currentOverrideSource: item.purchase.overrideSource,
-      aiSuggestedCents: item.purchase.aiSuggestedPriceCents,
-    });
-  }
-
-  function handlePriceSaved() {
-    if (campaignId) {
-      queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.inventory(campaignId) });
-    } else {
-      queryClient.invalidateQueries({ predicate: (query) => query.queryKey[0] === 'campaigns' });
-    }
-    // Always invalidate sell sheet — overrides affect global sell sheet regardless of view
-    queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.sellSheet });
-  }
-
-  function handleHintSaved() {
-    if (campaignId) {
-      queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.inventory(campaignId) });
-    } else {
-      queryClient.invalidateQueries({ predicate: (query) => query.queryKey[0] === 'campaigns' && query.queryKey[2] === 'inventory' });
-    }
-  }
-
-  // Summary stats
-  const { totalCost, totalMarket, totalPL } = useMemo(() => {
-    const cost = items.reduce((sum, i) => sum + costBasis(i.purchase), 0);
-    const market = items.reduce((sum, i) => {
-      if (!i.currentMarket) return sum;
-      return sum + bestPrice(i.currentMarket);
-    }, 0);
-    return { totalCost: cost, totalMarket: market, totalPL: market > 0 ? market - cost : 0 };
-  }, [items]);
 
   if (loading) return <div className="py-8 text-center"><PokeballLoader /></div>;
 
@@ -435,8 +170,8 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
               {showEV && (
                 <div>
                   <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Portfolio EV</div>
-                  <div className={`text-base font-semibold ${evPortfolio.totalEvCents >= 0 ? 'text-[var(--success)]' : 'text-[var(--danger)]'}`}>
-                    {formatPL(evPortfolio.totalEvCents)}
+                  <div className={`text-base font-semibold ${evPortfolio!.totalEvCents >= 0 ? 'text-[var(--success)]' : 'text-[var(--danger)]'}`}>
+                    {formatPL(evPortfolio!.totalEvCents)}
                   </div>
                 </div>
               )}
