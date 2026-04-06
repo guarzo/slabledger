@@ -6,7 +6,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/guarzo/slabledger/internal/domain/fusion"
+	"github.com/guarzo/slabledger/internal/domain/pricing"
 )
 
 // CardIDMappingRepository provides access to the card_id_mappings table.
@@ -205,7 +205,7 @@ func (r *CardIDMappingRepository) DeleteHint(ctx context.Context, cardName, setN
 }
 
 // ListHints returns all manual hint mappings.
-func (r *CardIDMappingRepository) ListHints(ctx context.Context) (_ []fusion.HintMapping, err error) {
+func (r *CardIDMappingRepository) ListHints(ctx context.Context) (_ []pricing.HintMapping, err error) {
 	rows, err := r.db.QueryContext(ctx,
 		`SELECT card_name, set_name, collector_number, provider, external_id
 		 FROM card_id_mappings WHERE hint_source = 'manual' ORDER BY card_name, set_name`,
@@ -219,9 +219,9 @@ func (r *CardIDMappingRepository) ListHints(ctx context.Context) (_ []fusion.Hin
 		}
 	}()
 
-	hints := make([]fusion.HintMapping, 0, 64)
+	hints := make([]pricing.HintMapping, 0, 64)
 	for rows.Next() {
-		var h fusion.HintMapping
+		var h pricing.HintMapping
 		if err := rows.Scan(&h.CardName, &h.SetName, &h.CollectorNumber, &h.Provider, &h.ExternalID); err != nil {
 			return nil, err
 		}

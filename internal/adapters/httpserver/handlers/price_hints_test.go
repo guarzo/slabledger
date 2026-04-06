@@ -9,19 +9,19 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/guarzo/slabledger/internal/domain/fusion"
+	"github.com/guarzo/slabledger/internal/domain/pricing"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
 )
 
-// mockPriceHintResolver implements fusion.PriceHintResolver for testing.
+// mockPriceHintResolver implements pricing.PriceHintResolver for testing.
 type mockPriceHintResolver struct {
 	getHintFn    func(ctx context.Context, cardName, setName, collectorNumber, provider string) (string, error)
 	saveHintFn   func(ctx context.Context, cardName, setName, collectorNumber, provider, externalID string) error
 	deleteHintFn func(ctx context.Context, cardName, setName, collectorNumber, provider string) error
-	listHintsFn  func(ctx context.Context) ([]fusion.HintMapping, error)
+	listHintsFn  func(ctx context.Context) ([]pricing.HintMapping, error)
 }
 
-var _ fusion.PriceHintResolver = (*mockPriceHintResolver)(nil)
+var _ pricing.PriceHintResolver = (*mockPriceHintResolver)(nil)
 
 func (m *mockPriceHintResolver) GetHint(ctx context.Context, cardName, setName, collectorNumber, provider string) (string, error) {
 	if m.getHintFn != nil {
@@ -44,7 +44,7 @@ func (m *mockPriceHintResolver) DeleteHint(ctx context.Context, cardName, setNam
 	return nil
 }
 
-func (m *mockPriceHintResolver) ListHints(ctx context.Context) ([]fusion.HintMapping, error) {
+func (m *mockPriceHintResolver) ListHints(ctx context.Context) ([]pricing.HintMapping, error) {
 	if m.listHintsFn != nil {
 		return m.listHintsFn(ctx)
 	}
@@ -59,8 +59,8 @@ func newPriceHintsHandler(resolver *mockPriceHintResolver) *PriceHintsHandler {
 
 func TestHandlePriceHints_GET_ListSuccess(t *testing.T) {
 	resolver := &mockPriceHintResolver{
-		listHintsFn: func(_ context.Context) ([]fusion.HintMapping, error) {
-			return []fusion.HintMapping{
+		listHintsFn: func(_ context.Context) ([]pricing.HintMapping, error) {
+			return []pricing.HintMapping{
 				{CardName: "Charizard", SetName: "Base Set", CollectorNumber: "4", Provider: "pricecharting", ExternalID: "123"},
 			}, nil
 		},
@@ -92,8 +92,8 @@ func TestHandlePriceHints_GET_ListSuccess(t *testing.T) {
 
 func TestHandlePriceHints_GET_EmptyList(t *testing.T) {
 	resolver := &mockPriceHintResolver{
-		listHintsFn: func(_ context.Context) ([]fusion.HintMapping, error) {
-			return []fusion.HintMapping{}, nil
+		listHintsFn: func(_ context.Context) ([]pricing.HintMapping, error) {
+			return []pricing.HintMapping{}, nil
 		},
 	}
 	h := newPriceHintsHandler(resolver)
@@ -114,7 +114,7 @@ func TestHandlePriceHints_GET_EmptyList(t *testing.T) {
 
 func TestHandlePriceHints_GET_ResolverError(t *testing.T) {
 	resolver := &mockPriceHintResolver{
-		listHintsFn: func(_ context.Context) ([]fusion.HintMapping, error) {
+		listHintsFn: func(_ context.Context) ([]pricing.HintMapping, error) {
 			return nil, errors.New("db error")
 		},
 	}
