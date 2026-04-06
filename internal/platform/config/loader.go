@@ -174,23 +174,6 @@ func FromEnv(base Config) Config {
 		}
 	}
 
-	// Fusion provider configuration
-	if v := os.Getenv("FUSION_CACHE_TTL"); v != "" {
-		if d, err := time.ParseDuration(v); err == nil {
-			cfg.Fusion.CacheTTL = d
-		}
-	}
-	if v := os.Getenv("FUSION_PRICECHARTING_TIMEOUT"); v != "" {
-		if d, err := time.ParseDuration(v); err == nil {
-			cfg.Fusion.PriceChartingTimeout = d
-		}
-	}
-	if v := os.Getenv("FUSION_SECONDARY_TIMEOUT"); v != "" {
-		if d, err := time.ParseDuration(v); err == nil {
-			cfg.Fusion.SecondarySourceTimeout = d
-		}
-	}
-
 	// JustTCG scheduler configuration
 	if v := os.Getenv("JUSTTCG_DAILY_BUDGET"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {

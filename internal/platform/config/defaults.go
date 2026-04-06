@@ -64,11 +64,6 @@ func Default() Config {
 			Enabled:  true,
 			Interval: 1 * time.Hour,
 		},
-		Fusion: FusionConfig{
-			CacheTTL:               4 * time.Hour,
-			PriceChartingTimeout:   30 * time.Second,
-			SecondarySourceTimeout: 20 * time.Second,
-		},
 		InventoryRefresh: InventoryRefreshConfig{
 			Enabled:        true,
 			Interval:       1 * time.Hour,
