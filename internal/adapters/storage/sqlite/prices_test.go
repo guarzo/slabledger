@@ -37,7 +37,7 @@ func TestPriceRepository_StorePrice(t *testing.T) {
 		Grade:      "PSA 10",
 		PriceCents: 100000,
 		Confidence: 0.95,
-		Source:     "pricecharting",
+		Source:     "doubleholo",
 		PriceDate:  time.Now(),
 	}
 
@@ -73,7 +73,7 @@ func TestPriceRepository_StorePrice_Upsert(t *testing.T) {
 		Grade:      "PSA 10",
 		PriceCents: 100000,
 		Confidence: 0.95,
-		Source:     "pricecharting",
+		Source:     "doubleholo",
 		PriceDate:  priceDate,
 	}
 	err := repo.StorePrice(ctx, entry1)
@@ -87,7 +87,7 @@ func TestPriceRepository_StorePrice_Upsert(t *testing.T) {
 		Grade:      "PSA 10",
 		PriceCents: 105000, // Updated price
 		Confidence: 0.96,
-		Source:     "pricecharting",
+		Source:     "doubleholo",
 		PriceDate:  priceDate, // Same date - should upsert
 	}
 	err = repo.StorePrice(ctx, entry2)
@@ -97,7 +97,7 @@ func TestPriceRepository_StorePrice_Upsert(t *testing.T) {
 	retrieved, err := repo.GetLatestPrice(ctx, pricing.Card{
 		Name: "Charizard",
 		Set:  "Base Set",
-	}, "PSA 10", "pricecharting")
+	}, "PSA 10", "doubleholo")
 
 	require.NoError(t, err)
 	require.NotNil(t, retrieved)
@@ -115,7 +115,7 @@ func TestPriceRepository_GetLatestPrice_NotFound(t *testing.T) {
 	retrieved, err := repo.GetLatestPrice(ctx, pricing.Card{
 		Name: "NonExistent",
 		Set:  "Test Set",
-	}, "PSA 10", "pricecharting")
+	}, "PSA 10", "doubleholo")
 
 	require.NoError(t, err)
 	require.Nil(t, retrieved, "should return nil for non-existent price")
@@ -135,7 +135,7 @@ func TestPriceRepository_GetStalePrices(t *testing.T) {
 		CardNumber: "4/102",
 		Grade:      "PSA 10",
 		PriceCents: 100000,
-		Source:     "pricecharting",
+		Source:     "doubleholo",
 		PriceDate:  time.Now().Add(-48 * time.Hour),
 	}
 	err := repo.StorePrice(ctx, entry)
@@ -174,7 +174,7 @@ func TestPriceRepository_GetStalePrices_FilterBySource(t *testing.T) {
 			SetName:    "Base Set",
 			Grade:      "PSA 10",
 			PriceCents: 100000,
-			Source:     "pricecharting",
+			Source:     "ebay",
 			PriceDate:  time.Now().Add(-48 * time.Hour),
 		},
 		{
@@ -197,12 +197,12 @@ func TestPriceRepository_GetStalePrices_FilterBySource(t *testing.T) {
 	require.NoError(t, err)
 
 	// Get stale prices filtered by source
-	stalePrices, err := repo.GetStalePrices(ctx, "pricecharting", 100)
+	stalePrices, err := repo.GetStalePrices(ctx, "ebay", 100)
 	require.NoError(t, err)
 
-	// Should only have pricecharting entries
+	// Should only have ebay entries
 	for _, sp := range stalePrices {
-		require.Equal(t, "pricecharting", sp.Source)
+		require.Equal(t, "ebay", sp.Source)
 	}
 }
 
@@ -393,7 +393,7 @@ func TestPriceRepository_GetStalePrices_DedupByCard(t *testing.T) {
 
 	// Store multiple grades and sources for the SAME card
 	grades := []string{"PSA 10", "PSA 9", "PSA 8", "Raw"}
-	sources := []string{"pricecharting", "doubleholo"}
+	sources := []string{"ebay", "doubleholo"}
 
 	for _, grade := range grades {
 		for _, source := range sources {
@@ -418,7 +418,7 @@ func TestPriceRepository_GetStalePrices_DedupByCard(t *testing.T) {
 		CardNumber: "2/102",
 		Grade:      "PSA 10",
 		PriceCents: 50000,
-		Source:     "pricecharting",
+		Source:     "doubleholo",
 		PriceDate:  time.Now().Add(-48 * time.Hour),
 	}
 	err := repo.StorePrice(ctx, entry)
@@ -478,7 +478,7 @@ func TestPriceRepository_GetLatestPricesBySource(t *testing.T) {
 		CardNumber: "4/102",
 		Grade:      "PSA 10",
 		PriceCents: 110000,
-		Source:     "cardhedger",
+		Source:     "ebay",
 		PriceDate:  now,
 	})
 	require.NoError(t, err)

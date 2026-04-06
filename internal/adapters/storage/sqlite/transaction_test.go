@@ -26,7 +26,7 @@ func TestTransaction_RollbackOnError(t *testing.T) {
 	// Insert a row within the transaction (using valid source from CHECK constraint)
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO price_history (card_name, set_name, grade, price_cents, source, price_date)
-		VALUES ('Test Card', 'Test Set', 'PSA 10', 10000, 'pricecharting', DATE('now'))
+		VALUES ('Test Card', 'Test Set', 'PSA 10', 10000, 'doubleholo', DATE('now'))
 	`)
 	require.NoError(t, err)
 
@@ -60,7 +60,7 @@ func TestTransaction_CommitSuccess(t *testing.T) {
 	// Insert a row within the transaction
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO price_history (card_name, set_name, grade, price_cents, source, price_date)
-		VALUES ('Committed Card', 'Test Set', 'PSA 10', 10000, 'pricecharting', DATE('now'))
+		VALUES ('Committed Card', 'Test Set', 'PSA 10', 10000, 'doubleholo', DATE('now'))
 	`)
 	require.NoError(t, err)
 
@@ -91,7 +91,7 @@ func TestTransaction_RollbackMultipleInserts(t *testing.T) {
 	for _, card := range cards {
 		_, err = tx.ExecContext(ctx, `
 			INSERT INTO price_history (card_name, set_name, grade, price_cents, source, price_date)
-			VALUES (?, 'Test Set', 'PSA 10', 10000, 'pricecharting', DATE('now'))
+			VALUES (?, 'Test Set', 'PSA 10', 10000, 'doubleholo', DATE('now'))
 		`, card)
 		require.NoError(t, err)
 	}
@@ -119,9 +119,9 @@ func TestTransaction_PartialFailure(t *testing.T) {
 
 	ctx := context.Background()
 
-	// First, insert a row outside the transaction to create a conflict
+	// First, insert a row outside the transaction to create a conflict later
 	_, err := db.ExecContext(ctx, `
-		INSERT INTO api_rate_limits (provider, blocked_until) VALUES ('pricecharting', DATETIME('now', '+1 hour'))
+		INSERT INTO api_rate_limits (provider, blocked_until) VALUES ('testprovider', DATETIME('now', '+1 hour'))
 	`)
 	require.NoError(t, err)
 
@@ -132,14 +132,14 @@ func TestTransaction_PartialFailure(t *testing.T) {
 	// Insert a valid row
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO price_history (card_name, set_name, grade, price_cents, source, price_date)
-		VALUES ('TxCard', 'TxSet', 'PSA 10', 10000, 'pricecharting', DATE('now'))
+		VALUES ('TxCard', 'TxSet', 'PSA 10', 10000, 'doubleholo', DATE('now'))
 	`)
 	require.NoError(t, err)
 
 	// Try to insert a duplicate (violates unique constraint on api_rate_limits.provider)
 	// We ignore the error here since SQLite may handle this differently (UPSERT behavior)
 	_, _ = tx.ExecContext(ctx, `
-		INSERT INTO api_rate_limits (provider, blocked_until) VALUES ('pricecharting', DATETIME('now', '+2 hours'))
+		INSERT INTO api_rate_limits (provider, blocked_until) VALUES ('testprovider', DATETIME('now', '+2 hours'))
 	`)
 
 	// Rollback the transaction regardless of the constraint result
@@ -168,7 +168,7 @@ func TestTransaction_ContextCancellation(t *testing.T) {
 	// Insert a row
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO price_history (card_name, set_name, grade, price_cents, source, price_date)
-		VALUES ('CancelCard', 'Test Set', 'PSA 10', 10000, 'pricecharting', DATE('now'))
+		VALUES ('CancelCard', 'Test Set', 'PSA 10', 10000, 'doubleholo', DATE('now'))
 	`)
 	require.NoError(t, err)
 
@@ -214,7 +214,7 @@ func TestTransaction_IsolationLevel(t *testing.T) {
 	// Insert initial data
 	_, err := db.ExecContext(ctx, `
 		INSERT INTO price_history (card_name, set_name, grade, price_cents, source, price_date)
-		VALUES ('IsoCard', 'Test Set', 'PSA 10', 10000, 'pricecharting', DATE('now'))
+		VALUES ('IsoCard', 'Test Set', 'PSA 10', 10000, 'doubleholo', DATE('now'))
 	`)
 	require.NoError(t, err)
 
@@ -287,7 +287,7 @@ func TestRepository_ErrorHandling(t *testing.T) {
 		require.NoError(t, err)
 
 		// Try to use the repo after close
-		_, err = tempRepo.GetLatestPrice(ctx, pricing.Card{Name: "Test", Set: "Test"}, "PSA 10", "pricecharting")
+		_, err = tempRepo.GetLatestPrice(ctx, pricing.Card{Name: "Test", Set: "Test"}, "PSA 10", "doubleholo")
 		require.Error(t, err, "should error when database is closed")
 	})
 }
@@ -310,7 +310,7 @@ func TestRepository_ConcurrentAccess(t *testing.T) {
 				CardNumber: "001",
 				Grade:      "PSA 10",
 				PriceCents: int64(10000 + idx),
-				Source:     "pricecharting",
+				Source:     "doubleholo",
 				PriceDate:  time.Now().Add(time.Duration(idx) * time.Hour), // Different dates to avoid upsert
 			}
 			err := repo.StorePrice(ctx, entry)
@@ -369,7 +369,7 @@ func TestTransaction_DeadlockHandling(t *testing.T) {
 	// Insert within savepoint
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO price_history (card_name, set_name, grade, price_cents, source, price_date)
-		VALUES ('SavepointCard', 'Test Set', 'PSA 10', 10000, 'pricecharting', DATE('now'))
+		VALUES ('SavepointCard', 'Test Set', 'PSA 10', 10000, 'doubleholo', DATE('now'))
 	`)
 	require.NoError(t, err)
 
@@ -386,7 +386,7 @@ func TestTransaction_DeadlockHandling(t *testing.T) {
 	// Insert after savepoint rollback should still work
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO price_history (card_name, set_name, grade, price_cents, source, price_date)
-		VALUES ('AfterSavepoint', 'Test Set', 'PSA 10', 10000, 'pricecharting', DATE('now'))
+		VALUES ('AfterSavepoint', 'Test Set', 'PSA 10', 10000, 'doubleholo', DATE('now'))
 	`)
 	require.NoError(t, err)
 
@@ -419,7 +419,7 @@ func TestPriceRepository_StorePriceError(t *testing.T) {
 			SetName:    "Test Set",
 			Grade:      "PSA 10",
 			PriceCents: 10000,
-			Source:     "pricecharting",
+			Source:     "doubleholo",
 			PriceDate:  time.Time{}, // Zero time
 		}
 		err := repo.StorePrice(ctx, entry)
@@ -440,7 +440,7 @@ func TestPriceRepository_StorePriceError(t *testing.T) {
 			SetName:    "Test Set",
 			Grade:      "PSA 10",
 			PriceCents: 10000,
-			Source:     "pricecharting",
+			Source:     "doubleholo",
 			PriceDate:  time.Now(),
 		}
 		err := repo.StorePrice(ctx, entry)
@@ -457,7 +457,7 @@ func TestPriceRepository_StorePriceError(t *testing.T) {
 			SetName:    "Test Set",
 			Grade:      "PSA 10",
 			PriceCents: -10000, // Negative price
-			Source:     "pricecharting",
+			Source:     "doubleholo",
 			PriceDate:  time.Now(),
 		}
 		err := repo.StorePrice(ctx, entry)
@@ -466,7 +466,7 @@ func TestPriceRepository_StorePriceError(t *testing.T) {
 			t.Logf("StorePrice with negative price returned error: %v", err)
 		} else {
 			// Verify it was stored
-			retrieved, err := repo.GetLatestPrice(ctx, pricing.Card{Name: "NegativeCard", Set: "Test Set"}, "PSA 10", "pricecharting")
+			retrieved, err := repo.GetLatestPrice(ctx, pricing.Card{Name: "NegativeCard", Set: "Test Set"}, "PSA 10", "doubleholo")
 			require.NoError(t, err)
 			require.NotNil(t, retrieved)
 			require.Equal(t, int64(-10000), retrieved.PriceCents)
@@ -493,7 +493,7 @@ func TestPriceRepository_ContextTimeout(t *testing.T) {
 		SetName:    "Test Set",
 		Grade:      "PSA 10",
 		PriceCents: 10000,
-		Source:     "pricecharting",
+		Source:     "doubleholo",
 		PriceDate:  time.Now(),
 	}
 

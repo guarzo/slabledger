@@ -18,7 +18,7 @@ export default function PriceHintDialog({
   onClose,
   onSaved,
 }: PriceHintDialogProps) {
-  const [provider, setProvider] = useState<PriceHint['provider']>('pricecharting');
+  const [provider, setProvider] = useState<PriceHint['provider']>('doubleholo');
   const [externalId, setExternalId] = useState('');
   const [saving, setSaving] = useState(false);
   const toast = useToast();
@@ -101,7 +101,6 @@ export default function PriceHintDialog({
               onChange={(e) => setProvider(e.target.value as PriceHint['provider'])}
               className="w-full px-3 py-2 rounded bg-[var(--surface-2)] border border-[var(--surface-2)] text-[var(--text)]"
             >
-              <option value="pricecharting">PriceCharting</option>
               <option value="doubleholo">DoubleHolo</option>
             </select>
           </div>
@@ -115,15 +114,10 @@ export default function PriceHintDialog({
               type="text"
               value={externalId}
               onChange={(e) => setExternalId(e.target.value)}
-              placeholder={provider === 'pricecharting' ? 'Product ID (e.g. 12345)' : 'DoubleHolo Card ID'}
+              placeholder="DoubleHolo Card ID"
               className="w-full px-3 py-2 rounded bg-[var(--surface-2)] border border-[var(--surface-2)] text-[var(--text)] placeholder:text-[var(--text-muted)]"
               autoFocus
             />
-            {provider === 'pricecharting' && (
-              <p className="text-xs text-[var(--text-muted)] mt-1">
-                Find the product ID in the PriceCharting URL (e.g. /game/pokemon-.../card-name)
-              </p>
-            )}
           </div>
         </div>
 

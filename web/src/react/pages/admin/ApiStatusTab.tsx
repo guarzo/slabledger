@@ -7,8 +7,7 @@ function UsageBar({ used, limit }: { used: number; limit: number }) {
 }
 
 const providerLabels: Record<string, string> = {
-  pricecharting: 'PriceCharting',
-  justtcg: 'JustTCG',
+  doubleholo: 'DoubleHolo',
 };
 
 function ProviderCard({ provider }: { provider: ProviderStatus }) {

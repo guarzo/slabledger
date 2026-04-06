@@ -484,7 +484,7 @@ func TestGetMarketSnapshot_FullSnapshot(t *testing.T) {
 					},
 				},
 				Confidence: 0.92,
-				Sources:    []string{"doubleholo", "ebay", "pricecharting"},
+				Sources:    []string{"doubleholo", "ebay"},
 			}, nil
 		},
 	}
@@ -527,8 +527,8 @@ func TestGetMarketSnapshot_FullSnapshot(t *testing.T) {
 	if snap.FusionConfidence != 0.92 {
 		t.Errorf("FusionConfidence = %v, want 0.92", snap.FusionConfidence)
 	}
-	if snap.SourceCount != 3 {
-		t.Errorf("SourceCount = %d, want 3", snap.SourceCount)
+	if snap.SourceCount != 2 {
+		t.Errorf("SourceCount = %d, want 2", snap.SourceCount)
 	}
 }
 

@@ -1,21 +1,15 @@
 // Package cardutil provides shared utilities for card name normalization
 // used by multiple price provider clients.
 //
-// Three normalization pipelines flow through functions in this package:
+// Two normalization pipelines flow through functions in this package:
 //
-// Pipeline 1 -- PriceCharting Query Building (pricecharting package):
-//
-//	normalizeSetName(set) -> StripCommonSetPrefixes -> StripPSASetCode -> era expansion
-//	normalizeCardName(name, normalizedSet) -> pcAbbreviations -> strip boilerplate -> strip set prefix
-//	buildQuery(set, name, num) -> "pokemon <set> <name> #<num>"
-//
-// Pipeline 2 -- Secondary Source Query Building (fusionprice package):
+// Pipeline 1 -- DoubleHolo / secondary source query building:
 //
 //	BuildCardMatchQuery -> NormalizeSetNameForSearch(set) + SimplifyForSearch(NormalizePurchaseName(name)) + number
 //	Fallback: truncateAtVariant(name) + eraPrefix + number
 //	Fallback: raw PSA listing title (stripped of grade suffix)
 //
-// Pipeline 3 -- Import Title Parsing (campaigns package):
+// Pipeline 2 -- Import Title Parsing (campaigns package):
 //
 //	parseCardMetadataFromTitle -> ParsePSAListingTitle + extractCardNameFromPSATitle
 //	-> stripCollectionSuffix -> extractVariantFromTitle -> resolvePSACategory
@@ -78,8 +72,7 @@ var VariantKeywords = constants.VariantKeywords
 
 // EraExpansions maps abbreviated Pokemon TCG era codes to their full set name
 // prefixes. This is the single source of truth for era code <-> expansion pairs.
-// Both cardutil (for era detection) and pricecharting (for query building and
-// alternative query generation) import from this map.
+// Used by cardutil for era detection and query building.
 var EraExpansions = map[string]string{
 	"SWSH": "Sword Shield",
 	"SM":   "Sun Moon",

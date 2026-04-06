@@ -72,6 +72,6 @@ export interface PriceHint {
   cardName: string;
   setName: string;
   cardNumber: string;
-  provider: 'pricecharting' | 'doubleholo';
+  provider: 'doubleholo';
   externalId: string;
 }

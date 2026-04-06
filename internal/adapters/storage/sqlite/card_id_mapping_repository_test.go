@@ -20,10 +20,10 @@ func TestCardIDMapping_SaveAndGetExternalID(t *testing.T) {
 	defer cleanup()
 	ctx := context.Background()
 
-	err := repo.SaveExternalID(ctx, "Charizard", "Base Set", "4", "pricecharting", "ext-123")
+	err := repo.SaveExternalID(ctx, "Charizard", "Base Set", "4", "doubleholo", "ext-123")
 	require.NoError(t, err)
 
-	id, err := repo.GetExternalID(ctx, "Charizard", "Base Set", "4", "pricecharting")
+	id, err := repo.GetExternalID(ctx, "Charizard", "Base Set", "4", "doubleholo")
 	require.NoError(t, err)
 	require.Equal(t, "ext-123", id)
 }
@@ -43,10 +43,10 @@ func TestCardIDMapping_GetLocalCard(t *testing.T) {
 	defer cleanup()
 	ctx := context.Background()
 
-	err := repo.SaveExternalID(ctx, "Charizard", "Base Set", "4", "pricecharting", "ext-123")
+	err := repo.SaveExternalID(ctx, "Charizard", "Base Set", "4", "doubleholo", "ext-123")
 	require.NoError(t, err)
 
-	cardName, setName, err := repo.GetLocalCard(ctx, "pricecharting", "ext-123")
+	cardName, setName, err := repo.GetLocalCard(ctx, "doubleholo", "ext-123")
 	require.NoError(t, err)
 	require.Equal(t, "Charizard", cardName)
 	require.Equal(t, "Base Set", setName)

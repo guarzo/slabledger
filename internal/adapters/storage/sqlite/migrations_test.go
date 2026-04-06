@@ -194,13 +194,13 @@ func TestMigrations_Constraints(t *testing.T) {
 	t.Run("price_history_unique_constraint", func(t *testing.T) {
 		_, err := db.Exec(`
 			INSERT INTO price_history (card_name, set_name, grade, source, price_cents, price_date)
-			VALUES ('Charizard', 'Base Set', 'PSA 10', 'pricecharting', 50000, '2025-01-01')
+			VALUES ('Charizard', 'Base Set', 'PSA 10', 'doubleholo', 50000, '2025-01-01')
 		`)
 		require.NoError(t, err)
 
 		_, err = db.Exec(`
 			INSERT INTO price_history (card_name, set_name, grade, source, price_cents, price_date)
-			VALUES ('Charizard', 'Base Set', 'PSA 10', 'pricecharting', 60000, '2025-01-01')
+			VALUES ('Charizard', 'Base Set', 'PSA 10', 'doubleholo', 60000, '2025-01-01')
 		`)
 		require.Error(t, err, "should fail due to UNIQUE constraint")
 	})
@@ -208,19 +208,20 @@ func TestMigrations_Constraints(t *testing.T) {
 	t.Run("refresh_queue_status_check", func(t *testing.T) {
 		_, err := db.Exec(`
 			INSERT INTO api_rate_limits (provider, calls_last_minute)
-			VALUES ('pricecharting', 0)
+			VALUES ('doubleholo', 0)
+		`)
+		// doubleholo is seeded by migration 000028, so conflict is expected — that's fine
+		_ = err
+
+		_, err = db.Exec(`
+			INSERT INTO price_refresh_queue (card_name, set_name, grade, source, status)
+			VALUES ('Pikachu', 'Base Set', 'PSA 9', 'doubleholo', 'pending')
 		`)
 		require.NoError(t, err)
 
 		_, err = db.Exec(`
 			INSERT INTO price_refresh_queue (card_name, set_name, grade, source, status)
-			VALUES ('Pikachu', 'Base Set', 'PSA 9', 'pricecharting', 'pending')
-		`)
-		require.NoError(t, err)
-
-		_, err = db.Exec(`
-			INSERT INTO price_refresh_queue (card_name, set_name, grade, source, status)
-			VALUES ('Pikachu', 'Base Set', 'PSA 10', 'pricecharting', 'invalid_status')
+			VALUES ('Pikachu', 'Base Set', 'PSA 10', 'doubleholo', 'invalid_status')
 		`)
 		require.Error(t, err, "should fail due to CHECK constraint")
 	})

@@ -28,8 +28,8 @@ func TestPriceRefreshScheduler_RefreshBatch(t *testing.T) {
 
 	repo := &mocks.MockPriceRepository{
 		StalePrices: []pricing.StalePrice{
-			{CardName: "Charizard", SetName: "Base Set", Grade: "PSA 10", Source: "pricecharting", HoursOld: 25},
-			{CardName: "Blastoise", SetName: "Base Set", Grade: "PSA 10", Source: "pricecharting", HoursOld: 30},
+			{CardName: "Charizard", SetName: "Base Set", Grade: "PSA 10", Source: "doubleholo", HoursOld: 25},
+			{CardName: "Blastoise", SetName: "Base Set", Grade: "PSA 10", Source: "doubleholo", HoursOld: 30},
 		},
 	}
 
@@ -59,7 +59,7 @@ func TestPriceRefreshScheduler_SkipsBlockedProvider(t *testing.T) {
 
 	repo := &mocks.MockPriceRepository{
 		StalePrices: []pricing.StalePrice{
-			{CardName: "Pikachu", SetName: "Base Set", Grade: "PSA 10", Source: "pricecharting", HoursOld: 25},
+			{CardName: "Pikachu", SetName: "Base Set", Grade: "PSA 10", Source: "doubleholo", HoursOld: 25},
 		},
 		BlockedUntil: time.Now().Add(1 * time.Hour), // Provider blocked
 	}
@@ -90,10 +90,10 @@ func TestPriceRefreshScheduler_RespectsRateLimit(t *testing.T) {
 
 	repo := &mocks.MockPriceRepository{
 		StalePrices: []pricing.StalePrice{
-			{CardName: "Mewtwo", SetName: "Base Set", Grade: "PSA 10", Source: "pricecharting", HoursOld: 25},
+			{CardName: "Mewtwo", SetName: "Base Set", Grade: "PSA 10", Source: "doubleholo", HoursOld: 25},
 		},
 		APIUsage: &pricing.APIUsageStats{
-			Provider:      "pricecharting",
+			Provider:      "doubleholo",
 			CallsLastHour: 60, // Over limit
 		},
 	}
@@ -152,8 +152,8 @@ func TestPriceRefreshScheduler_ContextCancellation(t *testing.T) {
 
 	repo := &mocks.MockPriceRepository{
 		StalePrices: []pricing.StalePrice{
-			{CardName: "Charizard", SetName: "Base Set", Grade: "PSA 10", Source: "pricecharting", HoursOld: 25},
-			{CardName: "Blastoise", SetName: "Base Set", Grade: "PSA 10", Source: "pricecharting", HoursOld: 30},
+			{CardName: "Charizard", SetName: "Base Set", Grade: "PSA 10", Source: "doubleholo", HoursOld: 25},
+			{CardName: "Blastoise", SetName: "Base Set", Grade: "PSA 10", Source: "doubleholo", HoursOld: 30},
 		},
 	}
 
@@ -198,7 +198,7 @@ func TestPriceRefreshScheduler_DisabledScheduler(t *testing.T) {
 
 	repo := &mocks.MockPriceRepository{
 		StalePrices: []pricing.StalePrice{
-			{CardName: "Charizard", SetName: "Base Set", Grade: "PSA 10", Source: "pricecharting", HoursOld: 25},
+			{CardName: "Charizard", SetName: "Base Set", Grade: "PSA 10", Source: "doubleholo", HoursOld: 25},
 		},
 	}
 
@@ -245,15 +245,15 @@ func TestPriceRefreshScheduler_GroupByProvider(t *testing.T) {
 	scheduler := NewPriceRefreshScheduler(repo, repo, repo, provider, logger, config)
 
 	stalePrices := []pricing.StalePrice{
-		{CardName: "Charizard", SetName: "Base Set", Grade: "PSA 10", Source: "pricecharting"},
-		{CardName: "Blastoise", SetName: "Base Set", Grade: "PSA 10", Source: "pricecharting"},
+		{CardName: "Charizard", SetName: "Base Set", Grade: "PSA 10", Source: "doubleholo"},
+		{CardName: "Blastoise", SetName: "Base Set", Grade: "PSA 10", Source: "doubleholo"},
 		{CardName: "Pikachu", SetName: "Base Set", Grade: "PSA 10", Source: "tcgplayer"},
 	}
 
 	grouped := scheduler.groupByProvider(stalePrices)
 
 	require.Len(t, grouped, 2, "should group into 2 providers")
-	require.Len(t, grouped["pricecharting"], 2, "should have 2 pricecharting entries")
+	require.Len(t, grouped["doubleholo"], 2, "should have 2 doubleholo entries")
 	require.Len(t, grouped["tcgplayer"], 1, "should have 1 tcgplayer entry")
 }
 
@@ -324,7 +324,7 @@ func TestPriceRefreshScheduler_Stop(t *testing.T) {
 
 	repo := &mocks.MockPriceRepository{
 		StalePrices: []pricing.StalePrice{
-			{CardName: "Charizard", SetName: "Base Set", Grade: "PSA 10", Source: "pricecharting", HoursOld: 25},
+			{CardName: "Charizard", SetName: "Base Set", Grade: "PSA 10", Source: "doubleholo", HoursOld: 25},
 		},
 	}
 
@@ -378,7 +378,7 @@ func TestPriceRefreshScheduler_BurstCounterSkipsDuplicates(t *testing.T) {
 				CardName: card,
 				SetName:  "Base Set",
 				Grade:    grade,
-				Source:   "pricecharting",
+				Source:   "doubleholo",
 				HoursOld: 25,
 			})
 		}

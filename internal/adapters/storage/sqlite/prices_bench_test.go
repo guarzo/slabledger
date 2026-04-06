@@ -24,7 +24,7 @@ func BenchmarkPriceRepository_StorePrice(b *testing.B) {
 			SetName:    "Test Set",
 			Grade:      "PSA 10",
 			PriceCents: int64(10000),
-			Source:     "pricecharting",
+			Source:     "doubleholo",
 			PriceDate:  time.Now(),
 		}
 		if err := repo.StorePrice(ctx, entry); err != nil {
@@ -46,7 +46,7 @@ func BenchmarkPriceRepository_GetLatestPrice(b *testing.B) {
 		SetName:    "Test Set",
 		Grade:      "PSA 10",
 		PriceCents: 10000,
-		Source:     "pricecharting",
+		Source:     "doubleholo",
 		PriceDate:  time.Now(),
 	}
 	if err := repo.StorePrice(ctx, entry); err != nil {
@@ -58,7 +58,7 @@ func BenchmarkPriceRepository_GetLatestPrice(b *testing.B) {
 		if _, err := repo.GetLatestPrice(ctx, pricing.Card{
 			Name: "Benchmark Card",
 			Set:  "Test Set",
-		}, "PSA 10", "pricecharting"); err != nil {
+		}, "PSA 10", "doubleholo"); err != nil {
 			b.Fatalf("GetLatestPrice failed at iteration %d: %v", i, err)
 		}
 	}
@@ -78,7 +78,7 @@ func BenchmarkPriceRepository_GetStalePrices(b *testing.B) {
 			SetName:    "Test Set",
 			Grade:      "PSA 10",
 			PriceCents: int64(10000 + i*100),
-			Source:     "pricecharting",
+			Source:     "doubleholo",
 			PriceDate:  time.Now(),
 		}
 		if err := repo.StorePrice(ctx, entry); err != nil {
@@ -109,7 +109,7 @@ func BenchmarkPriceRepository_RecordAPICall(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		call := &pricing.APICallRecord{
-			Provider:   "pricecharting",
+			Provider:   "doubleholo",
 			Endpoint:   "/api/prices",
 			StatusCode: 200,
 			LatencyMS:  150,
@@ -131,7 +131,7 @@ func BenchmarkPriceRepository_GetAPIUsage(b *testing.B) {
 	// Pre-populate API calls
 	for i := 0; i < 100; i++ {
 		call := &pricing.APICallRecord{
-			Provider:   "pricecharting",
+			Provider:   "doubleholo",
 			Endpoint:   "/api/prices",
 			StatusCode: 200,
 			LatencyMS:  150,
@@ -144,7 +144,7 @@ func BenchmarkPriceRepository_GetAPIUsage(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if _, err := repo.GetAPIUsage(ctx, "pricecharting"); err != nil {
+		if _, err := repo.GetAPIUsage(ctx, "doubleholo"); err != nil {
 			b.Fatalf("GetAPIUsage failed at iteration %d: %v", i, err)
 		}
 	}
@@ -158,13 +158,13 @@ func BenchmarkPriceRepository_IsProviderBlocked(b *testing.B) {
 	ctx := context.Background()
 
 	// Pre-set rate limit
-	if err := repo.UpdateRateLimit(ctx, "pricecharting", time.Now().Add(1*time.Hour)); err != nil {
+	if err := repo.UpdateRateLimit(ctx, "doubleholo", time.Now().Add(1*time.Hour)); err != nil {
 		b.Fatalf("setup UpdateRateLimit failed: %v", err)
 	}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if _, _, err := repo.IsProviderBlocked(ctx, "pricecharting"); err != nil {
+		if _, _, err := repo.IsProviderBlocked(ctx, "doubleholo"); err != nil {
 			b.Fatalf("IsProviderBlocked failed at iteration %d: %v", i, err)
 		}
 	}

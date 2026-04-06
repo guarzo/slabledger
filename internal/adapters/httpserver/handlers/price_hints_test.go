@@ -61,7 +61,7 @@ func TestHandlePriceHints_GET_ListSuccess(t *testing.T) {
 	resolver := &mockPriceHintResolver{
 		listHintsFn: func(_ context.Context) ([]pricing.HintMapping, error) {
 			return []pricing.HintMapping{
-				{CardName: "Charizard", SetName: "Base Set", CollectorNumber: "4", Provider: "pricecharting", ExternalID: "123"},
+				{CardName: "Charizard", SetName: "Base Set", CollectorNumber: "4", Provider: "doubleholo", ExternalID: "123"},
 			}, nil
 		},
 	}
@@ -143,7 +143,7 @@ func TestHandlePriceHints_POST_SaveSuccess(t *testing.T) {
 	}
 	h := newPriceHintsHandler(resolver)
 
-	body := `{"cardName":"Charizard","setName":"Base Set","cardNumber":"4","provider":"pricecharting","externalId":"abc"}`
+	body := `{"cardName":"Charizard","setName":"Base Set","cardNumber":"4","provider":"doubleholo","externalId":"abc"}`
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/price-hints", strings.NewReader(body))
 	h.HandlePriceHints(rec, req)
@@ -154,8 +154,8 @@ func TestHandlePriceHints_POST_SaveSuccess(t *testing.T) {
 	if savedCard != "Charizard" {
 		t.Errorf("expected saved card Charizard, got %s", savedCard)
 	}
-	if savedProvider != "pricecharting" {
-		t.Errorf("expected provider pricecharting, got %s", savedProvider)
+	if savedProvider != "doubleholo" {
+		t.Errorf("expected provider doubleholo, got %s", savedProvider)
 	}
 	if savedID != "abc" {
 		t.Errorf("expected externalId abc, got %s", savedID)
@@ -177,7 +177,7 @@ func TestHandlePriceHints_POST_BadJSON(t *testing.T) {
 func TestHandlePriceHints_POST_MissingCardName(t *testing.T) {
 	h := newPriceHintsHandler(&mockPriceHintResolver{})
 
-	body := `{"setName":"Base Set","cardNumber":"4","provider":"pricecharting","externalId":"abc"}`
+	body := `{"setName":"Base Set","cardNumber":"4","provider":"doubleholo","externalId":"abc"}`
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/price-hints", strings.NewReader(body))
 	h.HandlePriceHints(rec, req)
@@ -190,7 +190,7 @@ func TestHandlePriceHints_POST_MissingCardName(t *testing.T) {
 func TestHandlePriceHints_POST_MissingExternalId(t *testing.T) {
 	h := newPriceHintsHandler(&mockPriceHintResolver{})
 
-	body := `{"cardName":"Charizard","setName":"Base Set","cardNumber":"4","provider":"pricecharting"}`
+	body := `{"cardName":"Charizard","setName":"Base Set","cardNumber":"4","provider":"doubleholo"}`
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/price-hints", strings.NewReader(body))
 	h.HandlePriceHints(rec, req)
@@ -213,7 +213,7 @@ func TestHandlePriceHints_POST_InvalidProvider(t *testing.T) {
 	}
 }
 
-func TestHandlePriceHints_POST_DoubleHoloProvider(t *testing.T) {
+func TestHandlePriceHints_POST_ValidProvider(t *testing.T) {
 	resolver := &mockPriceHintResolver{
 		saveHintFn: func(_ context.Context, _, _, _, _, _ string) error { return nil },
 	}
@@ -237,7 +237,7 @@ func TestHandlePriceHints_POST_ResolverError(t *testing.T) {
 	}
 	h := newPriceHintsHandler(resolver)
 
-	body := `{"cardName":"X","setName":"Y","cardNumber":"1","provider":"pricecharting","externalId":"z"}`
+	body := `{"cardName":"X","setName":"Y","cardNumber":"1","provider":"doubleholo","externalId":"z"}`
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/price-hints", strings.NewReader(body))
 	h.HandlePriceHints(rec, req)
@@ -260,7 +260,7 @@ func TestHandlePriceHints_DELETE_Success(t *testing.T) {
 	}
 	h := newPriceHintsHandler(resolver)
 
-	body := `{"cardName":"Charizard","setName":"Base Set","cardNumber":"4","provider":"pricecharting"}`
+	body := `{"cardName":"Charizard","setName":"Base Set","cardNumber":"4","provider":"doubleholo"}`
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodDelete, "/api/price-hints", strings.NewReader(body))
 	h.HandlePriceHints(rec, req)
@@ -271,8 +271,8 @@ func TestHandlePriceHints_DELETE_Success(t *testing.T) {
 	if deletedCard != "Charizard" {
 		t.Errorf("expected deleted card Charizard, got %s", deletedCard)
 	}
-	if deletedProvider != "pricecharting" {
-		t.Errorf("expected provider pricecharting, got %s", deletedProvider)
+	if deletedProvider != "doubleholo" {
+		t.Errorf("expected provider doubleholo, got %s", deletedProvider)
 	}
 }
 
@@ -321,7 +321,7 @@ func TestHandlePriceHints_DELETE_NoExternalIdOK(t *testing.T) {
 	h := newPriceHintsHandler(resolver)
 
 	// externalId is NOT required for delete
-	body := `{"cardName":"Charizard","setName":"Base Set","cardNumber":"4","provider":"pricecharting"}`
+	body := `{"cardName":"Charizard","setName":"Base Set","cardNumber":"4","provider":"doubleholo"}`
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodDelete, "/api/price-hints", strings.NewReader(body))
 	h.HandlePriceHints(rec, req)
@@ -339,7 +339,7 @@ func TestHandlePriceHints_DELETE_ResolverError(t *testing.T) {
 	}
 	h := newPriceHintsHandler(resolver)
 
-	body := `{"cardName":"X","setName":"Y","cardNumber":"1","provider":"pricecharting"}`
+	body := `{"cardName":"X","setName":"Y","cardNumber":"1","provider":"doubleholo"}`
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodDelete, "/api/price-hints", strings.NewReader(body))
 	h.HandlePriceHints(rec, req)
