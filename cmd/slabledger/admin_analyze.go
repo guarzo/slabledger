@@ -124,7 +124,7 @@ func adminAnalyze(ctx context.Context, args []string) error {
 		)
 	}
 
-	priceProvImpl, cardHedgerClientImpl, pcProvider, err := initializePriceProviders(
+	priceProvImpl, pcProvider, err := initializePriceProviders(
 		ctx, &cfg, appCache, logger, cardProvImpl, priceRepo, cardIDMappingRepo,
 		dhClient,
 	)
@@ -138,7 +138,7 @@ func adminAnalyze(ctx context.Context, args []string) error {
 	}()
 
 	campaignsService, _, _ := initializeCampaignsService(
-		ctx, &cfg, logger, db, priceProvImpl, cardHedgerClientImpl, cardIDMappingRepo, intelRepo,
+		ctx, &cfg, logger, db, priceProvImpl, intelRepo,
 	)
 
 	// AI call tracking
