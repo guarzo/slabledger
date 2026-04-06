@@ -202,6 +202,7 @@ function formatToolName(name: string): string {
     get_capital_timeline: 'Loading capital timeline',
     get_expected_values: 'Computing expected values',
     get_deslab_candidates: 'Analyzing deslab candidates',
+    get_deslab_opportunities: 'Analyzing deslab opportunities',
     get_campaign_suggestions: 'Generating suggestions',
     run_projection: 'Running Monte Carlo simulation',
     get_channel_velocity: 'Checking channel velocity',

@@ -108,7 +108,7 @@ Fetch all campaign data in one round, then provide:
 3. **Market Conditions** — Current market alignment for this segment (trending up/down/stable, liquidity from inventory aging data).
 4. **Tuning Recommendations** — Specific parameter adjustments (buy terms, price range, grade range, spend cap) with reasoning and expected impact.
 5. **Problem Cards** — Cards held too long, declining in value, or with negative EV. Include cert, days held, and recommended action.
-6. **Crack Candidates** — Any cards where selling raw beats selling graded (if any found).
+6. **Deslab Candidates** — Any cards where selling raw beats selling graded (if any found).
 7. **Opportunity** — What's working well that could be expanded.`
 
 // liquidationSystemPrompt is used for liquidation analysis.
