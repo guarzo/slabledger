@@ -1,8 +1,12 @@
 package dh
 
 import (
+	"math"
 	"testing"
+	"time"
 )
+
+const floatEpsilon = 1e-9
 
 func TestHealthTracker_Stats(t *testing.T) {
 	tests := []struct {
@@ -35,20 +39,21 @@ func TestHealthTracker_Stats(t *testing.T) {
 			if stats.Failures != tt.wantFailures {
 				t.Errorf("Failures = %d, want %d", stats.Failures, tt.wantFailures)
 			}
-			if stats.SuccessRate != tt.wantSuccessRate {
-				t.Errorf("SuccessRate = %v, want %v", stats.SuccessRate, tt.wantSuccessRate)
+			if math.Abs(stats.SuccessRate-tt.wantSuccessRate) > floatEpsilon {
+				t.Errorf("SuccessRate = %v, want %v (delta %v)", stats.SuccessRate, tt.wantSuccessRate, stats.SuccessRate-tt.wantSuccessRate)
 			}
 		})
 	}
 }
 
 func TestHealthTracker_PruneOldBuckets(t *testing.T) {
-	ht := NewHealthTracker()
+	now := time.Now()
+	ht := NewHealthTracker(func() time.Time { return now })
 
 	// Manually inject a stale bucket (older than 7 days)
 	ht.mu.Lock()
 	staleBucket := healthBucket{
-		minute:  currentMinute() - healthWindowMinutes - 10,
+		minute:  ht.currentMinute() - healthWindowMinutes - 10,
 		success: 100,
 	}
 	ht.buckets = append([]healthBucket{staleBucket}, ht.buckets...)

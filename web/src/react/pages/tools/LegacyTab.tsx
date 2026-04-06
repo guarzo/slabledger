@@ -192,6 +192,8 @@ export default function LegacyTab() {
             variant={expandedCard === 'priceSync' ? 'primary' : 'secondary'}
             fullWidth
             onClick={() => toggle('priceSync')}
+            aria-expanded={expandedCard === 'priceSync'}
+            aria-controls="priceSync-panel"
           >
             {expandedCard === 'priceSync' ? 'Collapse' : 'Open Price Sync'}
           </Button>
@@ -207,6 +209,8 @@ export default function LegacyTab() {
             variant={expandedCard === 'ebay' ? 'primary' : 'secondary'}
             fullWidth
             onClick={() => toggle('ebay')}
+            aria-expanded={expandedCard === 'ebay'}
+            aria-controls="ebay-panel"
           >
             {expandedCard === 'ebay' ? 'Collapse' : 'Open eBay Export'}
           </Button>
@@ -222,6 +226,8 @@ export default function LegacyTab() {
             variant={expandedCard === 'sales' ? 'primary' : 'secondary'}
             fullWidth
             onClick={() => toggle('sales')}
+            aria-expanded={expandedCard === 'sales'}
+            aria-controls="sales-panel"
           >
             {expandedCard === 'sales' ? 'Collapse' : 'Open Import Sales'}
           </Button>
@@ -230,21 +236,27 @@ export default function LegacyTab() {
 
       {/* Expanded content — full-width below grid */}
       {expandedCard === 'priceSync' && (
-        <SectionErrorBoundary sectionName="Price Sync">
-          <ShopifySyncPage embedded />
-        </SectionErrorBoundary>
+        <div id="priceSync-panel" role="region" aria-label="Price Sync">
+          <SectionErrorBoundary sectionName="Price Sync">
+            <ShopifySyncPage embedded />
+          </SectionErrorBoundary>
+        </div>
       )}
 
       {expandedCard === 'ebay' && (
-        <SectionErrorBoundary sectionName="eBay Export">
-          <EbayExportTab />
-        </SectionErrorBoundary>
+        <div id="ebay-panel" role="region" aria-label="eBay Export">
+          <SectionErrorBoundary sectionName="eBay Export">
+            <EbayExportTab />
+          </SectionErrorBoundary>
+        </div>
       )}
 
       {expandedCard === 'sales' && (
-        <SectionErrorBoundary sectionName="Import Sales">
-          <ImportSalesTab />
-        </SectionErrorBoundary>
+        <div id="sales-panel" role="region" aria-label="Import Sales">
+          <SectionErrorBoundary sectionName="Import Sales">
+            <ImportSalesTab />
+          </SectionErrorBoundary>
+        </div>
       )}
     </>
   );

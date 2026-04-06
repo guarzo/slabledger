@@ -27,22 +27,29 @@ type healthBucket struct {
 type HealthTracker struct {
 	mu      sync.Mutex
 	buckets []healthBucket
+	nowFunc func() time.Time
 }
 
-// NewHealthTracker creates a new HealthTracker.
-func NewHealthTracker() *HealthTracker {
-	return &HealthTracker{}
+// NewHealthTracker creates a new HealthTracker. An optional nowFunc overrides the
+// time source (defaults to time.Now); pass a custom function in tests for
+// deterministic time control.
+func NewHealthTracker(nowFunc ...func() time.Time) *HealthTracker {
+	nf := time.Now
+	if len(nowFunc) > 0 && nowFunc[0] != nil {
+		nf = nowFunc[0]
+	}
+	return &HealthTracker{nowFunc: nf}
 }
 
-func currentMinute() int64 {
-	return time.Now().Unix() / 60
+func (ht *HealthTracker) currentMinute() int64 {
+	return ht.nowFunc().Unix() / 60
 }
 
 func (ht *HealthTracker) record(success bool) {
 	ht.mu.Lock()
 	defer ht.mu.Unlock()
 
-	now := currentMinute()
+	now := ht.currentMinute()
 	ht.pruneOld(now)
 
 	// Find or create bucket for current minute.
@@ -76,7 +83,7 @@ func (ht *HealthTracker) Stats() HealthStats {
 	ht.mu.Lock()
 	defer ht.mu.Unlock()
 
-	now := currentMinute()
+	now := ht.currentMinute()
 	ht.pruneOld(now)
 
 	var total, failures int

@@ -11,7 +11,9 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
-// ordersEpoch is the earliest date for counting DH orders.
+// ordersEpoch is the earliest date for counting DH orders. Set to 2020-01-01
+// because DoubleHolo's API requires a "since" parameter and this pre-dates all
+// Card Yeti activity on the platform, ensuring we capture every order.
 const ordersEpoch = "2020-01-01T00:00:00Z"
 
 // HandleGetIntelligence returns market intelligence for a specific card.

@@ -149,6 +149,8 @@ export default function OperationsTab({ campaigns, operationState, setOperationS
     queryClient.invalidateQueries({ queryKey: queryKeys.credit.invoices });
     queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.capitalTimeline });
     queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.weeklyReview });
+    queryClient.invalidateQueries({ queryKey: queryKeys.admin.dhStatus });
+    queryClient.invalidateQueries({ queryKey: queryKeys.admin.dhUnmatched });
   }
 
   async function handleGlobalImport(file: File) {
