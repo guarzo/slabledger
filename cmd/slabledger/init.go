@@ -47,7 +47,6 @@ func initializePriceProviders(
 	priceRepo *sqlite.PriceRepository,
 	cardIDMappingRepo *sqlite.CardIDMappingRepository,
 	dhClient *dh.Client,
-	intelRepo *sqlite.MarketIntelligenceRepository,
 ) (priceProvider *fusionprice.FusionPriceProvider, cardHedgerClient *cardhedger.Client, pcProvider *pricecharting.PriceCharting, err error) {
 	pcProvider, err = pricecharting.NewPriceCharting(
 		pricecharting.DefaultConfig(cfg.Adapters.PriceChartingToken), appCache, logger,

@@ -52,7 +52,7 @@ type ServerDependencies struct {
 	OpportunitiesHandler      *handlers.OpportunitiesHandler  // Arbitrage opportunities; nil = disabled
 	DHHandler                 *handlers.DHHandler             // DH bulk match + intelligence; nil = disabled
 	DHInventoryLister         handlers.DHInventoryLister      // optional: lists cards on DH after cert import
-	DHMatchClient             handlers.DHMatchClient          // optional: inline DH match for pending certs
+	DHCertResolver            handlers.DHCertResolver         // optional: inline DH cert resolution for pending certs
 	DHInventoryPusher         handlers.DHInventoryPusher      // optional: inline DH push for pending certs
 	DHFieldsUpdater           handlers.DHFieldsUpdater        // optional: persists DH fields after inline push
 	DHPushStatusUpdater       handlers.DHPushStatusUpdater    // optional: sets dh_push_status after inline push
@@ -199,8 +199,8 @@ func startWebServer(ctx context.Context, deps ServerDependencies) error {
 		if deps.DHInventoryLister != nil {
 			opts = append(opts, handlers.WithDHLister(deps.DHInventoryLister))
 		}
-		if deps.DHMatchClient != nil {
-			opts = append(opts, handlers.WithDHMatchClient(deps.DHMatchClient))
+		if deps.DHCertResolver != nil {
+			opts = append(opts, handlers.WithDHCertResolver(deps.DHCertResolver))
 		}
 		if deps.DHInventoryPusher != nil {
 			opts = append(opts, handlers.WithDHPusher(deps.DHInventoryPusher))

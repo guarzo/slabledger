@@ -40,7 +40,7 @@ func (h *CampaignsHandler) triggerDHListing(certNumbers []string) {
 		for _, p := range purchases {
 			// If pending DH push, do inline match + push first
 			if p.DHInventoryID == 0 && p.DHPushStatus == campaigns.DHPushStatusPending {
-				if h.dhMatchClient != nil && h.dhPusher != nil {
+				if h.dhCertResolver != nil && h.dhPusher != nil {
 					invID := h.inlineMatchAndPush(ctx, p)
 					if invID != 0 {
 						p.DHInventoryID = invID
@@ -101,34 +101,41 @@ func (h *CampaignsHandler) triggerDHListing(certNumbers []string) {
 	}()
 }
 
-// inlineMatchAndPush matches a single card against DH and pushes inventory.
+// inlineMatchAndPush resolves a single cert against DH and pushes inventory.
 // Returns the inventory ID on success, 0 on failure.
 func (h *CampaignsHandler) inlineMatchAndPush(ctx context.Context, p *campaigns.Purchase) int {
-	title := campaigns.BuildDHMatchTitle(p.CardName, p.SetName, p.CardNumber, p.PSAListingTitle)
+	cardName, variant := campaigns.CleanCardNameForDH(p.CardName)
 
-	matchResp, err := h.dhMatchClient.Match(ctx, title, p.CertNumber)
+	resp, err := h.dhCertResolver.ResolveCert(ctx, dh.CertResolveRequest{
+		CertNumber: p.CertNumber,
+		CardName:   cardName,
+		SetName:    p.SetName,
+		CardNumber: p.CardNumber,
+		Year:       p.CardYear,
+		Variant:    variant,
+	})
 	if err != nil {
-		h.logger.Warn(ctx, "inline dh match failed",
+		h.logger.Warn(ctx, "inline dh cert resolve failed",
 			observability.String("cert", p.CertNumber), observability.Err(err))
 		return 0
 	}
 
-	if !matchResp.Success || matchResp.Confidence < campaigns.DHMatchConfidenceThreshold {
+	if resp.Status != dh.CertStatusMatched {
 		if h.pushStatusUpdater != nil {
 			if err := h.pushStatusUpdater.UpdatePurchaseDHPushStatus(ctx, p.ID, campaigns.DHPushStatusUnmatched); err != nil {
-				h.logger.Warn(ctx, "inline dh match: failed to set unmatched status",
+				h.logger.Warn(ctx, "inline dh resolve: failed to set unmatched status",
 					observability.String("cert", p.CertNumber), observability.Err(err))
 			}
 		}
 		return 0
 	}
 
-	dhCardID := matchResp.CardID
+	dhCardID := resp.DHCardID
 
 	if h.dhCardIDSaver != nil {
 		externalID := strconv.Itoa(dhCardID)
 		if err := h.dhCardIDSaver.SaveExternalID(ctx, p.CardName, p.SetName, p.CardNumber, pricing.SourceDH, externalID); err != nil {
-			h.logger.Warn(ctx, "inline dh match: failed to save card mapping",
+			h.logger.Warn(ctx, "inline dh resolve: failed to save card mapping",
 				observability.String("cert", p.CertNumber), observability.Err(err))
 		}
 	}
@@ -142,14 +149,14 @@ func (h *CampaignsHandler) inlineMatchAndPush(ctx context.Context, p *campaigns.
 		Status:         dh.InventoryStatusInStock,
 	}
 
-	resp, pushErr := h.dhPusher.PushInventory(ctx, []dh.InventoryItem{item})
+	pushResp, pushErr := h.dhPusher.PushInventory(ctx, []dh.InventoryItem{item})
 	if pushErr != nil {
 		h.logger.Warn(ctx, "inline dh push failed",
 			observability.String("cert", p.CertNumber), observability.Err(pushErr))
 		return 0
 	}
 
-	for _, r := range resp.Results {
+	for _, r := range pushResp.Results {
 		if r.Status == "failed" || r.DHInventoryID == 0 {
 			continue
 		}

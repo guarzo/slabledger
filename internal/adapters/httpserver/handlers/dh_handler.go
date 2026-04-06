@@ -16,13 +16,6 @@ type DHCertResolver interface {
 	ResolveCert(ctx context.Context, req dh.CertResolveRequest) (*dh.CertResolution, error)
 }
 
-// DHMatchClient is the legacy match interface, still referenced by campaigns handler.
-// TODO: remove after campaigns_dh_listing.go is migrated to cert resolution.
-type DHMatchClient interface {
-	Match(ctx context.Context, title, sku string) (*dh.MatchResponse, error)
-	Available() bool
-}
-
 // DHCardIDSaver reads and writes DH card ID mappings.
 type DHCardIDSaver interface {
 	GetExternalID(ctx context.Context, cardName, setName, collectorNumber, provider string) (string, error)

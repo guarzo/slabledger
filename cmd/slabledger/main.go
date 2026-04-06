@@ -255,7 +255,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 
 	priceProvImpl, cardHedgerClientImpl, pcProvider, err := initializePriceProviders(
 		ctx, cfg, appCache, logger, cardProvImpl, priceRepo, cardIDMappingRepo,
-		dhClient, intelRepo,
+		dhClient,
 	)
 	if err != nil {
 		return err

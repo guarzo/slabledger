@@ -263,4 +263,3 @@ func (c *Client) patchEnterprise(ctx context.Context, fullURL string, body any, 
 func (c *Client) deleteEnterprise(ctx context.Context, fullURL string, body any, dest any) error {
 	return c.doEnterprise(ctx, "DELETE", fullURL, body, dest)
 }
-

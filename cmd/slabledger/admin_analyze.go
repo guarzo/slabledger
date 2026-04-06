@@ -126,7 +126,7 @@ func adminAnalyze(ctx context.Context, args []string) error {
 
 	priceProvImpl, cardHedgerClientImpl, pcProvider, err := initializePriceProviders(
 		ctx, &cfg, appCache, logger, cardProvImpl, priceRepo, cardIDMappingRepo,
-		dhClient, intelRepo,
+		dhClient,
 	)
 	if err != nil {
 		return fmt.Errorf("initialize price providers: %w", err)
