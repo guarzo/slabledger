@@ -1,7 +1,7 @@
 package campaigns
 
 import (
-	"time"
+	"github.com/guarzo/slabledger/internal/domain/timeutil"
 )
 
 // Signal thresholds — tunable constants for inventory signal detection.
@@ -61,9 +61,5 @@ func hasRecentLastSold(mkt *MarketSnapshot) bool {
 	if mkt.LastSoldDate == "" || mkt.LastSoldCents <= 0 {
 		return false
 	}
-	t, err := time.Parse("2006-01-02", mkt.LastSoldDate)
-	if err != nil {
-		return false
-	}
-	return time.Since(t).Hours()/24 <= recentSoldMaxDays
+	return timeutil.DaysSince(mkt.LastSoldDate) <= recentSoldMaxDays
 }

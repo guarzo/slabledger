@@ -5,9 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
-	"time"
-
 	"github.com/guarzo/slabledger/internal/domain/observability"
+	"github.com/guarzo/slabledger/internal/domain/timeutil"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -98,11 +97,7 @@ func snapshotFromPurchase(p *Purchase) *MarketSnapshot {
 // Uses stored snapshot data (no API calls) for fast page loads. The inventory refresh
 // scheduler keeps snapshots fresh in the background.
 func (s *service) enrichAgingItem(_ context.Context, p *Purchase, campaignName string) AgingItem {
-	daysHeld := 0
-	if t, err := time.Parse("2006-01-02", p.PurchaseDate); err == nil {
-		daysHeld = int(time.Since(t).Hours() / 24)
-	}
-	item := AgingItem{Purchase: *p, DaysHeld: daysHeld, CampaignName: campaignName}
+	item := AgingItem{Purchase: *p, DaysHeld: timeutil.DaysSince(p.PurchaseDate), CampaignName: campaignName}
 
 	snap := snapshotFromPurchase(p)
 
@@ -273,7 +268,7 @@ func (s *service) GetFlaggedInventory(ctx context.Context) ([]AgingItem, error) 
 	}
 	var flagged []AgingItem
 	for _, item := range all {
-		if item.Signals != nil && item.Signals.HasAnySignal() {
+		if item.Signals.HasAnySignal() {
 			flagged = append(flagged, item)
 		}
 	}

@@ -288,7 +288,7 @@ func (m *MockCampaignService) GetFlaggedInventory(ctx context.Context) ([]campai
 	if m.GetFlaggedInventoryFn != nil {
 		return m.GetFlaggedInventoryFn(ctx)
 	}
-	return nil, nil
+	return []campaigns.AgingItem{}, nil
 }
 
 func (m *MockCampaignService) GenerateSellSheet(ctx context.Context, campaignID string, purchaseIDs []string) (*campaigns.SellSheet, error) {

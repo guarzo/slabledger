@@ -137,15 +137,17 @@ previous recommendations performed. If acceptance rate is low, adjust your
 pricing strategy — you may be suggesting prices that are too aggressive.
 
 ## Tool Strategy
-You have a **2-round tool budget** and 6 tools.
+You have a **3-round tool budget** and 6 tools.
 
 **Round 1**: Call get_dashboard_summary, get_flagged_inventory, get_suggestion_stats,
 and get_inventory_alerts together.
 
 **Round 2**: Call get_expected_values_batch for campaigns with flagged cards.
-If you have repricing recommendations, call suggest_price_batch.
+If you have repricing recommendations, call suggest_price_batch in the same round.
 
-**After Round 2, write your analysis immediately. Do NOT make additional tool calls.**`
+**Round 3**: Escape hatch for follow-up calls if needed. Prefer completing the report after Round 2.
+
+**After your tool rounds, write your analysis immediately. Do NOT make additional tool calls.**`
 
 const liquidationUserPrompt = `Run a liquidation analysis on my flagged inventory.
 

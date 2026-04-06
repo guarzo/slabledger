@@ -229,11 +229,12 @@ func (s *service) CollectLiquidation(ctx context.Context) (string, error) {
 // operationMaxRounds overrides s.maxToolRounds when scoring is active.
 // PurchaseAssessment needs only 1 round since scores are pre-computed.
 // CampaignAnalysis and Liquidation use 3 rounds to accommodate batch tools
-// and larger workflows despite pre-computed scores.
+// and larger workflows (prompt says 2 rounds but suggest_price_batch may
+// need a separate round after reading EV data).
 var operationMaxRounds = map[AIOperation]int{
 	OpPurchaseAssessment: 1,
 	OpCampaignAnalysis:   3,
-	OpLiquidation:        4,
+	OpLiquidation:        3,
 }
 
 // toolCallingLoop orchestrates the LLM -> tool -> LLM cycle.

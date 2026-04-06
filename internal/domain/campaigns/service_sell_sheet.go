@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/errors"
+	"github.com/guarzo/slabledger/internal/domain/timeutil"
 	"github.com/guarzo/slabledger/internal/domain/intelligence"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
@@ -63,9 +64,7 @@ func (s *service) enrichSellSheetItem(_ context.Context, purchase *Purchase, cam
 	agingItem := AgingItem{
 		Purchase:      *purchase,
 		CurrentMarket: item.CurrentMarket,
-	}
-	if t, err := time.Parse("2006-01-02", purchase.PurchaseDate); err == nil {
-		agingItem.DaysHeld = int(time.Since(t).Hours() / 24)
+		DaysHeld:      timeutil.DaysSince(purchase.PurchaseDate),
 	}
 	isCrack := crackSet != nil && crackSet[purchase.ID]
 	sig := ComputeInventorySignals(&agingItem, isCrack)
@@ -74,7 +73,7 @@ func (s *service) enrichSellSheetItem(_ context.Context, purchase *Purchase, cam
 	}
 
 	// Compute recommended channel server-side
-	item.RecommendedChannel, item.ChannelLabel = recommendChannel(purchase.GradeValue, purchase.CLValueCents, item.CurrentMarket, item.Signals)
+	item.RecommendedChannel, item.ChannelLabel = recommendChannel(purchase.GradeValue, item.CurrentMarket, item.Signals)
 
 	// Deduct marketplace fees for eBay/TCGPlayer channels to project net revenue.
 	// grossModeFee skips fee deduction (used by price sync to return gross prices).
@@ -107,7 +106,7 @@ func (s *service) enrichSellSheetItem(_ context.Context, purchase *Purchase, cam
 }
 
 // recommendChannel determines the best exit channel for a sell-sheet item.
-func recommendChannel(grade float64, _ int, mkt *MarketSnapshot, signals *InventorySignals) (SaleChannel, string) {
+func recommendChannel(grade float64, mkt *MarketSnapshot, signals *InventorySignals) (SaleChannel, string) {
 	if grade == 7 {
 		return SaleChannelInPerson, "In Person"
 	}
@@ -134,6 +133,8 @@ func (s *service) GenerateSellSheet(ctx context.Context, campaignID string, purc
 		return nil, fmt.Errorf("batch purchase lookup: %w", err)
 	}
 
+	crackSet := s.buildCrackCandidateSet(ctx)
+
 	sheet := &SellSheet{
 		GeneratedAt:  time.Now().Format(time.RFC3339),
 		CampaignName: campaign.Name,
@@ -146,7 +147,7 @@ func (s *service) GenerateSellSheet(ctx context.Context, campaignID string, purc
 			continue
 		}
 
-		item, _ := s.enrichSellSheetItem(ctx, purchase, "", campaign.EbayFeePct, nil)
+		item, _ := s.enrichSellSheetItem(ctx, purchase, "", campaign.EbayFeePct, crackSet)
 		sheet.Totals.TotalExpectedRevenue += item.TargetSellPrice
 		sheet.Items = append(sheet.Items, item)
 		sheet.Totals.TotalCostBasis += item.CostBasisCents
@@ -209,6 +210,8 @@ func (s *service) buildCrossCampaignSellSheet(ctx context.Context, purchases []*
 		campaignMap[campaignList[i].ID] = &campaignList[i]
 	}
 
+	crackSet := s.buildCrackCandidateSet(ctx)
+
 	sheet := &SellSheet{
 		GeneratedAt:  time.Now().Format(time.RFC3339),
 		CampaignName: sheetName,
@@ -221,7 +224,7 @@ func (s *service) buildCrossCampaignSellSheet(ctx context.Context, purchases []*
 			campName = c.Name
 			feePct = c.EbayFeePct
 		}
-		item, _ := s.enrichSellSheetItem(ctx, purchase, campName, feePct, nil)
+		item, _ := s.enrichSellSheetItem(ctx, purchase, campName, feePct, crackSet)
 		sheet.Totals.TotalExpectedRevenue += item.TargetSellPrice
 		sheet.Items = append(sheet.Items, item)
 		sheet.Totals.TotalCostBasis += item.CostBasisCents

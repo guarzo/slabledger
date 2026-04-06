@@ -70,6 +70,9 @@ type InventorySignals struct {
 
 // HasAnySignal returns true if any signal flag is set.
 func (s *InventorySignals) HasAnySignal() bool {
+	if s == nil {
+		return false
+	}
 	return s.ProfitCaptureDeclining || s.ProfitCaptureSpike ||
 		s.CrackCandidate || s.StaleListing || s.DeepStale || s.CutLoss
 }

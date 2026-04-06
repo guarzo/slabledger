@@ -2,9 +2,15 @@ package campaigns_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/campaigns"
 )
+
+// recentDate returns a YYYY-MM-DD string for N days ago, keeping tests stable.
+func recentDate(daysAgo int) string {
+	return time.Now().AddDate(0, 0, -daysAgo).Format("2006-01-02")
+}
 
 func TestComputeInventorySignals(t *testing.T) {
 	tests := []struct {
@@ -23,7 +29,7 @@ func TestComputeInventorySignals(t *testing.T) {
 				},
 				CurrentMarket: &campaigns.MarketSnapshot{
 					LastSoldCents: 8000,
-					LastSoldDate:  "2026-03-28",
+					LastSoldDate:  recentDate(5),
 					SalesLast30d:  3,
 					Trend30d:      -0.08,
 					MedianCents:   7500,

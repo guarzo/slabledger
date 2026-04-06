@@ -32,6 +32,9 @@ func TestDefinitions_RequiredTools(t *testing.T) {
 		"suggest_price", "get_cert_lookup", "get_suggestion_stats",
 		"evaluate_purchase",
 		"get_expected_values_batch", "suggest_price_batch",
+		"get_acquisition_targets", "get_crack_opportunities",
+		"get_market_intelligence", "get_dh_suggestions",
+		"get_inventory_alerts", "get_data_gap_report",
 	}
 
 	registered := make(map[string]bool, len(defs))

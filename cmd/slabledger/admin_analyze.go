@@ -13,6 +13,7 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/clients/tcgdex"
 	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
 	"github.com/guarzo/slabledger/internal/domain/advisor"
+	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/platform/config"
 )
 
@@ -95,7 +96,11 @@ func adminAnalyze(ctx context.Context, args []string) error {
 	if err != nil {
 		return fmt.Errorf("open database: %w", err)
 	}
-	defer func() { _ = db.Close() }()
+	defer func() {
+		if cerr := db.Close(); cerr != nil {
+			logger.Debug(ctx, "failed to close database", observability.Err(cerr))
+		}
+	}()
 
 	if err := sqlite.RunMigrations(db, cfg.Database.MigrationsPath); err != nil {
 		return fmt.Errorf("run migrations: %w", err)
@@ -126,7 +131,11 @@ func adminAnalyze(ctx context.Context, args []string) error {
 	if err != nil {
 		return fmt.Errorf("initialize price providers: %w", err)
 	}
-	defer func() { _ = pcProvider.Close() }()
+	defer func() {
+		if cerr := pcProvider.Close(); cerr != nil {
+			logger.Debug(ctx, "failed to close price provider", observability.Err(cerr))
+		}
+	}()
 
 	campaignsService, _, _ := initializeCampaignsService(
 		ctx, &cfg, logger, db, priceProvImpl, cardHedgerClientImpl, cardIDMappingRepo, intelRepo,
@@ -173,23 +182,22 @@ func adminAnalyze(ctx context.Context, args []string) error {
 
 // buildStreamCallback returns a streaming callback that prints events to stdout.
 func buildStreamCallback(verbose bool) func(advisor.StreamEvent) {
-	var currentRound int
+	var toolCall int
 
 	return func(evt advisor.StreamEvent) {
 		switch evt.Type {
 		case advisor.EventToolStart:
 			if verbose {
-				currentRound++
-				fmt.Printf("\n[round %d] tool: %s ...\n", currentRound, evt.ToolName)
+				toolCall++
+				fmt.Printf("\n[tool %d] %s ...\n", toolCall, evt.ToolName)
 			}
 		case advisor.EventToolResult:
 			if verbose {
-				// Truncate long tool results for readability
 				content := evt.Content
 				if len(content) > 200 {
 					content = content[:200] + "..."
 				}
-				fmt.Printf("[round %d] result (%s): %s\n", currentRound, evt.ToolName, content)
+				fmt.Printf("[tool %d] result (%s): %s\n", toolCall, evt.ToolName, content)
 			}
 		case advisor.EventDelta:
 			fmt.Print(evt.Content)
