@@ -10,32 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func newTestPurchase(campaignID, certNumber string) *campaigns.Purchase {
-	now := time.Now().Truncate(time.Second)
-	return &campaigns.Purchase{
-		ID:           "purch-" + certNumber,
-		CampaignID:   campaignID,
-		CardName:     "Charizard",
-		CertNumber:   certNumber,
-		Grader:       "PSA",
-		GradeValue:   9.0,
-		BuyCostCents: 80000,
-		PurchaseDate: "2026-01-15",
-		CreatedAt:    now,
-		UpdatedAt:    now,
-	}
-}
-
-func createTestCampaign(t *testing.T, db *DB, id, name string) {
-	t.Helper()
-	now := time.Now().Truncate(time.Second)
-	_, err := db.Exec(
-		`INSERT INTO campaigns (id, name, phase, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
-		id, name, "pending", now, now,
-	)
-	require.NoError(t, err)
-}
-
 func TestCreatePurchase(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.Close()
@@ -414,17 +388,19 @@ func TestGetPurchasesByDHCertStatus(t *testing.T) {
 	createTestCampaign(t, db, "camp-dhcert", "DH Cert Status Test")
 
 	// Create purchases with different cert statuses
-	statuses := map[string]string{
-		"DC000001": "pending",
-		"DC000002": "pending",
-		"DC000003": "matched",
-		"DC000004": "ambiguous",
-		"DC000005": "pending",
+	certStatuses := []struct {
+		cert, status string
+	}{
+		{"DC000001", "pending"},
+		{"DC000002", "pending"},
+		{"DC000003", "matched"},
+		{"DC000004", "ambiguous"},
+		{"DC000005", "pending"},
 	}
-	for cert, status := range statuses {
-		p := newTestPurchase("camp-dhcert", cert)
+	for _, cs := range certStatuses {
+		p := newTestPurchase("camp-dhcert", cs.cert)
 		require.NoError(t, repo.CreatePurchase(ctx, p))
-		err := repo.UpdatePurchaseDHFields(ctx, p.ID, campaigns.DHFieldsUpdate{CertStatus: status})
+		err := repo.UpdatePurchaseDHFields(ctx, p.ID, campaigns.DHFieldsUpdate{CertStatus: cs.status})
 		require.NoError(t, err)
 	}
 

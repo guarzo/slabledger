@@ -185,14 +185,12 @@ func TestGetCapitalSummary_AlertLevels(t *testing.T) {
 		},
 	}
 
-	for i, tt := range tests {
+	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Fresh DB per subtest to avoid data bleed
 			subDB := setupTestDB(t)
 			defer subDB.Close()
 			subRepo := NewCampaignsRepository(subDB.DB)
 
-			// Set budget
 			err := subRepo.UpdateCashflowConfig(ctx, &campaigns.CashflowConfig{
 				CapitalBudgetCents: tt.budgetCents,
 				CashBufferCents:    100000,
@@ -200,17 +198,14 @@ func TestGetCapitalSummary_AlertLevels(t *testing.T) {
 			})
 			require.NoError(t, err)
 
-			// Create campaign + purchase with invoice date
-			campID := "camp-alert-" + time.Now().Format("150405") + string(rune('a'+i))
-			c := &campaigns.Campaign{ID: campID, Name: "Alert " + tt.name, Phase: campaigns.PhaseActive, CreatedAt: now, UpdatedAt: now}
+			c := &campaigns.Campaign{ID: "camp-alert", Name: "Alert Test", Phase: campaigns.PhaseActive, CreatedAt: now, UpdatedAt: now}
 			require.NoError(t, subRepo.CreateCampaign(ctx, c))
 
-			purchaseDate := time.Now().AddDate(0, 0, -5).Format("2006-01-02")
 			p := &campaigns.Purchase{
-				ID: "alert-p", CampaignID: campID, CardName: "Charizard",
+				ID: "alert-p", CampaignID: "camp-alert", CardName: "Charizard",
 				CertNumber: "ALERT001", GradeValue: 9,
 				BuyCostCents: tt.purchaseCents, PSASourcingFeeCents: 0,
-				PurchaseDate: purchaseDate, InvoiceDate: purchaseDate,
+				PurchaseDate: "2026-01-10", InvoiceDate: "2026-01-10",
 				CreatedAt: now, UpdatedAt: now,
 			}
 			require.NoError(t, subRepo.CreatePurchase(ctx, p))

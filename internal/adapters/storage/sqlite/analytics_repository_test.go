@@ -231,6 +231,10 @@ func TestGetPerformanceByGrade_Analytics(t *testing.T) {
 		assert.Equal(t, 180000, g10.TotalRevenueCents)
 		assert.Equal(t, 7470, g10.NetProfitCents)
 
+		// AvgBuyPctOfCL: grade 9 = avg(40000/50000, 60000/80000) = 0.775; grade 8 = 20000/30000 = 0.667
+		assert.InDelta(t, 0.775, g9.AvgBuyPctOfCL, 0.01)
+		assert.InDelta(t, 0.667, g8.AvgBuyPctOfCL, 0.01)
+
 		// ROI check for grade 9: net/spend
 		assert.InDelta(t, float64(20137)/float64(100600), g9.ROI, 0.001)
 
@@ -240,28 +244,4 @@ func TestGetPerformanceByGrade_Analytics(t *testing.T) {
 		assert.Equal(t, float64(10), grades[2].Grade)
 	})
 
-	t.Run("avgBuyPctOfCL computed when cl_value set", func(t *testing.T) {
-		db2 := setupTestDB(t)
-		defer db2.Close()
-		repo2 := NewCampaignsRepository(db2.DB)
-
-		campID := setupAnalyticsData(t, repo2)
-
-		grades, err := repo2.GetPerformanceByGrade(ctx, campID)
-		require.NoError(t, err)
-
-		gradeMap := make(map[float64]campaigns.GradePerformance)
-		for _, g := range grades {
-			gradeMap[g.Grade] = g
-		}
-
-		// Grade 9: ap-2 (buy=40000, cl=50000 → 0.8), ap-3 (buy=60000, cl=80000 → 0.75)
-		// avg = (0.8 + 0.75) / 2 = 0.775
-		g9 := gradeMap[9]
-		assert.InDelta(t, 0.775, g9.AvgBuyPctOfCL, 0.01)
-
-		// Grade 8: ap-5 (buy=20000, cl=30000 → 0.667)
-		g8 := gradeMap[8]
-		assert.InDelta(t, 0.667, g8.AvgBuyPctOfCL, 0.01)
-	})
 }
