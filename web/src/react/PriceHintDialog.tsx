@@ -102,7 +102,7 @@ export default function PriceHintDialog({
               className="w-full px-3 py-2 rounded bg-[var(--surface-2)] border border-[var(--surface-2)] text-[var(--text)]"
             >
               <option value="pricecharting">PriceCharting</option>
-              <option value="cardhedger">CardHedger</option>
+              <option value="doubleholo">DoubleHolo</option>
             </select>
           </div>
 
@@ -115,7 +115,7 @@ export default function PriceHintDialog({
               type="text"
               value={externalId}
               onChange={(e) => setExternalId(e.target.value)}
-              placeholder={provider === 'pricecharting' ? 'Product ID (e.g. 12345)' : 'Card ID'}
+              placeholder={provider === 'pricecharting' ? 'Product ID (e.g. 12345)' : 'DoubleHolo Card ID'}
               className="w-full px-3 py-2 rounded bg-[var(--surface-2)] border border-[var(--surface-2)] text-[var(--text)] placeholder:text-[var(--text-muted)]"
               autoFocus
             />

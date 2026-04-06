@@ -13,7 +13,7 @@ export interface EbayGradeData {
   volume7day: number | null;
 }
 
-/** Multi-platform estimate from CardHedger's price-estimate endpoint */
+/** Multi-platform estimate from the price-estimate endpoint */
 export interface EstimateGradeData {
   price: number;
   low: number;
@@ -72,6 +72,6 @@ export interface PriceHint {
   cardName: string;
   setName: string;
   cardNumber: string;
-  provider: 'pricecharting' | 'cardhedger';
+  provider: 'pricecharting' | 'doubleholo';
   externalId: string;
 }

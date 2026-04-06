@@ -10,36 +10,22 @@ import (
 
 // Known daily limits per provider.
 var providerDailyLimits = map[string]*int{
-	pricing.SourceCardHedger:    nil, // Unlimited plan — monitored via 429 tracking
 	pricing.SourcePriceCharting: nil, // No hard daily limit
 	pricing.SourceJustTCG:       nil, // Pro plan — scheduler self-limits via DailyBudget
 }
 
 // knownProviders is the ordered list of providers shown in the status response.
-var knownProviders = []string{pricing.SourceCardHedger, pricing.SourcePriceCharting, pricing.SourceJustTCG}
-
-// CardHedgerStats provides live observability counters from the CardHedger client.
-type CardHedgerStats interface {
-	MinuteCallsUsed() int
-	RateLimitHits() int
-	Last429Time() time.Time
-}
+var knownProviders = []string{pricing.SourcePriceCharting, pricing.SourceJustTCG}
 
 // APIStatusHandler serves API usage status information.
 type APIStatusHandler struct {
-	apiTracker      pricing.APITracker
-	logger          observability.Logger
-	cardHedgerStats CardHedgerStats // optional, may be nil
+	apiTracker pricing.APITracker
+	logger     observability.Logger
 }
 
 // NewAPIStatusHandler creates a new handler for the API status endpoint.
 func NewAPIStatusHandler(apiTracker pricing.APITracker, logger observability.Logger) *APIStatusHandler {
 	return &APIStatusHandler{apiTracker: apiTracker, logger: logger}
-}
-
-// WithCardHedgerStats sets the CardHedger client stats provider.
-func (h *APIStatusHandler) WithCardHedgerStats(s CardHedgerStats) {
-	h.cardHedgerStats = s
 }
 
 // apiUsageResponse is the JSON response for GET /api/status/api-usage.
@@ -131,15 +117,6 @@ func (h *APIStatusHandler) HandleAPIUsage(w http.ResponseWriter, r *http.Request
 				remaining = 0
 			}
 			ps.Today.Remaining = &remaining
-		}
-
-		// Populate live CardHedger counters from client
-		if name == pricing.SourceCardHedger && h.cardHedgerStats != nil {
-			ps.Today.MinuteCalls = int64(h.cardHedgerStats.MinuteCallsUsed())
-			if t := h.cardHedgerStats.Last429Time(); !t.IsZero() {
-				utc := t.UTC()
-				ps.Today.Last429At = &utc
-			}
 		}
 
 		resp.Providers = append(resp.Providers, ps)

@@ -50,7 +50,7 @@ export function PricingCoverageTab({ enabled = true }: { enabled?: boolean }) {
       {/* Discovery failures */}
       {discoveryFailures > 0 && (
         <div className="p-3 rounded-lg bg-[var(--warning-bg)] border border-[var(--warning-border)] text-[var(--warning)] text-sm">
-          {discoveryFailures} CardHedger discovery failure{discoveryFailures !== 1 ? 's' : ''} recorded
+          {discoveryFailures} discovery failure{discoveryFailures !== 1 ? 's' : ''} recorded
         </div>
       )}
 
