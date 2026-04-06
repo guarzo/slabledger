@@ -66,6 +66,7 @@ type PurchaseRepository interface {
 	UpdatePurchaseDHPushStatus(ctx context.Context, id string, status string) error
 	GetPurchasesByDHPushStatus(ctx context.Context, status string, limit int) ([]Purchase, error)
 	CountUnsoldByDHPushStatus(ctx context.Context) (map[string]int, error)
+	UpdatePurchaseDHCandidates(ctx context.Context, id string, candidatesJSON string) error
 }
 
 // SaleRepository handles sale persistence.

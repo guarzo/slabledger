@@ -174,6 +174,7 @@ type Purchase struct {
 	DHChannelsJSON      string       `json:"dhChannelsJson,omitempty"`      // Per-channel sync status JSON blob
 	DHStatus            DHStatus     `json:"dhStatus,omitempty"`            // DH inventory status
 	DHPushStatus        DHPushStatus `json:"dhPushStatus,omitempty"`        // Pipeline status: "", "pending", "matched", "unmatched", "manual"
+	DHCandidatesJSON    string       `json:"dhCandidatesJson,omitempty"`    // Ambiguous cert resolution candidates JSON
 	CreatedAt           time.Time    `json:"createdAt"`
 	UpdatedAt           time.Time    `json:"updatedAt"`
 

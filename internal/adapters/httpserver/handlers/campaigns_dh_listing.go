@@ -126,20 +126,46 @@ func (h *CampaignsHandler) inlineMatchAndPush(ctx context.Context, p *campaigns.
 		return 0
 	}
 
+	var dhCardID int
 	if resp.Status != dh.CertStatusMatched {
-		if h.pushStatusUpdater != nil {
-			if err := h.pushStatusUpdater.UpdatePurchaseDHPushStatus(ctx, p.ID, campaigns.DHPushStatusUnmatched); err != nil {
-				h.logger.Warn(ctx, "inline dh resolve: failed to set unmatched status",
+		if resp.Status == dh.CertStatusAmbiguous && len(resp.Candidates) > 0 {
+			var saveFn func(string) error
+			if h.dhCandidatesSaver != nil {
+				saveFn = func(j string) error { return h.dhCandidatesSaver.UpdatePurchaseDHCandidates(ctx, p.ID, j) }
+			}
+			resolved, err := dh.ResolveAmbiguous(resp.Candidates, p.CardNumber, saveFn)
+			if err != nil {
+				h.logger.Warn(ctx, "inline dh resolve: failed to save candidates",
 					observability.String("cert", p.CertNumber), observability.Err(err))
 			}
+			if resolved > 0 {
+				dhCardID = resolved
+			} else {
+				if h.pushStatusUpdater != nil {
+					if err := h.pushStatusUpdater.UpdatePurchaseDHPushStatus(ctx, p.ID, campaigns.DHPushStatusUnmatched); err != nil {
+						h.logger.Warn(ctx, "inline dh resolve: failed to set unmatched status",
+							observability.String("cert", p.CertNumber), observability.Err(err))
+					}
+				}
+				h.logger.Warn(ctx, "inline dh cert resolve: ambiguous, no card-number match",
+					observability.String("cert", p.CertNumber))
+				return 0
+			}
+		} else {
+			if h.pushStatusUpdater != nil {
+				if err := h.pushStatusUpdater.UpdatePurchaseDHPushStatus(ctx, p.ID, campaigns.DHPushStatusUnmatched); err != nil {
+					h.logger.Warn(ctx, "inline dh resolve: failed to set unmatched status",
+						observability.String("cert", p.CertNumber), observability.Err(err))
+				}
+			}
+			h.logger.Warn(ctx, "inline dh cert resolve: unmatched",
+				observability.String("cert", p.CertNumber),
+				observability.String("dh_status", resp.Status))
+			return 0
 		}
-		h.logger.Warn(ctx, "inline dh cert resolve: unmatched",
-			observability.String("cert", p.CertNumber),
-			observability.String("dh_status", resp.Status))
-		return 0
+	} else {
+		dhCardID = resp.DHCardID
 	}
-
-	dhCardID := resp.DHCardID
 
 	if h.dhCardIDSaver != nil {
 		externalID := strconv.Itoa(dhCardID)
