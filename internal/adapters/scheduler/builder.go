@@ -19,13 +19,6 @@ import (
 	"github.com/guarzo/slabledger/internal/platform/config"
 )
 
-// CardHedgerClient combines the interfaces used by both CardHedger schedulers.
-// *cardhedger.Client satisfies this interface.
-type CardHedgerClient interface {
-	CardHedgerBatchClient
-	CardHedgerRefreshClient
-}
-
 // BuildDeps holds the dependencies needed to build the scheduler group.
 type BuildDeps struct {
 	PriceRepo     pricing.PriceRepository
@@ -37,18 +30,13 @@ type BuildDeps struct {
 	AuthService   auth.Service // may be nil if auth is not configured
 	Logger        observability.Logger
 
-	// CardHedger dependencies (all optional; schedulers skipped if nil)
-	CardHedgerClient    CardHedgerClient
-	SyncStateStore      SyncStateStore
-	CardIDMappingLookup CardIDMappingLookup
+	// Sync state (shared by DH schedulers)
+	SyncStateStore SyncStateStore
 
-	// CardHedger daily batch dependencies (optional)
-	CardIDMappingLister     CardIDMappingLister
-	CardIDMappingSaver      CardIDMappingSaver
-	DiscoveryFailureTracker pricing.DiscoveryFailureTracker
-	FavoritesLister         FavoritesLister
-	CampaignCardLister      CampaignCardLister
-	CertSweeper             CertSweeper
+	// Card ID mapping (shared by JustTCG scheduler)
+	CardIDMappingLister CardIDMappingLister
+	CardIDMappingSaver  CardIDMappingSaver
+	CampaignCardLister  CampaignCardLister
 
 	// Cache warmup dependencies (optional)
 	NewSetsProvider NewSetIDsProvider
@@ -116,14 +104,12 @@ type BuildDeps struct {
 // BuildResult holds the scheduler group and optional auxiliary references.
 type BuildResult struct {
 	Group             *Group
-	CardDiscoverer    CardDiscoverer              // nil if CardHedger batch is not configured
 	CardLadderRefresh *CardLadderRefreshScheduler // nil if Card Ladder is not configured
 }
 
 // BuildGroup constructs a scheduler Group from centralized configuration and dependencies.
 func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 	var schedulers []Scheduler
-	var cardDiscoverer CardDiscoverer
 	var clRefresh *CardLadderRefreshScheduler
 
 	// Price refresh scheduler
@@ -220,52 +206,6 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 			deps.Logger, historyConfig,
 		)
 		schedulers = append(schedulers, historyScheduler)
-	}
-
-	// CardHedger delta poll scheduler (if all dependencies are provided)
-	if deps.CardHedgerClient != nil && deps.SyncStateStore != nil && deps.CardIDMappingLookup != nil {
-		chConfig := CardHedgerRefreshConfig{
-			Enabled:      cfg.CardHedger.Enabled,
-			PollInterval: cfg.CardHedger.PollInterval,
-		}
-		var refreshOpts []RefreshOption
-		if deps.APITracker != nil {
-			refreshOpts = append(refreshOpts, WithRefreshAPITracker(deps.APITracker))
-		}
-		chScheduler := NewCardHedgerRefreshScheduler(
-			deps.CardHedgerClient, deps.PriceRepo, deps.SyncStateStore,
-			deps.CardIDMappingLookup, deps.Logger, chConfig, refreshOpts...,
-		)
-		schedulers = append(schedulers, chScheduler)
-	}
-
-	// CardHedger daily batch scheduler (if client + mapping lister are provided)
-	if deps.CardHedgerClient != nil && deps.CardIDMappingLister != nil {
-		batchConfig := CardHedgerBatchConfig{
-			Enabled:        cfg.CardHedger.Enabled,
-			RunInterval:    cfg.CardHedger.BatchInterval,
-			MaxCardsPerRun: cfg.CardHedger.MaxCardsPerRun,
-		}
-		var batchOpts []BatchOption
-		if deps.APITracker != nil {
-			batchOpts = append(batchOpts, WithBatchAPITracker(deps.APITracker))
-		}
-		if deps.CardIDMappingSaver != nil {
-			batchOpts = append(batchOpts, WithBatchMappingSaver(deps.CardIDMappingSaver))
-		}
-		if deps.DiscoveryFailureTracker != nil {
-			batchOpts = append(batchOpts, WithDiscoveryFailureTracker(deps.DiscoveryFailureTracker))
-		}
-		if deps.CertSweeper != nil {
-			batchOpts = append(batchOpts, WithCertSweeper(deps.CertSweeper))
-		}
-		batchScheduler := NewCardHedgerBatchScheduler(
-			deps.CardHedgerClient, deps.PriceRepo, deps.CardIDMappingLister,
-			deps.FavoritesLister, deps.CampaignCardLister,
-			deps.Logger, batchConfig, batchOpts...,
-		)
-		schedulers = append(schedulers, batchScheduler)
-		cardDiscoverer = batchScheduler
 	}
 
 	// Advisor refresh scheduler (if advisor service and cache store are provided)
@@ -413,7 +353,6 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 
 	return BuildResult{
 		Group:             NewGroup(schedulers...),
-		CardDiscoverer:    cardDiscoverer,
 		CardLadderRefresh: clRefresh,
 	}
 }
