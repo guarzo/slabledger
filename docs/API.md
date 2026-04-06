@@ -411,7 +411,7 @@ Saves a price hint (upserts).
   "cardName": "Charizard",
   "setName": "Base Set",
   "cardNumber": "4",
-  "provider": "pricecharting",
+  "provider": "doubleholo",
   "externalId": "12345"
 }
 ```
