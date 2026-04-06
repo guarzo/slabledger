@@ -10,10 +10,11 @@ const INITIAL_CANDIDATES_SHOWN = 3;
 
 /* ── Candidate card ─────────────────────────────────────────────── */
 
-function CandidateCard({ candidate, onSelect, isPending }: {
+function CandidateCard({ candidate, onSelect, isPending, isDisabled }: {
   candidate: DHCandidate;
   onSelect: (dhCardId: number) => void;
   isPending: boolean;
+  isDisabled: boolean;
 }) {
   return (
     <div className="flex items-center gap-2 p-2 rounded border border-[var(--border)] bg-[var(--bg-secondary)]">
@@ -38,7 +39,7 @@ function CandidateCard({ candidate, onSelect, isPending }: {
         size="sm"
         onClick={() => onSelect(candidate.dh_card_id)}
         loading={isPending}
-        disabled={isPending}
+        disabled={isDisabled}
       >
         Select
       </Button>
@@ -101,7 +102,7 @@ function UnmatchedRow({ card }: { card: DHUnmatchedCard }) {
           {candidates.length > 0 && (
             <div className="flex flex-col gap-1">
               {visibleCandidates.map((c) => (
-                <CandidateCard key={c.dh_card_id} candidate={c} onSelect={handleSelect} isPending={selectingCardId === c.dh_card_id && selectMutation.isPending} />
+                <CandidateCard key={c.dh_card_id} candidate={c} onSelect={handleSelect} isPending={selectingCardId === c.dh_card_id && selectMutation.isPending} isDisabled={selectMutation.isPending} />
               ))}
               {hiddenCount > 0 && !showAll && (
                 <button

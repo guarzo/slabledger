@@ -37,6 +37,21 @@ func (h *DHHandler) HandleSelectMatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Fail early if required dependencies are not configured.
+	if h.inventoryPusher == nil {
+		writeError(w, http.StatusInternalServerError, "inventory pusher not configured")
+		return
+	}
+	if h.dhFieldsUpdater == nil {
+		writeError(w, http.StatusInternalServerError, "DH fields updater not configured")
+		return
+	}
+
+	// Serialize per purchase to prevent duplicate DH pushes from concurrent requests.
+	mu := h.selectMatchLock(req.PurchaseID)
+	mu.Lock()
+	defer mu.Unlock()
+
 	purchase, err := h.purchaseLister.GetPurchase(ctx, req.PurchaseID)
 	if err != nil {
 		if campaigns.IsPurchaseNotFound(err) {
@@ -61,18 +76,20 @@ func (h *DHHandler) HandleSelectMatch(w http.ResponseWriter, r *http.Request) {
 	// Validate that the chosen card ID is among the purchase's candidates.
 	if purchase.DHCandidatesJSON != "" {
 		var candidates []dh.CertResolutionCandidate
-		if err := json.Unmarshal([]byte(purchase.DHCandidatesJSON), &candidates); err == nil {
-			found := false
-			for _, c := range candidates {
-				if c.DHCardID == req.DHCardID {
-					found = true
-					break
-				}
+		if err := json.Unmarshal([]byte(purchase.DHCandidatesJSON), &candidates); err != nil {
+			writeError(w, http.StatusBadRequest, "malformed candidates data")
+			return
+		}
+		found := false
+		for _, c := range candidates {
+			if c.DHCardID == req.DHCardID {
+				found = true
+				break
 			}
-			if !found {
-				writeError(w, http.StatusBadRequest, "dhCardId is not among the purchase's candidates")
-				return
-			}
+		}
+		if !found {
+			writeError(w, http.StatusBadRequest, "dhCardId is not among the purchase's candidates")
+			return
 		}
 	}
 
@@ -103,18 +120,18 @@ func (h *DHHandler) HandleSelectMatch(w http.ResponseWriter, r *http.Request) {
 	for _, result := range pushResp.Results {
 		if result.Status != "failed" && result.DHInventoryID != 0 {
 			inventoryID = result.DHInventoryID
-			if h.dhFieldsUpdater != nil {
-				if err := h.dhFieldsUpdater.UpdatePurchaseDHFields(ctx, purchase.ID, campaigns.DHFieldsUpdate{
-					CardID:            req.DHCardID,
-					InventoryID:       result.DHInventoryID,
-					CertStatus:        dh.CertStatusMatched,
-					ListingPriceCents: result.AssignedPriceCents,
-					ChannelsJSON:      dh.MarshalChannels(result.Channels),
-					DHStatus:          campaigns.DHStatus(result.Status),
-				}); err != nil {
-					h.logger.Warn(ctx, "select match: failed to persist DH fields",
-						observability.String("purchaseID", purchase.ID), observability.Err(err))
-				}
+			if err := h.dhFieldsUpdater.UpdatePurchaseDHFields(ctx, purchase.ID, campaigns.DHFieldsUpdate{
+				CardID:            req.DHCardID,
+				InventoryID:       result.DHInventoryID,
+				CertStatus:        dh.CertStatusMatched,
+				ListingPriceCents: result.AssignedPriceCents,
+				ChannelsJSON:      dh.MarshalChannels(result.Channels),
+				DHStatus:          campaigns.DHStatus(result.Status),
+			}); err != nil {
+				h.logger.Error(ctx, "select match: failed to persist DH fields",
+					observability.String("purchaseID", purchase.ID), observability.Err(err))
+				writeError(w, http.StatusInternalServerError, "DH push succeeded but failed to save local state")
+				return
 			}
 			break
 		}

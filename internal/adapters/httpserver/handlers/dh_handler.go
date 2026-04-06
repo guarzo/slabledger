@@ -99,6 +99,13 @@ type DHHandler struct {
 	bgWG             sync.WaitGroup
 	bulkMatchMu      sync.Mutex
 	bulkMatchRunning atomic.Bool
+	selectLocks      sync.Map // per-purchaseID mutex for select-match serialization
+}
+
+// selectMatchLock returns a per-purchase mutex for serializing select-match requests.
+func (h *DHHandler) selectMatchLock(purchaseID string) *sync.Mutex {
+	v, _ := h.selectLocks.LoadOrStore(purchaseID, &sync.Mutex{})
+	return v.(*sync.Mutex)
 }
 
 // NewDHHandler creates a new DHHandler with the given dependencies.
