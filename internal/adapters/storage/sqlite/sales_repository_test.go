@@ -10,22 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func newTestSale(purchaseID string) *campaigns.Sale {
-	now := time.Now().Truncate(time.Second)
-	return &campaigns.Sale{
-		ID:             "sale-" + purchaseID,
-		PurchaseID:     purchaseID,
-		SaleChannel:    campaigns.SaleChannelEbay,
-		SalePriceCents: 95000,
-		SaleFeeCents:   11733,
-		SaleDate:       "2026-02-01",
-		DaysToSell:     17,
-		NetProfitCents: 2967,
-		CreatedAt:      now,
-		UpdatedAt:      now,
-	}
-}
-
 func setupSaleTestData(t *testing.T, db *DB, repo *CampaignsRepository, campaignID, certNumber string) *campaigns.Purchase {
 	t.Helper()
 	createTestCampaign(t, db, campaignID, "Sale Test "+campaignID)

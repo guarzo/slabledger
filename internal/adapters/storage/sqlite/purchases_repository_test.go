@@ -10,32 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func newTestPurchase(campaignID, certNumber string) *campaigns.Purchase {
-	now := time.Now().Truncate(time.Second)
-	return &campaigns.Purchase{
-		ID:           "purch-" + certNumber,
-		CampaignID:   campaignID,
-		CardName:     "Charizard",
-		CertNumber:   certNumber,
-		Grader:       "PSA",
-		GradeValue:   9.0,
-		BuyCostCents: 80000,
-		PurchaseDate: "2026-01-15",
-		CreatedAt:    now,
-		UpdatedAt:    now,
-	}
-}
-
-func createTestCampaign(t *testing.T, db *DB, id, name string) {
-	t.Helper()
-	now := time.Now().Truncate(time.Second)
-	_, err := db.Exec(
-		`INSERT INTO campaigns (id, name, phase, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
-		id, name, "pending", now, now,
-	)
-	require.NoError(t, err)
-}
-
 func TestCreatePurchase(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.Close()
@@ -294,5 +268,283 @@ func TestGetPurchaseIDByCertNumber(t *testing.T) {
 		id, err := repo.GetPurchaseIDByCertNumber(ctx, "99999999")
 		require.NoError(t, err)
 		assert.Empty(t, id)
+	})
+}
+
+func TestUpdatePurchaseCLValue(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewCampaignsRepository(db.DB)
+	ctx := context.Background()
+
+	createTestCampaign(t, db, "camp-cl", "CL Value Test")
+
+	t.Run("success", func(t *testing.T) {
+		p := newTestPurchase("camp-cl", "CL000001")
+		require.NoError(t, repo.CreatePurchase(ctx, p))
+
+		err := repo.UpdatePurchaseCLValue(ctx, p.ID, 125000, 42)
+		require.NoError(t, err)
+
+		got, err := repo.GetPurchase(ctx, p.ID)
+		require.NoError(t, err)
+		assert.Equal(t, 125000, got.CLValueCents)
+		assert.Equal(t, 42, got.Population)
+	})
+
+	t.Run("update to zero", func(t *testing.T) {
+		p := newTestPurchase("camp-cl", "CL000002")
+		p.CLValueCents = 100000
+		require.NoError(t, repo.CreatePurchase(ctx, p))
+
+		err := repo.UpdatePurchaseCLValue(ctx, p.ID, 0, 0)
+		require.NoError(t, err)
+
+		got, err := repo.GetPurchase(ctx, p.ID)
+		require.NoError(t, err)
+		assert.Equal(t, 0, got.CLValueCents)
+		assert.Equal(t, 0, got.Population)
+	})
+
+	t.Run("not found", func(t *testing.T) {
+		err := repo.UpdatePurchaseCLValue(ctx, "nonexistent", 100000, 10)
+		assert.ErrorIs(t, err, campaigns.ErrPurchaseNotFound)
+	})
+}
+
+func TestUpdatePurchaseDHFields(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewCampaignsRepository(db.DB)
+	ctx := context.Background()
+
+	createTestCampaign(t, db, "camp-dh", "DH Fields Test")
+
+	t.Run("success", func(t *testing.T) {
+		p := newTestPurchase("camp-dh", "DH000001")
+		require.NoError(t, repo.CreatePurchase(ctx, p))
+
+		update := campaigns.DHFieldsUpdate{
+			CardID:            12345,
+			InventoryID:       67890,
+			CertStatus:        "matched",
+			ListingPriceCents: 95000,
+			ChannelsJSON:      `["ebay","tcgplayer"]`,
+			DHStatus:          campaigns.DHStatusListed,
+		}
+		err := repo.UpdatePurchaseDHFields(ctx, p.ID, update)
+		require.NoError(t, err)
+
+		got, err := repo.GetPurchase(ctx, p.ID)
+		require.NoError(t, err)
+		assert.Equal(t, 12345, got.DHCardID)
+		assert.Equal(t, 67890, got.DHInventoryID)
+		assert.Equal(t, "matched", got.DHCertStatus)
+		assert.Equal(t, 95000, got.DHListingPriceCents)
+		assert.Equal(t, `["ebay","tcgplayer"]`, got.DHChannelsJSON)
+		assert.Equal(t, campaigns.DHStatusListed, got.DHStatus)
+	})
+
+	t.Run("overwrite existing fields", func(t *testing.T) {
+		p := newTestPurchase("camp-dh", "DH000002")
+		require.NoError(t, repo.CreatePurchase(ctx, p))
+
+		// First update
+		err := repo.UpdatePurchaseDHFields(ctx, p.ID, campaigns.DHFieldsUpdate{
+			CardID: 111, InventoryID: 222, CertStatus: "pending",
+			ListingPriceCents: 50000, DHStatus: campaigns.DHStatusInStock,
+		})
+		require.NoError(t, err)
+
+		// Second update overwrites
+		err = repo.UpdatePurchaseDHFields(ctx, p.ID, campaigns.DHFieldsUpdate{
+			CardID: 333, InventoryID: 444, CertStatus: "matched",
+			ListingPriceCents: 75000, ChannelsJSON: `["ebay"]`, DHStatus: campaigns.DHStatusListed,
+		})
+		require.NoError(t, err)
+
+		got, err := repo.GetPurchase(ctx, p.ID)
+		require.NoError(t, err)
+		assert.Equal(t, 333, got.DHCardID)
+		assert.Equal(t, 444, got.DHInventoryID)
+		assert.Equal(t, "matched", got.DHCertStatus)
+		assert.Equal(t, 75000, got.DHListingPriceCents)
+		assert.Equal(t, `["ebay"]`, got.DHChannelsJSON)
+		assert.Equal(t, campaigns.DHStatusListed, got.DHStatus)
+	})
+
+	t.Run("not found", func(t *testing.T) {
+		err := repo.UpdatePurchaseDHFields(ctx, "nonexistent", campaigns.DHFieldsUpdate{CardID: 1})
+		assert.ErrorIs(t, err, campaigns.ErrPurchaseNotFound)
+	})
+}
+
+func TestGetPurchasesByDHCertStatus(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewCampaignsRepository(db.DB)
+	ctx := context.Background()
+
+	createTestCampaign(t, db, "camp-dhcert", "DH Cert Status Test")
+
+	// Create purchases with different cert statuses
+	certStatuses := []struct {
+		cert, status string
+	}{
+		{"DC000001", "pending"},
+		{"DC000002", "pending"},
+		{"DC000003", "matched"},
+		{"DC000004", "ambiguous"},
+		{"DC000005", "pending"},
+	}
+	for _, cs := range certStatuses {
+		p := newTestPurchase("camp-dhcert", cs.cert)
+		require.NoError(t, repo.CreatePurchase(ctx, p))
+		err := repo.UpdatePurchaseDHFields(ctx, p.ID, campaigns.DHFieldsUpdate{CertStatus: cs.status})
+		require.NoError(t, err)
+	}
+
+	tests := []struct {
+		name          string
+		status        string
+		limit         int
+		expectedCount int
+		checkStatus   bool
+	}{
+		{"pending returns 3", "pending", 100, 3, false},
+		{"matched returns 1", "matched", 100, 1, true},
+		{"ambiguous returns 1", "ambiguous", 100, 1, false},
+		{"respects limit", "pending", 2, 2, false},
+		{"no matches returns empty", "nonexistent_status", 100, 0, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			results, err := repo.GetPurchasesByDHCertStatus(ctx, tt.status, tt.limit)
+			require.NoError(t, err)
+			assert.Len(t, results, tt.expectedCount)
+			if tt.checkStatus && len(results) > 0 {
+				assert.Equal(t, tt.status, results[0].DHCertStatus)
+			}
+		})
+	}
+}
+
+func TestUpdatePurchaseCardYear(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewCampaignsRepository(db.DB)
+	ctx := context.Background()
+
+	createTestCampaign(t, db, "camp-yr", "Card Year Test")
+
+	t.Run("success", func(t *testing.T) {
+		p := newTestPurchase("camp-yr", "YR000001")
+		require.NoError(t, repo.CreatePurchase(ctx, p))
+
+		err := repo.UpdatePurchaseCardYear(ctx, p.ID, "1999")
+		require.NoError(t, err)
+
+		got, err := repo.GetPurchase(ctx, p.ID)
+		require.NoError(t, err)
+		assert.Equal(t, "1999", got.CardYear)
+	})
+
+	t.Run("not found", func(t *testing.T) {
+		err := repo.UpdatePurchaseCardYear(ctx, "nonexistent", "2000")
+		assert.ErrorIs(t, err, campaigns.ErrPurchaseNotFound)
+	})
+}
+
+func TestUpdatePurchaseDHPushStatus(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewCampaignsRepository(db.DB)
+	ctx := context.Background()
+
+	createTestCampaign(t, db, "camp-push", "DH Push Status Test")
+
+	t.Run("success", func(t *testing.T) {
+		p := newTestPurchase("camp-push", "PS000001")
+		require.NoError(t, repo.CreatePurchase(ctx, p))
+
+		err := repo.UpdatePurchaseDHPushStatus(ctx, p.ID, campaigns.DHPushStatusPending)
+		require.NoError(t, err)
+
+		got, err := repo.GetPurchase(ctx, p.ID)
+		require.NoError(t, err)
+		assert.Equal(t, campaigns.DHPushStatusPending, got.DHPushStatus)
+	})
+
+	t.Run("not found", func(t *testing.T) {
+		err := repo.UpdatePurchaseDHPushStatus(ctx, "nonexistent", campaigns.DHPushStatusPending)
+		assert.ErrorIs(t, err, campaigns.ErrPurchaseNotFound)
+	})
+}
+
+func TestUpdatePurchaseDHCandidates(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewCampaignsRepository(db.DB)
+	ctx := context.Background()
+
+	createTestCampaign(t, db, "camp-cand", "DH Candidates Test")
+
+	t.Run("success", func(t *testing.T) {
+		p := newTestPurchase("camp-cand", "CD000001")
+		require.NoError(t, repo.CreatePurchase(ctx, p))
+
+		candidates := `[{"id":1,"name":"Charizard"},{"id":2,"name":"Charizard Holo"}]`
+		err := repo.UpdatePurchaseDHCandidates(ctx, p.ID, candidates)
+		require.NoError(t, err)
+
+		got, err := repo.GetPurchase(ctx, p.ID)
+		require.NoError(t, err)
+		assert.Equal(t, candidates, got.DHCandidatesJSON)
+	})
+
+	t.Run("not found", func(t *testing.T) {
+		err := repo.UpdatePurchaseDHCandidates(ctx, "nonexistent", "[]")
+		assert.ErrorIs(t, err, campaigns.ErrPurchaseNotFound)
+	})
+}
+
+func TestGetPurchasesByDHPushStatus(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewCampaignsRepository(db.DB)
+	ctx := context.Background()
+
+	createTestCampaign(t, db, "camp-pushq", "DH Push Query Test")
+
+	// Create purchases with different push statuses
+	certs := []string{"PQ000001", "PQ000002", "PQ000003"}
+	for _, cert := range certs {
+		p := newTestPurchase("camp-pushq", cert)
+		require.NoError(t, repo.CreatePurchase(ctx, p))
+	}
+	require.NoError(t, repo.UpdatePurchaseDHPushStatus(ctx, "purch-PQ000001", campaigns.DHPushStatusPending))
+	require.NoError(t, repo.UpdatePurchaseDHPushStatus(ctx, "purch-PQ000002", campaigns.DHPushStatusPending))
+	require.NoError(t, repo.UpdatePurchaseDHPushStatus(ctx, "purch-PQ000003", campaigns.DHPushStatusMatched))
+
+	t.Run("filters by push status", func(t *testing.T) {
+		pending, err := repo.GetPurchasesByDHPushStatus(ctx, campaigns.DHPushStatusPending, 100)
+		require.NoError(t, err)
+		assert.Len(t, pending, 2)
+
+		matched, err := repo.GetPurchasesByDHPushStatus(ctx, campaigns.DHPushStatusMatched, 100)
+		require.NoError(t, err)
+		assert.Len(t, matched, 1)
+	})
+
+	t.Run("respects limit", func(t *testing.T) {
+		pending, err := repo.GetPurchasesByDHPushStatus(ctx, campaigns.DHPushStatusPending, 1)
+		require.NoError(t, err)
+		assert.Len(t, pending, 1)
+	})
+
+	t.Run("no matches returns empty", func(t *testing.T) {
+		result, err := repo.GetPurchasesByDHPushStatus(ctx, campaigns.DHPushStatusManual, 100)
+		require.NoError(t, err)
+		assert.Empty(t, result)
 	})
 }
