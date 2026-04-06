@@ -57,6 +57,15 @@ export interface Purchase {
   reviewedPriceCents?: number;
   reviewedAt?: string;
   reviewSource?: string;
+  snapshotRetryCount?: number;
+  dhCardId?: number;
+  dhInventoryId?: number;
+  dhCertStatus?: string;
+  dhListingPriceCents?: number;
+  dhChannelsJson?: string;
+  dhStatus?: string;
+  dhPushStatus?: string;
+  dhCandidatesJson?: string;
   createdAt: string;
   updatedAt: string;
   // Market snapshot at time of purchase
@@ -96,6 +105,7 @@ export interface Sale {
   daysListed?: number;
   soldAtAskingPrice?: boolean;
   wasCracked?: boolean;
+  orderId?: string;
 }
 
 export interface CreateCampaignInput {

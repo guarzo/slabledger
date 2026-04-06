@@ -584,20 +584,8 @@ CREATE TABLE instagram_config (
     updated_at DATETIME
 );
 
--- Engagement metrics time series
-CREATE TABLE instagram_post_metrics (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    post_id TEXT REFERENCES social_posts(id),
-    impressions INTEGER,
-    reach INTEGER,
-    likes INTEGER,
-    comments INTEGER,
-    saves INTEGER,
-    shares INTEGER,
-    polled_at DATETIME
-);
-CREATE INDEX idx_post_metrics_post_id ON instagram_post_metrics(post_id);
-CREATE INDEX idx_post_metrics_post_id_polled_at ON instagram_post_metrics(post_id, polled_at);
+-- Engagement metrics time series (see SCHEMA.md for current definition)
+-- Table: instagram_post_metrics
 ```
 
 ---
