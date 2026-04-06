@@ -14,7 +14,6 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	"github.com/guarzo/slabledger/internal/adapters/clients/dhprice"
 	igclient "github.com/guarzo/slabledger/internal/adapters/clients/instagram"
-	"github.com/guarzo/slabledger/internal/adapters/clients/justtcg"
 	"github.com/guarzo/slabledger/internal/adapters/clients/pricelookup"
 	"github.com/guarzo/slabledger/internal/adapters/clients/psa"
 	"github.com/guarzo/slabledger/internal/adapters/clients/tcgdex"
@@ -316,7 +315,6 @@ type schedulerDeps struct {
 	CardLadderClient     *cardladder.Client
 	CardLadderStore      *sqlite.CardLadderStore
 	CardLadderSalesStore *sqlite.CLSalesStore
-	JustTCGClient        *justtcg.Client
 	DHClient             *dh.Client
 	DHIntelligenceRepo   *sqlite.MarketIntelligenceRepository
 	DHSuggestionsRepo    *sqlite.DHSuggestionsRepository
@@ -337,9 +335,6 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 		AuthService:              deps.AuthService,
 		Logger:                   deps.Logger,
 		SyncStateStore:           deps.SyncStateRepo,
-		CardIDMappingLister:      &cardIDMappingListAdapter{repo: deps.CardIDMappingRepo},
-		CardIDMappingSaver:       deps.CardIDMappingRepo,
-		CampaignCardLister:       &campaignCardListAdapter{repo: deps.CampaignsRepo},
 		NewSetsProvider:          deps.CardProvImpl.RegistryManager(),
 		InventoryLister:          &inventoryListAdapter{repo: deps.CampaignsRepo},
 		SnapshotRefresher:        &snapshotRefreshAdapter{svc: deps.CampaignsService},
@@ -362,12 +357,7 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 		CardLadderCLRecorder:     deps.CampaignsRepo,
 		CardLadderSalesStore:     deps.CardLadderSalesStore,
 	}
-	// Nil-safe interface conversion: a nil *justtcg.Client assigned to an interface
-	// produces a non-nil interface wrapping a nil pointer, which breaks nil checks.
-	if deps.JustTCGClient != nil {
-		buildDeps.JustTCGClient = deps.JustTCGClient
-	}
-	// Same nil-safety for DH dependencies.
+	// Nil-safe interface conversion for DH dependencies.
 	if deps.DHClient != nil {
 		buildDeps.DHClient = deps.DHClient
 		buildDeps.DHOrdersClient = deps.DHClient

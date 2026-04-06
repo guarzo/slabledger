@@ -33,11 +33,6 @@ type BuildDeps struct {
 	// Sync state (shared by DH schedulers)
 	SyncStateStore SyncStateStore
 
-	// Card ID mapping (shared by JustTCG scheduler)
-	CardIDMappingLister CardIDMappingLister
-	CardIDMappingSaver  CardIDMappingSaver
-	CampaignCardLister  CampaignCardLister
-
 	// Cache warmup dependencies (optional)
 	NewSetsProvider NewSetIDsProvider
 
@@ -68,9 +63,6 @@ type BuildDeps struct {
 
 	// Picks generation dependencies (optional)
 	PicksGenerator PicksGenerator
-
-	// JustTCG dependencies (optional)
-	JustTCGClient JustTCGClient
 
 	// DH dependencies (optional)
 	DHClient           *dh.Client
@@ -253,27 +245,6 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 			deps.Logger, cfg.CardLadder,
 		)
 		schedulers = append(schedulers, clRefresh)
-	}
-
-	// JustTCG NM price refresh scheduler (if client is available)
-	if deps.JustTCGClient != nil && deps.JustTCGClient.Available() && deps.CardIDMappingLister != nil {
-		jtcgConfig := JustTCGRefreshConfig{
-			Enabled:      cfg.JustTCG.Enabled,
-			RunInterval:  cfg.JustTCG.RunInterval,
-			DailyBudget:  cfg.JustTCG.DailyBudget,
-			RateInterval: cfg.JustTCG.RateInterval,
-		}
-		var jtcgOpts []JustTCGRefreshOption
-		if deps.APITracker != nil {
-			jtcgOpts = append(jtcgOpts, WithJustTCGAPITracker(deps.APITracker))
-		}
-		jtcgScheduler := NewJustTCGRefreshScheduler(
-			deps.JustTCGClient, deps.PriceRepo,
-			deps.CardIDMappingLister, deps.CardIDMappingSaver,
-			deps.CampaignCardLister,
-			deps.Logger, jtcgConfig, jtcgOpts...,
-		)
-		schedulers = append(schedulers, jtcgScheduler)
 	}
 
 	// DH intelligence refresh scheduler (if client + repo are provided)

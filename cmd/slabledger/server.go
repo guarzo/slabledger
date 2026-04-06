@@ -72,25 +72,6 @@ type EnvVarValidation struct {
 func validateEnvironmentVariables(ctx context.Context, logger observability.Logger, cfg *config.Config) EnvVarValidation {
 	result := EnvVarValidation{}
 
-	// Check required adapter keys via config struct
-	type requiredCheck struct {
-		name        string
-		value       string
-		description string
-	}
-	requiredVars := []requiredCheck{
-		{"PRICECHARTING_TOKEN", cfg.Adapters.PriceChartingToken, "Required for graded card pricing data. Get your API token from pricecharting.com"},
-	}
-
-	for _, rv := range requiredVars {
-		if rv.value == "" {
-			result.MissingRequired = append(result.MissingRequired, rv.name)
-			logger.Error(ctx, "Missing required configuration",
-				observability.String("variable", rv.name),
-				observability.String("description", rv.description))
-		}
-	}
-
 	// Check optional adapter keys via config struct
 	type optionalCheck struct {
 		name        string

@@ -1,5 +1,4 @@
-// Pipeline integration tests: normalization audit, multi-source fusion,
-// and end-to-end import-to-pricing.
+// Pipeline integration tests: normalization audit.
 //
 // Run with: go test -tags integration ./internal/integration/ -run TestNormalization -v
 //
@@ -12,38 +11,20 @@ import (
 	"testing"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardutil"
-	"github.com/guarzo/slabledger/internal/adapters/clients/pricecharting"
 
 	_ "github.com/joho/godotenv/autoload"
 )
 
-// TestNormalizationAudit verifies what each pricing source sees after
-// normalization — no API calls required. Logs normalized forms side by side for
-// manual review.
+// TestNormalizationAudit verifies what the DH pricing source sees after
+// normalization — no API calls required. Logs normalized forms for manual review.
 func TestNormalizationAudit(t *testing.T) {
 	for _, card := range uniqueInventory() {
 		t.Run(card.CertNumber+"_"+card.CardName, func(t *testing.T) {
-			// --- PriceCharting normalization ---
-			pcQuery := pricecharting.ExportBuildQuery(card.SetName, card.CardName, card.CardNumber)
-			t.Logf("PC query: %s", pcQuery)
-
-			if !strings.Contains(strings.ToLower(pcQuery), "pokemon") {
-				t.Errorf("PC query missing 'pokemon': %s", pcQuery)
-			}
-			if strings.Contains(strings.ToUpper(pcQuery), "JAPANESE") {
-				t.Logf("  NOTE: PC query contains JAPANESE (PriceCharting normalizeSetName does not strip it)")
-			}
-			for _, code := range []string{"PRE EN", "M24 EN", "MEW EN", "SVP EN"} {
-				if strings.Contains(strings.ToUpper(pcQuery), code) {
-					t.Logf("  NOTE: PC query contains PSA code %q", code)
-				}
-			}
-
-			// --- Secondary source normalization ---
+			// --- DH / card-match normalization ---
 			ppName := cardutil.NormalizePurchaseName(card.CardName)
 			ppName = cardutil.StripVariantSuffix(ppName)
 			ppSet := cardutil.NormalizeSetNameForSearch(card.SetName)
-			t.Logf("Secondary: name=%q set=%q", ppName, ppSet)
+			t.Logf("DH: name=%q set=%q", ppName, ppSet)
 
 			if strings.Contains(ppName, "-HOLO") || strings.Contains(ppName, "-REV.FOIL") {
 				t.Errorf("name has unexpanded abbreviation: %s", ppName)
@@ -63,10 +44,6 @@ func TestNormalizationAudit(t *testing.T) {
 			if !selfMatch {
 				t.Errorf("MatchesSetOverlap self-match failed for %q", card.SetName)
 			}
-
-			// --- Cross-source comparison ---
-			t.Logf("  Summary: PC=%q | secondary=%q/%q | set=%q",
-				pcQuery, ppName, ppSet, card.SetName)
 		})
 	}
 }

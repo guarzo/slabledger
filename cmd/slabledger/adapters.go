@@ -48,45 +48,6 @@ func (a *snapshotRefreshAdapter) RefreshSnapshot(ctx context.Context, p schedule
 	}, p.GradeValue, p.CLValueCents)
 }
 
-// campaignCardListAdapter adapts sqlite.CampaignsRepository to the scheduler.CampaignCardLister interface.
-type campaignCardListAdapter struct {
-	repo *sqlite.CampaignsRepository
-}
-
-func (a *campaignCardListAdapter) ListUnsoldCards(ctx context.Context) ([]scheduler.UnsoldCard, error) {
-	infos, err := a.repo.ListUnsoldCards(ctx)
-	if err != nil {
-		return nil, err
-	}
-	result := make([]scheduler.UnsoldCard, len(infos))
-	for i, info := range infos {
-		result[i] = scheduler.UnsoldCard{CardName: info.CardName, SetName: info.SetName, CardNumber: info.CardNumber}
-	}
-	return result, nil
-}
-
-// cardIDMappingListAdapter adapts sqlite.CardIDMappingRepository to the scheduler.CardIDMappingLister interface.
-type cardIDMappingListAdapter struct {
-	repo *sqlite.CardIDMappingRepository
-}
-
-func (a *cardIDMappingListAdapter) ListByProvider(ctx context.Context, provider string) ([]scheduler.CardIDMapping, error) {
-	mappings, err := a.repo.ListByProvider(ctx, provider)
-	if err != nil {
-		return nil, err
-	}
-	result := make([]scheduler.CardIDMapping, len(mappings))
-	for i, m := range mappings {
-		result[i] = scheduler.CardIDMapping{
-			CardName:        m.CardName,
-			SetName:         m.SetName,
-			CollectorNumber: m.CollectorNumber,
-			ExternalID:      m.ExternalID,
-		}
-	}
-	return result, nil
-}
-
 // --- PSA image backfill adapters ---
 
 type psaImageListerAdapter struct {

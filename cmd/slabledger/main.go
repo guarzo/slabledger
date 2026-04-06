@@ -19,7 +19,6 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/advisortool"
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	"github.com/guarzo/slabledger/internal/adapters/clients/google"
-	"github.com/guarzo/slabledger/internal/adapters/clients/justtcg"
 	"github.com/guarzo/slabledger/internal/adapters/clients/psa"
 	"github.com/guarzo/slabledger/internal/adapters/clients/tcgdex"
 	"github.com/guarzo/slabledger/internal/adapters/httpserver/handlers"
@@ -342,15 +341,6 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	// Create sell sheet items handler (always available when auth is configured)
 	sellSheetItemsHandler := handlers.NewSellSheetItemsHandler(campaignsRepo, logger)
 
-	// Initialize JustTCG client (optional — raw NM price refresh)
-	var justTCGClient *justtcg.Client
-	if cfg.Adapters.JustTCGKey != "" {
-		justTCGClient = justtcg.NewClient(cfg.Adapters.JustTCGKey, justtcg.WithLogger(logger))
-		logger.Info(ctx, "JustTCG client initialized",
-			observability.Bool("scheduler_enabled", cfg.JustTCG.Enabled),
-			observability.Int("daily_budget", cfg.JustTCG.DailyBudget))
-	}
-
 	schedulerResult, cancelScheduler := initializeSchedulers(ctx, schedulerDeps{
 		Config:               cfg,
 		Logger:               logger,
@@ -374,7 +364,6 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		CardLadderClient:     clClient,
 		CardLadderStore:      clStore,
 		CardLadderSalesStore: clSalesStore,
-		JustTCGClient:        justTCGClient,
 		DHClient:             dhClient,
 		DHIntelligenceRepo:   intelRepo,
 		DHSuggestionsRepo:    suggestionsRepo,
