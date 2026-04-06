@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"sort"
@@ -12,6 +13,9 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/ai"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
+
+// ErrResponseIncomplete indicates the SSE stream ended without a response.completed event.
+var ErrResponseIncomplete = errors.New("SSE stream ended without response.completed")
 
 // responsesAPIVersion is the minimum API version supporting the Responses API.
 const responsesAPIVersion = "2025-04-01-preview"
@@ -354,7 +358,7 @@ func (c *Client) parseResponsesSSEStream(ctx context.Context, body io.Reader, st
 	// disconnect, server timeout, or other interruption. Return an error
 	// so the caller knows the response is incomplete.
 	c.logWarn(ctx, "SSE stream ended without response.completed", fmt.Sprintf("pending_tool_calls=%d", len(toolCalls)), nil)
-	return result, fmt.Errorf("SSE stream ended without response.completed (possible network interruption)")
+	return result, fmt.Errorf("%w (possible network interruption)", ErrResponseIncomplete)
 }
 
 // ensureProperties ensures all "object" schemas in a tool's parameters have
