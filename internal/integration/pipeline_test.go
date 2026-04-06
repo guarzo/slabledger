@@ -8,19 +8,11 @@
 package integration
 
 import (
-	"context"
-	"fmt"
-	"os"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardutil"
-	"github.com/guarzo/slabledger/internal/adapters/clients/fusionprice"
 	"github.com/guarzo/slabledger/internal/adapters/clients/pricecharting"
-	"github.com/guarzo/slabledger/internal/adapters/clients/tcgdex"
-	domainCards "github.com/guarzo/slabledger/internal/domain/cards"
-	"github.com/guarzo/slabledger/internal/domain/observability"
 
 	_ "github.com/joho/godotenv/autoload"
 )
@@ -79,139 +71,3 @@ func TestNormalizationAudit(t *testing.T) {
 	}
 }
 
-// TestFullMultiSourceFusion exercises available price sources through the
-// fusion engine. Requires PRICECHARTING_TOKEN.
-func TestFullMultiSourceFusion(t *testing.T) {
-	token := os.Getenv("PRICECHARTING_TOKEN")
-	if token == "" {
-		t.Skip("PRICECHARTING_TOKEN not set")
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	defer cancel()
-
-	logger := observability.NewNoopLogger()
-	appCache := newTestCache(t)
-
-	// Primary source: PriceCharting
-	pcCfg := pricecharting.DefaultConfig(token)
-	pcCfg.RateLimitInterval = 3 * time.Second
-	pc, err := pricecharting.NewPriceCharting(pcCfg, appCache, logger)
-	if err != nil {
-		t.Fatalf("PriceCharting init: %v", err)
-	}
-	defer pc.Close()
-
-	// Card provider for cross-validation
-	cardProv := tcgdex.NewTCGdex(appCache, logger)
-
-	fusionProv := fusionprice.NewFusionProviderWithRepo(
-		pc,
-		nil, // no secondary sources
-		appCache,
-		nil, // no price repo
-		nil, // no API tracker
-		nil, // no access tracker
-		logger,
-		0, 0, 0, 0,
-		fusionprice.WithCardProvider(cardProv),
-	)
-
-	passed, failed, noPrice := 0, 0, 0
-
-	for _, card := range pricedInventory() {
-		t.Run(card.CertNumber+"_"+card.CardName, func(t *testing.T) {
-			c := domainCards.Card{
-				Name:    card.CardName,
-				Number:  card.CardNumber,
-				SetName: card.SetName,
-			}
-
-			price, err := fusionProv.LookupCard(ctx, card.SetName, c)
-			if err != nil {
-				t.Errorf("LookupCard FAILED: %v", err)
-				failed++
-				return
-			}
-			if price == nil {
-				t.Errorf("NO PRICE for $%.2f card", card.PricePaid)
-				noPrice++
-				return
-			}
-
-			// Get grade-appropriate price (use testGradePrice for half-grade interpolation)
-			priceCents, gradeLabel := testGradePrice(price.Grades, card.Grade)
-			priceUSD := float64(priceCents) / 100.0
-
-			t.Logf("  Product: %s | %s=$%.2f | Sources: %v | Confidence: %.2f",
-				price.ProductName, gradeLabel, priceUSD, price.Sources, price.Confidence)
-
-			if priceCents == 0 {
-				// Check if a higher grade has data (grade fallback handles downstream)
-				if price.Grades.PSA9Cents > 0 || price.Grades.PSA10Cents > 0 {
-					t.Logf("  %s=$0 but higher grade available — grade fallback will handle", gradeLabel)
-					passed++
-					return
-				}
-				t.Errorf("zero price for %s with no fallback grades", gradeLabel)
-				noPrice++
-				return
-			}
-
-			// Sanity check: price/buy ratio in [0.1, 5.0]
-			ratio := priceUSD / card.PricePaid
-			if ratio < 0.1 || ratio > 5.0 {
-				t.Errorf("PRICE ANOMALY: %s=$%.2f vs buy=$%.2f (ratio=%.2f)",
-					gradeLabel, priceUSD, card.PricePaid, ratio)
-				failed++
-				return
-			}
-
-			passed++
-			t.Logf("  PASS: %s=$%.2f (buy=$%.2f, ratio=%.2f)", gradeLabel, priceUSD, card.PricePaid, ratio)
-		})
-	}
-
-	total := len(pricedInventory())
-	fmt.Printf("\n=== MULTI-SOURCE FUSION: Passed=%d Failed=%d NoPrice=%d Total=%d ===\n",
-		passed, failed, noPrice, total)
-}
-
-// TestImportToFullPricing validates the complete import pipeline:
-// raw PSA title → parsed metadata → all-source fusion pricing.
-// Requires PRICECHARTING_TOKEN.
-// Uses the shared runImportPricingCheck helper from import_pricing_test.go.
-func TestImportToFullPricing(t *testing.T) {
-	token := os.Getenv("PRICECHARTING_TOKEN")
-	if token == "" {
-		t.Skip("PRICECHARTING_TOKEN not set")
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	defer cancel()
-
-	logger := observability.NewNoopLogger()
-	appCache := newTestCache(t)
-
-	pcCfg := pricecharting.DefaultConfig(token)
-	pcCfg.RateLimitInterval = 3 * time.Second
-	pc, err := pricecharting.NewPriceCharting(pcCfg, appCache, logger)
-	if err != nil {
-		t.Fatalf("PriceCharting init: %v", err)
-	}
-	defer pc.Close()
-
-	cardProv := tcgdex.NewTCGdex(appCache, logger)
-
-	fusionProv := fusionprice.NewFusionProviderWithRepo(
-		pc, nil, appCache, nil, nil, nil, logger,
-		0, 0, 0, 0,
-		fusionprice.WithCardProvider(cardProv),
-	)
-
-	entries := fullInventory()
-	passed, failed, noPrice, skipped := runImportPricingCheck(ctx, t, fusionProv, entries)
-
-	fmt.Printf("\n=== IMPORT-TO-PRICING: Passed=%d Failed=%d NoPrice=%d Skipped=%d Total=%d ===\n",
-		passed, failed, noPrice, skipped, len(entries))
-}

@@ -12,7 +12,6 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/clients/httpx"
 	domainCards "github.com/guarzo/slabledger/internal/domain/cards"
 	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
-	"github.com/guarzo/slabledger/internal/domain/fusion"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/domain/pricing"
 	"github.com/guarzo/slabledger/internal/platform/cache"
@@ -66,11 +65,11 @@ type PriceCharting struct {
 	upcDatabase    *UPCDatabase
 	httpClient     *httpx.Client // Unified HTTP client (includes retry + circuit breaker)
 	logger         observability.Logger
-	hintResolver   fusion.PriceHintResolver
+	hintResolver   pricing.PriceHintResolver
 }
 
 // WithHintResolver sets a PriceHintResolver for user-provided price hints.
-func WithHintResolver(r fusion.PriceHintResolver) func(*PriceCharting) {
+func WithHintResolver(r pricing.PriceHintResolver) func(*PriceCharting) {
 	return func(pc *PriceCharting) {
 		pc.hintResolver = r
 	}

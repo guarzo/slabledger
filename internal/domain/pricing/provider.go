@@ -198,6 +198,24 @@ type SalesVelocity struct {
 	MonthlyTotal  int
 }
 
+// HintMapping represents a user-provided price hint mapping.
+type HintMapping struct {
+	CardName        string
+	SetName         string
+	CollectorNumber string
+	Provider        string
+	ExternalID      string
+}
+
+// PriceHintResolver manages user-provided price hints that override automatic
+// external ID resolution. Manual hints are never overwritten by auto-discovery.
+type PriceHintResolver interface {
+	GetHint(ctx context.Context, cardName, setName, collectorNumber, provider string) (string, error)
+	SaveHint(ctx context.Context, cardName, setName, collectorNumber, provider, externalID string) error
+	DeleteHint(ctx context.Context, cardName, setName, collectorNumber, provider string) error
+	ListHints(ctx context.Context) ([]HintMapping, error)
+}
+
 // Source identifies where a price came from
 type Source string
 

@@ -66,12 +66,6 @@ func (s *PriceRefreshScheduler) Start(ctx context.Context) {
 	}, s.refreshBatch)
 }
 
-// sourceStats tracks success/failure counts per source
-type sourceStats struct {
-	success int
-	failure int
-}
-
 // refreshBatch processes one batch of stale prices
 func (s *PriceRefreshScheduler) refreshBatch(ctx context.Context) {
 	start := time.Now()
@@ -101,14 +95,6 @@ func (s *PriceRefreshScheduler) refreshBatch(ctx context.Context) {
 	successCount := 0
 	errorCount := 0
 	skippedCount := 0
-
-	// Track outcome quality categories
-	fullFusionCount := 0 // 2+ secondary sources succeeded
-	partialCount := 0    // exactly 1 secondary source succeeded
-	pcOnlyCount := 0     // PriceCharting only (secondary sources all failed or not attempted)
-
-	// Track per-source statistics across all cards
-	sourceStatsMap := make(map[string]*sourceStats)
 
 	for provider, prices := range byProvider {
 		// Check if provider is blocked
@@ -226,7 +212,7 @@ func (s *PriceRefreshScheduler) refreshBatch(ctx context.Context) {
 				PSAListingTitle: price.PSAListingTitle,
 			}
 
-			priceResult, err := s.priceProvider.GetPrice(ctx, card)
+			_, err := s.priceProvider.GetPrice(ctx, card)
 			apiCalls++
 			if err != nil {
 				s.logger.Warn(ctx, "failed to refresh price",
@@ -252,42 +238,11 @@ func (s *PriceRefreshScheduler) refreshBatch(ctx context.Context) {
 				}
 			}
 
-			// Track per-source statistics and classify outcome quality from fusion metadata
-			secondaryOK := 0
-			if priceResult != nil && priceResult.FusionMetadata != nil {
-				for _, sr := range priceResult.FusionMetadata.SourceResults {
-					if sourceStatsMap[sr.Source] == nil {
-						sourceStatsMap[sr.Source] = &sourceStats{}
-					}
-					if sr.Success {
-						sourceStatsMap[sr.Source].success++
-						if sr.Source != pricing.SourcePriceCharting {
-							secondaryOK++
-						}
-					} else {
-						sourceStatsMap[sr.Source].failure++
-					}
-				}
-			}
-
-			// Price is automatically persisted by fusion provider
-			// FusionProvider's CardSyncCollector emits per-card summary
 			successCount++
-			switch {
-			case secondaryOK >= 2:
-				fullFusionCount++
-			case secondaryOK == 1:
-				partialCount++
-			default:
-				pcOnlyCount++
-			}
 		}
 	}
 
 	duration := time.Since(start)
-
-	// Log per-source success rates
-	s.logSourceStats(ctx, sourceStatsMap)
 
 	// Log API daily usage summaries
 	s.logAPIUsageSummary(ctx)
@@ -301,9 +256,6 @@ func (s *PriceRefreshScheduler) refreshBatch(ctx context.Context) {
 	s.logger.Info(ctx, "refresh batch completed",
 		observability.Int("total", len(stalePrices)),
 		observability.Int("success", successCount),
-		observability.Int("full_fusion", fullFusionCount),
-		observability.Int("partial", partialCount),
-		observability.Int("pc_only", pcOnlyCount),
 		observability.Int("errors", errorCount),
 		observability.Int("skipped", skippedCount),
 		observability.Int("consecutive_failures", s.consecutiveFailures),
@@ -318,30 +270,6 @@ func (s *PriceRefreshScheduler) groupByProvider(stalePrices []pricing.StalePrice
 		byProvider[price.Source] = append(byProvider[price.Source], price)
 	}
 	return byProvider
-}
-
-// logSourceStats logs the success/failure rates for each fusion source
-func (s *PriceRefreshScheduler) logSourceStats(ctx context.Context, stats map[string]*sourceStats) {
-	if len(stats) == 0 {
-		return
-	}
-
-	// Calculate and log stats for each source
-	for source, st := range stats {
-		total := st.success + st.failure
-		if total == 0 {
-			continue
-		}
-
-		successRate := float64(st.success) / float64(total) * 100.0
-
-		s.logger.Info(ctx, "fusion source stats",
-			observability.String("source", source),
-			observability.Int("success", st.success),
-			observability.Int("failure", st.failure),
-			observability.Int("total", total),
-			observability.Float64("success_rate_pct", successRate))
-	}
 }
 
 // logAPIUsageSummary logs daily API usage for each provider after a refresh cycle.
