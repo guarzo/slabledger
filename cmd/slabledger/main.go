@@ -305,12 +305,10 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	}
 	clClient, _, clStore := initializeCardLadder(ctx, logger, db, clEncryptor)
 	var clHandler *handlers.CardLadderHandler
-	var salesCompsHandler *handlers.SalesCompsHandler
 	var clSalesStore *sqlite.CLSalesStore
 	if clStore != nil {
 		clHandler = handlers.NewCardLadderHandler(clStore, clClient, logger)
 		clSalesStore = sqlite.NewCLSalesStore(db.DB)
-		salesCompsHandler = handlers.NewSalesCompsHandler(clSalesStore, clStore, campaignsService, logger)
 	}
 
 	// Initialize picks
@@ -476,7 +474,6 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		AIStatusHandler:           aiStatusHandler,
 		PriceFlagsHandler:         priceFlagsHandler,
 		CardLadderHandler:         clHandler,
-		SalesCompsHandler:         salesCompsHandler,
 		PicksHandler:              picksHandler,
 		OpportunitiesHandler:      opportunitiesHandler,
 		DHHandler:                 dhHandler,

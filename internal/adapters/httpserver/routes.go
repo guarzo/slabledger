@@ -180,11 +180,6 @@ func (rt *Router) registerCampaignRoutes(mux *http.ServeMux) {
 	mux.Handle("PATCH /api/purchases/{purchaseId}/review-price", authRoute(rt.campaignsHandler.HandleSetReviewedPrice))
 	mux.Handle("POST /api/purchases/{purchaseId}/flag", authRoute(rt.campaignsHandler.HandleCreatePriceFlag))
 
-	// Sales comps endpoint
-	if rt.salesCompsHandler != nil {
-		mux.Handle("GET /api/purchases/{id}/sales-comps", authRoute(rt.salesCompsHandler.HandleGetSalesComps))
-	}
-
 	// Credit & Invoice endpoints
 	mux.Handle("GET /api/credit/summary", authRoute(rt.campaignsHandler.HandleCapitalSummary))
 	mux.Handle("GET /api/credit/config", authRoute(rt.campaignsHandler.HandleGetCashflowConfig))
@@ -297,7 +292,6 @@ func (rt *Router) registerDHRoutes(mux *http.ServeMux) {
 	}
 	mux.Handle("POST /api/dh/match", rt.authMW.RequireAuth(http.HandlerFunc(rt.dhHandler.HandleBulkMatch)))
 	mux.Handle("GET /api/dh/unmatched", rt.authMW.RequireAuth(http.HandlerFunc(rt.dhHandler.HandleUnmatched)))
-	mux.Handle("GET /api/dh/export-unmatched", rt.authMW.RequireAuth(http.HandlerFunc(rt.dhHandler.HandleExportUnmatched)))
 	mux.Handle("GET /api/dh/intelligence", rt.authMW.RequireAuth(http.HandlerFunc(rt.dhHandler.HandleGetIntelligence)))
 	mux.Handle("GET /api/dh/suggestions", rt.authMW.RequireAuth(http.HandlerFunc(rt.dhHandler.HandleGetSuggestions)))
 	mux.Handle("GET /api/dh/suggestions/inventory-alerts", rt.authMW.RequireAuth(http.HandlerFunc(rt.dhHandler.HandleInventoryAlerts)))
