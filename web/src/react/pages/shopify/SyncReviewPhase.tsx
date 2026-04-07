@@ -8,7 +8,6 @@ interface SyncReviewPhaseProps {
   unmatchedCount: number;
   noCertCount: number;
   updatedCount: number;
-  totalMismatches: number;
   totalImpactCents: number;
   filterCounts: FilterCounts;
   // Toolbar props
@@ -30,7 +29,6 @@ export function SyncReviewPhase({
   unmatchedCount,
   noCertCount,
   updatedCount,
-  totalMismatches,
   totalImpactCents,
   filterCounts,
   filter,
@@ -50,7 +48,6 @@ export function SyncReviewPhase({
         unmatchedCount={unmatchedCount}
         noCertCount={noCertCount}
         updatedCount={updatedCount}
-        totalMismatches={totalMismatches}
         totalImpactCents={totalImpactCents}
         filterCounts={filterCounts}
       />

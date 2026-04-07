@@ -433,7 +433,6 @@ export default function ShopifySyncPage({ embedded = false }: { embedded?: boole
           unmatchedCount={unmatched.length}
           noCertCount={noCertCount}
           updatedCount={updatedCount}
-          totalMismatches={allMismatches.length}
           totalImpactCents={totalImpactCents}
           filterCounts={filterCounts}
           filter={filter}

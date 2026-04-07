@@ -6,7 +6,6 @@ interface SyncSummaryBarProps {
   unmatchedCount: number;
   noCertCount: number;
   updatedCount: number;
-  totalMismatches: number;
   totalImpactCents: number;
   filterCounts: FilterCounts;
 }

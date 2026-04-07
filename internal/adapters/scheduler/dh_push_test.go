@@ -86,32 +86,13 @@ func (m *mockDHPushCardIDSaver) GetMappedSet(ctx context.Context, provider strin
 	return make(map[string]string), nil
 }
 
-type mockDHFieldsUpdaterLocal struct {
-	UpdateFn func(ctx context.Context, id string, update campaigns.DHFieldsUpdate) error
-	Calls    []struct {
-		ID     string
-		Update campaigns.DHFieldsUpdate
-	}
-}
-
-func (m *mockDHFieldsUpdaterLocal) UpdatePurchaseDHFields(ctx context.Context, id string, update campaigns.DHFieldsUpdate) error {
-	m.Calls = append(m.Calls, struct {
-		ID     string
-		Update campaigns.DHFieldsUpdate
-	}{id, update})
-	if m.UpdateFn != nil {
-		return m.UpdateFn(ctx, id, update)
-	}
-	return nil
-}
-
 // newTestDHPushScheduler creates a DHPushScheduler with all defaults wired.
 func newTestDHPushScheduler(
 	lister *mockDHPushPendingLister,
 	statusUpdater *mockDHPushStatusUpdater,
 	certResolver *mockDHPushCertResolver,
 	pusher *mockDHPushInventoryPusher,
-	fieldsUpdater *mockDHFieldsUpdaterLocal,
+	fieldsUpdater *mocks.MockDHFieldsUpdater,
 	cardIDSaver *mockDHPushCardIDSaver,
 ) *DHPushScheduler {
 	return NewDHPushScheduler(
@@ -136,7 +117,7 @@ func TestDHPush_Disabled(t *testing.T) {
 		&mockDHPushStatusUpdater{},
 		&mockDHPushCertResolver{},
 		&mockDHPushInventoryPusher{},
-		&mockDHFieldsUpdaterLocal{},
+		&mocks.MockDHFieldsUpdater{},
 		&mockDHPushCardIDSaver{},
 		mocks.NewMockLogger(),
 		DHPushConfig{Enabled: false},
@@ -165,7 +146,7 @@ func TestDHPush_EmptyBatch(t *testing.T) {
 	statusUpdater := &mockDHPushStatusUpdater{}
 	certResolver := &mockDHPushCertResolver{}
 	pusher := &mockDHPushInventoryPusher{}
-	fieldsUpdater := &mockDHFieldsUpdaterLocal{}
+	fieldsUpdater := &mocks.MockDHFieldsUpdater{}
 	cardIDSaver := &mockDHPushCardIDSaver{}
 
 	s := newTestDHPushScheduler(lister, statusUpdater, certResolver, pusher, fieldsUpdater, cardIDSaver)
@@ -184,7 +165,7 @@ func TestDHPush_ListerError(t *testing.T) {
 	statusUpdater := &mockDHPushStatusUpdater{}
 	certResolver := &mockDHPushCertResolver{}
 	pusher := &mockDHPushInventoryPusher{}
-	fieldsUpdater := &mockDHFieldsUpdaterLocal{}
+	fieldsUpdater := &mocks.MockDHFieldsUpdater{}
 	cardIDSaver := &mockDHPushCardIDSaver{}
 
 	s := newTestDHPushScheduler(lister, statusUpdater, certResolver, pusher, fieldsUpdater, cardIDSaver)
@@ -209,7 +190,7 @@ func TestDHPush_NoCertNumber_MarksUnmatched(t *testing.T) {
 	statusUpdater := &mockDHPushStatusUpdater{}
 	certResolver := &mockDHPushCertResolver{}
 	pusher := &mockDHPushInventoryPusher{}
-	fieldsUpdater := &mockDHFieldsUpdaterLocal{}
+	fieldsUpdater := &mocks.MockDHFieldsUpdater{}
 	cardIDSaver := &mockDHPushCardIDSaver{}
 
 	s := newTestDHPushScheduler(lister, statusUpdater, certResolver, pusher, fieldsUpdater, cardIDSaver)
@@ -240,7 +221,7 @@ func TestDHPush_CertResolveError_LeavesAsPending(t *testing.T) {
 	}
 	statusUpdater := &mockDHPushStatusUpdater{}
 	pusher := &mockDHPushInventoryPusher{}
-	fieldsUpdater := &mockDHFieldsUpdaterLocal{}
+	fieldsUpdater := &mocks.MockDHFieldsUpdater{}
 	cardIDSaver := &mockDHPushCardIDSaver{}
 
 	s := newTestDHPushScheduler(lister, statusUpdater, certResolver, pusher, fieldsUpdater, cardIDSaver)
@@ -270,7 +251,7 @@ func TestDHPush_CertNotMatched_MarksUnmatched(t *testing.T) {
 	}
 	statusUpdater := &mockDHPushStatusUpdater{}
 	pusher := &mockDHPushInventoryPusher{}
-	fieldsUpdater := &mockDHFieldsUpdaterLocal{}
+	fieldsUpdater := &mocks.MockDHFieldsUpdater{}
 	cardIDSaver := &mockDHPushCardIDSaver{}
 
 	s := newTestDHPushScheduler(lister, statusUpdater, certResolver, pusher, fieldsUpdater, cardIDSaver)
@@ -303,7 +284,7 @@ func TestDHPush_InventoryPushError_LeavesAsPending(t *testing.T) {
 		},
 	}
 	statusUpdater := &mockDHPushStatusUpdater{}
-	fieldsUpdater := &mockDHFieldsUpdaterLocal{}
+	fieldsUpdater := &mocks.MockDHFieldsUpdater{}
 	cardIDSaver := &mockDHPushCardIDSaver{}
 
 	s := newTestDHPushScheduler(lister, statusUpdater, certResolver, pusher, fieldsUpdater, cardIDSaver)
@@ -349,18 +330,18 @@ func TestDHPush_SuccessPath_UpdatesFields(t *testing.T) {
 		},
 	}
 	statusUpdater := &mockDHPushStatusUpdater{}
-	fieldsUpdater := &mockDHFieldsUpdaterLocal{}
+	fieldsUpdater := &mocks.MockDHFieldsUpdater{}
 	cardIDSaver := &mockDHPushCardIDSaver{}
 
 	s := newTestDHPushScheduler(lister, statusUpdater, certResolver, pusher, fieldsUpdater, cardIDSaver)
 	s.push(context.Background())
 
 	require.Len(t, fieldsUpdater.Calls, 1)
-	assert.Equal(t, "pur-5", fieldsUpdater.Calls[0].ID)
-	assert.Equal(t, 777, fieldsUpdater.Calls[0].Update.CardID)
-	assert.Equal(t, 555, fieldsUpdater.Calls[0].Update.InventoryID)
-	assert.Equal(t, 9000, fieldsUpdater.Calls[0].Update.ListingPriceCents)
-	assert.Equal(t, dh.CertStatusMatched, fieldsUpdater.Calls[0].Update.CertStatus)
+	assert.Equal(t, "pur-5", fieldsUpdater.IDs[0])
+	assert.Equal(t, 777, fieldsUpdater.Calls[0].CardID)
+	assert.Equal(t, 555, fieldsUpdater.Calls[0].InventoryID)
+	assert.Equal(t, 9000, fieldsUpdater.Calls[0].ListingPriceCents)
+	assert.Equal(t, dh.CertStatusMatched, fieldsUpdater.Calls[0].CertStatus)
 
 	require.Len(t, statusUpdater.Calls, 1)
 	assert.Equal(t, "pur-5", statusUpdater.Calls[0].ID)
@@ -389,7 +370,7 @@ func TestDHPush_AlreadyMapped_SkipsCertResolve(t *testing.T) {
 	}
 	pusher := &mockDHPushInventoryPusher{}
 	statusUpdater := &mockDHPushStatusUpdater{}
-	fieldsUpdater := &mockDHFieldsUpdaterLocal{}
+	fieldsUpdater := &mocks.MockDHFieldsUpdater{}
 	key := campaigns.DHCardKey(purchase.CardName, purchase.SetName, purchase.CardNumber)
 	cardIDSaver := &mockDHPushCardIDSaver{
 		GetMappedFn: func(_ context.Context, _ string) (map[string]string, error) {
@@ -426,7 +407,7 @@ func TestDHPush_InventoryPushEmptyResults_LeavesAsPending(t *testing.T) {
 		},
 	}
 	statusUpdater := &mockDHPushStatusUpdater{}
-	fieldsUpdater := &mockDHFieldsUpdaterLocal{}
+	fieldsUpdater := &mocks.MockDHFieldsUpdater{}
 	cardIDSaver := &mockDHPushCardIDSaver{}
 
 	s := newTestDHPushScheduler(lister, statusUpdater, certResolver, pusher, fieldsUpdater, cardIDSaver)
@@ -463,7 +444,7 @@ func TestDHPush_InventoryPushFailedStatus_LeavesAsPending(t *testing.T) {
 		},
 	}
 	statusUpdater := &mockDHPushStatusUpdater{}
-	fieldsUpdater := &mockDHFieldsUpdaterLocal{}
+	fieldsUpdater := &mocks.MockDHFieldsUpdater{}
 	cardIDSaver := &mockDHPushCardIDSaver{}
 
 	s := newTestDHPushScheduler(lister, statusUpdater, certResolver, pusher, fieldsUpdater, cardIDSaver)
@@ -499,7 +480,7 @@ func TestDHPush_MultiplePurchases_AllProcessed(t *testing.T) {
 		},
 	}
 	statusUpdater := &mockDHPushStatusUpdater{}
-	fieldsUpdater := &mockDHFieldsUpdaterLocal{}
+	fieldsUpdater := &mocks.MockDHFieldsUpdater{}
 	cardIDSaver := &mockDHPushCardIDSaver{}
 
 	s := newTestDHPushScheduler(lister, statusUpdater, certResolver, pusher, fieldsUpdater, cardIDSaver)
@@ -529,4 +510,4 @@ var _ DHPushStatusUpdater = (*mockDHPushStatusUpdater)(nil)
 var _ DHPushCertResolver = (*mockDHPushCertResolver)(nil)
 var _ DHPushInventoryPusher = (*mockDHPushInventoryPusher)(nil)
 var _ DHPushCardIDSaver = (*mockDHPushCardIDSaver)(nil)
-var _ DHFieldsUpdater = (*mockDHFieldsUpdaterLocal)(nil)
+var _ DHFieldsUpdater = (*mocks.MockDHFieldsUpdater)(nil)
