@@ -45,10 +45,10 @@ export const saleChannelColors: Record<SaleChannel, string> = {
   doubleholo: 'bg-green-500',
 };
 
-export const phaseColors: Record<Phase, string> = {
-  pending: 'bg-amber-500',
-  active: 'bg-green-500',
-  closed: 'bg-gray-400',
+export const phaseHexColors: Record<Phase, string> = {
+  active: '#059669',
+  pending: '#f59e0b',
+  closed: '#4b5563',
 };
 
 export const campaignTabs = [

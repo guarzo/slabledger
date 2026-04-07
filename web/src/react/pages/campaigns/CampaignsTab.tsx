@@ -5,12 +5,19 @@ import { EmptyState, Button } from '../../ui';
 import CardShell from '../../ui/CardShell';
 import CampaignFormFields from '../../ui/CampaignFormFields';
 import type { UseFormReturn } from '../../hooks/useForm';
+import { phaseHexColors } from '../../utils/campaignConstants';
 
-const phaseColors: Record<Phase, string> = {
-  active: '#059669',
-  pending: '#f59e0b',
-  closed: '#4b5563',
-};
+function PhaseBadge({ phase }: { phase: Phase }) {
+  const color = phaseHexColors[phase];
+  return (
+    <span
+      className="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded-full tracking-wider"
+      style={{ background: `${color}20`, color, border: `1px solid ${color}40` }}
+    >
+      {phase}
+    </span>
+  );
+}
 
 function FilterSummary({ c }: { c: Campaign }) {
   const parts: string[] = [c.sport];
@@ -94,7 +101,7 @@ export default function CampaignsTab({
                 {/* Phase accent bar */}
                 <div
                   className="w-[3px] self-stretch rounded-full flex-shrink-0"
-                  style={{ backgroundColor: phaseColors[c.phase] }}
+                  style={{ backgroundColor: phaseHexColors[c.phase] }}
                   aria-hidden="true"
                 />
                 <span className="sr-only">Phase: {c.phase}</span>
@@ -103,6 +110,7 @@ export default function CampaignsTab({
                 <div className="flex flex-col min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-semibold text-[var(--text)] truncate">{c.name}</span>
+                    <PhaseBadge phase={c.phase} />
                     {healthMap[c.id] && (
                       <>
                         <span
@@ -133,12 +141,24 @@ export default function CampaignsTab({
                     </div>
                   )}
 
-                  {/* Sell-through */}
-                  {pnl && (
-                    <span className="hidden md:inline">
-                      {pnl.totalSold}/{pnl.totalPurchases} ({formatPct(pnl.sellThroughPct)})
-                    </span>
-                  )}
+                  {/* Sell-through with mini bar */}
+                  {pnl && (() => {
+                    const st = pnl.sellThroughPct ?? 0;
+                    return (
+                      <div className="hidden md:flex items-center gap-2">
+                        <span>{pnl.totalSold}/{pnl.totalPurchases}</span>
+                        <div className="w-12 h-1.5 rounded-full bg-[var(--surface-3)] overflow-hidden" title={`Sell-through: ${formatPct(pnl.sellThroughPct)}`}>
+                          <div
+                            className="h-full rounded-full transition-all duration-300"
+                            style={{
+                              width: `${Math.min(st * 100, 100)}%`,
+                              background: st >= 0.5 ? 'var(--success)' : 'var(--warning)',
+                            }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   {/* Buy terms */}
                   <span className="hidden lg:inline">

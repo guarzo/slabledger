@@ -1,6 +1,6 @@
 import type { AgingItem, ExpectedValue } from '../../../../types/campaigns';
 import { formatCents, daysHeldColor, signalLabel, signalBgColor } from '../../../utils/formatters';
-import { TrendArrow, ConfidenceIndicator } from '../../../ui';
+import { TrendArrow, ConfidenceIndicator, GradeBadge } from '../../../ui';
 import MarketplaceLinks from './MarketplaceLinks';
 import {
   costBasis, bestPrice, unrealizedPL, marketTrend, velocityLabel,
@@ -37,6 +37,14 @@ export default function MobileCard({ item, selected, onToggle, onRecordSale, onF
       <div className="flex items-start justify-between mb-2">
         <div className="flex items-start gap-2">
           <input type="checkbox" checked={selected} onChange={onToggle} className="rounded mt-0.5" />
+          {item.purchase.frontImageUrl && (
+            <img
+              src={item.purchase.frontImageUrl}
+              alt=""
+              className="w-10 h-14 object-cover rounded shrink-0 bg-[var(--surface-2)]"
+              loading="lazy"
+            />
+          )}
           <div>
             <div className="text-sm font-medium text-[var(--text)]">
               {hotSeller && <span className="text-amber-400 mr-1" title="High demand">★</span>}
@@ -55,7 +63,7 @@ export default function MobileCard({ item, selected, onToggle, onRecordSale, onF
             <div className="text-xs text-[var(--text-muted)]">
               {showCampaignColumn && item.campaignName && <>{item.campaignName} &middot; </>}
               {item.purchase.setName && <>{item.purchase.setName} &middot; </>}
-              Cert #{item.purchase.certNumber} &middot; {item.purchase.grader && item.purchase.grader !== 'PSA' ? `${item.purchase.grader} ${item.purchase.gradeValue}` : `PSA ${item.purchase.gradeValue}`}
+              Cert #{item.purchase.certNumber} &middot; <GradeBadge grader={item.purchase.grader || 'PSA'} grade={item.purchase.gradeValue} size="sm" />
             </div>
           </div>
         </div>

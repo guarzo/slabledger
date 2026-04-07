@@ -47,11 +47,13 @@ export default function DashboardPage() {
       )}
 
       {/* Weekly Review */}
-      <div className="mb-6">
-        <SectionErrorBoundary sectionName="Weekly Review">
-          {weeklyReview && <WeeklyReviewSection data={weeklyReview} />}
-        </SectionErrorBoundary>
-      </div>
+      {weeklyReview && (
+        <div className="mb-6">
+          <SectionErrorBoundary sectionName="Weekly Review">
+            <WeeklyReviewSection data={weeklyReview} />
+          </SectionErrorBoundary>
+        </div>
+      )}
 
       {/* AI Weekly Intelligence */}
       <div className="mb-6">

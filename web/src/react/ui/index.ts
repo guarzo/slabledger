@@ -54,6 +54,9 @@ export { LinkDropdown } from './LinkDropdown';
 export { default as CardPriceCard } from './CardPriceCard';
 export type { CardPriceData, CardPrices, CardPriceCardProps } from './CardPriceCard';
 
+// Grade Display
+export { default as GradeBadge } from './GradeBadge';
+
 // Data Display
 export { ConfidenceIndicator } from './ConfidenceIndicator';
 export { TrendArrow } from './TrendArrow';

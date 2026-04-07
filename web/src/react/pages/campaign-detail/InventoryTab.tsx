@@ -248,7 +248,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
 
       {/* Filter tabs — visible when not in showAll mode */}
       {!showAll && (
-        <div className="flex items-center gap-2 mb-3 flex-wrap sell-sheet-no-print">
+        <div className="flex items-center gap-2 mb-3 overflow-x-auto scrollbar-none sell-sheet-no-print">
           {([
             { key: 'exceptions' as const, label: 'Exceptions', color: 'var(--warning)' },
             { key: 'sell_sheet' as const, label: 'Sell Sheet', color: 'var(--brand-400)' },
@@ -261,7 +261,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                 key={tab.key}
                 type="button"
                 onClick={() => setFilterTab(tab.key)}
-                className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-colors ${
+                className={`shrink-0 text-xs font-medium px-3 py-1.5 rounded-full border transition-colors ${
                   filterTab === tab.key
                     ? 'border-[var(--brand-500)] bg-[var(--brand-500)]/10 text-[var(--brand-400)]'
                     : 'border-[var(--surface-2)] text-[var(--text-muted)] hover:text-[var(--text)] hover:border-[var(--text-muted)]'
