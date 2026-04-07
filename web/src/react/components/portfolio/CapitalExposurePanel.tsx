@@ -1,60 +1,62 @@
 import type { CapitalSummary } from '../../../types/campaigns';
-import { formatCents, formatPctFromWhole } from '../../utils/formatters';
+import { formatCents } from '../../utils/formatters';
 
 interface CapitalExposurePanelProps {
   capital?: CapitalSummary;
 }
 
+function weeksBadge(capital: CapitalSummary) {
+  if (capital.recoveryRate30dCents === 0) {
+    return <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-[var(--surface-2)] text-[var(--text-muted)]">No sales data</span>;
+  }
+  const weeks = capital.weeksToCover;
+  const label = weeks > 20 ? '20+ wks' : `~${Math.round(weeks)} wks`;
+  const color = capital.alertLevel === 'critical' ? 'bg-[var(--danger)] text-white'
+    : capital.alertLevel === 'warning' ? 'bg-[var(--warning)] text-black'
+    : 'bg-[var(--success)] text-white';
+  return <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${color}`}>{label}</span>;
+}
+
+function trendArrow(trend: string) {
+  if (trend === 'improving') return <span className="text-[var(--success)]" title="Improving">&#9650;</span>;
+  if (trend === 'declining') return <span className="text-[var(--danger)]" title="Declining">&#9660;</span>;
+  return <span className="text-[var(--text-muted)]" title="Stable">&#9654;</span>;
+}
+
 export default function CapitalExposurePanel({ capital }: CapitalExposurePanelProps) {
   if (!capital) return null;
 
-  const barPct = Math.min(capital.exposurePct, 100);
-  const barColor = capital.alertLevel === 'critical' ? 'bg-[var(--danger)]' : capital.alertLevel === 'warning' ? 'bg-[var(--warning)]' : 'bg-[var(--success)]';
-  const alertColor = capital.alertLevel === 'critical' ? 'text-[var(--danger)]' : capital.alertLevel === 'warning' ? 'text-[var(--warning)]' : 'text-[var(--success)]';
-
-  const projectedPct = capital.capitalBudgetCents > 0 && capital.projectedExposureCents != null
-    ? Math.min((capital.projectedExposureCents / capital.capitalBudgetCents) * 100, 100)
-    : 0;
-  const showProjectedMarker = projectedPct > barPct && capital.projectedExposureCents != null && capital.projectedExposureCents > capital.outstandingCents;
+  const outstandingColor = capital.outstandingCents === 0 ? 'text-[var(--success)]' : 'text-[var(--text)]';
 
   return (
     <div className="h-full p-4 bg-[var(--surface-1)] rounded-xl border border-[var(--surface-2)]">
       <h3 className="text-sm font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-3">Capital Exposure</h3>
 
-      <div>
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-xs text-[var(--text-muted)]">Capital Exposure</span>
-          <span className={`text-xs font-medium ${alertColor}`}>{capital.alertLevel.toUpperCase()}</span>
+      <div className="flex items-baseline gap-3 mb-2">
+        <span className={`text-2xl font-bold ${outstandingColor}`}>{formatCents(capital.outstandingCents)}</span>
+        {weeksBadge(capital)}
+      </div>
+
+      {capital.recoveryRate30dCents > 0 && (
+        <div className="text-xs text-[var(--text-muted)] mb-2">
+          {formatCents(capital.recoveryRate30dCents)}/mo recovered {trendArrow(capital.recoveryTrend)}
         </div>
-        <div className="relative w-full h-2 bg-[var(--surface-2)] rounded-full overflow-visible mb-2">
-          <div className={`h-full ${barColor} rounded-full transition-all`} style={{ width: `${barPct}%` }} />
-          {showProjectedMarker && (
-            <div
-              className="absolute top-[-2px] h-[calc(100%+4px)] w-[2px] border-l-2 border-dashed border-[var(--warning-border)]"
-              style={{ left: `${projectedPct}%` }}
-              title={`Projected: ${formatCents(capital.projectedExposureCents!)} (${projectedPct.toFixed(0)}%)`}
-            />
+      )}
+
+      {capital.recoveryRate30dCents === 0 && capital.outstandingCents > 0 && (
+        <div className="text-xs text-[var(--text-muted)] mb-2">No recovery data yet</div>
+      )}
+
+      {(capital.unpaidInvoiceCount > 0 || capital.refundedCents > 0) && (
+        <div className="text-xs text-[var(--text-muted)]">
+          {capital.unpaidInvoiceCount > 0 && (
+            <span>{capital.unpaidInvoiceCount} unpaid invoice{capital.unpaidInvoiceCount !== 1 ? 's' : ''}</span>
+          )}
+          {capital.refundedCents > 0 && (
+            <span>{capital.unpaidInvoiceCount > 0 ? ' | ' : ''}{formatCents(capital.refundedCents)} refunded</span>
           )}
         </div>
-        <div className="flex justify-between text-xs text-[var(--text-muted)]">
-          <span>{formatCents(capital.outstandingCents)} outstanding</span>
-          {capital.capitalBudgetCents > 0
-            ? <span>{formatPctFromWhole(capital.exposurePct)} of {formatCents(capital.capitalBudgetCents)} budget</span>
-            : <span>{formatCents(capital.outstandingCents)} deployed</span>
-          }
-        </div>
-        {capital.unpaidInvoiceCount > 0 && (
-          <div className="mt-1 text-xs text-[var(--text-muted)]">
-            {capital.unpaidInvoiceCount} unpaid invoice{capital.unpaidInvoiceCount !== 1 ? 's' : ''}
-            {capital.refundedCents > 0 && <span> | {formatCents(capital.refundedCents)} refunded</span>}
-          </div>
-        )}
-        {capital.projectedExposureCents != null && capital.projectedExposureCents > 0 && (
-          <div className="mt-1 text-xs text-[var(--text-muted)]">
-            Projected: <span className="text-[var(--text)]">{formatCents(capital.projectedExposureCents)}</span> in {capital.daysToNextInvoice}d
-          </div>
-        )}
-      </div>
+      )}
     </div>
   );
 }
