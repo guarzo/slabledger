@@ -65,7 +65,7 @@ export default function CompSummaryPanel({ comp }: CompSummaryPanelProps) {
       </div>
 
       {comp.byPlatform && comp.byPlatform.length > 0 && (
-        <div>
+        <>
           <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider mb-1">Platform Breakdown</div>
           <div className="grid gap-1">
             {comp.byPlatform.map(p => (
@@ -77,7 +77,7 @@ export default function CompSummaryPanel({ comp }: CompSummaryPanelProps) {
               </div>
             ))}
           </div>
-        </div>
+        </>
       )}
     </div>
   );

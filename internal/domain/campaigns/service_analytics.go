@@ -338,21 +338,34 @@ func (s *service) crackCacheWorker(ctx context.Context) {
 }
 
 // enrichCompSummaries attaches CompSummary to aging items that have a gemRateID.
-// Computes once per unique gemRateID and derives per-purchase CompsAboveCost.
+// Computes once per unique gemRateID + grade combination (since gemRateID is grade-agnostic)
+// and derives per-purchase CompsAboveCost.
 func (s *service) enrichCompSummaries(ctx context.Context, items []AgingItem) {
 	if s.compProv == nil {
 		return
 	}
 
-	// Collect unique gemRateIDs with representative CL value
-	seen := make(map[string]int) // gemRateID → clValueCents
+	// compCacheKey groups purchases by card variant + grade so that different grades
+	// of the same card get separate comp summaries.
+	type compCacheKey struct {
+		gemRateID  string
+		gradeValue float64
+	}
+	type compLookup struct {
+		clValueCents int
+		certNumber   string // representative cert for condition lookup
+	}
+
+	// Collect unique gemRateID + grade pairs with a representative cert and CL value
+	seen := make(map[compCacheKey]compLookup)
 	for i := range items {
-		gid := items[i].Purchase.GemRateID
-		if gid == "" {
+		p := &items[i].Purchase
+		if p.GemRateID == "" {
 			continue
 		}
-		if _, ok := seen[gid]; !ok {
-			seen[gid] = items[i].Purchase.CLValueCents
+		key := compCacheKey{gemRateID: p.GemRateID, gradeValue: p.GradeValue}
+		if _, ok := seen[key]; !ok {
+			seen[key] = compLookup{clValueCents: p.CLValueCents, certNumber: p.CertNumber}
 		}
 	}
 
@@ -360,32 +373,34 @@ func (s *service) enrichCompSummaries(ctx context.Context, items []AgingItem) {
 		return
 	}
 
-	// Compute summaries once per gemRateID
-	cache := make(map[string]*CompSummary, len(seen))
-	for gid, clValue := range seen {
-		summary, err := s.compProv.GetCompSummary(ctx, gid, clValue)
+	// Compute summaries once per gemRateID + grade
+	cache := make(map[compCacheKey]*CompSummary, len(seen))
+	for key, lookup := range seen {
+		summary, err := s.compProv.GetCompSummary(ctx, key.gemRateID, lookup.certNumber, lookup.clValueCents)
 		if err != nil {
 			if s.logger != nil {
 				s.logger.Warn(ctx, "comp summary lookup failed",
-					observability.String("gemRateId", gid), observability.Err(err))
+					observability.String("gemRateId", key.gemRateID), observability.Err(err))
 			}
 			continue
 		}
 		if summary != nil {
-			cache[gid] = summary
+			cache[key] = summary
 		}
 	}
 
 	// Attach to items and derive per-purchase CompsAboveCost
 	for i := range items {
-		gid := items[i].Purchase.GemRateID
-		summary, ok := cache[gid]
+		p := &items[i].Purchase
+		key := compCacheKey{gemRateID: p.GemRateID, gradeValue: p.GradeValue}
+		summary, ok := cache[key]
 		if !ok {
 			continue
 		}
 		// Clone to allow per-purchase customization of CompsAboveCost
 		cs := *summary
-		cs.CompsAboveCost = CountAboveCost(summary.PriceCentsList, items[i].Purchase.BuyCostCents)
+		cs.CompsAboveCost = CountAboveCost(summary.PriceCentsList, p.BuyCostCents)
+		cs.PriceCentsList = nil
 		items[i].CompSummary = &cs
 	}
 }

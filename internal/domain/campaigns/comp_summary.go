@@ -27,9 +27,12 @@ type PlatformBreakdown struct {
 	LowCents    int    `json:"lowCents"`
 }
 
-// CompSummaryProvider computes comp analytics for a card variant.
+// CompSummaryProvider computes comp analytics for a card variant at a specific grade.
 type CompSummaryProvider interface {
-	GetCompSummary(ctx context.Context, gemRateID string, clValueCents int) (*CompSummary, error)
+	// GetCompSummary returns aggregated comp data for a gemRateID filtered by grade.
+	// certNumber is used to resolve the CL condition (grade) from the card mapping table,
+	// ensuring comps are grade-specific (e.g., PSA 10 comps only, not mixed with PSA 9).
+	GetCompSummary(ctx context.Context, gemRateID, certNumber string, clValueCents int) (*CompSummary, error)
 }
 
 // CountAboveCost returns how many prices in the list exceed the given cost.
