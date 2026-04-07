@@ -4,18 +4,11 @@ import (
 	"context"
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	"github.com/guarzo/slabledger/internal/domain/campaigns"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/domain/pricing"
-)
-
-// PSA rate limit error substrings returned by the DH enterprise API.
-const (
-	psaRateLimitMsg      = "PSA API rate limit"
-	psaDailyLimitReached = "daily limit reached"
 )
 
 // HandleBulkMatch kicks off an async bulk match of unmatched inventory cards against the DH catalog.
@@ -70,9 +63,9 @@ type matchedCard struct {
 
 // runBulkMatch processes unsold purchases against DH cert resolution, logging results.
 func (h *DHHandler) runBulkMatch(ctx context.Context, purchases []campaigns.Purchase, mappedSet map[string]string) {
-	// Reset PSA key rotation to start from the first key.
-	if rotator, ok := h.certResolver.(PSAKeyRotator); ok {
-		rotator.ResetPSAKeyRotation()
+	var rotateFn func() bool
+	if rotator, ok := h.certResolver.(dh.PSAKeyRotator); ok {
+		rotateFn = rotator.RotatePSAKey
 	}
 
 	var matched, skipped, noCert, notFound, failed int
@@ -109,48 +102,26 @@ func (h *DHHandler) runBulkMatch(ctx context.Context, purchases []campaigns.Purc
 			observability.String("cert", p.CertNumber),
 			observability.String("clean_name", cardName),
 			observability.String("variant", variant))
-		resp, err := h.certResolver.ResolveCert(ctx, req)
+		resp, err := dh.ResolveCertWithRotation(ctx, req, h.certResolver.ResolveCert, rotateFn, h.logger, "bulk match")
 		if err != nil {
-			// On PSA rate limit, loop through all available keys before giving up.
-			rateLimitAbort := false
-			for {
-				isPSARateLimit := strings.Contains(err.Error(), psaRateLimitMsg) ||
-					strings.Contains(err.Error(), psaDailyLimitReached)
-				if !isPSARateLimit {
-					break
-				}
-				rotator, ok := h.certResolver.(PSAKeyRotator)
-				if !ok || !rotator.RotatePSAKey() {
-					// No more keys to try — abort the entire batch.
-					failed++
-					errMsg := "DH cert resolution stopped: PSA API daily rate limit reached. All configured PSA keys exhausted."
-					h.logger.Error(ctx, errMsg, observability.Err(err))
-					h.bulkMatchError.Store(errMsg)
-					rateLimitAbort = true
-					break
-				}
-				h.logger.Info(ctx, "bulk match: PSA key rate limited, rotated to next key",
-					observability.String("cert", p.CertNumber))
-				resp, err = h.certResolver.ResolveCert(ctx, req)
-				if err == nil {
-					break
-				}
-			}
-			if rateLimitAbort {
+			if dh.IsPSARateLimitError(err) {
+				// All PSA keys exhausted — abort the entire batch.
+				failed++
+				errMsg := "DH cert resolution stopped: PSA API daily rate limit reached. All configured PSA keys exhausted."
+				h.logger.Error(ctx, errMsg, observability.Err(err))
+				h.bulkMatchError.Store(errMsg)
 				break
 			}
-			if err != nil {
-				h.logger.Warn(ctx, "bulk match: DH cert resolve failed",
-					observability.String("cert", p.CertNumber), observability.Err(err))
-				failed++
-				if h.pushStatusUpdater != nil {
-					if statusErr := h.pushStatusUpdater.UpdatePurchaseDHPushStatus(ctx, p.ID, campaigns.DHPushStatusUnmatched); statusErr != nil {
-						h.logger.Warn(ctx, "bulk match: failed to set unmatched status",
-							observability.String("purchaseID", p.ID), observability.Err(statusErr))
-					}
+			h.logger.Warn(ctx, "bulk match: DH cert resolve failed",
+				observability.String("cert", p.CertNumber), observability.Err(err))
+			failed++
+			if h.pushStatusUpdater != nil {
+				if statusErr := h.pushStatusUpdater.UpdatePurchaseDHPushStatus(ctx, p.ID, campaigns.DHPushStatusUnmatched); statusErr != nil {
+					h.logger.Warn(ctx, "bulk match: failed to set unmatched status",
+						observability.String("purchaseID", p.ID), observability.Err(statusErr))
 				}
-				continue
 			}
+			continue
 		}
 
 		h.logger.Debug(ctx, "bulk match: cert resolve result",
