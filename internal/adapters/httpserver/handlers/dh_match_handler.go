@@ -8,7 +8,6 @@ import (
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	"github.com/guarzo/slabledger/internal/domain/campaigns"
-	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/domain/pricing"
 )
@@ -115,8 +114,7 @@ func (h *DHHandler) runBulkMatch(ctx context.Context, purchases []campaigns.Purc
 			// On PSA rate limit, loop through all available keys before giving up.
 			rateLimitAbort := false
 			for {
-				isPSARateLimit := apperrors.HasErrorCode(err, apperrors.ErrCodeProviderRateLimit) ||
-					strings.Contains(err.Error(), psaRateLimitMsg) ||
+				isPSARateLimit := strings.Contains(err.Error(), psaRateLimitMsg) ||
 					strings.Contains(err.Error(), psaDailyLimitReached)
 				if !isPSARateLimit {
 					break
