@@ -183,7 +183,6 @@ func (rt *Router) registerCampaignRoutes(mux *http.ServeMux) {
 	// Credit & Invoice endpoints
 	mux.Handle("GET /api/credit/summary", authRoute(rt.campaignsHandler.HandleCapitalSummary))
 	mux.Handle("GET /api/credit/config", authRoute(rt.campaignsHandler.HandleGetCashflowConfig))
-	mux.Handle("PUT /api/credit/config", authRoute(rt.campaignsHandler.HandleUpdateCashflowConfig))
 	mux.Handle("GET /api/credit/invoices", authRoute(rt.campaignsHandler.HandleListInvoices))
 	mux.Handle("PUT /api/credit/invoices", authRoute(rt.campaignsHandler.HandleUpdateInvoice))
 
@@ -236,7 +235,6 @@ func (rt *Router) registerSocialRoutes(mux *http.ServeMux) {
 		mux.Handle("POST /api/social/posts/generate", rt.authMW.RequireAdmin(http.HandlerFunc(rt.socialHandler.HandleGenerate)))
 		mux.Handle("PATCH /api/social/posts/{id}/caption", rt.authMW.RequireAdmin(http.HandlerFunc(rt.socialHandler.HandleUpdateCaption)))
 		mux.Handle("DELETE /api/social/posts/{id}", rt.authMW.RequireAdmin(http.HandlerFunc(rt.socialHandler.HandleDelete)))
-		mux.Handle("POST /api/social/backfill-images", rt.authMW.RequireAdmin(http.HandlerFunc(rt.socialHandler.HandleBackfillImages)))
 		mux.Handle("POST /api/social/posts/{id}/regenerate-caption", rt.authMW.RequireAdmin(http.HandlerFunc(rt.socialHandler.HandleRegenerateCaption)))
 		mux.Handle("POST /api/social/posts/{id}/upload-slides", rt.authMW.RequireAdmin(http.HandlerFunc(rt.socialHandler.HandleUploadSlides)))
 		mux.Handle("GET /api/social/posts/{id}/metrics", rt.authMW.RequireAdmin(http.HandlerFunc(rt.socialHandler.HandleGetMetrics)))

@@ -14,17 +14,11 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/social"
 )
 
-// ImageBackfiller can fetch PSA slab images and update purchase records.
-type ImageBackfiller interface {
-	BackfillImages(ctx context.Context) (updated int, errors int, err error)
-}
-
 // SocialHandler handles social media content endpoints.
 type SocialHandler struct {
 	service     social.Service
 	repo        social.Repository
 	logger      observability.Logger
-	backfiller  ImageBackfiller          // optional — nil if PSA image API not configured
 	metricsRepo social.MetricsRepository // optional — nil if metrics not configured
 	mediaDir    string
 	baseURL     string
@@ -34,9 +28,6 @@ type SocialHandler struct {
 func NewSocialHandler(service social.Service, repo social.Repository, logger observability.Logger, mediaDir, baseURL string) *SocialHandler {
 	return &SocialHandler{service: service, repo: repo, logger: logger, mediaDir: mediaDir, baseURL: baseURL}
 }
-
-// WithBackfiller sets the optional image backfiller.
-func (h *SocialHandler) WithBackfiller(b ImageBackfiller) { h.backfiller = b }
 
 // WithMetricsRepo sets the optional metrics repository.
 func (h *SocialHandler) WithMetricsRepo(r social.MetricsRepository) { h.metricsRepo = r }
@@ -279,22 +270,3 @@ func (h *SocialHandler) HandleGetMetricsSummary(w http.ResponseWriter, r *http.R
 	writeJSONList(w, http.StatusOK, summary)
 }
 
-// HandleBackfillImages triggers PSA image backfill for purchases missing images.
-func (h *SocialHandler) HandleBackfillImages(w http.ResponseWriter, r *http.Request) {
-	if requireUser(w, r) == nil {
-		return
-	}
-	if h.backfiller == nil {
-		writeError(w, http.StatusServiceUnavailable, "Image backfill not configured (missing PSA image API token)")
-		return
-	}
-
-	updated, backfillErrors, err := h.backfiller.BackfillImages(r.Context())
-	if err != nil {
-		h.logger.Error(r.Context(), "image backfill failed", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "Image backfill failed")
-		return
-	}
-
-	writeJSON(w, http.StatusOK, map[string]int{"updated": updated, "errors": backfillErrors})
-}

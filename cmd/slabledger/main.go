@@ -20,7 +20,6 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/advisortool"
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	"github.com/guarzo/slabledger/internal/adapters/clients/google"
-	"github.com/guarzo/slabledger/internal/adapters/clients/psa"
 	"github.com/guarzo/slabledger/internal/adapters/clients/tcgdex"
 	"github.com/guarzo/slabledger/internal/adapters/httpserver/handlers"
 	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
@@ -418,19 +417,6 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 			observability.String("baseURL", baseURL))
 	}
 	socialHandler := handlers.NewSocialHandler(socialService, socialRepo, logger, mediaDir, baseURL)
-
-	// Wire image backfiller if PSA token is available
-	if cfg.Adapters.PSAToken != "" {
-		psaImageClient := psa.NewClient(cfg.Adapters.PSAToken, logger)
-		backfiller := psa.NewImageBackfiller(
-			psaImageClient,
-			&psaImageListerAdapter{repo: campaignsRepo},
-			&psaImageUpdaterAdapter{repo: campaignsRepo},
-			logger,
-		)
-		socialHandler.WithBackfiller(backfiller)
-		logger.Info(ctx, "PSA image backfill enabled")
-	}
 
 	// Wire metrics repository into social handler for API endpoints
 	socialHandler.WithMetricsRepo(metricsRepo)

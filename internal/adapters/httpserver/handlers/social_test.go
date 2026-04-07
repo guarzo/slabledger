@@ -405,37 +405,3 @@ func TestHandleDelete_Social(t *testing.T) {
 	}
 }
 
-func TestHandleBackfillImages(t *testing.T) {
-	tests := []struct {
-		name          string
-		authenticated bool
-		wantStatus    int
-	}{
-		{
-			name:          "not configured",
-			authenticated: true,
-			wantStatus:    http.StatusServiceUnavailable,
-		},
-		{
-			name:       "unauthenticated",
-			wantStatus: http.StatusUnauthorized,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			h := newTestSocialHandler(&mocks.MockSocialService{})
-
-			req := httptest.NewRequest(http.MethodPost, "/api/social/backfill-images", nil)
-			if tt.authenticated {
-				req = req.WithContext(authenticatedContext())
-			}
-			rec := httptest.NewRecorder()
-			h.HandleBackfillImages(rec, req)
-
-			if rec.Code != tt.wantStatus {
-				t.Fatalf("expected %d, got %d", tt.wantStatus, rec.Code)
-			}
-		})
-	}
-}
