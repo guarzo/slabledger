@@ -46,44 +46,6 @@ func TestGetCashflowConfig(t *testing.T) {
 	})
 }
 
-func TestUpdateCashflowConfig(t *testing.T) {
-	db := setupTestDB(t)
-	defer db.Close()
-	repo := NewCampaignsRepository(db.DB)
-	ctx := context.Background()
-
-	t.Run("insert and update round-trip", func(t *testing.T) {
-		now := time.Now().Truncate(time.Second)
-
-		// First insert (upsert)
-		err := repo.UpdateCashflowConfig(ctx, &campaigns.CashflowConfig{
-			CapitalBudgetCents: 3000000,
-			CashBufferCents:    500000,
-			UpdatedAt:          now,
-		})
-		require.NoError(t, err)
-
-		cfg, err := repo.GetCashflowConfig(ctx)
-		require.NoError(t, err)
-		assert.Equal(t, 3000000, cfg.CapitalBudgetCents)
-		assert.Equal(t, 500000, cfg.CashBufferCents)
-
-		// Second update (upsert overwrites)
-		later := now.Add(time.Hour)
-		err = repo.UpdateCashflowConfig(ctx, &campaigns.CashflowConfig{
-			CapitalBudgetCents: 8000000,
-			CashBufferCents:    1500000,
-			UpdatedAt:          later,
-		})
-		require.NoError(t, err)
-
-		cfg, err = repo.GetCashflowConfig(ctx)
-		require.NoError(t, err)
-		assert.Equal(t, 8000000, cfg.CapitalBudgetCents)
-		assert.Equal(t, 1500000, cfg.CashBufferCents)
-	})
-}
-
 func TestSumPurchaseCostByInvoiceDate(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.Close()

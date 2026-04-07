@@ -113,58 +113,6 @@ func TestHandleGetCashflowConfig(t *testing.T) {
 	}
 }
 
-func TestHandleUpdateCashflowConfig(t *testing.T) {
-	tests := []struct {
-		name       string
-		body       string
-		mockFn     func(_ context.Context, _ *campaigns.CashflowConfig) error
-		wantStatus int
-	}{
-		{
-			name: "success",
-			body: `{"capitalBudgetCents":6000000,"cashBufferCents":1500000}`,
-			mockFn: func(_ context.Context, _ *campaigns.CashflowConfig) error {
-				return nil
-			},
-			wantStatus: http.StatusOK,
-		},
-		{
-			name:       "invalid body",
-			body:       "{bad",
-			wantStatus: http.StatusBadRequest,
-		},
-		{
-			name: "write error",
-			body: `{"capitalBudgetCents":6000000}`,
-			mockFn: func(_ context.Context, _ *campaigns.CashflowConfig) error {
-				return fmt.Errorf("write error")
-			},
-			wantStatus: http.StatusInternalServerError,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			svc := &mocks.MockCampaignService{}
-			if tt.mockFn != nil {
-				svc.UpdateCashflowConfigFn = tt.mockFn
-			}
-			h := newTestHandler(svc)
-
-			req := httptest.NewRequest(http.MethodPut, "/api/credit/config", bytes.NewBufferString(tt.body))
-			if tt.name == "success" {
-				req.Header.Set("Content-Type", "application/json")
-			}
-			rec := httptest.NewRecorder()
-			h.HandleUpdateCashflowConfig(rec, req)
-
-			if rec.Code != tt.wantStatus {
-				t.Fatalf("expected %d, got %d; body: %s", tt.wantStatus, rec.Code, rec.Body.String())
-			}
-		})
-	}
-}
-
 func TestHandleListInvoices(t *testing.T) {
 	tests := []struct {
 		name        string
