@@ -1523,18 +1523,6 @@ Returns the current cashflow configuration.
 
 ---
 
-### `PUT /api/credit/config`
-
-Auth: RequireAuth
-
-Updates the cashflow configuration.
-
-**Body:** `CashflowConfig` (same shape as GET response)
-
-**Response:** `200 OK` — updated `CashflowConfig`
-
----
-
 ### `GET /api/credit/invoices`
 
 Auth: RequireAuth

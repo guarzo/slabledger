@@ -16,11 +16,6 @@ func (s *service) GetCashflowConfig(ctx context.Context) (*CashflowConfig, error
 	return s.repo.GetCashflowConfig(ctx)
 }
 
-func (s *service) UpdateCashflowConfig(ctx context.Context, cfg *CashflowConfig) error {
-	cfg.UpdatedAt = time.Now()
-	return s.repo.UpdateCashflowConfig(ctx, cfg)
-}
-
 func (s *service) ListInvoices(ctx context.Context) ([]Invoice, error) {
 	return s.repo.ListInvoices(ctx)
 }
