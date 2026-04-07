@@ -1,6 +1,6 @@
 # Database Schema Reference
 
-SlabLedger uses SQLite in WAL mode. Migrations are embedded in the binary and run automatically on startup. Migration files live in `internal/adapters/storage/sqlite/migrations/` (39 pairs, `000001`–`000039`).
+SlabLedger uses SQLite in WAL mode. Migrations are embedded in the binary and run automatically on startup. Migration files live in `internal/adapters/storage/sqlite/migrations/` (42 pairs, `000001`–`000042`).
 
 All monetary values are stored in **cents** (integer). Timestamps use `DATETIME`/`TIMESTAMP` as SQLite text in UTC. Boolean columns use `INTEGER` (`0`/`1`).
 
@@ -582,6 +582,8 @@ Individual graded cards bought under a campaign.
 | `dh_status` | TEXT | NOT NULL DEFAULT '' | DH inventory status; added migration 000032 |
 | `dh_push_status` | TEXT | NOT NULL DEFAULT '' | Pipeline status: "", "pending", "matched", "unmatched", "manual"; added migration 000034 |
 | `dh_candidates` | TEXT | NOT NULL DEFAULT '' | Ambiguous cert resolution candidates JSON; added migration 000039 |
+| `gem_rate_id` | TEXT | NOT NULL DEFAULT '' | CardLadder gem rate identifier; added migration 000040 |
+| `psa_spec_id` | INTEGER | NOT NULL DEFAULT 0 | PSA spec identifier; added migration 000040 |
 
 **Unique:** `(grader, cert_number)`
 
@@ -594,6 +596,7 @@ Individual graded cards bought under a campaign.
 - `idx_purchases_invoice_date` on `(invoice_date)` WHERE `invoice_date != ''` (partial); added migration 000027
 - `idx_purchases_dh_cert_status` on `(dh_cert_status)` WHERE `dh_cert_status != ''` (partial); added migration 000030
 - `idx_campaign_purchases_dh_push_status` on `(dh_push_status)` WHERE `dh_push_status != ''` (partial); added migration 000035
+- `idx_purchases_gem_rate_id` on `(gem_rate_id)`; added migration 000040
 
 **Foreign Keys:** `campaign_id → campaigns(id)` ON DELETE CASCADE
 
@@ -811,11 +814,14 @@ Card Ladder sales comparables data (recent auction/sale records).
 | `seller` | TEXT | NOT NULL DEFAULT '' | |
 | `item_url` | TEXT | NOT NULL DEFAULT '' | |
 | `slab_serial` | TEXT | NOT NULL DEFAULT '' | |
+| `condition` | TEXT | NOT NULL DEFAULT '' | Grade-specific condition label; added migration 000040 |
 | `created_at` | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | |
 
-**Unique:** `(gem_rate_id, item_id)`
+**Unique:** `(gem_rate_id, condition, item_id)`
 
-**Indexes:** `idx_cl_sales_comps_gem_rate` on `(gem_rate_id, sale_date DESC)`
+**Indexes:**
+- `idx_cl_sales_comps_gem_rate` on `(gem_rate_id, sale_date DESC)`
+- `idx_cl_sales_comps_gem_cond_date` on `(gem_rate_id, condition, sale_date DESC)`; added migration 000041
 
 **Foreign Keys:** none
 
@@ -937,17 +943,16 @@ Polled engagement metrics for published Instagram posts.
 ---
 
 ### `sell_sheet_items`
-Per-user sell sheet item selections (persisted across sessions).
+Global sell sheet item selections (persisted across sessions, not scoped to a user). Migrated to global in migration 000042.
 
 | Column | Type | Constraints | Notes |
 |--------|------|-------------|-------|
-| `user_id` | INTEGER | NOT NULL, PK part | |
-| `purchase_id` | TEXT | NOT NULL, PK part | |
+| `purchase_id` | TEXT | PK | |
 | `added_at` | DATETIME | NOT NULL DEFAULT CURRENT_TIMESTAMP | |
 
-**Primary Key:** `(user_id, purchase_id)`
+**Primary Key:** `purchase_id`
 
-**Indexes:** `idx_sell_sheet_items_user` on `(user_id)`
+**Indexes:** none
 
 **Foreign Keys:** none
 
