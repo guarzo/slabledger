@@ -5,7 +5,7 @@ import type { SortKey, SortDir } from './utils';
 const EXCEPTION_STATUSES = ['large_gap', 'no_data', 'flagged'] as const;
 
 export interface TabCounts {
-  exceptions: number;
+  needs_attention: number;
   card_show: number;
   all: number;
 }
@@ -24,7 +24,7 @@ export interface InventoryMeta {
 
 export function computeInventoryMeta(items: AgingItem[]): InventoryMeta {
   const stats: ReviewStats = { total: items.length, needsReview: 0, reviewed: 0, flagged: 0 };
-  const counts: TabCounts = { exceptions: 0, card_show: 0, all: items.length };
+  const counts: TabCounts = { needs_attention: 0, card_show: 0, all: items.length };
   let totalCost = 0;
   let totalMarket = 0;
   for (const item of items) {
@@ -33,8 +33,8 @@ export function computeInventoryMeta(items: AgingItem[]): InventoryMeta {
     else stats.needsReview++;
 
     const status = getReviewStatus(item);
-    if ((EXCEPTION_STATUSES as readonly string[]).includes(status)) {
-      counts.exceptions++;
+    if ((EXCEPTION_STATUSES as readonly string[]).includes(status) || isDHHeld(item)) {
+      counts.needs_attention++;
     }
     if (isCardShowCandidate(item)) counts.card_show++;
 
@@ -48,7 +48,11 @@ export function computeInventoryMeta(items: AgingItem[]): InventoryMeta {
   };
 }
 
-export type FilterTab = 'exceptions' | 'sell_sheet' | 'all' | 'card_show';
+export function isDHHeld(item: AgingItem): boolean {
+  return item.purchase.dhPushStatus === 'held';
+}
+
+export type FilterTab = 'needs_attention' | 'sell_sheet' | 'all' | 'card_show';
 
 export function filterAndSortItems(
   items: AgingItem[],
@@ -79,8 +83,8 @@ export function filterAndSortItems(
       result = result.filter(i => sellSheetHas(i.purchase.id));
     } else if (filterTab !== 'all') {
       result = result.filter(i => {
-        if (filterTab === 'exceptions') {
-          return (EXCEPTION_STATUSES as readonly string[]).includes(getReviewStatus(i));
+        if (filterTab === 'needs_attention') {
+          return (EXCEPTION_STATUSES as readonly string[]).includes(getReviewStatus(i)) || isDHHeld(i);
         }
         if (filterTab === 'card_show') return isCardShowCandidate(i);
         return false;

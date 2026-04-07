@@ -41,7 +41,7 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
   const [searchQuery, setSearchQuery] = useState('');
   const [isPrinting, setIsPrinting] = useState(false);
   const [statsExpanded, setStatsExpanded] = useState(false);
-  const [filterTab, setFilterTab] = useState<FilterTab>('exceptions');
+  const [filterTab, setFilterTab] = useState<FilterTab>('needs_attention');
   const [showAll, setShowAll] = useState(false);
   const debouncedSearch = useDebounce(searchQuery, 300);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
