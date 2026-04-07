@@ -12,24 +12,13 @@ import (
 
 // UpdatePurchaseDHFields updates DH v2 tracking fields on a purchase.
 func (r *CampaignsRepository) UpdatePurchaseDHFields(ctx context.Context, id string, update campaigns.DHFieldsUpdate) error {
-	result, err := r.db.ExecContext(ctx,
+	return r.execAndExpectRow(ctx, "update DH fields",
 		`UPDATE campaign_purchases
 		 SET dh_card_id = ?, dh_inventory_id = ?, dh_cert_status = ?,
 		     dh_listing_price_cents = ?, dh_channels_json = ?, dh_status = ?, updated_at = ?
 		 WHERE id = ?`,
 		update.CardID, update.InventoryID, update.CertStatus, update.ListingPriceCents, update.ChannelsJSON, update.DHStatus, time.Now(), id,
 	)
-	if err != nil {
-		return err
-	}
-	rows, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if rows == 0 {
-		return campaigns.ErrPurchaseNotFound
-	}
-	return nil
 }
 
 // GetPurchasesByDHCertStatus returns purchases with the given DH cert resolution status.
@@ -42,55 +31,27 @@ func (r *CampaignsRepository) GetPurchasesByDHCertStatus(ctx context.Context, st
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close() //nolint:errcheck // best-effort close
-
-	var purchases []campaigns.Purchase
-	for rows.Next() {
+	return scanRows(ctx, rows, func(rs *sql.Rows) (campaigns.Purchase, error) {
 		var p campaigns.Purchase
-		if err := scanPurchase(rows, &p); err != nil {
-			return nil, err
-		}
-		purchases = append(purchases, p)
-	}
-	return purchases, rows.Err()
+		err := scanPurchase(rs, &p)
+		return p, err
+	})
 }
 
 // UpdatePurchaseDHPushStatus updates the dh_push_status field on a purchase.
 func (r *CampaignsRepository) UpdatePurchaseDHPushStatus(ctx context.Context, id string, status string) error {
-	result, err := r.db.ExecContext(ctx,
+	return r.execAndExpectRow(ctx, "update DH push status",
 		`UPDATE campaign_purchases SET dh_push_status = ?, updated_at = ? WHERE id = ?`,
 		status, time.Now(), id,
 	)
-	if err != nil {
-		return err
-	}
-	rows, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if rows == 0 {
-		return campaigns.ErrPurchaseNotFound
-	}
-	return nil
 }
 
 // UpdatePurchaseDHCandidates stores disambiguation candidates JSON on a purchase.
 func (r *CampaignsRepository) UpdatePurchaseDHCandidates(ctx context.Context, id string, candidatesJSON string) error {
-	result, err := r.db.ExecContext(ctx,
+	return r.execAndExpectRow(ctx, "update DH candidates",
 		`UPDATE campaign_purchases SET dh_candidates = ?, updated_at = ? WHERE id = ?`,
 		candidatesJSON, time.Now(), id,
 	)
-	if err != nil {
-		return err
-	}
-	rows, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if rows == 0 {
-		return campaigns.ErrPurchaseNotFound
-	}
-	return nil
 }
 
 // GetPurchasesByDHPushStatus returns purchases with the given DH push status.
@@ -103,17 +64,11 @@ func (r *CampaignsRepository) GetPurchasesByDHPushStatus(ctx context.Context, st
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close() //nolint:errcheck // best-effort close
-
-	var purchases []campaigns.Purchase
-	for rows.Next() {
+	return scanRows(ctx, rows, func(rs *sql.Rows) (campaigns.Purchase, error) {
 		var p campaigns.Purchase
-		if err := scanPurchase(rows, &p); err != nil {
-			return nil, err
-		}
-		purchases = append(purchases, p)
-	}
-	return purchases, rows.Err()
+		err := scanPurchase(rs, &p)
+		return p, err
+	})
 }
 
 // CountUnsoldByDHPushStatus returns counts of unsold purchases grouped by dh_push_status.
@@ -153,40 +108,18 @@ func (r *CampaignsRepository) CountUnsoldByDHPushStatus(ctx context.Context) (ma
 
 // UpdatePurchaseGemRateID sets the CL gemRateID on a purchase.
 func (r *CampaignsRepository) UpdatePurchaseGemRateID(ctx context.Context, id, gemRateID string) error {
-	result, err := r.db.ExecContext(ctx,
+	return r.execAndExpectRow(ctx, "update gem rate ID",
 		`UPDATE campaign_purchases SET gem_rate_id = ?, updated_at = ? WHERE id = ?`,
 		gemRateID, time.Now(), id,
 	)
-	if err != nil {
-		return err
-	}
-	n, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if n == 0 {
-		return campaigns.ErrPurchaseNotFound
-	}
-	return nil
 }
 
 // UpdatePurchasePSASpecID sets the PSA spec ID on a purchase.
 func (r *CampaignsRepository) UpdatePurchasePSASpecID(ctx context.Context, id string, psaSpecID int) error {
-	result, err := r.db.ExecContext(ctx,
+	return r.execAndExpectRow(ctx, "update PSA spec ID",
 		`UPDATE campaign_purchases SET psa_spec_id = ?, updated_at = ? WHERE id = ?`,
 		psaSpecID, time.Now(), id,
 	)
-	if err != nil {
-		return err
-	}
-	n, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if n == 0 {
-		return campaigns.ErrPurchaseNotFound
-	}
-	return nil
 }
 
 // GetPurchaseIDByCertNumber returns the purchase ID for a given cert number.

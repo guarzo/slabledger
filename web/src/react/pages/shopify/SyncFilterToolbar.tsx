@@ -32,6 +32,7 @@ export function SyncFilterToolbar({
         ['no_market_data', `No Market (${filterCounts.no_market_data})`],
       ] as [SyncFilter, string][]).map(([key, label]) => (
         <button
+          type="button"
           key={key}
           onClick={() => onFilterChange(key)}
           className={`text-xs px-3 py-1 rounded-md border transition-colors ${

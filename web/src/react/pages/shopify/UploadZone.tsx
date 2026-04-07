@@ -13,6 +13,8 @@ export function UploadZone({ onFile }: { onFile: (file: File) => void }) {
 
   return (
     <div
+      role="button"
+      tabIndex={0}
       className={`border-2 border-dashed rounded-xl p-12 text-center cursor-pointer transition-colors ${
         dragOver ? 'border-[var(--brand-500)] bg-[var(--brand-500)]/5' : 'border-[var(--surface-2)] hover:border-[var(--brand-500)]/50'
       }`}
@@ -20,6 +22,7 @@ export function UploadZone({ onFile }: { onFile: (file: File) => void }) {
       onDragLeave={() => setDragOver(false)}
       onDrop={handleDrop}
       onClick={() => fileRef.current?.click()}
+      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileRef.current?.click(); } }}
     >
       <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="mx-auto mb-4 text-[var(--text-muted)]">
         <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
