@@ -65,7 +65,13 @@ func (e *CampaignToolExecutor) registerGetGlobalInventory() {
 		if err != nil {
 			return "", err
 		}
-		return toJSON(withCompDigests(result.Items)), nil
+		return toJSON(struct {
+			Items    any      `json:"items"`
+			Warnings []string `json:"warnings,omitempty"`
+		}{
+			Items:    withCompDigests(result.Items),
+			Warnings: result.Warnings,
+		}), nil
 	})
 }
 

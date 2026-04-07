@@ -1,5 +1,6 @@
 import { Suspense, lazy, useState } from 'react';
 import { Tabs } from 'radix-ui';
+import { useSearchParams } from 'react-router-dom';
 import { useCampaigns } from '../queries/useCampaignQueries';
 import OperationsTab, { type OperationState } from './campaigns/OperationsTab';
 import CardIntakeTab from './tools/CardIntakeTab';
@@ -20,6 +21,8 @@ const TABS = [
 
 export default function ToolsPage() {
   const { data: allCampaigns = [] } = useCampaigns(false);
+  const [searchParams] = useSearchParams();
+  const initialTab = TABS.some(t => t.id === searchParams.get('tab')) ? searchParams.get('tab')! : 'daily-ops';
   const [operationState, setOperationState] = useState<OperationState>('idle');
   const [importResult, setImportResult] = useState<GlobalImportResult | null>(null);
   const [psaResult, setPsaResult] = useState<PSAImportResult | null>(null);
@@ -31,7 +34,7 @@ export default function ToolsPage() {
         <p className="mt-1 text-sm text-[var(--text-muted)]">Daily operations, card intake, and legacy tools</p>
       </div>
 
-      <Tabs.Root defaultValue="daily-ops">
+      <Tabs.Root defaultValue={initialTab}>
         <TabNavigation tabs={TABS} ariaLabel="Tools tabs" />
 
         <Tabs.Content value="daily-ops">

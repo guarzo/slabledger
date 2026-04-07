@@ -139,7 +139,7 @@ func (p *Provider) CampaignData(ctx context.Context, campaignID string) (*adviso
 	go func() {
 		defer wg.Done()
 		result, err := p.svc.GetInventoryAging(ctx, campaignID)
-		if err != nil || len(result.Items) == 0 {
+		if err != nil || result == nil || len(result.Items) == 0 {
 			return
 		}
 		mu.Lock()

@@ -10,7 +10,7 @@ import { api } from '../../js/api';
 import type { Campaign, CampaignPNL, CreateCampaignInput, Phase } from '../../types/campaigns';
 import { queryKeys } from '../queries/queryKeys';
 import PokeballLoader from '../PokeballLoader';
-import { formatCents, formatPct, getErrorMessage } from '../utils/formatters';
+import { formatCents, formatPct, formatPriceRange, getErrorMessage } from '../utils/formatters';
 import { useToast } from '../contexts/ToastContext';
 import { useForm } from '../hooks/useForm';
 import { defaultCampaignInput } from '../utils/campaignConstants';
@@ -39,14 +39,6 @@ function validateCampaignForm(values: CreateCampaignInput) {
   return errors;
 }
 
-function formatPriceRange(raw: string): string {
-  if (!raw) return '';
-  const parts = raw.split(/\s*[-\u2013\u2014]\s*/);
-  return parts.map(p => {
-    const n = p.replace(/[^0-9.]/g, '');
-    return n ? `$${n}` : p;
-  }).join(' to ');
-}
 
 // Parsed campaign: only fields explicitly present in the text are set.
 // inclusionList + exclusionMode are always included — absent line = cleared.

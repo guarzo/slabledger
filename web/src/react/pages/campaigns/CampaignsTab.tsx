@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import type { Campaign, CampaignPNL, CreateCampaignInput, Phase } from '../../../types/campaigns';
-import { formatCents, formatPct } from '../../utils/formatters';
+import { formatCents, formatPct, formatPriceRange } from '../../utils/formatters';
 import { EmptyState, Button } from '../../ui';
 import CardShell from '../../ui/CardShell';
 import CampaignFormFields from '../../ui/CampaignFormFields';
@@ -16,7 +16,7 @@ function FilterSummary({ c }: { c: Campaign }) {
   const parts: string[] = [c.sport];
   if (c.yearRange) parts.push(c.yearRange);
   if (c.gradeRange) parts.push(`PSA ${c.gradeRange}`);
-  if (c.priceRange) parts.push(`$${c.priceRange}`);
+  if (c.priceRange) parts.push(formatPriceRange(c.priceRange));
   return (
     <span className="text-xs text-[var(--text-muted)] truncate">
       {parts.join(' / ')}
@@ -95,20 +95,25 @@ export default function CampaignsTab({
                 <div
                   className="w-[3px] self-stretch rounded-full flex-shrink-0"
                   style={{ backgroundColor: phaseColors[c.phase] }}
+                  aria-hidden="true"
                 />
+                <span className="sr-only">Phase: {c.phase}</span>
 
                 {/* Left: name + filters */}
                 <div className="flex flex-col min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-semibold text-[var(--text)] truncate">{c.name}</span>
                     {healthMap[c.id] && (
-                      <span
-                        className={`inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 ${
-                          healthMap[c.id] === 'critical' ? 'bg-[var(--danger)]' :
-                          healthMap[c.id] === 'warning' ? 'bg-[var(--warning)]' : 'bg-[var(--success)]'
-                        }`}
-                        title={`Health: ${healthMap[c.id]}`}
-                      />
+                      <>
+                        <span
+                          className={`inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                            healthMap[c.id] === 'critical' ? 'bg-[var(--danger)]' :
+                            healthMap[c.id] === 'warning' ? 'bg-[var(--warning)]' : 'bg-[var(--success)]'
+                          }`}
+                          aria-hidden="true"
+                        />
+                        <span className="sr-only">Health: {healthMap[c.id]}</span>
+                      </>
                     )}
                   </div>
                   <FilterSummary c={c} />

@@ -172,7 +172,7 @@ func (r *CampaignsRepository) OpenFlagPurchaseIDs(ctx context.Context) (map[stri
 		var purchaseID string
 		var flagID int64
 		if err := rows.Scan(&purchaseID, &flagID); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("scanning open flag purchase ID: %w", err)
 		}
 		result[purchaseID] = flagID
 	}

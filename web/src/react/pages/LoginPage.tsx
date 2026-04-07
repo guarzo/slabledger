@@ -33,7 +33,7 @@ const LoginPage: React.FC = () => {
 
       {/* Logo */}
       <div className="login-logo">
-        <img src={logoSrc} alt="Card Yeti" className="login-logo-img" />
+        <img src={logoSrc} alt="Card Yeti" className="login-logo-img" width="180" height="120" />
       </div>
 
       {/* Login Button */}

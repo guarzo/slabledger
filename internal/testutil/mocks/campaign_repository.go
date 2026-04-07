@@ -66,6 +66,7 @@ type MockCampaignRepository struct {
 	AddSellSheetItemsFn            func(ctx context.Context, purchaseIDs []string) error
 	RemoveSellSheetItemsFn         func(ctx context.Context, purchaseIDs []string) error
 	ClearSellSheetFn               func(ctx context.Context) error
+	OpenFlagPurchaseIDsFn          func(ctx context.Context) (map[string]int64, error)
 }
 
 // NewMockCampaignRepository creates a ready-to-use MockCampaignRepository with initialized maps.
@@ -839,7 +840,10 @@ func (m *MockCampaignRepository) HasOpenFlag(_ context.Context, _ string) (bool,
 	return false, nil
 }
 
-func (m *MockCampaignRepository) OpenFlagPurchaseIDs(_ context.Context) (map[string]int64, error) {
+func (m *MockCampaignRepository) OpenFlagPurchaseIDs(ctx context.Context) (map[string]int64, error) {
+	if m.OpenFlagPurchaseIDsFn != nil {
+		return m.OpenFlagPurchaseIDsFn(ctx)
+	}
 	return map[string]int64{}, nil
 }
 

@@ -2,6 +2,8 @@ import type { AgingItem, ReviewStats, ExpectedValue } from '../../../../types/ca
 import { costBasis, bestPrice, unrealizedPL, getReviewStatus, reviewUrgencySort, isCardShowCandidate } from './utils';
 import type { SortKey, SortDir } from './utils';
 
+const EXCEPTION_STATUSES = ['large_gap', 'no_data', 'flagged'] as const;
+
 export interface TabCounts {
   exceptions: number;
   card_show: number;
@@ -31,7 +33,7 @@ export function computeInventoryMeta(items: AgingItem[]): InventoryMeta {
     else stats.needsReview++;
 
     const status = getReviewStatus(item);
-    if (status === 'large_gap' || status === 'no_data' || status === 'flagged') {
+    if ((EXCEPTION_STATUSES as readonly string[]).includes(status)) {
       counts.exceptions++;
     }
     if (isCardShowCandidate(item)) counts.card_show++;
@@ -78,8 +80,7 @@ export function filterAndSortItems(
     } else if (filterTab !== 'all') {
       result = result.filter(i => {
         if (filterTab === 'exceptions') {
-          const status = getReviewStatus(i);
-          return status === 'large_gap' || status === 'no_data' || status === 'flagged';
+          return (EXCEPTION_STATUSES as readonly string[]).includes(getReviewStatus(i));
         }
         if (filterTab === 'card_show') return isCardShowCandidate(i);
         return false;

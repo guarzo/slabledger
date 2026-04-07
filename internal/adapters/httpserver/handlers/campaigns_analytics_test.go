@@ -339,41 +339,64 @@ func TestHandleTuning_ServiceError(t *testing.T) {
 
 // --- HandleInventory ---
 
-func TestHandleInventory_Success(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		GetInventoryAgingFn: func(_ context.Context, _ string) (*campaigns.InventoryResult, error) {
-			return &campaigns.InventoryResult{Items: []campaigns.AgingItem{{DaysHeld: 10}}}, nil
+func TestHandleInventory(t *testing.T) {
+	tests := []struct {
+		name           string
+		agingFn        func(context.Context, string) (*campaigns.InventoryResult, error)
+		expectedStatus int
+		checkBody      bool
+	}{
+		{
+			name: "success with items and warnings",
+			agingFn: func(_ context.Context, _ string) (*campaigns.InventoryResult, error) {
+				return &campaigns.InventoryResult{
+					Items:    []campaigns.AgingItem{{DaysHeld: 10}},
+					Warnings: []string{"Price flag data unavailable"},
+				}, nil
+			},
+			expectedStatus: http.StatusOK,
+			checkBody:      true,
+		},
+		{
+			name: "service error",
+			agingFn: func(_ context.Context, _ string) (*campaigns.InventoryResult, error) {
+				return nil, fmt.Errorf("internal error")
+			},
+			expectedStatus: http.StatusInternalServerError,
 		},
 	}
-	h := newTestHandler(svc)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/campaigns/c1/inventory", nil)
-	req.SetPathValue("id", "c1")
-	rec := httptest.NewRecorder()
-	h.HandleInventory(rec, req)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := &mocks.MockCampaignService{
+				GetInventoryAgingFn: tt.agingFn,
+			}
+			h := newTestHandler(svc)
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rec.Code)
+			req := httptest.NewRequest(http.MethodGet, "/api/campaigns/c1/inventory", nil)
+			req.SetPathValue("id", "c1")
+			rec := httptest.NewRecorder()
+			h.HandleInventory(rec, req)
+
+			if rec.Code != tt.expectedStatus {
+				t.Fatalf("expected %d, got %d; body: %s", tt.expectedStatus, rec.Code, rec.Body.String())
+			}
+			if tt.checkBody {
+				var result campaigns.InventoryResult
+				if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+					t.Fatalf("decode: %v", err)
+				}
+				if len(result.Items) != 1 {
+					t.Errorf("expected 1 item, got %d", len(result.Items))
+				}
+				if len(result.Warnings) == 0 {
+					t.Error("expected non-empty warnings")
+				}
+			} else {
+				decodeErrorResponse(t, rec)
+			}
+		})
 	}
-}
-
-func TestHandleInventory_ServiceError(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		GetInventoryAgingFn: func(_ context.Context, _ string) (*campaigns.InventoryResult, error) {
-			return nil, fmt.Errorf("internal error")
-		},
-	}
-	h := newTestHandler(svc)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/campaigns/c1/inventory", nil)
-	req.SetPathValue("id", "c1")
-	rec := httptest.NewRecorder()
-	h.HandleInventory(rec, req)
-
-	if rec.Code != http.StatusInternalServerError {
-		t.Fatalf("expected 500, got %d", rec.Code)
-	}
-	decodeErrorResponse(t, rec)
 }
 
 // --- HandleDaysToSell ---

@@ -42,7 +42,9 @@ export default function GlobalInventoryPage() {
 
       {warnings && warnings.length > 0 && (
         <div className="mb-4 p-3 rounded-lg bg-[var(--warning)]/10 border border-[var(--warning)]/20 text-sm text-[var(--warning)]">
-          {warnings.join('. ')}
+          <ul className="list-disc list-inside space-y-1">
+            {warnings.map((w, i) => <li key={i}>{w}</li>)}
+          </ul>
         </div>
       )}
 
