@@ -71,9 +71,9 @@ func TestBuildScoreCard(t *testing.T) {
 			entityID:   "purch-1",
 			entityType: "inventory_item",
 			data: &LiquidationFactorData{
-				DaysHeld:           90,
-				CapitalExposurePct: ptrFloat(75.0),
-				PriceChangePct:     ptrFloat(-5.0),
+				DaysHeld:        90,
+				WeeksToCover:    ptrFloat(8.0),
+				PriceChangePct:  ptrFloat(-5.0),
 				SalesPerMonth:      ptrFloat(3.0),
 				PriceConfidence:    0.7,
 				MarketSource:       "test",

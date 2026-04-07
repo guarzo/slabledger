@@ -9,14 +9,6 @@ import (
 )
 
 const (
-	// CapitalExposureThresholdPct is the maximum capital exposure percentage
-	// before activation is blocked.
-	CapitalExposureThresholdPct = 70
-
-	// DailyExposureDivisor is the fraction of capital budget that total daily
-	// exposure must stay below (e.g. 10 means daily exposure < budget/10 = 10%).
-	DailyExposureDivisor = 10
-
 	// HighSpendCapCents is the daily spend cap threshold (in cents) above which
 	// a warning is emitted that a single fill could be significant.
 	HighSpendCapCents = 500000 // $5,000/day
