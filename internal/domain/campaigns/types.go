@@ -175,6 +175,8 @@ type Purchase struct {
 	DHStatus            DHStatus     `json:"dhStatus,omitempty"`            // DH inventory status
 	DHPushStatus        DHPushStatus `json:"dhPushStatus,omitempty"`        // Pipeline status: "", "pending", "matched", "unmatched", "manual"
 	DHCandidatesJSON    string       `json:"dhCandidatesJson,omitempty"`    // Ambiguous cert resolution candidates JSON
+	GemRateID           string       `json:"gemRateId,omitempty"`           // CL gemRateID (grade-agnostic card variant identifier)
+	PSASpecID           int          `json:"psaSpecId,omitempty"`           // PSA spec ID from CL cards index
 	CreatedAt           time.Time    `json:"createdAt"`
 	UpdatedAt           time.Time    `json:"updatedAt"`
 

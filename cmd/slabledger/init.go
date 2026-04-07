@@ -354,6 +354,7 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 		CardLadderStore:          deps.CardLadderStore,
 		CardLadderPurchaseLister: deps.CampaignsRepo,
 		CardLadderValueUpdater:   deps.CampaignsRepo,
+		CardLadderGemRateUpdater: deps.CampaignsRepo,
 		CardLadderCLRecorder:     deps.CampaignsRepo,
 		CardLadderSalesStore:     deps.CardLadderSalesStore,
 	}

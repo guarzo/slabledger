@@ -90,6 +90,7 @@ type BuildDeps struct {
 	CardLadderStore          *sqlite.CardLadderStore
 	CardLadderPurchaseLister CardLadderPurchaseLister
 	CardLadderValueUpdater   CardLadderValueUpdater
+	CardLadderGemRateUpdater CardLadderGemRateUpdater
 	CardLadderCLRecorder     domainCampaigns.CLValueHistoryRecorder
 	CardLadderSalesStore     *sqlite.CLSalesStore
 }
@@ -241,6 +242,7 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 		clRefresh = NewCardLadderRefreshScheduler(
 			deps.CardLadderClient, deps.CardLadderStore,
 			deps.CardLadderPurchaseLister, deps.CardLadderValueUpdater,
+			deps.CardLadderGemRateUpdater,
 			deps.CardLadderCLRecorder,
 			deps.CardLadderSalesStore,
 			deps.Logger, cfg.CardLadder,
