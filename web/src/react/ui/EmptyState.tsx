@@ -23,7 +23,7 @@ export default function EmptyState({ icon, title, description, action, compact, 
       {steps && steps.length > 0 && (
         <ol className="text-left text-sm text-[var(--text-muted)] mb-4 space-y-1 max-w-xs">
           {steps.map((step, i) => (
-            <li key={i} className="flex gap-2">
+            <li key={`${step}-${i}`} className="flex gap-2">
               <span className="text-[var(--brand-400)] font-semibold shrink-0">{i + 1}.</span>
               <span>{step}</span>
             </li>
