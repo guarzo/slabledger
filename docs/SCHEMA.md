@@ -1,6 +1,6 @@
 # Database Schema Reference
 
-SlabLedger uses SQLite in WAL mode. Migrations are embedded in the binary and run automatically on startup. Migration files live in `internal/adapters/storage/sqlite/migrations/` (42 pairs, `000001`–`000042`).
+SlabLedger uses SQLite in WAL mode. Migrations are embedded in the binary and run automatically on startup. Migration files live in `internal/adapters/storage/sqlite/migrations/` (43 pairs, `000001`–`000043`).
 
 All monetary values are stored in **cents** (integer). Timestamps use `DATETIME`/`TIMESTAMP` as SQLite text in UTC. Boolean columns use `INTEGER` (`0`/`1`).
 
@@ -596,7 +596,7 @@ Individual graded cards bought under a campaign.
 - `idx_purchases_invoice_date` on `(invoice_date)` WHERE `invoice_date != ''` (partial); added migration 000027
 - `idx_purchases_dh_cert_status` on `(dh_cert_status)` WHERE `dh_cert_status != ''` (partial); added migration 000030
 - `idx_campaign_purchases_dh_push_status` on `(dh_push_status)` WHERE `dh_push_status != ''` (partial); added migration 000035
-- `idx_purchases_gem_rate_id` on `(gem_rate_id)`; added migration 000040
+- `idx_purchases_gem_rate_id` on `(gem_rate_id)` WHERE `gem_rate_id != ''` (partial); added migration 000040, converted to partial in 000043
 
 **Foreign Keys:** `campaign_id → campaigns(id)` ON DELETE CASCADE
 
