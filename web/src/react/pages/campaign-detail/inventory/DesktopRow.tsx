@@ -1,12 +1,12 @@
 import type { AgingItem } from '../../../../types/campaigns';
 import { formatCents, daysHeldColor } from '../../../utils/formatters';
-import { TrendArrow, ConfidenceIndicator } from '../../../ui';
+import { TrendArrow, ConfidenceIndicator, GradeBadge } from '../../../ui';
 import { DropdownMenu } from 'radix-ui';
 import MarketplaceLinks from './MarketplaceLinks';
 import {
   costBasis, bestPrice, unrealizedPL, marketTrend,
   getSourceByType, marketTooltip,
-  formatPL, displayGrade,
+  formatPL,
   getReviewStatus, statusBorderColor, isHotSeller,
 } from './utils';
 
@@ -71,6 +71,14 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
       </div>
       <div className="glass-table-td flex-1 min-w-0" title={item.purchase.cardName}>
         <div className="flex items-center gap-1.5 min-w-0">
+          {item.purchase.frontImageUrl && (
+            <img
+              src={item.purchase.frontImageUrl}
+              alt=""
+              className="w-8 h-11 object-cover rounded shrink-0 bg-[var(--surface-2)]"
+              loading="lazy"
+            />
+          )}
           {showCampaignColumn && item.campaignName && (() => {
             const color = campaignColor(item.campaignName);
             return (
@@ -106,7 +114,9 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
           {item.purchase.certNumber && <> &middot; {item.purchase.certNumber}</>}
         </div>
       </div>
-      <div className="glass-table-td flex-shrink-0 text-center text-[var(--text)]" style={{ width: '36px' }}>{displayGrade(item.purchase)}</div>
+      <div className="glass-table-td flex-shrink-0 text-center" style={{ width: '48px' }}>
+        <GradeBadge grader={item.purchase.grader || 'PSA'} grade={item.purchase.gradeValue} size="sm" />
+      </div>
       <div className="glass-table-td flex-shrink-0 text-right text-[var(--text)] tabular-nums" style={{ width: '72px' }}>{formatCents(cb)}</div>
       <div className="glass-table-td flex-shrink-0 text-right" style={{ width: '120px' }}
         title={snap ? marketTooltip(snap, cb) : undefined}>

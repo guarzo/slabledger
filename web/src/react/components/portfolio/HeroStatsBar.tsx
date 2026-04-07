@@ -1,5 +1,6 @@
 import type { PortfolioHealth, CapitalSummary } from '../../../types/campaigns';
 import { formatCents, formatPct, formatWeeksToCover } from '../../utils/formatters';
+import { EmptyState } from '../../ui';
 
 interface HeroStatsBarProps {
   health?: PortfolioHealth;
@@ -8,6 +9,22 @@ interface HeroStatsBarProps {
 
 export default function HeroStatsBar({ health, capital }: HeroStatsBarProps) {
   if (!health) return null;
+
+  // Onboarding: all-zero state
+  const hasActivity = health.totalDeployedCents > 0 || health.totalRecoveredCents > 0 || health.realizedROI !== 0;
+  if (!hasActivity) {
+    return (
+      <div className="mb-6">
+        <EmptyState
+          icon="📊"
+          title="Welcome to SlabLedger"
+          description="Your portfolio dashboard will come alive once you start tracking."
+          compact
+          steps={['Create a campaign', 'Import PSA purchases', 'Record sales as you go']}
+        />
+      </div>
+    );
+  }
 
   const roi = health.realizedROI ?? 0;
 

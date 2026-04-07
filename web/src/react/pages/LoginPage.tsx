@@ -37,7 +37,7 @@ const LoginPage: React.FC = () => {
       </div>
 
       {/* Login Button */}
-      <div className="login-actions">
+      <div className="login-card">
         {error && (
           <div className="login-error" role="alert">
             {getErrorMessage(error)}
