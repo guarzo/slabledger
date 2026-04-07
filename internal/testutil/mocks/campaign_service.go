@@ -50,11 +50,10 @@ type MockCampaignService struct {
 	ReassignPurchaseFn          func(ctx context.Context, purchaseID string, newCampaignID string) error
 
 	// Capital & Invoice
-	GetCapitalSummaryFn    func(ctx context.Context) (*campaigns.CapitalSummary, error)
-	GetCashflowConfigFn    func(ctx context.Context) (*campaigns.CashflowConfig, error)
-	UpdateCashflowConfigFn func(ctx context.Context, cfg *campaigns.CashflowConfig) error
-	ListInvoicesFn         func(ctx context.Context) ([]campaigns.Invoice, error)
-	UpdateInvoiceFn        func(ctx context.Context, inv *campaigns.Invoice) error
+	GetCapitalSummaryFn func(ctx context.Context) (*campaigns.CapitalSummary, error)
+	GetCashflowConfigFn func(ctx context.Context) (*campaigns.CashflowConfig, error)
+	ListInvoicesFn      func(ctx context.Context) ([]campaigns.Invoice, error)
+	UpdateInvoiceFn     func(ctx context.Context, inv *campaigns.Invoice) error
 
 	// Portfolio health
 	GetPortfolioHealthFn          func(ctx context.Context) (*campaigns.PortfolioHealth, error)
@@ -366,13 +365,6 @@ func (m *MockCampaignService) GetCashflowConfig(ctx context.Context) (*campaigns
 		return m.GetCashflowConfigFn(ctx)
 	}
 	return &campaigns.CashflowConfig{CapitalBudgetCents: 5000000, CashBufferCents: 1000000}, nil
-}
-
-func (m *MockCampaignService) UpdateCashflowConfig(ctx context.Context, cfg *campaigns.CashflowConfig) error {
-	if m.UpdateCashflowConfigFn != nil {
-		return m.UpdateCashflowConfigFn(ctx, cfg)
-	}
-	return nil
 }
 
 func (m *MockCampaignService) ListInvoices(ctx context.Context) ([]campaigns.Invoice, error) {

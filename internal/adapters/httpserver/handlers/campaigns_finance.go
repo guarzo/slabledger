@@ -31,20 +31,6 @@ func (h *CampaignsHandler) HandleGetCashflowConfig(w http.ResponseWriter, r *htt
 	writeJSON(w, http.StatusOK, cfg)
 }
 
-// HandleUpdateCashflowConfig handles PUT /api/credit/config.
-func (h *CampaignsHandler) HandleUpdateCashflowConfig(w http.ResponseWriter, r *http.Request) {
-	var cfg campaigns.CashflowConfig
-	if !decodeBody(w, r, &cfg) {
-		return
-	}
-	if !serviceCallVoid(w, r.Context(), h.logger, "failed to update cashflow config", func() error {
-		return h.service.UpdateCashflowConfig(r.Context(), &cfg)
-	}) {
-		return
-	}
-	writeJSON(w, http.StatusOK, cfg)
-}
-
 // HandleListInvoices handles GET /api/credit/invoices.
 func (h *CampaignsHandler) HandleListInvoices(w http.ResponseWriter, r *http.Request) {
 	invoices, ok := serviceCall(w, r.Context(), h.logger, "failed to list invoices", func() ([]campaigns.Invoice, error) {

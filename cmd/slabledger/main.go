@@ -20,7 +20,6 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/advisortool"
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	"github.com/guarzo/slabledger/internal/adapters/clients/google"
-	"github.com/guarzo/slabledger/internal/adapters/clients/psa"
 	"github.com/guarzo/slabledger/internal/adapters/clients/tcgdex"
 	"github.com/guarzo/slabledger/internal/adapters/httpserver/handlers"
 	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
@@ -305,12 +304,10 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	}
 	clClient, _, clStore := initializeCardLadder(ctx, logger, db, clEncryptor)
 	var clHandler *handlers.CardLadderHandler
-	var salesCompsHandler *handlers.SalesCompsHandler
 	var clSalesStore *sqlite.CLSalesStore
 	if clStore != nil {
 		clHandler = handlers.NewCardLadderHandler(clStore, clClient, logger)
 		clSalesStore = sqlite.NewCLSalesStore(db.DB)
-		salesCompsHandler = handlers.NewSalesCompsHandler(clSalesStore, clStore, campaignsService, logger)
 	}
 
 	// Initialize picks
@@ -421,19 +418,6 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	}
 	socialHandler := handlers.NewSocialHandler(socialService, socialRepo, logger, mediaDir, baseURL)
 
-	// Wire image backfiller if PSA token is available
-	if cfg.Adapters.PSAToken != "" {
-		psaImageClient := psa.NewClient(cfg.Adapters.PSAToken, logger)
-		backfiller := psa.NewImageBackfiller(
-			psaImageClient,
-			&psaImageListerAdapter{repo: campaignsRepo},
-			&psaImageUpdaterAdapter{repo: campaignsRepo},
-			logger,
-		)
-		socialHandler.WithBackfiller(backfiller)
-		logger.Info(ctx, "PSA image backfill enabled")
-	}
-
 	// Wire metrics repository into social handler for API endpoints
 	socialHandler.WithMetricsRepo(metricsRepo)
 
@@ -476,7 +460,6 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		AIStatusHandler:           aiStatusHandler,
 		PriceFlagsHandler:         priceFlagsHandler,
 		CardLadderHandler:         clHandler,
-		SalesCompsHandler:         salesCompsHandler,
 		PicksHandler:              picksHandler,
 		OpportunitiesHandler:      opportunitiesHandler,
 		DHHandler:                 dhHandler,

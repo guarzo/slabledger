@@ -441,8 +441,6 @@ func (m *mockRepo) SumPurchaseCostByInvoiceDate(_ context.Context, invoiceDate s
 func (m *mockRepo) GetCashflowConfig(_ context.Context) (*CashflowConfig, error) {
 	return &CashflowConfig{CapitalBudgetCents: 5000000, CashBufferCents: 1000000}, nil
 }
-func (m *mockRepo) UpdateCashflowConfig(_ context.Context, _ *CashflowConfig) error { return nil }
-
 func (m *mockRepo) GetCapitalSummary(_ context.Context) (*CapitalSummary, error) {
 	return &CapitalSummary{OutstandingCents: 0, WeeksToCover: WeeksToCoverNoData, AlertLevel: AlertOK}, nil
 }

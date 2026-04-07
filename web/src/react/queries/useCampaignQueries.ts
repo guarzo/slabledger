@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tansta
 import { api } from '../../js/api';
 import type { Campaign, CreateCampaignInput, CreatePurchaseInput, CreateSaleInput, Purchase, Sale, Invoice } from '../../types/campaigns';
 import { queryKeys } from './queryKeys';
+import { createParamQuery, createStaticQuery } from './createQuery';
 
 /**
  * Invalidates all queries related to purchases for a given campaign.
@@ -29,48 +30,25 @@ export function useCampaigns(activeOnly: boolean) {
   });
 }
 
-export function useCampaign(id: string) {
-  return useQuery({
-    queryKey: queryKeys.campaigns.detail(id),
-    queryFn: () => api.getCampaign(id),
-    enabled: !!id,
-    staleTime: CAMPAIGN_STALE_TIME,
-  });
-}
+export const useCampaign = createParamQuery(
+  queryKeys.campaigns.detail, (id) => api.getCampaign(id), { staleTime: CAMPAIGN_STALE_TIME },
+);
 
-export function usePurchases(campaignId: string) {
-  return useQuery({
-    queryKey: queryKeys.campaigns.purchases(campaignId),
-    queryFn: () => api.listPurchases(campaignId),
-    enabled: !!campaignId,
-    staleTime: CAMPAIGN_STALE_TIME,
-  });
-}
+export const usePurchases = createParamQuery(
+  queryKeys.campaigns.purchases, (id) => api.listPurchases(id), { staleTime: CAMPAIGN_STALE_TIME },
+);
 
-export function useSales(campaignId: string) {
-  return useQuery({
-    queryKey: queryKeys.campaigns.sales(campaignId),
-    queryFn: () => api.listSales(campaignId),
-    enabled: !!campaignId,
-  });
-}
+export const useSales = createParamQuery(
+  queryKeys.campaigns.sales, (id) => api.listSales(id),
+);
 
-export function useCampaignPNL(campaignId: string) {
-  return useQuery({
-    queryKey: queryKeys.campaigns.pnl(campaignId),
-    queryFn: () => api.getCampaignPNL(campaignId),
-    enabled: !!campaignId,
-    staleTime: ANALYTICS_STALE_TIME,
-  });
-}
+export const useCampaignPNL = createParamQuery(
+  queryKeys.campaigns.pnl, (id) => api.getCampaignPNL(id), { staleTime: ANALYTICS_STALE_TIME },
+);
 
-export function useChannelPNL(campaignId: string) {
-  return useQuery({
-    queryKey: queryKeys.campaigns.channelPnl(campaignId),
-    queryFn: () => api.getPNLByChannel(campaignId),
-    enabled: !!campaignId,
-  });
-}
+export const useChannelPNL = createParamQuery(
+  queryKeys.campaigns.channelPnl, (id) => api.getPNLByChannel(id),
+);
 
 export function useFillRate(campaignId: string, days: number = 30) {
   return useQuery({
@@ -80,13 +58,9 @@ export function useFillRate(campaignId: string, days: number = 30) {
   });
 }
 
-export function useDaysToSell(campaignId: string) {
-  return useQuery({
-    queryKey: queryKeys.campaigns.daysToSell(campaignId),
-    queryFn: () => api.getDaysToSell(campaignId),
-    enabled: !!campaignId,
-  });
-}
+export const useDaysToSell = createParamQuery(
+  queryKeys.campaigns.daysToSell, (id) => api.getDaysToSell(id),
+);
 
 export function useInventory(campaignId: string, opts?: { enabled?: boolean }) {
   const query = useQuery({
@@ -98,74 +72,43 @@ export function useInventory(campaignId: string, opts?: { enabled?: boolean }) {
   return { ...query, data: query.data?.items, warnings: query.data?.warnings };
 }
 
-export function useTuning(campaignId: string) {
-  return useQuery({
-    queryKey: queryKeys.campaigns.tuning(campaignId),
-    queryFn: () => api.getCampaignTuning(campaignId),
-    enabled: !!campaignId,
-    staleTime: ANALYTICS_STALE_TIME,
-  });
-}
+export const useTuning = createParamQuery(
+  queryKeys.campaigns.tuning, (id) => api.getCampaignTuning(id), { staleTime: ANALYTICS_STALE_TIME },
+);
 
 // Capital & Invoice queries
 
-export function useCapitalSummary() {
-  return useQuery({
-    queryKey: queryKeys.credit.summary,
-    queryFn: () => api.getCapitalSummary(),
-  });
-}
+export const useCapitalSummary = createStaticQuery(
+  queryKeys.credit.summary, () => api.getCapitalSummary(),
+);
 
-export function useInvoices() {
-  return useQuery({
-    queryKey: queryKeys.credit.invoices,
-    queryFn: () => api.listInvoices(),
-  });
-}
+export const useInvoices = createStaticQuery(
+  queryKeys.credit.invoices, () => api.listInvoices(),
+);
 
-export function usePortfolioHealth() {
-  return useQuery({
-    queryKey: queryKeys.portfolio.health,
-    queryFn: () => api.getPortfolioHealth(),
-    staleTime: ANALYTICS_STALE_TIME,
-  });
-}
+export const usePortfolioHealth = createStaticQuery(
+  queryKeys.portfolio.health, () => api.getPortfolioHealth(), { staleTime: ANALYTICS_STALE_TIME },
+);
 
-export function usePortfolioChannelVelocity() {
-  return useQuery({
-    queryKey: queryKeys.portfolio.channelVelocity,
-    queryFn: () => api.getPortfolioChannelVelocity(),
-  });
-}
+export const usePortfolioChannelVelocity = createStaticQuery(
+  queryKeys.portfolio.channelVelocity, () => api.getPortfolioChannelVelocity(),
+);
 
-export function usePortfolioInsights() {
-  return useQuery({
-    queryKey: queryKeys.portfolio.insights,
-    queryFn: () => api.getPortfolioInsights(),
-    staleTime: ANALYTICS_STALE_TIME,
-  });
-}
+export const usePortfolioInsights = createStaticQuery(
+  queryKeys.portfolio.insights, () => api.getPortfolioInsights(), { staleTime: ANALYTICS_STALE_TIME },
+);
 
-export function useCapitalTimeline() {
-  return useQuery({
-    queryKey: queryKeys.portfolio.capitalTimeline,
-    queryFn: () => api.getCapitalTimeline(),
-  });
-}
+export const useCapitalTimeline = createStaticQuery(
+  queryKeys.portfolio.capitalTimeline, () => api.getCapitalTimeline(),
+);
 
-export function useWeeklyReview() {
-  return useQuery({
-    queryKey: queryKeys.portfolio.weeklyReview,
-    queryFn: () => api.getWeeklyReview(),
-  });
-}
+export const useWeeklyReview = createStaticQuery(
+  queryKeys.portfolio.weeklyReview, () => api.getWeeklyReview(),
+);
 
-export function useGlobalSellSheet() {
-  return useQuery({
-    queryKey: queryKeys.portfolio.sellSheet,
-    queryFn: () => api.generateGlobalSellSheet(),
-  });
-}
+export const useGlobalSellSheet = createStaticQuery(
+  queryKeys.portfolio.sellSheet, () => api.generateGlobalSellSheet(),
+);
 
 export function useGlobalInventory() {
   const query = useQuery({
@@ -176,37 +119,21 @@ export function useGlobalInventory() {
   return { ...query, data: query.data?.items, warnings: query.data?.warnings };
 }
 
-export function useCrackCandidates(campaignId: string) {
-  return useQuery({
-    queryKey: queryKeys.campaigns.crackCandidates(campaignId),
-    queryFn: () => api.getCrackCandidates(campaignId),
-    enabled: !!campaignId,
-  });
-}
+export const useCrackCandidates = createParamQuery(
+  queryKeys.campaigns.crackCandidates, (id) => api.getCrackCandidates(id),
+);
 
-export function useExpectedValues(campaignId: string) {
-  return useQuery({
-    queryKey: queryKeys.campaigns.expectedValues(campaignId),
-    queryFn: () => api.getExpectedValues(campaignId),
-    enabled: !!campaignId,
-  });
-}
+export const useExpectedValues = createParamQuery(
+  queryKeys.campaigns.expectedValues, (id) => api.getExpectedValues(id),
+);
 
-export function useActivationChecklist(campaignId: string) {
-  return useQuery({
-    queryKey: queryKeys.campaigns.activationChecklist(campaignId),
-    queryFn: () => api.getActivationChecklist(campaignId),
-    enabled: !!campaignId,
-  });
-}
+export const useActivationChecklist = createParamQuery(
+  queryKeys.campaigns.activationChecklist, (id) => api.getActivationChecklist(id),
+);
 
-export function useProjections(campaignId: string) {
-  return useQuery({
-    queryKey: queryKeys.campaigns.projections(campaignId),
-    queryFn: () => api.getProjections(campaignId),
-    enabled: !!campaignId,
-  });
-}
+export const useProjections = createParamQuery(
+  queryKeys.campaigns.projections, (id) => api.getProjections(id),
+);
 
 // Credit & Invoice mutations
 

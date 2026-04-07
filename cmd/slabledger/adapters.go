@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 
-	"github.com/guarzo/slabledger/internal/adapters/clients/psa"
 	"github.com/guarzo/slabledger/internal/adapters/scheduler"
 	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
 	"github.com/guarzo/slabledger/internal/domain/campaigns"
@@ -46,30 +45,4 @@ func (a *snapshotRefreshAdapter) RefreshSnapshot(ctx context.Context, p schedule
 	return a.svc.RefreshPurchaseSnapshot(ctx, p.ID, campaigns.CardIdentity{
 		CardName: p.CardName, CardNumber: p.CardNumber, SetName: p.SetName, PSAListingTitle: p.PSAListingTitle,
 	}, p.GradeValue, p.CLValueCents)
-}
-
-// --- PSA image backfill adapters ---
-
-type psaImageListerAdapter struct {
-	repo *sqlite.CampaignsRepository
-}
-
-func (a *psaImageListerAdapter) ListPurchasesMissingImages(ctx context.Context, limit int) ([]psa.PurchaseImageRow, error) {
-	rows, err := a.repo.ListPurchasesMissingImages(ctx, limit)
-	if err != nil {
-		return nil, err
-	}
-	result := make([]psa.PurchaseImageRow, len(rows))
-	for i, r := range rows {
-		result[i] = psa.PurchaseImageRow{ID: r.ID, CertNumber: r.CertNumber}
-	}
-	return result, nil
-}
-
-type psaImageUpdaterAdapter struct {
-	repo *sqlite.CampaignsRepository
-}
-
-func (a *psaImageUpdaterAdapter) UpdatePurchaseImageURLs(ctx context.Context, id, frontURL, backURL string) error {
-	return a.repo.UpdatePurchaseImageURLs(ctx, id, frontURL, backURL)
 }
