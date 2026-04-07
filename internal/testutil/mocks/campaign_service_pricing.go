@@ -17,18 +17,18 @@ import (
 //	    },
 //	}
 type MockPricingService struct {
-	UpdateBuyCostFn        func(ctx context.Context, purchaseID string, buyCostCents int) error
-	SetPriceOverrideFn     func(ctx context.Context, purchaseID string, priceCents int, source string) error
-	SetAISuggestedPriceFn  func(ctx context.Context, purchaseID string, priceCents int) error
-	AcceptAISuggestionFn   func(ctx context.Context, purchaseID string) error
-	DismissAISuggestionFn  func(ctx context.Context, purchaseID string) error
+	UpdateBuyCostFn         func(ctx context.Context, purchaseID string, buyCostCents int) error
+	SetPriceOverrideFn      func(ctx context.Context, purchaseID string, priceCents int, source string) error
+	SetAISuggestedPriceFn   func(ctx context.Context, purchaseID string, priceCents int) error
+	AcceptAISuggestionFn    func(ctx context.Context, purchaseID string) error
+	DismissAISuggestionFn   func(ctx context.Context, purchaseID string) error
 	GetPriceOverrideStatsFn func(ctx context.Context) (*campaigns.PriceOverrideStats, error)
-	SetReviewedPriceFn     func(ctx context.Context, purchaseID string, priceCents int, source string) error
-	GetReviewStatsFn       func(ctx context.Context, campaignID string) (campaigns.ReviewStats, error)
-	GetGlobalReviewStatsFn func(ctx context.Context) (campaigns.ReviewStats, error)
-	CreatePriceFlagFn      func(ctx context.Context, purchaseID string, userID int64, reason string) (int64, error)
-	ListPriceFlagsFn       func(ctx context.Context, status string) ([]campaigns.PriceFlagWithContext, error)
-	ResolvePriceFlagFn     func(ctx context.Context, flagID int64, resolvedBy int64) error
+	SetReviewedPriceFn      func(ctx context.Context, purchaseID string, priceCents int, source string) error
+	GetReviewStatsFn        func(ctx context.Context, campaignID string) (campaigns.ReviewStats, error)
+	GetGlobalReviewStatsFn  func(ctx context.Context) (campaigns.ReviewStats, error)
+	CreatePriceFlagFn       func(ctx context.Context, purchaseID string, userID int64, reason string) (int64, error)
+	ListPriceFlagsFn        func(ctx context.Context, status string) ([]campaigns.PriceFlagWithContext, error)
+	ResolvePriceFlagFn      func(ctx context.Context, flagID int64, resolvedBy int64) error
 }
 
 var _ campaigns.PricingService = (*MockPricingService)(nil)

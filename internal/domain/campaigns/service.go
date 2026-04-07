@@ -283,12 +283,12 @@ func (s *service) Close() {
 
 // Compile-time checks: service satisfies Service and each sub-interface.
 var (
-	_ Service          = (*service)(nil)
-	_ CRUDService      = (*service)(nil)
-	_ AnalyticsService = (*service)(nil)
-	_ ImportService    = (*service)(nil)
-	_ FinanceService   = (*service)(nil)
-	_ PricingService   = (*service)(nil)
+	_ Service           = (*service)(nil)
+	_ CRUDService       = (*service)(nil)
+	_ AnalyticsService  = (*service)(nil)
+	_ ImportService     = (*service)(nil)
+	_ FinanceService    = (*service)(nil)
+	_ PricingService    = (*service)(nil)
 	_ CertLookupService = (*service)(nil)
-	_ SnapshotService  = (*service)(nil)
+	_ SnapshotService   = (*service)(nil)
 )
