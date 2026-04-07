@@ -3,10 +3,7 @@ import { costBasis, bestPrice, unrealizedPL, getReviewStatus, reviewUrgencySort,
 import type { SortKey, SortDir } from './utils';
 
 export interface TabCounts {
-  needs_review: number;
-  large_gap: number;
-  no_data: number;
-  flagged: number;
+  exceptions: number;
   card_show: number;
   all: number;
 }
@@ -25,7 +22,7 @@ export interface InventoryMeta {
 
 export function computeInventoryMeta(items: AgingItem[]): InventoryMeta {
   const stats: ReviewStats = { total: items.length, needsReview: 0, reviewed: 0, flagged: 0 };
-  const counts: TabCounts = { needs_review: 0, large_gap: 0, no_data: 0, flagged: 0, card_show: 0, all: items.length };
+  const counts: TabCounts = { exceptions: 0, card_show: 0, all: items.length };
   let totalCost = 0;
   let totalMarket = 0;
   for (const item of items) {
@@ -34,10 +31,9 @@ export function computeInventoryMeta(items: AgingItem[]): InventoryMeta {
     else stats.needsReview++;
 
     const status = getReviewStatus(item);
-    if (status === 'needs_review') { counts.needs_review++; }
-    else if (status === 'large_gap') { counts.needs_review++; counts.large_gap++; }
-    else if (status === 'no_data') { counts.needs_review++; counts.no_data++; }
-    else if (status === 'flagged') counts.flagged++;
+    if (status === 'large_gap' || status === 'no_data' || status === 'flagged') {
+      counts.exceptions++;
+    }
     if (isCardShowCandidate(item)) counts.card_show++;
 
     totalCost += costBasis(item.purchase);
@@ -50,7 +46,7 @@ export function computeInventoryMeta(items: AgingItem[]): InventoryMeta {
   };
 }
 
-export type FilterTab = 'needs_review' | 'large_gap' | 'no_data' | 'flagged' | 'card_show' | 'all' | 'sell_sheet';
+export type FilterTab = 'exceptions' | 'sell_sheet' | 'all' | 'card_show';
 
 export function filterAndSortItems(
   items: AgingItem[],
@@ -81,13 +77,12 @@ export function filterAndSortItems(
       result = result.filter(i => sellSheetHas(i.purchase.id));
     } else if (filterTab !== 'all') {
       result = result.filter(i => {
-        const status = getReviewStatus(i);
-        if (filterTab === 'large_gap') return status === 'large_gap';
-        if (filterTab === 'no_data') return status === 'no_data';
-        if (filterTab === 'flagged') return status === 'flagged';
+        if (filterTab === 'exceptions') {
+          const status = getReviewStatus(i);
+          return status === 'large_gap' || status === 'no_data' || status === 'flagged';
+        }
         if (filterTab === 'card_show') return isCardShowCandidate(i);
-        // 'needs_review' tab shows needs_review + large_gap + no_data (all unreviewed/unflagged)
-        return status === 'needs_review' || status === 'large_gap' || status === 'no_data';
+        return false;
       });
     }
   }

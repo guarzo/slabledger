@@ -40,7 +40,7 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
   const [searchQuery, setSearchQuery] = useState('');
   const [isPrinting, setIsPrinting] = useState(false);
   const [statsExpanded, setStatsExpanded] = useState(false);
-  const [filterTab, setFilterTab] = useState<FilterTab>('needs_review');
+  const [filterTab, setFilterTab] = useState<FilterTab>('exceptions');
   const [showAll, setShowAll] = useState(false);
   const debouncedSearch = useDebounce(searchQuery, 300);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -92,6 +92,17 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
     invalidateInventory();
     setExpandedId(null);
   }, [invalidateInventory]);
+
+  const handleResolveFlag = useCallback(async (flagId: number) => {
+    try {
+      await api.resolvePriceFlag(flagId);
+      toast.success('Flag resolved');
+      invalidateInventory();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to resolve flag';
+      toast.error(message);
+    }
+  }, [toast, invalidateInventory]);
 
   const handleFlagSubmit = useCallback(async (reason: PriceFlagReason) => {
     if (!flagTarget) return;
@@ -245,6 +256,7 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
     // Handlers
     handleSort,
     handleReviewed,
+    handleResolveFlag,
     handleFlagSubmit,
     handlePrint,
     toggleSelect,
