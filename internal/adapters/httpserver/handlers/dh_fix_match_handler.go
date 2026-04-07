@@ -81,12 +81,13 @@ func (h *DHHandler) HandleFixMatch(w http.ResponseWriter, r *http.Request) {
 
 	// Push to DH inventory
 	item := dh.InventoryItem{
-		DHCardID:       dhCardID,
-		CertNumber:     purchase.CertNumber,
-		GradingCompany: dh.GraderPSA,
-		Grade:          purchase.GradeValue,
-		CostBasisCents: purchase.CLValueCents,
-		Status:         dh.InventoryStatusInStock,
+		DHCardID:         dhCardID,
+		CertNumber:       purchase.CertNumber,
+		GradingCompany:   dh.GraderPSA,
+		Grade:            purchase.GradeValue,
+		CostBasisCents:   purchase.CLValueCents,
+		MarketValueCents: dh.IntPtr(purchase.CLValueCents),
+		Status:           dh.InventoryStatusInStock,
 	}
 
 	pushResp, pushErr := h.inventoryPusher.PushInventory(ctx, []dh.InventoryItem{item})

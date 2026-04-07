@@ -239,6 +239,10 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 
 	// Card Ladder value refresh scheduler (if client + store are provided)
 	if deps.CardLadderClient != nil && deps.CardLadderStore != nil && deps.CardLadderPurchaseLister != nil && deps.CardLadderValueUpdater != nil {
+		var clOpts []CardLadderRefreshOption
+		if deps.DHPushStatusUpdater != nil {
+			clOpts = append(clOpts, WithCLDHPushUpdater(deps.DHPushStatusUpdater))
+		}
 		clRefresh = NewCardLadderRefreshScheduler(
 			deps.CardLadderClient, deps.CardLadderStore,
 			deps.CardLadderPurchaseLister, deps.CardLadderValueUpdater,
@@ -246,6 +250,7 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 			deps.CardLadderCLRecorder,
 			deps.CardLadderSalesStore,
 			deps.Logger, cfg.CardLadder,
+			clOpts...,
 		)
 		schedulers = append(schedulers, clRefresh)
 	}

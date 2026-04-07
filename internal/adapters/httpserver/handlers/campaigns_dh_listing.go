@@ -176,12 +176,13 @@ func (h *CampaignsHandler) inlineMatchAndPush(ctx context.Context, p *campaigns.
 	}
 
 	item := dh.InventoryItem{
-		DHCardID:       dhCardID,
-		CertNumber:     p.CertNumber,
-		GradingCompany: dh.GraderPSA,
-		Grade:          p.GradeValue,
-		CostBasisCents: p.CLValueCents,
-		Status:         dh.InventoryStatusInStock,
+		DHCardID:         dhCardID,
+		CertNumber:       p.CertNumber,
+		GradingCompany:   dh.GraderPSA,
+		Grade:            p.GradeValue,
+		CostBasisCents:   p.CLValueCents,
+		MarketValueCents: dh.IntPtr(p.CLValueCents),
+		Status:           dh.InventoryStatusInStock,
 	}
 
 	pushResp, pushErr := h.dhPusher.PushInventory(ctx, []dh.InventoryItem{item})
