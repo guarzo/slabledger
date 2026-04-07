@@ -54,6 +54,28 @@ export interface MarketSignal {
   recommendation: string;
 }
 
+export interface PlatformBreakdown {
+  platform: string;
+  saleCount: number;
+  medianCents: number;
+  highCents: number;
+  lowCents: number;
+}
+
+export interface CompSummary {
+  gemRateId: string;
+  totalComps: number;
+  recentComps: number;
+  medianCents: number;
+  highestCents: number;
+  lowestCents: number;
+  trend90d: number;
+  compsAboveCL: number;
+  compsAboveCost: number;
+  byPlatform: PlatformBreakdown[];
+  lastSaleDate: string;
+}
+
 export interface AgingItem {
   purchase: Purchase;
   daysHeld: number;
@@ -66,6 +88,7 @@ export interface AgingItem {
   recommendedPriceCents?: number;
   recommendedSource?: string;
   signals?: InventorySignals;
+  compSummary?: CompSummary;
 }
 
 // Tuning types

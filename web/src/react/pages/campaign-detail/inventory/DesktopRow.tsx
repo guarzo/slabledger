@@ -1,4 +1,4 @@
-import type { AgingItem, ExpectedValue } from '../../../../types/campaigns';
+import type { AgingItem, CompSummary, ExpectedValue } from '../../../../types/campaigns';
 import { formatCents, daysHeldColor } from '../../../utils/formatters';
 import { TrendArrow, ConfidenceIndicator } from '../../../ui';
 import { DropdownMenu } from 'radix-ui';
@@ -24,6 +24,26 @@ function campaignColor(name: string) {
   let hash = 0;
   for (let i = 0; i < name.length; i++) hash = ((hash << 5) - hash + name.charCodeAt(i)) | 0;
   return BADGE_COLORS[Math.abs(hash) % BADGE_COLORS.length];
+}
+
+function compBadgeColor(comp: CompSummary): { bg: string; text: string } {
+  const aboveCostRatio = comp.recentComps > 0 ? comp.compsAboveCost / comp.recentComps : 0;
+  if (aboveCostRatio >= 0.6) return { bg: 'rgba(52,211,153,0.12)', text: '#34d399' }; // green
+  if (aboveCostRatio >= 0.3) return { bg: 'rgba(251,191,36,0.12)', text: '#fbbf24' }; // amber
+  return { bg: 'rgba(248,113,113,0.12)', text: '#f87171' }; // red
+}
+
+function CompBadge({ comp }: { comp: CompSummary }) {
+  const color = compBadgeColor(comp);
+  return (
+    <span
+      className="inline-block text-[10px] font-medium px-1.5 py-0.5 rounded-full max-w-[44px] truncate"
+      style={{ background: color.bg, color: color.text }}
+      title={`${comp.recentComps} comps (90d), median ${formatCents(comp.medianCents)}, ${comp.compsAboveCost}/${comp.recentComps} above cost`}
+    >
+      {comp.recentComps}c
+    </span>
+  );
 }
 
 interface DesktopRowProps {
@@ -159,6 +179,8 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
       <div className="glass-table-td flex-shrink-0 text-center print-hide-col" style={{ width: '48px' }}>
         {direction ? (
           <SignalBadge direction={direction} deltaPct={deltaPct} />
+        ) : item.compSummary && item.compSummary.recentComps > 0 ? (
+          <CompBadge comp={item.compSummary} />
         ) : (
           <span className="text-xs text-[var(--text-muted)]">-</span>
         )}

@@ -5,6 +5,7 @@ import { api } from '../../../../js/api';
 import { useToast } from '../../../contexts/ToastContext';
 import { queryKeys } from '../../../queries/queryKeys';
 import PriceSignalCard from './PriceSignalCard';
+import CompSummaryPanel from './CompSummaryPanel';
 import { costBasis } from './utils';
 import { PriceDecisionBar, buildPriceSources, preSelectSource } from '../../../ui';
 
@@ -83,6 +84,11 @@ export default function ExpandedDetail({ item, onReviewed, campaignId, onOpenFla
           highlight={purchase.overridePriceCents ? 'warning' : 'muted'}
         />
       </div>
+
+      {/* Comp Summary Panel */}
+      {item.compSummary && item.compSummary.recentComps > 0 && (
+        <CompSummaryPanel comp={item.compSummary} />
+      )}
 
       {/* Price decision bar */}
       <PriceDecisionBar

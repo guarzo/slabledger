@@ -272,6 +272,7 @@ type service struct {
 	popRecorder PopulationHistoryRecorder
 	clRecorder  CLValueHistoryRecorder
 
+	compProv  CompSummaryProvider     // optional — Card Ladder comp analytics
 	intelRepo intelligence.Repository // optional — DH market intelligence for price-sync enrichment
 
 	// certEnrichCh is a bounded channel for cert enrichment requests.
@@ -337,6 +338,11 @@ func WithPopulationRecorder(r PopulationHistoryRecorder) ServiceOption {
 // WithCLValueRecorder enables CL value history tracking during CSV imports.
 func WithCLValueRecorder(r CLValueHistoryRecorder) ServiceOption {
 	return func(s *service) { s.clRecorder = r }
+}
+
+// WithCompSummaryProvider enables Card Ladder comp analytics on inventory aging.
+func WithCompSummaryProvider(p CompSummaryProvider) ServiceOption {
+	return func(s *service) { s.compProv = p }
 }
 
 // WithIntelligenceRepo enables DH market intelligence enrichment in price-sync.

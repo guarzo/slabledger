@@ -219,6 +219,7 @@ func (s *service) GetInventoryAging(ctx context.Context, campaignID string) ([]A
 	}
 
 	s.applyOpenFlags(ctx, items)
+	s.enrichCompSummaries(ctx, items)
 	return items, nil
 }
 
@@ -244,6 +245,7 @@ func (s *service) GetGlobalInventoryAging(ctx context.Context) ([]AgingItem, err
 	}
 
 	s.applyOpenFlags(ctx, items)
+	s.enrichCompSummaries(ctx, items)
 
 	// Compute crack candidates for signal enrichment
 	crackSet := s.buildCrackCandidateSet(ctx)
