@@ -55,6 +55,7 @@ type AgingItem struct {
 	RecommendedPriceCents int               `json:"recommendedPriceCents,omitempty"`
 	RecommendedSource     string            `json:"recommendedSource,omitempty"`
 	Signals               *InventorySignals `json:"signals,omitempty"`
+	CompSummary           *CompSummary      `json:"compSummary,omitempty"`
 }
 
 // InventorySignals contains procedural flags for an unsold card.

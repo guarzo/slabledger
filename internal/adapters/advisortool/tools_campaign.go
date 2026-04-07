@@ -58,14 +58,14 @@ func (e *CampaignToolExecutor) registerGetInventoryAging() {
 func (e *CampaignToolExecutor) registerGetGlobalInventory() {
 	e.register(ai.ToolDefinition{
 		Name:        "get_global_inventory",
-		Description: "Get all unsold cards across all campaigns with aging, market signals, and recommended channels.",
+		Description: "Get all unsold cards across all campaigns with aging, market signals, recommended channels, and compDigest with recent sales comp analytics when available.",
 		Parameters:  emptyObjectParams,
 	}, func(ctx context.Context, _ string) (string, error) {
 		result, err := e.svc.GetGlobalInventoryAging(ctx)
 		if err != nil {
 			return "", err
 		}
-		return toJSON(result), nil
+		return toJSON(withCompDigests(result)), nil
 	})
 }
 

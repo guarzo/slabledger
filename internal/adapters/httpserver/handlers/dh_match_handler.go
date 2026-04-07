@@ -99,6 +99,7 @@ func (h *DHHandler) runBulkMatch(ctx context.Context, purchases []campaigns.Purc
 		cardName, variant := campaigns.CleanCardNameForDH(p.CardName)
 		req := dh.CertResolveRequest{
 			CertNumber: p.CertNumber,
+			GemRateID:  p.GemRateID,
 			CardName:   cardName,
 			SetName:    p.SetName,
 			CardNumber: p.CardNumber,
