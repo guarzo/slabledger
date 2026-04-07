@@ -1,5 +1,6 @@
 import type { PortfolioHealth, CapitalSummary } from '../../../types/campaigns';
 import { formatCents, formatPct, formatWeeksToCover } from '../../utils/formatters';
+import { EmptyState } from '../../ui';
 
 interface HeroStatsBarProps {
   health?: PortfolioHealth;
@@ -13,25 +14,14 @@ export default function HeroStatsBar({ health, capital }: HeroStatsBarProps) {
   const hasActivity = health.totalDeployedCents > 0 || health.totalRecoveredCents > 0 || health.realizedROI !== 0;
   if (!hasActivity) {
     return (
-      <div className="mb-6 p-6 bg-[var(--surface-1)] rounded-xl border border-[var(--surface-2)] text-center">
-        <h2 className="text-lg font-semibold text-[var(--text)] mb-2">Welcome to SlabLedger</h2>
-        <p className="text-sm text-[var(--text-muted)] max-w-md mx-auto mb-4">
-          Your portfolio dashboard will come alive once you start tracking. Here&apos;s how to get started:
-        </p>
-        <div className="flex flex-col sm:flex-row gap-3 justify-center text-sm text-[var(--text-muted)]">
-          <div className="flex items-center gap-2">
-            <span className="w-6 h-6 rounded-full bg-[var(--brand-500)]/20 text-[var(--brand-400)] flex items-center justify-center text-xs font-bold">1</span>
-            <span>Create a campaign</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="w-6 h-6 rounded-full bg-[var(--brand-500)]/20 text-[var(--brand-400)] flex items-center justify-center text-xs font-bold">2</span>
-            <span>Import PSA purchases</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="w-6 h-6 rounded-full bg-[var(--brand-500)]/20 text-[var(--brand-400)] flex items-center justify-center text-xs font-bold">3</span>
-            <span>Record sales as you go</span>
-          </div>
-        </div>
+      <div className="mb-6">
+        <EmptyState
+          icon="📊"
+          title="Welcome to SlabLedger"
+          description="Your portfolio dashboard will come alive once you start tracking."
+          compact
+          steps={['Create a campaign', 'Import PSA purchases', 'Record sales as you go']}
+        />
       </div>
     );
   }

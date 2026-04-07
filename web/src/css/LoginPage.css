@@ -89,7 +89,7 @@
 
 .login-page > .login-header p {
   font-size: var(--font-size-sm);
-  color: var(--text-secondary);
+  color: var(--text-secondary, var(--text-muted));
   margin: 0;
   font-weight: var(--font-weight-semibold);
   letter-spacing: 0.08em;
