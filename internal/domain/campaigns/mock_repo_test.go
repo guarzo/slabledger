@@ -444,7 +444,7 @@ func (m *mockRepo) GetCashflowConfig(_ context.Context) (*CashflowConfig, error)
 func (m *mockRepo) UpdateCashflowConfig(_ context.Context, _ *CashflowConfig) error { return nil }
 
 func (m *mockRepo) GetCapitalSummary(_ context.Context) (*CapitalSummary, error) {
-	return &CapitalSummary{OutstandingCents: 0, WeeksToCover: 99.0, AlertLevel: "ok"}, nil
+	return &CapitalSummary{OutstandingCents: 0, WeeksToCover: WeeksToCoverNoData, AlertLevel: AlertOK}, nil
 }
 
 func (m *mockRepo) GetPortfolioChannelVelocity(_ context.Context) ([]ChannelVelocity, error) {

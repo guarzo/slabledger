@@ -1,5 +1,5 @@
 import type { PortfolioHealth, CapitalSummary } from '../../../types/campaigns';
-import { formatCents, formatPct } from '../../utils/formatters';
+import { formatCents, formatPct, formatWeeksToCover } from '../../utils/formatters';
 
 interface HeroStatsBarProps {
   health?: PortfolioHealth;
@@ -45,12 +45,12 @@ export default function HeroStatsBar({ health, capital }: HeroStatsBarProps) {
                     : capital.recoveryRate30dCents === 0 ? 'text-[var(--text-muted)]'
                     : 'text-[var(--success)]'
                 }`}>
-                  {capital.recoveryRate30dCents === 0 ? '—' : capital.weeksToCover > 20 ? '20+' : `~${Math.round(capital.weeksToCover)}`}
+                  {capital.outstandingCents === 0 && capital.recoveryRate30dCents > 0 ? '0' : formatWeeksToCover(capital.weeksToCover, capital.recoveryRate30dCents > 0)}
                 </div>
               </div>
               <div>
                 <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Outstanding</div>
-                <div className="text-base font-semibold text-[#cbd5e1]">{formatCents(capital.outstandingCents ?? 0)}</div>
+                <div className="text-base font-semibold text-[#cbd5e1]">{formatCents(capital.outstandingCents)}</div>
               </div>
             </>
           )}

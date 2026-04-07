@@ -232,17 +232,46 @@ type CashflowConfig struct {
 	UpdatedAt          time.Time `json:"updatedAt"`
 }
 
+// AlertLevel indicates the severity of capital exposure.
+type AlertLevel string
+
+const (
+	AlertOK       AlertLevel = "ok"
+	AlertWarning  AlertLevel = "warning"
+	AlertCritical AlertLevel = "critical"
+)
+
+// RecoveryTrend indicates direction of recovery velocity.
+type RecoveryTrend string
+
+const (
+	TrendImproving RecoveryTrend = "improving"
+	TrendDeclining RecoveryTrend = "declining"
+	TrendStable    RecoveryTrend = "stable"
+)
+
+// Capital velocity thresholds and constants.
+const (
+	WeeksToCoverNoData            = 99.0    // Sentinel when no recovery data exists
+	WeeksPerMonth                 = 4.3     // 30 days / 7
+	TrendChangeThreshold          = 0.10    // 10% delta to consider directional
+	WeeksToCoverCriticalThreshold = 12.0    // Weeks-to-cover above which alert is critical
+	WeeksToCoverWarningThreshold  = 6.0     // Weeks-to-cover above which alert is warning
+	FallbackCriticalCents         = 1000000 // $10K outstanding, no recovery data
+	FallbackWarningCents          = 500000  // $5K outstanding, no recovery data
+)
+
 // CapitalSummary provides a snapshot of current capital exposure with recovery velocity.
 type CapitalSummary struct {
-	OutstandingCents          int     `json:"outstandingCents"`          // Unpaid purchases minus payments
-	RecoveryRate30dCents      int     `json:"recoveryRate30dCents"`      // Sale revenue in last 30 days
-	RecoveryRate30dPriorCents int     `json:"recoveryRate30dPriorCents"` // Sale revenue in days 31-60
-	WeeksToCover              float64 `json:"weeksToCover"`              // outstanding / weekly recovery rate (99 = no data)
-	RecoveryTrend             string  `json:"recoveryTrend"`             // "improving", "declining", "stable"
-	AlertLevel                string  `json:"alertLevel"`                // "ok", "warning", "critical"
-	RefundedCents             int     `json:"refundedCents"`             // Total refunds
-	PaidCents                 int     `json:"paidCents"`                 // Total paid
-	UnpaidInvoiceCount        int     `json:"unpaidInvoiceCount"`
+	OutstandingCents          int           `json:"outstandingCents"`          // Unpaid purchases minus payments
+	RecoveryRate30dCents      int           `json:"recoveryRate30dCents"`      // Sale revenue in last 30 days
+	RecoveryRate30dPriorCents int           `json:"recoveryRate30dPriorCents"` // Sale revenue in days 31-60
+	WeeksToCover              float64       `json:"weeksToCover"`              // outstanding / weekly recovery rate (99 = no data)
+	RecoveryTrend             RecoveryTrend `json:"recoveryTrend"`
+	AlertLevel                AlertLevel    `json:"alertLevel"`
+	RefundedCents             int           `json:"refundedCents"` // Total refunds
+	PaidCents                 int           `json:"paidCents"`     // Total paid
+	UnpaidInvoiceCount        int           `json:"unpaidInvoiceCount"`
 }
 
 // PurchaseFilter holds optional filtering criteria for GetAllPurchasesWithSales.

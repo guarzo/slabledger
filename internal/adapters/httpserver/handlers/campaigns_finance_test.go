@@ -16,17 +16,17 @@ import (
 
 func TestHandleCapitalSummary(t *testing.T) {
 	tests := []struct {
-		name                string
-		mockFn              func(_ context.Context) (*campaigns.CapitalSummary, error)
-		wantStatus          int
+		name                 string
+		mockFn               func(_ context.Context) (*campaigns.CapitalSummary, error)
+		wantStatus           int
 		wantOutstandingCents int
 	}{
 		{
 			name: "success",
 			mockFn: func(_ context.Context) (*campaigns.CapitalSummary, error) {
-				return &campaigns.CapitalSummary{OutstandingCents: 2500000, WeeksToCover: 12.5, AlertLevel: "ok"}, nil
+				return &campaigns.CapitalSummary{OutstandingCents: 2500000, WeeksToCover: 12.5, AlertLevel: campaigns.AlertOK}, nil
 			},
-			wantStatus:          http.StatusOK,
+			wantStatus:           http.StatusOK,
 			wantOutstandingCents: 2500000,
 		},
 		{

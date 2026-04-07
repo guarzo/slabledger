@@ -174,7 +174,7 @@ func TestGetCapitalSummary_RecoveryVelocity(t *testing.T) {
 		assert.Equal(t, 0, summary.RecoveryRate30dCents)
 		assert.Equal(t, 0, summary.RecoveryRate30dPriorCents)
 		assert.Equal(t, 99.0, summary.WeeksToCover)
-		assert.Equal(t, "stable", summary.RecoveryTrend)
+		assert.Equal(t, campaigns.TrendStable, summary.RecoveryTrend)
 	})
 
 	t.Run("recent sales compute recovery rate and weeks to cover", func(t *testing.T) {
@@ -251,7 +251,7 @@ func TestGetCapitalSummary_RecoveryVelocity(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, 50000, summary.RecoveryRate30dCents)
 		assert.Equal(t, 20000, summary.RecoveryRate30dPriorCents)
-		assert.Equal(t, "improving", summary.RecoveryTrend)
+		assert.Equal(t, campaigns.TrendImproving, summary.RecoveryTrend)
 	})
 
 	t.Run("alert levels based on weeks to cover", func(t *testing.T) {
@@ -288,7 +288,7 @@ func TestGetCapitalSummary_RecoveryVelocity(t *testing.T) {
 		summary, err := repo.GetCapitalSummary(ctx)
 		require.NoError(t, err)
 		assert.Greater(t, summary.WeeksToCover, 12.0)
-		assert.Equal(t, "critical", summary.AlertLevel)
+		assert.Equal(t, campaigns.AlertCritical, summary.AlertLevel)
 	})
 
 	t.Run("fallback alert when no recovery and high outstanding", func(t *testing.T) {
@@ -307,7 +307,7 @@ func TestGetCapitalSummary_RecoveryVelocity(t *testing.T) {
 
 		summary, err := repo.GetCapitalSummary(ctx)
 		require.NoError(t, err)
-		assert.Equal(t, "critical", summary.AlertLevel)
+		assert.Equal(t, campaigns.AlertCritical, summary.AlertLevel)
 	})
 }
 
@@ -323,8 +323,8 @@ func TestGetCapitalSummary_EmptyState(t *testing.T) {
 	assert.Equal(t, 0, summary.RecoveryRate30dCents)
 	assert.Equal(t, 0, summary.RecoveryRate30dPriorCents)
 	assert.Equal(t, 99.0, summary.WeeksToCover)
-	assert.Equal(t, "stable", summary.RecoveryTrend)
-	assert.Equal(t, "ok", summary.AlertLevel)
+	assert.Equal(t, campaigns.TrendStable, summary.RecoveryTrend)
+	assert.Equal(t, campaigns.AlertOK, summary.AlertLevel)
 	assert.Equal(t, 0, summary.RefundedCents)
 	assert.Equal(t, 0, summary.PaidCents)
 	assert.Equal(t, 0, summary.UnpaidInvoiceCount)

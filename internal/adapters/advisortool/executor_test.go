@@ -485,8 +485,8 @@ func TestExecute_GetDashboardSummary(t *testing.T) {
 				OutstandingCents:     2500000,
 				RecoveryRate30dCents: 500000,
 				WeeksToCover:         21.5,
-				RecoveryTrend:        "stable",
-				AlertLevel:           "ok",
+				RecoveryTrend:        campaigns.TrendStable,
+				AlertLevel:           campaigns.AlertCritical,
 			}, nil
 		},
 		GetPortfolioHealthFn: func(_ context.Context) (*campaigns.PortfolioHealth, error) {
@@ -511,7 +511,7 @@ func TestExecute_GetDashboardSummary(t *testing.T) {
 	if !strings.Contains(result, `"purchaseCount":10`) {
 		t.Errorf("missing purchaseCount in result: %s", result)
 	}
-	if !strings.Contains(result, `"alertLevel":"ok"`) {
+	if !strings.Contains(result, `"alertLevel":"critical"`) {
 		t.Errorf("missing alertLevel in result: %s", result)
 	}
 	if !strings.Contains(result, `"purchaseCountWoW":2`) {

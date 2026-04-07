@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/guarzo/slabledger/internal/domain/ai"
+	"github.com/guarzo/slabledger/internal/domain/campaigns"
 )
 
 func (e *CampaignToolExecutor) registerGetPortfolioHealth() {
@@ -104,11 +105,11 @@ type dashboardSummary struct {
 		ProfitWoW        int `json:"profitWoWCents"`
 	} `json:"weeklyReview"`
 	Capital struct {
-		BalanceCents         int     `json:"balanceCents"`
-		RecoveryRate30dCents int     `json:"recoveryRate30dCents"`
-		WeeksToCover         float64 `json:"weeksToCover"`
-		RecoveryTrend        string  `json:"recoveryTrend"`
-		AlertLevel           string  `json:"alertLevel"`
+		BalanceCents         int                     `json:"balanceCents"`
+		RecoveryRate30dCents int                     `json:"recoveryRate30dCents"`
+		WeeksToCover         float64                 `json:"weeksToCover"`
+		RecoveryTrend        campaigns.RecoveryTrend `json:"recoveryTrend"`
+		AlertLevel           campaigns.AlertLevel    `json:"alertLevel"`
 	} `json:"capital"`
 	PortfolioHealth []struct {
 		CampaignName  string `json:"campaignName"`

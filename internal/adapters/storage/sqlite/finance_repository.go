@@ -165,38 +165,34 @@ func (r *CampaignsRepository) GetCapitalSummary(ctx context.Context) (*campaigns
 		return nil, err
 	}
 
-	// Derive weeks to cover
-	weeksToCover := 99.0
+	weeksToCover := campaigns.WeeksToCoverNoData
 	if recovery30d > 0 {
-		weeklyRate := float64(recovery30d) / 4.3
+		weeklyRate := float64(recovery30d) / campaigns.WeeksPerMonth
 		weeksToCover = float64(outstanding) / weeklyRate
 	}
 
-	// Derive trend (>10% delta = directional)
-	trend := "stable"
+	trend := campaigns.TrendStable
 	if recovery30d > 0 && recoveryPrior30d > 0 {
 		ratio := float64(recovery30d) / float64(recoveryPrior30d)
-		if ratio > 1.10 {
-			trend = "improving"
-		} else if ratio < 0.90 {
-			trend = "declining"
+		if ratio > 1+campaigns.TrendChangeThreshold {
+			trend = campaigns.TrendImproving
+		} else if ratio < 1-campaigns.TrendChangeThreshold {
+			trend = campaigns.TrendDeclining
 		}
 	}
 
-	// Alert level based on weeks to cover
-	alertLevel := "ok"
+	alertLevel := campaigns.AlertOK
 	if recovery30d > 0 {
-		if weeksToCover > 12 {
-			alertLevel = "critical"
-		} else if weeksToCover >= 6 {
-			alertLevel = "warning"
+		if weeksToCover > campaigns.WeeksToCoverCriticalThreshold {
+			alertLevel = campaigns.AlertCritical
+		} else if weeksToCover >= campaigns.WeeksToCoverWarningThreshold {
+			alertLevel = campaigns.AlertWarning
 		}
 	} else {
-		// Fallback: no recovery data, use outstanding thresholds
-		if outstanding > 1000000 { // >$10K
-			alertLevel = "critical"
-		} else if outstanding > 500000 { // >$5K
-			alertLevel = "warning"
+		if outstanding > campaigns.FallbackCriticalCents {
+			alertLevel = campaigns.AlertCritical
+		} else if outstanding > campaigns.FallbackWarningCents {
+			alertLevel = campaigns.AlertWarning
 		}
 	}
 

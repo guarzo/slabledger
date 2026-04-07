@@ -1487,20 +1487,20 @@ Returns `[]` if no comps found or no CL mapping exists.
 
 Auth: RequireAuth
 
-Returns current credit position summary.
+Returns current capital exposure summary with recovery velocity.
 
-**Response:** `200 OK` — `CreditSummary`
+**Response:** `200 OK` — `CapitalSummary`
 ```json
 {
-  "creditLimitCents": 2000000,
   "outstandingCents": 840000,
-  "utilizationPct": 42.0,
+  "recoveryRate30dCents": 320000,
+  "recoveryRate30dPriorCents": 280000,
+  "weeksToCover": 11.3,
+  "recoveryTrend": "improving",
+  "alertLevel": "warning",
   "refundedCents": 0,
   "paidCents": 500000,
-  "unpaidInvoiceCount": 1,
-  "alertLevel": "ok",
-  "projectedExposureCents": 960000,
-  "daysToNextInvoice": 8
+  "unpaidInvoiceCount": 1
 }
 ```
 

@@ -358,7 +358,7 @@ func (m *MockCampaignService) GetCapitalSummary(ctx context.Context) (*campaigns
 	if m.GetCapitalSummaryFn != nil {
 		return m.GetCapitalSummaryFn(ctx)
 	}
-	return &campaigns.CapitalSummary{OutstandingCents: 0, WeeksToCover: 99.0, AlertLevel: "ok"}, nil
+	return &campaigns.CapitalSummary{OutstandingCents: 0, WeeksToCover: campaigns.WeeksToCoverNoData, AlertLevel: campaigns.AlertOK}, nil
 }
 
 func (m *MockCampaignService) GetCashflowConfig(ctx context.Context) (*campaigns.CashflowConfig, error) {

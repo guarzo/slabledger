@@ -1,26 +1,28 @@
 import type { CapitalSummary } from '../../../types/campaigns';
-import { formatCents } from '../../utils/formatters';
+import { formatCents, formatWeeksToCover } from '../../utils/formatters';
+import TrendArrow from '../../ui/TrendArrow';
 
 interface CapitalExposurePanelProps {
   capital?: CapitalSummary;
+}
+
+const trendToArrow = { improving: 'up', declining: 'down', stable: 'stable' } as const;
+
+function alertBadgeColor(level: string): string {
+  if (level === 'critical') return 'bg-[var(--danger)] text-white';
+  if (level === 'warning') return 'bg-[var(--warning)] text-black';
+  return 'bg-[var(--success)] text-white';
 }
 
 function weeksBadge(capital: CapitalSummary) {
   if (capital.recoveryRate30dCents === 0) {
     return <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-[var(--surface-2)] text-[var(--text-muted)]">No sales data</span>;
   }
-  const weeks = capital.weeksToCover;
-  const label = weeks > 20 ? '20+ wks' : `~${Math.round(weeks)} wks`;
-  const color = capital.alertLevel === 'critical' ? 'bg-[var(--danger)] text-white'
-    : capital.alertLevel === 'warning' ? 'bg-[var(--warning)] text-black'
-    : 'bg-[var(--success)] text-white';
-  return <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${color}`}>{label}</span>;
-}
-
-function trendArrow(trend: string) {
-  if (trend === 'improving') return <span className="text-[var(--success)]" title="Improving">&#9650;</span>;
-  if (trend === 'declining') return <span className="text-[var(--danger)]" title="Declining">&#9660;</span>;
-  return <span className="text-[var(--text-muted)]" title="Stable">&#9654;</span>;
+  if (capital.outstandingCents === 0) {
+    return <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-[var(--success)] text-white">Covered</span>;
+  }
+  const label = `${formatWeeksToCover(capital.weeksToCover, true)} wks`;
+  return <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${alertBadgeColor(capital.alertLevel)}`}>{label}</span>;
 }
 
 export default function CapitalExposurePanel({ capital }: CapitalExposurePanelProps) {
@@ -39,7 +41,7 @@ export default function CapitalExposurePanel({ capital }: CapitalExposurePanelPr
 
       {capital.recoveryRate30dCents > 0 && (
         <div className="text-xs text-[var(--text-muted)] mb-2">
-          {formatCents(capital.recoveryRate30dCents)}/mo recovered {trendArrow(capital.recoveryTrend)}
+          {formatCents(capital.recoveryRate30dCents)}/mo recovered <TrendArrow trend={trendToArrow[capital.recoveryTrend]} />
         </div>
       )}
 
