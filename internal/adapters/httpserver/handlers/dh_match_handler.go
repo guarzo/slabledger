@@ -63,6 +63,11 @@ type matchedCard struct {
 
 // runBulkMatch processes unsold purchases against DH cert resolution, logging results.
 func (h *DHHandler) runBulkMatch(ctx context.Context, purchases []campaigns.Purchase, mappedSet map[string]string) {
+	var rotateFn func() bool
+	if rotator, ok := h.certResolver.(dh.PSAKeyRotator); ok {
+		rotateFn = rotator.RotatePSAKey
+	}
+
 	var matched, skipped, noCert, notFound, failed int
 	var matchedCards []matchedCard
 
@@ -97,7 +102,7 @@ func (h *DHHandler) runBulkMatch(ctx context.Context, purchases []campaigns.Purc
 			observability.String("cert", p.CertNumber),
 			observability.String("clean_name", cardName),
 			observability.String("variant", variant))
-		resp, err := h.resolveCertWithRotation(ctx, req)
+		resp, err := dh.ResolveCertWithRotation(ctx, req, h.certResolver.ResolveCert, rotateFn, h.logger, "bulk match")
 		if err != nil {
 			if dh.IsPSARateLimitError(err) {
 				// All PSA keys exhausted — abort the entire batch.
@@ -183,33 +188,6 @@ func (h *DHHandler) runBulkMatch(ctx context.Context, purchases []campaigns.Purc
 	if h.inventoryPusher != nil && len(matchedCards) > 0 {
 		h.pushMatchedToDH(ctx, purchases, matchedCards)
 	}
-}
-
-// resolveCertWithRotation calls ResolveCert and rotates PSA API keys on rate limit errors.
-func (h *DHHandler) resolveCertWithRotation(ctx context.Context, req dh.CertResolveRequest) (*dh.CertResolution, error) {
-	resp, err := h.certResolver.ResolveCert(ctx, req)
-	if err == nil {
-		return resp, nil
-	}
-
-	rotator, ok := h.certResolver.(PSAKeyRotator)
-	if !ok {
-		return nil, err
-	}
-
-	for dh.IsPSARateLimitError(err) {
-		if !rotator.RotatePSAKey() {
-			return nil, err
-		}
-		h.logger.Info(ctx, "bulk match: PSA key rate limited, rotated to next key",
-			observability.String("cert", req.CertNumber))
-		resp, err = h.certResolver.ResolveCert(ctx, req)
-		if err == nil {
-			return resp, nil
-		}
-	}
-
-	return nil, err
 }
 
 // pushMatchedToDH uses DH card IDs from the match loop because Purchase.DHCardID

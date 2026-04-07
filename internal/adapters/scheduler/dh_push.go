@@ -36,12 +36,6 @@ type DHPushCertResolver interface {
 	ResolveCert(ctx context.Context, req dh.CertResolveRequest) (*dh.CertResolution, error)
 }
 
-// DHPushPSAKeyRotator can rotate PSA API keys when rate limited.
-type DHPushPSAKeyRotator interface {
-	RotatePSAKey() bool
-	ResetPSAKeyRotation()
-}
-
 // DHPushInventoryPusher pushes inventory items to DH.
 type DHPushInventoryPusher interface {
 	PushInventory(ctx context.Context, items []dh.InventoryItem) (*dh.InventoryPushResponse, error)
@@ -210,7 +204,11 @@ func (s *DHPushScheduler) processPurchase(ctx context.Context, p campaigns.Purch
 
 	if !alreadyMapped {
 		cardName, variant := campaigns.CleanCardNameForDH(p.CardName)
-		resp, err := s.resolveCertWithRotation(ctx, dh.CertResolveRequest{
+		var rotateFn func() bool
+		if rotator, ok := s.certResolver.(dh.PSAKeyRotator); ok {
+			rotateFn = rotator.RotatePSAKey
+		}
+		resp, err := dh.ResolveCertWithRotation(ctx, dh.CertResolveRequest{
 			CertNumber: p.CertNumber,
 			GemRateID:  p.GemRateID,
 			CardName:   cardName,
@@ -218,7 +216,7 @@ func (s *DHPushScheduler) processPurchase(ctx context.Context, p campaigns.Purch
 			CardNumber: p.CardNumber,
 			Year:       p.CardYear,
 			Variant:    variant,
-		})
+		}, s.certResolver.ResolveCert, rotateFn, s.logger, "dh push")
 		if err != nil {
 			s.logger.Warn(ctx, "dh push: cert resolve error, leaving as pending",
 				observability.String("purchaseID", p.ID),
@@ -353,35 +351,6 @@ func (s *DHPushScheduler) processPurchase(ctx context.Context, p campaigns.Purch
 	)
 
 	return processMatched
-}
-
-// resolveCertWithRotation calls ResolveCert and rotates PSA API keys on rate limit errors.
-func (s *DHPushScheduler) resolveCertWithRotation(ctx context.Context, req dh.CertResolveRequest) (*dh.CertResolution, error) {
-	resp, err := s.certResolver.ResolveCert(ctx, req)
-	if err == nil {
-		return resp, nil
-	}
-
-	rotator, ok := s.certResolver.(DHPushPSAKeyRotator)
-	if !ok {
-		return nil, err
-	}
-
-	for dh.IsPSARateLimitError(err) {
-		if !rotator.RotatePSAKey() {
-			s.logger.Error(ctx, "dh push: all PSA keys exhausted",
-				observability.String("cert", req.CertNumber))
-			return nil, err
-		}
-		s.logger.Info(ctx, "dh push: PSA key rate limited, rotated to next key",
-			observability.String("cert", req.CertNumber))
-		resp, err = s.certResolver.ResolveCert(ctx, req)
-		if err == nil {
-			return resp, nil
-		}
-	}
-
-	return nil, err
 }
 
 // Compile-time checks that dh.Client satisfies the push client interfaces.
