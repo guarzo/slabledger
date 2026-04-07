@@ -51,8 +51,8 @@ export function DHPushConfigCard() {
   });
 
   useEffect(() => {
-    if (config && !form) setForm(config);
-  }, [config, form]);
+    if (config) setForm(config);
+  }, [config]);
 
   if (isError) {
     return (

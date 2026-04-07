@@ -62,6 +62,7 @@ type MockCampaignRepository struct {
 	UpdatePurchaseDHPushStatusFn   func(ctx context.Context, id string, status string) error
 	UpdatePurchaseDHCandidatesFn   func(ctx context.Context, id string, candidatesJSON string) error
 	UpdatePurchaseDHHoldReasonFn   func(ctx context.Context, id string, reason string) error
+	ApproveHeldPurchaseFn          func(ctx context.Context, purchaseID string) error
 	GetDHPushConfigFn              func(ctx context.Context) (*campaigns.DHPushConfig, error)
 	SaveDHPushConfigFn             func(ctx context.Context, cfg *campaigns.DHPushConfig) error
 	GetPurchasesByDHPushStatusFn   func(ctx context.Context, status string, limit int) ([]campaigns.Purchase, error)
@@ -877,6 +878,13 @@ func (m *MockCampaignRepository) UpdatePurchaseDHCandidates(ctx context.Context,
 func (m *MockCampaignRepository) UpdatePurchaseDHHoldReason(ctx context.Context, id string, reason string) error {
 	if m.UpdatePurchaseDHHoldReasonFn != nil {
 		return m.UpdatePurchaseDHHoldReasonFn(ctx, id, reason)
+	}
+	return nil
+}
+
+func (m *MockCampaignRepository) ApproveHeldPurchase(ctx context.Context, purchaseID string) error {
+	if m.ApproveHeldPurchaseFn != nil {
+		return m.ApproveHeldPurchaseFn(ctx, purchaseID)
 	}
 	return nil
 }

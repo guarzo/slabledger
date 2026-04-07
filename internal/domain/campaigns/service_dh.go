@@ -19,10 +19,7 @@ func (s *service) ApproveDHPush(ctx context.Context, purchaseID string) error {
 	}
 	prevStatus := p.DHPushStatus
 	holdReasonCleared := p.DHHoldReason
-	if err := s.repo.UpdatePurchaseDHHoldReason(ctx, purchaseID, ""); err != nil {
-		return err
-	}
-	if err := s.repo.UpdatePurchaseDHPushStatus(ctx, purchaseID, DHPushStatusPending); err != nil {
+	if err := s.repo.ApproveHeldPurchase(ctx, purchaseID); err != nil {
 		return err
 	}
 	if s.logger != nil {

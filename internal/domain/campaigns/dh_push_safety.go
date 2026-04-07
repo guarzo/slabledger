@@ -129,11 +129,11 @@ func checkUnreviewedCLChange(p *Purchase, lastPushed, pctThreshold, minCents int
 	if p.ReviewedPriceCents > 0 {
 		return ""
 	}
-	delta := p.CLValueCents - lastPushed
-	absDelta := int(math.Abs(float64(delta)))
 	if lastPushed == 0 {
 		return ""
 	}
+	delta := p.CLValueCents - lastPushed
+	absDelta := int(math.Abs(float64(delta)))
 	pct := float64(delta) / float64(lastPushed) * 100
 
 	if math.Abs(pct) > float64(pctThreshold) && absDelta > minCents {

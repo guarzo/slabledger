@@ -5,13 +5,15 @@ set -e
 
 echo "🔄 Running post-start tasks..."
 
-# Fix Claude Code host path references.
-# When ~/.claude is mounted from the host, config files contain absolute paths
-# using the host username (e.g. /home/tng/.claude/...) which don't resolve in
-# the container where the user is "vscode". Create a symlink from the host home
-# directory to the container home so these paths resolve correctly.
+# Fix Claude Code and OpenCode host path references.
+# When ~/.claude or ~/.opencode is mounted from the host, config files contain
+# absolute paths using the host username (e.g. /home/tng/.claude/...) which
+# don't resolve in the container where the user is "vscode". Create a symlink
+# from the host home directory to the container home so these paths resolve.
 CONTAINER_USER="$(whoami)"
 CONTAINER_HOME="$(eval echo ~)"
+
+# Handle Claude Code config
 if [ -d "$CONTAINER_HOME/.claude" ]; then
     # Detect the host username from Claude's marketplace config (written by host Claude)
     HOST_HOME=""
@@ -32,6 +34,56 @@ if [ -d "$CONTAINER_HOME/.claude" ]; then
         sudo ln -sfn "$CONTAINER_HOME" "$HOST_HOME"
     fi
 fi
+
+# Handle OpenCode config - detect host home from opencode config
+if [ -d "$CONTAINER_HOME/.opencode" ]; then
+    HOST_HOME=""
+    # Check opencode config for absolute paths
+    OPENCODE_CONFIG="$CONTAINER_HOME/.opencode/config.json"
+    if [ -f "$OPENCODE_CONFIG" ]; then
+        # Look for installLocation or similar host paths in config
+        HOST_HOME=$(grep -oP '"/home/[^"]+' "$OPENCODE_CONFIG" | head -1 | tr -d '"' | xargs dirname 2>/dev/null || true)
+        # If that didn't work, try parent directory pattern
+        if [ -z "$HOST_HOME" ]; then
+            HOST_HOME=$(grep -oP 'installPath[^"]*"/home/[^"]+' "$OPENCODE_CONFIG" | head -1 | grep -oP '/home/[^/]+' || true)
+        fi
+    fi
+    # Fallback: scan skills directory for host paths
+    if [ -z "$HOST_HOME" ]; then
+        SKILLS_DIR="$CONTAINER_HOME/.opencode/skills"
+        if [ -d "$SKILLS_DIR" ]; then
+            HOST_HOME=$(grep -rlo '"/home/[^"]+' "$SKILLS_DIR" 2>/dev/null | head -1 | xargs dirname 2>/dev/null | grep -oP '/home/[^/]+' || true)
+        fi
+    fi
+    # Create symlink if host home differs from container home
+    if [ -n "$HOST_HOME" ] && [ "$HOST_HOME" != "$CONTAINER_HOME" ] && [ ! -e "$HOST_HOME" ]; then
+        echo "🔗 Creating symlink $HOST_HOME -> $CONTAINER_HOME (OpenCode host path fix)"
+        sudo ln -sfn "$CONTAINER_HOME" "$HOST_HOME"
+    fi
+fi
+
+# Fix OpenCode config directory symlinks.
+# The opencode config directory (~/.config/opencode or ~/.opencode) may contain
+# symlinks pointing to host paths (e.g. /home/tng/.dotfiles/opencode/...) which
+# don't resolve inside the container. Fix them to point to the mounted .dotfiles.
+for CONFIG_DIR in "$CONTAINER_HOME/.config/opencode" "$CONTAINER_HOME/.opencode"; do
+    if [ -d "$CONFIG_DIR" ]; then
+        for item in "$CONFIG_DIR"/*; do
+            if [ -L "$item" ]; then
+                TARGET=$(readlink "$item")
+                if echo "$TARGET" | grep -q "^/home/"; then
+                    # Replace host home path with container's .dotfiles location
+                    NEW_TARGET=$(echo "$TARGET" | sed "s|/home/[^/]*/.dotfiles|$CONTAINER_HOME/.dotfiles|g")
+                    if [ -e "$NEW_TARGET" ]; then
+                        echo "🔗 Fixing symlink: $(basename "$item") (OpenCode config path fix)"
+                        rm "$item"
+                        ln -sfn "$NEW_TARGET" "$item"
+                    fi
+                fi
+            fi
+        done
+    fi
+done
 
 # Remove Windows credential helper if present (copied from host .gitconfig)
 # The devcontainer already has its own credential helper in /etc/gitconfig
@@ -68,6 +120,7 @@ echo "📊 Environment Info:"
 echo "  Go version: $(go version | awk '{print $3}')"
 echo "  Node version: $(node --version 2>/dev/null || echo 'not installed')"
 echo "  Claude Code: $(claude --version 2>/dev/null || echo 'not installed')"
+echo "  OpenCode: $(opencode --version 2>/dev/null || echo 'not installed')"
 echo "  Shell: $(basename "${SHELL}")"
 echo "  Working directory: $(pwd)"
 echo ""
@@ -97,4 +150,5 @@ echo "  make build         # Build application"
 echo "  make run           # Run server"
 echo "  make lint          # Lint code"
 echo "  claude             # Start Claude Code CLI"
+echo "  opencode           # Start OpenCode CLI"
 echo ""

@@ -33,6 +33,7 @@ func newMockRepo() *mockRepo {
 		certNumbers:   make(map[string]bool),
 		purchaseSales: make(map[string]bool),
 		pnlData:       make(map[string]*CampaignPNL),
+		dhHoldReasons: make(map[string]string),
 	}
 }
 
@@ -695,6 +696,16 @@ func (m *mockRepo) UpdatePurchaseDHHoldReason(_ context.Context, id string, reas
 		return ErrPurchaseNotFound
 	}
 	m.dhHoldReasons[id] = reason
+	return nil
+}
+
+func (m *mockRepo) ApproveHeldPurchase(_ context.Context, purchaseID string) error {
+	if _, ok := m.purchases[purchaseID]; !ok {
+		return ErrPurchaseNotFound
+	}
+	p := m.purchases[purchaseID]
+	p.DHPushStatus = DHPushStatusPending
+	m.dhHoldReasons[purchaseID] = ""
 	return nil
 }
 

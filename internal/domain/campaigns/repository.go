@@ -72,6 +72,10 @@ type Repository interface {
 	CountUnsoldByDHPushStatus(ctx context.Context) (map[string]int, error)
 	UpdatePurchaseDHCandidates(ctx context.Context, id string, candidatesJSON string) error
 	UpdatePurchaseDHHoldReason(ctx context.Context, id string, reason string) error
+	// ApproveHeldPurchase atomically clears the hold reason and sets the push
+	// status to pending in a single transaction, preventing the scheduler from
+	// observing a half-updated record.
+	ApproveHeldPurchase(ctx context.Context, purchaseID string) error
 	GetDHPushConfig(ctx context.Context) (*DHPushConfig, error)
 	SaveDHPushConfig(ctx context.Context, cfg *DHPushConfig) error
 
