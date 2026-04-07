@@ -104,6 +104,16 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
     }
   }, [toast, invalidateInventory]);
 
+  const handleApproveDHPush = useCallback(async (purchaseId: string) => {
+    try {
+      await api.approveDHPush(purchaseId);
+      toast.success('DH push approved — will push on next cycle');
+      invalidateInventory();
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Failed to approve DH push'));
+    }
+  }, [toast, invalidateInventory]);
+
   const handleFlagSubmit = useCallback(async (reason: PriceFlagReason) => {
     if (!flagTarget) return;
     setFlagSubmitting(true);
@@ -256,6 +266,7 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
     handleSort,
     handleReviewed,
     handleResolveFlag,
+    handleApproveDHPush,
     handleFlagSubmit,
     handlePrint,
     toggleSelect,

@@ -42,7 +42,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
     reviewStats, tabCounts, showEV, evPortfolio, evMap,
     pageSellSheetCount, sellSheetActive, filteredAndSortedItems,
     totalCost, totalMarket, totalPL,
-    handleSort, handleReviewed, handleResolveFlag, handleFlagSubmit, handlePrint,
+    handleSort, handleReviewed, handleResolveFlag, handleApproveDHPush, handleFlagSubmit, handlePrint,
     toggleSelect, toggleAll, toggleExpand,
     openSaleModal, closeSaleModal, handleFixPricing, handleSetPrice,
     handlePriceSaved, handleHintSaved, sellSheet, toast,
@@ -405,7 +405,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                         isOnSellSheet={!sellSheetActive && sellSheet.has(item.purchase.id)}
                       />
                     </div>
-                    {isExpanded && <ExpandedDetail item={item} onReviewed={handleReviewed} campaignId={campaignId} onOpenFlagDialog={() => setFlagTarget({ purchaseId: item.purchase.id, cardName: item.purchase.cardName, grade: item.purchase.gradeValue })} onResolveFlag={handleResolveFlag} />}
+                    {isExpanded && <ExpandedDetail item={item} onReviewed={handleReviewed} campaignId={campaignId} onOpenFlagDialog={() => setFlagTarget({ purchaseId: item.purchase.id, cardName: item.purchase.cardName, grade: item.purchase.gradeValue })} onResolveFlag={handleResolveFlag} onApproveDHPush={handleApproveDHPush} onSetPrice={() => handleSetPrice(item)} />}
                   </div>
                 );
               })
@@ -445,7 +445,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                           isOnSellSheet={!sellSheetActive && sellSheet.has(item.purchase.id)}
                         />
                       </div>
-                      {isExpanded && <ExpandedDetail item={item} onReviewed={handleReviewed} campaignId={campaignId} onOpenFlagDialog={() => setFlagTarget({ purchaseId: item.purchase.id, cardName: item.purchase.cardName, grade: item.purchase.gradeValue })} onResolveFlag={handleResolveFlag} />}
+                      {isExpanded && <ExpandedDetail item={item} onReviewed={handleReviewed} campaignId={campaignId} onOpenFlagDialog={() => setFlagTarget({ purchaseId: item.purchase.id, cardName: item.purchase.cardName, grade: item.purchase.gradeValue })} onResolveFlag={handleResolveFlag} onApproveDHPush={handleApproveDHPush} onSetPrice={() => handleSetPrice(item)} />}
                     </div>
                   );
                 })}
