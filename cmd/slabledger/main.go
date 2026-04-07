@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -242,7 +243,12 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 			dh.WithEnterpriseKey(cfg.Adapters.DHEnterpriseKey),
 			dh.WithPSAKeys(cfg.Adapters.PSAToken),
 		)
-		logger.Info(ctx, "DH client initialized")
+		psaKeyCount := len(strings.Split(cfg.Adapters.PSAToken, ","))
+		if cfg.Adapters.PSAToken == "" {
+			psaKeyCount = 0
+		}
+		logger.Info(ctx, "DH client initialized",
+			observability.Int("psa_keys", psaKeyCount))
 	}
 
 	// DH repositories (always created — tables exist after migration 000028)
@@ -415,9 +421,9 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	}
 	socialHandler := handlers.NewSocialHandler(socialService, socialRepo, logger, mediaDir, baseURL)
 
-	// Wire image backfiller if PSA image token is available
-	if cfg.Adapters.PSAImageToken != "" {
-		psaImageClient := psa.NewClient(cfg.Adapters.PSAImageToken, logger)
+	// Wire image backfiller if PSA token is available
+	if cfg.Adapters.PSAToken != "" {
+		psaImageClient := psa.NewClient(cfg.Adapters.PSAToken, logger)
 		backfiller := psa.NewImageBackfiller(
 			psaImageClient,
 			&psaImageListerAdapter{repo: campaignsRepo},

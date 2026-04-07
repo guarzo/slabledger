@@ -103,9 +103,8 @@ type AuthConfig struct {
 // These are read from environment variables centrally and passed to adapter
 // constructors — adapters never read env vars directly.
 type AdapterConfig struct {
-	PSAToken           string // PSA_ACCESS_TOKEN - PSA cert lookup
-	PSAImageToken      string // PAO_API - Separate PSA token for image lookups
-	PricingAPIKey      string // PRICING_API_KEY - Bearer token for pricing API auth
+	PSAToken      string // PSA_ACCESS_TOKEN - PSA cert/image lookup (comma-separated for rotation)
+	PricingAPIKey string // PRICING_API_KEY - Bearer token for pricing API auth
 	AzureAIEndpoint    string // AZURE_AI_ENDPOINT - Azure AI Foundry endpoint URL
 	AzureAIKey         string // AZURE_AI_API_KEY - Azure AI API key
 	AzureAIDeployment  string // AZURE_AI_DEPLOYMENT - Model deployment name (default: gpt-5.4)
