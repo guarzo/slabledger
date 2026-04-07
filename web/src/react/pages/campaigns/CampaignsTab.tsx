@@ -143,7 +143,7 @@ export default function CampaignsTab({
 
                   {/* Sell-through with mini bar */}
                   {pnl && (() => {
-                    const st = pnl.sellThroughPct ?? 0;
+                    const st = Math.max(0, Math.min(pnl.sellThroughPct ?? 0, 1));
                     return (
                       <div className="hidden md:flex items-center gap-2">
                         <span>{pnl.totalSold}/{pnl.totalPurchases}</span>
@@ -151,7 +151,7 @@ export default function CampaignsTab({
                           <div
                             className="h-full rounded-full transition-all duration-300"
                             style={{
-                              width: `${Math.min(st * 100, 100)}%`,
+                              width: `${st * 100}%`,
                               background: st >= 0.5 ? 'var(--success)' : 'var(--warning)',
                             }}
                           />
