@@ -684,6 +684,19 @@ func (m *mockRepo) UpdatePurchaseDHCandidates(_ context.Context, _ string, _ str
 	return nil
 }
 
+func (m *mockRepo) UpdatePurchaseDHHoldReason(_ context.Context, _ string, _ string) error {
+	return nil
+}
+
+func (m *mockRepo) GetDHPushConfig(_ context.Context) (*DHPushConfig, error) {
+	def := DefaultDHPushConfig()
+	return &def, nil
+}
+
+func (m *mockRepo) SaveDHPushConfig(_ context.Context, _ *DHPushConfig) error {
+	return nil
+}
+
 // --- SellSheetRepository stubs ---
 
 func (m *mockRepo) GetSellSheetItems(_ context.Context) ([]string, error) {

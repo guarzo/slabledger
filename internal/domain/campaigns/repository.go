@@ -71,6 +71,9 @@ type Repository interface {
 	GetPurchasesByDHPushStatus(ctx context.Context, status string, limit int) ([]Purchase, error)
 	CountUnsoldByDHPushStatus(ctx context.Context) (map[string]int, error)
 	UpdatePurchaseDHCandidates(ctx context.Context, id string, candidatesJSON string) error
+	UpdatePurchaseDHHoldReason(ctx context.Context, id string, reason string) error
+	GetDHPushConfig(ctx context.Context) (*DHPushConfig, error)
+	SaveDHPushConfig(ctx context.Context, cfg *DHPushConfig) error
 
 	// Sale operations
 	CreateSale(ctx context.Context, s *Sale) error

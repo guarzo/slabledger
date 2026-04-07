@@ -54,6 +54,15 @@ func (r *CampaignsRepository) UpdatePurchaseDHCandidates(ctx context.Context, id
 	)
 }
 
+// UpdatePurchaseDHHoldReason stores the hold reason on a purchase.
+func (r *CampaignsRepository) UpdatePurchaseDHHoldReason(ctx context.Context, id string, reason string) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE campaign_purchases SET dh_hold_reason = ?, updated_at = ? WHERE id = ?`,
+		reason, time.Now(), id,
+	)
+	return err
+}
+
 // GetPurchasesByDHPushStatus returns purchases with the given DH push status.
 func (r *CampaignsRepository) GetPurchasesByDHPushStatus(ctx context.Context, status string, limit int) ([]campaigns.Purchase, error) {
 	query := fmt.Sprintf(
