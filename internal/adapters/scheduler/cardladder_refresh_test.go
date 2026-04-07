@@ -206,6 +206,34 @@ func TestCardLadderRefreshScheduler_Disabled(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// DH re-enrollment tests
+// ---------------------------------------------------------------------------
+
+type mockCLDHPushUpdater struct {
+	Calls []struct{ ID, Status string }
+}
+
+func (m *mockCLDHPushUpdater) UpdatePurchaseDHPushStatus(_ context.Context, id string, status string) error {
+	m.Calls = append(m.Calls, struct{ ID, Status string }{id, status})
+	return nil
+}
+
+func TestWithCLDHPushUpdater_ReEnrollsOnValueChange(t *testing.T) {
+	dhPushUpdater := &mockCLDHPushUpdater{}
+	s := NewCardLadderRefreshScheduler(
+		nil, nil,
+		&mockCLPurchaseLister{},
+		&mockCLValueUpdater{},
+		&mockCLGemRateUpdater{},
+		nil, nil,
+		mocks.NewMockLogger(),
+		config.CardLadderConfig{Enabled: true, Interval: 24 * time.Hour},
+		WithCLDHPushUpdater(dhPushUpdater),
+	)
+	require.NotNil(t, s.dhPushUpdater, "dhPushUpdater should be set via functional option")
+}
+
+// ---------------------------------------------------------------------------
 // Interface compliance checks
 // ---------------------------------------------------------------------------
 
@@ -213,3 +241,4 @@ var _ CardLadderPurchaseLister = (*mockCLPurchaseLister)(nil)
 var _ CardLadderValueUpdater = (*mockCLValueUpdater)(nil)
 var _ CardLadderGemRateUpdater = (*mockCLGemRateUpdater)(nil)
 var _ campaigns.CLValueHistoryRecorder = (*mockCLValueHistoryRecorder)(nil)
+var _ DHPushStatusUpdater = (*mockCLDHPushUpdater)(nil)

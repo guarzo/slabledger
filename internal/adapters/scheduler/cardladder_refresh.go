@@ -32,6 +32,14 @@ type CardLadderGemRateUpdater interface {
 	UpdatePurchasePSASpecID(ctx context.Context, purchaseID string, psaSpecID int) error
 }
 
+// CardLadderRefreshOption configures optional dependencies on a CardLadderRefreshScheduler.
+type CardLadderRefreshOption func(*CardLadderRefreshScheduler)
+
+// WithCLDHPushUpdater enables DH re-push when CL values change.
+func WithCLDHPushUpdater(u DHPushStatusUpdater) CardLadderRefreshOption {
+	return func(s *CardLadderRefreshScheduler) { s.dhPushUpdater = u }
+}
+
 // CardLadderRefreshScheduler refreshes CL values from the Card Ladder API daily.
 type CardLadderRefreshScheduler struct {
 	StopHandle
@@ -42,6 +50,7 @@ type CardLadderRefreshScheduler struct {
 	gemRateUpdater CardLadderGemRateUpdater
 	clRecorder     campaigns.CLValueHistoryRecorder
 	salesStore     *sqlite.CLSalesStore
+	dhPushUpdater  DHPushStatusUpdater // optional: re-enrolls changed items for DH push
 	logger         observability.Logger
 	config         config.CardLadderConfig
 }
@@ -57,9 +66,10 @@ func NewCardLadderRefreshScheduler(
 	salesStore *sqlite.CLSalesStore,
 	logger observability.Logger,
 	cfg config.CardLadderConfig,
+	opts ...CardLadderRefreshOption,
 ) *CardLadderRefreshScheduler {
 	cfg.ApplyDefaults()
-	return &CardLadderRefreshScheduler{
+	s := &CardLadderRefreshScheduler{
 		StopHandle:     NewStopHandle(),
 		client:         client,
 		store:          store,
@@ -71,6 +81,10 @@ func NewCardLadderRefreshScheduler(
 		logger:         logger,
 		config:         cfg,
 	}
+	for _, o := range opts {
+		o(s)
+	}
+	return s
 }
 
 // Start begins the scheduler loop.
@@ -232,11 +246,21 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 			continue
 		}
 
+		oldCLCents := purchase.CLValueCents
 		if err := s.valueUpdater.UpdatePurchaseCLValue(ctx, purchase.ID, newCLCents, purchase.Population); err != nil {
 			s.logger.Warn(ctx, "CL refresh: failed to update CL value",
 				observability.String("cert", purchase.CertNumber),
 				observability.Err(err))
 			continue
+		}
+
+		// Re-enroll already-pushed items for DH re-push when market value changes.
+		if s.dhPushUpdater != nil && purchase.DHInventoryID != 0 && newCLCents != oldCLCents {
+			if err := s.dhPushUpdater.UpdatePurchaseDHPushStatus(ctx, purchase.ID, campaigns.DHPushStatusPending); err != nil {
+				s.logger.Warn(ctx, "CL refresh: failed to re-enroll for DH push",
+					observability.String("cert", purchase.CertNumber),
+					observability.Err(err))
+			}
 		}
 
 		// Record history

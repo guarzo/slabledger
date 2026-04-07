@@ -355,3 +355,30 @@ func TestClient_DelistChannels(t *testing.T) {
 }
 
 func intPtr(v int) *int { return &v }
+
+func TestInventoryItem_MarketValueCents_Serialization(t *testing.T) {
+	// With market value
+	mv := 45000
+	item := InventoryItem{
+		DHCardID:         12345,
+		CertNumber:       "98765",
+		GradingCompany:   "psa",
+		Grade:            9,
+		CostBasisCents:   15000,
+		MarketValueCents: &mv,
+		Status:           InventoryStatusInStock,
+	}
+	b, err := json.Marshal(item)
+	require.NoError(t, err)
+	require.Contains(t, string(b), `"market_value_cents":45000`)
+
+	// Without market value (omitted)
+	item.MarketValueCents = nil
+	b, err = json.Marshal(item)
+	require.NoError(t, err)
+	require.NotContains(t, string(b), "market_value_cents")
+
+	// IntPtr helper: zero returns nil
+	require.Nil(t, IntPtr(0))
+	require.Equal(t, 45000, *IntPtr(45000))
+}
