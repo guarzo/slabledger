@@ -172,7 +172,9 @@ func (r *CampaignsRepository) GetCapitalSummary(ctx context.Context) (*campaigns
 	}
 
 	trend := campaigns.TrendStable
-	if recovery30d > 0 && recoveryPrior30d > 0 {
+	if recovery30d > 0 && recoveryPrior30d == 0 {
+		trend = campaigns.TrendImproving
+	} else if recovery30d > 0 && recoveryPrior30d > 0 {
 		ratio := float64(recovery30d) / float64(recoveryPrior30d)
 		if ratio > 1+campaigns.TrendChangeThreshold {
 			trend = campaigns.TrendImproving

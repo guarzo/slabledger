@@ -467,54 +467,139 @@ func TestExecute_SuggestPriceBatch(t *testing.T) {
 }
 
 func TestExecute_GetDashboardSummary(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		GetWeeklyReviewSummaryFn: func(_ context.Context) (*campaigns.WeeklyReviewSummary, error) {
-			return &campaigns.WeeklyReviewSummary{
-				PurchasesThisWeek:    10,
-				PurchasesLastWeek:    8,
-				SpendThisWeekCents:   50000,
-				SalesThisWeek:        5,
-				SalesLastWeek:        3,
-				RevenueThisWeekCents: 30000,
-				ProfitThisWeekCents:  5000,
-				ProfitLastWeekCents:  3000,
-			}, nil
+	tests := []struct {
+		name               string
+		weeklyReviewFn     func(_ context.Context) (*campaigns.WeeklyReviewSummary, error)
+		capitalSummaryFn   func(_ context.Context) (*campaigns.CapitalSummary, error)
+		portfolioHealthFn  func(_ context.Context) (*campaigns.PortfolioHealth, error)
+		channelVelocityFn  func(_ context.Context) ([]campaigns.ChannelVelocity, error)
+		wantSubstrings     []string
+		wantMissingStrings []string
+	}{
+		{
+			name: "full dashboard with critical capital",
+			weeklyReviewFn: func(_ context.Context) (*campaigns.WeeklyReviewSummary, error) {
+				return &campaigns.WeeklyReviewSummary{
+					PurchasesThisWeek:    10,
+					PurchasesLastWeek:    8,
+					SpendThisWeekCents:   50000,
+					SalesThisWeek:        5,
+					SalesLastWeek:        3,
+					RevenueThisWeekCents: 30000,
+					ProfitThisWeekCents:  5000,
+					ProfitLastWeekCents:  3000,
+				}, nil
+			},
+			capitalSummaryFn: func(_ context.Context) (*campaigns.CapitalSummary, error) {
+				return &campaigns.CapitalSummary{
+					OutstandingCents:     2500000,
+					RecoveryRate30dCents: 500000,
+					WeeksToCover:         21.5,
+					RecoveryTrend:        campaigns.TrendStable,
+					AlertLevel:           campaigns.AlertCritical,
+				}, nil
+			},
+			portfolioHealthFn: func(_ context.Context) (*campaigns.PortfolioHealth, error) {
+				return &campaigns.PortfolioHealth{
+					Campaigns: []campaigns.CampaignHealth{
+						{CampaignName: "Test", HealthStatus: "healthy", HealthReason: "good", CapitalAtRisk: 1000},
+					},
+				}, nil
+			},
+			channelVelocityFn: func(_ context.Context) ([]campaigns.ChannelVelocity, error) {
+				return []campaigns.ChannelVelocity{
+					{Channel: "ebay", AvgDaysToSell: 14.5, SaleCount: 5},
+				}, nil
+			},
+			wantSubstrings: []string{
+				`"purchaseCount":10`,
+				`"alertLevel":"critical"`,
+				`"purchaseCountWoW":2`,
+				`"recoveryTrend":"stable"`,
+			},
 		},
-		GetCapitalSummaryFn: func(_ context.Context) (*campaigns.CapitalSummary, error) {
-			return &campaigns.CapitalSummary{
-				OutstandingCents:     2500000,
-				RecoveryRate30dCents: 500000,
-				WeeksToCover:         21.5,
-				RecoveryTrend:        campaigns.TrendStable,
-				AlertLevel:           campaigns.AlertCritical,
-			}, nil
+		{
+			name: "healthy capital with ok alert",
+			weeklyReviewFn: func(_ context.Context) (*campaigns.WeeklyReviewSummary, error) {
+				return &campaigns.WeeklyReviewSummary{
+					PurchasesThisWeek:   3,
+					PurchasesLastWeek:   3,
+					SalesThisWeek:       2,
+					SalesLastWeek:       2,
+					ProfitThisWeekCents: 1000,
+					ProfitLastWeekCents: 1000,
+				}, nil
+			},
+			capitalSummaryFn: func(_ context.Context) (*campaigns.CapitalSummary, error) {
+				return &campaigns.CapitalSummary{
+					OutstandingCents:     50000,
+					RecoveryRate30dCents: 100000,
+					WeeksToCover:         2.15,
+					RecoveryTrend:        campaigns.TrendImproving,
+					AlertLevel:           campaigns.AlertOK,
+				}, nil
+			},
+			portfolioHealthFn: func(_ context.Context) (*campaigns.PortfolioHealth, error) {
+				return &campaigns.PortfolioHealth{}, nil
+			},
+			channelVelocityFn: func(_ context.Context) ([]campaigns.ChannelVelocity, error) {
+				return nil, nil
+			},
+			wantSubstrings: []string{
+				`"alertLevel":"ok"`,
+				`"recoveryTrend":"improving"`,
+				`"purchaseCount":3`,
+			},
 		},
-		GetPortfolioHealthFn: func(_ context.Context) (*campaigns.PortfolioHealth, error) {
-			return &campaigns.PortfolioHealth{
-				Campaigns: []campaigns.CampaignHealth{
-					{CampaignName: "Test", HealthStatus: "healthy", HealthReason: "good", CapitalAtRisk: 1000},
-				},
-			}, nil
-		},
-		GetPortfolioChannelVelocityFn: func(_ context.Context) ([]campaigns.ChannelVelocity, error) {
-			return []campaigns.ChannelVelocity{
-				{Channel: "ebay", AvgDaysToSell: 14.5, SaleCount: 5},
-			}, nil
+		{
+			name: "partial errors still returns available data",
+			weeklyReviewFn: func(_ context.Context) (*campaigns.WeeklyReviewSummary, error) {
+				return nil, fmt.Errorf("weekly review unavailable")
+			},
+			capitalSummaryFn: func(_ context.Context) (*campaigns.CapitalSummary, error) {
+				return &campaigns.CapitalSummary{
+					OutstandingCents: 100000,
+					AlertLevel:       campaigns.AlertWarning,
+					WeeksToCover:     8.0,
+				}, nil
+			},
+			portfolioHealthFn: func(_ context.Context) (*campaigns.PortfolioHealth, error) {
+				return nil, fmt.Errorf("health unavailable")
+			},
+			channelVelocityFn: func(_ context.Context) ([]campaigns.ChannelVelocity, error) {
+				return nil, nil
+			},
+			wantSubstrings: []string{
+				`"alertLevel":"warning"`,
+				`weeklyReview`,
+			},
 		},
 	}
-	e := newTestExecutor(svc)
 
-	result, err := e.Execute(context.Background(), "get_dashboard_summary", "{}")
-	if err != nil {
-		t.Fatalf("Execute returned error: %v", err)
-	}
-	if !strings.Contains(result, `"purchaseCount":10`) {
-		t.Errorf("missing purchaseCount in result: %s", result)
-	}
-	if !strings.Contains(result, `"alertLevel":"critical"`) {
-		t.Errorf("missing alertLevel in result: %s", result)
-	}
-	if !strings.Contains(result, `"purchaseCountWoW":2`) {
-		t.Errorf("missing WoW delta in result: %s", result)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := &mocks.MockCampaignService{
+				GetWeeklyReviewSummaryFn:      tt.weeklyReviewFn,
+				GetCapitalSummaryFn:           tt.capitalSummaryFn,
+				GetPortfolioHealthFn:          tt.portfolioHealthFn,
+				GetPortfolioChannelVelocityFn: tt.channelVelocityFn,
+			}
+			e := newTestExecutor(svc)
+
+			result, err := e.Execute(context.Background(), "get_dashboard_summary", "{}")
+			if err != nil {
+				t.Fatalf("Execute returned error: %v", err)
+			}
+			for _, want := range tt.wantSubstrings {
+				if !strings.Contains(result, want) {
+					t.Errorf("missing %q in result: %s", want, result)
+				}
+			}
+			for _, unwanted := range tt.wantMissingStrings {
+				if strings.Contains(result, unwanted) {
+					t.Errorf("unexpected %q in result: %s", unwanted, result)
+				}
+			}
+		})
 	}
 }

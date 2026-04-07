@@ -41,7 +41,7 @@ export default function CapitalExposurePanel({ capital }: CapitalExposurePanelPr
 
       {capital.recoveryRate30dCents > 0 && (
         <div className="text-xs text-[var(--text-muted)] mb-2">
-          {formatCents(capital.recoveryRate30dCents)}/mo recovered <TrendArrow trend={trendToArrow[capital.recoveryTrend]} />
+          {formatCents(capital.recoveryRate30dCents)}/30d recovered <TrendArrow trend={trendToArrow[capital.recoveryTrend]} />
         </div>
       )}
 

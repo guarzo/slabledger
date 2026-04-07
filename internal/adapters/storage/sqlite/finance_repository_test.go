@@ -207,6 +207,8 @@ func TestGetCapitalSummary_RecoveryVelocity(t *testing.T) {
 		assert.Equal(t, 0, summary.RecoveryRate30dPriorCents)
 		assert.Greater(t, summary.WeeksToCover, 4.0)
 		assert.Less(t, summary.WeeksToCover, 7.0)
+		assert.Equal(t, campaigns.TrendImproving, summary.RecoveryTrend,
+			"recovery from zero prior should be improving")
 	})
 
 	t.Run("improving trend when 30d exceeds prior 30d by more than 10pct", func(t *testing.T) {
@@ -252,6 +254,75 @@ func TestGetCapitalSummary_RecoveryVelocity(t *testing.T) {
 		assert.Equal(t, 50000, summary.RecoveryRate30dCents)
 		assert.Equal(t, 20000, summary.RecoveryRate30dPriorCents)
 		assert.Equal(t, campaigns.TrendImproving, summary.RecoveryTrend)
+	})
+
+	t.Run("declining trend when prior 30d exceeds 30d by more than 10pct", func(t *testing.T) {
+		db := setupTestDB(t)
+		defer db.Close()
+		repo := NewCampaignsRepository(db.DB)
+
+		createTestCampaign(t, db, "camp-decline", "Declining")
+		for i, cert := range []string{"DEC001", "DEC002"} {
+			p := &campaigns.Purchase{
+				ID: fmt.Sprintf("dec-p%d", i), CampaignID: "camp-decline", CardName: "Slowpoke",
+				CertNumber: cert, GradeValue: 8, BuyCostCents: 30000, PSASourcingFeeCents: 0,
+				PurchaseDate: "2026-01-10", InvoiceDate: "2026-01-10",
+				CreatedAt: now, UpdatedAt: now,
+			}
+			require.NoError(t, repo.CreatePurchase(ctx, p))
+		}
+
+		recentDate := time.Now().AddDate(0, 0, -5).Format("2006-01-02")
+		s1 := &campaigns.Sale{
+			ID: "dec-s1", PurchaseID: "dec-p0", SaleChannel: campaigns.SaleChannelEbay,
+			SalePriceCents: 10000, SaleFeeCents: 1235, SaleDate: recentDate,
+			DaysToSell: 5, NetProfitCents: 0, CreatedAt: now, UpdatedAt: now,
+		}
+		require.NoError(t, repo.CreateSale(ctx, s1))
+
+		priorDate := time.Now().AddDate(0, 0, -45).Format("2006-01-02")
+		s2 := &campaigns.Sale{
+			ID: "dec-s2", PurchaseID: "dec-p1", SaleChannel: campaigns.SaleChannelEbay,
+			SalePriceCents: 20000, SaleFeeCents: 2470, SaleDate: priorDate,
+			DaysToSell: 5, NetProfitCents: 0, CreatedAt: now, UpdatedAt: now,
+		}
+		require.NoError(t, repo.CreateSale(ctx, s2))
+
+		summary, err := repo.GetCapitalSummary(ctx)
+		require.NoError(t, err)
+		assert.Equal(t, 10000, summary.RecoveryRate30dCents)
+		assert.Equal(t, 20000, summary.RecoveryRate30dPriorCents)
+		assert.Equal(t, campaigns.TrendDeclining, summary.RecoveryTrend)
+	})
+
+	t.Run("warning alert when weeks to cover between 6 and 12", func(t *testing.T) {
+		db := setupTestDB(t)
+		defer db.Close()
+		repo := NewCampaignsRepository(db.DB)
+
+		createTestCampaign(t, db, "camp-warning", "Warning")
+		// Outstanding ~200000, recovery ~100000/30d → weekly ~23256 → weeks ~8.6
+		p := &campaigns.Purchase{
+			ID: "warn-p1", CampaignID: "camp-warning", CardName: "Snorlax",
+			CertNumber: "WRN001", GradeValue: 9, BuyCostCents: 200000, PSASourcingFeeCents: 0,
+			PurchaseDate: "2026-01-10", InvoiceDate: "2026-01-10",
+			CreatedAt: now, UpdatedAt: now,
+		}
+		require.NoError(t, repo.CreatePurchase(ctx, p))
+
+		recentDate := time.Now().AddDate(0, 0, -5).Format("2006-01-02")
+		s := &campaigns.Sale{
+			ID: "warn-s1", PurchaseID: "warn-p1", SaleChannel: campaigns.SaleChannelEbay,
+			SalePriceCents: 100000, SaleFeeCents: 12350, SaleDate: recentDate,
+			DaysToSell: 5, NetProfitCents: 0, CreatedAt: now, UpdatedAt: now,
+		}
+		require.NoError(t, repo.CreateSale(ctx, s))
+
+		summary, err := repo.GetCapitalSummary(ctx)
+		require.NoError(t, err)
+		assert.GreaterOrEqual(t, summary.WeeksToCover, 6.0)
+		assert.Less(t, summary.WeeksToCover, 12.0)
+		assert.Equal(t, campaigns.AlertWarning, summary.AlertLevel)
 	})
 
 	t.Run("alert levels based on weeks to cover", func(t *testing.T) {
