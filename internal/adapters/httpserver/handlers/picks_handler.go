@@ -96,10 +96,10 @@ func toPickResponses(pp []picks.Pick) []pickResponse {
 
 func (h *PicksHandler) HandleGetPicks(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	result, err := h.service.GetLatestPicks(ctx)
-	if err != nil {
-		h.logger.Error(ctx, "failed to get picks", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
+	result, ok := serviceCall(w, ctx, h.logger, "failed to get picks", func() ([]picks.Pick, error) {
+		return h.service.GetLatestPicks(ctx)
+	})
+	if !ok {
 		return
 	}
 	if result == nil {
@@ -116,10 +116,10 @@ func (h *PicksHandler) HandleGetPickHistory(w http.ResponseWriter, r *http.Reque
 			days = d
 		}
 	}
-	result, err := h.service.GetPickHistory(ctx, days)
-	if err != nil {
-		h.logger.Error(ctx, "failed to get pick history", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
+	result, ok := serviceCall(w, ctx, h.logger, "failed to get pick history", func() ([]picks.Pick, error) {
+		return h.service.GetPickHistory(ctx, days)
+	})
+	if !ok {
 		return
 	}
 	if result == nil {
@@ -130,10 +130,10 @@ func (h *PicksHandler) HandleGetPickHistory(w http.ResponseWriter, r *http.Reque
 
 func (h *PicksHandler) HandleGetWatchlist(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	items, err := h.service.GetWatchlist(ctx)
-	if err != nil {
-		h.logger.Error(ctx, "failed to get watchlist", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
+	items, ok := serviceCall(w, ctx, h.logger, "failed to get watchlist", func() ([]picks.WatchlistItem, error) {
+		return h.service.GetWatchlist(ctx)
+	})
+	if !ok {
 		return
 	}
 	if items == nil {

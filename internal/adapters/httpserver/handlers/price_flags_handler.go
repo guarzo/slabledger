@@ -31,10 +31,10 @@ func (h *PriceFlagsHandler) HandleListPriceFlags(w http.ResponseWriter, r *http.
 		writeError(w, http.StatusBadRequest, "invalid status: must be open, resolved, or all")
 		return
 	}
-	flags, err := h.service.ListPriceFlags(r.Context(), status)
-	if err != nil {
-		h.logger.Error(r.Context(), "failed to list price flags", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
+	flags, ok := serviceCall(w, r.Context(), h.logger, "failed to list price flags", func() ([]campaigns.PriceFlagWithContext, error) {
+		return h.service.ListPriceFlags(r.Context(), status)
+	})
+	if !ok {
 		return
 	}
 	if flags == nil {

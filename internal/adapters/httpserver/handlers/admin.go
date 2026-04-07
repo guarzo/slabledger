@@ -30,10 +30,10 @@ func NewAdminHandlers(authService auth.Service, logger observability.Logger) *Ad
 
 // HandleListAllowedEmails returns the email allowlist
 func (h *AdminHandlers) HandleListAllowedEmails(w http.ResponseWriter, r *http.Request) {
-	emails, err := h.authService.ListAllowedEmails(r.Context())
-	if err != nil {
-		h.logger.Error(r.Context(), "failed to list allowed emails", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
+	emails, ok := serviceCall(w, r.Context(), h.logger, "failed to list allowed emails", func() ([]auth.AllowedEmail, error) {
+		return h.authService.ListAllowedEmails(r.Context())
+	})
+	if !ok {
 		return
 	}
 	writeJSONList(w, http.StatusOK, emails)
@@ -61,9 +61,9 @@ func (h *AdminHandlers) HandleAddAllowedEmail(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	if err := h.authService.AddAllowedEmail(ctx, input.Email, user.ID, input.Notes); err != nil {
-		h.logger.Error(ctx, "failed to add allowed email", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
+	if !serviceCallVoid(w, ctx, h.logger, "failed to add allowed email", func() error {
+		return h.authService.AddAllowedEmail(ctx, input.Email, user.ID, input.Notes)
+	}) {
 		return
 	}
 
@@ -85,9 +85,9 @@ func (h *AdminHandlers) HandleRemoveAllowedEmail(w http.ResponseWriter, r *http.
 		return
 	}
 
-	if err := h.authService.RemoveAllowedEmail(ctx, email); err != nil {
-		h.logger.Error(ctx, "failed to remove allowed email", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
+	if !serviceCallVoid(w, ctx, h.logger, "failed to remove allowed email", func() error {
+		return h.authService.RemoveAllowedEmail(ctx, email)
+	}) {
 		return
 	}
 
@@ -176,10 +176,10 @@ func HandleBackup(dbPath string, logger observability.Logger) http.HandlerFunc {
 
 // HandleListUsers returns all registered users
 func (h *AdminHandlers) HandleListUsers(w http.ResponseWriter, r *http.Request) {
-	users, err := h.authService.ListUsers(r.Context())
-	if err != nil {
-		h.logger.Error(r.Context(), "failed to list users", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
+	users, ok := serviceCall(w, r.Context(), h.logger, "failed to list users", func() ([]auth.User, error) {
+		return h.authService.ListUsers(r.Context())
+	})
+	if !ok {
 		return
 	}
 	type userResponse struct {

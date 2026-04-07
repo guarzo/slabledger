@@ -75,10 +75,10 @@ func (h *SocialHandler) HandleListPosts(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	posts, err := h.service.ListPosts(r.Context(), statusFilter, 100, 0)
-	if err != nil {
-		h.logger.Error(r.Context(), "list social posts failed", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
+	posts, ok := serviceCall(w, r.Context(), h.logger, "list social posts failed", func() ([]social.SocialPost, error) {
+		return h.service.ListPosts(r.Context(), statusFilter, 100, 0)
+	})
+	if !ok {
 		return
 	}
 	writeJSONList(w, http.StatusOK, posts)
@@ -95,10 +95,10 @@ func (h *SocialHandler) HandleGetPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	detail, err := h.service.GetPost(r.Context(), id)
-	if err != nil {
-		h.logger.Error(r.Context(), "get social post failed", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
+	detail, ok := serviceCall(w, r.Context(), h.logger, "get social post failed", func() (*social.PostDetail, error) {
+		return h.service.GetPost(r.Context(), id)
+	})
+	if !ok {
 		return
 	}
 	if detail == nil {
@@ -150,9 +150,9 @@ func (h *SocialHandler) HandleUpdateCaption(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	if err := h.service.UpdateCaption(r.Context(), id, req.Caption, req.Hashtags); err != nil {
-		h.logger.Error(r.Context(), "update social caption failed", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
+	if !serviceCallVoid(w, r.Context(), h.logger, "update social caption failed", func() error {
+		return h.service.UpdateCaption(r.Context(), id, req.Caption, req.Hashtags)
+	}) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -167,9 +167,9 @@ func (h *SocialHandler) HandleDelete(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if err := h.service.Delete(r.Context(), id); err != nil {
-		h.logger.Error(r.Context(), "delete social post failed", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
+	if !serviceCallVoid(w, r.Context(), h.logger, "delete social post failed", func() error {
+		return h.service.Delete(r.Context(), id)
+	}) {
 		return
 	}
 

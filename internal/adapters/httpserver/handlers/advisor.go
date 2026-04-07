@@ -62,10 +62,10 @@ func (h *AdvisorHandler) HandleGetCached(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	cached, err := h.cacheStore.Get(r.Context(), analysisType)
-	if err != nil {
-		h.logger.Error(r.Context(), "failed to get cached analysis", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
+	cached, ok := serviceCall(w, r.Context(), h.logger, "failed to get cached analysis", func() (*advisor.CachedAnalysis, error) {
+		return h.cacheStore.Get(r.Context(), analysisType)
+	})
+	if !ok {
 		return
 	}
 
@@ -102,25 +102,32 @@ func (h *AdvisorHandler) HandleRefreshTrigger(w http.ResponseWriter, r *http.Req
 	}
 
 	// Atomically acquire the refresh lock. If already running, check for stale entries.
-	lease, acquired, err := h.cacheStore.AcquireRefresh(r.Context(), analysisType)
-	if err != nil {
-		h.logger.Error(r.Context(), "failed to acquire analysis refresh", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
+	type acquireResult struct {
+		lease    string
+		acquired bool
+	}
+	ar, ok := serviceCall(w, r.Context(), h.logger, "failed to acquire analysis refresh", func() (acquireResult, error) {
+		lease, acquired, err := h.cacheStore.AcquireRefresh(r.Context(), analysisType)
+		return acquireResult{lease, acquired}, err
+	})
+	if !ok {
 		return
 	}
+	lease, acquired := ar.lease, ar.acquired
 	if !acquired {
 		// Already running — atomically force-restart if stale (> 15 minutes).
-		staleLease, staleAcquired, staleErr := h.cacheStore.ForceAcquireStale(r.Context(), analysisType, 15*time.Minute)
-		if staleErr != nil {
-			h.logger.Error(r.Context(), "failed to check stale analysis", observability.Err(staleErr))
-			writeError(w, http.StatusInternalServerError, "Internal server error")
+		sar, ok2 := serviceCall(w, r.Context(), h.logger, "failed to check stale analysis", func() (acquireResult, error) {
+			staleLease, staleAcquired, staleErr := h.cacheStore.ForceAcquireStale(r.Context(), analysisType, 15*time.Minute)
+			return acquireResult{staleLease, staleAcquired}, staleErr
+		})
+		if !ok2 {
 			return
 		}
-		if !staleAcquired {
+		if !sar.acquired {
 			writeJSON(w, http.StatusOK, map[string]string{"status": "running"})
 			return
 		}
-		lease = staleLease
+		lease = sar.lease
 		h.logger.Warn(r.Context(), "stale running entry detected, restarting",
 			observability.String("type", string(analysisType)),
 		)
