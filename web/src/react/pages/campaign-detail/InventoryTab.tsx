@@ -396,13 +396,9 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
             <SortableHeader label="Gr" sortKey="grade" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-center" style={{ width: '36px' }} />
             <SortableHeader label="Cost" sortKey="cost" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-right" style={{ width: '72px' }} />
             <SortableHeader label="Market" sortKey="market" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-right" style={{ width: '120px' }} />
-            <div className="glass-table-th flex-shrink-0 text-right" style={{ width: '68px' }}>CL</div>
             <SortableHeader label="P/L" sortKey="pl" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-right print-hide-col" style={{ width: '72px' }} />
             <SortableHeader label="Days" sortKey="days" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-center print-hide-col" style={{ width: '40px' }} />
-            <div className="glass-table-th flex-shrink-0 text-center print-hide-col" style={{ width: '48px' }}>Signal</div>
-            <div className="glass-table-th flex-shrink-0 text-right" style={{ width: '68px' }}>Rec.</div>
-            <div className="glass-table-th flex-shrink-0 text-center print-hide-col" style={{ width: '72px' }}>Status</div>
-            {showEV && <SortableHeader label="EV" sortKey="ev" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-right" style={{ width: '64px' }} />}
+            <div className="glass-table-th flex-shrink-0 text-center print-hide-actions" style={{ width: '48px' }}>Sell</div>
             <div className="glass-table-th flex-shrink-0 !px-1 print-hide-actions" style={{ width: '28px' }}></div>
           </div>
           {/* Rows */}
@@ -424,8 +420,6 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                         onRecordSale={() => openSaleModal([item])}
                         onFixPricing={() => handleFixPricing(item.purchase)}
                         onSetPrice={() => handleSetPrice(item)}
-                        ev={evMap.get(item.purchase.certNumber)}
-                        showEV={!!showEV}
                         showCampaignColumn={showCampaignColumn}
                         isOnSellSheet={!sellSheetActive && sellSheet.has(item.purchase.id)}
                       />
@@ -466,8 +460,6 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                           onRecordSale={() => openSaleModal([item])}
                           onFixPricing={() => handleFixPricing(item.purchase)}
                           onSetPrice={() => handleSetPrice(item)}
-                          ev={evMap.get(item.purchase.certNumber)}
-                          showEV={!!showEV}
                           showCampaignColumn={showCampaignColumn}
                           isOnSellSheet={!sellSheetActive && sellSheet.has(item.purchase.id)}
                         />
