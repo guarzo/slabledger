@@ -187,19 +187,27 @@ func (s *DHPushScheduler) processPurchase(ctx context.Context, p campaigns.Purch
 
 	key := p.DHCardKey()
 
-	// Attempt to reuse an existing DH card ID mapping.
-	dhCardIDStr, alreadyMapped := mappedSet[key]
+	// Attempt to reuse an existing DH card ID — either from the purchase itself
+	// (re-push after CL value change) or from the mapping cache.
 	var dhCardID int
+	alreadyMapped := false
 
-	if alreadyMapped && dhCardIDStr != "" {
-		parsed, err := strconv.Atoi(dhCardIDStr)
-		if err != nil || parsed <= 0 {
-			alreadyMapped = false
-		} else {
+	if p.DHCardID != 0 {
+		dhCardID = p.DHCardID
+		alreadyMapped = true
+	} else if dhCardIDStr := mappedSet[key]; dhCardIDStr != "" {
+		if parsed, err := strconv.Atoi(dhCardIDStr); err == nil && parsed > 0 {
 			dhCardID = parsed
+			alreadyMapped = true
 		}
-	} else {
-		alreadyMapped = false
+	}
+
+	// Never push before we have a CL price — leave as pending for retry.
+	if p.CLValueCents == 0 {
+		s.logger.Debug(ctx, "dh push: no CL value yet, leaving as pending",
+			observability.String("purchaseID", p.ID),
+			observability.String("cert", p.CertNumber))
+		return processSkipped
 	}
 
 	if !alreadyMapped {
@@ -285,12 +293,13 @@ func (s *DHPushScheduler) processPurchase(ctx context.Context, p campaigns.Purch
 	}
 
 	item := dh.InventoryItem{
-		DHCardID:       dhCardID,
-		CertNumber:     p.CertNumber,
-		GradingCompany: dh.GraderPSA,
-		Grade:          p.GradeValue,
-		CostBasisCents: p.CLValueCents,
-		Status:         dh.InventoryStatusInStock,
+		DHCardID:         dhCardID,
+		CertNumber:       p.CertNumber,
+		GradingCompany:   dh.GraderPSA,
+		Grade:            p.GradeValue,
+		CostBasisCents:   p.CLValueCents,
+		MarketValueCents: dh.IntPtr(p.CLValueCents),
+		Status:           dh.InventoryStatusInStock,
 	}
 
 	pushResp, err := s.inventoryPush.PushInventory(ctx, []dh.InventoryItem{item})

@@ -78,10 +78,19 @@ func (s *service) RefreshCLValuesGlobal(ctx context.Context, rows []CLExportRow)
 		}
 		purchase.CLValueCents = newCLCents
 
-		// Flag for DH push if eligible
+		// Flag for DH push if eligible (first-time push).
 		if purchase.NeedsDHPush() {
 			if err := s.repo.UpdatePurchaseDHPushStatus(ctx, purchase.ID, DHPushStatusPending); err != nil && s.logger != nil {
 				s.logger.Warn(ctx, "cl refresh: failed to set dh push status",
+					observability.String("purchaseID", purchase.ID),
+					observability.Err(err))
+			}
+		}
+
+		// Re-push to DH when market value changes on an already-pushed item.
+		if purchase.DHInventoryID != 0 && newCLCents != oldCLCents {
+			if err := s.repo.UpdatePurchaseDHPushStatus(ctx, purchase.ID, DHPushStatusPending); err != nil && s.logger != nil {
+				s.logger.Warn(ctx, "cl refresh: failed to re-enroll for dh push",
 					observability.String("purchaseID", purchase.ID),
 					observability.Err(err))
 			}

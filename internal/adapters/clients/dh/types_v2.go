@@ -92,12 +92,21 @@ type CertResolutionJobStatus struct {
 
 // InventoryItem is a single item to push to DH inventory.
 type InventoryItem struct {
-	DHCardID       int     `json:"dh_card_id"`
-	CertNumber     string  `json:"cert_number"`
-	GradingCompany string  `json:"grading_company"`
-	Grade          float64 `json:"grade"`
-	CostBasisCents int     `json:"cost_basis_cents"`
-	Status         string  `json:"status,omitempty"` // "in_stock" (default) or "listed"
+	DHCardID         int     `json:"dh_card_id"`
+	CertNumber       string  `json:"cert_number"`
+	GradingCompany   string  `json:"grading_company"`
+	Grade            float64 `json:"grade"`
+	CostBasisCents   int     `json:"cost_basis_cents"`
+	MarketValueCents *int    `json:"market_value_cents,omitempty"` // current market value; DH uses internal lookup when omitted
+	Status           string  `json:"status,omitempty"`             // "in_stock" (default) or "listed"
+}
+
+// IntPtr returns a pointer to v, or nil when v is zero.
+func IntPtr(v int) *int {
+	if v == 0 {
+		return nil
+	}
+	return &v
 }
 
 // InventoryPushRequest is the request body for POST /inventory.
