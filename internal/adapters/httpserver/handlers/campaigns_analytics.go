@@ -180,10 +180,10 @@ func (h *CampaignsHandler) HandleSelectedSellSheet(w http.ResponseWriter, r *htt
 		return
 	}
 
-	sheet, err := h.service.GenerateSelectedSellSheet(r.Context(), req.PurchaseIDs)
-	if err != nil {
-		h.logger.Error(r.Context(), "selected sell sheet generation failed", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
+	sheet, ok := serviceCall(w, r.Context(), h.logger, "selected sell sheet generation failed", func() (*campaigns.SellSheet, error) {
+		return h.service.GenerateSelectedSellSheet(r.Context(), req.PurchaseIDs)
+	})
+	if !ok {
 		return
 	}
 	writeJSON(w, http.StatusOK, sheet)
@@ -407,10 +407,10 @@ func (h *CampaignsHandler) HandleShopifyPriceSync(w http.ResponseWriter, r *http
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("Too many items (max %d)", maxShopifyPriceSyncItems))
 		return
 	}
-	resp, err := h.service.MatchShopifyPrices(r.Context(), req.Items)
-	if err != nil {
-		h.logger.Error(r.Context(), "shopify price sync failed", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
+	resp, ok := serviceCall(w, r.Context(), h.logger, "shopify price sync failed", func() (*campaigns.ShopifyPriceSyncResponse, error) {
+		return h.service.MatchShopifyPrices(r.Context(), req.Items)
+	})
+	if !ok {
 		return
 	}
 	writeJSON(w, http.StatusOK, resp)

@@ -56,9 +56,8 @@ func (h *AdvisorHandler) HandleGetCached(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	analysisType := advisor.AnalysisType(r.PathValue("type"))
-	if analysisType != advisor.AnalysisDigest && analysisType != advisor.AnalysisLiquidation {
-		writeError(w, http.StatusBadRequest, "Invalid analysis type")
+	analysisType, ok := parseAnalysisType(w, r)
+	if !ok {
 		return
 	}
 
@@ -95,39 +94,31 @@ func (h *AdvisorHandler) HandleRefreshTrigger(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	analysisType := advisor.AnalysisType(r.PathValue("type"))
-	if analysisType != advisor.AnalysisDigest && analysisType != advisor.AnalysisLiquidation {
-		writeError(w, http.StatusBadRequest, "Invalid analysis type")
+	analysisType, ok := parseAnalysisType(w, r)
+	if !ok {
 		return
 	}
 
 	// Atomically acquire the refresh lock. If already running, check for stale entries.
-	type acquireResult struct {
-		lease    string
-		acquired bool
-	}
-	ar, ok := serviceCall(w, r.Context(), h.logger, "failed to acquire analysis refresh", func() (acquireResult, error) {
-		lease, acquired, err := h.cacheStore.AcquireRefresh(r.Context(), analysisType)
-		return acquireResult{lease, acquired}, err
-	})
-	if !ok {
+	lease, acquired, err := h.cacheStore.AcquireRefresh(r.Context(), analysisType)
+	if err != nil {
+		h.logger.Error(r.Context(), "failed to acquire analysis refresh", observability.Err(err))
+		writeError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
-	lease, acquired := ar.lease, ar.acquired
 	if !acquired {
 		// Already running — atomically force-restart if stale (> 15 minutes).
-		sar, ok2 := serviceCall(w, r.Context(), h.logger, "failed to check stale analysis", func() (acquireResult, error) {
-			staleLease, staleAcquired, staleErr := h.cacheStore.ForceAcquireStale(r.Context(), analysisType, 15*time.Minute)
-			return acquireResult{staleLease, staleAcquired}, staleErr
-		})
-		if !ok2 {
+		staleLease, staleAcquired, staleErr := h.cacheStore.ForceAcquireStale(r.Context(), analysisType, 15*time.Minute)
+		if staleErr != nil {
+			h.logger.Error(r.Context(), "failed to check stale analysis", observability.Err(staleErr))
+			writeError(w, http.StatusInternalServerError, "Internal server error")
 			return
 		}
-		if !sar.acquired {
-			writeJSON(w, http.StatusOK, map[string]string{"status": "running"})
+		if !staleAcquired {
+			writeJSON(w, http.StatusOK, map[string]string{"status": string(advisor.StatusRunning)})
 			return
 		}
-		lease = sar.lease
+		lease = staleLease
 		h.logger.Warn(r.Context(), "stale running entry detected, restarting",
 			observability.String("type", string(analysisType)),
 		)
@@ -174,7 +165,17 @@ func (h *AdvisorHandler) HandleRefreshTrigger(w http.ResponseWriter, r *http.Req
 		}
 	}()
 
-	writeJSON(w, http.StatusAccepted, map[string]string{"status": "running"})
+	writeJSON(w, http.StatusAccepted, map[string]string{"status": string(advisor.StatusRunning)})
+}
+
+// parseAnalysisType extracts and validates the analysis type from the request path.
+func parseAnalysisType(w http.ResponseWriter, r *http.Request) (advisor.AnalysisType, bool) {
+	t := advisor.AnalysisType(r.PathValue("type"))
+	if t != advisor.AnalysisDigest && t != advisor.AnalysisLiquidation {
+		writeError(w, http.StatusBadRequest, "Invalid analysis type")
+		return "", false
+	}
+	return t, true
 }
 
 // HandleDigest generates a weekly intelligence digest via SSE.

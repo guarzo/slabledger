@@ -30,10 +30,10 @@ func (h *CampaignsHandler) HandleGlobalRefreshCL(w http.ResponseWriter, r *http.
 		return
 	}
 
-	result, ok2 := serviceCall(w, r.Context(), h.logger, "global CL refresh failed", func() (*campaigns.GlobalCLRefreshResult, error) {
+	result, ok := serviceCall(w, r.Context(), h.logger, "global CL refresh failed", func() (*campaigns.GlobalCLRefreshResult, error) {
 		return h.service.RefreshCLValuesGlobal(r.Context(), clRows)
 	})
-	if !ok2 {
+	if !ok {
 		return
 	}
 	writeJSON(w, http.StatusOK, result)
@@ -57,10 +57,10 @@ func (h *CampaignsHandler) HandleGlobalImportCL(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	result, ok2 := serviceCall(w, r.Context(), h.logger, "global CL import failed", func() (*campaigns.GlobalImportResult, error) {
+	result, ok := serviceCall(w, r.Context(), h.logger, "global CL import failed", func() (*campaigns.GlobalImportResult, error) {
 		return h.service.ImportCLExportGlobal(r.Context(), clRows)
 	})
-	if !ok2 {
+	if !ok {
 		return
 	}
 
@@ -129,10 +129,10 @@ func (h *CampaignsHandler) HandleGlobalImportPSA(w http.ResponseWriter, r *http.
 		return
 	}
 
-	result, ok2 := serviceCall(w, r.Context(), h.logger, "global PSA import failed", func() (*campaigns.PSAImportResult, error) {
+	result, ok := serviceCall(w, r.Context(), h.logger, "global PSA import failed", func() (*campaigns.PSAImportResult, error) {
 		return h.service.ImportPSAExportGlobal(r.Context(), psaRows)
 	})
-	if !ok2 {
+	if !ok {
 		return
 	}
 
@@ -186,10 +186,10 @@ func (h *CampaignsHandler) HandleGlobalImportExternal(w http.ResponseWriter, r *
 		return
 	}
 
-	result, ok2 := serviceCall(w, r.Context(), h.logger, "external import failed", func() (*campaigns.ExternalImportResult, error) {
+	result, ok := serviceCall(w, r.Context(), h.logger, "external import failed", func() (*campaigns.ExternalImportResult, error) {
 		return h.service.ImportExternalCSV(r.Context(), shopifyRows)
 	})
-	if !ok2 {
+	if !ok {
 		return
 	}
 	if len(importErrors) > 0 {
@@ -358,10 +358,10 @@ func (h *CampaignsHandler) HandleImportOrders(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	result, ok2 := serviceCall(w, r.Context(), h.logger, "orders import failed", func() (*campaigns.OrdersImportResult, error) {
+	result, ok := serviceCall(w, r.Context(), h.logger, "orders import failed", func() (*campaigns.OrdersImportResult, error) {
 		return h.service.ImportOrdersSales(r.Context(), orderRows)
 	})
-	if !ok2 {
+	if !ok {
 		return
 	}
 
