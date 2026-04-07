@@ -18,6 +18,7 @@ import { Button, SectionErrorBoundary } from '../ui';
 import { useCampaigns, useCreateCampaign, usePortfolioHealth } from '../queries/useCampaignQueries';
 import PortfolioSummary from './campaigns/PortfolioSummary';
 import CampaignsTab from './campaigns/CampaignsTab';
+import InvoicesSection from '../components/insights/InvoicesSection';
 
 const phaseOrder: Record<Phase, number> = { active: 0, pending: 1, closed: 2 };
 
@@ -407,6 +408,10 @@ export default function CampaignsPage() {
           onToggleCreate={() => setShowCreate(true)}
           phaseGradients={phaseGradients}
         />
+      </SectionErrorBoundary>
+
+      <SectionErrorBoundary sectionName="Invoices">
+        <InvoicesSection />
       </SectionErrorBoundary>
     </div>
   );
