@@ -11,10 +11,10 @@ import (
 
 // HandleCapitalSummary handles GET /api/credit/summary.
 func (h *CampaignsHandler) HandleCapitalSummary(w http.ResponseWriter, r *http.Request) {
-	summary, err := h.service.GetCapitalSummary(r.Context())
-	if err != nil {
-		h.logger.Error(r.Context(), "failed to get capital summary", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
+	summary, ok := serviceCall(w, r.Context(), h.logger, "failed to get capital summary", func() (*campaigns.CapitalSummary, error) {
+		return h.service.GetCapitalSummary(r.Context())
+	})
+	if !ok {
 		return
 	}
 	writeJSON(w, http.StatusOK, summary)
@@ -22,10 +22,10 @@ func (h *CampaignsHandler) HandleCapitalSummary(w http.ResponseWriter, r *http.R
 
 // HandleGetCashflowConfig handles GET /api/credit/config.
 func (h *CampaignsHandler) HandleGetCashflowConfig(w http.ResponseWriter, r *http.Request) {
-	cfg, err := h.service.GetCashflowConfig(r.Context())
-	if err != nil {
-		h.logger.Error(r.Context(), "failed to get cashflow config", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
+	cfg, ok := serviceCall(w, r.Context(), h.logger, "failed to get cashflow config", func() (*campaigns.CashflowConfig, error) {
+		return h.service.GetCashflowConfig(r.Context())
+	})
+	if !ok {
 		return
 	}
 	writeJSON(w, http.StatusOK, cfg)
@@ -37,9 +37,9 @@ func (h *CampaignsHandler) HandleUpdateCashflowConfig(w http.ResponseWriter, r *
 	if !decodeBody(w, r, &cfg) {
 		return
 	}
-	if err := h.service.UpdateCashflowConfig(r.Context(), &cfg); err != nil {
-		h.logger.Error(r.Context(), "failed to update cashflow config", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
+	if !serviceCallVoid(w, r.Context(), h.logger, "failed to update cashflow config", func() error {
+		return h.service.UpdateCashflowConfig(r.Context(), &cfg)
+	}) {
 		return
 	}
 	writeJSON(w, http.StatusOK, cfg)
@@ -47,10 +47,10 @@ func (h *CampaignsHandler) HandleUpdateCashflowConfig(w http.ResponseWriter, r *
 
 // HandleListInvoices handles GET /api/credit/invoices.
 func (h *CampaignsHandler) HandleListInvoices(w http.ResponseWriter, r *http.Request) {
-	invoices, err := h.service.ListInvoices(r.Context())
-	if err != nil {
-		h.logger.Error(r.Context(), "failed to list invoices", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
+	invoices, ok := serviceCall(w, r.Context(), h.logger, "failed to list invoices", func() ([]campaigns.Invoice, error) {
+		return h.service.ListInvoices(r.Context())
+	})
+	if !ok {
 		return
 	}
 	writeJSONList(w, http.StatusOK, invoices)
@@ -76,10 +76,10 @@ func (h *CampaignsHandler) HandleUpdateInvoice(w http.ResponseWriter, r *http.Re
 
 // HandlePortfolioHealth handles GET /api/portfolio/health.
 func (h *CampaignsHandler) HandlePortfolioHealth(w http.ResponseWriter, r *http.Request) {
-	health, err := h.service.GetPortfolioHealth(r.Context())
-	if err != nil {
-		h.logger.Error(r.Context(), "failed to get portfolio health", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
+	health, ok := serviceCall(w, r.Context(), h.logger, "failed to get portfolio health", func() (*campaigns.PortfolioHealth, error) {
+		return h.service.GetPortfolioHealth(r.Context())
+	})
+	if !ok {
 		return
 	}
 	writeJSON(w, http.StatusOK, health)
@@ -87,10 +87,10 @@ func (h *CampaignsHandler) HandlePortfolioHealth(w http.ResponseWriter, r *http.
 
 // HandlePortfolioChannelVelocity handles GET /api/portfolio/channel-velocity.
 func (h *CampaignsHandler) HandlePortfolioChannelVelocity(w http.ResponseWriter, r *http.Request) {
-	velocity, err := h.service.GetPortfolioChannelVelocity(r.Context())
-	if err != nil {
-		h.logger.Error(r.Context(), "failed to get channel velocity", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
+	velocity, ok := serviceCall(w, r.Context(), h.logger, "failed to get channel velocity", func() ([]campaigns.ChannelVelocity, error) {
+		return h.service.GetPortfolioChannelVelocity(r.Context())
+	})
+	if !ok {
 		return
 	}
 	writeJSON(w, http.StatusOK, velocity)
@@ -98,10 +98,10 @@ func (h *CampaignsHandler) HandlePortfolioChannelVelocity(w http.ResponseWriter,
 
 // HandlePortfolioInsights handles GET /api/portfolio/insights.
 func (h *CampaignsHandler) HandlePortfolioInsights(w http.ResponseWriter, r *http.Request) {
-	insights, err := h.service.GetPortfolioInsights(r.Context())
-	if err != nil {
-		h.logger.Error(r.Context(), "failed to get portfolio insights", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
+	insights, ok := serviceCall(w, r.Context(), h.logger, "failed to get portfolio insights", func() (*campaigns.PortfolioInsights, error) {
+		return h.service.GetPortfolioInsights(r.Context())
+	})
+	if !ok {
 		return
 	}
 	writeJSON(w, http.StatusOK, insights)
@@ -109,10 +109,10 @@ func (h *CampaignsHandler) HandlePortfolioInsights(w http.ResponseWriter, r *htt
 
 // HandleCampaignSuggestions handles GET /api/portfolio/suggestions.
 func (h *CampaignsHandler) HandleCampaignSuggestions(w http.ResponseWriter, r *http.Request) {
-	suggestions, err := h.service.GetCampaignSuggestions(r.Context())
-	if err != nil {
-		h.logger.Error(r.Context(), "failed to get campaign suggestions", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
+	suggestions, ok := serviceCall(w, r.Context(), h.logger, "failed to get campaign suggestions", func() (*campaigns.SuggestionsResponse, error) {
+		return h.service.GetCampaignSuggestions(r.Context())
+	})
+	if !ok {
 		return
 	}
 	writeJSON(w, http.StatusOK, suggestions)
@@ -120,10 +120,10 @@ func (h *CampaignsHandler) HandleCampaignSuggestions(w http.ResponseWriter, r *h
 
 // HandleCapitalTimeline handles GET /api/portfolio/capital-timeline.
 func (h *CampaignsHandler) HandleCapitalTimeline(w http.ResponseWriter, r *http.Request) {
-	timeline, err := h.service.GetCapitalTimeline(r.Context())
-	if err != nil {
-		h.logger.Error(r.Context(), "failed to get capital timeline", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
+	timeline, ok := serviceCall(w, r.Context(), h.logger, "failed to get capital timeline", func() (*campaigns.CapitalTimeline, error) {
+		return h.service.GetCapitalTimeline(r.Context())
+	})
+	if !ok {
 		return
 	}
 	writeJSON(w, http.StatusOK, timeline)
@@ -131,10 +131,10 @@ func (h *CampaignsHandler) HandleCapitalTimeline(w http.ResponseWriter, r *http.
 
 // HandleWeeklyReview handles GET /api/portfolio/weekly-review.
 func (h *CampaignsHandler) HandleWeeklyReview(w http.ResponseWriter, r *http.Request) {
-	summary, err := h.service.GetWeeklyReviewSummary(r.Context())
-	if err != nil {
-		h.logger.Error(r.Context(), "failed to get weekly review", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
+	summary, ok := serviceCall(w, r.Context(), h.logger, "failed to get weekly review", func() (*campaigns.WeeklyReviewSummary, error) {
+		return h.service.GetWeeklyReviewSummary(r.Context())
+	})
+	if !ok {
 		return
 	}
 	writeJSON(w, http.StatusOK, summary)
@@ -142,10 +142,10 @@ func (h *CampaignsHandler) HandleWeeklyReview(w http.ResponseWriter, r *http.Req
 
 // HandleListRevocationFlags handles GET /api/portfolio/revocations.
 func (h *CampaignsHandler) HandleListRevocationFlags(w http.ResponseWriter, r *http.Request) {
-	flags, err := h.service.ListRevocationFlags(r.Context())
-	if err != nil {
-		h.logger.Error(r.Context(), "failed to list revocation flags", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
+	flags, ok := serviceCall(w, r.Context(), h.logger, "failed to list revocation flags", func() ([]campaigns.RevocationFlag, error) {
+		return h.service.ListRevocationFlags(r.Context())
+	})
+	if !ok {
 		return
 	}
 	writeJSONList(w, http.StatusOK, flags)
@@ -183,10 +183,10 @@ func (h *CampaignsHandler) HandleRevocationEmail(w http.ResponseWriter, r *http.
 		return
 	}
 
-	email, err := h.service.GenerateRevocationEmail(r.Context(), flagID)
-	if err != nil {
-		h.logger.Error(r.Context(), "failed to generate revocation email", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
+	email, ok := serviceCall(w, r.Context(), h.logger, "failed to generate revocation email", func() (string, error) {
+		return h.service.GenerateRevocationEmail(r.Context(), flagID)
+	})
+	if !ok {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"emailText": email})
