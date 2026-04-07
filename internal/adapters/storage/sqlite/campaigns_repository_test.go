@@ -320,26 +320,22 @@ func TestGetPortfolioChannelVelocity(t *testing.T) {
 	assert.Equal(t, 150000, inperson.RevenueCents)
 }
 
-func TestGetCapitalSummary_ProjectedExposure(t *testing.T) {
+func TestGetCapitalSummary_OutstandingAndPayments(t *testing.T) {
 	repo := setupCampaignsRepo(t)
 	ctx := context.Background()
 	now := time.Now().Truncate(time.Second)
 
-	// Test with no purchases → projectedExposure = 0
+	// Test with no purchases → zero outstanding
 	summary, err := repo.GetCapitalSummary(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, 0, summary.OutstandingCents, "no purchases → zero outstanding")
-	assert.Equal(t, 0, summary.ProjectedExposureCents, "no purchases → zero projected exposure")
-	assert.Equal(t, 30, summary.DaysToNextInvoice, "default days to next invoice is 30")
 
 	// Create campaign
 	c := &campaigns.Campaign{ID: "camp-credit", Name: "Credit Test", Phase: campaigns.PhaseActive, PSASourcingFeeCents: 300, CreatedAt: now, UpdatedAt: now}
 	require.NoError(t, repo.CreateCampaign(ctx, c))
 
-	// Create purchases with invoice dates (invoiced, non-refunded)
-	// Use a fixed date in the past for purchase/invoice dates so we can compute expected values
-	purchaseDate1 := time.Now().AddDate(0, 0, -30).Format("2006-01-02") // 30 days ago
-	purchaseDate2 := time.Now().AddDate(0, 0, -20).Format("2006-01-02") // 20 days ago
+	purchaseDate1 := time.Now().AddDate(0, 0, -30).Format("2006-01-02")
+	purchaseDate2 := time.Now().AddDate(0, 0, -20).Format("2006-01-02")
 
 	p1 := &campaigns.Purchase{
 		ID: "pc-1", CampaignID: "camp-credit", CardName: "Charizard",
@@ -363,17 +359,8 @@ func TestGetCapitalSummary_ProjectedExposure(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 80600, summary.OutstandingCents, "outstanding = total invoiced spend with no payments")
 
-	// Verify avgDailySpend and projectedExposure
-	// totalSpend = 80600, daysSinceFirst = days since purchaseDate1 (roughly 30)
-	// avgDailySpend ~ 80600 / 30 ~ 2687
-	// projectedExposure = outstanding + avgDailySpend * daysToNextInvoice
-	// With default 30 days: projectedExposure = 80600 + ~2687 * 30 = ~161200
-	assert.Greater(t, summary.ProjectedExposureCents, summary.OutstandingCents,
-		"projected exposure should exceed outstanding when there is daily spend")
-	assert.Equal(t, 30, summary.DaysToNextInvoice, "default days to next invoice when no unpaid invoices with due dates")
-
-	// Create an unpaid invoice with a due date in the future
-	dueDate := time.Now().AddDate(0, 0, 15).Format("2006-01-02") // 15 days from now
+	// Create an unpaid invoice and partially pay it
+	dueDate := time.Now().AddDate(0, 0, 15).Format("2006-01-02")
 	inv := &campaigns.Invoice{
 		ID:          "inv-1",
 		InvoiceDate: purchaseDate1,
@@ -386,18 +373,6 @@ func TestGetCapitalSummary_ProjectedExposure(t *testing.T) {
 	}
 	require.NoError(t, repo.CreateInvoice(ctx, inv))
 
-	summary, err = repo.GetCapitalSummary(ctx)
-	require.NoError(t, err)
-
-	// daysToNextInvoice should now reflect the due date (~15 days)
-	assert.InDelta(t, 15, summary.DaysToNextInvoice, 1,
-		"days to next invoice should use unpaid invoice due date")
-
-	// projectedExposure with ~15 days should be less than with 30 days
-	// because daysToNextInvoice is smaller
-	exposureWith15Days := summary.ProjectedExposureCents
-
-	// Now pay the invoice partially and verify outstanding is reduced
 	inv.PaidCents = 20000
 	inv.Status = "partial"
 	inv.UpdatedAt = now
@@ -408,10 +383,6 @@ func TestGetCapitalSummary_ProjectedExposure(t *testing.T) {
 	assert.Equal(t, 80600-20000, summary.OutstandingCents,
 		"outstanding should be reduced by paid amount")
 	assert.Equal(t, 20000, summary.PaidCents)
-
-	// Verify projected exposure is less than before paying
-	assert.Less(t, summary.ProjectedExposureCents, exposureWith15Days+20000,
-		"paying down should reduce projected exposure")
 
 	// Test with refunded purchase: add a refunded purchase and verify it doesn't count in outstanding
 	p3 := &campaigns.Purchase{
@@ -425,13 +396,11 @@ func TestGetCapitalSummary_ProjectedExposure(t *testing.T) {
 
 	summary, err = repo.GetCapitalSummary(ctx)
 	require.NoError(t, err)
-	// Refunded purchase (40000+300=40300) should NOT increase outstanding
 	assert.Equal(t, 80600-20000, summary.OutstandingCents,
 		"refunded purchase should not increase outstanding")
 	assert.Equal(t, 40300, summary.RefundedCents)
 
 	// Test with all invoices fully paid → outstanding = 0
-	// Create a second invoice for the remaining purchase (p2: 30000+300=30300)
 	inv2 := &campaigns.Invoice{
 		ID:          "inv-2",
 		InvoiceDate: purchaseDate2,
@@ -444,8 +413,7 @@ func TestGetCapitalSummary_ProjectedExposure(t *testing.T) {
 	}
 	require.NoError(t, repo.CreateInvoice(ctx, inv2))
 
-	// Pay remaining on the first invoice
-	inv.PaidCents = inv.TotalCents // pay the full invoice amount
+	inv.PaidCents = inv.TotalCents
 	inv.Status = "paid"
 	inv.UpdatedAt = now
 	require.NoError(t, repo.UpdateInvoice(ctx, inv))
@@ -454,10 +422,4 @@ func TestGetCapitalSummary_ProjectedExposure(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 0, summary.OutstandingCents,
 		"fully paid should result in zero outstanding")
-
-	// ProjectedExposure with zero outstanding is just avgDailySpend * daysToNextInvoice
-	// which should still be > 0 since daily spend exists
-	// Note: daysToNextInvoice defaults to 30 when no unpaid invoices exist
-	assert.GreaterOrEqual(t, summary.ProjectedExposureCents, 0,
-		"projected exposure should be non-negative even with zero outstanding")
 }
