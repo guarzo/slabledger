@@ -43,16 +43,16 @@ type CampaignFactorData struct {
 
 // LiquidationFactorData contains raw inputs for liquidation factor computers.
 type LiquidationFactorData struct {
-	DaysHeld           int
-	CapitalExposurePct *float64
-	PriceChangePct     *float64
-	SalesPerMonth      *float64
-	CrackROI           *float64
-	GradedROI          *float64
-	ROIPct             *float64
-	PSA10Pop           *int
-	PriceConfidence    float64
-	MarketSource       string
+	DaysHeld        int
+	WeeksToCover    *float64
+	PriceChangePct  *float64
+	SalesPerMonth   *float64
+	CrackROI        *float64
+	GradedROI       *float64
+	ROIPct          *float64
+	PSA10Pop        *int
+	PriceConfidence float64
+	MarketSource    string
 }
 
 // SuggestionFactorData contains raw inputs for suggestion factor computers.
@@ -184,8 +184,8 @@ func liquidationFactors(d *LiquidationFactorData) ([]scoring.Factor, []scoring.D
 
 	factors = append(factors, scoring.ComputeCarryingCost(d.DaysHeld, 1.0, "purchase"))
 
-	addOrGap(&factors, &gaps, d.CapitalExposurePct != nil, func() scoring.Factor {
-		return scoring.ComputeCapitalPressure(*d.CapitalExposurePct, 1.0, "capital")
+	addOrGap(&factors, &gaps, d.WeeksToCover != nil, func() scoring.Factor {
+		return scoring.ComputeCapitalPressure(*d.WeeksToCover, 1.0, "capital")
 	}, scoring.FactorCapitalPressure, gapNoMarketData)
 
 	addOrGap(&factors, &gaps, d.PriceChangePct != nil, func() scoring.Factor {

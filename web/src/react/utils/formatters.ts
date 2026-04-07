@@ -85,14 +85,6 @@ export function formatPct(pct: number | null | undefined): string {
 }
 
 /**
- * Format a whole-number percentage (e.g., 75 for 75%).
- * Use when the API already returns a percent value (0-100) rather than a ratio (0-1).
- */
-export function formatPctFromWhole(pct: number | null | undefined): string {
-  return formatPct((pct ?? 0) / 100);
-}
-
-/**
  * Extract a human-readable message from an unknown error value.
  */
 export function getErrorMessage(err: unknown, fallback = 'Something went wrong'): string {
@@ -183,5 +175,12 @@ export function signalBgColor(direction: SignalDirection | string): string {
     case 'falling': return 'bg-red-400/15 text-red-400';
     default: return 'bg-[var(--surface-2)] text-[var(--text-muted)]';
   }
+}
+
+/** Format weeks-to-cover for display. Returns '—' when no recovery data. */
+export function formatWeeksToCover(weeks: number, hasRecoveryData: boolean): string {
+  if (!hasRecoveryData) return '—';
+  if (weeks > 20) return '20+';
+  return `~${Math.round(weeks)}`;
 }
 

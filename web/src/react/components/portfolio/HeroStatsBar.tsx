@@ -1,5 +1,5 @@
 import type { PortfolioHealth, CapitalSummary } from '../../../types/campaigns';
-import { formatCents, formatPct, formatPctFromWhole } from '../../utils/formatters';
+import { formatCents, formatPct, formatWeeksToCover } from '../../utils/formatters';
 
 interface HeroStatsBarProps {
   health?: PortfolioHealth;
@@ -38,18 +38,19 @@ export default function HeroStatsBar({ health, capital }: HeroStatsBarProps) {
           {capital && (
             <>
               <div className="border-l border-[rgba(255,255,255,0.08)] pl-6">
-                <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Capital Exposure</div>
+                <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Wks to Cover</div>
                 <div className={`text-base font-semibold ${
                   capital.alertLevel === 'critical' ? 'text-[var(--danger)]'
                     : capital.alertLevel === 'warning' ? 'text-[var(--warning)]'
+                    : capital.recoveryRate30dCents === 0 ? 'text-[var(--text-muted)]'
                     : 'text-[var(--success)]'
                 }`}>
-                  {formatPctFromWhole(capital.exposurePct)}
+                  {capital.outstandingCents === 0 && capital.recoveryRate30dCents > 0 ? '0' : formatWeeksToCover(capital.weeksToCover, capital.recoveryRate30dCents > 0)}
                 </div>
               </div>
               <div>
                 <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Outstanding</div>
-                <div className="text-base font-semibold text-[#cbd5e1]">{formatCents(capital.outstandingCents ?? 0)}</div>
+                <div className="text-base font-semibold text-[#cbd5e1]">{formatCents(capital.outstandingCents)}</div>
               </div>
             </>
           )}

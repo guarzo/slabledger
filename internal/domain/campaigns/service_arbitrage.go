@@ -9,14 +9,6 @@ import (
 )
 
 const (
-	// CapitalExposureThresholdPct is the maximum capital exposure percentage
-	// before activation is blocked.
-	CapitalExposureThresholdPct = 70
-
-	// DailyExposureDivisor is the fraction of capital budget that total daily
-	// exposure must stay below (e.g. 10 means daily exposure < budget/10 = 10%).
-	DailyExposureDivisor = 10
-
 	// HighSpendCapCents is the daily spend cap threshold (in cents) above which
 	// a warning is emitted that a single fill could be significant.
 	HighSpendCapCents = 500000 // $5,000/day
@@ -111,11 +103,11 @@ func (s *service) GetActivationChecklist(ctx context.Context, campaignID string)
 		AllPassed:    true,
 	}
 
-	exposureCheckOK := capital.ExposurePct < CapitalExposureThresholdPct
+	exposureCheckOK := capital.AlertLevel != AlertCritical
 	checklist.Checks = append(checklist.Checks, ActivationCheck{
 		Name:    "Capital Exposure",
 		Passed:  exposureCheckOK,
-		Message: fmt.Sprintf("Current exposure: %.0f%% (threshold: %d%%)", capital.ExposurePct, CapitalExposureThresholdPct),
+		Message: fmt.Sprintf("Recovery velocity: alert=%s, weeks-to-cover=%.1f", capital.AlertLevel, capital.WeeksToCover),
 	})
 	if !exposureCheckOK {
 		checklist.AllPassed = false
@@ -154,10 +146,14 @@ func (s *service) GetActivationChecklist(ctx context.Context, campaignID string)
 		totalDailyExposure += campaign.DailySpendCapCents
 	}
 
-	dailyExpOK := capital.CapitalBudgetCents == 0 || totalDailyExposure < capital.CapitalBudgetCents/DailyExposureDivisor // skip if unconfigured
-	exposureMsg := fmt.Sprintf("Total daily exposure with activation: $%d/day (capital budget: $%d)", totalDailyExposure/100, capital.CapitalBudgetCents/100)
-	if capital.CapitalBudgetCents == 0 {
-		exposureMsg = fmt.Sprintf("Total daily exposure with activation: $%d/day (capital budget: not configured)", totalDailyExposure/100)
+	// Quantitative check: daily exposure must fit within weekly recovery capacity.
+	// Stricter than Capital Exposure (which only blocks on critical alert level)
+	// because this gates new spend commitments, not existing position.
+	dailyExpOK := capital.WeeksToCover == 0 || float64(totalDailyExposure) < float64(capital.RecoveryRate30dCents)/WeeksPerMonth
+	exposureMsg := fmt.Sprintf("Total daily exposure with activation: $%d/day (weekly recovery: $%d)", totalDailyExposure/100, capital.RecoveryRate30dCents/430)
+	if capital.RecoveryRate30dCents == 0 {
+		dailyExpOK = true
+		exposureMsg = fmt.Sprintf("Total daily exposure with activation: $%d/day (no recovery data yet)", totalDailyExposure/100)
 	}
 	checklist.Checks = append(checklist.Checks, ActivationCheck{
 		Name:    "Daily Exposure",

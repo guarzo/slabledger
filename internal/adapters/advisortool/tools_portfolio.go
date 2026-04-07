@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/guarzo/slabledger/internal/domain/ai"
+	"github.com/guarzo/slabledger/internal/domain/campaigns"
 )
 
 func (e *CampaignToolExecutor) registerGetPortfolioHealth() {
@@ -37,7 +38,7 @@ func (e *CampaignToolExecutor) registerGetPortfolioInsights() {
 func (e *CampaignToolExecutor) registerGetCapitalSummary() {
 	e.register(ai.ToolDefinition{
 		Name:        "get_capital_summary",
-		Description: "Get capital exposure: outstanding balance, capital budget, exposure %, alert level (ok/warning/critical), projected exposure, and days to next invoice.",
+		Description: "Get capital exposure: outstanding balance, 30-day recovery rate, weeks to cover, recovery trend, and alert level.",
 		Parameters:  emptyObjectParams,
 	}, func(ctx context.Context, _ string) (string, error) {
 		result, err := e.svc.GetCapitalSummary(ctx)
@@ -104,11 +105,11 @@ type dashboardSummary struct {
 		ProfitWoW        int `json:"profitWoWCents"`
 	} `json:"weeklyReview"`
 	Capital struct {
-		BalanceCents  int     `json:"balanceCents"`
-		BudgetCents   int     `json:"budgetCents"`
-		ExposurePct   float64 `json:"exposurePct"`
-		AlertLevel    string  `json:"alertLevel"`
-		DaysToInvoice int     `json:"daysToInvoice"`
+		BalanceCents         int                     `json:"balanceCents"`
+		RecoveryRate30dCents int                     `json:"recoveryRate30dCents"`
+		WeeksToCover         float64                 `json:"weeksToCover"`
+		RecoveryTrend        campaigns.RecoveryTrend `json:"recoveryTrend"`
+		AlertLevel           campaigns.AlertLevel    `json:"alertLevel"`
 	} `json:"capital"`
 	PortfolioHealth []struct {
 		CampaignName  string `json:"campaignName"`
@@ -127,7 +128,7 @@ type dashboardSummary struct {
 func (e *CampaignToolExecutor) registerGetDashboardSummary() {
 	e.register(ai.ToolDefinition{
 		Name:        "get_dashboard_summary",
-		Description: "Get a compact portfolio overview: weekly performance, capital exposure, campaign statuses, and channel velocity. Start here before drilling into specific tools.",
+		Description: "Get a compact portfolio overview: weekly performance, capital velocity, campaign statuses, and channel velocity. Start here before drilling into specific tools.",
 		Parameters:  emptyObjectParams,
 	}, func(ctx context.Context, _ string) (string, error) {
 		var ds dashboardSummary
@@ -149,10 +150,10 @@ func (e *CampaignToolExecutor) registerGetDashboardSummary() {
 			ds.Errors = append(ds.Errors, "capitalSummary: "+err.Error())
 		} else if cs != nil {
 			ds.Capital.BalanceCents = cs.OutstandingCents
-			ds.Capital.BudgetCents = cs.CapitalBudgetCents
-			ds.Capital.ExposurePct = cs.ExposurePct
+			ds.Capital.RecoveryRate30dCents = cs.RecoveryRate30dCents
+			ds.Capital.WeeksToCover = cs.WeeksToCover
+			ds.Capital.RecoveryTrend = cs.RecoveryTrend
 			ds.Capital.AlertLevel = cs.AlertLevel
-			ds.Capital.DaysToInvoice = cs.DaysToNextInvoice
 		}
 
 		if ph, err := e.svc.GetPortfolioHealth(ctx); err != nil {

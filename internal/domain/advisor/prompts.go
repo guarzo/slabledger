@@ -19,7 +19,7 @@ At 72% buy terms: Profit = CL × 15.65% - $3
 ### Capital & Invoicing
 - PSA invoices on ~15th and ~last day of each month
 - Payment due within 14 days
-- There is no credit limit. Outstanding balance and projected exposure matter for capital allocation — how much cash is tied up in PSA inventory
+- Outstanding balance, recovery rate, and weeks-to-cover drive capital allocation — how much cash is tied up and how fast it cycles back
 
 ### Campaign Data
 Do NOT assume campaign parameters — they change. When you need campaign details (names, buy terms, price ranges, grade ranges, phase status), call list_campaigns. For a quick portfolio overview, prefer get_dashboard_summary first.
@@ -63,7 +63,7 @@ summarized in get_dashboard_summary and get_portfolio_insights.
 
 const digestUserPrompt = `Generate my weekly intelligence digest. Fetch current data on:
 1. Weekly performance (week-over-week changes)
-2. Cash flow (outstanding balance, projected exposure, payment status)
+2. Cash flow (outstanding balance, recovery rate, weeks to cover, payment status)
 3. Portfolio insights (which segments are over/underperforming)
 4. Inventory signals (flagged cards needing action)
 5. Arbitrage opportunities (acquisition targets and deslab candidates)
@@ -71,7 +71,7 @@ const digestUserPrompt = `Generate my weekly intelligence digest. Fetch current 
 Structure your report as:
 1. **Executive Summary** — 2-3 sentence overview of this week
 2. **Performance** — purchases, spend, sales, revenue, profit vs last week
-3. **Cash Flow** — outstanding balance, projected exposure, unpaid invoices, days to next invoice
+3. **Cash Flow** — outstanding balance, 30d recovery rate, weeks to cover, recovery trend, unpaid invoices
 4. **Top Actions** — 3-5 specific prioritized recommendations
 5. **Segment Insights** — outperformers and underperformers by character/grade/era
 6. **Watch List** — cards flagged by inventory signals (stale, markdown, profit capture) plus any segments needing attention
@@ -136,9 +136,7 @@ needing action. Your job is to make judgment calls the engine cannot:
    - Sell in person at 75-80% of market to free capital immediately
    Show the math: holding cost per month vs markdown cost.
 
-4. **Capital pressure adjustment** — if outstanding balance is high relative to
-   projected revenue, lower the bar for all liquidation actions. Cards you would
-   normally hold become sells when capital is tied up unproductively.
+4. **Capital pressure adjustment** — if weeks-to-cover exceeds 12 (critical), lower the bar for all liquidation actions. The higher the weeks-to-cover, the more aggressively capital should be freed. Cards you would normally hold become sells when capital is tied up unproductively.
 
 Do NOT re-analyze cards flagged profitCaptureDeclining, profitCaptureSpike, or
 deslabCandidate — those have clear procedural actions (sell in person / deslab and sell raw).
@@ -171,7 +169,7 @@ Focus your judgment on three decisions:
 Do not repeat data from the flags — I can see those in the UI.
 
 Structure your report as:
-1. **Capital Position** — outstanding balance, projected exposure, capital tied up in stale inventory
+1. **Capital Position** — outstanding balance, recovery rate, weeks to cover, recovery trend, capital tied up in stale inventory
 2. **Reprice Recommendations** — table: card, current price, new price, reasoning
 3. **Auction Candidates** — table: card, why auction beats fixed, suggested start price
 4. **Markdown Actions** — table: card, cost basis, current market, recommended action, carrying cost math, capital freed

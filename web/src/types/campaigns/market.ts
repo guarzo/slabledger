@@ -158,15 +158,15 @@ export interface CashflowConfig {
 }
 
 export interface CapitalSummary {
-  capitalBudgetCents: number;
   outstandingCents: number;
-  exposurePct: number;
+  recoveryRate30dCents: number;
+  recoveryRate30dPriorCents: number;
+  weeksToCover: number;         // 99 = no recovery data
+  recoveryTrend: 'improving' | 'declining' | 'stable';
+  alertLevel: 'ok' | 'warning' | 'critical';
+  unpaidInvoiceCount: number;
   refundedCents: number;
   paidCents: number;
-  unpaidInvoiceCount: number;
-  alertLevel: 'ok' | 'warning' | 'critical';
-  projectedExposureCents?: number;
-  daysToNextInvoice?: number;
 }
 
 // Activation checklist types

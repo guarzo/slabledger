@@ -162,7 +162,7 @@ type WeeklyReviewSummary struct {
 	ProfitThisWeekCents  int               `json:"profitThisWeekCents"`
 	ProfitLastWeekCents  int               `json:"profitLastWeekCents"`
 	ByChannel            []ChannelPNL      `json:"byChannel"`
-	CapitalExposurePct   float64           `json:"capitalExposurePct"`
+	WeeksToCover         float64           `json:"weeksToCover"`
 	TopPerformers        []WeeklyPerformer `json:"topPerformers"`
 	BottomPerformers     []WeeklyPerformer `json:"bottomPerformers"`
 }

@@ -124,41 +124,26 @@ func (r *CampaignsRepository) UpdateCashflowConfig(ctx context.Context, cfg *cam
 // --- Capital Summary ---
 
 func (r *CampaignsRepository) GetCapitalSummary(ctx context.Context) (*campaigns.CapitalSummary, error) {
-	cfg, err := r.GetCashflowConfig(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	// Combined purchase-table query:
-	//   outstanding = total invoiced spend (non-refunded) before payment adjustments
-	//   refunded    = total spend on refunded purchases
-	//   avgDailySpend = outstanding spend / days since first invoiced purchase (for projection)
+	// Outstanding: invoiced non-refunded purchases minus payments
 	var outstanding, refunded int
-	var avgDailySpend float64
-	err = r.db.QueryRowContext(ctx,
+	err := r.db.QueryRowContext(ctx,
 		`SELECT
 			COALESCE(SUM(CASE WHEN was_refunded = 0 AND invoice_date != '' THEN buy_cost_cents + psa_sourcing_fee_cents ELSE 0 END), 0),
-			COALESCE(SUM(CASE WHEN was_refunded = 1 THEN buy_cost_cents + psa_sourcing_fee_cents ELSE 0 END), 0),
-			COALESCE(
-				CAST(SUM(CASE WHEN was_refunded = 0 AND invoice_date != '' THEN buy_cost_cents + psa_sourcing_fee_cents ELSE 0 END) AS REAL) /
-				MAX(1, JULIANDAY('now') - JULIANDAY(MIN(CASE WHEN was_refunded = 0 AND invoice_date != '' THEN purchase_date END))),
-			0)
+			COALESCE(SUM(CASE WHEN was_refunded = 1 THEN buy_cost_cents + psa_sourcing_fee_cents ELSE 0 END), 0)
 		FROM campaign_purchases WHERE invoice_date != ''`,
-	).Scan(&outstanding, &refunded, &avgDailySpend)
+	).Scan(&outstanding, &refunded)
 	if err != nil {
 		return nil, err
 	}
 
-	// Combined invoice-table query: paid total + unpaid count + next due date
+	// Paid total + unpaid count from invoices
 	var paidTotal, unpaidCount int
-	var dueDateStr sql.NullString
 	err = r.db.QueryRowContext(ctx,
 		`SELECT
 			COALESCE(SUM(CASE WHEN status IN ('paid', 'partial') THEN paid_cents ELSE 0 END), 0),
-			COALESCE(SUM(CASE WHEN status != 'paid' THEN 1 ELSE 0 END), 0),
-			MIN(CASE WHEN status != 'paid' AND due_date != '' THEN due_date END)
+			COALESCE(SUM(CASE WHEN status != 'paid' THEN 1 ELSE 0 END), 0)
 		FROM invoices`,
-	).Scan(&paidTotal, &unpaidCount, &dueDateStr)
+	).Scan(&paidTotal, &unpaidCount)
 	if err != nil {
 		return nil, err
 	}
@@ -168,41 +153,61 @@ func (r *CampaignsRepository) GetCapitalSummary(ctx context.Context) (*campaigns
 		outstanding = 0
 	}
 
-	exposurePct := float64(0)
-	if cfg.CapitalBudgetCents > 0 {
-		exposurePct = (float64(outstanding) / float64(cfg.CapitalBudgetCents)) * 100
+	// Recovery velocity: 30-day and prior 30-day sale revenue
+	var recovery30d, recoveryPrior30d int
+	err = r.db.QueryRowContext(ctx,
+		`SELECT
+			COALESCE(SUM(CASE WHEN sale_date >= date('now', '-30 days') THEN sale_price_cents ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN sale_date >= date('now', '-60 days') AND sale_date < date('now', '-30 days') THEN sale_price_cents ELSE 0 END), 0)
+		FROM campaign_sales`,
+	).Scan(&recovery30d, &recoveryPrior30d)
+	if err != nil {
+		return nil, err
 	}
 
-	alertLevel := "ok"
-	if exposurePct >= 90 {
-		alertLevel = "critical"
-	} else if exposurePct >= 80 {
-		alertLevel = "warning"
+	weeksToCover := campaigns.WeeksToCoverNoData
+	if recovery30d > 0 {
+		weeklyRate := float64(recovery30d) / campaigns.WeeksPerMonth
+		weeksToCover = float64(outstanding) / weeklyRate
 	}
 
-	// Find days to next unpaid invoice due date (default 30)
-	daysToNext := 30
-	if dueDateStr.Valid && dueDateStr.String != "" {
-		if dueDate, err := time.Parse("2006-01-02", dueDateStr.String); err == nil {
-			diff := int(time.Until(dueDate).Hours() / 24)
-			if diff > 0 {
-				daysToNext = diff
-			}
+	trend := campaigns.TrendStable
+	if recovery30d > 0 && recoveryPrior30d == 0 {
+		trend = campaigns.TrendImproving
+	} else if recovery30d > 0 && recoveryPrior30d > 0 {
+		ratio := float64(recovery30d) / float64(recoveryPrior30d)
+		if ratio > 1+campaigns.TrendChangeThreshold {
+			trend = campaigns.TrendImproving
+		} else if ratio < 1-campaigns.TrendChangeThreshold {
+			trend = campaigns.TrendDeclining
 		}
 	}
 
-	projectedExposure := outstanding + int(avgDailySpend*float64(daysToNext))
+	alertLevel := campaigns.AlertOK
+	if recovery30d > 0 {
+		if weeksToCover > campaigns.WeeksToCoverCriticalThreshold {
+			alertLevel = campaigns.AlertCritical
+		} else if weeksToCover >= campaigns.WeeksToCoverWarningThreshold {
+			alertLevel = campaigns.AlertWarning
+		}
+	} else {
+		if outstanding > campaigns.FallbackCriticalCents {
+			alertLevel = campaigns.AlertCritical
+		} else if outstanding > campaigns.FallbackWarningCents {
+			alertLevel = campaigns.AlertWarning
+		}
+	}
 
 	return &campaigns.CapitalSummary{
-		CapitalBudgetCents:     cfg.CapitalBudgetCents,
-		OutstandingCents:       outstanding,
-		ExposurePct:            exposurePct,
-		RefundedCents:          refunded,
-		PaidCents:              paidTotal,
-		UnpaidInvoiceCount:     unpaidCount,
-		AlertLevel:             alertLevel,
-		ProjectedExposureCents: projectedExposure,
-		DaysToNextInvoice:      daysToNext,
+		OutstandingCents:          outstanding,
+		RecoveryRate30dCents:      recovery30d,
+		RecoveryRate30dPriorCents: recoveryPrior30d,
+		WeeksToCover:              weeksToCover,
+		RecoveryTrend:             trend,
+		AlertLevel:                alertLevel,
+		RefundedCents:             refunded,
+		PaidCents:                 paidTotal,
+		UnpaidInvoiceCount:        unpaidCount,
 	}, nil
 }
 
