@@ -331,6 +331,54 @@ func (c *Client) ResetPSAKeyRotation() {
 	c.psaKeyIndex = 0
 }
 
+// PSAKeyRotator can rotate PSA API keys when rate limited.
+type PSAKeyRotator interface {
+	RotatePSAKey() bool
+	ResetPSAKeyRotation()
+}
+
+// IsPSARateLimitError returns true if the error indicates DH's cert resolution
+// hit a PSA API rate limit. These errors are returned as HTTP 422 and can be
+// resolved by rotating to a different PSA API key.
+func IsPSARateLimitError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "PSA API rate limit") ||
+		strings.Contains(msg, "daily limit reached")
+}
+
+// ResolveCertWithRotation calls resolve, rotating PSA API keys on rate limit errors.
+// rotateFn should be nil when the resolver doesn't support key rotation.
+func ResolveCertWithRotation(
+	ctx context.Context,
+	req CertResolveRequest,
+	resolve func(context.Context, CertResolveRequest) (*CertResolution, error),
+	rotateFn func() bool,
+	logger observability.Logger,
+	logPrefix string,
+) (*CertResolution, error) {
+	resp, err := resolve(ctx, req)
+	if err == nil || rotateFn == nil {
+		return resp, err
+	}
+
+	for IsPSARateLimitError(err) {
+		if !rotateFn() {
+			return nil, err
+		}
+		logger.Info(ctx, logPrefix+": PSA key rate limited, rotated to next key",
+			observability.String("cert", req.CertNumber))
+		resp, err = resolve(ctx, req)
+		if err == nil {
+			return resp, nil
+		}
+	}
+
+	return nil, err
+}
+
 // parsePSAKeys splits a comma-separated key string into trimmed, non-empty keys.
 func parsePSAKeys(raw string) []string {
 	var keys []string
