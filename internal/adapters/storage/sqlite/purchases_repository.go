@@ -276,7 +276,7 @@ func (r *CampaignsRepository) UpdatePurchaseCampaign(ctx context.Context, purcha
 
 func (r *CampaignsRepository) UpdatePurchaseCardYear(ctx context.Context, id string, year string) error {
 	return r.execAndExpectRow(ctx, "update card year",
-		`UPDATE campaign_purchases SET card_year = ? WHERE id = ?`,
-		year, id,
+		`UPDATE campaign_purchases SET card_year = ?, updated_at = ? WHERE id = ?`,
+		year, time.Now(), id,
 	)
 }
