@@ -1453,34 +1453,6 @@ Valid `reason` values: `wrong_match`, `stale_data`, `wrong_grade`, `source_disag
 
 ---
 
-### `GET /api/purchases/{id}/sales-comps`
-
-Auth: RequireAuth
-
-Returns Card Ladder sales comparables for a purchase.
-
-**Path params:** `id` (purchase UUID)
-
-**Response:** `200 OK`
-```json
-[
-  {
-    "date": "2025-01-15",
-    "price": 1300.00,
-    "platform": "ebay",
-    "listingType": "auction",
-    "seller": "cardstore123",
-    "url": "https://...",
-    "slabSerial": "12345678"
-  }
-]
-```
-Returns `[]` if no comps found or no CL mapping exists.
-
-**Errors:** `404` purchase not found
-
----
-
 ## Credit & Invoices
 
 ### `GET /api/credit/summary`
@@ -1999,21 +1971,6 @@ Deletes a social post and removes associated media files.
 **Path params:** `id` (UUID)
 
 **Response:** `204 No Content`
-
----
-
-### `POST /api/social/backfill-images`
-
-Auth: RequireAdmin
-
-Triggers PSA slab image backfill for purchases missing images.
-
-**Response:** `200 OK`
-```json
-{ "updated": 15, "errors": 2 }
-```
-
-**Errors:** `503` PSA image API not configured
 
 ---
 

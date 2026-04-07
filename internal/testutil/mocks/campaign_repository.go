@@ -588,10 +588,6 @@ func (m *MockCampaignRepository) SumPurchaseCostByInvoiceDate(_ context.Context,
 func (m *MockCampaignRepository) GetCashflowConfig(_ context.Context) (*campaigns.CashflowConfig, error) {
 	return &campaigns.CashflowConfig{CapitalBudgetCents: 5000000, CashBufferCents: 1000000}, nil
 }
-func (m *MockCampaignRepository) UpdateCashflowConfig(_ context.Context, _ *campaigns.CashflowConfig) error {
-	return nil
-}
-
 func (m *MockCampaignRepository) GetCapitalSummary(_ context.Context) (*campaigns.CapitalSummary, error) {
 	return &campaigns.CapitalSummary{OutstandingCents: 0, WeeksToCover: campaigns.WeeksToCoverNoData, AlertLevel: campaigns.AlertOK}, nil
 }
