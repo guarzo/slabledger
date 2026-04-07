@@ -37,6 +37,14 @@ export default function MobileCard({ item, selected, onToggle, onRecordSale, onF
       <div className="flex items-start justify-between mb-2">
         <div className="flex items-start gap-2">
           <input type="checkbox" checked={selected} onChange={onToggle} className="rounded mt-0.5" />
+          {item.purchase.frontImageUrl && (
+            <img
+              src={item.purchase.frontImageUrl}
+              alt=""
+              className="w-10 h-14 object-cover rounded shrink-0 bg-[var(--surface-2)]"
+              loading="lazy"
+            />
+          )}
           <div>
             <div className="text-sm font-medium text-[var(--text)]">
               {hotSeller && <span className="text-amber-400 mr-1" title="High demand">★</span>}

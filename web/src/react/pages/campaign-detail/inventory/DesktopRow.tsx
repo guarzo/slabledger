@@ -71,6 +71,14 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
       </div>
       <div className="glass-table-td flex-1 min-w-0" title={item.purchase.cardName}>
         <div className="flex items-center gap-1.5 min-w-0">
+          {item.purchase.frontImageUrl && (
+            <img
+              src={item.purchase.frontImageUrl}
+              alt=""
+              className="w-8 h-11 object-cover rounded shrink-0 bg-[var(--surface-2)]"
+              loading="lazy"
+            />
+          )}
           {showCampaignColumn && item.campaignName && (() => {
             const color = campaignColor(item.campaignName);
             return (
