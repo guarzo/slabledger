@@ -1,8 +1,8 @@
-// Package campaigns_test provides end-to-end pinning tests for the full normalization
+// Package cardutil_test provides end-to-end pinning tests for the full normalization
 // chain: PSA listing title → parseCardMetadataFromTitle → card-match query.
 // These tests pin current behavior so that refactoring normalization functions
 // in cardutil or campaigns catches regressions immediately.
-package campaigns_test
+package cardutil_test
 
 import (
 	"testing"

@@ -71,4 +71,3 @@ func (h *DHHandler) HandleUnmatched(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, unmatchedResponse{Unmatched: unmatched, Count: len(unmatched)})
 }
-

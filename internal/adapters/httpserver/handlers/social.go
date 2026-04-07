@@ -269,4 +269,3 @@ func (h *SocialHandler) HandleGetMetricsSummary(w http.ResponseWriter, r *http.R
 	}
 	writeJSONList(w, http.StatusOK, summary)
 }
-

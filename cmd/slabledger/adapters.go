@@ -46,4 +46,3 @@ func (a *snapshotRefreshAdapter) RefreshSnapshot(ctx context.Context, p schedule
 		CardName: p.CardName, CardNumber: p.CardNumber, SetName: p.SetName, PSAListingTitle: p.PSAListingTitle,
 	}, p.GradeValue, p.CLValueCents)
 }
-
