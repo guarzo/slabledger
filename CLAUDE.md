@@ -79,9 +79,9 @@ The campaigns package (`internal/domain/campaigns/`) is the core business featur
 ## Database
 
 SQLite with WAL mode. All monetary values in **cents**. Migrations managed by `golang-migrate/migrate/v4`
-and embedded in the binary via `embed.FS`. Migrations run automatically on startup. 40 migration pairs (`000001`–`000040`).
+and embedded in the binary via `embed.FS`. Migrations run automatically on startup. 42 migration pairs (`000001`–`000042`).
 
-Migration files: `internal/adapters/storage/sqlite/migrations/`
+Migration files: `internal/adapters/storage/sqlite/migrations/` (42 migration pairs)
 
 See [internal/README.md](internal/README.md) for step-by-step migration creation.
 

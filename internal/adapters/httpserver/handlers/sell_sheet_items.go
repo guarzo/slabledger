@@ -20,11 +20,7 @@ func NewSellSheetItemsHandler(repo campaigns.SellSheetRepository, logger observa
 
 // HandleGetItems handles GET /api/sell-sheet/items.
 func (h *SellSheetItemsHandler) HandleGetItems(w http.ResponseWriter, r *http.Request) {
-	user := requireUser(w, r)
-	if user == nil {
-		return
-	}
-	ids, err := h.repo.GetSellSheetItems(r.Context(), user.ID)
+	ids, err := h.repo.GetSellSheetItems(r.Context())
 	if err != nil {
 		h.logger.Error(r.Context(), "get sell sheet items failed", observability.Err(err))
 		writeError(w, http.StatusInternalServerError, "Internal server error")
@@ -38,10 +34,6 @@ func (h *SellSheetItemsHandler) HandleGetItems(w http.ResponseWriter, r *http.Re
 
 // HandleAddItems handles PUT /api/sell-sheet/items.
 func (h *SellSheetItemsHandler) HandleAddItems(w http.ResponseWriter, r *http.Request) {
-	user := requireUser(w, r)
-	if user == nil {
-		return
-	}
 	var req struct {
 		PurchaseIDs []string `json:"purchaseIds"`
 	}
@@ -52,7 +44,7 @@ func (h *SellSheetItemsHandler) HandleAddItems(w http.ResponseWriter, r *http.Re
 		writeError(w, http.StatusBadRequest, "At least one purchase ID is required")
 		return
 	}
-	if err := h.repo.AddSellSheetItems(r.Context(), user.ID, req.PurchaseIDs); err != nil {
+	if err := h.repo.AddSellSheetItems(r.Context(), req.PurchaseIDs); err != nil {
 		h.logger.Error(r.Context(), "add sell sheet items failed", observability.Err(err))
 		writeError(w, http.StatusInternalServerError, "Internal server error")
 		return
@@ -62,10 +54,6 @@ func (h *SellSheetItemsHandler) HandleAddItems(w http.ResponseWriter, r *http.Re
 
 // HandleRemoveItems handles DELETE /api/sell-sheet/items.
 func (h *SellSheetItemsHandler) HandleRemoveItems(w http.ResponseWriter, r *http.Request) {
-	user := requireUser(w, r)
-	if user == nil {
-		return
-	}
 	var req struct {
 		PurchaseIDs []string `json:"purchaseIds"`
 	}
@@ -76,7 +64,7 @@ func (h *SellSheetItemsHandler) HandleRemoveItems(w http.ResponseWriter, r *http
 		writeError(w, http.StatusBadRequest, "At least one purchase ID is required")
 		return
 	}
-	if err := h.repo.RemoveSellSheetItems(r.Context(), user.ID, req.PurchaseIDs); err != nil {
+	if err := h.repo.RemoveSellSheetItems(r.Context(), req.PurchaseIDs); err != nil {
 		h.logger.Error(r.Context(), "remove sell sheet items failed", observability.Err(err))
 		writeError(w, http.StatusInternalServerError, "Internal server error")
 		return
@@ -86,11 +74,7 @@ func (h *SellSheetItemsHandler) HandleRemoveItems(w http.ResponseWriter, r *http
 
 // HandleClearItems handles DELETE /api/sell-sheet/items/all.
 func (h *SellSheetItemsHandler) HandleClearItems(w http.ResponseWriter, r *http.Request) {
-	user := requireUser(w, r)
-	if user == nil {
-		return
-	}
-	if err := h.repo.ClearSellSheet(r.Context(), user.ID); err != nil {
+	if err := h.repo.ClearSellSheet(r.Context()); err != nil {
 		h.logger.Error(r.Context(), "clear sell sheet failed", observability.Err(err))
 		writeError(w, http.StatusInternalServerError, "Internal server error")
 		return
