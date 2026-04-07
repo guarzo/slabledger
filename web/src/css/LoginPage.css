@@ -88,12 +88,12 @@
 }
 
 .login-page > .login-header p {
-  font-size: var(--font-size-lg);
-  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
   margin: 0;
-  font-weight: var(--font-weight-medium);
-  letter-spacing: 0.02em;
-  opacity: 0.9;
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 /* Logo */
@@ -109,12 +109,18 @@
   filter: drop-shadow(0 10px 30px rgba(0, 0, 0, 0.3));
 }
 
-/* Login Actions */
-.login-actions {
+/* Sign-in card */
+.login-card {
   width: 100%;
-  max-width: 340px;
+  max-width: 380px;
   position: relative;
   z-index: 1;
+  background: rgba(22, 27, 34, 0.6);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(139, 152, 207, 0.12);
+  border-radius: var(--radius-xl);
+  padding: var(--space-8) var(--space-6);
 }
 
 .login-error {
