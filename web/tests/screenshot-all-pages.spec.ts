@@ -341,54 +341,57 @@ const PAGES = [
   { name: 'admin', path: '/admin' },
 ];
 
+const VIEWPORTS = [
+  { name: 'desktop', width: 1440, height: 900 },
+  { name: 'mobile', width: 390, height: 844 },   // iPhone 14
+];
+
+async function screenshotPage(
+  page: import('@playwright/test').Page,
+  pg: { name: string; path: string; skipAuth?: boolean },
+  viewport: { name: string; width: number; height: number },
+) {
+  await setupMocks(page, { skipAuth: pg.skipAuth });
+
+  await page.setViewportSize({ width: viewport.width, height: viewport.height });
+
+  await page.goto(pg.path, { waitUntil: 'networkidle', timeout: 30000 });
+
+  // Wait for React to mount and render meaningful content (not just a loader)
+  try {
+    await page.waitForSelector('#main-content', { timeout: 10000 });
+    await page.waitForFunction(() => {
+      const loaders = document.querySelectorAll('[data-testid="pokeball-loader"]');
+      if (loaders.length > 0) return false;
+      const main = document.querySelector('#main-content');
+      return main && main.textContent && main.textContent.trim().length > 30;
+    }, { timeout: 15000 });
+  } catch {
+    // Page may still be usable
+  }
+
+  // Dismiss any Vite error overlay
+  await page.evaluate(() => document.querySelector('vite-error-overlay')?.remove()).catch(() => {});
+
+  // Extra time for React state updates and animations
+  await page.waitForTimeout(1000);
+
+  const dir = viewport.name === 'desktop' ? SCREENSHOT_DIR : `${SCREENSHOT_DIR}/${viewport.name}`;
+  await page.screenshot({
+    path: `${dir}/${pg.name}.png`,
+    fullPage: false,
+    timeout: 30000,
+  });
+}
+
 test.describe('screenshot all pages', () => {
   test.use({ actionTimeout: 60000 });
 
-  for (const pg of PAGES) {
-    test(`screenshot: ${pg.name}`, async ({ page }) => {
-      // Log all API requests for debugging
-      page.on('request', (req) => {
-        if (req.url().includes('/api/')) {
-          console.log(`[${pg.name}] REQ: ${req.method()} ${new URL(req.url()).pathname}`);
-        }
+  for (const viewport of VIEWPORTS) {
+    for (const pg of PAGES) {
+      test(`${viewport.name}: ${pg.name}`, async ({ page }) => {
+        await screenshotPage(page, pg, viewport);
       });
-      page.on('response', (res) => {
-        if (res.url().includes('/api/')) {
-          console.log(`[${pg.name}] RES: ${res.status()} ${new URL(res.url()).pathname}`);
-        }
-      });
-
-      await setupMocks(page, { skipAuth: pg.skipAuth });
-
-      await page.setViewportSize({ width: 1440, height: 900 });
-
-      await page.goto(pg.path, { waitUntil: 'networkidle', timeout: 30000 });
-
-      // Wait for React to mount and render meaningful content (not just a loader)
-      try {
-        await page.waitForSelector('#main-content', { timeout: 10000 });
-        // Wait for loading spinners to disappear
-        await page.waitForFunction(() => {
-          const loaders = document.querySelectorAll('[data-testid="pokeball-loader"]');
-          if (loaders.length > 0) return false;
-          const main = document.querySelector('#main-content');
-          return main && main.textContent && main.textContent.trim().length > 30;
-        }, { timeout: 15000 });
-      } catch {
-        // Page may still be usable
-      }
-
-      // Dismiss any Vite error overlay
-      await page.evaluate(() => document.querySelector('vite-error-overlay')?.remove()).catch(() => {});
-
-      // Extra time for React state updates and animations
-      await page.waitForTimeout(1000);
-
-      await page.screenshot({
-        path: `${SCREENSHOT_DIR}/${pg.name}.png`,
-        fullPage: false,
-        timeout: 30000,
-      });
-    });
+    }
   }
 });
