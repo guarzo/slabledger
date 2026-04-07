@@ -1,10 +1,11 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/guarzo/slabledger/internal/domain/campaigns"
-	"github.com/guarzo/slabledger/internal/domain/observability"
+	domainobs "github.com/guarzo/slabledger/internal/domain/observability"
 )
 
 // HandleApproveDHPush handles POST /api/dh/approve/{purchaseId}.
@@ -20,7 +21,17 @@ func (h *DHHandler) HandleApproveDHPush(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if err := h.dhApproveService.ApproveDHPush(r.Context(), purchaseID); err != nil {
-		h.logger.Error(r.Context(), "approve dh push failed", observability.Err(err))
+		if errors.Is(err, campaigns.ErrPurchaseNotFound) {
+			h.logger.Error(r.Context(), "approve dh push: purchase not found", domainobs.Err(err))
+			writeError(w, http.StatusNotFound, "purchase not found")
+			return
+		}
+		if campaigns.IsValidationError(err) {
+			h.logger.Error(r.Context(), "approve dh push: validation error", domainobs.Err(err))
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		h.logger.Error(r.Context(), "approve dh push failed", domainobs.Err(err))
 		writeError(w, http.StatusInternalServerError, "failed to approve push")
 		return
 	}
@@ -36,7 +47,7 @@ func (h *DHHandler) HandleGetDHPushConfig(w http.ResponseWriter, r *http.Request
 	}
 	cfg, err := h.dhApproveService.GetDHPushConfig(r.Context())
 	if err != nil {
-		h.logger.Error(r.Context(), "get dh push config failed", observability.Err(err))
+		h.logger.Error(r.Context(), "get dh push config failed", domainobs.Err(err))
 		writeError(w, http.StatusInternalServerError, "failed to get DH push config")
 		return
 	}
@@ -55,7 +66,7 @@ func (h *DHHandler) HandleSaveDHPushConfig(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if err := h.dhApproveService.SaveDHPushConfig(r.Context(), &cfg); err != nil {
-		h.logger.Error(r.Context(), "save dh push config failed", observability.Err(err))
+		h.logger.Error(r.Context(), "save dh push config failed", domainobs.Err(err))
 		writeError(w, http.StatusInternalServerError, "failed to save DH push config")
 		return
 	}

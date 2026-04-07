@@ -105,6 +105,10 @@ func (h *DHHandler) HandleSelectMatch(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "purchase has no market value yet")
 		return
 	}
+	if purchase.BuyCostCents <= 0 {
+		writeError(w, http.StatusBadRequest, "purchase has no buy cost")
+		return
+	}
 
 	item := dh.InventoryItem{
 		DHCardID:         req.DHCardID,

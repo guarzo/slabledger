@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/campaigns"
@@ -31,6 +32,9 @@ func (r *CampaignsRepository) GetDHPushConfig(ctx context.Context) (*campaigns.D
 
 // SaveDHPushConfig upserts the DH push safety config.
 func (r *CampaignsRepository) SaveDHPushConfig(ctx context.Context, cfg *campaigns.DHPushConfig) error {
+	if cfg == nil {
+		return fmt.Errorf("dh push config cannot be nil")
+	}
 	cfg.UpdatedAt = time.Now()
 	_, err := r.db.ExecContext(ctx,
 		`INSERT INTO dh_push_config (id, swing_pct_threshold, swing_min_cents, disagreement_pct_threshold,

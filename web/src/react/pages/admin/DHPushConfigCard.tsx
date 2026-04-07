@@ -34,16 +34,12 @@ export function DHPushConfigCard() {
   const toast = useToast();
   const queryClient = useQueryClient();
 
-  const { data: config, isLoading } = useQuery({
+  const { data: config, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['admin', 'dh-push-config'],
     queryFn: () => api.getDHPushConfig(),
   });
 
   const [form, setForm] = useState<DHPushConfig | null>(null);
-
-  useEffect(() => {
-    if (config && !form) setForm(config);
-  }, [config, form]);
 
   const saveMutation = useMutation({
     mutationFn: (cfg: DHPushConfig) => api.saveDHPushConfig(cfg),
@@ -53,6 +49,21 @@ export function DHPushConfigCard() {
     },
     onError: () => toast.error('Failed to save config'),
   });
+
+  useEffect(() => {
+    if (config && !form) setForm(config);
+  }, [config, form]);
+
+  if (isError) {
+    return (
+      <CardShell padding="lg">
+        <div className="text-center">
+          <p className="text-red-500 mb-2">Failed to load config: {String(error)}</p>
+          <Button onClick={() => refetch()}>Retry</Button>
+        </div>
+      </CardShell>
+    );
+  }
 
   if (isLoading || !form) {
     return <CardShell padding="lg"><p className="text-[var(--text-muted)]">Loading...</p></CardShell>;

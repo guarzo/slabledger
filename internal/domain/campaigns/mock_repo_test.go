@@ -2,6 +2,7 @@ package campaigns
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"testing"
 	"time"
@@ -19,6 +20,8 @@ type mockRepo struct {
 	purchaseSales   map[string]bool // purchaseID -> has sale
 	pnlData         map[string]*CampaignPNL
 	channelVelocity []ChannelVelocity
+	dhPushConfig    *DHPushConfig
+	dhHoldReasons   map[string]string // purchaseID -> hold reason
 }
 
 func newMockRepo() *mockRepo {
@@ -684,16 +687,30 @@ func (m *mockRepo) UpdatePurchaseDHCandidates(_ context.Context, _ string, _ str
 	return nil
 }
 
-func (m *mockRepo) UpdatePurchaseDHHoldReason(_ context.Context, _ string, _ string) error {
+func (m *mockRepo) UpdatePurchaseDHHoldReason(_ context.Context, id string, reason string) error {
+	if m.purchases == nil {
+		return ErrPurchaseNotFound
+	}
+	if _, ok := m.purchases[id]; !ok {
+		return ErrPurchaseNotFound
+	}
+	m.dhHoldReasons[id] = reason
 	return nil
 }
 
 func (m *mockRepo) GetDHPushConfig(_ context.Context) (*DHPushConfig, error) {
+	if m.dhPushConfig != nil {
+		return m.dhPushConfig, nil
+	}
 	def := DefaultDHPushConfig()
 	return &def, nil
 }
 
-func (m *mockRepo) SaveDHPushConfig(_ context.Context, _ *DHPushConfig) error {
+func (m *mockRepo) SaveDHPushConfig(_ context.Context, cfg *DHPushConfig) error {
+	if cfg == nil {
+		return fmt.Errorf("dh push config cannot be nil")
+	}
+	m.dhPushConfig = cfg
 	return nil
 }
 

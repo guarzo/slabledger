@@ -155,7 +155,7 @@ proto.selectDHMatch = async function (this: APIClient, req: DHSelectMatchRequest
 };
 
 proto.approveDHPush = async function (this: APIClient, purchaseId: string): Promise<{ status: string }> {
-  return this.post<{ status: string }>(`/dh/approve/${purchaseId}`);
+  return this.post<{ status: string }>(`/dh/approve/${encodeURIComponent(purchaseId)}`);
 };
 
 proto.getDHPushConfig = async function (this: APIClient): Promise<DHPushConfig> {

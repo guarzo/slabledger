@@ -3,6 +3,7 @@ package campaigns
 import (
 	"fmt"
 	"math"
+	"sort"
 	"time"
 )
 
@@ -72,6 +73,9 @@ func EvaluateHoldTriggers(p *Purchase, cfg DHPushConfig) string {
 }
 
 func checkPriceSwing(newValue, lastPushed, pctThreshold, minCents int) string {
+	if lastPushed == 0 {
+		return ""
+	}
 	delta := newValue - lastPushed
 	absDelta := int(math.Abs(float64(delta)))
 	pct := float64(delta) / float64(lastPushed) * 100
@@ -98,11 +102,16 @@ func checkSourceDisagreement(p *Purchase, pctThreshold int) string {
 		return ""
 	}
 
-	for nameA, a := range prices {
-		for nameB, b := range prices {
-			if nameA >= nameB {
-				continue
-			}
+	keys := make([]string, 0, len(prices))
+	for name := range prices {
+		keys = append(keys, name)
+	}
+	sort.Strings(keys)
+
+	for i := 0; i < len(keys); i++ {
+		for j := i + 1; j < len(keys); j++ {
+			nameA, nameB := keys[i], keys[j]
+			a, b := prices[nameA], prices[nameB]
 			maxVal := max(a, b)
 			minVal := min(a, b)
 			if maxVal > 0 {

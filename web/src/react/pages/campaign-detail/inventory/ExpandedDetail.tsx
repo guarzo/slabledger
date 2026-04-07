@@ -20,12 +20,18 @@ interface ExpandedDetailProps {
 }
 
 function formatHoldReason(reason: string): string {
-  if (reason.startsWith('price_swing:')) return `Price swing: ${reason.split(':')[1]}`;
-  if (reason.startsWith('source_disagreement:')) {
-    const detail = reason.split(':')[1];
-    return `Source disagreement: ${detail}`;
+  if (reason.startsWith('price_swing:')) {
+    const parts = reason.split(':');
+    return `Price swing: ${parts[1] || 'Unknown'}`;
   }
-  if (reason.startsWith('unreviewed_cl_change:')) return `Unreviewed CL change: ${reason.split(':')[1]}`;
+  if (reason.startsWith('source_disagreement:')) {
+    const parts = reason.split(':');
+    return `Source disagreement: ${parts[1] || 'Unknown'}`;
+  }
+  if (reason.startsWith('unreviewed_cl_change:')) {
+    const parts = reason.split(':');
+    return `Unreviewed CL change: ${parts[1] || 'Unknown'}`;
+  }
   return reason || 'Unknown reason';
 }
 
