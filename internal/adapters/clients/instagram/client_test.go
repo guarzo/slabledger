@@ -295,3 +295,239 @@ func TestRefreshToken_Error(t *testing.T) {
 	assert.Contains(t, err.Error(), "refresh token")
 	assert.Contains(t, err.Error(), "The access token has expired")
 }
+
+// TestExchangeCode_Success verifies the three-step OAuth flow:
+// short-lived token → long-lived token → username fetch.
+func TestExchangeCode_Success(t *testing.T) {
+	// The client routes ALL HTTPS connections to the test server regardless of
+	// host, so we differentiate the three steps by URL path alone.
+	//   POST /oauth/access_token  — api.instagram.com short-lived token
+	//   GET  /access_token        — graph.instagram.com long-lived token
+	//   GET  /12345               — graph.instagram.com username lookup
+	const userID = int64(12345)
+	expiresIn := int64(5184000) // 60 days
+
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method + " " + r.URL.Path {
+		case "POST /oauth/access_token":
+			// Short-lived token exchange
+			if err := r.ParseForm(); err != nil {
+				http.Error(w, "bad form", http.StatusBadRequest)
+				return
+			}
+			assert.Equal(t, "authorization_code", r.FormValue("grant_type"))
+			assert.Equal(t, "test-code", r.FormValue("code"))
+			jsonResponse(w, http.StatusOK, map[string]any{
+				"access_token": "short-lived-token",
+				"user_id":      userID,
+			})
+
+		case "GET /access_token":
+			// Long-lived token exchange
+			assert.Equal(t, "ig_exchange_token", r.URL.Query().Get("grant_type"))
+			assert.Equal(t, "short-lived-token", r.URL.Query().Get("access_token"))
+			jsonResponse(w, http.StatusOK, map[string]any{
+				"access_token": "long-lived-token",
+				"token_type":   "bearer",
+				"expires_in":   expiresIn,
+			})
+
+		case fmt.Sprintf("GET /%d", userID):
+			// Username fetch
+			assert.Equal(t, "username", r.URL.Query().Get("fields"))
+			jsonResponse(w, http.StatusOK, map[string]string{
+				"username": "testuser",
+			})
+
+		default:
+			http.Error(w, "unexpected: "+r.Method+" "+r.URL.Path, http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	c := newTestClient(server.URL)
+	ctx := context.Background()
+
+	before := time.Now()
+	info, err := c.ExchangeCode(ctx, "test-code")
+	after := time.Now()
+
+	require.NoError(t, err)
+	require.NotNil(t, info)
+	assert.Equal(t, "long-lived-token", info.AccessToken)
+	assert.Equal(t, fmt.Sprintf("%d", userID), info.UserID)
+	assert.Equal(t, "testuser", info.Username)
+
+	expectedExpiry := before.Add(time.Duration(expiresIn) * time.Second)
+	latestExpiry := after.Add(time.Duration(expiresIn) * time.Second)
+	assert.True(t, !info.ExpiresAt.Before(expectedExpiry), "ExpiresAt should be at or after expected lower bound")
+	assert.True(t, !info.ExpiresAt.After(latestExpiry), "ExpiresAt should be at or before expected upper bound")
+}
+
+// TestExchangeCode_ShortTokenError verifies that an error on the short-lived token
+// step is propagated back to the caller.
+func TestExchangeCode_ShortTokenError(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost && r.URL.Path == "/oauth/access_token" {
+			errorResponse(w, http.StatusBadRequest, "invalid authorization code")
+			return
+		}
+		http.Error(w, "unexpected: "+r.Method+" "+r.URL.Path, http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	c := newTestClient(server.URL)
+	ctx := context.Background()
+
+	_, err := c.ExchangeCode(ctx, "bad-code")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "exchange code")
+	assert.Contains(t, err.Error(), "invalid authorization code")
+}
+
+// TestGetMediaInsights_Success verifies that insights and media endpoints are
+// both called and their results merged into a single MediaInsights struct.
+func TestGetMediaInsights_Success(t *testing.T) {
+	const mediaID = "media999"
+
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, http.MethodGet, r.Method)
+
+		switch r.URL.Path {
+		case "/" + mediaID + "/insights":
+			// Insights endpoint: impressions, reach, saved, shares
+			jsonResponse(w, http.StatusOK, map[string]any{
+				"data": []map[string]any{
+					{"name": "impressions", "values": []map[string]any{{"value": 500}}},
+					{"name": "reach", "values": []map[string]any{{"value": 300}}},
+					{"name": "saved", "values": []map[string]any{{"value": 42}}},
+					{"name": "shares", "values": []map[string]any{{"value": 15}}},
+				},
+			})
+
+		case "/" + mediaID:
+			// Media endpoint: like_count, comments_count
+			jsonResponse(w, http.StatusOK, map[string]any{
+				"like_count":     88,
+				"comments_count": 7,
+			})
+
+		default:
+			http.Error(w, "unexpected: "+r.Method+" "+r.URL.Path, http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	c := newTestClient(server.URL)
+	ctx := context.Background()
+
+	insights, err := c.GetMediaInsights(ctx, "test-token", mediaID)
+
+	require.NoError(t, err)
+	require.NotNil(t, insights)
+	assert.Equal(t, 500, insights.Impressions)
+	assert.Equal(t, 300, insights.Reach)
+	assert.Equal(t, 42, insights.Saves)
+	assert.Equal(t, 15, insights.Shares)
+	assert.Equal(t, 88, insights.Likes)
+	assert.Equal(t, 7, insights.Comments)
+}
+
+// TestGetMediaInsights_Error verifies that when both endpoints fail the error
+// is returned to the caller.
+func TestGetMediaInsights_Error(t *testing.T) {
+	const mediaID = "mediaBad"
+
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		errorResponse(w, http.StatusUnauthorized, "token expired")
+	}))
+	defer server.Close()
+
+	c := newTestClient(server.URL)
+	ctx := context.Background()
+
+	_, err := c.GetMediaInsights(ctx, "bad-token", mediaID)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "all metrics endpoints failed")
+}
+
+// TestPublishSingleImage_Success verifies the create → wait → publish flow for a
+// single image post.
+func TestPublishSingleImage_Success(t *testing.T) {
+	const igUserID = "userSingle"
+	const containerID = "single-container-777"
+	const postID = "published-post-777"
+
+	var pollCount int32
+
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+
+		switch {
+		// POST /{igUserID}/media — create media container
+		case r.Method == http.MethodPost && path == "/"+igUserID+"/media":
+			if err := r.ParseForm(); err != nil {
+				http.Error(w, "bad form", http.StatusBadRequest)
+				return
+			}
+			assert.NotEmpty(t, r.FormValue("image_url"))
+			jsonResponse(w, http.StatusOK, map[string]string{"id": containerID})
+
+		// GET /{containerID}?fields=status_code — waitForContainer polling
+		case r.Method == http.MethodGet && strings.Contains(r.URL.RawQuery, "status_code"):
+			n := atomic.AddInt32(&pollCount, 1)
+			if n < 2 {
+				jsonResponse(w, http.StatusOK, map[string]string{"status_code": "IN_PROGRESS"})
+			} else {
+				jsonResponse(w, http.StatusOK, map[string]string{"status_code": "FINISHED"})
+			}
+
+		// POST /{igUserID}/media_publish
+		case r.Method == http.MethodPost && path == "/"+igUserID+"/media_publish":
+			if err := r.ParseForm(); err != nil {
+				http.Error(w, "bad form", http.StatusBadRequest)
+				return
+			}
+			assert.Equal(t, containerID, r.FormValue("creation_id"))
+			jsonResponse(w, http.StatusOK, map[string]string{"id": postID})
+
+		default:
+			http.Error(w, "unexpected: "+r.Method+" "+path, http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	c := newTestClient(server.URL)
+	ctx := context.Background()
+
+	result, err := c.PublishSingleImage(ctx, "test-token", igUserID,
+		"https://img.example.com/card.jpg", "My caption")
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, postID, result.InstagramPostID)
+}
+
+// TestGetStatus_Success verifies that GetStatus delegates to getUsername and
+// returns the username string.
+func TestGetStatus_Success(t *testing.T) {
+	const igUserID = "userMe"
+
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, http.MethodGet, r.Method)
+		assert.Equal(t, "/"+igUserID, r.URL.Path)
+		assert.Equal(t, "username", r.URL.Query().Get("fields"))
+		jsonResponse(w, http.StatusOK, map[string]string{"username": "my_ig_handle"})
+	}))
+	defer server.Close()
+
+	c := newTestClient(server.URL)
+	ctx := context.Background()
+
+	username, err := c.GetStatus(ctx, "valid-token", igUserID)
+
+	require.NoError(t, err)
+	assert.Equal(t, "my_ig_handle", username)
+}
