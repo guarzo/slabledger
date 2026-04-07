@@ -131,6 +131,7 @@ type Service interface {
 	PricingService
 	CertLookupService
 	SnapshotService
+	DHService
 
 	// Close shuts down background workers.
 	Close()
