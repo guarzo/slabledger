@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -122,6 +124,38 @@ func (c *Client) FetchSalesComps(ctx context.Context, gemRateID, condition, grad
 	var resp SearchResponse[SaleComp]
 	if err := c.doGet(ctx, params, &resp); err != nil {
 		return nil, fmt.Errorf("fetch sales comps for %s: %w", gemRateID, err)
+	}
+	return &resp, nil
+}
+
+// FetchCardCatalog searches the CL cards index (full catalog).
+// Filters are key:value pairs (e.g. "condition:PSA 10") joined with "|".
+// Results are sorted by score descending.
+func (c *Client) FetchCardCatalog(ctx context.Context, query string, filters map[string]string, page, limit int) (*SearchResponse[CatalogCard], error) {
+	params := url.Values{
+		"index":     {"cards"},
+		"query":     {query},
+		"page":      {strconv.Itoa(page)},
+		"limit":     {strconv.Itoa(limit)},
+		"sort":      {"score"},
+		"direction": {"desc"},
+	}
+	if len(filters) > 0 {
+		keys := make([]string, 0, len(filters))
+		for k := range filters {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		parts := make([]string, 0, len(filters))
+		for _, k := range keys {
+			parts = append(parts, fmt.Sprintf("%s:%s", k, filters[k]))
+		}
+		params.Set("filters", strings.Join(parts, "|"))
+	}
+
+	var resp SearchResponse[CatalogCard]
+	if err := c.doGet(ctx, params, &resp); err != nil {
+		return nil, fmt.Errorf("fetch card catalog for %q: %w", query, err)
 	}
 	return &resp, nil
 }

@@ -44,6 +44,7 @@ type Router struct {
 	opportunitiesHandler      *handlers.OpportunitiesHandler
 	dhHandler                 *handlers.DHHandler
 	sellSheetItemsHandler     *handlers.SellSheetItemsHandler
+	cardCatalogHandler        *handlers.CardCatalogHandler
 	pricingAPIKey             string
 	logger                    observability.Logger
 	databasePath              string
@@ -77,6 +78,7 @@ type RouterConfig struct {
 	OpportunitiesHandler      *handlers.OpportunitiesHandler  // Arbitrage opportunities; nil = disabled
 	DHHandler                 *handlers.DHHandler             // DH bulk match + intelligence; nil = disabled
 	SellSheetItemsHandler     *handlers.SellSheetItemsHandler // Sell sheet persistence; nil = disabled
+	CardCatalogHandler        *handlers.CardCatalogHandler    // CL card catalog search; nil = disabled
 	Logger                    observability.Logger
 	AdminEmails               []string
 	DatabasePath              string
@@ -180,6 +182,10 @@ func NewRouter(cfg RouterConfig) *Router {
 		rt.sellSheetItemsHandler = cfg.SellSheetItemsHandler
 	}
 
+	if cfg.CardCatalogHandler != nil {
+		rt.cardCatalogHandler = cfg.CardCatalogHandler
+	}
+
 	if cfg.PricingAPIKey != "" && cfg.CampaignsRepo != nil {
 		rt.pricingAPIHandler = handlers.NewPricingAPIHandler(cfg.CampaignsRepo, cfg.Logger)
 		rt.pricingAPIKey = cfg.PricingAPIKey
@@ -273,6 +279,11 @@ func (rt *Router) Setup() http.Handler {
 		mux.HandleFunc("/api/cards/search", noAuth)
 		mux.HandleFunc("/api/cards/pricing", noAuth)
 		rt.logger.Warn(context.Background(), "card search/pricing routes registered without auth — requests will be rejected")
+	}
+
+	// CL Card Catalog search
+	if rt.cardCatalogHandler != nil && rt.authMW != nil {
+		mux.Handle("GET /api/cards/catalog", rt.authMW.RequireAuth(http.HandlerFunc(rt.cardCatalogHandler.HandleSearch)))
 	}
 
 	// Health & Status
