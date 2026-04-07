@@ -18,7 +18,7 @@ export function createParamQuery<T, P extends string>(
       queryKey: keyFn(param),
       queryFn: () => apiFn(param),
       enabled: !!param,
-      ...options,
+      staleTime: options?.staleTime,
     });
 }
 
@@ -34,6 +34,6 @@ export function createStaticQuery<T>(
     useQuery({
       queryKey,
       queryFn: apiFn,
-      ...options,
+      staleTime: options?.staleTime,
     });
 }
