@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -131,15 +132,6 @@ func (c *Client) FetchSalesComps(ctx context.Context, gemRateID, condition, grad
 // Filters are key:value pairs (e.g. "condition:PSA 10") joined with "|".
 // Results are sorted by score descending.
 func (c *Client) FetchCardCatalog(ctx context.Context, query string, filters map[string]string, page, limit int) (*SearchResponse[CatalogCard], error) {
-	filterParts := make([]string, 0, len(filters))
-	for k, v := range filters {
-		filterParts = append(filterParts, fmt.Sprintf("%s:%s", k, v))
-	}
-	filterStr := ""
-	if len(filterParts) > 0 {
-		filterStr = strings.Join(filterParts, "|")
-	}
-
 	params := url.Values{
 		"index":     {"cards"},
 		"query":     {query},
@@ -148,8 +140,17 @@ func (c *Client) FetchCardCatalog(ctx context.Context, query string, filters map
 		"sort":      {"score"},
 		"direction": {"desc"},
 	}
-	if filterStr != "" {
-		params.Set("filters", filterStr)
+	if len(filters) > 0 {
+		keys := make([]string, 0, len(filters))
+		for k := range filters {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		parts := make([]string, 0, len(filters))
+		for _, k := range keys {
+			parts = append(parts, fmt.Sprintf("%s:%s", k, filters[k]))
+		}
+		params.Set("filters", strings.Join(parts, "|"))
 	}
 
 	var resp SearchResponse[CatalogCard]
