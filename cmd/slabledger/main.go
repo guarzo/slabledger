@@ -344,6 +344,12 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	// Create sell sheet items handler (always available when auth is configured)
 	sellSheetItemsHandler := handlers.NewSellSheetItemsHandler(campaignsRepo, logger)
 
+	// Create card catalog handler (CL card catalog search; nil when CL is not configured)
+	var cardCatalogHandler *handlers.CardCatalogHandler
+	if clClient != nil && clClient.Available() {
+		cardCatalogHandler = handlers.NewCardCatalogHandler(clClient, logger)
+	}
+
 	schedulerResult, cancelScheduler := initializeSchedulers(ctx, schedulerDeps{
 		Config:               cfg,
 		Logger:               logger,
@@ -469,6 +475,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		OpportunitiesHandler:      opportunitiesHandler,
 		DHHandler:                 dhHandler,
 		SellSheetItemsHandler:     sellSheetItemsHandler,
+		CardCatalogHandler:        cardCatalogHandler,
 	}
 	// Nil-safe interface conversion: a nil *dh.Client assigned to an interface
 	// produces a non-nil interface wrapping a nil pointer, which breaks nil checks.

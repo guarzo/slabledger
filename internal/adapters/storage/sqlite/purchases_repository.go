@@ -31,8 +31,9 @@ func (r *CampaignsRepository) CreatePurchase(ctx context.Context, p *campaigns.P
 			ai_suggested_price_cents, ai_suggested_at,
 			card_year, ebay_export_flagged_at,
 			reviewed_price_cents, reviewed_at, review_source,
-			dh_card_id, dh_inventory_id, dh_cert_status, dh_listing_price_cents, dh_channels_json, dh_status, dh_push_status, dh_candidates)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			dh_card_id, dh_inventory_id, dh_cert_status, dh_listing_price_cents, dh_channels_json, dh_status, dh_push_status, dh_candidates,
+			gem_rate_id, psa_spec_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 	_, err := r.db.ExecContext(ctx, query,
 		p.ID, p.CampaignID, p.CardName, p.CertNumber,
@@ -49,6 +50,7 @@ func (r *CampaignsRepository) CreatePurchase(ctx context.Context, p *campaigns.P
 		p.CardYear, p.EbayExportFlaggedAt,
 		p.ReviewedPriceCents, p.ReviewedAt, string(p.ReviewSource),
 		p.DHCardID, p.DHInventoryID, p.DHCertStatus, p.DHListingPriceCents, p.DHChannelsJSON, p.DHStatus, p.DHPushStatus, p.DHCandidatesJSON,
+		p.GemRateID, p.PSASpecID,
 	)
 	if err != nil && isUniqueConstraintError(err) {
 		return campaigns.ErrDuplicateCertNumber
@@ -467,6 +469,44 @@ func (r *CampaignsRepository) CountUnsoldByDHPushStatus(ctx context.Context) (ma
 		counts[bucket] = cnt
 	}
 	return counts, rows.Err()
+}
+
+// UpdatePurchaseGemRateID sets the CL gemRateID on a purchase.
+func (r *CampaignsRepository) UpdatePurchaseGemRateID(ctx context.Context, id, gemRateID string) error {
+	result, err := r.db.ExecContext(ctx,
+		`UPDATE campaign_purchases SET gem_rate_id = ?, updated_at = ? WHERE id = ?`,
+		gemRateID, time.Now(), id,
+	)
+	if err != nil {
+		return err
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return campaigns.ErrPurchaseNotFound
+	}
+	return nil
+}
+
+// UpdatePurchasePSASpecID sets the PSA spec ID on a purchase.
+func (r *CampaignsRepository) UpdatePurchasePSASpecID(ctx context.Context, id string, psaSpecID int) error {
+	result, err := r.db.ExecContext(ctx,
+		`UPDATE campaign_purchases SET psa_spec_id = ?, updated_at = ? WHERE id = ?`,
+		psaSpecID, time.Now(), id,
+	)
+	if err != nil {
+		return err
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return campaigns.ErrPurchaseNotFound
+	}
+	return nil
 }
 
 // GetPurchaseIDByCertNumber returns the purchase ID for a given cert number.

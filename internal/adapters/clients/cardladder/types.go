@@ -49,6 +49,41 @@ type SaleComp struct {
 	GradingCompany  string  `json:"gradingCompany"`
 }
 
+// CatalogCard represents one card from the CL cards index (full catalog).
+// gemRateID is grade-agnostic: it identifies the card variant (card + set + year + number + parallel),
+// not the specific grade. The same gemRateID appears for PSA 10, PSA 9, etc.
+type CatalogCard struct {
+	ID                     string   `json:"id"`
+	GemRateID              string   `json:"gemRateId"`
+	PSASpecID              int      `json:"psaSpecId"`
+	Label                  string   `json:"label"`
+	Player                 string   `json:"player"`
+	PlayerIndexID          string   `json:"playerIndexId"`
+	Set                    string   `json:"set"`
+	Year                   string   `json:"year"`
+	Number                 string   `json:"number"`
+	Variation              string   `json:"variation"`
+	Category               string   `json:"category"`
+	Condition              string   `json:"condition"`
+	GradingCompany         string   `json:"gradingCompany"`
+	CurrentValue           float64  `json:"currentValue"`
+	MarketValue            float64  `json:"marketValue"`
+	Pop                    *int     `json:"pop"`
+	NumSales               int      `json:"numSales"`
+	MarketCap              *float64 `json:"marketCap"`
+	Score                  float64  `json:"score"`
+	WeeklyPercentChange    float64  `json:"weeklyPercentChange"`
+	MonthlyPercentChange   float64  `json:"monthlyPercentChange"`
+	QuarterlyPercentChange float64  `json:"quarterlyPercentChange"`
+	AnnualPercentChange    float64  `json:"annualPercentChange"`
+	PriceMovement          float64  `json:"priceMovement"`
+	LastSoldDate           string   `json:"lastSoldDate"`
+	Slug                   string   `json:"slug"`
+	KeyCard                bool     `json:"keyCard"`
+	Image                  string   `json:"image"`
+	EbayQuery              string   `json:"ebayQuery"`
+}
+
 // FirebaseAuthResponse is returned by the Firebase signInWithPassword endpoint.
 type FirebaseAuthResponse struct {
 	IDToken      string `json:"idToken"`

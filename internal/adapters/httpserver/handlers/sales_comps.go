@@ -74,7 +74,7 @@ func (h *SalesCompsHandler) HandleGetSalesComps(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	comps, err := h.salesStore.GetSaleComps(r.Context(), mapping.CLGemRateID, 50)
+	comps, err := h.salesStore.GetSaleComps(r.Context(), mapping.CLGemRateID, mapping.CLCondition, 50)
 	if err != nil {
 		h.logger.Error(r.Context(), "failed to get sales comps", observability.Err(err))
 		writeError(w, http.StatusInternalServerError, "internal error")

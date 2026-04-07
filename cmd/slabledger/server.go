@@ -57,6 +57,7 @@ type ServerDependencies struct {
 	DHCardIDSaver             handlers.DHCardIDSaver          // optional: persists DH card ID mappings
 	DHCandidatesSaver         handlers.DHCandidatesSaver      // optional: stores ambiguous DH candidates
 	SellSheetItemsHandler     *handlers.SellSheetItemsHandler // Sell sheet persistence; nil = disabled
+	CardCatalogHandler        *handlers.CardCatalogHandler    // CL card catalog search; nil = disabled
 }
 
 // EnvVarValidation holds the result of environment variable validation
@@ -223,6 +224,7 @@ func startWebServer(ctx context.Context, deps ServerDependencies) error {
 		OpportunitiesHandler:      deps.OpportunitiesHandler,
 		DHHandler:                 deps.DHHandler,
 		SellSheetItemsHandler:     deps.SellSheetItemsHandler,
+		CardCatalogHandler:        deps.CardCatalogHandler,
 		Logger:                    logger,
 		AdminEmails:               cfg.Auth.AdminEmails,
 		DatabasePath:              cfg.Database.Path,

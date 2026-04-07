@@ -9,6 +9,7 @@ import (
 // CLSaleCompRecord represents a stored sales comp.
 type CLSaleCompRecord struct {
 	GemRateID   string
+	Condition   string
 	ItemID      string
 	SaleDate    string
 	PriceCents  int
@@ -32,9 +33,9 @@ func NewCLSalesStore(db *sql.DB) *CLSalesStore {
 // UpsertSaleComp inserts or updates a sale comp record.
 func (s *CLSalesStore) UpsertSaleComp(ctx context.Context, rec CLSaleCompRecord) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO cl_sales_comps (gem_rate_id, item_id, sale_date, price_cents, platform, listing_type, seller, item_url, slab_serial, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		 ON CONFLICT(gem_rate_id, item_id) DO UPDATE SET
+		`INSERT INTO cl_sales_comps (gem_rate_id, condition, item_id, sale_date, price_cents, platform, listing_type, seller, item_url, slab_serial, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 ON CONFLICT(gem_rate_id, condition, item_id) DO UPDATE SET
 		   price_cents = excluded.price_cents,
 		   sale_date = excluded.sale_date,
 		   platform = excluded.platform,
@@ -42,19 +43,19 @@ func (s *CLSalesStore) UpsertSaleComp(ctx context.Context, rec CLSaleCompRecord)
 		   seller = excluded.seller,
 		   item_url = excluded.item_url,
 		   slab_serial = excluded.slab_serial`,
-		rec.GemRateID, rec.ItemID, rec.SaleDate, rec.PriceCents,
+		rec.GemRateID, rec.Condition, rec.ItemID, rec.SaleDate, rec.PriceCents,
 		rec.Platform, rec.ListingType, rec.Seller, rec.ItemURL, rec.SlabSerial,
 		time.Now().UTC().Format(time.RFC3339),
 	)
 	return err
 }
 
-// GetSaleComps returns recent sales for a gemRateID, ordered by date descending.
-func (s *CLSalesStore) GetSaleComps(ctx context.Context, gemRateID string, limit int) (_ []CLSaleCompRecord, err error) {
+// GetSaleComps returns recent sales for a gemRateID and condition, ordered by date descending.
+func (s *CLSalesStore) GetSaleComps(ctx context.Context, gemRateID, condition string, limit int) (_ []CLSaleCompRecord, err error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT gem_rate_id, item_id, sale_date, price_cents, platform, listing_type, seller, item_url, slab_serial
-		 FROM cl_sales_comps WHERE gem_rate_id = ? ORDER BY sale_date DESC LIMIT ?`,
-		gemRateID, limit,
+		`SELECT gem_rate_id, condition, item_id, sale_date, price_cents, platform, listing_type, seller, item_url, slab_serial
+		 FROM cl_sales_comps WHERE gem_rate_id = ? AND condition = ? ORDER BY sale_date DESC LIMIT ?`,
+		gemRateID, condition, limit,
 	)
 	if err != nil {
 		return nil, err
@@ -68,7 +69,7 @@ func (s *CLSalesStore) GetSaleComps(ctx context.Context, gemRateID string, limit
 	var comps []CLSaleCompRecord
 	for rows.Next() {
 		var c CLSaleCompRecord
-		if err := rows.Scan(&c.GemRateID, &c.ItemID, &c.SaleDate, &c.PriceCents,
+		if err := rows.Scan(&c.GemRateID, &c.Condition, &c.ItemID, &c.SaleDate, &c.PriceCents,
 			&c.Platform, &c.ListingType, &c.Seller, &c.ItemURL, &c.SlabSerial); err != nil {
 			return nil, err
 		}
@@ -77,11 +78,11 @@ func (s *CLSalesStore) GetSaleComps(ctx context.Context, gemRateID string, limit
 	return comps, rows.Err()
 }
 
-// GetLatestSaleDate returns the most recent sale date for a gemRateID, or empty string if none.
-func (s *CLSalesStore) GetLatestSaleDate(ctx context.Context, gemRateID string) (string, error) {
+// GetLatestSaleDate returns the most recent sale date for a gemRateID and condition, or empty string if none.
+func (s *CLSalesStore) GetLatestSaleDate(ctx context.Context, gemRateID, condition string) (string, error) {
 	var date sql.NullString
 	err := s.db.QueryRowContext(ctx,
-		`SELECT MAX(sale_date) FROM cl_sales_comps WHERE gem_rate_id = ?`, gemRateID,
+		`SELECT MAX(sale_date) FROM cl_sales_comps WHERE gem_rate_id = ? AND condition = ?`, gemRateID, condition,
 	).Scan(&date)
 	if err != nil {
 		return "", err

@@ -2,8 +2,10 @@ package scheduler
 
 import (
 	"context"
+	"fmt"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
@@ -24,6 +26,12 @@ type CardLadderValueUpdater interface {
 	UpdatePurchaseCLValue(ctx context.Context, purchaseID string, clValueCents, population int) error
 }
 
+// CardLadderGemRateUpdater persists gemRateID and psaSpecID on purchases.
+type CardLadderGemRateUpdater interface {
+	UpdatePurchaseGemRateID(ctx context.Context, purchaseID, gemRateID string) error
+	UpdatePurchasePSASpecID(ctx context.Context, purchaseID string, psaSpecID int) error
+}
+
 // CardLadderRefreshScheduler refreshes CL values from the Card Ladder API daily.
 type CardLadderRefreshScheduler struct {
 	StopHandle
@@ -31,6 +39,7 @@ type CardLadderRefreshScheduler struct {
 	store          *sqlite.CardLadderStore
 	purchaseLister CardLadderPurchaseLister
 	valueUpdater   CardLadderValueUpdater
+	gemRateUpdater CardLadderGemRateUpdater
 	clRecorder     campaigns.CLValueHistoryRecorder
 	salesStore     *sqlite.CLSalesStore
 	logger         observability.Logger
@@ -43,6 +52,7 @@ func NewCardLadderRefreshScheduler(
 	store *sqlite.CardLadderStore,
 	purchaseLister CardLadderPurchaseLister,
 	valueUpdater CardLadderValueUpdater,
+	gemRateUpdater CardLadderGemRateUpdater,
 	clRecorder campaigns.CLValueHistoryRecorder,
 	salesStore *sqlite.CLSalesStore,
 	logger observability.Logger,
@@ -55,6 +65,7 @@ func NewCardLadderRefreshScheduler(
 		store:          store,
 		purchaseLister: purchaseLister,
 		valueUpdater:   valueUpdater,
+		gemRateUpdater: gemRateUpdater,
 		clRecorder:     clRecorder,
 		salesStore:     salesStore,
 		logger:         logger,
@@ -204,6 +215,17 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 			mapped++
 		}
 
+		// Persist gemRateID on purchase if resolved
+		if gemRateID != "" && s.gemRateUpdater != nil && purchase.GemRateID == "" {
+			if err := s.gemRateUpdater.UpdatePurchaseGemRateID(ctx, purchase.ID, gemRateID); err != nil {
+				s.logger.Warn(ctx, "CL refresh: failed to persist gemRateID",
+					observability.String("cert", purchase.CertNumber),
+					observability.Err(err))
+			} else {
+				purchase.GemRateID = gemRateID // keep in-memory slice in sync for gap-fill phase
+			}
+		}
+
 		// Update CL value
 		newCLCents := mathutil.ToCentsInt(card.CurrentValue)
 		if newCLCents <= 0 {
@@ -245,6 +267,11 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 		s.refreshSalesComps(ctx, existingMappings)
 	}
 
+	// Phase 3: gap-fill gemRateIDs for purchases not matched via collection/Firestore.
+	if s.gemRateUpdater != nil && s.client != nil {
+		s.gapFillGemRateIDs(ctx, purchases)
+	}
+
 	s.logger.Info(ctx, "CL refresh: complete",
 		observability.Int("updated", updated),
 		observability.Int("mapped", mapped),
@@ -254,11 +281,20 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 }
 
 func (s *CardLadderRefreshScheduler) refreshSalesComps(ctx context.Context, mappings []sqlite.CLCardMapping) {
+	type compKey struct{ gemRateID, condition string }
+	seen := make(map[compKey]bool, len(mappings))
 	fetched := 0
+
 	for _, m := range mappings {
 		if m.CLGemRateID == "" || m.CLCondition == "" {
 			continue
 		}
+
+		key := compKey{m.CLGemRateID, m.CLCondition}
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
 
 		select {
 		case <-ctx.Done():
@@ -282,6 +318,7 @@ func (s *CardLadderRefreshScheduler) refreshSalesComps(ctx context.Context, mapp
 			}
 			if err := s.salesStore.UpsertSaleComp(ctx, sqlite.CLSaleCompRecord{
 				GemRateID:   comp.GemRateID,
+				Condition:   m.CLCondition,
 				ItemID:      comp.ItemID,
 				SaleDate:    saleDate,
 				PriceCents:  priceCents,
@@ -301,6 +338,84 @@ func (s *CardLadderRefreshScheduler) refreshSalesComps(ctx context.Context, mapp
 
 	s.logger.Info(ctx, "CL sales: refresh complete",
 		observability.Int("cardsProcessed", fetched))
+}
+
+// gapFillGemRateIDs queries the CL cards index for purchases that still have no gemRateID.
+// Matches on player name + condition + grading company. Rate limited by the client's built-in limiter.
+func (s *CardLadderRefreshScheduler) gapFillGemRateIDs(ctx context.Context, purchases []campaigns.Purchase) {
+	filled := 0
+	for i := range purchases {
+		p := &purchases[i]
+		if p.GemRateID != "" || p.CardName == "" {
+			continue
+		}
+
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
+		// Build condition label from grade: "PSA 10", "PSA 9", etc.
+		grader := p.Grader
+		if grader == "" {
+			grader = "PSA"
+		}
+		condition := fmt.Sprintf("%s %s", grader, formatGrade(p.GradeValue))
+
+		filters := map[string]string{
+			"condition":      condition,
+			"gradingCompany": strings.ToLower(grader),
+		}
+
+		resp, err := s.client.FetchCardCatalog(ctx, p.CardName, filters, 0, 5)
+		if err != nil {
+			s.logger.Warn(ctx, "CL gap-fill: search failed",
+				observability.String("card", p.CardName),
+				observability.Err(err))
+			continue
+		}
+
+		if len(resp.Hits) == 0 {
+			continue
+		}
+
+		// Take the top result — highest score match
+		hit := resp.Hits[0]
+		if hit.GemRateID == "" {
+			continue
+		}
+
+		if err := s.gemRateUpdater.UpdatePurchaseGemRateID(ctx, p.ID, hit.GemRateID); err != nil {
+			s.logger.Warn(ctx, "CL gap-fill: failed to persist gemRateID",
+				observability.String("cert", p.CertNumber),
+				observability.Err(err))
+			continue
+		}
+
+		if hit.PSASpecID != 0 {
+			if err := s.gemRateUpdater.UpdatePurchasePSASpecID(ctx, p.ID, hit.PSASpecID); err != nil {
+				s.logger.Warn(ctx, "CL gap-fill: failed to persist psaSpecId",
+					observability.String("cert", p.CertNumber),
+					observability.Err(err))
+			}
+		}
+
+		filled++
+	}
+
+	if filled > 0 {
+		s.logger.Info(ctx, "CL gap-fill: complete",
+			observability.Int("filled", filled))
+	}
+}
+
+// formatGrade formats a grade value for condition labels: 10 → "10", 9.5 → "9.5".
+func formatGrade(v float64) string {
+	if v == float64(int(v)) {
+		return strconv.Itoa(int(v))
+	}
+	return strconv.FormatFloat(v, 'f', -1, 64)
 }
 
 // extractGradeValue parses "PSA 9", "PSA 9.5", or "g9" → numeric grade value.
