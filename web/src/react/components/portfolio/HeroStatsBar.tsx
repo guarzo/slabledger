@@ -1,5 +1,5 @@
 import type { PortfolioHealth, CapitalSummary } from '../../../types/campaigns';
-import { formatCents, formatPct, formatPctFromWhole } from '../../utils/formatters';
+import { formatCents, formatPct } from '../../utils/formatters';
 
 interface HeroStatsBarProps {
   health?: PortfolioHealth;
@@ -38,13 +38,14 @@ export default function HeroStatsBar({ health, capital }: HeroStatsBarProps) {
           {capital && (
             <>
               <div className="border-l border-[rgba(255,255,255,0.08)] pl-6">
-                <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Capital Exposure</div>
+                <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Wks to Cover</div>
                 <div className={`text-base font-semibold ${
                   capital.alertLevel === 'critical' ? 'text-[var(--danger)]'
                     : capital.alertLevel === 'warning' ? 'text-[var(--warning)]'
+                    : capital.recoveryRate30dCents === 0 ? 'text-[var(--text-muted)]'
                     : 'text-[var(--success)]'
                 }`}>
-                  {formatPctFromWhole(capital.exposurePct)}
+                  {capital.recoveryRate30dCents === 0 ? '—' : capital.weeksToCover > 20 ? '20+' : `~${Math.round(capital.weeksToCover)}`}
                 </div>
               </div>
               <div>
