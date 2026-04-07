@@ -249,85 +249,11 @@ func (s *DHPushScheduler) processPurchase(ctx context.Context, p campaigns.Purch
 	}
 
 	if !alreadyMapped {
-		cardName, variant := campaigns.CleanCardNameForDH(p.CardName)
-		var rotateFn func() bool
-		if rotator, ok := s.certResolver.(dh.PSAKeyRotator); ok {
-			rotateFn = rotator.RotatePSAKey
+		resolved, result := s.resolveCert(ctx, p, mappedSet)
+		if result != processMatched {
+			return result
 		}
-		resp, err := dh.ResolveCertWithRotation(ctx, dh.CertResolveRequest{
-			CertNumber: p.CertNumber,
-			GemRateID:  p.GemRateID,
-			CardName:   cardName,
-			SetName:    p.SetName,
-			CardNumber: p.CardNumber,
-			Year:       p.CardYear,
-			Variant:    variant,
-		}, s.certResolver.ResolveCert, rotateFn, s.logger, "dh push")
-		if err != nil {
-			s.logger.Warn(ctx, "dh push: cert resolve error, leaving as pending",
-				observability.String("purchaseID", p.ID),
-				observability.String("cert", p.CertNumber),
-				observability.Err(err))
-			return processSkipped
-		}
-
-		if resp.Status != dh.CertStatusMatched {
-			if resp.Status == dh.CertStatusAmbiguous && len(resp.Candidates) > 0 {
-				var saveFn func(string) error
-				if s.candidatesSaver != nil {
-					saveFn = func(j string) error { return s.candidatesSaver.UpdatePurchaseDHCandidates(ctx, p.ID, j) }
-				}
-				resolved, resolveErr := dh.ResolveAmbiguous(resp.Candidates, p.CardNumber, saveFn)
-				if resolveErr != nil {
-					s.logger.Warn(ctx, "dh push: failed to resolve/save candidates, will retry",
-						observability.String("purchaseID", p.ID), observability.Err(resolveErr))
-					return processSkipped
-				}
-				if resolved > 0 {
-					dhCardID = resolved
-					externalID := strconv.Itoa(dhCardID)
-					if saveErr := s.cardIDSaver.SaveExternalID(ctx, p.CardName, p.SetName, p.CardNumber, pricing.SourceDH, externalID); saveErr != nil {
-						s.logger.Warn(ctx, "dh push: failed to save disambiguated ID",
-							observability.String("purchaseID", p.ID), observability.Err(saveErr))
-					} else {
-						mappedSet[key] = externalID
-					}
-					// fall through to inventory push
-				} else {
-					s.logger.Debug(ctx, "dh push: cert ambiguous, marking unmatched",
-						observability.String("purchaseID", p.ID),
-						observability.String("cert", p.CertNumber))
-					if updateErr := s.statusUpdater.UpdatePurchaseDHPushStatus(ctx, p.ID, campaigns.DHPushStatusUnmatched); updateErr != nil {
-						s.logger.Warn(ctx, "dh push: failed to set unmatched status",
-							observability.String("purchaseID", p.ID),
-							observability.Err(updateErr))
-					}
-					return processUnmatched
-				}
-			} else {
-				s.logger.Debug(ctx, "dh push: cert not matched, marking unmatched",
-					observability.String("purchaseID", p.ID),
-					observability.String("cert", p.CertNumber),
-					observability.String("status", resp.Status))
-				if updateErr := s.statusUpdater.UpdatePurchaseDHPushStatus(ctx, p.ID, campaigns.DHPushStatusUnmatched); updateErr != nil {
-					s.logger.Warn(ctx, "dh push: failed to set unmatched status",
-						observability.String("purchaseID", p.ID),
-						observability.Err(updateErr))
-				}
-				return processUnmatched
-			}
-		} else {
-			dhCardID = resp.DHCardID
-
-			externalID := strconv.Itoa(dhCardID)
-			if saveErr := s.cardIDSaver.SaveExternalID(ctx, p.CardName, p.SetName, p.CardNumber, pricing.SourceDH, externalID); saveErr != nil {
-				s.logger.Warn(ctx, "dh push: failed to save external ID mapping",
-					observability.String("purchaseID", p.ID),
-					observability.Err(saveErr))
-			} else {
-				mappedSet[key] = externalID
-			}
-		}
+		dhCardID = resolved
 	}
 
 	if holdReason := campaigns.EvaluateHoldTriggers(&p, pushCfg); holdReason != "" {
@@ -416,6 +342,97 @@ func (s *DHPushScheduler) processPurchase(ctx context.Context, p campaigns.Purch
 	)
 
 	return processMatched
+}
+
+// resolveCert resolves a purchase's cert number to a DH card ID, saving the
+// mapping on success. Returns the card ID and processMatched, or 0 and a
+// non-matched result indicating what happened.
+func (s *DHPushScheduler) resolveCert(ctx context.Context, p campaigns.Purchase, mappedSet map[string]string) (int, processResult) {
+	cardName, variant := campaigns.CleanCardNameForDH(p.CardName)
+	var rotateFn func() bool
+	if rotator, ok := s.certResolver.(dh.PSAKeyRotator); ok {
+		rotateFn = rotator.RotatePSAKey
+	}
+
+	resp, err := dh.ResolveCertWithRotation(ctx, dh.CertResolveRequest{
+		CertNumber: p.CertNumber,
+		GemRateID:  p.GemRateID,
+		CardName:   cardName,
+		SetName:    p.SetName,
+		CardNumber: p.CardNumber,
+		Year:       p.CardYear,
+		Variant:    variant,
+	}, s.certResolver.ResolveCert, rotateFn, s.logger, "dh push")
+	if err != nil {
+		s.logger.Warn(ctx, "dh push: cert resolve error, leaving as pending",
+			observability.String("purchaseID", p.ID),
+			observability.String("cert", p.CertNumber),
+			observability.Err(err))
+		return 0, processSkipped
+	}
+
+	switch {
+	case resp.Status == dh.CertStatusMatched:
+		dhCardID := resp.DHCardID
+		s.saveCardIDMapping(ctx, p, dhCardID, mappedSet)
+		return dhCardID, processMatched
+
+	case resp.Status == dh.CertStatusAmbiguous && len(resp.Candidates) > 0:
+		return s.resolveAmbiguousCert(ctx, p, resp.Candidates, mappedSet)
+
+	default:
+		s.logger.Debug(ctx, "dh push: cert not matched, marking unmatched",
+			observability.String("purchaseID", p.ID),
+			observability.String("cert", p.CertNumber),
+			observability.String("status", resp.Status))
+		s.markUnmatched(ctx, p.ID)
+		return 0, processUnmatched
+	}
+}
+
+// resolveAmbiguousCert attempts to disambiguate candidates by card number.
+func (s *DHPushScheduler) resolveAmbiguousCert(ctx context.Context, p campaigns.Purchase, candidates []dh.CertCandidate, mappedSet map[string]string) (int, processResult) {
+	var saveFn func(string) error
+	if s.candidatesSaver != nil {
+		saveFn = func(j string) error { return s.candidatesSaver.UpdatePurchaseDHCandidates(ctx, p.ID, j) }
+	}
+
+	resolved, resolveErr := dh.ResolveAmbiguous(candidates, p.CardNumber, saveFn)
+	if resolveErr != nil {
+		s.logger.Warn(ctx, "dh push: failed to resolve/save candidates, will retry",
+			observability.String("purchaseID", p.ID), observability.Err(resolveErr))
+		return 0, processSkipped
+	}
+
+	if resolved == 0 {
+		s.logger.Debug(ctx, "dh push: cert ambiguous, marking unmatched",
+			observability.String("purchaseID", p.ID),
+			observability.String("cert", p.CertNumber))
+		s.markUnmatched(ctx, p.ID)
+		return 0, processUnmatched
+	}
+
+	s.saveCardIDMapping(ctx, p, resolved, mappedSet)
+	return resolved, processMatched
+}
+
+// saveCardIDMapping persists a DH card ID mapping and updates the in-memory cache.
+func (s *DHPushScheduler) saveCardIDMapping(ctx context.Context, p campaigns.Purchase, dhCardID int, mappedSet map[string]string) {
+	externalID := strconv.Itoa(dhCardID)
+	if saveErr := s.cardIDSaver.SaveExternalID(ctx, p.CardName, p.SetName, p.CardNumber, pricing.SourceDH, externalID); saveErr != nil {
+		s.logger.Warn(ctx, "dh push: failed to save external ID mapping",
+			observability.String("purchaseID", p.ID), observability.Err(saveErr))
+		return
+	}
+	mappedSet[p.DHCardKey()] = externalID
+}
+
+// markUnmatched sets a purchase's DH push status to unmatched.
+func (s *DHPushScheduler) markUnmatched(ctx context.Context, purchaseID string) {
+	if updateErr := s.statusUpdater.UpdatePurchaseDHPushStatus(ctx, purchaseID, campaigns.DHPushStatusUnmatched); updateErr != nil {
+		s.logger.Warn(ctx, "dh push: failed to set unmatched status",
+			observability.String("purchaseID", purchaseID), observability.Err(updateErr))
+	}
 }
 
 // Compile-time checks that dh.Client satisfies the push client interfaces.

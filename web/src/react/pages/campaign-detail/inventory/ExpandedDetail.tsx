@@ -19,18 +19,17 @@ interface ExpandedDetailProps {
   onSetPrice?: () => void;
 }
 
+const holdReasonLabels: Record<string, string> = {
+  'price_swing:': 'Price swing',
+  'source_disagreement:': 'Source disagreement',
+  'unreviewed_cl_change:': 'Unreviewed CL change',
+};
+
 function formatHoldReason(reason: string): string {
-  if (reason.startsWith('price_swing:')) {
-    const parts = reason.split(':');
-    return `Price swing: ${parts[1] || 'Unknown'}`;
-  }
-  if (reason.startsWith('source_disagreement:')) {
-    const parts = reason.split(':');
-    return `Source disagreement: ${parts[1] || 'Unknown'}`;
-  }
-  if (reason.startsWith('unreviewed_cl_change:')) {
-    const parts = reason.split(':');
-    return `Unreviewed CL change: ${parts[1] || 'Unknown'}`;
+  for (const [prefix, label] of Object.entries(holdReasonLabels)) {
+    if (reason.startsWith(prefix)) {
+      return `${label}: ${reason.slice(prefix.length) || 'Unknown'}`;
+    }
   }
   return reason || 'Unknown reason';
 }

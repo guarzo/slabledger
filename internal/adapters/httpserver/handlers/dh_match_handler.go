@@ -131,29 +131,15 @@ func (h *DHHandler) runBulkMatch(ctx context.Context, purchases []campaigns.Purc
 			observability.Int("candidates", len(resp.Candidates)))
 
 		if resp.Status != dh.CertStatusMatched {
-			if resp.Status == dh.CertStatusAmbiguous && len(resp.Candidates) > 0 {
-				var saveFn func(string) error
-				if h.candidatesSaver != nil {
-					saveFn = func(j string) error { return h.candidatesSaver.UpdatePurchaseDHCandidates(ctx, p.ID, j) }
-				}
-				dhCardID, resolveErr := dh.ResolveAmbiguous(resp.Candidates, p.CardNumber, saveFn)
-				if resolveErr != nil {
-					h.logger.Warn(ctx, "bulk match: failed to save candidates",
-						observability.String("cert", p.CertNumber), observability.Err(resolveErr))
-				}
-				if dhCardID > 0 {
-					externalID := strconv.Itoa(dhCardID)
-					if err := h.cardIDSaver.SaveExternalID(ctx, p.CardName, p.SetName, p.CardNumber, pricing.SourceDH, externalID); err != nil {
-						h.logger.Error(ctx, "bulk match: save disambiguated ID", observability.Err(err),
-							observability.String("cert", p.CertNumber))
-						failed++
-						continue
-					}
-					matched++
-					matchedCards = append(matchedCards, matchedCard{identity: p.ToCardIdentity(), dhCardID: dhCardID})
-					mappedSet[key] = externalID
-					continue
-				}
+			dhCardID, saveErr := h.resolveAmbiguousMatch(ctx, resp, p, mappedSet)
+			if saveErr != nil {
+				failed++
+				continue
+			}
+			if dhCardID > 0 {
+				matched++
+				matchedCards = append(matchedCards, matchedCard{identity: p.ToCardIdentity(), dhCardID: dhCardID})
+				continue
 			}
 			notFound++
 			if h.pushStatusUpdater != nil {
@@ -188,6 +174,40 @@ func (h *DHHandler) runBulkMatch(ctx context.Context, purchases []campaigns.Purc
 	if h.inventoryPusher != nil && len(matchedCards) > 0 {
 		h.pushMatchedToDH(ctx, purchases, matchedCards)
 	}
+}
+
+// resolveAmbiguousMatch attempts to disambiguate an ambiguous cert response by
+// card number. Returns the DH card ID on success, or 0 if unresolvable.
+// Returns a non-nil error only when the card was resolved but saving failed.
+func (h *DHHandler) resolveAmbiguousMatch(ctx context.Context, resp *dh.CertResolution, p campaigns.Purchase, mappedSet map[string]string) (int, error) {
+	if resp.Status != dh.CertStatusAmbiguous || len(resp.Candidates) == 0 {
+		return 0, nil
+	}
+
+	var saveFn func(string) error
+	if h.candidatesSaver != nil {
+		saveFn = func(j string) error { return h.candidatesSaver.UpdatePurchaseDHCandidates(ctx, p.ID, j) }
+	}
+
+	dhCardID, resolveErr := dh.ResolveAmbiguous(resp.Candidates, p.CardNumber, saveFn)
+	if resolveErr != nil {
+		h.logger.Warn(ctx, "bulk match: failed to save candidates",
+			observability.String("cert", p.CertNumber), observability.Err(resolveErr))
+	}
+
+	if dhCardID == 0 {
+		return 0, nil
+	}
+
+	externalID := strconv.Itoa(dhCardID)
+	if err := h.cardIDSaver.SaveExternalID(ctx, p.CardName, p.SetName, p.CardNumber, pricing.SourceDH, externalID); err != nil {
+		h.logger.Error(ctx, "bulk match: save disambiguated ID", observability.Err(err),
+			observability.String("cert", p.CertNumber))
+		return 0, err
+	}
+
+	mappedSet[p.DHCardKey()] = externalID
+	return dhCardID, nil
 }
 
 // pushMatchedToDH uses DH card IDs from the match loop because Purchase.DHCardID
