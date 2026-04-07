@@ -14,10 +14,10 @@ func (h *CampaignsHandler) HandleListPurchases(w http.ResponseWriter, r *http.Re
 		return
 	}
 	limit, offset := parsePagination(r)
-	list, err := h.service.ListPurchasesByCampaign(r.Context(), id, limit, offset)
-	if err != nil {
-		h.logger.Error(r.Context(), "failed to list purchases", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
+	list, ok := serviceCall(w, r.Context(), h.logger, "failed to list purchases", func() ([]campaigns.Purchase, error) {
+		return h.service.ListPurchasesByCampaign(r.Context(), id, limit, offset)
+	})
+	if !ok {
 		return
 	}
 	writeJSONList(w, http.StatusOK, list)
@@ -58,10 +58,10 @@ func (h *CampaignsHandler) HandleListSales(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	limit, offset := parsePagination(r)
-	list, err := h.service.ListSalesByCampaign(r.Context(), id, limit, offset)
-	if err != nil {
-		h.logger.Error(r.Context(), "failed to list sales", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
+	list, ok := serviceCall(w, r.Context(), h.logger, "failed to list sales", func() ([]campaigns.Sale, error) {
+		return h.service.ListSalesByCampaign(r.Context(), id, limit, offset)
+	})
+	if !ok {
 		return
 	}
 	writeJSONList(w, http.StatusOK, list)
@@ -135,10 +135,10 @@ func (h *CampaignsHandler) HandleBulkSales(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	result, err := h.service.CreateBulkSales(r.Context(), campaignID, req.SaleChannel, req.SaleDate, req.Items)
-	if err != nil {
-		h.logger.Error(r.Context(), "failed to create bulk sales", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
+	result, ok := serviceCall(w, r.Context(), h.logger, "failed to create bulk sales", func() (*campaigns.BulkSaleResult, error) {
+		return h.service.CreateBulkSales(r.Context(), campaignID, req.SaleChannel, req.SaleDate, req.Items)
+	})
+	if !ok {
 		return
 	}
 	writeJSON(w, http.StatusCreated, result)
@@ -234,7 +234,7 @@ func (h *CampaignsHandler) HandleCertLookup(w http.ResponseWriter, r *http.Reque
 		writeError(w, http.StatusNotFound, "cert lookup failed")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"cert":   info,
 		"market": snapshot,
 	})
@@ -271,10 +271,10 @@ func (h *CampaignsHandler) HandleQuickAdd(w http.ResponseWriter, r *http.Request
 
 // HandlePriceOverrideStats handles GET /api/admin/price-override-stats.
 func (h *CampaignsHandler) HandlePriceOverrideStats(w http.ResponseWriter, r *http.Request) {
-	stats, err := h.service.GetPriceOverrideStats(r.Context())
-	if err != nil {
-		h.logger.Error(r.Context(), "failed to get price override stats", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
+	stats, ok := serviceCall(w, r.Context(), h.logger, "failed to get price override stats", func() (*campaigns.PriceOverrideStats, error) {
+		return h.service.GetPriceOverrideStats(r.Context())
+	})
+	if !ok {
 		return
 	}
 	writeJSON(w, http.StatusOK, stats)
