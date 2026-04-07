@@ -56,16 +56,15 @@ func (h *AdvisorHandler) HandleGetCached(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	analysisType := advisor.AnalysisType(r.PathValue("type"))
-	if analysisType != advisor.AnalysisDigest && analysisType != advisor.AnalysisLiquidation {
-		writeError(w, http.StatusBadRequest, "Invalid analysis type")
+	analysisType, ok := parseAnalysisType(w, r)
+	if !ok {
 		return
 	}
 
-	cached, err := h.cacheStore.Get(r.Context(), analysisType)
-	if err != nil {
-		h.logger.Error(r.Context(), "failed to get cached analysis", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
+	cached, ok := serviceCall(w, r.Context(), h.logger, "failed to get cached analysis", func() (*advisor.CachedAnalysis, error) {
+		return h.cacheStore.Get(r.Context(), analysisType)
+	})
+	if !ok {
 		return
 	}
 
@@ -95,9 +94,8 @@ func (h *AdvisorHandler) HandleRefreshTrigger(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	analysisType := advisor.AnalysisType(r.PathValue("type"))
-	if analysisType != advisor.AnalysisDigest && analysisType != advisor.AnalysisLiquidation {
-		writeError(w, http.StatusBadRequest, "Invalid analysis type")
+	analysisType, ok := parseAnalysisType(w, r)
+	if !ok {
 		return
 	}
 
@@ -117,7 +115,7 @@ func (h *AdvisorHandler) HandleRefreshTrigger(w http.ResponseWriter, r *http.Req
 			return
 		}
 		if !staleAcquired {
-			writeJSON(w, http.StatusOK, map[string]string{"status": "running"})
+			writeJSON(w, http.StatusOK, map[string]string{"status": string(advisor.StatusRunning)})
 			return
 		}
 		lease = staleLease
@@ -167,7 +165,17 @@ func (h *AdvisorHandler) HandleRefreshTrigger(w http.ResponseWriter, r *http.Req
 		}
 	}()
 
-	writeJSON(w, http.StatusAccepted, map[string]string{"status": "running"})
+	writeJSON(w, http.StatusAccepted, map[string]string{"status": string(advisor.StatusRunning)})
+}
+
+// parseAnalysisType extracts and validates the analysis type from the request path.
+func parseAnalysisType(w http.ResponseWriter, r *http.Request) (advisor.AnalysisType, bool) {
+	t := advisor.AnalysisType(r.PathValue("type"))
+	if t != advisor.AnalysisDigest && t != advisor.AnalysisLiquidation {
+		writeError(w, http.StatusBadRequest, "Invalid analysis type")
+		return "", false
+	}
+	return t, true
 }
 
 // HandleDigest generates a weekly intelligence digest via SSE.

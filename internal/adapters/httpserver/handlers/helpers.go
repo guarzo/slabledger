@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/guarzo/slabledger/internal/adapters/httpserver/middleware"
 	"github.com/guarzo/slabledger/internal/domain/auth"
+	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
 // decodeBody decodes the JSON request body into dst.
@@ -108,4 +110,28 @@ func parsePagination(r *http.Request) (limit, offset int) {
 		offset = v
 	}
 	return
+}
+
+// serviceCall invokes fn and returns the result. On error, it logs the failure
+// and writes a 500 JSON response, returning the zero value and false.
+// The msg parameter is the log message (e.g. "failed to list campaigns").
+func serviceCall[T any](w http.ResponseWriter, ctx context.Context, logger observability.Logger, msg string, fn func() (T, error)) (T, bool) {
+	result, err := fn()
+	if err != nil {
+		logger.Error(ctx, msg, observability.Err(err))
+		writeError(w, http.StatusInternalServerError, "Internal server error")
+		return result, false
+	}
+	return result, true
+}
+
+// serviceCallVoid invokes fn. On error, it logs the failure and writes a 500
+// JSON response, returning false.
+func serviceCallVoid(w http.ResponseWriter, ctx context.Context, logger observability.Logger, msg string, fn func() error) bool {
+	if err := fn(); err != nil {
+		logger.Error(ctx, msg, observability.Err(err))
+		writeError(w, http.StatusInternalServerError, "Internal server error")
+		return false
+	}
+	return true
 }

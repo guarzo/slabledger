@@ -70,10 +70,10 @@ func (h *CardRequestHandlers) HandleListCardRequests(w http.ResponseWriter, r *h
 		h.logger.Warn(ctx, "failed to enrich pending card requests", observability.Err(err))
 	}
 
-	items, err := h.repo.ListAll(ctx)
-	if err != nil {
-		h.logger.Error(ctx, "failed to list card requests", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
+	items, ok := serviceCall(w, ctx, h.logger, "failed to list card requests", func() ([]sqlite.CardRequestSubmission, error) {
+		return h.repo.ListAll(ctx)
+	})
+	if !ok {
 		return
 	}
 	writeJSONList(w, http.StatusOK, items)
@@ -180,10 +180,10 @@ func (h *CardRequestHandlers) HandleSubmitAllCardRequests(w http.ResponseWriter,
 		h.logger.Warn(ctx, "failed to enrich before submit-all", observability.Err(err))
 	}
 
-	items, err := h.repo.ListAll(ctx)
-	if err != nil {
-		h.logger.Error(ctx, "failed to list card requests for submit-all", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
+	items, ok := serviceCall(w, ctx, h.logger, "failed to list card requests for submit-all", func() ([]sqlite.CardRequestSubmission, error) {
+		return h.repo.ListAll(ctx)
+	})
+	if !ok {
 		return
 	}
 

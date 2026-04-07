@@ -63,10 +63,10 @@ func (h *InstagramHandler) HandleStatus(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	cfg, err := h.store.Get(r.Context())
-	if err != nil {
-		h.logger.Error(r.Context(), "get instagram config failed", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
+	cfg, ok := serviceCall(w, r.Context(), h.logger, "get instagram config failed", func() (*sqlite.InstagramConfig, error) {
+		return h.store.Get(r.Context())
+	})
+	if !ok {
 		return
 	}
 
@@ -92,15 +92,13 @@ func (h *InstagramHandler) HandleConnect(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Generate CSRF state
-	state, err := auth.GenerateState()
-	if err != nil {
-		h.logger.Error(r.Context(), "generate instagram oauth state failed", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
+	state, ok := serviceCall(w, r.Context(), h.logger, "generate instagram oauth state failed", auth.GenerateState)
+	if !ok {
 		return
 	}
-	if err := h.authSvc.StoreOAuthState(r.Context(), state, time.Now().Add(5*time.Minute)); err != nil {
-		h.logger.Error(r.Context(), "store instagram oauth state failed", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
+	if !serviceCallVoid(w, r.Context(), h.logger, "store instagram oauth state failed", func() error {
+		return h.authSvc.StoreOAuthState(r.Context(), state, time.Now().Add(5*time.Minute))
+	}) {
 		return
 	}
 
@@ -164,9 +162,9 @@ func (h *InstagramHandler) HandleDisconnect(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	if err := h.store.Delete(r.Context()); err != nil {
-		h.logger.Error(r.Context(), "disconnect instagram failed", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
+	if !serviceCallVoid(w, r.Context(), h.logger, "disconnect instagram failed", func() error {
+		return h.store.Delete(r.Context())
+	}) {
 		return
 	}
 

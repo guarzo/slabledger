@@ -10,12 +10,12 @@ import (
 
 // PriceFlagsHandler handles admin price flag review endpoints.
 type PriceFlagsHandler struct {
-	service campaigns.Service
+	service campaigns.PricingService
 	logger  observability.Logger
 }
 
 // NewPriceFlagsHandler creates a new PriceFlagsHandler.
-func NewPriceFlagsHandler(service campaigns.Service, logger observability.Logger) *PriceFlagsHandler {
+func NewPriceFlagsHandler(service campaigns.PricingService, logger observability.Logger) *PriceFlagsHandler {
 	return &PriceFlagsHandler{service: service, logger: logger}
 }
 
@@ -31,10 +31,10 @@ func (h *PriceFlagsHandler) HandleListPriceFlags(w http.ResponseWriter, r *http.
 		writeError(w, http.StatusBadRequest, "invalid status: must be open, resolved, or all")
 		return
 	}
-	flags, err := h.service.ListPriceFlags(r.Context(), status)
-	if err != nil {
-		h.logger.Error(r.Context(), "failed to list price flags", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
+	flags, ok := serviceCall(w, r.Context(), h.logger, "failed to list price flags", func() ([]campaigns.PriceFlagWithContext, error) {
+		return h.service.ListPriceFlags(r.Context(), status)
+	})
+	if !ok {
 		return
 	}
 	if flags == nil {

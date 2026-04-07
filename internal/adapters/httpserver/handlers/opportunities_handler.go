@@ -9,21 +9,21 @@ import (
 
 // OpportunitiesHandler serves cross-campaign arbitrage opportunity endpoints.
 type OpportunitiesHandler struct {
-	svc    campaigns.Service
+	svc    campaigns.AnalyticsService
 	logger observability.Logger
 }
 
 // NewOpportunitiesHandler creates a new OpportunitiesHandler.
-func NewOpportunitiesHandler(svc campaigns.Service, logger observability.Logger) *OpportunitiesHandler {
+func NewOpportunitiesHandler(svc campaigns.AnalyticsService, logger observability.Logger) *OpportunitiesHandler {
 	return &OpportunitiesHandler{svc: svc, logger: logger}
 }
 
 // HandleGetAcquisitionTargets returns raw-to-graded arbitrage opportunities.
 func (h *OpportunitiesHandler) HandleGetAcquisitionTargets(w http.ResponseWriter, r *http.Request) {
-	targets, err := h.svc.GetAcquisitionTargets(r.Context())
-	if err != nil {
-		h.logger.Error(r.Context(), "get acquisition targets", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "failed to get acquisition targets")
+	targets, ok := serviceCall(w, r.Context(), h.logger, "get acquisition targets", func() ([]campaigns.AcquisitionOpportunity, error) {
+		return h.svc.GetAcquisitionTargets(r.Context())
+	})
+	if !ok {
 		return
 	}
 	writeJSONList(w, http.StatusOK, targets)
@@ -31,10 +31,10 @@ func (h *OpportunitiesHandler) HandleGetAcquisitionTargets(w http.ResponseWriter
 
 // HandleGetCrackOpportunities returns cross-campaign crack arbitrage candidates.
 func (h *OpportunitiesHandler) HandleGetCrackOpportunities(w http.ResponseWriter, r *http.Request) {
-	results, err := h.svc.GetCrackOpportunities(r.Context())
-	if err != nil {
-		h.logger.Error(r.Context(), "get crack opportunities", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "failed to get crack opportunities")
+	results, ok := serviceCall(w, r.Context(), h.logger, "get crack opportunities", func() ([]campaigns.CrackAnalysis, error) {
+		return h.svc.GetCrackOpportunities(r.Context())
+	})
+	if !ok {
 		return
 	}
 	writeJSONList(w, http.StatusOK, results)
