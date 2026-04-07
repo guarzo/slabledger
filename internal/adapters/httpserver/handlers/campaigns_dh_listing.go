@@ -175,6 +175,10 @@ func (h *CampaignsHandler) inlineMatchAndPush(ctx context.Context, p *campaigns.
 		}
 	}
 
+	if p.CLValueCents == 0 {
+		return 0
+	}
+
 	item := dh.InventoryItem{
 		DHCardID:         dhCardID,
 		CertNumber:       p.CertNumber,

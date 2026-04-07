@@ -79,6 +79,11 @@ func (h *DHHandler) HandleFixMatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if purchase.CLValueCents == 0 {
+		writeError(w, http.StatusBadRequest, "purchase has no CL value yet")
+		return
+	}
+
 	// Push to DH inventory
 	item := dh.InventoryItem{
 		DHCardID:         dhCardID,

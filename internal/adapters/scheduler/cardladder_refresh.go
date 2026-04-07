@@ -32,16 +32,11 @@ type CardLadderGemRateUpdater interface {
 	UpdatePurchasePSASpecID(ctx context.Context, purchaseID string, psaSpecID int) error
 }
 
-// CardLadderDHPushUpdater re-enrolls purchases for DH push when their CL value changes.
-type CardLadderDHPushUpdater interface {
-	UpdatePurchaseDHPushStatus(ctx context.Context, id string, status string) error
-}
-
 // CardLadderRefreshOption configures optional dependencies on a CardLadderRefreshScheduler.
 type CardLadderRefreshOption func(*CardLadderRefreshScheduler)
 
 // WithCLDHPushUpdater enables DH re-push when CL values change.
-func WithCLDHPushUpdater(u CardLadderDHPushUpdater) CardLadderRefreshOption {
+func WithCLDHPushUpdater(u DHPushStatusUpdater) CardLadderRefreshOption {
 	return func(s *CardLadderRefreshScheduler) { s.dhPushUpdater = u }
 }
 
@@ -55,7 +50,7 @@ type CardLadderRefreshScheduler struct {
 	gemRateUpdater CardLadderGemRateUpdater
 	clRecorder     campaigns.CLValueHistoryRecorder
 	salesStore     *sqlite.CLSalesStore
-	dhPushUpdater  CardLadderDHPushUpdater // optional: re-enrolls changed items for DH push
+	dhPushUpdater  DHPushStatusUpdater // optional: re-enrolls changed items for DH push
 	logger         observability.Logger
 	config         config.CardLadderConfig
 }

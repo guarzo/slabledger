@@ -100,6 +100,11 @@ func (h *DHHandler) HandleSelectMatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if purchase.CLValueCents == 0 {
+		writeError(w, http.StatusBadRequest, "purchase has no CL value yet")
+		return
+	}
+
 	item := dh.InventoryItem{
 		DHCardID:         req.DHCardID,
 		CertNumber:       purchase.CertNumber,

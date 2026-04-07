@@ -202,6 +202,39 @@ func TestDHPush_NoCertNumber_MarksUnmatched(t *testing.T) {
 	assert.Empty(t, fieldsUpdater.Calls)
 }
 
+func TestDHPush_NoCLValue_LeavesAsPending(t *testing.T) {
+	purchase := campaigns.Purchase{
+		ID:           "pur-nocl",
+		CertNumber:   "12345678",
+		CardName:     "Pikachu",
+		SetName:      "Base Set",
+		CLValueCents: 0, // no CL value yet
+	}
+	lister := &mockDHPushPendingLister{
+		ListFn: func(_ context.Context, _ string, _ int) ([]campaigns.Purchase, error) {
+			return []campaigns.Purchase{purchase}, nil
+		},
+	}
+	resolverCalled := false
+	certResolver := &mockDHPushCertResolver{
+		ResolveFn: func(_ context.Context, _ dh.CertResolveRequest) (*dh.CertResolution, error) {
+			resolverCalled = true
+			return &dh.CertResolution{Status: dh.CertStatusMatched, DHCardID: 42}, nil
+		},
+	}
+	statusUpdater := &mockDHPushStatusUpdater{}
+	pusher := &mockDHPushInventoryPusher{}
+	fieldsUpdater := &mocks.MockDHFieldsUpdater{}
+	cardIDSaver := &mockDHPushCardIDSaver{}
+
+	s := newTestDHPushScheduler(lister, statusUpdater, certResolver, pusher, fieldsUpdater, cardIDSaver)
+	s.push(context.Background())
+
+	assert.False(t, resolverCalled, "cert resolver should not be called when CL value is 0")
+	assert.Empty(t, statusUpdater.Calls, "purchase should stay pending when CL value is 0")
+	assert.Empty(t, fieldsUpdater.Calls)
+}
+
 func TestDHPush_CertResolveError_LeavesAsPending(t *testing.T) {
 	purchase := campaigns.Purchase{
 		ID:           "pur-2",
@@ -325,6 +358,8 @@ func TestDHPush_SuccessPath_UpdatesFields(t *testing.T) {
 			assert.Equal(t, "22222222", items[0].CertNumber)
 			assert.Equal(t, float64(10), items[0].Grade)
 			assert.Equal(t, 8000, items[0].CostBasisCents)
+			require.NotNil(t, items[0].MarketValueCents)
+			assert.Equal(t, 8000, *items[0].MarketValueCents)
 			return &dh.InventoryPushResponse{
 				Results: []dh.InventoryResult{
 					{DHInventoryID: 555, Status: "in_stock", AssignedPriceCents: 9000},
