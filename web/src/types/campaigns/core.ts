@@ -66,6 +66,8 @@ export interface Purchase {
   dhStatus?: string;
   dhPushStatus?: string;
   dhCandidatesJson?: string;
+  gemRateId?: string;
+  psaSpecId?: number;
   createdAt: string;
   updatedAt: string;
   // Market snapshot at time of purchase
