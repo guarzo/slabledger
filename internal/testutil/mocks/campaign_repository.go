@@ -62,10 +62,10 @@ type MockCampaignRepository struct {
 	UpdatePurchaseDHPushStatusFn   func(ctx context.Context, id string, status string) error
 	UpdatePurchaseDHCandidatesFn   func(ctx context.Context, id string, candidatesJSON string) error
 	GetPurchasesByDHPushStatusFn   func(ctx context.Context, status string, limit int) ([]campaigns.Purchase, error)
-	GetSellSheetItemsFn            func(ctx context.Context, userID int64) ([]string, error)
-	AddSellSheetItemsFn            func(ctx context.Context, userID int64, purchaseIDs []string) error
-	RemoveSellSheetItemsFn         func(ctx context.Context, userID int64, purchaseIDs []string) error
-	ClearSellSheetFn               func(ctx context.Context, userID int64) error
+	GetSellSheetItemsFn            func(ctx context.Context) ([]string, error)
+	AddSellSheetItemsFn            func(ctx context.Context, purchaseIDs []string) error
+	RemoveSellSheetItemsFn         func(ctx context.Context, purchaseIDs []string) error
+	ClearSellSheetFn               func(ctx context.Context) error
 }
 
 // NewMockCampaignRepository creates a ready-to-use MockCampaignRepository with initialized maps.
@@ -882,30 +882,30 @@ func (m *MockCampaignRepository) CountUnsoldByDHPushStatus(_ context.Context) (m
 	return map[string]int{}, nil
 }
 
-func (m *MockCampaignRepository) GetSellSheetItems(ctx context.Context, userID int64) ([]string, error) {
+func (m *MockCampaignRepository) GetSellSheetItems(ctx context.Context) ([]string, error) {
 	if m.GetSellSheetItemsFn != nil {
-		return m.GetSellSheetItemsFn(ctx, userID)
+		return m.GetSellSheetItemsFn(ctx)
 	}
 	return nil, nil
 }
 
-func (m *MockCampaignRepository) AddSellSheetItems(ctx context.Context, userID int64, purchaseIDs []string) error {
+func (m *MockCampaignRepository) AddSellSheetItems(ctx context.Context, purchaseIDs []string) error {
 	if m.AddSellSheetItemsFn != nil {
-		return m.AddSellSheetItemsFn(ctx, userID, purchaseIDs)
+		return m.AddSellSheetItemsFn(ctx, purchaseIDs)
 	}
 	return nil
 }
 
-func (m *MockCampaignRepository) RemoveSellSheetItems(ctx context.Context, userID int64, purchaseIDs []string) error {
+func (m *MockCampaignRepository) RemoveSellSheetItems(ctx context.Context, purchaseIDs []string) error {
 	if m.RemoveSellSheetItemsFn != nil {
-		return m.RemoveSellSheetItemsFn(ctx, userID, purchaseIDs)
+		return m.RemoveSellSheetItemsFn(ctx, purchaseIDs)
 	}
 	return nil
 }
 
-func (m *MockCampaignRepository) ClearSellSheet(ctx context.Context, userID int64) error {
+func (m *MockCampaignRepository) ClearSellSheet(ctx context.Context) error {
 	if m.ClearSellSheetFn != nil {
-		return m.ClearSellSheetFn(ctx, userID)
+		return m.ClearSellSheetFn(ctx)
 	}
 	return nil
 }

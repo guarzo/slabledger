@@ -125,12 +125,12 @@ type PriceReviewRepository interface {
 	OpenFlagPurchaseIDs(ctx context.Context) (map[string]bool, error)
 }
 
-// SellSheetRepository handles sell sheet item persistence.
+// SellSheetRepository handles sell sheet item persistence (global, not per-user).
 type SellSheetRepository interface {
-	GetSellSheetItems(ctx context.Context, userID int64) ([]string, error)
-	AddSellSheetItems(ctx context.Context, userID int64, purchaseIDs []string) error
-	RemoveSellSheetItems(ctx context.Context, userID int64, purchaseIDs []string) error
-	ClearSellSheet(ctx context.Context, userID int64) error
+	GetSellSheetItems(ctx context.Context) ([]string, error)
+	AddSellSheetItems(ctx context.Context, purchaseIDs []string) error
+	RemoveSellSheetItems(ctx context.Context, purchaseIDs []string) error
+	ClearSellSheet(ctx context.Context) error
 }
 
 // Repository is the composed interface for all campaign persistence.

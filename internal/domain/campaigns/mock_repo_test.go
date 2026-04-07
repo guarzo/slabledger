@@ -688,16 +688,16 @@ func (m *mockRepo) UpdatePurchaseDHCandidates(_ context.Context, _ string, _ str
 
 // --- SellSheetRepository stubs ---
 
-func (m *mockRepo) GetSellSheetItems(_ context.Context, _ int64) ([]string, error) {
+func (m *mockRepo) GetSellSheetItems(_ context.Context) ([]string, error) {
 	return []string{}, nil
 }
-func (m *mockRepo) AddSellSheetItems(_ context.Context, _ int64, _ []string) error {
+func (m *mockRepo) AddSellSheetItems(_ context.Context, _ []string) error {
 	return nil
 }
-func (m *mockRepo) RemoveSellSheetItems(_ context.Context, _ int64, _ []string) error {
+func (m *mockRepo) RemoveSellSheetItems(_ context.Context, _ []string) error {
 	return nil
 }
-func (m *mockRepo) ClearSellSheet(_ context.Context, _ int64) error {
+func (m *mockRepo) ClearSellSheet(_ context.Context) error {
 	return nil
 }
 
