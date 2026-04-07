@@ -85,6 +85,7 @@ export interface AgingItem {
   priceAnomaly?: boolean;
   anomalyReason?: string;
   hasOpenFlag?: boolean;
+  openFlagId?: number;
   recommendedPriceCents?: number;
   recommendedSource?: string;
   signals?: InventorySignals;

@@ -52,6 +52,7 @@ type AgingItem struct {
 	PriceAnomaly          bool              `json:"priceAnomaly,omitempty"`
 	AnomalyReason         string            `json:"anomalyReason,omitempty"`
 	HasOpenFlag           bool              `json:"hasOpenFlag,omitempty"`
+	OpenFlagID            int64             `json:"openFlagId,omitempty"`
 	RecommendedPriceCents int               `json:"recommendedPriceCents,omitempty"`
 	RecommendedSource     string            `json:"recommendedSource,omitempty"`
 	Signals               *InventorySignals `json:"signals,omitempty"`

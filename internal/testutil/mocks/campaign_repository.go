@@ -839,8 +839,8 @@ func (m *MockCampaignRepository) HasOpenFlag(_ context.Context, _ string) (bool,
 	return false, nil
 }
 
-func (m *MockCampaignRepository) OpenFlagPurchaseIDs(_ context.Context) (map[string]bool, error) {
-	return map[string]bool{}, nil
+func (m *MockCampaignRepository) OpenFlagPurchaseIDs(_ context.Context) (map[string]int64, error) {
+	return map[string]int64{}, nil
 }
 
 func (m *MockCampaignRepository) UpdatePurchaseDHFields(ctx context.Context, id string, update campaigns.DHFieldsUpdate) error {

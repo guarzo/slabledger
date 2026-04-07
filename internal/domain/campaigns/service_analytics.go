@@ -347,8 +347,9 @@ func (s *service) applyOpenFlags(ctx context.Context, items []AgingItem) {
 		return
 	}
 	for i := range items {
-		if flaggedIDs[items[i].Purchase.ID] {
+		if fid := flaggedIDs[items[i].Purchase.ID]; fid > 0 {
 			items[i].HasOpenFlag = true
+			items[i].OpenFlagID = fid
 		}
 	}
 }

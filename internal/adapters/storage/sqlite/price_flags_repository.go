@@ -160,20 +160,21 @@ func (r *CampaignsRepository) HasOpenFlag(ctx context.Context, purchaseID string
 	return count > 0, err
 }
 
-func (r *CampaignsRepository) OpenFlagPurchaseIDs(ctx context.Context) (map[string]bool, error) {
+func (r *CampaignsRepository) OpenFlagPurchaseIDs(ctx context.Context) (map[string]int64, error) {
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT DISTINCT purchase_id FROM price_flags WHERE resolved_at IS NULL`)
+		`SELECT purchase_id, id FROM price_flags WHERE resolved_at IS NULL`)
 	if err != nil {
 		return nil, fmt.Errorf("open flag purchase IDs: %w", err)
 	}
 	defer rows.Close() //nolint:errcheck
-	result := make(map[string]bool)
+	result := make(map[string]int64)
 	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
+		var purchaseID string
+		var flagID int64
+		if err := rows.Scan(&purchaseID, &flagID); err != nil {
 			return nil, err
 		}
-		result[id] = true
+		result[purchaseID] = flagID
 	}
 	return result, rows.Err()
 }
