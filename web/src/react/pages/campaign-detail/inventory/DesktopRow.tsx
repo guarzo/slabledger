@@ -37,11 +37,11 @@ function CompBadge({ comp }: { comp: CompSummary }) {
   const color = compBadgeColor(comp);
   return (
     <span
-      className="inline-block text-[10px] font-medium px-1.5 py-0.5 rounded-full whitespace-nowrap"
+      className="inline-block text-[10px] font-medium px-1.5 py-0.5 rounded-full max-w-[44px] truncate"
       style={{ background: color.bg, color: color.text }}
       title={`${comp.recentComps} comps (90d), median ${formatCents(comp.medianCents)}, ${comp.compsAboveCost}/${comp.recentComps} above cost`}
     >
-      {comp.recentComps} comps
+      {comp.recentComps}c
     </span>
   );
 }

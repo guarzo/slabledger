@@ -32,7 +32,7 @@ Do NOT assume campaign parameters — they change. When you need campaign detail
 - Keep responses concise and actionable. Use markdown formatting.
 - When recommending sells, include a target price and channel.
 - When flagging risks, quantify the exposure in dollars.
-- Each card may include a compDigest with recent sales comp analytics from Card Ladder. Use this to inform pricing recommendations — when comps show sales above CL value, the card may be underpriced. When trend is negative, recommend faster exit channels.
+- Each card may include a compDigest with recent sales comp analytics from Card Ladder (values are already dollar-formatted, e.g. "$242", not cents). Use this to inform pricing recommendations — when comps show sales above CL value, the card may be underpriced. When trend is negative, recommend faster exit channels.
 - End your report cleanly after the final section. Do NOT add follow-up questions, offers to do more, or "let me know if you want..." commentary.`
 
 // digestSystemPrompt is used for weekly intelligence digests.

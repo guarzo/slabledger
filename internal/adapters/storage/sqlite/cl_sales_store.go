@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"slices"
 	"sort"
 	"time"
@@ -95,55 +96,66 @@ func (s *CLSalesStore) GetLatestSaleDate(ctx context.Context, gemRateID, conditi
 }
 
 // lookupCondition resolves the CL grade condition for a cert from cl_card_mappings.
-// Returns empty string if no mapping exists.
-func (s *CLSalesStore) lookupCondition(ctx context.Context, certNumber string) string {
+// Returns ("", nil) if no mapping exists; returns ("", err) on real DB errors.
+func (s *CLSalesStore) lookupCondition(ctx context.Context, certNumber string) (string, error) {
 	if certNumber == "" {
-		return ""
+		return "", nil
 	}
 	var condition sql.NullString
-	_ = s.db.QueryRowContext(ctx,
+	err := s.db.QueryRowContext(ctx,
 		`SELECT cl_condition FROM cl_card_mappings WHERE slab_serial = ?`, certNumber,
 	).Scan(&condition)
-	return condition.String
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return condition.String, nil
 }
 
-// conditionFilter builds a WHERE clause fragment and args for gemRateID + optional condition.
+// conditionFilter builds a WHERE clause fragment and args for gemRateID + condition.
+// When condition is empty (no mapping found), returns a clause that yields no rows
+// so we don't accidentally return mixed-grade comps.
 func conditionFilter(gemRateID, condition string) (clause string, args []any) {
 	if condition != "" {
 		return "gem_rate_id = ? AND condition = ?", []any{gemRateID, condition}
 	}
-	return "gem_rate_id = ?", []any{gemRateID}
+	// No condition resolved — return nothing rather than mixing grades
+	return "gem_rate_id = ? AND 1=0", []any{gemRateID}
 }
 
 // GetCompSummary computes aggregated comp analytics for a gemRateID filtered by grade.
-// certNumber is used to resolve the CL condition (grade) from cl_card_mappings so that
-// comps are grade-specific (e.g., PSA 10 only, not mixed with PSA 9).
-// clValueCents is used for the above-CL count; CompsAboveCost is left at 0
-// because the caller derives it per-purchase via CountAboveCost.
-func (s *CLSalesStore) GetCompSummary(ctx context.Context, gemRateID, certNumber string, clValueCents int) (*campaigns.CompSummary, error) {
-	condition := s.lookupCondition(ctx, certNumber)
+// certNumber resolves the CL condition (grade) from cl_card_mappings so comps are
+// grade-specific (e.g., PSA 10 only, not mixed with PSA 9).
+// CompsAboveCL and CompsAboveCost are left at 0 — the caller derives them per-purchase
+// from PriceCentsList since different purchases may have different CL values and costs.
+func (s *CLSalesStore) GetCompSummary(ctx context.Context, gemRateID, certNumber string) (*campaigns.CompSummary, error) {
+	condition, err := s.lookupCondition(ctx, certNumber)
+	if err != nil {
+		return nil, fmt.Errorf("lookup condition for cert %s: %w", certNumber, err)
+	}
 
 	now := time.Now()
 	cutoff := now.AddDate(0, 0, -90).Format("2006-01-02")
 
 	condClause, condArgs := conditionFilter(gemRateID, condition)
 
-	// Aggregation query
-	var totalComps, recentComps, compsAboveCL int
+	// Aggregation query — threshold-agnostic (no CL or cost comparisons)
+	var totalComps, recentComps int
 	var highCents, lowCents sql.NullInt64
 	var lastSaleDate sql.NullString
-	args := append([]any{cutoff, cutoff, cutoff, cutoff, clValueCents}, condArgs...)
-	err := s.db.QueryRowContext(ctx,
+	args := append([]any{cutoff, cutoff, cutoff}, condArgs...)
+	err = s.db.QueryRowContext(ctx,
 		`SELECT
 			COUNT(*) as total_comps,
 			COUNT(CASE WHEN sale_date >= ? THEN 1 END) as recent_comps,
 			MAX(CASE WHEN sale_date >= ? THEN price_cents END) as high_cents,
 			MIN(CASE WHEN sale_date >= ? THEN price_cents END) as low_cents,
-			MAX(sale_date) as last_sale_date,
-			COUNT(CASE WHEN sale_date >= ? AND price_cents > ? THEN 1 END) as comps_above_cl
+			MAX(sale_date) as last_sale_date
 		FROM cl_sales_comps WHERE `+condClause,
 		args...,
-	).Scan(&totalComps, &recentComps, &highCents, &lowCents, &lastSaleDate, &compsAboveCL)
+	).Scan(&totalComps, &recentComps, &highCents, &lowCents, &lastSaleDate)
 	if err != nil {
 		return nil, err
 	}
@@ -179,7 +191,6 @@ func (s *CLSalesStore) GetCompSummary(ctx context.Context, gemRateID, certNumber
 		HighestCents:   int(highCents.Int64),
 		LowestCents:    int(lowCents.Int64),
 		Trend90d:       trend,
-		CompsAboveCL:   compsAboveCL,
 		ByPlatform:     platforms,
 		LastSaleDate:   lastSaleDate.String,
 		PriceCentsList: recentPrices,

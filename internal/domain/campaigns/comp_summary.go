@@ -30,9 +30,11 @@ type PlatformBreakdown struct {
 // CompSummaryProvider computes comp analytics for a card variant at a specific grade.
 type CompSummaryProvider interface {
 	// GetCompSummary returns aggregated comp data for a gemRateID filtered by grade.
-	// certNumber is used to resolve the CL condition (grade) from the card mapping table,
-	// ensuring comps are grade-specific (e.g., PSA 10 comps only, not mixed with PSA 9).
-	GetCompSummary(ctx context.Context, gemRateID, certNumber string, clValueCents int) (*CompSummary, error)
+	// certNumber resolves the CL condition (grade) from the card mapping table so comps
+	// are grade-specific (e.g., PSA 10 only, not mixed with PSA 9).
+	// CompsAboveCL and CompsAboveCost are left at 0 — the caller derives them per-purchase
+	// from PriceCentsList since different purchases may have different CL values and costs.
+	GetCompSummary(ctx context.Context, gemRateID, certNumber string) (*CompSummary, error)
 }
 
 // CountAboveCost returns how many prices in the list exceed the given cost.
