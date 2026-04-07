@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { api } from '../../js/api';
 import type { ShopifyPriceSyncMatch, ShopifyPriceSyncResponse } from '../../types/campaigns';
 import { formatCents, centsToDollars, dollarsToCents, toTitleCase } from '../utils/formatters';
@@ -7,129 +7,10 @@ import { useToast } from '../contexts/ToastContext';
 import type { SyncFilter, SyncSort, ParsedCSV, ItemDecision, Phase } from './shopify/shopifyTypes';
 import { detectAndParseCSV, quoteCSVField } from './shopify/shopifyCSVParser';
 import { computeFilterCounts, applyFilter, getSortFn } from './shopify/shopifyUtils';
+import { SyncReviewPhase } from './shopify/SyncReviewPhase';
+import { IntelDetail } from './shopify/IntelDetail';
+import { UploadZone } from './shopify/UploadZone';
 
-
-/* ── Upload Phase ─────────────────────────────────────────────────── */
-
-function UploadZone({ onFile }: { onFile: (file: File) => void }) {
-  const fileRef = useRef<HTMLInputElement>(null);
-  const [dragOver, setDragOver] = useState(false);
-
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setDragOver(false);
-    const file = e.dataTransfer.files[0];
-    if (file) onFile(file);
-  }, [onFile]);
-
-  return (
-    <div
-      className={`border-2 border-dashed rounded-xl p-12 text-center cursor-pointer transition-colors ${
-        dragOver ? 'border-[var(--brand-500)] bg-[var(--brand-500)]/5' : 'border-[var(--surface-2)] hover:border-[var(--brand-500)]/50'
-      }`}
-      onDragOver={e => { e.preventDefault(); setDragOver(true); }}
-      onDragLeave={() => setDragOver(false)}
-      onDrop={handleDrop}
-      onClick={() => fileRef.current?.click()}
-    >
-      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="mx-auto mb-4 text-[var(--text-muted)]">
-        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
-        <polyline points="17 8 12 3 7 8" />
-        <line x1="12" y1="3" x2="12" y2="15" />
-      </svg>
-      <div className="text-sm font-medium text-[var(--text)]">Drop a CSV here or click to browse</div>
-      <div className="text-xs text-[var(--text-muted)] mt-1">Supports Shopify product CSV or eBay graded batch export</div>
-      <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={e => {
-        const file = e.target.files?.[0];
-        if (file) onFile(file);
-        e.target.value = '';
-      }} />
-    </div>
-  );
-}
-
-/* ── Intel Detail (expandable row) ───────────────────────────────── */
-
-function IntelDetail({ intel }: { intel: NonNullable<ShopifyPriceSyncMatch['intel']> }) {
-  return (
-    <div className="grid grid-cols-3 gap-6 text-xs">
-      {/* Left: Insights */}
-      <div>
-        {intel.insightHeadline && (
-          <>
-            <div className="font-semibold text-[var(--text)] mb-1">{intel.insightHeadline}</div>
-            {intel.insightDetail && (
-              <div className="text-[var(--text-muted)] leading-relaxed">{intel.insightDetail}</div>
-            )}
-          </>
-        )}
-        {intel.fetchedAt && (
-          <div className="text-[10px] text-[var(--text-muted)] mt-2">
-            Updated: {new Date(intel.fetchedAt).toLocaleDateString()}
-          </div>
-        )}
-      </div>
-
-      {/* Center: Recent Sales */}
-      <div>
-        <div className="font-semibold text-[var(--text-muted)] uppercase tracking-wide text-[10px] mb-2">Recent Sales</div>
-        {intel.recentSales && intel.recentSales.length > 0 ? (
-          <table className="w-full text-[11px]">
-            <thead>
-              <tr className="text-[var(--text-muted)]">
-                <th className="text-left font-medium pb-1">Date</th>
-                <th className="text-left font-medium pb-1">Grade</th>
-                <th className="text-right font-medium pb-1">Price</th>
-                <th className="text-right font-medium pb-1">Platform</th>
-              </tr>
-            </thead>
-            <tbody>
-              {intel.recentSales.map((sale, i) => (
-                <tr key={i} className="text-[var(--text)]">
-                  <td className="py-0.5">{new Date(sale.soldAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</td>
-                  <td className="py-0.5">{sale.grade}</td>
-                  <td className="py-0.5 text-right">{formatCents(sale.priceCents)}</td>
-                  <td className="py-0.5 text-right text-[var(--text-muted)]">{sale.platform}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : (
-          <div className="text-[var(--text-muted)] italic">No recent sales</div>
-        )}
-      </div>
-
-      {/* Right: Population & ROI */}
-      <div>
-        {intel.population && intel.population.length > 0 && (
-          <div className="mb-3">
-            <div className="font-semibold text-[var(--text-muted)] uppercase tracking-wide text-[10px] mb-1">PSA Population</div>
-            <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[var(--text)]">
-              {intel.population.map((p) => (
-                <span key={p.grade}>PSA {p.grade}: <span className="font-semibold">{p.count.toLocaleString()}</span></span>
-              ))}
-            </div>
-          </div>
-        )}
-        {intel.gradingROI && intel.gradingROI.length > 0 && (
-          <div>
-            <div className="font-semibold text-[var(--text-muted)] uppercase tracking-wide text-[10px] mb-1">Grading ROI</div>
-            <div className="flex flex-col gap-0.5 text-[var(--text)]">
-              {intel.gradingROI.map((r) => (
-                <span key={r.grade}>
-                  PSA {r.grade}: <span className={r.roi >= 0 ? 'text-[var(--success)]' : 'text-red-400'}>
-                    {r.roi >= 0 ? '+' : ''}{(r.roi * 100).toFixed(0)}% ROI
-                  </span>
-                  <span className="text-[var(--text-muted)]"> ({formatCents(r.avgSaleCents)} avg)</span>
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
 
 /* ── Review Row ───────────────────────────────────────────────────── */
 
@@ -547,82 +428,22 @@ export default function ShopifySyncPage({ embedded = false }: { embedded?: boole
 
       {/* Review phase */}
       {phase === 'review' && (
-        <>
-          {/* Summary bar */}
-          <div className="flex flex-wrap items-center gap-4 mb-3 p-3 bg-[var(--surface-1)] rounded-xl border border-[var(--surface-2)]">
-            <div className="text-sm">
-              <span className="text-[var(--success)] font-medium">{matched.length}</span>
-              <span className="text-[var(--text-muted)]"> matched</span>
-            </div>
-            {unmatched.length > 0 && (
-              <div className="text-sm">
-                <span className="text-[var(--warning)] font-medium">{unmatched.length}</span>
-                <span className="text-[var(--text-muted)]"> unmatched certs</span>
-              </div>
-            )}
-            {noCertCount > 0 && (
-              <div className="text-sm">
-                <span className="text-[var(--text-muted)]">{noCertCount} without certs</span>
-              </div>
-            )}
-            <div className="ml-auto flex items-center gap-4 text-sm">
-              <span className="text-[var(--text-muted)]">
-                {updatedCount} of {filterCounts.all} marked
-              </span>
-              {updatedCount > 0 && (
-                <span className={`font-semibold border-l border-[var(--surface-2)] pl-4 ${
-                  totalImpactCents >= 0 ? 'text-[var(--success)]' : 'text-red-400'
-                }`}>
-                  Impact: {totalImpactCents >= 0 ? '+' : ''}{formatCents(totalImpactCents)}
-                </span>
-              )}
-            </div>
-          </div>
-
-          {/* Filter / sort toolbar */}
-          <div className="flex flex-wrap items-center gap-2 mb-4">
-            <span className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wide mr-1">Show:</span>
-            {([
-              ['all', `All (${filterCounts.all})`],
-              ['price_drop', `Drops (${filterCounts.price_drop})`],
-              ['price_increase', `Increases (${filterCounts.price_increase})`],
-              ['no_market_data', `No Market (${filterCounts.no_market_data})`],
-            ] as [SyncFilter, string][]).map(([key, label]) => (
-              <button
-                key={key}
-                onClick={() => setFilter(key)}
-                className={`text-xs px-3 py-1 rounded-md border transition-colors ${
-                  filter === key
-                    ? 'border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]'
-                    : 'border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text)] hover:border-[var(--text-muted)]'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-
-            <select
-              value={sort}
-              onChange={e => setSort(e.target.value as SyncSort)}
-              className="ml-auto text-xs px-2 py-1 rounded-md border border-[var(--border)] bg-[var(--surface-raised)] text-[var(--text-muted)] cursor-pointer"
-            >
-              <option value="delta">Sort: Largest Delta</option>
-              <option value="value">Sort: Highest Value</option>
-              <option value="margin">Sort: Most Margin</option>
-              <option value="name">Sort: Card Name</option>
-            </select>
-
-            <Button size="sm" variant="success" onClick={updateAll}>Update All</Button>
-            <Button
-              size="sm"
-              variant="primary"
-              disabled={updatedCount === 0}
-              onClick={() => { setPhase('export'); handleExport(); }}
-            >
-              Export ({updatedCount})
-            </Button>
-          </div>
-
+        <SyncReviewPhase
+          matchedCount={matched.length}
+          unmatchedCount={unmatched.length}
+          noCertCount={noCertCount}
+          updatedCount={updatedCount}
+          totalImpactCents={totalImpactCents}
+          filterCounts={filterCounts}
+          filter={filter}
+          sort={sort}
+          onFilterChange={setFilter}
+          onSortChange={setSort}
+          onUpdateAll={updateAll}
+          onExport={() => { setPhase('export'); handleExport(); }}
+          alignedCount={alignedCount}
+          unmatched={unmatched}
+        >
           {/* User-reviewed section */}
           <SectionTable
             title="User-Reviewed Prices"
@@ -640,26 +461,7 @@ export default function ShopifySyncPage({ embedded = false }: { embedded?: boole
             decisions={decisions}
             onDecide={setDecisionFor}
           />
-
-          {/* Aligned footer */}
-          {alignedCount > 0 && (
-            <div className="text-center text-sm text-[var(--text-muted)] py-3 mt-2 border-t border-[var(--surface-2)]">
-              {alignedCount} card{alignedCount !== 1 ? 's' : ''} already aligned — not shown
-            </div>
-          )}
-
-          {/* Unmatched section */}
-          {unmatched.length > 0 && (
-            <details className="mt-4">
-              <summary className="text-sm text-[var(--text-muted)] cursor-pointer hover:text-[var(--text)]">
-                {unmatched.length} unmatched cert numbers (not found in inventory)
-              </summary>
-              <div className="mt-2 p-3 bg-[var(--surface-1)] rounded-lg text-xs text-[var(--text-muted)]">
-                {unmatched.join(', ')}
-              </div>
-            </details>
-          )}
-        </>
+        </SyncReviewPhase>
       )}
 
       {/* Export complete */}

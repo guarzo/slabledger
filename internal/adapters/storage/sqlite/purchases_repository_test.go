@@ -548,3 +548,260 @@ func TestGetPurchasesByDHPushStatus(t *testing.T) {
 		assert.Empty(t, result)
 	})
 }
+
+func TestListUnsoldPurchases_EmptyCampaign(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewCampaignsRepository(db.DB)
+	ctx := context.Background()
+
+	// Unknown campaign ID should return empty, not an error
+	unsold, err := repo.ListUnsoldPurchases(ctx, "camp-nonexistent")
+	require.NoError(t, err)
+	assert.Empty(t, unsold)
+}
+
+func TestListAllUnsoldPurchases(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewCampaignsRepository(db.DB)
+	ctx := context.Background()
+
+	// Create one active campaign and one closed campaign
+	createTestCampaign(t, db, "camp-lau-active", "Active Campaign")
+	_, err := db.Exec(
+		`INSERT INTO campaigns (id, name, phase, created_at, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+		"camp-lau-closed", "Closed Campaign", "closed",
+	)
+	require.NoError(t, err)
+
+	// Create purchases in both campaigns
+	activeP1 := newTestPurchase("camp-lau-active", "LAU00001")
+	activeP2 := newTestPurchase("camp-lau-active", "LAU00002")
+	closedP1 := newTestPurchase("camp-lau-closed", "LAU00003")
+	require.NoError(t, repo.CreatePurchase(ctx, activeP1))
+	require.NoError(t, repo.CreatePurchase(ctx, activeP2))
+	require.NoError(t, repo.CreatePurchase(ctx, closedP1))
+
+	t.Run("excludes closed campaign purchases", func(t *testing.T) {
+		unsold, err := repo.ListAllUnsoldPurchases(ctx)
+		require.NoError(t, err)
+		// Only active campaign purchases should appear
+		assert.Len(t, unsold, 2)
+		for _, p := range unsold {
+			assert.Equal(t, "camp-lau-active", p.CampaignID)
+		}
+	})
+
+	t.Run("sold purchase excluded from results", func(t *testing.T) {
+		s := newTestSale(activeP1.ID)
+		require.NoError(t, repo.CreateSale(ctx, s))
+
+		unsold, err := repo.ListAllUnsoldPurchases(ctx)
+		require.NoError(t, err)
+		assert.Len(t, unsold, 1)
+		assert.Equal(t, activeP2.ID, unsold[0].ID)
+	})
+}
+
+func TestListUnsoldCards(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewCampaignsRepository(db.DB)
+	ctx := context.Background()
+
+	createTestCampaign(t, db, "camp-luc", "Unsold Cards Test")
+
+	// Create purchases with distinct card names and one sold card
+	p1 := newTestPurchase("camp-luc", "LUC00001")
+	p1.CardName = "Charizard"
+	p1.SetName = "Base Set"
+	p1.CardNumber = "4/102"
+
+	p2 := newTestPurchase("camp-luc", "LUC00002")
+	p2.CardName = "Blastoise"
+	p2.SetName = "Base Set"
+	p2.CardNumber = "2/102"
+
+	p3 := newTestPurchase("camp-luc", "LUC00003")
+	p3.CardName = "Pikachu"
+	p3.SetName = "Base Set"
+	p3.CardNumber = "58/102"
+
+	require.NoError(t, repo.CreatePurchase(ctx, p1))
+	require.NoError(t, repo.CreatePurchase(ctx, p2))
+	require.NoError(t, repo.CreatePurchase(ctx, p3))
+
+	t.Run("returns unsold cards", func(t *testing.T) {
+		cards, err := repo.ListUnsoldCards(ctx)
+		require.NoError(t, err)
+		assert.Len(t, cards, 3)
+	})
+
+	t.Run("sold card excluded", func(t *testing.T) {
+		s := newTestSale(p1.ID)
+		require.NoError(t, repo.CreateSale(ctx, s))
+
+		cards, err := repo.ListUnsoldCards(ctx)
+		require.NoError(t, err)
+		assert.Len(t, cards, 2)
+		for _, c := range cards {
+			// Charizard was sold, should not appear
+			assert.NotContains(t, c.CardName, "charizard")
+		}
+	})
+
+	t.Run("deduplication of same card name and set", func(t *testing.T) {
+		createTestCampaign(t, db, "camp-luc-dedup", "Dedup Test")
+
+		// Two purchases with the exact same card_name, set_name, card_number
+		// SQL DISTINCT will collapse these into one entry
+		pd1 := newTestPurchase("camp-luc-dedup", "LUC00010")
+		pd1.CardName = "Dark Gyarados"
+		pd1.SetName = "Team Rocket"
+		pd1.CardNumber = "8/82"
+
+		pd2 := newTestPurchase("camp-luc-dedup", "LUC00011")
+		pd2.CardName = "Dark Gyarados"
+		pd2.SetName = "Team Rocket"
+		pd2.CardNumber = "8/82"
+
+		require.NoError(t, repo.CreatePurchase(ctx, pd1))
+		require.NoError(t, repo.CreatePurchase(ctx, pd2))
+
+		cards, err := repo.ListUnsoldCards(ctx)
+		require.NoError(t, err)
+		// The two identical entries should collapse to one via DISTINCT + normalization
+		darkCount := 0
+		for _, c := range cards {
+			if c.CardNumber == "8/82" {
+				darkCount++
+			}
+		}
+		assert.Equal(t, 1, darkCount, "identical card+set+number should appear once")
+	})
+}
+
+func TestCountUnsoldByDHPushStatus(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewCampaignsRepository(db.DB)
+	ctx := context.Background()
+
+	createTestCampaign(t, db, "camp-cub", "Count By Push Status")
+
+	// Create purchases with different DH push states
+	// 1. push_status='pending'
+	pPending := newTestPurchase("camp-cub", "CUB00001")
+	require.NoError(t, repo.CreatePurchase(ctx, pPending))
+	require.NoError(t, repo.UpdatePurchaseDHPushStatus(ctx, pPending.ID, campaigns.DHPushStatusPending))
+
+	// 2. dh_card_id set but no push status → should count as 'matched'
+	pMatched := newTestPurchase("camp-cub", "CUB00002")
+	require.NoError(t, repo.CreatePurchase(ctx, pMatched))
+	require.NoError(t, repo.UpdatePurchaseDHFields(ctx, pMatched.ID, campaigns.DHFieldsUpdate{
+		CardID: 42, CertStatus: "matched",
+	}))
+
+	// 3. Neither push_status nor dh_card_id → empty string bucket
+	pUnknown := newTestPurchase("camp-cub", "CUB00003")
+	require.NoError(t, repo.CreatePurchase(ctx, pUnknown))
+
+	t.Run("groups by push status bucket", func(t *testing.T) {
+		counts, err := repo.CountUnsoldByDHPushStatus(ctx)
+		require.NoError(t, err)
+
+		assert.Equal(t, 1, counts[campaigns.DHPushStatusPending], "one pending")
+		assert.Equal(t, 1, counts["matched"], "one matched via dh_card_id")
+		assert.Equal(t, 1, counts[""], "one unknown/empty")
+	})
+
+	t.Run("sold purchase excluded from counts", func(t *testing.T) {
+		s := newTestSale(pPending.ID)
+		require.NoError(t, repo.CreateSale(ctx, s))
+
+		counts, err := repo.CountUnsoldByDHPushStatus(ctx)
+		require.NoError(t, err)
+
+		// pending is now sold, should not appear
+		assert.Equal(t, 0, counts[campaigns.DHPushStatusPending], "sold pending should not count")
+		assert.Equal(t, 1, counts["matched"])
+		assert.Equal(t, 1, counts[""])
+	})
+}
+
+func TestUpdatePurchaseGemRateID(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewCampaignsRepository(db.DB)
+	ctx := context.Background()
+
+	createTestCampaign(t, db, "camp-gr", "GemRateID Test")
+
+	t.Run("success", func(t *testing.T) {
+		p := newTestPurchase("camp-gr", "GR000001")
+		require.NoError(t, repo.CreatePurchase(ctx, p))
+
+		err := repo.UpdatePurchaseGemRateID(ctx, p.ID, "gem-abc-123")
+		require.NoError(t, err)
+
+		got, err := repo.GetPurchase(ctx, p.ID)
+		require.NoError(t, err)
+		assert.Equal(t, "gem-abc-123", got.GemRateID)
+	})
+
+	t.Run("overwrite existing gem_rate_id", func(t *testing.T) {
+		p := newTestPurchase("camp-gr", "GR000002")
+		require.NoError(t, repo.CreatePurchase(ctx, p))
+
+		require.NoError(t, repo.UpdatePurchaseGemRateID(ctx, p.ID, "first-gem-id"))
+		require.NoError(t, repo.UpdatePurchaseGemRateID(ctx, p.ID, "second-gem-id"))
+
+		got, err := repo.GetPurchase(ctx, p.ID)
+		require.NoError(t, err)
+		assert.Equal(t, "second-gem-id", got.GemRateID)
+	})
+
+	t.Run("not found returns ErrPurchaseNotFound", func(t *testing.T) {
+		err := repo.UpdatePurchaseGemRateID(ctx, "nonexistent", "gem-xyz")
+		assert.ErrorIs(t, err, campaigns.ErrPurchaseNotFound)
+	})
+}
+
+func TestUpdatePurchasePSASpecID(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewCampaignsRepository(db.DB)
+	ctx := context.Background()
+
+	createTestCampaign(t, db, "camp-ps", "PSASpecID Test")
+
+	t.Run("success", func(t *testing.T) {
+		p := newTestPurchase("camp-ps", "PS100001")
+		require.NoError(t, repo.CreatePurchase(ctx, p))
+
+		err := repo.UpdatePurchasePSASpecID(ctx, p.ID, 111222)
+		require.NoError(t, err)
+
+		got, err := repo.GetPurchase(ctx, p.ID)
+		require.NoError(t, err)
+		assert.Equal(t, 111222, got.PSASpecID)
+	})
+
+	t.Run("overwrite existing psa_spec_id", func(t *testing.T) {
+		p := newTestPurchase("camp-ps", "PS100002")
+		require.NoError(t, repo.CreatePurchase(ctx, p))
+
+		require.NoError(t, repo.UpdatePurchasePSASpecID(ctx, p.ID, 111111))
+		require.NoError(t, repo.UpdatePurchasePSASpecID(ctx, p.ID, 222222))
+
+		got, err := repo.GetPurchase(ctx, p.ID)
+		require.NoError(t, err)
+		assert.Equal(t, 222222, got.PSASpecID)
+	})
+
+	t.Run("not found returns ErrPurchaseNotFound", func(t *testing.T) {
+		err := repo.UpdatePurchasePSASpecID(ctx, "nonexistent", 999)
+		assert.ErrorIs(t, err, campaigns.ErrPurchaseNotFound)
+	})
+}
