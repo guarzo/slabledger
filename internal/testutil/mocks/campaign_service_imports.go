@@ -114,5 +114,5 @@ func (m *MockImportService) ResolveCert(ctx context.Context, certNumber string) 
 	if m.ResolveCertFn != nil {
 		return m.ResolveCertFn(ctx, certNumber)
 	}
-	return &campaigns.CertInfo{CertNumber: certNumber}, nil
+	return nil, nil
 }
