@@ -331,6 +331,18 @@ func (c *Client) ResetPSAKeyRotation() {
 	c.psaKeyIndex = 0
 }
 
+// IsPSARateLimitError returns true if the error indicates DH's cert resolution
+// hit a PSA API rate limit. These errors are returned as HTTP 422 and can be
+// resolved by rotating to a different PSA API key.
+func IsPSARateLimitError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "PSA API rate limit") ||
+		strings.Contains(msg, "daily limit reached")
+}
+
 // parsePSAKeys splits a comma-separated key string into trimmed, non-empty keys.
 func parsePSAKeys(raw string) []string {
 	var keys []string
