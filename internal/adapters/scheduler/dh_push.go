@@ -206,6 +206,7 @@ func (s *DHPushScheduler) processPurchase(ctx context.Context, p campaigns.Purch
 		cardName, variant := campaigns.CleanCardNameForDH(p.CardName)
 		resp, err := s.certResolver.ResolveCert(ctx, dh.CertResolveRequest{
 			CertNumber: p.CertNumber,
+			GemRateID:  p.GemRateID,
 			CardName:   cardName,
 			SetName:    p.SetName,
 			CardNumber: p.CardNumber,
