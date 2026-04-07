@@ -118,3 +118,21 @@ func (e *ErrInsufficientData) Error() string {
 
 // MinFactors is the minimum number of non-gap factors required to produce a score.
 const MinFactors = 2
+
+// Signal is a human-readable interpretation of a factor.
+type Signal struct {
+	Factor    string `json:"factor"`
+	Direction string `json:"direction"`
+	Title     string `json:"title"`
+	Detail    string `json:"detail"`
+	Metric    string `json:"metric"`
+}
+
+// StructuredResult is the base output schema shared by all flows.
+type StructuredResult struct {
+	ScoreCard        ScoreCard `json:"score_card"`
+	Verdict          Verdict   `json:"verdict"`
+	AdjustmentReason *string   `json:"adjustment_reason"`
+	KeyInsight       string    `json:"key_insight"`
+	Signals          []Signal  `json:"signals"`
+}

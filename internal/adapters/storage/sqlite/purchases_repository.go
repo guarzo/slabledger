@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardutil"
@@ -222,109 +223,60 @@ func (r *CampaignsRepository) CountPurchasesByCampaign(ctx context.Context, camp
 	return count, err
 }
 
+// execAndExpectRow runs a write query and returns ErrPurchaseNotFound if no row was affected.
+func (r *CampaignsRepository) execAndExpectRow(ctx context.Context, op, query string, args ...any) error {
+	result, err := r.db.ExecContext(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("%s: rows affected: %w", op, err)
+	}
+	if n == 0 {
+		return campaigns.ErrPurchaseNotFound
+	}
+	return nil
+}
+
 func (r *CampaignsRepository) UpdatePurchaseCLValue(ctx context.Context, id string, clValueCents int, population int) error {
-	result, err := r.db.ExecContext(ctx,
+	return r.execAndExpectRow(ctx, "update cl value",
 		`UPDATE campaign_purchases SET cl_value_cents = ?, population = ?, updated_at = ? WHERE id = ?`,
 		clValueCents, population, time.Now(), id,
 	)
-	if err != nil {
-		return err
-	}
-	n, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if n == 0 {
-		return campaigns.ErrPurchaseNotFound
-	}
-	return nil
 }
 
 func (r *CampaignsRepository) UpdatePurchaseCardMetadata(ctx context.Context, id string, cardName, cardNumber, setName string) error {
-	result, err := r.db.ExecContext(ctx,
+	return r.execAndExpectRow(ctx, "update card metadata",
 		`UPDATE campaign_purchases SET card_name = ?, card_number = ?, set_name = ?, updated_at = ? WHERE id = ?`,
 		cardName, cardNumber, setName, time.Now(), id,
 	)
-	if err != nil {
-		return err
-	}
-	n, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if n == 0 {
-		return campaigns.ErrPurchaseNotFound
-	}
-	return nil
 }
 
 func (r *CampaignsRepository) UpdatePurchaseGrade(ctx context.Context, id string, gradeValue float64) error {
-	result, err := r.db.ExecContext(ctx,
+	return r.execAndExpectRow(ctx, "update grade",
 		`UPDATE campaign_purchases SET grade_value = ?, updated_at = ? WHERE id = ?`,
 		gradeValue, time.Now(), id,
 	)
-	if err != nil {
-		return err
-	}
-	n, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if n == 0 {
-		return campaigns.ErrPurchaseNotFound
-	}
-	return nil
 }
 
 func (r *CampaignsRepository) UpdatePurchaseBuyCost(ctx context.Context, id string, buyCostCents int) error {
-	result, err := r.db.ExecContext(ctx,
+	return r.execAndExpectRow(ctx, "update buy cost",
 		`UPDATE campaign_purchases SET buy_cost_cents = ?, updated_at = ? WHERE id = ?`,
 		buyCostCents, time.Now(), id,
 	)
-	if err != nil {
-		return err
-	}
-	n, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if n == 0 {
-		return campaigns.ErrPurchaseNotFound
-	}
-	return nil
 }
 
 func (r *CampaignsRepository) UpdatePurchaseCampaign(ctx context.Context, purchaseID string, campaignID string, sourcingFeeCents int) error {
-	result, err := r.db.ExecContext(ctx,
+	return r.execAndExpectRow(ctx, "update campaign",
 		`UPDATE campaign_purchases SET campaign_id = ?, psa_sourcing_fee_cents = ?, updated_at = ? WHERE id = ?`,
 		campaignID, sourcingFeeCents, time.Now(), purchaseID,
 	)
-	if err != nil {
-		return err
-	}
-	n, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if n == 0 {
-		return campaigns.ErrPurchaseNotFound
-	}
-	return nil
 }
 
 func (r *CampaignsRepository) UpdatePurchaseCardYear(ctx context.Context, id string, year string) error {
-	result, err := r.db.ExecContext(ctx,
-		`UPDATE campaign_purchases SET card_year = ? WHERE id = ?`,
-		year, id)
-	if err != nil {
-		return err
-	}
-	n, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if n == 0 {
-		return campaigns.ErrPurchaseNotFound
-	}
-	return nil
+	return r.execAndExpectRow(ctx, "update card year",
+		`UPDATE campaign_purchases SET card_year = ?, updated_at = ? WHERE id = ?`,
+		year, time.Now(), id,
+	)
 }
