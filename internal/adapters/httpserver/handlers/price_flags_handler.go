@@ -10,12 +10,12 @@ import (
 
 // PriceFlagsHandler handles admin price flag review endpoints.
 type PriceFlagsHandler struct {
-	service campaigns.Service
+	service campaigns.PricingService
 	logger  observability.Logger
 }
 
 // NewPriceFlagsHandler creates a new PriceFlagsHandler.
-func NewPriceFlagsHandler(service campaigns.Service, logger observability.Logger) *PriceFlagsHandler {
+func NewPriceFlagsHandler(service campaigns.PricingService, logger observability.Logger) *PriceFlagsHandler {
 	return &PriceFlagsHandler{service: service, logger: logger}
 }
 

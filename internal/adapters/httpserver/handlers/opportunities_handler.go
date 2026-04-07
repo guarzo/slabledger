@@ -9,12 +9,12 @@ import (
 
 // OpportunitiesHandler serves cross-campaign arbitrage opportunity endpoints.
 type OpportunitiesHandler struct {
-	svc    campaigns.Service
+	svc    campaigns.AnalyticsService
 	logger observability.Logger
 }
 
 // NewOpportunitiesHandler creates a new OpportunitiesHandler.
-func NewOpportunitiesHandler(svc campaigns.Service, logger observability.Logger) *OpportunitiesHandler {
+func NewOpportunitiesHandler(svc campaigns.AnalyticsService, logger observability.Logger) *OpportunitiesHandler {
 	return &OpportunitiesHandler{svc: svc, logger: logger}
 }
 
