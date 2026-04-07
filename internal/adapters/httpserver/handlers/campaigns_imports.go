@@ -30,10 +30,10 @@ func (h *CampaignsHandler) HandleGlobalRefreshCL(w http.ResponseWriter, r *http.
 		return
 	}
 
-	result, svcErr := h.service.RefreshCLValuesGlobal(r.Context(), clRows)
-	if svcErr != nil {
-		h.logger.Error(r.Context(), "global CL refresh failed", observability.Err(svcErr))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
+	result, ok2 := serviceCall(w, r.Context(), h.logger, "global CL refresh failed", func() (*campaigns.GlobalCLRefreshResult, error) {
+		return h.service.RefreshCLValuesGlobal(r.Context(), clRows)
+	})
+	if !ok2 {
 		return
 	}
 	writeJSON(w, http.StatusOK, result)
@@ -57,10 +57,10 @@ func (h *CampaignsHandler) HandleGlobalImportCL(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	result, svcErr := h.service.ImportCLExportGlobal(r.Context(), clRows)
-	if svcErr != nil {
-		h.logger.Error(r.Context(), "global CL import failed", observability.Err(svcErr))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
+	result, ok2 := serviceCall(w, r.Context(), h.logger, "global CL import failed", func() (*campaigns.GlobalImportResult, error) {
+		return h.service.ImportCLExportGlobal(r.Context(), clRows)
+	})
+	if !ok2 {
 		return
 	}
 
@@ -129,10 +129,10 @@ func (h *CampaignsHandler) HandleGlobalImportPSA(w http.ResponseWriter, r *http.
 		return
 	}
 
-	result, svcErr := h.service.ImportPSAExportGlobal(r.Context(), psaRows)
-	if svcErr != nil {
-		h.logger.Error(r.Context(), "global PSA import failed", observability.Err(svcErr))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
+	result, ok2 := serviceCall(w, r.Context(), h.logger, "global PSA import failed", func() (*campaigns.PSAImportResult, error) {
+		return h.service.ImportPSAExportGlobal(r.Context(), psaRows)
+	})
+	if !ok2 {
 		return
 	}
 
@@ -186,10 +186,10 @@ func (h *CampaignsHandler) HandleGlobalImportExternal(w http.ResponseWriter, r *
 		return
 	}
 
-	result, svcErr := h.service.ImportExternalCSV(r.Context(), shopifyRows)
-	if svcErr != nil {
-		h.logger.Error(r.Context(), "external import failed", observability.Err(svcErr))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
+	result, ok2 := serviceCall(w, r.Context(), h.logger, "external import failed", func() (*campaigns.ExternalImportResult, error) {
+		return h.service.ImportExternalCSV(r.Context(), shopifyRows)
+	})
+	if !ok2 {
 		return
 	}
 	if len(importErrors) > 0 {
@@ -252,10 +252,10 @@ func (h *CampaignsHandler) HandleScanCert(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	result, err := h.service.ScanCert(r.Context(), req.CertNumber)
-	if err != nil {
-		h.logger.Error(r.Context(), "scan cert failed", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
+	result, ok := serviceCall(w, r.Context(), h.logger, "scan cert failed", func() (*campaigns.ScanCertResult, error) {
+		return h.service.ScanCert(r.Context(), req.CertNumber)
+	})
+	if !ok {
 		return
 	}
 
@@ -299,10 +299,10 @@ func (h *CampaignsHandler) HandleResolveCert(w http.ResponseWriter, r *http.Requ
 // HandleListEbayExport handles GET /api/purchases/export-ebay.
 func (h *CampaignsHandler) HandleListEbayExport(w http.ResponseWriter, r *http.Request) {
 	flaggedOnly := r.URL.Query().Get("flagged_only") == "true"
-	resp, err := h.service.ListEbayExportItems(r.Context(), flaggedOnly)
-	if err != nil {
-		h.logger.Error(r.Context(), "list ebay export items failed", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
+	resp, ok := serviceCall(w, r.Context(), h.logger, "list ebay export items failed", func() (*campaigns.EbayExportListResponse, error) {
+		return h.service.ListEbayExportItems(r.Context(), flaggedOnly)
+	})
+	if !ok {
 		return
 	}
 	writeJSON(w, http.StatusOK, resp)
@@ -358,10 +358,10 @@ func (h *CampaignsHandler) HandleImportOrders(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	result, svcErr := h.service.ImportOrdersSales(r.Context(), orderRows)
-	if svcErr != nil {
-		h.logger.Error(r.Context(), "orders import failed", observability.Err(svcErr))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
+	result, ok2 := serviceCall(w, r.Context(), h.logger, "orders import failed", func() (*campaigns.OrdersImportResult, error) {
+		return h.service.ImportOrdersSales(r.Context(), orderRows)
+	})
+	if !ok2 {
 		return
 	}
 
@@ -387,10 +387,10 @@ func (h *CampaignsHandler) HandleConfirmOrdersSales(w http.ResponseWriter, r *ht
 		return
 	}
 
-	result, err := h.service.ConfirmOrdersSales(r.Context(), items)
-	if err != nil {
-		h.logger.Error(r.Context(), "confirm orders sales failed", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
+	result, ok := serviceCall(w, r.Context(), h.logger, "confirm orders sales failed", func() (*campaigns.BulkSaleResult, error) {
+		return h.service.ConfirmOrdersSales(r.Context(), items)
+	})
+	if !ok {
 		return
 	}
 
