@@ -52,10 +52,18 @@ type AgingItem struct {
 	PriceAnomaly          bool              `json:"priceAnomaly,omitempty"`
 	AnomalyReason         string            `json:"anomalyReason,omitempty"`
 	HasOpenFlag           bool              `json:"hasOpenFlag,omitempty"`
+	OpenFlagID            int64             `json:"openFlagId,omitempty"`
 	RecommendedPriceCents int               `json:"recommendedPriceCents,omitempty"`
 	RecommendedSource     string            `json:"recommendedSource,omitempty"`
 	Signals               *InventorySignals `json:"signals,omitempty"`
 	CompSummary           *CompSummary      `json:"compSummary,omitempty"`
+}
+
+// InventoryResult wraps an inventory listing with optional warnings
+// for partial failures (e.g. flag data unavailable).
+type InventoryResult struct {
+	Items    []AgingItem `json:"items"`
+	Warnings []string    `json:"warnings,omitempty"`
 }
 
 // InventorySignals contains procedural flags for an unsold card.

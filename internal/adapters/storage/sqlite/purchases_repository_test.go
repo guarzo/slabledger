@@ -311,4 +311,3 @@ func TestUpdatePurchaseCLValue(t *testing.T) {
 		assert.ErrorIs(t, err, campaigns.ErrPurchaseNotFound)
 	})
 }
-

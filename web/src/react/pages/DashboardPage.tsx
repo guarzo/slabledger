@@ -1,15 +1,20 @@
 import PokeballLoader from '../PokeballLoader';
-import { usePortfolioHealth, useWeeklyReview, useCapitalSummary } from '../queries/useCampaignQueries';
+import { usePortfolioHealth, useWeeklyReview, useCapitalSummary, useCapitalTimeline } from '../queries/useCampaignQueries';
 import HeroStatsBar from '../components/portfolio/HeroStatsBar';
+import CapitalTimelineChart from '../components/portfolio/CapitalTimelineChart';
+import CapitalExposurePanel from '../components/portfolio/CapitalExposurePanel';
 import WeeklyReviewSection from '../components/portfolio/WeeklyReviewSection';
 import WatchlistSection from '../components/watchlist/WatchlistSection';
 import AIAnalysisWidget from '../components/advisor/AIAnalysisWidget';
+import PicksList from '../components/picks/PicksList';
+import AcquisitionWatchlist from '../components/picks/AcquisitionWatchlist';
 import { SectionErrorBoundary } from '../ui';
 
 export default function DashboardPage() {
   const { data: healthData, isLoading: healthLoading } = usePortfolioHealth();
   const { data: weeklyReview } = useWeeklyReview();
   const { data: capitalData } = useCapitalSummary();
+  const { data: capitalTimeline } = useCapitalTimeline();
 
   if (healthLoading) {
     return (
@@ -28,6 +33,18 @@ export default function DashboardPage() {
 
       {/* Tier 1: Hero Stats Bar */}
       <HeroStatsBar health={healthData} capital={capitalData} />
+
+      {/* Capital Exposure + Timeline */}
+      {(capitalData || capitalTimeline) && (
+        <div className="mb-6">
+          <SectionErrorBoundary sectionName="Capital Exposure">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <CapitalExposurePanel capital={capitalData} />
+              {capitalTimeline && <CapitalTimelineChart data={capitalTimeline} />}
+            </div>
+          </SectionErrorBoundary>
+        </div>
+      )}
 
       {/* Weekly Review */}
       <div className="mb-6">
@@ -50,9 +67,19 @@ export default function DashboardPage() {
         </SectionErrorBoundary>
       </div>
 
+      {/* Opportunities */}
+      <div className="mb-6">
+        <SectionErrorBoundary sectionName="Opportunities">
+          <div className="space-y-4">
+            <PicksList />
+            <AcquisitionWatchlist />
+          </div>
+        </SectionErrorBoundary>
+      </div>
+
       {/* Watchlist */}
       <div className="mb-6">
-        <WatchlistSection maxItems={4} />
+        <WatchlistSection maxItems={8} />
       </div>
     </div>
   );

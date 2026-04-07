@@ -36,8 +36,8 @@ type MockCampaignService struct {
 	GetPNLByChannelFn           func(ctx context.Context, campaignID string) ([]campaigns.ChannelPNL, error)
 	GetDailySpendFn             func(ctx context.Context, campaignID string, days int) ([]campaigns.DailySpend, error)
 	GetDaysToSellDistFn         func(ctx context.Context, campaignID string) ([]campaigns.DaysToSellBucket, error)
-	GetInventoryAgingFn         func(ctx context.Context, campaignID string) ([]campaigns.AgingItem, error)
-	GetGlobalInventoryAgingFn   func(ctx context.Context) ([]campaigns.AgingItem, error)
+	GetInventoryAgingFn         func(ctx context.Context, campaignID string) (*campaigns.InventoryResult, error)
+	GetGlobalInventoryAgingFn   func(ctx context.Context) (*campaigns.InventoryResult, error)
 	GetFlaggedInventoryFn       func(ctx context.Context) ([]campaigns.AgingItem, error)
 	GenerateSellSheetFn         func(ctx context.Context, campaignID string, purchaseIDs []string) (*campaigns.SellSheet, error)
 	GenerateGlobalSellSheetFn   func(ctx context.Context) (*campaigns.SellSheet, error)
@@ -270,18 +270,18 @@ func (m *MockCampaignService) GetDaysToSellDistribution(ctx context.Context, cam
 	return []campaigns.DaysToSellBucket{}, nil
 }
 
-func (m *MockCampaignService) GetInventoryAging(ctx context.Context, campaignID string) ([]campaigns.AgingItem, error) {
+func (m *MockCampaignService) GetInventoryAging(ctx context.Context, campaignID string) (*campaigns.InventoryResult, error) {
 	if m.GetInventoryAgingFn != nil {
 		return m.GetInventoryAgingFn(ctx, campaignID)
 	}
-	return []campaigns.AgingItem{}, nil
+	return &campaigns.InventoryResult{Items: []campaigns.AgingItem{}}, nil
 }
 
-func (m *MockCampaignService) GetGlobalInventoryAging(ctx context.Context) ([]campaigns.AgingItem, error) {
+func (m *MockCampaignService) GetGlobalInventoryAging(ctx context.Context) (*campaigns.InventoryResult, error) {
 	if m.GetGlobalInventoryAgingFn != nil {
 		return m.GetGlobalInventoryAgingFn(ctx)
 	}
-	return []campaigns.AgingItem{}, nil
+	return &campaigns.InventoryResult{Items: []campaigns.AgingItem{}}, nil
 }
 
 func (m *MockCampaignService) GetFlaggedInventory(ctx context.Context) ([]campaigns.AgingItem, error) {

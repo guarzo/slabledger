@@ -116,7 +116,7 @@ type Repository interface {
 	ListPriceFlags(ctx context.Context, status string) ([]PriceFlagWithContext, error)
 	ResolvePriceFlag(ctx context.Context, flagID int64, resolvedBy int64) error
 	HasOpenFlag(ctx context.Context, purchaseID string) (bool, error)
-	OpenFlagPurchaseIDs(ctx context.Context) (map[string]bool, error)
+	OpenFlagPurchaseIDs(ctx context.Context) (map[string]int64, error)
 
 	// Sell sheet
 	SellSheetRepository

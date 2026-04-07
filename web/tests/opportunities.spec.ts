@@ -55,11 +55,11 @@ test.describe('Dashboard Page - Rendering', () => {
     await expect(page.locator('h1')).toContainText('Dashboard');
   });
 
-  test('should redirect favorites to watchlist', async ({ page }) => {
+  test('should redirect favorites to dashboard', async ({ page }) => {
     await setupPageWithMocks(page, '/favorites');
 
-    // /favorites redirects to /watchlist — verify URL
-    await expect(page).toHaveURL('/watchlist');
+    // /favorites redirects to / (dashboard) — verify URL
+    await expect(page).toHaveURL('/');
   });
 });
 

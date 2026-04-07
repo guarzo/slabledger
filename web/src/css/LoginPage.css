@@ -96,31 +96,17 @@
   opacity: 0.9;
 }
 
-/* Showcase Card */
-.login-showcase {
-  text-align: center;
+/* Logo */
+.login-logo {
   position: relative;
   z-index: 1;
+  text-align: center;
 }
 
-.showcase-card-wrapper {
-  width: 340px;
-  transform: perspective(1000px) rotateX(2deg);
-  transition: transform var(--transition-slow), filter var(--transition-slow);
-  filter: drop-shadow(0 20px 40px rgba(0, 0, 0, 0.3)) drop-shadow(var(--glow-brand));
-}
-
-.showcase-card-wrapper:hover {
-  transform: perspective(1000px) rotateX(0deg) translateY(-8px);
-  filter: drop-shadow(0 25px 50px rgba(0, 0, 0, 0.4)) drop-shadow(var(--glow-brand));
-}
-
-.showcase-caption {
-  margin-top: var(--space-4);
-  font-size: var(--font-size-sm);
-  color: var(--text-subtle);
-  font-style: italic;
-  opacity: 0.8;
+.login-logo-img {
+  width: 180px;
+  height: auto;
+  filter: drop-shadow(0 10px 30px rgba(0, 0, 0, 0.3));
 }
 
 /* Login Actions */
@@ -252,10 +238,6 @@
 @media (max-width: 640px) {
   .login-page {
     padding: var(--space-4);
-  }
-
-  .showcase-card-wrapper {
-    width: 300px;
   }
 
   .login-header h1 {

@@ -208,7 +208,7 @@ func applyCLSignal(snap *MarketSnapshot, clCents int) {
 	}
 }
 
-func (s *service) GetInventoryAging(ctx context.Context, campaignID string) ([]AgingItem, error) {
+func (s *service) GetInventoryAging(ctx context.Context, campaignID string) (*InventoryResult, error) {
 	unsold, err := s.repo.ListUnsoldPurchases(ctx, campaignID)
 	if err != nil {
 		return nil, err
@@ -218,12 +218,15 @@ func (s *service) GetInventoryAging(ctx context.Context, campaignID string) ([]A
 		items = append(items, s.enrichAgingItem(ctx, &unsold[i], ""))
 	}
 
-	s.applyOpenFlags(ctx, items)
+	result := &InventoryResult{Items: items}
+	if err := s.applyOpenFlags(ctx, items); err != nil {
+		result.Warnings = append(result.Warnings, "Price flag data unavailable")
+	}
 	s.enrichCompSummaries(ctx, items)
-	return items, nil
+	return result, nil
 }
 
-func (s *service) GetGlobalInventoryAging(ctx context.Context) ([]AgingItem, error) {
+func (s *service) GetGlobalInventoryAging(ctx context.Context) (*InventoryResult, error) {
 	purchases, err := s.repo.ListAllUnsoldPurchases(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list unsold purchases: %w", err)
@@ -244,7 +247,10 @@ func (s *service) GetGlobalInventoryAging(ctx context.Context) ([]AgingItem, err
 		items = append(items, s.enrichAgingItem(ctx, &purchases[i], campaignNames[purchases[i].CampaignID]))
 	}
 
-	s.applyOpenFlags(ctx, items)
+	result := &InventoryResult{Items: items}
+	if err := s.applyOpenFlags(ctx, items); err != nil {
+		result.Warnings = append(result.Warnings, "Price flag data unavailable")
+	}
 	s.enrichCompSummaries(ctx, items)
 
 	// Compute crack candidates for signal enrichment
@@ -259,19 +265,19 @@ func (s *service) GetGlobalInventoryAging(ctx context.Context) ([]AgingItem, err
 		}
 	}
 
-	return items, nil
+	return result, nil
 }
 
 // GetFlaggedInventory returns only unsold cards that have at least one
 // inventory signal set. Used by the liquidation analysis to receive
 // pre-filtered, actionable cards instead of the full inventory.
 func (s *service) GetFlaggedInventory(ctx context.Context) ([]AgingItem, error) {
-	all, err := s.GetGlobalInventoryAging(ctx)
+	result, err := s.GetGlobalInventoryAging(ctx)
 	if err != nil {
 		return nil, err
 	}
 	var flagged []AgingItem
-	for _, item := range all {
+	for _, item := range result.Items {
 		if item.Signals.HasAnySignal() {
 			flagged = append(flagged, item)
 		}
@@ -338,19 +344,22 @@ func (s *service) crackCacheWorker(ctx context.Context) {
 }
 
 // applyOpenFlags batch-loads open price flag status and sets HasOpenFlag on matching items.
-func (s *service) applyOpenFlags(ctx context.Context, items []AgingItem) {
+// Returns an error if flag data could not be loaded (items are still valid but lack flag info).
+func (s *service) applyOpenFlags(ctx context.Context, items []AgingItem) error {
 	flaggedIDs, err := s.repo.OpenFlagPurchaseIDs(ctx)
 	if err != nil {
 		if s.logger != nil {
 			s.logger.Warn(ctx, "failed to load open flags", observability.Err(err))
 		}
-		return
+		return err
 	}
 	for i := range items {
-		if flaggedIDs[items[i].Purchase.ID] {
+		if fid := flaggedIDs[items[i].Purchase.ID]; fid > 0 {
 			items[i].HasOpenFlag = true
+			items[i].OpenFlagID = fid
 		}
 	}
+	return nil
 }
 
 // --- Tuning ---

@@ -1,14 +1,13 @@
-import type { AgingItem, CompSummary, ExpectedValue } from '../../../../types/campaigns';
+import type { AgingItem } from '../../../../types/campaigns';
 import { formatCents, daysHeldColor } from '../../../utils/formatters';
 import { TrendArrow, ConfidenceIndicator } from '../../../ui';
 import { DropdownMenu } from 'radix-ui';
-import SignalBadge from './SignalBadge';
 import MarketplaceLinks from './MarketplaceLinks';
 import {
   costBasis, bestPrice, unrealizedPL, marketTrend,
   getSourceByType, marketTooltip,
-  formatPL, deriveSignalDirection, deriveSignalDelta, displayGrade,
-  getReviewStatus, statusBorderColor, statusBadge, isHotSeller,
+  formatPL, displayGrade,
+  getReviewStatus, statusBorderColor, isHotSeller,
 } from './utils';
 
 const BADGE_COLORS = [
@@ -26,26 +25,6 @@ function campaignColor(name: string) {
   return BADGE_COLORS[Math.abs(hash) % BADGE_COLORS.length];
 }
 
-function compBadgeColor(comp: CompSummary): { bg: string; text: string } {
-  const aboveCostRatio = comp.recentComps > 0 ? comp.compsAboveCost / comp.recentComps : 0;
-  if (aboveCostRatio >= 0.6) return { bg: 'rgba(52,211,153,0.12)', text: '#34d399' }; // green
-  if (aboveCostRatio >= 0.3) return { bg: 'rgba(251,191,36,0.12)', text: '#fbbf24' }; // amber
-  return { bg: 'rgba(248,113,113,0.12)', text: '#f87171' }; // red
-}
-
-function CompBadge({ comp }: { comp: CompSummary }) {
-  const color = compBadgeColor(comp);
-  return (
-    <span
-      className="inline-block text-[10px] font-medium px-1.5 py-0.5 rounded-full max-w-[44px] truncate"
-      style={{ background: color.bg, color: color.text }}
-      title={`${comp.recentComps} comps (90d), median ${formatCents(comp.medianCents)}, ${comp.compsAboveCost}/${comp.recentComps} above cost`}
-    >
-      {comp.recentComps}c
-    </span>
-  );
-}
-
 interface DesktopRowProps {
   item: AgingItem;
   selected: boolean;
@@ -54,21 +33,17 @@ interface DesktopRowProps {
   onRecordSale: () => void;
   onFixPricing?: () => void;
   onSetPrice?: () => void;
-  ev?: ExpectedValue;
-  showEV?: boolean;
   showCampaignColumn?: boolean;
   isOnSellSheet?: boolean;
 }
 
-export default function DesktopRow({ item, selected, onToggle, onExpand, onRecordSale, onFixPricing, onSetPrice, ev, showEV, showCampaignColumn, isOnSellSheet }: DesktopRowProps) {
+export default function DesktopRow({ item, selected, onToggle, onExpand, onRecordSale, onFixPricing, onSetPrice, showCampaignColumn, isOnSellSheet }: DesktopRowProps) {
   const cb = costBasis(item.purchase);
   const snap = item.currentMarket;
   const daysColor = daysHeldColor(item.daysHeld);
   const price = snap ? bestPrice(snap) : 0;
   const pl = unrealizedPL(cb, snap);
   const trend = snap ? marketTrend(snap) : null;
-  const direction = deriveSignalDirection(item);
-  const deltaPct = deriveSignalDelta(item);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     const target = e.target as HTMLElement;
@@ -80,10 +55,6 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
   };
 
   const reviewStatus = getReviewStatus(item);
-  const badge = statusBadge(item);
-  const clValue = item.purchase.clValueCents ?? 0;
-  const clIsHigher = clValue > 0 && price > 0 && clValue > price;
-  const recPrice = item.recommendedPriceCents ?? item.purchase.reviewedPriceCents ?? 0;
   const hotSeller = isHotSeller(item);
 
   return (
@@ -153,14 +124,6 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
           <span className="text-xs text-[var(--text-muted)]">-</span>
         )}
       </div>
-      {/* CL Value */}
-      <div className="glass-table-td flex-shrink-0 text-right tabular-nums" style={{ width: '68px' }}>
-        {clValue > 0 ? (
-          <span className={clIsHigher ? 'text-[var(--success)]' : 'text-[var(--text)]'}>{formatCents(clValue)}</span>
-        ) : (
-          <span className="text-xs text-[var(--text-muted)]">&mdash;</span>
-        )}
-      </div>
       {/* Unrealized P/L */}
       <div className="glass-table-td flex-shrink-0 text-right tabular-nums print-hide-col" style={{ width: '72px' }}>
         {pl != null ? (
@@ -175,46 +138,16 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
       </div>
       {/* Days held */}
       <div className={`glass-table-td flex-shrink-0 text-center print-hide-col ${daysColor}`} style={{ width: '40px' }}>{item.daysHeld}</div>
-      {/* Signal */}
-      <div className="glass-table-td flex-shrink-0 text-center print-hide-col" style={{ width: '48px' }}>
-        {direction ? (
-          <SignalBadge direction={direction} deltaPct={deltaPct} />
-        ) : item.compSummary && item.compSummary.recentComps > 0 ? (
-          <CompBadge comp={item.compSummary} />
-        ) : (
-          <span className="text-xs text-[var(--text-muted)]">-</span>
-        )}
-      </div>
-      {/* Rec. Price */}
-      <div className="glass-table-td flex-shrink-0 text-right tabular-nums" style={{ width: '68px' }}>
-        {recPrice > 0 ? (
-          <span className="text-[var(--success)]">{formatCents(recPrice)}</span>
-        ) : (
-          <span className="text-xs text-[var(--text-muted)] italic">&mdash;</span>
-        )}
-      </div>
-      {/* Status */}
-      <div className="glass-table-td flex-shrink-0 text-center print-hide-col" style={{ width: '72px' }}>
-        <span
-          className="inline-block text-[10px] font-medium px-1.5 py-0.5 rounded-full whitespace-nowrap"
-          style={{
-            color: badge.color,
-            background: `color-mix(in srgb, ${badge.color} 12%, transparent)`,
-          }}
+      {/* Sell button */}
+      <div className="glass-table-td flex-shrink-0 text-center !px-1 print-hide-actions" style={{ width: '48px' }} onClick={e => e.stopPropagation()}>
+        <button
+          type="button"
+          onClick={onRecordSale}
+          className="text-xs font-medium px-2 py-1 rounded bg-[var(--brand-500)]/20 text-[var(--brand-400)] hover:bg-[var(--brand-500)]/40 transition-colors"
         >
-          {badge.label}
-        </span>
+          Sell
+        </button>
       </div>
-      {/* EV */}
-      {showEV && (
-        <div className="glass-table-td flex-shrink-0 text-right" style={{ width: '64px' }}>
-          {ev ? (
-            <span className={`${ev.evCents >= 0 ? 'text-[var(--success)]' : 'text-[var(--danger)]'}`}>{formatPL(ev.evCents)}</span>
-          ) : (
-            <span className="text-xs text-[var(--text-muted)]">-</span>
-          )}
-        </div>
-      )}
       {/* Actions overflow menu */}
       <div className="glass-table-td flex-shrink-0 text-center !px-1 print-hide-actions" style={{ width: '28px' }}>
         <DropdownMenu.Root>
@@ -240,12 +173,6 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
               className="w-40 py-1 bg-[var(--surface-1)] border border-[var(--surface-2)] rounded-lg shadow-lg z-50
                          data-[state=open]:animate-[fadeIn_150ms_ease-out]"
             >
-              <DropdownMenu.Item
-                onSelect={onRecordSale}
-                className="px-3 py-2 text-sm text-[var(--text-muted)] hover:bg-[rgba(255,255,255,0.04)] hover:text-[var(--text)] outline-none cursor-default"
-              >
-                Record Sale
-              </DropdownMenu.Item>
               {onSetPrice && (
                 <DropdownMenu.Item
                   onSelect={onSetPrice}

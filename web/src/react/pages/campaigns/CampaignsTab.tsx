@@ -1,11 +1,28 @@
 import { Link } from 'react-router-dom';
 import type { Campaign, CampaignPNL, CreateCampaignInput, Phase } from '../../../types/campaigns';
-import { formatCents, formatPct } from '../../utils/formatters';
+import { formatCents, formatPct, formatPriceRange } from '../../utils/formatters';
 import { EmptyState, Button } from '../../ui';
 import CardShell from '../../ui/CardShell';
 import CampaignFormFields from '../../ui/CampaignFormFields';
-import PNLBadge from './PNLBadge';
 import type { UseFormReturn } from '../../hooks/useForm';
+
+const phaseColors: Record<Phase, string> = {
+  active: '#059669',
+  pending: '#f59e0b',
+  closed: '#4b5563',
+};
+
+function FilterSummary({ c }: { c: Campaign }) {
+  const parts: string[] = [c.sport];
+  if (c.yearRange) parts.push(c.yearRange);
+  if (c.gradeRange) parts.push(`PSA ${c.gradeRange}`);
+  if (c.priceRange) parts.push(formatPriceRange(c.priceRange));
+  return (
+    <span className="text-xs text-[var(--text-muted)] truncate">
+      {parts.join(' / ')}
+    </span>
+  );
+}
 
 export default function CampaignsTab({
   campaigns,
@@ -16,7 +33,6 @@ export default function CampaignsTab({
   createMutation,
   activeOnly,
   onToggleCreate,
-  phaseGradients,
 }: {
   campaigns: Campaign[];
   pnlMap: Record<string, CampaignPNL>;
@@ -26,7 +42,6 @@ export default function CampaignsTab({
   createMutation: { isPending: boolean };
   activeOnly: boolean;
   onToggleCreate: () => void;
-  phaseGradients: Record<Phase, string>;
 }) {
   return (
     <>
@@ -63,45 +78,91 @@ export default function CampaignsTab({
           action={activeOnly ? undefined : { label: '+ New Campaign', onClick: onToggleCreate }}
         />
       ) : (
-        <div className="grid gap-4">
-          {campaigns.map(c => (
-            <Link key={c.id} to={`/campaigns/${c.id}`}
-              className="block p-4 bg-[var(--surface-1)] rounded-xl border border-[var(--surface-2)] hover:border-[var(--brand-500)]/50 hover:-translate-y-0.5 hover:shadow-[var(--shadow-2)] transition-all">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <h3 className="text-lg font-semibold text-[var(--text)]">{c.name}</h3>
-                    <span
-                      className="px-2 py-0.5 text-xs font-medium text-white rounded-full"
-                      style={{ background: phaseGradients[c.phase] }}
-                    >
-                      {c.phase}
-                    </span>
+        <div className="flex flex-col gap-1">
+          {campaigns.map(c => {
+            const pnl = pnlMap[c.id];
+            const isClosed = c.phase === 'closed';
+            const isProfit = pnl ? pnl.netProfitCents >= 0 : true;
+            const profitColor = isProfit ? 'text-[var(--success)]' : 'text-[var(--danger)]';
+
+            return (
+              <Link
+                key={c.id}
+                to={`/campaigns/${c.id}`}
+                className={`group flex items-center gap-3 px-3 py-2.5 bg-[var(--surface-1)] rounded-lg border border-[var(--surface-2)] hover:border-[var(--brand-500)]/50 hover:bg-[var(--surface-0)] transition-colors ${isClosed ? 'opacity-50' : ''}`}
+              >
+                {/* Phase accent bar */}
+                <div
+                  className="w-[3px] self-stretch rounded-full flex-shrink-0"
+                  style={{ backgroundColor: phaseColors[c.phase] }}
+                  aria-hidden="true"
+                />
+                <span className="sr-only">Phase: {c.phase}</span>
+
+                {/* Left: name + filters */}
+                <div className="flex flex-col min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-[var(--text)] truncate">{c.name}</span>
                     {healthMap[c.id] && (
-                      <span
-                        className={`inline-block w-2 h-2 rounded-full ${
-                          healthMap[c.id] === 'critical' ? 'bg-[var(--danger)]' :
-                          healthMap[c.id] === 'warning' ? 'bg-[var(--warning)]' : 'bg-[var(--success)]'
-                        }`}
-                        title={`Health: ${healthMap[c.id]}`}
-                      />
+                      <>
+                        <span
+                          className={`inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                            healthMap[c.id] === 'critical' ? 'bg-[var(--danger)]' :
+                            healthMap[c.id] === 'warning' ? 'bg-[var(--warning)]' : 'bg-[var(--success)]'
+                          }`}
+                          aria-hidden="true"
+                        />
+                        <span className="sr-only">Health: {healthMap[c.id]}</span>
+                      </>
                     )}
                   </div>
-                  <div className="flex gap-4 text-sm text-[var(--text-muted)]">
-                    <span>{c.sport}</span>
-                    {c.yearRange && <span>{c.yearRange}</span>}
-                    {c.gradeRange && <span>PSA {c.gradeRange}</span>}
-                    {c.priceRange && <span>${c.priceRange}</span>}
-                  </div>
+                  <FilterSummary c={c} />
                 </div>
-                <div className="text-right text-sm text-[var(--text-muted)]">
-                  <div>Buy at {formatPct(c.buyTermsCLPct)} CL</div>
-                  <div>Cap: {formatCents(c.dailySpendCapCents)}/day</div>
+
+                {/* Right: inline stats */}
+                <div className="flex items-center gap-4 flex-shrink-0 text-xs text-[var(--text-muted)]">
+                  {/* P&L */}
+                  {pnl && (
+                    <div className="hidden sm:flex items-center gap-3">
+                      <span className={`font-medium ${profitColor}`}>
+                        {formatCents(pnl.netProfitCents)}
+                      </span>
+                      <span className={`font-medium ${profitColor}`}>
+                        {formatPct(pnl.roi)}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Sell-through */}
+                  {pnl && (
+                    <span className="hidden md:inline">
+                      {pnl.totalSold}/{pnl.totalPurchases} ({formatPct(pnl.sellThroughPct)})
+                    </span>
+                  )}
+
+                  {/* Buy terms */}
+                  <span className="hidden lg:inline">
+                    {formatCents(c.dailySpendCapCents)}/d @ {formatPct(c.buyTermsCLPct)}
+                  </span>
+
+                  {/* Chevron */}
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                    className="w-4 h-4 text-[var(--text-muted)] group-hover:text-[var(--brand-500)] transition-colors"
+                    aria-hidden="true"
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
                 </div>
-              </div>
-              {pnlMap[c.id] && <PNLBadge pnl={pnlMap[c.id]} />}
-            </Link>
-          ))}
+              </Link>
+            );
+          })}
         </div>
       )}
     </>

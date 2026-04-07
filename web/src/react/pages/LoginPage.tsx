@@ -1,25 +1,8 @@
 import React from 'react';
 import { Navigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { CardPriceCard } from '../ui';
-import type { GradeKey, GradeData } from '../../types/pricing';
+import logoSrc from '../../assets/card-yeti-business-logo.png';
 import '../../css/LoginPage.css';
-
-const SHOWCASE_CARD = {
-  name: 'Charizard ex',
-  setName: 'Obsidian Flames',
-  number: '223',
-  imageUrl: 'https://assets.tcgdex.net/en/sv/sv3/223/high.webp',
-};
-
-const SHOWCASE_PRICES = { raw: 28.50, psa8: 65.00, psa9: 155.00, psa10: 850.00 };
-
-const SHOWCASE_GRADE_DATA: Partial<Record<GradeKey, GradeData>> = {
-  raw: { ebay: { price: 28.50, confidence: 'high', salesCount: 42, trend: 'stable', median: 27.00, min: 22.00, max: 35.00, avg7day: 29.10, volume7day: 8 }, estimate: null },
-  psa8: { ebay: { price: 65.00, confidence: 'high', salesCount: 18, trend: 'up', median: 62.00, min: 55.00, max: 78.00, avg7day: 63.50, volume7day: 4 }, estimate: null },
-  psa9: { ebay: { price: 155.00, confidence: 'high', salesCount: 24, trend: 'up', median: 150.00, min: 130.00, max: 185.00, avg7day: 148.00, volume7day: 5 }, estimate: null },
-  psa10: { ebay: { price: 850.00, confidence: 'medium', salesCount: 6, trend: 'up', median: 825.00, min: 750.00, max: 950.00, avg7day: 820.00, volume7day: 2 }, estimate: null },
-};
 
 const LoginPage: React.FC = () => {
   const { user, loading, login } = useAuth();
@@ -48,17 +31,9 @@ const LoginPage: React.FC = () => {
         <p>Graded Card Portfolio Tracker</p>
       </div>
 
-      {/* Showcase Card */}
-      <div className="login-showcase">
-        <div className="showcase-card-wrapper">
-          <CardPriceCard
-            card={SHOWCASE_CARD}
-            prices={SHOWCASE_PRICES}
-            variant="featured"
-            gradeData={SHOWCASE_GRADE_DATA}
-          />
-        </div>
-        <p className="showcase-caption">Track your graded card investments</p>
+      {/* Logo */}
+      <div className="login-logo">
+        <img src={logoSrc} alt="Card Yeti" className="login-logo-img" width="180" height="120" />
       </div>
 
       {/* Login Button */}
