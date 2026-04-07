@@ -17,10 +17,10 @@ func (h *CampaignsHandler) HandleCampaignPNL(w http.ResponseWriter, r *http.Requ
 	if !ok {
 		return
 	}
-	pnl, err := h.service.GetCampaignPNL(r.Context(), id)
-	if err != nil {
-		h.logger.Error(r.Context(), "failed to get campaign PNL", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
+	pnl, ok := serviceCall(w, r.Context(), h.logger, "failed to get campaign PNL", func() (*campaigns.CampaignPNL, error) {
+		return h.service.GetCampaignPNL(r.Context(), id)
+	})
+	if !ok {
 		return
 	}
 	writeJSON(w, http.StatusOK, pnl)
@@ -32,10 +32,10 @@ func (h *CampaignsHandler) HandlePNLByChannel(w http.ResponseWriter, r *http.Req
 	if !ok {
 		return
 	}
-	channels, err := h.service.GetPNLByChannel(r.Context(), id)
-	if err != nil {
-		h.logger.Error(r.Context(), "failed to get PNL by channel", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
+	channels, ok := serviceCall(w, r.Context(), h.logger, "failed to get PNL by channel", func() ([]campaigns.ChannelPNL, error) {
+		return h.service.GetPNLByChannel(r.Context(), id)
+	})
+	if !ok {
 		return
 	}
 	writeJSONList(w, http.StatusOK, channels)
@@ -81,10 +81,10 @@ func (h *CampaignsHandler) HandleDaysToSell(w http.ResponseWriter, r *http.Reque
 	if !ok {
 		return
 	}
-	buckets, err := h.service.GetDaysToSellDistribution(r.Context(), id)
-	if err != nil {
-		h.logger.Error(r.Context(), "failed to get days-to-sell", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
+	buckets, ok := serviceCall(w, r.Context(), h.logger, "failed to get days-to-sell", func() ([]campaigns.DaysToSellBucket, error) {
+		return h.service.GetDaysToSellDistribution(r.Context(), id)
+	})
+	if !ok {
 		return
 	}
 	writeJSONList(w, http.StatusOK, buckets)
@@ -96,10 +96,10 @@ func (h *CampaignsHandler) HandleInventory(w http.ResponseWriter, r *http.Reques
 	if !ok {
 		return
 	}
-	result, err := h.service.GetInventoryAging(r.Context(), id)
-	if err != nil {
-		h.logger.Error(r.Context(), "failed to get inventory", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
+	result, ok := serviceCall(w, r.Context(), h.logger, "failed to get inventory", func() (*campaigns.InventoryResult, error) {
+		return h.service.GetInventoryAging(r.Context(), id)
+	})
+	if !ok {
 		return
 	}
 	writeJSON(w, http.StatusOK, result)
@@ -142,10 +142,10 @@ func (h *CampaignsHandler) HandleGlobalInventory(w http.ResponseWriter, r *http.
 		writeError(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
-	result, err := h.service.GetGlobalInventoryAging(r.Context())
-	if err != nil {
-		h.logger.Error(r.Context(), "failed to get global inventory", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
+	result, ok := serviceCall(w, r.Context(), h.logger, "failed to get global inventory", func() (*campaigns.InventoryResult, error) {
+		return h.service.GetGlobalInventoryAging(r.Context())
+	})
+	if !ok {
 		return
 	}
 	writeJSON(w, http.StatusOK, result)
@@ -153,10 +153,10 @@ func (h *CampaignsHandler) HandleGlobalInventory(w http.ResponseWriter, r *http.
 
 // HandleGlobalSellSheet handles POST /api/sell-sheet.
 func (h *CampaignsHandler) HandleGlobalSellSheet(w http.ResponseWriter, r *http.Request) {
-	sheet, err := h.service.GenerateGlobalSellSheet(r.Context())
-	if err != nil {
-		h.logger.Error(r.Context(), "global sell sheet generation failed", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
+	sheet, ok := serviceCall(w, r.Context(), h.logger, "global sell sheet generation failed", func() (*campaigns.SellSheet, error) {
+		return h.service.GenerateGlobalSellSheet(r.Context())
+	})
+	if !ok {
 		return
 	}
 	writeJSON(w, http.StatusOK, sheet)
@@ -233,10 +233,10 @@ func (h *CampaignsHandler) HandleExpectedValues(w http.ResponseWriter, r *http.R
 	if !ok {
 		return
 	}
-	portfolio, err := h.service.GetExpectedValues(r.Context(), id)
-	if err != nil {
-		h.logger.Error(r.Context(), "failed to get expected values", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
+	portfolio, ok := serviceCall(w, r.Context(), h.logger, "failed to get expected values", func() (*campaigns.EVPortfolio, error) {
+		return h.service.GetExpectedValues(r.Context(), id)
+	})
+	if !ok {
 		return
 	}
 	writeJSON(w, http.StatusOK, portfolio)
