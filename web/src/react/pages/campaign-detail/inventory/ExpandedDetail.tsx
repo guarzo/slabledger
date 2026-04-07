@@ -7,16 +7,17 @@ import { queryKeys } from '../../../queries/queryKeys';
 import PriceSignalCard from './PriceSignalCard';
 import CompSummaryPanel from './CompSummaryPanel';
 import { costBasis } from './utils';
-import { PriceDecisionBar, buildPriceSources, preSelectSource } from '../../../ui';
+import { PriceDecisionBar, buildPriceSources, preSelectSource, Button } from '../../../ui';
 
 interface ExpandedDetailProps {
   item: AgingItem;
   onReviewed?: () => void;
   campaignId?: string;
   onOpenFlagDialog?: () => void;
+  onResolveFlag?: (flagId: number) => void;
 }
 
-export default function ExpandedDetail({ item, onReviewed, campaignId, onOpenFlagDialog }: ExpandedDetailProps) {
+export default function ExpandedDetail({ item, onReviewed, campaignId, onOpenFlagDialog, onResolveFlag }: ExpandedDetailProps) {
   const queryClient = useQueryClient();
   const toast = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -98,6 +99,20 @@ export default function ExpandedDetail({ item, onReviewed, campaignId, onOpenFla
         onFlag={onOpenFlagDialog}
         isSubmitting={isSubmitting}
       />
+
+      {/* Resolve flag action */}
+      {item.hasOpenFlag && item.openFlagId && onResolveFlag && (
+        <div className="mt-3 flex items-center gap-2">
+          <span className="text-xs text-[var(--warning)]">This card has an open price flag</span>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => onResolveFlag(item.openFlagId!)}
+          >
+            Resolve Flag
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

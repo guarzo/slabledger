@@ -10,7 +10,7 @@ import { api } from '../../js/api';
 import type { Campaign, CampaignPNL, CreateCampaignInput, Phase } from '../../types/campaigns';
 import { queryKeys } from '../queries/queryKeys';
 import PokeballLoader from '../PokeballLoader';
-import { formatCents, formatPct, getErrorMessage } from '../utils/formatters';
+import { formatCents, formatPct, formatPriceRange, getErrorMessage } from '../utils/formatters';
 import { useToast } from '../contexts/ToastContext';
 import { useForm } from '../hooks/useForm';
 import { defaultCampaignInput } from '../utils/campaignConstants';
@@ -18,14 +18,9 @@ import { Button, SectionErrorBoundary } from '../ui';
 import { useCampaigns, useCreateCampaign, usePortfolioHealth } from '../queries/useCampaignQueries';
 import PortfolioSummary from './campaigns/PortfolioSummary';
 import CampaignsTab from './campaigns/CampaignsTab';
+import InvoicesSection from '../components/insights/InvoicesSection';
 
 const phaseOrder: Record<Phase, number> = { active: 0, pending: 1, closed: 2 };
-
-const phaseGradients: Record<Phase, string> = {
-  active: 'linear-gradient(135deg, #059669, #10b981)',
-  pending: 'linear-gradient(135deg, #f59e0b, #fbbf24)',
-  closed: 'linear-gradient(135deg, #374151, #4b5563)',
-};
 
 function sortCampaigns(campaigns: Campaign[]): Campaign[] {
   return [...campaigns].sort((a, b) => {
@@ -44,14 +39,6 @@ function validateCampaignForm(values: CreateCampaignInput) {
   return errors;
 }
 
-function formatPriceRange(raw: string): string {
-  if (!raw) return '';
-  const parts = raw.split(/\s*[-\u2013\u2014]\s*/);
-  return parts.map(p => {
-    const n = p.replace(/[^0-9.]/g, '');
-    return n ? `$${n}` : p;
-  }).join(' to ');
-}
 
 // Parsed campaign: only fields explicitly present in the text are set.
 // inclusionList + exclusionMode are always included — absent line = cleared.
@@ -405,8 +392,11 @@ export default function CampaignsPage() {
           createMutation={createMutation}
           activeOnly={activeOnly}
           onToggleCreate={() => setShowCreate(true)}
-          phaseGradients={phaseGradients}
         />
+      </SectionErrorBoundary>
+
+      <SectionErrorBoundary sectionName="Invoices">
+        <InvoicesSection />
       </SectionErrorBoundary>
     </div>
   );

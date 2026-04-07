@@ -153,6 +153,18 @@ export function toTitleCase(text: string): string {
   });
 }
 
+/**
+ * Format a raw price range string (e.g. "10-50") into a display format ("$10 to $50").
+ */
+export function formatPriceRange(raw: string): string {
+  if (!raw) return '';
+  const parts = raw.split(/\s*[-\u2013\u2014]\s*/);
+  return parts.map(p => {
+    const n = p.replace(/[^0-9.]/g, '');
+    return n ? `$${n}` : p;
+  }).join(' to ');
+}
+
 export type SignalDirection = 'rising' | 'falling' | 'stable';
 
 /** Display label for a market signal direction. */

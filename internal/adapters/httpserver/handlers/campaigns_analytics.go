@@ -96,13 +96,13 @@ func (h *CampaignsHandler) HandleInventory(w http.ResponseWriter, r *http.Reques
 	if !ok {
 		return
 	}
-	items, err := h.service.GetInventoryAging(r.Context(), id)
+	result, err := h.service.GetInventoryAging(r.Context(), id)
 	if err != nil {
 		h.logger.Error(r.Context(), "failed to get inventory", observability.Err(err))
 		writeError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
-	writeJSONList(w, http.StatusOK, items)
+	writeJSON(w, http.StatusOK, result)
 }
 
 // HandleSellSheet handles POST /api/campaigns/{id}/sell-sheet.
@@ -142,13 +142,13 @@ func (h *CampaignsHandler) HandleGlobalInventory(w http.ResponseWriter, r *http.
 		writeError(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
-	items, err := h.service.GetGlobalInventoryAging(r.Context())
+	result, err := h.service.GetGlobalInventoryAging(r.Context())
 	if err != nil {
 		h.logger.Error(r.Context(), "failed to get global inventory", observability.Err(err))
 		writeError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
-	writeJSONList(w, http.StatusOK, items)
+	writeJSON(w, http.StatusOK, result)
 }
 
 // HandleGlobalSellSheet handles POST /api/sell-sheet.

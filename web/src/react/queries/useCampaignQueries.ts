@@ -89,12 +89,13 @@ export function useDaysToSell(campaignId: string) {
 }
 
 export function useInventory(campaignId: string, opts?: { enabled?: boolean }) {
-  return useQuery({
+  const query = useQuery({
     queryKey: queryKeys.campaigns.inventory(campaignId),
     queryFn: () => api.getInventory(campaignId),
     enabled: !!campaignId && (opts?.enabled ?? true),
     staleTime: ANALYTICS_STALE_TIME,
   });
+  return { ...query, data: query.data?.items, warnings: query.data?.warnings };
 }
 
 export function useTuning(campaignId: string) {
@@ -167,11 +168,12 @@ export function useGlobalSellSheet() {
 }
 
 export function useGlobalInventory() {
-  return useQuery({
+  const query = useQuery({
     queryKey: queryKeys.portfolio.globalInventory,
     queryFn: () => api.getGlobalInventory(),
     staleTime: ANALYTICS_STALE_TIME,
   });
+  return { ...query, data: query.data?.items, warnings: query.data?.warnings };
 }
 
 export function useCrackCandidates(campaignId: string) {

@@ -7,7 +7,7 @@ import PostPreview from '../components/social/PostPreview';
 import { CardShell } from '../ui/CardShell';
 import Button from '../ui/Button';
 
-export default function ContentPage() {
+export default function ContentPage({ embedded = false }: { embedded?: boolean }) {
   const [previewPostId, setPreviewPostId] = useState<string | null>(null);
   const [showPublished, setShowPublished] = useState(false);
   const toast = useToast();
@@ -41,31 +41,33 @@ export default function ContentPage() {
   );
 
   if (previewPostId) {
-    return (
-      <div className="max-w-6xl mx-auto px-4">
-        <PostPreview
-          postId={previewPostId}
-          onBack={() => setPreviewPostId(null)}
-          igConnected={igStatus?.connected}
-        />
-      </div>
+    const preview = (
+      <PostPreview
+        postId={previewPostId}
+        onBack={() => setPreviewPostId(null)}
+        igConnected={igStatus?.connected}
+      />
     );
+    if (embedded) return preview;
+    return <div className="max-w-6xl mx-auto px-4">{preview}</div>;
   }
 
-  return (
-    <div className="max-w-6xl mx-auto px-4">
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold text-gradient text-gradient-premium">Content</h1>
-          {igStatus && (
-            <span className={`text-xs px-2 py-0.5 rounded-full ${
-              igStatus.connected
-                ? 'bg-emerald-500/10 text-emerald-400'
-                : 'bg-gray-500/10 text-gray-400'
-            }`}>
-              {igStatus.connected ? `@${igStatus.username}` : 'IG not connected'}
-            </span>
-          )}
+  const igBadge = igStatus && (
+    <span className={`text-xs px-2 py-0.5 rounded-full ${
+      igStatus.connected
+        ? 'bg-emerald-500/10 text-emerald-400'
+        : 'bg-gray-500/10 text-gray-400'
+    }`}>
+      {igStatus.connected ? `@${igStatus.username}` : 'IG not connected'}
+    </span>
+  );
+
+  const content = (
+    <>
+      <div className={`flex items-center justify-between ${embedded ? 'mb-4' : 'mb-6'}`}>
+        <div className={`flex items-center ${embedded ? 'gap-2' : 'gap-3'}`}>
+          {!embedded && <h1 className="text-2xl font-bold text-gradient text-gradient-premium">Content</h1>}
+          {igBadge}
         </div>
         <Button
           onClick={handleGenerate}
@@ -140,6 +142,9 @@ export default function ContentPage() {
           ))}
         </div>
       )}
-    </div>
+    </>
   );
+
+  if (embedded) return content;
+  return <div className="max-w-6xl mx-auto px-4">{content}</div>;
 }

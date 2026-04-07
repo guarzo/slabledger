@@ -42,7 +42,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
     reviewStats, tabCounts, showEV, evPortfolio, evMap,
     pageSellSheetCount, sellSheetActive, filteredAndSortedItems,
     totalCost, totalMarket, totalPL,
-    handleSort, handleReviewed, handleFlagSubmit, handlePrint,
+    handleSort, handleReviewed, handleResolveFlag, handleFlagSubmit, handlePrint,
     toggleSelect, toggleAll, toggleExpand,
     openSaleModal, closeSaleModal, handleFixPricing, handleSetPrice,
     handlePriceSaved, handleHintSaved, sellSheet, toast,
@@ -250,55 +250,36 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
       {!showAll && (
         <div className="flex items-center gap-2 mb-3 flex-wrap sell-sheet-no-print">
           {([
-            { key: 'needs_review' as const, label: 'Needs Review', color: 'var(--warning)' },
-            { key: 'large_gap' as const, label: 'Large Gap', color: 'var(--danger)' },
-            { key: 'no_data' as const, label: 'No Data', color: 'var(--text-muted)' },
-            { key: 'flagged' as const, label: 'Flagged', color: 'var(--danger)' },
-            { key: 'card_show' as const, label: 'Card Show', color: 'var(--brand-400)' },
+            { key: 'exceptions' as const, label: 'Exceptions', color: 'var(--warning)' },
+            { key: 'sell_sheet' as const, label: 'Sell Sheet', color: 'var(--brand-400)' },
             { key: 'all' as const, label: 'All', color: 'var(--text)' },
-          ] as const).map(tab => (
-            <button
-              key={tab.key}
-              type="button"
-              onClick={() => setFilterTab(tab.key)}
-              className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-colors ${
-                filterTab === tab.key
-                  ? 'border-[var(--brand-500)] bg-[var(--brand-500)]/10 text-[var(--brand-400)]'
-                  : 'border-[var(--surface-2)] text-[var(--text-muted)] hover:text-[var(--text)] hover:border-[var(--text-muted)]'
-              }`}
-            >
-              {tab.label}
-              <span
-                className="ml-1.5 inline-block min-w-[18px] text-center text-[10px] font-semibold px-1 py-[1px] rounded-full"
-                style={{
-                  background: filterTab === tab.key ? `color-mix(in srgb, ${tab.color} 15%, transparent)` : 'rgba(255,255,255,0.06)',
-                  color: filterTab === tab.key ? tab.color : 'var(--text-muted)',
-                }}
+            { key: 'card_show' as const, label: 'Card Show', color: 'var(--brand-400)' },
+          ] as const).map(tab => {
+            const count = tab.key === 'sell_sheet' ? pageSellSheetCount : tabCounts[tab.key];
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setFilterTab(tab.key)}
+                className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-colors ${
+                  filterTab === tab.key
+                    ? 'border-[var(--brand-500)] bg-[var(--brand-500)]/10 text-[var(--brand-400)]'
+                    : 'border-[var(--surface-2)] text-[var(--text-muted)] hover:text-[var(--text)] hover:border-[var(--text-muted)]'
+                }`}
               >
-                {tabCounts[tab.key]}
-              </span>
-            </button>
-          ))}
-          <button
-            type="button"
-            onClick={() => setFilterTab('sell_sheet')}
-            className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-colors ${
-              filterTab === 'sell_sheet'
-                ? 'border-[var(--brand-500)] bg-[var(--brand-500)]/10 text-[var(--brand-400)]'
-                : 'border-[var(--surface-2)] text-[var(--text-muted)] hover:text-[var(--text)] hover:border-[var(--text-muted)]'
-            }`}
-          >
-            Sell Sheet
-            <span
-              className="ml-1.5 inline-block min-w-[18px] text-center text-[10px] font-semibold px-1 py-[1px] rounded-full"
-              style={{
-                background: filterTab === 'sell_sheet' ? 'color-mix(in srgb, var(--brand-400) 15%, transparent)' : 'rgba(255,255,255,0.06)',
-                color: filterTab === 'sell_sheet' ? 'var(--brand-400)' : 'var(--text-muted)',
-              }}
-            >
-              {pageSellSheetCount}
-            </span>
-          </button>
+                {tab.label}
+                <span
+                  className="ml-1.5 inline-block min-w-[18px] text-center text-[10px] font-semibold px-1 py-[1px] rounded-full"
+                  style={{
+                    background: filterTab === tab.key ? `color-mix(in srgb, ${tab.color} 15%, transparent)` : 'rgba(255,255,255,0.06)',
+                    color: filterTab === tab.key ? tab.color : 'var(--text-muted)',
+                  }}
+                >
+                  {count}
+                </span>
+              </button>
+            );
+          })}
         </div>
       )}
 
@@ -320,7 +301,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
         <MobileSellSheetView
           items={filteredAndSortedItems}
           onRecordSale={(item) => openSaleModal([item])}
-          onExit={() => setFilterTab('needs_review')}
+          onExit={() => setFilterTab('exceptions')}
           searchQuery={searchQuery}
           onSearch={setSearchQuery}
           sellSheetCount={pageSellSheetCount}
@@ -396,13 +377,9 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
             <SortableHeader label="Gr" sortKey="grade" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-center" style={{ width: '36px' }} />
             <SortableHeader label="Cost" sortKey="cost" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-right" style={{ width: '72px' }} />
             <SortableHeader label="Market" sortKey="market" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-right" style={{ width: '120px' }} />
-            <div className="glass-table-th flex-shrink-0 text-right" style={{ width: '68px' }}>CL</div>
             <SortableHeader label="P/L" sortKey="pl" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-right print-hide-col" style={{ width: '72px' }} />
             <SortableHeader label="Days" sortKey="days" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-center print-hide-col" style={{ width: '40px' }} />
-            <div className="glass-table-th flex-shrink-0 text-center print-hide-col" style={{ width: '48px' }}>Signal</div>
-            <div className="glass-table-th flex-shrink-0 text-right" style={{ width: '68px' }}>Rec.</div>
-            <div className="glass-table-th flex-shrink-0 text-center print-hide-col" style={{ width: '72px' }}>Status</div>
-            {showEV && <SortableHeader label="EV" sortKey="ev" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-right" style={{ width: '64px' }} />}
+            <div className="glass-table-th flex-shrink-0 text-center print-hide-actions" style={{ width: '48px' }}>Sell</div>
             <div className="glass-table-th flex-shrink-0 !px-1 print-hide-actions" style={{ width: '28px' }}></div>
           </div>
           {/* Rows */}
@@ -424,13 +401,11 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                         onRecordSale={() => openSaleModal([item])}
                         onFixPricing={() => handleFixPricing(item.purchase)}
                         onSetPrice={() => handleSetPrice(item)}
-                        ev={evMap.get(item.purchase.certNumber)}
-                        showEV={!!showEV}
                         showCampaignColumn={showCampaignColumn}
                         isOnSellSheet={!sellSheetActive && sellSheet.has(item.purchase.id)}
                       />
                     </div>
-                    {isExpanded && <ExpandedDetail item={item} onReviewed={handleReviewed} campaignId={campaignId} onOpenFlagDialog={() => setFlagTarget({ purchaseId: item.purchase.id, cardName: item.purchase.cardName, grade: item.purchase.gradeValue })} />}
+                    {isExpanded && <ExpandedDetail item={item} onReviewed={handleReviewed} campaignId={campaignId} onOpenFlagDialog={() => setFlagTarget({ purchaseId: item.purchase.id, cardName: item.purchase.cardName, grade: item.purchase.gradeValue })} onResolveFlag={handleResolveFlag} />}
                   </div>
                 );
               })
@@ -466,13 +441,11 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                           onRecordSale={() => openSaleModal([item])}
                           onFixPricing={() => handleFixPricing(item.purchase)}
                           onSetPrice={() => handleSetPrice(item)}
-                          ev={evMap.get(item.purchase.certNumber)}
-                          showEV={!!showEV}
                           showCampaignColumn={showCampaignColumn}
                           isOnSellSheet={!sellSheetActive && sellSheet.has(item.purchase.id)}
                         />
                       </div>
-                      {isExpanded && <ExpandedDetail item={item} onReviewed={handleReviewed} campaignId={campaignId} onOpenFlagDialog={() => setFlagTarget({ purchaseId: item.purchase.id, cardName: item.purchase.cardName, grade: item.purchase.gradeValue })} />}
+                      {isExpanded && <ExpandedDetail item={item} onReviewed={handleReviewed} campaignId={campaignId} onOpenFlagDialog={() => setFlagTarget({ purchaseId: item.purchase.id, cardName: item.purchase.cardName, grade: item.purchase.gradeValue })} onResolveFlag={handleResolveFlag} />}
                     </div>
                   );
                 })}

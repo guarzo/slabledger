@@ -1,4 +1,5 @@
 import { useRef, useState, ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { api } from '../../../js/api';
 import type { Campaign, GlobalImportResult, PSAImportResult } from '../../../types/campaigns';
@@ -281,7 +282,12 @@ export default function OperationsTab({ campaigns, operationState, setOperationS
         <div className="mb-4 p-3 rounded-lg bg-[var(--surface-2)]/50 text-sm">
           <div className="flex items-center justify-between mb-1">
             <span className="font-medium text-[var(--text)]">Import Complete</span>
-            <button type="button" onClick={() => setImportResult(null)} className="text-[var(--text-muted)] hover:text-[var(--text)] text-xs">Dismiss</button>
+            <div className="flex items-center gap-3">
+              <Link to="/inventory" className="text-xs font-medium text-[var(--brand-400)] hover:text-[var(--brand-300)] underline">
+                Review prices &rarr;
+              </Link>
+              <button type="button" onClick={() => setImportResult(null)} className="text-[var(--text-muted)] hover:text-[var(--text)] text-xs">Dismiss</button>
+            </div>
           </div>
           <div className="flex flex-wrap gap-3 text-xs">
             {importResult.allocated > 0 && <span className="text-[var(--success)]">{importResult.allocated} allocated</span>}
@@ -312,7 +318,12 @@ export default function OperationsTab({ campaigns, operationState, setOperationS
         <div className="mb-4 p-3 rounded-lg bg-[var(--surface-2)]/50 text-sm">
           <div className="flex items-center justify-between mb-1">
             <span className="font-medium text-[var(--text)]">PSA Import Complete</span>
-            <button type="button" onClick={() => setPsaResult(null)} className="text-[var(--text-muted)] hover:text-[var(--text)] text-xs">Dismiss</button>
+            <div className="flex items-center gap-3">
+              <Link to="/inventory" className="text-xs font-medium text-[var(--brand-400)] hover:text-[var(--brand-300)] underline">
+                Review prices &rarr;
+              </Link>
+              <button type="button" onClick={() => setPsaResult(null)} className="text-[var(--text-muted)] hover:text-[var(--text)] text-xs">Dismiss</button>
+            </div>
           </div>
           <div className="flex flex-wrap gap-3 text-xs">
             {psaResult.allocated > 0 && <span className="text-[var(--success)]">{psaResult.allocated} allocated</span>}

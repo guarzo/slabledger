@@ -138,13 +138,13 @@ func (p *Provider) CampaignData(ctx context.Context, campaignID string) (*adviso
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		items, err := p.svc.GetInventoryAging(ctx, campaignID)
-		if err != nil || len(items) == 0 {
+		result, err := p.svc.GetInventoryAging(ctx, campaignID)
+		if err != nil || result == nil || len(result.Items) == 0 {
 			return
 		}
 		mu.Lock()
 		defer mu.Unlock()
-		avgVelocity, avgDelta := agingSignals(items)
+		avgVelocity, avgDelta := agingSignals(result.Items)
 		if avgVelocity != nil {
 			data.SalesPerMonth = avgVelocity
 		}

@@ -172,8 +172,8 @@ type Service interface {
 	GetPNLByChannel(ctx context.Context, campaignID string) ([]ChannelPNL, error)
 	GetDailySpend(ctx context.Context, campaignID string, days int) ([]DailySpend, error)
 	GetDaysToSellDistribution(ctx context.Context, campaignID string) ([]DaysToSellBucket, error)
-	GetInventoryAging(ctx context.Context, campaignID string) ([]AgingItem, error)
-	GetGlobalInventoryAging(ctx context.Context) ([]AgingItem, error)
+	GetInventoryAging(ctx context.Context, campaignID string) (*InventoryResult, error)
+	GetGlobalInventoryAging(ctx context.Context) (*InventoryResult, error)
 	GetFlaggedInventory(ctx context.Context) ([]AgingItem, error)
 
 	// Sell sheet

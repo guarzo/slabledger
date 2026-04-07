@@ -8,6 +8,7 @@ import { useSellSheet } from '../../../hooks/useSellSheet';
 import { queryKeys } from '../../../queries/queryKeys';
 import { useExpectedValues } from '../../../queries/useCampaignQueries';
 import { api } from '../../../../js/api';
+import { getErrorMessage } from '../../../utils/formatters';
 import { costBasis, bestPrice } from './utils';
 import type { SortKey, SortDir } from './utils';
 import { computeInventoryMeta, filterAndSortItems } from './inventoryCalcs';
@@ -40,7 +41,7 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
   const [searchQuery, setSearchQuery] = useState('');
   const [isPrinting, setIsPrinting] = useState(false);
   const [statsExpanded, setStatsExpanded] = useState(false);
-  const [filterTab, setFilterTab] = useState<FilterTab>('needs_review');
+  const [filterTab, setFilterTab] = useState<FilterTab>('exceptions');
   const [showAll, setShowAll] = useState(false);
   const debouncedSearch = useDebounce(searchQuery, 300);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -93,6 +94,16 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
     setExpandedId(null);
   }, [invalidateInventory]);
 
+  const handleResolveFlag = useCallback(async (flagId: number) => {
+    try {
+      await api.resolvePriceFlag(flagId);
+      toast.success('Flag resolved');
+      invalidateInventory();
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Failed to resolve flag'));
+    }
+  }, [toast, invalidateInventory]);
+
   const handleFlagSubmit = useCallback(async (reason: PriceFlagReason) => {
     if (!flagTarget) return;
     setFlagSubmitting(true);
@@ -102,8 +113,7 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
       setFlagTarget(null);
       handleReviewed();
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to submit price flag';
-      toast.error(message);
+      toast.error(getErrorMessage(err, 'Failed to submit price flag'));
     } finally {
       setFlagSubmitting(false);
     }
@@ -245,6 +255,7 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
     // Handlers
     handleSort,
     handleReviewed,
+    handleResolveFlag,
     handleFlagSubmit,
     handlePrint,
     toggleSelect,

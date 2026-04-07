@@ -103,14 +103,14 @@ func (e *CampaignToolExecutor) registerGetInventoryAlerts() {
 		}
 
 		// Build inventory lookup from global inventory aging.
-		aging, err := e.svc.GetGlobalInventoryAging(ctx)
+		agingResult, err := e.svc.GetGlobalInventoryAging(ctx)
 		if err != nil {
 			return "", fmt.Errorf("fetch inventory: %w", err)
 		}
 
 		type invKey struct{ name, set string }
-		invSet := make(map[invKey]bool, len(aging))
-		for _, item := range aging {
+		invSet := make(map[invKey]bool, len(agingResult.Items))
+		for _, item := range agingResult.Items {
 			k := invKey{
 				name: strings.ToLower(item.Purchase.CardName),
 				set:  strings.ToLower(item.Purchase.SetName),

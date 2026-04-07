@@ -5,7 +5,7 @@ import InventoryTab from './campaign-detail/InventoryTab';
 import AIAnalysisWidget from '../components/advisor/AIAnalysisWidget';
 
 export default function GlobalInventoryPage() {
-  const { data: items = [], isLoading, isError, error } = useGlobalInventory();
+  const { data: items = [], warnings, isLoading, isError, error } = useGlobalInventory();
   const sellSheet = useSellSheet();
   const pageSellSheetCount = useMemo(() => items.filter(i => sellSheet.has(i.purchase.id)).length, [items, sellSheet]);
 
@@ -39,6 +39,14 @@ export default function GlobalInventoryPage() {
           <h1 className="text-[22px] font-bold text-[var(--text)] tracking-tight">Inventory</h1>
         </div>
       </div>
+
+      {warnings && warnings.length > 0 && (
+        <div className="mb-4 p-3 rounded-lg bg-[var(--warning)]/10 border border-[var(--warning)]/20 text-sm text-[var(--warning)]">
+          <ul className="list-disc list-inside space-y-1">
+            {warnings.map((w, i) => <li key={i}>{w}</li>)}
+          </ul>
+        </div>
+      )}
 
       <InventoryTab items={items} isLoading={isLoading} showCampaignColumn />
 
