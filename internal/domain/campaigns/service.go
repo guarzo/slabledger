@@ -119,140 +119,18 @@ type CertInfo struct {
 	PopHigher  int     `json:"popHigher"`
 }
 
-// Service defines the business logic for campaign operations.
+// Service is the full campaigns API — a composition of all sub-interfaces.
+// Consumers that only need a subset should depend on the narrower interface
+// (e.g. AnalyticsService, ImportService) to follow the Interface Segregation Principle.
+// Sub-interfaces are defined in service_interfaces.go.
 type Service interface {
-	CreateCampaign(ctx context.Context, c *Campaign) error
-	GetCampaign(ctx context.Context, id string) (*Campaign, error)
-	ListCampaigns(ctx context.Context, activeOnly bool) ([]Campaign, error)
-	UpdateCampaign(ctx context.Context, c *Campaign) error
-	DeleteCampaign(ctx context.Context, id string) error
-
-	CreatePurchase(ctx context.Context, p *Purchase) error
-	GetPurchase(ctx context.Context, id string) (*Purchase, error)
-	DeletePurchase(ctx context.Context, id string) error
-	ListPurchasesByCampaign(ctx context.Context, campaignID string, limit, offset int) ([]Purchase, error)
-
-	CreateSale(ctx context.Context, s *Sale, campaign *Campaign, purchase *Purchase) error
-	CreateBulkSales(ctx context.Context, campaignID string, channel SaleChannel, saleDate string, items []BulkSaleInput) (*BulkSaleResult, error)
-	ListSalesByCampaign(ctx context.Context, campaignID string, limit, offset int) ([]Sale, error)
-	DeleteSaleByPurchaseID(ctx context.Context, purchaseID string) error
-
-	// Global (cross-campaign) operations
-	RefreshCLValuesGlobal(ctx context.Context, rows []CLExportRow) (*GlobalCLRefreshResult, error)
-	ImportCLExportGlobal(ctx context.Context, rows []CLExportRow) (*GlobalImportResult, error)
-	ImportPSAExportGlobal(ctx context.Context, rows []PSAExportRow) (*PSAImportResult, error)
-	ExportCLFormatGlobal(ctx context.Context, missingCLOnly bool) ([]CLExportEntry, error)
-	ReassignPurchase(ctx context.Context, purchaseID string, newCampaignID string) error
-
-	// External purchases
-	EnsureExternalCampaign(ctx context.Context) (*Campaign, error)
-	ImportExternalCSV(ctx context.Context, rows []ShopifyExportRow) (*ExternalImportResult, error)
-
-	// Orders sales import
-	ImportOrdersSales(ctx context.Context, rows []OrdersExportRow) (*OrdersImportResult, error)
-	ConfirmOrdersSales(ctx context.Context, items []OrdersConfirmItem) (*BulkSaleResult, error)
-
-	// Capital & Invoice management
-	GetCapitalSummary(ctx context.Context) (*CapitalSummary, error)
-	GetCashflowConfig(ctx context.Context) (*CashflowConfig, error)
-	UpdateCashflowConfig(ctx context.Context, cfg *CashflowConfig) error
-	ListInvoices(ctx context.Context) ([]Invoice, error)
-	UpdateInvoice(ctx context.Context, inv *Invoice) error
-
-	// Portfolio health
-	GetPortfolioHealth(ctx context.Context) (*PortfolioHealth, error)
-	GetPortfolioChannelVelocity(ctx context.Context) ([]ChannelVelocity, error)
-
-	// Cert lookup
-	LookupCert(ctx context.Context, certNumber string) (*CertInfo, *MarketSnapshot, error)
-	QuickAddPurchase(ctx context.Context, campaignID string, req QuickAddRequest) (*Purchase, error)
-
-	// Analytics
-	GetCampaignPNL(ctx context.Context, campaignID string) (*CampaignPNL, error)
-	GetPNLByChannel(ctx context.Context, campaignID string) ([]ChannelPNL, error)
-	GetDailySpend(ctx context.Context, campaignID string, days int) ([]DailySpend, error)
-	GetDaysToSellDistribution(ctx context.Context, campaignID string) ([]DaysToSellBucket, error)
-	GetInventoryAging(ctx context.Context, campaignID string) (*InventoryResult, error)
-	GetGlobalInventoryAging(ctx context.Context) (*InventoryResult, error)
-	GetFlaggedInventory(ctx context.Context) ([]AgingItem, error)
-
-	// Sell sheet
-	GenerateSellSheet(ctx context.Context, campaignID string, purchaseIDs []string) (*SellSheet, error)
-	GenerateGlobalSellSheet(ctx context.Context) (*SellSheet, error)
-	GenerateSelectedSellSheet(ctx context.Context, purchaseIDs []string) (*SellSheet, error)
-
-	// Tuning
-	GetCampaignTuning(ctx context.Context, campaignID string) (*TuningResponse, error)
-
-	// Portfolio insights & suggestions
-	GetPortfolioInsights(ctx context.Context) (*PortfolioInsights, error)
-	GetCampaignSuggestions(ctx context.Context) (*SuggestionsResponse, error)
-
-	// Revocation
-	FlagForRevocation(ctx context.Context, segmentLabel, segmentDimension, reason string) (*RevocationFlag, error)
-	ListRevocationFlags(ctx context.Context) ([]RevocationFlag, error)
-	GenerateRevocationEmail(ctx context.Context, flagID string) (string, error)
-
-	// Capital timeline
-	GetCapitalTimeline(ctx context.Context) (*CapitalTimeline, error)
-
-	// Weekly review
-	GetWeeklyReviewSummary(ctx context.Context) (*WeeklyReviewSummary, error)
-
-	// Crack arbitrage
-	GetCrackCandidates(ctx context.Context, campaignID string) ([]CrackAnalysis, error)
-	GetCrackOpportunities(ctx context.Context) ([]CrackAnalysis, error)
-
-	// Acquisition arbitrage
-	GetAcquisitionTargets(ctx context.Context) ([]AcquisitionOpportunity, error)
-
-	// Expected value
-	GetExpectedValues(ctx context.Context, campaignID string) (*EVPortfolio, error)
-	EvaluatePurchase(ctx context.Context, campaignID string, cardName string, grade float64, buyCostCents int) (*ExpectedValue, error)
-
-	// Activation checklist
-	GetActivationChecklist(ctx context.Context, campaignID string) (*ActivationChecklist, error)
-
-	// Monte Carlo projection
-	RunProjection(ctx context.Context, campaignID string) (*MonteCarloComparison, error)
-
-	// Buy cost correction
-	UpdateBuyCost(ctx context.Context, purchaseID string, buyCostCents int) error
-
-	// Price overrides & AI suggestions
-	SetPriceOverride(ctx context.Context, purchaseID string, priceCents int, source string) error
-	SetAISuggestedPrice(ctx context.Context, purchaseID string, priceCents int) error
-	AcceptAISuggestion(ctx context.Context, purchaseID string) error
-	DismissAISuggestion(ctx context.Context, purchaseID string) error
-	GetPriceOverrideStats(ctx context.Context) (*PriceOverrideStats, error)
-
-	// Price review
-	SetReviewedPrice(ctx context.Context, purchaseID string, priceCents int, source string) error
-	GetReviewStats(ctx context.Context, campaignID string) (ReviewStats, error)
-	GetGlobalReviewStats(ctx context.Context) (ReviewStats, error)
-
-	// Price flags
-	CreatePriceFlag(ctx context.Context, purchaseID string, userID int64, reason string) (int64, error)
-	ListPriceFlags(ctx context.Context, status string) ([]PriceFlagWithContext, error)
-	ResolvePriceFlag(ctx context.Context, flagID int64, resolvedBy int64) error
-
-	// Cert entry
-	ImportCerts(ctx context.Context, certNumbers []string) (*CertImportResult, error)
-	GetPurchasesByCertNumbers(ctx context.Context, certNumbers []string) (map[string]*Purchase, error)
-	ScanCert(ctx context.Context, certNumber string) (*ScanCertResult, error)
-	ResolveCert(ctx context.Context, certNumber string) (*CertInfo, error)
-
-	// eBay export
-	ListEbayExportItems(ctx context.Context, flaggedOnly bool) (*EbayExportListResponse, error)
-	GenerateEbayCSV(ctx context.Context, items []EbayExportGenerateItem) ([]byte, error)
-
-	// Shopify price sync
-	MatchShopifyPrices(ctx context.Context, items []ShopifyPriceSyncItem) (*ShopifyPriceSyncResponse, error)
-
-	// Snapshot refresh (used by background scheduler)
-	RefreshPurchaseSnapshot(ctx context.Context, purchaseID string, card CardIdentity, grade float64, clValueCents int) bool
-	ProcessPendingSnapshots(ctx context.Context, limit int) (processed, skipped, failed int)
-	RetryFailedSnapshots(ctx context.Context, limit int) (processed, skipped, failed int)
+	CRUDService
+	AnalyticsService
+	ImportService
+	FinanceService
+	PricingService
+	CertLookupService
+	SnapshotService
 
 	// Close shuts down background workers.
 	Close()
@@ -403,4 +281,14 @@ func (s *service) Close() {
 	s.wg.Wait()
 }
 
-var _ Service = (*service)(nil)
+// Compile-time checks: service satisfies Service and each sub-interface.
+var (
+	_ Service          = (*service)(nil)
+	_ CRUDService      = (*service)(nil)
+	_ AnalyticsService = (*service)(nil)
+	_ ImportService    = (*service)(nil)
+	_ FinanceService   = (*service)(nil)
+	_ PricingService   = (*service)(nil)
+	_ CertLookupService = (*service)(nil)
+	_ SnapshotService  = (*service)(nil)
+)
