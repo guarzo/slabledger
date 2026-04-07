@@ -23,8 +23,8 @@ import (
 
 // mockDHIntelCounter implements DHIntelligenceCounter.
 type mockDHIntelCounter struct {
-	CountAllFn          func(ctx context.Context) (int, error)
-	LatestFetchedAtFn   func(ctx context.Context) (string, error)
+	CountAllFn        func(ctx context.Context) (int, error)
+	LatestFetchedAtFn func(ctx context.Context) (string, error)
 }
 
 func (m *mockDHIntelCounter) CountAll(ctx context.Context) (int, error) {
@@ -43,8 +43,8 @@ func (m *mockDHIntelCounter) LatestFetchedAt(ctx context.Context) (string, error
 
 // mockDHSuggestCounter implements DHSuggestionsCounter.
 type mockDHSuggestCounter struct {
-	CountLatestFn       func(ctx context.Context) (int, error)
-	LatestFetchedAtFn   func(ctx context.Context) (string, error)
+	CountLatestFn     func(ctx context.Context) (int, error)
+	LatestFetchedAtFn func(ctx context.Context) (string, error)
 }
 
 func (m *mockDHSuggestCounter) CountLatest(ctx context.Context) (int, error) {

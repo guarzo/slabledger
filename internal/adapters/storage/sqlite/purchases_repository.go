@@ -328,4 +328,3 @@ func (r *CampaignsRepository) UpdatePurchaseCardYear(ctx context.Context, id str
 	}
 	return nil
 }
-

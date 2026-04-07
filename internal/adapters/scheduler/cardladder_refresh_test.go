@@ -51,8 +51,8 @@ func (m *mockCLValueUpdater) UpdatePurchaseCLValue(ctx context.Context, purchase
 type mockCLGemRateUpdater struct {
 	UpdateGemRateFn func(ctx context.Context, purchaseID, gemRateID string) error
 	UpdatePSASpecFn func(ctx context.Context, purchaseID string, psaSpecID int) error
-	GemRateCalls   []struct{ PurchaseID, GemRateID string }
-	PSASpecCalls   []struct {
+	GemRateCalls    []struct{ PurchaseID, GemRateID string }
+	PSASpecCalls    []struct {
 		PurchaseID string
 		PSASpecID  int
 	}
