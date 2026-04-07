@@ -204,7 +204,11 @@ func (s *DHPushScheduler) processPurchase(ctx context.Context, p campaigns.Purch
 
 	if !alreadyMapped {
 		cardName, variant := campaigns.CleanCardNameForDH(p.CardName)
-		resp, err := s.certResolver.ResolveCert(ctx, dh.CertResolveRequest{
+		var rotateFn func() bool
+		if rotator, ok := s.certResolver.(dh.PSAKeyRotator); ok {
+			rotateFn = rotator.RotatePSAKey
+		}
+		resp, err := dh.ResolveCertWithRotation(ctx, dh.CertResolveRequest{
 			CertNumber: p.CertNumber,
 			GemRateID:  p.GemRateID,
 			CardName:   cardName,
@@ -212,7 +216,7 @@ func (s *DHPushScheduler) processPurchase(ctx context.Context, p campaigns.Purch
 			CardNumber: p.CardNumber,
 			Year:       p.CardYear,
 			Variant:    variant,
-		})
+		}, s.certResolver.ResolveCert, rotateFn, s.logger, "dh push")
 		if err != nil {
 			s.logger.Warn(ctx, "dh push: cert resolve error, leaving as pending",
 				observability.String("purchaseID", p.ID),
