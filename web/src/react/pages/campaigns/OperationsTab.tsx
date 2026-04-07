@@ -64,11 +64,13 @@ function OperationCard({ icon, title, description, action }: {
 }) {
   return (
     <CardShell variant="default" padding="lg" role="region" ariaLabel={title}>
-      <div className="flex flex-col items-center text-center gap-3">
-        {icon}
-        <div>
-          <div className="text-sm font-semibold text-[var(--text)]">{title}</div>
-          <div className="text-xs text-[var(--text-muted)] mt-0.5">{description}</div>
+      <div className="flex flex-col gap-3">
+        <div className="flex items-start gap-3">
+          {icon}
+          <div className="min-w-0">
+            <div className="text-sm font-semibold text-[var(--text)]">{title}</div>
+            <div className="text-xs text-[var(--text-muted)] mt-0.5 leading-relaxed">{description}</div>
+          </div>
         </div>
         <div className="w-full">{action}</div>
       </div>
@@ -80,7 +82,7 @@ function OperationCard({ icon, title, description, action }: {
 
 function IconCircle({ color, children }: { color: string; children: ReactNode }) {
   return (
-    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${color}`}>
+    <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${color}`}>
       {children}
     </div>
   );
