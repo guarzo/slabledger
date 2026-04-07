@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../js/api';
 import { queryKeys } from './queryKeys';
 import type { PostMetricsSnapshot, MetricsSummary } from '../../types/social';
+import { createParamQuery } from './createQuery';
 
 const SOCIAL_STALE_TIME = 30_000;
 
@@ -17,14 +18,9 @@ export function useSocialPosts() {
   });
 }
 
-export function useSocialPost(id: string) {
-  return useQuery({
-    queryKey: queryKeys.social.detail(id),
-    queryFn: () => api.getSocialPost(id),
-    enabled: !!id,
-    staleTime: SOCIAL_STALE_TIME,
-  });
-}
+export const useSocialPost = createParamQuery(
+  queryKeys.social.detail, (id) => api.getSocialPost(id), { staleTime: SOCIAL_STALE_TIME },
+);
 
 export function useGenerateSocialPosts() {
   const queryClient = useQueryClient();
