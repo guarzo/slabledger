@@ -26,11 +26,7 @@ const CampaignsPage = lazy(() => import('./pages/CampaignsPage'));
 const CampaignDetailPage = lazy(() => import('./pages/CampaignDetailPage'));
 const AdminPage = lazy(() => import('./pages/AdminPage'));
 const GlobalInventoryPage = lazy(() => import('./pages/GlobalInventoryPage'));
-const InsightsPage = lazy(() => import('./pages/InsightsPage'));
 const ToolsPage = lazy(() => import('./pages/ToolsPage'));
-const WatchlistPage = lazy(() => import('./pages/WatchlistPage'));
-const ContentPage = lazy(() => import('./pages/ContentPage'));
-const OpportunitiesPage = lazy(() => import('./pages/OpportunitiesPage'));
 
 function AppContent() {
   const location = useLocation();
@@ -62,30 +58,6 @@ function AppContent() {
                   <LoginPage />
                 </PageTransition>
               } />
-              {/* Watchlist */}
-              <Route path="/watchlist" element={
-                <ProtectedRoute>
-                  <PageTransition>
-                    <WatchlistPage />
-                  </PageTransition>
-                </ProtectedRoute>
-              } />
-              {/* Opportunities */}
-              <Route path="/opportunities" element={
-                <ProtectedRoute>
-                  <PageTransition>
-                    <OpportunitiesPage />
-                  </PageTransition>
-                </ProtectedRoute>
-              } />
-              {/* Insights */}
-              <Route path="/insights" element={
-                <ProtectedRoute>
-                  <PageTransition>
-                    <InsightsPage />
-                  </PageTransition>
-                </ProtectedRoute>
-              } />
               {/* Tools */}
               <Route path="/tools" element={
                 <ProtectedRoute>
@@ -95,7 +67,11 @@ function AppContent() {
                 </ProtectedRoute>
               } />
               {/* Canonical redirects for legacy URLs */}
-              <Route path="/favorites" element={<Navigate to="/watchlist" replace />} />
+              <Route path="/favorites" element={<Navigate to="/" replace />} />
+              <Route path="/watchlist" element={<Navigate to="/" replace />} />
+              <Route path="/opportunities" element={<Navigate to="/" replace />} />
+              <Route path="/insights" element={<Navigate to="/" replace />} />
+              <Route path="/content" element={<Navigate to="/tools" replace />} />
               <Route path="/pricing" element={<Navigate to="/" replace />} />
               <Route path="/shopify-sync" element={<Navigate to="/tools" replace />} />
               <Route path="/suggestions" element={<Navigate to="/" replace />} />
@@ -111,14 +87,6 @@ function AppContent() {
                 <ProtectedRoute>
                   <PageTransition>
                     <CampaignDetailPage />
-                  </PageTransition>
-                </ProtectedRoute>
-              } />
-              {/* Social Content */}
-              <Route path="/content" element={
-                <ProtectedRoute>
-                  <PageTransition>
-                    <ContentPage />
                   </PageTransition>
                 </ProtectedRoute>
               } />
