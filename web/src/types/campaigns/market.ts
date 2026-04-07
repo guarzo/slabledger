@@ -29,35 +29,21 @@ export interface MarketSnapshot {
   medianCents?: number;
   optimisticCents?: number;
   trend30d?: number;
-  trend90d?: number;
-  volatility?: number;
   // Extended percentiles
   p10Cents?: number;
   p90Cents?: number;
   distSampleSize?: number;
-  distPeriodDays?: number;
   // Sales velocity
   dailyVelocity?: number;
-  weeklyVelocity?: number;
   monthlyVelocity?: number;
   // Short-term signal
   avg7DayCents?: number;
   // Pricing metadata
-  sourceCount?: number;
   confidence?: number;
-  sources?: string[];
-  // Estimated value
-  estimatedValueCents?: number;
-  estimateSource?: string;
   // CL anchor
   clValueCents?: number;
-  clDeviationPct?: number;
   // Per-source pricing data
   sourcePrices?: SourcePrice[];
-  // Grade estimation flag
-  isEstimated?: boolean;
-  // Pricing gap flag
-  pricingGap?: boolean;
 }
 
 export interface CertInfo {
