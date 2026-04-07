@@ -2,7 +2,7 @@
  * Admin-related API methods
  */
 
-import type { APIUsageResponse, CacheStatsResponse, PricingDiagnosticsResponse, PriceOverrideStats, CachedAnalysis, AdvisorAnalysisType, AIUsageResponse, DHStatusResponse, DHBulkMatchResponse, DHUnmatchedResponse, DHFixMatchRequest, DHFixMatchResponse, DHSelectMatchRequest } from '../../types/apiStatus';
+import type { APIUsageResponse, CacheStatsResponse, PricingDiagnosticsResponse, PriceOverrideStats, CachedAnalysis, AdvisorAnalysisType, AIUsageResponse, DHStatusResponse, DHBulkMatchResponse, DHUnmatchedResponse, DHFixMatchRequest, DHFixMatchResponse, DHSelectMatchRequest, DHPushConfig } from '../../types/apiStatus';
 import type { AllowedEmail, AdminUser } from '../../types/admin';
 import type { APIClient, CardRequestSubmission } from './client';
 import { APIError } from './client';
@@ -36,6 +36,9 @@ declare module './client' {
     getDHUnmatched(): Promise<DHUnmatchedResponse>;
     fixDHMatch(req: DHFixMatchRequest): Promise<DHFixMatchResponse>;
     selectDHMatch(req: DHSelectMatchRequest): Promise<DHFixMatchResponse>;
+    approveDHPush(purchaseId: string): Promise<{ status: string }>;
+    getDHPushConfig(): Promise<DHPushConfig>;
+    saveDHPushConfig(config: DHPushConfig): Promise<{ status: string }>;
   }
 }
 
@@ -149,4 +152,16 @@ proto.fixDHMatch = async function (this: APIClient, req: DHFixMatchRequest): Pro
 
 proto.selectDHMatch = async function (this: APIClient, req: DHSelectMatchRequest): Promise<DHFixMatchResponse> {
   return this.post<DHFixMatchResponse>('/dh/select-match', req);
+};
+
+proto.approveDHPush = async function (this: APIClient, purchaseId: string): Promise<{ status: string }> {
+  return this.post<{ status: string }>(`/dh/approve/${purchaseId}`);
+};
+
+proto.getDHPushConfig = async function (this: APIClient): Promise<DHPushConfig> {
+  return this.get<DHPushConfig>('/admin/dh-push-config');
+};
+
+proto.saveDHPushConfig = async function (this: APIClient, config: DHPushConfig): Promise<{ status: string }> {
+  return this.put<{ status: string }>('/admin/dh-push-config', config);
 };
