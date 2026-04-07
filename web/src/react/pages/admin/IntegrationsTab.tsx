@@ -1,6 +1,7 @@
 import { ApiStatusTab } from './ApiStatusTab';
 import { CardLadderTab } from './CardLadderTab';
 import { DHTab } from './DHTab';
+import { DHPushConfigCard } from './DHPushConfigCard';
 import { InstagramTab } from './InstagramTab';
 
 export function IntegrationsTab({ enabled = true }: { enabled?: boolean }) {
@@ -16,6 +17,9 @@ export function IntegrationsTab({ enabled = true }: { enabled?: boolean }) {
       <section>
         <h3 className="text-base font-semibold text-[var(--text)] mb-4">DH</h3>
         <DHTab enabled={enabled} />
+        <div className="mt-4">
+          <DHPushConfigCard />
+        </div>
       </section>
 
       <hr className="border-[var(--surface-2)]" />
