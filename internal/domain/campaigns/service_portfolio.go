@@ -291,10 +291,11 @@ func (s *service) GetWeeklyReviewSummary(ctx context.Context) (*WeeklyReviewSumm
 		summary.BottomPerformers = nil
 	}
 
-	// Capital exposure
+	// Capital exposure (default to sentinel 99 = no data, not zero which implies fully covered)
+	summary.WeeksToCover = 99.0
 	capital, err := s.repo.GetCapitalSummary(ctx)
 	if err == nil && capital != nil {
-		summary.CapitalExposurePct = capital.ExposurePct
+		summary.WeeksToCover = capital.WeeksToCover
 	}
 
 	return summary, nil

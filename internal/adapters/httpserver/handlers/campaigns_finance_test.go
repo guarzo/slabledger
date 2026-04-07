@@ -16,18 +16,22 @@ import (
 
 func TestHandleCapitalSummary(t *testing.T) {
 	tests := []struct {
-		name            string
-		mockFn          func(_ context.Context) (*campaigns.CapitalSummary, error)
-		wantStatus      int
-		wantBudgetCents int
+		name                 string
+		mockFn               func(_ context.Context) (*campaigns.CapitalSummary, error)
+		wantStatus           int
+		wantOutstandingCents int
+		wantWeeksToCover     float64
+		wantAlertLevel       campaigns.AlertLevel
 	}{
 		{
 			name: "success",
 			mockFn: func(_ context.Context) (*campaigns.CapitalSummary, error) {
-				return &campaigns.CapitalSummary{CapitalBudgetCents: 5000000}, nil
+				return &campaigns.CapitalSummary{OutstandingCents: 2500000, WeeksToCover: 12.5, AlertLevel: campaigns.AlertOK}, nil
 			},
-			wantStatus:      http.StatusOK,
-			wantBudgetCents: 5000000,
+			wantStatus:           http.StatusOK,
+			wantOutstandingCents: 2500000,
+			wantWeeksToCover:     12.5,
+			wantAlertLevel:       campaigns.AlertOK,
 		},
 		{
 			name: "database error",
@@ -55,8 +59,14 @@ func TestHandleCapitalSummary(t *testing.T) {
 				if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
 					t.Fatalf("decode: %v", err)
 				}
-				if result.CapitalBudgetCents != tt.wantBudgetCents {
-					t.Errorf("expected CapitalBudgetCents=%d, got %d", tt.wantBudgetCents, result.CapitalBudgetCents)
+				if result.OutstandingCents != tt.wantOutstandingCents {
+					t.Errorf("expected OutstandingCents=%d, got %d", tt.wantOutstandingCents, result.OutstandingCents)
+				}
+				if result.WeeksToCover != tt.wantWeeksToCover {
+					t.Errorf("expected WeeksToCover=%v, got %v", tt.wantWeeksToCover, result.WeeksToCover)
+				}
+				if result.AlertLevel != tt.wantAlertLevel {
+					t.Errorf("expected AlertLevel=%s, got %s", tt.wantAlertLevel, result.AlertLevel)
 				}
 			} else {
 				decodeErrorResponse(t, rec)
