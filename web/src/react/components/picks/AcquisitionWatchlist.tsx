@@ -207,7 +207,7 @@ export default function AcquisitionWatchlist() {
         <h2 className="text-lg font-semibold text-[var(--text)]">Acquisition Watchlist</h2>
         <button
           onClick={() => setShowForm(prev => !prev)}
-          className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-[var(--brand-500)]/15 text-[var(--brand-500)] border border-[var(--brand-500)]/25 hover:bg-[var(--brand-500)]/25 transition-colors"
+          className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-[var(--brand-500)]/15 text-[var(--brand-400)] border border-[var(--brand-500)]/25 hover:bg-[var(--brand-500)]/25 transition-colors"
         >
           {showForm ? 'Cancel' : '+ Add Card'}
         </button>
