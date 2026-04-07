@@ -1,6 +1,6 @@
 import type { AgingItem, ExpectedValue } from '../../../../types/campaigns';
 import { formatCents, daysHeldColor, signalLabel, signalBgColor } from '../../../utils/formatters';
-import { TrendArrow, ConfidenceIndicator } from '../../../ui';
+import { TrendArrow, ConfidenceIndicator, GradeBadge } from '../../../ui';
 import MarketplaceLinks from './MarketplaceLinks';
 import {
   costBasis, bestPrice, unrealizedPL, marketTrend, velocityLabel,
@@ -55,7 +55,7 @@ export default function MobileCard({ item, selected, onToggle, onRecordSale, onF
             <div className="text-xs text-[var(--text-muted)]">
               {showCampaignColumn && item.campaignName && <>{item.campaignName} &middot; </>}
               {item.purchase.setName && <>{item.purchase.setName} &middot; </>}
-              Cert #{item.purchase.certNumber} &middot; {item.purchase.grader && item.purchase.grader !== 'PSA' ? `${item.purchase.grader} ${item.purchase.gradeValue}` : `PSA ${item.purchase.gradeValue}`}
+              Cert #{item.purchase.certNumber} &middot; <GradeBadge grader={item.purchase.grader || 'PSA'} grade={item.purchase.gradeValue} size="sm" />
             </div>
           </div>
         </div>
