@@ -149,10 +149,10 @@ func (e *CampaignToolExecutor) registerGetDashboardSummary() {
 			ds.Errors = append(ds.Errors, "capitalSummary: "+err.Error())
 		} else if cs != nil {
 			ds.Capital.BalanceCents = cs.OutstandingCents
-			ds.Capital.BudgetCents = cs.CapitalBudgetCents
-			ds.Capital.ExposurePct = cs.ExposurePct
+			ds.Capital.BudgetCents = 0
+			ds.Capital.ExposurePct = cs.WeeksToCover
 			ds.Capital.AlertLevel = cs.AlertLevel
-			ds.Capital.DaysToInvoice = cs.DaysToNextInvoice
+			ds.Capital.DaysToInvoice = 0
 		}
 
 		if ph, err := e.svc.GetPortfolioHealth(ctx); err != nil {

@@ -232,17 +232,17 @@ type CashflowConfig struct {
 	UpdatedAt          time.Time `json:"updatedAt"`
 }
 
-// CapitalSummary provides a snapshot of current capital exposure.
+// CapitalSummary provides a snapshot of current capital exposure with recovery velocity.
 type CapitalSummary struct {
-	CapitalBudgetCents     int     `json:"capitalBudgetCents"` // User-set target (0 = no target)
-	OutstandingCents       int     `json:"outstandingCents"`   // Unpaid purchases
-	ExposurePct            float64 `json:"exposurePct"`        // (outstanding / budget) * 100, 0 if no budget
-	RefundedCents          int     `json:"refundedCents"`      // Total refunds
-	PaidCents              int     `json:"paidCents"`          // Total paid
-	UnpaidInvoiceCount     int     `json:"unpaidInvoiceCount"`
-	AlertLevel             string  `json:"alertLevel"`             // "ok", "warning", "critical"
-	ProjectedExposureCents int     `json:"projectedExposureCents"` // outstanding + avgDailySpend * daysToNextInvoice
-	DaysToNextInvoice      int     `json:"daysToNextInvoice"`
+	OutstandingCents          int     `json:"outstandingCents"`          // Unpaid purchases minus payments
+	RecoveryRate30dCents      int     `json:"recoveryRate30dCents"`      // Sale revenue in last 30 days
+	RecoveryRate30dPriorCents int     `json:"recoveryRate30dPriorCents"` // Sale revenue in days 31-60
+	WeeksToCover              float64 `json:"weeksToCover"`              // outstanding / weekly recovery rate (99 = no data)
+	RecoveryTrend             string  `json:"recoveryTrend"`             // "improving", "declining", "stable"
+	AlertLevel                string  `json:"alertLevel"`                // "ok", "warning", "critical"
+	RefundedCents             int     `json:"refundedCents"`             // Total refunds
+	PaidCents                 int     `json:"paidCents"`                 // Total paid
+	UnpaidInvoiceCount        int     `json:"unpaidInvoiceCount"`
 }
 
 // PurchaseFilter holds optional filtering criteria for GetAllPurchasesWithSales.

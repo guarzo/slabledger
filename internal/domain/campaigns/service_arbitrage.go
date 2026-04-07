@@ -111,11 +111,11 @@ func (s *service) GetActivationChecklist(ctx context.Context, campaignID string)
 		AllPassed:    true,
 	}
 
-	exposureCheckOK := capital.ExposurePct < CapitalExposureThresholdPct
+	exposureCheckOK := capital.AlertLevel != "critical"
 	checklist.Checks = append(checklist.Checks, ActivationCheck{
 		Name:    "Capital Exposure",
 		Passed:  exposureCheckOK,
-		Message: fmt.Sprintf("Current exposure: %.0f%% (threshold: %d%%)", capital.ExposurePct, CapitalExposureThresholdPct),
+		Message: fmt.Sprintf("Recovery velocity: alert=%s, weeks-to-cover=%.1f", capital.AlertLevel, capital.WeeksToCover),
 	})
 	if !exposureCheckOK {
 		checklist.AllPassed = false
@@ -154,11 +154,8 @@ func (s *service) GetActivationChecklist(ctx context.Context, campaignID string)
 		totalDailyExposure += campaign.DailySpendCapCents
 	}
 
-	dailyExpOK := capital.CapitalBudgetCents == 0 || totalDailyExposure < capital.CapitalBudgetCents/DailyExposureDivisor // skip if unconfigured
-	exposureMsg := fmt.Sprintf("Total daily exposure with activation: $%d/day (capital budget: $%d)", totalDailyExposure/100, capital.CapitalBudgetCents/100)
-	if capital.CapitalBudgetCents == 0 {
-		exposureMsg = fmt.Sprintf("Total daily exposure with activation: $%d/day (capital budget: not configured)", totalDailyExposure/100)
-	}
+	dailyExpOK := capital.AlertLevel == "ok"
+	exposureMsg := fmt.Sprintf("Total daily exposure with activation: $%d/day (recovery alert: %s)", totalDailyExposure/100, capital.AlertLevel)
 	checklist.Checks = append(checklist.Checks, ActivationCheck{
 		Name:    "Daily Exposure",
 		Passed:  dailyExpOK,

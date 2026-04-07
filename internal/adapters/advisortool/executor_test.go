@@ -482,11 +482,11 @@ func TestExecute_GetDashboardSummary(t *testing.T) {
 		},
 		GetCapitalSummaryFn: func(_ context.Context) (*campaigns.CapitalSummary, error) {
 			return &campaigns.CapitalSummary{
-				CapitalBudgetCents: 5000000,
-				OutstandingCents:   2500000,
-				ExposurePct:        50.0,
-				AlertLevel:         "ok",
-				DaysToNextInvoice:  7,
+				OutstandingCents:     2500000,
+				RecoveryRate30dCents: 500000,
+				WeeksToCover:         21.5,
+				RecoveryTrend:        "stable",
+				AlertLevel:           "ok",
 			}, nil
 		},
 		GetPortfolioHealthFn: func(_ context.Context) (*campaigns.PortfolioHealth, error) {

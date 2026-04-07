@@ -593,7 +593,7 @@ func (m *MockCampaignRepository) UpdateCashflowConfig(_ context.Context, _ *camp
 }
 
 func (m *MockCampaignRepository) GetCapitalSummary(_ context.Context) (*campaigns.CapitalSummary, error) {
-	return &campaigns.CapitalSummary{CapitalBudgetCents: 5000000}, nil
+	return &campaigns.CapitalSummary{OutstandingCents: 0, WeeksToCover: 99.0, AlertLevel: "ok"}, nil
 }
 
 func (m *MockCampaignRepository) GetPortfolioChannelVelocity(_ context.Context) ([]campaigns.ChannelVelocity, error) {

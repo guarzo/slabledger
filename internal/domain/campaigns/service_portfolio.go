@@ -294,7 +294,7 @@ func (s *service) GetWeeklyReviewSummary(ctx context.Context) (*WeeklyReviewSumm
 	// Capital exposure
 	capital, err := s.repo.GetCapitalSummary(ctx)
 	if err == nil && capital != nil {
-		summary.CapitalExposurePct = capital.ExposurePct
+		summary.CapitalExposurePct = capital.WeeksToCover
 	}
 
 	return summary, nil
