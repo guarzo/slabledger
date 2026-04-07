@@ -38,7 +38,7 @@ declare module './client' {
     selectDHMatch(req: DHSelectMatchRequest): Promise<DHFixMatchResponse>;
     approveDHPush(purchaseId: string): Promise<{ status: string }>;
     getDHPushConfig(): Promise<DHPushConfig>;
-    saveDHPushConfig(config: DHPushConfig): Promise<{ status: string }>;
+    saveDHPushConfig(config: DHPushConfig): Promise<DHPushConfig>;
   }
 }
 
@@ -162,6 +162,6 @@ proto.getDHPushConfig = async function (this: APIClient): Promise<DHPushConfig> 
   return this.get<DHPushConfig>('/admin/dh-push-config');
 };
 
-proto.saveDHPushConfig = async function (this: APIClient, config: DHPushConfig): Promise<{ status: string }> {
-  return this.put<{ status: string }>('/admin/dh-push-config', config);
+proto.saveDHPushConfig = async function (this: APIClient, config: DHPushConfig): Promise<DHPushConfig> {
+  return this.put<DHPushConfig>('/admin/dh-push-config', config);
 };

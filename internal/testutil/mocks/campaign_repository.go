@@ -62,6 +62,7 @@ type MockCampaignRepository struct {
 	UpdatePurchaseDHPushStatusFn   func(ctx context.Context, id string, status string) error
 	UpdatePurchaseDHCandidatesFn   func(ctx context.Context, id string, candidatesJSON string) error
 	UpdatePurchaseDHHoldReasonFn   func(ctx context.Context, id string, reason string) error
+	SetHeldWithReasonFn            func(ctx context.Context, purchaseID string, reason string) error
 	ApproveHeldPurchaseFn          func(ctx context.Context, purchaseID string) error
 	GetDHPushConfigFn              func(ctx context.Context) (*campaigns.DHPushConfig, error)
 	SaveDHPushConfigFn             func(ctx context.Context, cfg *campaigns.DHPushConfig) error
@@ -878,6 +879,13 @@ func (m *MockCampaignRepository) UpdatePurchaseDHCandidates(ctx context.Context,
 func (m *MockCampaignRepository) UpdatePurchaseDHHoldReason(ctx context.Context, id string, reason string) error {
 	if m.UpdatePurchaseDHHoldReasonFn != nil {
 		return m.UpdatePurchaseDHHoldReasonFn(ctx, id, reason)
+	}
+	return nil
+}
+
+func (m *MockCampaignRepository) SetHeldWithReason(ctx context.Context, purchaseID string, reason string) error {
+	if m.SetHeldWithReasonFn != nil {
+		return m.SetHeldWithReasonFn(ctx, purchaseID, reason)
 	}
 	return nil
 }

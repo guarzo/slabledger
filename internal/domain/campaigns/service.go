@@ -292,4 +292,5 @@ var (
 	_ PricingService    = (*service)(nil)
 	_ CertLookupService = (*service)(nil)
 	_ SnapshotService   = (*service)(nil)
+	_ DHService         = (*service)(nil)
 )

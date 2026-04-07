@@ -699,6 +699,16 @@ func (m *mockRepo) UpdatePurchaseDHHoldReason(_ context.Context, id string, reas
 	return nil
 }
 
+func (m *mockRepo) SetHeldWithReason(_ context.Context, purchaseID string, reason string) error {
+	p, ok := m.purchases[purchaseID]
+	if !ok {
+		return ErrPurchaseNotFound
+	}
+	p.DHPushStatus = DHPushStatusHeld
+	m.dhHoldReasons[purchaseID] = reason
+	return nil
+}
+
 func (m *mockRepo) ApproveHeldPurchase(_ context.Context, purchaseID string) error {
 	if _, ok := m.purchases[purchaseID]; !ok {
 		return ErrPurchaseNotFound

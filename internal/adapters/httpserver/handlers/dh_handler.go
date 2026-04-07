@@ -100,9 +100,9 @@ type DHHandler struct {
 	suggestCounter    DHSuggestionsCounter
 	logger            observability.Logger
 	baseCtx           context.Context
-	healthReporter    DHHealthReporter    // optional: API health metrics
-	countsFetcher     DHCountsFetcher     // optional: DH inventory/order counts
-	dhApproveService  DHApproveService    // optional: approve held pushes + push config
+	healthReporter    DHHealthReporter // optional: API health metrics
+	countsFetcher     DHCountsFetcher  // optional: DH inventory/order counts
+	dhApproveService  DHApproveService // optional: approve held pushes + push config
 
 	bgWG             sync.WaitGroup
 	bulkMatchMu      sync.Mutex

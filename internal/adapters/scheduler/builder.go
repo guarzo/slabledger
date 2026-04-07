@@ -82,7 +82,7 @@ type BuildDeps struct {
 	DHPushCardIDSaver     DHPushCardIDSaver
 	DHPushCandidatesSaver DHPushCandidatesSaver
 	DHPushConfigLoader    DHPushConfigLoader
-	DHPushHoldReasonUpdater DHPushHoldReasonUpdater
+	DHPushHoldSetter      DHPushHoldSetter
 
 	// Scoring gap cleanup dependencies (optional)
 	GapStore scoring.GapStore
@@ -327,8 +327,8 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 		if deps.DHPushConfigLoader != nil {
 			pushOpts = append(pushOpts, WithDHPushConfigLoader(deps.DHPushConfigLoader))
 		}
-		if deps.DHPushHoldReasonUpdater != nil {
-			pushOpts = append(pushOpts, WithDHPushHoldReasonUpdater(deps.DHPushHoldReasonUpdater))
+		if deps.DHPushHoldSetter != nil {
+			pushOpts = append(pushOpts, WithDHPushHoldSetter(deps.DHPushHoldSetter))
 		}
 		schedulers = append(schedulers, NewDHPushScheduler(
 			deps.DHPushPendingLister,

@@ -17,7 +17,6 @@ func (s *service) ApproveDHPush(ctx context.Context, purchaseID string) error {
 	if p.DHPushStatus != DHPushStatusHeld {
 		return errors.NewAppError(ErrCodeCampaignValidation, "purchase is not in held status")
 	}
-	prevStatus := p.DHPushStatus
 	holdReasonCleared := p.DHHoldReason
 	if err := s.repo.ApproveHeldPurchase(ctx, purchaseID); err != nil {
 		return err
@@ -25,7 +24,7 @@ func (s *service) ApproveDHPush(ctx context.Context, purchaseID string) error {
 	if s.logger != nil {
 		s.logger.Info(ctx, "dh push approved",
 			observability.String("purchaseID", purchaseID),
-			observability.String("previousStatus", prevStatus),
+			observability.String("previousStatus", DHPushStatusHeld),
 			observability.String("newStatus", DHPushStatusPending),
 			observability.String("holdReasonCleared", holdReasonCleared),
 			observability.Time("timestamp", time.Now()),

@@ -116,9 +116,11 @@ func (h *DHHandler) HandleFixMatch(w http.ResponseWriter, r *http.Request) {
 					ChannelsJSON:      dh.MarshalChannels(result.Channels),
 					DHStatus:          campaigns.DHStatus(result.Status),
 				}); err != nil {
-					h.logger.Warn(ctx, "fix match: failed to persist DH fields",
+					h.logger.Error(ctx, "fix match: failed to persist DH fields",
 						observability.String("purchaseID", purchase.ID),
 						observability.Err(err))
+					writeError(w, http.StatusInternalServerError, "DH push succeeded but failed to save local state")
+					return
 				}
 			}
 			break
