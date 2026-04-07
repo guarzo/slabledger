@@ -9,6 +9,33 @@ interface HeroStatsBarProps {
 export default function HeroStatsBar({ health, capital }: HeroStatsBarProps) {
   if (!health) return null;
 
+  // Onboarding: all-zero state
+  const hasActivity = health.totalDeployedCents > 0 || health.totalRecoveredCents > 0 || health.realizedROI !== 0;
+  if (!hasActivity) {
+    return (
+      <div className="mb-6 p-6 bg-[var(--surface-1)] rounded-xl border border-[var(--surface-2)] text-center">
+        <h2 className="text-lg font-semibold text-[var(--text)] mb-2">Welcome to SlabLedger</h2>
+        <p className="text-sm text-[var(--text-muted)] max-w-md mx-auto mb-4">
+          Your portfolio dashboard will come alive once you start tracking. Here&apos;s how to get started:
+        </p>
+        <div className="flex flex-col sm:flex-row gap-3 justify-center text-sm text-[var(--text-muted)]">
+          <div className="flex items-center gap-2">
+            <span className="w-6 h-6 rounded-full bg-[var(--brand-500)]/20 text-[var(--brand-400)] flex items-center justify-center text-xs font-bold">1</span>
+            <span>Create a campaign</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="w-6 h-6 rounded-full bg-[var(--brand-500)]/20 text-[var(--brand-400)] flex items-center justify-center text-xs font-bold">2</span>
+            <span>Import PSA purchases</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="w-6 h-6 rounded-full bg-[var(--brand-500)]/20 text-[var(--brand-400)] flex items-center justify-center text-xs font-bold">3</span>
+            <span>Record sales as you go</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const roi = health.realizedROI ?? 0;
 
   return (
