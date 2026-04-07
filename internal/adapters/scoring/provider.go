@@ -12,13 +12,13 @@ import (
 )
 
 // Provider gathers raw factor data for the scoring orchestrator
-// by calling campaigns.Service methods in parallel.
+// by calling campaigns.AnalyticsService methods in parallel.
 type Provider struct {
-	svc campaigns.Service
+	svc campaigns.AnalyticsService
 }
 
 // NewProvider creates a ScoringDataProvider backed by the given campaigns service.
-func NewProvider(svc campaigns.Service) *Provider {
+func NewProvider(svc campaigns.AnalyticsService) *Provider {
 	return &Provider{svc: svc}
 }
 

@@ -104,10 +104,10 @@ var _ DHInventoryLister = (*dh.Client)(nil)
 // HandleListCampaigns handles GET /api/campaigns.
 func (h *CampaignsHandler) HandleListCampaigns(w http.ResponseWriter, r *http.Request) {
 	activeOnly := r.URL.Query().Get("activeOnly") == "true"
-	list, err := h.service.ListCampaigns(r.Context(), activeOnly)
-	if err != nil {
-		h.logger.Error(r.Context(), "failed to list campaigns", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
+	list, ok := serviceCall(w, r.Context(), h.logger, "failed to list campaigns", func() ([]campaigns.Campaign, error) {
+		return h.service.ListCampaigns(r.Context(), activeOnly)
+	})
+	if !ok {
 		return
 	}
 	writeJSONList(w, http.StatusOK, list)

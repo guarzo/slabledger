@@ -29,10 +29,10 @@ func (h *SocialHandler) HandleUploadSlides(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Verify post exists and is in uploadable status
-	post, err := h.repo.GetPost(r.Context(), id)
-	if err != nil {
-		h.logger.Error(r.Context(), "get post for upload failed", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
+	post, ok2 := serviceCall(w, r.Context(), h.logger, "get post for upload failed", func() (*social.SocialPost, error) {
+		return h.repo.GetPost(r.Context(), id)
+	})
+	if !ok2 {
 		return
 	}
 	if post == nil {
@@ -117,9 +117,9 @@ func (h *SocialHandler) HandleUploadSlides(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	if err := h.repo.UpdateSlideURLs(r.Context(), id, urls); err != nil {
-		h.logger.Error(r.Context(), "save slide URLs failed", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
+	if !serviceCallVoid(w, r.Context(), h.logger, "save slide URLs failed", func() error {
+		return h.repo.UpdateSlideURLs(r.Context(), id, urls)
+	}) {
 		return
 	}
 

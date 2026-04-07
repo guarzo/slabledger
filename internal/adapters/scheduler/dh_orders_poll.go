@@ -31,7 +31,7 @@ type DHOrdersPollScheduler struct {
 	StopHandle
 	client      DHOrdersClient
 	syncState   SyncStateStore
-	campaignSvc campaigns.Service
+	campaignSvc campaigns.ImportService
 	logger      observability.Logger
 	config      DHOrdersPollConfig
 }
@@ -40,7 +40,7 @@ type DHOrdersPollScheduler struct {
 func NewDHOrdersPollScheduler(
 	client DHOrdersClient,
 	syncState SyncStateStore,
-	campaignSvc campaigns.Service,
+	campaignSvc campaigns.ImportService,
 	logger observability.Logger,
 	config DHOrdersPollConfig,
 ) *DHOrdersPollScheduler {
