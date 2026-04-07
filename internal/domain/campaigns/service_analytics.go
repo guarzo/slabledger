@@ -219,6 +219,7 @@ func (s *service) GetInventoryAging(ctx context.Context, campaignID string) ([]A
 	}
 
 	s.applyOpenFlags(ctx, items)
+	s.enrichCompSummaries(ctx, items)
 	return items, nil
 }
 
@@ -244,6 +245,7 @@ func (s *service) GetGlobalInventoryAging(ctx context.Context) ([]AgingItem, err
 	}
 
 	s.applyOpenFlags(ctx, items)
+	s.enrichCompSummaries(ctx, items)
 
 	// Compute crack candidates for signal enrichment
 	crackSet := s.buildCrackCandidateSet(ctx)
@@ -332,6 +334,59 @@ func (s *service) crackCacheWorker(ctx context.Context) {
 				s.logger.Warn(ctx, "crack cache refresh failed", observability.Err(err))
 			}
 		}
+	}
+}
+
+// enrichCompSummaries attaches CompSummary to aging items that have a gemRateID.
+// Computes once per unique gemRateID and derives per-purchase CompsAboveCost.
+func (s *service) enrichCompSummaries(ctx context.Context, items []AgingItem) {
+	if s.compProv == nil {
+		return
+	}
+
+	// Collect unique gemRateIDs with representative CL value
+	seen := make(map[string]int) // gemRateID → clValueCents
+	for i := range items {
+		gid := items[i].Purchase.GemRateID
+		if gid == "" {
+			continue
+		}
+		if _, ok := seen[gid]; !ok {
+			seen[gid] = items[i].Purchase.CLValueCents
+		}
+	}
+
+	if len(seen) == 0 {
+		return
+	}
+
+	// Compute summaries once per gemRateID
+	cache := make(map[string]*CompSummary, len(seen))
+	for gid, clValue := range seen {
+		summary, err := s.compProv.GetCompSummary(ctx, gid, clValue)
+		if err != nil {
+			if s.logger != nil {
+				s.logger.Warn(ctx, "comp summary lookup failed",
+					observability.String("gemRateId", gid), observability.Err(err))
+			}
+			continue
+		}
+		if summary != nil {
+			cache[gid] = summary
+		}
+	}
+
+	// Attach to items and derive per-purchase CompsAboveCost
+	for i := range items {
+		gid := items[i].Purchase.GemRateID
+		summary, ok := cache[gid]
+		if !ok {
+			continue
+		}
+		// Clone to allow per-purchase customization of CompsAboveCost
+		cs := *summary
+		cs.CompsAboveCost = CountAboveCost(summary.PriceCentsList, items[i].Purchase.BuyCostCents)
+		items[i].CompSummary = &cs
 	}
 }
 

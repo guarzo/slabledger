@@ -3,7 +3,10 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"sort"
 	"time"
+
+	"github.com/guarzo/slabledger/internal/domain/campaigns"
 )
 
 // CLSaleCompRecord represents a stored sales comp.
@@ -89,3 +92,183 @@ func (s *CLSalesStore) GetLatestSaleDate(ctx context.Context, gemRateID, conditi
 	}
 	return date.String, nil
 }
+
+// GetCompSummary computes aggregated comp analytics for a gemRateID.
+// clValueCents is used for the above-CL count; CompsAboveCost is left at 0
+// because the caller derives it per-purchase via CountAboveCost.
+func (s *CLSalesStore) GetCompSummary(ctx context.Context, gemRateID string, clValueCents int) (*campaigns.CompSummary, error) {
+	now := time.Now()
+	cutoff := now.AddDate(0, 0, -90).Format("2006-01-02")
+
+	// Aggregation query
+	var totalComps, recentComps, compsAboveCL int
+	var highCents, lowCents sql.NullInt64
+	var lastSaleDate sql.NullString
+	err := s.db.QueryRowContext(ctx,
+		`SELECT
+			COUNT(*) as total_comps,
+			COUNT(CASE WHEN sale_date >= ? THEN 1 END) as recent_comps,
+			MAX(CASE WHEN sale_date >= ? THEN price_cents END) as high_cents,
+			MIN(CASE WHEN sale_date >= ? THEN price_cents END) as low_cents,
+			MAX(sale_date) as last_sale_date,
+			COUNT(CASE WHEN sale_date >= ? AND price_cents > ? THEN 1 END) as comps_above_cl
+		FROM cl_sales_comps WHERE gem_rate_id = ?`,
+		cutoff, cutoff, cutoff, cutoff, clValueCents, gemRateID,
+	).Scan(&totalComps, &recentComps, &highCents, &lowCents, &lastSaleDate, &compsAboveCL)
+	if err != nil {
+		return nil, err
+	}
+
+	if totalComps == 0 {
+		return nil, nil
+	}
+
+	// Fetch recent price list for median + trend computation
+	recentPrices, saleDates, err := s.fetchRecentPricesAndDates(ctx, gemRateID, cutoff)
+	if err != nil {
+		return nil, err
+	}
+
+	medianCents := medianInt(recentPrices)
+
+	midCutoff := now.AddDate(0, 0, -45).Format("2006-01-02")
+	trend := computeTrend(recentPrices, saleDates, midCutoff)
+
+	// Platform breakdown
+	platforms, err := s.fetchPlatformBreakdown(ctx, gemRateID, cutoff)
+	if err != nil {
+		return nil, err
+	}
+
+	return &campaigns.CompSummary{
+		GemRateID:    gemRateID,
+		TotalComps:   totalComps,
+		RecentComps:  recentComps,
+		MedianCents:  medianCents,
+		HighestCents: int(highCents.Int64),
+		LowestCents:  int(lowCents.Int64),
+		Trend90d:     trend,
+		CompsAboveCL: compsAboveCL,
+		ByPlatform:   platforms,
+		LastSaleDate: lastSaleDate.String,
+		PriceCentsList: recentPrices,
+	}, nil
+}
+
+// fetchRecentPricesAndDates returns sorted recent prices and their dates.
+func (s *CLSalesStore) fetchRecentPricesAndDates(ctx context.Context, gemRateID, cutoff string) (prices []int, dates []string, err error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT price_cents, sale_date FROM cl_sales_comps
+		 WHERE gem_rate_id = ? AND sale_date >= ?
+		 ORDER BY price_cents ASC`,
+		gemRateID, cutoff,
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer func() {
+		if closeErr := rows.Close(); closeErr != nil && err == nil {
+			err = closeErr
+		}
+	}()
+
+	for rows.Next() {
+		var p int
+		var d string
+		if err := rows.Scan(&p, &d); err != nil {
+			return nil, nil, err
+		}
+		prices = append(prices, p)
+		dates = append(dates, d)
+	}
+	return prices, dates, rows.Err()
+}
+
+// fetchPlatformBreakdown returns per-platform comp stats for recent comps.
+// Uses a single query and computes aggregation in-memory.
+func (s *CLSalesStore) fetchPlatformBreakdown(ctx context.Context, gemRateID, cutoff string) (_ []campaigns.PlatformBreakdown, err error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT platform, price_cents FROM cl_sales_comps
+		 WHERE gem_rate_id = ? AND sale_date >= ?
+		 ORDER BY platform`,
+		gemRateID, cutoff,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if closeErr := rows.Close(); closeErr != nil && err == nil {
+			err = closeErr
+		}
+	}()
+
+	platPrices := make(map[string][]int)
+	var platOrder []string
+	for rows.Next() {
+		var platform string
+		var price int
+		if err := rows.Scan(&platform, &price); err != nil {
+			return nil, err
+		}
+		if _, ok := platPrices[platform]; !ok {
+			platOrder = append(platOrder, platform)
+		}
+		platPrices[platform] = append(platPrices[platform], price)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	var result []campaigns.PlatformBreakdown
+	for _, plat := range platOrder {
+		prices := platPrices[plat]
+		sort.Ints(prices)
+		result = append(result, campaigns.PlatformBreakdown{
+			Platform:    plat,
+			SaleCount:   len(prices),
+			MedianCents: medianInt(prices),
+			HighCents:   prices[len(prices)-1],
+			LowCents:    prices[0],
+		})
+	}
+	return result, nil
+}
+
+// medianInt returns the median of an int slice, or 0 if empty.
+// Sorts the input in place.
+func medianInt(vals []int) int {
+	n := len(vals)
+	if n == 0 {
+		return 0
+	}
+	sort.Ints(vals)
+	if n%2 == 1 {
+		return vals[n/2]
+	}
+	return (vals[n/2-1] + vals[n/2]) / 2
+}
+
+// computeTrend compares median of earlier half vs recent half of the 90-day window.
+// midCutoff splits the window: dates < midCutoff are "earlier", >= midCutoff are "recent".
+func computeTrend(prices []int, dates []string, midCutoff string) float64 {
+	var earlier, recent []int
+	for i, d := range dates {
+		if d < midCutoff {
+			earlier = append(earlier, prices[i])
+		} else {
+			recent = append(recent, prices[i])
+		}
+	}
+	if len(earlier) == 0 || len(recent) == 0 {
+		return 0
+	}
+	medEarlier := medianInt(earlier)
+	medRecent := medianInt(recent)
+	if medEarlier == 0 {
+		return 0
+	}
+	return float64(medRecent-medEarlier) / float64(medEarlier)
+}
+
+// Compile-time check: CLSalesStore implements CompSummaryProvider.
+var _ campaigns.CompSummaryProvider = (*CLSalesStore)(nil)

@@ -85,6 +85,11 @@ func initializeCampaignsService(
 	if intelRepo != nil {
 		campaignOpts = append(campaignOpts, campaigns.WithIntelligenceRepo(intelRepo))
 	}
+
+	// Card Ladder comp analytics — CLSalesStore only needs *sql.DB (always available).
+	clSalesStore := sqlite.NewCLSalesStore(db.DB)
+	campaignOpts = append(campaignOpts, campaigns.WithCompSummaryProvider(clSalesStore))
+
 	campaignsService := campaigns.NewService(campaignsRepo, campaignOpts...)
 
 	return campaignsService, campaignsRepo, cardRequestRepo
