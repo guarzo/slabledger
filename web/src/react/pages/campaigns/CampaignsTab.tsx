@@ -12,6 +12,18 @@ const phaseColors: Record<Phase, string> = {
   closed: '#4b5563',
 };
 
+function PhaseBadge({ phase }: { phase: Phase }) {
+  const color = phaseColors[phase];
+  return (
+    <span
+      className="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded-full tracking-wider"
+      style={{ background: `${color}20`, color, border: `1px solid ${color}40` }}
+    >
+      {phase}
+    </span>
+  );
+}
+
 function FilterSummary({ c }: { c: Campaign }) {
   const parts: string[] = [c.sport];
   if (c.yearRange) parts.push(c.yearRange);
@@ -103,6 +115,7 @@ export default function CampaignsTab({
                 <div className="flex flex-col min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-semibold text-[var(--text)] truncate">{c.name}</span>
+                    <PhaseBadge phase={c.phase} />
                     {healthMap[c.id] && (
                       <>
                         <span
@@ -133,11 +146,20 @@ export default function CampaignsTab({
                     </div>
                   )}
 
-                  {/* Sell-through */}
+                  {/* Sell-through with mini bar */}
                   {pnl && (
-                    <span className="hidden md:inline">
-                      {pnl.totalSold}/{pnl.totalPurchases} ({formatPct(pnl.sellThroughPct)})
-                    </span>
+                    <div className="hidden md:flex items-center gap-2">
+                      <span>{pnl.totalSold}/{pnl.totalPurchases}</span>
+                      <div className="w-12 h-1.5 rounded-full bg-[var(--surface-3)] overflow-hidden" title={`Sell-through: ${formatPct(pnl.sellThroughPct)}`}>
+                        <div
+                          className="h-full rounded-full transition-all duration-300"
+                          style={{
+                            width: `${Math.min((pnl.sellThroughPct ?? 0) * 100, 100)}%`,
+                            background: (pnl.sellThroughPct ?? 0) >= 0.5 ? 'var(--success)' : 'var(--warning)',
+                          }}
+                        />
+                      </div>
+                    </div>
                   )}
 
                   {/* Buy terms */}
