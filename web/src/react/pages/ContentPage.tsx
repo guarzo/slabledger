@@ -64,37 +64,20 @@ export default function ContentPage({ embedded = false }: { embedded?: boolean }
 
   const content = (
     <>
-      {!embedded && (
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold text-gradient text-gradient-premium">Content</h1>
-            {igBadge}
-          </div>
-          <Button
-            onClick={handleGenerate}
-            loading={generateMutation.isPending}
-            variant="primary"
-            size="sm"
-          >
-            Generate Posts
-          </Button>
+      <div className={`flex items-center justify-between ${embedded ? 'mb-4' : 'mb-6'}`}>
+        <div className={`flex items-center ${embedded ? 'gap-2' : 'gap-3'}`}>
+          {!embedded && <h1 className="text-2xl font-bold text-gradient text-gradient-premium">Content</h1>}
+          {igBadge}
         </div>
-      )}
-      {embedded && (
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            {igBadge}
-          </div>
-          <Button
-            onClick={handleGenerate}
-            loading={generateMutation.isPending}
-            variant="primary"
-            size="sm"
-          >
-            Generate Posts
-          </Button>
-        </div>
-      )}
+        <Button
+          onClick={handleGenerate}
+          loading={generateMutation.isPending}
+          variant="primary"
+          size="sm"
+        >
+          Generate Posts
+        </Button>
+      </div>
 
       {posts && posts.length > 0 && (
         <div className="flex items-center gap-3 mb-4">

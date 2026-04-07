@@ -129,8 +129,8 @@ func TestCampaignData(t *testing.T) {
 				},
 			}, nil
 		},
-		GetInventoryAgingFn: func(_ context.Context, _ string) ([]campaigns.AgingItem, error) {
-			return []campaigns.AgingItem{
+		GetInventoryAgingFn: func(_ context.Context, _ string) (*campaigns.InventoryResult, error) {
+			return &campaigns.InventoryResult{Items: []campaigns.AgingItem{
 				{
 					Signal: &campaigns.MarketSignal{DeltaPct: 0.10},
 					CurrentMarket: &campaigns.MarketSnapshot{
@@ -143,7 +143,7 @@ func TestCampaignData(t *testing.T) {
 						MonthlyVelocity: 8,
 					},
 				},
-			}, nil
+			}}, nil
 		},
 	}
 

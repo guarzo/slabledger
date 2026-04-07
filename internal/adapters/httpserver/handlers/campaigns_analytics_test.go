@@ -341,8 +341,8 @@ func TestHandleTuning_ServiceError(t *testing.T) {
 
 func TestHandleInventory_Success(t *testing.T) {
 	svc := &mocks.MockCampaignService{
-		GetInventoryAgingFn: func(_ context.Context, _ string) ([]campaigns.AgingItem, error) {
-			return []campaigns.AgingItem{{DaysHeld: 10}}, nil
+		GetInventoryAgingFn: func(_ context.Context, _ string) (*campaigns.InventoryResult, error) {
+			return &campaigns.InventoryResult{Items: []campaigns.AgingItem{{DaysHeld: 10}}}, nil
 		},
 	}
 	h := newTestHandler(svc)
@@ -359,7 +359,7 @@ func TestHandleInventory_Success(t *testing.T) {
 
 func TestHandleInventory_ServiceError(t *testing.T) {
 	svc := &mocks.MockCampaignService{
-		GetInventoryAgingFn: func(_ context.Context, _ string) ([]campaigns.AgingItem, error) {
+		GetInventoryAgingFn: func(_ context.Context, _ string) (*campaigns.InventoryResult, error) {
 			return nil, fmt.Errorf("internal error")
 		},
 	}

@@ -22,12 +22,6 @@ import InvoicesSection from '../components/insights/InvoicesSection';
 
 const phaseOrder: Record<Phase, number> = { active: 0, pending: 1, closed: 2 };
 
-const phaseGradients: Record<Phase, string> = {
-  active: 'linear-gradient(135deg, #059669, #10b981)',
-  pending: 'linear-gradient(135deg, #f59e0b, #fbbf24)',
-  closed: 'linear-gradient(135deg, #374151, #4b5563)',
-};
-
 function sortCampaigns(campaigns: Campaign[]): Campaign[] {
   return [...campaigns].sort((a, b) => {
     const orderA = phaseOrder[a.phase] ?? 2;
@@ -406,7 +400,6 @@ export default function CampaignsPage() {
           createMutation={createMutation}
           activeOnly={activeOnly}
           onToggleCreate={() => setShowCreate(true)}
-          phaseGradients={phaseGradients}
         />
       </SectionErrorBoundary>
 

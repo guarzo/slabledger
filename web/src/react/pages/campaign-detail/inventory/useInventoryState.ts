@@ -8,6 +8,7 @@ import { useSellSheet } from '../../../hooks/useSellSheet';
 import { queryKeys } from '../../../queries/queryKeys';
 import { useExpectedValues } from '../../../queries/useCampaignQueries';
 import { api } from '../../../../js/api';
+import { getErrorMessage } from '../../../utils/formatters';
 import { costBasis, bestPrice } from './utils';
 import type { SortKey, SortDir } from './utils';
 import { computeInventoryMeta, filterAndSortItems } from './inventoryCalcs';
@@ -99,8 +100,7 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
       toast.success('Flag resolved');
       invalidateInventory();
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to resolve flag';
-      toast.error(message);
+      toast.error(getErrorMessage(err, 'Failed to resolve flag'));
     }
   }, [toast, invalidateInventory]);
 
@@ -113,8 +113,7 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
       setFlagTarget(null);
       handleReviewed();
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to submit price flag';
-      toast.error(message);
+      toast.error(getErrorMessage(err, 'Failed to submit price flag'));
     } finally {
       setFlagSubmitting(false);
     }

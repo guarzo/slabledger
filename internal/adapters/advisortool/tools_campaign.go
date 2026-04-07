@@ -65,7 +65,7 @@ func (e *CampaignToolExecutor) registerGetGlobalInventory() {
 		if err != nil {
 			return "", err
 		}
-		return toJSON(withCompDigests(result)), nil
+		return toJSON(withCompDigests(result.Items)), nil
 	})
 }
 

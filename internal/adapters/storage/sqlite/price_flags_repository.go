@@ -162,7 +162,7 @@ func (r *CampaignsRepository) HasOpenFlag(ctx context.Context, purchaseID string
 
 func (r *CampaignsRepository) OpenFlagPurchaseIDs(ctx context.Context) (map[string]int64, error) {
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT purchase_id, id FROM price_flags WHERE resolved_at IS NULL`)
+		`SELECT purchase_id, MIN(id) FROM price_flags WHERE resolved_at IS NULL GROUP BY purchase_id`)
 	if err != nil {
 		return nil, fmt.Errorf("open flag purchase IDs: %w", err)
 	}

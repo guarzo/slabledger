@@ -59,6 +59,13 @@ type AgingItem struct {
 	CompSummary           *CompSummary      `json:"compSummary,omitempty"`
 }
 
+// InventoryResult wraps an inventory listing with optional warnings
+// for partial failures (e.g. flag data unavailable).
+type InventoryResult struct {
+	Items    []AgingItem `json:"items"`
+	Warnings []string    `json:"warnings,omitempty"`
+}
+
 // InventorySignals contains procedural flags for an unsold card.
 // Computed server-side from market data, aging, and profitability.
 type InventorySignals struct {

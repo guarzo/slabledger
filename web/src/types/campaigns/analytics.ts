@@ -92,6 +92,11 @@ export interface AgingItem {
   compSummary?: CompSummary;
 }
 
+export interface InventoryResult {
+  items: AgingItem[];
+  warnings?: string[];
+}
+
 // Tuning types
 
 export interface GradePerformance {

@@ -42,7 +42,6 @@ export default function CampaignsTab({
   createMutation: { isPending: boolean };
   activeOnly: boolean;
   onToggleCreate: () => void;
-  phaseGradients: Record<Phase, string>;
 }) {
   return (
     <>

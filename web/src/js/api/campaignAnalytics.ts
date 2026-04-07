@@ -3,7 +3,7 @@
  */
 
 import type {
-  CampaignPNL, ChannelPNL, DailySpend, DaysToSellBucket, AgingItem,
+  CampaignPNL, ChannelPNL, DailySpend, DaysToSellBucket, InventoryResult,
   TuningResponse, CrackAnalysis, EVPortfolio, ActivationChecklist,
   MonteCarloComparison, CapitalSummary, Invoice, PortfolioHealth,
   ChannelVelocity, PortfolioInsights, SuggestionsResponse,
@@ -18,8 +18,8 @@ declare module './client' {
     getPNLByChannel(campaignId: string): Promise<ChannelPNL[]>;
     getFillRate(campaignId: string, days?: number): Promise<DailySpend[]>;
     getDaysToSell(campaignId: string): Promise<DaysToSellBucket[]>;
-    getInventory(campaignId: string): Promise<AgingItem[]>;
-    getGlobalInventory(): Promise<AgingItem[]>;
+    getInventory(campaignId: string): Promise<InventoryResult>;
+    getGlobalInventory(): Promise<InventoryResult>;
 
     // Capital & Invoices
     getCapitalSummary(): Promise<CapitalSummary>;
@@ -71,12 +71,12 @@ proto.getDaysToSell = async function (this: APIClient, campaignId: string): Prom
   return this.get<DaysToSellBucket[]>(`/campaigns/${campaignId}/days-to-sell`);
 };
 
-proto.getInventory = async function (this: APIClient, campaignId: string): Promise<AgingItem[]> {
-  return this.get<AgingItem[]>(`/campaigns/${campaignId}/inventory`);
+proto.getInventory = async function (this: APIClient, campaignId: string): Promise<InventoryResult> {
+  return this.get<InventoryResult>(`/campaigns/${campaignId}/inventory`);
 };
 
-proto.getGlobalInventory = async function (this: APIClient): Promise<AgingItem[]> {
-  return this.get<AgingItem[]>('/inventory');
+proto.getGlobalInventory = async function (this: APIClient): Promise<InventoryResult> {
+  return this.get<InventoryResult>('/inventory');
 };
 
 // Capital & Invoice endpoints

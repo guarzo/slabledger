@@ -79,7 +79,7 @@ export default function DashboardPage() {
 
       {/* Watchlist */}
       <div className="mb-6">
-        <WatchlistSection />
+        <WatchlistSection maxItems={8} />
       </div>
     </div>
   );
