@@ -79,8 +79,9 @@ func (h *DHHandler) HandleFixMatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if purchase.CLValueCents == 0 {
-		writeError(w, http.StatusBadRequest, "purchase has no CL value yet")
+	marketValue := campaigns.ResolveMarketValueCents(purchase)
+	if marketValue == 0 {
+		writeError(w, http.StatusBadRequest, "purchase has no market value yet")
 		return
 	}
 
@@ -90,8 +91,8 @@ func (h *DHHandler) HandleFixMatch(w http.ResponseWriter, r *http.Request) {
 		CertNumber:       purchase.CertNumber,
 		GradingCompany:   dh.GraderPSA,
 		Grade:            purchase.GradeValue,
-		CostBasisCents:   purchase.CLValueCents,
-		MarketValueCents: dh.IntPtr(purchase.CLValueCents),
+		CostBasisCents:   purchase.BuyCostCents,
+		MarketValueCents: dh.IntPtr(marketValue),
 		Status:           dh.InventoryStatusInStock,
 	}
 

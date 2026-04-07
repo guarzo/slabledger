@@ -205,7 +205,7 @@ func (h *DHHandler) pushMatchedToDH(ctx context.Context, purchases []campaigns.P
 		if !ok {
 			continue
 		}
-		if p.CertNumber == "" || p.DHInventoryID != 0 || p.CLValueCents == 0 {
+		if p.CertNumber == "" || p.DHInventoryID != 0 || campaigns.ResolveMarketValueCents(&p) == 0 {
 			continue
 		}
 		items = append(items, dh.InventoryItem{
@@ -213,8 +213,8 @@ func (h *DHHandler) pushMatchedToDH(ctx context.Context, purchases []campaigns.P
 			CertNumber:       p.CertNumber,
 			GradingCompany:   dh.GraderPSA,
 			Grade:            p.GradeValue,
-			CostBasisCents:   p.CLValueCents,
-			MarketValueCents: dh.IntPtr(p.CLValueCents),
+			CostBasisCents:   p.BuyCostCents,
+			MarketValueCents: dh.IntPtr(campaigns.ResolveMarketValueCents(&p)),
 			Status:           dh.InventoryStatusInStock,
 		})
 	}

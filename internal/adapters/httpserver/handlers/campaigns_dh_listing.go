@@ -175,7 +175,8 @@ func (h *CampaignsHandler) inlineMatchAndPush(ctx context.Context, p *campaigns.
 		}
 	}
 
-	if p.CLValueCents == 0 {
+	marketValue := campaigns.ResolveMarketValueCents(p)
+	if marketValue == 0 {
 		return 0
 	}
 
@@ -184,8 +185,8 @@ func (h *CampaignsHandler) inlineMatchAndPush(ctx context.Context, p *campaigns.
 		CertNumber:       p.CertNumber,
 		GradingCompany:   dh.GraderPSA,
 		Grade:            p.GradeValue,
-		CostBasisCents:   p.CLValueCents,
-		MarketValueCents: dh.IntPtr(p.CLValueCents),
+		CostBasisCents:   p.BuyCostCents,
+		MarketValueCents: dh.IntPtr(marketValue),
 		Status:           dh.InventoryStatusInStock,
 	}
 
