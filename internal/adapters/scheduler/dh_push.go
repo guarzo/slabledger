@@ -19,6 +19,7 @@ const (
 	processMatched processResult = iota
 	processUnmatched
 	processSkipped
+	processHeld
 )
 
 // DHPushPendingLister returns purchases pending DH push.
@@ -52,6 +53,16 @@ type DHPushCandidatesSaver interface {
 	UpdatePurchaseDHCandidates(ctx context.Context, id string, candidatesJSON string) error
 }
 
+// DHPushConfigLoader loads DH push safety config.
+type DHPushConfigLoader interface {
+	GetDHPushConfig(ctx context.Context) (*campaigns.DHPushConfig, error)
+}
+
+// DHPushHoldReasonUpdater persists hold reasons on purchases.
+type DHPushHoldReasonUpdater interface {
+	UpdatePurchaseDHHoldReason(ctx context.Context, id string, reason string) error
+}
+
 // DHPushConfig controls the DH push scheduler.
 type DHPushConfig struct {
 	Enabled  bool
@@ -67,18 +78,30 @@ func WithDHPushCandidatesSaver(saver DHPushCandidatesSaver) DHPushOption {
 	return func(s *DHPushScheduler) { s.candidatesSaver = saver }
 }
 
+// WithDHPushConfigLoader injects a config loader for DH push safety thresholds.
+func WithDHPushConfigLoader(loader DHPushConfigLoader) DHPushOption {
+	return func(s *DHPushScheduler) { s.configLoader = loader }
+}
+
+// WithDHPushHoldReasonUpdater injects an updater for persisting hold reasons on purchases.
+func WithDHPushHoldReasonUpdater(updater DHPushHoldReasonUpdater) DHPushOption {
+	return func(s *DHPushScheduler) { s.holdReasonUpdater = updater }
+}
+
 // DHPushScheduler matches pending purchases against DH and pushes inventory.
 type DHPushScheduler struct {
 	StopHandle
-	pendingLister   DHPushPendingLister
-	statusUpdater   DHPushStatusUpdater
-	certResolver    DHPushCertResolver
-	inventoryPush   DHPushInventoryPusher
-	fieldsUpdater   DHFieldsUpdater
-	cardIDSaver     DHPushCardIDSaver
-	candidatesSaver DHPushCandidatesSaver
-	logger          observability.Logger
-	config          DHPushConfig
+	pendingLister     DHPushPendingLister
+	statusUpdater     DHPushStatusUpdater
+	certResolver      DHPushCertResolver
+	inventoryPush     DHPushInventoryPusher
+	fieldsUpdater     DHFieldsUpdater
+	cardIDSaver       DHPushCardIDSaver
+	candidatesSaver   DHPushCandidatesSaver
+	configLoader      DHPushConfigLoader
+	holdReasonUpdater DHPushHoldReasonUpdater
+	logger            observability.Logger
+	config            DHPushConfig
 }
 
 // NewDHPushScheduler creates a new DH push scheduler.
@@ -143,6 +166,16 @@ func (s *DHPushScheduler) push(ctx context.Context) {
 		return
 	}
 
+	// Load push safety config; fall back to defaults if unavailable.
+	pushCfg := campaigns.DefaultDHPushConfig()
+	if s.configLoader != nil {
+		if loaded, loadErr := s.configLoader.GetDHPushConfig(ctx); loadErr != nil {
+			s.logger.Warn(ctx, "dh push: failed to load push config, using defaults", observability.Err(loadErr))
+		} else if loaded != nil {
+			pushCfg = *loaded
+		}
+	}
+
 	// Load existing DH card ID mappings to avoid redundant Match calls.
 	mappedSet, err := s.cardIDSaver.GetMappedSet(ctx, pricing.SourceDH)
 	if err != nil {
@@ -154,15 +187,18 @@ func (s *DHPushScheduler) push(ctx context.Context) {
 	matched := 0
 	unmatched := 0
 	skipped := 0
+	held := 0
 
 	for _, p := range pending {
-		switch s.processPurchase(ctx, p, mappedSet) {
+		switch s.processPurchase(ctx, p, mappedSet, pushCfg) {
 		case processMatched:
 			matched++
 		case processUnmatched:
 			unmatched++
 		case processSkipped:
 			skipped++
+		case processHeld:
+			held++
 		}
 	}
 
@@ -171,10 +207,11 @@ func (s *DHPushScheduler) push(ctx context.Context) {
 		observability.Int("matched", matched),
 		observability.Int("unmatched", unmatched),
 		observability.Int("skipped", skipped),
+		observability.Int("held", held),
 	)
 }
 
-func (s *DHPushScheduler) processPurchase(ctx context.Context, p campaigns.Purchase, mappedSet map[string]string) processResult {
+func (s *DHPushScheduler) processPurchase(ctx context.Context, p campaigns.Purchase, mappedSet map[string]string, pushCfg campaigns.DHPushConfig) processResult {
 	if p.CertNumber == "" {
 		s.logger.Warn(ctx, "dh push: purchase has no cert number, marking unmatched",
 			observability.String("purchaseID", p.ID))
@@ -202,9 +239,10 @@ func (s *DHPushScheduler) processPurchase(ctx context.Context, p campaigns.Purch
 		}
 	}
 
-	// Never push before we have a CL price — leave as pending for retry.
-	if p.CLValueCents == 0 {
-		s.logger.Debug(ctx, "dh push: no CL value yet, leaving as pending",
+	// Never push before we have a market value — leave as pending for retry.
+	marketValue := campaigns.ResolveMarketValueCents(&p)
+	if marketValue == 0 {
+		s.logger.Debug(ctx, "dh push: no market value yet, leaving as pending",
 			observability.String("purchaseID", p.ID),
 			observability.String("cert", p.CertNumber))
 		return processSkipped
@@ -292,13 +330,31 @@ func (s *DHPushScheduler) processPurchase(ctx context.Context, p campaigns.Purch
 		}
 	}
 
+	if holdReason := campaigns.EvaluateHoldTriggers(&p, pushCfg); holdReason != "" {
+		s.logger.Info(ctx, "dh push: holding re-push for review",
+			observability.String("purchaseID", p.ID),
+			observability.String("cert", p.CertNumber),
+			observability.String("reason", holdReason))
+		if updateErr := s.statusUpdater.UpdatePurchaseDHPushStatus(ctx, p.ID, campaigns.DHPushStatusHeld); updateErr != nil {
+			s.logger.Warn(ctx, "dh push: failed to set held status",
+				observability.String("purchaseID", p.ID), observability.Err(updateErr))
+		}
+		if s.holdReasonUpdater != nil {
+			if updateErr := s.holdReasonUpdater.UpdatePurchaseDHHoldReason(ctx, p.ID, holdReason); updateErr != nil {
+				s.logger.Warn(ctx, "dh push: failed to set hold reason",
+					observability.String("purchaseID", p.ID), observability.Err(updateErr))
+			}
+		}
+		return processHeld
+	}
+
 	item := dh.InventoryItem{
 		DHCardID:         dhCardID,
 		CertNumber:       p.CertNumber,
 		GradingCompany:   dh.GraderPSA,
 		Grade:            p.GradeValue,
-		CostBasisCents:   p.CLValueCents,
-		MarketValueCents: dh.IntPtr(p.CLValueCents),
+		CostBasisCents:   p.BuyCostCents,
+		MarketValueCents: dh.IntPtr(marketValue),
 		Status:           dh.InventoryStatusInStock,
 	}
 
