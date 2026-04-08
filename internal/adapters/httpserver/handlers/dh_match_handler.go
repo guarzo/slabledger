@@ -63,8 +63,11 @@ type matchedCard struct {
 
 // runBulkMatch processes unsold purchases against DH cert resolution, logging results.
 func (h *DHHandler) runBulkMatch(ctx context.Context, purchases []campaigns.Purchase, mappedSet map[string]string) {
+	// Reset PSA key rotation at the start of each run so a previously exhausted
+	// index doesn't prevent newly added keys from being tried.
 	var rotateFn func() bool
 	if rotator, ok := h.certResolver.(dh.PSAKeyRotator); ok {
+		rotator.ResetPSAKeyRotation()
 		rotateFn = rotator.RotatePSAKey
 	}
 

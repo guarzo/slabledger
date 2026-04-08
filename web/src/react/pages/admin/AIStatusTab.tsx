@@ -1,7 +1,7 @@
 import type { AIOperationSummary } from '../../../types/apiStatus';
 import { useAIUsage } from '../../queries/useAdminQueries';
 import { formatTokens, formatLatency } from '../../utils/formatters';
-import { SummaryCard } from './shared';
+import { SummaryCard, formatAdminDate } from './shared';
 
 function formatCost(cents: number): string {
   if (cents === 0) return '$0';
@@ -66,8 +66,8 @@ export function AIStatusTab({ enabled = true }: { enabled?: boolean }) {
         </div>
       )}
 
-      {/* Summary cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      {/* Summary cards — 5 cards: 2 cols → 3 cols on sm → 5 on lg */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         <SummaryCard
           label="Total Calls (7d)"
           value={summary.totalCalls}
@@ -87,21 +87,13 @@ export function AIStatusTab({ enabled = true }: { enabled?: boolean }) {
         <SummaryCard
           label="Avg Latency"
           value={summary.totalCalls > 0 ? formatLatency(summary.avgLatencyMs) : '-'}
-          sub={summary.lastCallAt ? `Last: ${new Date(summary.lastCallAt).toLocaleDateString()}` : 'No calls yet'}
+          sub={summary.lastCallAt ? `Last: ${formatAdminDate(summary.lastCallAt)}` : 'No calls yet'}
         />
         <SummaryCard
           label="Est. Cost (7d)"
           value={formatCost(summary.totalCostCents)}
         />
       </div>
-
-      {/* Token breakdown */}
-      {summary.totalTokens > 0 && (
-        <div className="grid grid-cols-2 gap-3">
-          <SummaryCard label="Input Tokens" value={formatTokens(summary.totalInputTokens)} sub={`${inputPct}% of total`} />
-          <SummaryCard label="Output Tokens" value={formatTokens(summary.totalOutputTokens)} sub={`${outputPct}% of total`} />
-        </div>
-      )}
 
       {/* Operations breakdown */}
       {operations.length > 0 && (
@@ -138,7 +130,7 @@ export function AIStatusTab({ enabled = true }: { enabled?: boolean }) {
 
       {/* Timestamp */}
       <div className="text-xs text-[var(--text-muted)] text-right">
-        Updated: {new Date(data.timestamp).toLocaleTimeString()}
+        Updated: {formatAdminDate(data.timestamp)}
       </div>
     </div>
   );

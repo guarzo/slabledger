@@ -1,6 +1,6 @@
 import type { FailureSummary } from '../../../types/apiStatus';
 import { usePricingDiagnostics } from '../../queries/useAdminQueries';
-import { SummaryCard } from './shared';
+import { SummaryCard, formatAdminDate } from './shared';
 
 export function PricingCoverageTab({ enabled = true }: { enabled?: boolean }) {
   const { data: diag, error, isLoading } = usePricingDiagnostics({ enabled });
@@ -56,7 +56,7 @@ export function PricingCoverageTab({ enabled = true }: { enabled?: boolean }) {
                     </td>
                     <td className="glass-table-td text-right">{f.count}</td>
                     <td className="glass-table-td hidden sm:table-cell text-[var(--text-muted)]">
-                      {f.lastSeen ? new Date(f.lastSeen).toLocaleTimeString() : '-'}
+                      {f.lastSeen ? formatAdminDate(f.lastSeen) : '-'}
                     </td>
                   </tr>
                 ))}

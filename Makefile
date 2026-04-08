@@ -36,13 +36,15 @@ build:
 	go build -o slabledger ./cmd/slabledger
 
 # Web server
+LOG_FILE ?= /workspace/app.log
 web: web-build
-	@echo "Starting web server with .env loaded..."
+	@echo "Starting web server with .env loaded (logging to $(LOG_FILE))..."
+	@> $(LOG_FILE)
 	@if [ -f .env ]; then \
-		bash -c 'set -a && source .env && set +a && go run ./cmd/slabledger --web --port $${PORT:-8081}'; \
+		bash -c 'set -a && source .env && set +a && go run ./cmd/slabledger --web --port $${PORT:-8081}' 2>&1 | tee $(LOG_FILE); \
 	else \
 		echo "Warning: .env file not found"; \
-		go run ./cmd/slabledger --web --port 8081; \
+		go run ./cmd/slabledger --web --port 8081 2>&1 | tee $(LOG_FILE); \
 	fi
 
 # Frontend build (Vite)

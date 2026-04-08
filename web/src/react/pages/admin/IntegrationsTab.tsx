@@ -1,22 +1,35 @@
-import { ApiStatusTab } from './ApiStatusTab';
 import { CardLadderTab } from './CardLadderTab';
-import { MarketMoversTab } from './MarketMoversTab';
 import { DHTab } from './DHTab';
 import { DHPushConfigCard } from './DHPushConfigCard';
 import { InstagramTab } from './InstagramTab';
+import { useCardLadderStatus, useDHStatus } from '../../queries/useAdminQueries';
+import { useInstagramStatus } from '../../queries/useSocialQueries';
+
+function StatusBadge({ connected, label }: { connected: boolean; label: string }) {
+  return (
+    <span className="flex items-center gap-1.5 text-xs">
+      <span className={`w-1.5 h-1.5 rounded-full ${connected ? 'bg-emerald-400' : 'bg-gray-500'}`} />
+      <span className={connected ? 'text-emerald-400' : 'text-[var(--text-muted)]'}>{label}</span>
+    </span>
+  );
+}
 
 export function IntegrationsTab({ enabled = true }: { enabled?: boolean }) {
+  const { data: dhStatus } = useDHStatus({ enabled });
+  const { data: clStatus } = useCardLadderStatus({ enabled });
+  const { data: igStatus } = useInstagramStatus(enabled);
+
+  const dhHealthy = dhStatus?.api_health ? dhStatus.api_health.success_rate >= 0.95 : false;
+  const clConnected = clStatus?.configured ?? false;
+  const igConnected = igStatus?.connected ?? false;
+
   return (
     <div className="space-y-8 mt-4">
       <section>
-        <h3 className="text-base font-semibold text-[var(--text)] mb-4">API Providers</h3>
-        <ApiStatusTab enabled={enabled} />
-      </section>
-
-      <hr className="border-[var(--surface-2)]" />
-
-      <section>
-        <h3 className="text-base font-semibold text-[var(--text)] mb-4">DH</h3>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-base font-semibold text-[var(--text)]">DoubleHolo</h3>
+          <StatusBadge connected={dhHealthy} label={dhHealthy ? 'Healthy' : 'Unknown'} />
+        </div>
         <DHTab enabled={enabled} />
         <div className="mt-4">
           <DHPushConfigCard />
@@ -26,21 +39,20 @@ export function IntegrationsTab({ enabled = true }: { enabled?: boolean }) {
       <hr className="border-[var(--surface-2)]" />
 
       <section>
-        <h3 className="text-base font-semibold text-[var(--text)] mb-4">Card Ladder</h3>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-base font-semibold text-[var(--text)]">Card Ladder</h3>
+          <StatusBadge connected={clConnected} label={clConnected ? 'Connected' : 'Not connected'} />
+        </div>
         <CardLadderTab enabled={enabled} />
       </section>
 
       <hr className="border-[var(--surface-2)]" />
 
       <section>
-        <h3 className="text-base font-semibold text-[var(--text)] mb-4">Market Movers</h3>
-        <MarketMoversTab enabled={enabled} />
-      </section>
-
-      <hr className="border-[var(--surface-2)]" />
-
-      <section>
-        <h3 className="text-base font-semibold text-[var(--text)] mb-4">Instagram</h3>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-base font-semibold text-[var(--text)]">Instagram</h3>
+          <StatusBadge connected={igConnected} label={igConnected ? 'Connected' : 'Not connected'} />
+        </div>
         <InstagramTab enabled={enabled} />
       </section>
     </div>
