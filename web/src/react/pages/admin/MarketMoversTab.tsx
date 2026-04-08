@@ -87,7 +87,7 @@ export function MarketMoversTab({ enabled = true }: { enabled?: boolean }) {
     );
   }
 
-  const lastRun: MMLastRun | undefined = (status as any)?.lastRun;
+  const lastRun: MMLastRun | undefined = status?.lastRun;
 
   return (
     <div className="space-y-4 mt-4">

@@ -28,10 +28,10 @@ declare module './client' {
     getCardRequests(): Promise<CardRequestSubmission[]>;
     submitCardRequest(id: number): Promise<{ status: string; requestId: string }>;
     submitAllCardRequests(): Promise<{ submitted: number; errors: number }>;
-    getCardLadderStatus(): Promise<{ configured: boolean; email?: string; collectionId?: string; cardsMapped?: number }>;
+    getCardLadderStatus(): Promise<{ configured: boolean; email?: string; collectionId?: string; cardsMapped?: number; lastRun?: { lastRunAt: string; durationMs: number; updated: number; mapped: number; skipped: number; totalCLCards: number } }>;
     saveCardLadderConfig(config: { email: string; password: string; collectionId: string; firebaseApiKey: string }): Promise<{ status: string }>;
     triggerCardLadderRefresh(): Promise<{ status: string }>;
-    getMarketMoversStatus(): Promise<{ configured: boolean; username?: string; cardsMapped?: number }>;
+    getMarketMoversStatus(): Promise<{ configured: boolean; username?: string; cardsMapped?: number; lastRun?: { lastRunAt: string; durationMs: number; updated: number; newMappings: number; skipped: number; searchFailed: number; totalPurchases: number } }>;
     saveMarketMoversConfig(config: { username: string; password: string }): Promise<{ status: string }>;
     triggerMarketMoversRefresh(): Promise<{ status: string }>;
     getDHStatus(): Promise<DHStatusResponse>;

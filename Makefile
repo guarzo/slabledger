@@ -83,11 +83,7 @@ coverage:
 # Output: web/screenshots/*.png (desktop) + web/screenshots/mobile/*.png (mobile)
 screenshots: web-build
 	@echo "Taking screenshots of all pages..."
-	@cd web && \
-	  npx vite preview --port 4173 & SERVER_PID=$$! ; \
-	  sleep 2 ; \
-	  CI=1 ./node_modules/.bin/playwright test tests/screenshot-all-pages.spec.ts --project=chromium ; \
-	  EXIT=$$? ; kill $$SERVER_PID 2>/dev/null ; exit $$EXIT
+	@cd web && { npx vite preview --port 4173 & SERVER_PID=$$! ; sleep 2 ; CI=1 ./node_modules/.bin/playwright test tests/screenshot-all-pages.spec.ts --project=chromium ; EXIT=$$? ; kill $$SERVER_PID 2>/dev/null ; exit $$EXIT ; }
 	@echo "Screenshots saved to web/screenshots/"
 
 # Code quality
