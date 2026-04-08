@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
@@ -41,9 +42,20 @@ func WithCLDHPushUpdater(u DHPushStatusUpdater) CardLadderRefreshOption {
 	return func(s *CardLadderRefreshScheduler) { s.dhPushUpdater = u }
 }
 
+// CLRunStats holds the counters from the most recent Card Ladder refresh run.
+type CLRunStats struct {
+	LastRunAt    time.Time `json:"lastRunAt"`
+	DurationMs   int64     `json:"durationMs"`
+	Updated      int       `json:"updated"`
+	Mapped       int       `json:"mapped"`
+	Skipped      int       `json:"skipped"`
+	TotalCLCards int       `json:"totalCLCards"`
+}
+
 // CardLadderRefreshScheduler refreshes CL values from the Card Ladder API daily.
 type CardLadderRefreshScheduler struct {
 	StopHandle
+	statsMu        sync.RWMutex
 	client         *cardladder.Client
 	store          *sqlite.CardLadderStore
 	purchaseLister CardLadderPurchaseLister
@@ -54,6 +66,19 @@ type CardLadderRefreshScheduler struct {
 	dhPushUpdater  DHPushStatusUpdater // optional: re-enrolls changed items for DH push
 	logger         observability.Logger
 	config         config.CardLadderConfig
+	lastRunStats   *CLRunStats
+}
+
+// GetLastRunStats returns a copy of the stats from the most recent refresh run,
+// or nil if no run has completed yet.
+func (s *CardLadderRefreshScheduler) GetLastRunStats() *CLRunStats {
+	s.statsMu.RLock()
+	defer s.statsMu.RUnlock()
+	if s.lastRunStats == nil {
+		return nil
+	}
+	cp := *s.lastRunStats
+	return &cp
 }
 
 // NewCardLadderRefreshScheduler creates a new CL refresh scheduler.
@@ -117,6 +142,7 @@ var certFromImageRe = regexp.MustCompile(`/cert/(\d+)/`)
 var gradeDigitsRe = regexp.MustCompile(`(\d+(?:\.\d+)?)`)
 
 func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
+	start := time.Now()
 	cfg, err := s.store.GetConfig(ctx)
 	if err != nil {
 		s.logger.Error(ctx, "CL refresh: failed to load config", observability.Err(err))
@@ -302,6 +328,18 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 		observability.Int("mapped", mapped),
 		observability.Int("skipped", skipped),
 		observability.Int("totalCLCards", len(cards)))
+
+	s.statsMu.Lock()
+	s.lastRunStats = &CLRunStats{
+		LastRunAt:    start,
+		DurationMs:   time.Since(start).Milliseconds(),
+		Updated:      updated,
+		Mapped:       mapped,
+		Skipped:      skipped,
+		TotalCLCards: len(cards),
+	}
+	s.statsMu.Unlock()
+
 	return nil
 }
 

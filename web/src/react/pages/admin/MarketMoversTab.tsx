@@ -4,6 +4,30 @@ import { useToast } from '../../contexts/ToastContext';
 import { CardShell } from '../../ui/CardShell';
 import Button from '../../ui/Button';
 
+interface MMLastRun {
+  lastRunAt: string;
+  durationMs: number;
+  updated: number;
+  newMappings: number;
+  skipped: number;
+  searchFailed: number;
+  totalPurchases: number;
+}
+
+function RunStatRow({ label, value, accent }: { label: string; value: string | number; accent?: 'green' | 'red' | 'yellow' }) {
+  const color =
+    accent === 'green' ? 'text-emerald-400' :
+    accent === 'red'   ? 'text-red-400' :
+    accent === 'yellow'? 'text-yellow-400' :
+    'text-[var(--text)]';
+  return (
+    <div className="flex justify-between items-center py-1 border-b border-[var(--surface-2)] last:border-0">
+      <span className="text-xs text-[var(--text-muted)]">{label}</span>
+      <span className={`text-xs font-medium tabular-nums ${color}`}>{value}</span>
+    </div>
+  );
+}
+
 export function MarketMoversTab({ enabled = true }: { enabled?: boolean }) {
   const { data: status, isLoading, error } = useMarketMoversStatus({ enabled });
   const saveMutation = useSaveMarketMoversConfig();
@@ -63,6 +87,8 @@ export function MarketMoversTab({ enabled = true }: { enabled?: boolean }) {
     );
   }
 
+  const lastRun: MMLastRun | undefined = (status as any)?.lastRun;
+
   return (
     <div className="space-y-4 mt-4">
       {/* Connection Status */}
@@ -89,6 +115,34 @@ export function MarketMoversTab({ enabled = true }: { enabled?: boolean }) {
           </div>
         )}
       </CardShell>
+
+      {/* Last Run Stats */}
+      {lastRun && (
+        <CardShell padding="lg">
+          <h3 className="text-base font-semibold text-[var(--text)] mb-3">Last Refresh Run</h3>
+          <div className="space-y-0">
+            <RunStatRow label="Ran at" value={new Date(lastRun.lastRunAt).toLocaleString()} />
+            <RunStatRow label="Duration" value={`${(lastRun.durationMs / 1000).toFixed(1)}s`} />
+            <RunStatRow label="Total inventory" value={lastRun.totalPurchases} />
+            <RunStatRow
+              label="Updated"
+              value={lastRun.updated}
+              accent={lastRun.updated > 0 ? 'green' : undefined}
+            />
+            <RunStatRow
+              label="New mappings"
+              value={lastRun.newMappings}
+              accent={lastRun.newMappings > 0 ? 'green' : undefined}
+            />
+            <RunStatRow label="Skipped (no match)" value={lastRun.skipped} />
+            <RunStatRow
+              label="Search errors"
+              value={lastRun.searchFailed}
+              accent={lastRun.searchFailed > 0 ? 'red' : undefined}
+            />
+          </div>
+        </CardShell>
+      )}
 
       {/* Configuration Form */}
       <CardShell padding="lg">

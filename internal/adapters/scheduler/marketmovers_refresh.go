@@ -29,16 +29,41 @@ type MMValueUpdater interface {
 	UpdatePurchaseMMSignals(ctx context.Context, id string, mmValueCents int, mmTrendPct float64, mmSales30d, mmActiveLowCents int) error
 }
 
+// MMRunStats holds the counters from the most recent Market Movers refresh run.
+type MMRunStats struct {
+	LastRunAt      time.Time `json:"lastRunAt"`
+	DurationMs     int64     `json:"durationMs"`
+	Updated        int       `json:"updated"`
+	NewMappings    int       `json:"newMappings"`
+	Skipped        int       `json:"skipped"`
+	SearchFailed   int       `json:"searchFailed"`
+	TotalPurchases int       `json:"totalPurchases"`
+}
+
 // MarketMoversRefreshScheduler refreshes MM values from the Market Movers API daily.
 type MarketMoversRefreshScheduler struct {
 	StopHandle
 	clientMu       sync.Mutex
+	statsMu        sync.RWMutex
 	client         *marketmovers.Client
 	store          *sqlite.MarketMoversStore
 	purchaseLister MMPurchaseLister
 	valueUpdater   MMValueUpdater
 	logger         observability.Logger
 	config         config.MarketMoversConfig
+	lastRunStats   *MMRunStats
+}
+
+// GetLastRunStats returns a copy of the stats from the most recent refresh run,
+// or nil if no run has completed yet.
+func (s *MarketMoversRefreshScheduler) GetLastRunStats() *MMRunStats {
+	s.statsMu.RLock()
+	defer s.statsMu.RUnlock()
+	if s.lastRunStats == nil {
+		return nil
+	}
+	cp := *s.lastRunStats
+	return &cp
 }
 
 // SetClient replaces the API client used by the scheduler. This is called when
@@ -102,6 +127,7 @@ func (s *MarketMoversRefreshScheduler) RunOnce(ctx context.Context) error {
 }
 
 func (s *MarketMoversRefreshScheduler) runOnce(ctx context.Context) error {
+	start := time.Now()
 	cfg, err := s.store.GetConfig(ctx)
 	if err != nil {
 		s.logger.Error(ctx, "MM refresh: failed to load config", observability.Err(err))
@@ -208,6 +234,19 @@ func (s *MarketMoversRefreshScheduler) runOnce(ctx context.Context) error {
 		observability.Int("skipped", skipped),
 		observability.Int("searchFailed", searchFailed),
 		observability.Int("totalPurchases", len(purchases)))
+
+	s.statsMu.Lock()
+	s.lastRunStats = &MMRunStats{
+		LastRunAt:      start,
+		DurationMs:     time.Since(start).Milliseconds(),
+		Updated:        updated,
+		NewMappings:    mapped,
+		Skipped:        skipped,
+		SearchFailed:   searchFailed,
+		TotalPurchases: len(purchases),
+	}
+	s.statsMu.Unlock()
+
 	return nil
 }
 

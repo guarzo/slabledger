@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/marketmovers"
+	"github.com/guarzo/slabledger/internal/adapters/scheduler"
 	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
@@ -17,6 +18,9 @@ type MMRefresher interface {
 	// SetClient replaces the underlying API client. Called when credentials are
 	// saved for the first time after startup (i.e. no client existed at boot).
 	SetClient(client *marketmovers.Client)
+	// GetLastRunStats returns stats from the most recent refresh run, or nil if
+	// no run has completed yet.
+	GetLastRunStats() *scheduler.MMRunStats
 }
 
 // MarketMoversHandler manages Market Movers admin endpoints.
@@ -122,6 +126,15 @@ func (h *MarketMoversHandler) HandleStatus(w http.ResponseWriter, r *http.Reques
 	mappings, err := h.store.ListMappings(r.Context())
 	if err == nil {
 		status["cardsMapped"] = len(mappings)
+	}
+
+	h.mu.Lock()
+	refresher := h.refresher
+	h.mu.Unlock()
+	if refresher != nil {
+		if stats := refresher.GetLastRunStats(); stats != nil {
+			status["lastRun"] = stats
+		}
 	}
 
 	writeJSON(w, http.StatusOK, status)
