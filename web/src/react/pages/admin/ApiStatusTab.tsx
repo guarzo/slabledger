@@ -1,6 +1,6 @@
 import type { ProviderStatus } from '../../../types/apiStatus';
 import { useAdminApiUsage } from '../../queries/useAdminQueries';
-import { ProgressBar } from './shared';
+import { ProgressBar, formatAdminDate } from './shared';
 
 function UsageBar({ used, limit }: { used: number; limit: number }) {
   return <ProgressBar value={used} max={limit} warningThreshold={80} dangerThreshold={95} />;
@@ -77,7 +77,7 @@ export function ApiStatusTab({ enabled = true }: { enabled?: boolean }) {
             {data.providers.map(p => <ProviderCard key={p.name} provider={p} />)}
           </div>
           <div className="text-xs text-[var(--text-muted)] text-right">
-            Updated: {new Date(data.timestamp).toLocaleTimeString()}
+            Updated: {formatAdminDate(data.timestamp)}
           </div>
         </>
       ) : !errorMessage ? (

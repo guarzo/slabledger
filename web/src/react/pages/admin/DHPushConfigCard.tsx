@@ -7,22 +7,24 @@ import { useToast } from '../../contexts/ToastContext';
 import type { DHPushConfig } from '../../../types/apiStatus';
 import { formatCents } from '../../utils/formatters';
 
-function ConfigField({ label, value, onChange, suffix }: {
+function ConfigField({ label, description, value, onChange, suffix }: {
   label: string;
+  description: string;
   value: number;
   onChange: (v: number) => void;
   suffix: string;
 }) {
   return (
-    <div>
-      <label className="block text-xs text-[var(--text-muted)] mb-1">{label}</label>
-      <div className="flex items-center gap-2">
+    <div className="space-y-1">
+      <label className="block text-sm font-medium text-[var(--text)]">{label}</label>
+      <p className="text-xs text-[var(--text-muted)]">{description}</p>
+      <div className="flex items-center gap-2 mt-1">
         <input
           type="number"
           min={0}
           value={value}
           onChange={(e) => onChange(parseInt(e.target.value, 10) || 0)}
-          className="w-24 px-2 py-1.5 text-sm rounded-lg bg-[var(--surface-0)] border border-[var(--surface-2)] text-[var(--text)]"
+          className="w-24 px-2 py-1.5 text-sm rounded-lg bg-[var(--surface-0)] border border-[var(--surface-2)] text-[var(--text)] focus:outline-none focus:ring-1 focus:ring-[var(--brand-500)]"
         />
         <span className="text-xs text-[var(--text-muted)]">{suffix}</span>
       </div>
@@ -71,37 +73,45 @@ export function DHPushConfigCard() {
 
   return (
     <CardShell padding="lg">
-      <h4 className="text-sm font-semibold text-[var(--text)] mb-3">Push Safety Thresholds</h4>
-      <p className="text-xs text-[var(--text-muted)] mb-4">
-        Re-pushes that exceed these thresholds are held for manual approval.
+      <h4 className="text-sm font-semibold text-[var(--text)] mb-1">Listing Push Safety Rules</h4>
+      <p className="text-xs text-[var(--text-muted)] mb-5">
+        Price updates that exceed these thresholds are held for manual review before being pushed to your DoubleHolo listings.
       </p>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+        <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide col-span-full">Price Swing Rules</p>
         <ConfigField
-          label="Price Swing %"
+          label="Max Price Change"
+          description="Flag re-pushes where the new price differs from the current listing by more than this percentage."
           value={form.swingPctThreshold}
           onChange={(v) => setForm({ ...form, swingPctThreshold: v })}
           suffix="%"
         />
         <ConfigField
-          label="Price Swing Min"
+          label="Min Dollar Amount"
+          description="Only apply the swing rule when the absolute price difference exceeds this amount."
           value={form.swingMinCents}
           onChange={(v) => setForm({ ...form, swingMinCents: v })}
           suffix={`(${formatCents(form.swingMinCents)})`}
         />
+        <hr className="border-[var(--surface-2)] col-span-full" />
+        <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide col-span-full">Source &amp; CL Rules</p>
         <ConfigField
-          label="Source Disagreement %"
+          label="Source Disagreement Limit"
+          description="Hold a push when your pricing sources disagree by more than this percentage."
           value={form.disagreementPctThreshold}
           onChange={(v) => setForm({ ...form, disagreementPctThreshold: v })}
           suffix="%"
         />
         <ConfigField
-          label="Unreviewed CL Change %"
+          label="Max Unreviewed CL Shift"
+          description="Flag pushes where the Card Ladder value has changed by more than this since your last review."
           value={form.unreviewedChangePctThreshold}
           onChange={(v) => setForm({ ...form, unreviewedChangePctThreshold: v })}
           suffix="%"
         />
         <ConfigField
-          label="Unreviewed CL Change Min"
+          label="Min CL Change Amount"
+          description="Only apply the CL rule when the dollar shift exceeds this amount."
           value={form.unreviewedChangeMinCents}
           onChange={(v) => setForm({ ...form, unreviewedChangeMinCents: v })}
           suffix={`(${formatCents(form.unreviewedChangeMinCents)})`}

@@ -1,35 +1,7 @@
 import { useDHStatus, useTriggerDHBulkMatch } from '../../queries/useAdminQueries';
 import { useToast } from '../../contexts/ToastContext';
-import { formatPct } from '../../utils/formatters';
 import { CardShell } from '../../ui/CardShell';
-import { SummaryCard } from './shared';
 import Button from '../../ui/Button';
-
-function formatTimestamp(ts: string): string {
-  if (!ts) return 'Never';
-  const d = new Date(ts);
-  if (isNaN(d.getTime())) return ts;
-  return d.toLocaleString();
-}
-
-interface HealthCardProps {
-  label: string;
-  value: string;
-  valueColor?: string;
-  sub?: string;
-}
-
-function HealthCard({ label, value, valueColor, sub }: HealthCardProps) {
-  return (
-    <div className="rounded-xl bg-[var(--surface-1)] border border-[var(--surface-2)] p-4">
-      <div className="text-xs text-[var(--text-muted)] mb-1">{label}</div>
-      <div className="text-2xl font-bold" style={valueColor ? { color: valueColor } : undefined}>
-        {value}
-      </div>
-      {sub && <div className="text-xs text-[var(--text-muted)] mt-1">{sub}</div>}
-    </div>
-  );
-}
 
 export function DHTab({ enabled = true }: { enabled?: boolean }) {
   const { data: status, isLoading, error } = useDHStatus({ enabled });
@@ -61,18 +33,6 @@ export function DHTab({ enabled = true }: { enabled?: boolean }) {
   }
 
   const isRunning = status?.bulk_match_running ?? false;
-  const pendingCount = status?.pending_count ?? 0;
-  const mappedCount = status?.mapped_count ?? 0;
-  const unmatchedCount = status?.unmatched_count ?? 0;
-
-  const total = mappedCount + unmatchedCount;
-  const apiHealth = status?.api_health;
-  const apiHealthValue = apiHealth ? formatPct(apiHealth.success_rate) : '—';
-  const apiHealthClr = apiHealth ? (apiHealth.success_rate >= 0.95 ? 'var(--success)' : apiHealth.success_rate >= 0.80 ? 'var(--warning)' : 'var(--danger)') : undefined;
-  const apiHealthSub = apiHealth ? `${apiHealth.total_calls} calls / ${apiHealth.failures} failures (7d)` : 'No data';
-  const matchRateValue = total > 0 ? formatPct(mappedCount / total) : '—';
-  const matchRateSub = total > 0 ? `${mappedCount} matched / ${unmatchedCount} unmatched` : '0 matched / 0 unmatched';
-  const unmatchedPct = total > 0 ? formatPct(unmatchedCount / total) : '0%';
 
   const handleBulkMatch = async () => {
     try {
@@ -85,76 +45,6 @@ export function DHTab({ enabled = true }: { enabled?: boolean }) {
 
   return (
     <div className="space-y-4 mt-4">
-      {/* Integration Health */}
-      <div>
-        <h4 className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide mb-2">Integration Health</h4>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <HealthCard
-            label="API Health"
-            value={apiHealthValue}
-            valueColor={apiHealthClr}
-            sub={apiHealthSub}
-          />
-          <HealthCard
-            label="Match Rate"
-            value={matchRateValue}
-            valueColor="var(--brand-500)"
-            sub={matchRateSub}
-          />
-          <HealthCard
-            label="Unmatched"
-            value={String(unmatchedCount)}
-            valueColor={unmatchedCount > 0 ? 'var(--warning)' : undefined}
-            sub={`${unmatchedPct} of total inventory`}
-          />
-        </div>
-      </div>
-
-      {/* DoubleHolo Counts */}
-      <div>
-        <h4 className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide mb-2">DoubleHolo Counts</h4>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <SummaryCard
-            label="Inventory"
-            value={status?.dh_inventory_count ?? '—'}
-          />
-          <SummaryCard
-            label="Listings"
-            value={status?.dh_listings_count ?? '—'}
-          />
-          <SummaryCard
-            label="Orders"
-            value={status?.dh_orders_count ?? '—'}
-          />
-        </div>
-      </div>
-
-      {/* Market Data */}
-      <div>
-        <h4 className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide mb-2">Market Data</h4>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <SummaryCard
-            label="Market Intelligence"
-            value={status?.intelligence_count ?? 0}
-            sub={`Last: ${formatTimestamp(status?.intelligence_last_fetch ?? '')}`}
-          />
-          <SummaryCard
-            label="Suggestions"
-            value={status?.suggestions_count ?? 0}
-            sub={`Last: ${formatTimestamp(status?.suggestions_last_fetch ?? '')}`}
-          />
-          <SummaryCard
-            label="Pending Push"
-            value={pendingCount}
-            color={pendingCount > 0 ? 'var(--info)' : undefined}
-          />
-          <SummaryCard
-            label="Mapped Cards"
-            value={mappedCount}
-          />
-        </div>
-      </div>
-
       {/* Bulk Match Error */}
       {status?.bulk_match_error && (
         <div className="rounded-xl border border-red-500/40 bg-red-500/10 p-4">
