@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useInstagramStatus, useConnectInstagram, useDisconnectInstagram } from '../../queries/useSocialQueries';
 import { useToast } from '../../contexts/ToastContext';
 import { CardShell } from '../../ui/CardShell';
@@ -8,6 +9,7 @@ export function InstagramTab({ enabled = true }: { enabled?: boolean }) {
   const connectMutation = useConnectInstagram();
   const disconnectMutation = useDisconnectInstagram();
   const toast = useToast();
+  const [confirmDisconnect, setConfirmDisconnect] = useState(false);
 
   const handleConnect = async () => {
     try {
@@ -75,14 +77,23 @@ export function InstagramTab({ enabled = true }: { enabled?: boolean }) {
               </p>
             )}
 
-            <Button
-              variant="danger"
-              size="sm"
-              onClick={handleDisconnect}
-              loading={disconnectMutation.isPending}
-            >
-              Disconnect Instagram
-            </Button>
+            {!confirmDisconnect ? (
+              <Button variant="danger" size="sm" onClick={() => setConfirmDisconnect(true)}>
+                Disconnect Instagram
+              </Button>
+            ) : (
+              <div className="rounded-lg bg-[var(--danger-bg)] border border-[var(--danger-border)] p-3 space-y-2">
+                <p className="text-sm text-[var(--danger)]">Disconnect Instagram? This will stop all scheduled posts.</p>
+                <div className="flex gap-2">
+                  <Button variant="danger" size="sm" onClick={handleDisconnect} loading={disconnectMutation.isPending}>
+                    Yes, disconnect
+                  </Button>
+                  <Button variant="secondary" size="sm" onClick={() => setConfirmDisconnect(false)}>
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           <div className="space-y-4">
@@ -104,17 +115,17 @@ export function InstagramTab({ enabled = true }: { enabled?: boolean }) {
             >
               Connect Instagram
             </Button>
+
+            <CardShell padding="lg">
+              <h3 className="text-base font-semibold text-[var(--text)] mb-2">Setup Requirements</h3>
+              <ul className="text-sm text-[var(--text-muted)] space-y-1 list-disc list-inside">
+                <li>Instagram Business or Creator account</li>
+                <li>Meta App with <code>instagram_business_basic</code> and <code>instagram_business_content_publish</code> permissions</li>
+                <li>Environment variables: <code>INSTAGRAM_APP_ID</code>, <code>INSTAGRAM_APP_SECRET</code></li>
+              </ul>
+            </CardShell>
           </div>
         )}
-      </CardShell>
-
-      <CardShell padding="lg">
-        <h3 className="text-base font-semibold text-[var(--text)] mb-2">Setup Requirements</h3>
-        <ul className="text-sm text-[var(--text-muted)] space-y-1 list-disc list-inside">
-          <li>Instagram Business or Creator account</li>
-          <li>Meta App with <code>instagram_business_basic</code> and <code>instagram_business_content_publish</code> permissions</li>
-          <li>Environment variables: <code>INSTAGRAM_APP_ID</code>, <code>INSTAGRAM_APP_SECRET</code></li>
-        </ul>
       </CardShell>
     </div>
   );

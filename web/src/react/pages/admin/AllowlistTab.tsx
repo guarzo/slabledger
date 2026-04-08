@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import type { AllowedEmail } from '../../../types/admin';
 import { useAllowlist, useAddAllowedEmail, useRemoveAllowedEmail } from '../../queries/useAdminQueries';
 import { Button } from '../../ui';
+import { formatAdminDate } from './shared';
 
 function formatMutationError(err: unknown): string {
   if (err instanceof Error) return err.message;
@@ -94,11 +95,11 @@ export function AllowlistTab({ enabled = true }: { enabled?: boolean }) {
             </thead>
             <tbody>
               {allowlist.map((ae: AllowedEmail) => (
-                <tr key={ae.Email} className="glass-table-row">
-                  <td className="glass-table-td text-[var(--text)]">{ae.Email}</td>
+                <tr key={ae.Email ?? ae.CreatedAt} className="glass-table-row">
+                  <td className="glass-table-td text-[var(--text)]">{ae.Email ?? '-'}</td>
                   <td className="glass-table-td text-[var(--text-muted)] hidden sm:table-cell">{ae.Notes || '-'}</td>
                   <td className="glass-table-td text-[var(--text-muted)] hidden md:table-cell">
-                    {new Date(ae.CreatedAt).toLocaleDateString()}
+                    {formatAdminDate(ae.CreatedAt)}
                   </td>
                   <td className="glass-table-td text-right">
                     <Button

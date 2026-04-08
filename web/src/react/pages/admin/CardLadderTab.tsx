@@ -3,29 +3,7 @@ import { useCardLadderStatus, useSaveCardLadderConfig, useTriggerCardLadderRefre
 import { useToast } from '../../contexts/ToastContext';
 import { CardShell } from '../../ui/CardShell';
 import Button from '../../ui/Button';
-
-interface CLLastRun {
-  lastRunAt: string;
-  durationMs: number;
-  updated: number;
-  mapped: number;
-  skipped: number;
-  totalCLCards: number;
-}
-
-function RunStatRow({ label, value, accent }: { label: string; value: string | number; accent?: 'green' | 'red' | 'yellow' }) {
-  const color =
-    accent === 'green' ? 'text-emerald-400' :
-    accent === 'red'   ? 'text-red-400' :
-    accent === 'yellow'? 'text-yellow-400' :
-    'text-[var(--text)]';
-  return (
-    <div className="flex justify-between items-center py-1 border-b border-[var(--surface-2)] last:border-0">
-      <span className="text-xs text-[var(--text-muted)]">{label}</span>
-      <span className={`text-xs font-medium tabular-nums ${color}`}>{value}</span>
-    </div>
-  );
-}
+import { formatAdminDate } from './shared';
 
 export function CardLadderTab({ enabled = true }: { enabled?: boolean }) {
   const { data: status, isLoading, error } = useCardLadderStatus({ enabled });
@@ -89,127 +67,126 @@ export function CardLadderTab({ enabled = true }: { enabled?: boolean }) {
     );
   }
 
-  const lastRun: CLLastRun | undefined = status?.lastRun;
+  const credentialForm = (
+    <form onSubmit={handleSave} className="space-y-3">
+      <div>
+        <label htmlFor="cl-email" className="block text-xs text-[var(--text-muted)] mb-1">Email</label>
+        <input
+          id="cl-email"
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder={status?.email ?? 'your@email.com'}
+          required
+          autoComplete="email"
+          className="w-full rounded-md bg-[var(--surface-2)] border border-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--brand-500)]"
+        />
+      </div>
+      <div>
+        <label htmlFor="cl-password" className="block text-xs text-[var(--text-muted)] mb-1">Password</label>
+        <input
+          id="cl-password"
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          required
+          autoComplete="current-password"
+          className="w-full rounded-md bg-[var(--surface-2)] border border-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--brand-500)]"
+        />
+      </div>
+      <div>
+        <label htmlFor="cl-collection-id" className="block text-xs text-[var(--text-muted)] mb-1">Collection ID</label>
+        <input
+          id="cl-collection-id"
+          type="text"
+          value={collectionId}
+          onChange={(e) => setCollectionId(e.target.value)}
+          placeholder={status?.collectionId ?? 'abc123'}
+          required
+          className="w-full rounded-md bg-[var(--surface-2)] border border-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--brand-500)]"
+        />
+      </div>
+      <div>
+        <label htmlFor="cl-firebase-key" className="block text-xs text-[var(--text-muted)] mb-1">Firebase API Key</label>
+        <input
+          id="cl-firebase-key"
+          type="password"
+          value={firebaseApiKey}
+          onChange={(e) => setFirebaseApiKey(e.target.value)}
+          placeholder="AIza..."
+          required
+          autoComplete="off"
+          className="w-full rounded-md bg-[var(--surface-2)] border border-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--brand-500)]"
+        />
+        <p className="text-xs text-[var(--text-muted)] mt-1">
+          Your Card Ladder project key — available in the Card Ladder Firebase console settings.
+        </p>
+      </div>
+      <Button type="submit" variant="primary" size="sm" loading={saveMutation.isPending}>
+        {status?.configured ? 'Update' : 'Connect'}
+      </Button>
+    </form>
+  );
+
+  // Type extension for lastRun — backend may add this field in the future
+  const lastRun = (status as (typeof status & { lastRun?: { ranAt: string; duration: string; updated: number; fetched: number; skipped: number } }) | undefined)?.lastRun;
 
   return (
     <div className="space-y-4 mt-4">
-      {/* Connection Status */}
-      <CardShell padding="lg">
-        <h3 className="text-base font-semibold text-[var(--text)] mb-4">Connection Status</h3>
-        {status?.configured ? (
-          <div className="space-y-2">
-            <div className="flex items-center gap-3">
-              <div className="w-2 h-2 rounded-full bg-emerald-400" />
-              <span className="text-sm text-[var(--text)]">
-                Connected as <strong>{status.email}</strong>
-              </span>
+      {status?.configured ? (
+        <CardShell padding="lg">
+          {/* Header row */}
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
+              <span className="text-sm font-semibold text-[var(--text)]">Connected</span>
             </div>
-            <p className="text-xs text-[var(--text-muted)]">
-              Collection: {status.collectionId}
-            </p>
+            <span className="text-xs text-[var(--text-muted)]">{status.email}</span>
+          </div>
+
+          {/* Info rows */}
+          <div className="space-y-1 mb-3">
+            <p className="text-xs text-[var(--text-muted)]">Collection: {status.collectionId}</p>
             {status.cardsMapped !== undefined && (
-              <p className="text-xs text-[var(--text-muted)]">
-                Cards mapped: {status.cardsMapped}
-              </p>
+              <p className="text-xs text-[var(--text-muted)]">Cards mapped: {status.cardsMapped}</p>
             )}
           </div>
-        ) : (
-          <div className="flex items-center gap-3">
+
+          {/* Collapsible credentials update */}
+          <details>
+            <summary className="text-xs text-[var(--brand-400)] cursor-pointer mt-3 select-none">Update credentials</summary>
+            <div className="mt-3">
+              {credentialForm}
+            </div>
+          </details>
+
+          {/* Last Refresh block */}
+          {lastRun && (
+            <div className="mt-4 pt-4 border-t border-[var(--surface-2)] space-y-1">
+              <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">Last Refresh</p>
+              <p className="text-xs text-[var(--text-muted)]">
+                Ran at {formatAdminDate(lastRun.ranAt)} · {lastRun.duration}
+              </p>
+              <p className="text-xs text-[var(--text-muted)]">
+                {lastRun.updated > 0
+                  ? <span className="text-[var(--success)]">{lastRun.updated} updated</span>
+                  : <span>0 updated</span>} · {lastRun.fetched} fetched · {lastRun.skipped} skipped
+              </p>
+            </div>
+          )}
+        </CardShell>
+      ) : (
+        <CardShell padding="lg">
+          <h3 className="text-base font-semibold text-[var(--text)] mb-4">Connect Card Ladder</h3>
+          <div className="flex items-center gap-3 mb-4">
             <div className="w-2 h-2 rounded-full bg-gray-500" />
             <span className="text-sm text-[var(--text-muted)]">Not connected</span>
           </div>
-        )}
-      </CardShell>
-
-      {/* Last Run Stats */}
-      {lastRun && (
-        <CardShell padding="lg">
-          <h3 className="text-base font-semibold text-[var(--text)] mb-3">Last Refresh Run</h3>
-          <div className="space-y-0">
-            <RunStatRow label="Ran at" value={new Date(lastRun.lastRunAt).toLocaleString()} />
-            <RunStatRow label="Duration" value={`${(lastRun.durationMs / 1000).toFixed(1)}s`} />
-            <RunStatRow label="CL cards fetched" value={lastRun.totalCLCards} />
-            <RunStatRow
-              label="Updated"
-              value={lastRun.updated}
-              accent={lastRun.updated > 0 ? 'green' : undefined}
-            />
-            <RunStatRow
-              label="New mappings"
-              value={lastRun.mapped}
-              accent={lastRun.mapped > 0 ? 'green' : undefined}
-            />
-            <RunStatRow label="Skipped (no match)" value={lastRun.skipped} />
-          </div>
+          {credentialForm}
         </CardShell>
       )}
 
-      {/* Configuration Form */}
-      <CardShell padding="lg">
-        <h3 className="text-base font-semibold text-[var(--text)] mb-4">
-          {status?.configured ? 'Update Credentials' : 'Connect Card Ladder'}
-        </h3>
-        <form onSubmit={handleSave} className="space-y-3">
-          <div>
-            <label htmlFor="cl-email" className="block text-xs text-[var(--text-muted)] mb-1">Email</label>
-            <input
-              id="cl-email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder={status?.email ?? 'your@email.com'}
-              required
-              autoComplete="email"
-              className="w-full rounded-md bg-[var(--surface-2)] border border-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--brand-500)]"
-            />
-          </div>
-          <div>
-            <label htmlFor="cl-password" className="block text-xs text-[var(--text-muted)] mb-1">Password</label>
-            <input
-              id="cl-password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              autoComplete="current-password"
-              className="w-full rounded-md bg-[var(--surface-2)] border border-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--brand-500)]"
-            />
-          </div>
-          <div>
-            <label htmlFor="cl-collection-id" className="block text-xs text-[var(--text-muted)] mb-1">Collection ID</label>
-            <input
-              id="cl-collection-id"
-              type="text"
-              value={collectionId}
-              onChange={(e) => setCollectionId(e.target.value)}
-              placeholder={status?.collectionId ?? 'abc123'}
-              required
-              className="w-full rounded-md bg-[var(--surface-2)] border border-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--brand-500)]"
-            />
-          </div>
-          <div>
-            <label htmlFor="cl-firebase-key" className="block text-xs text-[var(--text-muted)] mb-1">Firebase API Key</label>
-            <input
-              id="cl-firebase-key"
-              type="password"
-              value={firebaseApiKey}
-              onChange={(e) => setFirebaseApiKey(e.target.value)}
-              placeholder="AIza..."
-              required
-              autoComplete="off"
-              className="w-full rounded-md bg-[var(--surface-2)] border border-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--brand-500)]"
-            />
-            <p className="text-xs text-[var(--text-muted)] mt-1">
-              Stable project identifier — does not rotate.
-            </p>
-          </div>
-          <Button type="submit" variant="primary" size="sm" loading={saveMutation.isPending}>
-            {status?.configured ? 'Update' : 'Connect'}
-          </Button>
-        </form>
-      </CardShell>
-
-      {/* Manual Refresh */}
+      {/* Trigger Refresh — separate action card */}
       {status?.configured && (
         <CardShell padding="lg">
           <h3 className="text-base font-semibold text-[var(--text)] mb-2">Manual Refresh</h3>

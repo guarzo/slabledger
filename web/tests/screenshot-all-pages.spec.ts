@@ -143,72 +143,59 @@ const MOCK_API_USAGE = {
       successRate: 98.6,
       avgLatencyMs: 245,
       rateLimitHits: 0,
+      minuteCalls: 3,
     },
   }],
   timestamp: '2026-04-07T09:00:00Z',
 };
 
+const MOCK_DH_STATUS = {
+  intelligence_count: 1250,
+  intelligence_last_fetch: '2026-04-07T08:00:00Z',
+  suggestions_count: 320,
+  suggestions_last_fetch: '2026-04-07T08:00:00Z',
+  unmatched_count: 3,
+  pending_count: 2,
+  mapped_count: 17,
+  bulk_match_running: false,
+  api_health: { total_calls: 1420, failures: 14, success_rate: 0.99 },
+  dh_inventory_count: 18,
+  dh_listings_count: 15,
+  dh_orders_count: 6,
+};
+
 const MOCK_CACHE_STATS = {
   enabled: true,
-  totalSets: 48,
-  finalizedSets: 45,
-  discoveredSets: 3,
-  lastUpdated: '2026-04-07T08:00:00Z',
-  registryVersion: 'v2.1',
+  totalSets: 120,
+  finalizedSets: 98,
+  discoveredSets: 22,
+  lastUpdated: '2026-04-07T06:00:00Z',
   sets: [
-    { id: 'base1', name: 'Base Set', series: 'Base', releaseDate: '1999-01-09', totalCards: 102, status: 'finalized', fetchedAt: '2026-04-01T00:00:00Z' },
-    { id: 'jungle', name: 'Jungle', series: 'Base', releaseDate: '1999-06-16', totalCards: 64, status: 'finalized', fetchedAt: '2026-04-01T00:00:00Z' },
-    { id: 'fossil', name: 'Fossil', series: 'Base', releaseDate: '1999-10-10', totalCards: 62, status: 'finalized', fetchedAt: '2026-04-01T00:00:00Z' },
+    { id: 'base1', name: 'Base Set', series: 'Base', releaseDate: '1999-01-09', totalCards: 102, status: 'finalized', fetchedAt: '2026-04-07T06:00:00Z' },
+    { id: 'neo1', name: 'Neo Genesis', series: 'Neo', releaseDate: '2000-10-16', totalCards: 111, status: 'finalized', fetchedAt: '2026-04-07T06:00:00Z' },
+    { id: 'sv1', name: 'Scarlet & Violet', series: 'SV', releaseDate: '2023-03-31', totalCards: 258, status: 'discovered', fetchedAt: '' },
   ],
 };
 
 const MOCK_CARD_REQUESTS: object[] = [];
 
-const MOCK_PRICING_DIAGNOSTICS = {
-  totalMappedCards: 312,
-  unmappedCards: 8,
-  recentFailures: [
-    { provider: 'doubleholo', errorType: 'timeout', count: 2, lastSeen: '2026-04-07T07:30:00Z' },
-  ],
-};
-
-const MOCK_PRICE_FLAGS = {
-  flags: [
-    {
-      id: 1,
-      purchaseId: '101',
-      flaggedBy: 1,
-      flaggedAt: '2026-04-06T12:00:00Z',
-      reason: 'source_disagreement',
-      cardName: 'Charizard Base Set',
-      grade: 9,
-      certNumber: '12345678',
-      flaggedByEmail: 'demo@cardyeti.com',
-      marketPriceCents: 35000,
-      clValueCents: 32000,
-      reviewedPriceCents: 34000,
-    },
-  ],
-  total: 1,
-};
-
 const MOCK_AI_USAGE = {
   configured: true,
   summary: {
-    totalCalls: 87,
-    successRate: 97.7,
-    totalInputTokens: 42000,
-    totalOutputTokens: 18000,
-    totalTokens: 60000,
-    avgLatencyMs: 620,
+    totalCalls: 45,
+    successRate: 97.8,
+    totalInputTokens: 125000,
+    totalOutputTokens: 42000,
+    totalTokens: 167000,
+    avgLatencyMs: 1230,
     rateLimitHits: 0,
-    callsLast24h: 12,
-    lastCallAt: '2026-04-07T08:45:00Z',
-    totalCostCents: 310,
+    callsLast24h: 8,
+    lastCallAt: '2026-04-07T08:30:00Z',
+    totalCostCents: 42,
   },
   operations: [
-    { operation: 'advisor', calls: 55, errors: 1, successRate: 98.2, avgLatencyMs: 580, totalTokens: 38000, totalCostCents: 210 },
-    { operation: 'social_content', calls: 32, errors: 1, successRate: 96.9, avgLatencyMs: 690, totalTokens: 22000, totalCostCents: 100 },
+    { operation: 'digest', calls: 2, errors: 0, successRate: 100, avgLatencyMs: 3200, totalTokens: 48000, totalCostCents: 14 },
+    { operation: 'campaign_analysis', calls: 10, errors: 1, successRate: 90, avgLatencyMs: 1450, totalTokens: 63000, totalCostCents: 19 },
   ],
   timestamp: '2026-04-07T09:00:00Z',
 };
@@ -224,19 +211,10 @@ const MOCK_PRICE_OVERRIDE_STATS = {
   suggestionTotalUsd: 380.00,
 };
 
-const MOCK_DH_STATUS = {
-  intelligence_count: 1240,
-  intelligence_last_fetch: '2026-04-07T06:00:00Z',
-  suggestions_count: 48,
-  suggestions_last_fetch: '2026-04-07T06:05:00Z',
-  unmatched_count: 8,
-  pending_count: 2,
-  mapped_count: 304,
-  bulk_match_running: false,
-  api_health: { total_calls: 142, failures: 3, success_rate: 97.9 },
-  dh_inventory_count: 312,
-  dh_listings_count: 289,
-  dh_orders_count: 57,
+const MOCK_PRICING_DIAGNOSTICS = {
+  totalMappedCards: 17,
+  unmappedCards: 3,
+  recentFailures: [],
 };
 
 const MOCK_DH_PUSH_CONFIG = {
@@ -245,7 +223,7 @@ const MOCK_DH_PUSH_CONFIG = {
   disagreementPctThreshold: 15,
   unreviewedChangePctThreshold: 20,
   unreviewedChangeMinCents: 1000,
-  updatedAt: '2026-04-01T00:00:00Z',
+  updatedAt: '2026-04-07T00:00:00Z',
 };
 
 /** Set up API mocks. Pass skipAuth=true for the login page. */
@@ -380,7 +358,7 @@ async function setupMocks(page: import('@playwright/test').Page, opts?: { skipAu
       return route.fulfill({ json: MOCK_API_USAGE });
     }
     if (path === '/api/admin/allowlist') {
-      return route.fulfill({ json: [{ email: 'demo@cardyeti.com', addedAt: '2026-01-01T00:00:00Z' }] });
+      return route.fulfill({ json: [{ Email: 'demo@cardyeti.com', Notes: 'seed account', CreatedAt: '2026-01-01T00:00:00Z', AddedBy: null }] });
     }
     if (path === '/api/admin/users') {
       return route.fulfill({ json: [MOCK_USER] });
@@ -395,7 +373,7 @@ async function setupMocks(page: import('@playwright/test').Page, opts?: { skipAu
       return route.fulfill({ json: MOCK_PRICING_DIAGNOSTICS });
     }
     if (path === '/api/admin/price-flags') {
-      return route.fulfill({ json: MOCK_PRICE_FLAGS });
+      return route.fulfill({ json: [] });
     }
     if (path === '/api/admin/ai-usage') {
       return route.fulfill({ json: MOCK_AI_USAGE });
@@ -407,7 +385,7 @@ async function setupMocks(page: import('@playwright/test').Page, opts?: { skipAu
       return route.fulfill({ json: MOCK_DH_PUSH_CONFIG });
     }
     if (path === '/api/admin/dh-status') {
-      return route.fulfill({ json: { healthy: true, cachedCards: 150 } });
+      return route.fulfill({ json: MOCK_DH_STATUS });
     }
     if (path === '/api/admin/dh-unmatched') {
       return route.fulfill({ json: [] });
@@ -417,6 +395,9 @@ async function setupMocks(page: import('@playwright/test').Page, opts?: { skipAu
     }
     if (path === '/api/admin/marketmovers/status') {
       return route.fulfill({ json: { configured: false } });
+    }
+    if (path === '/api/admin/instagram/status') {
+      return route.fulfill({ json: { connected: false } });
     }
     if (path.match(/\/admin\//)) {
       return route.fulfill({ json: [] });

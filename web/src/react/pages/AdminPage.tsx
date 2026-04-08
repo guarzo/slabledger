@@ -10,19 +10,27 @@ import type { Tab } from '../ui';
 import { UsersTab } from './admin/UsersTab';
 import { CardDataTab } from './admin/CardDataTab';
 import { PricingTab } from './admin/PricingTab';
-import { AITab } from './admin/AITab';
+import { StatsTab } from './admin/StatsTab';
 import { IntegrationsTab } from './admin/IntegrationsTab';
 
 const adminTabs: readonly Tab<string>[] = [
   { id: 'users', label: 'Users' },
   { id: 'card-data', label: 'Card Data' },
   { id: 'pricing', label: 'Pricing' },
-  { id: 'ai', label: 'AI' },
+  { id: 'stats', label: 'Stats' },
   { id: 'integrations', label: 'Integrations' },
 ] as const;
 
+const TAB_SUBTITLES: Record<string, string> = {
+  users: 'Manage allowed users and view registered accounts.',
+  'card-data': 'Monitor the card cache and set coverage.',
+  pricing: 'Review pricing coverage, flags, and price overrides.',
+  stats: 'Monitor AI usage, API health, and integration statistics.',
+  integrations: 'Connect and configure external services.',
+};
+
 export default function AdminPage() {
-  const [activeTab, setActiveTab] = useState('integrations');
+  const [activeTab, setActiveTab] = useState('users');
   const [backupLoading, setBackupLoading] = useState<boolean>(false);
   const [backupError, setBackupError] = useState<string | null>(null);
 
@@ -59,7 +67,7 @@ export default function AdminPage() {
           <p className="text-sm text-[var(--danger)] mt-1">Backup failed: {backupError}</p>
         )}
         <p className="text-sm text-[var(--text-muted)] mt-1">
-          Manage allowed users, view registered accounts, and monitor API usage.
+          {TAB_SUBTITLES[activeTab] ?? ''}
         </p>
       </div>
 
@@ -69,7 +77,7 @@ export default function AdminPage() {
         <Tabs.Content value="users"><UsersTab enabled={activeTab === 'users'} /></Tabs.Content>
         <Tabs.Content value="card-data"><CardDataTab enabled={activeTab === 'card-data'} /></Tabs.Content>
         <Tabs.Content value="pricing"><PricingTab enabled={activeTab === 'pricing'} /></Tabs.Content>
-        <Tabs.Content value="ai"><AITab enabled={activeTab === 'ai'} /></Tabs.Content>
+        <Tabs.Content value="stats"><StatsTab enabled={activeTab === 'stats'} /></Tabs.Content>
         <Tabs.Content value="integrations"><IntegrationsTab enabled={activeTab === 'integrations'} /></Tabs.Content>
       </Tabs.Root>
     </div>

@@ -1,20 +1,12 @@
 import { useMemo, useState } from 'react';
 import type { CachedSetEntry } from '../../../types/apiStatus';
 import { useAdminCacheStats } from '../../queries/useAdminQueries';
-import { MissingCardsTab } from './MissingCardsTab';
-import { ProgressBar, SummaryCard } from './shared';
+import { ProgressBar, SummaryCard, formatAdminDate } from './shared';
 
 const GO_ZERO_TIME = '0001-01-01T00:00:00Z';
 
 function isPlaceholderTimestamp(value: string | undefined | null): boolean {
   return !value || value === GO_ZERO_TIME;
-}
-
-function formatDateSafe(value: string | undefined | null): string {
-  if (isPlaceholderTimestamp(value)) return '-';
-  const date = new Date(value!);
-  if (Number.isNaN(date.getTime())) return '-';
-  return date.toLocaleString();
 }
 
 function CacheBar({ finalized, total }: { finalized: number; total: number }) {
@@ -135,7 +127,7 @@ export function CardDataTab({ enabled = true }: { enabled?: boolean }) {
                       })()}
                     </td>
                     <td className="glass-table-td text-[var(--text-muted)] text-xs hidden lg:table-cell">
-                      {formatDateSafe(s.fetchedAt)}
+                      {isPlaceholderTimestamp(s.fetchedAt) ? '-' : formatAdminDate(s.fetchedAt)}
                     </td>
                   </tr>
                 ))}
@@ -145,18 +137,12 @@ export function CardDataTab({ enabled = true }: { enabled?: boolean }) {
 
           {!isPlaceholderTimestamp(data.lastUpdated) && (
             <div className="text-xs text-[var(--text-muted)] text-right">
-              Registry updated: {formatDateSafe(data.lastUpdated)}
+              Registry updated: {formatAdminDate(data.lastUpdated)}
             </div>
           )}
         </div>
       </section>
 
-      <hr className="border-[var(--surface-2)]" />
-
-      <section>
-        <h3 className="text-base font-semibold text-[var(--text)] mb-4">Missing Cards</h3>
-        <MissingCardsTab enabled={enabled} />
-      </section>
     </div>
   );
 }
