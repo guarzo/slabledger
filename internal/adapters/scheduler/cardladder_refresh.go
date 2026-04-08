@@ -386,7 +386,7 @@ func (s *CardLadderRefreshScheduler) gapFillGemRateIDs(ctx context.Context, purc
 		if grader == "" {
 			grader = "PSA"
 		}
-		condition := fmt.Sprintf("%s %s", grader, formatGrade(p.GradeValue))
+		condition := fmt.Sprintf("%s %s", grader, mathutil.FormatGrade(p.GradeValue))
 
 		filters := map[string]string{
 			"condition":      condition,
@@ -442,14 +442,6 @@ func (s *CardLadderRefreshScheduler) gapFillGemRateIDs(ctx context.Context, purc
 		s.logger.Info(ctx, "CL gap-fill: complete",
 			observability.Int("filled", filled))
 	}
-}
-
-// formatGrade formats a grade value for condition labels: 10 → "10", 9.5 → "9.5".
-func formatGrade(v float64) string {
-	if v == float64(int(v)) {
-		return strconv.Itoa(int(v))
-	}
-	return strconv.FormatFloat(v, 'f', -1, 64)
 }
 
 // extractGradeValue parses "PSA 9", "PSA 9.5", or "g9" → numeric grade value.

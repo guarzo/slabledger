@@ -3,7 +3,9 @@ package scheduler
 import (
 	"context"
 	"fmt"
+	"math"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/marketmovers"
@@ -11,6 +13,7 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/campaigns"
 	"github.com/guarzo/slabledger/internal/domain/mathutil"
 	"github.com/guarzo/slabledger/internal/domain/observability"
+	"github.com/guarzo/slabledger/internal/platform/config"
 )
 
 // MMPurchaseLister lists unsold purchases for Market Movers value sync.
@@ -20,24 +23,37 @@ type MMPurchaseLister interface {
 
 // MMValueUpdater updates Market Movers values on purchases.
 type MMValueUpdater interface {
+	// UpdatePurchaseMMValue updates only the avg price (used by the CSV import path).
 	UpdatePurchaseMMValue(ctx context.Context, purchaseID string, mmValueCents int) error
-}
-
-// MarketMoversRefreshConfig controls the scheduler behaviour.
-type MarketMoversRefreshConfig struct {
-	Enabled     bool
-	RefreshHour int
+	// UpdatePurchaseMMSignals updates all MM signals in one statement (used by the scheduler).
+	UpdatePurchaseMMSignals(ctx context.Context, id string, mmValueCents int, mmTrendPct float64, mmSales30d, mmActiveLowCents int) error
 }
 
 // MarketMoversRefreshScheduler refreshes MM values from the Market Movers API daily.
 type MarketMoversRefreshScheduler struct {
 	StopHandle
+	clientMu       sync.Mutex
 	client         *marketmovers.Client
 	store          *sqlite.MarketMoversStore
 	purchaseLister MMPurchaseLister
 	valueUpdater   MMValueUpdater
 	logger         observability.Logger
-	config         MarketMoversRefreshConfig
+	config         config.MarketMoversConfig
+}
+
+// SetClient replaces the API client used by the scheduler. This is called when
+// credentials are saved for the first time after startup (no client at boot).
+func (s *MarketMoversRefreshScheduler) SetClient(client *marketmovers.Client) {
+	s.clientMu.Lock()
+	defer s.clientMu.Unlock()
+	s.client = client
+}
+
+// getClient returns the current API client under the lock.
+func (s *MarketMoversRefreshScheduler) getClient() *marketmovers.Client {
+	s.clientMu.Lock()
+	defer s.clientMu.Unlock()
+	return s.client
 }
 
 // NewMarketMoversRefreshScheduler creates a new Market Movers refresh scheduler.
@@ -47,7 +63,7 @@ func NewMarketMoversRefreshScheduler(
 	purchaseLister MMPurchaseLister,
 	valueUpdater MMValueUpdater,
 	logger observability.Logger,
-	cfg MarketMoversRefreshConfig,
+	cfg config.MarketMoversConfig,
 ) *MarketMoversRefreshScheduler {
 	return &MarketMoversRefreshScheduler{
 		StopHandle:     NewStopHandle(),
@@ -96,6 +112,12 @@ func (s *MarketMoversRefreshScheduler) runOnce(ctx context.Context) error {
 		return nil
 	}
 
+	client := s.getClient()
+	if client == nil {
+		s.logger.Warn(ctx, "MM refresh: client not initialized, skipping (credentials may have been set via UI — restart or save credentials again)")
+		return nil
+	}
+
 	// List all unsold purchases
 	purchases, err := s.purchaseLister.ListAllUnsoldPurchases(ctx)
 	if err != nil {
@@ -108,12 +130,15 @@ func (s *MarketMoversRefreshScheduler) runOnce(ctx context.Context) error {
 	if err != nil {
 		s.logger.Warn(ctx, "MM refresh: failed to list mappings", observability.Err(err))
 	}
-	mappingByCert := make(map[string]int64, len(existingMappings))
+	mappingByCert := make(map[string]sqlite.MMCardMapping, len(existingMappings))
 	for _, m := range existingMappings {
-		mappingByCert[m.SlabSerial] = m.MMCollectibleID
+		mappingByCert[m.SlabSerial] = m
 	}
 
 	updated, mapped, skipped, searchFailed := 0, 0, 0, 0
+
+	// Look back 30 days for daily stats
+	dateFrom := time.Now().UTC().AddDate(0, 0, -30)
 
 	for i := range purchases {
 		p := &purchases[i]
@@ -125,9 +150,9 @@ func (s *MarketMoversRefreshScheduler) runOnce(ctx context.Context) error {
 		}
 
 		// Resolve collectible ID — use cached mapping or search the API
-		collectibleID, ok := mappingByCert[p.CertNumber]
-		if !ok {
-			id, err := s.resolveCollectibleID(ctx, p)
+		mapping, hasCached := mappingByCert[p.CertNumber]
+		if !hasCached {
+			cid, mid, err := s.resolveCollectibleID(ctx, p)
 			if err != nil {
 				s.logger.Warn(ctx, "MM refresh: failed to resolve collectible ID",
 					observability.String("cert", p.CertNumber),
@@ -135,37 +160,41 @@ func (s *MarketMoversRefreshScheduler) runOnce(ctx context.Context) error {
 				searchFailed++
 				continue
 			}
-			if id == 0 {
+			if cid == 0 {
 				skipped++
 				continue
 			}
-			collectibleID = id
-			if err := s.store.SaveMapping(ctx, p.CertNumber, collectibleID); err != nil {
+			mapping = sqlite.MMCardMapping{SlabSerial: p.CertNumber, MMCollectibleID: cid, MasterID: mid}
+			if err := s.store.SaveMapping(ctx, p.CertNumber, cid, mid); err != nil {
 				s.logger.Warn(ctx, "MM refresh: failed to save mapping",
 					observability.String("cert", p.CertNumber),
 					observability.Err(err))
 			} else {
-				mappingByCert[p.CertNumber] = collectibleID
+				mappingByCert[p.CertNumber] = mapping
 				mapped++
 			}
 		}
 
-		// Fetch avg recent price (last 30 days)
-		avgPrice, err := s.client.AvgRecentPrice(ctx, collectibleID, 30)
+		// Fetch 30-day daily stats — derive avg price, trend %, and sales volume in one call
+		stats, err := client.FetchDailyStats(ctx, mapping.MMCollectibleID, dateFrom)
 		if err != nil {
-			s.logger.Warn(ctx, "MM refresh: failed to fetch price",
+			s.logger.Warn(ctx, "MM refresh: failed to fetch daily stats",
 				observability.String("cert", p.CertNumber),
-				observability.Int64("collectibleId", collectibleID),
+				observability.Int64("collectibleId", mapping.MMCollectibleID),
 				observability.Err(err))
 			continue
 		}
+
+		avgPrice, trendPct, sales30d := computeMMSignals(stats.DailyStats)
 		if avgPrice <= 0 {
 			continue
 		}
 
 		mmValueCents := mathutil.ToCentsInt(avgPrice)
-		if err := s.valueUpdater.UpdatePurchaseMMValue(ctx, p.ID, mmValueCents); err != nil {
-			s.logger.Warn(ctx, "MM refresh: failed to update MM value",
+		activeLowCents := s.fetchActiveLowCents(ctx, client, mapping.MMCollectibleID, p.CertNumber)
+
+		if err := s.valueUpdater.UpdatePurchaseMMSignals(ctx, p.ID, mmValueCents, trendPct, sales30d, activeLowCents); err != nil {
+			s.logger.Warn(ctx, "MM refresh: failed to update MM signals",
 				observability.String("cert", p.CertNumber),
 				observability.Err(err))
 			continue
@@ -182,30 +211,157 @@ func (s *MarketMoversRefreshScheduler) runOnce(ctx context.Context) error {
 	return nil
 }
 
-// resolveCollectibleID searches Market Movers for the card and returns its collectible ID.
-// Returns 0 if no suitable result is found.
-func (s *MarketMoversRefreshScheduler) resolveCollectibleID(ctx context.Context, p *campaigns.Purchase) (int64, error) {
+// resolveCollectibleID searches Market Movers for the card and returns its collectible ID
+// and master ID (grade-agnostic variant identifier, 0 if unknown).
+// Returns (0, 0, nil) if no suitable result is found.
+//
+// Strategy:
+//  1. Search by cert number — we embed the cert in the MM export Notes column, and MM
+//     indexes PSA cert numbers so this is the most precise lookup available.
+//  2. Fall back to a "{CardName} {Grader} {Grade}" text query if the cert search yields
+//     no result that matches the card name.
+//
+// Any candidate returned by either path is validated by checking that the MM result's
+// SearchTitle contains the card name (case-insensitive) before the ID is cached.
+func (s *MarketMoversRefreshScheduler) resolveCollectibleID(ctx context.Context, p *campaigns.Purchase) (collectibleID, masterID int64, err error) {
 	if p.CardName == "" {
-		return 0, nil
+		return 0, 0, nil
 	}
 
-	// Build a search query: "{CardName} {Grader} {Grade}"
+	// 1. Try cert number first.
+	if p.CertNumber != "" {
+		cid, mid, cerr := s.searchByCert(ctx, p)
+		if cerr != nil {
+			s.logger.Warn(ctx, "MM: cert-based search failed, falling back to name search",
+				observability.String("cert", p.CertNumber),
+				observability.Err(cerr))
+		} else if cid != 0 {
+			return cid, mid, nil
+		}
+	}
+
+	// 2. Fall back to name + grade search with relevance validation.
+	return s.searchByNameGrade(ctx, p)
+}
+
+// searchByCert searches MM using the PSA cert number as the query.
+// Returns the collectible ID and master ID of the first hit whose SearchTitle contains
+// the card name, or (0, 0, nil) if no matching result is found.
+func (s *MarketMoversRefreshScheduler) searchByCert(ctx context.Context, p *campaigns.Purchase) (collectibleID, masterID int64, err error) {
+	results, err := s.getClient().SearchCollectibles(ctx, p.CertNumber, 0, 3)
+	if err != nil {
+		return 0, 0, fmt.Errorf("search by cert: %w", err)
+	}
+	cardNameLower := strings.ToLower(p.CardName)
+	for _, r := range results.Items {
+		if strings.Contains(strings.ToLower(r.Item.SearchTitle), cardNameLower) {
+			return r.Item.ID, r.Item.MasterID, nil
+		}
+	}
+	return 0, 0, nil
+}
+
+// searchByNameGrade searches MM using "{CardName} {Grader} {Grade}" and validates
+// that the top result's SearchTitle contains the card name before returning the IDs.
+// Returns (0, 0, nil) if no relevant result is found.
+func (s *MarketMoversRefreshScheduler) searchByNameGrade(ctx context.Context, p *campaigns.Purchase) (collectibleID, masterID int64, err error) {
 	grader := p.Grader
 	if grader == "" {
 		grader = "PSA"
 	}
-	query := fmt.Sprintf("%s %s %s", p.CardName, grader, formatGrade(p.GradeValue))
-	// Trim extra spaces from zero-grade edge case
-	query = strings.TrimSpace(query)
+	// Omit grade when it is zero (unset) to avoid a spurious "0" token in the query.
+	var query string
+	if p.GradeValue == 0 {
+		query = fmt.Sprintf("%s %s", p.CardName, grader)
+	} else {
+		query = fmt.Sprintf("%s %s %s", p.CardName, grader, mathutil.FormatGrade(p.GradeValue))
+	}
 
-	results, err := s.client.SearchCollectibles(ctx, query, 0, 5)
+	results, err := s.getClient().SearchCollectibles(ctx, query, 0, 5)
 	if err != nil {
-		return 0, fmt.Errorf("search collectibles: %w", err)
+		return 0, 0, fmt.Errorf("search by name: %w", err)
 	}
 	if len(results.Items) == 0 {
-		return 0, nil
+		return 0, 0, nil
 	}
 
-	// Take the first result (highest relevance score from the index)
-	return results.Items[0].Item.ID, nil
+	// Validate relevance: reject the top result if its title doesn't contain the card name,
+	// since a mismatch means MM returned a completely unrelated card.
+	top := results.Items[0]
+	if !strings.Contains(strings.ToLower(top.Item.SearchTitle), strings.ToLower(p.CardName)) {
+		s.logger.Debug(ctx, "MM: name search top result rejected (title mismatch)",
+			observability.String("cert", p.CertNumber),
+			observability.String("query", query),
+			observability.String("resultTitle", top.Item.SearchTitle))
+		return 0, 0, nil
+	}
+
+	return top.Item.ID, top.Item.MasterID, nil
+}
+
+// computeMMSignals derives count-weighted average price, 30-day trend %, and total
+// sales volume from a slice of daily stats items.
+// trendPct is (lastDayWithSales.AvgPrice - firstDayWithSales.AvgPrice) / firstDayWithSales.AvgPrice,
+// capped to ±200% to resist single-sale outlier days.
+func computeMMSignals(items []marketmovers.DailyStatItem) (avgPrice float64, trendPct float64, sales30d int) {
+	if len(items) == 0 {
+		return 0, 0, 0
+	}
+
+	var totalAmount float64
+	var totalCount int
+	var firstPrice, lastPrice float64
+
+	for _, item := range items {
+		if item.TotalSalesCount <= 0 {
+			continue
+		}
+		totalAmount += item.TotalSalesAmount
+		totalCount += item.TotalSalesCount
+		if firstPrice == 0 {
+			firstPrice = item.AverageSalePrice
+		}
+		lastPrice = item.AverageSalePrice
+	}
+
+	if totalCount == 0 {
+		return 0, 0, 0
+	}
+
+	avgPrice = totalAmount / float64(totalCount)
+	sales30d = totalCount
+
+	if firstPrice > 0 {
+		raw := (lastPrice - firstPrice) / firstPrice
+		// Cap to ±200% to avoid outlier distortion from single-sale days
+		trendPct = math.Max(-2.0, math.Min(2.0, raw))
+	}
+
+	return avgPrice, trendPct, sales30d
+}
+
+// fetchActiveLowCents returns the lowest active Buy-It-Now price for a collectible in cents.
+// Returns 0 if no BIN listings are found or the call fails (non-fatal — active price is
+// supplementary data and should not block the rest of the refresh).
+func (s *MarketMoversRefreshScheduler) fetchActiveLowCents(ctx context.Context, client *marketmovers.Client, collectibleID int64, cert string) int {
+	resp, err := client.FetchActiveSales(ctx, []int64{collectibleID}, []string{"BuyItNow"}, 0, 10)
+	if err != nil {
+		s.logger.Debug(ctx, "MM refresh: failed to fetch active sales (non-fatal)",
+			observability.String("cert", cert),
+			observability.Int64("collectibleId", collectibleID),
+			observability.Err(err))
+		return 0
+	}
+
+	var lowestBIN float64
+	for _, item := range resp.Items {
+		if !item.IsBuyItNowAvailable || item.BuyItNowPrice <= 0 {
+			continue
+		}
+		if lowestBIN == 0 || item.BuyItNowPrice < lowestBIN {
+			lowestBIN = item.BuyItNowPrice
+		}
+	}
+
+	return mathutil.ToCentsInt(lowestBIN)
 }

@@ -23,6 +23,7 @@ type MarketMoversConfig struct {
 type MMCardMapping struct {
 	SlabSerial      string
 	MMCollectibleID int64
+	MasterID        int64 // Grade-agnostic variant ID (shared across all grades of the same card)
 }
 
 // MarketMoversStore manages Market Movers config and mapping persistence.
@@ -111,15 +112,17 @@ func (s *MarketMoversStore) DeleteConfig(ctx context.Context) error {
 	return err
 }
 
-// SaveMapping upserts a cert → MM collectible ID mapping.
-func (s *MarketMoversStore) SaveMapping(ctx context.Context, slabSerial string, mmCollectibleID int64) error {
+// SaveMapping upserts a cert → MM collectible ID + master ID mapping.
+// masterID is the grade-agnostic variant identifier (0 if unknown).
+func (s *MarketMoversStore) SaveMapping(ctx context.Context, slabSerial string, mmCollectibleID, masterID int64) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO mm_card_mappings (slab_serial, mm_collectible_id, updated_at)
-		 VALUES (?, ?, ?)
+		`INSERT INTO mm_card_mappings (slab_serial, mm_collectible_id, mm_master_id, updated_at)
+		 VALUES (?, ?, ?, ?)
 		 ON CONFLICT(slab_serial) DO UPDATE SET
 		   mm_collectible_id = excluded.mm_collectible_id,
+		   mm_master_id = excluded.mm_master_id,
 		   updated_at = excluded.updated_at`,
-		slabSerial, mmCollectibleID, time.Now().UTC().Format(time.RFC3339),
+		slabSerial, mmCollectibleID, masterID, time.Now().UTC().Format(time.RFC3339),
 	)
 	return err
 }
@@ -128,9 +131,9 @@ func (s *MarketMoversStore) SaveMapping(ctx context.Context, slabSerial string, 
 func (s *MarketMoversStore) GetMapping(ctx context.Context, slabSerial string) (*MMCardMapping, error) {
 	var m MMCardMapping
 	err := s.db.QueryRowContext(ctx,
-		`SELECT slab_serial, mm_collectible_id FROM mm_card_mappings WHERE slab_serial = ?`,
+		`SELECT slab_serial, mm_collectible_id, mm_master_id FROM mm_card_mappings WHERE slab_serial = ?`,
 		slabSerial,
-	).Scan(&m.SlabSerial, &m.MMCollectibleID)
+	).Scan(&m.SlabSerial, &m.MMCollectibleID, &m.MasterID)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -143,7 +146,7 @@ func (s *MarketMoversStore) GetMapping(ctx context.Context, slabSerial string) (
 // ListMappings returns all stored MM card mappings.
 func (s *MarketMoversStore) ListMappings(ctx context.Context) ([]MMCardMapping, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT slab_serial, mm_collectible_id FROM mm_card_mappings`)
+		`SELECT slab_serial, mm_collectible_id, mm_master_id FROM mm_card_mappings`)
 	if err != nil {
 		return nil, err
 	}
@@ -152,7 +155,7 @@ func (s *MarketMoversStore) ListMappings(ctx context.Context) ([]MMCardMapping, 
 	var mappings []MMCardMapping
 	for rows.Next() {
 		var m MMCardMapping
-		if err := rows.Scan(&m.SlabSerial, &m.MMCollectibleID); err != nil {
+		if err := rows.Scan(&m.SlabSerial, &m.MMCollectibleID, &m.MasterID); err != nil {
 			return nil, err
 		}
 		mappings = append(mappings, m)

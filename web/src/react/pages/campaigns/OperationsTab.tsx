@@ -2,7 +2,7 @@ import { useRef, useState, ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { api } from '../../../js/api';
-import type { Campaign, GlobalImportResult, PSAImportResult } from '../../../types/campaigns';
+import type { Campaign, GlobalImportResult, PSAImportResult, MMRefreshResult } from '../../../types/campaigns';
 import { queryKeys } from '../../queries/queryKeys';
 import { getErrorMessage } from '../../utils/formatters';
 import { useToast } from '../../contexts/ToastContext';
@@ -141,6 +141,7 @@ export default function OperationsTab({ campaigns, operationState, setOperationS
   const queryClient = useQueryClient();
   const busy = operationState !== 'idle';
   const [exportMissingOnly, setExportMissingOnly] = useState(false);
+  const [mmResult, setMmResult] = useState<MMRefreshResult | null>(null);
 
   function invalidateAll() {
     queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.all });
@@ -210,7 +211,9 @@ export default function OperationsTab({ campaigns, operationState, setOperationS
   async function handleMMImport(file: File) {
     try {
       setOperationState('importing-mm');
+      setMmResult(null);
       const result = await api.globalRefreshMM(file);
+      setMmResult(result);
       toast.success(`Market Movers import: ${result.updated} updated, ${result.skipped} skipped, ${result.notFound} not found`);
       invalidateAll();
     } catch (err) {
@@ -380,8 +383,29 @@ export default function OperationsTab({ campaigns, operationState, setOperationS
         </div>
       )}
 
-      {psaResult && (
+      {mmResult && (
         <div className="mb-4 p-3 rounded-lg bg-[var(--surface-2)]/50 text-sm">
+          <div className="flex items-center justify-between mb-1">
+            <span className="font-medium text-[var(--text)]">Market Movers Refresh Complete</span>
+            <button type="button" onClick={() => setMmResult(null)} className="text-[var(--text-muted)] hover:text-[var(--text)] text-xs">Dismiss</button>
+          </div>
+          <div className="flex flex-wrap gap-3 text-xs">
+            {mmResult.updated > 0 && <span className="text-[var(--success)]">{mmResult.updated} updated</span>}
+            {mmResult.skipped > 0 && <span className="text-[var(--text-muted)]">{mmResult.skipped} skipped</span>}
+            {mmResult.notFound > 0 && <span className="text-[var(--warning)]">{mmResult.notFound} not found</span>}
+            {mmResult.failed > 0 && <span className="text-[var(--danger)]">{mmResult.failed} failed</span>}
+          </div>
+          {mmResult.errors && mmResult.errors.length > 0 && (
+            <div className="mt-2 text-xs text-[var(--danger)] space-y-0.5">
+              {mmResult.errors.map((e, i) => (
+                <div key={i}>{e.row != null ? `Row ${e.row}: ` : ''}{e.error}</div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {psaResult && (        <div className="mb-4 p-3 rounded-lg bg-[var(--surface-2)]/50 text-sm">
           <div className="flex items-center justify-between mb-1">
             <span className="font-medium text-[var(--text)]">PSA Import Complete</span>
             <div className="flex items-center gap-3">

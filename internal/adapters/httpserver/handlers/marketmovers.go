@@ -14,6 +14,9 @@ import (
 // MMRefresher runs a Market Movers value refresh cycle on demand.
 type MMRefresher interface {
 	RunOnce(ctx context.Context) error
+	// SetClient replaces the underlying API client. Called when credentials are
+	// saved for the first time after startup (i.e. no client existed at boot).
+	SetClient(client *marketmovers.Client)
 }
 
 // MarketMoversHandler manages Market Movers admin endpoints.
@@ -75,19 +78,25 @@ func (h *MarketMoversHandler) HandleSaveConfig(w http.ResponseWriter, r *http.Re
 	h.mu.Lock()
 	if h.client != nil {
 		h.client.UpdateCredentials(
-			marketmovers.NewAuth(),
+			tempAuth,
 			authResp.RefreshToken,
 		)
 		h.client.SetToken(authResp.AccessToken, expiry)
 	} else {
 		h.client = marketmovers.NewClient(
 			marketmovers.WithTokenManager(
-				marketmovers.NewAuth(),
+				tempAuth,
 				authResp.RefreshToken,
 				time.Time{},
 			),
 		)
 		h.client.SetToken(authResp.AccessToken, expiry)
+		// Push the newly created client into the scheduler so that manual
+		// refresh and the daily loop become functional immediately (without
+		// requiring a server restart).
+		if h.refresher != nil {
+			h.refresher.SetClient(h.client)
+		}
 	}
 	h.mu.Unlock()
 

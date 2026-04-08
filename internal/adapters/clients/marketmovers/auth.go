@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 )
 
 const (
@@ -33,7 +34,7 @@ func WithAuthBaseURL(u string) AuthOption {
 func NewAuth(opts ...AuthOption) *Auth {
 	a := &Auth{
 		baseURL:    defaultAPIBaseURL,
-		httpClient: &http.Client{},
+		httpClient: &http.Client{Timeout: 30 * time.Second},
 	}
 	for _, opt := range opts {
 		opt(a)

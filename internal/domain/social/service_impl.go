@@ -355,10 +355,19 @@ func filterPriceMovers(snapshots []PurchaseSnapshot) []string {
 	cutoff := time.Now().UTC().AddDate(0, 0, -maxSnapshotAgeDays).Format("2006-01-02")
 	var ids []string
 	for _, snap := range snapshots {
-		if snap.SnapshotDate < cutoff || snap.MedianCents == 0 {
+		if snap.MedianCents == 0 {
 			continue
 		}
-		if math.Abs(snap.Trend30d) >= priceChangeThreshold {
+		// Use DH trend when available, fall back to MM trend for cards without a DH snapshot
+		trend := snap.Trend30d
+		if trend == 0 && snap.MMTrendPct != 0 {
+			trend = snap.MMTrendPct
+		}
+		// Only require a fresh DH snapshot when relying on it; MM trend is always fresh
+		if snap.Trend30d != 0 && snap.SnapshotDate < cutoff {
+			continue
+		}
+		if math.Abs(trend) >= priceChangeThreshold {
 			ids = append(ids, snap.PurchaseID)
 		}
 	}

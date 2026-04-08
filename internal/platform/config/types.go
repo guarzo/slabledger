@@ -176,6 +176,7 @@ type Config struct {
 	MetricsPoll      MetricsPollConfig
 	PicksRefresh     PicksRefreshConfig
 	CardLadder       CardLadderConfig
+	MarketMovers     MarketMoversConfig
 	DH               DHConfig
 	Adapters         AdapterConfig
 }
@@ -247,6 +248,12 @@ type CardLadderConfig struct {
 	Enabled     bool          // Enable CL refresh scheduler (default: false)
 	Interval    time.Duration // How often to run refresh (default: 24h)
 	RefreshHour int           // Hour (0-23 UTC) to schedule runs; -1 = use Interval (default: 4)
+}
+
+// MarketMoversConfig controls the Market Movers value refresh scheduler.
+type MarketMoversConfig struct {
+	Enabled     bool // Enable MM refresh scheduler (default: true)
+	RefreshHour int  // Hour (0-23 UTC) to schedule daily runs (default: 5)
 }
 
 // ApplyDefaults sets zero-valued fields to sensible defaults.

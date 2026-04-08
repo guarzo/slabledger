@@ -21,7 +21,7 @@ func (s *service) ExportMMFormatGlobal(ctx context.Context) ([]MMExportEntry, er
 		if grader == "" {
 			grader = "PSA"
 		}
-		grade := fmt.Sprintf("%s %s", grader, formatMMGrade(p.GradeValue))
+		grade := fmt.Sprintf("%s %s", grader, mathutil.FormatGrade(p.GradeValue))
 
 		// Player name: prefer enriched CardPlayer, fall back to raw CardName.
 		playerName := p.CardPlayer
@@ -60,7 +60,7 @@ func (s *service) ExportMMFormatGlobal(ctx context.Context) ([]MMExportEntry, er
 			DateSold:             "",
 			SoldPricePerCard:     "",
 			LastSalePrice:        lastSalePrice,
-			LastSaleDate:         p.SnapshotDate,
+			LastSaleDate:         "", // Not known; leave blank rather than misrepresent DH snapshot date as last-sale date
 		})
 	}
 	return entries, nil
@@ -135,10 +135,4 @@ func (s *service) RefreshMMValuesGlobal(ctx context.Context, rows []MMRefreshRow
 	return result, nil
 }
 
-// formatMMGrade formats a numeric grade for MM export: 10 → "10", 9.5 → "9.5".
-func formatMMGrade(v float64) string {
-	if v == float64(int(v)) {
-		return fmt.Sprintf("%d", int(v))
-	}
-	return fmt.Sprintf("%g", v)
-}
+// Note: formatMMGrade was deduplicated into mathutil.FormatGrade.

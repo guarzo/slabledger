@@ -36,24 +36,27 @@ if [ -d "$CONTAINER_HOME/.claude" ]; then
 fi
 
 # Handle OpenCode config - detect host home from opencode config
-if [ -d "$CONTAINER_HOME/.opencode" ]; then
+# OpenCode uses the XDG-standard path ~/.config/opencode
+if [ -d "$CONTAINER_HOME/.config/opencode" ]; then
     HOST_HOME=""
     # Check opencode config for absolute paths
-    OPENCODE_CONFIG="$CONTAINER_HOME/.opencode/config.json"
+    OPENCODE_CONFIG="$CONTAINER_HOME/.config/opencode/opencode.json"
     if [ -f "$OPENCODE_CONFIG" ]; then
-        # Look for installLocation or similar host paths in config
+        # Look for absolute host paths in config
         HOST_HOME=$(grep -oP '"/home/[^"]+' "$OPENCODE_CONFIG" | head -1 | tr -d '"' | xargs dirname 2>/dev/null || true)
         # If that didn't work, try parent directory pattern
         if [ -z "$HOST_HOME" ]; then
             HOST_HOME=$(grep -oP 'installPath[^"]*"/home/[^"]+' "$OPENCODE_CONFIG" | head -1 | grep -oP '/home/[^/]+' || true)
         fi
     fi
-    # Fallback: scan skills directory for host paths
+    # Fallback: scan for host paths in config entries (agents, commands, etc.)
     if [ -z "$HOST_HOME" ]; then
-        SKILLS_DIR="$CONTAINER_HOME/.opencode/skills"
-        if [ -d "$SKILLS_DIR" ]; then
-            HOST_HOME=$(grep -rlo '"/home/[^"]+' "$SKILLS_DIR" 2>/dev/null | head -1 | xargs dirname 2>/dev/null | grep -oP '/home/[^/]+' || true)
-        fi
+        for subdir in "$CONTAINER_HOME/.config/opencode"/*/; do
+            if [ -d "$subdir" ]; then
+                HOST_HOME=$(grep -rlo '"/home/[^"]+' "$subdir" 2>/dev/null | head -1 | xargs dirname 2>/dev/null | grep -oP '/home/[^/]+' || true)
+                [ -n "$HOST_HOME" ] && break
+            fi
+        done
     fi
     # Create symlink if host home differs from container home
     if [ -n "$HOST_HOME" ] && [ "$HOST_HOME" != "$CONTAINER_HOME" ] && [ ! -e "$HOST_HOME" ]; then
@@ -63,27 +66,25 @@ if [ -d "$CONTAINER_HOME/.opencode" ]; then
 fi
 
 # Fix OpenCode config directory symlinks.
-# The opencode config directory (~/.config/opencode or ~/.opencode) may contain
-# symlinks pointing to host paths (e.g. /home/tng/.dotfiles/opencode/...) which
+# The opencode config directory (~/.config/opencode) may contain symlinks
+# pointing to host paths (e.g. /home/tng/.dotfiles/opencode/...) which
 # don't resolve inside the container. Fix them to point to the mounted .dotfiles.
-for CONFIG_DIR in "$CONTAINER_HOME/.config/opencode" "$CONTAINER_HOME/.opencode"; do
-    if [ -d "$CONFIG_DIR" ]; then
-        for item in "$CONFIG_DIR"/*; do
-            if [ -L "$item" ]; then
-                TARGET=$(readlink "$item")
-                if echo "$TARGET" | grep -q "^/home/"; then
-                    # Replace host home path with container's .dotfiles location
-                    NEW_TARGET=$(echo "$TARGET" | sed "s|/home/[^/]*/.dotfiles|$CONTAINER_HOME/.dotfiles|g")
-                    if [ -e "$NEW_TARGET" ]; then
-                        echo "🔗 Fixing symlink: $(basename "$item") (OpenCode config path fix)"
-                        rm "$item"
-                        ln -sfn "$NEW_TARGET" "$item"
-                    fi
+if [ -d "$CONTAINER_HOME/.config/opencode" ]; then
+    for item in "$CONTAINER_HOME/.config/opencode"/*; do
+        if [ -L "$item" ]; then
+            TARGET=$(readlink "$item")
+            if echo "$TARGET" | grep -q "^/home/"; then
+                # Replace host home path with container's .dotfiles location
+                NEW_TARGET=$(echo "$TARGET" | sed "s|/home/[^/]*/.dotfiles|$CONTAINER_HOME/.dotfiles|g")
+                if [ -e "$NEW_TARGET" ]; then
+                    echo "🔗 Fixing symlink: $(basename "$item") (OpenCode config path fix)"
+                    rm "$item"
+                    ln -sfn "$NEW_TARGET" "$item"
                 fi
             fi
-        done
-    fi
-done
+        fi
+    done
+fi
 
 # Remove Windows credential helper if present (copied from host .gitconfig)
 # The devcontainer already has its own credential helper in /etc/gitconfig

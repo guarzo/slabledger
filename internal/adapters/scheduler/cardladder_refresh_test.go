@@ -121,27 +121,6 @@ func TestExtractGradeValue(t *testing.T) {
 	}
 }
 
-func TestFormatGrade(t *testing.T) {
-	tests := []struct {
-		name  string
-		grade float64
-		want  string
-	}{
-		{"integer grade 10", 10, "10"},
-		{"integer grade 9", 9, "9"},
-		{"integer grade 1", 1, "1"},
-		{"decimal grade 9.5", 9.5, "9.5"},
-		{"decimal grade 8.5", 8.5, "8.5"},
-		{"zero", 0, "0"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := formatGrade(tt.grade)
-			assert.Equal(t, tt.want, got)
-		})
-	}
-}
-
 // ---------------------------------------------------------------------------
 // Constructor / config tests
 // ---------------------------------------------------------------------------

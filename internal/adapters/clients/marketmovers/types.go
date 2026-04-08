@@ -138,6 +138,7 @@ type CollectibleSearchResult struct {
 // CollectibleItem is the card/collectible metadata from the search index.
 type CollectibleItem struct {
 	ID              int64            `json:"id"`
+	MasterID        int64            `json:"masterId"` // Grade-agnostic variant ID shared across all grades of the same card
 	SearchTitle     string           `json:"searchTitle"`
 	CollectibleType string           `json:"collectibleType"`
 	ImageURL        string           `json:"imageUrl"`

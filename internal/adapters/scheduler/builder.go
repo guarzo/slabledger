@@ -352,16 +352,16 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 		))
 	}
 
-	// Market Movers value refresh scheduler (if client + store are provided)
-	if deps.MMClient != nil && deps.MMStore != nil && deps.MMPurchaseLister != nil && deps.MMValueUpdater != nil {
-		mmCfg := MarketMoversRefreshConfig{
-			Enabled:     true,
-			RefreshHour: 5, // 5 AM UTC
-		}
+	// Market Movers value refresh scheduler.
+	// Created whenever the store and purchase interfaces are available, even if
+	// no client exists yet at startup. SetClient is called by the handler when
+	// credentials are saved for the first time, activating the scheduler without
+	// requiring a server restart.
+	if deps.MMStore != nil && deps.MMPurchaseLister != nil && deps.MMValueUpdater != nil {
 		mmRefresh = NewMarketMoversRefreshScheduler(
 			deps.MMClient, deps.MMStore,
 			deps.MMPurchaseLister, deps.MMValueUpdater,
-			deps.Logger, mmCfg,
+			deps.Logger, cfg.MarketMovers,
 		)
 		schedulers = append(schedulers, mmRefresh)
 	}
