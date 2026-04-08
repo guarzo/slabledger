@@ -246,6 +246,13 @@ func (r *CampaignsRepository) UpdatePurchaseCLValue(ctx context.Context, id stri
 	)
 }
 
+func (r *CampaignsRepository) UpdatePurchaseMMValue(ctx context.Context, id string, mmValueCents int) error {
+	return r.execAndExpectRow(ctx, "update mm value",
+		`UPDATE campaign_purchases SET mm_value_cents = ?, updated_at = ? WHERE id = ?`,
+		mmValueCents, time.Now(), id,
+	)
+}
+
 func (r *CampaignsRepository) UpdatePurchaseCardMetadata(ctx context.Context, id string, cardName, cardNumber, setName string) error {
 	return r.execAndExpectRow(ctx, "update card metadata",
 		`UPDATE campaign_purchases SET card_name = ?, card_number = ?, set_name = ?, updated_at = ? WHERE id = ?`,

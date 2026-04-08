@@ -166,6 +166,36 @@ export function useTriggerCardLadderRefresh() {
   });
 }
 
+export function useMarketMoversStatus(options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: queryKeys.admin.marketMoversStatus,
+    queryFn: () => api.getMarketMoversStatus(),
+    staleTime: 60_000,
+    enabled: options?.enabled ?? true,
+  });
+}
+
+export function useSaveMarketMoversConfig() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (config: { username: string; password: string }) =>
+      api.saveMarketMoversConfig(config),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.admin.marketMoversStatus });
+    },
+  });
+}
+
+export function useTriggerMarketMoversRefresh() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.triggerMarketMoversRefresh(),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.admin.marketMoversStatus });
+    },
+  });
+}
+
 export function useDHStatus(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: queryKeys.admin.dhStatus,

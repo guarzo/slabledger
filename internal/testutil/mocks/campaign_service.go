@@ -344,6 +344,14 @@ func (m *MockCampaignService) ExportCLFormatGlobal(ctx context.Context, missingC
 	return []campaigns.CLExportEntry{}, nil
 }
 
+func (m *MockCampaignService) ExportMMFormatGlobal(ctx context.Context) ([]campaigns.MMExportEntry, error) {
+	return []campaigns.MMExportEntry{}, nil
+}
+
+func (m *MockCampaignService) RefreshMMValuesGlobal(_ context.Context, _ []campaigns.MMRefreshRow) (*campaigns.MMRefreshResult, error) {
+	return &campaigns.MMRefreshResult{}, nil
+}
+
 func (m *MockCampaignService) ImportPSAExportGlobal(ctx context.Context, rows []campaigns.PSAExportRow) (*campaigns.PSAImportResult, error) {
 	if m.ImportPSAExportGlobalFn != nil {
 		return m.ImportPSAExportGlobalFn(ctx, rows)

@@ -61,6 +61,14 @@ func (m *MockImportService) ExportCLFormatGlobal(ctx context.Context, missingCLO
 	return []campaigns.CLExportEntry{}, nil
 }
 
+func (m *MockImportService) ExportMMFormatGlobal(ctx context.Context) ([]campaigns.MMExportEntry, error) {
+	return []campaigns.MMExportEntry{}, nil
+}
+
+func (m *MockImportService) RefreshMMValuesGlobal(_ context.Context, _ []campaigns.MMRefreshRow) (*campaigns.MMRefreshResult, error) {
+	return &campaigns.MMRefreshResult{}, nil
+}
+
 func (m *MockImportService) EnsureExternalCampaign(ctx context.Context) (*campaigns.Campaign, error) {
 	if m.EnsureExternalCampaignFn != nil {
 		return m.EnsureExternalCampaignFn(ctx)

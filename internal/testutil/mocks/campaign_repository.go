@@ -466,6 +466,15 @@ func (m *MockCampaignRepository) UpdatePurchaseCLValue(ctx context.Context, id s
 	return nil
 }
 
+func (m *MockCampaignRepository) UpdatePurchaseMMValue(_ context.Context, id string, mmValueCents int) error {
+	p, ok := m.Purchases[id]
+	if !ok {
+		return campaigns.ErrPurchaseNotFound
+	}
+	p.MMValueCents = mmValueCents
+	return nil
+}
+
 func (m *MockCampaignRepository) UpdatePurchaseCardMetadata(ctx context.Context, id, cardName, cardNumber, setName string) error {
 	if m.UpdatePurchaseCardMetadataFn != nil {
 		return m.UpdatePurchaseCardMetadataFn(ctx, id, cardName, cardNumber, setName)

@@ -144,6 +144,7 @@ type Purchase struct {
 	Grader                string         `json:"grader,omitempty"`     // e.g. "PSA", "CGC", "BGS", "SGC"
 	GradeValue            float64        `json:"gradeValue"`           // Numeric grade (1-10, supports half-grades like 9.5)
 	CLValueCents          int            `json:"clValueCents"`         // CL market value at purchase time
+	MMValueCents          int            `json:"mmValueCents"`         // Market Movers avg price (cents)
 	BuyCostCents          int            `json:"buyCostCents"`         // Actual cost paid
 	PSASourcingFeeCents   int            `json:"psaSourcingFeeCents"`  // Fee charged per card
 	Population            int            `json:"population,omitempty"` // PSA population count
@@ -179,8 +180,12 @@ type Purchase struct {
 	DHCandidatesJSON    string       `json:"dhCandidatesJson,omitempty"`    // Ambiguous cert resolution candidates JSON
 	GemRateID           string       `json:"gemRateId,omitempty"`           // CL gemRateID (grade-agnostic card variant identifier)
 	PSASpecID           int          `json:"psaSpecId,omitempty"`           // PSA spec ID from CL cards index
-	CreatedAt           time.Time    `json:"createdAt"`
-	UpdatedAt           time.Time    `json:"updatedAt"`
+	// Card Ladder metadata (from CL catalog enrichment)
+	CardPlayer    string    `json:"cardPlayer,omitempty"`    // Player/subject name (e.g. "Charizard", "LeBron James")
+	CardVariation string    `json:"cardVariation,omitempty"` // Card variation (e.g. "Holo Rare", "1st Edition")
+	CardCategory  string    `json:"cardCategory,omitempty"`  // Sport/category (e.g. "Pokemon", "Basketball")
+	CreatedAt     time.Time `json:"createdAt"`
+	UpdatedAt     time.Time `json:"updatedAt"`
 
 	// Market snapshot at time of purchase (best-effort, may be zero)
 	MarketSnapshotData

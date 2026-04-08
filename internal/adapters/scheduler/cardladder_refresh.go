@@ -26,10 +26,11 @@ type CardLadderValueUpdater interface {
 	UpdatePurchaseCLValue(ctx context.Context, purchaseID string, clValueCents, population int) error
 }
 
-// CardLadderGemRateUpdater persists gemRateID and psaSpecID on purchases.
+// CardLadderGemRateUpdater persists gemRateID, psaSpecID, and CL card metadata on purchases.
 type CardLadderGemRateUpdater interface {
 	UpdatePurchaseGemRateID(ctx context.Context, purchaseID, gemRateID string) error
 	UpdatePurchasePSASpecID(ctx context.Context, purchaseID string, psaSpecID int) error
+	UpdatePurchaseCLCardMetadata(ctx context.Context, id, player, variation, category string) error
 }
 
 // CardLadderRefreshOption configures optional dependencies on a CardLadderRefreshScheduler.
@@ -420,6 +421,15 @@ func (s *CardLadderRefreshScheduler) gapFillGemRateIDs(ctx context.Context, purc
 		if hit.PSASpecID != 0 {
 			if err := s.gemRateUpdater.UpdatePurchasePSASpecID(ctx, p.ID, hit.PSASpecID); err != nil {
 				s.logger.Warn(ctx, "CL gap-fill: failed to persist psaSpecId",
+					observability.String("cert", p.CertNumber),
+					observability.Err(err))
+			}
+		}
+
+		// Persist player/variation/category for MM export enrichment.
+		if hit.Player != "" || hit.Variation != "" || hit.Category != "" {
+			if err := s.gemRateUpdater.UpdatePurchaseCLCardMetadata(ctx, p.ID, hit.Player, hit.Variation, hit.Category); err != nil {
+				s.logger.Warn(ctx, "CL gap-fill: failed to persist card metadata",
 					observability.String("cert", p.CertNumber),
 					observability.Err(err))
 			}

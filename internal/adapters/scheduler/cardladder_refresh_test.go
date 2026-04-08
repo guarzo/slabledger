@@ -77,6 +77,10 @@ func (m *mockCLGemRateUpdater) UpdatePurchasePSASpecID(ctx context.Context, purc
 	return nil
 }
 
+func (m *mockCLGemRateUpdater) UpdatePurchaseCLCardMetadata(_ context.Context, _, _, _, _ string) error {
+	return nil
+}
+
 type mockCLValueHistoryRecorder struct {
 	RecordFn func(ctx context.Context, entry campaigns.CLValueEntry) error
 	Calls    []campaigns.CLValueEntry

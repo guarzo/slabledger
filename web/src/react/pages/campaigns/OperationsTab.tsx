@@ -10,7 +10,7 @@ import { Button, CardShell } from '../../ui';
 import ImportResultsDetail from './ImportResultsDetail';
 import DHUnmatchedSection from '../tools/DHUnmatchedSection';
 
-export type OperationState = 'idle' | 'importing' | 'exporting' | 'importing-psa';
+export type OperationState = 'idle' | 'importing' | 'exporting' | 'exporting-mm' | 'importing-mm' | 'importing-psa';
 
 /* ── FileUploadButton ─────────────────────────────────────────────── */
 
@@ -189,6 +189,37 @@ export default function OperationsTab({ campaigns, operationState, setOperationS
     }
   }
 
+  async function handleMMExport() {
+    try {
+      setOperationState('exporting-mm');
+      const blob = await api.globalExportMM();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'market-movers-export.csv';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 100);
+      toast.success('Market Movers CSV exported');
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Failed to export'));
+    } finally {
+      setOperationState('idle');
+    }
+  }
+
+  async function handleMMImport(file: File) {
+    try {
+      setOperationState('importing-mm');
+      const result = await api.globalRefreshMM(file);
+      toast.success(`Market Movers import: ${result.updated} updated, ${result.skipped} skipped, ${result.notFound} not found`);
+      invalidateAll();
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Failed to import Market Movers data'));
+    } finally {
+      setOperationState('idle');
+    }
+  }
+
   async function handlePSAImport(file: File) {
     try {
       setOperationState('importing-psa');
@@ -272,6 +303,39 @@ export default function OperationsTab({ campaigns, operationState, setOperationS
               loading={operationState === 'importing'}
               accept=".csv"
               onFile={handleGlobalImport}
+              busy={busy}
+            />
+          }
+        />
+
+        <OperationCard
+          icon={<DownloadIcon />}
+          title="Export for Market Movers"
+          description="Download inventory CSV to import into Market Movers collection"
+          action={
+            <Button
+              size="sm"
+              variant="secondary"
+              fullWidth
+              loading={operationState === 'exporting-mm'}
+              disabled={busy && operationState !== 'exporting-mm'}
+              onClick={handleMMExport}
+            >
+              Download CSV
+            </Button>
+          }
+        />
+
+        <OperationCard
+          icon={<UploadIcon />}
+          title="Import from Market Movers"
+          description="Upload a Market Movers export CSV to sync Last Sale Price into mm_value"
+          action={
+            <FileUploadButton
+              label="Upload CSV"
+              loading={operationState === 'importing-mm'}
+              accept=".csv"
+              onFile={handleMMImport}
               busy={busy}
             />
           }

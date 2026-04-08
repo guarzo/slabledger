@@ -31,6 +31,9 @@ declare module './client' {
     getCardLadderStatus(): Promise<{ configured: boolean; email?: string; collectionId?: string; cardsMapped?: number }>;
     saveCardLadderConfig(config: { email: string; password: string; collectionId: string; firebaseApiKey: string }): Promise<{ status: string }>;
     triggerCardLadderRefresh(): Promise<{ status: string }>;
+    getMarketMoversStatus(): Promise<{ configured: boolean; username?: string; cardsMapped?: number }>;
+    saveMarketMoversConfig(config: { username: string; password: string }): Promise<{ status: string }>;
+    triggerMarketMoversRefresh(): Promise<{ status: string }>;
     getDHStatus(): Promise<DHStatusResponse>;
     triggerDHBulkMatch(): Promise<DHBulkMatchResponse>;
     getDHUnmatched(): Promise<DHUnmatchedResponse>;
@@ -132,6 +135,18 @@ proto.saveCardLadderConfig = async function (this: APIClient, config: { email: s
 
 proto.triggerCardLadderRefresh = async function (this: APIClient) {
   return this.post<{ status: string }>('/admin/cardladder/refresh');
+};
+
+proto.getMarketMoversStatus = async function (this: APIClient) {
+  return this.get<{ configured: boolean; username?: string; cardsMapped?: number }>('/admin/marketmovers/status');
+};
+
+proto.saveMarketMoversConfig = async function (this: APIClient, config: { username: string; password: string }) {
+  return this.post<{ status: string }>('/admin/marketmovers/config', config);
+};
+
+proto.triggerMarketMoversRefresh = async function (this: APIClient) {
+  return this.post<{ status: string }>('/admin/marketmovers/refresh');
 };
 
 proto.getDHStatus = async function (this: APIClient): Promise<DHStatusResponse> {

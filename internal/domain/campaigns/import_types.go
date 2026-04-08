@@ -331,6 +331,113 @@ type OrdersConfirmItem struct {
 	OrderID        string      `json:"orderId,omitempty"`
 }
 
+// MMExportEntry represents a single row in the Market Movers collection import CSV format.
+// The 17-column format matches Market Movers' collection export/import schema.
+type MMExportEntry struct {
+	Sport                string  // Column 1: Sport/category (e.g. "Pokemon", "Basketball")
+	Grade                string  // Column 2: e.g. "PSA 10", "BGS 9.5"
+	PlayerName           string  // Column 3: Player/subject name
+	Year                 string  // Column 4: Card year
+	Set                  string  // Column 5: Set name
+	Variation            string  // Column 6: Card variation
+	CardNumber           string  // Column 7: Card number with "#" prefix
+	SpecificQualifier    string  // Column 8: Always empty
+	Quantity             string  // Column 9: Always "1"
+	DatePurchased        string  // Column 10: YYYY-MM-DD
+	PurchasePricePerCard float64 // Column 11: Buy cost in dollars
+	Notes                string  // Column 12: Cert number for traceability
+	Category             string  // Column 13: Always empty
+	DateSold             string  // Column 14: Empty (unsold)
+	SoldPricePerCard     string  // Column 15: Empty (unsold)
+	LastSalePrice        float64 // Column 16: MM or CL value in dollars (best available)
+	LastSaleDate         string  // Column 17: Snapshot date (best available proxy)
+}
+
+// MMRefreshRow holds the fields needed to refresh mm_value_cents from a Market Movers CSV row.
+// The cert number comes from the "Notes" column (col 12) and the price from "Last Sale Price" (col 16).
+type MMRefreshRow struct {
+	CertNumber    string  // From "Notes" column
+	LastSalePrice float64 // From "Last Sale Price" column, in dollars
+}
+
+// MMRefreshItemResult contains per-row outcome for MM value refreshes.
+type MMRefreshItemResult struct {
+	CertNumber    string `json:"certNumber"`
+	CardName      string `json:"cardName,omitempty"`
+	OldValueCents int    `json:"oldValueCents"`
+	NewValueCents int    `json:"newValueCents"`
+	Status        string `json:"status"` // "updated", "skipped", "failed"
+	Error         string `json:"error,omitempty"`
+}
+
+// MMRefreshResult summarizes the outcome of a Market Movers value refresh.
+type MMRefreshResult struct {
+	Updated  int                   `json:"updated"`
+	NotFound int                   `json:"notFound"`
+	Skipped  int                   `json:"skipped"`
+	Failed   int                   `json:"failed"`
+	Errors   []ImportError         `json:"errors,omitempty"`
+	Results  []MMRefreshItemResult `json:"results,omitempty"`
+}
+
+// mmExportHeaderCol0 is the expected first column header of the Market Movers 17-column CSV.
+const mmExportHeaderCol0 = "Sport"
+
+// ParseMMRefreshRows parses a Market Movers collection export CSV (17 columns)
+// and extracts cert number (Notes, col 12) and last sale price (col 16) for each data row.
+// Returns rows, any per-row parse warnings, and a fatal error if the file format is wrong.
+func ParseMMRefreshRows(records [][]string) ([]MMRefreshRow, []ParseError, error) {
+	if len(records) == 0 {
+		return nil, nil, fmt.Errorf("empty CSV")
+	}
+
+	// Validate header
+	header := records[0]
+	if len(header) < 16 || strings.TrimSpace(header[0]) != mmExportHeaderCol0 {
+		return nil, nil, fmt.Errorf("unrecognised CSV format: expected Market Movers 17-column export (first header column %q)", strings.TrimSpace(header[0]))
+	}
+
+	var rows []MMRefreshRow
+	var parseErrors []ParseError
+
+	for i, rec := range records[1:] {
+		rowNum := i + 2
+		if len(rec) < 16 {
+			parseErrors = append(parseErrors, ParseError{Row: rowNum, Message: "too few columns"})
+			continue
+		}
+
+		certNumber := strings.TrimSpace(rec[11]) // col 12 (0-indexed: 11)
+		rawPrice := strings.TrimSpace(rec[15])   // col 16 (0-indexed: 15)
+
+		if certNumber == "" && rawPrice == "" {
+			continue // blank data row — skip silently
+		}
+
+		if certNumber == "" {
+			parseErrors = append(parseErrors, ParseError{Row: rowNum, Message: "missing cert number in Notes column"})
+			continue
+		}
+
+		var lastSalePrice float64
+		if rawPrice != "" {
+			var err error
+			lastSalePrice, err = strconv.ParseFloat(rawPrice, 64)
+			if err != nil {
+				parseErrors = append(parseErrors, ParseError{Row: rowNum, Message: fmt.Sprintf("invalid Last Sale Price %q: %v", rawPrice, err)})
+				continue
+			}
+		}
+
+		rows = append(rows, MMRefreshRow{
+			CertNumber:    certNumber,
+			LastSalePrice: lastSalePrice,
+		})
+	}
+
+	return rows, parseErrors, nil
+}
+
 // cardNumberPattern matches expected card number formats (digits, alphanumeric, with optional slash separator).
 var cardNumberPattern = regexp.MustCompile(`^[A-Za-z0-9]+([/\-][A-Za-z0-9]+)?$`)
 

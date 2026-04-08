@@ -66,6 +66,8 @@ type ImportService interface {
 	ImportCLExportGlobal(ctx context.Context, rows []CLExportRow) (*GlobalImportResult, error)
 	ImportPSAExportGlobal(ctx context.Context, rows []PSAExportRow) (*PSAImportResult, error)
 	ExportCLFormatGlobal(ctx context.Context, missingCLOnly bool) ([]CLExportEntry, error)
+	ExportMMFormatGlobal(ctx context.Context) ([]MMExportEntry, error)
+	RefreshMMValuesGlobal(ctx context.Context, rows []MMRefreshRow) (*MMRefreshResult, error)
 
 	EnsureExternalCampaign(ctx context.Context) (*Campaign, error)
 	ImportExternalCSV(ctx context.Context, rows []ShopifyExportRow) (*ExternalImportResult, error)
