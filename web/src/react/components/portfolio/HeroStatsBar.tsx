@@ -1,6 +1,9 @@
 import type { PortfolioHealth, CapitalSummary } from '../../../types/campaigns';
 import { formatCents, formatPct, formatWeeksToCover } from '../../utils/formatters';
 import { EmptyState } from '../../ui';
+import TrendArrow from '../../ui/TrendArrow';
+
+const trendToArrow = { improving: 'up', declining: 'down', stable: 'stable' } as const;
 
 interface HeroStatsBarProps {
   health?: PortfolioHealth;
@@ -69,7 +72,23 @@ export default function HeroStatsBar({ health, capital }: HeroStatsBarProps) {
                 <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Outstanding</div>
                 <div className="text-base font-semibold text-[#cbd5e1]">{formatCents(capital.outstandingCents)}</div>
               </div>
+              {capital.recoveryRate30dCents > 0 && (
+                <div>
+                  <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">30d Recovery</div>
+                  <div className="flex items-center gap-1">
+                    <span className="text-base font-semibold text-[#cbd5e1]">{formatCents(capital.recoveryRate30dCents)}</span>
+                    <TrendArrow trend={trendToArrow[capital.recoveryTrend]} />
+                  </div>
+                </div>
+              )}
             </>
+          )}
+          {capital && capital.unpaidInvoiceCount > 0 && (
+            <div className="flex items-center self-center">
+              <span className="text-xs font-medium text-[var(--warning)] bg-[var(--warning)]/10 px-2 py-0.5 rounded-full">
+                {capital.unpaidInvoiceCount} unpaid invoice{capital.unpaidInvoiceCount !== 1 ? 's' : ''}
+              </span>
+            </div>
           )}
         </div>
       </div>
