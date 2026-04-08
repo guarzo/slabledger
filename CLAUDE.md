@@ -182,3 +182,7 @@ See [docs/API.md](docs/API.md) for all endpoints with request/response shapes.
 - `docs/API.md` — All endpoint request/response shapes
 - `docs/SCHEMA.md` — Full database schema with indexes
 - `.env.example` — All environment variables with comments
+
+## Worktrees
+
+Use `.worktrees/` in the project root for git worktrees.
