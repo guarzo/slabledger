@@ -132,6 +132,11 @@ type MockCampaignService struct {
 	GetPurchasesByCertNumbersFn func(ctx context.Context, certNumbers []string) (map[string]*campaigns.Purchase, error)
 	ScanCertFn                  func(ctx context.Context, certNumber string) (*campaigns.ScanCertResult, error)
 	ResolveCertFn               func(ctx context.Context, certNumber string) (*campaigns.CertInfo, error)
+
+	// DH push approve & config
+	ApproveDHPushFn    func(ctx context.Context, purchaseID string) error
+	GetDHPushConfigFn  func(ctx context.Context) (*campaigns.DHPushConfig, error)
+	SaveDHPushConfigFn func(ctx context.Context, cfg *campaigns.DHPushConfig) error
 }
 
 var _ campaigns.Service = (*MockCampaignService)(nil)
@@ -697,6 +702,29 @@ func (m *MockCampaignService) ResolveCert(ctx context.Context, certNumber string
 		return m.ResolveCertFn(ctx, certNumber)
 	}
 	return nil, nil
+}
+
+// DH push approve & config
+
+func (m *MockCampaignService) ApproveDHPush(ctx context.Context, purchaseID string) error {
+	if m.ApproveDHPushFn != nil {
+		return m.ApproveDHPushFn(ctx, purchaseID)
+	}
+	return nil
+}
+
+func (m *MockCampaignService) GetDHPushConfig(ctx context.Context) (*campaigns.DHPushConfig, error) {
+	if m.GetDHPushConfigFn != nil {
+		return m.GetDHPushConfigFn(ctx)
+	}
+	return &campaigns.DHPushConfig{}, nil
+}
+
+func (m *MockCampaignService) SaveDHPushConfig(ctx context.Context, cfg *campaigns.DHPushConfig) error {
+	if m.SaveDHPushConfigFn != nil {
+		return m.SaveDHPushConfigFn(ctx, cfg)
+	}
+	return nil
 }
 
 func (m *MockCampaignService) Close() {}

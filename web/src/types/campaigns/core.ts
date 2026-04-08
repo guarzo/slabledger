@@ -65,6 +65,7 @@ export interface Purchase {
   dhChannelsJson?: string;
   dhStatus?: string;
   dhPushStatus?: string;
+  dhHoldReason?: string;
   dhCandidatesJson?: string;
   gemRateId?: string;
   psaSpecId?: number;

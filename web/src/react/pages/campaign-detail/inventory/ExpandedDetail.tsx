@@ -15,9 +15,26 @@ interface ExpandedDetailProps {
   campaignId?: string;
   onOpenFlagDialog?: () => void;
   onResolveFlag?: (flagId: number) => void;
+  onApproveDHPush?: (purchaseId: string) => void;
+  onSetPrice?: () => void;
 }
 
-export default function ExpandedDetail({ item, onReviewed, campaignId, onOpenFlagDialog, onResolveFlag }: ExpandedDetailProps) {
+const holdReasonLabels: Record<string, string> = {
+  'price_swing:': 'Price swing',
+  'source_disagreement:': 'Source disagreement',
+  'unreviewed_cl_change:': 'Unreviewed CL change',
+};
+
+function formatHoldReason(reason: string): string {
+  for (const [prefix, label] of Object.entries(holdReasonLabels)) {
+    if (reason.startsWith(prefix)) {
+      return `${label}: ${reason.slice(prefix.length) || 'Unknown'}`;
+    }
+  }
+  return reason || 'Unknown reason';
+}
+
+export default function ExpandedDetail({ item, onReviewed, campaignId, onOpenFlagDialog, onResolveFlag, onApproveDHPush, onSetPrice }: ExpandedDetailProps) {
   const queryClient = useQueryClient();
   const toast = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -99,6 +116,30 @@ export default function ExpandedDetail({ item, onReviewed, campaignId, onOpenFla
         onFlag={onOpenFlagDialog}
         isSubmitting={isSubmitting}
       />
+
+      {/* DH Push Held action */}
+      {item.purchase.dhPushStatus === 'held' && onApproveDHPush && (
+        <div className="mt-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
+          <div className="flex items-center justify-between">
+            <div>
+              <span className="text-xs font-semibold text-amber-400 uppercase">DH Push Held</span>
+              <p className="text-sm text-[var(--text-muted)] mt-0.5">
+                {formatHoldReason(item.purchase.dhHoldReason ?? '')}
+              </p>
+            </div>
+            <div className="flex gap-2">
+              {onSetPrice && (
+                <Button size="sm" variant="secondary" onClick={onSetPrice}>
+                  Adjust Price
+                </Button>
+              )}
+              <Button size="sm" onClick={() => onApproveDHPush(item.purchase.id)}>
+                Approve Push
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Resolve flag action */}
       {item.hasOpenFlag && item.openFlagId && onResolveFlag && (

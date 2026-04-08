@@ -180,3 +180,12 @@ export interface DHSelectMatchRequest {
   purchaseId: string;
   dhCardId: number;
 }
+
+export interface DHPushConfig {
+  swingPctThreshold: number;
+  swingMinCents: number;
+  disagreementPctThreshold: number;
+  unreviewedChangePctThreshold: number;
+  unreviewedChangeMinCents: number;
+  updatedAt: string;
+}

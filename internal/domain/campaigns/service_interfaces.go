@@ -108,6 +108,13 @@ type PricingService interface {
 	ResolvePriceFlag(ctx context.Context, flagID int64, resolvedBy int64) error
 }
 
+// DHService handles DH push approval and configuration.
+type DHService interface {
+	ApproveDHPush(ctx context.Context, purchaseID string) error
+	GetDHPushConfig(ctx context.Context) (*DHPushConfig, error)
+	SaveDHPushConfig(ctx context.Context, cfg *DHPushConfig) error
+}
+
 // CertLookupService handles certificate lookup and quick-add operations.
 type CertLookupService interface {
 	LookupCert(ctx context.Context, certNumber string) (*CertInfo, *MarketSnapshot, error)

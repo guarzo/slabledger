@@ -6,6 +6,7 @@ import (
 	goerrors "errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/time/rate"
@@ -58,8 +59,9 @@ func WithPSAKeys(keys string) ClientOption {
 // Client provides access to the DH market intelligence API.
 type Client struct {
 	enterpriseKey string
-	psaKeys       []string // PSA API keys for cert resolution rotation
-	psaKeyIndex   int      // current key index (not atomic — only used in serial bulk match)
+	psaKeys       []string   // PSA API keys for cert resolution rotation
+	psaKeyIndex   int        // current key index; guarded by psaMu
+	psaMu         sync.Mutex // protects psaKeyIndex
 	baseURL       string
 	httpClient    *httpx.Client
 	limiter       *rate.Limiter
@@ -310,6 +312,8 @@ func (c *Client) deleteEnterprise(ctx context.Context, fullURL string, body any,
 
 // currentPSAKey returns the current PSA API key, or "" if none configured or all exhausted.
 func (c *Client) currentPSAKey() string {
+	c.psaMu.Lock()
+	defer c.psaMu.Unlock()
 	if len(c.psaKeys) == 0 || c.psaKeyIndex >= len(c.psaKeys) {
 		return ""
 	}
@@ -319,6 +323,8 @@ func (c *Client) currentPSAKey() string {
 // RotatePSAKey advances to the next PSA API key. Returns true if there are
 // more keys to try, false if we've cycled through all of them.
 func (c *Client) RotatePSAKey() bool {
+	c.psaMu.Lock()
+	defer c.psaMu.Unlock()
 	if len(c.psaKeys) <= 1 {
 		return false
 	}
@@ -328,6 +334,8 @@ func (c *Client) RotatePSAKey() bool {
 
 // ResetPSAKeyRotation resets the key index to the first key.
 func (c *Client) ResetPSAKeyRotation() {
+	c.psaMu.Lock()
+	defer c.psaMu.Unlock()
 	c.psaKeyIndex = 0
 }
 

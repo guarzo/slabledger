@@ -30,6 +30,7 @@ const (
 	DHPushStatusMatched   DHPushStatus = "matched"
 	DHPushStatusUnmatched DHPushStatus = "unmatched"
 	DHPushStatusManual    DHPushStatus = "manual"
+	DHPushStatusHeld      DHPushStatus = "held"
 )
 
 // SaleChannel represents where a card was sold.
@@ -173,7 +174,8 @@ type Purchase struct {
 	DHListingPriceCents int          `json:"dhListingPriceCents,omitempty"` // Current DH listing price
 	DHChannelsJSON      string       `json:"dhChannelsJson,omitempty"`      // Per-channel sync status JSON blob
 	DHStatus            DHStatus     `json:"dhStatus,omitempty"`            // DH inventory status
-	DHPushStatus        DHPushStatus `json:"dhPushStatus,omitempty"`        // Pipeline status: "", "pending", "matched", "unmatched", "manual"
+	DHPushStatus        DHPushStatus `json:"dhPushStatus,omitempty"`        // Pipeline status: "", "pending", "matched", "unmatched", "manual", "held"
+	DHHoldReason        string       `json:"dhHoldReason,omitempty"`        // Why a re-push was held
 	DHCandidatesJSON    string       `json:"dhCandidatesJson,omitempty"`    // Ambiguous cert resolution candidates JSON
 	GemRateID           string       `json:"gemRateId,omitempty"`           // CL gemRateID (grade-agnostic card variant identifier)
 	PSASpecID           int          `json:"psaSpecId,omitempty"`           // PSA spec ID from CL cards index
@@ -199,7 +201,8 @@ func (p *Purchase) NeedsDHPush() bool {
 	return p.DHInventoryID == 0 &&
 		p.DHPushStatus != DHPushStatusPending &&
 		p.DHPushStatus != DHPushStatusUnmatched &&
-		p.DHPushStatus != DHPushStatusManual
+		p.DHPushStatus != DHPushStatusManual &&
+		p.DHPushStatus != DHPushStatusHeld
 }
 
 // DHCardKey returns the pipe-delimited identity key used for DH card ID mapping lookups.

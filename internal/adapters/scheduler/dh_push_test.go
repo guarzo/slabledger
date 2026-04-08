@@ -339,6 +339,7 @@ func TestDHPush_SuccessPath_UpdatesFields(t *testing.T) {
 		SetName:      "SV Promo",
 		CardNumber:   "176",
 		GradeValue:   10,
+		BuyCostCents: 6000,
 		CLValueCents: 8000,
 	}
 	lister := &mockDHPushPendingLister{
@@ -357,7 +358,7 @@ func TestDHPush_SuccessPath_UpdatesFields(t *testing.T) {
 			assert.Equal(t, 777, items[0].DHCardID)
 			assert.Equal(t, "22222222", items[0].CertNumber)
 			assert.Equal(t, float64(10), items[0].Grade)
-			assert.Equal(t, 8000, items[0].CostBasisCents)
+			assert.Equal(t, 6000, items[0].CostBasisCents)
 			require.NotNil(t, items[0].MarketValueCents)
 			assert.Equal(t, 8000, *items[0].MarketValueCents)
 			return &dh.InventoryPushResponse{

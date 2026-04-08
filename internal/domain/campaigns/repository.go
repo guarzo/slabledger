@@ -71,6 +71,17 @@ type Repository interface {
 	GetPurchasesByDHPushStatus(ctx context.Context, status string, limit int) ([]Purchase, error)
 	CountUnsoldByDHPushStatus(ctx context.Context) (map[string]int, error)
 	UpdatePurchaseDHCandidates(ctx context.Context, id string, candidatesJSON string) error
+	UpdatePurchaseDHHoldReason(ctx context.Context, id string, reason string) error
+	// SetHeldWithReason atomically sets the push status to held and records
+	// the hold reason in a single transaction, preventing any reader from
+	// observing a held purchase with an empty reason.
+	SetHeldWithReason(ctx context.Context, purchaseID string, reason string) error
+	// ApproveHeldPurchase atomically clears the hold reason and sets the push
+	// status to pending in a single transaction, preventing the scheduler from
+	// observing a half-updated record.
+	ApproveHeldPurchase(ctx context.Context, purchaseID string) error
+	GetDHPushConfig(ctx context.Context) (*DHPushConfig, error)
+	SaveDHPushConfig(ctx context.Context, cfg *DHPushConfig) error
 
 	// Sale operations
 	CreateSale(ctx context.Context, s *Sale) error

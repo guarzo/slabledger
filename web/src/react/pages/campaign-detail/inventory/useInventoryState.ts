@@ -41,7 +41,7 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
   const [searchQuery, setSearchQuery] = useState('');
   const [isPrinting, setIsPrinting] = useState(false);
   const [statsExpanded, setStatsExpanded] = useState(false);
-  const [filterTab, setFilterTab] = useState<FilterTab>('exceptions');
+  const [filterTab, setFilterTab] = useState<FilterTab>('needs_attention');
   const [showAll, setShowAll] = useState(false);
   const debouncedSearch = useDebounce(searchQuery, 300);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -101,6 +101,16 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
       invalidateInventory();
     } catch (err) {
       toast.error(getErrorMessage(err, 'Failed to resolve flag'));
+    }
+  }, [toast, invalidateInventory]);
+
+  const handleApproveDHPush = useCallback(async (purchaseId: string) => {
+    try {
+      await api.approveDHPush(purchaseId);
+      toast.success('DH push approved — will push on next cycle');
+      invalidateInventory();
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Failed to approve DH push'));
     }
   }, [toast, invalidateInventory]);
 
@@ -256,6 +266,7 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
     handleSort,
     handleReviewed,
     handleResolveFlag,
+    handleApproveDHPush,
     handleFlagSubmit,
     handlePrint,
     toggleSelect,

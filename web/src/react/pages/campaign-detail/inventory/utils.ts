@@ -233,6 +233,9 @@ export function statusBorderColor(status: ReviewStatus): string {
 }
 
 export function statusBadge(item: AgingItem): { label: string; color: string } {
+  if (item.purchase.dhPushStatus === 'held') {
+    return { label: 'DH Held', color: 'var(--warning)' };
+  }
   const status = getReviewStatus(item);
   switch (status) {
     case 'flagged':

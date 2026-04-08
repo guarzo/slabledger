@@ -2,6 +2,7 @@ package campaigns
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"testing"
 	"time"
@@ -19,6 +20,8 @@ type mockRepo struct {
 	purchaseSales   map[string]bool // purchaseID -> has sale
 	pnlData         map[string]*CampaignPNL
 	channelVelocity []ChannelVelocity
+	dhPushConfig    *DHPushConfig
+	dhHoldReasons   map[string]string // purchaseID -> hold reason
 }
 
 func newMockRepo() *mockRepo {
@@ -30,6 +33,7 @@ func newMockRepo() *mockRepo {
 		certNumbers:   make(map[string]bool),
 		purchaseSales: make(map[string]bool),
 		pnlData:       make(map[string]*CampaignPNL),
+		dhHoldReasons: make(map[string]string),
 	}
 }
 
@@ -681,6 +685,53 @@ func (m *mockRepo) CountUnsoldByDHPushStatus(_ context.Context) (map[string]int,
 }
 
 func (m *mockRepo) UpdatePurchaseDHCandidates(_ context.Context, _ string, _ string) error {
+	return nil
+}
+
+func (m *mockRepo) UpdatePurchaseDHHoldReason(_ context.Context, id string, reason string) error {
+	if m.purchases == nil {
+		return ErrPurchaseNotFound
+	}
+	if _, ok := m.purchases[id]; !ok {
+		return ErrPurchaseNotFound
+	}
+	m.dhHoldReasons[id] = reason
+	return nil
+}
+
+func (m *mockRepo) SetHeldWithReason(_ context.Context, purchaseID string, reason string) error {
+	p, ok := m.purchases[purchaseID]
+	if !ok {
+		return ErrPurchaseNotFound
+	}
+	p.DHPushStatus = DHPushStatusHeld
+	m.dhHoldReasons[purchaseID] = reason
+	return nil
+}
+
+func (m *mockRepo) ApproveHeldPurchase(_ context.Context, purchaseID string) error {
+	if _, ok := m.purchases[purchaseID]; !ok {
+		return ErrPurchaseNotFound
+	}
+	p := m.purchases[purchaseID]
+	p.DHPushStatus = DHPushStatusPending
+	m.dhHoldReasons[purchaseID] = ""
+	return nil
+}
+
+func (m *mockRepo) GetDHPushConfig(_ context.Context) (*DHPushConfig, error) {
+	if m.dhPushConfig != nil {
+		return m.dhPushConfig, nil
+	}
+	def := DefaultDHPushConfig()
+	return &def, nil
+}
+
+func (m *mockRepo) SaveDHPushConfig(_ context.Context, cfg *DHPushConfig) error {
+	if cfg == nil {
+		return fmt.Errorf("dh push config cannot be nil")
+	}
+	m.dhPushConfig = cfg
 	return nil
 }
 
