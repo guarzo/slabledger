@@ -216,7 +216,6 @@ const MOCK_PRICING_DIAGNOSTICS = {
   unmappedCards: 3,
   recentFailures: [],
 };
-};
 
 const MOCK_DH_PUSH_CONFIG = {
   swingPctThreshold: 10,
