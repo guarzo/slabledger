@@ -44,12 +44,13 @@ export default function ExpandedDetail({ item, onReviewed, campaignId, onOpenFla
   const cb = costBasis(purchase);
 
   const clCents = purchase.clValueCents;
+  const mmCents = purchase.mmValueCents ?? 0;
   const marketCents = snap?.medianCents ?? 0;
   const lastSoldCents = snap?.lastSoldCents ?? 0;
 
   const sources = useMemo(
-    () => buildPriceSources({ clCents, marketCents, costCents: cb, lastSoldCents }),
-    [clCents, marketCents, cb, lastSoldCents],
+    () => buildPriceSources({ clCents, marketCents, costCents: cb, lastSoldCents, mmCents }),
+    [clCents, marketCents, cb, lastSoldCents, mmCents],
   );
 
   const preSelected = useMemo(
@@ -96,6 +97,7 @@ export default function ExpandedDetail({ item, onReviewed, campaignId, onOpenFla
         />
         <PriceSignalCard label="Last Sold" valueCents={lastSoldCents} />
         <PriceSignalCard label="Lowest eBay Listing" valueCents={snap?.lowestListCents ?? 0} />
+        <PriceSignalCard label="Market Movers" valueCents={mmCents} />
         <PriceSignalCard
           label="Current Override"
           valueCents={purchase.overridePriceCents ?? 0}

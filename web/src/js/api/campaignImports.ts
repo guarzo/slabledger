@@ -7,7 +7,7 @@ import type {
   CertLookupResult, ShopifyPriceSyncResponse,
   CertImportResult, EbayExportListResponse, EbayExportGenerateItem,
   OrdersImportResult, OrdersConfirmItem, BulkSaleResult,
-  ScanCertResponse, ResolveCertResponse,
+  ScanCertResponse, ResolveCertResponse, MMRefreshResult,
 } from '../../types/campaigns';
 import type { PriceFlagsResponse } from '../../types/campaigns/priceReview';
 import { APIClient } from './client';
@@ -17,9 +17,11 @@ declare module './client' {
     // Cert lookup
     lookupCert(certNumber: string): Promise<CertLookupResult>;
 
-    // Global imports
+    // Global imports / exports
     globalImportCL(file: File): Promise<GlobalImportResult>;
     globalExportCL(missingCLOnly?: boolean): Promise<Blob>;
+    globalExportMM(): Promise<Blob>;
+    globalRefreshMM(file: File): Promise<MMRefreshResult>;
 
     // PSA / External imports
     globalImportPSA(file: File): Promise<PSAImportResult>;
@@ -66,6 +68,18 @@ proto.globalExportCL = async function (this: APIClient, missingCLOnly?: boolean)
     {},
   );
   return response.blob();
+};
+
+proto.globalExportMM = async function (this: APIClient): Promise<Blob> {
+  const response = await this.fetchWithRetry(
+    `${this.baseURL}/purchases/export-mm`,
+    {},
+  );
+  return response.blob();
+};
+
+proto.globalRefreshMM = async function (this: APIClient, file: File): Promise<MMRefreshResult> {
+  return this.uploadFile<MMRefreshResult>('/purchases/refresh-mm', file);
 };
 
 // PSA CSV import (global)

@@ -223,3 +223,23 @@ export interface RevocationFlag {
   createdAt: string;
   sentAt?: string;
 }
+
+// Market Movers refresh
+
+export interface MMRefreshItemResult {
+  certNumber: string;
+  cardName?: string;
+  oldValueCents: number;
+  newValueCents: number;
+  status: 'updated' | 'skipped' | 'failed';
+  error?: string;
+}
+
+export interface MMRefreshResult {
+  updated: number;
+  notFound: number;
+  skipped: number;
+  failed: number;
+  errors?: ImportError[];
+  results?: MMRefreshItemResult[];
+}

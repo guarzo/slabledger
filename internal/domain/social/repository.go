@@ -45,5 +45,6 @@ type PurchaseSnapshot struct {
 	BuyCostCents int
 	MedianCents  int
 	Trend30d     float64
+	MMTrendPct   float64 // Market Movers 30-day trend % — used as fallback when Trend30d is 0
 	SnapshotDate string
 }

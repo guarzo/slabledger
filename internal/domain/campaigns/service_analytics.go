@@ -111,6 +111,15 @@ func (s *service) enrichAgingItem(_ context.Context, p *Purchase, campaignName s
 		applyCLSignal(snap, p.CLValueCents)
 	}
 
+	// Incorporate Market Movers avg price as a corroborating source price.
+	// Also use MM trend/volume as fallback when the DH snapshot lacks them.
+	if p.MMValueCents > 0 {
+		if snap == nil {
+			snap = &MarketSnapshot{}
+		}
+		applyMMSignal(snap, p)
+	}
+
 	if hasAnyPriceData(snap) {
 		item.CurrentMarket = snap
 
@@ -157,55 +166,6 @@ func (s *service) enrichAgingItem(_ context.Context, p *Purchase, campaignName s
 	item.RecommendedSource = recSource
 
 	return item
-}
-
-// applyCLSignal incorporates Card Ladder auction-based data into the market snapshot.
-// CL is weighted at 30% alongside market data (70%) and serves as a floor — the
-// market price should not fall below CL's auction-derived valuation.
-func applyCLSignal(snap *MarketSnapshot, clCents int) {
-	if snap == nil || clCents <= 0 {
-		return
-	}
-
-	// Add CL as a visible source price
-	snap.SourcePrices = append(snap.SourcePrices, SourcePrice{
-		Source:     "CardLadder",
-		PriceCents: clCents,
-	})
-
-	// Blend CL into the median: 70% market data, 30% CL
-	if snap.MedianCents > 0 {
-		blended := int(math.Round(float64(snap.MedianCents)*0.7 + float64(clCents)*0.3))
-		// CL as floor: don't let blended price drop below CL
-		if blended < clCents {
-			blended = clCents
-		}
-		snap.MedianCents = blended
-	} else {
-		// No market median — use CL directly
-		snap.MedianCents = clCents
-	}
-
-	// Recalculate fallback-derived percentiles from updated median
-	// (only when they were originally computed as fallbacks, i.e., proportional to median)
-	if snap.ConservativeCents > 0 && snap.P10Cents > 0 {
-		// Distribution data exists — leave percentiles as-is
-		return
-	}
-	if snap.MedianCents > 0 {
-		if snap.ConservativeCents == 0 {
-			snap.ConservativeCents = int(math.Round(float64(snap.MedianCents) * 0.85))
-		}
-		if snap.OptimisticCents == 0 {
-			snap.OptimisticCents = int(math.Round(float64(snap.MedianCents) * 1.15))
-		}
-		if snap.P10Cents == 0 {
-			snap.P10Cents = int(math.Round(float64(snap.MedianCents) * 0.70))
-		}
-		if snap.P90Cents == 0 {
-			snap.P90Cents = int(math.Round(float64(snap.MedianCents) * 1.30))
-		}
-	}
 }
 
 func (s *service) GetInventoryAging(ctx context.Context, campaignID string) (*InventoryResult, error) {

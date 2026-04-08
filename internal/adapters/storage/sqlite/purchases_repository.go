@@ -246,6 +246,34 @@ func (r *CampaignsRepository) UpdatePurchaseCLValue(ctx context.Context, id stri
 	)
 }
 
+func (r *CampaignsRepository) UpdatePurchaseMMValue(ctx context.Context, id string, mmValueCents int) error {
+	return r.execAndExpectRow(ctx, "update mm value",
+		`UPDATE campaign_purchases SET mm_value_cents = ?, updated_at = ? WHERE id = ?`,
+		mmValueCents, time.Now(), id,
+	)
+}
+
+// UpdatePurchaseMMSignals writes all Market Movers signals in a single statement.
+// Used by the daily MM refresh scheduler. mmValueCents is the 30-day count-weighted
+// average, mmTrendPct is the 30-day price-change fraction (e.g. 0.15 = +15%),
+// mmSales30d is the total sales count over 30 days, and mmActiveLowCents is the
+// lowest active BIN listing price (0 if no active listings found).
+func (r *CampaignsRepository) UpdatePurchaseMMSignals(
+	ctx context.Context,
+	id string,
+	mmValueCents int,
+	mmTrendPct float64,
+	mmSales30d int,
+	mmActiveLowCents int,
+) error {
+	return r.execAndExpectRow(ctx, "update mm signals",
+		`UPDATE campaign_purchases
+		 SET mm_value_cents = ?, mm_trend_pct = ?, mm_sales_30d = ?, mm_active_low_cents = ?, updated_at = ?
+		 WHERE id = ?`,
+		mmValueCents, mmTrendPct, mmSales30d, mmActiveLowCents, time.Now(), id,
+	)
+}
+
 func (r *CampaignsRepository) UpdatePurchaseCardMetadata(ctx context.Context, id string, cardName, cardNumber, setName string) error {
 	return r.execAndExpectRow(ctx, "update card metadata",
 		`UPDATE campaign_purchases SET card_name = ?, card_number = ?, set_name = ?, updated_at = ? WHERE id = ?`,

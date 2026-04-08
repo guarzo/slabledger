@@ -331,17 +331,18 @@ func (r *SocialRepository) GetUnsoldPurchasesWithSnapshots(ctx context.Context) 
 		`SELECT p.id, p.buy_cost_cents,
 		        COALESCE(p.median_cents, 0),
 		        COALESCE(p.trend_30d, 0),
+		        COALESCE(p.mm_trend_pct, 0),
 		        COALESCE(p.snapshot_date, '')
 		 FROM campaign_purchases p
 		 WHERE p.id NOT IN (SELECT purchase_id FROM campaign_sales)
 		 AND p.front_image_url != ''
-		 AND p.median_cents > 0`)
+		 AND (p.median_cents > 0 OR p.mm_trend_pct != 0)`)
 	if err != nil {
 		return nil, err
 	}
 	return scanRows(ctx, rows, func(rows *sql.Rows) (social.PurchaseSnapshot, error) {
 		var s social.PurchaseSnapshot
-		err := rows.Scan(&s.PurchaseID, &s.BuyCostCents, &s.MedianCents, &s.Trend30d, &s.SnapshotDate)
+		err := rows.Scan(&s.PurchaseID, &s.BuyCostCents, &s.MedianCents, &s.Trend30d, &s.MMTrendPct, &s.SnapshotDate)
 		return s, err
 	})
 }

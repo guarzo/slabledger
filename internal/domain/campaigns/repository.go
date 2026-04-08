@@ -39,6 +39,7 @@ type Repository interface {
 
 	// Purchase field updates
 	UpdatePurchaseCLValue(ctx context.Context, id string, clValueCents int, population int) error
+	UpdatePurchaseMMValue(ctx context.Context, id string, mmValueCents int) error
 	UpdatePurchaseCardMetadata(ctx context.Context, id string, cardName, cardNumber, setName string) error
 	UpdatePurchaseGrade(ctx context.Context, id string, gradeValue float64) error
 	UpdateExternalPurchaseFields(ctx context.Context, id string, p *Purchase) error

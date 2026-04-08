@@ -310,6 +310,13 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		clSalesStore = sqlite.NewCLSalesStore(db.DB)
 	}
 
+	// Initialize Market Movers (reuse the same encryptor as Card Ladder)
+	mmClient, mmStore := initializeMarketMovers(ctx, logger, db, clEncryptor)
+	var mmHandler *handlers.MarketMoversHandler
+	if mmStore != nil {
+		mmHandler = handlers.NewMarketMoversHandler(mmStore, mmClient, logger)
+	}
+
 	// Initialize picks
 	picksRepo := sqlite.NewPicksRepository(db.DB)
 	profitabilityProv := sqlite.NewProfitabilityProvider(db.DB)
@@ -378,6 +385,8 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		CardLadderClient:     clClient,
 		CardLadderStore:      clStore,
 		CardLadderSalesStore: clSalesStore,
+		MMClient:             mmClient,
+		MMStore:              mmStore,
 		DHClient:             dhClient,
 		DHIntelligenceRepo:   intelRepo,
 		DHSuggestionsRepo:    suggestionsRepo,
@@ -387,6 +396,11 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	// Wire Card Ladder manual refresh into the handler
 	if clHandler != nil && schedulerResult.CardLadderRefresh != nil {
 		clHandler.SetRefresher(schedulerResult.CardLadderRefresh)
+	}
+
+	// Wire Market Movers manual refresh into the handler
+	if mmHandler != nil && schedulerResult.MMRefresh != nil {
+		mmHandler.SetRefresher(schedulerResult.MMRefresh)
 	}
 
 	// Create price hints handler
@@ -461,6 +475,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		AIStatusHandler:           aiStatusHandler,
 		PriceFlagsHandler:         priceFlagsHandler,
 		CardLadderHandler:         clHandler,
+		MarketMoversHandler:       mmHandler,
 		PicksHandler:              picksHandler,
 		OpportunitiesHandler:      opportunitiesHandler,
 		DHHandler:                 dhHandler,

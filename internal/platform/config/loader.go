@@ -314,6 +314,16 @@ func FromEnv(base Config) Config {
 		}
 	}
 
+	// Market Movers scheduler configuration
+	if v := os.Getenv("MM_REFRESH_ENABLED"); v != "" {
+		cfg.MarketMovers.Enabled = parseBool(v, true)
+	}
+	if v := os.Getenv("MM_REFRESH_HOUR"); v != "" {
+		if i, err := strconv.Atoi(v); err == nil && i >= 0 && i <= 23 {
+			cfg.MarketMovers.RefreshHour = i
+		}
+	}
+
 	// Adapter API keys and tokens
 	cfg.Adapters.PSAToken = os.Getenv("PSA_ACCESS_TOKEN")
 	cfg.Adapters.PricingAPIKey = os.Getenv("PRICING_API_KEY")

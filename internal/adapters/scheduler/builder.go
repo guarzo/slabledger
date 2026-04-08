@@ -5,6 +5,7 @@ import (
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
+	"github.com/guarzo/slabledger/internal/adapters/clients/marketmovers"
 	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
 	"github.com/guarzo/slabledger/internal/domain/advisor"
 	"github.com/guarzo/slabledger/internal/domain/ai"
@@ -95,18 +96,26 @@ type BuildDeps struct {
 	CardLadderGemRateUpdater CardLadderGemRateUpdater
 	CardLadderCLRecorder     domainCampaigns.CLValueHistoryRecorder
 	CardLadderSalesStore     *sqlite.CLSalesStore
+
+	// Market Movers dependencies (optional)
+	MMClient         *marketmovers.Client
+	MMStore          *sqlite.MarketMoversStore
+	MMPurchaseLister MMPurchaseLister
+	MMValueUpdater   MMValueUpdater
 }
 
 // BuildResult holds the scheduler group and optional auxiliary references.
 type BuildResult struct {
 	Group             *Group
-	CardLadderRefresh *CardLadderRefreshScheduler // nil if Card Ladder is not configured
+	CardLadderRefresh *CardLadderRefreshScheduler   // nil if Card Ladder is not configured
+	MMRefresh         *MarketMoversRefreshScheduler // nil if Market Movers is not configured
 }
 
 // BuildGroup constructs a scheduler Group from centralized configuration and dependencies.
 func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 	var schedulers []Scheduler
 	var clRefresh *CardLadderRefreshScheduler
+	var mmRefresh *MarketMoversRefreshScheduler
 
 	// Price refresh scheduler
 	schedulerConfig := Config{
@@ -343,8 +352,23 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 		))
 	}
 
+	// Market Movers value refresh scheduler.
+	// Created whenever the store and purchase interfaces are available, even if
+	// no client exists yet at startup. SetClient is called by the handler when
+	// credentials are saved for the first time, activating the scheduler without
+	// requiring a server restart.
+	if deps.MMStore != nil && deps.MMPurchaseLister != nil && deps.MMValueUpdater != nil {
+		mmRefresh = NewMarketMoversRefreshScheduler(
+			deps.MMClient, deps.MMStore,
+			deps.MMPurchaseLister, deps.MMValueUpdater,
+			deps.Logger, cfg.MarketMovers,
+		)
+		schedulers = append(schedulers, mmRefresh)
+	}
+
 	return BuildResult{
 		Group:             NewGroup(schedulers...),
 		CardLadderRefresh: clRefresh,
+		MMRefresh:         mmRefresh,
 	}
 }

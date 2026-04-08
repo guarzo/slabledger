@@ -1,6 +1,6 @@
 # SlabLedger - Makefile
 
-.PHONY: all help build test test-verbose coverage lint check fmt clean install web web-build web-dev web-clean web-rebuild db-push db-pull ci hooks
+.PHONY: all help build test test-verbose coverage lint check fmt clean install web web-build web-dev web-clean web-rebuild db-push db-pull ci hooks screenshots
 
 # Default target
 all: help
@@ -18,6 +18,7 @@ help:
 	@echo "  test          Run all tests with mocks"
 	@echo "  test-verbose  Run all tests with verbose output"
 	@echo "  coverage      Run tests with coverage report"
+	@echo "  screenshots   Take screenshots of all pages (Playwright, mocked API)"
 	@echo "  lint          Run linting and formatting"
 	@echo "  check         Run full quality check (lint + architecture + file size)"
 	@echo "  clean         Clean build artifacts"
@@ -77,6 +78,13 @@ coverage:
 	go test -race -coverprofile=coverage.out -covermode=atomic ./...
 	go tool cover -html=coverage.out -o coverage.html
 	@echo "Coverage report: coverage.html"
+
+# Screenshots of all pages via Playwright (builds frontend, no backend needed)
+# Output: web/screenshots/*.png (desktop) + web/screenshots/mobile/*.png (mobile)
+screenshots: web-build
+	@echo "Taking screenshots of all pages..."
+	@cd web && { npx vite preview --port 4173 & SERVER_PID=$$! ; sleep 2 ; CI=1 ./node_modules/.bin/playwright test tests/screenshot-all-pages.spec.ts --project=chromium ; EXIT=$$? ; kill $$SERVER_PID 2>/dev/null ; exit $$EXIT ; }
+	@echo "Screenshots saved to web/screenshots/"
 
 # Code quality
 lint:

@@ -138,16 +138,20 @@ type Purchase struct {
 	ID                    string         `json:"id"`
 	CampaignID            string         `json:"campaignId"`
 	CardName              string         `json:"cardName"`
-	CertNumber            string         `json:"certNumber"`           // PSA cert number (unique)
-	CardNumber            string         `json:"cardNumber,omitempty"` // Card number within set (from PSA)
-	SetName               string         `json:"setName,omitempty"`    // Set/category name (from PSA)
-	Grader                string         `json:"grader,omitempty"`     // e.g. "PSA", "CGC", "BGS", "SGC"
-	GradeValue            float64        `json:"gradeValue"`           // Numeric grade (1-10, supports half-grades like 9.5)
-	CLValueCents          int            `json:"clValueCents"`         // CL market value at purchase time
-	BuyCostCents          int            `json:"buyCostCents"`         // Actual cost paid
-	PSASourcingFeeCents   int            `json:"psaSourcingFeeCents"`  // Fee charged per card
-	Population            int            `json:"population,omitempty"` // PSA population count
-	PurchaseDate          string         `json:"purchaseDate"`         // YYYY-MM-DD
+	CertNumber            string         `json:"certNumber"`                 // PSA cert number (unique)
+	CardNumber            string         `json:"cardNumber,omitempty"`       // Card number within set (from PSA)
+	SetName               string         `json:"setName,omitempty"`          // Set/category name (from PSA)
+	Grader                string         `json:"grader,omitempty"`           // e.g. "PSA", "CGC", "BGS", "SGC"
+	GradeValue            float64        `json:"gradeValue"`                 // Numeric grade (1-10, supports half-grades like 9.5)
+	CLValueCents          int            `json:"clValueCents"`               // CL market value at purchase time
+	MMValueCents          int            `json:"mmValueCents"`               // Market Movers 30-day avg price (cents)
+	MMTrendPct            float64        `json:"mmTrendPct,omitempty"`       // MM 30-day price change % (positive = rising)
+	MMSales30d            int            `json:"mmSales30d,omitempty"`       // MM 30-day sales volume (count)
+	MMActiveLowCents      int            `json:"mmActiveLowCents,omitempty"` // MM lowest active BIN listing (cents)
+	BuyCostCents          int            `json:"buyCostCents"`               // Actual cost paid
+	PSASourcingFeeCents   int            `json:"psaSourcingFeeCents"`        // Fee charged per card
+	Population            int            `json:"population,omitempty"`       // PSA population count
+	PurchaseDate          string         `json:"purchaseDate"`               // YYYY-MM-DD
 	VaultStatus           string         `json:"vaultStatus,omitempty"`
 	InvoiceDate           string         `json:"invoiceDate,omitempty"`
 	WasRefunded           bool           `json:"wasRefunded,omitempty"`
@@ -179,8 +183,12 @@ type Purchase struct {
 	DHCandidatesJSON    string       `json:"dhCandidatesJson,omitempty"`    // Ambiguous cert resolution candidates JSON
 	GemRateID           string       `json:"gemRateId,omitempty"`           // CL gemRateID (grade-agnostic card variant identifier)
 	PSASpecID           int          `json:"psaSpecId,omitempty"`           // PSA spec ID from CL cards index
-	CreatedAt           time.Time    `json:"createdAt"`
-	UpdatedAt           time.Time    `json:"updatedAt"`
+	// Card Ladder metadata (from CL catalog enrichment)
+	CardPlayer    string    `json:"cardPlayer,omitempty"`    // Player/subject name (e.g. "Charizard", "LeBron James")
+	CardVariation string    `json:"cardVariation,omitempty"` // Card variation (e.g. "Holo Rare", "1st Edition")
+	CardCategory  string    `json:"cardCategory,omitempty"`  // Sport/category (e.g. "Pokemon", "Basketball")
+	CreatedAt     time.Time `json:"createdAt"`
+	UpdatedAt     time.Time `json:"updatedAt"`
 
 	// Market snapshot at time of purchase (best-effort, may be zero)
 	MarketSnapshotData

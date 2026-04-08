@@ -105,8 +105,7 @@ func (h *CampaignsHandler) HandleGlobalExportCL(w http.ResponseWriter, r *http.R
 	}
 }
 
-// HandleGlobalImportPSA handles POST /api/purchases/import-psa.
-// Accepts a PSA communication spreadsheet CSV and auto-allocates purchases.
+// HandleGlobalImportPSA
 func (h *CampaignsHandler) HandleGlobalImportPSA(w http.ResponseWriter, r *http.Request) {
 	rows, ok := h.parseGlobalCSVUpload(w, r)
 	if !ok {
