@@ -18,6 +18,7 @@ PSA Cert Import → CL Value Lookup → Cert Resolution → Inventory Push → C
 | `matched` | Successfully pushed to DH | Done (unless CL value changes) |
 | `unmatched` | Cert couldn't be resolved | Manual fix via URL or candidate selection |
 | `manual` | User manually resolved | Done |
+| `held` | Re-push blocked by safety gate | User approves or adjusts price |
 
 ## Step-by-Step Flow
 
@@ -107,7 +108,7 @@ There are 5 places that push inventory to DH:
 | Select match | `handlers/dh_select_match_handler.go` | User picks from ambiguous candidates |
 | Fix match | `handlers/dh_fix_match_handler.go` | User pastes a DH URL for manual match |
 
-All sites send `CLValueCents` as both `cost_basis_cents` and `market_value_cents`.
+All sites use `ResolveMarketValueCents()` (reviewed price > CL value) as `market_value_cents` and `BuyCostCents` as `cost_basis_cents`.
 
 ## Re-Push on Price Change
 
@@ -117,6 +118,39 @@ When CL value changes on an already-pushed item:
 2. **CL refresh scheduler** (`cardladder_refresh.go`): same logic for API-driven value updates
 3. **Push scheduler** picks it up, sees `DHCardID` already set, skips cert resolution, pushes with updated `market_value_cents`
 4. DH's upsert semantics update the existing inventory item
+
+## Push Safety Gates
+
+Re-pushes are evaluated against configurable safety thresholds before proceeding. If any threshold is exceeded, the push is held for manual review.
+
+### Price Selection
+
+All push sites use `ResolveMarketValueCents()` which returns:
+1. `ReviewedPriceCents` (if > 0)
+2. `CLValueCents` (if > 0)
+3. `0` (push skipped)
+
+`cost_basis_cents` is set to `BuyCostCents` (actual purchase cost).
+
+### Hold Triggers
+
+| Trigger | Condition | Default Threshold |
+|---------|-----------|-------------------|
+| Price swing | New market value vs last pushed value | >20% AND >$50 |
+| Source disagreement | Any two of (CL, reviewed, last sold) differ | >25% |
+| Unreviewed CL change | No reviewed price + CL change from last push | >15% AND >$30 |
+
+First-time pushes are never held.
+
+### Configuration
+
+Thresholds are stored in `dh_push_config` table and editable from Admin > Integrations > DH.
+
+### Approval
+
+Held items appear in the inventory "Needs Attention" tab. Users can:
+- **Approve**: re-queues as `pending` for the next scheduler cycle
+- **Adjust**: opens price dialog, then re-queues
 
 ## Manual Resolution
 

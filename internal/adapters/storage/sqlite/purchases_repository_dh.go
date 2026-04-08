@@ -21,6 +21,21 @@ func (r *CampaignsRepository) UpdatePurchaseDHFields(ctx context.Context, id str
 	)
 }
 
+// UpdatePurchaseDHFieldsAndPushStatus atomically updates DH tracking fields
+// and the push status in a single UPDATE to prevent inconsistent state where
+// fields are saved (inventory ID set) but the status remains "pending".
+func (r *CampaignsRepository) UpdatePurchaseDHFieldsAndPushStatus(ctx context.Context, id string, update campaigns.DHFieldsUpdate, pushStatus string) error {
+	return r.execAndExpectRow(ctx, "update DH fields + push status",
+		`UPDATE campaign_purchases
+		 SET dh_card_id = ?, dh_inventory_id = ?, dh_cert_status = ?,
+		     dh_listing_price_cents = ?, dh_channels_json = ?, dh_status = ?,
+		     dh_push_status = ?, updated_at = ?
+		 WHERE id = ?`,
+		update.CardID, update.InventoryID, update.CertStatus, update.ListingPriceCents, update.ChannelsJSON, update.DHStatus,
+		pushStatus, time.Now(), id,
+	)
+}
+
 // GetPurchasesByDHCertStatus returns purchases with the given DH cert resolution status.
 func (r *CampaignsRepository) GetPurchasesByDHCertStatus(ctx context.Context, status string, limit int) ([]campaigns.Purchase, error) {
 	query := fmt.Sprintf(
@@ -52,6 +67,53 @@ func (r *CampaignsRepository) UpdatePurchaseDHCandidates(ctx context.Context, id
 		`UPDATE campaign_purchases SET dh_candidates = ?, updated_at = ? WHERE id = ?`,
 		candidatesJSON, time.Now(), id,
 	)
+}
+
+// UpdatePurchaseDHHoldReason stores the hold reason on a purchase.
+func (r *CampaignsRepository) UpdatePurchaseDHHoldReason(ctx context.Context, id string, reason string) error {
+	return r.execAndExpectRow(ctx, "update DH hold reason",
+		`UPDATE campaign_purchases SET dh_hold_reason = ?, updated_at = ? WHERE id = ?`,
+		reason, time.Now(), id,
+	)
+}
+
+// SetHeldWithReason atomically sets the push status to held and records
+// the hold reason in a single UPDATE, preventing any reader from observing
+// a held purchase with an empty reason.
+func (r *CampaignsRepository) SetHeldWithReason(ctx context.Context, purchaseID string, reason string) error {
+	return r.execAndExpectRow(ctx, "set held with reason",
+		`UPDATE campaign_purchases SET dh_push_status = ?, dh_hold_reason = ?, updated_at = ? WHERE id = ?`,
+		campaigns.DHPushStatusHeld, reason, time.Now(), purchaseID,
+	)
+}
+
+// ApproveHeldPurchase atomically clears the hold reason and sets the push
+// status to pending inside a single transaction.
+func (r *CampaignsRepository) ApproveHeldPurchase(ctx context.Context, purchaseID string) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback() //nolint:errcheck
+
+	now := time.Now()
+	result, err := tx.ExecContext(ctx,
+		`UPDATE campaign_purchases
+		 SET dh_push_status = ?, dh_hold_reason = '', updated_at = ?
+		 WHERE id = ?`,
+		campaigns.DHPushStatusPending, now, purchaseID,
+	)
+	if err != nil {
+		return err
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return campaigns.ErrPurchaseNotFound
+	}
+	return tx.Commit()
 }
 
 // GetPurchasesByDHPushStatus returns purchases with the given DH push status.

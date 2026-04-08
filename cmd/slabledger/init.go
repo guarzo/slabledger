@@ -183,33 +183,7 @@ func initializeSocialService(
 	}
 
 	// Initialize image generation if enabled
-	if cfg.Adapters.ImageAIEnabled && cfg.Adapters.ImageAIDeployment != "" &&
-		cfg.Adapters.AzureAIEndpoint != "" && cfg.Adapters.AzureAIKey != "" {
-		imgClient, imgErr := azureai.NewImageClient(azureai.Config{
-			Endpoint:       cfg.Adapters.AzureAIEndpoint,
-			APIKey:         cfg.Adapters.AzureAIKey,
-			DeploymentName: cfg.Adapters.ImageAIDeployment,
-		}, azureai.WithImageLogger(logger))
-		if imgErr != nil {
-			logger.Warn(ctx, "image generation client init failed",
-				observability.Err(imgErr))
-		} else {
-			mediaDir := os.Getenv("MEDIA_DIR")
-			if mediaDir == "" {
-				mediaDir = "./data/media"
-			}
-			baseURL := os.Getenv("BASE_URL")
-			if baseURL == "" {
-				logger.Warn(ctx, "BASE_URL not set; AI background generation disabled (cannot construct public URLs)")
-			} else {
-				socialOpts = append(socialOpts, social.WithImageGenerator(imgClient, cfg.Adapters.ImageAIQuality, mediaDir, baseURL))
-				socialOpts = append(socialOpts, social.WithMediaStore(mediafs.NewStore(mediaDir)))
-				logger.Info(ctx, "AI background generation enabled",
-					observability.String("deployment", cfg.Adapters.ImageAIDeployment),
-					observability.String("quality", cfg.Adapters.ImageAIQuality))
-			}
-		}
-	}
+	initImageGeneration(ctx, cfg, logger, &socialOpts)
 
 	// Initialize Instagram integration (requires encryption + Instagram config)
 	igConfig := config.LoadInstagramOAuthConfig()
@@ -238,6 +212,41 @@ func initializeSocialService(
 	socialService := social.NewService(socialRepo, socialOpts...)
 
 	return socialService, socialRepo, igClient, igStore, igTokenRefresher
+}
+
+// initImageGeneration configures image generation if enabled and all prerequisites are met.
+func initImageGeneration(ctx context.Context, cfg *config.Config, logger observability.Logger, socialOpts *[]social.ServiceOption) {
+	if !cfg.Adapters.ImageAIEnabled || cfg.Adapters.ImageAIDeployment == "" ||
+		cfg.Adapters.AzureAIEndpoint == "" || cfg.Adapters.AzureAIKey == "" {
+		return
+	}
+
+	imgClient, imgErr := azureai.NewImageClient(azureai.Config{
+		Endpoint:       cfg.Adapters.AzureAIEndpoint,
+		APIKey:         cfg.Adapters.AzureAIKey,
+		DeploymentName: cfg.Adapters.ImageAIDeployment,
+	}, azureai.WithImageLogger(logger))
+	if imgErr != nil {
+		logger.Warn(ctx, "image generation client init failed", observability.Err(imgErr))
+		return
+	}
+
+	mediaDir := os.Getenv("MEDIA_DIR")
+	if mediaDir == "" {
+		mediaDir = "./data/media"
+	}
+
+	baseURL := os.Getenv("BASE_URL")
+	if baseURL == "" {
+		logger.Warn(ctx, "BASE_URL not set; AI background generation disabled (cannot construct public URLs)")
+		return
+	}
+
+	*socialOpts = append(*socialOpts, social.WithImageGenerator(imgClient, cfg.Adapters.ImageAIQuality, mediaDir, baseURL))
+	*socialOpts = append(*socialOpts, social.WithMediaStore(mediafs.NewStore(mediaDir)))
+	logger.Info(ctx, "AI background generation enabled",
+		observability.String("deployment", cfg.Adapters.ImageAIDeployment),
+		observability.String("quality", cfg.Adapters.ImageAIQuality))
 }
 
 // initializeMetricsPoller creates the metrics repository and, when an Instagram
@@ -376,6 +385,8 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 			buildDeps.DHPushPendingLister = deps.CampaignsRepo
 			buildDeps.DHPushStatusUpdater = deps.CampaignsRepo
 			buildDeps.DHPushCandidatesSaver = deps.CampaignsRepo
+			buildDeps.DHPushConfigLoader = deps.CampaignsRepo
+			buildDeps.DHPushHoldSetter = deps.CampaignsRepo
 		}
 		if deps.CardIDMappingRepo != nil {
 			buildDeps.DHPushCardIDSaver = deps.CardIDMappingRepo

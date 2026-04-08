@@ -19,7 +19,7 @@ const purchaseColumns = `id, campaign_id, card_name, cert_number, card_number, s
 	ai_suggested_price_cents, ai_suggested_at,
 	card_year, ebay_export_flagged_at,
 	reviewed_price_cents, reviewed_at, review_source,
-	dh_card_id, dh_inventory_id, dh_cert_status, dh_listing_price_cents, dh_channels_json, dh_status, dh_push_status, dh_candidates,
+	dh_card_id, dh_inventory_id, dh_cert_status, dh_listing_price_cents, dh_channels_json, dh_status, dh_push_status, dh_candidates, dh_hold_reason,
 		gem_rate_id, psa_spec_id`
 
 // purchaseColumnsAliased is the same column list with the "p." table alias for JOIN queries.
@@ -35,7 +35,7 @@ const purchaseColumnsAliased = `p.id, p.campaign_id, p.card_name, p.cert_number,
 	p.ai_suggested_price_cents, p.ai_suggested_at,
 	p.card_year, p.ebay_export_flagged_at,
 	p.reviewed_price_cents, p.reviewed_at, p.review_source,
-	p.dh_card_id, p.dh_inventory_id, p.dh_cert_status, p.dh_listing_price_cents, p.dh_channels_json, p.dh_status, p.dh_push_status, p.dh_candidates,
+	p.dh_card_id, p.dh_inventory_id, p.dh_cert_status, p.dh_listing_price_cents, p.dh_channels_json, p.dh_status, p.dh_push_status, p.dh_candidates, p.dh_hold_reason,
 		p.gem_rate_id, p.psa_spec_id`
 
 // saleColumnsAliased is the SELECT column list for campaign_sales with "s." alias, used in LEFT JOIN queries.
@@ -65,7 +65,7 @@ func purchaseScanDests(p *campaigns.Purchase) []any {
 		&p.AISuggestedPriceCents, &p.AISuggestedAt,
 		&p.CardYear, &p.EbayExportFlaggedAt,
 		&p.ReviewedPriceCents, &p.ReviewedAt, &p.ReviewSource,
-		&p.DHCardID, &p.DHInventoryID, &p.DHCertStatus, &p.DHListingPriceCents, &p.DHChannelsJSON, &p.DHStatus, &p.DHPushStatus, &p.DHCandidatesJSON,
+		&p.DHCardID, &p.DHInventoryID, &p.DHCertStatus, &p.DHListingPriceCents, &p.DHChannelsJSON, &p.DHStatus, &p.DHPushStatus, &p.DHCandidatesJSON, &p.DHHoldReason,
 		&p.GemRateID, &p.PSASpecID,
 	}
 }

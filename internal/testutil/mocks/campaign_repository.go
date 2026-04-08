@@ -61,6 +61,11 @@ type MockCampaignRepository struct {
 	GetPurchasesByDHCertStatusFn   func(ctx context.Context, status string, limit int) ([]campaigns.Purchase, error)
 	UpdatePurchaseDHPushStatusFn   func(ctx context.Context, id string, status string) error
 	UpdatePurchaseDHCandidatesFn   func(ctx context.Context, id string, candidatesJSON string) error
+	UpdatePurchaseDHHoldReasonFn   func(ctx context.Context, id string, reason string) error
+	SetHeldWithReasonFn            func(ctx context.Context, purchaseID string, reason string) error
+	ApproveHeldPurchaseFn          func(ctx context.Context, purchaseID string) error
+	GetDHPushConfigFn              func(ctx context.Context) (*campaigns.DHPushConfig, error)
+	SaveDHPushConfigFn             func(ctx context.Context, cfg *campaigns.DHPushConfig) error
 	GetPurchasesByDHPushStatusFn   func(ctx context.Context, status string, limit int) ([]campaigns.Purchase, error)
 	GetSellSheetItemsFn            func(ctx context.Context) ([]string, error)
 	AddSellSheetItemsFn            func(ctx context.Context, purchaseIDs []string) error
@@ -867,6 +872,42 @@ func (m *MockCampaignRepository) UpdatePurchaseDHPushStatus(ctx context.Context,
 func (m *MockCampaignRepository) UpdatePurchaseDHCandidates(ctx context.Context, id string, candidatesJSON string) error {
 	if m.UpdatePurchaseDHCandidatesFn != nil {
 		return m.UpdatePurchaseDHCandidatesFn(ctx, id, candidatesJSON)
+	}
+	return nil
+}
+
+func (m *MockCampaignRepository) UpdatePurchaseDHHoldReason(ctx context.Context, id string, reason string) error {
+	if m.UpdatePurchaseDHHoldReasonFn != nil {
+		return m.UpdatePurchaseDHHoldReasonFn(ctx, id, reason)
+	}
+	return nil
+}
+
+func (m *MockCampaignRepository) SetHeldWithReason(ctx context.Context, purchaseID string, reason string) error {
+	if m.SetHeldWithReasonFn != nil {
+		return m.SetHeldWithReasonFn(ctx, purchaseID, reason)
+	}
+	return nil
+}
+
+func (m *MockCampaignRepository) ApproveHeldPurchase(ctx context.Context, purchaseID string) error {
+	if m.ApproveHeldPurchaseFn != nil {
+		return m.ApproveHeldPurchaseFn(ctx, purchaseID)
+	}
+	return nil
+}
+
+func (m *MockCampaignRepository) GetDHPushConfig(ctx context.Context) (*campaigns.DHPushConfig, error) {
+	if m.GetDHPushConfigFn != nil {
+		return m.GetDHPushConfigFn(ctx)
+	}
+	def := campaigns.DefaultDHPushConfig()
+	return &def, nil
+}
+
+func (m *MockCampaignRepository) SaveDHPushConfig(ctx context.Context, cfg *campaigns.DHPushConfig) error {
+	if m.SaveDHPushConfigFn != nil {
+		return m.SaveDHPushConfigFn(ctx, cfg)
 	}
 	return nil
 }

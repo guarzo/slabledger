@@ -131,6 +131,7 @@ type Service interface {
 	PricingService
 	CertLookupService
 	SnapshotService
+	DHService
 
 	// Close shuts down background workers.
 	Close()
@@ -291,4 +292,5 @@ var (
 	_ PricingService    = (*service)(nil)
 	_ CertLookupService = (*service)(nil)
 	_ SnapshotService   = (*service)(nil)
+	_ DHService         = (*service)(nil)
 )

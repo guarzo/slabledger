@@ -296,6 +296,9 @@ func (rt *Router) registerDHRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/dh/status", rt.authMW.RequireAuth(http.HandlerFunc(rt.dhHandler.HandleGetStatus)))
 	mux.Handle("POST /api/dh/fix-match", rt.authMW.RequireAuth(http.HandlerFunc(rt.dhHandler.HandleFixMatch)))
 	mux.Handle("POST /api/dh/select-match", rt.authMW.RequireAuth(http.HandlerFunc(rt.dhHandler.HandleSelectMatch)))
+	mux.Handle("POST /api/dh/approve/{purchaseId}", rt.authMW.RequireAuth(http.HandlerFunc(rt.dhHandler.HandleApproveDHPush)))
+	mux.Handle("GET /api/admin/dh-push-config", rt.authMW.RequireAdmin(http.HandlerFunc(rt.dhHandler.HandleGetDHPushConfig)))
+	mux.Handle("PUT /api/admin/dh-push-config", rt.authMW.RequireAdmin(http.HandlerFunc(rt.dhHandler.HandleSaveDHPushConfig)))
 	rt.logger.Info(context.Background(), "DH routes registered")
 }
 

@@ -338,8 +338,9 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 			intelRepo, suggestionsRepo,
 			logger,
 			ctx,
-			dhClient, // DHHealthReporter
-			dhClient, // DHCountsFetcher
+			dhClient,         // DHHealthReporter
+			dhClient,         // DHCountsFetcher
+			campaignsService, // DHApproveService
 		)
 		logger.Info(ctx, "DH handler initialized")
 	}

@@ -71,6 +71,13 @@ type DHHealthReporter interface {
 	Health() *dh.HealthTracker
 }
 
+// DHApproveService approves held DH push items and manages push config.
+type DHApproveService interface {
+	ApproveDHPush(ctx context.Context, purchaseID string) error
+	GetDHPushConfig(ctx context.Context) (*campaigns.DHPushConfig, error)
+	SaveDHPushConfig(ctx context.Context, cfg *campaigns.DHPushConfig) error
+}
+
 // DHCountsFetcher retrieves inventory and order counts from DH.
 type DHCountsFetcher interface {
 	ListInventory(ctx context.Context, filters dh.InventoryFilters) (*dh.InventoryListResponse, error)
@@ -95,6 +102,7 @@ type DHHandler struct {
 	baseCtx           context.Context
 	healthReporter    DHHealthReporter // optional: API health metrics
 	countsFetcher     DHCountsFetcher  // optional: DH inventory/order counts
+	dhApproveService  DHApproveService // optional: approve held pushes + push config
 
 	bgWG             sync.WaitGroup
 	bulkMatchMu      sync.Mutex
@@ -111,7 +119,7 @@ func (h *DHHandler) selectMatchLock(purchaseID string) *sync.Mutex {
 
 // NewDHHandler creates a new DHHandler with the given dependencies.
 // baseCtx is a server-lifecycle context; background goroutines derive from it.
-// healthReporter and countsFetcher are optional (nil-safe).
+// healthReporter, countsFetcher, and dhApproveService are optional (nil-safe).
 func NewDHHandler(
 	certResolver DHCertResolver,
 	cardIDSaver DHCardIDSaver,
@@ -129,6 +137,7 @@ func NewDHHandler(
 	baseCtx context.Context,
 	healthReporter DHHealthReporter,
 	countsFetcher DHCountsFetcher,
+	dhApproveService DHApproveService,
 ) *DHHandler {
 	if baseCtx == nil {
 		baseCtx = context.Background()
@@ -150,6 +159,7 @@ func NewDHHandler(
 		baseCtx:           baseCtx,
 		healthReporter:    healthReporter,
 		countsFetcher:     countsFetcher,
+		dhApproveService:  dhApproveService,
 	}
 	h.bulkMatchError.Store("")
 	return h

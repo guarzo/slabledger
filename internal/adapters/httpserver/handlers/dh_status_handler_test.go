@@ -152,6 +152,7 @@ func newTestDHHandler(
 		context.Background(),
 		healthReporter,
 		countsFetcher,
+		nil, // dhApproveService — not needed for these tests
 	)
 }
 

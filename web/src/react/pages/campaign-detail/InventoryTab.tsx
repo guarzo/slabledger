@@ -42,7 +42,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
     reviewStats, tabCounts, showEV, evPortfolio, evMap,
     pageSellSheetCount, sellSheetActive, filteredAndSortedItems,
     totalCost, totalMarket, totalPL,
-    handleSort, handleReviewed, handleResolveFlag, handleFlagSubmit, handlePrint,
+    handleSort, handleReviewed, handleResolveFlag, handleApproveDHPush, handleFlagSubmit, handlePrint,
     toggleSelect, toggleAll, toggleExpand,
     openSaleModal, closeSaleModal, handleFixPricing, handleSetPrice,
     handlePriceSaved, handleHintSaved, sellSheet, toast,
@@ -250,7 +250,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
       {!showAll && (
         <div className="flex items-center gap-2 mb-3 overflow-x-auto scrollbar-none sell-sheet-no-print">
           {([
-            { key: 'exceptions' as const, label: 'Exceptions', color: 'var(--warning)' },
+            { key: 'needs_attention' as const, label: 'Needs Attention', color: 'var(--warning)' },
             { key: 'sell_sheet' as const, label: 'Sell Sheet', color: 'var(--brand-400)' },
             { key: 'all' as const, label: 'All', color: 'var(--text)' },
             { key: 'card_show' as const, label: 'Card Show', color: 'var(--brand-400)' },
@@ -301,7 +301,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
         <MobileSellSheetView
           items={filteredAndSortedItems}
           onRecordSale={(item) => openSaleModal([item])}
-          onExit={() => setFilterTab('exceptions')}
+          onExit={() => setFilterTab('needs_attention')}
           searchQuery={searchQuery}
           onSearch={setSearchQuery}
           sellSheetCount={pageSellSheetCount}
@@ -405,7 +405,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                         isOnSellSheet={!sellSheetActive && sellSheet.has(item.purchase.id)}
                       />
                     </div>
-                    {isExpanded && <ExpandedDetail item={item} onReviewed={handleReviewed} campaignId={campaignId} onOpenFlagDialog={() => setFlagTarget({ purchaseId: item.purchase.id, cardName: item.purchase.cardName, grade: item.purchase.gradeValue })} onResolveFlag={handleResolveFlag} />}
+                    {isExpanded && <ExpandedDetail item={item} onReviewed={handleReviewed} campaignId={campaignId} onOpenFlagDialog={() => setFlagTarget({ purchaseId: item.purchase.id, cardName: item.purchase.cardName, grade: item.purchase.gradeValue })} onResolveFlag={handleResolveFlag} onApproveDHPush={handleApproveDHPush} onSetPrice={() => handleSetPrice(item)} />}
                   </div>
                 );
               })
@@ -445,7 +445,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                           isOnSellSheet={!sellSheetActive && sellSheet.has(item.purchase.id)}
                         />
                       </div>
-                      {isExpanded && <ExpandedDetail item={item} onReviewed={handleReviewed} campaignId={campaignId} onOpenFlagDialog={() => setFlagTarget({ purchaseId: item.purchase.id, cardName: item.purchase.cardName, grade: item.purchase.gradeValue })} onResolveFlag={handleResolveFlag} />}
+                      {isExpanded && <ExpandedDetail item={item} onReviewed={handleReviewed} campaignId={campaignId} onOpenFlagDialog={() => setFlagTarget({ purchaseId: item.purchase.id, cardName: item.purchase.cardName, grade: item.purchase.gradeValue })} onResolveFlag={handleResolveFlag} onApproveDHPush={handleApproveDHPush} onSetPrice={() => handleSetPrice(item)} />}
                     </div>
                   );
                 })}
