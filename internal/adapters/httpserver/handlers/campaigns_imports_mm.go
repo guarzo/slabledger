@@ -100,10 +100,11 @@ func (h *CampaignsHandler) HandleGlobalRefreshMM(w http.ResponseWriter, r *http.
 		return
 	}
 
-	// Surface row-level parse errors in the response
+	// Surface row-level parse errors in the response and count them as failures.
 	for _, pe := range parseErrors {
 		result.Errors = append(result.Errors, campaigns.ImportError{Row: pe.Row, Error: pe.Message})
 	}
+	result.Failed += len(parseErrors)
 
 	writeJSON(w, http.StatusOK, result)
 }

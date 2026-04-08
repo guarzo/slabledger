@@ -154,6 +154,12 @@ func (s *MarketMoversStore) ListMappings(ctx context.Context) ([]MMCardMapping, 
 
 	var mappings []MMCardMapping
 	for rows.Next() {
+		select {
+		case <-ctx.Done():
+			rows.Close() //nolint:errcheck // best-effort close on ctx cancel
+			return nil, ctx.Err()
+		default:
+		}
 		var m MMCardMapping
 		if err := rows.Scan(&m.SlabSerial, &m.MMCollectibleID, &m.MasterID); err != nil {
 			return nil, err

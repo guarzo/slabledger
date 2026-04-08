@@ -124,7 +124,9 @@ func (h *MarketMoversHandler) HandleStatus(w http.ResponseWriter, r *http.Reques
 	}
 
 	mappings, err := h.store.ListMappings(r.Context())
-	if err == nil {
+	if err != nil {
+		h.logger.Error(r.Context(), "failed to list Market Movers mappings", observability.Err(err))
+	} else {
 		status["cardsMapped"] = len(mappings)
 	}
 

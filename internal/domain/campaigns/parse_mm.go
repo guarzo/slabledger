@@ -9,6 +9,12 @@ import (
 // mmExportHeaderCol0 is the expected first column header of the Market Movers 17-column CSV.
 const mmExportHeaderCol0 = "Sport"
 
+// mmExportHeaderCol11 is the expected header for the cert-number column (index 11, col 12).
+const mmExportHeaderCol11 = "Notes"
+
+// mmExportHeaderCol15 is the expected header for the last-sale-price column (index 15, col 16).
+const mmExportHeaderCol15 = "Last Sale Price"
+
 // ParseMMRefreshRows parses a Market Movers collection export CSV (17 columns)
 // and extracts cert number (Notes, col 12) and last sale price (col 16) for each data row.
 // Returns rows, any per-row parse warnings, and a fatal error if the file format is wrong.
@@ -21,6 +27,12 @@ func ParseMMRefreshRows(records [][]string) ([]MMRefreshRow, []ParseError, error
 	header := records[0]
 	if len(header) < 16 || strings.TrimSpace(header[0]) != mmExportHeaderCol0 {
 		return nil, nil, fmt.Errorf("unrecognised CSV format: expected Market Movers 17-column export (first header column %q)", strings.TrimSpace(header[0]))
+	}
+	if strings.TrimSpace(header[11]) != mmExportHeaderCol11 {
+		return nil, nil, fmt.Errorf("unrecognised CSV format: expected column 12 to be %q, got %q", mmExportHeaderCol11, strings.TrimSpace(header[11]))
+	}
+	if strings.TrimSpace(header[15]) != mmExportHeaderCol15 {
+		return nil, nil, fmt.Errorf("unrecognised CSV format: expected column 16 to be %q, got %q", mmExportHeaderCol15, strings.TrimSpace(header[15]))
 	}
 
 	var rows []MMRefreshRow

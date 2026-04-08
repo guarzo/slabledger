@@ -1,2 +1,3 @@
--- SQLite does not support DROP COLUMN in older versions; no-op for rollback.
-SELECT 1;
+ALTER TABLE campaign_purchases DROP COLUMN card_player;
+ALTER TABLE campaign_purchases DROP COLUMN card_variation;
+ALTER TABLE campaign_purchases DROP COLUMN card_category;

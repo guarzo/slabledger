@@ -253,30 +253,44 @@ func (c *Client) doQuery(ctx context.Context, path string, input any, result any
 }
 
 // getToken returns a valid access token, refreshing if needed.
+// Uses double-check locking so the lock is not held during the network call.
 func (c *Client) getToken(ctx context.Context) (string, error) {
 	if c.staticToken != "" {
 		return c.staticToken, nil
 	}
 
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	// Return cached token if still valid (with 5min buffer)
+	// Return cached token if still valid (with 5min buffer).
 	if c.token.AccessToken != "" && time.Now().Add(5*time.Minute).Before(c.token.ExpiresAt) {
-		return c.token.AccessToken, nil
+		token := c.token.AccessToken
+		c.mu.Unlock()
+		return token, nil
 	}
-
 	if c.auth == nil || c.refreshToken == "" {
+		c.mu.Unlock()
 		return "", fmt.Errorf("no auth credentials configured")
 	}
+	// Capture credentials under the lock before releasing it.
+	auth := c.auth
+	refreshTok := c.refreshToken
+	c.mu.Unlock()
 
-	resp, err := c.auth.RefreshToken(ctx, c.refreshToken)
+	// Perform the network call outside the lock to avoid holding it during I/O.
+	resp, err := auth.RefreshToken(ctx, refreshTok)
 	if err != nil {
 		return "", fmt.Errorf("refresh token: %w", err)
 	}
 
-	// Parse expiry from JWT payload (exp claim)
+	// Parse expiry from JWT payload (exp claim).
 	expiry := parseJWTExpiry(resp.AccessToken)
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	// Double-check: another goroutine may have refreshed the token while we
+	// were waiting for the network call to complete.
+	if c.token.AccessToken != "" && time.Now().Add(5*time.Minute).Before(c.token.ExpiresAt) {
+		return c.token.AccessToken, nil
+	}
 	c.token = TokenState{
 		AccessToken: resp.AccessToken,
 		ExpiresAt:   expiry,

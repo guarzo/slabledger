@@ -214,7 +214,14 @@ export default function OperationsTab({ campaigns, operationState, setOperationS
       setMmResult(null);
       const result = await api.globalRefreshMM(file);
       setMmResult(result);
-      toast.success(`Market Movers import: ${result.updated} updated, ${result.skipped} skipped, ${result.notFound} not found`);
+      if (result.failed > 0 || (result.errors && result.errors.length > 0)) {
+        toast.warning(`Market Movers import: ${result.failed} failed. ${result.updated} updated, ${result.skipped} skipped, ${result.notFound} not found`);
+        if (result.errors && result.errors.length > 0) {
+          console.error('Market Movers import errors:', result.errors);
+        }
+      } else {
+        toast.success(`Market Movers import: ${result.updated} updated, ${result.skipped} skipped, ${result.notFound} not found`);
+      }
       invalidateAll();
     } catch (err) {
       toast.error(getErrorMessage(err, 'Failed to import Market Movers data'));

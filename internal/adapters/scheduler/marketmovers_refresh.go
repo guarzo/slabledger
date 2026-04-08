@@ -275,6 +275,9 @@ func (s *MarketMoversRefreshScheduler) resolveCollectibleID(ctx context.Context,
 				observability.String("cert", p.CertNumber),
 				observability.Err(cerr))
 		} else if cid != 0 {
+			s.logger.Info(ctx, "MM: resolved collectible via cert search",
+				observability.String("cert", p.CertNumber),
+				observability.Int64("collectibleId", cid))
 			return cid, mid, nil
 		}
 	}
@@ -335,6 +338,11 @@ func (s *MarketMoversRefreshScheduler) searchByNameGrade(ctx context.Context, p 
 		return 0, 0, nil
 	}
 
+	s.logger.Info(ctx, "MM: resolved collectible via name search",
+		observability.String("cert", p.CertNumber),
+		observability.String("query", query),
+		observability.String("resultTitle", top.Item.SearchTitle),
+		observability.Int64("collectibleId", top.Item.ID))
 	return top.Item.ID, top.Item.MasterID, nil
 }
 

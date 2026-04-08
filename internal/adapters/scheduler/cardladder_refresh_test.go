@@ -49,10 +49,11 @@ func (m *mockCLValueUpdater) UpdatePurchaseCLValue(ctx context.Context, purchase
 }
 
 type mockCLGemRateUpdater struct {
-	UpdateGemRateFn func(ctx context.Context, purchaseID, gemRateID string) error
-	UpdatePSASpecFn func(ctx context.Context, purchaseID string, psaSpecID int) error
-	GemRateCalls    []struct{ PurchaseID, GemRateID string }
-	PSASpecCalls    []struct {
+	UpdateGemRateFn                func(ctx context.Context, purchaseID, gemRateID string) error
+	UpdatePSASpecFn                func(ctx context.Context, purchaseID string, psaSpecID int) error
+	UpdatePurchaseCLCardMetadataFn func(ctx context.Context, id, player, variation, category string) error
+	GemRateCalls                   []struct{ PurchaseID, GemRateID string }
+	PSASpecCalls                   []struct {
 		PurchaseID string
 		PSASpecID  int
 	}
@@ -77,7 +78,10 @@ func (m *mockCLGemRateUpdater) UpdatePurchasePSASpecID(ctx context.Context, purc
 	return nil
 }
 
-func (m *mockCLGemRateUpdater) UpdatePurchaseCLCardMetadata(_ context.Context, _, _, _, _ string) error {
+func (m *mockCLGemRateUpdater) UpdatePurchaseCLCardMetadata(ctx context.Context, id, player, variation, category string) error {
+	if m.UpdatePurchaseCLCardMetadataFn != nil {
+		return m.UpdatePurchaseCLCardMetadataFn(ctx, id, player, variation, category)
+	}
 	return nil
 }
 

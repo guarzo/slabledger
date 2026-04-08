@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useMarketMoversStatus, useSaveMarketMoversConfig, useTriggerMarketMoversRefresh } from '../../queries/useAdminQueries';
 import { useToast } from '../../contexts/ToastContext';
 import { CardShell } from '../../ui/CardShell';
@@ -36,10 +36,12 @@ export function MarketMoversTab({ enabled = true }: { enabled?: boolean }) {
 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const hasHydrated = useRef(false);
 
   useEffect(() => {
-    if (status?.configured) {
+    if (!hasHydrated.current && status?.configured) {
       setUsername(status.username ?? '');
+      hasHydrated.current = true;
     }
   }, [status?.configured, status?.username]);
 
@@ -157,12 +159,12 @@ export function MarketMoversTab({ enabled = true }: { enabled?: boolean }) {
             <label htmlFor="mm-username" className="block text-xs text-[var(--text-muted)] mb-1">Email / Username</label>
             <input
               id="mm-username"
-              type="email"
+              type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               placeholder={status?.username ?? 'your@email.com'}
               required
-              autoComplete="email"
+              autoComplete="username"
               className="w-full rounded-md bg-[var(--surface-2)] border border-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--brand-500)]"
             />
           </div>
