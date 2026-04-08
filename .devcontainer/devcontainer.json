@@ -5,6 +5,9 @@
   "workspaceFolder": "/workspace",
   "shutdownAction": "stopCompose",
 
+  // Create empty docker-compose.override.yml if it doesn't exist (runs on host before build)
+  "initializeCommand": "test -f .devcontainer/docker-compose.override.yml || echo 'services: {}' > .devcontainer/docker-compose.override.yml",
+
   // VS Code customizations
   "customizations": {
     "vscode": {
