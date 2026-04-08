@@ -39,6 +39,7 @@ type Router struct {
 	aiUsageHandler            *handlers.AIStatusHandler
 	priceFlagsHandler         *handlers.PriceFlagsHandler
 	cardLadderHandler         *handlers.CardLadderHandler
+	marketMoversHandler       *handlers.MarketMoversHandler
 	picksHandler              *handlers.PicksHandler
 	opportunitiesHandler      *handlers.OpportunitiesHandler
 	dhHandler                 *handlers.DHHandler
@@ -72,6 +73,7 @@ type RouterConfig struct {
 	AIStatusHandler           *handlers.AIStatusHandler       // AI usage stats; nil = disabled
 	PriceFlagsHandler         *handlers.PriceFlagsHandler     // Price flag admin; nil = disabled
 	CardLadderHandler         *handlers.CardLadderHandler     // Card Ladder admin; nil = disabled
+	MarketMoversHandler       *handlers.MarketMoversHandler   // Market Movers admin; nil = disabled
 	PicksHandler              *handlers.PicksHandler          // AI picks; nil = disabled
 	OpportunitiesHandler      *handlers.OpportunitiesHandler  // Arbitrage opportunities; nil = disabled
 	DHHandler                 *handlers.DHHandler             // DH bulk match + intelligence; nil = disabled
@@ -158,6 +160,10 @@ func NewRouter(cfg RouterConfig) *Router {
 
 	if cfg.CardLadderHandler != nil {
 		rt.cardLadderHandler = cfg.CardLadderHandler
+	}
+
+	if cfg.MarketMoversHandler != nil {
+		rt.marketMoversHandler = cfg.MarketMoversHandler
 	}
 
 	if cfg.PicksHandler != nil {

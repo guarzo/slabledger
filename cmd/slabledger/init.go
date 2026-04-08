@@ -14,6 +14,7 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	"github.com/guarzo/slabledger/internal/adapters/clients/dhprice"
 	igclient "github.com/guarzo/slabledger/internal/adapters/clients/instagram"
+	"github.com/guarzo/slabledger/internal/adapters/clients/marketmovers"
 	"github.com/guarzo/slabledger/internal/adapters/clients/pricelookup"
 	"github.com/guarzo/slabledger/internal/adapters/clients/psa"
 	"github.com/guarzo/slabledger/internal/adapters/clients/tcgdex"
@@ -304,6 +305,42 @@ func initializeCardLadder(
 	return client, fbAuth, store
 }
 
+// initializeMarketMovers creates the Market Movers client, auth, and store.
+// Returns nil client if encryption key is not configured or if not yet configured.
+func initializeMarketMovers(
+	ctx context.Context,
+	logger observability.Logger,
+	db *sqlite.DB,
+	encryptor crypto.Encryptor,
+) (*marketmovers.Client, *sqlite.MarketMoversStore) {
+	if encryptor == nil {
+		logger.Info(ctx, "Market Movers disabled: encryption key not configured")
+		return nil, nil
+	}
+
+	store := sqlite.NewMarketMoversStore(db.DB, encryptor)
+
+	// Try to load existing config to set up the client
+	mmCfg, err := store.GetConfig(ctx)
+	if err != nil {
+		logger.Warn(ctx, "failed to load Market Movers config", observability.Err(err))
+	}
+
+	if mmCfg == nil {
+		logger.Info(ctx, "Market Movers not configured; use POST /api/admin/marketmovers/config to set up")
+		return nil, store
+	}
+
+	mmAuth := marketmovers.NewAuth()
+	client := marketmovers.NewClient(
+		marketmovers.WithTokenManager(mmAuth, mmCfg.RefreshToken, time.Time{}),
+	)
+	logger.Info(ctx, "Market Movers client initialized",
+		observability.Bool("hasUsername", mmCfg.Username != ""))
+
+	return client, store
+}
+
 // schedulerDeps bundles all dependencies needed by initializeSchedulers.
 type schedulerDeps struct {
 	Config               *config.Config
@@ -329,6 +366,8 @@ type schedulerDeps struct {
 	CardLadderClient     *cardladder.Client
 	CardLadderStore      *sqlite.CardLadderStore
 	CardLadderSalesStore *sqlite.CLSalesStore
+	MMClient             *marketmovers.Client
+	MMStore              *sqlite.MarketMoversStore
 	DHClient             *dh.Client
 	DHIntelligenceRepo   *sqlite.MarketIntelligenceRepository
 	DHSuggestionsRepo    *sqlite.DHSuggestionsRepository
@@ -371,6 +410,17 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 		CardLadderGemRateUpdater: deps.CampaignsRepo,
 		CardLadderCLRecorder:     deps.CampaignsRepo,
 		CardLadderSalesStore:     deps.CardLadderSalesStore,
+	}
+	// Wire Market Movers (nil-safe: only set if non-nil to avoid typed-nil interface issues)
+	if deps.MMClient != nil {
+		buildDeps.MMClient = deps.MMClient
+	}
+	if deps.MMStore != nil {
+		buildDeps.MMStore = deps.MMStore
+	}
+	if deps.CampaignsRepo != nil {
+		buildDeps.MMPurchaseLister = deps.CampaignsRepo
+		buildDeps.MMValueUpdater = deps.CampaignsRepo
 	}
 	// Nil-safe interface conversion for DH dependencies.
 	if deps.DHClient != nil {

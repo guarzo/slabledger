@@ -25,15 +25,3 @@ func TestBuildEbayTitle_ShortTitle(t *testing.T) {
 		t.Errorf("title = %q, want %q", title, want)
 	}
 }
-
-func TestFormatGrade_WholeNumber(t *testing.T) {
-	if got := formatGrade(9); got != "9" {
-		t.Errorf("formatGrade(9) = %q, want %q", got, "9")
-	}
-}
-
-func TestFormatGrade_HalfGrade(t *testing.T) {
-	if got := formatGrade(9.5); got != "9.5" {
-		t.Errorf("formatGrade(9.5) = %q, want %q", got, "9.5")
-	}
-}

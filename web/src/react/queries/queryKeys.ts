@@ -52,6 +52,7 @@ export const queryKeys = {
     aiUsage: ['admin', 'aiUsage'] as const,
     priceFlags: (status: string) => ['admin', 'priceFlags', status] as const,
     cardLadderStatus: ['admin', 'cardLadderStatus'] as const,
+    marketMoversStatus: ['admin', 'marketMoversStatus'] as const,
     dhStatus: ['admin', 'dhStatus'] as const,
     dhUnmatched: ['admin', 'dhUnmatched'] as const,
   },

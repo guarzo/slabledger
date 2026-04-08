@@ -48,6 +48,7 @@ type MockCampaignRepository struct {
 	GetPurchasesWithSalesFn        func(ctx context.Context, campaignID string) ([]campaigns.PurchaseWithSale, error)
 	GetPurchaseByCertNumberFn      func(ctx context.Context, grader, certNumber string) (*campaigns.Purchase, error)
 	UpdatePurchaseCLValueFn        func(ctx context.Context, id string, clValueCents int, population int) error
+	UpdatePurchaseMMValueFn        func(ctx context.Context, id string, mmValueCents int) error
 	UpdatePurchaseCardMetadataFn   func(ctx context.Context, id string, cardName, cardNumber, setName string) error
 	UpdatePurchaseGradeFn          func(ctx context.Context, id string, gradeValue float64) error
 	UpdateExternalPurchaseFieldsFn func(ctx context.Context, id string, p *campaigns.Purchase) error
@@ -463,6 +464,18 @@ func (m *MockCampaignRepository) UpdatePurchaseCLValue(ctx context.Context, id s
 	}
 	p.CLValueCents = clValueCents
 	p.Population = population
+	return nil
+}
+
+func (m *MockCampaignRepository) UpdatePurchaseMMValue(ctx context.Context, id string, mmValueCents int) error {
+	if m.UpdatePurchaseMMValueFn != nil {
+		return m.UpdatePurchaseMMValueFn(ctx, id, mmValueCents)
+	}
+	p, ok := m.Purchases[id]
+	if !ok {
+		return campaigns.ErrPurchaseNotFound
+	}
+	p.MMValueCents = mmValueCents
 	return nil
 }
 

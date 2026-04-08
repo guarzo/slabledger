@@ -336,6 +336,15 @@ func (m *mockRepo) UpdatePurchaseCLValue(_ context.Context, id string, clValueCe
 	return nil
 }
 
+func (m *mockRepo) UpdatePurchaseMMValue(_ context.Context, id string, mmValueCents int) error {
+	p, ok := m.purchases[id]
+	if !ok {
+		return ErrPurchaseNotFound
+	}
+	p.MMValueCents = mmValueCents
+	return nil
+}
+
 func (m *mockRepo) UpdatePurchaseCardMetadata(_ context.Context, id string, cardName, cardNumber, setName string) error {
 	p, ok := m.purchases[id]
 	if !ok {

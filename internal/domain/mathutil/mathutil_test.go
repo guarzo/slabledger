@@ -86,3 +86,28 @@ func TestToDollars(t *testing.T) {
 		}
 	}
 }
+
+func TestFormatGrade(t *testing.T) {
+	tests := []struct {
+		name  string
+		input float64
+		want  string
+	}{
+		{"integer 10", 10, "10"},
+		{"integer 9", 9, "9"},
+		{"integer 1", 1, "1"},
+		{"integer 0", 0, "0"},
+		{"half-grade 9.5", 9.5, "9.5"},
+		{"half-grade 8.5", 8.5, "8.5"},
+		{"half-grade 0.5", 0.5, "0.5"},
+		{"precise decimal 9.15", 9.15, "9.15"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := FormatGrade(tt.input)
+			if got != tt.want {
+				t.Errorf("FormatGrade(%v) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}

@@ -110,6 +110,10 @@ func Default() Config {
 			Interval:    24 * time.Hour,
 			RefreshHour: 4, // 4 AM UTC
 		},
+		MarketMovers: MarketMoversConfig{
+			Enabled:     true, // runs automatically when credentials are configured
+			RefreshHour: 5,    // 5 AM UTC
+		},
 		DH: DHConfig{
 			Enabled:       true,
 			CacheTTLHours: 24,

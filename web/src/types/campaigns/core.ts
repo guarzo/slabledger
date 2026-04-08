@@ -35,6 +35,7 @@ export interface Purchase {
   grader?: string;
   gradeValue: number;
   clValueCents: number;
+  mmValueCents?: number;
   buyCostCents: number;
   psaSourcingFeeCents: number;
   population?: number;

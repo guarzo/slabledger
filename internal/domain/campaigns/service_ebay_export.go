@@ -120,7 +120,7 @@ func (s *service) GenerateEbayCSV(ctx context.Context, items []EbayExportGenerat
 			setPrefix = "Pokemon Japanese "
 		}
 
-		gradeStr := formatGrade(p.GradeValue)
+		gradeStr := mathutil.FormatGrade(p.GradeValue)
 		title := buildEbayTitle(p.CardName, p.SetName, p.CardNumber, gradeStr)
 
 		var pics []string
@@ -170,13 +170,6 @@ func (s *service) GenerateEbayCSV(ctx context.Context, items []EbayExportGenerat
 func isJapaneseSet(setName string) bool {
 	lower := strings.ToLower(setName)
 	return strings.Contains(lower, "japanese") || strings.HasPrefix(lower, "ja ")
-}
-
-func formatGrade(grade float64) string {
-	if grade == float64(int(grade)) {
-		return fmt.Sprintf("%d", int(grade))
-	}
-	return fmt.Sprintf("%.1f", grade)
 }
 
 const ebayMaxTitleLen = 80

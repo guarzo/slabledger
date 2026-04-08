@@ -9,7 +9,7 @@ import (
 // purchaseColumns is the canonical SELECT column list for campaign_purchases (no table alias).
 const purchaseColumns = `id, campaign_id, card_name, cert_number, card_number, set_name,
 	grader, grade_value,
-	cl_value_cents, buy_cost_cents, psa_sourcing_fee_cents,
+	cl_value_cents, mm_value_cents, mm_trend_pct, mm_sales_30d, mm_active_low_cents, buy_cost_cents, psa_sourcing_fee_cents,
 	population, purchase_date, created_at, updated_at,
 	last_sold_cents, lowest_list_cents, conservative_cents, median_cents,
 	active_listings, sales_last_30d, trend_30d, snapshot_date, snapshot_json,
@@ -20,12 +20,13 @@ const purchaseColumns = `id, campaign_id, card_name, cert_number, card_number, s
 	card_year, ebay_export_flagged_at,
 	reviewed_price_cents, reviewed_at, review_source,
 	dh_card_id, dh_inventory_id, dh_cert_status, dh_listing_price_cents, dh_channels_json, dh_status, dh_push_status, dh_candidates, dh_hold_reason,
-		gem_rate_id, psa_spec_id`
+		gem_rate_id, psa_spec_id,
+		card_player, card_variation, card_category`
 
 // purchaseColumnsAliased is the same column list with the "p." table alias for JOIN queries.
 const purchaseColumnsAliased = `p.id, p.campaign_id, p.card_name, p.cert_number, p.card_number, p.set_name,
 	p.grader, p.grade_value,
-	p.cl_value_cents, p.buy_cost_cents, p.psa_sourcing_fee_cents,
+	p.cl_value_cents, p.mm_value_cents, p.mm_trend_pct, p.mm_sales_30d, p.mm_active_low_cents, p.buy_cost_cents, p.psa_sourcing_fee_cents,
 	p.population, p.purchase_date, p.created_at, p.updated_at,
 	p.last_sold_cents, p.lowest_list_cents, p.conservative_cents, p.median_cents,
 	p.active_listings, p.sales_last_30d, p.trend_30d, p.snapshot_date, p.snapshot_json,
@@ -36,7 +37,8 @@ const purchaseColumnsAliased = `p.id, p.campaign_id, p.card_name, p.cert_number,
 	p.card_year, p.ebay_export_flagged_at,
 	p.reviewed_price_cents, p.reviewed_at, p.review_source,
 	p.dh_card_id, p.dh_inventory_id, p.dh_cert_status, p.dh_listing_price_cents, p.dh_channels_json, p.dh_status, p.dh_push_status, p.dh_candidates, p.dh_hold_reason,
-		p.gem_rate_id, p.psa_spec_id`
+		p.gem_rate_id, p.psa_spec_id,
+		p.card_player, p.card_variation, p.card_category`
 
 // saleColumnsAliased is the SELECT column list for campaign_sales with "s." alias, used in LEFT JOIN queries.
 const saleColumnsAliased = `s.id, s.purchase_id, s.sale_channel, s.sale_price_cents, s.sale_fee_cents,
@@ -55,7 +57,7 @@ func purchaseScanDests(p *campaigns.Purchase) []any {
 	return []any{
 		&p.ID, &p.CampaignID, &p.CardName, &p.CertNumber, &p.CardNumber, &p.SetName,
 		&p.Grader, &p.GradeValue,
-		&p.CLValueCents, &p.BuyCostCents, &p.PSASourcingFeeCents,
+		&p.CLValueCents, &p.MMValueCents, &p.MMTrendPct, &p.MMSales30d, &p.MMActiveLowCents, &p.BuyCostCents, &p.PSASourcingFeeCents,
 		&p.Population, &p.PurchaseDate, &p.CreatedAt, &p.UpdatedAt,
 		&p.LastSoldCents, &p.LowestListCents, &p.ConservativeCents, &p.MedianCents,
 		&p.ActiveListings, &p.SalesLast30d, &p.Trend30d, &p.SnapshotDate, &p.SnapshotJSON,
@@ -67,6 +69,7 @@ func purchaseScanDests(p *campaigns.Purchase) []any {
 		&p.ReviewedPriceCents, &p.ReviewedAt, &p.ReviewSource,
 		&p.DHCardID, &p.DHInventoryID, &p.DHCertStatus, &p.DHListingPriceCents, &p.DHChannelsJSON, &p.DHStatus, &p.DHPushStatus, &p.DHCandidatesJSON, &p.DHHoldReason,
 		&p.GemRateID, &p.PSASpecID,
+		&p.CardPlayer, &p.CardVariation, &p.CardCategory,
 	}
 }
 

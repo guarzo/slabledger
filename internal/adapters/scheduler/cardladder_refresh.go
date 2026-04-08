@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
@@ -26,10 +27,11 @@ type CardLadderValueUpdater interface {
 	UpdatePurchaseCLValue(ctx context.Context, purchaseID string, clValueCents, population int) error
 }
 
-// CardLadderGemRateUpdater persists gemRateID and psaSpecID on purchases.
+// CardLadderGemRateUpdater persists gemRateID, psaSpecID, and CL card metadata on purchases.
 type CardLadderGemRateUpdater interface {
 	UpdatePurchaseGemRateID(ctx context.Context, purchaseID, gemRateID string) error
 	UpdatePurchasePSASpecID(ctx context.Context, purchaseID string, psaSpecID int) error
+	UpdatePurchaseCLCardMetadata(ctx context.Context, id, player, variation, category string) error
 }
 
 // CardLadderRefreshOption configures optional dependencies on a CardLadderRefreshScheduler.
@@ -40,9 +42,20 @@ func WithCLDHPushUpdater(u DHPushStatusUpdater) CardLadderRefreshOption {
 	return func(s *CardLadderRefreshScheduler) { s.dhPushUpdater = u }
 }
 
+// CLRunStats holds the counters from the most recent Card Ladder refresh run.
+type CLRunStats struct {
+	LastRunAt    time.Time `json:"lastRunAt"`
+	DurationMs   int64     `json:"durationMs"`
+	Updated      int       `json:"updated"`
+	Mapped       int       `json:"mapped"`
+	Skipped      int       `json:"skipped"`
+	TotalCLCards int       `json:"totalCLCards"`
+}
+
 // CardLadderRefreshScheduler refreshes CL values from the Card Ladder API daily.
 type CardLadderRefreshScheduler struct {
 	StopHandle
+	statsMu        sync.RWMutex
 	client         *cardladder.Client
 	store          *sqlite.CardLadderStore
 	purchaseLister CardLadderPurchaseLister
@@ -53,6 +66,19 @@ type CardLadderRefreshScheduler struct {
 	dhPushUpdater  DHPushStatusUpdater // optional: re-enrolls changed items for DH push
 	logger         observability.Logger
 	config         config.CardLadderConfig
+	lastRunStats   *CLRunStats
+}
+
+// GetLastRunStats returns a copy of the stats from the most recent refresh run,
+// or nil if no run has completed yet.
+func (s *CardLadderRefreshScheduler) GetLastRunStats() *CLRunStats {
+	s.statsMu.RLock()
+	defer s.statsMu.RUnlock()
+	if s.lastRunStats == nil {
+		return nil
+	}
+	cp := *s.lastRunStats
+	return &cp
 }
 
 // NewCardLadderRefreshScheduler creates a new CL refresh scheduler.
@@ -116,6 +142,7 @@ var certFromImageRe = regexp.MustCompile(`/cert/(\d+)/`)
 var gradeDigitsRe = regexp.MustCompile(`(\d+(?:\.\d+)?)`)
 
 func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
+	start := time.Now()
 	cfg, err := s.store.GetConfig(ctx)
 	if err != nil {
 		s.logger.Error(ctx, "CL refresh: failed to load config", observability.Err(err))
@@ -301,6 +328,18 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 		observability.Int("mapped", mapped),
 		observability.Int("skipped", skipped),
 		observability.Int("totalCLCards", len(cards)))
+
+	s.statsMu.Lock()
+	s.lastRunStats = &CLRunStats{
+		LastRunAt:    start,
+		DurationMs:   time.Since(start).Milliseconds(),
+		Updated:      updated,
+		Mapped:       mapped,
+		Skipped:      skipped,
+		TotalCLCards: len(cards),
+	}
+	s.statsMu.Unlock()
+
 	return nil
 }
 
@@ -385,7 +424,7 @@ func (s *CardLadderRefreshScheduler) gapFillGemRateIDs(ctx context.Context, purc
 		if grader == "" {
 			grader = "PSA"
 		}
-		condition := fmt.Sprintf("%s %s", grader, formatGrade(p.GradeValue))
+		condition := fmt.Sprintf("%s %s", grader, mathutil.FormatGrade(p.GradeValue))
 
 		filters := map[string]string{
 			"condition":      condition,
@@ -425,6 +464,15 @@ func (s *CardLadderRefreshScheduler) gapFillGemRateIDs(ctx context.Context, purc
 			}
 		}
 
+		// Persist player/variation/category for MM export enrichment.
+		if hit.Player != "" || hit.Variation != "" || hit.Category != "" {
+			if err := s.gemRateUpdater.UpdatePurchaseCLCardMetadata(ctx, p.ID, hit.Player, hit.Variation, hit.Category); err != nil {
+				s.logger.Warn(ctx, "CL gap-fill: failed to persist card metadata",
+					observability.String("cert", p.CertNumber),
+					observability.Err(err))
+			}
+		}
+
 		filled++
 	}
 
@@ -432,14 +480,6 @@ func (s *CardLadderRefreshScheduler) gapFillGemRateIDs(ctx context.Context, purc
 		s.logger.Info(ctx, "CL gap-fill: complete",
 			observability.Int("filled", filled))
 	}
-}
-
-// formatGrade formats a grade value for condition labels: 10 → "10", 9.5 → "9.5".
-func formatGrade(v float64) string {
-	if v == float64(int(v)) {
-		return strconv.Itoa(int(v))
-	}
-	return strconv.FormatFloat(v, 'f', -1, 64)
 }
 
 // extractGradeValue parses "PSA 9", "PSA 9.5", or "g9" → numeric grade value.

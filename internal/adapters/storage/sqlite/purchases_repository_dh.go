@@ -184,6 +184,14 @@ func (r *CampaignsRepository) UpdatePurchasePSASpecID(ctx context.Context, id st
 	)
 }
 
+// UpdatePurchaseCLCardMetadata persists Card Ladder catalog metadata (player, variation, category) on a purchase.
+func (r *CampaignsRepository) UpdatePurchaseCLCardMetadata(ctx context.Context, id, player, variation, category string) error {
+	return r.execAndExpectRow(ctx, "update CL card metadata",
+		`UPDATE campaign_purchases SET card_player = ?, card_variation = ?, card_category = ?, updated_at = ? WHERE id = ?`,
+		player, variation, category, time.Now(), id,
+	)
+}
+
 // GetPurchaseIDByCertNumber returns the purchase ID for a given cert number.
 func (r *CampaignsRepository) GetPurchaseIDByCertNumber(ctx context.Context, certNumber string) (string, error) {
 	var id string

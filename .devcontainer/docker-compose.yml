@@ -23,8 +23,8 @@ services:
       - ~/.claude:/home/vscode/.claude:cached
 
       # Mount host OpenCode directory (config, skills, agents).
-      # Similar to Claude, OpenCode writes absolute host paths in its config.
-      - ~/.opencode:/home/vscode/.opencode:cached
+      # OpenCode uses the XDG-standard path ~/.config/opencode on the host.
+      - ~/.config/opencode:/home/vscode/.config/opencode:cached
 
       # Mount host dotfiles (used by Claude Code commands symlink, etc.)
       - ~/.dotfiles:/home/vscode/.dotfiles:cached,ro

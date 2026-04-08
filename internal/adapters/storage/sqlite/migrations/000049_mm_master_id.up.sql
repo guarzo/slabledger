@@ -1,0 +1,1 @@
+ALTER TABLE mm_card_mappings ADD COLUMN mm_master_id INTEGER NOT NULL DEFAULT 0;

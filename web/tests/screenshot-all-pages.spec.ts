@@ -148,6 +148,106 @@ const MOCK_API_USAGE = {
   timestamp: '2026-04-07T09:00:00Z',
 };
 
+const MOCK_CACHE_STATS = {
+  enabled: true,
+  totalSets: 48,
+  finalizedSets: 45,
+  discoveredSets: 3,
+  lastUpdated: '2026-04-07T08:00:00Z',
+  registryVersion: 'v2.1',
+  sets: [
+    { id: 'base1', name: 'Base Set', series: 'Base', releaseDate: '1999-01-09', totalCards: 102, status: 'finalized', fetchedAt: '2026-04-01T00:00:00Z' },
+    { id: 'jungle', name: 'Jungle', series: 'Base', releaseDate: '1999-06-16', totalCards: 64, status: 'finalized', fetchedAt: '2026-04-01T00:00:00Z' },
+    { id: 'fossil', name: 'Fossil', series: 'Base', releaseDate: '1999-10-10', totalCards: 62, status: 'finalized', fetchedAt: '2026-04-01T00:00:00Z' },
+  ],
+};
+
+const MOCK_CARD_REQUESTS: object[] = [];
+
+const MOCK_PRICING_DIAGNOSTICS = {
+  totalMappedCards: 312,
+  unmappedCards: 8,
+  recentFailures: [
+    { provider: 'doubleholo', errorType: 'timeout', count: 2, lastSeen: '2026-04-07T07:30:00Z' },
+  ],
+};
+
+const MOCK_PRICE_FLAGS = {
+  flags: [
+    {
+      id: 1,
+      purchaseId: '101',
+      flaggedBy: 1,
+      flaggedAt: '2026-04-06T12:00:00Z',
+      reason: 'source_disagreement',
+      cardName: 'Charizard Base Set',
+      grade: 9,
+      certNumber: '12345678',
+      flaggedByEmail: 'demo@cardyeti.com',
+      marketPriceCents: 35000,
+      clValueCents: 32000,
+      reviewedPriceCents: 34000,
+    },
+  ],
+  total: 1,
+};
+
+const MOCK_AI_USAGE = {
+  configured: true,
+  summary: {
+    totalCalls: 87,
+    successRate: 97.7,
+    totalInputTokens: 42000,
+    totalOutputTokens: 18000,
+    totalTokens: 60000,
+    avgLatencyMs: 620,
+    rateLimitHits: 0,
+    callsLast24h: 12,
+    lastCallAt: '2026-04-07T08:45:00Z',
+    totalCostCents: 310,
+  },
+  operations: [
+    { operation: 'advisor', calls: 55, errors: 1, successRate: 98.2, avgLatencyMs: 580, totalTokens: 38000, totalCostCents: 210 },
+    { operation: 'social_content', calls: 32, errors: 1, successRate: 96.9, avgLatencyMs: 690, totalTokens: 22000, totalCostCents: 100 },
+  ],
+  timestamp: '2026-04-07T09:00:00Z',
+};
+
+const MOCK_PRICE_OVERRIDE_STATS = {
+  totalUnsold: 6,
+  overrideCount: 2,
+  manualCount: 1,
+  costMarkupCount: 1,
+  aiAcceptedCount: 0,
+  pendingSuggestions: 3,
+  overrideTotalUsd: 420.00,
+  suggestionTotalUsd: 380.00,
+};
+
+const MOCK_DH_STATUS = {
+  intelligence_count: 1240,
+  intelligence_last_fetch: '2026-04-07T06:00:00Z',
+  suggestions_count: 48,
+  suggestions_last_fetch: '2026-04-07T06:05:00Z',
+  unmatched_count: 8,
+  pending_count: 2,
+  mapped_count: 304,
+  bulk_match_running: false,
+  api_health: { total_calls: 142, failures: 3, success_rate: 97.9 },
+  dh_inventory_count: 312,
+  dh_listings_count: 289,
+  dh_orders_count: 57,
+};
+
+const MOCK_DH_PUSH_CONFIG = {
+  swingPctThreshold: 10,
+  swingMinCents: 500,
+  disagreementPctThreshold: 15,
+  unreviewedChangePctThreshold: 20,
+  unreviewedChangeMinCents: 1000,
+  updatedAt: '2026-04-01T00:00:00Z',
+};
+
 /** Set up API mocks. Pass skipAuth=true for the login page. */
 async function setupMocks(page: import('@playwright/test').Page, opts?: { skipAuth?: boolean }) {
   await page.route((url) => url.pathname.startsWith('/api/'), async (route) => {
@@ -286,7 +386,25 @@ async function setupMocks(page: import('@playwright/test').Page, opts?: { skipAu
       return route.fulfill({ json: [MOCK_USER] });
     }
     if (path === '/api/admin/cache-stats') {
-      return route.fulfill({ json: { entries: 42, hitRate: 0.85 } });
+      return route.fulfill({ json: MOCK_CACHE_STATS });
+    }
+    if (path === '/api/admin/card-requests') {
+      return route.fulfill({ json: MOCK_CARD_REQUESTS });
+    }
+    if (path === '/api/admin/pricing-diagnostics') {
+      return route.fulfill({ json: MOCK_PRICING_DIAGNOSTICS });
+    }
+    if (path === '/api/admin/price-flags') {
+      return route.fulfill({ json: MOCK_PRICE_FLAGS });
+    }
+    if (path === '/api/admin/ai-usage') {
+      return route.fulfill({ json: MOCK_AI_USAGE });
+    }
+    if (path === '/api/admin/price-override-stats') {
+      return route.fulfill({ json: MOCK_PRICE_OVERRIDE_STATS });
+    }
+    if (path === '/api/admin/dh-push-config') {
+      return route.fulfill({ json: MOCK_DH_PUSH_CONFIG });
     }
     if (path === '/api/admin/dh-status') {
       return route.fulfill({ json: { healthy: true, cachedCards: 150 } });
@@ -294,8 +412,19 @@ async function setupMocks(page: import('@playwright/test').Page, opts?: { skipAu
     if (path === '/api/admin/dh-unmatched') {
       return route.fulfill({ json: [] });
     }
+    if (path === '/api/admin/cardladder/status') {
+      return route.fulfill({ json: { configured: false } });
+    }
+    if (path === '/api/admin/marketmovers/status') {
+      return route.fulfill({ json: { configured: false } });
+    }
     if (path.match(/\/admin\//)) {
       return route.fulfill({ json: [] });
+    }
+
+    // DH endpoints
+    if (path === '/api/dh/status') {
+      return route.fulfill({ json: MOCK_DH_STATUS });
     }
 
     // Social
@@ -338,7 +467,11 @@ const PAGES = [
   { name: 'campaign-detail', path: '/campaigns/1' },
   { name: 'inventory', path: '/inventory' },
   { name: 'tools', path: '/tools' },
-  { name: 'admin', path: '/admin' },
+  { name: 'admin-integrations', path: '/admin' },
+  { name: 'admin-users', path: '/admin', tabLabel: 'Users' },
+  { name: 'admin-card-data', path: '/admin', tabLabel: 'Card Data' },
+  { name: 'admin-pricing', path: '/admin', tabLabel: 'Pricing' },
+  { name: 'admin-ai', path: '/admin', tabLabel: 'AI' },
 ];
 
 const VIEWPORTS = [
@@ -348,7 +481,7 @@ const VIEWPORTS = [
 
 async function screenshotPage(
   page: import('@playwright/test').Page,
-  pg: { name: string; path: string; skipAuth?: boolean },
+  pg: { name: string; path: string; skipAuth?: boolean; tabLabel?: string },
   viewport: { name: string; width: number; height: number },
 ) {
   await setupMocks(page, { skipAuth: pg.skipAuth });
@@ -368,6 +501,15 @@ async function screenshotPage(
     }, { timeout: 15000 });
   } catch {
     // Page may still be usable
+  }
+
+  // If a specific tab is requested, click it and wait for content to update
+  if (pg.tabLabel) {
+    const tab = page.getByRole('tab', { name: pg.tabLabel, exact: true });
+    await tab.click();
+    await page.waitForTimeout(800);
+    // Wait for any newly triggered requests to settle
+    await page.waitForLoadState('networkidle').catch(() => {});
   }
 
   // Dismiss any Vite error overlay

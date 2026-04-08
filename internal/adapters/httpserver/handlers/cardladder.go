@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
+	"github.com/guarzo/slabledger/internal/adapters/scheduler"
 	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
@@ -14,6 +15,9 @@ import (
 // CLRefresher runs a Card Ladder value refresh cycle on demand.
 type CLRefresher interface {
 	RunOnce(ctx context.Context) error
+	// GetLastRunStats returns stats from the most recent refresh run, or nil if
+	// no run has completed yet.
+	GetLastRunStats() *scheduler.CLRunStats
 }
 
 // CardLadderHandler manages Card Ladder admin endpoints.
@@ -111,6 +115,15 @@ func (h *CardLadderHandler) HandleStatus(w http.ResponseWriter, r *http.Request)
 	mappings, err := h.store.ListMappings(r.Context())
 	if err == nil {
 		status["cardsMapped"] = len(mappings)
+	}
+
+	h.mu.Lock()
+	refresher := h.refresher
+	h.mu.Unlock()
+	if refresher != nil {
+		if stats := refresher.GetLastRunStats(); stats != nil {
+			status["lastRun"] = stats
+		}
 	}
 
 	writeJSON(w, http.StatusOK, status)
