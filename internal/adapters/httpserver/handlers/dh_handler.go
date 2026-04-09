@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"sync/atomic"
 
@@ -213,7 +214,7 @@ func (h *DHHandler) pushAndPersistDH(ctx context.Context, purchase *campaigns.Pu
 					ChannelsJSON:      dh.MarshalChannels(result.Channels),
 					DHStatus:          campaigns.DHStatus(result.Status),
 				}); err != nil {
-					return 0, errDHPersistFailed
+					return 0, fmt.Errorf("%w: %v", errDHPersistFailed, err)
 				}
 			}
 			return result.DHInventoryID, nil

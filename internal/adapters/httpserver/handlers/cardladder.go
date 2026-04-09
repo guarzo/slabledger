@@ -18,6 +18,9 @@ type CLRefresher interface {
 	// GetLastRunStats returns stats from the most recent refresh run, or nil if
 	// no run has completed yet.
 	GetLastRunStats() *scheduler.CLRunStats
+	// SetClient replaces the API client used by the scheduler (e.g. after
+	// credentials are saved at runtime).
+	SetClient(client *cardladder.Client)
 }
 
 // CardLadderHandler manages Card Ladder admin endpoints.
@@ -92,7 +95,14 @@ func (h *CardLadderHandler) HandleSaveConfig(w http.ResponseWriter, r *http.Requ
 			),
 		)
 	}
+	// Capture client ref under lock before pushing to scheduler.
+	client := h.client
 	h.mu.Unlock()
+
+	// Push the new/updated client to the scheduler so it picks up new credentials.
+	if h.refresher != nil {
+		h.refresher.SetClient(client)
+	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "connected"})
 }
@@ -115,7 +125,9 @@ func (h *CardLadderHandler) HandleStatus(w http.ResponseWriter, r *http.Request)
 	}
 
 	mappings, err := h.store.ListMappings(r.Context())
-	if err == nil {
+	if err != nil {
+		h.logger.Error(r.Context(), "failed to list CL mappings", observability.Err(err))
+	} else {
 		status["cardsMapped"] = len(mappings)
 	}
 

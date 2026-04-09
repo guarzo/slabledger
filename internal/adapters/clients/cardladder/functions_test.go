@@ -136,10 +136,9 @@ func TestClient_CardEstimate(t *testing.T) {
 	}
 }
 
-func TestClient_BuildCardDocument(t *testing.T) {
-	// Test the document builder directly.
-	// CreateCollectionCard uses defaultFirestoreBaseURL (a const) so the real
-	// Firestore REST endpoint cannot be overridden for unit tests.
+func TestClient_CreateCollectionCard(t *testing.T) {
+	// defaultFirestoreBaseURL is a const and can't be overridden with httptest,
+	// so we test buildCardDocument directly instead of the full HTTP flow.
 	input := AddCollectionCardInput{
 		Label:            "2019 Pokemon Sm Black Star Promo Pikachu-Holo SM162",
 		Player:           "Pikachu-Holo",

@@ -198,18 +198,23 @@ func (c *Client) getToken(ctx context.Context) (string, error) {
 	}
 
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	// Return cached token if still valid (with 5min buffer)
+	// Return cached token if still valid (with 5min buffer).
 	if c.token.IDToken != "" && time.Now().Add(5*time.Minute).Before(c.token.ExpiresAt) {
-		return c.token.IDToken, nil
+		token := c.token.IDToken
+		c.mu.Unlock()
+		return token, nil
 	}
-
 	if c.auth == nil || c.refreshToken == "" {
+		c.mu.Unlock()
 		return "", fmt.Errorf("no auth credentials configured")
 	}
+	// Capture credentials under the lock before releasing it.
+	auth := c.auth
+	refreshTok := c.refreshToken
+	c.mu.Unlock()
 
-	resp, err := c.auth.RefreshToken(ctx, c.refreshToken)
+	// Perform the network call outside the lock to avoid holding it during I/O.
+	resp, err := auth.RefreshToken(ctx, refreshTok)
 	if err != nil {
 		return "", fmt.Errorf("refresh token: %w", err)
 	}
@@ -217,6 +222,13 @@ func (c *Client) getToken(ctx context.Context) (string, error) {
 	expSec, err := strconv.Atoi(resp.ExpiresIn)
 	if err != nil || expSec <= 0 {
 		expSec = 3600
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	// Double-check: another goroutine may have refreshed while we were waiting.
+	if c.token.IDToken != "" && time.Now().Add(5*time.Minute).Before(c.token.ExpiresAt) {
+		return c.token.IDToken, nil
 	}
 	c.token = TokenState{
 		IDToken:   resp.IDToken,

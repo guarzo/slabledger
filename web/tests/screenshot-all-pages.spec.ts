@@ -99,7 +99,8 @@ async function screenshotPage(
     await page.waitForLoadState('networkidle').catch(() => {});
   }
 
-  // If a specific filter tab is requested (e.g. inventory filter buttons), click it
+  // If a specific filter tab is requested (e.g. inventory filter buttons), click it.
+  // The button may not render if the backend is unavailable (CI without Go server).
   if (pg.filterTab) {
     try {
       const filterBtn = page.getByRole('button', { name: new RegExp(pg.filterTab), exact: false });
@@ -116,7 +117,8 @@ async function screenshotPage(
     }
   }
 
-  // If row expansion is requested (inventory detail), click the first data row
+  // If row expansion is requested (inventory detail), click the first data row.
+  // Row may not exist if backend is unavailable (CI without Go server).
   if (pg.expandRow) {
     try {
       const row = page.locator('div[role="row"]:has(div[role="gridcell"])').first();
@@ -150,7 +152,6 @@ test.describe('screenshot all pages', () => {
   // Fetch the first campaign ID from the real backend before running tests
   test.beforeAll(async ({ browser }) => {
     const page = await browser.newPage();
-    await page.setExtraHTTPHeaders({ Authorization: `Bearer ${AUTH_TOKEN}` });
     try {
       const response = await page.request.get('/api/campaigns', {
         headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
@@ -161,8 +162,9 @@ test.describe('screenshot all pages', () => {
           firstCampaignId = campaigns[0].id;
         }
       }
-    } catch {
+    } catch (err) {
       // Fall back — campaign-detail will show a not-found page
+      console.error('Failed to fetch campaigns for firstCampaignId:', err);
     }
     await page.close();
   });

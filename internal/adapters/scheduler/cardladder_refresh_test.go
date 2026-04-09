@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
 	"github.com/guarzo/slabledger/internal/domain/campaigns"
 	"github.com/guarzo/slabledger/internal/platform/config"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
@@ -223,6 +224,35 @@ func TestWithCLDHPushUpdater_ReEnrollsOnValueChange(t *testing.T) {
 // ---------------------------------------------------------------------------
 // Interface compliance checks
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// SetClient / getClient tests
+// ---------------------------------------------------------------------------
+
+func TestCardLadderRefreshScheduler_SetClient(t *testing.T) {
+	s := NewCardLadderRefreshScheduler(
+		nil, nil,
+		&mockCLPurchaseLister{},
+		&mockCLValueUpdater{},
+		&mockCLGemRateUpdater{},
+		nil, nil,
+		mocks.NewMockLogger(),
+		config.CardLadderConfig{Enabled: true, Interval: 24 * time.Hour},
+	)
+
+	// Initially nil
+	assert.Nil(t, s.getClient(), "client should be nil initially")
+
+	// Set a client
+	client := &cardladder.Client{}
+	s.SetClient(client)
+	assert.Equal(t, client, s.getClient(), "getClient should return the set client")
+
+	// Replace with another
+	client2 := &cardladder.Client{}
+	s.SetClient(client2)
+	assert.Equal(t, client2, s.getClient(), "getClient should return the new client")
+}
 
 var _ CardLadderPurchaseLister = (*mockCLPurchaseLister)(nil)
 var _ CardLadderValueUpdater = (*mockCLValueUpdater)(nil)
