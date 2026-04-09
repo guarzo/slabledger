@@ -5,7 +5,7 @@ import { useCampaigns } from '../queries/useCampaignQueries';
 import OperationsTab, { type OperationState } from './campaigns/OperationsTab';
 import CardIntakeTab from './tools/CardIntakeTab';
 import LegacyTab from './tools/LegacyTab';
-import type { GlobalImportResult, PSAImportResult } from '../../types/campaigns';
+import type { PSAImportResult } from '../../types/campaigns';
 import TabNavigation from '../ui/TabNavigation';
 import { SectionErrorBoundary } from '../ui';
 import PokeballLoader from '../PokeballLoader';
@@ -24,7 +24,6 @@ export default function ToolsPage() {
   const [searchParams] = useSearchParams();
   const initialTab = TABS.some(t => t.id === searchParams.get('tab')) ? searchParams.get('tab')! : 'daily-ops';
   const [operationState, setOperationState] = useState<OperationState>('idle');
-  const [importResult, setImportResult] = useState<GlobalImportResult | null>(null);
   const [psaResult, setPsaResult] = useState<PSAImportResult | null>(null);
 
   return (
@@ -43,8 +42,6 @@ export default function ToolsPage() {
               campaigns={allCampaigns}
               operationState={operationState}
               setOperationState={setOperationState}
-              importResult={importResult}
-              setImportResult={setImportResult}
               psaResult={psaResult}
               setPsaResult={setPsaResult}
             />

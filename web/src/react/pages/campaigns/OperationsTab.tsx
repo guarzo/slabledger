@@ -1,16 +1,17 @@
-import { useRef, useState, ReactNode } from 'react';
+import { useRef, ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { api } from '../../../js/api';
-import type { Campaign, GlobalImportResult, PSAImportResult, MMRefreshResult } from '../../../types/campaigns';
+import type { Campaign, PSAImportResult } from '../../../types/campaigns';
 import { queryKeys } from '../../queries/queryKeys';
 import { getErrorMessage } from '../../utils/formatters';
 import { useToast } from '../../contexts/ToastContext';
 import { Button, CardShell } from '../../ui';
 import ImportResultsDetail from './ImportResultsDetail';
 import DHUnmatchedSection from '../tools/DHUnmatchedSection';
+import { useMarketMoversStatus, useSyncCardLadderCollection } from '../../queries/useAdminQueries';
 
-export type OperationState = 'idle' | 'importing' | 'exporting' | 'exporting-mm' | 'importing-mm' | 'importing-psa';
+export type OperationState = 'idle' | 'importing-psa' | 'syncing-mm' | 'syncing-cl';
 
 /* ── FileUploadButton ─────────────────────────────────────────────── */
 
@@ -88,30 +89,6 @@ function IconCircle({ color, children }: { color: string; children: ReactNode })
   );
 }
 
-function UploadIcon() {
-  return (
-    <IconCircle color="bg-[var(--brand-500)]/15 text-[var(--brand-500)]">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
-        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
-        <polyline points="17 8 12 3 7 8" />
-        <line x1="12" y1="3" x2="12" y2="15" />
-      </svg>
-    </IconCircle>
-  );
-}
-
-function DownloadIcon() {
-  return (
-    <IconCircle color="bg-cyan-500/15 text-cyan-400">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
-        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
-        <polyline points="7 10 12 15 17 10" />
-        <line x1="12" y1="15" x2="12" y2="3" />
-      </svg>
-    </IconCircle>
-  );
-}
-
 function FileTextIcon() {
   return (
     <IconCircle color="bg-[var(--warning-bg)] text-[var(--warning)]">
@@ -126,22 +103,32 @@ function FileTextIcon() {
   );
 }
 
+function SyncIcon() {
+  return (
+    <IconCircle color="bg-emerald-500/15 text-emerald-400">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+        <polyline points="23 4 23 10 17 10" />
+        <polyline points="1 20 1 14 7 14" />
+        <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" />
+      </svg>
+    </IconCircle>
+  );
+}
+
 /* ── OperationsTab ────────────────────────────────────────────────── */
 
-export default function OperationsTab({ campaigns, operationState, setOperationState, importResult, setImportResult, psaResult, setPsaResult }: {
+export default function OperationsTab({ campaigns, operationState, setOperationState, psaResult, setPsaResult }: {
   campaigns: Campaign[];
   operationState: OperationState;
   setOperationState: (state: OperationState) => void;
-  importResult: GlobalImportResult | null;
-  setImportResult: (result: GlobalImportResult | null) => void;
   psaResult: PSAImportResult | null;
   setPsaResult: (result: PSAImportResult | null) => void;
 }) {
   const toast = useToast();
   const queryClient = useQueryClient();
   const busy = operationState !== 'idle';
-  const [exportMissingOnly, setExportMissingOnly] = useState(false);
-  const [mmResult, setMmResult] = useState<MMRefreshResult | null>(null);
+  const { data: mmStatus } = useMarketMoversStatus();
+  const clSync = useSyncCardLadderCollection();
 
   function invalidateAll() {
     queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.all });
@@ -155,76 +142,43 @@ export default function OperationsTab({ campaigns, operationState, setOperationS
     queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.weeklyReview });
     queryClient.invalidateQueries({ queryKey: queryKeys.admin.dhStatus });
     queryClient.invalidateQueries({ queryKey: queryKeys.admin.dhUnmatched });
+    queryClient.invalidateQueries({ queryKey: queryKeys.admin.marketMoversStatus });
   }
 
-  async function handleGlobalImport(file: File) {
+  async function handleMMSync() {
     try {
-      setOperationState('importing');
-      setImportResult(null);
-      const result = await api.globalImportCL(file);
-      setImportResult(result);
-      toast.success(`Allocated ${result.allocated}, refreshed ${result.refreshed}, unmatched ${result.unmatched}`);
-      invalidateAll();
-    } catch (err) {
-      toast.error(getErrorMessage(err, 'Failed to import'));
-    } finally {
-      setOperationState('idle');
-    }
-  }
-
-  async function handleGlobalExport() {
-    try {
-      setOperationState('exporting');
-      const blob = await api.globalExportCL(exportMissingOnly);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'card_ladder_import.csv';
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 100);
-      toast.success('Card Ladder CSV exported');
-    } catch (err) {
-      toast.error(getErrorMessage(err, 'Failed to export'));
-    } finally {
-      setOperationState('idle');
-    }
-  }
-
-  async function handleMMExport() {
-    try {
-      setOperationState('exporting-mm');
-      const blob = await api.globalExportMM();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'market-movers-export.csv';
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 100);
-      toast.success('Market Movers CSV exported');
-    } catch (err) {
-      toast.error(getErrorMessage(err, 'Failed to export'));
-    } finally {
-      setOperationState('idle');
-    }
-  }
-
-  async function handleMMImport(file: File) {
-    try {
-      setOperationState('importing-mm');
-      setMmResult(null);
-      const result = await api.globalRefreshMM(file);
-      setMmResult(result);
-      if (result.failed > 0 || (result.errors && result.errors.length > 0)) {
-        toast.warning(`Market Movers import: ${result.failed} failed. ${result.updated} updated, ${result.skipped} skipped, ${result.notFound} not found`);
+      setOperationState('syncing-mm');
+      const result = await api.syncMarketMoversCollection();
+      if (result.failed > 0) {
+        toast.warning(`MM sync: ${result.synced} synced, ${result.skipped} skipped, ${result.failed} failed`);
         if (result.errors && result.errors.length > 0) {
-          console.error('Market Movers import errors:', result.errors);
+          console.error('MM sync errors:', result.errors);
         }
+      } else if (result.synced === 0 && result.skipped === 0) {
+        toast.info('All items already synced to Market Movers');
       } else {
-        toast.success(`Market Movers import: ${result.updated} updated, ${result.skipped} skipped, ${result.notFound} not found`);
+        toast.success(`MM sync: ${result.synced} items added to Market Movers collection`);
       }
       invalidateAll();
     } catch (err) {
-      toast.error(getErrorMessage(err, 'Failed to import Market Movers data'));
+      toast.error(getErrorMessage(err, 'Failed to sync to Market Movers'));
+    } finally {
+      setOperationState('idle');
+    }
+  }
+
+  async function handleCLSync() {
+    try {
+      setOperationState('syncing-cl');
+      const result = await clSync.mutateAsync();
+      if (result.failed > 0) {
+        toast.error(`CL sync: ${result.synced} synced, ${result.skipped} skipped, ${result.failed} failed`);
+      } else {
+        toast.success(`CL sync: ${result.synced} synced, ${result.skipped} skipped, ${result.failed} failed`);
+      }
+      invalidateAll();
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'CL sync failed'));
     } finally {
       setOperationState('idle');
     }
@@ -275,143 +229,55 @@ export default function OperationsTab({ campaigns, operationState, setOperationS
         />
 
         <OperationCard
-          icon={<DownloadIcon />}
-          title="Export for Card Ladder"
-          description="Download inventory CSV to import into Card Ladder"
-          action={
-            <div className="flex flex-col gap-2 w-full">
-              <label className="flex items-center gap-1.5 text-xs text-[var(--text-muted)] cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={exportMissingOnly}
-                  onChange={(e) => setExportMissingOnly(e.target.checked)}
-                  className="accent-[var(--brand-500)]"
-                />
-                Only missing CL data
-              </label>
-              <Button
-                size="sm"
-                variant="secondary"
-                fullWidth
-                loading={operationState === 'exporting'}
-                disabled={busy && operationState !== 'exporting'}
-                onClick={handleGlobalExport}
-              >
-                Download CSV
-              </Button>
-            </div>
-          }
-        />
-
-        <OperationCard
-          icon={<UploadIcon />}
-          title="Import from Card Ladder"
-          description="Upload a Card Ladder CSV to allocate new and refresh existing purchases"
-          action={
-            <FileUploadButton
-              label="Upload CSV"
-              loading={operationState === 'importing'}
-              accept=".csv"
-              onFile={handleGlobalImport}
-              busy={busy}
-            />
-          }
-        />
-
-        <OperationCard
-          icon={<DownloadIcon />}
-          title="Export for Market Movers"
-          description="Download inventory CSV to import into Market Movers collection"
+          icon={<SyncIcon />}
+          title="Sync to Card Ladder"
+          description="Push unsold inventory with cert numbers directly to your CL collection via API"
           action={
             <Button
               size="sm"
               variant="secondary"
               fullWidth
-              loading={operationState === 'exporting-mm'}
-              disabled={busy && operationState !== 'exporting-mm'}
-              onClick={handleMMExport}
+              loading={operationState === 'syncing-cl'}
+              disabled={busy && operationState !== 'syncing-cl'}
+              onClick={handleCLSync}
             >
-              Download CSV
+              Sync Collection
             </Button>
           }
         />
 
         <OperationCard
-          icon={<UploadIcon />}
-          title="Import from Market Movers"
-          description="Upload a Market Movers export CSV to sync Last Sale Price into mm_value"
+          icon={<SyncIcon />}
+          title="Sync to Market Movers"
+          description="Push mapped unsold inventory directly to your MM collection via API"
           action={
-            <FileUploadButton
-              label="Upload CSV"
-              loading={operationState === 'importing-mm'}
-              accept=".csv"
-              onFile={handleMMImport}
-              busy={busy}
-            />
+            <div className="flex flex-col gap-2 w-full">
+              <Button
+                size="sm"
+                variant="secondary"
+                fullWidth
+                loading={operationState === 'syncing-mm'}
+                disabled={busy && operationState !== 'syncing-mm'}
+                onClick={handleMMSync}
+              >
+                Sync Collection
+              </Button>
+              {mmStatus?.priceStats && (
+                <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-[var(--text-muted)]">
+                  <span>Synced: <span className="text-[var(--text)]">{mmStatus.priceStats.syncedCount}</span></span>
+                  <span>Priced: <span className="text-[var(--text)]">{mmStatus.priceStats.withMMPrice}/{mmStatus.priceStats.unsoldTotal}</span></span>
+                  {mmStatus.priceStats.staleCount > 0 && (
+                    <span>Stale: <span className="text-[var(--warning)]">{mmStatus.priceStats.staleCount}</span></span>
+                  )}
+                </div>
+              )}
+            </div>
           }
         />
 
       </div>
 
       {/* Results area (full-width, below grid) */}
-      {importResult && (
-        <div className="mb-4 p-3 rounded-lg bg-[var(--surface-2)]/50 text-sm">
-          <div className="flex items-center justify-between mb-1">
-            <span className="font-medium text-[var(--text)]">Import Complete</span>
-            <div className="flex items-center gap-3">
-              <Link to="/inventory" className="text-xs font-medium text-[var(--brand-400)] hover:text-[var(--brand-300)] underline">
-                Review prices &rarr;
-              </Link>
-              <button type="button" onClick={() => setImportResult(null)} className="text-[var(--text-muted)] hover:text-[var(--text)] text-xs">Dismiss</button>
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-3 text-xs">
-            {importResult.allocated > 0 && <span className="text-[var(--success)]">{importResult.allocated} allocated</span>}
-            {importResult.refreshed > 0 && <span className="text-[var(--info)]">{importResult.refreshed} refreshed</span>}
-            {importResult.unmatched > 0 && <span className="text-[var(--warning)]">{importResult.unmatched} unmatched</span>}
-            {importResult.ambiguous > 0 && <span className="text-orange-400">{importResult.ambiguous} ambiguous</span>}
-            {importResult.skipped > 0 && <span className="text-[var(--text-muted)]">{importResult.skipped} skipped</span>}
-            {importResult.failed > 0 && <span className="text-[var(--danger)]">{importResult.failed} failed</span>}
-          </div>
-          {importResult.byCampaign && Object.keys(importResult.byCampaign).length > 0 && (
-            <div className="mt-2 text-xs text-[var(--text-muted)]">
-              {Object.entries(importResult.byCampaign).map(([campaignId, s]) => (
-                <div key={campaignId}>{s.campaignName}: {s.allocated} new, {s.refreshed} refreshed</div>
-              ))}
-            </div>
-          )}
-          {importResult.results?.some(r => r.status === 'unmatched' || r.status === 'ambiguous') && (
-            <ImportResultsDetail
-              results={importResult.results}
-              campaigns={campaigns}
-              onItemResolved={() => queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.all })}
-            />
-          )}
-        </div>
-      )}
-
-      {mmResult && (
-        <div className="mb-4 p-3 rounded-lg bg-[var(--surface-2)]/50 text-sm">
-          <div className="flex items-center justify-between mb-1">
-            <span className="font-medium text-[var(--text)]">Market Movers Refresh Complete</span>
-            <button type="button" onClick={() => setMmResult(null)} className="text-[var(--text-muted)] hover:text-[var(--text)] text-xs">Dismiss</button>
-          </div>
-          <div className="flex flex-wrap gap-3 text-xs">
-            {mmResult.updated > 0 && <span className="text-[var(--success)]">{mmResult.updated} updated</span>}
-            {mmResult.skipped > 0 && <span className="text-[var(--text-muted)]">{mmResult.skipped} skipped</span>}
-            {mmResult.notFound > 0 && <span className="text-[var(--warning)]">{mmResult.notFound} not found</span>}
-            {mmResult.failed > 0 && <span className="text-[var(--danger)]">{mmResult.failed} failed</span>}
-          </div>
-          {mmResult.errors && mmResult.errors.length > 0 && (
-            <div className="mt-2 text-xs text-[var(--danger)] space-y-0.5">
-              {mmResult.errors.map((e, i) => (
-                <div key={i}>{e.row != null ? `Row ${e.row}: ` : ''}{e.error}</div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
       {psaResult && (        <div className="mb-4 p-3 rounded-lg bg-[var(--surface-2)]/50 text-sm">
           <div className="flex items-center justify-between mb-1">
             <span className="font-medium text-[var(--text)]">PSA Import Complete</span>

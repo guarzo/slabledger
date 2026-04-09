@@ -1,6 +1,6 @@
 import { useState, useRef, ReactNode } from 'react';
 import { api } from '../../../js/api';
-import type { ExternalImportResult } from '../../../types/campaigns';
+import type { ExternalImportResult, GlobalImportResult, MMRefreshResult } from '../../../types/campaigns';
 import { getErrorMessage } from '../../utils/formatters';
 import { useToast } from '../../contexts/ToastContext';
 import { Button, CardShell, SectionErrorBoundary } from '../../ui';
@@ -90,6 +90,26 @@ function ReceiptIcon() {
   );
 }
 
+function DownloadIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+      <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+      <polyline points="7 10 12 15 17 10" />
+      <line x1="12" y1="15" x2="12" y2="3" />
+    </svg>
+  );
+}
+
+function UploadIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+      <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+      <polyline points="17 8 12 3 7 8" />
+      <line x1="12" y1="3" x2="12" y2="15" />
+    </svg>
+  );
+}
+
 /* ── ExternalImportCard (self-contained) ─────────────────────────── */
 
 function ExternalImportCard() {
@@ -159,6 +179,239 @@ function ExternalImportCard() {
   );
 }
 
+/* ── MMExportCard (self-contained) ───────────────────────────────── */
+
+function MMExportCard() {
+  const [loading, setLoading] = useState(false);
+  const [missingOnly, setMissingOnly] = useState(false);
+  const toast = useToast();
+
+  const handleExport = async () => {
+    try {
+      setLoading(true);
+      const blob = await api.globalExportMM(missingOnly);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'market-movers-export.csv';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 100);
+      toast.success('Market Movers CSV exported');
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Failed to export'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <LegacyCard
+      icon={<DownloadIcon />}
+      title="Export for Market Movers"
+      description="Download inventory CSV to import into Market Movers collection"
+    >
+      <div className="flex flex-col gap-2 w-full">
+        <label className="flex items-center gap-1.5 text-xs text-[var(--text-muted)] cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={missingOnly}
+            onChange={(e) => setMissingOnly(e.target.checked)}
+            className="accent-[var(--brand-500)]"
+          />
+          Only missing MM data
+        </label>
+        <Button
+          size="sm"
+          variant="secondary"
+          fullWidth
+          loading={loading}
+          onClick={handleExport}
+        >
+          Download CSV
+        </Button>
+      </div>
+    </LegacyCard>
+  );
+}
+
+/* ── MMImportCard (self-contained) ───────────────────────────────── */
+
+function MMImportCard() {
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<MMRefreshResult | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const toast = useToast();
+
+  const handleFile = async (file: File) => {
+    try {
+      setLoading(true);
+      setResult(null);
+      const res = await api.globalRefreshMM(file);
+      setResult(res);
+      if (res.failed > 0 || (res.errors && res.errors.length > 0)) {
+        toast.warning(`Market Movers import: ${res.failed} failed. ${res.updated} updated, ${res.skipped} skipped, ${res.notFound} not found`);
+        if (res.errors && res.errors.length > 0) {
+          console.error('Market Movers import errors:', res.errors);
+        }
+      } else {
+        toast.success(`Market Movers import: ${res.updated} updated, ${res.skipped} skipped, ${res.notFound} not found`);
+      }
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Failed to import Market Movers data'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <LegacyCard
+      icon={<UploadIcon />}
+      title="Import from Market Movers"
+      description="Upload a Market Movers export CSV to sync Last Sale Price into mm_value"
+    >
+      <Button
+        size="sm"
+        variant="secondary"
+        fullWidth
+        loading={loading}
+        onClick={() => fileRef.current?.click()}
+      >
+        Upload CSV
+      </Button>
+      <input
+        ref={fileRef}
+        type="file"
+        accept=".csv"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) handleFile(file);
+          e.target.value = '';
+        }}
+      />
+      {result && (
+        <div className="mt-3 p-2 rounded bg-[var(--surface-2)]/50 text-xs text-left">
+          <div className="flex flex-wrap gap-2">
+            {result.updated > 0 && <span className="text-[var(--success)]">{result.updated} updated</span>}
+            {result.skipped > 0 && <span className="text-[var(--text-muted)]">{result.skipped} skipped</span>}
+            {result.notFound > 0 && <span className="text-[var(--warning)]">{result.notFound} not found</span>}
+            {result.failed > 0 && <span className="text-[var(--danger)]">{result.failed} failed</span>}
+          </div>
+          {result.errors && result.errors.length > 0 && (
+            <div className="mt-1 text-[var(--danger)]">
+              {result.errors.map((e, idx) => (
+                <div key={idx}>{e.row != null ? `Row ${e.row}: ` : ''}{e.error}</div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </LegacyCard>
+  );
+}
+
+/* ── CLExportCard (self-contained) ────────────────────────────────── */
+
+function CLExportCard() {
+  const [loading, setLoading] = useState(false);
+  const [missingOnly, setMissingOnly] = useState(false);
+  const toast = useToast();
+
+  const handleExport = async () => {
+    try {
+      setLoading(true);
+      const blob = await api.globalExportCL(missingOnly);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'card_ladder_import.csv';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 100);
+      toast.success('Card Ladder CSV exported');
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Failed to export'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <LegacyCard
+      icon={<DownloadIcon />}
+      title="CL CSV Export"
+      description="Download inventory CSV to import into Card Ladder manually"
+    >
+      <div className="flex flex-col gap-2 w-full">
+        <label className="flex items-center gap-1.5 text-xs text-[var(--text-muted)] cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={missingOnly}
+            onChange={(e) => setMissingOnly(e.target.checked)}
+            className="accent-[var(--brand-500)]"
+          />
+          Only missing CL data
+        </label>
+        <Button size="sm" variant="secondary" fullWidth loading={loading} onClick={handleExport}>
+          Download CSV
+        </Button>
+      </div>
+    </LegacyCard>
+  );
+}
+
+/* ── CLImportCard (self-contained) ────────────────────────────────── */
+
+function CLImportCard() {
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<GlobalImportResult | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const toast = useToast();
+
+  const handleFile = async (file: File) => {
+    try {
+      setLoading(true);
+      setResult(null);
+      const res = await api.globalImportCL(file);
+      setResult(res);
+      toast.success(`CL import: ${res.allocated} allocated, ${res.refreshed} refreshed, ${res.unmatched} unmatched`);
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Failed to import'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <LegacyCard
+      icon={<UploadIcon />}
+      title="CL CSV Import"
+      description="Upload a Card Ladder CSV to allocate and refresh purchases"
+    >
+      <Button size="sm" variant="secondary" fullWidth loading={loading} onClick={() => fileRef.current?.click()}>
+        Upload CSV
+      </Button>
+      <input
+        ref={fileRef}
+        type="file"
+        accept=".csv"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) handleFile(file);
+          e.target.value = '';
+        }}
+      />
+      {result && (
+        <div className="mt-2 text-xs text-[var(--text-muted)]">
+          {result.allocated > 0 && <span className="text-[var(--success)] mr-2">{result.allocated} allocated</span>}
+          {result.refreshed > 0 && <span className="text-[var(--info)] mr-2">{result.refreshed} refreshed</span>}
+          {result.unmatched > 0 && <span className="text-[var(--warning)]">{result.unmatched} unmatched</span>}
+        </div>
+      )}
+    </LegacyCard>
+  );
+}
+
 /* ── LegacyTab ───────────────────────────────────────────────────── */
 
 export default function LegacyTab() {
@@ -181,6 +434,14 @@ export default function LegacyTab() {
       {/* Card grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
         <ExternalImportCard />
+
+        <MMExportCard />
+
+        <MMImportCard />
+
+        <CLExportCard />
+
+        <CLImportCard />
 
         <LegacyCard
           icon={<SyncIcon />}

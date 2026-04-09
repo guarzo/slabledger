@@ -25,11 +25,12 @@ type MMRefresher interface {
 
 // MarketMoversHandler manages Market Movers admin endpoints.
 type MarketMoversHandler struct {
-	mu        sync.Mutex
-	store     *sqlite.MarketMoversStore
-	client    *marketmovers.Client
-	refresher MMRefresher
-	logger    observability.Logger
+	mu             sync.Mutex
+	store          *sqlite.MarketMoversStore
+	client         *marketmovers.Client
+	refresher      MMRefresher
+	purchaseLister MMPurchaseLister // optional: provides unsold purchases for sync
+	logger         observability.Logger
 }
 
 // SetRefresher injects the refresh trigger after scheduler construction.
@@ -128,6 +129,13 @@ func (h *MarketMoversHandler) HandleStatus(w http.ResponseWriter, r *http.Reques
 		h.logger.Error(r.Context(), "failed to list Market Movers mappings", observability.Err(err))
 	} else {
 		status["cardsMapped"] = len(mappings)
+	}
+
+	priceStats, err := h.store.GetMMPriceStats(r.Context())
+	if err != nil {
+		h.logger.Error(r.Context(), "failed to get MM price stats", observability.Err(err))
+	} else {
+		status["priceStats"] = priceStats
 	}
 
 	h.mu.Lock()

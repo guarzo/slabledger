@@ -334,3 +334,155 @@ func b64url(t *testing.T, s string) string {
 	t.Helper()
 	return base64.RawURLEncoding.EncodeToString([]byte(s))
 }
+
+func TestClient_AddCollectionItem(t *testing.T) {
+	cases := []struct {
+		name              string
+		handler           http.HandlerFunc
+		wantErr           bool
+		wantCollectionID  int64
+		wantCollectibleID int64
+	}{
+		{
+			name: "success",
+			handler: func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodPost {
+					t.Errorf("expected POST, got %s", r.Method)
+				}
+				if r.URL.Path != "/private.collection.items.add" {
+					http.Error(w, "not found", http.StatusNotFound)
+					return
+				}
+				// Verify JSON body has direct input (no json envelope wrapper)
+				var body map[string]json.RawMessage
+				if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+					t.Errorf("decode body: %v", err)
+				}
+				if _, ok := body["collectible"]; !ok {
+					t.Errorf("expected collectible key in body")
+				}
+				w.Header().Set("Content-Type", "application/json")
+				data := map[string]any{
+					"success":             true,
+					"collectibleId":       float64(2030887),
+					"isCustomCollectible": false,
+					"collectionItemId":    float64(2004639),
+				}
+				if _, err := w.Write(buildTRPCResponse(t, data)); err != nil {
+					t.Errorf("write response: %v", err)
+				}
+			},
+			wantCollectionID:  2004639,
+			wantCollectibleID: 2030887,
+		},
+		{
+			name: "trpc error",
+			handler: func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				if _, err := fmt.Fprint(w, `{"error":{"message":"Item already exists"}}`); err != nil {
+					t.Errorf("write: %v", err)
+				}
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(tc.handler)
+			defer srv.Close()
+
+			c := marketmovers.NewClient(
+				marketmovers.WithClientBaseURL(srv.URL),
+				marketmovers.WithStaticToken("test-token"),
+			)
+
+			input := marketmovers.AddCollectionItemInput{
+				Collectible: marketmovers.CollectionCollectible{
+					CollectibleType: "sports-card",
+					CollectibleID:   2030887,
+				},
+				PurchaseDetails: marketmovers.CollectionPurchaseDetails{
+					Quantity:             1,
+					PurchasePricePerItem: 100.00,
+					ConversionFeePerItem: 0,
+					PurchaseDateISO:      "2026-04-09",
+					Notes:                "cert-12345678",
+				},
+			}
+
+			resp, err := c.AddCollectionItem(context.Background(), input)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("AddCollectionItem: %v", err)
+			}
+			if !resp.Success {
+				t.Error("expected success=true")
+			}
+			if resp.CollectionItemID != tc.wantCollectionID {
+				t.Errorf("expected collectionItemId %d, got %d", tc.wantCollectionID, resp.CollectionItemID)
+			}
+			if resp.CollectibleID != tc.wantCollectibleID {
+				t.Errorf("expected collectibleId %d, got %d", tc.wantCollectibleID, resp.CollectibleID)
+			}
+		})
+	}
+}
+
+func TestClient_AddMultipleCollectionItems(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("expected POST, got %s", r.Method)
+		}
+		if r.URL.Path != "/private.collection.items.addMultiple" {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		data := map[string]any{
+			"items": []map[string]any{
+				{"success": true, "collectibleId": float64(100), "isCustomCollectible": false, "collectionItemId": float64(1001)},
+				{"success": true, "collectibleId": float64(200), "isCustomCollectible": false, "collectionItemId": float64(1002)},
+			},
+		}
+		if _, err := w.Write(buildTRPCResponse(t, data)); err != nil {
+			t.Errorf("write response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	c := marketmovers.NewClient(
+		marketmovers.WithClientBaseURL(srv.URL),
+		marketmovers.WithStaticToken("test-token"),
+	)
+
+	items := []marketmovers.AddCollectionItemInput{
+		{
+			Collectible:     marketmovers.CollectionCollectible{CollectibleType: "sports-card", CollectibleID: 100},
+			PurchaseDetails: marketmovers.CollectionPurchaseDetails{Quantity: 1, PurchasePricePerItem: 50, PurchaseDateISO: "2026-01-01"},
+		},
+		{
+			Collectible:     marketmovers.CollectionCollectible{CollectibleType: "sports-card", CollectibleID: 200},
+			PurchaseDetails: marketmovers.CollectionPurchaseDetails{Quantity: 1, PurchasePricePerItem: 75, PurchaseDateISO: "2026-02-01"},
+		},
+	}
+
+	resp, err := c.AddMultipleCollectionItems(context.Background(), items)
+	if err != nil {
+		t.Fatalf("AddMultipleCollectionItems: %v", err)
+	}
+	if len(resp.Items) != 2 {
+		t.Fatalf("expected 2 items, got %d", len(resp.Items))
+	}
+	if resp.Items[0].CollectionItemID != 1001 {
+		t.Errorf("expected first item collectionItemId 1001, got %d", resp.Items[0].CollectionItemID)
+	}
+	if resp.Items[1].CollectionItemID != 1002 {
+		t.Errorf("expected second item collectionItemId 1002, got %d", resp.Items[1].CollectionItemID)
+	}
+}

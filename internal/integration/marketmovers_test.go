@@ -239,3 +239,66 @@ func TestMarketMovers_FetchCompletedSummaries(t *testing.T) {
 		t.Logf("  %s: avg=$%.2f count=%d", s.FormattedDate, s.AverageSalePrice, s.TotalSalesCount)
 	}
 }
+
+// TestMarketMovers_AddAndRemoveCollectionItem validates the full add→remove lifecycle.
+// Searches for a known cheap card, adds it to the collection with purchase details,
+// verifies the response, then immediately removes it to keep the collection clean.
+func TestMarketMovers_AddAndRemoveCollectionItem(t *testing.T) {
+	c := newMMClient(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	// 1. Search for a cheap, well-known card to use as the test item.
+	searchResp, err := c.SearchCollectibles(ctx, "Pikachu PSA 10", 0, 3)
+	if err != nil {
+		t.Fatalf("SearchCollectibles: %v", err)
+	}
+	if len(searchResp.Items) == 0 {
+		t.Skip("no search results for 'Pikachu PSA 10' — cannot test AddCollectionItem")
+	}
+
+	target := searchResp.Items[0].Item
+	t.Logf("Test target: id=%d title=%q", target.ID, target.SearchTitle)
+
+	// 2. Add the item to the collection.
+	input := marketmovers.AddCollectionItemInput{
+		Collectible: marketmovers.CollectionCollectible{
+			CollectibleType: "sports-card",
+			CollectibleID:   target.ID,
+		},
+		PurchaseDetails: marketmovers.CollectionPurchaseDetails{
+			Quantity:             1,
+			PurchasePricePerItem: 0.01, // penny — clearly a test entry
+			ConversionFeePerItem: 0,
+			PurchaseDateISO:      "2026-01-01",
+			Notes:                "integration-test-cleanup-me",
+		},
+		CategoryIDs: nil,
+	}
+
+	addResp, err := c.AddCollectionItem(ctx, input)
+	if err != nil {
+		t.Fatalf("AddCollectionItem: %v", err)
+	}
+
+	t.Logf("AddCollectionItem OK: success=%v collectibleId=%d collectionItemId=%d isCustom=%v",
+		addResp.Success, addResp.CollectibleID, addResp.CollectionItemID, addResp.IsCustomCollectible)
+
+	if !addResp.Success {
+		t.Error("expected success=true from AddCollectionItem")
+	}
+	if addResp.CollectibleID != target.ID {
+		t.Errorf("expected collectibleId=%d, got %d", target.ID, addResp.CollectibleID)
+	}
+	if addResp.CollectionItemID == 0 {
+		t.Error("expected non-zero collectionItemId")
+	}
+
+	// 3. Clean up: remove the item so we don't pollute the collection.
+	err = c.RemoveCollectionItem(ctx, addResp.CollectionItemID, "sports-card")
+	if err != nil {
+		t.Errorf("RemoveCollectionItem (cleanup): %v — item %d may remain in collection", err, addResp.CollectionItemID)
+	} else {
+		t.Logf("RemoveCollectionItem OK: cleaned up collectionItemId=%d", addResp.CollectionItemID)
+	}
+}

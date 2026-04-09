@@ -57,7 +57,7 @@ func TestResolveCollectibleID_EmptyCardName(t *testing.T) {
 	defer srv.Close()
 
 	s := newMMSchedulerWithServer(srv)
-	id, _, err := s.resolveCollectibleID(context.Background(), &campaigns.Purchase{
+	id, _, _, err := s.resolveCollectibleID(context.Background(), &campaigns.Purchase{
 		CertNumber: "12345678",
 		CardName:   "",
 	})
@@ -79,7 +79,7 @@ func TestSearchByCert_MatchingTitle(t *testing.T) {
 	defer srv.Close()
 
 	s := newMMSchedulerWithServer(srv)
-	id, _, err := s.searchByCert(context.Background(), &campaigns.Purchase{
+	id, _, _, err := s.searchByCert(context.Background(), &campaigns.Purchase{
 		CertNumber: "12345678",
 		CardName:   "Charizard",
 	})
@@ -98,7 +98,7 @@ func TestSearchByCert_TitleMismatch(t *testing.T) {
 	defer srv.Close()
 
 	s := newMMSchedulerWithServer(srv)
-	id, _, err := s.searchByCert(context.Background(), &campaigns.Purchase{
+	id, _, _, err := s.searchByCert(context.Background(), &campaigns.Purchase{
 		CertNumber: "12345678",
 		CardName:   "Charizard",
 	})
@@ -114,7 +114,7 @@ func TestSearchByCert_NoResults(t *testing.T) {
 	defer srv.Close()
 
 	s := newMMSchedulerWithServer(srv)
-	id, _, err := s.searchByCert(context.Background(), &campaigns.Purchase{
+	id, _, _, err := s.searchByCert(context.Background(), &campaigns.Purchase{
 		CertNumber: "00000000",
 		CardName:   "Charizard",
 	})
@@ -132,7 +132,7 @@ func TestSearchByCert_CaseInsensitive(t *testing.T) {
 	defer srv.Close()
 
 	s := newMMSchedulerWithServer(srv)
-	id, _, err := s.searchByCert(context.Background(), &campaigns.Purchase{
+	id, _, _, err := s.searchByCert(context.Background(), &campaigns.Purchase{
 		CertNumber: "87654321",
 		CardName:   "Umbreon Ex",
 	})
@@ -154,7 +154,7 @@ func TestSearchByNameGrade_MatchingTitle(t *testing.T) {
 	defer srv.Close()
 
 	s := newMMSchedulerWithServer(srv)
-	id, _, err := s.searchByNameGrade(context.Background(), &campaigns.Purchase{
+	id, _, _, err := s.searchByNameGrade(context.Background(), &campaigns.Purchase{
 		CardName:   "Mewtwo",
 		Grader:     "PSA",
 		GradeValue: 9,
@@ -174,7 +174,7 @@ func TestSearchByNameGrade_TitleMismatch_ReturnsZero(t *testing.T) {
 	defer srv.Close()
 
 	s := newMMSchedulerWithServer(srv)
-	id, _, err := s.searchByNameGrade(context.Background(), &campaigns.Purchase{
+	id, _, _, err := s.searchByNameGrade(context.Background(), &campaigns.Purchase{
 		CardName:   "Charizard",
 		Grader:     "PSA",
 		GradeValue: 10,
@@ -191,7 +191,7 @@ func TestSearchByNameGrade_NoResults(t *testing.T) {
 	defer srv.Close()
 
 	s := newMMSchedulerWithServer(srv)
-	id, _, err := s.searchByNameGrade(context.Background(), &campaigns.Purchase{
+	id, _, _, err := s.searchByNameGrade(context.Background(), &campaigns.Purchase{
 		CardName:   "Raichu",
 		Grader:     "PSA",
 		GradeValue: 8,
@@ -210,7 +210,7 @@ func TestSearchByNameGrade_EmptyGrader_DefaultsPSA(t *testing.T) {
 	defer srv.Close()
 
 	s := newMMSchedulerWithServer(srv)
-	_, _, _ = s.searchByNameGrade(context.Background(), &campaigns.Purchase{
+	_, _, _, _ = s.searchByNameGrade(context.Background(), &campaigns.Purchase{
 		CardName:   "Bulbasaur",
 		Grader:     "", // empty — should default to PSA
 		GradeValue: 7,
@@ -236,7 +236,7 @@ func TestResolveCollectibleID_CertSucceeds_NoNameFallback(t *testing.T) {
 	defer srv.Close()
 
 	s := newMMSchedulerWithServer(srv)
-	id, _, err := s.resolveCollectibleID(context.Background(), &campaigns.Purchase{
+	id, _, _, err := s.resolveCollectibleID(context.Background(), &campaigns.Purchase{
 		CertNumber: "11111111",
 		CardName:   "Venusaur",
 		Grader:     "PSA",
@@ -267,7 +267,7 @@ func TestResolveCollectibleID_CertMisses_NameFallbackSucceeds(t *testing.T) {
 	defer srv.Close()
 
 	s := newMMSchedulerWithServer(srv)
-	id, _, err := s.resolveCollectibleID(context.Background(), &campaigns.Purchase{
+	id, _, _, err := s.resolveCollectibleID(context.Background(), &campaigns.Purchase{
 		CertNumber: "22222222",
 		CardName:   "Venusaur",
 		Grader:     "PSA",
@@ -290,7 +290,7 @@ func TestResolveCollectibleID_NoCertNumber_GoesDirectToNameSearch(t *testing.T) 
 	defer srv.Close()
 
 	s := newMMSchedulerWithServer(srv)
-	id, _, err := s.resolveCollectibleID(context.Background(), &campaigns.Purchase{
+	id, _, _, err := s.resolveCollectibleID(context.Background(), &campaigns.Purchase{
 		CertNumber: "", // no cert — skip cert search entirely
 		CardName:   "Charmander",
 		Grader:     "PSA",

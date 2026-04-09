@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import type { CachedSetEntry } from '../../../types/apiStatus';
 import { useAdminCacheStats } from '../../queries/useAdminQueries';
-import { ProgressBar, SummaryCard, formatAdminDate } from './shared';
+import { ProgressBar, SummaryCard } from './shared';
+import { formatAdminDate } from './adminUtils';
 
 const GO_ZERO_TIME = '0001-01-01T00:00:00Z';
 

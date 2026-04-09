@@ -22,11 +22,13 @@ type CLRefresher interface {
 
 // CardLadderHandler manages Card Ladder admin endpoints.
 type CardLadderHandler struct {
-	mu        sync.Mutex
-	store     *sqlite.CardLadderStore
-	client    *cardladder.Client
-	refresher CLRefresher
-	logger    observability.Logger
+	mu             sync.Mutex
+	store          *sqlite.CardLadderStore
+	client         *cardladder.Client
+	refresher      CLRefresher
+	purchaseLister CLPurchaseLister
+	syncUpdater    CLSyncUpdater
+	logger         observability.Logger
 }
 
 // SetRefresher injects the refresh trigger after scheduler construction.

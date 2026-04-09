@@ -18,7 +18,7 @@ help:
 	@echo "  test          Run all tests with mocks"
 	@echo "  test-verbose  Run all tests with verbose output"
 	@echo "  coverage      Run tests with coverage report"
-	@echo "  screenshots   Take screenshots of all pages (Playwright, mocked API)"
+	@echo "  screenshots   Take screenshots of all pages (Playwright, real backend)"
 	@echo "  lint          Run linting and formatting"
 	@echo "  check         Run full quality check (lint + architecture + file size)"
 	@echo "  clean         Clean build artifacts"
@@ -81,11 +81,15 @@ coverage:
 	go tool cover -html=coverage.out -o coverage.html
 	@echo "Coverage report: coverage.html"
 
-# Screenshots of all pages via Playwright (builds frontend, no backend needed)
+# Screenshots of all pages via Playwright (uses real backend + data/slabledger.db)
 # Output: web/screenshots/*.png (desktop) + web/screenshots/mobile/*.png (mobile)
-screenshots: web-build
-	@echo "Taking screenshots of all pages..."
-	@cd web && { npx vite preview --port 4173 & SERVER_PID=$$! ; sleep 2 ; CI=1 ./node_modules/.bin/playwright test tests/screenshot-all-pages.spec.ts --project=chromium ; EXIT=$$? ; kill $$SERVER_PID 2>/dev/null ; exit $$EXIT ; }
+SCREENSHOT_TOKEN ?= playwright-screenshots
+screenshots: build web-build
+	@echo "Taking screenshots of all pages (real backend)..."
+	@LOCAL_API_TOKEN=$(SCREENSHOT_TOKEN) DATABASE_PATH=data/slabledger.db ./slabledger --web --port 4173 & SERVER_PID=$$! ; \
+	  sleep 3 ; \
+	  cd web && CI=1 SCREENSHOT_TOKEN=$(SCREENSHOT_TOKEN) ./node_modules/.bin/playwright test tests/screenshot-all-pages.spec.ts --project=chromium ; \
+	  EXIT=$$? ; kill $$SERVER_PID 2>/dev/null ; exit $$EXIT
 	@echo "Screenshots saved to web/screenshots/"
 
 # Code quality

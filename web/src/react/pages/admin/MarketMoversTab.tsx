@@ -83,13 +83,54 @@ export function MarketMoversTab({ enabled = true }: { enabled?: boolean }) {
 
   if (error && !status) {
     return (
-      <CardShell padding="lg">
-        <p className="text-red-400 text-sm">Failed to load Market Movers status.</p>
-      </CardShell>
+      <div className="space-y-4 mt-4">
+        <CardShell padding="lg">
+          <p className="text-red-400 text-sm mb-4">Failed to load Market Movers status.</p>
+          <h3 className="text-base font-semibold text-[var(--text)] mb-4">Connect Market Movers</h3>
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-2 h-2 rounded-full bg-gray-500" />
+            <span className="text-sm text-[var(--text-muted)]">Not connected</span>
+          </div>
+          <p className="text-xs text-[var(--text-muted)] mb-3">
+            Use your <strong>Sports Card Investor</strong> (sportscardinvestor.com) login credentials.
+          </p>
+          <form onSubmit={handleSave} className="space-y-3">
+            <div>
+              <label htmlFor="mm-username" className="block text-xs text-[var(--text-muted)] mb-1">Email / Username</label>
+              <input
+                id="mm-username"
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="your@email.com"
+                required
+                autoComplete="username"
+                className="w-full rounded-md bg-[var(--surface-2)] border border-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--brand-500)]"
+              />
+            </div>
+            <div>
+              <label htmlFor="mm-password" className="block text-xs text-[var(--text-muted)] mb-1">Password</label>
+              <input
+                id="mm-password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                autoComplete="current-password"
+                className="w-full rounded-md bg-[var(--surface-2)] border border-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--brand-500)]"
+              />
+            </div>
+            <Button type="submit" variant="primary" size="sm" loading={saveMutation.isPending}>
+              Connect
+            </Button>
+          </form>
+        </CardShell>
+      </div>
     );
   }
 
   const lastRun: MMLastRun | undefined = status?.lastRun;
+  const priceStats = status?.priceStats;
 
   return (
     <div className="space-y-4 mt-4">
@@ -117,6 +158,41 @@ export function MarketMoversTab({ enabled = true }: { enabled?: boolean }) {
           </div>
         )}
       </CardShell>
+
+      {/* Price Coverage Stats */}
+      {priceStats && (
+        <CardShell padding="lg">
+          <h3 className="text-base font-semibold text-[var(--text)] mb-3">Price Coverage</h3>
+          <div className="space-y-0">
+            <RunStatRow label="Unsold inventory" value={priceStats.unsoldTotal} />
+            <RunStatRow
+              label="With MM price"
+              value={`${priceStats.withMMPrice} / ${priceStats.unsoldTotal}`}
+              accent={priceStats.withMMPrice > 0 ? 'green' : undefined}
+            />
+            <RunStatRow
+              label="Synced to collection"
+              value={priceStats.syncedCount}
+              accent={priceStats.syncedCount > 0 ? 'green' : undefined}
+            />
+            <RunStatRow
+              label="Stale (>7 days)"
+              value={priceStats.staleCount}
+              accent={priceStats.staleCount > 0 ? 'yellow' : undefined}
+            />
+            {priceStats.newestUpdate && (
+              <RunStatRow label="Latest update" value={new Date(priceStats.newestUpdate).toLocaleString()} />
+            )}
+            {priceStats.oldestUpdate && (
+              <RunStatRow
+                label="Oldest update"
+                value={new Date(priceStats.oldestUpdate).toLocaleString()}
+                accent={priceStats.staleCount > 0 ? 'red' : undefined}
+              />
+            )}
+          </div>
+        </CardShell>
+      )}
 
       {/* Last Run Stats */}
       {lastRun && (

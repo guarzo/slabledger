@@ -15,7 +15,7 @@ import (
 
 func TestExportMMFormatGlobal_EmptyInventory(t *testing.T) {
 	svc := campaigns.NewService(mocks.NewMockCampaignRepository(), withTestIDGen(), withClosedBaseCtx())
-	entries, err := svc.ExportMMFormatGlobal(context.Background())
+	entries, err := svc.ExportMMFormatGlobal(context.Background(), false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -31,7 +31,7 @@ func TestExportMMFormatGlobal_RepoError(t *testing.T) {
 		return nil, wantErr
 	}
 	svc := campaigns.NewService(repo, withTestIDGen(), withClosedBaseCtx())
-	_, err := svc.ExportMMFormatGlobal(context.Background())
+	_, err := svc.ExportMMFormatGlobal(context.Background(), false)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -63,7 +63,7 @@ func TestExportMMFormatGlobal_FullFields(t *testing.T) {
 	repo.Purchases["p1"] = purchase
 
 	svc := campaigns.NewService(repo, withTestIDGen(), withClosedBaseCtx())
-	entries, err := svc.ExportMMFormatGlobal(context.Background())
+	entries, err := svc.ExportMMFormatGlobal(context.Background(), false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -99,13 +99,6 @@ func TestExportMMFormatGlobal_FullFields(t *testing.T) {
 	if e.PurchasePricePerCard != 100.0 {
 		t.Errorf("PurchasePricePerCard = %v, want 100.0", e.PurchasePricePerCard)
 	}
-	// MM value takes priority over CL value
-	if e.LastSalePrice != 150.0 {
-		t.Errorf("LastSalePrice = %v, want 150.0 (from MM)", e.LastSalePrice)
-	}
-	if e.LastSaleDate != "" {
-		t.Errorf("LastSaleDate = %q, want empty (not known, don't use DH snapshot date)", e.LastSaleDate)
-	}
 }
 
 func TestExportMMFormatGlobal_GraderDefaults(t *testing.T) {
@@ -114,7 +107,7 @@ func TestExportMMFormatGlobal_GraderDefaults(t *testing.T) {
 		ID: "p1", CardName: "Pikachu", GradeValue: 10, BuyCostCents: 5000,
 	}
 	svc := campaigns.NewService(repo, withTestIDGen(), withClosedBaseCtx())
-	entries, err := svc.ExportMMFormatGlobal(context.Background())
+	entries, err := svc.ExportMMFormatGlobal(context.Background(), false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -132,7 +125,7 @@ func TestExportMMFormatGlobal_HalfGrade(t *testing.T) {
 		ID: "p1", CardName: "Mewtwo", Grader: "BGS", GradeValue: 9.5, BuyCostCents: 8000,
 	}
 	svc := campaigns.NewService(repo, withTestIDGen(), withClosedBaseCtx())
-	entries, err := svc.ExportMMFormatGlobal(context.Background())
+	entries, err := svc.ExportMMFormatGlobal(context.Background(), false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -150,7 +143,7 @@ func TestExportMMFormatGlobal_PlayerNameFallback(t *testing.T) {
 		ID: "p1", CardName: "Gengar Holo", CardPlayer: "", BuyCostCents: 3000,
 	}
 	svc := campaigns.NewService(repo, withTestIDGen(), withClosedBaseCtx())
-	entries, err := svc.ExportMMFormatGlobal(context.Background())
+	entries, err := svc.ExportMMFormatGlobal(context.Background(), false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -159,35 +152,34 @@ func TestExportMMFormatGlobal_PlayerNameFallback(t *testing.T) {
 	}
 }
 
-func TestExportMMFormatGlobal_LastSalePriceSources(t *testing.T) {
+func TestExportMMFormatGlobal_MissingMMOnly(t *testing.T) {
 	tests := []struct {
-		name         string
-		mmValueCents int
-		clValueCents int
-		wantLastSale float64
+		name          string
+		missingMMOnly bool
+		wantCount     int
 	}{
-		{"MM only", 20000, 0, 200.0},
-		{"CL only", 0, 15000, 150.0},
-		{"MM beats CL", 20000, 15000, 200.0},
-		{"neither", 0, 0, 0.0},
+		{"all items", false, 3},
+		{"missing MM only", true, 2},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			repo := mocks.NewMockCampaignRepository()
 			repo.Purchases["p1"] = &campaigns.Purchase{
-				ID:           "p1",
-				CardName:     "Test Card",
-				MMValueCents: tc.mmValueCents,
-				CLValueCents: tc.clValueCents,
-				BuyCostCents: 5000,
+				ID: "p1", CardName: "Card A", MMValueCents: 20000, BuyCostCents: 5000,
+			}
+			repo.Purchases["p2"] = &campaigns.Purchase{
+				ID: "p2", CardName: "Card B", MMValueCents: 0, BuyCostCents: 5000,
+			}
+			repo.Purchases["p3"] = &campaigns.Purchase{
+				ID: "p3", CardName: "Card C", MMValueCents: 0, CLValueCents: 15000, BuyCostCents: 5000,
 			}
 			svc := campaigns.NewService(repo, withTestIDGen(), withClosedBaseCtx())
-			entries, err := svc.ExportMMFormatGlobal(context.Background())
+			entries, err := svc.ExportMMFormatGlobal(context.Background(), tc.missingMMOnly)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			if entries[0].LastSalePrice != tc.wantLastSale {
-				t.Errorf("LastSalePrice = %v, want %v", entries[0].LastSalePrice, tc.wantLastSale)
+			if len(entries) != tc.wantCount {
+				t.Errorf("got %d entries, want %d", len(entries), tc.wantCount)
 			}
 		})
 	}
@@ -199,7 +191,7 @@ func TestExportMMFormatGlobal_EmptyCardNumber(t *testing.T) {
 		ID: "p1", CardName: "Pikachu", CardNumber: "", BuyCostCents: 5000,
 	}
 	svc := campaigns.NewService(repo, withTestIDGen(), withClosedBaseCtx())
-	entries, err := svc.ExportMMFormatGlobal(context.Background())
+	entries, err := svc.ExportMMFormatGlobal(context.Background(), false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

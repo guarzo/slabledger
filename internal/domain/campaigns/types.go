@@ -148,6 +148,7 @@ type Purchase struct {
 	MMTrendPct            float64        `json:"mmTrendPct,omitempty"`       // MM 30-day price change % (positive = rising)
 	MMSales30d            int            `json:"mmSales30d,omitempty"`       // MM 30-day sales volume (count)
 	MMActiveLowCents      int            `json:"mmActiveLowCents,omitempty"` // MM lowest active BIN listing (cents)
+	MMValueUpdatedAt      string         `json:"mmValueUpdatedAt,omitempty"` // When MM value was last refreshed (RFC3339)
 	BuyCostCents          int            `json:"buyCostCents"`               // Actual cost paid
 	PSASourcingFeeCents   int            `json:"psaSourcingFeeCents"`        // Fee charged per card
 	Population            int            `json:"population,omitempty"`       // PSA population count
@@ -187,6 +188,7 @@ type Purchase struct {
 	CardPlayer    string    `json:"cardPlayer,omitempty"`    // Player/subject name (e.g. "Charizard", "LeBron James")
 	CardVariation string    `json:"cardVariation,omitempty"` // Card variation (e.g. "Holo Rare", "1st Edition")
 	CardCategory  string    `json:"cardCategory,omitempty"`  // Sport/category (e.g. "Pokemon", "Basketball")
+	CLSyncedAt    string    `json:"clSyncedAt,omitempty"`    // When card was last synced to CL collection (RFC3339)
 	CreatedAt     time.Time `json:"createdAt"`
 	UpdatedAt     time.Time `json:"updatedAt"`
 

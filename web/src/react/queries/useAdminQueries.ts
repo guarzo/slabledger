@@ -166,6 +166,16 @@ export function useTriggerCardLadderRefresh() {
   });
 }
 
+export function useSyncCardLadderCollection() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.syncCardLadderCollection(),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.admin.cardLadderStatus });
+    },
+  });
+}
+
 export function useMarketMoversStatus(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: queryKeys.admin.marketMoversStatus,
@@ -190,6 +200,16 @@ export function useTriggerMarketMoversRefresh() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: () => api.triggerMarketMoversRefresh(),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.admin.marketMoversStatus });
+    },
+  });
+}
+
+export function useSyncMarketMoversCollection() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.syncMarketMoversCollection(),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.admin.marketMoversStatus });
     },

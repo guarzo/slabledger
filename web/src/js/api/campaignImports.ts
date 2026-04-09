@@ -20,7 +20,7 @@ declare module './client' {
     // Global imports / exports
     globalImportCL(file: File): Promise<GlobalImportResult>;
     globalExportCL(missingCLOnly?: boolean): Promise<Blob>;
-    globalExportMM(): Promise<Blob>;
+    globalExportMM(missingMMOnly?: boolean): Promise<Blob>;
     globalRefreshMM(file: File): Promise<MMRefreshResult>;
 
     // PSA / External imports
@@ -70,9 +70,10 @@ proto.globalExportCL = async function (this: APIClient, missingCLOnly?: boolean)
   return response.blob();
 };
 
-proto.globalExportMM = async function (this: APIClient): Promise<Blob> {
+proto.globalExportMM = async function (this: APIClient, missingMMOnly?: boolean): Promise<Blob> {
+  const params = missingMMOnly ? '?missing_mm_only=true' : '';
   const response = await this.fetchWithRetry(
-    `${this.baseURL}/purchases/export-mm`,
+    `${this.baseURL}/purchases/export-mm${params}`,
     {},
   );
   return response.blob();

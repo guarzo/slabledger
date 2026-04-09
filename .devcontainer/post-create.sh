@@ -1,7 +1,7 @@
 #!/bin/bash
 # Post-create script - runs once after container is created
 
-set -e
+set -eo pipefail
 
 echo "🚀 Running post-create setup..."
 
@@ -19,9 +19,7 @@ go install honnef.co/go/tools/cmd/staticcheck@latest 2>/dev/null || true
 # Install web dependencies (if package.json exists)
 if [ -d "web" ] && [ -f "web/package.json" ]; then
     echo "📦 Installing web dependencies..."
-    cd web
-    npm install
-    cd ..
+    (cd web && npm install)
 fi
 
 # Ensure ~/.local/bin is on PATH for this script (and future bash sessions)
@@ -29,7 +27,9 @@ export PATH="$HOME/.local/bin:$PATH"
 
 # Install Claude Code CLI
 echo "🤖 Installing Claude Code CLI..."
-curl -fsSL https://claude.ai/install.sh | bash
+if ! curl -fsSL https://claude.ai/install.sh | bash; then
+    echo "⚠️  Claude Code CLI installation failed, continuing..."
+fi
 
 # Restore Claude config from backup if the main file is missing but a backup exists
 CLAUDE_CFG="$HOME/.claude.json"
@@ -43,10 +43,7 @@ fi
 
 # Create data directories if they don't exist
 echo "📁 Creating data directories..."
-mkdir -p data
-mkdir -p data/cache
-mkdir -p data/cache/sets
-mkdir -p data/cache/snapshots
+mkdir -p data/cache/sets data/cache/snapshots
 
 # Set up git hooks (if .git exists)
 if [ -d ".git" ]; then
@@ -59,6 +56,11 @@ if [ ! -f ".env" ] && [ -f ".env.example" ]; then
     echo "📝 Creating .env from .env.example..."
     cp .env.example .env
     echo "⚠️  Remember to update .env with your actual API keys!"
+fi
+
+echo "🤖 Installing OpenCode CLI..."
+if ! curl -fsSL https://opencode.ai/install | bash; then
+    echo "⚠️  OpenCode CLI installation failed, continuing..."
 fi
 
 # Build the application to verify everything works
