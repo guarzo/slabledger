@@ -152,7 +152,6 @@ test.describe('screenshot all pages', () => {
   // Fetch the first campaign ID from the real backend before running tests
   test.beforeAll(async ({ browser }) => {
     const page = await browser.newPage();
-    await page.setExtraHTTPHeaders({ Authorization: `Bearer ${AUTH_TOKEN}` });
     try {
       const response = await page.request.get('/api/campaigns', {
         headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
