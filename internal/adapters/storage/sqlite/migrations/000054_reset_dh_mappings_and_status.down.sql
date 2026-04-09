@@ -1,0 +1,3 @@
+-- Down migration is a no-op. The deleted mappings and reset statuses will be
+-- re-populated by the next bulk match or DH push scheduler run.
+-- There is no safe way to restore the previous (incorrect) state.
