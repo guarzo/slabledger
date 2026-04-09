@@ -34,6 +34,38 @@ function formatHoldReason(reason: string): string {
   return reason || 'Unknown reason';
 }
 
+/** Compact CL sync status dot with tooltip text. */
+function CLSyncIndicator({ syncedAt }: { syncedAt?: string }) {
+  if (!syncedAt) {
+    return (
+      <div className="mt-2 flex items-center gap-1.5 text-xs text-[var(--text-muted)]">
+        <span className="inline-block w-2 h-2 rounded-full bg-gray-500" />
+        <span>Not synced to CardLadder</span>
+      </div>
+    );
+  }
+  const parsed = new Date(syncedAt);
+  if (isNaN(parsed.getTime())) {
+    return (
+      <div className="mt-2 flex items-center gap-1.5 text-xs text-[var(--text-muted)]">
+        <span className="inline-block w-2 h-2 rounded-full bg-gray-400" />
+        <span>CL synced (unknown date)</span>
+      </div>
+    );
+  }
+  const ageMs = Date.now() - parsed.getTime();
+  const ageDays = Math.max(0, Math.floor(ageMs / 86_400_000));
+  // Green = synced within 2 days, amber = within 14 days, red = stale
+  const color = ageDays <= 2 ? 'bg-emerald-400' : ageDays <= 14 ? 'bg-amber-400' : 'bg-red-400';
+  const label = ageDays === 0 ? 'today' : ageDays === 1 ? 'yesterday' : `${ageDays}d ago`;
+  return (
+    <div className="mt-2 flex items-center gap-1.5 text-xs text-[var(--text-muted)]">
+      <span className={`inline-block w-2 h-2 rounded-full ${color}`} />
+      <span>CL synced {label}</span>
+    </div>
+  );
+}
+
 export default function ExpandedDetail({ item, onReviewed, campaignId, onOpenFlagDialog, onResolveFlag, onApproveDHPush, onSetPrice }: ExpandedDetailProps) {
   const queryClient = useQueryClient();
   const toast = useToast();
@@ -97,7 +129,7 @@ export default function ExpandedDetail({ item, onReviewed, campaignId, onOpenFla
         />
         <PriceSignalCard label="Last Sold" valueCents={lastSoldCents} />
         <PriceSignalCard label="Lowest eBay Listing" valueCents={snap?.lowestListCents ?? 0} />
-        <PriceSignalCard label="Market Movers" valueCents={mmCents} />
+        <PriceSignalCard label="Market Movers" valueCents={mmCents} updatedAt={purchase.mmValueUpdatedAt} />
         <PriceSignalCard
           label="Current Override"
           valueCents={purchase.overridePriceCents ?? 0}
@@ -118,6 +150,11 @@ export default function ExpandedDetail({ item, onReviewed, campaignId, onOpenFla
         onFlag={onOpenFlagDialog}
         isSubmitting={isSubmitting}
       />
+
+      {/* CL Sync indicator */}
+      {purchase.certNumber && (
+        <CLSyncIndicator syncedAt={purchase.clSyncedAt} />
+      )}
 
       {/* DH Push Held action */}
       {item.purchase.dhPushStatus === 'held' && onApproveDHPush && (

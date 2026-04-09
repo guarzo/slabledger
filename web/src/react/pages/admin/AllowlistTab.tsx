@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react';
 import type { AllowedEmail } from '../../../types/admin';
 import { useAllowlist, useAddAllowedEmail, useRemoveAllowedEmail } from '../../queries/useAdminQueries';
 import { Button } from '../../ui';
-import { formatAdminDate } from './shared';
+import { formatAdminDate } from './adminUtils';
 
 function formatMutationError(err: unknown): string {
   if (err instanceof Error) return err.message;

@@ -3,7 +3,7 @@ import { useCardLadderStatus, useSaveCardLadderConfig, useTriggerCardLadderRefre
 import { useToast } from '../../contexts/ToastContext';
 import { CardShell } from '../../ui/CardShell';
 import Button from '../../ui/Button';
-import { formatAdminDate } from './shared';
+import { formatAdminDate } from './adminUtils';
 
 export function CardLadderTab({ enabled = true }: { enabled?: boolean }) {
   const { data: status, isLoading, error } = useCardLadderStatus({ enabled });
@@ -55,14 +55,6 @@ export function CardLadderTab({ enabled = true }: { enabled?: boolean }) {
     return (
       <CardShell padding="lg">
         <p className="text-[var(--text-muted)]">Loading Card Ladder status...</p>
-      </CardShell>
-    );
-  }
-
-  if (error && !status) {
-    return (
-      <CardShell padding="lg">
-        <p className="text-red-400 text-sm">Failed to load Card Ladder status.</p>
       </CardShell>
     );
   }
@@ -128,8 +120,23 @@ export function CardLadderTab({ enabled = true }: { enabled?: boolean }) {
     </form>
   );
 
-  // Type extension for lastRun — backend may add this field in the future
-  const lastRun = (status as (typeof status & { lastRun?: { ranAt: string; duration: string; updated: number; fetched: number; skipped: number } }) | undefined)?.lastRun;
+  if (error && !status) {
+    return (
+      <div className="space-y-4 mt-4">
+        <CardShell padding="lg">
+          <p className="text-red-400 text-sm mb-4">Failed to load Card Ladder status.</p>
+          <h3 className="text-base font-semibold text-[var(--text)] mb-4">Connect Card Ladder</h3>
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-2 h-2 rounded-full bg-gray-500" />
+            <span className="text-sm text-[var(--text-muted)]">Not connected</span>
+          </div>
+          {credentialForm}
+        </CardShell>
+      </div>
+    );
+  }
+
+  const lastRun = status?.lastRun;
 
   return (
     <div className="space-y-4 mt-4">
@@ -165,13 +172,24 @@ export function CardLadderTab({ enabled = true }: { enabled?: boolean }) {
             <div className="mt-4 pt-4 border-t border-[var(--surface-2)] space-y-1">
               <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">Last Refresh</p>
               <p className="text-xs text-[var(--text-muted)]">
-                Ran at {formatAdminDate(lastRun.ranAt)} · {lastRun.duration}
+                Ran at {formatAdminDate(lastRun.lastRunAt)} · {Number.isFinite(lastRun.durationMs) ? (lastRun.durationMs / 1000).toFixed(1) : '?'}s
               </p>
               <p className="text-xs text-[var(--text-muted)]">
-                {lastRun.updated > 0
+                {(lastRun.updated ?? 0) > 0
                   ? <span className="text-[var(--success)]">{lastRun.updated} updated</span>
-                  : <span>0 updated</span>} · {lastRun.fetched} fetched · {lastRun.skipped} skipped
+                  : <span>0 updated</span>} · {lastRun.mapped ?? 0} mapped · {lastRun.skipped ?? 0} skipped · {lastRun.totalCLCards ?? 0} total CL cards
               </p>
+              {((lastRun.cardsPushed ?? 0) > 0 || (lastRun.cardsRemoved ?? 0) > 0) && (
+                <p className="text-xs text-[var(--text-muted)]">
+                  {(lastRun.cardsPushed ?? 0) > 0 && (
+                    <span className="text-[var(--success)]">{lastRun.cardsPushed} pushed</span>
+                  )}
+                  {(lastRun.cardsPushed ?? 0) > 0 && (lastRun.cardsRemoved ?? 0) > 0 && ' · '}
+                  {(lastRun.cardsRemoved ?? 0) > 0 && (
+                    <span className="text-amber-400">{lastRun.cardsRemoved} removed</span>
+                  )}
+                </p>
+              )}
             </div>
           )}
         </CardShell>

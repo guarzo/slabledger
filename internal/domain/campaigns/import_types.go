@@ -255,7 +255,6 @@ func ExtractCardNameFromTitle(title string) string {
 	cleaned := titleCleanupRegex.ReplaceAllString(title, "")
 	cleaned = conditionSuffixRegex.ReplaceAllString(cleaned, "")
 	cleaned = strings.Join(strings.Fields(cleaned), " ")
-	cleaned = strings.TrimSpace(cleaned)
 	if cleaned == "" {
 		return title
 	}
@@ -332,7 +331,7 @@ type OrdersConfirmItem struct {
 }
 
 // MMExportEntry represents a single row in the Market Movers collection import CSV format.
-// The 17-column format matches Market Movers' collection export/import schema.
+// The 13-column format matches Market Movers' collection import schema.
 type MMExportEntry struct {
 	Sport                string  // Column 1: Sport/category (e.g. "Pokemon", "Basketball")
 	Grade                string  // Column 2: e.g. "PSA 10", "BGS 9.5"
@@ -347,10 +346,6 @@ type MMExportEntry struct {
 	PurchasePricePerCard float64 // Column 11: Buy cost in dollars
 	Notes                string  // Column 12: Cert number for traceability
 	Category             string  // Column 13: Always empty
-	DateSold             string  // Column 14: Empty (unsold)
-	SoldPricePerCard     string  // Column 15: Empty (unsold)
-	LastSalePrice        float64 // Column 16: MM or CL value in dollars (best available)
-	LastSaleDate         string  // Column 17: Last sale date — left blank on export (we don't know the actual last-sale date)
 }
 
 // MMRefreshRow holds the fields needed to refresh mm_value_cents from a Market Movers CSV row.

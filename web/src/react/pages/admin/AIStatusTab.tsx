@@ -1,7 +1,8 @@
 import type { AIOperationSummary } from '../../../types/apiStatus';
 import { useAIUsage } from '../../queries/useAdminQueries';
 import { formatTokens, formatLatency } from '../../utils/formatters';
-import { SummaryCard, formatAdminDate } from './shared';
+import { SummaryCard } from './shared';
+import { formatAdminDate } from './adminUtils';
 
 function formatCost(cents: number): string {
   if (cents === 0) return '$0';

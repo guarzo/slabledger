@@ -28,12 +28,14 @@ declare module './client' {
     getCardRequests(): Promise<CardRequestSubmission[]>;
     submitCardRequest(id: number): Promise<{ status: string; requestId: string }>;
     submitAllCardRequests(): Promise<{ submitted: number; errors: number }>;
-    getCardLadderStatus(): Promise<{ configured: boolean; email?: string; collectionId?: string; cardsMapped?: number; lastRun?: { lastRunAt: string; durationMs: number; updated: number; mapped: number; skipped: number; totalCLCards: number } }>;
+    getCardLadderStatus(): Promise<{ configured: boolean; email?: string; collectionId?: string; cardsMapped?: number; lastRun?: { lastRunAt: string; durationMs: number; updated: number; mapped: number; skipped: number; totalCLCards: number; cardsPushed: number; cardsRemoved: number } }>;
     saveCardLadderConfig(config: { email: string; password: string; collectionId: string; firebaseApiKey: string }): Promise<{ status: string }>;
     triggerCardLadderRefresh(): Promise<{ status: string }>;
-    getMarketMoversStatus(): Promise<{ configured: boolean; username?: string; cardsMapped?: number; lastRun?: { lastRunAt: string; durationMs: number; updated: number; newMappings: number; skipped: number; searchFailed: number; totalPurchases: number } }>;
+    syncCardLadderCollection(): Promise<{ synced: number; skipped: number; failed: number; total: number; results: { certNumber: string; player: string; set: string; condition: string; estimatedValue: number; status: string; error?: string }[] }>;
+    getMarketMoversStatus(): Promise<{ configured: boolean; username?: string; cardsMapped?: number; priceStats?: { unsoldTotal: number; withMMPrice: number; syncedCount: number; oldestUpdate: string; newestUpdate: string; staleCount: number }; lastRun?: { lastRunAt: string; durationMs: number; updated: number; newMappings: number; skipped: number; searchFailed: number; totalPurchases: number } }>;
     saveMarketMoversConfig(config: { username: string; password: string }): Promise<{ status: string }>;
     triggerMarketMoversRefresh(): Promise<{ status: string }>;
+    syncMarketMoversCollection(): Promise<{ synced: number; skipped: number; failed: number; errors?: { certNumber: string; error: string }[] }>;
     getDHStatus(): Promise<DHStatusResponse>;
     triggerDHBulkMatch(): Promise<DHBulkMatchResponse>;
     getDHUnmatched(): Promise<DHUnmatchedResponse>;
@@ -126,7 +128,7 @@ proto.submitAllCardRequests = async function (this: APIClient): Promise<{ submit
 };
 
 proto.getCardLadderStatus = async function (this: APIClient) {
-  return this.get<{ configured: boolean; email?: string; collectionId?: string; cardsMapped?: number }>('/admin/cardladder/status');
+  return this.get<{ configured: boolean; email?: string; collectionId?: string; cardsMapped?: number; lastRun?: { lastRunAt: string; durationMs: number; updated: number; mapped: number; skipped: number; totalCLCards: number; cardsPushed: number; cardsRemoved: number } }>('/admin/cardladder/status');
 };
 
 proto.saveCardLadderConfig = async function (this: APIClient, config: { email: string; password: string; collectionId: string; firebaseApiKey: string }) {
@@ -137,8 +139,12 @@ proto.triggerCardLadderRefresh = async function (this: APIClient) {
   return this.post<{ status: string }>('/admin/cardladder/refresh');
 };
 
+proto.syncCardLadderCollection = async function (this: APIClient) {
+  return this.post<{ synced: number; skipped: number; failed: number; total: number; results: { certNumber: string; player: string; set: string; condition: string; estimatedValue: number; status: string; error?: string }[] }>('/admin/cardladder/sync-to-cl');
+};
+
 proto.getMarketMoversStatus = async function (this: APIClient) {
-  return this.get<{ configured: boolean; username?: string; cardsMapped?: number }>('/admin/marketmovers/status');
+  return this.get<{ configured: boolean; username?: string; cardsMapped?: number; priceStats?: { unsoldTotal: number; withMMPrice: number; syncedCount: number; oldestUpdate: string; newestUpdate: string; staleCount: number }; lastRun?: { lastRunAt: string; durationMs: number; updated: number; newMappings: number; skipped: number; searchFailed: number; totalPurchases: number } }>('/admin/marketmovers/status');
 };
 
 proto.saveMarketMoversConfig = async function (this: APIClient, config: { username: string; password: string }) {
@@ -147,6 +153,10 @@ proto.saveMarketMoversConfig = async function (this: APIClient, config: { userna
 
 proto.triggerMarketMoversRefresh = async function (this: APIClient) {
   return this.post<{ status: string }>('/admin/marketmovers/refresh');
+};
+
+proto.syncMarketMoversCollection = async function (this: APIClient) {
+  return this.post<{ synced: number; skipped: number; failed: number; errors?: { certNumber: string; error: string }[] }>('/admin/marketmovers/sync-collection');
 };
 
 proto.getDHStatus = async function (this: APIClient): Promise<DHStatusResponse> {

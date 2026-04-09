@@ -14,6 +14,7 @@ type DHPushConfig struct {
 	DisagreementPctThreshold     int       `json:"disagreementPctThreshold"`
 	UnreviewedChangePctThreshold int       `json:"unreviewedChangePctThreshold"`
 	UnreviewedChangeMinCents     int       `json:"unreviewedChangeMinCents"`
+	InitialPushValueFloorPct     int       `json:"initialPushValueFloorPct"`
 	UpdatedAt                    time.Time `json:"updatedAt"`
 }
 
@@ -25,6 +26,7 @@ func DefaultDHPushConfig() DHPushConfig {
 		DisagreementPctThreshold:     25,
 		UnreviewedChangePctThreshold: 15,
 		UnreviewedChangeMinCents:     3000,
+		InitialPushValueFloorPct:     50,
 	}
 }
 
@@ -40,12 +42,13 @@ func ResolveMarketValueCents(p *Purchase) int {
 	return 0
 }
 
-// EvaluateHoldTriggers checks whether a re-push should be held for review.
+// EvaluateHoldTriggers checks whether a push should be held for review.
+// For initial pushes (DHInventoryID == 0): checks market value vs buy cost.
+// For re-pushes: checks price swing, source disagreement, and unreviewed CL change.
 // Returns empty string if the push should proceed, or a reason string if held.
-// Only applies to re-pushes (DHInventoryID != 0).
 func EvaluateHoldTriggers(p *Purchase, cfg DHPushConfig) string {
 	if p.DHInventoryID == 0 {
-		return ""
+		return checkInitialPushValueMismatch(p, cfg.InitialPushValueFloorPct)
 	}
 
 	newValue := ResolveMarketValueCents(p)
@@ -138,6 +141,27 @@ func checkUnreviewedCLChange(p *Purchase, lastPushed, pctThreshold, minCents int
 
 	if math.Abs(pct) > float64(pctThreshold) && absDelta > minCents {
 		return fmt.Sprintf("unreviewed_cl_change:%+.0f%%", pct)
+	}
+	return ""
+}
+
+// checkInitialPushValueMismatch holds an initial push if the market value
+// is significantly below the buy cost, suggesting a possible data error.
+func checkInitialPushValueMismatch(p *Purchase, floorPct int) string {
+	if floorPct <= 0 {
+		floorPct = DefaultDHPushConfig().InitialPushValueFloorPct
+	}
+	if p.BuyCostCents == 0 {
+		return ""
+	}
+	marketValue := ResolveMarketValueCents(p)
+	if marketValue == 0 {
+		return ""
+	}
+	floor := p.BuyCostCents * floorPct / 100
+	if marketValue < floor {
+		pct := float64(marketValue) / float64(p.BuyCostCents) * 100
+		return fmt.Sprintf("initial_value_mismatch:market=%d,cost=%d,ratio=%.0f%%", marketValue, p.BuyCostCents, pct)
 	}
 	return ""
 }

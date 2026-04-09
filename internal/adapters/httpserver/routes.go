@@ -73,11 +73,14 @@ func (rt *Router) registerAdminRoutes(mux *http.ServeMux) {
 			mux.Handle("POST /api/admin/cardladder/config", rt.authMW.RequireAdmin(http.HandlerFunc(rt.cardLadderHandler.HandleSaveConfig)))
 			mux.Handle("GET /api/admin/cardladder/status", rt.authMW.RequireAdmin(http.HandlerFunc(rt.cardLadderHandler.HandleStatus)))
 			mux.Handle("POST /api/admin/cardladder/refresh", rt.authMW.RequireAdmin(http.HandlerFunc(rt.cardLadderHandler.HandleRefresh)))
+			mux.Handle("POST /api/admin/cardladder/add-card", rt.authMW.RequireAdmin(http.HandlerFunc(rt.cardLadderHandler.HandleAddCard)))
+			mux.Handle("POST /api/admin/cardladder/sync-to-cl", rt.authMW.RequireAdmin(http.HandlerFunc(rt.cardLadderHandler.HandleSyncToCardLadder)))
 		}
 		if rt.marketMoversHandler != nil {
 			mux.Handle("POST /api/admin/marketmovers/config", rt.authMW.RequireAdmin(http.HandlerFunc(rt.marketMoversHandler.HandleSaveConfig)))
 			mux.Handle("GET /api/admin/marketmovers/status", rt.authMW.RequireAdmin(http.HandlerFunc(rt.marketMoversHandler.HandleStatus)))
 			mux.Handle("POST /api/admin/marketmovers/refresh", rt.authMW.RequireAdmin(http.HandlerFunc(rt.marketMoversHandler.HandleRefresh)))
+			mux.Handle("POST /api/admin/marketmovers/sync-collection", rt.authMW.RequireAdmin(http.HandlerFunc(rt.marketMoversHandler.HandleSyncCollection)))
 		}
 		rt.logger.Info(context.Background(), "admin routes registered")
 	}
@@ -103,18 +106,9 @@ func (rt *Router) registerCampaignRoutes(mux *http.ServeMux) {
 	}
 
 	// Global sell sheet & inventory endpoints
-	sellSheetRoute := http.HandlerFunc(rt.campaignsHandler.HandleGlobalSellSheet)
-	selectedSellSheetRoute := http.HandlerFunc(rt.campaignsHandler.HandleSelectedSellSheet)
-	inventoryRoute := http.HandlerFunc(rt.campaignsHandler.HandleGlobalInventory)
-	if rt.authMW != nil {
-		mux.Handle("/api/sell-sheet", rt.authMW.RequireAuth(sellSheetRoute))
-		mux.Handle("POST /api/portfolio/sell-sheet", rt.authMW.RequireAuth(selectedSellSheetRoute))
-		mux.Handle("/api/inventory", rt.authMW.RequireAuth(inventoryRoute))
-	} else {
-		mux.HandleFunc("/api/sell-sheet", rt.campaignsHandler.HandleGlobalSellSheet)
-		mux.HandleFunc("POST /api/portfolio/sell-sheet", rt.campaignsHandler.HandleSelectedSellSheet)
-		mux.HandleFunc("/api/inventory", rt.campaignsHandler.HandleGlobalInventory)
-	}
+	mux.Handle("/api/sell-sheet", authRoute(rt.campaignsHandler.HandleGlobalSellSheet))
+	mux.Handle("POST /api/portfolio/sell-sheet", authRoute(rt.campaignsHandler.HandleSelectedSellSheet))
+	mux.Handle("/api/inventory", authRoute(rt.campaignsHandler.HandleGlobalInventory))
 	mux.HandleFunc("/sell-sheet", rt.spaHandler.HandleIndex)
 	mux.HandleFunc("/inventory", rt.spaHandler.HandleIndex)
 

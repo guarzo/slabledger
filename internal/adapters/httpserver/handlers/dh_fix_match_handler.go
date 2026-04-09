@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -85,50 +86,21 @@ func (h *DHHandler) HandleFixMatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Push to DH inventory
-	item := dh.InventoryItem{
-		DHCardID:         dhCardID,
-		CertNumber:       purchase.CertNumber,
-		GradingCompany:   dh.GraderPSA,
-		Grade:            purchase.GradeValue,
-		CostBasisCents:   purchase.BuyCostCents,
-		MarketValueCents: dh.IntPtr(marketValue),
-		Status:           dh.InventoryStatusInStock,
-	}
-
-	pushResp, pushErr := h.inventoryPusher.PushInventory(ctx, []dh.InventoryItem{item})
+	// Push to DH inventory and persist fields
+	inventoryID, pushErr := h.pushAndPersistDH(ctx, purchase, dhCardID, marketValue)
 	if pushErr != nil {
-		h.logger.Error(ctx, "fix match: push inventory", observability.Err(pushErr))
-		writeError(w, http.StatusBadGateway, "DH API error")
-		return
-	}
-
-	var inventoryID int
-	for _, result := range pushResp.Results {
-		if result.Status != "failed" && result.DHInventoryID != 0 {
-			inventoryID = result.DHInventoryID
-			if h.dhFieldsUpdater != nil {
-				if err := h.dhFieldsUpdater.UpdatePurchaseDHFields(ctx, purchase.ID, campaigns.DHFieldsUpdate{
-					CardID:            dhCardID,
-					InventoryID:       result.DHInventoryID,
-					CertStatus:        dh.CertStatusMatched,
-					ListingPriceCents: result.AssignedPriceCents,
-					ChannelsJSON:      dh.MarshalChannels(result.Channels),
-					DHStatus:          campaigns.DHStatus(result.Status),
-				}); err != nil {
-					h.logger.Error(ctx, "fix match: failed to persist DH fields",
-						observability.String("purchaseID", purchase.ID),
-						observability.Err(err))
-					writeError(w, http.StatusInternalServerError, "DH push succeeded but failed to save local state")
-					return
-				}
-			}
-			break
+		switch {
+		case errors.Is(pushErr, errDHPersistFailed):
+			h.logger.Error(ctx, "fix match: failed to persist DH fields",
+				observability.String("purchaseID", purchase.ID),
+				observability.Err(pushErr))
+			writeError(w, http.StatusInternalServerError, "DH push succeeded but failed to save local state")
+		case errors.Is(pushErr, errDHPushNoInventoryID):
+			writeError(w, http.StatusBadGateway, "DH push failed — no inventory ID returned")
+		default:
+			h.logger.Error(ctx, "fix match: push inventory", observability.Err(pushErr))
+			writeError(w, http.StatusBadGateway, "DH API error")
 		}
-	}
-
-	if inventoryID == 0 {
-		writeError(w, http.StatusBadGateway, "DH push failed — no inventory ID returned")
 		return
 	}
 
@@ -146,6 +118,22 @@ func (h *DHHandler) HandleFixMatch(w http.ResponseWriter, r *http.Request) {
 		if err := h.candidatesSaver.UpdatePurchaseDHCandidates(ctx, purchase.ID, ""); err != nil {
 			h.logger.Warn(ctx, "fix match: failed to clear candidates",
 				observability.String("purchaseID", purchase.ID),
+				observability.Err(err))
+		}
+	}
+
+	// Teach DH the correct match so future lookups resolve automatically.
+	if h.matchConfirmer != nil && purchase.CertNumber != "" {
+		confirmReq := dh.ConfirmMatchRequest{
+			CertNumber: purchase.CertNumber,
+			DHCardID:   dhCardID,
+			SetName:    purchase.SetName,
+			CardName:   purchase.CardName,
+		}
+		if _, err := h.matchConfirmer.ConfirmMatch(ctx, confirmReq); err != nil {
+			h.logger.Warn(ctx, "fix match: failed to confirm match with DH",
+				observability.String("purchaseID", purchase.ID),
+				observability.String("cert", purchase.CertNumber),
 				observability.Err(err))
 		}
 	}

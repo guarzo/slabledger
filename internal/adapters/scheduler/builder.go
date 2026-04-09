@@ -94,6 +94,7 @@ type BuildDeps struct {
 	CardLadderPurchaseLister CardLadderPurchaseLister
 	CardLadderValueUpdater   CardLadderValueUpdater
 	CardLadderGemRateUpdater CardLadderGemRateUpdater
+	CardLadderSyncUpdater    CardLadderSyncUpdater
 	CardLadderCLRecorder     domainCampaigns.CLValueHistoryRecorder
 	CardLadderSalesStore     *sqlite.CLSalesStore
 
@@ -253,6 +254,9 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 		var clOpts []CardLadderRefreshOption
 		if deps.DHPushStatusUpdater != nil {
 			clOpts = append(clOpts, WithCLDHPushUpdater(deps.DHPushStatusUpdater))
+		}
+		if deps.CardLadderSyncUpdater != nil {
+			clOpts = append(clOpts, WithCLSyncUpdater(deps.CardLadderSyncUpdater))
 		}
 		clRefresh = NewCardLadderRefreshScheduler(
 			deps.CardLadderClient, deps.CardLadderStore,

@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"sync/atomic"
 
@@ -71,6 +72,11 @@ type DHHealthReporter interface {
 	Health() *dh.HealthTracker
 }
 
+// DHMatchConfirmer confirms correct card matches with DH so the system learns.
+type DHMatchConfirmer interface {
+	ConfirmMatch(ctx context.Context, req dh.ConfirmMatchRequest) (*dh.ConfirmMatchResponse, error)
+}
+
 // DHApproveService approves held DH push items and manages push config.
 type DHApproveService interface {
 	ApproveDHPush(ctx context.Context, purchaseID string) error
@@ -103,6 +109,7 @@ type DHHandler struct {
 	healthReporter    DHHealthReporter // optional: API health metrics
 	countsFetcher     DHCountsFetcher  // optional: DH inventory/order counts
 	dhApproveService  DHApproveService // optional: approve held pushes + push config
+	matchConfirmer    DHMatchConfirmer // optional: confirms matches with DH for learning
 
 	bgWG             sync.WaitGroup
 	bulkMatchMu      sync.Mutex
@@ -117,49 +124,54 @@ func (h *DHHandler) selectMatchLock(purchaseID string) *sync.Mutex {
 	return v.(*sync.Mutex)
 }
 
+// DHHandlerDeps holds all dependencies for constructing a DHHandler.
+type DHHandlerDeps struct {
+	CertResolver      DHCertResolver
+	CardIDSaver       DHCardIDSaver
+	PurchaseLister    DHPurchaseLister
+	InventoryPusher   DHInventoryPusher   // optional: pushes matched cards to DH inventory
+	DHFieldsUpdater   DHFieldsUpdater     // optional: persists DH inventory IDs after push
+	PushStatusUpdater DHPushStatusUpdater // optional: sets dh_push_status after bulk match
+	CandidatesSaver   DHCandidatesSaver   // optional: stores ambiguous candidates
+	StatusCounter     DHStatusCounter     // optional: efficient push status counts
+	IntelRepo         intelligence.Repository
+	SuggestionsRepo   intelligence.SuggestionsRepository
+	IntelCounter      DHIntelligenceCounter
+	SuggestCounter    DHSuggestionsCounter
+	Logger            observability.Logger
+	BaseCtx           context.Context
+	HealthReporter    DHHealthReporter // optional: API health metrics
+	CountsFetcher     DHCountsFetcher  // optional: DH inventory/order counts
+	DHApproveService  DHApproveService // optional: approve held pushes + push config
+	MatchConfirmer    DHMatchConfirmer // optional: confirms matches with DH for learning
+}
+
 // NewDHHandler creates a new DHHandler with the given dependencies.
-// baseCtx is a server-lifecycle context; background goroutines derive from it.
-// healthReporter, countsFetcher, and dhApproveService are optional (nil-safe).
-func NewDHHandler(
-	certResolver DHCertResolver,
-	cardIDSaver DHCardIDSaver,
-	purchaseLister DHPurchaseLister,
-	inventoryPusher DHInventoryPusher,
-	dhFieldsUpdater DHFieldsUpdater,
-	pushStatusUpdater DHPushStatusUpdater,
-	candidatesSaver DHCandidatesSaver,
-	statusCounter DHStatusCounter,
-	intelRepo intelligence.Repository,
-	suggestionsRepo intelligence.SuggestionsRepository,
-	intelCounter DHIntelligenceCounter,
-	suggestCounter DHSuggestionsCounter,
-	logger observability.Logger,
-	baseCtx context.Context,
-	healthReporter DHHealthReporter,
-	countsFetcher DHCountsFetcher,
-	dhApproveService DHApproveService,
-) *DHHandler {
-	if baseCtx == nil {
-		baseCtx = context.Background()
+// BaseCtx is a server-lifecycle context; background goroutines derive from it.
+// HealthReporter, CountsFetcher, and DHApproveService are optional (nil-safe).
+func NewDHHandler(deps DHHandlerDeps) *DHHandler {
+	if deps.BaseCtx == nil {
+		deps.BaseCtx = context.Background()
 	}
 	h := &DHHandler{
-		certResolver:      certResolver,
-		cardIDSaver:       cardIDSaver,
-		purchaseLister:    purchaseLister,
-		inventoryPusher:   inventoryPusher,
-		dhFieldsUpdater:   dhFieldsUpdater,
-		pushStatusUpdater: pushStatusUpdater,
-		candidatesSaver:   candidatesSaver,
-		statusCounter:     statusCounter,
-		intelRepo:         intelRepo,
-		suggestionsRepo:   suggestionsRepo,
-		intelCounter:      intelCounter,
-		suggestCounter:    suggestCounter,
-		logger:            logger,
-		baseCtx:           baseCtx,
-		healthReporter:    healthReporter,
-		countsFetcher:     countsFetcher,
-		dhApproveService:  dhApproveService,
+		certResolver:      deps.CertResolver,
+		cardIDSaver:       deps.CardIDSaver,
+		purchaseLister:    deps.PurchaseLister,
+		inventoryPusher:   deps.InventoryPusher,
+		dhFieldsUpdater:   deps.DHFieldsUpdater,
+		pushStatusUpdater: deps.PushStatusUpdater,
+		candidatesSaver:   deps.CandidatesSaver,
+		statusCounter:     deps.StatusCounter,
+		intelRepo:         deps.IntelRepo,
+		suggestionsRepo:   deps.SuggestionsRepo,
+		intelCounter:      deps.IntelCounter,
+		suggestCounter:    deps.SuggestCounter,
+		logger:            deps.Logger,
+		baseCtx:           deps.BaseCtx,
+		healthReporter:    deps.HealthReporter,
+		countsFetcher:     deps.CountsFetcher,
+		dhApproveService:  deps.DHApproveService,
+		matchConfirmer:    deps.MatchConfirmer,
 	}
 	h.bulkMatchError.Store("")
 	return h
@@ -169,8 +181,56 @@ func NewDHHandler(
 // Call during graceful shutdown to avoid writing to a closed database.
 func (h *DHHandler) Wait() { h.bgWG.Wait() }
 
+// pushAndPersistDH builds an InventoryItem, pushes it to DH, and persists the DH fields.
+// Returns the DH inventory ID on success. Errors are classified for callers:
+//   - errDHPushNoInventoryID: push succeeded but no inventory ID was returned
+//   - errDHPersistFailed: push succeeded but local persistence failed
+//   - other errors: push API failure
+func (h *DHHandler) pushAndPersistDH(ctx context.Context, purchase *campaigns.Purchase, dhCardID, marketValueCents int) (int, error) {
+	item := dh.InventoryItem{
+		DHCardID:         dhCardID,
+		CertNumber:       purchase.CertNumber,
+		GradingCompany:   dh.GraderPSA,
+		Grade:            purchase.GradeValue,
+		CostBasisCents:   purchase.BuyCostCents,
+		MarketValueCents: dh.IntPtr(marketValueCents),
+		Status:           dh.InventoryStatusInStock,
+	}
+
+	pushResp, err := h.inventoryPusher.PushInventory(ctx, []dh.InventoryItem{item})
+	if err != nil {
+		return 0, err
+	}
+
+	for _, result := range pushResp.Results {
+		if result.Status != "failed" && result.DHInventoryID != 0 {
+			if h.dhFieldsUpdater != nil {
+				if err := h.dhFieldsUpdater.UpdatePurchaseDHFields(ctx, purchase.ID, campaigns.DHFieldsUpdate{
+					CardID:            dhCardID,
+					InventoryID:       result.DHInventoryID,
+					CertStatus:        dh.CertStatusMatched,
+					ListingPriceCents: result.AssignedPriceCents,
+					ChannelsJSON:      dh.MarshalChannels(result.Channels),
+					DHStatus:          campaigns.DHStatus(result.Status),
+				}); err != nil {
+					return 0, errDHPersistFailed
+				}
+			}
+			return result.DHInventoryID, nil
+		}
+	}
+
+	return 0, errDHPushNoInventoryID
+}
+
+var (
+	errDHPushNoInventoryID = errors.New("DH push failed — no inventory ID returned")
+	errDHPersistFailed     = errors.New("DH push succeeded but failed to save local state")
+)
+
 // Compile-time checks.
 var _ DHCertResolver = (*dh.Client)(nil)
 var _ DHInventoryPusher = (*dh.Client)(nil)
 var _ DHHealthReporter = (*dh.Client)(nil)
 var _ DHCountsFetcher = (*dh.Client)(nil)
+var _ DHMatchConfirmer = (*dh.Client)(nil)

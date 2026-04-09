@@ -1,7 +1,8 @@
 import { useDHStatus } from '../../queries/useAdminQueries';
 import { formatPct } from '../../utils/formatters';
 import { CardShell } from '../../ui/CardShell';
-import { SummaryCard, formatAdminDate } from './shared';
+import { SummaryCard } from './shared';
+import { formatAdminDate } from './adminUtils';
 
 function formatTimestamp(ts: string): string {
   return formatAdminDate(ts) === '-' ? 'Never' : formatAdminDate(ts);

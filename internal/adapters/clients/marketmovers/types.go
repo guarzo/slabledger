@@ -162,3 +162,43 @@ type PeriodStats struct {
 	PriceChangeAmount *float64 `json:"priceChangeAmount"`
 	PriceChangePct    *float64 `json:"priceChangePercentage"`
 }
+
+// ──────────────────────────────────────────────────────────────────────
+// Collection mutation types (private.collection.items.add / addMultiple)
+// ──────────────────────────────────────────────────────────────────────
+
+// AddCollectionItemInput is the input for the private.collection.items.add mutation.
+type AddCollectionItemInput struct {
+	Collectible     CollectionCollectible     `json:"collectible"`
+	PurchaseDetails CollectionPurchaseDetails `json:"purchaseDetails"`
+	CategoryIDs     *[]int64                  `json:"categoryIds"` // null means no category
+}
+
+// CollectionCollectible identifies the collectible to add.
+type CollectionCollectible struct {
+	CollectibleType string `json:"collectibleType"`
+	CollectibleID   int64  `json:"collectibleId"`
+	ImageURL        string `json:"imageUrl,omitempty"`
+}
+
+// CollectionPurchaseDetails holds purchase metadata for a collection item.
+type CollectionPurchaseDetails struct {
+	Quantity             int     `json:"quantity"`
+	PurchasePricePerItem float64 `json:"purchasePricePerItem"` // USD
+	ConversionFeePerItem float64 `json:"conversionFeePerItem"`
+	PurchaseDateISO      string  `json:"purchaseDateISO"` // "2006-01-02"
+	Notes                string  `json:"notes"`
+}
+
+// AddCollectionItemResponse is the response from private.collection.items.add.
+type AddCollectionItemResponse struct {
+	Success             bool  `json:"success"`
+	CollectibleID       int64 `json:"collectibleId"`
+	IsCustomCollectible bool  `json:"isCustomCollectible"`
+	CollectionItemID    int64 `json:"collectionItemId"`
+}
+
+// AddMultipleCollectionItemsResponse is the response from private.collection.items.addMultiple.
+type AddMultipleCollectionItemsResponse struct {
+	Items []AddCollectionItemResponse `json:"items"`
+}

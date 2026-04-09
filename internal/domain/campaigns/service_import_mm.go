@@ -5,17 +5,41 @@ import (
 	"fmt"
 
 	"github.com/guarzo/slabledger/internal/domain/mathutil"
+	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
 // ExportMMFormatGlobal exports all unsold inventory in Market Movers collection import CSV format.
-func (s *service) ExportMMFormatGlobal(ctx context.Context) ([]MMExportEntry, error) {
+// When missingMMOnly is true, only purchases without MM value data are included.
+//
+// If an MMMappingProvider is configured, entries for cards that have been resolved by the
+// MM scheduler are enriched with canonical field data parsed from the MM SearchTitle.
+// Unmapped cards fall back to the cleaned local data.
+func (s *service) ExportMMFormatGlobal(ctx context.Context, missingMMOnly bool) ([]MMExportEntry, error) {
 	unsold, err := s.repo.ListAllUnsoldPurchases(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list unsold: %w", err)
 	}
 
+	// Load MM search titles if available (cert → SearchTitle).
+	var searchTitles map[string]string
+	if s.mmMappings != nil {
+		searchTitles, err = s.mmMappings.ListMMSearchTitles(ctx)
+		if err != nil {
+			// Non-fatal: fall back to cleaned local data for all entries.
+			if s.logger != nil {
+				s.logger.Warn(ctx, "MM export: failed to load search titles, using local data",
+					observability.String("error", err.Error()))
+			}
+			searchTitles = nil
+		}
+	}
+
 	entries := make([]MMExportEntry, 0, len(unsold))
 	for _, p := range unsold {
+		if missingMMOnly && p.MMValueCents > 0 {
+			continue
+		}
+
 		// Grade string: "PSA 10", "BGS 9.5", etc.
 		grader := p.Grader
 		if grader == "" {
@@ -23,33 +47,52 @@ func (s *service) ExportMMFormatGlobal(ctx context.Context) ([]MMExportEntry, er
 		}
 		grade := fmt.Sprintf("%s %s", grader, mathutil.FormatGrade(p.GradeValue))
 
-		// Player name: prefer enriched CardPlayer, fall back to raw CardName.
-		playerName := p.CardPlayer
+		// Try enrichment from MM SearchTitle (canonical data from Market Movers).
+		var playerName, year, setName, variation, cardNumber string
+		if title, ok := searchTitles[p.CertNumber]; ok && title != "" {
+			fields := parseMMSearchTitle(title)
+			playerName = fields.PlayerName
+			year = fields.Year
+			setName = fields.Set
+			variation = fields.Variation
+			cardNumber = fields.CardNumber
+		}
+
+		// Fall back to local data for any fields not populated from SearchTitle.
 		if playerName == "" {
-			playerName = p.CardName
+			playerName = p.CardPlayer
+			if playerName == "" {
+				playerName = p.CardName
+			}
+			playerName = cleanMMPlayerName(playerName, p.SetName)
+		}
+		if year == "" {
+			year = p.CardYear
+		}
+		if setName == "" {
+			setName = p.SetName
+		}
+		if variation == "" {
+			variation = p.CardVariation
+		}
+		if cardNumber == "" {
+			if p.CardNumber != "" {
+				cardNumber = "#" + p.CardNumber
+			}
 		}
 
-		// Card number: add "#" prefix when non-empty.
-		cardNumber := ""
-		if p.CardNumber != "" {
-			cardNumber = "#" + p.CardNumber
-		}
-
-		// Last sale price: prefer MM value, fall back to CL value.
-		lastSalePrice := 0.0
-		if p.MMValueCents > 0 {
-			lastSalePrice = mathutil.ToDollars(int64(p.MMValueCents))
-		} else if p.CLValueCents > 0 {
-			lastSalePrice = mathutil.ToDollars(int64(p.CLValueCents))
+		sport := p.CardCategory
+		if sport == "" {
+			sport = "Pokemon"
 		}
 
 		entries = append(entries, MMExportEntry{
-			Sport:                p.CardCategory,
+			Sport:                sport,
 			Grade:                grade,
 			PlayerName:           playerName,
-			Year:                 p.CardYear,
-			Set:                  p.SetName,
-			Variation:            p.CardVariation,
+			Year:                 year,
+			Set:                  setName,
+			Variation:            variation,
 			CardNumber:           cardNumber,
 			SpecificQualifier:    "",
 			Quantity:             "1",
@@ -57,10 +100,6 @@ func (s *service) ExportMMFormatGlobal(ctx context.Context) ([]MMExportEntry, er
 			PurchasePricePerCard: mathutil.ToDollars(int64(p.BuyCostCents)),
 			Notes:                p.CertNumber,
 			Category:             "",
-			DateSold:             "",
-			SoldPricePerCard:     "",
-			LastSalePrice:        lastSalePrice,
-			LastSaleDate:         "", // Not known; leave blank rather than misrepresent DH snapshot date as last-sale date
 		})
 	}
 	return entries, nil
@@ -134,5 +173,3 @@ func (s *service) RefreshMMValuesGlobal(ctx context.Context, rows []MMRefreshRow
 
 	return result, nil
 }
-
-// Note: formatMMGrade was deduplicated into mathutil.FormatGrade.

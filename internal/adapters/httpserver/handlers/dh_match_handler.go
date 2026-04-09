@@ -103,8 +103,13 @@ func (h *DHHandler) runBulkMatch(ctx context.Context, purchases []campaigns.Purc
 		}
 		h.logger.Debug(ctx, "bulk match: resolving cert",
 			observability.String("cert", p.CertNumber),
+			observability.String("raw_name", p.CardName),
 			observability.String("clean_name", cardName),
-			observability.String("variant", variant))
+			observability.String("set_name", p.SetName),
+			observability.String("card_number", p.CardNumber),
+			observability.String("year", p.CardYear),
+			observability.String("variant", variant),
+			observability.String("gemrate_id", p.GemRateID))
 		resp, err := dh.ResolveCertWithRotation(ctx, req, h.certResolver.ResolveCert, rotateFn, h.logger, "bulk match")
 		if err != nil {
 			if dh.IsPSARateLimitError(err) {

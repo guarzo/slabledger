@@ -99,6 +99,22 @@ type CardIDResolver interface {
 	ResolveCardIDsByCerts(ctx context.Context, certs []string, grader string) (map[string]string, error)
 }
 
+// MMMappingProvider provides Market Movers search title mappings for export enrichment.
+// Implementations typically wrap the MM card mapping store.
+type MMMappingProvider interface {
+	// ListMMSearchTitles returns a map of cert number → MM canonical SearchTitle
+	// for all cards that have been resolved by the MM scheduler.
+	ListMMSearchTitles(ctx context.Context) (map[string]string, error)
+}
+
+// MMMappingFunc is a functional adapter for MMMappingProvider (like http.HandlerFunc).
+type MMMappingFunc func(ctx context.Context) (map[string]string, error)
+
+// ListMMSearchTitles implements MMMappingProvider.
+func (f MMMappingFunc) ListMMSearchTitles(ctx context.Context) (map[string]string, error) {
+	return f(ctx)
+}
+
 // CertLookup resolves PSA certificate numbers to card details.
 type CertLookup interface {
 	LookupCert(ctx context.Context, certNumber string) (*CertInfo, error)
@@ -142,6 +158,7 @@ type service struct {
 	priceProv          PriceLookup
 	certLookup         CertLookup
 	cardIDResolver     CardIDResolver
+	mmMappings         MMMappingProvider // optional — MM search title enrichment for export
 	logger             observability.Logger
 	baseCtx            context.Context // lifecycle context for background workers
 	idGen              func() string   // generates unique IDs; must be injected via WithIDGenerator
@@ -183,6 +200,11 @@ func WithCertLookup(cl CertLookup) ServiceOption {
 // WithCardIDResolver enables batch cert→card_id resolution after imports.
 func WithCardIDResolver(r CardIDResolver) ServiceOption {
 	return func(s *service) { s.cardIDResolver = r }
+}
+
+// WithMMMappings enables Market Movers search title enrichment on CSV export.
+func WithMMMappings(m MMMappingProvider) ServiceOption {
+	return func(s *service) { s.mmMappings = m }
 }
 
 // WithLogger enables structured logging for the campaigns service.

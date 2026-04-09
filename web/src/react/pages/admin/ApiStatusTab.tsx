@@ -1,6 +1,7 @@
 import type { ProviderStatus } from '../../../types/apiStatus';
 import { useAdminApiUsage } from '../../queries/useAdminQueries';
-import { ProgressBar, formatAdminDate } from './shared';
+import { ProgressBar } from './shared';
+import { formatAdminDate } from './adminUtils';
 
 function UsageBar({ used, limit }: { used: number; limit: number }) {
   return <ProgressBar value={used} max={limit} warningThreshold={80} dangerThreshold={95} />;
