@@ -9,9 +9,9 @@ import { useToast } from '../../contexts/ToastContext';
 import { Button, CardShell } from '../../ui';
 import ImportResultsDetail from './ImportResultsDetail';
 import DHUnmatchedSection from '../tools/DHUnmatchedSection';
-import { useMarketMoversStatus } from '../../queries/useAdminQueries';
+import { useMarketMoversStatus, useSyncCardLadderCollection } from '../../queries/useAdminQueries';
 
-export type OperationState = 'idle' | 'importing' | 'exporting' | 'exporting-mm' | 'importing-mm' | 'importing-psa' | 'syncing-mm';
+export type OperationState = 'idle' | 'importing' | 'exporting' | 'exporting-mm' | 'importing-mm' | 'importing-psa' | 'syncing-mm' | 'syncing-cl';
 
 /* ── FileUploadButton ─────────────────────────────────────────────── */
 
@@ -154,6 +154,7 @@ export default function OperationsTab({ campaigns, operationState, setOperationS
   const queryClient = useQueryClient();
   const busy = operationState !== 'idle';
   const { data: mmStatus } = useMarketMoversStatus();
+  const clSync = useSyncCardLadderCollection();
   const [exportMissingOnly, setExportMissingOnly] = useState(false);
 
   function invalidateAll() {
@@ -221,6 +222,19 @@ export default function OperationsTab({ campaigns, operationState, setOperationS
       invalidateAll();
     } catch (err) {
       toast.error(getErrorMessage(err, 'Failed to sync to Market Movers'));
+    } finally {
+      setOperationState('idle');
+    }
+  }
+
+  async function handleCLSync() {
+    try {
+      setOperationState('syncing-cl');
+      const result = await clSync.mutateAsync();
+      toast.success(`CL sync: ${result.added} added, ${result.skipped} skipped, ${result.errors} errors`);
+      invalidateAll();
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'CL sync failed'));
     } finally {
       setOperationState('idle');
     }
@@ -311,6 +325,24 @@ export default function OperationsTab({ campaigns, operationState, setOperationS
               onFile={handleGlobalImport}
               busy={busy}
             />
+          }
+        />
+
+        <OperationCard
+          icon={<SyncIcon />}
+          title="Sync to Card Ladder"
+          description="Push unsold inventory with cert numbers directly to your CL collection via API"
+          action={
+            <Button
+              size="sm"
+              variant="secondary"
+              fullWidth
+              loading={operationState === 'syncing-cl'}
+              disabled={busy && operationState !== 'syncing-cl'}
+              onClick={handleCLSync}
+            >
+              Sync Collection
+            </Button>
           }
         />
 
