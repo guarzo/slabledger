@@ -66,6 +66,7 @@ type CLRunStats struct {
 type CardLadderRefreshScheduler struct {
 	StopHandle
 	statsMu        sync.RWMutex
+	clientMu       sync.Mutex
 	client         *cardladder.Client
 	store          *sqlite.CardLadderStore
 	purchaseLister CardLadderPurchaseLister
@@ -90,6 +91,21 @@ func (s *CardLadderRefreshScheduler) GetLastRunStats() *CLRunStats {
 	}
 	cp := *s.lastRunStats
 	return &cp
+}
+
+// SetClient replaces the API client used by the scheduler. This is called when
+// credentials are saved for the first time after startup (no client at boot).
+func (s *CardLadderRefreshScheduler) SetClient(client *cardladder.Client) {
+	s.clientMu.Lock()
+	defer s.clientMu.Unlock()
+	s.client = client
+}
+
+// getClient returns the current API client under the lock.
+func (s *CardLadderRefreshScheduler) getClient() *cardladder.Client {
+	s.clientMu.Lock()
+	defer s.clientMu.Unlock()
+	return s.client
 }
 
 // NewCardLadderRefreshScheduler creates a new CL refresh scheduler.
@@ -154,6 +170,13 @@ var gradeDigitsRe = regexp.MustCompile(`(\d+(?:\.\d+)?)`)
 
 func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 	start := time.Now()
+
+	client := s.getClient()
+	if client == nil {
+		s.logger.Debug(ctx, "CL refresh: no client configured, skipping")
+		return nil
+	}
+
 	cfg, err := s.store.GetConfig(ctx)
 	if err != nil {
 		s.logger.Error(ctx, "CL refresh: failed to load config", observability.Err(err))
@@ -165,7 +188,7 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 	}
 
 	// Fetch all collection cards
-	cards, err := s.client.FetchAllCollection(ctx, cfg.CollectionID)
+	cards, err := client.FetchAllCollection(ctx, cfg.CollectionID)
 	if err != nil {
 		s.logger.Error(ctx, "CL refresh: failed to fetch collection", observability.Err(err))
 		return err
@@ -176,7 +199,7 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 	// Fetch gemRateId data from Firestore
 	var firestoreData map[string]cardladder.FirestoreCardData
 	if cfg.FirebaseUID != "" {
-		firestoreData, err = s.client.FetchFirestoreCards(ctx, cfg.FirebaseUID, cfg.CollectionID)
+		firestoreData, err = client.FetchFirestoreCards(ctx, cfg.FirebaseUID, cfg.CollectionID)
 		if err != nil {
 			s.logger.Warn(ctx, "CL refresh: failed to fetch Firestore card data", observability.Err(err))
 			// Continue without gemRateId data — values still sync, just no sales comps
@@ -326,24 +349,24 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 	// Note: newly created mappings from this run are intentionally deferred
 	// to the next refresh cycle to avoid extra API calls during initial sync.
 	if s.salesStore != nil {
-		s.refreshSalesComps(ctx, existingMappings)
+		s.refreshSalesComps(ctx, client, existingMappings)
 	}
 
 	// Phase 3: gap-fill gemRateIDs for purchases not matched via collection/Firestore.
-	if s.gemRateUpdater != nil && s.client != nil {
-		s.gapFillGemRateIDs(ctx, purchases)
+	if s.gemRateUpdater != nil {
+		s.gapFillGemRateIDs(ctx, client, purchases)
 	}
 
 	// Phase 4: push new unsold purchases (with certs) that aren't yet in the CL collection.
 	cardsPushed := 0
 	if cfg.FirebaseUID != "" {
-		cardsPushed = s.pushNewCards(ctx, cfg.FirebaseUID, cfg.CollectionID, purchases, existingMappings)
+		cardsPushed = s.pushNewCards(ctx, client, cfg.FirebaseUID, cfg.CollectionID, purchases, existingMappings)
 	}
 
 	// Phase 5: remove sold cards from the CL collection.
 	cardsRemoved := 0
 	if cfg.FirebaseUID != "" {
-		cardsRemoved = s.removeSoldCards(ctx, purchases, existingMappings)
+		cardsRemoved = s.removeSoldCards(ctx, client, purchases, existingMappings)
 	}
 
 	s.logger.Info(ctx, "CL refresh: complete",
