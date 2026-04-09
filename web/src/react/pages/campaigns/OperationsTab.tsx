@@ -171,7 +171,13 @@ export default function OperationsTab({ campaigns, operationState, setOperationS
     try {
       setOperationState('syncing-cl');
       const result = await clSync.mutateAsync();
-      toast.success(`CL sync: ${result.synced} synced, ${result.skipped} skipped, ${result.failed} failed`);
+      if (result.failed > 0) {
+        toast.warning(`CL sync: ${result.synced} synced, ${result.skipped} skipped, ${result.failed} failed`);
+      } else if (result.synced === 0 && result.skipped === 0) {
+        toast.info('All items already synced to Card Ladder');
+      } else {
+        toast.success(`CL sync: ${result.synced} cards synced to Card Ladder`);
+      }
       invalidateAll();
     } catch (err) {
       toast.error(getErrorMessage(err, 'CL sync failed'));
