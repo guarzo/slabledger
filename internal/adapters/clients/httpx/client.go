@@ -244,7 +244,7 @@ func (c *Client) doRequest(ctx context.Context, req Request, attempt int) (*Resp
 	// Handle HTTP errors — return both the response and error so callers
 	// can inspect status codes (e.g. 429) and headers (e.g. Retry-After).
 	if httpResp.StatusCode >= 400 {
-		err := c.handleHTTPError(httpResp.StatusCode, httpResp.Header, body)
+		err := c.handleHTTPError(ctx, httpResp.StatusCode, httpResp.Header, body)
 		c.observer.OnError(ctx, httpReq, err, attempt, duration)
 		return resp, err
 	}

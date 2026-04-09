@@ -96,7 +96,7 @@ func (c *Client) PostJSON(ctx context.Context, url string, headers map[string]st
 }
 
 // handleHTTPError converts HTTP status codes to appropriate errors
-func (c *Client) handleHTTPError(statusCode int, headers http.Header, body []byte) error {
+func (c *Client) handleHTTPError(ctx context.Context, statusCode int, headers http.Header, body []byte) error {
 	sanitized := sanitizeResponseBody(body, 200)
 
 	switch statusCode {
@@ -127,7 +127,7 @@ func (c *Client) handleHTTPError(statusCode int, headers http.Header, body []byt
 					}
 				}
 			}
-			c.logger.Warn(context.Background(), "HTTP 429 rate limit response", fields...)
+			c.logger.Info(ctx, "HTTP 429 rate limit response", fields...)
 		}
 		return apperrors.ProviderRateLimited(c.providerName, retryAfter)
 	case 500, 502, 503, 504:

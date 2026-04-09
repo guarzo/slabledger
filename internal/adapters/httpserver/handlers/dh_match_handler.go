@@ -79,10 +79,10 @@ func (h *DHHandler) runBulkMatch(ctx context.Context, purchases []campaigns.Purc
 			break
 		}
 
-		// Only skip purchases that have already been fully matched and pushed
-		// to DH inventory. Purchases with a card_id_mappings entry but still
-		// marked "unmatched" should be re-tried.
-		if p.DHPushStatus == campaigns.DHPushStatusMatched || p.DHPushStatus == campaigns.DHPushStatusManual {
+		// Skip purchases that are already matched, manually handled, or held
+		// for safety review. Held cards already have a valid DH card ID and
+		// are awaiting human approval — re-matching would clear the hold.
+		if p.DHPushStatus == campaigns.DHPushStatusMatched || p.DHPushStatus == campaigns.DHPushStatusManual || p.DHPushStatus == campaigns.DHPushStatusHeld {
 			skipped++
 			continue
 		}
@@ -94,15 +94,11 @@ func (h *DHHandler) runBulkMatch(ctx context.Context, purchases []campaigns.Purc
 
 		key := p.DHCardKey()
 
-		// If this card identity already has a mapping, skip the API call
+		// If this card identity already has a valid mapping, skip the API call
 		// and reuse the existing DH card ID.
 		if existingID := mappedSet[key]; existingID != "" {
 			parsed, parseErr := strconv.Atoi(existingID)
-			if parseErr != nil || parsed <= 0 {
-				h.logger.Debug(ctx, "bulk match: invalid existing mapping, resolving via API",
-					observability.String("cert", p.CertNumber),
-					observability.String("existing_id", existingID))
-			} else {
+			if parseErr == nil && parsed > 0 {
 				matched++
 				matchedCards = append(matchedCards, matchedCard{identity: p.ToCardIdentity(), dhCardID: parsed})
 				h.setMatchedStatus(ctx, p.ID)
@@ -111,6 +107,9 @@ func (h *DHHandler) runBulkMatch(ctx context.Context, purchases []campaigns.Purc
 					observability.Int("dh_card_id", parsed))
 				continue
 			}
+			h.logger.Debug(ctx, "bulk match: invalid existing mapping, resolving via API",
+				observability.String("cert", p.CertNumber),
+				observability.String("existing_id", existingID))
 		}
 
 		cardName, variant := campaigns.CleanCardNameForDH(p.CardName)
@@ -335,12 +334,6 @@ func (h *DHHandler) pushMatchedToDH(ctx context.Context, purchases []campaigns.P
 					observability.String("cert", r.CertNumber),
 					observability.Int("inventoryID", r.DHInventoryID),
 					observability.Err(err))
-			}
-			if h.pushStatusUpdater != nil {
-				if err := h.pushStatusUpdater.UpdatePurchaseDHPushStatus(ctx, purchaseID, campaigns.DHPushStatusMatched); err != nil {
-					h.logger.Warn(ctx, "push to DH: failed to set matched status",
-						observability.String("purchaseID", purchaseID), observability.Err(err))
-				}
 			}
 		}
 	}
