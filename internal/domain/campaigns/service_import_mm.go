@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/guarzo/slabledger/internal/domain/mathutil"
+	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
 // ExportMMFormatGlobal exports all unsold inventory in Market Movers collection import CSV format.
@@ -26,7 +27,8 @@ func (s *service) ExportMMFormatGlobal(ctx context.Context, missingMMOnly bool) 
 		if err != nil {
 			// Non-fatal: fall back to cleaned local data for all entries.
 			if s.logger != nil {
-				s.logger.Warn(ctx, "MM export: failed to load search titles, using local data")
+				s.logger.Warn(ctx, "MM export: failed to load search titles, using local data",
+					observability.String("error", err.Error()))
 			}
 			searchTitles = nil
 		}

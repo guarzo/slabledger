@@ -156,7 +156,12 @@ func (h *MarketMoversHandler) HandleSyncCollection(w http.ResponseWriter, r *htt
 			h.logger.Error(ctx, "failed to save collection item ID",
 				observability.String("cert", item.certNumber),
 				observability.Err(err))
-			// Still count as synced — the item was added to MM successfully.
+			result.Failed++
+			result.Errors = append(result.Errors, MMSyncError{
+				CertNumber: item.certNumber,
+				Error:      "added to MM but failed to save locally: " + err.Error(),
+			})
+			continue
 		}
 		result.Synced++
 	}

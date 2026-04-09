@@ -175,7 +175,9 @@ func (c *Client) ResolveAndCreateCard(ctx context.Context, uid, collectionID str
 
 	var datePurchased time.Time
 	if params.DatePurchased != "" {
-		datePurchased, _ = time.Parse("2006-01-02", params.DatePurchased)
+		if parsed, parseErr := time.Parse("2006-01-02", params.DatePurchased); parseErr == nil {
+			datePurchased = parsed
+		}
 	}
 
 	input := AddCollectionCardInput{
@@ -266,7 +268,7 @@ func buildCardDocument(uid, collectionID string, input AddCollectionCardInput, n
 	// Construct PSA cert photo URLs if not provided
 	imageURL := input.ImageURL
 	imageCustom := ""
-	if imageURL == "" && input.SlabSerial != "" {
+	if imageURL == "" && input.SlabSerial != "" && strings.EqualFold(input.GradingCompany, "PSA") {
 		imageURL = psaCertThumbnailURL(input.SlabSerial)
 		imageCustom = psaCertImageURL(input.SlabSerial)
 	}

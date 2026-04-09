@@ -33,7 +33,13 @@ func (s *CardLadderRefreshScheduler) refreshSalesComps(ctx context.Context, mapp
 		default:
 		}
 
-		resp, err := s.client.FetchSalesComps(ctx, m.CLGemRateID, m.CLCondition, "psa", 0, 100)
+		// Extract grader from condition (e.g. "PSA 10" → "psa").
+		grader := "psa"
+		if parts := strings.SplitN(m.CLCondition, " ", 2); len(parts) > 0 && parts[0] != "" {
+			grader = strings.ToLower(parts[0])
+		}
+
+		resp, err := s.client.FetchSalesComps(ctx, m.CLGemRateID, m.CLCondition, grader, 0, 100)
 		if err != nil {
 			s.logger.Warn(ctx, "CL sales: fetch failed",
 				observability.String("gemRateId", m.CLGemRateID),

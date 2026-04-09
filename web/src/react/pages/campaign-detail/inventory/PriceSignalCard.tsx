@@ -20,7 +20,7 @@ function freshnessInfo(isoDate: string): { label: string; color: string } {
   const updated = new Date(isoDate);
   if (isNaN(updated.getTime())) return { label: '', color: '' };
 
-  const daysAgo = Math.floor((Date.now() - updated.getTime()) / (1000 * 60 * 60 * 24));
+  const daysAgo = Math.max(0, Math.floor((Date.now() - updated.getTime()) / (1000 * 60 * 60 * 24)));
 
   if (daysAgo === 0) return { label: 'today', color: 'text-[var(--success)]' };
   if (daysAgo <= 3) return { label: `${daysAgo}d ago`, color: 'text-[var(--success)]' };

@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -67,7 +68,12 @@ func (h *CardLadderHandler) HandleAddCard(w http.ResponseWriter, r *http.Request
 	}
 
 	cfg, err := h.store.GetConfig(r.Context())
-	if err != nil || cfg == nil {
+	if err != nil {
+		h.logger.Error(r.Context(), "failed to get CL config", observability.Err(err))
+		writeError(w, http.StatusInternalServerError, "failed to get Card Ladder config")
+		return
+	}
+	if cfg == nil {
 		writeError(w, http.StatusPreconditionFailed, "Card Ladder not configured")
 		return
 	}
@@ -94,7 +100,12 @@ func (h *CardLadderHandler) HandleSyncToCardLadder(w http.ResponseWriter, r *htt
 	}
 
 	cfg, err := h.store.GetConfig(r.Context())
-	if err != nil || cfg == nil {
+	if err != nil {
+		h.logger.Error(r.Context(), "failed to get CL config", observability.Err(err))
+		writeError(w, http.StatusInternalServerError, "failed to get Card Ladder config")
+		return
+	}
+	if cfg == nil {
 		writeError(w, http.StatusPreconditionFailed, "Card Ladder not configured")
 		return
 	}
@@ -144,6 +155,7 @@ func (h *CardLadderHandler) HandleSyncToCardLadder(w http.ResponseWriter, r *htt
 				DatePurchased: p.PurchaseDate,
 			},
 		})
+		mappedCerts[p.CertNumber] = true
 	}
 
 	var results []addCardResult
@@ -169,9 +181,9 @@ func (h *CardLadderHandler) HandleSyncToCardLadder(w http.ResponseWriter, r *htt
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"synced":  synced,
-		"skipped": skipped,
+		"skipped": skipped + len(purchases) - len(toSync),
 		"failed":  errCount,
-		"total":   len(toSync),
+		"total":   len(purchases),
 		"results": results,
 	})
 }
@@ -193,6 +205,7 @@ func (h *CardLadderHandler) addCardToCollection(ctx context.Context, uid, collec
 	if err := h.store.SaveMapping(ctx, req.CertNumber, result.DocumentName, result.GemRateID, result.GemRateCondition); err != nil {
 		h.logger.Error(ctx, "failed to save CL mapping after Firestore write",
 			observability.String("cert", req.CertNumber), observability.Err(err))
+		return nil, fmt.Errorf("save mapping for cert %s: %w", req.CertNumber, err)
 	}
 
 	// Update cl_synced_at timestamp

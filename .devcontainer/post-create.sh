@@ -27,7 +27,9 @@ export PATH="$HOME/.local/bin:$PATH"
 
 # Install Claude Code CLI
 echo "🤖 Installing Claude Code CLI..."
-curl -fsSL https://claude.ai/install.sh | bash
+if ! curl -fsSL https://claude.ai/install.sh | bash; then
+    echo "⚠️  Claude Code CLI installation failed, continuing..."
+fi
 
 # Restore Claude config from backup if the main file is missing but a backup exists
 CLAUDE_CFG="$HOME/.claude.json"
@@ -57,7 +59,9 @@ if [ ! -f ".env" ] && [ -f ".env.example" ]; then
 fi
 
 echo "🤖 Installing OpenCode CLI..."
-curl -fsSL https://opencode.ai/install | bash
+if ! curl -fsSL https://opencode.ai/install | bash; then
+    echo "⚠️  OpenCode CLI installation failed, continuing..."
+fi
 
 # Build the application to verify everything works
 echo "🔨 Building application..."

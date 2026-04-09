@@ -124,6 +124,7 @@ func (s *MarketMoversStore) SaveMapping(ctx context.Context, slabSerial string, 
 		   mm_collectible_id = excluded.mm_collectible_id,
 		   mm_master_id = excluded.mm_master_id,
 		   mm_search_title = excluded.mm_search_title,
+		   mm_collection_item_id = 0,
 		   updated_at = excluded.updated_at`,
 		slabSerial, mmCollectibleID, masterID, searchTitle, time.Now().UTC().Format(time.RFC3339),
 	)
@@ -237,10 +238,10 @@ func (s *MarketMoversStore) GetMMPriceStats(ctx context.Context) (*MMPriceStats,
 	err := s.db.QueryRowContext(ctx, `
 		SELECT
 			COUNT(*) AS unsold_total,
-			SUM(CASE WHEN p.mm_value_cents > 0 THEN 1 ELSE 0 END) AS with_mm_price,
+			COALESCE(SUM(CASE WHEN p.mm_value_cents > 0 THEN 1 ELSE 0 END), 0) AS with_mm_price,
 			COALESCE(MIN(CASE WHEN p.mm_value_cents > 0 AND p.mm_value_updated_at != '' THEN p.mm_value_updated_at END), '') AS oldest_update,
 			COALESCE(MAX(CASE WHEN p.mm_value_cents > 0 AND p.mm_value_updated_at != '' THEN p.mm_value_updated_at END), '') AS newest_update,
-			SUM(CASE WHEN p.mm_value_cents > 0 AND (p.mm_value_updated_at = '' OR p.mm_value_updated_at < ?) THEN 1 ELSE 0 END) AS stale_count
+			COALESCE(SUM(CASE WHEN p.mm_value_cents > 0 AND (p.mm_value_updated_at = '' OR p.mm_value_updated_at < ?) THEN 1 ELSE 0 END), 0) AS stale_count
 		FROM campaign_purchases p
 		INNER JOIN campaigns c ON c.id = p.campaign_id
 		LEFT JOIN campaign_sales s ON s.purchase_id = p.id

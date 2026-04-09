@@ -2,6 +2,7 @@ package campaigns
 
 import (
 	"strings"
+	"unicode"
 )
 
 // cleanMMPlayerName extracts the core card name from our raw CardName/CardPlayer,
@@ -226,9 +227,14 @@ func mmTitleCase(name string) string {
 		case "lv.x":
 			words[i] = "Lv.X"
 		default:
-			// Title case: first letter upper, rest lower.
-			if len(w) > 0 {
-				words[i] = strings.ToUpper(w[:1]) + strings.ToLower(w[1:])
+			// Title case: first rune upper, rest lower (rune-safe for non-ASCII).
+			runes := []rune(w)
+			if len(runes) > 0 {
+				runes[0] = unicode.ToUpper(runes[0])
+				for j := 1; j < len(runes); j++ {
+					runes[j] = unicode.ToLower(runes[j])
+				}
+				words[i] = string(runes)
 			}
 		}
 	}

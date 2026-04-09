@@ -8,5 +8,6 @@ CREATE TABLE mm_card_mappings (
     updated_at        TEXT    NOT NULL DEFAULT '',
     mm_search_title   TEXT    NOT NULL DEFAULT ''
 );
-INSERT INTO mm_card_mappings SELECT * FROM mm_card_mappings_backup;
+INSERT INTO mm_card_mappings (slab_serial, mm_collectible_id, mm_master_id, updated_at, mm_search_title)
+    SELECT slab_serial, mm_collectible_id, mm_master_id, updated_at, mm_search_title FROM mm_card_mappings_backup;
 DROP TABLE mm_card_mappings_backup;

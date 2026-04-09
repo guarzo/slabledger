@@ -148,6 +148,9 @@ func checkUnreviewedCLChange(p *Purchase, lastPushed, pctThreshold, minCents int
 // checkInitialPushValueMismatch holds an initial push if the market value
 // is significantly below the buy cost, suggesting a possible data error.
 func checkInitialPushValueMismatch(p *Purchase, floorPct int) string {
+	if floorPct <= 0 {
+		floorPct = DefaultDHPushConfig().InitialPushValueFloorPct
+	}
 	if p.BuyCostCents == 0 {
 		return ""
 	}

@@ -62,6 +62,17 @@ func (c *Client) doCallable(ctx context.Context, functionName string, data any, 
 		return fmt.Errorf("http request to %s: %w", functionName, err)
 	}
 
+	// Check for Firebase callable error envelope before unmarshalling result.
+	var callableErr struct {
+		Error struct {
+			Message string `json:"message"`
+			Status  string `json:"status"`
+		} `json:"error"`
+	}
+	if json.Unmarshal(resp.Body, &callableErr) == nil && callableErr.Error.Message != "" {
+		return fmt.Errorf("callable %s error: %s (status: %s)", functionName, callableErr.Error.Message, callableErr.Error.Status)
+	}
+
 	if err := json.Unmarshal(resp.Body, result); err != nil {
 		return fmt.Errorf("unmarshal %s response: %w", functionName, err)
 	}

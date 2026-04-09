@@ -181,6 +181,24 @@ func TestEvaluateHoldTriggers(t *testing.T) {
 			cfg:      defaultCfg,
 			wantHeld: false,
 		},
+		{
+			name: "initial push - zero floor pct uses default and still triggers hold",
+			p: Purchase{
+				CLValueCents:  3000,  // $30 market value
+				BuyCostCents:  10000, // $100 buy cost
+				DHInventoryID: 0,
+			},
+			cfg: DHPushConfig{
+				SwingPctThreshold:            20,
+				SwingMinCents:                5000,
+				DisagreementPctThreshold:     25,
+				UnreviewedChangePctThreshold: 15,
+				UnreviewedChangeMinCents:     3000,
+				InitialPushValueFloorPct:     0, // zero should not bypass gate
+			},
+			wantHeld:     true,
+			wantContains: "initial_value_mismatch",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
