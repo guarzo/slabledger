@@ -52,6 +52,15 @@ type addCardResult struct {
 	Error      string  `json:"error,omitempty"`
 }
 
+// CLSyncResult is the JSON response for the CL collection sync endpoint.
+type CLSyncResult struct {
+	Synced  int             `json:"synced"`
+	Skipped int             `json:"skipped"`
+	Failed  int             `json:"failed"`
+	Total   int             `json:"total"`
+	Results []addCardResult `json:"results"`
+}
+
 // HandleAddCard adds a single card to the Card Ladder collection by cert number.
 func (h *CardLadderHandler) HandleAddCard(w http.ResponseWriter, r *http.Request) {
 	var req addCardRequest
@@ -195,12 +204,12 @@ func (h *CardLadderHandler) HandleSyncToCardLadder(w http.ResponseWriter, r *htt
 		}
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{
-		"synced":  synced,
-		"skipped": skipped + len(purchases) - len(toSync),
-		"failed":  errCount,
-		"total":   len(purchases),
-		"results": results,
+	writeJSON(w, http.StatusOK, CLSyncResult{
+		Synced:  synced,
+		Skipped: skipped + len(purchases) - len(toSync),
+		Failed:  errCount,
+		Total:   len(purchases),
+		Results: results,
 	})
 }
 
