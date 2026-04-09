@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -106,5 +108,46 @@ func TestClient_TokenRefreshOnExpiry(t *testing.T) {
 	}
 	if callCount != 1 {
 		t.Errorf("expected 1 refresh call, got %d", callCount)
+	}
+}
+
+func TestClient_ConcurrentTokenRefresh(t *testing.T) {
+	var refreshCalls atomic.Int64
+	authServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		refreshCalls.Add(1)
+		json.NewEncoder(w).Encode(FirebaseRefreshResponse{ //nolint:errcheck
+			IDToken:      "refreshed-token",
+			RefreshToken: "new-refresh",
+			ExpiresIn:    "3600",
+		})
+	}))
+	defer authServer.Close()
+
+	searchServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(SearchResponse[CollectionCard]{TotalHits: 0}) //nolint:errcheck
+	}))
+	defer searchServer.Close()
+
+	auth := NewFirebaseAuth("test-key", WithTokenBaseURL(authServer.URL))
+	client := NewClient(
+		WithBaseURL(searchServer.URL+"/search"),
+		WithTokenManager(auth, "old-refresh", time.Now().Add(-1*time.Hour)),
+	)
+
+	// Launch 5 concurrent requests that all need a token refresh
+	const goroutines = 5
+	var wg sync.WaitGroup
+	wg.Add(goroutines)
+	for i := 0; i < goroutines; i++ {
+		go func() {
+			defer wg.Done()
+			_, _ = client.FetchCollectionPage(context.Background(), "coll-123", 0, 100)
+		}()
+	}
+	wg.Wait()
+
+	calls := refreshCalls.Load()
+	if calls > int64(goroutines) {
+		t.Errorf("expected at most %d refresh calls, got %d", goroutines, calls)
 	}
 }
