@@ -321,6 +321,18 @@ func (c *Client) doQuery(ctx context.Context, path string, input any, result any
 
 	resp, err := c.httpClient.Get(ctx, u, headers, 0)
 	if err != nil {
+		// httpx returns both resp and err for HTTP 4xx/5xx — check for
+		// tRPC error in the body before falling back to the generic HTTP error.
+		if resp != nil && len(resp.Body) > 0 {
+			var errCheck struct {
+				Error *struct {
+					Message string `json:"message"`
+				} `json:"error"`
+			}
+			if jsonErr := json.Unmarshal(resp.Body, &errCheck); jsonErr == nil && errCheck.Error != nil {
+				return fmt.Errorf("trpc error: %s", errCheck.Error.Message)
+			}
+		}
 		return fmt.Errorf("http request: %w", err)
 	}
 
