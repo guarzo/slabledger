@@ -50,8 +50,8 @@ const PAGES = [
   { name: 'dashboard', path: '/' },
   { name: 'campaigns', path: '/campaigns' },
   { name: 'campaign-detail', path: () => `/campaigns/${firstCampaignId || 'unknown'}` },
-  { name: 'inventory', path: '/inventory' },
-  { name: 'inventory-expanded', path: '/inventory', expandRow: true },
+  { name: 'inventory', path: '/inventory', filterTab: 'Sell Sheet' },
+  { name: 'inventory-expanded', path: '/inventory', filterTab: 'Sell Sheet', expandRow: true, desktopOnly: true },
   { name: 'tools', path: '/tools' },
   { name: 'admin-users', path: '/admin' },
   { name: 'admin-card-data', path: '/admin', tabLabel: 'Card Data' },
@@ -67,7 +67,7 @@ const VIEWPORTS = [
 
 async function screenshotPage(
   page: import('@playwright/test').Page,
-  pg: { name: string; path: string | (() => string); skipAuth?: boolean; tabLabel?: string; expandRow?: boolean },
+  pg: { name: string; path: string | (() => string); skipAuth?: boolean; tabLabel?: string; filterTab?: string; expandRow?: boolean; desktopOnly?: boolean },
   viewport: { name: string; width: number; height: number },
 ) {
   await setupAuth(page, { skipAuth: pg.skipAuth });
@@ -97,6 +97,19 @@ async function screenshotPage(
     await page.waitForTimeout(800);
     // Wait for any newly triggered requests to settle
     await page.waitForLoadState('networkidle').catch(() => {});
+  }
+
+  // If a specific filter tab is requested (e.g. inventory filter buttons), click it
+  if (pg.filterTab) {
+    const filterBtn = page.getByRole('button', { name: new RegExp(pg.filterTab), exact: false });
+    await filterBtn.click();
+    await page.waitForTimeout(500);
+    // Wait for rows to render after filter change
+    try {
+      await page.locator('div[role="row"]').first().waitFor({ state: 'visible', timeout: 5000 });
+    } catch {
+      // Filter may result in no rows
+    }
   }
 
   // If row expansion is requested (inventory detail), click the first data row
@@ -148,6 +161,8 @@ test.describe('screenshot all pages', () => {
 
   for (const viewport of VIEWPORTS) {
     for (const pg of PAGES) {
+      // Skip desktop-only pages on mobile viewports
+      if (pg.desktopOnly && viewport.name !== 'desktop') continue;
       test(`${viewport.name}: ${pg.name}`, async ({ page }) => {
         await screenshotPage(page, pg, viewport);
       });
