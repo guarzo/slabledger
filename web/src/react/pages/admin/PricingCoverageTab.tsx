@@ -1,6 +1,7 @@
 import type { FailureSummary } from '../../../types/apiStatus';
 import { usePricingDiagnostics } from '../../queries/useAdminQueries';
-import { SummaryCard, formatAdminDate } from './shared';
+import { SummaryCard } from './shared';
+import { formatAdminDate } from './adminUtils';
 
 export function PricingCoverageTab({ enabled = true }: { enabled?: boolean }) {
   const { data: diag, error, isLoading } = usePricingDiagnostics({ enabled });
