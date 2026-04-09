@@ -20,6 +20,7 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/advisortool"
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	"github.com/guarzo/slabledger/internal/adapters/clients/google"
+	"github.com/guarzo/slabledger/internal/adapters/clients/gsheets"
 	"github.com/guarzo/slabledger/internal/adapters/clients/tcgdex"
 	"github.com/guarzo/slabledger/internal/adapters/httpserver/handlers"
 	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
@@ -378,7 +379,19 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		cardCatalogHandler = handlers.NewCardCatalogHandler(clClient, logger)
 	}
 
-	schedulerResult, cancelScheduler := initializeSchedulers(ctx, schedulerDeps{
+	// Initialize Google Sheets client for PSA sync (nil if not configured)
+	var gsheetsClient *gsheets.Client
+	if cfg.GoogleSheets.CredentialsJSON != "" {
+		var err error
+		gsheetsClient, err = gsheets.New(cfg.GoogleSheets.CredentialsJSON, logger)
+		if err != nil {
+			logger.Error(ctx, "failed to initialize Google Sheets client", observability.Err(err))
+		} else {
+			logger.Info(ctx, "Google Sheets client initialized")
+		}
+	}
+
+	sDeps := schedulerDeps{
 		Config:               cfg,
 		Logger:               logger,
 		DBTracker:            priceRepo,
@@ -408,7 +421,13 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		DHIntelligenceRepo:   intelRepo,
 		DHSuggestionsRepo:    suggestionsRepo,
 		GapStore:             gapStore,
-	})
+		PSASpreadsheetID:     cfg.GoogleSheets.SpreadsheetID,
+		PSATabName:           cfg.GoogleSheets.TabName,
+	}
+	if gsheetsClient != nil {
+		sDeps.PSASheetFetcher = gsheetsClient
+	}
+	schedulerResult, cancelScheduler := initializeSchedulers(ctx, sDeps)
 
 	// Wire Card Ladder manual refresh into the handler
 	if clHandler != nil && schedulerResult.CardLadderRefresh != nil {

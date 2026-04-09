@@ -392,6 +392,9 @@ type schedulerDeps struct {
 	DHIntelligenceRepo   *sqlite.MarketIntelligenceRepository
 	DHSuggestionsRepo    *sqlite.DHSuggestionsRepository
 	GapStore             *sqlite.GapStore
+	PSASheetFetcher      scheduler.SheetFetcher
+	PSASpreadsheetID     string
+	PSATabName           string
 }
 
 // initializeSchedulers builds and starts the scheduler group, returning the
@@ -474,6 +477,13 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 	}
 	if deps.GapStore != nil {
 		buildDeps.GapStore = deps.GapStore
+	}
+	// Wire PSA sync (nil-safe)
+	if deps.PSASheetFetcher != nil {
+		buildDeps.PSASheetFetcher = deps.PSASheetFetcher
+		buildDeps.PSAImporter = deps.CampaignsService
+		buildDeps.PSASpreadsheetID = deps.PSASpreadsheetID
+		buildDeps.PSATabName = deps.PSATabName
 	}
 	schedulerResult := scheduler.BuildGroup(deps.Config, buildDeps)
 	schedulerResult.Group.StartAll(schedulerCtx)
