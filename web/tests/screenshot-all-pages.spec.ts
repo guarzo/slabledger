@@ -101,27 +101,35 @@ async function screenshotPage(
 
   // If a specific filter tab is requested (e.g. inventory filter buttons), click it
   if (pg.filterTab) {
-    const filterBtn = page.getByRole('button', { name: new RegExp(pg.filterTab), exact: false });
-    await filterBtn.click();
-    await page.waitForTimeout(500);
-    // Wait for rows to render after filter change
     try {
-      await page.locator('div[role="row"]').first().waitFor({ state: 'visible', timeout: 5000 });
+      const filterBtn = page.getByRole('button', { name: new RegExp(pg.filterTab), exact: false });
+      await filterBtn.click({ timeout: 10000 });
+      await page.waitForTimeout(500);
+      // Wait for rows to render after filter change
+      try {
+        await page.locator('div[role="row"]').first().waitFor({ state: 'visible', timeout: 5000 });
+      } catch {
+        // Filter may result in no rows
+      }
     } catch {
-      // Filter may result in no rows
+      // Filter button may not exist (e.g. empty inventory with no backend data)
     }
   }
 
   // If row expansion is requested (inventory detail), click the first data row
   if (pg.expandRow) {
-    const row = page.locator('div[role="row"]').first();
-    await row.click();
-    await page.waitForTimeout(500);
-    // Wait for the expanded detail panel to appear
     try {
-      await page.locator('.glass-vrow-expanded').waitFor({ state: 'visible', timeout: 5000 });
+      const row = page.locator('div[role="row"]').first();
+      await row.click({ timeout: 10000 });
+      await page.waitForTimeout(500);
+      // Wait for the expanded detail panel to appear
+      try {
+        await page.locator('.glass-vrow-expanded').waitFor({ state: 'visible', timeout: 5000 });
+      } catch {
+        // Expansion may not be available (e.g. mobile view)
+      }
     } catch {
-      // Expansion may not be available (e.g. mobile view)
+      // Rows may not exist (e.g. empty inventory with no backend data)
     }
   }
 
