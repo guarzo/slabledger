@@ -4,6 +4,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { CardShell } from '../../ui/CardShell';
 import Button from '../../ui/Button';
 import type { MMLastRun } from '../../../types/admin';
+import { formatAdminDate } from './adminUtils';
 
 function RunStatRow({ label, value, accent }: { label: string; value: string | number; accent?: 'green' | 'red' | 'yellow' }) {
   const color =
@@ -172,12 +173,12 @@ export function MarketMoversTab({ enabled = true }: { enabled?: boolean }) {
               accent={priceStats.staleCount > 0 ? 'yellow' : undefined}
             />
             {priceStats.newestUpdate && (
-              <RunStatRow label="Latest update" value={new Date(priceStats.newestUpdate).toLocaleString()} />
+              <RunStatRow label="Latest update" value={formatAdminDate(priceStats.newestUpdate)} />
             )}
             {priceStats.oldestUpdate && (
               <RunStatRow
                 label="Oldest update"
-                value={new Date(priceStats.oldestUpdate).toLocaleString()}
+                value={formatAdminDate(priceStats.oldestUpdate)}
                 accent={priceStats.staleCount > 0 ? 'red' : undefined}
               />
             )}
@@ -190,7 +191,7 @@ export function MarketMoversTab({ enabled = true }: { enabled?: boolean }) {
         <CardShell padding="lg">
           <h3 className="text-base font-semibold text-[var(--text)] mb-3">Last Refresh Run</h3>
           <div className="space-y-0">
-            <RunStatRow label="Ran at" value={new Date(lastRun.lastRunAt).toLocaleString()} />
+            <RunStatRow label="Ran at" value={formatAdminDate(lastRun.lastRunAt)} />
             <RunStatRow label="Duration" value={`${(lastRun.durationMs / 1000).toFixed(1)}s`} />
             <RunStatRow label="Total inventory" value={lastRun.totalPurchases} />
             <RunStatRow
