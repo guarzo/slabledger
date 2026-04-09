@@ -49,6 +49,7 @@ func TestEvaluateHoldTriggers(t *testing.T) {
 		DisagreementPctThreshold:     25,
 		UnreviewedChangePctThreshold: 15,
 		UnreviewedChangeMinCents:     3000,
+		InitialPushValueFloorPct:     50,
 	}
 
 	tests := []struct {
@@ -59,8 +60,49 @@ func TestEvaluateHoldTriggers(t *testing.T) {
 		wantContains string
 	}{
 		{
-			name:     "first time push - never held",
+			name:     "initial push - no buy cost set - not held",
 			p:        Purchase{CLValueCents: 10000, DHInventoryID: 0},
+			cfg:      defaultCfg,
+			wantHeld: false,
+		},
+		{
+			name: "initial push - market value far below buy cost - held",
+			p: Purchase{
+				CLValueCents:  3000,  // $30 market value
+				BuyCostCents:  10000, // $100 buy cost (70% below)
+				DHInventoryID: 0,
+			},
+			cfg:          defaultCfg,
+			wantHeld:     true,
+			wantContains: "initial_value_mismatch",
+		},
+		{
+			name: "initial push - market value near buy cost - not held",
+			p: Purchase{
+				CLValueCents:  8000,  // $80 market value
+				BuyCostCents:  10000, // $100 buy cost (20% below, within threshold)
+				DHInventoryID: 0,
+			},
+			cfg:      defaultCfg,
+			wantHeld: false,
+		},
+		{
+			name: "initial push - no buy cost - not held",
+			p: Purchase{
+				CLValueCents:  5000,
+				BuyCostCents:  0,
+				DHInventoryID: 0,
+			},
+			cfg:      defaultCfg,
+			wantHeld: false,
+		},
+		{
+			name: "initial push - market value above buy cost - not held",
+			p: Purchase{
+				CLValueCents:  15000,
+				BuyCostCents:  10000,
+				DHInventoryID: 0,
+			},
 			cfg:      defaultCfg,
 			wantHeld: false,
 		},

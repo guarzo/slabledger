@@ -40,9 +40,41 @@ export function InstagramTab({ enabled = true }: { enabled?: boolean }) {
 
   if (error && !status) {
     return (
-      <CardShell padding="lg">
-        <p className="text-red-400 text-sm">Failed to load Instagram status. Please try refreshing the page.</p>
-      </CardShell>
+      <div className="space-y-4 mt-4">
+        <CardShell padding="lg">
+          <p className="text-red-400 text-sm mb-4">Failed to load Instagram status.</p>
+          <h3 className="text-base font-semibold text-[var(--text)] mb-4">Instagram Connection</h3>
+          <div className="space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-2 h-2 rounded-full bg-gray-500" />
+              <span className="text-sm text-[var(--text-muted)]">Not connected</span>
+            </div>
+
+            <p className="text-sm text-[var(--text-muted)]">
+              Connect your Instagram Business account to publish posts directly from the Content page.
+              Requires an Instagram Business or Creator account.
+            </p>
+
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={handleConnect}
+              loading={connectMutation.isPending}
+            >
+              Connect Instagram
+            </Button>
+
+            <CardShell padding="lg">
+              <h3 className="text-base font-semibold text-[var(--text)] mb-2">Setup Requirements</h3>
+              <ul className="text-sm text-[var(--text-muted)] space-y-1 list-disc list-inside">
+                <li>Instagram Business or Creator account</li>
+                <li>Meta App with <code>instagram_business_basic</code> and <code>instagram_business_content_publish</code> permissions</li>
+                <li>Environment variables: <code>INSTAGRAM_APP_ID</code>, <code>INSTAGRAM_APP_SECRET</code></li>
+              </ul>
+            </CardShell>
+          </div>
+        </CardShell>
+      </div>
     );
   }
 

@@ -61,9 +61,17 @@ export function CardLadderTab({ enabled = true }: { enabled?: boolean }) {
 
   if (error && !status) {
     return (
-      <CardShell padding="lg">
-        <p className="text-red-400 text-sm">Failed to load Card Ladder status.</p>
-      </CardShell>
+      <div className="space-y-4 mt-4">
+        <CardShell padding="lg">
+          <p className="text-red-400 text-sm mb-4">Failed to load Card Ladder status.</p>
+          <h3 className="text-base font-semibold text-[var(--text)] mb-4">Connect Card Ladder</h3>
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-2 h-2 rounded-full bg-gray-500" />
+            <span className="text-sm text-[var(--text-muted)]">Not connected</span>
+          </div>
+          {credentialForm}
+        </CardShell>
+      </div>
     );
   }
 
