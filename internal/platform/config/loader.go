@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/base64"
 	"flag"
 	"fmt"
 	"os"
@@ -371,6 +372,29 @@ func FromEnv(base Config) Config {
 	if v := os.Getenv("DH_PUSH_INTERVAL"); v != "" {
 		if d, err := time.ParseDuration(v); err == nil {
 			cfg.DH.PushInterval = d
+		}
+	}
+
+	// Google Sheets credentials (JSON key is base64-encoded in .env)
+	if v := os.Getenv("GOOGLE_SHEETS_CREDENTIALS_JSON"); v != "" {
+		decoded, err := base64.StdEncoding.DecodeString(v)
+		if err != nil {
+			// Fall back to raw value (allow non-encoded for dev convenience)
+			cfg.GoogleSheets.CredentialsJSON = v
+		} else {
+			cfg.GoogleSheets.CredentialsJSON = string(decoded)
+		}
+	}
+	cfg.GoogleSheets.SpreadsheetID = os.Getenv("GOOGLE_SHEETS_SPREADSHEET_ID")
+	cfg.GoogleSheets.TabName = os.Getenv("GOOGLE_SHEETS_TAB_NAME")
+
+	// PSA sync scheduler
+	if v := os.Getenv("PSA_SYNC_ENABLED"); v != "" {
+		cfg.PSASync.Enabled = parseBool(v, false)
+	}
+	if v := os.Getenv("PSA_SYNC_HOUR"); v != "" {
+		if h, err := strconv.Atoi(v); err == nil && h >= -1 && h <= 23 {
+			cfg.PSASync.SyncHour = h
 		}
 	}
 

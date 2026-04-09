@@ -58,6 +58,9 @@ type ServerDependencies struct {
 	DHCandidatesSaver         handlers.DHCandidatesSaver      // optional: stores ambiguous DH candidates
 	SellSheetItemsHandler     *handlers.SellSheetItemsHandler // Sell sheet persistence; nil = disabled
 	CardCatalogHandler        *handlers.CardCatalogHandler    // CL card catalog search; nil = disabled
+	SheetFetcher              handlers.SheetFetcher           // optional: Google Sheets fetcher for PSA sync
+	SheetsSpreadsheetID       string                          // Google Sheets spreadsheet ID
+	SheetsTabName             string                          // Google Sheets tab name
 }
 
 // EnvVarValidation holds the result of environment variable validation
@@ -190,6 +193,9 @@ func startWebServer(ctx context.Context, deps ServerDependencies) error {
 		}
 		if deps.DHCandidatesSaver != nil {
 			opts = append(opts, handlers.WithDHCandidatesSaver(deps.DHCandidatesSaver))
+		}
+		if deps.SheetFetcher != nil && deps.SheetsSpreadsheetID != "" {
+			opts = append(opts, handlers.WithSheetFetcher(deps.SheetFetcher, deps.SheetsSpreadsheetID, deps.SheetsTabName))
 		}
 		campaignsHandler = handlers.NewCampaignsHandler(
 			deps.CampaignsService, logger, ctx, opts...,

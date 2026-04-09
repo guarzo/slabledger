@@ -157,6 +157,7 @@ func (rt *Router) registerCampaignRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /api/purchases/refresh-cl", authRoute(rt.campaignsHandler.HandleGlobalRefreshCL))
 	mux.Handle("POST /api/purchases/import-cl", authRoute(rt.campaignsHandler.HandleGlobalImportCL))
 	mux.Handle("POST /api/purchases/import-psa", authRoute(rt.campaignsHandler.HandleGlobalImportPSA))
+	mux.Handle("POST /api/purchases/sync-psa-sheets", authRoute(rt.campaignsHandler.HandleSyncPSASheets))
 	mux.Handle("GET /api/purchases/export-cl", authRoute(rt.campaignsHandler.HandleGlobalExportCL))
 	mux.Handle("GET /api/purchases/export-mm", authRoute(rt.campaignsHandler.HandleGlobalExportMM))
 	mux.Handle("POST /api/purchases/refresh-mm", authRoute(rt.campaignsHandler.HandleGlobalRefreshMM))
