@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -17,11 +16,23 @@ type CLPurchaseLister interface {
 	ListAllUnsoldPurchases(ctx context.Context) ([]campaigns.Purchase, error)
 }
 
+// CLSyncUpdater sets cl_synced_at on a purchase after it is pushed to Card Ladder.
+type CLSyncUpdater interface {
+	UpdatePurchaseCLSyncedAt(ctx context.Context, purchaseID string, syncedAt string) error
+}
+
 // SetPurchaseLister injects the purchase lister for sync operations.
 func (h *CardLadderHandler) SetPurchaseLister(lister CLPurchaseLister) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.purchaseLister = lister
+}
+
+// SetSyncUpdater injects the sync-timestamp updater for CL push.
+func (h *CardLadderHandler) SetSyncUpdater(u CLSyncUpdater) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.syncUpdater = u
 }
 
 type addCardRequest struct {
@@ -61,7 +72,7 @@ func (h *CardLadderHandler) HandleAddCard(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	result, err := h.addCardToCollection(r.Context(), cfg.FirebaseUID, cfg.CollectionID, req)
+	result, err := h.addCardToCollection(r.Context(), cfg.FirebaseUID, cfg.CollectionID, "", req)
 	if err != nil {
 		h.logger.Error(r.Context(), "add card to CL failed", observability.Err(err))
 		writeError(w, http.StatusInternalServerError, err.Error())
@@ -95,38 +106,53 @@ func (h *CardLadderHandler) HandleSyncToCardLadder(w http.ResponseWriter, r *htt
 		return
 	}
 
+	// Load all existing mappings once to avoid N+1 queries
+	allMappings, err := h.store.ListMappings(r.Context())
+	if err != nil {
+		h.logger.Error(r.Context(), "list CL mappings failed", observability.Err(err))
+		writeError(w, http.StatusInternalServerError, "failed to list mappings")
+		return
+	}
+	mappedCerts := make(map[string]bool, len(allMappings))
+	for _, m := range allMappings {
+		mappedCerts[m.SlabSerial] = true
+	}
+
 	// Filter to purchases with cert numbers and check existing mappings
-	var toSync []addCardRequest
+	type syncEntry struct {
+		purchaseID string
+		req        addCardRequest
+	}
+	var toSync []syncEntry
 	for _, p := range purchases {
 		if p.CertNumber == "" {
 			continue
 		}
-		mapping, err := h.store.GetMapping(r.Context(), p.CertNumber)
-		if err != nil {
-			continue
-		}
-		if mapping != nil {
+		if mappedCerts[p.CertNumber] {
 			continue // already synced
 		}
 		grader := strings.ToLower(p.Grader)
 		if grader == "" {
 			grader = "psa"
 		}
-		toSync = append(toSync, addCardRequest{
-			CertNumber:    p.CertNumber,
-			Grader:        grader,
-			InvestmentUSD: float64(p.BuyCostCents) / 100.0,
-			DatePurchased: p.PurchaseDate,
+		toSync = append(toSync, syncEntry{
+			purchaseID: p.ID,
+			req: addCardRequest{
+				CertNumber:    p.CertNumber,
+				Grader:        grader,
+				InvestmentUSD: float64(p.BuyCostCents) / 100.0,
+				DatePurchased: p.PurchaseDate,
+			},
 		})
 	}
 
 	var results []addCardResult
 	var added, skipped, errCount int
-	for _, req := range toSync {
-		result, err := h.addCardToCollection(r.Context(), cfg.FirebaseUID, cfg.CollectionID, req)
+	for _, entry := range toSync {
+		result, err := h.addCardToCollection(r.Context(), cfg.FirebaseUID, cfg.CollectionID, entry.purchaseID, entry.req)
 		if err != nil {
 			results = append(results, addCardResult{
-				CertNumber: req.CertNumber,
+				CertNumber: entry.req.CertNumber,
 				Status:     "error",
 				Error:      err.Error(),
 			})
@@ -152,75 +178,38 @@ func (h *CardLadderHandler) HandleSyncToCardLadder(w http.ResponseWriter, r *htt
 
 // addCardToCollection resolves a cert number via Cloud Functions and writes the card
 // to the CardLadder Firestore collection.
-func (h *CardLadderHandler) addCardToCollection(ctx context.Context, uid, collectionID string, req addCardRequest) (*addCardResult, error) {
-	// Step 1: Resolve cert to card metadata
-	buildResp, err := h.client.BuildCollectionCard(ctx, req.CertNumber, req.Grader)
-	if err != nil {
-		return nil, fmt.Errorf("resolve cert %s: %w", req.CertNumber, err)
-	}
-
-	// Step 2: Get current market estimate
-	estimateResp, err := h.client.CardEstimate(ctx, cardladder.CardEstimateRequest{
-		GemRateID:      buildResp.GemRateID,
-		GradingCompany: buildResp.GradingCompany,
-		Condition:      buildResp.GemRateCondition,
-		Description:    buildResp.Player,
+func (h *CardLadderHandler) addCardToCollection(ctx context.Context, uid, collectionID, purchaseID string, req addCardRequest) (*addCardResult, error) {
+	result, err := h.client.ResolveAndCreateCard(ctx, uid, collectionID, cardladder.CardPushParams{
+		CertNumber:    req.CertNumber,
+		Grader:        req.Grader,
+		InvestmentUSD: req.InvestmentUSD,
+		DatePurchased: req.DatePurchased,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("estimate cert %s: %w", req.CertNumber, err)
+		return nil, err
 	}
 
-	// Step 3: Build the label (matches CL format)
-	label := fmt.Sprintf("%s %s %s %s #%s %s",
-		buildResp.Year, buildResp.Set, buildResp.Player,
-		buildResp.Variation, buildResp.Number, buildResp.Condition)
-
-	// Parse purchase date
-	var datePurchased time.Time
-	if req.DatePurchased != "" {
-		datePurchased, _ = time.Parse("2006-01-02", req.DatePurchased)
-	}
-
-	// Step 4: Write to Firestore
-	input := cardladder.AddCollectionCardInput{
-		Label:            label,
-		Player:           buildResp.Player,
-		PlayerIndexID:    estimateResp.IndexID,
-		Category:         buildResp.Category,
-		Year:             buildResp.Year,
-		Set:              buildResp.Set,
-		Number:           buildResp.Number,
-		Variation:        buildResp.Variation,
-		Condition:        buildResp.Condition,
-		GradingCompany:   buildResp.GradingCompany,
-		GemRateID:        buildResp.GemRateID,
-		GemRateCondition: buildResp.GemRateCondition,
-		SlabSerial:       buildResp.SlabSerial,
-		Pop:              buildResp.Pop,
-		ImageURL:         buildResp.ImageURL,
-		ImageBackURL:     buildResp.ImageBackURL,
-		CurrentValue:     estimateResp.EstimatedValue,
-		Investment:       req.InvestmentUSD,
-		DatePurchased:    datePurchased,
-	}
-
-	docName, err := h.client.CreateCollectionCard(ctx, uid, collectionID, input)
-	if err != nil {
-		return nil, fmt.Errorf("create card in Firestore: %w", err)
-	}
-
-	// Step 5: Save the local mapping
-	if err := h.store.SaveMapping(ctx, req.CertNumber, docName, buildResp.GemRateID, buildResp.GemRateCondition); err != nil {
+	// Save the local mapping
+	if err := h.store.SaveMapping(ctx, req.CertNumber, result.DocumentName, result.GemRateID, result.GemRateCondition); err != nil {
 		h.logger.Error(ctx, "failed to save CL mapping after Firestore write",
 			observability.String("cert", req.CertNumber), observability.Err(err))
 	}
 
+	// Update cl_synced_at timestamp
+	if h.syncUpdater != nil && purchaseID != "" {
+		now := time.Now().UTC().Format(time.RFC3339)
+		if err := h.syncUpdater.UpdatePurchaseCLSyncedAt(ctx, purchaseID, now); err != nil {
+			h.logger.Error(ctx, "failed to update cl_synced_at",
+				observability.String("cert", req.CertNumber), observability.Err(err))
+		}
+	}
+
 	return &addCardResult{
 		CertNumber: req.CertNumber,
-		Player:     buildResp.Player,
-		Set:        buildResp.Set,
-		Condition:  buildResp.Condition,
-		Value:      estimateResp.EstimatedValue,
+		Player:     result.Player,
+		Set:        result.Set,
+		Condition:  result.Condition,
+		Value:      result.EstimatedValue,
 		Status:     "added",
 	}, nil
 }

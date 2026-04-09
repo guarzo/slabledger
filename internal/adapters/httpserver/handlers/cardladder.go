@@ -27,6 +27,7 @@ type CardLadderHandler struct {
 	client         *cardladder.Client
 	refresher      CLRefresher
 	purchaseLister CLPurchaseLister
+	syncUpdater    CLSyncUpdater
 	logger         observability.Logger
 }
 
