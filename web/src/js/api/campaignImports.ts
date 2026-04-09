@@ -25,6 +25,7 @@ declare module './client' {
 
     // PSA / External imports
     globalImportPSA(file: File): Promise<PSAImportResult>;
+    syncPSASheets(): Promise<PSAImportResult>;
     globalImportExternal(file: File): Promise<ExternalImportResult>;
 
     // Orders sales import
@@ -86,6 +87,11 @@ proto.globalRefreshMM = async function (this: APIClient, file: File): Promise<MM
 // PSA CSV import (global)
 proto.globalImportPSA = async function (this: APIClient, file: File): Promise<PSAImportResult> {
   return this.uploadFile<PSAImportResult>('/purchases/import-psa', file);
+};
+
+// PSA Google Sheets sync
+proto.syncPSASheets = async function (this: APIClient): Promise<PSAImportResult> {
+  return this.post<PSAImportResult>('/purchases/sync-psa-sheets', {});
 };
 
 // External (Shopify) CSV import
