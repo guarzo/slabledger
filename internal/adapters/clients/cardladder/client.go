@@ -20,9 +20,10 @@ const defaultSearchURL = "https://search-zzvl7ri3bq-uc.a.run.app/search"
 
 // Client accesses Card Ladder's Cloud Run search API.
 type Client struct {
-	searchURL   string
-	rateLimiter *rate.Limiter
-	httpClient  *httpx.Client
+	searchURL    string
+	functionsURL string
+	rateLimiter  *rate.Limiter
+	httpClient   *httpx.Client
 
 	// Token management
 	mu           sync.Mutex
@@ -40,6 +41,11 @@ type ClientOption func(*Client)
 // WithBaseURL overrides the search endpoint URL (for testing).
 func WithBaseURL(u string) ClientOption {
 	return func(c *Client) { c.searchURL = u }
+}
+
+// WithFunctionsURL overrides the Cloud Functions base URL (for testing).
+func WithFunctionsURL(u string) ClientOption {
+	return func(c *Client) { c.functionsURL = u }
 }
 
 // WithStaticToken sets a fixed bearer token (for testing).

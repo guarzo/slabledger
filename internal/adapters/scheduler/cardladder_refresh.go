@@ -42,6 +42,16 @@ func WithCLDHPushUpdater(u DHPushStatusUpdater) CardLadderRefreshOption {
 	return func(s *CardLadderRefreshScheduler) { s.dhPushUpdater = u }
 }
 
+// CardLadderSyncUpdater sets cl_synced_at on purchases after CL push/sync.
+type CardLadderSyncUpdater interface {
+	UpdatePurchaseCLSyncedAt(ctx context.Context, purchaseID string, syncedAt string) error
+}
+
+// WithCLSyncUpdater enables cl_synced_at tracking on push.
+func WithCLSyncUpdater(u CardLadderSyncUpdater) CardLadderRefreshOption {
+	return func(s *CardLadderRefreshScheduler) { s.syncUpdater = u }
+}
+
 // CLRunStats holds the counters from the most recent Card Ladder refresh run.
 type CLRunStats struct {
 	LastRunAt    time.Time `json:"lastRunAt"`
@@ -50,6 +60,8 @@ type CLRunStats struct {
 	Mapped       int       `json:"mapped"`
 	Skipped      int       `json:"skipped"`
 	TotalCLCards int       `json:"totalCLCards"`
+	CardsPushed  int       `json:"cardsPushed"`
+	CardsRemoved int       `json:"cardsRemoved"`
 }
 
 // CardLadderRefreshScheduler refreshes CL values from the Card Ladder API daily.
@@ -61,6 +73,7 @@ type CardLadderRefreshScheduler struct {
 	purchaseLister CardLadderPurchaseLister
 	valueUpdater   CardLadderValueUpdater
 	gemRateUpdater CardLadderGemRateUpdater
+	syncUpdater    CardLadderSyncUpdater // optional: sets cl_synced_at on push
 	clRecorder     campaigns.CLValueHistoryRecorder
 	salesStore     *sqlite.CLSalesStore
 	dhPushUpdater  DHPushStatusUpdater // optional: re-enrolls changed items for DH push
@@ -323,11 +336,25 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 		s.gapFillGemRateIDs(ctx, purchases)
 	}
 
+	// Phase 4: push new unsold purchases (with certs) that aren't yet in the CL collection.
+	cardsPushed := 0
+	if cfg.FirebaseUID != "" {
+		cardsPushed = s.pushNewCards(ctx, cfg.FirebaseUID, cfg.CollectionID, purchases, existingMappings)
+	}
+
+	// Phase 5: remove sold cards from the CL collection.
+	cardsRemoved := 0
+	if cfg.FirebaseUID != "" {
+		cardsRemoved = s.removeSoldCards(ctx, purchases, existingMappings)
+	}
+
 	s.logger.Info(ctx, "CL refresh: complete",
 		observability.Int("updated", updated),
 		observability.Int("mapped", mapped),
 		observability.Int("skipped", skipped),
-		observability.Int("totalCLCards", len(cards)))
+		observability.Int("totalCLCards", len(cards)),
+		observability.Int("pushed", cardsPushed),
+		observability.Int("removed", cardsRemoved))
 
 	s.statsMu.Lock()
 	s.lastRunStats = &CLRunStats{
@@ -337,6 +364,8 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 		Mapped:       mapped,
 		Skipped:      skipped,
 		TotalCLCards: len(cards),
+		CardsPushed:  cardsPushed,
+		CardsRemoved: cardsRemoved,
 	}
 	s.statsMu.Unlock()
 

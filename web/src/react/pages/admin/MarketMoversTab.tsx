@@ -90,6 +90,7 @@ export function MarketMoversTab({ enabled = true }: { enabled?: boolean }) {
   }
 
   const lastRun: MMLastRun | undefined = status?.lastRun;
+  const priceStats = status?.priceStats;
 
   return (
     <div className="space-y-4 mt-4">
@@ -117,6 +118,41 @@ export function MarketMoversTab({ enabled = true }: { enabled?: boolean }) {
           </div>
         )}
       </CardShell>
+
+      {/* Price Coverage Stats */}
+      {priceStats && (
+        <CardShell padding="lg">
+          <h3 className="text-base font-semibold text-[var(--text)] mb-3">Price Coverage</h3>
+          <div className="space-y-0">
+            <RunStatRow label="Unsold inventory" value={priceStats.unsoldTotal} />
+            <RunStatRow
+              label="With MM price"
+              value={`${priceStats.withMMPrice} / ${priceStats.unsoldTotal}`}
+              accent={priceStats.withMMPrice > 0 ? 'green' : undefined}
+            />
+            <RunStatRow
+              label="Synced to collection"
+              value={priceStats.syncedCount}
+              accent={priceStats.syncedCount > 0 ? 'green' : undefined}
+            />
+            <RunStatRow
+              label="Stale (>7 days)"
+              value={priceStats.staleCount}
+              accent={priceStats.staleCount > 0 ? 'yellow' : undefined}
+            />
+            {priceStats.newestUpdate && (
+              <RunStatRow label="Latest update" value={new Date(priceStats.newestUpdate).toLocaleString()} />
+            )}
+            {priceStats.oldestUpdate && (
+              <RunStatRow
+                label="Oldest update"
+                value={new Date(priceStats.oldestUpdate).toLocaleString()}
+                accent={priceStats.staleCount > 0 ? 'red' : undefined}
+              />
+            )}
+          </div>
+        </CardShell>
+      )}
 
       {/* Last Run Stats */}
       {lastRun && (

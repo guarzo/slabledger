@@ -10,6 +10,47 @@ const (
 	CertStatusNotFound  = "not_found"
 )
 
+// --- Cert Confirm Match Status Constants ---
+
+const (
+	CertStatusConfirmed = "confirmed"
+	CertStatusUnmatched = "unmatched"
+)
+
+// --- Confirm Match Types ---
+
+// ConfirmMatchRequest is a single cert-to-card confirmation.
+type ConfirmMatchRequest struct {
+	CertNumber string `json:"cert_number"`
+	DHCardID   int    `json:"dh_card_id"`
+	SetName    string `json:"set_name,omitempty"`
+	CardName   string `json:"card_name,omitempty"`
+}
+
+// ConfirmMatchResponse is the response for a single confirm match call.
+type ConfirmMatchResponse struct {
+	CertNumber      string   `json:"cert_number"`
+	Status          string   `json:"status"` // "confirmed" or "error"
+	DHCardID        int      `json:"dh_card_id"`
+	CardName        string   `json:"card_name,omitempty"`
+	SetName         string   `json:"set_name,omitempty"`
+	CardNumber      string   `json:"card_number,omitempty"`
+	MappingsCreated []string `json:"mappings_created,omitempty"`
+	AliasesLearned  []string `json:"aliases_learned,omitempty"`
+}
+
+// ConfirmMatchBatchRequest is the request body for batch confirm match.
+type ConfirmMatchBatchRequest struct {
+	Confirmations []ConfirmMatchRequest `json:"confirmations"`
+}
+
+// ConfirmMatchBatchResponse is the response from batch confirm match.
+type ConfirmMatchBatchResponse struct {
+	Confirmed int                    `json:"confirmed"`
+	Failed    int                    `json:"failed"`
+	Results   []ConfirmMatchResponse `json:"results"`
+}
+
 // --- Inventory Status Constants ---
 
 const (

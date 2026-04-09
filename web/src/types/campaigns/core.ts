@@ -36,6 +36,10 @@ export interface Purchase {
   gradeValue: number;
   clValueCents: number;
   mmValueCents?: number;
+  mmTrendPct?: number;
+  mmSales30d?: number;
+  mmActiveLowCents?: number;
+  mmValueUpdatedAt?: string;
   buyCostCents: number;
   psaSourcingFeeCents: number;
   population?: number;
@@ -70,6 +74,7 @@ export interface Purchase {
   dhCandidatesJson?: string;
   gemRateId?: string;
   psaSpecId?: number;
+  clSyncedAt?: string;
   createdAt: string;
   updatedAt: string;
   // Market snapshot at time of purchase

@@ -128,8 +128,18 @@ export function CardLadderTab({ enabled = true }: { enabled?: boolean }) {
     </form>
   );
 
-  // Type extension for lastRun — backend may add this field in the future
-  const lastRun = (status as (typeof status & { lastRun?: { ranAt: string; duration: string; updated: number; fetched: number; skipped: number } }) | undefined)?.lastRun;
+  // Type for lastRun stats — matches CLRunStats JSON from backend
+  interface CLLastRun {
+    lastRunAt: string;
+    durationMs: number;
+    updated: number;
+    mapped: number;
+    skipped: number;
+    totalCLCards: number;
+    cardsPushed: number;
+    cardsRemoved: number;
+  }
+  const lastRun = (status as (typeof status & { lastRun?: CLLastRun }) | undefined)?.lastRun;
 
   return (
     <div className="space-y-4 mt-4">
@@ -165,13 +175,24 @@ export function CardLadderTab({ enabled = true }: { enabled?: boolean }) {
             <div className="mt-4 pt-4 border-t border-[var(--surface-2)] space-y-1">
               <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">Last Refresh</p>
               <p className="text-xs text-[var(--text-muted)]">
-                Ran at {formatAdminDate(lastRun.ranAt)} · {lastRun.duration}
+                Ran at {formatAdminDate(lastRun.lastRunAt)} · {(lastRun.durationMs / 1000).toFixed(1)}s
               </p>
               <p className="text-xs text-[var(--text-muted)]">
                 {lastRun.updated > 0
                   ? <span className="text-[var(--success)]">{lastRun.updated} updated</span>
-                  : <span>0 updated</span>} · {lastRun.fetched} fetched · {lastRun.skipped} skipped
+                  : <span>0 updated</span>} · {lastRun.mapped} mapped · {lastRun.skipped} skipped · {lastRun.totalCLCards} total CL cards
               </p>
+              {(lastRun.cardsPushed > 0 || lastRun.cardsRemoved > 0) && (
+                <p className="text-xs text-[var(--text-muted)]">
+                  {lastRun.cardsPushed > 0 && (
+                    <span className="text-[var(--success)]">{lastRun.cardsPushed} pushed</span>
+                  )}
+                  {lastRun.cardsPushed > 0 && lastRun.cardsRemoved > 0 && ' · '}
+                  {lastRun.cardsRemoved > 0 && (
+                    <span className="text-amber-400">{lastRun.cardsRemoved} removed</span>
+                  )}
+                </p>
+              )}
             </div>
           )}
         </CardShell>

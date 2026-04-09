@@ -73,11 +73,14 @@ func (rt *Router) registerAdminRoutes(mux *http.ServeMux) {
 			mux.Handle("POST /api/admin/cardladder/config", rt.authMW.RequireAdmin(http.HandlerFunc(rt.cardLadderHandler.HandleSaveConfig)))
 			mux.Handle("GET /api/admin/cardladder/status", rt.authMW.RequireAdmin(http.HandlerFunc(rt.cardLadderHandler.HandleStatus)))
 			mux.Handle("POST /api/admin/cardladder/refresh", rt.authMW.RequireAdmin(http.HandlerFunc(rt.cardLadderHandler.HandleRefresh)))
+			mux.Handle("POST /api/admin/cardladder/add-card", rt.authMW.RequireAdmin(http.HandlerFunc(rt.cardLadderHandler.HandleAddCard)))
+			mux.Handle("POST /api/admin/cardladder/sync-to-cl", rt.authMW.RequireAdmin(http.HandlerFunc(rt.cardLadderHandler.HandleSyncToCardLadder)))
 		}
 		if rt.marketMoversHandler != nil {
 			mux.Handle("POST /api/admin/marketmovers/config", rt.authMW.RequireAdmin(http.HandlerFunc(rt.marketMoversHandler.HandleSaveConfig)))
 			mux.Handle("GET /api/admin/marketmovers/status", rt.authMW.RequireAdmin(http.HandlerFunc(rt.marketMoversHandler.HandleStatus)))
 			mux.Handle("POST /api/admin/marketmovers/refresh", rt.authMW.RequireAdmin(http.HandlerFunc(rt.marketMoversHandler.HandleRefresh)))
+			mux.Handle("POST /api/admin/marketmovers/sync-collection", rt.authMW.RequireAdmin(http.HandlerFunc(rt.marketMoversHandler.HandleSyncCollection)))
 		}
 		rt.logger.Info(context.Background(), "admin routes registered")
 	}

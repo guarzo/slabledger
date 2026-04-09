@@ -10,13 +10,15 @@ import (
 )
 
 // HandleGlobalExportMM handles GET /api/purchases/export-mm.
-// Returns a CSV file of all unsold inventory in Market Movers collection import format (17 columns).
+// Returns a CSV file of all unsold inventory in Market Movers collection import format (13 columns).
+// Supports ?missing_mm_only=true to export only items lacking MM value data.
 //
 // Note: headers are committed before row iteration begins, so any mid-stream write error
 // produces a truncated 200 OK response with no error signal to the client. This matches
 // the pre-existing behaviour of HandleGlobalExportCL.
 func (h *CampaignsHandler) HandleGlobalExportMM(w http.ResponseWriter, r *http.Request) {
-	entries, err := h.service.ExportMMFormatGlobal(r.Context())
+	missingMMOnly := r.URL.Query().Get("missing_mm_only") == "true"
+	entries, err := h.service.ExportMMFormatGlobal(r.Context(), missingMMOnly)
 	if err != nil {
 		h.logger.Error(r.Context(), "global MM export failed", observability.Err(err))
 		writeError(w, http.StatusInternalServerError, "Internal server error")
@@ -31,16 +33,16 @@ func (h *CampaignsHandler) HandleGlobalExportMM(w http.ResponseWriter, r *http.R
 		"Sport", "Grade", "Player Name", "Year", "Set", "Variation",
 		"Card Number", "Specific Qualifier", "Quantity",
 		"Date Purchased", "Purchase Price per Card", "Notes", "Category",
-		"Date Sold", "Sold Price per Card", "Last Sale Price", "Last Sale Date",
 	}
 	if err := writer.Write(header); err != nil {
 		h.logger.Error(r.Context(), "mm csv header write failed", observability.Err(err))
 		return
 	}
 	for _, e := range entries {
-		lastSalePrice := ""
-		if e.LastSalePrice > 0 {
-			lastSalePrice = fmt.Sprintf("%.2f", e.LastSalePrice)
+		// Market Movers requires a positive purchase price; default zero-cost items to $0.01.
+		purchasePrice := e.PurchasePricePerCard
+		if purchasePrice <= 0 {
+			purchasePrice = 0.01
 		}
 		if err := writer.Write([]string{
 			e.Sport,
@@ -53,13 +55,9 @@ func (h *CampaignsHandler) HandleGlobalExportMM(w http.ResponseWriter, r *http.R
 			e.SpecificQualifier,
 			e.Quantity,
 			e.DatePurchased,
-			fmt.Sprintf("%.2f", e.PurchasePricePerCard),
+			fmt.Sprintf("%.2f", purchasePrice),
 			e.Notes,
 			e.Category,
-			e.DateSold,
-			e.SoldPricePerCard,
-			lastSalePrice,
-			e.LastSaleDate,
 		}); err != nil {
 			h.logger.Error(r.Context(), "mm csv row write failed", observability.Err(err))
 			return

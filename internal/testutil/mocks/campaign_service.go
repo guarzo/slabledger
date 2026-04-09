@@ -47,7 +47,7 @@ type MockCampaignService struct {
 	ImportCLExportGlobalFn      func(ctx context.Context, rows []campaigns.CLExportRow) (*campaigns.GlobalImportResult, error)
 	ImportPSAExportGlobalFn     func(ctx context.Context, rows []campaigns.PSAExportRow) (*campaigns.PSAImportResult, error)
 	ExportCLFormatGlobalFn      func(ctx context.Context, missingCLOnly bool) ([]campaigns.CLExportEntry, error)
-	ExportMMFormatGlobalFn      func(ctx context.Context) ([]campaigns.MMExportEntry, error)
+	ExportMMFormatGlobalFn      func(ctx context.Context, missingMMOnly bool) ([]campaigns.MMExportEntry, error)
 	RefreshMMValuesGlobalFn     func(ctx context.Context, rows []campaigns.MMRefreshRow) (*campaigns.MMRefreshResult, error)
 	ReassignPurchaseFn          func(ctx context.Context, purchaseID string, newCampaignID string) error
 
@@ -346,9 +346,9 @@ func (m *MockCampaignService) ExportCLFormatGlobal(ctx context.Context, missingC
 	return []campaigns.CLExportEntry{}, nil
 }
 
-func (m *MockCampaignService) ExportMMFormatGlobal(ctx context.Context) ([]campaigns.MMExportEntry, error) {
+func (m *MockCampaignService) ExportMMFormatGlobal(ctx context.Context, missingMMOnly bool) ([]campaigns.MMExportEntry, error) {
 	if m.ExportMMFormatGlobalFn != nil {
-		return m.ExportMMFormatGlobalFn(ctx)
+		return m.ExportMMFormatGlobalFn(ctx, missingMMOnly)
 	}
 	return []campaigns.MMExportEntry{}, nil
 }

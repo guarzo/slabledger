@@ -104,3 +104,98 @@ type TokenState struct {
 	IDToken   string
 	ExpiresAt time.Time
 }
+
+// callableRequest wraps data for Firebase callable function calls.
+type callableRequest struct {
+	Data any `json:"data"`
+}
+
+// callableResponse wraps the result from Firebase callable function calls.
+type callableResponse[T any] struct {
+	Result T `json:"result"`
+}
+
+// BuildCardRequest is the input for httpbuildcollectioncard.
+type BuildCardRequest struct {
+	Cert   string `json:"cert"`
+	Grader string `json:"grader"`
+}
+
+// BuildCardResponse is the result from httpbuildcollectioncard.
+type BuildCardResponse struct {
+	Pop              int    `json:"pop"`
+	Year             string `json:"year"`
+	Set              string `json:"set"`
+	Category         string `json:"category"`
+	Number           string `json:"number"`
+	Player           string `json:"player"`
+	Variation        string `json:"variation"`
+	Condition        string `json:"condition"`
+	ImageURL         string `json:"imageUrl"`
+	ImageBackURL     string `json:"imageBackUrl"`
+	GemRateID        string `json:"gemRateId"`
+	GemRateCondition string `json:"gemRateCondition"`
+	SlabSerial       string `json:"slabSerial"`
+	GradingCompany   string `json:"gradingCompany"`
+}
+
+// CardEstimateRequest is the input for httpcardestimate.
+type CardEstimateRequest struct {
+	GemRateID      string `json:"gemRateId"`
+	GradingCompany string `json:"gradingCompany"`
+	Condition      string `json:"condition"`
+	Description    string `json:"description"`
+}
+
+// VelocityData holds sales velocity for a time window.
+type VelocityData struct {
+	Velocity     int     `json:"velocity"`
+	AveragePrice float64 `json:"averagePrice"`
+}
+
+// CardEstimateResponse is the result from httpcardestimate.
+type CardEstimateResponse struct {
+	EstimatedValue     float64      `json:"estimatedValue"`
+	LastSaleDate       string       `json:"lastSaleDate"`
+	LastSalePrice      float64      `json:"lastSalePrice"`
+	Confidence         int          `json:"confidence"`
+	Grader             string       `json:"grader"`
+	Index              string       `json:"index"`
+	IndexID            string       `json:"indexId"`
+	Description        string       `json:"description"`
+	Grade              string       `json:"grade"`
+	TwoWeekData        VelocityData `json:"twoWeekData"`
+	OneMonthData       VelocityData `json:"oneMonthData"`
+	OneQuarterData     VelocityData `json:"oneQuarterData"`
+	OneYearData        VelocityData `json:"oneYearData"`
+	IsPlayerIndex      bool         `json:"isPlayerIndex"`
+	IndexPercentChange float64      `json:"indexPercentChange"`
+}
+
+// AddCollectionCardInput holds everything needed to create a card in a CL collection.
+type AddCollectionCardInput struct {
+	// Card metadata (from BuildCollectionCard)
+	Label            string
+	Player           string
+	PlayerIndexID    string
+	Category         string
+	Year             string
+	Set              string
+	Number           string
+	Variation        string
+	Condition        string // e.g. "PSA 9"
+	GradingCompany   string // e.g. "psa"
+	GemRateID        string
+	GemRateCondition string // e.g. "g9"
+	SlabSerial       string
+	Pop              int
+	ImageURL         string
+	ImageBackURL     string
+
+	// Valuation (from CardEstimate)
+	CurrentValue float64
+	Investment   float64 // purchase cost
+
+	// Purchase date
+	DatePurchased time.Time
+}

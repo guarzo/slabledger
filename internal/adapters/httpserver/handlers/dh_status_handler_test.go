@@ -153,6 +153,7 @@ func newTestDHHandler(
 		healthReporter,
 		countsFetcher,
 		nil, // dhApproveService — not needed for these tests
+		nil, // matchConfirmer — not needed for these tests
 	)
 }
 

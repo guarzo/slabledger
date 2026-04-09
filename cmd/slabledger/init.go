@@ -58,6 +58,7 @@ func initializeCampaignsService(
 	db *sqlite.DB,
 	priceProvImpl pricing.PriceProvider,
 	intelRepo *sqlite.MarketIntelligenceRepository,
+	mmStore *sqlite.MarketMoversStore,
 ) (campaigns.Service, *sqlite.CampaignsRepository, *sqlite.CardRequestRepository) {
 	campaignsRepo := sqlite.NewCampaignsRepository(db.DB)
 	priceLookupAdapter := pricelookup.NewAdapter(priceProvImpl)
@@ -90,6 +91,24 @@ func initializeCampaignsService(
 	// Card Ladder comp analytics — CLSalesStore only needs *sql.DB (always available).
 	clSalesStore := sqlite.NewCLSalesStore(db.DB)
 	campaignOpts = append(campaignOpts, campaigns.WithCompSummaryProvider(clSalesStore))
+
+	// Market Movers search title enrichment for CSV export (optional).
+	if mmStore != nil {
+		mmAdapter := campaigns.MMMappingFunc(func(ctx context.Context) (map[string]string, error) {
+			mappings, err := mmStore.ListMappings(ctx)
+			if err != nil {
+				return nil, err
+			}
+			result := make(map[string]string, len(mappings))
+			for _, m := range mappings {
+				if m.SearchTitle != "" {
+					result[m.SlabSerial] = m.SearchTitle
+				}
+			}
+			return result, nil
+		})
+		campaignOpts = append(campaignOpts, campaigns.WithMMMappings(mmAdapter))
+	}
 
 	campaignsService := campaigns.NewService(campaignsRepo, campaignOpts...)
 
@@ -408,6 +427,7 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 		CardLadderPurchaseLister: deps.CampaignsRepo,
 		CardLadderValueUpdater:   deps.CampaignsRepo,
 		CardLadderGemRateUpdater: deps.CampaignsRepo,
+		CardLadderSyncUpdater:    deps.CampaignsRepo,
 		CardLadderCLRecorder:     deps.CampaignsRepo,
 		CardLadderSalesStore:     deps.CardLadderSalesStore,
 	}

@@ -156,6 +156,12 @@ func (s *CardLadderStore) GetMapping(ctx context.Context, slabSerial string) (*C
 	return &m, nil
 }
 
+// DeleteMapping removes a cert→CL card mapping by slab serial.
+func (s *CardLadderStore) DeleteMapping(ctx context.Context, slabSerial string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM cl_card_mappings WHERE slab_serial = ?`, slabSerial)
+	return err
+}
+
 // ListMappings returns all stored mappings.
 func (s *CardLadderStore) ListMappings(ctx context.Context) ([]CLCardMapping, error) {
 	rows, err := s.db.QueryContext(ctx,

@@ -2,15 +2,16 @@ import { useRef, useState, ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { api } from '../../../js/api';
-import type { Campaign, GlobalImportResult, PSAImportResult, MMRefreshResult } from '../../../types/campaigns';
+import type { Campaign, GlobalImportResult, PSAImportResult } from '../../../types/campaigns';
 import { queryKeys } from '../../queries/queryKeys';
 import { getErrorMessage } from '../../utils/formatters';
 import { useToast } from '../../contexts/ToastContext';
 import { Button, CardShell } from '../../ui';
 import ImportResultsDetail from './ImportResultsDetail';
 import DHUnmatchedSection from '../tools/DHUnmatchedSection';
+import { useMarketMoversStatus } from '../../queries/useAdminQueries';
 
-export type OperationState = 'idle' | 'importing' | 'exporting' | 'exporting-mm' | 'importing-mm' | 'importing-psa';
+export type OperationState = 'idle' | 'importing' | 'exporting' | 'exporting-mm' | 'importing-mm' | 'importing-psa' | 'syncing-mm';
 
 /* ── FileUploadButton ─────────────────────────────────────────────── */
 
@@ -88,6 +89,20 @@ function IconCircle({ color, children }: { color: string; children: ReactNode })
   );
 }
 
+function FileTextIcon() {
+  return (
+    <IconCircle color="bg-[var(--warning-bg)] text-[var(--warning)]">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+        <polyline points="14 2 14 8 20 8" />
+        <line x1="16" y1="13" x2="8" y2="13" />
+        <line x1="16" y1="17" x2="8" y2="17" />
+        <polyline points="10 9 9 9 8 9" />
+      </svg>
+    </IconCircle>
+  );
+}
+
 function UploadIcon() {
   return (
     <IconCircle color="bg-[var(--brand-500)]/15 text-[var(--brand-500)]">
@@ -112,15 +127,13 @@ function DownloadIcon() {
   );
 }
 
-function FileTextIcon() {
+function SyncIcon() {
   return (
-    <IconCircle color="bg-[var(--warning-bg)] text-[var(--warning)]">
+    <IconCircle color="bg-emerald-500/15 text-emerald-400">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
-        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
-        <polyline points="14 2 14 8 20 8" />
-        <line x1="16" y1="13" x2="8" y2="13" />
-        <line x1="16" y1="17" x2="8" y2="17" />
-        <polyline points="10 9 9 9 8 9" />
+        <polyline points="23 4 23 10 17 10" />
+        <polyline points="1 20 1 14 7 14" />
+        <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" />
       </svg>
     </IconCircle>
   );
@@ -140,8 +153,8 @@ export default function OperationsTab({ campaigns, operationState, setOperationS
   const toast = useToast();
   const queryClient = useQueryClient();
   const busy = operationState !== 'idle';
+  const { data: mmStatus } = useMarketMoversStatus();
   const [exportMissingOnly, setExportMissingOnly] = useState(false);
-  const [mmResult, setMmResult] = useState<MMRefreshResult | null>(null);
 
   function invalidateAll() {
     queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.all });
@@ -155,6 +168,7 @@ export default function OperationsTab({ campaigns, operationState, setOperationS
     queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.weeklyReview });
     queryClient.invalidateQueries({ queryKey: queryKeys.admin.dhStatus });
     queryClient.invalidateQueries({ queryKey: queryKeys.admin.dhUnmatched });
+    queryClient.invalidateQueries({ queryKey: queryKeys.admin.marketMoversStatus });
   }
 
   async function handleGlobalImport(file: File) {
@@ -190,41 +204,23 @@ export default function OperationsTab({ campaigns, operationState, setOperationS
     }
   }
 
-  async function handleMMExport() {
+  async function handleMMSync() {
     try {
-      setOperationState('exporting-mm');
-      const blob = await api.globalExportMM();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'market-movers-export.csv';
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 100);
-      toast.success('Market Movers CSV exported');
-    } catch (err) {
-      toast.error(getErrorMessage(err, 'Failed to export'));
-    } finally {
-      setOperationState('idle');
-    }
-  }
-
-  async function handleMMImport(file: File) {
-    try {
-      setOperationState('importing-mm');
-      setMmResult(null);
-      const result = await api.globalRefreshMM(file);
-      setMmResult(result);
-      if (result.failed > 0 || (result.errors && result.errors.length > 0)) {
-        toast.warning(`Market Movers import: ${result.failed} failed. ${result.updated} updated, ${result.skipped} skipped, ${result.notFound} not found`);
+      setOperationState('syncing-mm');
+      const result = await api.syncMarketMoversCollection();
+      if (result.failed > 0) {
+        toast.warning(`MM sync: ${result.synced} synced, ${result.skipped} skipped, ${result.failed} failed`);
         if (result.errors && result.errors.length > 0) {
-          console.error('Market Movers import errors:', result.errors);
+          console.error('MM sync errors:', result.errors);
         }
+      } else if (result.synced === 0 && result.skipped === 0) {
+        toast.info('All items already synced to Market Movers');
       } else {
-        toast.success(`Market Movers import: ${result.updated} updated, ${result.skipped} skipped, ${result.notFound} not found`);
+        toast.success(`MM sync: ${result.synced} items added to Market Movers collection`);
       }
       invalidateAll();
     } catch (err) {
-      toast.error(getErrorMessage(err, 'Failed to import Market Movers data'));
+      toast.error(getErrorMessage(err, 'Failed to sync to Market Movers'));
     } finally {
       setOperationState('idle');
     }
@@ -319,35 +315,31 @@ export default function OperationsTab({ campaigns, operationState, setOperationS
         />
 
         <OperationCard
-          icon={<DownloadIcon />}
-          title="Export for Market Movers"
-          description="Download inventory CSV to import into Market Movers collection"
+          icon={<SyncIcon />}
+          title="Sync to Market Movers"
+          description="Push mapped unsold inventory directly to your MM collection via API"
           action={
-            <Button
-              size="sm"
-              variant="secondary"
-              fullWidth
-              loading={operationState === 'exporting-mm'}
-              disabled={busy && operationState !== 'exporting-mm'}
-              onClick={handleMMExport}
-            >
-              Download CSV
-            </Button>
-          }
-        />
-
-        <OperationCard
-          icon={<UploadIcon />}
-          title="Import from Market Movers"
-          description="Upload a Market Movers export CSV to sync Last Sale Price into mm_value"
-          action={
-            <FileUploadButton
-              label="Upload CSV"
-              loading={operationState === 'importing-mm'}
-              accept=".csv"
-              onFile={handleMMImport}
-              busy={busy}
-            />
+            <div className="flex flex-col gap-2 w-full">
+              <Button
+                size="sm"
+                variant="secondary"
+                fullWidth
+                loading={operationState === 'syncing-mm'}
+                disabled={busy && operationState !== 'syncing-mm'}
+                onClick={handleMMSync}
+              >
+                Sync Collection
+              </Button>
+              {mmStatus?.priceStats && (
+                <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-[var(--text-muted)]">
+                  <span>Synced: <span className="text-[var(--text)]">{mmStatus.priceStats.syncedCount}</span></span>
+                  <span>Priced: <span className="text-[var(--text)]">{mmStatus.priceStats.withMMPrice}/{mmStatus.priceStats.unsoldTotal}</span></span>
+                  {mmStatus.priceStats.staleCount > 0 && (
+                    <span>Stale: <span className="text-[var(--warning)]">{mmStatus.priceStats.staleCount}</span></span>
+                  )}
+                </div>
+              )}
+            </div>
           }
         />
 
@@ -386,28 +378,6 @@ export default function OperationsTab({ campaigns, operationState, setOperationS
               campaigns={campaigns}
               onItemResolved={() => queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.all })}
             />
-          )}
-        </div>
-      )}
-
-      {mmResult && (
-        <div className="mb-4 p-3 rounded-lg bg-[var(--surface-2)]/50 text-sm">
-          <div className="flex items-center justify-between mb-1">
-            <span className="font-medium text-[var(--text)]">Market Movers Refresh Complete</span>
-            <button type="button" onClick={() => setMmResult(null)} className="text-[var(--text-muted)] hover:text-[var(--text)] text-xs">Dismiss</button>
-          </div>
-          <div className="flex flex-wrap gap-3 text-xs">
-            {mmResult.updated > 0 && <span className="text-[var(--success)]">{mmResult.updated} updated</span>}
-            {mmResult.skipped > 0 && <span className="text-[var(--text-muted)]">{mmResult.skipped} skipped</span>}
-            {mmResult.notFound > 0 && <span className="text-[var(--warning)]">{mmResult.notFound} not found</span>}
-            {mmResult.failed > 0 && <span className="text-[var(--danger)]">{mmResult.failed} failed</span>}
-          </div>
-          {mmResult.errors && mmResult.errors.length > 0 && (
-            <div className="mt-2 text-xs text-[var(--danger)] space-y-0.5">
-              {mmResult.errors.map((e, i) => (
-                <div key={i}>{e.row != null ? `Row ${e.row}: ` : ''}{e.error}</div>
-              ))}
-            </div>
           )}
         </div>
       )}

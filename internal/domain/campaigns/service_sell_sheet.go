@@ -33,6 +33,7 @@ func (s *service) enrichSellSheetItem(_ context.Context, purchase *Purchase, cam
 		BuyCostCents:   purchase.BuyCostCents,
 		CostBasisCents: costBasis,
 		CLValueCents:   purchase.CLValueCents,
+		VaultStatus:    purchase.VaultStatus,
 	}
 
 	hasMarket := false

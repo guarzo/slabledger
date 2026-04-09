@@ -127,7 +127,7 @@ func adminAnalyze(ctx context.Context, args []string) error {
 	}
 
 	campaignsService, _, _ := initializeCampaignsService(
-		ctx, &cfg, logger, db, priceProvImpl, intelRepo,
+		ctx, &cfg, logger, db, priceProvImpl, intelRepo, nil,
 	)
 
 	// AI call tracking

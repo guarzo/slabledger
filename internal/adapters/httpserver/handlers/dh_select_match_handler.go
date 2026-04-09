@@ -165,6 +165,22 @@ func (h *DHHandler) HandleSelectMatch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Teach DH the correct match so future lookups resolve automatically.
+	if h.matchConfirmer != nil && purchase.CertNumber != "" {
+		confirmReq := dh.ConfirmMatchRequest{
+			CertNumber: purchase.CertNumber,
+			DHCardID:   req.DHCardID,
+			SetName:    purchase.SetName,
+			CardName:   purchase.CardName,
+		}
+		if _, err := h.matchConfirmer.ConfirmMatch(ctx, confirmReq); err != nil {
+			h.logger.Warn(ctx, "select match: failed to confirm match with DH",
+				observability.String("purchaseID", purchase.ID),
+				observability.String("cert", purchase.CertNumber),
+				observability.Err(err))
+		}
+	}
+
 	writeJSON(w, http.StatusOK, fixMatchResponse{
 		Status:        "ok",
 		DHCardID:      req.DHCardID,

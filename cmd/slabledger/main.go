@@ -262,8 +262,25 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		return err
 	}
 
+	// Create encryptor early — needed by Card Ladder, Market Movers, and MM mapping adapter.
+	var clEncryptor crypto.Encryptor
+	if cfg.Auth.EncryptionKey != "" {
+		var encErr error
+		clEncryptor, encErr = crypto.NewAESEncryptor(cfg.Auth.EncryptionKey)
+		if encErr != nil {
+			logger.Warn(ctx, "encryptor initialization failed, CL/MM token persistence disabled",
+				observability.Err(encErr))
+		}
+	}
+
+	// Create MM store early so the campaigns service can use it for export enrichment.
+	var mmStore *sqlite.MarketMoversStore
+	if clEncryptor != nil {
+		mmStore = sqlite.NewMarketMoversStore(db.DB, clEncryptor)
+	}
+
 	campaignsService, campaignsRepo, cardRequestRepo := initializeCampaignsService(
-		ctx, cfg, logger, db, priceProvImpl, intelRepo,
+		ctx, cfg, logger, db, priceProvImpl, intelRepo, mmStore,
 	)
 
 	// Sync state repository (for delta poll timestamps)
@@ -292,16 +309,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 
 	metricsRepo, insightsPoller := initializeMetricsPoller(ctx, db, igClient, igStore, logger)
 
-	// Initialize Card Ladder
-	var clEncryptor crypto.Encryptor
-	if cfg.Auth.EncryptionKey != "" {
-		var encErr error
-		clEncryptor, encErr = crypto.NewAESEncryptor(cfg.Auth.EncryptionKey)
-		if encErr != nil {
-			logger.Warn(ctx, "Card Ladder encryptor initialization failed, token persistence disabled",
-				observability.Err(encErr))
-		}
-	}
+	// Initialize Card Ladder (encryptor was created earlier for MM mapping adapter)
 	clClient, _, clStore := initializeCardLadder(ctx, logger, db, clEncryptor)
 	var clHandler *handlers.CardLadderHandler
 	var clSalesStore *sqlite.CLSalesStore
@@ -310,11 +318,14 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		clSalesStore = sqlite.NewCLSalesStore(db.DB)
 	}
 
-	// Initialize Market Movers (reuse the same encryptor as Card Ladder)
-	mmClient, mmStore := initializeMarketMovers(ctx, logger, db, clEncryptor)
+	// Initialize Market Movers client (store was created earlier for campaigns service)
+	mmClient, _ := initializeMarketMovers(ctx, logger, db, clEncryptor)
 	var mmHandler *handlers.MarketMoversHandler
 	if mmStore != nil {
 		mmHandler = handlers.NewMarketMoversHandler(mmStore, mmClient, logger)
+		if campaignsRepo != nil {
+			mmHandler.SetPurchaseLister(campaignsRepo)
+		}
 	}
 
 	// Initialize picks
@@ -348,6 +359,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 			dhClient,         // DHHealthReporter
 			dhClient,         // DHCountsFetcher
 			campaignsService, // DHApproveService
+			dhClient,         // DHMatchConfirmer
 		)
 		logger.Info(ctx, "DH handler initialized")
 	}
@@ -396,6 +408,9 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	// Wire Card Ladder manual refresh into the handler
 	if clHandler != nil && schedulerResult.CardLadderRefresh != nil {
 		clHandler.SetRefresher(schedulerResult.CardLadderRefresh)
+	}
+	if clHandler != nil && campaignsRepo != nil {
+		clHandler.SetPurchaseLister(campaignsRepo)
 	}
 
 	// Wire Market Movers manual refresh into the handler

@@ -178,7 +178,7 @@ func (s *MarketMoversRefreshScheduler) runOnce(ctx context.Context) error {
 		// Resolve collectible ID — use cached mapping or search the API
 		mapping, hasCached := mappingByCert[p.CertNumber]
 		if !hasCached {
-			cid, mid, err := s.resolveCollectibleID(ctx, p)
+			cid, mid, searchTitle, err := s.resolveCollectibleID(ctx, p)
 			if err != nil {
 				s.logger.Warn(ctx, "MM refresh: failed to resolve collectible ID",
 					observability.String("cert", p.CertNumber),
@@ -190,8 +190,8 @@ func (s *MarketMoversRefreshScheduler) runOnce(ctx context.Context) error {
 				skipped++
 				continue
 			}
-			mapping = sqlite.MMCardMapping{SlabSerial: p.CertNumber, MMCollectibleID: cid, MasterID: mid}
-			if err := s.store.SaveMapping(ctx, p.CertNumber, cid, mid); err != nil {
+			mapping = sqlite.MMCardMapping{SlabSerial: p.CertNumber, MMCollectibleID: cid, MasterID: mid, SearchTitle: searchTitle}
+			if err := s.store.SaveMapping(ctx, p.CertNumber, cid, mid, searchTitle); err != nil {
 				s.logger.Warn(ctx, "MM refresh: failed to save mapping",
 					observability.String("cert", p.CertNumber),
 					observability.Err(err))
@@ -250,9 +250,9 @@ func (s *MarketMoversRefreshScheduler) runOnce(ctx context.Context) error {
 	return nil
 }
 
-// resolveCollectibleID searches Market Movers for the card and returns its collectible ID
-// and master ID (grade-agnostic variant identifier, 0 if unknown).
-// Returns (0, 0, nil) if no suitable result is found.
+// resolveCollectibleID searches Market Movers for the card and returns its collectible ID,
+// master ID (grade-agnostic variant identifier, 0 if unknown), and the canonical SearchTitle.
+// Returns (0, 0, "", nil) if no suitable result is found.
 //
 // Strategy:
 //  1. Search by cert number — we embed the cert in the MM export Notes column, and MM
@@ -262,14 +262,14 @@ func (s *MarketMoversRefreshScheduler) runOnce(ctx context.Context) error {
 //
 // Any candidate returned by either path is validated by checking that the MM result's
 // SearchTitle contains the card name (case-insensitive) before the ID is cached.
-func (s *MarketMoversRefreshScheduler) resolveCollectibleID(ctx context.Context, p *campaigns.Purchase) (collectibleID, masterID int64, err error) {
+func (s *MarketMoversRefreshScheduler) resolveCollectibleID(ctx context.Context, p *campaigns.Purchase) (collectibleID, masterID int64, searchTitle string, err error) {
 	if p.CardName == "" {
-		return 0, 0, nil
+		return 0, 0, "", nil
 	}
 
 	// 1. Try cert number first.
 	if p.CertNumber != "" {
-		cid, mid, cerr := s.searchByCert(ctx, p)
+		cid, mid, title, cerr := s.searchByCert(ctx, p)
 		if cerr != nil {
 			s.logger.Warn(ctx, "MM: cert-based search failed, falling back to name search",
 				observability.String("cert", p.CertNumber),
@@ -278,7 +278,7 @@ func (s *MarketMoversRefreshScheduler) resolveCollectibleID(ctx context.Context,
 			s.logger.Info(ctx, "MM: resolved collectible via cert search",
 				observability.String("cert", p.CertNumber),
 				observability.Int64("collectibleId", cid))
-			return cid, mid, nil
+			return cid, mid, title, nil
 		}
 	}
 
@@ -287,26 +287,26 @@ func (s *MarketMoversRefreshScheduler) resolveCollectibleID(ctx context.Context,
 }
 
 // searchByCert searches MM using the PSA cert number as the query.
-// Returns the collectible ID and master ID of the first hit whose SearchTitle contains
-// the card name, or (0, 0, nil) if no matching result is found.
-func (s *MarketMoversRefreshScheduler) searchByCert(ctx context.Context, p *campaigns.Purchase) (collectibleID, masterID int64, err error) {
+// Returns the collectible ID, master ID, and SearchTitle of the first hit whose
+// SearchTitle contains the card name, or (0, 0, "", nil) if no matching result is found.
+func (s *MarketMoversRefreshScheduler) searchByCert(ctx context.Context, p *campaigns.Purchase) (collectibleID, masterID int64, searchTitle string, err error) {
 	results, err := s.getClient().SearchCollectibles(ctx, p.CertNumber, 0, 3)
 	if err != nil {
-		return 0, 0, fmt.Errorf("search by cert: %w", err)
+		return 0, 0, "", fmt.Errorf("search by cert: %w", err)
 	}
 	cardNameLower := strings.ToLower(p.CardName)
 	for _, r := range results.Items {
 		if strings.Contains(strings.ToLower(r.Item.SearchTitle), cardNameLower) {
-			return r.Item.ID, r.Item.MasterID, nil
+			return r.Item.ID, r.Item.MasterID, r.Item.SearchTitle, nil
 		}
 	}
-	return 0, 0, nil
+	return 0, 0, "", nil
 }
 
 // searchByNameGrade searches MM using "{CardName} {Grader} {Grade}" and validates
 // that the top result's SearchTitle contains the card name before returning the IDs.
-// Returns (0, 0, nil) if no relevant result is found.
-func (s *MarketMoversRefreshScheduler) searchByNameGrade(ctx context.Context, p *campaigns.Purchase) (collectibleID, masterID int64, err error) {
+// Returns (0, 0, "", nil) if no relevant result is found.
+func (s *MarketMoversRefreshScheduler) searchByNameGrade(ctx context.Context, p *campaigns.Purchase) (collectibleID, masterID int64, searchTitle string, err error) {
 	grader := p.Grader
 	if grader == "" {
 		grader = "PSA"
@@ -321,10 +321,10 @@ func (s *MarketMoversRefreshScheduler) searchByNameGrade(ctx context.Context, p 
 
 	results, err := s.getClient().SearchCollectibles(ctx, query, 0, 5)
 	if err != nil {
-		return 0, 0, fmt.Errorf("search by name: %w", err)
+		return 0, 0, "", fmt.Errorf("search by name: %w", err)
 	}
 	if len(results.Items) == 0 {
-		return 0, 0, nil
+		return 0, 0, "", nil
 	}
 
 	// Validate relevance: reject the top result if its title doesn't contain the card name,
@@ -335,7 +335,7 @@ func (s *MarketMoversRefreshScheduler) searchByNameGrade(ctx context.Context, p 
 			observability.String("cert", p.CertNumber),
 			observability.String("query", query),
 			observability.String("resultTitle", top.Item.SearchTitle))
-		return 0, 0, nil
+		return 0, 0, "", nil
 	}
 
 	s.logger.Info(ctx, "MM: resolved collectible via name search",
@@ -343,7 +343,7 @@ func (s *MarketMoversRefreshScheduler) searchByNameGrade(ctx context.Context, p 
 		observability.String("query", query),
 		observability.String("resultTitle", top.Item.SearchTitle),
 		observability.Int64("collectibleId", top.Item.ID))
-	return top.Item.ID, top.Item.MasterID, nil
+	return top.Item.ID, top.Item.MasterID, top.Item.SearchTitle, nil
 }
 
 // computeMMSignals derives count-weighted average price, 30-day trend %, and total

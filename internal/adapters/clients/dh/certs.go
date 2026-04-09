@@ -37,6 +37,30 @@ func (c *Client) ResolveCertsBatch(ctx context.Context, certs []CertResolveReque
 	return &resp, nil
 }
 
+// ConfirmMatch confirms the correct card match for a cert that was unmatched
+// or incorrectly matched. This teaches the DH system for future lookups.
+func (c *Client) ConfirmMatch(ctx context.Context, req ConfirmMatchRequest) (*ConfirmMatchResponse, error) {
+	fullURL := fmt.Sprintf("%s/api/v1/enterprise/certs/confirm_match", c.baseURL)
+
+	var resp ConfirmMatchResponse
+	if err := c.postEnterprise(ctx, fullURL, req, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// ConfirmMatchBatch confirms correct card matches for up to 500 certs at once.
+func (c *Client) ConfirmMatchBatch(ctx context.Context, confirmations []ConfirmMatchRequest) (*ConfirmMatchBatchResponse, error) {
+	fullURL := fmt.Sprintf("%s/api/v1/enterprise/certs/confirm_match", c.baseURL)
+	body := ConfirmMatchBatchRequest{Confirmations: confirmations}
+
+	var resp ConfirmMatchBatchResponse
+	if err := c.postEnterprise(ctx, fullURL, body, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
 // GetCertResolutionJob polls for the status and results of a batch cert resolution job.
 func (c *Client) GetCertResolutionJob(ctx context.Context, jobID string) (*CertResolutionJobStatus, error) {
 	fullURL := fmt.Sprintf("%s/api/v1/enterprise/certs/resolve_batch/%s", c.baseURL, url.PathEscape(jobID))

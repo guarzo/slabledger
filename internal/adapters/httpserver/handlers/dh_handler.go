@@ -71,6 +71,11 @@ type DHHealthReporter interface {
 	Health() *dh.HealthTracker
 }
 
+// DHMatchConfirmer confirms correct card matches with DH so the system learns.
+type DHMatchConfirmer interface {
+	ConfirmMatch(ctx context.Context, req dh.ConfirmMatchRequest) (*dh.ConfirmMatchResponse, error)
+}
+
 // DHApproveService approves held DH push items and manages push config.
 type DHApproveService interface {
 	ApproveDHPush(ctx context.Context, purchaseID string) error
@@ -103,6 +108,7 @@ type DHHandler struct {
 	healthReporter    DHHealthReporter // optional: API health metrics
 	countsFetcher     DHCountsFetcher  // optional: DH inventory/order counts
 	dhApproveService  DHApproveService // optional: approve held pushes + push config
+	matchConfirmer    DHMatchConfirmer // optional: confirms matches with DH for learning
 
 	bgWG             sync.WaitGroup
 	bulkMatchMu      sync.Mutex
@@ -138,6 +144,7 @@ func NewDHHandler(
 	healthReporter DHHealthReporter,
 	countsFetcher DHCountsFetcher,
 	dhApproveService DHApproveService,
+	matchConfirmer DHMatchConfirmer,
 ) *DHHandler {
 	if baseCtx == nil {
 		baseCtx = context.Background()
@@ -160,6 +167,7 @@ func NewDHHandler(
 		healthReporter:    healthReporter,
 		countsFetcher:     countsFetcher,
 		dhApproveService:  dhApproveService,
+		matchConfirmer:    matchConfirmer,
 	}
 	h.bulkMatchError.Store("")
 	return h
@@ -174,3 +182,4 @@ var _ DHCertResolver = (*dh.Client)(nil)
 var _ DHInventoryPusher = (*dh.Client)(nil)
 var _ DHHealthReporter = (*dh.Client)(nil)
 var _ DHCountsFetcher = (*dh.Client)(nil)
+var _ DHMatchConfirmer = (*dh.Client)(nil)

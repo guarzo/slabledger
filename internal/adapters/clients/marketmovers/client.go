@@ -210,6 +210,94 @@ func (c *Client) AvgRecentPrice(ctx context.Context, collectibleID int64, nDays 
 	return totalAmount / float64(totalCount), nil
 }
 
+// AddCollectionItem adds a single item to the user's MM collection.
+// Requires a valid collectibleId (from SearchCollectibles) and purchase details.
+func (c *Client) AddCollectionItem(ctx context.Context, input AddCollectionItemInput) (*AddCollectionItemResponse, error) {
+	var resp tRPCResponse[AddCollectionItemResponse]
+	if err := c.doMutation(ctx, "private.collection.items.add", input, &resp); err != nil {
+		return nil, fmt.Errorf("add collection item: %w", err)
+	}
+	return &resp.Result.Data, nil
+}
+
+// AddMultipleCollectionItems adds multiple items to the user's MM collection in a single request.
+func (c *Client) AddMultipleCollectionItems(ctx context.Context, items []AddCollectionItemInput) (*AddMultipleCollectionItemsResponse, error) {
+	var resp tRPCResponse[AddMultipleCollectionItemsResponse]
+	if err := c.doMutation(ctx, "private.collection.items.addMultiple", items, &resp); err != nil {
+		return nil, fmt.Errorf("add multiple collection items: %w", err)
+	}
+	return &resp.Result.Data, nil
+}
+
+// RemoveCollectionItem removes an item from the user's MM collection.
+func (c *Client) RemoveCollectionItem(ctx context.Context, collectionItemID int64, collectibleType string) error {
+	input := map[string]any{
+		"collectionItemId": collectionItemID,
+		"collectibleType":  collectibleType,
+	}
+	var resp tRPCResponse[map[string]any]
+	if err := c.doMutation(ctx, "private.collection.items.remove", input, &resp); err != nil {
+		return fmt.Errorf("remove collection item %d: %w", collectionItemID, err)
+	}
+	return nil
+}
+
+// doMutation executes a tRPC POST mutation (mutate procedure).
+func (c *Client) doMutation(ctx context.Context, path string, input any, result any) error {
+	if err := c.rateLimiter.Wait(ctx); err != nil {
+		return err
+	}
+
+	token, err := c.getToken(ctx)
+	if err != nil {
+		return fmt.Errorf("get auth token: %w", err)
+	}
+
+	bodyBytes, err := json.Marshal(input)
+	if err != nil {
+		return fmt.Errorf("marshal mutation input: %w", err)
+	}
+
+	u := c.baseURL + "/" + path
+	headers := map[string]string{
+		"Authorization": "Bearer " + token,
+		"Content-Type":  "application/json",
+	}
+
+	resp, err := c.httpClient.Post(ctx, u, headers, bodyBytes, 0)
+	if err != nil {
+		// httpx returns both resp and err for HTTP 4xx/5xx — check for
+		// tRPC validation error in the body before falling back to the
+		// generic HTTP error.
+		if resp != nil && len(resp.Body) > 0 {
+			var errCheck struct {
+				Error *struct {
+					Message string `json:"message"`
+				} `json:"error"`
+			}
+			if jsonErr := json.Unmarshal(resp.Body, &errCheck); jsonErr == nil && errCheck.Error != nil {
+				return fmt.Errorf("trpc error: %s", errCheck.Error.Message)
+			}
+		}
+		return fmt.Errorf("http request: %w", err)
+	}
+
+	// Check for tRPC error in response body before unmarshalling.
+	var errCheck struct {
+		Error *struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if jsonErr := json.Unmarshal(resp.Body, &errCheck); jsonErr == nil && errCheck.Error != nil {
+		return fmt.Errorf("trpc error: %s", errCheck.Error.Message)
+	}
+
+	if err := json.Unmarshal(resp.Body, result); err != nil {
+		return fmt.Errorf("unmarshal response: %w", err)
+	}
+	return nil
+}
+
 // doQuery executes a tRPC GET query (query procedure).
 func (c *Client) doQuery(ctx context.Context, path string, input any, result any) error {
 	if err := c.rateLimiter.Wait(ctx); err != nil {
