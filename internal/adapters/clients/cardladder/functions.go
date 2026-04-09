@@ -59,6 +59,18 @@ func (c *Client) doCallable(ctx context.Context, functionName string, data any, 
 
 	resp, err := c.httpClient.Post(ctx, u, headers, bodyBytes, 0)
 	if err != nil {
+		// If resp is available, check for Firebase callable error envelope before discarding.
+		if resp != nil {
+			var callableErr struct {
+				Error struct {
+					Message string `json:"message"`
+					Status  string `json:"status"`
+				} `json:"error"`
+			}
+			if json.Unmarshal(resp.Body, &callableErr) == nil && callableErr.Error.Message != "" {
+				return fmt.Errorf("callable %s error: %s (status: %s)", functionName, callableErr.Error.Message, callableErr.Error.Status)
+			}
+		}
 		return fmt.Errorf("http request to %s: %w", functionName, err)
 	}
 

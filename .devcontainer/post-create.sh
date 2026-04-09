@@ -1,7 +1,7 @@
 #!/bin/bash
 # Post-create script - runs once after container is created
 
-set -e
+set -eo pipefail
 
 echo "🚀 Running post-create setup..."
 

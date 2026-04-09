@@ -65,6 +65,8 @@ func (h *CardLadderHandler) HandleAddCard(w http.ResponseWriter, r *http.Request
 	}
 	if req.Grader == "" {
 		req.Grader = "psa"
+	} else {
+		req.Grader = strings.ToLower(req.Grader)
 	}
 
 	cfg, err := h.store.GetConfig(r.Context())
@@ -205,6 +207,11 @@ func (h *CardLadderHandler) addCardToCollection(ctx context.Context, uid, collec
 	if err := h.store.SaveMapping(ctx, req.CertNumber, result.DocumentName, result.GemRateID, result.GemRateCondition); err != nil {
 		h.logger.Error(ctx, "failed to save CL mapping after Firestore write",
 			observability.String("cert", req.CertNumber), observability.Err(err))
+		// Best-effort compensating delete to avoid orphaned remote document.
+		if delErr := h.client.DeleteCollectionCard(ctx, result.DocumentName); delErr != nil {
+			h.logger.Error(ctx, "compensating delete of remote CL doc failed",
+				observability.String("doc", result.DocumentName), observability.Err(delErr))
+		}
 		return nil, fmt.Errorf("save mapping for cert %s: %w", req.CertNumber, err)
 	}
 

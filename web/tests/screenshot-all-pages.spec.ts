@@ -119,7 +119,7 @@ async function screenshotPage(
   // If row expansion is requested (inventory detail), click the first data row
   if (pg.expandRow) {
     try {
-      const row = page.locator('div[role="row"]').first();
+      const row = page.locator('div[role="row"]:has(div[role="gridcell"])').first();
       await row.click({ timeout: 10000 });
       await page.waitForTimeout(500);
       // Wait for the expanded detail panel to appear

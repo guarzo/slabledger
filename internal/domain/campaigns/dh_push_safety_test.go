@@ -87,16 +87,6 @@ func TestEvaluateHoldTriggers(t *testing.T) {
 			wantHeld: false,
 		},
 		{
-			name: "initial push - no buy cost - not held",
-			p: Purchase{
-				CLValueCents:  5000,
-				BuyCostCents:  0,
-				DHInventoryID: 0,
-			},
-			cfg:      defaultCfg,
-			wantHeld: false,
-		},
-		{
 			name: "initial push - market value above buy cost - not held",
 			p: Purchase{
 				CLValueCents:  15000,

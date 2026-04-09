@@ -124,7 +124,13 @@ func (s *MarketMoversStore) SaveMapping(ctx context.Context, slabSerial string, 
 		   mm_collectible_id = excluded.mm_collectible_id,
 		   mm_master_id = excluded.mm_master_id,
 		   mm_search_title = excluded.mm_search_title,
-		   mm_collection_item_id = 0,
+		   mm_collection_item_id = CASE
+		     WHEN mm_card_mappings.mm_collectible_id != excluded.mm_collectible_id
+		       OR mm_card_mappings.mm_master_id != excluded.mm_master_id
+		       OR mm_card_mappings.mm_search_title != excluded.mm_search_title
+		     THEN 0
+		     ELSE mm_card_mappings.mm_collection_item_id
+		   END,
 		   updated_at = excluded.updated_at`,
 		slabSerial, mmCollectibleID, masterID, searchTitle, time.Now().UTC().Format(time.RFC3339),
 	)
