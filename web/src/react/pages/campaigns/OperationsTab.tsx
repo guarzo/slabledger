@@ -171,6 +171,7 @@ export default function OperationsTab({ campaigns, operationState, setOperationS
     try {
       setOperationState('syncing-cl');
       const result = await clSync.mutateAsync();
+<<<<<<< HEAD
       if (result.failed > 0) {
         toast.error(`CL sync: ${result.synced} synced, ${result.skipped} skipped, ${result.failed} failed`);
       } else {
@@ -225,6 +226,24 @@ export default function OperationsTab({ campaigns, operationState, setOperationS
               onFile={handlePSAImport}
               busy={busy}
             />
+          }
+        />
+
+        <OperationCard
+          icon={<SyncIcon />}
+          title="Sync to Card Ladder"
+          description="Push unsold inventory with cert numbers directly to your CL collection via API"
+          action={
+            <Button
+              size="sm"
+              variant="secondary"
+              fullWidth
+              loading={operationState === 'syncing-cl'}
+              disabled={busy && operationState !== 'syncing-cl'}
+              onClick={handleCLSync}
+            >
+              Sync Collection
+            </Button>
           }
         />
 
