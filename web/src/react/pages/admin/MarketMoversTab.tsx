@@ -3,16 +3,7 @@ import { useMarketMoversStatus, useSaveMarketMoversConfig, useTriggerMarketMover
 import { useToast } from '../../contexts/ToastContext';
 import { CardShell } from '../../ui/CardShell';
 import Button from '../../ui/Button';
-
-interface MMLastRun {
-  lastRunAt: string;
-  durationMs: number;
-  updated: number;
-  newMappings: number;
-  skipped: number;
-  searchFailed: number;
-  totalPurchases: number;
-}
+import type { MMLastRun } from '../../../types/admin';
 
 function RunStatRow({ label, value, accent }: { label: string; value: string | number; accent?: 'green' | 'red' | 'yellow' }) {
   const color =
