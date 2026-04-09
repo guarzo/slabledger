@@ -91,17 +91,36 @@ func TestCLSales_computeTrend(t *testing.T) {
 }
 
 func TestCLSales_conditionFilter(t *testing.T) {
-	t.Run("with condition", func(t *testing.T) {
-		clause, args := conditionFilter("gem-1", "NM-MT 8")
-		assert.Equal(t, "gem_rate_id = ? AND condition = ?", clause)
-		assert.Equal(t, []any{"gem-1", "NM-MT 8"}, args)
-	})
+	tests := []struct {
+		name       string
+		gemRateID  string
+		condition  string
+		wantClause string
+		wantArgs   []any
+	}{
+		{
+			name:       "with condition",
+			gemRateID:  "gem-1",
+			condition:  "NM-MT 8",
+			wantClause: "gem_rate_id = ? AND condition = ?",
+			wantArgs:   []any{"gem-1", "NM-MT 8"},
+		},
+		{
+			name:       "empty condition returns guard clause",
+			gemRateID:  "gem-1",
+			condition:  "",
+			wantClause: "gem_rate_id = ? AND 1=0",
+			wantArgs:   []any{"gem-1"},
+		},
+	}
 
-	t.Run("empty condition returns guard clause", func(t *testing.T) {
-		clause, args := conditionFilter("gem-1", "")
-		assert.Contains(t, clause, "1=0")
-		assert.Equal(t, []any{"gem-1"}, args)
-	})
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			clause, args := conditionFilter(tc.gemRateID, tc.condition)
+			assert.Equal(t, tc.wantClause, clause)
+			assert.Equal(t, tc.wantArgs, args)
+		})
+	}
 }
 
 // --- Database integration tests ---
@@ -208,25 +227,36 @@ func TestCLSales_UpsertSaleComp(t *testing.T) {
 }
 
 func TestCLSales_GetSaleComps(t *testing.T) {
-	db := setupTestDB(t)
-	defer db.Close()
-	store := NewCLSalesStore(db.DB)
 	ctx := context.Background()
 
 	t.Run("empty result for unknown gemRateID", func(t *testing.T) {
+		db := setupTestDB(t)
+		defer db.Close()
+		store := NewCLSalesStore(db.DB)
+
 		comps, err := store.GetSaleComps(ctx, "cls-nonexistent", "GEM-MT 10", 10)
 		require.NoError(t, err)
 		assert.Empty(t, comps)
 	})
 
-	t.Run("returns results ordered by date descending", func(t *testing.T) {
-		for i := 1; i <= 5; i++ {
-			rec := newCLSaleComp("cls-gem-order", "GEM-MT 10",
+	// seedComps inserts n sale comps for the given gemRateID and condition.
+	seedComps := func(t *testing.T, store *CLSalesStore, gemRateID, condition string, n int) {
+		t.Helper()
+		for i := 1; i <= n; i++ {
+			rec := newCLSaleComp(gemRateID, condition,
 				fmt.Sprintf("cls-ord-%d", i),
 				fmt.Sprintf("2026-03-%02d", i),
 				10000*i, "eBay")
 			require.NoError(t, store.UpsertSaleComp(ctx, rec))
 		}
+	}
+
+	t.Run("returns results ordered by date descending", func(t *testing.T) {
+		db := setupTestDB(t)
+		defer db.Close()
+		store := NewCLSalesStore(db.DB)
+
+		seedComps(t, store, "cls-gem-order", "GEM-MT 10", 5)
 
 		comps, err := store.GetSaleComps(ctx, "cls-gem-order", "GEM-MT 10", 10)
 		require.NoError(t, err)
@@ -237,6 +267,12 @@ func TestCLSales_GetSaleComps(t *testing.T) {
 	})
 
 	t.Run("respects limit", func(t *testing.T) {
+		db := setupTestDB(t)
+		defer db.Close()
+		store := NewCLSalesStore(db.DB)
+
+		seedComps(t, store, "cls-gem-order", "GEM-MT 10", 5)
+
 		comps, err := store.GetSaleComps(ctx, "cls-gem-order", "GEM-MT 10", 3)
 		require.NoError(t, err)
 		assert.Len(t, comps, 3)
@@ -244,6 +280,11 @@ func TestCLSales_GetSaleComps(t *testing.T) {
 	})
 
 	t.Run("filters by condition", func(t *testing.T) {
+		db := setupTestDB(t)
+		defer db.Close()
+		store := NewCLSalesStore(db.DB)
+
+		seedComps(t, store, "cls-gem-order", "GEM-MT 10", 5)
 		rec := newCLSaleComp("cls-gem-order", "NM 7", "cls-ord-nm7", "2026-03-01", 5000, "eBay")
 		require.NoError(t, store.UpsertSaleComp(ctx, rec))
 
@@ -258,23 +299,34 @@ func TestCLSales_GetSaleComps(t *testing.T) {
 }
 
 func TestCLSales_GetLatestSaleDate(t *testing.T) {
-	db := setupTestDB(t)
-	defer db.Close()
-	store := NewCLSalesStore(db.DB)
 	ctx := context.Background()
 
 	t.Run("returns empty for no data", func(t *testing.T) {
+		db := setupTestDB(t)
+		defer db.Close()
+		store := NewCLSalesStore(db.DB)
+
 		date, err := store.GetLatestSaleDate(ctx, "cls-nodata", "GEM-MT 10")
 		require.NoError(t, err)
 		assert.Equal(t, "", date)
 	})
 
-	t.Run("returns latest date", func(t *testing.T) {
-		for i, d := range []string{"2026-01-10", "2026-03-15", "2026-02-20"} {
-			rec := newCLSaleComp("cls-gem-latest", "GEM-MT 10",
+	// seedLatestDates inserts records for the given gemRateID, condition, and dates.
+	seedLatestDates := func(t *testing.T, store *CLSalesStore, gemRateID, condition string, dates []string) {
+		t.Helper()
+		for i, d := range dates {
+			rec := newCLSaleComp(gemRateID, condition,
 				fmt.Sprintf("cls-lat-%d", i), d, 10000, "eBay")
 			require.NoError(t, store.UpsertSaleComp(ctx, rec))
 		}
+	}
+
+	t.Run("returns latest date", func(t *testing.T) {
+		db := setupTestDB(t)
+		defer db.Close()
+		store := NewCLSalesStore(db.DB)
+
+		seedLatestDates(t, store, "cls-gem-latest", "GEM-MT 10", []string{"2026-01-10", "2026-03-15", "2026-02-20"})
 
 		date, err := store.GetLatestSaleDate(ctx, "cls-gem-latest", "GEM-MT 10")
 		require.NoError(t, err)
@@ -282,6 +334,13 @@ func TestCLSales_GetLatestSaleDate(t *testing.T) {
 	})
 
 	t.Run("scoped to condition", func(t *testing.T) {
+		db := setupTestDB(t)
+		defer db.Close()
+		store := NewCLSalesStore(db.DB)
+
+		// Seed both conditions in same DB
+		seedLatestDates(t, store, "cls-gem-latest", "GEM-MT 10", []string{"2026-01-10", "2026-03-15", "2026-02-20"})
+
 		rec := newCLSaleComp("cls-gem-latest", "NM-MT 8", "cls-lat-8", "2026-04-01", 8000, "eBay")
 		require.NoError(t, store.UpsertSaleComp(ctx, rec))
 

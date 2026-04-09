@@ -1,8 +1,6 @@
 package social
 
-import (
-	"time"
-)
+import "time"
 
 // PostType identifies the kind of social post.
 type PostType string

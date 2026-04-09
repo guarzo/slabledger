@@ -302,11 +302,7 @@ export class APIClient {
    * Handle a response that may be 204 No Content or contain a JSON error body.
    * Used by mutation endpoints that return no body on success.
    */
-  expectNoContent(response: Response): Promise<void> {
-    return this._expectNoContent(response);
-  }
-
-  private async _expectNoContent(response: Response): Promise<void> {
+  async expectNoContent(response: Response): Promise<void> {
     if (response.status === 204) return;
     const text = await response.text();
     if (text) {

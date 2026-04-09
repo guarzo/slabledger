@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -100,7 +101,7 @@ func TestSocialRepository_ListPosts(t *testing.T) {
 
 	// Create posts with different statuses and staggered times.
 	for i, st := range []social.PostStatus{social.PostStatusDraft, social.PostStatusDraft, social.PostStatusPublished} {
-		p := newTestSocialPost("soc-list-"+string(rune('a'+i)), social.PostTypeNewArrivals, st)
+		p := newTestSocialPost(fmt.Sprintf("soc-list-%c", 'a'+i), social.PostTypeNewArrivals, st)
 		// Stagger CreatedAt so ordering is deterministic.
 		p.CreatedAt = p.CreatedAt.Add(time.Duration(i) * time.Second)
 		p.UpdatedAt = p.CreatedAt
@@ -840,7 +841,7 @@ func TestSocialRepository_AllPostTypes(t *testing.T) {
 
 	types := []social.PostType{social.PostTypeNewArrivals, social.PostTypePriceMovers, social.PostTypeHotDeals}
 	for i, pt := range types {
-		post := newTestSocialPost("soc-type-"+string(rune('a'+i)), pt, social.PostStatusDraft)
+		post := newTestSocialPost(fmt.Sprintf("soc-type-%c", 'a'+i), pt, social.PostStatusDraft)
 		require.NoError(t, repo.CreatePost(ctx, post))
 
 		got, err := repo.GetPost(ctx, post.ID)

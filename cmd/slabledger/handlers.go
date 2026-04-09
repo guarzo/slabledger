@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"os"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
@@ -167,11 +166,8 @@ func createHandlers(in handlerInputs) (ServerDependencies, handlerOutputs) {
 	}
 
 	// Social handler
-	mediaDir := os.Getenv("MEDIA_DIR")
-	if mediaDir == "" {
-		mediaDir = "./data/media"
-	}
-	baseURL := os.Getenv("BASE_URL")
+	mediaDir := in.Cfg.Server.MediaDir
+	baseURL := in.Cfg.Server.BaseURL
 	if baseURL == "" {
 		logger.Warn(context.Background(), "BASE_URL is not set — slide URLs will be derived from request headers")
 	} else {
@@ -232,20 +228,17 @@ func createHandlers(in handlerInputs) (ServerDependencies, handlerOutputs) {
 	// Build DHListingService from available components.
 	// Nil-safe: only create the service if at least the lister client is available.
 	if in.DHClient != nil {
-		var listingOpts []campaigns.DHListingServiceOption
-		listingOpts = append(listingOpts, campaigns.WithDHListingLister(
-			dhlisting.NewInventoryListerAdapter(in.DHClient),
-		))
-		listingOpts = append(listingOpts, campaigns.WithDHListingCertResolver(
-			dhlisting.NewCertResolverAdapter(in.DHClient),
-		))
-		listingOpts = append(listingOpts, campaigns.WithDHListingPusher(
-			dhlisting.NewInventoryPusherAdapter(in.DHClient),
-		))
+		listingOpts := []campaigns.DHListingServiceOption{
+			campaigns.WithDHListingLister(dhlisting.NewInventoryListerAdapter(in.DHClient)),
+			campaigns.WithDHListingCertResolver(dhlisting.NewCertResolverAdapter(in.DHClient)),
+			campaigns.WithDHListingPusher(dhlisting.NewInventoryPusherAdapter(in.DHClient)),
+		}
 		if in.CampaignsRepo != nil {
-			listingOpts = append(listingOpts, campaigns.WithDHListingFieldsUpdater(in.CampaignsRepo))
-			listingOpts = append(listingOpts, campaigns.WithDHListingPushStatusUpdater(in.CampaignsRepo))
-			listingOpts = append(listingOpts, campaigns.WithDHListingCandidatesSaver(in.CampaignsRepo))
+			listingOpts = append(listingOpts,
+				campaigns.WithDHListingFieldsUpdater(in.CampaignsRepo),
+				campaigns.WithDHListingPushStatusUpdater(in.CampaignsRepo),
+				campaigns.WithDHListingCandidatesSaver(in.CampaignsRepo),
+			)
 		}
 		if in.CardIDMappingRepo != nil {
 			listingOpts = append(listingOpts, campaigns.WithDHListingCardIDSaver(in.CardIDMappingRepo))

@@ -61,6 +61,14 @@ const (
 	DHCertStatusNotFound  = "not_found"
 )
 
+// DefaultListingChannels are the DH sales channels enabled by default
+// when listing inventory items.
+var DefaultListingChannels = []string{"ebay", "shopify"}
+
+// SourceDH is the provider key for DoubleHolo price lookups.
+// Duplicated from pricing.SourceDH to avoid cross-domain import.
+const SourceDH = "doubleholo"
+
 // DHCertResolver resolves PSA cert numbers to DH card IDs.
 // This is the domain-level interface; adapter implementations wrap the
 // external DH API client.

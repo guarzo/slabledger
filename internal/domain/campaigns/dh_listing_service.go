@@ -4,11 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/guarzo/slabledger/internal/domain/observability"
-	"github.com/guarzo/slabledger/internal/domain/pricing"
 )
 
 // dhListingService implements DHListingService by coordinating cert resolution,
@@ -115,8 +115,16 @@ func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []stri
 		return DHListingResult{}
 	}
 
+	// Sort cert numbers for deterministic iteration order.
+	sortedCerts := make([]string, 0, len(purchases))
+	for cn := range purchases {
+		sortedCerts = append(sortedCerts, cn)
+	}
+	sort.Strings(sortedCerts)
+
 	listed, synced := 0, 0
-	for _, p := range purchases {
+	for _, cn := range sortedCerts {
+		p := purchases[cn]
 		// If pending DH push, do inline match + push first.
 		if p.DHInventoryID == 0 && p.DHPushStatus == DHPushStatusPending {
 			if s.certResolver == nil || s.pusher == nil {
@@ -142,7 +150,7 @@ func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []stri
 		}
 		listed++
 
-		defaultChannels := []string{"ebay", "shopify"}
+		defaultChannels := DefaultListingChannels
 		if err := s.lister.SyncChannels(ctx, p.DHInventoryID, defaultChannels); err != nil {
 			s.logger.Warn(ctx, "dh listing: channel sync failed, reverting to in_stock",
 				observability.String("cert", p.CertNumber),
@@ -154,11 +162,31 @@ func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []stri
 					observability.String("cert", p.CertNumber),
 					observability.Int("inventoryID", p.DHInventoryID),
 					observability.Err(revertErr))
+			} else if s.fieldsUpdater != nil {
+				// Persist reverted status locally so readers don't see stale data.
+				if persistErr := s.fieldsUpdater.UpdatePurchaseDHFields(ctx, p.ID, DHFieldsUpdate{
+					DHStatus: DHStatusInStock,
+				}); persistErr != nil {
+					s.logger.Warn(ctx, "dh listing: failed to persist reverted status",
+						observability.String("cert", p.CertNumber), observability.Err(persistErr))
+				}
 			}
 			listed-- // revert the listed count
 			continue
 		}
 		synced++
+
+		// Persist listed status and channel info locally.
+		if s.fieldsUpdater != nil {
+			channelsJSON, _ := json.Marshal(defaultChannels)
+			if persistErr := s.fieldsUpdater.UpdatePurchaseDHFields(ctx, p.ID, DHFieldsUpdate{
+				DHStatus:     DHStatusListed,
+				ChannelsJSON: string(channelsJSON),
+			}); persistErr != nil {
+				s.logger.Warn(ctx, "dh listing: failed to persist listed status",
+					observability.String("cert", p.CertNumber), observability.Err(persistErr))
+			}
+		}
 	}
 
 	if listed > 0 || synced > 0 {
@@ -206,7 +234,7 @@ func (s *dhListingService) inlineMatchAndPush(ctx context.Context, p *Purchase) 
 
 	if s.cardIDSaver != nil {
 		externalID := strconv.Itoa(dhCardID)
-		if err := s.cardIDSaver.SaveExternalID(ctx, p.CardName, p.SetName, p.CardNumber, pricing.SourceDH, externalID); err != nil {
+		if err := s.cardIDSaver.SaveExternalID(ctx, p.CardName, p.SetName, p.CardNumber, SourceDH, externalID); err != nil {
 			s.logger.Warn(ctx, "inline dh resolve: failed to save card mapping",
 				observability.String("cert", p.CertNumber), observability.Err(err))
 		}

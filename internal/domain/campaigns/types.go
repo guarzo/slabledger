@@ -300,7 +300,16 @@ type CapitalSummary struct {
 
 // ComputeCapitalSummary applies business logic to raw capital data, computing
 // derived fields: WeeksToCover, RecoveryTrend, and AlertLevel.
+// Returns a safe default summary if raw is nil.
 func ComputeCapitalSummary(raw *CapitalRawData) *CapitalSummary {
+	if raw == nil {
+		return &CapitalSummary{
+			WeeksToCover:  WeeksToCoverNoData,
+			RecoveryTrend: TrendStable,
+			AlertLevel:    AlertOK,
+		}
+	}
+
 	weeksToCover := WeeksToCoverNoData
 	if raw.RecoveryRate30dCents > 0 {
 		weeklyRate := float64(raw.RecoveryRate30dCents) / WeeksPerMonth
