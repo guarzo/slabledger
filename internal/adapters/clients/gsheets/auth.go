@@ -45,11 +45,24 @@ func (t *cachedToken) isExpired() bool {
 	return t.expiry.IsZero() || time.Now().Add(tokenMargin).After(t.expiry)
 }
 
+func (t *cachedToken) get() string {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	return t.accessToken
+}
+
 func (t *cachedToken) set(token string, expiry time.Time) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.accessToken = token
 	t.expiry = expiry
+}
+
+// tokenResponse represents the OAuth2 token endpoint response.
+type tokenResponse struct {
+	AccessToken string `json:"access_token"`
+	ExpiresIn   int    `json:"expires_in"`
+	TokenType   string `json:"token_type"`
 }
 
 // parseServiceAccountCredentials parses the JSON key and validates the RSA
