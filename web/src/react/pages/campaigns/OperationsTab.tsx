@@ -171,7 +171,7 @@ export default function OperationsTab({ campaigns, operationState, setOperationS
     try {
       setOperationState('syncing-cl');
       const result = await clSync.mutateAsync();
-      toast.success(`CL sync: ${result.added} added, ${result.skipped} skipped, ${result.errors} errors`);
+      toast.success(`CL sync: ${result.synced} synced, ${result.skipped} skipped, ${result.failed} failed`);
       invalidateAll();
     } catch (err) {
       toast.error(getErrorMessage(err, 'CL sync failed'));
