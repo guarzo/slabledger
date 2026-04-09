@@ -8,30 +8,46 @@ import (
 
 func TestResponsesRoutingMiddleware(t *testing.T) {
 	tests := []struct {
-		name     string
-		path     string
-		wantPath string
+		name      string
+		path      string
+		isFoundry bool
+		wantPath  string
 	}{
 		{
-			name:     "rewrites /openai/responses",
-			path:     "/openai/responses",
-			wantPath: "/openai/deployments/gpt-4o/responses",
+			name:      "Azure OpenAI: rewrites /openai/responses",
+			path:      "/openai/responses",
+			isFoundry: false,
+			wantPath:  "/openai/deployments/gpt-4o/responses",
 		},
 		{
-			name:     "rewrites /openai/responses with ID suffix",
-			path:     "/openai/responses/resp_abc123",
-			wantPath: "/openai/deployments/gpt-4o/responses/resp_abc123",
+			name:      "Azure OpenAI: rewrites /openai/responses with ID suffix",
+			path:      "/openai/responses/resp_abc123",
+			isFoundry: false,
+			wantPath:  "/openai/deployments/gpt-4o/responses/resp_abc123",
 		},
 		{
-			name:     "does not rewrite non-responses path",
-			path:     "/openai/chat/completions",
-			wantPath: "/openai/chat/completions",
+			name:      "AI Foundry: rewrites to /openai/v1/responses",
+			path:      "/openai/api/projects/my-proj/responses",
+			isFoundry: true,
+			wantPath:  "/api/projects/my-proj/openai/v1/responses",
+		},
+		{
+			name:      "AI Foundry: rewrites with ID suffix",
+			path:      "/openai/api/projects/my-proj/responses/resp_abc123",
+			isFoundry: true,
+			wantPath:  "/api/projects/my-proj/openai/v1/responses/resp_abc123",
+		},
+		{
+			name:      "does not rewrite non-responses path",
+			path:      "/openai/chat/completions",
+			isFoundry: false,
+			wantPath:  "/openai/chat/completions",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			middleware := responsesRoutingMiddleware("gpt-4o")
+			middleware := responsesRoutingMiddleware("gpt-4o", tt.isFoundry)
 
 			req := httptest.NewRequest(http.MethodPost, "https://example.com"+tt.path, nil)
 

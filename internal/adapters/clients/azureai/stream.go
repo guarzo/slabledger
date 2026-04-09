@@ -15,14 +15,45 @@ import (
 )
 
 // responsesRoutingMiddleware returns middleware that rewrites /openai/responses
-// paths to /openai/deployments/{deploymentName}/responses paths. This fixes an
-// Azure SDK bug where the Responses API path isn't correctly routed to the
-// deployment-specific endpoint.
-func responsesRoutingMiddleware(deploymentName string) option.Middleware {
+// paths to the correct endpoint-specific format. The SDK's Azure middleware
+// doesn't include /responses in its known routes, so it falls through to
+// path.Join("/openai/", path) → "/openai/responses" which is wrong for both
+// endpoint types.
+//
+// AI Foundry (.services.ai.azure.com): /openai/v1/responses (model in body).
+// Azure OpenAI (.openai.azure.com etc): /openai/deployments/{name}/responses.
+// responsesRoutingMiddleware returns middleware that fixes the Responses API
+// path for Azure endpoints. The SDK's Azure middleware doesn't include
+// /responses in its known routes, so it produces an incorrect path:
+//   - path.Join("/openai/", basePath+"/responses") where basePath comes from
+//     the endpoint URL (e.g. /api/projects/{proj} for AI Foundry).
+//
+// This middleware detects paths ending in /responses (or /responses/{id}) and
+// rewrites them to the correct endpoint-specific format:
+//   - AI Foundry: {basePath}/openai/v1/responses (model in body)
+//   - Azure OpenAI: /openai/deployments/{name}/responses
+func responsesRoutingMiddleware(deploymentName string, isFoundry bool) option.Middleware {
 	return func(req *http.Request, next option.MiddlewareNext) (*http.Response, error) {
-		if strings.HasPrefix(req.URL.Path, "/openai/responses") {
-			suffix := strings.TrimPrefix(req.URL.Path, "/openai/responses")
-			req.URL.Path = "/openai/deployments/" + deploymentName + "/responses" + suffix
+		p := req.URL.Path
+
+		// Find /responses or /responses/{id} at the end of the path.
+		idx := strings.Index(p, "/responses")
+		if idx >= 0 {
+			suffix := p[idx+len("/responses"):] // "" or "/{id}"
+			basePath := p[:idx]
+			// Strip the /openai prefix that the SDK middleware prepends.
+			basePath = strings.TrimPrefix(basePath, "/openai")
+			if isFoundry {
+				// AI Foundry: {basePath}/openai/v1/responses[/{id}]
+				// The /v1 path doesn't accept api-version query parameter.
+				req.URL.Path = basePath + "/openai/v1/responses" + suffix
+				q := req.URL.Query()
+				q.Del("api-version")
+				req.URL.RawQuery = q.Encode()
+			} else {
+				// Azure OpenAI: /openai/deployments/{name}/responses[/{id}]
+				req.URL.Path = "/openai/deployments/" + deploymentName + "/responses" + suffix
+			}
 		}
 		return next(req)
 	}
@@ -50,13 +81,10 @@ func (c *Client) doStream(ctx context.Context, params responses.ResponseNewParam
 			}
 
 		case "response.function_call_arguments.done":
-			stream(ai.CompletionChunk{
-				ToolCalls: []ai.ToolCall{{
-					ItemID:    event.ItemID,
-					Name:      event.Name,
-					Arguments: event.Arguments,
-				}},
-			})
+			// Tool calls are emitted in the response.completed handler below
+			// with full data (ID, Name, Arguments) from the response output.
+			// Emitting them here as well would cause duplicates in consumers
+			// that accumulate tool calls across chunks.
 
 		case "response.completed":
 			chunk := ai.CompletionChunk{

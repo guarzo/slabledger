@@ -98,7 +98,7 @@ func NewClient(cfg Config, opts ...Option) (*Client, error) {
 	sdkOpts := []option.RequestOption{
 		azure.WithEndpoint(cfg.Endpoint, cfg.APIVersion),
 		azure.WithAPIKey(cfg.APIKey),
-		option.WithMiddleware(responsesRoutingMiddleware(cfg.DeploymentName)),
+		option.WithMiddleware(responsesRoutingMiddleware(cfg.DeploymentName, isAIFoundry(cfg.Endpoint))),
 		option.WithMaxRetries(0),
 	}
 	if co.baseURL != "" {
@@ -204,9 +204,9 @@ func (c *Client) buildParams(req ai.CompletionRequest) responses.ResponseNewPara
 	if req.SystemPrompt != "" {
 		params.Instructions = openai.String(req.SystemPrompt)
 	}
-	if req.Temperature != nil {
-		params.Temperature = openai.Float(*req.Temperature)
-	}
+	// Note: temperature is intentionally omitted — some models (e.g. gpt-5.4)
+	// reject the parameter. Callers that need temperature control should use
+	// models that support it.
 	if req.MaxTokens > 0 {
 		params.MaxOutputTokens = openai.Int(int64(req.MaxTokens))
 	}
@@ -344,4 +344,11 @@ func isAzureOpenAI(endpoint string) bool {
 	return strings.Contains(endpoint, ".openai.azure.com") ||
 		strings.Contains(endpoint, ".cognitiveservices.azure.com") ||
 		strings.Contains(endpoint, ".services.ai.azure.com")
+}
+
+// isAIFoundry returns true if the endpoint is an Azure AI Foundry service
+// (.services.ai.azure.com) which uses /openai/v1/responses with model in body,
+// as opposed to Azure OpenAI which uses /openai/deployments/{name}/responses.
+func isAIFoundry(endpoint string) bool {
+	return strings.Contains(endpoint, ".services.ai.azure.com")
 }
