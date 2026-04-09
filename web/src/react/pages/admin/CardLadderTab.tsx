@@ -128,18 +128,7 @@ export function CardLadderTab({ enabled = true }: { enabled?: boolean }) {
     </form>
   );
 
-  // Type for lastRun stats — matches CLRunStats JSON from backend
-  interface CLLastRun {
-    lastRunAt: string;
-    durationMs: number;
-    updated: number;
-    mapped: number;
-    skipped: number;
-    totalCLCards: number;
-    cardsPushed: number;
-    cardsRemoved: number;
-  }
-  const lastRun = (status as (typeof status & { lastRun?: CLLastRun }) | undefined)?.lastRun;
+  const lastRun = status?.lastRun;
 
   return (
     <div className="space-y-4 mt-4">

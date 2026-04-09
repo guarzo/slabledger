@@ -28,7 +28,7 @@ declare module './client' {
     getCardRequests(): Promise<CardRequestSubmission[]>;
     submitCardRequest(id: number): Promise<{ status: string; requestId: string }>;
     submitAllCardRequests(): Promise<{ submitted: number; errors: number }>;
-    getCardLadderStatus(): Promise<{ configured: boolean; email?: string; collectionId?: string; cardsMapped?: number; lastRun?: { lastRunAt: string; durationMs: number; updated: number; mapped: number; skipped: number; totalCLCards: number } }>;
+    getCardLadderStatus(): Promise<{ configured: boolean; email?: string; collectionId?: string; cardsMapped?: number; lastRun?: { lastRunAt: string; durationMs: number; updated: number; mapped: number; skipped: number; totalCLCards: number; cardsPushed: number; cardsRemoved: number } }>;
     saveCardLadderConfig(config: { email: string; password: string; collectionId: string; firebaseApiKey: string }): Promise<{ status: string }>;
     triggerCardLadderRefresh(): Promise<{ status: string }>;
     getMarketMoversStatus(): Promise<{ configured: boolean; username?: string; cardsMapped?: number; priceStats?: { unsoldTotal: number; withMMPrice: number; syncedCount: number; oldestUpdate: string; newestUpdate: string; staleCount: number }; lastRun?: { lastRunAt: string; durationMs: number; updated: number; newMappings: number; skipped: number; searchFailed: number; totalPurchases: number } }>;
@@ -127,7 +127,7 @@ proto.submitAllCardRequests = async function (this: APIClient): Promise<{ submit
 };
 
 proto.getCardLadderStatus = async function (this: APIClient) {
-  return this.get<{ configured: boolean; email?: string; collectionId?: string; cardsMapped?: number }>('/admin/cardladder/status');
+  return this.get<{ configured: boolean; email?: string; collectionId?: string; cardsMapped?: number; lastRun?: { lastRunAt: string; durationMs: number; updated: number; mapped: number; skipped: number; totalCLCards: number; cardsPushed: number; cardsRemoved: number } }>('/admin/cardladder/status');
 };
 
 proto.saveCardLadderConfig = async function (this: APIClient, config: { email: string; password: string; collectionId: string; firebaseApiKey: string }) {
@@ -139,7 +139,7 @@ proto.triggerCardLadderRefresh = async function (this: APIClient) {
 };
 
 proto.getMarketMoversStatus = async function (this: APIClient) {
-  return this.get<{ configured: boolean; username?: string; cardsMapped?: number }>('/admin/marketmovers/status');
+  return this.get<{ configured: boolean; username?: string; cardsMapped?: number; priceStats?: { unsoldTotal: number; withMMPrice: number; syncedCount: number; oldestUpdate: string; newestUpdate: string; staleCount: number }; lastRun?: { lastRunAt: string; durationMs: number; updated: number; newMappings: number; skipped: number; searchFailed: number; totalPurchases: number } }>('/admin/marketmovers/status');
 };
 
 proto.saveMarketMoversConfig = async function (this: APIClient, config: { username: string; password: string }) {
