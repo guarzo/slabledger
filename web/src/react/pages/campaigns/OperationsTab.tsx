@@ -9,6 +9,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { Button, CardShell } from '../../ui';
 import ImportResultsDetail from './ImportResultsDetail';
 import DHUnmatchedSection from '../tools/DHUnmatchedSection';
+import { PendingItemsCard } from './PendingItemsCard';
 import { useMarketMoversStatus, useSyncCardLadderCollection, useSyncMarketMoversCollection } from '../../queries/useAdminQueries';
 
 export type OperationState = 'idle' | 'importing-psa' | 'syncing-psa' | 'syncing-mm' | 'syncing-cl';
@@ -378,6 +379,8 @@ export default function OperationsTab({ campaigns, operationState, setOperationS
           )}
         </div>
       )}
+
+      <PendingItemsCard />
 
       <DHUnmatchedSection />
     </>
