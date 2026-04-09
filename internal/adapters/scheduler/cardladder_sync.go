@@ -16,6 +16,7 @@ import (
 // collection if they don't already have a mapping. Returns the number of cards pushed.
 func (s *CardLadderRefreshScheduler) pushNewCards(
 	ctx context.Context,
+	client *cardladder.Client,
 	uid, collectionID string,
 	purchases []campaigns.Purchase,
 	existingMappings []sqlite.CLCardMapping,
@@ -44,7 +45,7 @@ func (s *CardLadderRefreshScheduler) pushNewCards(
 			grader = "psa"
 		}
 
-		if err := s.pushSingleCard(ctx, uid, collectionID, p, grader); err != nil {
+		if err := s.pushSingleCard(ctx, client, uid, collectionID, p, grader); err != nil {
 			s.logger.Warn(ctx, "CL push: failed to push card",
 				observability.String("cert", p.CertNumber),
 				observability.Err(err))
@@ -63,11 +64,12 @@ func (s *CardLadderRefreshScheduler) pushNewCards(
 // pushSingleCard resolves a cert, estimates value, and writes to Firestore.
 func (s *CardLadderRefreshScheduler) pushSingleCard(
 	ctx context.Context,
+	client *cardladder.Client,
 	uid, collectionID string,
 	p *campaigns.Purchase,
 	grader string,
 ) error {
-	result, err := s.client.ResolveAndCreateCard(ctx, uid, collectionID, cardladder.CardPushParams{
+	result, err := client.ResolveAndCreateCard(ctx, uid, collectionID, cardladder.CardPushParams{
 		CertNumber:    p.CertNumber,
 		Grader:        grader,
 		InvestmentUSD: float64(p.BuyCostCents) / 100.0,
@@ -102,6 +104,7 @@ func (s *CardLadderRefreshScheduler) pushSingleCard(
 // and removes them from the CL Firestore collection. Returns the number removed.
 func (s *CardLadderRefreshScheduler) removeSoldCards(
 	ctx context.Context,
+	client *cardladder.Client,
 	unsoldPurchases []campaigns.Purchase,
 	existingMappings []sqlite.CLCardMapping,
 ) int {
@@ -127,7 +130,7 @@ func (s *CardLadderRefreshScheduler) removeSoldCards(
 
 		// Card was sold — remove from Firestore
 		if m.CLCollectionCardID != "" {
-			if err := s.client.DeleteCollectionCard(ctx, m.CLCollectionCardID); err != nil {
+			if err := client.DeleteCollectionCard(ctx, m.CLCollectionCardID); err != nil {
 				s.logger.Warn(ctx, "CL remove: failed to delete from Firestore",
 					observability.String("cert", m.SlabSerial),
 					observability.String("docName", m.CLCollectionCardID),

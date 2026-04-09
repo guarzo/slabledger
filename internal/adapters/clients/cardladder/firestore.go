@@ -175,9 +175,11 @@ func (c *Client) ResolveAndCreateCard(ctx context.Context, uid, collectionID str
 
 	var datePurchased time.Time
 	if params.DatePurchased != "" {
-		if parsed, parseErr := time.Parse("2006-01-02", params.DatePurchased); parseErr == nil {
+		parsed, err := time.Parse("2006-01-02", params.DatePurchased)
+		if err == nil {
 			datePurchased = parsed
 		}
+		// On parse error, datePurchased stays zero — CL treats epoch as "no date set".
 	}
 
 	input := AddCollectionCardInput{

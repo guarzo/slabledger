@@ -41,9 +41,10 @@ func (h *CampaignsHandler) HandleGlobalExportMM(w http.ResponseWriter, r *http.R
 	}
 	for _, e := range entries {
 		// Market Movers requires a positive purchase price; default zero-cost items to $0.01.
-		purchasePrice := e.PurchasePricePerCard
-		if purchasePrice <= 0 {
-			purchasePrice = 0.01
+		// Round first so tiny positives (e.g. 0.001 → "0.00") are caught by the floor.
+		purchaseStr := fmt.Sprintf("%.2f", e.PurchasePricePerCard)
+		if e.PurchasePricePerCard <= 0 || purchaseStr == "0.00" {
+			purchaseStr = "0.01"
 		}
 		if err := writer.Write([]string{
 			e.Sport,
@@ -56,7 +57,7 @@ func (h *CampaignsHandler) HandleGlobalExportMM(w http.ResponseWriter, r *http.R
 			e.SpecificQualifier,
 			e.Quantity,
 			e.DatePurchased,
-			fmt.Sprintf("%.2f", purchasePrice),
+			purchaseStr,
 			e.Notes,
 			e.Category,
 		}); err != nil {

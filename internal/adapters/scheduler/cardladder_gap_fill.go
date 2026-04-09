@@ -5,13 +5,14 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
 	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
 	"github.com/guarzo/slabledger/internal/domain/campaigns"
 	"github.com/guarzo/slabledger/internal/domain/mathutil"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
-func (s *CardLadderRefreshScheduler) refreshSalesComps(ctx context.Context, mappings []sqlite.CLCardMapping) {
+func (s *CardLadderRefreshScheduler) refreshSalesComps(ctx context.Context, client *cardladder.Client, mappings []sqlite.CLCardMapping) {
 	type compKey struct{ gemRateID, condition string }
 	seen := make(map[compKey]bool, len(mappings))
 	fetched := 0
@@ -39,7 +40,7 @@ func (s *CardLadderRefreshScheduler) refreshSalesComps(ctx context.Context, mapp
 			grader = strings.ToLower(parts[0])
 		}
 
-		resp, err := s.client.FetchSalesComps(ctx, m.CLGemRateID, m.CLCondition, grader, 0, 100)
+		resp, err := client.FetchSalesComps(ctx, m.CLGemRateID, m.CLCondition, grader, 0, 100)
 		if err != nil {
 			s.logger.Warn(ctx, "CL sales: fetch failed",
 				observability.String("gemRateId", m.CLGemRateID),
@@ -79,7 +80,7 @@ func (s *CardLadderRefreshScheduler) refreshSalesComps(ctx context.Context, mapp
 
 // gapFillGemRateIDs queries the CL cards index for purchases that still have no gemRateID.
 // Matches on player name + condition + grading company. Rate limited by the client's built-in limiter.
-func (s *CardLadderRefreshScheduler) gapFillGemRateIDs(ctx context.Context, purchases []campaigns.Purchase) {
+func (s *CardLadderRefreshScheduler) gapFillGemRateIDs(ctx context.Context, client *cardladder.Client, purchases []campaigns.Purchase) {
 	filled := 0
 	for i := range purchases {
 		p := &purchases[i]
@@ -105,7 +106,7 @@ func (s *CardLadderRefreshScheduler) gapFillGemRateIDs(ctx context.Context, purc
 			"gradingCompany": strings.ToLower(grader),
 		}
 
-		resp, err := s.client.FetchCardCatalog(ctx, p.CardName, filters, 0, 5)
+		resp, err := client.FetchCardCatalog(ctx, p.CardName, filters, 0, 5)
 		if err != nil {
 			s.logger.Warn(ctx, "CL gap-fill: search failed",
 				observability.String("card", p.CardName),
@@ -129,6 +130,7 @@ func (s *CardLadderRefreshScheduler) gapFillGemRateIDs(ctx context.Context, purc
 				observability.Err(err))
 			continue
 		}
+		p.GemRateID = hit.GemRateID
 
 		if hit.PSASpecID != 0 {
 			if err := s.gemRateUpdater.UpdatePurchasePSASpecID(ctx, p.ID, hit.PSASpecID); err != nil {

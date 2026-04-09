@@ -106,9 +106,9 @@ func (rt *Router) registerCampaignRoutes(mux *http.ServeMux) {
 	}
 
 	// Global sell sheet & inventory endpoints
-	mux.Handle("/api/sell-sheet", authRoute(rt.campaignsHandler.HandleGlobalSellSheet))
+	mux.Handle("GET /api/sell-sheet", authRoute(rt.campaignsHandler.HandleGlobalSellSheet))
 	mux.Handle("POST /api/portfolio/sell-sheet", authRoute(rt.campaignsHandler.HandleSelectedSellSheet))
-	mux.Handle("/api/inventory", authRoute(rt.campaignsHandler.HandleGlobalInventory))
+	mux.Handle("GET /api/inventory", authRoute(rt.campaignsHandler.HandleGlobalInventory))
 	mux.HandleFunc("/sell-sheet", rt.spaHandler.HandleIndex)
 	mux.HandleFunc("/inventory", rt.spaHandler.HandleIndex)
 

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useCardLadderStatus, useSaveCardLadderConfig, useTriggerCardLadderRefresh } from '../../queries/useAdminQueries';
 import { useToast } from '../../contexts/ToastContext';
 import { CardShell } from '../../ui/CardShell';
@@ -15,13 +15,14 @@ export function CardLadderTab({ enabled = true }: { enabled?: boolean }) {
   const [password, setPassword] = useState('');
   const [collectionId, setCollectionId] = useState('');
   const [firebaseApiKey, setFirebaseApiKey] = useState('');
+  const hasHydrated = useRef(false);
 
   useEffect(() => {
-    if (status?.configured) {
-      setEmail(status.email ?? '');
-      setCollectionId(status.collectionId ?? '');
-    }
-  }, [status?.configured, status?.email, status?.collectionId]);
+    if (hasHydrated.current || !status?.configured) return;
+    hasHydrated.current = true;
+    setEmail(status.email ?? '');
+    setCollectionId(status.collectionId ?? '');
+  }, [status]);
 
   if (!enabled) {
     return (

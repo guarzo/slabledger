@@ -195,7 +195,7 @@ function MMExportCard() {
       a.href = url;
       a.download = 'market-movers-export.csv';
       a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 100);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
       toast.success('Market Movers CSV exported');
     } catch (err) {
       toast.error(getErrorMessage(err, 'Failed to export'));
@@ -373,7 +373,11 @@ function CLImportCard() {
       setResult(null);
       const res = await api.globalImportCL(file);
       setResult(res);
-      toast.success(`CL import: ${res.allocated} allocated, ${res.refreshed} refreshed, ${res.unmatched} unmatched`);
+      if (res.unmatched > 0) {
+        toast.warning(`CL import: ${res.allocated} allocated, ${res.refreshed} refreshed, ${res.unmatched} unmatched`);
+      } else {
+        toast.success(`CL import: ${res.allocated} allocated, ${res.refreshed} refreshed`);
+      }
     } catch (err) {
       toast.error(getErrorMessage(err, 'Failed to import'));
     } finally {

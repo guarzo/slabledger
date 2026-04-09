@@ -20,8 +20,8 @@ var graderGradeSuffixRe = regexp.MustCompile(
 	`\s+(?:(?:PSA|BGS|CGC|SGC)\s+\d+(?:\.\d)?|Raw\s+TCG\s*\([^)]*\))\s*$`,
 )
 
-// yearTokenRe matches a 4-digit year token (1990-2029).
-var yearTokenRe = regexp.MustCompile(`\b((?:199|20[012])\d)\b`)
+// yearTokenRe matches a 4-digit year token (1900-2099).
+var yearTokenRe = regexp.MustCompile(`\b((?:19|20)\d{2})\b`)
 
 // cardNumberRe matches a card number token starting with "#".
 // Matches formats like "#232/182", "#4/102", "#144/S-P", "#150/147".

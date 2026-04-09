@@ -194,7 +194,7 @@ type AddCollectionCardInput struct {
 
 	// Valuation (from CardEstimate)
 	CurrentValue float64
-	Investment   float64 // purchase cost
+	Investment   float64 // purchase cost in USD (dollars); CL stores whole-dollar integers
 
 	// Purchase date
 	DatePurchased time.Time

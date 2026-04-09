@@ -53,6 +53,15 @@ type addCardResult struct {
 	Error      string  `json:"error,omitempty"`
 }
 
+// CLSyncResult is the JSON response for the CL collection sync endpoint.
+type CLSyncResult struct {
+	Synced  int             `json:"synced"`
+	Skipped int             `json:"skipped"`
+	Failed  int             `json:"failed"`
+	Total   int             `json:"total"`
+	Results []addCardResult `json:"results"`
+}
+
 // HandleAddCard adds a single card to the Card Ladder collection by cert number.
 func (h *CardLadderHandler) HandleAddCard(w http.ResponseWriter, r *http.Request) {
 	var req addCardRequest
@@ -69,6 +78,15 @@ func (h *CardLadderHandler) HandleAddCard(w http.ResponseWriter, r *http.Request
 		req.Grader = strings.ToLower(req.Grader)
 	}
 
+	h.mu.Lock()
+	client := h.client
+	h.mu.Unlock()
+
+	if client == nil {
+		writeError(w, http.StatusServiceUnavailable, "Card Ladder client not configured")
+		return
+	}
+
 	cfg, err := h.store.GetConfig(r.Context())
 	if err != nil {
 		h.logger.Error(r.Context(), "failed to get CL config", observability.Err(err))
@@ -80,7 +98,9 @@ func (h *CardLadderHandler) HandleAddCard(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	result, err := h.addCardToCollection(r.Context(), cfg.FirebaseUID, cfg.CollectionID, "", req)
+	// Empty purchaseID: manual/ad-hoc adds have no associated purchase,
+	// so cl_synced_at update is intentionally skipped.
+	result, err := h.addCardToCollection(r.Context(), client, cfg.FirebaseUID, cfg.CollectionID, "", req)
 	if err != nil {
 		h.logger.Error(r.Context(), "add card to CL failed", observability.Err(err))
 		writeError(w, http.StatusInternalServerError, err.Error())
@@ -94,8 +114,14 @@ func (h *CardLadderHandler) HandleAddCard(w http.ResponseWriter, r *http.Request
 // Card Ladder collection. Cards already present (by cert number mapping) are skipped.
 func (h *CardLadderHandler) HandleSyncToCardLadder(w http.ResponseWriter, r *http.Request) {
 	h.mu.Lock()
+	client := h.client
 	lister := h.purchaseLister
 	h.mu.Unlock()
+
+	if client == nil {
+		writeError(w, http.StatusServiceUnavailable, "Card Ladder client not configured")
+		return
+	}
 	if lister == nil {
 		writeError(w, http.StatusServiceUnavailable, "purchase lister not available")
 		return
@@ -163,7 +189,7 @@ func (h *CardLadderHandler) HandleSyncToCardLadder(w http.ResponseWriter, r *htt
 	var results []addCardResult
 	var synced, skipped, errCount int
 	for _, entry := range toSync {
-		result, err := h.addCardToCollection(r.Context(), cfg.FirebaseUID, cfg.CollectionID, entry.purchaseID, entry.req)
+		result, err := h.addCardToCollection(r.Context(), client, cfg.FirebaseUID, cfg.CollectionID, entry.purchaseID, entry.req)
 		if err != nil {
 			results = append(results, addCardResult{
 				CertNumber: entry.req.CertNumber,
@@ -181,19 +207,19 @@ func (h *CardLadderHandler) HandleSyncToCardLadder(w http.ResponseWriter, r *htt
 		}
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{
-		"synced":  synced,
-		"skipped": skipped + len(purchases) - len(toSync),
-		"failed":  errCount,
-		"total":   len(purchases),
-		"results": results,
+	writeJSON(w, http.StatusOK, CLSyncResult{
+		Synced:  synced,
+		Skipped: skipped + len(purchases) - len(toSync),
+		Failed:  errCount,
+		Total:   len(purchases),
+		Results: results,
 	})
 }
 
 // addCardToCollection resolves a cert number via Cloud Functions and writes the card
 // to the CardLadder Firestore collection.
-func (h *CardLadderHandler) addCardToCollection(ctx context.Context, uid, collectionID, purchaseID string, req addCardRequest) (*addCardResult, error) {
-	result, err := h.client.ResolveAndCreateCard(ctx, uid, collectionID, cardladder.CardPushParams{
+func (h *CardLadderHandler) addCardToCollection(ctx context.Context, client *cardladder.Client, uid, collectionID, purchaseID string, req addCardRequest) (*addCardResult, error) {
+	result, err := client.ResolveAndCreateCard(ctx, uid, collectionID, cardladder.CardPushParams{
 		CertNumber:    req.CertNumber,
 		Grader:        req.Grader,
 		InvestmentUSD: req.InvestmentUSD,
@@ -203,7 +229,8 @@ func (h *CardLadderHandler) addCardToCollection(ctx context.Context, uid, collec
 		return nil, err
 	}
 
-	// Save the local mapping
+	// Save the local mapping — if this fails, we risk duplicate pushes on next sync,
+	// so treat it as a hard error rather than continuing with a stale mapping set.
 	if err := h.store.SaveMapping(ctx, req.CertNumber, result.DocumentName, result.GemRateID, result.GemRateCondition); err != nil {
 		h.logger.Error(ctx, "failed to save CL mapping after Firestore write",
 			observability.String("cert", req.CertNumber), observability.Err(err))
