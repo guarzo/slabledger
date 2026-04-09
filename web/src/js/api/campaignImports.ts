@@ -10,6 +10,7 @@ import type {
   ScanCertResponse, ResolveCertResponse, MMRefreshResult,
 } from '../../types/campaigns';
 import type { PriceFlagsResponse } from '../../types/campaigns/priceReview';
+import type { PSAPendingItem } from '../../types/admin';
 import { APIClient } from './client';
 
 declare module './client' {
@@ -47,6 +48,11 @@ declare module './client' {
     createPriceFlag(purchaseId: string, reason: string): Promise<{ id: number; flaggedAt: string }>;
     listPriceFlags(status?: string): Promise<PriceFlagsResponse>;
     resolvePriceFlag(flagId: number): Promise<void>;
+
+    // PSA pending items
+    listPSAPendingItems(): Promise<{ items: PSAPendingItem[] }>;
+    assignPSAPendingItem(id: string, campaignId: string): Promise<unknown>;
+    dismissPSAPendingItem(id: string): Promise<void>;
   }
 }
 
@@ -180,4 +186,17 @@ proto.resolvePriceFlag = async function (this: APIClient, flagId: number): Promi
     { method: 'PATCH' }
   );
   await this.expectNoContent(response);
+};
+
+// PSA pending items
+proto.listPSAPendingItems = async function (this: APIClient): Promise<{ items: PSAPendingItem[] }> {
+  return this.get<{ items: PSAPendingItem[] }>('/purchases/psa-pending');
+};
+
+proto.assignPSAPendingItem = async function (this: APIClient, id: string, campaignId: string): Promise<unknown> {
+  return this.post('/purchases/psa-pending/' + id + '/assign', { campaignId });
+};
+
+proto.dismissPSAPendingItem = async function (this: APIClient, id: string): Promise<void> {
+  await this.deleteResource('/purchases/psa-pending/' + id);
 };
