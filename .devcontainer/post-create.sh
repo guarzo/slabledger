@@ -61,6 +61,9 @@ if [ ! -f ".env" ] && [ -f ".env.example" ]; then
     echo "⚠️  Remember to update .env with your actual API keys!"
 fi
 
+echo "=== Installing OpenCode ==="
+curl -fsSL https://opencode.ai/install | bash
+
 # Build the application to verify everything works
 echo "🔨 Building application..."
 go build -o slabledger ./cmd/slabledger
