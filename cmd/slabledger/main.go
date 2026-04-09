@@ -537,7 +537,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		deps.DHCardIDSaver = cardIDMappingRepo
 	}
 	if gsheetsClient != nil && cfg.GoogleSheets.SpreadsheetID != "" {
-		deps.SheetsFetcher = gsheetsClient
+		deps.SheetFetcher = gsheetsClient
 		deps.SheetsSpreadsheetID = cfg.GoogleSheets.SpreadsheetID
 		deps.SheetsTabName = cfg.GoogleSheets.TabName
 	}

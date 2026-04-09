@@ -226,7 +226,12 @@ export default function OperationsTab({ campaigns, operationState, setOperationS
       if (result.allocated > 0) parts.push(`${result.allocated} allocated`);
       if (result.updated > 0) parts.push(`${result.updated} updated`);
       if (result.refunded > 0) parts.push(`${result.refunded} refunded`);
-      toast.success(parts.join(', ') || 'No changes');
+      const msg = parts.join(', ');
+      if (msg) {
+        toast.success(msg);
+      } else {
+        toast.info('No changes');
+      }
       invalidateAll();
     } catch (err) {
       toast.error(getErrorMessage(err, 'PSA Sync Failed'));

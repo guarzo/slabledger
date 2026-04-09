@@ -11,14 +11,6 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
-func newTestLogger() observability.Logger {
-	return observability.NewNoopLogger()
-}
-
-func testFutureTime() time.Time {
-	return time.Now().Add(1 * time.Hour)
-}
-
 func TestClient_ReadSheet(t *testing.T) {
 	successBody := sheetsValueRange{
 		Range: "Sheet1!A1:Z",
@@ -32,7 +24,7 @@ func TestClient_ReadSheet(t *testing.T) {
 	tests := []struct {
 		name         string
 		serverStatus int
-		serverBody   interface{} // marshaled as JSON response body
+		serverBody   any // marshaled as JSON response body
 		sheetName    string
 		wantRows     int
 		wantErr      bool
@@ -56,7 +48,7 @@ func TestClient_ReadSheet(t *testing.T) {
 		{
 			name:         "HTTP 403 error",
 			serverStatus: http.StatusForbidden,
-			serverBody:   map[string]interface{}{"error": map[string]string{"message": "not shared"}},
+			serverBody:   map[string]any{"error": map[string]string{"message": "not shared"}},
 			sheetName:    "Sheet1",
 			wantErr:      true,
 		},
@@ -84,11 +76,12 @@ func TestClient_ReadSheet(t *testing.T) {
 			defer server.Close()
 
 			client := &Client{
-				baseURL: server.URL,
-				token:   &cachedToken{},
-				logger:  newTestLogger(),
+				baseURL:    server.URL,
+				httpClient: server.Client(),
+				token:      &cachedToken{},
+				logger:     observability.NewNoopLogger(),
 			}
-			client.token.set("test-token", testFutureTime())
+			client.token.set("test-token", time.Now().Add(1*time.Hour))
 
 			spreadsheetID := "abc123"
 			rows, err := client.ReadSheet(context.Background(), spreadsheetID, tt.sheetName)

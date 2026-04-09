@@ -16,8 +16,8 @@ type DHInventoryLister interface {
 	SyncChannels(ctx context.Context, inventoryID int, channels []string) (*dh.ChannelSyncResponse, error)
 }
 
-// SheetsFetcher fetches sheet data for PSA sync.
-type SheetsFetcher interface {
+// SheetFetcher fetches sheet data for PSA sync.
+type SheetFetcher interface {
 	ReadSheet(ctx context.Context, spreadsheetID, sheetName string) ([][]string, error)
 }
 
@@ -34,7 +34,7 @@ type CampaignsHandler struct {
 	dhCandidatesSaver DHCandidatesSaver   // optional: stores ambiguous candidates
 	baseCtx           context.Context
 	bgWG              sync.WaitGroup // tracks background goroutines (e.g. DH listing)
-	sheetFetcher      SheetsFetcher  // optional: fetches PSA data from Google Sheets
+	sheetFetcher      SheetFetcher   // optional: fetches PSA data from Google Sheets
 	sheetsSpreadsheet string         // spreadsheet ID for PSA sync
 	sheetsTab         string         // tab name for PSA sync
 }
@@ -77,8 +77,8 @@ func WithDHCandidatesSaver(s DHCandidatesSaver) CampaignsHandlerOption {
 	return func(h *CampaignsHandler) { h.dhCandidatesSaver = s }
 }
 
-// WithSheetsFetcher enables Google Sheets PSA sync.
-func WithSheetsFetcher(f SheetsFetcher, spreadsheetID, tabName string) CampaignsHandlerOption {
+// WithSheetFetcher enables Google Sheets PSA sync.
+func WithSheetFetcher(f SheetFetcher, spreadsheetID, tabName string) CampaignsHandlerOption {
 	return func(h *CampaignsHandler) {
 		h.sheetFetcher = f
 		h.sheetsSpreadsheet = spreadsheetID

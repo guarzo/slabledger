@@ -106,7 +106,7 @@ func buildJWT(creds *ServiceAccountCredentials) (string, error) {
 	now := time.Now().UTC()
 	header := base64Encode([]byte(`{"alg":"RS256","typ":"JWT"}`))
 
-	claimSet := map[string]interface{}{
+	claimSet := map[string]any{
 		"iss":   creds.ClientEmail,
 		"scope": sheetsScope,
 		"aud":   creds.TokenURI,

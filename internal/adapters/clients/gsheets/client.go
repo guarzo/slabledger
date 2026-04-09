@@ -15,8 +15,10 @@ import (
 )
 
 const (
-	defaultBaseURL = "https://sheets.googleapis.com"
-	requestTimeout = 30 * time.Second
+	defaultBaseURL   = "https://sheets.googleapis.com"
+	requestTimeout   = 30 * time.Second
+	maxSheetBodySize = 50 << 20 // 50 MB — defensive limit for Sheets API responses
+	maxTokenBodySize = 1 << 20  // 1 MB — defensive limit for token exchange responses
 )
 
 // Client reads data from Google Sheets using service account credentials.
@@ -69,18 +71,13 @@ func (c *Client) ReadSheet(ctx context.Context, spreadsheetID, sheetName string)
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 
-	httpClient := c.httpClient
-	if httpClient == nil {
-		httpClient = http.DefaultClient
-	}
-
-	resp, err := httpClient.Do(req)
+	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("gsheets: fetch sheet: %w", err)
 	}
 	defer resp.Body.Close() //nolint:errcheck // best-effort close on HTTP response
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxSheetBodySize))
 	if err != nil {
 		return nil, fmt.Errorf("gsheets: read response: %w", err)
 	}
@@ -141,19 +138,14 @@ func (c *Client) getToken(ctx context.Context) (string, error) {
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	httpClient := c.httpClient
-	if httpClient == nil {
-		httpClient = http.DefaultClient
-	}
-
-	resp, err := httpClient.Do(req)
+	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("token exchange: %w", err)
 	}
 	defer resp.Body.Close() //nolint:errcheck // best-effort close on HTTP response
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, maxTokenBodySize))
 		return "", fmt.Errorf("token exchange returned %d: %s", resp.StatusCode, truncate(string(body), 200))
 	}
 
@@ -171,10 +163,11 @@ func (c *Client) getToken(ctx context.Context) (string, error) {
 	return tokenResp.AccessToken, nil
 }
 
-// truncate returns the first n characters of s, appending "..." if truncated.
+// truncate returns the first n runes of s, appending "..." if truncated.
 func truncate(s string, n int) string {
-	if len(s) <= n {
+	runes := []rune(s)
+	if len(runes) <= n {
 		return s
 	}
-	return s[:n] + "..."
+	return string(runes[:n]) + "..."
 }
