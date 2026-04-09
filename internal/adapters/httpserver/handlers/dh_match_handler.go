@@ -79,9 +79,10 @@ func (h *DHHandler) runBulkMatch(ctx context.Context, purchases []campaigns.Purc
 			break
 		}
 
-		key := p.DHCardKey()
-
-		if mappedSet[key] != "" {
+		// Only skip purchases that have already been fully matched and pushed
+		// to DH inventory. Purchases with a card_id_mappings entry but still
+		// marked "unmatched" should be re-tried.
+		if p.DHPushStatus == campaigns.DHPushStatusMatched || p.DHPushStatus == campaigns.DHPushStatusManual {
 			skipped++
 			continue
 		}
@@ -89,6 +90,21 @@ func (h *DHHandler) runBulkMatch(ctx context.Context, purchases []campaigns.Purc
 		if p.CertNumber == "" {
 			noCert++
 			continue
+		}
+
+		key := p.DHCardKey()
+
+		// If this card identity already has a mapping, skip the API call
+		// and reuse the existing DH card ID.
+		if existingID := mappedSet[key]; existingID != "" {
+			if parsed, parseErr := strconv.Atoi(existingID); parseErr == nil && parsed > 0 {
+				matched++
+				matchedCards = append(matchedCards, matchedCard{identity: p.ToCardIdentity(), dhCardID: parsed})
+				h.logger.Debug(ctx, "bulk match: reusing existing mapping",
+					observability.String("cert", p.CertNumber),
+					observability.Int("dh_card_id", parsed))
+				continue
+			}
 		}
 
 		cardName, variant := campaigns.CleanCardNameForDH(p.CardName)
