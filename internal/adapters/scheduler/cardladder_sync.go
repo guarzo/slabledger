@@ -2,7 +2,6 @@ package scheduler
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
@@ -67,59 +66,18 @@ func (s *CardLadderRefreshScheduler) pushSingleCard(
 	p *campaigns.Purchase,
 	grader string,
 ) error {
-	buildResp, err := s.client.BuildCollectionCard(ctx, p.CertNumber, grader)
-	if err != nil {
-		return fmt.Errorf("resolve cert %s: %w", p.CertNumber, err)
-	}
-
-	estimateResp, err := s.client.CardEstimate(ctx, cardladder.CardEstimateRequest{
-		GemRateID:      buildResp.GemRateID,
-		GradingCompany: buildResp.GradingCompany,
-		Condition:      buildResp.GemRateCondition,
-		Description:    buildResp.Player,
+	result, err := s.client.ResolveAndCreateCard(ctx, uid, collectionID, cardladder.CardPushParams{
+		CertNumber:    p.CertNumber,
+		Grader:        grader,
+		InvestmentUSD: float64(p.BuyCostCents) / 100.0,
+		DatePurchased: p.PurchaseDate,
 	})
 	if err != nil {
-		return fmt.Errorf("estimate cert %s: %w", p.CertNumber, err)
-	}
-
-	label := fmt.Sprintf("%s %s %s %s #%s %s",
-		buildResp.Year, buildResp.Set, buildResp.Player,
-		buildResp.Variation, buildResp.Number, buildResp.Condition)
-
-	var datePurchased time.Time
-	if p.PurchaseDate != "" {
-		datePurchased, _ = time.Parse("2006-01-02", p.PurchaseDate)
-	}
-
-	input := cardladder.AddCollectionCardInput{
-		Label:            label,
-		Player:           buildResp.Player,
-		PlayerIndexID:    estimateResp.IndexID,
-		Category:         buildResp.Category,
-		Year:             buildResp.Year,
-		Set:              buildResp.Set,
-		Number:           buildResp.Number,
-		Variation:        buildResp.Variation,
-		Condition:        buildResp.Condition,
-		GradingCompany:   buildResp.GradingCompany,
-		GemRateID:        buildResp.GemRateID,
-		GemRateCondition: buildResp.GemRateCondition,
-		SlabSerial:       buildResp.SlabSerial,
-		Pop:              buildResp.Pop,
-		ImageURL:         buildResp.ImageURL,
-		ImageBackURL:     buildResp.ImageBackURL,
-		CurrentValue:     estimateResp.EstimatedValue,
-		Investment:       float64(p.BuyCostCents) / 100.0,
-		DatePurchased:    datePurchased,
-	}
-
-	docName, err := s.client.CreateCollectionCard(ctx, uid, collectionID, input)
-	if err != nil {
-		return fmt.Errorf("create card in Firestore: %w", err)
+		return err
 	}
 
 	// Save the local mapping
-	if err := s.store.SaveMapping(ctx, p.CertNumber, docName, buildResp.GemRateID, buildResp.GemRateCondition); err != nil {
+	if err := s.store.SaveMapping(ctx, p.CertNumber, result.DocumentName, result.GemRateID, result.GemRateCondition); err != nil {
 		s.logger.Warn(ctx, "CL push: failed to save mapping after Firestore write",
 			observability.String("cert", p.CertNumber), observability.Err(err))
 	}

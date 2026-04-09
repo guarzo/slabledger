@@ -177,9 +177,10 @@ func initializeSocialService(
 	aiCallRepo *sqlite.AICallRepository,
 ) (social.Service, *sqlite.SocialRepository, *igclient.Client, *sqlite.InstagramStore, scheduler.InstagramTokenRefresher) {
 	socialRepo := sqlite.NewSocialRepository(db.DB)
-	var socialOpts []social.ServiceOption
-	socialOpts = append(socialOpts, social.WithLogger(logger))
-	socialOpts = append(socialOpts, social.WithAITracker(aiCallRepo))
+	socialOpts := []social.ServiceOption{
+		social.WithLogger(logger),
+		social.WithAITracker(aiCallRepo),
+	}
 
 	// Use a separate model for social content if SOCIAL_AI_DEPLOYMENT is configured.
 	socialLLM := azureAIClient

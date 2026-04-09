@@ -79,8 +79,13 @@ func (s *service) ExportMMFormatGlobal(ctx context.Context, missingMMOnly bool) 
 			}
 		}
 
+		sport := p.CardCategory
+		if sport == "" {
+			sport = "Pokemon"
+		}
+
 		entries = append(entries, MMExportEntry{
-			Sport:                "Pokemon",
+			Sport:                sport,
 			Grade:                grade,
 			PlayerName:           playerName,
 			Year:                 year,
@@ -166,5 +171,3 @@ func (s *service) RefreshMMValuesGlobal(ctx context.Context, rows []MMRefreshRow
 
 	return result, nil
 }
-
-// Note: formatMMGrade was deduplicated into mathutil.FormatGrade.

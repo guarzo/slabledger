@@ -45,7 +45,7 @@ func (s *MarketMoversStore) GetConfig(ctx context.Context) (*MarketMoversConfig,
 	err := s.db.QueryRowContext(ctx,
 		`SELECT username, encrypted_refresh_token FROM marketmovers_config WHERE id = 1`,
 	).Scan(&username, &encToken)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
@@ -137,7 +137,7 @@ func (s *MarketMoversStore) GetMapping(ctx context.Context, slabSerial string) (
 		`SELECT slab_serial, mm_collectible_id, mm_master_id, mm_search_title, mm_collection_item_id FROM mm_card_mappings WHERE slab_serial = ?`,
 		slabSerial,
 	).Scan(&m.SlabSerial, &m.MMCollectibleID, &m.MasterID, &m.SearchTitle, &m.CollectionItemID)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {

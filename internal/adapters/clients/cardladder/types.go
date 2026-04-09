@@ -199,3 +199,22 @@ type AddCollectionCardInput struct {
 	// Purchase date
 	DatePurchased time.Time
 }
+
+// CardPushParams holds the parameters needed to resolve and create a card in CL.
+type CardPushParams struct {
+	CertNumber    string
+	Grader        string
+	InvestmentUSD float64
+	DatePurchased string // YYYY-MM-DD, optional
+}
+
+// CardPushResult holds the result of resolving and creating a card in CL.
+type CardPushResult struct {
+	DocumentName     string
+	Player           string
+	Set              string
+	Condition        string
+	EstimatedValue   float64
+	GemRateID        string
+	GemRateCondition string
+}

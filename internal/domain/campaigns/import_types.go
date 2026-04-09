@@ -255,7 +255,6 @@ func ExtractCardNameFromTitle(title string) string {
 	cleaned := titleCleanupRegex.ReplaceAllString(title, "")
 	cleaned = conditionSuffixRegex.ReplaceAllString(cleaned, "")
 	cleaned = strings.Join(strings.Fields(cleaned), " ")
-	cleaned = strings.TrimSpace(cleaned)
 	if cleaned == "" {
 		return title
 	}

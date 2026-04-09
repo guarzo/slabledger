@@ -251,7 +251,7 @@ func (r *CampaignsRepository) UpdatePurchaseCLValue(ctx context.Context, id stri
 func (r *CampaignsRepository) UpdatePurchaseCLSyncedAt(ctx context.Context, id string, syncedAt string) error {
 	return r.execAndExpectRow(ctx, "update cl_synced_at",
 		`UPDATE campaign_purchases SET cl_synced_at = ?, updated_at = ? WHERE id = ?`,
-		syncedAt, time.Now(), id,
+		syncedAt, time.Now().UTC().Format(time.RFC3339), id,
 	)
 }
 
@@ -259,7 +259,7 @@ func (r *CampaignsRepository) UpdatePurchaseMMValue(ctx context.Context, id stri
 	now := time.Now().UTC().Format(time.RFC3339)
 	return r.execAndExpectRow(ctx, "update mm value",
 		`UPDATE campaign_purchases SET mm_value_cents = ?, mm_value_updated_at = ?, updated_at = ? WHERE id = ?`,
-		mmValueCents, now, time.Now(), id,
+		mmValueCents, now, now, id,
 	)
 }
 
@@ -281,7 +281,7 @@ func (r *CampaignsRepository) UpdatePurchaseMMSignals(
 		`UPDATE campaign_purchases
 		 SET mm_value_cents = ?, mm_trend_pct = ?, mm_sales_30d = ?, mm_active_low_cents = ?, mm_value_updated_at = ?, updated_at = ?
 		 WHERE id = ?`,
-		mmValueCents, mmTrendPct, mmSales30d, mmActiveLowCents, now, time.Now(), id,
+		mmValueCents, mmTrendPct, mmSales30d, mmActiveLowCents, now, now, id,
 	)
 }
 

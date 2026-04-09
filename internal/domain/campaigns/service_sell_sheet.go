@@ -38,12 +38,12 @@ func (s *service) enrichSellSheetItem(_ context.Context, purchase *Purchase, cam
 
 	hasMarket := false
 	snapshot := snapshotFromPurchase(purchase)
-	if snapshot == nil {
+	switch {
+	case snapshot == nil:
 		item.PriceLookupError = fmt.Sprintf("no snapshot: card=%q set=%q grade=%g", purchase.CardName, purchase.SetName, purchase.GradeValue)
-	} else if !hasAnyPriceData(snapshot) {
+	case !hasAnyPriceData(snapshot):
 		item.PriceLookupError = fmt.Sprintf("zero prices: card=%q set=%q grade=%g", purchase.CardName, purchase.SetName, purchase.GradeValue)
-	}
-	if hasAnyPriceData(snapshot) {
+	default:
 		item.CurrentMarket = snapshot
 		item.Recommendation = computeRecommendation(snapshot, purchase.CLValueCents)
 		item.TargetSellPrice = computeTargetPrice(snapshot, item.Recommendation)
@@ -308,11 +308,7 @@ func (s *service) MatchShopifyPrices(ctx context.Context, items []ShopifyPriceSy
 		}
 
 		// Compute recommended price using resolution hierarchy
-		var snap *MarketSnapshot
-		if sellItem.CurrentMarket != nil {
-			snap = sellItem.CurrentMarket
-		}
-		recPrice, recSource := recommendedPrice(purchase, snap)
+		recPrice, recSource := recommendedPrice(purchase, sellItem.CurrentMarket)
 		match.RecommendedPriceCents = recPrice
 		match.RecommendedSource = recSource
 		match.ReviewedAt = purchase.ReviewedAt

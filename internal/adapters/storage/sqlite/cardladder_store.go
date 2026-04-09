@@ -50,7 +50,7 @@ func (s *CardLadderStore) GetConfig(ctx context.Context) (*CardLadderConfig, err
 		`SELECT email, encrypted_refresh_token, collection_id, firebase_api_key, firebase_uid
 		 FROM cardladder_config WHERE id = 1`,
 	).Scan(&email, &encToken, &collectionID, &apiKey, &uid)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
@@ -147,7 +147,7 @@ func (s *CardLadderStore) GetMapping(ctx context.Context, slabSerial string) (*C
 		`SELECT slab_serial, cl_collection_card_id, cl_gem_rate_id, cl_condition
 		 FROM cl_card_mappings WHERE slab_serial = ?`, slabSerial,
 	).Scan(&m.SlabSerial, &m.CLCollectionCardID, &m.CLGemRateID, &m.CLCondition)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {

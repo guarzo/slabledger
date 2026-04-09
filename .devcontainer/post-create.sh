@@ -19,9 +19,7 @@ go install honnef.co/go/tools/cmd/staticcheck@latest 2>/dev/null || true
 # Install web dependencies (if package.json exists)
 if [ -d "web" ] && [ -f "web/package.json" ]; then
     echo "📦 Installing web dependencies..."
-    cd web
-    npm install
-    cd ..
+    (cd web && npm install)
 fi
 
 # Ensure ~/.local/bin is on PATH for this script (and future bash sessions)
@@ -43,10 +41,7 @@ fi
 
 # Create data directories if they don't exist
 echo "📁 Creating data directories..."
-mkdir -p data
-mkdir -p data/cache
-mkdir -p data/cache/sets
-mkdir -p data/cache/snapshots
+mkdir -p data/cache/sets data/cache/snapshots
 
 # Set up git hooks (if .git exists)
 if [ -d ".git" ]; then
@@ -61,7 +56,7 @@ if [ ! -f ".env" ] && [ -f ".env.example" ]; then
     echo "⚠️  Remember to update .env with your actual API keys!"
 fi
 
-echo "=== Installing OpenCode ==="
+echo "🤖 Installing OpenCode CLI..."
 curl -fsSL https://opencode.ai/install | bash
 
 # Build the application to verify everything works

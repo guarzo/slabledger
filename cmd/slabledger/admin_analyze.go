@@ -134,11 +134,12 @@ func adminAnalyze(ctx context.Context, args []string) error {
 	aiCallRepo := sqlite.NewAICallRepository(db)
 
 	// Advisor tool options
-	var advisorToolOpts []advisortool.ExecutorOption
-	advisorToolOpts = append(advisorToolOpts, advisortool.WithIntelligenceRepo(intelRepo))
-	advisorToolOpts = append(advisorToolOpts, advisortool.WithSuggestionsRepo(suggestionsRepo))
 	gapStore := sqlite.NewGapStore(db.DB)
-	advisorToolOpts = append(advisorToolOpts, advisortool.WithGapStore(gapStore))
+	advisorToolOpts := []advisortool.ExecutorOption{
+		advisortool.WithIntelligenceRepo(intelRepo),
+		advisortool.WithSuggestionsRepo(suggestionsRepo),
+		advisortool.WithGapStore(gapStore),
+	}
 
 	_, advisorSvc, _, err := initializeAdvisorService(
 		ctx, &cfg, logger, db, aiCallRepo, campaignsService, advisorToolOpts...,

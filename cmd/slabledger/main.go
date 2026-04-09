@@ -290,11 +290,12 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	aiCallRepo := sqlite.NewAICallRepository(db)
 
 	// Build advisor tool options — inject intelligence repos.
-	var advisorToolOpts []advisortool.ExecutorOption
-	advisorToolOpts = append(advisorToolOpts, advisortool.WithIntelligenceRepo(intelRepo))
-	advisorToolOpts = append(advisorToolOpts, advisortool.WithSuggestionsRepo(suggestionsRepo))
 	gapStore := sqlite.NewGapStore(db.DB)
-	advisorToolOpts = append(advisorToolOpts, advisortool.WithGapStore(gapStore))
+	advisorToolOpts := []advisortool.ExecutorOption{
+		advisortool.WithIntelligenceRepo(intelRepo),
+		advisortool.WithSuggestionsRepo(suggestionsRepo),
+		advisortool.WithGapStore(gapStore),
+	}
 
 	azureAIClient, advisorService, advisorCacheRepo, err := initializeAdvisorService(
 		ctx, cfg, logger, db, aiCallRepo, campaignsService, advisorToolOpts...,
@@ -345,22 +346,26 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	// Create DH handler (bulk match + intelligence; nil when client is not configured)
 	var dhHandler *handlers.DHHandler
 	if dhClient != nil && dhClient.EnterpriseAvailable() {
-		dhHandler = handlers.NewDHHandler(
-			dhClient, cardIDMappingRepo, campaignsRepo,
-			dhClient,      // DHInventoryPusher
-			campaignsRepo, // DHFieldsUpdater
-			campaignsRepo, // DHPushStatusUpdater
-			campaignsRepo, // DHCandidatesSaver
-			campaignsRepo, // DHStatusCounter
-			intelRepo, suggestionsRepo,
-			intelRepo, suggestionsRepo,
-			logger,
-			ctx,
-			dhClient,         // DHHealthReporter
-			dhClient,         // DHCountsFetcher
-			campaignsService, // DHApproveService
-			dhClient,         // DHMatchConfirmer
-		)
+		dhHandler = handlers.NewDHHandler(handlers.DHHandlerDeps{
+			CertResolver:      dhClient,
+			CardIDSaver:       cardIDMappingRepo,
+			PurchaseLister:    campaignsRepo,
+			InventoryPusher:   dhClient,
+			DHFieldsUpdater:   campaignsRepo,
+			PushStatusUpdater: campaignsRepo,
+			CandidatesSaver:   campaignsRepo,
+			StatusCounter:     campaignsRepo,
+			IntelRepo:         intelRepo,
+			SuggestionsRepo:   suggestionsRepo,
+			IntelCounter:      intelRepo,
+			SuggestCounter:    suggestionsRepo,
+			Logger:            logger,
+			BaseCtx:           ctx,
+			HealthReporter:    dhClient,
+			CountsFetcher:     dhClient,
+			DHApproveService:  campaignsService,
+			MatchConfirmer:    dhClient,
+		})
 		logger.Info(ctx, "DH handler initialized")
 	}
 

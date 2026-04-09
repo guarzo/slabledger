@@ -211,7 +211,7 @@ func TestClient_CreateCollectionCard(t *testing.T) {
 		Investment:       200,
 		DatePurchased:    time.Date(2025, 12, 8, 3, 24, 0, 0, time.UTC),
 	}
-	doc := buildCardDocument("user123", "coll456", input)
+	doc := buildCardDocument("user123", "coll456", input, time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC))
 
 	if v := firestoreString(doc.Fields, "player"); v != "Pikachu-Holo" {
 		t.Errorf("player = %q, want Pikachu-Holo", v)

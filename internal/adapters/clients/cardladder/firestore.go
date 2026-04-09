@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/httpx"
@@ -117,9 +118,14 @@ func (c *Client) CreateCollectionCard(ctx context.Context, uid, collectionID str
 
 	basePath := fmt.Sprintf("projects/%s/databases/(default)/documents/users/%s/collections/%s/collection_cards",
 		firestoreProject, uid, collectionID)
-	u := defaultFirestoreBaseURL + "/" + basePath
 
-	doc := buildCardDocument(uid, collectionID, input)
+	u, err := url.Parse(defaultFirestoreBaseURL + "/" + basePath)
+	if err != nil {
+		return "", fmt.Errorf("parse firestore URL: %w", err)
+	}
+
+	now := time.Now().UTC()
+	doc := buildCardDocument(uid, collectionID, input, now)
 	body, err := json.Marshal(doc)
 	if err != nil {
 		return "", fmt.Errorf("marshal firestore document: %w", err)
@@ -130,7 +136,7 @@ func (c *Client) CreateCollectionCard(ctx context.Context, uid, collectionID str
 		"Content-Type":  "application/json",
 	}
 
-	resp, err := c.httpClient.Post(ctx, u, headers, body, 0)
+	resp, err := c.httpClient.Post(ctx, u.String(), headers, body, 0)
 	if err != nil {
 		return "", fmt.Errorf("firestore create: %w", err)
 	}
@@ -143,10 +149,82 @@ func (c *Client) CreateCollectionCard(ctx context.Context, uid, collectionID str
 	return created.Name, nil
 }
 
+// ResolveAndCreateCard resolves a cert number via Cloud Functions, estimates
+// its market value, and writes the card to a CardLadder Firestore collection.
+// This is the shared implementation used by both the HTTP handler and scheduler.
+func (c *Client) ResolveAndCreateCard(ctx context.Context, uid, collectionID string, params CardPushParams) (*CardPushResult, error) {
+	buildResp, err := c.BuildCollectionCard(ctx, params.CertNumber, params.Grader)
+	if err != nil {
+		return nil, fmt.Errorf("resolve cert %s: %w", params.CertNumber, err)
+	}
+
+	estimateResp, err := c.CardEstimate(ctx, CardEstimateRequest{
+		GemRateID:      buildResp.GemRateID,
+		GradingCompany: buildResp.GradingCompany,
+		Condition:      buildResp.GemRateCondition,
+		Description:    buildResp.Player,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("estimate cert %s: %w", params.CertNumber, err)
+	}
+
+	label := fmt.Sprintf("%s %s %s %s #%s %s",
+		buildResp.Year, buildResp.Set, buildResp.Player,
+		buildResp.Variation, buildResp.Number, buildResp.Condition)
+
+	var datePurchased time.Time
+	if params.DatePurchased != "" {
+		datePurchased, _ = time.Parse("2006-01-02", params.DatePurchased)
+	}
+
+	input := AddCollectionCardInput{
+		Label:            label,
+		Player:           buildResp.Player,
+		PlayerIndexID:    estimateResp.IndexID,
+		Category:         buildResp.Category,
+		Year:             buildResp.Year,
+		Set:              buildResp.Set,
+		Number:           buildResp.Number,
+		Variation:        buildResp.Variation,
+		Condition:        buildResp.Condition,
+		GradingCompany:   buildResp.GradingCompany,
+		GemRateID:        buildResp.GemRateID,
+		GemRateCondition: buildResp.GemRateCondition,
+		SlabSerial:       buildResp.SlabSerial,
+		Pop:              buildResp.Pop,
+		ImageURL:         buildResp.ImageURL,
+		ImageBackURL:     buildResp.ImageBackURL,
+		CurrentValue:     estimateResp.EstimatedValue,
+		Investment:       params.InvestmentUSD,
+		DatePurchased:    datePurchased,
+	}
+
+	docName, err := c.CreateCollectionCard(ctx, uid, collectionID, input)
+	if err != nil {
+		return nil, fmt.Errorf("create card in Firestore: %w", err)
+	}
+
+	return &CardPushResult{
+		DocumentName:     docName,
+		Player:           buildResp.Player,
+		Set:              buildResp.Set,
+		Condition:        buildResp.Condition,
+		EstimatedValue:   estimateResp.EstimatedValue,
+		GemRateID:        buildResp.GemRateID,
+		GemRateCondition: buildResp.GemRateCondition,
+	}, nil
+}
+
 // DeleteCollectionCard deletes a card document from a CardLadder Firestore collection.
 // The documentName must be the full resource path returned by CreateCollectionCard
 // (e.g. "projects/cardladder-71d53/databases/(default)/documents/users/{uid}/collections/{cid}/collection_cards/{docId}").
 func (c *Client) DeleteCollectionCard(ctx context.Context, documentName string) error {
+	// Defense-in-depth: validate the document path belongs to our Firestore project.
+	expectedPrefix := "projects/" + firestoreProject + "/"
+	if !strings.HasPrefix(documentName, expectedPrefix) {
+		return fmt.Errorf("invalid document name: must start with %q", expectedPrefix)
+	}
+
 	if err := c.rateLimiter.Wait(ctx); err != nil {
 		return err
 	}
@@ -176,8 +254,8 @@ func (c *Client) DeleteCollectionCard(ctx context.Context, documentName string) 
 
 // buildCardDocument constructs a Firestore document matching the CardLadder
 // collection card schema observed in the Fiddler captures.
-func buildCardDocument(uid, collectionID string, input AddCollectionCardInput) firestoreDocument {
-	now := time.Now().UTC().Format(time.RFC3339Nano)
+func buildCardDocument(uid, collectionID string, input AddCollectionCardInput, now time.Time) firestoreDocument {
+	ts := now.Format(time.RFC3339Nano)
 	profit := input.CurrentValue - input.Investment
 
 	// Construct PSA cert photo URLs if not provided
@@ -218,7 +296,7 @@ func buildCardDocument(uid, collectionID string, input AddCollectionCardInput) f
 		"keyCard":          fsBool(false),
 		"public":           fsBool(false),
 		"ownership":        fsInt(100),
-		"dateAdded":        fsTimestamp(now),
+		"dateAdded":        fsTimestamp(ts),
 	}
 
 	if !input.DatePurchased.IsZero() {

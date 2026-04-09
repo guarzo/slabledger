@@ -22,7 +22,7 @@ function freshnessInfo(isoDate: string): { label: string; color: string } {
 
   const daysAgo = Math.floor((Date.now() - updated.getTime()) / (1000 * 60 * 60 * 24));
 
-  if (daysAgo <= 1) return { label: 'today', color: 'text-[var(--success)]' };
+  if (daysAgo === 0) return { label: 'today', color: 'text-[var(--success)]' };
   if (daysAgo <= 3) return { label: `${daysAgo}d ago`, color: 'text-[var(--success)]' };
   if (daysAgo <= 7) return { label: `${daysAgo}d ago`, color: 'text-[var(--warning)]' };
   return { label: `${daysAgo}d ago`, color: 'text-[var(--danger)]' };

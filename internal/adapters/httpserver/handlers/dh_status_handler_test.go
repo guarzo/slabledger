@@ -135,26 +135,18 @@ func newTestDHHandler(
 	countsFetcher DHCountsFetcher,
 	purchaseLister DHPurchaseLister,
 ) *DHHandler {
-	return NewDHHandler(
-		nil, // certResolver — not needed for these tests
-		nil, // cardIDSaver
-		purchaseLister,
-		nil, // inventoryPusher
-		nil, // dhFieldsUpdater
-		nil, // pushStatusUpdater
-		nil, // candidatesSaver
-		statusCounter,
-		intelRepo,
-		suggestionsRepo,
-		intelCounter,
-		suggestCounter,
-		mocks.NewMockLogger(),
-		context.Background(),
-		healthReporter,
-		countsFetcher,
-		nil, // dhApproveService — not needed for these tests
-		nil, // matchConfirmer — not needed for these tests
-	)
+	return NewDHHandler(DHHandlerDeps{
+		PurchaseLister:  purchaseLister,
+		StatusCounter:   statusCounter,
+		IntelRepo:       intelRepo,
+		SuggestionsRepo: suggestionsRepo,
+		IntelCounter:    intelCounter,
+		SuggestCounter:  suggestCounter,
+		Logger:          mocks.NewMockLogger(),
+		BaseCtx:         context.Background(),
+		HealthReporter:  healthReporter,
+		CountsFetcher:   countsFetcher,
+	})
 }
 
 // authenticatedRequest wraps a request with a test user in its context.
