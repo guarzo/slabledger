@@ -48,7 +48,7 @@ type addCardResult struct {
 	Set        string  `json:"set"`
 	Condition  string  `json:"condition"`
 	Value      float64 `json:"estimatedValue"`
-	Status     string  `json:"status"` // "added", "skipped", "error"
+	Status     string  `json:"status"` // "synced", "skipped", "error"
 	Error      string  `json:"error,omitempty"`
 }
 
@@ -147,7 +147,7 @@ func (h *CardLadderHandler) HandleSyncToCardLadder(w http.ResponseWriter, r *htt
 	}
 
 	var results []addCardResult
-	var added, skipped, errCount int
+	var synced, skipped, errCount int
 	for _, entry := range toSync {
 		result, err := h.addCardToCollection(r.Context(), cfg.FirebaseUID, cfg.CollectionID, entry.purchaseID, entry.req)
 		if err != nil {
@@ -160,17 +160,17 @@ func (h *CardLadderHandler) HandleSyncToCardLadder(w http.ResponseWriter, r *htt
 			continue
 		}
 		results = append(results, *result)
-		if result.Status == "added" {
-			added++
+		if result.Status == "synced" {
+			synced++
 		} else {
 			skipped++
 		}
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"added":   added,
+		"synced":  synced,
 		"skipped": skipped,
-		"errors":  errCount,
+		"failed":  errCount,
 		"total":   len(toSync),
 		"results": results,
 	})
@@ -210,6 +210,6 @@ func (h *CardLadderHandler) addCardToCollection(ctx context.Context, uid, collec
 		Set:        result.Set,
 		Condition:  result.Condition,
 		Value:      result.EstimatedValue,
-		Status:     "added",
+		Status:     "synced",
 	}, nil
 }
