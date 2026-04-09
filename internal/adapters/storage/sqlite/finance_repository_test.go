@@ -112,11 +112,11 @@ func TestSumPurchaseCostByInvoiceDate(t *testing.T) {
 	})
 }
 
-func TestGetCapitalSummary_RecoveryVelocity(t *testing.T) {
+func TestGetCapitalRawData_RecoveryVelocity(t *testing.T) {
 	ctx := context.Background()
 	now := time.Now().Truncate(time.Second)
 
-	t.Run("no sales returns 99 weeks and stable trend", func(t *testing.T) {
+	t.Run("no sales returns raw zero recovery data", func(t *testing.T) {
 		db := setupTestDB(t)
 		defer db.Close()
 		repo := NewCampaignsRepository(db.DB)
@@ -130,16 +130,19 @@ func TestGetCapitalSummary_RecoveryVelocity(t *testing.T) {
 		}
 		require.NoError(t, repo.CreatePurchase(ctx, p))
 
-		summary, err := repo.GetCapitalSummary(ctx)
+		raw, err := repo.GetCapitalRawData(ctx)
 		require.NoError(t, err)
-		assert.Equal(t, 50000, summary.OutstandingCents)
-		assert.Equal(t, 0, summary.RecoveryRate30dCents)
-		assert.Equal(t, 0, summary.RecoveryRate30dPriorCents)
+		assert.Equal(t, 50000, raw.OutstandingCents)
+		assert.Equal(t, 0, raw.RecoveryRate30dCents)
+		assert.Equal(t, 0, raw.RecoveryRate30dPriorCents)
+
+		// Verify derived fields via domain logic
+		summary := campaigns.ComputeCapitalSummary(raw)
 		assert.Equal(t, 99.0, summary.WeeksToCover)
 		assert.Equal(t, campaigns.TrendStable, summary.RecoveryTrend)
 	})
 
-	t.Run("recent sales compute recovery rate and weeks to cover", func(t *testing.T) {
+	t.Run("recent sales compute recovery rate", func(t *testing.T) {
 		db := setupTestDB(t)
 		defer db.Close()
 		repo := NewCampaignsRepository(db.DB)
@@ -163,17 +166,20 @@ func TestGetCapitalSummary_RecoveryVelocity(t *testing.T) {
 		}
 		require.NoError(t, repo.CreateSale(ctx, s))
 
-		summary, err := repo.GetCapitalSummary(ctx)
+		raw, err := repo.GetCapitalRawData(ctx)
 		require.NoError(t, err)
-		assert.Equal(t, 80000, summary.RecoveryRate30dCents)
-		assert.Equal(t, 0, summary.RecoveryRate30dPriorCents)
+		assert.Equal(t, 80000, raw.RecoveryRate30dCents)
+		assert.Equal(t, 0, raw.RecoveryRate30dPriorCents)
+
+		// Verify derived fields via domain logic
+		summary := campaigns.ComputeCapitalSummary(raw)
 		assert.Greater(t, summary.WeeksToCover, 4.0)
 		assert.Less(t, summary.WeeksToCover, 7.0)
 		assert.Equal(t, campaigns.TrendImproving, summary.RecoveryTrend,
 			"recovery from zero prior should be improving")
 	})
 
-	t.Run("improving trend when 30d exceeds prior 30d by more than 10pct", func(t *testing.T) {
+	t.Run("raw data has both 30d and prior 30d recovery", func(t *testing.T) {
 		db := setupTestDB(t)
 		defer db.Close()
 		repo := NewCampaignsRepository(db.DB)
@@ -211,14 +217,17 @@ func TestGetCapitalSummary_RecoveryVelocity(t *testing.T) {
 		}
 		require.NoError(t, repo.CreateSale(ctx, s2))
 
-		summary, err := repo.GetCapitalSummary(ctx)
+		raw, err := repo.GetCapitalRawData(ctx)
 		require.NoError(t, err)
-		assert.Equal(t, 50000, summary.RecoveryRate30dCents)
-		assert.Equal(t, 20000, summary.RecoveryRate30dPriorCents)
+		assert.Equal(t, 50000, raw.RecoveryRate30dCents)
+		assert.Equal(t, 20000, raw.RecoveryRate30dPriorCents)
+
+		// Verify derived fields via domain logic
+		summary := campaigns.ComputeCapitalSummary(raw)
 		assert.Equal(t, campaigns.TrendImproving, summary.RecoveryTrend)
 	})
 
-	t.Run("declining trend when prior 30d exceeds 30d by more than 10pct", func(t *testing.T) {
+	t.Run("declining recovery data from repo", func(t *testing.T) {
 		db := setupTestDB(t)
 		defer db.Close()
 		repo := NewCampaignsRepository(db.DB)
@@ -250,14 +259,17 @@ func TestGetCapitalSummary_RecoveryVelocity(t *testing.T) {
 		}
 		require.NoError(t, repo.CreateSale(ctx, s2))
 
-		summary, err := repo.GetCapitalSummary(ctx)
+		raw, err := repo.GetCapitalRawData(ctx)
 		require.NoError(t, err)
-		assert.Equal(t, 10000, summary.RecoveryRate30dCents)
-		assert.Equal(t, 20000, summary.RecoveryRate30dPriorCents)
+		assert.Equal(t, 10000, raw.RecoveryRate30dCents)
+		assert.Equal(t, 20000, raw.RecoveryRate30dPriorCents)
+
+		// Verify derived fields via domain logic
+		summary := campaigns.ComputeCapitalSummary(raw)
 		assert.Equal(t, campaigns.TrendDeclining, summary.RecoveryTrend)
 	})
 
-	t.Run("warning alert when weeks to cover between 6 and 12", func(t *testing.T) {
+	t.Run("warning-level raw data from repo", func(t *testing.T) {
 		db := setupTestDB(t)
 		defer db.Close()
 		repo := NewCampaignsRepository(db.DB)
@@ -280,14 +292,17 @@ func TestGetCapitalSummary_RecoveryVelocity(t *testing.T) {
 		}
 		require.NoError(t, repo.CreateSale(ctx, s))
 
-		summary, err := repo.GetCapitalSummary(ctx)
+		raw, err := repo.GetCapitalRawData(ctx)
 		require.NoError(t, err)
+
+		// Verify derived fields via domain logic
+		summary := campaigns.ComputeCapitalSummary(raw)
 		assert.GreaterOrEqual(t, summary.WeeksToCover, 6.0)
 		assert.Less(t, summary.WeeksToCover, 12.0)
 		assert.Equal(t, campaigns.AlertWarning, summary.AlertLevel)
 	})
 
-	t.Run("alert levels based on weeks to cover", func(t *testing.T) {
+	t.Run("critical-level raw data from repo", func(t *testing.T) {
 		db := setupTestDB(t)
 		defer db.Close()
 		repo := NewCampaignsRepository(db.DB)
@@ -318,8 +333,11 @@ func TestGetCapitalSummary_RecoveryVelocity(t *testing.T) {
 		}
 		require.NoError(t, repo.CreateSale(ctx, s))
 
-		summary, err := repo.GetCapitalSummary(ctx)
+		raw, err := repo.GetCapitalRawData(ctx)
 		require.NoError(t, err)
+
+		// Verify derived fields via domain logic
+		summary := campaigns.ComputeCapitalSummary(raw)
 		assert.Greater(t, summary.WeeksToCover, 12.0)
 		assert.Equal(t, campaigns.AlertCritical, summary.AlertLevel)
 	})
@@ -338,27 +356,35 @@ func TestGetCapitalSummary_RecoveryVelocity(t *testing.T) {
 		}
 		require.NoError(t, repo.CreatePurchase(ctx, p))
 
-		summary, err := repo.GetCapitalSummary(ctx)
+		raw, err := repo.GetCapitalRawData(ctx)
 		require.NoError(t, err)
+		assert.Equal(t, 1100000, raw.OutstandingCents)
+		assert.Equal(t, 0, raw.RecoveryRate30dCents)
+
+		// Verify derived fields via domain logic
+		summary := campaigns.ComputeCapitalSummary(raw)
 		assert.Equal(t, campaigns.AlertCritical, summary.AlertLevel)
 	})
 }
 
-func TestGetCapitalSummary_EmptyState(t *testing.T) {
+func TestGetCapitalRawData_EmptyState(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.Close()
 	repo := NewCampaignsRepository(db.DB)
 	ctx := context.Background()
 
-	summary, err := repo.GetCapitalSummary(ctx)
+	raw, err := repo.GetCapitalRawData(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, 0, summary.OutstandingCents)
-	assert.Equal(t, 0, summary.RecoveryRate30dCents)
-	assert.Equal(t, 0, summary.RecoveryRate30dPriorCents)
+	assert.Equal(t, 0, raw.OutstandingCents)
+	assert.Equal(t, 0, raw.RecoveryRate30dCents)
+	assert.Equal(t, 0, raw.RecoveryRate30dPriorCents)
+	assert.Equal(t, 0, raw.RefundedCents)
+	assert.Equal(t, 0, raw.PaidCents)
+	assert.Equal(t, 0, raw.UnpaidInvoiceCount)
+
+	// Verify derived fields via domain logic
+	summary := campaigns.ComputeCapitalSummary(raw)
 	assert.Equal(t, 99.0, summary.WeeksToCover)
 	assert.Equal(t, campaigns.TrendStable, summary.RecoveryTrend)
 	assert.Equal(t, campaigns.AlertOK, summary.AlertLevel)
-	assert.Equal(t, 0, summary.RefundedCents)
-	assert.Equal(t, 0, summary.PaidCents)
-	assert.Equal(t, 0, summary.UnpaidInvoiceCount)
 }

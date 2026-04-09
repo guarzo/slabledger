@@ -4,16 +4,7 @@
  */
 
 /**
- * Return today's date as an ISO date string (YYYY-MM-DD) in UTC.
- */
-export function today(): string {
-  return new Date().toISOString().split('T')[0];
-}
-
-/**
  * Return today's date as YYYY-MM-DD in the browser's local timezone.
- * Use this instead of today() when the date must match the user's calendar day
- * (e.g., sale dates, purchase dates).
  */
 export function localToday(): string {
   const d = new Date();

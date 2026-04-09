@@ -261,12 +261,17 @@ export class APIClient {
 
   /**
    * Delete resource - returns void for empty responses
-   * Supports optional timeout and cancellation
+   * Supports optional JSON body, timeout, and cancellation
    */
-  async deleteResource(endpoint: string, options?: APIRequestOptions): Promise<void> {
+  async deleteResource(endpoint: string, body?: unknown, options?: APIRequestOptions): Promise<void> {
+    const fetchOptions: RequestInit = { method: 'DELETE' };
+    if (body !== undefined) {
+      fetchOptions.headers = { 'Content-Type': 'application/json' };
+      fetchOptions.body = JSON.stringify(body);
+    }
     const response = await this.fetchWithRetry(
       `${this.baseURL}${endpoint}`,
-      { method: 'DELETE' },
+      fetchOptions,
       1,
       options
     );

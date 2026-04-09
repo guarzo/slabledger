@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { api } from '../../../js/api';
 import type { CertLookupResult, QuickAddRequest } from '../../../types/campaigns';
-import { formatCents, getErrorMessage, today } from '../../utils/formatters';
+import { formatCents, getErrorMessage, localToday } from '../../utils/formatters';
 import { useToast } from '../../contexts/ToastContext';
 import { Input, Button } from '../../ui';
 import AIAnalysisWidget from '../../components/advisor/AIAnalysisWidget';
@@ -11,7 +11,7 @@ export default function QuickAddSection({ campaignId, campaignName, onAdded }: {
   const [lookupResult, setLookupResult] = useState<CertLookupResult | null>(null);
   const [lookingUp, setLookingUp] = useState(false);
   const [buyCost, setBuyCost] = useState('');
-  const [purchaseDate, setPurchaseDate] = useState(today());
+  const [purchaseDate, setPurchaseDate] = useState(localToday());
   const [adding, setAdding] = useState(false);
   const toast = useToast();
   const mountedRef = useRef(true);

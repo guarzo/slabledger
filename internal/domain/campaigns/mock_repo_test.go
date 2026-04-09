@@ -463,8 +463,8 @@ func (m *mockRepo) SumPurchaseCostByInvoiceDate(_ context.Context, invoiceDate s
 func (m *mockRepo) GetCashflowConfig(_ context.Context) (*CashflowConfig, error) {
 	return &CashflowConfig{CapitalBudgetCents: 5000000, CashBufferCents: 1000000}, nil
 }
-func (m *mockRepo) GetCapitalSummary(_ context.Context) (*CapitalSummary, error) {
-	return &CapitalSummary{OutstandingCents: 0, WeeksToCover: WeeksToCoverNoData, AlertLevel: AlertOK}, nil
+func (m *mockRepo) GetCapitalRawData(_ context.Context) (*CapitalRawData, error) {
+	return &CapitalRawData{OutstandingCents: 0, RecoveryRate30dCents: 0, RecoveryRate30dPriorCents: 0}, nil
 }
 
 func (m *mockRepo) GetPortfolioChannelVelocity(_ context.Context) ([]ChannelVelocity, error) {

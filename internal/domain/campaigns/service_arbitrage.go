@@ -82,10 +82,11 @@ func (s *service) GetActivationChecklist(ctx context.Context, campaignID string)
 		return nil, err
 	}
 
-	capital, err := s.repo.GetCapitalSummary(ctx)
+	capitalRaw, err := s.repo.GetCapitalRawData(ctx)
 	if err != nil {
 		return nil, err
 	}
+	capital := ComputeCapitalSummary(capitalRaw)
 
 	invoices, err := s.repo.ListInvoices(ctx)
 	if err != nil {

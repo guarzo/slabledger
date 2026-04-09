@@ -320,15 +320,15 @@ func TestGetPortfolioChannelVelocity(t *testing.T) {
 	assert.Equal(t, 150000, inperson.RevenueCents)
 }
 
-func TestGetCapitalSummary_OutstandingAndPayments(t *testing.T) {
+func TestGetCapitalRawData_OutstandingAndPayments(t *testing.T) {
 	repo := setupCampaignsRepo(t)
 	ctx := context.Background()
 	now := time.Now().Truncate(time.Second)
 
 	// Test with no purchases → zero outstanding
-	summary, err := repo.GetCapitalSummary(ctx)
+	raw, err := repo.GetCapitalRawData(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, 0, summary.OutstandingCents, "no purchases → zero outstanding")
+	assert.Equal(t, 0, raw.OutstandingCents, "no purchases → zero outstanding")
 
 	// Create campaign
 	c := &campaigns.Campaign{ID: "camp-credit", Name: "Credit Test", Phase: campaigns.PhaseActive, PSASourcingFeeCents: 300, CreatedAt: now, UpdatedAt: now}
@@ -355,9 +355,9 @@ func TestGetCapitalSummary_OutstandingAndPayments(t *testing.T) {
 	require.NoError(t, repo.CreatePurchase(ctx, p2))
 
 	// With no invoices paid, outstanding = total invoiced spend = (50000+300) + (30000+300) = 80600
-	summary, err = repo.GetCapitalSummary(ctx)
+	raw, err = repo.GetCapitalRawData(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, 80600, summary.OutstandingCents, "outstanding = total invoiced spend with no payments")
+	assert.Equal(t, 80600, raw.OutstandingCents, "outstanding = total invoiced spend with no payments")
 
 	// Create an unpaid invoice and partially pay it
 	dueDate := time.Now().AddDate(0, 0, 15).Format("2006-01-02")
@@ -378,11 +378,11 @@ func TestGetCapitalSummary_OutstandingAndPayments(t *testing.T) {
 	inv.UpdatedAt = now
 	require.NoError(t, repo.UpdateInvoice(ctx, inv))
 
-	summary, err = repo.GetCapitalSummary(ctx)
+	raw, err = repo.GetCapitalRawData(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, 80600-20000, summary.OutstandingCents,
+	assert.Equal(t, 80600-20000, raw.OutstandingCents,
 		"outstanding should be reduced by paid amount")
-	assert.Equal(t, 20000, summary.PaidCents)
+	assert.Equal(t, 20000, raw.PaidCents)
 
 	// Test with refunded purchase: add a refunded purchase and verify it doesn't count in outstanding
 	p3 := &campaigns.Purchase{
@@ -394,11 +394,11 @@ func TestGetCapitalSummary_OutstandingAndPayments(t *testing.T) {
 	}
 	require.NoError(t, repo.CreatePurchase(ctx, p3))
 
-	summary, err = repo.GetCapitalSummary(ctx)
+	raw, err = repo.GetCapitalRawData(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, 80600-20000, summary.OutstandingCents,
+	assert.Equal(t, 80600-20000, raw.OutstandingCents,
 		"refunded purchase should not increase outstanding")
-	assert.Equal(t, 40300, summary.RefundedCents)
+	assert.Equal(t, 40300, raw.RefundedCents)
 
 	// Test with all invoices fully paid → outstanding = 0
 	inv2 := &campaigns.Invoice{
@@ -418,8 +418,8 @@ func TestGetCapitalSummary_OutstandingAndPayments(t *testing.T) {
 	inv.UpdatedAt = now
 	require.NoError(t, repo.UpdateInvoice(ctx, inv))
 
-	summary, err = repo.GetCapitalSummary(ctx)
+	raw, err = repo.GetCapitalRawData(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, 0, summary.OutstandingCents,
+	assert.Equal(t, 0, raw.OutstandingCents,
 		"fully paid should result in zero outstanding")
 }

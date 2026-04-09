@@ -274,6 +274,17 @@ const (
 	FallbackWarningCents          = 500000  // $5K outstanding, no recovery data
 )
 
+// CapitalRawData holds the raw SQL-fetched capital data before business logic is applied.
+// The repository returns this; domain logic computes derived fields (WeeksToCover, Trend, AlertLevel).
+type CapitalRawData struct {
+	OutstandingCents          int // Unpaid purchases minus payments
+	RecoveryRate30dCents      int // Sale revenue in last 30 days
+	RecoveryRate30dPriorCents int // Sale revenue in days 31-60
+	RefundedCents             int // Total refunds
+	PaidCents                 int // Total paid
+	UnpaidInvoiceCount        int // Count of unpaid invoices
+}
+
 // CapitalSummary provides a snapshot of current capital exposure with recovery velocity.
 type CapitalSummary struct {
 	OutstandingCents          int           `json:"outstandingCents"`          // Unpaid purchases minus payments
@@ -285,6 +296,55 @@ type CapitalSummary struct {
 	RefundedCents             int           `json:"refundedCents"` // Total refunds
 	PaidCents                 int           `json:"paidCents"`     // Total paid
 	UnpaidInvoiceCount        int           `json:"unpaidInvoiceCount"`
+}
+
+// ComputeCapitalSummary applies business logic to raw capital data, computing
+// derived fields: WeeksToCover, RecoveryTrend, and AlertLevel.
+func ComputeCapitalSummary(raw *CapitalRawData) *CapitalSummary {
+	weeksToCover := WeeksToCoverNoData
+	if raw.RecoveryRate30dCents > 0 {
+		weeklyRate := float64(raw.RecoveryRate30dCents) / WeeksPerMonth
+		weeksToCover = float64(raw.OutstandingCents) / weeklyRate
+	}
+
+	trend := TrendStable
+	if raw.RecoveryRate30dCents > 0 && raw.RecoveryRate30dPriorCents == 0 {
+		trend = TrendImproving
+	} else if raw.RecoveryRate30dCents > 0 && raw.RecoveryRate30dPriorCents > 0 {
+		ratio := float64(raw.RecoveryRate30dCents) / float64(raw.RecoveryRate30dPriorCents)
+		if ratio > 1+TrendChangeThreshold {
+			trend = TrendImproving
+		} else if ratio < 1-TrendChangeThreshold {
+			trend = TrendDeclining
+		}
+	}
+
+	alertLevel := AlertOK
+	if raw.RecoveryRate30dCents > 0 {
+		if weeksToCover > WeeksToCoverCriticalThreshold {
+			alertLevel = AlertCritical
+		} else if weeksToCover >= WeeksToCoverWarningThreshold {
+			alertLevel = AlertWarning
+		}
+	} else {
+		if raw.OutstandingCents > FallbackCriticalCents {
+			alertLevel = AlertCritical
+		} else if raw.OutstandingCents > FallbackWarningCents {
+			alertLevel = AlertWarning
+		}
+	}
+
+	return &CapitalSummary{
+		OutstandingCents:          raw.OutstandingCents,
+		RecoveryRate30dCents:      raw.RecoveryRate30dCents,
+		RecoveryRate30dPriorCents: raw.RecoveryRate30dPriorCents,
+		WeeksToCover:              weeksToCover,
+		RecoveryTrend:             trend,
+		AlertLevel:                alertLevel,
+		RefundedCents:             raw.RefundedCents,
+		PaidCents:                 raw.PaidCents,
+		UnpaidInvoiceCount:        raw.UnpaidInvoiceCount,
+	}
 }
 
 // PurchaseFilter holds optional filtering criteria for GetAllPurchasesWithSales.
