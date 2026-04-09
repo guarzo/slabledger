@@ -323,7 +323,7 @@ func TestGetPortfolioChannelVelocity(t *testing.T) {
 func TestGetCapitalRawData_OutstandingAndPayments(t *testing.T) {
 	repo := setupCampaignsRepo(t)
 	ctx := context.Background()
-	now := time.Now().Truncate(time.Second)
+	now := time.Date(2025, 6, 15, 12, 0, 0, 0, time.UTC)
 
 	// Test with no purchases → zero outstanding
 	raw, err := repo.GetCapitalRawData(ctx)
@@ -334,8 +334,8 @@ func TestGetCapitalRawData_OutstandingAndPayments(t *testing.T) {
 	c := &campaigns.Campaign{ID: "camp-credit", Name: "Credit Test", Phase: campaigns.PhaseActive, PSASourcingFeeCents: 300, CreatedAt: now, UpdatedAt: now}
 	require.NoError(t, repo.CreateCampaign(ctx, c))
 
-	purchaseDate1 := time.Now().AddDate(0, 0, -30).Format("2006-01-02")
-	purchaseDate2 := time.Now().AddDate(0, 0, -20).Format("2006-01-02")
+	purchaseDate1 := "2025-05-16"
+	purchaseDate2 := "2025-05-26"
 
 	p1 := &campaigns.Purchase{
 		ID: "pc-1", CampaignID: "camp-credit", CardName: "Charizard",
@@ -360,7 +360,7 @@ func TestGetCapitalRawData_OutstandingAndPayments(t *testing.T) {
 	assert.Equal(t, 80600, raw.OutstandingCents, "outstanding = total invoiced spend with no payments")
 
 	// Create an unpaid invoice and partially pay it
-	dueDate := time.Now().AddDate(0, 0, 15).Format("2006-01-02")
+	dueDate := "2025-06-30"
 	inv := &campaigns.Invoice{
 		ID:          "inv-1",
 		InvoiceDate: purchaseDate1,

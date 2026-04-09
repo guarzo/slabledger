@@ -323,22 +323,33 @@ func TestPurchasesPricing_GetPriceOverrideStats(t *testing.T) {
 	})
 
 	t.Run("excludes closed campaigns", func(t *testing.T) {
+		db2 := setupTestDB(t)
+		defer db2.Close()
+		repo2 := NewCampaignsRepository(db2.DB)
+
+		// Active campaign with one unsold purchase
+		createTestCampaign(t, db2, "pp-camp-active", "Active Campaign")
+		pActive := newTestPurchase("pp-camp-active", "PP400010")
+		require.NoError(t, repo2.CreatePurchase(ctx, pActive))
+		require.NoError(t, repo2.UpdatePurchasePriceOverride(ctx, pActive.ID, 10000, "manual"))
+
+		// Closed campaign with one unsold purchase
 		now := time.Now().Truncate(time.Second)
-		_, err := db.Exec(
+		_, err := db2.Exec(
 			`INSERT INTO campaigns (id, name, phase, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
 			"pp-camp-closed", "Closed Campaign", "closed", now, now,
 		)
 		require.NoError(t, err)
+		pClosed := newTestPurchase("pp-camp-closed", "PP400011")
+		require.NoError(t, repo2.CreatePurchase(ctx, pClosed))
+		require.NoError(t, repo2.UpdatePurchasePriceOverride(ctx, pClosed.ID, 99000, "manual"))
 
-		p := newTestPurchase("pp-camp-closed", "PP400010")
-		require.NoError(t, repo.CreatePurchase(ctx, p))
-		require.NoError(t, repo.UpdatePurchasePriceOverride(ctx, p.ID, 99000, "manual"))
-
-		stats, err := repo.GetPriceOverrideStats(ctx)
+		stats, err := repo2.GetPriceOverrideStats(ctx)
 		require.NoError(t, err)
 
-		// Closed campaign purchase should NOT be counted; counts should match the previous subtest.
-		assert.Equal(t, 4, stats.TotalUnsold)
+		// Only the active campaign purchase should be counted
+		assert.Equal(t, 1, stats.TotalUnsold)
+		assert.Equal(t, 1, stats.OverrideCount)
 	})
 }
 

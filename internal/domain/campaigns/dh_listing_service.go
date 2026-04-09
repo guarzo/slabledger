@@ -89,7 +89,10 @@ func NewDHListingService(
 	purchaseLookup DHListingPurchaseLookup,
 	logger observability.Logger,
 	opts ...DHListingServiceOption,
-) DHListingService {
+) (DHListingService, error) {
+	if purchaseLookup == nil {
+		return nil, fmt.Errorf("purchaseLookup is required")
+	}
 	s := &dhListingService{
 		purchaseLookup: purchaseLookup,
 		logger:         logger,
@@ -97,7 +100,7 @@ func NewDHListingService(
 	for _, opt := range opts {
 		opt(s)
 	}
-	return s
+	return s, nil
 }
 
 // ListPurchases implements DHListingService.

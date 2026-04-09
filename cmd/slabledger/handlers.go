@@ -250,9 +250,14 @@ func createHandlers(in handlerInputs) (ServerDependencies, handlerOutputs) {
 		if in.CardIDMappingRepo != nil {
 			listingOpts = append(listingOpts, campaigns.WithDHListingCardIDSaver(in.CardIDMappingRepo))
 		}
-		deps.DHListingService = campaigns.NewDHListingService(
+		svc, err := campaigns.NewDHListingService(
 			in.CampaignsService, in.Logger, listingOpts...,
 		)
+		if err != nil {
+			in.Logger.Error(in.Ctx, "create DH listing service", observability.Err(err))
+		} else {
+			deps.DHListingService = svc
+		}
 	}
 
 	// Wire Google Sheets for PSA sync (if client + spreadsheet configured)

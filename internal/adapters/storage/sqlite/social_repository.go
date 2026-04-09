@@ -131,7 +131,7 @@ func (r *SocialRepository) UpdatePostStatus(ctx context.Context, id string, stat
 		return fmt.Errorf("check rows affected: %w", err)
 	}
 	if n == 0 {
-		return fmt.Errorf("post %s not found", id)
+		return fmt.Errorf("post %s: %w", id, social.ErrPostNotFound)
 	}
 	return nil
 }
@@ -149,7 +149,7 @@ func (r *SocialRepository) UpdatePostCaption(ctx context.Context, id string, cap
 		return fmt.Errorf("check rows affected: %w", err)
 	}
 	if n == 0 {
-		return fmt.Errorf("post %s not found", id)
+		return fmt.Errorf("post %s: %w", id, social.ErrPostNotFound)
 	}
 	return nil
 }
@@ -167,7 +167,7 @@ func (r *SocialRepository) SetPublished(ctx context.Context, id string, instagra
 		return fmt.Errorf("check rows affected: %w", err)
 	}
 	if n == 0 {
-		return fmt.Errorf("post %s not found", id)
+		return fmt.Errorf("post %s: %w", id, social.ErrPostNotFound)
 	}
 	return nil
 }
@@ -211,7 +211,7 @@ func (r *SocialRepository) DeletePost(ctx context.Context, id string) error {
 		return fmt.Errorf("check rows affected: %w", err)
 	}
 	if n == 0 {
-		return fmt.Errorf("post %s not found", id)
+		return fmt.Errorf("post %s: %w", id, social.ErrPostNotFound)
 	}
 	return nil
 }
@@ -389,7 +389,7 @@ func (r *SocialRepository) UpdateSlideURLs(ctx context.Context, id string, urls 
 		return fmt.Errorf("check rows affected: %w", err)
 	}
 	if n == 0 {
-		return fmt.Errorf("post %s not found", id)
+		return fmt.Errorf("post %s: %w", id, social.ErrPostNotFound)
 	}
 	return nil
 }
@@ -411,7 +411,7 @@ func (r *SocialRepository) UpdateBackgroundURLs(ctx context.Context, id string, 
 		return fmt.Errorf("rows affected: %w", err)
 	}
 	if n == 0 {
-		return fmt.Errorf("post %s not found", id)
+		return fmt.Errorf("post %s: %w", id, social.ErrPostNotFound)
 	}
 	return nil
 }
@@ -429,7 +429,7 @@ func (r *SocialRepository) UpdateCoverTitle(ctx context.Context, id string, titl
 		return fmt.Errorf("check rows affected: %w", err)
 	}
 	if n == 0 {
-		return fmt.Errorf("post %s not found", id)
+		return fmt.Errorf("post %s: %w", id, social.ErrPostNotFound)
 	}
 	return nil
 }

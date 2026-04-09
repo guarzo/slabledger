@@ -58,6 +58,7 @@ type DHCertResolution struct {
 const (
 	DHCertStatusMatched   = "matched"
 	DHCertStatusAmbiguous = "ambiguous"
+	DHCertStatusNotFound  = "not_found"
 )
 
 // DHCertResolver resolves PSA cert numbers to DH card IDs.

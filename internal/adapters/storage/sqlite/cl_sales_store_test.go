@@ -131,12 +131,12 @@ func newCLSaleComp(gemRateID, condition, itemID, saleDate string, priceCents int
 }
 
 func TestCLSales_UpsertSaleComp(t *testing.T) {
-	db := setupTestDB(t)
-	defer db.Close()
-	store := NewCLSalesStore(db.DB)
-	ctx := context.Background()
-
 	t.Run("insert new record", func(t *testing.T) {
+		db := setupTestDB(t)
+		defer db.Close()
+		store := NewCLSalesStore(db.DB)
+		ctx := context.Background()
+
 		rec := newCLSaleComp("cls-gem-1", "GEM-MT 10", "cls-item-1", "2026-03-01", 50000, "eBay")
 		err := store.UpsertSaleComp(ctx, rec)
 		require.NoError(t, err)
@@ -150,8 +150,17 @@ func TestCLSales_UpsertSaleComp(t *testing.T) {
 	})
 
 	t.Run("upsert updates existing record on conflict", func(t *testing.T) {
+		db := setupTestDB(t)
+		defer db.Close()
+		store := NewCLSalesStore(db.DB)
+		ctx := context.Background()
+
+		// Insert initial record
+		rec := newCLSaleComp("cls-gem-1", "GEM-MT 10", "cls-item-1", "2026-03-01", 50000, "eBay")
+		require.NoError(t, store.UpsertSaleComp(ctx, rec))
+
 		// Same gemRateID + condition + itemID → should update
-		rec := newCLSaleComp("cls-gem-1", "GEM-MT 10", "cls-item-1", "2026-03-05", 55000, "TCGPlayer")
+		rec = newCLSaleComp("cls-gem-1", "GEM-MT 10", "cls-item-1", "2026-03-05", 55000, "TCGPlayer")
 		err := store.UpsertSaleComp(ctx, rec)
 		require.NoError(t, err)
 
@@ -164,8 +173,16 @@ func TestCLSales_UpsertSaleComp(t *testing.T) {
 	})
 
 	t.Run("different itemID inserts new row", func(t *testing.T) {
-		rec := newCLSaleComp("cls-gem-1", "GEM-MT 10", "cls-item-2", "2026-03-02", 48000, "eBay")
-		err := store.UpsertSaleComp(ctx, rec)
+		db := setupTestDB(t)
+		defer db.Close()
+		store := NewCLSalesStore(db.DB)
+		ctx := context.Background()
+
+		rec1 := newCLSaleComp("cls-gem-1", "GEM-MT 10", "cls-item-1", "2026-03-01", 50000, "eBay")
+		require.NoError(t, store.UpsertSaleComp(ctx, rec1))
+
+		rec2 := newCLSaleComp("cls-gem-1", "GEM-MT 10", "cls-item-2", "2026-03-02", 48000, "eBay")
+		err := store.UpsertSaleComp(ctx, rec2)
 		require.NoError(t, err)
 
 		comps, err := store.GetSaleComps(ctx, "cls-gem-1", "GEM-MT 10", 10)
@@ -174,6 +191,11 @@ func TestCLSales_UpsertSaleComp(t *testing.T) {
 	})
 
 	t.Run("different condition inserts new row", func(t *testing.T) {
+		db := setupTestDB(t)
+		defer db.Close()
+		store := NewCLSalesStore(db.DB)
+		ctx := context.Background()
+
 		rec := newCLSaleComp("cls-gem-1", "NM-MT 8", "cls-item-1", "2026-03-01", 30000, "eBay")
 		err := store.UpsertSaleComp(ctx, rec)
 		require.NoError(t, err)

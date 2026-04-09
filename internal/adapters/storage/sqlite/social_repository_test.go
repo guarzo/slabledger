@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -165,7 +166,7 @@ func TestSocialRepository_DeletePost(t *testing.T) {
 	t.Run("delete non-existent returns error", func(t *testing.T) {
 		err := repo.DeletePost(ctx, "soc-del-missing")
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "not found")
+		assert.True(t, errors.Is(err, social.ErrPostNotFound))
 	})
 }
 
@@ -191,7 +192,7 @@ func TestSocialRepository_UpdatePostStatus(t *testing.T) {
 	t.Run("update non-existent returns error", func(t *testing.T) {
 		err := repo.UpdatePostStatus(ctx, "soc-status-missing", social.PostStatusDraft)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "not found")
+		assert.True(t, errors.Is(err, social.ErrPostNotFound))
 	})
 }
 
@@ -217,7 +218,7 @@ func TestSocialRepository_UpdatePostCaption(t *testing.T) {
 	t.Run("update non-existent returns error", func(t *testing.T) {
 		err := repo.UpdatePostCaption(ctx, "soc-caption-missing", "x", "y")
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "not found")
+		assert.True(t, errors.Is(err, social.ErrPostNotFound))
 	})
 }
 
@@ -243,7 +244,7 @@ func TestSocialRepository_SetPublished(t *testing.T) {
 	t.Run("non-existent returns error", func(t *testing.T) {
 		err := repo.SetPublished(ctx, "soc-pub-missing", "ig-xxx")
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "not found")
+		assert.True(t, errors.Is(err, social.ErrPostNotFound))
 	})
 }
 
@@ -253,45 +254,33 @@ func TestSocialRepository_SetPublishing(t *testing.T) {
 	repo := NewSocialRepository(db.DB)
 	ctx := context.Background()
 
-	t.Run("transitions from draft to publishing", func(t *testing.T) {
-		post := newTestSocialPost("soc-pbing-1", social.PostTypeNewArrivals, social.PostStatusDraft)
-		require.NoError(t, repo.CreatePost(ctx, post))
+	transitionTests := []struct {
+		name        string
+		id          string
+		startStatus social.PostStatus
+		setFailed   bool // if true, set to failed before calling SetPublishing
+	}{
+		{"from draft", "soc-pbing-1", social.PostStatusDraft, false},
+		{"from failed (clears error)", "soc-pbing-2", social.PostStatusDraft, true},
+		{"from approved", "soc-pbing-3", social.PostStatusApproved, false},
+	}
+	for _, tc := range transitionTests {
+		t.Run(tc.name, func(t *testing.T) {
+			post := newTestSocialPost(tc.id, social.PostTypeNewArrivals, tc.startStatus)
+			require.NoError(t, repo.CreatePost(ctx, post))
+			if tc.setFailed {
+				require.NoError(t, repo.SetError(ctx, tc.id, "some error"))
+			}
 
-		err := repo.SetPublishing(ctx, "soc-pbing-1")
-		require.NoError(t, err)
+			err := repo.SetPublishing(ctx, tc.id)
+			require.NoError(t, err)
 
-		got, err := repo.GetPost(ctx, "soc-pbing-1")
-		require.NoError(t, err)
-		assert.Equal(t, social.PostStatusPublishing, got.Status)
-		assert.Empty(t, got.ErrorMessage)
-	})
-
-	t.Run("transitions from failed to publishing and clears error", func(t *testing.T) {
-		post := newTestSocialPost("soc-pbing-2", social.PostTypeNewArrivals, social.PostStatusDraft)
-		require.NoError(t, repo.CreatePost(ctx, post))
-		// Set to failed first.
-		require.NoError(t, repo.SetError(ctx, "soc-pbing-2", "some error"))
-
-		err := repo.SetPublishing(ctx, "soc-pbing-2")
-		require.NoError(t, err)
-
-		got, err := repo.GetPost(ctx, "soc-pbing-2")
-		require.NoError(t, err)
-		assert.Equal(t, social.PostStatusPublishing, got.Status)
-		assert.Empty(t, got.ErrorMessage)
-	})
-
-	t.Run("transitions from approved to publishing", func(t *testing.T) {
-		post := newTestSocialPost("soc-pbing-3", social.PostTypeNewArrivals, social.PostStatusApproved)
-		require.NoError(t, repo.CreatePost(ctx, post))
-
-		err := repo.SetPublishing(ctx, "soc-pbing-3")
-		require.NoError(t, err)
-
-		got, err := repo.GetPost(ctx, "soc-pbing-3")
-		require.NoError(t, err)
-		assert.Equal(t, social.PostStatusPublishing, got.Status)
-	})
+			got, err := repo.GetPost(ctx, tc.id)
+			require.NoError(t, err)
+			assert.Equal(t, social.PostStatusPublishing, got.Status)
+			assert.Empty(t, got.ErrorMessage)
+		})
+	}
 
 	t.Run("rejects transition from published", func(t *testing.T) {
 		post := newTestSocialPost("soc-pbing-4", social.PostTypeNewArrivals, social.PostStatusPublished)
@@ -484,7 +473,7 @@ func TestSocialRepository_UpdateSlideURLs(t *testing.T) {
 	t.Run("non-existent post returns error", func(t *testing.T) {
 		err := repo.UpdateSlideURLs(ctx, "soc-slides-missing", []string{"x"})
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "not found")
+		assert.True(t, errors.Is(err, social.ErrPostNotFound))
 	})
 }
 
@@ -510,7 +499,7 @@ func TestSocialRepository_UpdateBackgroundURLs(t *testing.T) {
 	t.Run("non-existent post returns error", func(t *testing.T) {
 		err := repo.UpdateBackgroundURLs(ctx, "soc-bg-missing", []string{"x"})
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "not found")
+		assert.True(t, errors.Is(err, social.ErrPostNotFound))
 	})
 }
 
@@ -535,7 +524,7 @@ func TestSocialRepository_UpdateCoverTitle(t *testing.T) {
 	t.Run("non-existent returns error", func(t *testing.T) {
 		err := repo.UpdateCoverTitle(ctx, "soc-cover-missing", "x")
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "not found")
+		assert.True(t, errors.Is(err, social.ErrPostNotFound))
 	})
 }
 
