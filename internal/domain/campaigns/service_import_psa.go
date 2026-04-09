@@ -126,6 +126,36 @@ func (s *service) ImportPSAExportGlobal(ctx context.Context, rows []PSAExportRow
 		}
 	}
 
+	// Persist ambiguous and unmatched items for later review.
+	if s.pendingItemRepo != nil {
+		var pending []PendingItem
+		for _, r := range result.Results {
+			if r.Status != "ambiguous" && r.Status != "unmatched" {
+				continue
+			}
+			pending = append(pending, PendingItem{
+				ID:           s.idGen(),
+				CertNumber:   r.CertNumber,
+				CardName:     r.CardName,
+				SetName:      r.SetName,
+				CardNumber:   r.CardNumber,
+				Grade:        r.Grade,
+				BuyCostCents: r.BuyCostCents,
+				PurchaseDate: r.PurchaseDate,
+				Status:       r.Status,
+				Candidates:   r.Candidates,
+				Source:       "manual", // overridden to "scheduler" by the scheduler if needed
+			})
+		}
+		if len(pending) > 0 {
+			if err := s.pendingItemRepo.SavePendingItems(ctx, pending); err != nil && s.logger != nil {
+				s.logger.Error(ctx, "failed to save pending items",
+					observability.Err(err),
+					observability.Int("count", len(pending)))
+			}
+		}
+	}
+
 	// Auto-detect invoices from newly imported purchases with invoice dates
 	created, updated := s.autoDetectInvoices(ctx, rows)
 	result.InvoicesCreated = created

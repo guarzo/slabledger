@@ -168,8 +168,9 @@ type service struct {
 	popRecorder PopulationHistoryRecorder
 	clRecorder  CLValueHistoryRecorder
 
-	compProv  CompSummaryProvider     // optional — Card Ladder comp analytics
-	intelRepo intelligence.Repository // optional — DH market intelligence for price-sync enrichment
+	compProv        CompSummaryProvider     // optional — Card Ladder comp analytics
+	intelRepo       intelligence.Repository // optional — DH market intelligence for price-sync enrichment
+	pendingItemRepo PendingItemRepository   // optional — stores ambiguous/unmatched items from imports
 
 	// certEnrichCh is a bounded channel for cert enrichment requests.
 	// A single background worker processes cert numbers sequentially,
@@ -249,6 +250,11 @@ func WithCompSummaryProvider(p CompSummaryProvider) ServiceOption {
 // WithIntelligenceRepo enables DH market intelligence enrichment in price-sync.
 func WithIntelligenceRepo(r intelligence.Repository) ServiceOption {
 	return func(s *service) { s.intelRepo = r }
+}
+
+// WithPendingItemRepository enables persistent storage of ambiguous/unmatched import items.
+func WithPendingItemRepository(r PendingItemRepository) ServiceOption {
+	return func(s *service) { s.pendingItemRepo = r }
 }
 
 func NewService(repo Repository, opts ...ServiceOption) Service {
