@@ -130,6 +130,7 @@ func (s *CardLadderRefreshScheduler) gapFillGemRateIDs(ctx context.Context, clie
 				observability.Err(err))
 			continue
 		}
+		p.GemRateID = hit.GemRateID
 
 		if hit.PSASpecID != 0 {
 			if err := s.gemRateUpdater.UpdatePurchasePSASpecID(ctx, p.ID, hit.PSASpecID); err != nil {

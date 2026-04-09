@@ -20,6 +20,7 @@ type MMSyncResult struct {
 	Synced  int           `json:"synced"`
 	Skipped int           `json:"skipped"`
 	Failed  int           `json:"failed"`
+	Total   int           `json:"total"`
 	Errors  []MMSyncError `json:"errors,omitempty"`
 }
 
@@ -166,5 +167,6 @@ func (h *MarketMoversHandler) HandleSyncCollection(w http.ResponseWriter, r *htt
 		result.Synced++
 	}
 
+	result.Total = result.Synced + result.Skipped + result.Failed
 	writeJSON(w, http.StatusOK, result)
 }

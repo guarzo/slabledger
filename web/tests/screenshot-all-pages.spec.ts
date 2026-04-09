@@ -161,8 +161,9 @@ test.describe('screenshot all pages', () => {
           firstCampaignId = campaigns[0].id;
         }
       }
-    } catch {
+    } catch (err) {
       // Fall back — campaign-detail will show a not-found page
+      console.error('Failed to fetch campaigns for firstCampaignId:', err);
     }
     await page.close();
   });

@@ -137,16 +137,27 @@ func TestClient_ConcurrentTokenRefresh(t *testing.T) {
 	// Launch 5 concurrent requests that all need a token refresh
 	const goroutines = 5
 	var wg sync.WaitGroup
+	errs := make(chan error, goroutines)
 	wg.Add(goroutines)
 	for i := 0; i < goroutines; i++ {
 		go func() {
 			defer wg.Done()
-			_, _ = client.FetchCollectionPage(context.Background(), "coll-123", 0, 100)
+			_, err := client.FetchCollectionPage(context.Background(), "coll-123", 0, 100)
+			if err != nil {
+				errs <- err
+			}
 		}()
 	}
 	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Errorf("FetchCollectionPage failed: %v", err)
+	}
 
 	calls := refreshCalls.Load()
+	if calls < 1 {
+		t.Errorf("expected at least 1 refresh call, got %d", calls)
+	}
 	if calls > int64(goroutines) {
 		t.Errorf("expected at most %d refresh calls, got %d", goroutines, calls)
 	}

@@ -9,7 +9,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { Button, CardShell } from '../../ui';
 import ImportResultsDetail from './ImportResultsDetail';
 import DHUnmatchedSection from '../tools/DHUnmatchedSection';
-import { useMarketMoversStatus, useSyncCardLadderCollection } from '../../queries/useAdminQueries';
+import { useMarketMoversStatus, useSyncCardLadderCollection, useSyncMarketMoversCollection } from '../../queries/useAdminQueries';
 
 export type OperationState = 'idle' | 'importing-psa' | 'syncing-mm' | 'syncing-cl';
 
@@ -129,6 +129,7 @@ export default function OperationsTab({ campaigns, operationState, setOperationS
   const busy = operationState !== 'idle';
   const { data: mmStatus } = useMarketMoversStatus();
   const clSync = useSyncCardLadderCollection();
+  const mmSync = useSyncMarketMoversCollection();
 
   function invalidateAll() {
     queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.all });
@@ -148,7 +149,7 @@ export default function OperationsTab({ campaigns, operationState, setOperationS
   async function handleMMSync() {
     try {
       setOperationState('syncing-mm');
-      const result = await api.syncMarketMoversCollection();
+      const result = await mmSync.mutateAsync();
       if (result.failed > 0) {
         toast.warning(`MM sync: ${result.synced} synced, ${result.skipped} skipped, ${result.failed} failed`);
         if (result.errors && result.errors.length > 0) {

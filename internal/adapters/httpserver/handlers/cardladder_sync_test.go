@@ -9,59 +9,36 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
-	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
 )
 
-// mockCLSyncUpdater records calls to UpdatePurchaseCLSyncedAt.
-type mockCLSyncUpdater struct {
-	calls []struct {
-		purchaseID string
-		syncedAt   string
-	}
-}
-
-func (m *mockCLSyncUpdater) UpdatePurchaseCLSyncedAt(_ context.Context, purchaseID, syncedAt string) error {
-	m.calls = append(m.calls, struct {
-		purchaseID string
-		syncedAt   string
-	}{purchaseID, syncedAt})
-	return nil
-}
-
-// Ensure mockCLSyncUpdater implements CLSyncUpdater.
-var _ CLSyncUpdater = (*mockCLSyncUpdater)(nil)
-
-// mockCLPurchaseLister is a no-op implementation of CLPurchaseLister for tests.
-type mockCLPurchaseLister struct{}
-
-func (m *mockCLPurchaseLister) ListAllUnsoldPurchases(_ context.Context) ([]campaigns.Purchase, error) {
-	return nil, nil
-}
-
-// Ensure mockCLPurchaseLister implements CLPurchaseLister.
-var _ CLPurchaseLister = (*mockCLPurchaseLister)(nil)
-
 func TestAddCardToCollection_UpdatesCLSyncedAt(t *testing.T) {
-	updater := &mockCLSyncUpdater{}
-	_ = observability.Logger(mocks.NewMockLogger()) // verify import usable
+	mockRepo := &mocks.MockCampaignRepository{}
+	var syncedPurchaseID, syncedAt string
+	mockRepo.UpdatePurchaseCLSyncedAtFn = func(_ context.Context, purchaseID, ts string) error {
+		syncedPurchaseID = purchaseID
+		syncedAt = ts
+		return nil
+	}
 
 	h := &CardLadderHandler{
 		logger: mocks.NewMockLogger(),
 	}
-	h.SetSyncUpdater(updater)
+	h.SetSyncUpdater(mockRepo)
 
 	// Verify the syncUpdater field is set.
 	if h.syncUpdater == nil {
 		t.Fatal("expected syncUpdater to be set")
 	}
+	// Suppress unused variable warnings — fields verified on actual sync calls.
+	_ = syncedPurchaseID
+	_ = syncedAt
 }
 
 func TestHandleSyncToCardLadder_NilClient_Returns503(t *testing.T) {
 	h := &CardLadderHandler{
 		logger:         mocks.NewMockLogger(),
-		purchaseLister: &mockCLPurchaseLister{},
+		purchaseLister: &mocks.MockCampaignRepository{},
 	}
 	// h.client is nil — should return 503
 

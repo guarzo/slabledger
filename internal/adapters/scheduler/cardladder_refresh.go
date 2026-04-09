@@ -66,7 +66,7 @@ type CLRunStats struct {
 type CardLadderRefreshScheduler struct {
 	StopHandle
 	statsMu        sync.RWMutex
-	clientMu       sync.Mutex
+	clientMu       sync.RWMutex
 	client         *cardladder.Client
 	store          *sqlite.CardLadderStore
 	purchaseLister CardLadderPurchaseLister
@@ -101,10 +101,10 @@ func (s *CardLadderRefreshScheduler) SetClient(client *cardladder.Client) {
 	s.client = client
 }
 
-// getClient returns the current API client under the lock.
+// getClient returns the current API client under a read lock.
 func (s *CardLadderRefreshScheduler) getClient() *cardladder.Client {
-	s.clientMu.Lock()
-	defer s.clientMu.Unlock()
+	s.clientMu.RLock()
+	defer s.clientMu.RUnlock()
 	return s.client
 }
 

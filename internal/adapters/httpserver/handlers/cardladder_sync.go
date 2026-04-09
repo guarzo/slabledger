@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -97,6 +98,8 @@ func (h *CardLadderHandler) HandleAddCard(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	// Empty purchaseID: manual/ad-hoc adds have no associated purchase,
+	// so cl_synced_at update is intentionally skipped.
 	result, err := h.addCardToCollection(r.Context(), client, cfg.FirebaseUID, cfg.CollectionID, "", req)
 	if err != nil {
 		h.logger.Error(r.Context(), "add card to CL failed", observability.Err(err))
@@ -226,7 +229,8 @@ func (h *CardLadderHandler) addCardToCollection(ctx context.Context, client *car
 		return nil, err
 	}
 
-	// Save the local mapping
+	// Save the local mapping — if this fails, we risk duplicate pushes on next sync,
+	// so treat it as a hard error rather than continuing with a stale mapping set.
 	if err := h.store.SaveMapping(ctx, req.CertNumber, result.DocumentName, result.GemRateID, result.GemRateCondition); err != nil {
 		h.logger.Error(ctx, "failed to save CL mapping after Firestore write",
 			observability.String("cert", req.CertNumber), observability.Err(err))
@@ -236,15 +240,6 @@ func (h *CardLadderHandler) addCardToCollection(ctx context.Context, client *car
 				observability.String("doc", result.DocumentName), observability.Err(delErr))
 		}
 		return nil, fmt.Errorf("save mapping for cert %s: %w", req.CertNumber, err)
-	}
-
-	// Update cl_synced_at timestamp
-	if h.syncUpdater != nil && purchaseID != "" {
-		now := time.Now().UTC().Format(time.RFC3339)
-		if err := h.syncUpdater.UpdatePurchaseCLSyncedAt(ctx, purchaseID, now); err != nil {
-			h.logger.Error(ctx, "failed to update cl_synced_at",
-				observability.String("cert", req.CertNumber), observability.Err(err))
-		}
 	}
 
 	// Update cl_synced_at timestamp
