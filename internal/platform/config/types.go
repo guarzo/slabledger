@@ -177,6 +177,8 @@ type Config struct {
 	PicksRefresh     PicksRefreshConfig
 	CardLadder       CardLadderConfig
 	MarketMovers     MarketMoversConfig
+	GoogleSheets     GoogleSheetsConfig
+	PSASync          PSASyncConfig
 	DH               DHConfig
 	Adapters         AdapterConfig
 }
@@ -229,6 +231,21 @@ type SocialContentConfig struct {
 	ContentHour  int           // hour (0-23 UTC) to schedule runs; -1 = use InitialDelay (default: 5)
 }
 
+// GoogleSheetsConfig holds credentials and target for Google Sheets API access.
+type GoogleSheetsConfig struct {
+	CredentialsJSON string // Service account JSON key content
+	SpreadsheetID   string // Google Sheets document ID
+	TabName         string // Sheet/tab name (empty = first sheet)
+}
+
+// PSASyncConfig controls the background PSA Google Sheets sync scheduler.
+type PSASyncConfig struct {
+	Enabled      bool
+	Interval     time.Duration // how often to run sync (default: 24h)
+	InitialDelay time.Duration // delay before first run (default: 5m)
+	SyncHour     int           // hour (0-23 UTC) to schedule runs; -1 = use InitialDelay (default: 10)
+}
+
 // MetricsPollConfig controls the Instagram metrics polling scheduler.
 type MetricsPollConfig struct {
 	Enabled  bool
@@ -267,5 +284,15 @@ func (c *PicksRefreshConfig) ApplyDefaults() {
 func (c *CardLadderConfig) ApplyDefaults() {
 	if c.Interval <= 0 {
 		c.Interval = 24 * time.Hour
+	}
+}
+
+// ApplyDefaults sets zero-valued fields to sensible defaults.
+func (c *PSASyncConfig) ApplyDefaults() {
+	if c.Interval <= 0 {
+		c.Interval = 24 * time.Hour
+	}
+	if c.InitialDelay <= 0 {
+		c.InitialDelay = 5 * time.Minute
 	}
 }

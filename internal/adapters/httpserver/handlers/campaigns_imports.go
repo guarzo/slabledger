@@ -2,11 +2,13 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/campaigns"
 	"github.com/guarzo/slabledger/internal/domain/observability"
@@ -105,30 +107,59 @@ func (h *CampaignsHandler) HandleGlobalExportCL(w http.ResponseWriter, r *http.R
 	}
 }
 
-// HandleGlobalImportPSA
+// HandleGlobalImportPSA handles POST /api/purchases/import-psa.
+// Accepts a PSA export CSV file and imports graded card data across all campaigns.
 func (h *CampaignsHandler) HandleGlobalImportPSA(w http.ResponseWriter, r *http.Request) {
 	rows, ok := h.parseGlobalCSVUpload(w, r)
 	if !ok {
 		return
 	}
 
+	h.importPSARows(w, r, rows, "CSV", "global PSA import failed")
+}
+
+// HandleSyncPSASheets handles POST /api/purchases/sync-psa-sheets.
+// Fetches PSA data from a configured Google Sheet and runs the standard import.
+func (h *CampaignsHandler) HandleSyncPSASheets(w http.ResponseWriter, r *http.Request) {
+	if h.sheetFetcher == nil || h.sheetsSpreadsheet == "" {
+		writeError(w, http.StatusServiceUnavailable, "Google Sheets sync not configured")
+		return
+	}
+
+	fetchCtx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
+	defer cancel()
+
+	rows, err := h.sheetFetcher.ReadSheet(fetchCtx, h.sheetsSpreadsheet, h.sheetsTab)
+	if err != nil {
+		h.logger.Error(r.Context(), "failed to fetch Google Sheet", observability.Err(err))
+		writeError(w, http.StatusBadGateway, "Failed to fetch Google Sheet")
+		return
+	}
+
+	h.importPSARows(w, r, rows, "sheet", "PSA sheets sync failed")
+}
+
+// importPSARows parses raw CSV rows as PSA export data, imports them, and
+// writes the JSON response. source labels the origin ("CSV" or "sheet") for
+// error messages; logLabel identifies the operation in failure logs.
+func (h *CampaignsHandler) importPSARows(w http.ResponseWriter, r *http.Request, rows [][]string, source, logLabel string) {
 	psaRows, parseErrors, err := campaigns.ParsePSAExportRows(rows)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	// For PSA: continue with valid rows even if there are parse errors.
+	// Continue with valid rows even if there are parse errors.
 	// Only fail if no valid rows at all.
 	if len(psaRows) == 0 {
 		if len(parseErrors) > 0 {
 			writeError(w, http.StatusBadRequest, parseErrors[0].Message)
 		} else {
-			writeError(w, http.StatusBadRequest, "No valid PSA data rows found in CSV")
+			writeError(w, http.StatusBadRequest, "No valid PSA data rows found in "+source)
 		}
 		return
 	}
 
-	result, ok := serviceCall(w, r.Context(), h.logger, "global PSA import failed", func() (*campaigns.PSAImportResult, error) {
+	result, ok := serviceCall(w, r.Context(), h.logger, logLabel, func() (*campaigns.PSAImportResult, error) {
 		return h.service.ImportPSAExportGlobal(r.Context(), psaRows)
 	})
 	if !ok {

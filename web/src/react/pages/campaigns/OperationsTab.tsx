@@ -11,7 +11,7 @@ import ImportResultsDetail from './ImportResultsDetail';
 import DHUnmatchedSection from '../tools/DHUnmatchedSection';
 import { useMarketMoversStatus, useSyncCardLadderCollection, useSyncMarketMoversCollection } from '../../queries/useAdminQueries';
 
-export type OperationState = 'idle' | 'importing-psa' | 'syncing-mm' | 'syncing-cl';
+export type OperationState = 'idle' | 'importing-psa' | 'syncing-psa' | 'syncing-mm' | 'syncing-cl';
 
 /* ── FileUploadButton ─────────────────────────────────────────────── */
 
@@ -115,6 +115,16 @@ function SyncIcon() {
   );
 }
 
+function CloudSyncIcon() {
+  return (
+    <IconCircle color="bg-emerald-500/15 text-emerald-400">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+        <path d="M12 9.75v6.75m0 0-3-3m3 3 3-3m-8.25 1.5a4.5 4.5 0 0 1-1.41-8.775 5.25 5.25 0 0 1 10.233-2.33 3 3 0 0 1 3.758 3.848A3.752 3.752 0 0 1 18 19.5H6.75Z" />
+      </svg>
+    </IconCircle>
+  );
+}
+
 /* ── OperationsTab ────────────────────────────────────────────────── */
 
 export default function OperationsTab({ campaigns, operationState, setOperationState, psaResult, setPsaResult }: {
@@ -206,6 +216,30 @@ export default function OperationsTab({ campaigns, operationState, setOperationS
     }
   }
 
+  async function handlePSASheetsSync() {
+    try {
+      setOperationState('syncing-psa');
+      setPsaResult(null);
+      const result = await api.syncPSASheets();
+      setPsaResult(result);
+      const parts: string[] = [];
+      if (result.allocated > 0) parts.push(`${result.allocated} allocated`);
+      if (result.updated > 0) parts.push(`${result.updated} updated`);
+      if (result.refunded > 0) parts.push(`${result.refunded} refunded`);
+      const msg = parts.join(', ');
+      if (msg) {
+        toast.success(msg);
+      } else {
+        toast.info('No changes');
+      }
+      invalidateAll();
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'PSA Sync Failed'));
+    } finally {
+      setOperationState('idle');
+    }
+  }
+
   return (
     <>
       {/* Section header */}
@@ -214,20 +248,23 @@ export default function OperationsTab({ campaigns, operationState, setOperationS
         <p className="text-xs text-[var(--text-muted)] mt-0.5">Daily import, export, and matching workflow</p>
       </div>
 
-      {/* Action card grid — ordered by typical workflow: PSA → Export → Import */}
+      {/* Action card grid — ordered by typical workflow: PSA Sync → Export → Import */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
         <OperationCard
-          icon={<FileTextIcon />}
-          title="PSA Import"
-          description="Import PSA data and create invoices"
+          icon={<CloudSyncIcon />}
+          title="PSA Sync"
+          description="Sync latest PSA data from Google Sheets"
           action={
-            <FileUploadButton
-              label="Upload PSA CSV"
-              loading={operationState === 'importing-psa'}
-              accept=".csv"
-              onFile={handlePSAImport}
-              busy={busy}
-            />
+            <Button
+              size="sm"
+              variant="primary"
+              fullWidth
+              loading={operationState === 'syncing-psa'}
+              disabled={busy && operationState !== 'syncing-psa'}
+              onClick={handlePSASheetsSync}
+            >
+              Sync from Sheets
+            </Button>
           }
         />
 
@@ -279,6 +316,29 @@ export default function OperationsTab({ campaigns, operationState, setOperationS
         />
 
       </div>
+
+      {/* Legacy operations */}
+      <details className="mb-6">
+        <summary className="text-sm font-medium text-[var(--text-muted)] cursor-pointer hover:text-[var(--text)] transition-colors">
+          Legacy Operations
+        </summary>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-3">
+          <OperationCard
+            icon={<FileTextIcon />}
+            title="PSA Import (CSV)"
+            description="Manual CSV upload — use PSA Sync instead"
+            action={
+              <FileUploadButton
+                label="Upload PSA CSV"
+                loading={operationState === 'importing-psa'}
+                accept=".csv"
+                onFile={handlePSAImport}
+                busy={busy}
+              />
+            }
+          />
+        </div>
+      </details>
 
       {/* Results area (full-width, below grid) */}
       {psaResult && (        <div className="mb-4 p-3 rounded-lg bg-[var(--surface-2)]/50 text-sm">

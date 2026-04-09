@@ -103,6 +103,12 @@ type BuildDeps struct {
 	MMStore          *sqlite.MarketMoversStore
 	MMPurchaseLister MMPurchaseLister
 	MMValueUpdater   MMValueUpdater
+
+	// PSA sync dependencies (optional)
+	PSASheetFetcher  SheetFetcher
+	PSAImporter      PSAImporter
+	PSASpreadsheetID string
+	PSATabName       string
 }
 
 // BuildResult holds the scheduler group and optional auxiliary references.
@@ -353,6 +359,15 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 			deps.Logger,
 			pushCfg,
 			pushOpts...,
+		))
+	}
+
+	// PSA Google Sheets sync scheduler (if fetcher and importer are provided)
+	if deps.PSASheetFetcher != nil && deps.PSAImporter != nil && deps.PSASpreadsheetID != "" {
+		schedulers = append(schedulers, NewPSASyncScheduler(
+			deps.PSASheetFetcher, deps.PSAImporter,
+			deps.Logger, cfg.PSASync,
+			deps.PSASpreadsheetID, deps.PSATabName,
 		))
 	}
 
