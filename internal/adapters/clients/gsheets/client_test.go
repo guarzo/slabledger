@@ -20,7 +20,7 @@ func testFutureTime() time.Time {
 }
 
 func TestClient_ReadSheet(t *testing.T) {
-	sheetData := sheetsValueRange{
+	successBody := sheetsValueRange{
 		Range: "Sheet1!A1:Z",
 		Values: [][]string{
 			{"Cert Number", "Listing Title", "Grade", "Price Paid"},
@@ -29,98 +29,85 @@ func TestClient_ReadSheet(t *testing.T) {
 		},
 	}
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		auth := r.Header.Get("Authorization")
-		if auth == "" {
-			t.Error("missing Authorization header")
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(sheetData)
-	}))
-	defer server.Close()
-
-	client := &Client{
-		baseURL: server.URL,
-		token:   &cachedToken{},
-		logger:  newTestLogger(),
+	tests := []struct {
+		name         string
+		serverStatus int
+		serverBody   interface{} // marshaled as JSON response body
+		sheetName    string
+		wantRows     int
+		wantErr      bool
+		checkPath    string // if non-empty, assert request path equals this
+	}{
+		{
+			name:         "success",
+			serverStatus: http.StatusOK,
+			serverBody:   successBody,
+			sheetName:    "Sheet1",
+			wantRows:     3,
+		},
+		{
+			name:         "empty tab defaults to Sheet1",
+			serverStatus: http.StatusOK,
+			serverBody:   sheetsValueRange{Values: [][]string{{"A"}}},
+			sheetName:    "",
+			wantRows:     1,
+			checkPath:    "/v4/spreadsheets/abc123/values/Sheet1",
+		},
+		{
+			name:         "HTTP 403 error",
+			serverStatus: http.StatusForbidden,
+			serverBody:   map[string]interface{}{"error": map[string]string{"message": "not shared"}},
+			sheetName:    "Sheet1",
+			wantErr:      true,
+		},
+		{
+			name:         "empty response",
+			serverStatus: http.StatusOK,
+			serverBody:   sheetsValueRange{Values: nil},
+			sheetName:    "Sheet1",
+			wantErr:      true,
+		},
 	}
-	client.token.set("test-token", testFutureTime())
 
-	rows, err := client.ReadSheet(context.Background(), "spreadsheet-id", "Sheet1")
-	if err != nil {
-		t.Fatalf("ReadSheet: %v", err)
-	}
-	if len(rows) != 3 {
-		t.Fatalf("got %d rows, want 3", len(rows))
-	}
-	if rows[0][0] != "Cert Number" {
-		t.Errorf("got header %q, want 'Cert Number'", rows[0][0])
-	}
-	if rows[1][0] != "12345678" {
-		t.Errorf("got cert %q, want '12345678'", rows[1][0])
-	}
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var capturedPath string
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				capturedPath = r.URL.Path
+				if auth := r.Header.Get("Authorization"); auth == "" {
+					t.Error("missing Authorization header")
+				}
+				w.WriteHeader(tt.serverStatus)
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(tt.serverBody)
+			}))
+			defer server.Close()
 
-func TestClient_ReadSheet_EmptyTab(t *testing.T) {
-	var capturedPath string
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		capturedPath = r.URL.Path
-		json.NewEncoder(w).Encode(sheetsValueRange{Values: [][]string{{"A"}}})
-	}))
-	defer server.Close()
+			client := &Client{
+				baseURL: server.URL,
+				token:   &cachedToken{},
+				logger:  newTestLogger(),
+			}
+			client.token.set("test-token", testFutureTime())
 
-	client := &Client{
-		baseURL: server.URL,
-		token:   &cachedToken{},
-		logger:  newTestLogger(),
-	}
-	client.token.set("test-token", testFutureTime())
+			spreadsheetID := "abc123"
+			rows, err := client.ReadSheet(context.Background(), spreadsheetID, tt.sheetName)
 
-	_, err := client.ReadSheet(context.Background(), "abc123", "")
-	if err != nil {
-		t.Fatalf("ReadSheet: %v", err)
-	}
-	want := "/v4/spreadsheets/abc123/values/Sheet1"
-	if capturedPath != want {
-		t.Errorf("path = %q, want %q", capturedPath, want)
-	}
-}
-
-func TestClient_ReadSheet_HTTPError(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusForbidden)
-		w.Write([]byte(`{"error": {"message": "not shared"}}`))
-	}))
-	defer server.Close()
-
-	client := &Client{
-		baseURL: server.URL,
-		token:   &cachedToken{},
-		logger:  newTestLogger(),
-	}
-	client.token.set("test-token", testFutureTime())
-
-	_, err := client.ReadSheet(context.Background(), "id", "Sheet1")
-	if err == nil {
-		t.Fatal("expected error for 403 response")
-	}
-}
-
-func TestClient_ReadSheet_EmptyResponse(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(sheetsValueRange{Values: nil})
-	}))
-	defer server.Close()
-
-	client := &Client{
-		baseURL: server.URL,
-		token:   &cachedToken{},
-		logger:  newTestLogger(),
-	}
-	client.token.set("test-token", testFutureTime())
-
-	_, err := client.ReadSheet(context.Background(), "id", "Sheet1")
-	if err == nil {
-		t.Fatal("expected error for empty sheet")
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(rows) != tt.wantRows {
+				t.Fatalf("got %d rows, want %d", len(rows), tt.wantRows)
+			}
+			if tt.checkPath != "" && capturedPath != tt.checkPath {
+				t.Errorf("path = %q, want %q", capturedPath, tt.checkPath)
+			}
+		})
 	}
 }

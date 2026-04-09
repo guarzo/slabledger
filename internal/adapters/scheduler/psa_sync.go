@@ -40,12 +40,7 @@ func NewPSASyncScheduler(
 	cfg config.PSASyncConfig,
 	spreadsheetID, tabName string,
 ) *PSASyncScheduler {
-	if cfg.Interval <= 0 {
-		cfg.Interval = 24 * time.Hour
-	}
-	if cfg.InitialDelay <= 0 {
-		cfg.InitialDelay = 5 * time.Minute
-	}
+	cfg.ApplyDefaults()
 	if cfg.SyncHour >= 0 {
 		cfg.InitialDelay = timeUntilHour(time.Now(), cfg.SyncHour)
 	}

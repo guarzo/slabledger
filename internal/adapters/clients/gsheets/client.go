@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/observability"
@@ -24,6 +25,7 @@ type Client struct {
 	baseURL    string
 	creds      *ServiceAccountCredentials
 	token      *cachedToken
+	refreshMu  sync.Mutex // serialises token refresh to prevent thundering herd
 	logger     observability.Logger
 }
 
@@ -106,7 +108,18 @@ type sheetsValueRange struct {
 }
 
 // getToken returns a valid access token, refreshing if needed.
+// A mutex ensures only one goroutine refreshes at a time; others wait
+// and reuse the newly-cached token.
 func (c *Client) getToken(ctx context.Context) (string, error) {
+	if !c.token.isExpired() {
+		return c.token.get(), nil
+	}
+
+	c.refreshMu.Lock()
+	defer c.refreshMu.Unlock()
+
+	// Double-check after acquiring the lock — another goroutine may have
+	// already refreshed while we waited.
 	if !c.token.isExpired() {
 		return c.token.get(), nil
 	}

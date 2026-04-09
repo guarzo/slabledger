@@ -286,3 +286,13 @@ func (c *CardLadderConfig) ApplyDefaults() {
 		c.Interval = 24 * time.Hour
 	}
 }
+
+// ApplyDefaults sets zero-valued fields to sensible defaults.
+func (c *PSASyncConfig) ApplyDefaults() {
+	if c.Interval <= 0 {
+		c.Interval = 24 * time.Hour
+	}
+	if c.InitialDelay <= 0 {
+		c.InitialDelay = 5 * time.Minute
+	}
+}

@@ -35,84 +35,98 @@ func generateTestCredentials(t *testing.T, key *rsa.PrivateKey) string {
 	return string(b)
 }
 
-func TestParseServiceAccountCredentials(t *testing.T) {
-	key := generateTestKey(t)
-	credsJSON := generateTestCredentials(t, key)
-
-	creds, err := parseServiceAccountCredentials(credsJSON)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if creds.ClientEmail != "test@project.iam.gserviceaccount.com" {
-		t.Errorf("got email %q, want test@project.iam.gserviceaccount.com", creds.ClientEmail)
-	}
-	if creds.parsedKey == nil {
-		t.Fatal("parsedKey is nil")
-	}
-}
-
-func TestParseServiceAccountCredentials_PKCS8(t *testing.T) {
-	key := generateTestKey(t)
-	der, err := x509.MarshalPKCS8PrivateKey(key)
-	if err != nil {
-		t.Fatalf("marshal PKCS8: %v", err)
-	}
-	pemBlock := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der})
-	creds := ServiceAccountCredentials{
-		ClientEmail: "test@project.iam.gserviceaccount.com",
-		PrivateKey:  string(pemBlock),
-		TokenURI:    "https://oauth2.googleapis.com/token",
-	}
+func mustMarshalCreds(t *testing.T, creds ServiceAccountCredentials) string {
+	t.Helper()
 	b, err := json.Marshal(creds)
 	if err != nil {
 		t.Fatalf("marshal creds: %v", err)
 	}
-
-	parsed, err := parseServiceAccountCredentials(string(b))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if parsed.parsedKey == nil {
-		t.Fatal("parsedKey is nil")
-	}
-	if parsed.ClientEmail != "test@project.iam.gserviceaccount.com" {
-		t.Errorf("got email %q, want test@project.iam.gserviceaccount.com", parsed.ClientEmail)
-	}
+	return string(b)
 }
 
-func TestParseServiceAccountCredentials_MissingClientEmail(t *testing.T) {
+func TestParseServiceAccountCredentials(t *testing.T) {
 	key := generateTestKey(t)
-	der := x509.MarshalPKCS1PrivateKey(key)
-	pemBlock := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: der})
-	creds := ServiceAccountCredentials{
-		ClientEmail: "",
-		PrivateKey:  string(pemBlock),
-		TokenURI:    "https://oauth2.googleapis.com/token",
-	}
-	b, _ := json.Marshal(creds)
-	_, err := parseServiceAccountCredentials(string(b))
-	if err == nil {
-		t.Fatal("expected error for missing client_email")
-	}
-}
 
-func TestParseServiceAccountCredentials_InvalidJSON(t *testing.T) {
-	_, err := parseServiceAccountCredentials("not json")
-	if err == nil {
-		t.Fatal("expected error for invalid JSON")
-	}
-}
+	pkcs1DER := x509.MarshalPKCS1PrivateKey(key)
+	pkcs1PEM := string(pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: pkcs1DER}))
 
-func TestParseServiceAccountCredentials_InvalidKey(t *testing.T) {
-	creds := ServiceAccountCredentials{
-		ClientEmail: "test@example.com",
-		PrivateKey:  "not a pem key",
-		TokenURI:    "https://oauth2.googleapis.com/token",
+	pkcs8DER, err := x509.MarshalPKCS8PrivateKey(key)
+	if err != nil {
+		t.Fatalf("marshal PKCS8: %v", err)
 	}
-	b, _ := json.Marshal(creds)
-	_, err := parseServiceAccountCredentials(string(b))
-	if err == nil {
-		t.Fatal("expected error for invalid private key")
+	pkcs8PEM := string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: pkcs8DER}))
+
+	tests := []struct {
+		name      string
+		input     string
+		wantEmail string
+		wantKey   bool
+		wantErr   bool
+	}{
+		{
+			name: "valid PKCS1",
+			input: mustMarshalCreds(t, ServiceAccountCredentials{
+				ClientEmail: "test@project.iam.gserviceaccount.com",
+				PrivateKey:  pkcs1PEM,
+				TokenURI:    "https://oauth2.googleapis.com/token",
+			}),
+			wantEmail: "test@project.iam.gserviceaccount.com",
+			wantKey:   true,
+		},
+		{
+			name: "valid PKCS8",
+			input: mustMarshalCreds(t, ServiceAccountCredentials{
+				ClientEmail: "test@project.iam.gserviceaccount.com",
+				PrivateKey:  pkcs8PEM,
+				TokenURI:    "https://oauth2.googleapis.com/token",
+			}),
+			wantEmail: "test@project.iam.gserviceaccount.com",
+			wantKey:   true,
+		},
+		{
+			name: "missing client_email",
+			input: mustMarshalCreds(t, ServiceAccountCredentials{
+				ClientEmail: "",
+				PrivateKey:  pkcs1PEM,
+				TokenURI:    "https://oauth2.googleapis.com/token",
+			}),
+			wantErr: true,
+		},
+		{
+			name:    "invalid JSON",
+			input:   "not json",
+			wantErr: true,
+		},
+		{
+			name: "invalid private key",
+			input: mustMarshalCreds(t, ServiceAccountCredentials{
+				ClientEmail: "test@example.com",
+				PrivateKey:  "not a pem key",
+				TokenURI:    "https://oauth2.googleapis.com/token",
+			}),
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			creds, err := parseServiceAccountCredentials(tt.input)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if creds.ClientEmail != tt.wantEmail {
+				t.Errorf("got email %q, want %q", creds.ClientEmail, tt.wantEmail)
+			}
+			if tt.wantKey && creds.parsedKey == nil {
+				t.Fatal("parsedKey is nil")
+			}
+		})
 	}
 }
 
