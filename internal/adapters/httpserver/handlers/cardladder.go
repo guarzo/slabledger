@@ -115,7 +115,9 @@ func (h *CardLadderHandler) HandleStatus(w http.ResponseWriter, r *http.Request)
 	}
 
 	mappings, err := h.store.ListMappings(r.Context())
-	if err == nil {
+	if err != nil {
+		h.logger.Error(r.Context(), "failed to list CL mappings", observability.Err(err))
+	} else {
 		status["cardsMapped"] = len(mappings)
 	}
 
