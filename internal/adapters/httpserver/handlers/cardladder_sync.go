@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -213,6 +212,15 @@ func (h *CardLadderHandler) addCardToCollection(ctx context.Context, uid, collec
 				observability.String("doc", result.DocumentName), observability.Err(delErr))
 		}
 		return nil, fmt.Errorf("save mapping for cert %s: %w", req.CertNumber, err)
+	}
+
+	// Update cl_synced_at timestamp
+	if h.syncUpdater != nil && purchaseID != "" {
+		now := time.Now().UTC().Format(time.RFC3339)
+		if err := h.syncUpdater.UpdatePurchaseCLSyncedAt(ctx, purchaseID, now); err != nil {
+			h.logger.Error(ctx, "failed to update cl_synced_at",
+				observability.String("cert", req.CertNumber), observability.Err(err))
+		}
 	}
 
 	// Update cl_synced_at timestamp
