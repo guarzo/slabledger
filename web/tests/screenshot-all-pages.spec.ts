@@ -99,7 +99,8 @@ async function screenshotPage(
     await page.waitForLoadState('networkidle').catch(() => {});
   }
 
-  // If a specific filter tab is requested (e.g. inventory filter buttons), click it
+  // If a specific filter tab is requested (e.g. inventory filter buttons), click it.
+  // The button may not render if the backend is unavailable (CI without Go server).
   if (pg.filterTab) {
     try {
       const filterBtn = page.getByRole('button', { name: new RegExp(pg.filterTab), exact: false });
@@ -116,7 +117,8 @@ async function screenshotPage(
     }
   }
 
-  // If row expansion is requested (inventory detail), click the first data row
+  // If row expansion is requested (inventory detail), click the first data row.
+  // Row may not exist if backend is unavailable (CI without Go server).
   if (pg.expandRow) {
     try {
       const row = page.locator('div[role="row"]:has(div[role="gridcell"])').first();
