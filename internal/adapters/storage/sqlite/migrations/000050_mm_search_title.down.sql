@@ -7,5 +7,5 @@ CREATE TABLE mm_card_mappings (
     mm_master_id      INTEGER NOT NULL DEFAULT 0,
     updated_at        TEXT    NOT NULL DEFAULT ''
 );
-INSERT INTO mm_card_mappings SELECT * FROM mm_card_mappings_backup;
+INSERT INTO mm_card_mappings (slab_serial, mm_collectible_id, mm_master_id, updated_at) SELECT slab_serial, mm_collectible_id, mm_master_id, updated_at FROM mm_card_mappings_backup;
 DROP TABLE mm_card_mappings_backup;

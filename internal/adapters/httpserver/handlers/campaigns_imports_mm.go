@@ -4,6 +4,7 @@ import (
 	"encoding/csv"
 	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/guarzo/slabledger/internal/domain/campaigns"
 	"github.com/guarzo/slabledger/internal/domain/observability"
@@ -17,7 +18,7 @@ import (
 // produces a truncated 200 OK response with no error signal to the client. This matches
 // the pre-existing behaviour of HandleGlobalExportCL.
 func (h *CampaignsHandler) HandleGlobalExportMM(w http.ResponseWriter, r *http.Request) {
-	missingMMOnly := r.URL.Query().Get("missing_mm_only") == "true"
+	missingMMOnly, _ := strconv.ParseBool(r.URL.Query().Get("missing_mm_only"))
 	entries, err := h.service.ExportMMFormatGlobal(r.Context(), missingMMOnly)
 	if err != nil {
 		h.logger.Error(r.Context(), "global MM export failed", observability.Err(err))

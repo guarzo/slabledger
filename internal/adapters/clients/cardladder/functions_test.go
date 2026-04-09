@@ -136,62 +136,10 @@ func TestClient_CardEstimate(t *testing.T) {
 	}
 }
 
-func TestClient_CreateCollectionCard(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			t.Fatalf("expected POST, got %s", r.Method)
-		}
-
-		// Verify the URL path contains the expected Firestore path
-		expectedPath := "/v1/projects/cardladder-71d53/databases/(default)/documents/users/user123/collections/coll456/collection_cards"
-		if r.URL.Path != expectedPath {
-			t.Errorf("path = %q, want %q", r.URL.Path, expectedPath)
-		}
-
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			t.Fatalf("read body: %v", err)
-		}
-		var doc firestoreDocument
-		if err := json.Unmarshal(body, &doc); err != nil {
-			t.Fatalf("unmarshal document: %v", err)
-		}
-
-		// Verify key fields
-		if v := firestoreString(doc.Fields, "player"); v != "Pikachu-Holo" {
-			t.Errorf("player = %q, want Pikachu-Holo", v)
-		}
-		if v := firestoreString(doc.Fields, "gemRateId"); v != "abc123" {
-			t.Errorf("gemRateId = %q, want abc123", v)
-		}
-		if v := firestoreString(doc.Fields, "slabSerial"); v != "69145695" {
-			t.Errorf("slabSerial = %q, want 69145695", v)
-		}
-		if doc.Fields["sold"].BooleanValue == nil || *doc.Fields["sold"].BooleanValue != false {
-			t.Error("sold should be false")
-		}
-		if doc.Fields["investment"].IntegerValue == nil || *doc.Fields["investment"].IntegerValue != "200" {
-			t.Errorf("investment = %v, want 200", doc.Fields["investment"].IntegerValue)
-		}
-
-		// Return a created document
-		json.NewEncoder(w).Encode(firestoreDocument{ //nolint:errcheck
-			Name:   "projects/cardladder-71d53/databases/(default)/documents/users/user123/collections/coll456/collection_cards/newCardID",
-			Fields: doc.Fields,
-		})
-	}))
-	defer server.Close()
-
-	// We need to override the Firestore base URL for testing.
-	// The CreateCollectionCard method uses defaultFirestoreBaseURL directly,
-	// so we use the test server and adjust the expected path.
-	origURL := defaultFirestoreBaseURL
-	// Unfortunately the const can't be overridden, so we test via the real flow
-	// which would hit the real Firestore. Instead, verify document building.
-	_ = origURL
-	_ = server
-
-	// Test the document builder directly
+func TestClient_BuildCardDocument(t *testing.T) {
+	// Test the document builder directly.
+	// CreateCollectionCard uses defaultFirestoreBaseURL (a const) so the real
+	// Firestore REST endpoint cannot be overridden for unit tests.
 	input := AddCollectionCardInput{
 		Label:            "2019 Pokemon Sm Black Star Promo Pikachu-Holo SM162",
 		Player:           "Pikachu-Holo",

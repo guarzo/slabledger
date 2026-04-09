@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -78,8 +79,11 @@ func (s *CardLadderRefreshScheduler) pushSingleCard(
 
 	// Save the local mapping
 	if err := s.store.SaveMapping(ctx, p.CertNumber, result.DocumentName, result.GemRateID, result.GemRateCondition); err != nil {
-		s.logger.Warn(ctx, "CL push: failed to save mapping after Firestore write",
-			observability.String("cert", p.CertNumber), observability.Err(err))
+		s.logger.Error(ctx, "CL push: failed to save mapping after Firestore write — orphaned remote card",
+			observability.String("cert", p.CertNumber),
+			observability.String("docName", result.DocumentName),
+			observability.Err(err))
+		return fmt.Errorf("save mapping for cert %s: %w", p.CertNumber, err)
 	}
 
 	// Update cl_synced_at on the purchase
@@ -137,6 +141,7 @@ func (s *CardLadderRefreshScheduler) removeSoldCards(
 			s.logger.Warn(ctx, "CL remove: failed to delete mapping",
 				observability.String("cert", m.SlabSerial),
 				observability.Err(err))
+			continue
 		}
 
 		removed++

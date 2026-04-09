@@ -242,6 +242,20 @@ func (c *Client) RemoveCollectionItem(ctx context.Context, collectionItemID int6
 	return nil
 }
 
+// checkTRPCError checks a response body for a tRPC error envelope and returns
+// a formatted error if one is present, or nil otherwise.
+func checkTRPCError(body []byte) error {
+	var errCheck struct {
+		Error *struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if jsonErr := json.Unmarshal(body, &errCheck); jsonErr == nil && errCheck.Error != nil {
+		return fmt.Errorf("trpc error: %s", errCheck.Error.Message)
+	}
+	return nil
+}
+
 // doMutation executes a tRPC POST mutation (mutate procedure).
 func (c *Client) doMutation(ctx context.Context, path string, input any, result any) error {
 	if err := c.rateLimiter.Wait(ctx); err != nil {
@@ -270,26 +284,16 @@ func (c *Client) doMutation(ctx context.Context, path string, input any, result 
 		// tRPC validation error in the body before falling back to the
 		// generic HTTP error.
 		if resp != nil && len(resp.Body) > 0 {
-			var errCheck struct {
-				Error *struct {
-					Message string `json:"message"`
-				} `json:"error"`
-			}
-			if jsonErr := json.Unmarshal(resp.Body, &errCheck); jsonErr == nil && errCheck.Error != nil {
-				return fmt.Errorf("trpc error: %s", errCheck.Error.Message)
+			if trpcErr := checkTRPCError(resp.Body); trpcErr != nil {
+				return trpcErr
 			}
 		}
 		return fmt.Errorf("http request: %w", err)
 	}
 
 	// Check for tRPC error in response body before unmarshalling.
-	var errCheck struct {
-		Error *struct {
-			Message string `json:"message"`
-		} `json:"error"`
-	}
-	if jsonErr := json.Unmarshal(resp.Body, &errCheck); jsonErr == nil && errCheck.Error != nil {
-		return fmt.Errorf("trpc error: %s", errCheck.Error.Message)
+	if trpcErr := checkTRPCError(resp.Body); trpcErr != nil {
+		return trpcErr
 	}
 
 	if err := json.Unmarshal(resp.Body, result); err != nil {
@@ -324,26 +328,16 @@ func (c *Client) doQuery(ctx context.Context, path string, input any, result any
 		// httpx returns both resp and err for HTTP 4xx/5xx — check for
 		// tRPC error in the body before falling back to the generic HTTP error.
 		if resp != nil && len(resp.Body) > 0 {
-			var errCheck struct {
-				Error *struct {
-					Message string `json:"message"`
-				} `json:"error"`
-			}
-			if jsonErr := json.Unmarshal(resp.Body, &errCheck); jsonErr == nil && errCheck.Error != nil {
-				return fmt.Errorf("trpc error: %s", errCheck.Error.Message)
+			if trpcErr := checkTRPCError(resp.Body); trpcErr != nil {
+				return trpcErr
 			}
 		}
 		return fmt.Errorf("http request: %w", err)
 	}
 
 	// Check for tRPC error in response body before unmarshalling
-	var errCheck struct {
-		Error *struct {
-			Message string `json:"message"`
-		} `json:"error"`
-	}
-	if jsonErr := json.Unmarshal(resp.Body, &errCheck); jsonErr == nil && errCheck.Error != nil {
-		return fmt.Errorf("trpc error: %s", errCheck.Error.Message)
+	if trpcErr := checkTRPCError(resp.Body); trpcErr != nil {
+		return trpcErr
 	}
 
 	if err := json.Unmarshal(resp.Body, result); err != nil {

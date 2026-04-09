@@ -46,7 +46,8 @@ func parseMMSearchTitle(title string) MMSearchTitleFields {
 	remaining = strings.TrimSpace(remaining)
 
 	// 2. Extract card number (#...) — find the last occurrence.
-	if loc := cardNumberRe.FindStringIndex(remaining); loc != nil {
+	if locs := cardNumberRe.FindAllStringIndex(remaining, -1); len(locs) > 0 {
+		loc := locs[len(locs)-1]
 		fields.CardNumber = strings.TrimSpace(remaining[loc[0]:loc[1]])
 		remaining = strings.TrimSpace(remaining[:loc[0]])
 	}

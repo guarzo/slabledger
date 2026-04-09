@@ -79,6 +79,13 @@ func (h *MarketMoversHandler) HandleSyncCollection(w http.ResponseWriter, r *htt
 	byCert := make(map[string]campaigns.Purchase, len(purchases))
 	for _, p := range purchases {
 		if p.CertNumber != "" {
+			if existing, ok := byCert[p.CertNumber]; ok {
+				h.logger.Warn(ctx, "MM sync: duplicate cert number in unsold purchases, keeping first",
+					observability.String("cert", p.CertNumber),
+					observability.String("keptPurchaseID", existing.ID),
+					observability.String("skippedPurchaseID", p.ID))
+				continue
+			}
 			byCert[p.CertNumber] = p
 		}
 	}

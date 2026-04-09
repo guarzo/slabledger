@@ -164,20 +164,20 @@ export function CardLadderTab({ enabled = true }: { enabled?: boolean }) {
             <div className="mt-4 pt-4 border-t border-[var(--surface-2)] space-y-1">
               <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">Last Refresh</p>
               <p className="text-xs text-[var(--text-muted)]">
-                Ran at {formatAdminDate(lastRun.lastRunAt)} · {(lastRun.durationMs / 1000).toFixed(1)}s
+                Ran at {formatAdminDate(lastRun.lastRunAt)} · {Number.isFinite(lastRun.durationMs) ? (lastRun.durationMs / 1000).toFixed(1) : '?'}s
               </p>
               <p className="text-xs text-[var(--text-muted)]">
-                {lastRun.updated > 0
+                {(lastRun.updated ?? 0) > 0
                   ? <span className="text-[var(--success)]">{lastRun.updated} updated</span>
-                  : <span>0 updated</span>} · {lastRun.mapped} mapped · {lastRun.skipped} skipped · {lastRun.totalCLCards} total CL cards
+                  : <span>0 updated</span>} · {lastRun.mapped ?? 0} mapped · {lastRun.skipped ?? 0} skipped · {lastRun.totalCLCards ?? 0} total CL cards
               </p>
-              {(lastRun.cardsPushed > 0 || lastRun.cardsRemoved > 0) && (
+              {((lastRun.cardsPushed ?? 0) > 0 || (lastRun.cardsRemoved ?? 0) > 0) && (
                 <p className="text-xs text-[var(--text-muted)]">
-                  {lastRun.cardsPushed > 0 && (
+                  {(lastRun.cardsPushed ?? 0) > 0 && (
                     <span className="text-[var(--success)]">{lastRun.cardsPushed} pushed</span>
                   )}
-                  {lastRun.cardsPushed > 0 && lastRun.cardsRemoved > 0 && ' · '}
-                  {lastRun.cardsRemoved > 0 && (
+                  {(lastRun.cardsPushed ?? 0) > 0 && (lastRun.cardsRemoved ?? 0) > 0 && ' · '}
+                  {(lastRun.cardsRemoved ?? 0) > 0 && (
                     <span className="text-amber-400">{lastRun.cardsRemoved} removed</span>
                   )}
                 </p>

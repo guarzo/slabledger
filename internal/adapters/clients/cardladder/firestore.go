@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/url"
 	"strconv"
 	"strings"
@@ -220,9 +221,13 @@ func (c *Client) ResolveAndCreateCard(ctx context.Context, uid, collectionID str
 // (e.g. "projects/cardladder-71d53/databases/(default)/documents/users/{uid}/collections/{cid}/collection_cards/{docId}").
 func (c *Client) DeleteCollectionCard(ctx context.Context, documentName string) error {
 	// Defense-in-depth: validate the document path belongs to our Firestore project.
-	expectedPrefix := "projects/" + firestoreProject + "/"
+	expectedPrefix := "projects/" + firestoreProject + "/databases/(default)/documents/"
 	if !strings.HasPrefix(documentName, expectedPrefix) {
 		return fmt.Errorf("invalid document name: must start with %q", expectedPrefix)
+	}
+	// Reject path traversal and query injection characters.
+	if strings.Contains(documentName, "..") || strings.Contains(documentName, "?") || strings.Contains(documentName, "#") {
+		return fmt.Errorf("invalid document name: contains forbidden characters")
 	}
 
 	if err := c.rateLimiter.Wait(ctx); err != nil {
@@ -286,9 +291,9 @@ func buildCardDocument(uid, collectionID string, input AddCollectionCardInput, n
 		"imageBack":        fsString(input.ImageBackURL),
 		"imageCustom":      fsString(imageCustom),
 		"pop":              fsInt(input.Pop),
-		"currentValue":     fsInt(int(input.CurrentValue)),
-		"investment":       fsInt(int(input.Investment)),
-		"profit":           fsInt(int(profit)),
+		"currentValue":     fsInt(int(math.Round(input.CurrentValue))),
+		"investment":       fsInt(int(math.Round(input.Investment))),
+		"profit":           fsInt(int(math.Round(profit))),
 		"quantity":         fsInt(1),
 		"quantitySold":     fsInt(0),
 		"sold":             fsBool(false),

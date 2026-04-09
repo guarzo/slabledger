@@ -45,8 +45,16 @@ function CLSyncIndicator({ syncedAt }: { syncedAt?: string }) {
     );
   }
   const parsed = new Date(syncedAt);
+  if (isNaN(parsed.getTime())) {
+    return (
+      <div className="mt-2 flex items-center gap-1.5 text-xs text-[var(--text-muted)]">
+        <span className="inline-block w-2 h-2 rounded-full bg-gray-400" />
+        <span>CL synced (unknown date)</span>
+      </div>
+    );
+  }
   const ageMs = Date.now() - parsed.getTime();
-  const ageDays = Math.floor(ageMs / 86_400_000);
+  const ageDays = Math.max(0, Math.floor(ageMs / 86_400_000));
   // Green = synced within 2 days, amber = within 14 days, red = stale
   const color = ageDays <= 2 ? 'bg-emerald-400' : ageDays <= 14 ? 'bg-amber-400' : 'bg-red-400';
   const label = ageDays === 0 ? 'today' : ageDays === 1 ? 'yesterday' : `${ageDays}d ago`;
