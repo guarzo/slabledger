@@ -97,7 +97,12 @@ func (h *DHHandler) runBulkMatch(ctx context.Context, purchases []campaigns.Purc
 		// If this card identity already has a mapping, skip the API call
 		// and reuse the existing DH card ID.
 		if existingID := mappedSet[key]; existingID != "" {
-			if parsed, parseErr := strconv.Atoi(existingID); parseErr == nil && parsed > 0 {
+			parsed, parseErr := strconv.Atoi(existingID)
+			if parseErr != nil || parsed <= 0 {
+				h.logger.Debug(ctx, "bulk match: invalid existing mapping, resolving via API",
+					observability.String("cert", p.CertNumber),
+					observability.String("existing_id", existingID))
+			} else {
 				matched++
 				matchedCards = append(matchedCards, matchedCard{identity: p.ToCardIdentity(), dhCardID: parsed})
 				h.logger.Debug(ctx, "bulk match: reusing existing mapping",
