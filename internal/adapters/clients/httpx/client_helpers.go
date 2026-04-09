@@ -12,6 +12,7 @@ import (
 	"time"
 
 	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
+	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/platform/resilience"
 )
 
@@ -112,6 +113,21 @@ func (c *Client) handleHTTPError(statusCode int, headers http.Header, body []byt
 		retryAfter := ""
 		if headers != nil {
 			retryAfter = headers.Get("Retry-After")
+		}
+		// Log rate limit diagnostics to help identify upstream limits
+		if c.logger != nil {
+			fields := []observability.Field{
+				observability.String("provider", c.providerName),
+				observability.String("body", sanitized),
+			}
+			if headers != nil {
+				for _, h := range []string{"Retry-After", "X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset", "RateLimit-Limit", "RateLimit-Remaining", "RateLimit-Reset"} {
+					if v := headers.Get(h); v != "" {
+						fields = append(fields, observability.String(h, v))
+					}
+				}
+			}
+			c.logger.Warn(context.Background(), "HTTP 429 rate limit response", fields...)
 		}
 		return apperrors.ProviderRateLimited(c.providerName, retryAfter)
 	case 500, 502, 503, 504:

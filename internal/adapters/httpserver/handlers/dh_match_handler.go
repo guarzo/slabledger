@@ -105,6 +105,7 @@ func (h *DHHandler) runBulkMatch(ctx context.Context, purchases []campaigns.Purc
 			} else {
 				matched++
 				matchedCards = append(matchedCards, matchedCard{identity: p.ToCardIdentity(), dhCardID: parsed})
+				h.setMatchedStatus(ctx, p.ID)
 				h.logger.Debug(ctx, "bulk match: reusing existing mapping",
 					observability.String("cert", p.CertNumber),
 					observability.Int("dh_card_id", parsed))
@@ -168,6 +169,7 @@ func (h *DHHandler) runBulkMatch(ctx context.Context, purchases []campaigns.Purc
 			if dhCardID > 0 {
 				matched++
 				matchedCards = append(matchedCards, matchedCard{identity: p.ToCardIdentity(), dhCardID: dhCardID})
+				h.setMatchedStatus(ctx, p.ID)
 				continue
 			}
 			notFound++
@@ -189,6 +191,7 @@ func (h *DHHandler) runBulkMatch(ctx context.Context, purchases []campaigns.Purc
 		}
 		matched++
 		matchedCards = append(matchedCards, matchedCard{identity: p.ToCardIdentity(), dhCardID: resp.DHCardID})
+		h.setMatchedStatus(ctx, p.ID)
 		mappedSet[key] = externalID
 	}
 
@@ -202,6 +205,17 @@ func (h *DHHandler) runBulkMatch(ctx context.Context, purchases []campaigns.Purc
 
 	if h.inventoryPusher != nil && len(matchedCards) > 0 {
 		h.pushMatchedToDH(ctx, purchases, matchedCards)
+	}
+}
+
+// setMatchedStatus marks a purchase as matched at cert-resolution time,
+// independent of whether the inventory push succeeds later.
+func (h *DHHandler) setMatchedStatus(ctx context.Context, purchaseID string) {
+	if h.pushStatusUpdater != nil {
+		if err := h.pushStatusUpdater.UpdatePurchaseDHPushStatus(ctx, purchaseID, campaigns.DHPushStatusMatched); err != nil {
+			h.logger.Warn(ctx, "bulk match: failed to set matched status",
+				observability.String("purchaseID", purchaseID), observability.Err(err))
+		}
 	}
 }
 
