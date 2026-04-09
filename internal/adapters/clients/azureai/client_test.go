@@ -142,21 +142,55 @@ func TestStreamCompletion_ToolCall(t *testing.T) {
 	}
 }
 
-func TestStreamCompletion_RetryOnMidStreamFailure(t *testing.T) {
+func TestStreamCompletion_NoRetryAfterEmittedChunks(t *testing.T) {
+	var attempts atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts.Add(1)
+		// Send partial data then close (no response.completed).
+		sseResponse(w,
+			sseEvent("response.output_text.delta", `{"type":"response.output_text.delta","delta":"partial"}`),
+		)
+	}))
+	defer server.Close()
+
+	client := newTestClient(t, server.URL)
+
+	var chunks []ai.CompletionChunk
+	err := client.StreamCompletion(context.Background(), ai.CompletionRequest{
+		Messages: []ai.Message{{Role: ai.RoleUser, Content: "hello"}},
+	}, func(chunk ai.CompletionChunk) {
+		chunks = append(chunks, chunk)
+	})
+
+	// After emitting chunks, the client should stop retrying and return an error.
+	if err == nil {
+		t.Fatal("expected error after partial stream")
+	}
+	if attempts.Load() != 1 {
+		t.Errorf("expected exactly 1 attempt (no retry after emitted chunks), got %d", attempts.Load())
+	}
+	// Should have received the partial chunk.
+	if len(chunks) == 0 || chunks[0].Delta != "partial" {
+		t.Errorf("expected partial delta chunk, got %v", chunks)
+	}
+}
+
+func TestStreamCompletion_RetryOnFailureBeforeChunks(t *testing.T) {
 	var attempts atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		attempt := attempts.Add(1)
 		if attempt == 1 {
-			// Send partial data then close (no response.completed).
+			// First attempt: stream ends with no data at all (only response.created).
 			sseResponse(w,
-				sseEvent("response.output_text.delta", `{"type":"response.output_text.delta","delta":"partial"}`),
+				sseEvent("response.created", `{"type":"response.created","response":{"id":"resp_retry","status":"in_progress"}}`),
 			)
 			return
 		}
+		// Second attempt: full success.
 		sseResponse(w,
-			sseEvent("response.created", `{"type":"response.created","response":{"id":"resp_retry","status":"in_progress"}}`),
+			sseEvent("response.created", `{"type":"response.created","response":{"id":"resp_retry2","status":"in_progress"}}`),
 			sseEvent("response.output_text.delta", `{"type":"response.output_text.delta","delta":"full result"}`),
-			sseEvent("response.completed", `{"type":"response.completed","response":{"id":"resp_retry","status":"completed","usage":{"input_tokens":10,"output_tokens":5,"total_tokens":15}}}`),
+			sseEvent("response.completed", `{"type":"response.completed","response":{"id":"resp_retry2","status":"completed","usage":{"input_tokens":10,"output_tokens":5,"total_tokens":15}}}`),
 		)
 	}))
 	defer server.Close()
@@ -408,6 +442,6 @@ func TestStreamCompletion_CapacityError(t *testing.T) {
 	// Error should be a capacity error or context deadline (from backoff timeout).
 	var capErr *capacityError
 	if !errors.As(retErr, &capErr) && !errors.Is(retErr, context.DeadlineExceeded) {
-		t.Logf("error type: %T, value: %v", retErr, retErr)
+		t.Errorf("expected *capacityError or context.DeadlineExceeded, got %T: %v", retErr, retErr)
 	}
 }

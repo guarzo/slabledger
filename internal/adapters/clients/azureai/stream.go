@@ -37,7 +37,9 @@ func responsesRoutingMiddleware(deploymentName string, isFoundry bool) option.Mi
 		p := req.URL.Path
 
 		// Find /responses or /responses/{id} at the end of the path.
-		idx := strings.Index(p, "/responses")
+		// Use LastIndex so paths containing "responses" as a project name
+		// (e.g. /api/projects/responses/responses) split at the correct segment.
+		idx := strings.LastIndex(p, "/responses")
 		if idx >= 0 {
 			suffix := p[idx+len("/responses"):] // "" or "/{id}"
 			basePath := p[:idx]

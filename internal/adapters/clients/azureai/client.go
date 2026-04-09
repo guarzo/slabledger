@@ -119,16 +119,23 @@ func NewClient(cfg Config, opts ...Option) (*Client, error) {
 // backoff. When a response ID is captured and store=true, falls back to
 // polling on stream failure.
 func (c *Client) StreamCompletion(ctx context.Context, req ai.CompletionRequest, stream func(ai.CompletionChunk)) error {
-	params := c.buildParams(req)
+	params, err := c.buildParams(req)
+	if err != nil {
+		return err
+	}
 
 	var lastErr error
 	var lastResponseID string
+	var emittedChunks bool
 
 	for attempt := range maxStreamRetries {
 		completed := false
 		wrappedStream := func(chunk ai.CompletionChunk) {
 			if chunk.Done {
 				completed = true
+			}
+			if chunk.Delta != "" || len(chunk.ToolCalls) > 0 {
+				emittedChunks = true
 			}
 			stream(chunk)
 		}
@@ -144,6 +151,11 @@ func (c *Client) StreamCompletion(ctx context.Context, req ai.CompletionRequest,
 
 		// Don't retry after completion or on last attempt.
 		if completed || attempt == maxStreamRetries-1 {
+			break
+		}
+		// Don't retry if we already forwarded content chunks — retrying would
+		// produce duplicate or corrupted output for the caller.
+		if emittedChunks {
 			break
 		}
 		// Don't retry permanent client errors (4xx except 429).
@@ -175,8 +187,10 @@ func (c *Client) StreamCompletion(ctx context.Context, req ai.CompletionRequest,
 pollFallback:
 	// Poll-based fallback: if streaming failed but we captured a response ID
 	// and the request used store=true, the response may have completed server-side.
-	if lastResponseID != "" && req.Store {
-		pollCtx, pollCancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	// Skip poll if we already emitted chunks — caller already has partial data.
+	// Derive from the caller's context so cancellation propagates.
+	if lastResponseID != "" && req.Store && !emittedChunks {
+		pollCtx, pollCancel := context.WithTimeout(ctx, 3*time.Minute)
 		defer pollCancel()
 		if c.logger != nil {
 			c.logger.Info(pollCtx, "attempting poll fallback for stored response",
@@ -196,7 +210,7 @@ pollFallback:
 }
 
 // buildParams maps a domain CompletionRequest to SDK ResponseNewParams.
-func (c *Client) buildParams(req ai.CompletionRequest) responses.ResponseNewParams {
+func (c *Client) buildParams(req ai.CompletionRequest) (responses.ResponseNewParams, error) {
 	params := responses.ResponseNewParams{
 		Model: shared.ResponsesModel(c.deploymentName),
 	}
@@ -225,11 +239,15 @@ func (c *Client) buildParams(req ai.CompletionRequest) responses.ResponseNewPara
 	// Convert tool definitions.
 	for _, td := range req.Tools {
 		toolParams := ensureProperties(td.Parameters)
+		toolMap, ok := toolParams.(map[string]any)
+		if !ok {
+			return responses.ResponseNewParams{}, fmt.Errorf("azureai: tool %q parameters must be a JSON object, got %T", td.Name, toolParams)
+		}
 		params.Tools = append(params.Tools, responses.ToolUnionParam{
 			OfFunction: &responses.FunctionToolParam{
 				Name:        td.Name,
 				Description: openai.String(td.Description),
-				Parameters:  toolParams.(map[string]any),
+				Parameters:  toolMap,
 			},
 		})
 	}
@@ -291,7 +309,7 @@ func (c *Client) buildParams(req ai.CompletionRequest) responses.ResponseNewPara
 		}
 	}
 
-	return params
+	return params, nil
 }
 
 // classifyBackoff returns the backoff duration based on error type and attempt.
