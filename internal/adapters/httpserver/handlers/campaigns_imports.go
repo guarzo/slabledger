@@ -2,11 +2,13 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/campaigns"
 	"github.com/guarzo/slabledger/internal/domain/observability"
@@ -137,6 +139,55 @@ func (h *CampaignsHandler) HandleGlobalImportPSA(w http.ResponseWriter, r *http.
 
 	// Surface row-level parse errors in the response so the caller
 	// knows which rows were skipped and why.
+	for _, pe := range parseErrors {
+		result.Errors = append(result.Errors, campaigns.ImportError{
+			Row:   pe.Row,
+			Error: pe.Message,
+		})
+	}
+
+	writeJSON(w, http.StatusOK, result)
+}
+
+// HandleSyncPSASheets handles POST /api/purchases/sync-psa-sheets.
+// Fetches PSA data from a configured Google Sheet and runs the standard import.
+func (h *CampaignsHandler) HandleSyncPSASheets(w http.ResponseWriter, r *http.Request) {
+	if h.sheetFetcher == nil || h.sheetsSpreadsheet == "" {
+		writeError(w, http.StatusServiceUnavailable, "Google Sheets sync not configured")
+		return
+	}
+
+	fetchCtx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
+	defer cancel()
+
+	rows, err := h.sheetFetcher.ReadSheet(fetchCtx, h.sheetsSpreadsheet, h.sheetsTab)
+	if err != nil {
+		h.logger.Error(r.Context(), "failed to fetch Google Sheet", observability.Err(err))
+		writeError(w, http.StatusBadGateway, "Failed to fetch Google Sheet")
+		return
+	}
+
+	psaRows, parseErrors, err := campaigns.ParsePSAExportRows(rows)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if len(psaRows) == 0 {
+		if len(parseErrors) > 0 {
+			writeError(w, http.StatusBadRequest, parseErrors[0].Message)
+		} else {
+			writeError(w, http.StatusBadRequest, "No valid PSA data rows found in sheet")
+		}
+		return
+	}
+
+	result, ok := serviceCall(w, r.Context(), h.logger, "PSA sheets sync failed", func() (*campaigns.PSAImportResult, error) {
+		return h.service.ImportPSAExportGlobal(r.Context(), psaRows)
+	})
+	if !ok {
+		return
+	}
+
 	for _, pe := range parseErrors {
 		result.Errors = append(result.Errors, campaigns.ImportError{
 			Row:   pe.Row,
