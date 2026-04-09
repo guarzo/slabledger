@@ -2,15 +2,17 @@ package azureai
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"net/http"
 	"strings"
 	"time"
 
-	"github.com/guarzo/slabledger/internal/adapters/clients/httpx"
+	openai "github.com/openai/openai-go/v3"
+	"github.com/openai/openai-go/v3/azure"
+	"github.com/openai/openai-go/v3/option"
+	"github.com/openai/openai-go/v3/responses"
+	"github.com/openai/openai-go/v3/shared"
+
 	"github.com/guarzo/slabledger/internal/domain/ai"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
@@ -23,54 +25,33 @@ type Config struct {
 	APIVersion     string // e.g. "2024-12-01-preview"
 }
 
+// responsesAPIVersion is the minimum API version supporting the Responses API.
+const responsesAPIVersion = "2025-04-01-preview"
+
 // Option configures the client.
-type Option func(*Client)
+type Option func(*clientOptions)
+
+// clientOptions holds optional configuration for the client.
+type clientOptions struct {
+	logger  observability.Logger
+	baseURL string // for testing with httptest
+}
 
 // WithLogger sets the logger.
 func WithLogger(l observability.Logger) Option {
-	return func(c *Client) { c.logger = l }
+	return func(o *clientOptions) { o.logger = l }
 }
 
-// Client implements ai.LLMProvider for Azure AI Foundry (OpenAI-compatible).
+// withBaseURL sets the base URL for the SDK client (unexported, for tests).
+func withBaseURL(url string) Option {
+	return func(o *clientOptions) { o.baseURL = url }
+}
+
+// Client implements ai.LLMProvider for Azure AI Foundry using the openai-go SDK.
 type Client struct {
-	config     Config
-	httpClient *http.Client
-	logger     observability.Logger
-}
-
-// NewClient creates a new Azure AI Foundry client.
-// This client only supports API-key authentication. For Azure OpenAI endpoints
-// (*.openai.azure.com, *.cognitiveservices.azure.com, *.services.ai.azure.com)
-// the key is sent via the "api-key" header. Bearer-token (Entra ID / managed
-// identity) auth is not supported — use a separate client or extend Config if
-// needed.
-func NewClient(cfg Config, opts ...Option) (*Client, error) {
-	if cfg.Endpoint == "" {
-		return nil, fmt.Errorf("azureai: Endpoint is required")
-	}
-	if cfg.APIKey == "" {
-		return nil, fmt.Errorf("azureai: APIKey is required (bearer-token auth is not supported)")
-	}
-	if cfg.DeploymentName == "" {
-		return nil, fmt.Errorf("azureai: DeploymentName is required")
-	}
-	if cfg.APIVersion == "" {
-		cfg.APIVersion = "2024-12-01-preview"
-	}
-
-	c := &Client{
-		config: cfg,
-		// No http.Client.Timeout — it covers the entire response lifetime
-		// and would abort long-running SSE streams. Connection-level timeouts
-		// are configured on the Transport; stream deadlines come from ctx.
-		httpClient: &http.Client{
-			Transport: httpx.DefaultTransport(),
-		},
-	}
-	for _, opt := range opts {
-		opt(c)
-	}
-	return c, nil
+	client         *openai.Client
+	deploymentName string
+	logger         observability.Logger
 }
 
 var _ ai.LLMProvider = (*Client)(nil)
@@ -92,46 +73,89 @@ func (e *capacityError) Error() string {
 
 const maxStreamRetries = 5
 
-// StreamCompletion streams a chat completion response from Azure AI.
-// Automatically selects the Responses API for AI Foundry endpoints
-// and the Chat Completions API for Azure OpenAI endpoints.
-// Retries automatically on transient errors (rate limits, connection resets)
-// with exponential backoff. For the Responses API, retries are allowed even
-// after partial text deltas if response.completed was not received. For the
-// Chat Completions API, any emitted chunk prevents retry.
+// NewClient creates a new Azure AI Foundry client backed by the openai-go SDK.
+func NewClient(cfg Config, opts ...Option) (*Client, error) {
+	if cfg.Endpoint == "" {
+		return nil, fmt.Errorf("azureai: Endpoint is required")
+	}
+	if cfg.APIKey == "" {
+		return nil, fmt.Errorf("azureai: APIKey is required")
+	}
+	if cfg.DeploymentName == "" {
+		return nil, fmt.Errorf("azureai: DeploymentName is required")
+	}
+	if cfg.APIVersion == "" {
+		cfg.APIVersion = responsesAPIVersion
+	}
+
+	var co clientOptions
+	for _, opt := range opts {
+		opt(&co)
+	}
+
+	// Build SDK client options. Disable SDK-level retries — we manage our own
+	// retry loop with backoff classification in StreamCompletion.
+	sdkOpts := []option.RequestOption{
+		azure.WithEndpoint(cfg.Endpoint, cfg.APIVersion),
+		azure.WithAPIKey(cfg.APIKey),
+		option.WithMiddleware(responsesRoutingMiddleware(cfg.DeploymentName, isAIFoundry(cfg.Endpoint))),
+		option.WithMaxRetries(0),
+	}
+	if co.baseURL != "" {
+		sdkOpts = append(sdkOpts, option.WithBaseURL(co.baseURL))
+	}
+
+	client := openai.NewClient(sdkOpts...)
+
+	return &Client{
+		client:         &client,
+		deploymentName: cfg.DeploymentName,
+		logger:         co.logger,
+	}, nil
+}
+
+// StreamCompletion streams a completion response from Azure AI using the
+// Responses API. Retries automatically on transient errors with exponential
+// backoff. When a response ID is captured and store=true, falls back to
+// polling on stream failure.
 func (c *Client) StreamCompletion(ctx context.Context, req ai.CompletionRequest, stream func(ai.CompletionChunk)) error {
-	responsesAPI := c.useResponsesAPI()
+	params, err := c.buildParams(req)
+	if err != nil {
+		return err
+	}
+
 	var lastErr error
 	var lastResponseID string
+	var emittedChunks bool
+
 	for attempt := range maxStreamRetries {
-		emitted := false
 		completed := false
 		wrappedStream := func(chunk ai.CompletionChunk) {
-			emitted = true
 			if chunk.Done {
 				completed = true
 			}
+			if chunk.Delta != "" || len(chunk.ToolCalls) > 0 {
+				emittedChunks = true
+			}
 			stream(chunk)
 		}
-		var respID string
-		respID, lastErr = c.doStreamCompletion(ctx, req, wrappedStream)
+
+		respID, err := c.doStream(ctx, params, wrappedStream)
 		if respID != "" {
 			lastResponseID = respID
 		}
-		if lastErr == nil {
+		if err == nil {
 			return nil
 		}
-		// Decide whether retry is safe:
-		// - Responses API: retry unless Done was emitted. Intermediate text
-		//   deltas will be regenerated by the server (previous_response_id
-		//   chaining replays the full response). Note: the caller may receive
-		//   duplicate deltas from the failed attempt; this is an acceptable
-		//   tradeoff vs permanent failure. The scheduler path uses a no-op
-		//   stream callback, so duplicates only affect fullContent accumulation.
-		// - Chat Completions: any emitted chunk is final; retrying would
-		//   duplicate streamed content.
-		noRetry := completed || (!responsesAPI && emitted)
-		if noRetry || attempt == maxStreamRetries-1 {
+		lastErr = err
+
+		// Don't retry after completion or on last attempt.
+		if completed || attempt == maxStreamRetries-1 {
+			break
+		}
+		// Don't retry if we already forwarded content chunks — retrying would
+		// produce duplicate or corrupted output for the caller.
+		if emittedChunks {
 			break
 		}
 		// Don't retry permanent client errors (4xx except 429).
@@ -140,21 +164,11 @@ func (c *Client) StreamCompletion(ctx context.Context, req ai.CompletionRequest,
 		}
 		// If we captured a response ID and store is enabled, skip further
 		// retries and go straight to poll fallback to avoid duplicate POSTs.
-		if lastResponseID != "" && req.Store && responsesAPI {
-			goto pollFallback
+		if lastResponseID != "" && req.Store {
+			break
 		}
-		// Capacity errors need the longest backoff (request too large for peak load).
-		// Rate limits need moderate backoff; other transient errors use shorter.
-		var capErr *capacityError
-		var rlErr *rateLimitError
-		var backoff time.Duration
-		if errors.As(lastErr, &capErr) {
-			backoff = time.Duration(60<<attempt) * time.Second // 60s, 120s, 240s
-		} else if errors.As(lastErr, &rlErr) {
-			backoff = time.Duration(30<<attempt) * time.Second // 30s, 60s, 120s
-		} else {
-			backoff = time.Duration(5<<attempt) * time.Second // 5s, 10s, 20s
-		}
+
+		backoff := classifyBackoff(lastErr, attempt)
 		if c.logger != nil {
 			c.logger.Warn(ctx, "retrying after transient error",
 				observability.Int("attempt", attempt+1),
@@ -173,17 +187,16 @@ func (c *Client) StreamCompletion(ctx context.Context, req ai.CompletionRequest,
 pollFallback:
 	// Poll-based fallback: if streaming failed but we captured a response ID
 	// and the request used store=true, the response may have completed server-side.
-	// Try to retrieve it via GET /responses/{id}.
-	if lastResponseID != "" && req.Store && responsesAPI {
-		// Use a fresh context for the poll — the original may be deadline-exceeded,
-		// but the response may still have completed server-side.
-		pollCtx, pollCancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	// Skip poll if we already emitted chunks — caller already has partial data.
+	// Derive from the caller's context so cancellation propagates.
+	if lastResponseID != "" && req.Store && !emittedChunks {
+		pollCtx, pollCancel := context.WithTimeout(ctx, 3*time.Minute)
 		defer pollCancel()
 		if c.logger != nil {
 			c.logger.Info(pollCtx, "attempting poll fallback for stored response",
 				observability.String("responseID", lastResponseID))
 		}
-		if pollErr := c.pollResponseFallback(pollCtx, lastResponseID, stream); pollErr == nil {
+		if pollErr := c.pollFallback(pollCtx, lastResponseID, stream); pollErr == nil {
 			return nil
 		} else {
 			if c.logger != nil {
@@ -196,147 +209,164 @@ pollFallback:
 	return lastErr
 }
 
-// pollResponseFallback retrieves a stored response via GET when streaming failed.
-// It polls up to 10 times (10s apart, with a 20s initial wait to let Azure finish processing).
-// Total budget: ~110s, fitting within the 3-minute poll context.
-func (c *Client) pollResponseFallback(ctx context.Context, responseID string, stream func(ai.CompletionChunk)) error {
-	endpoint := strings.TrimRight(c.config.Endpoint, "/")
-	var url string
-	if strings.Contains(endpoint, ".services.ai.azure.com") {
-		url = endpoint + "/openai/v1/responses/" + responseID
-	} else {
-		url = fmt.Sprintf("%s/openai/deployments/%s/responses/%s?api-version=%s",
-			endpoint, c.config.DeploymentName, responseID, responsesAPIVersion)
+// buildParams maps a domain CompletionRequest to SDK ResponseNewParams.
+func (c *Client) buildParams(req ai.CompletionRequest) (responses.ResponseNewParams, error) {
+	params := responses.ResponseNewParams{
+		Model: shared.ResponsesModel(c.deploymentName),
 	}
 
-	for poll := range 10 {
-		// Wait before each poll — give Azure time to finish processing.
-		wait := 10 * time.Second
-		if poll == 0 {
-			wait = 20 * time.Second // longer initial wait
+	if req.SystemPrompt != "" {
+		params.Instructions = openai.String(req.SystemPrompt)
+	}
+	// Note: temperature is intentionally omitted — some models (e.g. gpt-5.4)
+	// reject the parameter. Callers that need temperature control should use
+	// models that support it.
+	if req.MaxTokens > 0 {
+		params.MaxOutputTokens = openai.Int(int64(req.MaxTokens))
+	}
+	if req.Store {
+		params.Store = openai.Bool(true)
+	}
+	if req.ReasoningEffort != "" {
+		params.Reasoning = shared.ReasoningParam{
+			Effort: shared.ReasoningEffort(req.ReasoningEffort),
 		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(wait):
-		}
+	}
+	if id, ok := req.ConversationState.(string); ok && id != "" {
+		params.PreviousResponseID = openai.String(id)
+	}
 
-		httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-		if err != nil {
-			return err
+	// Convert tool definitions.
+	for _, td := range req.Tools {
+		toolParams := ensureProperties(td.Parameters)
+		toolMap, ok := toolParams.(map[string]any)
+		if !ok {
+			return responses.ResponseNewParams{}, fmt.Errorf("azureai: tool %q parameters must be a JSON object, got %T", td.Name, toolParams)
 		}
-		// Use the same auth method as streaming requests.
-		if isAzureOpenAI(endpoint) {
-			httpReq.Header.Set("api-key", c.config.APIKey)
-		} else {
-			httpReq.Header.Set("Authorization", "Bearer "+c.config.APIKey)
-		}
+		params.Tools = append(params.Tools, responses.ToolUnionParam{
+			OfFunction: &responses.FunctionToolParam{
+				Name:        td.Name,
+				Description: openai.String(td.Description),
+				Parameters:  toolMap,
+			},
+		})
+	}
 
-		resp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		body, _ := io.ReadAll(resp.Body)
-		resp.Body.Close() //nolint:errcheck
+	// Convert messages to input items.
+	chaining := false
+	if id, ok := req.ConversationState.(string); ok && id != "" {
+		chaining = true
+	}
 
-		if resp.StatusCode == http.StatusNotFound {
-			// Response not stored yet — keep polling.
-			if c.logger != nil {
-				c.logger.Info(ctx, "poll fallback: response not found yet, will retry",
-					observability.Int("poll", poll+1))
+	var items responses.ResponseInputParam
+	for _, msg := range req.Messages {
+		switch msg.Role {
+		case ai.RoleUser:
+			items = append(items, responses.ResponseInputItemUnionParam{
+				OfMessage: &responses.EasyInputMessageParam{
+					Role:    responses.EasyInputMessageRoleUser,
+					Content: responses.EasyInputMessageContentUnionParam{OfString: openai.String(msg.Content)},
+				},
+			})
+
+		case ai.RoleAssistant:
+			if msg.Content != "" {
+				items = append(items, responses.ResponseInputItemUnionParam{
+					OfMessage: &responses.EasyInputMessageParam{
+						Role:    responses.EasyInputMessageRoleAssistant,
+						Content: responses.EasyInputMessageContentUnionParam{OfString: openai.String(msg.Content)},
+					},
+				})
 			}
-			continue
-		}
-		if resp.StatusCode != http.StatusOK {
-			return fmt.Errorf("poll response returned %d", resp.StatusCode)
-		}
-
-		var result struct {
-			ID     string `json:"id"`
-			Status string `json:"status"`
-			Output []struct {
-				Type    string `json:"type"`
-				Content []struct {
-					Type string `json:"type"`
-					Text string `json:"text"`
-				} `json:"content"`
-				Name      string `json:"name"`
-				CallID    string `json:"call_id"`
-				Arguments string `json:"arguments"`
-			} `json:"output"`
-			Usage struct {
-				InputTokens  int `json:"input_tokens"`
-				OutputTokens int `json:"output_tokens"`
-				TotalTokens  int `json:"total_tokens"`
-			} `json:"usage"`
-			IncompleteDetails *struct {
-				Reason string `json:"reason"`
-			} `json:"incomplete_details"`
-		}
-		if err := json.Unmarshal(body, &result); err != nil {
-			return fmt.Errorf("parse poll response: %w", err)
-		}
-
-		switch result.Status {
-		case "completed", "incomplete":
-			if result.Status == "incomplete" {
-				reason := "unknown"
-				if result.IncompleteDetails != nil && result.IncompleteDetails.Reason != "" {
-					reason = result.IncompleteDetails.Reason
-				}
-				if len(result.Output) == 0 {
-					return fmt.Errorf("response %s: incomplete with no output (reason: %s)", responseID, reason)
-				}
-				if c.logger != nil {
-					c.logger.Warn(ctx, "poll fallback: response incomplete, emitting partial output",
-						observability.String("responseID", responseID),
-						observability.String("reason", reason),
-						observability.Int("outputItems", len(result.Output)),
-					)
-				}
-			}
-			// Emit the response as chunks. For "incomplete" responses
-			// (typically max_output_tokens), the partial output is still
-			// useful — a truncated analysis is better than no analysis.
-			chunk := ai.CompletionChunk{
-				Done:              true,
-				ConversationState: result.ID,
-			}
-			if result.Usage.TotalTokens > 0 {
-				chunk.Usage = &ai.TokenUsage{
-					InputTokens:  result.Usage.InputTokens,
-					OutputTokens: result.Usage.OutputTokens,
-					TotalTokens:  result.Usage.TotalTokens,
-				}
-			}
-			for _, out := range result.Output {
-				switch out.Type {
-				case "message":
-					for _, c := range out.Content {
-						if c.Type == "output_text" && c.Text != "" {
-							chunk.Delta += c.Text
-						}
-					}
-				case "function_call":
-					chunk.ToolCalls = append(chunk.ToolCalls, ai.ToolCall{
-						ID:        out.CallID,
-						Name:      out.Name,
-						Arguments: out.Arguments,
+			if !chaining {
+				for _, tc := range msg.ToolCalls {
+					items = append(items, responses.ResponseInputItemUnionParam{
+						OfFunctionCall: &responses.ResponseFunctionToolCallParam{
+							ID:        openai.String("fc_" + tc.ID),
+							CallID:    tc.ID,
+							Name:      tc.Name,
+							Arguments: tc.Arguments,
+						},
 					})
 				}
 			}
-			stream(chunk)
-			return nil
-		case "failed", "cancelled":
-			return fmt.Errorf("response %s: status %s", responseID, result.Status)
-		default:
-			// "queued", "in_progress" — keep polling
-			if c.logger != nil {
-				c.logger.Info(ctx, "poll fallback waiting",
-					observability.String("status", result.Status),
-					observability.Int("poll", poll+1))
-			}
+
+		case ai.RoleTool:
+			items = append(items, responses.ResponseInputItemUnionParam{
+				OfFunctionCallOutput: &responses.ResponseInputItemFunctionCallOutputParam{
+					CallID: msg.ToolCallID,
+					Output: responses.ResponseInputItemFunctionCallOutputOutputUnionParam{
+						OfString: openai.String(msg.Content),
+					},
+				},
+			})
 		}
 	}
-	return fmt.Errorf("response %s still not completed after polling", responseID)
+
+	if len(items) > 0 {
+		params.Input = responses.ResponseNewParamsInputUnion{
+			OfInputItemList: items,
+		}
+	}
+
+	return params, nil
+}
+
+// classifyBackoff returns the backoff duration based on error type and attempt.
+func classifyBackoff(err error, attempt int) time.Duration {
+	var capErr *capacityError
+	var rlErr *rateLimitError
+	if errors.As(err, &capErr) {
+		return time.Duration(60<<attempt) * time.Second // 60s, 120s, 240s
+	}
+	if errors.As(err, &rlErr) {
+		return time.Duration(30<<attempt) * time.Second // 30s, 60s, 120s
+	}
+	return time.Duration(5<<attempt) * time.Second // 5s, 10s, 20s
+}
+
+// isPermanentError returns true for non-retriable client errors (4xx except 429).
+func isPermanentError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.As(err, new(*rateLimitError)) || errors.As(err, new(*capacityError)) {
+		return false
+	}
+	msg := err.Error()
+	// SDK error format: '400 Bad Request', '401 Unauthorized', etc.
+	if strings.Contains(msg, "400 Bad Request") ||
+		strings.Contains(msg, "401 Unauthorized") ||
+		strings.Contains(msg, "403 Forbidden") ||
+		strings.Contains(msg, "404 Not Found") ||
+		strings.Contains(msg, "405 Method Not Allowed") ||
+		strings.Contains(msg, "422 Unprocessable") {
+		return true
+	}
+	// Also check for generic status code patterns.
+	if strings.Contains(msg, "status code: 400") ||
+		strings.Contains(msg, "status code: 401") ||
+		strings.Contains(msg, "status code: 403") ||
+		strings.Contains(msg, "status code: 404") ||
+		strings.Contains(msg, "status code: 405") ||
+		strings.Contains(msg, "status code: 422") {
+		return true
+	}
+	return false
+}
+
+// isAzureOpenAI returns true if the endpoint is an Azure OpenAI-compatible service
+// that uses the /openai/deployments/{name}/chat/completions URL pattern and api-key auth.
+// Matches: .openai.azure.com, .cognitiveservices.azure.com, and .services.ai.azure.com (AI Foundry).
+func isAzureOpenAI(endpoint string) bool {
+	return strings.Contains(endpoint, ".openai.azure.com") ||
+		strings.Contains(endpoint, ".cognitiveservices.azure.com") ||
+		strings.Contains(endpoint, ".services.ai.azure.com")
+}
+
+// isAIFoundry returns true if the endpoint is an Azure AI Foundry service
+// (.services.ai.azure.com) which uses /openai/v1/responses with model in body,
+// as opposed to Azure OpenAI which uses /openai/deployments/{name}/responses.
+func isAIFoundry(endpoint string) bool {
+	return strings.Contains(endpoint, ".services.ai.azure.com")
 }
