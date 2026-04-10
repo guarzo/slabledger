@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/httpx"
+	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
@@ -141,7 +142,7 @@ func (c *Client) rotateToken() bool {
 // request pacing, token rotation on 429, and response reading.
 func (c *Client) doRequest(ctx context.Context, opName, path, certNumber string) (*httpx.Response, error) {
 	if len(c.tokens) == 0 {
-		return nil, fmt.Errorf("PSA API token not configured")
+		return nil, apperrors.ConfigMissing("PSA API token", "PSA_API_TOKENS")
 	}
 
 	maxAttempts := len(c.tokens)
@@ -156,7 +157,7 @@ func (c *Client) doRequest(ctx context.Context, opName, path, certNumber string)
 			if c.rotateToken() {
 				continue
 			}
-			return nil, fmt.Errorf("PSA daily call limit (%d) reached", dailyCallLimit)
+			return nil, apperrors.ProviderRateLimited("PSA", "")
 		}
 
 		// Pace requests to avoid burst-triggered rate limits
@@ -188,7 +189,7 @@ func (c *Client) doRequest(ctx context.Context, opName, path, certNumber string)
 				}
 				c.logger.Warn(ctx, "PSA "+opName+": rate limited, no backup keys available",
 					observability.String("cert", certNumber))
-				return nil, fmt.Errorf("PSA API returned 429 for cert %s (all keys exhausted)", certNumber)
+				return nil, apperrors.ProviderRateLimited("PSA", "")
 			}
 			c.logger.Info(ctx, "PSA "+opName+": request failed",
 				observability.String("cert", certNumber),
@@ -199,7 +200,7 @@ func (c *Client) doRequest(ctx context.Context, opName, path, certNumber string)
 		return resp, nil
 	}
 
-	return nil, fmt.Errorf("PSA API returned 429 for cert %s (all keys exhausted)", certNumber)
+	return nil, apperrors.ProviderRateLimited("PSA", "")
 }
 
 // GetCert looks up a PSA certificate by number.
@@ -214,11 +215,11 @@ func (c *Client) GetCert(ctx context.Context, certNumber string) (*CertInfo, err
 		c.logger.Info(ctx, "PSA cert lookup: decode error",
 			observability.String("cert", certNumber),
 			observability.Err(decErr))
-		return nil, fmt.Errorf("decode PSA response: %w", decErr)
+		return nil, apperrors.ProviderInvalidResponse("PSA", fmt.Errorf("decode response for cert %s: %w", certNumber, decErr))
 	}
 
 	if certResp.PSACert.CertNumber == "" {
-		return nil, fmt.Errorf("cert %s not found", certNumber)
+		return nil, apperrors.ProviderNotFound("PSA", fmt.Sprintf("cert %s", certNumber))
 	}
 
 	c.logger.Info(ctx, "PSA cert lookup: success",
@@ -247,7 +248,7 @@ func (c *Client) GetImages(ctx context.Context, certNumber string) ([]ImageInfo,
 		c.logger.Info(ctx, "PSA image fetch: decode error",
 			observability.String("cert", certNumber),
 			observability.Err(decErr))
-		return nil, fmt.Errorf("decode PSA images response: %w", decErr)
+		return nil, apperrors.ProviderInvalidResponse("PSA", fmt.Errorf("decode images response: %w", decErr))
 	}
 
 	return images, nil
