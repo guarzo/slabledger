@@ -29,7 +29,6 @@ import (
 // assemble the ServerDependencies struct. Every field is set by runServer
 // before calling createHandlers.
 type handlerInputs struct {
-	Ctx               context.Context
 	Cfg               *config.Config
 	Logger            observability.Logger
 	DB                *sqlite.DB
@@ -73,8 +72,7 @@ type handlerOutputs struct {
 // createHandlers constructs all HTTP handlers, wires scheduler refresh
 // callbacks, and assembles the ServerDependencies struct ready for
 // startWebServer.
-func createHandlers(in handlerInputs) (ServerDependencies, handlerOutputs) {
-	ctx := in.Ctx
+func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, handlerOutputs) {
 	logger := in.Logger
 
 	// Card Ladder handler
@@ -250,7 +248,7 @@ func createHandlers(in handlerInputs) (ServerDependencies, handlerOutputs) {
 			in.CampaignsService, in.Logger, listingOpts...,
 		)
 		if err != nil {
-			in.Logger.Error(in.Ctx, "create DH listing service", observability.Err(err))
+			in.Logger.Error(ctx, "create DH listing service", observability.Err(err))
 		} else {
 			deps.DHListingService = svc
 		}

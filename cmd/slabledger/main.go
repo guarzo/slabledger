@@ -374,8 +374,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	}
 	schedulerResult, cancelScheduler := initializeSchedulers(ctx, sDeps)
 
-	deps, hOut := createHandlers(handlerInputs{
-		Ctx:               ctx,
+	deps, hOut := createHandlers(ctx, handlerInputs{
 		Cfg:               cfg,
 		Logger:            logger,
 		DB:                db,
