@@ -405,3 +405,131 @@ func TestResolveCollectibleID_NoCertNumber_GoesDirectToNameSearch(t *testing.T) 
 	assert.Equal(t, int64(300), id)
 	assert.Equal(t, 1, callCount, "no cert number — only one search should be made")
 }
+
+// ---------------------------------------------------------------------------
+// tokenMatchesTitle — tokenized matching tests
+// ---------------------------------------------------------------------------
+
+func TestTokenMatchesTitle(t *testing.T) {
+	cases := []struct {
+		name        string
+		cardName    string
+		searchTitle string
+		want        bool
+	}{
+		{
+			name:        "exact match short name",
+			cardName:    "Charizard",
+			searchTitle: "Charizard Base Set PSA 10",
+			want:        true,
+		},
+		{
+			name:        "PSA title reordered in MM",
+			cardName:    "2022 POKEMON SWORD & SHIELD BRILLIANT STARS CHARIZARD VSTAR",
+			searchTitle: "Charizard VSTAR 2022 Sword & Shield Brilliant Stars PSA 10",
+			want:        true,
+		},
+		{
+			name:        "completely different card",
+			cardName:    "Charizard",
+			searchTitle: "Pikachu VMAX PSA 10",
+			want:        false,
+		},
+		{
+			name:        "case insensitive",
+			cardName:    "Umbreon EX",
+			searchTitle: "UMBREON EX Full Art PSA 10",
+			want:        true,
+		},
+		{
+			name:        "noise words filtered",
+			cardName:    "Pokemon Holo Card Charizard",
+			searchTitle: "Charizard PSA 10",
+			want:        true,
+		},
+		{
+			name:        "no significant tokens falls back to contains",
+			cardName:    "ab cd",
+			searchTitle: "ab cd ef",
+			want:        true,
+		},
+		{
+			name:        "no significant tokens contains fails",
+			cardName:    "ab cd",
+			searchTitle: "ef gh",
+			want:        false,
+		},
+		{
+			name:        "empty cardName",
+			cardName:    "",
+			searchTitle: "Charizard PSA 10",
+			want:        true,
+		},
+		{
+			name:        "partial token overlap below 60%",
+			cardName:    "Alpha Beta Gamma Delta Epsilon",
+			searchTitle: "Alpha PSA 10",
+			want:        false,
+		},
+		{
+			name:        "60% threshold exactly met",
+			cardName:    "Brilliant Stars Charizard VSTAR 2022",
+			searchTitle: "Charizard VSTAR Brilliant Stars PSA 10",
+			want:        true,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := tokenMatchesTitle(tc.cardName, tc.searchTitle)
+			assert.Equal(t, tc.want, got, "tokenMatchesTitle(%q, %q)", tc.cardName, tc.searchTitle)
+		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// searchByCert — tokenized matching integration test
+// ---------------------------------------------------------------------------
+
+func TestSearchByCert_TokenizedMatch(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		// MM returns title with reordered tokens — would fail with strings.Contains
+		_, _ = w.Write(buildMMSearchResponse(t, []map[string]any{
+			{"item": map[string]any{"id": float64(5555), "searchTitle": "Charizard VSTAR 2022 Sword & Shield Brilliant Stars PSA 10", "collectibleType": "sports-card"}},
+		}))
+	}))
+	defer srv.Close()
+
+	s := newMMSchedulerWithServer(srv)
+	id, _, _, err := s.searchByCert(context.Background(), &campaigns.Purchase{
+		CertNumber: "12345678",
+		CardName:   "2022 POKEMON SWORD & SHIELD BRILLIANT STARS CHARIZARD VSTAR",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, int64(5555), id, "should match despite token reordering")
+}
+
+// ---------------------------------------------------------------------------
+// searchByNameGrade — tokenized matching integration test
+// ---------------------------------------------------------------------------
+
+func TestSearchByNameGrade_TokenizedMatch(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		// MM returns title with reordered tokens — would fail with strings.Contains
+		_, _ = w.Write(buildMMSearchResponse(t, []map[string]any{
+			{"item": map[string]any{"id": float64(6666), "searchTitle": "Charizard VSTAR 2022 Sword & Shield Brilliant Stars PSA 10", "collectibleType": "sports-card"}},
+		}))
+	}))
+	defer srv.Close()
+
+	s := newMMSchedulerWithServer(srv)
+	id, _, _, err := s.searchByNameGrade(context.Background(), &campaigns.Purchase{
+		CardName:   "2022 POKEMON SWORD & SHIELD BRILLIANT STARS CHARIZARD VSTAR",
+		Grader:     "PSA",
+		GradeValue: 10,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, int64(6666), id, "should match despite token reordering")
+}

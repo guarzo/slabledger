@@ -2,34 +2,45 @@ import { Button } from '../../../ui';
 import type { ReviewStats } from '../../../../types/campaigns/priceReview';
 import { useMediaQuery } from '../../../hooks/useMediaQuery';
 
+export type StatClickTarget = 'unreviewed' | 'flagged';
+
 interface ReviewSummaryBarProps {
   stats: ReviewStats;
   searchQuery: string;
   onSearchChange: (query: string) => void;
   showAll: boolean;
   onToggleShowAll: () => void;
+  onStatClick?: (target: StatClickTarget) => void;
 }
 
 interface StatBlockProps {
   label: string;
   value: number;
   colorClass?: string;
+  onClick?: () => void;
 }
 
-function StatBlock({ label, value, colorClass }: StatBlockProps) {
+function StatBlock({ label, value, colorClass, onClick }: StatBlockProps) {
+  const clickable = onClick && value > 0;
   return (
-    <div className="text-center px-3">
+    <div
+      className={`text-center px-3 ${clickable ? 'cursor-pointer hover:opacity-80' : ''}`}
+      onClick={clickable ? onClick : undefined}
+      role={clickable ? 'button' : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      onKeyDown={clickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') onClick(); } : undefined}
+    >
       <div className={`text-lg font-semibold tabular-nums ${colorClass ?? 'text-[var(--text)]'}`}>
         {value}
       </div>
-      <div className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">
+      <div className={`text-[10px] uppercase tracking-wider text-[var(--text-muted)] ${clickable ? 'underline decoration-dotted underline-offset-2' : ''}`}>
         {label}
       </div>
     </div>
   );
 }
 
-export default function ReviewSummaryBar({ stats, searchQuery, onSearchChange, showAll, onToggleShowAll }: ReviewSummaryBarProps) {
+export default function ReviewSummaryBar({ stats, searchQuery, onSearchChange, showAll, onToggleShowAll, onStatClick }: ReviewSummaryBarProps) {
   const isMobile = useMediaQuery('(max-width: 768px)');
   return (
     <div className={`rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] px-4 py-3 ${isMobile ? 'space-y-3' : 'flex items-center justify-between gap-4'}`}>
@@ -38,9 +49,9 @@ export default function ReviewSummaryBar({ stats, searchQuery, onSearchChange, s
         <StatBlock label="Cards" value={stats.total} />
         {!isMobile && (
           <>
-            <StatBlock label="Need Review" value={stats.needsReview} colorClass="text-[var(--warning)]" />
+            <StatBlock label="Unreviewed" value={stats.needsReview} colorClass="text-[var(--warning)]" onClick={() => onStatClick?.('unreviewed')} />
             <StatBlock label="Reviewed" value={stats.reviewed} colorClass="text-[var(--success)]" />
-            <StatBlock label="Flagged" value={stats.flagged} colorClass="text-[var(--danger)]" />
+            <StatBlock label="Flagged" value={stats.flagged} colorClass="text-[var(--danger)]" onClick={() => onStatClick?.('flagged')} />
           </>
         )}
       </div>
@@ -59,7 +70,7 @@ export default function ReviewSummaryBar({ stats, searchQuery, onSearchChange, s
           size="sm"
           onClick={onToggleShowAll}
         >
-          {showAll ? 'Show Needs Review' : 'Show All'}
+          {showAll ? 'Show Unreviewed' : 'Show All'}
         </Button>
       </div>
     </div>

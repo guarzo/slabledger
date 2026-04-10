@@ -41,6 +41,8 @@ declare module './client' {
     getDHUnmatched(): Promise<DHUnmatchedResponse>;
     fixDHMatch(req: DHFixMatchRequest): Promise<DHFixMatchResponse>;
     selectDHMatch(req: DHSelectMatchRequest): Promise<DHFixMatchResponse>;
+    dismissDHMatch(purchaseId: string): Promise<{ status: string }>;
+    undismissDHMatch(purchaseId: string): Promise<{ status: string }>;
     approveDHPush(purchaseId: string): Promise<{ status: string }>;
     getDHPushConfig(): Promise<DHPushConfig>;
     saveDHPushConfig(config: DHPushConfig): Promise<DHPushConfig>;
@@ -179,6 +181,14 @@ proto.fixDHMatch = async function (this: APIClient, req: DHFixMatchRequest): Pro
 
 proto.selectDHMatch = async function (this: APIClient, req: DHSelectMatchRequest): Promise<DHFixMatchResponse> {
   return this.post<DHFixMatchResponse>('/dh/select-match', req);
+};
+
+proto.dismissDHMatch = async function (this: APIClient, purchaseId: string): Promise<{ status: string }> {
+  return this.post<{ status: string }>('/dh/dismiss', { purchaseId });
+};
+
+proto.undismissDHMatch = async function (this: APIClient, purchaseId: string): Promise<{ status: string }> {
+  return this.post<{ status: string }>('/dh/undismiss', { purchaseId });
 };
 
 proto.approveDHPush = async function (this: APIClient, purchaseId: string): Promise<{ status: string }> {

@@ -58,6 +58,9 @@ export interface FailureSummary {
 export interface PricingDiagnosticsResponse {
   totalMappedCards: number;
   unmappedCards: number;
+  clPricedCards: number;
+  mmPricedCards: number;
+  totalUnsold: number;
   recentFailures: FailureSummary[];
 }
 
@@ -127,6 +130,7 @@ export interface DHStatusResponse {
   suggestions_count: number;
   suggestions_last_fetch: string;
   unmatched_count: number;
+  dismissed_count: number;
   pending_count: number;
   mapped_count: number;
   bulk_match_running: boolean;
@@ -163,6 +167,7 @@ export interface DHUnmatchedCard {
 export interface DHUnmatchedResponse {
   unmatched: DHUnmatchedCard[];
   count: number;
+  dismissed: DHUnmatchedCard[];
 }
 
 export interface DHFixMatchRequest {

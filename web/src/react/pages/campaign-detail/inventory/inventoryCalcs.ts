@@ -6,6 +6,7 @@ const EXCEPTION_STATUSES = ['large_gap', 'no_data', 'flagged'] as const;
 
 export interface TabCounts {
   needs_attention: number;
+  ai_suggestion: number;
   card_show: number;
   all: number;
 }
@@ -24,7 +25,7 @@ export interface InventoryMeta {
 
 export function computeInventoryMeta(items: AgingItem[]): InventoryMeta {
   const stats: ReviewStats = { total: items.length, needsReview: 0, reviewed: 0, flagged: 0 };
-  const counts: TabCounts = { needs_attention: 0, card_show: 0, all: items.length };
+  const counts: TabCounts = { needs_attention: 0, ai_suggestion: 0, card_show: 0, all: items.length };
   let totalCost = 0;
   let totalMarket = 0;
   for (const item of items) {
@@ -36,6 +37,7 @@ export function computeInventoryMeta(items: AgingItem[]): InventoryMeta {
     if ((EXCEPTION_STATUSES as readonly string[]).includes(status) || isDHHeld(item)) {
       counts.needs_attention++;
     }
+    if ((item.purchase.aiSuggestedPriceCents ?? 0) > 0) counts.ai_suggestion++;
     if (isCardShowCandidate(item)) counts.card_show++;
 
     totalCost += costBasis(item.purchase);
@@ -52,7 +54,7 @@ export function isDHHeld(item: AgingItem): boolean {
   return item.purchase.dhPushStatus === 'held';
 }
 
-export type FilterTab = 'needs_attention' | 'sell_sheet' | 'all' | 'card_show';
+export type FilterTab = 'needs_attention' | 'ai_suggestion' | 'sell_sheet' | 'all' | 'card_show';
 
 export function filterAndSortItems(
   items: AgingItem[],
@@ -86,6 +88,7 @@ export function filterAndSortItems(
         if (filterTab === 'needs_attention') {
           return (EXCEPTION_STATUSES as readonly string[]).includes(getReviewStatus(i)) || isDHHeld(i);
         }
+        if (filterTab === 'ai_suggestion') return (i.purchase.aiSuggestedPriceCents ?? 0) > 0;
         if (filterTab === 'card_show') return isCardShowCandidate(i);
         return false;
       });

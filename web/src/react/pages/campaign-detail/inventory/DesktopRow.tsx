@@ -33,11 +33,12 @@ interface DesktopRowProps {
   onRecordSale: () => void;
   onFixPricing?: () => void;
   onSetPrice?: () => void;
+  onDelete?: () => void;
   showCampaignColumn?: boolean;
   isOnSellSheet?: boolean;
 }
 
-export default function DesktopRow({ item, selected, onToggle, onExpand, onRecordSale, onFixPricing, onSetPrice, showCampaignColumn, isOnSellSheet }: DesktopRowProps) {
+export default function DesktopRow({ item, selected, onToggle, onExpand, onRecordSale, onFixPricing, onSetPrice, onDelete, showCampaignColumn, isOnSellSheet }: DesktopRowProps) {
   const cb = costBasis(item.purchase);
   const snap = item.currentMarket;
   const daysColor = daysHeldColor(item.daysHeld);
@@ -198,6 +199,17 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
                 >
                   Fix Pricing
                 </DropdownMenu.Item>
+              )}
+              {onDelete && (
+                <>
+                  <DropdownMenu.Separator className="my-1 h-px bg-[var(--surface-2)]" />
+                  <DropdownMenu.Item
+                    onSelect={onDelete}
+                    className="px-3 py-2 text-sm text-red-400 hover:bg-[rgba(248,113,113,0.08)] hover:text-red-300 outline-none cursor-default"
+                  >
+                    Delete
+                  </DropdownMenu.Item>
+                </>
               )}
             </DropdownMenu.Content>
           </DropdownMenu.Portal>

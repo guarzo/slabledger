@@ -31,6 +31,7 @@ const (
 	DHPushStatusUnmatched DHPushStatus = "unmatched"
 	DHPushStatusManual    DHPushStatus = "manual"
 	DHPushStatusHeld      DHPushStatus = "held"
+	DHPushStatusDismissed DHPushStatus = "dismissed"
 )
 
 // SaleChannel represents where a card was sold.
@@ -212,7 +213,8 @@ func (p *Purchase) NeedsDHPush() bool {
 		p.DHPushStatus != DHPushStatusPending &&
 		p.DHPushStatus != DHPushStatusUnmatched &&
 		p.DHPushStatus != DHPushStatusManual &&
-		p.DHPushStatus != DHPushStatusHeld
+		p.DHPushStatus != DHPushStatusHeld &&
+		p.DHPushStatus != DHPushStatusDismissed
 }
 
 // DHCardKey returns the pipe-delimited identity key used for DH card ID mapping lookups.

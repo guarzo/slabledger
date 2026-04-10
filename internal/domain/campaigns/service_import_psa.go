@@ -232,10 +232,40 @@ func (s *service) handleExistingPSAPurchase(ctx context.Context, existing *Purch
 	} else {
 		fields.PSAListingTitle = existing.PSAListingTitle
 	}
-	if err := s.repo.UpdatePurchasePSAFields(ctx, existing.ID, fields); err != nil {
+
+	// Skip the SQL UPDATE if nothing changed — prevents bumping updated_at
+	// and inflating the "updated" count on idempotent re-syncs.
+	psaChanged := existing.VaultStatus != fields.VaultStatus ||
+		existing.InvoiceDate != fields.InvoiceDate ||
+		existing.WasRefunded != fields.WasRefunded ||
+		existing.FrontImageURL != fields.FrontImageURL ||
+		existing.BackImageURL != fields.BackImageURL ||
+		existing.PurchaseSource != fields.PurchaseSource ||
+		existing.PSAListingTitle != fields.PSAListingTitle
+
+	buyCostChanged := existing.BuyCostCents == 0 && row.PricePaid > 0
+
+	metadataChanged := false
+	if isGenericSetName(existing.SetName) || existing.CardNumber == "" {
+		parsed := parseCardMetadataFromTitle(row.ListingTitle, row.Category)
+		metadataChanged = (isGenericSetName(existing.SetName) && !isGenericSetName(parsed.SetName)) ||
+			(existing.CardNumber == "" && parsed.CardNumber != "")
+	}
+
+	if !psaChanged && !buyCostChanged && !metadataChanged {
 		return PSAImportItemResult{
 			CertNumber: row.CertNumber, CardName: existing.CardName, Grade: existing.GradeValue,
-			Status: "failed", Error: err.Error(),
+			Status: "unchanged", CampaignID: existing.CampaignID,
+			SetName: existing.SetName, CardNumber: existing.CardNumber,
+		}
+	}
+
+	if psaChanged {
+		if err := s.repo.UpdatePurchasePSAFields(ctx, existing.ID, fields); err != nil {
+			return PSAImportItemResult{
+				CertNumber: row.CertNumber, CardName: existing.CardName, Grade: existing.GradeValue,
+				Status: "failed", Error: err.Error(),
+			}
 		}
 	}
 

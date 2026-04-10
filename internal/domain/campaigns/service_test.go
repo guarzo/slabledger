@@ -737,12 +737,12 @@ func TestService_ImportPSAExportGlobal_DuplicateSkip(t *testing.T) {
 		t.Fatalf("ImportPSAExportGlobal: %v", err)
 	}
 
-	// First row allocated, second row updates the same purchase with PSA fields
+	// First row allocated, second row detects no changes and skips the update
 	if result.Allocated != 1 {
 		t.Errorf("Allocated = %d, want 1", result.Allocated)
 	}
-	if result.Updated != 1 {
-		t.Errorf("Updated = %d, want 1", result.Updated)
+	if result.Updated != 0 {
+		t.Errorf("Updated = %d, want 0 (duplicate row with identical fields)", result.Updated)
 	}
 }
 

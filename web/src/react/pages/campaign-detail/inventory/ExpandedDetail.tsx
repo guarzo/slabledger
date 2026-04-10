@@ -122,6 +122,7 @@ export default function ExpandedDetail({ item, onReviewed, campaignId, onOpenFla
       <div className="grid grid-cols-3 gap-3 mb-4">
         <PriceSignalCard label="Cost Basis" valueCents={cb} />
         <PriceSignalCard label="Card Ladder" valueCents={clCents} />
+        <PriceSignalCard label="Market Movers" valueCents={mmCents} updatedAt={purchase.mmValueUpdatedAt} />
         <PriceSignalCard
           label="Market (Median)"
           valueCents={marketCents}
@@ -129,7 +130,6 @@ export default function ExpandedDetail({ item, onReviewed, campaignId, onOpenFla
         />
         <PriceSignalCard label="Last Sold" valueCents={lastSoldCents} />
         <PriceSignalCard label="Lowest eBay Listing" valueCents={snap?.lowestListCents ?? 0} />
-        <PriceSignalCard label="Market Movers" valueCents={mmCents} updatedAt={purchase.mmValueUpdatedAt} />
         <PriceSignalCard
           label="Current Override"
           valueCents={purchase.overridePriceCents ?? 0}

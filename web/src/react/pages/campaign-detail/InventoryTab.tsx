@@ -18,6 +18,7 @@ import SortableHeader from './inventory/SortableHeader';
 import ExpandedDetail from './inventory/ExpandedDetail';
 import PriceFlagDialog from './inventory/PriceFlagDialog';
 import ReviewSummaryBar from './inventory/ReviewSummaryBar';
+import type { StatClickTarget } from './inventory/ReviewSummaryBar';
 import { useInventoryState } from './inventory/useInventoryState';
 
 export interface InventoryTabProps {
@@ -42,7 +43,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
     reviewStats, tabCounts, showEV, evPortfolio, evMap,
     pageSellSheetCount, sellSheetActive, filteredAndSortedItems,
     totalCost, totalMarket, totalPL,
-    handleSort, handleReviewed, handleResolveFlag, handleApproveDHPush, handleFlagSubmit, handlePrint,
+    handleSort, handleReviewed, handleResolveFlag, handleApproveDHPush, handleFlagSubmit, handlePrint, handleDelete,
     toggleSelect, toggleAll, toggleExpand,
     openSaleModal, closeSaleModal, handleFixPricing, handleSetPrice,
     handlePriceSaved, handleHintSaved, sellSheet, toast,
@@ -71,6 +72,13 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
   });
 
   if (loading) return <div className="py-8 text-center"><PokeballLoader /></div>;
+
+  const handleStatClick = (target: StatClickTarget) => {
+    setShowAll(false);
+    if (target === 'flagged') {
+      setFilterTab('needs_attention');
+    }
+  };
 
   if (items.length === 0) {
     return (
@@ -243,6 +251,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
           onSearchChange={setSearchQuery}
           showAll={showAll}
           onToggleShowAll={() => setShowAll(prev => !prev)}
+          onStatClick={handleStatClick}
         />
       </div>
 
@@ -251,10 +260,14 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
         <div className="flex items-center gap-2 mb-3 overflow-x-auto scrollbar-none sell-sheet-no-print">
           {([
             { key: 'needs_attention' as const, label: 'Needs Attention', color: 'var(--warning)' },
+            { key: 'ai_suggestion' as const, label: 'AI Suggestions', color: 'var(--brand-400)' },
             { key: 'sell_sheet' as const, label: 'Sell Sheet', color: 'var(--brand-400)' },
             { key: 'all' as const, label: 'All', color: 'var(--text)' },
             { key: 'card_show' as const, label: 'Card Show', color: 'var(--brand-400)' },
-          ] as const).map(tab => {
+          ] as const).filter(tab => {
+            if (tab.key === 'ai_suggestion') return tabCounts.ai_suggestion > 0;
+            return true;
+          }).map(tab => {
             const count = tab.key === 'sell_sheet' ? pageSellSheetCount : tabCounts[tab.key];
             return (
               <button
@@ -401,6 +414,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                         onRecordSale={() => openSaleModal([item])}
                         onFixPricing={() => handleFixPricing(item.purchase)}
                         onSetPrice={() => handleSetPrice(item)}
+                        onDelete={() => handleDelete(item)}
                         showCampaignColumn={showCampaignColumn}
                         isOnSellSheet={!sellSheetActive && sellSheet.has(item.purchase.id)}
                       />
@@ -441,6 +455,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                           onRecordSale={() => openSaleModal([item])}
                           onFixPricing={() => handleFixPricing(item.purchase)}
                           onSetPrice={() => handleSetPrice(item)}
+                          onDelete={() => handleDelete(item)}
                           showCampaignColumn={showCampaignColumn}
                           isOnSellSheet={!sellSheetActive && sellSheet.has(item.purchase.id)}
                         />

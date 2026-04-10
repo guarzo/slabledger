@@ -269,6 +269,28 @@ export function useSelectDHMatch() {
   });
 }
 
+export function useDismissDHMatch() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (purchaseId: string) => api.dismissDHMatch(purchaseId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.admin.dhUnmatched });
+      qc.invalidateQueries({ queryKey: queryKeys.admin.dhStatus });
+    },
+  });
+}
+
+export function useUndismissDHMatch() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (purchaseId: string) => api.undismissDHMatch(purchaseId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.admin.dhUnmatched });
+      qc.invalidateQueries({ queryKey: queryKeys.admin.dhStatus });
+    },
+  });
+}
+
 export function usePSASyncStatus(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: queryKeys.admin.psaSyncStatus,
