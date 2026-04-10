@@ -45,6 +45,7 @@ declare module './client' {
     getDHPushConfig(): Promise<DHPushConfig>;
     saveDHPushConfig(config: DHPushConfig): Promise<DHPushConfig>;
     getPSASyncStatus(): Promise<PSASyncStatusResponse>;
+    triggerPSASyncRefresh(): Promise<{ status: string }>;
   }
 }
 
@@ -194,4 +195,8 @@ proto.saveDHPushConfig = async function (this: APIClient, config: DHPushConfig):
 
 proto.getPSASyncStatus = async function (this: APIClient): Promise<PSASyncStatusResponse> {
   return this.get<PSASyncStatusResponse>('/admin/psa-sync/status');
+};
+
+proto.triggerPSASyncRefresh = async function (this: APIClient) {
+  return this.post<{ status: string }>('/admin/psa-sync/refresh');
 };

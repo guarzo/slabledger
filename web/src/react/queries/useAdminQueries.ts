@@ -277,3 +277,13 @@ export function usePSASyncStatus(options?: { enabled?: boolean }) {
     enabled: options?.enabled ?? true,
   });
 }
+
+export function useTriggerPSASyncRefresh() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.triggerPSASyncRefresh(),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.admin.psaSyncStatus });
+    },
+  });
+}
