@@ -63,7 +63,7 @@ export function PSASyncTab({ enabled = true }: { enabled?: boolean }) {
         <CardShell padding="lg">
           <h3 className="text-base font-semibold text-[var(--text)] mb-2">Configuration</h3>
           <div className="text-sm text-[var(--text-muted)]">
-            <p>Sheet: <span className="text-[var(--text)] font-mono text-xs">{data.spreadsheetId && data.spreadsheetId.length > 12 ? data.spreadsheetId.slice(0, 12) + '...' : data.spreadsheetId}</span></p>
+            <p>Sheet: <span className="text-[var(--text)] font-mono text-xs">{data.spreadsheetId && data.spreadsheetId.length > 12 ? `${data.spreadsheetId.slice(0, 12)}...` : data.spreadsheetId}</span></p>
             <p>Interval: <span className="text-[var(--text)]">{data.interval}</span></p>
           </div>
 

@@ -252,7 +252,10 @@ func FromEnv(base Config) Config {
 			decoded, err = base64.StdEncoding.DecodeString(trimmed)
 		}
 		if err != nil {
-			// Assume raw JSON
+			// Both standard and trimmed base64 decodes failed.
+			// Assume the value is raw JSON (e.g. credentials pasted directly rather than encoded).
+			// Warn so operators can detect an accidentally truncated or mis-encoded secret.
+			fmt.Fprintf(os.Stderr, "WARNING: GOOGLE_SHEETS_CREDENTIALS_JSON is not valid base64 — treating as raw JSON. If this is unexpected, check that the value is correctly base64-encoded.\n")
 			cfg.GoogleSheets.CredentialsJSON = v
 		} else {
 			cfg.GoogleSheets.CredentialsJSON = string(decoded)

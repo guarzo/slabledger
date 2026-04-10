@@ -284,6 +284,7 @@ export function useTriggerPSASyncRefresh() {
     mutationFn: () => api.triggerPSASyncRefresh(),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.admin.psaSyncStatus });
+      qc.invalidateQueries({ queryKey: queryKeys.purchases.psaPendingItems });
     },
   });
 }

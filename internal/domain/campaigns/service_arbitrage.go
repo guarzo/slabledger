@@ -139,15 +139,14 @@ func (s *service) GetActivationChecklist(ctx context.Context, campaignID string)
 			break
 		}
 	}
+	invoiceMsg := "No completed invoice cycles yet — consider waiting before activating high-value campaigns"
+	if hasPaidInvoice {
+		invoiceMsg = "At least one invoice cycle has been completed and paid"
+	}
 	checklist.Checks = append(checklist.Checks, ActivationCheck{
-		Name:   "Invoice Cycle Cleared",
-		Passed: hasPaidInvoice,
-		Message: func() string {
-			if hasPaidInvoice {
-				return "At least one invoice cycle has been completed and paid"
-			}
-			return "No completed invoice cycles yet — consider waiting before activating high-value campaigns"
-		}(),
+		Name:    "Invoice Cycle Cleared",
+		Passed:  hasPaidInvoice,
+		Message: invoiceMsg,
 	})
 	checklist.AllPassed = checklist.AllPassed && hasPaidInvoice
 

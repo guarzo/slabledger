@@ -16,6 +16,8 @@ import (
 )
 
 // mockPSASyncRefresher is a test mock for handlers.PSASyncRefresher.
+// Kept local because moving it to testutil/mocks would create an import cycle
+// (testutil/mocks → adapters/scheduler → ... → testutil/mocks).
 type mockPSASyncRefresher struct {
 	RunOnceFn         func(ctx context.Context) error
 	GetLastRunStatsFn func() *scheduler.PSASyncRunStats

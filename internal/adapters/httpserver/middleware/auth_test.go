@@ -513,6 +513,34 @@ func TestLocalAPIToken_FallbackToSyntheticUser(t *testing.T) {
 	}
 }
 
+func TestLocalAPIToken_DBFailurePropagatesError(t *testing.T) {
+	// When authService is non-nil but GetOrCreateUser fails, the request should
+	// be rejected (401) rather than falling back to a synthetic ID=0 user that
+	// would violate FK constraints on subsequent DB writes.
+	service := &mockAuthService{
+		getOrCreateUserFunc: func(ctx context.Context, googleID, username, email, avatarURL string) (*auth.User, error) {
+			return nil, errors.New("database locked")
+		},
+	}
+	logger := &mockAuthLogger{}
+	mw := NewAuthMiddleware(service, logger)
+	mw.WithLocalAPIToken("test-secret-token")
+
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
+	req.Header.Set("Authorization", "Bearer test-secret-token")
+	w := httptest.NewRecorder()
+
+	mw.RequireAuth(handler).ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("Expected status 401 when DB fails, got %d", w.Code)
+	}
+}
+
 func TestLocalAPIToken_InvalidToken(t *testing.T) {
 	service := &mockAuthService{}
 	logger := &mockAuthLogger{}

@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -90,6 +91,10 @@ func (h *PSASyncHandler) HandleRefresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.refresher.RunOnce(r.Context()); err != nil {
+		if errors.Is(err, scheduler.ErrSyncInProgress) {
+			writeError(w, http.StatusConflict, "PSA sync already in progress")
+			return
+		}
 		h.logger.Error(r.Context(), "manual PSA sync failed", observability.Err(err))
 		writeError(w, http.StatusInternalServerError, "sync failed")
 		return
@@ -98,7 +103,7 @@ func (h *PSASyncHandler) HandleRefresh(w http.ResponseWriter, r *http.Request) {
 }
 
 // HandleListPendingItems returns all pending items awaiting user resolution.
-// GET /api/purchases/psa-pending
+// GET /api/admin/psa-sync/pending
 func (h *PSASyncHandler) HandleListPendingItems(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -117,7 +122,7 @@ func (h *PSASyncHandler) HandleListPendingItems(w http.ResponseWriter, r *http.R
 
 // HandleAssignPendingItem assigns a pending item to a campaign by creating
 // a purchase and resolving the pending item.
-// POST /api/purchases/psa-pending/{id}/assign
+// POST /api/admin/psa-sync/pending/{id}/assign
 func (h *PSASyncHandler) HandleAssignPendingItem(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -180,9 +185,12 @@ func (h *PSASyncHandler) HandleAssignPendingItem(w http.ResponseWriter, r *http.
 			observability.Err(err),
 			observability.String("pendingItemID", id),
 			observability.String("campaignID", body.CampaignID))
-		writeJSON(w, http.StatusOK, map[string]any{
-			"purchase": purchase,
-			"warning":  "purchase created but pending item could not be resolved",
+		// The purchase was committed but the pending item was not resolved.
+		// Return 500 with the purchase ID so the caller knows the purchase exists
+		// and can dismiss the pending item manually via DELETE /api/admin/psa-sync/pending/{id}.
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":      "purchase created but pending item could not be resolved — dismiss it manually",
+			"purchaseId": purchase.ID,
 		})
 		return
 	}
@@ -191,7 +199,7 @@ func (h *PSASyncHandler) HandleAssignPendingItem(w http.ResponseWriter, r *http.
 }
 
 // HandleDismissPendingItem removes a pending item without creating a purchase.
-// DELETE /api/purchases/psa-pending/{id}
+// DELETE /api/admin/psa-sync/pending/{id}
 func (h *PSASyncHandler) HandleDismissPendingItem(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
