@@ -316,7 +316,7 @@ func TestDoRequest_TokenRotationOn429(t *testing.T) {
 			t.Errorf("call 2: expected token-b, got %s", auth)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		resp := CertResponse{PSACert: CertInfo{CertNumber: "99999"}}
+		resp := CertResponse{PSACert: CertInfo{CertNumber: "99999", CardGrade: "GEM MT 10"}}
 		json.NewEncoder(w).Encode(resp)
 	}))
 	defer server.Close()
@@ -368,7 +368,7 @@ func TestDoRequest_DailyCallLimitEnforced(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		calls.Add(1)
 		w.Header().Set("Content-Type", "application/json")
-		resp := CertResponse{PSACert: CertInfo{CertNumber: "111"}}
+		resp := CertResponse{PSACert: CertInfo{CertNumber: "111", CardGrade: "MINT 9"}}
 		json.NewEncoder(w).Encode(resp)
 	}))
 	defer server.Close()
@@ -399,7 +399,7 @@ func TestDoRequest_DailyLimitRotatesToNextToken(t *testing.T) {
 			t.Errorf("expected token-b after rotation, got %s", auth)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		resp := CertResponse{PSACert: CertInfo{CertNumber: "333"}}
+		resp := CertResponse{PSACert: CertInfo{CertNumber: "333", CardGrade: "NM-MT 8"}}
 		json.NewEncoder(w).Encode(resp)
 	}))
 	defer server.Close()
@@ -442,7 +442,7 @@ func TestDoRequest_RequestPacing(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		calls.Add(1)
 		w.Header().Set("Content-Type", "application/json")
-		resp := CertResponse{PSACert: CertInfo{CertNumber: "444"}}
+		resp := CertResponse{PSACert: CertInfo{CertNumber: "444", CardGrade: "GEM MT 10"}}
 		json.NewEncoder(w).Encode(resp)
 	}))
 	defer server.Close()
@@ -471,7 +471,7 @@ func TestDoRequest_RequestPacing(t *testing.T) {
 func TestDoRequest_ContextCancelledDuringPacing(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		resp := CertResponse{PSACert: CertInfo{CertNumber: "555"}}
+		resp := CertResponse{PSACert: CertInfo{CertNumber: "555", CardGrade: "MINT 9"}}
 		json.NewEncoder(w).Encode(resp)
 	}))
 	defer server.Close()
@@ -690,7 +690,7 @@ func TestClient_GetCert_ErrorTypes(t *testing.T) {
 	t.Run("daily limit returns ProviderRateLimited", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
-			resp := CertResponse{PSACert: CertInfo{CertNumber: "111"}}
+			resp := CertResponse{PSACert: CertInfo{CertNumber: "111", CardGrade: "MINT 9"}}
 			json.NewEncoder(w).Encode(resp)
 		}))
 		defer server.Close()

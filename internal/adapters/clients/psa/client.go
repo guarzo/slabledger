@@ -221,6 +221,10 @@ func (c *Client) GetCert(ctx context.Context, certNumber string) (*CertInfo, err
 	if certResp.PSACert.CertNumber == "" {
 		return nil, apperrors.ProviderNotFound("PSA", fmt.Sprintf("cert %s", certNumber))
 	}
+	if certResp.PSACert.CardGrade == "" {
+		return nil, apperrors.ProviderInvalidResponse("PSA",
+			fmt.Errorf("cert %s has empty CardGrade", certNumber))
+	}
 
 	c.logger.Info(ctx, "PSA cert lookup: success",
 		observability.String("cert", certNumber),
