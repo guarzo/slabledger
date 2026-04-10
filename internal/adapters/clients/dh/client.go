@@ -28,9 +28,6 @@ type ClientOption func(*Client)
 
 // WithLogger sets the logger for structured logging.
 func WithLogger(l observability.Logger) ClientOption {
-	if l == nil {
-		return func(*Client) {}
-	}
 	return func(c *Client) { c.logger = l }
 }
 
@@ -84,9 +81,7 @@ func NewClient(baseURL string, opts ...ClientOption) *Client {
 		health:     NewHealthTracker(),
 	}
 	for _, opt := range opts {
-		if opt != nil {
-			opt(c)
-		}
+		opt(c)
 	}
 	return c
 }
@@ -98,13 +93,12 @@ func (c *Client) Health() *HealthTracker {
 
 // recordHealth safely records a success or failure, handling nil tracker.
 func (c *Client) recordHealth(success bool) {
-	if c.health == nil {
-		return
-	}
-	if success {
-		c.health.RecordSuccess()
-	} else {
-		c.health.RecordFailure()
+	if c.health != nil {
+		if success {
+			c.health.RecordSuccess()
+		} else {
+			c.health.RecordFailure()
+		}
 	}
 }
 
@@ -198,17 +192,25 @@ func (c *Client) EnterpriseAvailable() bool {
 	return c.enterpriseKey != ""
 }
 
+// waitForRateLimit waits for the rate limiter and returns context errors unchanged.
+func (c *Client) waitForRateLimit(ctx context.Context) error {
+	if err := c.limiter.Wait(ctx); err != nil {
+		if goerrors.Is(err, context.Canceled) || goerrors.Is(err, context.DeadlineExceeded) {
+			return err
+		}
+		return apperrors.ProviderUnavailable(providerName, err)
+	}
+	return nil
+}
+
 // getEnterprise performs a GET request with Bearer auth for the enterprise API.
 func (c *Client) getEnterprise(ctx context.Context, fullURL string, dest any) error {
 	if !c.EnterpriseAvailable() {
 		return apperrors.ConfigMissing("dh_enterprise_api_key", "DH_ENTERPRISE_API_KEY")
 	}
 
-	if err := c.limiter.Wait(ctx); err != nil {
-		if goerrors.Is(err, context.Canceled) || goerrors.Is(err, context.DeadlineExceeded) {
-			return err
-		}
-		return apperrors.ProviderUnavailable(providerName, err)
+	if err := c.waitForRateLimit(ctx); err != nil {
+		return err
 	}
 
 	headers := map[string]string{
@@ -238,11 +240,8 @@ func (c *Client) doEnterprise(ctx context.Context, method, fullURL string, body 
 		return apperrors.ConfigMissing("dh_enterprise_api_key", "DH_ENTERPRISE_API_KEY")
 	}
 
-	if err := c.limiter.Wait(ctx); err != nil {
-		if goerrors.Is(err, context.Canceled) || goerrors.Is(err, context.DeadlineExceeded) {
-			return err
-		}
-		return apperrors.ProviderUnavailable(providerName, err)
+	if err := c.waitForRateLimit(ctx); err != nil {
+		return err
 	}
 
 	var bodyBytes []byte

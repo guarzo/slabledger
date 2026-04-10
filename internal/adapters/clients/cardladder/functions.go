@@ -61,30 +61,17 @@ func (c *Client) doCallable(ctx context.Context, functionName string, data any, 
 
 	resp, err := c.httpClient.Post(ctx, u, headers, bodyBytes, 0)
 	if err != nil {
-		// If resp is available, check for Firebase callable error envelope before discarding.
 		if resp != nil {
-			var callableErr struct {
-				Error struct {
-					Message string `json:"message"`
-					Status  string `json:"status"`
-				} `json:"error"`
-			}
-			if json.Unmarshal(resp.Body, &callableErr) == nil && callableErr.Error.Message != "" {
-				return apperrors.ProviderUnavailable("CardLadder", fmt.Errorf("callable %s: %s (status: %s)", functionName, callableErr.Error.Message, callableErr.Error.Status))
+			if callableErr := checkCallableError(resp.Body, functionName); callableErr != nil {
+				return callableErr
 			}
 		}
 		return fmt.Errorf("http request to %s: %w", functionName, err)
 	}
 
 	// Check for Firebase callable error envelope before unmarshalling result.
-	var callableErr struct {
-		Error struct {
-			Message string `json:"message"`
-			Status  string `json:"status"`
-		} `json:"error"`
-	}
-	if json.Unmarshal(resp.Body, &callableErr) == nil && callableErr.Error.Message != "" {
-		return apperrors.ProviderUnavailable("CardLadder", fmt.Errorf("callable %s: %s (status: %s)", functionName, callableErr.Error.Message, callableErr.Error.Status))
+	if callableErr := checkCallableError(resp.Body, functionName); callableErr != nil {
+		return callableErr
 	}
 
 	// Check that "result" key is present and non-null.
@@ -100,6 +87,21 @@ func (c *Client) doCallable(ctx context.Context, functionName string, data any, 
 
 	if err := json.Unmarshal(resp.Body, result); err != nil {
 		return apperrors.ProviderInvalidResponse("CardLadder", fmt.Errorf("unmarshal %s response: %w", functionName, err))
+	}
+	return nil
+}
+
+// checkCallableError checks for Firebase callable error envelopes in response body.
+// Returns nil if no error is present.
+func checkCallableError(body []byte, functionName string) error {
+	var callableErr struct {
+		Error struct {
+			Message string `json:"message"`
+			Status  string `json:"status"`
+		} `json:"error"`
+	}
+	if json.Unmarshal(body, &callableErr) == nil && callableErr.Error.Message != "" {
+		return apperrors.ProviderUnavailable("CardLadder", fmt.Errorf("callable %s: %s (status: %s)", functionName, callableErr.Error.Message, callableErr.Error.Status))
 	}
 	return nil
 }

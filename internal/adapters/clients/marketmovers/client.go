@@ -283,9 +283,6 @@ func (c *Client) doMutation(ctx context.Context, path string, input any, result 
 
 	resp, err := c.httpClient.Post(ctx, u, headers, bodyBytes, 0)
 	if err != nil {
-		// httpx returns both resp and err for HTTP 4xx/5xx — check for
-		// tRPC validation error in the body before falling back to the
-		// generic HTTP error.
 		if resp != nil && len(resp.Body) > 0 {
 			if trpcErr := checkTRPCError(resp.Body); trpcErr != nil {
 				return trpcErr
@@ -294,29 +291,7 @@ func (c *Client) doMutation(ctx context.Context, path string, input any, result 
 		return fmt.Errorf("http request: %w", err)
 	}
 
-	// Check for tRPC error in response body before unmarshalling.
-	if trpcErr := checkTRPCError(resp.Body); trpcErr != nil {
-		return trpcErr
-	}
-
-	if err := json.Unmarshal(resp.Body, result); err != nil {
-		return apperrors.ProviderInvalidResponse("MarketMovers", fmt.Errorf("unmarshal response: %w", err))
-	}
-
-	// Verify the tRPC result.data path is present and non-null.
-	var mutEnv struct {
-		Result struct {
-			Data json.RawMessage `json:"data"`
-		} `json:"result"`
-	}
-	if err := json.Unmarshal(resp.Body, &mutEnv); err == nil {
-		if len(mutEnv.Result.Data) == 0 || string(mutEnv.Result.Data) == "null" {
-			return apperrors.ProviderInvalidResponse("MarketMovers",
-				fmt.Errorf("response missing result.data"))
-		}
-	}
-
-	return nil
+	return validateTRPCResponse(resp.Body, result)
 }
 
 // doQuery executes a tRPC GET query (query procedure).
@@ -342,8 +317,6 @@ func (c *Client) doQuery(ctx context.Context, path string, input any, result any
 
 	resp, err := c.httpClient.Get(ctx, u, headers, 0)
 	if err != nil {
-		// httpx returns both resp and err for HTTP 4xx/5xx — check for
-		// tRPC error in the body before falling back to the generic HTTP error.
 		if resp != nil && len(resp.Body) > 0 {
 			if trpcErr := checkTRPCError(resp.Body); trpcErr != nil {
 				return trpcErr
@@ -352,23 +325,27 @@ func (c *Client) doQuery(ctx context.Context, path string, input any, result any
 		return fmt.Errorf("http request: %w", err)
 	}
 
-	// Check for tRPC error in response body before unmarshalling
-	if trpcErr := checkTRPCError(resp.Body); trpcErr != nil {
+	return validateTRPCResponse(resp.Body, result)
+}
+
+// validateTRPCResponse checks for errors and validates the response structure.
+func validateTRPCResponse(body []byte, result any) error {
+	if trpcErr := checkTRPCError(body); trpcErr != nil {
 		return trpcErr
 	}
 
-	if err := json.Unmarshal(resp.Body, result); err != nil {
+	if err := json.Unmarshal(body, result); err != nil {
 		return apperrors.ProviderInvalidResponse("MarketMovers", fmt.Errorf("unmarshal response: %w", err))
 	}
 
 	// Verify the tRPC result.data path is present and non-null.
-	var queryEnv struct {
+	var envelope struct {
 		Result struct {
 			Data json.RawMessage `json:"data"`
 		} `json:"result"`
 	}
-	if err := json.Unmarshal(resp.Body, &queryEnv); err == nil {
-		if len(queryEnv.Result.Data) == 0 || string(queryEnv.Result.Data) == "null" {
+	if err := json.Unmarshal(body, &envelope); err == nil {
+		if len(envelope.Result.Data) == 0 || string(envelope.Result.Data) == "null" {
 			return apperrors.ProviderInvalidResponse("MarketMovers",
 				fmt.Errorf("response missing result.data"))
 		}

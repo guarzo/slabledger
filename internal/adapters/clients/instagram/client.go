@@ -466,10 +466,7 @@ func (c *Client) postForm(ctx context.Context, endpoint string, params url.Value
 		}
 		return err
 	}
-	if err := json.Unmarshal(resp.Body, dest); err != nil {
-		return fmt.Errorf("decode Instagram response from %s: %w", endpoint, err)
-	}
-	return nil
+	return decodeJSON(resp.Body, dest, endpoint)
 }
 
 func (c *Client) doGet(ctx context.Context, reqURL string, dest any) error {
@@ -485,8 +482,12 @@ func (c *Client) doGet(ctx context.Context, reqURL string, dest any) error {
 		}
 		return err
 	}
-	if err := json.Unmarshal(resp.Body, dest); err != nil {
-		return fmt.Errorf("decode Instagram response from %s: %w", reqURL, err)
+	return decodeJSON(resp.Body, dest, reqURL)
+}
+
+func decodeJSON(body []byte, dest any, endpoint string) error {
+	if err := json.Unmarshal(body, dest); err != nil {
+		return fmt.Errorf("decode Instagram response from %s: %w", endpoint, err)
 	}
 	return nil
 }
