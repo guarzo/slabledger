@@ -92,8 +92,11 @@ func createHandlers(in handlerInputs) (ServerDependencies, handlerOutputs) {
 		}
 	}
 
-	// Picks handler
-	picksHandler := handlers.NewPicksHandler(in.PicksService, logger)
+	// Picks handler (nil when service is disabled)
+	var picksHandler *handlers.PicksHandler
+	if in.PicksService != nil {
+		picksHandler = handlers.NewPicksHandler(in.PicksService, logger)
+	}
 
 	// Opportunities (arbitrage endpoints)
 	var opportunitiesHandler *handlers.OpportunitiesHandler

@@ -93,6 +93,9 @@ func NewDHListingService(
 	if purchaseLookup == nil {
 		return nil, fmt.Errorf("purchaseLookup is required")
 	}
+	if logger == nil {
+		return nil, fmt.Errorf("logger is required")
+	}
 	s := &dhListingService{
 		purchaseLookup: purchaseLookup,
 		logger:         logger,

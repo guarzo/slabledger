@@ -215,14 +215,22 @@ func TestCLSales_UpsertSaleComp(t *testing.T) {
 		store := NewCLSalesStore(db.DB)
 		ctx := context.Background()
 
-		rec := newCLSaleComp("cls-gem-1", "NM-MT 8", "cls-item-1", "2026-03-01", 30000, "eBay")
-		err := store.UpsertSaleComp(ctx, rec)
-		require.NoError(t, err)
+		rec8 := newCLSaleComp("cls-gem-1", "NM-MT 8", "cls-item-1", "2026-03-01", 30000, "eBay")
+		require.NoError(t, store.UpsertSaleComp(ctx, rec8))
 
+		rec10 := newCLSaleComp("cls-gem-1", "GEM-MT 10", "cls-item-1", "2026-03-01", 50000, "eBay")
+		require.NoError(t, store.UpsertSaleComp(ctx, rec10))
+
+		// Both conditions coexist independently
 		comps8, err := store.GetSaleComps(ctx, "cls-gem-1", "NM-MT 8", 10)
 		require.NoError(t, err)
-		assert.Len(t, comps8, 1)
+		require.Len(t, comps8, 1)
 		assert.Equal(t, 30000, comps8[0].PriceCents)
+
+		comps10, err := store.GetSaleComps(ctx, "cls-gem-1", "GEM-MT 10", 10)
+		require.NoError(t, err)
+		require.Len(t, comps10, 1)
+		assert.Equal(t, 50000, comps10[0].PriceCents)
 	})
 }
 
@@ -383,26 +391,38 @@ func TestCLSales_lookupCondition(t *testing.T) {
 }
 
 func TestCLSales_GetCompSummary(t *testing.T) {
-	db := setupTestDB(t)
-	defer db.Close()
-	store := NewCLSalesStore(db.DB)
-	ctx := context.Background()
-
-	gemRateID := "cls-gem-summary"
-	condition := "GEM-MT 10"
-	certNumber := "cls-cert-summary"
-
-	// Set up the card mapping so lookupCondition resolves
-	seedCLCardMapping(t, db, certNumber, gemRateID, condition)
+	// Fixed anchor at today's midnight for deterministic date arithmetic.
+	// Must be "today" because GetCompSummary SQL uses date('now', '-90 days').
+	now := time.Now()
+	anchor := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 
 	t.Run("returns nil when no comps exist", func(t *testing.T) {
+		db := setupTestDB(t)
+		defer db.Close()
+		store := NewCLSalesStore(db.DB)
+		ctx := context.Background()
+
+		gemRateID := "cls-gem-summary"
+		certNumber := "cls-cert-summary"
+		seedCLCardMapping(t, db, certNumber, gemRateID, "GEM-MT 10")
+
 		summary, err := store.GetCompSummary(ctx, gemRateID, certNumber)
 		require.NoError(t, err)
 		assert.Nil(t, summary)
 	})
 
 	t.Run("returns nil when all comps are older than 90 days", func(t *testing.T) {
-		oldDate := time.Now().AddDate(0, 0, -100).Format("2006-01-02")
+		db := setupTestDB(t)
+		defer db.Close()
+		store := NewCLSalesStore(db.DB)
+		ctx := context.Background()
+
+		gemRateID := "cls-gem-summary"
+		condition := "GEM-MT 10"
+		certNumber := "cls-cert-summary"
+		seedCLCardMapping(t, db, certNumber, gemRateID, condition)
+
+		oldDate := anchor.AddDate(0, 0, -100).Format("2006-01-02")
 		rec := newCLSaleComp(gemRateID, condition, "cls-old-1", oldDate, 40000, "eBay")
 		require.NoError(t, store.UpsertSaleComp(ctx, rec))
 
@@ -412,7 +432,20 @@ func TestCLSales_GetCompSummary(t *testing.T) {
 	})
 
 	t.Run("returns summary with recent comps", func(t *testing.T) {
-		now := time.Now()
+		db := setupTestDB(t)
+		defer db.Close()
+		store := NewCLSalesStore(db.DB)
+		ctx := context.Background()
+
+		gemRateID := "cls-gem-summary"
+		condition := "GEM-MT 10"
+		certNumber := "cls-cert-summary"
+		seedCLCardMapping(t, db, certNumber, gemRateID, condition)
+
+		// Insert old comp (>90 days) to verify TotalComps includes it
+		oldDate := anchor.AddDate(0, 0, -100).Format("2006-01-02")
+		oldRec := newCLSaleComp(gemRateID, condition, "cls-old-1", oldDate, 40000, "eBay")
+		require.NoError(t, store.UpsertSaleComp(ctx, oldRec))
 
 		// Seed comps spread across the 90-day window for trend computation
 		// Earlier half (days 60–80 ago)
@@ -437,7 +470,7 @@ func TestCLSales_GetCompSummary(t *testing.T) {
 		}
 
 		for i, ed := range earlierDates {
-			d := now.AddDate(0, 0, -ed.daysAgo).Format("2006-01-02")
+			d := anchor.AddDate(0, 0, -ed.daysAgo).Format("2006-01-02")
 			rec := newCLSaleComp(gemRateID, condition,
 				fmt.Sprintf("cls-sum-e%d", i), d, ed.cents, "eBay")
 			require.NoError(t, store.UpsertSaleComp(ctx, rec))
@@ -447,7 +480,7 @@ func TestCLSales_GetCompSummary(t *testing.T) {
 			if i%2 == 0 {
 				platform = "TCGPlayer"
 			}
-			d := now.AddDate(0, 0, -rd.daysAgo).Format("2006-01-02")
+			d := anchor.AddDate(0, 0, -rd.daysAgo).Format("2006-01-02")
 			rec := newCLSaleComp(gemRateID, condition,
 				fmt.Sprintf("cls-sum-r%d", i), d, rd.cents, platform)
 			require.NoError(t, store.UpsertSaleComp(ctx, rec))
@@ -478,6 +511,15 @@ func TestCLSales_GetCompSummary(t *testing.T) {
 	})
 
 	t.Run("returns nil when cert has no mapping (empty condition)", func(t *testing.T) {
+		db := setupTestDB(t)
+		defer db.Close()
+		store := NewCLSalesStore(db.DB)
+		ctx := context.Background()
+
+		gemRateID := "cls-gem-summary"
+		certNumber := "cls-cert-summary"
+		seedCLCardMapping(t, db, certNumber, gemRateID, "GEM-MT 10")
+
 		// Use a cert number that has no mapping — condition resolves to ""
 		// conditionFilter returns "1=0" guard, so no rows match
 		summary, err := store.GetCompSummary(ctx, gemRateID, "cls-unmapped-cert")
@@ -486,6 +528,15 @@ func TestCLSales_GetCompSummary(t *testing.T) {
 	})
 
 	t.Run("returns nil with empty certNumber", func(t *testing.T) {
+		db := setupTestDB(t)
+		defer db.Close()
+		store := NewCLSalesStore(db.DB)
+		ctx := context.Background()
+
+		gemRateID := "cls-gem-summary"
+		certNumber := "cls-cert-summary"
+		seedCLCardMapping(t, db, certNumber, gemRateID, "GEM-MT 10")
+
 		// lookupCondition returns "" for empty cert → conditionFilter guard
 		summary, err := store.GetCompSummary(ctx, gemRateID, "")
 		require.NoError(t, err)
@@ -505,6 +556,7 @@ func TestCLSales_GetCompSummary_platformBreakdown(t *testing.T) {
 	seedCLCardMapping(t, db, certNumber, gemRateID, condition)
 
 	now := time.Now()
+	anchor := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 	// 3 eBay sales and 2 TCGPlayer sales, all recent
 	sales := []struct {
 		itemID   string
@@ -519,7 +571,7 @@ func TestCLSales_GetCompSummary_platformBreakdown(t *testing.T) {
 		{"cls-plat-5", 62000, "TCGPlayer", 3},
 	}
 	for _, s := range sales {
-		d := now.AddDate(0, 0, -s.daysAgo).Format("2006-01-02")
+		d := anchor.AddDate(0, 0, -s.daysAgo).Format("2006-01-02")
 		rec := newCLSaleComp(gemRateID, condition, s.itemID, d, s.cents, s.platform)
 		require.NoError(t, store.UpsertSaleComp(ctx, rec))
 	}

@@ -68,6 +68,9 @@ func (r *SocialRepository) GetPost(ctx context.Context, id string) (*social.Soci
 	}
 	defer rows.Close() //nolint:errcheck
 	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
 		return nil, nil
 	}
 	p, err := scanSocialPost(rows)

@@ -263,17 +263,17 @@ export class APIClient {
    * Delete resource - returns void for empty responses
    * Supports optional JSON body, timeout, and cancellation
    */
-  async deleteResource(endpoint: string, body?: unknown, options?: APIRequestOptions): Promise<void> {
+  async deleteResource(endpoint: string, opts?: { body?: unknown } & APIRequestOptions): Promise<void> {
     const fetchOptions: RequestInit = { method: 'DELETE' };
-    if (body !== undefined) {
+    if (opts?.body !== undefined) {
       fetchOptions.headers = { 'Content-Type': 'application/json' };
-      fetchOptions.body = JSON.stringify(body);
+      fetchOptions.body = JSON.stringify(opts.body);
     }
     const response = await this.fetchWithRetry(
       `${this.baseURL}${endpoint}`,
       fetchOptions,
       1,
-      options
+      opts
     );
     // Handle 204 No Content - no response body expected
     if (response.status === 204) {
@@ -305,13 +305,15 @@ export class APIClient {
   async expectNoContent(response: Response): Promise<void> {
     if (response.status === 204) return;
     const text = await response.text();
-    if (text) {
-      try {
+    try {
+      if (text) {
         const data = JSON.parse(text);
         if (data.error) throw new APIError(data.error, response.status);
-      } catch (e) {
-        if (isAPIError(e)) throw e;
       }
+    } catch (e) {
+      if (isAPIError(e)) throw e;
+      // JSON parse failed on non-204 response
+      throw new APIError(text || `Unexpected status ${response.status}`, response.status);
     }
   }
 

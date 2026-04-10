@@ -190,6 +190,13 @@ func TestNewDHListingService_NilPurchaseLookup(t *testing.T) {
 	}
 }
 
+func TestNewDHListingService_NilLogger(t *testing.T) {
+	_, err := NewDHListingService(&stubPurchaseLookup{}, nil)
+	if err == nil {
+		t.Fatal("expected error for nil logger, got nil")
+	}
+}
+
 func TestNewDHListingService_Valid(t *testing.T) {
 	svc, err := NewDHListingService(&stubPurchaseLookup{}, observability.NewNoopLogger())
 	if err != nil {
@@ -377,125 +384,165 @@ func TestListPurchases_InlineMatchAndPush(t *testing.T) {
 
 // --- disambiguateCandidates tests ---
 
-func TestDisambiguateCandidates_MatchWithoutSave(t *testing.T) {
-	candidates := []DHCertCandidate{
-		{DHCardID: 10, CardNumber: "42"},
-		{DHCardID: 20, CardNumber: "99"},
+func TestDisambiguateCandidates(t *testing.T) {
+	tests := []struct {
+		name           string
+		candidates     []DHCertCandidate
+		cardNumber     string
+		saveFn         func(string) error
+		wantID         int
+		wantErr        bool
+		wantSaveCalled bool
+	}{
+		{
+			name: "match without save",
+			candidates: []DHCertCandidate{
+				{DHCardID: 10, CardNumber: "42"},
+				{DHCardID: 20, CardNumber: "99"},
+			},
+			cardNumber: "42",
+			wantID:     10,
+		},
+		{
+			name: "no match saves JSON",
+			candidates: []DHCertCandidate{
+				{DHCardID: 10, CardNumber: "1"},
+				{DHCardID: 20, CardNumber: "2"},
+			},
+			cardNumber:     "99",
+			wantID:         0,
+			wantSaveCalled: true,
+		},
+		{
+			name: "save function error",
+			candidates: []DHCertCandidate{
+				{DHCardID: 10, CardNumber: "1"},
+			},
+			cardNumber: "99",
+			saveFn:     func(_ string) error { return errors.New("save failed") },
+			wantID:     0,
+			wantErr:    true,
+		},
 	}
-	id, err := disambiguateCandidates(candidates, "42", nil)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if id != 10 {
-		t.Errorf("got %d, want 10", id)
-	}
-}
-
-func TestDisambiguateCandidates_NoMatchSavesJSON(t *testing.T) {
-	candidates := []DHCertCandidate{
-		{DHCardID: 10, CardNumber: "1"},
-		{DHCardID: 20, CardNumber: "2"},
-	}
-	var savedJSON string
-	saveFn := func(j string) error {
-		savedJSON = j
-		return nil
-	}
-	id, err := disambiguateCandidates(candidates, "99", saveFn)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if id != 0 {
-		t.Errorf("got %d, want 0", id)
-	}
-	if savedJSON == "" {
-		t.Error("expected candidates JSON to be saved")
-	}
-}
-
-func TestDisambiguateCandidates_SaveFnError(t *testing.T) {
-	candidates := []DHCertCandidate{
-		{DHCardID: 10, CardNumber: "1"},
-	}
-	saveFn := func(_ string) error { return errors.New("save failed") }
-	id, err := disambiguateCandidates(candidates, "99", saveFn)
-	if err == nil {
-		t.Fatal("expected error from saveFn")
-	}
-	if id != 0 {
-		t.Errorf("got %d, want 0", id)
-	}
-}
-
-// --- ComputeCapitalSummary nil guard test ---
-
-func TestComputeCapitalSummary_NilInput(t *testing.T) {
-	result := ComputeCapitalSummary(nil)
-	if result == nil {
-		t.Fatal("expected non-nil result for nil input")
-	}
-	if result.WeeksToCover != WeeksToCoverNoData {
-		t.Errorf("WeeksToCover = %f, want %f", result.WeeksToCover, WeeksToCoverNoData)
-	}
-	if result.RecoveryTrend != TrendStable {
-		t.Errorf("RecoveryTrend = %q, want %q", result.RecoveryTrend, TrendStable)
-	}
-	if result.AlertLevel != AlertOK {
-		t.Errorf("AlertLevel = %q, want %q", result.AlertLevel, AlertOK)
-	}
-}
-
-func TestComputeCapitalSummary_ZeroRecovery(t *testing.T) {
-	raw := &CapitalRawData{
-		OutstandingCents: 600000, // $6K → fallback warning
-	}
-	result := ComputeCapitalSummary(raw)
-	if result.WeeksToCover != WeeksToCoverNoData {
-		t.Errorf("WeeksToCover = %f, want %f", result.WeeksToCover, WeeksToCoverNoData)
-	}
-	if result.AlertLevel != AlertWarning {
-		t.Errorf("AlertLevel = %q, want %q", result.AlertLevel, AlertWarning)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var saveCalled bool
+			saveFn := tc.saveFn
+			if saveFn == nil && tc.wantSaveCalled {
+				saveFn = func(j string) error {
+					saveCalled = true
+					if j == "" {
+						t.Error("expected non-empty candidates JSON")
+					}
+					return nil
+				}
+			}
+			id, err := disambiguateCandidates(tc.candidates, tc.cardNumber, saveFn)
+			if tc.wantErr && err == nil {
+				t.Fatal("expected error, got nil")
+			}
+			if !tc.wantErr && err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if id != tc.wantID {
+				t.Errorf("got %d, want %d", id, tc.wantID)
+			}
+			if tc.wantSaveCalled && !saveCalled {
+				t.Error("expected save function to be called")
+			}
+		})
 	}
 }
 
-func TestComputeCapitalSummary_WithRecovery(t *testing.T) {
-	raw := &CapitalRawData{
-		OutstandingCents:          10000, // $100 → easily covered
-		RecoveryRate30dCents:      43000, // $430/month → ~$100/week
-		RecoveryRate30dPriorCents: 43000, // same → stable trend
-	}
-	result := ComputeCapitalSummary(raw)
-	if result.WeeksToCover == WeeksToCoverNoData {
-		t.Error("expected computed WeeksToCover, got sentinel")
-	}
-	if result.RecoveryTrend != TrendStable {
-		t.Errorf("RecoveryTrend = %q, want %q", result.RecoveryTrend, TrendStable)
-	}
-	if result.AlertLevel != AlertOK {
-		t.Errorf("AlertLevel = %q, want %q", result.AlertLevel, AlertOK)
-	}
-}
+// --- ComputeCapitalSummary tests ---
 
-func TestComputeCapitalSummary_ImprovingTrend(t *testing.T) {
-	raw := &CapitalRawData{
-		OutstandingCents:          100000,
-		RecoveryRate30dCents:      60000, // current
-		RecoveryRate30dPriorCents: 40000, // prior → ratio 1.5 > 1.1 → improving
+func TestComputeCapitalSummary(t *testing.T) {
+	tests := []struct {
+		name       string
+		input      *CapitalRawData
+		wantWeeks  float64
+		wantTrend  RecoveryTrend
+		wantAlert  AlertLevel
+		checkExact bool // if true, check WeeksToCover == wantWeeks; otherwise just check != sentinel
+		checkTrend bool
+		checkAlert bool
+	}{
+		{
+			name:       "nil input returns safe defaults",
+			input:      nil,
+			wantWeeks:  WeeksToCoverNoData,
+			wantTrend:  TrendStable,
+			wantAlert:  AlertOK,
+			checkExact: true,
+			checkTrend: true,
+			checkAlert: true,
+		},
+		{
+			name:       "zero recovery rate",
+			input:      &CapitalRawData{OutstandingCents: 600000},
+			wantWeeks:  WeeksToCoverNoData,
+			wantTrend:  TrendStable,
+			wantAlert:  AlertWarning,
+			checkExact: true,
+			checkTrend: true,
+			checkAlert: true,
+		},
+		{
+			name: "with recovery - easily covered",
+			input: &CapitalRawData{
+				OutstandingCents:          10000,
+				RecoveryRate30dCents:      43000,
+				RecoveryRate30dPriorCents: 43000,
+			},
+			wantTrend:  TrendStable,
+			wantAlert:  AlertOK,
+			checkExact: false,
+			checkTrend: true,
+			checkAlert: true,
+		},
+		{
+			name: "improving trend",
+			input: &CapitalRawData{
+				OutstandingCents:          100000,
+				RecoveryRate30dCents:      60000,
+				RecoveryRate30dPriorCents: 40000,
+			},
+			wantTrend:  TrendImproving,
+			checkTrend: true,
+		},
+		{
+			name: "declining trend",
+			input: &CapitalRawData{
+				OutstandingCents:          100000,
+				RecoveryRate30dCents:      30000,
+				RecoveryRate30dPriorCents: 60000,
+			},
+			wantTrend:  TrendDeclining,
+			checkTrend: true,
+		},
 	}
-	result := ComputeCapitalSummary(raw)
-	if result.RecoveryTrend != TrendImproving {
-		t.Errorf("RecoveryTrend = %q, want %q", result.RecoveryTrend, TrendImproving)
-	}
-}
-
-func TestComputeCapitalSummary_DecliningTrend(t *testing.T) {
-	raw := &CapitalRawData{
-		OutstandingCents:          100000,
-		RecoveryRate30dCents:      30000, // current
-		RecoveryRate30dPriorCents: 60000, // prior → ratio 0.5 < 0.9 → declining
-	}
-	result := ComputeCapitalSummary(raw)
-	if result.RecoveryTrend != TrendDeclining {
-		t.Errorf("RecoveryTrend = %q, want %q", result.RecoveryTrend, TrendDeclining)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := ComputeCapitalSummary(tc.input)
+			if result == nil {
+				t.Fatal("expected non-nil result")
+			}
+			if tc.checkExact {
+				if result.WeeksToCover != tc.wantWeeks {
+					t.Errorf("WeeksToCover = %f, want %f", result.WeeksToCover, tc.wantWeeks)
+				}
+			} else if !tc.checkExact && tc.wantWeeks == 0 {
+				// For cases where we just verify it's computed (not sentinel)
+				if result.WeeksToCover == WeeksToCoverNoData {
+					t.Error("expected computed WeeksToCover, got sentinel")
+				}
+			}
+			if tc.checkTrend && result.RecoveryTrend != tc.wantTrend {
+				t.Errorf("RecoveryTrend = %q, want %q", result.RecoveryTrend, tc.wantTrend)
+			}
+			if tc.checkAlert && result.AlertLevel != tc.wantAlert {
+				t.Errorf("AlertLevel = %q, want %q", result.AlertLevel, tc.wantAlert)
+			}
+		})
 	}
 }

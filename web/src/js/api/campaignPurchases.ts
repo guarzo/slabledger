@@ -169,7 +169,7 @@ proto.addSellSheetItems = async function (this: APIClient, purchaseIds: string[]
 };
 
 proto.removeSellSheetItems = async function (this: APIClient, purchaseIds: string[]): Promise<void> {
-  await this.deleteResource('/sell-sheet/items', { purchaseIds });
+  await this.deleteResource('/sell-sheet/items', { body: { purchaseIds } });
 };
 
 proto.clearSellSheetItems = async function (this: APIClient): Promise<void> {

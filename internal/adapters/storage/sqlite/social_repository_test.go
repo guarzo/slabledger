@@ -294,7 +294,7 @@ func TestSocialRepository_SetPublishing(t *testing.T) {
 
 	t.Run("non-existent returns error", func(t *testing.T) {
 		err := repo.SetPublishing(ctx, "soc-pbing-missing")
-		assert.Error(t, err)
+		assert.ErrorIs(t, err, social.ErrPostNotFound)
 	})
 }
 
