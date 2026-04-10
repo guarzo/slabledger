@@ -13,7 +13,10 @@ import (
 	"github.com/openai/openai-go/v3/responses"
 	"github.com/openai/openai-go/v3/shared"
 
+	"golang.org/x/time/rate"
+
 	"github.com/guarzo/slabledger/internal/domain/ai"
+	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
@@ -52,6 +55,7 @@ type Client struct {
 	client         *openai.Client
 	deploymentName string
 	logger         observability.Logger
+	rateLimiter    *rate.Limiter
 }
 
 var _ ai.LLMProvider = (*Client)(nil)
@@ -111,6 +115,7 @@ func NewClient(cfg Config, opts ...Option) (*Client, error) {
 		client:         &client,
 		deploymentName: cfg.DeploymentName,
 		logger:         co.logger,
+		rateLimiter:    rate.NewLimiter(rate.Limit(2), 2), // 2 req/sec
 	}, nil
 }
 
@@ -127,6 +132,10 @@ func (c *Client) StreamCompletion(ctx context.Context, req ai.CompletionRequest,
 	var lastErr error
 	var lastResponseID string
 	var emittedChunks bool
+
+	if err := c.rateLimiter.Wait(ctx); err != nil {
+		return apperrors.ProviderUnavailable("AzureAI", fmt.Errorf("rate limiter: %w", err))
+	}
 
 	for attempt := range maxStreamRetries {
 		completed := false
