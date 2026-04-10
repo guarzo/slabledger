@@ -278,6 +278,101 @@ func TestResolveCollectibleID_CertMisses_NameFallbackSucceeds(t *testing.T) {
 	assert.Equal(t, 2, callCount, "both cert and name searches should have been called")
 }
 
+// ---------------------------------------------------------------------------
+// computeMMSignals
+// ---------------------------------------------------------------------------
+
+func TestComputeMMSignals(t *testing.T) {
+	cases := []struct {
+		name      string
+		items     []marketmovers.DailyStatItem
+		wantAvg   float64
+		wantTrend float64
+		wantSales int
+	}{
+		{
+			name:      "empty items",
+			items:     nil,
+			wantAvg:   0,
+			wantTrend: 0,
+			wantSales: 0,
+		},
+		{
+			name: "single day",
+			items: []marketmovers.DailyStatItem{
+				{TotalSalesCount: 5, TotalSalesAmount: 1000, AverageSalePrice: 200},
+			},
+			wantAvg:   200, // 1000/5
+			wantTrend: 0,   // first == last -> 0%
+			wantSales: 5,
+		},
+		{
+			name: "multiple days ascending trend",
+			items: []marketmovers.DailyStatItem{
+				{TotalSalesCount: 2, TotalSalesAmount: 200, AverageSalePrice: 100},
+				{TotalSalesCount: 3, TotalSalesAmount: 600, AverageSalePrice: 200},
+			},
+			wantAvg:   160, // 800/5
+			wantTrend: 1.0, // (200-100)/100 = +100%
+			wantSales: 5,
+		},
+		{
+			name: "descending trend",
+			items: []marketmovers.DailyStatItem{
+				{TotalSalesCount: 2, TotalSalesAmount: 400, AverageSalePrice: 200},
+				{TotalSalesCount: 2, TotalSalesAmount: 200, AverageSalePrice: 100},
+			},
+			wantAvg:   150,  // 600/4
+			wantTrend: -0.5, // (100-200)/200 = -50%
+			wantSales: 4,
+		},
+		{
+			name: "trend capped at +200%",
+			items: []marketmovers.DailyStatItem{
+				{TotalSalesCount: 1, TotalSalesAmount: 100, AverageSalePrice: 100},
+				{TotalSalesCount: 1, TotalSalesAmount: 1000, AverageSalePrice: 1000},
+			},
+			wantAvg:   550, // 1100/2
+			wantTrend: 2.0, // (1000-100)/100 = 900% -> capped to 200%
+			wantSales: 2,
+		},
+		{
+			name: "zero-count days skipped",
+			items: []marketmovers.DailyStatItem{
+				{TotalSalesCount: 3, TotalSalesAmount: 300, AverageSalePrice: 100},
+				{TotalSalesCount: 0, TotalSalesAmount: 0, AverageSalePrice: 0},
+				{TotalSalesCount: 2, TotalSalesAmount: 400, AverageSalePrice: 200},
+			},
+			wantAvg:   140, // 700/5
+			wantTrend: 1.0, // (200-100)/100 = +100%
+			wantSales: 5,
+		},
+		{
+			name: "all zero-count days",
+			items: []marketmovers.DailyStatItem{
+				{TotalSalesCount: 0, TotalSalesAmount: 0, AverageSalePrice: 0},
+				{TotalSalesCount: 0, TotalSalesAmount: 0, AverageSalePrice: 0},
+			},
+			wantAvg:   0,
+			wantTrend: 0,
+			wantSales: 0,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			avg, trend, sales := computeMMSignals(tc.items)
+			assert.InDelta(t, tc.wantAvg, avg, 0.01, "avgPrice")
+			assert.InDelta(t, tc.wantTrend, trend, 0.01, "trendPct")
+			assert.Equal(t, tc.wantSales, sales, "sales30d")
+		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// resolveCollectibleID — fallback logic (continued)
+// ---------------------------------------------------------------------------
+
 func TestResolveCollectibleID_NoCertNumber_GoesDirectToNameSearch(t *testing.T) {
 	callCount := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
