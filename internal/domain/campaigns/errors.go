@@ -18,6 +18,7 @@ const (
 	ErrCodeNoAISuggestion         errors.ErrorCode = "ERR_NO_AI_SUGGESTION"
 	ErrCodePriceFlagNotFound      errors.ErrorCode = "ERR_PRICE_FLAG_NOT_FOUND"
 	ErrCodeCertNotFound           errors.ErrorCode = "ERR_CERT_NOT_FOUND"
+	ErrCodePendingItemNotFound    errors.ErrorCode = "ERR_PENDING_ITEM_NOT_FOUND"
 )
 
 // Sentinel errors for campaign operations
@@ -33,6 +34,7 @@ var (
 	ErrNoAISuggestion         = errors.NewAppError(ErrCodeNoAISuggestion, "no AI suggestion to accept or suggestion has changed")
 	ErrPriceFlagNotFound      = errors.NewAppError(ErrCodePriceFlagNotFound, "price flag not found or already resolved")
 	ErrCertNotFound           = errors.NewAppError(ErrCodeCertNotFound, "cert not found")
+	ErrPendingItemNotFound    = errors.NewAppError(ErrCodePendingItemNotFound, "pending item not found")
 )
 
 // IsCampaignNotFound checks if the error is a "campaign not found" error.
@@ -63,3 +65,8 @@ func IsPriceFlagNotFound(err error) bool { return errors.HasErrorCode(err, ErrCo
 
 // IsCertNotFound checks if the error is a "cert not found" error.
 func IsCertNotFound(err error) bool { return errors.HasErrorCode(err, ErrCodeCertNotFound) }
+
+// IsPendingItemNotFound checks if the error is a "pending item not found" error.
+func IsPendingItemNotFound(err error) bool {
+	return errors.HasErrorCode(err, ErrCodePendingItemNotFound)
+}

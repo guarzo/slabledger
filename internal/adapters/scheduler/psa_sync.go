@@ -2,12 +2,28 @@ package scheduler
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/campaigns"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/platform/config"
 )
+
+// PSASyncRunStats holds in-memory stats from the last PSA sync run.
+type PSASyncRunStats struct {
+	LastRunAt   time.Time `json:"lastRunAt"`
+	DurationMs  int64     `json:"durationMs"`
+	Allocated   int       `json:"allocated"`
+	Updated     int       `json:"updated"`
+	Refunded    int       `json:"refunded"`
+	Unmatched   int       `json:"unmatched"`
+	Ambiguous   int       `json:"ambiguous"`
+	Skipped     int       `json:"skipped"`
+	Failed      int       `json:"failed"`
+	TotalRows   int       `json:"totalRows"`
+	ParseErrors int       `json:"parseErrors"`
+}
 
 // SheetFetcher fetches sheet data as a 2D string grid.
 type SheetFetcher interface {
@@ -30,6 +46,8 @@ type PSASyncScheduler struct {
 	config        config.PSASyncConfig
 	spreadsheetID string
 	tabName       string
+	lastRunStats  *PSASyncRunStats
+	statsMu       sync.RWMutex
 }
 
 // NewPSASyncScheduler creates a new PSA sync scheduler.
@@ -77,7 +95,19 @@ func (s *PSASyncScheduler) Start(ctx context.Context) {
 	}, s.tick)
 }
 
+// GetLastRunStats returns a copy of the last run stats, or nil if no run has completed.
+func (s *PSASyncScheduler) GetLastRunStats() *PSASyncRunStats {
+	s.statsMu.RLock()
+	defer s.statsMu.RUnlock()
+	if s.lastRunStats == nil {
+		return nil
+	}
+	cp := *s.lastRunStats
+	return &cp
+}
+
 func (s *PSASyncScheduler) tick(ctx context.Context) {
+	start := time.Now()
 	s.logger.Info(ctx, "running PSA Google Sheets sync")
 
 	fetchCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
@@ -97,8 +127,9 @@ func (s *PSASyncScheduler) tick(ctx context.Context) {
 		return
 	}
 	if len(parseErrors) > 0 {
-		s.logger.Warn(ctx, "PSA sheet parse warnings",
-			observability.Int("parse_errors", len(parseErrors)))
+		s.logger.Warn(ctx, "PSA sheet parse failures — rows skipped",
+			observability.Int("skipped_rows", len(parseErrors)),
+			observability.String("spreadsheet_id", s.spreadsheetID))
 	}
 	if len(psaRows) == 0 {
 		s.logger.Warn(ctx, "no valid PSA rows found in sheet")
@@ -107,6 +138,7 @@ func (s *PSASyncScheduler) tick(ctx context.Context) {
 
 	importCtx, importCancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer importCancel()
+	importCtx = campaigns.WithImportSource(importCtx, "scheduler")
 
 	result, err := s.importer.ImportPSAExportGlobal(importCtx, psaRows)
 	if err != nil {
@@ -120,5 +152,22 @@ func (s *PSASyncScheduler) tick(ctx context.Context) {
 		observability.Int("refunded", result.Refunded),
 		observability.Int("unmatched", result.Unmatched),
 		observability.Int("skipped", result.Skipped),
-		observability.Int("failed", result.Failed))
+		observability.Int("failed", result.Failed),
+		observability.Int("import_errors", len(result.Errors)))
+
+	s.statsMu.Lock()
+	s.lastRunStats = &PSASyncRunStats{
+		LastRunAt:   start,
+		DurationMs:  time.Since(start).Milliseconds(),
+		Allocated:   result.Allocated,
+		Updated:     result.Updated,
+		Refunded:    result.Refunded,
+		Unmatched:   result.Unmatched,
+		Ambiguous:   result.Ambiguous,
+		Skipped:     result.Skipped,
+		Failed:      result.Failed,
+		TotalRows:   len(psaRows),
+		ParseErrors: len(parseErrors),
+	}
+	s.statsMu.Unlock()
 }

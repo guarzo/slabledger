@@ -55,6 +55,7 @@ export const queryKeys = {
     marketMoversStatus: ['admin', 'marketMoversStatus'] as const,
     dhStatus: ['admin', 'dhStatus'] as const,
     dhUnmatched: ['admin', 'dhUnmatched'] as const,
+    psaSyncStatus: ['admin', 'psaSyncStatus'] as const,
   },
   social: {
     all: ['social'] as const,
@@ -64,5 +65,8 @@ export const queryKeys = {
   instagram: {
     all: ['instagram'] as const,
     status: () => ['instagram', 'status'] as const,
+  },
+  purchases: {
+    psaPendingItems: ['purchases', 'psaPendingItems'] as const,
   },
 } as const;

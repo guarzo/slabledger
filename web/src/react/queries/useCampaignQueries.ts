@@ -340,3 +340,35 @@ export function useCreateBulkSales(campaignId: string) {
     },
   });
 }
+
+export function usePSAPendingItems() {
+  return useQuery({
+    queryKey: queryKeys.purchases.psaPendingItems,
+    queryFn: () => api.listPSAPendingItems(),
+    staleTime: 30_000,
+  });
+}
+
+export function useAssignPendingItem() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, campaignId }: { id: string; campaignId: string }) =>
+      api.assignPSAPendingItem(id, campaignId),
+    onSuccess: (_data, variables) => {
+      qc.invalidateQueries({ queryKey: queryKeys.purchases.psaPendingItems });
+      qc.invalidateQueries({ queryKey: queryKeys.admin.psaSyncStatus });
+      invalidatePurchaseRelatedQueries(qc, variables.campaignId);
+    },
+  });
+}
+
+export function useDismissPendingItem() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.dismissPSAPendingItem(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.purchases.psaPendingItems });
+      qc.invalidateQueries({ queryKey: queryKeys.admin.psaSyncStatus });
+    },
+  });
+}
