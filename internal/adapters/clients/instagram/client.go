@@ -10,7 +10,10 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/time/rate"
+
 	"github.com/guarzo/slabledger/internal/adapters/clients/httpx"
+	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
@@ -45,6 +48,7 @@ type Client struct {
 	redirectURI string
 	httpClient  *httpx.Client
 	logger      observability.Logger
+	rateLimiter *rate.Limiter
 }
 
 // NewClient creates a new Instagram API client.
@@ -57,6 +61,7 @@ func NewClient(appID, appSecret, redirectURI string, logger observability.Logger
 		redirectURI: redirectURI,
 		httpClient:  httpx.NewClient(httpCfg),
 		logger:      logger,
+		rateLimiter: rate.NewLimiter(rate.Limit(1), 1), // 1 req/sec
 	}
 }
 
@@ -190,6 +195,10 @@ func (c *Client) PublishSingleImage(ctx context.Context, token, igUserID, imageU
 	}
 	if err := c.postForm(ctx, fmt.Sprintf("%s/%s/media", graphURL, igUserID), params, &resp); err != nil {
 		return nil, fmt.Errorf("create media container: %w", err)
+	}
+	if resp.ID == "" {
+		return nil, apperrors.ProviderInvalidResponse("Instagram",
+			fmt.Errorf("single image container creation returned empty ID"))
 	}
 
 	if err := c.waitForContainer(ctx, token, resp.ID); err != nil {
@@ -338,6 +347,10 @@ func (c *Client) getUsername(ctx context.Context, token, userID string) (string,
 	if err := c.doGet(ctx, reqURL, &resp); err != nil {
 		return "", err
 	}
+	if resp.Username == "" {
+		return "", apperrors.ProviderInvalidResponse("Instagram",
+			fmt.Errorf("user info returned empty username"))
+	}
 	return resp.Username, nil
 }
 
@@ -353,6 +366,10 @@ func (c *Client) createItemContainer(ctx context.Context, token, igUserID, image
 	}
 	if err := c.postForm(ctx, fmt.Sprintf("%s/%s/media", graphURL, igUserID), params, &resp); err != nil {
 		return "", err
+	}
+	if resp.ID == "" {
+		return "", apperrors.ProviderInvalidResponse("Instagram",
+			fmt.Errorf("container creation returned empty ID"))
 	}
 	return resp.ID, nil
 }
@@ -370,6 +387,10 @@ func (c *Client) createCarouselContainer(ctx context.Context, token, igUserID st
 	}
 	if err := c.postForm(ctx, fmt.Sprintf("%s/%s/media", graphURL, igUserID), params, &resp); err != nil {
 		return "", err
+	}
+	if resp.ID == "" {
+		return "", apperrors.ProviderInvalidResponse("Instagram",
+			fmt.Errorf("carousel container creation returned empty ID"))
 	}
 	return resp.ID, nil
 }
@@ -421,10 +442,17 @@ func (c *Client) publishContainer(ctx context.Context, token, igUserID, containe
 	if err := c.postForm(ctx, fmt.Sprintf("%s/%s/media_publish", graphURL, igUserID), params, &resp); err != nil {
 		return "", err
 	}
+	if resp.ID == "" {
+		return "", apperrors.ProviderInvalidResponse("Instagram",
+			fmt.Errorf("publish returned empty media ID"))
+	}
 	return resp.ID, nil
 }
 
 func (c *Client) postForm(ctx context.Context, endpoint string, params url.Values, dest any) error {
+	if err := c.rateLimiter.Wait(ctx); err != nil {
+		return apperrors.ProviderUnavailable("Instagram", fmt.Errorf("rate limiter: %w", err))
+	}
 	headers := map[string]string{
 		"Content-Type": "application/x-www-form-urlencoded",
 	}
@@ -438,13 +466,13 @@ func (c *Client) postForm(ctx context.Context, endpoint string, params url.Value
 		}
 		return err
 	}
-	if err := json.Unmarshal(resp.Body, dest); err != nil {
-		return fmt.Errorf("decode Instagram response from %s: %w", endpoint, err)
-	}
-	return nil
+	return decodeJSON(resp.Body, dest, endpoint)
 }
 
 func (c *Client) doGet(ctx context.Context, reqURL string, dest any) error {
+	if err := c.rateLimiter.Wait(ctx); err != nil {
+		return apperrors.ProviderUnavailable("Instagram", fmt.Errorf("rate limiter: %w", err))
+	}
 	resp, err := c.httpClient.Get(ctx, reqURL, nil, 0)
 	if err != nil {
 		if resp != nil {
@@ -454,8 +482,12 @@ func (c *Client) doGet(ctx context.Context, reqURL string, dest any) error {
 		}
 		return err
 	}
-	if err := json.Unmarshal(resp.Body, dest); err != nil {
-		return fmt.Errorf("decode Instagram response from %s: %w", reqURL, err)
+	return decodeJSON(resp.Body, dest, reqURL)
+}
+
+func decodeJSON(body []byte, dest any, endpoint string) error {
+	if err := json.Unmarshal(body, dest); err != nil {
+		return fmt.Errorf("decode Instagram response from %s: %w", endpoint, err)
 	}
 	return nil
 }

@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+
+	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
 )
 
 const defaultFunctionsBaseURL = "https://us-central1-cardladder-71d53.cloudfunctions.net"
@@ -37,7 +39,7 @@ func (c *Client) CardEstimate(ctx context.Context, req CardEstimateRequest) (*Ca
 // {data: ...} / {result: ...} protocol.
 func (c *Client) doCallable(ctx context.Context, functionName string, data any, result any) error {
 	if err := c.rateLimiter.Wait(ctx); err != nil {
-		return err
+		return apperrors.ProviderUnavailable("CardLadder", fmt.Errorf("rate limiter: %w", err))
 	}
 
 	token, err := c.getToken(ctx)
@@ -49,7 +51,7 @@ func (c *Client) doCallable(ctx context.Context, functionName string, data any, 
 	body := callableRequest{Data: data}
 	bodyBytes, err := json.Marshal(body)
 	if err != nil {
-		return fmt.Errorf("marshal request: %w", err)
+		return apperrors.ProviderInvalidRequest("CardLadder", err)
 	}
 
 	headers := map[string]string{
@@ -59,34 +61,48 @@ func (c *Client) doCallable(ctx context.Context, functionName string, data any, 
 
 	resp, err := c.httpClient.Post(ctx, u, headers, bodyBytes, 0)
 	if err != nil {
-		// If resp is available, check for Firebase callable error envelope before discarding.
 		if resp != nil {
-			var callableErr struct {
-				Error struct {
-					Message string `json:"message"`
-					Status  string `json:"status"`
-				} `json:"error"`
-			}
-			if json.Unmarshal(resp.Body, &callableErr) == nil && callableErr.Error.Message != "" {
-				return fmt.Errorf("callable %s error: %s (status: %s)", functionName, callableErr.Error.Message, callableErr.Error.Status)
+			if callableErr := checkCallableError(resp.Body, functionName); callableErr != nil {
+				return callableErr
 			}
 		}
 		return fmt.Errorf("http request to %s: %w", functionName, err)
 	}
 
 	// Check for Firebase callable error envelope before unmarshalling result.
+	if callableErr := checkCallableError(resp.Body, functionName); callableErr != nil {
+		return callableErr
+	}
+
+	// Check that "result" key is present and non-null before unmarshalling the full response.
+	var envelope struct {
+		Result json.RawMessage `json:"result"`
+	}
+	if err := json.Unmarshal(resp.Body, &envelope); err != nil {
+		return apperrors.ProviderInvalidResponse("CardLadder", fmt.Errorf("unmarshal %s response: %w", functionName, err))
+	}
+	if len(envelope.Result) == 0 || string(envelope.Result) == "null" {
+		return apperrors.ProviderInvalidResponse("CardLadder", fmt.Errorf("callable %s returned nil result", functionName))
+	}
+
+	// Now unmarshal the full response into the result parameter.
+	if err := json.Unmarshal(resp.Body, result); err != nil {
+		return apperrors.ProviderInvalidResponse("CardLadder", fmt.Errorf("unmarshal %s response: %w", functionName, err))
+	}
+	return nil
+}
+
+// checkCallableError checks for Firebase callable error envelopes in response body.
+// Returns nil if no error is present.
+func checkCallableError(body []byte, functionName string) error {
 	var callableErr struct {
 		Error struct {
 			Message string `json:"message"`
 			Status  string `json:"status"`
 		} `json:"error"`
 	}
-	if json.Unmarshal(resp.Body, &callableErr) == nil && callableErr.Error.Message != "" {
-		return fmt.Errorf("callable %s error: %s (status: %s)", functionName, callableErr.Error.Message, callableErr.Error.Status)
-	}
-
-	if err := json.Unmarshal(resp.Body, result); err != nil {
-		return fmt.Errorf("unmarshal %s response: %w", functionName, err)
+	if json.Unmarshal(body, &callableErr) == nil && callableErr.Error.Message != "" {
+		return apperrors.ProviderUnavailable("CardLadder", fmt.Errorf("callable %s: %s (status: %s)", functionName, callableErr.Error.Message, callableErr.Error.Status))
 	}
 	return nil
 }

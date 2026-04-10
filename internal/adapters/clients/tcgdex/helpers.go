@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+
+	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
 )
 
 const defaultBaseURL = "https://api.tcgdex.net/v2"
@@ -50,6 +52,9 @@ func escapePathSegment(segment string) string {
 
 // get performs an HTTP GET request and decodes JSON into the target.
 func (t *TCGdex) get(ctx context.Context, u string, into any) error {
+	if err := t.rateLimiter.Wait(ctx); err != nil {
+		return apperrors.ProviderUnavailable("TCGdex", fmt.Errorf("rate limiter: %w", err))
+	}
 	headers := make(map[string]string)
 	return t.httpClient.GetJSON(ctx, u, headers, tcgdexTimeout, into)
 }

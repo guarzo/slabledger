@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/url"
 	"strconv"
+
+	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
 )
 
 // --- Match Types ---
@@ -157,6 +159,12 @@ func (c *Client) SearchCards(ctx context.Context, filters SearchFilters) (*Searc
 	var resp SearchResponse
 	if err := c.getEnterprise(ctx, fullURL, &resp); err != nil {
 		return nil, err
+	}
+	for i, item := range resp.Results {
+		if item.Name == "" {
+			return nil, apperrors.ProviderInvalidResponse(providerName,
+				fmt.Errorf("search result[%d] has empty name", i))
+		}
 	}
 	return &resp, nil
 }

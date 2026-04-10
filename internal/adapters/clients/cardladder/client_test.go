@@ -3,12 +3,15 @@ package cardladder
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
 )
 
 func TestClient_FetchCollection(t *testing.T) {
@@ -77,9 +80,9 @@ func TestClient_FetchSalesComps(t *testing.T) {
 }
 
 func TestClient_TokenRefreshOnExpiry(t *testing.T) {
-	callCount := 0
+	var callCount atomic.Int64
 	authServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		callCount++
+		callCount.Add(1)
 		json.NewEncoder(w).Encode(FirebaseRefreshResponse{ //nolint:errcheck
 			IDToken:      "refreshed-token",
 			RefreshToken: "new-refresh",
@@ -106,8 +109,8 @@ func TestClient_TokenRefreshOnExpiry(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FetchCollectionPage failed: %v", err)
 	}
-	if callCount != 1 {
-		t.Errorf("expected 1 refresh call, got %d", callCount)
+	if callCount.Load() != 1 {
+		t.Errorf("expected 1 refresh call, got %d", callCount.Load())
 	}
 }
 
@@ -155,10 +158,49 @@ func TestClient_ConcurrentTokenRefresh(t *testing.T) {
 	}
 
 	calls := refreshCalls.Load()
-	if calls < 1 {
-		t.Errorf("expected at least 1 refresh call, got %d", calls)
+	if calls != 1 {
+		t.Errorf("singleflight should coalesce to exactly 1 refresh call, got %d", calls)
 	}
-	if calls > int64(goroutines) {
-		t.Errorf("expected at most %d refresh calls, got %d", goroutines, calls)
-	}
+}
+
+func TestClient_ErrorTypes(t *testing.T) {
+	t.Run("unmarshal error returns ProviderInvalidResponse", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Write([]byte("not json")) //nolint:errcheck
+		}))
+		defer server.Close()
+
+		client := NewClient(
+			WithBaseURL(server.URL+"/search"),
+			WithStaticToken("test-token"),
+		)
+		_, err := client.FetchCollectionPage(context.Background(), "coll-1", 0, 100)
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		var appErr *apperrors.AppError
+		if !errors.As(err, &appErr) {
+			t.Fatalf("expected AppError, got %T: %v", err, err)
+		}
+		if appErr.Code != apperrors.ErrCodeProviderInvalidResp {
+			t.Errorf("code = %s, want %s", appErr.Code, apperrors.ErrCodeProviderInvalidResp)
+		}
+	})
+
+	t.Run("no auth returns ConfigMissing", func(t *testing.T) {
+		client := NewClient(
+			WithBaseURL("http://localhost:1/search"),
+		)
+		_, err := client.FetchCollectionPage(context.Background(), "coll-1", 0, 100)
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		var appErr *apperrors.AppError
+		if !errors.As(err, &appErr) {
+			t.Fatalf("expected AppError, got %T: %v", err, err)
+		}
+		if appErr.Code != apperrors.ErrCodeConfigMissing {
+			t.Errorf("code = %s, want %s", appErr.Code, apperrors.ErrCodeConfigMissing)
+		}
+	})
 }

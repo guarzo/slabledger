@@ -13,7 +13,10 @@ import (
 	"github.com/openai/openai-go/v3/responses"
 	"github.com/openai/openai-go/v3/shared"
 
+	"golang.org/x/time/rate"
+
 	"github.com/guarzo/slabledger/internal/domain/ai"
+	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
@@ -33,13 +36,24 @@ type Option func(*clientOptions)
 
 // clientOptions holds optional configuration for the client.
 type clientOptions struct {
-	logger  observability.Logger
-	baseURL string // for testing with httptest
+	logger       observability.Logger
+	baseURL      string // for testing with httptest
+	rateLimitRPS int    // requests per second (default 2)
 }
 
 // WithLogger sets the logger.
 func WithLogger(l observability.Logger) Option {
 	return func(o *clientOptions) { o.logger = l }
+}
+
+// WithRateLimitRPS sets the self-imposed rate limit in requests per second.
+// Defaults to 2 req/sec if not set.
+func WithRateLimitRPS(rps int) Option {
+	return func(o *clientOptions) {
+		if rps > 0 {
+			o.rateLimitRPS = rps
+		}
+	}
 }
 
 // withBaseURL sets the base URL for the SDK client (unexported, for tests).
@@ -52,6 +66,7 @@ type Client struct {
 	client         *openai.Client
 	deploymentName string
 	logger         observability.Logger
+	rateLimiter    *rate.Limiter
 }
 
 var _ ai.LLMProvider = (*Client)(nil)
@@ -107,10 +122,17 @@ func NewClient(cfg Config, opts ...Option) (*Client, error) {
 
 	client := openai.NewClient(sdkOpts...)
 
+	// Configure rate limiter (default 2 req/sec).
+	rps := 2
+	if co.rateLimitRPS > 0 {
+		rps = co.rateLimitRPS
+	}
+
 	return &Client{
 		client:         &client,
 		deploymentName: cfg.DeploymentName,
 		logger:         co.logger,
+		rateLimiter:    rate.NewLimiter(rate.Limit(rps), rps),
 	}, nil
 }
 
@@ -127,6 +149,10 @@ func (c *Client) StreamCompletion(ctx context.Context, req ai.CompletionRequest,
 	var lastErr error
 	var lastResponseID string
 	var emittedChunks bool
+
+	if err := c.rateLimiter.Wait(ctx); err != nil {
+		return apperrors.ProviderUnavailable("AzureAI", fmt.Errorf("rate limiter: %w", err))
+	}
 
 	for attempt := range maxStreamRetries {
 		completed := false

@@ -1,13 +1,12 @@
 package marketmovers
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"time"
+
+	"github.com/guarzo/slabledger/internal/adapters/clients/httpx"
 )
 
 const (
@@ -19,7 +18,7 @@ const (
 // Auth handles Market Movers authentication via the tRPC auth endpoints.
 type Auth struct {
 	baseURL    string
-	httpClient *http.Client
+	httpClient *httpx.Client
 }
 
 // AuthOption configures an Auth instance.
@@ -30,11 +29,20 @@ func WithAuthBaseURL(u string) AuthOption {
 	return func(a *Auth) { a.baseURL = u }
 }
 
+// WithHTTPXClient overrides the default httpx.Client (for testing or custom config).
+func WithHTTPXClient(c *httpx.Client) AuthOption {
+	return func(a *Auth) { a.httpClient = c }
+}
+
 // NewAuth creates a new Market Movers auth client.
 func NewAuth(opts ...AuthOption) *Auth {
+	cfg := httpx.DefaultConfig("MarketMovers-Auth")
+	cfg.DefaultTimeout = 10 * time.Second
+	cfg.RetryPolicy.MaxRetries = 1
+
 	a := &Auth{
 		baseURL:    defaultAPIBaseURL,
-		httpClient: &http.Client{Timeout: 30 * time.Second},
+		httpClient: httpx.NewClient(cfg),
 	}
 	for _, opt := range opts {
 		opt(a)
@@ -54,34 +62,18 @@ func (a *Auth) Login(ctx context.Context, username, password string) (*AuthLogin
 		return nil, fmt.Errorf("marshal login body: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		a.baseURL+"/"+pathLoginBasicAuth, bytes.NewReader(bodyBytes))
-	if err != nil {
-		return nil, fmt.Errorf("create login request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := a.httpClient.Do(req)
+	fullURL := a.baseURL + "/" + pathLoginBasicAuth
+	resp, err := a.httpClient.Post(ctx, fullURL, map[string]string{"Content-Type": "application/json"}, bodyBytes, 0)
 	if err != nil {
 		return nil, fmt.Errorf("market movers login request: %w", err)
 	}
-	defer resp.Body.Close() //nolint:errcheck
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read login response: %w", err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("market movers login failed (status %d): %s", resp.StatusCode, truncate(respBody, 200))
-	}
 
 	var envelope tRPCResponse[AuthLoginResponse]
-	if err := json.Unmarshal(respBody, &envelope); err != nil {
+	if err := json.Unmarshal(resp.Body, &envelope); err != nil {
 		return nil, fmt.Errorf("unmarshal login response: %w", err)
 	}
 	if envelope.Result.Data.AccessToken == "" {
-		// Might be a tRPC error body
-		return nil, parseTRPCError(respBody, "login")
+		return nil, parseTRPCError(resp.Body, "login")
 	}
 	return &envelope.Result.Data, nil
 }
@@ -96,33 +88,18 @@ func (a *Auth) RefreshToken(ctx context.Context, refreshToken string) (*AuthRefr
 		return nil, fmt.Errorf("marshal refresh body: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		a.baseURL+"/"+pathRefreshToken, bytes.NewReader(bodyBytes))
-	if err != nil {
-		return nil, fmt.Errorf("create refresh request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := a.httpClient.Do(req)
+	fullURL := a.baseURL + "/" + pathRefreshToken
+	resp, err := a.httpClient.Post(ctx, fullURL, map[string]string{"Content-Type": "application/json"}, bodyBytes, 0)
 	if err != nil {
 		return nil, fmt.Errorf("market movers refresh request: %w", err)
 	}
-	defer resp.Body.Close() //nolint:errcheck
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read refresh response: %w", err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("market movers refresh failed (status %d): %s", resp.StatusCode, truncate(respBody, 200))
-	}
 
 	var envelope tRPCResponse[AuthRefreshResponse]
-	if err := json.Unmarshal(respBody, &envelope); err != nil {
+	if err := json.Unmarshal(resp.Body, &envelope); err != nil {
 		return nil, fmt.Errorf("unmarshal refresh response: %w", err)
 	}
 	if envelope.Result.Data.AccessToken == "" {
-		return nil, parseTRPCError(respBody, "refresh")
+		return nil, parseTRPCError(resp.Body, "refresh")
 	}
 	return &envelope.Result.Data, nil
 }
@@ -138,11 +115,4 @@ func parseTRPCError(body []byte, op string) error {
 		return fmt.Errorf("market movers %s: %s", op, errResp.Error.Message)
 	}
 	return fmt.Errorf("market movers %s failed: empty response", op)
-}
-
-func truncate(b []byte, n int) string {
-	if len(b) <= n {
-		return string(b)
-	}
-	return string(b[:n]) + "..."
 }
