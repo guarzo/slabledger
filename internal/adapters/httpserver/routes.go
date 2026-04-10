@@ -85,6 +85,9 @@ func (rt *Router) registerAdminRoutes(mux *http.ServeMux) {
 		if rt.psaSyncHandler != nil {
 			mux.Handle("GET /api/admin/psa-sync/status", rt.authMW.RequireAdmin(http.HandlerFunc(rt.psaSyncHandler.HandleStatus)))
 			mux.Handle("POST /api/admin/psa-sync/refresh", rt.authMW.RequireAdmin(http.HandlerFunc(rt.psaSyncHandler.HandleRefresh)))
+			mux.Handle("GET /api/admin/psa-sync/pending", rt.authMW.RequireAdmin(http.HandlerFunc(rt.psaSyncHandler.HandleListPendingItems)))
+			mux.Handle("POST /api/admin/psa-sync/pending/{id}/assign", rt.authMW.RequireAdmin(http.HandlerFunc(rt.psaSyncHandler.HandleAssignPendingItem)))
+			mux.Handle("DELETE /api/admin/psa-sync/pending/{id}", rt.authMW.RequireAdmin(http.HandlerFunc(rt.psaSyncHandler.HandleDismissPendingItem)))
 		}
 		rt.logger.Info(context.Background(), "admin routes registered")
 	}
@@ -162,11 +165,7 @@ func (rt *Router) registerCampaignRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /api/purchases/import-cl", authRoute(rt.campaignsHandler.HandleGlobalImportCL))
 	mux.Handle("POST /api/purchases/import-psa", authRoute(rt.campaignsHandler.HandleGlobalImportPSA))
 	mux.Handle("POST /api/purchases/sync-psa-sheets", authRoute(rt.campaignsHandler.HandleSyncPSASheets))
-	if rt.psaSyncHandler != nil {
-		mux.Handle("GET /api/purchases/psa-pending", authRoute(rt.psaSyncHandler.HandleListPendingItems))
-		mux.Handle("POST /api/purchases/psa-pending/{id}/assign", authRoute(rt.psaSyncHandler.HandleAssignPendingItem))
-		mux.Handle("DELETE /api/purchases/psa-pending/{id}", authRoute(rt.psaSyncHandler.HandleDismissPendingItem))
-	}
+	// PSA pending items are served under /api/admin/psa-sync/pending/ (see registerAdminRoutes)
 	mux.Handle("GET /api/purchases/export-cl", authRoute(rt.campaignsHandler.HandleGlobalExportCL))
 	mux.Handle("GET /api/purchases/export-mm", authRoute(rt.campaignsHandler.HandleGlobalExportMM))
 	mux.Handle("POST /api/purchases/refresh-mm", authRoute(rt.campaignsHandler.HandleGlobalRefreshMM))

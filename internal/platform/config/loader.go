@@ -241,8 +241,18 @@ func FromEnv(base Config) Config {
 
 	// Google Sheets credentials (JSON key is base64-encoded in .env)
 	if v := os.Getenv("GOOGLE_SHEETS_CREDENTIALS_JSON"); v != "" {
+		v = strings.TrimSpace(v)
 		decoded, err := base64.StdEncoding.DecodeString(v)
 		if err != nil {
+			// Retry after trimming trailing non-base64 characters (e.g. stray %)
+			trimmed := strings.TrimRightFunc(v, func(r rune) bool {
+				return (r < 'A' || r > 'Z') && (r < 'a' || r > 'z') &&
+					(r < '0' || r > '9') && r != '+' && r != '/' && r != '='
+			})
+			decoded, err = base64.StdEncoding.DecodeString(trimmed)
+		}
+		if err != nil {
+			// Assume raw JSON
 			cfg.GoogleSheets.CredentialsJSON = v
 		} else {
 			cfg.GoogleSheets.CredentialsJSON = string(decoded)

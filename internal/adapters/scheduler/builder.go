@@ -257,8 +257,12 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 		))
 	}
 
-	// Card Ladder value refresh scheduler (if client + store are provided)
-	if deps.CardLadderClient != nil && deps.CardLadderStore != nil && deps.CardLadderPurchaseLister != nil && deps.CardLadderValueUpdater != nil {
+	// Card Ladder value refresh scheduler.
+	// Created whenever the store and purchase interfaces are available, even if
+	// no client exists yet at startup. SetClient is called by the handler when
+	// credentials are saved for the first time, activating the scheduler without
+	// requiring a server restart.
+	if deps.CardLadderStore != nil && deps.CardLadderPurchaseLister != nil && deps.CardLadderValueUpdater != nil {
 		var clOpts []CardLadderRefreshOption
 		if deps.DHPushStatusUpdater != nil {
 			clOpts = append(clOpts, WithCLDHPushUpdater(deps.DHPushStatusUpdater))
