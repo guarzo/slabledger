@@ -5,16 +5,9 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	"github.com/guarzo/slabledger/internal/domain/campaigns"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
-
-// DHInventoryLister transitions DH inventory items to listed and syncs channels.
-type DHInventoryLister interface {
-	UpdateInventory(ctx context.Context, inventoryID int, update dh.InventoryUpdate) (*dh.InventoryResult, error)
-	SyncChannels(ctx context.Context, inventoryID int, channels []string) (*dh.ChannelSyncResponse, error)
-}
 
 // SheetFetcher fetches sheet data for PSA sync.
 type SheetFetcher interface {
@@ -25,13 +18,7 @@ type SheetFetcher interface {
 type CampaignsHandler struct {
 	service           campaigns.Service
 	logger            observability.Logger
-	dhLister          DHInventoryLister   // optional: lists cards on DH after cert import
-	dhCertResolver    DHCertResolver      // optional: resolves certs against DH
-	dhPusher          DHInventoryPusher   // optional: pushes inventory to DH
-	dhFieldsUpdater   DHFieldsUpdater     // optional: persists DH fields after push
-	pushStatusUpdater DHPushStatusUpdater // optional: sets dh_push_status
-	dhCardIDSaver     DHCardIDSaver       // optional: persists DH card ID mappings
-	dhCandidatesSaver DHCandidatesSaver   // optional: stores ambiguous candidates
+	dhListingSvc      campaigns.DHListingService // optional: lists cards on DH after cert import
 	baseCtx           context.Context
 	bgWG              sync.WaitGroup // tracks background goroutines (e.g. DH listing)
 	sheetFetcher      SheetFetcher   // optional: fetches PSA data from Google Sheets
@@ -42,39 +29,9 @@ type CampaignsHandler struct {
 // CampaignsHandlerOption configures optional dependencies on CampaignsHandler.
 type CampaignsHandlerOption func(*CampaignsHandler)
 
-// WithDHLister enables DH listing after cert import.
-func WithDHLister(l DHInventoryLister) CampaignsHandlerOption {
-	return func(h *CampaignsHandler) { h.dhLister = l }
-}
-
-// WithDHCertResolver enables DH cert resolution for inline push.
-func WithDHCertResolver(c DHCertResolver) CampaignsHandlerOption {
-	return func(h *CampaignsHandler) { h.dhCertResolver = c }
-}
-
-// WithDHPusher enables inventory push to DH.
-func WithDHPusher(p DHInventoryPusher) CampaignsHandlerOption {
-	return func(h *CampaignsHandler) { h.dhPusher = p }
-}
-
-// WithDHFieldsUpdater enables persisting DH fields after push.
-func WithDHFieldsUpdater(u DHFieldsUpdater) CampaignsHandlerOption {
-	return func(h *CampaignsHandler) { h.dhFieldsUpdater = u }
-}
-
-// WithDHPushStatusUpdater enables setting dh_push_status.
-func WithDHPushStatusUpdater(u DHPushStatusUpdater) CampaignsHandlerOption {
-	return func(h *CampaignsHandler) { h.pushStatusUpdater = u }
-}
-
-// WithDHCardIDSaver enables persisting DH card ID mappings.
-func WithDHCardIDSaver(s DHCardIDSaver) CampaignsHandlerOption {
-	return func(h *CampaignsHandler) { h.dhCardIDSaver = s }
-}
-
-// WithDHCandidatesSaver enables storing ambiguous DH candidates on purchases.
-func WithDHCandidatesSaver(s DHCandidatesSaver) CampaignsHandlerOption {
-	return func(h *CampaignsHandler) { h.dhCandidatesSaver = s }
+// WithDHListingService enables DH listing after cert import.
+func WithDHListingService(svc campaigns.DHListingService) CampaignsHandlerOption {
+	return func(h *CampaignsHandler) { h.dhListingSvc = svc }
 }
 
 // WithSheetFetcher enables Google Sheets PSA sync.
@@ -114,9 +71,6 @@ func NewCampaignsHandler(
 func (h *CampaignsHandler) WaitBackground() {
 	h.bgWG.Wait()
 }
-
-// Compile-time checks.
-var _ DHInventoryLister = (*dh.Client)(nil)
 
 // HandleListCampaigns handles GET /api/campaigns.
 func (h *CampaignsHandler) HandleListCampaigns(w http.ResponseWriter, r *http.Request) {

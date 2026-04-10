@@ -9,7 +9,11 @@ import (
 // --- Capital & Invoice ---
 
 func (s *service) GetCapitalSummary(ctx context.Context) (*CapitalSummary, error) {
-	return s.repo.GetCapitalSummary(ctx)
+	raw, err := s.repo.GetCapitalRawData(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return ComputeCapitalSummary(raw), nil
 }
 
 func (s *service) GetCashflowConfig(ctx context.Context) (*CashflowConfig, error) {

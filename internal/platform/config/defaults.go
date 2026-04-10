@@ -19,6 +19,7 @@ func Default() Config {
 			WriteTimeout:    90 * time.Second, // Sized for pricing endpoint (~30s upstream calls)
 			IdleTimeout:     60 * time.Second,
 			ShutdownTimeout: 5 * time.Second,
+			MediaDir:        "./data/media",
 		},
 		Logging: LoggingConfig{
 			Level: "info",

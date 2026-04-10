@@ -37,30 +37,24 @@ type ServerDependencies struct {
 	PriceHintsHandler         *handlers.PriceHintsHandler
 	CardRequestHandler        *handlers.CardRequestHandlers
 	PricingDiagnosticsHandler *handlers.PricingDiagnosticsHandler
-	CampaignsRepo             domainCampaigns.Repository      // For pricing API (cert price lookup)
-	PricingAPIKey             string                          // Bearer token; empty = pricing API disabled
-	AdvisorHandler            *handlers.AdvisorHandler        // AI advisor; nil = disabled
-	SocialHandler             *handlers.SocialHandler         // Social content; nil = disabled
-	InstagramHandler          *handlers.InstagramHandler      // Instagram publishing; nil = disabled
-	AIStatusHandler           *handlers.AIStatusHandler       // AI usage stats; nil = disabled
-	PriceFlagsHandler         *handlers.PriceFlagsHandler     // Price flag admin; nil = disabled
-	CardLadderHandler         *handlers.CardLadderHandler     // Card Ladder admin; nil = disabled
-	MarketMoversHandler       *handlers.MarketMoversHandler   // Market Movers admin; nil = disabled
-	PicksHandler              *handlers.PicksHandler          // AI picks; nil = disabled
-	OpportunitiesHandler      *handlers.OpportunitiesHandler  // Arbitrage opportunities; nil = disabled
-	DHHandler                 *handlers.DHHandler             // DH bulk match + intelligence; nil = disabled
-	DHInventoryLister         handlers.DHInventoryLister      // optional: lists cards on DH after cert import
-	DHCertResolver            handlers.DHCertResolver         // optional: inline DH cert resolution for pending certs
-	DHInventoryPusher         handlers.DHInventoryPusher      // optional: inline DH push for pending certs
-	DHFieldsUpdater           handlers.DHFieldsUpdater        // optional: persists DH fields after inline push
-	DHPushStatusUpdater       handlers.DHPushStatusUpdater    // optional: sets dh_push_status after inline push
-	DHCardIDSaver             handlers.DHCardIDSaver          // optional: persists DH card ID mappings
-	DHCandidatesSaver         handlers.DHCandidatesSaver      // optional: stores ambiguous DH candidates
-	SellSheetItemsHandler     *handlers.SellSheetItemsHandler // Sell sheet persistence; nil = disabled
-	CardCatalogHandler        *handlers.CardCatalogHandler    // CL card catalog search; nil = disabled
-	SheetFetcher              handlers.SheetFetcher           // optional: Google Sheets fetcher for PSA sync
-	SheetsSpreadsheetID       string                          // Google Sheets spreadsheet ID
-	SheetsTabName             string                          // Google Sheets tab name
+	CampaignsRepo             domainCampaigns.Repository       // For pricing API (cert price lookup)
+	PricingAPIKey             string                           // Bearer token; empty = pricing API disabled
+	AdvisorHandler            *handlers.AdvisorHandler         // AI advisor; nil = disabled
+	SocialHandler             *handlers.SocialHandler          // Social content; nil = disabled
+	InstagramHandler          *handlers.InstagramHandler       // Instagram publishing; nil = disabled
+	AIStatusHandler           *handlers.AIStatusHandler        // AI usage stats; nil = disabled
+	PriceFlagsHandler         *handlers.PriceFlagsHandler      // Price flag admin; nil = disabled
+	CardLadderHandler         *handlers.CardLadderHandler      // Card Ladder admin; nil = disabled
+	MarketMoversHandler       *handlers.MarketMoversHandler    // Market Movers admin; nil = disabled
+	PicksHandler              *handlers.PicksHandler           // AI picks; nil = disabled
+	OpportunitiesHandler      *handlers.OpportunitiesHandler   // Arbitrage opportunities; nil = disabled
+	DHHandler                 *handlers.DHHandler              // DH bulk match + intelligence; nil = disabled
+	DHListingService          domainCampaigns.DHListingService // optional: orchestrates DH listing after cert import
+	SellSheetItemsHandler     *handlers.SellSheetItemsHandler  // Sell sheet persistence; nil = disabled
+	CardCatalogHandler        *handlers.CardCatalogHandler     // CL card catalog search; nil = disabled
+	SheetFetcher              handlers.SheetFetcher            // optional: Google Sheets fetcher for PSA sync
+	SheetsSpreadsheetID       string                           // Google Sheets spreadsheet ID
+	SheetsTabName             string                           // Google Sheets tab name
 }
 
 // EnvVarValidation holds the result of environment variable validation
@@ -173,26 +167,8 @@ func startWebServer(ctx context.Context, deps ServerDependencies) error {
 	var campaignsHandler *handlers.CampaignsHandler
 	if deps.CampaignsService != nil {
 		var opts []handlers.CampaignsHandlerOption
-		if deps.DHInventoryLister != nil {
-			opts = append(opts, handlers.WithDHLister(deps.DHInventoryLister))
-		}
-		if deps.DHCertResolver != nil {
-			opts = append(opts, handlers.WithDHCertResolver(deps.DHCertResolver))
-		}
-		if deps.DHInventoryPusher != nil {
-			opts = append(opts, handlers.WithDHPusher(deps.DHInventoryPusher))
-		}
-		if deps.DHFieldsUpdater != nil {
-			opts = append(opts, handlers.WithDHFieldsUpdater(deps.DHFieldsUpdater))
-		}
-		if deps.DHPushStatusUpdater != nil {
-			opts = append(opts, handlers.WithDHPushStatusUpdater(deps.DHPushStatusUpdater))
-		}
-		if deps.DHCardIDSaver != nil {
-			opts = append(opts, handlers.WithDHCardIDSaver(deps.DHCardIDSaver))
-		}
-		if deps.DHCandidatesSaver != nil {
-			opts = append(opts, handlers.WithDHCandidatesSaver(deps.DHCandidatesSaver))
+		if deps.DHListingService != nil {
+			opts = append(opts, handlers.WithDHListingService(deps.DHListingService))
 		}
 		if deps.SheetFetcher != nil && deps.SheetsSpreadsheetID != "" {
 			opts = append(opts, handlers.WithSheetFetcher(deps.SheetFetcher, deps.SheetsSpreadsheetID, deps.SheetsTabName))

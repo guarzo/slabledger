@@ -69,6 +69,12 @@ func FromEnv(base Config) Config {
 			cfg.Server.IdleTimeout = d
 		}
 	}
+	if v := os.Getenv("BASE_URL"); v != "" {
+		cfg.Server.BaseURL = v
+	}
+	if v := os.Getenv("MEDIA_DIR"); v != "" {
+		cfg.Server.MediaDir = v
+	}
 
 	// Rate limiting
 	if v := os.Getenv("RATE_LIMIT_REQUESTS"); v != "" {

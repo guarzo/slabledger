@@ -169,15 +169,7 @@ proto.addSellSheetItems = async function (this: APIClient, purchaseIds: string[]
 };
 
 proto.removeSellSheetItems = async function (this: APIClient, purchaseIds: string[]): Promise<void> {
-  const response = await this.fetchWithRetry(
-    `${this.baseURL}/sell-sheet/items`,
-    {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ purchaseIds }),
-    },
-  );
-  await this.expectNoContent(response);
+  await this.deleteResource('/sell-sheet/items', { body: { purchaseIds } });
 };
 
 proto.clearSellSheetItems = async function (this: APIClient): Promise<void> {

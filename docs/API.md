@@ -823,7 +823,7 @@ Records a sale for a purchase within this campaign. Computes `netProfitCents`, `
 
 **Body:** `Sale` object — required: `purchaseId`, `saleChannel`, `salePriceCents`, `saleDate`
 
-Valid `saleChannel` values: `ebay`, `tcgplayer`, `local`, `other`, `gamestop`, `website`, `cardshow`
+Valid `saleChannel` values: `ebay`, `website`, `inperson`, `tcgplayer`, `local`, `other`, `gamestop`, `cardshow`, `doubleholo`
 
 **Response:** `201 Created` — `Sale` object (may include `warnings` array)
 
@@ -1487,7 +1487,7 @@ Returns the current cashflow configuration.
 **Response:** `200 OK` — `CashflowConfig`
 ```json
 {
-  "creditLimitCents": 2000000,
+  "capitalBudgetCents": 2000000,
   "cashBufferCents": 200000,
   "updatedAt": "2025-01-01T00:00:00Z"
 }
@@ -1712,7 +1712,7 @@ Returns the Monday weekly review summary (WoW spend, revenue, sales comparisons)
   "profitThisWeekCents": 175000,
   "profitLastWeekCents": 85000,
   "byChannel": [...],
-  "creditUtilizationPct": 42.0,
+  "weeksToCover": 3.5,
   "topPerformers": [...],
   "bottomPerformers": [...]
 }
@@ -2238,3 +2238,950 @@ Clear all items from the sell sheet.
 **Auth:** RequireAuth
 
 **Response:** `204 No Content`
+
+---
+
+### `POST /api/portfolio/sell-sheet`
+
+Auth: RequireAuth
+
+Generates a sell sheet for selected purchases across all campaigns.
+
+**Body:**
+```json
+{ "purchaseIds": ["uuid1", "uuid2"] }
+```
+At least one, max 5,000 purchase IDs.
+
+**Response:** `200 OK` — `SellSheet` object (same shape as campaign sell sheet)
+
+**Errors:** `400` no purchase IDs or too many (>5,000)
+
+---
+
+## Global Purchase Operations
+
+### `GET /api/purchases/export-mm`
+
+Auth: RequireAuth
+
+Exports all unsold inventory as a Market Movers collection import-format CSV (13 columns).
+
+**Query params:** `missing_mm_only=true` (optional, export only items lacking MM value data)
+
+**Response:** `200 OK` with `Content-Type: text/csv`, `Content-Disposition: attachment; filename="market-movers-export.csv"`
+
+CSV columns: `Sport`, `Grade`, `Player Name`, `Year`, `Set`, `Variation`, `Card Number`, `Specific Qualifier`, `Quantity`, `Date Purchased`, `Purchase Price per Card`, `Notes`, `Category`
+
+---
+
+### `POST /api/purchases/refresh-mm`
+
+Auth: RequireAuth
+
+Refreshes Market Movers values across all campaigns from a Market Movers collection export CSV upload.
+
+**Body:** `multipart/form-data` — `file` field (CSV, max 10MB)
+
+**Response:** `200 OK` — `MMRefreshResult`
+```json
+{
+  "updated": 10,
+  "notFound": 2,
+  "skipped": 1,
+  "failed": 0,
+  "errors": [],
+  "results": [
+    {
+      "certNumber": "12345678",
+      "cardName": "Charizard",
+      "oldValueCents": 110000,
+      "newValueCents": 120000,
+      "status": "updated"
+    }
+  ]
+}
+```
+
+---
+
+### `POST /api/purchases/import-orders`
+
+Auth: RequireAuth
+
+Imports an orders export CSV, matches PSA cert numbers against unsold inventory, and returns categorized results for review before confirmation.
+
+**Body:** `multipart/form-data` — `file` field (CSV, max 10MB)
+
+**Response:** `200 OK` — `OrdersImportResult`
+```json
+{
+  "matched": [
+    {
+      "certNumber": "12345678",
+      "productTitle": "PSA 10 Charizard",
+      "saleChannel": "ebay",
+      "saleDate": "2025-02-01",
+      "salePriceCents": 130000,
+      "saleFeeCents": 16055,
+      "purchaseId": "uuid",
+      "campaignId": "uuid",
+      "cardName": "Charizard",
+      "buyCostCents": 84000,
+      "netProfitCents": 29645
+    }
+  ],
+  "alreadySold": [
+    { "certNumber": "87654321", "productTitle": "...", "reason": "already_sold" }
+  ],
+  "notFound": [],
+  "skipped": []
+}
+```
+
+---
+
+### `POST /api/purchases/import-orders/confirm`
+
+Auth: RequireAuth
+
+Accepts confirmed matches from order import and creates sale records.
+
+**Body:** Array of `OrdersConfirmItem`
+```json
+[
+  {
+    "purchaseId": "uuid",
+    "saleChannel": "ebay",
+    "saleDate": "2025-02-01",
+    "salePriceCents": 130000,
+    "orderId": "ORD-123"
+  }
+]
+```
+
+**Response:** `200 OK` — `BulkSaleResult`
+```json
+{
+  "created": 5,
+  "failed": 0,
+  "errors": []
+}
+```
+
+**Errors:** `400` no items provided or invalid JSON
+
+---
+
+### `POST /api/purchases/scan-cert`
+
+Auth: RequireAuth
+
+Scans a cert number to determine if it exists in inventory, has been sold, or is new.
+
+**Body:**
+```json
+{ "certNumber": "12345678" }
+```
+
+**Response:** `200 OK` — `ScanCertResult`
+```json
+{
+  "status": "existing",
+  "cardName": "Charizard",
+  "purchaseId": "uuid",
+  "campaignId": "uuid"
+}
+```
+`status` values: `existing` (unsold in inventory), `sold` (has a sale record), `new` (not in system)
+
+---
+
+### `POST /api/purchases/resolve-cert`
+
+Auth: RequireAuth
+
+Resolves a PSA cert number to card metadata via external lookup.
+
+**Body:**
+```json
+{ "certNumber": "12345678" }
+```
+
+**Response:** `200 OK` — `ResolveCertResult`
+```json
+{
+  "certNumber": "12345678",
+  "cardName": "Charizard",
+  "grade": 10,
+  "year": "1999",
+  "category": "Pokemon",
+  "subject": "Charizard"
+}
+```
+
+**Errors:** `400` missing certNumber; `404` cert not found
+
+---
+
+### `PATCH /api/purchases/{purchaseId}/buy-cost`
+
+Auth: RequireAuth
+
+Updates the buy cost of a purchase.
+
+**Path params:** `purchaseId` (purchase UUID)
+
+**Body:**
+```json
+{ "buyCostCents": 84000 }
+```
+
+**Response:** `204 No Content`
+
+**Errors:** `400` validation error; `404` purchase not found
+
+---
+
+## DH Integration
+
+### `POST /api/dh/match`
+
+Auth: RequireAuth
+
+Kicks off an async bulk match of unmatched inventory cards against the DH catalog. Returns immediately; progress is visible via `GET /api/dh/status`.
+
+**Body:** (empty)
+
+**Response:** `202 Accepted`
+```json
+{ "status": "started" }
+```
+
+**Errors:** `409` bulk match already running
+
+---
+
+### `GET /api/dh/unmatched`
+
+Auth: RequireAuth
+
+Returns inventory cards that do not yet have a DH mapping (push status = unmatched).
+
+**Response:** `200 OK`
+```json
+{
+  "unmatched": [
+    {
+      "purchase_id": "uuid",
+      "card_name": "Charizard",
+      "set_name": "Base Set",
+      "card_number": "4",
+      "cert_number": "12345678",
+      "grade": 10,
+      "cl_value_cents": 120000,
+      "candidates": [
+        { "dh_card_id": 123, "card_name": "Charizard", "set_name": "Base Set" }
+      ]
+    }
+  ],
+  "count": 1
+}
+```
+`candidates` is present only for ambiguous matches.
+
+---
+
+### `GET /api/dh/intelligence`
+
+Auth: RequireAuth
+
+Returns market intelligence data for a specific card.
+
+**Query params:** `card_name` (required), `set_name` (required), `card_number` (optional)
+
+**Response:** `200 OK` — market intelligence object
+
+**Errors:** `400` missing card_name or set_name; `404` no intelligence data found
+
+---
+
+### `GET /api/dh/suggestions`
+
+Auth: RequireAuth
+
+Returns the latest DH buy/sell suggestions.
+
+**Response:** `200 OK`
+```json
+{
+  "suggestions": [
+    {
+      "SuggestionDate": "2025-01-15",
+      "Type": "cards",
+      "Category": "hottest_cards",
+      "Rank": 1,
+      "CardName": "Charizard",
+      "SetName": "Base Set",
+      "CardNumber": "4",
+      "ImageURL": "https://...",
+      "CurrentPriceCents": 120000,
+      "ConfidenceScore": 0.95,
+      "Reasoning": "Strong demand..."
+    }
+  ],
+  "count": 10
+}
+```
+
+---
+
+### `GET /api/dh/suggestions/inventory-alerts`
+
+Auth: RequireAuth
+
+Cross-references latest DH suggestions against current inventory. Returns only suggestions that match cards in your unsold inventory.
+
+**Response:** `200 OK`
+```json
+{
+  "alerts": [
+    { ...Suggestion... }
+  ],
+  "count": 3
+}
+```
+
+---
+
+### `GET /api/dh/status`
+
+Auth: RequireAuth
+
+Returns aggregate stats for the DH integration including match counts, API health, and remote inventory/order counts.
+
+**Response:** `200 OK`
+```json
+{
+  "intelligence_count": 500,
+  "intelligence_last_fetch": "2025-01-15T10:00:00Z",
+  "suggestions_count": 20,
+  "suggestions_last_fetch": "2025-01-15T10:00:00Z",
+  "unmatched_count": 5,
+  "pending_count": 3,
+  "mapped_count": 120,
+  "bulk_match_running": false,
+  "bulk_match_error": "",
+  "api_health": {
+    "totalCalls": 100,
+    "successRate": 98.5,
+    "avgLatencyMs": 220
+  },
+  "dh_inventory_count": 130,
+  "dh_listings_count": 80,
+  "dh_orders_count": 45
+}
+```
+
+---
+
+### `POST /api/dh/fix-match`
+
+Auth: RequireAuth
+
+Manually resolves an unmatched card by pasting a DH URL. Parses the DH card ID, saves the mapping, pushes to DH inventory, and marks the purchase as manually matched.
+
+**Body:**
+```json
+{
+  "purchaseId": "uuid",
+  "dhUrl": "https://doubleholo.com/card/12345/..."
+}
+```
+
+**Response:** `200 OK`
+```json
+{
+  "status": "ok",
+  "dhCardId": 12345,
+  "dhInventoryId": 67890
+}
+```
+
+**Errors:** `400` missing fields, invalid URL, or no market value; `404` purchase not found; `502` DH API error
+
+---
+
+### `POST /api/dh/select-match`
+
+Auth: RequireAuth
+
+Selects one of the stored ambiguous candidates for a purchase. Validates the choice against stored candidates, pushes to DH inventory, and persists the match.
+
+**Body:**
+```json
+{
+  "purchaseId": "uuid",
+  "dhCardId": 12345
+}
+```
+
+**Response:** `200 OK`
+```json
+{
+  "status": "ok",
+  "dhCardId": 12345,
+  "dhInventoryId": 67890
+}
+```
+
+**Errors:** `400` invalid fields, card ID not among candidates, or no market value; `404` purchase not found; `502` DH API error
+
+---
+
+### `POST /api/dh/approve/{purchaseId}`
+
+Auth: RequireAuth
+
+Approves a held DH push item. Clears the hold and re-queues the purchase for DH push.
+
+**Path params:** `purchaseId` (purchase UUID)
+
+**Response:** `200 OK`
+```json
+{ "status": "approved" }
+```
+
+**Errors:** `400` validation error; `404` purchase not found; `503` DH approve service not configured
+
+---
+
+### `GET /api/admin/dh-push-config`
+
+Auth: RequireAdmin
+
+Returns the current DH push safety configuration (thresholds for price swing, disagreement, etc.).
+
+**Response:** `200 OK` — `DHPushConfig`
+```json
+{
+  "swingPctThreshold": 20,
+  "swingMinCents": 5000,
+  "disagreementPctThreshold": 25,
+  "unreviewedChangePctThreshold": 15,
+  "unreviewedChangeMinCents": 3000,
+  "initialPushValueFloorPct": 50,
+  "updatedAt": "2025-01-01T00:00:00Z"
+}
+```
+
+**Errors:** `503` DH approve service not configured
+
+---
+
+### `PUT /api/admin/dh-push-config`
+
+Auth: RequireAdmin
+
+Saves the DH push safety configuration.
+
+**Body:** `DHPushConfig` object (same shape as GET response)
+
+**Response:** `200 OK` — updated `DHPushConfig`
+
+**Errors:** `400` validation error; `503` DH approve service not configured
+
+---
+
+## Admin Price Flags
+
+### `GET /api/admin/price-flags`
+
+Auth: RequireAdmin
+
+Lists price flags for admin review.
+
+**Query params:** `status` (optional: `open`, `resolved`, `all`; defaults to `open`)
+
+**Response:** `200 OK`
+```json
+{
+  "flags": [
+    {
+      "id": 1,
+      "purchaseId": "uuid",
+      "flaggedBy": 1,
+      "flaggedAt": "2025-01-01T00:00:00Z",
+      "reason": "wrong_match",
+      "cardName": "Charizard",
+      "setName": "Base Set",
+      "cardNumber": "4",
+      "grade": 10,
+      "certNumber": "12345678",
+      "flaggedByEmail": "user@example.com",
+      "marketPriceCents": 120000,
+      "clValueCents": 115000,
+      "reviewedPriceCents": 0,
+      "sourcePrices": []
+    }
+  ],
+  "total": 1
+}
+```
+
+**Errors:** `400` invalid status value
+
+---
+
+### `PATCH /api/admin/price-flags/{flagId}/resolve`
+
+Auth: RequireAdmin
+
+Resolves a price flag.
+
+**Path params:** `flagId` (int64)
+
+**Response:** `204 No Content`
+
+**Errors:** `400` invalid flag ID; `404` flag not found or already resolved
+
+---
+
+## Admin — CardLadder
+
+### `POST /api/admin/cardladder/config`
+
+Auth: RequireAdmin
+
+Authenticates with Card Ladder via Firebase and stores the refresh token.
+
+**Body:**
+```json
+{
+  "email": "user@example.com",
+  "password": "secret",
+  "collectionId": "collection-uuid",
+  "firebaseApiKey": "AIza..."
+}
+```
+
+**Response:** `200 OK`
+```json
+{ "status": "connected" }
+```
+
+**Errors:** `400` missing required fields; `401` Firebase authentication failed
+
+---
+
+### `GET /api/admin/cardladder/status`
+
+Auth: RequireAdmin
+
+Returns the current Card Ladder connection status including mapped card count and last refresh run stats.
+
+**Response:** `200 OK`
+```json
+{
+  "configured": true,
+  "email": "user@example.com",
+  "collectionId": "collection-uuid",
+  "cardsMapped": 120,
+  "lastRun": {
+    "startedAt": "2025-01-15T10:00:00Z",
+    "duration": "2m30s",
+    "updated": 15,
+    "failed": 0
+  }
+}
+```
+
+---
+
+### `POST /api/admin/cardladder/refresh`
+
+Auth: RequireAdmin
+
+Triggers a manual Card Ladder value sync.
+
+**Response:** `200 OK`
+```json
+{ "status": "refresh complete" }
+```
+
+**Errors:** `503` Card Ladder refresh scheduler not available
+
+---
+
+### `POST /api/admin/cardladder/add-card`
+
+Auth: RequireAdmin
+
+Adds a single card to the Card Ladder collection by cert number.
+
+**Body:**
+```json
+{
+  "certNumber": "12345678",
+  "grader": "psa",
+  "investment": 840.00,
+  "datePurchased": "2025-01-15"
+}
+```
+`grader` defaults to `"psa"`. `datePurchased` is optional.
+
+**Response:** `200 OK`
+```json
+{
+  "certNumber": "12345678",
+  "player": "Charizard",
+  "set": "Base Set",
+  "condition": "PSA 10",
+  "estimatedValue": 1200.00,
+  "status": "synced"
+}
+```
+
+**Errors:** `400` missing certNumber; `412` Card Ladder not configured; `503` client not configured
+
+---
+
+### `POST /api/admin/cardladder/sync-to-cl`
+
+Auth: RequireAdmin
+
+Pushes all unsold purchases with cert numbers to the Card Ladder collection. Cards already present are skipped.
+
+**Response:** `200 OK` — `CLSyncResult`
+```json
+{
+  "synced": 10,
+  "skipped": 5,
+  "failed": 0,
+  "total": 15,
+  "results": [
+    {
+      "certNumber": "12345678",
+      "player": "Charizard",
+      "set": "Base Set",
+      "condition": "PSA 10",
+      "estimatedValue": 1200.00,
+      "status": "synced"
+    }
+  ]
+}
+```
+
+**Errors:** `412` Card Ladder not configured; `503` client or purchase lister not available
+
+---
+
+## Admin — Market Movers
+
+### `POST /api/admin/marketmovers/config`
+
+Auth: RequireAdmin
+
+Authenticates with Market Movers and stores the refresh token.
+
+**Body:**
+```json
+{
+  "username": "user@example.com",
+  "password": "secret"
+}
+```
+
+**Response:** `200 OK`
+```json
+{ "status": "connected" }
+```
+
+**Errors:** `400` missing username or password; `401` Market Movers authentication failed
+
+---
+
+### `GET /api/admin/marketmovers/status`
+
+Auth: RequireAdmin
+
+Returns the current Market Movers connection status including mapped card count, price stats, and last refresh run stats.
+
+**Response:** `200 OK`
+```json
+{
+  "configured": true,
+  "username": "user@example.com",
+  "cardsMapped": 80,
+  "priceStats": { ... },
+  "lastRun": {
+    "startedAt": "2025-01-15T10:00:00Z",
+    "duration": "1m15s",
+    "updated": 12,
+    "failed": 0
+  }
+}
+```
+
+---
+
+### `POST /api/admin/marketmovers/refresh`
+
+Auth: RequireAdmin
+
+Triggers a manual Market Movers value sync.
+
+**Response:** `200 OK`
+```json
+{ "status": "refresh complete" }
+```
+
+**Errors:** `503` Market Movers refresh scheduler not available
+
+---
+
+### `POST /api/admin/marketmovers/sync-collection`
+
+Auth: RequireAdmin
+
+Pushes unmapped unsold inventory items to the Market Movers collection. Items must have a resolved MM collectible_id and must not already have a collection_item_id.
+
+**Response:** `200 OK` — `MMSyncResult`
+```json
+{
+  "synced": 8,
+  "skipped": 3,
+  "failed": 0,
+  "total": 11,
+  "errors": []
+}
+```
+
+**Errors:** `503` Market Movers client or purchase lister not available
+
+---
+
+## Opportunities
+
+### `GET /api/opportunities/acquisition`
+
+Auth: RequireAuth
+
+Returns raw-to-graded arbitrage opportunities across all campaigns.
+
+**Response:** `200 OK` — Array of `AcquisitionOpportunity`
+```json
+[
+  {
+    "cardName": "Charizard",
+    "setName": "Base Set",
+    "cardNumber": "4",
+    "certNumber": "12345678",
+    "rawNMCents": 50000,
+    "gradedEstimates": { "10": 120000, "9": 80000 },
+    "bestGrade": "10",
+    "bestGradedCents": 120000,
+    "profitCents": 55000,
+    "profitROI": 1.1,
+    "source": "doubleholo"
+  }
+]
+```
+
+---
+
+### `GET /api/opportunities/crack`
+
+Auth: RequireAuth
+
+Returns cross-campaign slab crack arbitrage candidates (cards where raw value exceeds slabbed value net of cracking cost).
+
+**Response:** `200 OK` — Array of `CrackAnalysis`
+
+---
+
+## AI Picks
+
+### `GET /api/picks`
+
+Auth: RequireAuth
+
+Returns the latest AI-generated buy/sell picks.
+
+**Response:** `200 OK`
+```json
+{
+  "picks": [
+    {
+      "id": 1,
+      "date": "2025-01-15",
+      "card_name": "Charizard",
+      "set_name": "Base Set",
+      "grade": "10",
+      "direction": "buy",
+      "confidence": "high",
+      "buy_thesis": "Strong demand indicators...",
+      "target_buy_price": 840.00,
+      "expected_sell_price": 1200.00,
+      "signals": [
+        { "type": "market", "description": "Rising trend", "strength": 0.9 }
+      ],
+      "rank": 1,
+      "source": "ai",
+      "created_at": "2025-01-15T10:00:00Z"
+    }
+  ]
+}
+```
+
+---
+
+### `GET /api/picks/history`
+
+Auth: RequireAuth
+
+Returns historical picks over a time window.
+
+**Query params:** `days` (int, default 7, max 90)
+
+**Response:** `200 OK`
+```json
+{
+  "picks": [ ...pickResponse... ]
+}
+```
+
+---
+
+### `GET /api/picks/watchlist`
+
+Auth: RequireAuth
+
+Returns the user's acquisition watchlist.
+
+**Response:** `200 OK`
+```json
+{
+  "items": [
+    {
+      "id": 1,
+      "card_name": "Charizard",
+      "set_name": "Base Set",
+      "grade": "10",
+      "source": "manual",
+      "active": true,
+      "latest_assessment": { ...pickResponse or null... },
+      "added_at": "2025-01-01T00:00:00Z",
+      "updated_at": "2025-01-01T00:00:00Z"
+    }
+  ]
+}
+```
+
+---
+
+### `POST /api/picks/watchlist`
+
+Auth: RequireAuth
+
+Adds a card to the acquisition watchlist.
+
+**Body:**
+```json
+{
+  "card_name": "Charizard",
+  "set_name": "Base Set",
+  "grade": "10"
+}
+```
+
+**Response:** `201 Created`
+
+**Errors:** `400` missing required fields; `409` card already on watchlist
+
+---
+
+### `DELETE /api/picks/watchlist/{id}`
+
+Auth: RequireAuth
+
+Removes a card from the watchlist.
+
+**Path params:** `id` (int)
+
+**Response:** `204 No Content`
+
+**Errors:** `400` invalid id; `404` watchlist item not found
+
+---
+
+## Social Metrics
+
+### `GET /api/social/posts/{id}/metrics`
+
+Auth: RequireAdmin
+
+Returns engagement metrics snapshots for a published post.
+
+**Path params:** `id` (UUID)
+
+**Response:** `200 OK` — Array of `PostMetrics`
+```json
+[
+  {
+    "id": 1,
+    "postId": "uuid",
+    "impressions": 1500,
+    "reach": 1200,
+    "likes": 85,
+    "comments": 12,
+    "saves": 20,
+    "shares": 5,
+    "polledAt": "2025-01-15T10:00:00Z"
+  }
+]
+```
+
+**Errors:** `503` metrics not configured
+
+---
+
+### `GET /api/social/metrics/summary`
+
+Auth: RequireAdmin
+
+Returns the latest metrics for all published posts.
+
+**Response:** `200 OK` — Array of `MetricsSummary`
+```json
+[
+  {
+    "postId": "uuid",
+    "postType": "sale_card",
+    "coverTitle": "Charizard PSA 10",
+    "impressions": 1500,
+    "reach": 1200,
+    "likes": 85,
+    "comments": 12,
+    "saves": 20,
+    "shares": 5,
+    "publishedAt": "2025-01-10T10:00:00Z"
+  }
+]
+```
+
+**Errors:** `503` metrics not configured
+
+---
+
+### `GET /api/image-proxy`
+
+Auth: RequireAdmin
+
+Fetches an external card image and serves it same-origin to avoid CORS issues during client-side slide rendering. Only allows images from the PSA card image CDN.
+
+**Query params:** `url` (required, must be an https URL on an allowed host)
+
+**Response:** `200 OK` with `Content-Type: image/*`, `Cache-Control: public, max-age=86400`
+
+**Errors:** `400` missing url param; `403` URL not on allowed host; `502` upstream fetch failed

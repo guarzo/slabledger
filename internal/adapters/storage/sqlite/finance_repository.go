@@ -123,7 +123,7 @@ func (r *CampaignsRepository) UpdateCashflowConfig(ctx context.Context, cfg *cam
 
 // --- Capital Summary ---
 
-func (r *CampaignsRepository) GetCapitalSummary(ctx context.Context) (*campaigns.CapitalSummary, error) {
+func (r *CampaignsRepository) GetCapitalRawData(ctx context.Context) (*campaigns.CapitalRawData, error) {
 	// Outstanding: invoiced non-refunded purchases minus payments
 	var outstanding, refunded int
 	err := r.db.QueryRowContext(ctx,
@@ -165,46 +165,10 @@ func (r *CampaignsRepository) GetCapitalSummary(ctx context.Context) (*campaigns
 		return nil, err
 	}
 
-	weeksToCover := campaigns.WeeksToCoverNoData
-	if recovery30d > 0 {
-		weeklyRate := float64(recovery30d) / campaigns.WeeksPerMonth
-		weeksToCover = float64(outstanding) / weeklyRate
-	}
-
-	trend := campaigns.TrendStable
-	if recovery30d > 0 && recoveryPrior30d == 0 {
-		trend = campaigns.TrendImproving
-	} else if recovery30d > 0 && recoveryPrior30d > 0 {
-		ratio := float64(recovery30d) / float64(recoveryPrior30d)
-		if ratio > 1+campaigns.TrendChangeThreshold {
-			trend = campaigns.TrendImproving
-		} else if ratio < 1-campaigns.TrendChangeThreshold {
-			trend = campaigns.TrendDeclining
-		}
-	}
-
-	alertLevel := campaigns.AlertOK
-	if recovery30d > 0 {
-		if weeksToCover > campaigns.WeeksToCoverCriticalThreshold {
-			alertLevel = campaigns.AlertCritical
-		} else if weeksToCover >= campaigns.WeeksToCoverWarningThreshold {
-			alertLevel = campaigns.AlertWarning
-		}
-	} else {
-		if outstanding > campaigns.FallbackCriticalCents {
-			alertLevel = campaigns.AlertCritical
-		} else if outstanding > campaigns.FallbackWarningCents {
-			alertLevel = campaigns.AlertWarning
-		}
-	}
-
-	return &campaigns.CapitalSummary{
+	return &campaigns.CapitalRawData{
 		OutstandingCents:          outstanding,
 		RecoveryRate30dCents:      recovery30d,
 		RecoveryRate30dPriorCents: recoveryPrior30d,
-		WeeksToCover:              weeksToCover,
-		RecoveryTrend:             trend,
-		AlertLevel:                alertLevel,
 		RefundedCents:             refunded,
 		PaidCents:                 paidTotal,
 		UnpaidInvoiceCount:        unpaidCount,
