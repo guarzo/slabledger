@@ -121,23 +121,15 @@ func (h *PSASyncHandler) HandleAssignPendingItem(w http.ResponseWriter, r *http.
 		return
 	}
 
-	// Find the pending item by listing all and filtering by ID.
-	items, ok := serviceCall(w, ctx, h.logger, "failed to list pending items", func() ([]campaigns.PendingItem, error) {
-		return h.pendingRepo.ListPendingItems(ctx)
-	})
-	if !ok {
-		return
-	}
-
-	var item *campaigns.PendingItem
-	for i := range items {
-		if items[i].ID == id {
-			item = &items[i]
-			break
+	// Find the pending item by ID.
+	item, err := h.pendingRepo.GetPendingItemByID(ctx, id)
+	if err != nil {
+		if campaigns.IsPendingItemNotFound(err) {
+			writeError(w, http.StatusNotFound, "pending item not found")
+			return
 		}
-	}
-	if item == nil {
-		writeError(w, http.StatusNotFound, "pending item not found")
+		h.logger.Error(ctx, "failed to get pending item", observability.Err(err))
+		writeError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
 
@@ -164,8 +156,15 @@ func (h *PSASyncHandler) HandleAssignPendingItem(w http.ResponseWriter, r *http.
 	}
 
 	if err := h.pendingRepo.ResolvePendingItem(ctx, id, body.CampaignID); err != nil {
-		h.logger.Error(ctx, "failed to resolve pending item", observability.Err(err))
-		// Purchase was already created; log the error but still return success.
+		h.logger.Error(ctx, "failed to resolve pending item after purchase created",
+			observability.Err(err),
+			observability.String("pendingItemID", id),
+			observability.String("campaignID", body.CampaignID))
+		writeJSON(w, http.StatusOK, map[string]any{
+			"purchase": purchase,
+			"warning":  "purchase created but pending item could not be resolved",
+		})
+		return
 	}
 
 	writeJSON(w, http.StatusOK, purchase)

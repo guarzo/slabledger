@@ -22,7 +22,8 @@ func NewPendingItemsRepository(db *sql.DB) *PendingItemsRepository {
 var _ campaigns.PendingItemRepository = (*PendingItemsRepository)(nil)
 
 // SavePendingItems upserts pending items by cert_number.
-// Resolved items (resolved_at IS NOT NULL) are skipped.
+// If an unresolved row already exists for the cert, it is updated in place.
+// Resolved items (resolved_at IS NOT NULL) are left untouched.
 func (r *PendingItemsRepository) SavePendingItems(ctx context.Context, items []campaigns.PendingItem) error {
 	if len(items) == 0 {
 		return nil
@@ -33,32 +34,53 @@ func (r *PendingItemsRepository) SavePendingItems(ctx context.Context, items []c
 	}
 	defer tx.Rollback() //nolint:errcheck
 
-	stmt, err := tx.PrepareContext(ctx, `
-		INSERT INTO psa_pending_items (id, cert_number, card_name, set_name, card_number, grade, buy_cost_cents, purchase_date, status, candidates, source)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT(cert_number) DO UPDATE SET
-			status = excluded.status,
-			candidates = excluded.candidates,
-			buy_cost_cents = excluded.buy_cost_cents,
-			card_name = excluded.card_name,
-			set_name = excluded.set_name,
-			card_number = excluded.card_number,
-			grade = excluded.grade,
-			purchase_date = excluded.purchase_date,
-			source = excluded.source
-		WHERE resolved_at IS NULL
+	updateStmt, err := tx.PrepareContext(ctx, `
+		UPDATE psa_pending_items SET
+			status = ?, candidates = ?, buy_cost_cents = ?,
+			card_name = ?, set_name = ?, card_number = ?,
+			grade = ?, purchase_date = ?, source = ?
+		WHERE cert_number = ? AND resolved_at IS NULL
 	`)
 	if err != nil {
 		return err
 	}
-	defer stmt.Close() //nolint:errcheck
+	defer updateStmt.Close() //nolint:errcheck
+
+	insertStmt, err := tx.PrepareContext(ctx, `
+		INSERT INTO psa_pending_items (id, cert_number, card_name, set_name, card_number, grade, buy_cost_cents, purchase_date, status, candidates, source)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`)
+	if err != nil {
+		return err
+	}
+	defer insertStmt.Close() //nolint:errcheck
 
 	for _, item := range items {
 		candidatesJSON, err := json.Marshal(item.Candidates)
 		if err != nil {
 			candidatesJSON = []byte("[]")
 		}
-		if _, err := stmt.ExecContext(ctx,
+
+		// Try to update an existing unresolved row first.
+		res, err := updateStmt.ExecContext(ctx,
+			item.Status, string(candidatesJSON), item.BuyCostCents,
+			item.CardName, item.SetName, item.CardNumber,
+			item.Grade, item.PurchaseDate, item.Source,
+			item.CertNumber,
+		)
+		if err != nil {
+			return err
+		}
+		n, err := res.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if n > 0 {
+			continue // updated existing unresolved row
+		}
+
+		// No unresolved row exists — insert a new one.
+		if _, err := insertStmt.ExecContext(ctx,
 			item.ID, item.CertNumber, item.CardName, item.SetName,
 			item.CardNumber, item.Grade, item.BuyCostCents, item.PurchaseDate,
 			item.Status, string(candidatesJSON), item.Source,
@@ -99,7 +121,37 @@ func (r *PendingItemsRepository) ListPendingItems(ctx context.Context) ([]campai
 		}
 		items = append(items, item)
 	}
+	if items == nil {
+		items = []campaigns.PendingItem{}
+	}
 	return items, rows.Err()
+}
+
+// GetPendingItemByID returns a single unresolved pending item by ID.
+func (r *PendingItemsRepository) GetPendingItemByID(ctx context.Context, id string) (*campaigns.PendingItem, error) {
+	row := r.db.QueryRowContext(ctx, `
+		SELECT id, cert_number, card_name, set_name, card_number, grade,
+		       buy_cost_cents, purchase_date, status, candidates, source, created_at
+		FROM psa_pending_items
+		WHERE id = ? AND resolved_at IS NULL
+	`, id)
+
+	var item campaigns.PendingItem
+	var candidatesJSON string
+	if err := row.Scan(
+		&item.ID, &item.CertNumber, &item.CardName, &item.SetName,
+		&item.CardNumber, &item.Grade, &item.BuyCostCents, &item.PurchaseDate,
+		&item.Status, &candidatesJSON, &item.Source, &item.CreatedAt,
+	); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, campaigns.ErrPendingItemNotFound
+		}
+		return nil, err
+	}
+	if err := json.Unmarshal([]byte(candidatesJSON), &item.Candidates); err != nil {
+		item.Candidates = nil
+	}
+	return &item, nil
 }
 
 // ResolvePendingItem marks a pending item as resolved with the given campaign ID.

@@ -24,12 +24,30 @@ type PendingItem struct {
 	ResolvedCampaignID string     `json:"resolvedCampaignId,omitempty"`
 }
 
+// importSourceKey is a context key for propagating the import source.
+type importSourceKey struct{}
+
+// WithImportSource returns a context carrying the given import source ("scheduler" or "manual").
+func WithImportSource(ctx context.Context, source string) context.Context {
+	return context.WithValue(ctx, importSourceKey{}, source)
+}
+
+// importSourceFromContext returns the import source from context, defaulting to "manual".
+func importSourceFromContext(ctx context.Context) string {
+	if v, ok := ctx.Value(importSourceKey{}).(string); ok && v != "" {
+		return v
+	}
+	return "manual"
+}
+
 // PendingItemRepository manages persistent storage of pending PSA import items.
 type PendingItemRepository interface {
 	// SavePendingItems upserts pending items by cert_number. Resolved items are skipped.
 	SavePendingItems(ctx context.Context, items []PendingItem) error
 	// ListPendingItems returns all unresolved pending items, ordered by created_at DESC.
 	ListPendingItems(ctx context.Context) ([]PendingItem, error)
+	// GetPendingItemByID returns a single unresolved pending item by ID.
+	GetPendingItemByID(ctx context.Context, id string) (*PendingItem, error)
 	// ResolvePendingItem marks a pending item as resolved with the given campaign ID.
 	ResolvePendingItem(ctx context.Context, id string, campaignID string) error
 	// DismissPendingItem marks a pending item as resolved with an empty campaign ID.

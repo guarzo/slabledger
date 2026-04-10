@@ -354,9 +354,10 @@ export function useAssignPendingItem() {
   return useMutation({
     mutationFn: ({ id, campaignId }: { id: string; campaignId: string }) =>
       api.assignPSAPendingItem(id, campaignId),
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: queryKeys.purchases.psaPendingItems });
       qc.invalidateQueries({ queryKey: queryKeys.admin.psaSyncStatus });
+      invalidatePurchaseRelatedQueries(qc, variables.campaignId);
     },
   });
 }

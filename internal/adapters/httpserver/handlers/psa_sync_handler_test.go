@@ -73,14 +73,15 @@ func TestPSASyncHandler_HandleListPendingItems(t *testing.T) {
 func TestPSASyncHandler_HandleAssignPendingItem(t *testing.T) {
 	resolved := false
 	pendingRepo := &mocks.MockPendingItemRepository{
-		ListPendingItemsFn: func(ctx context.Context) ([]campaigns.PendingItem, error) {
-			return []campaigns.PendingItem{
-				{
+		GetPendingItemByIDFn: func(ctx context.Context, id string) (*campaigns.PendingItem, error) {
+			if id == "pi-1" {
+				return &campaigns.PendingItem{
 					ID: "pi-1", CertNumber: "CERT001", CardName: "Charizard",
 					Grade: 10, BuyCostCents: 1500, PurchaseDate: "2026-03-15",
 					Status: "ambiguous", Candidates: []string{"c1", "c2"},
-				},
-			}, nil
+				}, nil
+			}
+			return nil, campaigns.ErrPendingItemNotFound
 		},
 		ResolvePendingItemFn: func(ctx context.Context, id, campaignID string) error {
 			resolved = true

@@ -10,6 +10,7 @@ import (
 type MockPendingItemRepository struct {
 	SavePendingItemsFn   func(ctx context.Context, items []campaigns.PendingItem) error
 	ListPendingItemsFn   func(ctx context.Context) ([]campaigns.PendingItem, error)
+	GetPendingItemByIDFn func(ctx context.Context, id string) (*campaigns.PendingItem, error)
 	ResolvePendingItemFn func(ctx context.Context, id string, campaignID string) error
 	DismissPendingItemFn func(ctx context.Context, id string) error
 	CountPendingItemsFn  func(ctx context.Context) (int, error)
@@ -27,6 +28,13 @@ func (m *MockPendingItemRepository) ListPendingItems(ctx context.Context) ([]cam
 		return m.ListPendingItemsFn(ctx)
 	}
 	return nil, nil
+}
+
+func (m *MockPendingItemRepository) GetPendingItemByID(ctx context.Context, id string) (*campaigns.PendingItem, error) {
+	if m.GetPendingItemByIDFn != nil {
+		return m.GetPendingItemByIDFn(ctx, id)
+	}
+	return nil, campaigns.ErrPendingItemNotFound
 }
 
 func (m *MockPendingItemRepository) ResolvePendingItem(ctx context.Context, id string, campaignID string) error {

@@ -144,7 +144,7 @@ func (s *service) ImportPSAExportGlobal(ctx context.Context, rows []PSAExportRow
 				PurchaseDate: r.PurchaseDate,
 				Status:       r.Status,
 				Candidates:   r.Candidates,
-				Source:       "manual", // overridden to "scheduler" by the scheduler if needed
+				Source:       importSourceFromContext(ctx),
 			})
 		}
 		if len(pending) > 0 {

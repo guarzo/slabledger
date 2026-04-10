@@ -47,7 +47,7 @@ export function PSASyncTab({ enabled = true }: { enabled?: boolean }) {
     <div className="space-y-3">
       {data.configured && (
         <div className="text-sm text-[var(--text-muted)]">
-          <p>Sheet: <span className="text-[var(--text)] font-mono text-xs">{data.spreadsheetId?.slice(0, 12)}...</span></p>
+          <p>Sheet: <span className="text-[var(--text)] font-mono text-xs">{data.spreadsheetId && data.spreadsheetId.length > 12 ? data.spreadsheetId.slice(0, 12) + '...' : data.spreadsheetId}</span></p>
           <p>Interval: <span className="text-[var(--text)]">{data.interval}</span></p>
         </div>
       )}

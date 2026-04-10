@@ -155,6 +155,8 @@ export default function OperationsTab({ campaigns, operationState, setOperationS
     queryClient.invalidateQueries({ queryKey: queryKeys.admin.dhStatus });
     queryClient.invalidateQueries({ queryKey: queryKeys.admin.dhUnmatched });
     queryClient.invalidateQueries({ queryKey: queryKeys.admin.marketMoversStatus });
+    queryClient.invalidateQueries({ queryKey: queryKeys.purchases.psaPendingItems });
+    queryClient.invalidateQueries({ queryKey: queryKeys.admin.psaSyncStatus });
   }
 
   async function handleMMSync() {

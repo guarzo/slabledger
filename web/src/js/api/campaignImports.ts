@@ -194,9 +194,9 @@ proto.listPSAPendingItems = async function (this: APIClient): Promise<{ items: P
 };
 
 proto.assignPSAPendingItem = async function (this: APIClient, id: string, campaignId: string): Promise<unknown> {
-  return this.post('/purchases/psa-pending/' + id + '/assign', { campaignId });
+  return this.post(`/purchases/psa-pending/${encodeURIComponent(id)}/assign`, { campaignId });
 };
 
 proto.dismissPSAPendingItem = async function (this: APIClient, id: string): Promise<void> {
-  await this.deleteResource('/purchases/psa-pending/' + id);
+  await this.deleteResource(`/purchases/psa-pending/${encodeURIComponent(id)}`);
 };

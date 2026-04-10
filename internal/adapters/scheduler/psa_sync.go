@@ -127,8 +127,9 @@ func (s *PSASyncScheduler) tick(ctx context.Context) {
 		return
 	}
 	if len(parseErrors) > 0 {
-		s.logger.Warn(ctx, "PSA sheet parse warnings",
-			observability.Int("parse_errors", len(parseErrors)))
+		s.logger.Warn(ctx, "PSA sheet parse failures — rows skipped",
+			observability.Int("skipped_rows", len(parseErrors)),
+			observability.String("spreadsheet_id", s.spreadsheetID))
 	}
 	if len(psaRows) == 0 {
 		s.logger.Warn(ctx, "no valid PSA rows found in sheet")
@@ -137,6 +138,7 @@ func (s *PSASyncScheduler) tick(ctx context.Context) {
 
 	importCtx, importCancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer importCancel()
+	importCtx = campaigns.WithImportSource(importCtx, "scheduler")
 
 	result, err := s.importer.ImportPSAExportGlobal(importCtx, psaRows)
 	if err != nil {
@@ -150,7 +152,8 @@ func (s *PSASyncScheduler) tick(ctx context.Context) {
 		observability.Int("refunded", result.Refunded),
 		observability.Int("unmatched", result.Unmatched),
 		observability.Int("skipped", result.Skipped),
-		observability.Int("failed", result.Failed))
+		observability.Int("failed", result.Failed),
+		observability.Int("import_errors", len(result.Errors)))
 
 	s.statsMu.Lock()
 	s.lastRunStats = &PSASyncRunStats{

@@ -14,7 +14,7 @@ function PendingRow({ item }: { item: PSAPendingItem }) {
 
   const campaigns = campaignsData ?? [];
   const dropdownCampaigns = item.status === 'ambiguous'
-    ? campaigns.filter((c) => item.candidates.includes(c.id))
+    ? campaigns.filter((c) => (item.candidates ?? []).includes(c.id))
     : campaigns.filter((c) => c.phase === 'active');
 
   const handleAssign = () => {
@@ -35,7 +35,8 @@ function PendingRow({ item }: { item: PSAPendingItem }) {
           {item.status}
         </span>
       </td>
-      <td className="py-2 flex items-center gap-2">
+      <td className="py-2">
+        <div className="flex items-center gap-2">
         <select
           value={selectedCampaign}
           onChange={(e) => setSelectedCampaign(e.target.value)}
@@ -61,13 +62,14 @@ function PendingRow({ item }: { item: PSAPendingItem }) {
         >
           X
         </button>
+        </div>
       </td>
     </tr>
   );
 }
 
 export function PendingItemsCard() {
-  const { data, isLoading } = usePSAPendingItems();
+  const { data, isLoading, isError } = usePSAPendingItems();
   const items = data?.items ?? [];
 
   return (
@@ -83,7 +85,11 @@ export function PendingItemsCard() {
 
       {isLoading && <p className="text-sm text-[var(--text-muted)]">Loading...</p>}
 
-      {!isLoading && items.length === 0 && (
+      {!isLoading && isError && (
+        <p className="text-sm text-red-400">Failed to load pending items.</p>
+      )}
+
+      {!isLoading && !isError && items.length === 0 && (
         <p className="text-sm text-[var(--text-muted)]">No pending items - all PSA imports matched or resolved.</p>
       )}
 

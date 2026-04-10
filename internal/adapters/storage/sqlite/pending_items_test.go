@@ -122,6 +122,39 @@ func TestPendingItems(t *testing.T) {
 		assert.True(t, found, "CERT-001 should still be in list")
 	})
 
+	t.Run("get pending item by ID", func(t *testing.T) {
+		// Save a new item for this test.
+		items := []campaigns.PendingItem{
+			{
+				ID:           "pi-get",
+				CertNumber:   "CERT-GET",
+				CardName:     "Venusaur",
+				SetName:      "Base Set",
+				CardNumber:   "15",
+				Grade:        7.0,
+				BuyCostCents: 15000,
+				PurchaseDate: "2026-03-10",
+				Status:       "ambiguous",
+				Candidates:   []string{"camp-a", "camp-b"},
+				Source:       "scheduler",
+			},
+		}
+		err := repo.SavePendingItems(ctx, items)
+		require.NoError(t, err)
+
+		got, err := repo.GetPendingItemByID(ctx, "pi-get")
+		require.NoError(t, err)
+		assert.Equal(t, "pi-get", got.ID)
+		assert.Equal(t, "Venusaur", got.CardName)
+		assert.Equal(t, []string{"camp-a", "camp-b"}, got.Candidates)
+	})
+
+	t.Run("get pending item by ID not found", func(t *testing.T) {
+		_, err := repo.GetPendingItemByID(ctx, "nonexistent-id")
+		require.Error(t, err)
+		assert.True(t, campaigns.IsPendingItemNotFound(err))
+	})
+
 	t.Run("resolve pending item", func(t *testing.T) {
 		// pi-2 is still unresolved — resolve it.
 		err := repo.ResolvePendingItem(ctx, "pi-2", "camp-x")
@@ -159,11 +192,18 @@ func TestPendingItems(t *testing.T) {
 		got, err := repo.ListPendingItems(ctx)
 		require.NoError(t, err)
 
-		// CERT-002 should NOT appear in unresolved list (it's still resolved).
+		// With partial unique index, a resolved cert CAN reappear as a new
+		// pending row. The old resolved row is untouched; a fresh unresolved
+		// row is inserted.
+		var found bool
 		for _, item := range got {
-			assert.NotEqual(t, "CERT-002", item.CertNumber,
-				"resolved cert should not reappear after upsert attempt")
+			if item.CertNumber == "CERT-002" {
+				found = true
+				assert.Equal(t, "pi-2-new", item.ID, "should be the new row, not the resolved one")
+				assert.Equal(t, "Pikachu Updated", item.CardName)
+			}
 		}
+		assert.True(t, found, "resolved cert should reappear as a new pending row")
 	})
 
 	t.Run("resolve not found returns error", func(t *testing.T) {
