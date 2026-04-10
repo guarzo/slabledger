@@ -84,6 +84,7 @@ func (rt *Router) registerAdminRoutes(mux *http.ServeMux) {
 		}
 		if rt.psaSyncHandler != nil {
 			mux.Handle("GET /api/admin/psa-sync/status", rt.authMW.RequireAdmin(http.HandlerFunc(rt.psaSyncHandler.HandleStatus)))
+			mux.Handle("POST /api/admin/psa-sync/refresh", rt.authMW.RequireAdmin(http.HandlerFunc(rt.psaSyncHandler.HandleRefresh)))
 		}
 		rt.logger.Info(context.Background(), "admin routes registered")
 	}

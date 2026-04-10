@@ -10,8 +10,9 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
-// PSASyncRefresher provides last-run stats from the PSA sync scheduler.
+// PSASyncRefresher runs a PSA sync cycle on demand and provides last-run stats.
 type PSASyncRefresher interface {
+	RunOnce(ctx context.Context) error
 	GetLastRunStats() *scheduler.PSASyncRunStats
 }
 
@@ -81,6 +82,21 @@ func (h *PSASyncHandler) HandleStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
+// HandleRefresh triggers a manual PSA sync cycle.
+// POST /api/admin/psa-sync/refresh
+func (h *PSASyncHandler) HandleRefresh(w http.ResponseWriter, r *http.Request) {
+	if h.refresher == nil {
+		writeError(w, http.StatusServiceUnavailable, "PSA sync scheduler not available")
+		return
+	}
+	if err := h.refresher.RunOnce(r.Context()); err != nil {
+		h.logger.Error(r.Context(), "manual PSA sync failed", observability.Err(err))
+		writeError(w, http.StatusInternalServerError, "sync failed")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "sync complete"})
+}
+
 // HandleListPendingItems returns all pending items awaiting user resolution.
 // GET /api/purchases/psa-pending
 func (h *PSASyncHandler) HandleListPendingItems(w http.ResponseWriter, r *http.Request) {
@@ -145,6 +161,10 @@ func (h *PSASyncHandler) HandleAssignPendingItem(w http.ResponseWriter, r *http.
 		PurchaseDate: item.PurchaseDate,
 	}
 
+	if h.service == nil {
+		writeError(w, http.StatusServiceUnavailable, "purchase creation not available")
+		return
+	}
 	if err := h.service.CreatePurchase(ctx, purchase); err != nil {
 		if campaigns.IsDuplicateCertNumber(err) {
 			writeError(w, http.StatusConflict, fmt.Sprintf("cert %s already exists", item.CertNumber))

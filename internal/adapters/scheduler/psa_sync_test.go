@@ -73,7 +73,7 @@ func TestPSASyncScheduler_Tick(t *testing.T) {
 				"spreadsheet-id", "Sheet1",
 			)
 
-			s.tick(context.Background())
+			s.runOnce(context.Background()) //nolint:errcheck
 
 			if importerCalled != tt.wantImporterCalled {
 				t.Errorf("importer called = %v, want %v", importerCalled, tt.wantImporterCalled)
@@ -132,7 +132,7 @@ func TestPSASyncScheduler_GetLastRunStats(t *testing.T) {
 	}
 
 	// Run tick
-	s.tick(context.Background())
+	s.runOnce(context.Background()) //nolint:errcheck
 
 	stats := s.GetLastRunStats()
 	if stats == nil {

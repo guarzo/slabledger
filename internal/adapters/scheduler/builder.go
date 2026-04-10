@@ -116,6 +116,7 @@ type BuildResult struct {
 	Group             *Group
 	CardLadderRefresh *CardLadderRefreshScheduler   // nil if Card Ladder is not configured
 	MMRefresh         *MarketMoversRefreshScheduler // nil if Market Movers is not configured
+	PSASync           *PSASyncScheduler             // nil if PSA sync is not configured
 }
 
 // BuildGroup constructs a scheduler Group from centralized configuration and dependencies.
@@ -123,6 +124,7 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 	var schedulers []Scheduler
 	var clRefresh *CardLadderRefreshScheduler
 	var mmRefresh *MarketMoversRefreshScheduler
+	var psaSync *PSASyncScheduler
 
 	// Price refresh scheduler
 	schedulerConfig := Config{
@@ -364,11 +366,12 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 
 	// PSA Google Sheets sync scheduler (if fetcher and importer are provided)
 	if deps.PSASheetFetcher != nil && deps.PSAImporter != nil && deps.PSASpreadsheetID != "" {
-		schedulers = append(schedulers, NewPSASyncScheduler(
+		psaSync = NewPSASyncScheduler(
 			deps.PSASheetFetcher, deps.PSAImporter,
 			deps.Logger, cfg.PSASync,
 			deps.PSASpreadsheetID, deps.PSATabName,
-		))
+		)
+		schedulers = append(schedulers, psaSync)
 	}
 
 	// Market Movers value refresh scheduler.
@@ -389,5 +392,6 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 		Group:             NewGroup(schedulers...),
 		CardLadderRefresh: clRefresh,
 		MMRefresh:         mmRefresh,
+		PSASync:           psaSync,
 	}
 }

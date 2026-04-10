@@ -374,6 +374,9 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	}
 	schedulerResult, cancelScheduler := initializeSchedulers(ctx, sDeps)
 
+	// Create pending items repository for PSA sync handler.
+	pendingItemsRepo := sqlite.NewPendingItemsRepository(db.DB)
+
 	deps, hOut := createHandlers(ctx, handlerInputs{
 		Cfg:               cfg,
 		Logger:            logger,
@@ -406,6 +409,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		PicksService:      picksService,
 		SchedulerResult:   schedulerResult,
 		GSheetsClient:     gsheetsClient,
+		PendingItemsRepo:  pendingItemsRepo,
 	})
 	serverErr := startWebServer(ctx, deps)
 

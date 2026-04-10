@@ -92,7 +92,14 @@ func (s *PSASyncScheduler) Start(ctx context.Context) {
 		WG:           s.WG(),
 		StopChan:     s.Done(),
 		Logger:       s.logger,
-	}, s.tick)
+	}, func(ctx context.Context) {
+		s.runOnce(ctx) //nolint:errcheck
+	})
+}
+
+// RunOnce runs a single sync cycle. Exported for manual trigger via HTTP handler.
+func (s *PSASyncScheduler) RunOnce(ctx context.Context) error {
+	return s.runOnce(ctx)
 }
 
 // GetLastRunStats returns a copy of the last run stats, or nil if no run has completed.
@@ -106,7 +113,7 @@ func (s *PSASyncScheduler) GetLastRunStats() *PSASyncRunStats {
 	return &cp
 }
 
-func (s *PSASyncScheduler) tick(ctx context.Context) {
+func (s *PSASyncScheduler) runOnce(ctx context.Context) error {
 	start := time.Now()
 	s.logger.Info(ctx, "running PSA Google Sheets sync")
 
@@ -118,13 +125,13 @@ func (s *PSASyncScheduler) tick(ctx context.Context) {
 		s.logger.Error(ctx, "failed to fetch Google Sheet",
 			observability.Err(err),
 			observability.String("spreadsheet_id", s.spreadsheetID))
-		return
+		return err
 	}
 
 	psaRows, parseErrors, err := campaigns.ParsePSAExportRows(rows)
 	if err != nil {
 		s.logger.Error(ctx, "failed to parse PSA sheet data", observability.Err(err))
-		return
+		return err
 	}
 	if len(parseErrors) > 0 {
 		s.logger.Warn(ctx, "PSA sheet parse failures — rows skipped",
@@ -133,7 +140,7 @@ func (s *PSASyncScheduler) tick(ctx context.Context) {
 	}
 	if len(psaRows) == 0 {
 		s.logger.Warn(ctx, "no valid PSA rows found in sheet")
-		return
+		return nil
 	}
 
 	importCtx, importCancel := context.WithTimeout(ctx, 5*time.Minute)
@@ -143,7 +150,7 @@ func (s *PSASyncScheduler) tick(ctx context.Context) {
 	result, err := s.importer.ImportPSAExportGlobal(importCtx, psaRows)
 	if err != nil {
 		s.logger.Error(ctx, "PSA import failed", observability.Err(err))
-		return
+		return err
 	}
 
 	s.logger.Info(ctx, "PSA sync completed",
@@ -170,4 +177,6 @@ func (s *PSASyncScheduler) tick(ctx context.Context) {
 		ParseErrors: len(parseErrors),
 	}
 	s.statsMu.Unlock()
+
+	return nil
 }
