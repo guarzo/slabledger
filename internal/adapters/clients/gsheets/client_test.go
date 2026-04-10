@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/httpx"
+	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
@@ -145,5 +146,33 @@ func TestClient_ReadSheet_UsesHTTPX(t *testing.T) {
 	// httpx sets User-Agent automatically
 	if gotUserAgent == "" {
 		t.Error("expected User-Agent header from httpx client, got empty")
+	}
+}
+
+func TestNew_CredentialErrors(t *testing.T) {
+	tests := []struct {
+		name string
+		json string
+	}{
+		{
+			name: "invalid JSON",
+			json: "not json",
+		},
+		{
+			name: "missing client_email",
+			json: `{"private_key":"-----BEGIN RSA PRIVATE KEY-----\ntest\n-----END RSA PRIVATE KEY-----","token_uri":"https://oauth2.googleapis.com/token"}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := New(tt.json, observability.NewNoopLogger())
+			if err == nil {
+				t.Fatal("expected error, got nil")
+			}
+			if !apperrors.HasErrorCode(err, apperrors.ErrCodeConfigInvalid) {
+				t.Errorf("expected ErrCodeConfigInvalid, got: %v", err)
+			}
+		})
 	}
 }

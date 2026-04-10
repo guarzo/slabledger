@@ -15,6 +15,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
 )
 
 const (
@@ -70,10 +72,10 @@ type tokenResponse struct {
 func parseServiceAccountCredentials(jsonKey string) (*ServiceAccountCredentials, error) {
 	var creds ServiceAccountCredentials
 	if err := json.Unmarshal([]byte(jsonKey), &creds); err != nil {
-		return nil, fmt.Errorf("parse service account JSON: %w", err)
+		return nil, apperrors.ConfigInvalid("google_sheets_credentials", "", fmt.Sprintf("invalid JSON: %v", err))
 	}
 	if creds.ClientEmail == "" {
-		return nil, fmt.Errorf("client_email is required in service account credentials")
+		return nil, apperrors.ConfigInvalid("google_sheets_credentials", "", "client_email is required")
 	}
 	if creds.TokenURI == "" {
 		creds.TokenURI = "https://oauth2.googleapis.com/token"
@@ -81,20 +83,20 @@ func parseServiceAccountCredentials(jsonKey string) (*ServiceAccountCredentials,
 
 	block, _ := pem.Decode([]byte(creds.PrivateKey))
 	if block == nil {
-		return nil, fmt.Errorf("failed to decode PEM block from private key")
+		return nil, apperrors.ConfigInvalid("google_sheets_private_key", "", "failed to decode PEM block")
 	}
 	key, err := x509.ParsePKCS8PrivateKey(block.Bytes)
 	if err != nil {
 		// Try PKCS1 as fallback
 		key2, err2 := x509.ParsePKCS1PrivateKey(block.Bytes)
 		if err2 != nil {
-			return nil, fmt.Errorf("parse private key: %w (pkcs1: %v)", err, err2)
+			return nil, apperrors.ConfigInvalid("google_sheets_private_key", "", fmt.Sprintf("parse private key: %v (pkcs1: %v)", err, err2))
 		}
 		creds.parsedKey = key2
 	} else {
 		rsaKey, ok := key.(*rsa.PrivateKey)
 		if !ok {
-			return nil, fmt.Errorf("private key is not RSA")
+			return nil, apperrors.ConfigInvalid("google_sheets_private_key", "", "private key is not RSA")
 		}
 		creds.parsedKey = rsaKey
 	}

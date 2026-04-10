@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/httpx"
+	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
@@ -99,11 +100,11 @@ func (c *Client) ReadSheet(ctx context.Context, spreadsheetID, sheetName string)
 
 	var result sheetsValueRange
 	if err := json.Unmarshal(resp.Body, &result); err != nil {
-		return nil, fmt.Errorf("gsheets: decode response: %w", err)
+		return nil, apperrors.ProviderInvalidResponse("GoogleSheets", fmt.Errorf("decode response: %w", err))
 	}
 
 	if len(result.Values) == 0 {
-		return nil, fmt.Errorf("gsheets: sheet is empty (no rows returned)")
+		return nil, apperrors.ProviderInvalidResponse("GoogleSheets", fmt.Errorf("sheet is empty (no rows returned)"))
 	}
 
 	return result.Values, nil
@@ -151,11 +152,11 @@ func (c *Client) getToken(ctx context.Context) (string, error) {
 
 	var tokenResp tokenResponse
 	if err := json.Unmarshal(resp.Body, &tokenResp); err != nil {
-		return "", fmt.Errorf("decode token response: %w", err)
+		return "", apperrors.ProviderInvalidResponse("GoogleSheets", fmt.Errorf("decode token response: %w", err))
 	}
 
 	if tokenResp.AccessToken == "" {
-		return "", fmt.Errorf("token exchange returned empty access token")
+		return "", apperrors.ProviderAuthFailed("GoogleSheets", fmt.Errorf("token exchange returned empty access token"))
 	}
 
 	expiry := time.Now().Add(time.Duration(tokenResp.ExpiresIn) * time.Second)
