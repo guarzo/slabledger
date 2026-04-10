@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"slices"
 	"sort"
@@ -105,7 +106,7 @@ func (s *CLSalesStore) lookupCondition(ctx context.Context, certNumber string) (
 	err := s.db.QueryRowContext(ctx,
 		`SELECT cl_condition FROM cl_card_mappings WHERE slab_serial = ?`, certNumber,
 	).Scan(&condition)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return "", nil
 	}
 	if err != nil {
