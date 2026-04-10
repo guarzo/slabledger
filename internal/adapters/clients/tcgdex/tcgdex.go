@@ -15,6 +15,8 @@ import (
 	"os"
 	"time"
 
+	"golang.org/x/time/rate"
+
 	"github.com/guarzo/slabledger/internal/adapters/clients/httpx"
 	domainCards "github.com/guarzo/slabledger/internal/domain/cards"
 	"github.com/guarzo/slabledger/internal/domain/observability"
@@ -53,6 +55,7 @@ type TCGdex struct {
 	baseURL                 string
 	fileStore               storage.FileStore
 	cacheDir                string
+	rateLimiter             *rate.Limiter
 }
 
 // TCGdexOption is a functional option for configuring TCGdex.
@@ -137,6 +140,7 @@ func NewTCGdexWithClientAndStorage(c cache.Cache, httpClient httpx.HTTPClient, o
 		logger:        observability.NewNoopLogger(),
 		enablePersist: false,
 		baseURL:       defaultBaseURL,
+		rateLimiter:   rate.NewLimiter(rate.Limit(2), 2), // 2 req/sec
 	}
 
 	for _, opt := range opts {
