@@ -250,6 +250,28 @@ func TestGetPrice_NilResult(t *testing.T) {
 	}
 }
 
+func TestGetPrice_EmptyGradesSalesReturnsNil(t *testing.T) {
+	// Sales with empty Grade field — buildPrice should skip them (no mapping in gradeKey)
+	// and since byGrade is empty, buildPrice returns nil → GetPrice returns (nil, nil)
+	p := New(
+		&mockMarketData{sales: []dh.RecentSale{
+			{GradingCompany: "PSA", Grade: "", Price: 100.00, SoldAt: "2026-01-01", Platform: "ebay"},
+			{GradingCompany: "", Grade: "10", Price: 200.00, SoldAt: "2026-01-02", Platform: "ebay"},
+		}},
+		&mockIDLookup{id: "42"},
+	)
+
+	got, err := p.GetPrice(context.Background(), pricing.Card{
+		Name: "Test", Set: "Test Set", Number: "1",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != nil {
+		t.Fatalf("expected nil price for unrecognized grades, got %+v", got)
+	}
+}
+
 func TestAvailable(t *testing.T) {
 	tests := []struct {
 		name   string
