@@ -4,26 +4,38 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"net/url"
-	"strings"
 	"sync"
 	"time"
 
+	"github.com/guarzo/slabledger/internal/adapters/clients/httpx"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
-const (
-	defaultBaseURL   = "https://sheets.googleapis.com"
-	requestTimeout   = 30 * time.Second
-	maxSheetBodySize = 50 << 20 // 50 MB — defensive limit for Sheets API responses
-	maxTokenBodySize = 1 << 20  // 1 MB — defensive limit for token exchange responses
-)
+const defaultBaseURL = "https://sheets.googleapis.com"
+
+// Option configures a Client after construction.
+type Option func(*Client)
+
+// WithDataClient sets the httpx client used for Sheets API data calls.
+func WithDataClient(c *httpx.Client) Option {
+	return func(cl *Client) { cl.dataClient = c }
+}
+
+// WithAuthClient sets the httpx client used for OAuth token exchange.
+func WithAuthClient(c *httpx.Client) Option {
+	return func(cl *Client) { cl.authClient = c }
+}
+
+// WithBaseURL overrides the Sheets API base URL (useful for testing).
+func WithBaseURL(u string) Option {
+	return func(cl *Client) { cl.baseURL = u }
+}
 
 // Client reads data from Google Sheets using service account credentials.
 type Client struct {
-	httpClient *http.Client
+	dataClient *httpx.Client
+	authClient *httpx.Client
 	baseURL    string
 	creds      *ServiceAccountCredentials
 	token      *cachedToken
@@ -32,18 +44,33 @@ type Client struct {
 }
 
 // New creates a new Google Sheets client from service account JSON credentials.
-func New(credentialsJSON string, logger observability.Logger) (*Client, error) {
+func New(credentialsJSON string, logger observability.Logger, opts ...Option) (*Client, error) {
 	creds, err := parseServiceAccountCredentials(credentialsJSON)
 	if err != nil {
 		return nil, fmt.Errorf("gsheets: %w", err)
 	}
-	return &Client{
-		httpClient: &http.Client{Timeout: requestTimeout},
+
+	dataCfg := httpx.DefaultConfig("GoogleSheets")
+	dataCfg.DefaultTimeout = 30 * time.Second
+
+	authCfg := httpx.DefaultConfig("GoogleSheets-Auth")
+	authCfg.DefaultTimeout = 10 * time.Second
+	authCfg.RetryPolicy.MaxRetries = 1
+
+	c := &Client{
+		dataClient: httpx.NewClient(dataCfg),
+		authClient: httpx.NewClient(authCfg),
 		baseURL:    defaultBaseURL,
 		creds:      creds,
 		token:      &cachedToken{},
 		logger:     logger,
-	}, nil
+	}
+
+	for _, opt := range opts {
+		opt(c)
+	}
+
+	return c, nil
 }
 
 // ReadSheet fetches all values from the specified spreadsheet and sheet/tab.
@@ -65,29 +92,13 @@ func (c *Client) ReadSheet(ctx context.Context, spreadsheetID, sheetName string)
 		url.PathEscape(sheetName),
 	)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("gsheets: create request: %w", err)
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.dataClient.Get(ctx, apiURL, map[string]string{"Authorization": "Bearer " + token}, 0)
 	if err != nil {
 		return nil, fmt.Errorf("gsheets: fetch sheet: %w", err)
 	}
-	defer resp.Body.Close() //nolint:errcheck // best-effort close on HTTP response
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxSheetBodySize))
-	if err != nil {
-		return nil, fmt.Errorf("gsheets: read response: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("gsheets: API returned %d: %s", resp.StatusCode, truncate(string(body), 200))
-	}
 
 	var result sheetsValueRange
-	if err := json.Unmarshal(body, &result); err != nil {
+	if err := json.Unmarshal(resp.Body, &result); err != nil {
 		return nil, fmt.Errorf("gsheets: decode response: %w", err)
 	}
 
@@ -131,27 +142,20 @@ func (c *Client) getToken(ctx context.Context) (string, error) {
 		"assertion":  {jwt},
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.creds.TokenURI,
-		strings.NewReader(formData.Encode()))
-	if err != nil {
-		return "", fmt.Errorf("create token request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.authClient.Post(ctx, c.creds.TokenURI,
+		map[string]string{"Content-Type": "application/x-www-form-urlencoded"},
+		[]byte(formData.Encode()), 0)
 	if err != nil {
 		return "", fmt.Errorf("token exchange: %w", err)
 	}
-	defer resp.Body.Close() //nolint:errcheck // best-effort close on HTTP response
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, maxTokenBodySize))
-		return "", fmt.Errorf("token exchange returned %d: %s", resp.StatusCode, truncate(string(body), 200))
-	}
 
 	var tokenResp tokenResponse
-	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
+	if err := json.Unmarshal(resp.Body, &tokenResp); err != nil {
 		return "", fmt.Errorf("decode token response: %w", err)
+	}
+
+	if tokenResp.AccessToken == "" {
+		return "", fmt.Errorf("token exchange returned empty access token")
 	}
 
 	expiry := time.Now().Add(time.Duration(tokenResp.ExpiresIn) * time.Second)
@@ -161,13 +165,4 @@ func (c *Client) getToken(ctx context.Context) (string, error) {
 		observability.String("email", c.creds.ClientEmail))
 
 	return tokenResp.AccessToken, nil
-}
-
-// truncate returns the first n runes of s, appending "..." if truncated.
-func truncate(s string, n int) string {
-	runes := []rune(s)
-	if len(runes) <= n {
-		return s
-	}
-	return string(runes[:n]) + "..."
 }

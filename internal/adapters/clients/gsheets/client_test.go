@@ -8,8 +8,17 @@ import (
 	"testing"
 	"time"
 
+	"github.com/guarzo/slabledger/internal/adapters/clients/httpx"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
+
+func newTestClient(t *testing.T) *httpx.Client {
+	t.Helper()
+	cfg := httpx.DefaultConfig("test")
+	cfg.DefaultTimeout = 5 * time.Second
+	cfg.RetryPolicy.MaxRetries = 0
+	return httpx.NewClient(cfg)
+}
 
 func TestClient_ReadSheet(t *testing.T) {
 	successBody := sheetsValueRange{
@@ -69,15 +78,16 @@ func TestClient_ReadSheet(t *testing.T) {
 				if auth := r.Header.Get("Authorization"); auth == "" {
 					t.Error("missing Authorization header")
 				}
-				w.WriteHeader(tt.serverStatus)
 				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(tt.serverStatus)
 				json.NewEncoder(w).Encode(tt.serverBody)
 			}))
 			defer server.Close()
 
+			testHTTPX := newTestClient(t)
 			client := &Client{
 				baseURL:    server.URL,
-				httpClient: server.Client(),
+				dataClient: testHTTPX,
 				token:      &cachedToken{},
 				logger:     observability.NewNoopLogger(),
 			}
@@ -102,5 +112,38 @@ func TestClient_ReadSheet(t *testing.T) {
 				t.Errorf("path = %q, want %q", capturedPath, tt.checkPath)
 			}
 		})
+	}
+}
+
+func TestClient_ReadSheet_UsesHTTPX(t *testing.T) {
+	var gotUserAgent string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotUserAgent = r.Header.Get("User-Agent")
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(sheetsValueRange{
+			Values: [][]string{{"header"}, {"row1"}},
+		})
+	}))
+	defer server.Close()
+
+	testHTTPX := newTestClient(t)
+	client := &Client{
+		baseURL:    server.URL,
+		dataClient: testHTTPX,
+		token:      &cachedToken{},
+		logger:     observability.NewNoopLogger(),
+	}
+	client.token.set("test-token", time.Now().Add(1*time.Hour))
+
+	rows, err := client.ReadSheet(context.Background(), "sheet-id", "Tab1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("got %d rows, want 2", len(rows))
+	}
+	// httpx sets User-Agent automatically
+	if gotUserAgent == "" {
+		t.Error("expected User-Agent header from httpx client, got empty")
 	}
 }
