@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -15,6 +16,7 @@ import (
 	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/httpx"
+	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -530,4 +532,98 @@ func TestGetStatus_Success(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, "my_ig_handle", username)
+}
+
+func TestCreateContainer_ValidatesID(t *testing.T) {
+	const igUserID = "userEmpty"
+
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// All POSTs to /media return an empty ID.
+		if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/media") {
+			jsonResponse(w, http.StatusOK, map[string]string{"id": ""})
+			return
+		}
+		http.Error(w, "unexpected: "+r.Method+" "+r.URL.Path, http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	c := newTestClient(server.URL)
+	ctx := context.Background()
+
+	_, err := c.PublishCarousel(ctx, "tok", igUserID,
+		[]string{"https://img.example.com/a.jpg", "https://img.example.com/b.jpg"},
+		"caption")
+
+	require.Error(t, err)
+	var appErr *apperrors.AppError
+	require.True(t, errors.As(err, &appErr))
+	assert.Equal(t, apperrors.ErrCodeProviderInvalidResp, appErr.Code)
+}
+
+func TestPublishContainer_ValidatesID(t *testing.T) {
+	const igUserID = "userPubEmpty"
+
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+
+		switch {
+		// POST /{igUserID}/media — return valid container IDs
+		case r.Method == http.MethodPost && path == "/"+igUserID+"/media":
+			if err := r.ParseForm(); err != nil {
+				http.Error(w, "bad form", http.StatusBadRequest)
+				return
+			}
+			mediaType := r.FormValue("media_type")
+			if mediaType == "CAROUSEL" {
+				jsonResponse(w, http.StatusOK, map[string]string{"id": "carousel-001"})
+			} else {
+				jsonResponse(w, http.StatusOK, map[string]string{"id": "item-001"})
+			}
+
+		// GET — waitForContainer always returns FINISHED
+		case r.Method == http.MethodGet && strings.Contains(r.URL.RawQuery, "status_code"):
+			jsonResponse(w, http.StatusOK, map[string]string{"status_code": "FINISHED"})
+
+		// POST /{igUserID}/media_publish — return empty ID
+		case r.Method == http.MethodPost && path == "/"+igUserID+"/media_publish":
+			jsonResponse(w, http.StatusOK, map[string]string{"id": ""})
+
+		default:
+			http.Error(w, "unexpected: "+r.Method+" "+path, http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	c := newTestClient(server.URL)
+	ctx := context.Background()
+
+	_, err := c.PublishCarousel(ctx, "tok", igUserID,
+		[]string{"https://img.example.com/a.jpg", "https://img.example.com/b.jpg"},
+		"caption")
+
+	require.Error(t, err)
+	var appErr *apperrors.AppError
+	require.True(t, errors.As(err, &appErr))
+	assert.Equal(t, apperrors.ErrCodeProviderInvalidResp, appErr.Code)
+}
+
+func TestGetUsername_ValidatesUsername(t *testing.T) {
+	const igUserID = "userNoName"
+
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, http.MethodGet, r.Method)
+		assert.Equal(t, "/"+igUserID, r.URL.Path)
+		jsonResponse(w, http.StatusOK, map[string]string{"username": ""})
+	}))
+	defer server.Close()
+
+	c := newTestClient(server.URL)
+	ctx := context.Background()
+
+	_, err := c.GetStatus(ctx, "valid-token", igUserID)
+
+	require.Error(t, err)
+	var appErr *apperrors.AppError
+	require.True(t, errors.As(err, &appErr))
+	assert.Equal(t, apperrors.ErrCodeProviderInvalidResp, appErr.Code)
 }

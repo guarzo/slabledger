@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/httpx"
+	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
@@ -191,6 +192,10 @@ func (c *Client) PublishSingleImage(ctx context.Context, token, igUserID, imageU
 	if err := c.postForm(ctx, fmt.Sprintf("%s/%s/media", graphURL, igUserID), params, &resp); err != nil {
 		return nil, fmt.Errorf("create media container: %w", err)
 	}
+	if resp.ID == "" {
+		return nil, apperrors.ProviderInvalidResponse("Instagram",
+			fmt.Errorf("single image container creation returned empty ID"))
+	}
 
 	if err := c.waitForContainer(ctx, token, resp.ID); err != nil {
 		return nil, fmt.Errorf("wait for media: %w", err)
@@ -338,6 +343,10 @@ func (c *Client) getUsername(ctx context.Context, token, userID string) (string,
 	if err := c.doGet(ctx, reqURL, &resp); err != nil {
 		return "", err
 	}
+	if resp.Username == "" {
+		return "", apperrors.ProviderInvalidResponse("Instagram",
+			fmt.Errorf("user info returned empty username"))
+	}
 	return resp.Username, nil
 }
 
@@ -353,6 +362,10 @@ func (c *Client) createItemContainer(ctx context.Context, token, igUserID, image
 	}
 	if err := c.postForm(ctx, fmt.Sprintf("%s/%s/media", graphURL, igUserID), params, &resp); err != nil {
 		return "", err
+	}
+	if resp.ID == "" {
+		return "", apperrors.ProviderInvalidResponse("Instagram",
+			fmt.Errorf("container creation returned empty ID"))
 	}
 	return resp.ID, nil
 }
@@ -370,6 +383,10 @@ func (c *Client) createCarouselContainer(ctx context.Context, token, igUserID st
 	}
 	if err := c.postForm(ctx, fmt.Sprintf("%s/%s/media", graphURL, igUserID), params, &resp); err != nil {
 		return "", err
+	}
+	if resp.ID == "" {
+		return "", apperrors.ProviderInvalidResponse("Instagram",
+			fmt.Errorf("carousel container creation returned empty ID"))
 	}
 	return resp.ID, nil
 }
@@ -420,6 +437,10 @@ func (c *Client) publishContainer(ctx context.Context, token, igUserID, containe
 	}
 	if err := c.postForm(ctx, fmt.Sprintf("%s/%s/media_publish", graphURL, igUserID), params, &resp); err != nil {
 		return "", err
+	}
+	if resp.ID == "" {
+		return "", apperrors.ProviderInvalidResponse("Instagram",
+			fmt.Errorf("publish returned empty media ID"))
 	}
 	return resp.ID, nil
 }
