@@ -96,12 +96,11 @@ func (h *MarketMoversHandler) HandleSaveConfig(w http.ResponseWriter, r *http.Re
 			),
 		)
 		h.client.SetToken(authResp.AccessToken, expiry)
-		// Push the newly created client into the scheduler so that manual
-		// refresh and the daily loop become functional immediately (without
-		// requiring a server restart).
-		if h.refresher != nil {
-			h.refresher.SetClient(h.client)
-		}
+	}
+	// Always push the client to the scheduler — whether new or updated credentials.
+	// This matches the Card Ladder handler pattern (cardladder.go:102-104).
+	if h.refresher != nil {
+		h.refresher.SetClient(h.client)
 	}
 	h.mu.Unlock()
 
