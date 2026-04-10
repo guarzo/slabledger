@@ -14,6 +14,7 @@ import (
 	"golang.org/x/time/rate"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/httpx"
+	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
 )
 
 // Client accesses the Market Movers (Sports Card Investor) tRPC API.
@@ -253,7 +254,7 @@ func checkTRPCError(body []byte) error {
 		} `json:"error"`
 	}
 	if jsonErr := json.Unmarshal(body, &errCheck); jsonErr == nil && errCheck.Error != nil {
-		return fmt.Errorf("trpc error: %s", errCheck.Error.Message)
+		return apperrors.ProviderUnavailable("MarketMovers", fmt.Errorf("trpc error: %s", errCheck.Error.Message))
 	}
 	return nil
 }
@@ -271,7 +272,7 @@ func (c *Client) doMutation(ctx context.Context, path string, input any, result 
 
 	bodyBytes, err := json.Marshal(input)
 	if err != nil {
-		return fmt.Errorf("marshal mutation input: %w", err)
+		return apperrors.ProviderInvalidRequest("MarketMovers", err)
 	}
 
 	u := c.baseURL + "/" + path
@@ -299,7 +300,7 @@ func (c *Client) doMutation(ctx context.Context, path string, input any, result 
 	}
 
 	if err := json.Unmarshal(resp.Body, result); err != nil {
-		return fmt.Errorf("unmarshal response: %w", err)
+		return apperrors.ProviderInvalidResponse("MarketMovers", fmt.Errorf("unmarshal response: %w", err))
 	}
 	return nil
 }
@@ -317,7 +318,7 @@ func (c *Client) doQuery(ctx context.Context, path string, input any, result any
 
 	inputJSON, err := json.Marshal(input)
 	if err != nil {
-		return fmt.Errorf("marshal input: %w", err)
+		return apperrors.ProviderInvalidRequest("MarketMovers", err)
 	}
 
 	u := c.baseURL + "/" + path + "?input=" + url.QueryEscape(string(inputJSON))
@@ -343,7 +344,7 @@ func (c *Client) doQuery(ctx context.Context, path string, input any, result any
 	}
 
 	if err := json.Unmarshal(resp.Body, result); err != nil {
-		return fmt.Errorf("unmarshal response: %w", err)
+		return apperrors.ProviderInvalidResponse("MarketMovers", fmt.Errorf("unmarshal response: %w", err))
 	}
 	return nil
 }
@@ -361,7 +362,7 @@ func (c *Client) getToken(ctx context.Context) (string, error) {
 	}
 	if c.auth == nil || c.refreshToken == "" {
 		c.mu.Unlock()
-		return "", fmt.Errorf("no auth credentials configured")
+		return "", apperrors.ConfigMissing("MarketMovers credentials", "")
 	}
 	c.mu.Unlock()
 
