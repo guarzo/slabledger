@@ -87,6 +87,17 @@ func (c *Client) doCallable(ctx context.Context, functionName string, data any, 
 		return apperrors.ProviderUnavailable("CardLadder", fmt.Errorf("callable %s: %s (status: %s)", functionName, callableErr.Error.Message, callableErr.Error.Status))
 	}
 
+	// Check that "result" key is present and non-null.
+	var envelope struct {
+		Result json.RawMessage `json:"result"`
+	}
+	if err := json.Unmarshal(resp.Body, &envelope); err != nil {
+		return apperrors.ProviderInvalidResponse("CardLadder", fmt.Errorf("unmarshal %s response: %w", functionName, err))
+	}
+	if len(envelope.Result) == 0 || string(envelope.Result) == "null" {
+		return apperrors.ProviderInvalidResponse("CardLadder", fmt.Errorf("callable %s returned nil result", functionName))
+	}
+
 	if err := json.Unmarshal(resp.Body, result); err != nil {
 		return apperrors.ProviderInvalidResponse("CardLadder", fmt.Errorf("unmarshal %s response: %w", functionName, err))
 	}
