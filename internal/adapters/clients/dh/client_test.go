@@ -3,6 +3,7 @@ package dh
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"golang.org/x/time/rate"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/httpx"
+	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
 	"github.com/guarzo/slabledger/internal/platform/resilience"
 )
 
@@ -334,5 +336,126 @@ func TestClient_NotAvailable(t *testing.T) {
 	_, err := c.CardLookup(context.Background(), 1)
 	if err == nil {
 		t.Error("expected error when enterprise key not available")
+	}
+}
+
+func TestCardLookup_ValidatesCardID(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Return a response with Card.ID = 0 (invalid)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(CardLookupResponse{})
+	}))
+	defer server.Close()
+
+	c := newTestClient(server.URL)
+	_, err := c.CardLookup(context.Background(), 123)
+	var appErr *apperrors.AppError
+	if !errors.As(err, &appErr) || appErr.Code != apperrors.ErrCodeProviderInvalidResp {
+		t.Errorf("expected ProviderInvalidResponse, got: %v", err)
+	}
+}
+
+func TestResolveCert_ValidatesStatus(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(CertResolution{Status: "unexpected_value"})
+	}))
+	defer server.Close()
+
+	c := newTestClient(server.URL)
+	_, err := c.ResolveCert(context.Background(), CertResolveRequest{CertNumber: "12345678"})
+	var appErr *apperrors.AppError
+	if !errors.As(err, &appErr) || appErr.Code != apperrors.ErrCodeProviderInvalidResp {
+		t.Errorf("expected ProviderInvalidResponse, got: %v", err)
+	}
+}
+
+func TestResolveCert_AcceptsValidStatuses(t *testing.T) {
+	for _, status := range []string{"matched", "ambiguous", "not_found", "pending"} {
+		t.Run(status, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(CertResolution{Status: status})
+			}))
+			defer server.Close()
+
+			c := newTestClient(server.URL)
+			resp, err := c.ResolveCert(context.Background(), CertResolveRequest{CertNumber: "12345678"})
+			if err != nil {
+				t.Errorf("expected no error for status %q, got: %v", status, err)
+			}
+			if resp.Status != status {
+				t.Errorf("expected status %q, got %q", status, resp.Status)
+			}
+		})
+	}
+}
+
+func TestRecentSales_ValidatesSaleFields(t *testing.T) {
+	t.Run("zero price", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"sales": [{"sold_at": "2026-04-01T12:00:00Z", "price": 0}]}`))
+		}))
+		defer server.Close()
+
+		c := newTestClient(server.URL)
+		_, err := c.RecentSales(context.Background(), 42)
+		var appErr *apperrors.AppError
+		if !errors.As(err, &appErr) || appErr.Code != apperrors.ErrCodeProviderInvalidResp {
+			t.Errorf("expected ProviderInvalidResponse for zero price, got: %v", err)
+		}
+	})
+
+	t.Run("empty date", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"sales": [{"sold_at": "", "price": 100.00}]}`))
+		}))
+		defer server.Close()
+
+		c := newTestClient(server.URL)
+		_, err := c.RecentSales(context.Background(), 42)
+		var appErr *apperrors.AppError
+		if !errors.As(err, &appErr) || appErr.Code != apperrors.ErrCodeProviderInvalidResp {
+			t.Errorf("expected ProviderInvalidResponse for empty date, got: %v", err)
+		}
+	})
+
+	t.Run("empty sales list is valid", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"sales": []}`))
+		}))
+		defer server.Close()
+
+		c := newTestClient(server.URL)
+		sales, err := c.RecentSales(context.Background(), 42)
+		if err != nil {
+			t.Errorf("expected no error for empty sales, got: %v", err)
+		}
+		if len(sales) != 0 {
+			t.Errorf("expected 0 sales, got %d", len(sales))
+		}
+	})
+}
+
+func TestSearchCards_ValidatesResultNames(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(SearchResponse{
+			Results: []SearchResult{
+				{ID: 1, Name: "Valid Card"},
+				{ID: 2, Name: ""},
+			},
+		})
+	}))
+	defer server.Close()
+
+	c := newTestClient(server.URL)
+	_, err := c.SearchCards(context.Background(), SearchFilters{Query: "test"})
+	var appErr *apperrors.AppError
+	if !errors.As(err, &appErr) || appErr.Code != apperrors.ErrCodeProviderInvalidResp {
+		t.Errorf("expected ProviderInvalidResponse for empty name, got: %v", err)
 	}
 }

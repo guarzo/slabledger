@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+
+	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
 )
 
 // ResolveCert resolves a single PSA cert synchronously via the enterprise API.
@@ -20,6 +22,16 @@ func (c *Client) ResolveCert(ctx context.Context, req CertResolveRequest) (*Cert
 	var resp CertResolution
 	if err := c.doEnterprise(ctx, "POST", fullURL, body, &resp, psaHeaders); err != nil {
 		return nil, err
+	}
+	validStatuses := map[string]bool{
+		CertStatusMatched:   true,
+		CertStatusAmbiguous: true,
+		CertStatusNotFound:  true,
+		"pending":           true,
+	}
+	if !validStatuses[resp.Status] {
+		return nil, apperrors.ProviderInvalidResponse(providerName,
+			fmt.Errorf("unexpected cert resolve status %q", resp.Status))
 	}
 	return &resp, nil
 }

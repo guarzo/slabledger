@@ -116,6 +116,10 @@ func (c *Client) CardLookup(ctx context.Context, cardID int) (*CardLookupRespons
 	if err := c.getEnterprise(ctx, fullURL, &resp); err != nil {
 		return nil, err
 	}
+	if resp.Card.ID == 0 {
+		return nil, apperrors.ProviderInvalidResponse(providerName,
+			fmt.Errorf("card lookup returned zero ID for card_id=%d", cardID))
+	}
 	return &resp, nil
 }
 
@@ -128,6 +132,12 @@ func (c *Client) RecentSales(ctx context.Context, cardID int) ([]RecentSale, err
 	}
 	if err := c.getEnterprise(ctx, fullURL, &resp); err != nil {
 		return nil, err
+	}
+	for i, sale := range resp.Sales {
+		if sale.Price == 0 || sale.SoldAt == "" {
+			return nil, apperrors.ProviderInvalidResponse(providerName,
+				fmt.Errorf("sale[%d] has zero price or empty date for card_id=%d", i, cardID))
+		}
 	}
 	return resp.Sales, nil
 }
