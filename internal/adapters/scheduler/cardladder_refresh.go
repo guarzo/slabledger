@@ -147,12 +147,6 @@ func (s *CardLadderRefreshScheduler) Start(ctx context.Context) {
 		return
 	}
 
-	// Check for disabled scheduler: RefreshHour < 0 means do not run
-	if s.config.RefreshHour < 0 {
-		s.logger.Info(ctx, "Card Ladder refresh scheduler disabled (RefreshHour < 0)")
-		return
-	}
-
 	RunLoop(ctx, LoopConfig{
 		Name:         "card-ladder-refresh",
 		Interval:     s.config.Interval,

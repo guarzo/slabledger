@@ -108,12 +108,6 @@ func (s *MarketMoversRefreshScheduler) Start(ctx context.Context) {
 		return
 	}
 
-	// Check for disabled scheduler: -1 means do not run
-	if s.config.RefreshHour < 0 {
-		s.logger.Info(ctx, "Market Movers refresh scheduler disabled (RefreshHour < 0)")
-		return
-	}
-
 	RunLoop(ctx, LoopConfig{
 		Name:         "market-movers-refresh",
 		Interval:     24 * time.Hour,

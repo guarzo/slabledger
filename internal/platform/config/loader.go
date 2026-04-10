@@ -205,11 +205,11 @@ func FromEnv(base Config) Config {
 
 	// Card Ladder scheduler
 	envBool("CARDLADDER_REFRESH_ENABLED", &cfg.CardLadder.Enabled, false)
-	envIntRange("CARDLADDER_REFRESH_HOUR", &cfg.CardLadder.RefreshHour, -1, 23)
+	envIntRange("CARDLADDER_REFRESH_HOUR", &cfg.CardLadder.RefreshHour, 0, 23)
 
 	// Market Movers scheduler
 	envBool("MM_REFRESH_ENABLED", &cfg.MarketMovers.Enabled, true)
-	envIntRange("MM_REFRESH_HOUR", &cfg.MarketMovers.RefreshHour, -1, 23)
+	envIntRange("MM_REFRESH_HOUR", &cfg.MarketMovers.RefreshHour, 0, 23)
 
 	// Adapter API keys and tokens
 	cfg.Adapters.PSAToken = os.Getenv("PSA_ACCESS_TOKEN")
