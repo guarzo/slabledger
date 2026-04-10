@@ -5,6 +5,12 @@ import "math"
 // applyCLSignal incorporates Card Ladder auction-based data into the market snapshot.
 // CL is weighted at 30% alongside market data (70%) and serves as a floor — the
 // market price should not fall below CL's auction-derived valuation.
+//
+// NOTE: Double CL correction — applyCLCorrection (service_snapshots.go) already
+// blends CL into the stored SnapshotJSON median at write time. This function applies
+// a second CL blend at read time. When SnapshotJSON is present, CL may be counted
+// twice. This is a known limitation; the floor behavior ensures the net effect is
+// conservative (prevents underpricing rather than overpricing).
 func applyCLSignal(snap *MarketSnapshot, clCents int) {
 	if snap == nil || clCents <= 0 {
 		return
