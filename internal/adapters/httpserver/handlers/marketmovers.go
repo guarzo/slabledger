@@ -81,30 +81,32 @@ func (h *MarketMoversHandler) HandleSaveConfig(w http.ResponseWriter, r *http.Re
 
 	// Atomically update or create the live client
 	h.mu.Lock()
-	if h.client != nil {
-		h.client.UpdateCredentials(
-			tempAuth,
-			authResp.RefreshToken,
-		)
-		h.client.SetToken(authResp.AccessToken, expiry)
-	} else {
-		h.client = marketmovers.NewClient(
-			marketmovers.WithTokenManager(
-				tempAuth,
-				authResp.RefreshToken,
-				time.Time{},
-			),
-		)
-		h.client.SetToken(authResp.AccessToken, expiry)
-	}
-	// Always push the client to the scheduler — whether new or updated credentials.
-	// This matches the Card Ladder handler pattern (cardladder.go:102-104).
-	if h.refresher != nil {
-		h.refresher.SetClient(h.client)
-	}
+	h.updateOrCreateClient(tempAuth, authResp.RefreshToken, authResp.AccessToken, expiry)
 	h.mu.Unlock()
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "connected"})
+}
+
+// updateOrCreateClient updates the existing client or creates a new one with the given credentials.
+// Must be called with h.mu held.
+func (h *MarketMoversHandler) updateOrCreateClient(auth *marketmovers.Auth, refreshToken, accessToken string, expiry time.Time) {
+	if h.client != nil {
+		h.client.UpdateCredentials(auth, refreshToken)
+		h.client.SetToken(accessToken, expiry)
+	} else {
+		h.client = marketmovers.NewClient(
+			marketmovers.WithTokenManager(auth, refreshToken, time.Time{}),
+		)
+		h.client.SetToken(accessToken, expiry)
+	}
+	// Always push the client to the scheduler on credential save — whether new or updated.
+	// This ensures the scheduler gets a fresh client reference when credentials change,
+	// which is important for Market Movers because credentials can be updated at runtime
+	// (unlike Card Ladder which only pushes on initial client creation).
+	// The unconditional push pattern handles both first-time setup and credential refresh.
+	if h.refresher != nil {
+		h.refresher.SetClient(h.client)
+	}
 }
 
 // HandleStatus returns the current Market Movers connection status.

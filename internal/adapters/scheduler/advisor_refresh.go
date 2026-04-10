@@ -43,7 +43,8 @@ func NewAdvisorRefreshScheduler(
 	if cfg.InitialDelay < 0 {
 		cfg.InitialDelay = 0
 	}
-	// Compute initial delay from RefreshHour if set (>= 0).
+	// Compute initial delay from RefreshHour only if >= 0.
+	// Note: RefreshHour < 0 means scheduler is disabled (handled in Start()).
 	if cfg.RefreshHour >= 0 {
 		cfg.InitialDelay = timeUntilHour(time.Now(), cfg.RefreshHour)
 	}
@@ -61,6 +62,12 @@ func NewAdvisorRefreshScheduler(
 func (s *AdvisorRefreshScheduler) Start(ctx context.Context) {
 	if !s.config.Enabled {
 		s.logger.Info(ctx, "advisor refresh scheduler disabled")
+		return
+	}
+
+	// Check for disabled scheduler: RefreshHour < 0 means do not run
+	if s.config.RefreshHour < 0 {
+		s.logger.Info(ctx, "advisor refresh scheduler disabled (RefreshHour < 0)")
 		return
 	}
 

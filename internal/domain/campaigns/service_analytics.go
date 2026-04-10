@@ -101,6 +101,25 @@ func snapshotFromPurchase(p *Purchase) *MarketSnapshot {
 func (s *service) enrichAgingItem(_ context.Context, p *Purchase, campaignName string) AgingItem {
 	item := AgingItem{Purchase: *p, DaysHeld: timeutil.DaysSince(p.PurchaseDate), CampaignName: campaignName}
 
+	snap := s.buildEnrichedSnapshot(p)
+	if !hasAnyPriceData(snap) {
+		return item
+	}
+
+	item.CurrentMarket = snap
+	s.computeMarketSignal(p, snap, &item)
+	s.flagPriceAnomalies(p, snap, &item)
+
+	// Resolve recommended price from hierarchy
+	recPrice, recSource := recommendedPrice(p, item.CurrentMarket)
+	item.RecommendedPriceCents = recPrice
+	item.RecommendedSource = recSource
+
+	return item
+}
+
+// buildEnrichedSnapshot constructs a MarketSnapshot from purchase data, incorporating CL and MM signals.
+func (s *service) buildEnrichedSnapshot(p *Purchase) *MarketSnapshot {
 	snap := snapshotFromPurchase(p)
 
 	// Incorporate Card Ladder value — works even when stored snapshot is empty
@@ -120,52 +139,53 @@ func (s *service) enrichAgingItem(_ context.Context, p *Purchase, campaignName s
 		applyMMSignal(snap, p)
 	}
 
-	if hasAnyPriceData(snap) {
-		item.CurrentMarket = snap
+	return snap
+}
 
-		// Compute market signal if CL value and last sold data are available
-		if p.CLValueCents > 0 && snap.LastSoldCents > 0 {
-			lastSold := snap.LastSoldCents
-			deltaPct := float64(lastSold-p.CLValueCents) / float64(p.CLValueCents)
-			direction := "stable"
-			rec := "Either channel — local for speed, eBay for margin"
-			if deltaPct >= marketDriftThreshold {
-				direction = "rising"
-				rec = "Consider eBay/TCGPlayer — market ahead of valuations"
-			} else if deltaPct <= -marketDriftThreshold {
-				direction = "falling"
-				rec = "Consider local (GameStop at 90% CL) — lock in before drop"
-			}
-			item.Signal = &MarketSignal{
-				CardName: p.CardName, CertNumber: p.CertNumber,
-				Grade: p.GradeValue, CLValueCents: p.CLValueCents,
-				LastSoldCents: lastSold, DeltaPct: deltaPct,
-				Direction: direction, Recommendation: rec,
-			}
-		}
+// computeMarketSignal computes a market signal when CL value and last sold data are both available.
+func (s *service) computeMarketSignal(p *Purchase, snap *MarketSnapshot, item *AgingItem) {
+	if p.CLValueCents <= 0 || snap.LastSoldCents <= 0 {
+		return
 	}
 
-	// Flag price anomalies: large buy/market deviations with low-confidence pricing
+	lastSold := snap.LastSoldCents
+	deltaPct := float64(lastSold-p.CLValueCents) / float64(p.CLValueCents)
+	direction := "stable"
+	rec := "Either channel — local for speed, eBay for margin"
+
+	if deltaPct >= marketDriftThreshold {
+		direction = "rising"
+		rec = "Consider eBay/TCGPlayer — market ahead of valuations"
+	} else if deltaPct <= -marketDriftThreshold {
+		direction = "falling"
+		rec = "Consider local (GameStop at 90% CL) — lock in before drop"
+	}
+
+	item.Signal = &MarketSignal{
+		CardName: p.CardName, CertNumber: p.CertNumber,
+		Grade: p.GradeValue, CLValueCents: p.CLValueCents,
+		LastSoldCents: lastSold, DeltaPct: deltaPct,
+		Direction: direction, Recommendation: rec,
+	}
+}
+
+// flagPriceAnomalies flags purchases with large buy/market deviations and low-confidence pricing.
+func (s *service) flagPriceAnomalies(p *Purchase, snap *MarketSnapshot, item *AgingItem) {
 	const (
 		minMedianToBuyRatio    = 0.3
 		maxMedianToBuyRatio    = 5.0
 		lowConfidenceThreshold = 0.5
 	)
-	if snap != nil && p.BuyCostCents > 0 && snap.MedianCents > 0 {
-		ratio := float64(snap.MedianCents) / float64(p.BuyCostCents)
-		lowConfidence := snap.SourceCount <= 1 || snap.Confidence < lowConfidenceThreshold || snap.IsEstimated || snap.PricingGap
-		if lowConfidence && (ratio < minMedianToBuyRatio || ratio > maxMedianToBuyRatio) {
-			item.PriceAnomaly = true
-			item.AnomalyReason = "low confidence pricing"
-		}
+	if p.BuyCostCents <= 0 || snap.MedianCents <= 0 {
+		return
 	}
 
-	// Resolve recommended price from hierarchy
-	recPrice, recSource := recommendedPrice(p, item.CurrentMarket)
-	item.RecommendedPriceCents = recPrice
-	item.RecommendedSource = recSource
-
-	return item
+	ratio := float64(snap.MedianCents) / float64(p.BuyCostCents)
+	lowConfidence := snap.SourceCount <= 1 || snap.Confidence < lowConfidenceThreshold || snap.IsEstimated || snap.PricingGap
+	if lowConfidence && (ratio < minMedianToBuyRatio || ratio > maxMedianToBuyRatio) {
+		item.PriceAnomaly = true
+		item.AnomalyReason = "low confidence pricing"
+	}
 }
 
 func (s *service) GetInventoryAging(ctx context.Context, campaignID string) (*InventoryResult, error) {

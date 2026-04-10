@@ -108,6 +108,12 @@ func (s *MarketMoversRefreshScheduler) Start(ctx context.Context) {
 		return
 	}
 
+	// Check for disabled scheduler: -1 means do not run
+	if s.config.RefreshHour < 0 {
+		s.logger.Info(ctx, "Market Movers refresh scheduler disabled (RefreshHour < 0)")
+		return
+	}
+
 	RunLoop(ctx, LoopConfig{
 		Name:         "market-movers-refresh",
 		Interval:     24 * time.Hour,
@@ -138,6 +144,8 @@ func (s *MarketMoversRefreshScheduler) runOnce(ctx context.Context) error {
 		return nil
 	}
 
+	// Capture client reference once and hold it for the entire refresh operation
+	// to prevent race conditions if SetClient() is called during execution.
 	client := s.getClient()
 	if client == nil {
 		s.logger.Warn(ctx, "MM refresh: client not initialized, skipping (credentials may have been set via UI — restart or save credentials again)")

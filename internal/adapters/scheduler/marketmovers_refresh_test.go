@@ -337,6 +337,16 @@ func TestComputeMMSignals(t *testing.T) {
 			wantSales: 2,
 		},
 		{
+			name: "negative trend near theoretical limit",
+			items: []marketmovers.DailyStatItem{
+				{TotalSalesCount: 1, TotalSalesAmount: 1000, AverageSalePrice: 1000},
+				{TotalSalesCount: 1, TotalSalesAmount: 1, AverageSalePrice: 1},
+			},
+			wantAvg:   500.5,  // 1001/2
+			wantTrend: -0.999, // (1-1000)/1000 = -99.9%; can't reach -200% cap with positive prices
+			wantSales: 2,
+		},
+		{
 			name: "zero-count days skipped",
 			items: []marketmovers.DailyStatItem{
 				{TotalSalesCount: 3, TotalSalesAmount: 300, AverageSalePrice: 100},
