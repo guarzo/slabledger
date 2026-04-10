@@ -326,7 +326,7 @@ func FromEnv(base Config) Config {
 		cfg.MarketMovers.Enabled = parseBool(v, true)
 	}
 	if v := os.Getenv("MM_REFRESH_HOUR"); v != "" {
-		if i, err := strconv.Atoi(v); err == nil && i >= 0 && i <= 23 {
+		if i, err := strconv.Atoi(v); err == nil && i >= -1 && i <= 23 {
 			cfg.MarketMovers.RefreshHour = i
 		}
 	}
