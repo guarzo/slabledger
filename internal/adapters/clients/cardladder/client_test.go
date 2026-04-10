@@ -77,9 +77,9 @@ func TestClient_FetchSalesComps(t *testing.T) {
 }
 
 func TestClient_TokenRefreshOnExpiry(t *testing.T) {
-	callCount := 0
+	var callCount atomic.Int64
 	authServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		callCount++
+		callCount.Add(1)
 		json.NewEncoder(w).Encode(FirebaseRefreshResponse{ //nolint:errcheck
 			IDToken:      "refreshed-token",
 			RefreshToken: "new-refresh",
@@ -106,8 +106,8 @@ func TestClient_TokenRefreshOnExpiry(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FetchCollectionPage failed: %v", err)
 	}
-	if callCount != 1 {
-		t.Errorf("expected 1 refresh call, got %d", callCount)
+	if callCount.Load() != 1 {
+		t.Errorf("expected 1 refresh call, got %d", callCount.Load())
 	}
 }
 
@@ -155,10 +155,7 @@ func TestClient_ConcurrentTokenRefresh(t *testing.T) {
 	}
 
 	calls := refreshCalls.Load()
-	if calls < 1 {
-		t.Errorf("expected at least 1 refresh call, got %d", calls)
-	}
-	if calls > int64(goroutines) {
-		t.Errorf("expected at most %d refresh calls, got %d", goroutines, calls)
+	if calls != 1 {
+		t.Errorf("singleflight should coalesce to exactly 1 refresh call, got %d", calls)
 	}
 }

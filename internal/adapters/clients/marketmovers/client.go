@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/sync/singleflight"
 	"golang.org/x/time/rate"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/httpx"
@@ -26,6 +27,7 @@ type Client struct {
 	token        TokenState
 	auth         *Auth
 	refreshToken string
+	refreshGroup singleflight.Group
 
 	// For testing: bypass token management
 	staticToken string
@@ -346,15 +348,12 @@ func (c *Client) doQuery(ctx context.Context, path string, input any, result any
 	return nil
 }
 
-// getToken returns a valid access token, refreshing if needed.
-// Uses double-check locking so the lock is not held during the network call.
 func (c *Client) getToken(ctx context.Context) (string, error) {
 	if c.staticToken != "" {
 		return c.staticToken, nil
 	}
 
 	c.mu.Lock()
-	// Return cached token if still valid (with 5min buffer).
 	if c.token.AccessToken != "" && time.Now().Add(5*time.Minute).Before(c.token.ExpiresAt) {
 		token := c.token.AccessToken
 		c.mu.Unlock()
@@ -364,32 +363,41 @@ func (c *Client) getToken(ctx context.Context) (string, error) {
 		c.mu.Unlock()
 		return "", fmt.Errorf("no auth credentials configured")
 	}
-	// Capture credentials under the lock before releasing it.
-	auth := c.auth
-	refreshTok := c.refreshToken
 	c.mu.Unlock()
 
-	// Perform the network call outside the lock to avoid holding it during I/O.
-	resp, err := auth.RefreshToken(ctx, refreshTok)
-	if err != nil {
-		return "", fmt.Errorf("refresh token: %w", err)
-	}
+	v, err, _ := c.refreshGroup.Do("refresh", func() (any, error) {
+		c.mu.Lock()
+		if c.token.AccessToken != "" && time.Now().Add(5*time.Minute).Before(c.token.ExpiresAt) {
+			token := c.token.AccessToken
+			c.mu.Unlock()
+			return token, nil
+		}
+		auth := c.auth
+		refreshTok := c.refreshToken
+		c.mu.Unlock()
 
-	// Parse expiry from JWT payload (exp claim).
-	expiry := parseJWTExpiry(resp.AccessToken)
+		resp, err := auth.RefreshToken(ctx, refreshTok)
+		if err != nil {
+			return "", fmt.Errorf("refresh token: %w", err)
+		}
 
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	// Double-check: another goroutine may have refreshed the token while we
-	// were waiting for the network call to complete.
-	if c.token.AccessToken != "" && time.Now().Add(5*time.Minute).Before(c.token.ExpiresAt) {
+		expiry := parseJWTExpiry(resp.AccessToken)
+
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		c.token = TokenState{
+			AccessToken: resp.AccessToken,
+			ExpiresAt:   expiry,
+		}
+		if resp.RefreshToken != "" {
+			c.refreshToken = resp.RefreshToken
+		}
 		return c.token.AccessToken, nil
+	})
+	if err != nil {
+		return "", err
 	}
-	c.token = TokenState{
-		AccessToken: resp.AccessToken,
-		ExpiresAt:   expiry,
-	}
-	return c.token.AccessToken, nil
+	return v.(string), nil
 }
 
 // ParseJWTExpiry extracts the exp claim from a JWT without verification.

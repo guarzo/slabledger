@@ -24,8 +24,9 @@ type AuthLoginResponse struct {
 
 // AuthRefreshResponse is returned by auth.getFreshAccessToken.
 type AuthRefreshResponse struct {
-	AccessToken string   `json:"accessToken"`
-	User        UserInfo `json:"user"`
+	AccessToken  string   `json:"accessToken"`
+	RefreshToken string   `json:"refreshToken"`
+	User         UserInfo `json:"user"`
 }
 
 // UserInfo contains the user fields embedded in auth responses.

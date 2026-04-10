@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/sync/singleflight"
 	"golang.org/x/time/rate"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/httpx"
@@ -30,6 +31,7 @@ type Client struct {
 	token        TokenState
 	auth         *FirebaseAuth
 	refreshToken string
+	refreshGroup singleflight.Group
 
 	// For testing: bypass token management
 	staticToken string
@@ -198,7 +200,6 @@ func (c *Client) getToken(ctx context.Context) (string, error) {
 	}
 
 	c.mu.Lock()
-	// Return cached token if still valid (with 5min buffer).
 	if c.token.IDToken != "" && time.Now().Add(5*time.Minute).Before(c.token.ExpiresAt) {
 		token := c.token.IDToken
 		c.mu.Unlock()
@@ -208,36 +209,44 @@ func (c *Client) getToken(ctx context.Context) (string, error) {
 		c.mu.Unlock()
 		return "", fmt.Errorf("no auth credentials configured")
 	}
-	// Capture credentials under the lock before releasing it.
-	auth := c.auth
-	refreshTok := c.refreshToken
 	c.mu.Unlock()
 
-	// Perform the network call outside the lock to avoid holding it during I/O.
-	resp, err := auth.RefreshToken(ctx, refreshTok)
-	if err != nil {
-		return "", fmt.Errorf("refresh token: %w", err)
-	}
+	v, err, _ := c.refreshGroup.Do("refresh", func() (any, error) {
+		c.mu.Lock()
+		if c.token.IDToken != "" && time.Now().Add(5*time.Minute).Before(c.token.ExpiresAt) {
+			token := c.token.IDToken
+			c.mu.Unlock()
+			return token, nil
+		}
+		auth := c.auth
+		refreshTok := c.refreshToken
+		c.mu.Unlock()
 
-	expSec, err := strconv.Atoi(resp.ExpiresIn)
-	if err != nil || expSec <= 0 {
-		expSec = 3600
-	}
+		resp, err := auth.RefreshToken(ctx, refreshTok)
+		if err != nil {
+			return "", fmt.Errorf("refresh token: %w", err)
+		}
 
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	// Double-check: another goroutine may have refreshed while we were waiting.
-	if c.token.IDToken != "" && time.Now().Add(5*time.Minute).Before(c.token.ExpiresAt) {
+		expSec, err := strconv.Atoi(resp.ExpiresIn)
+		if err != nil || expSec <= 0 {
+			expSec = 3600
+		}
+
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		c.token = TokenState{
+			IDToken:   resp.IDToken,
+			ExpiresAt: time.Now().Add(time.Duration(expSec) * time.Second),
+		}
+		if resp.RefreshToken != "" {
+			c.refreshToken = resp.RefreshToken
+		}
 		return c.token.IDToken, nil
+	})
+	if err != nil {
+		return "", err
 	}
-	c.token = TokenState{
-		IDToken:   resp.IDToken,
-		ExpiresAt: time.Now().Add(time.Duration(expSec) * time.Second),
-	}
-	if resp.RefreshToken != "" {
-		c.refreshToken = resp.RefreshToken
-	}
-	return c.token.IDToken, nil
+	return v.(string), nil
 }
 
 // SetToken directly sets the current token state (used during initial setup).
