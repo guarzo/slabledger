@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/time/rate"
+
 	"github.com/guarzo/slabledger/internal/adapters/clients/httpx"
 	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
 	"github.com/guarzo/slabledger/internal/domain/observability"
@@ -46,6 +48,7 @@ type Client struct {
 	redirectURI string
 	httpClient  *httpx.Client
 	logger      observability.Logger
+	rateLimiter *rate.Limiter
 }
 
 // NewClient creates a new Instagram API client.
@@ -58,6 +61,7 @@ func NewClient(appID, appSecret, redirectURI string, logger observability.Logger
 		redirectURI: redirectURI,
 		httpClient:  httpx.NewClient(httpCfg),
 		logger:      logger,
+		rateLimiter: rate.NewLimiter(rate.Limit(1), 1), // 1 req/sec
 	}
 }
 
@@ -446,6 +450,9 @@ func (c *Client) publishContainer(ctx context.Context, token, igUserID, containe
 }
 
 func (c *Client) postForm(ctx context.Context, endpoint string, params url.Values, dest any) error {
+	if err := c.rateLimiter.Wait(ctx); err != nil {
+		return apperrors.ProviderUnavailable("Instagram", fmt.Errorf("rate limiter: %w", err))
+	}
 	headers := map[string]string{
 		"Content-Type": "application/x-www-form-urlencoded",
 	}
@@ -466,6 +473,9 @@ func (c *Client) postForm(ctx context.Context, endpoint string, params url.Value
 }
 
 func (c *Client) doGet(ctx context.Context, reqURL string, dest any) error {
+	if err := c.rateLimiter.Wait(ctx); err != nil {
+		return apperrors.ProviderUnavailable("Instagram", fmt.Errorf("rate limiter: %w", err))
+	}
 	resp, err := c.httpClient.Get(ctx, reqURL, nil, 0)
 	if err != nil {
 		if resp != nil {
