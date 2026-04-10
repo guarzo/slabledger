@@ -14,12 +14,32 @@ const (
 	HighSpendCapCents = 500000 // $5,000/day
 )
 
+// GetCrackCandidates returns cached crack candidates for a single campaign.
+// Returns nil if the cache has not been populated yet (background worker still running).
 func (s *service) GetCrackCandidates(ctx context.Context, campaignID string) ([]CrackAnalysis, error) {
-	campaign, err := s.repo.GetCampaign(ctx, campaignID)
-	if err != nil {
+	// Validate campaign exists
+	if _, err := s.repo.GetCampaign(ctx, campaignID); err != nil {
 		return nil, err
 	}
-	return s.crackCandidatesForCampaign(ctx, campaign)
+
+	s.crackCacheMu.RLock()
+	all := s.crackCacheAll
+	s.crackCacheMu.RUnlock()
+
+	if all == nil {
+		if s.logger != nil {
+			s.logger.Info(ctx, "crack cache not yet populated, returning empty list")
+		}
+		return nil, nil
+	}
+
+	var results []CrackAnalysis
+	for _, c := range all {
+		if c.CampaignID == campaignID {
+			results = append(results, c)
+		}
+	}
+	return results, nil
 }
 
 // crackCandidatesForCampaign computes crack candidates using an already-loaded campaign,
@@ -62,7 +82,7 @@ func (s *service) crackCandidatesForCampaign(ctx context.Context, campaign *Camp
 		}
 
 		analysis := computeCrackAnalysis(
-			p.ID, p.CardName, p.CertNumber, p.GradeValue,
+			p.ID, campaign.ID, p.CardName, p.CertNumber, p.GradeValue,
 			p.BuyCostCents, p.PSASourcingFeeCents, rawCents, gradedCents,
 			ebayFee,
 		)
@@ -179,7 +199,29 @@ func (s *service) GetActivationChecklist(ctx context.Context, campaignID string)
 	return checklist, nil
 }
 
+// GetCrackOpportunities returns cached cross-campaign crack opportunities.
+// Returns nil if the cache has not been populated yet.
 func (s *service) GetCrackOpportunities(ctx context.Context) ([]CrackAnalysis, error) {
+	s.crackCacheMu.RLock()
+	all := s.crackCacheAll
+	s.crackCacheMu.RUnlock()
+
+	if all == nil {
+		if s.logger != nil {
+			s.logger.Info(ctx, "crack cache not yet populated, returning empty list")
+		}
+		return nil, nil
+	}
+
+	// Return a copy to prevent callers from mutating the cache.
+	results := make([]CrackAnalysis, len(all))
+	copy(results, all)
+	return results, nil
+}
+
+// computeCrackOpportunitiesLive computes crack opportunities by making live API calls.
+// This is called ONLY by the background cache worker — never during page loads.
+func (s *service) computeCrackOpportunitiesLive(ctx context.Context) ([]CrackAnalysis, error) {
 	allCampaigns, err := s.repo.ListCampaigns(ctx, true)
 	if err != nil {
 		return nil, fmt.Errorf("list active campaigns: %w", err)

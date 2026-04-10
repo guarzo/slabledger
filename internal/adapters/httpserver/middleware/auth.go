@@ -81,12 +81,7 @@ func (m *AuthMiddleware) validateSession(r *http.Request) (*auth.User, error) {
 	if m.localAPIToken != "" {
 		if header := r.Header.Get("Authorization"); header != "" {
 			if token, ok := strings.CutPrefix(header, "Bearer "); ok && len(token) == len(m.localAPIToken) && subtle.ConstantTimeCompare([]byte(token), []byte(m.localAPIToken)) == 1 {
-				return &auth.User{
-					ID:       0,
-					Username: "local-api",
-					Email:    "local@localhost",
-					IsAdmin:  true,
-				}, nil
+				return m.resolveLocalAPIUser(r.Context())
 			}
 		}
 	}
@@ -107,6 +102,30 @@ func (m *AuthMiddleware) validateSession(r *http.Request) (*auth.User, error) {
 	}
 
 	return user, nil
+}
+
+// resolveLocalAPIUser returns a real DB-backed user for local API token auth.
+// When authService is available, it ensures a "local-api" user exists in the users
+// table so that FK constraints (favorites, price_flags) are satisfied.
+// When authService is nil, it falls back to a synthetic user with ID 0.
+func (m *AuthMiddleware) resolveLocalAPIUser(ctx context.Context) (*auth.User, error) {
+	if m.authService != nil {
+		user, err := m.authService.GetOrCreateUser(ctx, "local-api-token", "local-api", "local@localhost", "")
+		if err != nil {
+			m.logger.Warn(ctx, "failed to resolve local API user from DB, using synthetic user",
+				observability.Err(err))
+		} else {
+			// Ensure admin privileges for local API token
+			user.IsAdmin = true
+			return user, nil
+		}
+	}
+	return &auth.User{
+		ID:       0,
+		Username: "local-api",
+		Email:    "local@localhost",
+		IsAdmin:  true,
+	}, nil
 }
 
 // RequireAdmin requires the authenticated user to be an admin

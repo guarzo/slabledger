@@ -15,6 +15,7 @@ import (
 // Mock auth service for testing
 type mockAuthService struct {
 	validateSessionFunc    func(ctx context.Context, sessionID string) (*auth.Session, *auth.User, error)
+	getOrCreateUserFunc    func(ctx context.Context, googleID, username, email, avatarURL string) (*auth.User, error)
 	isEmailAllowedFunc     func(ctx context.Context, email string) (bool, error)
 	listAllowedEmailsFunc  func(ctx context.Context) ([]auth.AllowedEmail, error)
 	addAllowedEmailFunc    func(ctx context.Context, email string, addedBy int64, notes string) error
@@ -63,6 +64,9 @@ func (m *mockAuthService) CleanupExpiredSessions(ctx context.Context) (int, erro
 }
 
 func (m *mockAuthService) GetOrCreateUser(ctx context.Context, googleID, username, email, avatarURL string) (*auth.User, error) {
+	if m.getOrCreateUserFunc != nil {
+		return m.getOrCreateUserFunc(ctx, googleID, username, email, avatarURL)
+	}
 	return nil, errors.New("not implemented")
 }
 
@@ -419,7 +423,16 @@ func TestGetUserFromContext(t *testing.T) {
 }
 
 func TestLocalAPIToken_ValidToken(t *testing.T) {
-	service := &mockAuthService{}
+	service := &mockAuthService{
+		getOrCreateUserFunc: func(ctx context.Context, googleID, username, email, avatarURL string) (*auth.User, error) {
+			return &auth.User{
+				ID:       42,
+				Username: username,
+				Email:    email,
+				IsAdmin:  false, // DB default, middleware should override
+			}, nil
+		},
+	}
 	logger := &mockAuthLogger{}
 	mw := NewAuthMiddleware(service, logger)
 	mw.WithLocalAPIToken("test-secret-token")
@@ -450,6 +463,47 @@ func TestLocalAPIToken_ValidToken(t *testing.T) {
 	}
 	if contextUser == nil {
 		t.Fatal("Expected user in context")
+	}
+	if contextUser.ID != 42 {
+		t.Errorf("Expected user ID 42 from DB, got %d", contextUser.ID)
+	}
+	if contextUser.Username != "local-api" {
+		t.Errorf("Expected username 'local-api', got %q", contextUser.Username)
+	}
+	if !contextUser.IsAdmin {
+		t.Error("Expected local API user to be admin")
+	}
+}
+
+func TestLocalAPIToken_FallbackToSyntheticUser(t *testing.T) {
+	// When authService is nil, should fall back to synthetic user
+	logger := &mockAuthLogger{}
+	mw := NewAuthMiddleware(nil, logger)
+	mw.WithLocalAPIToken("test-secret-token")
+
+	var contextUser *auth.User
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		user, ok := GetUserFromContext(r.Context())
+		if ok {
+			contextUser = user
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
+	req.Header.Set("Authorization", "Bearer test-secret-token")
+	w := httptest.NewRecorder()
+
+	mw.RequireAuth(handler).ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d", w.Code)
+	}
+	if contextUser == nil {
+		t.Fatal("Expected user in context")
+	}
+	if contextUser.ID != 0 {
+		t.Errorf("Expected synthetic user ID 0, got %d", contextUser.ID)
 	}
 	if contextUser.Username != "local-api" {
 		t.Errorf("Expected username 'local-api', got %q", contextUser.Username)

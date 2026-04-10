@@ -179,9 +179,10 @@ type service struct {
 	certEnrichCancel context.CancelFunc
 	wg               sync.WaitGroup // tracks background goroutines (e.g. batchResolveCardIDs)
 
-	// Crack candidate cache — refreshed in background, read by inventory endpoint.
+	// Crack candidate cache — refreshed in background, read by inventory and handler endpoints.
 	crackCacheMu     sync.RWMutex
-	crackCacheSet    map[string]bool
+	crackCacheSet    map[string]bool // purchaseID→true (derived from crackCacheAll)
+	crackCacheAll    []CrackAnalysis // full cross-campaign results
 	crackCacheCancel context.CancelFunc
 }
 
