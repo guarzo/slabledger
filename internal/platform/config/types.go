@@ -24,6 +24,8 @@ type ServerConfig struct {
 	WriteTimeout    time.Duration // HTTP write timeout
 	IdleTimeout     time.Duration // HTTP idle timeout
 	ShutdownTimeout time.Duration // Graceful shutdown timeout
+	BaseURL         string        // Public base URL for generating absolute links (optional)
+	MediaDir        string        // Directory for media file storage (default: ./data/media)
 }
 
 // LoggingConfig controls logging behavior

@@ -74,6 +74,7 @@ type MockCampaignRepository struct {
 	RemoveSellSheetItemsFn         func(ctx context.Context, purchaseIDs []string) error
 	ClearSellSheetFn               func(ctx context.Context) error
 	OpenFlagPurchaseIDsFn          func(ctx context.Context) (map[string]int64, error)
+	GetCapitalRawDataFn            func(ctx context.Context) (*campaigns.CapitalRawData, error)
 }
 
 // NewMockCampaignRepository creates a ready-to-use MockCampaignRepository with initialized maps.
@@ -619,8 +620,11 @@ func (m *MockCampaignRepository) SumPurchaseCostByInvoiceDate(_ context.Context,
 func (m *MockCampaignRepository) GetCashflowConfig(_ context.Context) (*campaigns.CashflowConfig, error) {
 	return &campaigns.CashflowConfig{CapitalBudgetCents: 5000000, CashBufferCents: 1000000}, nil
 }
-func (m *MockCampaignRepository) GetCapitalSummary(_ context.Context) (*campaigns.CapitalSummary, error) {
-	return &campaigns.CapitalSummary{OutstandingCents: 0, WeeksToCover: campaigns.WeeksToCoverNoData, AlertLevel: campaigns.AlertOK}, nil
+func (m *MockCampaignRepository) GetCapitalRawData(ctx context.Context) (*campaigns.CapitalRawData, error) {
+	if m.GetCapitalRawDataFn != nil {
+		return m.GetCapitalRawDataFn(ctx)
+	}
+	return &campaigns.CapitalRawData{OutstandingCents: 0, RecoveryRate30dCents: 0, RecoveryRate30dPriorCents: 0}, nil
 }
 
 func (m *MockCampaignRepository) GetPortfolioChannelVelocity(_ context.Context) ([]campaigns.ChannelVelocity, error) {

@@ -82,10 +82,11 @@ func (s *service) GetActivationChecklist(ctx context.Context, campaignID string)
 		return nil, err
 	}
 
-	capital, err := s.repo.GetCapitalSummary(ctx)
+	capitalRaw, err := s.repo.GetCapitalRawData(ctx)
 	if err != nil {
 		return nil, err
 	}
+	capital := ComputeCapitalSummary(capitalRaw)
 
 	invoices, err := s.repo.ListInvoices(ctx)
 	if err != nil {
@@ -109,9 +110,7 @@ func (s *service) GetActivationChecklist(ctx context.Context, campaignID string)
 		Passed:  exposureCheckOK,
 		Message: fmt.Sprintf("Recovery velocity: alert=%s, weeks-to-cover=%.1f", capital.AlertLevel, capital.WeeksToCover),
 	})
-	if !exposureCheckOK {
-		checklist.AllPassed = false
-	}
+	checklist.AllPassed = checklist.AllPassed && exposureCheckOK
 
 	hasPaidInvoice := false
 	for _, inv := range invoices {
@@ -130,9 +129,7 @@ func (s *service) GetActivationChecklist(ctx context.Context, campaignID string)
 			return "No completed invoice cycles yet — consider waiting before activating high-value campaigns"
 		}(),
 	})
-	if !hasPaidInvoice {
-		checklist.AllPassed = false
-	}
+	checklist.AllPassed = checklist.AllPassed && hasPaidInvoice
 
 	totalDailyExposure := 0
 	alreadyIncluded := false
@@ -160,9 +157,7 @@ func (s *service) GetActivationChecklist(ctx context.Context, campaignID string)
 		Passed:  dailyExpOK,
 		Message: exposureMsg,
 	})
-	if !dailyExpOK {
-		checklist.AllPassed = false
-	}
+	checklist.AllPassed = checklist.AllPassed && dailyExpOK
 
 	// Warn on high-value campaigns: a single fill could be significant
 	if campaign.DailySpendCapCents >= HighSpendCapCents {

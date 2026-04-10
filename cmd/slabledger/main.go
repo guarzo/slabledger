@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/platform/config"
@@ -22,9 +21,7 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/clients/google"
 	"github.com/guarzo/slabledger/internal/adapters/clients/gsheets"
 	"github.com/guarzo/slabledger/internal/adapters/clients/tcgdex"
-	"github.com/guarzo/slabledger/internal/adapters/httpserver/handlers"
 	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
-	"github.com/guarzo/slabledger/internal/domain/ai"
 	"github.com/guarzo/slabledger/internal/domain/auth"
 	"github.com/guarzo/slabledger/internal/domain/favorites"
 	"github.com/guarzo/slabledger/internal/domain/picks"
@@ -313,71 +310,19 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 
 	// Initialize Card Ladder (encryptor was created earlier for MM mapping adapter)
 	clClient, _, clStore := initializeCardLadder(ctx, logger, db, clEncryptor)
-	var clHandler *handlers.CardLadderHandler
 	var clSalesStore *sqlite.CLSalesStore
 	if clStore != nil {
-		clHandler = handlers.NewCardLadderHandler(clStore, clClient, logger)
 		clSalesStore = sqlite.NewCLSalesStore(db.DB)
 	}
 
 	// Initialize Market Movers client (store was created earlier for campaigns service)
 	mmClient, _ := initializeMarketMovers(ctx, logger, db, clEncryptor)
-	var mmHandler *handlers.MarketMoversHandler
-	if mmStore != nil {
-		mmHandler = handlers.NewMarketMoversHandler(mmStore, mmClient, logger)
-		if campaignsRepo != nil {
-			mmHandler.SetPurchaseLister(campaignsRepo)
-		}
-	}
 
 	// Initialize picks
 	picksRepo := sqlite.NewPicksRepository(db.DB)
 	profitabilityProv := sqlite.NewProfitabilityProvider(db.DB)
 	inventoryProv := sqlite.NewInventoryProvider(db.DB)
-
 	picksService := picks.NewService(picksRepo, azureAIClient, profitabilityProv, inventoryProv, logger)
-	picksHandler := handlers.NewPicksHandler(picksService, logger)
-
-	// Create opportunities handler (arbitrage endpoints)
-	var opportunitiesHandler *handlers.OpportunitiesHandler
-	if campaignsService != nil {
-		opportunitiesHandler = handlers.NewOpportunitiesHandler(campaignsService, logger)
-	}
-
-	// Create DH handler (bulk match + intelligence; nil when client is not configured)
-	var dhHandler *handlers.DHHandler
-	if dhClient != nil && dhClient.EnterpriseAvailable() {
-		dhHandler = handlers.NewDHHandler(handlers.DHHandlerDeps{
-			CertResolver:      dhClient,
-			CardIDSaver:       cardIDMappingRepo,
-			PurchaseLister:    campaignsRepo,
-			InventoryPusher:   dhClient,
-			DHFieldsUpdater:   campaignsRepo,
-			PushStatusUpdater: campaignsRepo,
-			CandidatesSaver:   campaignsRepo,
-			StatusCounter:     campaignsRepo,
-			IntelRepo:         intelRepo,
-			SuggestionsRepo:   suggestionsRepo,
-			IntelCounter:      intelRepo,
-			SuggestCounter:    suggestionsRepo,
-			Logger:            logger,
-			BaseCtx:           ctx,
-			HealthReporter:    dhClient,
-			CountsFetcher:     dhClient,
-			DHApproveService:  campaignsService,
-			MatchConfirmer:    dhClient,
-		})
-		logger.Info(ctx, "DH handler initialized")
-	}
-
-	// Create sell sheet items handler (always available when auth is configured)
-	sellSheetItemsHandler := handlers.NewSellSheetItemsHandler(campaignsRepo, logger)
-
-	// Create card catalog handler (CL card catalog search; nil when CL is not configured)
-	var cardCatalogHandler *handlers.CardCatalogHandler
-	if clClient != nil && clClient.Available() {
-		cardCatalogHandler = handlers.NewCardCatalogHandler(clClient, logger)
-	}
 
 	// Initialize Google Sheets client for PSA sync (nil if not configured)
 	var gsheetsClient *gsheets.Client
@@ -429,154 +374,42 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	}
 	schedulerResult, cancelScheduler := initializeSchedulers(ctx, sDeps)
 
-	// Wire Card Ladder manual refresh into the handler
-	if clHandler != nil && schedulerResult.CardLadderRefresh != nil {
-		clHandler.SetRefresher(schedulerResult.CardLadderRefresh)
-	}
-	if clHandler != nil && campaignsRepo != nil {
-		clHandler.SetPurchaseLister(campaignsRepo)
-	}
-
-	// Wire Market Movers manual refresh into the handler
-	if mmHandler != nil && schedulerResult.MMRefresh != nil {
-		mmHandler.SetRefresher(schedulerResult.MMRefresh)
-	}
-
-	// Create price hints handler
-	priceHintsHandler := handlers.NewPriceHintsHandler(cardIDMappingRepo, logger)
-
-	// Create pricing diagnostics handler
-	pricingDiagRepo := sqlite.NewPricingDiagnosticsRepository(db.DB)
-	pricingDiagHandler := handlers.NewPricingDiagnosticsHandler(pricingDiagRepo, logger)
-
-	// Create card request handler (read-only)
-	cardRequestHandler := handlers.NewCardRequestHandlers(cardRequestRepo, nil, "", logger)
-
-	// Create advisor handler (if advisor was initialized above)
-	var advisorHandler *handlers.AdvisorHandler
-	if advisorService != nil {
-		advisorHandler = handlers.NewAdvisorHandler(advisorService, campaignsService, advisorCacheRepo, logger)
-	}
-
-	// Create social handler
-	mediaDir := os.Getenv("MEDIA_DIR")
-	if mediaDir == "" {
-		mediaDir = "./data/media"
-	}
-	baseURL := os.Getenv("BASE_URL")
-	if baseURL == "" {
-		logger.Warn(context.Background(), "BASE_URL is not set — slide URLs will be derived from request headers")
-	} else {
-		logger.Info(context.Background(), "BASE_URL configured",
-			observability.String("baseURL", baseURL))
-	}
-	socialHandler := handlers.NewSocialHandler(socialService, socialRepo, logger, mediaDir, baseURL)
-
-	// Wire metrics repository into social handler for API endpoints
-	socialHandler.WithMetricsRepo(metricsRepo)
-
-	// Create AI status handler — only wire tracker when an LLM provider is configured
-	var aiTracker ai.AICallTracker
-	if azureAIClient != nil {
-		aiTracker = aiCallRepo
-	}
-	aiStatusHandler := handlers.NewAIStatusHandler(aiTracker, logger)
-
-	// Create price flags handler
-	priceFlagsHandler := handlers.NewPriceFlagsHandler(campaignsService, logger)
-
-	// Create Instagram handler (if client + store were initialized)
-	var igHandler *handlers.InstagramHandler
-	if igClient != nil && igStore != nil && authService != nil {
-		igHandler = handlers.NewInstagramHandler(igClient, igStore, socialService, authService, logger)
-	}
-
-	// Start web server
-	deps := ServerDependencies{
-		Config:                    cfg,
-		Logger:                    logger,
-		CardProv:                  cardProvImpl,
-		PriceProv:                 priceProvImpl,
-		HealthChecker:             priceRepo,
-		APITracker:                priceRepo,
-		AuthService:               authService,
-		FavoritesService:          favoritesService,
-		CampaignsService:          campaignsService,
-		CacheStatsProvider:        cardProvImpl,
-		PriceHintsHandler:         priceHintsHandler,
-		CardRequestHandler:        cardRequestHandler,
-		PricingDiagnosticsHandler: pricingDiagHandler,
-		CampaignsRepo:             campaignsRepo,
-		PricingAPIKey:             cfg.Adapters.PricingAPIKey,
-		AdvisorHandler:            advisorHandler,
-		SocialHandler:             socialHandler,
-		InstagramHandler:          igHandler,
-		AIStatusHandler:           aiStatusHandler,
-		PriceFlagsHandler:         priceFlagsHandler,
-		CardLadderHandler:         clHandler,
-		MarketMoversHandler:       mmHandler,
-		PicksHandler:              picksHandler,
-		OpportunitiesHandler:      opportunitiesHandler,
-		DHHandler:                 dhHandler,
-		SellSheetItemsHandler:     sellSheetItemsHandler,
-		CardCatalogHandler:        cardCatalogHandler,
-	}
-	// Nil-safe interface conversion: a nil *dh.Client assigned to an interface
-	// produces a non-nil interface wrapping a nil pointer, which breaks nil checks.
-	if dhClient != nil {
-		deps.DHInventoryLister = dhClient
-		deps.DHCertResolver = dhClient
-		deps.DHInventoryPusher = dhClient
-	}
-	if campaignsRepo != nil {
-		deps.DHFieldsUpdater = campaignsRepo
-		deps.DHPushStatusUpdater = campaignsRepo
-		deps.DHCandidatesSaver = campaignsRepo
-	}
-	if cardIDMappingRepo != nil {
-		deps.DHCardIDSaver = cardIDMappingRepo
-	}
-	if gsheetsClient != nil && cfg.GoogleSheets.SpreadsheetID != "" {
-		deps.SheetFetcher = gsheetsClient
-		deps.SheetsSpreadsheetID = cfg.GoogleSheets.SpreadsheetID
-		deps.SheetsTabName = cfg.GoogleSheets.TabName
-	}
+	deps, hOut := createHandlers(ctx, handlerInputs{
+		Cfg:               cfg,
+		Logger:            logger,
+		DB:                db,
+		CardProvImpl:      cardProvImpl,
+		PriceProvImpl:     priceProvImpl,
+		PriceRepo:         priceRepo,
+		AuthService:       authService,
+		FavoritesService:  favoritesService,
+		CampaignsService:  campaignsService,
+		CampaignsRepo:     campaignsRepo,
+		CardIDMappingRepo: cardIDMappingRepo,
+		CardRequestRepo:   cardRequestRepo,
+		IntelRepo:         intelRepo,
+		SuggestionsRepo:   suggestionsRepo,
+		AdvisorService:    advisorService,
+		AdvisorCacheRepo:  advisorCacheRepo,
+		AzureAIClient:     azureAIClient,
+		AICallRepo:        aiCallRepo,
+		SocialService:     socialService,
+		SocialRepo:        socialRepo,
+		IGClient:          igClient,
+		IGStore:           igStore,
+		MetricsRepo:       metricsRepo,
+		CLClient:          clClient,
+		CLStore:           clStore,
+		MMStore:           mmStore,
+		MMClient:          mmClient,
+		DHClient:          dhClient,
+		PicksService:      picksService,
+		SchedulerResult:   schedulerResult,
+		GSheetsClient:     gsheetsClient,
+	})
 	serverErr := startWebServer(ctx, deps)
 
-	// Graceful scheduler shutdown
-	logger.Info(ctx, "shutting down schedulers")
-	cancelScheduler()
-	schedulerResult.Group.StopAll()
-
-	waitDone := make(chan struct{})
-	go func() {
-		schedulerResult.Group.Wait()
-		close(waitDone)
-	}()
-	select {
-	case <-waitDone:
-		// Schedulers shut down cleanly
-	case <-time.After(30 * time.Second):
-		logger.Warn(ctx, "scheduler shutdown timed out after 30s")
-	}
-
-	// Wait for any in-flight background DH bulk match to finish
-	if dhHandler != nil {
-		dhHandler.Wait()
-	}
-
-	// Wait for any in-flight background advisor analyses to finish
-	if advisorHandler != nil {
-		advisorHandler.Wait()
-	}
-
-	// Wait for in-flight social caption generation goroutines
-	socialService.Wait()
-
-	// Shut down campaign service background workers
-	if campaignsService != nil {
-		campaignsService.Close()
-	}
+	shutdownGracefully(ctx, logger, cancelScheduler, schedulerResult, hOut, socialService, campaignsService)
 
 	return serverErr
 }

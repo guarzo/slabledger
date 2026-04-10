@@ -112,7 +112,7 @@ type Repository interface {
 	UpdateInvoice(ctx context.Context, inv *Invoice) error
 	SumPurchaseCostByInvoiceDate(ctx context.Context, invoiceDate string) (int, error)
 	GetCashflowConfig(ctx context.Context) (*CashflowConfig, error)
-	GetCapitalSummary(ctx context.Context) (*CapitalSummary, error)
+	GetCapitalRawData(ctx context.Context) (*CapitalRawData, error)
 
 	// Revocation
 	CreateRevocationFlag(ctx context.Context, flag *RevocationFlag) error
