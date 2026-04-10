@@ -266,7 +266,7 @@ type PicksRefreshConfig struct {
 type CardLadderConfig struct {
 	Enabled     bool          // Enable CL refresh scheduler (default: false)
 	Interval    time.Duration // How often to run refresh (default: 24h)
-	RefreshHour int           // Hour (0-23 UTC) to schedule runs; -1 = use Interval (default: 4)
+	RefreshHour int           // Hour (0-23 UTC) to schedule daily runs (default: 4)
 }
 
 // MarketMoversConfig controls the Market Movers value refresh scheduler.

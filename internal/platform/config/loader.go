@@ -38,78 +38,104 @@ func Load(args []string) (Config, error) {
 	return cfg, nil
 }
 
+// envString reads an environment variable and assigns it to target if present.
+func envString(key string, target *string) {
+	if v := os.Getenv(key); v != "" {
+		*target = v
+	}
+}
+
+// envInt reads an environment variable, parses it as an int, and assigns it to target if valid.
+func envInt(key string, target *int) {
+	if v := os.Getenv(key); v != "" {
+		if i, err := strconv.Atoi(v); err == nil {
+			*target = i
+		}
+	}
+}
+
+// envIntPositive reads an environment variable, parses it as a positive int, and assigns it to target if valid.
+func envIntPositive(key string, target *int) {
+	if v := os.Getenv(key); v != "" {
+		if i, err := strconv.Atoi(v); err == nil && i > 0 {
+			*target = i
+		}
+	}
+}
+
+// envIntRange reads an environment variable, parses it as an int within [minVal, maxVal], and assigns it to target if valid.
+func envIntRange(key string, target *int, minVal, maxVal int) {
+	if v := os.Getenv(key); v != "" {
+		if i, err := strconv.Atoi(v); err == nil && i >= minVal && i <= maxVal {
+			*target = i
+		}
+	}
+}
+
+// envDuration reads an environment variable, parses it as a duration, and assigns it to target if valid.
+func envDuration(key string, target *time.Duration) {
+	if v := os.Getenv(key); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			*target = d
+		}
+	}
+}
+
+// envDurationPositive reads an environment variable, parses it as a positive duration, and assigns it to target if valid.
+func envDurationPositive(key string, target *time.Duration) {
+	if v := os.Getenv(key); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			*target = d
+		}
+	}
+}
+
+// envDurationNonNegative reads an environment variable, parses it as a non-negative duration, and assigns it to target if valid.
+func envDurationNonNegative(key string, target *time.Duration) {
+	if v := os.Getenv(key); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d >= 0 {
+			*target = d
+		}
+	}
+}
+
+// envBool reads an environment variable, parses it as a boolean with a default, and assigns it to target.
+func envBool(key string, target *bool, defaultVal bool) {
+	if v := os.Getenv(key); v != "" {
+		*target = parseBool(v, defaultVal)
+	}
+}
+
 // FromEnv overlays environment variables onto the base config
 func FromEnv(base Config) Config {
 	cfg := base
 
 	// Logging
-	if v := os.Getenv("LOG_LEVEL"); v != "" {
-		cfg.Logging.Level = v
-	}
-	if v := os.Getenv("LOG_JSON"); v != "" {
-		cfg.Logging.JSON = parseBool(v, false)
-	}
+	envString("LOG_LEVEL", &cfg.Logging.Level)
+	envBool("LOG_JSON", &cfg.Logging.JSON, false)
 
 	// Server
-	if v := os.Getenv("HTTP_LISTEN_ADDR"); v != "" {
-		cfg.Server.ListenAddr = v
-	}
-	if v := os.Getenv("HTTP_READ_TIMEOUT"); v != "" {
-		if d, err := time.ParseDuration(v); err == nil {
-			cfg.Server.ReadTimeout = d
-		}
-	}
-	if v := os.Getenv("HTTP_WRITE_TIMEOUT"); v != "" {
-		if d, err := time.ParseDuration(v); err == nil {
-			cfg.Server.WriteTimeout = d
-		}
-	}
-	if v := os.Getenv("HTTP_IDLE_TIMEOUT"); v != "" {
-		if d, err := time.ParseDuration(v); err == nil {
-			cfg.Server.IdleTimeout = d
-		}
-	}
-	if v := os.Getenv("BASE_URL"); v != "" {
-		cfg.Server.BaseURL = v
-	}
-	if v := os.Getenv("MEDIA_DIR"); v != "" {
-		cfg.Server.MediaDir = v
-	}
+	envString("HTTP_LISTEN_ADDR", &cfg.Server.ListenAddr)
+	envDuration("HTTP_READ_TIMEOUT", &cfg.Server.ReadTimeout)
+	envDuration("HTTP_WRITE_TIMEOUT", &cfg.Server.WriteTimeout)
+	envDuration("HTTP_IDLE_TIMEOUT", &cfg.Server.IdleTimeout)
+	envString("BASE_URL", &cfg.Server.BaseURL)
+	envString("MEDIA_DIR", &cfg.Server.MediaDir)
 
 	// Rate limiting
-	if v := os.Getenv("RATE_LIMIT_REQUESTS"); v != "" {
-		if i, err := strconv.Atoi(v); err == nil {
-			cfg.Mode.RateLimitRequests = i
-		}
-	}
-	if v := os.Getenv("RATE_LIMIT_TRUST_PROXY"); v != "" {
-		cfg.Mode.TrustProxy = parseBool(v, false)
-	}
+	envInt("RATE_LIMIT_REQUESTS", &cfg.Mode.RateLimitRequests)
+	envBool("RATE_LIMIT_TRUST_PROXY", &cfg.Mode.TrustProxy, false)
 
-	// Database configuration
-	if v := os.Getenv("DATABASE_PATH"); v != "" {
-		cfg.Database.Path = v
-	}
-	if v := os.Getenv("MIGRATIONS_PATH"); v != "" {
-		cfg.Database.MigrationsPath = v
-	}
+	// Database
+	envString("DATABASE_PATH", &cfg.Database.Path)
+	envString("MIGRATIONS_PATH", &cfg.Database.MigrationsPath)
 
-	// Maintenance configuration
-	if v := os.Getenv("ACCESS_LOG_RETENTION_DAYS"); v != "" {
-		if i, err := strconv.Atoi(v); err == nil {
-			cfg.Maintenance.AccessLogRetentionDays = i
-		}
-	}
-	if v := os.Getenv("ACCESS_LOG_CLEANUP_INTERVAL"); v != "" {
-		if d, err := time.ParseDuration(v); err == nil {
-			cfg.Maintenance.AccessLogCleanupInterval = d
-		}
-	}
-	if v := os.Getenv("ACCESS_LOG_CLEANUP_ENABLED"); v != "" {
-		cfg.Maintenance.AccessLogCleanupEnabled = parseBool(v, true)
-	}
+	// Maintenance
+	envInt("ACCESS_LOG_RETENTION_DAYS", &cfg.Maintenance.AccessLogRetentionDays)
+	envDuration("ACCESS_LOG_CLEANUP_INTERVAL", &cfg.Maintenance.AccessLogCleanupInterval)
+	envBool("ACCESS_LOG_CLEANUP_ENABLED", &cfg.Maintenance.AccessLogCleanupEnabled, true)
 
-	// Auth configuration
+	// Auth
 	cfg.Auth.EncryptionKey = os.Getenv("ENCRYPTION_KEY")
 	if v := os.Getenv("ADMIN_EMAILS"); v != "" {
 		emails := strings.Split(v, ",")
@@ -119,217 +145,71 @@ func FromEnv(base Config) Config {
 		cfg.Auth.AdminEmails = emails
 	}
 
-	// Price refresh scheduler configuration
-	if v := os.Getenv("PRICE_REFRESH_INTERVAL"); v != "" {
-		if d, err := time.ParseDuration(v); err == nil {
-			cfg.PriceRefresh.RefreshInterval = d
-		}
-	}
-	if v := os.Getenv("PRICE_BATCH_SIZE"); v != "" {
-		if i, err := strconv.Atoi(v); err == nil && i > 0 {
-			cfg.PriceRefresh.BatchSize = i
-		}
-	}
-	if v := os.Getenv("PRICE_BATCH_DELAY"); v != "" {
-		if d, err := time.ParseDuration(v); err == nil {
-			cfg.PriceRefresh.BatchDelay = d
-		}
-	}
-	if v := os.Getenv("PRICE_MAX_BURST_CALLS"); v != "" {
-		if i, err := strconv.Atoi(v); err == nil && i > 0 {
-			cfg.PriceRefresh.MaxBurstCalls = i
-		}
-	}
-	if v := os.Getenv("PRICE_MAX_CALLS_PER_HOUR"); v != "" {
-		if i, err := strconv.Atoi(v); err == nil && i > 0 {
-			cfg.PriceRefresh.MaxCallsPerHour = i
-		}
-	}
-	if v := os.Getenv("PRICE_BURST_PAUSE_DURATION"); v != "" {
-		if d, err := time.ParseDuration(v); err == nil && d > 0 {
-			cfg.PriceRefresh.BurstPauseDuration = d
-		}
-	}
+	// Price refresh scheduler
+	envDuration("PRICE_REFRESH_INTERVAL", &cfg.PriceRefresh.RefreshInterval)
+	envIntPositive("PRICE_BATCH_SIZE", &cfg.PriceRefresh.BatchSize)
+	envDuration("PRICE_BATCH_DELAY", &cfg.PriceRefresh.BatchDelay)
+	envIntPositive("PRICE_MAX_BURST_CALLS", &cfg.PriceRefresh.MaxBurstCalls)
+	envIntPositive("PRICE_MAX_CALLS_PER_HOUR", &cfg.PriceRefresh.MaxCallsPerHour)
+	envDurationPositive("PRICE_BURST_PAUSE_DURATION", &cfg.PriceRefresh.BurstPauseDuration)
+	envBool("PRICE_REFRESH_ENABLED", &cfg.PriceRefresh.Enabled, true)
 
-	// Cache warmup configuration
-	if v := os.Getenv("CACHE_WARMUP_ENABLED"); v != "" {
-		cfg.CacheWarmup.Enabled = parseBool(v, true)
-	}
-	if v := os.Getenv("CACHE_WARMUP_INTERVAL"); v != "" {
-		if d, err := time.ParseDuration(v); err == nil {
-			cfg.CacheWarmup.Interval = d
-		}
-	}
-	if v := os.Getenv("CACHE_WARMUP_RATE_LIMIT_DELAY"); v != "" {
-		if d, err := time.ParseDuration(v); err == nil {
-			cfg.CacheWarmup.RateLimitDelay = d
-		}
-	}
+	// Cache warmup
+	envBool("CACHE_WARMUP_ENABLED", &cfg.CacheWarmup.Enabled, true)
+	envDuration("CACHE_WARMUP_INTERVAL", &cfg.CacheWarmup.Interval)
+	envDuration("CACHE_WARMUP_RATE_LIMIT_DELAY", &cfg.CacheWarmup.RateLimitDelay)
 
-	// Price refresh scheduler enabled
-	if v := os.Getenv("PRICE_REFRESH_ENABLED"); v != "" {
-		cfg.PriceRefresh.Enabled = parseBool(v, true)
-	}
+	// Session cleanup
+	envBool("SESSION_CLEANUP_ENABLED", &cfg.SessionCleanup.Enabled, true)
+	envDuration("SESSION_CLEANUP_INTERVAL", &cfg.SessionCleanup.Interval)
 
-	// Session cleanup configuration
-	if v := os.Getenv("SESSION_CLEANUP_ENABLED"); v != "" {
-		cfg.SessionCleanup.Enabled = parseBool(v, true)
-	}
-	if v := os.Getenv("SESSION_CLEANUP_INTERVAL"); v != "" {
-		if d, err := time.ParseDuration(v); err == nil {
-			cfg.SessionCleanup.Interval = d
-		}
-	}
+	// Inventory refresh scheduler
+	envBool("INVENTORY_REFRESH_ENABLED", &cfg.InventoryRefresh.Enabled, true)
+	envDurationPositive("INVENTORY_REFRESH_INTERVAL", &cfg.InventoryRefresh.Interval)
+	envDurationPositive("INVENTORY_REFRESH_STALE_THRESHOLD", &cfg.InventoryRefresh.StaleThreshold)
+	envIntPositive("INVENTORY_REFRESH_BATCH_SIZE", &cfg.InventoryRefresh.BatchSize)
+	envDurationPositive("INVENTORY_REFRESH_BATCH_DELAY", &cfg.InventoryRefresh.BatchDelay)
 
-	// Inventory refresh scheduler configuration
-	if v := os.Getenv("INVENTORY_REFRESH_ENABLED"); v != "" {
-		cfg.InventoryRefresh.Enabled = parseBool(v, true)
-	}
-	if v := os.Getenv("INVENTORY_REFRESH_INTERVAL"); v != "" {
-		if d, err := time.ParseDuration(v); err == nil && d > 0 {
-			cfg.InventoryRefresh.Interval = d
-		}
-	}
-	if v := os.Getenv("INVENTORY_REFRESH_STALE_THRESHOLD"); v != "" {
-		if d, err := time.ParseDuration(v); err == nil && d > 0 {
-			cfg.InventoryRefresh.StaleThreshold = d
-		}
-	}
-	if v := os.Getenv("INVENTORY_REFRESH_BATCH_SIZE"); v != "" {
-		if i, err := strconv.Atoi(v); err == nil && i > 0 {
-			cfg.InventoryRefresh.BatchSize = i
-		}
-	}
-	if v := os.Getenv("INVENTORY_REFRESH_BATCH_DELAY"); v != "" {
-		if d, err := time.ParseDuration(v); err == nil && d > 0 {
-			cfg.InventoryRefresh.BatchDelay = d
-		}
-	}
+	// Snapshot enrichment scheduler
+	envBool("SNAPSHOT_ENRICH_ENABLED", &cfg.SnapshotEnrich.Enabled, true)
+	envDurationPositive("SNAPSHOT_ENRICH_INTERVAL", &cfg.SnapshotEnrich.Interval)
+	envIntPositive("SNAPSHOT_ENRICH_BATCH_SIZE", &cfg.SnapshotEnrich.BatchSize)
+	envDurationPositive("SNAPSHOT_ENRICH_RETRY_INTERVAL", &cfg.SnapshotEnrich.RetryInterval)
+	envIntPositive("SNAPSHOT_ENRICH_MAX_RETRIES", &cfg.SnapshotEnrich.MaxRetries)
 
-	// Snapshot enrichment scheduler configuration
-	if v := os.Getenv("SNAPSHOT_ENRICH_ENABLED"); v != "" {
-		cfg.SnapshotEnrich.Enabled = parseBool(v, true)
-	}
-	if v := os.Getenv("SNAPSHOT_ENRICH_INTERVAL"); v != "" {
-		if d, err := time.ParseDuration(v); err == nil && d > 0 {
-			cfg.SnapshotEnrich.Interval = d
-		}
-	}
-	if v := os.Getenv("SNAPSHOT_ENRICH_BATCH_SIZE"); v != "" {
-		if i, err := strconv.Atoi(v); err == nil && i > 0 {
-			cfg.SnapshotEnrich.BatchSize = i
-		}
-	}
-	if v := os.Getenv("SNAPSHOT_ENRICH_RETRY_INTERVAL"); v != "" {
-		if d, err := time.ParseDuration(v); err == nil && d > 0 {
-			cfg.SnapshotEnrich.RetryInterval = d
-		}
-	}
-	if v := os.Getenv("SNAPSHOT_ENRICH_MAX_RETRIES"); v != "" {
-		if i, err := strconv.Atoi(v); err == nil && i > 0 {
-			cfg.SnapshotEnrich.MaxRetries = i
-		}
-	}
-
-	// Snapshot history scheduler configuration
-	if v := os.Getenv("SNAPSHOT_HISTORY_ENABLED"); v != "" {
-		cfg.SnapshotHistory.Enabled = parseBool(v, true)
-	}
-	if v := os.Getenv("SNAPSHOT_HISTORY_INTERVAL"); v != "" {
-		if d, err := time.ParseDuration(v); err == nil && d > 0 {
-			cfg.SnapshotHistory.Interval = d
-		}
-	}
+	// Snapshot history scheduler
+	envBool("SNAPSHOT_HISTORY_ENABLED", &cfg.SnapshotHistory.Enabled, true)
+	envDurationPositive("SNAPSHOT_HISTORY_INTERVAL", &cfg.SnapshotHistory.Interval)
 
 	// Advisor refresh scheduler
-	if v := os.Getenv("ADVISOR_REFRESH_ENABLED"); v != "" {
-		cfg.AdvisorRefresh.Enabled = parseBool(v, true)
-	}
-	if v := os.Getenv("ADVISOR_REFRESH_INTERVAL"); v != "" {
-		if d, err := time.ParseDuration(v); err == nil && d > 0 {
-			cfg.AdvisorRefresh.Interval = d
-		}
-	}
-	if v := os.Getenv("ADVISOR_REFRESH_INITIAL_DELAY"); v != "" {
-		if d, err := time.ParseDuration(v); err == nil && d >= 0 {
-			cfg.AdvisorRefresh.InitialDelay = d
-		}
-	}
-	if v := os.Getenv("ADVISOR_REFRESH_HOUR"); v != "" {
-		if h, err := strconv.Atoi(v); err == nil && h >= -1 && h <= 23 {
-			cfg.AdvisorRefresh.RefreshHour = h
-		}
-	}
-	if v := os.Getenv("ADVISOR_MAX_TOOL_ROUNDS"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			cfg.AdvisorRefresh.MaxToolRounds = n
-		}
-	}
+	envBool("ADVISOR_REFRESH_ENABLED", &cfg.AdvisorRefresh.Enabled, true)
+	envDurationPositive("ADVISOR_REFRESH_INTERVAL", &cfg.AdvisorRefresh.Interval)
+	envDurationNonNegative("ADVISOR_REFRESH_INITIAL_DELAY", &cfg.AdvisorRefresh.InitialDelay)
+	envIntRange("ADVISOR_REFRESH_HOUR", &cfg.AdvisorRefresh.RefreshHour, -1, 23)
+	envIntPositive("ADVISOR_MAX_TOOL_ROUNDS", &cfg.AdvisorRefresh.MaxToolRounds)
 
 	// Social content scheduler
-	if v := os.Getenv("SOCIAL_CONTENT_ENABLED"); v != "" {
-		cfg.SocialContent.Enabled = parseBool(v, false)
-	}
-	if v := os.Getenv("SOCIAL_CONTENT_INTERVAL"); v != "" {
-		if d, err := time.ParseDuration(v); err == nil && d > 0 {
-			cfg.SocialContent.Interval = d
-		}
-	}
-	if v := os.Getenv("SOCIAL_CONTENT_INITIAL_DELAY"); v != "" {
-		if d, err := time.ParseDuration(v); err == nil && d > 0 {
-			cfg.SocialContent.InitialDelay = d
-		}
-	}
-	if v := os.Getenv("SOCIAL_CONTENT_HOUR"); v != "" {
-		if h, err := strconv.Atoi(v); err == nil && h >= -1 && h <= 23 {
-			cfg.SocialContent.ContentHour = h
-		}
-	}
+	envBool("SOCIAL_CONTENT_ENABLED", &cfg.SocialContent.Enabled, false)
+	envDurationPositive("SOCIAL_CONTENT_INTERVAL", &cfg.SocialContent.Interval)
+	envDurationPositive("SOCIAL_CONTENT_INITIAL_DELAY", &cfg.SocialContent.InitialDelay)
+	envIntRange("SOCIAL_CONTENT_HOUR", &cfg.SocialContent.ContentHour, -1, 23)
 
 	// Metrics poll scheduler
-	if v := os.Getenv("METRICS_POLL_ENABLED"); v != "" {
-		cfg.MetricsPoll.Enabled = parseBool(v, false)
-	}
-	if v := os.Getenv("METRICS_POLL_INTERVAL"); v != "" {
-		if d, err := time.ParseDuration(v); err == nil && d > 0 {
-			cfg.MetricsPoll.Interval = d
-		}
-	}
-	if v := os.Getenv("METRICS_POLL_MAX_AGE"); v != "" {
-		if d, err := time.ParseDuration(v); err == nil && d > 0 {
-			cfg.MetricsPoll.MaxAge = d
-		}
-	}
+	envBool("METRICS_POLL_ENABLED", &cfg.MetricsPoll.Enabled, false)
+	envDurationPositive("METRICS_POLL_INTERVAL", &cfg.MetricsPoll.Interval)
+	envDurationPositive("METRICS_POLL_MAX_AGE", &cfg.MetricsPoll.MaxAge)
 
 	// Picks refresh scheduler
-	if v := os.Getenv("PICKS_REFRESH_ENABLED"); v != "" {
-		cfg.PicksRefresh.Enabled = parseBool(v, true)
-	}
-	if v := os.Getenv("PICKS_REFRESH_HOUR"); v != "" {
-		if h, err := strconv.Atoi(v); err == nil && h >= -1 && h <= 23 {
-			cfg.PicksRefresh.ContentHour = h
-		}
-	}
+	envBool("PICKS_REFRESH_ENABLED", &cfg.PicksRefresh.Enabled, true)
+	envIntRange("PICKS_REFRESH_HOUR", &cfg.PicksRefresh.ContentHour, -1, 23)
 
-	// Card Ladder scheduler configuration
-	if v := os.Getenv("CARDLADDER_REFRESH_ENABLED"); v != "" {
-		cfg.CardLadder.Enabled = parseBool(v, false)
-	}
-	if v := os.Getenv("CARDLADDER_REFRESH_HOUR"); v != "" {
-		if i, err := strconv.Atoi(v); err == nil && i >= -1 && i <= 23 {
-			cfg.CardLadder.RefreshHour = i
-		}
-	}
+	// Card Ladder scheduler
+	envBool("CARDLADDER_REFRESH_ENABLED", &cfg.CardLadder.Enabled, false)
+	envIntRange("CARDLADDER_REFRESH_HOUR", &cfg.CardLadder.RefreshHour, 0, 23)
 
-	// Market Movers scheduler configuration
-	if v := os.Getenv("MM_REFRESH_ENABLED"); v != "" {
-		cfg.MarketMovers.Enabled = parseBool(v, true)
-	}
-	if v := os.Getenv("MM_REFRESH_HOUR"); v != "" {
-		if i, err := strconv.Atoi(v); err == nil && i >= 0 && i <= 23 {
-			cfg.MarketMovers.RefreshHour = i
-		}
-	}
+	// Market Movers scheduler
+	envBool("MM_REFRESH_ENABLED", &cfg.MarketMovers.Enabled, true)
+	envIntRange("MM_REFRESH_HOUR", &cfg.MarketMovers.RefreshHour, 0, 23)
 
 	// Adapter API keys and tokens
 	cfg.Adapters.PSAToken = os.Getenv("PSA_ACCESS_TOKEN")
@@ -351,41 +231,18 @@ func FromEnv(base Config) Config {
 	}
 	cfg.Adapters.ImageAIEnabled = parseBool(os.Getenv("IMAGE_AI_ENABLED"), false)
 	cfg.Adapters.DHEnterpriseKey = os.Getenv("DH_ENTERPRISE_API_KEY")
-	if v := os.Getenv("DH_API_BASE_URL"); v != "" {
-		cfg.Adapters.DHBaseURL = v
-	}
-	if v := os.Getenv("DH_CACHE_TTL_HOURS"); v != "" {
-		if i, err := strconv.Atoi(v); err == nil && i > 0 {
-			cfg.DH.CacheTTLHours = i
-		}
-	}
-	if v := os.Getenv("DH_RATE_LIMIT_RPS"); v != "" {
-		if i, err := strconv.Atoi(v); err == nil && i > 0 {
-			cfg.DH.RateLimitRPS = i
-		}
-	}
+	envString("DH_API_BASE_URL", &cfg.Adapters.DHBaseURL)
+	envIntPositive("DH_CACHE_TTL_HOURS", &cfg.DH.CacheTTLHours)
+	envIntPositive("DH_RATE_LIMIT_RPS", &cfg.DH.RateLimitRPS)
 	cfg.DH.Enabled = parseBool(os.Getenv("DH_ENABLED"), cfg.DH.Enabled)
-	if v := os.Getenv("DH_ORDERS_POLL_INTERVAL"); v != "" {
-		if d, err := time.ParseDuration(v); err == nil {
-			cfg.DH.OrdersPollInterval = d
-		}
-	}
-	if v := os.Getenv("DH_INVENTORY_POLL_INTERVAL"); v != "" {
-		if d, err := time.ParseDuration(v); err == nil {
-			cfg.DH.InventoryPollInterval = d
-		}
-	}
-	if v := os.Getenv("DH_PUSH_INTERVAL"); v != "" {
-		if d, err := time.ParseDuration(v); err == nil {
-			cfg.DH.PushInterval = d
-		}
-	}
+	envDuration("DH_ORDERS_POLL_INTERVAL", &cfg.DH.OrdersPollInterval)
+	envDuration("DH_INVENTORY_POLL_INTERVAL", &cfg.DH.InventoryPollInterval)
+	envDuration("DH_PUSH_INTERVAL", &cfg.DH.PushInterval)
 
 	// Google Sheets credentials (JSON key is base64-encoded in .env)
 	if v := os.Getenv("GOOGLE_SHEETS_CREDENTIALS_JSON"); v != "" {
 		decoded, err := base64.StdEncoding.DecodeString(v)
 		if err != nil {
-			// Fall back to raw value (allow non-encoded for dev convenience)
 			cfg.GoogleSheets.CredentialsJSON = v
 		} else {
 			cfg.GoogleSheets.CredentialsJSON = string(decoded)
@@ -395,14 +252,8 @@ func FromEnv(base Config) Config {
 	cfg.GoogleSheets.TabName = os.Getenv("GOOGLE_SHEETS_TAB_NAME")
 
 	// PSA sync scheduler
-	if v := os.Getenv("PSA_SYNC_ENABLED"); v != "" {
-		cfg.PSASync.Enabled = parseBool(v, false)
-	}
-	if v := os.Getenv("PSA_SYNC_HOUR"); v != "" {
-		if h, err := strconv.Atoi(v); err == nil && h >= -1 && h <= 23 {
-			cfg.PSASync.SyncHour = h
-		}
-	}
+	envBool("PSA_SYNC_ENABLED", &cfg.PSASync.Enabled, false)
+	envIntRange("PSA_SYNC_HOUR", &cfg.PSASync.SyncHour, -1, 23)
 
 	return cfg
 }

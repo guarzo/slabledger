@@ -143,6 +143,7 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 	}
 	if clHandler != nil && in.CampaignsRepo != nil {
 		clHandler.SetPurchaseLister(in.CampaignsRepo)
+		clHandler.SetSyncUpdater(in.CampaignsRepo)
 	}
 
 	// Wire Market Movers manual refresh into the handler

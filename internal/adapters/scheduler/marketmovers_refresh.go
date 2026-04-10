@@ -43,7 +43,7 @@ type MMRunStats struct {
 // MarketMoversRefreshScheduler refreshes MM values from the Market Movers API daily.
 type MarketMoversRefreshScheduler struct {
 	StopHandle
-	clientMu       sync.Mutex
+	clientMu       sync.RWMutex
 	statsMu        sync.RWMutex
 	client         *marketmovers.Client
 	store          *sqlite.MarketMoversStore
@@ -76,8 +76,8 @@ func (s *MarketMoversRefreshScheduler) SetClient(client *marketmovers.Client) {
 
 // getClient returns the current API client under the lock.
 func (s *MarketMoversRefreshScheduler) getClient() *marketmovers.Client {
-	s.clientMu.Lock()
-	defer s.clientMu.Unlock()
+	s.clientMu.RLock()
+	defer s.clientMu.RUnlock()
 	return s.client
 }
 
@@ -138,6 +138,8 @@ func (s *MarketMoversRefreshScheduler) runOnce(ctx context.Context) error {
 		return nil
 	}
 
+	// Capture client reference once and hold it for the entire refresh operation
+	// to prevent race conditions if SetClient() is called during execution.
 	client := s.getClient()
 	if client == nil {
 		s.logger.Warn(ctx, "MM refresh: client not initialized, skipping (credentials may have been set via UI — restart or save credentials again)")

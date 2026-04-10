@@ -43,7 +43,8 @@ func NewAdvisorRefreshScheduler(
 	if cfg.InitialDelay < 0 {
 		cfg.InitialDelay = 0
 	}
-	// Compute initial delay from RefreshHour if set (>= 0).
+	// Compute initial delay from RefreshHour only if >= 0.
+	// When RefreshHour is -1, use the InitialDelay value instead.
 	if cfg.RefreshHour >= 0 {
 		cfg.InitialDelay = timeUntilHour(time.Now(), cfg.RefreshHour)
 	}
