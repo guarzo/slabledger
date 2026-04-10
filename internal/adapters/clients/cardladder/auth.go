@@ -110,5 +110,8 @@ func (a *FirebaseAuth) RefreshToken(ctx context.Context, refreshToken string) (*
 	if refreshResp.IDToken == "" {
 		return nil, fmt.Errorf("empty id_token in refresh response")
 	}
+	if refreshResp.RefreshToken == "" {
+		return nil, fmt.Errorf("empty refresh_token in refresh response")
+	}
 	return &refreshResp, nil
 }

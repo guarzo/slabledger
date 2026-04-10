@@ -39,7 +39,7 @@ func (c *Client) CardEstimate(ctx context.Context, req CardEstimateRequest) (*Ca
 // {data: ...} / {result: ...} protocol.
 func (c *Client) doCallable(ctx context.Context, functionName string, data any, result any) error {
 	if err := c.rateLimiter.Wait(ctx); err != nil {
-		return err
+		return apperrors.ProviderUnavailable("CardLadder", fmt.Errorf("rate limiter: %w", err))
 	}
 
 	token, err := c.getToken(ctx)
@@ -74,7 +74,7 @@ func (c *Client) doCallable(ctx context.Context, functionName string, data any, 
 		return callableErr
 	}
 
-	// Check that "result" key is present and non-null.
+	// Check that "result" key is present and non-null before unmarshalling the full response.
 	var envelope struct {
 		Result json.RawMessage `json:"result"`
 	}
@@ -85,6 +85,7 @@ func (c *Client) doCallable(ctx context.Context, functionName string, data any, 
 		return apperrors.ProviderInvalidResponse("CardLadder", fmt.Errorf("callable %s returned nil result", functionName))
 	}
 
+	// Now unmarshal the full response into the result parameter.
 	if err := json.Unmarshal(resp.Body, result); err != nil {
 		return apperrors.ProviderInvalidResponse("CardLadder", fmt.Errorf("unmarshal %s response: %w", functionName, err))
 	}

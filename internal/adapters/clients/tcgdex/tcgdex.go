@@ -98,6 +98,16 @@ func WithBaseURL(url string) TCGdexOption {
 	}
 }
 
+// WithRateLimitRPS sets the self-imposed rate limit in requests per second.
+// Defaults to 2 req/sec if not set.
+func WithRateLimitRPS(rps int) TCGdexOption {
+	return func(t *TCGdex) {
+		if rps > 0 {
+			t.rateLimiter = rate.NewLimiter(rate.Limit(rps), rps)
+		}
+	}
+}
+
 // NewTCGdex creates a new TCGdex adapter with default HTTP client and persistent storage.
 func NewTCGdex(c cache.Cache, log observability.Logger) *TCGdex {
 	if log == nil {

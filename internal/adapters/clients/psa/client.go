@@ -194,7 +194,7 @@ func (c *Client) doRequest(ctx context.Context, opName, path, certNumber string)
 			c.logger.Info(ctx, "PSA "+opName+": request failed",
 				observability.String("cert", certNumber),
 				observability.Err(err))
-			return nil, fmt.Errorf("PSA API request: %w", err)
+			return nil, apperrors.ProviderUnavailable("PSA", fmt.Errorf("PSA API request: %w", err))
 		}
 
 		return resp, nil

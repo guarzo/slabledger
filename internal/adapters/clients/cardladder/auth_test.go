@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/httpx"
@@ -103,7 +104,7 @@ func TestFirebaseLogin_EmptyTokens(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for empty tokens, got nil")
 	}
-	if err.Error() != "empty token in login response" {
-		t.Errorf("unexpected error: %v", err)
+	if !strings.Contains(err.Error(), "empty token") {
+		t.Errorf("expected error about empty token, got: %v", err)
 	}
 }

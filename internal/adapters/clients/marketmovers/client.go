@@ -371,7 +371,8 @@ func (c *Client) getToken(ctx context.Context) (string, error) {
 	}
 	c.mu.Unlock()
 
-	v, err, _ := c.refreshGroup.Do("refresh", func() (any, error) {
+	// Use DoChan to allow followers to cancel via context while leader continues.
+	ch := c.refreshGroup.DoChan("refresh", func() (any, error) {
 		c.mu.Lock()
 		if c.token.AccessToken != "" && time.Now().Add(5*time.Minute).Before(c.token.ExpiresAt) {
 			token := c.token.AccessToken
@@ -400,10 +401,17 @@ func (c *Client) getToken(ctx context.Context) (string, error) {
 		}
 		return c.token.AccessToken, nil
 	})
-	if err != nil {
-		return "", err
+
+	// Wait for result or context cancellation.
+	select {
+	case <-ctx.Done():
+		return "", ctx.Err()
+	case result := <-ch:
+		if result.Err != nil {
+			return "", result.Err
+		}
+		return result.Val.(string), nil
 	}
-	return v.(string), nil
 }
 
 // ParseJWTExpiry extracts the exp claim from a JWT without verification.

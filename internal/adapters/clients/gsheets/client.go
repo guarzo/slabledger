@@ -5,8 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
-	"sync"
 	"time"
+
+	"golang.org/x/sync/singleflight"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/httpx"
 	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
@@ -35,13 +36,13 @@ func WithBaseURL(u string) Option {
 
 // Client reads data from Google Sheets using service account credentials.
 type Client struct {
-	dataClient *httpx.Client
-	authClient *httpx.Client
-	baseURL    string
-	creds      *ServiceAccountCredentials
-	token      *cachedToken
-	refreshMu  sync.Mutex // serialises token refresh to prevent thundering herd
-	logger     observability.Logger
+	dataClient   *httpx.Client
+	authClient   *httpx.Client
+	baseURL      string
+	creds        *ServiceAccountCredentials
+	token        *cachedToken
+	refreshGroup singleflight.Group // deduplicates concurrent token refreshes
+	logger       observability.Logger
 }
 
 // New creates a new Google Sheets client from service account JSON credentials.
@@ -117,53 +118,55 @@ type sheetsValueRange struct {
 }
 
 // getToken returns a valid access token, refreshing if needed.
-// A mutex ensures only one goroutine refreshes at a time; others wait
-// and reuse the newly-cached token.
+// Uses singleflight to ensure exactly one concurrent refresh operation.
 func (c *Client) getToken(ctx context.Context) (string, error) {
 	if !c.token.isExpired() {
 		return c.token.get(), nil
 	}
 
-	c.refreshMu.Lock()
-	defer c.refreshMu.Unlock()
+	v, err, _ := c.refreshGroup.Do("refresh", func() (any, error) {
+		// Double-check after acquiring the singleflight lock — another goroutine
+		// may have already refreshed while we waited.
+		if !c.token.isExpired() {
+			return c.token.get(), nil
+		}
 
-	// Double-check after acquiring the lock — another goroutine may have
-	// already refreshed while we waited.
-	if !c.token.isExpired() {
-		return c.token.get(), nil
-	}
+		jwt, err := buildJWT(c.creds)
+		if err != nil {
+			return "", err
+		}
 
-	jwt, err := buildJWT(c.creds)
+		formData := url.Values{
+			"grant_type": {"urn:ietf:params:oauth:grant-type:jwt-bearer"},
+			"assertion":  {jwt},
+		}
+
+		resp, err := c.authClient.Post(ctx, c.creds.TokenURI,
+			map[string]string{"Content-Type": "application/x-www-form-urlencoded"},
+			[]byte(formData.Encode()), 0)
+		if err != nil {
+			return "", fmt.Errorf("token exchange: %w", err)
+		}
+
+		var tokenResp tokenResponse
+		if err := json.Unmarshal(resp.Body, &tokenResp); err != nil {
+			return "", apperrors.ProviderInvalidResponse("GoogleSheets", fmt.Errorf("decode token response: %w", err))
+		}
+
+		if tokenResp.AccessToken == "" {
+			return "", apperrors.ProviderAuthFailed("GoogleSheets", fmt.Errorf("token exchange returned empty access token"))
+		}
+
+		expiry := time.Now().Add(time.Duration(tokenResp.ExpiresIn) * time.Second)
+		c.token.set(tokenResp.AccessToken, expiry)
+
+		c.logger.Info(ctx, "gsheets: refreshed access token",
+			observability.String("email", c.creds.ClientEmail))
+
+		return tokenResp.AccessToken, nil
+	})
 	if err != nil {
 		return "", err
 	}
-
-	formData := url.Values{
-		"grant_type": {"urn:ietf:params:oauth:grant-type:jwt-bearer"},
-		"assertion":  {jwt},
-	}
-
-	resp, err := c.authClient.Post(ctx, c.creds.TokenURI,
-		map[string]string{"Content-Type": "application/x-www-form-urlencoded"},
-		[]byte(formData.Encode()), 0)
-	if err != nil {
-		return "", fmt.Errorf("token exchange: %w", err)
-	}
-
-	var tokenResp tokenResponse
-	if err := json.Unmarshal(resp.Body, &tokenResp); err != nil {
-		return "", apperrors.ProviderInvalidResponse("GoogleSheets", fmt.Errorf("decode token response: %w", err))
-	}
-
-	if tokenResp.AccessToken == "" {
-		return "", apperrors.ProviderAuthFailed("GoogleSheets", fmt.Errorf("token exchange returned empty access token"))
-	}
-
-	expiry := time.Now().Add(time.Duration(tokenResp.ExpiresIn) * time.Second)
-	c.token.set(tokenResp.AccessToken, expiry)
-
-	c.logger.Info(ctx, "gsheets: refreshed access token",
-		observability.String("email", c.creds.ClientEmail))
-
-	return tokenResp.AccessToken, nil
+	return v.(string), nil
 }
