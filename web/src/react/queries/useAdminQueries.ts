@@ -268,3 +268,12 @@ export function useSelectDHMatch() {
     },
   });
 }
+
+export function usePSASyncStatus(options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: queryKeys.admin.psaSyncStatus,
+    queryFn: () => api.getPSASyncStatus(),
+    staleTime: 60_000,
+    enabled: options?.enabled ?? true,
+  });
+}

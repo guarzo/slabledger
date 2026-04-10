@@ -605,6 +605,94 @@ func TestService_ImportPSAExportGlobal_Unmatched(t *testing.T) {
 	}
 }
 
+func TestService_ImportPSAExportGlobal_SavesPendingItems(t *testing.T) {
+	repo := mocks.NewMockCampaignRepository()
+	pendingRepo := &mocks.MockPendingItemRepository{}
+	var savedItems []campaigns.PendingItem
+	pendingRepo.SavePendingItemsFn = func(_ context.Context, items []campaigns.PendingItem) error {
+		savedItems = items
+		return nil
+	}
+	svc := campaigns.NewService(repo,
+		withTestIDGen(),
+		campaigns.WithPendingItemRepository(pendingRepo),
+	)
+	ctx := context.Background()
+
+	// Create an active campaign with strict grade range 9-10
+	c := &campaigns.Campaign{Name: "High Grade", Sport: "Pokemon", BuyTermsCLPct: 0.78, GradeRange: "9-10"}
+	if err := svc.CreateCampaign(ctx, c); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+	c.Phase = campaigns.PhaseActive
+	if err := svc.UpdateCampaign(ctx, c); err != nil {
+		t.Fatalf("setup activate: %v", err)
+	}
+
+	// Import a grade 5 card — won't match the 9-10 campaign, becomes unmatched
+	rows := []campaigns.PSAExportRow{
+		{CertNumber: "PSA-PEND-001", ListingTitle: "Pikachu PSA 5", Grade: 5, PricePaid: 100, Date: "2026-03-01", Category: "Pokemon"},
+	}
+
+	result, err := svc.ImportPSAExportGlobal(ctx, rows)
+	if err != nil {
+		t.Fatalf("ImportPSAExportGlobal: %v", err)
+	}
+
+	if result.Unmatched != 1 {
+		t.Errorf("Unmatched = %d, want 1", result.Unmatched)
+	}
+	if len(savedItems) != 1 {
+		t.Fatalf("savedItems count = %d, want 1", len(savedItems))
+	}
+	if savedItems[0].CertNumber != "PSA-PEND-001" {
+		t.Errorf("CertNumber = %q, want %q", savedItems[0].CertNumber, "PSA-PEND-001")
+	}
+	if savedItems[0].Status != "unmatched" {
+		t.Errorf("Status = %q, want %q", savedItems[0].Status, "unmatched")
+	}
+	if savedItems[0].Source != "manual" {
+		t.Errorf("Source = %q, want %q", savedItems[0].Source, "manual")
+	}
+	if savedItems[0].Grade != 5 {
+		t.Errorf("Grade = %v, want 5", savedItems[0].Grade)
+	}
+	if savedItems[0].ID == "" {
+		t.Error("ID should not be empty")
+	}
+}
+
+func TestService_ImportPSAExportGlobal_NilPendingRepoDoesNotPanic(t *testing.T) {
+	repo := mocks.NewMockCampaignRepository()
+	// Create service WITHOUT WithPendingItemRepository
+	svc := campaigns.NewService(repo, withTestIDGen())
+	ctx := context.Background()
+
+	// Create an active campaign with strict grade range 9-10
+	c := &campaigns.Campaign{Name: "Strict", Sport: "Pokemon", BuyTermsCLPct: 0.78, GradeRange: "9-10"}
+	if err := svc.CreateCampaign(ctx, c); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+	c.Phase = campaigns.PhaseActive
+	if err := svc.UpdateCampaign(ctx, c); err != nil {
+		t.Fatalf("setup activate: %v", err)
+	}
+
+	// Import a grade 5 card — unmatched, but no pending repo configured
+	rows := []campaigns.PSAExportRow{
+		{CertNumber: "PSA-NIL-001", ListingTitle: "Mewtwo PSA 5", Grade: 5, PricePaid: 150, Date: "2026-03-01", Category: "Pokemon"},
+	}
+
+	// Should not panic
+	result, err := svc.ImportPSAExportGlobal(ctx, rows)
+	if err != nil {
+		t.Fatalf("ImportPSAExportGlobal: %v", err)
+	}
+	if result.Unmatched != 1 {
+		t.Errorf("Unmatched = %d, want 1", result.Unmatched)
+	}
+}
+
 func TestService_ImportPSAExportGlobal_SkipEmpty(t *testing.T) {
 	repo := mocks.NewMockCampaignRepository()
 	svc := campaigns.NewService(repo, withTestIDGen())

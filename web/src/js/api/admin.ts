@@ -3,7 +3,7 @@
  */
 
 import type { APIUsageResponse, CacheStatsResponse, PricingDiagnosticsResponse, PriceOverrideStats, CachedAnalysis, AdvisorAnalysisType, AIUsageResponse, DHStatusResponse, DHBulkMatchResponse, DHUnmatchedResponse, DHFixMatchRequest, DHFixMatchResponse, DHSelectMatchRequest, DHPushConfig } from '../../types/apiStatus';
-import type { AllowedEmail, AdminUser, CLStatusResponse, CLSyncResult, MMStatusResponse, MMSyncResult } from '../../types/admin';
+import type { AllowedEmail, AdminUser, CLStatusResponse, CLSyncResult, MMStatusResponse, MMSyncResult, PSASyncStatusResponse } from '../../types/admin';
 import type { APIClient, CardRequestSubmission } from './client';
 import { APIError } from './client';
 
@@ -44,6 +44,7 @@ declare module './client' {
     approveDHPush(purchaseId: string): Promise<{ status: string }>;
     getDHPushConfig(): Promise<DHPushConfig>;
     saveDHPushConfig(config: DHPushConfig): Promise<DHPushConfig>;
+    getPSASyncStatus(): Promise<PSASyncStatusResponse>;
   }
 }
 
@@ -189,4 +190,8 @@ proto.getDHPushConfig = async function (this: APIClient): Promise<DHPushConfig> 
 
 proto.saveDHPushConfig = async function (this: APIClient, config: DHPushConfig): Promise<DHPushConfig> {
   return this.put<DHPushConfig>('/admin/dh-push-config', config);
+};
+
+proto.getPSASyncStatus = async function (this: APIClient): Promise<PSASyncStatusResponse> {
+  return this.get<PSASyncStatusResponse>('/admin/psa-sync/status');
 };

@@ -82,6 +82,9 @@ func (rt *Router) registerAdminRoutes(mux *http.ServeMux) {
 			mux.Handle("POST /api/admin/marketmovers/refresh", rt.authMW.RequireAdmin(http.HandlerFunc(rt.marketMoversHandler.HandleRefresh)))
 			mux.Handle("POST /api/admin/marketmovers/sync-collection", rt.authMW.RequireAdmin(http.HandlerFunc(rt.marketMoversHandler.HandleSyncCollection)))
 		}
+		if rt.psaSyncHandler != nil {
+			mux.Handle("GET /api/admin/psa-sync/status", rt.authMW.RequireAdmin(http.HandlerFunc(rt.psaSyncHandler.HandleStatus)))
+		}
 		rt.logger.Info(context.Background(), "admin routes registered")
 	}
 
@@ -158,6 +161,11 @@ func (rt *Router) registerCampaignRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /api/purchases/import-cl", authRoute(rt.campaignsHandler.HandleGlobalImportCL))
 	mux.Handle("POST /api/purchases/import-psa", authRoute(rt.campaignsHandler.HandleGlobalImportPSA))
 	mux.Handle("POST /api/purchases/sync-psa-sheets", authRoute(rt.campaignsHandler.HandleSyncPSASheets))
+	if rt.psaSyncHandler != nil {
+		mux.Handle("GET /api/purchases/psa-pending", authRoute(rt.psaSyncHandler.HandleListPendingItems))
+		mux.Handle("POST /api/purchases/psa-pending/{id}/assign", authRoute(rt.psaSyncHandler.HandleAssignPendingItem))
+		mux.Handle("DELETE /api/purchases/psa-pending/{id}", authRoute(rt.psaSyncHandler.HandleDismissPendingItem))
+	}
 	mux.Handle("GET /api/purchases/export-cl", authRoute(rt.campaignsHandler.HandleGlobalExportCL))
 	mux.Handle("GET /api/purchases/export-mm", authRoute(rt.campaignsHandler.HandleGlobalExportMM))
 	mux.Handle("POST /api/purchases/refresh-mm", authRoute(rt.campaignsHandler.HandleGlobalRefreshMM))

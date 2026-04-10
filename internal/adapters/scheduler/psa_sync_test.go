@@ -102,3 +102,55 @@ func TestPSASyncScheduler_Start_Disabled(t *testing.T) {
 		t.Fatal("Start did not return when disabled")
 	}
 }
+
+func TestPSASyncScheduler_GetLastRunStats(t *testing.T) {
+	s := NewPSASyncScheduler(
+		&mocks.MockSheetFetcher{
+			ReadSheetFn: func(ctx context.Context, sid, sn string) ([][]string, error) {
+				return [][]string{
+					{"Cert Number", "Listing Title", "Grade", "Price Paid", "Date", "Vault Status", "Invoice Date", "Image URLs", "Purchase Source", "Category", "Was Refunded"},
+					{"12345", "2023 Pokemon Charizard #1", "10", "15.00", "2026-01-01", "In Vault", "", "", "", "Pokemon", "No"},
+				}, nil
+			},
+		},
+		&mocks.MockImportService{
+			ImportPSAExportGlobalFn: func(ctx context.Context, rows []campaigns.PSAExportRow) (*campaigns.PSAImportResult, error) {
+				return &campaigns.PSAImportResult{
+					Allocated: 1, Updated: 0, Refunded: 0,
+					Unmatched: 2, Ambiguous: 1, Skipped: 0, Failed: 0,
+				}, nil
+			},
+		},
+		mocks.NewMockLogger(),
+		config.PSASyncConfig{Enabled: true, SyncHour: -1},
+		"sheet-id", "Sheet1",
+	)
+
+	// Before any run, stats should be nil
+	if stats := s.GetLastRunStats(); stats != nil {
+		t.Fatal("expected nil stats before first run")
+	}
+
+	// Run tick
+	s.tick(context.Background())
+
+	stats := s.GetLastRunStats()
+	if stats == nil {
+		t.Fatal("expected non-nil stats after tick")
+	}
+	if stats.Allocated != 1 {
+		t.Errorf("expected Allocated=1, got %d", stats.Allocated)
+	}
+	if stats.Unmatched != 2 {
+		t.Errorf("expected Unmatched=2, got %d", stats.Unmatched)
+	}
+	if stats.Ambiguous != 1 {
+		t.Errorf("expected Ambiguous=1, got %d", stats.Ambiguous)
+	}
+	if stats.TotalRows != 1 {
+		t.Errorf("expected TotalRows=1, got %d", stats.TotalRows)
+	}
+	if stats.DurationMs < 0 {
+		t.Error("expected non-negative DurationMs")
+	}
+}

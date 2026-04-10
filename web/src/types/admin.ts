@@ -97,3 +97,44 @@ export interface MMSyncResult {
   failed: number;
   errors?: MMSyncError[];
 }
+
+// ---------------------------------------------------------------------------
+// PSA Sync types
+// ---------------------------------------------------------------------------
+
+export interface PSASyncLastRun {
+  lastRunAt: string;
+  durationMs: number;
+  allocated: number;
+  updated: number;
+  refunded: number;
+  unmatched: number;
+  ambiguous: number;
+  skipped: number;
+  failed: number;
+  totalRows: number;
+  parseErrors: number;
+}
+
+export interface PSASyncStatusResponse {
+  configured: boolean;
+  spreadsheetId: string;
+  interval: string;
+  lastRun?: PSASyncLastRun;
+  pendingCount?: number;
+}
+
+export interface PSAPendingItem {
+  id: string;
+  certNumber: string;
+  cardName: string;
+  setName: string;
+  cardNumber: string;
+  grade: number;
+  buyCostCents: number;
+  purchaseDate: string;
+  status: 'ambiguous' | 'unmatched';
+  candidates: string[];
+  source: 'scheduler' | 'manual';
+  createdAt: string;
+}

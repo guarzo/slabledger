@@ -3,7 +3,8 @@ import { DHTab } from './DHTab';
 import { DHPushConfigCard } from './DHPushConfigCard';
 import { InstagramTab } from './InstagramTab';
 import { MarketMoversTab } from './MarketMoversTab';
-import { useCardLadderStatus, useDHStatus, useMarketMoversStatus } from '../../queries/useAdminQueries';
+import { PSASyncTab } from './PSASyncTab';
+import { useCardLadderStatus, useDHStatus, useMarketMoversStatus, usePSASyncStatus } from '../../queries/useAdminQueries';
 import { useInstagramStatus } from '../../queries/useSocialQueries';
 
 function StatusBadge({ connected, label }: { connected: boolean; label: string }) {
@@ -20,11 +21,13 @@ export function IntegrationsTab({ enabled = true }: { enabled?: boolean }) {
   const { data: clStatus } = useCardLadderStatus({ enabled });
   const { data: igStatus } = useInstagramStatus(enabled);
   const { data: mmStatus } = useMarketMoversStatus({ enabled });
+  const { data: psaStatus } = usePSASyncStatus({ enabled });
 
   const dhHealthy = dhStatus?.api_health ? dhStatus.api_health.success_rate >= 0.95 : false;
   const clConnected = clStatus?.configured ?? false;
   const igConnected = igStatus?.connected ?? false;
   const mmConnected = mmStatus?.configured ?? false;
+  const psaConfigured = psaStatus?.configured ?? false;
 
   return (
     <div className="space-y-8 mt-4">
@@ -67,6 +70,16 @@ export function IntegrationsTab({ enabled = true }: { enabled?: boolean }) {
           <StatusBadge connected={mmConnected} label={mmConnected ? 'Connected' : 'Not connected'} />
         </div>
         <MarketMoversTab enabled={enabled} />
+      </section>
+
+      <hr className="border-[var(--surface-2)]" />
+
+      <section>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-base font-semibold text-[var(--text)]">PSA Sheets Sync</h3>
+          <StatusBadge connected={psaConfigured} label={psaConfigured ? 'Configured' : 'Not configured'} />
+        </div>
+        <PSASyncTab enabled={enabled} />
       </section>
     </div>
   );
