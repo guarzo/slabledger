@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+
+	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
 )
 
 const defaultFunctionsBaseURL = "https://us-central1-cardladder-71d53.cloudfunctions.net"
@@ -49,7 +51,7 @@ func (c *Client) doCallable(ctx context.Context, functionName string, data any, 
 	body := callableRequest{Data: data}
 	bodyBytes, err := json.Marshal(body)
 	if err != nil {
-		return fmt.Errorf("marshal request: %w", err)
+		return apperrors.ProviderInvalidRequest("CardLadder", err)
 	}
 
 	headers := map[string]string{
@@ -68,7 +70,7 @@ func (c *Client) doCallable(ctx context.Context, functionName string, data any, 
 				} `json:"error"`
 			}
 			if json.Unmarshal(resp.Body, &callableErr) == nil && callableErr.Error.Message != "" {
-				return fmt.Errorf("callable %s error: %s (status: %s)", functionName, callableErr.Error.Message, callableErr.Error.Status)
+				return apperrors.ProviderUnavailable("CardLadder", fmt.Errorf("callable %s: %s (status: %s)", functionName, callableErr.Error.Message, callableErr.Error.Status))
 			}
 		}
 		return fmt.Errorf("http request to %s: %w", functionName, err)
@@ -82,11 +84,11 @@ func (c *Client) doCallable(ctx context.Context, functionName string, data any, 
 		} `json:"error"`
 	}
 	if json.Unmarshal(resp.Body, &callableErr) == nil && callableErr.Error.Message != "" {
-		return fmt.Errorf("callable %s error: %s (status: %s)", functionName, callableErr.Error.Message, callableErr.Error.Status)
+		return apperrors.ProviderUnavailable("CardLadder", fmt.Errorf("callable %s: %s (status: %s)", functionName, callableErr.Error.Message, callableErr.Error.Status))
 	}
 
 	if err := json.Unmarshal(resp.Body, result); err != nil {
-		return fmt.Errorf("unmarshal %s response: %w", functionName, err)
+		return apperrors.ProviderInvalidResponse("CardLadder", fmt.Errorf("unmarshal %s response: %w", functionName, err))
 	}
 	return nil
 }

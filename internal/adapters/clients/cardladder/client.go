@@ -14,6 +14,8 @@ import (
 	"golang.org/x/sync/singleflight"
 	"golang.org/x/time/rate"
 
+	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
+
 	"github.com/guarzo/slabledger/internal/adapters/clients/httpx"
 )
 
@@ -189,7 +191,7 @@ func (c *Client) doGet(ctx context.Context, params url.Values, result any) error
 	}
 
 	if err := json.Unmarshal(resp.Body, result); err != nil {
-		return fmt.Errorf("unmarshal response: %w", err)
+		return apperrors.ProviderInvalidResponse("CardLadder", fmt.Errorf("unmarshal response: %w", err))
 	}
 	return nil
 }
@@ -207,7 +209,7 @@ func (c *Client) getToken(ctx context.Context) (string, error) {
 	}
 	if c.auth == nil || c.refreshToken == "" {
 		c.mu.Unlock()
-		return "", fmt.Errorf("no auth credentials configured")
+		return "", apperrors.ConfigMissing("CardLadder credentials", "")
 	}
 	c.mu.Unlock()
 

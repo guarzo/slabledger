@@ -3,12 +3,15 @@ package cardladder
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
 )
 
 func TestClient_FetchCollection(t *testing.T) {
@@ -158,4 +161,46 @@ func TestClient_ConcurrentTokenRefresh(t *testing.T) {
 	if calls != 1 {
 		t.Errorf("singleflight should coalesce to exactly 1 refresh call, got %d", calls)
 	}
+}
+
+func TestClient_ErrorTypes(t *testing.T) {
+	t.Run("unmarshal error returns ProviderInvalidResponse", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Write([]byte("not json")) //nolint:errcheck
+		}))
+		defer server.Close()
+
+		client := NewClient(
+			WithBaseURL(server.URL+"/search"),
+			WithStaticToken("test-token"),
+		)
+		_, err := client.FetchCollectionPage(context.Background(), "coll-1", 0, 100)
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		var appErr *apperrors.AppError
+		if !errors.As(err, &appErr) {
+			t.Fatalf("expected AppError, got %T: %v", err, err)
+		}
+		if appErr.Code != apperrors.ErrCodeProviderInvalidResp {
+			t.Errorf("code = %s, want %s", appErr.Code, apperrors.ErrCodeProviderInvalidResp)
+		}
+	})
+
+	t.Run("no auth returns ConfigMissing", func(t *testing.T) {
+		client := NewClient(
+			WithBaseURL("http://localhost:1/search"),
+		)
+		_, err := client.FetchCollectionPage(context.Background(), "coll-1", 0, 100)
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		var appErr *apperrors.AppError
+		if !errors.As(err, &appErr) {
+			t.Fatalf("expected AppError, got %T: %v", err, err)
+		}
+		if appErr.Code != apperrors.ErrCodeConfigMissing {
+			t.Errorf("code = %s, want %s", appErr.Code, apperrors.ErrCodeConfigMissing)
+		}
+	})
 }
