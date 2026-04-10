@@ -5,7 +5,10 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+
+	"github.com/guarzo/slabledger/internal/adapters/clients/httpx"
 )
 
 func TestFirebaseLogin(t *testing.T) {
@@ -57,5 +60,51 @@ func TestFirebaseRefreshToken(t *testing.T) {
 	}
 	if resp.IDToken != "new-id-token" {
 		t.Errorf("IDToken = %q, want %q", resp.IDToken, "new-id-token")
+	}
+}
+
+func TestFirebaseAuth_UsesHTTPXClient(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(FirebaseAuthResponse{
+			IDToken:      "httpx-id-token",
+			RefreshToken: "httpx-refresh-token",
+			ExpiresIn:    "3600",
+		})
+	}))
+	defer server.Close()
+
+	cfg := httpx.DefaultConfig("CardLadder-Auth-Test")
+	client := httpx.NewClient(cfg)
+
+	auth := NewFirebaseAuth("test-api-key",
+		WithAuthBaseURL(server.URL),
+		WithHTTPXClient(client),
+	)
+	resp, err := auth.Login(context.Background(), "user@example.com", "password123")
+	if err != nil {
+		t.Fatalf("Login with httpx client failed: %v", err)
+	}
+	if resp.IDToken != "httpx-id-token" {
+		t.Errorf("IDToken = %q, want %q", resp.IDToken, "httpx-id-token")
+	}
+}
+
+func TestFirebaseLogin_EmptyTokens(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(FirebaseAuthResponse{
+			IDToken:      "",
+			RefreshToken: "",
+			ExpiresIn:    "3600",
+		})
+	}))
+	defer server.Close()
+
+	auth := NewFirebaseAuth("test-api-key", WithAuthBaseURL(server.URL))
+	_, err := auth.Login(context.Background(), "user@example.com", "password123")
+	if err == nil {
+		t.Fatal("expected error for empty tokens, got nil")
+	}
+	if !strings.Contains(err.Error(), "empty token") {
+		t.Errorf("expected error about empty token, got: %v", err)
 	}
 }

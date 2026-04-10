@@ -1,27 +1,14 @@
 package cardladder
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"net/url"
-)
+	"time"
 
-// parseFirebaseError attempts to extract an error message from a Firebase error response.
-func parseFirebaseError(body []byte) string {
-	var fbErr struct {
-		Error struct {
-			Message string `json:"message"`
-		} `json:"error"`
-	}
-	if json.Unmarshal(body, &fbErr) == nil {
-		return fbErr.Error.Message
-	}
-	return ""
-}
+	"github.com/guarzo/slabledger/internal/adapters/clients/httpx"
+)
 
 const (
 	defaultAuthBaseURL  = "https://identitytoolkit.googleapis.com"
@@ -33,7 +20,7 @@ type FirebaseAuth struct {
 	apiKey       string
 	authBaseURL  string
 	tokenBaseURL string
-	httpClient   *http.Client
+	httpClient   *httpx.Client
 }
 
 // AuthOption configures a FirebaseAuth instance.
@@ -49,13 +36,22 @@ func WithTokenBaseURL(u string) AuthOption {
 	return func(a *FirebaseAuth) { a.tokenBaseURL = u }
 }
 
+// WithHTTPXClient overrides the default httpx client (for testing).
+func WithHTTPXClient(c *httpx.Client) AuthOption {
+	return func(a *FirebaseAuth) { a.httpClient = c }
+}
+
 // NewFirebaseAuth creates a Firebase Auth client.
 func NewFirebaseAuth(apiKey string, opts ...AuthOption) *FirebaseAuth {
+	cfg := httpx.DefaultConfig("CardLadder-Auth")
+	cfg.DefaultTimeout = 10 * time.Second
+	cfg.RetryPolicy.MaxRetries = 1
+
 	a := &FirebaseAuth{
 		apiKey:       apiKey,
 		authBaseURL:  defaultAuthBaseURL,
 		tokenBaseURL: defaultTokenBaseURL,
-		httpClient:   &http.Client{},
+		httpClient:   httpx.NewClient(cfg),
 	}
 	for _, opt := range opts {
 		opt(a)
@@ -65,86 +61,57 @@ func NewFirebaseAuth(apiKey string, opts ...AuthOption) *FirebaseAuth {
 
 // Login authenticates with email/password and returns tokens.
 func (a *FirebaseAuth) Login(ctx context.Context, email, password string) (*FirebaseAuthResponse, error) {
-	body := map[string]any{
+	reqBody := map[string]any{
 		"email":             email,
 		"password":          password,
 		"returnSecureToken": true,
 	}
-	bodyBytes, err := json.Marshal(body)
+	bodyBytes, err := json.Marshal(reqBody)
 	if err != nil {
 		return nil, fmt.Errorf("marshal login body: %w", err)
 	}
 
-	u := fmt.Sprintf("%s/v1/accounts:signInWithPassword?key=%s",
+	fullURL := fmt.Sprintf("%s/v1/accounts:signInWithPassword?key=%s",
 		a.authBaseURL, url.QueryEscape(a.apiKey))
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, bytes.NewReader(bodyBytes))
+	resp, err := a.httpClient.Post(ctx, fullURL, map[string]string{"Content-Type": "application/json"}, bodyBytes, 0)
 	if err != nil {
-		return nil, fmt.Errorf("create login request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := a.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("firebase login request: %w", err)
-	}
-	defer resp.Body.Close() //nolint:errcheck // best-effort close on HTTP response
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read login response: %w", err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		if msg := parseFirebaseError(respBody); msg != "" {
-			return nil, fmt.Errorf("firebase login failed: %s (status %d)", msg, resp.StatusCode)
-		}
-		return nil, fmt.Errorf("firebase login failed (status %d)", resp.StatusCode)
+		return nil, fmt.Errorf("firebase login: %w", err)
 	}
 
 	var authResp FirebaseAuthResponse
-	if err := json.Unmarshal(respBody, &authResp); err != nil {
-		return nil, fmt.Errorf("unmarshal login response: %w", err)
+	if err := json.Unmarshal(resp.Body, &authResp); err != nil {
+		return nil, fmt.Errorf("decode login response: %w", err)
+	}
+	if authResp.IDToken == "" || authResp.RefreshToken == "" {
+		return nil, fmt.Errorf("empty token in login response")
 	}
 	return &authResp, nil
 }
 
 // RefreshToken exchanges a refresh token for a new ID token.
 func (a *FirebaseAuth) RefreshToken(ctx context.Context, refreshToken string) (*FirebaseRefreshResponse, error) {
-	form := url.Values{
+	formData := url.Values{
 		"grant_type":    {"refresh_token"},
 		"refresh_token": {refreshToken},
 	}
+	bodyBytes := []byte(formData.Encode())
 
-	u := fmt.Sprintf("%s/v1/token?key=%s",
+	fullURL := fmt.Sprintf("%s/v1/token?key=%s",
 		a.tokenBaseURL, url.QueryEscape(a.apiKey))
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u,
-		bytes.NewReader([]byte(form.Encode())))
+	resp, err := a.httpClient.Post(ctx, fullURL, map[string]string{"Content-Type": "application/x-www-form-urlencoded"}, bodyBytes, 0)
 	if err != nil {
-		return nil, fmt.Errorf("create refresh request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
-	resp, err := a.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("firebase refresh request: %w", err)
-	}
-	defer resp.Body.Close() //nolint:errcheck // best-effort close on HTTP response
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read refresh response: %w", err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		if msg := parseFirebaseError(respBody); msg != "" {
-			return nil, fmt.Errorf("firebase refresh failed: %s (status %d)", msg, resp.StatusCode)
-		}
-		return nil, fmt.Errorf("firebase refresh failed (status %d)", resp.StatusCode)
+		return nil, fmt.Errorf("firebase refresh: %w", err)
 	}
 
 	var refreshResp FirebaseRefreshResponse
-	if err := json.Unmarshal(respBody, &refreshResp); err != nil {
-		return nil, fmt.Errorf("unmarshal refresh response: %w", err)
+	if err := json.Unmarshal(resp.Body, &refreshResp); err != nil {
+		return nil, fmt.Errorf("decode refresh response: %w", err)
+	}
+	if refreshResp.IDToken == "" {
+		return nil, fmt.Errorf("empty id_token in refresh response")
+	}
+	if refreshResp.RefreshToken == "" {
+		return nil, fmt.Errorf("empty refresh_token in refresh response")
 	}
 	return &refreshResp, nil
 }

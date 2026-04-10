@@ -423,3 +423,50 @@ func TestSearchCards_ValidationError(t *testing.T) {
 		t.Error("expected validation error for empty criteria")
 	}
 }
+
+func TestRateLimiter_BurstAllowed(t *testing.T) {
+	srv := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		resp := tcgdexSetDetail{
+			ID:   "swsh1",
+			Name: "Sword & Shield",
+			Cards: []tcgdexCardStub{
+				{ID: "swsh1-1", LocalID: "1", Name: "Celebi V"},
+			},
+		}
+		json.NewEncoder(w).Encode(resp)
+	})
+	defer srv.Close()
+
+	config := httpx.DefaultConfig("TCGdexTest")
+	config.DefaultTimeout = 5 * time.Second
+	client := httpx.NewClient(config)
+
+	adapter := NewTCGdexWithClientAndStorage(newTestCache(t), client, WithBaseURL(srv.URL))
+	adapter.languages = []string{"en"}
+
+	ctx := context.Background()
+
+	// Two rapid calls should succeed within burst capacity (burst=2)
+	for i := 0; i < 2; i++ {
+		cards, err := adapter.GetCards(ctx, "swsh1")
+		if err != nil {
+			t.Fatalf("call %d: unexpected error: %v", i, err)
+		}
+		if len(cards) != 1 {
+			t.Fatalf("call %d: expected 1 card, got %d", i, len(cards))
+		}
+	}
+}
+
+func TestRateLimiter_CancelledContext(t *testing.T) {
+	adapter := newTCGdexWithClient(newTestCache(t), mocks.NewMockHTTPClient())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // cancel immediately
+
+	err := adapter.get(ctx, "http://example.com/test", &struct{}{})
+	if err == nil {
+		t.Fatal("expected error from cancelled context, got nil")
+	}
+}

@@ -3,6 +3,7 @@ package psa
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/httpx"
+	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
@@ -314,7 +316,7 @@ func TestDoRequest_TokenRotationOn429(t *testing.T) {
 			t.Errorf("call 2: expected token-b, got %s", auth)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		resp := CertResponse{PSACert: CertInfo{CertNumber: "99999"}}
+		resp := CertResponse{PSACert: CertInfo{CertNumber: "99999", CardGrade: "GEM MT 10"}}
 		json.NewEncoder(w).Encode(resp)
 	}))
 	defer server.Close()
@@ -366,7 +368,7 @@ func TestDoRequest_DailyCallLimitEnforced(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		calls.Add(1)
 		w.Header().Set("Content-Type", "application/json")
-		resp := CertResponse{PSACert: CertInfo{CertNumber: "111"}}
+		resp := CertResponse{PSACert: CertInfo{CertNumber: "111", CardGrade: "MINT 9"}}
 		json.NewEncoder(w).Encode(resp)
 	}))
 	defer server.Close()
@@ -397,7 +399,7 @@ func TestDoRequest_DailyLimitRotatesToNextToken(t *testing.T) {
 			t.Errorf("expected token-b after rotation, got %s", auth)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		resp := CertResponse{PSACert: CertInfo{CertNumber: "333"}}
+		resp := CertResponse{PSACert: CertInfo{CertNumber: "333", CardGrade: "NM-MT 8"}}
 		json.NewEncoder(w).Encode(resp)
 	}))
 	defer server.Close()
@@ -440,7 +442,7 @@ func TestDoRequest_RequestPacing(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		calls.Add(1)
 		w.Header().Set("Content-Type", "application/json")
-		resp := CertResponse{PSACert: CertInfo{CertNumber: "444"}}
+		resp := CertResponse{PSACert: CertInfo{CertNumber: "444", CardGrade: "GEM MT 10"}}
 		json.NewEncoder(w).Encode(resp)
 	}))
 	defer server.Close()
@@ -469,7 +471,7 @@ func TestDoRequest_RequestPacing(t *testing.T) {
 func TestDoRequest_ContextCancelledDuringPacing(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		resp := CertResponse{PSACert: CertInfo{CertNumber: "555"}}
+		resp := CertResponse{PSACert: CertInfo{CertNumber: "555", CardGrade: "MINT 9"}}
 		json.NewEncoder(w).Encode(resp)
 	}))
 	defer server.Close()
@@ -610,4 +612,102 @@ func TestRotateToken_MultipleTokens(t *testing.T) {
 	if got := c.currentToken(); got != "b" {
 		t.Errorf("after rotation, currentToken = %q, want %q", got, "b")
 	}
+}
+
+// --- Error type assertions ---
+
+func TestClient_GetCert_ErrorTypes(t *testing.T) {
+	t.Run("no tokens returns ConfigMissing", func(t *testing.T) {
+		c := &Client{
+			httpClient:  httpx.NewClient(httpx.DefaultConfig("test")),
+			baseURL:     "http://localhost",
+			tokens:      nil,
+			logger:      observability.NewNoopLogger(),
+			dailyCounts: newTokenDayCounter(),
+		}
+		_, err := c.GetCert(context.Background(), "12345678")
+		var appErr *apperrors.AppError
+		if !errors.As(err, &appErr) {
+			t.Fatalf("expected AppError, got %T: %v", err, err)
+		}
+		if appErr.Code != apperrors.ErrCodeConfigMissing {
+			t.Errorf("expected ConfigMissing, got %s", appErr.Code)
+		}
+	})
+
+	t.Run("cert not found returns ProviderNotFound", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			json.NewEncoder(w).Encode(CertResponse{PSACert: CertInfo{CertNumber: ""}})
+		}))
+		defer server.Close()
+
+		c := newTestClient(t, server.URL)
+		_, err := c.GetCert(context.Background(), "12345678")
+		var appErr *apperrors.AppError
+		if !errors.As(err, &appErr) {
+			t.Fatalf("expected AppError, got %T: %v", err, err)
+		}
+		if appErr.Code != apperrors.ErrCodeProviderNotFound {
+			t.Errorf("expected ProviderNotFound, got %s", appErr.Code)
+		}
+	})
+
+	t.Run("rate limited returns ProviderRateLimited", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusTooManyRequests)
+		}))
+		defer server.Close()
+
+		c := newTestClient(t, server.URL) // single token, cannot rotate
+		_, err := c.GetCert(context.Background(), "12345678")
+		var appErr *apperrors.AppError
+		if !errors.As(err, &appErr) {
+			t.Fatalf("expected AppError, got %T: %v", err, err)
+		}
+		if appErr.Code != apperrors.ErrCodeProviderRateLimit {
+			t.Errorf("expected ProviderRateLimit, got %s", appErr.Code)
+		}
+	})
+
+	t.Run("decode error returns ProviderInvalidResponse", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{invalid json}`)
+		}))
+		defer server.Close()
+
+		c := newTestClient(t, server.URL)
+		_, err := c.GetCert(context.Background(), "12345678")
+		var appErr *apperrors.AppError
+		if !errors.As(err, &appErr) {
+			t.Fatalf("expected AppError, got %T: %v", err, err)
+		}
+		if appErr.Code != apperrors.ErrCodeProviderInvalidResp {
+			t.Errorf("expected ProviderInvalidResp, got %s", appErr.Code)
+		}
+	})
+
+	t.Run("daily limit returns ProviderRateLimited", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			resp := CertResponse{PSACert: CertInfo{CertNumber: "111", CardGrade: "MINT 9"}}
+			json.NewEncoder(w).Encode(resp)
+		}))
+		defer server.Close()
+
+		c := newTestClient(t, server.URL) // single token
+		today := time.Now().UTC().Format("2006-01-02")
+		c.dailyCounts.mu.Lock()
+		c.dailyCounts.counts[tokenDayKey{token: "test-token", day: today}] = dailyCallLimit + 1
+		c.dailyCounts.mu.Unlock()
+
+		_, err := c.GetCert(context.Background(), "111")
+		var appErr *apperrors.AppError
+		if !errors.As(err, &appErr) {
+			t.Fatalf("expected AppError, got %T: %v", err, err)
+		}
+		if appErr.Code != apperrors.ErrCodeProviderRateLimit {
+			t.Errorf("expected ProviderRateLimit, got %s", appErr.Code)
+		}
+	})
 }

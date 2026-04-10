@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/marketmovers"
+	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
 )
 
 // buildTRPCResponse wraps data in the standard tRPC envelope.
@@ -513,6 +515,118 @@ func TestClient_AddMultipleCollectionItems(t *testing.T) {
 			}
 			if resp.Items[1].CollectionItemID != 1002 {
 				t.Errorf("expected second item collectionItemId 1002, got %d", resp.Items[1].CollectionItemID)
+			}
+		})
+	}
+}
+
+func TestDoQuery_MissingResultData(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+	}{
+		{
+			name: "no result key",
+			body: `{}`,
+		},
+		{
+			name: "result data is null",
+			body: `{"result": {"data": null}}`,
+		},
+		{
+			name: "result is empty",
+			body: `{"result": {}}`,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(tc.body))
+			}))
+			defer srv.Close()
+
+			c := marketmovers.NewClient(
+				marketmovers.WithClientBaseURL(srv.URL),
+				marketmovers.WithStaticToken("test-token"),
+			)
+
+			_, err := c.SearchCollectibles(context.Background(), "test", 0, 10)
+			if err == nil {
+				t.Fatal("expected error, got nil")
+			}
+
+			var appErr *apperrors.AppError
+			if !errors.As(err, &appErr) {
+				t.Fatalf("expected AppError, got %T: %v", err, err)
+			}
+			if appErr.Code != apperrors.ErrCodeProviderInvalidResp {
+				t.Errorf("expected error code %s, got %s", apperrors.ErrCodeProviderInvalidResp, appErr.Code)
+			}
+		})
+	}
+}
+
+func TestClient_ErrorTypes(t *testing.T) {
+	cases := []struct {
+		name     string
+		setup    func() *marketmovers.Client
+		handler  http.HandlerFunc
+		wantCode apperrors.ErrorCode
+	}{
+		{
+			name: "no auth returns ConfigMissing",
+			setup: func() *marketmovers.Client {
+				// No static token, no auth — getToken will fail
+				return marketmovers.NewClient()
+			},
+			wantCode: apperrors.ErrCodeConfigMissing,
+		},
+		{
+			name: "unmarshal error returns ProviderInvalidResponse",
+			handler: func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				// Return invalid JSON that is not a tRPC error envelope
+				_, _ = w.Write([]byte(`not valid json`))
+			},
+			wantCode: apperrors.ErrCodeProviderInvalidResp,
+		},
+		{
+			name: "trpc error returns ProviderUnavailable",
+			handler: func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = fmt.Fprint(w, `{"error":{"message":"something went wrong"}}`)
+			},
+			wantCode: apperrors.ErrCodeProviderUnavailable,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var c *marketmovers.Client
+			if tc.setup != nil {
+				c = tc.setup()
+			} else {
+				srv := httptest.NewServer(tc.handler)
+				defer srv.Close()
+				c = marketmovers.NewClient(
+					marketmovers.WithClientBaseURL(srv.URL),
+					marketmovers.WithStaticToken("test-token"),
+				)
+			}
+
+			_, err := c.SearchCollectibles(context.Background(), "test", 0, 10)
+			if err == nil {
+				t.Fatal("expected error, got nil")
+			}
+
+			var appErr *apperrors.AppError
+			if !errors.As(err, &appErr) {
+				t.Fatalf("expected AppError, got %T: %v", err, err)
+			}
+			if appErr.Code != tc.wantCode {
+				t.Errorf("expected error code %s, got %s", tc.wantCode, appErr.Code)
 			}
 		})
 	}

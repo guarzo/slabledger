@@ -10,9 +10,11 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/sync/singleflight"
 	"golang.org/x/time/rate"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/httpx"
+	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
 )
 
 // Client accesses the Market Movers (Sports Card Investor) tRPC API.
@@ -26,6 +28,7 @@ type Client struct {
 	token        TokenState
 	auth         *Auth
 	refreshToken string
+	refreshGroup singleflight.Group
 
 	// For testing: bypass token management
 	staticToken string
@@ -251,7 +254,7 @@ func checkTRPCError(body []byte) error {
 		} `json:"error"`
 	}
 	if jsonErr := json.Unmarshal(body, &errCheck); jsonErr == nil && errCheck.Error != nil {
-		return fmt.Errorf("trpc error: %s", errCheck.Error.Message)
+		return apperrors.ProviderUnavailable("MarketMovers", fmt.Errorf("trpc error: %s", errCheck.Error.Message))
 	}
 	return nil
 }
@@ -269,7 +272,7 @@ func (c *Client) doMutation(ctx context.Context, path string, input any, result 
 
 	bodyBytes, err := json.Marshal(input)
 	if err != nil {
-		return fmt.Errorf("marshal mutation input: %w", err)
+		return apperrors.ProviderInvalidRequest("MarketMovers", err)
 	}
 
 	u := c.baseURL + "/" + path
@@ -280,9 +283,6 @@ func (c *Client) doMutation(ctx context.Context, path string, input any, result 
 
 	resp, err := c.httpClient.Post(ctx, u, headers, bodyBytes, 0)
 	if err != nil {
-		// httpx returns both resp and err for HTTP 4xx/5xx — check for
-		// tRPC validation error in the body before falling back to the
-		// generic HTTP error.
 		if resp != nil && len(resp.Body) > 0 {
 			if trpcErr := checkTRPCError(resp.Body); trpcErr != nil {
 				return trpcErr
@@ -291,15 +291,7 @@ func (c *Client) doMutation(ctx context.Context, path string, input any, result 
 		return fmt.Errorf("http request: %w", err)
 	}
 
-	// Check for tRPC error in response body before unmarshalling.
-	if trpcErr := checkTRPCError(resp.Body); trpcErr != nil {
-		return trpcErr
-	}
-
-	if err := json.Unmarshal(resp.Body, result); err != nil {
-		return fmt.Errorf("unmarshal response: %w", err)
-	}
-	return nil
+	return validateTRPCResponse(resp.Body, result)
 }
 
 // doQuery executes a tRPC GET query (query procedure).
@@ -315,7 +307,7 @@ func (c *Client) doQuery(ctx context.Context, path string, input any, result any
 
 	inputJSON, err := json.Marshal(input)
 	if err != nil {
-		return fmt.Errorf("marshal input: %w", err)
+		return apperrors.ProviderInvalidRequest("MarketMovers", err)
 	}
 
 	u := c.baseURL + "/" + path + "?input=" + url.QueryEscape(string(inputJSON))
@@ -325,8 +317,6 @@ func (c *Client) doQuery(ctx context.Context, path string, input any, result any
 
 	resp, err := c.httpClient.Get(ctx, u, headers, 0)
 	if err != nil {
-		// httpx returns both resp and err for HTTP 4xx/5xx — check for
-		// tRPC error in the body before falling back to the generic HTTP error.
 		if resp != nil && len(resp.Body) > 0 {
 			if trpcErr := checkTRPCError(resp.Body); trpcErr != nil {
 				return trpcErr
@@ -335,26 +325,41 @@ func (c *Client) doQuery(ctx context.Context, path string, input any, result any
 		return fmt.Errorf("http request: %w", err)
 	}
 
-	// Check for tRPC error in response body before unmarshalling
-	if trpcErr := checkTRPCError(resp.Body); trpcErr != nil {
+	return validateTRPCResponse(resp.Body, result)
+}
+
+// validateTRPCResponse checks for errors and validates the response structure.
+func validateTRPCResponse(body []byte, result any) error {
+	if trpcErr := checkTRPCError(body); trpcErr != nil {
 		return trpcErr
 	}
 
-	if err := json.Unmarshal(resp.Body, result); err != nil {
-		return fmt.Errorf("unmarshal response: %w", err)
+	if err := json.Unmarshal(body, result); err != nil {
+		return apperrors.ProviderInvalidResponse("MarketMovers", fmt.Errorf("unmarshal response: %w", err))
 	}
+
+	// Verify the tRPC result.data path is present and non-null.
+	var envelope struct {
+		Result struct {
+			Data json.RawMessage `json:"data"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(body, &envelope); err == nil {
+		if len(envelope.Result.Data) == 0 || string(envelope.Result.Data) == "null" {
+			return apperrors.ProviderInvalidResponse("MarketMovers",
+				fmt.Errorf("response missing result.data"))
+		}
+	}
+
 	return nil
 }
 
-// getToken returns a valid access token, refreshing if needed.
-// Uses double-check locking so the lock is not held during the network call.
 func (c *Client) getToken(ctx context.Context) (string, error) {
 	if c.staticToken != "" {
 		return c.staticToken, nil
 	}
 
 	c.mu.Lock()
-	// Return cached token if still valid (with 5min buffer).
 	if c.token.AccessToken != "" && time.Now().Add(5*time.Minute).Before(c.token.ExpiresAt) {
 		token := c.token.AccessToken
 		c.mu.Unlock()
@@ -362,34 +367,51 @@ func (c *Client) getToken(ctx context.Context) (string, error) {
 	}
 	if c.auth == nil || c.refreshToken == "" {
 		c.mu.Unlock()
-		return "", fmt.Errorf("no auth credentials configured")
+		return "", apperrors.ConfigMissing("MarketMovers credentials", "")
 	}
-	// Capture credentials under the lock before releasing it.
-	auth := c.auth
-	refreshTok := c.refreshToken
 	c.mu.Unlock()
 
-	// Perform the network call outside the lock to avoid holding it during I/O.
-	resp, err := auth.RefreshToken(ctx, refreshTok)
-	if err != nil {
-		return "", fmt.Errorf("refresh token: %w", err)
-	}
+	// Use DoChan to allow followers to cancel via context while leader continues.
+	ch := c.refreshGroup.DoChan("refresh", func() (any, error) {
+		c.mu.Lock()
+		if c.token.AccessToken != "" && time.Now().Add(5*time.Minute).Before(c.token.ExpiresAt) {
+			token := c.token.AccessToken
+			c.mu.Unlock()
+			return token, nil
+		}
+		auth := c.auth
+		refreshTok := c.refreshToken
+		c.mu.Unlock()
 
-	// Parse expiry from JWT payload (exp claim).
-	expiry := parseJWTExpiry(resp.AccessToken)
+		resp, err := auth.RefreshToken(ctx, refreshTok)
+		if err != nil {
+			return "", fmt.Errorf("refresh token: %w", err)
+		}
 
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	// Double-check: another goroutine may have refreshed the token while we
-	// were waiting for the network call to complete.
-	if c.token.AccessToken != "" && time.Now().Add(5*time.Minute).Before(c.token.ExpiresAt) {
+		expiry := parseJWTExpiry(resp.AccessToken)
+
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		c.token = TokenState{
+			AccessToken: resp.AccessToken,
+			ExpiresAt:   expiry,
+		}
+		if resp.RefreshToken != "" {
+			c.refreshToken = resp.RefreshToken
+		}
 		return c.token.AccessToken, nil
+	})
+
+	// Wait for result or context cancellation.
+	select {
+	case <-ctx.Done():
+		return "", ctx.Err()
+	case result := <-ch:
+		if result.Err != nil {
+			return "", result.Err
+		}
+		return result.Val.(string), nil
 	}
-	c.token = TokenState{
-		AccessToken: resp.AccessToken,
-		ExpiresAt:   expiry,
-	}
-	return c.token.AccessToken, nil
 }
 
 // ParseJWTExpiry extracts the exp claim from a JWT without verification.

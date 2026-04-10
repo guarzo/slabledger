@@ -3,11 +3,14 @@ package cardladder
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
 )
 
 func TestClient_BuildCollectionCard(t *testing.T) {
@@ -180,5 +183,49 @@ func TestClient_CreateCollectionCard(t *testing.T) {
 	}
 	if doc.Fields["datePurchased"].TimestampValue == nil {
 		t.Error("datePurchased should be set")
+	}
+}
+
+func TestDoCallable_MissingResult(t *testing.T) {
+	tests := []struct {
+		name     string
+		response string
+	}{
+		{
+			name:     "no result key",
+			response: `{}`,
+		},
+		{
+			name:     "result is null",
+			response: `{"result": null}`,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.Write([]byte(tc.response)) //nolint:errcheck
+			}))
+			defer server.Close()
+
+			client := NewClient(
+				WithFunctionsURL(server.URL),
+				WithStaticToken("test-token"),
+			)
+
+			_, err := client.BuildCollectionCard(context.Background(), "12345", "psa")
+			if err == nil {
+				t.Fatal("expected error for missing/null result, got nil")
+			}
+
+			var appErr *apperrors.AppError
+			if !errors.As(err, &appErr) {
+				t.Fatalf("expected AppError, got %T: %v", err, err)
+			}
+			if appErr.Code != apperrors.ErrCodeProviderInvalidResp {
+				t.Errorf("error code = %q, want %q", appErr.Code, apperrors.ErrCodeProviderInvalidResp)
+			}
+		})
 	}
 }
