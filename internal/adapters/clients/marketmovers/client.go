@@ -302,6 +302,20 @@ func (c *Client) doMutation(ctx context.Context, path string, input any, result 
 	if err := json.Unmarshal(resp.Body, result); err != nil {
 		return apperrors.ProviderInvalidResponse("MarketMovers", fmt.Errorf("unmarshal response: %w", err))
 	}
+
+	// Verify the tRPC result.data path is present and non-null.
+	var mutEnv struct {
+		Result struct {
+			Data json.RawMessage `json:"data"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(resp.Body, &mutEnv); err == nil {
+		if len(mutEnv.Result.Data) == 0 || string(mutEnv.Result.Data) == "null" {
+			return apperrors.ProviderInvalidResponse("MarketMovers",
+				fmt.Errorf("response missing result.data"))
+		}
+	}
+
 	return nil
 }
 
@@ -346,6 +360,20 @@ func (c *Client) doQuery(ctx context.Context, path string, input any, result any
 	if err := json.Unmarshal(resp.Body, result); err != nil {
 		return apperrors.ProviderInvalidResponse("MarketMovers", fmt.Errorf("unmarshal response: %w", err))
 	}
+
+	// Verify the tRPC result.data path is present and non-null.
+	var queryEnv struct {
+		Result struct {
+			Data json.RawMessage `json:"data"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(resp.Body, &queryEnv); err == nil {
+		if len(queryEnv.Result.Data) == 0 || string(queryEnv.Result.Data) == "null" {
+			return apperrors.ProviderInvalidResponse("MarketMovers",
+				fmt.Errorf("response missing result.data"))
+		}
+	}
+
 	return nil
 }
 

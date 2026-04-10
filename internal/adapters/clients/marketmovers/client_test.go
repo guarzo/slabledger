@@ -520,6 +520,54 @@ func TestClient_AddMultipleCollectionItems(t *testing.T) {
 	}
 }
 
+func TestDoQuery_MissingResultData(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+	}{
+		{
+			name: "no result key",
+			body: `{}`,
+		},
+		{
+			name: "result data is null",
+			body: `{"result": {"data": null}}`,
+		},
+		{
+			name: "result is empty",
+			body: `{"result": {}}`,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(tc.body))
+			}))
+			defer srv.Close()
+
+			c := marketmovers.NewClient(
+				marketmovers.WithClientBaseURL(srv.URL),
+				marketmovers.WithStaticToken("test-token"),
+			)
+
+			_, err := c.SearchCollectibles(context.Background(), "test", 0, 10)
+			if err == nil {
+				t.Fatal("expected error, got nil")
+			}
+
+			var appErr *apperrors.AppError
+			if !errors.As(err, &appErr) {
+				t.Fatalf("expected AppError, got %T: %v", err, err)
+			}
+			if appErr.Code != apperrors.ErrCodeProviderInvalidResp {
+				t.Errorf("expected error code %s, got %s", apperrors.ErrCodeProviderInvalidResp, appErr.Code)
+			}
+		})
+	}
+}
+
 func TestClient_ErrorTypes(t *testing.T) {
 	cases := []struct {
 		name     string
