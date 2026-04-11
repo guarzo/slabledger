@@ -520,6 +520,18 @@ func TestComputeCapitalSummary(t *testing.T) {
 			wantTrend:  TrendDeclining,
 			checkTrend: true,
 		},
+		{
+			name: "recovery collapsed to zero from positive prior",
+			input: &CapitalRawData{
+				OutstandingCents:          100000,
+				RecoveryRate30dCents:      0,
+				RecoveryRate30dPriorCents: 50000,
+			},
+			wantWeeks:  WeeksToCoverNoData,
+			wantTrend:  TrendDeclining,
+			checkExact: true,
+			checkTrend: true,
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
