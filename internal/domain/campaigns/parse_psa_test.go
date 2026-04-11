@@ -131,3 +131,85 @@ func TestParsePSAExportRows_NoValidRows(t *testing.T) {
 		t.Errorf("expected 0 parse errors, got %d", len(errs))
 	}
 }
+
+func TestParsePSAExportRows_ShipDateParsed(t *testing.T) {
+	records := [][]string{
+		{"Cert Number", "Listing Title", "Grade", "Price Paid", "Date", "Purchase Source", "Ship Date", "Invoice Date", "Was Refunded?", "Front Image URL", "Back Image URL", "Category"},
+		{"12345678", "Charizard VMAX", "10", "$45.00", "04/01/2026", "eBay", "04/03/2026", "", "no", "", "", "Pokemon"},
+	}
+
+	rows, errs, err := ParsePSAExportRows(records)
+	if err != nil {
+		t.Fatalf("ParsePSAExportRows: unexpected fatal error: %v", err)
+	}
+	if len(errs) != 0 {
+		t.Errorf("ParsePSAExportRows: unexpected parse errors: %v", errs)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("ParsePSAExportRows: got %d rows, want 1", len(rows))
+	}
+
+	row := rows[0]
+	if row.CertNumber != "12345678" {
+		t.Errorf("CertNumber = %q, want %q", row.CertNumber, "12345678")
+	}
+	if row.ListingTitle != "Charizard VMAX" {
+		t.Errorf("ListingTitle = %q, want %q", row.ListingTitle, "Charizard VMAX")
+	}
+	if row.Grade != 10 {
+		t.Errorf("Grade = %v, want 10", row.Grade)
+	}
+	if row.PricePaid != 45.00 {
+		t.Errorf("PricePaid = %v, want 45.00", row.PricePaid)
+	}
+	if row.Date != "2026-04-01" {
+		t.Errorf("Date = %q, want %q", row.Date, "2026-04-01")
+	}
+	if row.PurchaseSource != "eBay" {
+		t.Errorf("PurchaseSource = %q, want %q", row.PurchaseSource, "eBay")
+	}
+	if row.ShipDate != "2026-04-03" {
+		t.Errorf("ShipDate = %q, want %q", row.ShipDate, "2026-04-03")
+	}
+}
+
+func TestParsePSAExportRows_MissingShipDateNonFatal(t *testing.T) {
+	records := [][]string{
+		{"Cert Number", "Listing Title", "Grade", "Price Paid", "Date", "Purchase Source"},
+		{"12345678", "Charizard VMAX", "10", "$45.00", "04/01/2026", "eBay"},
+	}
+
+	rows, errs, err := ParsePSAExportRows(records)
+	if err != nil {
+		t.Fatalf("ParsePSAExportRows: unexpected fatal error: %v", err)
+	}
+	if len(errs) != 0 {
+		t.Errorf("ParsePSAExportRows: unexpected parse errors: %v", errs)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("ParsePSAExportRows: got %d rows, want 1", len(rows))
+	}
+
+	row := rows[0]
+	if row.CertNumber != "12345678" {
+		t.Errorf("CertNumber = %q, want %q", row.CertNumber, "12345678")
+	}
+	if row.ListingTitle != "Charizard VMAX" {
+		t.Errorf("ListingTitle = %q, want %q", row.ListingTitle, "Charizard VMAX")
+	}
+	if row.Grade != 10 {
+		t.Errorf("Grade = %v, want 10", row.Grade)
+	}
+	if row.PricePaid != 45.00 {
+		t.Errorf("PricePaid = %v, want 45.00", row.PricePaid)
+	}
+	if row.Date != "2026-04-01" {
+		t.Errorf("Date = %q, want %q", row.Date, "2026-04-01")
+	}
+	if row.PurchaseSource != "eBay" {
+		t.Errorf("PurchaseSource = %q, want %q", row.PurchaseSource, "eBay")
+	}
+	if row.ShipDate != "" {
+		t.Errorf("ShipDate = %q, want empty string", row.ShipDate)
+	}
+}
