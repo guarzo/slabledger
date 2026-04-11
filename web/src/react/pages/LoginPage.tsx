@@ -13,7 +13,8 @@ const LoginPage: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="login-container">
+      <div className="login-container" role="status" aria-live="polite" aria-atomic="true">
+        <span className="sr-only">Signing in…</span>
         <PokeballLoader />
       </div>
     );

@@ -44,7 +44,12 @@ export function CardDataTab({ enabled = true }: { enabled?: boolean }) {
   if (!data) {
     return errorMessage
       ? <div className="p-3 rounded-lg bg-[var(--danger-bg)] border border-[var(--danger-border)] text-[var(--danger)] text-sm">{errorMessage}</div>
-      : <div className="py-8"><PokeballLoader /></div>;
+      : (
+        <div className="py-8" role="status" aria-live="polite" aria-atomic="true">
+          <span className="sr-only">Loading card cache stats…</span>
+          <PokeballLoader />
+        </div>
+      );
   }
 
   if (!data.enabled) {

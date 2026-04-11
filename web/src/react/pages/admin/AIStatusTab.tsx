@@ -43,7 +43,14 @@ function OperationRow({ op }: { op: AIOperationSummary }) {
 export function AIStatusTab({ enabled = true }: { enabled?: boolean }) {
   const { data, error, isLoading } = useAIUsage({ enabled });
 
-  if (isLoading) return <div className="py-8"><PokeballLoader /></div>;
+  if (isLoading) {
+    return (
+      <div className="py-8" role="status" aria-live="polite" aria-atomic="true">
+        <span className="sr-only">Loading AI usage stats…</span>
+        <PokeballLoader />
+      </div>
+    );
+  }
   if (error && !data) return <div className="p-3 rounded-lg bg-[var(--danger-bg)] border border-[var(--danger-border)] text-[var(--danger)] text-sm">Failed to load AI usage stats</div>;
   if (!data) return null;
 

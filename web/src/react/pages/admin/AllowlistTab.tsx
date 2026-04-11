@@ -79,7 +79,8 @@ export function AllowlistTab({ enabled = true }: { enabled?: boolean }) {
       {/* Email list */}
       <div className="glass-table">
         {isLoading ? (
-          <div className="px-5 py-8">
+          <div className="px-5 py-8" role="status" aria-live="polite" aria-atomic="true">
+            <span className="sr-only">Loading allowlist…</span>
             <PokeballLoader />
           </div>
         ) : !error && Array.isArray(allowlist) && allowlist.length === 0 ? (

@@ -252,9 +252,12 @@ function MMImportCard() {
       if (res.failed > 0 || (res.errors && res.errors.length > 0)) {
         toast.warning(`Market Movers import: ${res.failed} failed. ${res.updated} updated, ${res.skipped} skipped, ${res.notFound} not found`);
         if (res.errors && res.errors.length > 0) {
+          const formatted = res.errors
+            .map((e) => (e.row ? `row ${e.row}: ${e.error}` : e.error))
+            .join('; ');
           reportError(
             'LegacyTab/mm-import',
-            new Error(`Market Movers import errors: ${res.errors.join('; ')}`),
+            new Error(`Market Movers import errors: ${formatted}`),
           );
         }
       } else {

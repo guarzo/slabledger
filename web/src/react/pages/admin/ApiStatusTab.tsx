@@ -83,7 +83,10 @@ export function ApiStatusTab({ enabled = true }: { enabled?: boolean }) {
           </div>
         </>
       ) : !errorMessage ? (
-        <div className="py-8"><PokeballLoader /></div>
+        <div className="py-8" role="status" aria-live="polite" aria-atomic="true">
+          <span className="sr-only">Loading API status…</span>
+          <PokeballLoader />
+        </div>
       ) : null}
     </div>
   );

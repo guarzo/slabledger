@@ -11,7 +11,14 @@ function pct(n: number, total: number): string {
 export function AIPricingTab({ enabled = true }: { enabled?: boolean }) {
   const { data: stats, error, isLoading } = usePriceOverrideStats({ enabled });
 
-  if (isLoading) return <div className="py-8"><PokeballLoader /></div>;
+  if (isLoading) {
+    return (
+      <div className="py-8" role="status" aria-live="polite" aria-atomic="true">
+        <span className="sr-only">Loading AI pricing stats…</span>
+        <PokeballLoader />
+      </div>
+    );
+  }
   if (error && !stats) return <div className="p-3 rounded-lg bg-[var(--danger-bg)] border border-[var(--danger-border)] text-[var(--danger)] text-sm">Failed to load price override stats</div>;
   if (!stats) return null;
 

@@ -112,9 +112,12 @@ export default function OperationsTab({ campaigns, operationState, setOperationS
       if (result.failed > 0) {
         toast.warning(`MM sync: ${result.synced} synced, ${result.skipped} skipped, ${result.failed} failed`);
         if (result.errors && result.errors.length > 0) {
+          const formatted = result.errors
+            .map((e) => `${e.certNumber}: ${e.error}`)
+            .join('; ');
           reportError(
             'OperationsTab/mm-sync',
-            new Error(`MM sync errors: ${result.errors.join('; ')}`),
+            new Error(`MM sync errors: ${formatted}`),
           );
         }
       } else if (result.synced === 0 && result.skipped === 0) {
