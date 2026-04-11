@@ -258,16 +258,18 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
       {/* Filter tabs — visible when not in showAll mode */}
       {!showAll && (
         <div className="flex items-center gap-2 mb-3 overflow-x-auto scrollbar-none sell-sheet-no-print">
-          {([
-            { key: 'needs_attention' as const, label: 'Needs Attention', color: 'var(--warning)' },
-            { key: 'ai_suggestion' as const, label: 'AI Suggestions', color: 'var(--brand-400)' },
-            { key: 'sell_sheet' as const, label: 'Sell Sheet', color: 'var(--brand-400)' },
-            { key: 'all' as const, label: 'All', color: 'var(--text)' },
-            { key: 'card_show' as const, label: 'Card Show', color: 'var(--brand-400)' },
-          ] as const).filter(tab => {
-            if (tab.key === 'ai_suggestion') return tabCounts.ai_suggestion > 0;
-            return true;
-          }).map(tab => {
+           {([
+             { key: 'needs_attention' as const, label: 'Needs Attention', color: 'var(--warning)' },
+             { key: 'in_hand' as const, label: 'In Hand', color: 'var(--success)' },
+             { key: 'ai_suggestion' as const, label: 'AI Suggestions', color: 'var(--brand-400)' },
+             { key: 'sell_sheet' as const, label: 'Sell Sheet', color: 'var(--brand-400)' },
+             { key: 'all' as const, label: 'All', color: 'var(--text)' },
+             { key: 'card_show' as const, label: 'Card Show', color: 'var(--brand-400)' },
+           ] as const).filter(tab => {
+             if (tab.key === 'ai_suggestion') return tabCounts.ai_suggestion > 0;
+             if (tab.key === 'in_hand') return tabCounts.in_hand > 0;
+             return true;
+           }).map(tab => {
             const count = tab.key === 'sell_sheet' ? pageSellSheetCount : tabCounts[tab.key];
             return (
               <button

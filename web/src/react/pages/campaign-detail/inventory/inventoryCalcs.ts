@@ -8,6 +8,7 @@ export interface TabCounts {
   needs_attention: number;
   ai_suggestion: number;
   card_show: number;
+  in_hand: number;
   all: number;
 }
 
@@ -25,7 +26,7 @@ export interface InventoryMeta {
 
 export function computeInventoryMeta(items: AgingItem[]): InventoryMeta {
   const stats: ReviewStats = { total: items.length, needsReview: 0, reviewed: 0, flagged: 0 };
-  const counts: TabCounts = { needs_attention: 0, ai_suggestion: 0, card_show: 0, all: items.length };
+  const counts: TabCounts = { needs_attention: 0, ai_suggestion: 0, card_show: 0, in_hand: 0, all: items.length };
   let totalCost = 0;
   let totalMarket = 0;
   for (const item of items) {
@@ -39,6 +40,7 @@ export function computeInventoryMeta(items: AgingItem[]): InventoryMeta {
     }
     if ((item.purchase.aiSuggestedPriceCents ?? 0) > 0) counts.ai_suggestion++;
     if (isCardShowCandidate(item)) counts.card_show++;
+    if (item.purchase.receivedAt) counts.in_hand++;
 
     totalCost += costBasis(item.purchase);
     if (item.currentMarket) totalMarket += bestPrice(item.currentMarket);
@@ -54,7 +56,7 @@ export function isDHHeld(item: AgingItem): boolean {
   return item.purchase.dhPushStatus === 'held';
 }
 
-export type FilterTab = 'needs_attention' | 'ai_suggestion' | 'sell_sheet' | 'all' | 'card_show';
+export type FilterTab = 'needs_attention' | 'ai_suggestion' | 'sell_sheet' | 'all' | 'card_show' | 'in_hand';
 
 export function filterAndSortItems(
   items: AgingItem[],
@@ -90,6 +92,7 @@ export function filterAndSortItems(
         }
         if (filterTab === 'ai_suggestion') return (i.purchase.aiSuggestedPriceCents ?? 0) > 0;
         if (filterTab === 'card_show') return isCardShowCandidate(i);
+        if (filterTab === 'in_hand') return !!i.purchase.receivedAt;
         return false;
       });
     }
