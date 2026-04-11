@@ -130,6 +130,7 @@ export interface Invoice {
   invoiceDate: string;
   totalCents: number;
   paidCents: number;
+  pendingReceiptCents: number;
   dueDate?: string;
   paidDate?: string;
   status: 'unpaid' | 'partial' | 'paid';
