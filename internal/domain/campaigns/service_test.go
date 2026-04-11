@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -1124,6 +1125,244 @@ func TestService_GetPortfolioHealth_RealizedROI_NoSales(t *testing.T) {
 	// No sales → totalSoldCostBasis stays 0 → RealizedROI stays 0
 	if health.RealizedROI != 0 {
 		t.Errorf("RealizedROI = %f, want 0 (no sales)", health.RealizedROI)
+	}
+}
+
+// --- GetPortfolioHealth liquidation-channel signal tests ---
+
+// TestService_GetPortfolioHealth_LiquidationSignals verifies that GetPortfolioHealth
+// populates LiquidationLossCents, LiquidationSaleCount, and EbayChannelMarginPct
+// correctly by walking per-sale data for each campaign.
+func TestService_GetPortfolioHealth_LiquidationSignals(t *testing.T) {
+	type saleFixture struct {
+		channel   campaigns.SaleChannel
+		salePrice int
+		netProfit int
+	}
+
+	cases := []struct {
+		name                 string
+		sales                []saleFixture
+		wantLossCents        int
+		wantLossCount        int
+		wantEbayMarginPct    float64
+		ebayMarginPctEpsilon float64
+	}{
+		{
+			name:                 "no sales",
+			sales:                nil,
+			wantLossCents:        0,
+			wantLossCount:        0,
+			wantEbayMarginPct:    0,
+			ebayMarginPctEpsilon: 0.00001,
+		},
+		{
+			name: "only eBay sales all profitable",
+			sales: []saleFixture{
+				{channel: campaigns.SaleChannelEbay, salePrice: 10000, netProfit: 2000},
+				{channel: campaigns.SaleChannelEbay, salePrice: 15000, netProfit: 4000},
+			},
+			wantLossCents:        0,
+			wantLossCount:        0,
+			wantEbayMarginPct:    float64(6000) / float64(25000), // 0.24
+			ebayMarginPctEpsilon: 0.0001,
+		},
+		{
+			name: "only eBay sales some losses — loss stays 0, margin still computed",
+			sales: []saleFixture{
+				{channel: campaigns.SaleChannelEbay, salePrice: 10000, netProfit: 2000},
+				{channel: campaigns.SaleChannelEbay, salePrice: 8000, netProfit: -1500},
+			},
+			wantLossCents:        0, // eBay never contributes to liquidation loss
+			wantLossCount:        0,
+			wantEbayMarginPct:    float64(500) / float64(18000), // ~0.0278
+			ebayMarginPctEpsilon: 0.0001,
+		},
+		{
+			name: "only inperson sales all profitable — loss stays 0",
+			sales: []saleFixture{
+				{channel: campaigns.SaleChannelInPerson, salePrice: 5000, netProfit: 1000},
+				{channel: campaigns.SaleChannelInPerson, salePrice: 7000, netProfit: 500},
+			},
+			wantLossCents:        0,
+			wantLossCount:        0,
+			wantEbayMarginPct:    0,
+			ebayMarginPctEpsilon: 0.00001,
+		},
+		{
+			name: "only inperson sales all losses",
+			sales: []saleFixture{
+				{channel: campaigns.SaleChannelInPerson, salePrice: 4000, netProfit: -800},
+				{channel: campaigns.SaleChannelInPerson, salePrice: 3000, netProfit: -1200},
+			},
+			wantLossCents:        -2000,
+			wantLossCount:        2,
+			wantEbayMarginPct:    0,
+			ebayMarginPctEpsilon: 0.00001,
+		},
+		{
+			name: "mixed channels — eBay profitable, inperson losses",
+			sales: []saleFixture{
+				{channel: campaigns.SaleChannelEbay, salePrice: 20000, netProfit: 5000},
+				{channel: campaigns.SaleChannelEbay, salePrice: 10000, netProfit: 3000},
+				{channel: campaigns.SaleChannelInPerson, salePrice: 5000, netProfit: -1500},
+				{channel: campaigns.SaleChannelInPerson, salePrice: 4000, netProfit: -2000},
+			},
+			wantLossCents:        -3500,
+			wantLossCount:        2,
+			wantEbayMarginPct:    float64(8000) / float64(30000), // ~0.2667
+			ebayMarginPctEpsilon: 0.0001,
+		},
+		{
+			name: "cardshow losses counted alongside inperson",
+			sales: []saleFixture{
+				{channel: campaigns.SaleChannelCardShow, salePrice: 5000, netProfit: -1000},
+				{channel: campaigns.SaleChannelInPerson, salePrice: 4500, netProfit: -750},
+			},
+			wantLossCents:        -1750,
+			wantLossCount:        2,
+			wantEbayMarginPct:    0,
+			ebayMarginPctEpsilon: 0.00001,
+		},
+		{
+			name: "profitable cardshow sale does not reduce liquidation loss",
+			sales: []saleFixture{
+				{channel: campaigns.SaleChannelCardShow, salePrice: 5000, netProfit: 1500}, // excluded
+				{channel: campaigns.SaleChannelCardShow, salePrice: 4000, netProfit: -900}, // counted
+				{channel: campaigns.SaleChannelInPerson, salePrice: 3000, netProfit: -600}, // counted
+			},
+			wantLossCents:        -1500,
+			wantLossCount:        2,
+			wantEbayMarginPct:    0,
+			ebayMarginPctEpsilon: 0.00001,
+		},
+		{
+			name: "website and other channels are neither liquidation nor eBay",
+			sales: []saleFixture{
+				{channel: campaigns.SaleChannelWebsite, salePrice: 10000, netProfit: -500},
+				{channel: campaigns.SaleChannelOther, salePrice: 5000, netProfit: -1000},
+				{channel: campaigns.SaleChannelEbay, salePrice: 20000, netProfit: 4000},
+			},
+			wantLossCents:        0, // website + other never count as liquidation
+			wantLossCount:        0,
+			wantEbayMarginPct:    float64(4000) / float64(20000), // 0.20
+			ebayMarginPctEpsilon: 0.0001,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := mocks.NewMockCampaignRepository()
+			svc := campaigns.NewService(repo, withTestIDGen())
+			ctx := context.Background()
+
+			c := &campaigns.Campaign{Name: "Health Test", BuyTermsCLPct: 0.78}
+			if err := svc.CreateCampaign(ctx, c); err != nil {
+				t.Fatalf("setup: %v", err)
+			}
+			repo.PNLData[c.ID] = &campaigns.CampaignPNL{
+				CampaignID:      c.ID,
+				TotalSpendCents: 100000,
+				TotalPurchases:  10,
+				TotalSold:       len(tc.sales),
+				ROI:             0.01, // keep base health logic in "healthy" bucket
+			}
+
+			// Inject per-sale fixture via the GetPurchasesWithSales override.
+			fixtures := make([]campaigns.PurchaseWithSale, 0, len(tc.sales))
+			for i, sf := range tc.sales {
+				fixtures = append(fixtures, campaigns.PurchaseWithSale{
+					Purchase: campaigns.Purchase{ID: fmt.Sprintf("p-%d", i), CampaignID: c.ID},
+					Sale: &campaigns.Sale{
+						PurchaseID:     fmt.Sprintf("p-%d", i),
+						SaleChannel:    sf.channel,
+						SalePriceCents: sf.salePrice,
+						NetProfitCents: sf.netProfit,
+					},
+				})
+			}
+			repo.GetPurchasesWithSalesFn = func(_ context.Context, campaignID string) ([]campaigns.PurchaseWithSale, error) {
+				if campaignID != c.ID {
+					return nil, nil
+				}
+				return fixtures, nil
+			}
+
+			health, err := svc.GetPortfolioHealth(ctx)
+			if err != nil {
+				t.Fatalf("GetPortfolioHealth: %v", err)
+			}
+			if len(health.Campaigns) != 1 {
+				t.Fatalf("expected 1 campaign, got %d", len(health.Campaigns))
+			}
+			got := health.Campaigns[0]
+
+			if got.LiquidationLossCents != tc.wantLossCents {
+				t.Errorf("LiquidationLossCents = %d, want %d", got.LiquidationLossCents, tc.wantLossCents)
+			}
+			if got.LiquidationSaleCount != tc.wantLossCount {
+				t.Errorf("LiquidationSaleCount = %d, want %d", got.LiquidationSaleCount, tc.wantLossCount)
+			}
+			if diff := got.EbayChannelMarginPct - tc.wantEbayMarginPct; diff > tc.ebayMarginPctEpsilon || diff < -tc.ebayMarginPctEpsilon {
+				t.Errorf("EbayChannelMarginPct = %f, want ~%f", got.EbayChannelMarginPct, tc.wantEbayMarginPct)
+			}
+		})
+	}
+}
+
+// TestService_GetPortfolioHealth_LiquidationReason verifies that a significant
+// liquidation loss combined with a healthy eBay channel margin triggers the
+// "eBay profitable but liquidation bleed" health reason message.
+func TestService_GetPortfolioHealth_LiquidationReason(t *testing.T) {
+	repo := mocks.NewMockCampaignRepository()
+	svc := campaigns.NewService(repo, withTestIDGen())
+	ctx := context.Background()
+
+	c := &campaigns.Campaign{Name: "Modern", BuyTermsCLPct: 0.78}
+	if err := svc.CreateCampaign(ctx, c); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+	repo.PNLData[c.ID] = &campaigns.CampaignPNL{
+		CampaignID:      c.ID,
+		TotalSpendCents: 100000,
+		TotalPurchases:  10,
+		TotalSold:       6,
+		ROI:             0.02,
+	}
+
+	// $20K eBay revenue, $4K profit (20% margin) + $1000 liquidation loss across 2 sales
+	repo.GetPurchasesWithSalesFn = func(_ context.Context, _ string) ([]campaigns.PurchaseWithSale, error) {
+		return []campaigns.PurchaseWithSale{
+			{Purchase: campaigns.Purchase{ID: "p1", CampaignID: c.ID}, Sale: &campaigns.Sale{PurchaseID: "p1", SaleChannel: campaigns.SaleChannelEbay, SalePriceCents: 20000, NetProfitCents: 4000}},
+			{Purchase: campaigns.Purchase{ID: "p2", CampaignID: c.ID}, Sale: &campaigns.Sale{PurchaseID: "p2", SaleChannel: campaigns.SaleChannelInPerson, SalePriceCents: 3000, NetProfitCents: -60000}},
+			{Purchase: campaigns.Purchase{ID: "p3", CampaignID: c.ID}, Sale: &campaigns.Sale{PurchaseID: "p3", SaleChannel: campaigns.SaleChannelCardShow, SalePriceCents: 2500, NetProfitCents: -40000}},
+		}, nil
+	}
+
+	health, err := svc.GetPortfolioHealth(ctx)
+	if err != nil {
+		t.Fatalf("GetPortfolioHealth: %v", err)
+	}
+	if len(health.Campaigns) != 1 {
+		t.Fatalf("expected 1 campaign, got %d", len(health.Campaigns))
+	}
+	got := health.Campaigns[0]
+
+	if got.LiquidationLossCents != -100000 {
+		t.Errorf("LiquidationLossCents = %d, want -100000", got.LiquidationLossCents)
+	}
+	if got.LiquidationSaleCount != 2 {
+		t.Errorf("LiquidationSaleCount = %d, want 2", got.LiquidationSaleCount)
+	}
+	wantMargin := 0.20
+	if diff := got.EbayChannelMarginPct - wantMargin; diff > 0.0001 || diff < -0.0001 {
+		t.Errorf("EbayChannelMarginPct = %f, want ~%f", got.EbayChannelMarginPct, wantMargin)
+	}
+	if got.HealthStatus != "warning" {
+		t.Errorf("HealthStatus = %q, want warning (liquidation override)", got.HealthStatus)
+	}
+	if !strings.Contains(got.HealthReason, "forced liquidation") {
+		t.Errorf("HealthReason = %q, want reason mentioning forced liquidation", got.HealthReason)
 	}
 }
 

@@ -65,18 +65,37 @@ func (s *service) GetPortfolioHealth(ctx context.Context) (*PortfolioHealth, err
 			totalSoldNetProfit += soldProfit
 		}
 
+		// Liquidation-vs-eBay channel split. Iterates sold purchases to separate
+		// "eBay margin is broken" from "we liquidated cards that would have been
+		// profitable". Uses raw stored channel values (not normalized) so cardshow
+		// is counted as liquidation but tcgplayer is counted with eBay.
+		liquidationLossCents, liquidationSaleCount, ebayMarginPct :=
+			s.computeChannelHealthSignals(ctx, c.ID)
+
+		if liquidationLossCents < -50000 && ebayMarginPct > 0.10 {
+			status = "warning"
+			reason = fmt.Sprintf(
+				"eBay channel profitable (%.1f%%) but $%.2f lost to forced liquidation",
+				ebayMarginPct*100,
+				float64(-liquidationLossCents)/100,
+			)
+		}
+
 		ch := CampaignHealth{
-			CampaignID:     c.ID,
-			CampaignName:   c.Name,
-			Phase:          c.Phase,
-			ROI:            pnl.ROI,
-			SellThroughPct: pnl.SellThroughPct,
-			AvgDaysToSell:  pnl.AvgDaysToSell,
-			TotalPurchases: pnl.TotalPurchases,
-			TotalUnsold:    pnl.TotalUnsold,
-			CapitalAtRisk:  capitalAtRisk,
-			HealthStatus:   status,
-			HealthReason:   reason,
+			CampaignID:           c.ID,
+			CampaignName:         c.Name,
+			Phase:                c.Phase,
+			ROI:                  pnl.ROI,
+			SellThroughPct:       pnl.SellThroughPct,
+			AvgDaysToSell:        pnl.AvgDaysToSell,
+			TotalPurchases:       pnl.TotalPurchases,
+			TotalUnsold:          pnl.TotalUnsold,
+			CapitalAtRisk:        capitalAtRisk,
+			HealthStatus:         status,
+			HealthReason:         reason,
+			LiquidationLossCents: liquidationLossCents,
+			LiquidationSaleCount: liquidationSaleCount,
+			EbayChannelMarginPct: ebayMarginPct,
 		}
 		health.Campaigns = append(health.Campaigns, ch)
 		health.TotalDeployed += pnl.TotalSpendCents
@@ -92,6 +111,58 @@ func (s *service) GetPortfolioHealth(ctx context.Context) (*PortfolioHealth, err
 	}
 
 	return health, nil
+}
+
+// computeChannelHealthSignals walks a campaign's sold purchases and returns:
+//   - liquidationLossCents: sum of strictly-negative net profit on inperson+cardshow
+//     sales (always ≤ 0). Profitable inperson/cardshow sales do not subtract from
+//     this figure — we only surface the bleed.
+//   - liquidationSaleCount: number of losing sales contributing to the loss.
+//   - ebayMarginPct: net profit / revenue on eBay sales (0 if no eBay sales).
+//
+// Reads per-sale data from GetPurchasesWithSales rather than ChannelPNL because the
+// latter only aggregates per-channel totals and cannot isolate strictly-negative
+// contributions. Errors are logged and the zero tuple is returned so that a single
+// campaign failure doesn't hide the whole portfolio health response.
+func (s *service) computeChannelHealthSignals(ctx context.Context, campaignID string) (int, int, float64) {
+	data, err := s.repo.GetPurchasesWithSales(ctx, campaignID)
+	if err != nil {
+		if s.logger != nil {
+			s.logger.Error(ctx, "channel health signals: fetch purchases with sales",
+				observability.String("campaignID", campaignID),
+				observability.Err(err))
+		}
+		return 0, 0, 0
+	}
+
+	var (
+		liquidationLossCents int
+		liquidationSaleCount int
+		ebayRevenue          int
+		ebayNetProfit        int
+	)
+
+	for _, d := range data {
+		if d.Sale == nil {
+			continue
+		}
+		switch d.Sale.SaleChannel {
+		case SaleChannelInPerson, SaleChannelCardShow:
+			if d.Sale.NetProfitCents < 0 {
+				liquidationLossCents += d.Sale.NetProfitCents
+				liquidationSaleCount++
+			}
+		case SaleChannelEbay:
+			ebayRevenue += d.Sale.SalePriceCents
+			ebayNetProfit += d.Sale.NetProfitCents
+		}
+	}
+
+	ebayMarginPct := 0.0
+	if ebayRevenue > 0 {
+		ebayMarginPct = float64(ebayNetProfit) / float64(ebayRevenue)
+	}
+	return liquidationLossCents, liquidationSaleCount, ebayMarginPct
 }
 
 func (s *service) GetPortfolioChannelVelocity(ctx context.Context) ([]ChannelVelocity, error) {
