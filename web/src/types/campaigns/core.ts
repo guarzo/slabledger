@@ -73,6 +73,7 @@ export interface Purchase {
   dhPushStatus?: string;
   dhHoldReason?: string;
   dhCandidatesJson?: string;
+  dhLastSyncedAt?: string;
   gemRateId?: string;
   psaSpecId?: number;
   clSyncedAt?: string;
