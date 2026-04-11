@@ -97,8 +97,11 @@ func (r *CampaignsRepository) SumPurchaseCostByInvoiceDate(ctx context.Context, 
 	return total, err
 }
 
-// GetPendingReceiptByInvoiceDate returns the sum of buy_cost_cents for non-refunded,
-// unreceived purchases grouped by invoice date. Returns an empty map if invoiceDates is empty.
+// GetPendingReceiptByInvoiceDate returns the sum of buy_cost_cents for purchases
+// that are not yet in-hand, grouped by invoice date. A purchase is considered
+// in-hand when it has either been scanned via cert intake (received_at IS NOT NULL)
+// or already sold (a row exists in campaign_sales). Refunded purchases are excluded.
+// Returns an empty map if invoiceDates is empty.
 func (r *CampaignsRepository) GetPendingReceiptByInvoiceDate(ctx context.Context, invoiceDates []string) (_ map[string]int, result_err error) {
 	if len(invoiceDates) == 0 {
 		return map[string]int{}, nil
@@ -112,12 +115,14 @@ func (r *CampaignsRepository) GetPendingReceiptByInvoiceDate(ctx context.Context
 	}
 
 	query := fmt.Sprintf(
-		`SELECT invoice_date, COALESCE(SUM(buy_cost_cents), 0)
-		 FROM campaign_purchases
-		 WHERE invoice_date IN (%s)
-		   AND received_at IS NULL
-		   AND was_refunded = 0
-		 GROUP BY invoice_date`,
+		`SELECT p.invoice_date, COALESCE(SUM(p.buy_cost_cents), 0)
+		 FROM campaign_purchases p
+		 LEFT JOIN campaign_sales s ON s.purchase_id = p.id
+		 WHERE p.invoice_date IN (%s)
+		   AND p.received_at IS NULL
+		   AND s.id IS NULL
+		   AND p.was_refunded = 0
+		 GROUP BY p.invoice_date`,
 		strings.Join(placeholders, ", "),
 	)
 
