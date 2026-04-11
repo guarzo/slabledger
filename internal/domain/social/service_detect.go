@@ -206,7 +206,7 @@ func (s *service) detectPostType(ctx context.Context, postType PostType, snapsho
 		return nil, fmt.Errorf("unsupported post type: %s", postType)
 	}
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("detect new arrivals: %w", err)
 	}
 
 	if len(candidateIDs) < s.minCards {
@@ -229,7 +229,13 @@ func (s *service) detectPostType(ctx context.Context, postType PostType, snapsho
 	// Deduplicate by card identity (name + set + grade)
 	if len(filtered) > 0 {
 		available, err := s.repo.GetAvailableCardsForPosts(ctx)
-		if err == nil {
+		if err != nil {
+			if s.logger != nil {
+				s.logger.Warn(ctx, "social: skipping card identity dedup — could not fetch available cards",
+					observability.String("postType", string(postType)),
+					observability.Err(err))
+			}
+		} else {
 			cardLookup := make(map[string]PostCardDetail, len(available))
 			for _, c := range available {
 				cardLookup[c.PurchaseID] = c

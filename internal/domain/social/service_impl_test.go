@@ -672,70 +672,97 @@ func TestDeduplicateByCardIdentity(t *testing.T) {
 	}
 }
 
-func TestDetectPostType_InsufficientCards_NewArrivals(t *testing.T) {
-	repo := &mockSocialRepo{}
-	// Return fewer than minCards recent purchases
-	repo.getRecentPurchaseIDsFunc = func(_ context.Context, _ string) ([]string, error) {
-		return []string{}, nil // empty — below minCards (default 1)
-	}
-	svc := NewService(repo).(*service)
-	snapshots := []PurchaseSnapshot{}
-	post, err := svc.detectPostType(context.Background(), PostTypeNewArrivals, snapshots)
-	if post != nil {
-		t.Error("expected nil post when insufficient cards")
-	}
-	if !IsInsufficientCards(err) {
-		t.Errorf("expected ErrInsufficientCards, got %v", err)
-	}
-}
-
-func TestDetectPostType_InsufficientCards_AfterDedup(t *testing.T) {
+func TestDetectPostType_InsufficientCards(t *testing.T) {
 	recent := time.Now().UTC().Format("2006-01-02")
-	repo := &mockSocialRepo{}
-	// Return 2 candidates for price movers
-	repo.getUnsoldPurchasesFunc = func(_ context.Context) ([]PurchaseSnapshot, error) {
-		return []PurchaseSnapshot{
-			{PurchaseID: "p1", MedianCents: 1000, Trend30d: 0.20, SnapshotDate: recent},
-			{PurchaseID: "p2", MedianCents: 1000, Trend30d: 0.20, SnapshotDate: recent},
-		}, nil
+
+	tests := []struct {
+		name           string
+		postType       PostType
+		setupRepo      func(*mockSocialRepo)
+		setupSnapshots func() []PurchaseSnapshot
+	}{
+		{
+			name:     "NewArrivals — no recent purchases",
+			postType: PostTypeNewArrivals,
+			setupRepo: func(repo *mockSocialRepo) {
+				repo.getRecentPurchaseIDsFunc = func(_ context.Context, _ string) ([]string, error) {
+					return []string{}, nil
+				}
+			},
+			setupSnapshots: func() []PurchaseSnapshot {
+				return []PurchaseSnapshot{}
+			},
+		},
+		{
+			name:     "PriceMovers — all filtered out by existing posts",
+			postType: PostTypePriceMovers,
+			setupRepo: func(repo *mockSocialRepo) {
+				repo.getPurchaseIDsInExistingFunc = func(_ context.Context, ids []string, _ PostType) (map[string]bool, error) {
+					m := make(map[string]bool)
+					for _, id := range ids {
+						m[id] = true
+					}
+					return m, nil
+				}
+			},
+			setupSnapshots: func() []PurchaseSnapshot {
+				return []PurchaseSnapshot{
+					{PurchaseID: "p1", MedianCents: 1000, Trend30d: 0.20, SnapshotDate: recent},
+					{PurchaseID: "p2", MedianCents: 1000, Trend30d: 0.20, SnapshotDate: recent},
+				}
+			},
+		},
 	}
-	// All candidates already in existing posts
-	repo.getPurchaseIDsInExistingFunc = func(_ context.Context, ids []string, _ PostType) (map[string]bool, error) {
-		m := make(map[string]bool)
-		for _, id := range ids {
-			m[id] = true
-		}
-		return m, nil
-	}
-	svc := NewService(repo).(*service)
-	snapshots := []PurchaseSnapshot{
-		{PurchaseID: "p1", MedianCents: 1000, Trend30d: 0.20, SnapshotDate: recent},
-		{PurchaseID: "p2", MedianCents: 1000, Trend30d: 0.20, SnapshotDate: recent},
-	}
-	post, err := svc.detectPostType(context.Background(), PostTypePriceMovers, snapshots)
-	if post != nil {
-		t.Error("expected nil post when all filtered out")
-	}
-	if !IsInsufficientCards(err) {
-		t.Errorf("expected ErrInsufficientCards, got %v", err)
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &mockSocialRepo{}
+			tt.setupRepo(repo)
+			svc := NewService(repo).(*service)
+			snapshots := tt.setupSnapshots()
+
+			post, err := svc.detectPostType(context.Background(), tt.postType, snapshots)
+			if post != nil {
+				t.Error("expected nil post when insufficient cards")
+			}
+			if !IsInsufficientCards(err) {
+				t.Errorf("expected ErrInsufficientCards, got %v", err)
+			}
+		})
 	}
 }
 
 func TestRuleBasedGenerate_SkipsInsufficientCards(t *testing.T) {
-	repo := &mockSocialRepo{}
-	// All recent purchases empty → all 3 post types get InsufficientCards
-	repo.getUnsoldPurchasesFunc = func(_ context.Context) ([]PurchaseSnapshot, error) {
-		return []PurchaseSnapshot{}, nil
+	tests := []struct {
+		name      string
+		setupRepo func(*mockSocialRepo)
+	}{
+		{
+			name: "all post types insufficient cards — no error",
+			setupRepo: func(repo *mockSocialRepo) {
+				repo.getUnsoldPurchasesFunc = func(_ context.Context) ([]PurchaseSnapshot, error) {
+					return []PurchaseSnapshot{}, nil
+				}
+				repo.getRecentPurchaseIDsFunc = func(_ context.Context, _ string) ([]string, error) {
+					return []string{}, nil
+				}
+			},
+		},
 	}
-	repo.getRecentPurchaseIDsFunc = func(_ context.Context, _ string) ([]string, error) {
-		return []string{}, nil
-	}
-	svc := NewService(repo).(*service)
-	n, err := svc.ruleBasedGenerate(context.Background())
-	if err != nil {
-		t.Errorf("expected nil error when all types have insufficient cards, got: %v", err)
-	}
-	if n != 0 {
-		t.Errorf("expected 0 posts created, got %d", n)
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &mockSocialRepo{}
+			tt.setupRepo(repo)
+			svc := NewService(repo).(*service)
+
+			n, err := svc.ruleBasedGenerate(context.Background())
+			if err != nil {
+				t.Errorf("expected nil error when all types have insufficient cards, got: %v", err)
+			}
+			if n != 0 {
+				t.Errorf("expected 0 posts created, got %d", n)
+			}
+		})
 	}
 }
