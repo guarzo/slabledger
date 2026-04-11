@@ -249,6 +249,7 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 	}
 
 	// Social publish scheduler (if render service URL is configured)
+	cfg.SocialPublish.ApplyDefaults()
 	var socialPublishScheduler *SocialPublishScheduler
 	if cfg.SocialPublish.RenderServiceURL != "" && deps.SocialPublisher != nil && deps.SocialPublishRepo != nil {
 		renderClient := renderservice.NewClient(cfg.SocialPublish.RenderServiceURL)

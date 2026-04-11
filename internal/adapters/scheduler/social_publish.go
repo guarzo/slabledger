@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/renderservice"
@@ -178,10 +179,16 @@ func (s *SocialPublishScheduler) tick(ctx context.Context) {
 	)
 }
 
+// safePostIDRe matches only alphanumeric characters, hyphens, and underscores.
+var safePostIDRe = regexp.MustCompile(`^[A-Za-z0-9\-_]+$`)
+
 // saveSlides writes JPEG blobs to disk and returns their public-accessible URLs.
 // Files are written to <mediaDir>/social/<postID>/slide-N.jpg.
 // URLs are relative paths (/api/media/social/<postID>/slide-N.jpg).
 func (s *SocialPublishScheduler) saveSlides(postID string, blobs [][]byte) ([]string, error) {
+	if !safePostIDRe.MatchString(postID) {
+		return nil, fmt.Errorf("invalid postID %q: must match [A-Za-z0-9-_]+", postID)
+	}
 	dir := filepath.Join(s.mediaDir, "social", postID)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return nil, fmt.Errorf("create slide dir: %w", err)

@@ -63,11 +63,6 @@ credentials.json
 
 # Data files (all runtime data stored in ./data/)
 data/
-data/snapshots/
-data/volatility.json
-data/cache.json
-data/ai_cache.json
-data/targets.csv
 
 # Prevent cache from being created in test/cmd directories
 cmd/**/data/
@@ -77,13 +72,6 @@ cmd/**/data/
 !.claude/skills/
 
 web/node_modules
-
-data/slabledger.db
-data/slabledger.db-shm
-data/slabledger.db-wal
-web/slabledger.db
-web/slabledger.db-shm
-web/slabledger.db-wal
 
 # Frontend build output
 web/dist/

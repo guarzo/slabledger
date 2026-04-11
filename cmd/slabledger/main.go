@@ -302,11 +302,11 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		return err
 	}
 
-	socialService, socialRepo, igClient, igStore, igTokenRefresher := initializeSocialService(
+	socialSvc := initializeSocialService(
 		ctx, cfg, logger, db, azureAIClient, aiCallRepo,
 	)
 
-	metricsRepo, insightsPoller := initializeMetricsPoller(ctx, db, igClient, igStore, logger)
+	metricsRepo, insightsPoller := initializeMetricsPoller(ctx, db, socialSvc.igClient, socialSvc.igStore, logger)
 
 	// Initialize Card Ladder (encryptor was created earlier for MM mapping adapter)
 	clClient, _, clStore := initializeCardLadder(ctx, logger, db, clEncryptor)
@@ -351,9 +351,10 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		AdvisorService:       advisorService,
 		AdvisorCacheRepo:     advisorCacheRepo,
 		AICallRepo:           aiCallRepo,
-		SocialService:        socialService,
-		SocialRepo:           socialRepo,
-		IGTokenRefresher:     igTokenRefresher,
+		SocialService:        socialSvc.service,
+		SocialRepo:           socialSvc.repo,
+		PublisherConfigured:  socialSvc.publisherConfigured,
+		IGTokenRefresher:     socialSvc.igTokenRefresher,
 		MetricsPostLister:    metricsRepo,
 		MetricsSaver:         metricsRepo,
 		InsightsPoller:       insightsPoller,
@@ -397,10 +398,10 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		AdvisorCacheRepo:  advisorCacheRepo,
 		AzureAIClient:     azureAIClient,
 		AICallRepo:        aiCallRepo,
-		SocialService:     socialService,
-		SocialRepo:        socialRepo,
-		IGClient:          igClient,
-		IGStore:           igStore,
+		SocialService:     socialSvc.service,
+		SocialRepo:        socialSvc.repo,
+		IGClient:          socialSvc.igClient,
+		IGStore:           socialSvc.igStore,
 		MetricsRepo:       metricsRepo,
 		CLClient:          clClient,
 		CLStore:           clStore,
@@ -414,7 +415,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	})
 	serverErr := startWebServer(ctx, deps)
 
-	shutdownGracefully(ctx, logger, cancelScheduler, schedulerResult, hOut, socialService, campaignsService)
+	shutdownGracefully(ctx, logger, cancelScheduler, schedulerResult, hOut, socialSvc.service, campaignsService)
 
 	return serverErr
 }

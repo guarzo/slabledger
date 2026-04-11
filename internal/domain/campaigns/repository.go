@@ -56,9 +56,11 @@ type Repository interface {
 	AcceptAISuggestion(ctx context.Context, purchaseID string, priceCents int) error
 	GetPriceOverrideStats(ctx context.Context) (*PriceOverrideStats, error)
 
+	// Receipt tracking
+	SetReceivedAt(ctx context.Context, purchaseID string, receivedAt time.Time) error
+
 	// eBay export
 	SetEbayExportFlag(ctx context.Context, purchaseID string, flaggedAt time.Time) error
-	SetReceivedAt(ctx context.Context, purchaseID string, receivedAt time.Time) error
 	ClearEbayExportFlags(ctx context.Context, purchaseIDs []string) error
 	ListEbayFlaggedPurchases(ctx context.Context) ([]Purchase, error)
 	UpdatePurchaseCardYear(ctx context.Context, id string, year string) error

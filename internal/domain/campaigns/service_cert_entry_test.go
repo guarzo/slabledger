@@ -278,52 +278,78 @@ func TestScanCert_ExistingSetsExportFlag(t *testing.T) {
 	}
 }
 
-func TestImportCerts_NewCertSetsReceivedAt(t *testing.T) {
-	repo := newMockRepo()
-	repo.campaigns[ExternalCampaignID] = &Campaign{ID: ExternalCampaignID, Name: ExternalCampaignName}
-
-	certLookup := &mockCertLookup{
-		lookupFn: func(_ context.Context, cert string) (*CertInfo, error) {
-			return &CertInfo{
-				CertNumber: cert, CardName: "Charizard", Grade: 8.0,
-				Year: "1999", Category: "BASE SET", CardNumber: "4", Population: 500,
-			}, nil
+func TestImportCerts_SetsReceivedAt(t *testing.T) {
+	tests := []struct {
+		name            string
+		seedPurchases   map[string]*Purchase
+		seedCertNumbers map[string]bool
+		certLookup      *mockCertLookup
+		idGen           func() string
+		wantImported    int
+		wantExisted     int
+		wantPurchaseID  string
+	}{
+		{
+			name:            "NewCertSetsReceivedAt",
+			seedPurchases:   map[string]*Purchase{},
+			seedCertNumbers: map[string]bool{},
+			certLookup: &mockCertLookup{
+				lookupFn: func(_ context.Context, cert string) (*CertInfo, error) {
+					return &CertInfo{
+						CertNumber: cert, CardName: "Charizard", Grade: 8.0,
+						Year: "1999", Category: "BASE SET", CardNumber: "4", Population: 500,
+					}, nil
+				},
+			},
+			idGen:          func() string { return "test-id" },
+			wantImported:   1,
+			wantExisted:    0,
+			wantPurchaseID: "test-id",
+		},
+		{
+			name: "ExistingCertSetsReceivedAt",
+			seedPurchases: map[string]*Purchase{
+				"existing-id": {ID: "existing-id", CertNumber: "12345678", Grader: "PSA"},
+			},
+			seedCertNumbers: map[string]bool{"12345678": true},
+			certLookup:      nil, // not needed for existing cert
+			idGen:           func() string { return "test-id" },
+			wantImported:    0,
+			wantExisted:     1,
+			wantPurchaseID:  "existing-id",
 		},
 	}
 
-	svc := &service{repo: repo, certLookup: certLookup, idGen: func() string { return "test-id" }}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := newMockRepo()
+			repo.campaigns[ExternalCampaignID] = &Campaign{ID: ExternalCampaignID, Name: ExternalCampaignName}
+			for k, v := range tc.seedPurchases {
+				repo.purchases[k] = v
+			}
+			for k, v := range tc.seedCertNumbers {
+				repo.certNumbers[k] = v
+			}
 
-	result, err := svc.ImportCerts(context.Background(), []string{"12345678"})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result.Imported != 1 {
-		t.Errorf("imported = %d, want 1", result.Imported)
-	}
-	created := repo.purchases["test-id"]
-	if created == nil {
-		t.Fatal("purchase was not created")
-	}
-	if created.ReceivedAt == nil {
-		t.Error("expected ReceivedAt to be set for new cert")
-	}
-}
-
-func TestImportCerts_ExistingCertSetsReceivedAt(t *testing.T) {
-	repo := newMockRepo()
-	repo.purchases["existing-id"] = &Purchase{ID: "existing-id", CertNumber: "12345678", Grader: "PSA"}
-	repo.certNumbers["12345678"] = true
-
-	svc := &service{repo: repo, idGen: func() string { return "test-id" }}
-	result, err := svc.ImportCerts(context.Background(), []string{"12345678"})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result.AlreadyExisted != 1 {
-		t.Errorf("alreadyExisted = %d, want 1", result.AlreadyExisted)
-	}
-	if repo.purchases["existing-id"].ReceivedAt == nil {
-		t.Error("expected ReceivedAt to be set for existing cert")
+			svc := &service{repo: repo, certLookup: tc.certLookup, idGen: tc.idGen}
+			result, err := svc.ImportCerts(context.Background(), []string{"12345678"})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if result.Imported != tc.wantImported {
+				t.Errorf("imported = %d, want %d", result.Imported, tc.wantImported)
+			}
+			if result.AlreadyExisted != tc.wantExisted {
+				t.Errorf("alreadyExisted = %d, want %d", result.AlreadyExisted, tc.wantExisted)
+			}
+			p := repo.purchases[tc.wantPurchaseID]
+			if p == nil {
+				t.Fatalf("purchase %q was not found", tc.wantPurchaseID)
+			}
+			if p.ReceivedAt == nil {
+				t.Errorf("expected ReceivedAt to be set for purchase %q", tc.wantPurchaseID)
+			}
+		})
 	}
 }
 

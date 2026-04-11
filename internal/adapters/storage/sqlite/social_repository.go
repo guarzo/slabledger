@@ -429,9 +429,8 @@ func (r *SocialRepository) UpdateCoverTitle(ctx context.Context, id string, titl
 }
 
 // CountPublishedToday returns the number of posts published on the current calendar day
-// (server local time).
-// Note: updated_at is used as a proxy for publish time — SetPublished stamps it
-// at publish time. Using date('now') in UTC matches the UTC-stored timestamps.
+// in UTC. updated_at is used as a proxy for publish time — SetPublished stamps it
+// at publish time. date('now') operates in UTC, matching the UTC-stored timestamps.
 func (r *SocialRepository) CountPublishedToday(ctx context.Context) (int, error) {
 	var count int
 	err := r.db.QueryRowContext(ctx,
@@ -459,7 +458,7 @@ func (r *SocialRepository) FetchEligibleDraft(ctx context.Context) (*social.Post
 		 WHERE status = 'draft'
 		 AND caption != ''
 		 AND caption != ?
-		 AND created_at >= datetime('now', '-7 days')
+		 AND datetime(created_at) >= datetime('now', '-7 days')
 		 ORDER BY created_at ASC
 		 LIMIT 1`,
 		captionPlaceholder,

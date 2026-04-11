@@ -292,8 +292,11 @@ export function formatReceivedDate(iso: string): string {
 
 /** Format a YYYY-MM-DD date string to "Mon D, YYYY" format (e.g., "Apr 3, 2026"). Uses local Date constructor to avoid UTC shift. */
 export function formatShipDate(dateStr: string): string {
-  const [year, month, day] = dateStr.split('-').map(Number);
+  const parts = dateStr.split('-').map(Number);
+  if (parts.length !== 3 || parts.some(isNaN)) return dateStr;
+  const [year, month, day] = parts;
   const d = new Date(year, month - 1, day);
+  if (isNaN(d.getTime())) return dateStr;
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
@@ -318,7 +321,8 @@ export function syncDotProps(
   function within24h(ts: string | undefined): boolean {
     if (!ts) return false;
     const t = new Date(ts).getTime();
-    return !isNaN(t) && now - t < threshold;
+    if (isNaN(t) || t > now) return false;
+    return now - t < threshold;
   }
 
   const cl = within24h(clSyncedAt);
@@ -331,6 +335,7 @@ export function syncDotProps(
     if (!ts) return `${label} · never`;
     const t = new Date(ts).getTime();
     if (isNaN(t)) return `${label} · unknown`;
+    if (t > now) return `${label} · just now`;
     const diffMs = now - t;
     const diffH = Math.floor(diffMs / 3600000);
     const diffM = Math.floor(diffMs / 60000);

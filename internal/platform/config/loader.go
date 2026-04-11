@@ -2,8 +2,10 @@ package config
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 	"strconv"
 	"strings"
@@ -262,10 +264,14 @@ func FromEnv(base Config) Config {
 			// Both standard and trimmed base64 decodes failed.
 			// Assume the value is raw JSON (e.g. credentials pasted directly rather than encoded).
 			// Warn so operators can detect an accidentally truncated or mis-encoded secret.
-			fmt.Fprintf(os.Stderr, "WARNING: GOOGLE_SHEETS_CREDENTIALS_JSON is not valid base64 — treating as raw JSON. If this is unexpected, check that the value is correctly base64-encoded.\n")
+			slog.Warn("GOOGLE_SHEETS_CREDENTIALS_JSON is not valid base64 — treating as raw JSON; if unexpected, check that the value is correctly base64-encoded")
 			cfg.GoogleSheets.CredentialsJSON = v
 		} else {
-			cfg.GoogleSheets.CredentialsJSON = string(decoded)
+			decodedStr := string(decoded)
+			if !json.Valid(decoded) {
+				slog.Warn("GOOGLE_SHEETS_CREDENTIALS_JSON decoded from base64 but is not valid JSON — credentials may be corrupt")
+			}
+			cfg.GoogleSheets.CredentialsJSON = decodedStr
 		}
 	}
 	cfg.GoogleSheets.SpreadsheetID = os.Getenv("GOOGLE_SHEETS_SPREADSHEET_ID")

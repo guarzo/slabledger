@@ -132,108 +132,112 @@ func TestParsePSAExportRows_NoValidRows(t *testing.T) {
 	}
 }
 
-func TestParsePSAExportRows_ShipDateParsed(t *testing.T) {
-	records := [][]string{
-		{"Cert Number", "Listing Title", "Grade", "Price Paid", "Date", "Purchase Source", "Ship Date", "Invoice Date", "Was Refunded?", "Front Image URL", "Back Image URL", "Category"},
-		{"12345678", "Charizard VMAX", "10", "$45.00", "04/01/2026", "eBay", "04/03/2026", "", "no", "", "", "Pokemon"},
+func TestParsePSAExportRows_ShipDateTableDriven(t *testing.T) {
+	tests := []struct {
+		name          string
+		records       [][]string
+		wantRows      int
+		wantErrs      int
+		wantRowChecks func(t *testing.T, rows []PSAExportRow, errs []ParseError)
+	}{
+		{
+			name: "ShipDateParsed",
+			records: [][]string{
+				{"Cert Number", "Listing Title", "Grade", "Price Paid", "Date", "Purchase Source", "Ship Date", "Invoice Date", "Was Refunded?", "Front Image URL", "Back Image URL", "Category"},
+				{"12345678", "Charizard VMAX", "10", "$45.00", "04/01/2026", "eBay", "04/03/2026", "", "no", "", "", "Pokemon"},
+			},
+			wantRows: 1,
+			wantErrs: 0,
+			wantRowChecks: func(t *testing.T, rows []PSAExportRow, _ []ParseError) {
+				row := rows[0]
+				if row.CertNumber != "12345678" {
+					t.Errorf("CertNumber = %q, want %q", row.CertNumber, "12345678")
+				}
+				if row.ListingTitle != "Charizard VMAX" {
+					t.Errorf("ListingTitle = %q, want %q", row.ListingTitle, "Charizard VMAX")
+				}
+				if row.Grade != 10 {
+					t.Errorf("Grade = %v, want 10", row.Grade)
+				}
+				if row.PricePaid != 45.00 {
+					t.Errorf("PricePaid = %v, want 45.00", row.PricePaid)
+				}
+				if row.Date != "2026-04-01" {
+					t.Errorf("Date = %q, want %q", row.Date, "2026-04-01")
+				}
+				if row.PurchaseSource != "eBay" {
+					t.Errorf("PurchaseSource = %q, want %q", row.PurchaseSource, "eBay")
+				}
+				if row.ShipDate != "2026-04-03" {
+					t.Errorf("ShipDate = %q, want %q", row.ShipDate, "2026-04-03")
+				}
+			},
+		},
+		{
+			name: "MissingShipDateNonFatal",
+			records: [][]string{
+				{"Cert Number", "Listing Title", "Grade", "Price Paid", "Date", "Purchase Source"},
+				{"12345678", "Charizard VMAX", "10", "$45.00", "04/01/2026", "eBay"},
+			},
+			wantRows: 1,
+			wantErrs: 0,
+			wantRowChecks: func(t *testing.T, rows []PSAExportRow, _ []ParseError) {
+				row := rows[0]
+				if row.CertNumber != "12345678" {
+					t.Errorf("CertNumber = %q, want %q", row.CertNumber, "12345678")
+				}
+				if row.ListingTitle != "Charizard VMAX" {
+					t.Errorf("ListingTitle = %q, want %q", row.ListingTitle, "Charizard VMAX")
+				}
+				if row.Grade != 10 {
+					t.Errorf("Grade = %v, want 10", row.Grade)
+				}
+				if row.PricePaid != 45.00 {
+					t.Errorf("PricePaid = %v, want 45.00", row.PricePaid)
+				}
+				if row.Date != "2026-04-01" {
+					t.Errorf("Date = %q, want %q", row.Date, "2026-04-01")
+				}
+				if row.PurchaseSource != "eBay" {
+					t.Errorf("PurchaseSource = %q, want %q", row.PurchaseSource, "eBay")
+				}
+				if row.ShipDate != "" {
+					t.Errorf("ShipDate = %q, want empty string", row.ShipDate)
+				}
+			},
+		},
+		{
+			name: "InvalidShipDate",
+			records: [][]string{
+				{"Cert Number", "Listing Title", "Grade", "Price Paid", "Date", "Purchase Source", "Ship Date", "Category"},
+				{"12345678", "Charizard VMAX", "10", "$45.00", "04/01/2026", "eBay", "not-a-date", "Pokemon"},
+				{"99887766", "Pikachu VMAX", "10", "$75.00", "04/01/2026", "eBay", "04/03/2026", "Pokemon"},
+			},
+			wantRows: 1,
+			wantErrs: 1,
+			wantRowChecks: func(t *testing.T, _ []PSAExportRow, errs []ParseError) {
+				if errs[0].Field != "ship date" {
+					t.Errorf("parse error field = %q, want %q", errs[0].Field, "ship date")
+				}
+			},
+		},
 	}
 
-	rows, errs, err := ParsePSAExportRows(records)
-	if err != nil {
-		t.Fatalf("ParsePSAExportRows: unexpected fatal error: %v", err)
-	}
-	if len(errs) != 0 {
-		t.Errorf("ParsePSAExportRows: unexpected parse errors: %v", errs)
-	}
-	if len(rows) != 1 {
-		t.Fatalf("ParsePSAExportRows: got %d rows, want 1", len(rows))
-	}
-
-	row := rows[0]
-	if row.CertNumber != "12345678" {
-		t.Errorf("CertNumber = %q, want %q", row.CertNumber, "12345678")
-	}
-	if row.ListingTitle != "Charizard VMAX" {
-		t.Errorf("ListingTitle = %q, want %q", row.ListingTitle, "Charizard VMAX")
-	}
-	if row.Grade != 10 {
-		t.Errorf("Grade = %v, want 10", row.Grade)
-	}
-	if row.PricePaid != 45.00 {
-		t.Errorf("PricePaid = %v, want 45.00", row.PricePaid)
-	}
-	if row.Date != "2026-04-01" {
-		t.Errorf("Date = %q, want %q", row.Date, "2026-04-01")
-	}
-	if row.PurchaseSource != "eBay" {
-		t.Errorf("PurchaseSource = %q, want %q", row.PurchaseSource, "eBay")
-	}
-	if row.ShipDate != "2026-04-03" {
-		t.Errorf("ShipDate = %q, want %q", row.ShipDate, "2026-04-03")
-	}
-}
-
-func TestParsePSAExportRows_MissingShipDateNonFatal(t *testing.T) {
-	records := [][]string{
-		{"Cert Number", "Listing Title", "Grade", "Price Paid", "Date", "Purchase Source"},
-		{"12345678", "Charizard VMAX", "10", "$45.00", "04/01/2026", "eBay"},
-	}
-
-	rows, errs, err := ParsePSAExportRows(records)
-	if err != nil {
-		t.Fatalf("ParsePSAExportRows: unexpected fatal error: %v", err)
-	}
-	if len(errs) != 0 {
-		t.Errorf("ParsePSAExportRows: unexpected parse errors: %v", errs)
-	}
-	if len(rows) != 1 {
-		t.Fatalf("ParsePSAExportRows: got %d rows, want 1", len(rows))
-	}
-
-	row := rows[0]
-	if row.CertNumber != "12345678" {
-		t.Errorf("CertNumber = %q, want %q", row.CertNumber, "12345678")
-	}
-	if row.ListingTitle != "Charizard VMAX" {
-		t.Errorf("ListingTitle = %q, want %q", row.ListingTitle, "Charizard VMAX")
-	}
-	if row.Grade != 10 {
-		t.Errorf("Grade = %v, want 10", row.Grade)
-	}
-	if row.PricePaid != 45.00 {
-		t.Errorf("PricePaid = %v, want 45.00", row.PricePaid)
-	}
-	if row.Date != "2026-04-01" {
-		t.Errorf("Date = %q, want %q", row.Date, "2026-04-01")
-	}
-	if row.PurchaseSource != "eBay" {
-		t.Errorf("PurchaseSource = %q, want %q", row.PurchaseSource, "eBay")
-	}
-	if row.ShipDate != "" {
-		t.Errorf("ShipDate = %q, want empty string", row.ShipDate)
-	}
-}
-
-func TestParsePSAExportRows_InvalidShipDate(t *testing.T) {
-	records := [][]string{
-		{"Cert Number", "Listing Title", "Grade", "Price Paid", "Date", "Purchase Source", "Ship Date", "Category"},
-		{"12345678", "Charizard VMAX", "10", "$45.00", "04/01/2026", "eBay", "not-a-date", "Pokemon"},
-		{"99887766", "Pikachu VMAX", "10", "$75.00", "04/01/2026", "eBay", "04/03/2026", "Pokemon"},
-	}
-
-	rows, errs, err := ParsePSAExportRows(records)
-	if err != nil {
-		t.Fatalf("ParsePSAExportRows: unexpected fatal error: %v", err)
-	}
-	if len(errs) != 1 {
-		t.Errorf("ParsePSAExportRows: got %d parse errors, want 1", len(errs))
-	} else {
-		if errs[0].Field != "ship date" {
-			t.Errorf("parse error field = %q, want %q", errs[0].Field, "ship date")
-		}
-	}
-	// Valid row (second row with valid ship date) should still be returned
-	if len(rows) != 1 {
-		t.Errorf("ParsePSAExportRows: got %d valid rows, want 1", len(rows))
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			rows, errs, err := ParsePSAExportRows(tc.records)
+			if err != nil {
+				t.Fatalf("ParsePSAExportRows: unexpected fatal error: %v", err)
+			}
+			if len(errs) != tc.wantErrs {
+				t.Errorf("ParsePSAExportRows: got %d parse errors, want %d: %v", len(errs), tc.wantErrs, errs)
+			}
+			if len(rows) != tc.wantRows {
+				t.Fatalf("ParsePSAExportRows: got %d rows, want %d", len(rows), tc.wantRows)
+			}
+			if tc.wantRowChecks != nil {
+				tc.wantRowChecks(t, rows, errs)
+			}
+		})
 	}
 }

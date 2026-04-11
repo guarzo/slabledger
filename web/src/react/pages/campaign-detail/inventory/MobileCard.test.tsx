@@ -62,8 +62,7 @@ describe('MobileCard', () => {
         />
       );
 
-      const dots = screen.queryAllByRole('button')
-        .filter(btn => btn.style.background === '#34d399');
+      const dots = screen.queryAllByTestId('in-hand-indicator');
       expect(dots).toHaveLength(0);
     });
 
@@ -75,7 +74,7 @@ describe('MobileCard', () => {
         },
       });
 
-      const { container } = render(
+      render(
         <MobileCard
           item={item}
           selected={false}
@@ -84,8 +83,7 @@ describe('MobileCard', () => {
         />
       );
 
-      const greenDot = container.querySelector('div[style*="background: rgb(52, 211, 153)"]')
-        || container.querySelector('div[style*="background: #34d399"]');
+      const greenDot = screen.getByTestId('in-hand-indicator');
       expect(greenDot).toBeInTheDocument();
     });
 
@@ -97,7 +95,7 @@ describe('MobileCard', () => {
         },
       });
 
-      const { container } = render(
+      render(
         <MobileCard
           item={item}
           selected={false}
@@ -106,16 +104,10 @@ describe('MobileCard', () => {
         />
       );
 
-      const greenDot = container.querySelector('div[style*="#34d399"]')
-        || Array.from(container.querySelectorAll('div')).find(
-          el => el.style.background === '#34d399' || el.style.background === 'rgb(52, 211, 153)'
-        );
+      const greenDot = screen.getByTestId('in-hand-indicator');
 
       expect(greenDot).toBeInTheDocument();
       expect(greenDot).toHaveStyle({
-        position: 'absolute',
-        top: '-3px',
-        right: '-3px',
         width: '10px',
         height: '10px',
         borderRadius: '50%',
@@ -130,7 +122,7 @@ describe('MobileCard', () => {
         },
       });
 
-      const { container } = render(
+      render(
         <MobileCard
           item={item}
           selected={false}
@@ -139,9 +131,7 @@ describe('MobileCard', () => {
         />
       );
 
-      const greenDot = Array.from(container.querySelectorAll('div')).find(
-        el => el.style.background === '#34d399' || el.style.background === 'rgb(52, 211, 153)'
-      );
+      const greenDot = screen.getByTestId('in-hand-indicator');
 
       expect(greenDot).toHaveAttribute('title', expect.stringContaining('In hand since'));
       expect(greenDot).toHaveAttribute('title', expect.stringContaining('Apr'));

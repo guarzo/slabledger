@@ -249,6 +249,16 @@ type SocialPublishConfig struct {
 	MaxDaily int
 }
 
+// ApplyDefaults fills in zero-valued fields with sensible defaults.
+func (c *SocialPublishConfig) ApplyDefaults() {
+	if c.IntervalMinutes == 0 {
+		c.IntervalMinutes = 60
+	}
+	if c.MaxDaily == 0 {
+		c.MaxDaily = 3
+	}
+}
+
 // GoogleSheetsConfig holds credentials and target for Google Sheets API access.
 type GoogleSheetsConfig struct {
 	CredentialsJSON string // Service account JSON key content

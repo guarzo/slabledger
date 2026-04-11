@@ -49,7 +49,7 @@ func TestRender_Success(t *testing.T) {
 			t.Errorf("unexpected path: %s", r.URL.Path)
 		}
 		mw := multipart.NewWriter(w)
-		w.Header().Set("Content-Type", "multipart/form-data; boundary="+mw.Boundary())
+		w.Header().Set("Content-Type", mw.FormDataContentType())
 		fw0, _ := mw.CreateFormField("slide-0")
 		fw0.Write(fakeJPEG1) //nolint:errcheck
 		fw1, _ := mw.CreateFormField("slide-1")

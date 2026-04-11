@@ -49,6 +49,9 @@ export default function MobileCard({ item, selected, onToggle, onRecordSale, onF
             )}
             {item.purchase.receivedAt && (
               <div
+                data-testid="in-hand-indicator"
+                role="img"
+                aria-label={`In hand since ${formatReceivedDate(item.purchase.receivedAt)}`}
                 title={`In hand since ${formatReceivedDate(item.purchase.receivedAt)}`}
                 style={{
                   position: 'absolute',

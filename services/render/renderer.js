@@ -28,14 +28,34 @@ async function getBrowser() {
  * @param {string} baseURL  - e.g. "http://localhost:3001"
  * @param {string} postId   - UUID of the social post
  * @param {number} slideIndex - 0 = cover, N = card at index N-1
+ * @param {object|null} postData - SocialPostDetail payload to serve locally (avoids backend fetch)
  * @param {number} timeoutMs - per-slide timeout (default 30000ms)
  * @returns {Promise<Buffer>} JPEG bytes
  */
-async function renderSlide(baseURL, postId, slideIndex, timeoutMs = 30000) {
+async function renderSlide(baseURL, postId, slideIndex, postData = null, timeoutMs = 30000) {
   const b = await getBrowser();
   const page = await b.newPage();
   try {
     await page.setViewport({ width: 1080, height: 1080, deviceScaleFactor: 2 });
+
+    // Intercept the API call for this post and respond with the provided data,
+    // avoiding a second round-trip to the backend.
+    if (postData) {
+      await page.setRequestInterception(true);
+      page.on('request', (interceptedReq) => {
+        const url = interceptedReq.url();
+        if (url.includes(`/api/social/posts/${encodeURIComponent(postId)}`) ||
+            url.includes(`/api/social/posts/${postId}`)) {
+          interceptedReq.respond({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify(postData),
+          });
+        } else {
+          interceptedReq.continue();
+        }
+      });
+    }
 
     const url = `${baseURL}/slide-preview?postId=${encodeURIComponent(postId)}&slideIndex=${slideIndex}`;
     await page.goto(url, { waitUntil: 'networkidle2', timeout: timeoutMs });
@@ -77,15 +97,15 @@ async function renderSlide(baseURL, postId, slideIndex, timeoutMs = 30000) {
  * @param {string} baseURL
  * @param {string} postId
  * @param {number} cardCount
+ * @param {object|null} postData - SocialPostDetail payload to serve locally
  * @returns {Promise<Buffer[]>} Array of JPEG buffers, index 0 = cover
  */
-async function renderPost(baseURL, postId, cardCount) {
-  const results = [];
+async function renderPost(baseURL, postId, cardCount, postData = null) {
+  const promises = [];
   for (let i = 0; i <= cardCount; i++) {
-    const jpeg = await renderSlide(baseURL, postId, i);
-    results.push(jpeg);
+    promises.push(renderSlide(baseURL, postId, i, postData));
   }
-  return results;
+  return Promise.all(promises);
 }
 
 module.exports = { renderPost };

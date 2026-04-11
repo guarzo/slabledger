@@ -31,7 +31,9 @@ app.post('/render/:postId', async (req, res) => {
   const cardCount = body.cardCount ?? (Array.isArray(body.cards) ? body.cards.length : 0);
 
   try {
-    const jpegs = await renderPost(INTERNAL_BASE_URL, postId, cardCount);
+    // Pass the post data through to the renderer so Puppeteer can serve it
+    // locally, avoiding a second fetch to the backend API.
+    const jpegs = await renderPost(INTERNAL_BASE_URL, postId, cardCount, body);
 
     const form = new FormData();
     jpegs.forEach((buf, i) => {

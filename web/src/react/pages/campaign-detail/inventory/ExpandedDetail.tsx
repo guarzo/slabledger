@@ -118,7 +118,7 @@ export default function ExpandedDetail({ item, onReviewed, campaignId, onOpenFla
 
   return (
     <div className="glass-vrow-expanded px-6 py-4 border-t border-[rgba(255,255,255,0.05)]">
-      {/* 3x2 price signal grid */}
+      {/* 3-column price signal grid, 8 cards */}
       <div className="grid grid-cols-3 gap-3 mb-4">
         <PriceSignalCard label="Cost Basis" valueCents={cb} />
         <PriceSignalCard label="Card Ladder" valueCents={clCents} />

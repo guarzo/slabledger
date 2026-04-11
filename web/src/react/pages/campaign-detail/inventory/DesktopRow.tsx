@@ -236,7 +236,11 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
                 <>
                   <DropdownMenu.Separator className="my-1 h-px bg-[var(--surface-2)]" />
                   <DropdownMenu.Item
-                    onSelect={onDelete}
+                    onSelect={() => {
+                      if (window.confirm('Delete this item? This cannot be undone.')) {
+                        onDelete();
+                      }
+                    }}
                     className="px-3 py-2 text-sm text-red-400 hover:bg-[rgba(248,113,113,0.08)] hover:text-red-300 outline-none cursor-default"
                   >
                     Delete
