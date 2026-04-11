@@ -7,7 +7,7 @@ import {
   costBasis, bestPrice, unrealizedPL, marketTrend,
   getSourceByType, marketTooltip,
   formatPL,
-  getReviewStatus, statusBorderColor, isHotSeller,
+  getReviewStatus, statusBorderColor, isHotSeller, formatReceivedDate,
 } from './utils';
 
 const BADGE_COLORS = [
@@ -23,12 +23,6 @@ function campaignColor(name: string) {
   let hash = 0;
   for (let i = 0; i < name.length; i++) hash = ((hash << 5) - hash + name.charCodeAt(i)) | 0;
   return BADGE_COLORS[Math.abs(hash) % BADGE_COLORS.length];
-}
-
-function formatReceivedDate(iso: string): string {
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 interface DesktopRowProps {

@@ -5,7 +5,7 @@ import MarketplaceLinks from './MarketplaceLinks';
 import {
   costBasis, bestPrice, unrealizedPL, marketTrend, velocityLabel,
   getSourceByType, fmtDateShort, plColor, formatPL,
-  deriveSignalDirection, deriveSignalDelta, isHotSeller,
+  deriveSignalDirection, deriveSignalDelta, isHotSeller, formatReceivedDate,
 } from './utils';
 
 interface MobileCardProps {
@@ -37,14 +37,32 @@ export default function MobileCard({ item, selected, onToggle, onRecordSale, onF
       <div className="flex items-start justify-between mb-2">
         <div className="flex items-start gap-2">
           <input type="checkbox" checked={selected} onChange={onToggle} className="rounded mt-0.5" />
-          {item.purchase.frontImageUrl && (
-            <img
-              src={item.purchase.frontImageUrl}
-              alt=""
-              className="w-10 h-14 object-cover rounded shrink-0 bg-[var(--surface-2)]"
-              loading="lazy"
-            />
-          )}
+          <div style={{ position: 'relative', width: 40, height: 56, flexShrink: 0 }}>
+            {item.purchase.frontImageUrl && (
+              <img
+                src={item.purchase.frontImageUrl}
+                alt=""
+                className="w-10 h-14 object-cover rounded shrink-0 bg-[var(--surface-2)]"
+                loading="lazy"
+              />
+            )}
+            {item.purchase.receivedAt && (
+              <div
+                title={`In hand since ${formatReceivedDate(item.purchase.receivedAt)}`}
+                style={{
+                  position: 'absolute',
+                  top: -3,
+                  right: -3,
+                  width: 10,
+                  height: 10,
+                  borderRadius: '50%',
+                  background: '#34d399',
+                  border: '2px solid var(--surface-1)',
+                  flexShrink: 0,
+                }}
+              />
+            )}
+          </div>
           <div>
             <div className="text-sm font-medium text-[var(--text)]">
               {hotSeller && <span className="text-amber-400 mr-1" title="High demand">★</span>}

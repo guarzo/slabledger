@@ -277,8 +277,15 @@ export function isCardShowCandidate(item: AgingItem): boolean {
   if (item.signals?.profitCaptureDeclining || item.signals?.profitCaptureSpike || item.signals?.crackCandidate) {
     return true;
   }
-  if (isHotSeller(item)) return true;
-  if (item.purchase.gradeValue === 7) return true;
-  if (item.currentMarket?.trend30d != null && item.currentMarket.trend30d > 0.05) return true;
-  return false;
+   if (isHotSeller(item)) return true;
+   if (item.purchase.gradeValue === 7) return true;
+   if (item.currentMarket?.trend30d != null && item.currentMarket.trend30d > 0.05) return true;
+   return false;
+}
+
+/** Format an ISO date string to "Mon D, YYYY" format (e.g., "Apr 5, 2026"). */
+export function formatReceivedDate(iso: string): string {
+   const d = new Date(iso);
+   if (isNaN(d.getTime())) return iso;
+   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
