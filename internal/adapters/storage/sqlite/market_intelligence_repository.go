@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"time"
 
@@ -31,15 +32,15 @@ func (r *MarketIntelligenceRepository) Store(ctx context.Context, intel *intelli
 
 	gradingROI, err := marshalJSON(intel.GradingROI)
 	if err != nil {
-		return err
+		return fmt.Errorf("marshal grading roi: %w", err)
 	}
 	recentSales, err := marshalJSON(intel.RecentSales)
 	if err != nil {
-		return err
+		return fmt.Errorf("marshal recent sales: %w", err)
 	}
 	population, err := marshalJSON(intel.Population)
 	if err != nil {
-		return err
+		return fmt.Errorf("marshal population: %w", err)
 	}
 
 	now := time.Now()
@@ -74,7 +75,10 @@ func (r *MarketIntelligenceRepository) Store(ctx context.Context, intel *intelli
 		insightsHeadline, insightsDetail,
 		intel.FetchedAt, now, now,
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("store market intelligence: %w", err)
+	}
+	return nil
 }
 
 // GetByCard returns the market intelligence for the given card, or nil if not found.
@@ -200,7 +204,7 @@ func (r *MarketIntelligenceRepository) getByCardsChunk(ctx context.Context, keys
 
 	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return err
+		return fmt.Errorf("query market intelligence: %w", err)
 	}
 	defer func() {
 		if cerr := rows.Close(); err == nil && cerr != nil {
@@ -211,7 +215,7 @@ func (r *MarketIntelligenceRepository) getByCardsChunk(ctx context.Context, keys
 	for rows.Next() {
 		intel, err := scanIntelRow(rows)
 		if err != nil {
-			return err
+			return fmt.Errorf("scan market intelligence row: %w", err)
 		}
 		key := intelligence.CardKey{
 			CardName:   intel.CardName,

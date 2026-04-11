@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"fmt"
 	"time"
 )
 
@@ -10,7 +11,10 @@ func (r *AuthRepository) StoreOAuthState(ctx context.Context, state string, expi
 	query := `INSERT INTO oauth_states (state, expires_at) VALUES (?, ?)`
 
 	_, err := r.db.ExecContext(ctx, query, state, expiresAt)
-	return err
+	if err != nil {
+		return fmt.Errorf("store oauth state: %w", err)
+	}
+	return nil
 }
 
 // ConsumeOAuthState atomically consumes and deletes a state token.

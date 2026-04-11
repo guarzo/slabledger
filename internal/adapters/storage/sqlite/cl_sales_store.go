@@ -53,7 +53,10 @@ func (s *CLSalesStore) UpsertSaleComp(ctx context.Context, rec CLSaleCompRecord)
 		rec.Platform, rec.ListingType, rec.Seller, rec.ItemURL, rec.SlabSerial,
 		time.Now().UTC().Format(time.RFC3339),
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("upsert sale comp: %w", err)
+	}
+	return nil
 }
 
 // GetSaleComps returns recent sales for a gemRateID and condition, ordered by date descending.

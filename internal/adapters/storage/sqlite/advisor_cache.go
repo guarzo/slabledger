@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/advisor"
@@ -146,11 +147,11 @@ func (r *AdvisorCacheRepository) SaveResult(ctx context.Context, analysisType ad
 		WHERE analysis_type = ? AND started_at = ?
 	`, string(status), content, errMsg, now, now, string(analysisType), lease)
 	if err != nil {
-		return err
+		return fmt.Errorf("update advisor cache: %w", err)
 	}
 	n, err := result.RowsAffected()
 	if err != nil {
-		return err
+		return fmt.Errorf("check rows affected: %w", err)
 	}
 	if n == 0 {
 		r.logSuperseded(ctx, analysisType, lease)
