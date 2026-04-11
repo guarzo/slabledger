@@ -71,20 +71,23 @@ func queryIntegrationFailures(ctx context.Context, db *sql.DB, reasonCol, reason
 	if err != nil {
 		return nil, fmt.Errorf("integration failure counts: %w", err)
 	}
-	func() {
-		defer rows.Close() //nolint:errcheck
-		for rows.Next() {
-			var reason string
-			var cnt int
-			if err = rows.Scan(&reason, &cnt); err != nil {
-				return
-			}
-			report.ByReason[reason] = cnt
+	for rows.Next() {
+		var reason string
+		var cnt int
+		if err := rows.Scan(&reason, &cnt); err != nil {
+			rows.Close() //nolint:errcheck
+			return nil, fmt.Errorf("integration failure counts scan: %w", err)
 		}
-		err = rows.Err()
-	}()
-	if err != nil {
-		return nil, fmt.Errorf("integration failure counts scan: %w", err)
+		report.ByReason[reason] = cnt
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close() //nolint:errcheck
+		return nil, fmt.Errorf("integration failure counts rows: %w", err)
+	}
+	// Close before opening the second cursor — some drivers don't like two
+	// open result sets at once, and the second query is independent.
+	if err := rows.Close(); err != nil {
+		return nil, fmt.Errorf("integration failure counts close: %w", err)
 	}
 
 	// Bounded sample list, most recent errors first.

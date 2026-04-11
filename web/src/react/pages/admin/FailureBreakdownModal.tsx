@@ -109,8 +109,8 @@ export function FailureBreakdownModal({ title, report, onClose }: Props) {
                         </tr>
                       </thead>
                       <tbody>
-                        {samples.map((s) => (
-                          <tr key={s.purchaseId} className="border-b border-[var(--surface-2)]">
+                        {samples.map((s, i) => (
+                          <tr key={`${s.purchaseId}-${i}`} className="border-b border-[var(--surface-2)]">
                             <td className="py-1 pr-2 font-mono">{s.certNumber || '—'}</td>
                             <td className="py-1 pr-2">{s.cardName || '—'}</td>
                             <td className="py-1 pr-2 font-mono">{s.reason}</td>
