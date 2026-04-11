@@ -106,7 +106,7 @@ export default function SettingsTab({ campaign, onUpdate, onDelete }: {
           <div className="p-4 bg-[var(--surface-1)] rounded-xl border border-[var(--surface-2)]">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-semibold text-[var(--text-muted)] uppercase tracking-wider">Activation Readiness</h3>
-              {!checklistLoading && (checklist?.allPassed ? (
+              {!checklistLoading && checklist && (checklist.allPassed ? (
                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-[var(--success-bg)] text-[var(--success)]">
                   Ready to activate
                 </span>
