@@ -51,7 +51,8 @@ export function MMStatsPanel({ enabled = true }: { enabled?: boolean }) {
         />
       </div>
 
-      {/* Row 2: last run */}
+      {/* Row 2: last run. Search Failed is always visible so API errors
+          aren't masked when a run also has upload activity. */}
       {lr && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <SummaryCard
@@ -61,17 +62,16 @@ export function MMStatsPanel({ enabled = true }: { enabled?: boolean }) {
           />
           <SummaryCard label="Updated this run" value={lr.updated} />
           <SummaryCard label="New Mappings" value={lr.newMappings} />
-          {showRemoteActivity ? (
+          <SummaryCard
+            label="Search Failed"
+            value={lr.searchFailed}
+            color={lr.searchFailed > 0 ? 'var(--warning)' : undefined}
+          />
+          {showRemoteActivity && (
             <SummaryCard
               label="Uploaded this run"
               value={lr.uploadedLastRun ?? 0}
               sub={(lr.deletedLastRun ?? 0) > 0 ? `${lr.deletedLastRun} deleted` : undefined}
-            />
-          ) : (
-            <SummaryCard
-              label="Search Failed"
-              value={lr.searchFailed}
-              color={lr.searchFailed > 0 ? 'var(--warning)' : undefined}
             />
           )}
         </div>

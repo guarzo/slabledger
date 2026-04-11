@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import type { IntegrationFailuresReport } from '../../../types/admin';
 import { formatAdminDate } from './adminUtils';
 
@@ -26,6 +27,7 @@ const REASON_DESCRIPTIONS: Record<string, string> = {
 };
 
 export function FailureBreakdownModal({ title, report, onClose }: Props) {
+  const titleId = useId();
   const byReason = report?.byReason ?? {};
   const reasons = Object.entries(byReason).sort((a, b) => b[1] - a[1]);
   const samples = report?.samples ?? [];
@@ -37,13 +39,14 @@ export function FailureBreakdownModal({ title, report, onClose }: Props) {
       onClick={onClose}
       role="dialog"
       aria-modal="true"
+      aria-labelledby={titleId}
     >
       <div
         className="bg-[var(--surface-0)] border border-[var(--surface-2)] rounded-xl shadow-xl max-w-3xl w-full max-h-[80vh] overflow-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between p-4 border-b border-[var(--surface-2)] sticky top-0 bg-[var(--surface-0)]">
-          <h2 className="text-lg font-semibold">{title}</h2>
+          <h2 id={titleId} className="text-lg font-semibold">{title}</h2>
           <button
             type="button"
             onClick={onClose}

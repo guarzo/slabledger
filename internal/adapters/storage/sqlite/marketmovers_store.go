@@ -287,9 +287,7 @@ type IntegrationFailuresReport struct {
 
 // GetMMFailures returns unsold purchases whose last MM refresh recorded a
 // failure reason, grouped by reason with a bounded sample list for the UI.
+// sampleLimit is clamped inside queryIntegrationFailures.
 func (s *MarketMoversStore) GetMMFailures(ctx context.Context, sampleLimit int) (*IntegrationFailuresReport, error) {
-	if sampleLimit <= 0 {
-		sampleLimit = 50
-	}
 	return queryIntegrationFailures(ctx, s.db, "mm_last_error", "mm_last_error_at", sampleLimit)
 }

@@ -248,9 +248,12 @@ func (r *CampaignsRepository) UpdatePurchaseCLValue(ctx context.Context, id stri
 }
 
 // UpdatePurchaseMMError records or clears the last mapping/pricing failure reason
-// for a purchase. Pass reason="" to clear on success. reasonAt is the RFC3339
-// timestamp of the error, or "" when clearing.
+// for a purchase. Pass reason="" to clear on success. reasonAt is normalized
+// to "" whenever reason is "" so the timestamp never lags behind the tag.
 func (r *CampaignsRepository) UpdatePurchaseMMError(ctx context.Context, id, reason, reasonAt string) error {
+	if reason == "" {
+		reasonAt = ""
+	}
 	return r.execAndExpectRow(ctx, "update mm last error",
 		`UPDATE campaign_purchases SET mm_last_error = ?, mm_last_error_at = ?, updated_at = ? WHERE id = ?`,
 		reason, reasonAt, time.Now().UTC().Format(time.RFC3339), id,
@@ -258,8 +261,12 @@ func (r *CampaignsRepository) UpdatePurchaseMMError(ctx context.Context, id, rea
 }
 
 // UpdatePurchaseCLError records or clears the last mapping/pricing failure reason
-// for a purchase. Pass reason="" to clear on success.
+// for a purchase. Pass reason="" to clear on success. reasonAt is normalized
+// to "" whenever reason is "" so the timestamp never lags behind the tag.
 func (r *CampaignsRepository) UpdatePurchaseCLError(ctx context.Context, id, reason, reasonAt string) error {
+	if reason == "" {
+		reasonAt = ""
+	}
 	return r.execAndExpectRow(ctx, "update cl last error",
 		`UPDATE campaign_purchases SET cl_last_error = ?, cl_last_error_at = ?, updated_at = ? WHERE id = ?`,
 		reason, reasonAt, time.Now().UTC().Format(time.RFC3339), id,

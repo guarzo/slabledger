@@ -6,6 +6,12 @@ import (
 	"fmt"
 )
 
+// maxIntegrationFailureSamples caps the sample list returned by
+// queryIntegrationFailures even if a caller passes a larger limit. The
+// HTTP handlers already clamp via parsePagination, but this is
+// defense-in-depth for any future direct caller.
+const maxIntegrationFailureSamples = 200
+
 // queryIntegrationFailures is the shared implementation behind
 // MarketMoversStore.GetMMFailures and CardLadderStore.GetCLFailures.
 //
@@ -23,6 +29,9 @@ func queryIntegrationFailures(ctx context.Context, db *sql.DB, reasonCol, reason
 	}
 	if reasonAtCol != "mm_last_error_at" && reasonAtCol != "cl_last_error_at" {
 		return nil, fmt.Errorf("queryIntegrationFailures: unknown reason timestamp column %q", reasonAtCol)
+	}
+	if sampleLimit <= 0 || sampleLimit > maxIntegrationFailureSamples {
+		sampleLimit = maxIntegrationFailureSamples
 	}
 
 	report := &IntegrationFailuresReport{

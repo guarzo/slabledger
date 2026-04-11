@@ -3,7 +3,6 @@ package scheduler
 import (
 	"context"
 	"regexp"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -28,14 +27,6 @@ type CardLadderValueUpdater interface {
 	// Pass reason="" and reasonAt="" to clear on success.
 	UpdatePurchaseCLError(ctx context.Context, purchaseID, reason, reasonAt string) error
 }
-
-// CL failure reason tags. Short, stable strings used by the /failures admin endpoint.
-const (
-	CLReasonNoImageMatch = "no_image_match"
-	CLReasonNoCertMatch  = "no_cert_match"
-	CLReasonNoValue      = "no_value"
-	CLReasonAPIError     = "api_error"
-)
 
 // CardLadderGemRateUpdater persists gemRateID, psaSpecID, and CL card metadata on purchases.
 type CardLadderGemRateUpdater interface {
@@ -336,7 +327,10 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 		if newCLCents <= 0 {
 			// Matched but CL reports no market value. Persist so the admin
 			// UI can show "matched without a price" distinct from "unmapped".
+			// Mark as matched so the second pass doesn't overwrite the
+			// `no_value` reason with `no_image_match`.
 			noValue++
+			matchedPurchaseIDs[purchase.ID] = true
 			s.recordCLError(ctx, purchase.ID, CLReasonNoValue)
 			continue
 		}
@@ -479,29 +473,4 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 	s.statsMu.Unlock()
 
 	return nil
-}
-
-// recordCLError persists a failure reason (or clears it when reason=="") on a
-// purchase. Logs warnings but never fails the refresh loop — diagnostics are
-// best-effort.
-func (s *CardLadderRefreshScheduler) recordCLError(ctx context.Context, purchaseID, reason string) {
-	var reasonAt string
-	if reason != "" {
-		reasonAt = time.Now().UTC().Format(time.RFC3339)
-	}
-	if err := s.valueUpdater.UpdatePurchaseCLError(ctx, purchaseID, reason, reasonAt); err != nil {
-		s.logger.Debug(ctx, "CL refresh: failed to persist error reason",
-			observability.String("purchaseId", purchaseID),
-			observability.String("reason", reason),
-			observability.Err(err))
-	}
-}
-
-// extractGradeValue parses "PSA 9", "PSA 9.5", or "g9" → numeric grade value.
-func extractGradeValue(condition string) float64 {
-	if m := gradeDigitsRe.FindString(condition); m != "" {
-		v, _ := strconv.ParseFloat(m, 64)
-		return v
-	}
-	return 0
 }

@@ -28,13 +28,21 @@ func (m *mockCLPurchaseLister) ListAllUnsoldPurchases(ctx context.Context) ([]ca
 	return nil, nil
 }
 
+type clErrorCall struct {
+	PurchaseID string
+	Reason     string
+	ReasonAt   string
+}
+
 type mockCLValueUpdater struct {
-	UpdateFn func(ctx context.Context, purchaseID string, clValueCents, population int) error
-	Calls    []struct {
+	UpdateFn      func(ctx context.Context, purchaseID string, clValueCents, population int) error
+	UpdateErrorFn func(ctx context.Context, purchaseID, reason, reasonAt string) error
+	Calls         []struct {
 		PurchaseID   string
 		CLValueCents int
 		Population   int
 	}
+	ErrorCalls []clErrorCall
 }
 
 func (m *mockCLValueUpdater) UpdatePurchaseCLValue(ctx context.Context, purchaseID string, clValueCents, population int) error {
@@ -50,6 +58,10 @@ func (m *mockCLValueUpdater) UpdatePurchaseCLValue(ctx context.Context, purchase
 }
 
 func (m *mockCLValueUpdater) UpdatePurchaseCLError(ctx context.Context, purchaseID, reason, reasonAt string) error {
+	m.ErrorCalls = append(m.ErrorCalls, clErrorCall{PurchaseID: purchaseID, Reason: reason, ReasonAt: reasonAt})
+	if m.UpdateErrorFn != nil {
+		return m.UpdateErrorFn(ctx, purchaseID, reason, reasonAt)
+	}
 	return nil
 }
 
