@@ -653,6 +653,7 @@ func TestSocialRepository_GetPurchaseIDsInExistingPosts(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := repo.GetPurchaseIDsInExistingPosts(ctx, tc.inputPostIDs, tc.postType)
 			require.NoError(t, err)
+			require.NotNil(t, result)
 			assert.Len(t, result, len(tc.expectedResult))
 			for k, v := range tc.expectedResult {
 				assert.Equal(t, v, result[k])

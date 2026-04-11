@@ -199,7 +199,8 @@ func (s *service) GetActivationChecklist(ctx context.Context, campaignID string)
 }
 
 // GetCrackOpportunities returns cached cross-campaign crack opportunities.
-// Returns nil if the cache has not been populated yet.
+// Returns an empty slice if the cache has not been populated yet or there are no opportunities.
+// Returns a zero-length slice and an error on failure.
 func (s *service) GetCrackOpportunities(ctx context.Context) ([]CrackAnalysis, error) {
 	s.crackCacheMu.RLock()
 	all := s.crackCacheAll
