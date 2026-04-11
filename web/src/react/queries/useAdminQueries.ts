@@ -145,6 +145,15 @@ export function useCardLadderStatus(options?: { enabled?: boolean }) {
   });
 }
 
+export function useCardLadderFailures(options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: queryKeys.admin.cardLadderFailures,
+    queryFn: () => api.getCardLadderFailures(50),
+    staleTime: 60_000,
+    enabled: options?.enabled ?? false,
+  });
+}
+
 export function useSaveCardLadderConfig() {
   const qc = useQueryClient();
   return useMutation({
@@ -182,6 +191,15 @@ export function useMarketMoversStatus(options?: { enabled?: boolean }) {
     queryFn: () => api.getMarketMoversStatus(),
     staleTime: 60_000,
     enabled: options?.enabled ?? true,
+  });
+}
+
+export function useMarketMoversFailures(options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: queryKeys.admin.marketMoversFailures,
+    queryFn: () => api.getMarketMoversFailures(50),
+    staleTime: 60_000,
+    enabled: options?.enabled ?? false,
   });
 }
 

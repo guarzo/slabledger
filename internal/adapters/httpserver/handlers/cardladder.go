@@ -131,6 +131,13 @@ func (h *CardLadderHandler) HandleStatus(w http.ResponseWriter, r *http.Request)
 		status["cardsMapped"] = len(mappings)
 	}
 
+	priceStats, err := h.store.GetCLPriceStats(r.Context())
+	if err != nil {
+		h.logger.Error(r.Context(), "failed to get CL price stats", observability.Err(err))
+	} else {
+		status["priceStats"] = priceStats
+	}
+
 	h.mu.Lock()
 	refresher := h.refresher
 	h.mu.Unlock()
@@ -158,4 +165,18 @@ func (h *CardLadderHandler) HandleRefresh(w http.ResponseWriter, r *http.Request
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "refresh complete"})
+}
+
+// HandleFailures returns a breakdown of per-purchase CL mapping/pricing failures
+// grouped by reason, with a bounded sample of recent failed purchases for the
+// admin UI to display.
+func (h *CardLadderHandler) HandleFailures(w http.ResponseWriter, r *http.Request) {
+	limit, _ := parsePagination(r)
+	report, err := h.store.GetCLFailures(r.Context(), limit)
+	if err != nil {
+		h.logger.Error(r.Context(), "failed to load CL failures", observability.Err(err))
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	writeJSON(w, http.StatusOK, report)
 }

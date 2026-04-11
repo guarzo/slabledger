@@ -3,7 +3,7 @@
  */
 
 import type { APIUsageResponse, CacheStatsResponse, PricingDiagnosticsResponse, PriceOverrideStats, CachedAnalysis, AdvisorAnalysisType, AIUsageResponse, DHStatusResponse, DHBulkMatchResponse, DHUnmatchedResponse, DHFixMatchRequest, DHFixMatchResponse, DHSelectMatchRequest, DHPushConfig } from '../../types/apiStatus';
-import type { AllowedEmail, AdminUser, CLStatusResponse, CLSyncResult, MMStatusResponse, MMSyncResult, PSASyncStatusResponse } from '../../types/admin';
+import type { AllowedEmail, AdminUser, CLStatusResponse, CLSyncResult, IntegrationFailuresReport, MMStatusResponse, MMSyncResult, PSASyncStatusResponse } from '../../types/admin';
 import type { APIClient, CardRequestSubmission } from './client';
 import { APIError } from './client';
 
@@ -29,10 +29,12 @@ declare module './client' {
     submitCardRequest(id: number): Promise<{ status: string; requestId: string }>;
     submitAllCardRequests(): Promise<{ submitted: number; errors: number }>;
     getCardLadderStatus(): Promise<CLStatusResponse>;
+    getCardLadderFailures(limit?: number): Promise<IntegrationFailuresReport>;
     saveCardLadderConfig(config: { email: string; password: string; collectionId: string; firebaseApiKey: string }): Promise<{ status: string }>;
     triggerCardLadderRefresh(): Promise<{ status: string }>;
     syncCardLadderCollection(): Promise<CLSyncResult>;
     getMarketMoversStatus(): Promise<MMStatusResponse>;
+    getMarketMoversFailures(limit?: number): Promise<IntegrationFailuresReport>;
     saveMarketMoversConfig(config: { username: string; password: string }): Promise<{ status: string }>;
     triggerMarketMoversRefresh(): Promise<{ status: string }>;
     syncMarketMoversCollection(): Promise<MMSyncResult>;
@@ -135,6 +137,11 @@ proto.getCardLadderStatus = async function (this: APIClient) {
   return this.get<CLStatusResponse>('/admin/cardladder/status');
 };
 
+proto.getCardLadderFailures = async function (this: APIClient, limit?: number) {
+  const q = limit ? `?limit=${limit}` : '';
+  return this.get<IntegrationFailuresReport>(`/admin/cardladder/failures${q}`);
+};
+
 proto.saveCardLadderConfig = async function (this: APIClient, config: { email: string; password: string; collectionId: string; firebaseApiKey: string }) {
   return this.post<{ status: string }>('/admin/cardladder/config', config);
 };
@@ -149,6 +156,11 @@ proto.syncCardLadderCollection = async function (this: APIClient) {
 
 proto.getMarketMoversStatus = async function (this: APIClient) {
   return this.get<MMStatusResponse>('/admin/marketmovers/status');
+};
+
+proto.getMarketMoversFailures = async function (this: APIClient, limit?: number) {
+  const q = limit ? `?limit=${limit}` : '';
+  return this.get<IntegrationFailuresReport>(`/admin/marketmovers/failures${q}`);
 };
 
 proto.saveMarketMoversConfig = async function (this: APIClient, config: { username: string; password: string }) {

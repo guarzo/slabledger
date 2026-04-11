@@ -268,3 +268,10 @@ func (s *MarketMoversStore) GetMMPriceStats(ctx context.Context) (*MMPriceStats,
 
 	return &stats, nil
 }
+
+// GetMMFailures returns unsold purchases whose last MM refresh recorded a
+// failure reason, grouped by reason with a bounded sample list for the UI.
+// sampleLimit is clamped inside queryIntegrationFailures.
+func (s *MarketMoversStore) GetMMFailures(ctx context.Context, sampleLimit int) (*IntegrationFailuresReport, error) {
+	return queryIntegrationFailures(ctx, s.db, "mm_last_error", "mm_last_error_at", sampleLimit)
+}
