@@ -345,10 +345,19 @@ function CLImportCard() {
       setResult(null);
       const res = await api.globalImportCL(file);
       setResult(res);
-      if (res.unmatched > 0) {
-        toast.warning(`CL import: ${res.allocated} allocated, ${res.refreshed} refreshed, ${res.unmatched} unmatched`);
+      const hasProblems = res.unmatched > 0 || res.ambiguous > 0 || res.skipped > 0 || res.failed > 0 || (res.errors?.length ?? 0) > 0;
+      const summary = [
+        res.allocated > 0 && `${res.allocated} allocated`,
+        res.refreshed > 0 && `${res.refreshed} refreshed`,
+        res.unmatched > 0 && `${res.unmatched} unmatched`,
+        res.ambiguous > 0 && `${res.ambiguous} ambiguous`,
+        res.skipped > 0 && `${res.skipped} skipped`,
+        res.failed > 0 && `${res.failed} failed`,
+      ].filter(Boolean).join(', ');
+      if (hasProblems) {
+        toast.warning(`CL import: ${summary}`);
       } else {
-        toast.success(`CL import: ${res.allocated} allocated, ${res.refreshed} refreshed`);
+        toast.success(`CL import: ${summary || '0 changes'}`);
       }
     } catch (err) {
       toast.error(getErrorMessage(err, 'Failed to import'));

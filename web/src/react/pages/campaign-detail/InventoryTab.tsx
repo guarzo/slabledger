@@ -192,13 +192,11 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
           items={items}
           onAddToSellSheet={(ids) => {
             sellSheet.add(ids);
-            setSelected(new Set());
-            toast.success(`Added ${selected.size} item${selected.size > 1 ? 's' : ''} to sell sheet`);
+            toast.success(`Added ${ids.length} item${ids.length > 1 ? 's' : ''} to sell sheet`);
           }}
           onRemoveFromSellSheet={(ids) => {
             sellSheet.remove(ids);
-            setSelected(new Set());
-            toast.success(`Removed ${selected.size} item${selected.size > 1 ? 's' : ''} from sell sheet`);
+            toast.success(`Removed ${ids.length} item${ids.length > 1 ? 's' : ''} from sell sheet`);
           }}
           onRecordSale={openSaleModal}
           onClearSelected={() => setSelected(new Set())}

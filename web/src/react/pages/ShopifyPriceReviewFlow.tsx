@@ -24,10 +24,19 @@ function ReviewRow({ match, decision, onDecide }: {
   );
 
   const reviewedCents = match.recommendedSource === 'user_reviewed' ? match.recommendedPriceCents : undefined;
-  const preSelected = useMemo(
+  const recommendationPreSelected = useMemo(
     () => preSelectSource(sources, reviewedCents),
     [sources, reviewedCents],
   );
+
+  // If the user has already made a decision, use that as preSelected so
+  // PriceDecisionBar's internal state doesn't revert to the recommendation on remount.
+  const preSelected = useMemo((): ReturnType<typeof preSelectSource> => {
+    if (decision?.action === 'update') {
+      return { kind: 'manual', priceCents: decision.priceCents };
+    }
+    return recommendationPreSelected;
+  }, [decision, recommendationPreSelected]);
 
   const [expanded, setExpanded] = useState(false);
   const hasIntel = !!match.intel;
@@ -57,6 +66,8 @@ function ReviewRow({ match, decision, onDecide }: {
                 className="mt-0.5 text-[var(--text-muted)] hover:text-[var(--text)] transition-transform"
                 style={{ transform: expanded ? 'rotate(90deg)' : 'none' }}
                 aria-label={expanded ? 'Collapse details' : 'Expand details'}
+                aria-expanded={expanded}
+                aria-controls={`intel-details-${match.certNumber}`}
               >
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <polyline points="9 18 15 12 9 6" />
@@ -138,7 +149,7 @@ function ReviewRow({ match, decision, onDecide }: {
         </td>
       </tr>
       {expanded && match.intel && (
-        <tr className="border-b border-[var(--surface-2)]/50">
+        <tr id={`intel-details-${match.certNumber}`} className="border-b border-[var(--surface-2)]/50">
           <td colSpan={7} className="px-4 py-3 bg-[var(--surface-1)]/50">
             <IntelDetail intel={match.intel} />
           </td>
