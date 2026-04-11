@@ -35,7 +35,7 @@ type SocialPublishSchedulerConfig struct {
 	IntervalMinutes  int    // Tick interval in minutes
 	MaxDaily         int    // Max posts published per calendar day
 	RenderServiceURL string // Base URL of the render sidecar
-	fixedHour        int    // Test-only: if > 0, override current hour. 0 = use real clock.
+	fixedHour        int    // Test-only: if >= 0, override current hour. -1 = use real clock.
 }
 
 var _ Scheduler = (*SocialPublishScheduler)(nil)
@@ -89,7 +89,7 @@ func (s *SocialPublishScheduler) Start(ctx context.Context) {
 
 func (s *SocialPublishScheduler) tick(ctx context.Context) {
 	currentHour := s.cfg.fixedHour
-	if currentHour == 0 {
+	if currentHour < 0 {
 		currentHour = time.Now().Hour()
 	}
 

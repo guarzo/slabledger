@@ -64,6 +64,7 @@ func defaultPublishConfig() SocialPublishSchedulerConfig {
 		EndHour:         24,
 		IntervalMinutes: 60,
 		MaxDaily:        10,
+		fixedHour:       -1, // use real clock
 	}
 }
 
