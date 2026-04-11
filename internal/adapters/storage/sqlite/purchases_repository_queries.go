@@ -21,7 +21,7 @@ func (r *CampaignsRepository) GetPurchaseByCertNumber(ctx context.Context, grade
 		return nil, campaigns.ErrPurchaseNotFound
 	}
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("scan purchase by cert %s/%s: %w", grader, certNumber, err)
 	}
 	return &p, nil
 }
@@ -54,7 +54,7 @@ func (r *CampaignsRepository) GetPurchasesByGraderAndCertNumbers(ctx context.Con
 
 		rows, err := r.db.QueryContext(ctx, query, args...)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("query purchases by grader/cert chunk: %w", err)
 		}
 
 		for rows.Next() {
@@ -68,16 +68,16 @@ func (r *CampaignsRepository) GetPurchasesByGraderAndCertNumbers(ctx context.Con
 			var p campaigns.Purchase
 			if err := scanPurchase(rows, &p); err != nil {
 				rows.Close() //nolint:errcheck // best-effort close on scan error
-				return nil, err
+				return nil, fmt.Errorf("scan purchase in grader/cert chunk: %w", err)
 			}
 			result[p.CertNumber] = &p
 		}
 		if err := rows.Err(); err != nil {
 			rows.Close() //nolint:errcheck // best-effort close on iteration error
-			return nil, err
+			return nil, fmt.Errorf("iterate purchases by grader/cert: %w", err)
 		}
 		if cerr := rows.Close(); cerr != nil {
-			return nil, cerr
+			return nil, fmt.Errorf("close purchases by grader/cert rows: %w", cerr)
 		}
 	}
 	return result, nil
@@ -109,7 +109,7 @@ func (r *CampaignsRepository) GetPurchasesByCertNumbers(ctx context.Context, cer
 
 		rows, err := r.db.QueryContext(ctx, query, args...)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("query purchases by cert chunk: %w", err)
 		}
 
 		for rows.Next() {
@@ -123,16 +123,16 @@ func (r *CampaignsRepository) GetPurchasesByCertNumbers(ctx context.Context, cer
 			var p campaigns.Purchase
 			if err := scanPurchase(rows, &p); err != nil {
 				rows.Close() //nolint:errcheck // best-effort close on scan error
-				return nil, err
+				return nil, fmt.Errorf("scan purchase in cert chunk: %w", err)
 			}
 			result[p.CertNumber] = &p
 		}
 		if err := rows.Err(); err != nil {
 			rows.Close() //nolint:errcheck // best-effort close on iteration error
-			return nil, err
+			return nil, fmt.Errorf("iterate purchases by cert: %w", err)
 		}
 		if cerr := rows.Close(); cerr != nil {
-			return nil, cerr
+			return nil, fmt.Errorf("close purchases by cert rows: %w", cerr)
 		}
 	}
 
@@ -163,7 +163,7 @@ func (r *CampaignsRepository) GetPurchasesByIDs(ctx context.Context, ids []strin
 		query := `SELECT ` + purchaseColumns + ` FROM campaign_purchases WHERE id IN (` + strings.Join(placeholders, ",") + `)`
 		rows, err := r.db.QueryContext(ctx, query, args...)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("query purchases by IDs chunk: %w", err)
 		}
 
 		purchases, err := scanRows(ctx, rows, func(rs *sql.Rows) (campaigns.Purchase, error) {
@@ -172,7 +172,7 @@ func (r *CampaignsRepository) GetPurchasesByIDs(ctx context.Context, ids []strin
 			return p, err
 		})
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("scan purchases by IDs chunk: %w", err)
 		}
 		for i := range purchases {
 			result[purchases[i].ID] = &purchases[i]
@@ -200,11 +200,11 @@ func (r *CampaignsRepository) UpdateExternalPurchaseFields(ctx context.Context, 
 		time.Now(), id,
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("update external purchase fields for %s: %w", id, err)
 	}
 	n, err := result.RowsAffected()
 	if err != nil {
-		return err
+		return fmt.Errorf("check rows affected on update external purchase fields: %w", err)
 	}
 	if n == 0 {
 		return campaigns.ErrPurchaseNotFound
@@ -224,11 +224,11 @@ func (r *CampaignsRepository) UpdatePurchaseMarketSnapshot(ctx context.Context, 
 		snap.SnapshotJSON, time.Now(), id,
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("update market snapshot for purchase %s: %w", id, err)
 	}
 	n, err := result.RowsAffected()
 	if err != nil {
-		return err
+		return fmt.Errorf("check rows affected on update market snapshot: %w", err)
 	}
 	if n == 0 {
 		return campaigns.ErrPurchaseNotFound
@@ -242,7 +242,7 @@ func (r *CampaignsRepository) ListSnapshotPurchasesByStatus(ctx context.Context,
 	query := `SELECT ` + purchaseColumns + ` FROM campaign_purchases WHERE snapshot_status = ? ORDER BY updated_at ASC LIMIT ?`
 	rows, err := r.db.QueryContext(ctx, query, status, limit)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("query purchases by snapshot status %q: %w", status, err)
 	}
 	return scanRows(ctx, rows, func(rs *sql.Rows) (campaigns.Purchase, error) {
 		var p campaigns.Purchase
@@ -257,11 +257,11 @@ func (r *CampaignsRepository) UpdatePurchaseSnapshotStatus(ctx context.Context, 
 		status, retryCount, time.Now(), id,
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("update snapshot status for purchase %s: %w", id, err)
 	}
 	n, err := result.RowsAffected()
 	if err != nil {
-		return err
+		return fmt.Errorf("check rows affected on update snapshot status: %w", err)
 	}
 	if n == 0 {
 		return campaigns.ErrPurchaseNotFound
@@ -279,11 +279,11 @@ func (r *CampaignsRepository) UpdatePurchasePSAFields(ctx context.Context, id st
 		time.Now(), id,
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("update PSA fields for purchase %s: %w", id, err)
 	}
 	n, err := result.RowsAffected()
 	if err != nil {
-		return err
+		return fmt.Errorf("check rows affected on update PSA fields: %w", err)
 	}
 	if n == 0 {
 		return campaigns.ErrPurchaseNotFound
@@ -302,7 +302,7 @@ func (r *CampaignsRepository) ListPurchasesMissingImages(ctx context.Context, li
 		 AND cert_number <> ''
 		 LIMIT ?`, limit)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("query purchases missing images: %w", err)
 	}
 	defer rows.Close() //nolint:errcheck
 
@@ -316,7 +316,7 @@ func (r *CampaignsRepository) ListPurchasesMissingImages(ctx context.Context, li
 			CertNumber string
 		}
 		if err := rows.Scan(&r.ID, &r.CertNumber); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("scan purchase missing images row: %w", err)
 		}
 		result = append(result, r)
 	}
@@ -346,7 +346,7 @@ func (r *CampaignsRepository) UpdatePurchaseImageURLs(ctx context.Context, id, f
 
 	res, err := r.db.ExecContext(ctx, query, args...)
 	if err != nil {
-		return err
+		return fmt.Errorf("update image URLs for purchase %s: %w", id, err)
 	}
 	n, err := res.RowsAffected()
 	if err != nil {
