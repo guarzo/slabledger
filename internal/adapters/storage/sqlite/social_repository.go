@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/social"
@@ -61,25 +60,31 @@ func (r *SocialRepository) CreatePost(ctx context.Context, post *social.SocialPo
 		post.Caption, post.Hashtags, post.CoverTitle, post.CardCount,
 		post.CreatedAt.Format(time.RFC3339), post.UpdatedAt.Format(time.RFC3339),
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("insert social post %s: %w", post.ID, err)
+	}
+	return nil
 }
 
+// GetPost returns the social post with the given ID, or (nil, nil) if no such post exists.
+// The nil-on-missing contract is intentional and verified by social_repository_test.go —
+// callers treat "no post" as a valid, non-error state.
 func (r *SocialRepository) GetPost(ctx context.Context, id string) (*social.SocialPost, error) {
 	rows, err := r.db.QueryContext(ctx,
 		`SELECT `+socialPostColumns+` FROM social_posts WHERE id = ?`, id)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("query social post %s: %w", id, err)
 	}
 	defer rows.Close() //nolint:errcheck
 	if !rows.Next() {
 		if err := rows.Err(); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("iterate social post %s: %w", id, err)
 		}
 		return nil, nil
 	}
 	p, err := scanSocialPost(rows)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("scan social post %s: %w", id, err)
 	}
 	return &p, nil
 }
@@ -107,7 +112,7 @@ func (r *SocialRepository) ListPosts(ctx context.Context, status *social.PostSta
 
 	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("query social posts: %w", err)
 	}
 	return scanRows(ctx, rows, scanSocialPost)
 }
@@ -118,7 +123,7 @@ func (r *SocialRepository) UpdatePostStatus(ctx context.Context, id string, stat
 		string(status), time.Now().UTC().Format(time.RFC3339), id,
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("update social post status %s: %w", id, err)
 	}
 	n, err := res.RowsAffected()
 	if err != nil {
@@ -136,7 +141,7 @@ func (r *SocialRepository) UpdatePostCaption(ctx context.Context, id string, cap
 		caption, hashtags, time.Now().UTC().Format(time.RFC3339), id,
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("update social post caption %s: %w", id, err)
 	}
 	n, err := res.RowsAffected()
 	if err != nil {
@@ -154,7 +159,7 @@ func (r *SocialRepository) SetPublished(ctx context.Context, id string, instagra
 		string(social.PostStatusPublished), instagramPostID, time.Now().UTC().Format(time.RFC3339), id,
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("mark social post published %s: %w", id, err)
 	}
 	n, err := res.RowsAffected()
 	if err != nil {
@@ -173,7 +178,7 @@ func (r *SocialRepository) SetPublishing(ctx context.Context, id string) error {
 		id, string(social.PostStatusDraft), string(social.PostStatusFailed), string(social.PostStatusApproved),
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("mark social post publishing %s: %w", id, err)
 	}
 	n, err := res.RowsAffected()
 	if err != nil {
@@ -185,20 +190,18 @@ func (r *SocialRepository) SetPublishing(ctx context.Context, id string) error {
 	return nil
 }
 
+// SetError marks a post as failed with the given error message. Returns
+// social.ErrPostNotFound if no post with the given id exists — callers in the
+// publish-failure path should treat that case as "post was deleted
+// concurrently, nothing to update" rather than as a stuck-in-publishing
+// condition.
 func (r *SocialRepository) SetError(ctx context.Context, id string, errorMessage string) error {
-	_, err := r.db.ExecContext(ctx,
+	res, err := r.db.ExecContext(ctx,
 		`UPDATE social_posts SET status = ?, error_message = ?, updated_at = ? WHERE id = ?`,
 		string(social.PostStatusFailed), errorMessage, time.Now().UTC().Format(time.RFC3339), id,
 	)
-	return err
-}
-
-func (r *SocialRepository) DeletePost(ctx context.Context, id string) error {
-	res, err := r.db.ExecContext(ctx,
-		`DELETE FROM social_posts WHERE id = ?`, id,
-	)
 	if err != nil {
-		return err
+		return fmt.Errorf("set social post error %s: %w", id, err)
 	}
 	n, err := res.RowsAffected()
 	if err != nil {
@@ -210,160 +213,21 @@ func (r *SocialRepository) DeletePost(ctx context.Context, id string) error {
 	return nil
 }
 
-func (r *SocialRepository) AddPostCards(ctx context.Context, postID string, cards []social.PostCard) error {
-	tx, err := r.db.BeginTx(ctx, nil)
+func (r *SocialRepository) DeletePost(ctx context.Context, id string) error {
+	res, err := r.db.ExecContext(ctx,
+		`DELETE FROM social_posts WHERE id = ?`, id,
+	)
 	if err != nil {
-		return err
+		return fmt.Errorf("delete social post %s: %w", id, err)
 	}
-	defer tx.Rollback() //nolint:errcheck
-
-	stmt, err := tx.PrepareContext(ctx,
-		`INSERT INTO social_post_cards (post_id, purchase_id, slide_order) VALUES (?, ?, ?)`)
+	n, err := res.RowsAffected()
 	if err != nil {
-		return err
+		return fmt.Errorf("check rows affected: %w", err)
 	}
-	defer stmt.Close() //nolint:errcheck
-
-	for _, c := range cards {
-		if _, err := stmt.ExecContext(ctx, c.PostID, c.PurchaseID, c.SlideOrder); err != nil {
-			return err
-		}
+	if n == 0 {
+		return fmt.Errorf("post %s: %w", id, social.ErrPostNotFound)
 	}
-	return tx.Commit()
-}
-
-func scanPostCardDetail(rows *sql.Rows) (social.PostCardDetail, error) {
-	var c social.PostCardDetail
-	var createdAt string
-	var sold int
-	err := rows.Scan(&c.PurchaseID, &c.SlideOrder, &c.CardName, &c.SetName, &c.CardNumber,
-		&c.GradeValue, &c.Grader, &c.CertNumber, &c.FrontImageURL, &c.AskingPriceCents,
-		&c.CLValueCents, &c.Trend30d, &createdAt, &sold)
-	c.CreatedAt = parseSQLiteTime(createdAt)
-	c.Sold = sold != 0
-	return c, err
-}
-
-func (r *SocialRepository) ListPostCards(ctx context.Context, postID string) ([]social.PostCardDetail, error) {
-	rows, err := r.db.QueryContext(ctx,
-		`SELECT spc.purchase_id, spc.slide_order,
-		        p.card_name, COALESCE(p.set_name, ''), COALESCE(p.card_number, ''),
-		        p.grade_value, COALESCE(p.grader, 'PSA'), COALESCE(p.cert_number, ''),
-		        COALESCE(p.front_image_url, ''), COALESCE(p.reviewed_price_cents, 0),
-		        COALESCE(p.cl_value_cents, 0), COALESCE(p.trend_30d, 0),
-		        p.created_at,
-		        CASE WHEN cs.purchase_id IS NOT NULL THEN 1 ELSE 0 END as sold
-		 FROM social_post_cards spc
-		 JOIN campaign_purchases p ON p.id = spc.purchase_id
-		 LEFT JOIN campaign_sales cs ON cs.purchase_id = p.id
-		 WHERE spc.post_id = ?
-		 ORDER BY spc.slide_order`, postID)
-	if err != nil {
-		return nil, err
-	}
-	return scanRows(ctx, rows, scanPostCardDetail)
-}
-
-func (r *SocialRepository) GetRecentPurchaseIDs(ctx context.Context, since string) ([]string, error) {
-	rows, err := r.db.QueryContext(ctx,
-		`SELECT p.id FROM campaign_purchases p
-		 WHERE p.created_at >= ?
-		 AND p.front_image_url != ''
-		 AND p.id NOT IN (SELECT purchase_id FROM campaign_sales)
-		 ORDER BY p.created_at DESC`, since)
-	if err != nil {
-		return nil, err
-	}
-	return scanRows(ctx, rows, func(rows *sql.Rows) (string, error) {
-		var id string
-		err := rows.Scan(&id)
-		return id, err
-	})
-}
-
-func (r *SocialRepository) GetPurchaseIDsInExistingPosts(ctx context.Context, purchaseIDs []string, postType social.PostType) (map[string]bool, error) {
-	if len(purchaseIDs) == 0 {
-		return nil, nil
-	}
-
-	placeholders := make([]string, len(purchaseIDs))
-	args := make([]any, 0, len(purchaseIDs)+2)
-	for i, id := range purchaseIDs {
-		placeholders[i] = "?"
-		args = append(args, id)
-	}
-	args = append(args, string(postType), string(social.PostStatusRejected))
-
-	query := fmt.Sprintf(
-		`SELECT DISTINCT spc.purchase_id
-		 FROM social_post_cards spc
-		 JOIN social_posts sp ON sp.id = spc.post_id
-		 WHERE spc.purchase_id IN (%s)
-		 AND sp.post_type = ?
-		 AND sp.status != ?`,
-		strings.Join(placeholders, ","))
-
-	rows, err := r.db.QueryContext(ctx, query, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close() //nolint:errcheck
-
-	result := make(map[string]bool)
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		result[id] = true
-	}
-	return result, rows.Err()
-}
-
-func (r *SocialRepository) GetUnsoldPurchasesWithSnapshots(ctx context.Context) ([]social.PurchaseSnapshot, error) {
-	rows, err := r.db.QueryContext(ctx,
-		`SELECT p.id, p.buy_cost_cents,
-		        COALESCE(p.median_cents, 0),
-		        COALESCE(p.trend_30d, 0),
-		        COALESCE(p.mm_trend_pct, 0),
-		        COALESCE(p.snapshot_date, '')
-		 FROM campaign_purchases p
-		 WHERE p.id NOT IN (SELECT purchase_id FROM campaign_sales)
-		 AND p.front_image_url != ''
-		 AND (p.median_cents > 0 OR p.mm_trend_pct != 0)`)
-	if err != nil {
-		return nil, err
-	}
-	return scanRows(ctx, rows, func(rows *sql.Rows) (social.PurchaseSnapshot, error) {
-		var s social.PurchaseSnapshot
-		err := rows.Scan(&s.PurchaseID, &s.BuyCostCents, &s.MedianCents, &s.Trend30d, &s.MMTrendPct, &s.SnapshotDate)
-		return s, err
-	})
-}
-
-func (r *SocialRepository) GetAvailableCardsForPosts(ctx context.Context) ([]social.PostCardDetail, error) {
-	rows, err := r.db.QueryContext(ctx,
-		`SELECT p.id, 0 as slide_order,
-		        p.card_name, COALESCE(p.set_name, ''), COALESCE(p.card_number, ''),
-		        p.grade_value, COALESCE(p.grader, 'PSA'), COALESCE(p.cert_number, ''),
-		        COALESCE(p.front_image_url, ''), COALESCE(p.reviewed_price_cents, 0),
-		        COALESCE(p.cl_value_cents, 0), COALESCE(p.trend_30d, 0),
-		        p.created_at,
-		        0 as sold
-		 FROM campaign_purchases p
-		 WHERE p.front_image_url <> ''
-		 AND p.id NOT IN (SELECT purchase_id FROM campaign_sales)
-		 AND p.id NOT IN (
-		     SELECT spc.purchase_id FROM social_post_cards spc
-		     JOIN social_posts sp ON sp.id = spc.post_id
-		     WHERE sp.status NOT IN (?, ?)
-		 )
-		 ORDER BY p.created_at DESC`,
-		string(social.PostStatusRejected), string(social.PostStatusFailed))
-	if err != nil {
-		return nil, err
-	}
-	return scanRows(ctx, rows, scanPostCardDetail)
+	return nil
 }
 
 func (r *SocialRepository) UpdateSlideURLs(ctx context.Context, id string, urls []string) error {
@@ -376,7 +240,7 @@ func (r *SocialRepository) UpdateSlideURLs(ctx context.Context, id string, urls 
 		string(urlsJSON), time.Now().UTC().Format(time.RFC3339), id,
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("update slide URLs for post %s: %w", id, err)
 	}
 	n, err := res.RowsAffected()
 	if err != nil {
@@ -398,7 +262,7 @@ func (r *SocialRepository) UpdateBackgroundURLs(ctx context.Context, id string, 
 		string(urlsJSON), time.Now().UTC().Format(time.RFC3339), id,
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("update background URLs for post %s: %w", id, err)
 	}
 	n, err := res.RowsAffected()
 	if err != nil {
@@ -416,7 +280,7 @@ func (r *SocialRepository) UpdateCoverTitle(ctx context.Context, id string, titl
 		title, time.Now().UTC().Format(time.RFC3339), id,
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("update cover title for post %s: %w", id, err)
 	}
 	n, err := res.RowsAffected()
 	if err != nil {

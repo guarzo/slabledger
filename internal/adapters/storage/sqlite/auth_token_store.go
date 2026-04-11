@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/auth"
@@ -14,12 +15,12 @@ func (r *AuthRepository) StoreTokens(ctx context.Context, userID int64, sessionI
 	// Encrypt tokens
 	encryptedAccess, err := r.encryptor.Encrypt(tokens.AccessToken)
 	if err != nil {
-		return err
+		return fmt.Errorf("encrypt access token: %w", err)
 	}
 
 	encryptedRefresh, err := r.encryptor.Encrypt(tokens.RefreshToken)
 	if err != nil {
-		return err
+		return fmt.Errorf("encrypt refresh token: %w", err)
 	}
 
 	query := `
@@ -35,7 +36,7 @@ func (r *AuthRepository) StoreTokens(ctx context.Context, userID int64, sessionI
 	`
 
 	now := time.Now()
-	_, err = r.db.ExecContext(
+	if _, err := r.db.ExecContext(
 		ctx,
 		query,
 		userID,
@@ -47,9 +48,10 @@ func (r *AuthRepository) StoreTokens(ctx context.Context, userID int64, sessionI
 		tokens.Scope,
 		now,
 		now,
-	)
-
-	return err
+	); err != nil {
+		return fmt.Errorf("upsert user tokens for user %d: %w", userID, err)
+	}
+	return nil
 }
 
 // GetTokens retrieves and decrypts OAuth tokens for a user and session
@@ -75,18 +77,18 @@ func (r *AuthRepository) GetTokens(ctx context.Context, userID int64, sessionID 
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrTokenNotFound
 		}
-		return nil, err
+		return nil, fmt.Errorf("query user tokens for user %d: %w", userID, err)
 	}
 
 	// Decrypt tokens
 	tokens.AccessToken, err = r.encryptor.Decrypt(encryptedAccess)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("decrypt access token: %w", err)
 	}
 
 	tokens.RefreshToken, err = r.encryptor.Decrypt(encryptedRefresh)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("decrypt refresh token: %w", err)
 	}
 
 	return tokens, nil
@@ -117,18 +119,18 @@ func (r *AuthRepository) GetTokensByUserID(ctx context.Context, userID int64) (*
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrTokenNotFound
 		}
-		return nil, err
+		return nil, fmt.Errorf("query latest user tokens for user %d: %w", userID, err)
 	}
 
 	// Decrypt tokens
 	tokens.AccessToken, err = r.encryptor.Decrypt(encryptedAccess)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("decrypt access token: %w", err)
 	}
 
 	tokens.RefreshToken, err = r.encryptor.Decrypt(encryptedRefresh)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("decrypt refresh token: %w", err)
 	}
 
 	return tokens, nil
@@ -139,12 +141,12 @@ func (r *AuthRepository) UpdateTokens(ctx context.Context, userID int64, session
 	// Encrypt tokens
 	encryptedAccess, err := r.encryptor.Encrypt(tokens.AccessToken)
 	if err != nil {
-		return err
+		return fmt.Errorf("encrypt access token: %w", err)
 	}
 
 	encryptedRefresh, err := r.encryptor.Encrypt(tokens.RefreshToken)
 	if err != nil {
-		return err
+		return fmt.Errorf("encrypt refresh token: %w", err)
 	}
 
 	query := `
@@ -166,12 +168,12 @@ func (r *AuthRepository) UpdateTokens(ctx context.Context, userID int64, session
 		hashSessionID(sessionID),
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("update user tokens for user %d: %w", userID, err)
 	}
 
 	rows, err := result.RowsAffected()
 	if err != nil {
-		return err
+		return fmt.Errorf("check rows affected on update tokens: %w", err)
 	}
 
 	if rows == 0 {
@@ -187,12 +189,12 @@ func (r *AuthRepository) DeleteTokens(ctx context.Context, userID int64, session
 
 	result, err := r.db.ExecContext(ctx, query, userID, hashSessionID(sessionID))
 	if err != nil {
-		return err
+		return fmt.Errorf("delete user tokens for user %d: %w", userID, err)
 	}
 
 	rows, err := result.RowsAffected()
 	if err != nil {
-		return err
+		return fmt.Errorf("check rows affected on delete tokens: %w", err)
 	}
 
 	if rows == 0 {
@@ -206,6 +208,8 @@ func (r *AuthRepository) DeleteTokens(ctx context.Context, userID int64, session
 func (r *AuthRepository) DeleteAllUserTokens(ctx context.Context, userID int64) error {
 	query := `DELETE FROM user_tokens WHERE user_id = ?`
 
-	_, err := r.db.ExecContext(ctx, query, userID)
-	return err
+	if _, err := r.db.ExecContext(ctx, query, userID); err != nil {
+		return fmt.Errorf("delete all user tokens for user %d: %w", userID, err)
+	}
+	return nil
 }

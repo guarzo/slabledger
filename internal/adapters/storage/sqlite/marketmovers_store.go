@@ -40,6 +40,8 @@ func NewMarketMoversStore(db *sql.DB, encryptor crypto.Encryptor) *MarketMoversS
 }
 
 // GetConfig returns the current MM config, or nil if not configured.
+// The nil-on-missing contract is intentional: callers treat "not configured" as a
+// valid initial state, not an error.
 func (s *MarketMoversStore) GetConfig(ctx context.Context) (*MarketMoversConfig, error) {
 	var username, encToken string
 	err := s.db.QueryRowContext(ctx,
@@ -49,12 +51,12 @@ func (s *MarketMoversStore) GetConfig(ctx context.Context) (*MarketMoversConfig,
 		return nil, nil
 	}
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("query marketmovers config: %w", err)
 	}
 
 	token, err := s.encryptor.Decrypt(encToken)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("decrypt marketmovers refresh token: %w", err)
 	}
 
 	return &MarketMoversConfig{
@@ -67,11 +69,11 @@ func (s *MarketMoversStore) GetConfig(ctx context.Context) (*MarketMoversConfig,
 func (s *MarketMoversStore) SaveConfig(ctx context.Context, username, refreshToken string) error {
 	encToken, err := s.encryptor.Encrypt(refreshToken)
 	if err != nil {
-		return err
+		return fmt.Errorf("encrypt marketmovers refresh token: %w", err)
 	}
 
 	now := time.Now().UTC().Format(time.RFC3339)
-	_, err = s.db.ExecContext(ctx,
+	if _, err := s.db.ExecContext(ctx,
 		`INSERT INTO marketmovers_config (id, username, encrypted_refresh_token, updated_at)
 		 VALUES (1, ?, ?, ?)
 		 ON CONFLICT(id) DO UPDATE SET
@@ -79,8 +81,10 @@ func (s *MarketMoversStore) SaveConfig(ctx context.Context, username, refreshTok
 		   encrypted_refresh_token = excluded.encrypted_refresh_token,
 		   updated_at = excluded.updated_at`,
 		username, encToken, now,
-	)
-	return err
+	); err != nil {
+		return fmt.Errorf("upsert marketmovers config: %w", err)
+	}
+	return nil
 }
 
 // UpdateRefreshToken updates just the refresh token (after token refresh).
@@ -88,7 +92,7 @@ func (s *MarketMoversStore) SaveConfig(ctx context.Context, username, refreshTok
 func (s *MarketMoversStore) UpdateRefreshToken(ctx context.Context, refreshToken string) error {
 	encToken, err := s.encryptor.Encrypt(refreshToken)
 	if err != nil {
-		return err
+		return fmt.Errorf("encrypt marketmovers refresh token: %w", err)
 	}
 
 	res, err := s.db.ExecContext(ctx,
@@ -96,7 +100,7 @@ func (s *MarketMoversStore) UpdateRefreshToken(ctx context.Context, refreshToken
 		encToken, time.Now().UTC().Format(time.RFC3339),
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("update marketmovers refresh token: %w", err)
 	}
 	n, err := res.RowsAffected()
 	if err != nil {
@@ -110,14 +114,16 @@ func (s *MarketMoversStore) UpdateRefreshToken(ctx context.Context, refreshToken
 
 // DeleteConfig removes the Market Movers configuration.
 func (s *MarketMoversStore) DeleteConfig(ctx context.Context) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM marketmovers_config WHERE id = 1`)
-	return err
+	if _, err := s.db.ExecContext(ctx, `DELETE FROM marketmovers_config WHERE id = 1`); err != nil {
+		return fmt.Errorf("delete marketmovers config: %w", err)
+	}
+	return nil
 }
 
 // SaveMapping upserts a cert → MM collectible ID + master ID + search title mapping.
 // masterID is the grade-agnostic variant identifier (0 if unknown).
 func (s *MarketMoversStore) SaveMapping(ctx context.Context, slabSerial string, mmCollectibleID, masterID int64, searchTitle string) error {
-	_, err := s.db.ExecContext(ctx,
+	if _, err := s.db.ExecContext(ctx,
 		`INSERT INTO mm_card_mappings (slab_serial, mm_collectible_id, mm_master_id, mm_search_title, updated_at)
 		 VALUES (?, ?, ?, ?, ?)
 		 ON CONFLICT(slab_serial) DO UPDATE SET
@@ -133,11 +139,15 @@ func (s *MarketMoversStore) SaveMapping(ctx context.Context, slabSerial string, 
 		   END,
 		   updated_at = excluded.updated_at`,
 		slabSerial, mmCollectibleID, masterID, searchTitle, time.Now().UTC().Format(time.RFC3339),
-	)
-	return err
+	); err != nil {
+		return fmt.Errorf("upsert mm card mapping %s: %w", slabSerial, err)
+	}
+	return nil
 }
 
 // GetMapping returns the MM collectible ID for a cert, or nil if not found.
+// The nil-on-missing contract is intentional: callers treat "no mapping yet" as
+// a valid state, not an error.
 func (s *MarketMoversStore) GetMapping(ctx context.Context, slabSerial string) (*MMCardMapping, error) {
 	var m MMCardMapping
 	err := s.db.QueryRowContext(ctx,
@@ -148,7 +158,7 @@ func (s *MarketMoversStore) GetMapping(ctx context.Context, slabSerial string) (
 		return nil, nil
 	}
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("query mm card mapping %s: %w", slabSerial, err)
 	}
 	return &m, nil
 }
@@ -158,7 +168,7 @@ func (s *MarketMoversStore) ListMappings(ctx context.Context) ([]MMCardMapping, 
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT slab_serial, mm_collectible_id, mm_master_id, mm_search_title, mm_collection_item_id FROM mm_card_mappings`)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("query mm card mappings: %w", err)
 	}
 	defer rows.Close() //nolint:errcheck
 
@@ -172,7 +182,7 @@ func (s *MarketMoversStore) ListMappings(ctx context.Context) ([]MMCardMapping, 
 		}
 		var m MMCardMapping
 		if err := rows.Scan(&m.SlabSerial, &m.MMCollectibleID, &m.MasterID, &m.SearchTitle, &m.CollectionItemID); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("scan mm card mapping row: %w", err)
 		}
 		mappings = append(mappings, m)
 	}
@@ -186,7 +196,7 @@ func (s *MarketMoversStore) SaveCollectionItemID(ctx context.Context, slabSerial
 		collectionItemID, time.Now().UTC().Format(time.RFC3339), slabSerial,
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("update mm collection item ID for %s: %w", slabSerial, err)
 	}
 	n, err := res.RowsAffected()
 	if err != nil {
@@ -205,7 +215,7 @@ func (s *MarketMoversStore) ListUnsyncedMappings(ctx context.Context) ([]MMCardM
 		 FROM mm_card_mappings
 		 WHERE mm_collectible_id > 0 AND mm_collection_item_id = 0`)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("query unsynced mm mappings: %w", err)
 	}
 	defer rows.Close() //nolint:errcheck
 
@@ -219,7 +229,7 @@ func (s *MarketMoversStore) ListUnsyncedMappings(ctx context.Context) ([]MMCardM
 		}
 		var m MMCardMapping
 		if err := rows.Scan(&m.SlabSerial, &m.MMCollectibleID, &m.MasterID, &m.SearchTitle, &m.CollectionItemID); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("scan unsynced mm mapping row: %w", err)
 		}
 		mappings = append(mappings, m)
 	}
