@@ -33,6 +33,10 @@ export default function SlidePreviewPage() {
     return <div className="text-red-500 p-4">Post not found</div>;
   }
 
+  if (isNaN(slideIndex) || slideIndex < 0) {
+    return <div className="text-red-500 p-4">Invalid slideIndex</div>;
+  }
+
   const isCover = slideIndex === 0;
   const card = isCover ? undefined : post.cards?.[slideIndex - 1];
   const totalSlides = (post.cards?.length ?? 0) + 1; // +1 for cover
