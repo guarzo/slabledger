@@ -63,6 +63,7 @@ credentials.json
 
 # Data files (all runtime data stored in ./data/)
 data/
+node_modules/
 
 # Prevent cache from being created in test/cmd directories
 cmd/**/data/
