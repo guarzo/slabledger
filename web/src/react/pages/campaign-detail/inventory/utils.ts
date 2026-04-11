@@ -289,3 +289,10 @@ export function formatReceivedDate(iso: string): string {
    if (isNaN(d.getTime())) return iso;
    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
+
+/** Format a YYYY-MM-DD date string to "Mon D, YYYY" format (e.g., "Apr 3, 2026"). Uses local Date constructor to avoid UTC shift. */
+export function formatShipDate(dateStr: string): string {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  const d = new Date(year, month - 1, day);
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
