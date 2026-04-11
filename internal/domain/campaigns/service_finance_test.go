@@ -12,6 +12,10 @@ import (
 
 func TestService_UpdateCashflowConfig(t *testing.T) {
 	ctx := context.Background()
+	// Shared sentinel so the assertion can use errors.Is against the exact
+	// error instance the mock returns — errors.Is on distinct errors.New
+	// values would fall back to identity comparison and fail.
+	repoBoom := errors.New("database boom")
 
 	tests := []struct {
 		name      string
@@ -57,8 +61,8 @@ func TestService_UpdateCashflowConfig(t *testing.T) {
 		{
 			name:    "repo error propagates",
 			cfg:     &campaigns.CashflowConfig{CapitalBudgetCents: 1, CashBufferCents: 1},
-			repoErr: errors.New("database boom"),
-			wantErr: errors.New("database boom"),
+			repoErr: repoBoom,
+			wantErr: repoBoom, // same instance so errors.Is passes even if the service wraps
 		},
 	}
 
@@ -79,12 +83,8 @@ func TestService_UpdateCashflowConfig(t *testing.T) {
 				if err == nil {
 					t.Fatalf("expected error %q, got nil", tt.wantErr)
 				}
-				if errors.Is(tt.wantErr, campaigns.ErrInvalidCashflowConfig) {
-					if !errors.Is(err, campaigns.ErrInvalidCashflowConfig) {
-						t.Fatalf("expected ErrInvalidCashflowConfig, got %v", err)
-					}
-				} else if err.Error() != tt.wantErr.Error() {
-					t.Fatalf("expected error %q, got %q", tt.wantErr, err)
+				if !errors.Is(err, tt.wantErr) {
+					t.Fatalf("expected error wrapping %v, got %v", tt.wantErr, err)
 				}
 				return
 			}

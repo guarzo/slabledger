@@ -14,8 +14,11 @@ interface InvoiceReadinessPanelProps {
 export default function InvoiceReadinessPanel({ capital }: InvoiceReadinessPanelProps) {
   if (!capital) return null;
 
-  // Empty state: no upcoming invoice (everything paid, or new account).
-  if (!capital.nextInvoiceDate || capital.nextInvoiceAmountCents === 0) {
+  // Empty state: no money owed. Keyed only on the amount so that invoices
+  // with a missing nextInvoiceDate (data-entry edge case) still render as
+  // long as there's an amount to show. The nextInvoiceDate block below is
+  // already guarded against the missing value.
+  if ((capital.nextInvoiceAmountCents ?? 0) === 0) {
     return (
       <div className="h-full p-4 bg-[var(--surface-1)] rounded-xl border border-[var(--surface-2)]">
         <h3 className="text-sm font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-3">

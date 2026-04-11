@@ -48,8 +48,12 @@ func ComputeInvoiceProjection(
 		dueDate time.Time
 	}
 
-	// Truncate "now" to a date-only value so daysUntilDue is whole days.
-	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	// Both "today" and each parsed due date are normalized to UTC calendar
+	// midnights. Using UTC here is intentional: the difference is measured in
+	// whole calendar days, and UTC sidesteps DST transitions which would
+	// otherwise undercount or overcount by one day on local-tz inputs.
+	todayY, todayM, todayD := now.Date()
+	today := time.Date(todayY, todayM, todayD, 0, 0, 0, 0, time.UTC)
 
 	candidates := make([]candidate, 0, len(invoices))
 	for _, inv := range invoices {
@@ -59,7 +63,7 @@ func ComputeInvoiceProjection(
 		if inv.DueDate == "" {
 			continue
 		}
-		due, err := time.ParseInLocation(dueDateLayout, inv.DueDate, now.Location())
+		due, err := time.ParseInLocation(dueDateLayout, inv.DueDate, time.UTC)
 		if err != nil {
 			continue
 		}

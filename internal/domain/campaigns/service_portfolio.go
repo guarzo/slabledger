@@ -228,10 +228,77 @@ func (s *service) GetPortfolioInsights(ctx context.Context) (*PortfolioInsights,
 
 // --- Campaign Suggestions ---
 
+// computeChannelHealthByCampaign walks a pre-fetched slice of purchase/sale
+// records and returns per-campaign liquidation and marketplace signals. It
+// mirrors the per-campaign semantics of computeChannelHealthSignals but
+// operates on a single bulk dataset, so GetCampaignSuggestions can derive
+// every campaign's health from one GetAllPurchasesWithSales call instead of
+// calling GetPurchasesWithSales once per campaign (the N+1 pattern that
+// GetPortfolioHealth produces).
+//
+// The returned CampaignHealth entries are intentionally partial: they carry
+// only the fields the liquidation-aware buy-terms rule consumes
+// (CampaignID, LiquidationLossCents, LiquidationSaleCount, EbayChannelMarginPct).
+// Callers that need the full health view (ROI, HealthStatus, etc.) must still
+// use GetPortfolioHealth.
+func computeChannelHealthByCampaign(data []PurchaseWithSale) map[string]CampaignHealth {
+	type agg struct {
+		liquidationLossCents int
+		liquidationSaleCount int
+		marketplaceRevenue   int
+		marketplaceNetProfit int
+	}
+	byCampaign := make(map[string]*agg)
+	for _, d := range data {
+		if d.Sale == nil {
+			continue
+		}
+		cid := d.Purchase.CampaignID
+		bucket, ok := byCampaign[cid]
+		if !ok {
+			bucket = &agg{}
+			byCampaign[cid] = bucket
+		}
+		switch d.Sale.SaleChannel {
+		case SaleChannelInPerson, SaleChannelCardShow:
+			if d.Sale.NetProfitCents < 0 {
+				bucket.liquidationLossCents += d.Sale.NetProfitCents
+				bucket.liquidationSaleCount++
+			}
+		case SaleChannelEbay, SaleChannelTCGPlayer:
+			bucket.marketplaceRevenue += d.Sale.SalePriceCents
+			bucket.marketplaceNetProfit += d.Sale.NetProfitCents
+		}
+	}
+	result := make(map[string]CampaignHealth, len(byCampaign))
+	for cid, b := range byCampaign {
+		margin := 0.0
+		if b.marketplaceRevenue > 0 {
+			margin = float64(b.marketplaceNetProfit) / float64(b.marketplaceRevenue)
+		}
+		result[cid] = CampaignHealth{
+			CampaignID:           cid,
+			LiquidationLossCents: b.liquidationLossCents,
+			LiquidationSaleCount: b.liquidationSaleCount,
+			EbayChannelMarginPct: margin,
+		}
+	}
+	return result
+}
+
 func (s *service) GetCampaignSuggestions(ctx context.Context) (*SuggestionsResponse, error) {
-	insights, err := s.GetPortfolioInsights(ctx)
+	// Single bulk fetch of purchase/sale data — reused for both portfolio
+	// insights and the per-campaign liquidation health map below, replacing
+	// the previous N+1 pattern where GetPortfolioHealth called
+	// GetPurchasesWithSales once per campaign.
+	data, err := s.repo.GetAllPurchasesWithSales(ctx, WithExcludeArchived())
 	if err != nil {
-		return nil, fmt.Errorf("portfolio insights: %w", err)
+		return nil, fmt.Errorf("all purchases with sales: %w", err)
+	}
+
+	channelPNL, err := s.repo.GetGlobalPNLByChannel(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("global channel PNL: %w", err)
 	}
 
 	campaigns, err := s.repo.ListCampaigns(ctx, false)
@@ -239,20 +306,8 @@ func (s *service) GetCampaignSuggestions(ctx context.Context) (*SuggestionsRespo
 		return nil, fmt.Errorf("list campaigns: %w", err)
 	}
 
-	// Portfolio health feeds the liquidation-aware buy-terms rule. Failure
-	// here is non-fatal: we degrade to running suggestions without health.
-	healthByCampaign := make(map[string]CampaignHealth)
-	health, err := s.GetPortfolioHealth(ctx)
-	if err != nil {
-		if s.logger != nil {
-			s.logger.Warn(ctx, "campaign suggestions: portfolio health unavailable, liquidation rule will skip",
-				observability.Err(err))
-		}
-	} else {
-		for _, h := range health.Campaigns {
-			healthByCampaign[h.CampaignID] = h
-		}
-	}
+	insights := computePortfolioInsights(data, channelPNL, campaigns)
+	healthByCampaign := computeChannelHealthByCampaign(data)
 
 	return GenerateSuggestions(ctx, insights, campaigns, healthByCampaign), nil
 }

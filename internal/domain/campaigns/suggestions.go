@@ -113,7 +113,7 @@ func GenerateSuggestions(ctx context.Context, insights *PortfolioInsights, campa
 	resp.NewCampaigns = append(resp.NewCampaigns, suggestGradeSweetSpot(ctx, insights, campaigns)...)
 	resp.NewCampaigns = append(resp.NewCampaigns, suggestCoverageGapCampaigns(ctx, insights)...)
 	resp.Adjustments = append(resp.Adjustments, suggestChannelInformedBuyTerms(ctx, insights, campaigns, now)...)
-	resp.Adjustments = append(resp.Adjustments, suggestBuyTermsFromLiquidation(campaigns, healthByCampaign)...)
+	resp.Adjustments = append(resp.Adjustments, suggestBuyTermsFromLiquidation(ctx, campaigns, healthByCampaign)...)
 	resp.Adjustments = append(resp.Adjustments, suggestSpendCapRebalancing(ctx, insights, campaigns)...)
 	resp.Adjustments = append(resp.Adjustments, suggestCharacterAdjustments(ctx, insights, campaigns)...)
 	resp.Adjustments = append(resp.Adjustments, suggestPhaseTransitions(ctx, insights, campaigns)...)

@@ -250,7 +250,7 @@ func suggestChannelInformedBuyTerms(_ context.Context, insights *PortfolioInsigh
 // Distinct from suggestChannelInformedBuyTerms: that rule reacts to portfolio-
 // wide realized margin vs. target; this rule reacts to actual strictly-negative
 // inperson/cardshow sales on a specific campaign.
-func suggestBuyTermsFromLiquidation(campaigns []Campaign, healthByCampaign map[string]CampaignHealth) []CampaignSuggestion {
+func suggestBuyTermsFromLiquidation(_ context.Context, campaigns []Campaign, healthByCampaign map[string]CampaignHealth) []CampaignSuggestion {
 	if len(healthByCampaign) == 0 {
 		return nil
 	}
