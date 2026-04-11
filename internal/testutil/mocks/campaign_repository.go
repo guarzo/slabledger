@@ -617,6 +617,20 @@ func (m *MockCampaignRepository) SumPurchaseCostByInvoiceDate(_ context.Context,
 	return total, nil
 }
 
+func (m *MockCampaignRepository) GetPendingReceiptByInvoiceDate(_ context.Context, invoiceDates []string) (map[string]int, error) {
+	result := make(map[string]int)
+	dateSet := make(map[string]bool)
+	for _, d := range invoiceDates {
+		dateSet[d] = true
+	}
+	for _, p := range m.Purchases {
+		if dateSet[p.InvoiceDate] && !p.WasRefunded && p.ReceivedAt == nil {
+			result[p.InvoiceDate] += p.BuyCostCents
+		}
+	}
+	return result, nil
+}
+
 func (m *MockCampaignRepository) GetCashflowConfig(_ context.Context) (*campaigns.CashflowConfig, error) {
 	return &campaigns.CashflowConfig{CapitalBudgetCents: 5000000, CashBufferCents: 1000000}, nil
 }
