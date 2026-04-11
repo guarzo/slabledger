@@ -231,15 +231,16 @@ func DHCardKey(cardName, setName, cardNumber string) string {
 
 // Invoice tracks a PSA invoice cycle for capital exposure management.
 type Invoice struct {
-	ID          string    `json:"id"`
-	InvoiceDate string    `json:"invoiceDate"`
-	TotalCents  int       `json:"totalCents"`
-	PaidCents   int       `json:"paidCents"`
-	DueDate     string    `json:"dueDate,omitempty"`
-	PaidDate    string    `json:"paidDate,omitempty"`
-	Status      string    `json:"status"` // "unpaid", "partial", "paid"
-	CreatedAt   time.Time `json:"createdAt"`
-	UpdatedAt   time.Time `json:"updatedAt"`
+	ID                  string    `json:"id"`
+	InvoiceDate         string    `json:"invoiceDate"`
+	TotalCents          int       `json:"totalCents"`
+	PaidCents           int       `json:"paidCents"`
+	PendingReceiptCents int       `json:"pendingReceiptCents"`
+	DueDate             string    `json:"dueDate,omitempty"`
+	PaidDate            string    `json:"paidDate,omitempty"`
+	Status              string    `json:"status"` // "unpaid", "partial", "paid"
+	CreatedAt           time.Time `json:"createdAt"`
+	UpdatedAt           time.Time `json:"updatedAt"`
 }
 
 // CashflowConfig holds capital allocation and cash management settings.
