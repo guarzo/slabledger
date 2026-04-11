@@ -150,97 +150,110 @@ func TestHandleGetCached(t *testing.T) {
 
 // --- HandleRefreshTrigger ---
 
-func TestHandleRefreshTrigger_NoCacheStore(t *testing.T) {
-	h := newAdvisorHandler(&mocks.MockAdvisorService{}, nil)
-
-	req := httptest.NewRequest(http.MethodPost, "/api/advisor/refresh/digest", nil)
-	req = withUser(req)
-	req.SetPathValue("type", "digest")
-	rec := httptest.NewRecorder()
-	h.HandleRefreshTrigger(rec, req)
-
-	if rec.Code != http.StatusServiceUnavailable {
-		t.Fatalf("expected 503, got %d", rec.Code)
-	}
-}
-
-func TestHandleRefreshTrigger_Acquired(t *testing.T) {
-	svc := &mocks.MockAdvisorService{
-		CollectDigestFn: func(_ context.Context) (string, error) {
-			return "digest content", nil
+func TestHandleRefreshTrigger(t *testing.T) {
+	tests := []struct {
+		name       string
+		pathType   string
+		setupSvc   func() *mocks.MockAdvisorService
+		setupCache func() advisor.CacheStore
+		waitBg     bool
+		wantCode   int
+		checkBody  func(t *testing.T, rec *httptest.ResponseRecorder)
+	}{
+		{
+			name:       "no cache store returns 503",
+			pathType:   "digest",
+			setupSvc:   func() *mocks.MockAdvisorService { return &mocks.MockAdvisorService{} },
+			setupCache: func() advisor.CacheStore { return nil },
+			wantCode:   http.StatusServiceUnavailable,
+		},
+		{
+			name:     "acquired returns 202 with status=running",
+			pathType: "digest",
+			setupSvc: func() *mocks.MockAdvisorService {
+				return &mocks.MockAdvisorService{
+					CollectDigestFn: func(_ context.Context) (string, error) {
+						return "digest content", nil
+					},
+				}
+			},
+			setupCache: func() advisor.CacheStore {
+				return &mocks.MockCacheStore{
+					AcquireRefreshFn: func(_ context.Context, _ advisor.AnalysisType) (string, bool, error) {
+						return "lease-1", true, nil
+					},
+					SaveResultFn: func(_ context.Context, _ advisor.AnalysisType, _, _, _ string) error {
+						return nil
+					},
+				}
+			},
+			waitBg:   true,
+			wantCode: http.StatusAccepted,
+			checkBody: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				t.Helper()
+				var result map[string]string
+				if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+					t.Fatalf("decode: %v", err)
+				}
+				if result["status"] != string(advisor.StatusRunning) {
+					t.Errorf("expected status=running, got %q", result["status"])
+				}
+			},
+		},
+		{
+			name:     "already running returns 200 with status=running",
+			pathType: "digest",
+			setupSvc: func() *mocks.MockAdvisorService { return &mocks.MockAdvisorService{} },
+			setupCache: func() advisor.CacheStore {
+				return &mocks.MockCacheStore{
+					AcquireRefreshFn: func(_ context.Context, _ advisor.AnalysisType) (string, bool, error) {
+						return "", false, nil
+					},
+					ForceAcquireStaleFn: func(_ context.Context, _ advisor.AnalysisType, _ time.Duration) (string, bool, error) {
+						return "", false, nil
+					},
+				}
+			},
+			wantCode: http.StatusOK,
+			checkBody: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				t.Helper()
+				var result map[string]string
+				if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+					t.Fatalf("decode: %v", err)
+				}
+				if result["status"] != string(advisor.StatusRunning) {
+					t.Errorf("expected status=running, got %q", result["status"])
+				}
+			},
+		},
+		{
+			name:       "invalid type returns 400",
+			pathType:   "badtype",
+			setupSvc:   func() *mocks.MockAdvisorService { return &mocks.MockAdvisorService{} },
+			setupCache: func() advisor.CacheStore { return &mocks.MockCacheStore{} },
+			wantCode:   http.StatusBadRequest,
 		},
 	}
-	cache := &mocks.MockCacheStore{
-		AcquireRefreshFn: func(_ context.Context, _ advisor.AnalysisType) (string, bool, error) {
-			return "lease-1", true, nil
-		},
-		SaveResultFn: func(_ context.Context, _ advisor.AnalysisType, _, _, _ string) error {
-			return nil
-		},
-	}
-	h := newAdvisorHandler(svc, cache)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/advisor/refresh/digest", nil)
-	req = withUser(req)
-	req.SetPathValue("type", "digest")
-	rec := httptest.NewRecorder()
-	h.HandleRefreshTrigger(rec, req)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newAdvisorHandler(tc.setupSvc(), tc.setupCache())
+			req := httptest.NewRequest(http.MethodPost, "/api/advisor/refresh/"+tc.pathType, nil)
+			req = withUser(req)
+			req.SetPathValue("type", tc.pathType)
+			rec := httptest.NewRecorder()
+			h.HandleRefreshTrigger(rec, req)
+			if tc.waitBg {
+				h.Wait()
+			}
 
-	// Wait for background goroutine to finish
-	h.Wait()
-
-	if rec.Code != http.StatusAccepted {
-		t.Fatalf("expected 202, got %d; body: %s", rec.Code, rec.Body.String())
-	}
-	var result map[string]string
-	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if result["status"] != string(advisor.StatusRunning) {
-		t.Errorf("expected status=running, got %q", result["status"])
-	}
-}
-
-func TestHandleRefreshTrigger_AlreadyRunning(t *testing.T) {
-	cache := &mocks.MockCacheStore{
-		AcquireRefreshFn: func(_ context.Context, _ advisor.AnalysisType) (string, bool, error) {
-			return "", false, nil // not acquired - already running
-		},
-		ForceAcquireStaleFn: func(_ context.Context, _ advisor.AnalysisType, _ time.Duration) (string, bool, error) {
-			return "", false, nil // also not stale
-		},
-	}
-	h := newAdvisorHandler(&mocks.MockAdvisorService{}, cache)
-
-	req := httptest.NewRequest(http.MethodPost, "/api/advisor/refresh/digest", nil)
-	req = withUser(req)
-	req.SetPathValue("type", "digest")
-	rec := httptest.NewRecorder()
-	h.HandleRefreshTrigger(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d; body: %s", rec.Code, rec.Body.String())
-	}
-	var result map[string]string
-	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if result["status"] != string(advisor.StatusRunning) {
-		t.Errorf("expected status=running, got %q", result["status"])
-	}
-}
-
-func TestHandleRefreshTrigger_InvalidType(t *testing.T) {
-	h := newAdvisorHandler(&mocks.MockAdvisorService{}, &mocks.MockCacheStore{})
-
-	req := httptest.NewRequest(http.MethodPost, "/api/advisor/refresh/badtype", nil)
-	req = withUser(req)
-	req.SetPathValue("type", "badtype")
-	rec := httptest.NewRecorder()
-	h.HandleRefreshTrigger(rec, req)
-
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d", rec.Code)
+			if rec.Code != tc.wantCode {
+				t.Fatalf("expected %d, got %d; body: %s", tc.wantCode, rec.Code, rec.Body.String())
+			}
+			if tc.checkBody != nil {
+				tc.checkBody(t, rec)
+			}
+		})
 	}
 }
 
