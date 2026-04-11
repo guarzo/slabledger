@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/guarzo/slabledger/internal/adapters/clients/cardutil"
 	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/domain/pricing"
+	"github.com/guarzo/slabledger/internal/platform/cardutil"
 )
 
 // PriceRefreshScheduler refreshes prices for unsold inventory cards.
