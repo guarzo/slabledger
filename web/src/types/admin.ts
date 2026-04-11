@@ -15,8 +15,34 @@ export interface AdminUser {
 }
 
 // ---------------------------------------------------------------------------
+// Integration diagnostics (shared MM + CL shape)
+// ---------------------------------------------------------------------------
+
+export interface IntegrationFailureSample {
+  purchaseId: string;
+  certNumber: string;
+  cardName: string;
+  reason: string;
+  errorAt: string;
+}
+
+export interface IntegrationFailuresReport {
+  byReason: Record<string, number>;
+  samples: IntegrationFailureSample[] | null;
+}
+
+// ---------------------------------------------------------------------------
 // Card Ladder types
 // ---------------------------------------------------------------------------
+
+export interface CLPriceStats {
+  unsoldTotal: number;
+  withCLValue: number;
+  syncedCount: number;
+  oldestUpdate: string;
+  newestUpdate: string;
+  staleCount: number;
+}
 
 export interface CLLastRun {
   lastRunAt: string;
@@ -27,6 +53,10 @@ export interface CLLastRun {
   totalCLCards: number;
   cardsPushed: number;
   cardsRemoved: number;
+  orphanMappings: number;
+  noImageMatch: number;
+  noCertMatch: number;
+  noValue: number;
 }
 
 export interface CLStatusResponse {
@@ -34,6 +64,7 @@ export interface CLStatusResponse {
   email?: string;
   collectionId?: string;
   cardsMapped?: number;
+  priceStats?: CLPriceStats;
   lastRun?: CLLastRun;
 }
 
@@ -76,6 +107,10 @@ export interface MMLastRun {
   skipped: number;
   searchFailed: number;
   totalPurchases: number;
+  tokenMismatches: number;
+  noSalesData: number;
+  uploadedLastRun: number;
+  deletedLastRun: number;
 }
 
 export interface MMStatusResponse {

@@ -3,8 +3,6 @@ package scheduler
 import (
 	"context"
 	"fmt"
-	"math"
-	"strings"
 	"sync"
 	"time"
 
@@ -27,17 +25,36 @@ type MMValueUpdater interface {
 	UpdatePurchaseMMValue(ctx context.Context, purchaseID string, mmValueCents int) error
 	// UpdatePurchaseMMSignals updates all MM signals in one statement (used by the scheduler).
 	UpdatePurchaseMMSignals(ctx context.Context, id string, mmValueCents int, mmTrendPct float64, mmSales30d, mmActiveLowCents int) error
+	// UpdatePurchaseMMError records or clears the last mapping/pricing failure reason.
+	// Pass reason="" and reasonAt="" to clear on success.
+	UpdatePurchaseMMError(ctx context.Context, id, reason, reasonAt string) error
 }
+
+// MM failure reason tags. Short, stable strings — not free-form messages —
+// so the /failures admin endpoint can group and display them.
+const (
+	MMReasonNoCardName        = "no_card_name"
+	MMReasonNoCertResults     = "no_cert_results"
+	MMReasonCertTokenMismatch = "cert_token_mismatch"
+	MMReasonNoNameResults     = "no_name_results"
+	MMReasonNameTokenMismatch = "name_token_mismatch"
+	MMReasonNoSalesData       = "no_30d_sales"
+	MMReasonAPIError          = "api_error"
+)
 
 // MMRunStats holds the counters from the most recent Market Movers refresh run.
 type MMRunStats struct {
-	LastRunAt      time.Time `json:"lastRunAt"`
-	DurationMs     int64     `json:"durationMs"`
-	Updated        int       `json:"updated"`
-	NewMappings    int       `json:"newMappings"`
-	Skipped        int       `json:"skipped"`
-	SearchFailed   int       `json:"searchFailed"`
-	TotalPurchases int       `json:"totalPurchases"`
+	LastRunAt       time.Time `json:"lastRunAt"`
+	DurationMs      int64     `json:"durationMs"`
+	Updated         int       `json:"updated"`
+	NewMappings     int       `json:"newMappings"`
+	Skipped         int       `json:"skipped"`
+	SearchFailed    int       `json:"searchFailed"`
+	TotalPurchases  int       `json:"totalPurchases"`
+	TokenMismatches int       `json:"tokenMismatches"` // cert or name search returned hits but all rejected by tokenMatchesTitle
+	NoSalesData     int       `json:"noSalesData"`     // mapping existed but 30-day avg was 0
+	UploadedLastRun int       `json:"uploadedLastRun"` // placeholder: MM refresh never auto-pushes today
+	DeletedLastRun  int       `json:"deletedLastRun"`  // placeholder: MM refresh never auto-deletes today
 }
 
 // MarketMoversRefreshScheduler refreshes MM values from the Market Movers API daily.
@@ -163,7 +180,10 @@ func (s *MarketMoversRefreshScheduler) runOnce(ctx context.Context) error {
 		mappingByCert[m.SlabSerial] = m
 	}
 
-	updated, mapped, skipped, searchFailed := 0, 0, 0, 0
+	var counts struct {
+		updated, mapped, skipped, searchFailed int
+		tokenMismatches, noSalesData           int
+	}
 
 	// Look back 30 days for daily stats
 	dateFrom := time.Now().UTC().AddDate(0, 0, -30)
@@ -180,16 +200,21 @@ func (s *MarketMoversRefreshScheduler) runOnce(ctx context.Context) error {
 		// Resolve collectible ID — use cached mapping or search the API
 		mapping, hasCached := mappingByCert[p.CertNumber]
 		if !hasCached {
-			cid, mid, searchTitle, err := s.resolveCollectibleID(ctx, p)
+			cid, mid, searchTitle, reason, err := s.resolveCollectibleID(ctx, p)
 			if err != nil {
 				s.logger.Warn(ctx, "MM refresh: failed to resolve collectible ID",
 					observability.String("cert", p.CertNumber),
 					observability.Err(err))
-				searchFailed++
+				counts.searchFailed++
+				s.recordMMError(ctx, p.ID, MMReasonAPIError)
 				continue
 			}
 			if cid == 0 {
-				skipped++
+				counts.skipped++
+				if reason == MMReasonCertTokenMismatch || reason == MMReasonNameTokenMismatch {
+					counts.tokenMismatches++
+				}
+				s.recordMMError(ctx, p.ID, reason)
 				continue
 			}
 			mapping = sqlite.MMCardMapping{SlabSerial: p.CertNumber, MMCollectibleID: cid, MasterID: mid, SearchTitle: searchTitle}
@@ -199,7 +224,7 @@ func (s *MarketMoversRefreshScheduler) runOnce(ctx context.Context) error {
 					observability.Err(err))
 			} else {
 				mappingByCert[p.CertNumber] = mapping
-				mapped++
+				counts.mapped++
 			}
 		}
 
@@ -210,11 +235,17 @@ func (s *MarketMoversRefreshScheduler) runOnce(ctx context.Context) error {
 				observability.String("cert", p.CertNumber),
 				observability.Int64("collectibleId", mapping.MMCollectibleID),
 				observability.Err(err))
+			s.recordMMError(ctx, p.ID, MMReasonAPIError)
 			continue
 		}
 
 		avgPrice, trendPct, sales30d := computeMMSignals(stats.DailyStats)
 		if avgPrice <= 0 {
+			// Mapping exists but no sales data in the 30-day window. Persist so
+			// admin UI can show "mapped but no price" cards distinct from
+			// "unmappable" cards.
+			counts.noSalesData++
+			s.recordMMError(ctx, p.ID, MMReasonNoSalesData)
 			continue
 		}
 
@@ -225,87 +256,61 @@ func (s *MarketMoversRefreshScheduler) runOnce(ctx context.Context) error {
 			s.logger.Warn(ctx, "MM refresh: failed to update MM signals",
 				observability.String("cert", p.CertNumber),
 				observability.Err(err))
+			s.recordMMError(ctx, p.ID, MMReasonAPIError)
 			continue
 		}
-		updated++
+		counts.updated++
+		// Clear any prior error on this purchase now that it's successfully priced.
+		s.recordMMError(ctx, p.ID, "")
 	}
 
 	s.logger.Info(ctx, "MM refresh: complete",
-		observability.Int("updated", updated),
-		observability.Int("newMappings", mapped),
-		observability.Int("skipped", skipped),
-		observability.Int("searchFailed", searchFailed),
+		observability.Int("updated", counts.updated),
+		observability.Int("newMappings", counts.mapped),
+		observability.Int("skipped", counts.skipped),
+		observability.Int("tokenMismatches", counts.tokenMismatches),
+		observability.Int("noSalesData", counts.noSalesData),
+		observability.Int("searchFailed", counts.searchFailed),
 		observability.Int("totalPurchases", len(purchases)))
 
 	s.statsMu.Lock()
 	s.lastRunStats = &MMRunStats{
-		LastRunAt:      start,
-		DurationMs:     time.Since(start).Milliseconds(),
-		Updated:        updated,
-		NewMappings:    mapped,
-		Skipped:        skipped,
-		SearchFailed:   searchFailed,
-		TotalPurchases: len(purchases),
+		LastRunAt:       start,
+		DurationMs:      time.Since(start).Milliseconds(),
+		Updated:         counts.updated,
+		NewMappings:     counts.mapped,
+		Skipped:         counts.skipped,
+		SearchFailed:    counts.searchFailed,
+		TotalPurchases:  len(purchases),
+		TokenMismatches: counts.tokenMismatches,
+		NoSalesData:     counts.noSalesData,
 	}
 	s.statsMu.Unlock()
 
 	return nil
 }
 
-// tokenMatchesTitle checks whether a card name and an MM SearchTitle refer to the same card
-// using tokenized matching. Instead of requiring the full card name as a substring of the
-// search title (which fails when PSA titles like "2022 POKEMON SWORD & SHIELD BRILLIANT STARS
-// CHARIZARD VSTAR" don't match MM's normalized "Charizard VSTAR 2022 Brilliant Stars PSA 10"),
-// this splits both strings into tokens and checks that a sufficient proportion of significant
-// card-name tokens appear in the search title.
-//
-// Tokens shorter than 3 characters and common noise words are ignored. The match threshold
-// is 60% of significant tokens (minimum 2 matches).
-func tokenMatchesTitle(cardName, searchTitle string) bool {
-	titleLower := strings.ToLower(searchTitle)
-	titleTokens := strings.Fields(titleLower)
-	titleSet := make(map[string]bool, len(titleTokens))
-	for _, t := range titleTokens {
-		titleSet[t] = true
+// recordMMError persists a failure reason (or clears it when reason=="") on a
+// purchase. Never fails the refresh loop — diagnostics are best-effort — but
+// the admin UI depends on these rows, so a persistence failure is logged at
+// Warn level so operators see it.
+func (s *MarketMoversRefreshScheduler) recordMMError(ctx context.Context, purchaseID, reason string) {
+	var reasonAt string
+	if reason != "" {
+		reasonAt = time.Now().UTC().Format(time.RFC3339)
 	}
-
-	cardTokens := strings.Fields(strings.ToLower(cardName))
-
-	var significant, matched int
-	for _, tok := range cardTokens {
-		if len(tok) < 3 || noiseWords[tok] {
-			continue
-		}
-		significant++
-		if titleSet[tok] {
-			matched++
-		}
+	if err := s.valueUpdater.UpdatePurchaseMMError(ctx, purchaseID, reason, reasonAt); err != nil {
+		s.logger.Warn(ctx, "MM refresh: failed to persist error reason",
+			observability.String("purchaseId", purchaseID),
+			observability.String("reason", reason),
+			observability.Err(err))
 	}
-
-	if significant == 0 {
-		// No significant tokens — fall back to plain contains.
-		return strings.Contains(titleLower, strings.ToLower(cardName))
-	}
-
-	// For 1-2 significant tokens, require all to match (exact match threshold).
-	// For 3+ tokens, require at least 60% to match (fuzzy matching for long PSA titles).
-	if significant <= 2 {
-		return matched == significant
-	}
-	return matched >= 2 && float64(matched)/float64(significant) >= 0.6
-}
-
-// noiseWords are common tokens in PSA listing titles that are often absent, reformatted,
-// or abbreviated in MM search titles — excluded from token matching.
-var noiseWords = map[string]bool{
-	"pokemon": true, "pokémon": true,
-	"the": true, "and": true, "for": true, "with": true,
-	"holo": true, "card": true, "cards": true,
 }
 
 // resolveCollectibleID searches Market Movers for the card and returns its collectible ID,
 // master ID (grade-agnostic variant identifier, 0 if unknown), and the canonical SearchTitle.
-// Returns (0, 0, "", nil) if no suitable result is found.
+// When the search yields nothing usable, collectibleID is 0 and reason is set to one of
+// the MMReason* constants so the caller can persist it for the admin UI.
 //
 // Strategy:
 //  1. Search by cert number — we embed the cert in the MM export Notes column, and MM
@@ -315,14 +320,16 @@ var noiseWords = map[string]bool{
 //
 // Any candidate returned by either path is validated via tokenized title matching (see
 // tokenMatchesTitle) before the ID is cached.
-func (s *MarketMoversRefreshScheduler) resolveCollectibleID(ctx context.Context, p *campaigns.Purchase) (collectibleID, masterID int64, searchTitle string, err error) {
+func (s *MarketMoversRefreshScheduler) resolveCollectibleID(ctx context.Context, p *campaigns.Purchase) (collectibleID, masterID int64, searchTitle, reason string, err error) {
 	if p.CardName == "" {
-		return 0, 0, "", nil
+		return 0, 0, "", MMReasonNoCardName, nil
 	}
 
-	// 1. Try cert number first.
+	// 1. Try cert number first. Cert-search miss is NOT terminal — fall through
+	// to name search so we still get a chance to map.
+	certReason := ""
 	if p.CertNumber != "" {
-		cid, mid, title, cerr := s.searchByCert(ctx, p)
+		cid, mid, title, r, cerr := s.searchByCert(ctx, p)
 		if cerr != nil {
 			s.logger.Warn(ctx, "MM: cert-based search failed, falling back to name search",
 				observability.String("cert", p.CertNumber),
@@ -331,34 +338,56 @@ func (s *MarketMoversRefreshScheduler) resolveCollectibleID(ctx context.Context,
 			s.logger.Info(ctx, "MM: resolved collectible via cert search",
 				observability.String("cert", p.CertNumber),
 				observability.Int64("collectibleId", cid))
-			return cid, mid, title, nil
+			return cid, mid, title, "", nil
+		} else {
+			certReason = r
 		}
 	}
 
 	// 2. Fall back to name + grade search with relevance validation.
-	return s.searchByNameGrade(ctx, p)
+	cid, mid, title, nameReason, err := s.searchByNameGrade(ctx, p)
+	if err != nil || cid != 0 {
+		return cid, mid, title, "", err
+	}
+
+	// Both paths failed. Prefer the more specific token-mismatch reason
+	// (which tells us MM DID have candidates) over the no-results reason.
+	combined := nameReason
+	if certReason == MMReasonCertTokenMismatch || nameReason == "" {
+		combined = certReason
+	}
+	return 0, 0, "", combined, nil
 }
 
-// searchByCert searches MM using the PSA cert number as the query.
-// Returns the collectible ID, master ID, and SearchTitle of the first hit whose
-// SearchTitle contains the card name, or (0, 0, "", nil) if no matching result is found.
-func (s *MarketMoversRefreshScheduler) searchByCert(ctx context.Context, p *campaigns.Purchase) (collectibleID, masterID int64, searchTitle string, err error) {
+// searchByCert searches MM using the PSA cert number as the query. Returns a
+// reason code when no usable result is found (0 results vs. all-rejected).
+func (s *MarketMoversRefreshScheduler) searchByCert(ctx context.Context, p *campaigns.Purchase) (collectibleID, masterID int64, searchTitle, reason string, err error) {
 	results, err := s.getClient().SearchCollectibles(ctx, p.CertNumber, 0, 3)
 	if err != nil {
-		return 0, 0, "", fmt.Errorf("search by cert: %w", err)
+		return 0, 0, "", "", fmt.Errorf("search by cert: %w", err)
+	}
+	if len(results.Items) == 0 {
+		return 0, 0, "", MMReasonNoCertResults, nil
 	}
 	for _, r := range results.Items {
 		if tokenMatchesTitle(p.CardName, r.Item.SearchTitle) {
-			return r.Item.ID, r.Item.MasterID, r.Item.SearchTitle, nil
+			return r.Item.ID, r.Item.MasterID, r.Item.SearchTitle, "", nil
 		}
 	}
-	return 0, 0, "", nil
+	// Promoted from Debug: this is the evidence we need to calibrate
+	// tokenMatchesTitle in the follow-up fix PR.
+	s.logger.Info(ctx, "MM: cert search all results rejected by token match",
+		observability.String("cert", p.CertNumber),
+		observability.String("cardName", p.CardName),
+		observability.String("sampleResultTitle", results.Items[0].Item.SearchTitle),
+		observability.Int("resultCount", len(results.Items)))
+	return 0, 0, "", MMReasonCertTokenMismatch, nil
 }
 
 // searchByNameGrade searches MM using "{CardName} {Grader} {Grade}" and validates
 // that the top result's SearchTitle contains the card name before returning the IDs.
-// Returns (0, 0, "", nil) if no relevant result is found.
-func (s *MarketMoversRefreshScheduler) searchByNameGrade(ctx context.Context, p *campaigns.Purchase) (collectibleID, masterID int64, searchTitle string, err error) {
+// Returns a reason code when no usable result is found.
+func (s *MarketMoversRefreshScheduler) searchByNameGrade(ctx context.Context, p *campaigns.Purchase) (collectibleID, masterID int64, searchTitle, reason string, err error) {
 	grader := p.Grader
 	if grader == "" {
 		grader = "PSA"
@@ -373,21 +402,23 @@ func (s *MarketMoversRefreshScheduler) searchByNameGrade(ctx context.Context, p 
 
 	results, err := s.getClient().SearchCollectibles(ctx, query, 0, 5)
 	if err != nil {
-		return 0, 0, "", fmt.Errorf("search by name: %w", err)
+		return 0, 0, "", "", fmt.Errorf("search by name: %w", err)
 	}
 	if len(results.Items) == 0 {
-		return 0, 0, "", nil
+		return 0, 0, "", MMReasonNoNameResults, nil
 	}
 
 	// Validate relevance: reject the top result if tokenized matching fails,
 	// since a mismatch means MM returned a completely unrelated card.
 	top := results.Items[0]
 	if !tokenMatchesTitle(p.CardName, top.Item.SearchTitle) {
-		s.logger.Debug(ctx, "MM: name search top result rejected (title mismatch)",
+		// Promoted from Debug: needed to diagnose mapping failures from logs.
+		s.logger.Info(ctx, "MM: name search top result rejected by token match",
 			observability.String("cert", p.CertNumber),
+			observability.String("cardName", p.CardName),
 			observability.String("query", query),
 			observability.String("resultTitle", top.Item.SearchTitle))
-		return 0, 0, "", nil
+		return 0, 0, "", MMReasonNameTokenMismatch, nil
 	}
 
 	s.logger.Info(ctx, "MM: resolved collectible via name search",
@@ -395,48 +426,7 @@ func (s *MarketMoversRefreshScheduler) searchByNameGrade(ctx context.Context, p 
 		observability.String("query", query),
 		observability.String("resultTitle", top.Item.SearchTitle),
 		observability.Int64("collectibleId", top.Item.ID))
-	return top.Item.ID, top.Item.MasterID, top.Item.SearchTitle, nil
-}
-
-// computeMMSignals derives count-weighted average price, 30-day trend %, and total
-// sales volume from a slice of daily stats items.
-// trendPct is (lastDayWithSales.AvgPrice - firstDayWithSales.AvgPrice) / firstDayWithSales.AvgPrice,
-// capped to ±200% to resist single-sale outlier days.
-func computeMMSignals(items []marketmovers.DailyStatItem) (avgPrice float64, trendPct float64, sales30d int) {
-	if len(items) == 0 {
-		return 0, 0, 0
-	}
-
-	var totalAmount float64
-	var totalCount int
-	var firstPrice, lastPrice float64
-
-	for _, item := range items {
-		if item.TotalSalesCount <= 0 {
-			continue
-		}
-		totalAmount += item.TotalSalesAmount
-		totalCount += item.TotalSalesCount
-		if firstPrice == 0 {
-			firstPrice = item.AverageSalePrice
-		}
-		lastPrice = item.AverageSalePrice
-	}
-
-	if totalCount == 0 {
-		return 0, 0, 0
-	}
-
-	avgPrice = totalAmount / float64(totalCount)
-	sales30d = totalCount
-
-	if firstPrice > 0 {
-		raw := (lastPrice - firstPrice) / firstPrice
-		// Cap to ±200% to avoid outlier distortion from single-sale days
-		trendPct = math.Max(-2.0, math.Min(2.0, raw))
-	}
-
-	return avgPrice, trendPct, sales30d
+	return top.Item.ID, top.Item.MasterID, top.Item.SearchTitle, "", nil
 }
 
 // fetchActiveLowCents returns the lowest active Buy-It-Now price for a collectible in cents.

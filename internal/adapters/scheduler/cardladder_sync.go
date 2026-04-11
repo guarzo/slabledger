@@ -116,7 +116,30 @@ func (s *CardLadderRefreshScheduler) removeSoldCards(
 		}
 	}
 
-	removed := 0
+	// Diagnostic: how many mappings does this phase consider "sold"?
+	candidates := 0
+	for _, m := range existingMappings {
+		if !unsoldCerts[m.SlabSerial] {
+			candidates++
+		}
+	}
+
+	removed, remoteDeleteFailed, localDeleteFailed := 0, 0, 0
+
+	// Defer the phase summary so cancelled runs still emit it. The closure
+	// reads the enclosing counter variables, so whatever state we reach —
+	// even an early return on ctx.Done — is captured correctly. The follow-up
+	// PR needs this shape to diagnose orphan mapping sources.
+	defer func() {
+		s.logger.Info(ctx, "CL remove: phase summary",
+			observability.Int("totalMappings", len(existingMappings)),
+			observability.Int("unsoldCerts", len(unsoldCerts)),
+			observability.Int("removalCandidates", candidates),
+			observability.Int("removed", removed),
+			observability.Int("remoteDeleteFailed", remoteDeleteFailed),
+			observability.Int("localDeleteFailed", localDeleteFailed))
+	}()
+
 	for _, m := range existingMappings {
 		if unsoldCerts[m.SlabSerial] {
 			continue // still unsold, keep in CL
@@ -135,6 +158,7 @@ func (s *CardLadderRefreshScheduler) removeSoldCards(
 					observability.String("cert", m.SlabSerial),
 					observability.String("docName", m.CLCollectionCardID),
 					observability.Err(err))
+				remoteDeleteFailed++
 				continue
 			}
 		}
@@ -144,15 +168,12 @@ func (s *CardLadderRefreshScheduler) removeSoldCards(
 			s.logger.Warn(ctx, "CL remove: failed to delete mapping",
 				observability.String("cert", m.SlabSerial),
 				observability.Err(err))
+			localDeleteFailed++
 			continue
 		}
 
 		removed++
 	}
 
-	if removed > 0 {
-		s.logger.Info(ctx, "CL remove: complete",
-			observability.Int("removed", removed))
-	}
 	return removed
 }
