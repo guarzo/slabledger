@@ -6,6 +6,22 @@ import (
 	"fmt"
 )
 
+// IntegrationFailureSample is a single failed-mapping row returned by the
+// /failures admin endpoints. Shared by MM and CL.
+type IntegrationFailureSample struct {
+	PurchaseID string `json:"purchaseId"`
+	CertNumber string `json:"certNumber"`
+	CardName   string `json:"cardName"`
+	Reason     string `json:"reason"`
+	ErrorAt    string `json:"errorAt"`
+}
+
+// IntegrationFailuresReport groups per-purchase failure reasons for an integration.
+type IntegrationFailuresReport struct {
+	ByReason map[string]int             `json:"byReason"`
+	Samples  []IntegrationFailureSample `json:"samples"`
+}
+
 // maxIntegrationFailureSamples caps the sample list returned by
 // queryIntegrationFailures even if a caller passes a larger limit. The
 // HTTP handlers already clamp via parsePagination, but this is
@@ -24,11 +40,14 @@ const maxIntegrationFailureSamples = 200
 // values are constrained to a small allowlist in the per-integration wrappers,
 // so the string interpolation is safe from injection.
 func queryIntegrationFailures(ctx context.Context, db *sql.DB, reasonCol, reasonAtCol string, sampleLimit int) (*IntegrationFailuresReport, error) {
-	if reasonCol != "mm_last_error" && reasonCol != "cl_last_error" {
-		return nil, fmt.Errorf("queryIntegrationFailures: unknown reason column %q", reasonCol)
-	}
-	if reasonAtCol != "mm_last_error_at" && reasonAtCol != "cl_last_error_at" {
-		return nil, fmt.Errorf("queryIntegrationFailures: unknown reason timestamp column %q", reasonAtCol)
+	// Validate reason + reason-timestamp column as a pair so a caller can't mix
+	// mm_last_error with cl_last_error_at or vice versa. The allowlist doubles
+	// as the only-ever safe values for the string interpolation below.
+	switch {
+	case reasonCol == "mm_last_error" && reasonAtCol == "mm_last_error_at":
+	case reasonCol == "cl_last_error" && reasonAtCol == "cl_last_error_at":
+	default:
+		return nil, fmt.Errorf("queryIntegrationFailures: invalid column pair (%q, %q)", reasonCol, reasonAtCol)
 	}
 	if sampleLimit <= 0 || sampleLimit > maxIntegrationFailureSamples {
 		sampleLimit = maxIntegrationFailureSamples

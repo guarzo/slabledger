@@ -17,15 +17,16 @@ const (
 )
 
 // recordCLError persists a failure reason (or clears it when reason=="") on a
-// purchase. Logs warnings but never fails the refresh loop — diagnostics are
-// best-effort.
+// purchase. Never fails the refresh loop — diagnostics are best-effort — but
+// the admin UI depends on these rows, so a persistence failure is logged at
+// Warn level so operators see it.
 func (s *CardLadderRefreshScheduler) recordCLError(ctx context.Context, purchaseID, reason string) {
 	var reasonAt string
 	if reason != "" {
 		reasonAt = time.Now().UTC().Format(time.RFC3339)
 	}
 	if err := s.valueUpdater.UpdatePurchaseCLError(ctx, purchaseID, reason, reasonAt); err != nil {
-		s.logger.Debug(ctx, "CL refresh: failed to persist error reason",
+		s.logger.Warn(ctx, "CL refresh: failed to persist error reason",
 			observability.String("purchaseId", purchaseID),
 			observability.String("reason", reason),
 			observability.Err(err))

@@ -77,10 +77,12 @@ export function MMStatsPanel({ enabled = true }: { enabled?: boolean }) {
         </div>
       )}
 
-      {/* Row 3: diagnostics — only when there are failures worth investigating */}
+      {/* Row 3: diagnostics — only when there are failures worth investigating.
+          searchFailed intentionally lives in row 2 (always visible) so it
+          isn't duplicated here. */}
       {diagnosticsShown && lr && (
         <div className="space-y-2">
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             <SummaryCard
               label="Token Mismatches"
               value={lr.tokenMismatches}
@@ -91,11 +93,6 @@ export function MMStatsPanel({ enabled = true }: { enabled?: boolean }) {
               label="No 30-day Sales"
               value={lr.noSalesData}
               sub="Mapped but no recent price"
-            />
-            <SummaryCard
-              label="API Errors"
-              value={lr.searchFailed}
-              color={lr.searchFailed > 0 ? 'var(--warning)' : undefined}
             />
           </div>
           <button

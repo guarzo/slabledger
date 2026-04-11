@@ -291,15 +291,16 @@ func (s *MarketMoversRefreshScheduler) runOnce(ctx context.Context) error {
 }
 
 // recordMMError persists a failure reason (or clears it when reason=="") on a
-// purchase. Logs warnings but never fails the refresh loop — diagnostics are
-// best-effort.
+// purchase. Never fails the refresh loop — diagnostics are best-effort — but
+// the admin UI depends on these rows, so a persistence failure is logged at
+// Warn level so operators see it.
 func (s *MarketMoversRefreshScheduler) recordMMError(ctx context.Context, purchaseID, reason string) {
 	var reasonAt string
 	if reason != "" {
 		reasonAt = time.Now().UTC().Format(time.RFC3339)
 	}
 	if err := s.valueUpdater.UpdatePurchaseMMError(ctx, purchaseID, reason, reasonAt); err != nil {
-		s.logger.Debug(ctx, "MM refresh: failed to persist error reason",
+		s.logger.Warn(ctx, "MM refresh: failed to persist error reason",
 			observability.String("purchaseId", purchaseID),
 			observability.String("reason", reason),
 			observability.Err(err))

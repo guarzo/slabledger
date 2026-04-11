@@ -1,7 +1,6 @@
 package scheduler
 
 import (
-	"math"
 	"strings"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/marketmovers"
@@ -93,7 +92,7 @@ func computeMMSignals(items []marketmovers.DailyStatItem) (avgPrice float64, tre
 	if firstPrice > 0 {
 		raw := (lastPrice - firstPrice) / firstPrice
 		// Cap to ±200% to avoid outlier distortion from single-sale days
-		trendPct = math.Max(-2.0, math.Min(2.0, raw))
+		trendPct = max(-2.0, min(2.0, raw))
 	}
 
 	return avgPrice, trendPct, sales30d

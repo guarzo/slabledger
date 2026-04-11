@@ -19,7 +19,9 @@ const REASON_DESCRIPTIONS: Record<string, string> = {
   no_name_results: 'Name-based fallback search returned zero MM results',
   name_token_mismatch: 'Name search top result rejected by token match',
   no_30d_sales: 'Card is mapped but has no sales in the last 30 days',
-  api_error: 'MM API returned an error',
+  // Shared — the modal is used for both MM and CL so this description must
+  // be provider-neutral.
+  api_error: 'External API returned an error',
   // Card Ladder
   no_image_match: 'No CL card matched the purchase by image URL or cert',
   no_cert_match: 'Purchase has no cert number to fallback-match',

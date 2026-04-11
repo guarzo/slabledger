@@ -201,6 +201,10 @@ func (s *CardLadderStore) GetCLFailures(ctx context.Context, sampleLimit int) (*
 }
 
 // GetCLPriceStats computes summary statistics about CL value freshness across unsold inventory.
+// SyncedCount counts unsold purchases whose cert currently has a row in
+// cl_card_mappings (i.e. the card is still in the CL remote collection) — more
+// accurate than cl_synced_at, which is a historical push timestamp that never
+// gets cleared when removeSoldCards prunes the mapping.
 func (s *CardLadderStore) GetCLPriceStats(ctx context.Context) (*CLPriceStats, error) {
 	var stats CLPriceStats
 
@@ -209,13 +213,14 @@ func (s *CardLadderStore) GetCLPriceStats(ctx context.Context) (*CLPriceStats, e
 		SELECT
 			COUNT(*) AS unsold_total,
 			COALESCE(SUM(CASE WHEN p.cl_value_cents > 0 THEN 1 ELSE 0 END), 0) AS with_cl_value,
-			COALESCE(SUM(CASE WHEN p.cl_synced_at IS NOT NULL AND p.cl_synced_at != '' THEN 1 ELSE 0 END), 0) AS synced_count,
+			COALESCE(SUM(CASE WHEN m.slab_serial IS NOT NULL THEN 1 ELSE 0 END), 0) AS synced_count,
 			COALESCE(MIN(CASE WHEN p.cl_value_cents > 0 AND p.cl_value_updated_at != '' THEN p.cl_value_updated_at END), '') AS oldest_update,
 			COALESCE(MAX(CASE WHEN p.cl_value_cents > 0 AND p.cl_value_updated_at != '' THEN p.cl_value_updated_at END), '') AS newest_update,
 			COALESCE(SUM(CASE WHEN p.cl_value_cents > 0 AND (p.cl_value_updated_at = '' OR p.cl_value_updated_at < ?) THEN 1 ELSE 0 END), 0) AS stale_count
 		FROM campaign_purchases p
 		INNER JOIN campaigns c ON c.id = p.campaign_id
 		LEFT JOIN campaign_sales s ON s.purchase_id = p.id
+		LEFT JOIN cl_card_mappings m ON m.slab_serial = p.cert_number
 		WHERE s.id IS NULL AND c.phase != 'closed'
 	`, staleCutoff,
 	).Scan(&stats.UnsoldTotal, &stats.WithCLValue, &stats.SyncedCount, &stats.OldestUpdate, &stats.NewestUpdate, &stats.StaleCount)
