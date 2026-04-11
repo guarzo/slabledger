@@ -15,6 +15,10 @@ var _ social.Repository = (*SocialRepository)(nil)
 
 const socialPostColumns = `id, post_type, status, caption, hashtags, cover_title, card_count, instagram_post_id, error_message, created_at, updated_at, slide_urls, background_urls`
 
+// captionPlaceholder is the sentinel value written by generateCaptionAsync while
+// a post's caption is being generated. FetchEligibleDraft excludes these posts.
+const captionPlaceholder = "Generating..."
+
 func scanSocialPost(rows *sql.Rows) (social.SocialPost, error) {
 	var p social.SocialPost
 	var postType, status, createdAt, updatedAt string
@@ -422,4 +426,74 @@ func (r *SocialRepository) UpdateCoverTitle(ctx context.Context, id string, titl
 		return fmt.Errorf("post %s: %w", id, social.ErrPostNotFound)
 	}
 	return nil
+}
+
+// CountPublishedToday returns the number of posts published on the current calendar day
+// (server local time).
+// Note: updated_at is used as a proxy for publish time — SetPublished stamps it
+// at publish time. Using date('now') in UTC matches the UTC-stored timestamps.
+func (r *SocialRepository) CountPublishedToday(ctx context.Context) (int, error) {
+	var count int
+	err := r.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM social_posts
+		 WHERE status = 'published'
+		 AND date(updated_at) = date('now')`,
+	).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("count published today: %w", err)
+	}
+	return count, nil
+}
+
+// FetchEligibleDraft returns the oldest eligible draft post with its card details.
+// Eligibility criteria:
+//   - status = 'draft'
+//   - caption is not empty and not the placeholder value 'Generating...'
+//   - created_at is within the last 7 days (avoids stale drafts)
+//
+// Returns nil, nil if no eligible draft exists.
+func (r *SocialRepository) FetchEligibleDraft(ctx context.Context) (*social.PostDetail, error) {
+	row := r.db.QueryRowContext(ctx,
+		`SELECT `+socialPostColumns+`
+		 FROM social_posts
+		 WHERE status = 'draft'
+		 AND caption != ''
+		 AND caption != ?
+		 AND created_at >= datetime('now', '-7 days')
+		 ORDER BY created_at ASC
+		 LIMIT 1`,
+		captionPlaceholder,
+	)
+
+	var p social.SocialPost
+	var postType, status, createdAt, updatedAt string
+	var slideURLsJSON, backgroundURLsJSON sql.NullString
+	if err := row.Scan(&p.ID, &postType, &status, &p.Caption, &p.Hashtags, &p.CoverTitle,
+		&p.CardCount, &p.InstagramPostID, &p.ErrorMessage, &createdAt, &updatedAt,
+		&slideURLsJSON, &backgroundURLsJSON); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("scan eligible draft: %w", err)
+	}
+	p.PostType = social.PostType(postType)
+	p.Status = social.PostStatus(status)
+	p.CreatedAt = parseSQLiteTime(createdAt)
+	p.UpdatedAt = parseSQLiteTime(updatedAt)
+	if slideURLsJSON.Valid && slideURLsJSON.String != "" {
+		if err := json.Unmarshal([]byte(slideURLsJSON.String), &p.SlideURLs); err != nil {
+			return nil, fmt.Errorf("unmarshal slide URLs: %w", err)
+		}
+	}
+	if backgroundURLsJSON.Valid && backgroundURLsJSON.String != "" {
+		if err := json.Unmarshal([]byte(backgroundURLsJSON.String), &p.BackgroundURLs); err != nil {
+			return nil, fmt.Errorf("unmarshal background URLs: %w", err)
+		}
+	}
+
+	cards, err := r.ListPostCards(ctx, p.ID)
+	if err != nil {
+		return nil, fmt.Errorf("list cards for draft: %w", err)
+	}
+	return &social.PostDetail{SocialPost: p, Cards: cards}, nil
 }
