@@ -61,25 +61,31 @@ func (r *SocialRepository) CreatePost(ctx context.Context, post *social.SocialPo
 		post.Caption, post.Hashtags, post.CoverTitle, post.CardCount,
 		post.CreatedAt.Format(time.RFC3339), post.UpdatedAt.Format(time.RFC3339),
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("insert social post %s: %w", post.ID, err)
+	}
+	return nil
 }
 
+// GetPost returns the social post with the given ID, or (nil, nil) if no such post exists.
+// The nil-on-missing contract is intentional and verified by social_repository_test.go —
+// callers treat "no post" as a valid, non-error state.
 func (r *SocialRepository) GetPost(ctx context.Context, id string) (*social.SocialPost, error) {
 	rows, err := r.db.QueryContext(ctx,
 		`SELECT `+socialPostColumns+` FROM social_posts WHERE id = ?`, id)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("query social post %s: %w", id, err)
 	}
 	defer rows.Close() //nolint:errcheck
 	if !rows.Next() {
 		if err := rows.Err(); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("iterate social post %s: %w", id, err)
 		}
 		return nil, nil
 	}
 	p, err := scanSocialPost(rows)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("scan social post %s: %w", id, err)
 	}
 	return &p, nil
 }
@@ -107,7 +113,7 @@ func (r *SocialRepository) ListPosts(ctx context.Context, status *social.PostSta
 
 	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("query social posts: %w", err)
 	}
 	return scanRows(ctx, rows, scanSocialPost)
 }
@@ -118,7 +124,7 @@ func (r *SocialRepository) UpdatePostStatus(ctx context.Context, id string, stat
 		string(status), time.Now().UTC().Format(time.RFC3339), id,
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("update social post status %s: %w", id, err)
 	}
 	n, err := res.RowsAffected()
 	if err != nil {
@@ -136,7 +142,7 @@ func (r *SocialRepository) UpdatePostCaption(ctx context.Context, id string, cap
 		caption, hashtags, time.Now().UTC().Format(time.RFC3339), id,
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("update social post caption %s: %w", id, err)
 	}
 	n, err := res.RowsAffected()
 	if err != nil {
@@ -154,7 +160,7 @@ func (r *SocialRepository) SetPublished(ctx context.Context, id string, instagra
 		string(social.PostStatusPublished), instagramPostID, time.Now().UTC().Format(time.RFC3339), id,
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("mark social post published %s: %w", id, err)
 	}
 	n, err := res.RowsAffected()
 	if err != nil {
@@ -173,7 +179,7 @@ func (r *SocialRepository) SetPublishing(ctx context.Context, id string) error {
 		id, string(social.PostStatusDraft), string(social.PostStatusFailed), string(social.PostStatusApproved),
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("mark social post publishing %s: %w", id, err)
 	}
 	n, err := res.RowsAffected()
 	if err != nil {
@@ -190,7 +196,10 @@ func (r *SocialRepository) SetError(ctx context.Context, id string, errorMessage
 		`UPDATE social_posts SET status = ?, error_message = ?, updated_at = ? WHERE id = ?`,
 		string(social.PostStatusFailed), errorMessage, time.Now().UTC().Format(time.RFC3339), id,
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("set social post error %s: %w", id, err)
+	}
+	return nil
 }
 
 func (r *SocialRepository) DeletePost(ctx context.Context, id string) error {
@@ -198,7 +207,7 @@ func (r *SocialRepository) DeletePost(ctx context.Context, id string) error {
 		`DELETE FROM social_posts WHERE id = ?`, id,
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("delete social post %s: %w", id, err)
 	}
 	n, err := res.RowsAffected()
 	if err != nil {
@@ -213,23 +222,26 @@ func (r *SocialRepository) DeletePost(ctx context.Context, id string) error {
 func (r *SocialRepository) AddPostCards(ctx context.Context, postID string, cards []social.PostCard) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("begin tx for post cards %s: %w", postID, err)
 	}
 	defer tx.Rollback() //nolint:errcheck
 
 	stmt, err := tx.PrepareContext(ctx,
 		`INSERT INTO social_post_cards (post_id, purchase_id, slide_order) VALUES (?, ?, ?)`)
 	if err != nil {
-		return err
+		return fmt.Errorf("prepare insert post card: %w", err)
 	}
 	defer stmt.Close() //nolint:errcheck
 
 	for _, c := range cards {
 		if _, err := stmt.ExecContext(ctx, c.PostID, c.PurchaseID, c.SlideOrder); err != nil {
-			return err
+			return fmt.Errorf("insert post card %s/%s: %w", c.PostID, c.PurchaseID, err)
 		}
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit post cards %s: %w", postID, err)
+	}
+	return nil
 }
 
 func scanPostCardDetail(rows *sql.Rows) (social.PostCardDetail, error) {
@@ -259,7 +271,7 @@ func (r *SocialRepository) ListPostCards(ctx context.Context, postID string) ([]
 		 WHERE spc.post_id = ?
 		 ORDER BY spc.slide_order`, postID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("query post cards for %s: %w", postID, err)
 	}
 	return scanRows(ctx, rows, scanPostCardDetail)
 }
@@ -272,7 +284,7 @@ func (r *SocialRepository) GetRecentPurchaseIDs(ctx context.Context, since strin
 		 AND p.id NOT IN (SELECT purchase_id FROM campaign_sales)
 		 ORDER BY p.created_at DESC`, since)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("query recent purchase IDs since %s: %w", since, err)
 	}
 	return scanRows(ctx, rows, func(rows *sql.Rows) (string, error) {
 		var id string
@@ -305,7 +317,7 @@ func (r *SocialRepository) GetPurchaseIDsInExistingPosts(ctx context.Context, pu
 
 	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("query existing post membership: %w", err)
 	}
 	defer rows.Close() //nolint:errcheck
 
@@ -313,7 +325,7 @@ func (r *SocialRepository) GetPurchaseIDsInExistingPosts(ctx context.Context, pu
 	for rows.Next() {
 		var id string
 		if err := rows.Scan(&id); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("scan existing post purchase ID: %w", err)
 		}
 		result[id] = true
 	}
@@ -332,7 +344,7 @@ func (r *SocialRepository) GetUnsoldPurchasesWithSnapshots(ctx context.Context) 
 		 AND p.front_image_url != ''
 		 AND (p.median_cents > 0 OR p.mm_trend_pct != 0)`)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("query unsold snapshots: %w", err)
 	}
 	return scanRows(ctx, rows, func(rows *sql.Rows) (social.PurchaseSnapshot, error) {
 		var s social.PurchaseSnapshot
@@ -361,7 +373,7 @@ func (r *SocialRepository) GetAvailableCardsForPosts(ctx context.Context) ([]soc
 		 ORDER BY p.created_at DESC`,
 		string(social.PostStatusRejected), string(social.PostStatusFailed))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("query available cards for posts: %w", err)
 	}
 	return scanRows(ctx, rows, scanPostCardDetail)
 }
@@ -376,7 +388,7 @@ func (r *SocialRepository) UpdateSlideURLs(ctx context.Context, id string, urls 
 		string(urlsJSON), time.Now().UTC().Format(time.RFC3339), id,
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("update slide URLs for post %s: %w", id, err)
 	}
 	n, err := res.RowsAffected()
 	if err != nil {
@@ -398,7 +410,7 @@ func (r *SocialRepository) UpdateBackgroundURLs(ctx context.Context, id string, 
 		string(urlsJSON), time.Now().UTC().Format(time.RFC3339), id,
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("update background URLs for post %s: %w", id, err)
 	}
 	n, err := res.RowsAffected()
 	if err != nil {
@@ -416,7 +428,7 @@ func (r *SocialRepository) UpdateCoverTitle(ctx context.Context, id string, titl
 		title, time.Now().UTC().Format(time.RFC3339), id,
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("update cover title for post %s: %w", id, err)
 	}
 	n, err := res.RowsAffected()
 	if err != nil {

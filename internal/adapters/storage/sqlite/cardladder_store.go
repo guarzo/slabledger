@@ -42,6 +42,8 @@ func NewCardLadderStore(db *sql.DB, encryptor crypto.Encryptor) *CardLadderStore
 }
 
 // GetConfig returns the current CL config, or nil if not configured.
+// The nil-on-missing contract is intentional: callers treat "not configured" as a
+// valid initial state, not an error.
 func (s *CardLadderStore) GetConfig(ctx context.Context) (*CardLadderConfig, error) {
 	var (
 		email, encToken, collectionID, apiKey, uid string
@@ -54,12 +56,12 @@ func (s *CardLadderStore) GetConfig(ctx context.Context) (*CardLadderConfig, err
 		return nil, nil
 	}
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("query cardladder config: %w", err)
 	}
 
 	token, err := s.encryptor.Decrypt(encToken)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("decrypt cardladder refresh token: %w", err)
 	}
 
 	return &CardLadderConfig{
@@ -75,11 +77,11 @@ func (s *CardLadderStore) GetConfig(ctx context.Context) (*CardLadderConfig, err
 func (s *CardLadderStore) SaveConfig(ctx context.Context, email, refreshToken, collectionID, firebaseAPIKey, firebaseUID string) error {
 	encToken, err := s.encryptor.Encrypt(refreshToken)
 	if err != nil {
-		return err
+		return fmt.Errorf("encrypt cardladder refresh token: %w", err)
 	}
 
 	now := time.Now().UTC().Format(time.RFC3339)
-	_, err = s.db.ExecContext(ctx,
+	if _, err := s.db.ExecContext(ctx,
 		`INSERT INTO cardladder_config (id, email, encrypted_refresh_token, collection_id, firebase_api_key, firebase_uid, updated_at)
 		 VALUES (1, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(id) DO UPDATE SET
@@ -90,8 +92,10 @@ func (s *CardLadderStore) SaveConfig(ctx context.Context, email, refreshToken, c
 		   firebase_uid = excluded.firebase_uid,
 		   updated_at = excluded.updated_at`,
 		email, encToken, collectionID, firebaseAPIKey, firebaseUID, now,
-	)
-	return err
+	); err != nil {
+		return fmt.Errorf("upsert cardladder config: %w", err)
+	}
+	return nil
 }
 
 // UpdateRefreshToken updates just the refresh token (after token refresh).
@@ -99,7 +103,7 @@ func (s *CardLadderStore) SaveConfig(ctx context.Context, email, refreshToken, c
 func (s *CardLadderStore) UpdateRefreshToken(ctx context.Context, refreshToken string) error {
 	encToken, err := s.encryptor.Encrypt(refreshToken)
 	if err != nil {
-		return err
+		return fmt.Errorf("encrypt cardladder refresh token: %w", err)
 	}
 
 	res, err := s.db.ExecContext(ctx,
@@ -107,7 +111,7 @@ func (s *CardLadderStore) UpdateRefreshToken(ctx context.Context, refreshToken s
 		encToken, time.Now().UTC().Format(time.RFC3339),
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("update cardladder refresh token: %w", err)
 	}
 	n, err := res.RowsAffected()
 	if err != nil {
@@ -121,13 +125,15 @@ func (s *CardLadderStore) UpdateRefreshToken(ctx context.Context, refreshToken s
 
 // DeleteConfig removes the CL configuration.
 func (s *CardLadderStore) DeleteConfig(ctx context.Context) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM cardladder_config WHERE id = 1`)
-	return err
+	if _, err := s.db.ExecContext(ctx, `DELETE FROM cardladder_config WHERE id = 1`); err != nil {
+		return fmt.Errorf("delete cardladder config: %w", err)
+	}
+	return nil
 }
 
 // SaveMapping upserts a cert→CL card mapping.
 func (s *CardLadderStore) SaveMapping(ctx context.Context, slabSerial, clCardID, gemRateID, condition string) error {
-	_, err := s.db.ExecContext(ctx,
+	if _, err := s.db.ExecContext(ctx,
 		`INSERT INTO cl_card_mappings (slab_serial, cl_collection_card_id, cl_gem_rate_id, cl_condition, updated_at)
 		 VALUES (?, ?, ?, ?, ?)
 		 ON CONFLICT(slab_serial) DO UPDATE SET
@@ -136,11 +142,15 @@ func (s *CardLadderStore) SaveMapping(ctx context.Context, slabSerial, clCardID,
 		   cl_condition = excluded.cl_condition,
 		   updated_at = excluded.updated_at`,
 		slabSerial, clCardID, gemRateID, condition, time.Now().UTC().Format(time.RFC3339),
-	)
-	return err
+	); err != nil {
+		return fmt.Errorf("upsert cl card mapping %s: %w", slabSerial, err)
+	}
+	return nil
 }
 
 // GetMapping returns a mapping for a cert, or nil if not found.
+// The nil-on-missing contract is intentional: callers treat "no mapping yet" as
+// a valid state, not an error.
 func (s *CardLadderStore) GetMapping(ctx context.Context, slabSerial string) (*CLCardMapping, error) {
 	var m CLCardMapping
 	err := s.db.QueryRowContext(ctx,
@@ -151,15 +161,17 @@ func (s *CardLadderStore) GetMapping(ctx context.Context, slabSerial string) (*C
 		return nil, nil
 	}
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("query cl card mapping %s: %w", slabSerial, err)
 	}
 	return &m, nil
 }
 
 // DeleteMapping removes a cert→CL card mapping by slab serial.
 func (s *CardLadderStore) DeleteMapping(ctx context.Context, slabSerial string) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM cl_card_mappings WHERE slab_serial = ?`, slabSerial)
-	return err
+	if _, err := s.db.ExecContext(ctx, `DELETE FROM cl_card_mappings WHERE slab_serial = ?`, slabSerial); err != nil {
+		return fmt.Errorf("delete cl card mapping %s: %w", slabSerial, err)
+	}
+	return nil
 }
 
 // ListMappings returns all stored mappings.
@@ -167,7 +179,7 @@ func (s *CardLadderStore) ListMappings(ctx context.Context) ([]CLCardMapping, er
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT slab_serial, cl_collection_card_id, cl_gem_rate_id, cl_condition FROM cl_card_mappings`)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("query cl card mappings: %w", err)
 	}
 	defer rows.Close() //nolint:errcheck
 
@@ -175,7 +187,7 @@ func (s *CardLadderStore) ListMappings(ctx context.Context) ([]CLCardMapping, er
 	for rows.Next() {
 		var m CLCardMapping
 		if err := rows.Scan(&m.SlabSerial, &m.CLCollectionCardID, &m.CLGemRateID, &m.CLCondition); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("scan cl card mapping row: %w", err)
 		}
 		mappings = append(mappings, m)
 	}
