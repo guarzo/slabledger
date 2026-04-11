@@ -1,8 +1,10 @@
+import type { ReactNode } from 'react';
 import { usePSASyncStatus, useTriggerPSASyncRefresh } from '../../queries/useAdminQueries';
 import { useToast } from '../../contexts/ToastContext';
 import { CardShell } from '../../ui/CardShell';
 import Button from '../../ui/Button';
 import { formatAdminDate } from './adminUtils';
+import { isAPIError } from '../../../js/api/client';
 
 export function PSASyncTab({ enabled = true }: { enabled?: boolean }) {
   const { data } = usePSASyncStatus({ enabled });
@@ -15,8 +17,12 @@ export function PSASyncTab({ enabled = true }: { enabled?: boolean }) {
     try {
       await refreshMutation.mutateAsync();
       toast.success('PSA Sheets sync complete');
-    } catch {
-      toast.error('PSA Sheets sync failed');
+    } catch (err) {
+      if (isAPIError(err) && err.status === 409) {
+        toast.error('Sync already in progress — try again in a moment');
+      } else {
+        toast.error('PSA Sheets sync failed');
+      }
     }
   };
 
@@ -75,10 +81,14 @@ export function PSASyncTab({ enabled = true }: { enabled?: boolean }) {
             </p>
             {(lastRun.unmatched > 0 || lastRun.ambiguous > 0 || lastRun.failed > 0 || lastRun.parseErrors > 0) && (
               <p className="text-xs text-[var(--text-muted)]">
-                {lastRun.unmatched > 0 && <><span className="text-orange-400">{lastRun.unmatched} unmatched</span> · </>}
-                {lastRun.ambiguous > 0 && <><span className="text-yellow-400">{lastRun.ambiguous} ambiguous</span> · </>}
-                {lastRun.failed > 0 && <><span className="text-red-400">{lastRun.failed} failed</span> · </>}
-                {lastRun.parseErrors > 0 && <><span className="text-orange-400">{lastRun.parseErrors} parse errors</span></>}
+                {[
+                  lastRun.unmatched > 0 && <span key="unmatched" className="text-orange-400">{lastRun.unmatched} unmatched</span>,
+                  lastRun.ambiguous > 0 && <span key="ambiguous" className="text-yellow-400">{lastRun.ambiguous} ambiguous</span>,
+                  lastRun.failed > 0 && <span key="failed" className="text-red-400">{lastRun.failed} failed</span>,
+                  lastRun.parseErrors > 0 && <span key="parseErrors" className="text-orange-400">{lastRun.parseErrors} parse errors</span>,
+                ]
+                  .filter(Boolean)
+                  .reduce<ReactNode[]>((acc, el, i) => (i === 0 ? [el] : [...acc, ' · ', el]), [])}
               </p>
             )}
           </div>

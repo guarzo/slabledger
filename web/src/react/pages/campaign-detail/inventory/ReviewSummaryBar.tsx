@@ -28,7 +28,7 @@ function StatBlock({ label, value, colorClass, onClick }: StatBlockProps) {
       onClick={clickable ? onClick : undefined}
       role={clickable ? 'button' : undefined}
       tabIndex={clickable ? 0 : undefined}
-      onKeyDown={clickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') onClick(); } : undefined}
+      onKeyDown={clickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } } : undefined}
     >
       <div className={`text-lg font-semibold tabular-nums ${colorClass ?? 'text-[var(--text)]'}`}>
         {value}

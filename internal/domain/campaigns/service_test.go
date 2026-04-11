@@ -744,6 +744,12 @@ func TestService_ImportPSAExportGlobal_DuplicateSkip(t *testing.T) {
 	if result.Updated != 0 {
 		t.Errorf("Updated = %d, want 0 (duplicate row with identical fields)", result.Updated)
 	}
+	if len(result.Results) < 2 {
+		t.Fatalf("Results len = %d, want >= 2", len(result.Results))
+	}
+	if result.Results[1].Status != "unchanged" {
+		t.Errorf("Results[1].Status = %q, want \"unchanged\"", result.Results[1].Status)
+	}
 }
 
 func TestService_ImportPSAExportGlobal_ExtractGrade(t *testing.T) {

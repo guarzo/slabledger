@@ -124,7 +124,7 @@ func (p *Provider) GetPrice(ctx context.Context, card pricing.Card) (*pricing.Pr
 				observability.String("card", card.Name),
 				observability.Err(err))
 		}
-	} else if lookup != nil {
+	} else if lookup != nil && hasMarketData(&lookup.MarketData) {
 		applyMarketData(price, &lookup.MarketData)
 	}
 
@@ -312,6 +312,16 @@ func buildPrice(productName string, sales []dh.RecentSale) *pricing.Price {
 		Sources:         sources,
 		LastSoldByGrade: lsbg,
 	}
+}
+
+// hasMarketData reports whether md contains at least one meaningful value.
+// Returns false when the API response has all zero/nil fields, preventing
+// applyMarketData from setting price.Market to an empty struct.
+func hasMarketData(md *dh.CardLookupMarketData) bool {
+	if md == nil {
+		return false
+	}
+	return (md.BestAsk != nil && *md.BestAsk > 0) || md.ActiveAsks > 0 || md.Volume24h > 0
 }
 
 // applyMarketData enriches a Price with listing/market data from the DH CardLookup API.

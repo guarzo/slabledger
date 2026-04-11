@@ -75,7 +75,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
 
   const handleStatClick = (target: StatClickTarget) => {
     setShowAll(false);
-    if (target === 'flagged') {
+    if (target === 'flagged' || target === 'unreviewed') {
       setFilterTab('needs_attention');
     }
   };

@@ -288,6 +288,7 @@ func (s *service) handleExistingPSAPurchase(ctx context.Context, existing *Purch
 
 	// Repair card metadata if set name is generic (e.g., "TCG Cards")
 	// or card number is missing. Fixes records from earlier imports.
+	metadataWritten := false
 	if isGenericSetName(existing.SetName) || existing.CardNumber == "" {
 		parsed := parseCardMetadataFromTitle(row.ListingTitle, row.Category)
 		newName, newNum, newSet := existing.CardName, existing.CardNumber, existing.SetName
@@ -310,16 +311,28 @@ func (s *service) handleExistingPSAPurchase(ctx context.Context, existing *Purch
 						observability.String("purchaseID", existing.ID),
 						observability.Err(err))
 				}
-			} else if s.priceProv != nil && existing.GradeValue > 0 {
-				// Defer snapshot recapture to background worker instead of blocking import
-				if err := s.repo.UpdatePurchaseSnapshotStatus(ctx, existing.ID, SnapshotStatusPending, 0); err != nil {
-					if s.logger != nil {
-						s.logger.Warn(ctx, "failed to set pending snapshot status",
-							observability.String("purchaseID", existing.ID),
-							observability.Err(err))
+			} else {
+				metadataWritten = true
+				if s.priceProv != nil && existing.GradeValue > 0 {
+					// Defer snapshot recapture to background worker instead of blocking import
+					if err := s.repo.UpdatePurchaseSnapshotStatus(ctx, existing.ID, SnapshotStatusPending, 0); err != nil {
+						if s.logger != nil {
+							s.logger.Warn(ctx, "failed to set pending snapshot status",
+								observability.String("purchaseID", existing.ID),
+								observability.Err(err))
+						}
 					}
 				}
 			}
+		}
+	}
+
+	// Return "updated" only if at least one write succeeded.
+	if !psaChanged && !buyCostChanged && !metadataWritten {
+		return PSAImportItemResult{
+			CertNumber: row.CertNumber, CardName: existing.CardName, Grade: existing.GradeValue,
+			Status: "unchanged", CampaignID: existing.CampaignID,
+			SetName: existing.SetName, CardNumber: existing.CardNumber,
 		}
 	}
 

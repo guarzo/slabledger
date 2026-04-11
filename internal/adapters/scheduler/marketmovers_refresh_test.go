@@ -488,48 +488,58 @@ func TestTokenMatchesTitle(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// searchByCert — tokenized matching integration test
+// searchByCert and searchByNameGrade — tokenized matching integration tests
 // ---------------------------------------------------------------------------
 
-func TestSearchByCert_TokenizedMatch(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		// MM returns title with reordered tokens — would fail with strings.Contains
-		_, _ = w.Write(buildMMSearchResponse(t, []map[string]any{
-			{"item": map[string]any{"id": float64(5555), "searchTitle": "Charizard VSTAR 2022 Sword & Shield Brilliant Stars PSA 10", "collectibleType": "sports-card"}},
-		}))
-	}))
-	defer srv.Close()
+func TestSearch_TokenizedMatch(t *testing.T) {
+	tests := []struct {
+		name     string
+		wantID   int64
+		purchase *campaigns.Purchase
+		search   func(s *MarketMoversRefreshScheduler, purchase *campaigns.Purchase) (int64, error)
+	}{
+		{
+			name:   "searchByCert matches despite token reordering",
+			wantID: 5555,
+			purchase: &campaigns.Purchase{
+				CertNumber: "12345678",
+				CardName:   "2022 POKEMON SWORD & SHIELD BRILLIANT STARS CHARIZARD VSTAR",
+			},
+			search: func(s *MarketMoversRefreshScheduler, p *campaigns.Purchase) (int64, error) {
+				id, _, _, err := s.searchByCert(context.Background(), p)
+				return id, err
+			},
+		},
+		{
+			name:   "searchByNameGrade matches despite token reordering",
+			wantID: 6666,
+			purchase: &campaigns.Purchase{
+				CardName:   "2022 POKEMON SWORD & SHIELD BRILLIANT STARS CHARIZARD VSTAR",
+				Grader:     "PSA",
+				GradeValue: 10,
+			},
+			search: func(s *MarketMoversRefreshScheduler, p *campaigns.Purchase) (int64, error) {
+				id, _, _, err := s.searchByNameGrade(context.Background(), p)
+				return id, err
+			},
+		},
+	}
 
-	s := newMMSchedulerWithServer(srv)
-	id, _, _, err := s.searchByCert(context.Background(), &campaigns.Purchase{
-		CertNumber: "12345678",
-		CardName:   "2022 POKEMON SWORD & SHIELD BRILLIANT STARS CHARIZARD VSTAR",
-	})
-	require.NoError(t, err)
-	assert.Equal(t, int64(5555), id, "should match despite token reordering")
-}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				// MM returns title with reordered tokens — would fail with strings.Contains
+				_, _ = w.Write(buildMMSearchResponse(t, []map[string]any{
+					{"item": map[string]any{"id": tc.wantID, "searchTitle": "Charizard VSTAR 2022 Sword & Shield Brilliant Stars PSA 10", "collectibleType": "sports-card"}},
+				}))
+			}))
+			defer srv.Close()
 
-// ---------------------------------------------------------------------------
-// searchByNameGrade — tokenized matching integration test
-// ---------------------------------------------------------------------------
-
-func TestSearchByNameGrade_TokenizedMatch(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		// MM returns title with reordered tokens — would fail with strings.Contains
-		_, _ = w.Write(buildMMSearchResponse(t, []map[string]any{
-			{"item": map[string]any{"id": float64(6666), "searchTitle": "Charizard VSTAR 2022 Sword & Shield Brilliant Stars PSA 10", "collectibleType": "sports-card"}},
-		}))
-	}))
-	defer srv.Close()
-
-	s := newMMSchedulerWithServer(srv)
-	id, _, _, err := s.searchByNameGrade(context.Background(), &campaigns.Purchase{
-		CardName:   "2022 POKEMON SWORD & SHIELD BRILLIANT STARS CHARIZARD VSTAR",
-		Grader:     "PSA",
-		GradeValue: 10,
-	})
-	require.NoError(t, err)
-	assert.Equal(t, int64(6666), id, "should match despite token reordering")
+			s := newMMSchedulerWithServer(srv)
+			id, err := tc.search(s, tc.purchase)
+			require.NoError(t, err)
+			assert.Equal(t, tc.wantID, id, "should match despite token reordering")
+		})
+	}
 }

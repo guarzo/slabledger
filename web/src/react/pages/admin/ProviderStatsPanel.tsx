@@ -8,9 +8,10 @@ function formatMs(ms: number): string {
 }
 
 export function MMStatsPanel({ enabled = true }: { enabled?: boolean }) {
-  const { data: status, isLoading } = useMarketMoversStatus({ enabled });
+  const { data: status, isLoading, isError } = useMarketMoversStatus({ enabled });
 
   if (isLoading) return <p className="text-[var(--text-muted)] text-sm">Loading...</p>;
+  if (isError) return <p className="text-[var(--danger)] text-sm">Failed to load status.</p>;
   if (!status?.configured) return <p className="text-[var(--text-muted)] text-sm">Not configured.</p>;
 
   const ps = status.priceStats;
@@ -65,9 +66,10 @@ export function MMStatsPanel({ enabled = true }: { enabled?: boolean }) {
 }
 
 export function CLStatsPanel({ enabled = true }: { enabled?: boolean }) {
-  const { data: status, isLoading } = useCardLadderStatus({ enabled });
+  const { data: status, isLoading, isError } = useCardLadderStatus({ enabled });
 
   if (isLoading) return <p className="text-[var(--text-muted)] text-sm">Loading...</p>;
+  if (isError) return <p className="text-[var(--danger)] text-sm">Failed to load status.</p>;
   if (!status?.configured) return <p className="text-[var(--text-muted)] text-sm">Not configured.</p>;
 
   const lr = status.lastRun;
@@ -122,9 +124,10 @@ export function CLStatsPanel({ enabled = true }: { enabled?: boolean }) {
 }
 
 export function PSAStatsPanel({ enabled = true }: { enabled?: boolean }) {
-  const { data: status, isLoading } = usePSASyncStatus({ enabled });
+  const { data: status, isLoading, isError } = usePSASyncStatus({ enabled });
 
   if (isLoading) return <p className="text-[var(--text-muted)] text-sm">Loading...</p>;
+  if (isError) return <p className="text-[var(--danger)] text-sm">Failed to load status.</p>;
   if (!status?.configured) return <p className="text-[var(--text-muted)] text-sm">Not configured.</p>;
 
   const lr = status.lastRun;
