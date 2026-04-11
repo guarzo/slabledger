@@ -277,7 +277,7 @@ func buildPrice(productName string, sales []dh.RecentSale) *pricing.Price {
 		lsbg = &pricing.LastSoldByGrade{}
 		for g, ls := range lastByGrade {
 			info := &pricing.GradeSaleInfo{
-				LastSoldPrice: ls.price,
+				LastSoldPrice: mathutil.ToCents(ls.price),
 				LastSoldDate:  ls.soldAt,
 				SaleCount:     ls.count,
 			}

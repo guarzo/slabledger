@@ -15,12 +15,13 @@ interface MobileCardProps {
   onRecordSale: () => void;
   onFixPricing?: () => void;
   onSetPrice?: () => void;
+  onDelete?: () => void;
   ev?: ExpectedValue;
   showCampaignColumn?: boolean;
   isOnSellSheet?: boolean;
 }
 
-export default function MobileCard({ item, selected, onToggle, onRecordSale, onFixPricing, onSetPrice, ev, showCampaignColumn, isOnSellSheet }: MobileCardProps) {
+export default function MobileCard({ item, selected, onToggle, onRecordSale, onFixPricing, onSetPrice, onDelete, ev, showCampaignColumn, isOnSellSheet }: MobileCardProps) {
   const cb = costBasis(item.purchase);
   const snap = item.currentMarket;
   const daysColor = daysHeldColor(item.daysHeld);
@@ -211,6 +212,16 @@ export default function MobileCard({ item, selected, onToggle, onRecordSale, onF
         >
           Sell
         </button>
+        {onDelete && (
+          <button
+            type="button"
+            onClick={onDelete}
+            className="text-xs font-medium px-2 py-1 rounded bg-[var(--danger)]/10 text-[var(--danger)] hover:bg-[var(--danger)]/20 transition-colors"
+            aria-label="Delete"
+          >
+            Del
+          </button>
+        )}
       </div>
     </div>
   );

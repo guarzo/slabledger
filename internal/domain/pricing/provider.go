@@ -115,9 +115,9 @@ type Price struct {
 
 // GradeSaleInfo contains last sold information for a specific grade
 type GradeSaleInfo struct {
-	LastSoldPrice float64 // Price in USD
-	LastSoldDate  string  // ISO date format (YYYY-MM-DD)
-	SaleCount     int     // Number of recent sales
+	LastSoldPrice int64  // Price in cents
+	LastSoldDate  string // ISO date format (YYYY-MM-DD)
+	SaleCount     int    // Number of recent sales
 }
 
 // LastSoldByGrade contains last sold data for each grade

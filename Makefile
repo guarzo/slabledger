@@ -27,6 +27,8 @@ help:
 	@echo "Database sync (requires ~/.ssh mounted):"
 	@echo "  db-pull       Pull prod DB to local"
 	@echo "  db-push       Push local DB to prod"
+	@echo ""
+	@echo "Local dev utilities:"
 	@echo "  kill          Kill any process running on port 8081"
 	@echo ""
 	@echo "Note: Use '/usr/bin/make web' if 'make' command conflicts with shell function"
@@ -179,7 +181,14 @@ db-pull:
 
 # Kill process on port 8081
 kill:
-	@kill $$(lsof -ti :8081) 2>/dev/null && echo "Killed process on :8081" || echo "Nothing running on :8081"
+	@pids=$$(lsof -ti :8081); \
+	if [ -z "$$pids" ]; then \
+		echo "Nothing running on :8081"; \
+	elif kill $$pids; then \
+		echo "Killed process on :8081"; \
+	else \
+		echo "Error: failed to kill process on :8081" >&2; exit 1; \
+	fi
 
 # CI target
 ci: install lint test coverage build

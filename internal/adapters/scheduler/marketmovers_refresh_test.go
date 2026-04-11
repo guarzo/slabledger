@@ -496,7 +496,7 @@ func TestSearch_TokenizedMatch(t *testing.T) {
 		name     string
 		wantID   int64
 		purchase *campaigns.Purchase
-		search   func(s *MarketMoversRefreshScheduler, purchase *campaigns.Purchase) (int64, error)
+		search   func(ctx context.Context, s *MarketMoversRefreshScheduler, purchase *campaigns.Purchase) (int64, error)
 	}{
 		{
 			name:   "searchByCert matches despite token reordering",
@@ -505,8 +505,8 @@ func TestSearch_TokenizedMatch(t *testing.T) {
 				CertNumber: "12345678",
 				CardName:   "2022 POKEMON SWORD & SHIELD BRILLIANT STARS CHARIZARD VSTAR",
 			},
-			search: func(s *MarketMoversRefreshScheduler, p *campaigns.Purchase) (int64, error) {
-				id, _, _, err := s.searchByCert(context.Background(), p)
+			search: func(ctx context.Context, s *MarketMoversRefreshScheduler, p *campaigns.Purchase) (int64, error) {
+				id, _, _, err := s.searchByCert(ctx, p)
 				return id, err
 			},
 		},
@@ -518,8 +518,8 @@ func TestSearch_TokenizedMatch(t *testing.T) {
 				Grader:     "PSA",
 				GradeValue: 10,
 			},
-			search: func(s *MarketMoversRefreshScheduler, p *campaigns.Purchase) (int64, error) {
-				id, _, _, err := s.searchByNameGrade(context.Background(), p)
+			search: func(ctx context.Context, s *MarketMoversRefreshScheduler, p *campaigns.Purchase) (int64, error) {
+				id, _, _, err := s.searchByNameGrade(ctx, p)
 				return id, err
 			},
 		},
@@ -537,7 +537,7 @@ func TestSearch_TokenizedMatch(t *testing.T) {
 			defer srv.Close()
 
 			s := newMMSchedulerWithServer(srv)
-			id, err := tc.search(s, tc.purchase)
+			id, err := tc.search(context.Background(), s, tc.purchase)
 			require.NoError(t, err)
 			assert.Equal(t, tc.wantID, id, "should match despite token reordering")
 		})

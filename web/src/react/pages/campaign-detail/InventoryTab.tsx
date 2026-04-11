@@ -341,6 +341,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                     onRecordSale={() => openSaleModal([item])}
                     onFixPricing={() => handleFixPricing(item.purchase)}
                     onSetPrice={() => handleSetPrice(item)}
+                    onDelete={() => handleDelete(item)}
                     ev={evMap.get(item.purchase.certNumber)}
                     showCampaignColumn={showCampaignColumn}
                     isOnSellSheet={!sellSheetActive && sellSheet.has(item.purchase.id)}
@@ -369,6 +370,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                         onRecordSale={() => openSaleModal([item])}
                         onFixPricing={() => handleFixPricing(item.purchase)}
                         onSetPrice={() => handleSetPrice(item)}
+                        onDelete={() => handleDelete(item)}
                         ev={evMap.get(item.purchase.certNumber)}
                         showCampaignColumn={showCampaignColumn}
                         isOnSellSheet={!sellSheetActive && sellSheet.has(item.purchase.id)}

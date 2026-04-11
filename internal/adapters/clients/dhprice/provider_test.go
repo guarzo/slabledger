@@ -481,8 +481,8 @@ func TestBuildPrice_LastSoldByGrade(t *testing.T) {
 				if got.LastSoldByGrade.PSA10 == nil {
 					t.Fatal("PSA10 is nil")
 				}
-				if got.LastSoldByGrade.PSA10.LastSoldPrice != 120.00 {
-					t.Errorf("PSA10.LastSoldPrice = %f, want 120.00", got.LastSoldByGrade.PSA10.LastSoldPrice)
+				if got.LastSoldByGrade.PSA10.LastSoldPrice != 12000 {
+					t.Errorf("PSA10.LastSoldPrice = %d, want 12000", got.LastSoldByGrade.PSA10.LastSoldPrice)
 				}
 				if got.LastSoldByGrade.PSA10.LastSoldDate != "2026-01-03" {
 					t.Errorf("PSA10.LastSoldDate = %q, want 2026-01-03", got.LastSoldByGrade.PSA10.LastSoldDate)
@@ -525,8 +525,8 @@ func TestBuildPrice_LastSoldByGrade(t *testing.T) {
 				if got.LastSoldByGrade.PSA10 == nil {
 					t.Fatal("PSA10 is nil")
 				}
-				if got.LastSoldByGrade.PSA10.LastSoldPrice != 120.00 {
-					t.Errorf("PSA10.LastSoldPrice = %f, want 120.00", got.LastSoldByGrade.PSA10.LastSoldPrice)
+				if got.LastSoldByGrade.PSA10.LastSoldPrice != 12000 {
+					t.Errorf("PSA10.LastSoldPrice = %d, want 12000", got.LastSoldByGrade.PSA10.LastSoldPrice)
 				}
 				if got.LastSoldByGrade.PSA10.LastSoldDate != "2026-01-05" {
 					t.Errorf("PSA10.LastSoldDate = %q, want 2026-01-05", got.LastSoldByGrade.PSA10.LastSoldDate)
@@ -538,8 +538,8 @@ func TestBuildPrice_LastSoldByGrade(t *testing.T) {
 				if got.LastSoldByGrade.PSA9 == nil {
 					t.Fatal("PSA9 is nil")
 				}
-				if got.LastSoldByGrade.PSA9.LastSoldPrice != 60.00 {
-					t.Errorf("PSA9.LastSoldPrice = %f, want 60.00", got.LastSoldByGrade.PSA9.LastSoldPrice)
+				if got.LastSoldByGrade.PSA9.LastSoldPrice != 6000 {
+					t.Errorf("PSA9.LastSoldPrice = %d, want 6000", got.LastSoldByGrade.PSA9.LastSoldPrice)
 				}
 				if got.LastSoldByGrade.PSA9.LastSoldDate != "2026-01-04" {
 					t.Errorf("PSA9.LastSoldDate = %q, want 2026-01-04", got.LastSoldByGrade.PSA9.LastSoldDate)
@@ -551,8 +551,8 @@ func TestBuildPrice_LastSoldByGrade(t *testing.T) {
 				if got.LastSoldByGrade.PSA8 == nil {
 					t.Fatal("PSA8 is nil")
 				}
-				if got.LastSoldByGrade.PSA8.LastSoldPrice != 30.00 {
-					t.Errorf("PSA8.LastSoldPrice = %f, want 30.00", got.LastSoldByGrade.PSA8.LastSoldPrice)
+				if got.LastSoldByGrade.PSA8.LastSoldPrice != 3000 {
+					t.Errorf("PSA8.LastSoldPrice = %d, want 3000", got.LastSoldByGrade.PSA8.LastSoldPrice)
 				}
 				if got.LastSoldByGrade.PSA8.LastSoldDate != "2026-01-03" {
 					t.Errorf("PSA8.LastSoldDate = %q, want 2026-01-03", got.LastSoldByGrade.PSA8.LastSoldDate)
@@ -622,8 +622,8 @@ func TestBuildPrice_LastSoldByGrade(t *testing.T) {
 				if got.LastSoldByGrade.PSA10.LastSoldDate != "2026-01-05" {
 					t.Errorf("LastSoldDate = %q, want 2026-01-05", got.LastSoldByGrade.PSA10.LastSoldDate)
 				}
-				if got.LastSoldByGrade.PSA10.LastSoldPrice != 105.00 {
-					t.Errorf("LastSoldPrice = %f, want 105.00", got.LastSoldByGrade.PSA10.LastSoldPrice)
+				if got.LastSoldByGrade.PSA10.LastSoldPrice != 10500 {
+					t.Errorf("LastSoldPrice = %d, want 10500", got.LastSoldByGrade.PSA10.LastSoldPrice)
 				}
 				if got.LastSoldByGrade.PSA10.SaleCount != 5 {
 					t.Errorf("SaleCount = %d, want 5", got.LastSoldByGrade.PSA10.SaleCount)

@@ -3,6 +3,7 @@ import { SummaryCard } from './shared';
 import { formatAdminDate } from './adminUtils';
 
 function formatMs(ms: number): string {
+  if (!Number.isFinite(ms)) return '-';
   if (ms < 1000) return `${ms}ms`;
   return `${(ms / 1000).toFixed(1)}s`;
 }
