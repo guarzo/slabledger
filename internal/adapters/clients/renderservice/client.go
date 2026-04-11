@@ -9,6 +9,7 @@ import (
 	"mime"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/social"
@@ -18,6 +19,7 @@ const (
 	defaultTimeout = 90 * time.Second
 	healthPath     = "/health"
 	renderPath     = "/render/"
+	maxPartSize    = int64(10 << 20) // 10 MiB per multipart part
 )
 
 // Client can render slide JPEGs via the sidecar and check its health.
@@ -67,7 +69,7 @@ func (c *HTTPClient) Render(ctx context.Context, postID string, detail social.Po
 		return nil, fmt.Errorf("marshal post detail: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+renderPath+postID, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+renderPath+url.PathEscape(postID), bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("build render request: %w", err)
 	}
@@ -115,9 +117,12 @@ func parseMultipartResponse(resp *http.Response) ([][]byte, error) {
 		if err != nil {
 			return nil, fmt.Errorf("read multipart part: %w", err)
 		}
-		data, err := io.ReadAll(part)
+		data, err := io.ReadAll(io.LimitReader(part, maxPartSize))
 		if err != nil {
 			return nil, fmt.Errorf("read part body: %w", err)
+		}
+		if int64(len(data)) == maxPartSize {
+			return nil, fmt.Errorf("multipart part too large (exceeds %d bytes)", maxPartSize)
 		}
 		blobs = append(blobs, data)
 	}
