@@ -195,6 +195,7 @@ func (rt *Router) registerCampaignRoutes(mux *http.ServeMux) {
 	// Credit & Invoice endpoints
 	mux.Handle("GET /api/credit/summary", authRoute(rt.campaignsHandler.HandleCapitalSummary))
 	mux.Handle("GET /api/credit/config", authRoute(rt.campaignsHandler.HandleGetCashflowConfig))
+	mux.Handle("PUT /api/credit/config", authRoute(rt.campaignsHandler.HandleUpdateCashflowConfig))
 	mux.Handle("GET /api/credit/invoices", authRoute(rt.campaignsHandler.HandleListInvoices))
 	mux.Handle("PUT /api/credit/invoices", authRoute(rt.campaignsHandler.HandleUpdateInvoice))
 

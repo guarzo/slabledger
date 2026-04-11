@@ -65,18 +65,46 @@ func (s *service) GetPortfolioHealth(ctx context.Context) (*PortfolioHealth, err
 			totalSoldNetProfit += soldProfit
 		}
 
+		// Liquidation-vs-marketplace channel split. Iterates sold purchases to
+		// separate "marketplace margin is broken" from "we liquidated cards that
+		// would have been profitable". Uses raw stored channel values (not
+		// normalized) so cardshow is counted as liquidation while ebay and
+		// tcgplayer are both counted as marketplace sales.
+		liquidationLossCents, liquidationSaleCount, ebayMarginPct :=
+			s.computeChannelHealthSignals(ctx, c.ID)
+
+		if liquidationLossCents < -50000 && ebayMarginPct > 0.10 {
+			liquidationReason := fmt.Sprintf(
+				"marketplace channels profitable (%.1f%%) but $%.2f lost to forced liquidation",
+				ebayMarginPct*100,
+				float64(-liquidationLossCents)/100,
+			)
+			// Don't downgrade a campaign that's already critical from the base
+			// health logic (e.g., deeply negative ROI with unsold inventory).
+			// Instead append the liquidation context to the existing reason.
+			if status == "critical" {
+				reason = reason + "; " + liquidationReason
+			} else {
+				status = "warning"
+				reason = liquidationReason
+			}
+		}
+
 		ch := CampaignHealth{
-			CampaignID:     c.ID,
-			CampaignName:   c.Name,
-			Phase:          c.Phase,
-			ROI:            pnl.ROI,
-			SellThroughPct: pnl.SellThroughPct,
-			AvgDaysToSell:  pnl.AvgDaysToSell,
-			TotalPurchases: pnl.TotalPurchases,
-			TotalUnsold:    pnl.TotalUnsold,
-			CapitalAtRisk:  capitalAtRisk,
-			HealthStatus:   status,
-			HealthReason:   reason,
+			CampaignID:           c.ID,
+			CampaignName:         c.Name,
+			Phase:                c.Phase,
+			ROI:                  pnl.ROI,
+			SellThroughPct:       pnl.SellThroughPct,
+			AvgDaysToSell:        pnl.AvgDaysToSell,
+			TotalPurchases:       pnl.TotalPurchases,
+			TotalUnsold:          pnl.TotalUnsold,
+			CapitalAtRisk:        capitalAtRisk,
+			HealthStatus:         status,
+			HealthReason:         reason,
+			LiquidationLossCents: liquidationLossCents,
+			LiquidationSaleCount: liquidationSaleCount,
+			EbayChannelMarginPct: ebayMarginPct,
 		}
 		health.Campaigns = append(health.Campaigns, ch)
 		health.TotalDeployed += pnl.TotalSpendCents
@@ -92,6 +120,61 @@ func (s *service) GetPortfolioHealth(ctx context.Context) (*PortfolioHealth, err
 	}
 
 	return health, nil
+}
+
+// computeChannelHealthSignals walks a campaign's sold purchases and returns:
+//   - liquidationLossCents: sum of strictly-negative net profit on inperson+cardshow
+//     sales (always ≤ 0). Profitable inperson/cardshow sales do not subtract from
+//     this figure — we only surface the bleed.
+//   - liquidationSaleCount: number of losing sales contributing to the loss.
+//   - marketplaceMarginPct: net profit / revenue across eBay and TCGPlayer sales
+//     combined (0 if no marketplace sales). eBay and TCGPlayer are grouped because
+//     CLAUDE.md treats them as fee-equivalent marketplaces and the campaign-level
+//     fee config shares a single ebayFeePct across both.
+//
+// Reads per-sale data from GetPurchasesWithSales rather than ChannelPNL because the
+// latter only aggregates per-channel totals and cannot isolate strictly-negative
+// contributions. Errors are logged and the zero tuple is returned so that a single
+// campaign failure doesn't hide the whole portfolio health response.
+func (s *service) computeChannelHealthSignals(ctx context.Context, campaignID string) (int, int, float64) {
+	data, err := s.repo.GetPurchasesWithSales(ctx, campaignID)
+	if err != nil {
+		if s.logger != nil {
+			s.logger.Error(ctx, "channel health signals: fetch purchases with sales",
+				observability.String("campaignID", campaignID),
+				observability.Err(err))
+		}
+		return 0, 0, 0
+	}
+
+	var (
+		liquidationLossCents int
+		liquidationSaleCount int
+		marketplaceRevenue   int
+		marketplaceNetProfit int
+	)
+
+	for _, d := range data {
+		if d.Sale == nil {
+			continue
+		}
+		switch d.Sale.SaleChannel {
+		case SaleChannelInPerson, SaleChannelCardShow:
+			if d.Sale.NetProfitCents < 0 {
+				liquidationLossCents += d.Sale.NetProfitCents
+				liquidationSaleCount++
+			}
+		case SaleChannelEbay, SaleChannelTCGPlayer:
+			marketplaceRevenue += d.Sale.SalePriceCents
+			marketplaceNetProfit += d.Sale.NetProfitCents
+		}
+	}
+
+	marketplaceMarginPct := 0.0
+	if marketplaceRevenue > 0 {
+		marketplaceMarginPct = float64(marketplaceNetProfit) / float64(marketplaceRevenue)
+	}
+	return liquidationLossCents, liquidationSaleCount, marketplaceMarginPct
 }
 
 func (s *service) GetPortfolioChannelVelocity(ctx context.Context) ([]ChannelVelocity, error) {
@@ -145,10 +228,77 @@ func (s *service) GetPortfolioInsights(ctx context.Context) (*PortfolioInsights,
 
 // --- Campaign Suggestions ---
 
+// computeChannelHealthByCampaign walks a pre-fetched slice of purchase/sale
+// records and returns per-campaign liquidation and marketplace signals. It
+// mirrors the per-campaign semantics of computeChannelHealthSignals but
+// operates on a single bulk dataset, so GetCampaignSuggestions can derive
+// every campaign's health from one GetAllPurchasesWithSales call instead of
+// calling GetPurchasesWithSales once per campaign (the N+1 pattern that
+// GetPortfolioHealth produces).
+//
+// The returned CampaignHealth entries are intentionally partial: they carry
+// only the fields the liquidation-aware buy-terms rule consumes
+// (CampaignID, LiquidationLossCents, LiquidationSaleCount, EbayChannelMarginPct).
+// Callers that need the full health view (ROI, HealthStatus, etc.) must still
+// use GetPortfolioHealth.
+func computeChannelHealthByCampaign(data []PurchaseWithSale) map[string]CampaignHealth {
+	type agg struct {
+		liquidationLossCents int
+		liquidationSaleCount int
+		marketplaceRevenue   int
+		marketplaceNetProfit int
+	}
+	byCampaign := make(map[string]*agg)
+	for _, d := range data {
+		if d.Sale == nil {
+			continue
+		}
+		cid := d.Purchase.CampaignID
+		bucket, ok := byCampaign[cid]
+		if !ok {
+			bucket = &agg{}
+			byCampaign[cid] = bucket
+		}
+		switch d.Sale.SaleChannel {
+		case SaleChannelInPerson, SaleChannelCardShow:
+			if d.Sale.NetProfitCents < 0 {
+				bucket.liquidationLossCents += d.Sale.NetProfitCents
+				bucket.liquidationSaleCount++
+			}
+		case SaleChannelEbay, SaleChannelTCGPlayer:
+			bucket.marketplaceRevenue += d.Sale.SalePriceCents
+			bucket.marketplaceNetProfit += d.Sale.NetProfitCents
+		}
+	}
+	result := make(map[string]CampaignHealth, len(byCampaign))
+	for cid, b := range byCampaign {
+		margin := 0.0
+		if b.marketplaceRevenue > 0 {
+			margin = float64(b.marketplaceNetProfit) / float64(b.marketplaceRevenue)
+		}
+		result[cid] = CampaignHealth{
+			CampaignID:           cid,
+			LiquidationLossCents: b.liquidationLossCents,
+			LiquidationSaleCount: b.liquidationSaleCount,
+			EbayChannelMarginPct: margin,
+		}
+	}
+	return result
+}
+
 func (s *service) GetCampaignSuggestions(ctx context.Context) (*SuggestionsResponse, error) {
-	insights, err := s.GetPortfolioInsights(ctx)
+	// Single bulk fetch of purchase/sale data — reused for both portfolio
+	// insights and the per-campaign liquidation health map below, replacing
+	// the previous N+1 pattern where GetPortfolioHealth called
+	// GetPurchasesWithSales once per campaign.
+	data, err := s.repo.GetAllPurchasesWithSales(ctx, WithExcludeArchived())
 	if err != nil {
-		return nil, fmt.Errorf("portfolio insights: %w", err)
+		return nil, fmt.Errorf("all purchases with sales: %w", err)
+	}
+
+	channelPNL, err := s.repo.GetGlobalPNLByChannel(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("global channel PNL: %w", err)
 	}
 
 	campaigns, err := s.repo.ListCampaigns(ctx, false)
@@ -156,7 +306,10 @@ func (s *service) GetCampaignSuggestions(ctx context.Context) (*SuggestionsRespo
 		return nil, fmt.Errorf("list campaigns: %w", err)
 	}
 
-	return GenerateSuggestions(ctx, insights, campaigns), nil
+	insights := computePortfolioInsights(data, channelPNL, campaigns)
+	healthByCampaign := computeChannelHealthByCampaign(data)
+
+	return GenerateSuggestions(ctx, insights, campaigns, healthByCampaign), nil
 }
 
 // --- Capital Timeline ---

@@ -17,10 +17,6 @@ const (
 	// the "sweet spot" worth dedicating a campaign to (Rule 2).
 	suggMinROIGradeSweetSpot = 0.10
 
-	// suggMinSalesPerChannel is the minimum sale count per channel to consider
-	// it for buy-terms suggestions (Rule 4).
-	suggMinSalesPerChannel = 3
-
 	// suggMinTotalSalesChannelAnalysis is the minimum total sales required before
 	// channel-informed buy terms suggestions are generated (Rule 4).
 	suggMinTotalSalesChannelAnalysis = 10
@@ -48,10 +44,15 @@ const (
 	// character before expansion stops being suggested (Rule 1).
 	suggMaxCampaignsPerCharacter = 3
 
-	// suggBuyTermsBuffer is the margin of tolerance before triggering a buy terms
-	// adjustment suggestion. If current buy terms exceed the computed max by more
-	// than this value, a suggestion is generated (Rule 4).
-	suggBuyTermsBuffer = 0.05
+	// suggBuyTermsReductionBuffer is the minimum gap between target margin and
+	// the portfolio's weighted-average margin before the channel-informed
+	// buy-terms rule fires. Gaps below this are treated as noise. (Rule 4)
+	suggBuyTermsReductionBuffer = 0.05
+
+	// suggBuyTermsFloorPct is the lower bound the channel-informed rule will
+	// ever recommend for CL%. Prevents the rule from suggesting absurdly
+	// aggressive terms when the margin gap is large. (Rule 4)
+	suggBuyTermsFloorPct = 0.70
 
 	// suggROIDeviation is the minimum deviation from average ROI before
 	// suggesting spend-cap rebalancing across campaigns (Rule 5).
@@ -79,10 +80,29 @@ const (
 	// suggActivateMinROI is the minimum ROI for a character segment to trigger
 	// a suggestion to activate a pending campaign (Rule 7).
 	suggActivateMinROI = 0.10
+
+	// suggLiquidationLossThresholdCents is the minimum absolute liquidation
+	// loss ($500) a campaign must have accumulated before the liquidation-aware
+	// buy-terms rule fires. Below this, the bleed is too small to structurally
+	// adjust buy terms. (Rule 8)
+	suggLiquidationLossThresholdCents = 50000
+
+	// suggLiquidationMinSampleSize is the minimum number of losing liquidation
+	// sales required before recommending a buy-terms reduction, to avoid
+	// overreacting to a single bad sale. (Rule 8)
+	suggLiquidationMinSampleSize = 5
+
+	// suggLiquidationFloorPct is the lower bound the liquidation-aware rule
+	// will ever recommend for CL%. Mirrors suggBuyTermsFloorPct but kept
+	// explicit so the two rules can evolve independently. (Rule 8)
+	suggLiquidationFloorPct = 0.70
 )
 
 // GenerateSuggestions produces data-driven campaign recommendations from portfolio insights.
-func GenerateSuggestions(ctx context.Context, insights *PortfolioInsights, campaigns []Campaign) *SuggestionsResponse {
+// healthByCampaign is keyed by Campaign.ID and drives the liquidation-aware buy-terms
+// rule. Callers that don't have portfolio health (e.g. unit tests of unrelated rules)
+// can pass nil — liquidation-dependent rules will simply skip.
+func GenerateSuggestions(ctx context.Context, insights *PortfolioInsights, campaigns []Campaign, healthByCampaign map[string]CampaignHealth) *SuggestionsResponse {
 	resp := &SuggestionsResponse{
 		DataSummary: insights.DataSummary,
 	}
@@ -93,6 +113,7 @@ func GenerateSuggestions(ctx context.Context, insights *PortfolioInsights, campa
 	resp.NewCampaigns = append(resp.NewCampaigns, suggestGradeSweetSpot(ctx, insights, campaigns)...)
 	resp.NewCampaigns = append(resp.NewCampaigns, suggestCoverageGapCampaigns(ctx, insights)...)
 	resp.Adjustments = append(resp.Adjustments, suggestChannelInformedBuyTerms(ctx, insights, campaigns, now)...)
+	resp.Adjustments = append(resp.Adjustments, suggestBuyTermsFromLiquidation(ctx, campaigns, healthByCampaign)...)
 	resp.Adjustments = append(resp.Adjustments, suggestSpendCapRebalancing(ctx, insights, campaigns)...)
 	resp.Adjustments = append(resp.Adjustments, suggestCharacterAdjustments(ctx, insights, campaigns)...)
 	resp.Adjustments = append(resp.Adjustments, suggestPhaseTransitions(ctx, insights, campaigns)...)
@@ -185,11 +206,6 @@ func betterSuggestion(a, b CampaignSuggestion) bool {
 		return confidenceRank[a.Confidence] > confidenceRank[b.Confidence]
 	}
 	return a.DataPoints > b.DataPoints
-}
-
-// isMarketplaceChannel returns true for channels that charge marketplace fees.
-func isMarketplaceChannel(ch SaleChannel) bool {
-	return NormalizeChannel(ch) == SaleChannelEbay
 }
 
 // gradeRangeFromLabel converts a grade label like "PSA 9" to a range string like "9-9".

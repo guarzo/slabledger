@@ -157,28 +157,45 @@ func suggestCoverageGapCampaigns(_ context.Context, insights *PortfolioInsights)
 	return suggestions
 }
 
+// suggestChannelInformedBuyTerms flags active campaigns whose revenue-weighted
+// margin across the portfolio's actual channel mix is meaningfully below the
+// target margin. When the gap exceeds suggBuyTermsReductionBuffer, it suggests
+// reducing CL% by the gap (floored at suggBuyTermsFloorPct).
+//
+// Rationale: the previous implementation compared the *best* channel's margin
+// to a flat target, which produced nonsensical recommendations (e.g. "lower
+// buy terms to 28.57%") whenever any channel ran hot. Using the weighted
+// average of the realized mix keeps the rule honest and only fires when the
+// portfolio is actually underperforming on net.
 func suggestChannelInformedBuyTerms(_ context.Context, insights *PortfolioInsights, campaigns []Campaign, now string) []CampaignSuggestion {
 	var suggestions []CampaignSuggestion
 
-	if len(insights.ByChannel) < 2 || insights.DataSummary.TotalSales < suggMinTotalSalesChannelAnalysis {
+	if len(insights.ByChannel) == 0 || insights.DataSummary.TotalSales < suggMinTotalSalesChannelAnalysis {
 		return nil
 	}
 
-	var bestChannel *ChannelPNL
-	var bestMargin float64
+	// Revenue-weighted average margin across ALL channels.
+	var totalRev, totalNet float64
+	var totalSales int
 	for i := range insights.ByChannel {
 		ch := &insights.ByChannel[i]
-		if ch.SaleCount < suggMinSalesPerChannel || ch.RevenueCents <= 0 {
+		if ch.RevenueCents <= 0 {
 			continue
 		}
-		margin := float64(ch.NetProfitCents) / float64(ch.RevenueCents)
-		if bestChannel == nil || margin > bestMargin {
-			bestChannel = ch
-			bestMargin = margin
-		}
+		totalRev += float64(ch.RevenueCents)
+		totalNet += float64(ch.NetProfitCents)
+		totalSales += ch.SaleCount
 	}
+	if totalRev <= 0 {
+		return nil
+	}
+	weightedMargin := totalNet / totalRev
 
-	if bestChannel == nil || bestMargin <= 0 {
+	// Only fire when the gap between target and realized margin is large
+	// enough to matter. This preserves a safety net for quiet eBay-only
+	// underperformance without generating nuisance suggestions.
+	gap := suggTargetMargin - weightedMargin
+	if gap < suggBuyTermsReductionBuffer {
 		return nil
 	}
 
@@ -187,44 +204,146 @@ func suggestChannelInformedBuyTerms(_ context.Context, insights *PortfolioInsigh
 			continue
 		}
 
-		var feePct float64
-		if isMarketplaceChannel(bestChannel.Channel) {
-			feePct = c.EbayFeePct
-			if feePct == 0 {
-				feePct = DefaultMarketplaceFeePct
-			}
-		} else if NormalizeChannel(bestChannel.Channel) == SaleChannelWebsite {
-			feePct = DefaultWebsiteFeePct
+		newTerms := c.BuyTermsCLPct - gap
+		if newTerms < suggBuyTermsFloorPct {
+			newTerms = suggBuyTermsFloorPct
 		}
-
-		targetMargin := suggTargetMargin
-
-		maxBuy := bestMargin - targetMargin - feePct
-		if maxBuy <= 0 {
+		// Never recommend terms >= current. Also skip if current is already
+		// at or below the floor — nothing sensible to suggest.
+		if newTerms >= c.BuyTermsCLPct {
 			continue
 		}
 
-		if c.BuyTermsCLPct > maxBuy+suggBuyTermsBuffer {
-			confidence := confidenceLabelWithAge(bestChannel.SaleCount, "", now)
+		confidence := confidenceLabelWithAge(totalSales, "", now)
 
-			suggestions = append(suggestions, CampaignSuggestion{
-				Type:  "adjust",
-				Title: fmt.Sprintf("Lower buy terms on %s", c.Name),
-				Rationale: fmt.Sprintf("Best channel (%s) margin is %.0f%%. With %.0f%% fees and 10%% target margin, max buy should be ~%.0f%% CL. Current: %.0f%%.",
-					bestChannel.Channel, bestMargin*100, feePct*100, maxBuy*100, c.BuyTermsCLPct*100),
-				Confidence: confidence,
-				DataPoints: bestChannel.SaleCount,
-				SuggestedParams: CampaignSuggestionParams{
-					Name:          c.Name,
-					BuyTermsCLPct: maxBuy,
-				},
-				ExpectedMetrics: ExpectedMetrics{
-					ExpectedMarginPct: targetMargin,
-					DataConfidence:    confidence,
-				},
-			})
-		}
+		suggestions = append(suggestions, CampaignSuggestion{
+			Type:  "adjust",
+			Title: fmt.Sprintf("Lower buy terms on %s (margin gap)", c.Name),
+			Rationale: fmt.Sprintf("Weighted-average margin across channels is %.1f%%, below the %.0f%% target. Lowering CL%% from %.0f%% to %.0f%% closes the gap.",
+				weightedMargin*100, suggTargetMargin*100,
+				c.BuyTermsCLPct*100, newTerms*100),
+			Confidence: confidence,
+			DataPoints: totalSales,
+			SuggestedParams: CampaignSuggestionParams{
+				Name:          c.Name,
+				BuyTermsCLPct: newTerms,
+			},
+			ExpectedMetrics: ExpectedMetrics{
+				ExpectedMarginPct: suggTargetMargin,
+				DataConfidence:    confidence,
+			},
+		})
 	}
 
 	return suggestions
+}
+
+// suggestBuyTermsFromLiquidation inspects per-campaign liquidation damage and
+// recommends a CL buy-terms reduction sized to absorb the observed inperson
+// and cardshow losses.
+//
+// Triggers only when real damage is observed on an active campaign (not a
+// theoretical margin gap), with a sample-size guard to avoid reacting to one
+// bad sale. Each 1% reduction in buy terms frees ~$5 of margin on a $500 card,
+// which both improves eBay profitability and widens the liquidation buffer.
+//
+// Distinct from suggestChannelInformedBuyTerms: that rule reacts to portfolio-
+// wide realized margin vs. target; this rule reacts to actual strictly-negative
+// inperson/cardshow sales on a specific campaign.
+func suggestBuyTermsFromLiquidation(_ context.Context, campaigns []Campaign, healthByCampaign map[string]CampaignHealth) []CampaignSuggestion {
+	if len(healthByCampaign) == 0 {
+		return nil
+	}
+
+	var suggestions []CampaignSuggestion
+	for _, c := range campaigns {
+		if c.Phase != PhaseActive {
+			continue
+		}
+		h, ok := healthByCampaign[c.ID]
+		if !ok {
+			continue
+		}
+		// LiquidationLossCents is stored as a non-positive number (sum of
+		// strictly-negative net profit on liquidation channels). Compare its
+		// magnitude to the threshold.
+		if -h.LiquidationLossCents < suggLiquidationLossThresholdCents {
+			continue
+		}
+		if h.LiquidationSaleCount < suggLiquidationMinSampleSize {
+			continue
+		}
+		// Only suggest "bake in a margin buffer" when the marketplace channel
+		// is actually profitable. If eBay/TCGPlayer margin is zero (no data)
+		// or negative (the whole channel is broken), lowering buy terms won't
+		// fix the campaign — recommending it would be misleading. The zero
+		// case also excludes campaigns with no marketplace sales at all,
+		// where we don't have enough data to confidently recommend a target.
+		if h.EbayChannelMarginPct <= 0 {
+			continue
+		}
+
+		reduction := computeBuyTermsReduction(h)
+		newTerms := c.BuyTermsCLPct - reduction
+		if newTerms < suggLiquidationFloorPct {
+			newTerms = suggLiquidationFloorPct
+		}
+		// Never recommend terms at or above current. Also skips campaigns
+		// whose current terms are already at or below the floor.
+		if newTerms >= c.BuyTermsCLPct {
+			continue
+		}
+
+		confidence := "medium"
+		if h.LiquidationSaleCount >= 10 {
+			confidence = "high"
+		}
+
+		appliedReductionPct := (c.BuyTermsCLPct - newTerms) * 100
+
+		suggestions = append(suggestions, CampaignSuggestion{
+			Type:  "adjust",
+			Title: fmt.Sprintf("Lower buy terms on %s (liquidation buffer)", c.Name),
+			Rationale: fmt.Sprintf(
+				"Campaign has $%.2f in liquidation losses across %d sales. Lowering CL%% from %.0f%% to %.0f%% creates a %.0f-point margin buffer on every fill, improving both eBay margin and liquidation tolerance.",
+				float64(-h.LiquidationLossCents)/100,
+				h.LiquidationSaleCount,
+				c.BuyTermsCLPct*100,
+				newTerms*100,
+				appliedReductionPct,
+			),
+			Confidence: confidence,
+			DataPoints: h.LiquidationSaleCount,
+			SuggestedParams: CampaignSuggestionParams{
+				Name:          c.Name,
+				BuyTermsCLPct: newTerms,
+			},
+			ExpectedMetrics: ExpectedMetrics{
+				DataConfidence: confidence,
+			},
+		})
+	}
+
+	return suggestions
+}
+
+// computeBuyTermsReduction maps observed average liquidation loss per sale
+// into a deterministic buy-terms reduction bucket. The thresholds are tuned
+// so that a typical $500 card with a 15% liquidation hit (~$75/sale) lands in
+// the 8% bucket.
+func computeBuyTermsReduction(h CampaignHealth) float64 {
+	if h.LiquidationSaleCount <= 0 {
+		return 0
+	}
+	avgLossCents := float64(-h.LiquidationLossCents) / float64(h.LiquidationSaleCount)
+	switch {
+	case avgLossCents > 5000: // > $50/sale
+		return 0.08
+	case avgLossCents > 3000: // $30–50/sale
+		return 0.05
+	case avgLossCents > 1500: // $15–30/sale
+		return 0.03
+	default:
+		return 0.02
+	}
 }

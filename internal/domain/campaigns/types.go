@@ -301,6 +301,14 @@ type CapitalSummary struct {
 	RefundedCents             int           `json:"refundedCents"` // Total refunds
 	PaidCents                 int           `json:"paidCents"`     // Total paid
 	UnpaidInvoiceCount        int           `json:"unpaidInvoiceCount"`
+	// Invoice-cycle projection (see ComputeInvoiceProjection in invoice_projection.go).
+	NextInvoiceDate        string `json:"nextInvoiceDate,omitempty"`    // YYYY-MM-DD, empty if no unpaid
+	NextInvoiceDueDate     string `json:"nextInvoiceDueDate,omitempty"` // YYYY-MM-DD
+	NextInvoiceAmountCents int    `json:"nextInvoiceAmountCents"`       // TotalCents - PaidCents of earliest unpaid
+	DaysUntilInvoiceDue    int    `json:"daysUntilInvoiceDue"`          // from now to due date, 0 if no unpaid
+	ProjectedRecoveryCents int    `json:"projectedRecoveryCents"`       // daily velocity * daysUntilInvoiceDue
+	ProjectedCashGapCents  int    `json:"projectedCashGapCents"`        // max(0, owed - projected - buffer)
+	CashBufferCents        int    `json:"cashBufferCents"`              // mirror of CashflowConfig.CashBufferCents
 }
 
 // ComputeCapitalSummary applies business logic to raw capital data, computing
@@ -411,6 +419,12 @@ type CampaignHealth struct {
 	CapitalAtRisk  int     `json:"capitalAtRiskCents"`
 	HealthStatus   string  `json:"healthStatus"` // "healthy", "warning", "critical"
 	HealthReason   string  `json:"healthReason"`
+
+	// Liquidation awareness — distinguishes "marketplace margin broken" from
+	// "we forced cards into low-margin inperson/cardshow sales to cover an invoice".
+	LiquidationLossCents int     `json:"liquidationLossCents"` // sum of negative net profit on inperson+cardshow sales; always ≤ 0
+	LiquidationSaleCount int     `json:"liquidationSaleCount"` // count of sales contributing to the loss
+	EbayChannelMarginPct float64 `json:"ebayChannelMarginPct"` // net profit / revenue on eBay + TCGPlayer sales combined; 0 if no marketplace sales. JSON field name retained for frontend compatibility.
 }
 
 // Sale represents the sale of a purchased card.
