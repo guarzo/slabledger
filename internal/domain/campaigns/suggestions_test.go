@@ -529,14 +529,11 @@ func TestGenerateSuggestions_BuyTermsFromLiquidation(t *testing.T) {
 		},
 		{
 			name: "bucket $15-30/sale → reduction 3%, medium confidence",
-			// $20/sale avg (> $15, ≤ $30) × 6 sales = $120 total loss. Sample 6 → medium.
-			// Wait: threshold is $500. Use larger per-sale loss that's still in bucket.
-			// $25/sale × 8 = $200 — still under $500 threshold. Boost sales count.
-			// Need: avgLoss in (1500, 3000] AND total ≥ 50000.
 			// $25/sale × 22 sales = $550 total, avg $25. Bucket is 3%.
+			// Marketplace margin positive so the gate allows the rule.
 			campaigns: []Campaign{{ID: "c3", Name: "Mid-Era", Phase: PhaseActive, BuyTermsCLPct: 0.80}},
 			health: map[string]CampaignHealth{
-				"c3": {CampaignID: "c3", LiquidationLossCents: -55000, LiquidationSaleCount: 22},
+				"c3": {CampaignID: "c3", LiquidationLossCents: -55000, LiquidationSaleCount: 22, EbayChannelMarginPct: 0.18},
 			},
 			wantCampaign:   "Mid-Era",
 			wantNewTerms:   0.77,
@@ -548,7 +545,7 @@ func TestGenerateSuggestions_BuyTermsFromLiquidation(t *testing.T) {
 			// $40/sale avg × 13 sales = $520. Bucket is 5%. 13 sales → high confidence.
 			campaigns: []Campaign{{ID: "c4", Name: "Vintage Core", Phase: PhaseActive, BuyTermsCLPct: 0.80}},
 			health: map[string]CampaignHealth{
-				"c4": {CampaignID: "c4", LiquidationLossCents: -52000, LiquidationSaleCount: 13},
+				"c4": {CampaignID: "c4", LiquidationLossCents: -52000, LiquidationSaleCount: 13, EbayChannelMarginPct: 0.20},
 			},
 			wantCampaign:   "Vintage Core",
 			wantNewTerms:   0.75,
@@ -560,7 +557,7 @@ func TestGenerateSuggestions_BuyTermsFromLiquidation(t *testing.T) {
 			// $80/sale avg × 8 sales = $640. Bucket is 8%. 8 sales → medium confidence (below 10).
 			campaigns: []Campaign{{ID: "c5", Name: "Vintage Low Grade", Phase: PhaseActive, BuyTermsCLPct: 0.82}},
 			health: map[string]CampaignHealth{
-				"c5": {CampaignID: "c5", LiquidationLossCents: -64000, LiquidationSaleCount: 8},
+				"c5": {CampaignID: "c5", LiquidationLossCents: -64000, LiquidationSaleCount: 8, EbayChannelMarginPct: 0.22},
 			},
 			wantCampaign:   "Vintage Low Grade",
 			wantNewTerms:   0.74,
@@ -572,7 +569,7 @@ func TestGenerateSuggestions_BuyTermsFromLiquidation(t *testing.T) {
 			// Campaign at 74% with 8% bucket ($80/sale × 10) → 74-8=66, clamped to 70.
 			campaigns: []Campaign{{ID: "c6", Name: "NearFloor", Phase: PhaseActive, BuyTermsCLPct: 0.74}},
 			health: map[string]CampaignHealth{
-				"c6": {CampaignID: "c6", LiquidationLossCents: -80000, LiquidationSaleCount: 10},
+				"c6": {CampaignID: "c6", LiquidationLossCents: -80000, LiquidationSaleCount: 10, EbayChannelMarginPct: 0.15},
 			},
 			wantCampaign:   "NearFloor",
 			wantNewTerms:   0.70,
@@ -584,7 +581,7 @@ func TestGenerateSuggestions_BuyTermsFromLiquidation(t *testing.T) {
 			// 70% + 8% bucket = would be 62, clamped to 70, which equals current → skip.
 			campaigns: []Campaign{{ID: "c7", Name: "AtFloor", Phase: PhaseActive, BuyTermsCLPct: 0.70}},
 			health: map[string]CampaignHealth{
-				"c7": {CampaignID: "c7", LiquidationLossCents: -80000, LiquidationSaleCount: 10},
+				"c7": {CampaignID: "c7", LiquidationLossCents: -80000, LiquidationSaleCount: 10, EbayChannelMarginPct: 0.15},
 			},
 		},
 		{
@@ -592,7 +589,7 @@ func TestGenerateSuggestions_BuyTermsFromLiquidation(t *testing.T) {
 			// 0.68 < 0.70 floor → clamped to 0.70 which is > current → skip (rule never raises terms).
 			campaigns: []Campaign{{ID: "c8", Name: "BelowFloor", Phase: PhaseActive, BuyTermsCLPct: 0.68}},
 			health: map[string]CampaignHealth{
-				"c8": {CampaignID: "c8", LiquidationLossCents: -80000, LiquidationSaleCount: 10},
+				"c8": {CampaignID: "c8", LiquidationLossCents: -80000, LiquidationSaleCount: 10, EbayChannelMarginPct: 0.15},
 			},
 		},
 		{
@@ -600,7 +597,7 @@ func TestGenerateSuggestions_BuyTermsFromLiquidation(t *testing.T) {
 			// avg $60/sale × 10 = $600, bucket 8%. Tier boundary: 10 sales → high.
 			campaigns: []Campaign{{ID: "c9", Name: "Boundary10", Phase: PhaseActive, BuyTermsCLPct: 0.85}},
 			health: map[string]CampaignHealth{
-				"c9": {CampaignID: "c9", LiquidationLossCents: -60000, LiquidationSaleCount: 10},
+				"c9": {CampaignID: "c9", LiquidationLossCents: -60000, LiquidationSaleCount: 10, EbayChannelMarginPct: 0.15},
 			},
 			wantCampaign:   "Boundary10",
 			wantNewTerms:   0.77,
@@ -612,7 +609,7 @@ func TestGenerateSuggestions_BuyTermsFromLiquidation(t *testing.T) {
 			// avg ~$67/sale × 9 = $600, bucket 8%. 9 sales → medium.
 			campaigns: []Campaign{{ID: "c10", Name: "Boundary9", Phase: PhaseActive, BuyTermsCLPct: 0.85}},
 			health: map[string]CampaignHealth{
-				"c10": {CampaignID: "c10", LiquidationLossCents: -60000, LiquidationSaleCount: 9},
+				"c10": {CampaignID: "c10", LiquidationLossCents: -60000, LiquidationSaleCount: 9, EbayChannelMarginPct: 0.15},
 			},
 			wantCampaign:   "Boundary9",
 			wantNewTerms:   0.77,
@@ -625,14 +622,14 @@ func TestGenerateSuggestions_BuyTermsFromLiquidation(t *testing.T) {
 				{ID: "c11", Name: "Archived", Phase: PhaseClosed, BuyTermsCLPct: 0.85},
 			},
 			health: map[string]CampaignHealth{
-				"c11": {CampaignID: "c11", LiquidationLossCents: -80000, LiquidationSaleCount: 10},
+				"c11": {CampaignID: "c11", LiquidationLossCents: -80000, LiquidationSaleCount: 10, EbayChannelMarginPct: 0.15},
 			},
 		},
 		{
 			name:      "missing health row — no panic, no suggestion",
 			campaigns: []Campaign{{ID: "c12", Name: "NoHealth", Phase: PhaseActive, BuyTermsCLPct: 0.85}},
 			health: map[string]CampaignHealth{
-				"other": {CampaignID: "other", LiquidationLossCents: -80000, LiquidationSaleCount: 10},
+				"other": {CampaignID: "other", LiquidationLossCents: -80000, LiquidationSaleCount: 10, EbayChannelMarginPct: 0.15},
 			},
 		},
 		{
@@ -640,6 +637,24 @@ func TestGenerateSuggestions_BuyTermsFromLiquidation(t *testing.T) {
 			campaigns:    []Campaign{{ID: "c13", Name: "NilHealth", Phase: PhaseActive, BuyTermsCLPct: 0.85}},
 			health:       nil,
 			wantCampaign: "",
+		},
+		{
+			name: "zero marketplace margin — rule skips (no marketplace sales to baseline)",
+			// Plenty of liquidation damage, but no marketplace sales means we
+			// don't have a trustworthy margin baseline to recommend from.
+			campaigns: []Campaign{{ID: "c14", Name: "NoMarketplaceSales", Phase: PhaseActive, BuyTermsCLPct: 0.85}},
+			health: map[string]CampaignHealth{
+				"c14": {CampaignID: "c14", LiquidationLossCents: -80000, LiquidationSaleCount: 10, EbayChannelMarginPct: 0.0},
+			},
+		},
+		{
+			name: "negative marketplace margin — rule skips (channel itself is broken)",
+			// Lowering buy terms won't rescue a campaign whose marketplace
+			// channel is already underwater. Fix the channel first.
+			campaigns: []Campaign{{ID: "c15", Name: "BrokenMarketplace", Phase: PhaseActive, BuyTermsCLPct: 0.85}},
+			health: map[string]CampaignHealth{
+				"c15": {CampaignID: "c15", LiquidationLossCents: -80000, LiquidationSaleCount: 10, EbayChannelMarginPct: -0.05},
+			},
 		},
 	}
 

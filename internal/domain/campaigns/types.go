@@ -420,11 +420,11 @@ type CampaignHealth struct {
 	HealthStatus   string  `json:"healthStatus"` // "healthy", "warning", "critical"
 	HealthReason   string  `json:"healthReason"`
 
-	// Liquidation awareness — distinguishes "eBay margin broken" from
+	// Liquidation awareness — distinguishes "marketplace margin broken" from
 	// "we forced cards into low-margin inperson/cardshow sales to cover an invoice".
 	LiquidationLossCents int     `json:"liquidationLossCents"` // sum of negative net profit on inperson+cardshow sales; always ≤ 0
 	LiquidationSaleCount int     `json:"liquidationSaleCount"` // count of sales contributing to the loss
-	EbayChannelMarginPct float64 `json:"ebayChannelMarginPct"` // net profit / revenue on eBay channel; 0 if no eBay sales
+	EbayChannelMarginPct float64 `json:"ebayChannelMarginPct"` // net profit / revenue on eBay + TCGPlayer sales combined; 0 if no marketplace sales. JSON field name retained for frontend compatibility.
 }
 
 // Sale represents the sale of a purchased card.

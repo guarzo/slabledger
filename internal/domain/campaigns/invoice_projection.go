@@ -25,8 +25,9 @@ type InvoiceProjection struct {
 //   - Empty invoice list / all invoices paid -> zero projection.
 //   - Invoice with empty or unparseable DueDate -> skipped (next candidate wins).
 //   - recoveryRate30dCents == 0 -> projected recovery is 0; gap = amount - buffer.
-//   - Overdue invoice (due date in the past) -> picked, daysUntilDue and
-//     projected recovery reported as 0; gap = amount - buffer.
+//   - Overdue invoice (due date in the past) -> picked, daysUntilDue reported as
+//     a negative number of days so callers can surface "N days overdue"; projected
+//     recovery reported as 0; gap = amount - buffer.
 //
 // Parameters:
 //
@@ -88,9 +89,6 @@ func ComputeInvoiceProjection(
 	}
 
 	daysUntilDue := int(picked.dueDate.Sub(today).Hours() / 24)
-	if daysUntilDue < 0 {
-		daysUntilDue = 0
-	}
 
 	projectedRecovery := 0
 	if recoveryRate30dCents > 0 && daysUntilDue > 0 {

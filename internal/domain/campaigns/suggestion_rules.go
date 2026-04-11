@@ -273,6 +273,15 @@ func suggestBuyTermsFromLiquidation(campaigns []Campaign, healthByCampaign map[s
 		if h.LiquidationSaleCount < suggLiquidationMinSampleSize {
 			continue
 		}
+		// Only suggest "bake in a margin buffer" when the marketplace channel
+		// is actually profitable. If eBay/TCGPlayer margin is zero (no data)
+		// or negative (the whole channel is broken), lowering buy terms won't
+		// fix the campaign — recommending it would be misleading. The zero
+		// case also excludes campaigns with no marketplace sales at all,
+		// where we don't have enough data to confidently recommend a target.
+		if h.EbayChannelMarginPct <= 0 {
+			continue
+		}
 
 		reduction := computeBuyTermsReduction(h)
 		newTerms := c.BuyTermsCLPct - reduction

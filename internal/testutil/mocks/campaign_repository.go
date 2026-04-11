@@ -76,7 +76,7 @@ type MockCampaignRepository struct {
 	ClearSellSheetFn               func(ctx context.Context) error
 	OpenFlagPurchaseIDsFn          func(ctx context.Context) (map[string]int64, error)
 	GetCapitalRawDataFn            func(ctx context.Context) (*campaigns.CapitalRawData, error)
-	UpdateCashflowConfigFn         func(cfg *campaigns.CashflowConfig) error
+	UpdateCashflowConfigFn         func(ctx context.Context, cfg *campaigns.CashflowConfig) error
 }
 
 // NewMockCampaignRepository creates a ready-to-use MockCampaignRepository with initialized maps.
@@ -641,9 +641,9 @@ func (m *MockCampaignRepository) GetCashflowConfig(_ context.Context) (*campaign
 	return &campaigns.CashflowConfig{CapitalBudgetCents: 5000000, CashBufferCents: 1000000}, nil
 }
 
-func (m *MockCampaignRepository) UpdateCashflowConfig(_ context.Context, cfg *campaigns.CashflowConfig) error {
+func (m *MockCampaignRepository) UpdateCashflowConfig(ctx context.Context, cfg *campaigns.CashflowConfig) error {
 	if m.UpdateCashflowConfigFn != nil {
-		return m.UpdateCashflowConfigFn(cfg)
+		return m.UpdateCashflowConfigFn(ctx, cfg)
 	}
 	if cfg == nil {
 		return nil

@@ -37,7 +37,10 @@ export default function InvoiceReadinessPanel({ capital }: InvoiceReadinessPanel
   const coveragePct = Math.min(100, Math.max(0, rawCoverage));
 
   const covered = gapCents === 0;
-  const overdue = capital.daysUntilInvoiceDue <= 0;
+  // Negative days means the due date is in the past — that is overdue. "Due
+  // today" (exactly 0) should not be treated as overdue; the daysLabel below
+  // surfaces it as "due today" instead.
+  const overdue = capital.daysUntilInvoiceDue < 0;
 
   // Color coding: covered -> success, gap -> danger if overdue otherwise warning.
   const accentClass = covered

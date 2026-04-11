@@ -65,20 +65,29 @@ func (s *service) GetPortfolioHealth(ctx context.Context) (*PortfolioHealth, err
 			totalSoldNetProfit += soldProfit
 		}
 
-		// Liquidation-vs-eBay channel split. Iterates sold purchases to separate
-		// "eBay margin is broken" from "we liquidated cards that would have been
-		// profitable". Uses raw stored channel values (not normalized) so cardshow
-		// is counted as liquidation but tcgplayer is counted with eBay.
+		// Liquidation-vs-marketplace channel split. Iterates sold purchases to
+		// separate "marketplace margin is broken" from "we liquidated cards that
+		// would have been profitable". Uses raw stored channel values (not
+		// normalized) so cardshow is counted as liquidation while ebay and
+		// tcgplayer are both counted as marketplace sales.
 		liquidationLossCents, liquidationSaleCount, ebayMarginPct :=
 			s.computeChannelHealthSignals(ctx, c.ID)
 
 		if liquidationLossCents < -50000 && ebayMarginPct > 0.10 {
-			status = "warning"
-			reason = fmt.Sprintf(
-				"eBay channel profitable (%.1f%%) but $%.2f lost to forced liquidation",
+			liquidationReason := fmt.Sprintf(
+				"marketplace channels profitable (%.1f%%) but $%.2f lost to forced liquidation",
 				ebayMarginPct*100,
 				float64(-liquidationLossCents)/100,
 			)
+			// Don't downgrade a campaign that's already critical from the base
+			// health logic (e.g., deeply negative ROI with unsold inventory).
+			// Instead append the liquidation context to the existing reason.
+			if status == "critical" {
+				reason = reason + "; " + liquidationReason
+			} else {
+				status = "warning"
+				reason = liquidationReason
+			}
 		}
 
 		ch := CampaignHealth{
@@ -118,7 +127,10 @@ func (s *service) GetPortfolioHealth(ctx context.Context) (*PortfolioHealth, err
 //     sales (always ≤ 0). Profitable inperson/cardshow sales do not subtract from
 //     this figure — we only surface the bleed.
 //   - liquidationSaleCount: number of losing sales contributing to the loss.
-//   - ebayMarginPct: net profit / revenue on eBay sales (0 if no eBay sales).
+//   - marketplaceMarginPct: net profit / revenue across eBay and TCGPlayer sales
+//     combined (0 if no marketplace sales). eBay and TCGPlayer are grouped because
+//     CLAUDE.md treats them as fee-equivalent marketplaces and the campaign-level
+//     fee config shares a single ebayFeePct across both.
 //
 // Reads per-sale data from GetPurchasesWithSales rather than ChannelPNL because the
 // latter only aggregates per-channel totals and cannot isolate strictly-negative
@@ -138,8 +150,8 @@ func (s *service) computeChannelHealthSignals(ctx context.Context, campaignID st
 	var (
 		liquidationLossCents int
 		liquidationSaleCount int
-		ebayRevenue          int
-		ebayNetProfit        int
+		marketplaceRevenue   int
+		marketplaceNetProfit int
 	)
 
 	for _, d := range data {
@@ -152,17 +164,17 @@ func (s *service) computeChannelHealthSignals(ctx context.Context, campaignID st
 				liquidationLossCents += d.Sale.NetProfitCents
 				liquidationSaleCount++
 			}
-		case SaleChannelEbay:
-			ebayRevenue += d.Sale.SalePriceCents
-			ebayNetProfit += d.Sale.NetProfitCents
+		case SaleChannelEbay, SaleChannelTCGPlayer:
+			marketplaceRevenue += d.Sale.SalePriceCents
+			marketplaceNetProfit += d.Sale.NetProfitCents
 		}
 	}
 
-	ebayMarginPct := 0.0
-	if ebayRevenue > 0 {
-		ebayMarginPct = float64(ebayNetProfit) / float64(ebayRevenue)
+	marketplaceMarginPct := 0.0
+	if marketplaceRevenue > 0 {
+		marketplaceMarginPct = float64(marketplaceNetProfit) / float64(marketplaceRevenue)
 	}
-	return liquidationLossCents, liquidationSaleCount, ebayMarginPct
+	return liquidationLossCents, liquidationSaleCount, marketplaceMarginPct
 }
 
 func (s *service) GetPortfolioChannelVelocity(ctx context.Context) ([]ChannelVelocity, error) {

@@ -67,7 +67,7 @@ func TestService_UpdateCashflowConfig(t *testing.T) {
 			repo := mocks.NewMockCampaignRepository()
 			if tt.repoErr != nil {
 				repoErr := tt.repoErr
-				repo.UpdateCashflowConfigFn = func(_ *campaigns.CashflowConfig) error {
+				repo.UpdateCashflowConfigFn = func(_ context.Context, _ *campaigns.CashflowConfig) error {
 					return repoErr
 				}
 			}
@@ -184,9 +184,10 @@ func TestComputeInvoiceProjection(t *testing.T) {
 			},
 		},
 		{
-			name: "overdue invoice picked with zero projected recovery",
+			name: "overdue invoice reports negative daysUntilDue with zero projected recovery",
 			invoices: []campaigns.Invoice{
-				// Due 5 days ago. amount = 2_000_000. daysUntil = 0, projected = 0.
+				// Due 5 days ago (now=2026-04-11, due=2026-04-06). amount = 2_000_000.
+				// daysUntil = -5 (UI renders "5 days overdue"), projected = 0 (gated on > 0).
 				// gap = max(0, 2_000_000 - 0 - 250_000) = 1_750_000.
 				{ID: "i1", InvoiceDate: "2026-03-22", DueDate: "2026-04-06", TotalCents: 2_000_000, PaidCents: 0, Status: "unpaid"},
 			},
@@ -196,7 +197,7 @@ func TestComputeInvoiceProjection(t *testing.T) {
 				NextInvoiceDate:        "2026-03-22",
 				NextInvoiceDueDate:     "2026-04-06",
 				NextInvoiceAmountCents: 2_000_000,
-				DaysUntilInvoiceDue:    0,
+				DaysUntilInvoiceDue:    -5,
 				ProjectedRecoveryCents: 0,
 				ProjectedCashGapCents:  1_750_000,
 			},
