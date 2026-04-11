@@ -20,6 +20,19 @@ func (s *service) GetCashflowConfig(ctx context.Context) (*CashflowConfig, error
 	return s.repo.GetCashflowConfig(ctx)
 }
 
+// UpdateCashflowConfig persists operator-set capital budget and cash buffer values.
+// Both values are validated as non-negative; nil config is rejected.
+func (s *service) UpdateCashflowConfig(ctx context.Context, cfg *CashflowConfig) error {
+	if cfg == nil {
+		return fmt.Errorf("cashflow config: %w", ErrInvalidCashflowConfig)
+	}
+	if cfg.CapitalBudgetCents < 0 || cfg.CashBufferCents < 0 {
+		return ErrInvalidCashflowConfig
+	}
+	cfg.UpdatedAt = time.Now()
+	return s.repo.UpdateCashflowConfig(ctx, cfg)
+}
+
 func (s *service) ListInvoices(ctx context.Context) ([]Invoice, error) {
 	invoices, err := s.repo.ListInvoices(ctx)
 	if err != nil {

@@ -477,6 +477,9 @@ func (m *mockRepo) GetPendingReceiptByInvoiceDate(_ context.Context, invoiceDate
 func (m *mockRepo) GetCashflowConfig(_ context.Context) (*CashflowConfig, error) {
 	return &CashflowConfig{CapitalBudgetCents: 5000000, CashBufferCents: 1000000}, nil
 }
+func (m *mockRepo) UpdateCashflowConfig(_ context.Context, _ *CashflowConfig) error {
+	return nil
+}
 func (m *mockRepo) GetCapitalRawData(_ context.Context) (*CapitalRawData, error) {
 	return &CapitalRawData{OutstandingCents: 0, RecoveryRate30dCents: 0, RecoveryRate30dPriorCents: 0}, nil
 }

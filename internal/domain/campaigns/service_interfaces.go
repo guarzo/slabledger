@@ -85,6 +85,7 @@ type ImportService interface {
 type FinanceService interface {
 	GetCapitalSummary(ctx context.Context) (*CapitalSummary, error)
 	GetCashflowConfig(ctx context.Context) (*CashflowConfig, error)
+	UpdateCashflowConfig(ctx context.Context, cfg *CashflowConfig) error
 	ListInvoices(ctx context.Context) ([]Invoice, error)
 	UpdateInvoice(ctx context.Context, inv *Invoice) error
 
