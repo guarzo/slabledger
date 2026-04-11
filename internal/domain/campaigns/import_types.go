@@ -128,7 +128,7 @@ type PSAExportRow struct {
 	Grade          float64 // PSA grade (1-10, supports half-grades like 8.5)
 	PricePaid      float64 // Price paid in dollars
 	PurchaseSource string  // Where the card was sourced
-	VaultStatus    string  // PSA vault status
+	ShipDate       string  // PSA ship date
 	InvoiceDate    string  // Invoice date (YYYY-MM-DD after conversion)
 	WasRefunded    bool    // Whether the purchase was refunded
 	FrontImageURL  string  // Front card image URL

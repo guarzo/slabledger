@@ -547,7 +547,7 @@ func TestService_ImportPSAExportGlobal_SkipExisting(t *testing.T) {
 
 	rows := []campaigns.PSAExportRow{
 		{CertNumber: "PSA002", ListingTitle: "Charizard", Grade: 9, PricePaid: 500,
-			VaultStatus: "IN_VAULT", InvoiceDate: "2026-02-01", PurchaseSource: "PSA"},
+			ShipDate: "2026-02-01", InvoiceDate: "2026-02-01", PurchaseSource: "PSA"},
 	}
 
 	result, err := svc.ImportPSAExportGlobal(ctx, rows)
@@ -567,8 +567,8 @@ func TestService_ImportPSAExportGlobal_SkipExisting(t *testing.T) {
 	if updated.InvoiceDate != "2026-02-01" {
 		t.Errorf("InvoiceDate = %q, want %q", updated.InvoiceDate, "2026-02-01")
 	}
-	if updated.VaultStatus != "IN_VAULT" {
-		t.Errorf("VaultStatus = %q, want %q", updated.VaultStatus, "IN_VAULT")
+	if updated.PSAShipDate != "2026-02-01" {
+		t.Errorf("PSAShipDate = %q, want %q", updated.PSAShipDate, "2026-02-01")
 	}
 	if updated.PurchaseSource != "PSA" {
 		t.Errorf("PurchaseSource = %q, want %q", updated.PurchaseSource, "PSA")

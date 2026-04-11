@@ -116,7 +116,7 @@ func ParsePSAExportRows(records [][]string) ([]PSAExportRow, []ParseError, error
 			Grade:          grade,
 			PricePaid:      pricePaid,
 			PurchaseSource: getField(colIdx("purchase source")),
-			VaultStatus:    getField(colIdx("vault status")),
+			ShipDate:       getField(colIdx("ship date")),
 			InvoiceDate:    invoiceDate,
 			WasRefunded:    wasRefunded,
 			FrontImageURL:  getField(colIdx("front image url")),

@@ -58,6 +58,7 @@ type Repository interface {
 
 	// eBay export
 	SetEbayExportFlag(ctx context.Context, purchaseID string, flaggedAt time.Time) error
+	SetReceivedAt(ctx context.Context, purchaseID string, receivedAt time.Time) error
 	ClearEbayExportFlags(ctx context.Context, purchaseIDs []string) error
 	ListEbayFlaggedPurchases(ctx context.Context) ([]Purchase, error)
 	UpdatePurchaseCardYear(ctx context.Context, id string, year string) error
@@ -146,7 +147,7 @@ type DHFieldsUpdate struct {
 
 // PSAUpdateFields contains the PSA-specific fields that can be updated on an existing purchase.
 type PSAUpdateFields struct {
-	VaultStatus     string
+	PSAShipDate     string
 	InvoiceDate     string
 	WasRefunded     bool
 	FrontImageURL   string

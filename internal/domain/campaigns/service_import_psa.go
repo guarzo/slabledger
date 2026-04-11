@@ -218,7 +218,7 @@ func collectAllocatedCerts(results []PSAImportItemResult) []string {
 // and repairs card metadata if the set name is generic or the card number is missing.
 func (s *service) handleExistingPSAPurchase(ctx context.Context, existing *Purchase, row PSAExportRow) PSAImportItemResult {
 	fields := PSAUpdateFields{
-		VaultStatus:    row.VaultStatus,
+		PSAShipDate:    row.ShipDate,
 		InvoiceDate:    row.InvoiceDate,
 		WasRefunded:    row.WasRefunded,
 		FrontImageURL:  row.FrontImageURL,
@@ -235,7 +235,7 @@ func (s *service) handleExistingPSAPurchase(ctx context.Context, existing *Purch
 
 	// Skip the SQL UPDATE if nothing changed — prevents bumping updated_at
 	// and inflating the "updated" count on idempotent re-syncs.
-	psaChanged := existing.VaultStatus != fields.VaultStatus ||
+	psaChanged := existing.PSAShipDate != fields.PSAShipDate ||
 		existing.InvoiceDate != fields.InvoiceDate ||
 		existing.WasRefunded != fields.WasRefunded ||
 		existing.FrontImageURL != fields.FrontImageURL ||
@@ -365,7 +365,7 @@ func (s *service) handleNewPSAPurchase(ctx context.Context, row PSAExportRow, gr
 			PSASourcingFeeCents: campaign.PSASourcingFeeCents,
 			Population:          0,
 			PurchaseDate:        purchaseDate,
-			VaultStatus:         row.VaultStatus,
+			PSAShipDate:         row.ShipDate,
 			InvoiceDate:         row.InvoiceDate,
 			WasRefunded:         row.WasRefunded,
 			FrontImageURL:       row.FrontImageURL,

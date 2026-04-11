@@ -154,7 +154,8 @@ type Purchase struct {
 	PSASourcingFeeCents   int            `json:"psaSourcingFeeCents"`        // Fee charged per card
 	Population            int            `json:"population,omitempty"`       // PSA population count
 	PurchaseDate          string         `json:"purchaseDate"`               // YYYY-MM-DD
-	VaultStatus           string         `json:"vaultStatus,omitempty"`
+	ReceivedAt            *string        `json:"receivedAt,omitempty"`
+	PSAShipDate           string         `json:"psaShipDate,omitempty"`
 	InvoiceDate           string         `json:"invoiceDate,omitempty"`
 	WasRefunded           bool           `json:"wasRefunded,omitempty"`
 	FrontImageURL         string         `json:"frontImageUrl,omitempty"`

@@ -415,7 +415,7 @@ func (m *mockRepo) UpdatePurchasePSAFields(_ context.Context, id string, fields 
 	if !ok {
 		return ErrPurchaseNotFound
 	}
-	p.VaultStatus = fields.VaultStatus
+	p.PSAShipDate = fields.PSAShipDate
 	p.InvoiceDate = fields.InvoiceDate
 	p.WasRefunded = fields.WasRefunded
 	p.FrontImageURL = fields.FrontImageURL
@@ -600,6 +600,16 @@ func (m *mockRepo) SetEbayExportFlag(_ context.Context, purchaseID string, flagg
 		return ErrPurchaseNotFound
 	}
 	p.EbayExportFlaggedAt = &flaggedAt
+	return nil
+}
+
+func (m *mockRepo) SetReceivedAt(_ context.Context, purchaseID string, receivedAt time.Time) error {
+	p, ok := m.purchases[purchaseID]
+	if !ok {
+		return ErrPurchaseNotFound
+	}
+	receivedAtStr := receivedAt.Format("2006-01-02T15:04:05Z07:00")
+	p.ReceivedAt = &receivedAtStr
 	return nil
 }
 

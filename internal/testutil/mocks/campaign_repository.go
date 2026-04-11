@@ -572,7 +572,7 @@ func (m *MockCampaignRepository) UpdatePurchasePSAFields(ctx context.Context, id
 	if !ok {
 		return campaigns.ErrPurchaseNotFound
 	}
-	p.VaultStatus = fields.VaultStatus
+	p.PSAShipDate = fields.PSAShipDate
 	p.InvoiceDate = fields.InvoiceDate
 	p.WasRefunded = fields.WasRefunded
 	p.FrontImageURL = fields.FrontImageURL
@@ -792,6 +792,16 @@ func (m *MockCampaignRepository) SetEbayExportFlag(_ context.Context, purchaseID
 		return campaigns.ErrPurchaseNotFound
 	}
 	p.EbayExportFlaggedAt = &flaggedAt
+	return nil
+}
+
+func (m *MockCampaignRepository) SetReceivedAt(_ context.Context, purchaseID string, receivedAt time.Time) error {
+	p, ok := m.Purchases[purchaseID]
+	if !ok {
+		return campaigns.ErrPurchaseNotFound
+	}
+	receivedAtStr := receivedAt.Format("2006-01-02T15:04:05Z07:00")
+	p.ReceivedAt = &receivedAtStr
 	return nil
 }
 
