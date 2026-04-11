@@ -1,5 +1,18 @@
 # AI Advisor Tool Reference
 
+## When to consult this file from SKILL.md
+
+The default campaign-analysis flow hits raw HTTP endpoints directly. This reference matters when you want a pre-synthesized narrative instead of stitching one yourself — the server exposes LLM-backed advisor endpoints that run tool-calling loops against the tools catalogued below:
+
+- `POST /api/advisor/digest` — portfolio-wide weekly intelligence (complement to Playbook B / weekly flow)
+- `POST /api/advisor/campaign-analysis` — single-campaign health (complement to Playbook E)
+- `POST /api/advisor/liquidation-analysis` — sell recommendations (complement to Playbook B)
+- `POST /api/advisor/purchase-assessment` — buy/no-buy (if the user asks about a specific card)
+
+Use an advisor endpoint when the user wants "a quick read" with a narrative framing, or as a sanity check against a manually-assembled playbook output. Use raw endpoints when you need the numbers in structured form to cite specifics or make concrete edits.
+
+---
+
 The advisor service (`internal/domain/advisor/`) orchestrates LLM tool-calling loops. The `CampaignToolExecutor` (`internal/adapters/advisortool/executor.go`) registers these tools for the LLM to call.
 
 ## Tool Catalog
