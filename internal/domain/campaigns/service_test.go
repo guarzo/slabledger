@@ -354,7 +354,8 @@ func TestService_GenerateSellSheet(t *testing.T) {
 		t.Fatalf("setup CreateCampaign: %v", err)
 	}
 
-	p := &campaigns.Purchase{CampaignID: c.ID, CardName: "Charizard", CertNumber: "99999999", SetName: "Base Set", GradeValue: 9, BuyCostCents: 50000, CLValueCents: 55000, PSASourcingFeeCents: 300, PurchaseDate: "2026-01-15"}
+	received := "2026-01-20T00:00:00Z"
+	p := &campaigns.Purchase{CampaignID: c.ID, CardName: "Charizard", CertNumber: "99999999", SetName: "Base Set", GradeValue: 9, BuyCostCents: 50000, CLValueCents: 55000, PSASourcingFeeCents: 300, PurchaseDate: "2026-01-15", ReceivedAt: &received}
 	if err := svc.CreatePurchase(ctx, p); err != nil {
 		t.Fatalf("setup CreatePurchase: %v", err)
 	}
@@ -1234,8 +1235,9 @@ func TestGenerateSelectedSellSheet(t *testing.T) {
 		t.Fatalf("setup CreateCampaign: %v", err)
 	}
 
-	p1 := &campaigns.Purchase{CampaignID: c.ID, CardName: "Card A", CertNumber: "111", GradeValue: 9, BuyCostCents: 5000, CLValueCents: 8000, PurchaseDate: "2026-01-01"}
-	p2 := &campaigns.Purchase{CampaignID: c.ID, CardName: "Card B", CertNumber: "222", GradeValue: 10, BuyCostCents: 10000, CLValueCents: 15000, PurchaseDate: "2026-01-02"}
+	received := "2026-01-05T00:00:00Z"
+	p1 := &campaigns.Purchase{CampaignID: c.ID, CardName: "Card A", CertNumber: "111", GradeValue: 9, BuyCostCents: 5000, CLValueCents: 8000, PurchaseDate: "2026-01-01", ReceivedAt: &received}
+	p2 := &campaigns.Purchase{CampaignID: c.ID, CardName: "Card B", CertNumber: "222", GradeValue: 10, BuyCostCents: 10000, CLValueCents: 15000, PurchaseDate: "2026-01-02", ReceivedAt: &received}
 	if err := svc.CreatePurchase(ctx, p1); err != nil {
 		t.Fatalf("setup CreatePurchase p1: %v", err)
 	}
@@ -1265,7 +1267,8 @@ func TestGenerateSelectedSellSheet_SkipsMissing(t *testing.T) {
 		t.Fatalf("setup CreateCampaign: %v", err)
 	}
 
-	p1 := &campaigns.Purchase{CampaignID: c.ID, CardName: "Card A", CertNumber: "111", GradeValue: 9, BuyCostCents: 5000, PurchaseDate: "2026-01-01"}
+	received := "2026-01-05T00:00:00Z"
+	p1 := &campaigns.Purchase{CampaignID: c.ID, CardName: "Card A", CertNumber: "111", GradeValue: 9, BuyCostCents: 5000, PurchaseDate: "2026-01-01", ReceivedAt: &received}
 	if err := svc.CreatePurchase(ctx, p1); err != nil {
 		t.Fatalf("setup CreatePurchase: %v", err)
 	}
