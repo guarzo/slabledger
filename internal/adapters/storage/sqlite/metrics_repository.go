@@ -28,7 +28,10 @@ func (r *MetricsRepository) SaveMetrics(ctx context.Context, m *social.PostMetri
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 		m.PostID, m.Impressions, m.Reach, m.Likes, m.Comments, m.Saves, m.Shares,
 		m.PolledAt.Format(time.RFC3339))
-	return err
+	if err != nil {
+		return fmt.Errorf("save metrics: %w", err)
+	}
+	return nil
 }
 
 func (r *MetricsRepository) GetMetrics(ctx context.Context, postID string) ([]social.PostMetrics, error) {

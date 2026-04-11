@@ -26,7 +26,7 @@ func (s *GapStore) RecordGaps(ctx context.Context, gaps []scoring.GapRecord) err
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("begin transaction: %w", err)
 	}
 	defer tx.Rollback() //nolint:errcheck
 
@@ -34,7 +34,7 @@ func (s *GapStore) RecordGaps(ctx context.Context, gaps []scoring.GapRecord) err
 		`INSERT INTO scoring_data_gaps (factor_name, reason, entity_type, entity_id, card_name, set_name, recorded_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
-		return err
+		return fmt.Errorf("prepare insert gaps statement: %w", err)
 	}
 	defer func() { _ = stmt.Close() }()
 
@@ -44,7 +44,7 @@ func (s *GapStore) RecordGaps(ctx context.Context, gaps []scoring.GapRecord) err
 			recordedAt = time.Now()
 		}
 		if _, err := stmt.ExecContext(ctx, g.FactorName, g.Reason, g.EntityType, g.EntityID, g.CardName, g.SetName, recordedAt); err != nil {
-			return err
+			return fmt.Errorf("insert gap record: %w", err)
 		}
 	}
 	return tx.Commit()

@@ -15,7 +15,7 @@ const (
 )
 
 // GetCrackCandidates returns cached crack candidates for a single campaign.
-// Returns nil if the cache has not been populated yet (background worker still running).
+// Returns an empty slice if the cache has not been populated yet (background worker still running).
 func (s *service) GetCrackCandidates(ctx context.Context, campaignID string) ([]CrackAnalysis, error) {
 	// Validate campaign exists
 	if _, err := s.repo.GetCampaign(ctx, campaignID); err != nil {
@@ -30,10 +30,10 @@ func (s *service) GetCrackCandidates(ctx context.Context, campaignID string) ([]
 		if s.logger != nil {
 			s.logger.Info(ctx, "crack cache not yet populated, returning empty list")
 		}
-		return nil, nil
+		return []CrackAnalysis{}, nil
 	}
 
-	var results []CrackAnalysis
+	results := []CrackAnalysis{}
 	for _, c := range all {
 		if c.CampaignID == campaignID {
 			results = append(results, c)
@@ -199,7 +199,8 @@ func (s *service) GetActivationChecklist(ctx context.Context, campaignID string)
 }
 
 // GetCrackOpportunities returns cached cross-campaign crack opportunities.
-// Returns nil if the cache has not been populated yet.
+// Returns an empty slice if the cache has not been populated yet or there are no opportunities.
+// Returns a zero-length slice and an error on failure.
 func (s *service) GetCrackOpportunities(ctx context.Context) ([]CrackAnalysis, error) {
 	s.crackCacheMu.RLock()
 	all := s.crackCacheAll
@@ -209,7 +210,7 @@ func (s *service) GetCrackOpportunities(ctx context.Context) ([]CrackAnalysis, e
 		if s.logger != nil {
 			s.logger.Info(ctx, "crack cache not yet populated, returning empty list")
 		}
-		return nil, nil
+		return []CrackAnalysis{}, nil
 	}
 
 	// Return a copy to prevent callers from mutating the cache.
@@ -249,13 +250,13 @@ func (s *service) GetAcquisitionTargets(ctx context.Context) ([]AcquisitionOppor
 		if s.logger != nil {
 			s.logger.Info(ctx, "skipping acquisition targets: price provider not configured")
 		}
-		return nil, nil
+		return []AcquisitionOpportunity{}, nil
 	}
 	allCampaigns, err := s.repo.ListCampaigns(ctx, true)
 	if err != nil {
 		return nil, fmt.Errorf("list active campaigns: %w", err)
 	}
-	var opportunities []AcquisitionOpportunity
+	opportunities := []AcquisitionOpportunity{}
 	seen := make(map[string]bool)
 	for _, campaign := range allCampaigns {
 		ebayFee := campaign.EbayFeePct

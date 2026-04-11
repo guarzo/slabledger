@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
@@ -13,7 +14,7 @@ func (r *DBTracker) Ping(ctx context.Context) error {
 		r.logger.Error(ctx, "database ping failed",
 			observability.Err(err),
 			observability.String("operation", "health_check"))
-		return err
+		return fmt.Errorf("health check: %w", err)
 	}
 
 	r.logger.Debug(ctx, "database ping succeeded",
