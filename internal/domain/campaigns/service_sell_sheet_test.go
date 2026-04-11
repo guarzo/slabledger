@@ -1,6 +1,7 @@
 package campaigns
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -91,4 +92,97 @@ func TestConvertIntel_Full(t *testing.T) {
 
 	// FetchedAt
 	assert.Contains(t, out.FetchedAt, "2026-04-02")
+}
+
+// TestSellSheet_SkipsNotReceived verifies that all three sell-sheet
+// generators exclude purchases whose ReceivedAt is nil — a cert still at
+// PSA can't be brought to a card show or shipped from an eBay listing.
+func TestSellSheet_SkipsNotReceived(t *testing.T) {
+	ctx := context.Background()
+	received := "2026-01-20T00:00:00Z"
+
+	// Shared setup: one received cert, one pending.
+	// Uses in-package helpers from mock_repo_test.go / import_test.go —
+	// internal tests can't import internal/testutil/mocks (import cycle).
+	newFixture := func(t *testing.T) (Service, *Campaign, *Purchase, *Purchase) {
+		t.Helper()
+
+		closedCtx, cancel := context.WithCancel(context.Background())
+		cancel()
+
+		repo := newMockRepo()
+		svc := NewService(
+			repo,
+			WithIDGenerator(internalTestIDGen()),
+			WithBaseContext(closedCtx),
+			WithPriceLookup(newDefaultPriceLookup(nil, "")),
+		)
+
+		c := &Campaign{Name: "Test", BuyTermsCLPct: 0.78, EbayFeePct: 0.1235, Phase: PhaseActive}
+		require.NoError(t, svc.CreateCampaign(ctx, c))
+
+		inHand := &Purchase{
+			CampaignID:   c.ID,
+			CardName:     "Charizard",
+			CertNumber:   "11111111",
+			SetName:      "Base Set",
+			GradeValue:   9,
+			BuyCostCents: 50000,
+			CLValueCents: 55000,
+			PurchaseDate: "2026-01-15",
+			ReceivedAt:   &received,
+		}
+		pending := &Purchase{
+			CampaignID:   c.ID,
+			CardName:     "Blastoise",
+			CertNumber:   "22222222",
+			SetName:      "Base Set",
+			GradeValue:   9,
+			BuyCostCents: 40000,
+			CLValueCents: 42000,
+			PurchaseDate: "2026-01-16",
+		}
+		require.NoError(t, svc.CreatePurchase(ctx, inHand))
+		require.NoError(t, svc.CreatePurchase(ctx, pending))
+
+		return svc, c, inHand, pending
+	}
+
+	cases := []struct {
+		name string
+		call func(svc Service, c *Campaign, inHand, pending *Purchase) (*SellSheet, error)
+	}{
+		{
+			name: "GenerateSellSheet",
+			call: func(svc Service, c *Campaign, inHand, pending *Purchase) (*SellSheet, error) {
+				return svc.GenerateSellSheet(ctx, c.ID, []string{inHand.ID, pending.ID})
+			},
+		},
+		{
+			name: "GenerateGlobalSellSheet",
+			call: func(svc Service, _ *Campaign, _, _ *Purchase) (*SellSheet, error) {
+				return svc.GenerateGlobalSellSheet(ctx)
+			},
+		},
+		{
+			name: "GenerateSelectedSellSheet",
+			call: func(svc Service, _ *Campaign, inHand, pending *Purchase) (*SellSheet, error) {
+				return svc.GenerateSelectedSellSheet(ctx, []string{inHand.ID, pending.ID})
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			svc, c, inHand, pending := newFixture(t)
+
+			sheet, err := tc.call(svc, c, inHand, pending)
+			require.NoError(t, err)
+
+			assert.Equal(t, 1, sheet.Totals.ItemCount, "ItemCount")
+			assert.Equal(t, 1, sheet.Totals.SkippedItems, "SkippedItems")
+			require.Len(t, sheet.Items, 1)
+			assert.Equal(t, inHand.CertNumber, sheet.Items[0].CertNumber)
+		})
+	}
 }

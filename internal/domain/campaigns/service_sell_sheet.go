@@ -147,6 +147,10 @@ func (s *service) GenerateSellSheet(ctx context.Context, campaignID string, purc
 			sheet.Totals.SkippedItems++
 			continue
 		}
+		if purchase.ReceivedAt == nil {
+			sheet.Totals.SkippedItems++
+			continue
+		}
 
 		item, _ := s.enrichSellSheetItem(ctx, purchase, "", campaign.EbayFeePct, crackSet)
 		sheet.Totals.TotalExpectedRevenue += item.TargetSellPrice
@@ -165,13 +169,24 @@ func (s *service) GenerateGlobalSellSheet(ctx context.Context) (*SellSheet, erro
 		return nil, fmt.Errorf("list unsold purchases: %w", err)
 	}
 
-	// Convert slice to pointer slice for buildCrossCampaignSellSheet
-	ptrs := make([]*Purchase, len(purchases))
+	// Only include cards that are physically in hand — a pending PSA return
+	// can't be sold at a card show or shipped off an eBay listing.
+	ptrs := make([]*Purchase, 0, len(purchases))
+	skipped := 0
 	for i := range purchases {
-		ptrs[i] = &purchases[i]
+		if purchases[i].ReceivedAt == nil {
+			skipped++
+			continue
+		}
+		ptrs = append(ptrs, &purchases[i])
 	}
 
-	return s.buildCrossCampaignSellSheet(ctx, ptrs, "All Inventory")
+	sheet, err := s.buildCrossCampaignSellSheet(ctx, ptrs, "All Inventory")
+	if err != nil {
+		return nil, err
+	}
+	sheet.Totals.SkippedItems = skipped
+	return sheet, nil
 }
 
 func (s *service) GenerateSelectedSellSheet(ctx context.Context, purchaseIDs []string) (*SellSheet, error) {
@@ -185,6 +200,10 @@ func (s *service) GenerateSelectedSellSheet(ctx context.Context, purchaseIDs []s
 	for _, pid := range purchaseIDs {
 		purchase, ok := purchaseMap[pid]
 		if !ok {
+			skipped++
+			continue
+		}
+		if purchase.ReceivedAt == nil {
 			skipped++
 			continue
 		}
