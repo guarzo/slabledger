@@ -7,8 +7,8 @@ package cardutil_test
 import (
 	"testing"
 
-	"github.com/guarzo/slabledger/internal/adapters/clients/cardutil"
 	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	"github.com/guarzo/slabledger/internal/platform/cardutil"
 )
 
 // normChainCase represents a single PSA listing title flowing through the full

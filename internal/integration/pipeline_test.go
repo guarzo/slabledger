@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/guarzo/slabledger/internal/adapters/clients/cardutil"
+	"github.com/guarzo/slabledger/internal/platform/cardutil"
 
 	_ "github.com/joho/godotenv/autoload"
 )

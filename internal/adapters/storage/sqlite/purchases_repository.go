@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/guarzo/slabledger/internal/adapters/clients/cardutil"
 	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	"github.com/guarzo/slabledger/internal/platform/cardutil"
 )
 
 // --- Purchase CRUD ---
