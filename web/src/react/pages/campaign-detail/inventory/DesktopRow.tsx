@@ -25,6 +25,12 @@ function campaignColor(name: string) {
   return BADGE_COLORS[Math.abs(hash) % BADGE_COLORS.length];
 }
 
+function formatReceivedDate(iso: string): string {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
 interface DesktopRowProps {
   item: AgingItem;
   selected: boolean;
@@ -70,16 +76,34 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
       <div className="glass-table-td flex-shrink-0 !px-1" style={{ width: '28px' }} onClick={e => e.stopPropagation()}>
         <input type="checkbox" checked={selected} onChange={onToggle} onKeyDown={e => e.stopPropagation()} className="rounded accent-[var(--brand-500)]" />
       </div>
-      <div className="glass-table-td flex-1 min-w-0" title={item.purchase.cardName}>
-        <div className="flex items-center gap-1.5 min-w-0">
-          {item.purchase.frontImageUrl && (
-            <img
-              src={item.purchase.frontImageUrl}
-              alt=""
-              className="w-8 h-11 object-cover rounded shrink-0 bg-[var(--surface-2)]"
-              loading="lazy"
-            />
-          )}
+       <div className="glass-table-td flex-1 min-w-0" title={item.purchase.cardName}>
+         <div className="flex items-center gap-1.5 min-w-0">
+           <div style={{ position: 'relative', width: 32, height: 44, flexShrink: 0 }}>
+             {item.purchase.frontImageUrl && (
+               <img
+                 src={item.purchase.frontImageUrl}
+                 alt=""
+                 className="w-8 h-11 object-cover rounded shrink-0 bg-[var(--surface-2)]"
+                 loading="lazy"
+               />
+             )}
+             {item.purchase.receivedAt && (
+               <div
+                 title={`In hand since ${formatReceivedDate(item.purchase.receivedAt)}`}
+                 style={{
+                   position: 'absolute',
+                   top: -3,
+                   right: -3,
+                   width: 10,
+                   height: 10,
+                   borderRadius: '50%',
+                   background: '#34d399',
+                   border: '2px solid var(--surface-1)',
+                   flexShrink: 0,
+                 }}
+               />
+             )}
+           </div>
           {showCampaignColumn && item.campaignName && (() => {
             const color = campaignColor(item.campaignName);
             return (
