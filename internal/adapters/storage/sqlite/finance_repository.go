@@ -138,9 +138,7 @@ func (r *CampaignsRepository) GetPendingReceiptByInvoiceDate(ctx context.Context
 		if err := rows.Scan(&date, &pending); err != nil {
 			return nil, err
 		}
-		if pending > 0 {
-			result[date] = pending
-		}
+		result[date] = pending
 	}
 	return result, rows.Err()
 }
