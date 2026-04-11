@@ -213,3 +213,27 @@ func TestParsePSAExportRows_MissingShipDateNonFatal(t *testing.T) {
 		t.Errorf("ShipDate = %q, want empty string", row.ShipDate)
 	}
 }
+
+func TestParsePSAExportRows_InvalidShipDate(t *testing.T) {
+	records := [][]string{
+		{"Cert Number", "Listing Title", "Grade", "Price Paid", "Date", "Purchase Source", "Ship Date", "Category"},
+		{"12345678", "Charizard VMAX", "10", "$45.00", "04/01/2026", "eBay", "not-a-date", "Pokemon"},
+		{"99887766", "Pikachu VMAX", "10", "$75.00", "04/01/2026", "eBay", "04/03/2026", "Pokemon"},
+	}
+
+	rows, errs, err := ParsePSAExportRows(records)
+	if err != nil {
+		t.Fatalf("ParsePSAExportRows: unexpected fatal error: %v", err)
+	}
+	if len(errs) != 1 {
+		t.Errorf("ParsePSAExportRows: got %d parse errors, want 1", len(errs))
+	} else {
+		if errs[0].Field != "ship date" {
+			t.Errorf("parse error field = %q, want %q", errs[0].Field, "ship date")
+		}
+	}
+	// Valid row (second row with valid ship date) should still be returned
+	if len(rows) != 1 {
+		t.Errorf("ParsePSAExportRows: got %d valid rows, want 1", len(rows))
+	}
+}
