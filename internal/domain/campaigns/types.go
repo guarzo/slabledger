@@ -301,6 +301,14 @@ type CapitalSummary struct {
 	RefundedCents             int           `json:"refundedCents"` // Total refunds
 	PaidCents                 int           `json:"paidCents"`     // Total paid
 	UnpaidInvoiceCount        int           `json:"unpaidInvoiceCount"`
+	// Invoice-cycle projection (see ComputeInvoiceProjection in invoice_projection.go).
+	NextInvoiceDate        string `json:"nextInvoiceDate,omitempty"`    // YYYY-MM-DD, empty if no unpaid
+	NextInvoiceDueDate     string `json:"nextInvoiceDueDate,omitempty"` // YYYY-MM-DD
+	NextInvoiceAmountCents int    `json:"nextInvoiceAmountCents"`       // TotalCents - PaidCents of earliest unpaid
+	DaysUntilInvoiceDue    int    `json:"daysUntilInvoiceDue"`          // from now to due date, 0 if no unpaid
+	ProjectedRecoveryCents int    `json:"projectedRecoveryCents"`       // daily velocity * daysUntilInvoiceDue
+	ProjectedCashGapCents  int    `json:"projectedCashGapCents"`        // max(0, owed - projected - buffer)
+	CashBufferCents        int    `json:"cashBufferCents"`              // mirror of CashflowConfig.CashBufferCents
 }
 
 // ComputeCapitalSummary applies business logic to raw capital data, computing
