@@ -117,11 +117,11 @@ func parseMultipartResponse(resp *http.Response) ([][]byte, error) {
 		if err != nil {
 			return nil, fmt.Errorf("read multipart part: %w", err)
 		}
-		data, err := io.ReadAll(io.LimitReader(part, maxPartSize))
+		data, err := io.ReadAll(io.LimitReader(part, maxPartSize+1))
 		if err != nil {
 			return nil, fmt.Errorf("read part body: %w", err)
 		}
-		if int64(len(data)) == maxPartSize {
+		if int64(len(data)) > maxPartSize {
 			return nil, fmt.Errorf("multipart part too large (exceeds %d bytes)", maxPartSize)
 		}
 		blobs = append(blobs, data)
