@@ -204,5 +204,65 @@ describe('inventoryCalcs', () => {
       expect(result).toHaveLength(1);
       expect(result[0].purchase.cardName).toBe('Charizard');
     });
+
+    // A pending-PSA cert can't be brought to a card show, so even when the
+    // item matches every other card-show heuristic (grade 7 here) it must be
+    // excluded until receivedAt is stamped.
+    it('excludes non-on-hand items from card_show filter', () => {
+      const items = [
+        makeItem({ purchase: { id: '1', gradeValue: 7, receivedAt: '2026-04-08T00:00:00Z' } }),
+        makeItem({ purchase: { id: '2', gradeValue: 7, receivedAt: undefined } }),
+      ];
+
+      const result = filterAndSortItems(items, {
+        debouncedSearch: '',
+        showAll: false,
+        filterTab: 'card_show',
+        sellSheetHas: () => false,
+        sortKey: 'days',
+        sortDir: 'desc',
+        evMap: new Map(),
+      });
+
+      expect(result).toHaveLength(1);
+      expect(result[0].purchase.id).toBe('1');
+    });
+
+    // Users can pre-add a cert to their sell sheet before it arrives, but
+    // the sell-sheet view (and any printed sheet) should hide it until the
+    // cert is physically received.
+    it('excludes non-on-hand items from sell_sheet filter', () => {
+      const items = [
+        makeItem({ purchase: { id: '1', receivedAt: '2026-04-08T00:00:00Z' } }),
+        makeItem({ purchase: { id: '2', receivedAt: undefined } }),
+      ];
+      const sellSheetIds = new Set(['1', '2']);
+
+      const result = filterAndSortItems(items, {
+        debouncedSearch: '',
+        showAll: false,
+        filterTab: 'sell_sheet',
+        sellSheetHas: (id) => sellSheetIds.has(id),
+        sortKey: 'days',
+        sortDir: 'desc',
+        evMap: new Map(),
+      });
+
+      expect(result).toHaveLength(1);
+      expect(result[0].purchase.id).toBe('1');
+    });
+  });
+
+  describe('computeInventoryMeta card_show count', () => {
+    it('only counts on-hand items toward card_show badge', () => {
+      const items = [
+        makeItem({ purchase: { id: '1', gradeValue: 7, receivedAt: '2026-04-08T00:00:00Z' } }),
+        makeItem({ purchase: { id: '2', gradeValue: 7, receivedAt: undefined } }),
+        makeItem({ purchase: { id: '3', gradeValue: 7, receivedAt: '2026-04-09T00:00:00Z' } }),
+      ];
+
+      const meta = computeInventoryMeta(items);
+      expect(meta.tabCounts.card_show).toBe(2);
+    });
   });
 });

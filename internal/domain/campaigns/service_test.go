@@ -354,7 +354,8 @@ func TestService_GenerateSellSheet(t *testing.T) {
 		t.Fatalf("setup CreateCampaign: %v", err)
 	}
 
-	p := &campaigns.Purchase{CampaignID: c.ID, CardName: "Charizard", CertNumber: "99999999", SetName: "Base Set", GradeValue: 9, BuyCostCents: 50000, CLValueCents: 55000, PSASourcingFeeCents: 300, PurchaseDate: "2026-01-15"}
+	received := "2026-01-20T00:00:00Z"
+	p := &campaigns.Purchase{CampaignID: c.ID, CardName: "Charizard", CertNumber: "99999999", SetName: "Base Set", GradeValue: 9, BuyCostCents: 50000, CLValueCents: 55000, PSASourcingFeeCents: 300, PurchaseDate: "2026-01-15", ReceivedAt: &received}
 	if err := svc.CreatePurchase(ctx, p); err != nil {
 		t.Fatalf("setup CreatePurchase: %v", err)
 	}
@@ -1234,8 +1235,9 @@ func TestGenerateSelectedSellSheet(t *testing.T) {
 		t.Fatalf("setup CreateCampaign: %v", err)
 	}
 
-	p1 := &campaigns.Purchase{CampaignID: c.ID, CardName: "Card A", CertNumber: "111", GradeValue: 9, BuyCostCents: 5000, CLValueCents: 8000, PurchaseDate: "2026-01-01"}
-	p2 := &campaigns.Purchase{CampaignID: c.ID, CardName: "Card B", CertNumber: "222", GradeValue: 10, BuyCostCents: 10000, CLValueCents: 15000, PurchaseDate: "2026-01-02"}
+	received := "2026-01-05T00:00:00Z"
+	p1 := &campaigns.Purchase{CampaignID: c.ID, CardName: "Card A", CertNumber: "111", GradeValue: 9, BuyCostCents: 5000, CLValueCents: 8000, PurchaseDate: "2026-01-01", ReceivedAt: &received}
+	p2 := &campaigns.Purchase{CampaignID: c.ID, CardName: "Card B", CertNumber: "222", GradeValue: 10, BuyCostCents: 10000, CLValueCents: 15000, PurchaseDate: "2026-01-02", ReceivedAt: &received}
 	if err := svc.CreatePurchase(ctx, p1); err != nil {
 		t.Fatalf("setup CreatePurchase p1: %v", err)
 	}
@@ -1265,7 +1267,8 @@ func TestGenerateSelectedSellSheet_SkipsMissing(t *testing.T) {
 		t.Fatalf("setup CreateCampaign: %v", err)
 	}
 
-	p1 := &campaigns.Purchase{CampaignID: c.ID, CardName: "Card A", CertNumber: "111", GradeValue: 9, BuyCostCents: 5000, PurchaseDate: "2026-01-01"}
+	received := "2026-01-05T00:00:00Z"
+	p1 := &campaigns.Purchase{CampaignID: c.ID, CardName: "Card A", CertNumber: "111", GradeValue: 9, BuyCostCents: 5000, PurchaseDate: "2026-01-01", ReceivedAt: &received}
 	if err := svc.CreatePurchase(ctx, p1); err != nil {
 		t.Fatalf("setup CreatePurchase: %v", err)
 	}
@@ -1279,5 +1282,115 @@ func TestGenerateSelectedSellSheet_SkipsMissing(t *testing.T) {
 	}
 	if sheet.Totals.SkippedItems != 1 {
 		t.Errorf("expected 1 skipped, got %d", sheet.Totals.SkippedItems)
+	}
+}
+
+// --- ReceivedAt gating ---
+//
+// Sell-sheet outputs must exclude any purchase whose ReceivedAt is nil —
+// a card still at PSA can't be brought to a card show or shipped off eBay.
+
+func TestGenerateSellSheet_SkipsNotReceived(t *testing.T) {
+	repo := mocks.NewMockCampaignRepository()
+	svc := campaigns.NewService(repo, withTestIDGen(), withClosedBaseCtx(), campaigns.WithPriceLookup(newDefaultPriceLookup(nil, "")))
+	ctx := context.Background()
+
+	c := &campaigns.Campaign{Name: "Test", BuyTermsCLPct: 0.78, EbayFeePct: 0.1235}
+	if err := svc.CreateCampaign(ctx, c); err != nil {
+		t.Fatalf("setup CreateCampaign: %v", err)
+	}
+
+	received := "2026-01-20T00:00:00Z"
+	inHand := &campaigns.Purchase{CampaignID: c.ID, CardName: "Charizard", CertNumber: "11111111", SetName: "Base Set", GradeValue: 9, BuyCostCents: 50000, CLValueCents: 55000, PurchaseDate: "2026-01-15", ReceivedAt: &received}
+	pending := &campaigns.Purchase{CampaignID: c.ID, CardName: "Blastoise", CertNumber: "22222222", SetName: "Base Set", GradeValue: 9, BuyCostCents: 40000, CLValueCents: 42000, PurchaseDate: "2026-01-16"}
+	if err := svc.CreatePurchase(ctx, inHand); err != nil {
+		t.Fatalf("setup CreatePurchase inHand: %v", err)
+	}
+	if err := svc.CreatePurchase(ctx, pending); err != nil {
+		t.Fatalf("setup CreatePurchase pending: %v", err)
+	}
+
+	sheet, err := svc.GenerateSellSheet(ctx, c.ID, []string{inHand.ID, pending.ID})
+	if err != nil {
+		t.Fatalf("GenerateSellSheet: %v", err)
+	}
+	if sheet.Totals.ItemCount != 1 {
+		t.Errorf("ItemCount = %d, want 1", sheet.Totals.ItemCount)
+	}
+	if sheet.Totals.SkippedItems != 1 {
+		t.Errorf("SkippedItems = %d, want 1", sheet.Totals.SkippedItems)
+	}
+	if len(sheet.Items) != 1 || sheet.Items[0].CertNumber != "11111111" {
+		t.Errorf("expected only inHand cert in items, got %+v", sheet.Items)
+	}
+}
+
+func TestGenerateGlobalSellSheet_SkipsNotReceived(t *testing.T) {
+	repo := mocks.NewMockCampaignRepository()
+	svc := campaigns.NewService(repo, withTestIDGen(), withClosedBaseCtx(), campaigns.WithPriceLookup(newDefaultPriceLookup(nil, "")))
+	ctx := context.Background()
+
+	c := &campaigns.Campaign{Name: "Test", BuyTermsCLPct: 0.78, EbayFeePct: 0.1235}
+	if err := svc.CreateCampaign(ctx, c); err != nil {
+		t.Fatalf("setup CreateCampaign: %v", err)
+	}
+
+	received := "2026-01-20T00:00:00Z"
+	inHand := &campaigns.Purchase{CampaignID: c.ID, CardName: "Charizard", CertNumber: "33333333", SetName: "Base Set", GradeValue: 9, BuyCostCents: 50000, CLValueCents: 55000, PurchaseDate: "2026-01-15", ReceivedAt: &received}
+	pending := &campaigns.Purchase{CampaignID: c.ID, CardName: "Blastoise", CertNumber: "44444444", SetName: "Base Set", GradeValue: 9, BuyCostCents: 40000, CLValueCents: 42000, PurchaseDate: "2026-01-16"}
+	if err := svc.CreatePurchase(ctx, inHand); err != nil {
+		t.Fatalf("setup CreatePurchase inHand: %v", err)
+	}
+	if err := svc.CreatePurchase(ctx, pending); err != nil {
+		t.Fatalf("setup CreatePurchase pending: %v", err)
+	}
+
+	sheet, err := svc.GenerateGlobalSellSheet(ctx)
+	if err != nil {
+		t.Fatalf("GenerateGlobalSellSheet: %v", err)
+	}
+	if sheet.Totals.ItemCount != 1 {
+		t.Errorf("ItemCount = %d, want 1", sheet.Totals.ItemCount)
+	}
+	if sheet.Totals.SkippedItems != 1 {
+		t.Errorf("SkippedItems = %d, want 1", sheet.Totals.SkippedItems)
+	}
+	if len(sheet.Items) != 1 || sheet.Items[0].CertNumber != "33333333" {
+		t.Errorf("expected only inHand cert in items, got %+v", sheet.Items)
+	}
+}
+
+func TestGenerateSelectedSellSheet_SkipsNotReceived(t *testing.T) {
+	repo := mocks.NewMockCampaignRepository()
+	svc := campaigns.NewService(repo, withTestIDGen(), withClosedBaseCtx(), campaigns.WithPriceLookup(newDefaultPriceLookup(nil, "")))
+	ctx := context.Background()
+
+	c := &campaigns.Campaign{Name: "Test Campaign", Phase: campaigns.PhaseActive}
+	if err := svc.CreateCampaign(ctx, c); err != nil {
+		t.Fatalf("setup CreateCampaign: %v", err)
+	}
+
+	received := "2026-01-05T00:00:00Z"
+	inHand := &campaigns.Purchase{CampaignID: c.ID, CardName: "Card A", CertNumber: "555", GradeValue: 9, BuyCostCents: 5000, CLValueCents: 8000, PurchaseDate: "2026-01-01", ReceivedAt: &received}
+	pending := &campaigns.Purchase{CampaignID: c.ID, CardName: "Card B", CertNumber: "666", GradeValue: 10, BuyCostCents: 10000, CLValueCents: 15000, PurchaseDate: "2026-01-02"}
+	if err := svc.CreatePurchase(ctx, inHand); err != nil {
+		t.Fatalf("setup CreatePurchase inHand: %v", err)
+	}
+	if err := svc.CreatePurchase(ctx, pending); err != nil {
+		t.Fatalf("setup CreatePurchase pending: %v", err)
+	}
+
+	sheet, err := svc.GenerateSelectedSellSheet(ctx, []string{inHand.ID, pending.ID})
+	if err != nil {
+		t.Fatalf("GenerateSelectedSellSheet: %v", err)
+	}
+	if sheet.Totals.ItemCount != 1 {
+		t.Errorf("ItemCount = %d, want 1", sheet.Totals.ItemCount)
+	}
+	if sheet.Totals.SkippedItems != 1 {
+		t.Errorf("SkippedItems = %d, want 1", sheet.Totals.SkippedItems)
+	}
+	if len(sheet.Items) != 1 || sheet.Items[0].CertNumber != "555" {
+		t.Errorf("expected only inHand cert in items, got %+v", sheet.Items)
 	}
 }

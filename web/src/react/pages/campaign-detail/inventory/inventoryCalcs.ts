@@ -39,7 +39,7 @@ export function computeInventoryMeta(items: AgingItem[]): InventoryMeta {
       counts.needs_attention++;
     }
     if ((item.purchase.aiSuggestedPriceCents ?? 0) > 0) counts.ai_suggestion++;
-    if (isCardShowCandidate(item)) counts.card_show++;
+    if (item.purchase.receivedAt && isCardShowCandidate(item)) counts.card_show++;
     if (item.purchase.receivedAt) counts.in_hand++;
 
     totalCost += costBasis(item.purchase);
@@ -84,14 +84,14 @@ export function filterAndSortItems(
   } else if (!showAll) {
     // Filter by active tab using getReviewStatus
     if (filterTab === 'sell_sheet') {
-      result = result.filter(i => sellSheetHas(i.purchase.id));
+      result = result.filter(i => sellSheetHas(i.purchase.id) && !!i.purchase.receivedAt);
     } else if (filterTab !== 'all') {
       result = result.filter(i => {
         if (filterTab === 'needs_attention') {
           return (EXCEPTION_STATUSES as readonly string[]).includes(getReviewStatus(i)) || isDHHeld(i);
         }
         if (filterTab === 'ai_suggestion') return (i.purchase.aiSuggestedPriceCents ?? 0) > 0;
-        if (filterTab === 'card_show') return isCardShowCandidate(i);
+        if (filterTab === 'card_show') return !!i.purchase.receivedAt && isCardShowCandidate(i);
         if (filterTab === 'in_hand') return !!i.purchase.receivedAt;
         return false;
       });
