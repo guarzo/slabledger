@@ -177,8 +177,9 @@ function MMExportCard() {
       description="Download inventory CSV to import into Market Movers collection"
     >
       <div className="flex flex-col gap-2 w-full">
-        <label className="flex items-center gap-1.5 text-xs text-[var(--text-muted)] cursor-pointer select-none">
+        <label htmlFor="missing-only-mm" className="flex items-center gap-1.5 text-xs text-[var(--text-muted)] cursor-pointer select-none">
           <input
+            id="missing-only-mm"
             type="checkbox"
             checked={missingOnly}
             onChange={(e) => setMissingOnly(e.target.checked)}
@@ -314,8 +315,9 @@ function CLExportCard() {
       description="Download inventory CSV to import into Card Ladder manually"
     >
       <div className="flex flex-col gap-2 w-full">
-        <label className="flex items-center gap-1.5 text-xs text-[var(--text-muted)] cursor-pointer select-none">
+        <label htmlFor="missing-only-cl" className="flex items-center gap-1.5 text-xs text-[var(--text-muted)] cursor-pointer select-none">
           <input
+            id="missing-only-cl"
             type="checkbox"
             checked={missingOnly}
             onChange={(e) => setMissingOnly(e.target.checked)}
