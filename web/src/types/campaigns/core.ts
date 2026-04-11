@@ -44,13 +44,14 @@ export interface Purchase {
   psaSourcingFeeCents: number;
   population?: number;
   purchaseDate: string;
-  vaultStatus?: string;
   invoiceDate?: string;
   wasRefunded?: boolean;
   frontImageUrl?: string;
   backImageUrl?: string;
   purchaseSource?: string;
   psaListingTitle?: string;
+  receivedAt?: string;    // ISO-8601 datetime — set when cert scanned via intake (in hand)
+  psaShipDate?: string;   // YYYY-MM-DD ship date from PSA spreadsheet
   snapshotStatus?: '' | 'pending' | 'failed' | 'exhausted';
   overridePriceCents?: number;
   overrideSource?: string;
