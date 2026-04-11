@@ -30,7 +30,7 @@ func (s *service) GetCrackCandidates(ctx context.Context, campaignID string) ([]
 		if s.logger != nil {
 			s.logger.Info(ctx, "crack cache not yet populated, returning empty list")
 		}
-		return nil, nil
+		return []CrackAnalysis{}, nil
 	}
 
 	var results []CrackAnalysis
@@ -209,7 +209,7 @@ func (s *service) GetCrackOpportunities(ctx context.Context) ([]CrackAnalysis, e
 		if s.logger != nil {
 			s.logger.Info(ctx, "crack cache not yet populated, returning empty list")
 		}
-		return nil, nil
+		return []CrackAnalysis{}, nil
 	}
 
 	// Return a copy to prevent callers from mutating the cache.
@@ -249,7 +249,7 @@ func (s *service) GetAcquisitionTargets(ctx context.Context) ([]AcquisitionOppor
 		if s.logger != nil {
 			s.logger.Info(ctx, "skipping acquisition targets: price provider not configured")
 		}
-		return nil, nil
+		return []AcquisitionOpportunity{}, nil
 	}
 	allCampaigns, err := s.repo.ListCampaigns(ctx, true)
 	if err != nil {
