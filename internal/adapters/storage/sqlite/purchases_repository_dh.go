@@ -30,9 +30,10 @@ func (r *CampaignsRepository) UpdatePurchaseDHFieldsAndPushStatus(ctx context.Co
 		`UPDATE campaign_purchases
 		 SET dh_card_id = ?, dh_inventory_id = ?, dh_cert_status = ?,
 		     dh_listing_price_cents = ?, dh_channels_json = ?, dh_status = ?,
-		     dh_push_status = ?, updated_at = ?
+		     dh_last_synced_at = ?, dh_push_status = ?, updated_at = ?
 		 WHERE id = ?`,
-		update.CardID, update.InventoryID, update.CertStatus, update.ListingPriceCents, update.ChannelsJSON, update.DHStatus,
+		update.CardID, update.InventoryID, update.CertStatus, update.ListingPriceCents,
+		update.ChannelsJSON, update.DHStatus, update.LastSyncedAt,
 		pushStatus, time.Now(), id,
 	)
 }
