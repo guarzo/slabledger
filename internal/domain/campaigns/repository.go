@@ -112,6 +112,7 @@ type Repository interface {
 	ListInvoices(ctx context.Context) ([]Invoice, error)
 	UpdateInvoice(ctx context.Context, inv *Invoice) error
 	SumPurchaseCostByInvoiceDate(ctx context.Context, invoiceDate string) (int, error)
+	GetPendingReceiptByInvoiceDate(ctx context.Context, invoiceDates []string) (map[string]int, error)
 	GetCashflowConfig(ctx context.Context) (*CashflowConfig, error)
 	GetCapitalRawData(ctx context.Context) (*CapitalRawData, error)
 
