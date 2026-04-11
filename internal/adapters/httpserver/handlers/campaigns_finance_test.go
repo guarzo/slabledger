@@ -115,19 +115,28 @@ func TestHandleGetCashflowConfig(t *testing.T) {
 
 func TestHandleListInvoices(t *testing.T) {
 	tests := []struct {
-		name        string
-		mockFn      func(_ context.Context) ([]campaigns.Invoice, error)
-		wantStatus  int
-		wantCount   int
-		checkNotNil bool
+		name             string
+		mockFn           func(_ context.Context) ([]campaigns.Invoice, error)
+		wantStatus       int
+		wantCount        int
+		checkNotNil      bool
+		wantPendingCents int
 	}{
 		{
-			name: "success",
+			name: "success - one invoice with pending receipt",
 			mockFn: func(_ context.Context) ([]campaigns.Invoice, error) {
-				return []campaigns.Invoice{{ID: "inv-1"}}, nil
+				return []campaigns.Invoice{
+					{
+						ID: "inv-1", InvoiceDate: "2026-01-15",
+						TotalCents: 10000, PaidCents: 10000,
+						PendingReceiptCents: 3500,
+						Status:              "paid",
+					},
+				}, nil
 			},
-			wantStatus: http.StatusOK,
-			wantCount:  1,
+			wantStatus:       http.StatusOK,
+			wantCount:        1,
+			wantPendingCents: 3500,
 		},
 		{
 			name: "empty",
@@ -168,6 +177,11 @@ func TestHandleListInvoices(t *testing.T) {
 				}
 				if tt.checkNotNil && result == nil {
 					t.Error("expected empty array, got nil")
+				}
+				if tt.wantStatus == http.StatusOK && len(result) > 0 && tt.wantPendingCents > 0 {
+					if result[0].PendingReceiptCents != tt.wantPendingCents {
+						t.Errorf("expected PendingReceiptCents=%d, got %d", tt.wantPendingCents, result[0].PendingReceiptCents)
+					}
 				}
 			}
 		})
