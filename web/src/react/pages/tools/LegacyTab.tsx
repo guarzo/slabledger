@@ -253,7 +253,7 @@ function MMImportCard() {
         toast.warning(`Market Movers import: ${res.failed} failed. ${res.updated} updated, ${res.skipped} skipped, ${res.notFound} not found`);
         if (res.errors && res.errors.length > 0) {
           const formatted = res.errors
-            .map((e) => (e.row ? `row ${e.row}: ${e.error}` : e.error))
+            .map((e) => (e.row != null ? `row ${e.row}: ${e.error}` : e.error))
             .join('; ');
           reportError(
             'LegacyTab/mm-import',
