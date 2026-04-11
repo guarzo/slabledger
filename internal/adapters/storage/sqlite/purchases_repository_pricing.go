@@ -240,3 +240,20 @@ func (r *CampaignsRepository) ListEbayFlaggedPurchases(ctx context.Context) ([]c
 		return p, err
 	})
 }
+
+func (r *CampaignsRepository) SetReceivedAt(ctx context.Context, purchaseID string, receivedAt time.Time) error {
+	result, err := r.db.ExecContext(ctx,
+		`UPDATE campaign_purchases SET received_at = ? WHERE id = ?`,
+		receivedAt, purchaseID)
+	if err != nil {
+		return err
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return campaigns.ErrPurchaseNotFound
+	}
+	return nil
+}
