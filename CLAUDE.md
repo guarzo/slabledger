@@ -54,13 +54,13 @@ internal/
       tcgdex/       # TCGdex.dev card/set metadata (EN + JA, no API key)
       google/       # Google OAuth
       httpx/        # Unified HTTP client (retry + circuit breaker)
-      cardutil/     # Card utility functions
       instagram/  # Instagram OAuth + carousel publishing
       azureai/    # Azure AI completions
     storage/sqlite/ # SQLite persistence + migrations
     scheduler/      # Background jobs (price refresh, session cleanup, social content, advisor, snapshots)
   platform/         # Cross-cutting concerns
     cache/          # Type-safe cache
+    cardutil/       # Card name/set normalization (pure utility, no external deps)
     config/         # Configuration
     crypto/         # AES encryption for auth tokens
     errors/         # Error types
