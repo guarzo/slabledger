@@ -6,6 +6,7 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	"github.com/guarzo/slabledger/internal/adapters/clients/marketmovers"
+	"github.com/guarzo/slabledger/internal/adapters/clients/renderservice"
 	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
 	"github.com/guarzo/slabledger/internal/domain/advisor"
 	"github.com/guarzo/slabledger/internal/domain/ai"
@@ -65,6 +66,10 @@ type BuildDeps struct {
 	// Picks generation dependencies (optional)
 	PicksGenerator PicksGenerator
 
+	// Social publish dependencies (optional — enabled when RenderServiceURL is configured)
+	SocialPublisher   SocialPublisher
+	SocialPublishRepo SocialPublishRepo
+
 	// DH dependencies (optional)
 	DHClient           *dh.Client
 	DHIntelligenceRepo intelligence.Repository
@@ -117,6 +122,7 @@ type BuildResult struct {
 	CardLadderRefresh *CardLadderRefreshScheduler   // nil if Card Ladder is not configured
 	MMRefresh         *MarketMoversRefreshScheduler // nil if Market Movers is not configured
 	PSASync           *PSASyncScheduler             // nil if PSA sync is not configured
+	SocialPublish     *SocialPublishScheduler       // nil if auto-publishing is not configured
 }
 
 // BuildGroup constructs a scheduler Group from centralized configuration and dependencies.
@@ -240,6 +246,29 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 		schedulers = append(schedulers, NewSocialContentScheduler(
 			deps.SocialContentDetector, deps.Logger, cfg.SocialContent, socialOpts...,
 		))
+	}
+
+	// Social publish scheduler (if render service URL is configured)
+	var socialPublishScheduler *SocialPublishScheduler
+	if cfg.SocialPublish.RenderServiceURL != "" && deps.SocialPublisher != nil && deps.SocialPublishRepo != nil {
+		renderClient := renderservice.NewClient(cfg.SocialPublish.RenderServiceURL)
+		publishCfg := SocialPublishSchedulerConfig{
+			StartHour:        cfg.SocialPublish.StartHour,
+			EndHour:          cfg.SocialPublish.EndHour,
+			IntervalMinutes:  cfg.SocialPublish.IntervalMinutes,
+			MaxDaily:         cfg.SocialPublish.MaxDaily,
+			RenderServiceURL: cfg.SocialPublish.RenderServiceURL,
+			fixedHour:        -1,
+		}
+		socialPublishScheduler = NewSocialPublishScheduler(
+			deps.SocialPublishRepo,
+			renderClient,
+			deps.SocialPublisher,
+			cfg.Server.MediaDir,
+			publishCfg,
+			deps.Logger,
+		)
+		schedulers = append(schedulers, socialPublishScheduler)
 	}
 
 	// Metrics poll scheduler (if all dependencies are provided)
@@ -397,5 +426,6 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 		CardLadderRefresh: clRefresh,
 		MMRefresh:         mmRefresh,
 		PSASync:           psaSync,
+		SocialPublish:     socialPublishScheduler,
 	}
 }

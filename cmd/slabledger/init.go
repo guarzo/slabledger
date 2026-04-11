@@ -378,6 +378,7 @@ type schedulerDeps struct {
 	AdvisorCacheRepo     *sqlite.AdvisorCacheRepository
 	AICallRepo           *sqlite.AICallRepository
 	SocialService        social.Service
+	SocialRepo           *sqlite.SocialRepository
 	IGTokenRefresher     scheduler.InstagramTokenRefresher
 	MetricsPostLister    social.MetricsPostLister
 	MetricsSaver         social.MetricsSaver
@@ -484,6 +485,11 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 		buildDeps.PSAImporter = deps.CampaignsService
 		buildDeps.PSASpreadsheetID = deps.PSASpreadsheetID
 		buildDeps.PSATabName = deps.PSATabName
+	}
+	// Wire social publish (nil-safe: only set if SocialRepo is non-nil to avoid typed-nil)
+	if deps.SocialRepo != nil {
+		buildDeps.SocialPublisher = deps.SocialService
+		buildDeps.SocialPublishRepo = deps.SocialRepo
 	}
 	schedulerResult := scheduler.BuildGroup(deps.Config, buildDeps)
 	schedulerResult.Group.StartAll(schedulerCtx)

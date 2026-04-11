@@ -352,6 +352,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		AdvisorCacheRepo:     advisorCacheRepo,
 		AICallRepo:           aiCallRepo,
 		SocialService:        socialService,
+		SocialRepo:           socialRepo,
 		IGTokenRefresher:     igTokenRefresher,
 		MetricsPostLister:    metricsRepo,
 		MetricsSaver:         metricsRepo,
