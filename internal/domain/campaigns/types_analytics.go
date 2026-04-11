@@ -82,6 +82,8 @@ func ComputeCapitalSummary(raw *CapitalRawData) *CapitalSummary {
 	trend := TrendStable
 	if raw.RecoveryRate30dCents > 0 && raw.RecoveryRate30dPriorCents == 0 {
 		trend = TrendImproving
+	} else if raw.RecoveryRate30dCents == 0 && raw.RecoveryRate30dPriorCents > 0 {
+		trend = TrendDeclining
 	} else if raw.RecoveryRate30dCents > 0 && raw.RecoveryRate30dPriorCents > 0 {
 		ratio := float64(raw.RecoveryRate30dCents) / float64(raw.RecoveryRate30dPriorCents)
 		if ratio > 1+TrendChangeThreshold {
