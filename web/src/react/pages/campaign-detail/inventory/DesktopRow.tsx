@@ -8,6 +8,7 @@ import {
   getSourceByType, marketTooltip,
   formatPL,
   getReviewStatus, statusBorderColor, isHotSeller, formatReceivedDate,
+  syncDotProps,
 } from './utils';
 
 const BADGE_COLORS = [
@@ -57,6 +58,11 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
 
   const reviewStatus = getReviewStatus(item);
   const hotSeller = isHotSeller(item);
+  const dot = syncDotProps(
+    item.purchase.clSyncedAt,
+    item.purchase.mmValueUpdatedAt,
+    item.purchase.dhLastSyncedAt,
+  );
 
   return (
     <div
@@ -167,6 +173,14 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
       </div>
       {/* Days held */}
       <div className={`glass-table-td flex-shrink-0 text-center print-hide-col ${daysColor}`} style={{ width: '40px' }}>{item.daysHeld}</div>
+      {/* Sync freshness dot */}
+      <div className="glass-table-td flex-shrink-0 text-center print-hide-col" style={{ width: '20px' }}>
+        <span
+          title={dot.tooltip}
+          aria-label="Sync freshness"
+          style={{ color: dot.color, fontSize: '10px', lineHeight: 1 }}
+        >&#9679;</span>
+      </div>
       {/* Sell button */}
       <div className="glass-table-td flex-shrink-0 text-center !px-1 print-hide-actions" style={{ width: '48px' }} onClick={e => e.stopPropagation()}>
         <button

@@ -135,6 +135,10 @@ export default function ExpandedDetail({ item, onReviewed, campaignId, onOpenFla
           valueCents={purchase.overridePriceCents ?? 0}
           highlight={purchase.overridePriceCents ? 'warning' : 'muted'}
         />
+        <PriceSignalCard
+          label="DH Listed"
+          valueCents={purchase.dhListingPriceCents ?? 0}
+        />
       </div>
 
       {/* Comp Summary Panel */}
