@@ -70,7 +70,7 @@ This directory contains the development container configuration for SlabLedger. 
 - SQLite 3
 - curl, wget
 - Docker-in-Docker (for building images)
-- Node.js 20 (for web development)
+- Node.js 24 (for web development)
 - vim, nano
 - htop, procps
 - **zsh** with **Oh My Zsh** - Default shell with plugins
@@ -131,7 +131,7 @@ ENCRYPTION_KEY=$(openssl rand -hex 32)
 ┌─────────────────────────────────────────┐
 │   Dev Container (Docker)                │
 │   ┌─────────────────────────────────┐   │
-│   │  Go 1.25.2 + Development Tools  │   │
+│   │  Go 1.26 + Development Tools    │   │
 │   └─────────────────────────────────┘   │
 │   ┌─────────────────────────────────┐   │
 │   │  Your Code (mounted)            │   │
@@ -363,8 +363,8 @@ Cmd/Ctrl + Shift + P
 ### Port Already in Use
 
 ```bash
-# Find process using port 8080
-sudo lsof -i :8080
+# Find process using port 8081
+sudo lsof -i :8081
 
 # Kill the process (if needed)
 kill -9 <PID>
@@ -437,7 +437,7 @@ After setting up the devcontainer:
 1. ✅ Verify `.env` has your API keys
 2. ✅ Run tests: `go test ./...`
 3. ✅ Start server: `go run ./cmd/slabledger server`
-4. ✅ Access at http://localhost:8080
+4. ✅ Access at http://localhost:8081
 5. ✅ Start implementing OAuth authentication
 
 ## Resources
