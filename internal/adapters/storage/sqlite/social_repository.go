@@ -190,13 +190,25 @@ func (r *SocialRepository) SetPublishing(ctx context.Context, id string) error {
 	return nil
 }
 
+// SetError marks a post as failed with the given error message. Returns
+// social.ErrPostNotFound if no post with the given id exists — callers in the
+// publish-failure path should treat that case as "post was deleted
+// concurrently, nothing to update" rather than as a stuck-in-publishing
+// condition.
 func (r *SocialRepository) SetError(ctx context.Context, id string, errorMessage string) error {
-	_, err := r.db.ExecContext(ctx,
+	res, err := r.db.ExecContext(ctx,
 		`UPDATE social_posts SET status = ?, error_message = ?, updated_at = ? WHERE id = ?`,
 		string(social.PostStatusFailed), errorMessage, time.Now().UTC().Format(time.RFC3339), id,
 	)
 	if err != nil {
 		return fmt.Errorf("set social post error %s: %w", id, err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("check rows affected: %w", err)
+	}
+	if n == 0 {
+		return fmt.Errorf("post %s: %w", id, social.ErrPostNotFound)
 	}
 	return nil
 }

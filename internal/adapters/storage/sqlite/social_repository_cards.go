@@ -127,7 +127,10 @@ func (r *SocialRepository) GetPurchaseIDsInExistingPosts(ctx context.Context, pu
 		}
 		result[id] = true
 	}
-	return result, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate existing post purchase IDs: %w", err)
+	}
+	return result, nil
 }
 
 func (r *SocialRepository) GetUnsoldPurchasesWithSnapshots(ctx context.Context) ([]social.PurchaseSnapshot, error) {

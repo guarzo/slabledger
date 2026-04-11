@@ -3,6 +3,7 @@ package social
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -128,10 +129,17 @@ func (s *service) setPublishError(ctx context.Context, id, errMsg string) {
 			observability.String("postId", id),
 			observability.String("error", errMsg))
 	}
-	if dbErr := s.repo.SetError(ctx, id, errMsg); dbErr != nil && s.logger != nil {
-		s.logger.Error(ctx, "social: failed to persist publish error — post stuck in publishing state",
-			observability.String("postId", id),
-			observability.Err(dbErr))
+	if dbErr := s.repo.SetError(ctx, id, errMsg); dbErr != nil {
+		// ErrPostNotFound means the post was deleted while publishing was
+		// in flight — nothing to mark, nothing stuck. Quietly move on.
+		if errors.Is(dbErr, ErrPostNotFound) {
+			return
+		}
+		if s.logger != nil {
+			s.logger.Error(ctx, "social: failed to persist publish error — post stuck in publishing state",
+				observability.String("postId", id),
+				observability.Err(dbErr))
+		}
 	}
 }
 
