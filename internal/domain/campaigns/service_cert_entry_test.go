@@ -278,6 +278,55 @@ func TestScanCert_ExistingSetsExportFlag(t *testing.T) {
 	}
 }
 
+func TestImportCerts_NewCertSetsReceivedAt(t *testing.T) {
+	repo := newMockRepo()
+	repo.campaigns[ExternalCampaignID] = &Campaign{ID: ExternalCampaignID, Name: ExternalCampaignName}
+
+	certLookup := &mockCertLookup{
+		lookupFn: func(_ context.Context, cert string) (*CertInfo, error) {
+			return &CertInfo{
+				CertNumber: cert, CardName: "Charizard", Grade: 8.0,
+				Year: "1999", Category: "BASE SET", CardNumber: "4", Population: 500,
+			}, nil
+		},
+	}
+
+	svc := &service{repo: repo, certLookup: certLookup, idGen: func() string { return "test-id" }}
+
+	result, err := svc.ImportCerts(context.Background(), []string{"12345678"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Imported != 1 {
+		t.Errorf("imported = %d, want 1", result.Imported)
+	}
+	created := repo.purchases["test-id"]
+	if created == nil {
+		t.Fatal("purchase was not created")
+	}
+	if created.ReceivedAt == nil {
+		t.Error("expected ReceivedAt to be set for new cert")
+	}
+}
+
+func TestImportCerts_ExistingCertSetsReceivedAt(t *testing.T) {
+	repo := newMockRepo()
+	repo.purchases["existing-id"] = &Purchase{ID: "existing-id", CertNumber: "12345678", Grader: "PSA"}
+	repo.certNumbers["12345678"] = true
+
+	svc := &service{repo: repo, idGen: func() string { return "test-id" }}
+	result, err := svc.ImportCerts(context.Background(), []string{"12345678"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.AlreadyExisted != 1 {
+		t.Errorf("alreadyExisted = %d, want 1", result.AlreadyExisted)
+	}
+	if repo.purchases["existing-id"].ReceivedAt == nil {
+		t.Error("expected ReceivedAt to be set for existing cert")
+	}
+}
+
 func TestResolveCert(t *testing.T) {
 	tests := []struct {
 		name         string
