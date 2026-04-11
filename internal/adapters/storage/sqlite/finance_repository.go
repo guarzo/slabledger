@@ -20,7 +20,10 @@ func (r *CampaignsRepository) CreateInvoice(ctx context.Context, inv *campaigns.
 		inv.ID, inv.InvoiceDate, inv.TotalCents, inv.PaidCents,
 		inv.DueDate, inv.PaidDate, inv.Status, inv.CreatedAt, inv.UpdatedAt,
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("create invoice: %w", err)
+	}
+	return nil
 }
 
 func (r *CampaignsRepository) GetInvoice(ctx context.Context, id string) (*campaigns.Invoice, error) {
@@ -72,11 +75,11 @@ func (r *CampaignsRepository) UpdateInvoice(ctx context.Context, inv *campaigns.
 		inv.TotalCents, inv.PaidCents, inv.DueDate, inv.PaidDate, inv.Status, inv.UpdatedAt, inv.ID,
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("update invoice: %w", err)
 	}
 	n, err := result.RowsAffected()
 	if err != nil {
-		return err
+		return fmt.Errorf("check rows affected for update invoice: %w", err)
 	}
 	if n == 0 {
 		return campaigns.ErrInvoiceNotFound
@@ -170,7 +173,10 @@ func (r *CampaignsRepository) UpdateCashflowConfig(ctx context.Context, cfg *cam
 		cfg.CapitalBudgetCents, cfg.CashBufferCents, cfg.UpdatedAt,
 		cfg.CapitalBudgetCents, cfg.CashBufferCents, cfg.UpdatedAt,
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("update cashflow config: %w", err)
+	}
+	return nil
 }
 
 // --- Capital Summary ---
@@ -238,7 +244,10 @@ func (r *CampaignsRepository) CreateRevocationFlag(ctx context.Context, flag *ca
 		flag.ID, flag.SegmentLabel, flag.SegmentDimension, flag.Reason,
 		flag.Status, flag.EmailText, flag.CreatedAt, flag.SentAt,
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("create revocation flag: %w", err)
+	}
+	return nil
 }
 
 func (r *CampaignsRepository) ListRevocationFlags(ctx context.Context) ([]campaigns.RevocationFlag, error) {
@@ -296,11 +305,11 @@ func (r *CampaignsRepository) UpdateRevocationFlagStatus(ctx context.Context, id
 	query := `UPDATE revocation_flags SET status = ?, sent_at = ? WHERE id = ?`
 	result, err := r.db.ExecContext(ctx, query, status, sentAt, id)
 	if err != nil {
-		return err
+		return fmt.Errorf("update revocation flag status: %w", err)
 	}
 	rows, err := result.RowsAffected()
 	if err != nil {
-		return err
+		return fmt.Errorf("check rows affected for update revocation flag status: %w", err)
 	}
 	if rows == 0 {
 		return fmt.Errorf("revocation flag %q: %w", id, campaigns.ErrRevocationFlagNotFound)
