@@ -227,7 +227,22 @@ func (s *service) GetCampaignSuggestions(ctx context.Context) (*SuggestionsRespo
 		return nil, fmt.Errorf("list campaigns: %w", err)
 	}
 
-	return GenerateSuggestions(ctx, insights, campaigns), nil
+	// Portfolio health feeds the liquidation-aware buy-terms rule. Failure
+	// here is non-fatal: we degrade to running suggestions without health.
+	healthByCampaign := make(map[string]CampaignHealth)
+	health, err := s.GetPortfolioHealth(ctx)
+	if err != nil {
+		if s.logger != nil {
+			s.logger.Warn(ctx, "campaign suggestions: portfolio health unavailable, liquidation rule will skip",
+				observability.Err(err))
+		}
+	} else {
+		for _, h := range health.Campaigns {
+			healthByCampaign[h.CampaignID] = h
+		}
+	}
+
+	return GenerateSuggestions(ctx, insights, campaigns, healthByCampaign), nil
 }
 
 // --- Capital Timeline ---

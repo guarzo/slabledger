@@ -80,10 +80,29 @@ const (
 	// suggActivateMinROI is the minimum ROI for a character segment to trigger
 	// a suggestion to activate a pending campaign (Rule 7).
 	suggActivateMinROI = 0.10
+
+	// suggLiquidationLossThresholdCents is the minimum absolute liquidation
+	// loss ($500) a campaign must have accumulated before the liquidation-aware
+	// buy-terms rule fires. Below this, the bleed is too small to structurally
+	// adjust buy terms. (Rule 8)
+	suggLiquidationLossThresholdCents = 50000
+
+	// suggLiquidationMinSampleSize is the minimum number of losing liquidation
+	// sales required before recommending a buy-terms reduction, to avoid
+	// overreacting to a single bad sale. (Rule 8)
+	suggLiquidationMinSampleSize = 5
+
+	// suggLiquidationFloorPct is the lower bound the liquidation-aware rule
+	// will ever recommend for CL%. Mirrors suggBuyTermsFloorPct but kept
+	// explicit so the two rules can evolve independently. (Rule 8)
+	suggLiquidationFloorPct = 0.70
 )
 
 // GenerateSuggestions produces data-driven campaign recommendations from portfolio insights.
-func GenerateSuggestions(ctx context.Context, insights *PortfolioInsights, campaigns []Campaign) *SuggestionsResponse {
+// healthByCampaign is keyed by Campaign.ID and drives the liquidation-aware buy-terms
+// rule. Callers that don't have portfolio health (e.g. unit tests of unrelated rules)
+// can pass nil — liquidation-dependent rules will simply skip.
+func GenerateSuggestions(ctx context.Context, insights *PortfolioInsights, campaigns []Campaign, healthByCampaign map[string]CampaignHealth) *SuggestionsResponse {
 	resp := &SuggestionsResponse{
 		DataSummary: insights.DataSummary,
 	}
@@ -94,6 +113,7 @@ func GenerateSuggestions(ctx context.Context, insights *PortfolioInsights, campa
 	resp.NewCampaigns = append(resp.NewCampaigns, suggestGradeSweetSpot(ctx, insights, campaigns)...)
 	resp.NewCampaigns = append(resp.NewCampaigns, suggestCoverageGapCampaigns(ctx, insights)...)
 	resp.Adjustments = append(resp.Adjustments, suggestChannelInformedBuyTerms(ctx, insights, campaigns, now)...)
+	resp.Adjustments = append(resp.Adjustments, suggestBuyTermsFromLiquidation(campaigns, healthByCampaign)...)
 	resp.Adjustments = append(resp.Adjustments, suggestSpendCapRebalancing(ctx, insights, campaigns)...)
 	resp.Adjustments = append(resp.Adjustments, suggestCharacterAdjustments(ctx, insights, campaigns)...)
 	resp.Adjustments = append(resp.Adjustments, suggestPhaseTransitions(ctx, insights, campaigns)...)

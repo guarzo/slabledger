@@ -237,3 +237,104 @@ func suggestChannelInformedBuyTerms(_ context.Context, insights *PortfolioInsigh
 
 	return suggestions
 }
+
+// suggestBuyTermsFromLiquidation inspects per-campaign liquidation damage and
+// recommends a CL buy-terms reduction sized to absorb the observed inperson
+// and cardshow losses.
+//
+// Triggers only when real damage is observed on an active campaign (not a
+// theoretical margin gap), with a sample-size guard to avoid reacting to one
+// bad sale. Each 1% reduction in buy terms frees ~$5 of margin on a $500 card,
+// which both improves eBay profitability and widens the liquidation buffer.
+//
+// Distinct from suggestChannelInformedBuyTerms: that rule reacts to portfolio-
+// wide realized margin vs. target; this rule reacts to actual strictly-negative
+// inperson/cardshow sales on a specific campaign.
+func suggestBuyTermsFromLiquidation(campaigns []Campaign, healthByCampaign map[string]CampaignHealth) []CampaignSuggestion {
+	if len(healthByCampaign) == 0 {
+		return nil
+	}
+
+	var suggestions []CampaignSuggestion
+	for _, c := range campaigns {
+		if c.Phase != PhaseActive {
+			continue
+		}
+		h, ok := healthByCampaign[c.ID]
+		if !ok {
+			continue
+		}
+		// LiquidationLossCents is stored as a non-positive number (sum of
+		// strictly-negative net profit on liquidation channels). Compare its
+		// magnitude to the threshold.
+		if -h.LiquidationLossCents < suggLiquidationLossThresholdCents {
+			continue
+		}
+		if h.LiquidationSaleCount < suggLiquidationMinSampleSize {
+			continue
+		}
+
+		reduction := computeBuyTermsReduction(h)
+		newTerms := c.BuyTermsCLPct - reduction
+		if newTerms < suggLiquidationFloorPct {
+			newTerms = suggLiquidationFloorPct
+		}
+		// Never recommend terms at or above current. Also skips campaigns
+		// whose current terms are already at or below the floor.
+		if newTerms >= c.BuyTermsCLPct {
+			continue
+		}
+
+		confidence := "medium"
+		if h.LiquidationSaleCount >= 10 {
+			confidence = "high"
+		}
+
+		appliedReductionPct := (c.BuyTermsCLPct - newTerms) * 100
+
+		suggestions = append(suggestions, CampaignSuggestion{
+			Type:  "adjust",
+			Title: fmt.Sprintf("Lower buy terms on %s (liquidation buffer)", c.Name),
+			Rationale: fmt.Sprintf(
+				"Campaign has $%.2f in liquidation losses across %d sales. Lowering CL%% from %.0f%% to %.0f%% creates a %.0f-point margin buffer on every fill, improving both eBay margin and liquidation tolerance.",
+				float64(-h.LiquidationLossCents)/100,
+				h.LiquidationSaleCount,
+				c.BuyTermsCLPct*100,
+				newTerms*100,
+				appliedReductionPct,
+			),
+			Confidence: confidence,
+			DataPoints: h.LiquidationSaleCount,
+			SuggestedParams: CampaignSuggestionParams{
+				Name:          c.Name,
+				BuyTermsCLPct: newTerms,
+			},
+			ExpectedMetrics: ExpectedMetrics{
+				DataConfidence: confidence,
+			},
+		})
+	}
+
+	return suggestions
+}
+
+// computeBuyTermsReduction maps observed average liquidation loss per sale
+// into a deterministic buy-terms reduction bucket. The thresholds are tuned
+// so that a typical $500 card with a 15% liquidation hit (~$75/sale) lands in
+// the 8% bucket.
+func computeBuyTermsReduction(h CampaignHealth) float64 {
+	if h.LiquidationSaleCount <= 0 {
+		return 0
+	}
+	avgLossCents := float64(-h.LiquidationLossCents) / float64(h.LiquidationSaleCount)
+	switch {
+	case avgLossCents > 5000: // > $50/sale
+		return 0.08
+	case avgLossCents > 3000: // $30–50/sale
+		return 0.05
+	case avgLossCents > 1500: // $15–30/sale
+		return 0.03
+	default:
+		return 0.02
+	}
+}

@@ -11,7 +11,7 @@ func TestGenerateSuggestions_Empty(t *testing.T) {
 	insights := &PortfolioInsights{
 		DataSummary: InsightsDataSummary{TotalPurchases: 0},
 	}
-	resp := GenerateSuggestions(context.Background(), insights, nil)
+	resp := GenerateSuggestions(context.Background(), insights, nil, nil)
 	if resp == nil {
 		t.Fatal("expected non-nil response")
 	}
@@ -34,7 +34,7 @@ func TestGenerateSuggestions_TopCharacterExpansion(t *testing.T) {
 		{Name: "Campaign A", Phase: PhaseActive, InclusionList: "Pikachu, Blastoise"},
 	}
 
-	resp := GenerateSuggestions(context.Background(), insights, campaigns)
+	resp := GenerateSuggestions(context.Background(), insights, campaigns, nil)
 
 	found := false
 	for _, s := range resp.NewCampaigns {
@@ -66,7 +66,7 @@ func TestGenerateSuggestions_CharacterAdjustments(t *testing.T) {
 		{Name: "Test Campaign", Phase: PhaseActive, InclusionList: "Pikachu, Blastoise"},
 	}
 
-	resp := GenerateSuggestions(context.Background(), insights, campaigns)
+	resp := GenerateSuggestions(context.Background(), insights, campaigns, nil)
 
 	// Should suggest removing Pikachu (negative ROI)
 	foundRemove := false
@@ -103,7 +103,7 @@ func TestGenerateSuggestions_CoverageGap(t *testing.T) {
 		DataSummary: InsightsDataSummary{TotalPurchases: 50},
 	}
 
-	resp := GenerateSuggestions(context.Background(), insights, nil)
+	resp := GenerateSuggestions(context.Background(), insights, nil, nil)
 
 	found := false
 	for _, s := range resp.NewCampaigns {
@@ -257,7 +257,7 @@ func TestGenerateSuggestions_ChannelInformedBuyTerms(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			resp := GenerateSuggestions(context.Background(), tc.insights, tc.campaigns)
+			resp := GenerateSuggestions(context.Background(), tc.insights, tc.campaigns, nil)
 
 			var match *CampaignSuggestion
 			for i := range resp.Adjustments {
@@ -309,7 +309,7 @@ func TestGenerateSuggestions_SpendCapRebalancing(t *testing.T) {
 		{Name: "High Cap", Phase: PhaseActive, DailySpendCapCents: 50000}, // $500/day
 	}
 
-	resp := GenerateSuggestions(context.Background(), insights, campaigns)
+	resp := GenerateSuggestions(context.Background(), insights, campaigns, nil)
 
 	// Caps differ by 10x, should suggest rebalancing
 	found := false
@@ -339,7 +339,7 @@ func TestGenerateSuggestions_GradeSweetSpot(t *testing.T) {
 		{Phase: PhaseActive, GradeRange: "8-10"},
 	}
 
-	resp := GenerateSuggestions(context.Background(), insights, campaigns)
+	resp := GenerateSuggestions(context.Background(), insights, campaigns, nil)
 
 	found := false
 	for _, s := range resp.NewCampaigns {
@@ -416,7 +416,7 @@ func TestROIWeightedSpendCaps(t *testing.T) {
 		{ID: "c2", Name: "Low ROI", Phase: PhaseActive, DailySpendCapCents: 50000},
 	}
 
-	resp := GenerateSuggestions(context.Background(), insights, campaigns)
+	resp := GenerateSuggestions(context.Background(), insights, campaigns, nil)
 
 	found := false
 	for _, s := range resp.Adjustments {
@@ -444,7 +444,7 @@ func TestPhaseTransition_ArchiveUnderperformer(t *testing.T) {
 		{ID: "c1", Name: "Losing Campaign", Phase: PhaseActive},
 	}
 
-	resp := GenerateSuggestions(context.Background(), insights, campaigns)
+	resp := GenerateSuggestions(context.Background(), insights, campaigns, nil)
 
 	found := false
 	for _, s := range resp.Adjustments {
@@ -471,7 +471,7 @@ func TestPhaseTransition_ActivatePending(t *testing.T) {
 		{ID: "c1", Name: "Pending Charizard", Phase: PhasePending, InclusionList: "Charizard"},
 	}
 
-	resp := GenerateSuggestions(context.Background(), insights, campaigns)
+	resp := GenerateSuggestions(context.Background(), insights, campaigns, nil)
 
 	found := false
 	for _, s := range resp.Adjustments {
@@ -491,4 +491,232 @@ func containsAll(s string, substrings ...string) bool {
 		}
 	}
 	return true
+}
+
+func TestGenerateSuggestions_BuyTermsFromLiquidation(t *testing.T) {
+	// Minimal insights that won't trigger any unrelated rule. The
+	// liquidation-aware rule reads CampaignHealth directly, not insights.
+	baseInsights := func() *PortfolioInsights {
+		return &PortfolioInsights{
+			DataSummary: InsightsDataSummary{TotalPurchases: 0, TotalSales: 0},
+		}
+	}
+
+	cases := []struct {
+		name           string
+		campaigns      []Campaign
+		health         map[string]CampaignHealth
+		wantCampaign   string // empty means no suggestion expected
+		wantNewTerms   float64
+		wantConfidence string
+		wantDataPoints int
+	}{
+		{
+			name: "below loss threshold",
+			// $400 loss over 10 sales — below $500 threshold, skip.
+			campaigns: []Campaign{{ID: "c1", Name: "LowLoss", Phase: PhaseActive, BuyTermsCLPct: 0.85}},
+			health: map[string]CampaignHealth{
+				"c1": {CampaignID: "c1", LiquidationLossCents: -40000, LiquidationSaleCount: 10},
+			},
+		},
+		{
+			name: "below sample size",
+			// $600 loss but only 4 sales — below 5-sample guard, skip.
+			campaigns: []Campaign{{ID: "c2", Name: "TooFewSales", Phase: PhaseActive, BuyTermsCLPct: 0.85}},
+			health: map[string]CampaignHealth{
+				"c2": {CampaignID: "c2", LiquidationLossCents: -60000, LiquidationSaleCount: 4},
+			},
+		},
+		{
+			name: "bucket $15-30/sale → reduction 3%, medium confidence",
+			// $20/sale avg (> $15, ≤ $30) × 6 sales = $120 total loss. Sample 6 → medium.
+			// Wait: threshold is $500. Use larger per-sale loss that's still in bucket.
+			// $25/sale × 8 = $200 — still under $500 threshold. Boost sales count.
+			// Need: avgLoss in (1500, 3000] AND total ≥ 50000.
+			// $25/sale × 22 sales = $550 total, avg $25. Bucket is 3%.
+			campaigns: []Campaign{{ID: "c3", Name: "Mid-Era", Phase: PhaseActive, BuyTermsCLPct: 0.80}},
+			health: map[string]CampaignHealth{
+				"c3": {CampaignID: "c3", LiquidationLossCents: -55000, LiquidationSaleCount: 22},
+			},
+			wantCampaign:   "Mid-Era",
+			wantNewTerms:   0.77,
+			wantConfidence: "high",
+			wantDataPoints: 22,
+		},
+		{
+			name: "bucket $30-50/sale → reduction 5%",
+			// $40/sale avg × 13 sales = $520. Bucket is 5%. 13 sales → high confidence.
+			campaigns: []Campaign{{ID: "c4", Name: "Vintage Core", Phase: PhaseActive, BuyTermsCLPct: 0.80}},
+			health: map[string]CampaignHealth{
+				"c4": {CampaignID: "c4", LiquidationLossCents: -52000, LiquidationSaleCount: 13},
+			},
+			wantCampaign:   "Vintage Core",
+			wantNewTerms:   0.75,
+			wantConfidence: "high",
+			wantDataPoints: 13,
+		},
+		{
+			name: "bucket >$50/sale → reduction 8%",
+			// $80/sale avg × 8 sales = $640. Bucket is 8%. 8 sales → medium confidence (below 10).
+			campaigns: []Campaign{{ID: "c5", Name: "Vintage Low Grade", Phase: PhaseActive, BuyTermsCLPct: 0.82}},
+			health: map[string]CampaignHealth{
+				"c5": {CampaignID: "c5", LiquidationLossCents: -64000, LiquidationSaleCount: 8},
+			},
+			wantCampaign:   "Vintage Low Grade",
+			wantNewTerms:   0.74,
+			wantConfidence: "medium",
+			wantDataPoints: 8,
+		},
+		{
+			name: "floor clamps reduction",
+			// Campaign at 74% with 8% bucket ($80/sale × 10) → 74-8=66, clamped to 70.
+			campaigns: []Campaign{{ID: "c6", Name: "NearFloor", Phase: PhaseActive, BuyTermsCLPct: 0.74}},
+			health: map[string]CampaignHealth{
+				"c6": {CampaignID: "c6", LiquidationLossCents: -80000, LiquidationSaleCount: 10},
+			},
+			wantCampaign:   "NearFloor",
+			wantNewTerms:   0.70,
+			wantConfidence: "high",
+			wantDataPoints: 10,
+		},
+		{
+			name: "already at floor — skip",
+			// 70% + 8% bucket = would be 62, clamped to 70, which equals current → skip.
+			campaigns: []Campaign{{ID: "c7", Name: "AtFloor", Phase: PhaseActive, BuyTermsCLPct: 0.70}},
+			health: map[string]CampaignHealth{
+				"c7": {CampaignID: "c7", LiquidationLossCents: -80000, LiquidationSaleCount: 10},
+			},
+		},
+		{
+			name: "below floor — skip",
+			// 0.68 < 0.70 floor → clamped to 0.70 which is > current → skip (rule never raises terms).
+			campaigns: []Campaign{{ID: "c8", Name: "BelowFloor", Phase: PhaseActive, BuyTermsCLPct: 0.68}},
+			health: map[string]CampaignHealth{
+				"c8": {CampaignID: "c8", LiquidationLossCents: -80000, LiquidationSaleCount: 10},
+			},
+		},
+		{
+			name: "sample size tier — 10 sales → high",
+			// avg $60/sale × 10 = $600, bucket 8%. Tier boundary: 10 sales → high.
+			campaigns: []Campaign{{ID: "c9", Name: "Boundary10", Phase: PhaseActive, BuyTermsCLPct: 0.85}},
+			health: map[string]CampaignHealth{
+				"c9": {CampaignID: "c9", LiquidationLossCents: -60000, LiquidationSaleCount: 10},
+			},
+			wantCampaign:   "Boundary10",
+			wantNewTerms:   0.77,
+			wantConfidence: "high",
+			wantDataPoints: 10,
+		},
+		{
+			name: "sample size tier — 9 sales → medium",
+			// avg ~$67/sale × 9 = $600, bucket 8%. 9 sales → medium.
+			campaigns: []Campaign{{ID: "c10", Name: "Boundary9", Phase: PhaseActive, BuyTermsCLPct: 0.85}},
+			health: map[string]CampaignHealth{
+				"c10": {CampaignID: "c10", LiquidationLossCents: -60000, LiquidationSaleCount: 9},
+			},
+			wantCampaign:   "Boundary9",
+			wantNewTerms:   0.77,
+			wantConfidence: "medium",
+			wantDataPoints: 9,
+		},
+		{
+			name: "archived campaign skipped",
+			campaigns: []Campaign{
+				{ID: "c11", Name: "Archived", Phase: PhaseClosed, BuyTermsCLPct: 0.85},
+			},
+			health: map[string]CampaignHealth{
+				"c11": {CampaignID: "c11", LiquidationLossCents: -80000, LiquidationSaleCount: 10},
+			},
+		},
+		{
+			name:      "missing health row — no panic, no suggestion",
+			campaigns: []Campaign{{ID: "c12", Name: "NoHealth", Phase: PhaseActive, BuyTermsCLPct: 0.85}},
+			health: map[string]CampaignHealth{
+				"other": {CampaignID: "other", LiquidationLossCents: -80000, LiquidationSaleCount: 10},
+			},
+		},
+		{
+			name:         "nil health map — rule skips cleanly",
+			campaigns:    []Campaign{{ID: "c13", Name: "NilHealth", Phase: PhaseActive, BuyTermsCLPct: 0.85}},
+			health:       nil,
+			wantCampaign: "",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			resp := GenerateSuggestions(context.Background(), baseInsights(), tc.campaigns, tc.health)
+
+			var match *CampaignSuggestion
+			for i := range resp.Adjustments {
+				s := &resp.Adjustments[i]
+				if s.Type != "adjust" || s.SuggestedParams.BuyTermsCLPct <= 0 {
+					continue
+				}
+				if !strings.Contains(s.Title, "(liquidation buffer)") {
+					continue
+				}
+				match = s
+				break
+			}
+
+			if tc.wantCampaign == "" {
+				if match != nil {
+					t.Errorf("expected no liquidation-buffer suggestion, got %+v", match.SuggestedParams)
+				}
+				return
+			}
+			if match == nil {
+				t.Fatalf("expected liquidation-buffer suggestion for %s, got none", tc.wantCampaign)
+			}
+			if match.SuggestedParams.Name != tc.wantCampaign {
+				t.Errorf("expected campaign %s, got %s", tc.wantCampaign, match.SuggestedParams.Name)
+			}
+			const eps = 1e-9
+			if math.Abs(match.SuggestedParams.BuyTermsCLPct-tc.wantNewTerms) > eps {
+				t.Errorf("expected newTerms %.4f, got %.4f", tc.wantNewTerms, match.SuggestedParams.BuyTermsCLPct)
+			}
+			if match.SuggestedParams.BuyTermsCLPct >= tc.campaigns[0].BuyTermsCLPct {
+				t.Errorf("suggested terms %.4f must be < current %.4f",
+					match.SuggestedParams.BuyTermsCLPct, tc.campaigns[0].BuyTermsCLPct)
+			}
+			if match.Confidence != tc.wantConfidence {
+				t.Errorf("expected confidence %q, got %q", tc.wantConfidence, match.Confidence)
+			}
+			if match.DataPoints != tc.wantDataPoints {
+				t.Errorf("expected DataPoints %d, got %d", tc.wantDataPoints, match.DataPoints)
+			}
+		})
+	}
+}
+
+func TestComputeBuyTermsReduction(t *testing.T) {
+	cases := []struct {
+		name       string
+		lossCents  int
+		saleCount  int
+		wantResult float64
+	}{
+		{"zero sales → zero reduction", -50000, 0, 0},
+		{"default bucket ($10/sale)", -50000, 50, 0.02},
+		{"$15–30 bucket ($20/sale)", -40000, 20, 0.03},
+		{"$30–50 bucket ($40/sale)", -40000, 10, 0.05},
+		{">$50 bucket ($100/sale)", -100000, 10, 0.08},
+		{"boundary $15 → default bucket", -15000, 10, 0.02},
+		{"boundary $30 → $15–30 bucket", -30000, 10, 0.03},
+		{"boundary $50 → $30–50 bucket", -50000, 10, 0.05},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h := CampaignHealth{
+				LiquidationLossCents: tc.lossCents,
+				LiquidationSaleCount: tc.saleCount,
+			}
+			got := computeBuyTermsReduction(h)
+			if math.Abs(got-tc.wantResult) > 1e-9 {
+				t.Errorf("want %.2f, got %.2f", tc.wantResult, got)
+			}
+		})
+	}
 }
