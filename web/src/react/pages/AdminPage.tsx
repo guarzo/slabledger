@@ -5,7 +5,7 @@
 import { useState } from 'react';
 import { Tabs } from 'radix-ui';
 import { api } from '../../js/api';
-import { Button, TabNavigation } from '../ui';
+import { Button, SectionErrorBoundary, TabNavigation } from '../ui';
 import type { Tab } from '../ui';
 import { UsersTab } from './admin/UsersTab';
 import { CardDataTab } from './admin/CardDataTab';
@@ -74,11 +74,31 @@ export default function AdminPage() {
       <Tabs.Root value={activeTab} onValueChange={setActiveTab}>
         <TabNavigation tabs={adminTabs} ariaLabel="Admin tabs" />
 
-        <Tabs.Content value="users"><UsersTab enabled={activeTab === 'users'} /></Tabs.Content>
-        <Tabs.Content value="card-data"><CardDataTab enabled={activeTab === 'card-data'} /></Tabs.Content>
-        <Tabs.Content value="pricing"><PricingTab enabled={activeTab === 'pricing'} /></Tabs.Content>
-        <Tabs.Content value="stats"><StatsTab enabled={activeTab === 'stats'} /></Tabs.Content>
-        <Tabs.Content value="integrations"><IntegrationsTab enabled={activeTab === 'integrations'} /></Tabs.Content>
+        <Tabs.Content value="users">
+          <SectionErrorBoundary sectionName="Users">
+            <UsersTab enabled={activeTab === 'users'} />
+          </SectionErrorBoundary>
+        </Tabs.Content>
+        <Tabs.Content value="card-data">
+          <SectionErrorBoundary sectionName="Card Data">
+            <CardDataTab enabled={activeTab === 'card-data'} />
+          </SectionErrorBoundary>
+        </Tabs.Content>
+        <Tabs.Content value="pricing">
+          <SectionErrorBoundary sectionName="Pricing">
+            <PricingTab enabled={activeTab === 'pricing'} />
+          </SectionErrorBoundary>
+        </Tabs.Content>
+        <Tabs.Content value="stats">
+          <SectionErrorBoundary sectionName="Stats">
+            <StatsTab enabled={activeTab === 'stats'} />
+          </SectionErrorBoundary>
+        </Tabs.Content>
+        <Tabs.Content value="integrations">
+          <SectionErrorBoundary sectionName="Integrations">
+            <IntegrationsTab enabled={activeTab === 'integrations'} />
+          </SectionErrorBoundary>
+        </Tabs.Content>
       </Tabs.Root>
     </div>
   );

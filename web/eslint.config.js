@@ -64,7 +64,12 @@ export default [
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
 
       // General rules
-      'no-console': ['warn', { allow: ['warn', 'error'] }],
+      // no-console: all application code must route errors through
+      // reportError() from src/js/errors.ts so we have a single telemetry
+      // funnel. The outermost crash paths (errors.ts, main.tsx, the two
+      // ErrorBoundary files) need raw console access and are allowlisted
+      // via an override below.
+      'no-console': 'error',
       'no-debugger': 'warn',
       'no-unused-vars': 'off', // Using TypeScript version instead
       'prefer-const': 'warn',
@@ -74,6 +79,23 @@ export default [
       react: {
         version: 'detect',
       },
+    },
+  },
+  // Allowlist: files that may call console.* directly. These are the
+  // outermost crash paths where reportError() is not available, plus
+  // test code and service workers which don't have access to the React
+  // error-reporting funnel.
+  {
+    files: [
+      'src/js/errors.ts',
+      'src/main.tsx',
+      'src/react/ErrorBoundary.tsx',
+      'src/react/ui/SectionErrorBoundary.tsx',
+      'public/**/*.{js,ts}',
+      'tests/**/*.{js,ts}',
+    ],
+    rules: {
+      'no-console': 'off',
     },
   },
   // Node.js config files and CommonJS modules

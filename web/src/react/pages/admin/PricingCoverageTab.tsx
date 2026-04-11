@@ -1,4 +1,5 @@
 import type { FailureSummary } from '../../../types/apiStatus';
+import PokeballLoader from '../../PokeballLoader';
 import { usePricingDiagnostics } from '../../queries/useAdminQueries';
 import { SummaryCard } from './shared';
 import { formatAdminDate } from './adminUtils';
@@ -6,7 +7,14 @@ import { formatAdminDate } from './adminUtils';
 export function PricingCoverageTab({ enabled = true }: { enabled?: boolean }) {
   const { data: diag, error, isLoading } = usePricingDiagnostics({ enabled });
 
-  if (isLoading) return <div className="text-center text-[var(--text-muted)] py-8">Loading...</div>;
+  if (isLoading) {
+    return (
+      <div className="py-8" role="status" aria-live="polite" aria-atomic="true">
+        <span className="sr-only">Loading pricing diagnostics…</span>
+        <PokeballLoader />
+      </div>
+    );
+  }
   if (error && !diag) return <div className="p-3 rounded-lg bg-[var(--danger-bg)] border border-[var(--danger-border)] text-[var(--danger)] text-sm">Failed to load pricing diagnostics</div>;
   if (!diag) return null;
 

@@ -1,4 +1,5 @@
 import type { ProviderStatus } from '../../../types/apiStatus';
+import PokeballLoader from '../../PokeballLoader';
 import { useAdminApiUsage } from '../../queries/useAdminQueries';
 import { ProgressBar } from './shared';
 import { formatAdminDate } from './adminUtils';
@@ -82,7 +83,10 @@ export function ApiStatusTab({ enabled = true }: { enabled?: boolean }) {
           </div>
         </>
       ) : !errorMessage ? (
-        <div className="text-center text-[var(--text-muted)] py-8">Loading...</div>
+        <div className="py-8" role="status" aria-live="polite" aria-atomic="true">
+          <span className="sr-only">Loading API status…</span>
+          <PokeballLoader />
+        </div>
       ) : null}
     </div>
   );

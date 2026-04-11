@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import PokeballLoader from '../../PokeballLoader';
 import { usePriceFlags, useResolvePriceFlag } from '../../queries/useAdminQueries';
 import { formatCents } from '../../utils/formatters';
 import { SummaryCard } from './shared';
@@ -132,7 +133,12 @@ export function PriceFlagsTab({ enabled = true }: { enabled?: boolean }) {
   const resolvedCount = allData?.flags.filter((f) => !!f.resolvedAt).length ?? 0;
 
   if (isLoading) {
-    return <div className="text-center text-[var(--text-muted)] py-8">Loading...</div>;
+    return (
+      <div className="py-8" role="status" aria-live="polite" aria-atomic="true">
+        <span className="sr-only">Loading price flags…</span>
+        <PokeballLoader />
+      </div>
+    );
   }
 
   if (error && !data) {
