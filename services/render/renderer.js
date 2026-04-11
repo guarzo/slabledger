@@ -5,13 +5,16 @@ let browser = null;
 async function getBrowser() {
   if (!browser) {
     browser = await puppeteer.launch({
-      headless: 'new',
+      headless: true,
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--disable-dev-shm-usage',
         '--disable-gpu',
       ],
+    });
+    browser.on('disconnected', () => {
+      browser = null;
     });
   }
   return browser;
@@ -59,7 +62,6 @@ async function renderSlide(baseURL, postId, slideIndex, timeoutMs = 30000) {
     const jpeg = await element.screenshot({
       type: 'jpeg',
       quality: 90,
-      clip: { x: 0, y: 0, width: 1080, height: 1080 },
     });
     return jpeg;
   } finally {
