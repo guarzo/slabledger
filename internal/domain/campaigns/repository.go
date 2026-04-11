@@ -143,6 +143,7 @@ type DHFieldsUpdate struct {
 	ListingPriceCents int
 	ChannelsJSON      string
 	DHStatus          DHStatus
+	LastSyncedAt      string // RFC3339; set to time.Now() on each inventory poll
 }
 
 // PSAUpdateFields contains the PSA-specific fields that can be updated on an existing purchase.

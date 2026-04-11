@@ -184,6 +184,7 @@ type Purchase struct {
 	DHPushStatus        DHPushStatus `json:"dhPushStatus,omitempty"`        // Pipeline status: "", "pending", "matched", "unmatched", "manual", "held"
 	DHHoldReason        string       `json:"dhHoldReason,omitempty"`        // Why a re-push was held
 	DHCandidatesJSON    string       `json:"dhCandidatesJson,omitempty"`    // Ambiguous cert resolution candidates JSON
+	DHLastSyncedAt      string       `json:"dhLastSyncedAt,omitempty"`      // When DH inventory was last polled for this purchase (RFC3339)
 	GemRateID           string       `json:"gemRateId,omitempty"`           // CL gemRateID (grade-agnostic card variant identifier)
 	PSASpecID           int          `json:"psaSpecId,omitempty"`           // PSA spec ID from CL cards index
 	// Card Ladder metadata (from CL catalog enrichment)
