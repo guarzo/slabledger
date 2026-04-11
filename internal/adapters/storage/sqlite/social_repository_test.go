@@ -637,10 +637,11 @@ func TestSocialRepository_GetPurchaseIDsInExistingPosts(t *testing.T) {
 		assert.Len(t, result, 0)
 	})
 
-	t.Run("empty input returns nil", func(t *testing.T) {
+	t.Run("empty input returns empty map", func(t *testing.T) {
 		result, err := repo.GetPurchaseIDsInExistingPosts(ctx, []string{}, social.PostTypeNewArrivals)
 		require.NoError(t, err)
-		assert.Nil(t, result)
+		assert.NotNil(t, result)
+		assert.Len(t, result, 0)
 	})
 }
 
