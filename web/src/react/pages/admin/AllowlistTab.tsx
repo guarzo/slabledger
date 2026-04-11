@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import type { AllowedEmail } from '../../../types/admin';
+import PokeballLoader from '../../PokeballLoader';
 import { useAllowlist, useAddAllowedEmail, useRemoveAllowedEmail } from '../../queries/useAdminQueries';
 import { Button } from '../../ui';
 import { formatAdminDate } from './adminUtils';
@@ -78,7 +79,9 @@ export function AllowlistTab({ enabled = true }: { enabled?: boolean }) {
       {/* Email list */}
       <div className="glass-table">
         {isLoading ? (
-          <div className="px-5 py-8 text-center text-[var(--text-muted)] text-sm">Loading...</div>
+          <div className="px-5 py-8">
+            <PokeballLoader />
+          </div>
         ) : !error && Array.isArray(allowlist) && allowlist.length === 0 ? (
           <div className="px-5 py-8 text-center text-[var(--text-muted)] text-sm">
             No emails in allowlist. Add one above to allow users to log in.

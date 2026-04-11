@@ -1,6 +1,7 @@
 import React from 'react';
 import { Navigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import PokeballLoader from '../PokeballLoader';
 import logoSrc from '../../assets/card-yeti-business-logo.png';
 import '../../css/LoginPage.css';
 
@@ -13,7 +14,7 @@ const LoginPage: React.FC = () => {
   if (loading) {
     return (
       <div className="login-container">
-        <div className="login-loading">Loading...</div>
+        <PokeballLoader />
       </div>
     );
   }

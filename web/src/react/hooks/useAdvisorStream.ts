@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { reportError } from '../../js/errors';
 import { type ScoreCard } from '../../types/scoring';
 
 interface StreamEvent {
@@ -149,7 +150,7 @@ export function useAdvisorStream(): UseAdvisorStreamResult {
                   try {
                     setScoreCard(JSON.parse(event.content) as ScoreCard);
                   } catch (e) {
-                    console.warn('Failed to parse score event:', event.content, e);
+                    reportError('useAdvisorStream/score-event', e);
                   }
                 }
                 break;
@@ -162,7 +163,7 @@ export function useAdvisorStream(): UseAdvisorStreamResult {
                 break;
             }
           } catch (parseErr) {
-            console.warn('Failed to parse SSE event:', data, parseErr);
+            reportError('useAdvisorStream/sse-event', parseErr);
           }
         }
 

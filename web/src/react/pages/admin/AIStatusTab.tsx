@@ -1,4 +1,5 @@
 import type { AIOperationSummary } from '../../../types/apiStatus';
+import PokeballLoader from '../../PokeballLoader';
 import { useAIUsage } from '../../queries/useAdminQueries';
 import { formatTokens, formatLatency } from '../../utils/formatters';
 import { SummaryCard } from './shared';
@@ -42,7 +43,7 @@ function OperationRow({ op }: { op: AIOperationSummary }) {
 export function AIStatusTab({ enabled = true }: { enabled?: boolean }) {
   const { data, error, isLoading } = useAIUsage({ enabled });
 
-  if (isLoading) return <div className="text-center text-[var(--text-muted)] py-8">Loading...</div>;
+  if (isLoading) return <div className="py-8"><PokeballLoader /></div>;
   if (error && !data) return <div className="p-3 rounded-lg bg-[var(--danger-bg)] border border-[var(--danger-border)] text-[var(--danger)] text-sm">Failed to load AI usage stats</div>;
   if (!data) return null;
 

@@ -1,3 +1,4 @@
+import PokeballLoader from '../../PokeballLoader';
 import { usePriceOverrideStats } from '../../queries/useAdminQueries';
 import { currency } from '../../utils/formatters';
 import { SummaryCard } from './shared';
@@ -10,7 +11,7 @@ function pct(n: number, total: number): string {
 export function AIPricingTab({ enabled = true }: { enabled?: boolean }) {
   const { data: stats, error, isLoading } = usePriceOverrideStats({ enabled });
 
-  if (isLoading) return <div className="text-center text-[var(--text-muted)] py-8">Loading...</div>;
+  if (isLoading) return <div className="py-8"><PokeballLoader /></div>;
   if (error && !stats) return <div className="p-3 rounded-lg bg-[var(--danger-bg)] border border-[var(--danger-border)] text-[var(--danger)] text-sm">Failed to load price override stats</div>;
   if (!stats) return null;
 

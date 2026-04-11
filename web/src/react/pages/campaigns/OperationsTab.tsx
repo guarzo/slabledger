@@ -2,6 +2,7 @@ import { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { api } from '../../../js/api';
+import { reportError } from '../../../js/errors';
 import type { Campaign, PSAImportResult } from '../../../types/campaigns';
 import { queryKeys } from '../../queries/queryKeys';
 import { getErrorMessage } from '../../utils/formatters';
@@ -111,7 +112,10 @@ export default function OperationsTab({ campaigns, operationState, setOperationS
       if (result.failed > 0) {
         toast.warning(`MM sync: ${result.synced} synced, ${result.skipped} skipped, ${result.failed} failed`);
         if (result.errors && result.errors.length > 0) {
-          console.error('MM sync errors:', result.errors);
+          reportError(
+            'OperationsTab/mm-sync',
+            new Error(`MM sync errors: ${result.errors.join('; ')}`),
+          );
         }
       } else if (result.synced === 0 && result.skipped === 0) {
         toast.info('All items already synced to Market Movers');

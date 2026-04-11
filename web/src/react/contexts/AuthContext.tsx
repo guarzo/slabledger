@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { api } from '../../js/api';
+import { reportError } from '../../js/errors';
 
 interface User {
   id: number;
@@ -34,7 +35,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setUser(userData);
     } catch (error) {
       if (error instanceof Error && 'status' in error && (error as { status: number }).status !== 401) {
-        console.error('Failed to fetch current user', error);
+        reportError('AuthContext/currentUser', error);
       }
       setUser(null);
     } finally {

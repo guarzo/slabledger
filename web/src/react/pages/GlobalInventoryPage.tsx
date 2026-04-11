@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { useSellSheet } from '../hooks/useSellSheet';
 import { useGlobalInventory } from '../queries/useCampaignQueries';
+import { SectionErrorBoundary } from '../ui';
 import InventoryTab from './campaign-detail/InventoryTab';
 import AIAnalysisWidget from '../components/advisor/AIAnalysisWidget';
 
@@ -48,7 +49,9 @@ export default function GlobalInventoryPage() {
         </div>
       )}
 
-      <InventoryTab items={items} isLoading={isLoading} showCampaignColumn />
+      <SectionErrorBoundary sectionName="Inventory">
+        <InventoryTab items={items} isLoading={isLoading} showCampaignColumn />
+      </SectionErrorBoundary>
 
       {/* Print footer — visible only when printing */}
       <div className="sell-sheet-print-footer">
