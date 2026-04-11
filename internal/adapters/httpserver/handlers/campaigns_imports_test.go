@@ -597,3 +597,162 @@ func TestHandleResolveCert_EmptyCert(t *testing.T) {
 		t.Fatalf("status = %d, want 400; body: %s", rec.Code, rec.Body.String())
 	}
 }
+
+// --- HandleGlobalImportPSA ---
+
+func TestHandleGlobalImportPSA_Success(t *testing.T) {
+	svc := &mocks.MockCampaignService{
+		ImportPSAExportGlobalFn: func(_ context.Context, rows []campaigns.PSAExportRow) (*campaigns.PSAImportResult, error) {
+			return &campaigns.PSAImportResult{Allocated: len(rows)}, nil
+		},
+	}
+	h := newTestHandler(svc)
+
+	body, contentType := createCSVMultipart(t, [][]string{
+		{"cert number", "listing title", "grade"},
+		{"12345678", "2020 Pokémon Charizard PSA 9", "9"},
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/purchases/import-psa", body)
+	req.Header.Set("Content-Type", contentType)
+	rec := httptest.NewRecorder()
+	h.HandleGlobalImportPSA(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d; body: %s", rec.Code, rec.Body.String())
+	}
+	var result campaigns.PSAImportResult
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if result.Allocated != 1 {
+		t.Errorf("expected Allocated=1, got %d", result.Allocated)
+	}
+}
+
+func TestHandleGlobalImportPSA_MissingFile(t *testing.T) {
+	h := newTestHandler(&mocks.MockCampaignService{})
+
+	var buf bytes.Buffer
+	writer := multipart.NewWriter(&buf)
+	writer.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/purchases/import-psa", &buf)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	rec := httptest.NewRecorder()
+	h.HandleGlobalImportPSA(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d; body: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandleGlobalImportPSA_InvalidHeader(t *testing.T) {
+	h := newTestHandler(&mocks.MockCampaignService{})
+
+	body, contentType := createCSVMultipart(t, [][]string{
+		{"wrong column", "bad column", "nope"},
+		{"12345678", "Charizard", "9"},
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/purchases/import-psa", body)
+	req.Header.Set("Content-Type", contentType)
+	rec := httptest.NewRecorder()
+	h.HandleGlobalImportPSA(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d; body: %s", rec.Code, rec.Body.String())
+	}
+	decodeErrorResponse(t, rec)
+}
+
+func TestHandleGlobalImportPSA_ServiceError(t *testing.T) {
+	svc := &mocks.MockCampaignService{
+		ImportPSAExportGlobalFn: func(_ context.Context, _ []campaigns.PSAExportRow) (*campaigns.PSAImportResult, error) {
+			return nil, fmt.Errorf("database failure")
+		},
+	}
+	h := newTestHandler(svc)
+
+	body, contentType := createCSVMultipart(t, [][]string{
+		{"cert number", "listing title", "grade"},
+		{"12345678", "Charizard PSA 9", "9"},
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/purchases/import-psa", body)
+	req.Header.Set("Content-Type", contentType)
+	rec := httptest.NewRecorder()
+	h.HandleGlobalImportPSA(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d; body: %s", rec.Code, rec.Body.String())
+	}
+	decodeErrorResponse(t, rec)
+}
+
+// --- HandleSyncPSASheets ---
+
+func TestHandleSyncPSASheets_NotConfigured(t *testing.T) {
+	h := newTestHandler(&mocks.MockCampaignService{})
+	// No WithSheetFetcher — sheetFetcher is nil
+
+	req := httptest.NewRequest(http.MethodPost, "/api/purchases/sync-psa-sheets", nil)
+	rec := httptest.NewRecorder()
+	h.HandleSyncPSASheets(rec, req)
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d; body: %s", rec.Code, rec.Body.String())
+	}
+	decodeErrorResponse(t, rec)
+}
+
+func TestHandleSyncPSASheets_Success(t *testing.T) {
+	svc := &mocks.MockCampaignService{
+		ImportPSAExportGlobalFn: func(_ context.Context, rows []campaigns.PSAExportRow) (*campaigns.PSAImportResult, error) {
+			return &campaigns.PSAImportResult{Allocated: len(rows)}, nil
+		},
+	}
+	fetcher := &mocks.MockSheetFetcher{
+		ReadSheetFn: func(_ context.Context, _, _ string) ([][]string, error) {
+			return [][]string{
+				{"cert number", "listing title", "grade"},
+				{"12345678", "Charizard PSA 9", "9"},
+			}, nil
+		},
+	}
+	h := NewCampaignsHandler(svc, mocks.NewMockLogger(), nil, WithSheetFetcher(fetcher, "sheet-id", "Sheet1"))
+
+	req := httptest.NewRequest(http.MethodPost, "/api/purchases/sync-psa-sheets", nil)
+	rec := httptest.NewRecorder()
+	h.HandleSyncPSASheets(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d; body: %s", rec.Code, rec.Body.String())
+	}
+	var result campaigns.PSAImportResult
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if result.Allocated != 1 {
+		t.Errorf("expected Allocated=1, got %d", result.Allocated)
+	}
+}
+
+func TestHandleSyncPSASheets_SheetFetchError(t *testing.T) {
+	svc := &mocks.MockCampaignService{}
+	fetcher := &mocks.MockSheetFetcher{
+		ReadSheetFn: func(_ context.Context, _, _ string) ([][]string, error) {
+			return nil, fmt.Errorf("google sheets API error")
+		},
+	}
+	h := NewCampaignsHandler(svc, mocks.NewMockLogger(), nil, WithSheetFetcher(fetcher, "sheet-id", "Sheet1"))
+
+	req := httptest.NewRequest(http.MethodPost, "/api/purchases/sync-psa-sheets", nil)
+	rec := httptest.NewRecorder()
+	h.HandleSyncPSASheets(rec, req)
+
+	if rec.Code != http.StatusBadGateway {
+		t.Fatalf("expected 502, got %d; body: %s", rec.Code, rec.Body.String())
+	}
+	decodeErrorResponse(t, rec)
+}
