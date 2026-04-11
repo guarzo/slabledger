@@ -62,7 +62,7 @@ tmp/
 credentials.json
 
 # Data files (all runtime data stored in ./data/)
-data/cache/
+data/
 data/snapshots/
 data/volatility.json
 data/cache.json
