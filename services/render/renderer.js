@@ -1,10 +1,10 @@
 const puppeteer = require('puppeteer');
 
-let browser = null;
+let browserPromise = null;
 
 async function getBrowser() {
-  if (!browser) {
-    browser = await puppeteer.launch({
+  if (!browserPromise) {
+    browserPromise = puppeteer.launch({
       headless: true,
       args: [
         '--no-sandbox',
@@ -12,12 +12,14 @@ async function getBrowser() {
         '--disable-dev-shm-usage',
         '--disable-gpu',
       ],
-    });
-    browser.on('disconnected', () => {
-      browser = null;
+    }).then(b => {
+      b.on('disconnected', () => {
+        browserPromise = null;
+      });
+      return b;
     });
   }
-  return browser;
+  return browserPromise;
 }
 
 /**
@@ -65,7 +67,7 @@ async function renderSlide(baseURL, postId, slideIndex, timeoutMs = 30000) {
     });
     return jpeg;
   } finally {
-    await page.close();
+    try { await page.close(); } catch (_) {}
   }
 }
 

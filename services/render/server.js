@@ -27,10 +27,6 @@ app.post('/render/:postId', async (req, res) => {
   const { postId } = req.params;
   const body = req.body;
 
-  if (!postId) {
-    return res.status(400).json({ error: 'postId required' });
-  }
-
   // Derive card count from body
   const cardCount = body.cardCount ?? (Array.isArray(body.cards) ? body.cards.length : 0);
 
@@ -46,6 +42,10 @@ app.post('/render/:postId', async (req, res) => {
     });
 
     res.set('Content-Type', `multipart/form-data; boundary=${form.getBoundary()}`);
+    form.on('error', (err) => {
+      console.error(`Form stream error for post ${postId}:`, err);
+      res.destroy(err);
+    });
     form.pipe(res);
   } catch (err) {
     console.error(`Render failed for post ${postId}:`, err);
