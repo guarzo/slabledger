@@ -184,8 +184,8 @@ export default function CampaignFormFields({
           <div className="md:col-span-2 space-y-2">
             <Input label={values.exclusionMode ? 'Exclusion List' : 'Inclusion List'} type="text" inputSize={inputSize} placeholder="e.g. charizard pikachu blastoise" value={values.inclusionList}
               onChange={e => onChange('inclusionList', e.target.value)} />
-            <label className="inline-flex items-center gap-2.5 text-sm text-[var(--text-muted)] cursor-pointer group select-none">
-              <Checkbox.Root checked={values.exclusionMode}
+            <label htmlFor="exclusion-mode-toggle" className="inline-flex items-center gap-2.5 text-sm text-[var(--text-muted)] cursor-pointer group select-none">
+              <Checkbox.Root id="exclusion-mode-toggle" checked={values.exclusionMode}
                 onCheckedChange={(checked) => onChange('exclusionMode', checked === true)}
                 className="flex items-center justify-center w-4 h-4 rounded
                            border border-[var(--surface-3)] bg-[var(--surface-2)] transition-colors
