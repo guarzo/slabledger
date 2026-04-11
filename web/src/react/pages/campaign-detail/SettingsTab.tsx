@@ -6,7 +6,6 @@ import { useToast } from '../../contexts/ToastContext';
 import { Input, Button, ConfirmDialog } from '../../ui';
 import CampaignFormFields from '../../ui/CampaignFormFields';
 import { useActivationChecklist } from '../../queries/useCampaignQueries';
-import PokeballLoader from '../../PokeballLoader';
 
 export default function SettingsTab({ campaign, onUpdate, onDelete }: {
   campaign: Campaign;
@@ -107,9 +106,7 @@ export default function SettingsTab({ campaign, onUpdate, onDelete }: {
           <div className="p-4 bg-[var(--surface-1)] rounded-xl border border-[var(--surface-2)]">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-semibold text-[var(--text-muted)] uppercase tracking-wider">Activation Readiness</h3>
-              {checklistLoading ? (
-                <PokeballLoader size="sm" />
-              ) : checklist?.allPassed ? (
+              {!checklistLoading && (checklist?.allPassed ? (
                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-[var(--success-bg)] text-[var(--success)]">
                   Ready to activate
                 </span>
@@ -117,7 +114,7 @@ export default function SettingsTab({ campaign, onUpdate, onDelete }: {
                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-[var(--warning-bg)] text-[var(--warning)]">
                   Review before activating
                 </span>
-              )}
+              ))}
             </div>
             {checklistLoading ? (
               <p className="text-sm text-[var(--text-muted)]">Checking activation readiness...</p>
