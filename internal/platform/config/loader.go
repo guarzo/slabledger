@@ -194,6 +194,13 @@ func FromEnv(base Config) Config {
 	envDurationPositive("SOCIAL_CONTENT_INITIAL_DELAY", &cfg.SocialContent.InitialDelay)
 	envIntRange("SOCIAL_CONTENT_HOUR", &cfg.SocialContent.ContentHour, -1, 23)
 
+	// Social publish scheduler
+	envString("RENDER_SERVICE_URL", &cfg.SocialPublish.RenderServiceURL)
+	envIntRange("SOCIAL_PUBLISH_START_HOUR", &cfg.SocialPublish.StartHour, 0, 23)
+	envIntRange("SOCIAL_PUBLISH_END_HOUR", &cfg.SocialPublish.EndHour, 0, 23)
+	envIntPositive("SOCIAL_PUBLISH_INTERVAL_MINUTES", &cfg.SocialPublish.IntervalMinutes)
+	envIntPositive("AUTO_PUBLISH_MAX_DAILY", &cfg.SocialPublish.MaxDaily)
+
 	// Metrics poll scheduler
 	envBool("METRICS_POLL_ENABLED", &cfg.MetricsPoll.Enabled, false)
 	envDurationPositive("METRICS_POLL_INTERVAL", &cfg.MetricsPoll.Interval)
