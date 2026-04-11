@@ -25,6 +25,10 @@ func (r *PricingDiagnosticsRepository) GetPricingDiagnostics(ctx context.Context
 		return nil, err
 	}
 
+	if err := r.queryPriceCoverage(ctx, diag); err != nil {
+		return nil, err
+	}
+
 	if err := r.queryRecentFailures(ctx, diag); err != nil {
 		return nil, err
 	}
@@ -58,6 +62,24 @@ func (r *PricingDiagnosticsRepository) queryMappingCoverage(ctx context.Context,
 	}
 	diag.TotalMappedCards = mapped
 	diag.UnmappedCards = total - mapped
+	return nil
+}
+
+// queryPriceCoverage counts unsold inventory cards with CL and MM prices.
+func (r *PricingDiagnosticsRepository) queryPriceCoverage(ctx context.Context, diag *pricing.PricingDiagnostics) error {
+	row := r.db.QueryRowContext(ctx, `
+		SELECT
+			COUNT(*) AS total_unsold,
+			COALESCE(SUM(CASE WHEN cp.cl_value_cents > 0 THEN 1 ELSE 0 END), 0) AS cl_priced,
+			COALESCE(SUM(CASE WHEN cp.mm_value_cents > 0 THEN 1 ELSE 0 END), 0) AS mm_priced
+		FROM campaign_purchases cp
+		JOIN campaigns c ON cp.campaign_id = c.id
+		LEFT JOIN campaign_sales cs ON cp.id = cs.purchase_id
+		WHERE cs.id IS NULL AND c.phase != 'closed'
+	`)
+	if err := row.Scan(&diag.TotalUnsold, &diag.CLPricedCards, &diag.MMPricedCards); err != nil {
+		return err
+	}
 	return nil
 }
 

@@ -2,8 +2,10 @@ package config
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 	"strconv"
 	"strings"
@@ -194,6 +196,13 @@ func FromEnv(base Config) Config {
 	envDurationPositive("SOCIAL_CONTENT_INITIAL_DELAY", &cfg.SocialContent.InitialDelay)
 	envIntRange("SOCIAL_CONTENT_HOUR", &cfg.SocialContent.ContentHour, -1, 23)
 
+	// Social publish scheduler
+	envString("RENDER_SERVICE_URL", &cfg.SocialPublish.RenderServiceURL)
+	envIntRange("SOCIAL_PUBLISH_START_HOUR", &cfg.SocialPublish.StartHour, 0, 23)
+	envIntRange("SOCIAL_PUBLISH_END_HOUR", &cfg.SocialPublish.EndHour, 0, 23)
+	envIntPositive("SOCIAL_PUBLISH_INTERVAL_MINUTES", &cfg.SocialPublish.IntervalMinutes)
+	envIntPositive("AUTO_PUBLISH_MAX_DAILY", &cfg.SocialPublish.MaxDaily)
+
 	// Metrics poll scheduler
 	envBool("METRICS_POLL_ENABLED", &cfg.MetricsPoll.Enabled, false)
 	envDurationPositive("METRICS_POLL_INTERVAL", &cfg.MetricsPoll.Interval)
@@ -241,11 +250,28 @@ func FromEnv(base Config) Config {
 
 	// Google Sheets credentials (JSON key is base64-encoded in .env)
 	if v := os.Getenv("GOOGLE_SHEETS_CREDENTIALS_JSON"); v != "" {
+		v = strings.TrimSpace(v)
 		decoded, err := base64.StdEncoding.DecodeString(v)
 		if err != nil {
+			// Retry after trimming trailing non-base64 characters (e.g. stray %)
+			trimmed := strings.TrimRightFunc(v, func(r rune) bool {
+				return (r < 'A' || r > 'Z') && (r < 'a' || r > 'z') &&
+					(r < '0' || r > '9') && r != '+' && r != '/' && r != '='
+			})
+			decoded, err = base64.StdEncoding.DecodeString(trimmed)
+		}
+		if err != nil {
+			// Both standard and trimmed base64 decodes failed.
+			// Assume the value is raw JSON (e.g. credentials pasted directly rather than encoded).
+			// Warn so operators can detect an accidentally truncated or mis-encoded secret.
+			slog.Warn("GOOGLE_SHEETS_CREDENTIALS_JSON is not valid base64 — treating as raw JSON; if unexpected, check that the value is correctly base64-encoded")
 			cfg.GoogleSheets.CredentialsJSON = v
 		} else {
-			cfg.GoogleSheets.CredentialsJSON = string(decoded)
+			decodedStr := string(decoded)
+			if !json.Valid(decoded) {
+				slog.Warn("GOOGLE_SHEETS_CREDENTIALS_JSON decoded from base64 but is not valid JSON — credentials may be corrupt")
+			}
+			cfg.GoogleSheets.CredentialsJSON = decodedStr
 		}
 	}
 	cfg.GoogleSheets.SpreadsheetID = os.Getenv("GOOGLE_SHEETS_SPREADSHEET_ID")

@@ -122,7 +122,7 @@ type SellSheetItem struct {
 	AISuggestedPriceCents int               `json:"aiSuggestedPriceCents,omitempty"`
 	AISuggestedAt         string            `json:"aiSuggestedAt,omitempty"`
 	Signals               *InventorySignals `json:"signals,omitempty"`
-	VaultStatus           string            `json:"vaultStatus,omitempty"`
+	PSAShipDate           string            `json:"psaShipDate,omitempty"`
 }
 
 // SellSheetTotals contains aggregate sell sheet metrics.

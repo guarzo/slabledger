@@ -6,6 +6,7 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	"github.com/guarzo/slabledger/internal/adapters/clients/marketmovers"
+	"github.com/guarzo/slabledger/internal/adapters/clients/renderservice"
 	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
 	"github.com/guarzo/slabledger/internal/domain/advisor"
 	"github.com/guarzo/slabledger/internal/domain/ai"
@@ -65,6 +66,10 @@ type BuildDeps struct {
 	// Picks generation dependencies (optional)
 	PicksGenerator PicksGenerator
 
+	// Social publish dependencies (optional — enabled when RenderServiceURL is configured)
+	SocialPublisher   SocialPublisher
+	SocialPublishRepo SocialPublishRepo
+
 	// DH dependencies (optional)
 	DHClient           *dh.Client
 	DHIntelligenceRepo intelligence.Repository
@@ -116,6 +121,8 @@ type BuildResult struct {
 	Group             *Group
 	CardLadderRefresh *CardLadderRefreshScheduler   // nil if Card Ladder is not configured
 	MMRefresh         *MarketMoversRefreshScheduler // nil if Market Movers is not configured
+	PSASync           *PSASyncScheduler             // nil if PSA sync is not configured
+	SocialPublish     *SocialPublishScheduler       // nil if auto-publishing is not configured
 }
 
 // BuildGroup constructs a scheduler Group from centralized configuration and dependencies.
@@ -123,6 +130,7 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 	var schedulers []Scheduler
 	var clRefresh *CardLadderRefreshScheduler
 	var mmRefresh *MarketMoversRefreshScheduler
+	var psaSync *PSASyncScheduler
 
 	// Price refresh scheduler
 	schedulerConfig := Config{
@@ -240,6 +248,30 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 		))
 	}
 
+	// Social publish scheduler (if render service URL is configured)
+	cfg.SocialPublish.ApplyDefaults()
+	var socialPublishScheduler *SocialPublishScheduler
+	if cfg.SocialPublish.RenderServiceURL != "" && deps.SocialPublisher != nil && deps.SocialPublishRepo != nil {
+		renderClient := renderservice.NewClient(cfg.SocialPublish.RenderServiceURL)
+		publishCfg := SocialPublishSchedulerConfig{
+			StartHour:        cfg.SocialPublish.StartHour,
+			EndHour:          cfg.SocialPublish.EndHour,
+			IntervalMinutes:  cfg.SocialPublish.IntervalMinutes,
+			MaxDaily:         cfg.SocialPublish.MaxDaily,
+			RenderServiceURL: cfg.SocialPublish.RenderServiceURL,
+			fixedHour:        -1,
+		}
+		socialPublishScheduler = NewSocialPublishScheduler(
+			deps.SocialPublishRepo,
+			renderClient,
+			deps.SocialPublisher,
+			cfg.Server.MediaDir,
+			publishCfg,
+			deps.Logger,
+		)
+		schedulers = append(schedulers, socialPublishScheduler)
+	}
+
 	// Metrics poll scheduler (if all dependencies are provided)
 	if deps.MetricsPostLister != nil && deps.MetricsSaver != nil && deps.InsightsPoller != nil {
 		schedulers = append(schedulers, NewMetricsPollScheduler(
@@ -255,8 +287,12 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 		))
 	}
 
-	// Card Ladder value refresh scheduler (if client + store are provided)
-	if deps.CardLadderClient != nil && deps.CardLadderStore != nil && deps.CardLadderPurchaseLister != nil && deps.CardLadderValueUpdater != nil {
+	// Card Ladder value refresh scheduler.
+	// Created whenever the store and purchase interfaces are available, even if
+	// no client exists yet at startup. SetClient is called by the handler when
+	// credentials are saved for the first time, activating the scheduler without
+	// requiring a server restart.
+	if deps.CardLadderStore != nil && deps.CardLadderPurchaseLister != nil && deps.CardLadderValueUpdater != nil {
 		var clOpts []CardLadderRefreshOption
 		if deps.DHPushStatusUpdater != nil {
 			clOpts = append(clOpts, WithCLDHPushUpdater(deps.DHPushStatusUpdater))
@@ -364,11 +400,12 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 
 	// PSA Google Sheets sync scheduler (if fetcher and importer are provided)
 	if deps.PSASheetFetcher != nil && deps.PSAImporter != nil && deps.PSASpreadsheetID != "" {
-		schedulers = append(schedulers, NewPSASyncScheduler(
+		psaSync = NewPSASyncScheduler(
 			deps.PSASheetFetcher, deps.PSAImporter,
 			deps.Logger, cfg.PSASync,
 			deps.PSASpreadsheetID, deps.PSATabName,
-		))
+		)
+		schedulers = append(schedulers, psaSync)
 	}
 
 	// Market Movers value refresh scheduler.
@@ -389,5 +426,7 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 		Group:             NewGroup(schedulers...),
 		CardLadderRefresh: clRefresh,
 		MMRefresh:         mmRefresh,
+		PSASync:           psaSync,
+		SocialPublish:     socialPublishScheduler,
 	}
 }

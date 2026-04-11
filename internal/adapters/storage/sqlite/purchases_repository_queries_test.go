@@ -386,7 +386,7 @@ func TestPurchasesQueries_UpdatePurchasePSAFields(t *testing.T) {
 		require.NoError(t, repo.CreatePurchase(ctx, p))
 
 		fields := campaigns.PSAUpdateFields{
-			VaultStatus:     "in_vault",
+			PSAShipDate:     "2026-02-15",
 			InvoiceDate:     "2026-02-15",
 			WasRefunded:     true,
 			FrontImageURL:   "https://example.com/psa-front.jpg",
@@ -400,7 +400,7 @@ func TestPurchasesQueries_UpdatePurchasePSAFields(t *testing.T) {
 
 		got, err := repo.GetPurchase(ctx, p.ID)
 		require.NoError(t, err)
-		assert.Equal(t, "in_vault", got.VaultStatus)
+		assert.Equal(t, "2026-02-15", got.PSAShipDate)
 		assert.Equal(t, "2026-02-15", got.InvoiceDate)
 		assert.True(t, got.WasRefunded)
 		assert.Equal(t, "https://example.com/psa-front.jpg", got.FrontImageURL)

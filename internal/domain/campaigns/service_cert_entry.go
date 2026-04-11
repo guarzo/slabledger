@@ -76,6 +76,13 @@ func (s *service) ImportCerts(ctx context.Context, certNumbers []string) (*CertI
 				})
 				continue
 			}
+			if recvErr := s.repo.SetReceivedAt(ctx, existing.ID, now); recvErr != nil {
+				if s.logger != nil {
+					s.logger.Warn(ctx, "cert import: failed to set received_at",
+						observability.String("cert", certNum),
+						observability.Err(recvErr))
+				}
+			}
 			result.AlreadyExisted++
 			continue
 		}
@@ -136,6 +143,14 @@ func (s *service) ImportCerts(ctx context.Context, certNumbers []string) (*CertI
 			result.Failed++
 			result.Errors = append(result.Errors, CertImportError{CertNumber: certNum, Error: createErr.Error()})
 			continue
+		}
+
+		if recvErr := s.repo.SetReceivedAt(ctx, purchase.ID, now); recvErr != nil {
+			if s.logger != nil {
+				s.logger.Warn(ctx, "cert import: failed to set received_at",
+					observability.String("cert", certNum),
+					observability.Err(recvErr))
+			}
 		}
 
 		if s.certEnrichCh != nil {

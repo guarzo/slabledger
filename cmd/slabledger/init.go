@@ -168,6 +168,15 @@ func initializeAdvisorService(
 
 // initializeSocialService creates the social content service, including
 // optional Instagram integration when configured.
+type socialServiceResult struct {
+	service             social.Service
+	repo                *sqlite.SocialRepository
+	igClient            *igclient.Client
+	igStore             *sqlite.InstagramStore
+	igTokenRefresher    scheduler.InstagramTokenRefresher
+	publisherConfigured bool
+}
+
 func initializeSocialService(
 	ctx context.Context,
 	cfg *config.Config,
@@ -175,7 +184,7 @@ func initializeSocialService(
 	db *sqlite.DB,
 	azureAIClient advisor.LLMProvider,
 	aiCallRepo *sqlite.AICallRepository,
-) (social.Service, *sqlite.SocialRepository, *igclient.Client, *sqlite.InstagramStore, scheduler.InstagramTokenRefresher) {
+) socialServiceResult {
 	socialRepo := sqlite.NewSocialRepository(db.DB)
 	socialOpts := []social.ServiceOption{
 		social.WithLogger(logger),
@@ -211,6 +220,7 @@ func initializeSocialService(
 	var igClient *igclient.Client
 	var igStore *sqlite.InstagramStore
 	var igTokenRefresher scheduler.InstagramTokenRefresher
+	var publisherConfigured bool
 
 	if igConfig.IsConfigured() && cfg.Auth.EncryptionKey != "" {
 		igEncryptor, igErr := crypto.NewAESEncryptor(cfg.Auth.EncryptionKey)
@@ -224,6 +234,7 @@ func initializeSocialService(
 			publisher := igclient.NewPublisherAdapter(igClient)
 			tokenProvider := igclient.NewTokenProvider(igStore)
 			socialOpts = append(socialOpts, social.WithPublisher(publisher, tokenProvider))
+			publisherConfigured = true
 
 			igTokenRefresher = igclient.NewTokenRefresher(igClient, igStore, logger)
 			logger.Info(ctx, "Instagram integration initialized")
@@ -232,7 +243,14 @@ func initializeSocialService(
 
 	socialService := social.NewService(socialRepo, socialOpts...)
 
-	return socialService, socialRepo, igClient, igStore, igTokenRefresher
+	return socialServiceResult{
+		service:             socialService,
+		repo:                socialRepo,
+		igClient:            igClient,
+		igStore:             igStore,
+		igTokenRefresher:    igTokenRefresher,
+		publisherConfigured: publisherConfigured,
+	}
 }
 
 // initImageGeneration configures image generation if enabled and all prerequisites are met.
@@ -378,6 +396,8 @@ type schedulerDeps struct {
 	AdvisorCacheRepo     *sqlite.AdvisorCacheRepository
 	AICallRepo           *sqlite.AICallRepository
 	SocialService        social.Service
+	SocialRepo           *sqlite.SocialRepository
+	PublisherConfigured  bool
 	IGTokenRefresher     scheduler.InstagramTokenRefresher
 	MetricsPostLister    social.MetricsPostLister
 	MetricsSaver         social.MetricsSaver
@@ -484,6 +504,11 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 		buildDeps.PSAImporter = deps.CampaignsService
 		buildDeps.PSASpreadsheetID = deps.PSASpreadsheetID
 		buildDeps.PSATabName = deps.PSATabName
+	}
+	// Wire social publish (nil-safe: only set if publisher was actually configured)
+	if deps.PublisherConfigured {
+		buildDeps.SocialPublisher = deps.SocialService
+		buildDeps.SocialPublishRepo = deps.SocialRepo
 	}
 	schedulerResult := scheduler.BuildGroup(deps.Config, buildDeps)
 	schedulerResult.Group.StartAll(schedulerCtx)

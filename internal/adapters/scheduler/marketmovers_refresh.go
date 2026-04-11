@@ -252,6 +252,57 @@ func (s *MarketMoversRefreshScheduler) runOnce(ctx context.Context) error {
 	return nil
 }
 
+// tokenMatchesTitle checks whether a card name and an MM SearchTitle refer to the same card
+// using tokenized matching. Instead of requiring the full card name as a substring of the
+// search title (which fails when PSA titles like "2022 POKEMON SWORD & SHIELD BRILLIANT STARS
+// CHARIZARD VSTAR" don't match MM's normalized "Charizard VSTAR 2022 Brilliant Stars PSA 10"),
+// this splits both strings into tokens and checks that a sufficient proportion of significant
+// card-name tokens appear in the search title.
+//
+// Tokens shorter than 3 characters and common noise words are ignored. The match threshold
+// is 60% of significant tokens (minimum 2 matches).
+func tokenMatchesTitle(cardName, searchTitle string) bool {
+	titleLower := strings.ToLower(searchTitle)
+	titleTokens := strings.Fields(titleLower)
+	titleSet := make(map[string]bool, len(titleTokens))
+	for _, t := range titleTokens {
+		titleSet[t] = true
+	}
+
+	cardTokens := strings.Fields(strings.ToLower(cardName))
+
+	var significant, matched int
+	for _, tok := range cardTokens {
+		if len(tok) < 3 || noiseWords[tok] {
+			continue
+		}
+		significant++
+		if titleSet[tok] {
+			matched++
+		}
+	}
+
+	if significant == 0 {
+		// No significant tokens — fall back to plain contains.
+		return strings.Contains(titleLower, strings.ToLower(cardName))
+	}
+
+	// For 1-2 significant tokens, require all to match (exact match threshold).
+	// For 3+ tokens, require at least 60% to match (fuzzy matching for long PSA titles).
+	if significant <= 2 {
+		return matched == significant
+	}
+	return matched >= 2 && float64(matched)/float64(significant) >= 0.6
+}
+
+// noiseWords are common tokens in PSA listing titles that are often absent, reformatted,
+// or abbreviated in MM search titles — excluded from token matching.
+var noiseWords = map[string]bool{
+	"pokemon": true, "pokémon": true,
+	"the": true, "and": true, "for": true, "with": true,
+	"holo": true, "card": true, "cards": true,
+}
+
 // resolveCollectibleID searches Market Movers for the card and returns its collectible ID,
 // master ID (grade-agnostic variant identifier, 0 if unknown), and the canonical SearchTitle.
 // Returns (0, 0, "", nil) if no suitable result is found.
@@ -262,8 +313,8 @@ func (s *MarketMoversRefreshScheduler) runOnce(ctx context.Context) error {
 //  2. Fall back to a "{CardName} {Grader} {Grade}" text query if the cert search yields
 //     no result that matches the card name.
 //
-// Any candidate returned by either path is validated by checking that the MM result's
-// SearchTitle contains the card name (case-insensitive) before the ID is cached.
+// Any candidate returned by either path is validated via tokenized title matching (see
+// tokenMatchesTitle) before the ID is cached.
 func (s *MarketMoversRefreshScheduler) resolveCollectibleID(ctx context.Context, p *campaigns.Purchase) (collectibleID, masterID int64, searchTitle string, err error) {
 	if p.CardName == "" {
 		return 0, 0, "", nil
@@ -296,9 +347,8 @@ func (s *MarketMoversRefreshScheduler) searchByCert(ctx context.Context, p *camp
 	if err != nil {
 		return 0, 0, "", fmt.Errorf("search by cert: %w", err)
 	}
-	cardNameLower := strings.ToLower(p.CardName)
 	for _, r := range results.Items {
-		if strings.Contains(strings.ToLower(r.Item.SearchTitle), cardNameLower) {
+		if tokenMatchesTitle(p.CardName, r.Item.SearchTitle) {
 			return r.Item.ID, r.Item.MasterID, r.Item.SearchTitle, nil
 		}
 	}
@@ -329,10 +379,10 @@ func (s *MarketMoversRefreshScheduler) searchByNameGrade(ctx context.Context, p 
 		return 0, 0, "", nil
 	}
 
-	// Validate relevance: reject the top result if its title doesn't contain the card name,
+	// Validate relevance: reject the top result if tokenized matching fails,
 	// since a mismatch means MM returned a completely unrelated card.
 	top := results.Items[0]
-	if !strings.Contains(strings.ToLower(top.Item.SearchTitle), strings.ToLower(p.CardName)) {
+	if !tokenMatchesTitle(p.CardName, top.Item.SearchTitle) {
 		s.logger.Debug(ctx, "MM: name search top result rejected (title mismatch)",
 			observability.String("cert", p.CertNumber),
 			observability.String("query", query),

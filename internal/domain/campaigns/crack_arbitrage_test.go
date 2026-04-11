@@ -4,7 +4,7 @@ import "testing"
 
 func Test_computeCrackAnalysis(t *testing.T) {
 	result := computeCrackAnalysis(
-		"p1", "Charizard", "12345", 8,
+		"p1", "camp1", "Charizard", "12345", 8,
 		8500, 300, 12000, 10000,
 		0.1235,
 	)
@@ -29,7 +29,7 @@ func Test_computeCrackAnalysis(t *testing.T) {
 
 func TestCrackAnalysis_NotCandidate(t *testing.T) {
 	result := computeCrackAnalysis(
-		"p2", "Pikachu", "67890", 8,
+		"p2", "camp1", "Pikachu", "67890", 8,
 		5000, 300, 3000, 8000,
 		0.1235,
 	)
@@ -43,7 +43,7 @@ func TestCrackAnalysis_NotCandidate(t *testing.T) {
 func TestCrackAnalysis_PSA7(t *testing.T) {
 	// PSA 7 modern card: raw NM should exceed graded PSA 7 value
 	result := computeCrackAnalysis(
-		"p3", "Umbreon VMAX", "99999", 7,
+		"p3", "camp1", "Umbreon VMAX", "99999", 7,
 		14700, 300, 25000, 20000, // buy $147 + $3 fee, raw $250, graded $200
 		0.1235,
 	)
@@ -66,7 +66,7 @@ func TestCrackAnalysis_PSA7(t *testing.T) {
 func TestCrackAnalysis_PSA6(t *testing.T) {
 	// PSA 6 card: lower grade, even bigger spread expected
 	result := computeCrackAnalysis(
-		"p4", "Charizard ex", "88888", 6,
+		"p4", "camp1", "Charizard ex", "88888", 6,
 		7500, 300, 13000, 8000, // buy $75 + $3 fee, raw $130, graded $80
 		0.1235,
 	)

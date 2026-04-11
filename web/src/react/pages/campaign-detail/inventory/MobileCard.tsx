@@ -5,7 +5,7 @@ import MarketplaceLinks from './MarketplaceLinks';
 import {
   costBasis, bestPrice, unrealizedPL, marketTrend, velocityLabel,
   getSourceByType, fmtDateShort, plColor, formatPL,
-  deriveSignalDirection, deriveSignalDelta, isHotSeller,
+  deriveSignalDirection, deriveSignalDelta, isHotSeller, formatReceivedDate,
 } from './utils';
 
 interface MobileCardProps {
@@ -15,12 +15,13 @@ interface MobileCardProps {
   onRecordSale: () => void;
   onFixPricing?: () => void;
   onSetPrice?: () => void;
+  onDelete?: () => void;
   ev?: ExpectedValue;
   showCampaignColumn?: boolean;
   isOnSellSheet?: boolean;
 }
 
-export default function MobileCard({ item, selected, onToggle, onRecordSale, onFixPricing, onSetPrice, ev, showCampaignColumn, isOnSellSheet }: MobileCardProps) {
+export default function MobileCard({ item, selected, onToggle, onRecordSale, onFixPricing, onSetPrice, onDelete, ev, showCampaignColumn, isOnSellSheet }: MobileCardProps) {
   const cb = costBasis(item.purchase);
   const snap = item.currentMarket;
   const daysColor = daysHeldColor(item.daysHeld);
@@ -37,14 +38,35 @@ export default function MobileCard({ item, selected, onToggle, onRecordSale, onF
       <div className="flex items-start justify-between mb-2">
         <div className="flex items-start gap-2">
           <input type="checkbox" checked={selected} onChange={onToggle} className="rounded mt-0.5" />
-          {item.purchase.frontImageUrl && (
-            <img
-              src={item.purchase.frontImageUrl}
-              alt=""
-              className="w-10 h-14 object-cover rounded shrink-0 bg-[var(--surface-2)]"
-              loading="lazy"
-            />
-          )}
+          <div style={{ position: 'relative', width: 40, height: 56, flexShrink: 0 }}>
+            {item.purchase.frontImageUrl && (
+              <img
+                src={item.purchase.frontImageUrl}
+                alt=""
+                className="w-10 h-14 object-cover rounded shrink-0 bg-[var(--surface-2)]"
+                loading="lazy"
+              />
+            )}
+            {item.purchase.receivedAt && (
+              <div
+                data-testid="in-hand-indicator"
+                role="img"
+                aria-label={`In hand since ${formatReceivedDate(item.purchase.receivedAt)}`}
+                title={`In hand since ${formatReceivedDate(item.purchase.receivedAt)}`}
+                style={{
+                  position: 'absolute',
+                  top: -3,
+                  right: -3,
+                  width: 10,
+                  height: 10,
+                  borderRadius: '50%',
+                  background: '#34d399',
+                  border: '2px solid var(--surface-1)',
+                  flexShrink: 0,
+                }}
+              />
+            )}
+          </div>
           <div>
             <div className="text-sm font-medium text-[var(--text)]">
               {hotSeller && <span className="text-amber-400 mr-1" title="High demand">★</span>}
@@ -193,6 +215,16 @@ export default function MobileCard({ item, selected, onToggle, onRecordSale, onF
         >
           Sell
         </button>
+        {onDelete && (
+          <button
+            type="button"
+            onClick={onDelete}
+            className="text-xs font-medium px-2 py-1 rounded bg-[var(--danger)]/10 text-[var(--danger)] hover:bg-[var(--danger)]/20 transition-colors"
+            aria-label="Delete"
+          >
+            Del
+          </button>
+        )}
       </div>
     </div>
   );

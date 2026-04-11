@@ -31,6 +31,7 @@ const (
 	DHPushStatusUnmatched DHPushStatus = "unmatched"
 	DHPushStatusManual    DHPushStatus = "manual"
 	DHPushStatusHeld      DHPushStatus = "held"
+	DHPushStatusDismissed DHPushStatus = "dismissed"
 )
 
 // SaleChannel represents where a card was sold.
@@ -153,7 +154,8 @@ type Purchase struct {
 	PSASourcingFeeCents   int            `json:"psaSourcingFeeCents"`        // Fee charged per card
 	Population            int            `json:"population,omitempty"`       // PSA population count
 	PurchaseDate          string         `json:"purchaseDate"`               // YYYY-MM-DD
-	VaultStatus           string         `json:"vaultStatus,omitempty"`
+	ReceivedAt            *string        `json:"receivedAt,omitempty"`
+	PSAShipDate           string         `json:"psaShipDate,omitempty"`
 	InvoiceDate           string         `json:"invoiceDate,omitempty"`
 	WasRefunded           bool           `json:"wasRefunded,omitempty"`
 	FrontImageURL         string         `json:"frontImageUrl,omitempty"`
@@ -182,6 +184,7 @@ type Purchase struct {
 	DHPushStatus        DHPushStatus `json:"dhPushStatus,omitempty"`        // Pipeline status: "", "pending", "matched", "unmatched", "manual", "held"
 	DHHoldReason        string       `json:"dhHoldReason,omitempty"`        // Why a re-push was held
 	DHCandidatesJSON    string       `json:"dhCandidatesJson,omitempty"`    // Ambiguous cert resolution candidates JSON
+	DHLastSyncedAt      string       `json:"dhLastSyncedAt,omitempty"`      // When DH inventory was last polled for this purchase (RFC3339)
 	GemRateID           string       `json:"gemRateId,omitempty"`           // CL gemRateID (grade-agnostic card variant identifier)
 	PSASpecID           int          `json:"psaSpecId,omitempty"`           // PSA spec ID from CL cards index
 	// Card Ladder metadata (from CL catalog enrichment)
@@ -212,7 +215,8 @@ func (p *Purchase) NeedsDHPush() bool {
 		p.DHPushStatus != DHPushStatusPending &&
 		p.DHPushStatus != DHPushStatusUnmatched &&
 		p.DHPushStatus != DHPushStatusManual &&
-		p.DHPushStatus != DHPushStatusHeld
+		p.DHPushStatus != DHPushStatusHeld &&
+		p.DHPushStatus != DHPushStatusDismissed
 }
 
 // DHCardKey returns the pipe-delimited identity key used for DH card ID mapping lookups.
@@ -227,15 +231,16 @@ func DHCardKey(cardName, setName, cardNumber string) string {
 
 // Invoice tracks a PSA invoice cycle for capital exposure management.
 type Invoice struct {
-	ID          string    `json:"id"`
-	InvoiceDate string    `json:"invoiceDate"`
-	TotalCents  int       `json:"totalCents"`
-	PaidCents   int       `json:"paidCents"`
-	DueDate     string    `json:"dueDate,omitempty"`
-	PaidDate    string    `json:"paidDate,omitempty"`
-	Status      string    `json:"status"` // "unpaid", "partial", "paid"
-	CreatedAt   time.Time `json:"createdAt"`
-	UpdatedAt   time.Time `json:"updatedAt"`
+	ID                  string    `json:"id"`
+	InvoiceDate         string    `json:"invoiceDate"`
+	TotalCents          int       `json:"totalCents"`
+	PaidCents           int       `json:"paidCents"`
+	PendingReceiptCents int       `json:"pendingReceiptCents"`
+	DueDate             string    `json:"dueDate,omitempty"`
+	PaidDate            string    `json:"paidDate,omitempty"`
+	Status              string    `json:"status"` // "unpaid", "partial", "paid"
+	CreatedAt           time.Time `json:"createdAt"`
+	UpdatedAt           time.Time `json:"updatedAt"`
 }
 
 // CashflowConfig holds capital allocation and cash management settings.

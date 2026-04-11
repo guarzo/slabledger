@@ -21,7 +21,28 @@ func (s *service) GetCashflowConfig(ctx context.Context) (*CashflowConfig, error
 }
 
 func (s *service) ListInvoices(ctx context.Context) ([]Invoice, error) {
-	return s.repo.ListInvoices(ctx)
+	invoices, err := s.repo.ListInvoices(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if len(invoices) == 0 {
+		return invoices, nil
+	}
+
+	dates := make([]string, len(invoices))
+	for i, inv := range invoices {
+		dates[i] = inv.InvoiceDate
+	}
+
+	pending, err := s.repo.GetPendingReceiptByInvoiceDate(ctx, dates)
+	if err != nil {
+		return nil, fmt.Errorf("get pending receipt: %w", err)
+	}
+
+	for i := range invoices {
+		invoices[i].PendingReceiptCents = pending[invoices[i].InvoiceDate]
+	}
+	return invoices, nil
 }
 
 func (s *service) UpdateInvoice(ctx context.Context, inv *Invoice) error {

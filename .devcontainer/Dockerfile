@@ -25,12 +25,16 @@ RUN apt-get update && apt-get install -y \
     curl \
     wget \
     netcat-openbsd \
-    # Text editors
-    vim \
-    nano \
+    lsof \
+    iproute2 \
+    net-tools \
     # Process tools
     htop \
     procps \
+    psmisc \
+    # Text editors
+    vim \
+    nano \
     # Shells
     bash-completion \
     zsh \

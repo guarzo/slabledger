@@ -13,6 +13,7 @@ import (
 type unmatchedResponse struct {
 	Unmatched []unmatchedCard `json:"unmatched"`
 	Count     int             `json:"count"`
+	Dismissed []unmatchedCard `json:"dismissed"`
 }
 
 type unmatchedCard struct {
@@ -41,8 +42,9 @@ func (h *DHHandler) HandleUnmatched(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var unmatched []unmatchedCard
+	var dismissed []unmatchedCard
 	for _, p := range purchases {
-		if p.DHPushStatus != campaigns.DHPushStatusUnmatched {
+		if p.DHPushStatus != campaigns.DHPushStatusUnmatched && p.DHPushStatus != campaigns.DHPushStatusDismissed {
 			continue
 		}
 		card := unmatchedCard{
@@ -63,11 +65,18 @@ func (h *DHHandler) HandleUnmatched(w http.ResponseWriter, r *http.Request) {
 				card.Candidates = raw
 			}
 		}
-		unmatched = append(unmatched, card)
+		if p.DHPushStatus == campaigns.DHPushStatusDismissed {
+			dismissed = append(dismissed, card)
+		} else {
+			unmatched = append(unmatched, card)
+		}
 	}
 
 	if unmatched == nil {
 		unmatched = []unmatchedCard{}
 	}
-	writeJSON(w, http.StatusOK, unmatchedResponse{Unmatched: unmatched, Count: len(unmatched)})
+	if dismissed == nil {
+		dismissed = []unmatchedCard{}
+	}
+	writeJSON(w, http.StatusOK, unmatchedResponse{Unmatched: unmatched, Count: len(unmatched), Dismissed: dismissed})
 }

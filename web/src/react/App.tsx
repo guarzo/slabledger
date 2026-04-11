@@ -27,10 +27,11 @@ const CampaignDetailPage = lazy(() => import('./pages/CampaignDetailPage'));
 const AdminPage = lazy(() => import('./pages/AdminPage'));
 const GlobalInventoryPage = lazy(() => import('./pages/GlobalInventoryPage'));
 const ToolsPage = lazy(() => import('./pages/ToolsPage'));
+const SlidePreviewPage = lazy(() => import('./pages/SlidePreviewPage'));
 
 function AppContent() {
   const location = useLocation();
-  const isLoginPage = location.pathname === '/login';
+  const isLoginPage = location.pathname === '/login' || location.pathname === '/slide-preview';
 
   return (
       <ToastProvider>
@@ -105,8 +106,18 @@ function AppContent() {
                     <AdminPage />
                   </PageTransition>
                 </AdminRoute>
-              } />
-              <Route path="*" element={<Navigate to="/login" replace />} />
+               } />
+               {/* Headless slide rendering for Puppeteer sidecar — no auth required */}
+               <Route path="/slide-preview" element={
+                 <Suspense fallback={
+                   <div className="flex items-center justify-center" style={{ width: 1080, height: 1080 }}>
+                     <PokeballLoader />
+                   </div>
+                 }>
+                   <SlidePreviewPage />
+                 </Suspense>
+               } />
+               <Route path="*" element={<Navigate to="/login" replace />} />
             </Routes>
           </Suspense>
         </main>

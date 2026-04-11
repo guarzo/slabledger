@@ -25,7 +25,7 @@ func (r *CampaignsRepository) CreatePurchase(ctx context.Context, p *campaigns.P
 			population, purchase_date, created_at, updated_at,
 			last_sold_cents, lowest_list_cents, conservative_cents, median_cents,
 			active_listings, sales_last_30d, trend_30d, snapshot_date, snapshot_json,
-			vault_status, invoice_date, was_refunded, front_image_url, back_image_url, purchase_source,
+			received_at, psa_ship_date, invoice_date, was_refunded, front_image_url, back_image_url, purchase_source,
 			psa_listing_title, snapshot_status, snapshot_retry_count,
 			override_price_cents, override_source, override_set_at,
 			ai_suggested_price_cents, ai_suggested_at,
@@ -33,7 +33,7 @@ func (r *CampaignsRepository) CreatePurchase(ctx context.Context, p *campaigns.P
 			reviewed_price_cents, reviewed_at, review_source,
 			dh_card_id, dh_inventory_id, dh_cert_status, dh_listing_price_cents, dh_channels_json, dh_status, dh_push_status, dh_candidates,
 			gem_rate_id, psa_spec_id)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 	_, err := r.db.ExecContext(ctx, query,
 		p.ID, p.CampaignID, p.CardName, p.CertNumber,
@@ -43,7 +43,7 @@ func (r *CampaignsRepository) CreatePurchase(ctx context.Context, p *campaigns.P
 		p.Population, p.PurchaseDate, p.CreatedAt, p.UpdatedAt,
 		p.LastSoldCents, p.LowestListCents, p.ConservativeCents, p.MedianCents,
 		p.ActiveListings, p.SalesLast30d, p.Trend30d, p.SnapshotDate, p.SnapshotJSON,
-		p.VaultStatus, p.InvoiceDate, p.WasRefunded, p.FrontImageURL, p.BackImageURL, p.PurchaseSource,
+		p.ReceivedAt, p.PSAShipDate, p.InvoiceDate, p.WasRefunded, p.FrontImageURL, p.BackImageURL, p.PurchaseSource,
 		p.PSAListingTitle, p.SnapshotStatus, p.SnapshotRetryCount,
 		p.OverridePriceCents, p.OverrideSource, p.OverrideSetAt,
 		p.AISuggestedPriceCents, p.AISuggestedAt,

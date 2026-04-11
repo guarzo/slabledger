@@ -56,6 +56,9 @@ type Repository interface {
 	AcceptAISuggestion(ctx context.Context, purchaseID string, priceCents int) error
 	GetPriceOverrideStats(ctx context.Context) (*PriceOverrideStats, error)
 
+	// Receipt tracking
+	SetReceivedAt(ctx context.Context, purchaseID string, receivedAt time.Time) error
+
 	// eBay export
 	SetEbayExportFlag(ctx context.Context, purchaseID string, flaggedAt time.Time) error
 	ClearEbayExportFlags(ctx context.Context, purchaseIDs []string) error
@@ -111,6 +114,7 @@ type Repository interface {
 	ListInvoices(ctx context.Context) ([]Invoice, error)
 	UpdateInvoice(ctx context.Context, inv *Invoice) error
 	SumPurchaseCostByInvoiceDate(ctx context.Context, invoiceDate string) (int, error)
+	GetPendingReceiptByInvoiceDate(ctx context.Context, invoiceDates []string) (map[string]int, error)
 	GetCashflowConfig(ctx context.Context) (*CashflowConfig, error)
 	GetCapitalRawData(ctx context.Context) (*CapitalRawData, error)
 
@@ -142,11 +146,12 @@ type DHFieldsUpdate struct {
 	ListingPriceCents int
 	ChannelsJSON      string
 	DHStatus          DHStatus
+	LastSyncedAt      string // RFC3339; set to time.Now() on each inventory poll
 }
 
 // PSAUpdateFields contains the PSA-specific fields that can be updated on an existing purchase.
 type PSAUpdateFields struct {
-	VaultStatus     string
+	PSAShipDate     string
 	InvoiceDate     string
 	WasRefunded     bool
 	FrontImageURL   string

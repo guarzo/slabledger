@@ -77,10 +77,11 @@ export function CardDataTab({ enabled = true }: { enabled?: boolean }) {
           </div>
 
           {/* Sets table */}
-          <div className="glass-table max-h-[min(500px,calc(100vh-400px))] overflow-y-auto scrollbar-dark">
+          <div className="glass-table">
+            <div className="max-h-[min(500px,calc(100vh-400px))] overflow-y-auto scrollbar-dark">
             <table className="w-full text-sm">
               <thead className="sticky top-0 z-10">
-                <tr className="glass-table-header" style={{ backdropFilter: 'blur(12px)' }}>
+                <tr className="glass-table-header" style={{ backdropFilter: 'blur(12px)', background: 'var(--surface-0)' }}>
                   <th className="glass-table-th text-left" aria-sort={sortField === 'name' ? (sortAsc ? 'ascending' : 'descending') : 'none'}>
                     <button type="button" className="cursor-pointer select-none hover:text-[var(--text)] transition-colors" onClick={() => handleSort('name')}>
                       Set{sortIcon('name')}
@@ -134,6 +135,7 @@ export function CardDataTab({ enabled = true }: { enabled?: boolean }) {
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
 
           {!isPlaceholderTimestamp(data.lastUpdated) && (

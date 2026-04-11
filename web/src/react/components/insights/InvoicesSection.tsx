@@ -73,6 +73,7 @@ export default function InvoicesSection() {
                 <th className="text-right py-2 px-3 text-[var(--text-muted)] font-medium text-xs">Total</th>
                 <th className="text-right py-2 px-3 text-[var(--text-muted)] font-medium text-xs">Paid</th>
                 <th className="text-center py-2 px-3 text-[var(--text-muted)] font-medium text-xs">Status</th>
+                <th className="text-right py-2 px-3 text-[var(--text-muted)] font-medium text-xs">Pending Receipt</th>
                 <th className="text-right py-2 px-3 text-[var(--text-muted)] font-medium text-xs">Due</th>
                 <th className="py-2 px-3"></th>
               </tr>
@@ -87,6 +88,15 @@ export default function InvoicesSection() {
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusBadge(inv.status)}`}>
                       {inv.status}
                     </span>
+                  </td>
+                  <td className="py-2 px-3 text-xs text-right">
+                    {inv.pendingReceiptCents > 0 ? (
+                      <span className="text-[var(--warning)]">{formatCents(inv.pendingReceiptCents)} pending</span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-[var(--success-bg)] text-[var(--success)]">
+                        ✓ All received
+                      </span>
+                    )}
                   </td>
                   <td className="py-2 px-3 text-xs text-right text-[var(--text-muted)]">{inv.dueDate || '-'}</td>
                   <td className="py-2 px-3 text-right">

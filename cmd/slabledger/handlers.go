@@ -60,6 +60,7 @@ type handlerInputs struct {
 	PicksService      picks.Service
 	SchedulerResult   *scheduler.BuildResult
 	GSheetsClient     *gsheets.Client
+	PendingItemsRepo  *sqlite.PendingItemsRepository
 }
 
 // handlerOutputs holds the constructed handlers that are also needed post-
@@ -88,6 +89,27 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 		if in.CampaignsRepo != nil {
 			mmHandler.SetPurchaseLister(in.CampaignsRepo)
 		}
+	}
+
+	// PSA Sync handler (pending items + admin status)
+	var psaSyncHandler *handlers.PSASyncHandler
+	if in.PendingItemsRepo != nil {
+		var refresher handlers.PSASyncRefresher
+		if in.SchedulerResult != nil && in.SchedulerResult.PSASync != nil {
+			refresher = in.SchedulerResult.PSASync
+		}
+		var svc handlers.PSASyncPurchaseCreator
+		if in.CampaignsService != nil {
+			svc = in.CampaignsService
+		}
+		psaSyncHandler = handlers.NewPSASyncHandler(handlers.PSASyncHandlerConfig{
+			PendingRepo:   in.PendingItemsRepo,
+			Refresher:     refresher,
+			Service:       svc,
+			SpreadsheetID: in.Cfg.GoogleSheets.SpreadsheetID,
+			Interval:      in.Cfg.PSASync.Interval.String(),
+			Logger:        logger,
+		})
 	}
 
 	// Picks handler (nil when service is disabled)
@@ -221,6 +243,7 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 		PriceFlagsHandler:         priceFlagsHandler,
 		CardLadderHandler:         clHandler,
 		MarketMoversHandler:       mmHandler,
+		PSASyncHandler:            psaSyncHandler,
 		PicksHandler:              picksHandler,
 		OpportunitiesHandler:      opportunitiesHandler,
 		DHHandler:                 dhHandler,

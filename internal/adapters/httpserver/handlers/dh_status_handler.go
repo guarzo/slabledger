@@ -121,6 +121,7 @@ type dhStatusResponse struct {
 	SuggestionsCount      int             `json:"suggestions_count"`
 	SuggestionsLastFetch  string          `json:"suggestions_last_fetch"`
 	UnmatchedCount        int             `json:"unmatched_count"`
+	DismissedCount        int             `json:"dismissed_count"`
 	PendingCount          int             `json:"pending_count"`
 	MappedCount           int             `json:"mapped_count"`
 	BulkMatchRunning      bool            `json:"bulk_match_running"`
@@ -181,6 +182,7 @@ func (h *DHHandler) HandleGetStatus(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		resp.UnmatchedCount = counts[campaigns.DHPushStatusUnmatched]
+		resp.DismissedCount = counts[campaigns.DHPushStatusDismissed]
 		resp.PendingCount = counts[campaigns.DHPushStatusPending]
 		resp.MappedCount = counts[campaigns.DHPushStatusMatched] + counts[campaigns.DHPushStatusManual]
 	}

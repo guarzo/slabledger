@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useDHStatus, useDHUnmatched, useFixDHMatch, useSelectDHMatch } from '../../queries/useAdminQueries';
+import { useDHStatus, useDHUnmatched, useFixDHMatch, useSelectDHMatch, useDismissDHMatch, useUndismissDHMatch } from '../../queries/useAdminQueries';
 import { useToast } from '../../contexts/ToastContext';
 import { formatCents } from '../../utils/formatters';
 import { Button, CardShell } from '../../ui';
@@ -60,7 +60,11 @@ function CandidateCard({ candidate, onSelect, isPending, isDisabled }: {
 
 /* ── Single unmatched row with candidates + fallback URL input ── */
 
-function UnmatchedRow({ card }: { card: DHUnmatchedCard }) {
+function UnmatchedRow({ card, onDismiss, isDismissing }: {
+  card: DHUnmatchedCard;
+  onDismiss: (purchaseId: string) => void;
+  isDismissing: boolean;
+}) {
   const [url, setUrl] = useState('');
   const [validationError, setValidationError] = useState('');
   const [showAll, setShowAll] = useState(false);
@@ -144,6 +148,16 @@ function UnmatchedRow({ card }: { card: DHUnmatchedCard }) {
               >
                 Fix
               </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onDismiss(card.purchase_id)}
+                loading={isDismissing}
+                disabled={isDismissing}
+                className="text-[var(--text-muted)] hover:text-[var(--text)]"
+              >
+                Skip
+              </Button>
             </div>
             {validationError && (
               <p className="text-xs text-red-400">{validationError}</p>
@@ -155,14 +169,97 @@ function UnmatchedRow({ card }: { card: DHUnmatchedCard }) {
   );
 }
 
+/* ── Dismissed row (simplified, with Undo button) ───────────────── */
+
+function DismissedRow({ card, onUndismiss, isUndismissing }: {
+  card: DHUnmatchedCard;
+  onUndismiss: (purchaseId: string) => void;
+  isUndismissing: boolean;
+}) {
+  return (
+    <tr className="border-b border-[var(--surface-2)]/50 opacity-60">
+      <td className="py-1.5 px-3 text-xs font-mono text-[var(--text-muted)]">{card.cert_number}</td>
+      <td className="py-1.5 px-3 text-xs text-[var(--text-muted)]">{card.card_name}</td>
+      <td className="py-1.5 px-3 text-xs text-[var(--text-muted)]">{card.card_number}</td>
+      <td className="py-1.5 px-3 text-xs text-[var(--text-muted)]">{card.set_name}</td>
+      <td className="py-1.5 px-3 text-xs text-[var(--text-muted)] text-right">{card.grade}</td>
+      <td className="py-1.5 px-3 text-xs text-[var(--text-muted)] text-right">{formatCents(card.cl_value_cents)}</td>
+      <td className="py-1.5 px-3">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => onUndismiss(card.purchase_id)}
+          loading={isUndismissing}
+          disabled={isUndismissing}
+          className="text-xs text-[var(--info)]"
+        >
+          Undo
+        </Button>
+      </td>
+    </tr>
+  );
+}
+
+/* ── Table header row ────────────────────────────────────────────── */
+
+function TableHeader() {
+  return (
+    <thead>
+      <tr>
+        <th className="pb-2 px-3 text-[10px] font-medium uppercase tracking-wider text-[var(--text-muted)]">Cert</th>
+        <th className="pb-2 px-3 text-[10px] font-medium uppercase tracking-wider text-[var(--text-muted)]">Card Name</th>
+        <th className="pb-2 px-3 text-[10px] font-medium uppercase tracking-wider text-[var(--text-muted)]">Number</th>
+        <th className="pb-2 px-3 text-[10px] font-medium uppercase tracking-wider text-[var(--text-muted)]">Set</th>
+        <th className="pb-2 px-3 text-[10px] font-medium uppercase tracking-wider text-[var(--text-muted)] text-right">Grade</th>
+        <th className="pb-2 px-3 text-[10px] font-medium uppercase tracking-wider text-[var(--text-muted)] text-right">Value</th>
+        <th className="pb-2 px-3 text-[10px] font-medium uppercase tracking-wider text-[var(--text-muted)]">Actions</th>
+      </tr>
+    </thead>
+  );
+}
+
 /* ── DHUnmatchedSection ──────────────────────────────────────────── */
 
 export default function DHUnmatchedSection() {
   const { data: status } = useDHStatus({ enabled: true });
   const unmatchedCount = status?.unmatched_count ?? 0;
-  const { data: unmatchedData, isLoading: unmatchedLoading } = useDHUnmatched({ enabled: unmatchedCount > 0 });
+  const dismissedCount = status?.dismissed_count ?? 0;
+  const totalCount = unmatchedCount + dismissedCount;
+  const { data: unmatchedData, isLoading: unmatchedLoading } = useDHUnmatched({ enabled: totalCount > 0 });
+  const dismissMutation = useDismissDHMatch();
+  const undismissMutation = useUndismissDHMatch();
+  const toast = useToast();
 
-  if (unmatchedCount === 0) return null;
+  const [dismissingId, setDismissingId] = useState<string | null>(null);
+  const [undismissingId, setUndismissingId] = useState<string | null>(null);
+
+  if (totalCount === 0) return null;
+
+  const handleDismiss = async (purchaseId: string) => {
+    setDismissingId(purchaseId);
+    try {
+      await dismissMutation.mutateAsync(purchaseId);
+      toast.success('Card dismissed');
+    } catch {
+      toast.error('Failed to dismiss card');
+    } finally {
+      setDismissingId(null);
+    }
+  };
+
+  const handleUndismiss = async (purchaseId: string) => {
+    setUndismissingId(purchaseId);
+    try {
+      await undismissMutation.mutateAsync(purchaseId);
+      toast.success('Card restored');
+    } catch {
+      toast.error('Failed to restore card');
+    } finally {
+      setUndismissingId(null);
+    }
+  };
+
+  const dismissed = unmatchedData?.dismissed ?? [];
 
   return (
     <CardShell padding="lg">
@@ -181,20 +278,15 @@ export default function DHUnmatchedSection() {
       {unmatchedData?.unmatched && unmatchedData.unmatched.length > 0 ? (
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
-            <thead>
-              <tr>
-                <th className="pb-2 px-3 text-[10px] font-medium uppercase tracking-wider text-[var(--text-muted)]">Cert</th>
-                <th className="pb-2 px-3 text-[10px] font-medium uppercase tracking-wider text-[var(--text-muted)]">Card Name</th>
-                <th className="pb-2 px-3 text-[10px] font-medium uppercase tracking-wider text-[var(--text-muted)]">Number</th>
-                <th className="pb-2 px-3 text-[10px] font-medium uppercase tracking-wider text-[var(--text-muted)]">Set</th>
-                <th className="pb-2 px-3 text-[10px] font-medium uppercase tracking-wider text-[var(--text-muted)] text-right">Grade</th>
-                <th className="pb-2 px-3 text-[10px] font-medium uppercase tracking-wider text-[var(--text-muted)] text-right">Value</th>
-                <th className="pb-2 px-3 text-[10px] font-medium uppercase tracking-wider text-[var(--text-muted)]">Fix</th>
-              </tr>
-            </thead>
+            <TableHeader />
             <tbody>
               {unmatchedData.unmatched.map((card) => (
-                <UnmatchedRow key={card.purchase_id} card={card} />
+                <UnmatchedRow
+                  key={card.purchase_id}
+                  card={card}
+                  onDismiss={handleDismiss}
+                  isDismissing={dismissingId === card.purchase_id}
+                />
               ))}
             </tbody>
           </table>
@@ -205,6 +297,29 @@ export default function DHUnmatchedSection() {
         <p className="text-sm text-[var(--text-muted)]">No unmatched cards found.</p>
       ) : (
         <p className="text-sm text-[var(--danger)]">Failed to load unmatched cards.</p>
+      )}
+
+      {dismissed.length > 0 && (
+        <details className="mt-4">
+          <summary className="text-xs font-medium text-[var(--text-muted)] cursor-pointer hover:text-[var(--text)] transition-colors">
+            Dismissed ({dismissed.length})
+          </summary>
+          <div className="overflow-x-auto mt-2">
+            <table className="w-full text-left border-collapse">
+              <TableHeader />
+              <tbody>
+                {dismissed.map((card) => (
+                  <DismissedRow
+                    key={card.purchase_id}
+                    card={card}
+                    onUndismiss={handleUndismiss}
+                    isUndismissing={undismissingId === card.purchase_id}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </details>
       )}
     </CardShell>
   );

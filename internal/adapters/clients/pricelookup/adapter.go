@@ -70,7 +70,7 @@ func (a *Adapter) GetLastSoldCents(ctx context.Context, card campaigns.CardIdent
 	if info == nil || info.LastSoldPrice <= 0 {
 		return 0, nil
 	}
-	return int(mathutil.ToCents(info.LastSoldPrice)), nil
+	return int(info.LastSoldPrice), nil
 }
 
 // GetMarketSnapshot returns a comprehensive market snapshot for a card at a given grade.
@@ -91,7 +91,7 @@ func (a *Adapter) GetMarketSnapshot(ctx context.Context, card campaigns.CardIden
 	// Last sold data from actual sales records.
 	if price.LastSoldByGrade != nil {
 		if info := gradeInfo(price.LastSoldByGrade, grade); info != nil {
-			snap.LastSoldCents = int(mathutil.ToCents(info.LastSoldPrice))
+			snap.LastSoldCents = int(info.LastSoldPrice)
 			snap.LastSoldDate = info.LastSoldDate
 			snap.SaleCount = info.SaleCount
 		}

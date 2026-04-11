@@ -1356,7 +1356,9 @@ Sets a manual price override for a purchase.
 ```json
 { "priceCents": 130000, "source": "manual" }
 ```
-Valid `source` values: `manual`, `cost_markup`, `ai_accepted`
+Valid `source` values: `manual`, `cost_markup`
+
+> Note: `ai_accepted` is only set internally via the accept-AI-suggestion endpoint and cannot be used directly.
 
 **Response:** `204 No Content`
 
@@ -2958,6 +2960,119 @@ Pushes unmapped unsold inventory items to the Market Movers collection. Items mu
 ```
 
 **Errors:** `503` Market Movers client or purchase lister not available
+
+---
+
+## Admin — PSA Sync
+
+### `GET /api/admin/psa-sync/status`
+
+Auth: RequireAdmin
+
+Returns PSA sync configuration and last-run stats.
+
+**Response:** `200 OK`
+```json
+{
+  "configured": true,
+  "spreadsheetId": "1ABC...",
+  "interval": "24h",
+  "pendingCount": 3,
+  "lastRun": {
+    "lastRunAt": "2025-01-15T10:00:00Z",
+    "durationMs": 4500,
+    "allocated": 8,
+    "updated": 2,
+    "refunded": 0,
+    "unmatched": 1,
+    "ambiguous": 1,
+    "skipped": 0,
+    "failed": 0,
+    "totalRows": 12,
+    "parseErrors": 0
+  }
+}
+```
+
+---
+
+### `POST /api/admin/psa-sync/refresh`
+
+Auth: RequireAdmin
+
+Triggers a manual PSA sync cycle (fetches from Google Sheet and runs import pipeline).
+
+**Body:** (empty)
+
+**Response:** `200 OK`
+```json
+{ "status": "sync complete" }
+```
+
+**Errors:** `503` PSA sync scheduler not available; `500` sync failed
+
+---
+
+### `GET /api/admin/psa-sync/pending`
+
+Auth: RequireAdmin
+
+Lists all pending PSA import items awaiting manual resolution (ambiguous or unmatched).
+
+**Response:** `200 OK`
+```json
+{
+  "items": [
+    {
+      "id": "uuid",
+      "certNumber": "12345678",
+      "cardName": "Charizard",
+      "setName": "Base Set",
+      "cardNumber": "4",
+      "grade": 10,
+      "buyCostCents": 84000,
+      "purchaseDate": "2025-01-15",
+      "status": "ambiguous",
+      "candidates": ["Campaign A", "Campaign B"],
+      "source": "scheduler",
+      "createdAt": "2025-01-15T10:00:00Z"
+    }
+  ]
+}
+```
+
+---
+
+### `POST /api/admin/psa-sync/pending/{id}/assign`
+
+Auth: RequireAdmin
+
+Assigns a pending item to a campaign by creating a purchase and resolving the pending item.
+
+**Path params:** `id` (pending item UUID)
+
+**Body:**
+```json
+{ "campaignId": "uuid" }
+```
+
+**Response:** `200 OK` — `Purchase` object
+
+**Errors:** `400` missing campaignId; `404` pending item not found; `409` cert number already exists; `503` purchase creation not available
+
+---
+
+### `DELETE /api/admin/psa-sync/pending/{id}`
+
+Auth: RequireAdmin
+
+Dismisses a pending item without creating a purchase.
+
+**Path params:** `id` (pending item UUID)
+
+**Response:** `204 No Content`
+
+**Errors:** `404` pending item not found
 
 ---
 

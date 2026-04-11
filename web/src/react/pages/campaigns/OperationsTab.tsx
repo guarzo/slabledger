@@ -1,4 +1,4 @@
-import { useRef, ReactNode } from 'react';
+import { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { api } from '../../../js/api';
@@ -12,49 +12,7 @@ import DHUnmatchedSection from '../tools/DHUnmatchedSection';
 import { PendingItemsCard } from './PendingItemsCard';
 import { useMarketMoversStatus, useSyncCardLadderCollection, useSyncMarketMoversCollection } from '../../queries/useAdminQueries';
 
-export type OperationState = 'idle' | 'importing-psa' | 'syncing-psa' | 'syncing-mm' | 'syncing-cl';
-
-/* ── FileUploadButton ─────────────────────────────────────────────── */
-
-function FileUploadButton({ label, loading, accept, onFile, busy = false, variant = 'secondary', fullWidth = true, size = 'sm' }: {
-  label: string;
-  loading: boolean;
-  accept: string;
-  onFile: (file: File) => void;
-  busy?: boolean;
-  variant?: 'primary' | 'secondary' | 'success' | 'danger' | 'warning' | 'ghost' | 'link';
-  fullWidth?: boolean;
-  size?: 'sm' | 'md' | 'lg';
-}) {
-  const fileRef = useRef<HTMLInputElement>(null);
-
-  return (
-    <>
-      <Button
-        size={size}
-        variant={variant}
-        fullWidth={fullWidth}
-        loading={loading}
-        disabled={busy && !loading}
-        onClick={() => { if (!busy) fileRef.current?.click(); }}
-      >
-        {label}
-      </Button>
-      <input
-        ref={fileRef}
-        type="file"
-        accept={accept}
-        className="hidden"
-        onChange={(e) => {
-          if (busy) return;
-          const file = e.target.files?.[0];
-          if (file) onFile(file);
-          e.target.value = '';
-        }}
-      />
-    </>
-  );
-}
+export type OperationState = 'idle' | 'syncing-psa' | 'syncing-mm' | 'syncing-cl';
 
 /* ── OperationCard ────────────────────────────────────────────────── */
 
@@ -90,19 +48,6 @@ function IconCircle({ color, children }: { color: string; children: ReactNode })
   );
 }
 
-function FileTextIcon() {
-  return (
-    <IconCircle color="bg-[var(--warning-bg)] text-[var(--warning)]">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
-        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
-        <polyline points="14 2 14 8 20 8" />
-        <line x1="16" y1="13" x2="8" y2="13" />
-        <line x1="16" y1="17" x2="8" y2="17" />
-        <polyline points="10 9 9 9 8 9" />
-      </svg>
-    </IconCircle>
-  );
-}
 
 function SyncIcon() {
   return (
@@ -195,25 +140,6 @@ export default function OperationsTab({ campaigns, operationState, setOperationS
       invalidateAll();
     } catch (err) {
       toast.error(getErrorMessage(err, 'CL sync failed'));
-    } finally {
-      setOperationState('idle');
-    }
-  }
-
-  async function handlePSAImport(file: File) {
-    try {
-      setOperationState('importing-psa');
-      setPsaResult(null);
-      const result = await api.globalImportPSA(file);
-      setPsaResult(result);
-      const invoiceParts: string[] = [];
-      if (result.invoicesCreated) invoiceParts.push(`${result.invoicesCreated} invoices created`);
-      if (result.invoicesUpdated) invoiceParts.push(`${result.invoicesUpdated} invoices updated`);
-      const invoiceMsg = invoiceParts.length ? `, ${invoiceParts.join(', ')}` : '';
-      toast.success(`PSA import: ${result.allocated} allocated, ${result.updated} updated, ${result.refunded} refunded${invoiceMsg}. Market pricing will update in the background.`);
-      invalidateAll();
-    } catch (err) {
-      toast.error(getErrorMessage(err, 'Failed to import PSA data'));
     } finally {
       setOperationState('idle');
     }
@@ -320,28 +246,7 @@ export default function OperationsTab({ campaigns, operationState, setOperationS
 
       </div>
 
-      {/* Legacy operations */}
-      <details className="mb-6">
-        <summary className="text-sm font-medium text-[var(--text-muted)] cursor-pointer hover:text-[var(--text)] transition-colors">
-          Legacy Operations
-        </summary>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-3">
-          <OperationCard
-            icon={<FileTextIcon />}
-            title="PSA Import (CSV)"
-            description="Manual CSV upload — use PSA Sync instead"
-            action={
-              <FileUploadButton
-                label="Upload PSA CSV"
-                loading={operationState === 'importing-psa'}
-                accept=".csv"
-                onFile={handlePSAImport}
-                busy={busy}
-              />
-            }
-          />
-        </div>
-      </details>
+
 
       {/* Results area (full-width, below grid) */}
       {psaResult && (        <div className="mb-4 p-3 rounded-lg bg-[var(--surface-2)]/50 text-sm">

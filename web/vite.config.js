@@ -55,6 +55,11 @@ export default defineConfig(({ mode }) => ({
       '/api': {
         target: 'http://localhost:8081',
         changeOrigin: true
+      },
+      // Proxy auth routes to the Go server
+      '/auth': {
+        target: 'http://localhost:8081',
+        changeOrigin: true
       }
     }
   }

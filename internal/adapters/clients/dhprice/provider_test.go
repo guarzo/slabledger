@@ -8,63 +8,39 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	domainCards "github.com/guarzo/slabledger/internal/domain/cards"
 	"github.com/guarzo/slabledger/internal/domain/pricing"
+	"github.com/guarzo/slabledger/internal/testutil/mocks"
 )
-
-// --- test doubles ---
-// These mocks live here (not in testutil/mocks) because MarketDataClient and
-// CardIDLookup are defined in the dhprice package — moving them would create a
-// circular import.
-
-type mockMarketData struct {
-	RecentSalesFn func(ctx context.Context, cardID int) ([]dh.RecentSale, error)
-	sales         []dh.RecentSale
-	err           error
-}
-
-func (m *mockMarketData) RecentSales(ctx context.Context, cardID int) ([]dh.RecentSale, error) {
-	if m.RecentSalesFn != nil {
-		return m.RecentSalesFn(ctx, cardID)
-	}
-	return m.sales, m.err
-}
-
-type mockIDLookup struct {
-	GetExternalIDFn func(ctx context.Context, cardName, setName, collectorNumber, provider string) (string, error)
-	id              string
-	err             error
-}
-
-func (m *mockIDLookup) GetExternalID(ctx context.Context, cardName, setName, collectorNumber, provider string) (string, error) {
-	if m.GetExternalIDFn != nil {
-		return m.GetExternalIDFn(ctx, cardName, setName, collectorNumber, provider)
-	}
-	return m.id, m.err
-}
 
 // --- tests ---
 
 func TestGetPrice_NoCardID(t *testing.T) {
 	tests := []struct {
 		name    string
-		lookup  *mockIDLookup
+		lookup  *mocks.MockDHCardIDLookup
 		wantNil bool
 		wantErr bool
 	}{
 		{
-			name:    "unmapped card returns nil",
-			lookup:  &mockIDLookup{id: "", err: nil},
+			name: "unmapped card returns nil",
+			lookup: &mocks.MockDHCardIDLookup{
+				GetExternalIDFn: func(_ context.Context, _, _, _, _ string) (string, error) { return "", nil },
+			},
 			wantNil: true,
 		},
 		{
-			name:    "lookup error propagates",
-			lookup:  &mockIDLookup{id: "", err: errors.New("db down")},
+			name: "lookup error propagates",
+			lookup: &mocks.MockDHCardIDLookup{
+				GetExternalIDFn: func(_ context.Context, _, _, _, _ string) (string, error) {
+					return "", errors.New("db down")
+				},
+			},
 			wantErr: true,
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			p := New(&mockMarketData{}, tc.lookup)
+			p := New(&mocks.MockDHMarketDataClient{}, tc.lookup)
 			got, err := p.GetPrice(context.Background(), pricing.Card{
 				Name: "Charizard", Set: "Base Set", Number: "4",
 			})
@@ -99,8 +75,12 @@ func TestGetPrice_WithSales(t *testing.T) {
 	}
 
 	p := New(
-		&mockMarketData{sales: sales},
-		&mockIDLookup{id: "42"},
+		&mocks.MockDHMarketDataClient{
+			RecentSalesFn: func(_ context.Context, _ int) ([]dh.RecentSale, error) { return sales, nil },
+		},
+		&mocks.MockDHCardIDLookup{
+			GetExternalIDFn: func(_ context.Context, _, _, _, _ string) (string, error) { return "42", nil },
+		},
 	)
 
 	got, err := p.GetPrice(context.Background(), pricing.Card{
@@ -179,8 +159,12 @@ func TestGetPrice_AmountFallback(t *testing.T) {
 	}
 
 	p := New(
-		&mockMarketData{sales: sales},
-		&mockIDLookup{id: "42"},
+		&mocks.MockDHMarketDataClient{
+			RecentSalesFn: func(_ context.Context, _ int) ([]dh.RecentSale, error) { return sales, nil },
+		},
+		&mocks.MockDHCardIDLookup{
+			GetExternalIDFn: func(_ context.Context, _, _, _, _ string) (string, error) { return "42", nil },
+		},
 	)
 
 	got, err := p.GetPrice(context.Background(), pricing.Card{
@@ -204,6 +188,15 @@ func TestGetPrice_AmountFallback(t *testing.T) {
 }
 
 func TestGetPrice_NilResult(t *testing.T) {
+	idLookup42 := &mocks.MockDHCardIDLookup{
+		GetExternalIDFn: func(_ context.Context, _, _, _, _ string) (string, error) { return "42", nil },
+	}
+	idLookupBad := &mocks.MockDHCardIDLookup{
+		GetExternalIDFn: func(_ context.Context, _, _, _, _ string) (string, error) {
+			return "not-a-number", nil
+		},
+	}
+
 	tests := []struct {
 		name   string
 		client MarketDataClient
@@ -212,20 +205,24 @@ func TestGetPrice_NilResult(t *testing.T) {
 	}{
 		{
 			name:   "no sales returns nil",
-			client: &mockMarketData{sales: nil},
-			lookup: &mockIDLookup{id: "42"},
+			client: &mocks.MockDHMarketDataClient{},
+			lookup: idLookup42,
 			card:   pricing.Card{Name: "Pikachu", Set: "Jungle", Number: "60"},
 		},
 		{
-			name:   "only unknown grades returns nil",
-			client: &mockMarketData{sales: []dh.RecentSale{{GradingCompany: "XYZ", Grade: "99", Price: 999.00}}},
-			lookup: &mockIDLookup{id: "42"},
+			name: "only unknown grades returns nil",
+			client: &mocks.MockDHMarketDataClient{
+				RecentSalesFn: func(_ context.Context, _ int) ([]dh.RecentSale, error) {
+					return []dh.RecentSale{{GradingCompany: "XYZ", Grade: "99", Price: 999.00}}, nil
+				},
+			},
+			lookup: idLookup42,
 			card:   pricing.Card{Name: "Oddish", Set: "Jungle", Number: "58"},
 		},
 		{
 			name:   "invalid card ID returns nil",
-			client: &mockMarketData{},
-			lookup: &mockIDLookup{id: "not-a-number"},
+			client: &mocks.MockDHMarketDataClient{},
+			lookup: idLookupBad,
 			card:   pricing.Card{Name: "Test", Set: "Set", Number: "1"},
 		},
 		{
@@ -254,11 +251,17 @@ func TestGetPrice_EmptyGradesSalesReturnsNil(t *testing.T) {
 	// Sales with empty Grade field — buildPrice should skip them (no mapping in gradeKey)
 	// and since byGrade is empty, buildPrice returns nil → GetPrice returns (nil, nil)
 	p := New(
-		&mockMarketData{sales: []dh.RecentSale{
-			{GradingCompany: "PSA", Grade: "", Price: 100.00, SoldAt: "2026-01-01", Platform: "ebay"},
-			{GradingCompany: "", Grade: "10", Price: 200.00, SoldAt: "2026-01-02", Platform: "ebay"},
-		}},
-		&mockIDLookup{id: "42"},
+		&mocks.MockDHMarketDataClient{
+			RecentSalesFn: func(_ context.Context, _ int) ([]dh.RecentSale, error) {
+				return []dh.RecentSale{
+					{GradingCompany: "PSA", Grade: "", Price: 100.00, SoldAt: "2026-01-01", Platform: "ebay"},
+					{GradingCompany: "", Grade: "10", Price: 200.00, SoldAt: "2026-01-02", Platform: "ebay"},
+				}, nil
+			},
+		},
+		&mocks.MockDHCardIDLookup{
+			GetExternalIDFn: func(_ context.Context, _, _, _, _ string) (string, error) { return "42", nil },
+		},
 	)
 
 	got, err := p.GetPrice(context.Background(), pricing.Card{
@@ -279,9 +282,9 @@ func TestAvailable(t *testing.T) {
 		lookup CardIDLookup
 		want   bool
 	}{
-		{"both present", &mockMarketData{}, &mockIDLookup{}, true},
-		{"nil client", nil, &mockIDLookup{}, false},
-		{"nil lookup", &mockMarketData{}, nil, false},
+		{"both present", &mocks.MockDHMarketDataClient{}, &mocks.MockDHCardIDLookup{}, true},
+		{"nil client", nil, &mocks.MockDHCardIDLookup{}, false},
+		{"nil lookup", &mocks.MockDHMarketDataClient{}, nil, false},
 		{"both nil", nil, nil, false},
 	}
 
@@ -309,8 +312,12 @@ func TestLookupCard(t *testing.T) {
 	}
 
 	p := New(
-		&mockMarketData{sales: sales},
-		&mockIDLookup{id: "7"},
+		&mocks.MockDHMarketDataClient{
+			RecentSalesFn: func(_ context.Context, _ int) ([]dh.RecentSale, error) { return sales, nil },
+		},
+		&mocks.MockDHCardIDLookup{
+			GetExternalIDFn: func(_ context.Context, _, _, _, _ string) (string, error) { return "7", nil },
+		},
 	)
 
 	card := domainCards.Card{
@@ -451,6 +458,409 @@ func TestBuildPrice_NoPlatform(t *testing.T) {
 	// Ebay should NOT be populated (platform is not "ebay")
 	if psa10.Ebay != nil {
 		t.Error("Ebay detail should be nil for empty platform")
+	}
+}
+
+func TestBuildPrice_LastSoldByGrade(t *testing.T) {
+	tests := []struct {
+		name   string
+		sales  []dh.RecentSale
+		verify func(*testing.T, *pricing.Price)
+	}{
+		{
+			name: "single grade PSA10",
+			sales: []dh.RecentSale{
+				{GradingCompany: "PSA", Grade: "10", Price: 100.00, SoldAt: "2026-01-01", Platform: "ebay"},
+				{GradingCompany: "PSA", Grade: "10", Price: 120.00, SoldAt: "2026-01-03", Platform: "ebay"},
+				{GradingCompany: "PSA", Grade: "10", Price: 110.00, SoldAt: "2026-01-02", Platform: "ebay"},
+			},
+			verify: func(t *testing.T, got *pricing.Price) {
+				if got.LastSoldByGrade == nil {
+					t.Fatal("LastSoldByGrade is nil")
+				}
+				if got.LastSoldByGrade.PSA10 == nil {
+					t.Fatal("PSA10 is nil")
+				}
+				if got.LastSoldByGrade.PSA10.LastSoldPrice != 12000 {
+					t.Errorf("PSA10.LastSoldPrice = %d, want 12000", got.LastSoldByGrade.PSA10.LastSoldPrice)
+				}
+				if got.LastSoldByGrade.PSA10.LastSoldDate != "2026-01-03" {
+					t.Errorf("PSA10.LastSoldDate = %q, want 2026-01-03", got.LastSoldByGrade.PSA10.LastSoldDate)
+				}
+				if got.LastSoldByGrade.PSA10.SaleCount != 3 {
+					t.Errorf("PSA10.SaleCount = %d, want 3", got.LastSoldByGrade.PSA10.SaleCount)
+				}
+				// All other grade slots should be nil
+				if got.LastSoldByGrade.PSA9 != nil {
+					t.Error("PSA9 should be nil")
+				}
+				if got.LastSoldByGrade.PSA8 != nil {
+					t.Error("PSA8 should be nil")
+				}
+				if got.LastSoldByGrade.PSA7 != nil {
+					t.Error("PSA7 should be nil")
+				}
+				if got.LastSoldByGrade.PSA6 != nil {
+					t.Error("PSA6 should be nil")
+				}
+				if got.LastSoldByGrade.Raw != nil {
+					t.Error("Raw should be nil")
+				}
+			},
+		},
+		{
+			name: "multiple grades",
+			sales: []dh.RecentSale{
+				{GradingCompany: "PSA", Grade: "10", Price: 100.00, SoldAt: "2026-01-01", Platform: "ebay"},
+				{GradingCompany: "PSA", Grade: "10", Price: 120.00, SoldAt: "2026-01-05", Platform: "ebay"},
+				{GradingCompany: "PSA", Grade: "9", Price: 50.00, SoldAt: "2026-01-02", Platform: "ebay"},
+				{GradingCompany: "PSA", Grade: "9", Price: 60.00, SoldAt: "2026-01-04", Platform: "ebay"},
+				{GradingCompany: "PSA", Grade: "8", Price: 30.00, SoldAt: "2026-01-03", Platform: "ebay"},
+			},
+			verify: func(t *testing.T, got *pricing.Price) {
+				if got.LastSoldByGrade == nil {
+					t.Fatal("LastSoldByGrade is nil")
+				}
+				// PSA10: 2 sales, most recent is "2026-01-05" with price 120.00
+				if got.LastSoldByGrade.PSA10 == nil {
+					t.Fatal("PSA10 is nil")
+				}
+				if got.LastSoldByGrade.PSA10.LastSoldPrice != 12000 {
+					t.Errorf("PSA10.LastSoldPrice = %d, want 12000", got.LastSoldByGrade.PSA10.LastSoldPrice)
+				}
+				if got.LastSoldByGrade.PSA10.LastSoldDate != "2026-01-05" {
+					t.Errorf("PSA10.LastSoldDate = %q, want 2026-01-05", got.LastSoldByGrade.PSA10.LastSoldDate)
+				}
+				if got.LastSoldByGrade.PSA10.SaleCount != 2 {
+					t.Errorf("PSA10.SaleCount = %d, want 2", got.LastSoldByGrade.PSA10.SaleCount)
+				}
+				// PSA9: 2 sales, most recent is "2026-01-04" with price 60.00
+				if got.LastSoldByGrade.PSA9 == nil {
+					t.Fatal("PSA9 is nil")
+				}
+				if got.LastSoldByGrade.PSA9.LastSoldPrice != 6000 {
+					t.Errorf("PSA9.LastSoldPrice = %d, want 6000", got.LastSoldByGrade.PSA9.LastSoldPrice)
+				}
+				if got.LastSoldByGrade.PSA9.LastSoldDate != "2026-01-04" {
+					t.Errorf("PSA9.LastSoldDate = %q, want 2026-01-04", got.LastSoldByGrade.PSA9.LastSoldDate)
+				}
+				if got.LastSoldByGrade.PSA9.SaleCount != 2 {
+					t.Errorf("PSA9.SaleCount = %d, want 2", got.LastSoldByGrade.PSA9.SaleCount)
+				}
+				// PSA8: 1 sale at "2026-01-03" with price 30.00
+				if got.LastSoldByGrade.PSA8 == nil {
+					t.Fatal("PSA8 is nil")
+				}
+				if got.LastSoldByGrade.PSA8.LastSoldPrice != 3000 {
+					t.Errorf("PSA8.LastSoldPrice = %d, want 3000", got.LastSoldByGrade.PSA8.LastSoldPrice)
+				}
+				if got.LastSoldByGrade.PSA8.LastSoldDate != "2026-01-03" {
+					t.Errorf("PSA8.LastSoldDate = %q, want 2026-01-03", got.LastSoldByGrade.PSA8.LastSoldDate)
+				}
+				if got.LastSoldByGrade.PSA8.SaleCount != 1 {
+					t.Errorf("PSA8.SaleCount = %d, want 1", got.LastSoldByGrade.PSA8.SaleCount)
+				}
+				// PSA7 and PSA6 should be nil
+				if got.LastSoldByGrade.PSA7 != nil {
+					t.Error("PSA7 should be nil")
+				}
+				if got.LastSoldByGrade.PSA6 != nil {
+					t.Error("PSA6 should be nil")
+				}
+			},
+		},
+		{
+			name: "BGS10 and CGC 9.5 skipped",
+			sales: []dh.RecentSale{
+				{GradingCompany: "BGS", Grade: "10", Price: 200.00, SoldAt: "2026-01-01", Platform: "ebay"},
+				{GradingCompany: "BGS", Grade: "10", Price: 210.00, SoldAt: "2026-01-02", Platform: "ebay"},
+				{GradingCompany: "CGC", Grade: "9.5", Price: 70.00, SoldAt: "2026-01-01", Platform: "ebay"},
+				{GradingCompany: "CGC", Grade: "9.5", Price: 75.00, SoldAt: "2026-01-03", Platform: "ebay"},
+			},
+			verify: func(t *testing.T, got *pricing.Price) {
+				if got.LastSoldByGrade == nil {
+					t.Fatal("LastSoldByGrade is nil")
+				}
+				// BGS10 and CGC 9.5 map to GradePSA95 and GradeBGS10, which are not tracked in LastSoldByGrade
+				// So all PSA slots and Raw should be nil
+				if got.LastSoldByGrade.PSA10 != nil {
+					t.Error("PSA10 should be nil")
+				}
+				if got.LastSoldByGrade.PSA9 != nil {
+					t.Error("PSA9 should be nil")
+				}
+				if got.LastSoldByGrade.PSA8 != nil {
+					t.Error("PSA8 should be nil")
+				}
+				if got.LastSoldByGrade.PSA7 != nil {
+					t.Error("PSA7 should be nil")
+				}
+				if got.LastSoldByGrade.PSA6 != nil {
+					t.Error("PSA6 should be nil")
+				}
+				if got.LastSoldByGrade.Raw != nil {
+					t.Error("Raw should be nil")
+				}
+			},
+		},
+		{
+			name: "most recent sale wins across out-of-order input",
+			sales: []dh.RecentSale{
+				{GradingCompany: "PSA", Grade: "10", Price: 100.00, SoldAt: "2026-01-01", Platform: "ebay"},
+				{GradingCompany: "PSA", Grade: "10", Price: 105.00, SoldAt: "2026-01-05", Platform: "ebay"},
+				{GradingCompany: "PSA", Grade: "10", Price: 103.00, SoldAt: "2026-01-03", Platform: "ebay"},
+				{GradingCompany: "PSA", Grade: "10", Price: 102.00, SoldAt: "2026-01-02", Platform: "ebay"},
+				{GradingCompany: "PSA", Grade: "10", Price: 104.00, SoldAt: "2026-01-04", Platform: "ebay"},
+			},
+			verify: func(t *testing.T, got *pricing.Price) {
+				if got.LastSoldByGrade == nil {
+					t.Fatal("LastSoldByGrade is nil")
+				}
+				if got.LastSoldByGrade.PSA10 == nil {
+					t.Fatal("PSA10 is nil")
+				}
+				if got.LastSoldByGrade.PSA10.LastSoldDate != "2026-01-05" {
+					t.Errorf("LastSoldDate = %q, want 2026-01-05", got.LastSoldByGrade.PSA10.LastSoldDate)
+				}
+				if got.LastSoldByGrade.PSA10.LastSoldPrice != 10500 {
+					t.Errorf("LastSoldPrice = %d, want 10500", got.LastSoldByGrade.PSA10.LastSoldPrice)
+				}
+				if got.LastSoldByGrade.PSA10.SaleCount != 5 {
+					t.Errorf("SaleCount = %d, want 5", got.LastSoldByGrade.PSA10.SaleCount)
+				}
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := buildPrice("TestCard", tc.sales)
+			if got == nil {
+				t.Fatal("expected non-nil price")
+			}
+			tc.verify(t, got)
+		})
+	}
+}
+
+// Helper to create a float64 pointer.
+func ptrF64(v float64) *float64 {
+	return &v
+}
+
+func TestApplyMarketData(t *testing.T) {
+	tests := []struct {
+		name             string
+		md               *dh.CardLookupMarketData
+		verifyMarketData func(*testing.T, *pricing.MarketData)
+	}{
+		{
+			name: "nil market data",
+			md:   nil,
+			verifyMarketData: func(t *testing.T, market *pricing.MarketData) {
+				if market != nil {
+					t.Errorf("expected nil market data, got %+v", market)
+				}
+			},
+		},
+		{
+			name: "with BestAsk and ActiveAsks",
+			md: &dh.CardLookupMarketData{
+				BestAsk:    ptrF64(25.50),
+				ActiveAsks: 12,
+				Volume24h:  0,
+			},
+			verifyMarketData: func(t *testing.T, market *pricing.MarketData) {
+				if market == nil {
+					t.Fatal("expected non-nil market data")
+				}
+				if market.LowestListing != 2550 {
+					t.Errorf("LowestListing = %d, want 2550", market.LowestListing)
+				}
+				if market.ActiveListings != 12 {
+					t.Errorf("ActiveListings = %d, want 12", market.ActiveListings)
+				}
+				if market.SalesLast30d != 0 {
+					t.Errorf("SalesLast30d = %d, want 0", market.SalesLast30d)
+				}
+				if market.SalesLast90d != 0 {
+					t.Errorf("SalesLast90d = %d, want 0", market.SalesLast90d)
+				}
+			},
+		},
+		{
+			name: "with volume extrapolation",
+			md: &dh.CardLookupMarketData{
+				BestAsk:    nil,
+				ActiveAsks: 0,
+				Volume24h:  3,
+			},
+			verifyMarketData: func(t *testing.T, market *pricing.MarketData) {
+				if market == nil {
+					t.Fatal("expected non-nil market data")
+				}
+				if market.LowestListing != 0 {
+					t.Errorf("LowestListing = %d, want 0", market.LowestListing)
+				}
+				if market.SalesLast30d != 90 {
+					t.Errorf("SalesLast30d = %d, want 90", market.SalesLast30d)
+				}
+				if market.SalesLast90d != 270 {
+					t.Errorf("SalesLast90d = %d, want 270", market.SalesLast90d)
+				}
+			},
+		},
+		{
+			name: "zero BestAsk ignored",
+			md: &dh.CardLookupMarketData{
+				BestAsk:    ptrF64(0.0),
+				ActiveAsks: 5,
+				Volume24h:  1,
+			},
+			verifyMarketData: func(t *testing.T, market *pricing.MarketData) {
+				if market == nil {
+					t.Fatal("expected non-nil market data")
+				}
+				if market.LowestListing != 0 {
+					t.Errorf("LowestListing = %d, want 0", market.LowestListing)
+				}
+				if market.ActiveListings != 5 {
+					t.Errorf("ActiveListings = %d, want 5", market.ActiveListings)
+				}
+				if market.SalesLast30d != 30 {
+					t.Errorf("SalesLast30d = %d, want 30", market.SalesLast30d)
+				}
+			},
+		},
+		{
+			name: "full market data",
+			md: &dh.CardLookupMarketData{
+				BestAsk:    ptrF64(100.0),
+				ActiveAsks: 5,
+				Volume24h:  2,
+			},
+			verifyMarketData: func(t *testing.T, market *pricing.MarketData) {
+				if market == nil {
+					t.Fatal("expected non-nil market data")
+				}
+				if market.LowestListing != 10000 {
+					t.Errorf("LowestListing = %d, want 10000", market.LowestListing)
+				}
+				if market.ActiveListings != 5 {
+					t.Errorf("ActiveListings = %d, want 5", market.ActiveListings)
+				}
+				if market.SalesLast30d != 60 {
+					t.Errorf("SalesLast30d = %d, want 60", market.SalesLast30d)
+				}
+				if market.SalesLast90d != 180 {
+					t.Errorf("SalesLast90d = %d, want 180", market.SalesLast90d)
+				}
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			price := &pricing.Price{}
+			applyMarketData(price, tc.md)
+			tc.verifyMarketData(t, price.Market)
+		})
+	}
+}
+
+func TestGetPrice_CardLookup(t *testing.T) {
+	baseSalesFn := func(_ context.Context, _ int) ([]dh.RecentSale, error) {
+		return []dh.RecentSale{
+			{GradingCompany: "PSA", Grade: "10", Price: 50.00, Platform: "ebay"},
+		}, nil
+	}
+
+	tests := []struct {
+		name         string
+		cardLookupFn func(context.Context, int) (*dh.CardLookupResponse, error)
+		verify       func(*testing.T, *pricing.Price)
+	}{
+		{
+			name: "enrichment applied on success",
+			cardLookupFn: func(_ context.Context, _ int) (*dh.CardLookupResponse, error) {
+				return &dh.CardLookupResponse{
+					MarketData: dh.CardLookupMarketData{
+						BestAsk:    ptrF64(30.0),
+						ActiveAsks: 8,
+						Volume24h:  1,
+					},
+				}, nil
+			},
+			verify: func(t *testing.T, got *pricing.Price) {
+				if got.Grades.PSA10Cents != 5000 {
+					t.Errorf("PSA10Cents = %d, want 5000", got.Grades.PSA10Cents)
+				}
+				if got.Market == nil {
+					t.Fatal("expected non-nil market data")
+				}
+				if got.Market.LowestListing != 3000 {
+					t.Errorf("LowestListing = %d, want 3000", got.Market.LowestListing)
+				}
+				if got.Market.ActiveListings != 8 {
+					t.Errorf("ActiveListings = %d, want 8", got.Market.ActiveListings)
+				}
+			},
+		},
+		{
+			name: "CardLookup error is non-fatal",
+			cardLookupFn: func(_ context.Context, _ int) (*dh.CardLookupResponse, error) {
+				return nil, errors.New("lookup failed")
+			},
+			verify: func(t *testing.T, got *pricing.Price) {
+				if got.Grades.PSA10Cents != 5000 {
+					t.Errorf("PSA10Cents = %d, want 5000", got.Grades.PSA10Cents)
+				}
+				if got.Market != nil {
+					t.Errorf("expected nil market data (CardLookup failed), got %+v", got.Market)
+				}
+			},
+		},
+		{
+			name: "all-zero market data does not set Market",
+			cardLookupFn: func(_ context.Context, _ int) (*dh.CardLookupResponse, error) {
+				return &dh.CardLookupResponse{
+					MarketData: dh.CardLookupMarketData{
+						BestAsk:    nil,
+						ActiveAsks: 0,
+						Volume24h:  0,
+					},
+				}, nil
+			},
+			verify: func(t *testing.T, got *pricing.Price) {
+				if got.Market != nil {
+					t.Errorf("expected nil market data for all-zero lookup, got %+v", got.Market)
+				}
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p := New(
+				&mocks.MockDHMarketDataClient{
+					RecentSalesFn: baseSalesFn,
+					CardLookupFn:  tc.cardLookupFn,
+				},
+				&mocks.MockDHCardIDLookup{
+					GetExternalIDFn: func(_ context.Context, _, _, _, _ string) (string, error) { return "42", nil },
+				},
+			)
+			got, err := p.GetPrice(context.Background(), pricing.Card{
+				Name: "Charizard", Set: "Base Set", Number: "4",
+			})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got == nil {
+				t.Fatal("expected non-nil price")
+			}
+			tc.verify(t, got)
+		})
 	}
 }
 
