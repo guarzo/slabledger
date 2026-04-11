@@ -117,9 +117,9 @@ export default function CaptionEditor({ postId, caption: initialCaption, hashtag
         />
 
         <div>
-          <label htmlFor="hashtags-input" className="text-xs text-[var(--text-muted)] block mb-1">Hashtags</label>
+          <label htmlFor={`${postId}-hashtags-input`} className="text-xs text-[var(--text-muted)] block mb-1">Hashtags</label>
           <input
-            id="hashtags-input"
+            id={`${postId}-hashtags-input`}
             type="text"
             value={hashtags}
             onChange={(e) => handleHashtagsChange(e.target.value)}
