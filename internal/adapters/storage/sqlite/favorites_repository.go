@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -100,12 +101,12 @@ func (r *FavoritesRepository) Remove(ctx context.Context, userID int64, cardName
 
 	result, err := r.db.ExecContext(ctx, query, userID, cardName, setName, cardNumber)
 	if err != nil {
-		return err
+		return fmt.Errorf("delete favorite: %w", err)
 	}
 
 	rows, err := result.RowsAffected()
 	if err != nil {
-		return err
+		return fmt.Errorf("check rows affected: %w", err)
 	}
 	if rows == 0 {
 		return favorites.ErrFavoriteNotFound

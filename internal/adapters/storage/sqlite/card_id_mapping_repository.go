@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/pricing"
@@ -77,7 +78,7 @@ func (r *CardIDMappingRepository) ListByProvider(ctx context.Context, provider s
 	for rows.Next() {
 		var m CardIDMapping
 		if err := rows.Scan(&m.CardName, &m.SetName, &m.CollectorNumber, &m.ExternalID); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("scan card id mapping row: %w", err)
 		}
 		mappings = append(mappings, m)
 	}
@@ -104,7 +105,7 @@ func (r *CardIDMappingRepository) GetMappedSet(ctx context.Context, provider str
 	for rows.Next() {
 		var cardName, setName, collectorNumber, externalID string
 		if err := rows.Scan(&cardName, &setName, &collectorNumber, &externalID); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("scan card id mapping to map row: %w", err)
 		}
 		result[cardName+"|"+setName+"|"+collectorNumber] = externalID
 	}
@@ -146,7 +147,7 @@ func (r *CardIDMappingRepository) DeleteByCard(ctx context.Context, cardName, se
 		)
 	}
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("delete card id mappings: %w", err)
 	}
 	return result.RowsAffected()
 }
@@ -163,7 +164,10 @@ func (r *CardIDMappingRepository) SaveExternalID(ctx context.Context, cardName, 
 		 WHERE hint_source = 'auto'`,
 		cardName, setName, collectorNumber, provider, externalID, now, now,
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("save external id: %w", err)
+	}
+	return nil
 }
 
 // SaveHint stores a user-provided price hint, overwriting any existing mapping.
@@ -176,7 +180,10 @@ func (r *CardIDMappingRepository) SaveHint(ctx context.Context, cardName, setNam
 		 DO UPDATE SET external_id = excluded.external_id, hint_source = 'manual', updated_at = excluded.updated_at`,
 		cardName, setName, collectorNumber, provider, externalID, now, now,
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("upsert card hint: %w", err)
+	}
+	return nil
 }
 
 // GetHint returns the external ID only when a manual hint exists for the given card+provider.
@@ -201,7 +208,10 @@ func (r *CardIDMappingRepository) DeleteHint(ctx context.Context, cardName, setN
 		`DELETE FROM card_id_mappings WHERE card_name = ? AND set_name = ? AND collector_number = ? AND provider = ? AND hint_source = 'manual'`,
 		cardName, setName, collectorNumber, provider,
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("delete hint: %w", err)
+	}
+	return nil
 }
 
 // ListHints returns all manual hint mappings.
@@ -223,7 +233,7 @@ func (r *CardIDMappingRepository) ListHints(ctx context.Context) (_ []pricing.Hi
 	for rows.Next() {
 		var h pricing.HintMapping
 		if err := rows.Scan(&h.CardName, &h.SetName, &h.CollectorNumber, &h.Provider, &h.ExternalID); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("scan hint row: %w", err)
 		}
 		hints = append(hints, h)
 	}

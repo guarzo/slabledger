@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"time"
 )
 
@@ -41,5 +42,8 @@ func (r *SyncStateRepository) Set(ctx context.Context, key, value string) error 
 		 DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
 		key, value, now,
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("upsert sync state: %w", err)
+	}
+	return nil
 }

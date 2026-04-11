@@ -48,5 +48,8 @@ func (r *CampaignsRepository) SaveDHPushConfig(ctx context.Context, cfg *campaig
 		cfg.SwingPctThreshold, cfg.SwingMinCents, cfg.DisagreementPctThreshold,
 		cfg.UnreviewedChangePctThreshold, cfg.UnreviewedChangeMinCents, cfg.UpdatedAt,
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("save dh push config: %w", err)
+	}
+	return nil
 }

@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/auth"
@@ -39,7 +40,10 @@ func (r *AuthRepository) CreateSession(ctx context.Context, session *auth.Sessio
 		session.IPAddress,
 	)
 
-	return err
+	if err != nil {
+		return fmt.Errorf("create session: %w", err)
+	}
+	return nil
 }
 
 // GetSession retrieves a session by ID.
@@ -66,7 +70,7 @@ func (r *AuthRepository) GetSession(ctx context.Context, sessionID string) (*aut
 	)
 
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return nil, err
+		return nil, fmt.Errorf("query session by hashed id: %w", err)
 	}
 	if err == nil {
 		// Found by hashed ID — return plaintext ID as callers expect.
@@ -89,7 +93,7 @@ func (r *AuthRepository) GetSession(ctx context.Context, sessionID string) (*aut
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrSessionNotFound
 		}
-		return nil, err
+		return nil, fmt.Errorf("query session by plaintext id: %w", err)
 	}
 
 	// Migrate the row to hashed format so future lookups use the fast path.
@@ -144,7 +148,7 @@ func (r *AuthRepository) resolveSessionID(ctx context.Context, sessionID string)
 func (r *AuthRepository) UpdateSessionAccess(ctx context.Context, sessionID string) error {
 	dbID, err := r.resolveSessionID(ctx, sessionID)
 	if err != nil {
-		return err
+		return fmt.Errorf("resolve session: %w", err)
 	}
 
 	query := `
@@ -154,7 +158,10 @@ func (r *AuthRepository) UpdateSessionAccess(ctx context.Context, sessionID stri
 	`
 
 	_, err = r.db.ExecContext(ctx, query, time.Now(), dbID)
-	return err
+	if err != nil {
+		return fmt.Errorf("update session access time: %w", err)
+	}
+	return nil
 }
 
 // DeleteSession deletes a session.
@@ -163,11 +170,14 @@ func (r *AuthRepository) UpdateSessionAccess(ctx context.Context, sessionID stri
 func (r *AuthRepository) DeleteSession(ctx context.Context, sessionID string) error {
 	dbID, err := r.resolveSessionID(ctx, sessionID)
 	if err != nil {
-		return err
+		return fmt.Errorf("resolve session: %w", err)
 	}
 
 	_, err = r.db.ExecContext(ctx, `DELETE FROM user_sessions WHERE id = ?`, dbID)
-	return err
+	if err != nil {
+		return fmt.Errorf("delete session: %w", err)
+	}
+	return nil
 }
 
 // DeleteExpiredSessions deletes all expired sessions
@@ -176,7 +186,7 @@ func (r *AuthRepository) DeleteExpiredSessions(ctx context.Context) (int, error)
 
 	result, err := r.db.ExecContext(ctx, query, time.Now())
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("delete expired sessions: %w", err)
 	}
 
 	rows, err := result.RowsAffected()

@@ -263,7 +263,7 @@ func (s *service) GetLatestPicks(ctx context.Context) ([]Pick, error) {
 		return nil, fmt.Errorf("get latest pick date: %w", err)
 	}
 	if latestDate.IsZero() {
-		return nil, nil
+		return []Pick{}, nil
 	}
 	picks, err := s.repo.GetPicksByDate(ctx, latestDate)
 	if err != nil {

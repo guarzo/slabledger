@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 
 	"github.com/guarzo/slabledger/internal/domain/campaigns"
 )
@@ -34,7 +35,10 @@ func (r *CampaignsRepository) CreateCampaign(ctx context.Context, c *campaigns.C
 		c.CLConfidence, c.BuyTermsCLPct, c.DailySpendCapCents, c.InclusionList,
 		c.ExclusionMode, c.Phase, c.PSASourcingFeeCents, c.EbayFeePct, c.ExpectedFillRate, c.CreatedAt, c.UpdatedAt,
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("create campaign: %w", err)
+	}
+	return nil
 }
 
 func (r *CampaignsRepository) GetCampaign(ctx context.Context, id string) (*campaigns.Campaign, error) {
@@ -73,7 +77,7 @@ func (r *CampaignsRepository) ListCampaigns(ctx context.Context, activeOnly bool
 
 	rows, err := r.db.QueryContext(ctx, query)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("query campaigns: %w", err)
 	}
 	defer func() {
 		if cerr := rows.Close(); err == nil && cerr != nil {
@@ -96,7 +100,7 @@ func (r *CampaignsRepository) ListCampaigns(ctx context.Context, activeOnly bool
 			&c.CLConfidence, &c.BuyTermsCLPct, &c.DailySpendCapCents, &c.InclusionList,
 			&c.ExclusionMode, &c.Phase, &c.PSASourcingFeeCents, &c.EbayFeePct, &c.ExpectedFillRate, &c.CreatedAt, &c.UpdatedAt,
 		); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("scan campaign row: %w", err)
 		}
 		result = append(result, c)
 	}
@@ -106,7 +110,7 @@ func (r *CampaignsRepository) ListCampaigns(ctx context.Context, activeOnly bool
 func (r *CampaignsRepository) DeleteCampaign(ctx context.Context, id string) (retErr error) {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("begin transaction: %w", err)
 	}
 	defer func() {
 		if retErr != nil {
@@ -147,7 +151,7 @@ func (r *CampaignsRepository) DeleteCampaign(ctx context.Context, id string) (re
 func (r *CampaignsRepository) DeletePurchase(ctx context.Context, id string) (retErr error) {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("begin transaction: %w", err)
 	}
 	defer func() {
 		if retErr != nil {
@@ -165,12 +169,12 @@ func (r *CampaignsRepository) DeletePurchase(ctx context.Context, id string) (re
 	// Delete the purchase
 	result, err := tx.ExecContext(ctx, `DELETE FROM campaign_purchases WHERE id = ?`, id)
 	if err != nil {
-		retErr = err
+		retErr = fmt.Errorf("delete purchase: %w", err)
 		return retErr
 	}
 	n, err := result.RowsAffected()
 	if err != nil {
-		retErr = err
+		retErr = fmt.Errorf("check rows affected: %w", err)
 		return retErr
 	}
 	if n == 0 {
@@ -195,11 +199,11 @@ func (r *CampaignsRepository) UpdateCampaign(ctx context.Context, c *campaigns.C
 		c.ExclusionMode, c.Phase, c.PSASourcingFeeCents, c.EbayFeePct, c.ExpectedFillRate, c.UpdatedAt, c.ID,
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("update campaign: %w", err)
 	}
 	n, err := result.RowsAffected()
 	if err != nil {
-		return err
+		return fmt.Errorf("check rows affected: %w", err)
 	}
 	if n == 0 {
 		return campaigns.ErrCampaignNotFound

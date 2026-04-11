@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/auth"
@@ -163,12 +164,12 @@ func (r *AuthRepository) UpdateUser(ctx context.Context, user *auth.User) error 
 		user.ID,
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("update user: %w", err)
 	}
 
 	rows, err := result.RowsAffected()
 	if err != nil {
-		return err
+		return fmt.Errorf("check rows affected: %w", err)
 	}
 
 	if rows == 0 {

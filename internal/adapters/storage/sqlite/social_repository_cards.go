@@ -93,7 +93,7 @@ func (r *SocialRepository) GetRecentPurchaseIDs(ctx context.Context, since strin
 
 func (r *SocialRepository) GetPurchaseIDsInExistingPosts(ctx context.Context, purchaseIDs []string, postType social.PostType) (map[string]bool, error) {
 	if len(purchaseIDs) == 0 {
-		return nil, nil
+		return map[string]bool{}, nil
 	}
 
 	placeholders := make([]string, len(purchaseIDs))

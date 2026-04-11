@@ -51,7 +51,10 @@ func (r *CardRequestRepository) TrackMissingCert(ctx context.Context, cert, grad
 		 ON CONFLICT(grader, cert_number) DO NOTHING`,
 		cert, grader, grade, description,
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("track missing cert: %w", err)
+	}
+	return nil
 }
 
 // EnrichPendingFromPurchases fills card_name, set_name, card_number, and front_image_url
@@ -84,7 +87,10 @@ func (r *CardRequestRepository) EnrichPendingFromPurchases(ctx context.Context) 
 		     OR (p.front_image_url != '' AND p.front_image_url != card_request_submissions.front_image_url)
 		   )
 		 )`)
-	return err
+	if err != nil {
+		return fmt.Errorf("enrich pending from purchases: %w", err)
+	}
+	return nil
 }
 
 // ListAll returns all card request submissions ordered by status then created_at.
@@ -98,7 +104,7 @@ func (r *CardRequestRepository) ListAll(ctx context.Context) (_ []CardRequestSub
 		   CASE status WHEN 'pending' THEN 0 WHEN 'submitted' THEN 1 ELSE 2 END,
 		   created_at DESC`)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("query card requests: %w", err)
 	}
 	defer func() {
 		if cerr := rows.Close(); err == nil && cerr != nil {
@@ -114,7 +120,7 @@ func (r *CardRequestRepository) ListAll(ctx context.Context) (_ []CardRequestSub
 			&s.Grade, &s.FrontImageURL, &s.Variant, &s.Status, &s.CardHedgerRequestID,
 			&s.SubmittedAt, &s.CreatedAt, &s.UpdatedAt,
 		); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("scan card request row: %w", err)
 		}
 		results = append(results, s)
 	}
@@ -152,11 +158,11 @@ func (r *CardRequestRepository) ClaimForProcessing(ctx context.Context, id int64
 		 WHERE id = ? AND status = 'pending'`, id,
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("claim for processing: %w", err)
 	}
 	n, err := res.RowsAffected()
 	if err != nil {
-		return err
+		return fmt.Errorf("check rows affected: %w", err)
 	}
 	if n == 0 {
 		return fmt.Errorf("id %d: %w", id, ErrCardRequestAlreadyClaimed)
@@ -171,7 +177,10 @@ func (r *CardRequestRepository) RevertClaim(ctx context.Context, id int64) error
 		 SET status = 'pending', updated_at = CURRENT_TIMESTAMP
 		 WHERE id = ? AND status = 'processing'`, id,
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("revert claim: %w", err)
+	}
+	return nil
 }
 
 // UpdateSubmitted marks a submission as submitted with the external request ID
@@ -184,7 +193,10 @@ func (r *CardRequestRepository) UpdateSubmitted(ctx context.Context, id int64, r
 		 WHERE id = ?`,
 		requestID, now, now, id,
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("update submitted: %w", err)
+	}
+	return nil
 }
 
 // CountByStatus returns a map of status -> count.

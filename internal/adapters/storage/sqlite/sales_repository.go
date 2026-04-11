@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 
 	"github.com/guarzo/slabledger/internal/domain/campaigns"
 )
@@ -49,7 +50,10 @@ func (r *CampaignsRepository) CreateSale(ctx context.Context, s *campaigns.Sale)
 	if err != nil && isUniqueConstraintError(err) {
 		return campaigns.ErrDuplicateSale
 	}
-	return err
+	if err != nil {
+		return fmt.Errorf("create sale: %w", err)
+	}
+	return nil
 }
 
 func (r *CampaignsRepository) GetSaleByPurchaseID(ctx context.Context, purchaseID string) (*campaigns.Sale, error) {
@@ -80,7 +84,7 @@ func (r *CampaignsRepository) GetSalesByPurchaseIDs(ctx context.Context, purchas
 	query := `SELECT ` + saleColumns + ` FROM campaign_sales WHERE purchase_id IN (` + string(placeholders) + `)`
 	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("query sales by purchase ids: %w", err)
 	}
 	defer func() {
 		if cerr := rows.Close(); err == nil && cerr != nil {
@@ -118,11 +122,11 @@ func (r *CampaignsRepository) ListSalesByCampaign(ctx context.Context, campaignI
 func (r *CampaignsRepository) DeleteSale(ctx context.Context, saleID string) error {
 	result, err := r.db.ExecContext(ctx, `DELETE FROM campaign_sales WHERE id = ?`, saleID)
 	if err != nil {
-		return err
+		return fmt.Errorf("delete sale: %w", err)
 	}
 	rows, err := result.RowsAffected()
 	if err != nil {
-		return err
+		return fmt.Errorf("check rows affected: %w", err)
 	}
 	if rows == 0 {
 		return campaigns.ErrSaleNotFound
@@ -133,11 +137,11 @@ func (r *CampaignsRepository) DeleteSale(ctx context.Context, saleID string) err
 func (r *CampaignsRepository) DeleteSaleByPurchaseID(ctx context.Context, purchaseID string) error {
 	result, err := r.db.ExecContext(ctx, `DELETE FROM campaign_sales WHERE purchase_id = ?`, purchaseID)
 	if err != nil {
-		return err
+		return fmt.Errorf("delete sale by purchase id: %w", err)
 	}
 	rows, err := result.RowsAffected()
 	if err != nil {
-		return err
+		return fmt.Errorf("check rows affected: %w", err)
 	}
 	if rows == 0 {
 		return campaigns.ErrSaleNotFound

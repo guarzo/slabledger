@@ -55,7 +55,10 @@ func (r *CampaignsRepository) CreatePurchase(ctx context.Context, p *campaigns.P
 	if err != nil && isUniqueConstraintError(err) {
 		return campaigns.ErrDuplicateCertNumber
 	}
-	return err
+	if err != nil {
+		return fmt.Errorf("create purchase: %w", err)
+	}
+	return nil
 }
 
 func (r *CampaignsRepository) GetPurchase(ctx context.Context, id string) (*campaigns.Purchase, error) {

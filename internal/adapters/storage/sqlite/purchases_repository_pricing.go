@@ -25,11 +25,11 @@ func (r *CampaignsRepository) UpdatePurchasePriceOverride(ctx context.Context, p
 		priceCents, source, setAt, now, purchaseID,
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("update purchase price override: %w", err)
 	}
 	n, err := result.RowsAffected()
 	if err != nil {
-		return err
+		return fmt.Errorf("check rows affected: %w", err)
 	}
 	if n == 0 {
 		return campaigns.ErrPurchaseNotFound
@@ -77,11 +77,11 @@ func (r *CampaignsRepository) UpdatePurchaseAISuggestion(ctx context.Context, pu
 		priceCents, suggestedAt, now, purchaseID,
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("update ai suggestion: %w", err)
 	}
 	n, err := result.RowsAffected()
 	if err != nil {
-		return err
+		return fmt.Errorf("check rows affected: %w", err)
 	}
 	if n == 0 {
 		return campaigns.ErrPurchaseNotFound
@@ -116,7 +116,7 @@ func (r *CampaignsRepository) GetPriceOverrideStats(ctx context.Context) (*campa
 		&stats.SuggestionTotalCents,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("query price override stats: %w", err)
 	}
 	stats.OverrideTotalUsd = float64(stats.OverrideTotalCents) / 100
 	stats.SuggestionTotalUsd = float64(stats.SuggestionTotalCents) / 100
@@ -129,11 +129,11 @@ func (r *CampaignsRepository) ClearPurchaseAISuggestion(ctx context.Context, pur
 		time.Now(), purchaseID,
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("clear ai suggestion: %w", err)
 	}
 	n, err := result.RowsAffected()
 	if err != nil {
-		return err
+		return fmt.Errorf("check rows affected: %w", err)
 	}
 	if n == 0 {
 		return campaigns.ErrPurchaseNotFound
@@ -148,7 +148,7 @@ func (r *CampaignsRepository) AcceptAISuggestion(ctx context.Context, purchaseID
 
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("begin transaction: %w", err)
 	}
 	defer tx.Rollback() //nolint:errcheck
 
@@ -164,16 +164,19 @@ func (r *CampaignsRepository) AcceptAISuggestion(ctx context.Context, purchaseID
 		priceCents, setAt, now, purchaseID, priceCents,
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("accept ai suggestion: %w", err)
 	}
 	n, err := result.RowsAffected()
 	if err != nil {
-		return err
+		return fmt.Errorf("check rows affected: %w", err)
 	}
 	if n == 0 {
 		return campaigns.ErrNoAISuggestion
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit accept ai suggestion transaction: %w", err)
+	}
+	return nil
 }
 
 func (r *CampaignsRepository) SetEbayExportFlag(ctx context.Context, purchaseID string, flaggedAt time.Time) error {
@@ -181,11 +184,11 @@ func (r *CampaignsRepository) SetEbayExportFlag(ctx context.Context, purchaseID 
 		`UPDATE campaign_purchases SET ebay_export_flagged_at = ? WHERE id = ?`,
 		flaggedAt, purchaseID)
 	if err != nil {
-		return err
+		return fmt.Errorf("set ebay export flag: %w", err)
 	}
 	n, err := result.RowsAffected()
 	if err != nil {
-		return err
+		return fmt.Errorf("check rows affected: %w", err)
 	}
 	if n == 0 {
 		return campaigns.ErrPurchaseNotFound
@@ -200,7 +203,7 @@ func (r *CampaignsRepository) ClearEbayExportFlags(ctx context.Context, purchase
 
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("begin transaction: %w", err)
 	}
 	defer tx.Rollback() //nolint:errcheck // rollback after commit is a no-op
 
@@ -217,10 +220,13 @@ func (r *CampaignsRepository) ClearEbayExportFlags(ctx context.Context, purchase
 		}
 		query := `UPDATE campaign_purchases SET ebay_export_flagged_at = NULL WHERE id IN (` + strings.Join(placeholders, ",") + `)`
 		if _, err := tx.ExecContext(ctx, query, args...); err != nil {
-			return err
+			return fmt.Errorf("clear ebay export flags: %w", err)
 		}
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit clear ebay export flags transaction: %w", err)
+	}
+	return nil
 }
 
 func (r *CampaignsRepository) ListEbayFlaggedPurchases(ctx context.Context) ([]campaigns.Purchase, error) {
@@ -232,7 +238,7 @@ func (r *CampaignsRepository) ListEbayFlaggedPurchases(ctx context.Context) ([]c
 		ORDER BY c.created_at DESC, p.purchase_date DESC`
 	rows, err := r.db.QueryContext(ctx, query)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("query ebay flagged purchases: %w", err)
 	}
 	return scanRows(ctx, rows, func(rs *sql.Rows) (campaigns.Purchase, error) {
 		var p campaigns.Purchase

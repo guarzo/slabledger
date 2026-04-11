@@ -94,7 +94,7 @@ func (r *CampaignsRepository) SetHeldWithReason(ctx context.Context, purchaseID 
 func (r *CampaignsRepository) ApproveHeldPurchase(ctx context.Context, purchaseID string) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("begin transaction: %w", err)
 	}
 	defer tx.Rollback() //nolint:errcheck
 
@@ -106,11 +106,11 @@ func (r *CampaignsRepository) ApproveHeldPurchase(ctx context.Context, purchaseI
 		campaigns.DHPushStatusPending, now, purchaseID,
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("approve held purchase: %w", err)
 	}
 	n, err := result.RowsAffected()
 	if err != nil {
-		return err
+		return fmt.Errorf("check rows affected: %w", err)
 	}
 	if n == 0 {
 		return campaigns.ErrPurchaseNotFound

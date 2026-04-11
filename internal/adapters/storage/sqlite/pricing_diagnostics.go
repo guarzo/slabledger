@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"fmt"
 
 	"github.com/guarzo/slabledger/internal/domain/pricing"
 )
@@ -58,7 +59,7 @@ func (r *PricingDiagnosticsRepository) queryMappingCoverage(ctx context.Context,
 	`)
 	var total, mapped int
 	if err := row.Scan(&total, &mapped); err != nil {
-		return err
+		return fmt.Errorf("query mapping coverage: %w", err)
 	}
 	diag.TotalMappedCards = mapped
 	diag.UnmappedCards = total - mapped
@@ -78,7 +79,7 @@ func (r *PricingDiagnosticsRepository) queryPriceCoverage(ctx context.Context, d
 		WHERE cs.id IS NULL AND c.phase != 'closed'
 	`)
 	if err := row.Scan(&diag.TotalUnsold, &diag.CLPricedCards, &diag.MMPricedCards); err != nil {
-		return err
+		return fmt.Errorf("query price coverage: %w", err)
 	}
 	return nil
 }
@@ -104,7 +105,7 @@ func (r *PricingDiagnosticsRepository) queryRecentFailures(ctx context.Context, 
 		LIMIT 50
 	`)
 	if err != nil {
-		return err
+		return fmt.Errorf("query recent failures: %w", err)
 	}
 	defer rows.Close() //nolint:errcheck
 
@@ -112,7 +113,7 @@ func (r *PricingDiagnosticsRepository) queryRecentFailures(ctx context.Context, 
 		var f pricing.FailureSummary
 		var lastSeen string
 		if err := rows.Scan(&f.Provider, &f.ErrorType, &f.Count, &lastSeen); err != nil {
-			return err
+			return fmt.Errorf("scan failure row: %w", err)
 		}
 		f.LastSeen = parseSQLiteTime(lastSeen)
 		diag.RecentFailures = append(diag.RecentFailures, f)
