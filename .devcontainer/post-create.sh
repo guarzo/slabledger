@@ -9,13 +9,6 @@ echo "🚀 Running post-create setup..."
 echo "📦 Downloading Go dependencies..."
 go mod download
 
-# Install Go tools (if not already installed)
-echo "🔧 Installing Go development tools..."
-go install golang.org/x/tools/gopls@latest 2>/dev/null || true
-go install github.com/go-delve/delve/cmd/dlv@latest 2>/dev/null || true
-curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b "$(go env GOPATH)/bin" v2.11.3 2>/dev/null || true
-go install honnef.co/go/tools/cmd/staticcheck@latest 2>/dev/null || true
-
 # Install web dependencies (if package.json exists)
 if [ -d "web" ] && [ -f "web/package.json" ]; then
     echo "📦 Installing web dependencies..."

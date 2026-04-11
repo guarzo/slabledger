@@ -28,10 +28,20 @@ RUN apt-get update && apt-get install -y \
     lsof \
     iproute2 \
     net-tools \
+    rsync \
     # Process tools
     htop \
     procps \
     psmisc \
+    # Filesystem tools
+    tree \
+    # JSON/text processing
+    jq \
+    ripgrep \
+    # Pagers
+    less \
+    # Linters
+    shellcheck \
     # Text editors
     vim \
     nano \
