@@ -484,6 +484,32 @@ func TestGetPendingReceiptByInvoiceDate(t *testing.T) {
 			wantPending: map[string]int{"2026-03-15": 40000},
 		},
 		{
+			name: "sold purchase without received_at is not pending",
+			setup: func(t *testing.T, db *DB, repo *CampaignsRepository) {
+				now := time.Now().Truncate(time.Second)
+				createTestCampaign(t, db, "camp-pr-sold", "PR Sold")
+				// Sold but never scanned via cert intake — implicitly in-hand.
+				p1 := &campaigns.Purchase{
+					ID: "pr-p-sold", CampaignID: "camp-pr-sold", CardName: "Charizard", CertNumber: "PRS001",
+					GradeValue: 9, BuyCostCents: 60000,
+					PurchaseDate: "2026-03-20", InvoiceDate: "2026-03-25",
+					CreatedAt: now, UpdatedAt: now,
+				}
+				// Not sold and not received — genuinely pending.
+				p2 := &campaigns.Purchase{
+					ID: "pr-p-open", CampaignID: "camp-pr-sold", CardName: "Blastoise", CertNumber: "PRS002",
+					GradeValue: 9, BuyCostCents: 20000,
+					PurchaseDate: "2026-03-21", InvoiceDate: "2026-03-25",
+					CreatedAt: now, UpdatedAt: now,
+				}
+				require.NoError(t, repo.CreatePurchase(ctx, p1))
+				require.NoError(t, repo.CreatePurchase(ctx, p2))
+				require.NoError(t, repo.CreateSale(ctx, newTestSale(p1.ID)))
+			},
+			inputDates:  []string{"2026-03-25"},
+			wantPending: map[string]int{"2026-03-25": 20000},
+		},
+		{
 			name: "multiple invoice dates in a single call",
 			setup: func(t *testing.T, db *DB, repo *CampaignsRepository) {
 				now := time.Now().Truncate(time.Second)
