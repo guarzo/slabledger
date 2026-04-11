@@ -224,7 +224,10 @@ func (r *MarketIntelligenceRepository) getByCardsChunk(ctx context.Context, keys
 		}
 		result[key] = intel
 	}
-	return rows.Err()
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate market intelligence rows in getByCardsChunk: %w", err)
+	}
+	return nil
 }
 
 // scanOne executes a query expected to return zero or one row and scans it into a MarketIntelligence.

@@ -173,7 +173,10 @@ func (r *CampaignsRepository) AcceptAISuggestion(ctx context.Context, purchaseID
 	if n == 0 {
 		return campaigns.ErrNoAISuggestion
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit accept ai suggestion transaction: %w", err)
+	}
+	return nil
 }
 
 func (r *CampaignsRepository) SetEbayExportFlag(ctx context.Context, purchaseID string, flaggedAt time.Time) error {
@@ -220,7 +223,10 @@ func (r *CampaignsRepository) ClearEbayExportFlags(ctx context.Context, purchase
 			return fmt.Errorf("clear ebay export flags: %w", err)
 		}
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit clear ebay export flags transaction: %w", err)
+	}
+	return nil
 }
 
 func (r *CampaignsRepository) ListEbayFlaggedPurchases(ctx context.Context) ([]campaigns.Purchase, error) {

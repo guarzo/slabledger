@@ -68,7 +68,10 @@ func (r *DHSuggestionsRepository) StoreSuggestions(ctx context.Context, suggesti
 		}
 	}
 
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit transaction saving suggestions: %w", err)
+	}
+	return nil
 }
 
 // GetByDate returns all suggestions for a specific date.

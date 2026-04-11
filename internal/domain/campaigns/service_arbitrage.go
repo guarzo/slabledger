@@ -15,7 +15,7 @@ const (
 )
 
 // GetCrackCandidates returns cached crack candidates for a single campaign.
-// Returns nil if the cache has not been populated yet (background worker still running).
+// Returns an empty slice if the cache has not been populated yet (background worker still running).
 func (s *service) GetCrackCandidates(ctx context.Context, campaignID string) ([]CrackAnalysis, error) {
 	// Validate campaign exists
 	if _, err := s.repo.GetCampaign(ctx, campaignID); err != nil {
@@ -33,7 +33,7 @@ func (s *service) GetCrackCandidates(ctx context.Context, campaignID string) ([]
 		return []CrackAnalysis{}, nil
 	}
 
-	var results []CrackAnalysis
+	results := []CrackAnalysis{}
 	for _, c := range all {
 		if c.CampaignID == campaignID {
 			results = append(results, c)
@@ -255,7 +255,7 @@ func (s *service) GetAcquisitionTargets(ctx context.Context) ([]AcquisitionOppor
 	if err != nil {
 		return nil, fmt.Errorf("list active campaigns: %w", err)
 	}
-	var opportunities []AcquisitionOpportunity
+	opportunities := []AcquisitionOpportunity{}
 	seen := make(map[string]bool)
 	for _, campaign := range allCampaigns {
 		ebayFee := campaign.EbayFeePct

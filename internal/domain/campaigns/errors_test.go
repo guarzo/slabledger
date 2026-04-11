@@ -2,6 +2,7 @@ package campaigns_test
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/guarzo/slabledger/internal/domain/campaigns"
@@ -32,13 +33,14 @@ func TestSentinelErrors(t *testing.T) {
 			if tc.err == nil {
 				t.Fatalf("%s is nil", tc.name)
 			}
-			// errors.Is must match against itself (wrapping compatibility).
-			if !errors.Is(tc.err, tc.err) {
-				t.Fatalf("%s: errors.Is(err, err) returned false", tc.name)
+			// Wrapping the sentinel must still be detectable via errors.Is.
+			wrapped := fmt.Errorf("operation failed: %w", tc.err)
+			if !errors.Is(wrapped, tc.err) {
+				t.Fatalf("%s: errors.Is(wrapped, sentinel) returned false — sentinel not detectable through wrapping", tc.name)
 			}
-			// A different sentinel must not match.
-			if errors.Is(tc.err, campaigns.ErrCampaignNotFound) && tc.name != "ErrCampaignNotFound" {
-				t.Fatalf("%s unexpectedly matches ErrCampaignNotFound", tc.name)
+			// A different sentinel must not match through wrapping.
+			if tc.name != "ErrCampaignNotFound" && errors.Is(wrapped, campaigns.ErrCampaignNotFound) {
+				t.Fatalf("%s: errors.Is(wrapped, ErrCampaignNotFound) unexpectedly true", tc.name)
 			}
 		})
 	}
