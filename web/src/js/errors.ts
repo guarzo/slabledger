@@ -4,6 +4,19 @@
  */
 
 /**
+ * Report an error from application code through the central handler.
+ * This is the single funnel for ad-hoc error logging — use it instead of
+ * `console.error` / `console.warn` so future Sentry/telemetry wiring only
+ * has to hook one place. The eslint `no-console` rule is enforced for all
+ * files except this one, ErrorBoundary.tsx, SectionErrorBoundary.tsx, and
+ * main.tsx (which need raw console access for the outermost crash paths).
+ */
+export function reportError(context: string, error: unknown): void {
+  const err = error instanceof Error ? error : new Error(String(error));
+  handleError(err, context);
+}
+
+/**
  * Global error handler
  */
 function handleError(error: Error, context = 'An error occurred'): {

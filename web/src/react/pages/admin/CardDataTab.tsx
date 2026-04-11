@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { CachedSetEntry } from '../../../types/apiStatus';
+import PokeballLoader from '../../PokeballLoader';
 import { useAdminCacheStats } from '../../queries/useAdminQueries';
 import { ProgressBar, SummaryCard } from './shared';
 import { formatAdminDate } from './adminUtils';
@@ -43,7 +44,12 @@ export function CardDataTab({ enabled = true }: { enabled?: boolean }) {
   if (!data) {
     return errorMessage
       ? <div className="p-3 rounded-lg bg-[var(--danger-bg)] border border-[var(--danger-border)] text-[var(--danger)] text-sm">{errorMessage}</div>
-      : <div className="text-center text-[var(--text-muted)] py-8">Loading...</div>;
+      : (
+        <div className="py-8" role="status" aria-live="polite" aria-atomic="true">
+          <span className="sr-only">Loading card cache stats…</span>
+          <PokeballLoader />
+        </div>
+      );
   }
 
   if (!data.enabled) {

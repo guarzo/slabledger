@@ -1,5 +1,6 @@
 import { useState, useRef, ReactNode } from 'react';
 import { api } from '../../../js/api';
+import { reportError } from '../../../js/errors';
 import type { ExternalImportResult, GlobalImportResult, MMRefreshResult } from '../../../types/campaigns';
 import { getErrorMessage } from '../../utils/formatters';
 import { useToast } from '../../contexts/ToastContext';
@@ -251,7 +252,13 @@ function MMImportCard() {
       if (res.failed > 0 || (res.errors && res.errors.length > 0)) {
         toast.warning(`Market Movers import: ${res.failed} failed. ${res.updated} updated, ${res.skipped} skipped, ${res.notFound} not found`);
         if (res.errors && res.errors.length > 0) {
-          console.error('Market Movers import errors:', res.errors);
+          const formatted = res.errors
+            .map((e) => (e.row != null ? `row ${e.row}: ${e.error}` : e.error))
+            .join('; ');
+          reportError(
+            'LegacyTab/mm-import',
+            new Error(`Market Movers import errors: ${formatted}`),
+          );
         }
       } else {
         toast.success(`Market Movers import: ${res.updated} updated, ${res.skipped} skipped, ${res.notFound} not found`);

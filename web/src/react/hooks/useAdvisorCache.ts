@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useMemo } from 'react';
 import { api } from '../../js/api';
+import { reportError } from '../../js/errors';
 import type { AdvisorAnalysisType } from '../../types/apiStatus';
 
 const CACHE_KEY_PREFIX = ['advisor', 'cache'] as const;
@@ -24,7 +25,7 @@ export function useAdvisorCache(type: AdvisorAnalysisType) {
       await api.refreshAdvisorCache(type);
       await queryClient.invalidateQueries({ queryKey });
     } catch (err) {
-      console.error('Failed to refresh advisor cache:', err);
+      reportError('useAdvisorCache/refresh', err);
       throw err;
     }
   }, [type, queryClient, queryKey]);

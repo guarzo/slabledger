@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { api } from '../../js/api';
+import { reportError } from '../../js/errors';
 import { queryKeys } from '../queries/queryKeys';
 import type { SocialPostDetail } from '../../types/social';
 
@@ -53,7 +54,10 @@ async function captureVisibleSlide(): Promise<Blob> {
   const blob = new Blob([buf], { type: mime });
 
   if (blob.size < 50_000) {
-    console.error(`[publish] slide capture suspiciously small (${blob.size} bytes)`);
+    reportError(
+      'usePublishWithSlides/slide-size',
+      new Error(`slide capture suspiciously small (${blob.size} bytes)`),
+    );
   }
   return blob;
 }

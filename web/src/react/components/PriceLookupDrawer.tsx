@@ -7,6 +7,7 @@ import { useUserPreferences } from '../contexts/UserPreferencesContext';
 import { useToast } from '../contexts/ToastContext';
 import { getErrorMessage } from '../utils/formatters';
 import { api } from '../../js/api';
+import { reportError } from '../../js/errors';
 import type { CardPricingResponse } from '../../types/pricing';
 
 const CARD_SEARCH_LIMIT = 50;
@@ -73,7 +74,7 @@ export default function PriceLookupDrawer({
           imageUrl: card.imageUrl || card.images?.large || card.images?.small || ''
         });
       } catch (e) {
-        console.error('Failed to save recent price check', e);
+        reportError('PriceLookupDrawer/saveRecent', e);
       }
     } catch (err) {
       if (controller.signal.aborted) return;

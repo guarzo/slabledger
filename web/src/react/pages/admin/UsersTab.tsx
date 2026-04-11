@@ -1,4 +1,5 @@
 import type { AdminUser } from '../../../types/admin';
+import PokeballLoader from '../../PokeballLoader';
 import { useAdminUsers } from '../../queries/useAdminQueries';
 import { AllowlistTab } from './AllowlistTab';
 
@@ -46,7 +47,9 @@ export function UsersTab({ enabled = true }: { enabled?: boolean }) {
       <section>
         <h3 className="text-base font-semibold text-[var(--text)] mb-4">Registered Users</h3>
         {isLoading ? (
-          <div className="text-center text-[var(--text-muted)] py-8" role="status" aria-live="polite" aria-atomic="true">Loading...</div>
+          <div className="py-8" role="status" aria-live="polite" aria-atomic="true">
+            <PokeballLoader />
+          </div>
         ) : error ? (
           <div className="p-3 rounded-lg bg-[var(--danger-bg)] border border-[var(--danger-border)] text-[var(--danger)] text-sm" role="alert" aria-live="assertive" aria-atomic="true">Failed to load users</div>
         ) : (

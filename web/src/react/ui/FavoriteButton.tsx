@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { clsx } from 'clsx';
 import { useAuth } from '../contexts/AuthContext';
 import { useFavorites } from '../contexts/FavoritesContext';
+import { reportError } from '../../js/errors';
 import type { FavoriteInput } from '../../types/favorites';
 
 /**
@@ -93,7 +94,7 @@ export const FavoriteButton: React.FC<FavoriteButtonProps> = ({
       };
       await toggleFavorite(input);
     } catch (err) {
-      console.error('Favorite toggle failed', err);
+      reportError('FavoriteButton/toggle', err);
     } finally {
       setIsToggling(false);
     }

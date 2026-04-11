@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, Dispatch, SetStateAction } from 'react';
+import { reportError } from '../../js/errors';
 
 /**
  * Custom hook for localStorage with React state synchronization
@@ -55,7 +56,7 @@ export function useLocalStorage<T>(
           }
         } catch (err) {
           if (import.meta.env.DEV) {
-            console.error('localStorage write failed', err);
+            reportError('useLocalStorage/write', err);
           }
           // State still updates; only persistence failed
         }
