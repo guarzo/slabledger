@@ -1,6 +1,6 @@
 # SlabLedger - Makefile
 
-.PHONY: all help build test test-verbose coverage lint check fmt clean install web web-build web-dev web-clean web-rebuild db-push db-pull ci hooks screenshots
+.PHONY: all help build test test-verbose coverage lint check fmt clean install web web-build web-dev web-clean web-rebuild db-push db-pull ci hooks screenshots kill
 
 # Default target
 all: help
@@ -27,6 +27,7 @@ help:
 	@echo "Database sync (requires ~/.ssh mounted):"
 	@echo "  db-pull       Pull prod DB to local"
 	@echo "  db-push       Push local DB to prod"
+	@echo "  kill          Kill any process running on port 8081"
 	@echo ""
 	@echo "Note: Use '/usr/bin/make web' if 'make' command conflicts with shell function"
 
@@ -175,6 +176,10 @@ db-pull:
 	sqlite3 "$(LOCAL_DB)" ".restore '$$TMP_LOCAL'" && rm -f "$$TMP_LOCAL" && \
 	trap - EXIT && \
 	echo "Done."
+
+# Kill process on port 8081
+kill:
+	@kill $$(lsof -ti :8081) 2>/dev/null && echo "Killed process on :8081" || echo "Nothing running on :8081"
 
 # CI target
 ci: install lint test coverage build
