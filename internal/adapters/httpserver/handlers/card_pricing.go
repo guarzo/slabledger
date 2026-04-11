@@ -193,16 +193,16 @@ func (h *Handler) HandleCardPricing(w http.ResponseWriter, r *http.Request) {
 	if price.LastSoldByGrade != nil {
 		ls := &LastSoldResponse{}
 		if g := price.LastSoldByGrade.PSA10; g != nil {
-			ls.PSA10 = &GradeSaleResponse{LastSoldPrice: g.LastSoldPrice, LastSoldDate: g.LastSoldDate, SaleCount: g.SaleCount}
+			ls.PSA10 = &GradeSaleResponse{LastSoldPrice: mathutil.ToDollars(g.LastSoldPrice), LastSoldDate: g.LastSoldDate, SaleCount: g.SaleCount}
 		}
 		if g := price.LastSoldByGrade.PSA9; g != nil {
-			ls.PSA9 = &GradeSaleResponse{LastSoldPrice: g.LastSoldPrice, LastSoldDate: g.LastSoldDate, SaleCount: g.SaleCount}
+			ls.PSA9 = &GradeSaleResponse{LastSoldPrice: mathutil.ToDollars(g.LastSoldPrice), LastSoldDate: g.LastSoldDate, SaleCount: g.SaleCount}
 		}
 		if g := price.LastSoldByGrade.PSA8; g != nil {
-			ls.PSA8 = &GradeSaleResponse{LastSoldPrice: g.LastSoldPrice, LastSoldDate: g.LastSoldDate, SaleCount: g.SaleCount}
+			ls.PSA8 = &GradeSaleResponse{LastSoldPrice: mathutil.ToDollars(g.LastSoldPrice), LastSoldDate: g.LastSoldDate, SaleCount: g.SaleCount}
 		}
 		if g := price.LastSoldByGrade.Raw; g != nil {
-			ls.Raw = &GradeSaleResponse{LastSoldPrice: g.LastSoldPrice, LastSoldDate: g.LastSoldDate, SaleCount: g.SaleCount}
+			ls.Raw = &GradeSaleResponse{LastSoldPrice: mathutil.ToDollars(g.LastSoldPrice), LastSoldDate: g.LastSoldDate, SaleCount: g.SaleCount}
 		}
 		resp.LastSold = ls
 	}

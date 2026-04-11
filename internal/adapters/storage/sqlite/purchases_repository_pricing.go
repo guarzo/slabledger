@@ -240,3 +240,10 @@ func (r *CampaignsRepository) ListEbayFlaggedPurchases(ctx context.Context) ([]c
 		return p, err
 	})
 }
+
+func (r *CampaignsRepository) SetReceivedAt(ctx context.Context, purchaseID string, receivedAt time.Time) error {
+	return r.execAndExpectRow(ctx, "set received_at",
+		`UPDATE campaign_purchases SET received_at = ?, updated_at = ? WHERE id = ?`,
+		receivedAt, time.Now().UTC(), purchaseID,
+	)
+}

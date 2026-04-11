@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -10,10 +11,14 @@ import (
 	"github.com/guarzo/slabledger/internal/platform/config"
 )
 
+// ErrSyncInProgress is returned when RunOnce is called while a sync cycle is already running.
+var ErrSyncInProgress = fmt.Errorf("PSA sync already in progress")
+
 // PSASyncRunStats holds in-memory stats from the last PSA sync run.
 type PSASyncRunStats struct {
 	LastRunAt   time.Time `json:"lastRunAt"`
 	DurationMs  int64     `json:"durationMs"`
+	LastError   string    `json:"lastError,omitempty"` // non-empty if the run failed
 	Allocated   int       `json:"allocated"`
 	Updated     int       `json:"updated"`
 	Refunded    int       `json:"refunded"`
@@ -46,6 +51,7 @@ type PSASyncScheduler struct {
 	config        config.PSASyncConfig
 	spreadsheetID string
 	tabName       string
+	running       sync.Mutex // ensures only one runOnce executes at a time
 	lastRunStats  *PSASyncRunStats
 	statsMu       sync.RWMutex
 }
@@ -92,7 +98,24 @@ func (s *PSASyncScheduler) Start(ctx context.Context) {
 		WG:           s.WG(),
 		StopChan:     s.Done(),
 		Logger:       s.logger,
-	}, s.tick)
+	}, func(ctx context.Context) {
+		if !s.running.TryLock() {
+			s.logger.Info(ctx, "PSA sync skipping tick: previous run still in progress")
+			return
+		}
+		defer s.running.Unlock()
+		s.runOnce(ctx) //nolint:errcheck
+	})
+}
+
+// RunOnce runs a single sync cycle. Exported for manual trigger via HTTP handler.
+// Returns ErrSyncInProgress if a cycle is already running (background or prior manual trigger).
+func (s *PSASyncScheduler) RunOnce(ctx context.Context) error {
+	if !s.running.TryLock() {
+		return ErrSyncInProgress
+	}
+	defer s.running.Unlock()
+	return s.runOnce(ctx)
 }
 
 // GetLastRunStats returns a copy of the last run stats, or nil if no run has completed.
@@ -106,7 +129,7 @@ func (s *PSASyncScheduler) GetLastRunStats() *PSASyncRunStats {
 	return &cp
 }
 
-func (s *PSASyncScheduler) tick(ctx context.Context) {
+func (s *PSASyncScheduler) runOnce(ctx context.Context) error {
 	start := time.Now()
 	s.logger.Info(ctx, "running PSA Google Sheets sync")
 
@@ -118,13 +141,15 @@ func (s *PSASyncScheduler) tick(ctx context.Context) {
 		s.logger.Error(ctx, "failed to fetch Google Sheet",
 			observability.Err(err),
 			observability.String("spreadsheet_id", s.spreadsheetID))
-		return
+		s.recordFailure(start, err)
+		return err
 	}
 
 	psaRows, parseErrors, err := campaigns.ParsePSAExportRows(rows)
 	if err != nil {
 		s.logger.Error(ctx, "failed to parse PSA sheet data", observability.Err(err))
-		return
+		s.recordFailure(start, err)
+		return err
 	}
 	if len(parseErrors) > 0 {
 		s.logger.Warn(ctx, "PSA sheet parse failures — rows skipped",
@@ -133,7 +158,7 @@ func (s *PSASyncScheduler) tick(ctx context.Context) {
 	}
 	if len(psaRows) == 0 {
 		s.logger.Warn(ctx, "no valid PSA rows found in sheet")
-		return
+		return nil
 	}
 
 	importCtx, importCancel := context.WithTimeout(ctx, 5*time.Minute)
@@ -143,7 +168,8 @@ func (s *PSASyncScheduler) tick(ctx context.Context) {
 	result, err := s.importer.ImportPSAExportGlobal(importCtx, psaRows)
 	if err != nil {
 		s.logger.Error(ctx, "PSA import failed", observability.Err(err))
-		return
+		s.recordFailure(start, err)
+		return err
 	}
 
 	s.logger.Info(ctx, "PSA sync completed",
@@ -168,6 +194,20 @@ func (s *PSASyncScheduler) tick(ctx context.Context) {
 		Failed:      result.Failed,
 		TotalRows:   len(psaRows),
 		ParseErrors: len(parseErrors),
+	}
+	s.statsMu.Unlock()
+
+	return nil
+}
+
+// recordFailure writes a failure record to lastRunStats so the status endpoint
+// reflects the failed run rather than showing stale data from a previous success.
+func (s *PSASyncScheduler) recordFailure(start time.Time, err error) {
+	s.statsMu.Lock()
+	s.lastRunStats = &PSASyncRunStats{
+		LastRunAt:  start,
+		DurationMs: time.Since(start).Milliseconds(),
+		LastError:  err.Error(),
 	}
 	s.statsMu.Unlock()
 }

@@ -388,3 +388,138 @@ func TestGetCapitalRawData_EmptyState(t *testing.T) {
 	assert.Equal(t, campaigns.TrendStable, summary.RecoveryTrend)
 	assert.Equal(t, campaigns.AlertOK, summary.AlertLevel)
 }
+
+func TestGetPendingReceiptByInvoiceDate(t *testing.T) {
+	ctx := context.Background()
+
+	tests := []struct {
+		name        string
+		setup       func(t *testing.T, db *DB, repo *CampaignsRepository)
+		inputDates  []string
+		wantPending map[string]int
+	}{
+		{
+			name:        "empty input returns empty map",
+			setup:       func(t *testing.T, db *DB, repo *CampaignsRepository) {},
+			inputDates:  []string{},
+			wantPending: map[string]int{},
+		},
+		{
+			name: "date with no purchases returns zero (absent from map)",
+			setup: func(t *testing.T, db *DB, repo *CampaignsRepository) {
+				createTestCampaign(t, db, "camp-pr1", "PR Test 1")
+			},
+			inputDates:  []string{"2026-01-01"},
+			wantPending: map[string]int{},
+		},
+		{
+			name: "all purchases received returns zero pending (absent from map)",
+			setup: func(t *testing.T, db *DB, repo *CampaignsRepository) {
+				now := time.Now().Truncate(time.Second)
+				createTestCampaign(t, db, "camp-pr2", "PR Test 2")
+				receivedAt := now.Format(time.RFC3339)
+				p := &campaigns.Purchase{
+					ID: "pr-p1", CampaignID: "camp-pr2", CardName: "Charizard", CertNumber: "PR001",
+					GradeValue: 9, BuyCostCents: 50000,
+					PurchaseDate: "2026-01-10", InvoiceDate: "2026-01-15",
+					ReceivedAt: &receivedAt,
+					CreatedAt:  now, UpdatedAt: now,
+				}
+				require.NoError(t, repo.CreatePurchase(ctx, p))
+			},
+			inputDates:  []string{"2026-01-15"},
+			wantPending: map[string]int{},
+		},
+		{
+			name: "partial receipt returns sum of unreceived buy_cost_cents",
+			setup: func(t *testing.T, db *DB, repo *CampaignsRepository) {
+				now := time.Now().Truncate(time.Second)
+				createTestCampaign(t, db, "camp-pr3", "PR Test 3")
+				receivedAt := now.Format(time.RFC3339)
+				// received: 50000
+				p1 := &campaigns.Purchase{
+					ID: "pr-p2", CampaignID: "camp-pr3", CardName: "Charizard", CertNumber: "PR002",
+					GradeValue: 9, BuyCostCents: 50000,
+					PurchaseDate: "2026-02-10", InvoiceDate: "2026-02-15",
+					ReceivedAt: &receivedAt,
+					CreatedAt:  now, UpdatedAt: now,
+				}
+				// NOT received: 30000
+				p2 := &campaigns.Purchase{
+					ID: "pr-p3", CampaignID: "camp-pr3", CardName: "Pikachu", CertNumber: "PR003",
+					GradeValue: 10, BuyCostCents: 30000,
+					PurchaseDate: "2026-02-12", InvoiceDate: "2026-02-15",
+					CreatedAt: now, UpdatedAt: now,
+				}
+				require.NoError(t, repo.CreatePurchase(ctx, p1))
+				require.NoError(t, repo.CreatePurchase(ctx, p2))
+			},
+			inputDates:  []string{"2026-02-15"},
+			wantPending: map[string]int{"2026-02-15": 30000},
+		},
+		{
+			name: "refunded purchases excluded from pending",
+			setup: func(t *testing.T, db *DB, repo *CampaignsRepository) {
+				now := time.Now().Truncate(time.Second)
+				createTestCampaign(t, db, "camp-pr4", "PR Test 4")
+				// NOT received but refunded: should not count
+				p1 := &campaigns.Purchase{
+					ID: "pr-p4", CampaignID: "camp-pr4", CardName: "Venusaur", CertNumber: "PR004",
+					GradeValue: 8, BuyCostCents: 25000,
+					PurchaseDate: "2026-03-10", InvoiceDate: "2026-03-15",
+					WasRefunded: true,
+					CreatedAt:   now, UpdatedAt: now,
+				}
+				// NOT received and NOT refunded: should count
+				p2 := &campaigns.Purchase{
+					ID: "pr-p5", CampaignID: "camp-pr4", CardName: "Blastoise", CertNumber: "PR005",
+					GradeValue: 9, BuyCostCents: 40000,
+					PurchaseDate: "2026-03-12", InvoiceDate: "2026-03-15",
+					CreatedAt: now, UpdatedAt: now,
+				}
+				require.NoError(t, repo.CreatePurchase(ctx, p1))
+				require.NoError(t, repo.CreatePurchase(ctx, p2))
+			},
+			inputDates:  []string{"2026-03-15"},
+			wantPending: map[string]int{"2026-03-15": 40000},
+		},
+		{
+			name: "multiple invoice dates in a single call",
+			setup: func(t *testing.T, db *DB, repo *CampaignsRepository) {
+				now := time.Now().Truncate(time.Second)
+				createTestCampaign(t, db, "camp-pr5", "PR Test 5")
+				// date A: 20000 pending
+				p1 := &campaigns.Purchase{
+					ID: "pr-p6", CampaignID: "camp-pr5", CardName: "Mewtwo", CertNumber: "PR006",
+					GradeValue: 10, BuyCostCents: 20000,
+					PurchaseDate: "2026-04-01", InvoiceDate: "2026-04-05",
+					CreatedAt: now, UpdatedAt: now,
+				}
+				// date B: 15000 pending
+				p2 := &campaigns.Purchase{
+					ID: "pr-p7", CampaignID: "camp-pr5", CardName: "Mew", CertNumber: "PR007",
+					GradeValue: 9, BuyCostCents: 15000,
+					PurchaseDate: "2026-04-10", InvoiceDate: "2026-04-12",
+					CreatedAt: now, UpdatedAt: now,
+				}
+				require.NoError(t, repo.CreatePurchase(ctx, p1))
+				require.NoError(t, repo.CreatePurchase(ctx, p2))
+			},
+			inputDates:  []string{"2026-04-05", "2026-04-12"},
+			wantPending: map[string]int{"2026-04-05": 20000, "2026-04-12": 15000},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db := setupTestDB(t)
+			defer db.Close()
+			repo := NewCampaignsRepository(db.DB)
+			tt.setup(t, db, repo)
+
+			got, err := repo.GetPendingReceiptByInvoiceDate(ctx, tt.inputDates)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantPending, got)
+		})
+	}
+}

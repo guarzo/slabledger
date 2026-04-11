@@ -7,7 +7,8 @@ import {
   costBasis, bestPrice, unrealizedPL, marketTrend,
   getSourceByType, marketTooltip,
   formatPL,
-  getReviewStatus, statusBorderColor, isHotSeller,
+  getReviewStatus, statusBorderColor, isHotSeller, formatReceivedDate,
+  syncDotProps,
 } from './utils';
 
 const BADGE_COLORS = [
@@ -33,11 +34,12 @@ interface DesktopRowProps {
   onRecordSale: () => void;
   onFixPricing?: () => void;
   onSetPrice?: () => void;
+  onDelete?: () => void;
   showCampaignColumn?: boolean;
   isOnSellSheet?: boolean;
 }
 
-export default function DesktopRow({ item, selected, onToggle, onExpand, onRecordSale, onFixPricing, onSetPrice, showCampaignColumn, isOnSellSheet }: DesktopRowProps) {
+export default function DesktopRow({ item, selected, onToggle, onExpand, onRecordSale, onFixPricing, onSetPrice, onDelete, showCampaignColumn, isOnSellSheet }: DesktopRowProps) {
   const cb = costBasis(item.purchase);
   const snap = item.currentMarket;
   const daysColor = daysHeldColor(item.daysHeld);
@@ -56,6 +58,11 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
 
   const reviewStatus = getReviewStatus(item);
   const hotSeller = isHotSeller(item);
+  const dot = syncDotProps(
+    item.purchase.clSyncedAt,
+    item.purchase.mmValueUpdatedAt,
+    item.purchase.dhLastSyncedAt,
+  );
 
   return (
     <div
@@ -69,16 +76,34 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
       <div className="glass-table-td flex-shrink-0 !px-1" style={{ width: '28px' }} onClick={e => e.stopPropagation()}>
         <input type="checkbox" checked={selected} onChange={onToggle} onKeyDown={e => e.stopPropagation()} className="rounded accent-[var(--brand-500)]" />
       </div>
-      <div className="glass-table-td flex-1 min-w-0" title={item.purchase.cardName}>
-        <div className="flex items-center gap-1.5 min-w-0">
-          {item.purchase.frontImageUrl && (
-            <img
-              src={item.purchase.frontImageUrl}
-              alt=""
-              className="w-8 h-11 object-cover rounded shrink-0 bg-[var(--surface-2)]"
-              loading="lazy"
-            />
-          )}
+       <div className="glass-table-td flex-1 min-w-0" title={item.purchase.cardName}>
+         <div className="flex items-center gap-1.5 min-w-0">
+           <div style={{ position: 'relative', width: 32, height: 44, flexShrink: 0 }}>
+             {item.purchase.frontImageUrl && (
+               <img
+                 src={item.purchase.frontImageUrl}
+                 alt=""
+                 className="w-8 h-11 object-cover rounded shrink-0 bg-[var(--surface-2)]"
+                 loading="lazy"
+               />
+             )}
+             {item.purchase.receivedAt && (
+               <div
+                 title={`In hand since ${formatReceivedDate(item.purchase.receivedAt)}`}
+                 style={{
+                   position: 'absolute',
+                   top: -3,
+                   right: -3,
+                   width: 10,
+                   height: 10,
+                   borderRadius: '50%',
+                   background: '#34d399',
+                   border: '2px solid var(--surface-1)',
+                   flexShrink: 0,
+                 }}
+               />
+             )}
+           </div>
           {showCampaignColumn && item.campaignName && (() => {
             const color = campaignColor(item.campaignName);
             return (
@@ -148,6 +173,14 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
       </div>
       {/* Days held */}
       <div className={`glass-table-td flex-shrink-0 text-center print-hide-col ${daysColor}`} style={{ width: '40px' }}>{item.daysHeld}</div>
+      {/* Sync freshness dot */}
+      <div className="glass-table-td flex-shrink-0 text-center print-hide-col" style={{ width: '20px' }}>
+        <span
+          title={dot.tooltip}
+          aria-label="Sync freshness"
+          style={{ color: dot.color, fontSize: '10px', lineHeight: 1 }}
+        >&#9679;</span>
+      </div>
       {/* Sell button */}
       <div className="glass-table-td flex-shrink-0 text-center !px-1 print-hide-actions" style={{ width: '48px' }} onClick={e => e.stopPropagation()}>
         <button
@@ -198,6 +231,21 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
                 >
                   Fix Pricing
                 </DropdownMenu.Item>
+              )}
+              {onDelete && (
+                <>
+                  <DropdownMenu.Separator className="my-1 h-px bg-[var(--surface-2)]" />
+                  <DropdownMenu.Item
+                    onSelect={() => {
+                      if (window.confirm('Delete this item? This cannot be undone.')) {
+                        onDelete();
+                      }
+                    }}
+                    className="px-3 py-2 text-sm text-red-400 hover:bg-[rgba(248,113,113,0.08)] hover:text-red-300 outline-none cursor-default"
+                  >
+                    Delete
+                  </DropdownMenu.Item>
+                </>
               )}
             </DropdownMenu.Content>
           </DropdownMenu.Portal>

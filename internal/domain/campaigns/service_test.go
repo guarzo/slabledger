@@ -547,7 +547,7 @@ func TestService_ImportPSAExportGlobal_SkipExisting(t *testing.T) {
 
 	rows := []campaigns.PSAExportRow{
 		{CertNumber: "PSA002", ListingTitle: "Charizard", Grade: 9, PricePaid: 500,
-			VaultStatus: "IN_VAULT", InvoiceDate: "2026-02-01", PurchaseSource: "PSA"},
+			ShipDate: "2026-02-01", InvoiceDate: "2026-02-01", PurchaseSource: "PSA"},
 	}
 
 	result, err := svc.ImportPSAExportGlobal(ctx, rows)
@@ -567,8 +567,8 @@ func TestService_ImportPSAExportGlobal_SkipExisting(t *testing.T) {
 	if updated.InvoiceDate != "2026-02-01" {
 		t.Errorf("InvoiceDate = %q, want %q", updated.InvoiceDate, "2026-02-01")
 	}
-	if updated.VaultStatus != "IN_VAULT" {
-		t.Errorf("VaultStatus = %q, want %q", updated.VaultStatus, "IN_VAULT")
+	if updated.PSAShipDate != "2026-02-01" {
+		t.Errorf("PSAShipDate = %q, want %q", updated.PSAShipDate, "2026-02-01")
 	}
 	if updated.PurchaseSource != "PSA" {
 		t.Errorf("PurchaseSource = %q, want %q", updated.PurchaseSource, "PSA")
@@ -737,12 +737,18 @@ func TestService_ImportPSAExportGlobal_DuplicateSkip(t *testing.T) {
 		t.Fatalf("ImportPSAExportGlobal: %v", err)
 	}
 
-	// First row allocated, second row updates the same purchase with PSA fields
+	// First row allocated, second row detects no changes and skips the update
 	if result.Allocated != 1 {
 		t.Errorf("Allocated = %d, want 1", result.Allocated)
 	}
-	if result.Updated != 1 {
-		t.Errorf("Updated = %d, want 1", result.Updated)
+	if result.Updated != 0 {
+		t.Errorf("Updated = %d, want 0 (duplicate row with identical fields)", result.Updated)
+	}
+	if len(result.Results) != 2 {
+		t.Fatalf("Results len = %d, want 2", len(result.Results))
+	}
+	if result.Results[1].Status != "unchanged" {
+		t.Errorf("Results[1].Status = %q, want \"unchanged\"", result.Results[1].Status)
 	}
 }
 

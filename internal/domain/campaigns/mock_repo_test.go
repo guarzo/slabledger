@@ -415,7 +415,7 @@ func (m *mockRepo) UpdatePurchasePSAFields(_ context.Context, id string, fields 
 	if !ok {
 		return ErrPurchaseNotFound
 	}
-	p.VaultStatus = fields.VaultStatus
+	p.PSAShipDate = fields.PSAShipDate
 	p.InvoiceDate = fields.InvoiceDate
 	p.WasRefunded = fields.WasRefunded
 	p.FrontImageURL = fields.FrontImageURL
@@ -458,6 +458,20 @@ func (m *mockRepo) SumPurchaseCostByInvoiceDate(_ context.Context, invoiceDate s
 		}
 	}
 	return total, nil
+}
+
+func (m *mockRepo) GetPendingReceiptByInvoiceDate(_ context.Context, invoiceDates []string) (map[string]int, error) {
+	result := make(map[string]int)
+	dateSet := make(map[string]bool)
+	for _, d := range invoiceDates {
+		dateSet[d] = true
+	}
+	for _, p := range m.purchases {
+		if dateSet[p.InvoiceDate] && !p.WasRefunded && p.ReceivedAt == nil {
+			result[p.InvoiceDate] += p.BuyCostCents
+		}
+	}
+	return result, nil
 }
 
 func (m *mockRepo) GetCashflowConfig(_ context.Context) (*CashflowConfig, error) {
@@ -600,6 +614,16 @@ func (m *mockRepo) SetEbayExportFlag(_ context.Context, purchaseID string, flagg
 		return ErrPurchaseNotFound
 	}
 	p.EbayExportFlaggedAt = &flaggedAt
+	return nil
+}
+
+func (m *mockRepo) SetReceivedAt(_ context.Context, purchaseID string, receivedAt time.Time) error {
+	p, ok := m.purchases[purchaseID]
+	if !ok {
+		return ErrPurchaseNotFound
+	}
+	receivedAtStr := receivedAt.Format("2006-01-02T15:04:05Z07:00")
+	p.ReceivedAt = &receivedAtStr
 	return nil
 }
 

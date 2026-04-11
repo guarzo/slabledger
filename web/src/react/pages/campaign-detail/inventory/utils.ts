@@ -277,8 +277,89 @@ export function isCardShowCandidate(item: AgingItem): boolean {
   if (item.signals?.profitCaptureDeclining || item.signals?.profitCaptureSpike || item.signals?.crackCandidate) {
     return true;
   }
-  if (isHotSeller(item)) return true;
-  if (item.purchase.gradeValue === 7) return true;
-  if (item.currentMarket?.trend30d != null && item.currentMarket.trend30d > 0.05) return true;
-  return false;
+   if (isHotSeller(item)) return true;
+   if (item.purchase.gradeValue === 7) return true;
+   if (item.currentMarket?.trend30d != null && item.currentMarket.trend30d > 0.05) return true;
+   return false;
+}
+
+/** Format an ISO date string to "Mon D, YYYY" format (e.g., "Apr 5, 2026"). */
+export function formatReceivedDate(iso: string): string {
+   const d = new Date(iso);
+   if (isNaN(d.getTime())) return iso;
+   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+/** Format a YYYY-MM-DD date string to "Mon D, YYYY" format (e.g., "Apr 3, 2026"). Uses local Date constructor to avoid UTC shift. */
+export function formatShipDate(dateStr: string): string {
+  const parts = dateStr.split('-').map(Number);
+  if (parts.length !== 3 || parts.some(isNaN)) return dateStr;
+  const [year, month, day] = parts;
+  const d = new Date(year, month - 1, day);
+  if (isNaN(d.getTime())) return dateStr;
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+export interface SyncDotProps {
+  color: string;   // CSS color value
+  tooltip: string; // native title= tooltip string
+}
+
+/** Returns color + tooltip for the per-row sync freshness dot.
+ *  Green = all 3 synced within 24h
+ *  Yellow = ≥1 synced within 24h, not all 3
+ *  Red = none synced within 24h (or all timestamps missing)
+ */
+export function syncDotProps(
+  clSyncedAt: string | undefined,
+  mmValueUpdatedAt: string | undefined,
+  dhLastSyncedAt: string | undefined,
+): SyncDotProps {
+  const now = Date.now();
+  const threshold = 24 * 60 * 60 * 1000; // 24h in ms
+
+  function within24h(ts: string | undefined): boolean {
+    if (!ts) return false;
+    const t = new Date(ts).getTime();
+    if (isNaN(t) || t > now) return false;
+    return now - t < threshold;
+  }
+
+  const cl = within24h(clSyncedAt);
+  const mm = within24h(mmValueUpdatedAt);
+  const dh = within24h(dhLastSyncedAt);
+
+  const freshCount = [cl, mm, dh].filter(Boolean).length;
+
+  function fmt(label: string, ts: string | undefined): string {
+    if (!ts) return `${label} · never`;
+    const t = new Date(ts).getTime();
+    if (isNaN(t)) return `${label} · unknown`;
+    if (t > now) return `${label} · just now`;
+    const diffMs = now - t;
+    const diffH = Math.floor(diffMs / 3600000);
+    const diffM = Math.floor(diffMs / 60000);
+    if (diffM < 1) return `${label} · just now`;
+    if (diffH < 1) return `${label} · ${diffM}m ago`;
+    if (diffH < 24) return `${label} · ${diffH}h ago`;
+    const diffD = Math.floor(diffMs / 86400000);
+    return `${label} · ${diffD}d ago`;
+  }
+
+  const tooltip = [
+    fmt('CL', clSyncedAt),
+    fmt('MM', mmValueUpdatedAt),
+    fmt('DH', dhLastSyncedAt),
+  ].join('\n');
+
+  let color: string;
+  if (freshCount === 3) {
+    color = '#22c55e'; // green
+  } else if (freshCount >= 1) {
+    color = '#f59e0b'; // yellow/amber
+  } else {
+    color = '#ef4444'; // red
+  }
+
+  return { color, tooltip };
 }

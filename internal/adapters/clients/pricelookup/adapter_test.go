@@ -120,29 +120,29 @@ func TestGradePrice(t *testing.T) {
 
 func TestGradeInfo(t *testing.T) {
 	lsbg := &pricing.LastSoldByGrade{
-		PSA10: &pricing.GradeSaleInfo{LastSoldPrice: 50.0, SaleCount: 5},
-		PSA9:  &pricing.GradeSaleInfo{LastSoldPrice: 30.0, SaleCount: 3},
-		PSA8:  &pricing.GradeSaleInfo{LastSoldPrice: 15.0, SaleCount: 2},
-		PSA7:  &pricing.GradeSaleInfo{LastSoldPrice: 10.0, SaleCount: 4},
-		PSA6:  &pricing.GradeSaleInfo{LastSoldPrice: 7.0, SaleCount: 6},
-		Raw:   &pricing.GradeSaleInfo{LastSoldPrice: 5.0, SaleCount: 10},
+		PSA10: &pricing.GradeSaleInfo{LastSoldPrice: 5000, SaleCount: 5},
+		PSA9:  &pricing.GradeSaleInfo{LastSoldPrice: 3000, SaleCount: 3},
+		PSA8:  &pricing.GradeSaleInfo{LastSoldPrice: 1500, SaleCount: 2},
+		PSA7:  &pricing.GradeSaleInfo{LastSoldPrice: 1000, SaleCount: 4},
+		PSA6:  &pricing.GradeSaleInfo{LastSoldPrice: 700, SaleCount: 6},
+		Raw:   &pricing.GradeSaleInfo{LastSoldPrice: 500, SaleCount: 10},
 	}
 
 	tests := []struct {
 		name          string
 		grade         float64
-		expectedPrice float64
+		expectedPrice int64
 		expectedCount int
 	}{
-		{"psa10", 10, 50.0, 5},
-		{"psa9", 9, 30.0, 3},
-		{"psa8", 8, 15.0, 2},
-		{"psa8.5 uses floor", 8.5, 15.0, 2},
-		{"psa7", 7, 10.0, 4},
-		{"psa7.5 uses floor", 7.5, 10.0, 4},
-		{"psa6", 6, 7.0, 6},
-		{"psa6.5 uses floor", 6.5, 7.0, 6},
-		{"raw", 0, 5.0, 10},
+		{"psa10", 10, 5000, 5},
+		{"psa9", 9, 3000, 3},
+		{"psa8", 8, 1500, 2},
+		{"psa8.5 uses floor", 8.5, 1500, 2},
+		{"psa7", 7, 1000, 4},
+		{"psa7.5 uses floor", 7.5, 1000, 4},
+		{"psa6", 6, 700, 6},
+		{"psa6.5 uses floor", 6.5, 700, 6},
+		{"raw", 0, 500, 10},
 	}
 
 	for _, tt := range tests {
@@ -153,7 +153,7 @@ func TestGradeInfo(t *testing.T) {
 				return
 			}
 			if got.LastSoldPrice != tt.expectedPrice {
-				t.Errorf("gradeInfo(lsbg, %g).LastSoldPrice = %v, want %v", tt.grade, got.LastSoldPrice, tt.expectedPrice)
+				t.Errorf("gradeInfo(lsbg, %g).LastSoldPrice = %d, want %d", tt.grade, got.LastSoldPrice, tt.expectedPrice)
 			}
 			if got.SaleCount != tt.expectedCount {
 				t.Errorf("gradeInfo(lsbg, %g).SaleCount = %d, want %d", tt.grade, got.SaleCount, tt.expectedCount)
@@ -163,7 +163,7 @@ func TestGradeInfo(t *testing.T) {
 
 	// Test nil sub-fields
 	t.Run("nil psa10", func(t *testing.T) {
-		partial := &pricing.LastSoldByGrade{Raw: &pricing.GradeSaleInfo{LastSoldPrice: 1.0}}
+		partial := &pricing.LastSoldByGrade{Raw: &pricing.GradeSaleInfo{LastSoldPrice: 100}}
 		got := gradeInfo(partial, 10.0)
 		if got != nil {
 			t.Errorf("expected nil for missing PSA10, got %+v", got)
@@ -317,10 +317,10 @@ func TestGetLastSoldCents_ValidGrades(t *testing.T) {
 		lookupFn: func(_ context.Context, _ string, _ domainCards.Card) (*pricing.Price, error) {
 			return &pricing.Price{
 				LastSoldByGrade: &pricing.LastSoldByGrade{
-					PSA10: &pricing.GradeSaleInfo{LastSoldPrice: 100.50, SaleCount: 5},
-					PSA9:  &pricing.GradeSaleInfo{LastSoldPrice: 50.25, SaleCount: 3},
-					PSA8:  &pricing.GradeSaleInfo{LastSoldPrice: 25.00, SaleCount: 2},
-					Raw:   &pricing.GradeSaleInfo{LastSoldPrice: 10.00, SaleCount: 10},
+					PSA10: &pricing.GradeSaleInfo{LastSoldPrice: 10050, SaleCount: 5},
+					PSA9:  &pricing.GradeSaleInfo{LastSoldPrice: 5025, SaleCount: 3},
+					PSA8:  &pricing.GradeSaleInfo{LastSoldPrice: 2500, SaleCount: 2},
+					Raw:   &pricing.GradeSaleInfo{LastSoldPrice: 1000, SaleCount: 10},
 				},
 			}, nil
 		},
@@ -397,7 +397,7 @@ func TestGetLastSoldCents_PSA7(t *testing.T) {
 		lookupFn: func(_ context.Context, _ string, _ domainCards.Card) (*pricing.Price, error) {
 			return &pricing.Price{
 				LastSoldByGrade: &pricing.LastSoldByGrade{
-					PSA7: &pricing.GradeSaleInfo{LastSoldPrice: 150.00},
+					PSA7: &pricing.GradeSaleInfo{LastSoldPrice: 15000},
 				},
 			}, nil
 		},
@@ -422,7 +422,7 @@ func TestGetLastSoldCents_RawBehavior(t *testing.T) {
 			name: "uses LastSoldByGrade.Raw when available",
 			price: &pricing.Price{
 				Grades:          pricing.GradedPrices{RawCents: 500},
-				LastSoldByGrade: &pricing.LastSoldByGrade{Raw: &pricing.GradeSaleInfo{LastSoldPrice: 8.00}},
+				LastSoldByGrade: &pricing.LastSoldByGrade{Raw: &pricing.GradeSaleInfo{LastSoldPrice: 800}},
 			},
 			expected: 800,
 		},
@@ -459,7 +459,7 @@ func TestGetMarketSnapshot_FullSnapshot(t *testing.T) {
 		lookupFn: func(_ context.Context, _ string, _ domainCards.Card) (*pricing.Price, error) {
 			return &pricing.Price{
 				LastSoldByGrade: &pricing.LastSoldByGrade{
-					PSA10: &pricing.GradeSaleInfo{LastSoldPrice: 100.0, LastSoldDate: "2025-01-15", SaleCount: 5},
+					PSA10: &pricing.GradeSaleInfo{LastSoldPrice: 10000, LastSoldDate: "2025-01-15", SaleCount: 5},
 				},
 				Grades: pricing.GradedPrices{PSA10Cents: 9500},
 				Market: &pricing.MarketData{
@@ -691,7 +691,7 @@ func TestGetMarketSnapshot_LastSoldFallbackChain(t *testing.T) {
 			lookupFn: func(_ context.Context, _ string, _ domainCards.Card) (*pricing.Price, error) {
 				return &pricing.Price{
 					LastSoldByGrade: &pricing.LastSoldByGrade{
-						PSA10: &pricing.GradeSaleInfo{LastSoldPrice: 200.0, SaleCount: 5},
+						PSA10: &pricing.GradeSaleInfo{LastSoldPrice: 20000, SaleCount: 5},
 					},
 					GradeDetails: map[string]*pricing.GradeDetail{
 						"psa10": {

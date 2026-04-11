@@ -41,10 +41,13 @@ declare module './client' {
     getDHUnmatched(): Promise<DHUnmatchedResponse>;
     fixDHMatch(req: DHFixMatchRequest): Promise<DHFixMatchResponse>;
     selectDHMatch(req: DHSelectMatchRequest): Promise<DHFixMatchResponse>;
+    dismissDHMatch(purchaseId: string): Promise<{ status: string }>;
+    undismissDHMatch(purchaseId: string): Promise<{ status: string }>;
     approveDHPush(purchaseId: string): Promise<{ status: string }>;
     getDHPushConfig(): Promise<DHPushConfig>;
     saveDHPushConfig(config: DHPushConfig): Promise<DHPushConfig>;
     getPSASyncStatus(): Promise<PSASyncStatusResponse>;
+    triggerPSASyncRefresh(): Promise<{ status: string }>;
   }
 }
 
@@ -180,6 +183,14 @@ proto.selectDHMatch = async function (this: APIClient, req: DHSelectMatchRequest
   return this.post<DHFixMatchResponse>('/dh/select-match', req);
 };
 
+proto.dismissDHMatch = async function (this: APIClient, purchaseId: string): Promise<{ status: string }> {
+  return this.post<{ status: string }>('/dh/dismiss', { purchaseId });
+};
+
+proto.undismissDHMatch = async function (this: APIClient, purchaseId: string): Promise<{ status: string }> {
+  return this.post<{ status: string }>('/dh/undismiss', { purchaseId });
+};
+
 proto.approveDHPush = async function (this: APIClient, purchaseId: string): Promise<{ status: string }> {
   return this.post<{ status: string }>(`/dh/approve/${encodeURIComponent(purchaseId)}`);
 };
@@ -194,4 +205,8 @@ proto.saveDHPushConfig = async function (this: APIClient, config: DHPushConfig):
 
 proto.getPSASyncStatus = async function (this: APIClient): Promise<PSASyncStatusResponse> {
   return this.get<PSASyncStatusResponse>('/admin/psa-sync/status');
+};
+
+proto.triggerPSASyncRefresh = async function (this: APIClient) {
+  return this.post<{ status: string }>('/admin/psa-sync/refresh');
 };

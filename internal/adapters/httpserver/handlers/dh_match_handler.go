@@ -79,10 +79,11 @@ func (h *DHHandler) runBulkMatch(ctx context.Context, purchases []campaigns.Purc
 			break
 		}
 
-		// Skip purchases that are already matched, manually handled, or held
-		// for safety review. Held cards already have a valid DH card ID and
-		// are awaiting human approval — re-matching would clear the hold.
-		if p.DHPushStatus == campaigns.DHPushStatusMatched || p.DHPushStatus == campaigns.DHPushStatusManual || p.DHPushStatus == campaigns.DHPushStatusHeld {
+		// Skip purchases that are already matched, manually handled, held
+		// for safety review, or dismissed as unmatchable. Held cards already
+		// have a valid DH card ID and are awaiting human approval — re-matching
+		// would clear the hold.
+		if p.DHPushStatus == campaigns.DHPushStatusMatched || p.DHPushStatus == campaigns.DHPushStatusManual || p.DHPushStatus == campaigns.DHPushStatusHeld || p.DHPushStatus == campaigns.DHPushStatusDismissed {
 			skipped++
 			continue
 		}

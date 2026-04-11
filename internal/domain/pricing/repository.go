@@ -53,6 +53,9 @@ type APIUsageStats struct {
 type PricingDiagnostics struct {
 	TotalMappedCards int              `json:"totalMappedCards"`
 	UnmappedCards    int              `json:"unmappedCards"`
+	CLPricedCards    int              `json:"clPricedCards"`
+	MMPricedCards    int              `json:"mmPricedCards"`
+	TotalUnsold      int              `json:"totalUnsold"`
 	RecentFailures   []FailureSummary `json:"recentFailures"`
 }
 

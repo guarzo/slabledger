@@ -223,6 +223,19 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
     });
   }
 
+  const handleDelete = useCallback(async (item: AgingItem) => {
+    const name = item.purchase.cardName || 'this card';
+    if (!window.confirm(`Delete "${name}"? This will permanently remove it and any associated sale.`)) return;
+    try {
+      await api.deletePurchase(item.purchase.campaignId, item.purchase.id);
+      toast.success(`Deleted "${name}"`);
+      if (expandedId === item.purchase.id) setExpandedId(null);
+      invalidateInventory({ sellSheet: true });
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Failed to delete purchase'));
+    }
+  }, [toast, expandedId, invalidateInventory]);
+
   function handlePriceSaved() {
     invalidateInventory({ sellSheet: true });
   }
@@ -269,6 +282,7 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
     handleApproveDHPush,
     handleFlagSubmit,
     handlePrint,
+    handleDelete,
     toggleSelect,
     toggleAll,
     toggleExpand,

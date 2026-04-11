@@ -96,6 +96,13 @@ func Default() Config {
 			InitialDelay: 5 * time.Minute,
 			ContentHour:  5, // 5 AM UTC
 		},
+		SocialPublish: SocialPublishConfig{
+			RenderServiceURL: "", // disabled by default; set to enable auto-publishing
+			StartHour:        9,  // 9 AM server local time
+			EndHour:          21, // 9 PM server local time
+			IntervalMinutes:  60, // check every hour
+			MaxDaily:         10, // max 10 posts per day
+		},
 		MetricsPoll: MetricsPollConfig{
 			Enabled:  false, // disabled by default
 			Interval: 6 * time.Hour,

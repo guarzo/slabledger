@@ -22,6 +22,7 @@ const (
 // MarketDataClient is the subset of the DH client needed for price lookups.
 type MarketDataClient interface {
 	RecentSales(ctx context.Context, cardID int) ([]dh.RecentSale, error)
+	CardLookup(ctx context.Context, cardID int) (*dh.CardLookupResponse, error)
 }
 
 // CardIDLookup resolves a card to its external DH card ID.
@@ -109,7 +110,25 @@ func (p *Provider) GetPrice(ctx context.Context, card pricing.Card) (*pricing.Pr
 		return nil, nil
 	}
 
-	return buildPrice(card.Name, sales), nil
+	price := buildPrice(card.Name, sales)
+	if price == nil {
+		return nil, nil
+	}
+
+	// Enrich with listing data from CardLookup (BestAsk, ActiveAsks, LastSale).
+	// Non-fatal: if the call fails we still return sales-based pricing.
+	lookup, err := p.client.CardLookup(ctx, cardID)
+	if err != nil {
+		if p.logger != nil {
+			p.logger.Warn(ctx, "dhprice: CardLookup failed (non-fatal)",
+				observability.String("card", card.Name),
+				observability.Err(err))
+		}
+	} else if lookup != nil && hasMarketData(&lookup.MarketData) {
+		applyMarketData(price, &lookup.MarketData)
+	}
+
+	return price, nil
 }
 
 // LookupCard delegates to GetPrice after constructing a pricing.Card.
@@ -150,10 +169,18 @@ func buildPrice(productName string, sales []dh.RecentSale) *pricing.Price {
 		platform string
 	}
 
+	// lastSale tracks the most recent sale for each grade.
+	type lastSale struct {
+		soldAt string
+		price  float64
+		count  int
+	}
+
 	// Group sale prices by (grade, platform) and by grade (aggregate).
 	byGradePlatform := make(map[gradeplatform][]float64)
 	byGrade := make(map[pricing.Grade][]float64)
 	platforms := make(map[string]bool)
+	lastByGrade := make(map[pricing.Grade]*lastSale)
 
 	for _, s := range sales {
 		key := s.GradingCompany + " " + s.Grade
@@ -166,6 +193,17 @@ func buildPrice(productName string, sales []dh.RecentSale) *pricing.Price {
 		if platform != "" {
 			byGradePlatform[gradeplatform{g, platform}] = append(byGradePlatform[gradeplatform{g, platform}], s.Price)
 			platforms[platform] = true
+		}
+
+		// Track the most recent sale per grade (lexicographic comparison works for ISO dates).
+		if ls, ok := lastByGrade[g]; !ok {
+			lastByGrade[g] = &lastSale{soldAt: s.SoldAt, price: s.Price, count: 1}
+		} else {
+			ls.count++
+			if s.SoldAt > ls.soldAt {
+				ls.soldAt = s.SoldAt
+				ls.price = s.Price
+			}
 		}
 	}
 
@@ -233,16 +271,76 @@ func buildPrice(productName string, sales []dh.RecentSale) *pricing.Price {
 	}
 	sort.Strings(sources)
 
-	return &pricing.Price{
-		ProductName:  productName,
-		Amount:       amount,
-		Currency:     "USD",
-		Source:       pricing.SourceDH,
-		Grades:       grades,
-		Confidence:   dhConfidence,
-		GradeDetails: details,
-		Sources:      sources,
+	// Build last-sold data from the most recent sale per grade.
+	var lsbg *pricing.LastSoldByGrade
+	if len(lastByGrade) > 0 {
+		lsbg = &pricing.LastSoldByGrade{}
+		for g, ls := range lastByGrade {
+			info := &pricing.GradeSaleInfo{
+				LastSoldPrice: mathutil.ToCents(ls.price),
+				LastSoldDate:  ls.soldAt,
+				SaleCount:     ls.count,
+			}
+			switch g {
+			case pricing.GradePSA10:
+				lsbg.PSA10 = info
+			case pricing.GradePSA9:
+				lsbg.PSA9 = info
+			case pricing.GradePSA8:
+				lsbg.PSA8 = info
+			case pricing.GradePSA7:
+				lsbg.PSA7 = info
+			case pricing.GradePSA6:
+				lsbg.PSA6 = info
+			case pricing.GradePSA95, pricing.GradeBGS10:
+				// GradePSA95 (CGC/BGS 9.5) and BGS10 are tracked in GradedPrices
+				// but LastSoldByGrade only has PSA tiers — skip.
+			case pricing.GradeRaw:
+				lsbg.Raw = info
+			}
+		}
 	}
+
+	return &pricing.Price{
+		ProductName:     productName,
+		Amount:          amount,
+		Currency:        "USD",
+		Source:          pricing.SourceDH,
+		Grades:          grades,
+		Confidence:      dhConfidence,
+		GradeDetails:    details,
+		Sources:         sources,
+		LastSoldByGrade: lsbg,
+	}
+}
+
+// hasMarketData reports whether md contains at least one meaningful value.
+// Returns false when the API response has all zero/nil fields, preventing
+// applyMarketData from setting price.Market to an empty struct.
+func hasMarketData(md *dh.CardLookupMarketData) bool {
+	if md == nil {
+		return false
+	}
+	return (md.BestAsk != nil && *md.BestAsk > 0) || md.ActiveAsks > 0 || md.Volume24h > 0
+}
+
+// applyMarketData enriches a Price with listing/market data from the DH CardLookup API.
+func applyMarketData(price *pricing.Price, md *dh.CardLookupMarketData) {
+	if md == nil {
+		return
+	}
+	market := &pricing.MarketData{
+		ActiveListings: md.ActiveAsks,
+	}
+	if md.BestAsk != nil && *md.BestAsk > 0 {
+		market.LowestListing = mathutil.ToCents(*md.BestAsk)
+	}
+	if md.Volume24h > 0 {
+		// Extrapolate 24h volume to 30d/90d estimates.
+		market.SalesLast30d = md.Volume24h * 30
+		market.SalesLast90d = md.Volume24h * 90
+	}
+	price.Market = market
 }
 
 // median returns the median of a float64 slice. The slice is sorted in place.

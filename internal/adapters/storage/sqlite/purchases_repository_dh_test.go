@@ -17,30 +17,73 @@ func TestUpdatePurchaseDHFields(t *testing.T) {
 
 	createTestCampaign(t, db, "camp-dh", "DH Fields Test")
 
-	t.Run("success", func(t *testing.T) {
-		p := newTestPurchase("camp-dh", "DH000001")
-		require.NoError(t, repo.CreatePurchase(ctx, p))
+	tests := []struct {
+		name             string
+		cert             string
+		update           campaigns.DHFieldsUpdate
+		wantCardID       int
+		wantInventoryID  int
+		wantCertStatus   string
+		wantPriceCents   int
+		wantChannelsJSON string
+		wantDHStatus     campaigns.DHStatus
+		wantLastSyncedAt string
+	}{
+		{
+			name: "all fields written",
+			cert: "DH000001",
+			update: campaigns.DHFieldsUpdate{
+				CardID:            12345,
+				InventoryID:       67890,
+				CertStatus:        "matched",
+				ListingPriceCents: 95000,
+				ChannelsJSON:      `["ebay","tcgplayer"]`,
+				DHStatus:          campaigns.DHStatusListed,
+				LastSyncedAt:      "2026-04-11T00:00:00Z",
+			},
+			wantCardID:       12345,
+			wantInventoryID:  67890,
+			wantCertStatus:   "matched",
+			wantPriceCents:   95000,
+			wantChannelsJSON: `["ebay","tcgplayer"]`,
+			wantDHStatus:     campaigns.DHStatusListed,
+			wantLastSyncedAt: "2026-04-11T00:00:00Z",
+		},
+		{
+			name: "partial fields written",
+			cert: "DH000003",
+			update: campaigns.DHFieldsUpdate{
+				CardID:     777,
+				CertStatus: "pending",
+				DHStatus:   campaigns.DHStatusInStock,
+			},
+			wantCardID:       777,
+			wantInventoryID:  0,
+			wantCertStatus:   "pending",
+			wantPriceCents:   0,
+			wantChannelsJSON: "",
+			wantDHStatus:     campaigns.DHStatusInStock,
+			wantLastSyncedAt: "",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p := newTestPurchase("camp-dh", tc.cert)
+			require.NoError(t, repo.CreatePurchase(ctx, p))
 
-		update := campaigns.DHFieldsUpdate{
-			CardID:            12345,
-			InventoryID:       67890,
-			CertStatus:        "matched",
-			ListingPriceCents: 95000,
-			ChannelsJSON:      `["ebay","tcgplayer"]`,
-			DHStatus:          campaigns.DHStatusListed,
-		}
-		err := repo.UpdatePurchaseDHFields(ctx, p.ID, update)
-		require.NoError(t, err)
+			require.NoError(t, repo.UpdatePurchaseDHFields(ctx, p.ID, tc.update))
 
-		got, err := repo.GetPurchase(ctx, p.ID)
-		require.NoError(t, err)
-		assert.Equal(t, 12345, got.DHCardID)
-		assert.Equal(t, 67890, got.DHInventoryID)
-		assert.Equal(t, "matched", got.DHCertStatus)
-		assert.Equal(t, 95000, got.DHListingPriceCents)
-		assert.Equal(t, `["ebay","tcgplayer"]`, got.DHChannelsJSON)
-		assert.Equal(t, campaigns.DHStatusListed, got.DHStatus)
-	})
+			got, err := repo.GetPurchase(ctx, p.ID)
+			require.NoError(t, err)
+			assert.Equal(t, tc.wantCardID, got.DHCardID)
+			assert.Equal(t, tc.wantInventoryID, got.DHInventoryID)
+			assert.Equal(t, tc.wantCertStatus, got.DHCertStatus)
+			assert.Equal(t, tc.wantPriceCents, got.DHListingPriceCents)
+			assert.Equal(t, tc.wantChannelsJSON, got.DHChannelsJSON)
+			assert.Equal(t, tc.wantDHStatus, got.DHStatus)
+			assert.Equal(t, tc.wantLastSyncedAt, got.DHLastSyncedAt)
+		})
+	}
 
 	t.Run("overwrite existing fields", func(t *testing.T) {
 		p := newTestPurchase("camp-dh", "DH000002")

@@ -6,7 +6,7 @@ import { useToast } from '../../../contexts/ToastContext';
 import { queryKeys } from '../../../queries/queryKeys';
 import PriceSignalCard from './PriceSignalCard';
 import CompSummaryPanel from './CompSummaryPanel';
-import { costBasis } from './utils';
+import { costBasis, formatShipDate } from './utils';
 import { PriceDecisionBar, buildPriceSources, preSelectSource, Button } from '../../../ui';
 
 interface ExpandedDetailProps {
@@ -118,10 +118,11 @@ export default function ExpandedDetail({ item, onReviewed, campaignId, onOpenFla
 
   return (
     <div className="glass-vrow-expanded px-6 py-4 border-t border-[rgba(255,255,255,0.05)]">
-      {/* 3x2 price signal grid */}
+      {/* 3-column price signal grid, 8 cards */}
       <div className="grid grid-cols-3 gap-3 mb-4">
         <PriceSignalCard label="Cost Basis" valueCents={cb} />
         <PriceSignalCard label="Card Ladder" valueCents={clCents} />
+        <PriceSignalCard label="Market Movers" valueCents={mmCents} updatedAt={purchase.mmValueUpdatedAt} />
         <PriceSignalCard
           label="Market (Median)"
           valueCents={marketCents}
@@ -129,11 +130,14 @@ export default function ExpandedDetail({ item, onReviewed, campaignId, onOpenFla
         />
         <PriceSignalCard label="Last Sold" valueCents={lastSoldCents} />
         <PriceSignalCard label="Lowest eBay Listing" valueCents={snap?.lowestListCents ?? 0} />
-        <PriceSignalCard label="Market Movers" valueCents={mmCents} updatedAt={purchase.mmValueUpdatedAt} />
         <PriceSignalCard
           label="Current Override"
           valueCents={purchase.overridePriceCents ?? 0}
           highlight={purchase.overridePriceCents ? 'warning' : 'muted'}
+        />
+        <PriceSignalCard
+          label="DH Listed"
+          valueCents={purchase.dhListingPriceCents ?? 0}
         />
       </div>
 
@@ -156,7 +160,19 @@ export default function ExpandedDetail({ item, onReviewed, campaignId, onOpenFla
         <CLSyncIndicator syncedAt={purchase.clSyncedAt} />
       )}
 
-      {/* DH Push Held action */}
+      {/* Ship date chip (only when not yet received) */}
+      {purchase.psaShipDate && !purchase.receivedAt && (
+        <div className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-[rgba(148,163,184,0.15)] bg-[rgba(148,163,184,0.08)] px-2.5 py-1">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-[var(--text-muted)] shrink-0">
+            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+            <line x1="16" y1="2" x2="16" y2="6"/>
+            <line x1="8" y1="2" x2="8" y2="6"/>
+            <line x1="3" y1="10" x2="21" y2="10"/>
+          </svg>
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Shipped</span>
+          <span className="text-xs text-[var(--text-muted)]">{formatShipDate(purchase.psaShipDate)}</span>
+        </div>
+      )}
       {item.purchase.dhPushStatus === 'held' && onApproveDHPush && (
         <div className="mt-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
           <div className="flex items-center justify-between">

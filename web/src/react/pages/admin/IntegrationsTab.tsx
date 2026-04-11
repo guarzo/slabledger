@@ -1,6 +1,5 @@
 import { CardLadderTab } from './CardLadderTab';
 import { DHTab } from './DHTab';
-import { DHPushConfigCard } from './DHPushConfigCard';
 import { InstagramTab } from './InstagramTab';
 import { MarketMoversTab } from './MarketMoversTab';
 import { PSASyncTab } from './PSASyncTab';
@@ -37,9 +36,6 @@ export function IntegrationsTab({ enabled = true }: { enabled?: boolean }) {
           <StatusBadge connected={dhHealthy} label={dhHealthy ? 'Healthy' : 'Unknown'} />
         </div>
         <DHTab enabled={enabled} />
-        <div className="mt-4">
-          <DHPushConfigCard />
-        </div>
       </section>
 
       <hr className="border-[var(--surface-2)]" />

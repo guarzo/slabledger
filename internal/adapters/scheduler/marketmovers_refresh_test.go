@@ -405,3 +405,141 @@ func TestResolveCollectibleID_NoCertNumber_GoesDirectToNameSearch(t *testing.T) 
 	assert.Equal(t, int64(300), id)
 	assert.Equal(t, 1, callCount, "no cert number — only one search should be made")
 }
+
+// ---------------------------------------------------------------------------
+// tokenMatchesTitle — tokenized matching tests
+// ---------------------------------------------------------------------------
+
+func TestTokenMatchesTitle(t *testing.T) {
+	cases := []struct {
+		name        string
+		cardName    string
+		searchTitle string
+		want        bool
+	}{
+		{
+			name:        "exact match short name",
+			cardName:    "Charizard",
+			searchTitle: "Charizard Base Set PSA 10",
+			want:        true,
+		},
+		{
+			name:        "PSA title reordered in MM",
+			cardName:    "2022 POKEMON SWORD & SHIELD BRILLIANT STARS CHARIZARD VSTAR",
+			searchTitle: "Charizard VSTAR 2022 Sword & Shield Brilliant Stars PSA 10",
+			want:        true,
+		},
+		{
+			name:        "completely different card",
+			cardName:    "Charizard",
+			searchTitle: "Pikachu VMAX PSA 10",
+			want:        false,
+		},
+		{
+			name:        "case insensitive",
+			cardName:    "Umbreon EX",
+			searchTitle: "UMBREON EX Full Art PSA 10",
+			want:        true,
+		},
+		{
+			name:        "noise words filtered",
+			cardName:    "Pokemon Holo Card Charizard",
+			searchTitle: "Charizard PSA 10",
+			want:        true,
+		},
+		{
+			name:        "no significant tokens falls back to contains",
+			cardName:    "ab cd",
+			searchTitle: "ab cd ef",
+			want:        true,
+		},
+		{
+			name:        "no significant tokens contains fails",
+			cardName:    "ab cd",
+			searchTitle: "ef gh",
+			want:        false,
+		},
+		{
+			name:        "empty cardName",
+			cardName:    "",
+			searchTitle: "Charizard PSA 10",
+			want:        true,
+		},
+		{
+			name:        "partial token overlap below 60%",
+			cardName:    "Alpha Beta Gamma Delta Epsilon",
+			searchTitle: "Alpha PSA 10",
+			want:        false,
+		},
+		{
+			name:        "60% threshold exactly met",
+			cardName:    "Brilliant Stars Charizard VSTAR 2022",
+			searchTitle: "Charizard VSTAR Brilliant Stars PSA 10",
+			want:        true,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := tokenMatchesTitle(tc.cardName, tc.searchTitle)
+			assert.Equal(t, tc.want, got, "tokenMatchesTitle(%q, %q)", tc.cardName, tc.searchTitle)
+		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// searchByCert and searchByNameGrade — tokenized matching integration tests
+// ---------------------------------------------------------------------------
+
+func TestSearch_TokenizedMatch(t *testing.T) {
+	tests := []struct {
+		name     string
+		wantID   int64
+		purchase *campaigns.Purchase
+		search   func(ctx context.Context, s *MarketMoversRefreshScheduler, purchase *campaigns.Purchase) (int64, error)
+	}{
+		{
+			name:   "searchByCert matches despite token reordering",
+			wantID: 5555,
+			purchase: &campaigns.Purchase{
+				CertNumber: "12345678",
+				CardName:   "2022 POKEMON SWORD & SHIELD BRILLIANT STARS CHARIZARD VSTAR",
+			},
+			search: func(ctx context.Context, s *MarketMoversRefreshScheduler, p *campaigns.Purchase) (int64, error) {
+				id, _, _, err := s.searchByCert(ctx, p)
+				return id, err
+			},
+		},
+		{
+			name:   "searchByNameGrade matches despite token reordering",
+			wantID: 6666,
+			purchase: &campaigns.Purchase{
+				CardName:   "2022 POKEMON SWORD & SHIELD BRILLIANT STARS CHARIZARD VSTAR",
+				Grader:     "PSA",
+				GradeValue: 10,
+			},
+			search: func(ctx context.Context, s *MarketMoversRefreshScheduler, p *campaigns.Purchase) (int64, error) {
+				id, _, _, err := s.searchByNameGrade(ctx, p)
+				return id, err
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				// MM returns title with reordered tokens — would fail with strings.Contains
+				_, _ = w.Write(buildMMSearchResponse(t, []map[string]any{
+					{"item": map[string]any{"id": tc.wantID, "searchTitle": "Charizard VSTAR 2022 Sword & Shield Brilliant Stars PSA 10", "collectibleType": "sports-card"}},
+				}))
+			}))
+			defer srv.Close()
+
+			s := newMMSchedulerWithServer(srv)
+			id, err := tc.search(context.Background(), s, tc.purchase)
+			require.NoError(t, err)
+			assert.Equal(t, tc.wantID, id, "should match despite token reordering")
+		})
+	}
+}

@@ -102,6 +102,21 @@ func ParsePSAExportRows(records [][]string) ([]PSAExportRow, []ParseError, error
 			invoiceDate = converted
 		}
 
+		shipDateStr := getField(colIdx("ship date"))
+		shipDate := ""
+		if shipDateStr != "" {
+			converted, dateErr := ParsePSADate(shipDateStr)
+			if dateErr != nil {
+				parseErrors = append(parseErrors, ParseError{
+					Row:     rowNum,
+					Field:   "ship date",
+					Message: fmt.Sprintf("Row %d: invalid ship date %q: %v", rowNum, shipDateStr, dateErr),
+				})
+				continue
+			}
+			shipDate = converted
+		}
+
 		wasRefunded := false
 		refundedStr := strings.ToLower(getField(colIdx("was refunded?")))
 		if refundedStr == "yes" || refundedStr == "true" || refundedStr == "1" {
@@ -116,7 +131,7 @@ func ParsePSAExportRows(records [][]string) ([]PSAExportRow, []ParseError, error
 			Grade:          grade,
 			PricePaid:      pricePaid,
 			PurchaseSource: getField(colIdx("purchase source")),
-			VaultStatus:    getField(colIdx("vault status")),
+			ShipDate:       shipDate,
 			InvoiceDate:    invoiceDate,
 			WasRefunded:    wasRefunded,
 			FrontImageURL:  getField(colIdx("front image url")),

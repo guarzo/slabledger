@@ -271,10 +271,10 @@ func (r *CampaignsRepository) UpdatePurchaseSnapshotStatus(ctx context.Context, 
 
 func (r *CampaignsRepository) UpdatePurchasePSAFields(ctx context.Context, id string, fields campaigns.PSAUpdateFields) error {
 	result, err := r.db.ExecContext(ctx,
-		`UPDATE campaign_purchases SET vault_status = ?, invoice_date = ?, was_refunded = ?,
+		`UPDATE campaign_purchases SET psa_ship_date = ?, invoice_date = ?, was_refunded = ?,
 			front_image_url = ?, back_image_url = ?, purchase_source = ?, psa_listing_title = ?, updated_at = ?
 		WHERE id = ?`,
-		fields.VaultStatus, fields.InvoiceDate, fields.WasRefunded,
+		fields.PSAShipDate, fields.InvoiceDate, fields.WasRefunded,
 		fields.FrontImageURL, fields.BackImageURL, fields.PurchaseSource, fields.PSAListingTitle,
 		time.Now(), id,
 	)

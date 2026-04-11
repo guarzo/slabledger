@@ -142,6 +142,7 @@ func (s *DHInventoryPollScheduler) poll(ctx context.Context) {
 			ListingPriceCents: item.ListingPriceCents,
 			ChannelsJSON:      dh.MarshalChannels(item.Channels),
 			DHStatus:          item.Status,
+			LastSyncedAt:      time.Now().UTC().Format(time.RFC3339),
 		}); updateErr != nil {
 			s.logger.Warn(ctx, "dh inventory poll: failed to update purchase",
 				observability.String("purchaseID", purchaseID),

@@ -175,6 +175,7 @@ type Config struct {
 	SnapshotHistory  SnapshotHistoryConfig
 	AdvisorRefresh   AdvisorRefreshConfig
 	SocialContent    SocialContentConfig
+	SocialPublish    SocialPublishConfig
 	MetricsPoll      MetricsPollConfig
 	PicksRefresh     PicksRefreshConfig
 	CardLadder       CardLadderConfig
@@ -231,6 +232,31 @@ type SocialContentConfig struct {
 	Interval     time.Duration // how often to run detection (default: 24h)
 	InitialDelay time.Duration // delay before first run (default: 5m)
 	ContentHour  int           // hour (0-23 UTC) to schedule runs; -1 = use InitialDelay (default: 5)
+}
+
+// SocialPublishConfig controls the automated Instagram publish scheduler.
+type SocialPublishConfig struct {
+	// RenderServiceURL is the base URL of the Puppeteer render sidecar.
+	// Empty = auto-publishing disabled; the scheduler is not started.
+	RenderServiceURL string
+	// StartHour is the earliest hour (0–23, server local time) for auto-publishing.
+	StartHour int
+	// EndHour is the latest hour (exclusive) for auto-publishing.
+	EndHour int
+	// IntervalMinutes controls how often the publish scheduler ticks.
+	IntervalMinutes int
+	// MaxDaily is the maximum number of posts auto-published per calendar day.
+	MaxDaily int
+}
+
+// ApplyDefaults fills in zero-valued fields with sensible defaults.
+func (c *SocialPublishConfig) ApplyDefaults() {
+	if c.IntervalMinutes == 0 {
+		c.IntervalMinutes = 60
+	}
+	if c.MaxDaily == 0 {
+		c.MaxDaily = 3
+	}
 }
 
 // GoogleSheetsConfig holds credentials and target for Google Sheets API access.

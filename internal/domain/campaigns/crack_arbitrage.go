@@ -3,6 +3,7 @@ package campaigns
 // CrackAnalysis contains the crack arbitrage analysis for a single PSA 8 card.
 type CrackAnalysis struct {
 	PurchaseID        string  `json:"purchaseId"`
+	CampaignID        string  `json:"campaignId"`
 	CardName          string  `json:"cardName"`
 	CertNumber        string  `json:"certNumber"`
 	Grade             float64 `json:"grade"`
@@ -22,7 +23,7 @@ type CrackAnalysis struct {
 // Formula: raw eBay sold price > PSA 8 purchase cost / 0.8765
 // The 0.8765 factor accounts for eBay fees (12.35%).
 func computeCrackAnalysis(
-	purchaseID, cardName, certNumber string,
+	purchaseID, campaignID, cardName, certNumber string,
 	grade float64,
 	buyCostCents, sourcingFeeCents, rawMarketCents, gradedMarketCents int,
 	ebayFeePct float64,
@@ -54,6 +55,7 @@ func computeCrackAnalysis(
 
 	return &CrackAnalysis{
 		PurchaseID:        purchaseID,
+		CampaignID:        campaignID,
 		CardName:          cardName,
 		CertNumber:        certNumber,
 		Grade:             grade,

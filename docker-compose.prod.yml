@@ -41,6 +41,24 @@ services:
           cpus: '0.5'
           memory: 512M
 
+  render-service:
+    image: ${DOCKERHUB_USERNAME:-guarzo}/slabledger-render:${VERSION:-latest}
+    container_name: slabledger-render
+    environment:
+      PORT: 3001
+      API_BASE_URL: "http://slabledger:8081"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
+    networks:
+      - app_network
+    profiles:
+      - social
+
 networks:
   app_network:
     driver: bridge

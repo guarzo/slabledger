@@ -190,13 +190,13 @@ proto.resolvePriceFlag = async function (this: APIClient, flagId: number): Promi
 
 // PSA pending items
 proto.listPSAPendingItems = async function (this: APIClient): Promise<{ items: PSAPendingItem[] }> {
-  return this.get<{ items: PSAPendingItem[] }>('/purchases/psa-pending');
+  return this.get<{ items: PSAPendingItem[] }>('/admin/psa-sync/pending');
 };
 
 proto.assignPSAPendingItem = async function (this: APIClient, id: string, campaignId: string): Promise<unknown> {
-  return this.post(`/purchases/psa-pending/${encodeURIComponent(id)}/assign`, { campaignId });
+  return this.post(`/admin/psa-sync/pending/${encodeURIComponent(id)}/assign`, { campaignId });
 };
 
 proto.dismissPSAPendingItem = async function (this: APIClient, id: string): Promise<void> {
-  await this.deleteResource(`/purchases/psa-pending/${encodeURIComponent(id)}`);
+  await this.deleteResource(`/admin/psa-sync/pending/${encodeURIComponent(id)}`);
 };
