@@ -530,570 +530,664 @@ func TestHandleSelectedSellSheet_TooManyIDs(t *testing.T) {
 
 // --- HandleGlobalInventory ---
 
-func TestHandleGlobalInventory_Success(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		GetGlobalInventoryAgingFn: func(_ context.Context) (*campaigns.InventoryResult, error) {
-			return &campaigns.InventoryResult{
-				Items:    []campaigns.AgingItem{{DaysHeld: 5}},
-				Warnings: []string{},
-			}, nil
+func TestHandleGlobalInventory(t *testing.T) {
+	tests := []struct {
+		name     string
+		method   string
+		setupSvc func() *mocks.MockCampaignService
+		wantCode int
+		check    func(t *testing.T, rec *httptest.ResponseRecorder)
+	}{
+		{
+			name:   "success",
+			method: http.MethodGet,
+			setupSvc: func() *mocks.MockCampaignService {
+				return &mocks.MockCampaignService{
+					GetGlobalInventoryAgingFn: func(_ context.Context) (*campaigns.InventoryResult, error) {
+						return &campaigns.InventoryResult{
+							Items:    []campaigns.AgingItem{{DaysHeld: 5}},
+							Warnings: []string{},
+						}, nil
+					},
+				}
+			},
+			wantCode: http.StatusOK,
+			check: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				t.Helper()
+				var result campaigns.InventoryResult
+				if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+					t.Fatalf("decode: %v", err)
+				}
+				if len(result.Items) != 1 {
+					t.Errorf("expected 1 item, got %d", len(result.Items))
+				}
+			},
+		},
+		{
+			name:     "method not allowed",
+			method:   http.MethodPost,
+			setupSvc: func() *mocks.MockCampaignService { return &mocks.MockCampaignService{} },
+			wantCode: http.StatusMethodNotAllowed,
+		},
+		{
+			name:   "service error",
+			method: http.MethodGet,
+			setupSvc: func() *mocks.MockCampaignService {
+				return &mocks.MockCampaignService{
+					GetGlobalInventoryAgingFn: func(_ context.Context) (*campaigns.InventoryResult, error) {
+						return nil, fmt.Errorf("database error")
+					},
+				}
+			},
+			wantCode: http.StatusInternalServerError,
 		},
 	}
-	h := newTestHandler(svc)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/inventory", nil)
-	rec := httptest.NewRecorder()
-	h.HandleGlobalInventory(rec, req)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newTestHandler(tc.setupSvc())
+			req := httptest.NewRequest(tc.method, "/api/inventory", nil)
+			rec := httptest.NewRecorder()
+			h.HandleGlobalInventory(rec, req)
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d; body: %s", rec.Code, rec.Body.String())
+			if rec.Code != tc.wantCode {
+				t.Fatalf("expected %d, got %d; body: %s", tc.wantCode, rec.Code, rec.Body.String())
+			}
+			if tc.check != nil {
+				tc.check(t, rec)
+			}
+		})
 	}
-	var result campaigns.InventoryResult
-	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if len(result.Items) != 1 {
-		t.Errorf("expected 1 item, got %d", len(result.Items))
-	}
-}
-
-func TestHandleGlobalInventory_MethodNotAllowed(t *testing.T) {
-	h := newTestHandler(&mocks.MockCampaignService{})
-
-	req := httptest.NewRequest(http.MethodPost, "/api/inventory", nil)
-	rec := httptest.NewRecorder()
-	h.HandleGlobalInventory(rec, req)
-
-	if rec.Code != http.StatusMethodNotAllowed {
-		t.Fatalf("expected 405, got %d", rec.Code)
-	}
-}
-
-func TestHandleGlobalInventory_ServiceError(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		GetGlobalInventoryAgingFn: func(_ context.Context) (*campaigns.InventoryResult, error) {
-			return nil, fmt.Errorf("database error")
-		},
-	}
-	h := newTestHandler(svc)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/inventory", nil)
-	rec := httptest.NewRecorder()
-	h.HandleGlobalInventory(rec, req)
-
-	if rec.Code != http.StatusInternalServerError {
-		t.Fatalf("expected 500, got %d", rec.Code)
-	}
-	decodeErrorResponse(t, rec)
 }
 
 // --- HandleGlobalSellSheet ---
 
-func TestHandleGlobalSellSheet_Success(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		GenerateGlobalSellSheetFn: func(_ context.Context) (*campaigns.SellSheet, error) {
-			return &campaigns.SellSheet{CampaignName: "Global", Items: []campaigns.SellSheetItem{}}, nil
+func TestHandleGlobalSellSheet(t *testing.T) {
+	tests := []struct {
+		name     string
+		setupSvc func() *mocks.MockCampaignService
+		wantCode int
+		check    func(t *testing.T, rec *httptest.ResponseRecorder)
+	}{
+		{
+			name: "success",
+			setupSvc: func() *mocks.MockCampaignService {
+				return &mocks.MockCampaignService{
+					GenerateGlobalSellSheetFn: func(_ context.Context) (*campaigns.SellSheet, error) {
+						return &campaigns.SellSheet{CampaignName: "Global", Items: []campaigns.SellSheetItem{}}, nil
+					},
+				}
+			},
+			wantCode: http.StatusOK,
+			check: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				t.Helper()
+				var result campaigns.SellSheet
+				if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+					t.Fatalf("decode: %v", err)
+				}
+				if result.CampaignName != "Global" {
+					t.Errorf("expected CampaignName=Global, got %q", result.CampaignName)
+				}
+			},
+		},
+		{
+			name: "service error",
+			setupSvc: func() *mocks.MockCampaignService {
+				return &mocks.MockCampaignService{
+					GenerateGlobalSellSheetFn: func(_ context.Context) (*campaigns.SellSheet, error) {
+						return nil, fmt.Errorf("sheet generation failed")
+					},
+				}
+			},
+			wantCode: http.StatusInternalServerError,
 		},
 	}
-	h := newTestHandler(svc)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/sell-sheet", nil)
-	rec := httptest.NewRecorder()
-	h.HandleGlobalSellSheet(rec, req)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newTestHandler(tc.setupSvc())
+			req := httptest.NewRequest(http.MethodPost, "/api/sell-sheet", nil)
+			rec := httptest.NewRecorder()
+			h.HandleGlobalSellSheet(rec, req)
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d; body: %s", rec.Code, rec.Body.String())
+			if rec.Code != tc.wantCode {
+				t.Fatalf("expected %d, got %d; body: %s", tc.wantCode, rec.Code, rec.Body.String())
+			}
+			if tc.check != nil {
+				tc.check(t, rec)
+			}
+		})
 	}
-	var result campaigns.SellSheet
-	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if result.CampaignName != "Global" {
-		t.Errorf("expected CampaignName=Global, got %q", result.CampaignName)
-	}
-}
-
-func TestHandleGlobalSellSheet_ServiceError(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		GenerateGlobalSellSheetFn: func(_ context.Context) (*campaigns.SellSheet, error) {
-			return nil, fmt.Errorf("sheet generation failed")
-		},
-	}
-	h := newTestHandler(svc)
-
-	req := httptest.NewRequest(http.MethodPost, "/api/sell-sheet", nil)
-	rec := httptest.NewRecorder()
-	h.HandleGlobalSellSheet(rec, req)
-
-	if rec.Code != http.StatusInternalServerError {
-		t.Fatalf("expected 500, got %d", rec.Code)
-	}
-	decodeErrorResponse(t, rec)
 }
 
 // --- HandleCrackCandidates ---
 
-func TestHandleCrackCandidates_Success(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		GetCrackCandidatesFn: func(_ context.Context, id string) ([]campaigns.CrackAnalysis, error) {
-			return []campaigns.CrackAnalysis{{PurchaseID: "p1"}}, nil
+func TestHandleCrackCandidates(t *testing.T) {
+	tests := []struct {
+		name     string
+		pathID   string
+		setupSvc func() *mocks.MockCampaignService
+		wantCode int
+		check    func(t *testing.T, rec *httptest.ResponseRecorder)
+	}{
+		{
+			name:   "success",
+			pathID: "c1",
+			setupSvc: func() *mocks.MockCampaignService {
+				return &mocks.MockCampaignService{
+					GetCrackCandidatesFn: func(_ context.Context, id string) ([]campaigns.CrackAnalysis, error) {
+						return []campaigns.CrackAnalysis{{PurchaseID: "p1"}}, nil
+					},
+				}
+			},
+			wantCode: http.StatusOK,
+			check: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				t.Helper()
+				var result []campaigns.CrackAnalysis
+				if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+					t.Fatalf("decode: %v", err)
+				}
+				if len(result) != 1 {
+					t.Errorf("expected 1 candidate, got %d", len(result))
+				}
+			},
+		},
+		{
+			name:   "campaign not found",
+			pathID: "c1",
+			setupSvc: func() *mocks.MockCampaignService {
+				return &mocks.MockCampaignService{
+					GetCrackCandidatesFn: func(_ context.Context, _ string) ([]campaigns.CrackAnalysis, error) {
+						return nil, campaigns.ErrCampaignNotFound
+					},
+				}
+			},
+			wantCode: http.StatusNotFound,
+		},
+		{
+			name:     "missing id",
+			pathID:   "", // no SetPathValue
+			setupSvc: func() *mocks.MockCampaignService { return &mocks.MockCampaignService{} },
+			wantCode: http.StatusBadRequest,
 		},
 	}
-	h := newTestHandler(svc)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/campaigns/c1/crack-candidates", nil)
-	req.SetPathValue("id", "c1")
-	rec := httptest.NewRecorder()
-	h.HandleCrackCandidates(rec, req)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newTestHandler(tc.setupSvc())
+			req := httptest.NewRequest(http.MethodGet, "/api/campaigns/c1/crack-candidates", nil)
+			if tc.pathID != "" {
+				req.SetPathValue("id", tc.pathID)
+			}
+			rec := httptest.NewRecorder()
+			h.HandleCrackCandidates(rec, req)
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d; body: %s", rec.Code, rec.Body.String())
+			if rec.Code != tc.wantCode {
+				t.Fatalf("expected %d, got %d; body: %s", tc.wantCode, rec.Code, rec.Body.String())
+			}
+			if tc.check != nil {
+				tc.check(t, rec)
+			}
+		})
 	}
-	var result []campaigns.CrackAnalysis
-	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if len(result) != 1 {
-		t.Errorf("expected 1 candidate, got %d", len(result))
-	}
-}
-
-func TestHandleCrackCandidates_CampaignNotFound(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		GetCrackCandidatesFn: func(_ context.Context, _ string) ([]campaigns.CrackAnalysis, error) {
-			return nil, campaigns.ErrCampaignNotFound
-		},
-	}
-	h := newTestHandler(svc)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/campaigns/c1/crack-candidates", nil)
-	req.SetPathValue("id", "c1")
-	rec := httptest.NewRecorder()
-	h.HandleCrackCandidates(rec, req)
-
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("expected 404, got %d", rec.Code)
-	}
-	decodeErrorResponse(t, rec)
-}
-
-func TestHandleCrackCandidates_MissingID(t *testing.T) {
-	h := newTestHandler(&mocks.MockCampaignService{})
-
-	req := httptest.NewRequest(http.MethodGet, "/api/campaigns//crack-candidates", nil)
-	// No SetPathValue — simulates missing ID
-	rec := httptest.NewRecorder()
-	h.HandleCrackCandidates(rec, req)
-
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d", rec.Code)
-	}
-	decodeErrorResponse(t, rec)
 }
 
 // --- HandleExpectedValues ---
 
-func TestHandleExpectedValues_Success(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		GetExpectedValuesFn: func(_ context.Context, id string) (*campaigns.EVPortfolio, error) {
-			return &campaigns.EVPortfolio{}, nil
+func TestHandleExpectedValues(t *testing.T) {
+	tests := []struct {
+		name     string
+		setupSvc func() *mocks.MockCampaignService
+		wantCode int
+	}{
+		{
+			name: "success",
+			setupSvc: func() *mocks.MockCampaignService {
+				return &mocks.MockCampaignService{
+					GetExpectedValuesFn: func(_ context.Context, id string) (*campaigns.EVPortfolio, error) {
+						return &campaigns.EVPortfolio{}, nil
+					},
+				}
+			},
+			wantCode: http.StatusOK,
+		},
+		{
+			name: "service error",
+			setupSvc: func() *mocks.MockCampaignService {
+				return &mocks.MockCampaignService{
+					GetExpectedValuesFn: func(_ context.Context, _ string) (*campaigns.EVPortfolio, error) {
+						return nil, fmt.Errorf("internal error")
+					},
+				}
+			},
+			wantCode: http.StatusInternalServerError,
 		},
 	}
-	h := newTestHandler(svc)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/campaigns/c1/expected-values", nil)
-	req.SetPathValue("id", "c1")
-	rec := httptest.NewRecorder()
-	h.HandleExpectedValues(rec, req)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newTestHandler(tc.setupSvc())
+			req := httptest.NewRequest(http.MethodGet, "/api/campaigns/c1/expected-values", nil)
+			req.SetPathValue("id", "c1")
+			rec := httptest.NewRecorder()
+			h.HandleExpectedValues(rec, req)
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d; body: %s", rec.Code, rec.Body.String())
+			if rec.Code != tc.wantCode {
+				t.Fatalf("expected %d, got %d; body: %s", tc.wantCode, rec.Code, rec.Body.String())
+			}
+		})
 	}
-}
-
-func TestHandleExpectedValues_ServiceError(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		GetExpectedValuesFn: func(_ context.Context, _ string) (*campaigns.EVPortfolio, error) {
-			return nil, fmt.Errorf("internal error")
-		},
-	}
-	h := newTestHandler(svc)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/campaigns/c1/expected-values", nil)
-	req.SetPathValue("id", "c1")
-	rec := httptest.NewRecorder()
-	h.HandleExpectedValues(rec, req)
-
-	if rec.Code != http.StatusInternalServerError {
-		t.Fatalf("expected 500, got %d", rec.Code)
-	}
-	decodeErrorResponse(t, rec)
 }
 
 // --- HandleEvaluatePurchase ---
 
-func TestHandleEvaluatePurchase_Success(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		EvaluatePurchaseFn: func(_ context.Context, id, cardName string, grade float64, buyCostCents int) (*campaigns.ExpectedValue, error) {
-			return &campaigns.ExpectedValue{CardName: cardName}, nil
+func TestHandleEvaluatePurchase(t *testing.T) {
+	tests := []struct {
+		name     string
+		body     string
+		setupSvc func() *mocks.MockCampaignService
+		wantCode int
+	}{
+		{
+			name: "success",
+			body: `{"cardName":"Charizard","grade":9,"buyCostCents":5000}`,
+			setupSvc: func() *mocks.MockCampaignService {
+				return &mocks.MockCampaignService{
+					EvaluatePurchaseFn: func(_ context.Context, id, cardName string, grade float64, buyCostCents int) (*campaigns.ExpectedValue, error) {
+						return &campaigns.ExpectedValue{CardName: cardName}, nil
+					},
+				}
+			},
+			wantCode: http.StatusOK,
+		},
+		{
+			name:     "missing cardName",
+			body:     `{"cardName":"","grade":9,"buyCostCents":5000}`,
+			setupSvc: func() *mocks.MockCampaignService { return &mocks.MockCampaignService{} },
+			wantCode: http.StatusBadRequest,
+		},
+		{
+			name:     "grade below 1",
+			body:     `{"cardName":"Charizard","grade":0,"buyCostCents":5000}`,
+			setupSvc: func() *mocks.MockCampaignService { return &mocks.MockCampaignService{} },
+			wantCode: http.StatusBadRequest,
+		},
+		{
+			name:     "grade above 10",
+			body:     `{"cardName":"Charizard","grade":11,"buyCostCents":5000}`,
+			setupSvc: func() *mocks.MockCampaignService { return &mocks.MockCampaignService{} },
+			wantCode: http.StatusBadRequest,
+		},
+		{
+			name:     "negative buyCostCents",
+			body:     `{"cardName":"Charizard","grade":9,"buyCostCents":-1}`,
+			setupSvc: func() *mocks.MockCampaignService { return &mocks.MockCampaignService{} },
+			wantCode: http.StatusBadRequest,
+		},
+		{
+			name:     "invalid json",
+			body:     `{bad`,
+			setupSvc: func() *mocks.MockCampaignService { return &mocks.MockCampaignService{} },
+			wantCode: http.StatusBadRequest,
+		},
+		{
+			name: "campaign not found",
+			body: `{"cardName":"Charizard","grade":9,"buyCostCents":5000}`,
+			setupSvc: func() *mocks.MockCampaignService {
+				return &mocks.MockCampaignService{
+					EvaluatePurchaseFn: func(_ context.Context, _ string, _ string, _ float64, _ int) (*campaigns.ExpectedValue, error) {
+						return nil, campaigns.ErrCampaignNotFound
+					},
+				}
+			},
+			wantCode: http.StatusNotFound,
 		},
 	}
-	h := newTestHandler(svc)
 
-	body := `{"cardName":"Charizard","grade":9,"buyCostCents":5000}`
-	req := httptest.NewRequest(http.MethodPost, "/api/campaigns/c1/evaluate-purchase", bytes.NewBufferString(body))
-	req.SetPathValue("id", "c1")
-	rec := httptest.NewRecorder()
-	h.HandleEvaluatePurchase(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d; body: %s", rec.Code, rec.Body.String())
-	}
-}
-
-func TestHandleEvaluatePurchase_ValidationErrors(t *testing.T) {
-	tests := []struct {
-		name string
-		body string
-	}{
-		{"missing cardName", `{"cardName":"","grade":9,"buyCostCents":5000}`},
-		{"grade below 1", `{"cardName":"Charizard","grade":0,"buyCostCents":5000}`},
-		{"grade above 10", `{"cardName":"Charizard","grade":11,"buyCostCents":5000}`},
-		{"negative buyCostCents", `{"cardName":"Charizard","grade":9,"buyCostCents":-1}`},
-		{"invalid json", `{bad`},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			h := newTestHandler(&mocks.MockCampaignService{})
-			req := httptest.NewRequest(http.MethodPost, "/api/campaigns/c1/evaluate-purchase", bytes.NewBufferString(tt.body))
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newTestHandler(tc.setupSvc())
+			req := httptest.NewRequest(http.MethodPost, "/api/campaigns/c1/evaluate-purchase", bytes.NewBufferString(tc.body))
 			req.SetPathValue("id", "c1")
 			rec := httptest.NewRecorder()
 			h.HandleEvaluatePurchase(rec, req)
 
-			if rec.Code != http.StatusBadRequest {
-				t.Fatalf("expected 400, got %d; body: %s", rec.Code, rec.Body.String())
+			if rec.Code != tc.wantCode {
+				t.Fatalf("expected %d, got %d; body: %s", tc.wantCode, rec.Code, rec.Body.String())
 			}
-			decodeErrorResponse(t, rec)
 		})
 	}
-}
-
-func TestHandleEvaluatePurchase_CampaignNotFound(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		EvaluatePurchaseFn: func(_ context.Context, _ string, _ string, _ float64, _ int) (*campaigns.ExpectedValue, error) {
-			return nil, campaigns.ErrCampaignNotFound
-		},
-	}
-	h := newTestHandler(svc)
-
-	body := `{"cardName":"Charizard","grade":9,"buyCostCents":5000}`
-	req := httptest.NewRequest(http.MethodPost, "/api/campaigns/c1/evaluate-purchase", bytes.NewBufferString(body))
-	req.SetPathValue("id", "c1")
-	rec := httptest.NewRecorder()
-	h.HandleEvaluatePurchase(rec, req)
-
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("expected 404, got %d", rec.Code)
-	}
-	decodeErrorResponse(t, rec)
 }
 
 // --- HandleActivationChecklist ---
 
-func TestHandleActivationChecklist_Success(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		GetActivationChecklistFn: func(_ context.Context, id string) (*campaigns.ActivationChecklist, error) {
-			return &campaigns.ActivationChecklist{}, nil
-		},
-	}
-	h := newTestHandler(svc)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/campaigns/c1/activation-checklist", nil)
-	req.SetPathValue("id", "c1")
-	rec := httptest.NewRecorder()
-	h.HandleActivationChecklist(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d; body: %s", rec.Code, rec.Body.String())
-	}
-}
-
-func TestHandleActivationChecklist_CampaignNotFound(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		GetActivationChecklistFn: func(_ context.Context, _ string) (*campaigns.ActivationChecklist, error) {
-			return nil, campaigns.ErrCampaignNotFound
-		},
-	}
-	h := newTestHandler(svc)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/campaigns/c1/activation-checklist", nil)
-	req.SetPathValue("id", "c1")
-	rec := httptest.NewRecorder()
-	h.HandleActivationChecklist(rec, req)
-
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("expected 404, got %d", rec.Code)
-	}
-	decodeErrorResponse(t, rec)
-}
-
-// --- HandleProjections ---
-
-func TestHandleProjections_Success(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		RunProjectionFn: func(_ context.Context, id string) (*campaigns.MonteCarloComparison, error) {
-			return &campaigns.MonteCarloComparison{}, nil
-		},
-	}
-	h := newTestHandler(svc)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/campaigns/c1/projections", nil)
-	req.SetPathValue("id", "c1")
-	rec := httptest.NewRecorder()
-	h.HandleProjections(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d; body: %s", rec.Code, rec.Body.String())
-	}
-}
-
-func TestHandleProjections_CampaignNotFound(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		RunProjectionFn: func(_ context.Context, _ string) (*campaigns.MonteCarloComparison, error) {
-			return nil, campaigns.ErrCampaignNotFound
-		},
-	}
-	h := newTestHandler(svc)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/campaigns/c1/projections", nil)
-	req.SetPathValue("id", "c1")
-	rec := httptest.NewRecorder()
-	h.HandleProjections(rec, req)
-
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("expected 404, got %d", rec.Code)
-	}
-	decodeErrorResponse(t, rec)
-}
-
-// --- HandleSetReviewedPrice ---
-
-func TestHandleSetReviewedPrice_Success(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		SetReviewedPriceFn: func(_ context.Context, purchaseID string, priceCents int, source string) error {
-			return nil
-		},
-	}
-	h := newTestHandler(svc)
-
-	body := `{"priceCents":1000,"source":"market"}`
-	req := httptest.NewRequest(http.MethodPatch, "/api/purchases/p1/review-price", bytes.NewBufferString(body))
-	req.SetPathValue("purchaseId", "p1")
-	rec := httptest.NewRecorder()
-	h.HandleSetReviewedPrice(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d; body: %s", rec.Code, rec.Body.String())
-	}
-	var result map[string]any
-	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if result["success"] != true {
-		t.Errorf("expected success=true, got %v", result["success"])
-	}
-	if _, ok := result["reviewedAt"]; !ok {
-		t.Error("expected reviewedAt field in response")
-	}
-}
-
-func TestHandleSetReviewedPrice_PurchaseNotFound(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		SetReviewedPriceFn: func(_ context.Context, _ string, _ int, _ string) error {
-			return campaigns.ErrPurchaseNotFound
-		},
-	}
-	h := newTestHandler(svc)
-
-	body := `{"priceCents":1000,"source":"market"}`
-	req := httptest.NewRequest(http.MethodPatch, "/api/purchases/p1/review-price", bytes.NewBufferString(body))
-	req.SetPathValue("purchaseId", "p1")
-	rec := httptest.NewRecorder()
-	h.HandleSetReviewedPrice(rec, req)
-
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("expected 404, got %d", rec.Code)
-	}
-	decodeErrorResponse(t, rec)
-}
-
-func TestHandleSetReviewedPrice_ValidationError(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		SetReviewedPriceFn: func(_ context.Context, _ string, _ int, _ string) error {
-			return campaigns.ErrCampaignNameRequired
-		},
-	}
-	h := newTestHandler(svc)
-
-	body := `{"priceCents":1000,"source":"market"}`
-	req := httptest.NewRequest(http.MethodPatch, "/api/purchases/p1/review-price", bytes.NewBufferString(body))
-	req.SetPathValue("purchaseId", "p1")
-	rec := httptest.NewRecorder()
-	h.HandleSetReviewedPrice(rec, req)
-
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d", rec.Code)
-	}
-	decodeErrorResponse(t, rec)
-}
-
-func TestHandleSetReviewedPrice_InvalidBody(t *testing.T) {
-	h := newTestHandler(&mocks.MockCampaignService{})
-
-	req := httptest.NewRequest(http.MethodPatch, "/api/purchases/p1/review-price", bytes.NewBufferString("{bad"))
-	req.SetPathValue("purchaseId", "p1")
-	rec := httptest.NewRecorder()
-	h.HandleSetReviewedPrice(rec, req)
-
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d", rec.Code)
-	}
-	decodeErrorResponse(t, rec)
-}
-
-// --- HandleCreatePriceFlag ---
-
-func TestHandleCreatePriceFlag_Success(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		CreatePriceFlagFn: func(_ context.Context, purchaseID string, userID int64, reason string) (int64, error) {
-			return 101, nil
-		},
-	}
-	h := newTestHandler(svc)
-
-	body := `{"reason":"price seems off"}`
-	req := httptest.NewRequest(http.MethodPost, "/api/purchases/p1/flag", bytes.NewBufferString(body))
-	req = withUser(req)
-	req.SetPathValue("purchaseId", "p1")
-	rec := httptest.NewRecorder()
-	h.HandleCreatePriceFlag(rec, req)
-
-	if rec.Code != http.StatusCreated {
-		t.Fatalf("expected 201, got %d; body: %s", rec.Code, rec.Body.String())
-	}
-	var result map[string]any
-	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if _, ok := result["id"]; !ok {
-		t.Error("expected id field in response")
-	}
-	if _, ok := result["flaggedAt"]; !ok {
-		t.Error("expected flaggedAt field in response")
-	}
-}
-
-func TestHandleCreatePriceFlag_RequiresUser(t *testing.T) {
-	h := newTestHandler(&mocks.MockCampaignService{})
-
-	body := `{"reason":"price seems off"}`
-	req := httptest.NewRequest(http.MethodPost, "/api/purchases/p1/flag", bytes.NewBufferString(body))
-	// No withUser — no auth
-	req.SetPathValue("purchaseId", "p1")
-	rec := httptest.NewRecorder()
-	h.HandleCreatePriceFlag(rec, req)
-
-	if rec.Code != http.StatusUnauthorized {
-		t.Fatalf("expected 401, got %d", rec.Code)
-	}
-}
-
-func TestHandleCreatePriceFlag_PurchaseNotFound(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		CreatePriceFlagFn: func(_ context.Context, _ string, _ int64, _ string) (int64, error) {
-			return 0, campaigns.ErrPurchaseNotFound
-		},
-	}
-	h := newTestHandler(svc)
-
-	body := `{"reason":"price seems off"}`
-	req := httptest.NewRequest(http.MethodPost, "/api/purchases/p1/flag", bytes.NewBufferString(body))
-	req = withUser(req)
-	req.SetPathValue("purchaseId", "p1")
-	rec := httptest.NewRecorder()
-	h.HandleCreatePriceFlag(rec, req)
-
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("expected 404, got %d", rec.Code)
-	}
-	decodeErrorResponse(t, rec)
-}
-
-// --- HandleShopifyPriceSync ---
-
-func TestHandleShopifyPriceSync_Success(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		MatchShopifyPricesFn: func(_ context.Context, items []campaigns.ShopifyPriceSyncItem) (*campaigns.ShopifyPriceSyncResponse, error) {
-			return &campaigns.ShopifyPriceSyncResponse{
-				Matched: []campaigns.ShopifyPriceSyncMatch{{CertNumber: "12345"}},
-			}, nil
-		},
-	}
-	h := newTestHandler(svc)
-
-	body := `{"items":[{"certNumber":"12345","grader":"PSA","currentPriceCents":1000}]}`
-	req := httptest.NewRequest(http.MethodPost, "/api/shopify/price-sync", bytes.NewBufferString(body))
-	rec := httptest.NewRecorder()
-	h.HandleShopifyPriceSync(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d; body: %s", rec.Code, rec.Body.String())
-	}
-	var result campaigns.ShopifyPriceSyncResponse
-	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if len(result.Matched) != 1 {
-		t.Errorf("expected 1 matched item, got %d", len(result.Matched))
-	}
-}
-
-func TestHandleShopifyPriceSync_ValidationErrors(t *testing.T) {
+func TestHandleActivationChecklist(t *testing.T) {
 	tests := []struct {
-		name string
-		body string
+		name     string
+		setupSvc func() *mocks.MockCampaignService
+		wantCode int
 	}{
-		{"empty items", `{"items":[]}`},
-		{"invalid json", `{bad`},
+		{
+			name: "success",
+			setupSvc: func() *mocks.MockCampaignService {
+				return &mocks.MockCampaignService{
+					GetActivationChecklistFn: func(_ context.Context, id string) (*campaigns.ActivationChecklist, error) {
+						return &campaigns.ActivationChecklist{}, nil
+					},
+				}
+			},
+			wantCode: http.StatusOK,
+		},
+		{
+			name: "campaign not found",
+			setupSvc: func() *mocks.MockCampaignService {
+				return &mocks.MockCampaignService{
+					GetActivationChecklistFn: func(_ context.Context, _ string) (*campaigns.ActivationChecklist, error) {
+						return nil, campaigns.ErrCampaignNotFound
+					},
+				}
+			},
+			wantCode: http.StatusNotFound,
+		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			h := newTestHandler(&mocks.MockCampaignService{})
-			req := httptest.NewRequest(http.MethodPost, "/api/shopify/price-sync", bytes.NewBufferString(tt.body))
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newTestHandler(tc.setupSvc())
+			req := httptest.NewRequest(http.MethodGet, "/api/campaigns/c1/activation-checklist", nil)
+			req.SetPathValue("id", "c1")
 			rec := httptest.NewRecorder()
-			h.HandleShopifyPriceSync(rec, req)
+			h.HandleActivationChecklist(rec, req)
 
-			if rec.Code != http.StatusBadRequest {
-				t.Fatalf("expected 400, got %d; body: %s", rec.Code, rec.Body.String())
+			if rec.Code != tc.wantCode {
+				t.Fatalf("expected %d, got %d; body: %s", tc.wantCode, rec.Code, rec.Body.String())
 			}
-			decodeErrorResponse(t, rec)
 		})
 	}
 }
 
-func TestHandleShopifyPriceSync_TooManyItems(t *testing.T) {
-	h := newTestHandler(&mocks.MockCampaignService{})
+// --- HandleProjections ---
 
-	items := make([]campaigns.ShopifyPriceSyncItem, 5001)
-	body, _ := json.Marshal(map[string]any{"items": items})
-	req := httptest.NewRequest(http.MethodPost, "/api/shopify/price-sync", bytes.NewBuffer(body))
-	rec := httptest.NewRecorder()
-	h.HandleShopifyPriceSync(rec, req)
-
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d", rec.Code)
+func TestHandleProjections(t *testing.T) {
+	tests := []struct {
+		name     string
+		setupSvc func() *mocks.MockCampaignService
+		wantCode int
+	}{
+		{
+			name: "success",
+			setupSvc: func() *mocks.MockCampaignService {
+				return &mocks.MockCampaignService{
+					RunProjectionFn: func(_ context.Context, id string) (*campaigns.MonteCarloComparison, error) {
+						return &campaigns.MonteCarloComparison{}, nil
+					},
+				}
+			},
+			wantCode: http.StatusOK,
+		},
+		{
+			name: "campaign not found",
+			setupSvc: func() *mocks.MockCampaignService {
+				return &mocks.MockCampaignService{
+					RunProjectionFn: func(_ context.Context, _ string) (*campaigns.MonteCarloComparison, error) {
+						return nil, campaigns.ErrCampaignNotFound
+					},
+				}
+			},
+			wantCode: http.StatusNotFound,
+		},
 	}
-	decodeErrorResponse(t, rec)
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newTestHandler(tc.setupSvc())
+			req := httptest.NewRequest(http.MethodGet, "/api/campaigns/c1/projections", nil)
+			req.SetPathValue("id", "c1")
+			rec := httptest.NewRecorder()
+			h.HandleProjections(rec, req)
+
+			if rec.Code != tc.wantCode {
+				t.Fatalf("expected %d, got %d; body: %s", tc.wantCode, rec.Code, rec.Body.String())
+			}
+		})
+	}
+}
+
+// --- HandleSetReviewedPrice ---
+
+func TestHandleSetReviewedPrice(t *testing.T) {
+	tests := []struct {
+		name     string
+		body     string
+		setupSvc func() *mocks.MockCampaignService
+		wantCode int
+		check    func(t *testing.T, rec *httptest.ResponseRecorder)
+	}{
+		{
+			name: "success",
+			body: `{"priceCents":1000,"source":"market"}`,
+			setupSvc: func() *mocks.MockCampaignService {
+				return &mocks.MockCampaignService{
+					SetReviewedPriceFn: func(_ context.Context, purchaseID string, priceCents int, source string) error {
+						return nil
+					},
+				}
+			},
+			wantCode: http.StatusOK,
+			check: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				t.Helper()
+				var result map[string]any
+				if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+					t.Fatalf("decode: %v", err)
+				}
+				if result["success"] != true {
+					t.Errorf("expected success=true, got %v", result["success"])
+				}
+				if _, ok := result["reviewedAt"]; !ok {
+					t.Error("expected reviewedAt field in response")
+				}
+			},
+		},
+		{
+			name: "purchase not found",
+			body: `{"priceCents":1000,"source":"market"}`,
+			setupSvc: func() *mocks.MockCampaignService {
+				return &mocks.MockCampaignService{
+					SetReviewedPriceFn: func(_ context.Context, _ string, _ int, _ string) error {
+						return campaigns.ErrPurchaseNotFound
+					},
+				}
+			},
+			wantCode: http.StatusNotFound,
+		},
+		{
+			name: "validation error",
+			body: `{"priceCents":1000,"source":"market"}`,
+			setupSvc: func() *mocks.MockCampaignService {
+				return &mocks.MockCampaignService{
+					SetReviewedPriceFn: func(_ context.Context, _ string, _ int, _ string) error {
+						return campaigns.ErrCampaignNameRequired
+					},
+				}
+			},
+			wantCode: http.StatusBadRequest,
+		},
+		{
+			name:     "invalid body",
+			body:     `{bad`,
+			setupSvc: func() *mocks.MockCampaignService { return &mocks.MockCampaignService{} },
+			wantCode: http.StatusBadRequest,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newTestHandler(tc.setupSvc())
+			req := httptest.NewRequest(http.MethodPatch, "/api/purchases/p1/review-price", bytes.NewBufferString(tc.body))
+			req.SetPathValue("purchaseId", "p1")
+			rec := httptest.NewRecorder()
+			h.HandleSetReviewedPrice(rec, req)
+
+			if rec.Code != tc.wantCode {
+				t.Fatalf("expected %d, got %d; body: %s", tc.wantCode, rec.Code, rec.Body.String())
+			}
+			if tc.check != nil {
+				tc.check(t, rec)
+			}
+		})
+	}
+}
+
+// --- HandleCreatePriceFlag ---
+
+func TestHandleCreatePriceFlag(t *testing.T) {
+	tests := []struct {
+		name     string
+		withAuth bool
+		setupSvc func() *mocks.MockCampaignService
+		wantCode int
+		check    func(t *testing.T, rec *httptest.ResponseRecorder)
+	}{
+		{
+			name:     "success",
+			withAuth: true,
+			setupSvc: func() *mocks.MockCampaignService {
+				return &mocks.MockCampaignService{
+					CreatePriceFlagFn: func(_ context.Context, purchaseID string, userID int64, reason string) (int64, error) {
+						return 101, nil
+					},
+				}
+			},
+			wantCode: http.StatusCreated,
+			check: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				t.Helper()
+				var result map[string]any
+				if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+					t.Fatalf("decode: %v", err)
+				}
+				if _, ok := result["id"]; !ok {
+					t.Error("expected id field in response")
+				}
+				if _, ok := result["flaggedAt"]; !ok {
+					t.Error("expected flaggedAt field in response")
+				}
+			},
+		},
+		{
+			name:     "requires user",
+			withAuth: false,
+			setupSvc: func() *mocks.MockCampaignService { return &mocks.MockCampaignService{} },
+			wantCode: http.StatusUnauthorized,
+		},
+		{
+			name:     "purchase not found",
+			withAuth: true,
+			setupSvc: func() *mocks.MockCampaignService {
+				return &mocks.MockCampaignService{
+					CreatePriceFlagFn: func(_ context.Context, _ string, _ int64, _ string) (int64, error) {
+						return 0, campaigns.ErrPurchaseNotFound
+					},
+				}
+			},
+			wantCode: http.StatusNotFound,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newTestHandler(tc.setupSvc())
+			body := `{"reason":"price seems off"}`
+			req := httptest.NewRequest(http.MethodPost, "/api/purchases/p1/flag", bytes.NewBufferString(body))
+			if tc.withAuth {
+				req = withUser(req)
+			}
+			req.SetPathValue("purchaseId", "p1")
+			rec := httptest.NewRecorder()
+			h.HandleCreatePriceFlag(rec, req)
+
+			if rec.Code != tc.wantCode {
+				t.Fatalf("expected %d, got %d; body: %s", tc.wantCode, rec.Code, rec.Body.String())
+			}
+			if tc.check != nil {
+				tc.check(t, rec)
+			}
+		})
+	}
+}
+
+// --- HandleShopifyPriceSync ---
+
+func TestHandleShopifyPriceSync(t *testing.T) {
+	tests := []struct {
+		name     string
+		body     func() []byte
+		setupSvc func() *mocks.MockCampaignService
+		wantCode int
+		check    func(t *testing.T, rec *httptest.ResponseRecorder)
+	}{
+		{
+			name: "success",
+			body: func() []byte {
+				return []byte(`{"items":[{"certNumber":"12345","grader":"PSA","currentPriceCents":1000}]}`)
+			},
+			setupSvc: func() *mocks.MockCampaignService {
+				return &mocks.MockCampaignService{
+					MatchShopifyPricesFn: func(_ context.Context, items []campaigns.ShopifyPriceSyncItem) (*campaigns.ShopifyPriceSyncResponse, error) {
+						return &campaigns.ShopifyPriceSyncResponse{
+							Matched: []campaigns.ShopifyPriceSyncMatch{{CertNumber: "12345"}},
+						}, nil
+					},
+				}
+			},
+			wantCode: http.StatusOK,
+			check: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				t.Helper()
+				var result campaigns.ShopifyPriceSyncResponse
+				if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+					t.Fatalf("decode: %v", err)
+				}
+				if len(result.Matched) != 1 {
+					t.Errorf("expected 1 matched item, got %d", len(result.Matched))
+				}
+			},
+		},
+		{
+			name:     "empty items",
+			body:     func() []byte { return []byte(`{"items":[]}`) },
+			setupSvc: func() *mocks.MockCampaignService { return &mocks.MockCampaignService{} },
+			wantCode: http.StatusBadRequest,
+		},
+		{
+			name:     "invalid json",
+			body:     func() []byte { return []byte(`{bad`) },
+			setupSvc: func() *mocks.MockCampaignService { return &mocks.MockCampaignService{} },
+			wantCode: http.StatusBadRequest,
+		},
+		{
+			name: "too many items",
+			body: func() []byte {
+				items := make([]campaigns.ShopifyPriceSyncItem, 5001)
+				b, _ := json.Marshal(map[string]any{"items": items})
+				return b
+			},
+			setupSvc: func() *mocks.MockCampaignService { return &mocks.MockCampaignService{} },
+			wantCode: http.StatusBadRequest,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newTestHandler(tc.setupSvc())
+			req := httptest.NewRequest(http.MethodPost, "/api/shopify/price-sync", bytes.NewBuffer(tc.body()))
+			rec := httptest.NewRecorder()
+			h.HandleShopifyPriceSync(rec, req)
+
+			if rec.Code != tc.wantCode {
+				t.Fatalf("expected %d, got %d; body: %s", tc.wantCode, rec.Code, rec.Body.String())
+			}
+			if tc.check != nil {
+				tc.check(t, rec)
+			}
+		})
+	}
 }
