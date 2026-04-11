@@ -15,9 +15,10 @@ func (r *CampaignsRepository) UpdatePurchaseDHFields(ctx context.Context, id str
 	return r.execAndExpectRow(ctx, "update DH fields",
 		`UPDATE campaign_purchases
 		 SET dh_card_id = ?, dh_inventory_id = ?, dh_cert_status = ?,
-		     dh_listing_price_cents = ?, dh_channels_json = ?, dh_status = ?, updated_at = ?
+		     dh_listing_price_cents = ?, dh_channels_json = ?, dh_status = ?,
+		     dh_last_synced_at = ?, updated_at = ?
 		 WHERE id = ?`,
-		update.CardID, update.InventoryID, update.CertStatus, update.ListingPriceCents, update.ChannelsJSON, update.DHStatus, time.Now(), id,
+		update.CardID, update.InventoryID, update.CertStatus, update.ListingPriceCents, update.ChannelsJSON, update.DHStatus, update.LastSyncedAt, time.Now(), id,
 	)
 }
 
