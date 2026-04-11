@@ -154,6 +154,14 @@ export interface CapitalSummary {
   unpaidInvoiceCount: number;
   refundedCents: number;
   paidCents: number;
+  // Invoice-cycle projection fields (see CapitalSummary in internal/domain/campaigns/types.go)
+  nextInvoiceDate?: string;        // YYYY-MM-DD, empty if no unpaid
+  nextInvoiceDueDate?: string;     // YYYY-MM-DD, empty if no unpaid
+  nextInvoiceAmountCents: number;  // TotalCents - PaidCents of earliest unpaid
+  daysUntilInvoiceDue: number;     // from now to due date, 0 if no unpaid
+  projectedRecoveryCents: number;  // daily velocity * daysUntilInvoiceDue
+  projectedCashGapCents: number;   // max(0, owed - projected - buffer)
+  cashBufferCents: number;         // mirror of CashflowConfig.CashBufferCents
 }
 
 // Activation checklist types

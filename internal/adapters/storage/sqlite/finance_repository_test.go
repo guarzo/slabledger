@@ -44,6 +44,32 @@ func TestGetCashflowConfig(t *testing.T) {
 		assert.Equal(t, 5000000, cfg.CapitalBudgetCents)
 		assert.Equal(t, 2000000, cfg.CashBufferCents)
 	})
+
+	t.Run("repeated updates overwrite existing row", func(t *testing.T) {
+		db := setupTestDB(t)
+		defer db.Close()
+		repo := NewCampaignsRepository(db.DB)
+
+		first := time.Now().Truncate(time.Second)
+		require.NoError(t, repo.UpdateCashflowConfig(ctx, &campaigns.CashflowConfig{
+			CapitalBudgetCents: 1_000_000,
+			CashBufferCents:    100_000,
+			UpdatedAt:          first,
+		}))
+
+		second := first.Add(time.Minute)
+		require.NoError(t, repo.UpdateCashflowConfig(ctx, &campaigns.CashflowConfig{
+			CapitalBudgetCents: 7_500_000,
+			CashBufferCents:    250_000,
+			UpdatedAt:          second,
+		}))
+
+		cfg, err := repo.GetCashflowConfig(ctx)
+		require.NoError(t, err)
+		assert.Equal(t, 7_500_000, cfg.CapitalBudgetCents)
+		assert.Equal(t, 250_000, cfg.CashBufferCents)
+		assert.Equal(t, second.UTC(), cfg.UpdatedAt.UTC())
+	})
 }
 
 func TestSumPurchaseCostByInvoiceDate(t *testing.T) {

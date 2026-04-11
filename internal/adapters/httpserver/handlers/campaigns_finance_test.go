@@ -113,6 +113,78 @@ func TestHandleGetCashflowConfig(t *testing.T) {
 	}
 }
 
+func TestHandleUpdateCashflowConfig(t *testing.T) {
+	tests := []struct {
+		name       string
+		body       string
+		mockFn     func(ctx context.Context, cfg *campaigns.CashflowConfig) error
+		wantStatus int
+	}{
+		{
+			name: "success",
+			body: `{"capitalBudgetCents":5000000,"cashBufferCents":500000}`,
+			mockFn: func(_ context.Context, cfg *campaigns.CashflowConfig) error {
+				if cfg.CapitalBudgetCents != 5000000 || cfg.CashBufferCents != 500000 {
+					return fmt.Errorf("unexpected cfg: %+v", cfg)
+				}
+				return nil
+			},
+			wantStatus: http.StatusOK,
+		},
+		{
+			name:       "malformed JSON returns 400",
+			body:       "{bad",
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name: "negative value returns 400",
+			body: `{"capitalBudgetCents":-1,"cashBufferCents":0}`,
+			mockFn: func(_ context.Context, _ *campaigns.CashflowConfig) error {
+				return campaigns.ErrInvalidCashflowConfig
+			},
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name: "service error returns 500",
+			body: `{"capitalBudgetCents":1,"cashBufferCents":1}`,
+			mockFn: func(_ context.Context, _ *campaigns.CashflowConfig) error {
+				return fmt.Errorf("boom")
+			},
+			wantStatus: http.StatusInternalServerError,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := &mocks.MockCampaignService{}
+			if tt.mockFn != nil {
+				svc.UpdateCashflowConfigFn = tt.mockFn
+			}
+			h := newTestHandler(svc)
+
+			req := httptest.NewRequest(http.MethodPut, "/api/credit/config", bytes.NewBufferString(tt.body))
+			rec := httptest.NewRecorder()
+			h.HandleUpdateCashflowConfig(rec, req)
+
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("expected %d, got %d; body: %s", tt.wantStatus, rec.Code, rec.Body.String())
+			}
+			if tt.wantStatus == http.StatusOK {
+				var result campaigns.CashflowConfig
+				if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+					t.Fatalf("decode: %v", err)
+				}
+				if result.CapitalBudgetCents != 5000000 {
+					t.Errorf("expected CapitalBudgetCents=5000000, got %d", result.CapitalBudgetCents)
+				}
+				if result.CashBufferCents != 500000 {
+					t.Errorf("expected CashBufferCents=500000, got %d", result.CashBufferCents)
+				}
+			}
+		})
+	}
+}
+
 func TestHandleListInvoices(t *testing.T) {
 	tests := []struct {
 		name             string

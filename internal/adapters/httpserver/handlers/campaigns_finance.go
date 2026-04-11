@@ -31,6 +31,31 @@ func (h *CampaignsHandler) HandleGetCashflowConfig(w http.ResponseWriter, r *htt
 	writeJSON(w, http.StatusOK, cfg)
 }
 
+// HandleUpdateCashflowConfig handles PUT /api/credit/config.
+func (h *CampaignsHandler) HandleUpdateCashflowConfig(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		CapitalBudgetCents int `json:"capitalBudgetCents"`
+		CashBufferCents    int `json:"cashBufferCents"`
+	}
+	if !decodeBody(w, r, &req) {
+		return
+	}
+	cfg := &campaigns.CashflowConfig{
+		CapitalBudgetCents: req.CapitalBudgetCents,
+		CashBufferCents:    req.CashBufferCents,
+	}
+	if err := h.service.UpdateCashflowConfig(r.Context(), cfg); err != nil {
+		if stderrors.Is(err, campaigns.ErrInvalidCashflowConfig) {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		h.logger.Error(r.Context(), "failed to update cashflow config", observability.Err(err))
+		writeError(w, http.StatusInternalServerError, "Internal server error")
+		return
+	}
+	writeJSON(w, http.StatusOK, cfg)
+}
+
 // HandleListInvoices handles GET /api/credit/invoices.
 func (h *CampaignsHandler) HandleListInvoices(w http.ResponseWriter, r *http.Request) {
 	invoices, ok := serviceCall(w, r.Context(), h.logger, "failed to list invoices", func() ([]campaigns.Invoice, error) {

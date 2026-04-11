@@ -13,11 +13,53 @@ func (s *service) GetCapitalSummary(ctx context.Context) (*CapitalSummary, error
 	if err != nil {
 		return nil, err
 	}
-	return ComputeCapitalSummary(raw), nil
+	summary := ComputeCapitalSummary(raw)
+
+	// Layer the next-invoice projection on top of the velocity-based summary so
+	// callers can reason about cash pressure on the upcoming PSA invoice cycle.
+	invoices, err := s.repo.ListInvoices(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list invoices for projection: %w", err)
+	}
+	cfg, err := s.repo.GetCashflowConfig(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("get cashflow config: %w", err)
+	}
+	buffer := 0
+	if cfg != nil {
+		buffer = cfg.CashBufferCents
+	}
+	recoveryRate := 0
+	if raw != nil {
+		recoveryRate = raw.RecoveryRate30dCents
+	}
+	projection := ComputeInvoiceProjection(invoices, recoveryRate, buffer, time.Now())
+	summary.NextInvoiceDate = projection.NextInvoiceDate
+	summary.NextInvoiceDueDate = projection.NextInvoiceDueDate
+	summary.NextInvoiceAmountCents = projection.NextInvoiceAmountCents
+	summary.DaysUntilInvoiceDue = projection.DaysUntilInvoiceDue
+	summary.ProjectedRecoveryCents = projection.ProjectedRecoveryCents
+	summary.ProjectedCashGapCents = projection.ProjectedCashGapCents
+	summary.CashBufferCents = buffer
+
+	return summary, nil
 }
 
 func (s *service) GetCashflowConfig(ctx context.Context) (*CashflowConfig, error) {
 	return s.repo.GetCashflowConfig(ctx)
+}
+
+// UpdateCashflowConfig persists operator-set capital budget and cash buffer values.
+// Both values are validated as non-negative; nil config is rejected.
+func (s *service) UpdateCashflowConfig(ctx context.Context, cfg *CashflowConfig) error {
+	if cfg == nil {
+		return fmt.Errorf("cashflow config: %w", ErrInvalidCashflowConfig)
+	}
+	if cfg.CapitalBudgetCents < 0 || cfg.CashBufferCents < 0 {
+		return ErrInvalidCashflowConfig
+	}
+	cfg.UpdatedAt = time.Now()
+	return s.repo.UpdateCashflowConfig(ctx, cfg)
 }
 
 func (s *service) ListInvoices(ctx context.Context) ([]Invoice, error) {

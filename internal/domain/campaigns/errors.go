@@ -19,6 +19,7 @@ const (
 	ErrCodePriceFlagNotFound      errors.ErrorCode = "ERR_PRICE_FLAG_NOT_FOUND"
 	ErrCodeCertNotFound           errors.ErrorCode = "ERR_CERT_NOT_FOUND"
 	ErrCodePendingItemNotFound    errors.ErrorCode = "ERR_PENDING_ITEM_NOT_FOUND"
+	ErrCodeInvalidCashflowConfig  errors.ErrorCode = "ERR_INVALID_CASHFLOW_CONFIG"
 )
 
 // Sentinel errors for campaign operations
@@ -35,6 +36,7 @@ var (
 	ErrPriceFlagNotFound      = errors.NewAppError(ErrCodePriceFlagNotFound, "price flag not found or already resolved")
 	ErrCertNotFound           = errors.NewAppError(ErrCodeCertNotFound, "cert not found")
 	ErrPendingItemNotFound    = errors.NewAppError(ErrCodePendingItemNotFound, "pending item not found")
+	ErrInvalidCashflowConfig  = errors.NewAppError(ErrCodeInvalidCashflowConfig, "invalid cashflow config")
 )
 
 // IsCampaignNotFound checks if the error is a "campaign not found" error.

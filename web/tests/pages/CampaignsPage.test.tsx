@@ -45,6 +45,11 @@ vi.mock('../../src/js/api', () => ({
       refundedCents: 0,
       paidCents: 0,
       unpaidInvoiceCount: 0,
+      nextInvoiceAmountCents: 0,
+      daysUntilInvoiceDue: 0,
+      projectedRecoveryCents: 0,
+      projectedCashGapCents: 0,
+      cashBufferCents: 0,
     })),
     getPortfolioHealth: vi.fn(() => Promise.resolve({
       campaigns: [],

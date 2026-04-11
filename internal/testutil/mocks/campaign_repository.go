@@ -21,6 +21,7 @@ type MockCampaignRepository struct {
 	PurchaseSales   map[string]bool // purchaseID -> has sale
 	PNLData         map[string]*campaigns.CampaignPNL
 	ChannelVelocity []campaigns.ChannelVelocity
+	CashflowConfig  *campaigns.CashflowConfig
 
 	// Optional overrides (Fn-field pattern)
 	CreateCampaignFn               func(ctx context.Context, c *campaigns.Campaign) error
@@ -75,6 +76,7 @@ type MockCampaignRepository struct {
 	ClearSellSheetFn               func(ctx context.Context) error
 	OpenFlagPurchaseIDsFn          func(ctx context.Context) (map[string]int64, error)
 	GetCapitalRawDataFn            func(ctx context.Context) (*campaigns.CapitalRawData, error)
+	UpdateCashflowConfigFn         func(ctx context.Context, cfg *campaigns.CashflowConfig) error
 }
 
 // NewMockCampaignRepository creates a ready-to-use MockCampaignRepository with initialized maps.
@@ -632,7 +634,23 @@ func (m *MockCampaignRepository) GetPendingReceiptByInvoiceDate(_ context.Contex
 }
 
 func (m *MockCampaignRepository) GetCashflowConfig(_ context.Context) (*campaigns.CashflowConfig, error) {
+	if m.CashflowConfig != nil {
+		cfg := *m.CashflowConfig
+		return &cfg, nil
+	}
 	return &campaigns.CashflowConfig{CapitalBudgetCents: 5000000, CashBufferCents: 1000000}, nil
+}
+
+func (m *MockCampaignRepository) UpdateCashflowConfig(ctx context.Context, cfg *campaigns.CashflowConfig) error {
+	if m.UpdateCashflowConfigFn != nil {
+		return m.UpdateCashflowConfigFn(ctx, cfg)
+	}
+	if cfg == nil {
+		return nil
+	}
+	cp := *cfg
+	m.CashflowConfig = &cp
+	return nil
 }
 func (m *MockCampaignRepository) GetCapitalRawData(ctx context.Context) (*campaigns.CapitalRawData, error) {
 	if m.GetCapitalRawDataFn != nil {

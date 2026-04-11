@@ -336,3 +336,94 @@ func TestSegmentPerformanceLatestSaleDate(t *testing.T) {
 	}
 	t.Error("Charizard segment not found")
 }
+
+func Test_computeChannelHealthByCampaign(t *testing.T) {
+	data := []PurchaseWithSale{
+		// c1: profitable eBay + TCGPlayer marketplace, plus a cardshow loss.
+		{
+			Purchase: Purchase{ID: "c1-p1", CampaignID: "c1"},
+			Sale:     &Sale{PurchaseID: "c1-p1", SaleChannel: SaleChannelEbay, SalePriceCents: 20000, NetProfitCents: 4000},
+		},
+		{
+			Purchase: Purchase{ID: "c1-p2", CampaignID: "c1"},
+			Sale:     &Sale{PurchaseID: "c1-p2", SaleChannel: SaleChannelTCGPlayer, SalePriceCents: 5000, NetProfitCents: 1000},
+		},
+		{
+			Purchase: Purchase{ID: "c1-p3", CampaignID: "c1"},
+			Sale:     &Sale{PurchaseID: "c1-p3", SaleChannel: SaleChannelCardShow, SalePriceCents: 3000, NetProfitCents: -2500},
+		},
+		// c2: only inperson losses, no marketplace activity.
+		{
+			Purchase: Purchase{ID: "c2-p1", CampaignID: "c2"},
+			Sale:     &Sale{PurchaseID: "c2-p1", SaleChannel: SaleChannelInPerson, SalePriceCents: 4000, NetProfitCents: -1500},
+		},
+		// c3: profitable inperson sale should NOT reduce liquidation loss;
+		// only a cardshow profit exists so c3 has no liquidation damage.
+		{
+			Purchase: Purchase{ID: "c3-p1", CampaignID: "c3"},
+			Sale:     &Sale{PurchaseID: "c3-p1", SaleChannel: SaleChannelInPerson, SalePriceCents: 6000, NetProfitCents: 800},
+		},
+		// c4: unsold purchase — no sale record, should not crash or appear.
+		{
+			Purchase: Purchase{ID: "c4-p1", CampaignID: "c4"},
+			Sale:     nil,
+		},
+	}
+
+	got := computeChannelHealthByCampaign(data)
+
+	// c1: marketplace revenue 25000, net profit 5000, margin 0.20.
+	//     liquidation: -2500 across 1 cardshow sale.
+	if c1, ok := got["c1"]; !ok {
+		t.Fatalf("expected entry for c1, got map: %#v", got)
+	} else {
+		if c1.LiquidationLossCents != -2500 {
+			t.Errorf("c1 LiquidationLossCents = %d, want -2500", c1.LiquidationLossCents)
+		}
+		if c1.LiquidationSaleCount != 1 {
+			t.Errorf("c1 LiquidationSaleCount = %d, want 1", c1.LiquidationSaleCount)
+		}
+		if diff := c1.EbayChannelMarginPct - 0.20; diff > 1e-9 || diff < -1e-9 {
+			t.Errorf("c1 marketplace margin = %f, want 0.20", c1.EbayChannelMarginPct)
+		}
+	}
+
+	// c2: no marketplace, one liquidation loss.
+	if c2, ok := got["c2"]; !ok {
+		t.Fatalf("expected entry for c2, got map: %#v", got)
+	} else {
+		if c2.LiquidationLossCents != -1500 {
+			t.Errorf("c2 LiquidationLossCents = %d, want -1500", c2.LiquidationLossCents)
+		}
+		if c2.LiquidationSaleCount != 1 {
+			t.Errorf("c2 LiquidationSaleCount = %d, want 1", c2.LiquidationSaleCount)
+		}
+		if c2.EbayChannelMarginPct != 0 {
+			t.Errorf("c2 marketplace margin = %f, want 0", c2.EbayChannelMarginPct)
+		}
+	}
+
+	// c3: profitable liquidation-channel sale does not contribute to loss.
+	if c3, ok := got["c3"]; !ok {
+		t.Fatalf("expected entry for c3, got map: %#v", got)
+	} else {
+		if c3.LiquidationLossCents != 0 {
+			t.Errorf("c3 LiquidationLossCents = %d, want 0", c3.LiquidationLossCents)
+		}
+		if c3.LiquidationSaleCount != 0 {
+			t.Errorf("c3 LiquidationSaleCount = %d, want 0", c3.LiquidationSaleCount)
+		}
+	}
+
+	// c4: nil sale — helper must not create a ghost entry.
+	if _, ok := got["c4"]; ok {
+		t.Errorf("did not expect entry for c4 (unsold purchase), got: %#v", got["c4"])
+	}
+}
+
+func Test_computeChannelHealthByCampaign_Empty(t *testing.T) {
+	got := computeChannelHealthByCampaign(nil)
+	if len(got) != 0 {
+		t.Errorf("expected empty map for nil input, got %d entries", len(got))
+	}
+}

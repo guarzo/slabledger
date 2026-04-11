@@ -1,6 +1,7 @@
 import PokeballLoader from '../PokeballLoader';
 import { usePortfolioHealth, useWeeklyReview, useCapitalSummary } from '../queries/useCampaignQueries';
 import HeroStatsBar from '../components/portfolio/HeroStatsBar';
+import InvoiceReadinessPanel from '../components/portfolio/InvoiceReadinessPanel';
 import WeeklyReviewSection from '../components/portfolio/WeeklyReviewSection';
 import WatchlistSection from '../components/watchlist/WatchlistSection';
 import AIAnalysisWidget from '../components/advisor/AIAnalysisWidget';
@@ -30,6 +31,15 @@ export default function DashboardPage() {
 
       {/* Tier 1: Hero Stats Bar */}
       <HeroStatsBar health={healthData} capital={capitalData} />
+
+      {/* Invoice Readiness */}
+      {capitalData && (
+        <div className="mb-6">
+          <SectionErrorBoundary sectionName="Invoice Readiness">
+            <InvoiceReadinessPanel capital={capitalData} />
+          </SectionErrorBoundary>
+        </div>
+      )}
 
       {/* Weekly Review */}
       {weeklyReview && (
