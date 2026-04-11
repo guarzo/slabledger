@@ -28,6 +28,7 @@ func TestUpdatePurchaseDHFields(t *testing.T) {
 			ListingPriceCents: 95000,
 			ChannelsJSON:      `["ebay","tcgplayer"]`,
 			DHStatus:          campaigns.DHStatusListed,
+			LastSyncedAt:      "2026-04-11T00:00:00Z",
 		}
 		err := repo.UpdatePurchaseDHFields(ctx, p.ID, update)
 		require.NoError(t, err)
@@ -40,6 +41,7 @@ func TestUpdatePurchaseDHFields(t *testing.T) {
 		assert.Equal(t, 95000, got.DHListingPriceCents)
 		assert.Equal(t, `["ebay","tcgplayer"]`, got.DHChannelsJSON)
 		assert.Equal(t, campaigns.DHStatusListed, got.DHStatus)
+		assert.Equal(t, "2026-04-11T00:00:00Z", got.DHLastSyncedAt)
 	})
 
 	t.Run("overwrite existing fields", func(t *testing.T) {
