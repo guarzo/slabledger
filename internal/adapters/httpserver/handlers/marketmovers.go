@@ -167,3 +167,17 @@ func (h *MarketMoversHandler) HandleRefresh(w http.ResponseWriter, r *http.Reque
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "refresh complete"})
 }
+
+// HandleFailures returns a breakdown of per-purchase MM mapping/pricing failures
+// grouped by reason, with a bounded sample of recent failed purchases for the
+// admin UI to display.
+func (h *MarketMoversHandler) HandleFailures(w http.ResponseWriter, r *http.Request) {
+	limit, _ := parsePagination(r)
+	report, err := h.store.GetMMFailures(r.Context(), limit)
+	if err != nil {
+		h.logger.Error(r.Context(), "failed to load MM failures", observability.Err(err))
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	writeJSON(w, http.StatusOK, report)
+}

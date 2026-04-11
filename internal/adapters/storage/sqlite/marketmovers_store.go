@@ -268,3 +268,28 @@ func (s *MarketMoversStore) GetMMPriceStats(ctx context.Context) (*MMPriceStats,
 
 	return &stats, nil
 }
+
+// IntegrationFailureSample is a single failed-mapping row returned by the
+// /failures admin endpoints. Shared by MM and CL.
+type IntegrationFailureSample struct {
+	PurchaseID string `json:"purchaseId"`
+	CertNumber string `json:"certNumber"`
+	CardName   string `json:"cardName"`
+	Reason     string `json:"reason"`
+	ErrorAt    string `json:"errorAt"`
+}
+
+// IntegrationFailuresReport groups per-purchase failure reasons for an integration.
+type IntegrationFailuresReport struct {
+	ByReason map[string]int             `json:"byReason"`
+	Samples  []IntegrationFailureSample `json:"samples"`
+}
+
+// GetMMFailures returns unsold purchases whose last MM refresh recorded a
+// failure reason, grouped by reason with a bounded sample list for the UI.
+func (s *MarketMoversStore) GetMMFailures(ctx context.Context, sampleLimit int) (*IntegrationFailuresReport, error) {
+	if sampleLimit <= 0 {
+		sampleLimit = 50
+	}
+	return queryIntegrationFailures(ctx, s.db, "mm_last_error", "mm_last_error_at", sampleLimit)
+}

@@ -49,6 +49,10 @@ func (m *mockCLValueUpdater) UpdatePurchaseCLValue(ctx context.Context, purchase
 	return nil
 }
 
+func (m *mockCLValueUpdater) UpdatePurchaseCLError(ctx context.Context, purchaseID, reason, reasonAt string) error {
+	return nil
+}
+
 type mockCLGemRateUpdater struct {
 	UpdateGemRateFn                func(ctx context.Context, purchaseID, gemRateID string) error
 	UpdatePSASpecFn                func(ctx context.Context, purchaseID string, psaSpecID int) error

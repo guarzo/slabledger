@@ -181,3 +181,49 @@ func (s *CardLadderStore) ListMappings(ctx context.Context) ([]CLCardMapping, er
 	}
 	return mappings, rows.Err()
 }
+
+// CLPriceStats summarizes CL value freshness across unsold inventory.
+// Mirrors MMPriceStats so the frontend can render a symmetric panel.
+type CLPriceStats struct {
+	UnsoldTotal  int    `json:"unsoldTotal"`  // Total unsold purchases
+	WithCLValue  int    `json:"withCLValue"`  // Unsold purchases with a CL value
+	SyncedCount  int    `json:"syncedCount"`  // Unsold purchases pushed to the CL remote collection
+	OldestUpdate string `json:"oldestUpdate"` // Oldest cl_value_updated_at among priced cards
+	NewestUpdate string `json:"newestUpdate"` // Newest cl_value_updated_at
+	StaleCount   int    `json:"staleCount"`   // Priced cards whose value is older than 7 days
+}
+
+// GetCLFailures returns unsold purchases whose last CL refresh recorded a
+// failure reason, grouped by reason with a bounded sample list for the UI.
+func (s *CardLadderStore) GetCLFailures(ctx context.Context, sampleLimit int) (*IntegrationFailuresReport, error) {
+	if sampleLimit <= 0 {
+		sampleLimit = 50
+	}
+	return queryIntegrationFailures(ctx, s.db, "cl_last_error", "cl_last_error_at", sampleLimit)
+}
+
+// GetCLPriceStats computes summary statistics about CL value freshness across unsold inventory.
+func (s *CardLadderStore) GetCLPriceStats(ctx context.Context) (*CLPriceStats, error) {
+	var stats CLPriceStats
+
+	staleCutoff := time.Now().UTC().AddDate(0, 0, -7).Format(time.RFC3339)
+	err := s.db.QueryRowContext(ctx, `
+		SELECT
+			COUNT(*) AS unsold_total,
+			COALESCE(SUM(CASE WHEN p.cl_value_cents > 0 THEN 1 ELSE 0 END), 0) AS with_cl_value,
+			COALESCE(SUM(CASE WHEN p.cl_synced_at IS NOT NULL AND p.cl_synced_at != '' THEN 1 ELSE 0 END), 0) AS synced_count,
+			COALESCE(MIN(CASE WHEN p.cl_value_cents > 0 AND p.cl_value_updated_at != '' THEN p.cl_value_updated_at END), '') AS oldest_update,
+			COALESCE(MAX(CASE WHEN p.cl_value_cents > 0 AND p.cl_value_updated_at != '' THEN p.cl_value_updated_at END), '') AS newest_update,
+			COALESCE(SUM(CASE WHEN p.cl_value_cents > 0 AND (p.cl_value_updated_at = '' OR p.cl_value_updated_at < ?) THEN 1 ELSE 0 END), 0) AS stale_count
+		FROM campaign_purchases p
+		INNER JOIN campaigns c ON c.id = p.campaign_id
+		LEFT JOIN campaign_sales s ON s.purchase_id = p.id
+		WHERE s.id IS NULL AND c.phase != 'closed'
+	`, staleCutoff,
+	).Scan(&stats.UnsoldTotal, &stats.WithCLValue, &stats.SyncedCount, &stats.OldestUpdate, &stats.NewestUpdate, &stats.StaleCount)
+	if err != nil {
+		return nil, fmt.Errorf("cl price stats: %w", err)
+	}
+
+	return &stats, nil
+}

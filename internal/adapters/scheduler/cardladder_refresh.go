@@ -4,6 +4,7 @@ import (
 	"context"
 	"regexp"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -23,7 +24,18 @@ type CardLadderPurchaseLister interface {
 // CardLadderValueUpdater updates CL values on purchases.
 type CardLadderValueUpdater interface {
 	UpdatePurchaseCLValue(ctx context.Context, purchaseID string, clValueCents, population int) error
+	// UpdatePurchaseCLError records or clears the last mapping/pricing failure reason.
+	// Pass reason="" and reasonAt="" to clear on success.
+	UpdatePurchaseCLError(ctx context.Context, purchaseID, reason, reasonAt string) error
 }
+
+// CL failure reason tags. Short, stable strings used by the /failures admin endpoint.
+const (
+	CLReasonNoImageMatch = "no_image_match"
+	CLReasonNoCertMatch  = "no_cert_match"
+	CLReasonNoValue      = "no_value"
+	CLReasonAPIError     = "api_error"
+)
 
 // CardLadderGemRateUpdater persists gemRateID, psaSpecID, and CL card metadata on purchases.
 type CardLadderGemRateUpdater interface {
@@ -52,14 +64,18 @@ func WithCLSyncUpdater(u CardLadderSyncUpdater) CardLadderRefreshOption {
 
 // CLRunStats holds the counters from the most recent Card Ladder refresh run.
 type CLRunStats struct {
-	LastRunAt    time.Time `json:"lastRunAt"`
-	DurationMs   int64     `json:"durationMs"`
-	Updated      int       `json:"updated"`
-	Mapped       int       `json:"mapped"`
-	Skipped      int       `json:"skipped"`
-	TotalCLCards int       `json:"totalCLCards"`
-	CardsPushed  int       `json:"cardsPushed"`
-	CardsRemoved int       `json:"cardsRemoved"`
+	LastRunAt      time.Time `json:"lastRunAt"`
+	DurationMs     int64     `json:"durationMs"`
+	Updated        int       `json:"updated"`
+	Mapped         int       `json:"mapped"`  // Kept for backwards compatibility; equals Updated by construction.
+	Skipped        int       `json:"skipped"` // CL cards that did not match a purchase (CL-side perspective).
+	TotalCLCards   int       `json:"totalCLCards"`
+	CardsPushed    int       `json:"cardsPushed"`
+	CardsRemoved   int       `json:"cardsRemoved"`
+	OrphanMappings int       `json:"orphanMappings"` // Persistent mappings that neither matched a CL card this run nor correspond to a sold purchase.
+	NoImageMatch   int       `json:"noImageMatch"`   // Unsold purchases with no CL card matched via image URL.
+	NoCertMatch    int       `json:"noCertMatch"`    // Unsold purchases that also failed cert-regex fallback.
+	NoValue        int       `json:"noValue"`        // Matched but CL card.CurrentValue was 0.
 }
 
 // CardLadderRefreshScheduler refreshes CL values from the Card Ladder API daily.
@@ -239,8 +255,19 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 		mappingByCLCardID[existingMappings[i].CLCollectionCardID] = &existingMappings[i]
 	}
 
-	updated, mapped, skipped := 0, 0, 0
+	updated, mapped, skipped, noValue := 0, 0, 0, 0
 	today := time.Now().UTC().Format("2006-01-02")
+
+	// Track which purchase IDs had a successful CL card match + value update
+	// this run. Used for the second-pass error persistence over unmatched
+	// purchases (so the admin UI shows per-card failure reasons).
+	matchedPurchaseIDs := make(map[string]bool, len(purchases))
+	// Track which existing mapping SlabSerials resolved to a CL card hit
+	// this run. Any mapping NOT in this set but whose cert IS still in
+	// unsoldCerts is an "orphan": a stored mapping that no longer points
+	// to a live CL remote card — likely cleanup work the follow-up PR
+	// will tackle after we see the logged samples.
+	resolvedMappings := make(map[string]bool, len(existingMappings))
 
 	for _, card := range cards {
 		// Try to find the matching purchase
@@ -249,6 +276,9 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 		// First check if we have a cached mapping
 		if m, ok := mappingByCLCardID[card.CollectionCardID]; ok {
 			purchase = certToPurchase[m.SlabSerial]
+			if purchase != nil {
+				resolvedMappings[m.SlabSerial] = true
+			}
 		}
 
 		// Primary match: image URL
@@ -304,6 +334,10 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 		// Update CL value
 		newCLCents := mathutil.ToCentsInt(card.CurrentValue)
 		if newCLCents <= 0 {
+			// Matched but CL reports no market value. Persist so the admin
+			// UI can show "matched without a price" distinct from "unmapped".
+			noValue++
+			s.recordCLError(ctx, purchase.ID, CLReasonNoValue)
 			continue
 		}
 
@@ -343,6 +377,52 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 			}
 		}
 		updated++
+		matchedPurchaseIDs[purchase.ID] = true
+		resolvedMappings[purchase.CertNumber] = true
+		// Clear any prior CL error now that this purchase is successfully priced.
+		s.recordCLError(ctx, purchase.ID, "")
+	}
+
+	// Second pass: for every unsold purchase that did NOT get matched this run,
+	// persist a failure reason tag so the admin UI can group and show why.
+	// This is how we know which cards to investigate in the follow-up PR.
+	noImageMatch, noCertMatch := 0, 0
+	for i := range purchases {
+		p := &purchases[i]
+		if matchedPurchaseIDs[p.ID] {
+			continue
+		}
+		reason := CLReasonNoImageMatch
+		if p.CertNumber == "" {
+			reason = CLReasonNoCertMatch
+			noCertMatch++
+		} else {
+			noImageMatch++
+		}
+		s.recordCLError(ctx, p.ID, reason)
+	}
+
+	// Orphan audit: persistent mappings whose cert is still in the unsold
+	// set but didn't resolve to a CL card this run. These are the ~144
+	// stuck rows the user reported — not actionable in THIS PR, but
+	// counting + logging them makes the cleanup fix tractable later.
+	orphanMappings := 0
+	var orphanSamples []string
+	for _, m := range existingMappings {
+		if resolvedMappings[m.SlabSerial] {
+			continue
+		}
+		if _, stillUnsold := certToPurchase[m.SlabSerial]; stillUnsold {
+			orphanMappings++
+			if len(orphanSamples) < 10 {
+				orphanSamples = append(orphanSamples, m.SlabSerial)
+			}
+		}
+	}
+	if orphanMappings > 0 {
+		s.logger.Warn(ctx, "CL refresh: orphan mappings detected (stored but unresolved this run)",
+			observability.Int("orphanMappings", orphanMappings),
+			observability.String("sampleCerts", strings.Join(orphanSamples, ",")))
 	}
 
 	// Phase 2: fetch sales comps for mapped cards with gemRateIDs.
@@ -375,22 +455,46 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 		observability.Int("skipped", skipped),
 		observability.Int("totalCLCards", len(cards)),
 		observability.Int("pushed", cardsPushed),
-		observability.Int("removed", cardsRemoved))
+		observability.Int("removed", cardsRemoved),
+		observability.Int("orphanMappings", orphanMappings),
+		observability.Int("noImageMatch", noImageMatch),
+		observability.Int("noCertMatch", noCertMatch),
+		observability.Int("noValue", noValue))
 
 	s.statsMu.Lock()
 	s.lastRunStats = &CLRunStats{
-		LastRunAt:    start,
-		DurationMs:   time.Since(start).Milliseconds(),
-		Updated:      updated,
-		Mapped:       mapped,
-		Skipped:      skipped,
-		TotalCLCards: len(cards),
-		CardsPushed:  cardsPushed,
-		CardsRemoved: cardsRemoved,
+		LastRunAt:      start,
+		DurationMs:     time.Since(start).Milliseconds(),
+		Updated:        updated,
+		Mapped:         mapped,
+		Skipped:        skipped,
+		TotalCLCards:   len(cards),
+		CardsPushed:    cardsPushed,
+		CardsRemoved:   cardsRemoved,
+		OrphanMappings: orphanMappings,
+		NoImageMatch:   noImageMatch,
+		NoCertMatch:    noCertMatch,
+		NoValue:        noValue,
 	}
 	s.statsMu.Unlock()
 
 	return nil
+}
+
+// recordCLError persists a failure reason (or clears it when reason=="") on a
+// purchase. Logs warnings but never fails the refresh loop — diagnostics are
+// best-effort.
+func (s *CardLadderRefreshScheduler) recordCLError(ctx context.Context, purchaseID, reason string) {
+	var reasonAt string
+	if reason != "" {
+		reasonAt = time.Now().UTC().Format(time.RFC3339)
+	}
+	if err := s.valueUpdater.UpdatePurchaseCLError(ctx, purchaseID, reason, reasonAt); err != nil {
+		s.logger.Debug(ctx, "CL refresh: failed to persist error reason",
+			observability.String("purchaseId", purchaseID),
+			observability.String("reason", reason),
+			observability.Err(err))
+	}
 }
 
 // extractGradeValue parses "PSA 9", "PSA 9.5", or "g9" → numeric grade value.
