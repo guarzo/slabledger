@@ -80,8 +80,8 @@ func (c *HTTPClient) Render(ctx context.Context, postID string, detail social.Po
 	defer resp.Body.Close() //nolint:errcheck
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("render returned %d: %s", resp.StatusCode, string(body))
+		errBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return nil, fmt.Errorf("render returned %d: %s", resp.StatusCode, string(errBody))
 	}
 
 	return parseMultipartResponse(resp)
@@ -100,6 +100,9 @@ func parseMultipartResponse(resp *http.Response) ([][]byte, error) {
 	}
 
 	boundary := params["boundary"]
+	if boundary == "" {
+		return nil, fmt.Errorf("multipart/form-data response missing boundary parameter")
+	}
 	mr := multipart.NewReader(resp.Body, boundary)
 
 	// The sidecar sends slide-0, slide-1, ... in order; collect all parts.

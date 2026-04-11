@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/campaigns"
@@ -94,6 +95,54 @@ func (r *CampaignsRepository) SumPurchaseCostByInvoiceDate(ctx context.Context, 
 		invoiceDate,
 	).Scan(&total)
 	return total, err
+}
+
+// GetPendingReceiptByInvoiceDate returns the sum of buy_cost_cents for non-refunded,
+// unreceived purchases grouped by invoice date. Returns an empty map if invoiceDates is empty.
+func (r *CampaignsRepository) GetPendingReceiptByInvoiceDate(ctx context.Context, invoiceDates []string) (_ map[string]int, result_err error) {
+	if len(invoiceDates) == 0 {
+		return map[string]int{}, nil
+	}
+
+	placeholders := make([]string, len(invoiceDates))
+	args := make([]any, len(invoiceDates))
+	for i, d := range invoiceDates {
+		placeholders[i] = "?"
+		args[i] = d
+	}
+
+	query := fmt.Sprintf(
+		`SELECT invoice_date, COALESCE(SUM(buy_cost_cents), 0)
+		 FROM campaign_purchases
+		 WHERE invoice_date IN (%s)
+		   AND received_at IS NULL
+		   AND was_refunded = 0
+		 GROUP BY invoice_date`,
+		strings.Join(placeholders, ", "),
+	)
+
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if cerr := rows.Close(); result_err == nil && cerr != nil {
+			result_err = cerr
+		}
+	}()
+
+	result := make(map[string]int)
+	for rows.Next() {
+		var date string
+		var pending int
+		if err := rows.Scan(&date, &pending); err != nil {
+			return nil, err
+		}
+		if pending > 0 {
+			result[date] = pending
+		}
+	}
+	return result, rows.Err()
 }
 
 // --- Cashflow Config ---
