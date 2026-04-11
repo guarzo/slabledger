@@ -157,28 +157,45 @@ func suggestCoverageGapCampaigns(_ context.Context, insights *PortfolioInsights)
 	return suggestions
 }
 
+// suggestChannelInformedBuyTerms flags active campaigns whose revenue-weighted
+// margin across the portfolio's actual channel mix is meaningfully below the
+// target margin. When the gap exceeds suggBuyTermsReductionBuffer, it suggests
+// reducing CL% by the gap (floored at suggBuyTermsFloorPct).
+//
+// Rationale: the previous implementation compared the *best* channel's margin
+// to a flat target, which produced nonsensical recommendations (e.g. "lower
+// buy terms to 28.57%") whenever any channel ran hot. Using the weighted
+// average of the realized mix keeps the rule honest and only fires when the
+// portfolio is actually underperforming on net.
 func suggestChannelInformedBuyTerms(_ context.Context, insights *PortfolioInsights, campaigns []Campaign, now string) []CampaignSuggestion {
 	var suggestions []CampaignSuggestion
 
-	if len(insights.ByChannel) < 2 || insights.DataSummary.TotalSales < suggMinTotalSalesChannelAnalysis {
+	if len(insights.ByChannel) == 0 || insights.DataSummary.TotalSales < suggMinTotalSalesChannelAnalysis {
 		return nil
 	}
 
-	var bestChannel *ChannelPNL
-	var bestMargin float64
+	// Revenue-weighted average margin across ALL channels.
+	var totalRev, totalNet float64
+	var totalSales int
 	for i := range insights.ByChannel {
 		ch := &insights.ByChannel[i]
-		if ch.SaleCount < suggMinSalesPerChannel || ch.RevenueCents <= 0 {
+		if ch.RevenueCents <= 0 {
 			continue
 		}
-		margin := float64(ch.NetProfitCents) / float64(ch.RevenueCents)
-		if bestChannel == nil || margin > bestMargin {
-			bestChannel = ch
-			bestMargin = margin
-		}
+		totalRev += float64(ch.RevenueCents)
+		totalNet += float64(ch.NetProfitCents)
+		totalSales += ch.SaleCount
 	}
+	if totalRev <= 0 {
+		return nil
+	}
+	weightedMargin := totalNet / totalRev
 
-	if bestChannel == nil || bestMargin <= 0 {
+	// Only fire when the gap between target and realized margin is large
+	// enough to matter. This preserves a safety net for quiet eBay-only
+	// underperformance without generating nuisance suggestions.
+	gap := suggTargetMargin - weightedMargin
+	if gap < suggBuyTermsReductionBuffer {
 		return nil
 	}
 
@@ -187,43 +204,35 @@ func suggestChannelInformedBuyTerms(_ context.Context, insights *PortfolioInsigh
 			continue
 		}
 
-		var feePct float64
-		if isMarketplaceChannel(bestChannel.Channel) {
-			feePct = c.EbayFeePct
-			if feePct == 0 {
-				feePct = DefaultMarketplaceFeePct
-			}
-		} else if NormalizeChannel(bestChannel.Channel) == SaleChannelWebsite {
-			feePct = DefaultWebsiteFeePct
+		newTerms := c.BuyTermsCLPct - gap
+		if newTerms < suggBuyTermsFloorPct {
+			newTerms = suggBuyTermsFloorPct
 		}
-
-		targetMargin := suggTargetMargin
-
-		maxBuy := bestMargin - targetMargin - feePct
-		if maxBuy <= 0 {
+		// Never recommend terms >= current. Also skip if current is already
+		// at or below the floor — nothing sensible to suggest.
+		if newTerms >= c.BuyTermsCLPct {
 			continue
 		}
 
-		if c.BuyTermsCLPct > maxBuy+suggBuyTermsBuffer {
-			confidence := confidenceLabelWithAge(bestChannel.SaleCount, "", now)
+		confidence := confidenceLabelWithAge(totalSales, "", now)
 
-			suggestions = append(suggestions, CampaignSuggestion{
-				Type:  "adjust",
-				Title: fmt.Sprintf("Lower buy terms on %s", c.Name),
-				Rationale: fmt.Sprintf("Best channel (%s) margin is %.0f%%. With %.0f%% fees and 10%% target margin, max buy should be ~%.0f%% CL. Current: %.0f%%.",
-					bestChannel.Channel, bestMargin*100, feePct*100, maxBuy*100, c.BuyTermsCLPct*100),
-				Confidence: confidence,
-				DataPoints: bestChannel.SaleCount,
-				SuggestedParams: CampaignSuggestionParams{
-					Name:          c.Name,
-					BuyTermsCLPct: maxBuy,
-				},
-				ExpectedMetrics: ExpectedMetrics{
-					ExpectedMarginPct: targetMargin,
-					DataConfidence:    confidence,
-				},
-			})
-		}
+		suggestions = append(suggestions, CampaignSuggestion{
+			Type:  "adjust",
+			Title: fmt.Sprintf("Lower buy terms on %s (margin gap)", c.Name),
+			Rationale: fmt.Sprintf("Weighted-average margin across channels is %.1f%%, below the %.0f%% target. Lowering CL%% from %.0f%% to %.0f%% closes the gap.",
+				weightedMargin*100, suggTargetMargin*100,
+				c.BuyTermsCLPct*100, newTerms*100),
+			Confidence: confidence,
+			DataPoints: totalSales,
+			SuggestedParams: CampaignSuggestionParams{
+				Name:          c.Name,
+				BuyTermsCLPct: newTerms,
+			},
+			ExpectedMetrics: ExpectedMetrics{
+				ExpectedMarginPct: suggTargetMargin,
+				DataConfidence:    confidence,
+			},
+		})
 	}
 
 	return suggestions

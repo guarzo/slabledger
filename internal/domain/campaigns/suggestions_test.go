@@ -118,38 +118,140 @@ func TestGenerateSuggestions_CoverageGap(t *testing.T) {
 
 func TestGenerateSuggestions_ChannelInformedBuyTerms(t *testing.T) {
 	cases := []struct {
-		name            string
-		insights        *PortfolioInsights
-		campaigns       []Campaign
-		wantCampaign    string
-		wantMaxBuy      float64
-		wantMaxBuyExact bool // if true, assert exact maxBuy value
+		name         string
+		insights     *PortfolioInsights
+		campaigns    []Campaign
+		wantCampaign string // empty means no suggestion expected
+		wantNewTerms float64
+		wantExact    bool
 	}{
 		{
-			name: "eBay best channel",
+			name: "weighted margin already meets target",
+			// totalRev 100000, totalNet 12000 => weighted 12% (above 10% target)
 			insights: &PortfolioInsights{
 				ByChannel: []ChannelPNL{
-					{Channel: SaleChannelEbay, SaleCount: 20, RevenueCents: 100000, FeesCents: 12350, NetProfitCents: 30000},
-					{Channel: SaleChannelInPerson, SaleCount: 5, RevenueCents: 30000, FeesCents: 0, NetProfitCents: 15000},
+					{Channel: SaleChannelEbay, SaleCount: 20, RevenueCents: 70000, NetProfitCents: 7000},
+					{Channel: SaleChannelInPerson, SaleCount: 10, RevenueCents: 30000, NetProfitCents: 5000},
 				},
-				DataSummary: InsightsDataSummary{TotalPurchases: 50, TotalSales: 25},
+				DataSummary: InsightsDataSummary{TotalPurchases: 50, TotalSales: 30},
 			},
-			campaigns:    []Campaign{{Name: "Aggressive Campaign", Phase: PhaseActive, BuyTermsCLPct: 0.85, EbayFeePct: 0.1235}},
-			wantCampaign: "Aggressive Campaign",
+			campaigns: []Campaign{{Name: "Healthy", Phase: PhaseActive, BuyTermsCLPct: 0.85}},
 		},
 		{
-			name: "InPerson best channel",
+			name: "gap below reduction buffer",
+			// weighted 8%, target 10%, gap 2% < 5% buffer
 			insights: &PortfolioInsights{
 				ByChannel: []ChannelPNL{
-					{Channel: SaleChannelInPerson, SaleCount: 15, RevenueCents: 80000, FeesCents: 0, NetProfitCents: 40000},
-					{Channel: SaleChannelEbay, SaleCount: 10, RevenueCents: 50000, FeesCents: 6175, NetProfitCents: 10000},
+					{Channel: SaleChannelEbay, SaleCount: 20, RevenueCents: 100000, NetProfitCents: 8000},
 				},
-				DataSummary: InsightsDataSummary{TotalPurchases: 50, TotalSales: 25},
+				DataSummary: InsightsDataSummary{TotalPurchases: 50, TotalSales: 20},
 			},
-			campaigns:       []Campaign{{Name: "IP Campaign", Phase: PhaseActive, BuyTermsCLPct: 0.80, EbayFeePct: 0.1235}},
-			wantCampaign:    "IP Campaign",
-			wantMaxBuy:      0.40, // 50% margin - 10% target - 0% fee
-			wantMaxBuyExact: true,
+			campaigns: []Campaign{{Name: "Near Target", Phase: PhaseActive, BuyTermsCLPct: 0.85}},
+		},
+		{
+			name: "gap exceeds buffer — suggest reduction",
+			// weighted 3%, target 10%, gap 7% → lower 0.85 to 0.78
+			insights: &PortfolioInsights{
+				ByChannel: []ChannelPNL{
+					{Channel: SaleChannelEbay, SaleCount: 20, RevenueCents: 100000, NetProfitCents: 3000},
+				},
+				DataSummary: InsightsDataSummary{TotalPurchases: 50, TotalSales: 20},
+			},
+			campaigns:    []Campaign{{Name: "Underperformer", Phase: PhaseActive, BuyTermsCLPct: 0.85}},
+			wantCampaign: "Underperformer",
+			wantNewTerms: 0.78,
+			wantExact:    true,
+		},
+		{
+			name: "floor respected at 70%",
+			// weighted -5%, target 10%, gap 15% → 0.74 - 0.15 = 0.59, floored to 0.70
+			insights: &PortfolioInsights{
+				ByChannel: []ChannelPNL{
+					{Channel: SaleChannelEbay, SaleCount: 20, RevenueCents: 100000, NetProfitCents: -5000},
+				},
+				DataSummary: InsightsDataSummary{TotalPurchases: 50, TotalSales: 20},
+			},
+			campaigns:    []Campaign{{Name: "Bleeding", Phase: PhaseActive, BuyTermsCLPct: 0.74}},
+			wantCampaign: "Bleeding",
+			wantNewTerms: 0.70,
+			wantExact:    true,
+		},
+		{
+			name: "no channel data",
+			insights: &PortfolioInsights{
+				ByChannel:   nil,
+				DataSummary: InsightsDataSummary{TotalPurchases: 50, TotalSales: 20},
+			},
+			campaigns: []Campaign{{Name: "X", Phase: PhaseActive, BuyTermsCLPct: 0.85}},
+		},
+		{
+			name: "single channel — weighted == channel margin",
+			// single eBay channel at 2% → gap 8% → 0.85 - 0.08 = 0.77
+			insights: &PortfolioInsights{
+				ByChannel: []ChannelPNL{
+					{Channel: SaleChannelEbay, SaleCount: 25, RevenueCents: 50000, NetProfitCents: 1000},
+				},
+				DataSummary: InsightsDataSummary{TotalPurchases: 40, TotalSales: 25},
+			},
+			campaigns:    []Campaign{{Name: "Solo eBay", Phase: PhaseActive, BuyTermsCLPct: 0.85}},
+			wantCampaign: "Solo eBay",
+			wantNewTerms: 0.77,
+			wantExact:    true,
+		},
+		{
+			name: "mixed channels below buffer",
+			// eBay +20% on 60% of rev, InPerson -15% on 40% → weighted = 0.12*0.6 + -0.15*0.4 = 0.072 - 0.06 = 0.012
+			// Actually: 0.20*0.6 + -0.15*0.4 = 0.12 - 0.06 = 0.06 → gap 4% (below buffer)
+			insights: &PortfolioInsights{
+				ByChannel: []ChannelPNL{
+					{Channel: SaleChannelEbay, SaleCount: 18, RevenueCents: 60000, NetProfitCents: 12000},
+					{Channel: SaleChannelInPerson, SaleCount: 8, RevenueCents: 40000, NetProfitCents: -6000},
+				},
+				DataSummary: InsightsDataSummary{TotalPurchases: 40, TotalSales: 26},
+			},
+			campaigns: []Campaign{{Name: "Mixed", Phase: PhaseActive, BuyTermsCLPct: 0.85}},
+		},
+		{
+			name: "archived campaign skipped",
+			insights: &PortfolioInsights{
+				ByChannel: []ChannelPNL{
+					{Channel: SaleChannelEbay, SaleCount: 20, RevenueCents: 100000, NetProfitCents: 3000},
+				},
+				DataSummary: InsightsDataSummary{TotalPurchases: 50, TotalSales: 20},
+			},
+			campaigns: []Campaign{{Name: "Closed", Phase: PhaseClosed, BuyTermsCLPct: 0.85}},
+		},
+		{
+			name: "zero revenue edge case",
+			insights: &PortfolioInsights{
+				ByChannel: []ChannelPNL{
+					{Channel: SaleChannelEbay, SaleCount: 0, RevenueCents: 0, NetProfitCents: 0},
+				},
+				DataSummary: InsightsDataSummary{TotalPurchases: 30, TotalSales: 20},
+			},
+			campaigns: []Campaign{{Name: "Empty", Phase: PhaseActive, BuyTermsCLPct: 0.85}},
+		},
+		{
+			name: "production smoke: Modern eBay +26.6% no longer fires",
+			// eBay margin +26.6% on full revenue → weighted 26.6% ≫ 10% target → no suggestion.
+			// Regression guard for the old "lower Modern to 28.57%" bad output.
+			insights: &PortfolioInsights{
+				ByChannel: []ChannelPNL{
+					{Channel: SaleChannelEbay, SaleCount: 30, RevenueCents: 500000, NetProfitCents: 133000},
+				},
+				DataSummary: InsightsDataSummary{TotalPurchases: 60, TotalSales: 30},
+			},
+			campaigns: []Campaign{{Name: "Modern", Phase: PhaseActive, BuyTermsCLPct: 0.85, EbayFeePct: 0.1235}},
+		},
+		{
+			name: "below minimum total sales — skipped",
+			insights: &PortfolioInsights{
+				ByChannel: []ChannelPNL{
+					{Channel: SaleChannelEbay, SaleCount: 5, RevenueCents: 20000, NetProfitCents: -2000},
+				},
+				DataSummary: InsightsDataSummary{TotalPurchases: 20, TotalSales: 5},
+			},
+			campaigns: []Campaign{{Name: "Sparse", Phase: PhaseActive, BuyTermsCLPct: 0.85}},
 		},
 	}
 
@@ -157,20 +259,42 @@ func TestGenerateSuggestions_ChannelInformedBuyTerms(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			resp := GenerateSuggestions(context.Background(), tc.insights, tc.campaigns)
 
-			found := false
-			for _, s := range resp.Adjustments {
-				if s.Type == "adjust" && s.SuggestedParams.Name == tc.wantCampaign && s.SuggestedParams.BuyTermsCLPct > 0 {
-					found = true
-					if tc.wantMaxBuyExact {
-						const eps = 1e-9
-						if math.Abs(s.SuggestedParams.BuyTermsCLPct-tc.wantMaxBuy) > eps {
-							t.Errorf("expected maxBuy %f, got %f", tc.wantMaxBuy, s.SuggestedParams.BuyTermsCLPct)
-						}
-					}
+			var match *CampaignSuggestion
+			for i := range resp.Adjustments {
+				s := &resp.Adjustments[i]
+				if s.Type != "adjust" || s.SuggestedParams.BuyTermsCLPct <= 0 {
+					continue
 				}
+				// Only consider suggestions from the channel-informed rule (Title starts with "Lower buy terms on").
+				if !strings.HasPrefix(s.Title, "Lower buy terms on ") {
+					continue
+				}
+				match = s
+				break
 			}
-			if !found {
-				t.Errorf("expected buy terms adjustment suggestion for %s", tc.wantCampaign)
+
+			if tc.wantCampaign == "" {
+				if match != nil {
+					t.Errorf("expected no channel-informed buy terms suggestion, got %+v", match.SuggestedParams)
+				}
+				return
+			}
+
+			if match == nil {
+				t.Fatalf("expected channel-informed buy terms suggestion for %s, got none", tc.wantCampaign)
+			}
+			if match.SuggestedParams.Name != tc.wantCampaign {
+				t.Errorf("expected campaign %s, got %s", tc.wantCampaign, match.SuggestedParams.Name)
+			}
+			if match.SuggestedParams.BuyTermsCLPct >= tc.campaigns[0].BuyTermsCLPct {
+				t.Errorf("suggested terms %.4f must be < current %.4f",
+					match.SuggestedParams.BuyTermsCLPct, tc.campaigns[0].BuyTermsCLPct)
+			}
+			if tc.wantExact {
+				const eps = 1e-9
+				if math.Abs(match.SuggestedParams.BuyTermsCLPct-tc.wantNewTerms) > eps {
+					t.Errorf("expected newTerms %.4f, got %.4f", tc.wantNewTerms, match.SuggestedParams.BuyTermsCLPct)
+				}
 			}
 		})
 	}
