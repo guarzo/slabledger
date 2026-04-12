@@ -1,3 +1,7 @@
+// Social slide grade badge using post-type gradient theming.
+// For the general-purpose grade badge (inventory, campaign detail, etc.), see:
+// web/src/react/ui/GradeBadge.tsx
+// They are separate intentionally — this version uses post-type theming via getTheme().
 import { getTheme } from './theme';
 import type { PostType } from '../../../../../types/social';
 
