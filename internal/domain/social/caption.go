@@ -48,8 +48,8 @@ func (s *service) generateCaptionAsync(post *SocialPost) {
 		ai.RecordCall(ctx, s.tracker, s.logger, ai.OpSocialCaption, err, start, 0, &usage)
 		s.logError(ctx, "generate caption", post.PostType, err)
 		errCtx, errCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer errCancel()
 		_ = s.repo.UpdatePostCaption(errCtx, post.ID, placeholderCaption, "") //nolint:errcheck // best-effort
-		errCancel()
 		return
 	}
 
