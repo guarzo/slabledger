@@ -407,3 +407,32 @@ func parsePSAKeys(raw string) []string {
 	}
 	return keys
 }
+
+// GenerateInstagramPost initiates a DH-side Instagram post generation.
+// Returns the numeric post_id for use with PollInstagramPostStatus.
+// Requires EnterpriseAvailable() == true.
+func (c *Client) GenerateInstagramPost(ctx context.Context, scope, strategy, headline string) (int64, error) {
+	url := c.baseURL + "/api/v1/enterprise/instagram/generate"
+	req := DHInstagramGenerateRequest{
+		Scope:    scope,
+		Strategy: strategy,
+		Headline: headline,
+	}
+	var resp DHInstagramGenerateResponse
+	if err := c.postEnterprise(ctx, url, req, &resp); err != nil {
+		return 0, err
+	}
+	return resp.PostID, nil
+}
+
+// PollInstagramPostStatus returns the current render status and, when ready,
+// the public slide image URLs for the given post_id.
+// Requires EnterpriseAvailable() == true.
+func (c *Client) PollInstagramPostStatus(ctx context.Context, postID int64) (*DHInstagramStatusResponse, error) {
+	url := fmt.Sprintf("%s/api/v1/enterprise/instagram/posts/%d/status", c.baseURL, postID)
+	var resp DHInstagramStatusResponse
+	if err := c.getEnterprise(ctx, url, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
