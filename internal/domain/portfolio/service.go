@@ -156,47 +156,6 @@ func (s *service) GetPortfolioHealth(ctx context.Context) (*inventory.PortfolioH
 	return health, nil
 }
 
-func (s *service) computeChannelHealthSignals(ctx context.Context, campaignID string) (int, int, float64) {
-	data, err := s.analytics.GetPurchasesWithSales(ctx, campaignID)
-	if err != nil {
-		if s.logger != nil {
-			s.logger.Error(ctx, "channel health signals: fetch purchases with sales",
-				observability.String("campaignID", campaignID),
-				observability.Err(err))
-		}
-		return 0, 0, 0
-	}
-
-	var (
-		liquidationLossCents int
-		liquidationSaleCount int
-		marketplaceRevenue   int
-		marketplaceNetProfit int
-	)
-
-	for _, d := range data {
-		if d.Sale == nil {
-			continue
-		}
-		switch d.Sale.SaleChannel {
-		case inventory.SaleChannelInPerson, inventory.SaleChannelCardShow:
-			if d.Sale.NetProfitCents < 0 {
-				liquidationLossCents += d.Sale.NetProfitCents
-				liquidationSaleCount++
-			}
-		case inventory.SaleChannelEbay, inventory.SaleChannelTCGPlayer:
-			marketplaceRevenue += d.Sale.SalePriceCents
-			marketplaceNetProfit += d.Sale.NetProfitCents
-		}
-	}
-
-	marketplaceMarginPct := 0.0
-	if marketplaceRevenue > 0 {
-		marketplaceMarginPct = float64(marketplaceNetProfit) / float64(marketplaceRevenue)
-	}
-	return liquidationLossCents, liquidationSaleCount, marketplaceMarginPct
-}
-
 func (s *service) GetPortfolioChannelVelocity(ctx context.Context) ([]inventory.ChannelVelocity, error) {
 	return s.analytics.GetPortfolioChannelVelocity(ctx)
 }
@@ -428,7 +387,7 @@ func (s *service) GetWeeklyReviewSummary(ctx context.Context) (*inventory.Weekly
 		capital := inventory.ComputeCapitalSummary(capitalRaw)
 		summary.WeeksToCover = capital.WeeksToCover
 	} else {
-		summary.WeeksToCover = 99.0
+		summary.WeeksToCover = inventory.WeeksToCoverNoData
 	}
 
 	return summary, nil

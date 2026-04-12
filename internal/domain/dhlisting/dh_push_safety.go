@@ -4,35 +4,9 @@ import (
 	"fmt"
 	"math"
 	"sort"
-	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 )
-
-// DHPushConfig holds admin-configurable thresholds for DH push safety gates.
-// This is a duplicate definition to avoid circular dependencies.
-// TODO: Consider moving this to a shared types package if it grows further.
-type DHPushConfig struct {
-	SwingPctThreshold            int       `json:"swingPctThreshold"`
-	SwingMinCents                int       `json:"swingMinCents"`
-	DisagreementPctThreshold     int       `json:"disagreementPctThreshold"`
-	UnreviewedChangePctThreshold int       `json:"unreviewedChangePctThreshold"`
-	UnreviewedChangeMinCents     int       `json:"unreviewedChangeMinCents"`
-	InitialPushValueFloorPct     int       `json:"initialPushValueFloorPct"`
-	UpdatedAt                    time.Time `json:"updatedAt"`
-}
-
-// DefaultDHPushConfig returns sensible defaults for push safety thresholds.
-func DefaultDHPushConfig() DHPushConfig {
-	return DHPushConfig{
-		SwingPctThreshold:            20,
-		SwingMinCents:                5000,
-		DisagreementPctThreshold:     25,
-		UnreviewedChangePctThreshold: 15,
-		UnreviewedChangeMinCents:     3000,
-		InitialPushValueFloorPct:     50,
-	}
-}
 
 // ResolveMarketValueCents returns the best available price for DH push:
 // reviewed price > CL value > 0.
@@ -50,44 +24,9 @@ func ResolveMarketValueCents(p *inventory.Purchase) int {
 // For initial pushes (DHInventoryID == 0): checks market value vs buy cost.
 // For re-pushes: checks price swing, source disagreement, and unreviewed CL change.
 // Returns empty string if the push should proceed, or a reason string if held.
-//
-// Note: cfg can be either dhlisting.DHPushConfig or inventory.DHPushConfig;
-// they have identical structure so type conversion is safe.
-func EvaluateHoldTriggers(p *inventory.Purchase, cfg interface{}) string {
-	// Handle both inventory.DHPushConfig and dhlisting.DHPushConfig
-	var dhCfg DHPushConfig
-	switch v := cfg.(type) {
-	case inventory.DHPushConfig:
-		dhCfg = DHPushConfig{
-			SwingPctThreshold:            v.SwingPctThreshold,
-			SwingMinCents:                v.SwingMinCents,
-			DisagreementPctThreshold:     v.DisagreementPctThreshold,
-			UnreviewedChangePctThreshold: v.UnreviewedChangePctThreshold,
-			UnreviewedChangeMinCents:     v.UnreviewedChangeMinCents,
-			InitialPushValueFloorPct:     v.InitialPushValueFloorPct,
-			UpdatedAt:                    v.UpdatedAt,
-		}
-	case *inventory.DHPushConfig:
-		dhCfg = DHPushConfig{
-			SwingPctThreshold:            v.SwingPctThreshold,
-			SwingMinCents:                v.SwingMinCents,
-			DisagreementPctThreshold:     v.DisagreementPctThreshold,
-			UnreviewedChangePctThreshold: v.UnreviewedChangePctThreshold,
-			UnreviewedChangeMinCents:     v.UnreviewedChangeMinCents,
-			InitialPushValueFloorPct:     v.InitialPushValueFloorPct,
-			UpdatedAt:                    v.UpdatedAt,
-		}
-	case DHPushConfig:
-		dhCfg = v
-	case *DHPushConfig:
-		dhCfg = *v
-	default:
-		// Fallback to default config if type is unknown
-		dhCfg = DefaultDHPushConfig()
-	}
-
+func EvaluateHoldTriggers(p *inventory.Purchase, cfg inventory.DHPushConfig) string {
 	if p.DHInventoryID == 0 {
-		return checkInitialPushValueMismatch(p, dhCfg.InitialPushValueFloorPct)
+		return checkInitialPushValueMismatch(p, cfg.InitialPushValueFloorPct)
 	}
 
 	newValue := ResolveMarketValueCents(p)
@@ -97,17 +36,17 @@ func EvaluateHoldTriggers(p *inventory.Purchase, cfg interface{}) string {
 	}
 
 	// Trigger 1: Price swing
-	if reason := checkPriceSwing(newValue, lastPushed, dhCfg.SwingPctThreshold, dhCfg.SwingMinCents); reason != "" {
+	if reason := checkPriceSwing(newValue, lastPushed, cfg.SwingPctThreshold, cfg.SwingMinCents); reason != "" {
 		return reason
 	}
 
 	// Trigger 2: Source disagreement
-	if reason := checkSourceDisagreement(p, dhCfg.DisagreementPctThreshold); reason != "" {
+	if reason := checkSourceDisagreement(p, cfg.DisagreementPctThreshold); reason != "" {
 		return reason
 	}
 
 	// Trigger 3: Unreviewed CL change
-	if reason := checkUnreviewedCLChange(p, lastPushed, dhCfg.UnreviewedChangePctThreshold, dhCfg.UnreviewedChangeMinCents); reason != "" {
+	if reason := checkUnreviewedCLChange(p, lastPushed, cfg.UnreviewedChangePctThreshold, cfg.UnreviewedChangeMinCents); reason != "" {
 		return reason
 	}
 
@@ -188,7 +127,7 @@ func checkUnreviewedCLChange(p *inventory.Purchase, lastPushed, pctThreshold, mi
 // is significantly below the buy cost, suggesting a possible data error.
 func checkInitialPushValueMismatch(p *inventory.Purchase, floorPct int) string {
 	if floorPct <= 0 {
-		floorPct = DefaultDHPushConfig().InitialPushValueFloorPct
+		floorPct = inventory.DefaultDHPushConfig().InitialPushValueFloorPct
 	}
 	if p.BuyCostCents == 0 {
 		return ""
