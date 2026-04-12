@@ -182,14 +182,6 @@ func (h *AdminHandlers) HandleListUsers(w http.ResponseWriter, r *http.Request) 
 	if !ok {
 		return
 	}
-	type userResponse struct {
-		ID          int64      `json:"id"`
-		Username    string     `json:"username"`
-		Email       string     `json:"email"`
-		AvatarURL   string     `json:"avatar_url"`
-		IsAdmin     bool       `json:"is_admin"`
-		LastLoginAt *time.Time `json:"last_login_at"`
-	}
 
 	resp := make([]userResponse, len(users))
 	for i, u := range users {

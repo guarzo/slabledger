@@ -7,7 +7,7 @@ import (
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
 	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/mathutil"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
@@ -80,7 +80,7 @@ func (s *CardLadderRefreshScheduler) refreshSalesComps(ctx context.Context, clie
 
 // gapFillGemRateIDs queries the CL cards index for purchases that still have no gemRateID.
 // Matches on player name + condition + grading company. Rate limited by the client's built-in limiter.
-func (s *CardLadderRefreshScheduler) gapFillGemRateIDs(ctx context.Context, client *cardladder.Client, purchases []campaigns.Purchase) {
+func (s *CardLadderRefreshScheduler) gapFillGemRateIDs(ctx context.Context, client *cardladder.Client, purchases []inventory.Purchase) {
 	filled := 0
 	for i := range purchases {
 		p := &purchases[i]

@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	"github.com/guarzo/slabledger/internal/domain/dhlisting"
 )
 
 // --- Local mocks (inline interface fields, not central mocks) ---
@@ -45,13 +45,13 @@ func (m *mockInventoryLister) SyncChannels(ctx context.Context, inventoryID int,
 func TestCertResolverAdapter_ResolveCert_Success(t *testing.T) {
 	tests := []struct {
 		name    string
-		req     campaigns.DHCertResolveRequest
+		req     dhlisting.DHCertResolveRequest
 		dhResp  *dh.CertResolution
-		wantRes *campaigns.DHCertResolution
+		wantRes *dhlisting.DHCertResolution
 	}{
 		{
 			name: "matched with card ID and no candidates",
-			req: campaigns.DHCertResolveRequest{
+			req: dhlisting.DHCertResolveRequest{
 				CertNumber: "12345678",
 				CardName:   "Charizard",
 				SetName:    "Base Set",
@@ -69,14 +69,14 @@ func TestCertResolverAdapter_ResolveCert_Success(t *testing.T) {
 				Grade:      9.0,
 				ImageURL:   "https://example.com/img.jpg",
 			},
-			wantRes: &campaigns.DHCertResolution{
+			wantRes: &dhlisting.DHCertResolution{
 				Status:   "matched",
 				DHCardID: 42,
 			},
 		},
 		{
 			name: "ambiguous with candidates",
-			req: campaigns.DHCertResolveRequest{
+			req: dhlisting.DHCertResolveRequest{
 				CertNumber: "99999999",
 				CardName:   "Pikachu",
 			},
@@ -88,9 +88,9 @@ func TestCertResolverAdapter_ResolveCert_Success(t *testing.T) {
 					{DHCardID: 11, CardName: "Pikachu", SetName: "Jungle", CardNumber: "60", ImageURL: "https://example.com/b.jpg"},
 				},
 			},
-			wantRes: &campaigns.DHCertResolution{
+			wantRes: &dhlisting.DHCertResolution{
 				Status: "ambiguous",
-				Candidates: []campaigns.DHCertCandidate{
+				Candidates: []dhlisting.DHCertCandidate{
 					{DHCardID: 10, CardName: "Pikachu", SetName: "Base Set", CardNumber: "58"},
 					{DHCardID: 11, CardName: "Pikachu", SetName: "Jungle", CardNumber: "60"},
 				},
@@ -172,7 +172,7 @@ func TestCertResolverAdapter_ResolveCert_Error(t *testing.T) {
 	}
 
 	adapter := NewCertResolverAdapter(mock)
-	got, err := adapter.ResolveCert(context.Background(), campaigns.DHCertResolveRequest{
+	got, err := adapter.ResolveCert(context.Background(), dhlisting.DHCertResolveRequest{
 		CertNumber: "11111111",
 	})
 	if !errors.Is(err, wantErr) {
@@ -188,14 +188,14 @@ func TestCertResolverAdapter_ResolveCert_Error(t *testing.T) {
 func TestInventoryPusherAdapter_PushInventory_Success(t *testing.T) {
 	tests := []struct {
 		name        string
-		items       []campaigns.DHInventoryPushItem
+		items       []dhlisting.DHInventoryPushItem
 		wantDHItems []dh.InventoryItem
 		dhResp      *dh.InventoryPushResponse
-		wantResults []campaigns.DHInventoryPushResultItem
+		wantResults []dhlisting.DHInventoryPushResultItem
 	}{
 		{
 			name: "single item with market value",
-			items: []campaigns.DHInventoryPushItem{
+			items: []dhlisting.DHInventoryPushItem{
 				{DHCardID: 42, CertNumber: "12345678", Grade: 9.0, CostBasisCents: 5000, MarketValueCents: 8000},
 			},
 			wantDHItems: []dh.InventoryItem{
@@ -222,7 +222,7 @@ func TestInventoryPusherAdapter_PushInventory_Success(t *testing.T) {
 					},
 				},
 			},
-			wantResults: []campaigns.DHInventoryPushResultItem{
+			wantResults: []dhlisting.DHInventoryPushResultItem{
 				{
 					DHInventoryID:      100,
 					Status:             "in_stock",
@@ -233,7 +233,7 @@ func TestInventoryPusherAdapter_PushInventory_Success(t *testing.T) {
 		},
 		{
 			name: "zero market value maps to nil pointer",
-			items: []campaigns.DHInventoryPushItem{
+			items: []dhlisting.DHInventoryPushItem{
 				{DHCardID: 7, CertNumber: "00000001", Grade: 10.0, CostBasisCents: 2000, MarketValueCents: 0},
 			},
 			wantDHItems: []dh.InventoryItem{
@@ -252,7 +252,7 @@ func TestInventoryPusherAdapter_PushInventory_Success(t *testing.T) {
 					{DHInventoryID: 200, Status: "in_stock", AssignedPriceCents: 3000},
 				},
 			},
-			wantResults: []campaigns.DHInventoryPushResultItem{
+			wantResults: []dhlisting.DHInventoryPushResultItem{
 				{DHInventoryID: 200, Status: "in_stock", AssignedPriceCents: 3000, ChannelsJSON: "[]"},
 			},
 		},
@@ -338,10 +338,10 @@ func TestInventoryPusherAdapter_PushInventory_Success(t *testing.T) {
 func TestInventoryPusherAdapter_PushInventory_EmptyInput(t *testing.T) {
 	tests := []struct {
 		name  string
-		items []campaigns.DHInventoryPushItem
+		items []dhlisting.DHInventoryPushItem
 	}{
 		{name: "nil input", items: nil},
-		{name: "empty slice", items: []campaigns.DHInventoryPushItem{}},
+		{name: "empty slice", items: []dhlisting.DHInventoryPushItem{}},
 	}
 
 	for _, tc := range tests {
@@ -373,7 +373,7 @@ func TestInventoryPusherAdapter_PushInventory_Error(t *testing.T) {
 	}
 
 	adapter := NewInventoryPusherAdapter(mock)
-	got, err := adapter.PushInventory(context.Background(), []campaigns.DHInventoryPushItem{
+	got, err := adapter.PushInventory(context.Background(), []dhlisting.DHInventoryPushItem{
 		{DHCardID: 1, CertNumber: "111"},
 	})
 	if !errors.Is(err, wantErr) {

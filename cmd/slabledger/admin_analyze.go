@@ -10,6 +10,7 @@ import (
 
 	"github.com/guarzo/slabledger/internal/adapters/advisortool"
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
+	scoringadapter "github.com/guarzo/slabledger/internal/adapters/scoring"
 	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
 	"github.com/guarzo/slabledger/internal/domain/advisor"
 	"github.com/guarzo/slabledger/internal/domain/observability"
@@ -126,9 +127,13 @@ func adminAnalyze(ctx context.Context, args []string) error {
 		return fmt.Errorf("initialize price providers: %w", err)
 	}
 
-	campaignsService, _, _ := initializeCampaignsService(
+	campaignsInit := initializeCampaignsService(
 		ctx, &cfg, logger, db, priceProvImpl, intelRepo, nil,
 	)
+	campaignsService := campaignsInit.service
+	arbSvc := campaignsInit.arbSvc
+	portSvc := campaignsInit.portSvc
+	tuningSvc := campaignsInit.tuningSvc
 
 	// AI call tracking
 	aiCallRepo := sqlite.NewAICallRepository(db)
@@ -139,10 +144,19 @@ func adminAnalyze(ctx context.Context, args []string) error {
 		advisortool.WithIntelligenceRepo(intelRepo),
 		advisortool.WithSuggestionsRepo(suggestionsRepo),
 		advisortool.WithGapStore(gapStore),
+		advisortool.WithArbitrageService(arbSvc),
+		advisortool.WithPortfolioService(portSvc),
+		advisortool.WithTuningService(tuningSvc),
 	}
 
 	_, advisorSvc, _, err := initializeAdvisorService(
-		ctx, &cfg, logger, db, aiCallRepo, campaignsService, advisorToolOpts...,
+		ctx, &cfg, logger, db, aiCallRepo, campaignsService,
+		[]scoringadapter.ProviderOption{
+			scoringadapter.WithArbitrageService(arbSvc),
+			scoringadapter.WithPortfolioService(portSvc),
+			scoringadapter.WithTuningService(tuningSvc),
+		},
+		advisorToolOpts...,
 	)
 	if err != nil {
 		return fmt.Errorf("initialize advisor service: %w", err)

@@ -11,7 +11,7 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
 	"github.com/guarzo/slabledger/internal/domain/advisor"
 	"github.com/guarzo/slabledger/internal/domain/auth"
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/domain/picks"
 	"github.com/guarzo/slabledger/internal/domain/pricing"
@@ -30,8 +30,13 @@ type schedulerDeps struct {
 	AuthService          auth.Service
 	SyncStateRepo        *sqlite.SyncStateRepository
 	CardIDMappingRepo    *sqlite.CardIDMappingRepository
-	CampaignsRepo        *sqlite.CampaignsRepository
-	CampaignsService     campaigns.Service
+	CampaignStore        *sqlite.CampaignStore
+	PurchaseStore        *sqlite.PurchaseStore
+	DHStore              *sqlite.DHStore
+	SnapshotStore        *sqlite.SnapshotStore
+	CampaignsService     inventory.Service
+	CertLookup           inventory.CertLookup
+	CertEnrichJob        *scheduler.CertEnrichJob // pre-built; nil if PSA not configured
 	AdvisorService       advisor.Service
 	AdvisorCacheRepo     *sqlite.AdvisorCacheRepository
 	AICallRepo           *sqlite.AICallRepository
@@ -72,11 +77,11 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 		Logger:                   deps.Logger,
 		SyncStateStore:           deps.SyncStateRepo,
 		NewSetsProvider:          deps.CardProvImpl.RegistryManager(),
-		InventoryLister:          &inventoryListAdapter{repo: deps.CampaignsRepo},
+		InventoryLister:          &inventoryListAdapter{repo: deps.PurchaseStore},
 		SnapshotRefresher:        &snapshotRefreshAdapter{svc: deps.CampaignsService},
 		SnapshotEnrichService:    deps.CampaignsService,
-		SnapshotHistoryLister:    deps.CampaignsRepo,
-		SnapshotHistoryRecorder:  deps.CampaignsRepo,
+		SnapshotHistoryLister:    deps.PurchaseStore,
+		SnapshotHistoryRecorder:  deps.SnapshotStore,
 		AdvisorCollector:         deps.AdvisorService,
 		AdvisorCache:             deps.AdvisorCacheRepo,
 		AICallTracker:            deps.AICallRepo,
@@ -88,11 +93,11 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 		PicksGenerator:           deps.PicksService,
 		CardLadderClient:         deps.CardLadderClient,
 		CardLadderStore:          deps.CardLadderStore,
-		CardLadderPurchaseLister: deps.CampaignsRepo,
-		CardLadderValueUpdater:   deps.CampaignsRepo,
-		CardLadderGemRateUpdater: deps.CampaignsRepo,
-		CardLadderSyncUpdater:    deps.CampaignsRepo,
-		CardLadderCLRecorder:     deps.CampaignsRepo,
+		CardLadderPurchaseLister: deps.PurchaseStore,
+		CardLadderValueUpdater:   deps.PurchaseStore,
+		CardLadderGemRateUpdater: deps.PurchaseStore,
+		CardLadderSyncUpdater:    deps.PurchaseStore,
+		CardLadderCLRecorder:     deps.SnapshotStore,
 		CardLadderSalesStore:     deps.CardLadderSalesStore,
 	}
 	// Wire Market Movers (nil-safe: only set if non-nil to avoid typed-nil interface issues)
@@ -102,25 +107,26 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 	if deps.MMStore != nil {
 		buildDeps.MMStore = deps.MMStore
 	}
-	if deps.CampaignsRepo != nil {
-		buildDeps.MMPurchaseLister = deps.CampaignsRepo
-		buildDeps.MMValueUpdater = deps.CampaignsRepo
+	if deps.PurchaseStore != nil {
+		buildDeps.MMPurchaseLister = deps.PurchaseStore
+		buildDeps.MMValueUpdater = deps.PurchaseStore
 	}
 	// Nil-safe interface conversion for DH dependencies.
 	if deps.DHClient != nil {
 		buildDeps.DHClient = deps.DHClient
 		buildDeps.DHOrdersClient = deps.DHClient
 		buildDeps.DHInventoryListClient = deps.DHClient
-		// Guard against typed-nil pointers: a nil *sqlite.CampaignsRepository
-		// assigned to an interface produces a non-nil interface wrapping a nil pointer.
-		if deps.CampaignsRepo != nil {
-			buildDeps.DHFieldsUpdater = deps.CampaignsRepo
-			buildDeps.PurchaseByCertLookup = deps.CampaignsRepo
-			buildDeps.DHPushPendingLister = deps.CampaignsRepo
-			buildDeps.DHPushStatusUpdater = deps.CampaignsRepo
-			buildDeps.DHPushCandidatesSaver = deps.CampaignsRepo
-			buildDeps.DHPushConfigLoader = deps.CampaignsRepo
-			buildDeps.DHPushHoldSetter = deps.CampaignsRepo
+		// Guard against typed-nil pointers: use individual stores instead of composite repo.
+		if deps.PurchaseStore != nil {
+			buildDeps.DHFieldsUpdater = deps.PurchaseStore
+			buildDeps.PurchaseByCertLookup = deps.PurchaseStore
+			buildDeps.DHPushPendingLister = deps.PurchaseStore
+			buildDeps.DHPushStatusUpdater = deps.PurchaseStore
+			buildDeps.DHPushCandidatesSaver = deps.PurchaseStore
+			buildDeps.DHPushHoldSetter = deps.PurchaseStore
+		}
+		if deps.DHStore != nil {
+			buildDeps.DHPushConfigLoader = deps.DHStore
 		}
 		if deps.CardIDMappingRepo != nil {
 			buildDeps.DHPushCardIDSaver = deps.CardIDMappingRepo
@@ -145,15 +151,28 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 		buildDeps.PSASpreadsheetID = deps.PSASpreadsheetID
 		buildDeps.PSATabName = deps.PSATabName
 	}
+
+	// Wire cert enrichment (nil-safe)
+	if deps.CertLookup != nil && deps.PurchaseStore != nil {
+		buildDeps.CertLookup = deps.CertLookup
+		buildDeps.PurchaseRepo = deps.PurchaseStore
+		buildDeps.CampaignService = deps.CampaignsService
+	}
+	// Pass pre-built CertEnrichJob so the scheduler group uses the same instance
+	// that was injected into inventory.service via WithCertEnrichEnqueuer.
+	if deps.CertEnrichJob != nil {
+		buildDeps.CertEnrichJobPrebuilt = deps.CertEnrichJob
+	}
+
+	// Wire crack cache refresh (uses inventory service for RefreshCrackCandidates).
+	if deps.CampaignsService != nil {
+		buildDeps.CrackCacheService = deps.CampaignsService
+	}
+
 	// Wire social publish (nil-safe: only set if publisher was actually configured)
 	if deps.PublisherConfigured {
 		buildDeps.SocialPublisher = deps.SocialService
 		buildDeps.SocialPublishRepo = deps.SocialRepo
-	}
-	// DHSocialRepo is always wired when SocialRepo is available — DHSocialScheduler
-	// does not require Instagram OAuth, only a DH Enterprise key.
-	if deps.SocialRepo != nil {
-		buildDeps.DHSocialRepo = deps.SocialRepo
 	}
 	schedulerResult := scheduler.BuildGroup(deps.Config, buildDeps)
 	schedulerResult.Group.StartAll(schedulerCtx)

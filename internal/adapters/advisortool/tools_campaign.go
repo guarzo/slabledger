@@ -3,6 +3,7 @@ package advisortool
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"github.com/guarzo/slabledger/internal/domain/ai"
 )
@@ -10,11 +11,11 @@ import (
 func (e *CampaignToolExecutor) registerListCampaigns() {
 	e.register(ai.ToolDefinition{
 		Name:        "list_campaigns",
-		Description: "List all campaigns with their parameters, phase, and basic stats. Use activeOnly=false to include closed campaigns.",
+		Description: "List all campaigns with their parameters, phase, and basic stats. Use activeOnly=false to include closed inventory.",
 		Parameters: jsonSchema{
 			Type: "object",
 			Properties: map[string]jsonSchema{
-				"activeOnly": {Type: "boolean", Description: "If true, only return active campaigns. Default false."},
+				"activeOnly": {Type: "boolean", Description: "If true, only return active inventory. Default false."},
 			},
 		},
 	}, func(ctx context.Context, args string) (string, error) {
@@ -46,7 +47,12 @@ func (e *CampaignToolExecutor) registerGetPNLByChannel() {
 func (e *CampaignToolExecutor) registerGetCampaignTuning() {
 	e.registerCampaignTool("get_campaign_tuning",
 		"Get comprehensive tuning data: performance by grade, by price tier, buy threshold analysis, market alignment, top/bottom performers, and algorithmic recommendations.",
-		func(ctx context.Context, id string) (any, error) { return e.svc.GetCampaignTuning(ctx, id) })
+		func(ctx context.Context, id string) (any, error) {
+			if e.tuningSvc != nil {
+				return e.tuningSvc.GetCampaignTuning(ctx, id)
+			}
+			return nil, fmt.Errorf("tuning service not available")
+		})
 }
 
 func (e *CampaignToolExecutor) registerGetInventoryAging() {
@@ -81,7 +87,10 @@ func (e *CampaignToolExecutor) registerGetSellSheet() {
 		Description: "Get the global sell sheet: target sell price, minimum acceptable price, and recommended channel for each unsold card.",
 		Parameters:  emptyObjectParams,
 	}, func(ctx context.Context, _ string) (string, error) {
-		result, err := e.svc.GenerateGlobalSellSheet(ctx)
+		if e.exportService == nil {
+			return "", fmt.Errorf("export service not available")
+		}
+		result, err := e.exportService.GenerateGlobalSellSheet(ctx)
 		if err != nil {
 			return "", err
 		}

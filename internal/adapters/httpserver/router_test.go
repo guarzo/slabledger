@@ -24,8 +24,8 @@ func setupTestRouter(t *testing.T) *Router {
 	healthHandler := handlers.NewHealthHandler(nil, cardProv, nil, logger)
 	spaHandler := handlers.NewSPAHandler(logger)
 
-	campaignSvc := &mocks.MockCampaignService{}
-	campaignsHandler := handlers.NewCampaignsHandler(campaignSvc, logger, nil)
+	campaignSvc := &mocks.MockInventoryService{}
+	campaignsHandler := handlers.NewCampaignsHandler(campaignSvc, nil, nil, nil, logger, nil)
 
 	return NewRouter(RouterConfig{
 		Handler:          handler,

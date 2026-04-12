@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -334,7 +335,7 @@ func (r *SocialRepository) FetchEligibleDraft(ctx context.Context) (*social.Post
 	if err := row.Scan(&p.ID, &postType, &status, &p.Caption, &p.Hashtags, &p.CoverTitle,
 		&p.CardCount, &p.InstagramPostID, &p.ErrorMessage, &createdAt, &updatedAt,
 		&slideURLsJSON, &backgroundURLsJSON); err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("scan eligible draft: %w", err)

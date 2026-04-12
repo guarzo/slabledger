@@ -7,7 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	"github.com/guarzo/slabledger/internal/domain/arbitrage"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
@@ -17,7 +18,7 @@ func (h *CampaignsHandler) HandleCampaignPNL(w http.ResponseWriter, r *http.Requ
 	if !ok {
 		return
 	}
-	pnl, ok := serviceCall(w, r.Context(), h.logger, "failed to get campaign PNL", func() (*campaigns.CampaignPNL, error) {
+	pnl, ok := serviceCall(w, r.Context(), h.logger, "failed to get campaign PNL", func() (*inventory.CampaignPNL, error) {
 		return h.service.GetCampaignPNL(r.Context(), id)
 	})
 	if !ok {
@@ -32,7 +33,7 @@ func (h *CampaignsHandler) HandlePNLByChannel(w http.ResponseWriter, r *http.Req
 	if !ok {
 		return
 	}
-	channels, ok := serviceCall(w, r.Context(), h.logger, "failed to get PNL by channel", func() ([]campaigns.ChannelPNL, error) {
+	channels, ok := serviceCall(w, r.Context(), h.logger, "failed to get PNL by channel", func() ([]inventory.ChannelPNL, error) {
 		return h.service.GetPNLByChannel(r.Context(), id)
 	})
 	if !ok {
@@ -81,7 +82,7 @@ func (h *CampaignsHandler) HandleDaysToSell(w http.ResponseWriter, r *http.Reque
 	if !ok {
 		return
 	}
-	buckets, ok := serviceCall(w, r.Context(), h.logger, "failed to get days-to-sell", func() ([]campaigns.DaysToSellBucket, error) {
+	buckets, ok := serviceCall(w, r.Context(), h.logger, "failed to get days-to-sell", func() ([]inventory.DaysToSellBucket, error) {
 		return h.service.GetDaysToSellDistribution(r.Context(), id)
 	})
 	if !ok {
@@ -96,7 +97,7 @@ func (h *CampaignsHandler) HandleInventory(w http.ResponseWriter, r *http.Reques
 	if !ok {
 		return
 	}
-	result, ok := serviceCall(w, r.Context(), h.logger, "failed to get inventory", func() (*campaigns.InventoryResult, error) {
+	result, ok := serviceCall(w, r.Context(), h.logger, "failed to get inventory", func() (*inventory.InventoryResult, error) {
 		return h.service.GetInventoryAging(r.Context(), id)
 	})
 	if !ok {
@@ -107,6 +108,11 @@ func (h *CampaignsHandler) HandleInventory(w http.ResponseWriter, r *http.Reques
 
 // HandleSellSheet handles POST /api/campaigns/{id}/sell-sheet.
 func (h *CampaignsHandler) HandleSellSheet(w http.ResponseWriter, r *http.Request) {
+	if h.exportService == nil {
+		writeError(w, http.StatusServiceUnavailable, "Export service not available")
+		return
+	}
+
 	id, ok := pathID(w, r, "id", "Campaign ID")
 	if !ok {
 		return
@@ -123,9 +129,9 @@ func (h *CampaignsHandler) HandleSellSheet(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	sheet, err := h.service.GenerateSellSheet(r.Context(), id, req.PurchaseIDs)
+	sheet, err := h.exportService.GenerateSellSheet(r.Context(), id, req.PurchaseIDs)
 	if err != nil {
-		if campaigns.IsCampaignNotFound(err) {
+		if inventory.IsCampaignNotFound(err) {
 			writeError(w, http.StatusNotFound, "Campaign not found")
 			return
 		}
@@ -142,7 +148,7 @@ func (h *CampaignsHandler) HandleGlobalInventory(w http.ResponseWriter, r *http.
 		writeError(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
-	result, ok := serviceCall(w, r.Context(), h.logger, "failed to get global inventory", func() (*campaigns.InventoryResult, error) {
+	result, ok := serviceCall(w, r.Context(), h.logger, "failed to get global inventory", func() (*inventory.InventoryResult, error) {
 		return h.service.GetGlobalInventoryAging(r.Context())
 	})
 	if !ok {
@@ -153,8 +159,13 @@ func (h *CampaignsHandler) HandleGlobalInventory(w http.ResponseWriter, r *http.
 
 // HandleGlobalSellSheet handles POST /api/sell-sheet.
 func (h *CampaignsHandler) HandleGlobalSellSheet(w http.ResponseWriter, r *http.Request) {
-	sheet, ok := serviceCall(w, r.Context(), h.logger, "global sell sheet generation failed", func() (*campaigns.SellSheet, error) {
-		return h.service.GenerateGlobalSellSheet(r.Context())
+	if h.exportService == nil {
+		writeError(w, http.StatusServiceUnavailable, "Export service not available")
+		return
+	}
+
+	sheet, ok := serviceCall(w, r.Context(), h.logger, "global sell sheet generation failed", func() (*inventory.SellSheet, error) {
+		return h.exportService.GenerateGlobalSellSheet(r.Context())
 	})
 	if !ok {
 		return
@@ -164,6 +175,11 @@ func (h *CampaignsHandler) HandleGlobalSellSheet(w http.ResponseWriter, r *http.
 
 // HandleSelectedSellSheet handles POST /api/portfolio/sell-sheet.
 func (h *CampaignsHandler) HandleSelectedSellSheet(w http.ResponseWriter, r *http.Request) {
+	if h.exportService == nil {
+		writeError(w, http.StatusServiceUnavailable, "Export service not available")
+		return
+	}
+
 	var req struct {
 		PurchaseIDs []string `json:"purchaseIds"`
 	}
@@ -180,8 +196,8 @@ func (h *CampaignsHandler) HandleSelectedSellSheet(w http.ResponseWriter, r *htt
 		return
 	}
 
-	sheet, ok := serviceCall(w, r.Context(), h.logger, "selected sell sheet generation failed", func() (*campaigns.SellSheet, error) {
-		return h.service.GenerateSelectedSellSheet(r.Context(), req.PurchaseIDs)
+	sheet, ok := serviceCall(w, r.Context(), h.logger, "selected sell sheet generation failed", func() (*inventory.SellSheet, error) {
+		return h.exportService.GenerateSelectedSellSheet(r.Context(), req.PurchaseIDs)
 	})
 	if !ok {
 		return
@@ -195,9 +211,9 @@ func (h *CampaignsHandler) HandleTuning(w http.ResponseWriter, r *http.Request) 
 	if !ok {
 		return
 	}
-	tuning, err := h.service.GetCampaignTuning(r.Context(), id)
+	tuning, err := h.tuningSvc.GetCampaignTuning(r.Context(), id)
 	if err != nil {
-		if campaigns.IsCampaignNotFound(err) {
+		if inventory.IsCampaignNotFound(err) {
 			writeError(w, http.StatusNotFound, "Campaign not found")
 			return
 		}
@@ -214,9 +230,9 @@ func (h *CampaignsHandler) HandleCrackCandidates(w http.ResponseWriter, r *http.
 	if !ok {
 		return
 	}
-	candidates, err := h.service.GetCrackCandidates(r.Context(), id)
+	candidates, err := h.arbSvc.GetCrackCandidates(r.Context(), id)
 	if err != nil {
-		if campaigns.IsCampaignNotFound(err) {
+		if inventory.IsCampaignNotFound(err) {
 			writeError(w, http.StatusNotFound, "Campaign not found")
 			return
 		}
@@ -233,8 +249,8 @@ func (h *CampaignsHandler) HandleExpectedValues(w http.ResponseWriter, r *http.R
 	if !ok {
 		return
 	}
-	portfolio, ok := serviceCall(w, r.Context(), h.logger, "failed to get expected values", func() (*campaigns.EVPortfolio, error) {
-		return h.service.GetExpectedValues(r.Context(), id)
+	portfolio, ok := serviceCall(w, r.Context(), h.logger, "failed to get expected values", func() (*arbitrage.EVPortfolio, error) {
+		return h.arbSvc.GetExpectedValues(r.Context(), id)
 	})
 	if !ok {
 		return
@@ -269,9 +285,9 @@ func (h *CampaignsHandler) HandleEvaluatePurchase(w http.ResponseWriter, r *http
 		writeError(w, http.StatusBadRequest, "buyCostCents is invalid")
 		return
 	}
-	ev, err := h.service.EvaluatePurchase(r.Context(), id, req.CardName, req.Grade, req.BuyCostCents)
+	ev, err := h.arbSvc.EvaluatePurchase(r.Context(), id, req.CardName, req.Grade, req.BuyCostCents)
 	if err != nil {
-		if campaigns.IsCampaignNotFound(err) {
+		if inventory.IsCampaignNotFound(err) {
 			writeError(w, http.StatusNotFound, "Campaign not found")
 			return
 		}
@@ -288,9 +304,9 @@ func (h *CampaignsHandler) HandleActivationChecklist(w http.ResponseWriter, r *h
 	if !ok {
 		return
 	}
-	checklist, err := h.service.GetActivationChecklist(r.Context(), id)
+	checklist, err := h.arbSvc.GetActivationChecklist(r.Context(), id)
 	if err != nil {
-		if campaigns.IsCampaignNotFound(err) {
+		if inventory.IsCampaignNotFound(err) {
 			writeError(w, http.StatusNotFound, "Campaign not found")
 			return
 		}
@@ -307,9 +323,9 @@ func (h *CampaignsHandler) HandleProjections(w http.ResponseWriter, r *http.Requ
 	if !ok {
 		return
 	}
-	result, err := h.service.RunProjection(r.Context(), id)
+	result, err := h.arbSvc.RunProjection(r.Context(), id)
 	if err != nil {
-		if campaigns.IsCampaignNotFound(err) {
+		if inventory.IsCampaignNotFound(err) {
 			writeError(w, http.StatusNotFound, "Campaign not found")
 			return
 		}
@@ -334,11 +350,11 @@ func (h *CampaignsHandler) HandleSetReviewedPrice(w http.ResponseWriter, r *http
 		return
 	}
 	if err := h.service.SetReviewedPrice(r.Context(), purchaseID, req.PriceCents, req.Source); err != nil {
-		if campaigns.IsPurchaseNotFound(err) {
+		if inventory.IsPurchaseNotFound(err) {
 			writeError(w, http.StatusNotFound, "Purchase not found")
 			return
 		}
-		if campaigns.IsValidationError(err) {
+		if inventory.IsValidationError(err) {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
@@ -371,11 +387,11 @@ func (h *CampaignsHandler) HandleCreatePriceFlag(w http.ResponseWriter, r *http.
 	}
 	flagID, err := h.service.CreatePriceFlag(r.Context(), purchaseID, user.ID, req.Reason)
 	if err != nil {
-		if campaigns.IsPurchaseNotFound(err) {
+		if inventory.IsPurchaseNotFound(err) {
 			writeError(w, http.StatusNotFound, "Purchase not found")
 			return
 		}
-		if campaigns.IsValidationError(err) {
+		if inventory.IsValidationError(err) {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
@@ -392,8 +408,13 @@ func (h *CampaignsHandler) HandleCreatePriceFlag(w http.ResponseWriter, r *http.
 
 // HandleShopifyPriceSync handles POST /api/shopify/price-sync.
 func (h *CampaignsHandler) HandleShopifyPriceSync(w http.ResponseWriter, r *http.Request) {
+	if h.exportService == nil {
+		writeError(w, http.StatusServiceUnavailable, "Export service not available")
+		return
+	}
+
 	var req struct {
-		Items []campaigns.ShopifyPriceSyncItem `json:"items"`
+		Items []inventory.ShopifyPriceSyncItem `json:"items"`
 	}
 	if !decodeBody(w, r, &req) {
 		return
@@ -407,8 +428,8 @@ func (h *CampaignsHandler) HandleShopifyPriceSync(w http.ResponseWriter, r *http
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("Too many items (max %d)", maxShopifyPriceSyncItems))
 		return
 	}
-	resp, ok := serviceCall(w, r.Context(), h.logger, "shopify price sync failed", func() (*campaigns.ShopifyPriceSyncResponse, error) {
-		return h.service.MatchShopifyPrices(r.Context(), req.Items)
+	resp, ok := serviceCall(w, r.Context(), h.logger, "shopify price sync failed", func() (*inventory.ShopifyPriceSyncResponse, error) {
+		return h.exportService.MatchShopifyPrices(r.Context(), req.Items)
 	})
 	if !ok {
 		return

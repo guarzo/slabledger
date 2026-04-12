@@ -7,8 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/social"
+	"github.com/guarzo/slabledger/internal/testutil/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -29,12 +30,12 @@ func newTestSocialPost(id string, postType social.PostType, status social.PostSt
 }
 
 // createSocialPurchase inserts a campaign and a purchase that has a front_image_url,
-// which is needed for social queries that filter on front_image_url != ”.
+// which is needed for social queries that filter on front_image_url != ".
 func createSocialPurchase(t *testing.T, db *DB, campaignID, purchaseID, certNumber string) {
 	t.Helper()
 	createTestCampaign(t, db, campaignID, "Social Campaign "+campaignID)
 	now := time.Now().Truncate(time.Second)
-	p := &campaigns.Purchase{
+	p := &inventory.Purchase{
 		ID:            purchaseID,
 		CampaignID:    campaignID,
 		CardName:      "Charizard",
@@ -49,8 +50,9 @@ func createSocialPurchase(t *testing.T, db *DB, campaignID, purchaseID, certNumb
 		CreatedAt:     now,
 		UpdatedAt:     now,
 	}
-	repo := NewCampaignsRepository(db.DB)
-	require.NoError(t, repo.CreatePurchase(context.Background(), p))
+	logger := mocks.NewMockLogger()
+	purchaseStore := NewPurchaseStore(db.DB, logger)
+	require.NoError(t, purchaseStore.CreatePurchase(context.Background(), p))
 }
 
 func TestSocialRepository_CreateAndGet(t *testing.T) {
@@ -326,8 +328,19 @@ func TestSocialRepository_AddPostCards(t *testing.T) {
 	createSocialPurchase(t, db, "soc-camp-cards", "soc-purch-1", "CARD001")
 	// Second purchase in same campaign — use direct SQL to avoid duplicate campaign.
 	now := time.Now().Truncate(time.Second)
-	campRepo := NewCampaignsRepository(db.DB)
-	p2 := &campaigns.Purchase{
+	logger := mocks.NewMockLogger()
+	campRepo := &testCampaignsRepository{
+		CampaignStore:  NewCampaignStore(db.DB, logger),
+		PurchaseStore:  NewPurchaseStore(db.DB, logger),
+		SaleStore:      NewSaleStore(db.DB, logger),
+		AnalyticsStore: NewAnalyticsStore(db.DB, logger),
+		FinanceStore:   NewFinanceStore(db.DB, logger),
+		PricingStore:   NewPricingStore(db.DB, logger),
+		DHStore:        NewDHStore(db.DB, logger),
+		SnapshotStore:  NewSnapshotStore(db.DB, logger),
+		SellSheetStore: NewSellSheetStore(db.DB, logger),
+	}
+	p2 := &inventory.Purchase{
 		ID: "soc-purch-2", CampaignID: "soc-camp-cards", CardName: "Pikachu",
 		CertNumber: "CARD002", Grader: "PSA", GradeValue: 10, BuyCostCents: 30000,
 		FrontImageURL: "https://example.com/CARD002.jpg", PurchaseDate: "2026-01-16",
@@ -360,14 +373,25 @@ func TestSocialRepository_ListPostCards(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.Close()
 	repo := NewSocialRepository(db.DB)
-	campRepo := NewCampaignsRepository(db.DB)
+	logger := mocks.NewMockLogger()
+	campRepo := &testCampaignsRepository{
+		CampaignStore:  NewCampaignStore(db.DB, logger),
+		PurchaseStore:  NewPurchaseStore(db.DB, logger),
+		SaleStore:      NewSaleStore(db.DB, logger),
+		AnalyticsStore: NewAnalyticsStore(db.DB, logger),
+		FinanceStore:   NewFinanceStore(db.DB, logger),
+		PricingStore:   NewPricingStore(db.DB, logger),
+		DHStore:        NewDHStore(db.DB, logger),
+		SnapshotStore:  NewSnapshotStore(db.DB, logger),
+		SellSheetStore: NewSellSheetStore(db.DB, logger),
+	}
 	ctx := context.Background()
 	now := time.Now().Truncate(time.Second)
 
 	createTestCampaign(t, db, "soc-camp-lpc", "List Post Cards")
 
 	// Create purchases with different data.
-	purchases := []*campaigns.Purchase{
+	purchases := []*inventory.Purchase{
 		{
 			ID: "soc-lpc-p1", CampaignID: "soc-camp-lpc", CardName: "Charizard",
 			CertNumber: "LPC001", SetName: "Base Set", CardNumber: "4", Grader: "PSA",
@@ -417,9 +441,9 @@ func TestSocialRepository_ListPostCards(t *testing.T) {
 
 	t.Run("marks sold cards", func(t *testing.T) {
 		// Sell Pikachu.
-		sale := &campaigns.Sale{
+		sale := &inventory.Sale{
 			ID: "soc-lpc-sale-1", PurchaseID: "soc-lpc-p2",
-			SaleChannel: campaigns.SaleChannelEbay, SalePriceCents: 40000,
+			SaleChannel: inventory.SaleChannelEbay, SalePriceCents: 40000,
 			SaleFeeCents: 4940, SaleDate: "2026-02-01", DaysToSell: 16,
 			NetProfitCents: 5060, CreatedAt: now, UpdatedAt: now,
 		}
@@ -533,35 +557,46 @@ func TestSocialRepository_GetRecentPurchaseIDs(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.Close()
 	repo := NewSocialRepository(db.DB)
-	campRepo := NewCampaignsRepository(db.DB)
+	logger := mocks.NewMockLogger()
+	campRepo := &testCampaignsRepository{
+		CampaignStore:  NewCampaignStore(db.DB, logger),
+		PurchaseStore:  NewPurchaseStore(db.DB, logger),
+		SaleStore:      NewSaleStore(db.DB, logger),
+		AnalyticsStore: NewAnalyticsStore(db.DB, logger),
+		FinanceStore:   NewFinanceStore(db.DB, logger),
+		PricingStore:   NewPricingStore(db.DB, logger),
+		DHStore:        NewDHStore(db.DB, logger),
+		SnapshotStore:  NewSnapshotStore(db.DB, logger),
+		SellSheetStore: NewSellSheetStore(db.DB, logger),
+	}
 	ctx := context.Background()
 	now := time.Now().Truncate(time.Second)
 
 	createTestCampaign(t, db, "soc-camp-recent", "Recent Purchases")
 
 	// Purchase with image, unsold.
-	p1 := &campaigns.Purchase{
+	p1 := &inventory.Purchase{
 		ID: "soc-recent-p1", CampaignID: "soc-camp-recent", CardName: "Charizard",
 		CertNumber: "REC001", GradeValue: 9, BuyCostCents: 80000,
 		FrontImageURL: "https://example.com/REC001.jpg", PurchaseDate: "2026-01-15",
 		CreatedAt: now, UpdatedAt: now,
 	}
 	// Purchase without image — should be excluded.
-	p2 := &campaigns.Purchase{
+	p2 := &inventory.Purchase{
 		ID: "soc-recent-p2", CampaignID: "soc-camp-recent", CardName: "Pikachu",
 		CertNumber: "REC002", GradeValue: 10, BuyCostCents: 30000,
 		FrontImageURL: "", PurchaseDate: "2026-01-16",
 		CreatedAt: now, UpdatedAt: now,
 	}
 	// Purchase with image, will be sold — should be excluded.
-	p3 := &campaigns.Purchase{
+	p3 := &inventory.Purchase{
 		ID: "soc-recent-p3", CampaignID: "soc-camp-recent", CardName: "Blastoise",
 		CertNumber: "REC003", GradeValue: 8, BuyCostCents: 40000,
 		FrontImageURL: "https://example.com/REC003.jpg", PurchaseDate: "2026-01-17",
 		CreatedAt: now, UpdatedAt: now,
 	}
 	// Old purchase — before "since" date.
-	p4 := &campaigns.Purchase{
+	p4 := &inventory.Purchase{
 		ID: "soc-recent-p4", CampaignID: "soc-camp-recent", CardName: "Venusaur",
 		CertNumber: "REC004", GradeValue: 9, BuyCostCents: 35000,
 		FrontImageURL: "https://example.com/REC004.jpg", PurchaseDate: "2025-12-01",
@@ -573,9 +608,9 @@ func TestSocialRepository_GetRecentPurchaseIDs(t *testing.T) {
 	require.NoError(t, campRepo.CreatePurchase(ctx, p4))
 
 	// Sell p3.
-	sale := &campaigns.Sale{
+	sale := &inventory.Sale{
 		ID: "soc-recent-s1", PurchaseID: "soc-recent-p3",
-		SaleChannel: campaigns.SaleChannelEbay, SalePriceCents: 50000,
+		SaleChannel: inventory.SaleChannelEbay, SalePriceCents: 50000,
 		SaleFeeCents: 6175, SaleDate: "2026-02-01", DaysToSell: 15,
 		NetProfitCents: 3825, CreatedAt: now, UpdatedAt: now,
 	}
@@ -600,9 +635,20 @@ func TestSocialRepository_GetPurchaseIDsInExistingPosts(t *testing.T) {
 	ctx := context.Background()
 
 	createSocialPurchase(t, db, "soc-camp-exist", "soc-exist-p1", "EXIST001")
-	campRepo := NewCampaignsRepository(db.DB)
+	logger := mocks.NewMockLogger()
+	campRepo := &testCampaignsRepository{
+		CampaignStore:  NewCampaignStore(db.DB, logger),
+		PurchaseStore:  NewPurchaseStore(db.DB, logger),
+		SaleStore:      NewSaleStore(db.DB, logger),
+		AnalyticsStore: NewAnalyticsStore(db.DB, logger),
+		FinanceStore:   NewFinanceStore(db.DB, logger),
+		PricingStore:   NewPricingStore(db.DB, logger),
+		DHStore:        NewDHStore(db.DB, logger),
+		SnapshotStore:  NewSnapshotStore(db.DB, logger),
+		SellSheetStore: NewSellSheetStore(db.DB, logger),
+	}
 	now := time.Now().Truncate(time.Second)
-	p2 := &campaigns.Purchase{
+	p2 := &inventory.Purchase{
 		ID: "soc-exist-p2", CampaignID: "soc-camp-exist", CardName: "Pikachu",
 		CertNumber: "EXIST002", GradeValue: 10, BuyCostCents: 30000,
 		FrontImageURL: "https://example.com/EXIST002.jpg", PurchaseDate: "2026-01-16",
@@ -666,55 +712,66 @@ func TestSocialRepository_GetAvailableCardsForPosts(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.Close()
 	repo := NewSocialRepository(db.DB)
-	campRepo := NewCampaignsRepository(db.DB)
+	logger := mocks.NewMockLogger()
+	campRepo := &testCampaignsRepository{
+		CampaignStore:  NewCampaignStore(db.DB, logger),
+		PurchaseStore:  NewPurchaseStore(db.DB, logger),
+		SaleStore:      NewSaleStore(db.DB, logger),
+		AnalyticsStore: NewAnalyticsStore(db.DB, logger),
+		FinanceStore:   NewFinanceStore(db.DB, logger),
+		PricingStore:   NewPricingStore(db.DB, logger),
+		DHStore:        NewDHStore(db.DB, logger),
+		SnapshotStore:  NewSnapshotStore(db.DB, logger),
+		SellSheetStore: NewSellSheetStore(db.DB, logger),
+	}
 	ctx := context.Background()
 	now := time.Now().Truncate(time.Second)
 
 	createTestCampaign(t, db, "soc-camp-avail", "Available Cards")
 
 	// Available card: has image, unsold, not in any post.
-	p1 := &campaigns.Purchase{
+	p1 := &inventory.Purchase{
 		ID: "soc-avail-p1", CampaignID: "soc-camp-avail", CardName: "Charizard",
 		CertNumber: "AVAIL001", SetName: "Base Set", CardNumber: "4", Grader: "PSA",
 		GradeValue: 9, BuyCostCents: 80000, FrontImageURL: "https://example.com/AVAIL001.jpg",
 		PurchaseDate: "2026-01-15", CreatedAt: now, UpdatedAt: now,
 	}
 	// No image — excluded.
-	p2 := &campaigns.Purchase{
+	p2 := &inventory.Purchase{
 		ID: "soc-avail-p2", CampaignID: "soc-camp-avail", CardName: "Pikachu",
 		CertNumber: "AVAIL002", GradeValue: 10, BuyCostCents: 30000,
 		FrontImageURL: "", PurchaseDate: "2026-01-16",
 		CreatedAt: now, UpdatedAt: now,
 	}
 	// Sold — excluded.
-	p3 := &campaigns.Purchase{
+	p3 := &inventory.Purchase{
 		ID: "soc-avail-p3", CampaignID: "soc-camp-avail", CardName: "Blastoise",
 		CertNumber: "AVAIL003", GradeValue: 8, BuyCostCents: 40000,
 		FrontImageURL: "https://example.com/AVAIL003.jpg", PurchaseDate: "2026-01-17",
 		CreatedAt: now, UpdatedAt: now,
 	}
 	// In a draft post — excluded (not rejected/failed).
-	p4 := &campaigns.Purchase{
+	p4 := &inventory.Purchase{
 		ID: "soc-avail-p4", CampaignID: "soc-camp-avail", CardName: "Venusaur",
 		CertNumber: "AVAIL004", Grader: "PSA", GradeValue: 9, BuyCostCents: 35000,
 		FrontImageURL: "https://example.com/AVAIL004.jpg", PurchaseDate: "2026-01-18",
 		CreatedAt: now, UpdatedAt: now,
 	}
 	// In a rejected post — should be available.
-	p5 := &campaigns.Purchase{
+	p5 := &inventory.Purchase{
 		ID: "soc-avail-p5", CampaignID: "soc-camp-avail", CardName: "Mewtwo",
 		CertNumber: "AVAIL005", Grader: "PSA", GradeValue: 10, BuyCostCents: 100000,
 		FrontImageURL: "https://example.com/AVAIL005.jpg", PurchaseDate: "2026-01-19",
 		CreatedAt: now, UpdatedAt: now,
 	}
-	for _, p := range []*campaigns.Purchase{p1, p2, p3, p4, p5} {
+	for _, p := range []*inventory.Purchase{p1, p2, p3, p4, p5} {
 		require.NoError(t, campRepo.CreatePurchase(ctx, p))
 	}
 
 	// Sell p3.
-	sale := &campaigns.Sale{
+	sale := &inventory.Sale{
 		ID: "soc-avail-s1", PurchaseID: "soc-avail-p3",
-		SaleChannel: campaigns.SaleChannelEbay, SalePriceCents: 50000,
+		SaleChannel: inventory.SaleChannelEbay, SalePriceCents: 50000,
 		SaleFeeCents: 6175, SaleDate: "2026-02-01", DaysToSell: 15,
 		NetProfitCents: 3825, CreatedAt: now, UpdatedAt: now,
 	}
@@ -752,14 +809,25 @@ func TestSocialRepository_GetUnsoldPurchasesWithSnapshots(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.Close()
 	repo := NewSocialRepository(db.DB)
-	campRepo := NewCampaignsRepository(db.DB)
+	logger := mocks.NewMockLogger()
+	campRepo := &testCampaignsRepository{
+		CampaignStore:  NewCampaignStore(db.DB, logger),
+		PurchaseStore:  NewPurchaseStore(db.DB, logger),
+		SaleStore:      NewSaleStore(db.DB, logger),
+		AnalyticsStore: NewAnalyticsStore(db.DB, logger),
+		FinanceStore:   NewFinanceStore(db.DB, logger),
+		PricingStore:   NewPricingStore(db.DB, logger),
+		DHStore:        NewDHStore(db.DB, logger),
+		SnapshotStore:  NewSnapshotStore(db.DB, logger),
+		SellSheetStore: NewSellSheetStore(db.DB, logger),
+	}
 	ctx := context.Background()
 	now := time.Now().Truncate(time.Second)
 
 	createTestCampaign(t, db, "soc-camp-snap", "Snapshot Test")
 
 	// Purchase with snapshot data and image.
-	p1 := &campaigns.Purchase{
+	p1 := &inventory.Purchase{
 		ID: "soc-snap-p1", CampaignID: "soc-camp-snap", CardName: "Charizard",
 		CertNumber: "SNAP001", GradeValue: 9, BuyCostCents: 80000,
 		FrontImageURL: "https://example.com/SNAP001.jpg", PurchaseDate: "2026-01-15",
@@ -775,7 +843,7 @@ func TestSocialRepository_GetUnsoldPurchasesWithSnapshots(t *testing.T) {
 	require.NoError(t, err)
 
 	// Purchase without snapshot data — excluded (median_cents=0 and mm_trend_pct=0).
-	p2 := &campaigns.Purchase{
+	p2 := &inventory.Purchase{
 		ID: "soc-snap-p2", CampaignID: "soc-camp-snap", CardName: "Pikachu",
 		CertNumber: "SNAP002", GradeValue: 10, BuyCostCents: 30000,
 		FrontImageURL: "https://example.com/SNAP002.jpg", PurchaseDate: "2026-01-16",
@@ -784,7 +852,7 @@ func TestSocialRepository_GetUnsoldPurchasesWithSnapshots(t *testing.T) {
 	require.NoError(t, campRepo.CreatePurchase(ctx, p2))
 
 	// Sold purchase with snapshots — excluded.
-	p3 := &campaigns.Purchase{
+	p3 := &inventory.Purchase{
 		ID: "soc-snap-p3", CampaignID: "soc-camp-snap", CardName: "Blastoise",
 		CertNumber: "SNAP003", GradeValue: 8, BuyCostCents: 40000,
 		FrontImageURL: "https://example.com/SNAP003.jpg", PurchaseDate: "2026-01-17",
@@ -796,16 +864,16 @@ func TestSocialRepository_GetUnsoldPurchasesWithSnapshots(t *testing.T) {
 		"soc-snap-p3",
 	)
 	require.NoError(t, err)
-	sale := &campaigns.Sale{
+	sale := &inventory.Sale{
 		ID: "soc-snap-s1", PurchaseID: "soc-snap-p3",
-		SaleChannel: campaigns.SaleChannelEbay, SalePriceCents: 60000,
+		SaleChannel: inventory.SaleChannelEbay, SalePriceCents: 60000,
 		SaleFeeCents: 7410, SaleDate: "2026-02-01", DaysToSell: 15,
 		NetProfitCents: 12590, CreatedAt: now, UpdatedAt: now,
 	}
 	require.NoError(t, campRepo.CreateSale(ctx, sale))
 
 	// No image — excluded.
-	p4 := &campaigns.Purchase{
+	p4 := &inventory.Purchase{
 		ID: "soc-snap-p4", CampaignID: "soc-camp-snap", CardName: "Venusaur",
 		CertNumber: "SNAP004", GradeValue: 9, BuyCostCents: 35000,
 		FrontImageURL: "", PurchaseDate: "2026-01-18",

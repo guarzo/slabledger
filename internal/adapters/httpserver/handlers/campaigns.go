@@ -5,8 +5,14 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	"github.com/guarzo/slabledger/internal/domain/arbitrage"
+	"github.com/guarzo/slabledger/internal/domain/dhlisting"
+	"github.com/guarzo/slabledger/internal/domain/export"
+	"github.com/guarzo/slabledger/internal/domain/finance"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
+	"github.com/guarzo/slabledger/internal/domain/portfolio"
+	"github.com/guarzo/slabledger/internal/domain/tuning"
 )
 
 // SheetFetcher fetches sheet data for PSA sync.
@@ -16,9 +22,14 @@ type SheetFetcher interface {
 
 // CampaignsHandler handles campaign-related HTTP requests.
 type CampaignsHandler struct {
-	service           campaigns.Service
+	service           inventory.Service
+	arbSvc            arbitrage.Service
+	portSvc           portfolio.Service
+	tuningSvc         tuning.Service
 	logger            observability.Logger
-	dhListingSvc      campaigns.DHListingService // optional: lists cards on DH after cert import
+	dhListingSvc      dhlisting.DHListingService // optional: lists cards on DH after cert import
+	financeService    finance.Service            // optional: finance operations
+	exportService     export.Service             // optional: sell sheet and eBay export
 	baseCtx           context.Context
 	bgWG              sync.WaitGroup // tracks background goroutines (e.g. DH listing)
 	sheetFetcher      SheetFetcher   // optional: fetches PSA data from Google Sheets
@@ -30,8 +41,18 @@ type CampaignsHandler struct {
 type CampaignsHandlerOption func(*CampaignsHandler)
 
 // WithDHListingService enables DH listing after cert import.
-func WithDHListingService(svc campaigns.DHListingService) CampaignsHandlerOption {
+func WithDHListingService(svc dhlisting.DHListingService) CampaignsHandlerOption {
 	return func(h *CampaignsHandler) { h.dhListingSvc = svc }
+}
+
+// WithFinanceService enables finance operations on campaigns.
+func WithFinanceService(svc finance.Service) CampaignsHandlerOption {
+	return func(h *CampaignsHandler) { h.financeService = svc }
+}
+
+// WithExportService enables sell sheet and eBay export operations.
+func WithExportService(svc export.Service) CampaignsHandlerOption {
+	return func(h *CampaignsHandler) { h.exportService = svc }
 }
 
 // WithSheetFetcher enables Google Sheets PSA sync.
@@ -47,7 +68,10 @@ func WithSheetFetcher(f SheetFetcher, spreadsheetID, tabName string) CampaignsHa
 // baseCtx is a server-lifecycle context; background goroutines derive from it
 // so they are cancelled on shutdown. If nil, context.Background() is used.
 func NewCampaignsHandler(
-	service campaigns.Service,
+	service inventory.Service,
+	arbSvc arbitrage.Service,
+	portSvc portfolio.Service,
+	tuningSvc tuning.Service,
 	logger observability.Logger,
 	baseCtx context.Context,
 	opts ...CampaignsHandlerOption,
@@ -56,9 +80,12 @@ func NewCampaignsHandler(
 		baseCtx = context.Background()
 	}
 	h := &CampaignsHandler{
-		service: service,
-		logger:  logger,
-		baseCtx: baseCtx,
+		service:   service,
+		arbSvc:    arbSvc,
+		portSvc:   portSvc,
+		tuningSvc: tuningSvc,
+		logger:    logger,
+		baseCtx:   baseCtx,
 	}
 	for _, opt := range opts {
 		opt(h)
@@ -72,10 +99,10 @@ func (h *CampaignsHandler) WaitBackground() {
 	h.bgWG.Wait()
 }
 
-// HandleListCampaigns handles GET /api/campaigns.
+// HandleListCampaigns handles GET /api/inventory.
 func (h *CampaignsHandler) HandleListCampaigns(w http.ResponseWriter, r *http.Request) {
 	activeOnly := r.URL.Query().Get("activeOnly") == "true"
-	list, ok := serviceCall(w, r.Context(), h.logger, "failed to list campaigns", func() ([]campaigns.Campaign, error) {
+	list, ok := serviceCall(w, r.Context(), h.logger, "failed to list campaigns", func() ([]inventory.Campaign, error) {
 		return h.service.ListCampaigns(r.Context(), activeOnly)
 	})
 	if !ok {
@@ -84,15 +111,15 @@ func (h *CampaignsHandler) HandleListCampaigns(w http.ResponseWriter, r *http.Re
 	writeJSONList(w, http.StatusOK, list)
 }
 
-// HandleCreateCampaign handles POST /api/campaigns.
+// HandleCreateCampaign handles POST /api/inventory.
 func (h *CampaignsHandler) HandleCreateCampaign(w http.ResponseWriter, r *http.Request) {
-	var c campaigns.Campaign
+	var c inventory.Campaign
 	if !decodeBody(w, r, &c) {
 		return
 	}
 
 	if err := h.service.CreateCampaign(r.Context(), &c); err != nil {
-		if campaigns.IsCampaignNotFound(err) || campaigns.IsValidationError(err) {
+		if inventory.IsCampaignNotFound(err) || inventory.IsValidationError(err) {
 			writeError(w, http.StatusBadRequest, "invalid campaign data")
 			return
 		}
@@ -112,7 +139,7 @@ func (h *CampaignsHandler) HandleGetCampaign(w http.ResponseWriter, r *http.Requ
 	}
 	c, err := h.service.GetCampaign(r.Context(), id)
 	if err != nil {
-		if campaigns.IsCampaignNotFound(err) {
+		if inventory.IsCampaignNotFound(err) {
 			writeError(w, http.StatusNotFound, "Campaign not found")
 			return
 		}
@@ -129,18 +156,18 @@ func (h *CampaignsHandler) HandleUpdateCampaign(w http.ResponseWriter, r *http.R
 	if !ok {
 		return
 	}
-	var c campaigns.Campaign
+	var c inventory.Campaign
 	if !decodeBody(w, r, &c) {
 		return
 	}
 	c.ID = id
 
 	if err := h.service.UpdateCampaign(r.Context(), &c); err != nil {
-		if campaigns.IsCampaignNotFound(err) {
+		if inventory.IsCampaignNotFound(err) {
 			writeError(w, http.StatusNotFound, "Campaign not found")
 			return
 		}
-		if campaigns.IsValidationError(err) {
+		if inventory.IsValidationError(err) {
 			writeError(w, http.StatusBadRequest, "invalid campaign data")
 			return
 		}
@@ -158,7 +185,7 @@ func (h *CampaignsHandler) HandleDelete(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if err := h.service.DeleteCampaign(r.Context(), id); err != nil {
-		if campaigns.IsCampaignNotFound(err) {
+		if inventory.IsCampaignNotFound(err) {
 			writeError(w, http.StatusNotFound, "Campaign not found")
 			return
 		}

@@ -6,7 +6,8 @@ import (
 	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	"github.com/guarzo/slabledger/internal/domain/dhlisting"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/domain/pricing"
 )
@@ -24,7 +25,7 @@ const (
 
 // DHPushPendingLister returns purchases pending DH push.
 type DHPushPendingLister interface {
-	GetPurchasesByDHPushStatus(ctx context.Context, status string, limit int) ([]campaigns.Purchase, error)
+	GetPurchasesByDHPushStatus(ctx context.Context, status string, limit int) ([]inventory.Purchase, error)
 }
 
 // DHPushStatusUpdater updates the DH push status on a purchase.
@@ -55,7 +56,7 @@ type DHPushCandidatesSaver interface {
 
 // DHPushConfigLoader loads DH push safety config.
 type DHPushConfigLoader interface {
-	GetDHPushConfig(ctx context.Context) (*campaigns.DHPushConfig, error)
+	GetDHPushConfig(ctx context.Context) (*inventory.DHPushConfig, error)
 }
 
 // DHPushHoldSetter atomically sets a purchase to held status with a reason.
@@ -161,7 +162,7 @@ func (s *DHPushScheduler) push(ctx context.Context) {
 		rotator.ResetPSAKeyRotation()
 	}
 
-	pending, err := s.pendingLister.GetPurchasesByDHPushStatus(ctx, campaigns.DHPushStatusPending, dhPushBatchLimit)
+	pending, err := s.pendingLister.GetPurchasesByDHPushStatus(ctx, inventory.DHPushStatusPending, dhPushBatchLimit)
 	if err != nil {
 		s.logger.Warn(ctx, "dh push: failed to list pending purchases", observability.Err(err))
 		return
@@ -173,7 +174,7 @@ func (s *DHPushScheduler) push(ctx context.Context) {
 	}
 
 	// Load push safety config; fall back to defaults if unavailable.
-	pushCfg := campaigns.DefaultDHPushConfig()
+	pushCfg := inventory.DefaultDHPushConfig()
 	if s.configLoader != nil {
 		if loaded, loadErr := s.configLoader.GetDHPushConfig(ctx); loadErr != nil {
 			s.logger.Warn(ctx, "dh push: failed to load push config, using defaults", observability.Err(loadErr))
@@ -217,14 +218,14 @@ func (s *DHPushScheduler) push(ctx context.Context) {
 	)
 }
 
-func (s *DHPushScheduler) processPurchase(ctx context.Context, p campaigns.Purchase, mappedSet map[string]string, pushCfg campaigns.DHPushConfig) processResult {
+func (s *DHPushScheduler) processPurchase(ctx context.Context, p inventory.Purchase, mappedSet map[string]string, pushCfg inventory.DHPushConfig) processResult {
 	// Guard: if a previous cycle pushed successfully (inventory ID set) but the
 	// status update failed, just fix the status rather than re-pushing.
 	if p.DHInventoryID != 0 {
 		s.logger.Info(ctx, "dh push: purchase already has inventory ID, fixing status to matched",
 			observability.String("purchaseID", p.ID),
 			observability.Int("dhInventoryID", p.DHInventoryID))
-		if updateErr := s.statusUpdater.UpdatePurchaseDHPushStatus(ctx, p.ID, campaigns.DHPushStatusMatched); updateErr != nil {
+		if updateErr := s.statusUpdater.UpdatePurchaseDHPushStatus(ctx, p.ID, inventory.DHPushStatusMatched); updateErr != nil {
 			s.logger.Warn(ctx, "dh push: failed to fix status on already-pushed purchase",
 				observability.String("purchaseID", p.ID), observability.Err(updateErr))
 		}
@@ -234,7 +235,7 @@ func (s *DHPushScheduler) processPurchase(ctx context.Context, p campaigns.Purch
 	if p.CertNumber == "" {
 		s.logger.Warn(ctx, "dh push: purchase has no cert number, marking unmatched",
 			observability.String("purchaseID", p.ID))
-		if updateErr := s.statusUpdater.UpdatePurchaseDHPushStatus(ctx, p.ID, campaigns.DHPushStatusUnmatched); updateErr != nil {
+		if updateErr := s.statusUpdater.UpdatePurchaseDHPushStatus(ctx, p.ID, inventory.DHPushStatusUnmatched); updateErr != nil {
 			s.logger.Warn(ctx, "dh push: failed to set unmatched status for cert-less purchase",
 				observability.String("purchaseID", p.ID), observability.Err(updateErr))
 		}
@@ -259,7 +260,7 @@ func (s *DHPushScheduler) processPurchase(ctx context.Context, p campaigns.Purch
 	}
 
 	// Never push before we have a market value — leave as pending for retry.
-	marketValue := campaigns.ResolveMarketValueCents(&p)
+	marketValue := dhlisting.ResolveMarketValueCents(&p)
 	if marketValue == 0 {
 		s.logger.Debug(ctx, "dh push: no market value yet, leaving as pending",
 			observability.String("purchaseID", p.ID),
@@ -275,7 +276,7 @@ func (s *DHPushScheduler) processPurchase(ctx context.Context, p campaigns.Purch
 		dhCardID = resolved
 	}
 
-	if holdReason := campaigns.EvaluateHoldTriggers(&p, pushCfg); holdReason != "" {
+	if holdReason := dhlisting.EvaluateHoldTriggers(&p, pushCfg); holdReason != "" {
 		s.logger.Info(ctx, "dh push: holding re-push for review",
 			observability.String("purchaseID", p.ID),
 			observability.String("cert", p.CertNumber),
@@ -286,7 +287,7 @@ func (s *DHPushScheduler) processPurchase(ctx context.Context, p campaigns.Purch
 					observability.String("purchaseID", p.ID), observability.Err(updateErr))
 			}
 		} else {
-			if updateErr := s.statusUpdater.UpdatePurchaseDHPushStatus(ctx, p.ID, campaigns.DHPushStatusHeld); updateErr != nil {
+			if updateErr := s.statusUpdater.UpdatePurchaseDHPushStatus(ctx, p.ID, inventory.DHPushStatusHeld); updateErr != nil {
 				s.logger.Warn(ctx, "dh push: failed to set held status",
 					observability.String("purchaseID", p.ID), observability.Err(updateErr))
 			}
@@ -331,13 +332,13 @@ func (s *DHPushScheduler) processPurchase(ctx context.Context, p campaigns.Purch
 		return processSkipped
 	}
 
-	update := campaigns.DHFieldsUpdate{
+	update := inventory.DHFieldsUpdate{
 		CardID:            dhCardID,
 		InventoryID:       result.DHInventoryID,
 		CertStatus:        dh.CertStatusMatched,
 		ListingPriceCents: result.AssignedPriceCents,
 		ChannelsJSON:      dh.MarshalChannels(result.Channels),
-		DHStatus:          campaigns.DHStatus(result.Status),
+		DHStatus:          inventory.DHStatus(result.Status),
 	}
 
 	if updateErr := s.fieldsUpdater.UpdatePurchaseDHFields(ctx, p.ID, update); updateErr != nil {
@@ -347,7 +348,7 @@ func (s *DHPushScheduler) processPurchase(ctx context.Context, p campaigns.Purch
 		return processSkipped
 	}
 
-	if updateErr := s.statusUpdater.UpdatePurchaseDHPushStatus(ctx, p.ID, campaigns.DHPushStatusMatched); updateErr != nil {
+	if updateErr := s.statusUpdater.UpdatePurchaseDHPushStatus(ctx, p.ID, inventory.DHPushStatusMatched); updateErr != nil {
 		// Fields are already saved with the inventory ID, so the purchase won't
 		// be re-pushed (NeedsDHPush checks DHInventoryID). Log at Error level
 		// since the status is inconsistent but won't cause duplicate pushes.
@@ -369,8 +370,8 @@ func (s *DHPushScheduler) processPurchase(ctx context.Context, p campaigns.Purch
 // resolveCert resolves a purchase's cert number to a DH card ID, saving the
 // mapping on success. Returns the card ID and processMatched, or 0 and a
 // non-matched result indicating what happened.
-func (s *DHPushScheduler) resolveCert(ctx context.Context, p campaigns.Purchase, mappedSet map[string]string) (int, processResult) {
-	cardName, variant := campaigns.CleanCardNameForDH(p.CardName)
+func (s *DHPushScheduler) resolveCert(ctx context.Context, p inventory.Purchase, mappedSet map[string]string) (int, processResult) {
+	cardName, variant := dhlisting.CleanCardNameForDH(p.CardName)
 	var rotateFn func() bool
 	if rotator, ok := s.certResolver.(dh.PSAKeyRotator); ok {
 		rotateFn = rotator.RotatePSAKey
@@ -413,7 +414,7 @@ func (s *DHPushScheduler) resolveCert(ctx context.Context, p campaigns.Purchase,
 }
 
 // resolveAmbiguousCert attempts to disambiguate candidates by card number.
-func (s *DHPushScheduler) resolveAmbiguousCert(ctx context.Context, p campaigns.Purchase, candidates []dh.CertResolutionCandidate, mappedSet map[string]string) (int, processResult) {
+func (s *DHPushScheduler) resolveAmbiguousCert(ctx context.Context, p inventory.Purchase, candidates []dh.CertResolutionCandidate, mappedSet map[string]string) (int, processResult) {
 	var saveFn func(string) error
 	if s.candidatesSaver != nil {
 		saveFn = func(j string) error { return s.candidatesSaver.UpdatePurchaseDHCandidates(ctx, p.ID, j) }
@@ -439,7 +440,7 @@ func (s *DHPushScheduler) resolveAmbiguousCert(ctx context.Context, p campaigns.
 }
 
 // saveCardIDMapping persists a DH card ID mapping and updates the in-memory cache.
-func (s *DHPushScheduler) saveCardIDMapping(ctx context.Context, p campaigns.Purchase, dhCardID int, mappedSet map[string]string) {
+func (s *DHPushScheduler) saveCardIDMapping(ctx context.Context, p inventory.Purchase, dhCardID int, mappedSet map[string]string) {
 	externalID := strconv.Itoa(dhCardID)
 	if saveErr := s.cardIDSaver.SaveExternalID(ctx, p.CardName, p.SetName, p.CardNumber, pricing.SourceDH, externalID); saveErr != nil {
 		s.logger.Warn(ctx, "dh push: failed to save external ID mapping",
@@ -451,7 +452,7 @@ func (s *DHPushScheduler) saveCardIDMapping(ctx context.Context, p campaigns.Pur
 
 // markUnmatched sets a purchase's DH push status to unmatched.
 func (s *DHPushScheduler) markUnmatched(ctx context.Context, purchaseID string) {
-	if updateErr := s.statusUpdater.UpdatePurchaseDHPushStatus(ctx, purchaseID, campaigns.DHPushStatusUnmatched); updateErr != nil {
+	if updateErr := s.statusUpdater.UpdatePurchaseDHPushStatus(ctx, purchaseID, inventory.DHPushStatusUnmatched); updateErr != nil {
 		s.logger.Warn(ctx, "dh push: failed to set unmatched status",
 			observability.String("purchaseID", purchaseID), observability.Err(updateErr))
 	}

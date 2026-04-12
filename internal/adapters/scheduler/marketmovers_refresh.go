@@ -8,7 +8,7 @@ import (
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/marketmovers"
 	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/mathutil"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/platform/config"
@@ -16,7 +16,7 @@ import (
 
 // MMPurchaseLister lists unsold purchases for Market Movers value sync.
 type MMPurchaseLister interface {
-	ListAllUnsoldPurchases(ctx context.Context) ([]campaigns.Purchase, error)
+	ListAllUnsoldPurchases(ctx context.Context) ([]inventory.Purchase, error)
 }
 
 // MMValueUpdater updates Market Movers values on purchases.
@@ -320,7 +320,7 @@ func (s *MarketMoversRefreshScheduler) recordMMError(ctx context.Context, purcha
 //
 // Any candidate returned by either path is validated via tokenized title matching (see
 // tokenMatchesTitle) before the ID is cached.
-func (s *MarketMoversRefreshScheduler) resolveCollectibleID(ctx context.Context, p *campaigns.Purchase) (collectibleID, masterID int64, searchTitle, reason string, err error) {
+func (s *MarketMoversRefreshScheduler) resolveCollectibleID(ctx context.Context, p *inventory.Purchase) (collectibleID, masterID int64, searchTitle, reason string, err error) {
 	if p.CardName == "" {
 		return 0, 0, "", MMReasonNoCardName, nil
 	}
@@ -361,7 +361,7 @@ func (s *MarketMoversRefreshScheduler) resolveCollectibleID(ctx context.Context,
 
 // searchByCert searches MM using the PSA cert number as the query. Returns a
 // reason code when no usable result is found (0 results vs. all-rejected).
-func (s *MarketMoversRefreshScheduler) searchByCert(ctx context.Context, p *campaigns.Purchase) (collectibleID, masterID int64, searchTitle, reason string, err error) {
+func (s *MarketMoversRefreshScheduler) searchByCert(ctx context.Context, p *inventory.Purchase) (collectibleID, masterID int64, searchTitle, reason string, err error) {
 	results, err := s.getClient().SearchCollectibles(ctx, p.CertNumber, 0, 3)
 	if err != nil {
 		return 0, 0, "", "", fmt.Errorf("search by cert: %w", err)
@@ -387,7 +387,7 @@ func (s *MarketMoversRefreshScheduler) searchByCert(ctx context.Context, p *camp
 // searchByNameGrade searches MM using "{CardName} {Grader} {Grade}" and validates
 // that the top result's SearchTitle contains the card name before returning the IDs.
 // Returns a reason code when no usable result is found.
-func (s *MarketMoversRefreshScheduler) searchByNameGrade(ctx context.Context, p *campaigns.Purchase) (collectibleID, masterID int64, searchTitle, reason string, err error) {
+func (s *MarketMoversRefreshScheduler) searchByNameGrade(ctx context.Context, p *inventory.Purchase) (collectibleID, masterID int64, searchTitle, reason string, err error) {
 	grader := p.Grader
 	if grader == "" {
 		grader = "PSA"

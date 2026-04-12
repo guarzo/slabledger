@@ -1,0 +1,126 @@
+{
+  "base_commit": "7cb661c",
+  "started_at": "2026-04-12T18:43:15.000Z",
+  "segments": [
+    {
+      "id": 1,
+      "name": "domain/inventory",
+      "paths": ["internal/domain/inventory/"],
+      "status": "completed",
+      "improve_findings": 10,
+      "polish_fixed": 2,
+      "polish_needs_review": 14,
+      "completed_at": "2026-04-12T19:15:00.000Z"
+    },
+    {
+      "id": 2,
+      "name": "domain/advisor+social+scoring",
+      "paths": ["internal/domain/advisor/", "internal/domain/social/", "internal/domain/scoring/"],
+      "status": "completed",
+      "improve_findings": 10,
+      "polish_fixed": 0,
+      "polish_needs_review": 0,
+      "completed_at": "2026-04-12T19:30:00.000Z"
+    },
+    {
+      "id": 3,
+      "name": "domain/favorites+picks+cards+auth+small",
+      "paths": ["internal/domain/favorites/", "internal/domain/picks/", "internal/domain/cards/", "internal/domain/auth/", "internal/domain/errors/", "internal/domain/constants/", "internal/domain/observability/", "internal/domain/storage/", "internal/domain/intelligence/", "internal/domain/timeutil/", "internal/domain/mathutil/", "internal/domain/pricing/"],
+      "status": "completed",
+      "improve_findings": 8,
+      "polish_fixed": 0,
+      "polish_needs_review": 1,
+      "completed_at": "2026-04-12T19:45:00.000Z"
+    },
+    {
+      "id": 4,
+      "name": "domain/decomposed-siblings",
+      "paths": ["internal/domain/arbitrage/", "internal/domain/portfolio/", "internal/domain/tuning/", "internal/domain/finance/", "internal/domain/export/", "internal/domain/dhlisting/", "internal/domain/csvimport/", "internal/domain/mmutil/"],
+      "status": "completed",
+      "improve_findings": 8,
+      "polish_fixed": 1,
+      "polish_needs_review": 15,
+      "completed_at": "2026-04-12T20:00:00.000Z"
+    },
+    {
+      "id": 5,
+      "name": "adapters/httpserver",
+      "paths": ["internal/adapters/httpserver/"],
+      "status": "completed",
+      "improve_findings": 10,
+      "polish_fixed": 1,
+      "polish_needs_review": 11,
+      "completed_at": "2026-04-12T20:15:00.000Z"
+    },
+    {
+      "id": 6,
+      "name": "adapters/storage/sqlite",
+      "paths": ["internal/adapters/storage/sqlite/"],
+      "status": "completed",
+      "improve_findings": 10,
+      "polish_fixed": 5,
+      "polish_needs_review": 5,
+      "completed_at": "2026-04-12T20:30:00.000Z"
+    },
+    {
+      "id": 7,
+      "name": "adapters/clients",
+      "paths": ["internal/adapters/clients/"],
+      "status": "completed",
+      "improve_findings": 8,
+      "polish_fixed": 2,
+      "polish_needs_review": 6,
+      "completed_at": "2026-04-12T20:45:00.000Z"
+    },
+    {
+      "id": 8,
+      "name": "adapters/scheduler+scoring+advisor",
+      "paths": ["internal/adapters/scheduler/", "internal/adapters/scoring/", "internal/adapters/advisortool/"],
+      "status": "completed",
+      "improve_findings": 8,
+      "polish_fixed": 2,
+      "polish_needs_review": 6,
+      "completed_at": "2026-04-12T21:00:00.000Z"
+    },
+    {
+      "id": 9,
+      "name": "platform",
+      "paths": ["internal/platform/"],
+      "status": "completed",
+      "improve_findings": 6,
+      "polish_fixed": 0,
+      "polish_needs_review": 2,
+      "completed_at": "2026-04-12T21:15:00.000Z"
+    },
+    {
+      "id": 10,
+      "name": "cmd",
+      "paths": ["cmd/"],
+      "status": "completed",
+      "improve_findings": 8,
+      "polish_fixed": 2,
+      "polish_needs_review": 6,
+      "completed_at": "2026-04-12T21:30:00.000Z"
+    },
+    {
+      "id": 11,
+      "name": "testutil",
+      "paths": ["internal/testutil/"],
+      "status": "completed",
+      "improve_findings": 10,
+      "polish_fixed": 2,
+      "polish_needs_review": 8,
+      "completed_at": "2026-04-12T21:45:00.000Z"
+    },
+    {
+      "id": 12,
+      "name": "web",
+      "paths": ["web/"],
+      "status": "completed",
+      "improve_findings": 10,
+      "polish_fixed": 1,
+      "polish_needs_review": 9,
+      "completed_at": "2026-04-12T22:00:00.000Z"
+    }
+  ]
+}

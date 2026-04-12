@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
@@ -79,7 +79,7 @@ func (h *CampaignsHandler) HandleGlobalRefreshMM(w http.ResponseWriter, r *http.
 		return
 	}
 
-	mmRows, parseErrors, err := campaigns.ParseMMRefreshRows(rows)
+	mmRows, parseErrors, err := inventory.ParseMMRefreshRows(rows)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -93,7 +93,7 @@ func (h *CampaignsHandler) HandleGlobalRefreshMM(w http.ResponseWriter, r *http.
 		return
 	}
 
-	result, ok := serviceCall(w, r.Context(), h.logger, "global MM refresh failed", func() (*campaigns.MMRefreshResult, error) {
+	result, ok := serviceCall(w, r.Context(), h.logger, "global MM refresh failed", func() (*inventory.MMRefreshResult, error) {
 		return h.service.RefreshMMValuesGlobal(r.Context(), mmRows)
 	})
 	if !ok {
@@ -102,7 +102,7 @@ func (h *CampaignsHandler) HandleGlobalRefreshMM(w http.ResponseWriter, r *http.
 
 	// Surface row-level parse errors in the response and count them as failures.
 	for _, pe := range parseErrors {
-		result.Errors = append(result.Errors, campaigns.ImportError{Row: pe.Row, Error: pe.Message})
+		result.Errors = append(result.Errors, inventory.ImportError{Row: pe.Row, Error: pe.Message})
 	}
 	result.Failed += len(parseErrors)
 

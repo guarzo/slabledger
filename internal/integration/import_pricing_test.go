@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 
 	_ "github.com/joho/godotenv/autoload"
 )
@@ -90,7 +90,7 @@ func TestParseCardMetadataFromCSV(t *testing.T) {
 			continue
 		}
 
-		cardName, cardNumber, setName := campaigns.ExportParseCardMetadataFromTitle(row.ListingTitle, row.Category)
+		cardName, cardNumber, setName := inventory.ExportParseCardMetadataFromTitle(row.ListingTitle, row.Category)
 
 		t.Run(row.CertNumber, func(t *testing.T) {
 			t.Logf("Title: %s", row.ListingTitle)
@@ -106,7 +106,7 @@ func TestParseCardMetadataFromCSV(t *testing.T) {
 				failed++
 				return
 			}
-			if exp.setNotGeneric && campaigns.ExportIsGenericSetName(setName) {
+			if exp.setNotGeneric && inventory.ExportIsGenericSetName(setName) {
 				t.Errorf("set name %q is generic, should be specific", setName)
 				failed++
 				return

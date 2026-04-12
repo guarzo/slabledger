@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 )
 
 // ---------------------------------------------------------------------------
@@ -49,12 +49,12 @@ func (m *MockDHInventoryListClient) ListInventory(ctx context.Context, filters d
 
 // MockDHFieldsUpdater is a test double for scheduler.DHFieldsUpdater.
 type MockDHFieldsUpdater struct {
-	UpdatePurchaseDHFieldsFn func(ctx context.Context, id string, update campaigns.DHFieldsUpdate) error
-	Calls                    []campaigns.DHFieldsUpdate
+	UpdatePurchaseDHFieldsFn func(ctx context.Context, id string, update inventory.DHFieldsUpdate) error
+	Calls                    []inventory.DHFieldsUpdate
 	IDs                      []string
 }
 
-func (m *MockDHFieldsUpdater) UpdatePurchaseDHFields(ctx context.Context, id string, update campaigns.DHFieldsUpdate) error {
+func (m *MockDHFieldsUpdater) UpdatePurchaseDHFields(ctx context.Context, id string, update inventory.DHFieldsUpdate) error {
 	if m.UpdatePurchaseDHFieldsFn != nil {
 		return m.UpdatePurchaseDHFieldsFn(ctx, id, update)
 	}

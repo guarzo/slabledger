@@ -8,7 +8,8 @@ import (
 	"strings"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	"github.com/guarzo/slabledger/internal/domain/dhlisting"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/domain/pricing"
 )
@@ -55,7 +56,7 @@ func (h *DHHandler) HandleSelectMatch(w http.ResponseWriter, r *http.Request) {
 
 	purchase, err := h.purchaseLister.GetPurchase(ctx, req.PurchaseID)
 	if err != nil {
-		if campaigns.IsPurchaseNotFound(err) {
+		if inventory.IsPurchaseNotFound(err) {
 			writeError(w, http.StatusNotFound, "purchase not found")
 			return
 		}
@@ -101,7 +102,7 @@ func (h *DHHandler) HandleSelectMatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	marketValue := campaigns.ResolveMarketValueCents(purchase)
+	marketValue := dhlisting.ResolveMarketValueCents(purchase)
 	if marketValue == 0 {
 		writeError(w, http.StatusBadRequest, "purchase has no market value yet")
 		return
@@ -130,7 +131,7 @@ func (h *DHHandler) HandleSelectMatch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if h.pushStatusUpdater != nil {
-		if err := h.pushStatusUpdater.UpdatePurchaseDHPushStatus(ctx, purchase.ID, campaigns.DHPushStatusManual); err != nil {
+		if err := h.pushStatusUpdater.UpdatePurchaseDHPushStatus(ctx, purchase.ID, inventory.DHPushStatusManual); err != nil {
 			h.logger.Warn(ctx, "select match: failed to set manual status",
 				observability.String("purchaseID", purchase.ID), observability.Err(err))
 		} else if h.candidatesSaver != nil {

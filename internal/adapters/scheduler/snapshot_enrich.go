@@ -8,7 +8,7 @@ import (
 	"github.com/guarzo/slabledger/internal/platform/config"
 )
 
-// SnapshotEnrichService is the subset of campaigns.Service needed by the enrichment scheduler.
+// SnapshotEnrichService is the subset of inventory.Service needed by the enrichment scheduler.
 type SnapshotEnrichService interface {
 	ProcessPendingSnapshots(ctx context.Context, limit int) (processed, skipped, failed int)
 	RetryFailedSnapshots(ctx context.Context, limit int) (processed, skipped, failed int)

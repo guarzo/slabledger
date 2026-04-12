@@ -4,6 +4,8 @@
 #   2. Storage adapters must not import client adapters. Peers should
 #      communicate through domain interfaces; pure utilities (string
 #      normalization, encoding, etc.) belong in internal/platform/.
+#   3. Inventory sub-packages (arbitrage, portfolio, tuning, finance, export,
+#      dhlisting) must not import each other (flat sibling rule).
 set -euo pipefail
 
 violations_domain=$(grep -rn '"github.com/guarzo/slabledger/internal/adapters' internal/domain/ 2>/dev/null || true)
@@ -32,3 +34,29 @@ if [ -n "$violations_storage" ]; then
 fi
 
 echo "Architecture check passed: no domain → adapter or storage → clients imports."
+
+# Flat sibling rule: inventory sub-packages must not import each other.
+SUB_PACKAGES="arbitrage portfolio tuning finance export dhlisting"
+sibling_violations=""
+for pkg in $SUB_PACKAGES; do
+  for other in $SUB_PACKAGES; do
+    if [ "$pkg" != "$other" ]; then
+      found=$(grep -rn "\"github.com/guarzo/slabledger/internal/domain/$other\"" \
+        "internal/domain/$pkg/" 2>/dev/null | grep -v "_test.go" || true)
+      if [ -n "$found" ]; then
+        sibling_violations="${sibling_violations}ERROR: internal/domain/$pkg imports sibling internal/domain/$other\n${found}\n"
+      fi
+    fi
+  done
+done
+
+if [ -n "$sibling_violations" ]; then
+  echo "ERROR: Inventory sub-packages must not import each other (flat sibling rule)."
+  echo ""
+  printf "%b" "$sibling_violations"
+  echo ""
+  echo "Sub-packages should depend only on internal/domain/inventory (shared types)."
+  exit 1
+fi
+
+echo "Flat sibling rule check passed: no cross-imports between inventory sub-packages."

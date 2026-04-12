@@ -8,13 +8,13 @@ import (
 	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
 // CLPurchaseLister lists unsold purchases for syncing to Card Ladder.
 type CLPurchaseLister interface {
-	ListAllUnsoldPurchases(ctx context.Context) ([]campaigns.Purchase, error)
+	ListAllUnsoldPurchases(ctx context.Context) ([]inventory.Purchase, error)
 }
 
 // CLSyncUpdater sets cl_synced_at on a purchase after it is pushed to Card Ladder.

@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -43,7 +44,7 @@ func (s *InstagramStore) Get(ctx context.Context) (*InstagramConfig, error) {
 		`SELECT access_token, ig_user_id, username, token_expires_at, connected_at
 		 FROM instagram_config WHERE id = 1`,
 	).Scan(&encToken, &igUserID, &username, &expiresAt, &connectedAt)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
