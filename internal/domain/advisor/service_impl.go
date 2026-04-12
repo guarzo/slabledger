@@ -101,9 +101,21 @@ func (s *service) AnalyzeCampaign(ctx context.Context, campaignID string, stream
 	var scoreCard *scoring.ScoreCard
 	if s.scoringData != nil {
 		data, err := s.scoringData.CampaignData(ctx, campaignID)
-		if err == nil && data != nil {
+		if err != nil {
+			if s.logger != nil {
+				s.logger.Warn(ctx, "AnalyzeCampaign: failed to load scoring data — proceeding without scorecard",
+					observability.String("campaignID", campaignID),
+					observability.Err(err))
+			}
+		} else if data != nil {
 			sc, scErr := BuildScoreCard(campaignID, "campaign", data, scoring.CampaignAnalysisProfile)
-			if scErr == nil {
+			if scErr != nil {
+				if s.logger != nil {
+					s.logger.Warn(ctx, "AnalyzeCampaign: failed to build scorecard — proceeding without",
+						observability.String("campaignID", campaignID),
+						observability.Err(scErr))
+				}
+			} else {
 				scoreCard = &sc
 				s.recordGaps(ctx, sc, "", "")
 			}
@@ -134,9 +146,21 @@ func (s *service) AssessPurchase(ctx context.Context, req PurchaseAssessmentRequ
 	var scoreCard *scoring.ScoreCard
 	if s.scoringData != nil {
 		data, err := s.scoringData.PurchaseData(ctx, req)
-		if err == nil && data != nil {
+		if err != nil {
+			if s.logger != nil {
+				s.logger.Warn(ctx, "AssessPurchase: failed to load scoring data — proceeding without scorecard",
+					observability.String("certNumber", req.CertNumber),
+					observability.Err(err))
+			}
+		} else if data != nil {
 			sc, scErr := BuildScoreCard(req.CertNumber, "purchase", data, scoring.PurchaseAssessmentProfile)
-			if scErr == nil {
+			if scErr != nil {
+				if s.logger != nil {
+					s.logger.Warn(ctx, "AssessPurchase: failed to build scorecard — proceeding without",
+						observability.String("certNumber", req.CertNumber),
+						observability.Err(scErr))
+				}
+			} else {
 				scoreCard = &sc
 				s.recordGaps(ctx, sc, req.CardName, req.SetName)
 			}
