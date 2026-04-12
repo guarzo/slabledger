@@ -176,8 +176,9 @@ export default function EbayExportTab() {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-4">
-        <label className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
+        <label htmlFor="flagged-only-export" className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
           <input
+            id="flagged-only-export"
             type="checkbox"
             checked={flaggedOnly}
             onChange={e => setFlaggedOnly(e.target.checked)}

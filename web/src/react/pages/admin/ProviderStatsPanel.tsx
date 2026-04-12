@@ -9,6 +9,7 @@ import {
 import { SummaryCard } from './shared';
 import { formatAdminDate } from './adminUtils';
 import { FailureBreakdownModal } from './FailureBreakdownModal';
+import PokeballLoader from '../../PokeballLoader';
 
 function formatMs(ms: number): string {
   if (!Number.isFinite(ms)) return '-';
@@ -21,7 +22,7 @@ export function MMStatsPanel({ enabled = true }: { enabled?: boolean }) {
   const [showFailures, setShowFailures] = useState(false);
   const { data: failures } = useMarketMoversFailures({ enabled: showFailures });
 
-  if (isLoading) return <p className="text-[var(--text-muted)] text-sm">Loading...</p>;
+  if (isLoading) return <PokeballLoader size="sm" />;
   if (isError) return <p className="text-[var(--danger)] text-sm">Failed to load status.</p>;
   if (!status?.configured) return <p className="text-[var(--text-muted)] text-sm">Not configured.</p>;
 
@@ -121,7 +122,7 @@ export function CLStatsPanel({ enabled = true }: { enabled?: boolean }) {
   const [showFailures, setShowFailures] = useState(false);
   const { data: failures } = useCardLadderFailures({ enabled: showFailures });
 
-  if (isLoading) return <p className="text-[var(--text-muted)] text-sm">Loading...</p>;
+  if (isLoading) return <PokeballLoader size="sm" />;
   if (isError) return <p className="text-[var(--danger)] text-sm">Failed to load status.</p>;
   if (!status?.configured) return <p className="text-[var(--text-muted)] text-sm">Not configured.</p>;
 
@@ -224,7 +225,7 @@ export function CLStatsPanel({ enabled = true }: { enabled?: boolean }) {
 export function PSAStatsPanel({ enabled = true }: { enabled?: boolean }) {
   const { data: status, isLoading, isError } = usePSASyncStatus({ enabled });
 
-  if (isLoading) return <p className="text-[var(--text-muted)] text-sm">Loading...</p>;
+  if (isLoading) return <PokeballLoader size="sm" />;
   if (isError) return <p className="text-[var(--danger)] text-sm">Failed to load status.</p>;
   if (!status?.configured) return <p className="text-[var(--text-muted)] text-sm">Not configured.</p>;
 

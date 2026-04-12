@@ -277,8 +277,9 @@ export default function RecordSaleModal({ open, onClose, onSuccess, items }: Rec
                     helper="Days on the platform"
                   />
                   <div className="flex items-end pb-1">
-                    <label className="flex items-center gap-2 text-xs text-[var(--text-muted)] cursor-pointer">
+                    <label htmlFor="sold-at-asking-price" className="flex items-center gap-2 text-xs text-[var(--text-muted)] cursor-pointer">
                       <input
+                        id="sold-at-asking-price"
                         type="checkbox"
                         checked={soldAtAskingPrice}
                         onChange={e => setSoldAtAskingPrice(e.target.checked)}

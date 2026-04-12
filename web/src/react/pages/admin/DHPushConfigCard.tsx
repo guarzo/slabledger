@@ -6,6 +6,7 @@ import Button from '../../ui/Button';
 import { useToast } from '../../contexts/ToastContext';
 import type { DHPushConfig } from '../../../types/apiStatus';
 import { formatCents } from '../../utils/formatters';
+import PokeballLoader from '../../PokeballLoader';
 
 function ConfigField({ id, label, value, onChange, suffix }: {
   id: string;
@@ -71,7 +72,7 @@ export function DHPushConfigCard() {
   }
 
   if (isLoading || !form) {
-    return <CardShell padding="lg"><p className="text-[var(--text-muted)]">Loading...</p></CardShell>;
+    return <CardShell padding="lg"><PokeballLoader size="sm" /></CardShell>;
   }
 
   return (
