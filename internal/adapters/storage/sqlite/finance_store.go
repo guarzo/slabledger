@@ -157,8 +157,12 @@ func (fs *FinanceStore) GetPendingReceiptByInvoiceDate(ctx context.Context, invo
 		if err != nil {
 			return nil, err
 		}
-		scanErr := func() error {
-			defer rows.Close()
+		scanErr := func() (err error) {
+			defer func() {
+				if cerr := rows.Close(); err == nil && cerr != nil {
+					err = cerr
+				}
+			}()
 			for rows.Next() {
 				var date string
 				var pending int
