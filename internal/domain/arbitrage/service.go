@@ -261,7 +261,8 @@ func (s *service) GetActivationChecklist(ctx context.Context, campaignID string)
 func (s *service) GetAcquisitionTargets(ctx context.Context) ([]AcquisitionOpportunity, error) {
 	if s.priceProv == nil {
 		if s.logger != nil {
-			s.logger.Info(ctx, "skipping acquisition targets: price provider not configured")
+			s.logger.Info(ctx, "skipping acquisition targets",
+				observability.String("reason", "price provider not configured"))
 		}
 		return []AcquisitionOpportunity{}, nil
 	}
