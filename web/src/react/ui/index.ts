@@ -27,6 +27,7 @@ export { default as EmptyState } from './EmptyState';
 // Feedback & Overlays
 export { default as ConfirmDialog } from './ConfirmDialog';
 export { default as SectionErrorBoundary } from './SectionErrorBoundary';
+export { ErrorAlert } from './ErrorAlert';
 
 // Sliders
 export { default as DualRangeSlider } from './DualRangeSlider';

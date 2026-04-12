@@ -1,6 +1,7 @@
 import PokeballLoader from '../../PokeballLoader';
 import { usePriceOverrideStats } from '../../queries/useAdminQueries';
 import { currency } from '../../utils/formatters';
+import { ErrorAlert } from '../../ui';
 import { SummaryCard } from './shared';
 
 function pct(n: number, total: number): string {
@@ -19,7 +20,7 @@ export function AIPricingTab({ enabled = true }: { enabled?: boolean }) {
       </div>
     );
   }
-  if (error && !stats) return <div className="p-3 rounded-lg bg-[var(--danger-bg)] border border-[var(--danger-border)] text-[var(--danger)] text-sm">Failed to load price override stats</div>;
+  if (error && !stats) return <ErrorAlert message="Failed to load price override stats" className="p-3 rounded-lg bg-[var(--danger-bg)] border border-[var(--danger-border)]" />;
   if (!stats) return null;
 
   const noOverride = stats.totalUnsold - stats.overrideCount;
