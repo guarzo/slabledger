@@ -126,6 +126,8 @@ type dhStatusResponse struct {
 	MappedCount           int             `json:"mapped_count"`
 	BulkMatchRunning      bool            `json:"bulk_match_running"`
 	BulkMatchError        string          `json:"bulk_match_error,omitempty"`
+	BulkMatchLastMatched  int64           `json:"bulk_match_last_matched"`
+	BulkMatchLastFailed   int64           `json:"bulk_match_last_failed"`
 	APIHealth             *dh.HealthStats `json:"api_health,omitempty"`
 	DHInventoryCount      int             `json:"dh_inventory_count,omitempty"`
 	DHListingsCount       int             `json:"dh_listings_count,omitempty"`
@@ -144,8 +146,10 @@ func (h *DHHandler) HandleGetStatus(w http.ResponseWriter, r *http.Request) {
 		bulkMatchErr, _ = v.(string)
 	}
 	resp := dhStatusResponse{
-		BulkMatchRunning: h.bulkMatchRunning.Load(),
-		BulkMatchError:   bulkMatchErr,
+		BulkMatchRunning:     h.bulkMatchRunning.Load(),
+		BulkMatchError:       bulkMatchErr,
+		BulkMatchLastMatched: h.bulkMatchMatched.Load(),
+		BulkMatchLastFailed:  h.bulkMatchFailed.Load(),
 	}
 
 	if h.intelCounter != nil {

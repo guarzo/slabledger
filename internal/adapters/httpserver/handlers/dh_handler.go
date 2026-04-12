@@ -116,6 +116,8 @@ type DHHandler struct {
 	bulkMatchMu      sync.Mutex
 	bulkMatchRunning atomic.Bool
 	bulkMatchError   atomic.Value // stores last bulk match error string (or "")
+	bulkMatchFailed  atomic.Int64 // failed count from last completed bulk match run
+	bulkMatchMatched atomic.Int64 // matched count from last completed bulk match run
 	selectLocks      sync.Map     // per-purchaseID mutex for select-match serialization
 }
 
