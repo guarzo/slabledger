@@ -1,7 +1,7 @@
 ---
 name: improve
-description: Holistic codebase review — quality, maintainability, dead code, duplication, UX friction — produces a prioritized top-10 list of improvements
-argument-hint: "[backend | frontend | <package-name>]"
+description: Holistic codebase review — quality, maintainability, dead code, duplication, UX friction — produces a prioritized top-10 list of improvements. Use when the user asks about tech debt, what to refactor, code audit, codebase health, what needs fixing, improvement opportunities, or general code quality review.
+argument-hint: "[backend | frontend | diff | since:<date> | <package-name>]"
 ---
 
 # Codebase Improvement Review
@@ -14,12 +14,16 @@ Parse the argument to determine review scope:
 
 | Argument | Scope | Phase 1 Commands | Phase 2 Categories |
 |----------|-------|-----------------|-------------------|
-| *(empty)* | Full codebase | All backend + frontend | All 8 categories |
-| `backend` | Go backend only | Backend only | Categories 1-6, 8 |
+| *(empty)* | Full codebase | All backend + frontend | All 10 categories |
+| `backend` | Go backend only | Backend only | Categories 1-6, 8-10 |
 | `frontend` | React frontend only | Frontend only | Categories 1-4, 7-8 |
+| `diff` | Files changed since last `/improve` run | Scoped to changed files | All applicable |
+| `since:<date>` | Files changed since date (e.g. `since:2026-04-10`) | Scoped to changed files | All applicable |
 | `<package>` | Specific package deep dive | Backend scoped to package | All applicable, deep dive |
 
-**Package argument validation:** If the argument is not `backend` or `frontend`, verify it matches an existing directory under `internal/domain/` or `internal/adapters/clients/`. If no match, list available packages and ask the user to pick one.
+**Diff-aware mode:** For `diff` or `since:<date>`, use `git diff --name-only` to get the list of changed files. For `diff`, use the date from the last run stored in the memory file. For `since:<date>`, parse the date from the argument. Scope both Phase 1 and Phase 2 to only those files. This is useful as a lightweight post-work check rather than a full sweep.
+
+**Package argument validation:** If the argument is not a recognized keyword (`backend`, `frontend`, `diff`, or `since:*`), verify it matches an existing directory under `internal/` (any level — `domain/`, `adapters/httpserver/`, `adapters/storage/sqlite/`, `adapters/scheduler/`, `platform/`, etc.) or `web/src/`. If no match, list available packages and ask the user to pick one.
 
 ## Step 1: Check for previous findings
 
@@ -63,19 +67,40 @@ cd web && npm run typecheck
 cd web && npm test
 ```
 
+### Dependency health (all scopes)
+
+```bash
+# Check for unused Go modules
+go mod tidy -diff 2>&1 || true
+
+# Check for known npm vulnerabilities
+cd web && npm audit --audit-level=moderate 2>&1 || true
+```
+
+Capture any findings — unused modules or vulnerabilities are findings, not blockers.
+
 ### Structural analysis (all scopes)
 
 Use Glob and Grep to gather:
 
 1. **File sizes** — Find all `.go` files (excluding `*_test.go` and `testutil/mocks/`) and count lines. Flag files approaching or exceeding the 500-line guideline.
-2. **Test coverage gaps** — For each non-test `.go` file, check whether a corresponding `_test.go` exists in the same directory. List packages with no test files at all.
-3. **LOC distribution** — Count lines per top-level package (`internal/domain/*`, `internal/adapters/*`, `internal/platform/*`, `cmd/*`, `web/src/*`).
+2. **Coverage by package** — Parse the `go tool cover -func=coverage.out` output. Extract the overall coverage percentage (the last line: `total:`) and per-package coverage. Sort packages by coverage ascending. Flag any functions at 0% in critical packages (`campaigns`, `pricing`, `auth`, `storage/sqlite`).
+3. **Test file gaps** — List packages that have no `_test.go` files at all.
+4. **LOC distribution** — Count lines per top-level package (`internal/domain/*`, `internal/adapters/*`, `internal/platform/*`, `cmd/*`, `web/src/*`).
 
-For package-scoped runs, restrict structural analysis to that package.
+For package-scoped or diff-scoped runs, restrict structural analysis to the relevant files.
 
 ## Step 3: Phase 2 — Qualitative Analysis
 
 Using Phase 1 data as a guide, do targeted code reading. Prioritize areas the numbers flagged — large files, low-coverage packages, lint warnings — then broaden.
+
+**Parallelize with sub-agents:** For full-codebase or backend scope, spawn up to 3 Explore agents in parallel, each responsible for a subset of categories. Share the Phase 1 data summary with each agent so they have context. Each agent should return its top findings using the format from Step 4.
+
+- **Agent 1 — Structural concerns**: Categories 1 (Maintainability), 2 (Dead Code), 3 (Duplication)
+- **Agent 2 — Correctness concerns**: Categories 4 (Code Quality), 5 (Tests), 6 (Architecture), 9 (Performance)
+- **Agent 3 — Surface concerns**: Categories 7 (UX Friction), 8 (Documentation), 10 (Dependencies)
+
+For narrow scopes (single package, diff, frontend-only), running in the main context is fine — sub-agents add overhead that isn't worth it for small reviews.
 
 Review across these categories (skip categories not applicable to the current scope per the table in Step 0):
 
@@ -109,7 +134,11 @@ Review across these categories (skip categories not applicable to the current sc
 - Identify domain packages that have grown too broad and should be split
 
 ### Category 7: UX Friction (full codebase and frontend scope only)
-- Review loading states, error states, and empty states across key pages
+- Run the Playwright screenshot suite to capture current UI state:
+  ```bash
+  cd web && npx playwright test tests/screenshot-all-pages.spec.ts --project=chromium
+  ```
+- Read screenshots from `web/screenshots/` (desktop) and `web/screenshots/mobile/` (mobile) — visually check for broken layouts, overlapping elements, missing loading/empty states, inconsistent spacing
 - Check for accessibility gaps (missing aria labels, keyboard navigation issues)
 - Identify inconsistent UI patterns across pages
 
@@ -117,6 +146,17 @@ Review across these categories (skip categories not applicable to the current sc
 - Spot-check that docs match current code (especially `docs/API.md` endpoints, `docs/SCHEMA.md` tables)
 - Check for Go struct JSON tags that don't match TypeScript interfaces in `web/src/types/`
 - Identify undocumented endpoints or misleading comments
+
+### Category 9: Performance & Concurrency
+- Look for unbounded goroutines or missing context cancellation in long-running operations
+- Check for N+1 query patterns in the SQLite layer (queries inside loops)
+- Identify unbounded slice growth or missing pagination in list endpoints
+- Look for blocking operations in hot paths that should be async
+
+### Category 10: Dependency Health
+- Review `go mod tidy -diff` output from Phase 1 for unused modules
+- Review `npm audit` output from Phase 1 for known vulnerabilities
+- Check for pinned vs floating dependency versions that could cause supply chain risk
 
 ## Step 4: Synthesize and rank — Top 10
 
@@ -143,9 +183,9 @@ Present each finding in this exact format:
 
 If there are previous findings from Step 1, note for each item whether it is **new**, **persists** from last run, or represents a **regression**.
 
-## Step 5: Save findings to memory
+## Step 5: Save findings to memory and clean up
 
-Write the summary to `/home/vscode/.claude/projects/-workspace/memory/improve_findings.md`:
+Write the summary to `/home/vscode/.claude/projects/-workspace/memory/improve_findings.md`. When updating an existing file, **preserve the metrics history table** — append a new row and keep the last 5 rows. For findings, update the status of resolved items (add the PR number if known) and add new items.
 
 ```markdown
 ---
@@ -155,19 +195,30 @@ type: project
 ---
 
 ## Last Run: [today's date]
-**Scope**: [full | backend | frontend | <package>]
+**Scope**: [full | backend | frontend | diff | <package>]
+
+### Metrics History
+| Date | Scope | Coverage | Lint | 500+ LOC | nil,nil | npm audit |
+|------|-------|----------|------|----------|---------|-----------|
+| [today] | [scope] | [N%] | [N] | [N] | [N] | [N] |
+| [prev] | [scope] | [N%] | [N] | [N] | [N] | [N] |
 
 ### Top Findings
-1. [Title] — Status: open
-2. [Title] — Status: open
+1. [Title] — opened [date], status: open
+2. [Title] — opened [date], status: open
+3. [Title] — opened [prev date], status: resolved (PR #NNN)
 ...
 
-### Key Metrics
+### Key Metrics (current run)
+- Go test coverage: [N%]
 - Go lint warnings: [N]
-- Files over 500 LOC: [N]
+- Files over 500 LOC: [N] ([list them])
 - Packages with zero tests: [N]
+- Frontend TS type errors: [N]
 - Frontend lint warnings: [N]
 - Test failures: [N]
+- return nil, nil in production: [N]
+- npm audit vulnerabilities: [N]
 ```
 
 If `MEMORY.md` exists in the memory directory, ensure it has a pointer to this file. If `MEMORY.md` does not exist, create it:
@@ -176,14 +227,28 @@ If `MEMORY.md` exists in the memory directory, ensure it has a pointer to this f
 - [Improve Findings](improve_findings.md) — Latest /improve skill review results and metrics
 ```
 
+**Clean up artifacts:**
+
+```bash
+rm -f coverage.out
+```
+
 ## Step 6: Interactive follow-up
 
-After presenting the top 10, ask:
+After presenting the top 10, offer these options:
 
-> "Want to dig into any of these? Pick a number to discuss further, or say 'go' to start working on #1."
+> "What next? You can:
+> - **Pick a number** to dig deeper into a specific finding
+> - **'go'** to start working on #1
+> - **'quick wins'** to tackle all Small-effort items in sequence
+> - **'compare'** to see how metrics changed over time
+> - **'diff'** to see what changed since the last run"
 
 From there, be conversational:
 - If the user picks a number, provide deeper analysis of that finding — show the specific code, explain the trade-offs, discuss approach options
 - If the user says "go" or picks a number to work on, help implement the fix
+- If the user says "quick wins", filter to Small-effort items and work through them in order
+- If the user says "compare", show the metrics history table with trend arrows
+- If the user says "diff", run `git diff` from the last run date and summarize what changed
 - If the user wants to reorder priorities, adjust and re-present
 - If the user is done, wrap up
