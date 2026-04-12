@@ -399,10 +399,7 @@ func TestService_GetPortfolioHealth_LiquidationSignals(t *testing.T) {
 				})
 			}
 
-			repo.GetPurchasesWithSalesFn = func(_ context.Context, campaignID string) ([]inventory.PurchaseWithSale, error) {
-				if campaignID != c.ID {
-					return nil, nil
-				}
+			repo.GetAllPurchasesWithSalesFn = func(_ context.Context, opts ...inventory.PurchaseFilterOpt) ([]inventory.PurchaseWithSale, error) {
 				return fixtures, nil
 			}
 
@@ -487,7 +484,7 @@ func TestService_GetPortfolioHealth_LiquidationReason(t *testing.T) {
 			for i := range sales {
 				sales[i].Purchase.CampaignID = c.ID
 			}
-			repo.GetPurchasesWithSalesFn = func(_ context.Context, _ string) ([]inventory.PurchaseWithSale, error) {
+			repo.GetAllPurchasesWithSalesFn = func(_ context.Context, opts ...inventory.PurchaseFilterOpt) ([]inventory.PurchaseWithSale, error) {
 				return sales, nil
 			}
 
