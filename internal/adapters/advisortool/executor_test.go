@@ -101,6 +101,37 @@ func TestDefinitionsFor_Empty(t *testing.T) {
 	}
 }
 
+// TestExecute_GetCapitalSummary_NilFinanceService verifies that get_capital_summary returns an
+// error gracefully when no financeService is injected (nil guard regression test).
+func TestExecute_GetCapitalSummary_NilFinanceService(t *testing.T) {
+	// Create executor without WithFinanceService — financeService will be nil
+	e := newTestExecutor(&mocks.MockInventoryService{})
+
+	// Tool must still be registered even with nil financeService
+	var found bool
+	for _, def := range e.Definitions() {
+		if def.Name == "get_capital_summary" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("get_capital_summary tool not registered when financeService is nil")
+	}
+
+	// Execute should return error "finance service not available", not panic
+	result, err := e.Execute(context.Background(), "get_capital_summary", "{}")
+	if err == nil {
+		t.Fatalf("expected error for nil financeService, got result: %s", result)
+	}
+	if result != "" {
+		t.Errorf("expected empty result on error, got %q", result)
+	}
+	if !strings.Contains(err.Error(), "not available") {
+		t.Errorf("error %q does not mention 'not available'", err.Error())
+	}
+}
+
 // TestExecute_UnknownTool verifies that calling an unregistered tool returns an error.
 func TestExecute_UnknownTool(t *testing.T) {
 	e := newTestExecutor(&mocks.MockInventoryService{})
