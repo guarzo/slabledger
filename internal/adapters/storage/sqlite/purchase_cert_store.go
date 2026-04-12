@@ -70,6 +70,8 @@ func (ps *PurchaseStore) GetPurchasesByGraderAndCertNumbers(ctx context.Context,
 
 // GetPurchasesByCertNumbers retrieves purchases by cert numbers across all graders.
 // Large inputs are chunked to stay within SQLite's parameter limit.
+// If the same cert number exists under multiple graders, the last scanned row wins;
+// use GetPurchasesByGraderAndCertNumbers when grader context is available.
 func (ps *PurchaseStore) GetPurchasesByCertNumbers(ctx context.Context, certNumbers []string) (map[string]*inventory.Purchase, error) {
 	if len(certNumbers) == 0 {
 		return make(map[string]*inventory.Purchase), nil
@@ -176,6 +178,8 @@ func (ps *PurchaseStore) SetReceivedAt(ctx context.Context, purchaseID string, r
 }
 
 // GetPurchaseIDByCertNumber returns the purchase ID for a given cert number.
+// If multiple purchases share the cert number under different graders, an arbitrary
+// row is returned; callers with grader context should use GetPurchasesByGraderAndCertNumbers.
 func (ps *PurchaseStore) GetPurchaseIDByCertNumber(ctx context.Context, certNumber string) (string, error) {
 	var id string
 	err := ps.db.QueryRowContext(ctx,
