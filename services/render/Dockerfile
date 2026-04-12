@@ -42,10 +42,7 @@ ENV PUPPETEER_CACHE_DIR=/app/.cache/puppeteer
 ENV PUPPETEER_SKIP_DOWNLOAD=true
 
 COPY services/render/package*.json ./
-RUN npm ci --omit=dev
-
-# Install Chrome for Puppeteer as root so the binary lands under /app.
-RUN npx puppeteer browsers install chrome
+RUN npm ci --omit=dev && npx puppeteer browsers install chrome
 
 COPY services/render/ ./
 
