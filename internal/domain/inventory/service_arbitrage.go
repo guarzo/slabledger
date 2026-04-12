@@ -66,10 +66,24 @@ func (s *service) crackCandidatesForCampaign(ctx context.Context, campaign *Camp
 		rawCents := 0
 		gradedCents := 0
 		if s.priceProv != nil {
-			if v, err := s.priceProv.GetLastSoldCents(ctx, card, 0); err == nil {
+			if v, err := s.priceProv.GetLastSoldCents(ctx, card, 0); err != nil {
+				if s.logger != nil {
+					s.logger.Debug(ctx, "price lookup failed for crack candidate",
+						observability.String("purchaseID", p.ID),
+						observability.String("cardName", p.CardName),
+						observability.Err(err))
+				}
+			} else {
 				rawCents = v
 			}
-			if v, err := s.priceProv.GetLastSoldCents(ctx, card, p.GradeValue); err == nil {
+			if v, err := s.priceProv.GetLastSoldCents(ctx, card, p.GradeValue); err != nil {
+				if s.logger != nil {
+					s.logger.Debug(ctx, "graded price lookup failed for crack candidate",
+						observability.String("purchaseID", p.ID),
+						observability.String("cardName", p.CardName),
+						observability.Err(err))
+				}
+			} else {
 				gradedCents = v
 			}
 		}
@@ -281,7 +295,13 @@ func (s *service) GetAcquisitionTargets(ctx context.Context) ([]AcquisitionOppor
 			seen[key] = true
 			card := p.ToCardIdentity()
 			rawNMCents := 0
-			if v, err := s.priceProv.GetLastSoldCents(ctx, card, 0); err == nil && v > 0 {
+			if v, err := s.priceProv.GetLastSoldCents(ctx, card, 0); err != nil {
+				if s.logger != nil {
+					s.logger.Debug(ctx, "price lookup failed for acquisition target",
+						observability.String("cardName", p.CardName),
+						observability.Err(err))
+				}
+			} else if v > 0 {
 				rawNMCents = v
 			}
 			if rawNMCents == 0 {
@@ -289,7 +309,13 @@ func (s *service) GetAcquisitionTargets(ctx context.Context) ([]AcquisitionOppor
 			}
 			gradedEstimates := make(map[string]int)
 			for _, grade := range []float64{8, 9, 10} {
-				if v, err := s.priceProv.GetLastSoldCents(ctx, card, grade); err == nil && v > 0 {
+				if v, err := s.priceProv.GetLastSoldCents(ctx, card, grade); err != nil {
+					if s.logger != nil {
+						s.logger.Debug(ctx, "graded price lookup failed for acquisition target",
+							observability.String("cardName", p.CardName),
+							observability.Err(err))
+					}
+				} else if v > 0 {
 					gradedEstimates[fmt.Sprintf("PSA %g", grade)] = v
 				}
 			}
