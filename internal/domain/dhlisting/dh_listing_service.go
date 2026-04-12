@@ -287,8 +287,12 @@ func (s *dhListingService) inlineMatchAndPush(ctx context.Context, p *inventory.
 				ChannelsJSON:      r.ChannelsJSON,
 				DHStatus:          inventory.DHStatus(r.Status),
 			}); err != nil {
-				s.logger.Warn(ctx, "inline dh push: failed to persist DH fields",
+				// Note: returning 0 here means we'll retry next run and potentially create another DH entry.
+				// This is preferable to creating unlimited duplicates. The DH entry created above may need
+				// manual cleanup if the DB persist consistently fails.
+				s.logger.Error(ctx, "inline dh push: failed to persist DH fields — returning 0 to prevent duplicate push",
 					observability.String("cert", p.CertNumber), observability.Err(err))
+				return 0
 			}
 		}
 
