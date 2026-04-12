@@ -9,6 +9,7 @@ const (
 	PostTypeNewArrivals PostType = "new_arrivals"
 	PostTypePriceMovers PostType = "price_movers"
 	PostTypeHotDeals    PostType = "hot_deals"
+	PostTypeDHInstagram PostType = "dh_instagram"
 )
 
 // PostStatus tracks the lifecycle of a social post draft.
