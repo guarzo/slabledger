@@ -66,7 +66,7 @@ func suggestSpendCapRebalancing(_ context.Context, insights *PortfolioInsights, 
 			avgROI := insights.DataSummary.OverallROI
 			var adjustments []string
 			for _, e := range active {
-				if e.roi > avgROI+suggROIDeviation && e.cap < totalBudget/len(active)*2 {
+				if e.roi > avgROI+suggROIDeviation && e.cap < totalBudget*2/len(active) {
 					adjustments = append(adjustments, fmt.Sprintf("raise %s ($%d/day, %.0f%% ROI)", e.campaign.Name, e.cap/100, e.roi*100))
 				} else if e.roi < avgROI-suggROIDeviation && e.cap > totalBudget/len(active)/2 {
 					adjustments = append(adjustments, fmt.Sprintf("lower %s ($%d/day, %.0f%% ROI)", e.campaign.Name, e.cap/100, e.roi*100))

@@ -208,12 +208,13 @@ func betterSuggestion(a, b CampaignSuggestion) bool {
 	return a.DataPoints > b.DataPoints
 }
 
-// gradeRangeFromLabel converts a grade label like "PSA 9" to a range string like "9-9".
+// gradeRangeFromLabel converts a grade label like "PSA 9" or "PSA 9.5" to a range string like "9-9".
 func gradeRangeFromLabel(label string) string {
 	parts := strings.Fields(label)
 	for _, p := range parts {
-		n, err := strconv.Atoi(p)
-		if err == nil && n >= 1 && n <= 10 {
+		f, err := strconv.ParseFloat(p, 64)
+		if err == nil && f >= 1 && f <= 10 {
+			n := int(f)
 			return fmt.Sprintf("%d-%d", n, n)
 		}
 	}
