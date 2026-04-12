@@ -155,7 +155,11 @@ func (s *service) GenerateSellSheet(ctx context.Context, campaignID string, purc
 			continue
 		}
 
-		item, _ := s.enrichSellSheetItem(ctx, purchase, "", campaign.EbayFeePct, crackSet)
+		item, ok := s.enrichSellSheetItem(ctx, purchase, "", campaign.EbayFeePct, crackSet)
+		if !ok {
+			sheet.Totals.SkippedItems++
+			continue
+		}
 		sheet.Totals.TotalExpectedRevenue += item.TargetSellPrice
 		sheet.Items = append(sheet.Items, item)
 		sheet.Totals.TotalCostBasis += item.CostBasisCents
@@ -247,7 +251,11 @@ func (s *service) buildCrossCampaignSellSheet(ctx context.Context, purchases []*
 			campName = c.Name
 			feePct = c.EbayFeePct
 		}
-		item, _ := s.enrichSellSheetItem(ctx, purchase, campName, feePct, crackSet)
+		item, ok := s.enrichSellSheetItem(ctx, purchase, campName, feePct, crackSet)
+		if !ok {
+			sheet.Totals.SkippedItems++
+			continue
+		}
 		sheet.Totals.TotalExpectedRevenue += item.TargetSellPrice
 		sheet.Items = append(sheet.Items, item)
 		sheet.Totals.TotalCostBasis += item.CostBasisCents
