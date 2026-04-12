@@ -40,7 +40,11 @@ func (h *CampaignsHandler) HandleCreatePurchase(w http.ResponseWriter, r *http.R
 			writeError(w, http.StatusConflict, "Certificate number already exists")
 			return
 		}
-		if inventory.IsValidationError(err) || inventory.IsCampaignNotFound(err) {
+		if inventory.IsCampaignNotFound(err) {
+			writeError(w, http.StatusNotFound, "Campaign not found")
+			return
+		}
+		if inventory.IsValidationError(err) {
 			writeError(w, http.StatusBadRequest, "invalid purchase data")
 			return
 		}
@@ -83,7 +87,7 @@ func (h *CampaignsHandler) HandleCreateSale(w http.ResponseWriter, r *http.Reque
 	// Look up the purchase and campaign for profit computation
 	purchase, err := h.service.GetPurchase(r.Context(), s.PurchaseID)
 	if err != nil {
-		if campaigns.IsPurchaseNotFound(err) {
+		if inventory.IsPurchaseNotFound(err) {
 			writeError(w, http.StatusNotFound, "Purchase not found")
 		} else {
 			h.logger.Error(r.Context(), "HandleCreateSale: GetPurchase failed",
@@ -100,7 +104,7 @@ func (h *CampaignsHandler) HandleCreateSale(w http.ResponseWriter, r *http.Reque
 
 	campaign, err := h.service.GetCampaign(r.Context(), id)
 	if err != nil {
-		if campaigns.IsCampaignNotFound(err) {
+		if inventory.IsCampaignNotFound(err) {
 			writeError(w, http.StatusNotFound, "Campaign not found")
 		} else {
 			h.logger.Error(r.Context(), "HandleCreateSale: GetCampaign failed",
