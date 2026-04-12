@@ -46,7 +46,10 @@ func NewService(
 // --- Portfolio Health ---
 
 func (s *service) GetPortfolioHealth(ctx context.Context) (*inventory.PortfolioHealth, error) {
-	allCampaigns, err := s.campaigns.ListCampaigns(ctx, false)
+	// Load only active (non-archived) campaigns to match purchase data below.
+	// Archived campaigns are excluded from purchase data via WithExcludeArchived(),
+	// so including them here would give them a zero channel health score.
+	allCampaigns, err := s.campaigns.ListCampaigns(ctx, true)
 	if err != nil {
 		return nil, fmt.Errorf("list campaigns: %w", err)
 	}

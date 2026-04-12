@@ -23,7 +23,7 @@ func TestService_GetPortfolioHealth_Healthy(t *testing.T) {
 	svc := newPortfolioSvc(repo)
 	ctx := context.Background()
 
-	c := &inventory.Campaign{ID: "c1", Name: "Profitable", BuyTermsCLPct: 0.78}
+	c := &inventory.Campaign{ID: "c1", Name: "Profitable", BuyTermsCLPct: 0.78, Phase: inventory.PhaseActive}
 	repo.Campaigns[c.ID] = c
 	repo.PNLData[c.ID] = &inventory.CampaignPNL{
 		CampaignID:        c.ID,
@@ -59,7 +59,7 @@ func TestService_GetPortfolioHealth_Warning(t *testing.T) {
 	svc := newPortfolioSvc(repo)
 	ctx := context.Background()
 
-	c := &inventory.Campaign{ID: "c1", Name: "Losing", BuyTermsCLPct: 0.78}
+	c := &inventory.Campaign{ID: "c1", Name: "Losing", BuyTermsCLPct: 0.78, Phase: inventory.PhaseActive}
 	repo.Campaigns[c.ID] = c
 	repo.PNLData[c.ID] = &inventory.CampaignPNL{
 		CampaignID:        c.ID,
@@ -88,7 +88,7 @@ func TestService_GetPortfolioHealth_Critical(t *testing.T) {
 	svc := newPortfolioSvc(repo)
 	ctx := context.Background()
 
-	c := &inventory.Campaign{ID: "c1", Name: "Bleeding", BuyTermsCLPct: 0.78}
+	c := &inventory.Campaign{ID: "c1", Name: "Bleeding", BuyTermsCLPct: 0.78, Phase: inventory.PhaseActive}
 	repo.Campaigns[c.ID] = c
 	repo.PNLData[c.ID] = &inventory.CampaignPNL{
 		CampaignID:        c.ID,
@@ -117,7 +117,7 @@ func TestService_GetPortfolioHealth_SlowSellThrough(t *testing.T) {
 	svc := newPortfolioSvc(repo)
 	ctx := context.Background()
 
-	c := &inventory.Campaign{ID: "c1", Name: "Slow", BuyTermsCLPct: 0.78}
+	c := &inventory.Campaign{ID: "c1", Name: "Slow", BuyTermsCLPct: 0.78, Phase: inventory.PhaseActive}
 	repo.Campaigns[c.ID] = c
 	repo.PNLData[c.ID] = &inventory.CampaignPNL{
 		CampaignID:        c.ID,
@@ -147,8 +147,8 @@ func TestService_GetPortfolioHealth_OverallROI(t *testing.T) {
 	svc := newPortfolioSvc(repo)
 	ctx := context.Background()
 
-	c1 := &inventory.Campaign{ID: "c1", Name: "Campaign A", BuyTermsCLPct: 0.78}
-	c2 := &inventory.Campaign{ID: "c2", Name: "Campaign B", BuyTermsCLPct: 0.78}
+	c1 := &inventory.Campaign{ID: "c1", Name: "Campaign A", BuyTermsCLPct: 0.78, Phase: inventory.PhaseActive}
+	c2 := &inventory.Campaign{ID: "c2", Name: "Campaign B", BuyTermsCLPct: 0.78, Phase: inventory.PhaseActive}
 	repo.Campaigns[c1.ID] = c1
 	repo.Campaigns[c2.ID] = c2
 
@@ -184,8 +184,8 @@ func TestService_GetPortfolioHealth_RealizedROI(t *testing.T) {
 	svc := newPortfolioSvc(repo)
 	ctx := context.Background()
 
-	c1 := &inventory.Campaign{ID: "c1", Name: "Fully Sold", BuyTermsCLPct: 0.78}
-	c2 := &inventory.Campaign{ID: "c2", Name: "Mixed", BuyTermsCLPct: 0.78}
+	c1 := &inventory.Campaign{ID: "c1", Name: "Fully Sold", BuyTermsCLPct: 0.78, Phase: inventory.PhaseActive}
+	c2 := &inventory.Campaign{ID: "c2", Name: "Mixed", BuyTermsCLPct: 0.78, Phase: inventory.PhaseActive}
 	repo.Campaigns[c1.ID] = c1
 	repo.Campaigns[c2.ID] = c2
 
@@ -219,7 +219,7 @@ func TestService_GetPortfolioHealth_RealizedROI_Rounding(t *testing.T) {
 	svc := newPortfolioSvc(repo)
 	ctx := context.Background()
 
-	c1 := &inventory.Campaign{ID: "c1", Name: "Odd Split", BuyTermsCLPct: 0.78}
+	c1 := &inventory.Campaign{ID: "c1", Name: "Odd Split", BuyTermsCLPct: 0.78, Phase: inventory.PhaseActive}
 	repo.Campaigns[c1.ID] = c1
 
 	// 1000 cents spent, 1 of 3 sold → soldCostBasis = round(1000*1/3) = round(333.33) = 333
@@ -245,7 +245,7 @@ func TestService_GetPortfolioHealth_RealizedROI_NoSales(t *testing.T) {
 	svc := newPortfolioSvc(repo)
 	ctx := context.Background()
 
-	c1 := &inventory.Campaign{ID: "c1", Name: "No Sales", BuyTermsCLPct: 0.78}
+	c1 := &inventory.Campaign{ID: "c1", Name: "No Sales", BuyTermsCLPct: 0.78, Phase: inventory.PhaseActive}
 	repo.Campaigns[c1.ID] = c1
 	repo.PNLData[c1.ID] = &inventory.CampaignPNL{
 		CampaignID: c1.ID, TotalSpendCents: 50000, TotalRevenueCents: 0, TotalFeesCents: 0,
@@ -378,7 +378,7 @@ func TestService_GetPortfolioHealth_LiquidationSignals(t *testing.T) {
 			svc := newPortfolioSvc(repo)
 			ctx := context.Background()
 
-			c := &inventory.Campaign{ID: "c1", Name: "Health Test", BuyTermsCLPct: 0.78}
+			c := &inventory.Campaign{ID: "c1", Name: "Health Test", BuyTermsCLPct: 0.78, Phase: inventory.PhaseActive}
 			repo.Campaigns[c.ID] = c
 			repo.PNLData[c.ID] = &inventory.CampaignPNL{
 				CampaignID:      c.ID,
@@ -475,7 +475,7 @@ func TestService_GetPortfolioHealth_LiquidationReason(t *testing.T) {
 			svc := newPortfolioSvc(repo)
 			ctx := context.Background()
 
-			c := &inventory.Campaign{ID: "c1", Name: "Modern", BuyTermsCLPct: 0.78}
+			c := &inventory.Campaign{ID: "c1", Name: "Modern", BuyTermsCLPct: 0.78, Phase: inventory.PhaseActive}
 			repo.Campaigns[c.ID] = c
 			pnl := tc.pnl
 			pnl.CampaignID = c.ID
