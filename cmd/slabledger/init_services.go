@@ -35,6 +35,15 @@ import (
 	"github.com/guarzo/slabledger/internal/platform/crypto"
 )
 
+// exportReaderComposite satisfies export.ExportReader by composing the three
+// required stores. Named explicitly so that adding methods to export.ExportReader
+// produces a compile error here if any store doesn't implement the new method.
+type exportReaderComposite struct {
+	*sqlite.SellSheetStore
+	*sqlite.PurchaseStore
+	*sqlite.CampaignStore
+}
+
 // initializePriceProviders creates the DH price provider.
 func initializePriceProviders(
 	ctx context.Context,
@@ -197,11 +206,7 @@ func initializeCampaignsService(
 		exportOpts = append(exportOpts, export.WithIntelligenceRepo(intelRepo))
 	}
 	// Create a minimal composite wrapper to satisfy ExportReader interface
-	exportReader := &struct {
-		*sqlite.SellSheetStore
-		*sqlite.PurchaseStore
-		*sqlite.CampaignStore
-	}{
+	exportReader := &exportReaderComposite{
 		SellSheetStore: sellSheetStore,
 		PurchaseStore:  purchaseStore,
 		CampaignStore:  campaignStore,
