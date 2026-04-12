@@ -165,8 +165,9 @@ func (s *service) GetActivationChecklist(ctx context.Context, campaignID string)
 	// Quantitative check: daily exposure must fit within weekly recovery capacity.
 	// Stricter than Capital Exposure (which only blocks on critical alert level)
 	// because this gates new spend commitments, not existing position.
-	dailyExpOK := capital.WeeksToCover == 0 || float64(totalDailyExposure) < float64(capital.RecoveryRate30dCents)/WeeksPerMonth
-	exposureMsg := fmt.Sprintf("Total daily exposure with activation: $%d/day (weekly recovery: $%d)", totalDailyExposure/100, capital.RecoveryRate30dCents/430)
+	dailyRecovery := float64(capital.RecoveryRate30dCents) / 30.0
+	dailyExpOK := capital.WeeksToCover == 0 || float64(totalDailyExposure) < dailyRecovery
+	exposureMsg := fmt.Sprintf("Total daily exposure with activation: $%d/day (daily recovery: $%d)", totalDailyExposure/100, int(dailyRecovery)/100)
 	if capital.RecoveryRate30dCents == 0 {
 		dailyExpOK = true
 		exposureMsg = fmt.Sprintf("Total daily exposure with activation: $%d/day (no recovery data yet)", totalDailyExposure/100)

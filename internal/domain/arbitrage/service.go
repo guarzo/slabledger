@@ -224,8 +224,9 @@ func (s *service) GetActivationChecklist(ctx context.Context, campaignID string)
 		totalDailyExposure += campaign.DailySpendCapCents
 	}
 
-	dailyExpOK := capital.WeeksToCover == 0 || float64(totalDailyExposure) < float64(capital.RecoveryRate30dCents)/inventory.WeeksPerMonth
-	exposureMsg := fmt.Sprintf("Total daily exposure with activation: $%d/day (weekly recovery: $%d)", totalDailyExposure/100, capital.RecoveryRate30dCents/430)
+	dailyRecovery := float64(capital.RecoveryRate30dCents) / 30.0
+	dailyExpOK := capital.WeeksToCover == 0 || float64(totalDailyExposure) < dailyRecovery
+	exposureMsg := fmt.Sprintf("Total daily exposure with activation: $%d/day (daily recovery: $%d)", totalDailyExposure/100, int(dailyRecovery)/100)
 	if capital.RecoveryRate30dCents == 0 {
 		dailyExpOK = true
 		exposureMsg = fmt.Sprintf("Total daily exposure with activation: $%d/day (no recovery data yet)", totalDailyExposure/100)

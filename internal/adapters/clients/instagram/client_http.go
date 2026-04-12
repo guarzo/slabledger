@@ -28,6 +28,10 @@ func (c *Client) exchangeCodeForShortLived(ctx context.Context, code string) (to
 	if err := c.postForm(ctx, tokenURL, params, &resp); err != nil {
 		return "", "", err
 	}
+	if resp.AccessToken == "" || resp.UserID == 0 {
+		return "", "", apperrors.ProviderInvalidResponse("Instagram",
+			fmt.Errorf("token exchange returned empty access_token or zero user_id"))
+	}
 
 	return resp.AccessToken, fmt.Sprintf("%d", resp.UserID), nil
 }
@@ -46,6 +50,10 @@ func (c *Client) exchangeForLongLived(ctx context.Context, shortToken string) (t
 	}
 	if err := c.doGet(ctx, longLivedURL+"?"+params.Encode(), &resp); err != nil {
 		return "", 0, err
+	}
+	if resp.AccessToken == "" {
+		return "", 0, apperrors.ProviderInvalidResponse("Instagram",
+			fmt.Errorf("long-lived token exchange returned empty access_token"))
 	}
 
 	return resp.AccessToken, resp.ExpiresIn, nil
@@ -164,6 +172,9 @@ func (c *Client) publishContainer(ctx context.Context, token, igUserID, containe
 
 func (c *Client) postForm(ctx context.Context, endpoint string, params url.Values, dest any) error {
 	if err := c.rateLimiter.Wait(ctx); err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		return apperrors.ProviderUnavailable("Instagram", fmt.Errorf("rate limiter: %w", err))
 	}
 	headers := map[string]string{
@@ -184,6 +195,9 @@ func (c *Client) postForm(ctx context.Context, endpoint string, params url.Value
 
 func (c *Client) doGet(ctx context.Context, reqURL string, dest any) error {
 	if err := c.rateLimiter.Wait(ctx); err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		return apperrors.ProviderUnavailable("Instagram", fmt.Errorf("rate limiter: %w", err))
 	}
 	resp, err := c.httpClient.Get(ctx, reqURL, nil, 0)
