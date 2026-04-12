@@ -51,6 +51,13 @@ func (s *service) GetPortfolioHealth(ctx context.Context) (*inventory.PortfolioH
 		return nil, fmt.Errorf("list campaigns: %w", err)
 	}
 
+	// Load all purchases with sales once to avoid N+1 queries
+	allData, err := s.analytics.GetAllPurchasesWithSales(ctx, inventory.WithExcludeArchived())
+	if err != nil {
+		return nil, fmt.Errorf("all purchases with sales: %w", err)
+	}
+	healthByCampaign := computeChannelHealthByCampaign(allData)
+
 	health := &inventory.PortfolioHealth{}
 	totalSoldCostBasis := 0
 	totalSoldNetProfit := 0
@@ -98,8 +105,10 @@ func (s *service) GetPortfolioHealth(ctx context.Context) (*inventory.PortfolioH
 			totalSoldNetProfit += soldProfit
 		}
 
-		liquidationLossCents, liquidationSaleCount, ebayMarginPct :=
-			s.computeChannelHealthSignals(ctx, c.ID)
+		channelHealth := healthByCampaign[c.ID]
+		liquidationLossCents := channelHealth.LiquidationLossCents
+		liquidationSaleCount := channelHealth.LiquidationSaleCount
+		ebayMarginPct := channelHealth.EbayChannelMarginPct
 
 		if liquidationLossCents < -50000 && ebayMarginPct > 0.10 {
 			liquidationReason := fmt.Sprintf(
@@ -411,11 +420,15 @@ func (s *service) GetWeeklyReviewSummary(ctx context.Context) (*inventory.Weekly
 		summary.BottomPerformers = nil
 	}
 
-	summary.WeeksToCover = 99.0
 	capitalRaw, err := s.finance.GetCapitalRawData(ctx)
-	if err == nil && capitalRaw != nil {
+	if err != nil {
+		return nil, fmt.Errorf("get capital data for weekly review: %w", err)
+	}
+	if capitalRaw != nil {
 		capital := inventory.ComputeCapitalSummary(capitalRaw)
 		summary.WeeksToCover = capital.WeeksToCover
+	} else {
+		summary.WeeksToCover = 99.0
 	}
 
 	return summary, nil
