@@ -42,27 +42,16 @@ func (ps *PurchaseStore) GetPurchasesByGraderAndCertNumbers(ctx context.Context,
 			return nil, fmt.Errorf("query purchases by grader/cert chunk: %w", err)
 		}
 
-		for rows.Next() {
-			select {
-			case <-ctx.Done():
-				rows.Close() //nolint:errcheck // best-effort close on ctx cancel
-				return nil, ctx.Err()
-			default:
-			}
-
+		purchases, err := scanRows(ctx, rows, func(rs *sql.Rows) (inventory.Purchase, error) {
 			var p inventory.Purchase
-			if err := scanPurchase(rows, &p); err != nil {
-				rows.Close() //nolint:errcheck // best-effort close on scan error
-				return nil, fmt.Errorf("scan purchase in grader/cert chunk: %w", err)
-			}
-			result[p.CertNumber] = &p
+			err := scanPurchase(rs, &p)
+			return p, err
+		})
+		if err != nil {
+			return nil, fmt.Errorf("scan purchases by grader/cert chunk: %w", err)
 		}
-		if err := rows.Err(); err != nil {
-			rows.Close() //nolint:errcheck // best-effort close on iteration error
-			return nil, fmt.Errorf("iterate purchases by grader/cert: %w", err)
-		}
-		if cerr := rows.Close(); cerr != nil {
-			return nil, fmt.Errorf("close purchases by grader/cert rows: %w", cerr)
+		for i := range purchases {
+			result[purchases[i].CertNumber] = &purchases[i]
 		}
 	}
 	return result, nil
@@ -99,27 +88,16 @@ func (ps *PurchaseStore) GetPurchasesByCertNumbers(ctx context.Context, certNumb
 			return nil, fmt.Errorf("query purchases by cert chunk: %w", err)
 		}
 
-		for rows.Next() {
-			select {
-			case <-ctx.Done():
-				rows.Close() //nolint:errcheck // best-effort close on ctx cancel
-				return nil, ctx.Err()
-			default:
-			}
-
+		purchases, err := scanRows(ctx, rows, func(rs *sql.Rows) (inventory.Purchase, error) {
 			var p inventory.Purchase
-			if err := scanPurchase(rows, &p); err != nil {
-				rows.Close() //nolint:errcheck // best-effort close on scan error
-				return nil, fmt.Errorf("scan purchase in cert chunk: %w", err)
-			}
-			result[p.CertNumber] = &p
+			err := scanPurchase(rs, &p)
+			return p, err
+		})
+		if err != nil {
+			return nil, fmt.Errorf("scan purchases by cert chunk: %w", err)
 		}
-		if err := rows.Err(); err != nil {
-			rows.Close() //nolint:errcheck // best-effort close on iteration error
-			return nil, fmt.Errorf("iterate purchases by cert: %w", err)
-		}
-		if cerr := rows.Close(); cerr != nil {
-			return nil, fmt.Errorf("close purchases by cert rows: %w", cerr)
+		for i := range purchases {
+			result[purchases[i].CertNumber] = &purchases[i]
 		}
 	}
 
