@@ -248,8 +248,8 @@ func (s *dhListingService) inlineMatchAndPush(ctx context.Context, p *inventory.
 	if s.cardIDSaver != nil {
 		externalID := strconv.Itoa(dhCardID)
 		if err := s.cardIDSaver.SaveExternalID(ctx, p.CardName, p.SetName, p.CardNumber, SourceDH, externalID); err != nil {
-			s.logger.Warn(ctx, "inline dh resolve: failed to save card mapping",
-				observability.String("cert", p.CertNumber), observability.Err(err))
+			s.logger.Error(ctx, "inline dh resolve: failed to save card mapping — cert resolver will be called again next run",
+				observability.String("cert", p.CertNumber), observability.String("cardName", p.CardName), observability.Err(err))
 		}
 	}
 
