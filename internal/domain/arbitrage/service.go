@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"sort"
-	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
@@ -14,8 +13,6 @@ const (
 	// HighSpendCapCents is the daily spend cap threshold (in cents) above which
 	// a warning is emitted that a single fill could be significant.
 	HighSpendCapCents = 500000 // $5,000/day
-
-	crackCacheRefreshInterval = 15 * time.Minute
 )
 
 // Service provides arbitrage analysis: crack opportunities, acquisition targets,

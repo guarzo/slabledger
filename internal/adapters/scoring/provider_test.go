@@ -42,7 +42,6 @@ func (m *mockArbSvc) EvaluatePurchase(ctx context.Context, campaignID, cardName 
 func (m *mockArbSvc) RunProjection(ctx context.Context, campaignID string) (*arbitrage.MonteCarloComparison, error) {
 	return nil, nil
 }
-func (m *mockArbSvc) StartCrackCacheWorker(ctx context.Context) context.CancelFunc { return func() {} }
 
 type mockPortSvc struct {
 	getPortfolioInsightsFn func(ctx context.Context) (*inventory.PortfolioInsights, error)
