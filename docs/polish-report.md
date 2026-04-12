@@ -139,3 +139,34 @@ No auto-fixes needed — single new file is clean.
 **Fragility**
 14. ⚠ [MEDIUM] `portfolio/service.go:49,55` — campaigns loaded with archived included but purchases loaded with `WithExcludeArchived()` — asymmetry causes archived campaigns to always show zero channel health
 15. ⚠ [MEDIUM] `csvimport/import_parsing_metadata.go:169-182` — `anywhereSuffixes` leftmost-match strategy contradicts "ordered longest-first" registry; future pattern additions can strip more card name than intended
+
+---
+## Segment 5: adapters/httpserver (34 files)
+
+### Improve Findings (10)
+1. Redundant in-handler method checks on method-dispatched routes — `campaigns_analytics.go:147`, `advisor.go:183,198,224,239` — registered with explicit method prefix so router handles 405 before handler runs
+2. `HandleCertLookup` maps all errors to 404 — `campaigns_purchases.go:232-235` — hides DB errors behind "cert not found" response
+3. `HandleRemoveAllowedEmail` uses `strings.TrimPrefix` on URL path instead of `PathValue` — `admin.go:81` — fragile against route prefix changes
+4. `HandleCreateSale` fetches purchase and campaign before calling service — `campaigns_purchases.go:84-98` — service-layer concerns leaked into handler
+5. `HandleGenerate` in SocialHandler spawns untracked goroutine — `social.go:111-120` — no WaitGroup, goroutine races shutdown unlike other handlers
+6. Duplicate `userResponse` struct defined in two files — `auth.go:285` and `admin.go:185` — fixed in auto-fix
+7. `HandleCreatePurchase` maps campaign-not-found to 400 instead of 404 — `campaigns_purchases.go:43-44`
+8. `NewRouter` reads env vars directly via `os.Getenv` — `router.go:136,148` — bypasses config layer
+9. Seven purchase-mutation handlers have zero test coverage — `campaigns_purchases.go:119,148,187,284,315,334,361`
+10. `Router` struct has 25 fields, `RouterConfig` mirrors with 27 — `router.go:23-94` — god object expanding with each feature
+
+### Polish — Fixed (1)
+✓ `handlers/admin.go:185` — removed duplicate inline `userResponse` struct; uses package-level `userResponse` from `auth.go`
+
+### Polish — Needs Review (11)
+1. ⚠ [High] `campaigns_imports.go:105-107` — flush error logged but CSV response already committed as 200, client receives truncated file silently
+2. ⚠ [High] `campaigns_purchases.go:84-88` — `GetPurchase` failure in `HandleCreateSale` maps all errors to 404, no logging, masks DB errors
+3. ⚠ [High] `campaigns_purchases.go:94-98` — `GetCampaign` failure in `HandleCreateSale` maps all errors to 404, same pattern
+4. ⚠ [Medium] `campaigns_analytics.go:62-76` — `GetCampaign` failure in `HandleFillRate` logged at Debug only; 200 returned with partial data
+5. ⚠ [Medium] `campaigns_dh_listing.go:29` — `dhListingSvc.ListPurchases` return value completely ignored in fire-and-forget goroutine
+6. ⚠ [Medium] `dh_match_handler.go:56` — bulk match errors only surface rate-limit abort; per-purchase failures visible only in log
+7. ⚠ [Medium] `dh_status_handler.go:151-174` — intelligence/suggestions count errors return zero values indistinguishable from empty DB
+8. ⚠ [Medium] `admin.go:81` — `HandleRemoveAllowedEmail` uses `strings.TrimPrefix` on URL path instead of `r.PathValue`; fragile
+9. ⚠ [Medium] `social.go:111-120` — `HandleGenerate` spawns goroutine without WaitGroup, races server shutdown
+10. ⚠ [Medium] `router.go:136,148` — `NewRouter` calls `os.Getenv` directly, bypassing config layer validation and testability
+11. ⚠ [Low] `campaigns_purchases.go:43-44` — `IsCampaignNotFound` error mapped to 400 instead of 404 in `HandleCreatePurchase`

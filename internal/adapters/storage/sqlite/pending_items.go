@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -144,7 +145,7 @@ func (r *PendingItemsRepository) GetPendingItemByID(ctx context.Context, id stri
 		&item.CardNumber, &item.Grade, &item.BuyCostCents, &item.PurchaseDate,
 		&item.Status, &candidatesJSON, &item.Source, &item.CreatedAt,
 	); err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, inventory.ErrPendingItemNotFound
 		}
 		return nil, err

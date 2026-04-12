@@ -46,7 +46,11 @@
       "id": 5,
       "name": "adapters/httpserver",
       "paths": ["internal/adapters/httpserver/"],
-      "status": "pending"
+      "status": "completed",
+      "improve_findings": 10,
+      "polish_fixed": 1,
+      "polish_needs_review": 11,
+      "completed_at": "2026-04-12T20:15:00.000Z"
     },
     {
       "id": 6,

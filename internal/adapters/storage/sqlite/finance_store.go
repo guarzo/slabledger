@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/guarzo/slabledger/internal/domain/finance"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"strings"
@@ -21,7 +22,10 @@ func NewFinanceStore(db *sql.DB, logger observability.Logger) *FinanceStore {
 	return &FinanceStore{base{db: db, logger: logger}}
 }
 
-var _ inventory.FinanceRepository = (*FinanceStore)(nil)
+var (
+	_ inventory.FinanceRepository = (*FinanceStore)(nil)
+	_ finance.FinanceReader       = (*FinanceStore)(nil)
+)
 
 func (fs *FinanceStore) CreateInvoice(ctx context.Context, inv *inventory.Invoice) error {
 	query := `INSERT INTO invoices (id, invoice_date, total_cents, paid_cents, due_date, paid_date, status, created_at, updated_at)
@@ -289,7 +293,7 @@ func (fs *FinanceStore) CreateRevocationFlag(ctx context.Context, flag *inventor
 	return nil
 }
 
-func (fs *FinanceStore) ListRevocationFlags(ctx context.Context) ([]inventory.RevocationFlag, error) {
+func (fs *FinanceStore) ListRevocationFlags(ctx context.Context) (result []inventory.RevocationFlag, err error) {
 	query := `
 		SELECT id, segment_label, segment_dimension, reason, status, email_text, created_at, sent_at
 		FROM revocation_flags
@@ -305,7 +309,6 @@ func (fs *FinanceStore) ListRevocationFlags(ctx context.Context) ([]inventory.Re
 		}
 	}()
 
-	var result []inventory.RevocationFlag
 	for rows.Next() {
 		var f inventory.RevocationFlag
 		if err := rows.Scan(

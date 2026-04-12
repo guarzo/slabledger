@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -34,7 +35,7 @@ func (r *AdvisorCacheRepository) Get(ctx context.Context, analysisType advisor.A
 		`SELECT analysis_type, status, content, error_message, started_at, completed_at, updated_at
 		 FROM advisor_cache WHERE analysis_type = ?`, string(analysisType),
 	).Scan(&ca.AnalysisType, &ca.Status, &ca.Content, &ca.ErrorMessage, &startedAt, &completedAt, &updatedAt)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
