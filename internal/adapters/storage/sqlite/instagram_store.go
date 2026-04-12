@@ -55,7 +55,7 @@ func (s *InstagramStore) Get(ctx context.Context) (*InstagramConfig, error) {
 
 	token, err := s.encryptor.Decrypt(encToken)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("decrypt access token: %w", err)
 	}
 
 	cfg := &InstagramConfig{
@@ -77,7 +77,7 @@ func (s *InstagramStore) Get(ctx context.Context) (*InstagramConfig, error) {
 func (s *InstagramStore) Save(ctx context.Context, token, igUserID, username string, expiresAt time.Time) error {
 	encToken, err := s.encryptor.Encrypt(token)
 	if err != nil {
-		return err
+		return fmt.Errorf("encrypt access token: %w", err)
 	}
 
 	now := time.Now().UTC().Format(time.RFC3339)
@@ -93,14 +93,17 @@ func (s *InstagramStore) Save(ctx context.Context, token, igUserID, username str
 		   updated_at = excluded.updated_at`,
 		encToken, igUserID, username, expiresAt.Format(time.RFC3339), now, now,
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("save instagram config: %w", err)
+	}
+	return nil
 }
 
 // UpdateToken updates just the access token and expiry (for refresh).
 func (s *InstagramStore) UpdateToken(ctx context.Context, token string, expiresAt time.Time) error {
 	encToken, err := s.encryptor.Encrypt(token)
 	if err != nil {
-		return err
+		return fmt.Errorf("encrypt access token: %w", err)
 	}
 
 	result, err := s.db.ExecContext(ctx,
@@ -108,11 +111,11 @@ func (s *InstagramStore) UpdateToken(ctx context.Context, token string, expiresA
 		encToken, expiresAt.Format(time.RFC3339), time.Now().UTC().Format(time.RFC3339),
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("update instagram token: %w", err)
 	}
 	n, err := result.RowsAffected()
 	if err != nil {
-		return err
+		return fmt.Errorf("check rows affected: %w", err)
 	}
 	if n == 0 {
 		return fmt.Errorf("no instagram config found to update")
@@ -135,5 +138,8 @@ func (s *InstagramStore) GetToken(ctx context.Context) (accessToken, igUserID st
 // Delete removes the Instagram connection.
 func (s *InstagramStore) Delete(ctx context.Context) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM instagram_config WHERE id = 1`)
-	return err
+	if err != nil {
+		return fmt.Errorf("delete instagram config: %w", err)
+	}
+	return nil
 }

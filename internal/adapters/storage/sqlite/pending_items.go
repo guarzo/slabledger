@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/campaigns"
@@ -30,7 +31,7 @@ func (r *PendingItemsRepository) SavePendingItems(ctx context.Context, items []c
 	}
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("begin transaction: %w", err)
 	}
 	defer tx.Rollback() //nolint:errcheck
 
@@ -42,7 +43,7 @@ func (r *PendingItemsRepository) SavePendingItems(ctx context.Context, items []c
 		WHERE cert_number = ? AND resolved_at IS NULL
 	`)
 	if err != nil {
-		return err
+		return fmt.Errorf("prepare update pending items: %w", err)
 	}
 	defer updateStmt.Close() //nolint:errcheck
 
@@ -51,7 +52,7 @@ func (r *PendingItemsRepository) SavePendingItems(ctx context.Context, items []c
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
-		return err
+		return fmt.Errorf("prepare insert pending items: %w", err)
 	}
 	defer insertStmt.Close() //nolint:errcheck
 
@@ -69,11 +70,11 @@ func (r *PendingItemsRepository) SavePendingItems(ctx context.Context, items []c
 			item.CertNumber,
 		)
 		if err != nil {
-			return err
+			return fmt.Errorf("update pending item: %w", err)
 		}
 		n, err := res.RowsAffected()
 		if err != nil {
-			return err
+			return fmt.Errorf("check rows affected: %w", err)
 		}
 		if n > 0 {
 			continue // updated existing unresolved row
@@ -85,7 +86,7 @@ func (r *PendingItemsRepository) SavePendingItems(ctx context.Context, items []c
 			item.CardNumber, item.Grade, item.BuyCostCents, item.PurchaseDate,
 			item.Status, string(candidatesJSON), item.Source,
 		); err != nil {
-			return err
+			return fmt.Errorf("insert pending item: %w", err)
 		}
 	}
 	return tx.Commit()
@@ -171,11 +172,11 @@ func (r *PendingItemsRepository) resolvePendingItem(ctx context.Context, id stri
 		WHERE id = ? AND resolved_at IS NULL
 	`, time.Now().UTC(), campaignID, id)
 	if err != nil {
-		return err
+		return fmt.Errorf("update pending item: %w", err)
 	}
 	n, err := res.RowsAffected()
 	if err != nil {
-		return err
+		return fmt.Errorf("check rows affected: %w", err)
 	}
 	if n == 0 {
 		return campaigns.ErrPendingItemNotFound

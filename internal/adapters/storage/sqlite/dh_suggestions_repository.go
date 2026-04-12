@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"fmt"
 
 	"github.com/guarzo/slabledger/internal/domain/intelligence"
 )
@@ -29,14 +30,14 @@ func (r *DHSuggestionsRepository) StoreSuggestions(ctx context.Context, suggesti
 
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("begin transaction: %w", err)
 	}
 	defer tx.Rollback() //nolint:errcheck
 
 	date := suggestions[0].SuggestionDate
 
 	if _, err := tx.ExecContext(ctx, `DELETE FROM dh_suggestions WHERE suggestion_date = ?`, date); err != nil {
-		return err
+		return fmt.Errorf("delete old suggestions: %w", err)
 	}
 
 	stmt, err := tx.PrepareContext(ctx,
@@ -49,7 +50,7 @@ func (r *DHSuggestionsRepository) StoreSuggestions(ctx context.Context, suggesti
 			fetched_at
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
-		return err
+		return fmt.Errorf("prepare insert suggestions statement: %w", err)
 	}
 	defer func() { _ = stmt.Close() }()
 
@@ -63,11 +64,14 @@ func (r *DHSuggestionsRepository) StoreSuggestions(ctx context.Context, suggesti
 			s.SentimentScore, s.SentimentTrend, s.SentimentMentions,
 			s.FetchedAt,
 		); err != nil {
-			return err
+			return fmt.Errorf("insert suggestion: %w", err)
 		}
 	}
 
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit transaction saving suggestions: %w", err)
+	}
+	return nil
 }
 
 // GetByDate returns all suggestions for a specific date.

@@ -4,10 +4,7 @@ import type { AgingItem } from '../../../types/campaigns';
 import PokeballLoader from '../../PokeballLoader';
 import { formatCents, formatPct } from '../../utils/formatters';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
-import { EmptyState, Button } from '../../ui';
-import RecordSaleModal from './RecordSaleModal';
-import PriceHintDialog from '../../PriceHintDialog';
-import PriceOverrideDialog from '../../PriceOverrideDialog';
+import { EmptyState } from '../../ui';
 import { costBasis, unrealizedPL, formatPL } from './inventory/utils';
 import '../../../styles/print-sell-sheet.css';
 import DesktopRow from './inventory/DesktopRow';
@@ -16,10 +13,10 @@ import MobileSellSheetView from './inventory/MobileSellSheetView';
 import CrackCandidatesBanner from './inventory/CrackCandidatesBanner';
 import SortableHeader from './inventory/SortableHeader';
 import ExpandedDetail from './inventory/ExpandedDetail';
-import PriceFlagDialog from './inventory/PriceFlagDialog';
 import ReviewSummaryBar from './inventory/ReviewSummaryBar';
 import type { StatClickTarget } from './inventory/ReviewSummaryBar';
 import { useInventoryState } from './inventory/useInventoryState';
+import { SellSheetActions, SellSheetModals } from './SellSheetView';
 
 export interface InventoryTabProps {
   items: AgingItem[];
@@ -188,57 +185,26 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
         </div>
       )}
 
-      {selected.size > 0 && (
-        <div className="flex items-center justify-between mb-3 sell-sheet-no-print">
-          <span className="text-sm text-[var(--text-muted)]">{selected.size} selected</span>
-          <div className="flex items-center gap-2">
-            {sellSheetActive ? (
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => {
-                  sellSheet.remove(Array.from(selected));
-                  setSelected(new Set());
-                  toast.success(`Removed ${selected.size} item${selected.size > 1 ? 's' : ''} from sell sheet`);
-                }}
-              >
-                Remove from Sell Sheet ({selected.size})
-              </Button>
-            ) : (
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => {
-                  sellSheet.add(Array.from(selected));
-                  setSelected(new Set());
-                  toast.success(`Added ${selected.size} item${selected.size > 1 ? 's' : ''} to sell sheet`);
-                }}
-              >
-                Add to Sell Sheet ({selected.size})
-              </Button>
-            )}
-            <Button
-              size="sm"
-              onClick={() => openSaleModal(items.filter(i => selected.has(i.purchase.id)))}
-            >
-              Record Sale ({selected.size})
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {sellSheetActive && pageSellSheetCount > 0 && (
-        <div className="flex justify-end mb-3 sell-sheet-no-print">
-          <Button
-            size="sm"
-            variant="secondary"
-            disabled={isPrinting}
-            onClick={handlePrint}
-          >
-            {isPrinting ? 'Preparing…' : 'Print Sell Sheet'}
-          </Button>
-        </div>
-      )}
+      {selected.size > 0 || (sellSheetActive && pageSellSheetCount > 0) ? (
+        <SellSheetActions
+          selected={selected}
+          sellSheetActive={sellSheetActive}
+          items={items}
+          onAddToSellSheet={(ids) => {
+            sellSheet.add(ids);
+            toast.success(`Added ${ids.length} item${ids.length > 1 ? 's' : ''} to sell sheet`);
+          }}
+          onRemoveFromSellSheet={(ids) => {
+            sellSheet.remove(ids);
+            toast.success(`Removed ${ids.length} item${ids.length > 1 ? 's' : ''} from sell sheet`);
+          }}
+          onRecordSale={openSaleModal}
+          onClearSelected={() => setSelected(new Set())}
+          isPrinting={isPrinting}
+          pageSellSheetCount={pageSellSheetCount}
+          onPrint={handlePrint}
+        />
+      ) : null}
 
       {/* Crack Candidates Banner */}
       {campaignId && <div className="sell-sheet-no-print"><CrackCandidatesBanner campaignId={campaignId} /></div>}
@@ -325,8 +291,8 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
         />
       ) : isMobile ? (
         <div className="space-y-3">
-          <label className="flex items-center gap-2 text-xs text-[var(--text-muted)] px-1 sell-sheet-no-print">
-            <input type="checkbox" checked={filteredAndSortedItems.length > 0 && filteredAndSortedItems.every(i => selected.has(i.purchase.id))}
+          <label htmlFor="select-all-mobile" className="flex items-center gap-2 text-xs text-[var(--text-muted)] px-1 sell-sheet-no-print">
+            <input id="select-all-mobile" type="checkbox" checked={filteredAndSortedItems.length > 0 && filteredAndSortedItems.every(i => selected.has(i.purchase.id))}
               onChange={toggleAll} className="rounded" />
             Select all
           </label>
@@ -474,52 +440,26 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
         </div>
       )}
 
-      <RecordSaleModal
-        open={saleModalOpen}
-        onClose={closeSaleModal}
-        onSuccess={() => setSelected(prev => {
+      <SellSheetModals
+        saleModalOpen={saleModalOpen}
+        saleModalItems={saleModalItems}
+        onSaleClose={closeSaleModal}
+        onSaleSuccess={(soldIds) => setSelected(prev => {
           const next = new Set(prev);
-          for (const item of saleModalItems) {
-            next.delete(item.purchase.id);
-          }
+          for (const id of soldIds) next.delete(id);
           return next;
         })}
-        items={saleModalItems}
+        hintTarget={hintTarget}
+        onHintClose={() => setHintTarget(null)}
+        onHintSaved={handleHintSaved}
+        priceTarget={priceTarget}
+        onPriceClose={() => setPriceTarget(null)}
+        onPriceSaved={handlePriceSaved}
+        flagTarget={flagTarget}
+        onFlagCancel={() => setFlagTarget(null)}
+        onFlagSubmit={handleFlagSubmit}
+        flagSubmitting={flagSubmitting}
       />
-
-      {hintTarget && (
-        <PriceHintDialog
-          cardName={hintTarget.cardName}
-          setName={hintTarget.setName}
-          cardNumber={hintTarget.cardNumber}
-          onClose={() => setHintTarget(null)}
-          onSaved={handleHintSaved}
-        />
-      )}
-
-      {priceTarget && (
-        <PriceOverrideDialog
-          purchaseId={priceTarget.purchaseId}
-          cardName={priceTarget.cardName}
-          costBasisCents={priceTarget.costBasisCents}
-          currentPriceCents={priceTarget.currentPriceCents}
-          currentOverrideCents={priceTarget.currentOverrideCents}
-          currentOverrideSource={priceTarget.currentOverrideSource}
-          aiSuggestedCents={priceTarget.aiSuggestedCents}
-          onClose={() => setPriceTarget(null)}
-          onSaved={handlePriceSaved}
-        />
-      )}
-
-      {flagTarget && (
-        <PriceFlagDialog
-          cardName={flagTarget.cardName}
-          grade={flagTarget.grade}
-          onSubmit={handleFlagSubmit}
-          onCancel={() => setFlagTarget(null)}
-          isSubmitting={flagSubmitting}
-        />
-      )}
     </div>
   );
 }

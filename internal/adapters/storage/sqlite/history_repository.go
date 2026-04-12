@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/guarzo/slabledger/internal/domain/campaigns"
 )
@@ -52,7 +53,10 @@ func (r *CampaignsRepository) RecordSnapshot(ctx context.Context, e campaigns.Sn
 		e.DailyVelocity, e.WeeklyVelocity, e.Trend30d, e.Trend90d, e.Volatility,
 		e.SourceCount, e.Confidence, e.SnapshotJSON, e.SnapshotDate,
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("record snapshot: %w", err)
+	}
+	return nil
 }
 
 // RecordPopulation inserts or updates a population history observation.
@@ -69,7 +73,10 @@ func (r *CampaignsRepository) RecordPopulation(ctx context.Context, e campaigns.
 		e.CardName, e.SetName, e.CardNumber, e.GradeValue, e.Grader,
 		e.Population, e.PopHigher, e.ObservationDate, e.Source,
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("record population: %w", err)
+	}
+	return nil
 }
 
 // RecordCLValue inserts or updates a Card Ladder value history observation.
@@ -86,5 +93,8 @@ func (r *CampaignsRepository) RecordCLValue(ctx context.Context, e campaigns.CLV
 		e.CertNumber, e.CardName, e.SetName, e.CardNumber, e.GradeValue,
 		e.CLValueCents, e.ObservationDate, e.Source,
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("record cl value: %w", err)
+	}
+	return nil
 }

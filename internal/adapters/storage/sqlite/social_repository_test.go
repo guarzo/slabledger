@@ -624,24 +624,42 @@ func TestSocialRepository_GetPurchaseIDsInExistingPosts(t *testing.T) {
 		{PostID: "soc-exist-post2", PurchaseID: "soc-exist-p2", SlideOrder: 1},
 	}))
 
-	t.Run("returns only non-rejected post purchase IDs", func(t *testing.T) {
-		result, err := repo.GetPurchaseIDsInExistingPosts(ctx, []string{"soc-exist-p1", "soc-exist-p2"}, social.PostTypeNewArrivals)
-		require.NoError(t, err)
-		assert.True(t, result["soc-exist-p1"])
-		assert.False(t, result["soc-exist-p2"]) // rejected post excluded
-	})
-
-	t.Run("different post type returns empty", func(t *testing.T) {
-		result, err := repo.GetPurchaseIDsInExistingPosts(ctx, []string{"soc-exist-p1"}, social.PostTypePriceMovers)
-		require.NoError(t, err)
-		assert.Len(t, result, 0)
-	})
-
-	t.Run("empty input returns nil", func(t *testing.T) {
-		result, err := repo.GetPurchaseIDsInExistingPosts(ctx, []string{}, social.PostTypeNewArrivals)
-		require.NoError(t, err)
-		assert.Nil(t, result)
-	})
+	tests := []struct {
+		name           string
+		inputPostIDs   []string
+		postType       social.PostType
+		expectedResult map[string]bool
+	}{
+		{
+			name:           "returns only non-rejected post purchase IDs",
+			inputPostIDs:   []string{"soc-exist-p1", "soc-exist-p2"},
+			postType:       social.PostTypeNewArrivals,
+			expectedResult: map[string]bool{"soc-exist-p1": true},
+		},
+		{
+			name:           "different post type returns empty",
+			inputPostIDs:   []string{"soc-exist-p1"},
+			postType:       social.PostTypePriceMovers,
+			expectedResult: map[string]bool{},
+		},
+		{
+			name:           "empty input returns empty map",
+			inputPostIDs:   []string{},
+			postType:       social.PostTypeNewArrivals,
+			expectedResult: map[string]bool{},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := repo.GetPurchaseIDsInExistingPosts(ctx, tc.inputPostIDs, tc.postType)
+			require.NoError(t, err)
+			require.NotNil(t, result)
+			assert.Len(t, result, len(tc.expectedResult))
+			for k, v := range tc.expectedResult {
+				assert.Equal(t, v, result[k])
+			}
+		})
+	}
 }
 
 func TestSocialRepository_GetAvailableCardsForPosts(t *testing.T) {

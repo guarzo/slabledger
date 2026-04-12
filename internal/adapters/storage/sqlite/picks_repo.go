@@ -26,7 +26,7 @@ func NewPicksRepository(db *sql.DB) *PicksRepository {
 func (r *PicksRepository) SavePicks(ctx context.Context, ps []picks.Pick) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("begin transaction: %w", err)
 	}
 	defer tx.Rollback() //nolint:errcheck
 
@@ -36,7 +36,7 @@ func (r *PicksRepository) SavePicks(ctx context.Context, ps []picks.Pick) error 
 			 target_buy_price, expected_sell_price, signals_json, rank, source)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
-		return err
+		return fmt.Errorf("prepare insert picks statement: %w", err)
 	}
 	defer stmt.Close() //nolint:errcheck
 
@@ -77,7 +77,7 @@ func (r *PicksRepository) GetPicksByDate(ctx context.Context, date time.Time) ([
 		date.Format("2006-01-02"),
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("query picks by date: %w", err)
 	}
 	return scanPicks(ctx, rows)
 }
@@ -94,7 +94,7 @@ func (r *PicksRepository) GetPicksRange(ctx context.Context, from, to time.Time)
 		to.Format("2006-01-02"),
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("query picks range: %w", err)
 	}
 	return scanPicks(ctx, rows)
 }
@@ -106,7 +106,7 @@ func (r *PicksRepository) GetLatestPickDate(ctx context.Context) (time.Time, err
 		`SELECT MAX(pick_date) FROM ai_picks`,
 	).Scan(&dateStr)
 	if err != nil {
-		return time.Time{}, err
+		return time.Time{}, fmt.Errorf("query latest pick date: %w", err)
 	}
 	if !dateStr.Valid || dateStr.String == "" {
 		return time.Time{}, nil
@@ -146,7 +146,7 @@ func (r *PicksRepository) SaveWatchlistItem(ctx context.Context, item picks.Watc
 		if isUniqueConstraintError(err) {
 			return picks.ErrWatchlistDuplicate
 		}
-		return err
+		return fmt.Errorf("insert watchlist item: %w", err)
 	}
 	return nil
 }
@@ -160,7 +160,7 @@ func (r *PicksRepository) DeleteWatchlistItem(ctx context.Context, id int) error
 		id,
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("update watchlist item: %w", err)
 	}
 	n, err := res.RowsAffected()
 	if err != nil {
@@ -185,7 +185,7 @@ func (r *PicksRepository) GetActiveWatchlist(ctx context.Context) ([]picks.Watch
 		WHERE w.active = 1
 		ORDER BY w.added_at DESC`)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("query active watchlist: %w", err)
 	}
 	defer rows.Close() //nolint:errcheck
 
@@ -227,7 +227,7 @@ func (r *PicksRepository) GetActiveWatchlist(ctx context.Context) ([]picks.Watch
 			&pickDirection, &pickConfidence, &pickBuyThesis,
 			&pickTargetBuy, &pickExpectedSell, &pickSignalsJSON, &pickRank, &pickSource, &pickCreatedAt,
 		); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("scan watchlist row: %w", err)
 		}
 
 		item.Source = picks.WatchlistSource(source)
@@ -270,7 +270,7 @@ func (r *PicksRepository) GetActiveWatchlist(ctx context.Context) ([]picks.Watch
 		items = append(items, item)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("scan watchlist rows: %w", err)
 	}
 	return items, nil
 }
@@ -285,7 +285,7 @@ func (r *PicksRepository) UpdateWatchlistAssessment(ctx context.Context, watchli
 		watchlistID,
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("update watchlist assessment: %w", err)
 	}
 	n, err := res.RowsAffected()
 	if err != nil {
