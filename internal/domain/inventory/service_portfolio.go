@@ -378,6 +378,14 @@ func (s *service) GetWeeklyReviewSummary(ctx context.Context) (*WeeklyReviewSumm
 
 	for _, d := range allData {
 		pd := d.Purchase.PurchaseDate
+		if !isValidDate(pd) {
+			if s.logger != nil {
+				s.logger.Warn(ctx, "invalid purchase date format — skipping weekly bucketing",
+					observability.String("purchaseID", d.Purchase.ID),
+					observability.String("date", pd))
+			}
+			continue
+		}
 		if pd >= thisWeekStr && pd <= thisWeekEndStr {
 			summary.PurchasesThisWeek++
 			summary.SpendThisWeekCents += d.Purchase.BuyCostCents + d.Purchase.PSASourcingFeeCents
@@ -388,6 +396,14 @@ func (s *service) GetWeeklyReviewSummary(ctx context.Context) (*WeeklyReviewSumm
 
 		if d.Sale != nil {
 			sd := d.Sale.SaleDate
+			if !isValidDate(sd) {
+				if s.logger != nil {
+					s.logger.Warn(ctx, "invalid sale date format — skipping weekly bucketing",
+						observability.String("purchaseID", d.Purchase.ID),
+						observability.String("date", sd))
+				}
+				continue
+			}
 			if sd >= thisWeekStr && sd <= thisWeekEndStr {
 				summary.SalesThisWeek++
 				summary.RevenueThisWeekCents += d.Sale.SalePriceCents
@@ -453,4 +469,10 @@ func (s *service) GetWeeklyReviewSummary(ctx context.Context) (*WeeklyReviewSumm
 	}
 
 	return summary, nil
+}
+
+// isValidDate returns true if the date string matches YYYY-MM-DD format.
+func isValidDate(s string) bool {
+	_, err := time.Parse("2006-01-02", s)
+	return err == nil
 }
