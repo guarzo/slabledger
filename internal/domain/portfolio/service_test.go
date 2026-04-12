@@ -3,6 +3,7 @@ package portfolio_test
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/guarzo/slabledger/internal/domain/inventory"
@@ -507,7 +508,7 @@ func TestService_GetPortfolioHealth_LiquidationReason(t *testing.T) {
 				t.Errorf("HealthStatus = %q, want %q", got.HealthStatus, tc.wantStatus)
 			}
 			for _, want := range tc.wantReasonHas {
-				if !stringsContains(got.HealthReason, want) {
+				if !strings.Contains(got.HealthReason, want) {
 					t.Errorf("HealthReason = %q, want substring %q", got.HealthReason, want)
 				}
 			}
@@ -567,16 +568,4 @@ func TestService_GetPortfolioChannelVelocity_WithData(t *testing.T) {
 	}
 }
 
-// stringsContains is a helper to avoid importing strings in the test file.
-func stringsContains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(substr) == 0 || containsSubstring(s, substr))
-}
-
-func containsSubstring(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
-}
+// end of tests

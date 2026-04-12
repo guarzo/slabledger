@@ -1,0 +1,90 @@
+{
+  "base_commit": "7cb661c",
+  "started_at": "2026-04-12T18:43:15.000Z",
+  "segments": [
+    {
+      "id": 1,
+      "name": "domain/inventory",
+      "paths": ["internal/domain/inventory/"],
+      "status": "completed",
+      "improve_findings": 10,
+      "polish_fixed": 2,
+      "polish_needs_review": 14,
+      "completed_at": "2026-04-12T19:15:00.000Z"
+    },
+    {
+      "id": 2,
+      "name": "domain/advisor+social+scoring",
+      "paths": ["internal/domain/advisor/", "internal/domain/social/", "internal/domain/scoring/"],
+      "status": "completed",
+      "improve_findings": 10,
+      "polish_fixed": 0,
+      "polish_needs_review": 0,
+      "completed_at": "2026-04-12T19:30:00.000Z"
+    },
+    {
+      "id": 3,
+      "name": "domain/favorites+picks+cards+auth+small",
+      "paths": ["internal/domain/favorites/", "internal/domain/picks/", "internal/domain/cards/", "internal/domain/auth/", "internal/domain/errors/", "internal/domain/constants/", "internal/domain/observability/", "internal/domain/storage/", "internal/domain/intelligence/", "internal/domain/timeutil/", "internal/domain/mathutil/", "internal/domain/pricing/"],
+      "status": "completed",
+      "improve_findings": 8,
+      "polish_fixed": 0,
+      "polish_needs_review": 1,
+      "completed_at": "2026-04-12T19:45:00.000Z"
+    },
+    {
+      "id": 4,
+      "name": "domain/decomposed-siblings",
+      "paths": ["internal/domain/arbitrage/", "internal/domain/portfolio/", "internal/domain/tuning/", "internal/domain/finance/", "internal/domain/export/", "internal/domain/dhlisting/", "internal/domain/csvimport/", "internal/domain/mmutil/"],
+      "status": "pending"
+    },
+    {
+      "id": 5,
+      "name": "adapters/httpserver",
+      "paths": ["internal/adapters/httpserver/"],
+      "status": "pending"
+    },
+    {
+      "id": 6,
+      "name": "adapters/storage/sqlite",
+      "paths": ["internal/adapters/storage/sqlite/"],
+      "status": "pending"
+    },
+    {
+      "id": 7,
+      "name": "adapters/clients",
+      "paths": ["internal/adapters/clients/"],
+      "status": "pending"
+    },
+    {
+      "id": 8,
+      "name": "adapters/scheduler+scoring+advisor",
+      "paths": ["internal/adapters/scheduler/", "internal/adapters/scoring/", "internal/adapters/advisortool/"],
+      "status": "pending"
+    },
+    {
+      "id": 9,
+      "name": "platform",
+      "paths": ["internal/platform/"],
+      "status": "pending"
+    },
+    {
+      "id": 10,
+      "name": "cmd",
+      "paths": ["cmd/"],
+      "status": "pending"
+    },
+    {
+      "id": 11,
+      "name": "testutil",
+      "paths": ["internal/testutil/"],
+      "status": "pending"
+    },
+    {
+      "id": 12,
+      "name": "web",
+      "paths": ["web/"],
+      "status": "pending"
+    }
+  ]
+}
