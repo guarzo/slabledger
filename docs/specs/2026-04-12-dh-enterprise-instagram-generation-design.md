@@ -138,9 +138,11 @@ DHSocialScheduler.tick()
         CoverTitle: humanReadable(strategy), // e.g. "Top Expensive Cards"
     })
 
-    IF LLM configured:
-      safeGo("dhSocialCaptionAsync", func() { generateCaptionAsync(ctx, postID) })
-    // If LLM not configured, caption stays empty → placeholderCaption written → post blocked from publishing
+    // DH posts have no linked PostCard rows (no purchase IDs), so the existing
+    // card-based generateCaptionAsync cannot be reused directly.
+    // Instead: write a strategy-derived caption directly in the scheduler.
+    caption = buildDHCaption(strategy)  // e.g. "Check out our top cards this week! 🃏"
+    SocialRepository.UpdatePostCaption(ctx, postID, caption, defaultHashtags)
 ```
 
 **Struct:**
@@ -148,7 +150,6 @@ DHSocialScheduler.tick()
 type DHSocialScheduler struct {
     dhClient       DHInstagramClient   // interface: GenerateInstagramPost, PollInstagramPostStatus
     socialRepo     social.Repository
-    llm            ai.LLM              // optional, nil if not configured
     logger         observability.Logger
     pollInterval   time.Duration
     pollTimeout    time.Duration
@@ -210,7 +211,7 @@ SocialPublishScheduler.tick()  [unchanged entry point]
   → SetPublished(instagramPostID)
 ```
 
-**Caption dependency:** LLM is a soft requirement. Without it, the post gets a placeholder caption and is blocked from auto-publishing. This is consistent with the existing pipeline behavior.
+**Caption handling:** DH posts have no linked `PostCard` rows (no purchase IDs), so the existing card-based `generateCaptionAsync` LLM flow cannot be used. Instead, the scheduler writes a strategy-derived caption directly at post creation time via `buildDHCaption(strategy)` — e.g., `"Check out our top cards this week!"` — with a fixed set of default hashtags. No LLM dependency for DH posts. The placeholder caption sentinel is never set, so posts are eligible for auto-publishing as soon as they're created.
 
 ---
 
@@ -252,7 +253,6 @@ if cfg.DH.SocialEnabled && deps.DHClient.EnterpriseAvailable() {
     g.Add(NewDHSocialScheduler(
         deps.DHClient,
         deps.SocialRepository,
-        deps.LLM,          // optional, may be nil
         deps.Logger,
         cfg.DH.SocialPollInterval,
         cfg.DH.SocialPollTimeout,
@@ -283,9 +283,10 @@ DH posts appear in existing `/api/social/posts` list. Caption editing, deletion,
 
 - Unit test `dh.Client.GenerateInstagramPost` and `PollInstagramPostStatus` with mock HTTP server responses
 - Unit test `DHSocialScheduler.tick()` using a mock `DHInstagramClient` and mock `social.Repository`:
-  - All 4 strategies run, posts created
+  - All 4 strategies run, posts created with SlideURLs and a non-placeholder caption
   - Strategy that returns "failed" is skipped without affecting others
   - Poll timeout causes skip without affecting others
+  - Verify `buildDHCaption` produces correct non-empty captions for each strategy
 - Unit test `SocialPublishScheduler` with a `dh_instagram` post that has `SlideURLs` pre-set — verify render client is NOT called
 - All mocks via `internal/testutil/mocks/` using the Fn-field pattern
 
