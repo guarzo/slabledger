@@ -368,12 +368,15 @@ func (s *service) GetWeeklyReviewSummary(ctx context.Context) (*inventory.Weekly
 	sort.Slice(topSales, func(i, j int) bool {
 		return topSales[i].ProfitCents > topSales[j].ProfitCents
 	})
-	if len(topSales) > 10 {
-		summary.TopPerformers = topSales[:5]
-		summary.BottomPerformers = topSales[len(topSales)-5:]
-	} else if len(topSales) > 5 {
-		summary.TopPerformers = topSales[:5]
-		summary.BottomPerformers = topSales[5:]
+
+	const maxPerformers = 5
+
+	if len(topSales) > 2*maxPerformers {
+		summary.TopPerformers = topSales[:maxPerformers]
+		summary.BottomPerformers = topSales[len(topSales)-maxPerformers:]
+	} else if len(topSales) > maxPerformers {
+		summary.TopPerformers = topSales[:maxPerformers]
+		summary.BottomPerformers = topSales[maxPerformers:]
 	} else {
 		summary.TopPerformers = topSales
 		summary.BottomPerformers = nil

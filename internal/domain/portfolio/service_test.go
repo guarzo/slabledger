@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/portfolio"
@@ -569,3 +570,94 @@ func TestService_GetPortfolioChannelVelocity_WithData(t *testing.T) {
 }
 
 // end of tests
+
+func TestService_GetWeeklyReviewSummary_PerformerCounts(t *testing.T) {
+	cases := []struct {
+		name          string
+		salesCount    int
+		wantTopLen    int
+		wantBottomLen int
+	}{
+		{
+			name:          "12 sales: top 5, bottom 5",
+			salesCount:    12,
+			wantTopLen:    5,
+			wantBottomLen: 5,
+		},
+		{
+			name:          "7 sales: top 5, bottom 2",
+			salesCount:    7,
+			wantTopLen:    5,
+			wantBottomLen: 2,
+		},
+		{
+			name:          "4 sales: all top, no bottom",
+			salesCount:    4,
+			wantTopLen:    4,
+			wantBottomLen: 0,
+		},
+		{
+			name:          "11 sales: top 5, bottom 5 (exactly > 2*5)",
+			salesCount:    11,
+			wantTopLen:    5,
+			wantBottomLen: 5,
+		},
+		{
+			name:          "10 sales: top 5, bottom 5 (= 2*5, >5 branch)",
+			salesCount:    10,
+			wantTopLen:    5,
+			wantBottomLen: 5,
+		},
+		{
+			name:          "5 sales: all top, no bottom (= maxPerformers, else branch)",
+			salesCount:    5,
+			wantTopLen:    5,
+			wantBottomLen: 0,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := mocks.NewInMemoryCampaignStore()
+			svc := newPortfolioSvc(repo)
+			ctx := context.Background()
+
+			// Use today's date so sales land in "this week"
+			today := time.Now().Format("2006-01-02")
+
+			fixtures := make([]inventory.PurchaseWithSale, tc.salesCount)
+			for i := range fixtures {
+				fixtures[i] = inventory.PurchaseWithSale{
+					Purchase: inventory.Purchase{
+						ID:         fmt.Sprintf("p-%d", i),
+						CampaignID: "c1",
+						CardName:   fmt.Sprintf("Card %d", i),
+					},
+					Sale: &inventory.Sale{
+						PurchaseID:     fmt.Sprintf("p-%d", i),
+						SaleChannel:    inventory.SaleChannelEbay,
+						SalePriceCents: 10000 + i*1000,
+						NetProfitCents: (i + 1) * 100, // distinct profits for deterministic ordering
+						SaleDate:       today,
+					},
+				}
+			}
+
+			repo.GetAllPurchasesWithSalesFn = func(_ context.Context, _ ...inventory.PurchaseFilterOpt) ([]inventory.PurchaseWithSale, error) {
+				return fixtures, nil
+			}
+
+			summary, err := svc.GetWeeklyReviewSummary(ctx)
+			if err != nil {
+				t.Fatalf("GetWeeklyReviewSummary: %v", err)
+			}
+
+			if len(summary.TopPerformers) != tc.wantTopLen {
+				t.Errorf("TopPerformers len = %d, want %d", len(summary.TopPerformers), tc.wantTopLen)
+			}
+			if len(summary.BottomPerformers) != tc.wantBottomLen {
+				t.Errorf("BottomPerformers len = %d, want %d", len(summary.BottomPerformers), tc.wantBottomLen)
+			}
+		})
+	}
+}
