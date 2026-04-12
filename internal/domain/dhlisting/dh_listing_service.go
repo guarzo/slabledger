@@ -116,7 +116,7 @@ func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []stri
 	purchases, err := s.purchaseLookup.GetPurchasesByCertNumbers(ctx, certNumbers)
 	if err != nil {
 		s.logger.Warn(ctx, "dh listing: batch cert lookup failed", observability.Err(err))
-		return DHListingResult{}
+		return DHListingResult{Error: err}
 	}
 
 	// Sort cert numbers for deterministic iteration order.

@@ -94,9 +94,10 @@ func TestListPurchases_PersistFailure_DecrementsListedCount(t *testing.T) {
 }
 
 // TestListPurchases_LookupFailure_ReturnsZeroResult verifies that when
-// GetPurchasesByCertNumbers fails, an empty result is returned.
+// GetPurchasesByCertNumbers fails, an empty result is returned with Error set.
 func TestListPurchases_LookupFailure_ReturnsZeroResult(t *testing.T) {
-	lookup := &mockPurchaseLookup{err: errors.New("db connection lost")}
+	lookupErr := errors.New("db connection lost")
+	lookup := &mockPurchaseLookup{err: lookupErr}
 	lister := &mockInventoryLister{}
 
 	svc := newTestService(t, lookup, WithDHListingLister(lister))
@@ -104,7 +105,10 @@ func TestListPurchases_LookupFailure_ReturnsZeroResult(t *testing.T) {
 	result := svc.ListPurchases(context.Background(), []string{"99999999"})
 
 	if result.Listed != 0 || result.Synced != 0 || result.Total != 0 {
-		t.Errorf("expected zero result on lookup failure, got %+v", result)
+		t.Errorf("expected zero counts on lookup failure, got %+v", result)
+	}
+	if result.Error == nil {
+		t.Error("expected Error to be set on lookup failure")
 	}
 }
 
