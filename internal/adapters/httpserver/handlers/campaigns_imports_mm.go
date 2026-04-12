@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"bytes"
 	"encoding/csv"
 	"fmt"
 	"net/http"
@@ -14,9 +15,8 @@ import (
 // Returns a CSV file of all unsold inventory in Market Movers collection import format (13 columns).
 // Supports ?missing_mm_only=true to export only items lacking MM value data.
 //
-// Note: headers are committed before row iteration begins, so any mid-stream write error
-// produces a truncated 200 OK response with no error signal to the client. This matches
-// the pre-existing behaviour of HandleGlobalExportCL.
+// Note: headers are committed after all CSV data is buffered, so any write error
+// returns a proper error response instead of a truncated 200 OK.
 func (h *CampaignsHandler) HandleGlobalExportMM(w http.ResponseWriter, r *http.Request) {
 	missingMMOnly, _ := strconv.ParseBool(r.URL.Query().Get("missing_mm_only"))
 	entries, err := h.service.ExportMMFormatGlobal(r.Context(), missingMMOnly)
@@ -26,10 +26,8 @@ func (h *CampaignsHandler) HandleGlobalExportMM(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	w.Header().Set("Content-Type", "text/csv")
-	w.Header().Set("Content-Disposition", `attachment; filename="market-movers-export.csv"`)
-
-	writer := csv.NewWriter(w)
+	var buf bytes.Buffer
+	writer := csv.NewWriter(&buf)
 	header := []string{
 		"Sport", "Grade", "Player Name", "Year", "Set", "Variation",
 		"Card Number", "Specific Qualifier", "Quantity",
@@ -37,6 +35,7 @@ func (h *CampaignsHandler) HandleGlobalExportMM(w http.ResponseWriter, r *http.R
 	}
 	if err := writer.Write(header); err != nil {
 		h.logger.Error(r.Context(), "mm csv header write failed", observability.Err(err))
+		writeError(w, http.StatusInternalServerError, "failed to generate CSV")
 		return
 	}
 	for _, e := range entries {
@@ -62,13 +61,20 @@ func (h *CampaignsHandler) HandleGlobalExportMM(w http.ResponseWriter, r *http.R
 			e.Category,
 		}); err != nil {
 			h.logger.Error(r.Context(), "mm csv row write failed", observability.Err(err))
+			writeError(w, http.StatusInternalServerError, "failed to generate CSV")
 			return
 		}
 	}
 	writer.Flush()
 	if err := writer.Error(); err != nil {
 		h.logger.Error(r.Context(), "mm csv flush failed", observability.Err(err))
+		writeError(w, http.StatusInternalServerError, "failed to generate CSV")
+		return
 	}
+	w.Header().Set("Content-Type", "text/csv")
+	w.Header().Set("Content-Disposition", `attachment; filename="market-movers-export.csv"`)
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(buf.Bytes())
 }
 
 // HandleGlobalRefreshMM handles POST /api/purchases/refresh-mm.
