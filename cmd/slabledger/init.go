@@ -509,6 +509,7 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 	if deps.PublisherConfigured {
 		buildDeps.SocialPublisher = deps.SocialService
 		buildDeps.SocialPublishRepo = deps.SocialRepo
+		buildDeps.DHSocialRepo = deps.SocialRepo
 	}
 	schedulerResult := scheduler.BuildGroup(deps.Config, buildDeps)
 	schedulerResult.Group.StartAll(schedulerCtx)
