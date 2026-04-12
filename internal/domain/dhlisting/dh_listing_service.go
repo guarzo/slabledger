@@ -182,7 +182,14 @@ func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []stri
 
 		// Persist listed status and channel info locally.
 		if s.fieldsUpdater != nil {
-			channelsJSON, _ := json.Marshal(defaultChannels)
+			channelsJSON, marshalErr := json.Marshal(defaultChannels)
+			if marshalErr != nil {
+				s.logger.Error(ctx, "dh listing: failed to marshal channels",
+					observability.String("cert", p.CertNumber),
+					observability.Err(marshalErr))
+				listed--
+				continue
+			}
 			if persistErr := s.fieldsUpdater.UpdatePurchaseDHFields(ctx, p.ID, inventory.DHFieldsUpdate{
 				DHStatus:     inventory.DHStatusListed,
 				ChannelsJSON: string(channelsJSON),
