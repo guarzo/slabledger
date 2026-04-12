@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/ai"
@@ -22,12 +23,22 @@ type SocialHandler struct {
 	metricsRepo social.MetricsRepository // optional — nil if metrics not configured
 	mediaDir    string
 	baseURL     string
+	baseCtx     context.Context
+	bgWG        sync.WaitGroup
 }
 
 // NewSocialHandler creates a new social handler.
 func NewSocialHandler(service social.Service, repo social.Repository, logger observability.Logger, mediaDir, baseURL string) *SocialHandler {
-	return &SocialHandler{service: service, repo: repo, logger: logger, mediaDir: mediaDir, baseURL: baseURL}
+	return &SocialHandler{service: service, repo: repo, logger: logger, mediaDir: mediaDir, baseURL: baseURL, baseCtx: context.Background()}
 }
+
+// WithBaseCtx sets the server-lifecycle context used for background goroutines.
+// Call before the handler starts receiving requests.
+func (h *SocialHandler) WithBaseCtx(ctx context.Context) { h.baseCtx = ctx }
+
+// Wait blocks until all background goroutines have completed.
+// Call during graceful shutdown to avoid writing to a closed database.
+func (h *SocialHandler) Wait() { h.bgWG.Wait() }
 
 // WithMetricsRepo sets the optional metrics repository.
 func (h *SocialHandler) WithMetricsRepo(r social.MetricsRepository) { h.metricsRepo = r }
@@ -108,8 +119,10 @@ func (h *SocialHandler) HandleGenerate(w http.ResponseWriter, r *http.Request) {
 
 	// Run detection in a background goroutine with its own context so the
 	// HTTP request timeout (30s) doesn't kill the LLM call.
+	h.bgWG.Add(1)
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer h.bgWG.Done()
+		ctx, cancel := context.WithTimeout(h.baseCtx, 5*time.Minute)
 		defer cancel()
 		created, err := h.service.DetectAndGenerate(ctx)
 		if err != nil {

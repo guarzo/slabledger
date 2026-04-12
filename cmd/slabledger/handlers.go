@@ -81,6 +81,7 @@ type handlerInputs struct {
 type handlerOutputs struct {
 	DHHandler      *handlers.DHHandler
 	AdvisorHandler *handlers.AdvisorHandler
+	SocialHandler  *handlers.SocialHandler
 }
 
 // createHandlers constructs all HTTP handlers, wires scheduler refresh
@@ -212,6 +213,7 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 			observability.String("baseURL", baseURL))
 	}
 	socialHandler := handlers.NewSocialHandler(in.SocialService, in.SocialRepo, logger, mediaDir, baseURL)
+	socialHandler.WithBaseCtx(ctx)
 
 	// Wire metrics repository into social handler for API endpoints
 	socialHandler.WithMetricsRepo(in.MetricsRepo)
@@ -308,6 +310,7 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 	out := handlerOutputs{
 		DHHandler:      dhHandler,
 		AdvisorHandler: advisorHandler,
+		SocialHandler:  socialHandler,
 	}
 	return deps, out
 }
