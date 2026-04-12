@@ -37,9 +37,12 @@ export default function PriceFlagDialog({ cardName, grade, onSubmit, onCancel, i
 
         {/* Reason options */}
         <div className="px-5 pb-4 space-y-2">
-          {REASONS.map(reason => (
+          {REASONS.map(reason => {
+            const reasonId = `price-flag-reason-${reason}`;
+            return (
             <label
               key={reason}
+              htmlFor={reasonId}
               className={`flex items-center gap-3 px-3 py-2.5 rounded-md border cursor-pointer transition-colors ${
                 selected === reason
                   ? 'border-[var(--accent)] bg-[var(--accent)]/10'
@@ -58,6 +61,7 @@ export default function PriceFlagDialog({ cardName, grade, onSubmit, onCancel, i
                 )}
               </span>
               <input
+                id={reasonId}
                 type="radio"
                 name="flag-reason"
                 value={reason}
@@ -67,7 +71,8 @@ export default function PriceFlagDialog({ cardName, grade, onSubmit, onCancel, i
               />
               <span className="text-sm text-[var(--text)]">{PRICE_FLAG_LABELS[reason]}</span>
             </label>
-          ))}
+            );
+          })}
         </div>
 
         {/* Actions */}

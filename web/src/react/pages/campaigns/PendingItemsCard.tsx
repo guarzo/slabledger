@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { usePSAPendingItems, useAssignPendingItem, useDismissPendingItem, useCampaigns } from '../../queries/useCampaignQueries';
 import type { PSAPendingItem } from '../../../types/admin';
+import PokeballLoader from '../../PokeballLoader';
 
 function formatCents(cents: number): string {
   return '$' + (cents / 100).toFixed(2);
@@ -83,7 +84,7 @@ export function PendingItemsCard() {
         )}
       </div>
 
-      {isLoading && <p className="text-sm text-[var(--text-muted)]">Loading...</p>}
+      {isLoading && <PokeballLoader size="sm" />}
 
       {!isLoading && isError && (
         <p className="text-sm text-red-400">Failed to load pending items.</p>
