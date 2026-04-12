@@ -29,6 +29,15 @@ const (
 	FallbackWarningCents          = 500000  // $5K outstanding, no recovery data
 )
 
+// InvoiceSellThrough holds sell-through metrics for a single invoice date's purchases.
+// Only returned (received_at IS NOT NULL) purchases are counted.
+type InvoiceSellThrough struct {
+	TotalPurchaseCount int `json:"totalPurchaseCount"` // all non-refunded returned purchases for the invoice_date
+	SoldCount          int `json:"soldCount"`          // purchases with a completed sale
+	TotalCostCents     int `json:"totalCostCents"`     // sum of buy_cost_cents for returned purchases
+	SaleRevenueCents   int `json:"saleRevenueCents"`   // sum of sale_price_cents for sold purchases
+}
+
 // CapitalRawData holds the raw SQL-fetched capital data before business logic is applied.
 // The repository returns this; domain logic computes derived fields (WeeksToCover, Trend, AlertLevel).
 type CapitalRawData struct {
@@ -51,14 +60,13 @@ type CapitalSummary struct {
 	RefundedCents             int           `json:"refundedCents"` // Total refunds
 	PaidCents                 int           `json:"paidCents"`     // Total paid
 	UnpaidInvoiceCount        int           `json:"unpaidInvoiceCount"`
-	// Invoice-cycle projection (see ComputeInvoiceProjection in invoice_projection.go).
-	NextInvoiceDate        string `json:"nextInvoiceDate,omitempty"`    // YYYY-MM-DD, empty if no unpaid
-	NextInvoiceDueDate     string `json:"nextInvoiceDueDate,omitempty"` // YYYY-MM-DD
-	NextInvoiceAmountCents int    `json:"nextInvoiceAmountCents"`       // TotalCents - PaidCents of earliest unpaid
-	DaysUntilInvoiceDue    int    `json:"daysUntilInvoiceDue"`          // from now to due date, 0 if no unpaid
-	ProjectedRecoveryCents int    `json:"projectedRecoveryCents"`       // daily velocity * daysUntilInvoiceDue
-	ProjectedCashGapCents  int    `json:"projectedCashGapCents"`        // max(0, owed - projected - buffer)
-	CashBufferCents        int    `json:"cashBufferCents"`              // mirror of CashflowConfig.CashBufferCents
+	// Invoice-cycle actuals (see ComputeInvoiceProjection in invoice_projection.go).
+	NextInvoiceDate                string             `json:"nextInvoiceDate,omitempty"`      // YYYY-MM-DD, empty if no unpaid
+	NextInvoiceDueDate             string             `json:"nextInvoiceDueDate,omitempty"`   // YYYY-MM-DD
+	NextInvoiceAmountCents         int                `json:"nextInvoiceAmountCents"`         // TotalCents - PaidCents of earliest unpaid invoice (amount still owed)
+	DaysUntilInvoiceDue            int                `json:"daysUntilInvoiceDue"`            // from now to due date, negative = overdue
+	NextInvoicePendingReceiptCents int                `json:"nextInvoicePendingReceiptCents"` // cost of cards still at PSA for this invoice
+	NextInvoiceSellThrough         InvoiceSellThrough `json:"nextInvoiceSellThrough"`         // sell-through for returned cards on this invoice
 }
 
 // ComputeCapitalSummary applies business logic to raw capital data, computing
