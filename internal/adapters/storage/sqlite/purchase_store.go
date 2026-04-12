@@ -36,22 +36,58 @@ func (ps *PurchaseStore) CreatePurchase(ctx context.Context, p *inventory.Purcha
 		p.Grader = "PSA"
 	}
 	query := `
-		INSERT INTO campaign_purchases (id, campaign_id, card_name, cert_number,
-			card_number, set_name,
-			grader, grade_value,
+		INSERT INTO campaign_purchases (
+			-- identity
+			id, campaign_id, card_name, cert_number, card_number, set_name, grader, grade_value,
+			-- costs
 			cl_value_cents, buy_cost_cents, psa_sourcing_fee_cents,
+			-- dates
 			population, purchase_date, created_at, updated_at,
+			-- market snapshot
 			last_sold_cents, lowest_list_cents, conservative_cents, median_cents,
 			active_listings, sales_last_30d, trend_30d, snapshot_date, snapshot_json,
+			-- provenance
 			received_at, psa_ship_date, invoice_date, was_refunded, front_image_url, back_image_url, purchase_source,
+			-- PSA
 			psa_listing_title, snapshot_status, snapshot_retry_count,
+			-- price overrides
 			override_price_cents, override_source, override_set_at,
+			-- AI suggestions
 			ai_suggested_price_cents, ai_suggested_at,
+			-- misc
 			card_year, ebay_export_flagged_at,
+			-- review
 			reviewed_price_cents, reviewed_at, review_source,
+			-- DH
 			dh_card_id, dh_inventory_id, dh_cert_status, dh_listing_price_cents, dh_channels_json, dh_status, dh_push_status, dh_candidates,
-			gem_rate_id, psa_spec_id)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			-- gem/spec
+			gem_rate_id, psa_spec_id
+		) VALUES (
+			-- identity
+			?, ?, ?, ?, ?, ?, ?, ?,
+			-- costs
+			?, ?, ?,
+			-- dates
+			?, ?, ?, ?,
+			-- market snapshot
+			?, ?, ?, ?, ?, ?, ?, ?, ?,
+			-- provenance
+			?, ?, ?, ?, ?, ?, ?,
+			-- PSA
+			?, ?, ?,
+			-- price overrides
+			?, ?, ?,
+			-- AI suggestions
+			?, ?,
+			-- misc
+			?, ?,
+			-- review
+			?, ?, ?,
+			-- DH
+			?, ?, ?, ?, ?, ?, ?, ?,
+			-- gem/spec
+			?, ?
+		)
 	`
 	_, err := ps.db.ExecContext(ctx, query,
 		p.ID, p.CampaignID, p.CardName, p.CertNumber,
