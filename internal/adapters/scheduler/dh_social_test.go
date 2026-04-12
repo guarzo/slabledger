@@ -28,11 +28,17 @@ func (m *mockDHInstagramClient) EnterpriseAvailable() bool {
 }
 
 func (m *mockDHInstagramClient) GenerateInstagramPost(ctx context.Context, scope, strategy, headline string) (int64, error) {
-	return m.GenerateInstagramPostFn(ctx, scope, strategy, headline)
+	if m.GenerateInstagramPostFn != nil {
+		return m.GenerateInstagramPostFn(ctx, scope, strategy, headline)
+	}
+	return 0, nil
 }
 
 func (m *mockDHInstagramClient) PollInstagramPostStatus(ctx context.Context, postID int64) (*dh.DHInstagramStatusResponse, error) {
-	return m.PollInstagramPostStatusFn(ctx, postID)
+	if m.PollInstagramPostStatusFn != nil {
+		return m.PollInstagramPostStatusFn(ctx, postID)
+	}
+	return &dh.DHInstagramStatusResponse{RenderStatus: "ready"}, nil
 }
 
 // mockDHSocialRepo implements DHSocialRepo for testing.

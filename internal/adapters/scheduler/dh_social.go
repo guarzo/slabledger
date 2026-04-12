@@ -24,6 +24,9 @@ type dhInstagramStrategy struct {
 	title string // Human-readable cover title stored on the post
 }
 
+// dhSocialScope is the DH API scope for own-inventory Instagram posts.
+const dhSocialScope = "own_inventory"
+
 // dhInstagramStrategies is the fixed set of own_inventory strategies run each daily tick.
 var dhInstagramStrategies = []dhInstagramStrategy{
 	{key: "inventory_top_expensive", title: "Top Expensive Cards"},
@@ -106,7 +109,7 @@ func (s *DHSocialScheduler) tick(ctx context.Context) {
 }
 
 func (s *DHSocialScheduler) generatePost(ctx context.Context, strategy dhInstagramStrategy) error {
-	postID, err := s.dhClient.GenerateInstagramPost(ctx, "own_inventory", strategy.key, "")
+	postID, err := s.dhClient.GenerateInstagramPost(ctx, dhSocialScope, strategy.key, "")
 	if err != nil {
 		return fmt.Errorf("generate: %w", err)
 	}
