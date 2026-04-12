@@ -40,7 +40,11 @@ func (h *CampaignsHandler) HandleCreatePurchase(w http.ResponseWriter, r *http.R
 			writeError(w, http.StatusConflict, "Certificate number already exists")
 			return
 		}
-		if campaigns.IsValidationError(err) || campaigns.IsCampaignNotFound(err) {
+		if campaigns.IsCampaignNotFound(err) {
+			writeError(w, http.StatusNotFound, "Campaign not found")
+			return
+		}
+		if campaigns.IsValidationError(err) {
 			writeError(w, http.StatusBadRequest, "invalid purchase data")
 			return
 		}
