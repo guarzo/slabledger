@@ -83,7 +83,14 @@ func (h *CampaignsHandler) HandleCreateSale(w http.ResponseWriter, r *http.Reque
 	// Look up the purchase and campaign for profit computation
 	purchase, err := h.service.GetPurchase(r.Context(), s.PurchaseID)
 	if err != nil {
-		writeError(w, http.StatusNotFound, "Purchase not found")
+		if campaigns.IsPurchaseNotFound(err) {
+			writeError(w, http.StatusNotFound, "Purchase not found")
+		} else {
+			h.logger.Error(r.Context(), "HandleCreateSale: GetPurchase failed",
+				observability.String("purchaseID", s.PurchaseID),
+				observability.Err(err))
+			writeError(w, http.StatusInternalServerError, "Internal server error")
+		}
 		return
 	}
 	if purchase.CampaignID != id {
@@ -93,7 +100,14 @@ func (h *CampaignsHandler) HandleCreateSale(w http.ResponseWriter, r *http.Reque
 
 	campaign, err := h.service.GetCampaign(r.Context(), id)
 	if err != nil {
-		writeError(w, http.StatusNotFound, "Campaign not found")
+		if campaigns.IsCampaignNotFound(err) {
+			writeError(w, http.StatusNotFound, "Campaign not found")
+		} else {
+			h.logger.Error(r.Context(), "HandleCreateSale: GetCampaign failed",
+				observability.String("campaignID", id),
+				observability.Err(err))
+			writeError(w, http.StatusInternalServerError, "Internal server error")
+		}
 		return
 	}
 
