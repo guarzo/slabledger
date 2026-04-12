@@ -56,37 +56,61 @@
       "id": 6,
       "name": "adapters/storage/sqlite",
       "paths": ["internal/adapters/storage/sqlite/"],
-      "status": "pending"
+      "status": "completed",
+      "improve_findings": 10,
+      "polish_fixed": 5,
+      "polish_needs_review": 5,
+      "completed_at": "2026-04-12T20:30:00.000Z"
     },
     {
       "id": 7,
       "name": "adapters/clients",
       "paths": ["internal/adapters/clients/"],
-      "status": "pending"
+      "status": "completed",
+      "improve_findings": 8,
+      "polish_fixed": 2,
+      "polish_needs_review": 6,
+      "completed_at": "2026-04-12T20:45:00.000Z"
     },
     {
       "id": 8,
       "name": "adapters/scheduler+scoring+advisor",
       "paths": ["internal/adapters/scheduler/", "internal/adapters/scoring/", "internal/adapters/advisortool/"],
-      "status": "pending"
+      "status": "completed",
+      "improve_findings": 8,
+      "polish_fixed": 2,
+      "polish_needs_review": 6,
+      "completed_at": "2026-04-12T21:00:00.000Z"
     },
     {
       "id": 9,
       "name": "platform",
       "paths": ["internal/platform/"],
-      "status": "pending"
+      "status": "completed",
+      "improve_findings": 6,
+      "polish_fixed": 0,
+      "polish_needs_review": 2,
+      "completed_at": "2026-04-12T21:15:00.000Z"
     },
     {
       "id": 10,
       "name": "cmd",
       "paths": ["cmd/"],
-      "status": "pending"
+      "status": "completed",
+      "improve_findings": 8,
+      "polish_fixed": 2,
+      "polish_needs_review": 6,
+      "completed_at": "2026-04-12T21:30:00.000Z"
     },
     {
       "id": 11,
       "name": "testutil",
       "paths": ["internal/testutil/"],
-      "status": "pending"
+      "status": "completed",
+      "improve_findings": 10,
+      "polish_fixed": 2,
+      "polish_needs_review": 8,
+      "completed_at": "2026-04-12T21:45:00.000Z"
     },
     {
       "id": 12,

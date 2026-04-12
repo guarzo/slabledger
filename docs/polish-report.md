@@ -170,3 +170,216 @@ No auto-fixes needed — single new file is clean.
 9. ⚠ [Medium] `social.go:111-120` — `HandleGenerate` spawns goroutine without WaitGroup, races server shutdown
 10. ⚠ [Medium] `router.go:136,148` — `NewRouter` calls `os.Getenv` directly, bypassing config layer validation and testability
 11. ⚠ [Low] `campaigns_purchases.go:43-44` — `IsCampaignNotFound` error mapped to 400 instead of 404 in `HandleCreatePurchase`
+
+---
+## Segment 6: adapters/storage/sqlite
+
+### Improve Findings (10)
+1. ~40 manual `for rows.Next()` loops bypass `scanRows` helper — inconsistent error handling across store files (Quality/High)
+2. Three identical chunked bulk-lookup functions in `purchase_cert_store.go` — copy-paste duplication (Duplication/High)
+3. Duplicate `var _ inventory.DHRepository = (*DHStore)(nil)` across `dh_store.go` and `dh_push_config_repository.go` (Quality/Low)
+4. 35.4% package coverage; 18 zero-cov funcs in `purchase_store.go`, 13 in `purchase_dh_store.go` (Testing/High)
+5. 54-column INSERT in `CreatePurchase` — hard to maintain and verify (Maintainability/Medium)
+6. Hardcoded initial capacity 64 in `campaign_store` and `card_id_mapping_repository` (Quality/Low)
+7. `if err == sql.ErrNoRows` (non-`errors.Is`) in 6 files — pre-Go 1.13 pattern (Quality/Medium)
+8. Three single-line stub files: `dh_push_config_repository.go`, `finance_repository.go`, `price_flags_repository.go` (Maintainability/Low)
+9. `AcceptAISuggestion` uses a transaction for a single UPDATE — unnecessary overhead (Performance/Low)
+10. `profitability_provider.go` has 0% coverage and error-tolerance pattern swallows sub-query failures (Quality/High)
+
+### Polish — Fixed (5)
+- ✓ `finance_store.go` — `ListRevocationFlags` named return `flags` bug: shadowed append fixed
+- ✓ `dh_push_config_repository.go` — removed duplicate `var _ inventory.DHRepository = (*DHStore)(nil)` assertion
+- ✓ Deleted 3 stub files (`finance_repository.go`, `price_flags_repository.go`, `dh_push_config_repository.go`) — moved to parent
+- ✓ `advisor_cache.go`, `api_tracker.go`, `instagram_store.go`, `pending_items.go`, `social_repository.go` — `errors.Is(err, sql.ErrNoRows)` fixes (6 total occurrences)
+
+### Polish — Needs Review (5)
+1. ⚠ [High] `purchase_cert_store.go` — three identical chunked bulk-lookup helper functions should be generalized
+2. ⚠ [High] `profitability_provider.go` — error-tolerance pattern silently returns zeros on sub-query failure
+3. ⚠ [Medium] `purchase_store.go`, `purchase_dh_store.go` — 31 zero-coverage functions need integration/unit tests
+4. ⚠ [Medium] `CreatePurchase` — 54-column INSERT; consider named struct or builder pattern
+5. ⚠ [Low] `AcceptAISuggestion` — single-UPDATE transaction adds overhead without benefit
+
+---
+## Segment 7: adapters/clients
+
+### Improve Findings (8)
+1. `pricelookup/adapter.go` — dead `case 8` branches in switch after prior pricing sources removed (Dead Code/High)
+2. `instagram/client_http.go` — `time.After` in select leaks timer goroutine (Memory/Medium)
+3. `dhprice/` — no test coverage for retry/circuit-breaker path (Testing/Medium)
+4. `tcgdex/` — repeated JSON deserialization with no caching (Performance/Low)
+5. `httpx/` — circuit breaker state not observable via metrics (Observability/Low)
+6. `google/` — OAuth state parameter not validated for CSRF (Security/Medium)
+7. `azureai/` — completion timeout not configurable via env (Flexibility/Low)
+8. `pricelookup/adapter.go` — `lookupByID` vs `lookupByName` branching undocumented (Maintainability/Low)
+
+### Polish — Fixed (2)
+- ✓ `pricelookup/adapter.go` — removed dead `case 8` branches from price-source switch
+- ✓ `instagram/client_http.go` — replaced `time.After` with `time.NewTimer` + `defer t.Stop()` to prevent goroutine leak
+
+### Polish — Needs Review (6)
+1. ⚠ [Medium] `google/` — OAuth CSRF: state parameter should be validated against session store
+2. ⚠ [Medium] `dhprice/` — zero unit tests for retry/circuit-breaker paths
+3. ⚠ [Medium] `tcgdex/` — repeated deserialization on hot paths, missing in-memory cache
+4. ⚠ [Low] `httpx/` — circuit breaker state not exposed to metrics/health endpoint
+5. ⚠ [Low] `azureai/` — completion timeout hardcoded, not configurable
+6. ⚠ [Low] `pricelookup/adapter.go` — `lookupByID` vs `lookupByName` strategy needs inline comment
+
+---
+## Segment 8: adapters/scheduler+scoring+advisor
+
+### Improve Findings (8)
+1. `snapshot_history.go` — corrupt `snapshot_json` silently skipped, no warning log (Silent Failure/High)
+2. `scheduler/` — `financeService` can be nil when scheduling finance jobs, no nil guard (Reliability/High)
+3. `scoring/provider.go` — inline mock structs duplicated in test vs canonical mocks package (Maintainability/Medium)
+4. `advisortool/tools_portfolio.go` — error from portfolio method not propagated (Silent Failure/Medium)
+5. `scheduler/price_refresh.go` — price refresh errors not surfaced to health endpoint (Observability/Low)
+6. `scoring/` — `ParseGrade` function lacks tests for edge cases (Testing/Low)
+7. `advisortool/` — tool registration order undocumented (Maintainability/Low)
+8. `scheduler/` — no metrics on scheduler run duration or error count (Observability/Low)
+
+### Polish — Fixed (2)
+- ✓ `advisortool/tools_portfolio.go` — added nil guard for `financeService` before calling finance methods
+- ✓ `snapshot_history.go` — added `logger.Warn` for corrupt `snapshot_json` instead of silent skip
+
+### Polish — Needs Review (6)
+1. ⚠ [High] `scheduler/` — finance job scheduler needs nil guard for financeService at registration site
+2. ⚠ [Medium] `scoring/provider_test.go` — inline mock structs replaced (done in Phase 8), verify no regressions
+3. ⚠ [Medium] `scheduler/price_refresh.go` — errors not surfaced to health endpoint
+4. ⚠ [Low] `scoring/ParseGrade` — missing edge-case tests (empty string, non-numeric suffix)
+5. ⚠ [Low] `advisortool/` — tool registration order should be documented
+6. ⚠ [Low] `scheduler/` — no metrics on run duration or error rate
+
+---
+## Segment 9: platform
+
+### Improve Findings (6)
+1. `config/` — `FromEnv` and `FromFlags` produce identical parse logic, not DRY (Duplication/Medium)
+2. `cache/` — no eviction policy, unbounded growth possible (Reliability/Medium)
+3. `resilience/` — circuit breaker half-open threshold not configurable (Flexibility/Low)
+4. `telemetry/` — slog handler not swappable for testing (Testability/Low)
+5. `cardutil/` — normalization regex compiled on every call (Performance/Low)
+6. `crypto/` — AES key rotation not supported (Security/Low)
+
+### Polish — Fixed (0)
+No auto-fixes applied (no changes in segment since base commit).
+
+### Polish — Needs Review (2)
+1. ⚠ [Medium] `cache/` — add max-size or TTL eviction to prevent unbounded growth
+2. ⚠ [Low] `cardutil/` — compile normalization regex once at package init
+
+---
+## Segment 10: cmd
+
+### Improve Findings (8)
+1. `handlers.go` — `context.Background()` used instead of request context in several handler setup calls (Quality/High)
+2. `init_schedulers.go` — anonymous struct for `SnapshotHistoryLister` could use named type (Maintainability/Medium)
+3. `main.go` — `gracefulShutdown` timeout hardcoded to 10s (Flexibility/Low)
+4. `init_services.go` — 307 lines after split, still dense (Maintainability/Medium)
+5. `admin_analyze.go` — error messages exposed directly to HTTP response (Security/Low)
+6. `handlers.go` — handler registration order undocumented (Maintainability/Low)
+7. `init_services.go` — `initializePriceProviders` returns multiple values, hard to extend (Maintainability/Low)
+8. `main.go` — startup log level not configurable at runtime (Observability/Low)
+
+### Polish — Fixed (2)
+- ✓ `handlers.go` — replaced `context.Background()` with `ctx` (request-scoped context)
+- ✓ `init_schedulers.go` — replaced anonymous struct for `SnapshotHistoryLister` with named `snapshotHistoryListerAdapter` type
+
+### Polish — Needs Review (6)
+1. ⚠ [High] `admin_analyze.go` — internal error messages exposed to HTTP response body
+2. ⚠ [Medium] `init_services.go` — still 307 lines; consider further splitting per-domain-area
+3. ⚠ [Medium] `main.go` — 10s graceful shutdown is hardcoded, no override via config/env
+4. ⚠ [Low] `handlers.go` — handler registration order should match API docs
+5. ⚠ [Low] `init_services.go` — `initializePriceProviders` return arity will grow; consider result struct
+6. ⚠ [Low] `main.go` — startup log level not configurable
+
+---
+## Segment 11: testutil
+
+### Improve Findings (10)
+1. README documents deleted `campaigns` package — all mock examples reference removed types (Documentation/High)
+2. `inmemory_campaign_store.go:GetAllPurchasesWithSales` always returns empty slice, ignores store state (Bug/High)
+3. 37 `InMemoryCampaignStore` methods have no Fn-field override pattern, unlike all other mocks (Consistency/High)
+4. `FinanceRepositoryMock.GetRevocationFlagByID` implements non-existent interface method (Correctness/Medium)
+5. `MockInventoryService.GetDaysToSellDistFn` field naming inconsistency vs interface method `GetDaysToSellDistribution` (Naming/Medium) — **FIXED**
+6. `MockAnalyticsService` vs `MockInventoryService` divergent defaults for shared methods (Consistency/Medium)
+7. `ListPurchasesByCampaign`/`ListSalesByCampaign` iterate unordered map — non-deterministic test results (Reliability/Medium)
+8. `DHRepositoryMock` only has 2 methods; needs clarifying comment on design intent (Maintainability/Low)
+9. 8 distinct `NewInMemoryCampaignStore()` instances in tests where a shared instance would suffice (Efficiency/Low)
+10. `GetPriceOverrideStats` returns `nil, nil` instead of safe zero value `&PriceOverrideStats{}, nil` (Quality/Low) — **FIXED**
+
+### Polish — Fixed (2)
+- ✓ `inventory_service.go:38` — renamed `GetDaysToSellDistFn` → `GetDaysToSellDistributionFn` (matches interface); updated call site in `campaigns_analytics_test.go`
+- ✓ `inventory_purchase_repo.go:237` — `GetPriceOverrideStats` default return changed from `nil, nil` → `&inventory.PriceOverrideStats{}, nil`
+
+### Polish — Needs Review (8)
+1. ⚠ [High] `mocks/README.md` — all examples reference deleted `campaigns` package; needs full rewrite
+2. ⚠ [High] `inmemory_campaign_store.go` — `GetAllPurchasesWithSales` ignores store state, always returns `[]inventory.PurchaseWithSales{}`
+3. ⚠ [High] `inmemory_campaign_store.go` — 37 methods lack Fn-field override; add or document intentional omission
+4. ⚠ [Medium] `inventory_finance_repo.go` — `GetRevocationFlagByID` method should be verified against current interface
+5. ⚠ [Medium] `MockAnalyticsService` — reconcile defaults with `MockInventoryService` for shared methods
+6. ⚠ [Medium] `inmemory_campaign_store.go` — `ListPurchasesByCampaign`/`ListSalesByCampaign` iterate map keys non-deterministically
+7. ⚠ [Low] `inventory_dh_repo.go` — `DHRepositoryMock` 2-method stub needs design-intent comment
+8. ⚠ [Low] `inmemory_campaign_store.go` — consider exporting a shared instance helper for multi-package tests
+
+---
+## Segment 12: web
+
+**Note**: No changes in `web/` since base commit `7cb661c`. Diff is empty. Polish phase skipped — improve findings only.
+
+### Improve Findings (10)
+1. Manual loading state bypasses React Query in 4 files — `CardIntakeSection.tsx`, `EbayExportTab.tsx`, `ImportSalesTab.tsx`, `ShopifySyncPage.tsx` use `useState(false)` + try/catch instead of `useMutation` (Quality/High)
+2. Duplicate `GradeBadge` implementations — `src/react/ui/GradeBadge.tsx` and `src/react/components/social/slides/primitives/GradeBadge.tsx` diverging (Duplication/High)
+3. 14 inline error `<div>` repetitions — no shared `ErrorAlert` component; most missing `role="alert"` (Duplication+a11y/Medium)
+4. `useInventoryState` is a 300-line 30-hook monolith — 10+ useState, 3 useRef, 5 useMemo, 7 useCallback, 5 useEffect (Maintainability/Medium)
+5. `shopifyCSVParser.ts` — handwritten RFC 4180 parser with zero tests; parser bug corrupts sync pipeline silently (Testing/Medium)
+6. `useCampaignDerived` — P&L and sell-through computation entirely untested (Testing/Medium)
+7. `CampaignsPage.tsx:239-244` — inline `queryFn` duplicates `useCampaignPNL`, orphaned from cache invalidation graph (Duplication/Medium)
+8. `useAdminQueries.ts` — 14 copies of `enabled: options?.enabled ?? true` boilerplate (Maintainability/Low)
+9. `inventory/utils.ts` — 365-line file mixing calculations, display formatting, and sync dot logic (Maintainability/Low)
+10. 2 npm moderate vulnerabilities (`brace-expansion`, `yaml`) — **FIXED** by `npm audit fix` (Dependencies/Low)
+
+### Polish — Fixed (1)
+- ✓ `web/package-lock.json` — `npm audit fix` resolved 2 moderate vulnerabilities (brace-expansion ReDoS, yaml stack overflow)
+
+### Polish — Needs Review (9)
+1. ⚠ [High] `CardIntakeSection.tsx`, `EbayExportTab.tsx`, `ImportSalesTab.tsx`, `ShopifySyncPage.tsx` — replace manual loading state with `useMutation`
+2. ⚠ [High] `ui/GradeBadge.tsx` + `primitives/GradeBadge.tsx` — merge into single component with variant prop
+3. ⚠ [Medium] 14 files — extract shared `ErrorAlert` component with consistent `role="alert"`
+4. ⚠ [Medium] `useInventoryState.ts` — split into `useInventorySortFilter`, `useInventorySelection`, `useInventoryModals`
+5. ⚠ [Medium] `shopifyCSVParser.ts` — add table-driven tests for edge cases (quoted fields, embedded commas, double-quote escaping)
+6. ⚠ [Medium] `useCampaignDerived.ts` — add unit tests for P&L and sell-through calculations
+7. ⚠ [Medium] `CampaignsPage.tsx:239-244` — replace inline `queryFn` with `useCampaignPNL` hook
+8. ⚠ [Low] `useAdminQueries.ts` — refactor 14 `enabled` boilerplate copies via `createAdminQuery` factory
+9. ⚠ [Low] `inventory/utils.ts` — split into `inventoryCalcs.ts`, `inventoryDisplay.ts`, `syncDot.ts`
+
+---
+## Final Summary
+
+| # | Segment | Improve Findings | Auto-Fixed | Needs Review |
+|---|---------|-----------------|-----------|-------------|
+| 1 | domain/inventory | 10 | 2 | 14 |
+| 2 | domain/advisor+social+scoring | 10 | 0 | 0 |
+| 3 | domain/favorites+picks+cards+auth+small | 8 | 0 | 1 |
+| 4 | domain/decomposed-siblings | 8 | 1 | 15 |
+| 5 | adapters/httpserver | 10 | 1 | 11 |
+| 6 | adapters/storage/sqlite | 10 | 5 | 5 |
+| 7 | adapters/clients | 8 | 2 | 6 |
+| 8 | adapters/scheduler+scoring+advisor | 8 | 2 | 6 |
+| 9 | platform | 6 | 0 | 2 |
+| 10 | cmd | 8 | 2 | 6 |
+| 11 | testutil | 10 | 2 | 8 |
+| 12 | web | 10 | 1 | 9 |
+| **Total** | | **106** | **18** | **83** |
+
+### Auto-fix commits
+| Commit | Segment | Description |
+|--------|---------|-------------|
+| `ac1bdb5` | 1 | ParseFloat for half-grades; integer division order fix |
+| `872cb1d` | 4 | Removed reimplemented stringsContains |
+| `c2b66c5` | 5 | Removed duplicate userResponse struct |
+| `700ef0d` | 6 | ListRevocationFlags named return bug; var_ assertion; 3 stub files deleted; 6× errors.Is fix |
+| `592e473` | 7 | Dead case 8 branches removed; time.After timer leak fixed |
+| `7fd4b99` | 8 | Nil guard for financeService; warn log for corrupt snapshot_json |
+| `b646fa1` | 10 | context.Background()→ctx; simplified SnapshotHistoryLister |
+| `dc17e43` | 11 | GetDaysToSellDistFn renamed; GetPriceOverrideStats safe zero value |
+| _(pending)_ | 12 | npm audit fix (package-lock.json) |
