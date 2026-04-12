@@ -204,6 +204,9 @@ func (h *DHHandler) runBulkMatch(ctx context.Context, purchases []inventory.Purc
 		observability.Int("not_found", notFound),
 		observability.Int("failed", failed))
 
+	h.bulkMatchMatched.Store(int64(matched))
+	h.bulkMatchFailed.Store(int64(failed))
+
 	if h.inventoryPusher != nil && len(matchedCards) > 0 {
 		h.pushMatchedToDH(ctx, purchases, matchedCards)
 	}
