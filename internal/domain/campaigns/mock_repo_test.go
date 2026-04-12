@@ -484,6 +484,31 @@ func (m *mockRepo) GetCapitalRawData(_ context.Context) (*CapitalRawData, error)
 	return &CapitalRawData{OutstandingCents: 0, RecoveryRate30dCents: 0, RecoveryRate30dPriorCents: 0}, nil
 }
 
+func (m *mockRepo) GetInvoiceSellThrough(_ context.Context, invoiceDate string) (InvoiceSellThrough, error) {
+	var result InvoiceSellThrough
+	for _, p := range m.purchases {
+		if p.InvoiceDate != invoiceDate || p.WasRefunded {
+			continue
+		}
+		if p.ReceivedAt == nil {
+			continue
+		}
+		result.TotalPurchaseCount++
+		result.TotalCostCents += p.BuyCostCents
+		if m.purchaseSales[p.ID] {
+			result.SoldCount++
+			// Sale revenue: look it up from Sales map by purchase ID
+			for _, s := range m.sales {
+				if s.PurchaseID == p.ID {
+					result.SaleRevenueCents += s.SalePriceCents
+					break
+				}
+			}
+		}
+	}
+	return result, nil
+}
+
 func (m *mockRepo) GetPortfolioChannelVelocity(_ context.Context) ([]ChannelVelocity, error) {
 	if m.channelVelocity != nil {
 		return m.channelVelocity, nil

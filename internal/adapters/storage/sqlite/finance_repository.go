@@ -227,6 +227,35 @@ func (r *CampaignsRepository) GetCapitalRawData(ctx context.Context) (*campaigns
 	}, nil
 }
 
+// GetInvoiceSellThrough returns sell-through metrics for all non-refunded,
+// returned purchases belonging to the given invoiceDate. Only purchases where
+// received_at IS NOT NULL are included (cards still at PSA are excluded).
+func (r *CampaignsRepository) GetInvoiceSellThrough(ctx context.Context, invoiceDate string) (campaigns.InvoiceSellThrough, error) {
+	query := `
+		SELECT
+			COUNT(*) AS total_count,
+			COALESCE(SUM(p.buy_cost_cents), 0) AS total_cost_cents,
+			COUNT(s.id) AS sold_count,
+			COALESCE(SUM(CASE WHEN s.id IS NOT NULL THEN s.sale_price_cents ELSE 0 END), 0) AS sale_revenue_cents
+		FROM campaign_purchases p
+		LEFT JOIN campaign_sales s ON s.purchase_id = p.id
+		WHERE p.invoice_date = ?
+		  AND p.was_refunded = 0
+		  AND p.received_at IS NOT NULL
+	`
+	var result campaigns.InvoiceSellThrough
+	err := r.db.QueryRowContext(ctx, query, invoiceDate).Scan(
+		&result.TotalPurchaseCount,
+		&result.TotalCostCents,
+		&result.SoldCount,
+		&result.SaleRevenueCents,
+	)
+	if err != nil {
+		return campaigns.InvoiceSellThrough{}, err
+	}
+	return result, nil
+}
+
 // --- Revocation Flags ---
 
 func (r *CampaignsRepository) CreateRevocationFlag(ctx context.Context, flag *campaigns.RevocationFlag) error {

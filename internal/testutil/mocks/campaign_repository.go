@@ -76,6 +76,7 @@ type MockCampaignRepository struct {
 	ClearSellSheetFn               func(ctx context.Context) error
 	OpenFlagPurchaseIDsFn          func(ctx context.Context) (map[string]int64, error)
 	GetCapitalRawDataFn            func(ctx context.Context) (*campaigns.CapitalRawData, error)
+	GetInvoiceSellThroughFn        func(ctx context.Context, invoiceDate string) (campaigns.InvoiceSellThrough, error)
 	UpdateCashflowConfigFn         func(ctx context.Context, cfg *campaigns.CashflowConfig) error
 }
 
@@ -657,6 +658,34 @@ func (m *MockCampaignRepository) GetCapitalRawData(ctx context.Context) (*campai
 		return m.GetCapitalRawDataFn(ctx)
 	}
 	return &campaigns.CapitalRawData{OutstandingCents: 0, RecoveryRate30dCents: 0, RecoveryRate30dPriorCents: 0}, nil
+}
+
+func (m *MockCampaignRepository) GetInvoiceSellThrough(_ context.Context, invoiceDate string) (campaigns.InvoiceSellThrough, error) {
+	if m.GetInvoiceSellThroughFn != nil {
+		return m.GetInvoiceSellThroughFn(context.Background(), invoiceDate)
+	}
+	var result campaigns.InvoiceSellThrough
+	for _, p := range m.Purchases {
+		if p.InvoiceDate != invoiceDate || p.WasRefunded {
+			continue
+		}
+		if p.ReceivedAt == nil {
+			continue
+		}
+		result.TotalPurchaseCount++
+		result.TotalCostCents += p.BuyCostCents
+		if m.PurchaseSales[p.ID] {
+			result.SoldCount++
+			// Sale revenue: look it up from Sales map by purchase ID
+			for _, s := range m.Sales {
+				if s.PurchaseID == p.ID {
+					result.SaleRevenueCents += s.SalePriceCents
+					break
+				}
+			}
+		}
+	}
+	return result, nil
 }
 
 func (m *MockCampaignRepository) GetPortfolioChannelVelocity(_ context.Context) ([]campaigns.ChannelVelocity, error) {
