@@ -59,16 +59,10 @@ func (ps *PurchaseStore) AcceptAISuggestion(ctx context.Context, purchaseID stri
 		return inventory.ErrNoAISuggestion
 	}
 
-	tx, err := ps.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin transaction: %w", err)
-	}
-	defer tx.Rollback() //nolint:errcheck
-
 	now := time.Now()
 	setAt := now.Format(time.RFC3339)
 
-	result, err := tx.ExecContext(ctx,
+	result, err := ps.db.ExecContext(ctx,
 		`UPDATE campaign_purchases
 		 SET override_price_cents = ?, override_source = 'ai_accepted', override_set_at = ?,
 		     ai_suggested_price_cents = 0, ai_suggested_at = '',
@@ -85,9 +79,6 @@ func (ps *PurchaseStore) AcceptAISuggestion(ctx context.Context, purchaseID stri
 	}
 	if n == 0 {
 		return inventory.ErrNoAISuggestion
-	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit accept ai suggestion transaction: %w", err)
 	}
 	return nil
 }
