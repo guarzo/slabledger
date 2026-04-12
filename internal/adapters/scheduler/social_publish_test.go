@@ -127,14 +127,17 @@ func TestSocialPublishScheduler(t *testing.T) {
 			shouldPublish:     false,
 		},
 		{
-			name:              "RenderClientUnhealthy",
-			cfg:               defaultPublishConfig(),
-			countTodayFn:      func(_ context.Context) (int, error) { return 0, nil },
-			fetchEligibleFn:   func(_ context.Context) (*social.PostDetail, error) { return nil, nil },
+			name:         "RenderClientUnhealthy",
+			cfg:          defaultPublishConfig(),
+			countTodayFn: func(_ context.Context) (int, error) { return 0, nil },
+			fetchEligibleFn: func(_ context.Context) (*social.PostDetail, error) {
+				// Return a post without SlideURLs so the health check is reached.
+				return post, nil
+			},
 			updateSlideURLsFn: func(_ context.Context, _ string, _ []string) error { return nil },
 			healthFn:          func(_ context.Context) error { return errors.New("connection refused") },
 			publishFn:         func(_ context.Context, _ string) error { return nil },
-			shouldFetch:       false,
+			shouldFetch:       true,
 			shouldPublish:     false,
 		},
 		{
