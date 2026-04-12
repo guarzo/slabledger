@@ -41,6 +41,7 @@ func initializePriceProviders(
 	logger.Info(ctx, "DH price provider initialized")
 	return provider, nil
 }
+
 // initializeAdvisorService creates the Azure AI client and advisor service.
 // All return values may be nil/zero if Azure AI is not configured. This is not
 // an error.
