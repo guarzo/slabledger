@@ -26,7 +26,7 @@ The advisor service (`internal/domain/advisor/`) orchestrates LLM tool-calling l
 | `get_sell_sheet` | Global sell sheet: target price, min price, channel per card | `GenerateGlobalSellSheet` |
 | `get_portfolio_health` | Health scores per campaign: status, reason, capital at risk | `GetPortfolioHealth` |
 | `get_portfolio_insights` | Cross-campaign segmentation by character, grade, era, tier | `GetPortfolioInsights` |
-| `get_credit_summary` | Credit utilization, limit, alert level, projected exposure | `GetCreditSummary` |
+| `get_credit_summary` | Outstanding balance, recovery trend, alert level, projected exposure | `GetCreditSummary` |
 | `get_weekly_review` | Week-over-week comparison: purchases, spend, sales, profit | `GetWeeklyReviewSummary` |
 | `get_capital_timeline` | Daily capital deployment: spend, recovery, outstanding balance | `GetCapitalTimeline` |
 | `get_channel_velocity` | Average days to sell and count by channel | `GetPortfolioChannelVelocity` |
