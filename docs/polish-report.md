@@ -99,3 +99,43 @@ No auto-fixes needed — single new file is clean.
 
 ### Polish — Needs Review (1)
 1. ⚠ [LOW] `internal/domain/constants/channels.go` — new file looks correct; verify `SaleChannelWebsite` and `SaleChannelInPerson` are the intended canonical replacements for older channel names in existing DB data
+
+---
+## Segment 4: domain/decomposed-siblings (47 files)
+
+### Improve Findings (8)
+
+1. `mmutil` package is orphaned — never imported, all functions unexported, verbatim copy of `inventory/mm_clean.go` + `mm_search_title.go` (Dead Code/High) — `internal/domain/mmutil/`
+2. Three packages have zero tests: `finance`, `export`, `dhlisting` — includes high-stakes `EvaluateHoldTriggers` safety system (Tests/High) — `internal/domain/finance/`, `export/`, `dhlisting/`
+3. Card-name normalization logic triplicated across `dhlisting`, `mmutil`, and `inventory` — suffix/prefix lists diverging silently (Duplication/High) — `dhlisting/dh_helpers.go:49`, `mmutil/mm_clean.go:48`, `inventory/mm_clean.go:48`
+4. `arbitrage.Service` has no service-level tests — orchestration logic (nil-priceProv, error propagation, cross-campaign iteration) entirely untested (Tests/High) — `internal/domain/arbitrage/service.go`
+5. `computeExpectedValue` 11-parameter signature with undiscoverable variadic fee override — callers always pass `0.05` explicitly (Quality/Medium) — `arbitrage/expected_value.go:49`
+6. `mcPercentileFloat` and `mcPercentileInt` are identical except for type — natural generic candidate (Duplication/Low) — `arbitrage/montecarlo.go:171-196`
+7. `dhlisting.Service` is a type alias for `DHListingService` — two identical interface names in same package creates confusion (Architecture/Low) — `dhlisting/service.go:6`
+8. `dhlisting` nil-guard pattern is asymmetric across 7 optional dependencies — no documented valid combinations (Quality/Low) — `dhlisting/dh_listing_service.go:133-298`
+
+### Polish — Fixed (1)
+- ✓ `portfolio/service_test.go:570-581` — removed reimplemented `stringsContains`/`containsSubstring` helpers; replaced with `strings.Contains` from stdlib
+
+### Polish — Needs Review (15)
+
+**Bugs / Logic**
+1. ⚠ [HIGH] `arbitrage/service.go:82` — crack filter `GradeValue > 8` passes PSA 8.5 half-grades which trade like PSA 9 — likely should be excluded; comment says "PSA 8 slab"
+2. ⚠ [HIGH] `portfolio/service.go:371-380` — bottom performers slice inconsistent count (6-10 sales: 1-5 items; >10: always 5); 6 sales returns 5 top + 1 bottom
+3. ⚠ [HIGH] `arbitrage/expected_value.go:60-65` — `computeExpectedValue` ignores campaign-specific `ebayFeePct`; always uses `DefaultMarketplaceFeePct = 0.1235`, making EV numbers wrong for non-default-fee campaigns
+4. ⚠ [HIGH] `montecarlo.go:105-131` — simulation uses flat `avgCost` for all cards instead of sampling per-card cost; understates true ROI variance, overly optimistic risk profile
+5. ⚠ [HIGH] `dhlisting/dh_listing_service.go:193-200` — `UpdatePurchaseDHFields` failure after successful DH push is swallowed; `listed` counter not decremented, local DB diverges from DH state permanently
+6. ⚠ [HIGH] `dhlisting/dh_listing_service.go:280-290` — `UpdatePurchaseDHFields` failure in `inlineMatchAndPush` swallowed; remote DH ID exists but not persisted locally, future runs re-push creating duplicate DH entries
+7. ⚠ [HIGH] `export/service_sell_sheet.go` — entire sell-sheet implementation duplicated verbatim from `inventory/service_sell_sheet.go`; already a maintenance divergence risk
+8. ⚠ [HIGH] `dhlisting/dh_listing_service.go:111-119` — `ListPurchases` returns zero-value struct (not error) on lookup failure; callers cannot distinguish batch failure from empty result
+
+**Silent Failures**
+9. ⚠ [HIGH] `portfolio/service.go:65-74` — `GetCampaignPNL` failure silently drops campaign; empty portfolio indistinguishable from full failure
+10. ⚠ [MEDIUM] `arbitrage/service.go:143-151` — per-campaign crack analysis failure silently drops campaign from `GetCrackOpportunities`
+11. ⚠ [MEDIUM] `arbitrage/service.go:279-287` — per-campaign DB failure silently drops campaign from `GetAcquisitionTargets`
+12. ⚠ [MEDIUM] `export/service_sell_sheet.go:158,250` — `enrichSellSheetItem` `hasMarket bool` return discarded; zero-priced items silently undercount `TotalExpectedRevenue`
+13. ⚠ [MEDIUM] `dhlisting/dh_listing_service.go:246-252` — `SaveExternalID` failure swallowed; repeated failures cause repeated cert-resolver roundtrips silently
+
+**Fragility**
+14. ⚠ [MEDIUM] `portfolio/service.go:49,55` — campaigns loaded with archived included but purchases loaded with `WithExcludeArchived()` — asymmetry causes archived campaigns to always show zero channel health
+15. ⚠ [MEDIUM] `csvimport/import_parsing_metadata.go:169-182` — `anywhereSuffixes` leftmost-match strategy contradicts "ordered longest-first" registry; future pattern additions can strip more card name than intended

@@ -36,7 +36,11 @@
       "id": 4,
       "name": "domain/decomposed-siblings",
       "paths": ["internal/domain/arbitrage/", "internal/domain/portfolio/", "internal/domain/tuning/", "internal/domain/finance/", "internal/domain/export/", "internal/domain/dhlisting/", "internal/domain/csvimport/", "internal/domain/mmutil/"],
-      "status": "pending"
+      "status": "completed",
+      "improve_findings": 8,
+      "polish_fixed": 1,
+      "polish_needs_review": 15,
+      "completed_at": "2026-04-12T20:00:00.000Z"
     },
     {
       "id": 5,
