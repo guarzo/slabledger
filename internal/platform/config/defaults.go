@@ -129,9 +129,12 @@ func Default() Config {
 			SyncHour:     10, // 10 AM UTC (1 hour after PSA updates at 9am)
 		},
 		DH: DHConfig{
-			Enabled:       true,
-			CacheTTLHours: 24,
-			RateLimitRPS:  1,
+			Enabled:            true,
+			CacheTTLHours:      24,
+			RateLimitRPS:       1,
+			SocialHour:         6,
+			SocialPollInterval: 5 * time.Second,
+			SocialPollTimeout:  3 * time.Minute,
 		},
 	}
 }

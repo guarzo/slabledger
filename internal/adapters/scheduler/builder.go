@@ -70,6 +70,9 @@ type BuildDeps struct {
 	SocialPublisher   SocialPublisher
 	SocialPublishRepo SocialPublishRepo
 
+	// DH social dependencies (optional — enabled when DH enterprise is configured)
+	DHSocialRepo DHSocialRepo
+
 	// DH dependencies (optional)
 	DHClient           *dh.Client
 	DHIntelligenceRepo intelligence.Repository
@@ -270,6 +273,21 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 			deps.Logger,
 		)
 		schedulers = append(schedulers, socialPublishScheduler)
+	}
+
+	// DH social scheduler (if DH enterprise is configured)
+	if cfg.DH.SocialEnabled && deps.DHClient != nil && deps.DHClient.EnterpriseAvailable() && deps.DHSocialRepo != nil {
+		dhSocialCfg := DHSocialSchedulerConfig{
+			Hour:         cfg.DH.SocialHour,
+			PollInterval: cfg.DH.SocialPollInterval,
+			PollTimeout:  cfg.DH.SocialPollTimeout,
+		}
+		schedulers = append(schedulers, NewDHSocialScheduler(
+			deps.DHClient,
+			deps.DHSocialRepo,
+			deps.Logger,
+			dhSocialCfg,
+		))
 	}
 
 	// Metrics poll scheduler (if all dependencies are provided)

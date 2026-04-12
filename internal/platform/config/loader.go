@@ -247,6 +247,10 @@ func FromEnv(base Config) Config {
 	envDuration("DH_ORDERS_POLL_INTERVAL", &cfg.DH.OrdersPollInterval)
 	envDuration("DH_INVENTORY_POLL_INTERVAL", &cfg.DH.InventoryPollInterval)
 	envDuration("DH_PUSH_INTERVAL", &cfg.DH.PushInterval)
+	envBool("DH_SOCIAL_ENABLED", &cfg.DH.SocialEnabled, false)
+	envIntRange("DH_SOCIAL_HOUR", &cfg.DH.SocialHour, 0, 23)
+	envDurationPositive("DH_SOCIAL_POLL_INTERVAL", &cfg.DH.SocialPollInterval)
+	envDurationPositive("DH_SOCIAL_POLL_TIMEOUT", &cfg.DH.SocialPollTimeout)
 
 	// Google Sheets credentials (JSON key is base64-encoded in .env)
 	if v := os.Getenv("GOOGLE_SHEETS_CREDENTIALS_JSON"); v != "" {
