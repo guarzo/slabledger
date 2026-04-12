@@ -85,7 +85,8 @@ type handlerOutputs struct {
 
 // createHandlers constructs all HTTP handlers, wires scheduler refresh
 // callbacks, and assembles the ServerDependencies struct ready for
-// startWebServer.
+// startWebServer. Handler construction order follows the route order defined
+// in docs/API.md. When adding new handlers, update docs/API.md in the same commit.
 func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, handlerOutputs) {
 	logger := in.Logger
 
