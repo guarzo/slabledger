@@ -110,6 +110,15 @@ func runSimulation(
 		avgCost /= len(filtered)
 	}
 
+	// Collect per-card costs for sampling in simulation.
+	cardCosts := make([]int, 0, len(filtered))
+	for _, d := range filtered {
+		c := d.Purchase.BuyCostCents + d.Purchase.PSASourcingFeeCents
+		if c > 0 {
+			cardCosts = append(cardCosts, c)
+		}
+	}
+
 	// Run simulations
 	rois := make([]float64, n)
 	profits := make([]int, n)
@@ -126,7 +135,11 @@ func runSimulation(
 		cardsSold := 0
 
 		for j := 0; j < sampleSize; j++ {
+			// Use per-card cost sampled from dataset; fall back to avgCost if no costs collected.
 			cost := avgCost
+			if len(cardCosts) > 0 {
+				cost = cardCosts[rng.Intn(len(cardCosts))]
+			}
 			totalSpend += cost
 
 			// Sample sell/no-sell
