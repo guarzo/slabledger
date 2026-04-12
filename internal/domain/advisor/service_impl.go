@@ -418,9 +418,14 @@ func (s *service) toolCallingLoop(ctx context.Context, operation AIOperation, sy
 			}(i, tc)
 		}
 
-		stream(StreamEvent{Type: EventToolStart, ToolName: toolCalls[0].Name})
+		toolNames := make([]string, len(toolCalls))
+		for i, tc := range toolCalls {
+			toolNames[i] = tc.Name
+		}
+		toolSummary := strings.Join(toolNames, ",")
+		stream(StreamEvent{Type: EventToolStart, ToolName: toolSummary})
 		wg.Wait()
-		stream(StreamEvent{Type: EventToolResult, ToolName: toolCalls[0].Name})
+		stream(StreamEvent{Type: EventToolResult, ToolName: toolSummary})
 
 		for _, tr := range results {
 			messages = append(messages, Message{
