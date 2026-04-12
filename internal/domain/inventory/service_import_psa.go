@@ -105,13 +105,27 @@ func (s *service) ImportPSAExportGlobal(ctx context.Context, rows []PSAExportRow
 		switch itemResult.Status {
 		case "allocated":
 			result.Allocated++
+			if campaign == nil {
+				if s.logger != nil {
+					s.logger.Error(ctx, "allocated status with nil campaign — skipping ByCampaign update",
+						observability.String("certNumber", row.CertNumber))
+				}
+				break
+			}
 			summary := result.ByCampaign[campaign.ID]
 			summary.CampaignName = campaign.Name
 			summary.Allocated++
 			result.ByCampaign[campaign.ID] = summary
 			// Cache newly created purchase so duplicate cert rows in the same batch
 			// are handled as updates rather than allocation attempts.
-			if created, err := s.purchases.GetPurchaseByCertNumber(ctx, "PSA", row.CertNumber); err == nil && created != nil {
+			created, lookupErr := s.purchases.GetPurchaseByCertNumber(ctx, "PSA", row.CertNumber)
+			if lookupErr != nil {
+				if s.logger != nil {
+					s.logger.Warn(ctx, "post-allocation cache update failed — duplicate cert risk",
+						observability.String("certNumber", row.CertNumber),
+						observability.Err(lookupErr))
+				}
+			} else if created != nil {
 				existingMap[row.CertNumber] = created
 			}
 		case "ambiguous":
