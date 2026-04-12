@@ -194,8 +194,10 @@ func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []stri
 				DHStatus:     inventory.DHStatusListed,
 				ChannelsJSON: string(channelsJSON),
 			}); persistErr != nil {
-				s.logger.Warn(ctx, "dh listing: failed to persist listed status",
+				s.logger.Error(ctx, "dh listing: failed to persist listed status — decrementing listed count",
 					observability.String("cert", p.CertNumber), observability.Err(persistErr))
+				listed--
+				continue
 			}
 		}
 	}
