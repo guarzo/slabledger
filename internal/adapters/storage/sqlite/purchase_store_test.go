@@ -61,6 +61,101 @@ func TestPurchaseStore_PurchaseCRUD(t *testing.T) {
 	assert.Len(t, unsold, 1)
 }
 
+func TestPurchaseStore_GetPurchase_NotFound(t *testing.T) {
+	repo := setupCampaignsRepo(t)
+	ctx := context.Background()
+
+	tests := []struct {
+		name    string
+		id      string
+		wantErr error
+	}{
+		{
+			name:    "not found returns ErrPurchaseNotFound",
+			id:      "nonexistent",
+			wantErr: inventory.ErrPurchaseNotFound,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := repo.GetPurchase(ctx, tt.id)
+			require.ErrorIs(t, err, tt.wantErr)
+		})
+	}
+}
+
+func TestPurchaseStore_ListPurchasesByCampaign(t *testing.T) {
+	repo := setupCampaignsRepo(t)
+	ctx := context.Background()
+	now := time.Now().Truncate(time.Second)
+
+	require.NoError(t, repo.CreateCampaign(ctx, &inventory.Campaign{ID: "lc-camp-1", Name: "Camp 1", Phase: inventory.PhasePending, CreatedAt: now, UpdatedAt: now}))
+	require.NoError(t, repo.CreateCampaign(ctx, &inventory.Campaign{ID: "lc-camp-2", Name: "Camp 2", Phase: inventory.PhasePending, CreatedAt: now, UpdatedAt: now}))
+
+	p1 := newTestPurchase("lc-camp-1", "lc-11111111")
+	p2 := newTestPurchase("lc-camp-1", "lc-22222222")
+	pOther := newTestPurchase("lc-camp-2", "lc-33333333")
+	require.NoError(t, repo.CreatePurchase(ctx, p1))
+	require.NoError(t, repo.CreatePurchase(ctx, p2))
+	require.NoError(t, repo.CreatePurchase(ctx, pOther))
+
+	tests := []struct {
+		name       string
+		campaignID string
+		limit      int
+		offset     int
+		wantCount  int
+	}{
+		{name: "two purchases for camp-1", campaignID: "lc-camp-1", limit: 100, offset: 0, wantCount: 2},
+		{name: "one purchase for camp-2", campaignID: "lc-camp-2", limit: 100, offset: 0, wantCount: 1},
+		{name: "empty for unknown campaign", campaignID: "unknown", limit: 100, offset: 0, wantCount: 0},
+		{name: "limit 1 returns only one", campaignID: "lc-camp-1", limit: 1, offset: 0, wantCount: 1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := repo.ListPurchasesByCampaign(ctx, tt.campaignID, tt.limit, tt.offset)
+			require.NoError(t, err)
+			require.Len(t, got, tt.wantCount)
+		})
+	}
+}
+
+func TestPurchaseStore_GetPurchaseByCertNumber(t *testing.T) {
+	repo := setupCampaignsRepo(t)
+	ctx := context.Background()
+	now := time.Now().Truncate(time.Second)
+
+	require.NoError(t, repo.CreateCampaign(ctx, &inventory.Campaign{ID: "gc-camp-1", Name: "Camp 1", Phase: inventory.PhasePending, CreatedAt: now, UpdatedAt: now}))
+	p := newTestPurchase("gc-camp-1", "gc-99887766")
+	require.NoError(t, repo.CreatePurchase(ctx, p))
+
+	tests := []struct {
+		name       string
+		grader     string
+		certNumber string
+		wantErr    error
+	}{
+		{name: "existing cert returns purchase", grader: "PSA", certNumber: "gc-99887766", wantErr: nil},
+		{name: "wrong grader returns ErrPurchaseNotFound", grader: "CGC", certNumber: "gc-99887766", wantErr: inventory.ErrPurchaseNotFound},
+		{name: "missing cert returns ErrPurchaseNotFound", grader: "PSA", certNumber: "gc-00000000", wantErr: inventory.ErrPurchaseNotFound},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := repo.GetPurchaseByCertNumber(ctx, tt.grader, tt.certNumber)
+			if tt.wantErr != nil {
+				require.ErrorIs(t, err, tt.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			require.NotNil(t, got)
+			require.Equal(t, tt.certNumber, got.CertNumber)
+		})
+	}
+}
+
 func TestPurchaseStore_UpdatePurchaseCampaign(t *testing.T) {
 	repo := setupCampaignsRepo(t)
 	ctx := context.Background()
