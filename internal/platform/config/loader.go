@@ -241,6 +241,7 @@ func FromEnv(base Config) Config {
 	cfg.Adapters.ImageAIEnabled = parseBool(os.Getenv("IMAGE_AI_ENABLED"), false)
 	cfg.Adapters.DHEnterpriseKey = os.Getenv("DH_ENTERPRISE_API_KEY")
 	envString("DH_API_BASE_URL", &cfg.Adapters.DHBaseURL)
+	envDurationPositive("AZURE_AI_TIMEOUT", &cfg.Adapters.AzureAICompletionTimeout)
 	envIntPositive("DH_CACHE_TTL_HOURS", &cfg.DH.CacheTTLHours)
 	envIntPositive("DH_RATE_LIMIT_RPS", &cfg.DH.RateLimitRPS)
 	cfg.DH.Enabled = parseBool(os.Getenv("DH_ENABLED"), cfg.DH.Enabled)

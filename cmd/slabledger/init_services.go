@@ -63,7 +63,7 @@ func initializeAdvisorService(
 		Endpoint:       cfg.Adapters.AzureAIEndpoint,
 		APIKey:         cfg.Adapters.AzureAIKey,
 		DeploymentName: cfg.Adapters.AzureAIDeployment,
-	}, azureai.WithLogger(logger))
+	}, azureai.WithLogger(logger), azureai.WithCompletionTimeout(cfg.Adapters.AzureAICompletionTimeout))
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("initialize azure ai client: %w", err)
 	}
