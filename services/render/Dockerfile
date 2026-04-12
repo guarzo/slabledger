@@ -33,12 +33,18 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
+# Set Puppeteer cache dir and suppress the postinstall browser download.
+# PUPPETEER_SKIP_DOWNLOAD prevents npm ci from downloading Chrome via the
+# postinstall hook (which would use /root/.cache/puppeteer and be discarded).
+# The explicit 'browsers install chrome' below downloads into /app/.cache/puppeteer,
+# which is covered by the chown at the end so appuser can read it at runtime.
+ENV PUPPETEER_CACHE_DIR=/app/.cache/puppeteer
+ENV PUPPETEER_SKIP_DOWNLOAD=true
+
 COPY services/render/package*.json ./
 RUN npm ci --omit=dev
 
-# Install Chrome for Puppeteer into a known, writable cache directory.
-# Must run as root (before USER appuser) so the binary can be placed under /app.
-ENV PUPPETEER_CACHE_DIR=/app/.cache/puppeteer
+# Install Chrome for Puppeteer as root so the binary lands under /app.
 RUN npx puppeteer browsers install chrome
 
 COPY services/render/ ./
