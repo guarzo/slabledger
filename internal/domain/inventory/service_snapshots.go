@@ -186,24 +186,26 @@ func (s *service) RefreshPurchaseSnapshot(ctx context.Context, purchaseID string
 // ProcessPendingSnapshots fetches and persists market snapshots for purchases
 // that were imported without one (snapshot_status = "pending").
 func (s *service) ProcessPendingSnapshots(ctx context.Context, limit int) (processed, skipped, failed int) {
-	return s.processSnapshotsByStatus(ctx, SnapshotStatusPending, limit)
+	p, sk, f, _ := s.processSnapshotsByStatus(ctx, SnapshotStatusPending, limit)
+	return p, sk, f
 }
 
 // RetryFailedSnapshots retries market snapshot capture for purchases where
 // a previous attempt failed (snapshot_status = "failed").
 func (s *service) RetryFailedSnapshots(ctx context.Context, limit int) (processed, skipped, failed int) {
-	return s.processSnapshotsByStatus(ctx, SnapshotStatusFailed, limit)
+	p, sk, f, _ := s.processSnapshotsByStatus(ctx, SnapshotStatusFailed, limit)
+	return p, sk, f
 }
 
-func (s *service) processSnapshotsByStatus(ctx context.Context, status SnapshotStatus, limit int) (processed, skipped, failed int) {
-	purchases, err := s.purchases.ListSnapshotPurchasesByStatus(ctx, status, limit)
-	if err != nil {
+func (s *service) processSnapshotsByStatus(ctx context.Context, status SnapshotStatus, limit int) (processed, skipped, failed int, err error) {
+	purchases, dbErr := s.purchases.ListSnapshotPurchasesByStatus(ctx, status, limit)
+	if dbErr != nil {
 		if s.logger != nil {
 			s.logger.Error(ctx, "ListSnapshotPurchasesByStatus failed",
 				observability.String("status", string(status)),
-				observability.Err(err))
+				observability.Err(dbErr))
 		}
-		return 0, 0, 0
+		return 0, 0, 0, dbErr
 	}
 	for _, p := range purchases {
 		card := p.ToCardIdentity()
@@ -211,7 +213,7 @@ func (s *service) processSnapshotsByStatus(ctx context.Context, status SnapshotS
 		switch result {
 		case snapshotCancelled:
 			// Context was cancelled — stop processing and leave remaining purchases unchanged
-			return processed, skipped, failed
+			return processed, skipped, failed, nil
 		case snapshotSuccess:
 			if err := s.purchases.UpdatePurchaseSnapshotStatus(ctx, p.ID, SnapshotStatusNone, 0); err != nil && s.logger != nil {
 				s.logger.Warn(ctx, "failed to clear snapshot status",
@@ -249,7 +251,7 @@ func (s *service) processSnapshotsByStatus(ctx context.Context, status SnapshotS
 			failed++
 		}
 	}
-	return processed, skipped, failed
+	return processed, skipped, failed, nil
 }
 
 // needsSnapshotRecovery returns true when a purchase has valid card metadata
