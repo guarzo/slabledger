@@ -10,7 +10,7 @@ import (
 
 	"github.com/guarzo/slabledger/internal/domain/advisor"
 	"github.com/guarzo/slabledger/internal/domain/ai"
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
@@ -18,7 +18,7 @@ import (
 type AdvisorHandler struct {
 	service      advisor.Service
 	campaignsSvc interface {
-		GetCampaign(ctx context.Context, id string) (*campaigns.Campaign, error)
+		GetCampaign(ctx context.Context, id string) (*inventory.Campaign, error)
 	}
 	cacheStore advisor.CacheStore // may be nil if caching is not configured
 	logger     observability.Logger
@@ -29,7 +29,7 @@ type AdvisorHandler struct {
 func NewAdvisorHandler(
 	service advisor.Service,
 	campaignsSvc interface {
-		GetCampaign(ctx context.Context, id string) (*campaigns.Campaign, error)
+		GetCampaign(ctx context.Context, id string) (*inventory.Campaign, error)
 	},
 	cacheStore advisor.CacheStore,
 	logger observability.Logger,

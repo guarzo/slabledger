@@ -7,7 +7,7 @@ import (
 	"net/http"
 
 	"github.com/guarzo/slabledger/internal/adapters/scheduler"
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
@@ -17,14 +17,14 @@ type PSASyncRefresher interface {
 	GetLastRunStats() *scheduler.PSASyncRunStats
 }
 
-// PSASyncPurchaseCreator creates purchases (subset of campaigns.Service).
+// PSASyncPurchaseCreator creates purchases (subset of inventory.Service).
 type PSASyncPurchaseCreator interface {
-	CreatePurchase(ctx context.Context, p *campaigns.Purchase) error
+	CreatePurchase(ctx context.Context, p *inventory.Purchase) error
 }
 
 // PSASyncHandlerConfig holds dependencies for the PSA sync handler.
 type PSASyncHandlerConfig struct {
-	PendingRepo   campaigns.PendingItemRepository
+	PendingRepo   inventory.PendingItemRepository
 	Refresher     PSASyncRefresher       // optional
 	Service       PSASyncPurchaseCreator // optional
 	SpreadsheetID string
@@ -34,7 +34,7 @@ type PSASyncHandlerConfig struct {
 
 // PSASyncHandler serves PSA sync status and pending-item CRUD endpoints.
 type PSASyncHandler struct {
-	pendingRepo   campaigns.PendingItemRepository
+	pendingRepo   inventory.PendingItemRepository
 	refresher     PSASyncRefresher
 	service       PSASyncPurchaseCreator
 	spreadsheetID string
@@ -107,14 +107,14 @@ func (h *PSASyncHandler) HandleRefresh(w http.ResponseWriter, r *http.Request) {
 func (h *PSASyncHandler) HandleListPendingItems(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	items, ok := serviceCall(w, ctx, h.logger, "failed to list pending items", func() ([]campaigns.PendingItem, error) {
+	items, ok := serviceCall(w, ctx, h.logger, "failed to list pending items", func() ([]inventory.PendingItem, error) {
 		return h.pendingRepo.ListPendingItems(ctx)
 	})
 	if !ok {
 		return
 	}
 	if items == nil {
-		items = []campaigns.PendingItem{}
+		items = []inventory.PendingItem{}
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"items": items})
@@ -145,7 +145,7 @@ func (h *PSASyncHandler) HandleAssignPendingItem(w http.ResponseWriter, r *http.
 	// Find the pending item by ID.
 	item, err := h.pendingRepo.GetPendingItemByID(ctx, id)
 	if err != nil {
-		if campaigns.IsPendingItemNotFound(err) {
+		if inventory.IsPendingItemNotFound(err) {
 			writeError(w, http.StatusNotFound, "pending item not found")
 			return
 		}
@@ -154,7 +154,7 @@ func (h *PSASyncHandler) HandleAssignPendingItem(w http.ResponseWriter, r *http.
 		return
 	}
 
-	purchase := &campaigns.Purchase{
+	purchase := &inventory.Purchase{
 		CampaignID:   body.CampaignID,
 		CertNumber:   item.CertNumber,
 		CardName:     item.CardName,
@@ -171,7 +171,7 @@ func (h *PSASyncHandler) HandleAssignPendingItem(w http.ResponseWriter, r *http.
 		return
 	}
 	if err := h.service.CreatePurchase(ctx, purchase); err != nil {
-		if campaigns.IsDuplicateCertNumber(err) {
+		if inventory.IsDuplicateCertNumber(err) {
 			writeError(w, http.StatusConflict, fmt.Sprintf("cert %s already exists", item.CertNumber))
 			return
 		}
@@ -209,7 +209,7 @@ func (h *PSASyncHandler) HandleDismissPendingItem(w http.ResponseWriter, r *http
 	}
 
 	if err := h.pendingRepo.DismissPendingItem(ctx, id); err != nil {
-		if campaigns.IsPendingItemNotFound(err) {
+		if inventory.IsPendingItemNotFound(err) {
 			writeError(w, http.StatusNotFound, "pending item not found")
 			return
 		}

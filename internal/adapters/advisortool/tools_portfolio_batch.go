@@ -97,13 +97,13 @@ func (e *CampaignToolExecutor) registerSuggestPriceBatch() {
 func (e *CampaignToolExecutor) registerGetExpectedValuesBatch() {
 	e.register(ai.ToolDefinition{
 		Name:        "get_expected_values_batch",
-		Description: "Get expected values for multiple campaigns in one call. Returns a map of campaignId to EV data. Omit campaignIds to get all active campaigns.",
+		Description: "Get expected values for multiple campaigns in one call. Returns a map of campaignId to EV data. Omit campaignIds to get all active inventory.",
 		Parameters: jsonSchema{
 			Type: "object",
 			Properties: map[string]jsonSchema{
 				"campaignIds": {
 					Type:        "array",
-					Description: "Campaign IDs to fetch EVs for. Omit for all active campaigns.",
+					Description: "Campaign IDs to fetch EVs for. Omit for all active inventory.",
 					Items:       &jsonSchema{Type: "string"},
 				},
 			},
@@ -130,6 +130,10 @@ func (e *CampaignToolExecutor) registerGetExpectedValuesBatch() {
 			return `{}`, nil
 		}
 
+		if e.arbSvc == nil {
+			return "", fmt.Errorf("arbitrage service not available")
+		}
+
 		type evResult struct {
 			id   string
 			data json.RawMessage
@@ -145,7 +149,7 @@ func (e *CampaignToolExecutor) registerGetExpectedValuesBatch() {
 				defer wg.Done()
 				sem <- struct{}{}
 				defer func() { <-sem }()
-				ev, err := e.svc.GetExpectedValues(ctx, campaignID)
+				ev, err := e.arbSvc.GetExpectedValues(ctx, campaignID)
 				if err != nil {
 					errJSON, _ := json.Marshal(struct { //nolint:errcheck
 						Error string `json:"error"`

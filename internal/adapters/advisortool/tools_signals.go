@@ -6,7 +6,7 @@ import (
 	"math"
 
 	"github.com/guarzo/slabledger/internal/domain/ai"
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 )
 
 func (e *CampaignToolExecutor) registerGetFlaggedInventory() {
@@ -25,12 +25,12 @@ func (e *CampaignToolExecutor) registerGetFlaggedInventory() {
 
 // agingItemWithDigest wraps AgingItem with a compact compDigest for advisor token efficiency.
 type agingItemWithDigest struct {
-	campaigns.AgingItem
+	inventory.AgingItem
 	CompDigest string `json:"compDigest,omitempty"`
 }
 
 // withCompDigests wraps items, replacing the full CompSummary with a compact one-line digest.
-func withCompDigests(items []campaigns.AgingItem) []agingItemWithDigest {
+func withCompDigests(items []inventory.AgingItem) []agingItemWithDigest {
 	out := make([]agingItemWithDigest, len(items))
 	for i := range items {
 		digest := compDigest(items[i].CompSummary)
@@ -42,7 +42,7 @@ func withCompDigests(items []campaigns.AgingItem) []agingItemWithDigest {
 }
 
 // compDigest formats a CompSummary into a compact one-line string for the advisor.
-func compDigest(cs *campaigns.CompSummary) string {
+func compDigest(cs *inventory.CompSummary) string {
 	if cs == nil || cs.RecentComps == 0 {
 		return ""
 	}

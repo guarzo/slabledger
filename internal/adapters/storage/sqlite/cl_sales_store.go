@@ -9,7 +9,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 )
 
 // CLSaleCompRecord represents a stored sales comp.
@@ -134,7 +134,7 @@ func conditionFilter(gemRateID, condition string) (clause string, args []any) {
 // grade-specific (e.g., PSA 10 only, not mixed with PSA 9).
 // CompsAboveCL and CompsAboveCost are left at 0 — the caller derives them per-purchase
 // from PriceCentsList since different purchases may have different CL values and costs.
-func (s *CLSalesStore) GetCompSummary(ctx context.Context, gemRateID, certNumber string) (*campaigns.CompSummary, error) {
+func (s *CLSalesStore) GetCompSummary(ctx context.Context, gemRateID, certNumber string) (*inventory.CompSummary, error) {
 	condition, err := s.lookupCondition(ctx, certNumber)
 	if err != nil {
 		return nil, fmt.Errorf("lookup condition for cert %s: %w", certNumber, err)
@@ -187,7 +187,7 @@ func (s *CLSalesStore) GetCompSummary(ctx context.Context, gemRateID, certNumber
 		return nil, err
 	}
 
-	return &campaigns.CompSummary{
+	return &inventory.CompSummary{
 		GemRateID:      gemRateID,
 		TotalComps:     totalComps,
 		RecentComps:    recentComps,
@@ -233,7 +233,7 @@ func (s *CLSalesStore) fetchRecentPricesAndDates(ctx context.Context, gemRateID,
 }
 
 // fetchPlatformBreakdown returns per-platform comp stats for recent comps.
-func (s *CLSalesStore) fetchPlatformBreakdown(ctx context.Context, gemRateID, condition, cutoff string) (_ []campaigns.PlatformBreakdown, err error) {
+func (s *CLSalesStore) fetchPlatformBreakdown(ctx context.Context, gemRateID, condition, cutoff string) (_ []inventory.PlatformBreakdown, err error) {
 	condClause, condArgs := conditionFilter(gemRateID, condition)
 	args := append([]any{cutoff}, condArgs...)
 	rows, err := s.db.QueryContext(ctx,
@@ -268,11 +268,11 @@ func (s *CLSalesStore) fetchPlatformBreakdown(ctx context.Context, gemRateID, co
 		return nil, err
 	}
 
-	var result []campaigns.PlatformBreakdown
+	var result []inventory.PlatformBreakdown
 	for _, plat := range platOrder {
 		prices := platPrices[plat]
 		sort.Ints(prices)
-		result = append(result, campaigns.PlatformBreakdown{
+		result = append(result, inventory.PlatformBreakdown{
 			Platform:    plat,
 			SaleCount:   len(prices),
 			MedianCents: medianInt(prices),
@@ -320,4 +320,4 @@ func computeTrend(prices []int, dates []string, midCutoff string) float64 {
 }
 
 // Compile-time check: CLSalesStore implements CompSummaryProvider.
-var _ campaigns.CompSummaryProvider = (*CLSalesStore)(nil)
+var _ inventory.CompSummaryProvider = (*CLSalesStore)(nil)

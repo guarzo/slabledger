@@ -6,8 +6,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/guarzo/slabledger/internal/adapters/advisortool"
 	"github.com/guarzo/slabledger/internal/adapters/clients/azureai"
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
@@ -15,14 +13,12 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/clients/dhprice"
 	igclient "github.com/guarzo/slabledger/internal/adapters/clients/instagram"
 	"github.com/guarzo/slabledger/internal/adapters/clients/marketmovers"
-	"github.com/guarzo/slabledger/internal/adapters/clients/pricelookup"
-	"github.com/guarzo/slabledger/internal/adapters/clients/psa"
 	"github.com/guarzo/slabledger/internal/adapters/scheduler"
 	scoringadapter "github.com/guarzo/slabledger/internal/adapters/scoring"
 	"github.com/guarzo/slabledger/internal/adapters/storage/mediafs"
 	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
 	"github.com/guarzo/slabledger/internal/domain/advisor"
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/domain/pricing"
 	"github.com/guarzo/slabledger/internal/domain/social"
@@ -46,72 +42,6 @@ func initializePriceProviders(
 	return provider, nil
 }
 
-// initializeCampaignsService creates the campaigns service with all options
-// wired, including price lookup and PSA cert lookup.
-func initializeCampaignsService(
-	ctx context.Context,
-	cfg *config.Config,
-	logger observability.Logger,
-	db *sqlite.DB,
-	priceProvImpl pricing.PriceProvider,
-	intelRepo *sqlite.MarketIntelligenceRepository,
-	mmStore *sqlite.MarketMoversStore,
-) (campaigns.Service, *sqlite.CampaignsRepository, *sqlite.CardRequestRepository) {
-	campaignsRepo := sqlite.NewCampaignsRepository(db.DB)
-	priceLookupAdapter := pricelookup.NewAdapter(priceProvImpl)
-	campaignOpts := []campaigns.ServiceOption{
-		campaigns.WithPriceLookup(priceLookupAdapter),
-		campaigns.WithIDGenerator(uuid.NewString),
-		campaigns.WithMaxSnapshotRetries(cfg.SnapshotEnrich.MaxRetries),
-	}
-
-	if cfg.Adapters.PSAToken != "" {
-		psaClient := psa.NewClient(cfg.Adapters.PSAToken, logger)
-		certAdapter := psa.NewCertAdapter(psaClient)
-		campaignOpts = append(campaignOpts, campaigns.WithCertLookup(certAdapter))
-		logger.Info(ctx, "PSA cert lookup enabled")
-	}
-
-	// Card request repository (tracks certs without linked cards)
-	cardRequestRepo := sqlite.NewCardRequestRepository(db.DB)
-
-	// History recorders — track CL values and population changes during CSV imports.
-	campaignOpts = append(campaignOpts,
-		campaigns.WithCLValueRecorder(campaignsRepo),
-		campaigns.WithPopulationRecorder(campaignsRepo),
-	)
-
-	if intelRepo != nil {
-		campaignOpts = append(campaignOpts, campaigns.WithIntelligenceRepo(intelRepo))
-	}
-
-	// Card Ladder comp analytics — CLSalesStore only needs *sql.DB (always available).
-	clSalesStore := sqlite.NewCLSalesStore(db.DB)
-	campaignOpts = append(campaignOpts, campaigns.WithCompSummaryProvider(clSalesStore))
-
-	// Market Movers search title enrichment for CSV export (optional).
-	if mmStore != nil {
-		mmAdapter := campaigns.MMMappingFunc(func(ctx context.Context) (map[string]string, error) {
-			mappings, err := mmStore.ListMappings(ctx)
-			if err != nil {
-				return nil, err
-			}
-			result := make(map[string]string, len(mappings))
-			for _, m := range mappings {
-				if m.SearchTitle != "" {
-					result[m.SlabSerial] = m.SearchTitle
-				}
-			}
-			return result, nil
-		})
-		campaignOpts = append(campaignOpts, campaigns.WithMMMappings(mmAdapter))
-	}
-
-	campaignsService := campaigns.NewService(campaignsRepo, campaignOpts...)
-
-	return campaignsService, campaignsRepo, cardRequestRepo
-}
-
 // initializeAdvisorService creates the Azure AI client and advisor service.
 // All return values may be nil/zero if Azure AI is not configured. This is not
 // an error.
@@ -121,7 +51,8 @@ func initializeAdvisorService(
 	logger observability.Logger,
 	db *sqlite.DB,
 	aiCallRepo *sqlite.AICallRepository,
-	campaignsService campaigns.Service,
+	campaignsService inventory.Service,
+	scoringOpts []scoringadapter.ProviderOption,
 	toolOpts ...advisortool.ExecutorOption,
 ) (llmProvider advisor.LLMProvider, advisorSvc advisor.Service, advisorCacheRepo *sqlite.AdvisorCacheRepository, err error) {
 	if cfg.Adapters.AzureAIEndpoint == "" || cfg.Adapters.AzureAIKey == "" {
@@ -150,7 +81,7 @@ func initializeAdvisorService(
 	}
 
 	// Scoring engine: pre-compute factor scores for advisor flows
-	scoringProvider := scoringadapter.NewProvider(campaignsService)
+	scoringProvider := scoringadapter.NewProvider(campaignsService, scoringOpts...)
 	advisorOpts = append(advisorOpts, advisor.WithScoringDataProvider(scoringProvider))
 
 	// Data gap tracking for scoring quality reports

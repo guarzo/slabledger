@@ -13,7 +13,7 @@ import (
 )
 
 func TestAddCardToCollection_UpdatesCLSyncedAt(t *testing.T) {
-	mockRepo := &mocks.MockCampaignRepository{}
+	mockRepo := &mocks.PurchaseRepositoryMock{}
 	var syncedPurchaseID, syncedAt string
 	mockRepo.UpdatePurchaseCLSyncedAtFn = func(_ context.Context, purchaseID, ts string) error {
 		syncedPurchaseID = purchaseID
@@ -38,7 +38,7 @@ func TestAddCardToCollection_UpdatesCLSyncedAt(t *testing.T) {
 func TestHandleSyncToCardLadder_NilClient_Returns503(t *testing.T) {
 	h := &CardLadderHandler{
 		logger:         mocks.NewMockLogger(),
-		purchaseLister: &mocks.MockCampaignRepository{},
+		purchaseLister: &mocks.PurchaseRepositoryMock{},
 	}
 	// h.client is nil — should return 503
 

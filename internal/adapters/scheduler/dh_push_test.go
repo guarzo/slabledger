@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -18,10 +18,10 @@ import (
 // ---------------------------------------------------------------------------
 
 type mockDHPushPendingLister struct {
-	ListFn func(ctx context.Context, status string, limit int) ([]campaigns.Purchase, error)
+	ListFn func(ctx context.Context, status string, limit int) ([]inventory.Purchase, error)
 }
 
-func (m *mockDHPushPendingLister) GetPurchasesByDHPushStatus(ctx context.Context, status string, limit int) ([]campaigns.Purchase, error) {
+func (m *mockDHPushPendingLister) GetPurchasesByDHPushStatus(ctx context.Context, status string, limit int) ([]inventory.Purchase, error) {
 	if m.ListFn != nil {
 		return m.ListFn(ctx, status, limit)
 	}
@@ -139,8 +139,8 @@ func TestDHPush_Disabled(t *testing.T) {
 
 func TestDHPush_EmptyBatch(t *testing.T) {
 	lister := &mockDHPushPendingLister{
-		ListFn: func(_ context.Context, _ string, _ int) ([]campaigns.Purchase, error) {
-			return []campaigns.Purchase{}, nil
+		ListFn: func(_ context.Context, _ string, _ int) ([]inventory.Purchase, error) {
+			return []inventory.Purchase{}, nil
 		},
 	}
 	statusUpdater := &mockDHPushStatusUpdater{}
@@ -158,7 +158,7 @@ func TestDHPush_EmptyBatch(t *testing.T) {
 
 func TestDHPush_ListerError(t *testing.T) {
 	lister := &mockDHPushPendingLister{
-		ListFn: func(_ context.Context, _ string, _ int) ([]campaigns.Purchase, error) {
+		ListFn: func(_ context.Context, _ string, _ int) ([]inventory.Purchase, error) {
 			return nil, fmt.Errorf("database unavailable")
 		},
 	}
@@ -177,14 +177,14 @@ func TestDHPush_ListerError(t *testing.T) {
 }
 
 func TestDHPush_NoCertNumber_MarksUnmatched(t *testing.T) {
-	purchase := campaigns.Purchase{
+	purchase := inventory.Purchase{
 		ID:         "pur-1",
 		CertNumber: "", // no cert
 		CardName:   "Charizard",
 	}
 	lister := &mockDHPushPendingLister{
-		ListFn: func(_ context.Context, _ string, _ int) ([]campaigns.Purchase, error) {
-			return []campaigns.Purchase{purchase}, nil
+		ListFn: func(_ context.Context, _ string, _ int) ([]inventory.Purchase, error) {
+			return []inventory.Purchase{purchase}, nil
 		},
 	}
 	statusUpdater := &mockDHPushStatusUpdater{}
@@ -198,12 +198,12 @@ func TestDHPush_NoCertNumber_MarksUnmatched(t *testing.T) {
 
 	require.Len(t, statusUpdater.Calls, 1)
 	assert.Equal(t, "pur-1", statusUpdater.Calls[0].ID)
-	assert.Equal(t, campaigns.DHPushStatusUnmatched, statusUpdater.Calls[0].Status)
+	assert.Equal(t, inventory.DHPushStatusUnmatched, statusUpdater.Calls[0].Status)
 	assert.Empty(t, fieldsUpdater.Calls)
 }
 
 func TestDHPush_NoCLValue_LeavesAsPending(t *testing.T) {
-	purchase := campaigns.Purchase{
+	purchase := inventory.Purchase{
 		ID:           "pur-nocl",
 		CertNumber:   "12345678",
 		CardName:     "Pikachu",
@@ -211,8 +211,8 @@ func TestDHPush_NoCLValue_LeavesAsPending(t *testing.T) {
 		CLValueCents: 0, // no CL value yet
 	}
 	lister := &mockDHPushPendingLister{
-		ListFn: func(_ context.Context, _ string, _ int) ([]campaigns.Purchase, error) {
-			return []campaigns.Purchase{purchase}, nil
+		ListFn: func(_ context.Context, _ string, _ int) ([]inventory.Purchase, error) {
+			return []inventory.Purchase{purchase}, nil
 		},
 	}
 	resolverCalled := false
@@ -236,7 +236,7 @@ func TestDHPush_NoCLValue_LeavesAsPending(t *testing.T) {
 }
 
 func TestDHPush_CertResolveError_LeavesAsPending(t *testing.T) {
-	purchase := campaigns.Purchase{
+	purchase := inventory.Purchase{
 		ID:           "pur-2",
 		CertNumber:   "12345678",
 		CardName:     "Pikachu",
@@ -244,8 +244,8 @@ func TestDHPush_CertResolveError_LeavesAsPending(t *testing.T) {
 		CLValueCents: 5000,
 	}
 	lister := &mockDHPushPendingLister{
-		ListFn: func(_ context.Context, _ string, _ int) ([]campaigns.Purchase, error) {
-			return []campaigns.Purchase{purchase}, nil
+		ListFn: func(_ context.Context, _ string, _ int) ([]inventory.Purchase, error) {
+			return []inventory.Purchase{purchase}, nil
 		},
 	}
 	certResolver := &mockDHPushCertResolver{
@@ -267,7 +267,7 @@ func TestDHPush_CertResolveError_LeavesAsPending(t *testing.T) {
 }
 
 func TestDHPush_CertNotMatched_MarksUnmatched(t *testing.T) {
-	purchase := campaigns.Purchase{
+	purchase := inventory.Purchase{
 		ID:           "pur-3",
 		CertNumber:   "99999999",
 		CardName:     "Machamp",
@@ -275,8 +275,8 @@ func TestDHPush_CertNotMatched_MarksUnmatched(t *testing.T) {
 		CLValueCents: 5000,
 	}
 	lister := &mockDHPushPendingLister{
-		ListFn: func(_ context.Context, _ string, _ int) ([]campaigns.Purchase, error) {
-			return []campaigns.Purchase{purchase}, nil
+		ListFn: func(_ context.Context, _ string, _ int) ([]inventory.Purchase, error) {
+			return []inventory.Purchase{purchase}, nil
 		},
 	}
 	certResolver := &mockDHPushCertResolver{
@@ -294,19 +294,19 @@ func TestDHPush_CertNotMatched_MarksUnmatched(t *testing.T) {
 
 	require.Len(t, statusUpdater.Calls, 1)
 	assert.Equal(t, "pur-3", statusUpdater.Calls[0].ID)
-	assert.Equal(t, campaigns.DHPushStatusUnmatched, statusUpdater.Calls[0].Status)
+	assert.Equal(t, inventory.DHPushStatusUnmatched, statusUpdater.Calls[0].Status)
 }
 
 func TestDHPush_InventoryPushError_LeavesAsPending(t *testing.T) {
-	purchase := campaigns.Purchase{
+	purchase := inventory.Purchase{
 		ID:           "pur-4",
 		CertNumber:   "11111111",
 		CardName:     "Blastoise",
 		CLValueCents: 5000,
 	}
 	lister := &mockDHPushPendingLister{
-		ListFn: func(_ context.Context, _ string, _ int) ([]campaigns.Purchase, error) {
-			return []campaigns.Purchase{purchase}, nil
+		ListFn: func(_ context.Context, _ string, _ int) ([]inventory.Purchase, error) {
+			return []inventory.Purchase{purchase}, nil
 		},
 	}
 	certResolver := &mockDHPushCertResolver{
@@ -332,7 +332,7 @@ func TestDHPush_InventoryPushError_LeavesAsPending(t *testing.T) {
 }
 
 func TestDHPush_SuccessPath_UpdatesFields(t *testing.T) {
-	purchase := campaigns.Purchase{
+	purchase := inventory.Purchase{
 		ID:           "pur-5",
 		CertNumber:   "22222222",
 		CardName:     "Umbreon ex",
@@ -343,8 +343,8 @@ func TestDHPush_SuccessPath_UpdatesFields(t *testing.T) {
 		CLValueCents: 8000,
 	}
 	lister := &mockDHPushPendingLister{
-		ListFn: func(_ context.Context, _ string, _ int) ([]campaigns.Purchase, error) {
-			return []campaigns.Purchase{purchase}, nil
+		ListFn: func(_ context.Context, _ string, _ int) ([]inventory.Purchase, error) {
+			return []inventory.Purchase{purchase}, nil
 		},
 	}
 	certResolver := &mockDHPushCertResolver{
@@ -384,11 +384,11 @@ func TestDHPush_SuccessPath_UpdatesFields(t *testing.T) {
 
 	require.Len(t, statusUpdater.Calls, 1)
 	assert.Equal(t, "pur-5", statusUpdater.Calls[0].ID)
-	assert.Equal(t, campaigns.DHPushStatusMatched, statusUpdater.Calls[0].Status)
+	assert.Equal(t, inventory.DHPushStatusMatched, statusUpdater.Calls[0].Status)
 }
 
 func TestDHPush_AlreadyMapped_SkipsCertResolve(t *testing.T) {
-	purchase := campaigns.Purchase{
+	purchase := inventory.Purchase{
 		ID:           "pur-6",
 		CertNumber:   "33333333",
 		CardName:     "Charizard",
@@ -397,8 +397,8 @@ func TestDHPush_AlreadyMapped_SkipsCertResolve(t *testing.T) {
 		CLValueCents: 5000,
 	}
 	lister := &mockDHPushPendingLister{
-		ListFn: func(_ context.Context, _ string, _ int) ([]campaigns.Purchase, error) {
-			return []campaigns.Purchase{purchase}, nil
+		ListFn: func(_ context.Context, _ string, _ int) ([]inventory.Purchase, error) {
+			return []inventory.Purchase{purchase}, nil
 		},
 	}
 	resolverCalled := false
@@ -411,7 +411,7 @@ func TestDHPush_AlreadyMapped_SkipsCertResolve(t *testing.T) {
 	pusher := &mockDHPushInventoryPusher{}
 	statusUpdater := &mockDHPushStatusUpdater{}
 	fieldsUpdater := &mocks.MockDHFieldsUpdater{}
-	key := campaigns.DHCardKey(purchase.CardName, purchase.SetName, purchase.CardNumber)
+	key := inventory.DHCardKey(purchase.CardName, purchase.SetName, purchase.CardNumber)
 	cardIDSaver := &mockDHPushCardIDSaver{
 		GetMappedFn: func(_ context.Context, _ string) (map[string]string, error) {
 			// Pre-populate cache so cert resolve is skipped
@@ -426,15 +426,15 @@ func TestDHPush_AlreadyMapped_SkipsCertResolve(t *testing.T) {
 }
 
 func TestDHPush_InventoryPushEmptyResults_LeavesAsPending(t *testing.T) {
-	purchase := campaigns.Purchase{
+	purchase := inventory.Purchase{
 		ID:           "pur-7",
 		CertNumber:   "44444444",
 		CardName:     "Venusaur",
 		CLValueCents: 5000,
 	}
 	lister := &mockDHPushPendingLister{
-		ListFn: func(_ context.Context, _ string, _ int) ([]campaigns.Purchase, error) {
-			return []campaigns.Purchase{purchase}, nil
+		ListFn: func(_ context.Context, _ string, _ int) ([]inventory.Purchase, error) {
+			return []inventory.Purchase{purchase}, nil
 		},
 	}
 	certResolver := &mockDHPushCertResolver{
@@ -460,15 +460,15 @@ func TestDHPush_InventoryPushEmptyResults_LeavesAsPending(t *testing.T) {
 }
 
 func TestDHPush_InventoryPushFailedStatus_LeavesAsPending(t *testing.T) {
-	purchase := campaigns.Purchase{
+	purchase := inventory.Purchase{
 		ID:           "pur-8",
 		CertNumber:   "55555555",
 		CardName:     "Gyarados",
 		CLValueCents: 5000,
 	}
 	lister := &mockDHPushPendingLister{
-		ListFn: func(_ context.Context, _ string, _ int) ([]campaigns.Purchase, error) {
-			return []campaigns.Purchase{purchase}, nil
+		ListFn: func(_ context.Context, _ string, _ int) ([]inventory.Purchase, error) {
+			return []inventory.Purchase{purchase}, nil
 		},
 	}
 	certResolver := &mockDHPushCertResolver{
@@ -497,13 +497,13 @@ func TestDHPush_InventoryPushFailedStatus_LeavesAsPending(t *testing.T) {
 }
 
 func TestDHPush_MultiplePurchases_AllProcessed(t *testing.T) {
-	purchases := []campaigns.Purchase{
+	purchases := []inventory.Purchase{
 		{ID: "pur-a", CertNumber: "11111111", CardName: "Pikachu", CLValueCents: 5000},
 		{ID: "pur-b", CertNumber: "22222222", CardName: "Raichu", CLValueCents: 5000},
 		{ID: "pur-c", CertNumber: "", CardName: "Gengar", CLValueCents: 5000}, // no cert → unmatched
 	}
 	lister := &mockDHPushPendingLister{
-		ListFn: func(_ context.Context, _ string, _ int) ([]campaigns.Purchase, error) {
+		ListFn: func(_ context.Context, _ string, _ int) ([]inventory.Purchase, error) {
 			return purchases, nil
 		},
 	}
@@ -536,9 +536,9 @@ func TestDHPush_MultiplePurchases_AllProcessed(t *testing.T) {
 	var matchedCalls []string
 	for _, c := range statusUpdater.Calls {
 		switch c.Status {
-		case campaigns.DHPushStatusUnmatched:
+		case inventory.DHPushStatusUnmatched:
 			unmatchedCalls = append(unmatchedCalls, c.ID)
-		case campaigns.DHPushStatusMatched:
+		case inventory.DHPushStatusMatched:
 			matchedCalls = append(matchedCalls, c.ID)
 		}
 	}

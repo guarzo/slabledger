@@ -10,10 +10,13 @@ import (
 
 	"github.com/guarzo/slabledger/internal/adapters/httpserver/handlers"
 	"github.com/guarzo/slabledger/internal/adapters/httpserver/middleware"
+	"github.com/guarzo/slabledger/internal/domain/arbitrage"
 	"github.com/guarzo/slabledger/internal/domain/auth"
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
 	"github.com/guarzo/slabledger/internal/domain/favorites"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
+	"github.com/guarzo/slabledger/internal/domain/portfolio"
+	"github.com/guarzo/slabledger/internal/domain/tuning"
 )
 
 // Router configures all HTTP routes and returns the configured handler
@@ -62,7 +65,10 @@ type RouterConfig struct {
 	AuthService               auth.Service
 	FavoritesService          favorites.Service
 	CampaignsHandler          *handlers.CampaignsHandler
-	CampaignsService          campaigns.Service
+	CampaignsService          inventory.Service
+	ArbitrageService          arbitrage.Service
+	PortfolioService          portfolio.Service
+	TuningService             tuning.Service
 	PriceHintsHandler         *handlers.PriceHintsHandler
 	CardRequestHandler        *handlers.CardRequestHandlers
 	PricingDiagnosticsHandler *handlers.PricingDiagnosticsHandler
@@ -103,7 +109,14 @@ func NewRouter(cfg RouterConfig) *Router {
 	if cfg.CampaignsHandler != nil {
 		rt.campaignsHandler = cfg.CampaignsHandler
 	} else if cfg.CampaignsService != nil {
-		rt.campaignsHandler = handlers.NewCampaignsHandler(cfg.CampaignsService, cfg.Logger, nil)
+		rt.campaignsHandler = handlers.NewCampaignsHandler(
+			cfg.CampaignsService,
+			cfg.ArbitrageService,
+			cfg.PortfolioService,
+			cfg.TuningService,
+			cfg.Logger,
+			nil,
+		)
 	}
 
 	if cfg.PriceHintsHandler != nil {

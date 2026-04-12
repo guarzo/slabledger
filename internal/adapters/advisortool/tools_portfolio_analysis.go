@@ -6,19 +6,29 @@ import (
 	"fmt"
 
 	"github.com/guarzo/slabledger/internal/domain/ai"
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 )
 
 func (e *CampaignToolExecutor) registerGetExpectedValues() {
 	e.registerCampaignTool("get_expected_values",
 		"Get expected value per unsold card in a campaign: EV in cents, EV per dollar invested, sell probability, confidence level.",
-		func(ctx context.Context, id string) (any, error) { return e.svc.GetExpectedValues(ctx, id) })
+		func(ctx context.Context, id string) (any, error) {
+			if e.arbSvc == nil {
+				return nil, fmt.Errorf("arbitrage service not available")
+			}
+			return e.arbSvc.GetExpectedValues(ctx, id)
+		})
 }
 
 func (e *CampaignToolExecutor) registerGetDeslabCandidates() {
 	e.registerCampaignTool("get_deslab_candidates",
 		"Get deslab arbitrage analysis: cards where removing from PSA slab and selling raw may be more profitable than selling graded. Shows graded vs deslab net, advantage, and ROI comparison.",
-		func(ctx context.Context, id string) (any, error) { return e.svc.GetCrackCandidates(ctx, id) })
+		func(ctx context.Context, id string) (any, error) {
+			if e.arbSvc == nil {
+				return nil, fmt.Errorf("arbitrage service not available")
+			}
+			return e.arbSvc.GetCrackCandidates(ctx, id)
+		})
 }
 
 func (e *CampaignToolExecutor) registerGetCampaignSuggestions() {
@@ -27,7 +37,10 @@ func (e *CampaignToolExecutor) registerGetCampaignSuggestions() {
 		Description: "Get data-driven suggestions for new campaigns and adjustments to existing ones, with expected ROI, margin, and confidence.",
 		Parameters:  emptyObjectParams,
 	}, func(ctx context.Context, _ string) (string, error) {
-		result, err := e.svc.GetCampaignSuggestions(ctx)
+		if e.portSvc == nil {
+			return "", fmt.Errorf("portfolio service not available")
+		}
+		result, err := e.portSvc.GetCampaignSuggestions(ctx)
 		if err != nil {
 			return "", err
 		}
@@ -38,16 +51,24 @@ func (e *CampaignToolExecutor) registerGetCampaignSuggestions() {
 func (e *CampaignToolExecutor) registerRunProjection() {
 	e.registerCampaignTool("run_projection",
 		"Run Monte Carlo simulation (1000 iterations) comparing current campaign parameters vs alternatives. Returns P10/P50/P90 distributions for ROI and profit.",
-		func(ctx context.Context, id string) (any, error) { return e.svc.RunProjection(ctx, id) })
+		func(ctx context.Context, id string) (any, error) {
+			if e.arbSvc == nil {
+				return nil, fmt.Errorf("arbitrage service not available")
+			}
+			return e.arbSvc.RunProjection(ctx, id)
+		})
 }
 
 func (e *CampaignToolExecutor) registerGetChannelVelocity() {
 	e.register(ai.ToolDefinition{
 		Name:        "get_channel_velocity",
-		Description: "Get average days to sell and sale count by channel across all campaigns.",
+		Description: "Get average days to sell and sale count by channel across all inventory.",
 		Parameters:  emptyObjectParams,
 	}, func(ctx context.Context, _ string) (string, error) {
-		result, err := e.svc.GetPortfolioChannelVelocity(ctx)
+		if e.portSvc == nil {
+			return "", fmt.Errorf("portfolio service not available")
+		}
+		result, err := e.portSvc.GetPortfolioChannelVelocity(ctx)
 		if err != nil {
 			return "", err
 		}
@@ -81,8 +102,8 @@ func (e *CampaignToolExecutor) registerGetCertLookup() {
 			return "", err
 		}
 		result := struct {
-			CertInfo *campaigns.CertInfo       `json:"certInfo"`
-			Market   *campaigns.MarketSnapshot `json:"market,omitempty"`
+			CertInfo *inventory.CertInfo       `json:"certInfo"`
+			Market   *inventory.MarketSnapshot `json:"market,omitempty"`
 		}{
 			CertInfo: certInfo,
 			Market:   snapshot,
@@ -127,7 +148,10 @@ func (e *CampaignToolExecutor) registerEvaluatePurchase() {
 		if p.BuyCostCents < 0 {
 			return "", fmt.Errorf("buyCostCents must be non-negative")
 		}
-		result, err := e.svc.EvaluatePurchase(ctx, p.CampaignID, p.CardName, p.Grade, p.BuyCostCents)
+		if e.arbSvc == nil {
+			return "", fmt.Errorf("arbitrage service not available")
+		}
+		result, err := e.arbSvc.EvaluatePurchase(ctx, p.CampaignID, p.CardName, p.Grade, p.BuyCostCents)
 		if err != nil {
 			return "", err
 		}
@@ -174,7 +198,10 @@ func (e *CampaignToolExecutor) registerGetAcquisitionTargets() {
 		Description: "Get raw-to-graded arbitrage opportunities: cards where buying raw NM and grading would yield $100+ profit. Shows raw NM price, best graded estimate, profit, and ROI.",
 		Parameters:  emptyObjectParams,
 	}, func(ctx context.Context, _ string) (string, error) {
-		result, err := e.svc.GetAcquisitionTargets(ctx)
+		if e.arbSvc == nil {
+			return "", fmt.Errorf("arbitrage service not available")
+		}
+		result, err := e.arbSvc.GetAcquisitionTargets(ctx)
 		if err != nil {
 			return "", err
 		}
@@ -191,7 +218,10 @@ func (e *CampaignToolExecutor) registerGetDeslabOpportunities() {
 		Description: "Get cross-campaign deslab arbitrage candidates: graded cards where removing from slab and selling raw is more profitable than selling graded. Shows deslab vs graded net, advantage, and ROI.",
 		Parameters:  emptyObjectParams,
 	}, func(ctx context.Context, _ string) (string, error) {
-		result, err := e.svc.GetCrackOpportunities(ctx)
+		if e.arbSvc == nil {
+			return "", fmt.Errorf("arbitrage service not available")
+		}
+		result, err := e.arbSvc.GetCrackOpportunities(ctx)
 		if err != nil {
 			return "", err
 		}

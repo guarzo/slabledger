@@ -3,7 +3,7 @@ package handlers
 import (
 	"net/http"
 
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
@@ -14,7 +14,7 @@ func (h *CampaignsHandler) HandleListPurchases(w http.ResponseWriter, r *http.Re
 		return
 	}
 	limit, offset := parsePagination(r)
-	list, ok := serviceCall(w, r.Context(), h.logger, "failed to list purchases", func() ([]campaigns.Purchase, error) {
+	list, ok := serviceCall(w, r.Context(), h.logger, "failed to list purchases", func() ([]inventory.Purchase, error) {
 		return h.service.ListPurchasesByCampaign(r.Context(), id, limit, offset)
 	})
 	if !ok {
@@ -29,18 +29,18 @@ func (h *CampaignsHandler) HandleCreatePurchase(w http.ResponseWriter, r *http.R
 	if !ok {
 		return
 	}
-	var p campaigns.Purchase
+	var p inventory.Purchase
 	if !decodeBody(w, r, &p) {
 		return
 	}
 	p.CampaignID = id
 
 	if err := h.service.CreatePurchase(r.Context(), &p); err != nil {
-		if campaigns.IsDuplicateCertNumber(err) {
+		if inventory.IsDuplicateCertNumber(err) {
 			writeError(w, http.StatusConflict, "Certificate number already exists")
 			return
 		}
-		if campaigns.IsValidationError(err) || campaigns.IsCampaignNotFound(err) {
+		if inventory.IsValidationError(err) || inventory.IsCampaignNotFound(err) {
 			writeError(w, http.StatusBadRequest, "invalid purchase data")
 			return
 		}
@@ -58,7 +58,7 @@ func (h *CampaignsHandler) HandleListSales(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	limit, offset := parsePagination(r)
-	list, ok := serviceCall(w, r.Context(), h.logger, "failed to list sales", func() ([]campaigns.Sale, error) {
+	list, ok := serviceCall(w, r.Context(), h.logger, "failed to list sales", func() ([]inventory.Sale, error) {
 		return h.service.ListSalesByCampaign(r.Context(), id, limit, offset)
 	})
 	if !ok {
@@ -74,7 +74,7 @@ func (h *CampaignsHandler) HandleCreateSale(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	var sale campaigns.Sale
+	var sale inventory.Sale
 	if !decodeBody(w, r, &sale) {
 		return
 	}
@@ -98,11 +98,11 @@ func (h *CampaignsHandler) HandleCreateSale(w http.ResponseWriter, r *http.Reque
 	}
 
 	if err := h.service.CreateSale(r.Context(), s, campaign, purchase); err != nil {
-		if campaigns.IsDuplicateSale(err) {
+		if inventory.IsDuplicateSale(err) {
 			writeError(w, http.StatusConflict, "Sale already exists for this purchase")
 			return
 		}
-		if campaigns.IsValidationError(err) {
+		if inventory.IsValidationError(err) {
 			writeError(w, http.StatusBadRequest, "invalid sale data")
 			return
 		}
@@ -123,9 +123,9 @@ func (h *CampaignsHandler) HandleBulkSales(w http.ResponseWriter, r *http.Reques
 	}
 
 	var req struct {
-		SaleChannel campaigns.SaleChannel     `json:"saleChannel"`
+		SaleChannel inventory.SaleChannel     `json:"saleChannel"`
 		SaleDate    string                    `json:"saleDate"`
-		Items       []campaigns.BulkSaleInput `json:"items"`
+		Items       []inventory.BulkSaleInput `json:"items"`
 	}
 	if !decodeBody(w, r, &req) {
 		return
@@ -135,7 +135,7 @@ func (h *CampaignsHandler) HandleBulkSales(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	result, ok := serviceCall(w, r.Context(), h.logger, "failed to create bulk sales", func() (*campaigns.BulkSaleResult, error) {
+	result, ok := serviceCall(w, r.Context(), h.logger, "failed to create bulk sales", func() (*inventory.BulkSaleResult, error) {
 		return h.service.CreateBulkSales(r.Context(), campaignID, req.SaleChannel, req.SaleDate, req.Items)
 	})
 	if !ok {
@@ -158,7 +158,7 @@ func (h *CampaignsHandler) HandleDeletePurchase(w http.ResponseWriter, r *http.R
 	// Verify the purchase belongs to this campaign
 	purchase, err := h.service.GetPurchase(r.Context(), purchaseID)
 	if err != nil {
-		if campaigns.IsPurchaseNotFound(err) {
+		if inventory.IsPurchaseNotFound(err) {
 			writeError(w, http.StatusNotFound, "Purchase not found")
 			return
 		}
@@ -172,7 +172,7 @@ func (h *CampaignsHandler) HandleDeletePurchase(w http.ResponseWriter, r *http.R
 	}
 
 	if err := h.service.DeletePurchase(r.Context(), purchaseID); err != nil {
-		if campaigns.IsPurchaseNotFound(err) {
+		if inventory.IsPurchaseNotFound(err) {
 			writeError(w, http.StatusNotFound, "Purchase not found")
 			return
 		}
@@ -197,7 +197,7 @@ func (h *CampaignsHandler) HandleDeleteSale(w http.ResponseWriter, r *http.Reque
 	// Verify the purchase belongs to this campaign
 	purchase, err := h.service.GetPurchase(r.Context(), purchaseID)
 	if err != nil {
-		if campaigns.IsPurchaseNotFound(err) {
+		if inventory.IsPurchaseNotFound(err) {
 			writeError(w, http.StatusNotFound, "Purchase not found")
 			return
 		}
@@ -211,7 +211,7 @@ func (h *CampaignsHandler) HandleDeleteSale(w http.ResponseWriter, r *http.Reque
 	}
 
 	if err := h.service.DeleteSaleByPurchaseID(r.Context(), purchaseID); err != nil {
-		if campaigns.IsSaleNotFound(err) {
+		if inventory.IsSaleNotFound(err) {
 			writeError(w, http.StatusNotFound, "No sale found for this purchase")
 			return
 		}
@@ -247,18 +247,18 @@ func (h *CampaignsHandler) HandleQuickAdd(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	var req campaigns.QuickAddRequest
+	var req inventory.QuickAddRequest
 	if !decodeBody(w, r, &req) {
 		return
 	}
 
 	purchase, err := h.service.QuickAddPurchase(r.Context(), id, req)
 	if err != nil {
-		if campaigns.IsDuplicateCertNumber(err) {
+		if inventory.IsDuplicateCertNumber(err) {
 			writeError(w, http.StatusConflict, "Certificate number already exists")
 			return
 		}
-		if campaigns.IsCampaignNotFound(err) {
+		if inventory.IsCampaignNotFound(err) {
 			writeError(w, http.StatusNotFound, "Campaign not found")
 			return
 		}
@@ -271,7 +271,7 @@ func (h *CampaignsHandler) HandleQuickAdd(w http.ResponseWriter, r *http.Request
 
 // HandlePriceOverrideStats handles GET /api/admin/price-override-stats.
 func (h *CampaignsHandler) HandlePriceOverrideStats(w http.ResponseWriter, r *http.Request) {
-	stats, ok := serviceCall(w, r.Context(), h.logger, "failed to get price override stats", func() (*campaigns.PriceOverrideStats, error) {
+	stats, ok := serviceCall(w, r.Context(), h.logger, "failed to get price override stats", func() (*inventory.PriceOverrideStats, error) {
 		return h.service.GetPriceOverrideStats(r.Context())
 	})
 	if !ok {
@@ -296,11 +296,11 @@ func (h *CampaignsHandler) HandleSetPriceOverride(w http.ResponseWriter, r *http
 	}
 
 	if err := h.service.SetPriceOverride(r.Context(), purchaseID, req.PriceCents, req.Source); err != nil {
-		if campaigns.IsPurchaseNotFound(err) {
+		if inventory.IsPurchaseNotFound(err) {
 			writeError(w, http.StatusNotFound, "Purchase not found")
 			return
 		}
-		if campaigns.IsValidationError(err) {
+		if inventory.IsValidationError(err) {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
@@ -319,7 +319,7 @@ func (h *CampaignsHandler) HandleClearPriceOverride(w http.ResponseWriter, r *ht
 	}
 
 	if err := h.service.SetPriceOverride(r.Context(), purchaseID, 0, ""); err != nil {
-		if campaigns.IsPurchaseNotFound(err) {
+		if inventory.IsPurchaseNotFound(err) {
 			writeError(w, http.StatusNotFound, "Purchase not found")
 			return
 		}
@@ -338,15 +338,15 @@ func (h *CampaignsHandler) HandleAcceptAISuggestion(w http.ResponseWriter, r *ht
 	}
 
 	if err := h.service.AcceptAISuggestion(r.Context(), purchaseID); err != nil {
-		if campaigns.IsPurchaseNotFound(err) {
+		if inventory.IsPurchaseNotFound(err) {
 			writeError(w, http.StatusNotFound, "Purchase not found")
 			return
 		}
-		if campaigns.IsNoAISuggestion(err) {
+		if inventory.IsNoAISuggestion(err) {
 			writeError(w, http.StatusConflict, "AI suggestion is no longer available")
 			return
 		}
-		if campaigns.IsValidationError(err) {
+		if inventory.IsValidationError(err) {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
@@ -365,7 +365,7 @@ func (h *CampaignsHandler) HandleDismissAISuggestion(w http.ResponseWriter, r *h
 	}
 
 	if err := h.service.DismissAISuggestion(r.Context(), purchaseID); err != nil {
-		if campaigns.IsPurchaseNotFound(err) {
+		if inventory.IsPurchaseNotFound(err) {
 			writeError(w, http.StatusNotFound, "Purchase not found")
 			return
 		}
@@ -391,11 +391,11 @@ func (h *CampaignsHandler) HandleUpdateBuyCost(w http.ResponseWriter, r *http.Re
 	}
 
 	if err := h.service.UpdateBuyCost(r.Context(), purchaseID, req.BuyCostCents); err != nil {
-		if campaigns.IsPurchaseNotFound(err) {
+		if inventory.IsPurchaseNotFound(err) {
 			writeError(w, http.StatusNotFound, "Purchase not found")
 			return
 		}
-		if campaigns.IsValidationError(err) {
+		if inventory.IsValidationError(err) {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
@@ -425,11 +425,11 @@ func (h *CampaignsHandler) HandleReassignPurchase(w http.ResponseWriter, r *http
 	}
 
 	if err := h.service.ReassignPurchase(r.Context(), purchaseID, req.CampaignID); err != nil {
-		if campaigns.IsPurchaseNotFound(err) {
+		if inventory.IsPurchaseNotFound(err) {
 			writeError(w, http.StatusNotFound, "Purchase not found")
 			return
 		}
-		if campaigns.IsCampaignNotFound(err) {
+		if inventory.IsCampaignNotFound(err) {
 			writeError(w, http.StatusNotFound, "Campaign not found")
 			return
 		}

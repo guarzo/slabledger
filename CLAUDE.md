@@ -34,9 +34,17 @@ make check                                 # Full quality check (lint + architec
 ```
 internal/
   domain/           # Pure business logic (NO external deps)
+    inventory/      # Core inventory: campaigns, purchases, sales (8 focused repo interfaces)
+    arbitrage/      # Crack candidates, acquisition targets, EV, Monte Carlo projection
+    portfolio/      # Inventory aging, price signals, portfolio health analysis
+    tuning/         # Campaign tuning suggestions and analytics
+    finance/        # Invoices, cashflow, capital tracking, revocation flags
+    export/         # Sell sheet, eBay CSV, Shopify price sync
+    dhlisting/      # DH listing push pipeline coordination
+    csvimport/      # CSV parsing utilities (pure, no external deps)
+    mmutil/         # Market Movers text normalization (pure, no external deps)
     advisor/        # AI advisor interfaces and types
     auth/           # Authentication interfaces
-    campaigns/      # Campaign tracking, purchases, sales, P&L, analytics, CSV import
     cards/          # CardRepository interface
     constants/      # Shared constants
     errors/         # Error types
@@ -70,15 +78,27 @@ internal/
 
 **Key Principle**: Domain code depends ONLY on interfaces, never concrete implementations.
 
-## Campaigns Domain
+## Inventory Domain
 
-The campaigns package (`internal/domain/campaigns/`) is the core business feature:
+The inventory domain (`internal/domain/inventory/`) is the core campaigns and inventory tracking feature, split into 9 focused packages:
 
+### Core inventory package
 - **Types**: Campaign, Purchase, Sale, Phase, SaleChannel
-- **Service**: CRUD + ArchiveCampaign, ImportPurchases, analytics (PNL, channel breakdown, fill rate, days-to-sell, inventory aging with market signals)
+- **8 focused repository interfaces**: CampaignRepository, PurchaseRepository, SaleRepository, AnalyticsRepository, FinanceRepository, PricingRepository, DHRepository, SnapshotRepository
+- **Service**: CRUD + ArchiveCampaign, ImportPurchases, and delegates to sub-packages for computation
 - **PriceLookup**: Optional interface for market signal computation (injected via `WithPriceLookup` functional option)
 - **Import**: CSV import with `ExtractGrade` for PSA grade extraction from card titles
 - **Channel fees**: eBay/TCGPlayer use campaign's `ebayFeePct`; local/other = 0%
+
+### Sub-packages (flat sibling design, no cross-imports)
+- **arbitrage**: Crack detection, acquisition targets, expected value, Monte Carlo projection
+- **portfolio**: Inventory aging, price signals, portfolio health analysis
+- **tuning**: Campaign parameter optimization, tuning suggestions and analytics
+- **finance**: Invoices, cashflow forecasting, capital tracking, revocation flags
+- **export**: Sell sheet generation, eBay CSV, Shopify price sync
+- **dhlisting**: DH listing push pipeline coordination
+- **csvimport**: CSV parsing for all import formats (pure utility, no dependencies)
+- **mmutil**: Market Movers text normalization (pure utility, no dependencies)
 
 ## Database
 
@@ -108,8 +128,11 @@ DH (DoubleHolo) is the sole price source via `DHPriceProvider` (`internal/adapte
 - **Pattern**: Table-driven tests with `[]struct` for all test cases
 - **Mocks**: Import from `internal/testutil/mocks/` — never create inline mocks
   - Uses Fn-field pattern: override any method by setting `mock.CreateCampaignFn = func(...) { ... }`
+  - Separate focused mocks for each interface: `CampaignRepositoryMock`, `PurchaseRepositoryMock`, etc.
+  - Service mocks for each sub-package: `MockArbitrageService`, `MockPortfolioService`, etc.
+  - In-memory store for service-layer tests: `mocks.NewInMemoryCampaignStore()`
   - Full guide: `internal/testutil/mocks/README.md`
-- **Error assertions**: Use `errors.Is(err, campaigns.ErrCampaignNotFound)` with sentinel errors
+- **Error assertions**: Use `errors.Is(err, inventory.ErrCampaignNotFound)` with sentinel errors
 - **Deterministic data**: Use fixed seeds for Monte Carlo, atomic counters for IDs
 - **Unit tests**: Mock all external deps, use `internal/testutil/mocks`
 - **Integration tests**: `internal/integration/` with `-tags integration` flag, requires API keys in `.env`
@@ -129,7 +152,7 @@ DH (DoubleHolo) is the sole price source via `DHPriceProvider` (`internal/adapte
 ## Quality Checks
 
 - `make check` — runs lint + architecture import check + file size check
-- `scripts/check-imports.sh` — fails if domain packages import adapter packages (hexagonal invariant)
+- `scripts/check-imports.sh` — fails if domain packages import adapter packages (hexagonal invariant); also enforces flat sibling rule between inventory sub-packages
 - `scripts/check-file-size.sh` — warns at 500 lines, fails at 600 lines (excludes test files and mocks)
 
 ## Adding New Components

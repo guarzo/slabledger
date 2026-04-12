@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
 	domainCards "github.com/guarzo/slabledger/internal/domain/cards"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/mathutil"
 	"github.com/guarzo/slabledger/internal/domain/pricing"
 )
@@ -286,7 +286,7 @@ func TestBuildSourcePrices_EstimateConfidenceLevels(t *testing.T) {
 			}
 			sources := buildSourcePrices(price, 10)
 			// Find Estimate source
-			var found *campaigns.SourcePrice
+			var found *inventory.SourcePrice
 			for i := range sources {
 				if sources[i].Source == "Estimate" {
 					found = &sources[i]
@@ -306,7 +306,7 @@ func TestBuildSourcePrices_EstimateConfidenceLevels(t *testing.T) {
 
 // --- Adapter integration tests for GetLastSoldCents and GetMarketSnapshot ---
 
-var testCard = campaigns.CardIdentity{
+var testCard = inventory.CardIdentity{
 	CardName:   "Charizard",
 	CardNumber: "4",
 	SetName:    "Base Set",

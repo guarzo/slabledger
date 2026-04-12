@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/platform/config"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
@@ -16,7 +16,7 @@ func TestPSASyncScheduler_Tick(t *testing.T) {
 	tests := []struct {
 		name               string
 		fetcherFn          func(ctx context.Context, spreadsheetID, sheetName string) ([][]string, error)
-		importerFn         func(ctx context.Context, rows []campaigns.PSAExportRow) (*campaigns.PSAImportResult, error)
+		importerFn         func(ctx context.Context, rows []inventory.PSAExportRow) (*inventory.PSAImportResult, error)
 		wantImporterCalled bool
 	}{
 		{
@@ -27,8 +27,8 @@ func TestPSASyncScheduler_Tick(t *testing.T) {
 					{"12345678", "2023 Pokemon Charizard PSA 10", "10", "$125.00"},
 				}, nil
 			},
-			importerFn: func(_ context.Context, _ []campaigns.PSAExportRow) (*campaigns.PSAImportResult, error) {
-				return &campaigns.PSAImportResult{Allocated: 1}, nil
+			importerFn: func(_ context.Context, _ []inventory.PSAExportRow) (*inventory.PSAImportResult, error) {
+				return &inventory.PSAImportResult{Allocated: 1}, nil
 			},
 			wantImporterCalled: true,
 		},
@@ -57,12 +57,12 @@ func TestPSASyncScheduler_Tick(t *testing.T) {
 
 			importerCalled := false
 			importer := &mocks.MockImportService{
-				ImportPSAExportGlobalFn: func(ctx context.Context, rows []campaigns.PSAExportRow) (*campaigns.PSAImportResult, error) {
+				ImportPSAExportGlobalFn: func(ctx context.Context, rows []inventory.PSAExportRow) (*inventory.PSAImportResult, error) {
 					importerCalled = true
 					if tt.importerFn != nil {
 						return tt.importerFn(ctx, rows)
 					}
-					return &campaigns.PSAImportResult{}, nil
+					return &inventory.PSAImportResult{}, nil
 				},
 			}
 
@@ -114,8 +114,8 @@ func TestPSASyncScheduler_GetLastRunStats(t *testing.T) {
 			},
 		},
 		&mocks.MockImportService{
-			ImportPSAExportGlobalFn: func(ctx context.Context, rows []campaigns.PSAExportRow) (*campaigns.PSAImportResult, error) {
-				return &campaigns.PSAImportResult{
+			ImportPSAExportGlobalFn: func(ctx context.Context, rows []inventory.PSAExportRow) (*inventory.PSAImportResult, error) {
+				return &inventory.PSAImportResult{
 					Allocated: 1, Updated: 0, Refunded: 0,
 					Unmatched: 2, Ambiguous: 1, Skipped: 0, Failed: 0,
 				}, nil

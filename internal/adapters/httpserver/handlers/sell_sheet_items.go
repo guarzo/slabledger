@@ -3,18 +3,18 @@ package handlers
 import (
 	"net/http"
 
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
 // SellSheetItemsHandler handles sell sheet item persistence endpoints.
 type SellSheetItemsHandler struct {
-	repo   campaigns.SellSheetRepository
+	repo   inventory.SellSheetRepository
 	logger observability.Logger
 }
 
 // NewSellSheetItemsHandler creates a new sell sheet items handler.
-func NewSellSheetItemsHandler(repo campaigns.SellSheetRepository, logger observability.Logger) *SellSheetItemsHandler {
+func NewSellSheetItemsHandler(repo inventory.SellSheetRepository, logger observability.Logger) *SellSheetItemsHandler {
 	return &SellSheetItemsHandler{repo: repo, logger: logger}
 }
 

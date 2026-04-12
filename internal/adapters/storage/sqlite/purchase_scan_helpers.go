@@ -3,7 +3,7 @@ package sqlite
 import (
 	"database/sql"
 
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 )
 
 // purchaseColumns is the canonical SELECT column list for campaign_purchases (no table alias).
@@ -46,14 +46,36 @@ const saleColumnsAliased = `s.id, s.purchase_id, s.sale_channel, s.sale_price_ce
 	s.last_sold_cents, s.lowest_list_cents, s.conservative_cents,
 	s.median_cents, s.active_listings, s.sales_last_30d, s.trend_30d, s.snapshot_date, s.snapshot_json`
 
+// saleColumns is the canonical column list for campaign_sales queries (no table alias).
+const saleColumns = `id, purchase_id, sale_channel, sale_price_cents, sale_fee_cents,
+	sale_date, days_to_sell, net_profit_cents, created_at, updated_at,
+	last_sold_cents, lowest_list_cents, conservative_cents, median_cents,
+	active_listings, sales_last_30d, trend_30d, snapshot_date, snapshot_json,
+	original_list_price_cents, price_reductions, days_listed, sold_at_asking_price,
+	was_cracked, order_id`
+
 // scanner abstracts *sql.Row and *sql.Rows so scanPurchase works with both.
 type scanner interface {
 	Scan(dest ...any) error
 }
 
+// scanSale scans a single Sale row matching saleColumns order.
+func scanSale(s scanner) (inventory.Sale, error) {
+	var sale inventory.Sale
+	err := s.Scan(
+		&sale.ID, &sale.PurchaseID, &sale.SaleChannel, &sale.SalePriceCents, &sale.SaleFeeCents,
+		&sale.SaleDate, &sale.DaysToSell, &sale.NetProfitCents, &sale.CreatedAt, &sale.UpdatedAt,
+		&sale.LastSoldCents, &sale.LowestListCents, &sale.ConservativeCents, &sale.MedianCents,
+		&sale.ActiveListings, &sale.SalesLast30d, &sale.Trend30d, &sale.SnapshotDate, &sale.SnapshotJSON,
+		&sale.OriginalListPriceCents, &sale.PriceReductions, &sale.DaysListed, &sale.SoldAtAskingPrice,
+		&sale.WasCracked, &sale.OrderID,
+	)
+	return sale, err
+}
+
 // purchaseScanDests returns the ordered slice of scan destinations for a Purchase.
 // The order matches purchaseColumns exactly.
-func purchaseScanDests(p *campaigns.Purchase) []any {
+func purchaseScanDests(p *inventory.Purchase) []any {
 	return []any{
 		&p.ID, &p.CampaignID, &p.CardName, &p.CertNumber, &p.CardNumber, &p.SetName,
 		&p.Grader, &p.GradeValue,
@@ -75,14 +97,14 @@ func purchaseScanDests(p *campaigns.Purchase) []any {
 
 // scanPurchase scans a single row into a Purchase struct.
 // The row must contain exactly the columns listed in purchaseColumns, in order.
-func scanPurchase(s scanner, p *campaigns.Purchase) error {
+func scanPurchase(s scanner, p *inventory.Purchase) error {
 	return s.Scan(purchaseScanDests(p)...)
 }
 
 // scanPurchaseWithSale scans a row containing purchase columns followed by sale columns
 // (from a LEFT JOIN). Sale columns use sql.Null* types to handle NULL when no sale exists.
-func scanPurchaseWithSale(s scanner) (campaigns.PurchaseWithSale, error) {
-	var pws campaigns.PurchaseWithSale
+func scanPurchaseWithSale(s scanner) (inventory.PurchaseWithSale, error) {
+	var pws inventory.PurchaseWithSale
 	var (
 		sID             sql.NullString
 		sPurchaseID     sql.NullString
@@ -119,10 +141,10 @@ func scanPurchaseWithSale(s scanner) (campaigns.PurchaseWithSale, error) {
 	}
 
 	if sID.Valid {
-		sale := &campaigns.Sale{
+		sale := &inventory.Sale{
 			ID:             sID.String,
 			PurchaseID:     sPurchaseID.String,
-			SaleChannel:    campaigns.SaleChannel(sSaleChannel.String),
+			SaleChannel:    inventory.SaleChannel(sSaleChannel.String),
 			SalePriceCents: int(sSalePriceCents.Int64),
 			SaleFeeCents:   int(sSaleFeeCents.Int64),
 			SaleDate:       sSaleDate.String,

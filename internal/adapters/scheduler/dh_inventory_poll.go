@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
@@ -22,7 +22,7 @@ type DHInventoryListClient interface {
 
 // DHFieldsUpdater updates DH tracking fields on a purchase.
 type DHFieldsUpdater interface {
-	UpdatePurchaseDHFields(ctx context.Context, id string, update campaigns.DHFieldsUpdate) error
+	UpdatePurchaseDHFields(ctx context.Context, id string, update inventory.DHFieldsUpdate) error
 }
 
 // PurchaseByCertLookup resolves a cert number to a purchase ID.
@@ -135,7 +135,7 @@ func (s *DHInventoryPollScheduler) poll(ctx context.Context) {
 			continue
 		}
 
-		if updateErr := s.updater.UpdatePurchaseDHFields(ctx, purchaseID, campaigns.DHFieldsUpdate{
+		if updateErr := s.updater.UpdatePurchaseDHFields(ctx, purchaseID, inventory.DHFieldsUpdate{
 			CardID:            item.DHCardID,
 			InventoryID:       item.DHInventoryID,
 			CertStatus:        dh.CertStatusMatched,

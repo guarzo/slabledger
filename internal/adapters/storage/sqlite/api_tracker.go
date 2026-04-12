@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -68,7 +69,7 @@ func (r *DBTracker) GetAPIUsage(ctx context.Context, provider string) (*pricing.
 		&stats.CallsLast5Min,
 	)
 
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		// No API calls recorded for this provider
 		return &pricing.APIUsageStats{
 			Provider: provider,
@@ -140,7 +141,7 @@ func (r *DBTracker) IsProviderBlocked(ctx context.Context, provider string) (boo
 
 	var blockedUntil sql.NullString
 	err := r.db.QueryRowContext(ctx, query, provider).Scan(&blockedUntil)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return false, time.Time{}, nil // Not blocked
 	}
 	if err != nil {

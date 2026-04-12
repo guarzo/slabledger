@@ -1,4 +1,4 @@
-// Package scoring implements advisor.ScoringDataProvider by wrapping campaigns.Service.
+// Package scoring implements advisor.ScoringDataProvider by wrapping inventory.Service.
 package scoring
 
 import (
@@ -8,18 +8,46 @@ import (
 	"sync"
 
 	"github.com/guarzo/slabledger/internal/domain/advisor"
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	"github.com/guarzo/slabledger/internal/domain/arbitrage"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
+	"github.com/guarzo/slabledger/internal/domain/portfolio"
+	"github.com/guarzo/slabledger/internal/domain/tuning"
 )
 
 // Provider gathers raw factor data for the scoring orchestrator
-// by calling campaigns.AnalyticsService methods in parallel.
+// by calling service methods in parallel.
 type Provider struct {
-	svc campaigns.AnalyticsService
+	svc       inventory.AnalyticsService
+	arbSvc    arbitrage.Service
+	portSvc   portfolio.Service
+	tuningSvc tuning.Service
+}
+
+// ProviderOption configures optional dependencies on Provider.
+type ProviderOption func(*Provider)
+
+// WithArbitrageService injects the arbitrage service.
+func WithArbitrageService(svc arbitrage.Service) ProviderOption {
+	return func(p *Provider) { p.arbSvc = svc }
+}
+
+// WithPortfolioService injects the portfolio service.
+func WithPortfolioService(svc portfolio.Service) ProviderOption {
+	return func(p *Provider) { p.portSvc = svc }
+}
+
+// WithTuningService injects the tuning service.
+func WithTuningService(svc tuning.Service) ProviderOption {
+	return func(p *Provider) { p.tuningSvc = svc }
 }
 
 // NewProvider creates a ScoringDataProvider backed by the given campaigns service.
-func NewProvider(svc campaigns.AnalyticsService) *Provider {
-	return &Provider{svc: svc}
+func NewProvider(svc inventory.AnalyticsService, opts ...ProviderOption) *Provider {
+	p := &Provider{svc: svc}
+	for _, opt := range opts {
+		opt(p)
+	}
+	return p
 }
 
 var _ advisor.ScoringDataProvider = (*Provider)(nil)
@@ -33,60 +61,66 @@ func (p *Provider) PurchaseData(ctx context.Context, req advisor.PurchaseAssessm
 	var wg sync.WaitGroup
 
 	// 1. EvaluatePurchase -> ROI, SalesPerMonth, PriceChangePct, PriceConfidence
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		ev, err := p.svc.EvaluatePurchase(ctx, req.CampaignID, req.CardName, grade, req.BuyCostCents)
-		if err != nil || ev == nil {
-			return
-		}
-		mu.Lock()
-		defer mu.Unlock()
-		roiPct := ev.EVPerDollar * 100
-		data.ROIPct = &roiPct
-		salesPerMonth := ev.LiquidityFactor * 5
-		data.SalesPerMonth = &salesPerMonth
-		priceChangePct := ev.TrendAdjustment * 100
-		data.PriceChangePct = &priceChangePct
-		data.PriceConfidence = mapConfidence(ev.Confidence)
-		data.MarketSource = "campaigns"
-	}()
+	if p.arbSvc != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			ev, err := p.arbSvc.EvaluatePurchase(ctx, req.CampaignID, req.CardName, grade, req.BuyCostCents)
+			if err != nil || ev == nil {
+				return
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			roiPct := ev.EVPerDollar * 100
+			data.ROIPct = &roiPct
+			salesPerMonth := ev.LiquidityFactor * 5
+			data.SalesPerMonth = &salesPerMonth
+			priceChangePct := ev.TrendAdjustment * 100
+			data.PriceChangePct = &priceChangePct
+			data.PriceConfidence = mapConfidence(ev.Confidence)
+			data.MarketSource = "campaigns"
+		}()
+	}
 
 	// 2. GetCampaignTuning -> GradeROI, CampaignAvgROI, Trend30dPct
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		tuning, err := p.svc.GetCampaignTuning(ctx, req.CampaignID)
-		if err != nil || tuning == nil {
-			return
-		}
-		mu.Lock()
-		defer mu.Unlock()
-		gradeROI, avgROI := extractGradeROI(tuning.ByGrade, grade)
-		if gradeROI != nil {
-			data.GradeROI = gradeROI
-		}
-		if avgROI != nil {
-			data.CampaignAvgROI = avgROI
-		}
-		if tuning.MarketAlignment != nil {
-			trend := tuning.MarketAlignment.AvgTrend30d * 100
-			data.Trend30dPct = &trend
-		}
-	}()
+	if p.tuningSvc != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			tuningData, err := p.tuningSvc.GetCampaignTuning(ctx, req.CampaignID)
+			if err != nil || tuningData == nil {
+				return
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			gradeROI, avgROI := extractGradeROI(tuningData.ByGrade, grade)
+			if gradeROI != nil {
+				data.GradeROI = gradeROI
+			}
+			if avgROI != nil {
+				data.CampaignAvgROI = avgROI
+			}
+			if tuningData.MarketAlignment != nil {
+				trend := tuningData.MarketAlignment.AvgTrend30d * 100
+				data.Trend30dPct = &trend
+			}
+		}()
+	}
 
 	// 3. GetPortfolioInsights -> ConcentrationRisk
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		insights, err := p.svc.GetPortfolioInsights(ctx)
-		if err != nil || insights == nil {
-			return
-		}
-		mu.Lock()
-		defer mu.Unlock()
-		data.ConcentrationRisk = computeConcentration(insights.ByCharacter, req.CardName)
-	}()
+	if p.portSvc != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			insights, err := p.portSvc.GetPortfolioInsights(ctx)
+			if err != nil || insights == nil {
+				return
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			data.ConcentrationRisk = computeConcentration(insights.ByCharacter, req.CardName)
+		}()
+	}
 
 	wg.Wait()
 	return data, nil
@@ -119,20 +153,22 @@ func (p *Provider) CampaignData(ctx context.Context, campaignID string) (*adviso
 	}()
 
 	// 2. GetCampaignTuning -> Trend30dPct
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		tuning, err := p.svc.GetCampaignTuning(ctx, campaignID)
-		if err != nil || tuning == nil {
-			return
-		}
-		mu.Lock()
-		defer mu.Unlock()
-		if tuning.MarketAlignment != nil {
-			trend := tuning.MarketAlignment.AvgTrend30d * 100
-			data.Trend30dPct = &trend
-		}
-	}()
+	if p.tuningSvc != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			tuningData, err := p.tuningSvc.GetCampaignTuning(ctx, campaignID)
+			if err != nil || tuningData == nil {
+				return
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			if tuningData.MarketAlignment != nil {
+				trend := tuningData.MarketAlignment.AvgTrend30d * 100
+				data.Trend30dPct = &trend
+			}
+		}()
+	}
 
 	// 3. GetInventoryAging -> SalesPerMonth, PriceChangePct
 	wg.Add(1)
@@ -207,7 +243,7 @@ func confidenceFromCount(n int) float64 {
 }
 
 // extractGradeROI finds the ROI for the matching grade and computes the campaign average.
-func extractGradeROI(grades []campaigns.GradePerformance, target float64) (gradeROI, avgROI *float64) {
+func extractGradeROI(grades []inventory.GradePerformance, target float64) (gradeROI, avgROI *float64) {
 	if len(grades) == 0 {
 		return nil, nil
 	}
@@ -231,7 +267,7 @@ func extractGradeROI(grades []campaigns.GradePerformance, target float64) (grade
 // computeConcentration determines concentration risk by comparing character purchases to total.
 // Matches segment labels against whole words in the card name to avoid false positives
 // (e.g. "Char" matching "Charged Up Pikachu").
-func computeConcentration(segments []campaigns.SegmentPerformance, cardName string) string {
+func computeConcentration(segments []inventory.SegmentPerformance, cardName string) string {
 	if len(segments) == 0 {
 		return "low"
 	}
@@ -263,7 +299,7 @@ func computeConcentration(segments []campaigns.SegmentPerformance, cardName stri
 }
 
 // agingSignals computes average monthly velocity and average delta pct from aging items.
-func agingSignals(items []campaigns.AgingItem) (avgVelocity, avgDelta *float64) {
+func agingSignals(items []inventory.AgingItem) (avgVelocity, avgDelta *float64) {
 	var velocitySum float64
 	var velocityCount int
 	var deltaSum float64

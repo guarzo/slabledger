@@ -5,7 +5,7 @@ import (
 	"net/http"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
@@ -44,7 +44,7 @@ func (h *DHHandler) HandleUnmatched(w http.ResponseWriter, r *http.Request) {
 	var unmatched []unmatchedCard
 	var dismissed []unmatchedCard
 	for _, p := range purchases {
-		if p.DHPushStatus != campaigns.DHPushStatusUnmatched && p.DHPushStatus != campaigns.DHPushStatusDismissed {
+		if p.DHPushStatus != inventory.DHPushStatusUnmatched && p.DHPushStatus != inventory.DHPushStatusDismissed {
 			continue
 		}
 		card := unmatchedCard{
@@ -65,7 +65,7 @@ func (h *DHHandler) HandleUnmatched(w http.ResponseWriter, r *http.Request) {
 				card.Candidates = raw
 			}
 		}
-		if p.DHPushStatus == campaigns.DHPushStatusDismissed {
+		if p.DHPushStatus == inventory.DHPushStatusDismissed {
 			dismissed = append(dismissed, card)
 		} else {
 			unmatched = append(unmatched, card)

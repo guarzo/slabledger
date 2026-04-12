@@ -4,18 +4,18 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
 // PriceFlagsHandler handles admin price flag review endpoints.
 type PriceFlagsHandler struct {
-	service campaigns.PricingService
+	service inventory.PricingService
 	logger  observability.Logger
 }
 
 // NewPriceFlagsHandler creates a new PriceFlagsHandler.
-func NewPriceFlagsHandler(service campaigns.PricingService, logger observability.Logger) *PriceFlagsHandler {
+func NewPriceFlagsHandler(service inventory.PricingService, logger observability.Logger) *PriceFlagsHandler {
 	return &PriceFlagsHandler{service: service, logger: logger}
 }
 
@@ -31,14 +31,14 @@ func (h *PriceFlagsHandler) HandleListPriceFlags(w http.ResponseWriter, r *http.
 		writeError(w, http.StatusBadRequest, "invalid status: must be open, resolved, or all")
 		return
 	}
-	flags, ok := serviceCall(w, r.Context(), h.logger, "failed to list price flags", func() ([]campaigns.PriceFlagWithContext, error) {
+	flags, ok := serviceCall(w, r.Context(), h.logger, "failed to list price flags", func() ([]inventory.PriceFlagWithContext, error) {
 		return h.service.ListPriceFlags(r.Context(), status)
 	})
 	if !ok {
 		return
 	}
 	if flags == nil {
-		flags = []campaigns.PriceFlagWithContext{}
+		flags = []inventory.PriceFlagWithContext{}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"flags": flags,
@@ -59,7 +59,7 @@ func (h *PriceFlagsHandler) HandleResolvePriceFlag(w http.ResponseWriter, r *htt
 		return
 	}
 	if err := h.service.ResolvePriceFlag(r.Context(), flagID, user.ID); err != nil {
-		if campaigns.IsPriceFlagNotFound(err) {
+		if inventory.IsPriceFlagNotFound(err) {
 			writeError(w, http.StatusNotFound, "Price flag not found or already resolved")
 			return
 		}

@@ -4,7 +4,7 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 	domainobs "github.com/guarzo/slabledger/internal/domain/observability"
 )
 
@@ -21,12 +21,12 @@ func (h *DHHandler) HandleApproveDHPush(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if err := h.dhApproveService.ApproveDHPush(r.Context(), purchaseID); err != nil {
-		if errors.Is(err, campaigns.ErrPurchaseNotFound) {
+		if errors.Is(err, inventory.ErrPurchaseNotFound) {
 			h.logger.Warn(r.Context(), "approve dh push: purchase not found", domainobs.Err(err))
 			writeError(w, http.StatusNotFound, "purchase not found")
 			return
 		}
-		if campaigns.IsValidationError(err) {
+		if inventory.IsValidationError(err) {
 			h.logger.Warn(r.Context(), "approve dh push: validation error", domainobs.Err(err))
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
@@ -61,12 +61,12 @@ func (h *DHHandler) HandleSaveDHPushConfig(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusServiceUnavailable, "DH approve service not configured")
 		return
 	}
-	var cfg campaigns.DHPushConfig
+	var cfg inventory.DHPushConfig
 	if !decodeBody(w, r, &cfg) {
 		return
 	}
 	if err := h.dhApproveService.SaveDHPushConfig(r.Context(), &cfg); err != nil {
-		if campaigns.IsValidationError(err) {
+		if inventory.IsValidationError(err) {
 			h.logger.Warn(r.Context(), "save dh push config: validation error", domainobs.Err(err))
 			writeError(w, http.StatusBadRequest, err.Error())
 			return

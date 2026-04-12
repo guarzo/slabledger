@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
 	domainCards "github.com/guarzo/slabledger/internal/domain/cards"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/mathutil"
 	"github.com/guarzo/slabledger/internal/domain/pricing"
 )
@@ -36,12 +36,12 @@ func isHalfGrade(grade float64) bool {
 	return math.Abs(frac-0.5) < gradeEpsilon
 }
 
-// Adapter wraps a PriceProvider to implement campaigns.PriceLookup.
+// Adapter wraps a PriceProvider to implement inventory.PriceLookup.
 type Adapter struct {
 	provider pricing.PriceProvider
 }
 
-var _ campaigns.PriceLookup = (*Adapter)(nil)
+var _ inventory.PriceLookup = (*Adapter)(nil)
 
 // NewAdapter creates a PriceLookup adapter around a PriceProvider.
 func NewAdapter(provider pricing.PriceProvider) *Adapter {
@@ -49,7 +49,7 @@ func NewAdapter(provider pricing.PriceProvider) *Adapter {
 }
 
 // GetLastSoldCents returns the last sold price in cents for a card at a given grade.
-func (a *Adapter) GetLastSoldCents(ctx context.Context, card campaigns.CardIdentity, grade float64) (int, error) {
+func (a *Adapter) GetLastSoldCents(ctx context.Context, card inventory.CardIdentity, grade float64) (int, error) {
 	if !validGrade(grade) {
 		return 0, fmt.Errorf("unsupported grade: %g", grade)
 	}
@@ -74,7 +74,7 @@ func (a *Adapter) GetLastSoldCents(ctx context.Context, card campaigns.CardIdent
 }
 
 // GetMarketSnapshot returns a comprehensive market snapshot for a card at a given grade.
-func (a *Adapter) GetMarketSnapshot(ctx context.Context, card campaigns.CardIdentity, grade float64) (*campaigns.MarketSnapshot, error) {
+func (a *Adapter) GetMarketSnapshot(ctx context.Context, card inventory.CardIdentity, grade float64) (*inventory.MarketSnapshot, error) {
 	if !validGrade(grade) {
 		return nil, fmt.Errorf("unsupported grade: %g", grade)
 	}
@@ -86,7 +86,7 @@ func (a *Adapter) GetMarketSnapshot(ctx context.Context, card campaigns.CardIden
 		return nil, nil
 	}
 
-	snap := &campaigns.MarketSnapshot{}
+	snap := &inventory.MarketSnapshot{}
 
 	// Last sold data from actual sales records.
 	if price.LastSoldByGrade != nil {
@@ -160,7 +160,9 @@ func (a *Adapter) GetMarketSnapshot(ctx context.Context, card campaigns.CardIden
 		snap.SourceCount = len(price.Sources)
 	}
 
-	// Conservative/distribution data
+	// Conservative/distribution data.
+	// PSA 8 has no direct data in the provider API; the fallback logic at lines below
+	// (conservative = 0.85 × median) applies instead.
 	if price.Conservative != nil {
 		floorGrade := math.Floor(grade)
 		switch floorGrade {
@@ -168,8 +170,6 @@ func (a *Adapter) GetMarketSnapshot(ctx context.Context, card campaigns.CardIden
 			snap.ConservativeCents = int(mathutil.ToCents(price.Conservative.PSA10USD))
 		case 9:
 			snap.ConservativeCents = int(mathutil.ToCents(price.Conservative.PSA9USD))
-		case 8:
-			// No PSA8 conservative data available; leave unset so fallback populates it
 		default:
 			if grade == 0 {
 				snap.ConservativeCents = int(mathutil.ToCents(price.Conservative.RawUSD))
@@ -177,7 +177,8 @@ func (a *Adapter) GetMarketSnapshot(ctx context.Context, card campaigns.CardIden
 		}
 	}
 
-	// Distributions (percentile data)
+	// Distributions (percentile data).
+	// PSA 8 has no direct distribution data; the fallback at lines below applies.
 	if price.Distributions != nil {
 		var dist *pricing.SalesDistribution
 		floorGrade := math.Floor(grade)
@@ -186,8 +187,6 @@ func (a *Adapter) GetMarketSnapshot(ctx context.Context, card campaigns.CardIden
 			dist = price.Distributions.PSA10
 		case 9:
 			dist = price.Distributions.PSA9
-		case 8:
-			// No PSA8 distribution data available; leave unset so fallback populates it
 		default:
 			if grade == 0 {
 				dist = price.Distributions.Raw
@@ -244,7 +243,7 @@ func (a *Adapter) GetMarketSnapshot(ctx context.Context, card campaigns.CardIden
 	return snap, nil
 }
 
-func (a *Adapter) getPrice(ctx context.Context, card campaigns.CardIdentity) (*pricing.Price, error) {
+func (a *Adapter) getPrice(ctx context.Context, card inventory.CardIdentity) (*pricing.Price, error) {
 	c := domainCards.Card{Name: card.CardName, Number: card.CardNumber, SetName: card.SetName, PSAListingTitle: card.PSAListingTitle}
 	price, err := a.provider.LookupCard(ctx, card.SetName, c)
 	if err != nil {
@@ -277,8 +276,8 @@ func gradeToCanonical(grade float64) pricing.Grade {
 	}
 }
 
-func buildSourcePrices(price *pricing.Price, grade float64) []campaigns.SourcePrice {
-	var sources []campaigns.SourcePrice
+func buildSourcePrices(price *pricing.Price, grade float64) []inventory.SourcePrice {
+	var sources []inventory.SourcePrice
 
 	// Per-grade detail data from DH and other sources
 	key := gradeDetailKey(grade)
@@ -286,7 +285,7 @@ func buildSourcePrices(price *pricing.Price, grade float64) []campaigns.SourcePr
 		if detail, ok := price.GradeDetails[key]; ok && detail != nil {
 			// eBay sales data
 			if detail.Ebay != nil && detail.Ebay.PriceCents > 0 {
-				sp := campaigns.SourcePrice{
+				sp := inventory.SourcePrice{
 					Source:     "eBay",
 					PriceCents: int(detail.Ebay.PriceCents),
 					SaleCount:  detail.Ebay.SalesCount,
@@ -310,7 +309,7 @@ func buildSourcePrices(price *pricing.Price, grade float64) []campaigns.SourcePr
 
 			// Price estimate
 			if detail.Estimate != nil && detail.Estimate.PriceCents > 0 {
-				sp := campaigns.SourcePrice{
+				sp := inventory.SourcePrice{
 					Source:     "Estimate",
 					PriceCents: int(detail.Estimate.PriceCents),
 				}

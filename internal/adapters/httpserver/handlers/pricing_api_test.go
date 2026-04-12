@@ -9,20 +9,20 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 )
 
 // mockCertPriceLookup implements CertPriceLookup for tests.
 type mockCertPriceLookup struct {
-	purchases map[string]*campaigns.Purchase
+	purchases map[string]*inventory.Purchase
 	err       error
 }
 
-func (m *mockCertPriceLookup) GetPurchasesByCertNumbers(ctx context.Context, certNumbers []string) (map[string]*campaigns.Purchase, error) {
+func (m *mockCertPriceLookup) GetPurchasesByCertNumbers(ctx context.Context, certNumbers []string) (map[string]*inventory.Purchase, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
-	result := make(map[string]*campaigns.Purchase)
+	result := make(map[string]*inventory.Purchase)
 	for _, cn := range certNumbers {
 		if p, ok := m.purchases[cn]; ok {
 			result[cn] = p
@@ -33,7 +33,7 @@ func (m *mockCertPriceLookup) GetPurchasesByCertNumbers(ctx context.Context, cer
 
 func TestHandleSinglePrice_Found(t *testing.T) {
 	mock := &mockCertPriceLookup{
-		purchases: map[string]*campaigns.Purchase{
+		purchases: map[string]*inventory.Purchase{
 			"12345678": {CertNumber: "12345678", CLValueCents: 9473},
 		},
 	}
@@ -65,7 +65,7 @@ func TestHandleSinglePrice_Found(t *testing.T) {
 }
 
 func TestHandleSinglePrice_NotFound(t *testing.T) {
-	mock := &mockCertPriceLookup{purchases: map[string]*campaigns.Purchase{}}
+	mock := &mockCertPriceLookup{purchases: map[string]*inventory.Purchase{}}
 	h := NewPricingAPIHandler(mock, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/prices/99999999", nil)
@@ -89,7 +89,7 @@ func TestHandleSinglePrice_NotFound(t *testing.T) {
 
 func TestHandleSinglePrice_ZeroCLValue(t *testing.T) {
 	mock := &mockCertPriceLookup{
-		purchases: map[string]*campaigns.Purchase{
+		purchases: map[string]*inventory.Purchase{
 			"12345678": {CertNumber: "12345678", CLValueCents: 0},
 		},
 	}
@@ -131,7 +131,7 @@ func TestHandleSinglePrice_DBError(t *testing.T) {
 
 func TestHandleBatchPrices_HappyPath(t *testing.T) {
 	mock := &mockCertPriceLookup{
-		purchases: map[string]*campaigns.Purchase{
+		purchases: map[string]*inventory.Purchase{
 			"11111111": {CertNumber: "11111111", CLValueCents: 5000},
 			"22222222": {CertNumber: "22222222", CLValueCents: 10050},
 		},
@@ -175,7 +175,7 @@ func TestHandleBatchPrices_HappyPath(t *testing.T) {
 
 func TestHandleBatchPrices_Deduplication(t *testing.T) {
 	mock := &mockCertPriceLookup{
-		purchases: map[string]*campaigns.Purchase{
+		purchases: map[string]*inventory.Purchase{
 			"11111111": {CertNumber: "11111111", CLValueCents: 5000},
 		},
 	}
@@ -282,7 +282,7 @@ func TestHandleBatchPrices_EmptyStringInArray(t *testing.T) {
 
 func TestPricingAPI_EndToEnd(t *testing.T) {
 	mock := &mockCertPriceLookup{
-		purchases: map[string]*campaigns.Purchase{
+		purchases: map[string]*inventory.Purchase{
 			"11111111": {CertNumber: "11111111", CLValueCents: 9473},
 			"22222222": {CertNumber: "22222222", CLValueCents: 4500},
 		},

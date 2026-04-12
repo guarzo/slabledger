@@ -8,18 +8,43 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	"github.com/guarzo/slabledger/internal/domain/arbitrage"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
+	"github.com/guarzo/slabledger/internal/domain/portfolio"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
 )
 
 // newTestExecutor creates a CampaignToolExecutor backed by the given mock service.
-func newTestExecutor(svc campaigns.Service) *CampaignToolExecutor {
+func newTestExecutor(svc inventory.Service) *CampaignToolExecutor {
 	return NewCampaignToolExecutor(svc)
+}
+
+// newTestExecutorFull creates a CampaignToolExecutor with all optional services.
+func newTestExecutorFull(svc inventory.Service, arbSvc arbitrage.Service, portSvc portfolio.Service) *CampaignToolExecutor {
+	// Create a finance service that wraps the campaign service for backward compatibility
+	finSvc := &mocks.MockFinanceService{}
+	if campaignSvc, ok := svc.(*mocks.MockInventoryService); ok {
+		// Copy over finance methods from campaign service
+		finSvc.GetCapitalSummaryFn = campaignSvc.GetCapitalSummaryFn
+		finSvc.GetCashflowConfigFn = campaignSvc.GetCashflowConfigFn
+		finSvc.UpdateCashflowConfigFn = campaignSvc.UpdateCashflowConfigFn
+		finSvc.ListInvoicesFn = campaignSvc.ListInvoicesFn
+		finSvc.UpdateInvoiceFn = campaignSvc.UpdateInvoiceFn
+		finSvc.FlagForRevocationFn = campaignSvc.FlagForRevocationFn
+		finSvc.ListRevocationFlagsFn = campaignSvc.ListRevocationFlagsFn
+		finSvc.GenerateRevocationEmailFn = campaignSvc.GenerateRevocationEmailFn
+	}
+
+	return NewCampaignToolExecutor(svc,
+		WithArbitrageService(arbSvc),
+		WithPortfolioService(portSvc),
+		WithFinanceService(finSvc),
+	)
 }
 
 // TestDefinitions_RequiredTools verifies that all required tools are registered.
 func TestDefinitions_RequiredTools(t *testing.T) {
-	e := newTestExecutor(&mocks.MockCampaignService{})
+	e := newTestExecutor(&mocks.MockInventoryService{})
 	defs := e.Definitions()
 
 	requiredTools := []string{
@@ -50,7 +75,7 @@ func TestDefinitions_RequiredTools(t *testing.T) {
 
 // TestDefinitionsFor_Subset verifies that only the requested tools are returned.
 func TestDefinitionsFor_Subset(t *testing.T) {
-	e := newTestExecutor(&mocks.MockCampaignService{})
+	e := newTestExecutor(&mocks.MockInventoryService{})
 	names := []string{"list_campaigns", "get_portfolio_health"}
 	defs := e.DefinitionsFor(names)
 	if len(defs) != 2 {
@@ -69,7 +94,7 @@ func TestDefinitionsFor_Subset(t *testing.T) {
 
 // TestDefinitionsFor_Empty verifies that an empty name list returns zero tools.
 func TestDefinitionsFor_Empty(t *testing.T) {
-	e := newTestExecutor(&mocks.MockCampaignService{})
+	e := newTestExecutor(&mocks.MockInventoryService{})
 	defs := e.DefinitionsFor([]string{})
 	if len(defs) != 0 {
 		t.Errorf("DefinitionsFor([]) returned %d tools, want 0", len(defs))
@@ -78,7 +103,7 @@ func TestDefinitionsFor_Empty(t *testing.T) {
 
 // TestExecute_UnknownTool verifies that calling an unregistered tool returns an error.
 func TestExecute_UnknownTool(t *testing.T) {
-	e := newTestExecutor(&mocks.MockCampaignService{})
+	e := newTestExecutor(&mocks.MockInventoryService{})
 	_, err := e.Execute(context.Background(), "does_not_exist", "{}")
 	if err == nil {
 		t.Fatal("expected error for unknown tool, got nil")
@@ -90,7 +115,7 @@ func TestExecute_UnknownTool(t *testing.T) {
 
 // TestExecute_InvalidJSON verifies that passing malformed JSON to a campaign-id tool returns an error.
 func TestExecute_InvalidJSON(t *testing.T) {
-	e := newTestExecutor(&mocks.MockCampaignService{})
+	e := newTestExecutor(&mocks.MockInventoryService{})
 	// get_campaign_pnl requires a campaignId; send malformed JSON.
 	_, err := e.Execute(context.Background(), "get_campaign_pnl", "{not valid json")
 	if err == nil {
@@ -100,12 +125,12 @@ func TestExecute_InvalidJSON(t *testing.T) {
 
 // TestExecute_ListCampaigns verifies that the list_campaigns tool calls ListCampaigns and returns JSON.
 func TestExecute_ListCampaigns(t *testing.T) {
-	want := []campaigns.Campaign{
+	want := []inventory.Campaign{
 		{ID: "camp-1", Name: "Vintage Test"},
 		{ID: "camp-2", Name: "Modern Test"},
 	}
-	svc := &mocks.MockCampaignService{
-		ListCampaignsFn: func(_ context.Context, activeOnly bool) ([]campaigns.Campaign, error) {
+	svc := &mocks.MockInventoryService{
+		ListCampaignsFn: func(_ context.Context, activeOnly bool) ([]inventory.Campaign, error) {
 			return want, nil
 		},
 	}
@@ -115,7 +140,7 @@ func TestExecute_ListCampaigns(t *testing.T) {
 		t.Fatalf("Execute list_campaigns: %v", err)
 	}
 
-	var got []campaigns.Campaign
+	var got []inventory.Campaign
 	if err := json.Unmarshal([]byte(result), &got); err != nil {
 		t.Fatalf("unmarshal result: %v", err)
 	}
@@ -132,23 +157,23 @@ func TestExecute_ListCampaigns(t *testing.T) {
 
 // TestExecute_GetPortfolioHealth verifies that the get_portfolio_health tool calls GetPortfolioHealth and returns JSON.
 func TestExecute_GetPortfolioHealth(t *testing.T) {
-	want := &campaigns.PortfolioHealth{
+	want := &inventory.PortfolioHealth{
 		TotalDeployed:  100000,
 		TotalRecovered: 80000,
 		OverallROI:     -0.2,
 	}
-	svc := &mocks.MockCampaignService{
-		GetPortfolioHealthFn: func(_ context.Context) (*campaigns.PortfolioHealth, error) {
+	portSvc := &mocks.MockPortfolioService{
+		GetPortfolioHealthFn: func(_ context.Context) (*inventory.PortfolioHealth, error) {
 			return want, nil
 		},
 	}
-	e := newTestExecutor(svc)
+	e := newTestExecutorFull(&mocks.MockInventoryService{}, nil, portSvc)
 	result, err := e.Execute(context.Background(), "get_portfolio_health", "{}")
 	if err != nil {
 		t.Fatalf("Execute get_portfolio_health: %v", err)
 	}
 
-	var got campaigns.PortfolioHealth
+	var got inventory.PortfolioHealth
 	if err := json.Unmarshal([]byte(result), &got); err != nil {
 		t.Fatalf("unmarshal result: %v", err)
 	}
@@ -165,10 +190,10 @@ func TestExecute_GetCampaignPNL(t *testing.T) {
 	const wantID = "camp-42"
 	var capturedID string
 
-	svc := &mocks.MockCampaignService{
-		GetCampaignPNLFn: func(_ context.Context, campaignID string) (*campaigns.CampaignPNL, error) {
+	svc := &mocks.MockInventoryService{
+		GetCampaignPNLFn: func(_ context.Context, campaignID string) (*inventory.CampaignPNL, error) {
 			capturedID = campaignID
-			return &campaigns.CampaignPNL{CampaignID: campaignID, TotalSpendCents: 5000}, nil
+			return &inventory.CampaignPNL{CampaignID: campaignID, TotalSpendCents: 5000}, nil
 		},
 	}
 	e := newTestExecutor(svc)
@@ -180,7 +205,7 @@ func TestExecute_GetCampaignPNL(t *testing.T) {
 		t.Errorf("capturedID = %q, want %q", capturedID, wantID)
 	}
 
-	var got campaigns.CampaignPNL
+	var got inventory.CampaignPNL
 	if err := json.Unmarshal([]byte(result), &got); err != nil {
 		t.Fatalf("unmarshal result: %v", err)
 	}
@@ -192,8 +217,8 @@ func TestExecute_GetCampaignPNL(t *testing.T) {
 // TestExecute_ServiceError verifies that a service error is propagated by Execute.
 func TestExecute_ServiceError(t *testing.T) {
 	serviceErr := errors.New("database unavailable")
-	svc := &mocks.MockCampaignService{
-		ListCampaignsFn: func(_ context.Context, _ bool) ([]campaigns.Campaign, error) {
+	svc := &mocks.MockInventoryService{
+		ListCampaignsFn: func(_ context.Context, _ bool) ([]inventory.Campaign, error) {
 			return nil, serviceErr
 		},
 	}
@@ -223,20 +248,21 @@ func TestToJSON_TruncatesAt15KB(t *testing.T) {
 
 func TestExecute_GetExpectedValuesBatch(t *testing.T) {
 	tests := []struct {
-		name      string
-		mockSetup func(*mocks.MockCampaignService)
-		payload   string
-		wantErr   bool
-		validate  func(t *testing.T, result string)
+		name         string
+		mockSetup    func(*mocks.MockInventoryService)
+		arbMockSetup func(*mocks.MockArbitrageService)
+		payload      string
+		wantErr      bool
+		validate     func(t *testing.T, result string)
 	}{
 		{
 			name: "WithIDs",
-			mockSetup: func(svc *mocks.MockCampaignService) {
-				svc.GetExpectedValuesFn = func(_ context.Context, campaignID string) (*campaigns.EVPortfolio, error) {
-					return &campaigns.EVPortfolio{
+			arbMockSetup: func(arb *mocks.MockArbitrageService) {
+				arb.GetExpectedValuesFn = func(_ context.Context, campaignID string) (*arbitrage.EVPortfolio, error) {
+					return &arbitrage.EVPortfolio{
 						TotalEVCents:  1000,
 						PositiveCount: 2,
-						Items: []campaigns.ExpectedValue{
+						Items: []arbitrage.ExpectedValue{
 							{CardName: "Charizard-" + campaignID, EVCents: 500},
 						},
 					}, nil
@@ -244,7 +270,7 @@ func TestExecute_GetExpectedValuesBatch(t *testing.T) {
 			},
 			payload: `{"campaignIds":["camp-1","camp-2"]}`,
 			validate: func(t *testing.T, result string) {
-				var got map[string]*campaigns.EVPortfolio
+				var got map[string]*arbitrage.EVPortfolio
 				if err := json.Unmarshal([]byte(result), &got); err != nil {
 					t.Fatalf("unmarshal: %v", err)
 				}
@@ -261,23 +287,25 @@ func TestExecute_GetExpectedValuesBatch(t *testing.T) {
 		},
 		{
 			name: "AllActive",
-			mockSetup: func(svc *mocks.MockCampaignService) {
-				svc.ListCampaignsFn = func(_ context.Context, activeOnly bool) ([]campaigns.Campaign, error) {
+			mockSetup: func(svc *mocks.MockInventoryService) {
+				svc.ListCampaignsFn = func(_ context.Context, activeOnly bool) ([]inventory.Campaign, error) {
 					if !activeOnly {
 						return nil, fmt.Errorf("expected activeOnly=true, got false")
 					}
-					return []campaigns.Campaign{
+					return []inventory.Campaign{
 						{ID: "a1", Name: "Alpha"},
 						{ID: "a2", Name: "Beta"},
 					}, nil
 				}
-				svc.GetExpectedValuesFn = func(_ context.Context, campaignID string) (*campaigns.EVPortfolio, error) {
-					return &campaigns.EVPortfolio{TotalEVCents: 100}, nil
+			},
+			arbMockSetup: func(arb *mocks.MockArbitrageService) {
+				arb.GetExpectedValuesFn = func(_ context.Context, campaignID string) (*arbitrage.EVPortfolio, error) {
+					return &arbitrage.EVPortfolio{TotalEVCents: 100}, nil
 				}
 			},
 			payload: `{}`,
 			validate: func(t *testing.T, result string) {
-				var got map[string]*campaigns.EVPortfolio
+				var got map[string]*arbitrage.EVPortfolio
 				if err := json.Unmarshal([]byte(result), &got); err != nil {
 					t.Fatalf("unmarshal: %v", err)
 				}
@@ -294,12 +322,12 @@ func TestExecute_GetExpectedValuesBatch(t *testing.T) {
 		},
 		{
 			name: "PartialFailure",
-			mockSetup: func(svc *mocks.MockCampaignService) {
-				svc.GetExpectedValuesFn = func(_ context.Context, campaignID string) (*campaigns.EVPortfolio, error) {
+			arbMockSetup: func(arb *mocks.MockArbitrageService) {
+				arb.GetExpectedValuesFn = func(_ context.Context, campaignID string) (*arbitrage.EVPortfolio, error) {
 					if campaignID == "bad" {
 						return nil, errors.New("not found")
 					}
-					return &campaigns.EVPortfolio{TotalEVCents: 200}, nil
+					return &arbitrage.EVPortfolio{TotalEVCents: 200}, nil
 				}
 			},
 			payload: `{"campaignIds":["good","bad"]}`,
@@ -338,9 +366,15 @@ func TestExecute_GetExpectedValuesBatch(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			svc := &mocks.MockCampaignService{}
-			tc.mockSetup(svc)
-			e := newTestExecutor(svc)
+			svc := &mocks.MockInventoryService{}
+			if tc.mockSetup != nil {
+				tc.mockSetup(svc)
+			}
+			arb := &mocks.MockArbitrageService{}
+			if tc.arbMockSetup != nil {
+				tc.arbMockSetup(arb)
+			}
+			e := newTestExecutorFull(svc, arb, nil)
 			result, err := e.Execute(context.Background(), "get_expected_values_batch", tc.payload)
 			if tc.wantErr {
 				if err == nil {
@@ -361,14 +395,14 @@ func TestExecute_GetExpectedValuesBatch(t *testing.T) {
 func TestExecute_SuggestPriceBatch(t *testing.T) {
 	tests := []struct {
 		name      string
-		mockSetup func(*mocks.MockCampaignService)
+		mockSetup func(*mocks.MockInventoryService)
 		payload   string
 		wantErr   bool
 		validate  func(t *testing.T, result string)
 	}{
 		{
 			name: "AllOK",
-			mockSetup: func(svc *mocks.MockCampaignService) {
+			mockSetup: func(svc *mocks.MockInventoryService) {
 				svc.SetAISuggestedPriceFn = func(_ context.Context, purchaseID string, priceCents int) error {
 					return nil
 				}
@@ -396,7 +430,7 @@ func TestExecute_SuggestPriceBatch(t *testing.T) {
 		},
 		{
 			name: "PartialFailure",
-			mockSetup: func(svc *mocks.MockCampaignService) {
+			mockSetup: func(svc *mocks.MockInventoryService) {
 				svc.SetAISuggestedPriceFn = func(_ context.Context, purchaseID string, priceCents int) error {
 					if purchaseID == "bad" {
 						return errors.New("purchase not found")
@@ -432,13 +466,13 @@ func TestExecute_SuggestPriceBatch(t *testing.T) {
 		},
 		{
 			name:      "Empty",
-			mockSetup: func(svc *mocks.MockCampaignService) {},
+			mockSetup: func(svc *mocks.MockInventoryService) {},
 			payload:   `{"suggestions":[]}`,
 			wantErr:   true,
 		},
 		{
 			name:      "InvalidItem",
-			mockSetup: func(svc *mocks.MockCampaignService) {},
+			mockSetup: func(svc *mocks.MockInventoryService) {},
 			payload:   `{"suggestions":[{"purchaseId":"","priceCents":1500}]}`,
 			wantErr:   true,
 		},
@@ -446,7 +480,7 @@ func TestExecute_SuggestPriceBatch(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			svc := &mocks.MockCampaignService{}
+			svc := &mocks.MockInventoryService{}
 			tc.mockSetup(svc)
 			e := newTestExecutor(svc)
 			result, err := e.Execute(context.Background(), "suggest_price_batch", tc.payload)
@@ -469,17 +503,17 @@ func TestExecute_SuggestPriceBatch(t *testing.T) {
 func TestExecute_GetDashboardSummary(t *testing.T) {
 	tests := []struct {
 		name               string
-		weeklyReviewFn     func(_ context.Context) (*campaigns.WeeklyReviewSummary, error)
-		capitalSummaryFn   func(_ context.Context) (*campaigns.CapitalSummary, error)
-		portfolioHealthFn  func(_ context.Context) (*campaigns.PortfolioHealth, error)
-		channelVelocityFn  func(_ context.Context) ([]campaigns.ChannelVelocity, error)
+		weeklyReviewFn     func(_ context.Context) (*inventory.WeeklyReviewSummary, error)
+		capitalSummaryFn   func(_ context.Context) (*inventory.CapitalSummary, error)
+		portfolioHealthFn  func(_ context.Context) (*inventory.PortfolioHealth, error)
+		channelVelocityFn  func(_ context.Context) ([]inventory.ChannelVelocity, error)
 		wantSubstrings     []string
 		wantMissingStrings []string
 	}{
 		{
 			name: "full dashboard with critical capital",
-			weeklyReviewFn: func(_ context.Context) (*campaigns.WeeklyReviewSummary, error) {
-				return &campaigns.WeeklyReviewSummary{
+			weeklyReviewFn: func(_ context.Context) (*inventory.WeeklyReviewSummary, error) {
+				return &inventory.WeeklyReviewSummary{
 					PurchasesThisWeek:    10,
 					PurchasesLastWeek:    8,
 					SpendThisWeekCents:   50000,
@@ -490,24 +524,24 @@ func TestExecute_GetDashboardSummary(t *testing.T) {
 					ProfitLastWeekCents:  3000,
 				}, nil
 			},
-			capitalSummaryFn: func(_ context.Context) (*campaigns.CapitalSummary, error) {
-				return &campaigns.CapitalSummary{
+			capitalSummaryFn: func(_ context.Context) (*inventory.CapitalSummary, error) {
+				return &inventory.CapitalSummary{
 					OutstandingCents:     2500000,
 					RecoveryRate30dCents: 500000,
 					WeeksToCover:         21.5,
-					RecoveryTrend:        campaigns.TrendStable,
-					AlertLevel:           campaigns.AlertCritical,
+					RecoveryTrend:        inventory.TrendStable,
+					AlertLevel:           inventory.AlertCritical,
 				}, nil
 			},
-			portfolioHealthFn: func(_ context.Context) (*campaigns.PortfolioHealth, error) {
-				return &campaigns.PortfolioHealth{
-					Campaigns: []campaigns.CampaignHealth{
+			portfolioHealthFn: func(_ context.Context) (*inventory.PortfolioHealth, error) {
+				return &inventory.PortfolioHealth{
+					Campaigns: []inventory.CampaignHealth{
 						{CampaignName: "Test", HealthStatus: "healthy", HealthReason: "good", CapitalAtRisk: 1000},
 					},
 				}, nil
 			},
-			channelVelocityFn: func(_ context.Context) ([]campaigns.ChannelVelocity, error) {
-				return []campaigns.ChannelVelocity{
+			channelVelocityFn: func(_ context.Context) ([]inventory.ChannelVelocity, error) {
+				return []inventory.ChannelVelocity{
 					{Channel: "ebay", AvgDaysToSell: 14.5, SaleCount: 5},
 				}, nil
 			},
@@ -520,8 +554,8 @@ func TestExecute_GetDashboardSummary(t *testing.T) {
 		},
 		{
 			name: "healthy capital with ok alert",
-			weeklyReviewFn: func(_ context.Context) (*campaigns.WeeklyReviewSummary, error) {
-				return &campaigns.WeeklyReviewSummary{
+			weeklyReviewFn: func(_ context.Context) (*inventory.WeeklyReviewSummary, error) {
+				return &inventory.WeeklyReviewSummary{
 					PurchasesThisWeek:   3,
 					PurchasesLastWeek:   3,
 					SalesThisWeek:       2,
@@ -530,19 +564,19 @@ func TestExecute_GetDashboardSummary(t *testing.T) {
 					ProfitLastWeekCents: 1000,
 				}, nil
 			},
-			capitalSummaryFn: func(_ context.Context) (*campaigns.CapitalSummary, error) {
-				return &campaigns.CapitalSummary{
+			capitalSummaryFn: func(_ context.Context) (*inventory.CapitalSummary, error) {
+				return &inventory.CapitalSummary{
 					OutstandingCents:     50000,
 					RecoveryRate30dCents: 100000,
 					WeeksToCover:         2.15,
-					RecoveryTrend:        campaigns.TrendImproving,
-					AlertLevel:           campaigns.AlertOK,
+					RecoveryTrend:        inventory.TrendImproving,
+					AlertLevel:           inventory.AlertOK,
 				}, nil
 			},
-			portfolioHealthFn: func(_ context.Context) (*campaigns.PortfolioHealth, error) {
-				return &campaigns.PortfolioHealth{}, nil
+			portfolioHealthFn: func(_ context.Context) (*inventory.PortfolioHealth, error) {
+				return &inventory.PortfolioHealth{}, nil
 			},
-			channelVelocityFn: func(_ context.Context) ([]campaigns.ChannelVelocity, error) {
+			channelVelocityFn: func(_ context.Context) ([]inventory.ChannelVelocity, error) {
 				return nil, nil
 			},
 			wantSubstrings: []string{
@@ -553,20 +587,20 @@ func TestExecute_GetDashboardSummary(t *testing.T) {
 		},
 		{
 			name: "partial errors still returns available data",
-			weeklyReviewFn: func(_ context.Context) (*campaigns.WeeklyReviewSummary, error) {
+			weeklyReviewFn: func(_ context.Context) (*inventory.WeeklyReviewSummary, error) {
 				return nil, fmt.Errorf("weekly review unavailable")
 			},
-			capitalSummaryFn: func(_ context.Context) (*campaigns.CapitalSummary, error) {
-				return &campaigns.CapitalSummary{
+			capitalSummaryFn: func(_ context.Context) (*inventory.CapitalSummary, error) {
+				return &inventory.CapitalSummary{
 					OutstandingCents: 100000,
-					AlertLevel:       campaigns.AlertWarning,
+					AlertLevel:       inventory.AlertWarning,
 					WeeksToCover:     8.0,
 				}, nil
 			},
-			portfolioHealthFn: func(_ context.Context) (*campaigns.PortfolioHealth, error) {
+			portfolioHealthFn: func(_ context.Context) (*inventory.PortfolioHealth, error) {
 				return nil, fmt.Errorf("health unavailable")
 			},
-			channelVelocityFn: func(_ context.Context) ([]campaigns.ChannelVelocity, error) {
+			channelVelocityFn: func(_ context.Context) ([]inventory.ChannelVelocity, error) {
 				return nil, nil
 			},
 			wantSubstrings: []string{
@@ -578,13 +612,15 @@ func TestExecute_GetDashboardSummary(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			svc := &mocks.MockCampaignService{
+			svc := &mocks.MockInventoryService{
+				GetCapitalSummaryFn: tt.capitalSummaryFn,
+			}
+			portSvc := &mocks.MockPortfolioService{
 				GetWeeklyReviewSummaryFn:      tt.weeklyReviewFn,
-				GetCapitalSummaryFn:           tt.capitalSummaryFn,
 				GetPortfolioHealthFn:          tt.portfolioHealthFn,
 				GetPortfolioChannelVelocityFn: tt.channelVelocityFn,
 			}
-			e := newTestExecutor(svc)
+			e := newTestExecutorFull(svc, nil, portSvc)
 
 			result, err := e.Execute(context.Background(), "get_dashboard_summary", "{}")
 			if err != nil {

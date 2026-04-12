@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
@@ -40,7 +40,7 @@ func (h *DHHandler) HandleDismissMatch(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "purchase not found")
 		return
 	}
-	if p.DHPushStatus != campaigns.DHPushStatusUnmatched {
+	if p.DHPushStatus != inventory.DHPushStatusUnmatched {
 		writeError(w, http.StatusConflict, "purchase is not in unmatched state")
 		return
 	}
@@ -49,7 +49,7 @@ func (h *DHHandler) HandleDismissMatch(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "push status updater not configured")
 		return
 	}
-	if err := h.pushStatusUpdater.UpdatePurchaseDHPushStatus(ctx, req.PurchaseID, campaigns.DHPushStatusDismissed); err != nil {
+	if err := h.pushStatusUpdater.UpdatePurchaseDHPushStatus(ctx, req.PurchaseID, inventory.DHPushStatusDismissed); err != nil {
 		h.logger.Error(ctx, "dismiss: update push status", observability.Err(err))
 		writeError(w, http.StatusInternalServerError, "failed to dismiss purchase")
 		return
@@ -87,7 +87,7 @@ func (h *DHHandler) HandleUndismissMatch(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusNotFound, "purchase not found")
 		return
 	}
-	if p.DHPushStatus != campaigns.DHPushStatusDismissed {
+	if p.DHPushStatus != inventory.DHPushStatusDismissed {
 		writeError(w, http.StatusConflict, "purchase is not in dismissed state")
 		return
 	}
@@ -96,7 +96,7 @@ func (h *DHHandler) HandleUndismissMatch(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusInternalServerError, "push status updater not configured")
 		return
 	}
-	if err := h.pushStatusUpdater.UpdatePurchaseDHPushStatus(ctx, req.PurchaseID, campaigns.DHPushStatusUnmatched); err != nil {
+	if err := h.pushStatusUpdater.UpdatePurchaseDHPushStatus(ctx, req.PurchaseID, inventory.DHPushStatusUnmatched); err != nil {
 		h.logger.Error(ctx, "undismiss: update push status", observability.Err(err))
 		writeError(w, http.StatusInternalServerError, "failed to undismiss purchase")
 		return

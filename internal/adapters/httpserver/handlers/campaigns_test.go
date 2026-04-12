@@ -9,14 +9,31 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	"github.com/guarzo/slabledger/internal/domain/arbitrage"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
+	"github.com/guarzo/slabledger/internal/domain/portfolio"
+	"github.com/guarzo/slabledger/internal/domain/tuning"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
 )
 
 // --- helpers ---
 
-func newTestHandler(svc *mocks.MockCampaignService) *CampaignsHandler {
-	return NewCampaignsHandler(svc, mocks.NewMockLogger(), nil)
+func newTestHandler(svc *mocks.MockInventoryService) *CampaignsHandler {
+	return NewCampaignsHandler(svc, nil, nil, nil, mocks.NewMockLogger(), nil,
+		WithFinanceService(&mocks.MockFinanceService{}),
+		WithExportService(&mocks.MockExportService{}))
+}
+
+func newTestHandlerFull(svc *mocks.MockInventoryService, arbSvc arbitrage.Service, portSvc portfolio.Service, tuningSvc tuning.Service) *CampaignsHandler {
+	return NewCampaignsHandler(svc, arbSvc, portSvc, tuningSvc, mocks.NewMockLogger(), nil,
+		WithFinanceService(&mocks.MockFinanceService{}),
+		WithExportService(&mocks.MockExportService{}))
+}
+
+func newTestHandlerWithServices(svc *mocks.MockInventoryService, finSvc *mocks.MockFinanceService, expSvc *mocks.MockExportService) *CampaignsHandler {
+	return NewCampaignsHandler(svc, nil, nil, nil, mocks.NewMockLogger(), nil,
+		WithFinanceService(finSvc),
+		WithExportService(expSvc))
 }
 
 // decodeErrorResponse decodes a JSON response and returns the "error" field value.
@@ -40,13 +57,13 @@ func TestHandleListCampaigns_GET_List(t *testing.T) {
 		name       string
 		query      string
 		activeOnly bool
-		campaigns  []campaigns.Campaign
+		campaigns  []inventory.Campaign
 	}{
 		{
 			name:       "list all campaigns",
 			query:      "",
 			activeOnly: false,
-			campaigns: []campaigns.Campaign{
+			campaigns: []inventory.Campaign{
 				{ID: "c1", Name: "Camp A"},
 				{ID: "c2", Name: "Camp B"},
 			},
@@ -55,7 +72,7 @@ func TestHandleListCampaigns_GET_List(t *testing.T) {
 			name:       "list active only",
 			query:      "?activeOnly=true",
 			activeOnly: true,
-			campaigns:  []campaigns.Campaign{{ID: "c1", Name: "Active"}},
+			campaigns:  []inventory.Campaign{{ID: "c1", Name: "Active"}},
 		},
 		{
 			name:       "empty list returns JSON array",
@@ -67,8 +84,8 @@ func TestHandleListCampaigns_GET_List(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			svc := &mocks.MockCampaignService{
-				ListCampaignsFn: func(_ context.Context, activeOnly bool) ([]campaigns.Campaign, error) {
+			svc := &mocks.MockInventoryService{
+				ListCampaignsFn: func(_ context.Context, activeOnly bool) ([]inventory.Campaign, error) {
 					if activeOnly != tt.activeOnly {
 						t.Errorf("expected activeOnly=%v, got %v", tt.activeOnly, activeOnly)
 					}
@@ -88,7 +105,7 @@ func TestHandleListCampaigns_GET_List(t *testing.T) {
 				t.Errorf("expected Content-Type application/json, got %q", ct)
 			}
 			// Verify response is a JSON array (even when nil from service)
-			var result []campaigns.Campaign
+			var result []inventory.Campaign
 			if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
 				t.Fatalf("failed to decode response: %v", err)
 			}
@@ -97,8 +114,8 @@ func TestHandleListCampaigns_GET_List(t *testing.T) {
 }
 
 func TestHandleListCampaigns_GET_ServiceError(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		ListCampaignsFn: func(_ context.Context, _ bool) ([]campaigns.Campaign, error) {
+	svc := &mocks.MockInventoryService{
+		ListCampaignsFn: func(_ context.Context, _ bool) ([]inventory.Campaign, error) {
 			return nil, fmt.Errorf("db connection lost")
 		},
 	}
@@ -120,8 +137,8 @@ func TestHandleListCampaigns_GET_ServiceError(t *testing.T) {
 // --- HandleCreateCampaign (POST) ---
 
 func TestHandleCreateCampaign_POST_CreateSuccess(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		CreateCampaignFn: func(_ context.Context, c *campaigns.Campaign) error {
+	svc := &mocks.MockInventoryService{
+		CreateCampaignFn: func(_ context.Context, c *inventory.Campaign) error {
 			c.ID = "new-id"
 			return nil
 		},
@@ -137,7 +154,7 @@ func TestHandleCreateCampaign_POST_CreateSuccess(t *testing.T) {
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d; body: %s", rec.Code, rec.Body.String())
 	}
-	var result campaigns.Campaign
+	var result inventory.Campaign
 	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
 		t.Fatalf("failed to decode: %v", err)
 	}
@@ -147,7 +164,7 @@ func TestHandleCreateCampaign_POST_CreateSuccess(t *testing.T) {
 }
 
 func TestHandleCreateCampaign_POST_InvalidBody(t *testing.T) {
-	h := newTestHandler(&mocks.MockCampaignService{})
+	h := newTestHandler(&mocks.MockInventoryService{})
 
 	req := httptest.NewRequest(http.MethodPost, "/api/campaigns", bytes.NewBufferString("{invalid"))
 	rec := httptest.NewRecorder()
@@ -160,9 +177,9 @@ func TestHandleCreateCampaign_POST_InvalidBody(t *testing.T) {
 }
 
 func TestHandleCreateCampaign_POST_ValidationError(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		CreateCampaignFn: func(_ context.Context, _ *campaigns.Campaign) error {
-			return campaigns.ErrCampaignNameRequired
+	svc := &mocks.MockInventoryService{
+		CreateCampaignFn: func(_ context.Context, _ *inventory.Campaign) error {
+			return inventory.ErrCampaignNameRequired
 		},
 	}
 	h := newTestHandler(svc)
@@ -181,9 +198,9 @@ func TestHandleCreateCampaign_POST_ValidationError(t *testing.T) {
 // --- HandleGetCampaign (GET by ID) ---
 
 func TestHandleGetCampaign_Success(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		GetCampaignFn: func(_ context.Context, id string) (*campaigns.Campaign, error) {
-			return &campaigns.Campaign{ID: id, Name: "Found"}, nil
+	svc := &mocks.MockInventoryService{
+		GetCampaignFn: func(_ context.Context, id string) (*inventory.Campaign, error) {
+			return &inventory.Campaign{ID: id, Name: "Found"}, nil
 		},
 	}
 	h := newTestHandler(svc)
@@ -196,7 +213,7 @@ func TestHandleGetCampaign_Success(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rec.Code)
 	}
-	var result campaigns.Campaign
+	var result inventory.Campaign
 	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -206,9 +223,9 @@ func TestHandleGetCampaign_Success(t *testing.T) {
 }
 
 func TestHandleGetCampaign_NotFound(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		GetCampaignFn: func(_ context.Context, _ string) (*campaigns.Campaign, error) {
-			return nil, campaigns.ErrCampaignNotFound
+	svc := &mocks.MockInventoryService{
+		GetCampaignFn: func(_ context.Context, _ string) (*inventory.Campaign, error) {
+			return nil, inventory.ErrCampaignNotFound
 		},
 	}
 	h := newTestHandler(svc)
@@ -225,8 +242,8 @@ func TestHandleGetCampaign_NotFound(t *testing.T) {
 }
 
 func TestHandleGetCampaign_InternalError(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		GetCampaignFn: func(_ context.Context, _ string) (*campaigns.Campaign, error) {
+	svc := &mocks.MockInventoryService{
+		GetCampaignFn: func(_ context.Context, _ string) (*inventory.Campaign, error) {
 			return nil, fmt.Errorf("database down")
 		},
 	}
@@ -246,8 +263,8 @@ func TestHandleGetCampaign_InternalError(t *testing.T) {
 // --- HandleUpdateCampaign (PUT) ---
 
 func TestHandleUpdateCampaign_PUT_Success(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		UpdateCampaignFn: func(_ context.Context, c *campaigns.Campaign) error {
+	svc := &mocks.MockInventoryService{
+		UpdateCampaignFn: func(_ context.Context, c *inventory.Campaign) error {
 			if c.ID != "abc-123" {
 				t.Errorf("expected ID=abc-123, got %q", c.ID)
 			}
@@ -268,9 +285,9 @@ func TestHandleUpdateCampaign_PUT_Success(t *testing.T) {
 }
 
 func TestHandleUpdateCampaign_PUT_NotFound(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		UpdateCampaignFn: func(_ context.Context, _ *campaigns.Campaign) error {
-			return campaigns.ErrCampaignNotFound
+	svc := &mocks.MockInventoryService{
+		UpdateCampaignFn: func(_ context.Context, _ *inventory.Campaign) error {
+			return inventory.ErrCampaignNotFound
 		},
 	}
 	h := newTestHandler(svc)
@@ -288,9 +305,9 @@ func TestHandleUpdateCampaign_PUT_NotFound(t *testing.T) {
 }
 
 func TestHandleUpdateCampaign_PUT_ValidationError(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		UpdateCampaignFn: func(_ context.Context, _ *campaigns.Campaign) error {
-			return campaigns.ErrInvalidBuyTermsPct
+	svc := &mocks.MockInventoryService{
+		UpdateCampaignFn: func(_ context.Context, _ *inventory.Campaign) error {
+			return inventory.ErrInvalidBuyTermsPct
 		},
 	}
 	h := newTestHandler(svc)
@@ -308,7 +325,7 @@ func TestHandleUpdateCampaign_PUT_ValidationError(t *testing.T) {
 }
 
 func TestHandleUpdateCampaign_PUT_InvalidBody(t *testing.T) {
-	h := newTestHandler(&mocks.MockCampaignService{})
+	h := newTestHandler(&mocks.MockInventoryService{})
 
 	req := httptest.NewRequest(http.MethodPut, "/api/campaigns/abc-123", bytes.NewBufferString("{bad"))
 	req.SetPathValue("id", "abc-123")
@@ -324,7 +341,7 @@ func TestHandleUpdateCampaign_PUT_InvalidBody(t *testing.T) {
 // --- HandleDelete ---
 
 func TestHandleDelete_Success(t *testing.T) {
-	svc := &mocks.MockCampaignService{
+	svc := &mocks.MockInventoryService{
 		DeleteCampaignFn: func(_ context.Context, id string) error {
 			if id != "abc-123" {
 				t.Errorf("expected id=abc-123, got %q", id)
@@ -345,9 +362,9 @@ func TestHandleDelete_Success(t *testing.T) {
 }
 
 func TestHandleDelete_NotFound(t *testing.T) {
-	svc := &mocks.MockCampaignService{
+	svc := &mocks.MockInventoryService{
 		DeleteCampaignFn: func(_ context.Context, _ string) error {
-			return campaigns.ErrCampaignNotFound
+			return inventory.ErrCampaignNotFound
 		},
 	}
 	h := newTestHandler(svc)
@@ -364,7 +381,7 @@ func TestHandleDelete_NotFound(t *testing.T) {
 }
 
 func TestHandleDelete_MissingID(t *testing.T) {
-	h := newTestHandler(&mocks.MockCampaignService{})
+	h := newTestHandler(&mocks.MockInventoryService{})
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/campaigns/", nil)
 	// No SetPathValue — simulates missing ID

@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
 	"github.com/stretchr/testify/require"
 )
@@ -22,9 +22,40 @@ func setupTestDB(t *testing.T) *DB {
 	return db
 }
 
-func newTestPurchase(campaignID, certNumber string) *campaigns.Purchase {
+func setupCampaignsRepo(t *testing.T) *testCampaignsRepository {
+	t.Helper()
+	db := setupTestDB(t)
+	logger := mocks.NewMockLogger()
+	return &testCampaignsRepository{
+		CampaignStore:  NewCampaignStore(db.DB, logger),
+		PurchaseStore:  NewPurchaseStore(db.DB, logger),
+		SaleStore:      NewSaleStore(db.DB, logger),
+		AnalyticsStore: NewAnalyticsStore(db.DB, logger),
+		FinanceStore:   NewFinanceStore(db.DB, logger),
+		PricingStore:   NewPricingStore(db.DB, logger),
+		DHStore:        NewDHStore(db.DB, logger),
+		SnapshotStore:  NewSnapshotStore(db.DB, logger),
+		SellSheetStore: NewSellSheetStore(db.DB, logger),
+	}
+}
+
+// testCampaignsRepository is a test-only composite that wraps individual stores
+// to provide backward compatibility for existing test code.
+type testCampaignsRepository struct {
+	*CampaignStore
+	*PurchaseStore
+	*SaleStore
+	*AnalyticsStore
+	*FinanceStore
+	*PricingStore
+	*DHStore
+	*SnapshotStore
+	*SellSheetStore
+}
+
+func newTestPurchase(campaignID, certNumber string) *inventory.Purchase {
 	now := time.Now().Truncate(time.Second)
-	return &campaigns.Purchase{
+	return &inventory.Purchase{
 		ID:           "purch-" + certNumber,
 		CampaignID:   campaignID,
 		CardName:     "Charizard",
@@ -38,12 +69,12 @@ func newTestPurchase(campaignID, certNumber string) *campaigns.Purchase {
 	}
 }
 
-func newTestSale(purchaseID string) *campaigns.Sale {
+func newTestSale(purchaseID string) *inventory.Sale {
 	now := time.Now().Truncate(time.Second)
-	return &campaigns.Sale{
+	return &inventory.Sale{
 		ID:             "sale-" + purchaseID,
 		PurchaseID:     purchaseID,
-		SaleChannel:    campaigns.SaleChannelEbay,
+		SaleChannel:    inventory.SaleChannelEbay,
 		SalePriceCents: 95000,
 		SaleFeeCents:   11733,
 		SaleDate:       "2026-02-01",

@@ -7,7 +7,7 @@ package cardutil_test
 import (
 	"testing"
 
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/platform/cardutil"
 )
 
@@ -19,7 +19,7 @@ type normChainCase struct {
 	listingTitle string // Raw PSA listing title
 	category     string // PSA category
 
-	// Outputs from campaigns.ExportParseCardMetadataFromTitle
+	// Outputs from inventory.ExportParseCardMetadataFromTitle
 	wantCardName   string
 	wantCardNumber string
 	wantSetName    string
@@ -177,7 +177,7 @@ var normChainCases = []normChainCase{
 func TestNormalizationChainParse(t *testing.T) {
 	for _, tc := range normChainCases {
 		t.Run(tc.cert, func(t *testing.T) {
-			cardName, cardNumber, setName := campaigns.ExportParseCardMetadataFromTitle(tc.listingTitle, tc.category)
+			cardName, cardNumber, setName := inventory.ExportParseCardMetadataFromTitle(tc.listingTitle, tc.category)
 
 			if cardName != tc.wantCardName {
 				t.Errorf("cardName: got %q, want %q", cardName, tc.wantCardName)
@@ -197,7 +197,7 @@ func TestNormalizationChainParse(t *testing.T) {
 func TestNormalizationChainCHQuery(t *testing.T) {
 	for _, tc := range normChainCases {
 		t.Run(tc.cert, func(t *testing.T) {
-			cardName, cardNumber, setName := campaigns.ExportParseCardMetadataFromTitle(tc.listingTitle, tc.category)
+			cardName, cardNumber, setName := inventory.ExportParseCardMetadataFromTitle(tc.listingTitle, tc.category)
 			chQuery := cardutil.BuildCardMatchQuery(setName, cardName, cardNumber)
 
 			if chQuery != tc.wantCardMatchQuery {

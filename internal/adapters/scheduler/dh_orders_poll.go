@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
@@ -31,7 +31,7 @@ type DHOrdersPollScheduler struct {
 	StopHandle
 	client      DHOrdersClient
 	syncState   SyncStateStore
-	campaignSvc campaigns.ImportService
+	campaignSvc inventory.ImportService
 	logger      observability.Logger
 	config      DHOrdersPollConfig
 }
@@ -40,7 +40,7 @@ type DHOrdersPollScheduler struct {
 func NewDHOrdersPollScheduler(
 	client DHOrdersClient,
 	syncState SyncStateStore,
-	campaignSvc campaigns.ImportService,
+	campaignSvc inventory.ImportService,
 	logger observability.Logger,
 	config DHOrdersPollConfig,
 ) *DHOrdersPollScheduler {
@@ -104,11 +104,11 @@ func (s *DHOrdersPollScheduler) poll(ctx context.Context) {
 		observability.Int("count", len(allOrders)),
 		observability.String("since", since))
 
-	rows := make([]campaigns.OrdersExportRow, 0, len(allOrders))
+	rows := make([]inventory.OrdersExportRow, 0, len(allOrders))
 	certToOrderID := make(map[string]string, len(allOrders))
 
 	for _, order := range allOrders {
-		rows = append(rows, campaigns.OrdersExportRow{
+		rows = append(rows, inventory.OrdersExportRow{
 			OrderNumber:  order.OrderID,
 			Date:         parseDHSoldAt(order.SoldAt),
 			SalesChannel: mapDHChannel(order.Channel),
@@ -145,9 +145,9 @@ func (s *DHOrdersPollScheduler) poll(ctx context.Context) {
 		return
 	}
 
-	confirmItems := make([]campaigns.OrdersConfirmItem, 0, len(importResult.Matched))
+	confirmItems := make([]inventory.OrdersConfirmItem, 0, len(importResult.Matched))
 	for _, m := range importResult.Matched {
-		confirmItems = append(confirmItems, campaigns.OrdersConfirmItem{
+		confirmItems = append(confirmItems, inventory.OrdersConfirmItem{
 			PurchaseID:     m.PurchaseID,
 			SaleChannel:    m.SaleChannel,
 			SaleDate:       m.SaleDate,
@@ -207,17 +207,17 @@ func (s *DHOrdersPollScheduler) updateDHOrdersCheckpoint(ctx context.Context, or
 	}
 }
 
-// mapDHChannel converts a DH channel string to a campaigns.SaleChannel.
-func mapDHChannel(channel string) campaigns.SaleChannel {
+// mapDHChannel converts a DH channel string to a inventory.SaleChannel.
+func mapDHChannel(channel string) inventory.SaleChannel {
 	switch channel {
 	case "ebay":
-		return campaigns.SaleChannelEbay
+		return inventory.SaleChannelEbay
 	case "shopify":
-		return campaigns.SaleChannelWebsite
+		return inventory.SaleChannelWebsite
 	case "dh":
-		return campaigns.SaleChannelInPerson
+		return inventory.SaleChannelInPerson
 	default:
-		return campaigns.SaleChannelInPerson
+		return inventory.SaleChannelInPerson
 	}
 }
 

@@ -11,7 +11,7 @@ import (
 
 	"github.com/guarzo/slabledger/internal/adapters/httpserver/handlers"
 	"github.com/guarzo/slabledger/internal/adapters/scheduler"
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
 )
 
@@ -67,8 +67,8 @@ func TestPSASyncHandler_HandleStatus(t *testing.T) {
 
 func TestPSASyncHandler_HandleListPendingItems(t *testing.T) {
 	pendingRepo := &mocks.MockPendingItemRepository{
-		ListPendingItemsFn: func(ctx context.Context) ([]campaigns.PendingItem, error) {
-			return []campaigns.PendingItem{
+		ListPendingItemsFn: func(ctx context.Context) ([]inventory.PendingItem, error) {
+			return []inventory.PendingItem{
 				{ID: "pi-1", CertNumber: "CERT001", Status: "ambiguous", Candidates: []string{"c1", "c2"}},
 			}, nil
 		},
@@ -84,7 +84,7 @@ func TestPSASyncHandler_HandleListPendingItems(t *testing.T) {
 		t.Fatalf("expected 200, got %d", rr.Code)
 	}
 	var resp struct {
-		Items []campaigns.PendingItem `json:"items"`
+		Items []inventory.PendingItem `json:"items"`
 	}
 	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
@@ -97,23 +97,23 @@ func TestPSASyncHandler_HandleListPendingItems(t *testing.T) {
 func TestPSASyncHandler_HandleAssignPendingItem(t *testing.T) {
 	resolved := false
 	pendingRepo := &mocks.MockPendingItemRepository{
-		GetPendingItemByIDFn: func(ctx context.Context, id string) (*campaigns.PendingItem, error) {
+		GetPendingItemByIDFn: func(ctx context.Context, id string) (*inventory.PendingItem, error) {
 			if id == "pi-1" {
-				return &campaigns.PendingItem{
+				return &inventory.PendingItem{
 					ID: "pi-1", CertNumber: "CERT001", CardName: "Charizard",
 					Grade: 10, BuyCostCents: 1500, PurchaseDate: "2026-03-15",
 					Status: "ambiguous", Candidates: []string{"c1", "c2"},
 				}, nil
 			}
-			return nil, campaigns.ErrPendingItemNotFound
+			return nil, inventory.ErrPendingItemNotFound
 		},
 		ResolvePendingItemFn: func(ctx context.Context, id, campaignID string) error {
 			resolved = true
 			return nil
 		},
 	}
-	svc := &mocks.MockCampaignService{
-		CreatePurchaseFn: func(ctx context.Context, p *campaigns.Purchase) error {
+	svc := &mocks.MockInventoryService{
+		CreatePurchaseFn: func(ctx context.Context, p *inventory.Purchase) error {
 			p.ID = "new-purchase"
 			return nil
 		},
@@ -209,8 +209,8 @@ func TestPSASyncHandler_HandleRefresh_Error(t *testing.T) {
 
 func TestPSASyncHandler_HandleAssignPendingItem_NilService(t *testing.T) {
 	pendingRepo := &mocks.MockPendingItemRepository{
-		GetPendingItemByIDFn: func(ctx context.Context, id string) (*campaigns.PendingItem, error) {
-			return &campaigns.PendingItem{
+		GetPendingItemByIDFn: func(ctx context.Context, id string) (*inventory.PendingItem, error) {
+			return &inventory.PendingItem{
 				ID: "pi-1", CertNumber: "CERT001", CardName: "Charizard",
 				Grade: 10, BuyCostCents: 1500, PurchaseDate: "2026-03-15",
 			}, nil

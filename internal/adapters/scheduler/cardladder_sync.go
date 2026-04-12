@@ -8,7 +8,7 @@ import (
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
 	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
@@ -18,7 +18,7 @@ func (s *CardLadderRefreshScheduler) pushNewCards(
 	ctx context.Context,
 	client *cardladder.Client,
 	uid, collectionID string,
-	purchases []campaigns.Purchase,
+	purchases []inventory.Purchase,
 	existingMappings []sqlite.CLCardMapping,
 ) int {
 	// Build set of already-mapped certs for quick lookup
@@ -66,7 +66,7 @@ func (s *CardLadderRefreshScheduler) pushSingleCard(
 	ctx context.Context,
 	client *cardladder.Client,
 	uid, collectionID string,
-	p *campaigns.Purchase,
+	p *inventory.Purchase,
 	grader string,
 ) error {
 	result, err := client.ResolveAndCreateCard(ctx, uid, collectionID, cardladder.CardPushParams{
@@ -105,7 +105,7 @@ func (s *CardLadderRefreshScheduler) pushSingleCard(
 func (s *CardLadderRefreshScheduler) removeSoldCards(
 	ctx context.Context,
 	client *cardladder.Client,
-	unsoldPurchases []campaigns.Purchase,
+	unsoldPurchases []inventory.Purchase,
 	existingMappings []sqlite.CLCardMapping,
 ) int {
 	// Build set of unsold cert numbers

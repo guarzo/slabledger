@@ -2,9 +2,10 @@ package advisortool
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/guarzo/slabledger/internal/domain/ai"
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 )
 
 func (e *CampaignToolExecutor) registerGetPortfolioHealth() {
@@ -13,7 +14,10 @@ func (e *CampaignToolExecutor) registerGetPortfolioHealth() {
 		Description: "Get health scores for all campaigns: status (healthy/warning/critical), reason, and capital at risk.",
 		Parameters:  emptyObjectParams,
 	}, func(ctx context.Context, _ string) (string, error) {
-		result, err := e.svc.GetPortfolioHealth(ctx)
+		if e.portSvc == nil {
+			return "", fmt.Errorf("portfolio service not available")
+		}
+		result, err := e.portSvc.GetPortfolioHealth(ctx)
 		if err != nil {
 			return "", err
 		}
@@ -27,7 +31,10 @@ func (e *CampaignToolExecutor) registerGetPortfolioInsights() {
 		Description: "Get cross-campaign portfolio segmentation: by character, grade, era, price tier, channel. Includes coverage gaps (profitable segments with no active campaigns).",
 		Parameters:  emptyObjectParams,
 	}, func(ctx context.Context, _ string) (string, error) {
-		result, err := e.svc.GetPortfolioInsights(ctx)
+		if e.portSvc == nil {
+			return "", fmt.Errorf("portfolio service not available")
+		}
+		result, err := e.portSvc.GetPortfolioInsights(ctx)
 		if err != nil {
 			return "", err
 		}
@@ -41,7 +48,10 @@ func (e *CampaignToolExecutor) registerGetCapitalSummary() {
 		Description: "Get capital exposure: outstanding balance, 30-day recovery rate, weeks to cover, recovery trend, and alert level.",
 		Parameters:  emptyObjectParams,
 	}, func(ctx context.Context, _ string) (string, error) {
-		result, err := e.svc.GetCapitalSummary(ctx)
+		if e.financeService == nil {
+			return "", fmt.Errorf("finance service not available")
+		}
+		result, err := e.financeService.GetCapitalSummary(ctx)
 		if err != nil {
 			return "", err
 		}
@@ -55,7 +65,10 @@ func (e *CampaignToolExecutor) registerGetWeeklyReview() {
 		Description: "Get week-over-week comparison: purchases, spend, sales, revenue, profit with deltas. Includes top/bottom performers and channel breakdown.",
 		Parameters:  emptyObjectParams,
 	}, func(ctx context.Context, _ string) (string, error) {
-		result, err := e.svc.GetWeeklyReviewSummary(ctx)
+		if e.portSvc == nil {
+			return "", fmt.Errorf("portfolio service not available")
+		}
+		result, err := e.portSvc.GetWeeklyReviewSummary(ctx)
 		if err != nil {
 			return "", err
 		}
@@ -69,7 +82,10 @@ func (e *CampaignToolExecutor) registerGetCapitalTimeline() {
 		Description: "Get daily capital deployment: cumulative spend, cumulative recovery, outstanding balance over time, with invoice date markers.",
 		Parameters:  emptyObjectParams,
 	}, func(ctx context.Context, _ string) (string, error) {
-		result, err := e.svc.GetCapitalTimeline(ctx)
+		if e.portSvc == nil {
+			return "", fmt.Errorf("portfolio service not available")
+		}
+		result, err := e.portSvc.GetCapitalTimeline(ctx)
 		if err != nil {
 			return "", err
 		}
@@ -108,8 +124,8 @@ type dashboardSummary struct {
 		BalanceCents         int                     `json:"balanceCents"`
 		RecoveryRate30dCents int                     `json:"recoveryRate30dCents"`
 		WeeksToCover         float64                 `json:"weeksToCover"`
-		RecoveryTrend        campaigns.RecoveryTrend `json:"recoveryTrend"`
-		AlertLevel           campaigns.AlertLevel    `json:"alertLevel"`
+		RecoveryTrend        inventory.RecoveryTrend `json:"recoveryTrend"`
+		AlertLevel           inventory.AlertLevel    `json:"alertLevel"`
 	} `json:"capital"`
 	PortfolioHealth []struct {
 		CampaignName  string `json:"campaignName"`
@@ -133,60 +149,66 @@ func (e *CampaignToolExecutor) registerGetDashboardSummary() {
 	}, func(ctx context.Context, _ string) (string, error) {
 		var ds dashboardSummary
 
-		if wr, err := e.svc.GetWeeklyReviewSummary(ctx); err != nil {
-			ds.Errors = append(ds.Errors, "weeklyReview: "+err.Error())
-		} else if wr != nil {
-			ds.WeeklyReview.PurchaseCount = wr.PurchasesThisWeek
-			ds.WeeklyReview.PurchaseSpend = wr.SpendThisWeekCents
-			ds.WeeklyReview.SaleCount = wr.SalesThisWeek
-			ds.WeeklyReview.SaleRevenue = wr.RevenueThisWeekCents
-			ds.WeeklyReview.NetProfit = wr.ProfitThisWeekCents
-			ds.WeeklyReview.PurchaseCountWoW = wr.PurchasesThisWeek - wr.PurchasesLastWeek
-			ds.WeeklyReview.SaleCountWoW = wr.SalesThisWeek - wr.SalesLastWeek
-			ds.WeeklyReview.ProfitWoW = wr.ProfitThisWeekCents - wr.ProfitLastWeekCents
-		}
-
-		if cs, err := e.svc.GetCapitalSummary(ctx); err != nil {
-			ds.Errors = append(ds.Errors, "capitalSummary: "+err.Error())
-		} else if cs != nil {
-			ds.Capital.BalanceCents = cs.OutstandingCents
-			ds.Capital.RecoveryRate30dCents = cs.RecoveryRate30dCents
-			ds.Capital.WeeksToCover = cs.WeeksToCover
-			ds.Capital.RecoveryTrend = cs.RecoveryTrend
-			ds.Capital.AlertLevel = cs.AlertLevel
-		}
-
-		if ph, err := e.svc.GetPortfolioHealth(ctx); err != nil {
-			ds.Errors = append(ds.Errors, "portfolioHealth: "+err.Error())
-		} else if ph != nil {
-			for _, ch := range ph.Campaigns {
-				ds.PortfolioHealth = append(ds.PortfolioHealth, struct {
-					CampaignName  string `json:"campaignName"`
-					Status        string `json:"status"`
-					Reason        string `json:"reason"`
-					CapitalAtRisk int    `json:"capitalAtRiskCents"`
-				}{
-					CampaignName:  ch.CampaignName,
-					Status:        ch.HealthStatus,
-					Reason:        ch.HealthReason,
-					CapitalAtRisk: ch.CapitalAtRisk,
-				})
+		if e.portSvc != nil {
+			if wr, err := e.portSvc.GetWeeklyReviewSummary(ctx); err != nil {
+				ds.Errors = append(ds.Errors, "weeklyReview: "+err.Error())
+			} else if wr != nil {
+				ds.WeeklyReview.PurchaseCount = wr.PurchasesThisWeek
+				ds.WeeklyReview.PurchaseSpend = wr.SpendThisWeekCents
+				ds.WeeklyReview.SaleCount = wr.SalesThisWeek
+				ds.WeeklyReview.SaleRevenue = wr.RevenueThisWeekCents
+				ds.WeeklyReview.NetProfit = wr.ProfitThisWeekCents
+				ds.WeeklyReview.PurchaseCountWoW = wr.PurchasesThisWeek - wr.PurchasesLastWeek
+				ds.WeeklyReview.SaleCountWoW = wr.SalesThisWeek - wr.SalesLastWeek
+				ds.WeeklyReview.ProfitWoW = wr.ProfitThisWeekCents - wr.ProfitLastWeekCents
 			}
 		}
 
-		if cv, err := e.svc.GetPortfolioChannelVelocity(ctx); err != nil {
-			ds.Errors = append(ds.Errors, "channelVelocity: "+err.Error())
-		} else {
-			for _, v := range cv {
-				ds.ChannelVelocity = append(ds.ChannelVelocity, struct {
-					Channel   string  `json:"channel"`
-					AvgDays   float64 `json:"avgDaysToSell"`
-					SaleCount int     `json:"saleCount"`
-				}{
-					Channel:   string(v.Channel),
-					AvgDays:   v.AvgDaysToSell,
-					SaleCount: v.SaleCount,
-				})
+		if e.financeService != nil {
+			if cs, err := e.financeService.GetCapitalSummary(ctx); err != nil {
+				ds.Errors = append(ds.Errors, "capitalSummary: "+err.Error())
+			} else if cs != nil {
+				ds.Capital.BalanceCents = cs.OutstandingCents
+				ds.Capital.RecoveryRate30dCents = cs.RecoveryRate30dCents
+				ds.Capital.WeeksToCover = cs.WeeksToCover
+				ds.Capital.RecoveryTrend = cs.RecoveryTrend
+				ds.Capital.AlertLevel = cs.AlertLevel
+			}
+		}
+
+		if e.portSvc != nil {
+			if ph, err := e.portSvc.GetPortfolioHealth(ctx); err != nil {
+				ds.Errors = append(ds.Errors, "portfolioHealth: "+err.Error())
+			} else if ph != nil {
+				for _, ch := range ph.Campaigns {
+					ds.PortfolioHealth = append(ds.PortfolioHealth, struct {
+						CampaignName  string `json:"campaignName"`
+						Status        string `json:"status"`
+						Reason        string `json:"reason"`
+						CapitalAtRisk int    `json:"capitalAtRiskCents"`
+					}{
+						CampaignName:  ch.CampaignName,
+						Status:        ch.HealthStatus,
+						Reason:        ch.HealthReason,
+						CapitalAtRisk: ch.CapitalAtRisk,
+					})
+				}
+			}
+
+			if cv, err := e.portSvc.GetPortfolioChannelVelocity(ctx); err != nil {
+				ds.Errors = append(ds.Errors, "channelVelocity: "+err.Error())
+			} else {
+				for _, v := range cv {
+					ds.ChannelVelocity = append(ds.ChannelVelocity, struct {
+						Channel   string  `json:"channel"`
+						AvgDays   float64 `json:"avgDaysToSell"`
+						SaleCount int     `json:"saleCount"`
+					}{
+						Channel:   string(v.Channel),
+						AvgDays:   v.AvgDaysToSell,
+						SaleCount: v.SaleCount,
+					})
+				}
 			}
 		}
 

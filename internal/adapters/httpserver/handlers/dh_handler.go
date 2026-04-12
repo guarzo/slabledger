@@ -8,8 +8,8 @@ import (
 	"sync/atomic"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
 	"github.com/guarzo/slabledger/internal/domain/intelligence"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
@@ -27,8 +27,8 @@ type DHCardIDSaver interface {
 
 // DHPurchaseLister lists and retrieves purchases for DH operations.
 type DHPurchaseLister interface {
-	ListAllUnsoldPurchases(ctx context.Context) ([]campaigns.Purchase, error)
-	GetPurchase(ctx context.Context, id string) (*campaigns.Purchase, error)
+	ListAllUnsoldPurchases(ctx context.Context) ([]inventory.Purchase, error)
+	GetPurchase(ctx context.Context, id string) (*inventory.Purchase, error)
 }
 
 // DHInventoryPusher pushes inventory items to DH.
@@ -38,7 +38,7 @@ type DHInventoryPusher interface {
 
 // DHFieldsUpdater persists DH tracking fields on local purchases.
 type DHFieldsUpdater interface {
-	UpdatePurchaseDHFields(ctx context.Context, id string, update campaigns.DHFieldsUpdate) error
+	UpdatePurchaseDHFields(ctx context.Context, id string, update inventory.DHFieldsUpdate) error
 }
 
 // DHPushStatusUpdater sets the DH push pipeline status on a purchase.
@@ -81,8 +81,8 @@ type DHMatchConfirmer interface {
 // DHApproveService approves held DH push items and manages push config.
 type DHApproveService interface {
 	ApproveDHPush(ctx context.Context, purchaseID string) error
-	GetDHPushConfig(ctx context.Context) (*campaigns.DHPushConfig, error)
-	SaveDHPushConfig(ctx context.Context, cfg *campaigns.DHPushConfig) error
+	GetDHPushConfig(ctx context.Context) (*inventory.DHPushConfig, error)
+	SaveDHPushConfig(ctx context.Context, cfg *inventory.DHPushConfig) error
 }
 
 // DHCountsFetcher retrieves inventory and order counts from DH.
@@ -187,7 +187,7 @@ func (h *DHHandler) Wait() { h.bgWG.Wait() }
 //   - errDHPushNoInventoryID: push succeeded but no inventory ID was returned
 //   - errDHPersistFailed: push succeeded but local persistence failed
 //   - other errors: push API failure
-func (h *DHHandler) pushAndPersistDH(ctx context.Context, purchase *campaigns.Purchase, dhCardID, marketValueCents int) (int, error) {
+func (h *DHHandler) pushAndPersistDH(ctx context.Context, purchase *inventory.Purchase, dhCardID, marketValueCents int) (int, error) {
 	item := dh.InventoryItem{
 		DHCardID:         dhCardID,
 		CertNumber:       purchase.CertNumber,
@@ -206,13 +206,13 @@ func (h *DHHandler) pushAndPersistDH(ctx context.Context, purchase *campaigns.Pu
 	for _, result := range pushResp.Results {
 		if result.Status != "failed" && result.DHInventoryID != 0 {
 			if h.dhFieldsUpdater != nil {
-				if err := h.dhFieldsUpdater.UpdatePurchaseDHFields(ctx, purchase.ID, campaigns.DHFieldsUpdate{
+				if err := h.dhFieldsUpdater.UpdatePurchaseDHFields(ctx, purchase.ID, inventory.DHFieldsUpdate{
 					CardID:            dhCardID,
 					InventoryID:       result.DHInventoryID,
 					CertStatus:        dh.CertStatusMatched,
 					ListingPriceCents: result.AssignedPriceCents,
 					ChannelsJSON:      dh.MarshalChannels(result.Channels),
-					DHStatus:          campaigns.DHStatus(result.Status),
+					DHStatus:          inventory.DHStatus(result.Status),
 				}); err != nil {
 					return 0, fmt.Errorf("%w: %v", errDHPersistFailed, err)
 				}

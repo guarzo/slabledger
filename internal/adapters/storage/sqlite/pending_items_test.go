@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -20,7 +20,7 @@ func TestPendingItems(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("save and list pending items", func(t *testing.T) {
-		items := []campaigns.PendingItem{
+		items := []inventory.PendingItem{
 			{
 				ID:           "pi-1",
 				CertNumber:   "CERT-001",
@@ -82,7 +82,7 @@ func TestPendingItems(t *testing.T) {
 	})
 
 	t.Run("upsert updates unresolved items", func(t *testing.T) {
-		updated := []campaigns.PendingItem{
+		updated := []inventory.PendingItem{
 			{
 				ID:           "pi-1-updated",
 				CertNumber:   "CERT-001", // same cert as pi-1
@@ -124,7 +124,7 @@ func TestPendingItems(t *testing.T) {
 
 	t.Run("get pending item by ID", func(t *testing.T) {
 		// Save a new item for this test.
-		items := []campaigns.PendingItem{
+		items := []inventory.PendingItem{
 			{
 				ID:           "pi-get",
 				CertNumber:   "CERT-GET",
@@ -152,7 +152,7 @@ func TestPendingItems(t *testing.T) {
 	t.Run("get pending item by ID not found", func(t *testing.T) {
 		_, err := repo.GetPendingItemByID(ctx, "nonexistent-id")
 		require.Error(t, err)
-		assert.True(t, campaigns.IsPendingItemNotFound(err))
+		assert.True(t, inventory.IsPendingItemNotFound(err))
 	})
 
 	t.Run("resolve pending item", func(t *testing.T) {
@@ -170,7 +170,7 @@ func TestPendingItems(t *testing.T) {
 
 	t.Run("upsert skips resolved items", func(t *testing.T) {
 		// pi-2 was resolved above. Re-save with same cert should not update it.
-		reSave := []campaigns.PendingItem{
+		reSave := []inventory.PendingItem{
 			{
 				ID:           "pi-2-new",
 				CertNumber:   "CERT-002", // same cert as resolved pi-2
@@ -209,12 +209,12 @@ func TestPendingItems(t *testing.T) {
 	t.Run("resolve not found returns error", func(t *testing.T) {
 		err := repo.ResolvePendingItem(ctx, "nonexistent-id", "camp-z")
 		require.Error(t, err)
-		assert.True(t, campaigns.IsPendingItemNotFound(err))
+		assert.True(t, inventory.IsPendingItemNotFound(err))
 	})
 
 	t.Run("dismiss pending item", func(t *testing.T) {
 		// Save a new item to dismiss.
-		items := []campaigns.PendingItem{
+		items := []inventory.PendingItem{
 			{
 				ID:           "pi-dismiss",
 				CertNumber:   "CERT-DISMISS",
@@ -245,7 +245,7 @@ func TestPendingItems(t *testing.T) {
 	t.Run("dismiss not found returns error", func(t *testing.T) {
 		err := repo.DismissPendingItem(ctx, "nonexistent-id")
 		require.Error(t, err)
-		assert.True(t, campaigns.IsPendingItemNotFound(err))
+		assert.True(t, inventory.IsPendingItemNotFound(err))
 	})
 
 	t.Run("count pending items", func(t *testing.T) {

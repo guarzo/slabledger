@@ -5,12 +5,12 @@ import (
 
 	"github.com/guarzo/slabledger/internal/adapters/scheduler"
 	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 )
 
-// inventoryListAdapter adapts sqlite.CampaignsRepository to the scheduler.InventoryLister interface.
+// inventoryListAdapter adapts sqlite.PurchaseStore to the scheduler.InventoryLister interface.
 type inventoryListAdapter struct {
-	repo *sqlite.CampaignsRepository
+	repo *sqlite.PurchaseStore
 }
 
 func (a *inventoryListAdapter) ListUnsoldInventory(ctx context.Context) ([]scheduler.InventoryPurchase, error) {
@@ -36,13 +36,13 @@ func (a *inventoryListAdapter) ListUnsoldInventory(ctx context.Context) ([]sched
 	return result, nil
 }
 
-// snapshotRefreshAdapter adapts campaigns.Service to the scheduler.SnapshotRefresher interface.
+// snapshotRefreshAdapter adapts inventory.Service to the scheduler.SnapshotRefresher interface.
 type snapshotRefreshAdapter struct {
-	svc campaigns.Service
+	svc inventory.Service
 }
 
 func (a *snapshotRefreshAdapter) RefreshSnapshot(ctx context.Context, p scheduler.InventoryPurchase) bool {
-	return a.svc.RefreshPurchaseSnapshot(ctx, p.ID, campaigns.CardIdentity{
+	return a.svc.RefreshPurchaseSnapshot(ctx, p.ID, inventory.CardIdentity{
 		CardName: p.CardName, CardNumber: p.CardNumber, SetName: p.SetName, PSAListingTitle: p.PSAListingTitle,
 	}, p.GradeValue, p.CLValueCents)
 }

@@ -3,38 +3,38 @@ package mocks
 import (
 	"context"
 
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 )
 
-// MockPendingItemRepository is a test mock for campaigns.PendingItemRepository.
+// MockPendingItemRepository is a test mock for inventory.PendingItemRepository.
 type MockPendingItemRepository struct {
-	SavePendingItemsFn   func(ctx context.Context, items []campaigns.PendingItem) error
-	ListPendingItemsFn   func(ctx context.Context) ([]campaigns.PendingItem, error)
-	GetPendingItemByIDFn func(ctx context.Context, id string) (*campaigns.PendingItem, error)
+	SavePendingItemsFn   func(ctx context.Context, items []inventory.PendingItem) error
+	ListPendingItemsFn   func(ctx context.Context) ([]inventory.PendingItem, error)
+	GetPendingItemByIDFn func(ctx context.Context, id string) (*inventory.PendingItem, error)
 	ResolvePendingItemFn func(ctx context.Context, id string, campaignID string) error
 	DismissPendingItemFn func(ctx context.Context, id string) error
 	CountPendingItemsFn  func(ctx context.Context) (int, error)
 }
 
-func (m *MockPendingItemRepository) SavePendingItems(ctx context.Context, items []campaigns.PendingItem) error {
+func (m *MockPendingItemRepository) SavePendingItems(ctx context.Context, items []inventory.PendingItem) error {
 	if m.SavePendingItemsFn != nil {
 		return m.SavePendingItemsFn(ctx, items)
 	}
 	return nil
 }
 
-func (m *MockPendingItemRepository) ListPendingItems(ctx context.Context) ([]campaigns.PendingItem, error) {
+func (m *MockPendingItemRepository) ListPendingItems(ctx context.Context) ([]inventory.PendingItem, error) {
 	if m.ListPendingItemsFn != nil {
 		return m.ListPendingItemsFn(ctx)
 	}
 	return nil, nil
 }
 
-func (m *MockPendingItemRepository) GetPendingItemByID(ctx context.Context, id string) (*campaigns.PendingItem, error) {
+func (m *MockPendingItemRepository) GetPendingItemByID(ctx context.Context, id string) (*inventory.PendingItem, error) {
 	if m.GetPendingItemByIDFn != nil {
 		return m.GetPendingItemByIDFn(ctx, id)
 	}
-	return nil, campaigns.ErrPendingItemNotFound
+	return nil, inventory.ErrPendingItemNotFound
 }
 
 func (m *MockPendingItemRepository) ResolvePendingItem(ctx context.Context, id string, campaignID string) error {

@@ -5,14 +5,14 @@ import (
 	"net/http"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/marketmovers"
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/mathutil"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
 // MMPurchaseLister provides unsold purchase data for collection sync.
 type MMPurchaseLister interface {
-	ListAllUnsoldPurchases(ctx context.Context) ([]campaigns.Purchase, error)
+	ListAllUnsoldPurchases(ctx context.Context) ([]inventory.Purchase, error)
 }
 
 // MMSyncResult is the JSON response for the collection sync endpoint.
@@ -77,7 +77,7 @@ func (h *MarketMoversHandler) HandleSyncCollection(w http.ResponseWriter, r *htt
 		writeError(w, http.StatusInternalServerError, "failed to load purchases")
 		return
 	}
-	byCert := make(map[string]campaigns.Purchase, len(purchases))
+	byCert := make(map[string]inventory.Purchase, len(purchases))
 	for _, p := range purchases {
 		if p.CertNumber != "" {
 			if existing, ok := byCert[p.CertNumber]; ok {

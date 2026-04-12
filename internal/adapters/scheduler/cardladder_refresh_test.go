@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/platform/config"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
 	"github.com/stretchr/testify/assert"
@@ -18,10 +18,10 @@ import (
 // ---------------------------------------------------------------------------
 
 type mockCLPurchaseLister struct {
-	ListFn func(ctx context.Context) ([]campaigns.Purchase, error)
+	ListFn func(ctx context.Context) ([]inventory.Purchase, error)
 }
 
-func (m *mockCLPurchaseLister) ListAllUnsoldPurchases(ctx context.Context) ([]campaigns.Purchase, error) {
+func (m *mockCLPurchaseLister) ListAllUnsoldPurchases(ctx context.Context) ([]inventory.Purchase, error) {
 	if m.ListFn != nil {
 		return m.ListFn(ctx)
 	}
@@ -103,11 +103,11 @@ func (m *mockCLGemRateUpdater) UpdatePurchaseCLCardMetadata(ctx context.Context,
 }
 
 type mockCLValueHistoryRecorder struct {
-	RecordFn func(ctx context.Context, entry campaigns.CLValueEntry) error
-	Calls    []campaigns.CLValueEntry
+	RecordFn func(ctx context.Context, entry inventory.CLValueEntry) error
+	Calls    []inventory.CLValueEntry
 }
 
-func (m *mockCLValueHistoryRecorder) RecordCLValue(ctx context.Context, entry campaigns.CLValueEntry) error {
+func (m *mockCLValueHistoryRecorder) RecordCLValue(ctx context.Context, entry inventory.CLValueEntry) error {
 	m.Calls = append(m.Calls, entry)
 	if m.RecordFn != nil {
 		return m.RecordFn(ctx, entry)
@@ -273,5 +273,5 @@ func TestCardLadderRefreshScheduler_SetClient(t *testing.T) {
 var _ CardLadderPurchaseLister = (*mockCLPurchaseLister)(nil)
 var _ CardLadderValueUpdater = (*mockCLValueUpdater)(nil)
 var _ CardLadderGemRateUpdater = (*mockCLGemRateUpdater)(nil)
-var _ campaigns.CLValueHistoryRecorder = (*mockCLValueHistoryRecorder)(nil)
+var _ inventory.CLValueHistoryRecorder = (*mockCLValueHistoryRecorder)(nil)
 var _ DHPushStatusUpdater = (*mockCLDHPushUpdater)(nil)

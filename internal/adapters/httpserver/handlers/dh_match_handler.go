@@ -6,7 +6,8 @@ import (
 	"strconv"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	"github.com/guarzo/slabledger/internal/domain/dhlisting"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/domain/pricing"
 )
@@ -57,12 +58,12 @@ func (h *DHHandler) HandleBulkMatch(w http.ResponseWriter, r *http.Request) {
 }
 
 type matchedCard struct {
-	identity campaigns.CardIdentity
+	identity inventory.CardIdentity
 	dhCardID int
 }
 
 // runBulkMatch processes unsold purchases against DH cert resolution, logging results.
-func (h *DHHandler) runBulkMatch(ctx context.Context, purchases []campaigns.Purchase, mappedSet map[string]string) {
+func (h *DHHandler) runBulkMatch(ctx context.Context, purchases []inventory.Purchase, mappedSet map[string]string) {
 	// Reset PSA key rotation at the start of each run so a previously exhausted
 	// index doesn't prevent newly added keys from being tried.
 	var rotateFn func() bool
@@ -83,7 +84,7 @@ func (h *DHHandler) runBulkMatch(ctx context.Context, purchases []campaigns.Purc
 		// for safety review, or dismissed as unmatchable. Held cards already
 		// have a valid DH card ID and are awaiting human approval — re-matching
 		// would clear the hold.
-		if p.DHPushStatus == campaigns.DHPushStatusMatched || p.DHPushStatus == campaigns.DHPushStatusManual || p.DHPushStatus == campaigns.DHPushStatusHeld || p.DHPushStatus == campaigns.DHPushStatusDismissed {
+		if p.DHPushStatus == inventory.DHPushStatusMatched || p.DHPushStatus == inventory.DHPushStatusManual || p.DHPushStatus == inventory.DHPushStatusHeld || p.DHPushStatus == inventory.DHPushStatusDismissed {
 			skipped++
 			continue
 		}
@@ -113,7 +114,7 @@ func (h *DHHandler) runBulkMatch(ctx context.Context, purchases []campaigns.Purc
 				observability.String("existing_id", existingID))
 		}
 
-		cardName, variant := campaigns.CleanCardNameForDH(p.CardName)
+		cardName, variant := dhlisting.CleanCardNameForDH(p.CardName)
 		req := dh.CertResolveRequest{
 			CertNumber: p.CertNumber,
 			GemRateID:  p.GemRateID,
@@ -146,7 +147,7 @@ func (h *DHHandler) runBulkMatch(ctx context.Context, purchases []campaigns.Purc
 				observability.String("cert", p.CertNumber), observability.Err(err))
 			failed++
 			if h.pushStatusUpdater != nil {
-				if statusErr := h.pushStatusUpdater.UpdatePurchaseDHPushStatus(ctx, p.ID, campaigns.DHPushStatusUnmatched); statusErr != nil {
+				if statusErr := h.pushStatusUpdater.UpdatePurchaseDHPushStatus(ctx, p.ID, inventory.DHPushStatusUnmatched); statusErr != nil {
 					h.logger.Warn(ctx, "bulk match: failed to set unmatched status",
 						observability.String("purchaseID", p.ID), observability.Err(statusErr))
 				}
@@ -174,7 +175,7 @@ func (h *DHHandler) runBulkMatch(ctx context.Context, purchases []campaigns.Purc
 			}
 			notFound++
 			if h.pushStatusUpdater != nil {
-				if err := h.pushStatusUpdater.UpdatePurchaseDHPushStatus(ctx, p.ID, campaigns.DHPushStatusUnmatched); err != nil {
+				if err := h.pushStatusUpdater.UpdatePurchaseDHPushStatus(ctx, p.ID, inventory.DHPushStatusUnmatched); err != nil {
 					h.logger.Warn(ctx, "bulk match: failed to set unmatched status",
 						observability.String("purchaseID", p.ID), observability.Err(err))
 				}
@@ -212,7 +213,7 @@ func (h *DHHandler) runBulkMatch(ctx context.Context, purchases []campaigns.Purc
 // independent of whether the inventory push succeeds later.
 func (h *DHHandler) setMatchedStatus(ctx context.Context, purchaseID string) {
 	if h.pushStatusUpdater != nil {
-		if err := h.pushStatusUpdater.UpdatePurchaseDHPushStatus(ctx, purchaseID, campaigns.DHPushStatusMatched); err != nil {
+		if err := h.pushStatusUpdater.UpdatePurchaseDHPushStatus(ctx, purchaseID, inventory.DHPushStatusMatched); err != nil {
 			h.logger.Warn(ctx, "bulk match: failed to set matched status",
 				observability.String("purchaseID", purchaseID), observability.Err(err))
 		}
@@ -222,7 +223,7 @@ func (h *DHHandler) setMatchedStatus(ctx context.Context, purchaseID string) {
 // resolveAmbiguousMatch attempts to disambiguate an ambiguous cert response by
 // card number. Returns the DH card ID on success, or 0 if unresolvable.
 // Returns a non-nil error only when the card was resolved but saving failed.
-func (h *DHHandler) resolveAmbiguousMatch(ctx context.Context, resp *dh.CertResolution, p campaigns.Purchase, mappedSet map[string]string) (int, error) {
+func (h *DHHandler) resolveAmbiguousMatch(ctx context.Context, resp *dh.CertResolution, p inventory.Purchase, mappedSet map[string]string) (int, error) {
 	if resp.Status != dh.CertStatusAmbiguous || len(resp.Candidates) == 0 {
 		return 0, nil
 	}
@@ -255,20 +256,20 @@ func (h *DHHandler) resolveAmbiguousMatch(ctx context.Context, resp *dh.CertReso
 
 // pushMatchedToDH uses DH card IDs from the match loop because Purchase.DHCardID
 // isn't populated yet — that happens later via the inventory poll scheduler.
-func (h *DHHandler) pushMatchedToDH(ctx context.Context, purchases []campaigns.Purchase, matched []matchedCard) {
+func (h *DHHandler) pushMatchedToDH(ctx context.Context, purchases []inventory.Purchase, matched []matchedCard) {
 	dhCardIDs := make(map[string]int, len(matched))
 	for _, mc := range matched {
-		dhCardIDs[campaigns.DHCardKey(mc.identity.CardName, mc.identity.SetName, mc.identity.CardNumber)] = mc.dhCardID
+		dhCardIDs[inventory.DHCardKey(mc.identity.CardName, mc.identity.SetName, mc.identity.CardNumber)] = mc.dhCardID
 	}
 
 	var items []dh.InventoryItem
 	for _, p := range purchases {
-		key := campaigns.DHCardKey(p.CardName, p.SetName, p.CardNumber)
+		key := inventory.DHCardKey(p.CardName, p.SetName, p.CardNumber)
 		dhCardID, ok := dhCardIDs[key]
 		if !ok {
 			continue
 		}
-		if p.CertNumber == "" || p.DHInventoryID != 0 || campaigns.ResolveMarketValueCents(&p) == 0 || p.BuyCostCents <= 0 {
+		if p.CertNumber == "" || p.DHInventoryID != 0 || dhlisting.ResolveMarketValueCents(&p) == 0 || p.BuyCostCents <= 0 {
 			continue
 		}
 		items = append(items, dh.InventoryItem{
@@ -277,7 +278,7 @@ func (h *DHHandler) pushMatchedToDH(ctx context.Context, purchases []campaigns.P
 			GradingCompany:   dh.GraderPSA,
 			Grade:            p.GradeValue,
 			CostBasisCents:   p.BuyCostCents,
-			MarketValueCents: dh.IntPtr(campaigns.ResolveMarketValueCents(&p)),
+			MarketValueCents: dh.IntPtr(dhlisting.ResolveMarketValueCents(&p)),
 			Status:           dh.InventoryStatusInStock,
 		})
 	}
@@ -323,13 +324,13 @@ func (h *DHHandler) pushMatchedToDH(ctx context.Context, purchases []campaigns.P
 			if !ok {
 				continue
 			}
-			if err := h.dhFieldsUpdater.UpdatePurchaseDHFields(ctx, purchaseID, campaigns.DHFieldsUpdate{
+			if err := h.dhFieldsUpdater.UpdatePurchaseDHFields(ctx, purchaseID, inventory.DHFieldsUpdate{
 				CardID:            certToDHCardID[r.CertNumber],
 				InventoryID:       r.DHInventoryID,
 				CertStatus:        dh.CertStatusMatched,
 				ListingPriceCents: r.AssignedPriceCents,
 				ChannelsJSON:      dh.MarshalChannels(r.Channels),
-				DHStatus:          campaigns.DHStatus(r.Status),
+				DHStatus:          inventory.DHStatus(r.Status),
 			}); err != nil {
 				h.logger.Warn(ctx, "push to DH: failed to persist inventory ID",
 					observability.String("cert", r.CertNumber),
