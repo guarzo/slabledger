@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { syncDotProps } from './utils';
+import { syncDotProps } from './syncDot';
 
 const NOW = new Date('2026-04-11T12:00:00Z').getTime();
 
