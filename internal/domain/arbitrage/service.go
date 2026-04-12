@@ -27,6 +27,23 @@ type Service interface {
 	RunProjection(ctx context.Context, campaignID string) (*MonteCarloComparison, error)
 }
 
+// ServiceOption configures the arbitrage service.
+type ServiceOption func(*service)
+
+// WithPriceLookup injects the price lookup dependency.
+func WithPriceLookup(priceProv inventory.PriceLookup) ServiceOption {
+	return func(s *service) {
+		s.priceProv = priceProv
+	}
+}
+
+// WithLogger injects the logger.
+func WithLogger(logger observability.Logger) ServiceOption {
+	return func(s *service) {
+		s.logger = logger
+	}
+}
+
 // service implements Service.
 type service struct {
 	campaigns inventory.CampaignRepository
@@ -43,17 +60,18 @@ func NewService(
 	purchases inventory.PurchaseRepository,
 	analytics inventory.AnalyticsRepository,
 	finance inventory.FinanceRepository,
-	priceProv inventory.PriceLookup,
-	logger observability.Logger,
+	opts ...ServiceOption,
 ) Service {
-	return &service{
+	svc := &service{
 		campaigns: campaigns,
 		purchases: purchases,
 		analytics: analytics,
 		finance:   finance,
-		priceProv: priceProv,
-		logger:    logger,
 	}
+	for _, opt := range opts {
+		opt(svc)
+	}
+	return svc
 }
 
 // GetCrackCandidates returns crack candidates for a single campaign, computed on demand.

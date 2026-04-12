@@ -180,8 +180,8 @@ func initializeCampaignsService(
 		purchaseStore,  // PurchaseRepository
 		analyticsStore, // AnalyticsRepository
 		financeStore,   // FinanceRepository
-		priceLookupAdapter,
-		logger,
+		arbitrage.WithPriceLookup(priceLookupAdapter),
+		arbitrage.WithLogger(logger),
 	)
 
 	portSvc := portfolio.NewService(

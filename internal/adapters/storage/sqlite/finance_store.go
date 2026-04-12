@@ -119,50 +119,61 @@ func (fs *FinanceStore) SumPurchaseCostByInvoiceDate(ctx context.Context, invoic
 // in-hand when it has either been scanned via cert intake (received_at IS NOT NULL)
 // or already sold (a row exists in campaign_sales). Refunded purchases are excluded.
 // Returns an empty map if invoiceDates is empty.
-func (fs *FinanceStore) GetPendingReceiptByInvoiceDate(ctx context.Context, invoiceDates []string) (_ map[string]int, result_err error) {
+func (fs *FinanceStore) GetPendingReceiptByInvoiceDate(ctx context.Context, invoiceDates []string) (map[string]int, error) {
 	if len(invoiceDates) == 0 {
 		return map[string]int{}, nil
 	}
 
-	placeholders := make([]string, len(invoiceDates))
-	args := make([]any, len(invoiceDates))
-	for i, d := range invoiceDates {
-		placeholders[i] = "?"
-		args[i] = d
-	}
-
-	query := fmt.Sprintf(
-		`SELECT p.invoice_date, COALESCE(SUM(p.buy_cost_cents), 0)
-		 FROM campaign_purchases p
-		 LEFT JOIN campaign_sales s ON s.purchase_id = p.id
-		 WHERE p.invoice_date IN (%s)
-		   AND p.received_at IS NULL
-		   AND s.id IS NULL
-		   AND p.was_refunded = 0
-		 GROUP BY p.invoice_date`,
-		strings.Join(placeholders, ", "),
-	)
-
-	rows, err := fs.db.QueryContext(ctx, query, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		if cerr := rows.Close(); result_err == nil && cerr != nil {
-			result_err = cerr
-		}
-	}()
-
+	const chunkSize = 500
 	result := make(map[string]int)
-	for rows.Next() {
-		var date string
-		var pending int
-		if err := rows.Scan(&date, &pending); err != nil {
+
+	for i := 0; i < len(invoiceDates); i += chunkSize {
+		end := i + chunkSize
+		if end > len(invoiceDates) {
+			end = len(invoiceDates)
+		}
+		chunk := invoiceDates[i:end]
+
+		placeholders := make([]string, len(chunk))
+		args := make([]any, len(chunk))
+		for j, d := range chunk {
+			placeholders[j] = "?"
+			args[j] = d
+		}
+
+		query := fmt.Sprintf(
+			`SELECT p.invoice_date, COALESCE(SUM(p.buy_cost_cents), 0)
+			 FROM campaign_purchases p
+			 LEFT JOIN campaign_sales s ON s.purchase_id = p.id
+			 WHERE p.invoice_date IN (%s)
+			   AND p.received_at IS NULL
+			   AND s.id IS NULL
+			   AND p.was_refunded = 0
+			 GROUP BY p.invoice_date`,
+			strings.Join(placeholders, ", "),
+		)
+
+		rows, err := fs.db.QueryContext(ctx, query, args...)
+		if err != nil {
 			return nil, err
 		}
-		result[date] = pending
+		scanErr := func() error {
+			defer rows.Close()
+			for rows.Next() {
+				var date string
+				var pending int
+				if err := rows.Scan(&date, &pending); err != nil {
+					return err
+				}
+				result[date] += pending
+			}
+			return rows.Err()
+		}()
+		if scanErr != nil {
+			return nil, scanErr
+		}
 	}
-	return result, rows.Err()
+	return result, nil
 }
 
 // --- Cashflow Config ---
