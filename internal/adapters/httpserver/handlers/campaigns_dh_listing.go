@@ -26,6 +26,10 @@ func (h *CampaignsHandler) triggerDHListing(certNumbers []string) {
 		ctx, cancel := context.WithTimeout(h.baseCtx, 5*time.Minute)
 		defer cancel()
 
-		h.dhListingSvc.ListPurchases(ctx, certNumbers)
+		result := h.dhListingSvc.ListPurchases(ctx, certNumbers)
+		h.logger.Info(ctx, "dh listing goroutine completed",
+			observability.Int("listed", result.Listed),
+			observability.Int("synced", result.Synced),
+			observability.Int("total", result.Total))
 	}()
 }
