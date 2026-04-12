@@ -265,6 +265,46 @@ func parseCampaignID(args string) (string, error) {
 }
 
 // registerTools registers all available tools.
+// Tool registration order affects tool numbering in AI streaming responses.
+// Tools are registered in this order:
+//
+//  1. list_campaigns               — list all campaigns
+//  2. get_campaign_pnl             — single-campaign P&L
+//  3. get_pnl_by_channel           — P&L by sale channel
+//  4. get_campaign_tuning          — tuning suggestions
+//  5. get_inventory_aging          — aging report with market signals
+//  6. get_global_inventory         — unsold inventory across campaigns
+//  7. get_flagged_inventory        — flagged (revocation/review) items
+//  8. get_sell_sheet               — exportable sell sheet
+//  9. get_portfolio_health         — campaign health scores
+//  10. get_portfolio_insights      — portfolio segmentation + coverage gaps
+//  11. get_capital_summary         — capital exposure (requires financeService)
+//  12. get_weekly_review           — week-over-week comparison
+//  13. get_capital_timeline        — daily capital deployment chart
+//  14. get_expected_values         — EV for a single campaign
+//  15. get_deslab_candidates       — crack/deslab recommendations
+//  16. get_campaign_suggestions    — DH-sourced buy suggestions
+//  17. run_projection              — Monte Carlo cashflow projection
+//  18. get_channel_velocity        — avg days-to-sell per channel
+//  19. get_cert_lookup             — PSA cert lookup
+//  20. evaluate_purchase           — evaluate a specific purchase
+//  21. suggest_price               — AI price suggestion for one item
+//  22. get_suggestion_stats        — AI price suggestion statistics
+//  23. get_dashboard_summary       — combined dashboard view
+//  24. get_acquisition_targets     — potential acquisition targets
+//  25. get_deslab_opportunities    — DH deslab/crack opportunities
+//  26. get_market_intelligence     — market intelligence report
+//  27. get_dh_suggestions          — DH-specific suggestions
+//  28. get_inventory_alerts        — inventory alert report
+//  29. get_data_gap_report         — scoring data gap report (requires gapStore)
+//  30. get_expected_values_batch   — EV for multiple campaigns
+//  31. suggest_price_batch         — AI price suggestions in bulk
+//
+// Optional tools (only useful when the relevant service is injected):
+//   - get_capital_summary: requires WithFinanceService
+//   - get_data_gap_report: requires WithGapStore (returns error JSON if absent)
+//   - get_market_intelligence: requires WithIntelligenceRepo
+//   - get_dh_suggestions: requires WithSuggestionsRepo
 func (e *CampaignToolExecutor) registerTools() {
 	e.registerListCampaigns()
 	e.registerGetCampaignPNL()
