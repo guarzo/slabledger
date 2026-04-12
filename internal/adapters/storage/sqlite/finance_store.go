@@ -340,6 +340,26 @@ func (fs *FinanceStore) GetLatestRevocationFlag(ctx context.Context) (*inventory
 	return &f, nil
 }
 
+func (fs *FinanceStore) GetRevocationFlagByID(ctx context.Context, id string) (*inventory.RevocationFlag, error) {
+	query := `
+		SELECT id, segment_label, segment_dimension, reason, status, email_text, created_at, sent_at
+		FROM revocation_flags
+		WHERE id = ?
+	`
+	var f inventory.RevocationFlag
+	err := fs.db.QueryRowContext(ctx, query, id).Scan(
+		&f.ID, &f.SegmentLabel, &f.SegmentDimension, &f.Reason,
+		&f.Status, &f.EmailText, &f.CreatedAt, &f.SentAt,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &f, nil
+}
+
 func (fs *FinanceStore) UpdateRevocationFlagStatus(ctx context.Context, id string, status string, sentAt *time.Time) error {
 	query := `UPDATE revocation_flags SET status = ?, sent_at = ? WHERE id = ?`
 	result, err := fs.db.ExecContext(ctx, query, status, sentAt, id)

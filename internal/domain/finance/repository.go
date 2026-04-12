@@ -27,5 +27,6 @@ type FinanceReader interface {
 	CreateRevocationFlag(ctx context.Context, flag *inventory.RevocationFlag) error
 	ListRevocationFlags(ctx context.Context) ([]inventory.RevocationFlag, error)
 	GetLatestRevocationFlag(ctx context.Context) (*inventory.RevocationFlag, error)
+	GetRevocationFlagByID(ctx context.Context, id string) (*inventory.RevocationFlag, error)
 	UpdateRevocationFlagStatus(ctx context.Context, id string, status string, sentAt *time.Time) error
 }

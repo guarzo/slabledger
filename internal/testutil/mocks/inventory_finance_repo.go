@@ -22,6 +22,7 @@ type FinanceRepositoryMock struct {
 	CreateRevocationFlagFn           func(ctx context.Context, flag *inventory.RevocationFlag) error
 	ListRevocationFlagsFn            func(ctx context.Context) ([]inventory.RevocationFlag, error)
 	GetLatestRevocationFlagFn        func(ctx context.Context) (*inventory.RevocationFlag, error)
+	GetRevocationFlagByIDFn          func(ctx context.Context, id string) (*inventory.RevocationFlag, error)
 	UpdateRevocationFlagStatusFn     func(ctx context.Context, id string, status string, sentAt *time.Time) error
 }
 
@@ -116,6 +117,13 @@ func (m *FinanceRepositoryMock) GetLatestRevocationFlag(ctx context.Context) (*i
 		return m.GetLatestRevocationFlagFn(ctx)
 	}
 	return nil, inventory.ErrRevocationFlagNotFound
+}
+
+func (m *FinanceRepositoryMock) GetRevocationFlagByID(ctx context.Context, id string) (*inventory.RevocationFlag, error) {
+	if m.GetRevocationFlagByIDFn != nil {
+		return m.GetRevocationFlagByIDFn(ctx, id)
+	}
+	return nil, nil
 }
 
 func (m *FinanceRepositoryMock) UpdateRevocationFlagStatus(ctx context.Context, id string, status string, sentAt *time.Time) error {

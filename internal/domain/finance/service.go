@@ -149,17 +149,9 @@ func (s *service) ListRevocationFlags(ctx context.Context) ([]inventory.Revocati
 }
 
 func (s *service) GenerateRevocationEmail(ctx context.Context, flagID string) (string, error) {
-	flags, err := s.repo.ListRevocationFlags(ctx)
+	flag, err := s.repo.GetRevocationFlagByID(ctx, flagID)
 	if err != nil {
-		return "", fmt.Errorf("list revocation flags: %w", err)
-	}
-
-	var flag *inventory.RevocationFlag
-	for i := range flags {
-		if flags[i].ID == flagID {
-			flag = &flags[i]
-			break
-		}
+		return "", fmt.Errorf("get revocation flag: %w", err)
 	}
 	if flag == nil {
 		return "", fmt.Errorf("revocation flag not found: %s", flagID)
