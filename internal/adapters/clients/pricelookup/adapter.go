@@ -160,7 +160,9 @@ func (a *Adapter) GetMarketSnapshot(ctx context.Context, card inventory.CardIden
 		snap.SourceCount = len(price.Sources)
 	}
 
-	// Conservative/distribution data
+	// Conservative/distribution data.
+	// PSA 8 has no direct data in the provider API; the fallback logic at lines below
+	// (conservative = 0.85 × median) applies instead.
 	if price.Conservative != nil {
 		floorGrade := math.Floor(grade)
 		switch floorGrade {
@@ -168,8 +170,6 @@ func (a *Adapter) GetMarketSnapshot(ctx context.Context, card inventory.CardIden
 			snap.ConservativeCents = int(mathutil.ToCents(price.Conservative.PSA10USD))
 		case 9:
 			snap.ConservativeCents = int(mathutil.ToCents(price.Conservative.PSA9USD))
-		case 8:
-			// No PSA8 conservative data available; leave unset so fallback populates it
 		default:
 			if grade == 0 {
 				snap.ConservativeCents = int(mathutil.ToCents(price.Conservative.RawUSD))
@@ -177,7 +177,8 @@ func (a *Adapter) GetMarketSnapshot(ctx context.Context, card inventory.CardIden
 		}
 	}
 
-	// Distributions (percentile data)
+	// Distributions (percentile data).
+	// PSA 8 has no direct distribution data; the fallback at lines below applies.
 	if price.Distributions != nil {
 		var dist *pricing.SalesDistribution
 		floorGrade := math.Floor(grade)
@@ -186,8 +187,6 @@ func (a *Adapter) GetMarketSnapshot(ctx context.Context, card inventory.CardIden
 			dist = price.Distributions.PSA10
 		case 9:
 			dist = price.Distributions.PSA9
-		case 8:
-			// No PSA8 distribution data available; leave unset so fallback populates it
 		default:
 			if grade == 0 {
 				dist = price.Distributions.Raw

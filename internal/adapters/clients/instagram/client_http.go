@@ -142,10 +142,12 @@ func (c *Client) waitForContainer(ctx context.Context, token, containerID string
 				observability.String("statusCode", resp.StatusCode))
 		}
 
+		t := time.NewTimer(1 * time.Second)
 		select {
 		case <-ctx.Done():
+			t.Stop()
 			return ctx.Err()
-		case <-time.After(1 * time.Second):
+		case <-t.C:
 		}
 	}
 	return fmt.Errorf("container %s timed out waiting for FINISHED status", containerID)
