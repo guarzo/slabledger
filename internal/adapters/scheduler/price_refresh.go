@@ -21,6 +21,7 @@ type PriceRefreshScheduler struct {
 	logger              observability.Logger
 	config              Config
 	consecutiveFailures int
+	lastFailureAt       time.Time // zero if no failure since startup
 }
 
 // NewPriceRefreshScheduler creates a new price refresh scheduler.
@@ -77,6 +78,7 @@ func (s *PriceRefreshScheduler) refreshBatch(ctx context.Context) {
 	cards, err := s.candidates.GetRefreshCandidates(ctx, s.config.BatchSize)
 	if err != nil {
 		s.consecutiveFailures++
+		s.lastFailureAt = time.Now()
 		s.logger.Error(ctx, "failed to get refresh candidates",
 			observability.Err(err),
 			observability.Int("consecutive_failures", s.consecutiveFailures))
@@ -223,8 +225,10 @@ func (s *PriceRefreshScheduler) refreshBatch(ctx context.Context) {
 
 	if errorCount > 0 {
 		s.consecutiveFailures++
+		s.lastFailureAt = time.Now()
 	} else {
 		s.consecutiveFailures = 0
+		// lastFailureAt intentionally preserved — shows when the last failure was, even after recovery
 	}
 
 	s.logger.Info(ctx, "refresh batch completed",
@@ -235,6 +239,11 @@ func (s *PriceRefreshScheduler) refreshBatch(ctx context.Context) {
 		observability.Int("skipped", skippedCount),
 		observability.Int("consecutive_failures", s.consecutiveFailures),
 		observability.Duration("duration", duration))
+}
+
+// LastFailureAt returns the time of the last refresh failure, or zero if no failure has occurred.
+func (s *PriceRefreshScheduler) LastFailureAt() time.Time {
+	return s.lastFailureAt
 }
 
 // logAPIUsageSummary logs daily API usage for each provider after a refresh cycle.
