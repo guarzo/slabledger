@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"math"
 
 	"github.com/guarzo/slabledger/internal/domain/observability"
@@ -59,7 +60,11 @@ func SnapshotFromPurchase(p *Purchase) *MarketSnapshot {
 	// Prefer full JSON snapshot when available (contains all fields)
 	if p.SnapshotJSON != "" {
 		var snap MarketSnapshot
-		if err := json.Unmarshal([]byte(p.SnapshotJSON), &snap); err == nil {
+		if err := json.Unmarshal([]byte(p.SnapshotJSON), &snap); err != nil {
+			slog.Default().Warn("snapshot JSON unmarshal failed — using column fallback",
+				"purchaseID", p.ID,
+				"error", err)
+		} else {
 			return &snap
 		}
 	}
