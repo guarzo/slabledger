@@ -36,6 +36,11 @@ WORKDIR /app
 COPY services/render/package*.json ./
 RUN npm ci --omit=dev
 
+# Install Chrome for Puppeteer into a known, writable cache directory.
+# Must run as root (before USER appuser) so the binary can be placed under /app.
+ENV PUPPETEER_CACHE_DIR=/app/.cache/puppeteer
+RUN npx puppeteer browsers install chrome
+
 COPY services/render/ ./
 
 # Copy compiled frontend from builder stage
