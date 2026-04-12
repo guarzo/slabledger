@@ -3,21 +3,41 @@ import { api } from '../../js/api';
 import { queryKeys } from './queryKeys';
 import type { DHFixMatchRequest, DHSelectMatchRequest } from '../../types/apiStatus';
 
-export function useAllowlist(options?: { enabled?: boolean }) {
-  return useQuery({
-    queryKey: queryKeys.admin.allowlist,
-    queryFn: () => api.getAdminAllowlist(),
-    enabled: options?.enabled ?? true,
-  });
+/** Options shared by all admin read queries */
+interface AdminQueryOptions {
+  enabled?: boolean;
 }
 
-export function useAdminUsers(options?: { enabled?: boolean }) {
-  return useQuery({
-    queryKey: queryKeys.admin.users,
-    queryFn: () => api.getAdminUsers(),
-    enabled: options?.enabled ?? true,
-  });
+/**
+ * Factory for admin query hooks. Reduces boilerplate for the enabled option.
+ * Each generated hook accepts AdminQueryOptions and defaults enabled to true.
+ */
+function createAdminQuery<T>(
+  queryKey: readonly unknown[],
+  queryFn: () => Promise<T>,
+) {
+  return (options?: AdminQueryOptions) =>
+    useQuery<T>({
+      queryKey,
+      queryFn,
+      enabled: options?.enabled ?? true,
+    });
 }
+
+export const useAllowlist = createAdminQuery(
+  queryKeys.admin.allowlist,
+  () => api.getAdminAllowlist(),
+);
+
+export const useAdminUsers = createAdminQuery(
+  queryKeys.admin.users,
+  () => api.getAdminUsers(),
+);
+
+export const useCardRequests = createAdminQuery(
+  queryKeys.admin.cardRequests,
+  () => api.getCardRequests(),
+);
 
 export function useAdminApiUsage(options?: { enabled?: boolean }) {
   return useQuery({
@@ -73,14 +93,6 @@ export function usePricingDiagnostics(options?: { enabled?: boolean }) {
     queryKey: queryKeys.admin.pricingDiagnostics,
     queryFn: () => api.getPricingDiagnostics(),
     staleTime: 60_000,
-    enabled: options?.enabled ?? true,
-  });
-}
-
-export function useCardRequests(options?: { enabled?: boolean }) {
-  return useQuery({
-    queryKey: queryKeys.admin.cardRequests,
-    queryFn: () => api.getCardRequests(),
     enabled: options?.enabled ?? true,
   });
 }
