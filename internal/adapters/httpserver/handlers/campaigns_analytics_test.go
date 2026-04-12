@@ -404,7 +404,7 @@ func TestHandleInventory(t *testing.T) {
 
 func TestHandleDaysToSell_Success(t *testing.T) {
 	svc := &mocks.MockInventoryService{
-		GetDaysToSellDistFn: func(_ context.Context, _ string) ([]inventory.DaysToSellBucket, error) {
+		GetDaysToSellDistributionFn: func(_ context.Context, _ string) ([]inventory.DaysToSellBucket, error) {
 			return []inventory.DaysToSellBucket{{Label: "0-7", Count: 5}}, nil
 		},
 	}

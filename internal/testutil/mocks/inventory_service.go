@@ -35,7 +35,7 @@ type MockInventoryService struct {
 	GetCampaignPNLFn            func(ctx context.Context, campaignID string) (*inventory.CampaignPNL, error)
 	GetPNLByChannelFn           func(ctx context.Context, campaignID string) ([]inventory.ChannelPNL, error)
 	GetDailySpendFn             func(ctx context.Context, campaignID string, days int) ([]inventory.DailySpend, error)
-	GetDaysToSellDistFn         func(ctx context.Context, campaignID string) ([]inventory.DaysToSellBucket, error)
+	GetDaysToSellDistributionFn func(ctx context.Context, campaignID string) ([]inventory.DaysToSellBucket, error)
 	GetInventoryAgingFn         func(ctx context.Context, campaignID string) (*inventory.InventoryResult, error)
 	GetGlobalInventoryAgingFn   func(ctx context.Context) (*inventory.InventoryResult, error)
 	GetFlaggedInventoryFn       func(ctx context.Context) ([]inventory.AgingItem, error)
@@ -272,8 +272,8 @@ func (m *MockInventoryService) GetDailySpend(ctx context.Context, campaignID str
 }
 
 func (m *MockInventoryService) GetDaysToSellDistribution(ctx context.Context, campaignID string) ([]inventory.DaysToSellBucket, error) {
-	if m.GetDaysToSellDistFn != nil {
-		return m.GetDaysToSellDistFn(ctx, campaignID)
+	if m.GetDaysToSellDistributionFn != nil {
+		return m.GetDaysToSellDistributionFn(ctx, campaignID)
 	}
 	return []inventory.DaysToSellBucket{}, nil
 }

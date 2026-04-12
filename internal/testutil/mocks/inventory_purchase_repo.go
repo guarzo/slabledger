@@ -234,7 +234,7 @@ func (m *PurchaseRepositoryMock) GetPriceOverrideStats(ctx context.Context) (*in
 	if m.GetPriceOverrideStatsFn != nil {
 		return m.GetPriceOverrideStatsFn(ctx)
 	}
-	return nil, nil
+	return &inventory.PriceOverrideStats{}, nil
 }
 
 func (m *PurchaseRepositoryMock) SetReceivedAt(ctx context.Context, purchaseID string, receivedAt time.Time) error {
