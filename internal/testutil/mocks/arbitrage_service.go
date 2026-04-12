@@ -25,7 +25,6 @@ type MockArbitrageService struct {
 	GetExpectedValuesFn      func(ctx context.Context, campaignID string) (*arbitrage.EVPortfolio, error)
 	EvaluatePurchaseFn       func(ctx context.Context, campaignID string, cardName string, grade float64, buyCostCents int) (*arbitrage.ExpectedValue, error)
 	RunProjectionFn          func(ctx context.Context, campaignID string) (*arbitrage.MonteCarloComparison, error)
-	StartCrackCacheWorkerFn  func(ctx context.Context) context.CancelFunc
 }
 
 var _ arbitrage.Service = (*MockArbitrageService)(nil)
@@ -77,11 +76,4 @@ func (m *MockArbitrageService) RunProjection(ctx context.Context, campaignID str
 		return m.RunProjectionFn(ctx, campaignID)
 	}
 	return nil, nil
-}
-
-func (m *MockArbitrageService) StartCrackCacheWorker(ctx context.Context) context.CancelFunc {
-	if m.StartCrackCacheWorkerFn != nil {
-		return m.StartCrackCacheWorkerFn(ctx)
-	}
-	return func() {}
 }

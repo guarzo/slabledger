@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"sort"
-	"sync"
 	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/inventory"
@@ -29,10 +28,6 @@ type Service interface {
 	GetExpectedValues(ctx context.Context, campaignID string) (*EVPortfolio, error)
 	EvaluatePurchase(ctx context.Context, campaignID string, cardName string, grade float64, buyCostCents int) (*ExpectedValue, error)
 	RunProjection(ctx context.Context, campaignID string) (*MonteCarloComparison, error)
-
-	// StartCrackCacheWorker launches the background crack cache refresh goroutine.
-	// The returned cancel func stops the worker.
-	StartCrackCacheWorker(ctx context.Context) context.CancelFunc
 }
 
 // service implements Service.
@@ -43,10 +38,6 @@ type service struct {
 	finance   inventory.FinanceRepository
 	priceProv inventory.PriceLookup
 	logger    observability.Logger
-
-	crackCacheMu  sync.RWMutex
-	crackCacheSet map[string]bool
-	crackCacheAll []CrackAnalysis
 }
 
 // NewService creates a new arbitrage Service.
@@ -68,30 +59,13 @@ func NewService(
 	}
 }
 
-// GetCrackCandidates returns cached crack candidates for a single campaign.
+// GetCrackCandidates returns crack candidates for a single campaign, computed on demand.
 func (s *service) GetCrackCandidates(ctx context.Context, campaignID string) ([]CrackAnalysis, error) {
-	if _, err := s.campaigns.GetCampaign(ctx, campaignID); err != nil {
+	campaign, err := s.campaigns.GetCampaign(ctx, campaignID)
+	if err != nil {
 		return nil, err
 	}
-
-	s.crackCacheMu.RLock()
-	all := s.crackCacheAll
-	s.crackCacheMu.RUnlock()
-
-	if all == nil {
-		if s.logger != nil {
-			s.logger.Info(ctx, "crack cache not yet populated, returning empty list")
-		}
-		return []CrackAnalysis{}, nil
-	}
-
-	results := []CrackAnalysis{}
-	for _, c := range all {
-		if c.CampaignID == campaignID {
-			results = append(results, c)
-		}
-	}
-	return results, nil
+	return s.crackCandidatesForCampaign(ctx, campaign)
 }
 
 // crackCandidatesForCampaign computes crack candidates for an already-loaded campaign.
@@ -147,21 +121,29 @@ func (s *service) crackCandidatesForCampaign(ctx context.Context, campaign *inve
 	return results, nil
 }
 
-// GetCrackOpportunities returns cached cross-campaign crack opportunities.
+// GetCrackOpportunities returns cross-campaign crack opportunities, computed on demand.
 func (s *service) GetCrackOpportunities(ctx context.Context) ([]CrackAnalysis, error) {
-	s.crackCacheMu.RLock()
-	all := s.crackCacheAll
-	s.crackCacheMu.RUnlock()
-
-	if all == nil {
-		if s.logger != nil {
-			s.logger.Info(ctx, "crack cache not yet populated, returning empty list")
-		}
-		return []CrackAnalysis{}, nil
+	allCampaigns, err := s.campaigns.ListCampaigns(ctx, true)
+	if err != nil {
+		return nil, fmt.Errorf("list active campaigns: %w", err)
 	}
-
-	results := make([]CrackAnalysis, len(all))
-	copy(results, all)
+	var results []CrackAnalysis
+	for _, c := range allCampaigns {
+		campaign := c
+		candidates, err := s.crackCandidatesForCampaign(ctx, &campaign)
+		if err != nil {
+			if s.logger != nil {
+				s.logger.Warn(ctx, "crack candidates failed for campaign",
+					observability.String("campaignID", c.ID),
+					observability.Err(err))
+			}
+			continue
+		}
+		results = append(results, candidates...)
+	}
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].CrackAdvantage > results[j].CrackAdvantage
+	})
 	return results, nil
 }
 
@@ -458,4 +440,3 @@ func (s *service) RunProjection(ctx context.Context, campaignID string) (*MonteC
 
 	return RunMonteCarloProjection(campaign, data), nil
 }
-
