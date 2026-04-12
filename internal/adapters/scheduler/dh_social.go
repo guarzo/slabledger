@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/domain/social"
@@ -18,7 +19,6 @@ type DHInstagramClient interface {
 	PollInstagramPostStatus(ctx context.Context, postID int64) (*dh.DHInstagramStatusResponse, error)
 }
 
-// dhInstagramStrategy holds strategy metadata for dh_instagram post generation.
 type dhInstagramStrategy struct {
 	key   string // DH API strategy identifier
 	title string // Human-readable cover title stored on the post
@@ -39,6 +39,7 @@ var dhInstagramStrategies = []dhInstagramStrategy{
 const defaultDHInstagramHashtags = "#pokemon #pokemoncards #pokemontcg #tradingcards #cardcollector"
 
 // DHSocialSchedulerConfig holds runtime parameters for DHSocialScheduler.
+// Hour must be in [0, 23]. PollInterval and PollTimeout must be positive.
 type DHSocialSchedulerConfig struct {
 	Hour         int           // UTC hour to fire (0–23)
 	PollInterval time.Duration // How often to poll DH for render status
@@ -62,7 +63,6 @@ type DHSocialRepo interface {
 	UpdateSlideURLs(ctx context.Context, id string, urls []string) error
 }
 
-// NewDHSocialScheduler constructs a DHSocialScheduler.
 func NewDHSocialScheduler(
 	dhClient DHInstagramClient,
 	socialRepo DHSocialRepo,
@@ -109,33 +109,39 @@ func (s *DHSocialScheduler) tick(ctx context.Context) {
 }
 
 func (s *DHSocialScheduler) generatePost(ctx context.Context, strategy dhInstagramStrategy) error {
-	postID, err := s.dhClient.GenerateInstagramPost(ctx, dhSocialScope, strategy.key, "")
+	dhPostID, err := s.dhClient.GenerateInstagramPost(ctx, dhSocialScope, strategy.key, "")
 	if err != nil {
 		return fmt.Errorf("generate: %w", err)
 	}
-
-	slideURLs, err := s.pollUntilReady(ctx, postID)
-	if err != nil {
-		return fmt.Errorf("poll post %d: %w", postID, err)
+	// Validate DH returned a usable ID.
+	if dhPostID == 0 {
+		return fmt.Errorf("DH returned post_id=0 for strategy %s", strategy.key)
 	}
 
+	slideURLs, err := s.pollUntilReady(ctx, dhPostID)
+	if err != nil {
+		return fmt.Errorf("poll post %d: %w", dhPostID, err)
+	}
+
+	now := time.Now().UTC()
+	caption := buildDHCaption(strategy)
 	post := &social.SocialPost{
+		ID:         uuid.NewString(),
 		PostType:   social.PostTypeDHInstagram,
 		Status:     social.PostStatusDraft,
 		CoverTitle: strategy.title,
-		SlideURLs:  slideURLs,
+		Caption:    caption,
+		Hashtags:   defaultDHInstagramHashtags,
+		CreatedAt:  now,
+		UpdatedAt:  now,
 	}
 	if err := s.socialRepo.CreatePost(ctx, post); err != nil {
 		return fmt.Errorf("create post: %w", err)
 	}
 
-	caption := buildDHCaption(strategy)
-	if err := s.socialRepo.UpdatePostCaption(ctx, post.ID, caption, defaultDHInstagramHashtags); err != nil {
-		// Non-fatal: post is created, caption update failure just means default empty caption.
-		s.logger.Warn(ctx, "dh social: failed to set caption",
-			observability.String("post_id", post.ID),
-			observability.Err(err),
-		)
+	// Persist the pre-rendered slide URLs so the publish scheduler can skip local rendering.
+	if err := s.socialRepo.UpdateSlideURLs(ctx, post.ID, slideURLs); err != nil {
+		return fmt.Errorf("persist slide URLs for post %s: %w", post.ID, err)
 	}
 
 	s.logger.Info(ctx, "dh social: created draft post",
@@ -155,11 +161,20 @@ func (s *DHSocialScheduler) pollUntilReady(ctx context.Context, dhPostID int64) 
 		}
 		switch status.RenderStatus {
 		case "ready":
+			if len(status.SlideImageURLs) == 0 {
+				return nil, fmt.Errorf("DH post %d ready but returned no slide URLs", dhPostID)
+			}
 			return status.SlideImageURLs, nil
 		case "failed":
 			return nil, fmt.Errorf("DH render failed for post_id %d", dhPostID)
+		case "generating":
+			// Still generating — wait before next poll.
+		default:
+			s.logger.Warn(ctx, "dh social: unexpected render status, continuing to poll",
+				observability.String("render_status", status.RenderStatus),
+				observability.Int64("dh_post_id", dhPostID),
+			)
 		}
-		// Still generating — wait before next poll.
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
@@ -169,7 +184,8 @@ func (s *DHSocialScheduler) pollUntilReady(ctx context.Context, dhPostID int64) 
 	return nil, fmt.Errorf("timed out waiting for DH post %d to render", dhPostID)
 }
 
-// buildDHCaption returns a human-readable caption for a DH Instagram post.
+// buildDHCaption builds the Instagram caption for a strategy post.
+// Format: "<strategy title> — check out what's hot in our collection!"
 func buildDHCaption(strategy dhInstagramStrategy) string {
 	return fmt.Sprintf("%s — check out what's hot in our collection!", strategy.title)
 }

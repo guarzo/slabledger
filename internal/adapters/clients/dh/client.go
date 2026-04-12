@@ -420,7 +420,7 @@ func (c *Client) GenerateInstagramPost(ctx context.Context, scope, strategy, hea
 	}
 	var resp DHInstagramGenerateResponse
 	if err := c.postEnterprise(ctx, url, req, &resp); err != nil {
-		return 0, fmt.Errorf("dh GenerateInstagramPost: %w", err)
+		return 0, err
 	}
 	return resp.PostID, nil
 }
@@ -432,7 +432,7 @@ func (c *Client) PollInstagramPostStatus(ctx context.Context, postID int64) (*DH
 	url := fmt.Sprintf("%s/api/v1/enterprise/instagram/posts/%d/status", c.baseURL, postID)
 	var resp DHInstagramStatusResponse
 	if err := c.getEnterprise(ctx, url, &resp); err != nil {
-		return nil, fmt.Errorf("dh PollInstagramPostStatus: %w", err)
+		return nil, err
 	}
 	return &resp, nil
 }

@@ -509,6 +509,10 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 	if deps.PublisherConfigured {
 		buildDeps.SocialPublisher = deps.SocialService
 		buildDeps.SocialPublishRepo = deps.SocialRepo
+	}
+	// DHSocialRepo is always wired when SocialRepo is available — DHSocialScheduler
+	// does not require Instagram OAuth, only a DH Enterprise key.
+	if deps.SocialRepo != nil {
 		buildDeps.DHSocialRepo = deps.SocialRepo
 	}
 	schedulerResult := scheduler.BuildGroup(deps.Config, buildDeps)

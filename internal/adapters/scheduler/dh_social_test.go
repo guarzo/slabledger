@@ -9,74 +9,17 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
-	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/domain/social"
+	"github.com/guarzo/slabledger/internal/testutil/mocks"
 )
 
-// mockDHInstagramClient implements DHInstagramClient for testing.
-type mockDHInstagramClient struct {
-	EnterpriseAvailableFn     func() bool
-	GenerateInstagramPostFn   func(ctx context.Context, scope, strategy, headline string) (int64, error)
-	PollInstagramPostStatusFn func(ctx context.Context, postID int64) (*dh.DHInstagramStatusResponse, error)
-}
-
-func (m *mockDHInstagramClient) EnterpriseAvailable() bool {
-	if m.EnterpriseAvailableFn != nil {
-		return m.EnterpriseAvailableFn()
-	}
-	return true
-}
-
-func (m *mockDHInstagramClient) GenerateInstagramPost(ctx context.Context, scope, strategy, headline string) (int64, error) {
-	if m.GenerateInstagramPostFn != nil {
-		return m.GenerateInstagramPostFn(ctx, scope, strategy, headline)
-	}
-	return 0, nil
-}
-
-func (m *mockDHInstagramClient) PollInstagramPostStatus(ctx context.Context, postID int64) (*dh.DHInstagramStatusResponse, error) {
-	if m.PollInstagramPostStatusFn != nil {
-		return m.PollInstagramPostStatusFn(ctx, postID)
-	}
-	return &dh.DHInstagramStatusResponse{RenderStatus: "ready"}, nil
-}
-
-// mockDHSocialRepo implements DHSocialRepo for testing.
-type mockDHSocialRepo struct {
-	CreatePostFn        func(ctx context.Context, post *social.SocialPost) error
-	UpdatePostCaptionFn func(ctx context.Context, id string, caption, hashtags string) error
-	UpdateSlideURLsFn   func(ctx context.Context, id string, urls []string) error
-}
-
-func (m *mockDHSocialRepo) CreatePost(ctx context.Context, post *social.SocialPost) error {
-	if m.CreatePostFn != nil {
-		return m.CreatePostFn(ctx, post)
-	}
-	return nil
-}
-
-func (m *mockDHSocialRepo) UpdatePostCaption(ctx context.Context, id string, caption, hashtags string) error {
-	if m.UpdatePostCaptionFn != nil {
-		return m.UpdatePostCaptionFn(ctx, id, caption, hashtags)
-	}
-	return nil
-}
-
-func (m *mockDHSocialRepo) UpdateSlideURLs(ctx context.Context, id string, urls []string) error {
-	if m.UpdateSlideURLsFn != nil {
-		return m.UpdateSlideURLsFn(ctx, id, urls)
-	}
-	return nil
-}
-
 func newTestDHSocialScheduler(dhClient DHInstagramClient, repo DHSocialRepo) *DHSocialScheduler {
-	logger := observability.NewNoopLogger()
 	cfg := DHSocialSchedulerConfig{
 		Hour:         6,
 		PollInterval: 1 * time.Millisecond,
 		PollTimeout:  100 * time.Millisecond,
 	}
-	return NewDHSocialScheduler(dhClient, repo, logger, cfg)
+	return NewDHSocialScheduler(dhClient, repo, nopLogger{}, cfg)
 }
 
 func TestDHSocialScheduler_Tick(t *testing.T) {
@@ -154,18 +97,26 @@ func TestDHSocialScheduler_Tick(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			postsCreated := 0
 
-			repo := &mockDHSocialRepo{
+			repo := &mocks.MockDHSocialRepo{
 				CreatePostFn: func(ctx context.Context, post *social.SocialPost) error {
+					require.NotEmpty(t, post.ID, "post.ID must be set before CreatePost")
+					require.False(t, post.CreatedAt.IsZero(), "post.CreatedAt must be set")
+					require.False(t, post.UpdatedAt.IsZero(), "post.UpdatedAt must be set")
 					require.Equal(t, social.PostTypeDHInstagram, post.PostType)
 					require.Equal(t, social.PostStatusDraft, post.Status)
-					require.NotEmpty(t, post.SlideURLs)
 					require.NotEmpty(t, post.CoverTitle)
+					require.NotEmpty(t, post.Caption)
 					postsCreated++
+					return nil
+				},
+				UpdateSlideURLsFn: func(ctx context.Context, id string, urls []string) error {
+					require.NotEmpty(t, id)
+					require.NotEmpty(t, urls)
 					return nil
 				},
 			}
 
-			dhClient := &mockDHInstagramClient{
+			dhClient := &mocks.MockDHInstagramClient{
 				EnterpriseAvailableFn: func() bool { return tc.enterpriseAvail },
 			}
 			if tc.generateFn != nil {
