@@ -118,12 +118,6 @@ func (s *SocialPublishScheduler) tick(ctx context.Context) {
 		return
 	}
 
-	// Verify render sidecar is healthy
-	if err := s.renderClient.Health(ctx); err != nil {
-		s.logger.Error(ctx, "render sidecar unhealthy, skipping tick", observability.Err(err))
-		return
-	}
-
 	// Fetch one eligible draft
 	post, err := s.repo.FetchEligibleDraft(ctx)
 	if err != nil {
@@ -135,33 +129,44 @@ func (s *SocialPublishScheduler) tick(ctx context.Context) {
 		return
 	}
 
-	// Render slides
-	blobs, err := s.renderClient.Render(ctx, post.ID, *post)
-	if err != nil {
-		s.logger.Error(ctx, "render failed",
-			observability.String("post_id", post.ID),
-			observability.Err(err),
-		)
-		return
-	}
+	// Render slides only if not pre-rendered
+	if len(post.SlideURLs) == 0 {
+		// Verify render sidecar is healthy
+		if err := s.renderClient.Health(ctx); err != nil {
+			s.logger.Warn(ctx, "render service unhealthy, skipping publish tick",
+				observability.Err(err),
+			)
+			return
+		}
 
-	// Write JPEG files to disk
-	urls, err := s.saveSlides(post.ID, blobs)
-	if err != nil {
-		s.logger.Error(ctx, "failed to save slides",
-			observability.String("post_id", post.ID),
-			observability.Err(err),
-		)
-		return
-	}
+		// Render slides
+		blobs, err := s.renderClient.Render(ctx, post.ID, *post)
+		if err != nil {
+			s.logger.Error(ctx, "render failed",
+				observability.String("post_id", post.ID),
+				observability.Err(err),
+			)
+			return
+		}
 
-	// Update slide_urls in DB
-	if err := s.repo.UpdateSlideURLs(ctx, post.ID, urls); err != nil {
-		s.logger.Error(ctx, "failed to update slide URLs",
-			observability.String("post_id", post.ID),
-			observability.Err(err),
-		)
-		return
+		// Write JPEG files to disk
+		urls, err := s.saveSlides(post.ID, blobs)
+		if err != nil {
+			s.logger.Error(ctx, "failed to save slides",
+				observability.String("post_id", post.ID),
+				observability.Err(err),
+			)
+			return
+		}
+
+		// Update slide_urls in DB
+		if err := s.repo.UpdateSlideURLs(ctx, post.ID, urls); err != nil {
+			s.logger.Error(ctx, "failed to update slide URLs",
+				observability.String("post_id", post.ID),
+				observability.Err(err),
+			)
+			return
+		}
 	}
 
 	// Publish via existing service path
@@ -175,7 +180,6 @@ func (s *SocialPublishScheduler) tick(ctx context.Context) {
 
 	s.logger.Info(ctx, "auto-published post",
 		observability.String("post_id", post.ID),
-		observability.Int("slides", len(blobs)),
 	)
 }
 

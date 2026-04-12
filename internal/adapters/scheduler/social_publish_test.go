@@ -176,6 +176,44 @@ func TestSocialPublishScheduler(t *testing.T) {
 			shouldPublish:      true,
 			expectSlideURLsSet: true,
 		},
+		{
+			name:         "PreRenderedPost",
+			cfg:          defaultPublishConfig(),
+			countTodayFn: func(_ context.Context) (int, error) { return 0, nil },
+			fetchEligibleFn: func(_ context.Context) (*social.PostDetail, error) {
+				preRenderedPost := &social.PostDetail{
+					SocialPost: social.SocialPost{
+						ID:        "post-prerendered",
+						CardCount: 1,
+						Caption:   "pre-rendered caption",
+						SlideURLs: []string{"/api/media/social/post-prerendered/slide-0.jpg"},
+					},
+					Cards: []social.PostCardDetail{{PurchaseID: "p1"}},
+				}
+				return preRenderedPost, nil
+			},
+			updateSlideURLsFn: func(_ context.Context, _ string, _ []string) error {
+				t.Error("UpdateSlideURLs should not be called for pre-rendered posts")
+				return nil
+			},
+			healthFn: func(_ context.Context) error {
+				t.Error("Health should not be called for pre-rendered posts")
+				return nil
+			},
+			renderFn: func(_ context.Context, _ string, _ social.PostDetail) ([][]byte, error) {
+				t.Error("Render should not be called for pre-rendered posts")
+				return nil, nil
+			},
+			publishFn: func(_ context.Context, id string) error {
+				if id != "post-prerendered" {
+					t.Errorf("publish called with wrong ID: %s", id)
+				}
+				return nil
+			},
+			shouldFetch:        true,
+			shouldPublish:      true,
+			expectSlideURLsSet: false,
+		},
 	}
 
 	for _, tc := range tests {
