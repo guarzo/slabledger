@@ -144,6 +144,13 @@ export interface CashflowConfig {
   updatedAt: string;
 }
 
+export interface InvoiceSellThrough {
+  totalPurchaseCount: number;
+  soldCount: number;
+  totalCostCents: number;
+  saleRevenueCents: number;
+}
+
 export interface CapitalSummary {
   outstandingCents: number;
   recoveryRate30dCents: number;
@@ -154,14 +161,13 @@ export interface CapitalSummary {
   unpaidInvoiceCount: number;
   refundedCents: number;
   paidCents: number;
-  // Invoice-cycle projection fields (see CapitalSummary in internal/domain/campaigns/types.go)
-  nextInvoiceDate?: string;        // YYYY-MM-DD, empty if no unpaid
-  nextInvoiceDueDate?: string;     // YYYY-MM-DD, empty if no unpaid
-  nextInvoiceAmountCents: number;  // TotalCents - PaidCents of earliest unpaid
-  daysUntilInvoiceDue: number;     // from now to due date, 0 if no unpaid
-  projectedRecoveryCents: number;  // daily velocity * daysUntilInvoiceDue
-  projectedCashGapCents: number;   // max(0, owed - projected - buffer)
-  cashBufferCents: number;         // mirror of CashflowConfig.CashBufferCents
+  // Invoice-cycle fields (see CapitalSummary in internal/domain/campaigns/types.go)
+  nextInvoiceDate?: string;                       // YYYY-MM-DD, empty if no unpaid
+  nextInvoiceDueDate?: string;                    // YYYY-MM-DD, empty if no unpaid
+  nextInvoiceAmountCents: number;                 // TotalCents - PaidCents of earliest unpaid
+  daysUntilInvoiceDue: number;                    // from now to due date, 0 if no unpaid
+  nextInvoicePendingReceiptCents: number;         // cost of cards not yet returned from PSA
+  nextInvoiceSellThrough: InvoiceSellThrough;     // sell-through stats for returned cards
 }
 
 // Activation checklist types

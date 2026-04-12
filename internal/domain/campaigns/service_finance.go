@@ -15,32 +15,31 @@ func (s *service) GetCapitalSummary(ctx context.Context) (*CapitalSummary, error
 	}
 	summary := ComputeCapitalSummary(raw)
 
-	// Layer the next-invoice projection on top of the velocity-based summary so
-	// callers can reason about cash pressure on the upcoming PSA invoice cycle.
 	invoices, err := s.repo.ListInvoices(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list invoices for projection: %w", err)
 	}
-	cfg, err := s.repo.GetCashflowConfig(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("get cashflow config: %w", err)
-	}
-	buffer := 0
-	if cfg != nil {
-		buffer = cfg.CashBufferCents
-	}
-	recoveryRate := 0
-	if raw != nil {
-		recoveryRate = raw.RecoveryRate30dCents
-	}
-	projection := ComputeInvoiceProjection(invoices, recoveryRate, buffer, time.Now())
+	projection := ComputeInvoiceProjection(invoices, time.Now())
 	summary.NextInvoiceDate = projection.NextInvoiceDate
 	summary.NextInvoiceDueDate = projection.NextInvoiceDueDate
 	summary.NextInvoiceAmountCents = projection.NextInvoiceAmountCents
 	summary.DaysUntilInvoiceDue = projection.DaysUntilInvoiceDue
-	summary.ProjectedRecoveryCents = projection.ProjectedRecoveryCents
-	summary.ProjectedCashGapCents = projection.ProjectedCashGapCents
-	summary.CashBufferCents = buffer
+
+	if projection.NextInvoiceDate != "" {
+		// Pending receipt for this invoice's purchases
+		pendingMap, err := s.repo.GetPendingReceiptByInvoiceDate(ctx, []string{projection.NextInvoiceDate})
+		if err != nil {
+			return nil, fmt.Errorf("get pending receipt for invoice: %w", err)
+		}
+		summary.NextInvoicePendingReceiptCents = pendingMap[projection.NextInvoiceDate]
+
+		// Sell-through for returned purchases on this invoice
+		sellThrough, err := s.repo.GetInvoiceSellThrough(ctx, projection.NextInvoiceDate)
+		if err != nil {
+			return nil, fmt.Errorf("get invoice sell-through: %w", err)
+		}
+		summary.NextInvoiceSellThrough = sellThrough
+	}
 
 	return summary, nil
 }

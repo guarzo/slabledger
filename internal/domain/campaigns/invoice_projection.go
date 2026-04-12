@@ -5,40 +5,30 @@ import (
 	"time"
 )
 
-// InvoiceProjection holds derived next-invoice fields produced by
-// ComputeInvoiceProjection. All cent fields are non-negative.
+// InvoiceProjection holds the identifying fields for the earliest unpaid invoice.
+// Sell-through and pending-receipt data are fetched separately by the service.
 type InvoiceProjection struct {
 	NextInvoiceDate        string
 	NextInvoiceDueDate     string
 	NextInvoiceAmountCents int
 	DaysUntilInvoiceDue    int
-	ProjectedRecoveryCents int
-	ProjectedCashGapCents  int
 }
 
 // ComputeInvoiceProjection picks the earliest unpaid invoice with a parseable
-// DueDate, then projects sale recovery between now and that due date at the
-// caller-supplied 30-day daily rate. Returns a zero-valued projection when no
-// qualifying invoice exists.
+// DueDate and returns its identifying fields. Returns a zero-valued projection
+// when no qualifying invoice exists.
 //
 // Edge cases:
 //   - Empty invoice list / all invoices paid -> zero projection.
 //   - Invoice with empty or unparseable DueDate -> skipped (next candidate wins).
-//   - recoveryRate30dCents == 0 -> projected recovery is 0; gap = amount - buffer.
-//   - Overdue invoice (due date in the past) -> picked, daysUntilDue reported as
-//     a negative number of days so callers can surface "N days overdue"; projected
-//     recovery reported as 0; gap = amount - buffer.
+//   - Overdue invoice (due date in the past) -> picked; daysUntilDue is negative.
 //
 // Parameters:
 //
-//	invoices             - full invoice list (any order; function sorts internally)
-//	recoveryRate30dCents - 30-day rolling sale revenue (cents)
-//	cashBufferCents      - operator-set cash buffer (cents)
-//	now                  - current time, injected for testability
+//	invoices - full invoice list (any order; function sorts internally)
+//	now      - current time, injected for testability
 func ComputeInvoiceProjection(
 	invoices []Invoice,
-	recoveryRate30dCents int,
-	cashBufferCents int,
 	now time.Time,
 ) InvoiceProjection {
 	const dueDateLayout = "2006-01-02"
@@ -48,10 +38,10 @@ func ComputeInvoiceProjection(
 		dueDate time.Time
 	}
 
-	// Both "today" and each parsed due date are normalized to UTC calendar
-	// midnights. Using UTC here is intentional: the difference is measured in
-	// whole calendar days, and UTC sidesteps DST transitions which would
-	// otherwise undercount or overcount by one day on local-tz inputs.
+	// Normalize now to UTC so the extracted calendar day matches the UTC
+	// midnight used when parsing due dates. Without this, a non-UTC now can
+	// yield a different calendar day near day boundaries, skewing DaysUntilDue.
+	now = now.UTC()
 	todayY, todayM, todayD := now.Date()
 	today := time.Date(todayY, todayM, todayD, 0, 0, 0, 0, time.UTC)
 
@@ -94,23 +84,10 @@ func ComputeInvoiceProjection(
 
 	daysUntilDue := int(picked.dueDate.Sub(today).Hours() / 24)
 
-	projectedRecovery := 0
-	if recoveryRate30dCents > 0 && daysUntilDue > 0 {
-		// Use integer math to avoid float drift on cent values.
-		projectedRecovery = (recoveryRate30dCents * daysUntilDue) / 30
-	}
-
-	gap := amountOwed - projectedRecovery - cashBufferCents
-	if gap < 0 {
-		gap = 0
-	}
-
 	return InvoiceProjection{
 		NextInvoiceDate:        picked.invoice.InvoiceDate,
 		NextInvoiceDueDate:     picked.invoice.DueDate,
 		NextInvoiceAmountCents: amountOwed,
 		DaysUntilInvoiceDue:    daysUntilDue,
-		ProjectedRecoveryCents: projectedRecovery,
-		ProjectedCashGapCents:  gap,
 	}
 }
