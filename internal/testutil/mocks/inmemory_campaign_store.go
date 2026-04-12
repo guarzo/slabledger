@@ -225,8 +225,14 @@ func (m *InMemoryCampaignStore) ListPurchasesByCampaign(ctx context.Context, cam
 	if m.ListPurchasesByCampaignFn != nil {
 		return m.ListPurchasesByCampaignFn(ctx, campaignID, limit, offset)
 	}
+	ids := make([]string, 0, len(m.Purchases))
+	for id := range m.Purchases {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
 	var result []inventory.Purchase
-	for _, p := range m.Purchases {
+	for _, id := range ids {
+		p := m.Purchases[id]
 		if p.CampaignID == campaignID {
 			result = append(result, *p)
 		}
@@ -668,8 +674,14 @@ func (m *InMemoryCampaignStore) ListSalesByCampaign(ctx context.Context, campaig
 	if m.ListSalesByCampaignFn != nil {
 		return m.ListSalesByCampaignFn(ctx, campaignID, limit, offset)
 	}
+	saleIDs := make([]string, 0, len(m.Sales))
+	for id := range m.Sales {
+		saleIDs = append(saleIDs, id)
+	}
+	sort.Strings(saleIDs)
 	var result []inventory.Sale
-	for _, s := range m.Sales {
+	for _, id := range saleIDs {
+		s := m.Sales[id]
 		if p, ok := m.Purchases[s.PurchaseID]; ok && p.CampaignID == campaignID {
 			result = append(result, *s)
 		}
@@ -748,7 +760,39 @@ func (m *InMemoryCampaignStore) GetAllPurchasesWithSales(ctx context.Context, op
 	if m.GetAllPurchasesWithSalesFn != nil {
 		return m.GetAllPurchasesWithSalesFn(ctx, opts...)
 	}
-	return []inventory.PurchaseWithSale{}, nil
+	var f inventory.PurchaseFilter
+	for _, o := range opts {
+		o(&f)
+	}
+
+	// Collect purchase IDs in sorted order for deterministic output.
+	ids := make([]string, 0, len(m.Purchases))
+	for id := range m.Purchases {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+
+	var result []inventory.PurchaseWithSale
+	for _, id := range ids {
+		p := m.Purchases[id]
+		if f.SinceDate != "" && p.PurchaseDate < f.SinceDate {
+			continue
+		}
+		if f.ExcludeArchived {
+			if c, ok := m.Campaigns[p.CampaignID]; ok && c.Phase == inventory.PhaseClosed {
+				continue
+			}
+		}
+		pws := inventory.PurchaseWithSale{Purchase: *p}
+		for _, s := range m.Sales {
+			if s.PurchaseID == p.ID {
+				pws.Sale = s
+				break
+			}
+		}
+		result = append(result, pws)
+	}
+	return result, nil
 }
 
 func (m *InMemoryCampaignStore) GetPortfolioChannelVelocity(_ context.Context) ([]inventory.ChannelVelocity, error) {
