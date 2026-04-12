@@ -8,7 +8,7 @@ import (
 // Score computes a ScoreCard from a ScoreRequest and WeightProfile.
 // Returns ErrInsufficientData if fewer than MinFactors non-gap factors are available.
 func Score(req ScoreRequest, profile WeightProfile) (ScoreCard, error) {
-	if len(req.Factors) < MinFactors && len(req.DataGaps) > 0 {
+	if len(req.Factors) < MinFactors {
 		return ScoreCard{}, &ErrInsufficientData{
 			Available: len(req.Factors),
 			Required:  MinFactors,

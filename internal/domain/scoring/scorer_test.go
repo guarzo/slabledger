@@ -15,12 +15,14 @@ func TestScore_CompositeCalculation(t *testing.T) {
 		compositeEpsilon float64
 	}{
 		{
-			name: "single factor",
+			name: "two equal factors same direction",
 			factors: []Factor{
 				{Name: "market_trend", Value: 0.5, Confidence: 1.0, Source: "test"},
+				{Name: "liquidity", Value: 0.5, Confidence: 1.0, Source: "test"},
 			},
 			weights: []FactorWeight{
-				{Name: "market_trend", Weight: 1.0},
+				{Name: "market_trend", Weight: 0.5},
+				{Name: "liquidity", Weight: 0.5},
 			},
 			wantComposite:    0.5,
 			compositeEpsilon: 0.001,
@@ -39,16 +41,18 @@ func TestScore_CompositeCalculation(t *testing.T) {
 			compositeEpsilon: 0.001,
 		},
 		{
-			name: "missing factor renormalizes weights",
+			name: "missing third factor renormalizes weights",
 			factors: []Factor{
 				{Name: "market_trend", Value: 0.5, Confidence: 1.0, Source: "test"},
+				{Name: "liquidity", Value: 0.5, Confidence: 1.0, Source: "test"},
 			},
 			weights: []FactorWeight{
-				{Name: "market_trend", Weight: 0.6},
-				{Name: "liquidity", Weight: 0.4},
+				{Name: "market_trend", Weight: 0.5},
+				{Name: "liquidity", Weight: 0.3},
+				{Name: "scarcity", Weight: 0.2}, // missing from factors
 			},
-			// Only market_trend present. Weight renormalized: 0.6/0.6 = 1.0
-			wantComposite:    0.5,
+			// market_trend(0.5) + liquidity(0.5), weights renormalized to 0.5/0.8 and 0.3/0.8
+			wantComposite:    0.5*(0.5/0.8) + 0.5*(0.3/0.8),
 			compositeEpsilon: 0.001,
 		},
 	}
@@ -159,6 +163,34 @@ func TestScore_InsufficientData(t *testing.T) {
 	}
 	if insuffErr.Available != 1 {
 		t.Errorf("Available = %d, want 1", insuffErr.Available)
+	}
+}
+
+func TestScore_ZeroFactors_ReturnsError(t *testing.T) {
+	req := ScoreRequest{
+		EntityID:   "test",
+		EntityType: "campaign",
+		Factors:    nil, // zero factors
+		DataGaps:   nil, // no gaps either
+	}
+	_, err := Score(req, PurchaseAssessmentProfile)
+	if err == nil {
+		t.Fatal("expected ErrInsufficientData for zero factors, got nil")
+	}
+}
+
+func TestScore_ZeroGaps_WithFewFactors_ReturnsError(t *testing.T) {
+	req := ScoreRequest{
+		EntityID:   "test",
+		EntityType: "campaign",
+		Factors:    []Factor{{Name: "roi_potential", Value: 0.5, Confidence: 0.8}},
+		DataGaps:   nil, // no gaps — but only 1 factor, below MinFactors
+	}
+	_, err := Score(req, PurchaseAssessmentProfile)
+	// With current && logic: no error (because DataGaps is empty)
+	// With correct guard: error (because Factors < MinFactors)
+	if err == nil {
+		t.Fatal("expected ErrInsufficientData for too few factors, got nil")
 	}
 }
 
