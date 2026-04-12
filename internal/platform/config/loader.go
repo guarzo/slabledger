@@ -108,7 +108,10 @@ func envBool(key string, target *bool, defaultVal bool) {
 	}
 }
 
-// FromEnv overlays environment variables onto the base config
+// FromEnv overlays environment variables onto the base config.
+// Uses the env* helper functions above which provide type-safe, validated parsing.
+// FromFlags reads configuration from CLI flags using the standard flag package.
+// Both set the same Config fields; FromFlags takes precedence (applied after FromEnv).
 func FromEnv(base Config) Config {
 	cfg := base
 
