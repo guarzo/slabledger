@@ -67,26 +67,20 @@ type schedulerDeps struct {
 func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.BuildResult, context.CancelFunc) {
 	schedulerCtx, cancelScheduler := context.WithCancel(ctx)
 	buildDeps := scheduler.BuildDeps{
-		APITracker:            deps.DBTracker,
-		HealthChecker:         deps.DBTracker,
-		AccessTracker:         deps.DBTracker,
-		RefreshCandidates:     deps.RefreshCandidates,
-		PriceProvider:         deps.PriceProvImpl,
-		CardProvider:          deps.CardProvImpl,
-		AuthService:           deps.AuthService,
-		Logger:                deps.Logger,
-		SyncStateStore:        deps.SyncStateRepo,
-		NewSetsProvider:       deps.CardProvImpl.RegistryManager(),
-		InventoryLister:       &inventoryListAdapter{repo: deps.PurchaseStore},
-		SnapshotRefresher:     &snapshotRefreshAdapter{svc: deps.CampaignsService},
-		SnapshotEnrichService: deps.CampaignsService,
-		SnapshotHistoryLister: &struct {
-			*sqlite.SnapshotStore
-			*sqlite.PurchaseStore
-		}{
-			SnapshotStore: deps.SnapshotStore,
-			PurchaseStore: deps.PurchaseStore,
-		},
+		APITracker:               deps.DBTracker,
+		HealthChecker:            deps.DBTracker,
+		AccessTracker:            deps.DBTracker,
+		RefreshCandidates:        deps.RefreshCandidates,
+		PriceProvider:            deps.PriceProvImpl,
+		CardProvider:             deps.CardProvImpl,
+		AuthService:              deps.AuthService,
+		Logger:                   deps.Logger,
+		SyncStateStore:           deps.SyncStateRepo,
+		NewSetsProvider:          deps.CardProvImpl.RegistryManager(),
+		InventoryLister:          &inventoryListAdapter{repo: deps.PurchaseStore},
+		SnapshotRefresher:        &snapshotRefreshAdapter{svc: deps.CampaignsService},
+		SnapshotEnrichService:    deps.CampaignsService,
+		SnapshotHistoryLister:    deps.PurchaseStore,
 		SnapshotHistoryRecorder:  deps.SnapshotStore,
 		AdvisorCollector:         deps.AdvisorService,
 		AdvisorCache:             deps.AdvisorCacheRepo,

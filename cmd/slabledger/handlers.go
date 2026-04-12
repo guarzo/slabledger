@@ -206,9 +206,9 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 	mediaDir := in.Cfg.Server.MediaDir
 	baseURL := in.Cfg.Server.BaseURL
 	if baseURL == "" {
-		logger.Warn(context.Background(), "BASE_URL is not set — slide URLs will be derived from request headers")
+		logger.Warn(ctx, "BASE_URL is not set — slide URLs will be derived from request headers")
 	} else {
-		logger.Info(context.Background(), "BASE_URL configured",
+		logger.Info(ctx, "BASE_URL configured",
 			observability.String("baseURL", baseURL))
 	}
 	socialHandler := handlers.NewSocialHandler(in.SocialService, in.SocialRepo, logger, mediaDir, baseURL)
