@@ -313,7 +313,7 @@ type CapitalSummary struct {
 	// Invoice-cycle actuals (see ComputeInvoiceProjection in invoice_projection.go).
 	NextInvoiceDate                string             `json:"nextInvoiceDate,omitempty"`      // YYYY-MM-DD, empty if no unpaid
 	NextInvoiceDueDate             string             `json:"nextInvoiceDueDate,omitempty"`   // YYYY-MM-DD
-	NextInvoiceAmountCents         int                `json:"nextInvoiceAmountCents"`         // TotalCents of earliest unpaid invoice
+	NextInvoiceAmountCents         int                `json:"nextInvoiceAmountCents"`         // TotalCents - PaidCents of earliest unpaid invoice (amount still owed)
 	DaysUntilInvoiceDue            int                `json:"daysUntilInvoiceDue"`            // from now to due date, negative = overdue
 	NextInvoicePendingReceiptCents int                `json:"nextInvoicePendingReceiptCents"` // cost of cards still at PSA for this invoice
 	NextInvoiceSellThrough         InvoiceSellThrough `json:"nextInvoiceSellThrough"`         // sell-through for returned cards on this invoice
