@@ -7,18 +7,20 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/domain/picks"
 )
 
 // ProfitabilityProvider queries campaign_purchases + campaign_sales
 // to surface historical profitability patterns for the AI picks engine.
 type ProfitabilityProvider struct {
-	db *sql.DB
+	db     *sql.DB
+	logger observability.Logger
 }
 
 // NewProfitabilityProvider creates a new ProfitabilityProvider backed by db.
-func NewProfitabilityProvider(db *sql.DB) *ProfitabilityProvider {
-	return &ProfitabilityProvider{db: db}
+func NewProfitabilityProvider(db *sql.DB, logger observability.Logger) *ProfitabilityProvider {
+	return &ProfitabilityProvider{db: db, logger: logger}
 }
 
 var _ picks.ProfitabilityProvider = (*ProfitabilityProvider)(nil)
@@ -57,7 +59,10 @@ func (p *ProfitabilityProvider) GetProfitablePatterns(ctx context.Context) (pick
 	// ProfitablePriceTiers intentionally left empty for MVP.
 
 	if len(errs) > 0 {
-		return profile, errors.Join(errs...)
+		joined := errors.Join(errs...)
+		p.logger.Warn(context.Background(), "GetProfitablePatterns: partial failure, returning incomplete profile",
+			observability.Err(joined))
+		return profile, joined
 	}
 	return profile, nil
 }

@@ -341,7 +341,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 
 	// Initialize picks
 	picksRepo := sqlite.NewPicksRepository(db.DB)
-	profitabilityProv := sqlite.NewProfitabilityProvider(db.DB)
+	profitabilityProv := sqlite.NewProfitabilityProvider(db.DB, logger)
 	inventoryProv := sqlite.NewInventoryProvider(db.DB)
 	picksService := picks.NewService(picksRepo, azureAIClient, profitabilityProv, inventoryProv, logger)
 
