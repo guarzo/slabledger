@@ -660,9 +660,9 @@ func (m *MockCampaignRepository) GetCapitalRawData(ctx context.Context) (*campai
 	return &campaigns.CapitalRawData{OutstandingCents: 0, RecoveryRate30dCents: 0, RecoveryRate30dPriorCents: 0}, nil
 }
 
-func (m *MockCampaignRepository) GetInvoiceSellThrough(_ context.Context, invoiceDate string) (campaigns.InvoiceSellThrough, error) {
+func (m *MockCampaignRepository) GetInvoiceSellThrough(ctx context.Context, invoiceDate string) (campaigns.InvoiceSellThrough, error) {
 	if m.GetInvoiceSellThroughFn != nil {
-		return m.GetInvoiceSellThroughFn(context.Background(), invoiceDate)
+		return m.GetInvoiceSellThroughFn(ctx, invoiceDate)
 	}
 	var result campaigns.InvoiceSellThrough
 	for _, p := range m.Purchases {
