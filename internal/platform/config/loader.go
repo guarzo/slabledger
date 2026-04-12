@@ -123,6 +123,11 @@ func FromEnv(base Config) Config {
 	envDuration("HTTP_IDLE_TIMEOUT", &cfg.Server.IdleTimeout)
 	envString("BASE_URL", &cfg.Server.BaseURL)
 	envString("MEDIA_DIR", &cfg.Server.MediaDir)
+	if v := os.Getenv("SHUTDOWN_TIMEOUT_SECONDS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			cfg.Server.SchedulerShutdownTimeout = time.Duration(n) * time.Second
+		}
+	}
 
 	// Rate limiting
 	envInt("RATE_LIMIT_REQUESTS", &cfg.Mode.RateLimitRequests)

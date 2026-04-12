@@ -448,7 +448,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	})
 	serverErr := startWebServer(ctx, deps)
 
-	shutdownGracefully(ctx, logger, cancelScheduler, schedulerResult, hOut, socialSvc.service, campaignsService)
+	shutdownGracefully(ctx, logger, cancelScheduler, schedulerResult, hOut, socialSvc.service, campaignsService, cfg.Server.SchedulerShutdownTimeout)
 
 	return serverErr
 }
