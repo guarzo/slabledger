@@ -103,7 +103,7 @@ func (h *CardLadderHandler) HandleAddCard(w http.ResponseWriter, r *http.Request
 	result, err := h.addCardToCollection(r.Context(), client, cfg.FirebaseUID, cfg.CollectionID, "", req)
 	if err != nil {
 		h.logger.Error(r.Context(), "add card to CL failed", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeError(w, http.StatusInternalServerError, "sync operation failed")
 		return
 	}
 
