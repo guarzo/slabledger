@@ -38,8 +38,10 @@ func ComputeInvoiceProjection(
 		dueDate time.Time
 	}
 
-	// Both "today" and each parsed due date are normalized to UTC calendar
-	// midnights so differences are measured in whole calendar days.
+	// Normalize now to UTC so the extracted calendar day matches the UTC
+	// midnight used when parsing due dates. Without this, a non-UTC now can
+	// yield a different calendar day near day boundaries, skewing DaysUntilDue.
+	now = now.UTC()
 	todayY, todayM, todayD := now.Date()
 	today := time.Date(todayY, todayM, todayD, 0, 0, 0, 0, time.UTC)
 

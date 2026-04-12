@@ -37,7 +37,12 @@ export default function InvoiceReadinessPanel({ capital }: InvoiceReadinessPanel
     return `${daysUntil} day${daysUntil === 1 ? '' : 's'}`;
   })();
 
-  const st = capital.nextInvoiceSellThrough;
+  const st = capital.nextInvoiceSellThrough ?? {
+    totalPurchaseCount: 0,
+    soldCount: 0,
+    totalCostCents: 0,
+    saleRevenueCents: 0,
+  };
   const sellThroughPct = st.totalPurchaseCount > 0
     ? Math.round((st.soldCount / st.totalPurchaseCount) * 100)
     : 0;

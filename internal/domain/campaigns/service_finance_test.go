@@ -239,106 +239,137 @@ func TestComputeInvoiceProjection(t *testing.T) {
 func TestService_GetCapitalSummary_WithProjection(t *testing.T) {
 	ctx := context.Background()
 
-	t.Run("populates invoice fields from unpaid invoice", func(t *testing.T) {
-		repo := mocks.NewMockCampaignRepository()
-		repo.GetCapitalRawDataFn = func(_ context.Context) (*campaigns.CapitalRawData, error) {
-			return &campaigns.CapitalRawData{
+	// Fixed UTC reference date so DaysUntilInvoiceDue assertions are deterministic.
+	// The service calls ComputeInvoiceProjection(invoices, time.Now()), so we cannot
+	// inject a clock; instead we use dates relative to today-UTC and assert exact values.
+	todayUTC := time.Now().UTC().Truncate(24 * time.Hour)
+	fmtDate := func(d time.Time) string { return d.Format("2006-01-02") }
+
+	tests := []struct {
+		name string
+		// Per-test repo setup
+		rawData    *campaigns.CapitalRawData
+		invoice    *campaigns.Invoice // nil = no invoice added
+		sellThruFn func(context.Context, string) (campaigns.InvoiceSellThrough, error)
+		// Expected fields on the returned summary.
+		// checkNextInvoiceDate: true = assert NextInvoiceDate == wantNextInvoiceDate
+		// (allows distinguishing "expect empty" from "don't care").
+		checkNextInvoiceDate   bool
+		wantNextInvoiceDate    string
+		wantNextInvoiceDueDate string
+		wantAmountCents        int
+		wantDaysUntilDue       int
+		wantOutstandingCents   int
+		wantSellThru           campaigns.InvoiceSellThrough
+	}{
+		{
+			name: "populates invoice fields from unpaid invoice",
+			rawData: &campaigns.CapitalRawData{
 				OutstandingCents:     12_000_000,
 				RecoveryRate30dCents: 9_000_000,
 				PaidCents:            5_000_000,
 				UnpaidInvoiceCount:   1,
-			}, nil
-		}
-		invoiceDate := time.Now().Format("2006-01-02")
-		dueDate := time.Now().Add(14 * 24 * time.Hour).Format("2006-01-02")
-		repo.Invoices["i1"] = &campaigns.Invoice{
-			ID:          "i1",
-			InvoiceDate: invoiceDate,
-			DueDate:     dueDate,
-			TotalCents:  6_500_000,
-			PaidCents:   0,
-			Status:      "unpaid",
-		}
-		svc := campaigns.NewService(repo, withTestIDGen(), withClosedBaseCtx())
-
-		summary, err := svc.GetCapitalSummary(ctx)
-		if err != nil {
-			t.Fatalf("GetCapitalSummary: %v", err)
-		}
-		if summary.NextInvoiceDueDate != dueDate {
-			t.Errorf("NextInvoiceDueDate = %q, want %q", summary.NextInvoiceDueDate, dueDate)
-		}
-		if summary.NextInvoiceAmountCents != 6_500_000 {
-			t.Errorf("NextInvoiceAmountCents = %d, want 6500000", summary.NextInvoiceAmountCents)
-		}
-		if summary.DaysUntilInvoiceDue != 13 && summary.DaysUntilInvoiceDue != 14 {
-			t.Errorf("DaysUntilInvoiceDue = %d, want 13 or 14", summary.DaysUntilInvoiceDue)
-		}
-		// Existing summary fields still flow through.
-		if summary.OutstandingCents != 12_000_000 {
-			t.Errorf("OutstandingCents = %d, want 12000000", summary.OutstandingCents)
-		}
-	})
-
-	t.Run("no invoices yields zero-valued projection but still returns summary", func(t *testing.T) {
-		repo := mocks.NewMockCampaignRepository()
-		repo.GetCapitalRawDataFn = func(_ context.Context) (*campaigns.CapitalRawData, error) {
-			return &campaigns.CapitalRawData{
+			},
+			invoice: &campaigns.Invoice{
+				ID:          "i1",
+				InvoiceDate: fmtDate(todayUTC),
+				DueDate:     fmtDate(todayUTC.Add(14 * 24 * time.Hour)),
+				TotalCents:  6_500_000,
+				PaidCents:   0,
+				Status:      "unpaid",
+			},
+			checkNextInvoiceDate:   true,
+			wantNextInvoiceDate:    fmtDate(todayUTC),
+			wantNextInvoiceDueDate: fmtDate(todayUTC.Add(14 * 24 * time.Hour)),
+			wantAmountCents:        6_500_000,
+			wantDaysUntilDue:       14,
+			wantOutstandingCents:   12_000_000,
+		},
+		{
+			name: "no invoices yields zero-valued projection but still returns summary",
+			rawData: &campaigns.CapitalRawData{
 				OutstandingCents:     1_000_000,
 				RecoveryRate30dCents: 600_000,
-			}, nil
-		}
-		svc := campaigns.NewService(repo, withTestIDGen(), withClosedBaseCtx())
-
-		summary, err := svc.GetCapitalSummary(ctx)
-		if err != nil {
-			t.Fatalf("GetCapitalSummary: %v", err)
-		}
-		if summary.NextInvoiceDate != "" || summary.NextInvoiceDueDate != "" {
-			t.Errorf("expected empty next invoice fields, got %+v", summary)
-		}
-		if summary.NextInvoiceAmountCents != 0 || summary.DaysUntilInvoiceDue != 0 {
-			t.Errorf("expected zero invoice values, got %+v", summary)
-		}
-	})
-
-	t.Run("sell-through data is populated for the next invoice date", func(t *testing.T) {
-		repo := mocks.NewMockCampaignRepository()
-		repo.GetCapitalRawDataFn = func(_ context.Context) (*campaigns.CapitalRawData, error) {
-			return &campaigns.CapitalRawData{OutstandingCents: 500_000}, nil
-		}
-		invoiceDate := time.Now().Format("2006-01-02")
-		dueDate := time.Now().Add(10 * 24 * time.Hour).Format("2006-01-02")
-		repo.Invoices["i1"] = &campaigns.Invoice{
-			ID: "i1", InvoiceDate: invoiceDate, DueDate: dueDate,
-			TotalCents: 1_000_000, Status: "unpaid",
-		}
-		repo.GetInvoiceSellThroughFn = func(_ context.Context, date string) (campaigns.InvoiceSellThrough, error) {
-			if date != invoiceDate {
-				return campaigns.InvoiceSellThrough{}, nil
-			}
-			return campaigns.InvoiceSellThrough{
+			},
+			invoice:              nil,
+			checkNextInvoiceDate: true,
+			wantNextInvoiceDate:  "",
+			wantAmountCents:      0,
+			wantDaysUntilDue:     0,
+			wantOutstandingCents: 1_000_000,
+		},
+		{
+			name:    "sell-through data is populated for the next invoice date",
+			rawData: &campaigns.CapitalRawData{OutstandingCents: 500_000},
+			invoice: &campaigns.Invoice{
+				ID:          "i1",
+				InvoiceDate: fmtDate(todayUTC),
+				DueDate:     fmtDate(todayUTC.Add(10 * 24 * time.Hour)),
+				TotalCents:  1_000_000,
+				Status:      "unpaid",
+			},
+			sellThruFn: func(_ context.Context, date string) (campaigns.InvoiceSellThrough, error) {
+				if date != fmtDate(todayUTC) {
+					return campaigns.InvoiceSellThrough{}, nil
+				}
+				return campaigns.InvoiceSellThrough{
+					TotalPurchaseCount: 10,
+					SoldCount:          4,
+					TotalCostCents:     200_000,
+					SaleRevenueCents:   90_000,
+				}, nil
+			},
+			wantDaysUntilDue: 10,
+			wantAmountCents:  1_000_000,
+			wantSellThru: campaigns.InvoiceSellThrough{
 				TotalPurchaseCount: 10,
 				SoldCount:          4,
 				TotalCostCents:     200_000,
 				SaleRevenueCents:   90_000,
-			}, nil
-		}
-		svc := campaigns.NewService(repo, withTestIDGen(), withClosedBaseCtx())
+			},
+		},
+	}
 
-		summary, err := svc.GetCapitalSummary(ctx)
-		if err != nil {
-			t.Fatalf("GetCapitalSummary: %v", err)
-		}
-		st := summary.NextInvoiceSellThrough
-		if st.TotalPurchaseCount != 10 {
-			t.Errorf("TotalPurchaseCount = %d, want 10", st.TotalPurchaseCount)
-		}
-		if st.SoldCount != 4 {
-			t.Errorf("SoldCount = %d, want 4", st.SoldCount)
-		}
-		if st.SaleRevenueCents != 90_000 {
-			t.Errorf("SaleRevenueCents = %d, want 90000", st.SaleRevenueCents)
-		}
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := mocks.NewMockCampaignRepository()
+			rawData := tt.rawData
+			repo.GetCapitalRawDataFn = func(_ context.Context) (*campaigns.CapitalRawData, error) {
+				return rawData, nil
+			}
+			if tt.invoice != nil {
+				repo.Invoices[tt.invoice.ID] = tt.invoice
+			}
+			if tt.sellThruFn != nil {
+				repo.GetInvoiceSellThroughFn = tt.sellThruFn
+			}
+			svc := campaigns.NewService(repo, withTestIDGen(), withClosedBaseCtx())
+
+			summary, err := svc.GetCapitalSummary(ctx)
+			if err != nil {
+				t.Fatalf("GetCapitalSummary: %v", err)
+			}
+			if tt.checkNextInvoiceDate && summary.NextInvoiceDate != tt.wantNextInvoiceDate {
+				t.Errorf("NextInvoiceDate = %q, want %q", summary.NextInvoiceDate, tt.wantNextInvoiceDate)
+			}
+			if tt.wantNextInvoiceDueDate != "" && summary.NextInvoiceDueDate != tt.wantNextInvoiceDueDate {
+				t.Errorf("NextInvoiceDueDate = %q, want %q", summary.NextInvoiceDueDate, tt.wantNextInvoiceDueDate)
+			}
+			if summary.NextInvoiceAmountCents != tt.wantAmountCents {
+				t.Errorf("NextInvoiceAmountCents = %d, want %d", summary.NextInvoiceAmountCents, tt.wantAmountCents)
+			}
+			if tt.wantDaysUntilDue != 0 && summary.DaysUntilInvoiceDue != tt.wantDaysUntilDue {
+				t.Errorf("DaysUntilInvoiceDue = %d, want %d", summary.DaysUntilInvoiceDue, tt.wantDaysUntilDue)
+			}
+			if tt.wantOutstandingCents != 0 && summary.OutstandingCents != tt.wantOutstandingCents {
+				t.Errorf("OutstandingCents = %d, want %d", summary.OutstandingCents, tt.wantOutstandingCents)
+			}
+			if tt.wantSellThru != (campaigns.InvoiceSellThrough{}) {
+				st := summary.NextInvoiceSellThrough
+				if st != tt.wantSellThru {
+					t.Errorf("NextInvoiceSellThrough = %+v, want %+v", st, tt.wantSellThru)
+				}
+			}
+		})
+	}
 }
