@@ -95,6 +95,10 @@ func (s *SnapshotHistoryScheduler) tick(ctx context.Context) {
 
 		var snap inventory.MarketSnapshot
 		if err := json.Unmarshal([]byte(p.SnapshotJSON), &snap); err != nil {
+			s.logger.Warn(ctx, "snapshot_history: corrupt snapshot_json, skipping",
+				observability.String("card", p.CardName),
+				observability.Err(err),
+			)
 			skipped++
 			continue
 		}

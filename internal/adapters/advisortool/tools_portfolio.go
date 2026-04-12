@@ -164,14 +164,16 @@ func (e *CampaignToolExecutor) registerGetDashboardSummary() {
 			}
 		}
 
-		if cs, err := e.financeService.GetCapitalSummary(ctx); err != nil {
-			ds.Errors = append(ds.Errors, "capitalSummary: "+err.Error())
-		} else if cs != nil {
-			ds.Capital.BalanceCents = cs.OutstandingCents
-			ds.Capital.RecoveryRate30dCents = cs.RecoveryRate30dCents
-			ds.Capital.WeeksToCover = cs.WeeksToCover
-			ds.Capital.RecoveryTrend = cs.RecoveryTrend
-			ds.Capital.AlertLevel = cs.AlertLevel
+		if e.financeService != nil {
+			if cs, err := e.financeService.GetCapitalSummary(ctx); err != nil {
+				ds.Errors = append(ds.Errors, "capitalSummary: "+err.Error())
+			} else if cs != nil {
+				ds.Capital.BalanceCents = cs.OutstandingCents
+				ds.Capital.RecoveryRate30dCents = cs.RecoveryRate30dCents
+				ds.Capital.WeeksToCover = cs.WeeksToCover
+				ds.Capital.RecoveryTrend = cs.RecoveryTrend
+				ds.Capital.AlertLevel = cs.AlertLevel
+			}
 		}
 
 		if e.portSvc != nil {
