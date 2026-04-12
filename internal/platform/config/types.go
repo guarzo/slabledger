@@ -126,6 +126,10 @@ type DHConfig struct {
 	OrdersPollInterval    time.Duration // default: 30m
 	InventoryPollInterval time.Duration // default: 2h
 	PushInterval          time.Duration // default: 5m
+	SocialEnabled         bool
+	SocialHour            int
+	SocialPollInterval    time.Duration
+	SocialPollTimeout     time.Duration
 }
 
 // InventoryRefreshConfig controls the inventory snapshot refresh scheduler
