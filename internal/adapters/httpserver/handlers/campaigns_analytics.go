@@ -60,7 +60,7 @@ func (h *CampaignsHandler) HandleFillRate(w http.ResponseWriter, r *http.Request
 	// Enrich with campaign's daily cap
 	campaign, capErr := h.service.GetCampaign(r.Context(), id)
 	if capErr != nil {
-		h.logger.Debug(r.Context(), "failed to get campaign for fill rate enrichment",
+		h.logger.Error(r.Context(), "failed to get campaign for fill rate enrichment",
 			observability.String("campaign_id", id),
 			observability.Err(capErr))
 	}
