@@ -204,6 +204,9 @@ func (s *service) GetInventoryAging(ctx context.Context, campaignID string) (*In
 
 	result := &InventoryResult{Items: items}
 	if err := s.applyOpenFlags(ctx, items); err != nil {
+		if s.logger != nil {
+			s.logger.Warn(ctx, "applyOpenFlags failed", observability.Err(err))
+		}
 		result.Warnings = append(result.Warnings, "Price flag data unavailable")
 	}
 	s.enrichCompSummaries(ctx, items)
@@ -233,6 +236,9 @@ func (s *service) GetGlobalInventoryAging(ctx context.Context) (*InventoryResult
 
 	result := &InventoryResult{Items: items}
 	if err := s.applyOpenFlags(ctx, items); err != nil {
+		if s.logger != nil {
+			s.logger.Warn(ctx, "applyOpenFlags failed", observability.Err(err))
+		}
 		result.Warnings = append(result.Warnings, "Price flag data unavailable")
 	}
 	s.enrichCompSummaries(ctx, items)
