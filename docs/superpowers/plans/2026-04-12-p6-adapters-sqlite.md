@@ -1,12 +1,29 @@
 # P6 — adapters/storage/sqlite Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use **superpowers:subagent-driven-development** to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. See Setup section below for worktree creation.
 
 **Goal:** Fix correctness, reduce duplication, and improve test coverage in `internal/adapters/storage/sqlite/`.
 
 **Architecture:** All changes are confined to `internal/adapters/storage/sqlite/`. The three tasks are ordered by severity: generalize chunked bulk-lookup helpers first (HIGH), fix profitability_provider error handling (HIGH), remove unnecessary transaction in AcceptAISuggestion (LOW). Test coverage additions follow.
 
 **Tech Stack:** Go 1.21+, SQLite via `database/sql`, Go generics (`[T any]`), table-driven tests.
+
+---
+
+## Setup
+
+```bash
+# Create worktree from the main repo root (not from within another worktree)
+git -C /workspace worktree add /workspace/.worktrees/plan-p6-sqlite -b feature/polish-p6-sqlite
+cd /workspace/.worktrees/plan-p6-sqlite
+```
+
+Verify:
+```bash
+go build ./internal/adapters/storage/sqlite/...
+go test -race ./internal/adapters/storage/sqlite/...
+```
+Expected: builds and all tests pass.
 
 ---
 

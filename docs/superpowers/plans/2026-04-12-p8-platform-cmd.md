@@ -1,12 +1,29 @@
 # P8 — platform+cmd Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use **superpowers:subagent-driven-development** to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. See Setup section below for worktree creation.
 
 **Goal:** Fix internal error exposure in HTTP responses, add configurable shutdown timeout, and improve code quality in `internal/platform/` and `cmd/`.
 
 **Architecture:** Changes are confined to `internal/platform/` and `cmd/slabledger/`. The `admin_analyze.go` spec item refers to the CLI admin command which writes to stdout/stderr (not HTTP). The actual HTTP error exposure is in `internal/adapters/httpserver/handlers/cardladder_sync.go:106` — but that file is in P5 scope. For P8, focus on: admin error formatting, cache TTL enforcement, shutdown timeout, config refactoring, handler registration order.
 
 **Tech Stack:** Go 1.21+, environment variable configuration.
+
+---
+
+## Setup
+
+```bash
+# Create worktree from the main repo root (not from within another worktree)
+git -C /workspace worktree add /workspace/.worktrees/plan-p8-platform -b feature/polish-p8-platform
+cd /workspace/.worktrees/plan-p8-platform
+```
+
+Verify:
+```bash
+go build ./internal/platform/... ./cmd/slabledger/...
+go test -race ./internal/platform/... ./cmd/slabledger/...
+```
+Expected: builds and all tests pass.
 
 ---
 

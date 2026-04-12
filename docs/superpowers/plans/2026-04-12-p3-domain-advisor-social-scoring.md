@@ -1,6 +1,6 @@
 # P3 — domain/advisor+social+scoring Polish Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use **superpowers:subagent-driven-development** to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. See Setup section below for worktree creation.
 
 **Goal:** Fix 10 silent-failure, logic, duplication, and test quality issues in `internal/domain/advisor/`, `internal/domain/social/`, and `internal/domain/scoring/`.
 
@@ -15,10 +15,9 @@
 ## Setup
 
 ```bash
-git worktree add .worktrees/plan-p3-domain-advisor -b feature/polish-p3-domain-advisor
-cd .worktrees/plan-p3-domain-advisor
-go build ./internal/domain/advisor/... ./internal/domain/social/... ./internal/domain/scoring/...
-go test -race ./internal/domain/advisor/... ./internal/domain/social/... ./internal/domain/scoring/...
+# Create worktree from the main repo root (not from within another worktree)
+git -C /workspace worktree add /workspace/.worktrees/plan-p3-domain-advisor -b feature/polish-p3-domain-advisor
+cd /workspace/.worktrees/plan-p3-domain-advisor
 ```
 
 ---

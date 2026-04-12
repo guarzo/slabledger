@@ -1,12 +1,29 @@
 # P7 — adapters/clients+scheduler Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use **superpowers:subagent-driven-development** to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. See Setup section below for worktree creation.
 
 **Goal:** Fix safety issues in the scheduler and clients layers: nil guard at job registration, error tracking for price refresh, and documentation/test coverage improvements.
 
 **Architecture:** Changes are confined to `internal/adapters/clients/`, `internal/adapters/scheduler/`, and `internal/adapters/advisortool/`. No cross-plan file conflicts.
 
 **Tech Stack:** Go 1.21+, `internal/platform/cache` for TCGDex (already used), `httptest` for DH client tests, table-driven tests.
+
+---
+
+## Setup
+
+```bash
+# Create worktree from the main repo root (not from within another worktree)
+git -C /workspace worktree add /workspace/.worktrees/plan-p7-clients -b feature/polish-p7-clients
+cd /workspace/.worktrees/plan-p7-clients
+```
+
+Verify:
+```bash
+go build ./internal/adapters/clients/... ./internal/adapters/scheduler/... ./internal/adapters/advisortool/...
+go test -race ./internal/adapters/clients/... ./internal/adapters/scheduler/... ./internal/adapters/advisortool/...
+```
+Expected: builds and all tests pass.
 
 ---
 

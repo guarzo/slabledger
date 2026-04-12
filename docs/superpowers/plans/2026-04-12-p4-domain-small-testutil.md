@@ -1,6 +1,6 @@
 # P4 — domain/small+testutil Polish Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use **superpowers:subagent-driven-development** to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. See Setup section below for worktree creation.
 
 **Goal:** Fix 9 issues in `internal/domain/favorites/`, `picks/`, `cards/`, `auth/`, `pricing/`, `constants/`, `storage/`, and `internal/testutil/` — including a README rewrite, in-memory store correctness, and inline mock replacement.
 
@@ -15,10 +15,9 @@
 ## Setup
 
 ```bash
-git worktree add .worktrees/plan-p4-domain-small -b feature/polish-p4-domain-small
-cd .worktrees/plan-p4-domain-small
-go build ./internal/domain/... ./internal/testutil/...
-go test -race ./internal/domain/... ./internal/testutil/...
+# Create worktree from the main repo root (not from within another worktree)
+git -C /workspace worktree add /workspace/.worktrees/plan-p4-domain-small -b feature/polish-p4-domain-small
+cd /workspace/.worktrees/plan-p4-domain-small
 ```
 
 ---

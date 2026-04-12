@@ -1,6 +1,6 @@
 # P5 — adapters/httpserver Polish Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use **superpowers:subagent-driven-development** to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. See Setup section below for worktree creation.
 
 **Goal:** Fix 10 HTTP handler issues in `internal/adapters/httpserver/handlers/` — including post-200 error handling, missing error logging, goroutine lifecycle management, and HTTP status code correctness.
 
@@ -15,10 +15,9 @@
 ## Setup
 
 ```bash
-git worktree add .worktrees/plan-p5-httpserver -b feature/polish-p5-httpserver
-cd .worktrees/plan-p5-httpserver
-go build ./internal/adapters/httpserver/...
-go test -race ./internal/adapters/httpserver/...
+# Create worktree from the main repo root (not from within another worktree)
+git -C /workspace worktree add /workspace/.worktrees/plan-p5-httpserver -b feature/polish-p5-httpserver
+cd /workspace/.worktrees/plan-p5-httpserver
 ```
 
 ---

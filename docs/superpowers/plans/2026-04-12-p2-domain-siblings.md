@@ -1,6 +1,6 @@
 # P2 — domain/decomposed-siblings Polish Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use **superpowers:subagent-driven-development** to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. See Setup section below for worktree creation.
 
 **Goal:** Fix 15 silent-failure, data-integrity, and logic bugs across `internal/domain/arbitrage/`, `portfolio/`, `tuning/`, `finance/`, `export/`, `dhlisting/`, `csvimport/`, and `mmutil/`.
 
@@ -15,10 +15,9 @@
 ## Setup
 
 ```bash
-git worktree add .worktrees/plan-p2-domain-siblings -b feature/polish-p2-domain-siblings
-cd .worktrees/plan-p2-domain-siblings
-go build ./internal/domain/...
-go test -race ./internal/domain/...
+# Create worktree from the main repo root (not from within another worktree)
+git -C /workspace worktree add /workspace/.worktrees/plan-p2-domain-siblings -b feature/polish-p2-domain-siblings
+cd /workspace/.worktrees/plan-p2-domain-siblings
 ```
 
 Expected: builds and all tests pass.

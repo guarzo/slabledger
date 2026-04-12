@@ -1,6 +1,6 @@
 # P1 — domain/inventory Polish Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use **superpowers:subagent-driven-development** to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. See Setup section below for worktree creation.
 
 **Goal:** Fix 14 silent-failure, data-integrity, and maintainability issues in `internal/domain/inventory/`.
 
@@ -15,8 +15,9 @@
 ## Setup
 
 ```bash
-git worktree add .worktrees/plan-p1-domain-inventory -b feature/polish-p1-domain-inventory
-cd .worktrees/plan-p1-domain-inventory
+# Create worktree from the main repo root (not from within another worktree)
+git -C /workspace worktree add /workspace/.worktrees/plan-p1-domain-inventory -b feature/polish-p1-domain-inventory
+cd /workspace/.worktrees/plan-p1-domain-inventory
 ```
 
 Verify:
