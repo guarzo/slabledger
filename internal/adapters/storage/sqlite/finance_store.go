@@ -305,7 +305,7 @@ func (fs *FinanceStore) ListRevocationFlags(ctx context.Context) ([]inventory.Re
 		}
 	}()
 
-	result := make([]inventory.RevocationFlag, 0, 64)
+	var result []inventory.RevocationFlag
 	for rows.Next() {
 		var f inventory.RevocationFlag
 		if err := rows.Scan(
