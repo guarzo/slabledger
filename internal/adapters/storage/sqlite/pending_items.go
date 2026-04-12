@@ -7,10 +7,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 )
 
-// PendingItemsRepository implements campaigns.PendingItemRepository using SQLite.
+// PendingItemsRepository implements inventory.PendingItemRepository using SQLite.
 type PendingItemsRepository struct {
 	db *sql.DB
 }
@@ -20,12 +20,12 @@ func NewPendingItemsRepository(db *sql.DB) *PendingItemsRepository {
 	return &PendingItemsRepository{db: db}
 }
 
-var _ campaigns.PendingItemRepository = (*PendingItemsRepository)(nil)
+var _ inventory.PendingItemRepository = (*PendingItemsRepository)(nil)
 
 // SavePendingItems upserts pending items by cert_number.
 // If an unresolved row already exists for the cert, it is updated in place.
 // Resolved items (resolved_at IS NOT NULL) are left untouched.
-func (r *PendingItemsRepository) SavePendingItems(ctx context.Context, items []campaigns.PendingItem) error {
+func (r *PendingItemsRepository) SavePendingItems(ctx context.Context, items []inventory.PendingItem) error {
 	if len(items) == 0 {
 		return nil
 	}
@@ -93,7 +93,7 @@ func (r *PendingItemsRepository) SavePendingItems(ctx context.Context, items []c
 }
 
 // ListPendingItems returns all unresolved pending items, ordered by created_at DESC.
-func (r *PendingItemsRepository) ListPendingItems(ctx context.Context) ([]campaigns.PendingItem, error) {
+func (r *PendingItemsRepository) ListPendingItems(ctx context.Context) ([]inventory.PendingItem, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, cert_number, card_name, set_name, card_number, grade,
 		       buy_cost_cents, purchase_date, status, candidates, source, created_at
@@ -106,9 +106,9 @@ func (r *PendingItemsRepository) ListPendingItems(ctx context.Context) ([]campai
 	}
 	defer rows.Close() //nolint:errcheck
 
-	var items []campaigns.PendingItem
+	var items []inventory.PendingItem
 	for rows.Next() {
-		var item campaigns.PendingItem
+		var item inventory.PendingItem
 		var candidatesJSON string
 		if err := rows.Scan(
 			&item.ID, &item.CertNumber, &item.CardName, &item.SetName,
@@ -123,13 +123,13 @@ func (r *PendingItemsRepository) ListPendingItems(ctx context.Context) ([]campai
 		items = append(items, item)
 	}
 	if items == nil {
-		items = []campaigns.PendingItem{}
+		items = []inventory.PendingItem{}
 	}
 	return items, rows.Err()
 }
 
 // GetPendingItemByID returns a single unresolved pending item by ID.
-func (r *PendingItemsRepository) GetPendingItemByID(ctx context.Context, id string) (*campaigns.PendingItem, error) {
+func (r *PendingItemsRepository) GetPendingItemByID(ctx context.Context, id string) (*inventory.PendingItem, error) {
 	row := r.db.QueryRowContext(ctx, `
 		SELECT id, cert_number, card_name, set_name, card_number, grade,
 		       buy_cost_cents, purchase_date, status, candidates, source, created_at
@@ -137,7 +137,7 @@ func (r *PendingItemsRepository) GetPendingItemByID(ctx context.Context, id stri
 		WHERE id = ? AND resolved_at IS NULL
 	`, id)
 
-	var item campaigns.PendingItem
+	var item inventory.PendingItem
 	var candidatesJSON string
 	if err := row.Scan(
 		&item.ID, &item.CertNumber, &item.CardName, &item.SetName,
@@ -145,7 +145,7 @@ func (r *PendingItemsRepository) GetPendingItemByID(ctx context.Context, id stri
 		&item.Status, &candidatesJSON, &item.Source, &item.CreatedAt,
 	); err != nil {
 		if err == sql.ErrNoRows {
-			return nil, campaigns.ErrPendingItemNotFound
+			return nil, inventory.ErrPendingItemNotFound
 		}
 		return nil, err
 	}
@@ -179,7 +179,7 @@ func (r *PendingItemsRepository) resolvePendingItem(ctx context.Context, id stri
 		return fmt.Errorf("check rows affected: %w", err)
 	}
 	if n == 0 {
-		return campaigns.ErrPendingItemNotFound
+		return inventory.ErrPendingItemNotFound
 	}
 	return nil
 }

@@ -6,15 +6,15 @@ import (
 	"net/http"
 	"slices"
 
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
 // CertPriceLookup is the interface the pricing API handler depends on.
 // Defined at the consumer level per idiomatic Go.
-// Satisfied by campaigns.Repository (and test mocks).
+// Satisfied by inventory.Repository (and test mocks).
 type CertPriceLookup interface {
-	GetPurchasesByCertNumbers(ctx context.Context, certNumbers []string) (map[string]*campaigns.Purchase, error)
+	GetPurchasesByCertNumbers(ctx context.Context, certNumbers []string) (map[string]*inventory.Purchase, error)
 }
 
 // PricingAPIHandler handles pricing API requests.
@@ -60,7 +60,7 @@ func centsToDollars(cents int) float64 {
 }
 
 // buildPriceResult constructs a priceResult from a purchase, choosing the best price source.
-func buildPriceResult(certNumber string, p *campaigns.Purchase) priceResult {
+func buildPriceResult(certNumber string, p *inventory.Purchase) priceResult {
 	result := priceResult{
 		CertNumber:    certNumber,
 		ComputedPrice: centsToDollars(p.CLValueCents),

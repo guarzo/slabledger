@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/marketmovers"
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/platform/config"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
 	"github.com/stretchr/testify/assert"
@@ -57,7 +57,7 @@ func TestResolveCollectibleID_EmptyCardName(t *testing.T) {
 	defer srv.Close()
 
 	s := newMMSchedulerWithServer(srv)
-	id, _, _, _, err := s.resolveCollectibleID(context.Background(), &campaigns.Purchase{
+	id, _, _, _, err := s.resolveCollectibleID(context.Background(), &inventory.Purchase{
 		CertNumber: "12345678",
 		CardName:   "",
 	})
@@ -79,7 +79,7 @@ func TestSearchByCert_MatchingTitle(t *testing.T) {
 	defer srv.Close()
 
 	s := newMMSchedulerWithServer(srv)
-	id, _, _, _, err := s.searchByCert(context.Background(), &campaigns.Purchase{
+	id, _, _, _, err := s.searchByCert(context.Background(), &inventory.Purchase{
 		CertNumber: "12345678",
 		CardName:   "Charizard",
 	})
@@ -98,7 +98,7 @@ func TestSearchByCert_TitleMismatch(t *testing.T) {
 	defer srv.Close()
 
 	s := newMMSchedulerWithServer(srv)
-	id, _, _, _, err := s.searchByCert(context.Background(), &campaigns.Purchase{
+	id, _, _, _, err := s.searchByCert(context.Background(), &inventory.Purchase{
 		CertNumber: "12345678",
 		CardName:   "Charizard",
 	})
@@ -114,7 +114,7 @@ func TestSearchByCert_NoResults(t *testing.T) {
 	defer srv.Close()
 
 	s := newMMSchedulerWithServer(srv)
-	id, _, _, _, err := s.searchByCert(context.Background(), &campaigns.Purchase{
+	id, _, _, _, err := s.searchByCert(context.Background(), &inventory.Purchase{
 		CertNumber: "00000000",
 		CardName:   "Charizard",
 	})
@@ -132,7 +132,7 @@ func TestSearchByCert_CaseInsensitive(t *testing.T) {
 	defer srv.Close()
 
 	s := newMMSchedulerWithServer(srv)
-	id, _, _, _, err := s.searchByCert(context.Background(), &campaigns.Purchase{
+	id, _, _, _, err := s.searchByCert(context.Background(), &inventory.Purchase{
 		CertNumber: "87654321",
 		CardName:   "Umbreon Ex",
 	})
@@ -154,7 +154,7 @@ func TestSearchByNameGrade_MatchingTitle(t *testing.T) {
 	defer srv.Close()
 
 	s := newMMSchedulerWithServer(srv)
-	id, _, _, _, err := s.searchByNameGrade(context.Background(), &campaigns.Purchase{
+	id, _, _, _, err := s.searchByNameGrade(context.Background(), &inventory.Purchase{
 		CardName:   "Mewtwo",
 		Grader:     "PSA",
 		GradeValue: 9,
@@ -174,7 +174,7 @@ func TestSearchByNameGrade_TitleMismatch_ReturnsZero(t *testing.T) {
 	defer srv.Close()
 
 	s := newMMSchedulerWithServer(srv)
-	id, _, _, _, err := s.searchByNameGrade(context.Background(), &campaigns.Purchase{
+	id, _, _, _, err := s.searchByNameGrade(context.Background(), &inventory.Purchase{
 		CardName:   "Charizard",
 		Grader:     "PSA",
 		GradeValue: 10,
@@ -191,7 +191,7 @@ func TestSearchByNameGrade_NoResults(t *testing.T) {
 	defer srv.Close()
 
 	s := newMMSchedulerWithServer(srv)
-	id, _, _, _, err := s.searchByNameGrade(context.Background(), &campaigns.Purchase{
+	id, _, _, _, err := s.searchByNameGrade(context.Background(), &inventory.Purchase{
 		CardName:   "Raichu",
 		Grader:     "PSA",
 		GradeValue: 8,
@@ -210,7 +210,7 @@ func TestSearchByNameGrade_EmptyGrader_DefaultsPSA(t *testing.T) {
 	defer srv.Close()
 
 	s := newMMSchedulerWithServer(srv)
-	_, _, _, _, _ = s.searchByNameGrade(context.Background(), &campaigns.Purchase{
+	_, _, _, _, _ = s.searchByNameGrade(context.Background(), &inventory.Purchase{
 		CardName:   "Bulbasaur",
 		Grader:     "", // empty — should default to PSA
 		GradeValue: 7,
@@ -236,7 +236,7 @@ func TestResolveCollectibleID_CertSucceeds_NoNameFallback(t *testing.T) {
 	defer srv.Close()
 
 	s := newMMSchedulerWithServer(srv)
-	id, _, _, _, err := s.resolveCollectibleID(context.Background(), &campaigns.Purchase{
+	id, _, _, _, err := s.resolveCollectibleID(context.Background(), &inventory.Purchase{
 		CertNumber: "11111111",
 		CardName:   "Venusaur",
 		Grader:     "PSA",
@@ -267,7 +267,7 @@ func TestResolveCollectibleID_CertMisses_NameFallbackSucceeds(t *testing.T) {
 	defer srv.Close()
 
 	s := newMMSchedulerWithServer(srv)
-	id, _, _, _, err := s.resolveCollectibleID(context.Background(), &campaigns.Purchase{
+	id, _, _, _, err := s.resolveCollectibleID(context.Background(), &inventory.Purchase{
 		CertNumber: "22222222",
 		CardName:   "Venusaur",
 		Grader:     "PSA",
@@ -395,7 +395,7 @@ func TestResolveCollectibleID_NoCertNumber_GoesDirectToNameSearch(t *testing.T) 
 	defer srv.Close()
 
 	s := newMMSchedulerWithServer(srv)
-	id, _, _, _, err := s.resolveCollectibleID(context.Background(), &campaigns.Purchase{
+	id, _, _, _, err := s.resolveCollectibleID(context.Background(), &inventory.Purchase{
 		CertNumber: "", // no cert — skip cert search entirely
 		CardName:   "Charmander",
 		Grader:     "PSA",
@@ -495,17 +495,17 @@ func TestSearch_TokenizedMatch(t *testing.T) {
 	tests := []struct {
 		name     string
 		wantID   int64
-		purchase *campaigns.Purchase
-		search   func(ctx context.Context, s *MarketMoversRefreshScheduler, purchase *campaigns.Purchase) (int64, error)
+		purchase *inventory.Purchase
+		search   func(ctx context.Context, s *MarketMoversRefreshScheduler, purchase *inventory.Purchase) (int64, error)
 	}{
 		{
 			name:   "searchByCert matches despite token reordering",
 			wantID: 5555,
-			purchase: &campaigns.Purchase{
+			purchase: &inventory.Purchase{
 				CertNumber: "12345678",
 				CardName:   "2022 POKEMON SWORD & SHIELD BRILLIANT STARS CHARIZARD VSTAR",
 			},
-			search: func(ctx context.Context, s *MarketMoversRefreshScheduler, p *campaigns.Purchase) (int64, error) {
+			search: func(ctx context.Context, s *MarketMoversRefreshScheduler, p *inventory.Purchase) (int64, error) {
 				id, _, _, _, err := s.searchByCert(ctx, p)
 				return id, err
 			},
@@ -513,12 +513,12 @@ func TestSearch_TokenizedMatch(t *testing.T) {
 		{
 			name:   "searchByNameGrade matches despite token reordering",
 			wantID: 6666,
-			purchase: &campaigns.Purchase{
+			purchase: &inventory.Purchase{
 				CardName:   "2022 POKEMON SWORD & SHIELD BRILLIANT STARS CHARIZARD VSTAR",
 				Grader:     "PSA",
 				GradeValue: 10,
 			},
-			search: func(ctx context.Context, s *MarketMoversRefreshScheduler, p *campaigns.Purchase) (int64, error) {
+			search: func(ctx context.Context, s *MarketMoversRefreshScheduler, p *inventory.Purchase) (int64, error) {
 				id, _, _, _, err := s.searchByNameGrade(ctx, p)
 				return id, err
 			},

@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
@@ -24,7 +24,7 @@ func (c *SnapshotHistoryConfig) ApplyDefaults() {
 
 // SnapshotHistoryLister provides unsold purchases with their snapshot data.
 type SnapshotHistoryLister interface {
-	ListAllUnsoldPurchases(ctx context.Context) ([]campaigns.Purchase, error)
+	ListAllUnsoldPurchases(ctx context.Context) ([]inventory.Purchase, error)
 }
 
 var _ Scheduler = (*SnapshotHistoryScheduler)(nil)
@@ -34,7 +34,7 @@ var _ Scheduler = (*SnapshotHistoryScheduler)(nil)
 type SnapshotHistoryScheduler struct {
 	StopHandle
 	lister   SnapshotHistoryLister
-	recorder campaigns.SnapshotHistoryRecorder
+	recorder inventory.SnapshotHistoryRecorder
 	logger   observability.Logger
 	config   SnapshotHistoryConfig
 }
@@ -42,7 +42,7 @@ type SnapshotHistoryScheduler struct {
 // NewSnapshotHistoryScheduler creates a new snapshot history scheduler.
 func NewSnapshotHistoryScheduler(
 	lister SnapshotHistoryLister,
-	recorder campaigns.SnapshotHistoryRecorder,
+	recorder inventory.SnapshotHistoryRecorder,
 	logger observability.Logger,
 	config SnapshotHistoryConfig,
 ) *SnapshotHistoryScheduler {
@@ -93,13 +93,13 @@ func (s *SnapshotHistoryScheduler) tick(ctx context.Context) {
 			continue
 		}
 
-		var snap campaigns.MarketSnapshot
+		var snap inventory.MarketSnapshot
 		if err := json.Unmarshal([]byte(p.SnapshotJSON), &snap); err != nil {
 			skipped++
 			continue
 		}
 
-		entry := campaigns.SnapshotHistoryEntry{
+		entry := inventory.SnapshotHistoryEntry{
 			CardName:            p.CardName,
 			SetName:             p.SetName,
 			CardNumber:          p.CardNumber,

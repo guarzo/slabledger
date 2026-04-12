@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
 )
 
@@ -46,9 +46,9 @@ func createCSVMultipart(t *testing.T, rows [][]string) (*bytes.Buffer, string) {
 // --- HandleGlobalExportCL ---
 
 func TestHandleGlobalExportCL_Success(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		ExportCLFormatGlobalFn: func(_ context.Context, _ bool) ([]campaigns.CLExportEntry, error) {
-			return []campaigns.CLExportEntry{
+	svc := &mocks.MockInventoryService{
+		ExportCLFormatGlobalFn: func(_ context.Context, _ bool) ([]inventory.CLExportEntry, error) {
+			return []inventory.CLExportEntry{
 				{DatePurchased: "3/9/2026", CertNumber: "12345678", Grader: "PSA", Investment: 150.00, EstimatedValue: 200.00},
 			}, nil
 		},
@@ -85,9 +85,9 @@ func TestHandleGlobalExportCL_Success(t *testing.T) {
 }
 
 func TestHandleGlobalExportCL_Empty(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		ExportCLFormatGlobalFn: func(_ context.Context, _ bool) ([]campaigns.CLExportEntry, error) {
-			return []campaigns.CLExportEntry{}, nil
+	svc := &mocks.MockInventoryService{
+		ExportCLFormatGlobalFn: func(_ context.Context, _ bool) ([]inventory.CLExportEntry, error) {
+			return []inventory.CLExportEntry{}, nil
 		},
 	}
 	h := newTestHandler(svc)
@@ -114,11 +114,11 @@ func TestHandleGlobalExportCL_Empty(t *testing.T) {
 // --- HandleGlobalRefreshCL ---
 
 func TestHandleGlobalRefreshCL_Success(t *testing.T) {
-	var capturedRows []campaigns.CLExportRow
-	svc := &mocks.MockCampaignService{
-		RefreshCLValuesGlobalFn: func(_ context.Context, rows []campaigns.CLExportRow) (*campaigns.GlobalCLRefreshResult, error) {
+	var capturedRows []inventory.CLExportRow
+	svc := &mocks.MockInventoryService{
+		RefreshCLValuesGlobalFn: func(_ context.Context, rows []inventory.CLExportRow) (*inventory.GlobalCLRefreshResult, error) {
 			capturedRows = rows
-			return &campaigns.GlobalCLRefreshResult{Updated: len(rows)}, nil
+			return &inventory.GlobalCLRefreshResult{Updated: len(rows)}, nil
 		},
 	}
 	h := newTestHandler(svc)
@@ -141,7 +141,7 @@ func TestHandleGlobalRefreshCL_Success(t *testing.T) {
 		t.Errorf("expected 2 rows passed to service, got %d", len(capturedRows))
 	}
 
-	var result campaigns.GlobalCLRefreshResult
+	var result inventory.GlobalCLRefreshResult
 	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -151,7 +151,7 @@ func TestHandleGlobalRefreshCL_Success(t *testing.T) {
 }
 
 func TestHandleGlobalRefreshCL_MissingFile(t *testing.T) {
-	h := newTestHandler(&mocks.MockCampaignService{})
+	h := newTestHandler(&mocks.MockInventoryService{})
 
 	var buf bytes.Buffer
 	writer := multipart.NewWriter(&buf)
@@ -168,7 +168,7 @@ func TestHandleGlobalRefreshCL_MissingFile(t *testing.T) {
 }
 
 func TestHandleGlobalRefreshCL_BadCSVHeader(t *testing.T) {
-	h := newTestHandler(&mocks.MockCampaignService{})
+	h := newTestHandler(&mocks.MockInventoryService{})
 
 	body, contentType := createCSVMultipart(t, [][]string{
 		{"Wrong Column", "Current Value"},
@@ -190,8 +190,8 @@ func TestHandleGlobalRefreshCL_BadCSVHeader(t *testing.T) {
 }
 
 func TestHandleGlobalRefreshCL_ServiceError(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		RefreshCLValuesGlobalFn: func(_ context.Context, _ []campaigns.CLExportRow) (*campaigns.GlobalCLRefreshResult, error) {
+	svc := &mocks.MockInventoryService{
+		RefreshCLValuesGlobalFn: func(_ context.Context, _ []inventory.CLExportRow) (*inventory.GlobalCLRefreshResult, error) {
 			return nil, fmt.Errorf("database failure")
 		},
 	}
@@ -215,11 +215,11 @@ func TestHandleGlobalRefreshCL_ServiceError(t *testing.T) {
 // --- HandleGlobalImportCL ---
 
 func TestHandleGlobalImportCL_Success(t *testing.T) {
-	var capturedRows []campaigns.CLExportRow
-	svc := &mocks.MockCampaignService{
-		ImportCLExportGlobalFn: func(_ context.Context, rows []campaigns.CLExportRow) (*campaigns.GlobalImportResult, error) {
+	var capturedRows []inventory.CLExportRow
+	svc := &mocks.MockInventoryService{
+		ImportCLExportGlobalFn: func(_ context.Context, rows []inventory.CLExportRow) (*inventory.GlobalImportResult, error) {
 			capturedRows = rows
-			return &campaigns.GlobalImportResult{Allocated: len(rows)}, nil
+			return &inventory.GlobalImportResult{Allocated: len(rows)}, nil
 		},
 	}
 	h := newTestHandler(svc)
@@ -250,7 +250,7 @@ func TestHandleGlobalImportCL_Success(t *testing.T) {
 }
 
 func TestHandleGlobalImportCL_MissingFile(t *testing.T) {
-	h := newTestHandler(&mocks.MockCampaignService{})
+	h := newTestHandler(&mocks.MockInventoryService{})
 
 	var buf bytes.Buffer
 	writer := multipart.NewWriter(&buf)
@@ -267,7 +267,7 @@ func TestHandleGlobalImportCL_MissingFile(t *testing.T) {
 }
 
 func TestHandleGlobalImportCL_BadCSVHeader(t *testing.T) {
-	h := newTestHandler(&mocks.MockCampaignService{})
+	h := newTestHandler(&mocks.MockInventoryService{})
 
 	body, contentType := createCSVMultipart(t, [][]string{
 		{"Wrong Column", "Another Bad Column", "Nope"},
@@ -289,9 +289,9 @@ func TestHandleGlobalImportCL_BadCSVHeader(t *testing.T) {
 }
 
 func TestHandleGlobalImportCL_BadDateFormat(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		ImportCLExportGlobalFn: func(_ context.Context, rows []campaigns.CLExportRow) (*campaigns.GlobalImportResult, error) {
-			return &campaigns.GlobalImportResult{Allocated: len(rows)}, nil
+	svc := &mocks.MockInventoryService{
+		ImportCLExportGlobalFn: func(_ context.Context, rows []inventory.CLExportRow) (*inventory.GlobalImportResult, error) {
+			return &inventory.GlobalImportResult{Allocated: len(rows)}, nil
 		},
 	}
 	h := newTestHandler(svc)
@@ -315,8 +315,8 @@ func TestHandleGlobalImportCL_BadDateFormat(t *testing.T) {
 }
 
 func TestHandleGlobalImportCL_ServiceError(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		ImportCLExportGlobalFn: func(_ context.Context, _ []campaigns.CLExportRow) (*campaigns.GlobalImportResult, error) {
+	svc := &mocks.MockInventoryService{
+		ImportCLExportGlobalFn: func(_ context.Context, _ []inventory.CLExportRow) (*inventory.GlobalImportResult, error) {
 			return nil, fmt.Errorf("database failure")
 		},
 	}
@@ -340,9 +340,9 @@ func TestHandleGlobalImportCL_ServiceError(t *testing.T) {
 // --- HandleImportCerts ---
 
 func TestHandleImportCerts_Success(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		ImportCertsFn: func(_ context.Context, certs []string) (*campaigns.CertImportResult, error) {
-			return &campaigns.CertImportResult{
+	svc := &mocks.MockInventoryService{
+		ImportCertsFn: func(_ context.Context, certs []string) (*inventory.CertImportResult, error) {
+			return &inventory.CertImportResult{
 				Imported:       len(certs),
 				AlreadyExisted: 0,
 				Failed:         0,
@@ -361,7 +361,7 @@ func TestHandleImportCerts_Success(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body: %s", rec.Code, rec.Body.String())
 	}
-	var result campaigns.CertImportResult
+	var result inventory.CertImportResult
 	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
 		t.Fatal(err)
 	}
@@ -371,7 +371,7 @@ func TestHandleImportCerts_Success(t *testing.T) {
 }
 
 func TestHandleImportCerts_EmptyCerts(t *testing.T) {
-	h := newTestHandler(&mocks.MockCampaignService{})
+	h := newTestHandler(&mocks.MockInventoryService{})
 
 	body := strings.NewReader(`{"certNumbers":[]}`)
 	req := httptest.NewRequest("POST", "/api/purchases/import-certs", body)
@@ -386,7 +386,7 @@ func TestHandleImportCerts_EmptyCerts(t *testing.T) {
 }
 
 func TestHandleImportCerts_InvalidJSON(t *testing.T) {
-	h := newTestHandler(&mocks.MockCampaignService{})
+	h := newTestHandler(&mocks.MockInventoryService{})
 
 	body := strings.NewReader(`not json`)
 	req := httptest.NewRequest("POST", "/api/purchases/import-certs", body)
@@ -401,8 +401,8 @@ func TestHandleImportCerts_InvalidJSON(t *testing.T) {
 }
 
 func TestHandleImportCerts_ServiceError(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		ImportCertsFn: func(_ context.Context, _ []string) (*campaigns.CertImportResult, error) {
+	svc := &mocks.MockInventoryService{
+		ImportCertsFn: func(_ context.Context, _ []string) (*inventory.CertImportResult, error) {
 			return nil, fmt.Errorf("database failure")
 		},
 	}
@@ -423,9 +423,9 @@ func TestHandleImportCerts_ServiceError(t *testing.T) {
 // --- HandleScanCert ---
 
 func TestHandleScanCert_Existing(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		ScanCertFn: func(_ context.Context, cert string) (*campaigns.ScanCertResult, error) {
-			return &campaigns.ScanCertResult{
+	svc := &mocks.MockInventoryService{
+		ScanCertFn: func(_ context.Context, cert string) (*inventory.ScanCertResult, error) {
+			return &inventory.ScanCertResult{
 				Status:     "existing",
 				CardName:   "Charizard PSA 10",
 				PurchaseID: "p1",
@@ -445,7 +445,7 @@ func TestHandleScanCert_Existing(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body: %s", rec.Code, rec.Body.String())
 	}
-	var result campaigns.ScanCertResult
+	var result inventory.ScanCertResult
 	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
 		t.Fatal(err)
 	}
@@ -458,7 +458,7 @@ func TestHandleScanCert_Existing(t *testing.T) {
 }
 
 func TestHandleScanCert_EmptyCert(t *testing.T) {
-	h := newTestHandler(&mocks.MockCampaignService{})
+	h := newTestHandler(&mocks.MockInventoryService{})
 
 	body := strings.NewReader(`{"certNumber":""}`)
 	req := httptest.NewRequest("POST", "/api/purchases/scan-cert", body)
@@ -473,7 +473,7 @@ func TestHandleScanCert_EmptyCert(t *testing.T) {
 }
 
 func TestHandleScanCert_InvalidJSON(t *testing.T) {
-	h := newTestHandler(&mocks.MockCampaignService{})
+	h := newTestHandler(&mocks.MockInventoryService{})
 
 	body := strings.NewReader(`not json`)
 	req := httptest.NewRequest("POST", "/api/purchases/scan-cert", body)
@@ -488,8 +488,8 @@ func TestHandleScanCert_InvalidJSON(t *testing.T) {
 }
 
 func TestHandleScanCert_ServiceError(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		ScanCertFn: func(_ context.Context, _ string) (*campaigns.ScanCertResult, error) {
+	svc := &mocks.MockInventoryService{
+		ScanCertFn: func(_ context.Context, _ string) (*inventory.ScanCertResult, error) {
 			return nil, fmt.Errorf("database failure")
 		},
 	}
@@ -510,9 +510,9 @@ func TestHandleScanCert_ServiceError(t *testing.T) {
 // --- HandleResolveCert ---
 
 func TestHandleResolveCert_Success(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		ResolveCertFn: func(_ context.Context, cert string) (*campaigns.CertInfo, error) {
-			return &campaigns.CertInfo{
+	svc := &mocks.MockInventoryService{
+		ResolveCertFn: func(_ context.Context, cert string) (*inventory.CertInfo, error) {
+			return &inventory.CertInfo{
 				CertNumber: cert, CardName: "Umbreon VMAX", Grade: 10,
 				Year: "2022", Category: "EVOLVING SKIES",
 				Subject: "2022 Pokemon Evolving Skies Umbreon VMAX",
@@ -531,7 +531,7 @@ func TestHandleResolveCert_Success(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body: %s", rec.Code, rec.Body.String())
 	}
-	var result campaigns.ResolveCertResult
+	var result inventory.ResolveCertResult
 	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
 		t.Fatal(err)
 	}
@@ -544,9 +544,9 @@ func TestHandleResolveCert_Success(t *testing.T) {
 }
 
 func TestHandleResolveCert_NotFound(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		ResolveCertFn: func(_ context.Context, _ string) (*campaigns.CertInfo, error) {
-			return nil, campaigns.ErrCertNotFound
+	svc := &mocks.MockInventoryService{
+		ResolveCertFn: func(_ context.Context, _ string) (*inventory.CertInfo, error) {
+			return nil, inventory.ErrCertNotFound
 		},
 	}
 	h := newTestHandler(svc)
@@ -564,8 +564,8 @@ func TestHandleResolveCert_NotFound(t *testing.T) {
 }
 
 func TestHandleResolveCert_ServiceError(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		ResolveCertFn: func(_ context.Context, _ string) (*campaigns.CertInfo, error) {
+	svc := &mocks.MockInventoryService{
+		ResolveCertFn: func(_ context.Context, _ string) (*inventory.CertInfo, error) {
 			return nil, fmt.Errorf("PSA API timeout")
 		},
 	}
@@ -584,7 +584,7 @@ func TestHandleResolveCert_ServiceError(t *testing.T) {
 }
 
 func TestHandleResolveCert_EmptyCert(t *testing.T) {
-	h := newTestHandler(&mocks.MockCampaignService{})
+	h := newTestHandler(&mocks.MockInventoryService{})
 
 	body := strings.NewReader(`{"certNumber":""}`)
 	req := httptest.NewRequest("POST", "/api/purchases/resolve-cert", body)
@@ -604,7 +604,7 @@ func TestHandleGlobalImportPSA(t *testing.T) {
 	tests := []struct {
 		name     string
 		setupReq func(t *testing.T) (*bytes.Buffer, string)
-		setupSvc func() *mocks.MockCampaignService
+		setupSvc func() *mocks.MockInventoryService
 		wantCode int
 		check    func(t *testing.T, rec *httptest.ResponseRecorder)
 	}{
@@ -617,17 +617,17 @@ func TestHandleGlobalImportPSA(t *testing.T) {
 					{"12345678", "2020 Pokémon Charizard PSA 9", "9"},
 				})
 			},
-			setupSvc: func() *mocks.MockCampaignService {
-				return &mocks.MockCampaignService{
-					ImportPSAExportGlobalFn: func(_ context.Context, rows []campaigns.PSAExportRow) (*campaigns.PSAImportResult, error) {
-						return &campaigns.PSAImportResult{Allocated: len(rows)}, nil
+			setupSvc: func() *mocks.MockInventoryService {
+				return &mocks.MockInventoryService{
+					ImportPSAExportGlobalFn: func(_ context.Context, rows []inventory.PSAExportRow) (*inventory.PSAImportResult, error) {
+						return &inventory.PSAImportResult{Allocated: len(rows)}, nil
 					},
 				}
 			},
 			wantCode: http.StatusOK,
 			check: func(t *testing.T, rec *httptest.ResponseRecorder) {
 				t.Helper()
-				var result campaigns.PSAImportResult
+				var result inventory.PSAImportResult
 				if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
 					t.Fatalf("decode: %v", err)
 				}
@@ -645,7 +645,7 @@ func TestHandleGlobalImportPSA(t *testing.T) {
 				writer.Close()
 				return &buf, writer.FormDataContentType()
 			},
-			setupSvc: func() *mocks.MockCampaignService { return &mocks.MockCampaignService{} },
+			setupSvc: func() *mocks.MockInventoryService { return &mocks.MockInventoryService{} },
 			wantCode: http.StatusBadRequest,
 		},
 		{
@@ -657,7 +657,7 @@ func TestHandleGlobalImportPSA(t *testing.T) {
 					{"12345678", "Charizard", "9"},
 				})
 			},
-			setupSvc: func() *mocks.MockCampaignService { return &mocks.MockCampaignService{} },
+			setupSvc: func() *mocks.MockInventoryService { return &mocks.MockInventoryService{} },
 			wantCode: http.StatusBadRequest,
 		},
 		{
@@ -669,9 +669,9 @@ func TestHandleGlobalImportPSA(t *testing.T) {
 					{"12345678", "Charizard PSA 9", "9"},
 				})
 			},
-			setupSvc: func() *mocks.MockCampaignService {
-				return &mocks.MockCampaignService{
-					ImportPSAExportGlobalFn: func(_ context.Context, _ []campaigns.PSAExportRow) (*campaigns.PSAImportResult, error) {
+			setupSvc: func() *mocks.MockInventoryService {
+				return &mocks.MockInventoryService{
+					ImportPSAExportGlobalFn: func(_ context.Context, _ []inventory.PSAExportRow) (*inventory.PSAImportResult, error) {
 						return nil, fmt.Errorf("database failure")
 					},
 				}
@@ -704,22 +704,22 @@ func TestHandleGlobalImportPSA(t *testing.T) {
 func TestHandleSyncPSASheets(t *testing.T) {
 	tests := []struct {
 		name         string
-		setupHandler func(svc *mocks.MockCampaignService) *CampaignsHandler
-		setupSvc     func() *mocks.MockCampaignService
+		setupHandler func(svc *mocks.MockInventoryService) *CampaignsHandler
+		setupSvc     func() *mocks.MockInventoryService
 		wantCode     int
 		check        func(t *testing.T, rec *httptest.ResponseRecorder)
 	}{
 		{
 			name: "not configured",
-			setupHandler: func(svc *mocks.MockCampaignService) *CampaignsHandler {
+			setupHandler: func(svc *mocks.MockInventoryService) *CampaignsHandler {
 				return newTestHandler(svc) // no WithSheetFetcher
 			},
-			setupSvc: func() *mocks.MockCampaignService { return &mocks.MockCampaignService{} },
+			setupSvc: func() *mocks.MockInventoryService { return &mocks.MockInventoryService{} },
 			wantCode: http.StatusServiceUnavailable,
 		},
 		{
 			name: "success",
-			setupHandler: func(svc *mocks.MockCampaignService) *CampaignsHandler {
+			setupHandler: func(svc *mocks.MockInventoryService) *CampaignsHandler {
 				fetcher := &mocks.MockSheetFetcher{
 					ReadSheetFn: func(_ context.Context, _, _ string) ([][]string, error) {
 						return [][]string{
@@ -728,19 +728,19 @@ func TestHandleSyncPSASheets(t *testing.T) {
 						}, nil
 					},
 				}
-				return NewCampaignsHandler(svc, mocks.NewMockLogger(), nil, WithSheetFetcher(fetcher, "sheet-id", "Sheet1"))
+				return NewCampaignsHandler(svc, nil, nil, nil, mocks.NewMockLogger(), nil, WithSheetFetcher(fetcher, "sheet-id", "Sheet1"))
 			},
-			setupSvc: func() *mocks.MockCampaignService {
-				return &mocks.MockCampaignService{
-					ImportPSAExportGlobalFn: func(_ context.Context, rows []campaigns.PSAExportRow) (*campaigns.PSAImportResult, error) {
-						return &campaigns.PSAImportResult{Allocated: len(rows)}, nil
+			setupSvc: func() *mocks.MockInventoryService {
+				return &mocks.MockInventoryService{
+					ImportPSAExportGlobalFn: func(_ context.Context, rows []inventory.PSAExportRow) (*inventory.PSAImportResult, error) {
+						return &inventory.PSAImportResult{Allocated: len(rows)}, nil
 					},
 				}
 			},
 			wantCode: http.StatusOK,
 			check: func(t *testing.T, rec *httptest.ResponseRecorder) {
 				t.Helper()
-				var result campaigns.PSAImportResult
+				var result inventory.PSAImportResult
 				if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
 					t.Fatalf("decode: %v", err)
 				}
@@ -751,15 +751,15 @@ func TestHandleSyncPSASheets(t *testing.T) {
 		},
 		{
 			name: "sheet fetch error",
-			setupHandler: func(svc *mocks.MockCampaignService) *CampaignsHandler {
+			setupHandler: func(svc *mocks.MockInventoryService) *CampaignsHandler {
 				fetcher := &mocks.MockSheetFetcher{
 					ReadSheetFn: func(_ context.Context, _, _ string) ([][]string, error) {
 						return nil, fmt.Errorf("google sheets API error")
 					},
 				}
-				return NewCampaignsHandler(svc, mocks.NewMockLogger(), nil, WithSheetFetcher(fetcher, "sheet-id", "Sheet1"))
+				return NewCampaignsHandler(svc, nil, nil, nil, mocks.NewMockLogger(), nil, WithSheetFetcher(fetcher, "sheet-id", "Sheet1"))
 			},
-			setupSvc: func() *mocks.MockCampaignService { return &mocks.MockCampaignService{} },
+			setupSvc: func() *mocks.MockInventoryService { return &mocks.MockInventoryService{} },
 			wantCode: http.StatusBadGateway,
 		},
 	}

@@ -10,20 +10,20 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
 	domainerrors "github.com/guarzo/slabledger/internal/domain/errors"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
 )
 
 // --- HandleListPurchases ---
 
 func TestHandleListPurchases_GET_Success(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		ListPurchasesByCampaignFn: func(_ context.Context, cid string, limit, offset int) ([]campaigns.Purchase, error) {
+	svc := &mocks.MockInventoryService{
+		ListPurchasesByCampaignFn: func(_ context.Context, cid string, limit, offset int) ([]inventory.Purchase, error) {
 			if cid != "c1" {
 				t.Errorf("expected campaignID=c1, got %q", cid)
 			}
-			return []campaigns.Purchase{{ID: "p1", CampaignID: cid}}, nil
+			return []inventory.Purchase{{ID: "p1", CampaignID: cid}}, nil
 		},
 	}
 	h := newTestHandler(svc)
@@ -40,11 +40,11 @@ func TestHandleListPurchases_GET_Success(t *testing.T) {
 
 func TestHandleListPurchases_GET_Pagination(t *testing.T) {
 	var capturedLimit, capturedOffset int
-	svc := &mocks.MockCampaignService{
-		ListPurchasesByCampaignFn: func(_ context.Context, _ string, limit, offset int) ([]campaigns.Purchase, error) {
+	svc := &mocks.MockInventoryService{
+		ListPurchasesByCampaignFn: func(_ context.Context, _ string, limit, offset int) ([]inventory.Purchase, error) {
 			capturedLimit = limit
 			capturedOffset = offset
-			return []campaigns.Purchase{}, nil
+			return []inventory.Purchase{}, nil
 		},
 	}
 	h := newTestHandler(svc)
@@ -66,7 +66,7 @@ func TestHandleListPurchases_GET_Pagination(t *testing.T) {
 }
 
 func TestHandleListPurchases_MissingCampaignID(t *testing.T) {
-	h := newTestHandler(&mocks.MockCampaignService{})
+	h := newTestHandler(&mocks.MockInventoryService{})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/campaigns//purchases", nil)
 	// No SetPathValue — simulates missing ID
@@ -82,8 +82,8 @@ func TestHandleListPurchases_MissingCampaignID(t *testing.T) {
 // --- HandleCreatePurchase ---
 
 func TestHandleCreatePurchase_POST_Success(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		CreatePurchaseFn: func(_ context.Context, p *campaigns.Purchase) error {
+	svc := &mocks.MockInventoryService{
+		CreatePurchaseFn: func(_ context.Context, p *inventory.Purchase) error {
 			if p.CampaignID != "c1" {
 				t.Errorf("expected campaignID=c1, got %q", p.CampaignID)
 			}
@@ -108,9 +108,9 @@ func TestHandleCreatePurchase_POST_Success(t *testing.T) {
 }
 
 func TestHandleCreatePurchase_POST_DuplicateCert(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		CreatePurchaseFn: func(_ context.Context, _ *campaigns.Purchase) error {
-			return campaigns.ErrDuplicateCertNumber
+	svc := &mocks.MockInventoryService{
+		CreatePurchaseFn: func(_ context.Context, _ *inventory.Purchase) error {
+			return inventory.ErrDuplicateCertNumber
 		},
 	}
 	h := newTestHandler(svc)
@@ -128,7 +128,7 @@ func TestHandleCreatePurchase_POST_DuplicateCert(t *testing.T) {
 }
 
 func TestHandleCreatePurchase_POST_InvalidBody(t *testing.T) {
-	h := newTestHandler(&mocks.MockCampaignService{})
+	h := newTestHandler(&mocks.MockInventoryService{})
 
 	req := httptest.NewRequest(http.MethodPost, "/api/campaigns/c1/purchases", bytes.NewBufferString("{bad"))
 	req.SetPathValue("id", "c1")
@@ -144,9 +144,9 @@ func TestHandleCreatePurchase_POST_InvalidBody(t *testing.T) {
 // --- HandleListSales ---
 
 func TestHandleListSales_GET_Success(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		ListSalesByCampaignFn: func(_ context.Context, _ string, _, _ int) ([]campaigns.Sale, error) {
-			return []campaigns.Sale{{ID: "s1", PurchaseID: "p1"}}, nil
+	svc := &mocks.MockInventoryService{
+		ListSalesByCampaignFn: func(_ context.Context, _ string, _, _ int) ([]inventory.Sale, error) {
+			return []inventory.Sale{{ID: "s1", PurchaseID: "p1"}}, nil
 		},
 	}
 	h := newTestHandler(svc)
@@ -164,14 +164,14 @@ func TestHandleListSales_GET_Success(t *testing.T) {
 // --- HandleCreateSale ---
 
 func TestHandleCreateSale_POST_Success(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		GetPurchaseFn: func(_ context.Context, id string) (*campaigns.Purchase, error) {
-			return &campaigns.Purchase{ID: id, CampaignID: "c1"}, nil
+	svc := &mocks.MockInventoryService{
+		GetPurchaseFn: func(_ context.Context, id string) (*inventory.Purchase, error) {
+			return &inventory.Purchase{ID: id, CampaignID: "c1"}, nil
 		},
-		GetCampaignFn: func(_ context.Context, id string) (*campaigns.Campaign, error) {
-			return &campaigns.Campaign{ID: id}, nil
+		GetCampaignFn: func(_ context.Context, id string) (*inventory.Campaign, error) {
+			return &inventory.Campaign{ID: id}, nil
 		},
-		CreateSaleFn: func(_ context.Context, s *campaigns.Sale, _ *campaigns.Campaign, _ *campaigns.Purchase) error {
+		CreateSaleFn: func(_ context.Context, s *inventory.Sale, _ *inventory.Campaign, _ *inventory.Purchase) error {
 			s.ID = "new-sale"
 			return nil
 		},
@@ -190,15 +190,15 @@ func TestHandleCreateSale_POST_Success(t *testing.T) {
 }
 
 func TestHandleCreateSale_POST_DuplicateSale(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		GetPurchaseFn: func(_ context.Context, id string) (*campaigns.Purchase, error) {
-			return &campaigns.Purchase{ID: id, CampaignID: "c1"}, nil
+	svc := &mocks.MockInventoryService{
+		GetPurchaseFn: func(_ context.Context, id string) (*inventory.Purchase, error) {
+			return &inventory.Purchase{ID: id, CampaignID: "c1"}, nil
 		},
-		GetCampaignFn: func(_ context.Context, id string) (*campaigns.Campaign, error) {
-			return &campaigns.Campaign{ID: id}, nil
+		GetCampaignFn: func(_ context.Context, id string) (*inventory.Campaign, error) {
+			return &inventory.Campaign{ID: id}, nil
 		},
-		CreateSaleFn: func(_ context.Context, _ *campaigns.Sale, _ *campaigns.Campaign, _ *campaigns.Purchase) error {
-			return campaigns.ErrDuplicateSale
+		CreateSaleFn: func(_ context.Context, _ *inventory.Sale, _ *inventory.Campaign, _ *inventory.Purchase) error {
+			return inventory.ErrDuplicateSale
 		},
 	}
 	h := newTestHandler(svc)
@@ -216,9 +216,9 @@ func TestHandleCreateSale_POST_DuplicateSale(t *testing.T) {
 }
 
 func TestHandleCreateSale_POST_PurchaseNotInCampaign(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		GetPurchaseFn: func(_ context.Context, id string) (*campaigns.Purchase, error) {
-			return &campaigns.Purchase{ID: id, CampaignID: "other-campaign"}, nil
+	svc := &mocks.MockInventoryService{
+		GetPurchaseFn: func(_ context.Context, id string) (*inventory.Purchase, error) {
+			return &inventory.Purchase{ID: id, CampaignID: "other-campaign"}, nil
 		},
 	}
 	h := newTestHandler(svc)
@@ -236,9 +236,9 @@ func TestHandleCreateSale_POST_PurchaseNotInCampaign(t *testing.T) {
 }
 
 func TestHandleCreateSale_POST_PurchaseNotFound(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		GetPurchaseFn: func(_ context.Context, _ string) (*campaigns.Purchase, error) {
-			return nil, campaigns.ErrPurchaseNotFound
+	svc := &mocks.MockInventoryService{
+		GetPurchaseFn: func(_ context.Context, _ string) (*inventory.Purchase, error) {
+			return nil, inventory.ErrPurchaseNotFound
 		},
 	}
 	h := newTestHandler(svc)
@@ -262,7 +262,7 @@ func TestHandleCertLookup(t *testing.T) {
 		name           string
 		method         string
 		certNumber     string
-		lookupFn       func(context.Context, string) (*campaigns.CertInfo, *campaigns.MarketSnapshot, error)
+		lookupFn       func(context.Context, string) (*inventory.CertInfo, *inventory.MarketSnapshot, error)
 		expectedStatus int
 		checkBody      func(t *testing.T, rec *httptest.ResponseRecorder)
 	}{
@@ -270,12 +270,12 @@ func TestHandleCertLookup(t *testing.T) {
 			name:       "success with market snapshot",
 			method:     http.MethodGet,
 			certNumber: "12345678",
-			lookupFn: func(_ context.Context, cert string) (*campaigns.CertInfo, *campaigns.MarketSnapshot, error) {
-				return &campaigns.CertInfo{
+			lookupFn: func(_ context.Context, cert string) (*inventory.CertInfo, *inventory.MarketSnapshot, error) {
+				return &inventory.CertInfo{
 						CertNumber: cert,
 						CardName:   "Charizard",
 						Grade:      10,
-					}, &campaigns.MarketSnapshot{
+					}, &inventory.MarketSnapshot{
 						LastSoldCents: 50000,
 					}, nil
 			},
@@ -297,8 +297,8 @@ func TestHandleCertLookup(t *testing.T) {
 			name:       "success without market snapshot",
 			method:     http.MethodGet,
 			certNumber: "12345678",
-			lookupFn: func(_ context.Context, cert string) (*campaigns.CertInfo, *campaigns.MarketSnapshot, error) {
-				return &campaigns.CertInfo{CertNumber: cert}, nil, nil
+			lookupFn: func(_ context.Context, cert string) (*inventory.CertInfo, *inventory.MarketSnapshot, error) {
+				return &inventory.CertInfo{CertNumber: cert}, nil, nil
 			},
 			expectedStatus: http.StatusOK,
 		},
@@ -306,7 +306,7 @@ func TestHandleCertLookup(t *testing.T) {
 			name:       "cert not found returns 404",
 			method:     http.MethodGet,
 			certNumber: "99999999",
-			lookupFn: func(_ context.Context, _ string) (*campaigns.CertInfo, *campaigns.MarketSnapshot, error) {
+			lookupFn: func(_ context.Context, _ string) (*inventory.CertInfo, *inventory.MarketSnapshot, error) {
 				return nil, nil, fmt.Errorf("cert not found")
 			},
 			expectedStatus: http.StatusNotFound,
@@ -327,7 +327,7 @@ func TestHandleCertLookup(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			svc := &mocks.MockCampaignService{
+			svc := &mocks.MockInventoryService{
 				LookupCertFn: tt.lookupFn,
 			}
 			h := newTestHandler(svc)
@@ -384,7 +384,7 @@ func TestHandleUpdateBuyCost(t *testing.T) {
 			purchaseID: "missing",
 			body:       `{"buyCostCents":18699}`,
 			updateFn: func(_ context.Context, _ string, _ int) error {
-				return fmt.Errorf("purchase lookup: %w", campaigns.ErrPurchaseNotFound)
+				return fmt.Errorf("purchase lookup: %w", inventory.ErrPurchaseNotFound)
 			},
 			expectedStatus: http.StatusNotFound,
 		},
@@ -393,7 +393,7 @@ func TestHandleUpdateBuyCost(t *testing.T) {
 			purchaseID: "p1",
 			body:       `{"buyCostCents":-1}`,
 			updateFn: func(_ context.Context, _ string, _ int) error {
-				return domainerrors.NewAppError(campaigns.ErrCodeCampaignValidation, "buyCostCents must be >= 0")
+				return domainerrors.NewAppError(inventory.ErrCodeCampaignValidation, "buyCostCents must be >= 0")
 			},
 			expectedStatus: http.StatusBadRequest,
 		},
@@ -403,7 +403,7 @@ func TestHandleUpdateBuyCost(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var capturedID string
 			var capturedCents int
-			svc := &mocks.MockCampaignService{
+			svc := &mocks.MockInventoryService{
 				UpdateBuyCostFn: func(_ context.Context, purchaseID string, buyCostCents int) error {
 					capturedID = purchaseID
 					capturedCents = buyCostCents
@@ -434,7 +434,7 @@ func TestHandleUpdateBuyCost(t *testing.T) {
 
 func TestHandleReassignPurchase_Success(t *testing.T) {
 	var capturedPurchaseID, capturedCampaignID string
-	svc := &mocks.MockCampaignService{
+	svc := &mocks.MockInventoryService{
 		ReassignPurchaseFn: func(_ context.Context, purchaseID, newCampaignID string) error {
 			capturedPurchaseID = purchaseID
 			capturedCampaignID = newCampaignID
@@ -461,7 +461,7 @@ func TestHandleReassignPurchase_Success(t *testing.T) {
 }
 
 func TestHandleReassignPurchase_MissingCampaignID(t *testing.T) {
-	h := newTestHandler(&mocks.MockCampaignService{})
+	h := newTestHandler(&mocks.MockInventoryService{})
 
 	body := `{"campaignId":""}`
 	req := httptest.NewRequest(http.MethodPatch, "/api/purchases/p1/campaign", strings.NewReader(body))
@@ -476,9 +476,9 @@ func TestHandleReassignPurchase_MissingCampaignID(t *testing.T) {
 }
 
 func TestHandleReassignPurchase_NotFound(t *testing.T) {
-	svc := &mocks.MockCampaignService{
+	svc := &mocks.MockInventoryService{
 		ReassignPurchaseFn: func(_ context.Context, _, _ string) error {
-			return fmt.Errorf("purchase lookup: %w", campaigns.ErrPurchaseNotFound)
+			return fmt.Errorf("purchase lookup: %w", inventory.ErrPurchaseNotFound)
 		},
 	}
 	h := newTestHandler(svc)

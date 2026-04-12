@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/advisor"
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
 )
 
@@ -432,9 +432,9 @@ func TestHandlePurchaseAssessment_Success(t *testing.T) {
 			return nil
 		},
 	}
-	campaignsSvc := &mocks.MockCampaignService{
-		GetCampaignFn: func(_ context.Context, id string) (*campaigns.Campaign, error) {
-			return &campaigns.Campaign{ID: id, Name: "Test Campaign"}, nil
+	campaignsSvc := &mocks.MockInventoryService{
+		GetCampaignFn: func(_ context.Context, id string) (*inventory.Campaign, error) {
+			return &inventory.Campaign{ID: id, Name: "Test Campaign"}, nil
 		},
 	}
 	h := NewAdvisorHandler(svc, campaignsSvc, nil, mocks.NewMockLogger())

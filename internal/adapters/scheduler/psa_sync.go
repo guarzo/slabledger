@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/platform/config"
 )
@@ -37,7 +37,7 @@ type SheetFetcher interface {
 
 // PSAImporter runs the PSA import pipeline.
 type PSAImporter interface {
-	ImportPSAExportGlobal(ctx context.Context, rows []campaigns.PSAExportRow) (*campaigns.PSAImportResult, error)
+	ImportPSAExportGlobal(ctx context.Context, rows []inventory.PSAExportRow) (*inventory.PSAImportResult, error)
 }
 
 var _ Scheduler = (*PSASyncScheduler)(nil)
@@ -145,7 +145,7 @@ func (s *PSASyncScheduler) runOnce(ctx context.Context) error {
 		return err
 	}
 
-	psaRows, parseErrors, err := campaigns.ParsePSAExportRows(rows)
+	psaRows, parseErrors, err := inventory.ParsePSAExportRows(rows)
 	if err != nil {
 		s.logger.Error(ctx, "failed to parse PSA sheet data", observability.Err(err))
 		s.recordFailure(start, err)
@@ -163,7 +163,7 @@ func (s *PSASyncScheduler) runOnce(ctx context.Context) error {
 
 	importCtx, importCancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer importCancel()
-	importCtx = campaigns.WithImportSource(importCtx, "scheduler")
+	importCtx = inventory.WithImportSource(importCtx, "scheduler")
 
 	result, err := s.importer.ImportPSAExportGlobal(importCtx, psaRows)
 	if err != nil {

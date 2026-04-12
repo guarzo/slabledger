@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -19,7 +19,7 @@ func TestDHOrdersPoll_NoOrders(t *testing.T) {
 		},
 	}
 	syncStore := newMockSyncStateStore()
-	svc := &mocks.MockCampaignService{}
+	svc := &mocks.MockInventoryService{}
 
 	s := NewDHOrdersPollScheduler(client, syncStore, svc, mocks.NewMockLogger(), DHOrdersPollConfig{
 		Enabled:  true,
@@ -55,24 +55,24 @@ func TestDHOrdersPoll_RecordsSale(t *testing.T) {
 	}
 	syncStore := newMockSyncStateStore()
 
-	var capturedConfirmItems []campaigns.OrdersConfirmItem
+	var capturedConfirmItems []inventory.OrdersConfirmItem
 
-	svc := &mocks.MockCampaignService{
-		ImportOrdersSalesFn: func(_ context.Context, rows []campaigns.OrdersExportRow) (*campaigns.OrdersImportResult, error) {
+	svc := &mocks.MockInventoryService{
+		ImportOrdersSalesFn: func(_ context.Context, rows []inventory.OrdersExportRow) (*inventory.OrdersImportResult, error) {
 			require.Len(t, rows, 1)
 			assert.Equal(t, "99998888", rows[0].CertNumber)
 			assert.Equal(t, "2026-04-02", rows[0].Date)
-			assert.Equal(t, campaigns.SaleChannelEbay, rows[0].SalesChannel)
+			assert.Equal(t, inventory.SaleChannelEbay, rows[0].SalesChannel)
 			assert.Equal(t, 75.0, rows[0].UnitPrice)
 			assert.Equal(t, "PSA", rows[0].Grader)
 			assert.Equal(t, float64(10), rows[0].Grade)
 
-			return &campaigns.OrdersImportResult{
-				Matched: []campaigns.OrdersImportMatch{
+			return &inventory.OrdersImportResult{
+				Matched: []inventory.OrdersImportMatch{
 					{
 						CertNumber:     "99998888",
 						ProductTitle:   "Charizard PSA 10",
-						SaleChannel:    campaigns.SaleChannelEbay,
+						SaleChannel:    inventory.SaleChannelEbay,
 						SaleDate:       "2026-04-02",
 						SalePriceCents: 7500,
 						SaleFeeCents:   994,
@@ -85,9 +85,9 @@ func TestDHOrdersPoll_RecordsSale(t *testing.T) {
 				},
 			}, nil
 		},
-		ConfirmOrdersSalesFn: func(_ context.Context, items []campaigns.OrdersConfirmItem) (*campaigns.BulkSaleResult, error) {
+		ConfirmOrdersSalesFn: func(_ context.Context, items []inventory.OrdersConfirmItem) (*inventory.BulkSaleResult, error) {
 			capturedConfirmItems = items
-			return &campaigns.BulkSaleResult{Created: len(items)}, nil
+			return &inventory.BulkSaleResult{Created: len(items)}, nil
 		},
 	}
 
@@ -100,7 +100,7 @@ func TestDHOrdersPoll_RecordsSale(t *testing.T) {
 
 	require.Len(t, capturedConfirmItems, 1)
 	assert.Equal(t, "pur-001", capturedConfirmItems[0].PurchaseID)
-	assert.Equal(t, campaigns.SaleChannelEbay, capturedConfirmItems[0].SaleChannel)
+	assert.Equal(t, inventory.SaleChannelEbay, capturedConfirmItems[0].SaleChannel)
 	assert.Equal(t, "2026-04-02", capturedConfirmItems[0].SaleDate)
 	assert.Equal(t, 7500, capturedConfirmItems[0].SalePriceCents)
 	assert.Equal(t, "dh-12345", capturedConfirmItems[0].OrderID, "OrderID should be set from DH order")
@@ -113,7 +113,7 @@ func TestDHOrdersPoll_Disabled(t *testing.T) {
 	s := NewDHOrdersPollScheduler(
 		&mocks.MockDHOrdersClient{},
 		newMockSyncStateStore(),
-		&mocks.MockCampaignService{},
+		&mocks.MockInventoryService{},
 		mocks.NewMockLogger(),
 		DHOrdersPollConfig{Enabled: false},
 	)

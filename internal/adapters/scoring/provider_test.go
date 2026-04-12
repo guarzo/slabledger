@@ -5,34 +5,118 @@ import (
 	"testing"
 
 	"github.com/guarzo/slabledger/internal/domain/advisor"
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	"github.com/guarzo/slabledger/internal/domain/arbitrage"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
+	"github.com/guarzo/slabledger/internal/domain/portfolio"
+	"github.com/guarzo/slabledger/internal/domain/tuning"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
 )
 
+// --- minimal mock implementations for the new service interfaces ---
+
+type mockArbSvc struct {
+	evaluatePurchaseFn func(ctx context.Context, campaignID, cardName string, grade float64, buyCostCents int) (*arbitrage.ExpectedValue, error)
+}
+
+func (m *mockArbSvc) GetCrackCandidates(ctx context.Context, campaignID string) ([]arbitrage.CrackAnalysis, error) {
+	return nil, nil
+}
+func (m *mockArbSvc) GetCrackOpportunities(ctx context.Context) ([]arbitrage.CrackAnalysis, error) {
+	return nil, nil
+}
+func (m *mockArbSvc) GetAcquisitionTargets(ctx context.Context) ([]arbitrage.AcquisitionOpportunity, error) {
+	return nil, nil
+}
+func (m *mockArbSvc) GetActivationChecklist(ctx context.Context, campaignID string) (*inventory.ActivationChecklist, error) {
+	return nil, nil
+}
+func (m *mockArbSvc) GetExpectedValues(ctx context.Context, campaignID string) (*arbitrage.EVPortfolio, error) {
+	return nil, nil
+}
+func (m *mockArbSvc) EvaluatePurchase(ctx context.Context, campaignID, cardName string, grade float64, buyCostCents int) (*arbitrage.ExpectedValue, error) {
+	if m.evaluatePurchaseFn != nil {
+		return m.evaluatePurchaseFn(ctx, campaignID, cardName, grade, buyCostCents)
+	}
+	return &arbitrage.ExpectedValue{}, nil
+}
+func (m *mockArbSvc) RunProjection(ctx context.Context, campaignID string) (*arbitrage.MonteCarloComparison, error) {
+	return nil, nil
+}
+func (m *mockArbSvc) StartCrackCacheWorker(ctx context.Context) context.CancelFunc { return func() {} }
+
+type mockPortSvc struct {
+	getPortfolioInsightsFn func(ctx context.Context) (*inventory.PortfolioInsights, error)
+}
+
+func (m *mockPortSvc) GetPortfolioHealth(ctx context.Context) (*inventory.PortfolioHealth, error) {
+	return nil, nil
+}
+func (m *mockPortSvc) GetPortfolioChannelVelocity(ctx context.Context) ([]inventory.ChannelVelocity, error) {
+	return nil, nil
+}
+func (m *mockPortSvc) GetPortfolioInsights(ctx context.Context) (*inventory.PortfolioInsights, error) {
+	if m.getPortfolioInsightsFn != nil {
+		return m.getPortfolioInsightsFn(ctx)
+	}
+	return &inventory.PortfolioInsights{}, nil
+}
+func (m *mockPortSvc) GetCampaignSuggestions(ctx context.Context) (*inventory.SuggestionsResponse, error) {
+	return nil, nil
+}
+func (m *mockPortSvc) GetCapitalTimeline(ctx context.Context) (*inventory.CapitalTimeline, error) {
+	return nil, nil
+}
+func (m *mockPortSvc) GetWeeklyReviewSummary(ctx context.Context) (*inventory.WeeklyReviewSummary, error) {
+	return nil, nil
+}
+
+type mockTuningSvc struct {
+	getCampaignTuningFn func(ctx context.Context, campaignID string) (*inventory.TuningResponse, error)
+}
+
+func (m *mockTuningSvc) GetCampaignTuning(ctx context.Context, campaignID string) (*inventory.TuningResponse, error) {
+	if m.getCampaignTuningFn != nil {
+		return m.getCampaignTuningFn(ctx, campaignID)
+	}
+	return &inventory.TuningResponse{}, nil
+}
+
+// verify interface compliance
+var _ arbitrage.Service = (*mockArbSvc)(nil)
+var _ portfolio.Service = (*mockPortSvc)(nil)
+var _ tuning.Service = (*mockTuningSvc)(nil)
+
+// --- tests ---
+
 func TestPurchaseData(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		EvaluatePurchaseFn: func(_ context.Context, _ string, _ string, _ float64, _ int) (*campaigns.ExpectedValue, error) {
-			return &campaigns.ExpectedValue{
+	svc := &mocks.MockInventoryService{}
+	arbSvc := &mockArbSvc{
+		evaluatePurchaseFn: func(_ context.Context, _ string, _ string, _ float64, _ int) (*arbitrage.ExpectedValue, error) {
+			return &arbitrage.ExpectedValue{
 				EVPerDollar:     0.35,
 				LiquidityFactor: 1.2,
 				TrendAdjustment: 0.05,
 				Confidence:      "high",
 			}, nil
 		},
-		GetCampaignTuningFn: func(_ context.Context, _ string) (*campaigns.TuningResponse, error) {
-			return &campaigns.TuningResponse{
-				ByGrade: []campaigns.GradePerformance{
+	}
+	tuningSvc := &mockTuningSvc{
+		getCampaignTuningFn: func(_ context.Context, _ string) (*inventory.TuningResponse, error) {
+			return &inventory.TuningResponse{
+				ByGrade: []inventory.GradePerformance{
 					{Grade: 10, ROI: 0.25, PurchaseCount: 10},
 					{Grade: 9, ROI: 0.15, PurchaseCount: 5},
 				},
-				MarketAlignment: &campaigns.MarketAlignment{
+				MarketAlignment: &inventory.MarketAlignment{
 					AvgTrend30d: 0.08,
 				},
 			}, nil
 		},
-		GetPortfolioInsightsFn: func(_ context.Context) (*campaigns.PortfolioInsights, error) {
-			return &campaigns.PortfolioInsights{
-				ByCharacter: []campaigns.SegmentPerformance{
+	}
+	portSvc := &mockPortSvc{
+		getPortfolioInsightsFn: func(_ context.Context) (*inventory.PortfolioInsights, error) {
+			return &inventory.PortfolioInsights{
+				ByCharacter: []inventory.SegmentPerformance{
 					{Label: "Charizard", PurchaseCount: 50},
 					{Label: "Pikachu", PurchaseCount: 30},
 					{Label: "Blastoise", PurchaseCount: 20},
@@ -41,7 +125,11 @@ func TestPurchaseData(t *testing.T) {
 		},
 	}
 
-	p := NewProvider(svc)
+	p := NewProvider(svc,
+		WithArbitrageService(arbSvc),
+		WithTuningService(tuningSvc),
+		WithPortfolioService(portSvc),
+	)
 	req := advisor.PurchaseAssessmentRequest{
 		CampaignID:   "camp-1",
 		CardName:     "Charizard VMAX",
@@ -82,8 +170,8 @@ func TestPurchaseData(t *testing.T) {
 }
 
 func TestPurchaseData_GracefulDegradation(t *testing.T) {
-	// All service methods return defaults (nil pointers / empty slices).
-	svc := &mocks.MockCampaignService{}
+	// No optional services injected — all calls are nil-guarded, results all nil/zero.
+	svc := &mocks.MockInventoryService{}
 	p := NewProvider(svc)
 
 	req := advisor.PurchaseAssessmentRequest{
@@ -98,56 +186,57 @@ func TestPurchaseData_GracefulDegradation(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// With empty defaults the EvaluatePurchase returns a zero ExpectedValue,
-	// so ROIPct and SalesPerMonth will be set to 0 (pointer to 0).
-	if data.ROIPct == nil {
-		t.Error("ROIPct should not be nil even with zero EV")
+	// No arbSvc injected → ROIPct is nil
+	if data.ROIPct != nil {
+		t.Error("ROIPct should be nil when no arbSvc injected")
 	}
-	// Tuning returns empty ByGrade -> GradeROI nil
+	// No tuningSvc injected → GradeROI nil
 	if data.GradeROI != nil {
-		t.Error("GradeROI should be nil with no grade data")
+		t.Error("GradeROI should be nil with no tuningSvc injected")
 	}
-	// Concentration with empty segments -> "low"
-	if data.ConcentrationRisk != "low" {
-		t.Errorf("ConcentrationRisk: got %q, want %q", data.ConcentrationRisk, "low")
+	// No portSvc injected → ConcentrationRisk is ""
+	if data.ConcentrationRisk != "" {
+		t.Errorf("ConcentrationRisk: got %q, want empty string (no portSvc)", data.ConcentrationRisk)
 	}
 }
 
 func TestCampaignData(t *testing.T) {
-	svc := &mocks.MockCampaignService{
-		GetCampaignPNLFn: func(_ context.Context, _ string) (*campaigns.CampaignPNL, error) {
-			return &campaigns.CampaignPNL{
+	svc := &mocks.MockInventoryService{
+		GetCampaignPNLFn: func(_ context.Context, _ string) (*inventory.CampaignPNL, error) {
+			return &inventory.CampaignPNL{
 				ROI:            0.22,
 				SellThroughPct: 0.65,
 				TotalPurchases: 30,
 			}, nil
 		},
-		GetCampaignTuningFn: func(_ context.Context, _ string) (*campaigns.TuningResponse, error) {
-			return &campaigns.TuningResponse{
-				MarketAlignment: &campaigns.MarketAlignment{
-					AvgTrend30d: -0.03,
-				},
-			}, nil
-		},
-		GetInventoryAgingFn: func(_ context.Context, _ string) (*campaigns.InventoryResult, error) {
-			return &campaigns.InventoryResult{Items: []campaigns.AgingItem{
+		GetInventoryAgingFn: func(_ context.Context, _ string) (*inventory.InventoryResult, error) {
+			return &inventory.InventoryResult{Items: []inventory.AgingItem{
 				{
-					Signal: &campaigns.MarketSignal{DeltaPct: 0.10},
-					CurrentMarket: &campaigns.MarketSnapshot{
+					Signal: &inventory.MarketSignal{DeltaPct: 0.10},
+					CurrentMarket: &inventory.MarketSnapshot{
 						MonthlyVelocity: 12,
 					},
 				},
 				{
-					Signal: &campaigns.MarketSignal{DeltaPct: -0.05},
-					CurrentMarket: &campaigns.MarketSnapshot{
+					Signal: &inventory.MarketSignal{DeltaPct: -0.05},
+					CurrentMarket: &inventory.MarketSnapshot{
 						MonthlyVelocity: 8,
 					},
 				},
 			}}, nil
 		},
 	}
+	tuningSvc := &mockTuningSvc{
+		getCampaignTuningFn: func(_ context.Context, _ string) (*inventory.TuningResponse, error) {
+			return &inventory.TuningResponse{
+				MarketAlignment: &inventory.MarketAlignment{
+					AvgTrend30d: -0.03,
+				},
+			}, nil
+		},
+	}
 
-	p := NewProvider(svc)
+	p := NewProvider(svc, WithTuningService(tuningSvc))
 	data, err := p.CampaignData(context.Background(), "camp-1")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -172,7 +261,7 @@ func TestCampaignData(t *testing.T) {
 }
 
 func TestStubMethods_ReturnNil(t *testing.T) {
-	p := NewProvider(&mocks.MockCampaignService{})
+	p := NewProvider(&mocks.MockInventoryService{})
 
 	t.Run("LiquidationData", func(t *testing.T) {
 		data, err := p.LiquidationData(context.Background(), "p-1")
@@ -215,7 +304,7 @@ func TestParseGrade(t *testing.T) {
 }
 
 func TestComputeConcentration(t *testing.T) {
-	segments := []campaigns.SegmentPerformance{
+	segments := []inventory.SegmentPerformance{
 		{Label: "Charizard", PurchaseCount: 50},
 		{Label: "Pikachu", PurchaseCount: 30},
 		{Label: "Blastoise", PurchaseCount: 20},

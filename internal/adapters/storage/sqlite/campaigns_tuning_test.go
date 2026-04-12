@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -16,11 +16,11 @@ func TestGetPerformanceByGrade(t *testing.T) {
 	now := time.Now().Truncate(time.Second)
 
 	// Setup campaign
-	c := &campaigns.Campaign{ID: "camp-1", Name: "Test", Phase: campaigns.PhasePending, CreatedAt: now, UpdatedAt: now}
+	c := &inventory.Campaign{ID: "camp-1", Name: "Test", Phase: inventory.PhasePending, CreatedAt: now, UpdatedAt: now}
 	require.NoError(t, repo.CreateCampaign(ctx, c))
 
 	// Create purchases at different grades
-	purchases := []*campaigns.Purchase{
+	purchases := []*inventory.Purchase{
 		{ID: "p1", CampaignID: "camp-1", CardName: "Charizard", CertNumber: "111", GradeValue: 9, CLValueCents: 100000, BuyCostCents: 80000, PSASourcingFeeCents: 300, PurchaseDate: "2026-01-01", CreatedAt: now, UpdatedAt: now},
 		{ID: "p2", CampaignID: "camp-1", CardName: "Pikachu", CertNumber: "222", GradeValue: 9.5, CLValueCents: 50000, BuyCostCents: 40000, PSASourcingFeeCents: 300, PurchaseDate: "2026-01-02", CreatedAt: now, UpdatedAt: now},
 		{ID: "p3", CampaignID: "camp-1", CardName: "Blastoise", CertNumber: "333", GradeValue: 10, CLValueCents: 200000, BuyCostCents: 170000, PSASourcingFeeCents: 300, PurchaseDate: "2026-01-03", CreatedAt: now, UpdatedAt: now},
@@ -30,8 +30,8 @@ func TestGetPerformanceByGrade(t *testing.T) {
 	}
 
 	// Create a sale for the first purchase
-	sale := &campaigns.Sale{
-		ID: "s1", PurchaseID: "p1", SaleChannel: campaigns.SaleChannelEbay,
+	sale := &inventory.Sale{
+		ID: "s1", PurchaseID: "p1", SaleChannel: inventory.SaleChannelEbay,
 		SalePriceCents: 95000, SaleFeeCents: 11733, SaleDate: "2026-01-15",
 		DaysToSell: 14, NetProfitCents: 2967, CreatedAt: now, UpdatedAt: now,
 	}
@@ -43,7 +43,7 @@ func TestGetPerformanceByGrade(t *testing.T) {
 	require.Len(t, result, 3, "expected 3 grades (9, 9.5 and 10)")
 
 	// Grade 9: 1 purchase, 1 sold; Grade 9.5: 1 purchase, 0 sold; Grade 10: 1 purchase, 0 sold
-	var grade9, grade95, grade10 *campaigns.GradePerformance
+	var grade9, grade95, grade10 *inventory.GradePerformance
 	for i := range result {
 		switch result[i].Grade {
 		case 9:
@@ -77,7 +77,7 @@ func TestGetPerformanceByGrade_Empty(t *testing.T) {
 	ctx := context.Background()
 	now := time.Now().Truncate(time.Second)
 
-	c := &campaigns.Campaign{ID: "camp-1", Name: "Test", Phase: campaigns.PhasePending, CreatedAt: now, UpdatedAt: now}
+	c := &inventory.Campaign{ID: "camp-1", Name: "Test", Phase: inventory.PhasePending, CreatedAt: now, UpdatedAt: now}
 	require.NoError(t, repo.CreateCampaign(ctx, c))
 
 	result, err := repo.GetPerformanceByGrade(ctx, "camp-1")
@@ -91,18 +91,18 @@ func TestGetPurchasesWithSales(t *testing.T) {
 	now := time.Now().Truncate(time.Second)
 
 	// Setup campaign
-	c := &campaigns.Campaign{ID: "camp-1", Name: "Test", Phase: campaigns.PhasePending, CreatedAt: now, UpdatedAt: now}
+	c := &inventory.Campaign{ID: "camp-1", Name: "Test", Phase: inventory.PhasePending, CreatedAt: now, UpdatedAt: now}
 	require.NoError(t, repo.CreateCampaign(ctx, c))
 
 	// Create purchases
-	p1 := &campaigns.Purchase{ID: "p1", CampaignID: "camp-1", CardName: "Charizard", CertNumber: "111", GradeValue: 9, CLValueCents: 100000, BuyCostCents: 80000, PSASourcingFeeCents: 300, PurchaseDate: "2026-01-01", CreatedAt: now, UpdatedAt: now}
-	p2 := &campaigns.Purchase{ID: "p2", CampaignID: "camp-1", CardName: "Pikachu", CertNumber: "222", GradeValue: 9.5, CLValueCents: 50000, BuyCostCents: 40000, PSASourcingFeeCents: 300, PurchaseDate: "2026-01-02", CreatedAt: now, UpdatedAt: now}
+	p1 := &inventory.Purchase{ID: "p1", CampaignID: "camp-1", CardName: "Charizard", CertNumber: "111", GradeValue: 9, CLValueCents: 100000, BuyCostCents: 80000, PSASourcingFeeCents: 300, PurchaseDate: "2026-01-01", CreatedAt: now, UpdatedAt: now}
+	p2 := &inventory.Purchase{ID: "p2", CampaignID: "camp-1", CardName: "Pikachu", CertNumber: "222", GradeValue: 9.5, CLValueCents: 50000, BuyCostCents: 40000, PSASourcingFeeCents: 300, PurchaseDate: "2026-01-02", CreatedAt: now, UpdatedAt: now}
 	require.NoError(t, repo.CreatePurchase(ctx, p1))
 	require.NoError(t, repo.CreatePurchase(ctx, p2))
 
 	// Create a sale for p1 only
-	sale := &campaigns.Sale{
-		ID: "s1", PurchaseID: "p1", SaleChannel: campaigns.SaleChannelEbay,
+	sale := &inventory.Sale{
+		ID: "s1", PurchaseID: "p1", SaleChannel: inventory.SaleChannelEbay,
 		SalePriceCents: 95000, SaleFeeCents: 11733, SaleDate: "2026-01-15",
 		DaysToSell: 14, NetProfitCents: 2967, CreatedAt: now, UpdatedAt: now,
 	}
@@ -130,7 +130,7 @@ func TestGetPurchasesWithSales_Empty(t *testing.T) {
 	ctx := context.Background()
 	now := time.Now().Truncate(time.Second)
 
-	c := &campaigns.Campaign{ID: "camp-1", Name: "Test", Phase: campaigns.PhasePending, CreatedAt: now, UpdatedAt: now}
+	c := &inventory.Campaign{ID: "camp-1", Name: "Test", Phase: inventory.PhasePending, CreatedAt: now, UpdatedAt: now}
 	require.NoError(t, repo.CreateCampaign(ctx, c))
 
 	result, err := repo.GetPurchasesWithSales(ctx, "camp-1")

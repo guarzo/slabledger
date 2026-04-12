@@ -7,22 +7,32 @@ import (
 	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/ai"
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	"github.com/guarzo/slabledger/internal/domain/arbitrage"
+	"github.com/guarzo/slabledger/internal/domain/export"
+	"github.com/guarzo/slabledger/internal/domain/finance"
 	"github.com/guarzo/slabledger/internal/domain/intelligence"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
+	"github.com/guarzo/slabledger/internal/domain/portfolio"
 	"github.com/guarzo/slabledger/internal/domain/scoring"
+	"github.com/guarzo/slabledger/internal/domain/tuning"
 )
 
 // toolHandler is a function that executes a tool and returns JSON.
 type toolHandler func(ctx context.Context, args string) (string, error)
 
-// CampaignToolExecutor implements ai.ToolExecutor by calling campaigns.Service methods.
+// CampaignToolExecutor implements ai.ToolExecutor by calling inventory.Service methods.
 type CampaignToolExecutor struct {
-	svc         campaigns.Service
-	intelRepo   intelligence.Repository
-	suggestRepo intelligence.SuggestionsRepository
-	gapStore    scoring.GapStore
-	handlers    map[string]toolHandler
-	defs        []ai.ToolDefinition
+	svc            inventory.Service
+	financeService finance.Service
+	exportService  export.Service
+	arbSvc         arbitrage.Service
+	portSvc        portfolio.Service
+	tuningSvc      tuning.Service
+	intelRepo      intelligence.Repository
+	suggestRepo    intelligence.SuggestionsRepository
+	gapStore       scoring.GapStore
+	handlers       map[string]toolHandler
+	defs           []ai.ToolDefinition
 }
 
 // ExecutorOption configures optional dependencies on CampaignToolExecutor.
@@ -43,8 +53,33 @@ func WithGapStore(gs scoring.GapStore) ExecutorOption {
 	return func(e *CampaignToolExecutor) { e.gapStore = gs }
 }
 
+// WithArbitrageService injects the arbitrage service.
+func WithArbitrageService(svc arbitrage.Service) ExecutorOption {
+	return func(e *CampaignToolExecutor) { e.arbSvc = svc }
+}
+
+// WithPortfolioService injects the portfolio service.
+func WithPortfolioService(svc portfolio.Service) ExecutorOption {
+	return func(e *CampaignToolExecutor) { e.portSvc = svc }
+}
+
+// WithTuningService injects the tuning service.
+func WithTuningService(svc tuning.Service) ExecutorOption {
+	return func(e *CampaignToolExecutor) { e.tuningSvc = svc }
+}
+
+// WithFinanceService injects the finance service.
+func WithFinanceService(svc finance.Service) ExecutorOption {
+	return func(e *CampaignToolExecutor) { e.financeService = svc }
+}
+
+// WithExportService injects the export service.
+func WithExportService(svc export.Service) ExecutorOption {
+	return func(e *CampaignToolExecutor) { e.exportService = svc }
+}
+
 // NewCampaignToolExecutor creates a ToolExecutor backed by the campaigns service.
-func NewCampaignToolExecutor(svc campaigns.Service, opts ...ExecutorOption) *CampaignToolExecutor {
+func NewCampaignToolExecutor(svc inventory.Service, opts ...ExecutorOption) *CampaignToolExecutor {
 	e := &CampaignToolExecutor{
 		svc:      svc,
 		handlers: make(map[string]toolHandler),

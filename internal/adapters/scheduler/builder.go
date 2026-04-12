@@ -11,9 +11,9 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/advisor"
 	"github.com/guarzo/slabledger/internal/domain/ai"
 	"github.com/guarzo/slabledger/internal/domain/auth"
-	domainCampaigns "github.com/guarzo/slabledger/internal/domain/campaigns"
 	domainCards "github.com/guarzo/slabledger/internal/domain/cards"
 	"github.com/guarzo/slabledger/internal/domain/intelligence"
+	domainCampaigns "github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/domain/pricing"
 	"github.com/guarzo/slabledger/internal/domain/scoring"
@@ -117,6 +117,17 @@ type BuildDeps struct {
 	PSAImporter      PSAImporter
 	PSASpreadsheetID string
 	PSATabName       string
+
+	// Cert enrichment dependencies (optional).
+	// If CertEnrichJobPrebuilt is set, it is used directly (skipping creation from CertLookup/PurchaseRepo).
+	// This allows the job to be created before NewService for early injection via WithCertEnrichEnqueuer.
+	CertEnrichJobPrebuilt *CertEnrichJob
+	CertLookup            domainCampaigns.CertLookup
+	PurchaseRepo          domainCampaigns.PurchaseRepository
+
+	// Crack cache refresh dependencies (optional).
+	// CrackCacheService is the inventory service used by CrackCacheRefreshJob to call RefreshCrackCandidates.
+	CrackCacheService domainCampaigns.Service
 }
 
 // BuildResult holds the scheduler group and optional auxiliary references.
@@ -126,6 +137,8 @@ type BuildResult struct {
 	MMRefresh         *MarketMoversRefreshScheduler // nil if Market Movers is not configured
 	PSASync           *PSASyncScheduler             // nil if PSA sync is not configured
 	SocialPublish     *SocialPublishScheduler       // nil if auto-publishing is not configured
+	CertEnrichJob     *CertEnrichJob                // nil if cert lookup is not configured
+	CrackCacheJob     *CrackCacheRefreshJob         // nil if inventory service is not configured
 }
 
 // BuildGroup constructs a scheduler Group from centralized configuration and dependencies.
@@ -134,6 +147,8 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 	var clRefresh *CardLadderRefreshScheduler
 	var mmRefresh *MarketMoversRefreshScheduler
 	var psaSync *PSASyncScheduler
+	var certEnrichJob *CertEnrichJob
+	var crackCacheJob *CrackCacheRefreshJob
 
 	// Price refresh scheduler
 	schedulerConfig := Config{
@@ -426,6 +441,26 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 		schedulers = append(schedulers, psaSync)
 	}
 
+	// Cert enrichment scheduler (if cert lookup is provided).
+	// Prefer the pre-built job (created before service construction) so the same instance
+	// is injected into inventory.service via WithCertEnrichEnqueuer.
+	if deps.CertEnrichJobPrebuilt != nil {
+		certEnrichJob = deps.CertEnrichJobPrebuilt
+		schedulers = append(schedulers, certEnrichJob)
+	} else if deps.CertLookup != nil && deps.PurchaseRepo != nil {
+		certEnrichJob = NewCertEnrichJob(
+			deps.CertLookup, deps.PurchaseRepo,
+			deps.Logger,
+		)
+		schedulers = append(schedulers, certEnrichJob)
+	}
+
+	// Crack cache refresh scheduler (if inventory service is provided).
+	if deps.CrackCacheService != nil {
+		crackCacheJob = NewCrackCacheRefreshJob(deps.CrackCacheService, deps.Logger)
+		schedulers = append(schedulers, crackCacheJob)
+	}
+
 	// Market Movers value refresh scheduler.
 	// Created whenever the store and purchase interfaces are available, even if
 	// no client exists yet at startup. SetClient is called by the handler when
@@ -446,5 +481,7 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 		MMRefresh:         mmRefresh,
 		PSASync:           psaSync,
 		SocialPublish:     socialPublishScheduler,
+		CertEnrichJob:     certEnrichJob,
+		CrackCacheJob:     crackCacheJob,
 	}
 }

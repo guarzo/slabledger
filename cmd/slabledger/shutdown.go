@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/scheduler"
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/domain/social"
 )
@@ -19,7 +19,7 @@ func shutdownGracefully(
 	schedulerResult *scheduler.BuildResult,
 	hOut handlerOutputs,
 	socialService social.Service,
-	campaignsService campaigns.Service,
+	campaignsService inventory.Service,
 ) {
 	logger.Info(ctx, "shutting down schedulers")
 	cancelScheduler()

@@ -17,15 +17,23 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/clients/marketmovers"
 	"github.com/guarzo/slabledger/internal/adapters/clients/pricelookup"
 	"github.com/guarzo/slabledger/internal/adapters/clients/psa"
+	"github.com/guarzo/slabledger/internal/adapters/clients/tcgdex"
 	"github.com/guarzo/slabledger/internal/adapters/scheduler"
 	scoringadapter "github.com/guarzo/slabledger/internal/adapters/scoring"
 	"github.com/guarzo/slabledger/internal/adapters/storage/mediafs"
 	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
 	"github.com/guarzo/slabledger/internal/domain/advisor"
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	"github.com/guarzo/slabledger/internal/domain/arbitrage"
+	"github.com/guarzo/slabledger/internal/domain/auth"
+	"github.com/guarzo/slabledger/internal/domain/export"
+	"github.com/guarzo/slabledger/internal/domain/finance"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
+	"github.com/guarzo/slabledger/internal/domain/picks"
+	"github.com/guarzo/slabledger/internal/domain/portfolio"
 	"github.com/guarzo/slabledger/internal/domain/pricing"
 	"github.com/guarzo/slabledger/internal/domain/social"
+	"github.com/guarzo/slabledger/internal/domain/tuning"
 	"github.com/guarzo/slabledger/internal/platform/config"
 	"github.com/guarzo/slabledger/internal/platform/crypto"
 )
@@ -46,8 +54,32 @@ func initializePriceProviders(
 	return provider, nil
 }
 
+// campaignsInitResult holds all values returned by initializeCampaignsService.
+type campaignsInitResult struct {
+	service         inventory.Service
+	campaignStore   *sqlite.CampaignStore
+	purchaseStore   *sqlite.PurchaseStore
+	saleStore       *sqlite.SaleStore
+	analyticsStore  *sqlite.AnalyticsStore
+	financeStore    *sqlite.FinanceStore
+	pricingStore    *sqlite.PricingStore
+	dhStore         *sqlite.DHStore
+	snapshotStore   *sqlite.SnapshotStore
+	sellSheetStore  *sqlite.SellSheetStore
+	cardRequestRepo *sqlite.CardRequestRepository
+	certLookup      inventory.CertLookup
+	certEnrichJob   *scheduler.CertEnrichJob // nil if PSA not configured
+	arbSvc          arbitrage.Service
+	portSvc         portfolio.Service
+	tuningSvc       tuning.Service
+	financeService  finance.Service
+	exportService   export.Service
+}
+
 // initializeCampaignsService creates the campaigns service with all options
-// wired, including price lookup and PSA cert lookup.
+// wired, including price lookup and PSA cert lookup. It also creates the
+// arbitrage, portfolio, and tuning services that delegate to the same
+// repositories.
 func initializeCampaignsService(
 	ctx context.Context,
 	cfg *config.Config,
@@ -56,20 +88,38 @@ func initializeCampaignsService(
 	priceProvImpl pricing.PriceProvider,
 	intelRepo *sqlite.MarketIntelligenceRepository,
 	mmStore *sqlite.MarketMoversStore,
-) (campaigns.Service, *sqlite.CampaignsRepository, *sqlite.CardRequestRepository) {
-	campaignsRepo := sqlite.NewCampaignsRepository(db.DB)
+) campaignsInitResult {
+	// Create individual stores instead of composite repository
+	campaignStore := sqlite.NewCampaignStore(db.DB, logger)
+	purchaseStore := sqlite.NewPurchaseStore(db.DB, logger)
+	saleStore := sqlite.NewSaleStore(db.DB, logger)
+	analyticsStore := sqlite.NewAnalyticsStore(db.DB, logger)
+	financeStore := sqlite.NewFinanceStore(db.DB, logger)
+	pricingStore := sqlite.NewPricingStore(db.DB, logger)
+	dhStore := sqlite.NewDHStore(db.DB, logger)
+	snapshotStore := sqlite.NewSnapshotStore(db.DB, logger)
+	sellSheetStore := sqlite.NewSellSheetStore(db.DB, logger)
+
 	priceLookupAdapter := pricelookup.NewAdapter(priceProvImpl)
-	campaignOpts := []campaigns.ServiceOption{
-		campaigns.WithPriceLookup(priceLookupAdapter),
-		campaigns.WithIDGenerator(uuid.NewString),
-		campaigns.WithMaxSnapshotRetries(cfg.SnapshotEnrich.MaxRetries),
+	campaignOpts := []inventory.ServiceOption{
+		inventory.WithPriceLookup(priceLookupAdapter),
+		inventory.WithIDGenerator(uuid.NewString),
+		inventory.WithMaxSnapshotRetries(cfg.SnapshotEnrich.MaxRetries),
 	}
 
+	// PSA cert lookup (optional)
+	var certLookup inventory.CertLookup
+	var certEnrichJobForSvc *scheduler.CertEnrichJob
 	if cfg.Adapters.PSAToken != "" {
 		psaClient := psa.NewClient(cfg.Adapters.PSAToken, logger)
 		certAdapter := psa.NewCertAdapter(psaClient)
-		campaignOpts = append(campaignOpts, campaigns.WithCertLookup(certAdapter))
-		logger.Info(ctx, "PSA cert lookup enabled")
+		certLookup = certAdapter
+		campaignOpts = append(campaignOpts, inventory.WithCertLookup(certAdapter))
+		// CertEnrichJob must be created before NewService so it can be injected via
+		// WithCertEnrichEnqueuer. It will also be registered with the scheduler group below.
+		certEnrichJobForSvc = scheduler.NewCertEnrichJob(certAdapter, purchaseStore, logger)
+		campaignOpts = append(campaignOpts, inventory.WithCertEnrichEnqueuer(certEnrichJobForSvc))
+		logger.Info(ctx, "PSA cert lookup and cert enrichment enabled")
 	}
 
 	// Card request repository (tracks certs without linked cards)
@@ -77,21 +127,21 @@ func initializeCampaignsService(
 
 	// History recorders — track CL values and population changes during CSV imports.
 	campaignOpts = append(campaignOpts,
-		campaigns.WithCLValueRecorder(campaignsRepo),
-		campaigns.WithPopulationRecorder(campaignsRepo),
+		inventory.WithCLValueRecorder(snapshotStore),
+		inventory.WithPopulationRecorder(snapshotStore),
 	)
 
 	if intelRepo != nil {
-		campaignOpts = append(campaignOpts, campaigns.WithIntelligenceRepo(intelRepo))
+		campaignOpts = append(campaignOpts, inventory.WithIntelligenceRepo(intelRepo))
 	}
 
 	// Card Ladder comp analytics — CLSalesStore only needs *sql.DB (always available).
 	clSalesStore := sqlite.NewCLSalesStore(db.DB)
-	campaignOpts = append(campaignOpts, campaigns.WithCompSummaryProvider(clSalesStore))
+	campaignOpts = append(campaignOpts, inventory.WithCompSummaryProvider(clSalesStore))
 
 	// Market Movers search title enrichment for CSV export (optional).
 	if mmStore != nil {
-		mmAdapter := campaigns.MMMappingFunc(func(ctx context.Context) (map[string]string, error) {
+		mmAdapter := inventory.MMMappingFunc(func(ctx context.Context) (map[string]string, error) {
 			mappings, err := mmStore.ListMappings(ctx)
 			if err != nil {
 				return nil, err
@@ -104,12 +154,86 @@ func initializeCampaignsService(
 			}
 			return result, nil
 		})
-		campaignOpts = append(campaignOpts, campaigns.WithMMMappings(mmAdapter))
+		campaignOpts = append(campaignOpts, inventory.WithMMMappings(mmAdapter))
 	}
 
-	campaignsService := campaigns.NewService(campaignsRepo, campaignOpts...)
+	campaignsService := inventory.NewService(
+		campaignStore,  // CampaignRepository
+		purchaseStore,  // PurchaseRepository
+		saleStore,      // SaleRepository
+		analyticsStore, // AnalyticsRepository
+		financeStore,   // FinanceRepository
+		pricingStore,   // PricingRepository
+		dhStore,        // DHRepository
+		snapshotStore,  // SnapshotRepository
+		campaignOpts...,
+	)
 
-	return campaignsService, campaignsRepo, cardRequestRepo
+	arbSvc := arbitrage.NewService(
+		campaignStore,  // CampaignRepository
+		purchaseStore,  // PurchaseRepository
+		analyticsStore, // AnalyticsRepository
+		financeStore,   // FinanceRepository
+		priceLookupAdapter,
+		logger,
+	)
+
+	portSvc := portfolio.NewService(
+		campaignStore,  // CampaignRepository
+		analyticsStore, // AnalyticsRepository
+		financeStore,   // FinanceRepository
+		logger,
+	)
+
+	tuningSvc := tuning.NewService(
+		campaignStore,  // CampaignRepository
+		analyticsStore, // AnalyticsRepository
+		logger,
+	)
+
+	// Create export service
+	var exportSvc export.Service
+	exportOpts := []export.Option{
+		export.WithLogger(logger),
+	}
+	if intelRepo != nil {
+		exportOpts = append(exportOpts, export.WithIntelligenceRepo(intelRepo))
+	}
+	// Create a minimal composite wrapper to satisfy ExportReader interface
+	exportReader := &struct {
+		*sqlite.SellSheetStore
+		*sqlite.PurchaseStore
+		*sqlite.CampaignStore
+	}{
+		SellSheetStore: sellSheetStore,
+		PurchaseStore:  purchaseStore,
+		CampaignStore:  campaignStore,
+	}
+	exportSvc = export.New(exportReader, exportOpts...)
+
+	// Create finance service
+	financeSvc := finance.New(financeStore, uuid.NewString)
+
+	return campaignsInitResult{
+		service:         campaignsService,
+		campaignStore:   campaignStore,
+		purchaseStore:   purchaseStore,
+		saleStore:       saleStore,
+		analyticsStore:  analyticsStore,
+		financeStore:    financeStore,
+		pricingStore:    pricingStore,
+		dhStore:         dhStore,
+		snapshotStore:   snapshotStore,
+		sellSheetStore:  sellSheetStore,
+		cardRequestRepo: cardRequestRepo,
+		certLookup:      certLookup,
+		certEnrichJob:   certEnrichJobForSvc,
+		arbSvc:          arbSvc,
+		portSvc:         portSvc,
+		tuningSvc:       tuningSvc,
+		financeService:  financeSvc,
+		exportService:   exportSvc,
+	}
 }
 
 // initializeAdvisorService creates the Azure AI client and advisor service.
@@ -121,7 +245,8 @@ func initializeAdvisorService(
 	logger observability.Logger,
 	db *sqlite.DB,
 	aiCallRepo *sqlite.AICallRepository,
-	campaignsService campaigns.Service,
+	campaignsService inventory.Service,
+	scoringOpts []scoringadapter.ProviderOption,
 	toolOpts ...advisortool.ExecutorOption,
 ) (llmProvider advisor.LLMProvider, advisorSvc advisor.Service, advisorCacheRepo *sqlite.AdvisorCacheRepository, err error) {
 	if cfg.Adapters.AzureAIEndpoint == "" || cfg.Adapters.AzureAIKey == "" {
@@ -150,7 +275,7 @@ func initializeAdvisorService(
 	}
 
 	// Scoring engine: pre-compute factor scores for advisor flows
-	scoringProvider := scoringadapter.NewProvider(campaignsService)
+	scoringProvider := scoringadapter.NewProvider(campaignsService, scoringOpts...)
 	advisorOpts = append(advisorOpts, advisor.WithScoringDataProvider(scoringProvider))
 
 	// Data gap tracking for scoring quality reports
@@ -374,4 +499,171 @@ func initializeMarketMovers(
 		observability.Bool("hasUsername", mmCfg.Username != ""))
 
 	return client, store
+}
+
+// schedulerDeps bundles all dependencies needed by initializeSchedulers.
+type schedulerDeps struct {
+	Config               *config.Config
+	Logger               observability.Logger
+	DBTracker            *sqlite.DBTracker
+	RefreshCandidates    pricing.RefreshCandidateProvider
+	PriceProvImpl        pricing.PriceProvider
+	CardProvImpl         *tcgdex.TCGdex
+	AuthService          auth.Service
+	SyncStateRepo        *sqlite.SyncStateRepository
+	CardIDMappingRepo    *sqlite.CardIDMappingRepository
+	CampaignStore        *sqlite.CampaignStore
+	PurchaseStore        *sqlite.PurchaseStore
+	DHStore              *sqlite.DHStore
+	SnapshotStore        *sqlite.SnapshotStore
+	CampaignsService     inventory.Service
+	CertLookup           inventory.CertLookup
+	CertEnrichJob        *scheduler.CertEnrichJob // pre-built; nil if PSA not configured
+	AdvisorService       advisor.Service
+	AdvisorCacheRepo     *sqlite.AdvisorCacheRepository
+	AICallRepo           *sqlite.AICallRepository
+	SocialService        social.Service
+	SocialRepo           *sqlite.SocialRepository
+	PublisherConfigured  bool
+	IGTokenRefresher     scheduler.InstagramTokenRefresher
+	MetricsPostLister    social.MetricsPostLister
+	MetricsSaver         social.MetricsSaver
+	InsightsPoller       social.InsightsPoller
+	PicksService         picks.Service
+	CardLadderClient     *cardladder.Client
+	CardLadderStore      *sqlite.CardLadderStore
+	CardLadderSalesStore *sqlite.CLSalesStore
+	MMClient             *marketmovers.Client
+	MMStore              *sqlite.MarketMoversStore
+	DHClient             *dh.Client
+	DHIntelligenceRepo   *sqlite.MarketIntelligenceRepository
+	DHSuggestionsRepo    *sqlite.DHSuggestionsRepository
+	GapStore             *sqlite.GapStore
+	PSASheetFetcher      scheduler.SheetFetcher
+	PSASpreadsheetID     string
+	PSATabName           string
+}
+
+// initializeSchedulers builds and starts the scheduler group, returning the
+// result and a cancel function to shut them down.
+func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.BuildResult, context.CancelFunc) {
+	schedulerCtx, cancelScheduler := context.WithCancel(ctx)
+	buildDeps := scheduler.BuildDeps{
+		APITracker:            deps.DBTracker,
+		HealthChecker:         deps.DBTracker,
+		AccessTracker:         deps.DBTracker,
+		RefreshCandidates:     deps.RefreshCandidates,
+		PriceProvider:         deps.PriceProvImpl,
+		CardProvider:          deps.CardProvImpl,
+		AuthService:           deps.AuthService,
+		Logger:                deps.Logger,
+		SyncStateStore:        deps.SyncStateRepo,
+		NewSetsProvider:       deps.CardProvImpl.RegistryManager(),
+		InventoryLister:       &inventoryListAdapter{repo: deps.PurchaseStore},
+		SnapshotRefresher:     &snapshotRefreshAdapter{svc: deps.CampaignsService},
+		SnapshotEnrichService: deps.CampaignsService,
+		SnapshotHistoryLister: &struct {
+			*sqlite.SnapshotStore
+			*sqlite.PurchaseStore
+		}{
+			SnapshotStore: deps.SnapshotStore,
+			PurchaseStore: deps.PurchaseStore,
+		},
+		SnapshotHistoryRecorder:  deps.SnapshotStore,
+		AdvisorCollector:         deps.AdvisorService,
+		AdvisorCache:             deps.AdvisorCacheRepo,
+		AICallTracker:            deps.AICallRepo,
+		SocialContentDetector:    deps.SocialService,
+		InstagramTokenRefresher:  deps.IGTokenRefresher,
+		MetricsPostLister:        deps.MetricsPostLister,
+		MetricsSaver:             deps.MetricsSaver,
+		InsightsPoller:           deps.InsightsPoller,
+		PicksGenerator:           deps.PicksService,
+		CardLadderClient:         deps.CardLadderClient,
+		CardLadderStore:          deps.CardLadderStore,
+		CardLadderPurchaseLister: deps.PurchaseStore,
+		CardLadderValueUpdater:   deps.PurchaseStore,
+		CardLadderGemRateUpdater: deps.PurchaseStore,
+		CardLadderSyncUpdater:    deps.PurchaseStore,
+		CardLadderCLRecorder:     deps.SnapshotStore,
+		CardLadderSalesStore:     deps.CardLadderSalesStore,
+	}
+	// Wire Market Movers (nil-safe: only set if non-nil to avoid typed-nil interface issues)
+	if deps.MMClient != nil {
+		buildDeps.MMClient = deps.MMClient
+	}
+	if deps.MMStore != nil {
+		buildDeps.MMStore = deps.MMStore
+	}
+	if deps.PurchaseStore != nil {
+		buildDeps.MMPurchaseLister = deps.PurchaseStore
+		buildDeps.MMValueUpdater = deps.PurchaseStore
+	}
+	// Nil-safe interface conversion for DH dependencies.
+	if deps.DHClient != nil {
+		buildDeps.DHClient = deps.DHClient
+		buildDeps.DHOrdersClient = deps.DHClient
+		buildDeps.DHInventoryListClient = deps.DHClient
+		// Guard against typed-nil pointers: use individual stores instead of composite repo.
+		if deps.PurchaseStore != nil {
+			buildDeps.DHFieldsUpdater = deps.PurchaseStore
+			buildDeps.PurchaseByCertLookup = deps.PurchaseStore
+			buildDeps.DHPushPendingLister = deps.PurchaseStore
+			buildDeps.DHPushStatusUpdater = deps.PurchaseStore
+			buildDeps.DHPushCandidatesSaver = deps.PurchaseStore
+			buildDeps.DHPushHoldSetter = deps.PurchaseStore
+		}
+		if deps.DHStore != nil {
+			buildDeps.DHPushConfigLoader = deps.DHStore
+		}
+		if deps.CardIDMappingRepo != nil {
+			buildDeps.DHPushCardIDSaver = deps.CardIDMappingRepo
+		}
+		if deps.CampaignsService != nil {
+			buildDeps.CampaignService = deps.CampaignsService
+		}
+	}
+	if deps.DHIntelligenceRepo != nil {
+		buildDeps.DHIntelligenceRepo = deps.DHIntelligenceRepo
+	}
+	if deps.DHSuggestionsRepo != nil {
+		buildDeps.DHSuggestionsRepo = deps.DHSuggestionsRepo
+	}
+	if deps.GapStore != nil {
+		buildDeps.GapStore = deps.GapStore
+	}
+	// Wire PSA sync (nil-safe)
+	if deps.PSASheetFetcher != nil {
+		buildDeps.PSASheetFetcher = deps.PSASheetFetcher
+		buildDeps.PSAImporter = deps.CampaignsService
+		buildDeps.PSASpreadsheetID = deps.PSASpreadsheetID
+		buildDeps.PSATabName = deps.PSATabName
+	}
+
+	// Wire cert enrichment (nil-safe)
+	if deps.CertLookup != nil && deps.PurchaseStore != nil {
+		buildDeps.CertLookup = deps.CertLookup
+		buildDeps.PurchaseRepo = deps.PurchaseStore
+		buildDeps.CampaignService = deps.CampaignsService
+	}
+	// Pass pre-built CertEnrichJob so the scheduler group uses the same instance
+	// that was injected into inventory.service via WithCertEnrichEnqueuer.
+	if deps.CertEnrichJob != nil {
+		buildDeps.CertEnrichJobPrebuilt = deps.CertEnrichJob
+	}
+
+	// Wire crack cache refresh (uses inventory service for RefreshCrackCandidates).
+	if deps.CampaignsService != nil {
+		buildDeps.CrackCacheService = deps.CampaignsService
+	}
+
+	// Wire social publish (nil-safe: only set if publisher was actually configured)
+	if deps.PublisherConfigured {
+		buildDeps.SocialPublisher = deps.SocialService
+		buildDeps.SocialPublishRepo = deps.SocialRepo
+	}
+	schedulerResult := scheduler.BuildGroup(deps.Config, buildDeps)
+	schedulerResult.Group.StartAll(schedulerCtx)
+
+	return &schedulerResult, cancelScheduler
 }

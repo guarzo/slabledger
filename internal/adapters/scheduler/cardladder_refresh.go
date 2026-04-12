@@ -9,7 +9,7 @@ import (
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
 	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/mathutil"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/platform/config"
@@ -17,7 +17,7 @@ import (
 
 // CardLadderPurchaseLister lists unsold purchases with their image URLs.
 type CardLadderPurchaseLister interface {
-	ListAllUnsoldPurchases(ctx context.Context) ([]campaigns.Purchase, error)
+	ListAllUnsoldPurchases(ctx context.Context) ([]inventory.Purchase, error)
 }
 
 // CardLadderValueUpdater updates CL values on purchases.
@@ -80,7 +80,7 @@ type CardLadderRefreshScheduler struct {
 	valueUpdater   CardLadderValueUpdater
 	gemRateUpdater CardLadderGemRateUpdater
 	syncUpdater    CardLadderSyncUpdater // optional: sets cl_synced_at on push
-	clRecorder     campaigns.CLValueHistoryRecorder
+	clRecorder     inventory.CLValueHistoryRecorder
 	salesStore     *sqlite.CLSalesStore
 	dhPushUpdater  DHPushStatusUpdater // optional: re-enrolls changed items for DH push
 	logger         observability.Logger
@@ -122,7 +122,7 @@ func NewCardLadderRefreshScheduler(
 	purchaseLister CardLadderPurchaseLister,
 	valueUpdater CardLadderValueUpdater,
 	gemRateUpdater CardLadderGemRateUpdater,
-	clRecorder campaigns.CLValueHistoryRecorder,
+	clRecorder inventory.CLValueHistoryRecorder,
 	salesStore *sqlite.CLSalesStore,
 	logger observability.Logger,
 	cfg config.CardLadderConfig,
@@ -224,8 +224,8 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 	}
 
 	// Build image URL → purchase map for matching
-	imageToPurchase := make(map[string]*campaigns.Purchase, len(purchases))
-	certToPurchase := make(map[string]*campaigns.Purchase, len(purchases))
+	imageToPurchase := make(map[string]*inventory.Purchase, len(purchases))
+	certToPurchase := make(map[string]*inventory.Purchase, len(purchases))
 	for i := range purchases {
 		p := &purchases[i]
 		if p.FrontImageURL != "" {
@@ -262,7 +262,7 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 
 	for _, card := range cards {
 		// Try to find the matching purchase
-		var purchase *campaigns.Purchase
+		var purchase *inventory.Purchase
 
 		// First check if we have a cached mapping
 		if m, ok := mappingByCLCardID[card.CollectionCardID]; ok {
@@ -345,7 +345,7 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 
 		// Re-enroll already-pushed items for DH re-push when market value changes.
 		if s.dhPushUpdater != nil && purchase.DHInventoryID != 0 && newCLCents != oldCLCents {
-			if err := s.dhPushUpdater.UpdatePurchaseDHPushStatus(ctx, purchase.ID, campaigns.DHPushStatusPending); err != nil {
+			if err := s.dhPushUpdater.UpdatePurchaseDHPushStatus(ctx, purchase.ID, inventory.DHPushStatusPending); err != nil {
 				s.logger.Warn(ctx, "CL refresh: failed to re-enroll for DH push",
 					observability.String("cert", purchase.CertNumber),
 					observability.Err(err))
@@ -355,7 +355,7 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 		// Record history
 		if s.clRecorder != nil {
 			gradeValue := extractGradeValue(card.Condition)
-			if err := s.clRecorder.RecordCLValue(ctx, campaigns.CLValueEntry{
+			if err := s.clRecorder.RecordCLValue(ctx, inventory.CLValueEntry{
 				CertNumber:      purchase.CertNumber,
 				CardName:        purchase.CardName,
 				SetName:         purchase.SetName,

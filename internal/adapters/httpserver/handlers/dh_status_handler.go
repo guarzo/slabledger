@@ -6,8 +6,8 @@ import (
 	"sync"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
 	"github.com/guarzo/slabledger/internal/domain/intelligence"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
@@ -181,10 +181,10 @@ func (h *DHHandler) HandleGetStatus(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, "failed to count push statuses")
 			return
 		}
-		resp.UnmatchedCount = counts[campaigns.DHPushStatusUnmatched]
-		resp.DismissedCount = counts[campaigns.DHPushStatusDismissed]
-		resp.PendingCount = counts[campaigns.DHPushStatusPending]
-		resp.MappedCount = counts[campaigns.DHPushStatusMatched] + counts[campaigns.DHPushStatusManual]
+		resp.UnmatchedCount = counts[inventory.DHPushStatusUnmatched]
+		resp.DismissedCount = counts[inventory.DHPushStatusDismissed]
+		resp.PendingCount = counts[inventory.DHPushStatusPending]
+		resp.MappedCount = counts[inventory.DHPushStatusMatched] + counts[inventory.DHPushStatusManual]
 	}
 
 	// API health metrics

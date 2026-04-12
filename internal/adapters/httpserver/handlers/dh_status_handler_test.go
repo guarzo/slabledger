@@ -14,8 +14,8 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	"github.com/guarzo/slabledger/internal/adapters/httpserver/middleware"
 	"github.com/guarzo/slabledger/internal/domain/auth"
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
 	"github.com/guarzo/slabledger/internal/domain/intelligence"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
 )
 
@@ -104,18 +104,18 @@ func (m *mockDHCountsFetcher) GetOrders(ctx context.Context, filters dh.OrderFil
 
 // mockDHPurchaseLister implements DHPurchaseLister.
 type mockDHPurchaseLister struct {
-	ListAllUnsoldPurchasesFn func(ctx context.Context) ([]campaigns.Purchase, error)
-	GetPurchaseFn            func(ctx context.Context, id string) (*campaigns.Purchase, error)
+	ListAllUnsoldPurchasesFn func(ctx context.Context) ([]inventory.Purchase, error)
+	GetPurchaseFn            func(ctx context.Context, id string) (*inventory.Purchase, error)
 }
 
-func (m *mockDHPurchaseLister) ListAllUnsoldPurchases(ctx context.Context) ([]campaigns.Purchase, error) {
+func (m *mockDHPurchaseLister) ListAllUnsoldPurchases(ctx context.Context) ([]inventory.Purchase, error) {
 	if m.ListAllUnsoldPurchasesFn != nil {
 		return m.ListAllUnsoldPurchasesFn(ctx)
 	}
-	return []campaigns.Purchase{}, nil
+	return []inventory.Purchase{}, nil
 }
 
-func (m *mockDHPurchaseLister) GetPurchase(ctx context.Context, id string) (*campaigns.Purchase, error) {
+func (m *mockDHPurchaseLister) GetPurchase(ctx context.Context, id string) (*inventory.Purchase, error) {
 	if m.GetPurchaseFn != nil {
 		return m.GetPurchaseFn(ctx, id)
 	}
@@ -218,10 +218,10 @@ func TestHandleGetStatus_WithStatusCounters(t *testing.T) {
 	statusCounter := &mockDHStatusCounter{
 		CountUnsoldByDHPushStatusFn: func(_ context.Context) (map[string]int, error) {
 			return map[string]int{
-				campaigns.DHPushStatusUnmatched: 10,
-				campaigns.DHPushStatusPending:   5,
-				campaigns.DHPushStatusMatched:   3,
-				campaigns.DHPushStatusManual:    2,
+				inventory.DHPushStatusUnmatched: 10,
+				inventory.DHPushStatusPending:   5,
+				inventory.DHPushStatusMatched:   3,
+				inventory.DHPushStatusManual:    2,
 			}, nil
 		},
 	}
@@ -483,8 +483,8 @@ func TestHandleInventoryAlerts_NoMatches(t *testing.T) {
 		},
 	}
 	purchaseLister := &mockDHPurchaseLister{
-		ListAllUnsoldPurchasesFn: func(_ context.Context) ([]campaigns.Purchase, error) {
-			return []campaigns.Purchase{
+		ListAllUnsoldPurchasesFn: func(_ context.Context) ([]inventory.Purchase, error) {
+			return []inventory.Purchase{
 				{CardName: "Pikachu", SetName: "Base Set", CardNumber: "025"},
 			}, nil
 		},
@@ -513,8 +513,8 @@ func TestHandleInventoryAlerts_WithMatches(t *testing.T) {
 		},
 	}
 	purchaseLister := &mockDHPurchaseLister{
-		ListAllUnsoldPurchasesFn: func(_ context.Context) ([]campaigns.Purchase, error) {
-			return []campaigns.Purchase{
+		ListAllUnsoldPurchasesFn: func(_ context.Context) ([]inventory.Purchase, error) {
+			return []inventory.Purchase{
 				{CardName: "Charizard", SetName: "Base Set", CardNumber: "004"},
 				{CardName: "Pikachu", SetName: "Base Set", CardNumber: "025"},
 			}, nil
@@ -556,7 +556,7 @@ func TestHandleInventoryAlerts_PurchasesError(t *testing.T) {
 		},
 	}
 	purchaseLister := &mockDHPurchaseLister{
-		ListAllUnsoldPurchasesFn: func(_ context.Context) ([]campaigns.Purchase, error) {
+		ListAllUnsoldPurchasesFn: func(_ context.Context) ([]inventory.Purchase, error) {
 			return nil, fmt.Errorf("purchase list failed")
 		},
 	}

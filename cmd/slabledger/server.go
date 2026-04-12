@@ -15,11 +15,17 @@ import (
 	"github.com/guarzo/slabledger/internal/platform/config"
 
 	// Domain interfaces (what we depend on - Dependency Inversion Principle)
+	domainArbitrage "github.com/guarzo/slabledger/internal/domain/arbitrage"
 	domainAuth "github.com/guarzo/slabledger/internal/domain/auth"
-	domainCampaigns "github.com/guarzo/slabledger/internal/domain/campaigns"
 	domainCards "github.com/guarzo/slabledger/internal/domain/cards"
+	domainDHListing "github.com/guarzo/slabledger/internal/domain/dhlisting"
+	domainExport "github.com/guarzo/slabledger/internal/domain/export"
 	domainFavorites "github.com/guarzo/slabledger/internal/domain/favorites"
+	domainFinance "github.com/guarzo/slabledger/internal/domain/finance"
+	domainCampaigns "github.com/guarzo/slabledger/internal/domain/inventory"
+	domainPortfolio "github.com/guarzo/slabledger/internal/domain/portfolio"
 	domainPricing "github.com/guarzo/slabledger/internal/domain/pricing"
+	domainTuning "github.com/guarzo/slabledger/internal/domain/tuning"
 )
 
 // ServerDependencies bundles all dependencies required by startWebServer.
@@ -33,29 +39,34 @@ type ServerDependencies struct {
 	AuthService               domainAuth.Service
 	FavoritesService          domainFavorites.Service
 	CampaignsService          domainCampaigns.Service
+	ArbitrageService          domainArbitrage.Service
+	PortfolioService          domainPortfolio.Service
+	TuningService             domainTuning.Service
 	CacheStatsProvider        handlers.CacheStatsProvider
 	PriceHintsHandler         *handlers.PriceHintsHandler
 	CardRequestHandler        *handlers.CardRequestHandlers
 	PricingDiagnosticsHandler *handlers.PricingDiagnosticsHandler
-	CampaignsRepo             domainCampaigns.Repository       // For pricing API (cert price lookup)
-	PricingAPIKey             string                           // Bearer token; empty = pricing API disabled
-	AdvisorHandler            *handlers.AdvisorHandler         // AI advisor; nil = disabled
-	SocialHandler             *handlers.SocialHandler          // Social content; nil = disabled
-	InstagramHandler          *handlers.InstagramHandler       // Instagram publishing; nil = disabled
-	AIStatusHandler           *handlers.AIStatusHandler        // AI usage stats; nil = disabled
-	PriceFlagsHandler         *handlers.PriceFlagsHandler      // Price flag admin; nil = disabled
-	CardLadderHandler         *handlers.CardLadderHandler      // Card Ladder admin; nil = disabled
-	MarketMoversHandler       *handlers.MarketMoversHandler    // Market Movers admin; nil = disabled
-	PSASyncHandler            *handlers.PSASyncHandler         // PSA pending items + admin status; nil = disabled
-	PicksHandler              *handlers.PicksHandler           // AI picks; nil = disabled
-	OpportunitiesHandler      *handlers.OpportunitiesHandler   // Arbitrage opportunities; nil = disabled
-	DHHandler                 *handlers.DHHandler              // DH bulk match + intelligence; nil = disabled
-	DHListingService          domainCampaigns.DHListingService // optional: orchestrates DH listing after cert import
-	SellSheetItemsHandler     *handlers.SellSheetItemsHandler  // Sell sheet persistence; nil = disabled
-	CardCatalogHandler        *handlers.CardCatalogHandler     // CL card catalog search; nil = disabled
-	SheetFetcher              handlers.SheetFetcher            // optional: Google Sheets fetcher for PSA sync
-	SheetsSpreadsheetID       string                           // Google Sheets spreadsheet ID
-	SheetsTabName             string                           // Google Sheets tab name
+	CampaignsRepo             handlers.CertPriceLookup        // For pricing API (cert price lookup)
+	PricingAPIKey             string                          // Bearer token; empty = pricing API disabled
+	AdvisorHandler            *handlers.AdvisorHandler        // AI advisor; nil = disabled
+	SocialHandler             *handlers.SocialHandler         // Social content; nil = disabled
+	InstagramHandler          *handlers.InstagramHandler      // Instagram publishing; nil = disabled
+	AIStatusHandler           *handlers.AIStatusHandler       // AI usage stats; nil = disabled
+	PriceFlagsHandler         *handlers.PriceFlagsHandler     // Price flag admin; nil = disabled
+	CardLadderHandler         *handlers.CardLadderHandler     // Card Ladder admin; nil = disabled
+	MarketMoversHandler       *handlers.MarketMoversHandler   // Market Movers admin; nil = disabled
+	PSASyncHandler            *handlers.PSASyncHandler        // PSA pending items + admin status; nil = disabled
+	PicksHandler              *handlers.PicksHandler          // AI picks; nil = disabled
+	OpportunitiesHandler      *handlers.OpportunitiesHandler  // Arbitrage opportunities; nil = disabled
+	DHHandler                 *handlers.DHHandler             // DH bulk match + intelligence; nil = disabled
+	DHListingService          domainDHListing.Service         // optional: orchestrates DH listing after cert import
+	ExportService             domainExport.Service            // optional: sell sheet and eBay export
+	FinanceService            domainFinance.Service           // optional: finance operations
+	SellSheetItemsHandler     *handlers.SellSheetItemsHandler // Sell sheet persistence; nil = disabled
+	CardCatalogHandler        *handlers.CardCatalogHandler    // CL card catalog search; nil = disabled
+	SheetFetcher              handlers.SheetFetcher           // optional: Google Sheets fetcher for PSA sync
+	SheetsSpreadsheetID       string                          // Google Sheets spreadsheet ID
+	SheetsTabName             string                          // Google Sheets tab name
 }
 
 // EnvVarValidation holds the result of environment variable validation
@@ -171,11 +182,23 @@ func startWebServer(ctx context.Context, deps ServerDependencies) error {
 		if deps.DHListingService != nil {
 			opts = append(opts, handlers.WithDHListingService(deps.DHListingService))
 		}
+		if deps.FinanceService != nil {
+			opts = append(opts, handlers.WithFinanceService(deps.FinanceService))
+		}
+		if deps.ExportService != nil {
+			opts = append(opts, handlers.WithExportService(deps.ExportService))
+		}
 		if deps.SheetFetcher != nil && deps.SheetsSpreadsheetID != "" {
 			opts = append(opts, handlers.WithSheetFetcher(deps.SheetFetcher, deps.SheetsSpreadsheetID, deps.SheetsTabName))
 		}
 		campaignsHandler = handlers.NewCampaignsHandler(
-			deps.CampaignsService, logger, ctx, opts...,
+			deps.CampaignsService,
+			deps.ArbitrageService,
+			deps.PortfolioService,
+			deps.TuningService,
+			logger,
+			ctx,
+			opts...,
 		)
 		logger.Info(ctx, "Campaigns handler initialized")
 	}

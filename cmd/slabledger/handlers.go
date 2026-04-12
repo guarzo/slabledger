@@ -5,7 +5,7 @@ import (
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
-	"github.com/guarzo/slabledger/internal/adapters/clients/dhlisting"
+	dhlistingadapter "github.com/guarzo/slabledger/internal/adapters/clients/dhlisting"
 	"github.com/guarzo/slabledger/internal/adapters/clients/gsheets"
 	igclient "github.com/guarzo/slabledger/internal/adapters/clients/instagram"
 	"github.com/guarzo/slabledger/internal/adapters/clients/marketmovers"
@@ -15,13 +15,19 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
 	"github.com/guarzo/slabledger/internal/domain/advisor"
 	"github.com/guarzo/slabledger/internal/domain/ai"
+	"github.com/guarzo/slabledger/internal/domain/arbitrage"
 	"github.com/guarzo/slabledger/internal/domain/auth"
-	"github.com/guarzo/slabledger/internal/domain/campaigns"
+	"github.com/guarzo/slabledger/internal/domain/dhlisting"
+	"github.com/guarzo/slabledger/internal/domain/export"
 	"github.com/guarzo/slabledger/internal/domain/favorites"
+	"github.com/guarzo/slabledger/internal/domain/finance"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/domain/picks"
+	"github.com/guarzo/slabledger/internal/domain/portfolio"
 	"github.com/guarzo/slabledger/internal/domain/pricing"
 	"github.com/guarzo/slabledger/internal/domain/social"
+	"github.com/guarzo/slabledger/internal/domain/tuning"
 	"github.com/guarzo/slabledger/internal/platform/config"
 )
 
@@ -37,8 +43,14 @@ type handlerInputs struct {
 	PriceRepo         *sqlite.DBTracker
 	AuthService       auth.Service
 	FavoritesService  favorites.Service
-	CampaignsService  campaigns.Service
-	CampaignsRepo     *sqlite.CampaignsRepository
+	CampaignsService  inventory.Service
+	ArbitrageService  arbitrage.Service
+	PortfolioService  portfolio.Service
+	TuningService     tuning.Service
+	FinanceService    finance.Service
+	ExportService     export.Service
+	PurchaseStore     *sqlite.PurchaseStore
+	SellSheetStore    *sqlite.SellSheetStore
 	CardIDMappingRepo *sqlite.CardIDMappingRepository
 	CardRequestRepo   *sqlite.CardRequestRepository
 	IntelRepo         *sqlite.MarketIntelligenceRepository
@@ -61,6 +73,7 @@ type handlerInputs struct {
 	SchedulerResult   *scheduler.BuildResult
 	GSheetsClient     *gsheets.Client
 	PendingItemsRepo  *sqlite.PendingItemsRepository
+	IDGen             func() string
 }
 
 // handlerOutputs holds the constructed handlers that are also needed post-
@@ -86,8 +99,8 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 	var mmHandler *handlers.MarketMoversHandler
 	if in.MMStore != nil {
 		mmHandler = handlers.NewMarketMoversHandler(in.MMStore, in.MMClient, logger)
-		if in.CampaignsRepo != nil {
-			mmHandler.SetPurchaseLister(in.CampaignsRepo)
+		if in.PurchaseStore != nil {
+			mmHandler.SetPurchaseLister(in.PurchaseStore)
 		}
 	}
 
@@ -120,8 +133,8 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 
 	// Opportunities (arbitrage endpoints)
 	var opportunitiesHandler *handlers.OpportunitiesHandler
-	if in.CampaignsService != nil {
-		opportunitiesHandler = handlers.NewOpportunitiesHandler(in.CampaignsService, logger)
+	if in.ArbitrageService != nil {
+		opportunitiesHandler = handlers.NewOpportunitiesHandler(in.ArbitrageService, logger)
 	}
 
 	// DH handler (bulk match + intelligence; nil when client is not configured)
@@ -130,12 +143,12 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 		dhHandler = handlers.NewDHHandler(handlers.DHHandlerDeps{
 			CertResolver:      in.DHClient,
 			CardIDSaver:       in.CardIDMappingRepo,
-			PurchaseLister:    in.CampaignsRepo,
+			PurchaseLister:    in.PurchaseStore,
 			InventoryPusher:   in.DHClient,
-			DHFieldsUpdater:   in.CampaignsRepo,
-			PushStatusUpdater: in.CampaignsRepo,
-			CandidatesSaver:   in.CampaignsRepo,
-			StatusCounter:     in.CampaignsRepo,
+			DHFieldsUpdater:   in.PurchaseStore,
+			PushStatusUpdater: in.PurchaseStore,
+			CandidatesSaver:   in.PurchaseStore,
+			StatusCounter:     in.PurchaseStore,
 			IntelRepo:         in.IntelRepo,
 			SuggestionsRepo:   in.SuggestionsRepo,
 			IntelCounter:      in.IntelRepo,
@@ -151,7 +164,7 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 	}
 
 	// Sell sheet items handler
-	sellSheetItemsHandler := handlers.NewSellSheetItemsHandler(in.CampaignsRepo, logger)
+	sellSheetItemsHandler := handlers.NewSellSheetItemsHandler(in.SellSheetStore, logger)
 
 	// Card catalog handler (CL card catalog search; nil when CL is not configured)
 	var cardCatalogHandler *handlers.CardCatalogHandler
@@ -160,16 +173,16 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 	}
 
 	// Wire Card Ladder manual refresh into the handler
-	if clHandler != nil && in.SchedulerResult.CardLadderRefresh != nil {
+	if clHandler != nil && in.SchedulerResult != nil && in.SchedulerResult.CardLadderRefresh != nil {
 		clHandler.SetRefresher(in.SchedulerResult.CardLadderRefresh)
 	}
-	if clHandler != nil && in.CampaignsRepo != nil {
-		clHandler.SetPurchaseLister(in.CampaignsRepo)
-		clHandler.SetSyncUpdater(in.CampaignsRepo)
+	if clHandler != nil && in.PurchaseStore != nil {
+		clHandler.SetPurchaseLister(in.PurchaseStore)
+		clHandler.SetSyncUpdater(in.PurchaseStore)
 	}
 
 	// Wire Market Movers manual refresh into the handler
-	if mmHandler != nil && in.SchedulerResult.MMRefresh != nil {
+	if mmHandler != nil && in.SchedulerResult != nil && in.SchedulerResult.MMRefresh != nil {
 		mmHandler.SetRefresher(in.SchedulerResult.MMRefresh)
 	}
 
@@ -230,11 +243,14 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 		AuthService:               in.AuthService,
 		FavoritesService:          in.FavoritesService,
 		CampaignsService:          in.CampaignsService,
+		ArbitrageService:          in.ArbitrageService,
+		PortfolioService:          in.PortfolioService,
+		TuningService:             in.TuningService,
 		CacheStatsProvider:        in.CardProvImpl,
 		PriceHintsHandler:         priceHintsHandler,
 		CardRequestHandler:        cardRequestHandler,
 		PricingDiagnosticsHandler: pricingDiagHandler,
-		CampaignsRepo:             in.CampaignsRepo,
+		CampaignsRepo:             in.PurchaseStore,
 		PricingAPIKey:             in.Cfg.Adapters.PricingAPIKey,
 		AdvisorHandler:            advisorHandler,
 		SocialHandler:             socialHandler,
@@ -253,22 +269,22 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 	// Build DHListingService from available components.
 	// Nil-safe: only create the service if at least the lister client is available.
 	if in.DHClient != nil {
-		listingOpts := []campaigns.DHListingServiceOption{
-			campaigns.WithDHListingLister(dhlisting.NewInventoryListerAdapter(in.DHClient)),
-			campaigns.WithDHListingCertResolver(dhlisting.NewCertResolverAdapter(in.DHClient)),
-			campaigns.WithDHListingPusher(dhlisting.NewInventoryPusherAdapter(in.DHClient)),
+		listingOpts := []dhlisting.DHListingServiceOption{
+			dhlisting.WithDHListingLister(dhlistingadapter.NewInventoryListerAdapter(in.DHClient)),
+			dhlisting.WithDHListingCertResolver(dhlistingadapter.NewCertResolverAdapter(in.DHClient)),
+			dhlisting.WithDHListingPusher(dhlistingadapter.NewInventoryPusherAdapter(in.DHClient)),
 		}
-		if in.CampaignsRepo != nil {
+		if in.PurchaseStore != nil {
 			listingOpts = append(listingOpts,
-				campaigns.WithDHListingFieldsUpdater(in.CampaignsRepo),
-				campaigns.WithDHListingPushStatusUpdater(in.CampaignsRepo),
-				campaigns.WithDHListingCandidatesSaver(in.CampaignsRepo),
+				dhlisting.WithDHListingFieldsUpdater(in.PurchaseStore),
+				dhlisting.WithDHListingPushStatusUpdater(in.PurchaseStore),
+				dhlisting.WithDHListingCandidatesSaver(in.PurchaseStore),
 			)
 		}
 		if in.CardIDMappingRepo != nil {
-			listingOpts = append(listingOpts, campaigns.WithDHListingCardIDSaver(in.CardIDMappingRepo))
+			listingOpts = append(listingOpts, dhlisting.WithDHListingCardIDSaver(in.CardIDMappingRepo))
 		}
-		svc, err := campaigns.NewDHListingService(
+		svc, err := dhlisting.NewDHListingService(
 			in.CampaignsService, in.Logger, listingOpts...,
 		)
 		if err != nil {
@@ -277,6 +293,10 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 			deps.DHListingService = svc
 		}
 	}
+
+	// Wire services from initialization
+	deps.ExportService = in.ExportService
+	deps.FinanceService = in.FinanceService
 
 	// Wire Google Sheets for PSA sync (if client + spreadsheet configured)
 	if in.GSheetsClient != nil && in.Cfg.GoogleSheets.SpreadsheetID != "" {

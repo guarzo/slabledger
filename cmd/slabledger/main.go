@@ -10,6 +10,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/google/uuid"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/platform/config"
 	"github.com/guarzo/slabledger/internal/platform/telemetry"
@@ -21,6 +22,7 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/clients/google"
 	"github.com/guarzo/slabledger/internal/adapters/clients/gsheets"
 	"github.com/guarzo/slabledger/internal/adapters/clients/tcgdex"
+	scoringadapter "github.com/guarzo/slabledger/internal/adapters/scoring"
 	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
 	"github.com/guarzo/slabledger/internal/domain/auth"
 	"github.com/guarzo/slabledger/internal/domain/favorites"
@@ -277,9 +279,17 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		mmStore = sqlite.NewMarketMoversStore(db.DB, clEncryptor)
 	}
 
-	campaignsService, campaignsRepo, cardRequestRepo := initializeCampaignsService(
+	campaignsInit := initializeCampaignsService(
 		ctx, cfg, logger, db, priceProvImpl, intelRepo, mmStore,
 	)
+	campaignsService := campaignsInit.service
+	cardRequestRepo := campaignsInit.cardRequestRepo
+	certLookup := campaignsInit.certLookup
+	arbSvc := campaignsInit.arbSvc
+	portSvc := campaignsInit.portSvc
+	tuningSvc := campaignsInit.tuningSvc
+	financeService := campaignsInit.financeService
+	exportService := campaignsInit.exportService
 
 	// Sync state repository (for delta poll timestamps)
 	syncStateRepo := sqlite.NewSyncStateRepository(db.DB)
@@ -293,10 +303,21 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		advisortool.WithIntelligenceRepo(intelRepo),
 		advisortool.WithSuggestionsRepo(suggestionsRepo),
 		advisortool.WithGapStore(gapStore),
+		advisortool.WithArbitrageService(arbSvc),
+		advisortool.WithPortfolioService(portSvc),
+		advisortool.WithTuningService(tuningSvc),
+		advisortool.WithFinanceService(financeService),
+		advisortool.WithExportService(exportService),
 	}
 
 	azureAIClient, advisorService, advisorCacheRepo, err := initializeAdvisorService(
-		ctx, cfg, logger, db, aiCallRepo, campaignsService, advisorToolOpts...,
+		ctx, cfg, logger, db, aiCallRepo, campaignsService,
+		[]scoringadapter.ProviderOption{
+			scoringadapter.WithArbitrageService(arbSvc),
+			scoringadapter.WithPortfolioService(portSvc),
+			scoringadapter.WithTuningService(tuningSvc),
+		},
+		advisorToolOpts...,
 	)
 	if err != nil {
 		return err
@@ -346,8 +367,13 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		AuthService:          authService,
 		SyncStateRepo:        syncStateRepo,
 		CardIDMappingRepo:    cardIDMappingRepo,
-		CampaignsRepo:        campaignsRepo,
+		CampaignStore:        campaignsInit.campaignStore,
+		PurchaseStore:        campaignsInit.purchaseStore,
+		DHStore:              campaignsInit.dhStore,
+		SnapshotStore:        campaignsInit.snapshotStore,
 		CampaignsService:     campaignsService,
+		CertLookup:           certLookup,
+		CertEnrichJob:        campaignsInit.certEnrichJob,
 		AdvisorService:       advisorService,
 		AdvisorCacheRepo:     advisorCacheRepo,
 		AICallRepo:           aiCallRepo,
@@ -389,7 +415,13 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		AuthService:       authService,
 		FavoritesService:  favoritesService,
 		CampaignsService:  campaignsService,
-		CampaignsRepo:     campaignsRepo,
+		ArbitrageService:  arbSvc,
+		PortfolioService:  portSvc,
+		TuningService:     tuningSvc,
+		FinanceService:    financeService,
+		ExportService:     exportService,
+		PurchaseStore:     campaignsInit.purchaseStore,
+		SellSheetStore:    campaignsInit.sellSheetStore,
 		CardIDMappingRepo: cardIDMappingRepo,
 		CardRequestRepo:   cardRequestRepo,
 		IntelRepo:         intelRepo,
@@ -412,6 +444,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		SchedulerResult:   schedulerResult,
 		GSheetsClient:     gsheetsClient,
 		PendingItemsRepo:  pendingItemsRepo,
+		IDGen:             uuid.NewString,
 	})
 	serverErr := startWebServer(ctx, deps)
 
