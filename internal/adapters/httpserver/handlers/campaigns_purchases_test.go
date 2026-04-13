@@ -307,9 +307,21 @@ func TestHandleCertLookup(t *testing.T) {
 			method:     http.MethodGet,
 			certNumber: "99999999",
 			lookupFn: func(_ context.Context, _ string) (*inventory.CertInfo, *inventory.MarketSnapshot, error) {
-				return nil, nil, fmt.Errorf("cert not found")
+				return nil, nil, fmt.Errorf("cert lookup: %w", inventory.ErrCertNotFound)
 			},
 			expectedStatus: http.StatusNotFound,
+			checkBody: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				decodeErrorResponse(t, rec)
+			},
+		},
+		{
+			name:       "internal error returns 500",
+			method:     http.MethodGet,
+			certNumber: "99999999",
+			lookupFn: func(_ context.Context, _ string) (*inventory.CertInfo, *inventory.MarketSnapshot, error) {
+				return nil, nil, fmt.Errorf("database connection failed")
+			},
+			expectedStatus: http.StatusInternalServerError,
 			checkBody: func(t *testing.T, rec *httptest.ResponseRecorder) {
 				decodeErrorResponse(t, rec)
 			},
@@ -493,4 +505,498 @@ func TestHandleReassignPurchase_NotFound(t *testing.T) {
 		t.Fatalf("expected 404, got %d; body: %s", rec.Code, rec.Body.String())
 	}
 	decodeErrorResponse(t, rec)
+}
+
+// --- HandleBulkSales ---
+
+func TestHandleBulkSales(t *testing.T) {
+	tests := []struct {
+		name       string
+		svc        *mocks.MockInventoryService
+		body       string
+		wantStatus int
+		checkBody  func(t *testing.T, rec *httptest.ResponseRecorder)
+	}{
+		{
+			name: "success",
+			svc: &mocks.MockInventoryService{
+				CreateBulkSalesFn: func(_ context.Context, _ string, _ inventory.SaleChannel, _ string, items []inventory.BulkSaleInput) (*inventory.BulkSaleResult, error) {
+					return &inventory.BulkSaleResult{Created: len(items)}, nil
+				},
+			},
+			body:       `{"saleChannel":"ebay","saleDate":"2026-01-01","items":[{"purchaseId":"p-1","salePriceCents":5000},{"purchaseId":"p-2","salePriceCents":6000}]}`,
+			wantStatus: http.StatusCreated,
+		},
+		{
+			name:       "no items returns 400",
+			svc:        &mocks.MockInventoryService{},
+			body:       `{"saleChannel":"ebay","saleDate":"2026-01-01","items":[]}`,
+			wantStatus: http.StatusBadRequest,
+			checkBody:  func(t *testing.T, rec *httptest.ResponseRecorder) { decodeErrorResponse(t, rec) },
+		},
+		{
+			name: "service error returns 500",
+			svc: &mocks.MockInventoryService{
+				CreateBulkSalesFn: func(_ context.Context, _ string, _ inventory.SaleChannel, _ string, _ []inventory.BulkSaleInput) (*inventory.BulkSaleResult, error) {
+					return nil, fmt.Errorf("db error")
+				},
+			},
+			body:       `{"saleChannel":"ebay","saleDate":"2026-01-01","items":[{"purchaseId":"p-1","salePriceCents":5000}]}`,
+			wantStatus: http.StatusInternalServerError,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := newTestHandler(tt.svc)
+			req := httptest.NewRequest(http.MethodPost, "/api/campaigns/c-1/sales/bulk", strings.NewReader(tt.body))
+			req.SetPathValue("id", "c-1")
+			rec := httptest.NewRecorder()
+			h.HandleBulkSales(rec, req)
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("expected %d, got %d; body: %s", tt.wantStatus, rec.Code, rec.Body.String())
+			}
+			if tt.checkBody != nil {
+				tt.checkBody(t, rec)
+			}
+		})
+	}
+}
+
+// --- HandleDeletePurchase ---
+
+func TestHandleDeletePurchase(t *testing.T) {
+	tests := []struct {
+		name       string
+		svc        *mocks.MockInventoryService
+		campaignID string
+		purchaseID string
+		wantStatus int
+		checkBody  func(t *testing.T, rec *httptest.ResponseRecorder)
+	}{
+		{
+			name: "success",
+			svc: &mocks.MockInventoryService{
+				GetPurchaseFn: func(_ context.Context, id string) (*inventory.Purchase, error) {
+					return &inventory.Purchase{ID: id, CampaignID: "c-1"}, nil
+				},
+				DeletePurchaseFn: func(_ context.Context, _ string) error { return nil },
+			},
+			campaignID: "c-1",
+			purchaseID: "p-1",
+			wantStatus: http.StatusNoContent,
+		},
+		{
+			name: "purchase not found returns 404",
+			svc: &mocks.MockInventoryService{
+				GetPurchaseFn: func(_ context.Context, _ string) (*inventory.Purchase, error) {
+					return nil, inventory.ErrPurchaseNotFound
+				},
+			},
+			campaignID: "c-1",
+			purchaseID: "missing",
+			wantStatus: http.StatusNotFound,
+			checkBody:  func(t *testing.T, rec *httptest.ResponseRecorder) { decodeErrorResponse(t, rec) },
+		},
+		{
+			name: "wrong campaign returns 403",
+			svc: &mocks.MockInventoryService{
+				GetPurchaseFn: func(_ context.Context, id string) (*inventory.Purchase, error) {
+					return &inventory.Purchase{ID: id, CampaignID: "other-campaign"}, nil
+				},
+			},
+			campaignID: "c-1",
+			purchaseID: "p-1",
+			wantStatus: http.StatusForbidden,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := newTestHandler(tt.svc)
+			req := httptest.NewRequest(http.MethodDelete, "/api/campaigns/"+tt.campaignID+"/purchases/"+tt.purchaseID, nil)
+			req.SetPathValue("id", tt.campaignID)
+			req.SetPathValue("purchaseId", tt.purchaseID)
+			rec := httptest.NewRecorder()
+			h.HandleDeletePurchase(rec, req)
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("expected %d, got %d; body: %s", tt.wantStatus, rec.Code, rec.Body.String())
+			}
+			if tt.checkBody != nil {
+				tt.checkBody(t, rec)
+			}
+		})
+	}
+}
+
+// --- HandleDeleteSale ---
+
+func TestHandleDeleteSale(t *testing.T) {
+	tests := []struct {
+		name       string
+		svc        *mocks.MockInventoryService
+		wantStatus int
+		checkBody  func(t *testing.T, rec *httptest.ResponseRecorder)
+	}{
+		{
+			name: "success",
+			svc: &mocks.MockInventoryService{
+				GetPurchaseFn: func(_ context.Context, id string) (*inventory.Purchase, error) {
+					return &inventory.Purchase{ID: id, CampaignID: "c-1"}, nil
+				},
+				DeleteSaleByPurchaseIDFn: func(_ context.Context, _ string) error { return nil },
+			},
+			wantStatus: http.StatusNoContent,
+		},
+		{
+			name: "sale not found returns 404",
+			svc: &mocks.MockInventoryService{
+				GetPurchaseFn: func(_ context.Context, id string) (*inventory.Purchase, error) {
+					return &inventory.Purchase{ID: id, CampaignID: "c-1"}, nil
+				},
+				DeleteSaleByPurchaseIDFn: func(_ context.Context, _ string) error {
+					return inventory.ErrSaleNotFound
+				},
+			},
+			wantStatus: http.StatusNotFound,
+			checkBody:  func(t *testing.T, rec *httptest.ResponseRecorder) { decodeErrorResponse(t, rec) },
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := newTestHandler(tt.svc)
+			req := httptest.NewRequest(http.MethodDelete, "/api/campaigns/c-1/purchases/p-1/sale", nil)
+			req.SetPathValue("id", "c-1")
+			req.SetPathValue("purchaseId", "p-1")
+			rec := httptest.NewRecorder()
+			h.HandleDeleteSale(rec, req)
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("expected %d, got %d; body: %s", tt.wantStatus, rec.Code, rec.Body.String())
+			}
+			if tt.checkBody != nil {
+				tt.checkBody(t, rec)
+			}
+		})
+	}
+}
+
+// --- HandleQuickAdd ---
+
+func TestHandleQuickAdd(t *testing.T) {
+	tests := []struct {
+		name       string
+		svc        *mocks.MockInventoryService
+		campaignID string
+		body       string
+		wantStatus int
+	}{
+		{
+			name: "success",
+			svc: &mocks.MockInventoryService{
+				QuickAddPurchaseFn: func(_ context.Context, campaignID string, _ inventory.QuickAddRequest) (*inventory.Purchase, error) {
+					return &inventory.Purchase{ID: "p-new", CampaignID: campaignID}, nil
+				},
+			},
+			campaignID: "c-1",
+			body:       `{"certNumber":"12345","buyCostCents":5000}`,
+			wantStatus: http.StatusCreated,
+		},
+		{
+			name: "duplicate cert returns 409",
+			svc: &mocks.MockInventoryService{
+				QuickAddPurchaseFn: func(_ context.Context, _ string, _ inventory.QuickAddRequest) (*inventory.Purchase, error) {
+					return nil, inventory.ErrDuplicateCertNumber
+				},
+			},
+			campaignID: "c-1",
+			body:       `{"certNumber":"12345","buyCostCents":5000}`,
+			wantStatus: http.StatusConflict,
+		},
+		{
+			name: "campaign not found returns 404",
+			svc: &mocks.MockInventoryService{
+				QuickAddPurchaseFn: func(_ context.Context, _ string, _ inventory.QuickAddRequest) (*inventory.Purchase, error) {
+					return nil, inventory.ErrCampaignNotFound
+				},
+			},
+			campaignID: "missing",
+			body:       `{"certNumber":"99999"}`,
+			wantStatus: http.StatusNotFound,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := newTestHandler(tt.svc)
+			req := httptest.NewRequest(http.MethodPost, "/api/campaigns/"+tt.campaignID+"/purchases/quick-add", strings.NewReader(tt.body))
+			req.SetPathValue("id", tt.campaignID)
+			rec := httptest.NewRecorder()
+			h.HandleQuickAdd(rec, req)
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("expected %d, got %d; body: %s", tt.wantStatus, rec.Code, rec.Body.String())
+			}
+		})
+	}
+}
+
+// --- HandlePriceOverrideStats ---
+
+func TestHandlePriceOverrideStats(t *testing.T) {
+	tests := []struct {
+		name       string
+		svc        *mocks.MockInventoryService
+		wantStatus int
+		checkBody  func(t *testing.T, rec *httptest.ResponseRecorder)
+	}{
+		{
+			name: "success returns stats",
+			svc: &mocks.MockInventoryService{
+				GetPriceOverrideStatsFn: func(_ context.Context) (*inventory.PriceOverrideStats, error) {
+					return &inventory.PriceOverrideStats{OverrideCount: 3}, nil
+				},
+			},
+			wantStatus: http.StatusOK,
+			checkBody: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				var result inventory.PriceOverrideStats
+				if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+					t.Fatalf("decode: %v", err)
+				}
+				if result.OverrideCount != 3 {
+					t.Errorf("expected OverrideCount=3, got %d", result.OverrideCount)
+				}
+			},
+		},
+		{
+			name: "service error returns 500",
+			svc: &mocks.MockInventoryService{
+				GetPriceOverrideStatsFn: func(_ context.Context) (*inventory.PriceOverrideStats, error) {
+					return nil, fmt.Errorf("db error")
+				},
+			},
+			wantStatus: http.StatusInternalServerError,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := newTestHandler(tt.svc)
+			req := httptest.NewRequest(http.MethodGet, "/api/admin/price-override-stats", nil)
+			rec := httptest.NewRecorder()
+			h.HandlePriceOverrideStats(rec, req)
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("expected %d, got %d; body: %s", tt.wantStatus, rec.Code, rec.Body.String())
+			}
+			if tt.checkBody != nil {
+				tt.checkBody(t, rec)
+			}
+		})
+	}
+}
+
+// --- HandleSetPriceOverride ---
+
+func TestHandleSetPriceOverride(t *testing.T) {
+	tests := []struct {
+		name       string
+		svc        *mocks.MockInventoryService
+		purchaseID string
+		body       string
+		wantStatus int
+	}{
+		{
+			name: "success",
+			svc: &mocks.MockInventoryService{
+				SetPriceOverrideFn: func(_ context.Context, _ string, _ int, _ string) error { return nil },
+			},
+			purchaseID: "p-1",
+			body:       `{"priceCents":9900,"source":"manual"}`,
+			wantStatus: http.StatusNoContent,
+		},
+		{
+			name: "not found returns 404",
+			svc: &mocks.MockInventoryService{
+				SetPriceOverrideFn: func(_ context.Context, _ string, _ int, _ string) error {
+					return inventory.ErrPurchaseNotFound
+				},
+			},
+			purchaseID: "missing",
+			body:       `{"priceCents":9900,"source":"manual"}`,
+			wantStatus: http.StatusNotFound,
+		},
+		{
+			name: "validation error returns 400",
+			svc: &mocks.MockInventoryService{
+				SetPriceOverrideFn: func(_ context.Context, _ string, _ int, _ string) error {
+					return domainerrors.NewAppError(inventory.ErrCodeCampaignValidation, "priceCents must be >= 0")
+				},
+			},
+			purchaseID: "p-1",
+			body:       `{"priceCents":-1,"source":"manual"}`,
+			wantStatus: http.StatusBadRequest,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := newTestHandler(tt.svc)
+			req := httptest.NewRequest(http.MethodPatch, "/api/purchases/"+tt.purchaseID+"/price-override", strings.NewReader(tt.body))
+			req.SetPathValue("purchaseId", tt.purchaseID)
+			rec := httptest.NewRecorder()
+			h.HandleSetPriceOverride(rec, req)
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("expected %d, got %d; body: %s", tt.wantStatus, rec.Code, rec.Body.String())
+			}
+		})
+	}
+}
+
+// --- HandleClearPriceOverride ---
+
+func TestHandleClearPriceOverride(t *testing.T) {
+	tests := []struct {
+		name       string
+		svc        *mocks.MockInventoryService
+		purchaseID string
+		wantStatus int
+		checkBody  func(t *testing.T, rec *httptest.ResponseRecorder)
+	}{
+		{
+			name: "success",
+			svc: &mocks.MockInventoryService{
+				SetPriceOverrideFn: func(_ context.Context, _ string, _ int, _ string) error { return nil },
+			},
+			purchaseID: "p-1",
+			wantStatus: http.StatusNoContent,
+		},
+		{
+			name: "not found returns 404",
+			svc: &mocks.MockInventoryService{
+				SetPriceOverrideFn: func(_ context.Context, _ string, _ int, _ string) error {
+					return inventory.ErrPurchaseNotFound
+				},
+			},
+			purchaseID: "missing",
+			wantStatus: http.StatusNotFound,
+			checkBody:  func(t *testing.T, rec *httptest.ResponseRecorder) { decodeErrorResponse(t, rec) },
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := newTestHandler(tt.svc)
+			req := httptest.NewRequest(http.MethodDelete, "/api/purchases/"+tt.purchaseID+"/price-override", nil)
+			req.SetPathValue("purchaseId", tt.purchaseID)
+			rec := httptest.NewRecorder()
+			h.HandleClearPriceOverride(rec, req)
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("expected %d, got %d; body: %s", tt.wantStatus, rec.Code, rec.Body.String())
+			}
+			if tt.checkBody != nil {
+				tt.checkBody(t, rec)
+			}
+		})
+	}
+}
+
+// --- HandleAcceptAISuggestion ---
+
+func TestHandleAcceptAISuggestion(t *testing.T) {
+	tests := []struct {
+		name       string
+		svc        *mocks.MockInventoryService
+		purchaseID string
+		wantStatus int
+	}{
+		{
+			name: "success",
+			svc: &mocks.MockInventoryService{
+				AcceptAISuggestionFn: func(_ context.Context, _ string) error { return nil },
+			},
+			purchaseID: "p-1",
+			wantStatus: http.StatusNoContent,
+		},
+		{
+			name: "no suggestion returns 409",
+			svc: &mocks.MockInventoryService{
+				AcceptAISuggestionFn: func(_ context.Context, _ string) error {
+					return inventory.ErrNoAISuggestion
+				},
+			},
+			purchaseID: "p-1",
+			wantStatus: http.StatusConflict,
+		},
+		{
+			name: "not found returns 404",
+			svc: &mocks.MockInventoryService{
+				AcceptAISuggestionFn: func(_ context.Context, _ string) error {
+					return inventory.ErrPurchaseNotFound
+				},
+			},
+			purchaseID: "missing",
+			wantStatus: http.StatusNotFound,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := newTestHandler(tt.svc)
+			req := httptest.NewRequest(http.MethodPost, "/api/purchases/"+tt.purchaseID+"/accept-ai-suggestion", nil)
+			req.SetPathValue("purchaseId", tt.purchaseID)
+			rec := httptest.NewRecorder()
+			h.HandleAcceptAISuggestion(rec, req)
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("expected %d, got %d; body: %s", tt.wantStatus, rec.Code, rec.Body.String())
+			}
+		})
+	}
+}
+
+// --- HandleDismissAISuggestion ---
+
+func TestHandleDismissAISuggestion(t *testing.T) {
+	tests := []struct {
+		name       string
+		svc        *mocks.MockInventoryService
+		purchaseID string
+		wantStatus int
+		checkBody  func(t *testing.T, rec *httptest.ResponseRecorder)
+	}{
+		{
+			name: "success",
+			svc: &mocks.MockInventoryService{
+				DismissAISuggestionFn: func(_ context.Context, _ string) error { return nil },
+			},
+			purchaseID: "p-1",
+			wantStatus: http.StatusNoContent,
+		},
+		{
+			name: "not found returns 404",
+			svc: &mocks.MockInventoryService{
+				DismissAISuggestionFn: func(_ context.Context, _ string) error {
+					return inventory.ErrPurchaseNotFound
+				},
+			},
+			purchaseID: "missing",
+			wantStatus: http.StatusNotFound,
+			checkBody:  func(t *testing.T, rec *httptest.ResponseRecorder) { decodeErrorResponse(t, rec) },
+		},
+		{
+			name: "service error returns 500",
+			svc: &mocks.MockInventoryService{
+				DismissAISuggestionFn: func(_ context.Context, _ string) error {
+					return fmt.Errorf("db error")
+				},
+			},
+			purchaseID: "p-1",
+			wantStatus: http.StatusInternalServerError,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := newTestHandler(tt.svc)
+			req := httptest.NewRequest(http.MethodDelete, "/api/purchases/"+tt.purchaseID+"/ai-suggestion", nil)
+			req.SetPathValue("purchaseId", tt.purchaseID)
+			rec := httptest.NewRecorder()
+			h.HandleDismissAISuggestion(rec, req)
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("expected %d, got %d; body: %s", tt.wantStatus, rec.Code, rec.Body.String())
+			}
+			if tt.checkBody != nil {
+				tt.checkBody(t, rec)
+			}
+		})
+	}
 }

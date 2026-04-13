@@ -248,8 +248,12 @@ func (h *CampaignsHandler) HandleCertLookup(w http.ResponseWriter, r *http.Reque
 	}
 	info, snapshot, err := h.service.LookupCert(r.Context(), certNumber)
 	if err != nil {
+		if inventory.IsCertNotFound(err) {
+			writeError(w, http.StatusNotFound, "cert not found")
+			return
+		}
 		h.logger.Error(r.Context(), "cert lookup failed", observability.Err(err), observability.String("cert", certNumber))
-		writeError(w, http.StatusNotFound, "cert lookup failed")
+		writeError(w, http.StatusInternalServerError, "cert lookup failed")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
