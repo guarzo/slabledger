@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/guarzo/slabledger/internal/domain/ai"
@@ -66,7 +67,7 @@ func makePurchaseCards(n int) []PostCardDetail {
 	cards := make([]PostCardDetail, n)
 	for i := range cards {
 		cards[i] = PostCardDetail{
-			PurchaseID: string(rune('A' + i)), // "A", "B", ...
+			PurchaseID: fmt.Sprintf("p%d", i),
 			CardName:   "Charizard",
 			SetName:    "Base Set",
 			GradeValue: 9.0,

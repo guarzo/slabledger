@@ -85,6 +85,13 @@ func (s *service) GetCrackCandidates(ctx context.Context, campaignID string) ([]
 
 // crackCandidatesForCampaign computes crack candidates for an already-loaded campaign.
 func (s *service) crackCandidatesForCampaign(ctx context.Context, campaign *inventory.Campaign) ([]CrackAnalysis, error) {
+	if s.priceProv == nil {
+		if s.logger != nil {
+			s.logger.Info(ctx, "skipping crack candidates",
+				observability.String("reason", "price provider not configured"))
+		}
+		return []CrackAnalysis{}, nil
+	}
 	unsold, err := s.purchases.ListUnsoldPurchases(ctx, campaign.ID)
 	if err != nil {
 		return nil, err
@@ -107,26 +114,24 @@ func (s *service) crackCandidatesForCampaign(ctx context.Context, campaign *inve
 
 		rawCents := 0
 		gradedCents := 0
-		if s.priceProv != nil {
-			if v, err := s.priceProv.GetLastSoldCents(ctx, card, 0); err != nil {
-				if s.logger != nil {
-					s.logger.Warn(ctx, "crack analysis: raw price lookup failed",
-						observability.String("cardName", p.CardName),
-						observability.Err(err))
-				}
-			} else {
-				rawCents = v
+		if v, err := s.priceProv.GetLastSoldCents(ctx, card, 0); err != nil {
+			if s.logger != nil {
+				s.logger.Warn(ctx, "crack analysis: raw price lookup failed",
+					observability.String("cardName", p.CardName),
+					observability.Err(err))
 			}
-			if v, err := s.priceProv.GetLastSoldCents(ctx, card, p.GradeValue); err != nil {
-				if s.logger != nil {
-					s.logger.Warn(ctx, "crack analysis: graded price lookup failed",
-						observability.String("cardName", p.CardName),
-						observability.Float64("grade", p.GradeValue),
-						observability.Err(err))
-				}
-			} else {
-				gradedCents = v
+		} else {
+			rawCents = v
+		}
+		if v, err := s.priceProv.GetLastSoldCents(ctx, card, p.GradeValue); err != nil {
+			if s.logger != nil {
+				s.logger.Warn(ctx, "crack analysis: graded price lookup failed",
+					observability.String("cardName", p.CardName),
+					observability.Float64("grade", p.GradeValue),
+					observability.Err(err))
 			}
+		} else {
+			gradedCents = v
 		}
 
 		if rawCents == 0 {
@@ -154,6 +159,13 @@ func (s *service) crackCandidatesForCampaign(ctx context.Context, campaign *inve
 // GetCrackOpportunities returns cross-campaign crack opportunities, computed on demand.
 // Uses a single ListAllUnsoldPurchases call to avoid N+1 DB queries.
 func (s *service) GetCrackOpportunities(ctx context.Context) ([]CrackAnalysis, error) {
+	if s.priceProv == nil {
+		if s.logger != nil {
+			s.logger.Info(ctx, "skipping crack opportunities",
+				observability.String("reason", "price provider not configured"))
+		}
+		return []CrackAnalysis{}, nil
+	}
 	allCampaigns, err := s.campaigns.ListCampaigns(ctx, true)
 	if err != nil {
 		return nil, fmt.Errorf("list active campaigns: %w", err)
@@ -182,32 +194,35 @@ func (s *service) GetCrackOpportunities(ctx context.Context) ([]CrackAnalysis, e
 		}
 		ebayFee, ok := ebayFeeMap[p.CampaignID]
 		if !ok {
-			continue // purchase belongs to a non-active campaign
+			if s.logger != nil {
+				s.logger.Debug(ctx, "crack analysis: skipping purchase — campaign not active",
+					observability.String("purchaseID", p.ID),
+					observability.String("campaignID", p.CampaignID))
+			}
+			continue
 		}
 		card := p.ToCardIdentity()
 
 		rawCents := 0
 		gradedCents := 0
-		if s.priceProv != nil {
-			if v, err := s.priceProv.GetLastSoldCents(ctx, card, 0); err != nil {
-				if s.logger != nil {
-					s.logger.Warn(ctx, "crack analysis: raw price lookup failed",
-						observability.String("cardName", p.CardName),
-						observability.Err(err))
-				}
-			} else {
-				rawCents = v
+		if v, err := s.priceProv.GetLastSoldCents(ctx, card, 0); err != nil {
+			if s.logger != nil {
+				s.logger.Warn(ctx, "crack analysis: raw price lookup failed",
+					observability.String("cardName", p.CardName),
+					observability.Err(err))
 			}
-			if v, err := s.priceProv.GetLastSoldCents(ctx, card, p.GradeValue); err != nil {
-				if s.logger != nil {
-					s.logger.Warn(ctx, "crack analysis: graded price lookup failed",
-						observability.String("cardName", p.CardName),
-						observability.Float64("grade", p.GradeValue),
-						observability.Err(err))
-				}
-			} else {
-				gradedCents = v
+		} else {
+			rawCents = v
+		}
+		if v, err := s.priceProv.GetLastSoldCents(ctx, card, p.GradeValue); err != nil {
+			if s.logger != nil {
+				s.logger.Warn(ctx, "crack analysis: graded price lookup failed",
+					observability.String("cardName", p.CardName),
+					observability.Float64("grade", p.GradeValue),
+					observability.Err(err))
 			}
+		} else {
+			gradedCents = v
 		}
 
 		if rawCents == 0 {
@@ -366,7 +381,12 @@ func (s *service) GetAcquisitionTargets(ctx context.Context) ([]AcquisitionOppor
 	for _, p := range allUnsold {
 		ebayFee, ok := ebayFeeMap[p.CampaignID]
 		if !ok {
-			continue // purchase belongs to a non-active campaign
+			if s.logger != nil {
+				s.logger.Debug(ctx, "acquisition targets: skipping purchase — campaign not active",
+					observability.String("purchaseID", p.ID),
+					observability.String("campaignID", p.CampaignID))
+			}
+			continue
 		}
 		key := p.CardName + "|" + p.SetName + "|" + p.CardNumber
 		if seen[key] {

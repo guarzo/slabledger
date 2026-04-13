@@ -14,7 +14,7 @@ const (
 )
 
 // ComputeInventorySignals determines procedural flags for an unsold card.
-// isCrackCandidate should be pre-computed from GetCrackOpportunities.
+// isCrackCandidate should be pre-computed from arbitrage.Service.GetCrackOpportunities.
 func ComputeInventorySignals(item *AgingItem, isCrackCandidate bool) InventorySignals {
 	var sig InventorySignals
 

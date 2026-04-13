@@ -11,6 +11,13 @@ import (
 // crackCandidatesForCampaign computes crack candidates using an already-loaded campaign,
 // avoiding a redundant GetCampaign call when the caller already has the campaign.
 func (s *service) crackCandidatesForCampaign(ctx context.Context, campaign *Campaign) ([]CrackAnalysis, error) {
+	if s.priceProv == nil {
+		if s.logger != nil {
+			s.logger.Info(ctx, "skipping crack candidates",
+				observability.String("reason", "price provider not configured"))
+		}
+		return []CrackAnalysis{}, nil
+	}
 	unsold, err := s.purchases.ListUnsoldPurchases(ctx, campaign.ID)
 	if err != nil {
 		return nil, err
@@ -23,7 +30,7 @@ func (s *service) crackCandidatesForCampaign(ctx context.Context, campaign *Camp
 
 	var results []CrackAnalysis
 	for _, p := range unsold {
-		if p.GradeValue > 8 {
+		if p.GradeValue >= 9 {
 			continue
 		}
 
@@ -31,27 +38,25 @@ func (s *service) crackCandidatesForCampaign(ctx context.Context, campaign *Camp
 
 		rawCents := 0
 		gradedCents := 0
-		if s.priceProv != nil {
-			if v, err := s.priceProv.GetLastSoldCents(ctx, card, 0); err != nil {
-				if s.logger != nil {
-					s.logger.Debug(ctx, "price lookup failed for crack candidate",
-						observability.String("purchaseID", p.ID),
-						observability.String("cardName", p.CardName),
-						observability.Err(err))
-				}
-			} else {
-				rawCents = v
+		if v, err := s.priceProv.GetLastSoldCents(ctx, card, 0); err != nil {
+			if s.logger != nil {
+				s.logger.Debug(ctx, "price lookup failed for crack candidate",
+					observability.String("purchaseID", p.ID),
+					observability.String("cardName", p.CardName),
+					observability.Err(err))
 			}
-			if v, err := s.priceProv.GetLastSoldCents(ctx, card, p.GradeValue); err != nil {
-				if s.logger != nil {
-					s.logger.Debug(ctx, "graded price lookup failed for crack candidate",
-						observability.String("purchaseID", p.ID),
-						observability.String("cardName", p.CardName),
-						observability.Err(err))
-				}
-			} else {
-				gradedCents = v
+		} else {
+			rawCents = v
+		}
+		if v, err := s.priceProv.GetLastSoldCents(ctx, card, p.GradeValue); err != nil {
+			if s.logger != nil {
+				s.logger.Debug(ctx, "graded price lookup failed for crack candidate",
+					observability.String("purchaseID", p.ID),
+					observability.String("cardName", p.CardName),
+					observability.Err(err))
 			}
+		} else {
+			gradedCents = v
 		}
 
 		if rawCents == 0 {

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../../js/api';
 import type { OrdersImportResult, OrdersImportSkip, BulkSaleResult } from '../../../types/campaigns';
@@ -14,6 +14,12 @@ export default function ImportSalesTab() {
   const toast = useToast();
   const queryClient = useQueryClient();
   const fileRef = useRef<HTMLInputElement>(null);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => { isMountedRef.current = false; };
+  }, []);
 
   const [phase, setPhase] = useState<Phase>('upload');
   const [result, setResult] = useState<OrdersImportResult | null>(null);
@@ -53,6 +59,7 @@ export default function ImportSalesTab() {
         queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.weeklyReview }),
       ]);
 
+      if (!isMountedRef.current) return;
       setPhase('upload');
       setResult(null);
       setSelected(new Set());

@@ -274,7 +274,6 @@ func TestPriceFlag_CreateAndHasOpen(t *testing.T) {
 		open, err := repo.HasOpenFlag(ctx, "nonexistent-purchase")
 		require.NoError(t, err)
 		assert.False(t, open)
-		_ = db
 	})
 }
 
@@ -310,7 +309,6 @@ func TestPriceFlag_Resolve(t *testing.T) {
 	t.Run("resolving nonexistent flag returns ErrPriceFlagNotFound", func(t *testing.T) {
 		db, repo := newPricingTestDB(t)
 		defer db.Close()
-		_ = db
 
 		err := repo.ResolvePriceFlag(ctx, 9999, 1)
 		require.ErrorIs(t, err, inventory.ErrPriceFlagNotFound)
@@ -348,7 +346,6 @@ func TestOpenFlagPurchaseIDs(t *testing.T) {
 	t.Run("no open flags returns empty map", func(t *testing.T) {
 		db, repo := newPricingTestDB(t)
 		defer db.Close()
-		_ = db
 
 		result, err := repo.OpenFlagPurchaseIDs(ctx)
 		require.NoError(t, err)

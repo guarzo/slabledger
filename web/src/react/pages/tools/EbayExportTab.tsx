@@ -77,6 +77,11 @@ export default function EbayExportTab() {
       setItems(newItems);
       setDecisions(new Map());
     },
+    onError: (err) => {
+      // Suppress the synthetic 'aborted' error thrown when flaggedOnly toggles
+      // mid-flight — the useEffect will call reset() immediately after abort().
+      if (err instanceof Error && err.message === 'aborted') return;
+    },
   });
 
   const exportMutation = useMutation<Blob, Error, EbayExportGenerateItem[]>({
@@ -107,6 +112,7 @@ export default function EbayExportTab() {
     fetchMutation.reset();
     exportMutation.reset();
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  // mutation functions from useMutation are stable refs — safe to omit from deps
   }, [flaggedOnly]);
 
   const setDecision = (purchaseId: string, decision: Decision) => {

@@ -248,6 +248,8 @@ func TestEvaluateHoldTriggers_RePush(t *testing.T) {
 				ReviewedPriceCents:  tc.reviewedPriceCents,
 				CLValueCents:        tc.clValueCents,
 			}
+			// MarketSnapshotData is a deprecated embedded struct; accessing it directly
+			// is the only way to set LastSoldCents in tests until the field is promoted.
 			p.MarketSnapshotData.LastSoldCents = tc.lastSoldCents //nolint:staticcheck
 			reason := EvaluateHoldTriggers(p, cfg)
 			held := reason != ""
