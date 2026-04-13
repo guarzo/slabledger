@@ -428,6 +428,11 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 	}
 
 	// Phase 5: remove sold cards from the CL collection.
+	// Uses existingMappings (the pre-loop snapshot) intentionally: sold cards were already
+	// absent from Firestore before this run began, so freshness is not required for deletes.
+	// Phase 4 needed a fresh snapshot to avoid re-pushing cards just mapped in the main loop;
+	// Phase 5 has no equivalent hazard — it only deletes mappings whose cert is no longer
+	// in the unsold set, which cannot change within a single run.
 	cardsRemoved := 0
 	if cfg.FirebaseUID != "" {
 		cardsRemoved = s.removeSoldCards(ctx, client, cfg.FirebaseUID, cfg.CollectionID, purchases, existingMappings)

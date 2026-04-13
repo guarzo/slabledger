@@ -235,8 +235,12 @@ func (p *Purchase) ToCardIdentity() CardIdentity {
 
 // NeedsDHPush returns true if this purchase is eligible for DH push pipeline enrollment.
 // A purchase must be received (ReceivedAt != nil) before it can be pushed to DH.
+// Purchases already marked sold on DH (DHStatus == DHStatusSold) are excluded to keep
+// the in-memory check consistent with the DB-level GetPurchasesByDHPushStatus query,
+// which gates on a missing sale row.
 func (p *Purchase) NeedsDHPush() bool {
 	return p.ReceivedAt != nil &&
+		p.DHStatus != DHStatusSold &&
 		p.DHInventoryID == 0 &&
 		p.DHPushStatus != DHPushStatusPending &&
 		p.DHPushStatus != DHPushStatusUnmatched &&

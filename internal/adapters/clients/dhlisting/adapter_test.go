@@ -384,9 +384,9 @@ func TestInventoryPusherAdapter_PushInventory_Error(t *testing.T) {
 	}
 }
 
-// --- InventoryListerAdapter tests ---
+// --- InventoryAdapter tests ---
 
-func TestInventoryListerAdapter_UpdateInventoryStatus_Success(t *testing.T) {
+func TestInventoryAdapter_UpdateInventoryStatus_Success(t *testing.T) {
 	var capturedID int
 	var capturedUpdate dh.InventoryUpdate
 	mock := &mockInventoryLister{
@@ -401,7 +401,7 @@ func TestInventoryListerAdapter_UpdateInventoryStatus_Success(t *testing.T) {
 		},
 	}
 
-	adapter := NewInventoryListerAdapter(mock)
+	adapter := NewInventoryAdapter(mock)
 	err := adapter.UpdateInventoryStatus(context.Background(), 42, "listed")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -414,7 +414,7 @@ func TestInventoryListerAdapter_UpdateInventoryStatus_Success(t *testing.T) {
 	}
 }
 
-func TestInventoryListerAdapter_SyncChannels_Success(t *testing.T) {
+func TestInventoryAdapter_SyncChannels_Success(t *testing.T) {
 	var capturedID int
 	var capturedChannels []string
 	mock := &mockInventoryLister{
@@ -429,7 +429,7 @@ func TestInventoryListerAdapter_SyncChannels_Success(t *testing.T) {
 		},
 	}
 
-	adapter := NewInventoryListerAdapter(mock)
+	adapter := NewInventoryAdapter(mock)
 	err := adapter.SyncChannels(context.Background(), 55, []string{"ebay", "shopify"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -442,7 +442,7 @@ func TestInventoryListerAdapter_SyncChannels_Success(t *testing.T) {
 	}
 }
 
-func TestInventoryListerAdapter_UpdateInventoryStatus_Error(t *testing.T) {
+func TestInventoryAdapter_UpdateInventoryStatus_Error(t *testing.T) {
 	wantErr := errors.New("update failed")
 	mock := &mockInventoryLister{
 		UpdateInventoryFn: func(_ context.Context, _ int, _ dh.InventoryUpdate) (*dh.InventoryResult, error) {
@@ -453,14 +453,14 @@ func TestInventoryListerAdapter_UpdateInventoryStatus_Error(t *testing.T) {
 		},
 	}
 
-	adapter := NewInventoryListerAdapter(mock)
+	adapter := NewInventoryAdapter(mock)
 	err := adapter.UpdateInventoryStatus(context.Background(), 1, "listed")
 	if !errors.Is(err, wantErr) {
 		t.Errorf("error: got %v, want %v", err, wantErr)
 	}
 }
 
-func TestInventoryListerAdapter_SyncChannels_Error(t *testing.T) {
+func TestInventoryAdapter_SyncChannels_Error(t *testing.T) {
 	wantErr := errors.New("sync failed")
 	mock := &mockInventoryLister{
 		UpdateInventoryFn: func(_ context.Context, _ int, _ dh.InventoryUpdate) (*dh.InventoryResult, error) {
@@ -471,7 +471,7 @@ func TestInventoryListerAdapter_SyncChannels_Error(t *testing.T) {
 		},
 	}
 
-	adapter := NewInventoryListerAdapter(mock)
+	adapter := NewInventoryAdapter(mock)
 	err := adapter.SyncChannels(context.Background(), 1, []string{"ebay"})
 	if !errors.Is(err, wantErr) {
 		t.Errorf("error: got %v, want %v", err, wantErr)

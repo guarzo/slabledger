@@ -126,7 +126,7 @@ func initializeCampaignsService(
 	// DH sold notifier — retires items on DH when a sale is recorded locally.
 	if dhClient != nil && dhClient.EnterpriseAvailable() {
 		campaignOpts = append(campaignOpts,
-			inventory.WithDHSoldNotifier(dhlistingadapter.NewInventoryListerAdapter(dhClient)),
+			inventory.WithDHSoldNotifier(dhlistingadapter.NewInventoryAdapter(dhClient)),
 		)
 	}
 

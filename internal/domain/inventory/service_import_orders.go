@@ -177,11 +177,13 @@ func (s *service) ConfirmOrdersSales(ctx context.Context, items []OrdersConfirmI
 		// Notify DH that this item has sold so it is retired on their platform.
 		// This is best-effort: a failure does not roll back the local sale record.
 		if s.dhSoldNotifier != nil && purchase.DHInventoryID != 0 {
-			if err := s.dhSoldNotifier.MarkInventorySold(ctx, purchase.DHInventoryID); err != nil && s.logger != nil {
-				s.logger.Warn(ctx, "confirm sales: failed to mark DH inventory as sold",
-					observability.String("purchaseID", purchase.ID),
-					observability.Int("dhInventoryID", purchase.DHInventoryID),
-					observability.Err(err))
+			if err := s.dhSoldNotifier.MarkInventorySold(ctx, purchase.DHInventoryID); err != nil {
+				if s.logger != nil {
+					s.logger.Warn(ctx, "confirm sales: failed to mark DH inventory as sold",
+						observability.String("purchaseID", purchase.ID),
+						observability.Int("dhInventoryID", purchase.DHInventoryID),
+						observability.Err(err))
+				}
 			}
 		}
 

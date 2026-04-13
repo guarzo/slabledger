@@ -41,6 +41,20 @@ type firestoreValue struct {
 	DoubleValue    *float64 `json:"doubleValue,omitempty"`
 }
 
+// CollectionCardDocPath returns the full Firestore resource path for a collection card document.
+// shortID may be either a bare document ID or a full resource path; if it is already a full
+// resource path (starts with the projects/ prefix), it is returned unchanged.
+func CollectionCardDocPath(uid, collectionID, shortID string) string {
+	expectedPrefix := "projects/" + firestoreProject + "/databases/(default)/documents/"
+	if strings.HasPrefix(shortID, expectedPrefix) {
+		return shortID
+	}
+	return fmt.Sprintf(
+		"projects/%s/databases/(default)/documents/users/%s/collections/%s/collection_cards/%s",
+		firestoreProject, uid, collectionID, shortID,
+	)
+}
+
 // FetchFirestoreCards lists all collection card documents from Firestore
 // and returns a map of collectionCardId → FirestoreCardData.
 func (c *Client) FetchFirestoreCards(ctx context.Context, uid, collectionID string) (map[string]FirestoreCardData, error) {
