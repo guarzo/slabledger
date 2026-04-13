@@ -234,9 +234,11 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 	}
 
 	// Load existing mappings
+	mappingsLoadErr := false
 	existingMappings, err := s.store.ListMappings(ctx)
 	if err != nil {
 		s.logger.Warn(ctx, "CL refresh: failed to load card mappings — CL→purchase resolution, sales-comp, and collection reconciliation phases will be degraded or skipped this run", observability.Err(err))
+		mappingsLoadErr = true
 	}
 	mappingByCLCardID := make(map[string]*sqlite.CLCardMapping, len(existingMappings))
 	for i := range existingMappings {
@@ -410,15 +412,25 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 	}
 
 	// Phase 4: push new unsold purchases (with certs) that aren't yet in the CL collection.
+	// Reload mappings so any new mappings created by the main loop are included in the
+	// dedup check — using the stale snapshot would cause the main loop's newly-mapped
+	// certs to appear unmapped and get pushed a second time (duplicate Firestore docs).
+	// Skip entirely if the original ListMappings call failed: we cannot safely determine
+	// which certs are already in the remote collection.
 	cardsPushed := 0
-	if cfg.FirebaseUID != "" {
-		cardsPushed = s.pushNewCards(ctx, client, cfg.FirebaseUID, cfg.CollectionID, purchases, existingMappings)
+	if cfg.FirebaseUID != "" && !mappingsLoadErr {
+		freshMappings, freshErr := s.store.ListMappings(ctx)
+		if freshErr != nil {
+			s.logger.Warn(ctx, "CL push: skipping — could not reload mappings for dedup check", observability.Err(freshErr))
+		} else {
+			cardsPushed = s.pushNewCards(ctx, client, cfg.FirebaseUID, cfg.CollectionID, purchases, freshMappings)
+		}
 	}
 
 	// Phase 5: remove sold cards from the CL collection.
 	cardsRemoved := 0
 	if cfg.FirebaseUID != "" {
-		cardsRemoved = s.removeSoldCards(ctx, client, purchases, existingMappings)
+		cardsRemoved = s.removeSoldCards(ctx, client, cfg.FirebaseUID, cfg.CollectionID, purchases, existingMappings)
 	}
 
 	s.logger.Info(ctx, "CL refresh: complete",

@@ -22,6 +22,7 @@ type DHStatus = string
 const (
 	DHStatusInStock DHStatus = "in_stock"
 	DHStatusListed  DHStatus = "listed"
+	DHStatusSold    DHStatus = "sold"
 )
 
 // DHPushStatus represents the DH inventory push pipeline status.
@@ -233,8 +234,10 @@ func (p *Purchase) ToCardIdentity() CardIdentity {
 }
 
 // NeedsDHPush returns true if this purchase is eligible for DH push pipeline enrollment.
+// A purchase must be received (ReceivedAt != nil) before it can be pushed to DH.
 func (p *Purchase) NeedsDHPush() bool {
-	return p.DHInventoryID == 0 &&
+	return p.ReceivedAt != nil &&
+		p.DHInventoryID == 0 &&
 		p.DHPushStatus != DHPushStatusPending &&
 		p.DHPushStatus != DHPushStatusUnmatched &&
 		p.DHPushStatus != DHPushStatusManual &&
