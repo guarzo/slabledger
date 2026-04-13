@@ -324,7 +324,8 @@ func hasMarketData(md *dh.CardLookupMarketData) bool {
 		md.ActiveAsks > 0 ||
 		md.Volume24h > 0 ||
 		(md.MidPrice != nil && *md.MidPrice > 0) ||
-		(md.LastSale != nil && *md.LastSale > 0)
+		(md.LastSale != nil && *md.LastSale > 0) ||
+		(md.LastSaleDate != nil && *md.LastSaleDate != "")
 }
 
 // applyMarketData enriches a Price with listing/market data from the DH CardLookup API.
@@ -339,7 +340,7 @@ func applyMarketData(price *pricing.Price, md *dh.CardLookupMarketData) {
 		market.LowestListing = mathutil.ToCents(*md.BestAsk)
 	}
 	if md.MidPrice != nil && *md.MidPrice > 0 {
-		market.MidPrice = mathutil.ToCents(*md.MidPrice)
+		market.MidPriceCents = mathutil.ToCents(*md.MidPrice)
 	}
 	if md.LastSale != nil && *md.LastSale > 0 {
 		market.LastSoldCents = mathutil.ToCents(*md.LastSale)

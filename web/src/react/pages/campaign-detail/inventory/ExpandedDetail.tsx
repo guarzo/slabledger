@@ -39,7 +39,7 @@ function formatSaleDate(dateStr?: string): string | undefined {
   if (!dateStr) return undefined;
   const d = new Date(dateStr + 'T00:00:00'); // force local midnight to avoid UTC offset shift
   if (isNaN(d.getTime())) return undefined;
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 export default function ExpandedDetail({ item, onReviewed, campaignId, onOpenFlagDialog, onResolveFlag, onApproveDHPush, onSetPrice }: ExpandedDetailProps) {
