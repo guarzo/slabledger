@@ -104,40 +104,42 @@ func (a *InventoryPusherAdapter) PushInventory(ctx context.Context, items []dhli
 
 var _ dhlisting.DHInventoryPusher = (*InventoryPusherAdapter)(nil)
 
-// --- DHInventoryLister adapter ---
+// --- DHInventoryLister / DHSoldNotifier adapter ---
 
-// InventoryListerAdapter wraps a dh.Client to implement dhlisting.DHInventoryLister.
-type InventoryListerAdapter struct {
+// InventoryAdapter wraps a dh.Client to implement dhlisting.DHInventoryLister
+// and inventory.DHSoldNotifier. It handles both read/list operations and
+// inventory status mutations (listing updates and sold transitions).
+type InventoryAdapter struct {
 	client interface {
 		UpdateInventory(ctx context.Context, inventoryID int, update dh.InventoryUpdate) (*dh.InventoryResult, error)
 		SyncChannels(ctx context.Context, inventoryID int, channels []string) (*dh.ChannelSyncResponse, error)
 	}
 }
 
-// NewInventoryListerAdapter creates a new InventoryListerAdapter.
-func NewInventoryListerAdapter(client interface {
+// NewInventoryAdapter creates a new InventoryAdapter.
+func NewInventoryAdapter(client interface {
 	UpdateInventory(ctx context.Context, inventoryID int, update dh.InventoryUpdate) (*dh.InventoryResult, error)
 	SyncChannels(ctx context.Context, inventoryID int, channels []string) (*dh.ChannelSyncResponse, error)
-}) *InventoryListerAdapter {
-	return &InventoryListerAdapter{client: client}
+}) *InventoryAdapter {
+	return &InventoryAdapter{client: client}
 }
 
-func (a *InventoryListerAdapter) UpdateInventoryStatus(ctx context.Context, inventoryID int, status string) error {
+func (a *InventoryAdapter) UpdateInventoryStatus(ctx context.Context, inventoryID int, status string) error {
 	_, err := a.client.UpdateInventory(ctx, inventoryID, dh.InventoryUpdate{Status: status})
 	return err
 }
 
-func (a *InventoryListerAdapter) SyncChannels(ctx context.Context, inventoryID int, channels []string) error {
+func (a *InventoryAdapter) SyncChannels(ctx context.Context, inventoryID int, channels []string) error {
 	_, err := a.client.SyncChannels(ctx, inventoryID, channels)
 	return err
 }
 
 // MarkInventorySold transitions the DH inventory item to "sold" status,
 // retiring it from the DH platform when a sale is recorded locally.
-func (a *InventoryListerAdapter) MarkInventorySold(ctx context.Context, inventoryID int) error {
+func (a *InventoryAdapter) MarkInventorySold(ctx context.Context, inventoryID int) error {
 	_, err := a.client.UpdateInventory(ctx, inventoryID, dh.InventoryUpdate{Status: inventory.DHStatusSold})
 	return err
 }
 
-var _ dhlisting.DHInventoryLister = (*InventoryListerAdapter)(nil)
-var _ inventory.DHSoldNotifier = (*InventoryListerAdapter)(nil)
+var _ dhlisting.DHInventoryLister = (*InventoryAdapter)(nil)
+var _ inventory.DHSoldNotifier = (*InventoryAdapter)(nil)

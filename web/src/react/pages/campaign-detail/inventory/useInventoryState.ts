@@ -140,7 +140,9 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
     return map;
   }, [showEV, evPortfolio]);
 
-  // Page-scoped sell-sheet count: only count items on sell sheet that are in hand
+  // Page-scoped sell-sheet count: only count items on sell sheet that are in hand.
+  // sellSheetHas is stable (useCallback over a useMemo'd Set), so this memo only
+  // recomputes when items or the sell-sheet contents actually change.
   const pageSellSheetCount = useMemo(() => {
     let count = 0;
     for (const item of items) {

@@ -251,7 +251,7 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 	// Nil-safe: only create the service if at least the lister client is available.
 	if in.DHClient != nil {
 		listingOpts := []dhlisting.DHListingServiceOption{
-			dhlisting.WithDHListingLister(dhlistingadapter.NewInventoryListerAdapter(in.DHClient)),
+			dhlisting.WithDHListingLister(dhlistingadapter.NewInventoryAdapter(in.DHClient)),
 			dhlisting.WithDHListingCertResolver(dhlistingadapter.NewCertResolverAdapter(in.DHClient)),
 			dhlisting.WithDHListingPusher(dhlistingadapter.NewInventoryPusherAdapter(in.DHClient)),
 		}
