@@ -26,7 +26,6 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/auth"
 	"github.com/guarzo/slabledger/internal/domain/favorites"
 	"github.com/guarzo/slabledger/internal/domain/picks"
-	"github.com/guarzo/slabledger/internal/platform/cache"
 	"github.com/guarzo/slabledger/internal/platform/crypto"
 )
 
@@ -137,7 +136,6 @@ SERVER MODE:
     slabledger server --port 9090 # Custom port
 
 EXAMPLES:
-    slabledger admin cache-stats       # Show cache statistics
 
 Documentation: docs/USER_GUIDE.md
 Web Interface: http://localhost:8081`)
@@ -442,22 +440,6 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	shutdownGracefully(ctx, logger, cancelScheduler, schedulerResult, hOut, socialSvc.service, campaignsService, cfg.Server.SchedulerShutdownTimeout)
 
 	return serverErr
-}
-
-func initializeCache(cachePath string) cache.Cache {
-	if cachePath == "" {
-		return nil
-	}
-
-	appCache, err := cache.New(cache.Config{
-		Type:     "file",
-		FilePath: cachePath,
-	})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: Cache initialization failed: %v (path: %s)\n", err, cachePath)
-		return nil
-	}
-	return appCache
 }
 
 func resolveDatabasePath(configuredPath string) (string, error) {
