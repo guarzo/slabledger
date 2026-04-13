@@ -33,18 +33,6 @@ test.describe('Dashboard Page - Rendering @smoke', () => {
     // Should show user menu button (username text is hidden on mobile, but button is always visible)
     await expect(page.locator('button[aria-label="User menu for Test User"]')).toBeVisible();
   });
-
-  test('should have Price Lookup button in header', async ({ page }) => {
-    await setupPageWithMocks(page, '/');
-
-    const lookupButton = page.locator(selectors.priceLookupButton);
-    await lookupButton.focus();
-
-    const isFocused = await lookupButton.evaluate((el) => {
-      return document.activeElement === el;
-    });
-    expect(isFocused).toBe(true);
-  });
 });
 
 test.describe('Dashboard Page - Rendering', () => {

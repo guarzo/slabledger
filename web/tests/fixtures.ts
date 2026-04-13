@@ -103,9 +103,6 @@ export const selectors = {
   // Dashboard page (home)
   dashboardHeading: 'text=Dashboard',
 
-  // Price Lookup (drawer triggered from header)
-  priceLookupButton: 'button[aria-label="Price Lookup"]',
-
   // Campaigns page
   campaignsHeading: 'text=Campaigns',
 

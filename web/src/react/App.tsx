@@ -67,6 +67,7 @@ function AppContent() {
                 </ProtectedRoute>
                 } />
                 {/* Canonical redirects for legacy URLs */}
+                <Route path="/watchlist" element={<Navigate to="/" replace />} />
                <Route path="/opportunities" element={<Navigate to="/" replace />} />
                <Route path="/insights" element={<Navigate to="/" replace />} />
               <Route path="/content" element={<Navigate to="/tools?tab=content" replace />} />
