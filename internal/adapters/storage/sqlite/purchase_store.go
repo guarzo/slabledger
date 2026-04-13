@@ -384,10 +384,33 @@ func (ps *PurchaseStore) UpdatePurchaseBuyCost(ctx context.Context, id string, b
 }
 
 func (ps *PurchaseStore) UpdatePurchaseCampaign(ctx context.Context, purchaseID string, campaignID string, sourcingFeeCents int) error {
-	return ps.execAndExpectRow(ctx, "update campaign",
-		`UPDATE campaign_purchases SET campaign_id = ?, psa_sourcing_fee_cents = ?, updated_at = ? WHERE id = ?`,
-		campaignID, sourcingFeeCents, time.Now(), purchaseID,
+	// Conditional update: only reassign if no linked sale exists.
+	// This prevents a TOCTOU race between checking for sales and updating the campaign.
+	result, err := ps.db.ExecContext(ctx,
+		`UPDATE campaign_purchases
+		 SET campaign_id = ?, psa_sourcing_fee_cents = ?, updated_at = ?
+		 WHERE id = ?
+		   AND NOT EXISTS (SELECT 1 FROM campaign_sales WHERE purchase_id = ?)`,
+		campaignID, sourcingFeeCents, time.Now(), purchaseID, purchaseID,
 	)
+	if err != nil {
+		return fmt.Errorf("update campaign: %w", err)
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("update campaign: rows affected: %w", err)
+	}
+	if n == 0 {
+		// Distinguish "not found" from "has a linked sale".
+		var exists int
+		if qErr := ps.db.QueryRowContext(ctx,
+			`SELECT 1 FROM campaign_purchases WHERE id = ?`, purchaseID,
+		).Scan(&exists); qErr != nil {
+			return inventory.ErrPurchaseNotFound
+		}
+		return inventory.ErrPurchaseHasSale
+	}
+	return nil
 }
 
 func (ps *PurchaseStore) UpdatePurchaseCardYear(ctx context.Context, id string, year string) error {

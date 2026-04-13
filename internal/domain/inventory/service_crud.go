@@ -154,3 +154,19 @@ func (s *service) CreateBulkSales(ctx context.Context, campaignID string, channe
 	}
 	return result, nil
 }
+
+func (s *service) ReassignPurchase(ctx context.Context, purchaseID string, newCampaignID string) error {
+	// Verify purchase exists
+	if _, err := s.purchases.GetPurchase(ctx, purchaseID); err != nil {
+		return fmt.Errorf("purchase lookup: %w", err)
+	}
+
+	// Verify target campaign exists and get its sourcing fee
+	campaign, err := s.campaigns.GetCampaign(ctx, newCampaignID)
+	if err != nil {
+		return fmt.Errorf("campaign lookup: %w", err)
+	}
+
+	// UpdatePurchaseCampaign atomically rejects the update if a linked sale exists.
+	return s.purchases.UpdatePurchaseCampaign(ctx, purchaseID, newCampaignID, campaign.PSASourcingFeeCents)
+}
