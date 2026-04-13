@@ -97,7 +97,9 @@ func (s *service) crackCandidatesForCampaign(ctx context.Context, campaign *inve
 
 	var results []CrackAnalysis
 	for _, p := range unsold {
-		if p.GradeValue > 8 {
+		// Skip PSA 9+ from crack analysis — only PSA 8 and below (including half-grades like 8.5)
+		// are candidates for cracking and resubmission.
+		if p.GradeValue >= 9 {
 			continue
 		}
 
@@ -355,6 +357,11 @@ func (s *service) GetAcquisitionTargets(ctx context.Context) ([]AcquisitionOppor
 
 // GetExpectedValues returns expected values for all unsold purchases in a campaign.
 func (s *service) GetExpectedValues(ctx context.Context, campaignID string) (*EVPortfolio, error) {
+	campaign, err := s.campaigns.GetCampaign(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+
 	data, err := s.analytics.GetPurchasesWithSales(ctx, campaignID)
 	if err != nil {
 		return nil, err
@@ -404,11 +411,16 @@ func (s *service) GetExpectedValues(ctx context.Context, campaignID string) (*EV
 			}
 		}
 
+		feePct := campaign.EbayFeePct
+		if feePct == 0 {
+			feePct = DefaultMarketplaceFeePct
+		}
 		ev := computeExpectedValue(
 			p.CardName, p.CertNumber, p.GradeValue,
 			costBasis, seg.SellThroughPct, seg.AvgMarginPct,
 			liquidityFactor, trendAdj, seg.AvgDaysToSell,
 			0.05, seg.SoldCount,
+			feePct,
 		)
 
 		portfolio.Items = append(portfolio.Items, *ev)
@@ -459,16 +471,25 @@ func (s *service) EvaluatePurchase(ctx context.Context, campaignID string, cardN
 	}
 
 	if seg == nil {
-		return computeExpectedValue(cardName, "", grade, buyCostCents+campaign.PSASourcingFeeCents, 0.5, 0.0, 1.0, 0.0, 30, 0.05, 0), nil
+		feePct := campaign.EbayFeePct
+		if feePct == 0 {
+			feePct = DefaultMarketplaceFeePct
+		}
+		return computeExpectedValue(cardName, "", grade, buyCostCents+campaign.PSASourcingFeeCents, 0.5, 0.0, 1.0, 0.0, 30, 0.05, 0, feePct), nil
 	}
 
 	costBasis := buyCostCents + campaign.PSASourcingFeeCents
+	feePct := campaign.EbayFeePct
+	if feePct == 0 {
+		feePct = DefaultMarketplaceFeePct
+	}
 
 	return computeExpectedValue(
 		cardName, "", grade, costBasis,
 		seg.SellThroughPct, seg.AvgMarginPct,
 		1.0, 0.0, seg.AvgDaysToSell,
 		0.05, seg.SoldCount,
+		feePct,
 	), nil
 }
 

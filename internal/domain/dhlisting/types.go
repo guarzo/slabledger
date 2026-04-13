@@ -22,9 +22,10 @@ type DHListingService interface {
 
 // DHListingResult summarises a batch listing operation.
 type DHListingResult struct {
-	Listed int // items successfully set to listed + synced
-	Synced int // items with channels synced
-	Total  int // total purchases found
+	Listed int   // items successfully set to listed + synced
+	Synced int   // items with channels synced
+	Total  int   // total purchases found
+	Error  error // set when a fatal error prevented listing (e.g. DB lookup failure)
 }
 
 // --- Domain-level abstractions for DH external operations ---

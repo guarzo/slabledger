@@ -116,7 +116,7 @@ func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []stri
 	purchases, err := s.purchaseLookup.GetPurchasesByCertNumbers(ctx, certNumbers)
 	if err != nil {
 		s.logger.Warn(ctx, "dh listing: batch cert lookup failed", observability.Err(err))
-		return DHListingResult{}
+		return DHListingResult{Error: err}
 	}
 
 	// Sort cert numbers for deterministic iteration order.
@@ -194,8 +194,10 @@ func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []stri
 				DHStatus:     inventory.DHStatusListed,
 				ChannelsJSON: string(channelsJSON),
 			}); persistErr != nil {
-				s.logger.Warn(ctx, "dh listing: failed to persist listed status",
+				s.logger.Error(ctx, "dh listing: failed to persist listed status — decrementing listed count",
 					observability.String("cert", p.CertNumber), observability.Err(persistErr))
+				listed--
+				continue
 			}
 		}
 	}
@@ -246,8 +248,8 @@ func (s *dhListingService) inlineMatchAndPush(ctx context.Context, p *inventory.
 	if s.cardIDSaver != nil {
 		externalID := strconv.Itoa(dhCardID)
 		if err := s.cardIDSaver.SaveExternalID(ctx, p.CardName, p.SetName, p.CardNumber, SourceDH, externalID); err != nil {
-			s.logger.Warn(ctx, "inline dh resolve: failed to save card mapping",
-				observability.String("cert", p.CertNumber), observability.Err(err))
+			s.logger.Error(ctx, "inline dh resolve: failed to save card mapping — cert resolver will be called again next run",
+				observability.String("cert", p.CertNumber), observability.String("cardName", p.CardName), observability.Err(err))
 		}
 	}
 
@@ -285,8 +287,12 @@ func (s *dhListingService) inlineMatchAndPush(ctx context.Context, p *inventory.
 				ChannelsJSON:      r.ChannelsJSON,
 				DHStatus:          inventory.DHStatus(r.Status),
 			}); err != nil {
-				s.logger.Warn(ctx, "inline dh push: failed to persist DH fields",
+				// Note: returning 0 here means we'll retry next run and potentially create another DH entry.
+				// This is preferable to creating unlimited duplicates. The DH entry created above may need
+				// manual cleanup if the DB persist consistently fails.
+				s.logger.Error(ctx, "inline dh push: failed to persist DH fields — returning 0 to prevent duplicate push",
 					observability.String("cert", p.CertNumber), observability.Err(err))
+				return 0
 			}
 		}
 
