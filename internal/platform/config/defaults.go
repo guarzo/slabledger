@@ -14,12 +14,13 @@ func Default() Config {
 			Path: "data/cache.json",
 		},
 		Server: ServerConfig{
-			ListenAddr:      "127.0.0.1:8080",
-			ReadTimeout:     15 * time.Second,
-			WriteTimeout:    90 * time.Second, // Sized for pricing endpoint (~30s upstream calls)
-			IdleTimeout:     60 * time.Second,
-			ShutdownTimeout: 5 * time.Second,
-			MediaDir:        "./data/media",
+			ListenAddr:               "127.0.0.1:8080",
+			ReadTimeout:              15 * time.Second,
+			WriteTimeout:             90 * time.Second, // Sized for pricing endpoint (~30s upstream calls)
+			IdleTimeout:              60 * time.Second,
+			ShutdownTimeout:          5 * time.Second,
+			SchedulerShutdownTimeout: 30 * time.Second,
+			MediaDir:                 "./data/media",
 		},
 		Logging: LoggingConfig{
 			Level: "info",

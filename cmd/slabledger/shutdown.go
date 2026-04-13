@@ -20,6 +20,7 @@ func shutdownGracefully(
 	hOut handlerOutputs,
 	socialService social.Service,
 	campaignsService inventory.Service,
+	shutdownTimeout time.Duration,
 ) {
 	logger.Info(ctx, "shutting down schedulers")
 	cancelScheduler()
@@ -33,8 +34,9 @@ func shutdownGracefully(
 	select {
 	case <-waitDone:
 		// Schedulers shut down cleanly
-	case <-time.After(30 * time.Second):
-		logger.Warn(ctx, "scheduler shutdown timed out after 30s")
+	case <-time.After(shutdownTimeout):
+		logger.Warn(ctx, "scheduler shutdown timed out",
+			observability.String("timeout", shutdownTimeout.String()))
 	}
 
 	// Wait for any in-flight background DH bulk match to finish
