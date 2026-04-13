@@ -82,7 +82,7 @@ func (h *CampaignsHandler) HandleGlobalExportCL(w http.ResponseWriter, r *http.R
 
 	w.Header().Set("Content-Type", "text/csv")
 	w.Header().Set("Content-Disposition", `attachment; filename="card_ladder_import.csv"`)
-
+	w.WriteHeader(http.StatusOK)
 	writer := csv.NewWriter(w)
 	if err := writer.Write([]string{"Date Purchased", "Cert #", "Grader", "Investment", "Estimated Value", "Notes", "Date Sold", "Sold Price"}); err != nil {
 		h.logger.Error(r.Context(), "csv header write failed", observability.Err(err))

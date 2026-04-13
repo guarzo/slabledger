@@ -14,9 +14,8 @@ import (
 // Returns a CSV file of all unsold inventory in Market Movers collection import format (13 columns).
 // Supports ?missing_mm_only=true to export only items lacking MM value data.
 //
-// Note: headers are committed before row iteration begins, so any mid-stream write error
-// produces a truncated 200 OK response with no error signal to the client. This matches
-// the pre-existing behaviour of HandleGlobalExportCL.
+// Note: headers are committed after all CSV data is buffered, so any write error
+// returns a proper error response instead of a truncated 200 OK.
 func (h *CampaignsHandler) HandleGlobalExportMM(w http.ResponseWriter, r *http.Request) {
 	missingMMOnly, _ := strconv.ParseBool(r.URL.Query().Get("missing_mm_only"))
 	entries, err := h.service.ExportMMFormatGlobal(r.Context(), missingMMOnly)
@@ -28,7 +27,7 @@ func (h *CampaignsHandler) HandleGlobalExportMM(w http.ResponseWriter, r *http.R
 
 	w.Header().Set("Content-Type", "text/csv")
 	w.Header().Set("Content-Disposition", `attachment; filename="market-movers-export.csv"`)
-
+	w.WriteHeader(http.StatusOK)
 	writer := csv.NewWriter(w)
 	header := []string{
 		"Sport", "Grade", "Player Name", "Year", "Set", "Variation",
