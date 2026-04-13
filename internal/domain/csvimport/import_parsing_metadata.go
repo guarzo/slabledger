@@ -164,8 +164,11 @@ func stripCollectionSuffix(name string) string {
 	upper := strings.ToUpper(name)
 
 	// Anywhere suffixes: find the leftmost match across all patterns.
-	// We scan all patterns and pick the earliest match position to avoid order-dependent
-	// behavior where a later-registered but earlier-occurring pattern would be missed.
+	// We scan all patterns and pick the earliest match position — leftmost wins regardless
+	// of registry order. This is intentional: stripping everything from the first collection
+	// marker onward yields the cleanest card name. Registry order (longest-first) matters
+	// for trailing-only suffixes below, where we need specific patterns to match before
+	// their shorter substrings.
 	minIdx := -1
 	for _, cs := range anywhereSuffixes {
 		if idx := strings.Index(upper, " "+cs.Pattern); idx > 0 {

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/portfolio"
@@ -22,7 +23,7 @@ func TestService_GetPortfolioHealth_Healthy(t *testing.T) {
 	svc := newPortfolioSvc(repo)
 	ctx := context.Background()
 
-	c := &inventory.Campaign{ID: "c1", Name: "Profitable", BuyTermsCLPct: 0.78}
+	c := &inventory.Campaign{ID: "c1", Name: "Profitable", BuyTermsCLPct: 0.78, Phase: inventory.PhaseActive}
 	repo.Campaigns[c.ID] = c
 	repo.PNLData[c.ID] = &inventory.CampaignPNL{
 		CampaignID:        c.ID,
@@ -58,7 +59,7 @@ func TestService_GetPortfolioHealth_Warning(t *testing.T) {
 	svc := newPortfolioSvc(repo)
 	ctx := context.Background()
 
-	c := &inventory.Campaign{ID: "c1", Name: "Losing", BuyTermsCLPct: 0.78}
+	c := &inventory.Campaign{ID: "c1", Name: "Losing", BuyTermsCLPct: 0.78, Phase: inventory.PhaseActive}
 	repo.Campaigns[c.ID] = c
 	repo.PNLData[c.ID] = &inventory.CampaignPNL{
 		CampaignID:        c.ID,
@@ -87,7 +88,7 @@ func TestService_GetPortfolioHealth_Critical(t *testing.T) {
 	svc := newPortfolioSvc(repo)
 	ctx := context.Background()
 
-	c := &inventory.Campaign{ID: "c1", Name: "Bleeding", BuyTermsCLPct: 0.78}
+	c := &inventory.Campaign{ID: "c1", Name: "Bleeding", BuyTermsCLPct: 0.78, Phase: inventory.PhaseActive}
 	repo.Campaigns[c.ID] = c
 	repo.PNLData[c.ID] = &inventory.CampaignPNL{
 		CampaignID:        c.ID,
@@ -116,7 +117,7 @@ func TestService_GetPortfolioHealth_SlowSellThrough(t *testing.T) {
 	svc := newPortfolioSvc(repo)
 	ctx := context.Background()
 
-	c := &inventory.Campaign{ID: "c1", Name: "Slow", BuyTermsCLPct: 0.78}
+	c := &inventory.Campaign{ID: "c1", Name: "Slow", BuyTermsCLPct: 0.78, Phase: inventory.PhaseActive}
 	repo.Campaigns[c.ID] = c
 	repo.PNLData[c.ID] = &inventory.CampaignPNL{
 		CampaignID:        c.ID,
@@ -146,8 +147,8 @@ func TestService_GetPortfolioHealth_OverallROI(t *testing.T) {
 	svc := newPortfolioSvc(repo)
 	ctx := context.Background()
 
-	c1 := &inventory.Campaign{ID: "c1", Name: "Campaign A", BuyTermsCLPct: 0.78}
-	c2 := &inventory.Campaign{ID: "c2", Name: "Campaign B", BuyTermsCLPct: 0.78}
+	c1 := &inventory.Campaign{ID: "c1", Name: "Campaign A", BuyTermsCLPct: 0.78, Phase: inventory.PhaseActive}
+	c2 := &inventory.Campaign{ID: "c2", Name: "Campaign B", BuyTermsCLPct: 0.78, Phase: inventory.PhaseActive}
 	repo.Campaigns[c1.ID] = c1
 	repo.Campaigns[c2.ID] = c2
 
@@ -183,8 +184,8 @@ func TestService_GetPortfolioHealth_RealizedROI(t *testing.T) {
 	svc := newPortfolioSvc(repo)
 	ctx := context.Background()
 
-	c1 := &inventory.Campaign{ID: "c1", Name: "Fully Sold", BuyTermsCLPct: 0.78}
-	c2 := &inventory.Campaign{ID: "c2", Name: "Mixed", BuyTermsCLPct: 0.78}
+	c1 := &inventory.Campaign{ID: "c1", Name: "Fully Sold", BuyTermsCLPct: 0.78, Phase: inventory.PhaseActive}
+	c2 := &inventory.Campaign{ID: "c2", Name: "Mixed", BuyTermsCLPct: 0.78, Phase: inventory.PhaseActive}
 	repo.Campaigns[c1.ID] = c1
 	repo.Campaigns[c2.ID] = c2
 
@@ -218,7 +219,7 @@ func TestService_GetPortfolioHealth_RealizedROI_Rounding(t *testing.T) {
 	svc := newPortfolioSvc(repo)
 	ctx := context.Background()
 
-	c1 := &inventory.Campaign{ID: "c1", Name: "Odd Split", BuyTermsCLPct: 0.78}
+	c1 := &inventory.Campaign{ID: "c1", Name: "Odd Split", BuyTermsCLPct: 0.78, Phase: inventory.PhaseActive}
 	repo.Campaigns[c1.ID] = c1
 
 	// 1000 cents spent, 1 of 3 sold → soldCostBasis = round(1000*1/3) = round(333.33) = 333
@@ -244,7 +245,7 @@ func TestService_GetPortfolioHealth_RealizedROI_NoSales(t *testing.T) {
 	svc := newPortfolioSvc(repo)
 	ctx := context.Background()
 
-	c1 := &inventory.Campaign{ID: "c1", Name: "No Sales", BuyTermsCLPct: 0.78}
+	c1 := &inventory.Campaign{ID: "c1", Name: "No Sales", BuyTermsCLPct: 0.78, Phase: inventory.PhaseActive}
 	repo.Campaigns[c1.ID] = c1
 	repo.PNLData[c1.ID] = &inventory.CampaignPNL{
 		CampaignID: c1.ID, TotalSpendCents: 50000, TotalRevenueCents: 0, TotalFeesCents: 0,
@@ -377,7 +378,7 @@ func TestService_GetPortfolioHealth_LiquidationSignals(t *testing.T) {
 			svc := newPortfolioSvc(repo)
 			ctx := context.Background()
 
-			c := &inventory.Campaign{ID: "c1", Name: "Health Test", BuyTermsCLPct: 0.78}
+			c := &inventory.Campaign{ID: "c1", Name: "Health Test", BuyTermsCLPct: 0.78, Phase: inventory.PhaseActive}
 			repo.Campaigns[c.ID] = c
 			repo.PNLData[c.ID] = &inventory.CampaignPNL{
 				CampaignID:      c.ID,
@@ -474,7 +475,7 @@ func TestService_GetPortfolioHealth_LiquidationReason(t *testing.T) {
 			svc := newPortfolioSvc(repo)
 			ctx := context.Background()
 
-			c := &inventory.Campaign{ID: "c1", Name: "Modern", BuyTermsCLPct: 0.78}
+			c := &inventory.Campaign{ID: "c1", Name: "Modern", BuyTermsCLPct: 0.78, Phase: inventory.PhaseActive}
 			repo.Campaigns[c.ID] = c
 			pnl := tc.pnl
 			pnl.CampaignID = c.ID
@@ -569,3 +570,94 @@ func TestService_GetPortfolioChannelVelocity_WithData(t *testing.T) {
 }
 
 // end of tests
+
+func TestService_GetWeeklyReviewSummary_PerformerCounts(t *testing.T) {
+	cases := []struct {
+		name          string
+		salesCount    int
+		wantTopLen    int
+		wantBottomLen int
+	}{
+		{
+			name:          "12 sales: top 5, bottom 5",
+			salesCount:    12,
+			wantTopLen:    5,
+			wantBottomLen: 5,
+		},
+		{
+			name:          "7 sales: top 5, bottom 2",
+			salesCount:    7,
+			wantTopLen:    5,
+			wantBottomLen: 2,
+		},
+		{
+			name:          "4 sales: all top, no bottom",
+			salesCount:    4,
+			wantTopLen:    4,
+			wantBottomLen: 0,
+		},
+		{
+			name:          "11 sales: top 5, bottom 5 (exactly > 2*5)",
+			salesCount:    11,
+			wantTopLen:    5,
+			wantBottomLen: 5,
+		},
+		{
+			name:          "10 sales: top 5, bottom 5 (= 2*5, >5 branch)",
+			salesCount:    10,
+			wantTopLen:    5,
+			wantBottomLen: 5,
+		},
+		{
+			name:          "5 sales: all top, no bottom (= maxPerformers, else branch)",
+			salesCount:    5,
+			wantTopLen:    5,
+			wantBottomLen: 0,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := mocks.NewInMemoryCampaignStore()
+			svc := newPortfolioSvc(repo)
+			ctx := context.Background()
+
+			// Use today's date so sales land in "this week"
+			today := time.Now().Format("2006-01-02")
+
+			fixtures := make([]inventory.PurchaseWithSale, tc.salesCount)
+			for i := range fixtures {
+				fixtures[i] = inventory.PurchaseWithSale{
+					Purchase: inventory.Purchase{
+						ID:         fmt.Sprintf("p-%d", i),
+						CampaignID: "c1",
+						CardName:   fmt.Sprintf("Card %d", i),
+					},
+					Sale: &inventory.Sale{
+						PurchaseID:     fmt.Sprintf("p-%d", i),
+						SaleChannel:    inventory.SaleChannelEbay,
+						SalePriceCents: 10000 + i*1000,
+						NetProfitCents: (i + 1) * 100, // distinct profits for deterministic ordering
+						SaleDate:       today,
+					},
+				}
+			}
+
+			repo.GetAllPurchasesWithSalesFn = func(_ context.Context, _ ...inventory.PurchaseFilterOpt) ([]inventory.PurchaseWithSale, error) {
+				return fixtures, nil
+			}
+
+			summary, err := svc.GetWeeklyReviewSummary(ctx)
+			if err != nil {
+				t.Fatalf("GetWeeklyReviewSummary: %v", err)
+			}
+
+			if len(summary.TopPerformers) != tc.wantTopLen {
+				t.Errorf("TopPerformers len = %d, want %d", len(summary.TopPerformers), tc.wantTopLen)
+			}
+			if len(summary.BottomPerformers) != tc.wantBottomLen {
+				t.Errorf("BottomPerformers len = %d, want %d", len(summary.BottomPerformers), tc.wantBottomLen)
+			}
+		})
+	}
+}

@@ -577,6 +577,51 @@ func TestParseCardMetadataFromTitle_ParseWarning(t *testing.T) {
 	}
 }
 
+// TestStripCollectionSuffix_LeftmostMatchWins validates that when multiple
+// anywhere-suffix patterns appear in a name, the leftmost occurrence is stripped
+// (not the longest-registered or first-in-registry pattern). This is the correct
+// behavior: we always strip from the earliest collection marker onward.
+func TestStripCollectionSuffix_LeftmostMatchWins(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			// "SPECIAL COLLECTION" appears at pos 13 (earlier).
+			// "SUPER PREMIUM COLLECTION" appears at pos 32 (later).
+			// Leftmost match should win: strip from "SPECIAL COLLECTION" onward.
+			name:  "leftmost shorter pattern beats later longer pattern",
+			input: "CHARIZARD EX SPECIAL COLLECTION SUPER PREMIUM COLLECTION",
+			want:  "CHARIZARD EX",
+		},
+		{
+			// "SUPER PREMIUM COLLECTION" appears at pos 13 (earlier).
+			// "SPECIAL COLLECTION" appears at pos 40 (later).
+			// Leftmost match wins: strip from "SUPER PREMIUM COLLECTION" onward.
+			name:  "leftmost longer pattern beats later shorter pattern",
+			input: "CHARIZARD EX SUPER PREMIUM COLLECTION SPECIAL COLLECTION",
+			want:  "CHARIZARD EX",
+		},
+		{
+			// Both patterns start at same position — longer wins due to registry order.
+			// "PRISMATIC EVOLUTIONS PREMIUM FIGURE COLLECTION" vs "PREMIUM FIGURE COLLECTION":
+			// only one can appear at a given position; this case ensures basic correctness.
+			name:  "standard anywhere suffix stripped from middle",
+			input: "UMBREON EX PRISMATIC EVOLUTIONS PREMIUM FIGURE COLLECTION extra text",
+			want:  "UMBREON EX",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := stripCollectionSuffix(tc.input)
+			if got != tc.want {
+				t.Errorf("stripCollectionSuffix(%q) = %q, want %q", tc.input, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestCollectionSuffixRegistryNoDuplicates(t *testing.T) {
 	seen := make(map[string]bool)
 	for _, cs := range collectionSuffixRegistry {
