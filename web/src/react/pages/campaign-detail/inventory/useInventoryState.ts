@@ -140,11 +140,11 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
     return map;
   }, [showEV, evPortfolio]);
 
-  // Page-scoped sell-sheet count: only count items actually present on this page
+  // Page-scoped sell-sheet count: only count items on sell sheet that are in hand
   const pageSellSheetCount = useMemo(() => {
     let count = 0;
     for (const item of items) {
-      if (sellSheetHas(item.purchase.id)) count++;
+      if (sellSheetHas(item.purchase.id) && !!item.purchase.receivedAt) count++;
     }
     return count;
   }, [items, sellSheetHas]);
