@@ -107,7 +107,7 @@ func (c *Client) CardLookup(ctx context.Context, cardID int) (*CardLookupRespons
 	fullURL := fmt.Sprintf("%s/api/v1/enterprise/cards/lookup?card_id=%d", c.baseURL, cardID)
 
 	var resp CardLookupResponse
-	if err := c.getEnterprise(ctx, fullURL, &resp); err != nil {
+	if err := c.doEnterprise(ctx, "GET", fullURL, nil, &resp); err != nil {
 		return nil, err
 	}
 	if resp.Card.ID <= 0 {
@@ -124,7 +124,7 @@ func (c *Client) RecentSales(ctx context.Context, cardID int) ([]RecentSale, err
 	var resp struct {
 		Sales []RecentSale `json:"sales"`
 	}
-	if err := c.getEnterprise(ctx, fullURL, &resp); err != nil {
+	if err := c.doEnterprise(ctx, "GET", fullURL, nil, &resp); err != nil {
 		return nil, err
 	}
 	for i, sale := range resp.Sales {
@@ -181,7 +181,7 @@ func (c *Client) Suggestions(ctx context.Context) (*SuggestionsResponse, error) 
 	fullURL := fmt.Sprintf("%s/api/v1/enterprise/suggestions", c.baseURL)
 
 	var resp SuggestionsResponse
-	if err := c.getEnterprise(ctx, fullURL, &resp); err != nil {
+	if err := c.doEnterprise(ctx, "GET", fullURL, nil, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil
@@ -200,35 +200,6 @@ func (c *Client) waitForRateLimit(ctx context.Context) error {
 		}
 		return apperrors.ProviderUnavailable(providerName, err)
 	}
-	return nil
-}
-
-// getEnterprise performs a GET request with Bearer auth for the enterprise API.
-func (c *Client) getEnterprise(ctx context.Context, fullURL string, dest any) error {
-	if !c.EnterpriseAvailable() {
-		return apperrors.ConfigMissing("dh_enterprise_api_key", "DH_ENTERPRISE_API_KEY")
-	}
-
-	if err := c.waitForRateLimit(ctx); err != nil {
-		return err
-	}
-
-	headers := map[string]string{
-		enterpriseAuthHeader: "Bearer " + c.enterpriseKey,
-		"Accept":             "application/json",
-	}
-
-	resp, err := c.httpClient.Get(ctx, fullURL, headers, c.timeout)
-	if err != nil {
-		c.recordHealth(false)
-		return err
-	}
-
-	if err := json.Unmarshal(resp.Body, dest); err != nil {
-		c.recordHealth(false)
-		return apperrors.ProviderInvalidResponse(providerName, err)
-	}
-	c.recordHealth(true)
 	return nil
 }
 
@@ -431,7 +402,7 @@ func (c *Client) GenerateInstagramPost(ctx context.Context, scope, strategy, hea
 func (c *Client) PollInstagramPostStatus(ctx context.Context, postID int64) (*DHInstagramStatusResponse, error) {
 	url := fmt.Sprintf("%s/api/v1/enterprise/instagram/posts/%d/status", c.baseURL, postID)
 	var resp DHInstagramStatusResponse
-	if err := c.getEnterprise(ctx, url, &resp); err != nil {
+	if err := c.doEnterprise(ctx, "GET", url, nil, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil

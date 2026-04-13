@@ -82,7 +82,7 @@ func (c *Client) GetCertResolutionJob(ctx context.Context, jobID string) (*CertR
 	fullURL := fmt.Sprintf("%s/api/v1/enterprise/certs/resolve_batch/%s", c.baseURL, url.PathEscape(jobID))
 
 	var resp CertResolutionJobStatus
-	if err := c.getEnterprise(ctx, fullURL, &resp); err != nil {
+	if err := c.doEnterprise(ctx, "GET", fullURL, nil, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil

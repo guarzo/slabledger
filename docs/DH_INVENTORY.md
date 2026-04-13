@@ -5,8 +5,8 @@ How cards flow from local inventory to DH's marketplace.
 ## Overview
 
 ```
-PSA Cert Import → CL Value Lookup → Cert Resolution → Inventory Push → Channel Sync
-     (CSV)         (CardLadder)        (DH API)          (DH API)       (eBay/Shopify)
+PSA Cert Import → CL Value (manual) → Cert Resolution → Inventory Push → Channel Sync
+     (CSV)         (at import time)       (DH API)          (DH API)       (eBay/Shopify)
 ```
 
 ## Pipeline States (`dh_push_status`)
@@ -29,8 +29,8 @@ A purchase becomes eligible for DH push when:
 - Its `dh_push_status` is not already `pending`, `unmatched`, or `manual`
 
 **Triggers:**
-- CL import/refresh sets status to `pending` when `NeedsDHPush()` returns true
-- CL value change on an already-pushed item re-enrolls it as `pending` (re-push)
+- PSA import sets status to `pending` when `NeedsDHPush()` returns true
+- A CL value change on an already-pushed item re-enrolls it as `pending` (re-push). `CLValueCents` is entered manually at import time — there is no automated CardLadder sync.
 
 **Guard:** Items with `CLValueCents == 0` are skipped by the push scheduler (left as `pending` until CL value arrives).
 
@@ -110,14 +110,15 @@ There are 5 places that push inventory to DH:
 
 All sites use `ResolveMarketValueCents()` (reviewed price > CL value) as `market_value_cents` and `BuyCostCents` as `cost_basis_cents`.
 
-## Re-Push on Price Change
+## Re-Push on CL Value Change
 
 When CL value changes on an already-pushed item:
 
 1. **CL import service** (`service_import_cl.go`): detects `DHInventoryID != 0 && newCL != oldCL`, sets status back to `pending`
-2. **CL refresh scheduler** (`cardladder_refresh.go`): same logic for API-driven value updates
-3. **Push scheduler** picks it up, sees `DHCardID` already set, skips cert resolution, pushes with updated `market_value_cents`
-4. DH's upsert semantics update the existing inventory item
+2. **Push scheduler** picks it up, sees `DHCardID` already set, skips cert resolution, pushes with updated `market_value_cents`
+3. DH's upsert semantics update the existing inventory item
+
+> Note: `CLValueCents` is entered manually at import time. There is no automated CardLadder scheduler — the `cardladder_refresh.go` scheduler is a legacy component that is no longer active.
 
 ## Push Safety Gates
 
@@ -181,10 +182,9 @@ For `unmatched` cards:
 | Push scheduler | `internal/adapters/scheduler/dh_push.go` |
 | DH API client | `internal/adapters/clients/dh/` |
 | API types | `internal/adapters/clients/dh/types_v2.go` |
-| Card name cleaning | `internal/domain/campaigns/dh_helpers.go` |
+| Card name cleaning | `internal/domain/inventory/dh_helpers.go` |
 | Push status DB ops | `internal/adapters/storage/sqlite/purchases_repository_dh.go` |
 | Card ID mapping cache | `internal/adapters/storage/sqlite/card_id_mapping_repository.go` |
 | HTTP handlers | `internal/adapters/httpserver/handlers/dh_*.go` |
-| CL refresh (re-push) | `internal/adapters/scheduler/cardladder_refresh.go` |
-| CL import (re-push) | `internal/domain/campaigns/service_import_cl.go` |
+| CL import (re-push trigger) | `internal/domain/inventory/service_import_cl.go` |
 | Scheduler wiring | `internal/adapters/scheduler/builder.go` |

@@ -105,15 +105,16 @@ export default function EbayExportTab() {
     fetchMutation.mutate();
   }, [fetchMutation]);
 
+  const resetFetch = fetchMutation.reset;
+  const resetExport = exportMutation.reset;
+
   useEffect(() => {
     fetchControllerRef.current?.abort();
     setItems([]);
     setDecisions(new Map());
-    fetchMutation.reset();
-    exportMutation.reset();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  // mutation functions from useMutation are stable refs — safe to omit from deps
-  }, [flaggedOnly]);
+    resetFetch();
+    resetExport();
+  }, [flaggedOnly, resetFetch, resetExport]);
 
   const setDecision = (purchaseId: string, decision: Decision) => {
     setDecisions(prev => new Map(prev).set(purchaseId, decision));

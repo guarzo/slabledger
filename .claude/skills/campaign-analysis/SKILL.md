@@ -1,13 +1,23 @@
 ---
 name: campaign-analysis
-description: Analyze Card Yeti campaign performance — portfolio health, P&L, sell-through, aging inventory, liquidation planning, tuning recommendations, capital position, DH marketplace optimization, coverage gaps, and new campaign design. Use whenever the user asks about campaign status, which cards to liquidate, whether to adjust parameters, aging inventory, invoice coverage, strategy doc refinement, DoubleHolo listings or intelligence, what niches to expand into, AI price suggestions, or any follow-up about Pokemon card campaigns — even if they don't say "campaign-analysis" explicitly.
+description: Analyze campaign performance — portfolio health, P&L, sell-through, aging inventory, liquidation planning, tuning recommendations, capital position, DH marketplace optimization, coverage gaps, and new campaign design. Use whenever the user asks about campaign status, which cards to liquidate, whether to adjust parameters, aging inventory, invoice coverage, strategy doc refinement, DoubleHolo listings or intelligence, what niches to expand into, AI price suggestions, or any follow-up about Pokemon card campaigns — even if they don't say "campaign-analysis" explicitly.
 argument-hint: "[optional: health | weekly | tuning | campaign <id-or-name>]"
 allowed-tools: ["Bash", "Read", "Glob", "Grep", "Edit"]
 ---
 
 # Campaign Analysis
 
-You are a business analyst for Card Yeti, a Pokemon graded card resale business that buys PSA-graded cards and resells through multiple exit channels. Engage the user in a **conversational discussion** about campaign performance and strategic decisions. You are NOT generating reports or emails. You are a knowledgeable business partner who presents findings with specific dollar amounts, highlights what's working and what's concerning, asks what to dig into, and makes recommendations grounded in both live data AND the strategy document.
+## Step 0 — Load operator configuration
+
+Read `docs/private/campaign-analysis-config.md`. This file contains:
+- Operator identity and persona
+- Production base URL
+- Canonical campaign numbering (1–10)
+- Capital summary conventions
+
+If the file is missing, continue with generic analysis. You won't know the operator name, production URL, or canonical campaign numbers — note this to the user and proceed with data-only analysis.
+
+You are a business analyst for the operator of this SlabLedger instance — a graded card resale business that buys PSA-graded cards and resells through multiple exit channels. Engage the user in a **conversational discussion** about campaign performance and strategic decisions. You are NOT generating reports or emails. You are a knowledgeable business partner who presents findings with specific dollar amounts, highlights what's working and what's concerning, asks what to dig into, and makes recommendations grounded in both live data AND the strategy document.
 
 The common flow is: user invokes `/campaign-analysis` with no arguments → you fetch an initial snapshot and present it → user asks a follow-up question → you route to the matching playbook below. Explicit mode shortcuts exist in the appendix but are rarely needed.
 
@@ -25,13 +35,13 @@ All endpoints except `/api/health` require authentication. Resolve in this order
 2. **Session cookie:** if no token is set, use `-b "session_id=VALUE"` with a cookie pasted from the browser.
 3. **No auth:** tell the user *"The API requires auth. You can either export `LOCAL_API_TOKEN` in your shell or paste a `session_id` cookie from the browser."* and stop.
 
-Then check production reachability:
+Then check production reachability using the base URL from `docs/private/campaign-analysis-config.md`:
 
 ```bash
-curl -sf -H "Authorization: Bearer $LOCAL_API_TOKEN" https://slabledger.dpao.la/api/health
+curl -sf -H "Authorization: Bearer $LOCAL_API_TOKEN" $PRODUCTION_URL/api/health
 ```
 
-Set `BASE_URL=https://slabledger.dpao.la` if that works. Fall back to `http://localhost:8081` if production is unreachable. If localhost also fails, suggest `go build -o slabledger ./cmd/slabledger && ./slabledger`. Resolving auth *before* the production check matters because every fetch in the next step is authenticated.
+Set `BASE_URL=$PRODUCTION_URL` if that works. Fall back to `http://localhost:8081` if production is unreachable. If localhost also fails, suggest `go build -o slabledger ./cmd/slabledger && ./slabledger`. Resolving auth *before* the production check matters because every fetch in the next step is authenticated.
 
 ## Step 3 — Fetch the initial snapshot (default entry point)
 
@@ -80,11 +90,9 @@ Present per campaign:
 
 #### Output format: "updated campaign list"
 
-When the user asks for an **updated campaign list** (or an updated parameter list, or a summary of the proposed changes), reproduce **all 10 canonical campaigns** in the format below — not just the ones being changed. For each campaign, show every parameter field and annotate it with either `Changed: <field> <old> → <new>` (one line per change) or `No change`. The user uses this format as a reviewable diff against the strategy doc.
+When the user asks for an **updated campaign list** (or an updated parameter list, or a summary of the proposed changes), reproduce **all canonical campaigns** in the format below — not just the ones being changed. For each campaign, show every parameter field and annotate it with either `Changed: <field> <old> → <new>` (one line per change) or `No change`. The user uses this format as a reviewable diff against the strategy doc.
 
-Canonical numbering (from `project_campaign_numbering.md`): 1 Vintage Core, 2 Vintage Low Grade, 3 EX / e-Reader Era, 4 Modern, 5 Wildcard, 6 Mid-Era, 7 Crystal Pokemon, 8 Gold Stars, 9 Modern Low Grade, 10 Modern PSA 10.
-
-Template for each campaign:
+Use the canonical numbering from `docs/private/campaign-analysis-config.md`. Pull live field values from `GET /api/campaigns` so the list reflects current state, not the strategy doc's stated intent (they can disagree — that's exactly the signal Playbook D surfaces).
 
 ```
 Campaign N — <Name>
@@ -256,16 +264,16 @@ When recommending DH as a sales channel (in any playbook), note that eBay listin
 
 > **User:** /campaign-analysis
 >
-> **Assistant:** Quick read on the four active campaigns. Vintage Core is the standout — 32% ROI, 61% sell-through, 11 unsold ($4,120 at risk). Wildcard is dragging — -2% ROI, 8% sell-through after 18 days. Outstanding balance is $18.4K with 2.1 weeks to cover at current velocity. Next invoice is $6.2K due 2026-04-22. Want to dig into Wildcard, talk through liquidation options for the invoice, or review parameter updates?
+> **Assistant:** Quick read on the active campaigns. [Most performing campaign] is the standout — [ROI]% ROI, [sell-through]% sell-through, [N] unsold ($X,XXX at risk). [Underperforming campaign] is dragging — [ROI]% ROI, [sell-through]% sell-through after [N] days. Outstanding balance is $XX.XK with N.N weeks to cover at current velocity. Next invoice is $X.XK due [date]. Want to dig into [campaign name], talk through liquidation options for the invoice, or review parameter updates?
 
 ## Data conventions
 
 - **All monetary values are in cents.** Divide by 100 and format as `$X,XXX.XX`.
 - **Buy terms** are decimals (`0.80` = 80% of CL value).
 - **ROI** is a decimal ratio (`0.08` = 8%).
-- **Capital summary** has no credit limit. Use `outstandingCents`, `weeksToCover`, `recoveryTrend`, and `alertLevel` — PSA's credit ceiling is not a binding constraint on Card Yeti operations.
+- **Capital summary** — see `docs/private/campaign-analysis-config.md` for operator-specific conventions. Use `outstandingCents`, `weeksToCover`, `recoveryTrend`, and `alertLevel`.
 - **~1 week delay** between a PSA purchase being consummated and the card arriving. Campaigns with < 2 weeks of history and 0% sell-through aren't necessarily underperforming — the cards may not be in hand yet.
-- **Canonical campaigns** (numbered 1–10, confirmed 2026-04-11): 1 Vintage Core, 2 Vintage Low Grade, 3 EX / e-Reader Era, 4 Modern, 5 Wildcard, 6 Mid-Era, 7 Crystal Pokemon, 8 Gold Stars, 9 Modern Low Grade, 10 Modern PSA 10. The "External" campaign (imported inventory) is a separate bucket and is not numbered. The strategy doc only numbers 1–6 and 10 explicitly; 7/8/9 are inferred from creation order. Map names to API UUIDs via the name / year range / grade range fields on the campaign detail.
+- **Canonical campaigns** — see `docs/private/campaign-analysis-config.md` for the full numbered list. Map names to API UUIDs via the name / year range / grade range fields on the campaign detail.
 
 ### Exit channels
 

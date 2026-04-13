@@ -86,3 +86,8 @@ docs/superpowers/
 # Private docs (sensitive business data, kept locally only)
 docs/private/
 .claude/commands/campaign-analysis.md
+
+# Internal engineering docs (not for public consumption)
+docs/AI_USAGE_AUDIT.md
+docs/Issues.md
+docs/CARD_LADDER_INTEGRATION.md

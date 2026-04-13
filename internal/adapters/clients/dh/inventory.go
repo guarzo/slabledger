@@ -58,7 +58,7 @@ func (c *Client) ListInventory(ctx context.Context, filters InventoryFilters) (*
 	fullURL := fmt.Sprintf("%s/api/v1/enterprise/inventory?%s", c.baseURL, params.Encode())
 
 	var resp InventoryListResponse
-	if err := c.getEnterprise(ctx, fullURL, &resp); err != nil {
+	if err := c.doEnterprise(ctx, "GET", fullURL, nil, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil
@@ -126,7 +126,7 @@ func (c *Client) GetOrders(ctx context.Context, filters OrderFilters) (*OrdersRe
 	fullURL := fmt.Sprintf("%s/api/v1/enterprise/orders?%s", c.baseURL, params.Encode())
 
 	var resp OrdersResponse
-	if err := c.getEnterprise(ctx, fullURL, &resp); err != nil {
+	if err := c.doEnterprise(ctx, "GET", fullURL, nil, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil

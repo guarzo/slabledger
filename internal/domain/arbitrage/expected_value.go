@@ -1,9 +1,13 @@
 package arbitrage
 
-import "math"
+import (
+	"math"
+
+	"github.com/guarzo/slabledger/internal/domain/constants"
+)
 
 // DefaultMarketplaceFeePct is the default eBay/TCGPlayer fee percentage (12.35%).
-const DefaultMarketplaceFeePct = 0.1235
+const DefaultMarketplaceFeePct = constants.DefaultMarketplaceFeePct
 
 // confidenceLabel returns a confidence string based on data point count.
 func confidenceLabel(n int) string {

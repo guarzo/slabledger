@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { test as base, Page } from '@playwright/test';
 
 /**
