@@ -148,3 +148,144 @@ func TestListPurchases(t *testing.T) {
 		})
 	}
 }
+
+// TestListPurchases_EmptyInput asserts that an empty cert-number slice
+// returns a zero result and does not panic.
+func TestListPurchases_EmptyInput(t *testing.T) {
+	lookup := &mockPurchaseLookup{
+		purchases: map[string]*inventory.Purchase{},
+	}
+	svc := newTestService(t, lookup, WithDHListingLister(&mockInventoryLister{}))
+
+	result := svc.ListPurchases(context.Background(), []string{})
+
+	if result.Listed != 0 || result.Synced != 0 || result.Total != 0 {
+		t.Errorf("expected zero result for empty input, got %+v", result)
+	}
+	if result.Error != nil {
+		t.Errorf("expected no error for empty input, got %v", result.Error)
+	}
+}
+
+// TestDisambiguateCandidates covers the package-level disambiguateCandidates
+// function (white-box test; requires package dhlisting).
+func TestDisambiguateCandidates(t *testing.T) {
+	tests := []struct {
+		name           string
+		candidates     []DHCertCandidate
+		cardNumber     string
+		saveFnErr      error
+		wantID         int
+		wantSaveCalled bool
+		wantErr        bool
+	}{
+		{
+			name:           "empty candidates — saveFn called with empty JSON",
+			candidates:     []DHCertCandidate{},
+			cardNumber:     "001",
+			wantID:         0,
+			wantSaveCalled: true,
+		},
+		{
+			name: "single candidate matching card number",
+			candidates: []DHCertCandidate{
+				{DHCardID: 42, CardNumber: "001"},
+			},
+			cardNumber:     "001",
+			wantID:         42,
+			wantSaveCalled: false,
+		},
+		{
+			name: "single candidate non-matching card number — saveFn called",
+			candidates: []DHCertCandidate{
+				{DHCardID: 99, CardNumber: "002"},
+			},
+			cardNumber:     "001",
+			wantID:         0,
+			wantSaveCalled: true,
+		},
+		{
+			name: "multiple candidates — exact card number match returns ID",
+			candidates: []DHCertCandidate{
+				{DHCardID: 10, CardNumber: "001"},
+				{DHCardID: 20, CardNumber: "002"},
+			},
+			cardNumber:     "001",
+			wantID:         10,
+			wantSaveCalled: false,
+		},
+		{
+			name: "multiple candidates — no card number match calls saveFn",
+			candidates: []DHCertCandidate{
+				{DHCardID: 10, CardNumber: "003"},
+				{DHCardID: 20, CardNumber: "004"},
+			},
+			cardNumber:     "001",
+			wantID:         0,
+			wantSaveCalled: true,
+		},
+		{
+			name: "multiple candidates — ambiguous (two match same number) calls saveFn",
+			candidates: []DHCertCandidate{
+				{DHCardID: 10, CardNumber: "001"},
+				{DHCardID: 20, CardNumber: "001"},
+			},
+			cardNumber:     "001",
+			wantID:         0,
+			wantSaveCalled: true,
+		},
+		{
+			name: "saveFn error is propagated",
+			candidates: []DHCertCandidate{
+				{DHCardID: 5, CardNumber: "999"},
+			},
+			cardNumber:     "001",
+			saveFnErr:      errors.New("save failed"),
+			wantID:         0,
+			wantSaveCalled: true,
+			wantErr:        true,
+		},
+		{
+			name:           "nil saveFn — no panic on unresolvable candidates",
+			candidates:     []DHCertCandidate{{DHCardID: 7, CardNumber: "002"}},
+			cardNumber:     "001",
+			wantID:         0,
+			wantSaveCalled: false, // saveFn is nil — no call
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			saveCalled := false
+			var saveFn func(string) error
+			if tc.name != "nil saveFn — no panic on unresolvable candidates" {
+				err := tc.saveFnErr
+				saveFn = func(_ string) error {
+					saveCalled = true
+					return err
+				}
+			}
+
+			id, err := disambiguateCandidates(tc.candidates, tc.cardNumber, saveFn)
+
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+			}
+			if id != tc.wantID {
+				t.Errorf("expected ID %d, got %d", tc.wantID, id)
+			}
+			if tc.wantSaveCalled && !saveCalled {
+				t.Error("expected saveFn to be called, but it was not")
+			}
+			if !tc.wantSaveCalled && saveCalled {
+				t.Error("expected saveFn not to be called, but it was")
+			}
+		})
+	}
+}
