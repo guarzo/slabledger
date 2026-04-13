@@ -108,7 +108,10 @@ func envBool(key string, target *bool, defaultVal bool) {
 	}
 }
 
-// FromEnv overlays environment variables onto the base config
+// FromEnv overlays environment variables onto the base config.
+// Uses the env* helper functions above which provide type-safe, validated parsing.
+// FromFlags reads configuration from CLI flags using the standard flag package.
+// Both set the same Config fields; FromFlags takes precedence (applied after FromEnv).
 func FromEnv(base Config) Config {
 	cfg := base
 
@@ -123,6 +126,11 @@ func FromEnv(base Config) Config {
 	envDuration("HTTP_IDLE_TIMEOUT", &cfg.Server.IdleTimeout)
 	envString("BASE_URL", &cfg.Server.BaseURL)
 	envString("MEDIA_DIR", &cfg.Server.MediaDir)
+	if v := os.Getenv("SHUTDOWN_TIMEOUT_SECONDS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			cfg.Server.SchedulerShutdownTimeout = time.Duration(n) * time.Second
+		}
+	}
 
 	// Rate limiting
 	envInt("RATE_LIMIT_REQUESTS", &cfg.Mode.RateLimitRequests)

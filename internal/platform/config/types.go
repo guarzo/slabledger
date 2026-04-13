@@ -19,13 +19,14 @@ type CacheConfig struct {
 
 // ServerConfig contains HTTP server configuration
 type ServerConfig struct {
-	ListenAddr      string        // HTTP listen address (default: 127.0.0.1:8080)
-	ReadTimeout     time.Duration // HTTP read timeout
-	WriteTimeout    time.Duration // HTTP write timeout
-	IdleTimeout     time.Duration // HTTP idle timeout
-	ShutdownTimeout time.Duration // Graceful shutdown timeout
-	BaseURL         string        // Public base URL for generating absolute links (optional)
-	MediaDir        string        // Directory for media file storage (default: ./data/media)
+	ListenAddr               string        // HTTP listen address (default: 127.0.0.1:8080)
+	ReadTimeout              time.Duration // HTTP read timeout
+	WriteTimeout             time.Duration // HTTP write timeout
+	IdleTimeout              time.Duration // HTTP idle timeout
+	ShutdownTimeout          time.Duration // Graceful HTTP server shutdown timeout
+	SchedulerShutdownTimeout time.Duration // Graceful scheduler shutdown timeout (SHUTDOWN_TIMEOUT_SECONDS)
+	BaseURL                  string        // Public base URL for generating absolute links (optional)
+	MediaDir                 string        // Directory for media file storage (default: ./data/media)
 }
 
 // LoggingConfig controls logging behavior

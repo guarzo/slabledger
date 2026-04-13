@@ -1,5 +1,10 @@
 package main
 
+// init_services.go initializes optional external services: price providers, AI-powered services
+// (advisor, social, image generation), metrics polling, and third-party integrations
+// (Card Ladder, Market Movers). Core inventory/campaign services are initialized in
+// init_inventory_services.go. Scheduler initialization is in init_schedulers.go.
+
 import (
 	"context"
 	"fmt"
