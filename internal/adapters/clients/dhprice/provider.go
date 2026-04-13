@@ -320,7 +320,11 @@ func hasMarketData(md *dh.CardLookupMarketData) bool {
 	if md == nil {
 		return false
 	}
-	return (md.BestAsk != nil && *md.BestAsk > 0) || md.ActiveAsks > 0 || md.Volume24h > 0
+	return (md.BestAsk != nil && *md.BestAsk > 0) ||
+		md.ActiveAsks > 0 ||
+		md.Volume24h > 0 ||
+		(md.MidPrice != nil && *md.MidPrice > 0) ||
+		(md.LastSale != nil && *md.LastSale > 0)
 }
 
 // applyMarketData enriches a Price with listing/market data from the DH CardLookup API.
@@ -333,6 +337,15 @@ func applyMarketData(price *pricing.Price, md *dh.CardLookupMarketData) {
 	}
 	if md.BestAsk != nil && *md.BestAsk > 0 {
 		market.LowestListing = mathutil.ToCents(*md.BestAsk)
+	}
+	if md.MidPrice != nil && *md.MidPrice > 0 {
+		market.MidPrice = mathutil.ToCents(*md.MidPrice)
+	}
+	if md.LastSale != nil && *md.LastSale > 0 {
+		market.LastSoldCents = mathutil.ToCents(*md.LastSale)
+	}
+	if md.LastSaleDate != nil {
+		market.LastSoldDate = *md.LastSaleDate
 	}
 	if md.Volume24h > 0 {
 		// Extrapolate 24h volume to 30d/90d estimates.
