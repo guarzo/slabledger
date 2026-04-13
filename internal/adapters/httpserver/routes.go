@@ -42,9 +42,6 @@ func (rt *Router) registerAdminRoutes(mux *http.ServeMux) {
 		if rt.apiStatusHandler != nil {
 			mux.Handle("/api/admin/api-usage", rt.authMW.RequireAdmin(http.HandlerFunc(rt.apiStatusHandler.HandleAPIUsage)))
 		}
-		if rt.cacheStatusHandler != nil {
-			mux.Handle("/api/admin/cache-stats", rt.authMW.RequireAdmin(http.HandlerFunc(rt.cacheStatusHandler.HandleCacheStats)))
-		}
 		if rt.databasePath != "" {
 			mux.Handle("/api/admin/backup", rt.authMW.RequireAdmin(handlers.HandleBackup(rt.databasePath, rt.logger)))
 		}
@@ -53,11 +50,6 @@ func (rt *Router) registerAdminRoutes(mux *http.ServeMux) {
 		}
 		if rt.pricingDiagnosticsHandler != nil {
 			mux.Handle("GET /api/admin/pricing-diagnostics", rt.authMW.RequireAdmin(http.HandlerFunc(rt.pricingDiagnosticsHandler.HandlePricingDiagnostics)))
-		}
-		if rt.cardRequestHandler != nil {
-			mux.Handle("GET /api/admin/card-requests", rt.authMW.RequireAdmin(http.HandlerFunc(rt.cardRequestHandler.HandleListCardRequests)))
-			mux.Handle("POST /api/admin/card-requests/{id}/submit", rt.authMW.RequireAdmin(http.HandlerFunc(rt.cardRequestHandler.HandleSubmitCardRequest)))
-			mux.Handle("POST /api/admin/card-requests/submit-all", rt.authMW.RequireAdmin(http.HandlerFunc(rt.cardRequestHandler.HandleSubmitAllCardRequests)))
 		}
 		if rt.campaignsHandler != nil {
 			mux.Handle("GET /api/admin/price-override-stats", rt.authMW.RequireAdmin(http.HandlerFunc(rt.campaignsHandler.HandlePriceOverrideStats)))
@@ -325,20 +317,6 @@ func (rt *Router) registerOpportunitiesRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/opportunities/acquisition", rt.authMW.RequireAuth(http.HandlerFunc(rt.opportunitiesHandler.HandleGetAcquisitionTargets)))
 	mux.Handle("GET /api/opportunities/crack", rt.authMW.RequireAuth(http.HandlerFunc(rt.opportunitiesHandler.HandleGetCrackOpportunities)))
 	rt.logger.Info(context.Background(), "opportunities routes registered")
-}
-
-// registerPicksRoutes wires the AI picks and acquisition watchlist endpoints.
-func (rt *Router) registerPicksRoutes(mux *http.ServeMux) {
-	if rt.picksHandler == nil || rt.authMW == nil {
-		return
-	}
-	mux.Handle("GET /api/picks", rt.authMW.RequireAuth(http.HandlerFunc(rt.picksHandler.HandleGetPicks)))
-	mux.Handle("GET /api/picks/history", rt.authMW.RequireAuth(http.HandlerFunc(rt.picksHandler.HandleGetPickHistory)))
-	mux.Handle("GET /api/picks/watchlist", rt.authMW.RequireAuth(http.HandlerFunc(rt.picksHandler.HandleGetWatchlist)))
-	mux.Handle("POST /api/picks/watchlist", rt.authMW.RequireAuth(http.HandlerFunc(rt.picksHandler.HandleAddWatchlistItem)))
-	mux.Handle("DELETE /api/picks/watchlist/{id}", rt.authMW.RequireAuth(http.HandlerFunc(rt.picksHandler.HandleDeleteWatchlistItem)))
-	mux.HandleFunc("/opportunities", rt.spaHandler.HandleIndex)
-	rt.logger.Info(context.Background(), "picks routes registered")
 }
 
 // TrackedEndpoints lists the endpoints whose response times are recorded.

@@ -5,7 +5,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/guarzo/slabledger/internal/domain/cards"
 	"github.com/guarzo/slabledger/internal/domain/pricing"
 )
 
@@ -107,7 +106,7 @@ func (m *MockSimplePriceProvider) Name() string {
 	return "mock"
 }
 
-func (m *MockSimplePriceProvider) LookupCard(_ context.Context, _ string, _ cards.Card) (*pricing.Price, error) {
+func (m *MockSimplePriceProvider) LookupCard(_ context.Context, _ string, _ pricing.CardLookup) (*pricing.Price, error) {
 	return &pricing.Price{}, nil
 }
 

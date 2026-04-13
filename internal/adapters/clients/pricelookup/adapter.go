@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"math"
 
-	domainCards "github.com/guarzo/slabledger/internal/domain/cards"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/mathutil"
 	"github.com/guarzo/slabledger/internal/domain/pricing"
@@ -248,7 +247,7 @@ func (a *Adapter) GetMarketSnapshot(ctx context.Context, card inventory.CardIden
 // handled internally by the DHPriceProvider. Callers that have a DH card ID will
 // benefit from cache hits without needing to pass the ID through this adapter layer.
 func (a *Adapter) getPrice(ctx context.Context, card inventory.CardIdentity) (*pricing.Price, error) {
-	c := domainCards.Card{Name: card.CardName, Number: card.CardNumber, SetName: card.SetName, PSAListingTitle: card.PSAListingTitle}
+	c := pricing.CardLookup{Name: card.CardName, Number: card.CardNumber, PSAListingTitle: card.PSAListingTitle}
 	price, err := a.provider.LookupCard(ctx, card.SetName, c)
 	if err != nil {
 		return nil, fmt.Errorf("price lookup for %q: %w", card.CardName, err)

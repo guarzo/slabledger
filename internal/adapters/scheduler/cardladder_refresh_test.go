@@ -102,19 +102,6 @@ func (m *mockCLGemRateUpdater) UpdatePurchaseCLCardMetadata(ctx context.Context,
 	return nil
 }
 
-type mockCLValueHistoryRecorder struct {
-	RecordFn func(ctx context.Context, entry inventory.CLValueEntry) error
-	Calls    []inventory.CLValueEntry
-}
-
-func (m *mockCLValueHistoryRecorder) RecordCLValue(ctx context.Context, entry inventory.CLValueEntry) error {
-	m.Calls = append(m.Calls, entry)
-	if m.RecordFn != nil {
-		return m.RecordFn(ctx, entry)
-	}
-	return nil
-}
-
 // ---------------------------------------------------------------------------
 // Helper functions tests
 // ---------------------------------------------------------------------------
@@ -152,7 +139,7 @@ func TestNewCardLadderRefreshScheduler_DefaultInterval(t *testing.T) {
 		&mockCLPurchaseLister{},
 		&mockCLValueUpdater{},
 		&mockCLGemRateUpdater{},
-		nil, nil,
+		nil,
 		mocks.NewMockLogger(),
 		config.CardLadderConfig{
 			Enabled:  true,
@@ -169,7 +156,7 @@ func TestNewCardLadderRefreshScheduler_ExplicitInterval(t *testing.T) {
 		&mockCLPurchaseLister{},
 		&mockCLValueUpdater{},
 		&mockCLGemRateUpdater{},
-		nil, nil,
+		nil,
 		mocks.NewMockLogger(),
 		config.CardLadderConfig{
 			Enabled:  true,
@@ -190,7 +177,7 @@ func TestCardLadderRefreshScheduler_Disabled(t *testing.T) {
 		&mockCLPurchaseLister{},
 		&mockCLValueUpdater{},
 		&mockCLGemRateUpdater{},
-		nil, nil,
+		nil,
 		mocks.NewMockLogger(),
 		config.CardLadderConfig{Enabled: false, Interval: 24 * time.Hour},
 	)
@@ -229,7 +216,7 @@ func TestWithCLDHPushUpdater_ReEnrollsOnValueChange(t *testing.T) {
 		&mockCLPurchaseLister{},
 		&mockCLValueUpdater{},
 		&mockCLGemRateUpdater{},
-		nil, nil,
+		nil,
 		mocks.NewMockLogger(),
 		config.CardLadderConfig{Enabled: true, Interval: 24 * time.Hour},
 		WithCLDHPushUpdater(dhPushUpdater),
@@ -251,7 +238,7 @@ func TestCardLadderRefreshScheduler_SetClient(t *testing.T) {
 		&mockCLPurchaseLister{},
 		&mockCLValueUpdater{},
 		&mockCLGemRateUpdater{},
-		nil, nil,
+		nil,
 		mocks.NewMockLogger(),
 		config.CardLadderConfig{Enabled: true, Interval: 24 * time.Hour},
 	)
@@ -273,5 +260,4 @@ func TestCardLadderRefreshScheduler_SetClient(t *testing.T) {
 var _ CardLadderPurchaseLister = (*mockCLPurchaseLister)(nil)
 var _ CardLadderValueUpdater = (*mockCLValueUpdater)(nil)
 var _ CardLadderGemRateUpdater = (*mockCLGemRateUpdater)(nil)
-var _ inventory.CLValueHistoryRecorder = (*mockCLValueHistoryRecorder)(nil)
 var _ DHPushStatusUpdater = (*mockCLDHPushUpdater)(nil)

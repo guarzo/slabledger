@@ -3,22 +3,10 @@ import { test, expect, selectors, setupPageWithMocks } from './fixtures';
 /**
  * E2E tests for keyboard navigation and accessibility
  * Tests keyboard nav, ARIA attributes, and mobile accessibility
- * on the actual app pages (dashboard, watchlist, campaigns)
+ * on the actual app pages (dashboard, campaigns)
  */
 
 test.describe('Keyboard Navigation', () => {
-  test('should be able to focus the Price Lookup button', async ({ page }) => {
-    await setupPageWithMocks(page, '/');
-
-    const lookupButton = page.locator(selectors.priceLookupButton);
-    await lookupButton.focus();
-
-    const isFocused = await lookupButton.evaluate((el) => {
-      return document.activeElement === el;
-    });
-    expect(isFocused).toBe(true);
-  });
-
   test('should be able to tab through navigation links', async ({ page }) => {
     await setupPageWithMocks(page, '/');
 
@@ -133,10 +121,6 @@ test.describe('Mobile Accessibility', () => {
     // Header should still be visible
     const header = page.locator(selectors.header);
     await expect(header).toBeVisible();
-
-    // Price Lookup button should still be visible
-    const lookupButton = page.locator(selectors.priceLookupButton);
-    await expect(lookupButton).toBeVisible();
 
     // Desktop nav is hidden on mobile; hamburger menu button should be visible
     const hamburger = page.locator('button[aria-label="Open menu"]');

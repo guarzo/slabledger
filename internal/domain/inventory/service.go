@@ -181,7 +181,6 @@ type service struct {
 	finance   FinanceRepository
 	pricing   PricingRepository
 	dh        DHRepository
-	snapshots SnapshotRepository
 
 	priceProv          PriceLookup
 	certLookup         CertLookup
@@ -190,10 +189,6 @@ type service struct {
 	logger             observability.Logger
 	idGen              func() string // generates unique IDs; must be injected via WithIDGenerator
 	maxSnapshotRetries int           // max retry attempts for failed snapshots (0 = unlimited)
-
-	// History recorders (optional — best-effort logging, never block imports)
-	popRecorder PopulationHistoryRecorder
-	clRecorder  CLValueHistoryRecorder
 
 	compProv        CompSummaryProvider     // optional — Card Ladder comp analytics
 	intelRepo       intelligence.Repository // optional — DH market intelligence for price-sync enrichment
@@ -270,16 +265,6 @@ func WithIDGenerator(fn func() string) ServiceOption {
 	return func(s *service) { s.idGen = fn }
 }
 
-// WithPopulationRecorder enables population history tracking during CSV imports.
-func WithPopulationRecorder(r PopulationHistoryRecorder) ServiceOption {
-	return func(s *service) { s.popRecorder = r }
-}
-
-// WithCLValueRecorder enables CL value history tracking during CSV imports.
-func WithCLValueRecorder(r CLValueHistoryRecorder) ServiceOption {
-	return func(s *service) { s.clRecorder = r }
-}
-
 // WithCompSummaryProvider enables Card Ladder comp analytics on inventory aging.
 func WithCompSummaryProvider(p CompSummaryProvider) ServiceOption {
 	return func(s *service) { s.compProv = p }
@@ -303,7 +288,6 @@ func NewService(
 	finance FinanceRepository,
 	pricing PricingRepository,
 	dh DHRepository,
-	snapshots SnapshotRepository,
 	opts ...ServiceOption,
 ) Service {
 	s := &service{
@@ -314,7 +298,6 @@ func NewService(
 		finance:   finance,
 		pricing:   pricing,
 		dh:        dh,
-		snapshots: snapshots,
 	}
 	for _, opt := range opts {
 		opt(s)

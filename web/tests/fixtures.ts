@@ -46,17 +46,6 @@ export const test = base.extend<Fixtures>({
         return;
       }
 
-      // Handle favorites endpoint
-      if (url.includes('/api/favorites')) {
-        await route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          headers: { 'Access-Control-Allow-Origin': '*' },
-          body: JSON.stringify({ favorites: [], total: 0 }),
-        });
-        return;
-      }
-
       // Handle campaigns endpoint
       if (url.includes('/api/campaigns')) {
         await route.fulfill({
@@ -114,9 +103,6 @@ export const selectors = {
   // Dashboard page (home)
   dashboardHeading: 'text=Dashboard',
 
-  // Price Lookup (drawer triggered from header)
-  priceLookupButton: 'button[aria-label="Price Lookup"]',
-
   // Campaigns page
   campaignsHeading: 'text=Campaigns',
 
@@ -128,7 +114,7 @@ export const selectors = {
 /**
  * Helper to mock all API routes for authenticated pages
  */
-export async function mockAllAPIs(page: Page, options?: { favorites?: any[] }) {
+export async function mockAllAPIs(page: Page) {
   console.warn('[MOCK] Registering catch-all API routes...');
 
   await page.route(url => new URL(url).pathname.startsWith('/api/'), async (route) => {
@@ -150,29 +136,12 @@ export async function mockAllAPIs(page: Page, options?: { favorites?: any[] }) {
           last_login_at: new Date().toISOString(),
         }),
       });
-    } else if (url.includes('/api/favorites')) {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        headers: { 'Access-Control-Allow-Origin': '*' },
-        body: JSON.stringify({
-          favorites: options?.favorites || [],
-          total: options?.favorites?.length || 0,
-        }),
-      });
     } else if (url.includes('/api/campaigns')) {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
         headers: { 'Access-Control-Allow-Origin': '*' },
         body: JSON.stringify([]),
-      });
-    } else if (url.includes('/api/cards/search')) {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        headers: { 'Access-Control-Allow-Origin': '*' },
-        body: JSON.stringify({ cards: [] }),
       });
     } else if (url.includes('/api/portfolio/')) {
       // Dashboard portfolio endpoints — return safe empty data
@@ -222,13 +191,12 @@ export async function waitForReactHydration(page: Page) {
  */
 export async function setupPageWithMocks(
   page: Page,
-  path: string,
-  options?: { favorites?: any[] }
+  path: string
 ) {
   console.warn(`[SETUP] Setting up page: ${path}`);
 
   // Register mock FIRST, before any navigation
-  await mockAllAPIs(page, options);
+  await mockAllAPIs(page);
 
   // Then navigate
   await page.goto(path);
@@ -256,20 +224,4 @@ export const PORTFOLIO_MOCK: Record<string, unknown> = {
 /**
  * Mock data generators for testing
  */
-export const mockData = {
-  /**
-   * Generate mock favorite items
-   */
-  favorites: (count: number) => {
-    return Array.from({ length: count }, (_, i) => ({
-      id: i + 1,
-      user_id: 1,
-      card_name: `Test Card ${i + 1}`,
-      set_name: `Test Set ${Math.floor(i / 10) + 1}`,
-      card_number: String(i + 1).padStart(3, '0'),
-      image_url: `https://images.pokemontcg.io/base1/${i + 1}.png`,
-      notes: i % 3 === 0 ? `Note for card ${i + 1}` : '',
-      created_at: new Date().toISOString(),
-    }));
-  },
-};
+export const mockData = {};

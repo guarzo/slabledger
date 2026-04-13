@@ -17,10 +17,8 @@ import (
 	// Domain interfaces (what we depend on - Dependency Inversion Principle)
 	domainArbitrage "github.com/guarzo/slabledger/internal/domain/arbitrage"
 	domainAuth "github.com/guarzo/slabledger/internal/domain/auth"
-	domainCards "github.com/guarzo/slabledger/internal/domain/cards"
 	domainDHListing "github.com/guarzo/slabledger/internal/domain/dhlisting"
 	domainExport "github.com/guarzo/slabledger/internal/domain/export"
-	domainFavorites "github.com/guarzo/slabledger/internal/domain/favorites"
 	domainFinance "github.com/guarzo/slabledger/internal/domain/finance"
 	domainCampaigns "github.com/guarzo/slabledger/internal/domain/inventory"
 	domainPortfolio "github.com/guarzo/slabledger/internal/domain/portfolio"
@@ -32,19 +30,15 @@ import (
 type ServerDependencies struct {
 	Config                    *config.Config
 	Logger                    observability.Logger
-	CardProv                  domainCards.CardProvider
 	PriceProv                 domainPricing.PriceProvider
 	HealthChecker             domainPricing.HealthChecker
 	APITracker                domainPricing.APITracker
 	AuthService               domainAuth.Service
-	FavoritesService          domainFavorites.Service
 	CampaignsService          domainCampaigns.Service
 	ArbitrageService          domainArbitrage.Service
 	PortfolioService          domainPortfolio.Service
 	TuningService             domainTuning.Service
-	CacheStatsProvider        handlers.CacheStatsProvider
 	PriceHintsHandler         *handlers.PriceHintsHandler
-	CardRequestHandler        *handlers.CardRequestHandlers
 	PricingDiagnosticsHandler *handlers.PricingDiagnosticsHandler
 	CampaignsRepo             handlers.CertPriceLookup        // For pricing API (cert price lookup)
 	PricingAPIKey             string                          // Bearer token; empty = pricing API disabled
@@ -56,7 +50,6 @@ type ServerDependencies struct {
 	CardLadderHandler         *handlers.CardLadderHandler     // Card Ladder admin; nil = disabled
 	MarketMoversHandler       *handlers.MarketMoversHandler   // Market Movers admin; nil = disabled
 	PSASyncHandler            *handlers.PSASyncHandler        // PSA pending items + admin status; nil = disabled
-	PicksHandler              *handlers.PicksHandler          // AI picks; nil = disabled
 	OpportunitiesHandler      *handlers.OpportunitiesHandler  // Arbitrage opportunities; nil = disabled
 	DHHandler                 *handlers.DHHandler             // DH bulk match + intelligence; nil = disabled
 	DHListingService          domainDHListing.Service         // optional: orchestrates DH listing after cert import
@@ -142,24 +135,18 @@ func startWebServer(ctx context.Context, deps ServerDependencies) error {
 	// Create timing store for observability
 	timingStore := middleware.NewTimingStore(httpserver.TrackedEndpoints)
 
-	// Create card search service
-	searchService := domainCards.NewSearchService(deps.CardProv)
-
 	// Create handlers with domain interfaces
 	var handlerOpts []handlers.HandlerOption
 	if deps.PriceProv != nil {
 		handlerOpts = append(handlerOpts, handlers.WithPriceProvider(deps.PriceProv))
 	}
 	handler := handlers.NewHandler(
-		deps.CardProv,
-		searchService,
 		logger,
 		handlerOpts...,
 	)
 
 	healthHandler := handlers.NewHealthHandler(
 		deps.HealthChecker,
-		deps.CardProv,
 		deps.PriceProv,
 		logger,
 	)
@@ -168,12 +155,6 @@ func startWebServer(ctx context.Context, deps ServerDependencies) error {
 
 	// Create API status handler (returns empty data when tracker is nil)
 	apiStatusHandler := handlers.NewAPIStatusHandler(deps.APITracker, logger)
-
-	// Create cache status handler
-	var cacheStatusHandler *handlers.CacheStatusHandler
-	if deps.CacheStatsProvider != nil {
-		cacheStatusHandler = handlers.NewCacheStatusHandler(deps.CacheStatsProvider, logger)
-	}
 
 	// Create campaigns handler if service is available
 	var campaignsHandler *handlers.CampaignsHandler
@@ -208,14 +189,11 @@ func startWebServer(ctx context.Context, deps ServerDependencies) error {
 		Handler:                   handler,
 		HealthHandler:             healthHandler,
 		APIStatusHandler:          apiStatusHandler,
-		CacheStatusHandler:        cacheStatusHandler,
 		SPAHandler:                spaHandler,
 		AuthService:               deps.AuthService,
-		FavoritesService:          deps.FavoritesService,
 		CampaignsHandler:          campaignsHandler,
 		CampaignsService:          deps.CampaignsService,
 		PriceHintsHandler:         deps.PriceHintsHandler,
-		CardRequestHandler:        deps.CardRequestHandler,
 		PricingDiagnosticsHandler: deps.PricingDiagnosticsHandler,
 		PricingAPIKey:             deps.PricingAPIKey,
 		CampaignsRepo:             deps.CampaignsRepo,
@@ -227,7 +205,6 @@ func startWebServer(ctx context.Context, deps ServerDependencies) error {
 		CardLadderHandler:         deps.CardLadderHandler,
 		MarketMoversHandler:       deps.MarketMoversHandler,
 		PSASyncHandler:            deps.PSASyncHandler,
-		PicksHandler:              deps.PicksHandler,
 		OpportunitiesHandler:      deps.OpportunitiesHandler,
 		DHHandler:                 deps.DHHandler,
 		SellSheetItemsHandler:     deps.SellSheetItemsHandler,

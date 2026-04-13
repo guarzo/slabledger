@@ -105,10 +105,6 @@ func (s *service) RefreshCLValuesGlobal(ctx context.Context, rows []CLExportRow)
 		// Must run before history recording so history uses repaired identity.
 		s.backfillMetadataFromCL(ctx, purchase, row)
 
-		// Record history entries (best-effort — never block the import).
-		s.recordCLHistory(ctx, purchase, newCLCents)
-		s.recordPopHistory(ctx, purchase, newPop)
-
 		// Defer snapshot recovery to background worker instead of blocking the CSV upload.
 		snapshotDeferred := false
 		if s.priceProv != nil && needsSnapshotRecovery(purchase) {
@@ -260,8 +256,6 @@ func (s *service) ImportCLExportGlobal(ctx context.Context, rows []CLExportRow) 
 			}
 
 			s.backfillMetadataFromCL(ctx, existing, row)
-			s.recordCLHistory(ctx, existing, newCLCents)
-			s.recordPopHistory(ctx, existing, newPop)
 			// Defer snapshot recovery to background worker instead of blocking import.
 			if s.priceProv != nil && needsSnapshotRecovery(existing) {
 				if err := s.purchases.UpdatePurchaseSnapshotStatus(ctx, existing.ID, SnapshotStatusPending, 0); err != nil && s.logger != nil {
@@ -443,44 +437,4 @@ func filterOutExternal(campaigns []Campaign) []Campaign {
 		}
 	}
 	return filtered
-}
-
-// recordCLHistory records a CL value observation if the recorder is configured.
-func (s *service) recordCLHistory(ctx context.Context, p *Purchase, clValueCents int) {
-	if s.clRecorder == nil || clValueCents == 0 {
-		return
-	}
-	today := time.Now().Format("2006-01-02")
-	if err := s.clRecorder.RecordCLValue(ctx, CLValueEntry{
-		CertNumber:      p.CertNumber,
-		CardName:        p.CardName,
-		SetName:         p.SetName,
-		CardNumber:      p.CardNumber,
-		GradeValue:      p.GradeValue,
-		CLValueCents:    clValueCents,
-		ObservationDate: today,
-		Source:          "csv_import",
-	}); err != nil && s.logger != nil {
-		s.logger.Warn(ctx, "failed to record CL history", observability.Err(err))
-	}
-}
-
-// recordPopHistory records a population observation if the recorder is configured.
-func (s *service) recordPopHistory(ctx context.Context, p *Purchase, pop int) {
-	if s.popRecorder == nil || pop == 0 {
-		return
-	}
-	today := time.Now().Format("2006-01-02")
-	if err := s.popRecorder.RecordPopulation(ctx, PopulationEntry{
-		CardName:        p.CardName,
-		SetName:         p.SetName,
-		CardNumber:      p.CardNumber,
-		GradeValue:      p.GradeValue,
-		Grader:          p.Grader,
-		Population:      pop,
-		ObservationDate: today,
-		Source:          "csv_import",
-	}); err != nil && s.logger != nil {
-		s.logger.Warn(ctx, "failed to record pop history", observability.Err(err))
-	}
 }

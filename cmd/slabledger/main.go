@@ -21,13 +21,9 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	"github.com/guarzo/slabledger/internal/adapters/clients/google"
 	"github.com/guarzo/slabledger/internal/adapters/clients/gsheets"
-	"github.com/guarzo/slabledger/internal/adapters/clients/tcgdex"
 	scoringadapter "github.com/guarzo/slabledger/internal/adapters/scoring"
 	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
 	"github.com/guarzo/slabledger/internal/domain/auth"
-	"github.com/guarzo/slabledger/internal/domain/favorites"
-	"github.com/guarzo/slabledger/internal/domain/picks"
-	"github.com/guarzo/slabledger/internal/platform/cache"
 	"github.com/guarzo/slabledger/internal/platform/crypto"
 )
 
@@ -138,7 +134,6 @@ SERVER MODE:
     slabledger server --port 9090 # Custom port
 
 EXAMPLES:
-    slabledger admin cache-stats       # Show cache statistics
 
 Documentation: docs/USER_GUIDE.md
 Web Interface: http://localhost:8081`)
@@ -160,9 +155,6 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		logger.Info(ctx, "Received interrupt signal, initiating graceful shutdown")
 		cancel()
 	}()
-
-	// Initialize cache
-	appCache := initializeCache(cfg.Cache.Path)
 
 	// Initialize database
 	dbPath, err := resolveDatabasePath(cfg.Database.Path)
@@ -222,13 +214,6 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		}
 	}
 
-	// Initialize favorites
-	favoritesRepo := sqlite.NewFavoritesRepository(db.DB)
-	favoritesService := favorites.NewService(favoritesRepo)
-
-	// Initialize providers
-	cardProvImpl := tcgdex.NewTCGdex(appCache, logger)
-
 	// Card ID mapping repository (caches external provider IDs)
 	cardIDMappingRepo := sqlite.NewCardIDMappingRepository(db.DB)
 
@@ -283,7 +268,6 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		ctx, cfg, logger, db, priceProvImpl, intelRepo, mmStore,
 	)
 	campaignsService := campaignsInit.service
-	cardRequestRepo := campaignsInit.cardRequestRepo
 	certLookup := campaignsInit.certLookup
 	arbSvc := campaignsInit.arbSvc
 	portSvc := campaignsInit.portSvc
@@ -339,12 +323,6 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	// Initialize Market Movers client (store was created earlier for campaigns service)
 	mmClient, _ := initializeMarketMovers(ctx, logger, db, clEncryptor)
 
-	// Initialize picks
-	picksRepo := sqlite.NewPicksRepository(db.DB)
-	profitabilityProv := sqlite.NewProfitabilityProvider(db.DB, logger)
-	inventoryProv := sqlite.NewInventoryProvider(db.DB)
-	picksService := picks.NewService(picksRepo, azureAIClient, profitabilityProv, inventoryProv, logger)
-
 	// Initialize Google Sheets client for PSA sync (nil if not configured)
 	var gsheetsClient *gsheets.Client
 	if cfg.GoogleSheets.CredentialsJSON != "" {
@@ -363,14 +341,12 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		DBTracker:            priceRepo,
 		RefreshCandidates:    refreshCandidateRepo,
 		PriceProvImpl:        priceProvImpl,
-		CardProvImpl:         cardProvImpl,
 		AuthService:          authService,
 		SyncStateRepo:        syncStateRepo,
 		CardIDMappingRepo:    cardIDMappingRepo,
 		CampaignStore:        campaignsInit.campaignStore,
 		PurchaseStore:        campaignsInit.purchaseStore,
 		DHStore:              campaignsInit.dhStore,
-		SnapshotStore:        campaignsInit.snapshotStore,
 		CampaignsService:     campaignsService,
 		CertLookup:           certLookup,
 		CertEnrichJob:        campaignsInit.certEnrichJob,
@@ -384,7 +360,6 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		MetricsPostLister:    metricsRepo,
 		MetricsSaver:         metricsRepo,
 		InsightsPoller:       insightsPoller,
-		PicksService:         picksService,
 		CardLadderClient:     clClient,
 		CardLadderStore:      clStore,
 		CardLadderSalesStore: clSalesStore,
@@ -409,11 +384,9 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		Cfg:               cfg,
 		Logger:            logger,
 		DB:                db,
-		CardProvImpl:      cardProvImpl,
 		PriceProvImpl:     priceProvImpl,
 		PriceRepo:         priceRepo,
 		AuthService:       authService,
-		FavoritesService:  favoritesService,
 		CampaignsService:  campaignsService,
 		ArbitrageService:  arbSvc,
 		PortfolioService:  portSvc,
@@ -423,7 +396,6 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		PurchaseStore:     campaignsInit.purchaseStore,
 		SellSheetStore:    campaignsInit.sellSheetStore,
 		CardIDMappingRepo: cardIDMappingRepo,
-		CardRequestRepo:   cardRequestRepo,
 		IntelRepo:         intelRepo,
 		SuggestionsRepo:   suggestionsRepo,
 		AdvisorService:    advisorService,
@@ -440,7 +412,6 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		MMStore:           mmStore,
 		MMClient:          mmClient,
 		DHClient:          dhClient,
-		PicksService:      picksService,
 		SchedulerResult:   schedulerResult,
 		GSheetsClient:     gsheetsClient,
 		PendingItemsRepo:  pendingItemsRepo,
@@ -451,22 +422,6 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	shutdownGracefully(ctx, logger, cancelScheduler, schedulerResult, hOut, socialSvc.service, campaignsService, cfg.Server.SchedulerShutdownTimeout)
 
 	return serverErr
-}
-
-func initializeCache(cachePath string) cache.Cache {
-	if cachePath == "" {
-		return nil
-	}
-
-	appCache, err := cache.New(cache.Config{
-		Type:     "file",
-		FilePath: cachePath,
-	})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: Cache initialization failed: %v (path: %s)\n", err, cachePath)
-		return nil
-	}
-	return appCache
 }
 
 func resolveDatabasePath(configuredPath string) (string, error) {

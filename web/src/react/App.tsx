@@ -8,7 +8,6 @@
 import { Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
-import { FavoritesProvider } from './contexts/FavoritesContext';
 import { UserPreferencesProvider } from './contexts/UserPreferencesContext';
 import { ToastProvider } from './contexts/ToastContext';
 import Header from './components/Header';
@@ -68,8 +67,8 @@ function AppContent() {
                 </ProtectedRoute>
               } />
               {/* Canonical redirects for legacy URLs */}
-              <Route path="/favorites" element={<Navigate to="/" replace />} />
               <Route path="/watchlist" element={<Navigate to="/" replace />} />
+              <Route path="/favorites" element={<Navigate to="/" replace />} />
               <Route path="/opportunities" element={<Navigate to="/" replace />} />
               <Route path="/insights" element={<Navigate to="/" replace />} />
               <Route path="/content" element={<Navigate to="/tools?tab=content" replace />} />
@@ -131,11 +130,9 @@ function AppWithErrorBoundary() {
     <ErrorBoundary key={location.pathname}>
       <QueryProvider>
         <AuthProvider>
-          <FavoritesProvider>
-            <UserPreferencesProvider>
-              <AppContent />
-            </UserPreferencesProvider>
-          </FavoritesProvider>
+          <UserPreferencesProvider>
+            <AppContent />
+          </UserPreferencesProvider>
         </AuthProvider>
       </QueryProvider>
     </ErrorBoundary>

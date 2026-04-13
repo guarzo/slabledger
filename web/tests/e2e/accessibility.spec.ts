@@ -74,20 +74,6 @@ test.describe('Accessibility - Page Level Scans @a11y', () => {
     expect(criticalViolations).toEqual([]);
   });
 
-  test('Favorites page should have no critical accessibility violations', async ({ page }) => {
-    await page.goto('/favorites');
-    await waitForPageReady(page);
-
-    const accessibilityScanResults = await createAxeBuilder(page)
-      .withTags(['wcag2a', 'wcag2aa'])
-      .analyze();
-
-    const criticalViolations = accessibilityScanResults.violations.filter(
-      v => v.impact === 'critical' || v.impact === 'serious'
-    );
-    expect(criticalViolations).toEqual([]);
-  });
-
   test('Home page should have no critical accessibility violations', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('domcontentloaded');
@@ -397,25 +383,5 @@ test.describe('Accessibility - Mobile/Touch @a11y', () => {
         }
       }
     }
-  });
-});
-
-test.describe('Accessibility - Empty and Error States @a11y', () => {
-  test('empty favorites should be accessible', async ({ page }) => {
-    await page.setViewportSize({ width: 1280, height: 720 });
-    await mockAllAPIs(page);
-
-    await page.goto('/favorites');
-    await page.waitForLoadState('domcontentloaded');
-    await page.waitForTimeout(500);
-
-    const accessibilityScanResults = await createAxeBuilder(page)
-      .withTags(['wcag2a', 'wcag2aa'])
-      .analyze();
-
-    const criticalViolations = accessibilityScanResults.violations.filter(
-      v => v.impact === 'critical' || v.impact === 'serious'
-    );
-    expect(criticalViolations).toEqual([]);
   });
 });

@@ -16,7 +16,7 @@ func internalTestIDGen() func() string {
 
 func TestService_RefreshCLValuesGlobal(t *testing.T) {
 	repo := newMockRepo()
-	svc := NewService(repo, repo, repo, repo, repo, repo, repo, repo, WithIDGenerator(internalTestIDGen()))
+	svc := NewService(repo, repo, repo, repo, repo, repo, repo, WithIDGenerator(internalTestIDGen()))
 	ctx := context.Background()
 
 	// Create two campaigns
@@ -77,7 +77,7 @@ func TestService_RefreshCLValuesGlobal(t *testing.T) {
 
 func TestService_ImportCLExportGlobal_AutoAllocate(t *testing.T) {
 	repo := newMockRepo()
-	svc := NewService(repo, repo, repo, repo, repo, repo, repo, repo, WithIDGenerator(internalTestIDGen()))
+	svc := NewService(repo, repo, repo, repo, repo, repo, repo, WithIDGenerator(internalTestIDGen()))
 	ctx := context.Background()
 
 	// Campaign A: high grade, high price
@@ -139,7 +139,7 @@ func TestService_ImportCLExportGlobal_AutoAllocate(t *testing.T) {
 
 func TestService_ImportCLExportGlobal_RefreshExisting(t *testing.T) {
 	repo := newMockRepo()
-	svc := NewService(repo, repo, repo, repo, repo, repo, repo, repo, WithIDGenerator(internalTestIDGen()))
+	svc := NewService(repo, repo, repo, repo, repo, repo, repo, WithIDGenerator(internalTestIDGen()))
 	ctx := context.Background()
 
 	c := &Campaign{Name: "Test", Phase: PhaseActive, GradeRange: "9-10", PriceRange: "50-500", PSASourcingFeeCents: 300}
@@ -176,7 +176,7 @@ func TestService_ImportCLExportGlobal_RefreshExisting(t *testing.T) {
 
 func TestService_ImportCLExportGlobal_Ambiguous(t *testing.T) {
 	repo := newMockRepo()
-	svc := NewService(repo, repo, repo, repo, repo, repo, repo, repo, WithIDGenerator(internalTestIDGen()))
+	svc := NewService(repo, repo, repo, repo, repo, repo, repo, WithIDGenerator(internalTestIDGen()))
 	ctx := context.Background()
 
 	// Two campaigns with overlapping criteria
@@ -206,7 +206,7 @@ func TestService_ImportCLExportGlobal_Ambiguous(t *testing.T) {
 
 func TestService_ImportCLExportGlobal_SkipsClosedCampaigns(t *testing.T) {
 	repo := newMockRepo()
-	svc := NewService(repo, repo, repo, repo, repo, repo, repo, repo, WithIDGenerator(internalTestIDGen()))
+	svc := NewService(repo, repo, repo, repo, repo, repo, repo, WithIDGenerator(internalTestIDGen()))
 	ctx := context.Background()
 
 	// Active campaign
@@ -238,7 +238,7 @@ func TestService_ImportCLExportGlobal_SkipsClosedCampaigns(t *testing.T) {
 
 func TestService_ExportCLFormatGlobal(t *testing.T) {
 	repo := newMockRepo()
-	svc := NewService(repo, repo, repo, repo, repo, repo, repo, repo, WithIDGenerator(internalTestIDGen()))
+	svc := NewService(repo, repo, repo, repo, repo, repo, repo, WithIDGenerator(internalTestIDGen()))
 	ctx := context.Background()
 
 	// Create two campaigns with purchases
@@ -287,7 +287,7 @@ func TestService_ExportCLFormatGlobal(t *testing.T) {
 
 func TestService_ExportCLFormatGlobal_Empty(t *testing.T) {
 	repo := newMockRepo()
-	svc := NewService(repo, repo, repo, repo, repo, repo, repo, repo, WithIDGenerator(internalTestIDGen()))
+	svc := NewService(repo, repo, repo, repo, repo, repo, repo, WithIDGenerator(internalTestIDGen()))
 	ctx := context.Background()
 
 	entries, err := svc.ExportCLFormatGlobal(ctx, false)
@@ -301,7 +301,7 @@ func TestService_ExportCLFormatGlobal_Empty(t *testing.T) {
 
 func TestService_ExportCLFormatGlobal_MissingCLOnly(t *testing.T) {
 	repo := newMockRepo()
-	svc := NewService(repo, repo, repo, repo, repo, repo, repo, repo, WithIDGenerator(internalTestIDGen()))
+	svc := NewService(repo, repo, repo, repo, repo, repo, repo, WithIDGenerator(internalTestIDGen()))
 	ctx := context.Background()
 
 	c := &Campaign{Name: "Campaign A", BuyTermsCLPct: 0.78, PSASourcingFeeCents: 300}
@@ -337,7 +337,7 @@ func TestService_ExportCLFormatGlobal_MissingCLOnly(t *testing.T) {
 
 func TestService_ReassignPurchase(t *testing.T) {
 	repo := newMockRepo()
-	svc := NewService(repo, repo, repo, repo, repo, repo, repo, repo, WithIDGenerator(internalTestIDGen()))
+	svc := NewService(repo, repo, repo, repo, repo, repo, repo, WithIDGenerator(internalTestIDGen()))
 	ctx := context.Background()
 
 	c1 := &Campaign{Name: "Source", PSASourcingFeeCents: 300}
@@ -364,7 +364,7 @@ func TestService_ReassignPurchase(t *testing.T) {
 
 func TestService_ReassignPurchase_NotFound(t *testing.T) {
 	repo := newMockRepo()
-	svc := NewService(repo, repo, repo, repo, repo, repo, repo, repo, WithIDGenerator(internalTestIDGen()))
+	svc := NewService(repo, repo, repo, repo, repo, repo, repo, WithIDGenerator(internalTestIDGen()))
 	ctx := context.Background()
 
 	c := &Campaign{Name: "Target"}

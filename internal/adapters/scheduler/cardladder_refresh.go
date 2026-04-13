@@ -80,7 +80,6 @@ type CardLadderRefreshScheduler struct {
 	valueUpdater   CardLadderValueUpdater
 	gemRateUpdater CardLadderGemRateUpdater
 	syncUpdater    CardLadderSyncUpdater // optional: sets cl_synced_at on push
-	clRecorder     inventory.CLValueHistoryRecorder
 	salesStore     *sqlite.CLSalesStore
 	dhPushUpdater  DHPushStatusUpdater // optional: re-enrolls changed items for DH push
 	logger         observability.Logger
@@ -122,7 +121,6 @@ func NewCardLadderRefreshScheduler(
 	purchaseLister CardLadderPurchaseLister,
 	valueUpdater CardLadderValueUpdater,
 	gemRateUpdater CardLadderGemRateUpdater,
-	clRecorder inventory.CLValueHistoryRecorder,
 	salesStore *sqlite.CLSalesStore,
 	logger observability.Logger,
 	cfg config.CardLadderConfig,
@@ -136,7 +134,6 @@ func NewCardLadderRefreshScheduler(
 		purchaseLister: purchaseLister,
 		valueUpdater:   valueUpdater,
 		gemRateUpdater: gemRateUpdater,
-		clRecorder:     clRecorder,
 		salesStore:     salesStore,
 		logger:         logger,
 		config:         cfg,
@@ -239,7 +236,7 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 	// Load existing mappings
 	existingMappings, err := s.store.ListMappings(ctx)
 	if err != nil {
-		s.logger.Warn(ctx, "CL refresh: failed to list mappings", observability.Err(err))
+		s.logger.Warn(ctx, "CL refresh: failed to load card mappings — CL→purchase resolution, sales-comp, and collection reconciliation phases will be degraded or skipped this run", observability.Err(err))
 	}
 	mappingByCLCardID := make(map[string]*sqlite.CLCardMapping, len(existingMappings))
 	for i := range existingMappings {
@@ -247,7 +244,6 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 	}
 
 	updated, mapped, skipped, noValue := 0, 0, 0, 0
-	today := time.Now().UTC().Format("2006-01-02")
 
 	// Track which purchase IDs had a successful CL card match + value update
 	// this run. Used for the second-pass error persistence over unmatched
@@ -352,24 +348,6 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 			}
 		}
 
-		// Record history
-		if s.clRecorder != nil {
-			gradeValue := extractGradeValue(card.Condition)
-			if err := s.clRecorder.RecordCLValue(ctx, inventory.CLValueEntry{
-				CertNumber:      purchase.CertNumber,
-				CardName:        purchase.CardName,
-				SetName:         purchase.SetName,
-				CardNumber:      purchase.CardNumber,
-				GradeValue:      gradeValue,
-				CLValueCents:    newCLCents,
-				ObservationDate: today,
-				Source:          "api_sync",
-			}); err != nil {
-				s.logger.Debug(ctx, "CL refresh: failed to record CL value history",
-					observability.String("cert", purchase.CertNumber),
-					observability.Err(err))
-			}
-		}
 		updated++
 		matchedPurchaseIDs[purchase.ID] = true
 		resolvedMappings[purchase.CertNumber] = true

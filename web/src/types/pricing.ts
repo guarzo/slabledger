@@ -42,31 +42,6 @@ export interface SalesVelocity {
   monthlyTotal: number;
 }
 
-export interface CardPricingResponse {
-  card: string;
-  set: string;
-  number: string;
-  rawUSD: number;
-  psa8: number;
-  psa9: number;
-  psa10: number;
-  confidence: number;
-  matchQuality?: 'good' | 'partial' | 'none' | 'hinted';
-  gradeData?: Partial<Record<GradeKey, GradeData>>;
-  market?: MarketOverview;
-  velocity?: SalesVelocity;
-  sources?: string[];
-  conservativePsa10?: number;
-  conservativePsa9?: number;
-  conservativeRaw?: number;
-  lastSold?: {
-    psa10?: { lastSoldPrice: number; lastSoldDate: string; saleCount: number };
-    psa9?: { lastSoldPrice: number; lastSoldDate: string; saleCount: number };
-    psa8?: { lastSoldPrice: number; lastSoldDate: string; saleCount: number };
-    raw?: { lastSoldPrice: number; lastSoldDate: string; saleCount: number };
-  };
-}
-
 /** Price hint mapping for manual price corrections */
 export interface PriceHint {
   cardName: string;

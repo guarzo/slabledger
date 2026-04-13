@@ -15,7 +15,7 @@ import (
 
 func TestExportMMFormatGlobal_EmptyInventory(t *testing.T) {
 	r := mocks.NewInMemoryCampaignStore()
-	svc := inventory.NewService(r, r, r, r, r, r, r, r, withTestIDGen())
+	svc := inventory.NewService(r, r, r, r, r, r, r, withTestIDGen())
 	entries, err := svc.ExportMMFormatGlobal(context.Background(), false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -31,7 +31,7 @@ func TestExportMMFormatGlobal_RepoError(t *testing.T) {
 	repo.ListAllUnsoldPurchasesFn = func(_ context.Context) ([]inventory.Purchase, error) {
 		return nil, wantErr
 	}
-	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
+	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
 	_, err := svc.ExportMMFormatGlobal(context.Background(), false)
 	if err == nil {
 		t.Fatal("expected error, got nil")
@@ -63,7 +63,7 @@ func TestExportMMFormatGlobal_FullFields(t *testing.T) {
 	purchase.SnapshotDate = "2024-03-01"
 	repo.Purchases["p1"] = purchase
 
-	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
+	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
 	entries, err := svc.ExportMMFormatGlobal(context.Background(), false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -107,7 +107,7 @@ func TestExportMMFormatGlobal_GraderDefaults(t *testing.T) {
 	repo.Purchases["p1"] = &inventory.Purchase{
 		ID: "p1", CardName: "Pikachu", GradeValue: 10, BuyCostCents: 5000,
 	}
-	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
+	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
 	entries, err := svc.ExportMMFormatGlobal(context.Background(), false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -125,7 +125,7 @@ func TestExportMMFormatGlobal_HalfGrade(t *testing.T) {
 	repo.Purchases["p1"] = &inventory.Purchase{
 		ID: "p1", CardName: "Mewtwo", Grader: "BGS", GradeValue: 9.5, BuyCostCents: 8000,
 	}
-	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
+	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
 	entries, err := svc.ExportMMFormatGlobal(context.Background(), false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -143,7 +143,7 @@ func TestExportMMFormatGlobal_PlayerNameFallback(t *testing.T) {
 	repo.Purchases["p1"] = &inventory.Purchase{
 		ID: "p1", CardName: "Gengar Holo", CardPlayer: "", BuyCostCents: 3000,
 	}
-	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
+	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
 	entries, err := svc.ExportMMFormatGlobal(context.Background(), false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -174,7 +174,7 @@ func TestExportMMFormatGlobal_MissingMMOnly(t *testing.T) {
 			repo.Purchases["p3"] = &inventory.Purchase{
 				ID: "p3", CardName: "Card C", MMValueCents: 0, CLValueCents: 15000, BuyCostCents: 5000,
 			}
-			svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
+			svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
 			entries, err := svc.ExportMMFormatGlobal(context.Background(), tc.missingMMOnly)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
@@ -191,7 +191,7 @@ func TestExportMMFormatGlobal_EmptyCardNumber(t *testing.T) {
 	repo.Purchases["p1"] = &inventory.Purchase{
 		ID: "p1", CardName: "Pikachu", CardNumber: "", BuyCostCents: 5000,
 	}
-	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
+	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
 	entries, err := svc.ExportMMFormatGlobal(context.Background(), false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -210,7 +210,7 @@ func TestRefreshMMValuesGlobal_HappyPath(t *testing.T) {
 	repo.Purchases["p1"] = &inventory.Purchase{
 		ID: "p1", CardName: "Charizard", CertNumber: "11111111", MMValueCents: 10000,
 	}
-	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
+	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
 
 	result, err := svc.RefreshMMValuesGlobal(context.Background(), []inventory.MMRefreshRow{
 		{CertNumber: "11111111", LastSalePrice: 200.0},
@@ -245,7 +245,7 @@ func TestRefreshMMValuesGlobal_HappyPath(t *testing.T) {
 
 func TestRefreshMMValuesGlobal_CertNotFound(t *testing.T) {
 	repo := mocks.NewInMemoryCampaignStore()
-	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
+	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
 
 	result, err := svc.RefreshMMValuesGlobal(context.Background(), []inventory.MMRefreshRow{
 		{CertNumber: "99999999", LastSalePrice: 50.0},
@@ -266,7 +266,7 @@ func TestRefreshMMValuesGlobal_ZeroPrice(t *testing.T) {
 	repo.Purchases["p1"] = &inventory.Purchase{
 		ID: "p1", CardName: "Pikachu", CertNumber: "22222222", MMValueCents: 5000,
 	}
-	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
+	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
 
 	result, err := svc.RefreshMMValuesGlobal(context.Background(), []inventory.MMRefreshRow{
 		{CertNumber: "22222222", LastSalePrice: 0},
@@ -288,7 +288,7 @@ func TestRefreshMMValuesGlobal_ZeroPrice(t *testing.T) {
 
 func TestRefreshMMValuesGlobal_EmptyCert(t *testing.T) {
 	repo := mocks.NewInMemoryCampaignStore()
-	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
+	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
 
 	result, err := svc.RefreshMMValuesGlobal(context.Background(), []inventory.MMRefreshRow{
 		{CertNumber: "", LastSalePrice: 100.0},
@@ -312,7 +312,7 @@ func TestRefreshMMValuesGlobal_MixedRows(t *testing.T) {
 	repo.Purchases["p2"] = &inventory.Purchase{
 		ID: "p2", CardName: "Pikachu", CertNumber: "22222222", MMValueCents: 5000,
 	}
-	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
+	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
 
 	rows := []inventory.MMRefreshRow{
 		{CertNumber: "11111111", LastSalePrice: 200.0}, // updated
@@ -347,7 +347,7 @@ func TestRefreshMMValuesGlobal_RepoError(t *testing.T) {
 	repo.GetPurchasesByCertNumbersFn = func(_ context.Context, _ []string) (map[string]*inventory.Purchase, error) {
 		return nil, wantErr
 	}
-	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
+	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
 
 	_, err := svc.RefreshMMValuesGlobal(context.Background(), []inventory.MMRefreshRow{
 		{CertNumber: "11111111", LastSalePrice: 100.0},

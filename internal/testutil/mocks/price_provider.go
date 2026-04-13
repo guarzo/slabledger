@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	domainCards "github.com/guarzo/slabledger/internal/domain/cards"
 	"github.com/guarzo/slabledger/internal/domain/pricing"
 )
 
@@ -61,7 +60,7 @@ func (m *MockPriceProvider) GetPrice(ctx context.Context, card pricing.Card) (*p
 
 // LookupCard returns mock price data for a card.
 // The context parameter enables request cancellation and timeout propagation.
-func (m *MockPriceProvider) LookupCard(ctx context.Context, setName string, card domainCards.Card) (*pricing.Price, error) {
+func (m *MockPriceProvider) LookupCard(ctx context.Context, setName string, card pricing.CardLookup) (*pricing.Price, error) {
 	// Check for context cancellation
 	select {
 	case <-ctx.Done():
@@ -94,7 +93,7 @@ func (m *MockPriceProvider) SetMockMatch(setName, cardName, number string, match
 }
 
 // generateMockPrice creates a mock Price with realistic price data
-func generateMockPrice(setName string, card domainCards.Card) *pricing.Price {
+func generateMockPrice(setName string, card pricing.CardLookup) *pricing.Price {
 	// Generate deterministic but varied prices based on card name
 	hash := simpleHash(card.Name + card.Number)
 	basePrice := int64(10 + (hash % 100)) // Base price between $10-$110

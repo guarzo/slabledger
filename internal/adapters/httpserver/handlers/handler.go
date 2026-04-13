@@ -1,28 +1,21 @@
 package handlers
 
 import (
-	"github.com/guarzo/slabledger/internal/domain/cards"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/domain/pricing"
 )
 
 type Handler struct {
-	cardProv      cards.CardProvider
-	logger        observability.Logger
-	searchService *cards.SearchService
-	priceProv     pricing.PriceProvider
+	logger    observability.Logger
+	priceProv pricing.PriceProvider
 }
 
 func NewHandler(
-	cardProv cards.CardProvider,
-	searchService *cards.SearchService,
 	logger observability.Logger,
 	opts ...HandlerOption,
 ) *Handler {
 	h := &Handler{
-		cardProv:      cardProv,
-		searchService: searchService,
-		logger:        logger,
+		logger: logger,
 	}
 	for _, opt := range opts {
 		opt(h)

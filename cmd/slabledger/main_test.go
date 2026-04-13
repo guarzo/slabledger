@@ -130,12 +130,3 @@ func TestResolveDatabasePath(t *testing.T) {
 		})
 	}
 }
-
-func TestInitializeCache(t *testing.T) {
-	t.Run("empty path returns nil", func(t *testing.T) {
-		result := initializeCache("")
-		if result != nil {
-			t.Errorf("expected nil cache for empty path, got %v", result)
-		}
-	})
-}

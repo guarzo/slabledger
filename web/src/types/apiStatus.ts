@@ -24,28 +24,6 @@ export interface APIUsageResponse {
   timestamp: string;
 }
 
-/** Cache statistics types for the /api/admin/cache-stats endpoint */
-
-export interface CachedSetEntry {
-  id: string;
-  name: string;
-  series: string;
-  releaseDate: string;
-  totalCards: number;
-  status: string;
-  fetchedAt: string;
-}
-
-export interface CacheStatsResponse {
-  enabled: boolean;
-  totalSets?: number;
-  finalizedSets?: number;
-  discoveredSets?: number;
-  lastUpdated?: string;
-  registryVersion?: string;
-  sets?: CachedSetEntry[];
-}
-
 /** Pricing diagnostics types for the /api/admin/pricing-diagnostics endpoint */
 
 export interface FailureSummary {

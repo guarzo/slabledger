@@ -69,17 +69,6 @@ test.describe('Visual Regression - Pages @visual', () => {
     });
   });
 
-  test('Favorites page - empty state', async ({ page }) => {
-    await page.goto('/favorites');
-    await waitForPageStability(page);
-
-    await expect(page).toHaveScreenshot('favorites-page-empty.png', {
-      fullPage: true,
-      animations: 'disabled',
-      maxDiffPixelRatio: 0.20,
-    });
-  });
-
   test('Campaigns page', async ({ page }) => {
     await page.goto('/campaigns');
     await waitForPageStability(page);
@@ -138,25 +127,6 @@ test.describe('Visual Regression - States @visual', () => {
 
   test.beforeEach(async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 720 });
-  });
-
-  test('Empty favorites state', async ({ page }) => {
-    await mockAllAPIs(page);
-
-    await page.goto('/favorites');
-    await page.waitForLoadState('domcontentloaded');
-    await page.waitForTimeout(500);
-
-    // Look for empty state message
-    const emptyState = page.locator('text=No cards on your watchlist yet').first();
-    const isVisible = await emptyState.isVisible({ timeout: 2000 }).catch(() => false);
-
-    if (isVisible) {
-      await expect(emptyState).toHaveScreenshot('empty-favorites-state.png', {
-        animations: 'disabled',
-        maxDiffPixelRatio: 0.10,
-      });
-    }
   });
 });
 

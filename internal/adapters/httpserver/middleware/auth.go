@@ -107,7 +107,7 @@ func (m *AuthMiddleware) validateSession(r *http.Request) (*auth.User, error) {
 
 // resolveLocalAPIUser returns a real DB-backed user for local API token auth.
 // When authService is available, it ensures a "local-api" user exists in the users
-// table so that FK constraints (favorites, price_flags) are satisfied.
+// table so that FK constraints (price_flags) are satisfied.
 // If the DB call fails, the error is propagated — falling back to a synthetic ID=0
 // user would violate FK constraints on subsequent writes.
 // When authService is nil, it falls back to a synthetic user with ID 0.

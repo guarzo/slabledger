@@ -421,7 +421,6 @@ select:focus-visible,
 
 /**
  * Drawer slide animations (from right edge)
- * Used by PriceLookupDrawer
  */
 @keyframes slideInFromRight {
   from { transform: translateX(100%); }

@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
-	domainCards "github.com/guarzo/slabledger/internal/domain/cards"
 	"github.com/guarzo/slabledger/internal/domain/mathutil"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/domain/pricing"
@@ -132,7 +131,7 @@ func (p *Provider) GetPrice(ctx context.Context, card pricing.Card) (*pricing.Pr
 }
 
 // LookupCard delegates to GetPrice after constructing a pricing.Card.
-func (p *Provider) LookupCard(ctx context.Context, setName string, card domainCards.Card) (*pricing.Price, error) {
+func (p *Provider) LookupCard(ctx context.Context, setName string, card pricing.CardLookup) (*pricing.Price, error) {
 	pc := pricing.Card{
 		Name:            card.Name,
 		Number:          card.Number,

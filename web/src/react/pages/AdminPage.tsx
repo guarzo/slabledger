@@ -8,14 +8,12 @@ import { api } from '../../js/api';
 import { Button, SectionErrorBoundary, TabNavigation, ErrorAlert } from '../ui';
 import type { Tab } from '../ui';
 import { UsersTab } from './admin/UsersTab';
-import { CardDataTab } from './admin/CardDataTab';
 import { PricingTab } from './admin/PricingTab';
 import { StatsTab } from './admin/StatsTab';
 import { IntegrationsTab } from './admin/IntegrationsTab';
 
 const adminTabs: readonly Tab<string>[] = [
   { id: 'users', label: 'Users' },
-  { id: 'card-data', label: 'Card Data' },
   { id: 'pricing', label: 'Pricing' },
   { id: 'stats', label: 'Stats' },
   { id: 'integrations', label: 'Integrations' },
@@ -23,7 +21,6 @@ const adminTabs: readonly Tab<string>[] = [
 
 const TAB_SUBTITLES: Record<string, string> = {
   users: 'Manage allowed users and view registered accounts.',
-  'card-data': 'Monitor the card cache and set coverage.',
   pricing: 'Review pricing coverage, flags, and price overrides.',
   stats: 'Monitor AI usage, API health, and integration statistics.',
   integrations: 'Connect and configure external services.',
@@ -75,20 +72,15 @@ export default function AdminPage() {
         <TabNavigation tabs={adminTabs} ariaLabel="Admin tabs" />
 
         <Tabs.Content value="users">
-          <SectionErrorBoundary sectionName="Users">
-            <UsersTab enabled={activeTab === 'users'} />
-          </SectionErrorBoundary>
-        </Tabs.Content>
-        <Tabs.Content value="card-data">
-          <SectionErrorBoundary sectionName="Card Data">
-            <CardDataTab enabled={activeTab === 'card-data'} />
-          </SectionErrorBoundary>
-        </Tabs.Content>
-        <Tabs.Content value="pricing">
-          <SectionErrorBoundary sectionName="Pricing">
-            <PricingTab enabled={activeTab === 'pricing'} />
-          </SectionErrorBoundary>
-        </Tabs.Content>
+           <SectionErrorBoundary sectionName="Users">
+             <UsersTab enabled={activeTab === 'users'} />
+           </SectionErrorBoundary>
+         </Tabs.Content>
+         <Tabs.Content value="pricing">
+           <SectionErrorBoundary sectionName="Pricing">
+             <PricingTab enabled={activeTab === 'pricing'} />
+           </SectionErrorBoundary>
+         </Tabs.Content>
         <Tabs.Content value="stats">
           <SectionErrorBoundary sectionName="Stats">
             <StatsTab enabled={activeTab === 'stats'} />

@@ -28,7 +28,7 @@ func withDisabledBackgroundWorkers() inventory.ServiceOption {
 }
 
 func TestService_CreateCampaign(t *testing.T) {
-	svc := inventory.NewService(mocks.NewInMemoryCampaignStore(), mocks.NewInMemoryCampaignStore(), mocks.NewInMemoryCampaignStore(), mocks.NewInMemoryCampaignStore(), mocks.NewInMemoryCampaignStore(), mocks.NewInMemoryCampaignStore(), mocks.NewInMemoryCampaignStore(), mocks.NewInMemoryCampaignStore(), withTestIDGen())
+	svc := inventory.NewService(mocks.NewInMemoryCampaignStore(), mocks.NewInMemoryCampaignStore(), mocks.NewInMemoryCampaignStore(), mocks.NewInMemoryCampaignStore(), mocks.NewInMemoryCampaignStore(), mocks.NewInMemoryCampaignStore(), mocks.NewInMemoryCampaignStore(), withTestIDGen())
 	ctx := context.Background()
 
 	c := &inventory.Campaign{Name: "Vintage Core PSA 8-9", Sport: "Pokemon", BuyTermsCLPct: 0.80}
@@ -44,7 +44,7 @@ func TestService_CreateCampaign(t *testing.T) {
 }
 
 func TestService_CreateCampaign_ValidationError(t *testing.T) {
-	svc := inventory.NewService(mocks.NewInMemoryCampaignStore(), mocks.NewInMemoryCampaignStore(), mocks.NewInMemoryCampaignStore(), mocks.NewInMemoryCampaignStore(), mocks.NewInMemoryCampaignStore(), mocks.NewInMemoryCampaignStore(), mocks.NewInMemoryCampaignStore(), mocks.NewInMemoryCampaignStore(), withTestIDGen())
+	svc := inventory.NewService(mocks.NewInMemoryCampaignStore(), mocks.NewInMemoryCampaignStore(), mocks.NewInMemoryCampaignStore(), mocks.NewInMemoryCampaignStore(), mocks.NewInMemoryCampaignStore(), mocks.NewInMemoryCampaignStore(), mocks.NewInMemoryCampaignStore(), withTestIDGen())
 	ctx := context.Background()
 
 	c := &inventory.Campaign{Name: ""}
@@ -55,7 +55,7 @@ func TestService_CreateCampaign_ValidationError(t *testing.T) {
 
 func TestService_CreatePurchase(t *testing.T) {
 	repo := mocks.NewInMemoryCampaignStore()
-	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
+	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
 	ctx := context.Background()
 
 	// Create campaign first
@@ -83,7 +83,7 @@ func TestService_CreatePurchase(t *testing.T) {
 
 func TestService_CreatePurchase_DuplicateCert(t *testing.T) {
 	repo := mocks.NewInMemoryCampaignStore()
-	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
+	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
 	ctx := context.Background()
 
 	c := &inventory.Campaign{Name: "Test", BuyTermsCLPct: 0.78}
@@ -104,7 +104,7 @@ func TestService_CreatePurchase_DuplicateCert(t *testing.T) {
 
 func TestService_CreateSale_ComputesFieldsEbay(t *testing.T) {
 	repo := mocks.NewInMemoryCampaignStore()
-	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
+	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
 	ctx := context.Background()
 
 	c := &inventory.Campaign{Name: "Test", BuyTermsCLPct: 0.78, EbayFeePct: 0.1235}
@@ -140,7 +140,7 @@ func TestService_CreateSale_ComputesFieldsEbay(t *testing.T) {
 
 func TestService_CreateSale_SaleDateBeforePurchase(t *testing.T) {
 	repo := mocks.NewInMemoryCampaignStore()
-	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
+	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
 	ctx := context.Background()
 
 	c := &inventory.Campaign{Name: "Test", BuyTermsCLPct: 0.78, EbayFeePct: 0.12}
@@ -171,7 +171,7 @@ func TestService_CreateSale_SaleDateBeforePurchase(t *testing.T) {
 
 func TestService_CreateSale_SameDateAllowed(t *testing.T) {
 	repo := mocks.NewInMemoryCampaignStore()
-	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
+	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
 	ctx := context.Background()
 
 	c := &inventory.Campaign{Name: "Test", BuyTermsCLPct: 0.78, EbayFeePct: 0.12}
@@ -282,7 +282,7 @@ func newDefaultPriceLookup(t *testing.T, expectSetName string) *mockPriceLookup 
 
 func TestService_LookupCert(t *testing.T) {
 	repo := mocks.NewInMemoryCampaignStore()
-	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, repo, withTestIDGen(), withDisabledBackgroundWorkers(), inventory.WithCertLookup(newDefaultCertLookup()), inventory.WithPriceLookup(newDefaultPriceLookup(nil, "")))
+	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, withTestIDGen(), withDisabledBackgroundWorkers(), inventory.WithCertLookup(newDefaultCertLookup()), inventory.WithPriceLookup(newDefaultPriceLookup(nil, "")))
 	ctx := context.Background()
 
 	info, snapshot, err := svc.LookupCert(ctx, "12345678")
@@ -304,7 +304,7 @@ func TestService_LookupCert(t *testing.T) {
 }
 
 func TestService_LookupCert_NotConfigured(t *testing.T) {
-	svc := inventory.NewService(mocks.NewInMemoryCampaignStore(), mocks.NewInMemoryCampaignStore(), mocks.NewInMemoryCampaignStore(), mocks.NewInMemoryCampaignStore(), mocks.NewInMemoryCampaignStore(), mocks.NewInMemoryCampaignStore(), mocks.NewInMemoryCampaignStore(), mocks.NewInMemoryCampaignStore(), withTestIDGen())
+	svc := inventory.NewService(mocks.NewInMemoryCampaignStore(), mocks.NewInMemoryCampaignStore(), mocks.NewInMemoryCampaignStore(), mocks.NewInMemoryCampaignStore(), mocks.NewInMemoryCampaignStore(), mocks.NewInMemoryCampaignStore(), mocks.NewInMemoryCampaignStore(), withTestIDGen())
 	_, _, err := svc.LookupCert(context.Background(), "12345678")
 	if err == nil {
 		t.Error("expected error when cert lookup not configured")
@@ -313,7 +313,7 @@ func TestService_LookupCert_NotConfigured(t *testing.T) {
 
 func TestService_QuickAddPurchase(t *testing.T) {
 	repo := mocks.NewInMemoryCampaignStore()
-	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, repo, withTestIDGen(), inventory.WithCertLookup(newDefaultCertLookup()))
+	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, withTestIDGen(), inventory.WithCertLookup(newDefaultCertLookup()))
 	ctx := context.Background()
 
 	c := &inventory.Campaign{Name: "Test", BuyTermsCLPct: 0.78, PSASourcingFeeCents: 300}
@@ -342,7 +342,7 @@ func TestService_QuickAddPurchase(t *testing.T) {
 
 func TestService_CreateSale_ComputesFieldsLocal(t *testing.T) {
 	repo := mocks.NewInMemoryCampaignStore()
-	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
+	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
 	ctx := context.Background()
 
 	c := &inventory.Campaign{Name: "Test", BuyTermsCLPct: 0.78}
@@ -377,7 +377,7 @@ func TestService_CreateSale_ComputesFieldsLocal(t *testing.T) {
 
 func TestService_CreatePurchase_CapturesSnapshot(t *testing.T) {
 	repo := mocks.NewInMemoryCampaignStore()
-	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, repo, withTestIDGen(), withDisabledBackgroundWorkers(), inventory.WithPriceLookup(newDefaultPriceLookup(t, "Base Set")))
+	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, withTestIDGen(), withDisabledBackgroundWorkers(), inventory.WithPriceLookup(newDefaultPriceLookup(t, "Base Set")))
 	ctx := context.Background()
 
 	c := &inventory.Campaign{Name: "Test", BuyTermsCLPct: 0.78}
@@ -412,7 +412,7 @@ func TestService_CreatePurchase_CapturesSnapshot(t *testing.T) {
 
 func TestService_CreateSale_CapturesSnapshot(t *testing.T) {
 	repo := mocks.NewInMemoryCampaignStore()
-	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, repo, withTestIDGen(), withDisabledBackgroundWorkers(), inventory.WithPriceLookup(newDefaultPriceLookup(t, "Base Set")))
+	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, withTestIDGen(), withDisabledBackgroundWorkers(), inventory.WithPriceLookup(newDefaultPriceLookup(t, "Base Set")))
 	ctx := context.Background()
 
 	c := &inventory.Campaign{Name: "Test", BuyTermsCLPct: 0.78, EbayFeePct: 0.1235}
@@ -448,7 +448,7 @@ func TestService_CreateSale_CapturesSnapshot(t *testing.T) {
 
 func TestService_ImportPSAExportGlobal_Allocate(t *testing.T) {
 	repo := mocks.NewInMemoryCampaignStore()
-	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
+	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
 	ctx := context.Background()
 
 	// Create an active campaign with grade range 8-10
@@ -490,7 +490,7 @@ func TestService_ImportPSAExportGlobal_Allocate(t *testing.T) {
 
 func TestService_ImportPSAExportGlobal_SkipExisting(t *testing.T) {
 	repo := mocks.NewInMemoryCampaignStore()
-	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
+	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
 	ctx := context.Background()
 
 	c := &inventory.Campaign{Name: "Test", BuyTermsCLPct: 0.78}
@@ -539,7 +539,7 @@ func TestService_ImportPSAExportGlobal_SkipExisting(t *testing.T) {
 
 func TestService_ImportPSAExportGlobal_Unmatched(t *testing.T) {
 	repo := mocks.NewInMemoryCampaignStore()
-	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
+	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
 	ctx := context.Background()
 
 	// Create a campaign with strict grade range
@@ -575,7 +575,7 @@ func TestService_ImportPSAExportGlobal_SavesPendingItems(t *testing.T) {
 		savedItems = items
 		return nil
 	}
-	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, repo,
+	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo,
 		withTestIDGen(),
 		inventory.WithPendingItemRepository(pendingRepo),
 	)
@@ -627,7 +627,7 @@ func TestService_ImportPSAExportGlobal_SavesPendingItems(t *testing.T) {
 func TestService_ImportPSAExportGlobal_NilPendingRepoDoesNotPanic(t *testing.T) {
 	repo := mocks.NewInMemoryCampaignStore()
 	// Create service WITHOUT WithPendingItemRepository
-	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
+	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
 	ctx := context.Background()
 
 	// Create an active campaign with strict grade range 9-10
@@ -657,7 +657,7 @@ func TestService_ImportPSAExportGlobal_NilPendingRepoDoesNotPanic(t *testing.T) 
 
 func TestService_ImportPSAExportGlobal_SkipEmpty(t *testing.T) {
 	repo := mocks.NewInMemoryCampaignStore()
-	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
+	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
 	ctx := context.Background()
 
 	rows := []inventory.PSAExportRow{
@@ -677,7 +677,7 @@ func TestService_ImportPSAExportGlobal_SkipEmpty(t *testing.T) {
 
 func TestService_ImportPSAExportGlobal_DuplicateSkip(t *testing.T) {
 	repo := mocks.NewInMemoryCampaignStore()
-	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
+	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
 	ctx := context.Background()
 
 	c := &inventory.Campaign{Name: "Test", Sport: "Pokemon", BuyTermsCLPct: 0.78, GradeRange: "8-10"}
@@ -716,7 +716,7 @@ func TestService_ImportPSAExportGlobal_DuplicateSkip(t *testing.T) {
 
 func TestService_ImportPSAExportGlobal_ExtractGrade(t *testing.T) {
 	repo := mocks.NewInMemoryCampaignStore()
-	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
+	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
 	ctx := context.Background()
 
 	c := &inventory.Campaign{Name: "Test", Sport: "Pokemon", BuyTermsCLPct: 0.78, GradeRange: "8-10"}
@@ -745,7 +745,7 @@ func TestService_ImportPSAExportGlobal_ExtractGrade(t *testing.T) {
 
 func TestService_ImportPSAExportGlobal_InvoiceUpdatesOnReimport(t *testing.T) {
 	repo := mocks.NewInMemoryCampaignStore()
-	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
+	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
 	ctx := context.Background()
 
 	c := &inventory.Campaign{Name: "Test", Sport: "Pokemon", BuyTermsCLPct: 0.78, GradeRange: "8-10", PSASourcingFeeCents: 300}
@@ -814,7 +814,7 @@ func TestService_ImportPSAExportGlobal_InvoiceUpdatesOnReimport(t *testing.T) {
 
 func TestService_CreateSale_WasCracked(t *testing.T) {
 	repo := mocks.NewInMemoryCampaignStore()
-	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
+	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
 	ctx := context.Background()
 
 	c := &inventory.Campaign{Name: "Test", BuyTermsCLPct: 0.80, EbayFeePct: 0.1235}

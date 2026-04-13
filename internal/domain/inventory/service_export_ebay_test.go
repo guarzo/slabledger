@@ -18,7 +18,7 @@ func TestListEbayExportItems_FlaggedOnly(t *testing.T) {
 		MarketSnapshotData: MarketSnapshotData{MedianCents: 27500},
 	}
 
-	svc := &service{campaigns: repo, purchases: repo, sales: repo, analytics: repo, finance: repo, pricing: repo, dh: repo, snapshots: repo, idGen: func() string { return "id" }}
+	svc := &service{campaigns: repo, purchases: repo, sales: repo, analytics: repo, finance: repo, pricing: repo, dh: repo, idGen: func() string { return "id" }}
 	resp, err := svc.ListEbayExportItems(context.Background(), true)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -41,7 +41,7 @@ func TestGenerateEbayCSV_Success(t *testing.T) {
 		BackImageURL:  "https://example.com/back.jpg",
 	}
 
-	svc := &service{campaigns: repo, purchases: repo, sales: repo, analytics: repo, finance: repo, pricing: repo, dh: repo, snapshots: repo, idGen: func() string { return "id" }}
+	svc := &service{campaigns: repo, purchases: repo, sales: repo, analytics: repo, finance: repo, pricing: repo, dh: repo, idGen: func() string { return "id" }}
 	csvBytes, err := svc.GenerateEbayCSV(context.Background(), []EbayExportGenerateItem{
 		{PurchaseID: "p1", PriceCents: 25000},
 	})
@@ -76,7 +76,7 @@ func TestListEbayExportItems_ExcludesNonPSA(t *testing.T) {
 		CLValueCents: 10000, EbayExportFlaggedAt: &now,
 	}
 
-	svc := &service{campaigns: repo, purchases: repo, sales: repo, analytics: repo, finance: repo, pricing: repo, dh: repo, snapshots: repo, idGen: func() string { return "id" }}
+	svc := &service{campaigns: repo, purchases: repo, sales: repo, analytics: repo, finance: repo, pricing: repo, dh: repo, idGen: func() string { return "id" }}
 	resp, err := svc.ListEbayExportItems(context.Background(), true)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -173,7 +173,7 @@ func TestListEbayExportItems_IncludesNewPriceFields(t *testing.T) {
 				},
 			}
 
-			svc := &service{campaigns: repo, purchases: repo, sales: repo, analytics: repo, finance: repo, pricing: repo, dh: repo, snapshots: repo, idGen: func() string { return "id" }}
+			svc := &service{campaigns: repo, purchases: repo, sales: repo, analytics: repo, finance: repo, pricing: repo, dh: repo, idGen: func() string { return "id" }}
 			resp, err := svc.ListEbayExportItems(context.Background(), true)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)

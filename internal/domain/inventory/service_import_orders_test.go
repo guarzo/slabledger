@@ -47,7 +47,7 @@ func TestImportOrdersSales(t *testing.T) {
 	repo.sales["sale-3"] = &Sale{ID: "sale-3", PurchaseID: "purch-3"}
 	repo.purchaseSales["purch-3"] = true
 
-	svc := NewService(repo, repo, repo, repo, repo, repo, repo, repo, WithIDGenerator(func() string { return "gen-id" }))
+	svc := NewService(repo, repo, repo, repo, repo, repo, repo, WithIDGenerator(func() string { return "gen-id" }))
 	defer svc.Close()
 
 	rows := []OrdersExportRow{
@@ -119,7 +119,7 @@ func TestConfirmOrdersSales(t *testing.T) {
 	}
 
 	idCounter := 0
-	svc := NewService(repo, repo, repo, repo, repo, repo, repo, repo, WithIDGenerator(func() string {
+	svc := NewService(repo, repo, repo, repo, repo, repo, repo, WithIDGenerator(func() string {
 		idCounter++
 		return fmt.Sprintf("sale-%d", idCounter)
 	}))
