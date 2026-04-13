@@ -244,34 +244,6 @@ Dropped in migration 000038. Was used for external pricing source discovery; sou
 
 ---
 
-### `card_request_submissions`
-Tracks card IDs submitted to external pricing services.
-
-| Column | Type | Constraints | Notes |
-|--------|------|-------------|-------|
-| `id` | INTEGER | PK, AUTOINCREMENT | |
-| `cert_number` | TEXT | NOT NULL | |
-| `grader` | TEXT | NOT NULL DEFAULT 'PSA' | |
-| `card_name` | TEXT | NOT NULL DEFAULT '' | |
-| `set_name` | TEXT | NOT NULL DEFAULT '' | |
-| `card_number` | TEXT | NOT NULL DEFAULT '' | |
-| `grade` | TEXT | NOT NULL DEFAULT '' | |
-| `front_image_url` | TEXT | NOT NULL DEFAULT '' | |
-| `variant` | TEXT | NOT NULL DEFAULT '' | |
-| `status` | TEXT | NOT NULL DEFAULT 'pending' | e.g. 'pending','submitted' |
-| `cardhedger_request_id` | TEXT | NOT NULL DEFAULT '' | Response ID from external service (legacy column name) |
-| `submitted_at` | DATETIME | | When submitted to provider |
-| `created_at` | DATETIME | NOT NULL DEFAULT CURRENT_TIMESTAMP | |
-| `updated_at` | DATETIME | NOT NULL DEFAULT CURRENT_TIMESTAMP | |
-
-**Unique:** `(grader, cert_number)`
-
-**Indexes:** none (unique constraint only)
-
-**Foreign Keys:** none
-
----
-
 ### `market_snapshot_history`
 Daily archive of market data snapshots for unsold inventory — enables price trajectory analysis.
 
@@ -1084,7 +1056,6 @@ sync_state
 cashflow_config
 invoices
 revocation_flags
-card_request_submissions
 market_snapshot_history
 population_history
 cl_value_history

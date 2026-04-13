@@ -31,23 +31,6 @@ export function isAPIError(error: unknown): error is APIError {
   return error instanceof APIError;
 }
 
-export interface CardRequestSubmission {
-  id: number;
-  certNumber: string;
-  grader: string;
-  cardName: string;
-  setName: string;
-  cardNumber: string;
-  grade: string;
-  frontImageUrl: string;
-  variant: string;
-  status: string;
-  cardhedgerRequestId: string;
-  submittedAt: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
 /** Default request timeout in milliseconds (30 seconds) */
 export const DEFAULT_TIMEOUT_MS = 30000;
 

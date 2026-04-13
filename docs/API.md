@@ -528,46 +528,6 @@ Returns pricing data quality diagnostics (coverage rates, match quality distribu
 
 ---
 
-### `GET /api/admin/card-requests`
-
-Auth: RequireAdmin
-
-Lists all card request submissions. Enriches pending rows from current purchases before returning.
-
-**Response:** `200 OK` — Array of `sqlite.CardRequestSubmission`
-
----
-
-### `POST /api/admin/card-requests/{id}/submit`
-
-Auth: RequireAdmin
-
-Submits a single pending card request.
-
-**Path params:** `id` (int64)
-
-**Response:** `200 OK`
-```json
-{ "status": "submitted", "requestId": "ch-req-abc123" }
-```
-
-**Errors:** `400` invalid ID; `404` not found; `409` already claimed; `503` client not configured; `502` external API error
-
----
-
-### `POST /api/admin/card-requests/submit-all`
-
-Auth: RequireAdmin
-
-Submits all pending card requests.
-
-**Response:** `200 OK`
-```json
-{ "submitted": 5, "errors": 0 }
-```
-
----
-
 ### `GET /api/admin/price-override-stats`
 
 Auth: RequireAdmin

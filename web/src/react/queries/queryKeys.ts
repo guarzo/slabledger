@@ -42,7 +42,6 @@ export const queryKeys = {
     users: ['admin', 'users'] as const,
     apiUsage: ['admin', 'apiUsage'] as const,
     cacheStats: ['admin', 'cacheStats'] as const,
-    cardRequests: ['admin', 'cardRequests'] as const,
     pricingDiagnostics: ['admin', 'pricingDiagnostics'] as const,
     priceOverrideStats: ['admin', 'priceOverrideStats'] as const,
     aiUsage: ['admin', 'aiUsage'] as const,

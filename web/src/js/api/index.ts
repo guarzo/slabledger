@@ -20,7 +20,6 @@ export {
 } from './client';
 
 export type {
-  CardRequestSubmission,
   APIRequestOptions,
 } from './client';
 
