@@ -2,6 +2,7 @@ package arbitrage
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -235,7 +236,147 @@ func (r *stubFinanceRepo) UpdateRevocationFlagStatus(_ context.Context, _ string
 	return nil
 }
 
-// Task 6: PSA grade filter — >= 9 should exclude 9, 9.5, 10 but include 8, 8.5.
+// TestGetCrackCandidates_NilPriceProvider verifies no panic when price provider is absent.
+func TestGetCrackCandidates_NilPriceProvider(t *testing.T) {
+	campaignID := "camp-nil"
+	campaign := &inventory.Campaign{
+		ID:         campaignID,
+		Name:       "Test",
+		EbayFeePct: 0.1235,
+	}
+	purchase := inventory.Purchase{
+		ID:           "p-nil",
+		CampaignID:   campaignID,
+		CardName:     "Charizard",
+		GradeValue:   8.0,
+		BuyCostCents: 10000,
+	}
+
+	// No price provider injected — rawCents will be 0, so all candidates skip.
+	svc := NewService(
+		&stubCampaignRepo{campaign: campaign},
+		&stubPurchaseRepo{unsold: []inventory.Purchase{purchase}},
+		&stubAnalyticsRepo{},
+		&stubFinanceRepo{},
+	)
+
+	results, err := svc.GetCrackCandidates(context.Background(), campaignID)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// No price data → no crack candidates; the key assertion is no panic.
+	_ = results
+}
+
+// TestGetExpectedValues_RepoError verifies error propagation from the analytics repo.
+func TestGetExpectedValues_RepoError(t *testing.T) {
+	campaignID := "camp-err"
+	campaign := &inventory.Campaign{ID: campaignID, Name: "Test", EbayFeePct: 0.1235}
+
+	errRepo := &stubAnalyticsRepo{}
+	// Override GetPurchasesWithSales to return an error.
+	analyticsWithError := &errAnalyticsRepo{err: fmt.Errorf("repo failure")}
+
+	svc := NewService(
+		&stubCampaignRepo{campaign: campaign},
+		&stubPurchaseRepo{},
+		analyticsWithError,
+		&stubFinanceRepo{},
+	)
+
+	_, err := svc.GetExpectedValues(context.Background(), campaignID)
+	if err == nil {
+		t.Fatal("expected error from repo, got nil")
+	}
+	_ = errRepo
+}
+
+// TestGetAcquisitionTargets_Empty verifies an empty slice (not error) when no price provider.
+func TestGetAcquisitionTargets_Empty(t *testing.T) {
+	campaign := &inventory.Campaign{ID: "camp-acq", Name: "Test", EbayFeePct: 0.1235}
+
+	// No price provider → GetAcquisitionTargets returns [] immediately.
+	svc := NewService(
+		&stubCampaignRepo{campaign: campaign},
+		&stubPurchaseRepo{},
+		&stubAnalyticsRepo{},
+		&stubFinanceRepo{},
+	)
+
+	results, err := svc.GetAcquisitionTargets(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if results == nil {
+		t.Fatal("expected non-nil slice, got nil")
+	}
+	if len(results) != 0 {
+		t.Errorf("expected empty slice, got %d results", len(results))
+	}
+}
+
+// TestEvaluatePurchase_NoHistory verifies fallback EV is returned when no sales history exists.
+func TestEvaluatePurchase_NoHistory(t *testing.T) {
+	campaignID := "camp-eval"
+	campaign := &inventory.Campaign{
+		ID:         campaignID,
+		Name:       "Test",
+		EbayFeePct: 0.1235,
+	}
+
+	// Empty analytics — no historical data for the grade segment.
+	svc := NewService(
+		&stubCampaignRepo{campaign: campaign},
+		&stubPurchaseRepo{},
+		&stubAnalyticsRepo{data: nil},
+		&stubFinanceRepo{},
+	)
+
+	ev, err := svc.EvaluatePurchase(context.Background(), campaignID, "Charizard", 9.0, 8000)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if ev == nil {
+		t.Fatal("expected non-nil ExpectedValue for fallback path")
+	}
+}
+
+// errAnalyticsRepo is a minimal analytics repo stub that always returns an error
+// from GetPurchasesWithSales.
+type errAnalyticsRepo struct {
+	err error
+}
+
+func (r *errAnalyticsRepo) GetCampaignPNL(_ context.Context, _ string) (*inventory.CampaignPNL, error) {
+	return nil, nil
+}
+func (r *errAnalyticsRepo) GetPNLByChannel(_ context.Context, _ string) ([]inventory.ChannelPNL, error) {
+	return nil, nil
+}
+func (r *errAnalyticsRepo) GetDailySpend(_ context.Context, _ string, _ int) ([]inventory.DailySpend, error) {
+	return nil, nil
+}
+func (r *errAnalyticsRepo) GetDaysToSellDistribution(_ context.Context, _ string) ([]inventory.DaysToSellBucket, error) {
+	return nil, nil
+}
+func (r *errAnalyticsRepo) GetPerformanceByGrade(_ context.Context, _ string) ([]inventory.GradePerformance, error) {
+	return nil, nil
+}
+func (r *errAnalyticsRepo) GetPurchasesWithSales(_ context.Context, _ string) ([]inventory.PurchaseWithSale, error) {
+	return nil, r.err
+}
+func (r *errAnalyticsRepo) GetAllPurchasesWithSales(_ context.Context, _ ...inventory.PurchaseFilterOpt) ([]inventory.PurchaseWithSale, error) {
+	return nil, r.err
+}
+func (r *errAnalyticsRepo) GetPortfolioChannelVelocity(_ context.Context) ([]inventory.ChannelVelocity, error) {
+	return nil, nil
+}
+func (r *errAnalyticsRepo) GetGlobalPNLByChannel(_ context.Context) ([]inventory.ChannelPNL, error) {
+	return nil, nil
+}
+func (r *errAnalyticsRepo) GetDailyCapitalTimeSeries(_ context.Context) ([]inventory.DailyCapitalPoint, error) {
+	return nil, nil
+}
 
 func TestGetCrackCandidates_GradeFilter(t *testing.T) {
 	tests := []struct {
