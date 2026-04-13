@@ -192,7 +192,7 @@ func (s *service) GenerateGlobalSellSheet(ctx context.Context) (*inventory.SellS
 	if err != nil {
 		return nil, err
 	}
-	sheet.Totals.SkippedItems = skipped
+	sheet.Totals.SkippedItems += skipped
 	return sheet, nil
 }
 
@@ -221,7 +221,7 @@ func (s *service) GenerateSelectedSellSheet(ctx context.Context, purchaseIDs []s
 	if err != nil {
 		return nil, err
 	}
-	sheet.Totals.SkippedItems = skipped
+	sheet.Totals.SkippedItems += skipped
 	return sheet, nil
 }
 

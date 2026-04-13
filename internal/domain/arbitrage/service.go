@@ -471,16 +471,25 @@ func (s *service) EvaluatePurchase(ctx context.Context, campaignID string, cardN
 	}
 
 	if seg == nil {
-		return computeExpectedValue(cardName, "", grade, buyCostCents+campaign.PSASourcingFeeCents, 0.5, 0.0, 1.0, 0.0, 30, 0.05, 0), nil
+		feePct := campaign.EbayFeePct
+		if feePct == 0 {
+			feePct = DefaultMarketplaceFeePct
+		}
+		return computeExpectedValue(cardName, "", grade, buyCostCents+campaign.PSASourcingFeeCents, 0.5, 0.0, 1.0, 0.0, 30, 0.05, 0, feePct), nil
 	}
 
 	costBasis := buyCostCents + campaign.PSASourcingFeeCents
+	feePct := campaign.EbayFeePct
+	if feePct == 0 {
+		feePct = DefaultMarketplaceFeePct
+	}
 
 	return computeExpectedValue(
 		cardName, "", grade, costBasis,
 		seg.SellThroughPct, seg.AvgMarginPct,
 		1.0, 0.0, seg.AvgDaysToSell,
 		0.05, seg.SoldCount,
+		feePct,
 	), nil
 }
 

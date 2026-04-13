@@ -351,10 +351,10 @@ func TestGetExpectedValues_UsesCampaignFee(t *testing.T) {
 	portfolioHighFee := runEV(0.2500) // 25% — significantly higher
 
 	if len(portfolioDefault.Items) == 0 {
-		t.Skip("no EV items with default fee — insufficient segment data")
+		t.Fatalf("expected non-empty EV items with default fee — insufficient segment data in test fixture")
 	}
 	if len(portfolioHighFee.Items) == 0 {
-		t.Skip("no EV items with high fee — insufficient segment data")
+		t.Fatalf("expected non-empty EV items with high fee — insufficient segment data in test fixture")
 	}
 
 	// Higher fee → lower expected sale net → lower EV
@@ -368,23 +368,33 @@ func TestGetExpectedValues_UsesCampaignFee(t *testing.T) {
 // This is tested indirectly — we verify the simulation runs without panic and produces output.
 
 func TestRunSimulation_PerCardCostNoPanic(t *testing.T) {
-	// Two cards with very different costs: $5 and $100
+	// Build 12 entries with varied buy costs: low ($5) and high ($100) to trigger
+	// the per-card-cost sampling path inside runSimulation. RunMonteCarloProjection
+	// returns early when len(history) < 10, so we must exceed that guard.
 	history := []inventory.PurchaseWithSale{
-		{
-			Purchase: inventory.Purchase{BuyCostCents: 500, GradeValue: 9, CLValueCents: 2000},
-			Sale:     &inventory.Sale{NetProfitCents: 200, SaleFeeCents: 100},
-		},
-		{
-			Purchase: inventory.Purchase{BuyCostCents: 10000, GradeValue: 9, CLValueCents: 15000},
-			Sale:     &inventory.Sale{NetProfitCents: 3000, SaleFeeCents: 1800},
-		},
+		{Purchase: inventory.Purchase{BuyCostCents: 500, GradeValue: 9, CLValueCents: 2000}, Sale: &inventory.Sale{NetProfitCents: 200, SaleFeeCents: 100}},
+		{Purchase: inventory.Purchase{BuyCostCents: 10000, GradeValue: 9, CLValueCents: 15000}, Sale: &inventory.Sale{NetProfitCents: 3000, SaleFeeCents: 1800}},
+		{Purchase: inventory.Purchase{BuyCostCents: 600, GradeValue: 9, CLValueCents: 2200}, Sale: &inventory.Sale{NetProfitCents: 250, SaleFeeCents: 110}},
+		{Purchase: inventory.Purchase{BuyCostCents: 9500, GradeValue: 9, CLValueCents: 14000}, Sale: &inventory.Sale{NetProfitCents: 2800, SaleFeeCents: 1700}},
+		{Purchase: inventory.Purchase{BuyCostCents: 700, GradeValue: 9, CLValueCents: 2500}, Sale: &inventory.Sale{NetProfitCents: 300, SaleFeeCents: 120}},
+		{Purchase: inventory.Purchase{BuyCostCents: 11000, GradeValue: 9, CLValueCents: 16000}, Sale: &inventory.Sale{NetProfitCents: 3200, SaleFeeCents: 1900}},
+		{Purchase: inventory.Purchase{BuyCostCents: 450, GradeValue: 9, CLValueCents: 1800}, Sale: &inventory.Sale{NetProfitCents: 180, SaleFeeCents: 90}},
+		{Purchase: inventory.Purchase{BuyCostCents: 12000, GradeValue: 9, CLValueCents: 17000}, Sale: &inventory.Sale{NetProfitCents: 3500, SaleFeeCents: 2000}},
+		{Purchase: inventory.Purchase{BuyCostCents: 800, GradeValue: 9, CLValueCents: 2800}, Sale: &inventory.Sale{NetProfitCents: 350, SaleFeeCents: 130}},
+		{Purchase: inventory.Purchase{BuyCostCents: 9000, GradeValue: 9, CLValueCents: 13500}, Sale: &inventory.Sale{NetProfitCents: 2600, SaleFeeCents: 1600}},
+		{Purchase: inventory.Purchase{BuyCostCents: 550, GradeValue: 9, CLValueCents: 2100}, Sale: &inventory.Sale{NetProfitCents: 220, SaleFeeCents: 105}},
+		{Purchase: inventory.Purchase{BuyCostCents: 10500, GradeValue: 9, CLValueCents: 15500}, Sale: &inventory.Sale{NetProfitCents: 3100, SaleFeeCents: 1850}},
 	}
 
 	campaign := &inventory.Campaign{BuyTermsCLPct: 0.65, GradeRange: "9-9"}
 	result := RunMonteCarloProjection(campaign, history)
 
-	// The simulation runs (may return insufficient due to few data points, but no panic).
+	// With 12 history entries the simulation passes the insufficient-history guard
+	// and executes runSimulation where per-card-cost sampling runs.
 	if result == nil {
 		t.Fatal("expected non-nil result")
+	}
+	if result.Confidence == "insufficient" {
+		t.Errorf("expected simulation to run with 12 history entries, got Confidence=%q", result.Confidence)
 	}
 }

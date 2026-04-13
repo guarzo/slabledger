@@ -61,86 +61,90 @@ func newTestService(t *testing.T, lookup DHListingPurchaseLookup, opts ...DHList
 	return svc
 }
 
-// TestListPurchases_PersistFailure_DecrementsListedCount verifies that when
-// UpdatePurchaseDHFields fails after a successful UpdateInventoryStatus +
-// SyncChannels, the listed count is NOT incremented (decremented back to 0).
-func TestListPurchases_PersistFailure_DecrementsListedCount(t *testing.T) {
-	certNum := "12345678"
-	purchase := &inventory.Purchase{
-		ID:            "purchase-1",
-		CertNumber:    certNum,
-		DHInventoryID: 42,
-	}
-
-	lookup := &mockPurchaseLookup{
-		purchases: map[string]*inventory.Purchase{certNum: purchase},
-	}
-	lister := &mockInventoryLister{} // success
-	fieldsUpdater := &mockFieldsUpdater{updateErr: errors.New("db error")}
-
-	svc := newTestService(t, lookup,
-		WithDHListingLister(lister),
-		WithDHListingFieldsUpdater(fieldsUpdater),
-	)
-
-	result := svc.ListPurchases(context.Background(), []string{certNum})
-
-	if result.Listed != 0 {
-		t.Errorf("expected Listed=0 when persist fails, got %d", result.Listed)
-	}
-	if result.Total != 1 {
-		t.Errorf("expected Total=1, got %d", result.Total)
-	}
-}
-
-// TestListPurchases_LookupFailure_ReturnsZeroResult verifies that when
-// GetPurchasesByCertNumbers fails, an empty result is returned with Error set.
-func TestListPurchases_LookupFailure_ReturnsZeroResult(t *testing.T) {
-	lookupErr := errors.New("db connection lost")
-	lookup := &mockPurchaseLookup{err: lookupErr}
-	lister := &mockInventoryLister{}
-
-	svc := newTestService(t, lookup, WithDHListingLister(lister))
-
-	result := svc.ListPurchases(context.Background(), []string{"99999999"})
-
-	if result.Listed != 0 || result.Synced != 0 || result.Total != 0 {
-		t.Errorf("expected zero counts on lookup failure, got %+v", result)
-	}
-	if result.Error == nil {
-		t.Error("expected Error to be set on lookup failure")
-	}
-}
-
-// TestListPurchases_Success verifies normal path increments listed and synced.
-func TestListPurchases_Success(t *testing.T) {
+// TestListPurchases covers the three key scenarios for ListPurchases in a
+// single table-driven test.
+func TestListPurchases(t *testing.T) {
 	certNum := "55555555"
 	purchase := &inventory.Purchase{
-		ID:            "purchase-2",
+		ID:            "purchase-1",
 		CertNumber:    certNum,
 		DHInventoryID: 99,
 	}
 
-	lookup := &mockPurchaseLookup{
-		purchases: map[string]*inventory.Purchase{certNum: purchase},
+	tests := []struct {
+		name          string
+		lookup        *mockPurchaseLookup
+		lister        *mockInventoryLister
+		fieldsUpdater *mockFieldsUpdater
+		certs         []string
+		wantListed    int
+		wantSynced    int
+		wantTotal     int
+		wantErrSet    bool
+	}{
+		{
+			name: "Success",
+			lookup: &mockPurchaseLookup{
+				purchases: map[string]*inventory.Purchase{certNum: purchase},
+			},
+			lister:        &mockInventoryLister{},
+			fieldsUpdater: &mockFieldsUpdater{},
+			certs:         []string{certNum},
+			wantListed:    1,
+			wantSynced:    1,
+			wantTotal:     1,
+		},
+		{
+			name: "PersistFailure_DecrementsListedCount",
+			lookup: &mockPurchaseLookup{
+				purchases: map[string]*inventory.Purchase{
+					"12345678": {ID: "purchase-2", CertNumber: "12345678", DHInventoryID: 42},
+				},
+			},
+			lister:        &mockInventoryLister{},
+			fieldsUpdater: &mockFieldsUpdater{updateErr: errors.New("db error")},
+			certs:         []string{"12345678"},
+			wantListed:    0,
+			wantSynced:    1, // synced is incremented before persist; persist failure only decrements listed
+			wantTotal:     1,
+		},
+		{
+			name:       "LookupFailure_ReturnsZeroResult",
+			lookup:     &mockPurchaseLookup{err: errors.New("db connection lost")},
+			lister:     &mockInventoryLister{},
+			certs:      []string{"99999999"},
+			wantListed: 0,
+			wantSynced: 0,
+			wantTotal:  0,
+			wantErrSet: true,
+		},
 	}
-	lister := &mockInventoryLister{}
-	fieldsUpdater := &mockFieldsUpdater{}
 
-	svc := newTestService(t, lookup,
-		WithDHListingLister(lister),
-		WithDHListingFieldsUpdater(fieldsUpdater),
-	)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			opts := []DHListingServiceOption{WithDHListingLister(tc.lister)}
+			if tc.fieldsUpdater != nil {
+				opts = append(opts, WithDHListingFieldsUpdater(tc.fieldsUpdater))
+			}
+			svc := newTestService(t, tc.lookup, opts...)
 
-	result := svc.ListPurchases(context.Background(), []string{certNum})
+			result := svc.ListPurchases(context.Background(), tc.certs)
 
-	if result.Listed != 1 {
-		t.Errorf("expected Listed=1, got %d", result.Listed)
-	}
-	if result.Synced != 1 {
-		t.Errorf("expected Synced=1, got %d", result.Synced)
-	}
-	if result.Total != 1 {
-		t.Errorf("expected Total=1, got %d", result.Total)
+			if result.Listed != tc.wantListed {
+				t.Errorf("Listed: got %d, want %d", result.Listed, tc.wantListed)
+			}
+			if result.Synced != tc.wantSynced {
+				t.Errorf("Synced: got %d, want %d", result.Synced, tc.wantSynced)
+			}
+			if result.Total != tc.wantTotal {
+				t.Errorf("Total: got %d, want %d", result.Total, tc.wantTotal)
+			}
+			if tc.wantErrSet && result.Error == nil {
+				t.Error("expected Error to be set, got nil")
+			}
+			if !tc.wantErrSet && result.Error != nil {
+				t.Errorf("expected no Error, got %v", result.Error)
+			}
+		})
 	}
 }
