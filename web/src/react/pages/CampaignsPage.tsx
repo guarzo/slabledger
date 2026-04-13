@@ -15,7 +15,7 @@ import { useToast } from '../contexts/ToastContext';
 import { useForm } from '../hooks/useForm';
 import { defaultCampaignInput } from '../utils/campaignConstants';
 import { Button, SectionErrorBoundary } from '../ui';
-import { useCampaigns, useCreateCampaign, usePortfolioHealth } from '../queries/useCampaignQueries';
+import { useCampaigns, useCreateCampaign, usePortfolioHealth, campaignPNLQueryOptions } from '../queries/useCampaignQueries';
 import PortfolioSummary from './campaigns/PortfolioSummary';
 import CampaignsTab from './campaigns/CampaignsTab';
 import InvoicesSection from '../components/insights/InvoicesSection';
@@ -237,11 +237,7 @@ export default function CampaignsPage() {
   }, []);
 
   const pnlQueries = useQueries({
-    queries: allCampaigns.map(c => ({
-      queryKey: queryKeys.campaigns.pnl(c.id),
-      queryFn: () => api.getCampaignPNL(c.id),
-      enabled: !!c.id,
-    })),
+    queries: allCampaigns.map(c => campaignPNLQueryOptions(c.id)),
   });
 
   const pnlMap = useMemo(() => {

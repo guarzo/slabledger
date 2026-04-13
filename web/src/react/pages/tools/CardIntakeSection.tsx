@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react';
+import { useMutation } from '@tanstack/react-query';
 import { api } from '../../../js/api';
 import { reportError } from '../../../js/errors';
 import type { ExternalImportResult, GlobalImportResult, MMRefreshResult } from '../../../types/campaigns';
@@ -44,6 +45,17 @@ export function LegacyCard({ icon, title, description, children }: {
   );
 }
 
+/* ── downloadBlob ─────────────────────────────────────────────────── */
+
+function downloadBlob(blob: Blob, filename: string, revokeDelayMs = 100): void {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), revokeDelayMs);
+}
+
 /* ── Icons ────────────────────────────────────────────────────────── */
 
 function ShopBagIcon() {
@@ -79,24 +91,18 @@ function UploadIcon() {
 /* ── ExternalImportCard ──────────────────────────────────────────── */
 
 function ExternalImportCard() {
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<ExternalImportResult | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const toast = useToast();
 
-  const handleFile = async (file: File) => {
-    try {
-      setLoading(true);
-      setResult(null);
-      const res = await api.globalImportExternal(file);
-      setResult(res);
+  const importMutation = useMutation<ExternalImportResult, Error, File>({
+    mutationFn: (file: File) => api.globalImportExternal(file),
+    onSuccess: (res) => {
       toast.success(`External import: ${res.imported} imported, ${res.updated} updated, ${res.skipped} skipped, ${res.failed} failed`);
-    } catch (err) {
+    },
+    onError: (err) => {
       toast.error(getErrorMessage(err, 'Failed to import external data'));
-    } finally {
-      setLoading(false);
-    }
-  };
+    },
+  });
 
   return (
     <LegacyCard
@@ -108,7 +114,7 @@ function ExternalImportCard() {
         size="sm"
         variant="secondary"
         fullWidth
-        loading={loading}
+        loading={importMutation.isPending}
         onClick={() => fileRef.current?.click()}
       >
         Upload Shopify CSV
@@ -120,21 +126,21 @@ function ExternalImportCard() {
         className="hidden"
         onChange={(e) => {
           const file = e.target.files?.[0];
-          if (file) handleFile(file);
+          if (file) importMutation.mutate(file);
           e.target.value = '';
         }}
       />
-      {result && (
+      {importMutation.data && (
         <div className="mt-3 p-2 rounded bg-[var(--surface-2)]/50 text-xs text-left">
           <div className="flex flex-wrap gap-2">
-            {result.imported > 0 && <span className="text-[var(--success)]">{result.imported} imported</span>}
-            {result.updated > 0 && <span className="text-[var(--info)]">{result.updated} updated</span>}
-            {result.skipped > 0 && <span className="text-[var(--text-muted)]">{result.skipped} skipped</span>}
-            {result.failed > 0 && <span className="text-[var(--danger)]">{result.failed} failed</span>}
+            {importMutation.data.imported > 0 && <span className="text-[var(--success)]">{importMutation.data.imported} imported</span>}
+            {importMutation.data.updated > 0 && <span className="text-[var(--info)]">{importMutation.data.updated} updated</span>}
+            {importMutation.data.skipped > 0 && <span className="text-[var(--text-muted)]">{importMutation.data.skipped} skipped</span>}
+            {importMutation.data.failed > 0 && <span className="text-[var(--danger)]">{importMutation.data.failed} failed</span>}
           </div>
-          {result.errors && result.errors.length > 0 && (
+          {importMutation.data.errors && importMutation.data.errors.length > 0 && (
             <div className="mt-1 text-[var(--danger)]">
-              {result.errors.map((e, idx) => (
+              {importMutation.data.errors.map((e, idx) => (
                 <div key={idx}>{e.row != null ? `Row ${e.row}: ` : ''}{e.error}</div>
               ))}
             </div>
@@ -148,27 +154,19 @@ function ExternalImportCard() {
 /* ── MMExportCard ────────────────────────────────────────────────── */
 
 function MMExportCard() {
-  const [loading, setLoading] = useState(false);
   const [missingOnly, setMissingOnly] = useState(false);
   const toast = useToast();
 
-  const handleExport = async () => {
-    try {
-      setLoading(true);
-      const blob = await api.globalExportMM(missingOnly);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'market-movers-export.csv';
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
+  const exportMutation = useMutation<Blob, Error, boolean>({
+    mutationFn: (missing: boolean) => api.globalExportMM(missing),
+    onSuccess: (blob) => {
+      downloadBlob(blob, 'market-movers-export.csv');
       toast.success('Market Movers CSV exported');
-    } catch (err) {
+    },
+    onError: (err) => {
       toast.error(getErrorMessage(err, 'Failed to export'));
-    } finally {
-      setLoading(false);
-    }
-  };
+    },
+  });
 
   return (
     <LegacyCard
@@ -191,8 +189,8 @@ function MMExportCard() {
           size="sm"
           variant="secondary"
           fullWidth
-          loading={loading}
-          onClick={handleExport}
+          loading={exportMutation.isPending}
+          onClick={() => exportMutation.mutate(missingOnly)}
         >
           Download CSV
         </Button>
@@ -204,17 +202,12 @@ function MMExportCard() {
 /* ── MMImportCard ────────────────────────────────────────────────── */
 
 function MMImportCard() {
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<MMRefreshResult | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const toast = useToast();
 
-  const handleFile = async (file: File) => {
-    try {
-      setLoading(true);
-      setResult(null);
-      const res = await api.globalRefreshMM(file);
-      setResult(res);
+  const importMutation = useMutation<MMRefreshResult, Error, File>({
+    mutationFn: (file: File) => api.globalRefreshMM(file),
+    onSuccess: (res) => {
       if (res.failed > 0 || (res.errors && res.errors.length > 0)) {
         toast.warning(`Market Movers import: ${res.failed} failed. ${res.updated} updated, ${res.skipped} skipped, ${res.notFound} not found`);
         if (res.errors && res.errors.length > 0) {
@@ -229,12 +222,11 @@ function MMImportCard() {
       } else {
         toast.success(`Market Movers import: ${res.updated} updated, ${res.skipped} skipped, ${res.notFound} not found`);
       }
-    } catch (err) {
+    },
+    onError: (err) => {
       toast.error(getErrorMessage(err, 'Failed to import Market Movers data'));
-    } finally {
-      setLoading(false);
-    }
-  };
+    },
+  });
 
   return (
     <LegacyCard
@@ -246,7 +238,7 @@ function MMImportCard() {
         size="sm"
         variant="secondary"
         fullWidth
-        loading={loading}
+        loading={importMutation.isPending}
         onClick={() => fileRef.current?.click()}
       >
         Upload CSV
@@ -258,21 +250,21 @@ function MMImportCard() {
         className="hidden"
         onChange={(e) => {
           const file = e.target.files?.[0];
-          if (file) handleFile(file);
+          if (file) importMutation.mutate(file);
           e.target.value = '';
         }}
       />
-      {result && (
+      {importMutation.data && (
         <div className="mt-3 p-2 rounded bg-[var(--surface-2)]/50 text-xs text-left">
           <div className="flex flex-wrap gap-2">
-            {result.updated > 0 && <span className="text-[var(--success)]">{result.updated} updated</span>}
-            {result.skipped > 0 && <span className="text-[var(--text-muted)]">{result.skipped} skipped</span>}
-            {result.notFound > 0 && <span className="text-[var(--warning)]">{result.notFound} not found</span>}
-            {result.failed > 0 && <span className="text-[var(--danger)]">{result.failed} failed</span>}
+            {importMutation.data.updated > 0 && <span className="text-[var(--success)]">{importMutation.data.updated} updated</span>}
+            {importMutation.data.skipped > 0 && <span className="text-[var(--text-muted)]">{importMutation.data.skipped} skipped</span>}
+            {importMutation.data.notFound > 0 && <span className="text-[var(--warning)]">{importMutation.data.notFound} not found</span>}
+            {importMutation.data.failed > 0 && <span className="text-[var(--danger)]">{importMutation.data.failed} failed</span>}
           </div>
-          {result.errors && result.errors.length > 0 && (
+          {importMutation.data.errors && importMutation.data.errors.length > 0 && (
             <div className="mt-1 text-[var(--danger)]">
-              {result.errors.map((e, idx) => (
+              {importMutation.data.errors.map((e, idx) => (
                 <div key={idx}>{e.row != null ? `Row ${e.row}: ` : ''}{e.error}</div>
               ))}
             </div>
@@ -286,27 +278,19 @@ function MMImportCard() {
 /* ── CLExportCard ────────────────────────────────────────────────── */
 
 function CLExportCard() {
-  const [loading, setLoading] = useState(false);
   const [missingOnly, setMissingOnly] = useState(false);
   const toast = useToast();
 
-  const handleExport = async () => {
-    try {
-      setLoading(true);
-      const blob = await api.globalExportCL(missingOnly);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'card_ladder_import.csv';
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 100);
+  const exportMutation = useMutation<Blob, Error, boolean>({
+    mutationFn: (missing: boolean) => api.globalExportCL(missing),
+    onSuccess: (blob) => {
+      downloadBlob(blob, 'card_ladder_import.csv');
       toast.success('Card Ladder CSV exported');
-    } catch (err) {
+    },
+    onError: (err) => {
       toast.error(getErrorMessage(err, 'Failed to export'));
-    } finally {
-      setLoading(false);
-    }
-  };
+    },
+  });
 
   return (
     <LegacyCard
@@ -325,7 +309,7 @@ function CLExportCard() {
           />
           Only missing CL data
         </label>
-        <Button size="sm" variant="secondary" fullWidth loading={loading} onClick={handleExport}>
+        <Button size="sm" variant="secondary" fullWidth loading={exportMutation.isPending} onClick={() => exportMutation.mutate(missingOnly)}>
           Download CSV
         </Button>
       </div>
@@ -336,17 +320,12 @@ function CLExportCard() {
 /* ── CLImportCard ────────────────────────────────────────────────── */
 
 function CLImportCard() {
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<GlobalImportResult | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const toast = useToast();
 
-  const handleFile = async (file: File) => {
-    try {
-      setLoading(true);
-      setResult(null);
-      const res = await api.globalImportCL(file);
-      setResult(res);
+  const importMutation = useMutation<GlobalImportResult, Error, File>({
+    mutationFn: (file: File) => api.globalImportCL(file),
+    onSuccess: (res) => {
       const hasProblems = res.unmatched > 0 || res.ambiguous > 0 || res.skipped > 0 || res.failed > 0 || (res.errors?.length ?? 0) > 0;
       const summary = [
         res.allocated > 0 && `${res.allocated} allocated`,
@@ -361,12 +340,11 @@ function CLImportCard() {
       } else {
         toast.success(`CL import: ${summary || '0 changes'}`);
       }
-    } catch (err) {
+    },
+    onError: (err) => {
       toast.error(getErrorMessage(err, 'Failed to import'));
-    } finally {
-      setLoading(false);
-    }
-  };
+    },
+  });
 
   return (
     <LegacyCard
@@ -374,7 +352,7 @@ function CLImportCard() {
       title="CL CSV Import"
       description="Upload a Card Ladder CSV to allocate and refresh purchases"
     >
-      <Button size="sm" variant="secondary" fullWidth loading={loading} onClick={() => fileRef.current?.click()}>
+      <Button size="sm" variant="secondary" fullWidth loading={importMutation.isPending} onClick={() => fileRef.current?.click()}>
         Upload CSV
       </Button>
       <input
@@ -384,15 +362,15 @@ function CLImportCard() {
         className="hidden"
         onChange={(e) => {
           const file = e.target.files?.[0];
-          if (file) handleFile(file);
+          if (file) importMutation.mutate(file);
           e.target.value = '';
         }}
       />
-      {result && (
+      {importMutation.data && (
         <div className="mt-2 text-xs text-[var(--text-muted)]">
-          {result.allocated > 0 && <span className="text-[var(--success)] mr-2">{result.allocated} allocated</span>}
-          {result.refreshed > 0 && <span className="text-[var(--info)] mr-2">{result.refreshed} refreshed</span>}
-          {result.unmatched > 0 && <span className="text-[var(--warning)]">{result.unmatched} unmatched</span>}
+          {importMutation.data.allocated > 0 && <span className="text-[var(--success)] mr-2">{importMutation.data.allocated} allocated</span>}
+          {importMutation.data.refreshed > 0 && <span className="text-[var(--info)] mr-2">{importMutation.data.refreshed} refreshed</span>}
+          {importMutation.data.unmatched > 0 && <span className="text-[var(--warning)]">{importMutation.data.unmatched} unmatched</span>}
         </div>
       )}
     </LegacyCard>

@@ -46,6 +46,17 @@ export const useCampaignPNL = createParamQuery(
   queryKeys.campaigns.pnl, (id) => api.getCampaignPNL(id), { staleTime: ANALYTICS_STALE_TIME },
 );
 
+/**
+ * Query options factory for campaign PNL — use with useQueries() for bulk fetching.
+ * Using this ensures cache key consistency with useCampaignPNL hook.
+ */
+export const campaignPNLQueryOptions = (id: string) => ({
+  queryKey: queryKeys.campaigns.pnl(id),
+  queryFn: () => api.getCampaignPNL(id),
+  enabled: !!id,
+  staleTime: ANALYTICS_STALE_TIME,
+});
+
 export const useChannelPNL = createParamQuery(
   queryKeys.campaigns.channelPnl, (id) => api.getPNLByChannel(id),
 );

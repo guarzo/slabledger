@@ -1,6 +1,7 @@
 import type { ProviderStatus } from '../../../types/apiStatus';
 import PokeballLoader from '../../PokeballLoader';
 import { useAdminApiUsage } from '../../queries/useAdminQueries';
+import { ErrorAlert } from '../../ui';
 import { ProgressBar } from './shared';
 import { formatAdminDate } from './adminUtils';
 
@@ -71,7 +72,7 @@ export function ApiStatusTab({ enabled = true }: { enabled?: boolean }) {
   return (
     <div className="space-y-4">
       {errorMessage && (
-        <div className="p-3 rounded-lg bg-[var(--danger-bg)] border border-[var(--danger-border)] text-[var(--danger)] text-sm">{errorMessage}</div>
+        <ErrorAlert message={errorMessage} className="p-3 rounded-lg bg-[var(--danger-bg)] border border-[var(--danger-border)]" />
       )}
       {data ? (
         <>
