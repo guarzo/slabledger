@@ -165,8 +165,19 @@ func (s *CardLadderRefreshScheduler) removeSoldCards(
 		// without cleaning up a remote document would leave an orphaned remote entry
 		// with no local trace.
 		if m.CLCollectionCardID == "" {
-			s.logger.Warn(ctx, "CL remove: skipping sold card with no CLCollectionCardID",
+			// No Firestore document to delete — the card was never pushed or the ID was
+			// lost. Remove the local mapping anyway so future push cycles can re-enroll
+			// the cert if it comes back as unsold (e.g. reversed sale).
+			s.logger.Warn(ctx, "CL remove: sold card has no CLCollectionCardID — removing local mapping only",
 				observability.String("cert", m.SlabSerial))
+			if err := s.store.DeleteMapping(ctx, m.SlabSerial); err != nil {
+				s.logger.Warn(ctx, "CL remove: failed to delete mapping for empty-ID card",
+					observability.String("cert", m.SlabSerial),
+					observability.Err(err))
+				localDeleteFailed++
+			} else {
+				removed++
+			}
 			continue
 		}
 		docName := cardladder.CollectionCardDocPath(uid, collectionID, m.CLCollectionCardID)

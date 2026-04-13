@@ -386,7 +386,7 @@ func TestInventoryPusherAdapter_PushInventory_Error(t *testing.T) {
 
 // --- InventoryAdapter tests ---
 
-func TestInventoryListerAdapter_UpdateInventoryStatus_Success(t *testing.T) {
+func TestInventoryAdapter_UpdateInventoryStatus_Success(t *testing.T) {
 	var capturedID int
 	var capturedUpdate dh.InventoryUpdate
 	mock := &mockInventoryLister{
@@ -414,7 +414,7 @@ func TestInventoryListerAdapter_UpdateInventoryStatus_Success(t *testing.T) {
 	}
 }
 
-func TestInventoryListerAdapter_SyncChannels_Success(t *testing.T) {
+func TestInventoryAdapter_SyncChannels_Success(t *testing.T) {
 	var capturedID int
 	var capturedChannels []string
 	mock := &mockInventoryLister{
@@ -442,7 +442,7 @@ func TestInventoryListerAdapter_SyncChannels_Success(t *testing.T) {
 	}
 }
 
-func TestInventoryListerAdapter_UpdateInventoryStatus_Error(t *testing.T) {
+func TestInventoryAdapter_UpdateInventoryStatus_Error(t *testing.T) {
 	wantErr := errors.New("update failed")
 	mock := &mockInventoryLister{
 		UpdateInventoryFn: func(_ context.Context, _ int, _ dh.InventoryUpdate) (*dh.InventoryResult, error) {
@@ -460,7 +460,7 @@ func TestInventoryListerAdapter_UpdateInventoryStatus_Error(t *testing.T) {
 	}
 }
 
-func TestInventoryListerAdapter_SyncChannels_Error(t *testing.T) {
+func TestInventoryAdapter_SyncChannels_Error(t *testing.T) {
 	wantErr := errors.New("sync failed")
 	mock := &mockInventoryLister{
 		UpdateInventoryFn: func(_ context.Context, _ int, _ dh.InventoryUpdate) (*dh.InventoryResult, error) {
