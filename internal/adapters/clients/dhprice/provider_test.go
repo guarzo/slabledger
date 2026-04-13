@@ -864,5 +864,89 @@ func TestGetPrice_CardLookup(t *testing.T) {
 	}
 }
 
+// TestGetPrice_TransientClientError verifies that errors from the underlying MarketDataClient
+// are propagated cleanly by the provider. Retry/circuit-breaker logic lives in the httpx layer;
+// this test verifies the provider correctly surfaces the final error after all retries are exhausted.
+func TestGetPrice_TransientClientError(t *testing.T) {
+	cases := []struct {
+		name             string
+		recentSalesErr   error
+		expectErr        bool
+		expectNilPrice   bool
+		expectedAttempts int
+	}{
+		{
+			name:             "server error propagates cleanly",
+			recentSalesErr:   errors.New("server error: 500"),
+			expectErr:        true,
+			expectNilPrice:   true,
+			expectedAttempts: 1,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			attempts := 0
+			client := &mocks.MockDHMarketDataClient{
+				RecentSalesFn: func(_ context.Context, _ int) ([]dh.RecentSale, error) {
+					attempts++
+					return nil, tc.recentSalesErr
+				},
+			}
+			lookup := &mocks.MockDHCardIDLookup{
+				GetExternalIDFn: func(_ context.Context, _, _, _, _ string) (string, error) {
+					return "12345", nil
+				},
+			}
+
+			p := New(client, lookup)
+			got, err := p.GetPrice(context.Background(), pricing.Card{
+				Name: "Charizard", Set: "Base Set", Number: "4",
+			})
+
+			if tc.expectErr && err == nil {
+				t.Fatalf("expected error, got result: %+v", got)
+			}
+			if !tc.expectErr && err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if tc.expectNilPrice && got != nil {
+				t.Errorf("expected nil price, got %+v", got)
+			}
+			if attempts != tc.expectedAttempts {
+				t.Errorf("expected %d attempt(s) at the provider level, got %d", tc.expectedAttempts, attempts)
+			}
+		})
+	}
+}
+
+// TestGetPrice_UnavailableProvider verifies that GetPrice returns (nil, nil) safely
+// when the provider is not configured (nil client or resolver), rather than panicking.
+// This also validates the Available() contract: an unavailable provider returns nil gracefully.
+func TestGetPrice_UnavailableProvider(t *testing.T) {
+	tests := []struct {
+		name   string
+		client MarketDataClient
+		lookup CardIDLookup
+	}{
+		{"nil client", nil, &mocks.MockDHCardIDLookup{}},
+		{"nil lookup", &mocks.MockDHMarketDataClient{}, nil},
+		{"both nil", nil, nil},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p := New(tc.client, tc.lookup)
+			got, err := p.GetPrice(context.Background(), pricing.Card{Name: "Charizard", Set: "Base Set"})
+			if err != nil {
+				t.Fatalf("expected no error for unavailable provider, got: %v", err)
+			}
+			if got != nil {
+				t.Errorf("expected nil price for unavailable provider, got: %+v", got)
+			}
+		})
+	}
+}
+
 // Verify Provider satisfies PriceProvider at compile time.
 var _ pricing.PriceProvider = (*Provider)(nil)

@@ -247,6 +247,13 @@ func TestParseGrade(t *testing.T) {
 		{"BGS 8", 8.0},
 		{"10", 10.0},
 		{"", 0},
+		// Edge cases
+		{"PSA NM-MT", 0},          // no numeric suffix returns 0
+		{"PSA 8 abc", 8},          // rightmost numeric wins (abc fails, 8 is second from right)
+		{"   9   ", 9},            // whitespace-padded grade
+		{"PSA 8.5", 8.5},          // half-grade extracted
+		{"BGS 9.5 Q", 9.5},        // half-grade with trailing non-numeric token
+		{"CGC 10.0 Pristine", 10}, // grade with trailing label
 	}
 	for _, tt := range tests {
 		got := parseGrade(tt.input)

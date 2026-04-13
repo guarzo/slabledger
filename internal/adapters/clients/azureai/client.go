@@ -36,9 +36,10 @@ type Option func(*clientOptions)
 
 // clientOptions holds optional configuration for the client.
 type clientOptions struct {
-	logger       observability.Logger
-	baseURL      string // for testing with httptest
-	rateLimitRPS int    // requests per second (default 2)
+	logger            observability.Logger
+	baseURL           string        // for testing with httptest
+	rateLimitRPS      int           // requests per second (default 2)
+	completionTimeout time.Duration // poll fallback timeout (default 3m)
 }
 
 // WithLogger sets the logger.
@@ -56,6 +57,16 @@ func WithRateLimitRPS(rps int) Option {
 	}
 }
 
+// WithCompletionTimeout sets the timeout for the poll fallback when streaming fails.
+// Default is 3 minutes if not set or zero.
+func WithCompletionTimeout(d time.Duration) Option {
+	return func(o *clientOptions) {
+		if d > 0 {
+			o.completionTimeout = d
+		}
+	}
+}
+
 // withBaseURL sets the base URL for the SDK client (unexported, for tests).
 func withBaseURL(url string) Option {
 	return func(o *clientOptions) { o.baseURL = url }
@@ -63,10 +74,11 @@ func withBaseURL(url string) Option {
 
 // Client implements ai.LLMProvider for Azure AI Foundry using the openai-go SDK.
 type Client struct {
-	client         *openai.Client
-	deploymentName string
-	logger         observability.Logger
-	rateLimiter    *rate.Limiter
+	client            *openai.Client
+	deploymentName    string
+	logger            observability.Logger
+	rateLimiter       *rate.Limiter
+	completionTimeout time.Duration // poll fallback timeout; 0 means use default (3m)
 }
 
 var _ ai.LLMProvider = (*Client)(nil)
@@ -129,10 +141,11 @@ func NewClient(cfg Config, opts ...Option) (*Client, error) {
 	}
 
 	return &Client{
-		client:         &client,
-		deploymentName: cfg.DeploymentName,
-		logger:         co.logger,
-		rateLimiter:    rate.NewLimiter(rate.Limit(rps), rps),
+		client:            &client,
+		deploymentName:    cfg.DeploymentName,
+		logger:            co.logger,
+		rateLimiter:       rate.NewLimiter(rate.Limit(rps), rps),
+		completionTimeout: co.completionTimeout,
 	}, nil
 }
 
@@ -216,7 +229,11 @@ pollFallback:
 	// Skip poll if we already emitted chunks — caller already has partial data.
 	// Derive from the caller's context so cancellation propagates.
 	if lastResponseID != "" && req.Store && !emittedChunks {
-		pollCtx, pollCancel := context.WithTimeout(ctx, 3*time.Minute)
+		pollTimeout := c.completionTimeout
+		if pollTimeout == 0 {
+			pollTimeout = 3 * time.Minute
+		}
+		pollCtx, pollCancel := context.WithTimeout(ctx, pollTimeout)
 		defer pollCancel()
 		if c.logger != nil {
 			c.logger.Info(pollCtx, "attempting poll fallback for stored response",
