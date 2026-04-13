@@ -212,8 +212,8 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 		logger.Info(ctx, "BASE_URL configured",
 			observability.String("baseURL", baseURL))
 	}
-	socialHandler := handlers.NewSocialHandler(in.SocialService, in.SocialRepo, logger, mediaDir, baseURL)
-	socialHandler.WithBaseCtx(ctx)
+	socialHandler := handlers.NewSocialHandler(in.SocialService, in.SocialRepo, logger, mediaDir, baseURL,
+		handlers.WithBaseCtx(ctx))
 
 	// Wire metrics repository into social handler for API endpoints
 	socialHandler.WithMetricsRepo(in.MetricsRepo)

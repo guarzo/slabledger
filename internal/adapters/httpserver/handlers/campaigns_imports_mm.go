@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"bytes"
 	"encoding/csv"
 	"fmt"
 	"net/http"
@@ -26,8 +25,10 @@ func (h *CampaignsHandler) HandleGlobalExportMM(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	var buf bytes.Buffer
-	writer := csv.NewWriter(&buf)
+	w.Header().Set("Content-Type", "text/csv")
+	w.Header().Set("Content-Disposition", `attachment; filename="market-movers-export.csv"`)
+	w.WriteHeader(http.StatusOK)
+	writer := csv.NewWriter(w)
 	header := []string{
 		"Sport", "Grade", "Player Name", "Year", "Set", "Variation",
 		"Card Number", "Specific Qualifier", "Quantity",
@@ -35,7 +36,6 @@ func (h *CampaignsHandler) HandleGlobalExportMM(w http.ResponseWriter, r *http.R
 	}
 	if err := writer.Write(header); err != nil {
 		h.logger.Error(r.Context(), "mm csv header write failed", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "failed to generate CSV")
 		return
 	}
 	for _, e := range entries {
@@ -61,20 +61,13 @@ func (h *CampaignsHandler) HandleGlobalExportMM(w http.ResponseWriter, r *http.R
 			e.Category,
 		}); err != nil {
 			h.logger.Error(r.Context(), "mm csv row write failed", observability.Err(err))
-			writeError(w, http.StatusInternalServerError, "failed to generate CSV")
 			return
 		}
 	}
 	writer.Flush()
 	if err := writer.Error(); err != nil {
 		h.logger.Error(r.Context(), "mm csv flush failed", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "failed to generate CSV")
-		return
 	}
-	w.Header().Set("Content-Type", "text/csv")
-	w.Header().Set("Content-Disposition", `attachment; filename="market-movers-export.csv"`)
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(buf.Bytes())
 }
 
 // HandleGlobalRefreshMM handles POST /api/purchases/refresh-mm.

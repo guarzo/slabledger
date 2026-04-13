@@ -27,14 +27,24 @@ type SocialHandler struct {
 	bgWG        sync.WaitGroup
 }
 
-// NewSocialHandler creates a new social handler.
-func NewSocialHandler(service social.Service, repo social.Repository, logger observability.Logger, mediaDir, baseURL string) *SocialHandler {
-	return &SocialHandler{service: service, repo: repo, logger: logger, mediaDir: mediaDir, baseURL: baseURL, baseCtx: context.Background()}
+// SocialHandlerOpt is a functional option for configuring a SocialHandler.
+type SocialHandlerOpt func(*SocialHandler)
+
+// WithBaseCtx returns an option that sets the server-lifecycle context used for
+// background goroutines. Pass during construction — baseCtx is immutable after
+// NewSocialHandler returns.
+func WithBaseCtx(ctx context.Context) SocialHandlerOpt {
+	return func(h *SocialHandler) { h.baseCtx = ctx }
 }
 
-// WithBaseCtx sets the server-lifecycle context used for background goroutines.
-// Call before the handler starts receiving requests.
-func (h *SocialHandler) WithBaseCtx(ctx context.Context) { h.baseCtx = ctx }
+// NewSocialHandler creates a new social handler.
+func NewSocialHandler(service social.Service, repo social.Repository, logger observability.Logger, mediaDir, baseURL string, opts ...SocialHandlerOpt) *SocialHandler {
+	h := &SocialHandler{service: service, repo: repo, logger: logger, mediaDir: mediaDir, baseURL: baseURL, baseCtx: context.Background()}
+	for _, o := range opts {
+		o(h)
+	}
+	return h
+}
 
 // Wait blocks until all background goroutines have completed.
 // Call during graceful shutdown to avoid writing to a closed database.

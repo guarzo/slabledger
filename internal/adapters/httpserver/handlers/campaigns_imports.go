@@ -80,11 +80,12 @@ func (h *CampaignsHandler) HandleGlobalExportCL(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	var buf bytes.Buffer
-	writer := csv.NewWriter(&buf)
+	w.Header().Set("Content-Type", "text/csv")
+	w.Header().Set("Content-Disposition", `attachment; filename="card_ladder_import.csv"`)
+	w.WriteHeader(http.StatusOK)
+	writer := csv.NewWriter(w)
 	if err := writer.Write([]string{"Date Purchased", "Cert #", "Grader", "Investment", "Estimated Value", "Notes", "Date Sold", "Sold Price"}); err != nil {
 		h.logger.Error(r.Context(), "csv header write failed", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "failed to generate CSV")
 		return
 	}
 	for _, e := range entries {
@@ -97,20 +98,13 @@ func (h *CampaignsHandler) HandleGlobalExportCL(w http.ResponseWriter, r *http.R
 			"", "", "",
 		}); err != nil {
 			h.logger.Error(r.Context(), "csv row write failed", observability.Err(err))
-			writeError(w, http.StatusInternalServerError, "failed to generate CSV")
 			return
 		}
 	}
 	writer.Flush()
 	if err := writer.Error(); err != nil {
 		h.logger.Error(r.Context(), "csv flush failed", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "failed to generate CSV")
-		return
 	}
-	w.Header().Set("Content-Type", "text/csv")
-	w.Header().Set("Content-Disposition", `attachment; filename="card_ladder_import.csv"`)
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(buf.Bytes())
 }
 
 // HandleGlobalImportPSA handles POST /api/purchases/import-psa.
