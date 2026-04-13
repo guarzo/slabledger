@@ -181,7 +181,6 @@ type service struct {
 	finance   FinanceRepository
 	pricing   PricingRepository
 	dh        DHRepository
-	snapshots SnapshotRepository
 
 	priceProv          PriceLookup
 	certLookup         CertLookup
@@ -289,7 +288,6 @@ func NewService(
 	finance FinanceRepository,
 	pricing PricingRepository,
 	dh DHRepository,
-	snapshots SnapshotRepository,
 	opts ...ServiceOption,
 ) Service {
 	s := &service{
@@ -300,7 +298,6 @@ func NewService(
 		finance:   finance,
 		pricing:   pricing,
 		dh:        dh,
-		snapshots: snapshots,
 	}
 	for _, opt := range opts {
 		opt(s)

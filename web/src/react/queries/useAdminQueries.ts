@@ -44,15 +44,6 @@ export function useAdminApiUsage(options?: AdminQueryOptions) {
   });
 }
 
-export function useAdminCacheStats(options?: AdminQueryOptions) {
-  return useQuery({
-    queryKey: queryKeys.admin.cacheStats,
-    queryFn: () => api.getAdminCacheStats(),
-    staleTime: 60_000,
-    enabled: options?.enabled ?? true,
-  });
-}
-
 export function useAddAllowedEmail() {
   const qc = useQueryClient();
   return useMutation({

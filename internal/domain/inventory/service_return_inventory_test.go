@@ -36,7 +36,7 @@ func TestDeleteSaleByPurchaseID(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			repo := newMockRepo()
 			tc.seed(repo)
-			svc := &service{campaigns: repo, purchases: repo, sales: repo, analytics: repo, finance: repo, pricing: repo, dh: repo, snapshots: repo, idGen: func() string { return "test-id" }}
+			svc := &service{campaigns: repo, purchases: repo, sales: repo, analytics: repo, finance: repo, pricing: repo, dh: repo, idGen: func() string { return "test-id" }}
 
 			err := svc.DeleteSaleByPurchaseID(context.Background(), "p1")
 

@@ -28,7 +28,7 @@ func TestImportCerts_NewCert(t *testing.T) {
 		},
 	}
 
-	svc := &service{campaigns: repo, purchases: repo, sales: repo, analytics: repo, finance: repo, pricing: repo, dh: repo, snapshots: repo, certLookup: certLookup, idGen: func() string { return "test-id" }}
+	svc := &service{campaigns: repo, purchases: repo, sales: repo, analytics: repo, finance: repo, pricing: repo, dh: repo, certLookup: certLookup, idGen: func() string { return "test-id" }}
 
 	result, err := svc.ImportCerts(context.Background(), []string{"12345678"})
 	if err != nil {
@@ -60,7 +60,7 @@ func TestImportCerts_ExistingCert(t *testing.T) {
 	repo.purchases["existing-id"] = &Purchase{ID: "existing-id", CertNumber: "12345678", Grader: "PSA"}
 	repo.certNumbers["12345678"] = true
 
-	svc := &service{campaigns: repo, purchases: repo, sales: repo, analytics: repo, finance: repo, pricing: repo, dh: repo, snapshots: repo, idGen: func() string { return "test-id" }}
+	svc := &service{campaigns: repo, purchases: repo, sales: repo, analytics: repo, finance: repo, pricing: repo, dh: repo, idGen: func() string { return "test-id" }}
 	result, err := svc.ImportCerts(context.Background(), []string{"12345678"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -87,7 +87,7 @@ func TestImportCerts_Deduplication(t *testing.T) {
 	}
 
 	svc := &service{
-		campaigns: repo, purchases: repo, sales: repo, analytics: repo, finance: repo, pricing: repo, dh: repo, snapshots: repo, certLookup: certLookup,
+		campaigns: repo, purchases: repo, sales: repo, analytics: repo, finance: repo, pricing: repo, dh: repo, certLookup: certLookup,
 		idGen: func() string { idCounter++; return fmt.Sprintf("id-%d", idCounter) },
 	}
 	result, _ := svc.ImportCerts(context.Background(), []string{"111", "111", " 111 ", ""})
@@ -163,7 +163,7 @@ func TestImportCerts_SoldCerts(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			repo := newMockRepo()
 			tc.seed(repo)
-			svc := &service{campaigns: repo, purchases: repo, sales: repo, analytics: repo, finance: repo, pricing: repo, dh: repo, snapshots: repo, idGen: func() string { return "test-id" }}
+			svc := &service{campaigns: repo, purchases: repo, sales: repo, analytics: repo, finance: repo, pricing: repo, dh: repo, idGen: func() string { return "test-id" }}
 
 			result, err := svc.ImportCerts(context.Background(), tc.input)
 			if err != nil {
@@ -244,7 +244,7 @@ func TestScanCert(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			repo := newMockRepo()
 			tc.seed(repo)
-			svc := &service{campaigns: repo, purchases: repo, sales: repo, analytics: repo, finance: repo, pricing: repo, dh: repo, snapshots: repo, idGen: func() string { return "test-id" }}
+			svc := &service{campaigns: repo, purchases: repo, sales: repo, analytics: repo, finance: repo, pricing: repo, dh: repo, idGen: func() string { return "test-id" }}
 
 			result, err := svc.ScanCert(context.Background(), tc.certNumber)
 			if err != nil {
@@ -267,7 +267,7 @@ func TestScanCert_ExistingSetsExportFlag(t *testing.T) {
 		CardName: "Charizard", CampaignID: "camp-1",
 	}
 
-	svc := &service{campaigns: repo, purchases: repo, sales: repo, analytics: repo, finance: repo, pricing: repo, dh: repo, snapshots: repo, idGen: func() string { return "test-id" }}
+	svc := &service{campaigns: repo, purchases: repo, sales: repo, analytics: repo, finance: repo, pricing: repo, dh: repo, idGen: func() string { return "test-id" }}
 
 	_, err := svc.ScanCert(context.Background(), "11111111")
 	if err != nil {
@@ -331,7 +331,7 @@ func TestImportCerts_SetsReceivedAt(t *testing.T) {
 				repo.certNumbers[k] = v
 			}
 
-			svc := &service{campaigns: repo, purchases: repo, sales: repo, analytics: repo, finance: repo, pricing: repo, dh: repo, snapshots: repo, certLookup: tc.certLookup, idGen: tc.idGen}
+			svc := &service{campaigns: repo, purchases: repo, sales: repo, analytics: repo, finance: repo, pricing: repo, dh: repo, certLookup: tc.certLookup, idGen: tc.idGen}
 			result, err := svc.ImportCerts(context.Background(), []string{"12345678"})
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
@@ -406,7 +406,7 @@ func TestResolveCert(t *testing.T) {
 			if tc.lookupFn != nil {
 				certLookup = &mockCertLookup{lookupFn: tc.lookupFn}
 			}
-			svc := &service{campaigns: repo, purchases: repo, sales: repo, analytics: repo, finance: repo, pricing: repo, dh: repo, snapshots: repo, certLookup: certLookup, idGen: func() string { return "test-id" }}
+			svc := &service{campaigns: repo, purchases: repo, sales: repo, analytics: repo, finance: repo, pricing: repo, dh: repo, certLookup: certLookup, idGen: func() string { return "test-id" }}
 
 			info, err := svc.ResolveCert(context.Background(), tc.certNumber)
 			if tc.wantErr {

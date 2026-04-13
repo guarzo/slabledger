@@ -130,7 +130,6 @@ func initializeCampaignsService(
 		financeStore,   // FinanceRepository
 		pricingStore,   // PricingRepository
 		dhStore,        // DHRepository
-		snapshotStore,  // SnapshotRepository
 		campaignOpts...,
 	)
 

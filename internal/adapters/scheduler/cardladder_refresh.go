@@ -236,7 +236,7 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 	// Load existing mappings
 	existingMappings, err := s.store.ListMappings(ctx)
 	if err != nil {
-		s.logger.Warn(ctx, "CL refresh: failed to list mappings", observability.Err(err))
+		s.logger.Warn(ctx, "CL refresh: failed to load card mappings — orphan audit will be skipped this run", observability.Err(err))
 	}
 	mappingByCLCardID := make(map[string]*sqlite.CLCardMapping, len(existingMappings))
 	for i := range existingMappings {

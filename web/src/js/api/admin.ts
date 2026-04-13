@@ -2,7 +2,7 @@
  * Admin-related API methods
  */
 
-import type { APIUsageResponse, CacheStatsResponse, PricingDiagnosticsResponse, PriceOverrideStats, CachedAnalysis, AdvisorAnalysisType, AIUsageResponse, DHStatusResponse, DHBulkMatchResponse, DHUnmatchedResponse, DHFixMatchRequest, DHFixMatchResponse, DHSelectMatchRequest, DHPushConfig } from '../../types/apiStatus';
+import type { APIUsageResponse, PricingDiagnosticsResponse, PriceOverrideStats, CachedAnalysis, AdvisorAnalysisType, AIUsageResponse, DHStatusResponse, DHBulkMatchResponse, DHUnmatchedResponse, DHFixMatchRequest, DHFixMatchResponse, DHSelectMatchRequest, DHPushConfig } from '../../types/apiStatus';
 import type { AllowedEmail, AdminUser, CLStatusResponse, CLSyncResult, IntegrationFailuresReport, MMStatusResponse, MMSyncResult, PSASyncStatusResponse } from '../../types/admin';
 import type { APIClient } from './client';
 import { APIError } from './client';
@@ -18,7 +18,6 @@ declare module './client' {
     removeAllowedEmail(email: string): Promise<void>;
     getAdminUsers(): Promise<AdminUser[]>;
     getAdminApiUsage(): Promise<APIUsageResponse>;
-    getAdminCacheStats(): Promise<CacheStatsResponse>;
     getPricingDiagnostics(): Promise<PricingDiagnosticsResponse>;
     getAdvisorCache(type: AdvisorAnalysisType): Promise<CachedAnalysis>;
     refreshAdvisorCache(type: AdvisorAnalysisType): Promise<void>;
@@ -78,10 +77,6 @@ proto.getAdminUsers = async function (this: APIClient): Promise<AdminUser[]> {
 
 proto.getAdminApiUsage = async function (this: APIClient): Promise<APIUsageResponse> {
   return this.get<APIUsageResponse>('/admin/api-usage');
-};
-
-proto.getAdminCacheStats = async function (this: APIClient): Promise<CacheStatsResponse> {
-  return this.get<CacheStatsResponse>('/admin/cache-stats');
 };
 
 proto.getPricingDiagnostics = async function (this: APIClient): Promise<PricingDiagnosticsResponse> {

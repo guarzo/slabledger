@@ -51,7 +51,6 @@ Default when `Fn` is nil:
 ### inventory.FinanceRepository → `FinanceRepositoryMock`
 ### inventory.PricingRepository → `PricingRepositoryMock`
 ### inventory.DHRepository → `DHRepositoryMock`
-### inventory.SnapshotRepository → `SnapshotRepositoryMock`
 
 All follow the same Fn-field pattern. Unset methods return zero values or empty slices.
 
@@ -94,11 +93,11 @@ Each follows the same pattern: set the `*Fn` field to override a method.
 
 For service-layer tests that need a realistic store with actual state.
 
-`InMemoryCampaignStore` implements all 8 inventory repository interfaces:
+`InMemoryCampaignStore` implements all 7 inventory repository interfaces:
 `CampaignRepository`, `PurchaseRepository`, `SaleRepository`, `AnalyticsRepository`,
-`FinanceRepository`, `PricingRepository`, `DHRepository`, `SnapshotRepository`.
+`FinanceRepository`, `PricingRepository`, `DHRepository`.
 
-Pass the same instance for all 8 repository slots when constructing `inventory.NewService`.
+Pass the same instance for all 7 repository slots when constructing `inventory.NewService`.
 
 ```go
 store := mocks.NewInMemoryCampaignStore()
@@ -111,7 +110,6 @@ svc := inventory.NewService(
     store, // FinanceRepository
     store, // PricingRepository
     store, // DHRepository
-    store, // SnapshotRepository
     logger,
 )
 ```

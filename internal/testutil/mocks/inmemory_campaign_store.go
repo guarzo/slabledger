@@ -13,7 +13,7 @@ import (
 // The default implementations provide a minimal working in-memory store with
 // cascade deletes and duplicate cert detection, suitable for service-layer tests.
 //
-// Pass the same *InMemoryCampaignStore for all 8 repository slots in inventory.NewService.
+// Pass the same *InMemoryCampaignStore for all 7 repository slots in inventory.NewService.
 type InMemoryCampaignStore struct {
 	Campaigns       map[string]*inventory.Campaign
 	Purchases       map[string]*inventory.Purchase
@@ -90,7 +90,6 @@ var _ inventory.AnalyticsRepository = (*InMemoryCampaignStore)(nil)
 var _ inventory.FinanceRepository = (*InMemoryCampaignStore)(nil)
 var _ inventory.PricingRepository = (*InMemoryCampaignStore)(nil)
 var _ inventory.DHRepository = (*InMemoryCampaignStore)(nil)
-var _ inventory.SnapshotRepository = (*InMemoryCampaignStore)(nil)
 
 // NewInMemoryCampaignStore creates a ready-to-use InMemoryCampaignStore with initialized maps.
 func NewInMemoryCampaignStore() *InMemoryCampaignStore {
@@ -1101,7 +1100,7 @@ func (m *InMemoryCampaignStore) ClearSellSheet(ctx context.Context) error {
 	return nil
 }
 
-// --- SnapshotRepository ---
+// --- PurchaseRepository: Snapshot Status Methods ---
 
 func (m *InMemoryCampaignStore) ListSnapshotPurchasesByStatus(_ context.Context, status inventory.SnapshotStatus, limit int) ([]inventory.Purchase, error) {
 	if limit <= 0 {
