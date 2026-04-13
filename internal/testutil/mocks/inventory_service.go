@@ -121,8 +121,8 @@ type MockInventoryService struct {
 
 	// Snapshot refresh
 	RefreshPurchaseSnapshotFn func(ctx context.Context, purchaseID string, card inventory.CardIdentity, grade float64, clValueCents int) bool
-	ProcessPendingSnapshotsFn func(ctx context.Context, limit int) (int, int, int)
-	RetryFailedSnapshotsFn    func(ctx context.Context, limit int) (int, int, int)
+	ProcessPendingSnapshotsFn func(ctx context.Context, limit int) (int, int, int, error)
+	RetryFailedSnapshotsFn    func(ctx context.Context, limit int) (int, int, int, error)
 
 	// External purchases
 	EnsureExternalCampaignFn func(ctx context.Context) (*inventory.Campaign, error)
@@ -701,18 +701,18 @@ func (m *MockInventoryService) RefreshPurchaseSnapshot(ctx context.Context, purc
 	return false
 }
 
-func (m *MockInventoryService) ProcessPendingSnapshots(ctx context.Context, limit int) (int, int, int) {
+func (m *MockInventoryService) ProcessPendingSnapshots(ctx context.Context, limit int) (int, int, int, error) {
 	if m.ProcessPendingSnapshotsFn != nil {
 		return m.ProcessPendingSnapshotsFn(ctx, limit)
 	}
-	return 0, 0, 0
+	return 0, 0, 0, nil
 }
 
-func (m *MockInventoryService) RetryFailedSnapshots(ctx context.Context, limit int) (int, int, int) {
+func (m *MockInventoryService) RetryFailedSnapshots(ctx context.Context, limit int) (int, int, int, error) {
 	if m.RetryFailedSnapshotsFn != nil {
 		return m.RetryFailedSnapshotsFn(ctx, limit)
 	}
-	return 0, 0, 0
+	return 0, 0, 0, nil
 }
 
 func (m *MockInventoryService) GetPurchasesByCertNumbers(ctx context.Context, certNumbers []string) (map[string]*inventory.Purchase, error) {

@@ -380,51 +380,51 @@ func (s *service) GetWeeklyReviewSummary(ctx context.Context) (*WeeklyReviewSumm
 		pd := d.Purchase.PurchaseDate
 		if !isValidDate(pd) {
 			if s.logger != nil {
-				s.logger.Warn(ctx, "invalid purchase date format — skipping weekly bucketing",
+				s.logger.Warn(ctx, "invalid purchase date format — skipping purchase bucketing",
 					observability.String("purchaseID", d.Purchase.ID),
 					observability.String("date", pd))
 			}
-			continue
-		}
-		if pd >= thisWeekStr && pd <= thisWeekEndStr {
-			summary.PurchasesThisWeek++
-			summary.SpendThisWeekCents += d.Purchase.BuyCostCents + d.Purchase.PSASourcingFeeCents
-		} else if pd >= lastWeekStr && pd <= lastWeekEndStr {
-			summary.PurchasesLastWeek++
-			summary.SpendLastWeekCents += d.Purchase.BuyCostCents + d.Purchase.PSASourcingFeeCents
+		} else {
+			if pd >= thisWeekStr && pd <= thisWeekEndStr {
+				summary.PurchasesThisWeek++
+				summary.SpendThisWeekCents += d.Purchase.BuyCostCents + d.Purchase.PSASourcingFeeCents
+			} else if pd >= lastWeekStr && pd <= lastWeekEndStr {
+				summary.PurchasesLastWeek++
+				summary.SpendLastWeekCents += d.Purchase.BuyCostCents + d.Purchase.PSASourcingFeeCents
+			}
 		}
 
 		if d.Sale != nil {
 			sd := d.Sale.SaleDate
 			if !isValidDate(sd) {
 				if s.logger != nil {
-					s.logger.Warn(ctx, "invalid sale date format — skipping weekly bucketing",
+					s.logger.Warn(ctx, "invalid sale date format — skipping sale bucketing",
 						observability.String("purchaseID", d.Purchase.ID),
 						observability.String("date", sd))
 				}
-				continue
-			}
-			if sd >= thisWeekStr && sd <= thisWeekEndStr {
-				summary.SalesThisWeek++
-				summary.RevenueThisWeekCents += d.Sale.SalePriceCents
-				summary.ProfitThisWeekCents += d.Sale.NetProfitCents
-				channelProfits[d.Sale.SaleChannel] += d.Sale.NetProfitCents
-				channelRevenue[d.Sale.SaleChannel] += d.Sale.SalePriceCents
-				channelFees[d.Sale.SaleChannel] += d.Sale.SaleFeeCents
-				channelCounts[d.Sale.SaleChannel]++
-				channelDays[d.Sale.SaleChannel] += float64(d.Sale.DaysToSell)
-				topSales = append(topSales, WeeklyPerformer{
-					CardName:    d.Purchase.CardName,
-					CertNumber:  d.Purchase.CertNumber,
-					Grade:       d.Purchase.GradeValue,
-					ProfitCents: d.Sale.NetProfitCents,
-					Channel:     string(d.Sale.SaleChannel),
-					DaysToSell:  d.Sale.DaysToSell,
-				})
-			} else if sd >= lastWeekStr && sd <= lastWeekEndStr {
-				summary.SalesLastWeek++
-				summary.RevenueLastWeekCents += d.Sale.SalePriceCents
-				summary.ProfitLastWeekCents += d.Sale.NetProfitCents
+			} else {
+				if sd >= thisWeekStr && sd <= thisWeekEndStr {
+					summary.SalesThisWeek++
+					summary.RevenueThisWeekCents += d.Sale.SalePriceCents
+					summary.ProfitThisWeekCents += d.Sale.NetProfitCents
+					channelProfits[d.Sale.SaleChannel] += d.Sale.NetProfitCents
+					channelRevenue[d.Sale.SaleChannel] += d.Sale.SalePriceCents
+					channelFees[d.Sale.SaleChannel] += d.Sale.SaleFeeCents
+					channelCounts[d.Sale.SaleChannel]++
+					channelDays[d.Sale.SaleChannel] += float64(d.Sale.DaysToSell)
+					topSales = append(topSales, WeeklyPerformer{
+						CardName:    d.Purchase.CardName,
+						CertNumber:  d.Purchase.CertNumber,
+						Grade:       d.Purchase.GradeValue,
+						ProfitCents: d.Sale.NetProfitCents,
+						Channel:     string(d.Sale.SaleChannel),
+						DaysToSell:  d.Sale.DaysToSell,
+					})
+				} else if sd >= lastWeekStr && sd <= lastWeekEndStr {
+					summary.SalesLastWeek++
+					summary.RevenueLastWeekCents += d.Sale.SalePriceCents
+					summary.ProfitLastWeekCents += d.Sale.NetProfitCents
+				}
 			}
 		}
 	}

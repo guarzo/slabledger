@@ -27,20 +27,20 @@ type mockSnapshotEnrichService struct {
 	retryLimitSeen   int
 }
 
-func (m *mockSnapshotEnrichService) ProcessPendingSnapshots(_ context.Context, limit int) (processed, skipped, failed int) {
+func (m *mockSnapshotEnrichService) ProcessPendingSnapshots(_ context.Context, limit int) (processed, skipped, failed int, err error) {
 	atomic.AddInt32(&m.pendingCallCount, 1)
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.pendingLimitSeen = limit
-	return m.pendingProcessed, m.pendingSkipped, m.pendingFailed
+	return m.pendingProcessed, m.pendingSkipped, m.pendingFailed, nil
 }
 
-func (m *mockSnapshotEnrichService) RetryFailedSnapshots(_ context.Context, limit int) (processed, skipped, failed int) {
+func (m *mockSnapshotEnrichService) RetryFailedSnapshots(_ context.Context, limit int) (processed, skipped, failed int, err error) {
 	atomic.AddInt32(&m.retryCallCount, 1)
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.retryLimitSeen = limit
-	return m.retryProcessed, m.retrySkipped, m.retryFailed
+	return m.retryProcessed, m.retrySkipped, m.retryFailed, nil
 }
 
 func (m *mockSnapshotEnrichService) PendingCallCount() int32 {

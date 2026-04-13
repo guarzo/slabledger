@@ -185,16 +185,14 @@ func (s *service) RefreshPurchaseSnapshot(ctx context.Context, purchaseID string
 
 // ProcessPendingSnapshots fetches and persists market snapshots for purchases
 // that were imported without one (snapshot_status = "pending").
-func (s *service) ProcessPendingSnapshots(ctx context.Context, limit int) (processed, skipped, failed int) {
-	p, sk, f, _ := s.processSnapshotsByStatus(ctx, SnapshotStatusPending, limit)
-	return p, sk, f
+func (s *service) ProcessPendingSnapshots(ctx context.Context, limit int) (processed, skipped, failed int, err error) {
+	return s.processSnapshotsByStatus(ctx, SnapshotStatusPending, limit)
 }
 
 // RetryFailedSnapshots retries market snapshot capture for purchases where
 // a previous attempt failed (snapshot_status = "failed").
-func (s *service) RetryFailedSnapshots(ctx context.Context, limit int) (processed, skipped, failed int) {
-	p, sk, f, _ := s.processSnapshotsByStatus(ctx, SnapshotStatusFailed, limit)
-	return p, sk, f
+func (s *service) RetryFailedSnapshots(ctx context.Context, limit int) (processed, skipped, failed int, err error) {
+	return s.processSnapshotsByStatus(ctx, SnapshotStatusFailed, limit)
 }
 
 func (s *service) processSnapshotsByStatus(ctx context.Context, status SnapshotStatus, limit int) (processed, skipped, failed int, err error) {

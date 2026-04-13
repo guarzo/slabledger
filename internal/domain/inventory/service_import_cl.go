@@ -246,7 +246,7 @@ func (s *service) ImportCLExportGlobal(ctx context.Context, rows []CLExportRow) 
 			existing.CLValueCents = newCLCents
 
 			// Note: This update path mirrors the CL refresh path above but intentionally omits
-			// the re-push-on-value-change logic (DH re-enroll on DHInventoryID change) because
+			// the re-push-on-value-change logic (DH re-enroll on CL value change) because
 			// the import flow uses cached pre-import pricing, so value deltas are less meaningful.
 			// Snapshot deferral here is best-effort with no tracking in the result summary.
 

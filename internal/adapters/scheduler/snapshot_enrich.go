@@ -10,8 +10,8 @@ import (
 
 // SnapshotEnrichService is the subset of inventory.Service needed by the enrichment scheduler.
 type SnapshotEnrichService interface {
-	ProcessPendingSnapshots(ctx context.Context, limit int) (processed, skipped, failed int)
-	RetryFailedSnapshots(ctx context.Context, limit int) (processed, skipped, failed int)
+	ProcessPendingSnapshots(ctx context.Context, limit int) (processed, skipped, failed int, err error)
+	RetryFailedSnapshots(ctx context.Context, limit int) (processed, skipped, failed int, err error)
 }
 
 var _ Scheduler = (*SnapshotEnrichScheduler)(nil)
@@ -86,7 +86,10 @@ func (s *SnapshotEnrichScheduler) Start(ctx context.Context) {
 
 // tickPending processes one batch of pending snapshots.
 func (s *SnapshotEnrichScheduler) tickPending(ctx context.Context) {
-	processed, skipped, failed := s.service.ProcessPendingSnapshots(ctx, s.config.BatchSize)
+	processed, skipped, failed, err := s.service.ProcessPendingSnapshots(ctx, s.config.BatchSize)
+	if err != nil {
+		s.logger.Warn(ctx, "snapshot enrichment failed", observability.Err(err))
+	}
 	if processed > 0 || skipped > 0 || failed > 0 {
 		s.logger.Info(ctx, "snapshot enrichment",
 			observability.Int("processed", processed),
@@ -97,7 +100,10 @@ func (s *SnapshotEnrichScheduler) tickPending(ctx context.Context) {
 
 // tickRetry retries one batch of previously-failed snapshots.
 func (s *SnapshotEnrichScheduler) tickRetry(ctx context.Context) {
-	processed, skipped, failed := s.service.RetryFailedSnapshots(ctx, s.config.BatchSize)
+	processed, skipped, failed, err := s.service.RetryFailedSnapshots(ctx, s.config.BatchSize)
+	if err != nil {
+		s.logger.Warn(ctx, "snapshot retry failed", observability.Err(err))
+	}
 	if processed > 0 || skipped > 0 || failed > 0 {
 		s.logger.Info(ctx, "snapshot retry",
 			observability.Int("processed", processed),
