@@ -96,12 +96,6 @@ func initializeCampaignsService(
 		logger.Info(ctx, "PSA cert lookup and cert enrichment enabled")
 	}
 
-	// History recorders — track CL values and population changes during CSV imports.
-	campaignOpts = append(campaignOpts,
-		inventory.WithCLValueRecorder(snapshotStore),
-		inventory.WithPopulationRecorder(snapshotStore),
-	)
-
 	if intelRepo != nil {
 		campaignOpts = append(campaignOpts, inventory.WithIntelligenceRepo(intelRepo))
 	}

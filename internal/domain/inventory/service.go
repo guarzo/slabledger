@@ -191,10 +191,6 @@ type service struct {
 	idGen              func() string // generates unique IDs; must be injected via WithIDGenerator
 	maxSnapshotRetries int           // max retry attempts for failed snapshots (0 = unlimited)
 
-	// History recorders (optional — best-effort logging, never block imports)
-	popRecorder PopulationHistoryRecorder
-	clRecorder  CLValueHistoryRecorder
-
 	compProv        CompSummaryProvider     // optional — Card Ladder comp analytics
 	intelRepo       intelligence.Repository // optional — DH market intelligence for price-sync enrichment
 	pendingItemRepo PendingItemRepository   // optional — stores ambiguous/unmatched items from imports
@@ -268,16 +264,6 @@ func WithMaxSnapshotRetries(n int) ServiceOption {
 // Must be provided by the composition root (e.g., uuid.NewString).
 func WithIDGenerator(fn func() string) ServiceOption {
 	return func(s *service) { s.idGen = fn }
-}
-
-// WithPopulationRecorder enables population history tracking during CSV imports.
-func WithPopulationRecorder(r PopulationHistoryRecorder) ServiceOption {
-	return func(s *service) { s.popRecorder = r }
-}
-
-// WithCLValueRecorder enables CL value history tracking during CSV imports.
-func WithCLValueRecorder(r CLValueHistoryRecorder) ServiceOption {
-	return func(s *service) { s.clRecorder = r }
 }
 
 // WithCompSummaryProvider enables Card Ladder comp analytics on inventory aging.

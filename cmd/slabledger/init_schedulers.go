@@ -74,8 +74,6 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 		InventoryLister:          &inventoryListAdapter{repo: deps.PurchaseStore},
 		SnapshotRefresher:        &snapshotRefreshAdapter{svc: deps.CampaignsService},
 		SnapshotEnrichService:    deps.CampaignsService,
-		SnapshotHistoryLister:    deps.PurchaseStore,
-		SnapshotHistoryRecorder:  deps.SnapshotStore,
 		AdvisorCollector:         deps.AdvisorService,
 		AdvisorCache:             deps.AdvisorCacheRepo,
 		AICallTracker:            deps.AICallRepo,
@@ -90,7 +88,6 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 		CardLadderValueUpdater:   deps.PurchaseStore,
 		CardLadderGemRateUpdater: deps.PurchaseStore,
 		CardLadderSyncUpdater:    deps.PurchaseStore,
-		CardLadderCLRecorder:     deps.SnapshotStore,
 		CardLadderSalesStore:     deps.CardLadderSalesStore,
 	}
 	// Wire Market Movers (nil-safe: only set if non-nil to avoid typed-nil interface issues)

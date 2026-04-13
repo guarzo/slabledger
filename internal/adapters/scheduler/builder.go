@@ -40,10 +40,6 @@ type BuildDeps struct {
 	// Snapshot enrichment dependencies (optional)
 	SnapshotEnrichService SnapshotEnrichService
 
-	// Snapshot history archival dependencies (optional)
-	SnapshotHistoryLister   SnapshotHistoryLister
-	SnapshotHistoryRecorder domainCampaigns.SnapshotHistoryRecorder
-
 	// Advisor refresh dependencies (optional)
 	AdvisorCollector AdvisorCollector
 	AdvisorCache     advisor.CacheStore
@@ -95,7 +91,6 @@ type BuildDeps struct {
 	CardLadderValueUpdater   CardLadderValueUpdater
 	CardLadderGemRateUpdater CardLadderGemRateUpdater
 	CardLadderSyncUpdater    CardLadderSyncUpdater
-	CardLadderCLRecorder     domainCampaigns.CLValueHistoryRecorder
 	CardLadderSalesStore     *sqlite.CLSalesStore
 
 	// Market Movers dependencies (optional)
@@ -212,19 +207,6 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 		schedulers = append(schedulers, enrichScheduler)
 	}
 
-	// Snapshot history archival scheduler (if dependencies are provided)
-	if deps.SnapshotHistoryLister != nil && deps.SnapshotHistoryRecorder != nil {
-		historyConfig := SnapshotHistoryConfig{
-			Enabled:  cfg.SnapshotHistory.Enabled,
-			Interval: cfg.SnapshotHistory.Interval,
-		}
-		historyScheduler := NewSnapshotHistoryScheduler(
-			deps.SnapshotHistoryLister, deps.SnapshotHistoryRecorder,
-			deps.Logger, historyConfig,
-		)
-		schedulers = append(schedulers, historyScheduler)
-	}
-
 	// Advisor refresh scheduler (if advisor service and cache store are provided)
 	if deps.AdvisorCollector != nil && deps.AdvisorCache != nil {
 		schedulers = append(schedulers, NewAdvisorRefreshScheduler(
@@ -309,7 +291,6 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 			deps.CardLadderClient, deps.CardLadderStore,
 			deps.CardLadderPurchaseLister, deps.CardLadderValueUpdater,
 			deps.CardLadderGemRateUpdater,
-			deps.CardLadderCLRecorder,
 			deps.CardLadderSalesStore,
 			deps.Logger, cfg.CardLadder,
 			clOpts...,

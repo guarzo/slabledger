@@ -5,5 +5,4 @@ package inventory
 // (ListSnapshotPurchasesByStatus, UpdatePurchaseSnapshotStatus).
 // This interface exists for future decomposition (Phase 2).
 type SnapshotRepository interface {
-	// Snapshot recording is handled by SnapshotHistoryRecorder (see history.go)
 }
