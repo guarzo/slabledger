@@ -1,490 +1,181 @@
-# Mock Providers Package
+# testutil/mocks
 
-This package provides centralized, reusable mock implementations for all provider interfaces used in the slabledger application. These mocks are designed for comprehensive testing with configurable behaviors.
+Centralized mock implementations for all domain interfaces.
 
-## Overview
+## Pattern
 
-All mocks support configurable behaviors through functional options, allowing tests to simulate various scenarios including:
-- Network delays
-- Timeouts
-- Rate limiting
-- Error conditions
-- Empty responses
-- Partial failures
+All mocks use the **Fn-field pattern**: every interface method has a corresponding `Fn` field.
+When the field is `nil`, the method returns a sensible zero-value default.
+Override any method per test by assigning a function.
 
-## Available Mocks
-
-### MockCardProvider
-Mocks the card provider interface (implements `domainCards.CardProvider`).
-
-**Methods:**
-- `GetCards(ctx, setID)` - Returns mock cards for a given set
-- `GetSet(ctx, setID)` - Returns mock set metadata
-- `ListAllSets(ctx)` - Returns all mock card sets
-- `Available()` - Returns provider availability status
-
-**Example:**
 ```go
-import (
-    "context"
-    "github.com/guarzo/slabledger/internal/testutil/mocks"
-)
-
-func TestWithCards(t *testing.T) {
-    ctx := context.Background()
-
-    // Basic usage
-    cardProvider := mocks.NewMockCardProvider()
-    sets, err := cardProvider.ListAllSets(ctx)
-    cards, err := cardProvider.GetCards(ctx, "base")
-
-    // With error simulation
-    cardProvider := mocks.NewMockCardProvider(
-        mocks.WithError(fmt.Errorf("API unavailable")),
-    )
-
-    // With empty data
-    cardProvider := mocks.NewMockCardProvider(
-        mocks.WithEmptyData(),
-    )
-
-    // Custom data
-    cardProvider := mocks.NewMockCardProvider()
-    cardProvider.SetMockCards("base", customCards)
-}
-```
-
-### MockPriceProvider
-Mocks the DH price provider interface.
-
-**Methods:**
-- `Available()` - Returns availability status
-- `LookupCard(ctx, setName, card)` - Returns mock price data
-
-**Example:**
-```go
-func TestPriceLookup(t *testing.T) {
-    ctx := context.Background()
-    priceProvider := mocks.NewMockPriceProvider()
-
-    card := model.Card{Name: "Pikachu", Number: "025"}
-    match, err := priceProvider.LookupCard(ctx, "Base Set", card)
-
-    // Returns deterministic prices based on card name/number
-    assert.NotZero(t, match.LoosePrice)
-    assert.NotZero(t, match.ManualPrice) // PSA 10 price
-}
-```
-
-**Custom match data:**
-```go
-func TestCustomPrices(t *testing.T) {
-    priceProvider := mocks.NewMockPriceProvider()
-
-    customMatch := &prices.PCMatch{
-        LoosePrice: 1000, // $10.00 in cents
-        ManualPrice: 5000, // $50.00 in cents
-    }
-
-    priceProvider.SetMockMatch("Base Set", "Charizard", "006", customMatch)
-}
-```
-
-### MockPopulationProvider
-Mocks the PSA population data provider interface with full interface compliance.
-
-**Interface compliance:**
-```go
-var _ population.Provider = (*MockPopulationProvider)(nil)
-```
-
-**Methods:**
-- `Available()` - Returns availability status
-- `GetProviderName()` - Returns "Mock Population Provider"
-- `IsMockMode()` - Returns true
-- `LookupPopulation(ctx, card)` - Returns mock population data
-- `BatchLookupPopulation(ctx, cards)` - Returns batch population data
-- `GetSetPopulation(ctx, setName)` - Returns set statistics
-
-**Example:**
-```go
-func TestPopulationData(t *testing.T) {
-    popProvider := mocks.NewMockPopulationProvider()
-
-    card := model.Card{Name: "Charizard", Number: "006"}
-    data, err := popProvider.LookupPopulation(context.Background(), card)
-
-    // Deterministic population based on card name/number
-    assert.NotZero(t, data.PSA10Population)
-    assert.NotEmpty(t, data.ScarcityLevel)
-}
-```
-
-### MockHTTPClient
-
-Mocks the httpx.HTTPClient interface for testing adapters that make HTTP requests.
-
-**Interface compliance:**
-```go
-var _ httpx.HTTPClient = (*MockHTTPClient)(nil)
-```
-
-**Methods:**
-- `GetJSON(ctx, url, headers, timeout, dest)` - GET request with JSON decoding
-- `Get(ctx, url, headers, timeout)` - Raw GET request
-- `Post(ctx, url, headers, body, timeout)` - POST request
-- `PostJSON(ctx, url, headers, body, timeout, dest)` - POST with JSON encoding/decoding
-- `Do(ctx, req)` - Custom request
-- `GetCircuitBreakerStats()` - Returns zero values
-
-**Key Features:**
-- ✅ No retry logic (immediate responses)
-- ✅ No circuit breaker overhead
-- ✅ No network I/O (pure in-memory)
-- ✅ URL pattern matching
-- ✅ Call recording for verification
-- ✅ Statistics tracking
-- ✅ Thread-safe
-
-**Example:**
-```go
-func TestCardProvider(t *testing.T) {
-    // Pre-configured with TCGdex responses
-    mockClient := mocks.NewMockHTTPClientWithTCGdexResponses()
-
-    sets, err := provider.ListAllSets(context.Background())
-    // Returns 3 mock sets immediately (no retry delays)
-}
-```
-
-**Custom responses:**
-```go
-mockClient := mocks.NewMockHTTPClient()
-mockClient.AddResponse("/v2/sets", mocks.MockHTTPResponse{
-    StatusCode: 200,
-    Body: `{"data": [...]}`,
-})
-```
-
-**Error simulation:**
-```go
-// Specific error
-mockClient := mocks.NewMockHTTPClientWithError(fmt.Errorf("network error"))
-
-// HTTP error status
-mockClient := mocks.NewMockHTTPClientWithStatusCode(404, "not found")
-
-// With delay (for timeout testing)
-mockClient := mocks.NewMockHTTPClient(mocks.WithDelay(5 * time.Second))
-```
-
-**Verification:**
-```go
-// Check calls were made
-callLog := mockClient.GetCallLog()
-assert.Equal(t, 2, len(callLog))
-assert.Equal(t, "GET", callLog[0].Method)
-assert.Contains(t, callLog[0].URL, "/v2/sets")
-
-// Check statistics
-stats := mockClient.GetStats()
-fmt.Printf("Total calls: %d\n", stats.TotalCalls)
-fmt.Printf("Errors: %d\n", stats.TotalErrors)
-```
-
-**Performance:**
-- **Without mock:** 120+ seconds (retry backoffs: 1s, 2s, 4s, 8s...)
-- **With mock:** < 5 seconds (immediate responses)
-- **Speedup:** 95% faster test execution
-
-**When to use:**
-- ✅ Unit tests for HTTP adapters
-- ✅ Integration tests (unless testing HTTP layer specifically)
-- ✅ CI/CD pipelines (fast, deterministic)
-- ❌ E2E tests (use real HTTP client)
-
-### MockCampaignRepository
-Mocks the campaigns.Repository interface for campaign persistence (implements `campaigns.Repository`).
-
-**Interface compliance:**
-```go
-var _ campaigns.Repository = (*MockCampaignRepository)(nil)
-```
-
-**Methods (20 total):**
-- Campaign CRUD: `CreateCampaign`, `GetCampaign`, `ListCampaigns`, `UpdateCampaign`, `DeleteCampaign`
-- Purchase CRUD: `CreatePurchase`, `GetPurchase`, `ListPurchasesByCampaign`, `ListUnsoldPurchases`, `CountPurchasesByCampaign`
-- Sale CRUD: `CreateSale`, `GetSaleByPurchaseID`, `ListSalesByCampaign`
-- Analytics: `GetCampaignPNL`, `GetPNLByChannel`, `GetDailySpend`, `GetDaysToSellDistribution`
-- Tuning: `GetPerformanceByGrade`, `GetPurchasesWithSales`
-
-Uses the functional-field pattern: each method has a corresponding `Fn` field (e.g., `CreateCampaignFn`). If the field is nil, the method returns sensible defaults (nil error, empty slices, or stub structs).
-
-**Example:**
-```go
-repo := &mocks.MockCampaignRepository{
-    ListCampaignsFn: func(ctx context.Context, activeOnly bool) ([]campaigns.Campaign, error) {
-        return []campaigns.Campaign{{ID: "1", Name: "Test"}}, nil
-    },
-    GetCampaignPNLFn: func(ctx context.Context, campaignID string) (*campaigns.CampaignPNL, error) {
-        return &campaigns.CampaignPNL{CampaignID: campaignID, TotalSpentCents: 5000}, nil
+mock := &mocks.CampaignRepositoryMock{
+    GetCampaignFn: func(ctx context.Context, id string) (*inventory.Campaign, error) {
+        return &inventory.Campaign{ID: id, Name: "Test Campaign"}, nil
     },
 }
 ```
 
-### MockFavoritesRepository
-Mocks the favorites.Repository interface for favorites persistence (implements `favorites.Repository`).
+No constructors needed for these mocks — just instantiate the struct and set the fields you care about.
 
-**Interface compliance:**
+## Repository Mocks
+
+### inventory.CampaignRepository → `CampaignRepositoryMock`
+
 ```go
-var _ favorites.Repository = (*MockFavoritesRepository)(nil)
-```
-
-**Methods:**
-- `Add(ctx, userID, input)` - Add a card to favorites
-- `Remove(ctx, userID, cardName, setName, cardNumber)` - Remove a favorite
-- `List(ctx, userID, limit, offset)` - List user's favorites
-- `Count(ctx, userID)` - Count user's favorites
-- `IsFavorite(ctx, userID, cardName, setName, cardNumber)` - Check if a card is favorited
-- `CheckMultiple(ctx, userID, cards)` - Check favorite status for multiple cards
-
-Uses the functional-field pattern: each method has a corresponding `Fn` field (e.g., `AddFn`, `RemoveFn`). If the field is nil, the method returns sensible defaults.
-
-**Example:**
-```go
-repo := &mocks.MockFavoritesRepository{
-    ListFn: func(ctx context.Context, userID int64, limit, offset int) ([]favorites.Favorite, error) {
-        return []favorites.Favorite{{ID: 1, UserID: userID, CardName: "Pikachu"}}, nil
-    },
-    IsFavoriteFn: func(ctx context.Context, userID int64, cardName, setName, cardNumber string) (bool, error) {
-        return true, nil
+mock := &mocks.CampaignRepositoryMock{
+    ListCampaignsFn: func(ctx context.Context, activeOnly bool) ([]inventory.Campaign, error) {
+        return []inventory.Campaign{{ID: "c1", Name: "Vintage"}}, nil
     },
 }
 ```
 
-### MockCampaignService
-Mocks the campaigns.Service interface (implements `campaigns.Service`).
+Default when `Fn` is nil:
+- `GetCampaign` → `inventory.ErrCampaignNotFound`
+- `ListCampaigns` → `[]inventory.Campaign{}`
+- mutating methods → `nil` (no-op)
 
-Uses the same functional-field pattern as the repository mocks. See `campaign_service.go` for the full list of supported methods.
+### inventory.PurchaseRepository → `PurchaseRepositoryMock`
 
-## Configurable Behaviors
+Default when `Fn` is nil:
+- `GetPurchase` → `inventory.ErrPurchaseNotFound`
+- list methods → empty slice
 
-All mocks support functional options for configuring behavior:
+### inventory.SaleRepository → `SaleRepositoryMock`
 
-### Error Simulation
-```go
-// Return a specific error
-mock := mocks.NewMockPriceProvider(
-    mocks.WithError(fmt.Errorf("connection failed")),
-)
+Default when `Fn` is nil:
+- `GetSaleByPurchaseID` → `inventory.ErrSaleNotFound`
+- list methods → empty slice
 
-// Simulate timeout
-mock := mocks.NewMockPriceProvider(
-    mocks.WithTimeout(),
-)
+### inventory.AnalyticsRepository → `AnalyticsRepositoryMock`
+### inventory.FinanceRepository → `FinanceRepositoryMock`
+### inventory.PricingRepository → `PricingRepositoryMock`
+### inventory.DHRepository → `DHRepositoryMock`
+### inventory.SnapshotRepository → `SnapshotRepositoryMock`
 
-// Simulate rate limiting
-mock := mocks.NewMockPopulationProvider(
-    mocks.WithRateLimit(),
-)
-```
+All follow the same Fn-field pattern. Unset methods return zero values or empty slices.
 
-### Performance Simulation
-```go
-// Add network delay
-mock := mocks.NewMockCardProvider(
-    mocks.WithDelay(500 * time.Millisecond),
-)
-```
+### picks.Repository → `MockPicksRepository`
+### picks.ProfitabilityProvider → `MockProfitabilityProvider`
+### picks.InventoryProvider → `MockInventoryProvider`
 
-### Partial Failures
-```go
-// Fail after N successful calls
-mock := mocks.NewMockPriceProvider(
-    mocks.WithFailAfterN(5),
-)
+## Service Mocks
 
-// First 5 calls succeed, then all subsequent calls fail
-```
-
-### Empty Data
-```go
-// Return empty results instead of mock data
-mock := mocks.NewMockPopulationProvider(
-    mocks.WithEmptyData(),
-)
-```
-
-### Combining Options
-```go
-// Multiple behaviors can be combined
-mock := mocks.NewMockPriceProvider(
-    mocks.WithDelay(100 * time.Millisecond),
-    mocks.WithFailAfterN(10),
-)
-```
-
-## Testing Patterns
-
-### Unit Tests
-Use mocks to isolate the code under test:
+### inventory.Service → `MockInventoryService`
 
 ```go
-func TestAnalysisEngine(t *testing.T) {
-    // Arrange
-    cardProvider := mocks.NewMockCardProvider()
-    priceProvider := mocks.NewMockPriceProvider()
-    popProvider := mocks.NewMockPopulationProvider()
-
-    analyzer := analysis.NewAnalyzer(
-        cardProvider,
-        priceProvider,
-        popProvider,
-    )
-
-    // Act
-    results, err := analyzer.AnalyzeSet("base")
-
-    // Assert
-    require.NoError(t, err)
-    assert.NotEmpty(t, results)
+svc := &mocks.MockInventoryService{
+    ListCampaignsFn: func(ctx context.Context, activeOnly bool) ([]inventory.Campaign, error) {
+        return []inventory.Campaign{{ID: "c1"}}, nil
+    },
+    GetCampaignPNLFn: func(ctx context.Context, campaignID string) (*inventory.CampaignPNL, error) {
+        return &inventory.CampaignPNL{CampaignID: campaignID}, nil
+    },
 }
 ```
 
-### Error Scenario Tests
-Test error handling:
+### Sub-domain service mocks
+
+| Interface | Mock type |
+|-----------|-----------|
+| `arbitrage.Service` | `MockArbitrageService` |
+| `portfolio.Service` | `MockPortfolioService` |
+| `tuning.Service` | `MockTuningService` |
+| `finance.Service` | `MockFinanceService` |
+| `export.Service` | `MockExportService` |
+| `dhlisting.Service` | `MockDHListingService` |
+| `advisor.Service` | `MockAdvisorService` |
+| `social.Service` | `MockSocialService` |
+| `picks.Service` | `MockPicksService` |
+
+Each follows the same pattern: set the `*Fn` field to override a method.
+
+## InMemoryCampaignStore
+
+For service-layer tests that need a realistic store with actual state.
+
+`InMemoryCampaignStore` implements all 8 inventory repository interfaces:
+`CampaignRepository`, `PurchaseRepository`, `SaleRepository`, `AnalyticsRepository`,
+`FinanceRepository`, `PricingRepository`, `DHRepository`, `SnapshotRepository`.
+
+Pass the same instance for all 8 repository slots when constructing `inventory.NewService`.
 
 ```go
-func TestAnalysisWithProviderFailure(t *testing.T) {
-    cardProvider := mocks.NewMockCardProvider()
-    priceProvider := mocks.NewMockPriceProvider(
-        mocks.WithError(fmt.Errorf("API unavailable")),
-    )
+store := mocks.NewInMemoryCampaignStore()
 
-    analyzer := analysis.NewAnalyzer(cardProvider, priceProvider)
+svc := inventory.NewService(
+    store, // CampaignRepository
+    store, // PurchaseRepository
+    store, // SaleRepository
+    store, // AnalyticsRepository
+    store, // FinanceRepository
+    store, // PricingRepository
+    store, // DHRepository
+    store, // SnapshotRepository
+    logger,
+)
+```
 
-    results, err := analyzer.AnalyzeSet("base")
+### Fn-fields on InMemoryCampaignStore
 
-    // Should handle error gracefully
-    assert.Error(t, err)
-    assert.Contains(t, err.Error(), "API unavailable")
+`InMemoryCampaignStore` also supports the Fn-field pattern for any method. When you need
+to inject a custom error or alter a specific method's behaviour while keeping the rest of
+the in-memory state:
+
+```go
+store := mocks.NewInMemoryCampaignStore()
+store.CreatePurchaseFn = func(ctx context.Context, p *inventory.Purchase) error {
+    return fmt.Errorf("simulated DB failure")
 }
 ```
 
-### Performance Tests
-Test behavior under delays:
+The default implementations provide a working in-memory store: cascade deletes, duplicate
+cert detection, pagination support. **No extra Fn-fields are needed** for basic usage.
+
+### Direct state access
+
+Test helpers can seed data directly into the store's maps:
 
 ```go
-func TestTimeoutHandling(t *testing.T) {
-    priceProvider := mocks.NewMockPriceProvider(
-        mocks.WithDelay(5 * time.Second),
-    )
+store := mocks.NewInMemoryCampaignStore()
+store.Campaigns["c1"] = &inventory.Campaign{ID: "c1", Name: "Test"}
+store.Purchases["p1"] = &inventory.Purchase{ID: "p1", CampaignID: "c1"}
+```
 
-    ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-    defer cancel()
+## Other Mocks
 
-    // Should timeout before mock responds
-    _, err := priceProvider.LookupCard(ctx, "Base Set", card)
-    assert.Error(t, err)
+| Type | Interface |
+|------|-----------|
+| `MockCardProvider` | `cards.CardProvider` |
+| `MockPriceProvider` | `pricing.PriceProvider` |
+| `MockHTTPClient` | `httpx.Client` |
+| `MockAuthRepository` | `auth.Repository` |
+| `MockCertLookup` | cert lookup interface |
+| `MockSocialService` | `social.Service` |
+
+## Error Assertions
+
+Use sentinel errors with `errors.Is`:
+
+```go
+err := svc.GetCampaign(ctx, "nonexistent")
+if !errors.Is(err, inventory.ErrCampaignNotFound) {
+    t.Errorf("expected ErrCampaignNotFound, got %v", err)
 }
 ```
 
-### Integration Tests
-Use mocks to avoid external API dependencies:
+Key sentinel errors:
+- `inventory.ErrCampaignNotFound`
+- `inventory.ErrPurchaseNotFound`
+- `inventory.ErrSaleNotFound`
+- `inventory.ErrInvoiceNotFound`
+- `inventory.ErrDuplicateCert`
 
-```go
-func TestCompleteAnalysisFlow(t *testing.T) {
-    // Use all mocks for isolated integration test
-    cardProvider := mocks.NewMockCardProvider()
-    priceProvider := mocks.NewMockPriceProvider()
-    popProvider := mocks.NewMockPopulationProvider()
+## Usage Notes
 
-    // Run full analysis without external dependencies
-    app := cli.NewApp(
-        cardProvider,
-        priceProvider,
-        popProvider,
-    )
-
-    err := app.Run([]string{"--set", "base", "--analysis", "rank"})
-    assert.NoError(t, err)
-}
-```
-
-## Best Practices
-
-1. **Use Interface Compliance Checks**
-   ```go
-   var _ population.Provider = (*MockPopulationProvider)(nil)
-   ```
-
-2. **Reset Mock State Between Tests**
-   ```go
-   provider := mocks.NewMockPriceProvider()
-   // Mocks maintain state across calls - create new instances between tests
-   ```
-
-3. **Use Deterministic Data**
-   - Mock data is generated deterministically based on input (e.g., card name)
-   - Same inputs always produce same outputs
-   - Tests are reproducible
-
-4. **Prefer Centralized Mocks**
-   - Use these instead of creating ad-hoc mocks in test files
-   - Reduces duplication
-   - Ensures consistency across tests
-
-5. **Customize When Needed**
-   ```go
-   mockPrice := mocks.NewMockPriceProvider()
-   mockPrice.SetMockMatch("Base Set", "Charizard", "006", customData)
-   ```
-
-## Migration Guide
-
-### Replacing Old Mocks
-
-**Before (duplicated mock):**
-```go
-type testMockProvider struct{}
-func (t *testMockProvider) LookupPopulation(...) {...}
-```
-
-**After (centralized mock):**
-```go
-import "github.com/guarzo/slabledger/internal/testutil/mocks"
-
-mockPop := mocks.NewMockPopulationProvider()
-```
-
-### Converting Tests
-
-1. Import the mocks package
-2. Replace custom mock creation with `New*` functions
-3. Use functional options for behavior configuration
-4. Remove old mock implementations
-
-## Testing the Mocks
-
-The mocks themselves have comprehensive tests in `mocks_test.go`:
-- Interface compliance verification
-- Basic functionality tests
-- TTL expiration tests
-- Error behavior tests
-- Configurable behavior tests
-
-Run mock tests:
-```bash
-go test ./internal/testutil/mocks/
-```
-
-## Contributing
-
-When adding new provider interfaces:
-
-1. Create a new mock file (e.g., `new_provider.go`)
-2. Implement the provider interface
-3. Add interface compliance check
-4. Support `MockBehavior` configuration
-5. Add tests to `mocks_test.go`
-6. Document usage in this README
+- **Never create inline mocks** in test files. Add to this package instead.
+- Mocks live in `package mocks` (not `package mocks_test`) so they export for all test packages.
+- `picks/service_test.go` and `favorites/service_test.go` use `package picks`/`package favorites`
+  (white-box tests) and therefore cannot import `testutil/mocks` — their inline mocks are intentional.
+- `MockBehavior` / `MockOption` helpers in `common.go` are used only by card/HTTP mocks (legacy);
+  prefer the Fn-field pattern for all new mocks.
