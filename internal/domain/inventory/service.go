@@ -45,6 +45,7 @@ type PriceLookup interface {
 type MarketSnapshot struct {
 	LastSoldCents     int     `json:"lastSoldCents"`
 	LastSoldDate      string  `json:"lastSoldDate,omitempty"`
+	MidPriceCents     int     `json:"midPriceCents,omitempty"`
 	SaleCount         int     `json:"saleCount,omitempty"`
 	GradePriceCents   int     `json:"gradePriceCents"`
 	LowestListCents   int     `json:"lowestListCents,omitempty"`

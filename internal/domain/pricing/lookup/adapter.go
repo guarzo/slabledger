@@ -146,6 +146,16 @@ func (a *Adapter) GetMarketSnapshot(ctx context.Context, card inventory.CardIden
 		snap.SalesLast30d = price.Market.SalesLast30d
 		snap.SalesLast90d = price.Market.SalesLast90d
 		snap.Volatility = price.Market.Volatility
+		if price.Market.MidPrice > 0 {
+			snap.MidPriceCents = int(price.Market.MidPrice)
+		}
+		// Prefer DH's own last_sale over the recent-sales scan result
+		if price.Market.LastSoldCents > 0 {
+			snap.LastSoldCents = int(price.Market.LastSoldCents)
+		}
+		if price.Market.LastSoldDate != "" {
+			snap.LastSoldDate = price.Market.LastSoldDate
+		}
 	}
 
 	// Sales velocity
