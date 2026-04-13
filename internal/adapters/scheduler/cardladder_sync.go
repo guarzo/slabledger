@@ -158,25 +158,25 @@ func (s *CardLadderRefreshScheduler) removeSoldCards(
 		// Card was sold — remove from Firestore.
 		// cl_collection_card_id may hold either a full Firestore resource path
 		// (written by pushNewCards) or a short collectionCardId from the search
-		// API (written by the main refresh loop). Reconstruct the full path when
-		// a short ID is detected so DeleteCollectionCard's path validation passes.
-		if m.CLCollectionCardID != "" {
-			docName := m.CLCollectionCardID
-			const fsPrefix = "projects/cardladder-71d53/databases/(default)/documents/"
-			if !strings.HasPrefix(docName, fsPrefix) {
-				docName = fmt.Sprintf(
-					"projects/cardladder-71d53/databases/(default)/documents/users/%s/collections/%s/collection_cards/%s",
-					uid, collectionID, docName,
-				)
-			}
-			if err := client.DeleteCollectionCard(ctx, docName); err != nil {
-				s.logger.Warn(ctx, "CL remove: failed to delete from Firestore",
-					observability.String("cert", m.SlabSerial),
-					observability.String("docName", docName),
-					observability.Err(err))
-				remoteDeleteFailed++
-				continue
-			}
+		// API (written by the main refresh loop). CollectionCardDocPath normalises
+		// both forms so DeleteCollectionCard's path validation passes.
+		// Skip the entire removal (remote + local) if CLCollectionCardID is empty:
+		// we have no Firestore document to delete, and removing the local mapping
+		// without cleaning up a remote document would leave an orphaned remote entry
+		// with no local trace.
+		if m.CLCollectionCardID == "" {
+			s.logger.Warn(ctx, "CL remove: skipping sold card with no CLCollectionCardID",
+				observability.String("cert", m.SlabSerial))
+			continue
+		}
+		docName := cardladder.CollectionCardDocPath(uid, collectionID, m.CLCollectionCardID)
+		if err := client.DeleteCollectionCard(ctx, docName); err != nil {
+			s.logger.Warn(ctx, "CL remove: failed to delete from Firestore",
+				observability.String("cert", m.SlabSerial),
+				observability.String("docName", docName),
+				observability.Err(err))
+			remoteDeleteFailed++
+			continue
 		}
 
 		// Remove local mapping
