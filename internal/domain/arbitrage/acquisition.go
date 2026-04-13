@@ -3,6 +3,8 @@ package arbitrage
 import (
 	"math"
 	"sort"
+
+	"github.com/guarzo/slabledger/internal/domain/constants"
 )
 
 // MinAcquisitionProfitCents is the minimum profit ($100) to qualify as an opportunity.
@@ -37,7 +39,7 @@ func computeAcquisitionOpportunity(
 		return nil
 	}
 	if ebayFeePct <= 0 || ebayFeePct >= 1 {
-		ebayFeePct = DefaultMarketplaceFeePct
+		ebayFeePct = constants.DefaultMarketplaceFeePct
 	}
 
 	bestGrade := ""

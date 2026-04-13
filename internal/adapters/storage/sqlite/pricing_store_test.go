@@ -37,7 +37,6 @@ func newPricingTestDB(t *testing.T) (*DB, *testCampaignsRepository) {
 		FinanceStore:   NewFinanceStore(db.DB, logger),
 		PricingStore:   NewPricingStore(db.DB, logger),
 		DHStore:        NewDHStore(db.DB, logger),
-		SnapshotStore:  NewSnapshotStore(db.DB, logger),
 		SellSheetStore: NewSellSheetStore(db.DB, logger),
 	}
 	return db, repo

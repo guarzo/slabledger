@@ -193,16 +193,6 @@ func (p *Provider) CampaignData(ctx context.Context, campaignID string) (*adviso
 	return data, nil
 }
 
-// LiquidationData is deferred; returns nil.
-func (p *Provider) LiquidationData(_ context.Context, _ string) (*advisor.LiquidationFactorData, error) {
-	return nil, nil
-}
-
-// SuggestionData is deferred; returns nil.
-func (p *Provider) SuggestionData(_ context.Context, _ string) (*advisor.SuggestionFactorData, error) {
-	return nil, nil
-}
-
 // parseGrade extracts a numeric grade from a string like "PSA 10" or "9.5".
 func parseGrade(s string) float64 {
 	s = strings.TrimSpace(s)

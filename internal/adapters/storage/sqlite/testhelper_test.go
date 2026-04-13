@@ -34,7 +34,6 @@ func setupCampaignsRepo(t *testing.T) *testCampaignsRepository {
 		FinanceStore:   NewFinanceStore(db.DB, logger),
 		PricingStore:   NewPricingStore(db.DB, logger),
 		DHStore:        NewDHStore(db.DB, logger),
-		SnapshotStore:  NewSnapshotStore(db.DB, logger),
 		SellSheetStore: NewSellSheetStore(db.DB, logger),
 	}
 }
@@ -49,7 +48,6 @@ type testCampaignsRepository struct {
 	*FinanceStore
 	*PricingStore
 	*DHStore
-	*SnapshotStore
 	*SellSheetStore
 }
 

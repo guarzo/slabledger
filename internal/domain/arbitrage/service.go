@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/guarzo/slabledger/internal/domain/constants"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
@@ -99,7 +100,7 @@ func (s *service) crackCandidatesForCampaign(ctx context.Context, campaign *inve
 
 	ebayFee := campaign.EbayFeePct
 	if ebayFee == 0 {
-		ebayFee = DefaultMarketplaceFeePct
+		ebayFee = constants.DefaultMarketplaceFeePct
 	}
 
 	var results []CrackAnalysis
@@ -141,7 +142,7 @@ func (s *service) crackCandidatesForCampaign(ctx context.Context, campaign *inve
 			gradedCents = p.CLValueCents
 		}
 
-		analysis := computeCrackAnalysis(
+		analysis := ComputeCrackAnalysis(
 			p.ID, campaign.ID, p.CardName, p.CertNumber, p.GradeValue,
 			p.BuyCostCents, p.PSASourcingFeeCents, rawCents, gradedCents,
 			ebayFee,
@@ -176,7 +177,7 @@ func (s *service) GetCrackOpportunities(ctx context.Context) ([]CrackAnalysis, e
 	for _, c := range allCampaigns {
 		fee := c.EbayFeePct
 		if fee == 0 {
-			fee = DefaultMarketplaceFeePct
+			fee = constants.DefaultMarketplaceFeePct
 		}
 		ebayFeeMap[c.ID] = fee
 	}
@@ -232,7 +233,7 @@ func (s *service) GetCrackOpportunities(ctx context.Context) ([]CrackAnalysis, e
 			gradedCents = p.CLValueCents
 		}
 
-		analysis := computeCrackAnalysis(
+		analysis := ComputeCrackAnalysis(
 			p.ID, p.CampaignID, p.CardName, p.CertNumber, p.GradeValue,
 			p.BuyCostCents, p.PSASourcingFeeCents, rawCents, gradedCents,
 			ebayFee,
@@ -366,7 +367,7 @@ func (s *service) GetAcquisitionTargets(ctx context.Context) ([]AcquisitionOppor
 	for _, c := range allCampaigns {
 		fee := c.EbayFeePct
 		if fee == 0 {
-			fee = DefaultMarketplaceFeePct
+			fee = constants.DefaultMarketplaceFeePct
 		}
 		ebayFeeMap[c.ID] = fee
 	}

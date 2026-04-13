@@ -6,10 +6,6 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/constants"
 )
 
-// DefaultMarketplaceFeePct is the default fee percentage for eBay (12.35%).
-// Defined in constants.DefaultMarketplaceFeePct; re-exported here for callers within this package.
-const DefaultMarketplaceFeePct = constants.DefaultMarketplaceFeePct
-
 // DefaultWebsiteFeePct is the fee percentage for website/online store sales (3% credit card processing).
 const DefaultWebsiteFeePct = 0.03
 
@@ -19,7 +15,7 @@ func CalculateSaleFee(channel SaleChannel, salePriceCents int, campaign *Campaig
 	case SaleChannelEbay:
 		feePct := campaign.EbayFeePct
 		if feePct == 0 {
-			feePct = DefaultMarketplaceFeePct
+			feePct = constants.DefaultMarketplaceFeePct
 		}
 		return int(math.Round(float64(salePriceCents) * feePct))
 	case SaleChannelWebsite:

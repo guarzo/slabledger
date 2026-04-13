@@ -83,7 +83,6 @@ type SearchResult struct {
 	IsHolo             *bool   `json:"is_holo"`
 	IsReverseHolo      *bool   `json:"is_reverse_holo"`
 	IsFirstEdition     *bool   `json:"is_first_edition"`
-	PricechartingID    *string `json:"pricecharting_id"`
 	TCGPlayerProductID *int    `json:"tcgplayer_product_id"`
 }
 

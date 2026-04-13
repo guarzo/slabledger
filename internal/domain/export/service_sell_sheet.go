@@ -7,6 +7,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/guarzo/slabledger/internal/domain/constants"
 	"github.com/guarzo/slabledger/internal/domain/intelligence"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
@@ -84,7 +85,7 @@ func (s *service) enrichSellSheetItem(_ context.Context, purchase *inventory.Pur
 	if ebayFeePct != grossModeFee && item.TargetSellPrice > 0 && inventory.NormalizeChannel(item.RecommendedChannel) == inventory.SaleChannelEbay {
 		feePct := ebayFeePct
 		if feePct == 0 {
-			feePct = inventory.DefaultMarketplaceFeePct
+			feePct = constants.DefaultMarketplaceFeePct
 		}
 		item.TargetSellPrice -= int(math.Round(float64(item.TargetSellPrice) * feePct))
 	}

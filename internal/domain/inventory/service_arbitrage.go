@@ -5,18 +5,20 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/guarzo/slabledger/internal/domain/constants"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
-// crackCandidatesForCampaign computes crack candidates using an already-loaded campaign,
-// avoiding a redundant GetCampaign call when the caller already has the campaign.
-func (s *service) crackCandidatesForCampaign(ctx context.Context, campaign *Campaign) ([]CrackAnalysis, error) {
+// crackCandidatesForCampaign returns crack candidate purchase IDs for a campaign.
+// A card is a crack candidate when its raw (ungraded) market value exceeds the
+// breakeven raw price AND selling raw nets more than selling graded.
+func (s *service) crackCandidatesForCampaign(ctx context.Context, campaign *Campaign) ([]string, error) {
 	if s.priceProv == nil {
 		if s.logger != nil {
 			s.logger.Info(ctx, "skipping crack candidates",
 				observability.String("reason", "price provider not configured"))
 		}
-		return []CrackAnalysis{}, nil
+		return nil, nil
 	}
 	unsold, err := s.purchases.ListUnsoldPurchases(ctx, campaign.ID)
 	if err != nil {
@@ -25,10 +27,10 @@ func (s *service) crackCandidatesForCampaign(ctx context.Context, campaign *Camp
 
 	ebayFee := campaign.EbayFeePct
 	if ebayFee == 0 {
-		ebayFee = DefaultMarketplaceFeePct
+		ebayFee = constants.DefaultMarketplaceFeePct
 	}
 
-	var results []CrackAnalysis
+	var candidates []string
 	for _, p := range unsold {
 		if p.GradeValue >= 9 {
 			continue
@@ -66,31 +68,36 @@ func (s *service) crackCandidatesForCampaign(ctx context.Context, campaign *Camp
 			gradedCents = p.CLValueCents
 		}
 
-		analysis := computeCrackAnalysis(
-			p.ID, campaign.ID, p.CardName, p.CertNumber, p.GradeValue,
-			p.BuyCostCents, p.PSASourcingFeeCents, rawCents, gradedCents,
-			ebayFee,
-		)
-		results = append(results, *analysis)
+		if isCrackCandidate(p.BuyCostCents, p.PSASourcingFeeCents, rawCents, gradedCents, ebayFee) {
+			candidates = append(candidates, p.ID)
+		}
 	}
 
-	sort.Slice(results, func(i, j int) bool {
-		return results[i].CrackAdvantage > results[j].CrackAdvantage
-	})
-
-	return results, nil
+	return candidates, nil
 }
 
-// computeCrackOpportunitiesLive computes crack opportunities by making live API calls.
+// isCrackCandidate reports whether selling a card raw is more profitable than selling graded.
+func isCrackCandidate(buyCostCents, sourcingFeeCents, rawMarketCents, gradedMarketCents int, ebayFeePct float64) bool {
+	if ebayFeePct < 0 || ebayFeePct >= 1 {
+		ebayFeePct = constants.DefaultMarketplaceFeePct
+	}
+	costBasis := buyCostCents + sourcingFeeCents
+	breakevenRaw := int(float64(costBasis) / (1 - ebayFeePct))
+	crackNet := rawMarketCents - int(float64(rawMarketCents)*ebayFeePct) - costBasis
+	gradedNet := gradedMarketCents - int(float64(gradedMarketCents)*ebayFeePct) - costBasis
+	return rawMarketCents > breakevenRaw && crackNet > gradedNet
+}
+
+// computeCrackOpportunitiesLive computes crack candidate purchase IDs by making live API calls.
 // This is called ONLY by the background cache worker — never during page loads.
-func (s *service) computeCrackOpportunitiesLive(ctx context.Context) ([]CrackAnalysis, error) {
+func (s *service) computeCrackOpportunitiesLive(ctx context.Context) ([]string, error) {
 	allCampaigns, err := s.campaigns.ListCampaigns(ctx, true)
 	if err != nil {
 		return nil, fmt.Errorf("list active campaigns: %w", err)
 	}
-	var allResults []CrackAnalysis
+	var allCandidates []string
 	for _, campaign := range allCampaigns {
-		results, err := s.crackCandidatesForCampaign(ctx, &campaign)
+		candidates, err := s.crackCandidatesForCampaign(ctx, &campaign)
 		if err != nil {
 			if s.logger != nil {
 				s.logger.Warn(ctx, "crack candidates failed for campaign",
@@ -99,10 +106,8 @@ func (s *service) computeCrackOpportunitiesLive(ctx context.Context) ([]CrackAna
 			}
 			continue
 		}
-		allResults = append(allResults, results...)
+		allCandidates = append(allCandidates, candidates...)
 	}
-	sort.Slice(allResults, func(i, j int) bool {
-		return allResults[i].CrackAdvantage > allResults[j].CrackAdvantage
-	})
-	return allResults, nil
+	sort.Strings(allCandidates)
+	return allCandidates, nil
 }

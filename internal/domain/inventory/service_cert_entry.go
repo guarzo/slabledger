@@ -107,7 +107,7 @@ func (s *service) ImportCerts(ctx context.Context, certNumbers []string) (*CertI
 
 		setName := info.Category
 		if setName != "" {
-			resolved := resolvePSACategory(setName)
+			resolved := ResolvePSACategory(setName)
 			if !IsGenericSetName(resolved) {
 				setName = resolved
 			}

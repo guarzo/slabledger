@@ -67,8 +67,6 @@ func WithCacheStore(c CacheStore) ServiceOption {
 type ScoringDataProvider interface {
 	PurchaseData(ctx context.Context, req PurchaseAssessmentRequest) (*PurchaseFactorData, error)
 	CampaignData(ctx context.Context, campaignID string) (*CampaignFactorData, error)
-	LiquidationData(ctx context.Context, purchaseID string) (*LiquidationFactorData, error)
-	SuggestionData(ctx context.Context, segment string) (*SuggestionFactorData, error)
 }
 
 // WithScoringDataProvider injects the data provider used by the scoring orchestrator.
