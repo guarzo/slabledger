@@ -404,6 +404,9 @@ func (m *mockRepo) UpdatePurchaseCampaign(_ context.Context, purchaseID string, 
 	if !ok {
 		return ErrPurchaseNotFound
 	}
+	if m.purchaseSales[purchaseID] {
+		return ErrPurchaseHasSale
+	}
 	p.CampaignID = campaignID
 	p.PSASourcingFeeCents = sourcingFeeCents
 	return nil

@@ -442,6 +442,9 @@ func (m *InMemoryCampaignStore) UpdatePurchaseCampaign(ctx context.Context, purc
 	if !ok {
 		return inventory.ErrPurchaseNotFound
 	}
+	if m.PurchaseSales[purchaseID] {
+		return inventory.ErrPurchaseHasSale
+	}
 	p.CampaignID = campaignID
 	p.PSASourcingFeeCents = sourcingFeeCents
 	return nil
