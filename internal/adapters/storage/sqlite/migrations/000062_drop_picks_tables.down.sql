@@ -15,8 +15,8 @@ CREATE TABLE IF NOT EXISTS ai_picks (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_ai_picks_date ON ai_picks(pick_date);
-CREATE UNIQUE INDEX idx_ai_picks_unique ON ai_picks(pick_date, card_name, set_name, grade);
+CREATE INDEX IF NOT EXISTS idx_ai_picks_date ON ai_picks(pick_date);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ai_picks_unique ON ai_picks(pick_date, card_name, set_name, grade);
 
 CREATE TABLE IF NOT EXISTS acquisition_watchlist (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -30,5 +30,5 @@ CREATE TABLE IF NOT EXISTS acquisition_watchlist (
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE UNIQUE INDEX idx_acq_watchlist_unique_active ON acquisition_watchlist(card_name, set_name, grade) WHERE active = 1;
-CREATE INDEX idx_acq_watchlist_active ON acquisition_watchlist(active);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_acq_watchlist_unique_active ON acquisition_watchlist(card_name, set_name, grade) WHERE active = 1;
+CREATE INDEX IF NOT EXISTS idx_acq_watchlist_active ON acquisition_watchlist(active);

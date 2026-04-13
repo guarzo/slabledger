@@ -68,6 +68,7 @@ function AppContent() {
                 } />
                 {/* Canonical redirects for legacy URLs */}
                 <Route path="/watchlist" element={<Navigate to="/" replace />} />
+                <Route path="/favorites" element={<Navigate to="/" replace />} />
                <Route path="/opportunities" element={<Navigate to="/" replace />} />
                <Route path="/insights" element={<Navigate to="/" replace />} />
               <Route path="/content" element={<Navigate to="/tools?tab=content" replace />} />

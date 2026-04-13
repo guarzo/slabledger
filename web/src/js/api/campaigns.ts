@@ -1,5 +1,5 @@
 /**
- * Campaign-related API methods — core CRUD, cards
+ * Campaign-related API methods — core CRUD
  *
  * Sub-modules handle the rest:
  * - campaignPurchases.ts — purchase CRUD, price overrides, sell sheets
@@ -16,7 +16,7 @@ import './campaignAnalytics';
 import './campaignImports';
 
 /* ------------------------------------------------------------------ */
-/*  Declaration merging — core campaign CRUD + cards                   */
+/*  Declaration merging — core campaign CRUD                           */
 /* ------------------------------------------------------------------ */
 
 declare module './client' {
