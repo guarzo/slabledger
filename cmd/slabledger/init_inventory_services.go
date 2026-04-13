@@ -5,7 +5,6 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/guarzo/slabledger/internal/adapters/clients/pricelookup"
 	"github.com/guarzo/slabledger/internal/adapters/clients/psa"
 	"github.com/guarzo/slabledger/internal/adapters/scheduler"
 	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
@@ -16,6 +15,7 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/domain/portfolio"
 	"github.com/guarzo/slabledger/internal/domain/pricing"
+	"github.com/guarzo/slabledger/internal/domain/pricing/lookup"
 	"github.com/guarzo/slabledger/internal/domain/tuning"
 	"github.com/guarzo/slabledger/internal/platform/config"
 )
@@ -39,7 +39,6 @@ type campaignsInitResult struct {
 	financeStore   *sqlite.FinanceStore
 	pricingStore   *sqlite.PricingStore
 	dhStore        *sqlite.DHStore
-	snapshotStore  *sqlite.SnapshotStore
 	sellSheetStore *sqlite.SellSheetStore
 	certLookup     inventory.CertLookup
 	certEnrichJob  *scheduler.CertEnrichJob // nil if PSA not configured
@@ -71,10 +70,9 @@ func initializeCampaignsService(
 	financeStore := sqlite.NewFinanceStore(db.DB, logger)
 	pricingStore := sqlite.NewPricingStore(db.DB, logger)
 	dhStore := sqlite.NewDHStore(db.DB, logger)
-	snapshotStore := sqlite.NewSnapshotStore(db.DB, logger)
 	sellSheetStore := sqlite.NewSellSheetStore(db.DB, logger)
 
-	priceLookupAdapter := pricelookup.NewAdapter(priceProvImpl)
+	priceLookupAdapter := lookup.NewAdapter(priceProvImpl)
 	campaignOpts := []inventory.ServiceOption{
 		inventory.WithPriceLookup(priceLookupAdapter),
 		inventory.WithIDGenerator(uuid.NewString),
@@ -183,7 +181,6 @@ func initializeCampaignsService(
 		financeStore:   financeStore,
 		pricingStore:   pricingStore,
 		dhStore:        dhStore,
-		snapshotStore:  snapshotStore,
 		sellSheetStore: sellSheetStore,
 		certLookup:     certLookup,
 		certEnrichJob:  certEnrichJobForSvc,

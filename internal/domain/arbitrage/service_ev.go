@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/guarzo/slabledger/internal/domain/constants"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 )
 
@@ -65,7 +66,7 @@ func (s *service) GetExpectedValues(ctx context.Context, campaignID string) (*EV
 
 		feePct := campaign.EbayFeePct
 		if feePct == 0 {
-			feePct = DefaultMarketplaceFeePct
+			feePct = constants.DefaultMarketplaceFeePct
 		}
 		ev := computeExpectedValue(EVInput{
 			CardName:               p.CardName,
@@ -132,7 +133,7 @@ func (s *service) EvaluatePurchase(ctx context.Context, campaignID string, cardN
 	if seg == nil {
 		feePct := campaign.EbayFeePct
 		if feePct == 0 {
-			feePct = DefaultMarketplaceFeePct
+			feePct = constants.DefaultMarketplaceFeePct
 		}
 		return computeExpectedValue(EVInput{
 			CardName:              cardName,
@@ -149,7 +150,7 @@ func (s *service) EvaluatePurchase(ctx context.Context, campaignID string, cardN
 	costBasis := buyCostCents + campaign.PSASourcingFeeCents
 	feePct := campaign.EbayFeePct
 	if feePct == 0 {
-		feePct = DefaultMarketplaceFeePct
+		feePct = constants.DefaultMarketplaceFeePct
 	}
 
 	return computeExpectedValue(EVInput{

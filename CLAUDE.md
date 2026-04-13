@@ -52,7 +52,6 @@ internal/
     llmutil/        # LLM response utilities (strip fences, etc.)
     mathutil/       # Math utility functions
     observability/  # Logger, MetricsRecorder interfaces
-    picks/          # Acquisition watchlist service (AI-driven picks)
     pricing/        # PriceProvider interface, graded prices, market data
     scoring/        # Price scoring factors and profiles
     social/         # Social content generation domain

@@ -2,84 +2,149 @@ package arbitrage
 
 import "testing"
 
-func Test_computeCrackAnalysis(t *testing.T) {
-	result := computeCrackAnalysis(
-		"p1", "camp1", "Charizard", "12345", 8,
-		8500, 300, 12000, 10000,
-		0.1235,
-	)
+func TestComputeCrackAnalysis(t *testing.T) {
+	tests := []struct {
+		name              string
+		purchaseID        string
+		campaignID        string
+		cardName          string
+		certNumber        string
+		grade             float64
+		buyCents          int
+		feeCents          int
+		rawMarketCents    int
+		gradedMarketCents int
+		convRate          float64
+		// expected
+		wantCostBasis         int
+		wantRawMarket         int
+		wantIsCandidate       bool
+		wantPositiveBreakeven bool
+		wantPositiveAdvantage bool
+		wantNegativeGradedNet bool
+		wantPositiveCrackNet  bool
+		wantCrackROIGtGraded  bool
+	}{
+		{
+			name:                  "base",
+			purchaseID:            "p1",
+			campaignID:            "camp1",
+			cardName:              "Charizard",
+			certNumber:            "12345",
+			grade:                 8,
+			buyCents:              8500,
+			feeCents:              300,
+			rawMarketCents:        12000,
+			gradedMarketCents:     10000,
+			convRate:              0.1235,
+			wantCostBasis:         8800,
+			wantRawMarket:         12000,
+			wantIsCandidate:       true,
+			wantPositiveBreakeven: true,
+			wantPositiveAdvantage: true,
+		},
+		{
+			name:              "not_candidate",
+			purchaseID:        "p2",
+			campaignID:        "camp1",
+			cardName:          "Pikachu",
+			certNumber:        "67890",
+			grade:             8,
+			buyCents:          5000,
+			feeCents:          300,
+			rawMarketCents:    3000,
+			gradedMarketCents: 8000,
+			convRate:          0.1235,
+			wantIsCandidate:   false,
+		},
+		{
+			name:                  "psa7",
+			purchaseID:            "p3",
+			campaignID:            "camp1",
+			cardName:              "Umbreon VMAX",
+			certNumber:            "99999",
+			grade:                 7,
+			buyCents:              14700,
+			feeCents:              300,
+			rawMarketCents:        25000,
+			gradedMarketCents:     20000,
+			convRate:              0.1235,
+			wantCostBasis:         15000,
+			wantIsCandidate:       true,
+			wantPositiveAdvantage: true,
+			wantCrackROIGtGraded:  true,
+		},
+		{
+			name:                  "psa6",
+			purchaseID:            "p4",
+			campaignID:            "camp1",
+			cardName:              "Charizard ex",
+			certNumber:            "88888",
+			grade:                 6,
+			buyCents:              7500,
+			feeCents:              300,
+			rawMarketCents:        13000,
+			gradedMarketCents:     8000,
+			convRate:              0.1235,
+			wantIsCandidate:       true,
+			wantNegativeGradedNet: true,
+			wantPositiveCrackNet:  true,
+		},
+		{
+			// Zero fee must be treated as unset and substituted with the default
+			// marketplace fee; a real 0% fee would overstate crack proceeds.
+			name:                  "zero_fee_normalised",
+			purchaseID:            "p5",
+			campaignID:            "camp1",
+			cardName:              "Blastoise",
+			certNumber:            "11111",
+			grade:                 8,
+			buyCents:              8500,
+			feeCents:              300,
+			rawMarketCents:        12000,
+			gradedMarketCents:     10000,
+			convRate:              0, // unset — should fall back to DefaultMarketplaceFeePct
+			wantCostBasis:         8800,
+			wantRawMarket:         12000,
+			wantIsCandidate:       true,
+			wantPositiveBreakeven: true,
+			wantPositiveAdvantage: true,
+		},
+	}
 
-	if result.CostBasisCents != 8800 {
-		t.Errorf("expected cost basis 8800, got %d", result.CostBasisCents)
-	}
-	if result.BreakevenRawCents <= 0 {
-		t.Error("expected positive breakeven raw price")
-	}
-	if result.RawMarketCents != 12000 {
-		t.Errorf("expected raw market 12000, got %d", result.RawMarketCents)
-	}
-	// With raw at 12000 and graded at 10000, cracking should be more profitable
-	if !result.IsCrackCandidate {
-		t.Error("expected card to be a crack candidate")
-	}
-	if result.CrackAdvantage <= 0 {
-		t.Error("expected positive crack advantage")
-	}
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := ComputeCrackAnalysis(
+				tt.purchaseID, tt.campaignID, tt.cardName, tt.certNumber,
+				tt.grade,
+				tt.buyCents, tt.feeCents, tt.rawMarketCents, tt.gradedMarketCents,
+				tt.convRate,
+			)
 
-func TestCrackAnalysis_NotCandidate(t *testing.T) {
-	result := computeCrackAnalysis(
-		"p2", "camp1", "Pikachu", "67890", 8,
-		5000, 300, 3000, 8000,
-		0.1235,
-	)
-
-	// Raw price is low, graded is much higher - should NOT be crack candidate
-	if result.IsCrackCandidate {
-		t.Error("expected card NOT to be a crack candidate")
-	}
-}
-
-func TestCrackAnalysis_PSA7(t *testing.T) {
-	// PSA 7 modern card: raw NM should exceed graded PSA 7 value
-	result := computeCrackAnalysis(
-		"p3", "camp1", "Umbreon VMAX", "99999", 7,
-		14700, 300, 25000, 20000, // buy $147 + $3 fee, raw $250, graded $200
-		0.1235,
-	)
-
-	if result.CostBasisCents != 15000 {
-		t.Errorf("expected cost basis 15000, got %d", result.CostBasisCents)
-	}
-	if !result.IsCrackCandidate {
-		t.Error("expected PSA 7 card to be a crack candidate (raw > graded)")
-	}
-	if result.CrackAdvantage <= 0 {
-		t.Error("expected positive crack advantage")
-	}
-	// Verify crack ROI is higher than graded ROI
-	if result.CrackROI <= result.GradedROI {
-		t.Errorf("crack ROI (%f) should exceed graded ROI (%f)", result.CrackROI, result.GradedROI)
-	}
-}
-
-func TestCrackAnalysis_PSA6(t *testing.T) {
-	// PSA 6 card: lower grade, even bigger spread expected
-	result := computeCrackAnalysis(
-		"p4", "camp1", "Charizard ex", "88888", 6,
-		7500, 300, 13000, 8000, // buy $75 + $3 fee, raw $130, graded $80
-		0.1235,
-	)
-
-	if !result.IsCrackCandidate {
-		t.Error("expected PSA 6 card to be a crack candidate")
-	}
-	// Verify the math: crackNet = 13000 - 1606 - 7800 = 3594
-	// gradedNet = 8000 - 988 - 7800 = -788
-	if result.GradedNetCents >= 0 {
-		t.Error("expected negative graded net (graded is unprofitable)")
-	}
-	if result.CrackNetCents <= 0 {
-		t.Error("expected positive crack net")
+			if tt.wantCostBasis != 0 && result.CostBasisCents != tt.wantCostBasis {
+				t.Errorf("CostBasisCents: want %d, got %d", tt.wantCostBasis, result.CostBasisCents)
+			}
+			if tt.wantRawMarket != 0 && result.RawMarketCents != tt.wantRawMarket {
+				t.Errorf("RawMarketCents: want %d, got %d", tt.wantRawMarket, result.RawMarketCents)
+			}
+			if result.IsCrackCandidate != tt.wantIsCandidate {
+				t.Errorf("IsCrackCandidate: want %v, got %v", tt.wantIsCandidate, result.IsCrackCandidate)
+			}
+			if tt.wantPositiveBreakeven && result.BreakevenRawCents <= 0 {
+				t.Error("BreakevenRawCents: want positive, got <= 0")
+			}
+			if tt.wantPositiveAdvantage && result.CrackAdvantage <= 0 {
+				t.Error("CrackAdvantage: want positive, got <= 0")
+			}
+			if tt.wantNegativeGradedNet && result.GradedNetCents >= 0 {
+				t.Error("GradedNetCents: want negative (graded unprofitable), got >= 0")
+			}
+			if tt.wantPositiveCrackNet && result.CrackNetCents <= 0 {
+				t.Error("CrackNetCents: want positive, got <= 0")
+			}
+			if tt.wantCrackROIGtGraded && result.CrackROI <= result.GradedROI {
+				t.Errorf("CrackROI (%f) should exceed GradedROI (%f)", result.CrackROI, result.GradedROI)
+			}
+		})
 	}
 }

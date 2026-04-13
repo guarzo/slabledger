@@ -1,5 +1,7 @@
 package arbitrage
 
+import "github.com/guarzo/slabledger/internal/domain/constants"
+
 // CrackAnalysis contains the crack arbitrage analysis for a single PSA 8 card.
 type CrackAnalysis struct {
 	PurchaseID        string  `json:"purchaseId"`
@@ -19,10 +21,10 @@ type CrackAnalysis struct {
 	GradedROI         float64 `json:"gradedROI"`
 }
 
-// computeCrackAnalysis determines whether cracking a PSA 8 slab and selling raw is profitable.
+// ComputeCrackAnalysis determines whether cracking a PSA 8 slab and selling raw is profitable.
 // Formula: raw eBay sold price > PSA 8 purchase cost / 0.8765
 // The 0.8765 factor accounts for eBay fees (12.35%).
-func computeCrackAnalysis(
+func ComputeCrackAnalysis(
 	purchaseID, campaignID, cardName, certNumber string,
 	grade float64,
 	buyCostCents, sourcingFeeCents, rawMarketCents, gradedMarketCents int,
@@ -31,8 +33,11 @@ func computeCrackAnalysis(
 	costBasis := buyCostCents + sourcingFeeCents
 
 	// Breakeven raw price: costBasis / (1 - ebayFeePct)
-	if ebayFeePct < 0 || ebayFeePct >= 1 {
-		ebayFeePct = DefaultMarketplaceFeePct
+	// Treat 0 as "unset" for marketplace channels — a zero fee would overstate
+	// proceeds for eBay/TCGPlayer sales. Local/other channel callers must pass
+	// a distinct sentinel (negative) if they truly want 0% fees.
+	if ebayFeePct <= 0 || ebayFeePct >= 1 {
+		ebayFeePct = constants.DefaultMarketplaceFeePct
 	}
 	breakevenRaw := int(float64(costBasis) / (1 - ebayFeePct))
 

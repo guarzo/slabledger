@@ -31,7 +31,6 @@ func TestCreateSale(t *testing.T) {
 		FinanceStore:   NewFinanceStore(db.DB, logger),
 		PricingStore:   NewPricingStore(db.DB, logger),
 		DHStore:        NewDHStore(db.DB, logger),
-		SnapshotStore:  NewSnapshotStore(db.DB, logger),
 		SellSheetStore: NewSellSheetStore(db.DB, logger),
 	}
 	ctx := context.Background()
@@ -65,7 +64,6 @@ func TestGetSaleByPurchaseID(t *testing.T) {
 		FinanceStore:   NewFinanceStore(db.DB, logger),
 		PricingStore:   NewPricingStore(db.DB, logger),
 		DHStore:        NewDHStore(db.DB, logger),
-		SnapshotStore:  NewSnapshotStore(db.DB, logger),
 		SellSheetStore: NewSellSheetStore(db.DB, logger),
 	}
 	ctx := context.Background()
@@ -105,7 +103,6 @@ func TestListSalesByCampaign(t *testing.T) {
 		FinanceStore:   NewFinanceStore(db.DB, logger),
 		PricingStore:   NewPricingStore(db.DB, logger),
 		DHStore:        NewDHStore(db.DB, logger),
-		SnapshotStore:  NewSnapshotStore(db.DB, logger),
 		SellSheetStore: NewSellSheetStore(db.DB, logger),
 	}
 	ctx := context.Background()
@@ -158,7 +155,6 @@ func TestListUnsoldPurchases(t *testing.T) {
 		FinanceStore:   NewFinanceStore(db.DB, logger),
 		PricingStore:   NewPricingStore(db.DB, logger),
 		DHStore:        NewDHStore(db.DB, logger),
-		SnapshotStore:  NewSnapshotStore(db.DB, logger),
 		SellSheetStore: NewSellSheetStore(db.DB, logger),
 	}
 	ctx := context.Background()

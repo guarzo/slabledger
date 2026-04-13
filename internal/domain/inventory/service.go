@@ -208,8 +208,7 @@ type service struct {
 
 	// Crack candidate cache — refreshed in background, read by inventory and handler endpoints.
 	crackCacheMu  sync.RWMutex
-	crackCacheSet map[string]bool // purchaseID→true (derived from crackCacheAll)
-	crackCacheAll []CrackAnalysis // full cross-campaign results
+	crackCacheSet map[string]bool // purchaseID→true for crack candidates
 }
 
 // ServiceOption configures optional service dependencies.

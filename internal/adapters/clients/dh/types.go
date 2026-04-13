@@ -12,7 +12,6 @@ type MarketDataResponse struct {
 	PeriodHigh     float64             `json:"period_high"`
 	PriceChange    float64             `json:"price_change"`
 	PriceChangePct float64             `json:"price_change_pct"`
-	PriceHistory   [][]any             `json:"price_history"`
 	Periods        map[string]Period   `json:"periods"`
 	RecentSales    []RecentSale        `json:"recent_sales"`
 	Population     []PopEntry          `json:"population"`
@@ -29,7 +28,6 @@ type Period struct {
 	PeriodHigh     float64 `json:"period_high"`
 	PriceChange    float64 `json:"price_change"`
 	PriceChangePct float64 `json:"price_change_pct"`
-	PriceHistory   [][]any `json:"price_history"`
 }
 
 // RecentSale is a single completed sale from recent sales history.
@@ -183,7 +181,6 @@ type CardLookupCard struct {
 	Artist             string `json:"artist"`
 	ImageURL           string `json:"image_url"`
 	Slug               string `json:"slug"`
-	PriceChartingID    string `json:"pricecharting_id"`
 	TCGPlayerProductID *int   `json:"tcgplayer_product_id"`
 }
 
