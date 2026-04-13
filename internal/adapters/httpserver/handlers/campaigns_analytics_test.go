@@ -154,15 +154,24 @@ func TestHandleFillRate_EnrichesWithCap(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rec.Code)
 	}
-	var result []inventory.DailySpend
+	var result []struct {
+		Date          string  `json:"date"`
+		SpendUSD      float64 `json:"spendUSD"`
+		CapUSD        float64 `json:"capUSD"`
+		FillRatePct   float64 `json:"fillRatePct"`
+		PurchaseCount int     `json:"purchaseCount"`
+	}
 	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	if result[0].CapCents != 1000 {
-		t.Errorf("expected CapCents=1000, got %d", result[0].CapCents)
+	if result[0].CapUSD != 10.0 {
+		t.Errorf("expected CapUSD=10.0, got %f", result[0].CapUSD)
+	}
+	if result[0].SpendUSD != 5.0 {
+		t.Errorf("expected SpendUSD=5.0, got %f", result[0].SpendUSD)
 	}
 	if result[0].FillRatePct != 0.5 {
 		t.Errorf("expected FillRatePct=0.5, got %f", result[0].FillRatePct)

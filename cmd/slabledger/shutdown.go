@@ -39,7 +39,7 @@ func shutdownGracefully(
 			observability.String("timeout", shutdownTimeout.String()))
 	}
 
-	// Wait for any in-flight background DH bulk match to finish
+	// Wait for in-flight background DH bulk match to finish
 	if hOut.DHHandler != nil {
 		hOut.DHHandler.Wait()
 	}
@@ -47,6 +47,11 @@ func shutdownGracefully(
 	// Wait for any in-flight background advisor analyses to finish
 	if hOut.AdvisorHandler != nil {
 		hOut.AdvisorHandler.Wait()
+	}
+
+	// Wait for in-flight social handler background goroutines (HandleGenerate)
+	if hOut.SocialHandler != nil {
+		hOut.SocialHandler.Wait()
 	}
 
 	// Wait for in-flight social caption generation goroutines
