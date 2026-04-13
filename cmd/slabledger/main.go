@@ -24,7 +24,6 @@ import (
 	scoringadapter "github.com/guarzo/slabledger/internal/adapters/scoring"
 	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
 	"github.com/guarzo/slabledger/internal/domain/auth"
-	"github.com/guarzo/slabledger/internal/domain/picks"
 	"github.com/guarzo/slabledger/internal/platform/crypto"
 )
 
@@ -325,12 +324,6 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	// Initialize Market Movers client (store was created earlier for campaigns service)
 	mmClient, _ := initializeMarketMovers(ctx, logger, db, clEncryptor)
 
-	// Initialize picks
-	picksRepo := sqlite.NewPicksRepository(db.DB)
-	profitabilityProv := sqlite.NewProfitabilityProvider(db.DB, logger)
-	inventoryProv := sqlite.NewInventoryProvider(db.DB)
-	picksService := picks.NewService(picksRepo, azureAIClient, profitabilityProv, inventoryProv, logger)
-
 	// Initialize Google Sheets client for PSA sync (nil if not configured)
 	var gsheetsClient *gsheets.Client
 	if cfg.GoogleSheets.CredentialsJSON != "" {
@@ -369,7 +362,6 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		MetricsPostLister:    metricsRepo,
 		MetricsSaver:         metricsRepo,
 		InsightsPoller:       insightsPoller,
-		PicksService:         picksService,
 		CardLadderClient:     clClient,
 		CardLadderStore:      clStore,
 		CardLadderSalesStore: clSalesStore,
@@ -423,7 +415,6 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		MMStore:           mmStore,
 		MMClient:          mmClient,
 		DHClient:          dhClient,
-		PicksService:      picksService,
 		SchedulerResult:   schedulerResult,
 		GSheetsClient:     gsheetsClient,
 		PendingItemsRepo:  pendingItemsRepo,

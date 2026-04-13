@@ -4,8 +4,6 @@ import HeroStatsBar from '../components/portfolio/HeroStatsBar';
 import InvoiceReadinessPanel from '../components/portfolio/InvoiceReadinessPanel';
 import WeeklyReviewSection from '../components/portfolio/WeeklyReviewSection';
 import AIAnalysisWidget from '../components/advisor/AIAnalysisWidget';
-import PicksList from '../components/picks/PicksList';
-import AcquisitionWatchlist from '../components/picks/AcquisitionWatchlist';
 import { SectionErrorBoundary } from '../ui';
 
 export default function DashboardPage() {
@@ -61,17 +59,8 @@ export default function DashboardPage() {
             collapsible
           />
         </SectionErrorBoundary>
-      </div>
-
-       {/* Opportunities */}
-       <div className="mb-6">
-         <SectionErrorBoundary sectionName="Opportunities">
-           <div className="space-y-4">
-             <PicksList />
-             <AcquisitionWatchlist />
-           </div>
-         </SectionErrorBoundary>
        </div>
-     </div>
-  );
+
+      </div>
+   );
 }

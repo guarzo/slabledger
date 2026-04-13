@@ -40,7 +40,6 @@ type Router struct {
 	priceFlagsHandler         *handlers.PriceFlagsHandler
 	cardLadderHandler         *handlers.CardLadderHandler
 	marketMoversHandler       *handlers.MarketMoversHandler
-	picksHandler              *handlers.PicksHandler
 	opportunitiesHandler      *handlers.OpportunitiesHandler
 	dhHandler                 *handlers.DHHandler
 	sellSheetItemsHandler     *handlers.SellSheetItemsHandler
@@ -78,7 +77,6 @@ type RouterConfig struct {
 	PriceFlagsHandler         *handlers.PriceFlagsHandler     // Price flag admin; nil = disabled
 	CardLadderHandler         *handlers.CardLadderHandler     // Card Ladder admin; nil = disabled
 	MarketMoversHandler       *handlers.MarketMoversHandler   // Market Movers admin; nil = disabled
-	PicksHandler              *handlers.PicksHandler          // AI picks; nil = disabled
 	OpportunitiesHandler      *handlers.OpportunitiesHandler  // Arbitrage opportunities; nil = disabled
 	DHHandler                 *handlers.DHHandler             // DH bulk match + intelligence; nil = disabled
 	SellSheetItemsHandler     *handlers.SellSheetItemsHandler // Sell sheet persistence; nil = disabled
@@ -177,10 +175,6 @@ func NewRouter(cfg RouterConfig) *Router {
 		rt.marketMoversHandler = cfg.MarketMoversHandler
 	}
 
-	if cfg.PicksHandler != nil {
-		rt.picksHandler = cfg.PicksHandler
-	}
-
 	if cfg.OpportunitiesHandler != nil {
 		rt.opportunitiesHandler = cfg.OpportunitiesHandler
 	}
@@ -269,9 +263,6 @@ func (rt *Router) Setup() http.Handler {
 
 	// AI Advisor routes
 	rt.registerAdvisorRoutes(mux)
-
-	// AI Picks routes
-	rt.registerPicksRoutes(mux)
 
 	// Arbitrage opportunities routes
 	rt.registerOpportunitiesRoutes(mux)

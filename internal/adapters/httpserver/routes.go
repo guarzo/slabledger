@@ -324,20 +324,6 @@ func (rt *Router) registerOpportunitiesRoutes(mux *http.ServeMux) {
 	rt.logger.Info(context.Background(), "opportunities routes registered")
 }
 
-// registerPicksRoutes wires the AI picks and acquisition watchlist endpoints.
-func (rt *Router) registerPicksRoutes(mux *http.ServeMux) {
-	if rt.picksHandler == nil || rt.authMW == nil {
-		return
-	}
-	mux.Handle("GET /api/picks", rt.authMW.RequireAuth(http.HandlerFunc(rt.picksHandler.HandleGetPicks)))
-	mux.Handle("GET /api/picks/history", rt.authMW.RequireAuth(http.HandlerFunc(rt.picksHandler.HandleGetPickHistory)))
-	mux.Handle("GET /api/picks/watchlist", rt.authMW.RequireAuth(http.HandlerFunc(rt.picksHandler.HandleGetWatchlist)))
-	mux.Handle("POST /api/picks/watchlist", rt.authMW.RequireAuth(http.HandlerFunc(rt.picksHandler.HandleAddWatchlistItem)))
-	mux.Handle("DELETE /api/picks/watchlist/{id}", rt.authMW.RequireAuth(http.HandlerFunc(rt.picksHandler.HandleDeleteWatchlistItem)))
-	mux.HandleFunc("/opportunities", rt.spaHandler.HandleIndex)
-	rt.logger.Info(context.Background(), "picks routes registered")
-}
-
 // TrackedEndpoints lists the endpoints whose response times are recorded.
 var TrackedEndpoints = []string{
 	"/api/portfolio/insights",

@@ -21,7 +21,6 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/finance"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
-	"github.com/guarzo/slabledger/internal/domain/picks"
 	"github.com/guarzo/slabledger/internal/domain/portfolio"
 	"github.com/guarzo/slabledger/internal/domain/pricing"
 	"github.com/guarzo/slabledger/internal/domain/social"
@@ -65,7 +64,6 @@ type handlerInputs struct {
 	MMStore           *sqlite.MarketMoversStore
 	MMClient          *marketmovers.Client
 	DHClient          *dh.Client
-	PicksService      picks.Service
 	SchedulerResult   *scheduler.BuildResult
 	GSheetsClient     *gsheets.Client
 	PendingItemsRepo  *sqlite.PendingItemsRepository
@@ -121,12 +119,6 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 			Interval:      in.Cfg.PSASync.Interval.String(),
 			Logger:        logger,
 		})
-	}
-
-	// Picks handler (nil when service is disabled)
-	var picksHandler *handlers.PicksHandler
-	if in.PicksService != nil {
-		picksHandler = handlers.NewPicksHandler(in.PicksService, logger)
 	}
 
 	// Opportunities (arbitrage endpoints)
@@ -256,7 +248,6 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 		CardLadderHandler:         clHandler,
 		MarketMoversHandler:       mmHandler,
 		PSASyncHandler:            psaSyncHandler,
-		PicksHandler:              picksHandler,
 		OpportunitiesHandler:      opportunitiesHandler,
 		DHHandler:                 dhHandler,
 		SellSheetItemsHandler:     sellSheetItemsHandler,

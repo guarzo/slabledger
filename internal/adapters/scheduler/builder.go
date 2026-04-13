@@ -58,9 +58,6 @@ type BuildDeps struct {
 	MetricsSaver      social.MetricsSaver
 	InsightsPoller    social.InsightsPoller
 
-	// Picks generation dependencies (optional)
-	PicksGenerator PicksGenerator
-
 	// Social publish dependencies (optional — enabled when RenderServiceURL is configured)
 	SocialPublisher   SocialPublisher
 	SocialPublishRepo SocialPublishRepo
@@ -292,13 +289,6 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 		schedulers = append(schedulers, NewMetricsPollScheduler(
 			deps.MetricsPostLister, deps.MetricsSaver, deps.InsightsPoller,
 			deps.Logger, cfg.MetricsPoll,
-		))
-	}
-
-	// Picks refresh scheduler (if generator is provided)
-	if deps.PicksGenerator != nil {
-		schedulers = append(schedulers, NewPicksRefreshScheduler(
-			deps.PicksGenerator, deps.Logger, cfg.PicksRefresh,
 		))
 	}
 

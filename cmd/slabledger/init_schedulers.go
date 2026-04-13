@@ -12,7 +12,6 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/auth"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
-	"github.com/guarzo/slabledger/internal/domain/picks"
 	"github.com/guarzo/slabledger/internal/domain/pricing"
 	"github.com/guarzo/slabledger/internal/domain/social"
 	"github.com/guarzo/slabledger/internal/platform/config"
@@ -45,7 +44,6 @@ type schedulerDeps struct {
 	MetricsPostLister    social.MetricsPostLister
 	MetricsSaver         social.MetricsSaver
 	InsightsPoller       social.InsightsPoller
-	PicksService         picks.Service
 	CardLadderClient     *cardladder.Client
 	CardLadderStore      *sqlite.CardLadderStore
 	CardLadderSalesStore *sqlite.CLSalesStore
@@ -86,7 +84,6 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 		MetricsPostLister:        deps.MetricsPostLister,
 		MetricsSaver:             deps.MetricsSaver,
 		InsightsPoller:           deps.InsightsPoller,
-		PicksGenerator:           deps.PicksService,
 		CardLadderClient:         deps.CardLadderClient,
 		CardLadderStore:          deps.CardLadderStore,
 		CardLadderPurchaseLister: deps.PurchaseStore,

@@ -51,7 +51,6 @@ type ServerDependencies struct {
 	CardLadderHandler         *handlers.CardLadderHandler     // Card Ladder admin; nil = disabled
 	MarketMoversHandler       *handlers.MarketMoversHandler   // Market Movers admin; nil = disabled
 	PSASyncHandler            *handlers.PSASyncHandler        // PSA pending items + admin status; nil = disabled
-	PicksHandler              *handlers.PicksHandler          // AI picks; nil = disabled
 	OpportunitiesHandler      *handlers.OpportunitiesHandler  // Arbitrage opportunities; nil = disabled
 	DHHandler                 *handlers.DHHandler             // DH bulk match + intelligence; nil = disabled
 	DHListingService          domainDHListing.Service         // optional: orchestrates DH listing after cert import
@@ -208,7 +207,6 @@ func startWebServer(ctx context.Context, deps ServerDependencies) error {
 		CardLadderHandler:         deps.CardLadderHandler,
 		MarketMoversHandler:       deps.MarketMoversHandler,
 		PSASyncHandler:            deps.PSASyncHandler,
-		PicksHandler:              deps.PicksHandler,
 		OpportunitiesHandler:      deps.OpportunitiesHandler,
 		DHHandler:                 deps.DHHandler,
 		SellSheetItemsHandler:     deps.SellSheetItemsHandler,
