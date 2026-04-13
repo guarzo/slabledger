@@ -16,7 +16,7 @@ import './campaignAnalytics';
 import './campaignImports';
 
 /* ------------------------------------------------------------------ */
-/*  Declaration merging — core campaign CRUD + cards + favorites       */
+/*  Declaration merging — core campaign CRUD + cards                   */
 /* ------------------------------------------------------------------ */
 
 declare module './client' {
