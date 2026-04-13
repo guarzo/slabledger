@@ -75,16 +75,6 @@ type PriceRefreshConfig struct {
 	Enabled bool
 }
 
-// CacheWarmupConfig controls the card cache warmup scheduler
-type CacheWarmupConfig struct {
-	// Enable/disable warmup (default: true)
-	Enabled bool
-	// How often to run warmup (default: 24h)
-	Interval time.Duration
-	// Delay between GetCards calls to respect rate limits (default: 2s)
-	RateLimitDelay time.Duration
-}
-
 // SessionCleanupConfig controls session cleanup scheduling
 type SessionCleanupConfig struct {
 	Enabled  bool
@@ -176,7 +166,6 @@ type Config struct {
 	Maintenance      MaintenanceConfig
 	Auth             AuthConfig
 	PriceRefresh     PriceRefreshConfig
-	CacheWarmup      CacheWarmupConfig
 	SessionCleanup   SessionCleanupConfig
 	InventoryRefresh InventoryRefreshConfig
 	SnapshotEnrich   SnapshotEnrichConfig

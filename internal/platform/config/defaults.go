@@ -57,11 +57,6 @@ func Default() Config {
 			BurstPauseDuration: 10 * time.Second,
 			Enabled:            true,
 		},
-		CacheWarmup: CacheWarmupConfig{
-			Enabled:        true,
-			Interval:       24 * time.Hour,
-			RateLimitDelay: 2 * time.Second,
-		},
 		SessionCleanup: SessionCleanupConfig{
 			Enabled:  true,
 			Interval: 1 * time.Hour,

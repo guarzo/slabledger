@@ -21,7 +21,6 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	"github.com/guarzo/slabledger/internal/adapters/clients/google"
 	"github.com/guarzo/slabledger/internal/adapters/clients/gsheets"
-	"github.com/guarzo/slabledger/internal/adapters/clients/tcgdex"
 	scoringadapter "github.com/guarzo/slabledger/internal/adapters/scoring"
 	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
 	"github.com/guarzo/slabledger/internal/domain/auth"
@@ -161,9 +160,6 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		cancel()
 	}()
 
-	// Initialize cache
-	appCache := initializeCache(cfg.Cache.Path)
-
 	// Initialize database
 	dbPath, err := resolveDatabasePath(cfg.Database.Path)
 	if err != nil {
@@ -225,9 +221,6 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	// Initialize favorites
 	favoritesRepo := sqlite.NewFavoritesRepository(db.DB)
 	favoritesService := favorites.NewService(favoritesRepo)
-
-	// Initialize providers
-	cardProvImpl := tcgdex.NewTCGdex(appCache, logger)
 
 	// Card ID mapping repository (caches external provider IDs)
 	cardIDMappingRepo := sqlite.NewCardIDMappingRepository(db.DB)
@@ -363,7 +356,6 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		DBTracker:            priceRepo,
 		RefreshCandidates:    refreshCandidateRepo,
 		PriceProvImpl:        priceProvImpl,
-		CardProvImpl:         cardProvImpl,
 		AuthService:          authService,
 		SyncStateRepo:        syncStateRepo,
 		CardIDMappingRepo:    cardIDMappingRepo,
@@ -409,7 +401,6 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		Cfg:               cfg,
 		Logger:            logger,
 		DB:                db,
-		CardProvImpl:      cardProvImpl,
 		PriceProvImpl:     priceProvImpl,
 		PriceRepo:         priceRepo,
 		AuthService:       authService,

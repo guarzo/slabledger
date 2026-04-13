@@ -9,7 +9,6 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/clients/gsheets"
 	igclient "github.com/guarzo/slabledger/internal/adapters/clients/instagram"
 	"github.com/guarzo/slabledger/internal/adapters/clients/marketmovers"
-	"github.com/guarzo/slabledger/internal/adapters/clients/tcgdex"
 	"github.com/guarzo/slabledger/internal/adapters/httpserver/handlers"
 	"github.com/guarzo/slabledger/internal/adapters/scheduler"
 	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
@@ -38,7 +37,6 @@ type handlerInputs struct {
 	Cfg               *config.Config
 	Logger            observability.Logger
 	DB                *sqlite.DB
-	CardProvImpl      *tcgdex.TCGdex
 	PriceProvImpl     pricing.PriceProvider
 	PriceRepo         *sqlite.DBTracker
 	AuthService       auth.Service
@@ -239,7 +237,6 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 	deps := ServerDependencies{
 		Config:                    in.Cfg,
 		Logger:                    logger,
-		CardProv:                  in.CardProvImpl,
 		PriceProv:                 in.PriceProvImpl,
 		HealthChecker:             in.PriceRepo,
 		APITracker:                in.PriceRepo,
@@ -249,7 +246,6 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 		ArbitrageService:          in.ArbitrageService,
 		PortfolioService:          in.PortfolioService,
 		TuningService:             in.TuningService,
-		CacheStatsProvider:        in.CardProvImpl,
 		PriceHintsHandler:         priceHintsHandler,
 		CardRequestHandler:        cardRequestHandler,
 		PricingDiagnosticsHandler: pricingDiagHandler,

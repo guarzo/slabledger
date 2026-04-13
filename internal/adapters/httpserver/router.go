@@ -24,7 +24,6 @@ type Router struct {
 	handler                   *handlers.Handler
 	healthHandler             *handlers.HealthHandler
 	apiStatusHandler          *handlers.APIStatusHandler
-	cacheStatusHandler        *handlers.CacheStatusHandler
 	spaHandler                *handlers.SPAHandler
 	authHandler               *handlers.AuthHandlers
 	adminHandler              *handlers.AdminHandlers
@@ -62,7 +61,6 @@ type RouterConfig struct {
 	Handler                   *handlers.Handler
 	HealthHandler             *handlers.HealthHandler
 	APIStatusHandler          *handlers.APIStatusHandler
-	CacheStatusHandler        *handlers.CacheStatusHandler
 	SPAHandler                *handlers.SPAHandler
 	AuthService               auth.Service
 	FavoritesService          favorites.Service
@@ -100,16 +98,15 @@ type RouterConfig struct {
 // NewRouter creates a new router with the given configuration
 func NewRouter(cfg RouterConfig) *Router {
 	rt := &Router{
-		handler:            cfg.Handler,
-		healthHandler:      cfg.HealthHandler,
-		apiStatusHandler:   cfg.APIStatusHandler,
-		cacheStatusHandler: cfg.CacheStatusHandler,
-		spaHandler:         cfg.SPAHandler,
-		logger:             cfg.Logger,
-		databasePath:       cfg.DatabasePath,
-		timingStore:        cfg.TimingStore,
-		googleOAuthEnv:     cfg.GoogleOAuthEnv,
-		localAPIToken:      cfg.LocalAPIToken,
+		handler:          cfg.Handler,
+		healthHandler:    cfg.HealthHandler,
+		apiStatusHandler: cfg.APIStatusHandler,
+		spaHandler:       cfg.SPAHandler,
+		logger:           cfg.Logger,
+		databasePath:     cfg.DatabasePath,
+		timingStore:      cfg.TimingStore,
+		googleOAuthEnv:   cfg.GoogleOAuthEnv,
+		localAPIToken:    cfg.LocalAPIToken,
 	}
 
 	if cfg.CampaignsHandler != nil {
@@ -289,21 +286,6 @@ func (rt *Router) Setup() http.Handler {
 		mux.Handle("/api/favorites/toggle", rt.authMW.RequireAuth(http.HandlerFunc(rt.favoritesHandler.HandleToggleFavorite)))
 		mux.Handle("/api/favorites/check", rt.authMW.RequireAuth(http.HandlerFunc(rt.favoritesHandler.HandleCheckFavorites)))
 		rt.logger.Info(context.Background(), "favorites routes registered")
-	}
-
-	// Core API endpoints — require authentication to protect external API budget
-	if rt.authMW != nil {
-		mux.Handle("/api/cards/search", rt.authMW.RequireAuth(http.HandlerFunc(rt.handler.HandleCardSearch)))
-		mux.Handle("/api/cards/pricing", rt.authMW.RequireAuth(http.HandlerFunc(rt.handler.HandleCardPricing)))
-	} else {
-		// Fail closed: reject requests when auth middleware is not configured
-		// rather than exposing external API budget to unauthenticated callers.
-		noAuth := func(w http.ResponseWriter, _ *http.Request) {
-			http.Error(w, "authentication not configured", http.StatusServiceUnavailable)
-		}
-		mux.HandleFunc("/api/cards/search", noAuth)
-		mux.HandleFunc("/api/cards/pricing", noAuth)
-		rt.logger.Warn(context.Background(), "card search/pricing routes registered without auth — requests will be rejected")
 	}
 
 	// CL Card Catalog search

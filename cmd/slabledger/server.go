@@ -17,7 +17,6 @@ import (
 	// Domain interfaces (what we depend on - Dependency Inversion Principle)
 	domainArbitrage "github.com/guarzo/slabledger/internal/domain/arbitrage"
 	domainAuth "github.com/guarzo/slabledger/internal/domain/auth"
-	domainCards "github.com/guarzo/slabledger/internal/domain/cards"
 	domainDHListing "github.com/guarzo/slabledger/internal/domain/dhlisting"
 	domainExport "github.com/guarzo/slabledger/internal/domain/export"
 	domainFavorites "github.com/guarzo/slabledger/internal/domain/favorites"
@@ -32,7 +31,6 @@ import (
 type ServerDependencies struct {
 	Config                    *config.Config
 	Logger                    observability.Logger
-	CardProv                  domainCards.CardProvider
 	PriceProv                 domainPricing.PriceProvider
 	HealthChecker             domainPricing.HealthChecker
 	APITracker                domainPricing.APITracker
@@ -42,7 +40,6 @@ type ServerDependencies struct {
 	ArbitrageService          domainArbitrage.Service
 	PortfolioService          domainPortfolio.Service
 	TuningService             domainTuning.Service
-	CacheStatsProvider        handlers.CacheStatsProvider
 	PriceHintsHandler         *handlers.PriceHintsHandler
 	CardRequestHandler        *handlers.CardRequestHandlers
 	PricingDiagnosticsHandler *handlers.PricingDiagnosticsHandler
@@ -142,24 +139,18 @@ func startWebServer(ctx context.Context, deps ServerDependencies) error {
 	// Create timing store for observability
 	timingStore := middleware.NewTimingStore(httpserver.TrackedEndpoints)
 
-	// Create card search service
-	searchService := domainCards.NewSearchService(deps.CardProv)
-
 	// Create handlers with domain interfaces
 	var handlerOpts []handlers.HandlerOption
 	if deps.PriceProv != nil {
 		handlerOpts = append(handlerOpts, handlers.WithPriceProvider(deps.PriceProv))
 	}
 	handler := handlers.NewHandler(
-		deps.CardProv,
-		searchService,
 		logger,
 		handlerOpts...,
 	)
 
 	healthHandler := handlers.NewHealthHandler(
 		deps.HealthChecker,
-		deps.CardProv,
 		deps.PriceProv,
 		logger,
 	)
@@ -168,12 +159,6 @@ func startWebServer(ctx context.Context, deps ServerDependencies) error {
 
 	// Create API status handler (returns empty data when tracker is nil)
 	apiStatusHandler := handlers.NewAPIStatusHandler(deps.APITracker, logger)
-
-	// Create cache status handler
-	var cacheStatusHandler *handlers.CacheStatusHandler
-	if deps.CacheStatsProvider != nil {
-		cacheStatusHandler = handlers.NewCacheStatusHandler(deps.CacheStatsProvider, logger)
-	}
 
 	// Create campaigns handler if service is available
 	var campaignsHandler *handlers.CampaignsHandler
@@ -208,7 +193,6 @@ func startWebServer(ctx context.Context, deps ServerDependencies) error {
 		Handler:                   handler,
 		HealthHandler:             healthHandler,
 		APIStatusHandler:          apiStatusHandler,
-		CacheStatusHandler:        cacheStatusHandler,
 		SPAHandler:                spaHandler,
 		AuthService:               deps.AuthService,
 		FavoritesService:          deps.FavoritesService,

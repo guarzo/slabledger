@@ -6,7 +6,6 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	"github.com/guarzo/slabledger/internal/adapters/clients/marketmovers"
-	"github.com/guarzo/slabledger/internal/adapters/clients/tcgdex"
 	"github.com/guarzo/slabledger/internal/adapters/scheduler"
 	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
 	"github.com/guarzo/slabledger/internal/domain/advisor"
@@ -26,7 +25,6 @@ type schedulerDeps struct {
 	DBTracker            *sqlite.DBTracker
 	RefreshCandidates    pricing.RefreshCandidateProvider
 	PriceProvImpl        pricing.PriceProvider
-	CardProvImpl         *tcgdex.TCGdex
 	AuthService          auth.Service
 	SyncStateRepo        *sqlite.SyncStateRepository
 	CardIDMappingRepo    *sqlite.CardIDMappingRepository
@@ -72,11 +70,9 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 		AccessTracker:            deps.DBTracker,
 		RefreshCandidates:        deps.RefreshCandidates,
 		PriceProvider:            deps.PriceProvImpl,
-		CardProvider:             deps.CardProvImpl,
 		AuthService:              deps.AuthService,
 		Logger:                   deps.Logger,
 		SyncStateStore:           deps.SyncStateRepo,
-		NewSetsProvider:          deps.CardProvImpl.RegistryManager(),
 		InventoryLister:          &inventoryListAdapter{repo: deps.PurchaseStore},
 		SnapshotRefresher:        &snapshotRefreshAdapter{svc: deps.CampaignsService},
 		SnapshotEnrichService:    deps.CampaignsService,

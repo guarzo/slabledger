@@ -11,7 +11,6 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/advisor"
 	"github.com/guarzo/slabledger/internal/domain/ai"
 	"github.com/guarzo/slabledger/internal/domain/auth"
-	domainCards "github.com/guarzo/slabledger/internal/domain/cards"
 	"github.com/guarzo/slabledger/internal/domain/intelligence"
 	domainCampaigns "github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
@@ -28,15 +27,11 @@ type BuildDeps struct {
 	AccessTracker     pricing.AccessTracker
 	RefreshCandidates pricing.RefreshCandidateProvider
 	PriceProvider     pricing.PriceProvider
-	CardProvider      domainCards.CardProvider
 	AuthService       auth.Service // may be nil if auth is not configured
 	Logger            observability.Logger
 
 	// Sync state (shared by DH schedulers)
 	SyncStateStore SyncStateStore
-
-	// Cache warmup dependencies (optional)
-	NewSetsProvider NewSetIDsProvider
 
 	// Inventory snapshot refresh dependencies (optional)
 	InventoryLister   InventoryLister
@@ -194,19 +189,6 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 	// Scoring data gap cleanup scheduler (if gap store is provided)
 	if deps.GapStore != nil {
 		schedulers = append(schedulers, NewGapCleanupScheduler(deps.GapStore, deps.Logger))
-	}
-
-	// Card cache warmup scheduler (if enabled)
-	if cfg.CacheWarmup.Enabled {
-		warmupConfig := CacheWarmupConfig{
-			Enabled:        cfg.CacheWarmup.Enabled,
-			Interval:       cfg.CacheWarmup.Interval,
-			RateLimitDelay: cfg.CacheWarmup.RateLimitDelay,
-		}
-		warmupScheduler := NewCacheWarmupScheduler(
-			deps.CardProvider, deps.Logger, warmupConfig, deps.NewSetsProvider,
-		)
-		schedulers = append(schedulers, warmupScheduler)
 	}
 
 	// Inventory snapshot refresh scheduler (if dependencies are provided)

@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/guarzo/slabledger/internal/adapters/httpserver/handlers"
-	"github.com/guarzo/slabledger/internal/domain/cards"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
 )
 
@@ -17,11 +16,9 @@ func setupTestRouter(t *testing.T) *Router {
 	t.Setenv("LOCAL_API_TOKEN", "")
 
 	logger := mocks.NewMockLogger()
-	cardProv := mocks.NewMockCardProvider()
-	searchSvc := cards.NewSearchService(cardProv)
 
-	handler := handlers.NewHandler(cardProv, searchSvc, logger)
-	healthHandler := handlers.NewHealthHandler(nil, cardProv, nil, logger)
+	handler := handlers.NewHandler(logger)
+	healthHandler := handlers.NewHealthHandler(nil, nil, logger)
 	spaHandler := handlers.NewSPAHandler(logger)
 
 	campaignSvc := &mocks.MockInventoryService{}

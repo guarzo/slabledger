@@ -164,11 +164,6 @@ func FromEnv(base Config) Config {
 	envDurationPositive("PRICE_BURST_PAUSE_DURATION", &cfg.PriceRefresh.BurstPauseDuration)
 	envBool("PRICE_REFRESH_ENABLED", &cfg.PriceRefresh.Enabled, true)
 
-	// Cache warmup
-	envBool("CACHE_WARMUP_ENABLED", &cfg.CacheWarmup.Enabled, true)
-	envDuration("CACHE_WARMUP_INTERVAL", &cfg.CacheWarmup.Interval)
-	envDuration("CACHE_WARMUP_RATE_LIMIT_DELAY", &cfg.CacheWarmup.RateLimitDelay)
-
 	// Session cleanup
 	envBool("SESSION_CLEANUP_ENABLED", &cfg.SessionCleanup.Enabled, true)
 	envDuration("SESSION_CLEANUP_INTERVAL", &cfg.SessionCleanup.Interval)

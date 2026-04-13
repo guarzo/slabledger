@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
-	domainCards "github.com/guarzo/slabledger/internal/domain/cards"
 	"github.com/guarzo/slabledger/internal/domain/pricing"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
 )
@@ -320,7 +319,7 @@ func TestLookupCard(t *testing.T) {
 		},
 	)
 
-	card := domainCards.Card{
+	card := pricing.CardLookup{
 		Name:            "Mewtwo",
 		Number:          "10",
 		PSAListingTitle: "Mewtwo Holo",

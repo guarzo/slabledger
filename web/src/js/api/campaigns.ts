@@ -9,8 +9,7 @@
 
 import type { FavoriteInput, FavoritesList, ToggleFavoriteResponse } from '../../types/favorites';
 import type { Campaign, CreateCampaignInput } from '../../types/campaigns';
-import type { CardPricingResponse } from '../../types/pricing';
-import type { APIClient, APIRequestOptions, SearchCardsResponse } from './client';
+import type { APIClient } from './client';
 
 // Side-effect imports: each sub-module patches APIClient.prototype
 import './campaignPurchases';
@@ -23,12 +22,6 @@ import './campaignImports';
 
 declare module './client' {
   interface APIClient {
-    // Card pricing
-    getCardPricing(name: string, set: string, number: string, options?: APIRequestOptions): Promise<CardPricingResponse>;
-
-    // Cards
-    searchCards(query: string, limit?: number): Promise<SearchCardsResponse>;
-
     // Favorites
     getFavorites(page?: number, pageSize?: number): Promise<FavoritesList>;
     toggleFavorite(input: FavoriteInput): Promise<ToggleFavoriteResponse>;
@@ -48,22 +41,6 @@ declare module './client' {
 
 import { APIClient as _APIClient } from './client';
 const proto = _APIClient.prototype;
-
-// Card pricing endpoints
-proto.getCardPricing = async function (
-  this: APIClient, name: string, set: string, number: string, options?: APIRequestOptions,
-): Promise<CardPricingResponse> {
-  const params = new URLSearchParams({ name, set, number });
-  return this.get<CardPricingResponse>(`/cards/pricing?${params.toString()}`, {
-    ...options,
-    timeoutMs: options?.timeoutMs ?? 90_000,
-  });
-};
-
-// Cards endpoints
-proto.searchCards = async function (this: APIClient, query: string, limit = 10): Promise<SearchCardsResponse> {
-  return this.get<SearchCardsResponse>(`/cards/search?q=${encodeURIComponent(query)}&limit=${limit}`);
-};
 
 // Favorites endpoints
 proto.getFavorites = async function (this: APIClient, page = 1, pageSize = 100): Promise<FavoritesList> {

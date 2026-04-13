@@ -2,9 +2,15 @@ package pricing
 
 import (
 	"context"
-
-	domainCards "github.com/guarzo/slabledger/internal/domain/cards"
 )
+
+// CardLookup represents card information for price lookups.
+// This keeps the pricing domain independent of the cards domain.
+type CardLookup struct {
+	Name            string
+	Number          string
+	PSAListingTitle string
+}
 
 // PriceProvider defines what the domain needs from price sources.
 type PriceProvider interface {
@@ -20,7 +26,7 @@ type PriceProvider interface {
 	// LookupCard searches for a card by name and set, returning detailed price match.
 	// This is used by lookup endpoints to provide detailed price information.
 	// The context parameter enables request cancellation and timeout propagation.
-	LookupCard(ctx context.Context, setName string, card domainCards.Card) (*Price, error)
+	LookupCard(ctx context.Context, setName string, card CardLookup) (*Price, error)
 }
 
 // Card represents the minimal card information needed for price lookups

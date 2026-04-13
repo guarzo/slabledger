@@ -48,19 +48,6 @@ export interface CardRequestSubmission {
   updatedAt: string;
 }
 
-export interface CardSearchResult {
-  id: string;
-  name: string;
-  setName: string;
-  number: string;
-  imageUrl?: string;
-}
-
-export interface SearchCardsResponse {
-  cards: CardSearchResult[];
-  total?: number;
-}
-
 /** Default request timeout in milliseconds (30 seconds) */
 export const DEFAULT_TIMEOUT_MS = 30000;
 

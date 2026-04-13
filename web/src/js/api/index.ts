@@ -22,13 +22,10 @@ export {
 
 export type {
   CardRequestSubmission,
-  CardSearchResult,
-  SearchCardsResponse,
   APIRequestOptions,
 } from './client';
 
 // Re-export types that the old api.ts re-exported
-export type { CardPricingResponse } from '../../types/pricing';
 export type { AllowedEmail, AdminUser } from '../../types/admin';
 
 // Create and export the singleton

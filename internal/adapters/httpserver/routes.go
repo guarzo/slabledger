@@ -42,9 +42,6 @@ func (rt *Router) registerAdminRoutes(mux *http.ServeMux) {
 		if rt.apiStatusHandler != nil {
 			mux.Handle("/api/admin/api-usage", rt.authMW.RequireAdmin(http.HandlerFunc(rt.apiStatusHandler.HandleAPIUsage)))
 		}
-		if rt.cacheStatusHandler != nil {
-			mux.Handle("/api/admin/cache-stats", rt.authMW.RequireAdmin(http.HandlerFunc(rt.cacheStatusHandler.HandleCacheStats)))
-		}
 		if rt.databasePath != "" {
 			mux.Handle("/api/admin/backup", rt.authMW.RequireAdmin(handlers.HandleBackup(rt.databasePath, rt.logger)))
 		}
