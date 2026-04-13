@@ -21,7 +21,7 @@ func (s *service) LookupCert(ctx context.Context, certNumber string) (*CertInfo,
 	var snapshot *MarketSnapshot
 	if s.priceProv != nil && info.CardName != "" && info.Grade > 0 {
 		resolvedCategory := resolvePSACategory(info.Category)
-		if isGenericSetName(resolvedCategory) {
+		if IsGenericSetName(resolvedCategory) {
 			resolvedCategory = info.Category
 		}
 		snapshot, err = s.priceProv.GetMarketSnapshot(ctx, CardIdentity{CardName: info.CardName, CardNumber: info.CardNumber, SetName: resolvedCategory}, info.Grade)
@@ -51,7 +51,7 @@ func (s *service) QuickAddPurchase(ctx context.Context, campaignID string, req Q
 	}
 
 	setName := resolvePSACategory(info.Category)
-	if isGenericSetName(setName) {
+	if IsGenericSetName(setName) {
 		setName = info.Category // keep original if resolved is still generic
 	}
 
