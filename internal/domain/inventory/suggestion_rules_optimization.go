@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/guarzo/slabledger/internal/domain/mathutil"
 )
 
 func suggestSpendCapRebalancing(_ context.Context, insights *PortfolioInsights, campaigns []Campaign) []CampaignSuggestion {
@@ -222,14 +224,14 @@ func suggestPhaseTransitions(_ context.Context, insights *PortfolioInsights, cam
 						Title: fmt.Sprintf("Consider closing %s", c.Name),
 						Rationale: fmt.Sprintf("%s has %.0f%% ROI with %.0f%% sell-through across %d purchases. Performance is below viable thresholds.",
 							c.Name, m.ROI*100, sellThrough*100, m.PurchaseCount),
-						Confidence: confidenceLabel(m.SoldCount),
+						Confidence: mathutil.ConfidenceLabel(m.SoldCount),
 						DataPoints: m.PurchaseCount,
 						SuggestedParams: CampaignSuggestionParams{
 							Name: c.Name,
 						},
 						ExpectedMetrics: ExpectedMetrics{
 							ExpectedROI:    m.ROI,
-							DataConfidence: confidenceLabel(m.SoldCount),
+							DataConfidence: mathutil.ConfidenceLabel(m.SoldCount),
 						},
 					})
 				}

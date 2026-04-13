@@ -20,10 +20,6 @@ const (
 	PostStatusPublishing PostStatus = "publishing"
 	PostStatusPublished  PostStatus = "published"
 	PostStatusFailed     PostStatus = "failed"
-
-	// Deprecated — kept for backward compatibility with existing data.
-	PostStatusApproved PostStatus = "approved"
-	PostStatusRejected PostStatus = "rejected"
 )
 
 // SocialPost represents a social media content draft.

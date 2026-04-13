@@ -5,6 +5,7 @@ const BADGE_ICONS: Record<PostType, string> = {
   hot_deals: '\uD83D\uDD25',
   new_arrivals: '\u2728',
   price_movers: '\uD83D\uDCC8',
+  dh_instagram: '\uD83C\uDF1F',
 };
 
 export default function PostTypeBadge({ postType }: { postType: PostType }) {

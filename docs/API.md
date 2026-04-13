@@ -2723,6 +2723,35 @@ Pushes all unsold purchases with cert numbers to the Card Ladder collection. Car
 
 ---
 
+### `GET /api/admin/cardladder/failures`
+
+Auth: RequireAdmin
+
+Returns a breakdown of per-purchase Card Ladder mapping/sync failures for the admin UI. Query param `limit` (default 50, max 200) controls the sample list size.
+
+**Response:** `200 OK` — `IntegrationFailuresReport`
+```json
+{
+  "byReason": {
+    "card_not_found": 3,
+    "token_expired": 1
+  },
+  "samples": [
+    {
+      "purchaseId": "uuid",
+      "certNumber": "12345678",
+      "cardName": "Charizard",
+      "reason": "card_not_found",
+      "errorAt": "2026-04-13T10:00:00Z"
+    }
+  ]
+}
+```
+
+**Errors:** `500` internal error
+
+---
+
 ## Admin — Market Movers
 
 ### `POST /api/admin/marketmovers/config`
@@ -2805,6 +2834,35 @@ Pushes unmapped unsold inventory items to the Market Movers collection. Items mu
 ```
 
 **Errors:** `503` Market Movers client or purchase lister not available
+
+---
+
+### `GET /api/admin/marketmovers/failures`
+
+Auth: RequireAdmin
+
+Returns a breakdown of per-purchase Market Movers mapping/sync failures for the admin UI. Query param `limit` (default 50, max 200) controls the sample list size.
+
+**Response:** `200 OK` — `IntegrationFailuresReport`
+```json
+{
+  "byReason": {
+    "collectible_not_found": 2,
+    "token_expired": 1
+  },
+  "samples": [
+    {
+      "purchaseId": "uuid",
+      "certNumber": "12345678",
+      "cardName": "Pikachu",
+      "reason": "collectible_not_found",
+      "errorAt": "2026-04-13T10:00:00Z"
+    }
+  ]
+}
+```
+
+**Errors:** `500` internal error
 
 ---
 
@@ -3002,7 +3060,7 @@ Returns the latest metrics for all published posts.
 [
   {
     "postId": "uuid",
-    "postType": "sale_card",
+    "postType": "new_arrivals",
     "coverTitle": "Charizard PSA 10",
     "impressions": 1500,
     "reach": 1200,

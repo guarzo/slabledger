@@ -2,6 +2,8 @@ package inventory
 
 import (
 	"testing"
+
+	"github.com/guarzo/slabledger/internal/domain/mathutil"
 )
 
 func TestExtractCharacter(t *testing.T) {
@@ -228,7 +230,7 @@ func TestConfidenceLabel(t *testing.T) {
 		{100, "high"},
 	}
 	for _, tc := range tests {
-		got := confidenceLabel(tc.n)
+		got := mathutil.ConfidenceLabel(tc.n)
 		if got != tc.want {
 			t.Errorf("confidenceLabel(%d) = %q, want %q", tc.n, got, tc.want)
 		}
