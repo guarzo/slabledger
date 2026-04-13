@@ -47,7 +47,7 @@ func NewInMemoryAuthRepository() *InMemoryAuthRepository {
 		allowed:  make(map[string]*auth.AllowedEmail),
 		tokens:   make(map[tokenKey]*auth.UserTokens),
 	}
-	r.nextID.Store(1)
+	r.nextID.Store(0)
 	return r
 }
 
@@ -72,7 +72,8 @@ func (r *InMemoryAuthRepository) CreateUser(_ context.Context, googleID, usernam
 	}
 	r.users[id] = u
 	r.byGoogle[googleID] = id
-	return u, nil
+	cp := *u
+	return &cp, nil
 }
 
 func (r *InMemoryAuthRepository) GetUserByGoogleID(_ context.Context, googleID string) (*auth.User, error) {
@@ -103,8 +104,13 @@ func (r *InMemoryAuthRepository) UpdateUser(_ context.Context, user *auth.User) 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if _, ok := r.users[user.ID]; !ok {
+	prev, ok := r.users[user.ID]
+	if !ok {
 		return auth.ErrUserNotFound
+	}
+	// Remove the old Google ID mapping if it changed.
+	if prev.GoogleID != user.GoogleID {
+		delete(r.byGoogle, prev.GoogleID)
 	}
 	cp := *user
 	cp.UpdatedAt = time.Now()
@@ -139,13 +145,20 @@ func (r *InMemoryAuthRepository) GetTokensByUserID(_ context.Context, userID int
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	var latest *auth.UserTokens
 	for k, t := range r.tokens {
-		if k.userID == userID {
-			cp := *t
-			return &cp, nil
+		if k.userID != userID {
+			continue
+		}
+		if latest == nil || t.ExpiresAt.After(latest.ExpiresAt) {
+			latest = t
 		}
 	}
-	return nil, apperrors.NewAppError("ERR_TOKENS_NOT_FOUND", "tokens not found")
+	if latest == nil {
+		return nil, apperrors.NewAppError("ERR_TOKENS_NOT_FOUND", "tokens not found")
+	}
+	cp := *latest
+	return &cp, nil
 }
 
 func (r *InMemoryAuthRepository) UpdateTokens(_ context.Context, userID int64, sessionID string, tokens *auth.UserTokens) error {

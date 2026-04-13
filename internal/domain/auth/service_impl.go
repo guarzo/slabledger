@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -24,14 +25,34 @@ type authService struct {
 	loginURLFn func(state string) string
 }
 
-// New creates a testable, repository-backed auth.Service.
-// loginURLFn is injectable: pass nil or a stub in tests; pass the real Google
-// URL builder in production (or use OAuthService instead).
-func New(repo Repository, loginURLFn func(state string) string) Service {
-	if loginURLFn == nil {
-		loginURLFn = func(state string) string { return "" }
+// Option is a functional option for configuring an authService.
+type Option func(*authService)
+
+// WithLoginURLFn injects a custom login URL builder into the service.
+// When not provided, GetLoginURL returns an empty string.
+func WithLoginURLFn(fn func(state string) string) Option {
+	return func(s *authService) {
+		if fn != nil {
+			s.loginURLFn = fn
+		}
 	}
-	return &authService{repo: repo, loginURLFn: loginURLFn}
+}
+
+// New creates a testable, repository-backed auth.Service.
+// Returns an error if repo is nil. Optional behaviour is configured via Option
+// helpers (e.g. WithLoginURLFn).
+func New(repo Repository, opts ...Option) (Service, error) {
+	if repo == nil {
+		return nil, fmt.Errorf("auth.New: repo must not be nil")
+	}
+	s := &authService{
+		repo:       repo,
+		loginURLFn: func(_ string) string { return "" },
+	}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s, nil
 }
 
 var _ Service = (*authService)(nil)
