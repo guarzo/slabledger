@@ -166,31 +166,40 @@ func TestScore_InsufficientData(t *testing.T) {
 	}
 }
 
-func TestScore_ZeroFactors_ReturnsError(t *testing.T) {
-	req := ScoreRequest{
-		EntityID:   "test",
-		EntityType: "campaign",
-		Factors:    nil, // zero factors
-		DataGaps:   nil, // no gaps either
+func TestScore_InsufficientFactors(t *testing.T) {
+	tests := []struct {
+		name    string
+		factors []Factor
+		gaps    []DataGap
+	}{
+		{
+			name:    "zero factors",
+			factors: nil, // zero factors, no gaps
+			gaps:    nil,
+		},
+		{
+			name:    "too few factors no gaps",
+			factors: []Factor{{Name: "roi_potential", Value: 0.5, Confidence: 0.8}},
+			gaps:    nil, // only 1 factor below MinFactors, DataGaps empty
+		},
 	}
-	_, err := Score(req, PurchaseAssessmentProfile)
-	if err == nil {
-		t.Fatal("expected ErrInsufficientData for zero factors, got nil")
-	}
-}
-
-func TestScore_ZeroGaps_WithFewFactors_ReturnsError(t *testing.T) {
-	req := ScoreRequest{
-		EntityID:   "test",
-		EntityType: "campaign",
-		Factors:    []Factor{{Name: "roi_potential", Value: 0.5, Confidence: 0.8}},
-		DataGaps:   nil, // no gaps — but only 1 factor, below MinFactors
-	}
-	_, err := Score(req, PurchaseAssessmentProfile)
-	// With current && logic: no error (because DataGaps is empty)
-	// With correct guard: error (because Factors < MinFactors)
-	if err == nil {
-		t.Fatal("expected ErrInsufficientData for too few factors, got nil")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := ScoreRequest{
+				EntityID:   "test",
+				EntityType: "campaign",
+				Factors:    tt.factors,
+				DataGaps:   tt.gaps,
+			}
+			_, err := Score(req, PurchaseAssessmentProfile)
+			if err == nil {
+				t.Fatal("expected ErrInsufficientData, got nil")
+			}
+			var insuffErr *ErrInsufficientData
+			if !errors.As(err, &insuffErr) {
+				t.Fatalf("expected *ErrInsufficientData, got %T: %v", err, err)
+			}
+		})
 	}
 }
 

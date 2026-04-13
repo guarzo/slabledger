@@ -5,22 +5,24 @@ import "context"
 // mockSocialRepo is a test double for social.Repository using the Fn-field pattern.
 // Set any Fn field to override the default no-op behavior for that method.
 type mockSocialRepo struct {
-	GetPostFn                  func(ctx context.Context, id string) (*SocialPost, error)
-	CreatePostFn               func(ctx context.Context, post *SocialPost) error
-	UpdatePostStatusFn         func(ctx context.Context, id string, status PostStatus) error
-	DeletePostFn               func(ctx context.Context, id string) error
-	ListPostCardsFn            func(ctx context.Context, postID string) ([]PostCardDetail, error)
-	GetRecentPurchaseIDsFn     func(ctx context.Context, since string) ([]string, error)
-	GetPurchaseIDsInExistingFn func(ctx context.Context, ids []string, pt PostType) (map[string]bool, error)
-	GetUnsoldPurchasesFn       func(ctx context.Context) ([]PurchaseSnapshot, error)
-	UpdatePostCaptionFn        func(ctx context.Context, id, caption, hashtags string) error
-	AddPostCardsFn             func(ctx context.Context, postID string, cards []PostCard) error
-	ListPostsFn                func(ctx context.Context, status *PostStatus, limit, offset int) ([]SocialPost, error)
-	SetPublishedFn             func(ctx context.Context, id, igPostID string) error
-	SetPublishingFn            func(ctx context.Context, id string) error
-	UpdateSlideURLsFn          func(ctx context.Context, id string, urls []string) error
-	UpdateCoverTitleFn         func(ctx context.Context, id string, title string) error
-	UpdateBackgroundURLsFn     func(ctx context.Context, id string, urls []string) error
+	GetPostFn                   func(ctx context.Context, id string) (*SocialPost, error)
+	CreatePostFn                func(ctx context.Context, post *SocialPost) error
+	UpdatePostStatusFn          func(ctx context.Context, id string, status PostStatus) error
+	DeletePostFn                func(ctx context.Context, id string) error
+	ListPostCardsFn             func(ctx context.Context, postID string) ([]PostCardDetail, error)
+	GetRecentPurchaseIDsFn      func(ctx context.Context, since string) ([]string, error)
+	GetPurchaseIDsInExistingFn  func(ctx context.Context, ids []string, pt PostType) (map[string]bool, error)
+	GetUnsoldPurchasesFn        func(ctx context.Context) ([]PurchaseSnapshot, error)
+	UpdatePostCaptionFn         func(ctx context.Context, id, caption, hashtags string) error
+	AddPostCardsFn              func(ctx context.Context, postID string, cards []PostCard) error
+	ListPostsFn                 func(ctx context.Context, status *PostStatus, limit, offset int) ([]SocialPost, error)
+	SetPublishedFn              func(ctx context.Context, id, igPostID string) error
+	SetPublishingFn             func(ctx context.Context, id string) error
+	SetErrorFn                  func(ctx context.Context, id, errMsg string) error
+	GetAvailableCardsForPostsFn func(ctx context.Context) ([]PostCardDetail, error)
+	UpdateSlideURLsFn           func(ctx context.Context, id string, urls []string) error
+	UpdateCoverTitleFn          func(ctx context.Context, id string, title string) error
+	UpdateBackgroundURLsFn      func(ctx context.Context, id string, urls []string) error
 }
 
 var _ Repository = (*mockSocialRepo)(nil)
@@ -116,9 +118,17 @@ func (m *mockSocialRepo) SetPublishing(ctx context.Context, id string) error {
 	return nil
 }
 
-func (m *mockSocialRepo) SetError(_ context.Context, _, _ string) error { return nil }
+func (m *mockSocialRepo) SetError(ctx context.Context, id, errMsg string) error {
+	if m.SetErrorFn != nil {
+		return m.SetErrorFn(ctx, id, errMsg)
+	}
+	return nil
+}
 
-func (m *mockSocialRepo) GetAvailableCardsForPosts(_ context.Context) ([]PostCardDetail, error) {
+func (m *mockSocialRepo) GetAvailableCardsForPosts(ctx context.Context) ([]PostCardDetail, error) {
+	if m.GetAvailableCardsForPostsFn != nil {
+		return m.GetAvailableCardsForPostsFn(ctx)
+	}
 	return nil, nil
 }
 

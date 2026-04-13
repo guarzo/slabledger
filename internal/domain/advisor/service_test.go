@@ -98,7 +98,7 @@ func TestGenerateDigest_WithToolCalls(t *testing.T) {
 		t.Errorf("expected 2 LLM calls, got %d", llm.Calls)
 	}
 	if len(executor.ExecuteCalls) != 1 {
-		t.Errorf("expected 1 tool execution, got %d", len(executor.ExecuteCalls))
+		t.Fatalf("expected 1 tool execution, got %d", len(executor.ExecuteCalls))
 	}
 	if executor.ExecuteCalls[0].ToolName != "list_campaigns" {
 		t.Errorf("expected tool %q, got %q", "list_campaigns", executor.ExecuteCalls[0].ToolName)
