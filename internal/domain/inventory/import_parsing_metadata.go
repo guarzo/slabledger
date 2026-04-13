@@ -147,7 +147,7 @@ func resolveSetName(titleSet, category string) (string, string) {
 	resolved = ResolvePSACategory(resolved)
 
 	// Determine warning after all resolution steps so a generic titleSet
-	// that remains generic after resolvePSACategory is correctly flagged.
+	// that remains generic after ResolvePSACategory is correctly flagged.
 	var warning string
 	if IsGenericSetName(resolved) {
 		warning = "set name remains generic after resolution"

@@ -33,7 +33,10 @@ func ComputeCrackAnalysis(
 	costBasis := buyCostCents + sourcingFeeCents
 
 	// Breakeven raw price: costBasis / (1 - ebayFeePct)
-	if ebayFeePct < 0 || ebayFeePct >= 1 {
+	// Treat 0 as "unset" for marketplace channels — a zero fee would overstate
+	// proceeds for eBay/TCGPlayer sales. Local/other channel callers must pass
+	// a distinct sentinel (negative) if they truly want 0% fees.
+	if ebayFeePct <= 0 || ebayFeePct >= 1 {
 		ebayFeePct = constants.DefaultMarketplaceFeePct
 	}
 	breakevenRaw := int(float64(costBasis) / (1 - ebayFeePct))
