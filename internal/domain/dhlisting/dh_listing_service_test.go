@@ -52,7 +52,7 @@ func (m *mockFieldsUpdater) UpdatePurchaseDHFields(_ context.Context, _ string, 
 	return m.updateErr
 }
 
-func newTestService(t *testing.T, lookup DHListingPurchaseLookup, opts ...DHListingServiceOption) DHListingService {
+func newTestService(t *testing.T, lookup DHListingPurchaseLookup, opts ...DHListingServiceOption) Service {
 	t.Helper()
 	svc, err := NewDHListingService(lookup, observability.NewNoopLogger(), opts...)
 	if err != nil {
