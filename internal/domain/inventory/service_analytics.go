@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"math"
 
 	"github.com/guarzo/slabledger/internal/domain/observability"
@@ -59,7 +60,11 @@ func SnapshotFromPurchase(p *Purchase) *MarketSnapshot {
 	// Prefer full JSON snapshot when available (contains all fields)
 	if p.SnapshotJSON != "" {
 		var snap MarketSnapshot
-		if err := json.Unmarshal([]byte(p.SnapshotJSON), &snap); err == nil {
+		if err := json.Unmarshal([]byte(p.SnapshotJSON), &snap); err != nil {
+			slog.Default().Warn("snapshot JSON unmarshal failed — using column fallback",
+				"purchaseID", p.ID,
+				"error", err)
+		} else {
 			return &snap
 		}
 	}
@@ -199,6 +204,9 @@ func (s *service) GetInventoryAging(ctx context.Context, campaignID string) (*In
 
 	result := &InventoryResult{Items: items}
 	if err := s.applyOpenFlags(ctx, items); err != nil {
+		if s.logger != nil {
+			s.logger.Warn(ctx, "applyOpenFlags failed", observability.Err(err))
+		}
 		result.Warnings = append(result.Warnings, "Price flag data unavailable")
 	}
 	s.enrichCompSummaries(ctx, items)
@@ -228,6 +236,9 @@ func (s *service) GetGlobalInventoryAging(ctx context.Context) (*InventoryResult
 
 	result := &InventoryResult{Items: items}
 	if err := s.applyOpenFlags(ctx, items); err != nil {
+		if s.logger != nil {
+			s.logger.Warn(ctx, "applyOpenFlags failed", observability.Err(err))
+		}
 		result.Warnings = append(result.Warnings, "Price flag data unavailable")
 	}
 	s.enrichCompSummaries(ctx, items)
