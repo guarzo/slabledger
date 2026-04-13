@@ -45,61 +45,64 @@ type EVPortfolio struct {
 	MinDataPoints int             `json:"minDataPoints"`
 }
 
+// EVInput holds parameters for computeExpectedValue.
+// All fields have documented units to prevent positional errors.
+type EVInput struct {
+	CardName               string
+	CertNumber             string
+	Grade                  float64 // 1.0-10.0
+	CostBasis              int     // cents
+	SegmentSellThrough     float64 // 0.0-1.0
+	SegmentMedianMarginPct float64 // fraction, e.g. 0.25 = 25%
+	LiquidityFactor        float64 // multiplier; 1.0 = neutral
+	TrendAdjustment        float64 // fraction; 0.05 = +5% trend
+	AvgDaysUnsold          float64 // average days held before sale
+	AnnualCapitalCostRate  float64 // fraction per year; e.g. 0.08 = 8%
+	DataPoints             int     // number of comparable sales
+	FeePct                 float64 // optional override; 0 = use DefaultMarketplaceFeePct
+}
+
 // computeExpectedValue is a pure function that computes the expected value of a card position.
-func computeExpectedValue(
-	cardName, certNumber string,
-	grade float64,
-	costBasis int,
-	segmentSellThrough float64,
-	segmentMedianMarginPct float64,
-	liquidityFactor float64,
-	trendAdjustment float64,
-	avgDaysUnsold float64,
-	annualCapitalCostRate float64,
-	dataPoints int,
-	feePctOpts ...float64,
-) *ExpectedValue {
+func computeExpectedValue(in EVInput) *ExpectedValue {
 	feePct := DefaultMarketplaceFeePct
-	if len(feePctOpts) > 0 && feePctOpts[0] > 0 {
-		feePct = feePctOpts[0]
+	if in.FeePct > 0 {
+		feePct = in.FeePct
 	}
 
 	// Adjust sell probability by liquidity
-	pSell := segmentSellThrough * math.Min(math.Max(liquidityFactor, 0.5), 2.0)
+	pSell := in.SegmentSellThrough * math.Min(math.Max(in.LiquidityFactor, 0.5), 2.0)
 	pSell = math.Min(pSell, 0.99) // Cap at 99%
 
 	// Expected sale price: costBasis * (1 + medianMargin) * (1 + trend)
-	expectedSale := float64(costBasis) * (1 + segmentMedianMarginPct) * (1 + trendAdjustment)
+	expectedSale := float64(in.CostBasis) * (1 + in.SegmentMedianMarginPct) * (1 + in.TrendAdjustment)
 	expectedSaleCents := int(expectedSale)
 
 	// Expected fees
 	expectedFees := int(expectedSale * feePct)
 
 	// Expected profit if sold
-	expectedProfit := expectedSaleCents - expectedFees - costBasis
+	expectedProfit := expectedSaleCents - expectedFees - in.CostBasis
 
 	// Carrying cost = opportunity cost of capital
-	daysHeldEstimate := avgDaysUnsold
+	daysHeldEstimate := in.AvgDaysUnsold
 	if daysHeldEstimate < 1 {
 		daysHeldEstimate = 30
 	}
-	carryingCost := int(float64(costBasis) * annualCapitalCostRate * daysHeldEstimate / 365.0)
+	carryingCost := int(float64(in.CostBasis) * in.AnnualCapitalCostRate * daysHeldEstimate / 365.0)
 
 	// E[V] = P(sell) * E[profit|sell] - (1-P(sell)) * carryingCost
 	ev := int(pSell*float64(expectedProfit) - (1-pSell)*float64(carryingCost))
 
 	evPerDollar := 0.0
-	if costBasis > 0 {
-		evPerDollar = float64(ev) / float64(costBasis)
+	if in.CostBasis > 0 {
+		evPerDollar = float64(ev) / float64(in.CostBasis)
 	}
 
-	confidence := confidenceLabel(dataPoints)
-
 	return &ExpectedValue{
-		CardName:           cardName,
-		CertNumber:         certNumber,
-		Grade:              grade,
-		CostBasisCents:     costBasis,
+		CardName:           in.CardName,
+		CertNumber:         in.CertNumber,
+		Grade:              in.Grade,
+		CostBasisCents:     in.CostBasis,
 		SellProbability:    pSell,
 		ExpectedSalePrice:  expectedSaleCents,
 		ExpectedFees:       expectedFees,
@@ -107,9 +110,9 @@ func computeExpectedValue(
 		CarryingCostCents:  carryingCost,
 		EVCents:            ev,
 		EVPerDollar:        evPerDollar,
-		SegmentSellThrough: segmentSellThrough,
-		LiquidityFactor:    liquidityFactor,
-		TrendAdjustment:    trendAdjustment,
-		Confidence:         confidence,
+		SegmentSellThrough: in.SegmentSellThrough,
+		LiquidityFactor:    in.LiquidityFactor,
+		TrendAdjustment:    in.TrendAdjustment,
+		Confidence:         confidenceLabel(in.DataPoints),
 	}
 }

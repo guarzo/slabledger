@@ -415,13 +415,20 @@ func (s *service) GetExpectedValues(ctx context.Context, campaignID string) (*EV
 		if feePct == 0 {
 			feePct = DefaultMarketplaceFeePct
 		}
-		ev := computeExpectedValue(
-			p.CardName, p.CertNumber, p.GradeValue,
-			costBasis, seg.SellThroughPct, seg.AvgMarginPct,
-			liquidityFactor, trendAdj, seg.AvgDaysToSell,
-			0.05, seg.SoldCount,
-			feePct,
-		)
+		ev := computeExpectedValue(EVInput{
+			CardName:               p.CardName,
+			CertNumber:             p.CertNumber,
+			Grade:                  p.GradeValue,
+			CostBasis:              costBasis,
+			SegmentSellThrough:     seg.SellThroughPct,
+			SegmentMedianMarginPct: seg.AvgMarginPct,
+			LiquidityFactor:        liquidityFactor,
+			TrendAdjustment:        trendAdj,
+			AvgDaysUnsold:          seg.AvgDaysToSell,
+			AnnualCapitalCostRate:  0.05,
+			DataPoints:             seg.SoldCount,
+			FeePct:                 feePct,
+		})
 
 		portfolio.Items = append(portfolio.Items, *ev)
 		portfolio.TotalEVCents += ev.EVCents
@@ -475,7 +482,16 @@ func (s *service) EvaluatePurchase(ctx context.Context, campaignID string, cardN
 		if feePct == 0 {
 			feePct = DefaultMarketplaceFeePct
 		}
-		return computeExpectedValue(cardName, "", grade, buyCostCents+campaign.PSASourcingFeeCents, 0.5, 0.0, 1.0, 0.0, 30, 0.05, 0, feePct), nil
+		return computeExpectedValue(EVInput{
+			CardName:              cardName,
+			Grade:                 grade,
+			CostBasis:             buyCostCents + campaign.PSASourcingFeeCents,
+			SegmentSellThrough:    0.5,
+			LiquidityFactor:       1.0,
+			AvgDaysUnsold:         30,
+			AnnualCapitalCostRate: 0.05,
+			FeePct:                feePct,
+		}), nil
 	}
 
 	costBasis := buyCostCents + campaign.PSASourcingFeeCents
@@ -484,13 +500,18 @@ func (s *service) EvaluatePurchase(ctx context.Context, campaignID string, cardN
 		feePct = DefaultMarketplaceFeePct
 	}
 
-	return computeExpectedValue(
-		cardName, "", grade, costBasis,
-		seg.SellThroughPct, seg.AvgMarginPct,
-		1.0, 0.0, seg.AvgDaysToSell,
-		0.05, seg.SoldCount,
-		feePct,
-	), nil
+	return computeExpectedValue(EVInput{
+		CardName:               cardName,
+		Grade:                  grade,
+		CostBasis:              costBasis,
+		SegmentSellThrough:     seg.SellThroughPct,
+		SegmentMedianMarginPct: seg.AvgMarginPct,
+		LiquidityFactor:        1.0,
+		AvgDaysUnsold:          seg.AvgDaysToSell,
+		AnnualCapitalCostRate:  0.05,
+		DataPoints:             seg.SoldCount,
+		FeePct:                 feePct,
+	}), nil
 }
 
 // RunProjection runs a Monte Carlo simulation projection for a campaign.
