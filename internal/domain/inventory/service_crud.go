@@ -154,3 +154,27 @@ func (s *service) CreateBulkSales(ctx context.Context, campaignID string, channe
 	}
 	return result, nil
 }
+
+func (s *service) ReassignPurchase(ctx context.Context, purchaseID string, newCampaignID string) error {
+	// Verify purchase exists
+	if _, err := s.purchases.GetPurchase(ctx, purchaseID); err != nil {
+		return fmt.Errorf("purchase lookup: %w", err)
+	}
+
+	// Prevent reassignment if purchase has a linked sale
+	sale, err := s.sales.GetSaleByPurchaseID(ctx, purchaseID)
+	if err != nil && !IsSaleNotFound(err) && !IsPurchaseNotFound(err) {
+		return fmt.Errorf("sale lookup for purchase %s: %w", purchaseID, err)
+	}
+	if err == nil && sale != nil {
+		return fmt.Errorf("cannot reassign purchase %s: it has a linked sale", purchaseID)
+	}
+
+	// Verify target campaign exists and get its sourcing fee
+	campaign, err := s.campaigns.GetCampaign(ctx, newCampaignID)
+	if err != nil {
+		return fmt.Errorf("campaign lookup: %w", err)
+	}
+
+	return s.purchases.UpdatePurchaseCampaign(ctx, purchaseID, newCampaignID, campaign.PSASourcingFeeCents)
+}
