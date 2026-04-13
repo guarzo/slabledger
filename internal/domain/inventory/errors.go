@@ -20,6 +20,7 @@ const (
 	ErrCodeCertNotFound           errors.ErrorCode = "ERR_CERT_NOT_FOUND"
 	ErrCodePendingItemNotFound    errors.ErrorCode = "ERR_PENDING_ITEM_NOT_FOUND"
 	ErrCodeInvalidCashflowConfig  errors.ErrorCode = "ERR_INVALID_CASHFLOW_CONFIG"
+	ErrCodePurchaseHasSale        errors.ErrorCode = "ERR_PURCHASE_HAS_SALE"
 )
 
 // Sentinel errors for campaign operations
@@ -37,6 +38,7 @@ var (
 	ErrCertNotFound           = errors.NewAppError(ErrCodeCertNotFound, "cert not found")
 	ErrPendingItemNotFound    = errors.NewAppError(ErrCodePendingItemNotFound, "pending item not found")
 	ErrInvalidCashflowConfig  = errors.NewAppError(ErrCodeInvalidCashflowConfig, "invalid cashflow config")
+	ErrPurchaseHasSale        = errors.NewAppError(ErrCodePurchaseHasSale, "cannot reassign purchase with a linked sale")
 )
 
 // IsCampaignNotFound checks if the error is a "campaign not found" error.
@@ -72,3 +74,6 @@ func IsCertNotFound(err error) bool { return errors.HasErrorCode(err, ErrCodeCer
 func IsPendingItemNotFound(err error) bool {
 	return errors.HasErrorCode(err, ErrCodePendingItemNotFound)
 }
+
+// IsPurchaseHasSale checks if the error indicates a purchase cannot be modified because it has a linked sale.
+func IsPurchaseHasSale(err error) bool { return errors.HasErrorCode(err, ErrCodePurchaseHasSale) }
