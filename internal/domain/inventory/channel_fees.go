@@ -1,9 +1,14 @@
 package inventory
 
-import "math"
+import (
+	"math"
+
+	"github.com/guarzo/slabledger/internal/domain/constants"
+)
 
 // DefaultMarketplaceFeePct is the default fee percentage for eBay (12.35%).
-const DefaultMarketplaceFeePct = 0.1235
+// Defined in constants.DefaultMarketplaceFeePct; re-exported here for callers within this package.
+const DefaultMarketplaceFeePct = constants.DefaultMarketplaceFeePct
 
 // DefaultWebsiteFeePct is the fee percentage for website/online store sales (3% credit card processing).
 const DefaultWebsiteFeePct = 0.03

@@ -18,3 +18,6 @@ const (
 	SaleChannelCardShow   SaleChannel = "cardshow"
 	SaleChannelDoubleHolo SaleChannel = "doubleholo"
 )
+
+// DefaultMarketplaceFeePct is the default eBay/TCGPlayer fee percentage (12.35%).
+const DefaultMarketplaceFeePct = 0.1235

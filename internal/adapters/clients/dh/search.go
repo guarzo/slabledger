@@ -157,7 +157,7 @@ func (c *Client) SearchCards(ctx context.Context, filters SearchFilters) (*Searc
 	fullURL := fmt.Sprintf("%s/api/v1/enterprise/search?%s", c.baseURL, params.Encode())
 
 	var resp SearchResponse
-	if err := c.getEnterprise(ctx, fullURL, &resp); err != nil {
+	if err := c.doEnterprise(ctx, "GET", fullURL, nil, &resp); err != nil {
 		return nil, err
 	}
 	for i, item := range resp.Results {
