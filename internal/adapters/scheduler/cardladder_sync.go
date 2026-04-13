@@ -102,9 +102,13 @@ func (s *CardLadderRefreshScheduler) pushSingleCard(
 
 // removeSoldCards detects sold cards (mapped certs no longer in the unsold set)
 // and removes them from the CL Firestore collection. Returns the number removed.
+//
+// uid and collectionID are required to reconstruct the full Firestore document
+// path for mappings that only store the short search-API collectionCardId.
 func (s *CardLadderRefreshScheduler) removeSoldCards(
 	ctx context.Context,
 	client *cardladder.Client,
+	uid, collectionID string,
 	unsoldPurchases []inventory.Purchase,
 	existingMappings []sqlite.CLCardMapping,
 ) int {
@@ -151,12 +155,24 @@ func (s *CardLadderRefreshScheduler) removeSoldCards(
 		default:
 		}
 
-		// Card was sold — remove from Firestore
+		// Card was sold — remove from Firestore.
+		// cl_collection_card_id may hold either a full Firestore resource path
+		// (written by pushNewCards) or a short collectionCardId from the search
+		// API (written by the main refresh loop). Reconstruct the full path when
+		// a short ID is detected so DeleteCollectionCard's path validation passes.
 		if m.CLCollectionCardID != "" {
-			if err := client.DeleteCollectionCard(ctx, m.CLCollectionCardID); err != nil {
+			docName := m.CLCollectionCardID
+			const fsPrefix = "projects/cardladder-71d53/databases/(default)/documents/"
+			if !strings.HasPrefix(docName, fsPrefix) {
+				docName = fmt.Sprintf(
+					"projects/cardladder-71d53/databases/(default)/documents/users/%s/collections/%s/collection_cards/%s",
+					uid, collectionID, docName,
+				)
+			}
+			if err := client.DeleteCollectionCard(ctx, docName); err != nil {
 				s.logger.Warn(ctx, "CL remove: failed to delete from Firestore",
 					observability.String("cert", m.SlabSerial),
-					observability.String("docName", m.CLCollectionCardID),
+					observability.String("docName", docName),
 					observability.Err(err))
 				remoteDeleteFailed++
 				continue

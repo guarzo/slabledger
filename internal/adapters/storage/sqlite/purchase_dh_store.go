@@ -115,11 +115,18 @@ func (ps *PurchaseStore) ApproveHeldPurchase(ctx context.Context, purchaseID str
 	return tx.Commit()
 }
 
-// GetPurchasesByDHPushStatus returns purchases with the given DH push status.
+// GetPurchasesByDHPushStatus returns received, unsold purchases with the given DH push status.
+// Items that have not yet been received (received_at IS NULL) are excluded so that only
+// physically-in-hand inventory is sent to DH.
 func (ps *PurchaseStore) GetPurchasesByDHPushStatus(ctx context.Context, status string, limit int) ([]inventory.Purchase, error) {
 	query := fmt.Sprintf(
-		`SELECT %s FROM campaign_purchases WHERE dh_push_status = ? ORDER BY updated_at ASC LIMIT ?`,
-		purchaseColumns,
+		`SELECT %s FROM campaign_purchases p
+		 LEFT JOIN campaign_sales s ON s.purchase_id = p.id
+		 WHERE p.dh_push_status = ?
+		   AND p.received_at IS NOT NULL
+		   AND s.id IS NULL
+		 ORDER BY p.updated_at ASC LIMIT ?`,
+		purchaseColumnsAliased,
 	)
 	rows, err := ps.db.QueryContext(ctx, query, status, limit)
 	if err != nil {
