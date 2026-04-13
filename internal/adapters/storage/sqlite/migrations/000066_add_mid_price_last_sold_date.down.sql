@@ -1,0 +1,3 @@
+-- 000066_add_mid_price_last_sold_date.down.sql
+-- SQLite does not support DROP COLUMN in older versions; columns are left in place.
+-- Acceptable since the server always starts with the latest migration.
