@@ -169,7 +169,6 @@ type Config struct {
 	SessionCleanup   SessionCleanupConfig
 	InventoryRefresh InventoryRefreshConfig
 	SnapshotEnrich   SnapshotEnrichConfig
-	SnapshotHistory  SnapshotHistoryConfig
 	AdvisorRefresh   AdvisorRefreshConfig
 	SocialContent    SocialContentConfig
 	SocialPublish    SocialPublishConfig
@@ -189,12 +188,6 @@ type AdvisorRefreshConfig struct {
 	InitialDelay  time.Duration // delay before first run (default: 2m)
 	RefreshHour   int           // hour (0-23 UTC) to schedule runs; -1 = use InitialDelay (default: 4)
 	MaxToolRounds int           // max LLM tool-calling rounds per analysis (default: 5)
-}
-
-// SnapshotHistoryConfig controls daily archival of market snapshots.
-type SnapshotHistoryConfig struct {
-	Enabled  bool
-	Interval time.Duration // how often to archive (default: 24h)
 }
 
 // SnapshotEnrichConfig controls the background snapshot enrichment scheduler.

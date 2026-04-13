@@ -347,7 +347,6 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		CampaignStore:        campaignsInit.campaignStore,
 		PurchaseStore:        campaignsInit.purchaseStore,
 		DHStore:              campaignsInit.dhStore,
-		SnapshotStore:        campaignsInit.snapshotStore,
 		CampaignsService:     campaignsService,
 		CertLookup:           certLookup,
 		CertEnrichJob:        campaignsInit.certEnrichJob,

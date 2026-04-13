@@ -75,10 +75,6 @@ func Default() Config {
 			BatchSize:     3,
 			MaxRetries:    5,
 		},
-		SnapshotHistory: SnapshotHistoryConfig{
-			Enabled:  true,
-			Interval: 24 * time.Hour,
-		},
 		AdvisorRefresh: AdvisorRefreshConfig{
 			Enabled:       true,
 			Interval:      24 * time.Hour,

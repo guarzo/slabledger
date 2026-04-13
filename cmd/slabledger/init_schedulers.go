@@ -30,7 +30,6 @@ type schedulerDeps struct {
 	CampaignStore        *sqlite.CampaignStore
 	PurchaseStore        *sqlite.PurchaseStore
 	DHStore              *sqlite.DHStore
-	SnapshotStore        *sqlite.SnapshotStore
 	CampaignsService     inventory.Service
 	CertLookup           inventory.CertLookup
 	CertEnrichJob        *scheduler.CertEnrichJob // pre-built; nil if PSA not configured

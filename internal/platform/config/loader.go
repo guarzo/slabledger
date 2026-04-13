@@ -182,10 +182,6 @@ func FromEnv(base Config) Config {
 	envDurationPositive("SNAPSHOT_ENRICH_RETRY_INTERVAL", &cfg.SnapshotEnrich.RetryInterval)
 	envIntPositive("SNAPSHOT_ENRICH_MAX_RETRIES", &cfg.SnapshotEnrich.MaxRetries)
 
-	// Snapshot history scheduler
-	envBool("SNAPSHOT_HISTORY_ENABLED", &cfg.SnapshotHistory.Enabled, true)
-	envDurationPositive("SNAPSHOT_HISTORY_INTERVAL", &cfg.SnapshotHistory.Interval)
-
 	// Advisor refresh scheduler
 	envBool("ADVISOR_REFRESH_ENABLED", &cfg.AdvisorRefresh.Enabled, true)
 	envDurationPositive("ADVISOR_REFRESH_INTERVAL", &cfg.AdvisorRefresh.Interval)

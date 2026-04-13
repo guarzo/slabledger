@@ -5,7 +5,7 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
-// SnapshotStore implements snapshot and history recording operations.
+// SnapshotStore provides snapshot persistence for the inventory service.
 type SnapshotStore struct {
 	base
 }
