@@ -21,6 +21,15 @@ var factorDisplayNames = map[string]string{
 	FactorCoverageImpact:  "Coverage Impact",
 }
 
+// factorDisplayName returns the human-readable display name for a factor.
+// Falls back to the raw factor name if no display name is registered.
+func factorDisplayName(factorName string) string {
+	if name := factorDisplayNames[factorName]; name != "" {
+		return name
+	}
+	return factorName
+}
+
 func FallbackResult(sc ScoreCard) StructuredResult {
 	if len(sc.Factors) == 0 {
 		return StructuredResult{
@@ -33,10 +42,7 @@ func FallbackResult(sc ScoreCard) StructuredResult {
 	strongest := sc.Factors[0]
 	for _, f := range sc.Factors {
 		dir := factorDirection(f.Value)
-		title := factorDisplayNames[f.Name]
-		if title == "" {
-			title = f.Name
-		}
+		title := factorDisplayName(f.Name)
 		signals = append(signals, Signal{
 			Factor:    f.Name,
 			Direction: dir,
@@ -70,10 +76,7 @@ func factorDirection(value float64) string {
 }
 
 func generateInsight(strongest Factor, verdict Verdict) string {
-	name := factorDisplayNames[strongest.Name]
-	if name == "" {
-		name = strongest.Name
-	}
+	name := factorDisplayName(strongest.Name)
 	dir := factorDirection(strongest.Value)
 	return fmt.Sprintf("%s is %s (%.2f), driving an overall %s signal", name, dir, strongest.Value, string(verdict))
 }

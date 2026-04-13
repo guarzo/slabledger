@@ -210,3 +210,184 @@ func TestComputeSellThrough(t *testing.T) {
 		})
 	}
 }
+
+func TestComputeGradeFit(t *testing.T) {
+	tests := []struct {
+		name           string
+		gradeROI       float64
+		campaignAvgROI float64
+		confidence     float64
+		source         string
+		wantValue      float64
+		wantFactor     string
+	}{
+		{
+			name:     "grade outperforms campaign by 30 pct — value 1.0",
+			gradeROI: 30.0, campaignAvgROI: 0.0, confidence: 0.8, source: "test",
+			wantValue: 1.0, wantFactor: FactorGradeFit,
+		},
+		{
+			name:     "grade underperforms campaign by 30 pct — value -1.0",
+			gradeROI: 0.0, campaignAvgROI: 30.0, confidence: 0.8, source: "test",
+			wantValue: -1.0, wantFactor: FactorGradeFit,
+		},
+		{
+			name:     "equal roi — value 0.0",
+			gradeROI: 15.0, campaignAvgROI: 15.0, confidence: 1.0, source: "test",
+			wantValue: 0.0, wantFactor: FactorGradeFit,
+		},
+		{
+			name:     "clamped positive — outperforms by 60 pct caps at 1.0",
+			gradeROI: 60.0, campaignAvgROI: 0.0, confidence: 0.5, source: "test",
+			wantValue: 1.0, wantFactor: FactorGradeFit,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := ComputeGradeFit(tt.gradeROI, tt.campaignAvgROI, tt.confidence, tt.source)
+			if f.Name != tt.wantFactor {
+				t.Errorf("Name = %q, want %q", f.Name, tt.wantFactor)
+			}
+			if f.Value != tt.wantValue {
+				t.Errorf("Value = %v, want %v", f.Value, tt.wantValue)
+			}
+		})
+	}
+}
+
+func TestComputeCrackAdvantage(t *testing.T) {
+	tests := []struct {
+		name       string
+		crackROI   float64
+		gradedROI  float64
+		confidence float64
+		source     string
+		wantValue  float64
+		wantFactor string
+	}{
+		{
+			name:     "crack significantly better — clamps to 1.0",
+			crackROI: 100.0, gradedROI: 0.0, confidence: 0.9, source: "test",
+			wantValue: 1.0, wantFactor: FactorCrackAdvantage,
+		},
+		{
+			name:     "crack significantly worse — clamps to -1.0",
+			crackROI: 0.0, gradedROI: 100.0, confidence: 0.9, source: "test",
+			wantValue: -1.0, wantFactor: FactorCrackAdvantage,
+		},
+		{
+			name:     "equal — value 0.0",
+			crackROI: 50.0, gradedROI: 50.0, confidence: 0.5, source: "test",
+			wantValue: 0.0, wantFactor: FactorCrackAdvantage,
+		},
+		{
+			name:     "crack better by 25 — value 0.5",
+			crackROI: 75.0, gradedROI: 50.0, confidence: 0.7, source: "test",
+			wantValue: 0.5, wantFactor: FactorCrackAdvantage,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := ComputeCrackAdvantage(tt.crackROI, tt.gradedROI, tt.confidence, tt.source)
+			if f.Name != tt.wantFactor {
+				t.Errorf("Name = %q, want %q", f.Name, tt.wantFactor)
+			}
+			if f.Value != tt.wantValue {
+				t.Errorf("Value = %v, want %v", f.Value, tt.wantValue)
+			}
+		})
+	}
+}
+
+func TestComputeSpendEfficiency(t *testing.T) {
+	tests := []struct {
+		name        string
+		fillRatePct float64
+		roiPct      float64
+		confidence  float64
+		source      string
+		wantValue   float64
+		wantFactor  string
+	}{
+		{
+			name:        "low fill rate — negative signal",
+			fillRatePct: 10.0, roiPct: 5.0, confidence: 0.8, source: "test",
+			wantValue: -0.6, wantFactor: FactorSpendEfficiency,
+		},
+		{
+			name:        "high fill rate and good roi — positive signal",
+			fillRatePct: 97.0, roiPct: 15.0, confidence: 0.9, source: "test",
+			wantValue: 0.6, wantFactor: FactorSpendEfficiency,
+		},
+		{
+			name:        "mid-range fill rate — moderate signal",
+			fillRatePct: 70.0, roiPct: 5.0, confidence: 0.7, source: "test",
+			wantValue: 0.3, wantFactor: FactorSpendEfficiency,
+		},
+		{
+			name:        "default case — neutral",
+			fillRatePct: 50.0, roiPct: 5.0, confidence: 0.5, source: "test",
+			wantValue: 0.0, wantFactor: FactorSpendEfficiency,
+		},
+		{
+			name:        "high fill rate but low roi — not positive",
+			fillRatePct: 97.0, roiPct: 5.0, confidence: 0.5, source: "test",
+			wantValue: 0.0, wantFactor: FactorSpendEfficiency,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := ComputeSpendEfficiency(tt.fillRatePct, tt.roiPct, tt.confidence, tt.source)
+			if f.Name != tt.wantFactor {
+				t.Errorf("Name = %q, want %q", f.Name, tt.wantFactor)
+			}
+			if f.Value != tt.wantValue {
+				t.Errorf("Value = %v, want %v", f.Value, tt.wantValue)
+			}
+		})
+	}
+}
+
+func TestComputeCoverageImpact(t *testing.T) {
+	tests := []struct {
+		name         string
+		fillsGap     bool
+		overlapCount int
+		confidence   float64
+		source       string
+		wantValue    float64
+		wantFactor   string
+	}{
+		{
+			name:     "fills a gap — strong positive signal",
+			fillsGap: true, overlapCount: 0, confidence: 0.9, source: "test",
+			wantValue: 0.8, wantFactor: FactorCoverageImpact,
+		},
+		{
+			name:     "overlaps existing — negative signal",
+			fillsGap: false, overlapCount: 3, confidence: 0.7, source: "test",
+			wantValue: -0.3, wantFactor: FactorCoverageImpact,
+		},
+		{
+			name:     "no gap and no overlap — neutral",
+			fillsGap: false, overlapCount: 0, confidence: 0.5, source: "test",
+			wantValue: 0.0, wantFactor: FactorCoverageImpact,
+		},
+		{
+			name:     "fills gap takes precedence over overlap",
+			fillsGap: true, overlapCount: 5, confidence: 0.6, source: "test",
+			wantValue: 0.8, wantFactor: FactorCoverageImpact,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := ComputeCoverageImpact(tt.fillsGap, tt.overlapCount, tt.confidence, tt.source)
+			if f.Name != tt.wantFactor {
+				t.Errorf("Name = %q, want %q", f.Name, tt.wantFactor)
+			}
+			if f.Value != tt.wantValue {
+				t.Errorf("Value = %v, want %v", f.Value, tt.wantValue)
+			}
+		})
+	}
+}
