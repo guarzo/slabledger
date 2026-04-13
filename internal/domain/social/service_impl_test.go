@@ -256,145 +256,6 @@ func TestParseCaptionResponse(t *testing.T) {
 	}
 }
 
-// --- Mock types for service-level tests ---
-
-type mockSocialRepo struct {
-	getPostFunc                  func(ctx context.Context, id string) (*SocialPost, error)
-	createPostFunc               func(ctx context.Context, post *SocialPost) error
-	updatePostStatusFunc         func(ctx context.Context, id string, status PostStatus) error
-	deletePostFunc               func(ctx context.Context, id string) error
-	listPostCardsFunc            func(ctx context.Context, postID string) ([]PostCardDetail, error)
-	getRecentPurchaseIDsFunc     func(ctx context.Context, since string) ([]string, error)
-	getPurchaseIDsInExistingFunc func(ctx context.Context, ids []string, pt PostType) (map[string]bool, error)
-	getUnsoldPurchasesFunc       func(ctx context.Context) ([]PurchaseSnapshot, error)
-	updatePostCaptionFunc        func(ctx context.Context, id, caption, hashtags string) error
-	addPostCardsFunc             func(ctx context.Context, postID string, cards []PostCard) error
-	listPostsFunc                func(ctx context.Context, status *PostStatus, limit, offset int) ([]SocialPost, error)
-	setPublishedFunc             func(ctx context.Context, id, igPostID string) error
-	setPublishingFunc            func(ctx context.Context, id string) error
-	updateSlideURLsFunc          func(ctx context.Context, id string, urls []string) error
-	updateCoverTitleFunc         func(ctx context.Context, id string, title string) error
-	updateBackgroundURLsFunc     func(ctx context.Context, id string, urls []string) error
-}
-
-func (m *mockSocialRepo) GetPost(ctx context.Context, id string) (*SocialPost, error) {
-	if m.getPostFunc != nil {
-		return m.getPostFunc(ctx, id)
-	}
-	return nil, nil
-}
-
-func (m *mockSocialRepo) CreatePost(ctx context.Context, post *SocialPost) error {
-	if m.createPostFunc != nil {
-		return m.createPostFunc(ctx, post)
-	}
-	return nil
-}
-
-func (m *mockSocialRepo) UpdatePostStatus(ctx context.Context, id string, status PostStatus) error {
-	if m.updatePostStatusFunc != nil {
-		return m.updatePostStatusFunc(ctx, id, status)
-	}
-	return nil
-}
-
-func (m *mockSocialRepo) DeletePost(ctx context.Context, id string) error {
-	if m.deletePostFunc != nil {
-		return m.deletePostFunc(ctx, id)
-	}
-	return nil
-}
-
-func (m *mockSocialRepo) ListPostCards(ctx context.Context, postID string) ([]PostCardDetail, error) {
-	if m.listPostCardsFunc != nil {
-		return m.listPostCardsFunc(ctx, postID)
-	}
-	return nil, nil
-}
-
-func (m *mockSocialRepo) GetRecentPurchaseIDs(ctx context.Context, since string) ([]string, error) {
-	if m.getRecentPurchaseIDsFunc != nil {
-		return m.getRecentPurchaseIDsFunc(ctx, since)
-	}
-	return nil, nil
-}
-
-func (m *mockSocialRepo) GetPurchaseIDsInExistingPosts(ctx context.Context, ids []string, pt PostType) (map[string]bool, error) {
-	if m.getPurchaseIDsInExistingFunc != nil {
-		return m.getPurchaseIDsInExistingFunc(ctx, ids, pt)
-	}
-	return nil, nil
-}
-
-func (m *mockSocialRepo) GetUnsoldPurchasesWithSnapshots(ctx context.Context) ([]PurchaseSnapshot, error) {
-	if m.getUnsoldPurchasesFunc != nil {
-		return m.getUnsoldPurchasesFunc(ctx)
-	}
-	return nil, nil
-}
-
-func (m *mockSocialRepo) UpdatePostCaption(ctx context.Context, id, caption, hashtags string) error {
-	if m.updatePostCaptionFunc != nil {
-		return m.updatePostCaptionFunc(ctx, id, caption, hashtags)
-	}
-	return nil
-}
-
-func (m *mockSocialRepo) AddPostCards(ctx context.Context, postID string, cards []PostCard) error {
-	if m.addPostCardsFunc != nil {
-		return m.addPostCardsFunc(ctx, postID, cards)
-	}
-	return nil
-}
-
-func (m *mockSocialRepo) ListPosts(ctx context.Context, status *PostStatus, limit, offset int) ([]SocialPost, error) {
-	if m.listPostsFunc != nil {
-		return m.listPostsFunc(ctx, status, limit, offset)
-	}
-	return nil, nil
-}
-
-func (m *mockSocialRepo) SetPublished(ctx context.Context, id, igPostID string) error {
-	if m.setPublishedFunc != nil {
-		return m.setPublishedFunc(ctx, id, igPostID)
-	}
-	return nil
-}
-
-func (m *mockSocialRepo) SetPublishing(ctx context.Context, id string) error {
-	if m.setPublishingFunc != nil {
-		return m.setPublishingFunc(ctx, id)
-	}
-	return nil
-}
-
-func (m *mockSocialRepo) SetError(_ context.Context, _, _ string) error { return nil }
-
-func (m *mockSocialRepo) GetAvailableCardsForPosts(_ context.Context) ([]PostCardDetail, error) {
-	return nil, nil
-}
-
-func (m *mockSocialRepo) UpdateSlideURLs(ctx context.Context, id string, urls []string) error {
-	if m.updateSlideURLsFunc != nil {
-		return m.updateSlideURLsFunc(ctx, id, urls)
-	}
-	return nil
-}
-
-func (m *mockSocialRepo) UpdateCoverTitle(ctx context.Context, id string, title string) error {
-	if m.updateCoverTitleFunc != nil {
-		return m.updateCoverTitleFunc(ctx, id, title)
-	}
-	return nil
-}
-
-func (m *mockSocialRepo) UpdateBackgroundURLs(ctx context.Context, id string, urls []string) error {
-	if m.updateBackgroundURLsFunc != nil {
-		return m.updateBackgroundURLsFunc(ctx, id, urls)
-	}
-	return nil
-}
-
 type mockPublisher struct{}
 
 func (m *mockPublisher) PublishCarousel(_ context.Context, _, _ string, _ []string, _ string) (*PublishResultInfo, error) {
@@ -421,12 +282,12 @@ func (m *mockTokenProvider) GetToken(_ context.Context) (string, string, error) 
 
 func TestPublish_AlreadyPublished(t *testing.T) {
 	repo := &mockSocialRepo{}
-	repo.getPostFunc = func(_ context.Context, _ string) (*SocialPost, error) {
+	repo.GetPostFn = func(_ context.Context, _ string) (*SocialPost, error) {
 		return &SocialPost{ID: "p1", Caption: "A real caption"}, nil
 	}
 	// SetPublishing returns error for already-published posts (mock default returns nil,
 	// so override to simulate the repo rejecting it)
-	repo.setPublishingFunc = func(_ context.Context, _ string) error {
+	repo.SetPublishingFn = func(_ context.Context, _ string) error {
 		return fmt.Errorf("post not in publishable state")
 	}
 	svc := NewService(repo, WithPublisher(&mockPublisher{}, &mockTokenProvider{}))
@@ -439,10 +300,10 @@ func TestPublish_AlreadyPublished(t *testing.T) {
 func TestPublish_DraftSucceeds(t *testing.T) {
 	published := false
 	repo := &mockSocialRepo{}
-	repo.getPostFunc = func(_ context.Context, _ string) (*SocialPost, error) {
+	repo.GetPostFn = func(_ context.Context, _ string) (*SocialPost, error) {
 		return &SocialPost{ID: "p1", Caption: "A real caption"}, nil
 	}
-	repo.setPublishingFunc = func(_ context.Context, _ string) error {
+	repo.SetPublishingFn = func(_ context.Context, _ string) error {
 		published = true
 		return nil
 	}
@@ -459,11 +320,11 @@ func TestPublish_DraftSucceeds(t *testing.T) {
 
 func TestPublish_PlaceholderCaptionBlocked(t *testing.T) {
 	repo := &mockSocialRepo{}
-	repo.getPostFunc = func(_ context.Context, _ string) (*SocialPost, error) {
+	repo.GetPostFn = func(_ context.Context, _ string) (*SocialPost, error) {
 		return &SocialPost{ID: "p1", Caption: placeholderCaption}, nil
 	}
 	setPublishingCalled := false
-	repo.setPublishingFunc = func(_ context.Context, _ string) error {
+	repo.SetPublishingFn = func(_ context.Context, _ string) error {
 		setPublishingCalled = true
 		return nil
 	}
@@ -479,11 +340,11 @@ func TestPublish_PlaceholderCaptionBlocked(t *testing.T) {
 
 func TestPublish_EmptyCaptionBlocked(t *testing.T) {
 	repo := &mockSocialRepo{}
-	repo.getPostFunc = func(_ context.Context, _ string) (*SocialPost, error) {
+	repo.GetPostFn = func(_ context.Context, _ string) (*SocialPost, error) {
 		return &SocialPost{ID: "p1", Caption: ""}, nil
 	}
 	setPublishingCalled := false
-	repo.setPublishingFunc = func(_ context.Context, _ string) error {
+	repo.SetPublishingFn = func(_ context.Context, _ string) error {
 		setPublishingCalled = true
 		return nil
 	}
@@ -509,18 +370,18 @@ func TestPublish_NoPublisherConfigured(t *testing.T) {
 func TestPublishAsync_FiltersEmptySlideURLs(t *testing.T) {
 	publisher := &capturingPublisher{}
 	repo := &mockSocialRepo{}
-	repo.getPostFunc = func(_ context.Context, _ string) (*SocialPost, error) {
+	repo.GetPostFn = func(_ context.Context, _ string) (*SocialPost, error) {
 		return &SocialPost{
 			ID:        "p1",
 			Caption:   "Test caption",
 			SlideURLs: []string{"http://img1.jpg", "", "http://img2.jpg", ""},
 		}, nil
 	}
-	repo.listPostCardsFunc = func(_ context.Context, _ string) ([]PostCardDetail, error) {
+	repo.ListPostCardsFn = func(_ context.Context, _ string) ([]PostCardDetail, error) {
 		return []PostCardDetail{{PurchaseID: "p1", FrontImageURL: "http://front.jpg"}}, nil
 	}
-	repo.setPublishingFunc = func(_ context.Context, _ string) error { return nil }
-	repo.setPublishedFunc = func(_ context.Context, _, _ string) error { return nil }
+	repo.SetPublishingFn = func(_ context.Context, _ string) error { return nil }
+	repo.SetPublishedFn = func(_ context.Context, _, _ string) error { return nil }
 
 	svc := NewService(repo, WithPublisher(publisher, &mockTokenProvider{}))
 	err := svc.Publish(context.Background(), "p1")
@@ -542,21 +403,21 @@ func TestPublishAsync_FiltersEmptySlideURLs(t *testing.T) {
 func TestPublishAsync_AllEmptySlideURLsFallsBackToCards(t *testing.T) {
 	publisher := &capturingPublisher{}
 	repo := &mockSocialRepo{}
-	repo.getPostFunc = func(_ context.Context, _ string) (*SocialPost, error) {
+	repo.GetPostFn = func(_ context.Context, _ string) (*SocialPost, error) {
 		return &SocialPost{
 			ID:        "p1",
 			Caption:   "Test caption",
 			SlideURLs: []string{"", "", ""},
 		}, nil
 	}
-	repo.listPostCardsFunc = func(_ context.Context, _ string) ([]PostCardDetail, error) {
+	repo.ListPostCardsFn = func(_ context.Context, _ string) ([]PostCardDetail, error) {
 		return []PostCardDetail{
 			{PurchaseID: "p1", FrontImageURL: "http://card1.jpg"},
 			{PurchaseID: "p2", FrontImageURL: "http://card2.jpg"},
 		}, nil
 	}
-	repo.setPublishingFunc = func(_ context.Context, _ string) error { return nil }
-	repo.setPublishedFunc = func(_ context.Context, _, _ string) error { return nil }
+	repo.SetPublishingFn = func(_ context.Context, _ string) error { return nil }
+	repo.SetPublishedFn = func(_ context.Context, _, _ string) error { return nil }
 
 	svc := NewService(repo, WithPublisher(publisher, &mockTokenProvider{}))
 	err := svc.Publish(context.Background(), "p1")
@@ -685,7 +546,7 @@ func TestDetectPostType_InsufficientCards(t *testing.T) {
 			name:     "NewArrivals — no recent purchases",
 			postType: PostTypeNewArrivals,
 			setupRepo: func(repo *mockSocialRepo) {
-				repo.getRecentPurchaseIDsFunc = func(_ context.Context, _ string) ([]string, error) {
+				repo.GetRecentPurchaseIDsFn = func(_ context.Context, _ string) ([]string, error) {
 					return []string{}, nil
 				}
 			},
@@ -697,7 +558,7 @@ func TestDetectPostType_InsufficientCards(t *testing.T) {
 			name:     "PriceMovers — all filtered out by existing posts",
 			postType: PostTypePriceMovers,
 			setupRepo: func(repo *mockSocialRepo) {
-				repo.getPurchaseIDsInExistingFunc = func(_ context.Context, ids []string, _ PostType) (map[string]bool, error) {
+				repo.GetPurchaseIDsInExistingFn = func(_ context.Context, ids []string, _ PostType) (map[string]bool, error) {
 					m := make(map[string]bool)
 					for _, id := range ids {
 						m[id] = true
@@ -740,10 +601,10 @@ func TestRuleBasedGenerate_SkipsInsufficientCards(t *testing.T) {
 		{
 			name: "all post types insufficient cards — no error",
 			setupRepo: func(repo *mockSocialRepo) {
-				repo.getUnsoldPurchasesFunc = func(_ context.Context) ([]PurchaseSnapshot, error) {
+				repo.GetUnsoldPurchasesFn = func(_ context.Context) ([]PurchaseSnapshot, error) {
 					return []PurchaseSnapshot{}, nil
 				}
-				repo.getRecentPurchaseIDsFunc = func(_ context.Context, _ string) ([]string, error) {
+				repo.GetRecentPurchaseIDsFn = func(_ context.Context, _ string) ([]string, error) {
 					return []string{}, nil
 				}
 			},

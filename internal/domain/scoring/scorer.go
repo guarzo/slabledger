@@ -8,7 +8,7 @@ import (
 // Score computes a ScoreCard from a ScoreRequest and WeightProfile.
 // Returns ErrInsufficientData if fewer than MinFactors non-gap factors are available.
 func Score(req ScoreRequest, profile WeightProfile) (ScoreCard, error) {
-	if len(req.Factors) < MinFactors && len(req.DataGaps) > 0 {
+	if len(req.Factors) < MinFactors {
 		return ScoreCard{}, &ErrInsufficientData{
 			Available: len(req.Factors),
 			Required:  MinFactors,
@@ -70,7 +70,11 @@ func computeConfidence(factors []Factor, weights []FactorWeight) float64 {
 		return 0.2
 	}
 
-	coverage := float64(len(factors)) / float64(totalExpected) * 0.3
+	n := float64(len(factors))
+	if n == 0 {
+		return clamp(0, 0.2, 0.95)
+	}
+	coverage := n / float64(totalExpected) * 0.3
 
 	var sumAbs, sumConf float64
 	var positive, negative int
@@ -83,14 +87,10 @@ func computeConfidence(factors []Factor, weights []FactorWeight) float64 {
 			negative++
 		}
 	}
-	strength := 0.0
-	if len(factors) > 0 {
-		strength = (sumAbs / float64(len(factors))) * 0.3
-	}
-	quality := 0.0
-	if len(factors) > 0 {
-		quality = (sumConf / float64(len(factors))) * 0.2
-	}
+
+	strength := (sumAbs / n) * 0.3
+	quality := (sumConf / n) * 0.2
+
 	significant := positive + negative
 	agreement := 0.0
 	if significant > 0 {

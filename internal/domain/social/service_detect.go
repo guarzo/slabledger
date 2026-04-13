@@ -12,6 +12,13 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
+// cardIdentityKey identifies a card by name, set, and grade for deduplication.
+type cardIdentityKey struct {
+	name  string
+	set   string
+	grade float64
+}
+
 func (s *service) llmGenerate(ctx context.Context) (int, error) {
 	cards, err := s.repo.GetAvailableCardsForPosts(ctx)
 	if err != nil {
@@ -67,12 +74,6 @@ func (s *service) llmGenerate(ctx context.Context) (int, error) {
 	cardLookup := make(map[string]PostCardDetail, len(cards))
 	for _, c := range cards {
 		cardLookup[c.PurchaseID] = c
-	}
-
-	type cardIdentityKey struct {
-		name  string
-		set   string
-		grade float64
 	}
 
 	created := 0
@@ -335,14 +336,8 @@ func filterHotDeals(snapshots []PurchaseSnapshot) []string {
 // identity from a post's card list. Also deduplicates by purchase ID.
 // When duplicates exist, prefers the card with an image, then higher market value.
 func deduplicateByCardIdentity(ids []string, cardLookup map[string]PostCardDetail) []string {
-	type cardIdentity struct {
-		name  string
-		set   string
-		grade float64
-	}
-
-	best := make(map[cardIdentity]string)
-	bestCard := make(map[cardIdentity]PostCardDetail)
+	best := make(map[cardIdentityKey]string)
+	bestCard := make(map[cardIdentityKey]PostCardDetail)
 
 	seenPurchase := make(map[string]bool)
 	for _, pid := range ids {
@@ -356,7 +351,7 @@ func deduplicateByCardIdentity(ids []string, cardLookup map[string]PostCardDetai
 			continue
 		}
 
-		key := cardIdentity{name: card.CardName, set: card.SetName, grade: card.GradeValue}
+		key := cardIdentityKey{name: card.CardName, set: card.SetName, grade: card.GradeValue}
 		existing, exists := bestCard[key]
 		if !exists {
 			best[key] = pid
