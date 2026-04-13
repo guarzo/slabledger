@@ -3,6 +3,8 @@ package arbitrage
 import (
 	"math"
 	"testing"
+
+	"github.com/guarzo/slabledger/internal/domain/constants"
 )
 
 func TestComputeAcquisitionOpportunity(t *testing.T) {
@@ -89,7 +91,7 @@ func TestComputeAcquisitionOpportunity(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			opp := computeAcquisitionOpportunity(
 				tt.cardName, tt.setName, tt.cardNumber, "",
-				tt.rawNM, tt.gradedEstimates, DefaultMarketplaceFeePct, "test",
+				tt.rawNM, tt.gradedEstimates, constants.DefaultMarketplaceFeePct, "test",
 			)
 
 			if tt.wantNil {

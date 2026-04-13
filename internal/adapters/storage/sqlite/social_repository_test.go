@@ -337,7 +337,6 @@ func TestSocialRepository_AddPostCards(t *testing.T) {
 		FinanceStore:   NewFinanceStore(db.DB, logger),
 		PricingStore:   NewPricingStore(db.DB, logger),
 		DHStore:        NewDHStore(db.DB, logger),
-		SnapshotStore:  NewSnapshotStore(db.DB, logger),
 		SellSheetStore: NewSellSheetStore(db.DB, logger),
 	}
 	p2 := &inventory.Purchase{
@@ -382,7 +381,6 @@ func TestSocialRepository_ListPostCards(t *testing.T) {
 		FinanceStore:   NewFinanceStore(db.DB, logger),
 		PricingStore:   NewPricingStore(db.DB, logger),
 		DHStore:        NewDHStore(db.DB, logger),
-		SnapshotStore:  NewSnapshotStore(db.DB, logger),
 		SellSheetStore: NewSellSheetStore(db.DB, logger),
 	}
 	ctx := context.Background()
@@ -566,7 +564,6 @@ func TestSocialRepository_GetRecentPurchaseIDs(t *testing.T) {
 		FinanceStore:   NewFinanceStore(db.DB, logger),
 		PricingStore:   NewPricingStore(db.DB, logger),
 		DHStore:        NewDHStore(db.DB, logger),
-		SnapshotStore:  NewSnapshotStore(db.DB, logger),
 		SellSheetStore: NewSellSheetStore(db.DB, logger),
 	}
 	ctx := context.Background()
@@ -644,7 +641,6 @@ func TestSocialRepository_GetPurchaseIDsInExistingPosts(t *testing.T) {
 		FinanceStore:   NewFinanceStore(db.DB, logger),
 		PricingStore:   NewPricingStore(db.DB, logger),
 		DHStore:        NewDHStore(db.DB, logger),
-		SnapshotStore:  NewSnapshotStore(db.DB, logger),
 		SellSheetStore: NewSellSheetStore(db.DB, logger),
 	}
 	now := time.Now().Truncate(time.Second)
@@ -721,7 +717,6 @@ func TestSocialRepository_GetAvailableCardsForPosts(t *testing.T) {
 		FinanceStore:   NewFinanceStore(db.DB, logger),
 		PricingStore:   NewPricingStore(db.DB, logger),
 		DHStore:        NewDHStore(db.DB, logger),
-		SnapshotStore:  NewSnapshotStore(db.DB, logger),
 		SellSheetStore: NewSellSheetStore(db.DB, logger),
 	}
 	ctx := context.Background()
@@ -818,7 +813,6 @@ func TestSocialRepository_GetUnsoldPurchasesWithSnapshots(t *testing.T) {
 		FinanceStore:   NewFinanceStore(db.DB, logger),
 		PricingStore:   NewPricingStore(db.DB, logger),
 		DHStore:        NewDHStore(db.DB, logger),
-		SnapshotStore:  NewSnapshotStore(db.DB, logger),
 		SellSheetStore: NewSellSheetStore(db.DB, logger),
 	}
 	ctx := context.Background()

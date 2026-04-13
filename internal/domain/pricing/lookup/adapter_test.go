@@ -1,4 +1,4 @@
-package pricelookup
+package lookup
 
 import (
 	"context"
@@ -578,38 +578,30 @@ func TestGetMarketSnapshot_FallbackLogic(t *testing.T) {
 		t.Fatal("expected non-nil snapshot")
 		return
 	}
-	// GradePriceCents from Grades
 	if snap.GradePriceCents != 5000 {
 		t.Errorf("GradePriceCents = %d, want 5000", snap.GradePriceCents)
 	}
-	// Fallback: MedianCents = GradePriceCents when no distributions
 	if snap.MedianCents != 5000 {
 		t.Errorf("MedianCents = %d, want 5000 (fallback from GradePriceCents)", snap.MedianCents)
 	}
-	// Fallback: ConservativeCents = 85% of median
-	expectedConservative := 4250 // round(5000 * 0.85)
+	expectedConservative := 4250
 	if snap.ConservativeCents != expectedConservative {
 		t.Errorf("ConservativeCents = %d, want %d", snap.ConservativeCents, expectedConservative)
 	}
-	// Fallback: OptimisticCents = 115% of median
-	expectedOptimistic := 5750 // round(5000 * 1.15)
+	expectedOptimistic := 5750
 	if snap.OptimisticCents != expectedOptimistic {
 		t.Errorf("OptimisticCents = %d, want %d", snap.OptimisticCents, expectedOptimistic)
 	}
-	// Fallback: P10 = 70% of median
-	expectedP10 := 3500 // round(5000 * 0.70)
+	expectedP10 := 3500
 	if snap.P10Cents != expectedP10 {
 		t.Errorf("P10Cents = %d, want %d", snap.P10Cents, expectedP10)
 	}
-	// Fallback: P90 = 130% of median
-	expectedP90 := 6500 // round(5000 * 1.30)
+	expectedP90 := 6500
 	if snap.P90Cents != expectedP90 {
 		t.Errorf("P90Cents = %d, want %d", snap.P90Cents, expectedP90)
 	}
 }
 
-// TestGetMarketSnapshot_LastSoldFallbackChain validates that LastSoldCents is populated
-// from fallback sources when LastSoldByGrade is nil or missing data.
 func TestGetMarketSnapshot_LastSoldFallbackChain(t *testing.T) {
 	t.Run("fallback to eBay when LastSoldByGrade is nil", func(t *testing.T) {
 		mock := &mockPriceProvider{
@@ -654,10 +646,10 @@ func TestGetMarketSnapshot_LastSoldFallbackChain(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if snap.LastSoldCents != 0 {
-			t.Errorf("LastSoldCents = %d, want 0 (estimate should not set LastSoldCents)", snap.LastSoldCents)
+			t.Errorf("LastSoldCents = %d, want 0", snap.LastSoldCents)
 		}
 		if snap.EstimatedValueCents != 7000 {
-			t.Errorf("EstimatedValueCents = %d, want 7000 (from estimate)", snap.EstimatedValueCents)
+			t.Errorf("EstimatedValueCents = %d, want 7000", snap.EstimatedValueCents)
 		}
 		if snap.EstimateSource != pricing.SourceDH {
 			t.Errorf("EstimateSource = %q, want %q", snap.EstimateSource, pricing.SourceDH)
@@ -668,10 +660,7 @@ func TestGetMarketSnapshot_LastSoldFallbackChain(t *testing.T) {
 		mock := &mockPriceProvider{
 			lookupFn: func(_ context.Context, _ string, _ pricing.CardLookup) (*pricing.Price, error) {
 				return &pricing.Price{
-					// Key exists but value is nil — must not panic
-					GradeDetails: map[string]*pricing.GradeDetail{
-						"psa9": nil,
-					},
+					GradeDetails: map[string]*pricing.GradeDetail{"psa9": nil},
 				}, nil
 			},
 		}
@@ -706,7 +695,7 @@ func TestGetMarketSnapshot_LastSoldFallbackChain(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if snap.LastSoldCents != 20000 {
-			t.Errorf("LastSoldCents = %d, want 20000 (from actual LastSoldByGrade)", snap.LastSoldCents)
+			t.Errorf("LastSoldCents = %d, want 20000", snap.LastSoldCents)
 		}
 	})
 }
@@ -741,8 +730,6 @@ func TestGetMarketSnapshot_SourcesPassthrough(t *testing.T) {
 	if snap == nil {
 		t.Fatal("expected non-nil snapshot")
 	}
-
-	// Sources should be passed through from Price
 	if len(snap.Sources) != 2 {
 		t.Fatalf("Sources = %v, want [ebay tcgplayer]", snap.Sources)
 	}
@@ -752,8 +739,6 @@ func TestGetMarketSnapshot_SourcesPassthrough(t *testing.T) {
 	if snap.SourceCount != 2 {
 		t.Errorf("SourceCount = %d, want 2", snap.SourceCount)
 	}
-
-	// Ebay data should flow through to LastSoldCents fallback
 	if snap.LastSoldCents != 10500 {
 		t.Errorf("LastSoldCents = %d, want 10500 (from Ebay fallback)", snap.LastSoldCents)
 	}

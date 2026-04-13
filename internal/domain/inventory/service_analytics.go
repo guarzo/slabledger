@@ -294,19 +294,16 @@ func (s *service) buildCrackCandidateSet(ctx context.Context) map[string]bool {
 // This is the ONLY code path that makes live DH API calls for crack analysis.
 // All handlers read from the cache populated here.
 func (s *service) RefreshCrackCandidates(ctx context.Context) error {
-	cracks, err := s.computeCrackOpportunitiesLive(ctx)
+	candidates, err := s.computeCrackOpportunitiesLive(ctx)
 	if err != nil {
 		return err
 	}
-	set := make(map[string]bool, len(cracks))
-	for _, c := range cracks {
-		if c.IsCrackCandidate {
-			set[c.PurchaseID] = true
-		}
+	set := make(map[string]bool, len(candidates))
+	for _, id := range candidates {
+		set[id] = true
 	}
 	s.crackCacheMu.Lock()
 	s.crackCacheSet = set
-	s.crackCacheAll = cracks
 	s.crackCacheMu.Unlock()
 	return nil
 }

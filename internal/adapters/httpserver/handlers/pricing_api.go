@@ -12,7 +12,7 @@ import (
 
 // CertPriceLookup is the interface the pricing API handler depends on.
 // Defined at the consumer level per idiomatic Go.
-// Satisfied by inventory.Repository (and test mocks).
+// Satisfied by *sqlite.PurchaseStore (and test mocks).
 type CertPriceLookup interface {
 	GetPurchasesByCertNumbers(ctx context.Context, certNumbers []string) (map[string]*inventory.Purchase, error)
 }

@@ -26,11 +26,6 @@ func ResolvePSACategory(setName string) string {
 	return setName
 }
 
-// Deprecated: use ResolvePSACategory instead.
-func resolvePSACategory(setName string) string {
-	return ResolvePSACategory(setName)
-}
-
 // variantPattern pairs a variant name with its compiled word-boundary regex.
 type variantPattern struct {
 	name string
@@ -140,7 +135,7 @@ func parseCardMetadataFromTitle(listingTitle, category string) PSACardMetadata {
 // and an optional warning.
 func resolveSetName(titleSet, category string) (string, string) {
 	// Apply known PSA category mappings (e.g., "GAME" → "Base Set").
-	resolved := resolvePSACategory(category)
+	resolved := ResolvePSACategory(category)
 
 	// When set is still generic after mapping, use the parsed title set
 	if IsGenericSetName(resolved) && titleSet != "" {
@@ -149,7 +144,7 @@ func resolveSetName(titleSet, category string) (string, string) {
 
 	// Apply mapping again — titleSet may itself be a known PSA category
 	// (e.g., "GAME" from listing title → "Base Set")
-	resolved = resolvePSACategory(resolved)
+	resolved = ResolvePSACategory(resolved)
 
 	// Determine warning after all resolution steps so a generic titleSet
 	// that remains generic after resolvePSACategory is correctly flagged.

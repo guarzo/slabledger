@@ -6,9 +6,6 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/constants"
 )
 
-// DefaultMarketplaceFeePct is the default eBay/TCGPlayer fee percentage (12.35%).
-const DefaultMarketplaceFeePct = constants.DefaultMarketplaceFeePct
-
 // confidenceLabel returns a confidence string based on data point count.
 func confidenceLabel(n int) string {
 	switch {
@@ -63,12 +60,12 @@ type EVInput struct {
 	AvgDaysUnsold          float64 // average days held before sale
 	AnnualCapitalCostRate  float64 // fraction per year; e.g. 0.08 = 8%
 	DataPoints             int     // number of comparable sales
-	FeePct                 float64 // optional override; 0 = use DefaultMarketplaceFeePct
+	FeePct                 float64 // optional override; 0 = use constants.DefaultMarketplaceFeePct
 }
 
 // computeExpectedValue is a pure function that computes the expected value of a card position.
 func computeExpectedValue(in EVInput) *ExpectedValue {
-	feePct := DefaultMarketplaceFeePct
+	feePct := constants.DefaultMarketplaceFeePct
 	if in.FeePct > 0 {
 		feePct = in.FeePct
 	}

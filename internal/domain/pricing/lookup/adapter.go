@@ -1,4 +1,7 @@
-package pricelookup
+// Package lookup adapts a PriceProvider to implement inventory.PriceLookup.
+// Grade interpolation, fallback logic, and source-price assembly live here
+// because they are domain computations on pricing data, not external API concerns.
+package lookup
 
 import (
 	"context"

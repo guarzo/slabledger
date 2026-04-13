@@ -85,7 +85,6 @@ func TestSumPurchaseCostByInvoiceDate(t *testing.T) {
 		FinanceStore:   NewFinanceStore(db.DB, logger),
 		PricingStore:   NewPricingStore(db.DB, logger),
 		DHStore:        NewDHStore(db.DB, logger),
-		SnapshotStore:  NewSnapshotStore(db.DB, logger),
 		SellSheetStore: NewSellSheetStore(db.DB, logger),
 	}
 	ctx := context.Background()
@@ -166,7 +165,6 @@ func TestGetCapitalRawData_RecoveryVelocity(t *testing.T) {
 			FinanceStore:   NewFinanceStore(db.DB, logger),
 			PricingStore:   NewPricingStore(db.DB, logger),
 			DHStore:        NewDHStore(db.DB, logger),
-			SnapshotStore:  NewSnapshotStore(db.DB, logger),
 			SellSheetStore: NewSellSheetStore(db.DB, logger),
 		}
 
@@ -203,7 +201,6 @@ func TestGetCapitalRawData_RecoveryVelocity(t *testing.T) {
 			FinanceStore:   NewFinanceStore(db.DB, logger),
 			PricingStore:   NewPricingStore(db.DB, logger),
 			DHStore:        NewDHStore(db.DB, logger),
-			SnapshotStore:  NewSnapshotStore(db.DB, logger),
 			SellSheetStore: NewSellSheetStore(db.DB, logger),
 		}
 
@@ -251,7 +248,6 @@ func TestGetCapitalRawData_RecoveryVelocity(t *testing.T) {
 			FinanceStore:   NewFinanceStore(db.DB, logger),
 			PricingStore:   NewPricingStore(db.DB, logger),
 			DHStore:        NewDHStore(db.DB, logger),
-			SnapshotStore:  NewSnapshotStore(db.DB, logger),
 			SellSheetStore: NewSellSheetStore(db.DB, logger),
 		}
 
@@ -310,7 +306,6 @@ func TestGetCapitalRawData_RecoveryVelocity(t *testing.T) {
 			FinanceStore:   NewFinanceStore(db.DB, logger),
 			PricingStore:   NewPricingStore(db.DB, logger),
 			DHStore:        NewDHStore(db.DB, logger),
-			SnapshotStore:  NewSnapshotStore(db.DB, logger),
 			SellSheetStore: NewSellSheetStore(db.DB, logger),
 		}
 
@@ -363,7 +358,6 @@ func TestGetCapitalRawData_RecoveryVelocity(t *testing.T) {
 			FinanceStore:   NewFinanceStore(db.DB, logger),
 			PricingStore:   NewPricingStore(db.DB, logger),
 			DHStore:        NewDHStore(db.DB, logger),
-			SnapshotStore:  NewSnapshotStore(db.DB, logger),
 			SellSheetStore: NewSellSheetStore(db.DB, logger),
 		}
 
@@ -407,7 +401,6 @@ func TestGetCapitalRawData_RecoveryVelocity(t *testing.T) {
 			FinanceStore:   NewFinanceStore(db.DB, logger),
 			PricingStore:   NewPricingStore(db.DB, logger),
 			DHStore:        NewDHStore(db.DB, logger),
-			SnapshotStore:  NewSnapshotStore(db.DB, logger),
 			SellSheetStore: NewSellSheetStore(db.DB, logger),
 		}
 
@@ -458,7 +451,6 @@ func TestGetCapitalRawData_RecoveryVelocity(t *testing.T) {
 			FinanceStore:   NewFinanceStore(db.DB, logger),
 			PricingStore:   NewPricingStore(db.DB, logger),
 			DHStore:        NewDHStore(db.DB, logger),
-			SnapshotStore:  NewSnapshotStore(db.DB, logger),
 			SellSheetStore: NewSellSheetStore(db.DB, logger),
 		}
 
@@ -494,7 +486,6 @@ func TestGetCapitalRawData_EmptyState(t *testing.T) {
 		FinanceStore:   NewFinanceStore(db.DB, logger),
 		PricingStore:   NewPricingStore(db.DB, logger),
 		DHStore:        NewDHStore(db.DB, logger),
-		SnapshotStore:  NewSnapshotStore(db.DB, logger),
 		SellSheetStore: NewSellSheetStore(db.DB, logger),
 	}
 	ctx := context.Background()
@@ -675,7 +666,6 @@ func TestGetPendingReceiptByInvoiceDate(t *testing.T) {
 				FinanceStore:   NewFinanceStore(db.DB, logger),
 				PricingStore:   NewPricingStore(db.DB, logger),
 				DHStore:        NewDHStore(db.DB, logger),
-				SnapshotStore:  NewSnapshotStore(db.DB, logger),
 				SellSheetStore: NewSellSheetStore(db.DB, logger),
 			}
 			tt.setup(t, db, repo)
