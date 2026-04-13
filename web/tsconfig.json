@@ -27,5 +27,10 @@
     }
   },
   "include": ["src", "tests", "vitest-augments.d.ts", "vite-env.d.ts"],
+  "exclude": [
+    "tests/*.spec.ts",
+    "tests/e2e",
+    "tests/fixtures.ts"
+  ],
   "references": [{ "path": "./tsconfig.node.json" }]
 }
