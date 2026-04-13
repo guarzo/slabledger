@@ -81,6 +81,8 @@ type MarketSnapshotData struct {
 	LowestListCents   int     `json:"lowestListCents,omitempty"`
 	ConservativeCents int     `json:"conservativeCents,omitempty"`
 	MedianCents       int     `json:"medianCents,omitempty"`
+	MidPriceCents     int     `json:"midPriceCents,omitempty"`
+	LastSoldDate      string  `json:"lastSoldDate,omitempty"`
 	ActiveListings    int     `json:"activeListings,omitempty"`
 	SalesLast30d      int     `json:"salesLast30d,omitempty"`
 	Trend30d          float64 `json:"trend30d,omitempty"`
@@ -93,6 +95,8 @@ func (d *MarketSnapshotData) applySnapshot(snapshot *MarketSnapshot, date string
 	d.LowestListCents = snapshot.LowestListCents
 	d.ConservativeCents = snapshot.ConservativeCents
 	d.MedianCents = snapshot.MedianCents
+	d.MidPriceCents = snapshot.MidPriceCents
+	d.LastSoldDate = snapshot.LastSoldDate
 	d.ActiveListings = snapshot.ActiveListings
 	d.SalesLast30d = snapshot.SalesLast30d
 	d.Trend30d = snapshot.Trend30d
