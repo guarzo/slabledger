@@ -212,13 +212,20 @@ func (s *service) ScanCert(ctx context.Context, certNumber string) (*ScanCertRes
 		}, nil
 	}
 
-	// Existing and not sold — flag for eBay export
+	// Existing and not sold — flag for eBay export and mark received
 	now := time.Now()
 	if flagErr := s.purchases.SetEbayExportFlag(ctx, existing.ID, now); flagErr != nil {
 		if s.logger != nil {
 			s.logger.Warn(ctx, "scan cert: failed to set ebay export flag",
 				observability.String("cert", certNumber),
 				observability.Err(flagErr))
+		}
+	}
+	if recvErr := s.purchases.SetReceivedAt(ctx, existing.ID, now); recvErr != nil {
+		if s.logger != nil {
+			s.logger.Warn(ctx, "scan cert: failed to set received_at",
+				observability.String("cert", certNumber),
+				observability.Err(recvErr))
 		}
 	}
 

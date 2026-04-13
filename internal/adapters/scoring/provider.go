@@ -10,6 +10,7 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/advisor"
 	"github.com/guarzo/slabledger/internal/domain/arbitrage"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
+	"github.com/guarzo/slabledger/internal/domain/mathutil"
 	"github.com/guarzo/slabledger/internal/domain/portfolio"
 	"github.com/guarzo/slabledger/internal/domain/tuning"
 )
@@ -148,7 +149,7 @@ func (p *Provider) CampaignData(ctx context.Context, campaignID string) (*adviso
 		data.CampaignROI = &roiPct
 		sellThrough := pnl.SellThroughPct
 		data.SellThroughPct = &sellThrough
-		data.PriceConfidence = confidenceFromCount(pnl.TotalPurchases)
+		data.PriceConfidence = mathutil.ConfidenceScore(pnl.TotalPurchases)
 		data.MarketSource = "campaigns"
 	}()
 
@@ -217,18 +218,6 @@ func mapConfidence(label string) float64 {
 		return 0.3
 	default:
 		return 0.0
-	}
-}
-
-// confidenceFromCount derives a confidence score from the number of data points.
-func confidenceFromCount(n int) float64 {
-	switch {
-	case n >= 20:
-		return 1.0
-	case n >= 5:
-		return 0.6
-	default:
-		return 0.3
 	}
 }
 

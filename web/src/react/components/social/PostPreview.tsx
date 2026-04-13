@@ -50,7 +50,7 @@ export default function PostPreview({ postId, onBack, igConnected }: PostPreview
 
   const totalSlides = (detail.cards?.length ?? 0) + 1;
   const psa10Count = detail.cards?.filter(c => c.gradeValue === 10).length ?? 0;
-  const isPublishable = detail.status === 'draft' || detail.status === 'failed' || detail.status === 'approved';
+  const isPublishable = detail.status === 'draft' || detail.status === 'failed';
 
   const handlePublish = async () => {
     try {

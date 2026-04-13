@@ -5,6 +5,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/guarzo/slabledger/internal/domain/mathutil"
 )
 
 // knownCharacters is the default set of Pokemon characters to match against card names.
@@ -394,22 +396,10 @@ func computeCampaignMetrics(data []PurchaseWithSale) []CampaignPNLBrief {
 	return result
 }
 
-// confidenceLabel returns a confidence string based on data point count.
-func confidenceLabel(n int) string {
-	switch {
-	case n >= 20:
-		return "high"
-	case n >= 5:
-		return "medium"
-	default:
-		return "low"
-	}
-}
-
 // confidenceLabelWithAge returns a confidence string that decays based on data age.
 // If the latest data is older than 6 months, confidence is reduced by one level.
 func confidenceLabelWithAge(n int, latestSaleDate string, now string) string {
-	base := confidenceLabel(n)
+	base := mathutil.ConfidenceLabel(n)
 	if latestSaleDate == "" || now == "" {
 		return base
 	}

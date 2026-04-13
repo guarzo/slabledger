@@ -174,9 +174,9 @@ func (r *SocialRepository) SetPublished(ctx context.Context, id string, instagra
 
 func (r *SocialRepository) SetPublishing(ctx context.Context, id string) error {
 	res, err := r.db.ExecContext(ctx,
-		`UPDATE social_posts SET status = ?, error_message = '', updated_at = ? WHERE id = ? AND status IN (?, ?, ?)`,
+		`UPDATE social_posts SET status = ?, error_message = '', updated_at = ? WHERE id = ? AND status IN (?, ?)`,
 		string(social.PostStatusPublishing), time.Now().UTC().Format(time.RFC3339),
-		id, string(social.PostStatusDraft), string(social.PostStatusFailed), string(social.PostStatusApproved),
+		id, string(social.PostStatusDraft), string(social.PostStatusFailed),
 	)
 	if err != nil {
 		return fmt.Errorf("mark social post publishing %s: %w", id, err)

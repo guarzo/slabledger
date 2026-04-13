@@ -53,10 +53,12 @@ func (dhs *DHStore) SaveDHPushConfig(ctx context.Context, cfg *inventory.DHPushC
 			unreviewed_change_pct_threshold, unreviewed_change_min_cents, updated_at)
 		VALUES (1, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
-			swing_pct_threshold = ?, swing_min_cents = ?, disagreement_pct_threshold = ?,
-			unreviewed_change_pct_threshold = ?, unreviewed_change_min_cents = ?, updated_at = ?`,
-		cfg.SwingPctThreshold, cfg.SwingMinCents, cfg.DisagreementPctThreshold,
-		cfg.UnreviewedChangePctThreshold, cfg.UnreviewedChangeMinCents, cfg.UpdatedAt,
+			swing_pct_threshold = excluded.swing_pct_threshold,
+			swing_min_cents = excluded.swing_min_cents,
+			disagreement_pct_threshold = excluded.disagreement_pct_threshold,
+			unreviewed_change_pct_threshold = excluded.unreviewed_change_pct_threshold,
+			unreviewed_change_min_cents = excluded.unreviewed_change_min_cents,
+			updated_at = excluded.updated_at`,
 		cfg.SwingPctThreshold, cfg.SwingMinCents, cfg.DisagreementPctThreshold,
 		cfg.UnreviewedChangePctThreshold, cfg.UnreviewedChangeMinCents, cfg.UpdatedAt,
 	)

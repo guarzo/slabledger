@@ -10,7 +10,6 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/google/uuid"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/platform/config"
 	"github.com/guarzo/slabledger/internal/platform/telemetry"
@@ -415,7 +414,6 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		SchedulerResult:   schedulerResult,
 		GSheetsClient:     gsheetsClient,
 		PendingItemsRepo:  pendingItemsRepo,
-		IDGen:             uuid.NewString,
 	})
 	serverErr := startWebServer(ctx, deps)
 

@@ -66,7 +66,6 @@ type handlerInputs struct {
 	SchedulerResult   *scheduler.BuildResult
 	GSheetsClient     *gsheets.Client
 	PendingItemsRepo  *sqlite.PendingItemsRepository
-	IDGen             func() string
 }
 
 // handlerOutputs holds the constructed handlers that are also needed post-
