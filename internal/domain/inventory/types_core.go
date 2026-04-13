@@ -139,45 +139,63 @@ const (
 
 // Purchase represents a single card purchased through a campaign.
 type Purchase struct {
-	ID                    string         `json:"id"`
-	CampaignID            string         `json:"campaignId"`
-	CardName              string         `json:"cardName"`
-	CertNumber            string         `json:"certNumber"`                 // PSA cert number (unique)
-	CardNumber            string         `json:"cardNumber,omitempty"`       // Card number within set (from PSA)
-	SetName               string         `json:"setName,omitempty"`          // Set/category name (from PSA)
-	Grader                string         `json:"grader,omitempty"`           // e.g. "PSA", "CGC", "BGS", "SGC"
-	GradeValue            float64        `json:"gradeValue"`                 // Numeric grade (1-10, supports half-grades like 9.5)
-	CLValueCents          int            `json:"clValueCents"`               // CL market value at purchase time
-	MMValueCents          int            `json:"mmValueCents"`               // Market Movers 30-day avg price (cents)
-	MMTrendPct            float64        `json:"mmTrendPct,omitempty"`       // MM 30-day price change % (positive = rising)
-	MMSales30d            int            `json:"mmSales30d,omitempty"`       // MM 30-day sales volume (count)
-	MMActiveLowCents      int            `json:"mmActiveLowCents,omitempty"` // MM lowest active BIN listing (cents)
-	MMValueUpdatedAt      string         `json:"mmValueUpdatedAt,omitempty"` // When MM value was last refreshed (RFC3339)
-	BuyCostCents          int            `json:"buyCostCents"`               // Actual cost paid
-	PSASourcingFeeCents   int            `json:"psaSourcingFeeCents"`        // Fee charged per card
-	Population            int            `json:"population,omitempty"`       // PSA population count
-	PurchaseDate          string         `json:"purchaseDate"`               // YYYY-MM-DD
-	ReceivedAt            *string        `json:"receivedAt,omitempty"`
-	PSAShipDate           string         `json:"psaShipDate,omitempty"`
-	InvoiceDate           string         `json:"invoiceDate,omitempty"`
-	WasRefunded           bool           `json:"wasRefunded,omitempty"`
-	FrontImageURL         string         `json:"frontImageUrl,omitempty"`
-	BackImageURL          string         `json:"backImageUrl,omitempty"`
-	PurchaseSource        string         `json:"purchaseSource,omitempty"`
-	PSAListingTitle       string         `json:"psaListingTitle,omitempty"` // Raw PSA listing title for pricing fallback
-	SnapshotStatus        SnapshotStatus `json:"snapshotStatus,omitempty"`  // see SnapshotStatus* constants
-	SnapshotRetryCount    int            `json:"snapshotRetryCount,omitempty"`
-	OverridePriceCents    int            `json:"overridePriceCents,omitempty"`
-	OverrideSource        OverrideSource `json:"overrideSource,omitempty"`
-	OverrideSetAt         string         `json:"overrideSetAt,omitempty"`
-	AISuggestedPriceCents int            `json:"aiSuggestedPriceCents,omitempty"`
-	AISuggestedAt         string         `json:"aiSuggestedAt,omitempty"`
-	CardYear              string         `json:"cardYear,omitempty"`
-	EbayExportFlaggedAt   *time.Time     `json:"ebayExportFlaggedAt,omitempty"`
-	ReviewedPriceCents    int            `json:"reviewedPriceCents,omitempty"`
-	ReviewedAt            string         `json:"reviewedAt,omitempty"`
-	ReviewSource          ReviewSource   `json:"reviewSource,omitempty"`
-	// DoubleHolo v2 integration fields
+	// --- Core identity ---
+	ID         string  `json:"id"`
+	CampaignID string  `json:"campaignId"`
+	CardName   string  `json:"cardName"`
+	CertNumber string  `json:"certNumber"`           // PSA cert number (unique)
+	CardNumber string  `json:"cardNumber,omitempty"` // Card number within set (from PSA)
+	SetName    string  `json:"setName,omitempty"`    // Set/category name (from PSA)
+	Grader     string  `json:"grader,omitempty"`     // e.g. "PSA", "CGC", "BGS", "SGC"
+	GradeValue float64 `json:"gradeValue"`           // Numeric grade (1-10, supports half-grades like 9.5)
+
+	// --- Market Movers data ---
+	CLValueCents     int     `json:"clValueCents"`               // CL market value at purchase time
+	MMValueCents     int     `json:"mmValueCents"`               // Market Movers 30-day avg price (cents)
+	MMTrendPct       float64 `json:"mmTrendPct,omitempty"`       // MM 30-day price change % (positive = rising)
+	MMSales30d       int     `json:"mmSales30d,omitempty"`       // MM 30-day sales volume (count)
+	MMActiveLowCents int     `json:"mmActiveLowCents,omitempty"` // MM lowest active BIN listing (cents)
+	MMValueUpdatedAt string  `json:"mmValueUpdatedAt,omitempty"` // When MM value was last refreshed (RFC3339)
+
+	// --- Purchase cost & logistics ---
+	BuyCostCents        int     `json:"buyCostCents"`         // Actual cost paid
+	PSASourcingFeeCents int     `json:"psaSourcingFeeCents"`  // Fee charged per card
+	Population          int     `json:"population,omitempty"` // PSA population count
+	PurchaseDate        string  `json:"purchaseDate"`         // YYYY-MM-DD
+	ReceivedAt          *string `json:"receivedAt,omitempty"`
+	PSAShipDate         string  `json:"psaShipDate,omitempty"`
+	InvoiceDate         string  `json:"invoiceDate,omitempty"`
+	WasRefunded         bool    `json:"wasRefunded,omitempty"`
+
+	// --- Media ---
+	FrontImageURL string `json:"frontImageUrl,omitempty"`
+	BackImageURL  string `json:"backImageUrl,omitempty"`
+
+	// --- Metadata ---
+	PurchaseSource  string `json:"purchaseSource,omitempty"`
+	PSAListingTitle string `json:"psaListingTitle,omitempty"` // Raw PSA listing title for pricing fallback
+
+	// --- Market snapshot enrichment ---
+	SnapshotStatus     SnapshotStatus `json:"snapshotStatus,omitempty"` // see SnapshotStatus* constants
+	SnapshotRetryCount int            `json:"snapshotRetryCount,omitempty"`
+
+	// --- Price override ---
+	OverridePriceCents int            `json:"overridePriceCents,omitempty"`
+	OverrideSource     OverrideSource `json:"overrideSource,omitempty"`
+	OverrideSetAt      string         `json:"overrideSetAt,omitempty"`
+
+	// --- AI suggestion ---
+	AISuggestedPriceCents int    `json:"aiSuggestedPriceCents,omitempty"`
+	AISuggestedAt         string `json:"aiSuggestedAt,omitempty"`
+
+	// --- Review ---
+	CardYear            string       `json:"cardYear,omitempty"`
+	EbayExportFlaggedAt *time.Time   `json:"ebayExportFlaggedAt,omitempty"`
+	ReviewedPriceCents  int          `json:"reviewedPriceCents,omitempty"`
+	ReviewedAt          string       `json:"reviewedAt,omitempty"`
+	ReviewSource        ReviewSource `json:"reviewSource,omitempty"`
+
+	// --- DoubleHolo integration ---
 	DHCardID            int          `json:"dhCardId,omitempty"`            // DH card identity (from cert resolution)
 	DHInventoryID       int          `json:"dhInventoryId,omitempty"`       // DH inventory item ID (from inventory push)
 	DHCertStatus        string       `json:"dhCertStatus,omitempty"`        // Resolution state: matched, ambiguous, not_found, unresolved, resolving
@@ -188,15 +206,17 @@ type Purchase struct {
 	DHHoldReason        string       `json:"dhHoldReason,omitempty"`        // Why a re-push was held
 	DHCandidatesJSON    string       `json:"dhCandidatesJson,omitempty"`    // Ambiguous cert resolution candidates JSON
 	DHLastSyncedAt      string       `json:"dhLastSyncedAt,omitempty"`      // When DH inventory was last polled for this purchase (RFC3339)
-	GemRateID           string       `json:"gemRateId,omitempty"`           // CL gemRateID (grade-agnostic card variant identifier)
-	PSASpecID           int          `json:"psaSpecId,omitempty"`           // PSA spec ID from CL cards index
-	// Card Ladder metadata (from CL catalog enrichment)
-	CardPlayer    string    `json:"cardPlayer,omitempty"`    // Player/subject name (e.g. "Charizard", "LeBron James")
-	CardVariation string    `json:"cardVariation,omitempty"` // Card variation (e.g. "Holo Rare", "1st Edition")
-	CardCategory  string    `json:"cardCategory,omitempty"`  // Sport/category (e.g. "Pokemon", "Basketball")
-	CLSyncedAt    string    `json:"clSyncedAt,omitempty"`    // When card was last synced to CL collection (RFC3339)
-	CreatedAt     time.Time `json:"createdAt"`
-	UpdatedAt     time.Time `json:"updatedAt"`
+
+	// --- Card Ladder enrichment ---
+	GemRateID     string `json:"gemRateId,omitempty"`     // CL gemRateID (grade-agnostic card variant identifier)
+	PSASpecID     int    `json:"psaSpecId,omitempty"`     // PSA spec ID from CL cards index
+	CardPlayer    string `json:"cardPlayer,omitempty"`    // Player/subject name (e.g. "Charizard", "LeBron James")
+	CardVariation string `json:"cardVariation,omitempty"` // Card variation (e.g. "Holo Rare", "1st Edition")
+	CardCategory  string `json:"cardCategory,omitempty"`  // Sport/category (e.g. "Pokemon", "Basketball")
+	CLSyncedAt    string `json:"clSyncedAt,omitempty"`    // When card was last synced to CL collection (RFC3339)
+
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
 
 	// Market snapshot at time of purchase (best-effort, may be zero)
 	MarketSnapshotData
