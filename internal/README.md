@@ -33,17 +33,24 @@ This codebase follows **Hexagonal Architecture** (also known as Ports and Adapte
                     │ (implements interfaces)
                     ▼
 ┌─────────────────────────────────────────────────┐
-│         DOMAIN (Business Logic)                 │
-│    internal/domain/                             │
-│    ├── auth/           (authentication)         │
-│    ├── campaigns/      (campaign tracking, P&L) │
-│    ├── cards/          (card interfaces)        │
-│    ├── constants/      (shared constants)       │
-│    ├── favorites/      (favorites management)   │
-│    ├── mathutil/       (math utilities)         │
-│    ├── observability/  (logger interfaces)      │
-│    ├── pricing/        (price interfaces/models)│
-│    └── storage/        (storage interfaces)     │
+ │         DOMAIN (Business Logic)                 │
+ │    internal/domain/                             │
+ │    ├── inventory/      (campaigns, purchases)   │
+ │    ├── arbitrage/      (crack candidates, EV)   │
+ │    ├── auth/           (authentication)         │
+ │    ├── cards/          (card interfaces)        │
+ │    ├── constants/      (shared constants)       │
+ │    ├── export/         (sell sheet, eBay CSV)   │
+ │    ├── favorites/      (favorites management)   │
+ │    ├── finance/        (invoices, cashflow)     │
+ │    ├── intelligence/   (DH market data)         │
+ │    ├── mathutil/       (math utilities)         │
+ │    ├── observability/  (logger interfaces)      │
+ │    ├── picks/          (acquisition watchlist)  │
+ │    ├── pricing/        (price interfaces/models)│
+ │    ├── scoring/        (price scoring factors)  │
+ │    ├── social/         (social content)         │
+ │    └── storage/        (storage interfaces)     │
 └───────────────────┬─────────────────────────────┘
                     │ (uses)
                     ▼
@@ -83,14 +90,20 @@ This codebase follows **Hexagonal Architecture** (also known as Ports and Adapte
 | Package | Purpose |
 |---------|---------|
 | `auth/` | Authentication interfaces |
-| `campaigns/` | Campaign tracking, purchases, sales, P&L, analytics, CSV import |
+| `inventory/` | Campaign tracking, purchases, sales, P&L, analytics, CSV import |
+| `arbitrage/` | Crack candidates, acquisition targets, expected value, Monte Carlo |
 | `cards/` | `CardRepository` interface for card metadata |
 | `constants/` | Shared application constants |
+| `export/` | Sell sheet generation, eBay CSV, Shopify price sync |
 | `favorites/` | Favorites management |
+| `finance/` | Invoices, cashflow, capital tracking, revocation flags |
+| `intelligence/` | DH market intelligence repository and types |
 | `mathutil/` | Math utility functions |
 | `observability/` | Logger, MetricsRecorder interfaces |
+| `picks/` | AI-driven acquisition watchlist service |
 | `pricing/` | `PriceProvider` interface, graded prices, market data models |
-| `pricing/analysis/` | Pricing analysis logic |
+| `scoring/` | Price scoring factors and profiles |
+| `social/` | Social content generation |
 | `storage/` | Storage interfaces |
 
 **Rules**:
@@ -486,7 +499,7 @@ func (h *Handler) GetPNL(c *gin.Context) {
 
 **Bad**:
 ```go
-// internal/domain/campaigns/service.go
+// internal/domain/inventory/service.go
 import "github.com/guarzo/slabledger/internal/adapters/clients/dhprice"
 
 type Service struct {
@@ -496,7 +509,7 @@ type Service struct {
 
 **Good**:
 ```go
-// internal/domain/campaigns/service.go
+// internal/domain/inventory/service.go
 import "github.com/guarzo/slabledger/internal/domain/pricing"
 
 type Service struct {
@@ -510,17 +523,17 @@ type Service struct {
 
 ### Domain Layer Testing
 ```go
-// internal/domain/campaigns/service_test.go
-func TestService_GetPNL(t *testing.T) {
+// internal/domain/inventory/service_test.go
+func TestService_GetCampaignPNL(t *testing.T) {
     // ✅ Use mock providers (no real API calls)
-    mockPrice := &mocks.MockPriceProvider{
-        GetPriceFunc: func(ctx context.Context, card pricing.Card) (*pricing.Price, error) {
-            return &pricing.Price{RawUSD: 10}, nil
+    mockAnalytics := &mocks.AnalyticsRepositoryMock{
+        GetCampaignPNLFn: func(ctx context.Context, id string) (*inventory.CampaignPNL, error) {
+            return &inventory.CampaignPNL{}, nil
         },
     }
 
-    service := campaigns.NewService(mockPrice)
-    pnl, err := service.GetPNL(context.Background(), campaignID)
+    svc := inventory.NewService(mockCampaigns, mockPurchases, mockSales, mockAnalytics, ...)
+    pnl, err := svc.GetCampaignPNL(context.Background(), campaignID)
     assert.NoError(t, err)
 }
 ```
@@ -547,8 +560,8 @@ Several files in this codebase exceed 500 lines of code. Before adding code to a
 
 | File | LOC | Why it's large |
 |------|-----|----------------|
-| `domain/social/service_impl.go` | 731 | Social content orchestration |
-| `domain/campaigns/service_analytics.go` | 609 | Campaign analytics computations |
+| `domain/arbitrage/service.go` | 530 | Crack, acquisition, EV, Monte Carlo computation |
+| `domain/inventory/service_analytics.go` | ~330 | Campaign analytics computations |
 
 ---
 

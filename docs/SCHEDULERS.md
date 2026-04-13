@@ -74,7 +74,7 @@ Schedulers are conditionally included based on:
 **File:** `price_refresh.go`
 **Purpose:** Refreshes stale card prices by calling the DH price provider.
 
-Fetches cards with the oldest prices (prioritized by value-based staleness thresholds), groups them by provider, respects per-provider rate limits and hourly call caps, then logs per-source fusion statistics and daily API budget usage.
+Fetches cards with the oldest prices (prioritized by value-based staleness thresholds), groups them by provider, respects per-provider rate limits and hourly call caps, then logs daily API budget usage.
 
 | Config | Env Var | Default | Description |
 |--------|---------|---------|-------------|

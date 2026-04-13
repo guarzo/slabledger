@@ -40,10 +40,6 @@ type MockInventoryService struct {
 	GetGlobalInventoryAgingFn   func(ctx context.Context) (*inventory.InventoryResult, error)
 	GetFlaggedInventoryFn       func(ctx context.Context) ([]inventory.AgingItem, error)
 	RefreshCrackCandidatesFn    func(ctx context.Context) error
-	GenerateSellSheetFn         func(ctx context.Context, campaignID string, purchaseIDs []string) (*inventory.SellSheet, error)
-	GenerateGlobalSellSheetFn   func(ctx context.Context) (*inventory.SellSheet, error)
-	GenerateSelectedSellSheetFn func(ctx context.Context, purchaseIDs []string) (*inventory.SellSheet, error)
-	GetCampaignTuningFn         func(ctx context.Context, campaignID string) (*inventory.TuningResponse, error)
 	RefreshCLValuesGlobalFn     func(ctx context.Context, rows []inventory.CLExportRow) (*inventory.GlobalCLRefreshResult, error)
 	ImportCLExportGlobalFn      func(ctx context.Context, rows []inventory.CLExportRow) (*inventory.GlobalImportResult, error)
 	ImportPSAExportGlobalFn     func(ctx context.Context, rows []inventory.PSAExportRow) (*inventory.PSAImportResult, error)
@@ -59,49 +55,10 @@ type MockInventoryService struct {
 	ListInvoicesFn         func(ctx context.Context) ([]inventory.Invoice, error)
 	UpdateInvoiceFn        func(ctx context.Context, inv *inventory.Invoice) error
 
-	// Portfolio health
-	GetPortfolioHealthFn          func(ctx context.Context) (*inventory.PortfolioHealth, error)
-	GetPortfolioChannelVelocityFn func(ctx context.Context) ([]inventory.ChannelVelocity, error)
-
-	// Portfolio insights & suggestions
-	GetPortfolioInsightsFn   func(ctx context.Context) (*inventory.PortfolioInsights, error)
-	GetCampaignSuggestionsFn func(ctx context.Context) (*inventory.SuggestionsResponse, error)
-
 	// Revocation
 	FlagForRevocationFn       func(ctx context.Context, segmentLabel, segmentDimension, reason string) (*inventory.RevocationFlag, error)
 	ListRevocationFlagsFn     func(ctx context.Context) ([]inventory.RevocationFlag, error)
 	GenerateRevocationEmailFn func(ctx context.Context, flagID string) (string, error)
-
-	// Capital timeline
-	GetCapitalTimelineFn func(ctx context.Context) (*inventory.CapitalTimeline, error)
-
-	// Weekly review
-	GetWeeklyReviewSummaryFn func(ctx context.Context) (*inventory.WeeklyReviewSummary, error)
-
-	// Crack arbitrage
-	GetCrackCandidatesFn    func(ctx context.Context, campaignID string) ([]inventory.CrackAnalysis, error)
-	GetCrackOpportunitiesFn func(ctx context.Context) ([]inventory.CrackAnalysis, error)
-
-	// Acquisition arbitrage
-	GetAcquisitionTargetsFn func(ctx context.Context) ([]inventory.AcquisitionOpportunity, error)
-
-	// Expected value
-	GetExpectedValuesFn func(ctx context.Context, campaignID string) (*inventory.EVPortfolio, error)
-	EvaluatePurchaseFn  func(ctx context.Context, campaignID string, cardName string, grade float64, buyCostCents int) (*inventory.ExpectedValue, error)
-
-	// Activation checklist
-	GetActivationChecklistFn func(ctx context.Context, campaignID string) (*inventory.ActivationChecklist, error)
-
-	// Monte Carlo projection
-	RunProjectionFn func(ctx context.Context, campaignID string) (*inventory.MonteCarloComparison, error)
-
-	// Cert entry & eBay export
-	ImportCertsFn         func(ctx context.Context, certNumbers []string) (*inventory.CertImportResult, error)
-	ListEbayExportItemsFn func(ctx context.Context, flaggedOnly bool) (*inventory.EbayExportListResponse, error)
-	GenerateEbayCSVFn     func(ctx context.Context, items []inventory.EbayExportGenerateItem) ([]byte, error)
-
-	// Shopify price sync
-	MatchShopifyPricesFn func(ctx context.Context, items []inventory.ShopifyPriceSyncItem) (*inventory.ShopifyPriceSyncResponse, error)
 
 	// Price overrides & AI suggestions
 	GetPriceOverrideStatsFn func(ctx context.Context) (*inventory.PriceOverrideStats, error)
@@ -133,6 +90,7 @@ type MockInventoryService struct {
 	ConfirmOrdersSalesFn func(ctx context.Context, items []inventory.OrdersConfirmItem) (*inventory.BulkSaleResult, error)
 
 	// Cert batch lookup
+	ImportCertsFn               func(ctx context.Context, certNumbers []string) (*inventory.CertImportResult, error)
 	GetPurchasesByCertNumbersFn func(ctx context.Context, certNumbers []string) (map[string]*inventory.Purchase, error)
 	ScanCertFn                  func(ctx context.Context, certNumber string) (*inventory.ScanCertResult, error)
 	ResolveCertFn               func(ctx context.Context, certNumber string) (*inventory.CertInfo, error)
@@ -306,34 +264,6 @@ func (m *MockInventoryService) RefreshCrackCandidates(ctx context.Context) error
 	return nil
 }
 
-func (m *MockInventoryService) GenerateSellSheet(ctx context.Context, campaignID string, purchaseIDs []string) (*inventory.SellSheet, error) {
-	if m.GenerateSellSheetFn != nil {
-		return m.GenerateSellSheetFn(ctx, campaignID, purchaseIDs)
-	}
-	return &inventory.SellSheet{}, nil
-}
-
-func (m *MockInventoryService) GenerateGlobalSellSheet(ctx context.Context) (*inventory.SellSheet, error) {
-	if m.GenerateGlobalSellSheetFn != nil {
-		return m.GenerateGlobalSellSheetFn(ctx)
-	}
-	return &inventory.SellSheet{}, nil
-}
-
-func (m *MockInventoryService) GenerateSelectedSellSheet(ctx context.Context, purchaseIDs []string) (*inventory.SellSheet, error) {
-	if m.GenerateSelectedSellSheetFn != nil {
-		return m.GenerateSelectedSellSheetFn(ctx, purchaseIDs)
-	}
-	return &inventory.SellSheet{}, nil
-}
-
-func (m *MockInventoryService) GetCampaignTuning(ctx context.Context, campaignID string) (*inventory.TuningResponse, error) {
-	if m.GetCampaignTuningFn != nil {
-		return m.GetCampaignTuningFn(ctx, campaignID)
-	}
-	return &inventory.TuningResponse{CampaignID: campaignID}, nil
-}
-
 func (m *MockInventoryService) RefreshCLValuesGlobal(ctx context.Context, rows []inventory.CLExportRow) (*inventory.GlobalCLRefreshResult, error) {
 	if m.RefreshCLValuesGlobalFn != nil {
 		return m.RefreshCLValuesGlobalFn(ctx, rows)
@@ -418,34 +348,6 @@ func (m *MockInventoryService) UpdateInvoice(ctx context.Context, inv *inventory
 	return nil
 }
 
-func (m *MockInventoryService) GetPortfolioHealth(ctx context.Context) (*inventory.PortfolioHealth, error) {
-	if m.GetPortfolioHealthFn != nil {
-		return m.GetPortfolioHealthFn(ctx)
-	}
-	return &inventory.PortfolioHealth{}, nil
-}
-
-func (m *MockInventoryService) GetPortfolioChannelVelocity(ctx context.Context) ([]inventory.ChannelVelocity, error) {
-	if m.GetPortfolioChannelVelocityFn != nil {
-		return m.GetPortfolioChannelVelocityFn(ctx)
-	}
-	return []inventory.ChannelVelocity{}, nil
-}
-
-func (m *MockInventoryService) GetPortfolioInsights(ctx context.Context) (*inventory.PortfolioInsights, error) {
-	if m.GetPortfolioInsightsFn != nil {
-		return m.GetPortfolioInsightsFn(ctx)
-	}
-	return &inventory.PortfolioInsights{}, nil
-}
-
-func (m *MockInventoryService) GetCampaignSuggestions(ctx context.Context) (*inventory.SuggestionsResponse, error) {
-	if m.GetCampaignSuggestionsFn != nil {
-		return m.GetCampaignSuggestionsFn(ctx)
-	}
-	return &inventory.SuggestionsResponse{}, nil
-}
-
 // Revocation
 
 func (m *MockInventoryService) FlagForRevocation(ctx context.Context, segmentLabel, segmentDimension, reason string) (*inventory.RevocationFlag, error) {
@@ -467,143 +369,6 @@ func (m *MockInventoryService) GenerateRevocationEmail(ctx context.Context, flag
 		return m.GenerateRevocationEmailFn(ctx, flagID)
 	}
 	return "", nil
-}
-
-// Capital timeline
-
-func (m *MockInventoryService) GetCapitalTimeline(ctx context.Context) (*inventory.CapitalTimeline, error) {
-	if m.GetCapitalTimelineFn != nil {
-		return m.GetCapitalTimelineFn(ctx)
-	}
-	return &inventory.CapitalTimeline{}, nil
-}
-
-// Weekly review
-
-func (m *MockInventoryService) GetWeeklyReviewSummary(ctx context.Context) (*inventory.WeeklyReviewSummary, error) {
-	if m.GetWeeklyReviewSummaryFn != nil {
-		return m.GetWeeklyReviewSummaryFn(ctx)
-	}
-	return &inventory.WeeklyReviewSummary{}, nil
-}
-
-// Crack arbitrage
-
-func (m *MockInventoryService) GetCrackCandidates(ctx context.Context, campaignID string) ([]inventory.CrackAnalysis, error) {
-	if m.GetCrackCandidatesFn != nil {
-		return m.GetCrackCandidatesFn(ctx, campaignID)
-	}
-	return []inventory.CrackAnalysis{}, nil
-}
-
-func (m *MockInventoryService) GetCrackOpportunities(ctx context.Context) ([]inventory.CrackAnalysis, error) {
-	if m.GetCrackOpportunitiesFn != nil {
-		return m.GetCrackOpportunitiesFn(ctx)
-	}
-	return []inventory.CrackAnalysis{}, nil
-}
-
-func (m *MockInventoryService) GetAcquisitionTargets(ctx context.Context) ([]inventory.AcquisitionOpportunity, error) {
-	if m.GetAcquisitionTargetsFn != nil {
-		return m.GetAcquisitionTargetsFn(ctx)
-	}
-	return []inventory.AcquisitionOpportunity{}, nil
-}
-
-// Expected value
-
-func (m *MockInventoryService) GetExpectedValues(ctx context.Context, campaignID string) (*inventory.EVPortfolio, error) {
-	if m.GetExpectedValuesFn != nil {
-		return m.GetExpectedValuesFn(ctx, campaignID)
-	}
-	return &inventory.EVPortfolio{}, nil
-}
-
-func (m *MockInventoryService) EvaluatePurchase(ctx context.Context, campaignID string, cardName string, grade float64, buyCostCents int) (*inventory.ExpectedValue, error) {
-	if m.EvaluatePurchaseFn != nil {
-		return m.EvaluatePurchaseFn(ctx, campaignID, cardName, grade, buyCostCents)
-	}
-	return &inventory.ExpectedValue{}, nil
-}
-
-// Activation checklist
-
-func (m *MockInventoryService) GetActivationChecklist(ctx context.Context, campaignID string) (*inventory.ActivationChecklist, error) {
-	if m.GetActivationChecklistFn != nil {
-		return m.GetActivationChecklistFn(ctx, campaignID)
-	}
-	return &inventory.ActivationChecklist{CampaignID: campaignID, AllPassed: true}, nil
-}
-
-// Monte Carlo projection
-
-func (m *MockInventoryService) RunProjection(ctx context.Context, campaignID string) (*inventory.MonteCarloComparison, error) {
-	if m.RunProjectionFn != nil {
-		return m.RunProjectionFn(ctx, campaignID)
-	}
-	return &inventory.MonteCarloComparison{Confidence: "insufficient"}, nil
-}
-
-// Cert entry & eBay export
-
-func (m *MockInventoryService) ImportCerts(ctx context.Context, certNumbers []string) (*inventory.CertImportResult, error) {
-	if m.ImportCertsFn != nil {
-		return m.ImportCertsFn(ctx, certNumbers)
-	}
-	return nil, nil
-}
-
-func (m *MockInventoryService) ListEbayExportItems(ctx context.Context, flaggedOnly bool) (*inventory.EbayExportListResponse, error) {
-	if m.ListEbayExportItemsFn != nil {
-		return m.ListEbayExportItemsFn(ctx, flaggedOnly)
-	}
-	return nil, nil
-}
-
-func (m *MockInventoryService) GenerateEbayCSV(ctx context.Context, items []inventory.EbayExportGenerateItem) ([]byte, error) {
-	if m.GenerateEbayCSVFn != nil {
-		return m.GenerateEbayCSVFn(ctx, items)
-	}
-	return nil, nil
-}
-
-// Shopify price sync
-
-func (m *MockInventoryService) MatchShopifyPrices(ctx context.Context, items []inventory.ShopifyPriceSyncItem) (*inventory.ShopifyPriceSyncResponse, error) {
-	if m.MatchShopifyPricesFn != nil {
-		return m.MatchShopifyPricesFn(ctx, items)
-	}
-	return &inventory.ShopifyPriceSyncResponse{Matched: []inventory.ShopifyPriceSyncMatch{}, Unmatched: []string{}}, nil
-}
-
-// External purchases
-
-func (m *MockInventoryService) EnsureExternalCampaign(ctx context.Context) (*inventory.Campaign, error) {
-	if m.EnsureExternalCampaignFn != nil {
-		return m.EnsureExternalCampaignFn(ctx)
-	}
-	return &inventory.Campaign{ID: inventory.ExternalCampaignID, Name: inventory.ExternalCampaignName}, nil
-}
-
-func (m *MockInventoryService) ImportExternalCSV(ctx context.Context, rows []inventory.ShopifyExportRow) (*inventory.ExternalImportResult, error) {
-	if m.ImportExternalCSVFn != nil {
-		return m.ImportExternalCSVFn(ctx, rows)
-	}
-	return &inventory.ExternalImportResult{}, nil
-}
-
-func (m *MockInventoryService) ImportOrdersSales(ctx context.Context, rows []inventory.OrdersExportRow) (*inventory.OrdersImportResult, error) {
-	if m.ImportOrdersSalesFn != nil {
-		return m.ImportOrdersSalesFn(ctx, rows)
-	}
-	return &inventory.OrdersImportResult{}, nil
-}
-
-func (m *MockInventoryService) ConfirmOrdersSales(ctx context.Context, items []inventory.OrdersConfirmItem) (*inventory.BulkSaleResult, error) {
-	if m.ConfirmOrdersSalesFn != nil {
-		return m.ConfirmOrdersSalesFn(ctx, items)
-	}
-	return &inventory.BulkSaleResult{}, nil
 }
 
 // Price overrides & AI suggestions
@@ -732,6 +497,41 @@ func (m *MockInventoryService) ScanCert(ctx context.Context, certNumber string) 
 func (m *MockInventoryService) ResolveCert(ctx context.Context, certNumber string) (*inventory.CertInfo, error) {
 	if m.ResolveCertFn != nil {
 		return m.ResolveCertFn(ctx, certNumber)
+	}
+	return nil, nil
+}
+
+func (m *MockInventoryService) EnsureExternalCampaign(ctx context.Context) (*inventory.Campaign, error) {
+	if m.EnsureExternalCampaignFn != nil {
+		return m.EnsureExternalCampaignFn(ctx)
+	}
+	return &inventory.Campaign{ID: inventory.ExternalCampaignID, Name: inventory.ExternalCampaignName}, nil
+}
+
+func (m *MockInventoryService) ImportExternalCSV(ctx context.Context, rows []inventory.ShopifyExportRow) (*inventory.ExternalImportResult, error) {
+	if m.ImportExternalCSVFn != nil {
+		return m.ImportExternalCSVFn(ctx, rows)
+	}
+	return &inventory.ExternalImportResult{}, nil
+}
+
+func (m *MockInventoryService) ImportOrdersSales(ctx context.Context, rows []inventory.OrdersExportRow) (*inventory.OrdersImportResult, error) {
+	if m.ImportOrdersSalesFn != nil {
+		return m.ImportOrdersSalesFn(ctx, rows)
+	}
+	return &inventory.OrdersImportResult{}, nil
+}
+
+func (m *MockInventoryService) ConfirmOrdersSales(ctx context.Context, items []inventory.OrdersConfirmItem) (*inventory.BulkSaleResult, error) {
+	if m.ConfirmOrdersSalesFn != nil {
+		return m.ConfirmOrdersSalesFn(ctx, items)
+	}
+	return &inventory.BulkSaleResult{}, nil
+}
+
+func (m *MockInventoryService) ImportCerts(ctx context.Context, certNumbers []string) (*inventory.CertImportResult, error) {
+	if m.ImportCertsFn != nil {
+		return m.ImportCertsFn(ctx, certNumbers)
 	}
 	return nil, nil
 }

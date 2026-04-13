@@ -31,11 +31,10 @@ Key files:
 
 | File | Purpose |
 |------|---------|
-| `internal/domain/campaigns/types.go` | Campaign, Purchase, Sale structs |
-| `internal/domain/campaigns/service.go` | Business logic, PriceLookup interface |
-| `internal/domain/campaigns/channel_fees.go` | CalculateSaleFee, CalculateNetProfit |
-| `internal/domain/campaigns/import.go` | ImportRow, ExtractGrade |
-| `internal/domain/campaigns/analytics_types.go` | CampaignPNL, ChannelPNL, AgingItem, etc. |
+| `internal/domain/inventory/types.go` | Campaign, Purchase, Sale structs |
+| `internal/domain/inventory/service.go` | Business logic, PriceLookup interface |
+| `internal/domain/inventory/channel_fees.go` | CalculateSaleFee, CalculateNetProfit |
+| `internal/domain/inventory/service_interfaces.go` | 8 focused repository interfaces |
 | `internal/adapters/storage/sqlite/campaigns_repository.go` | SQLite implementation |
 | `internal/adapters/httpserver/handlers/campaigns.go` | HTTP handlers |
 | `internal/adapters/clients/pricelookup/adapter.go` | PriceLookup adapter |
@@ -53,22 +52,16 @@ type PriceLookup interface {
 // Service accepts options
 type ServiceOption func(*service)
 func WithPriceLookup(pl PriceLookup) ServiceOption { ... }
-func NewService(repo Repository, opts ...ServiceOption) Service { ... }
+func NewService(repos Repositories, opts ...ServiceOption) Service { ... }
 
 // Wiring in main.go
 adapter := pricelookup.NewAdapter(priceProvider)
-svc := campaigns.NewService(repo, campaigns.WithPriceLookup(adapter))
+svc := inventory.NewService(repos, inventory.WithPriceLookup(adapter))
 ```
 
 ### Database Migrations
 
-Migrations are in `internal/adapters/storage/sqlite/migrations/`. Current migrations:
-
-| Migration | Description |
-|-----------|-------------|
-| 000001 | Complete initial schema (campaigns, purchases, sales, price_history, price_refresh_queue, favorites, sessions, api_calls, etc.) |
-| 000002 | Card ID mappings table + sync state |
-| 000003 | API daily summary view (aggregates api_calls by provider and date for status endpoint) |
+Migrations are in `internal/adapters/storage/sqlite/migrations/`. There are currently 60 migration pairs (`000001`–`000060`). See [docs/SCHEMA.md](SCHEMA.md) for the full schema and [internal/README.md](../internal/README.md) for step-by-step migration creation instructions.
 
 ---
 
@@ -193,7 +186,7 @@ curl http://localhost:8081/api/status/api-usage
 | CSV import skipping all rows | Check CSV format: 3 columns, header row required |
 | Duplicate cert errors | Certificate numbers are unique across all campaigns |
 | `database is locked` | WAL mode issue or concurrent write contention. Check `PRAGMA journal_mode=wal;` runs on startup |
-| `mock does not implement interface` | Repository interface changed. Add missing method to both mocks (`testutil/mocks/` and `domain/campaigns/mock_repo_test.go`) |
+| `mock does not implement interface` | Repository interface changed. Add missing method to both mocks (`testutil/mocks/` and `domain/inventory/mock_repo_test.go`) |
 | Frontend proxy 502 | Backend not running on :8081. Start backend: `go run ./cmd/slabledger` |
 | `migration: dirty database` | Failed migration left dirty state. Fix version in `schema_migrations` table |
 | Chinese set number mapping unknown | New CBB volume not in `mapChineseNumber`. Add volume mapping; falls back to number-less search |

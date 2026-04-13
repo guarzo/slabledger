@@ -8,11 +8,6 @@ const DefaultMarketplaceFeePct = 0.1235
 // DefaultWebsiteFeePct is the fee percentage for website/online store sales (3% credit card processing).
 const DefaultWebsiteFeePct = 0.03
 
-// grossModeFee is a sentinel value passed to enrichSellSheetItem to suppress fee
-// deduction and return gross (pre-fee) prices. Any negative value would work but
-// -1.0 is chosen to be clearly invalid as a real fee percentage.
-const grossModeFee = -1.0
-
 // CalculateSaleFee computes marketplace fees for a given channel and sale price.
 func CalculateSaleFee(channel SaleChannel, salePriceCents int, campaign *Campaign) int {
 	switch NormalizeChannel(channel) {

@@ -23,7 +23,7 @@ slabledger is a graded card portfolio tracker and pricing tool using Hexagonal A
 │                         DOMAIN LAYER                        │
 │          (Pure Business Logic - NO external deps)           │
 │                                                             │
-│  • Campaigns Service       • P&L Analytics                  │
+│  • Inventory Service       • P&L Analytics                  │
 │  • DH Pricing              • Market Direction Signals       │
 │  • Favorites               • CSV Import                     │
 │  • Authentication          • Channel Fee Calculation        │
@@ -48,20 +48,27 @@ slabledger is a graded card portfolio tracker and pricing tool using Hexagonal A
 internal/
   domain/                   # Pure business logic
     auth/                   # Authentication service interface
-    campaigns/              # Campaign tracking, purchases, sales, analytics
+    inventory/              # Campaign tracking, purchases, sales, analytics
       types.go              # Campaign, Purchase, Sale, Phase, SaleChannel
-      repository.go         # Repository interface (CRUD + analytics queries)
+      service_interfaces.go # 8 focused repository interfaces
       service.go            # Business logic, PriceLookup interface, ServiceOption
-      validation.go         # Input validation
       channel_fees.go       # CalculateSaleFee, CalculateNetProfit
-      analytics_types.go    # CampaignPNL, ChannelPNL, DailySpend, AgingItem, etc.
-      import.go             # ImportRow, ImportResult, ExtractGrade
       errors.go             # Sentinel errors (ErrCampaignNotFound, etc.)
+    arbitrage/              # Crack candidates, acquisition targets, EV, Monte Carlo
+    portfolio/              # Inventory aging, price signals, portfolio health
+    tuning/                 # Campaign parameter optimization and analytics
+    finance/                # Invoices, cashflow, capital tracking, revocation flags
+    export/                 # Sell sheet, eBay CSV, Shopify price sync
+    dhlisting/              # DH listing push pipeline coordination
     cards/                  # CardRepository interface
     favorites/              # Favorites service
     observability/          # Logger, MetricsRecorder interfaces
     pricing/                # PriceProvider, Price, GradedPrices, LastSoldByGrade
     mathutil/               # CalculateTrend, CalculatePercentChange, etc.
+    ai/                     # LLMProvider, ImageGenerator, ToolExecutor interfaces
+    advisor/                # AI advisor service and tool loop
+    social/                 # Social content generation domain
+    picks/                  # Acquisition watchlist (AI-driven picks)
 
   adapters/                 # Interface implementations
     httpserver/             # Inbound HTTP
@@ -69,17 +76,19 @@ internal/
       middleware/           # Auth, CORS, rate limiting, recovery
       router.go             # Route registration with auth gating
     clients/
-      dhprice/            # DH (DoubleHolo) pricing
-      pricelookup/          # PriceLookup adapter (wraps PriceProvider for campaigns)
+      dhprice/              # DH (DoubleHolo) pricing
+      pricelookup/          # PriceLookup adapter (wraps PriceProvider for inventory)
       tcgdex/               # TCGdex.dev card/set metadata (EN + JA)
       google/               # Google OAuth service
       httpx/                # Unified HTTP client with retry + circuit breaker
-      cardutil/             # Card name normalization
+      azureai/              # Azure AI completions and image generation
+      instagram/            # Instagram OAuth + carousel publishing
     storage/sqlite/         # SQLite repository implementations + migrations
-    scheduler/              # Background jobs (price refresh, session cleanup)
+    scheduler/              # Background jobs (price refresh, session cleanup, advisor, social)
 
   platform/                 # Cross-cutting concerns
     cache/                  # Type-safe cache (memory + file)
+    cardutil/               # Card name/set normalization
     config/                 # Configuration loading
     crypto/                 # AES encryption for auth tokens
     errors/                 # Platform error types (AppError)
@@ -157,12 +166,12 @@ All dependencies injected via constructors in `main.go`:
 // Pricing via DH
 priceProvImpl := dhprice.NewProvider(dhClient, ...)
 
-// Campaigns with optional market signals
+// Inventory service with optional market signals
 priceLookupAdapter := pricelookup.NewAdapter(priceProvImpl)
-campaignsService := campaigns.NewService(campaignsRepo, campaigns.WithPriceLookup(priceLookupAdapter))
+inventoryService := inventory.NewService(repos, inventory.WithPriceLookup(priceLookupAdapter))
 
 // HTTP server
-deps := ServerDependencies{CampaignsService: campaignsService, ...}
+deps := ServerDependencies{InventoryService: inventoryService, ...}
 ```
 
 ## Adding New Features
@@ -170,22 +179,10 @@ deps := ServerDependencies{CampaignsService: campaignsService, ...}
 1. Define interface in `internal/domain/{feature}/`
 2. Implement in `internal/adapters/clients/{provider}/` or `internal/adapters/storage/`
 3. Wire in `main.go`
-4. Add compile-time check: `var _ campaigns.Repository = (*CampaignsRepository)(nil)`
+4. Add compile-time check: `var _ inventory.Repository = (*InventoryRepository)(nil)`
 5. Use functional options for optional dependencies: `WithFoo(impl) ServiceOption`
 
 ### Access Control Model
-
-SlabLedger uses a single-tenant model: one instance per user/household.
-The email allowlist (`ADMIN_EMAILS` env var) controls who can authenticate,
-but all authenticated users share the same campaign data. There is no
-per-user data isolation by design.
-
-If multi-tenant support is ever needed, add a `user_id` column to all data
-tables and filter queries accordingly.
-
----
-
-## Access Control Model
 
 SlabLedger is a **single-tenant** application. An email allowlist (`ADMIN_EMAILS` environment variable) gates authentication via Google OAuth. All authenticated users share the same campaign data, pricing caches, and favorites. There is no per-user data isolation, row-level security, or role hierarchy beyond the admin flag.
 
@@ -204,7 +201,7 @@ To support multi-tenant usage, the following changes would be required:
 
 **Problem**: Original app focused on finding raw cards to buy and grade. Business pivoted to PSA Direct Buy campaigns where PSA sources already-graded cards.
 
-**Decision**: New `campaigns/` domain package with purchase/sale tracking, multi-channel P&L, market direction signals. Removed unused scoring, opportunity detection, eBay deal detection, PSA population analysis.
+**Decision**: New `inventory/` domain package with purchase/sale tracking, multi-channel P&L, market direction signals. Removed unused scoring, opportunity detection, eBay deal detection, PSA population analysis.
 
 **Result**: Clean separation between campaign tracking (new core feature) and card pricing (retained for market signals and favorites).
 
@@ -212,7 +209,7 @@ To support multi-tenant usage, the following changes would be required:
 
 **Problem**: Campaign domain needs market price data for signals, but shouldn't import the pricing package directly.
 
-**Decision**: Define `PriceLookup` interface in campaigns domain. Adapter in `clients/pricelookup/` wraps `PriceProvider`. Injected via functional option `WithPriceLookup`.
+**Decision**: Define `PriceLookup` interface in inventory domain. Adapter in `clients/pricelookup/` wraps `PriceProvider`. Injected via functional option `WithPriceLookup`.
 
 **Result**: Domain stays pure, market signals work when price provider is available, gracefully degrade when not.
 
@@ -250,32 +247,28 @@ To support multi-tenant usage, the following changes would be required:
 
 | Package | Interface | File | Methods | Purpose |
 |---------|-----------|------|---------|---------|
-| `campaigns` | `Service` | `service.go` | ~40 | Full campaign business logic |
-| `campaigns` | `Repository` | `repository.go` | composed | Composed: CRUD + Purchase + Sale + Analytics + Finance + Revocation |
-| `campaigns` | `PriceLookup` | `service.go` | 2 | Market signals for inventory aging |
-| `campaigns` | `CertLookup` | `service.go` | 1 | PSA cert → card details |
-| `campaigns` | `CardIDResolver` | `service.go` | 1 | Batch cert → external card ID |
+| `inventory` | `Service` | `service.go` | ~40 | Full campaign/inventory business logic |
+| `inventory` | `CampaignRepository` | `service_interfaces.go` | ~5 | Campaign CRUD |
+| `inventory` | `PurchaseRepository` | `service_interfaces.go` | ~6 | Purchase CRUD |
+| `inventory` | `SaleRepository` | `service_interfaces.go` | ~4 | Sale CRUD |
+| `inventory` | `AnalyticsRepository` | `service_interfaces.go` | ~8 | PNL, aging, channel analytics |
+| `inventory` | `FinanceRepository` | `service_interfaces.go` | ~6 | Capital, cashflow, invoices |
+| `inventory` | `PriceLookup` | `service.go` | 2 | Market signals for inventory aging |
 | `pricing` | `PriceProvider` | `provider.go` | 5 | Card price lookup (DH) |
-| `pricing` | `PriceRepository` | `repository.go` | ~10 | Price history persistence |
 | `pricing` | `APITracker` | `repository.go` | 3 | Rate limit state tracking |
 | `pricing` | `AccessTracker` | `repository.go` | 1 | Card access log |
 | `pricing` | `HealthChecker` | `repository.go` | 1 | Provider health |
-| `pricing` | `DiscoveryFailureTracker` | `repository.go` | 3 | Failed discovery persistence |
-| `pricing` | `PricingDiagnosticsProvider` | `repository.go` | 1 | Diagnostics data |
 | `auth` | `Service` | `service.go` | 14 | OAuth flow, session management, allowlist |
 | `auth` | `Repository` | `repository.go` | ~14 | Auth persistence |
 | `social` | `Service` | `service.go` | 8 | Social post generation and publishing |
 | `social` | `Publisher` | `service.go` | 1 | Instagram carousel publish |
-| `social` | `InstagramTokenProvider` | `service.go` | 1 | Instagram credentials |
 | `social` | `Repository` | `repository.go` | ~8 | Social post persistence |
 | `advisor` | `Service` | `service.go` | 6 | AI advisor analysis (streaming) |
 | `advisor` | `CacheStore` | `cache.go` | 5 | Advisor result persistence |
 | `ai` | `LLMProvider` | `llm.go` | 1 | LLM completion (Azure AI) |
-| `ai` | `AICallTracker` | `tracking.go` | 1 | AI call metrics |
+| `ai` | `ImageGenerator` | `llm.go` | 1 | Image generation |
 | `ai` | `ToolExecutor` | `tools.go` | 1 | Tool call execution |
-| `ai` | `FilteredToolExecutor` | `tools.go` | 1 | Subset tool execution |
 | `cards` | `CardProvider` | `provider.go` | 5 | Card/set search (TCGdex) |
-| `cards` | `NewSetIDsProvider` | `provider.go` | 1 | New set discovery |
 | `favorites` | `Service` | `service.go` | 6 | Favorites CRUD |
 | `favorites` | `Repository` | `repository.go` | ~6 | Favorites persistence |
 | `observability` | `Logger` | `logger.go` | 5 | Structured logging |

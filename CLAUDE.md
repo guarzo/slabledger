@@ -37,23 +37,27 @@ internal/
     inventory/      # Core inventory: campaigns, purchases, sales (8 focused repo interfaces)
     arbitrage/      # Crack candidates, acquisition targets, EV, Monte Carlo projection
     portfolio/      # Inventory aging, price signals, portfolio health analysis
-    tuning/         # Campaign tuning suggestions and analytics
+    tuning/         # Campaign parameter optimization, tuning suggestions and analytics
     finance/        # Invoices, cashflow, capital tracking, revocation flags
     export/         # Sell sheet, eBay CSV, Shopify price sync
     dhlisting/      # DH listing push pipeline coordination
-    csvimport/      # CSV parsing utilities (pure, no external deps)
-    mmutil/         # Market Movers text normalization (pure, no external deps)
-    advisor/        # AI advisor interfaces and types
+    advisor/        # AI advisor interfaces, tool loop, tracking
+    ai/             # LLM provider, image generation, tool executor interfaces
     auth/           # Authentication interfaces
     cards/          # CardRepository interface
     constants/      # Shared constants
     errors/         # Error types
     favorites/      # Favorites management
+    intelligence/   # Market intelligence repository and types (DH Tier 3 data)
+    llmutil/        # LLM response utilities (strip fences, etc.)
     mathutil/       # Math utility functions
     observability/  # Logger, MetricsRecorder interfaces
+    picks/          # Acquisition watchlist service (AI-driven picks)
     pricing/        # PriceProvider interface, graded prices, market data
+    scoring/        # Price scoring factors and profiles
     social/         # Social content generation domain
-    storage/        # Storage interfaces
+    storage/        # Cache and storage interfaces
+    timeutil/       # Time utility functions
   adapters/         # Interface implementations
     httpserver/     # HTTP handlers, middleware, router
     clients/        # External API clients
@@ -62,8 +66,8 @@ internal/
       tcgdex/       # TCGdex.dev card/set metadata (EN + JA, no API key)
       google/       # Google OAuth
       httpx/        # Unified HTTP client (retry + circuit breaker)
-      instagram/  # Instagram OAuth + carousel publishing
-      azureai/    # Azure AI completions
+      instagram/    # Instagram OAuth + carousel publishing
+      azureai/      # Azure AI completions
     storage/sqlite/ # SQLite persistence + migrations
     scheduler/      # Background jobs (price refresh, session cleanup, social content, advisor, snapshots)
   platform/         # Cross-cutting concerns
@@ -80,30 +84,28 @@ internal/
 
 ## Inventory Domain
 
-The inventory domain (`internal/domain/inventory/`) is the core campaigns and inventory tracking feature, split into 9 focused packages:
+The inventory domain (`internal/domain/inventory/`) is the core campaigns and inventory tracking feature.
 
 ### Core inventory package
 - **Types**: Campaign, Purchase, Sale, Phase, SaleChannel
 - **8 focused repository interfaces**: CampaignRepository, PurchaseRepository, SaleRepository, AnalyticsRepository, FinanceRepository, PricingRepository, DHRepository, SnapshotRepository
-- **Service**: CRUD + ArchiveCampaign, ImportPurchases, and delegates to sub-packages for computation
+- **Service**: CRUD + imports + analytics; delegates computation to sibling sub-packages
 - **PriceLookup**: Optional interface for market signal computation (injected via `WithPriceLookup` functional option)
-- **Import**: CSV import with `ExtractGrade` for PSA grade extraction from card titles
+- **Import**: CSV parsing lives directly in the `inventory` package (parse_cl.go, parse_psa.go, parse_mm.go, parse_shopify.go, parse_orders.go)
 - **Channel fees**: eBay/TCGPlayer use campaign's `ebayFeePct`; local/other = 0%
 
-### Sub-packages (flat sibling design, no cross-imports)
+### Sibling sub-packages (flat siblings under `internal/domain/`, no cross-imports between them)
 - **arbitrage**: Crack detection, acquisition targets, expected value, Monte Carlo projection
 - **portfolio**: Inventory aging, price signals, portfolio health analysis
 - **tuning**: Campaign parameter optimization, tuning suggestions and analytics
 - **finance**: Invoices, cashflow forecasting, capital tracking, revocation flags
 - **export**: Sell sheet generation, eBay CSV, Shopify price sync
 - **dhlisting**: DH listing push pipeline coordination
-- **csvimport**: CSV parsing for all import formats (pure utility, no dependencies)
-- **mmutil**: Market Movers text normalization (pure utility, no dependencies)
 
 ## Database
 
 SQLite with WAL mode. All monetary values in **cents**. Migrations managed by `golang-migrate/migrate/v4`
-and embedded in the binary via `embed.FS`. Migrations run automatically on startup. 57 migration pairs (`000001`–`000057`).
+and embedded in the binary via `embed.FS`. Migrations run automatically on startup. 60 migration pairs (`000001`–`000060`).
 
 Migration files: `internal/adapters/storage/sqlite/migrations/` (57 migration pairs)
 
@@ -194,8 +196,6 @@ See [docs/API.md](docs/API.md) for all endpoints with request/response shapes.
 - [Development](docs/DEVELOPMENT.md) - Caching, rate limiting, resilience, troubleshooting
 - [Database Schema](docs/SCHEMA.md) - Table definitions, indexes, relationships
 - [API Reference](docs/API.md) - All endpoints with request/response shapes
-- [Pricing Data](docs/PRICING_DATA.md) - Full pricing pipeline, normalization, fusion, caching
-- [Roadmap](docs/ROADMAP.md) - Development roadmap
 - [Campaign Strategy](docs/private/CAMPAIGN_STRATEGY.md) - Business strategy (private, not tracked in git)
 
 ## Key Reference Files

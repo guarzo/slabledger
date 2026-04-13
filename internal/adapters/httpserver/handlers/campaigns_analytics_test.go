@@ -220,12 +220,12 @@ func TestHandleCampaignPNL_ServiceError(t *testing.T) {
 // --- HandleSellSheet ---
 
 func TestHandleSellSheet_Success(t *testing.T) {
-	svc := &mocks.MockInventoryService{
+	expSvc := &mocks.MockExportService{
 		GenerateSellSheetFn: func(_ context.Context, _ string, pids []string) (*inventory.SellSheet, error) {
 			return &inventory.SellSheet{CampaignName: "Test", Items: make([]inventory.SellSheetItem, len(pids))}, nil
 		},
 	}
-	h := newTestHandler(svc)
+	h := newTestHandlerWithServices(&mocks.MockInventoryService{}, &mocks.MockFinanceService{}, expSvc)
 
 	body := `{"purchaseIds":["p1","p2"]}`
 	req := httptest.NewRequest(http.MethodPost, "/api/campaigns/c1/sell-sheet", bytes.NewBufferString(body))
@@ -477,12 +477,12 @@ func TestHandlePNLByChannel_NilReturnsEmptyArray(t *testing.T) {
 // --- HandleSelectedSellSheet ---
 
 func TestHandleSelectedSellSheet_Success(t *testing.T) {
-	svc := &mocks.MockInventoryService{
+	expSvc := &mocks.MockExportService{
 		GenerateSelectedSellSheetFn: func(_ context.Context, pids []string) (*inventory.SellSheet, error) {
 			return &inventory.SellSheet{CampaignName: "All Inventory", Items: make([]inventory.SellSheetItem, len(pids))}, nil
 		},
 	}
-	h := newTestHandler(svc)
+	h := newTestHandlerWithServices(&mocks.MockInventoryService{}, &mocks.MockFinanceService{}, expSvc)
 
 	body := `{"purchaseIds":["p1","p2","p3"]}`
 	req := httptest.NewRequest(http.MethodPost, "/api/portfolio/sell-sheet", bytes.NewBufferString(body))
