@@ -310,7 +310,7 @@ Entire route groups registered in `routes.go` are absent from `docs/API.md`: DH 
 ## #4: Double computation of `OverrideTotalUsd` in both repo and service layers
 
 **Category**: Duplication | **Severity**: High | **Effort**: Small (< 1hr)
-**Location**: `internal/adapters/storage/sqlite/purchases_repository_pricing.go:121-122` and `internal/domain/campaigns/service_pricing.go:66-67`
+**Location**: `internal/adapters/storage/sqlite/purchases_repository_pricing.go:121-122` and `internal/domain/inventory/service_pricing.go:66-67`
 
 The same `float64(cents) / 100` conversion for `OverrideTotalUsd` and `SuggestionTotalUsd` happens in both the repository layer and the service layer. The service silently overwrites the repository's value. If the formula ever diverges between layers, one will silently override the other — a latent bug.
 
@@ -321,7 +321,7 @@ The same `float64(cents) / 100` conversion for `OverrideTotalUsd` and `Suggestio
 ## #5: 845 lines of critical campaign analytics with zero tests
 
 **Category**: Tests | **Severity**: High | **Effort**: Large (4hr+)
-**Location**: `internal/domain/campaigns/tuning_analytics.go` (365 lines), `internal/domain/campaigns/service_analytics.go` (key functions)
+**Location**: `internal/domain/inventory/tuning_analytics.go` (365 lines), `internal/domain/inventory/service_analytics.go` (key functions)
 
 Pure functions like `computePriceTierPerformance`, `computeMarketAlignment`, `computeBuyThresholdAnalysis`, `snapshotFromPurchase`, `applyCLSignal` (70/30 price blending with floor logic), and `enrichAgingItem` (market signal computation, price anomaly detection) power the main dashboard but have zero direct tests. The CL blending math and market signal computation are especially bug-prone without coverage.
 
@@ -332,11 +332,11 @@ Pure functions like `computePriceTierPerformance`, `computeMarketAlignment`, `co
 ## #6: Repeated eBay fee fallback pattern in 6 locations
 
 **Category**: Duplication | **Severity**: High | **Effort**: Small (< 1hr)
-**Location**: `internal/domain/campaigns/channel_fees.go:18`, `service_sell_sheet.go:81`, `suggestion_rules.go:191`, `service_arbitrage.go:33`, `crack_arbitrage.go:33`, `acquisition_arbitrage.go:39`
+**Location**: `internal/domain/inventory/channel_fees.go:18`, `service_sell_sheet.go:81`, `suggestion_rules.go:191`, `service_arbitrage.go:33`, `crack_arbitrage.go:33`
 
-The 3-line pattern `feePct := campaign.EbayFeePct; if feePct == 0 { feePct = DefaultMarketplaceFeePct }` is duplicated across 6 files. If default fee logic changes or per-channel defaults are introduced, every copy must be found and updated.
+The 3-line pattern `feePct := campaign.EbayFeePct; if feePct == 0 { feePct = DefaultMarketplaceFeePct }` is duplicated across multiple files. If default fee logic changes or per-channel defaults are introduced, every copy must be found and updated.
 
-**Suggested approach**: Add a method `func (c *Campaign) EffectiveEbayFeePct() float64` that encapsulates the fallback. Replace all 6 call sites with a single method call.
+**Suggested approach**: Add a method `func (c *Campaign) EffectiveEbayFeePct() float64` that encapsulates the fallback. Replace all call sites with a single method call.
 
 ---
 
@@ -376,7 +376,7 @@ The `runServer()` function spans 376 lines — a god-function that creates 30+ d
 ## #10: 501 lines of campaign suggestion algorithms with zero tests
 
 **Category**: Tests | **Severity**: Medium | **Effort**: Medium (1–4hr)
-**Location**: `internal/domain/campaigns/suggestion_rules.go` (230 lines), `internal/domain/campaigns/suggestion_rules_optimization.go` (271 lines)
+**Location**: `internal/domain/inventory/suggestion_rules.go` (230 lines), `internal/domain/inventory/suggestion_rules_optimization.go` (271 lines)
 
 These files contain complex branching logic for generating campaign optimization suggestions (fee structures, sell-through analysis, price tier distributions, market alignment recommendations). Despite being critical business logic that directly influences user decisions, neither file has any test coverage.
 
@@ -388,10 +388,10 @@ These files contain complex branching logic for generating campaign optimization
 
 - **Inconsistent error wrapping** in `purchases_repository_pricing.go` — `UpdateReviewedPrice` wraps all errors but 6 adjacent functions doing the same pattern use bare `return err`
 - **`http.Error` vs `writeError` inconsistency** — `social_proxy.go` (6 uses) and `pricing_diagnostics.go` (1 use) return plain text errors while 300+ other handler calls use JSON `writeError`
-- **Campaigns package at 58 files / 11K lines** — spans ~20 concerns (CRUD, imports, exports, analytics, portfolio, arbitrage, suggestions, Monte Carlo). Candidate for splitting into sub-packages
-- **Migration count stale** in `CLAUDE.md` and `docs/SCHEMA.md` — both say 43 migration pairs but there are actually 44 (missing `000044_dh_push_safety`)
+- **`inventory` package at 58 files / 11K lines** — spans ~20 concerns (CRUD, imports, exports, analytics, portfolio, arbitrage, suggestions, Monte Carlo). Further splitting into sub-packages may help long-term.
+- **Migration count stale** in `CLAUDE.md` and `docs/SCHEMA.md` — both have been updated to reflect the current 60 migration pairs
 - **`SCHEMA.md` missing table** — `dh_push_config` table and `campaign_purchases.dh_hold_reason` column from migration 000044 are undocumented
 - **Duplicate `writeJSON`/`writeError` implementations** — `pricing_api.go` defines `writePricingJSON`/`writePricingError` identical to the shared helpers in `helpers.go`, plus `apikey.go` middleware has a third copy
 - **40+ `ExecContext` + `RowsAffected` boilerplate blocks** in SQLite adapter — could be consolidated with an `execExpectOne(ctx, db, notFoundErr, query, args...)` helper
-- **Duplicate inline mocks** — campaigns package has 787-line `mockRepo` in `mock_repo_test.go` parallel to the shared `mocks.MockCampaignRepository`
+- **Duplicate inline mocks** — inventory package has `mockRepo` in `mock_repo_test.go` parallel to the shared `mocks.MockCampaignRepository`
 - **`centsToDollars` duplication** — `mathutil.ToDollars(int64)`, handler-local `centsToDollars(int)`, and 15+ inline `float64(cents)/100` conversions. The `int64` vs `int` signature mismatch discourages use of the shared function

@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../../js/api';
 import type { OrdersImportResult, OrdersImportSkip, BulkSaleResult } from '../../../types/campaigns';
 import { queryKeys } from '../../queries/queryKeys';
@@ -16,17 +16,13 @@ export default function ImportSalesTab() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [phase, setPhase] = useState<Phase>('upload');
-  const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<OrdersImportResult | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [confirmResult, setConfirmResult] = useState<BulkSaleResult | null>(null);
 
-  async function handleUpload(file: File) {
-    try {
-      setLoading(true);
-      setResult(null);
-      setConfirmResult(null);
-      const res = await api.importOrdersSales(file);
+  const uploadMutation = useMutation<OrdersImportResult, Error, File>({
+    mutationFn: (file: File) => api.importOrdersSales(file),
+    onSuccess: (res) => {
       // Go nil slices serialize to JSON null — normalize to empty arrays
       res.matched = res.matched ?? [];
       res.alreadySold = res.alreadySold ?? [];
@@ -35,32 +31,15 @@ export default function ImportSalesTab() {
       setResult(res);
       setSelected(new Set(res.matched.map(m => m.purchaseId)));
       setPhase('review');
-    } catch (err) {
+    },
+    onError: (err) => {
       toast.error(getErrorMessage(err, 'Failed to parse orders CSV'));
-    } finally {
-      setLoading(false);
-    }
-  }
+    },
+  });
 
-  async function handleConfirm() {
-    if (!result) return;
-    const items = result.matched
-      .filter(m => selected.has(m.purchaseId))
-      .map(m => ({
-        purchaseId: m.purchaseId,
-        saleChannel: m.saleChannel,
-        saleDate: m.saleDate,
-        salePriceCents: m.salePriceCents,
-      }));
-
-    if (items.length === 0) {
-      toast.error('No items selected');
-      return;
-    }
-
-    try {
-      setPhase('confirming');
-      const res = await api.confirmOrdersSales(items);
+  const confirmMutation = useMutation<BulkSaleResult, Error, Parameters<typeof api.confirmOrdersSales>[0]>({
+    mutationFn: (items) => api.confirmOrdersSales(items),
+    onSuccess: async (res) => {
       setConfirmResult(res);
       toast.success(`${res.created} sales created${res.failed > 0 ? `, ${res.failed} failed` : ''}`);
 
@@ -77,10 +56,30 @@ export default function ImportSalesTab() {
       setPhase('upload');
       setResult(null);
       setSelected(new Set());
-    } catch (err) {
+    },
+    onError: (err) => {
       toast.error(getErrorMessage(err, 'Failed to confirm sales'));
       setPhase('review');
+    },
+  });
+
+  function handleConfirm() {
+    if (!result) return;
+    const items = result.matched
+      .filter(m => selected.has(m.purchaseId))
+      .map(m => ({
+        purchaseId: m.purchaseId,
+        saleChannel: m.saleChannel,
+        saleDate: m.saleDate,
+        salePriceCents: m.salePriceCents,
+      }));
+
+    if (items.length === 0) {
+      toast.error('No items selected');
+      return;
     }
+    setPhase('confirming');
+    confirmMutation.mutate(items);
   }
 
   function handleReset() {
@@ -137,7 +136,7 @@ export default function ImportSalesTab() {
             <Button
               size="md"
               variant="primary"
-              loading={loading}
+              loading={uploadMutation.isPending}
               onClick={() => fileRef.current?.click()}
             >
               Choose File
@@ -149,7 +148,7 @@ export default function ImportSalesTab() {
               className="hidden"
               onChange={(e) => {
                 const file = e.target.files?.[0];
-                if (file) handleUpload(file);
+                if (file) uploadMutation.mutate(file);
                 e.target.value = '';
               }}
             />
@@ -252,7 +251,7 @@ export default function ImportSalesTab() {
             <Button
               size="sm"
               variant="primary"
-              loading={phase === 'confirming'}
+              loading={confirmMutation.isPending}
               disabled={selectedCount === 0}
               onClick={handleConfirm}
             >

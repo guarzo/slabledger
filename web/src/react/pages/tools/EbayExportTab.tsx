@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import { useMutation } from '@tanstack/react-query';
 import { api } from '../../../js/api';
 import type { EbayExportItem, EbayExportGenerateItem } from '../../../types/campaigns';
 import { PriceDecisionBar, buildPriceSources, preSelectSource } from '../../ui';
@@ -60,36 +61,52 @@ export default function EbayExportTab() {
   const [items, setItems] = useState<EbayExportItem[]>([]);
   const [decisions, setDecisions] = useState<Map<string, Decision>>(new Map());
   const [flaggedOnly, setFlaggedOnly] = useState(true);
-  const [loading, setLoading] = useState(false);
   const [exportCount, setExportCount] = useState(0);
-  const [error, setError] = useState<string | null>(null);
   const fetchControllerRef = useRef<AbortController | null>(null);
 
-  const fetchItems = useCallback(async () => {
-    fetchControllerRef.current?.abort();
-    const controller = new AbortController();
-    fetchControllerRef.current = controller;
-
-    setLoading(true);
-    setError(null);
-    try {
+  const fetchMutation = useMutation<EbayExportItem[], Error, void>({
+    mutationFn: async () => {
+      fetchControllerRef.current?.abort();
+      const controller = new AbortController();
+      fetchControllerRef.current = controller;
       const resp = await api.listEbayExportItems(flaggedOnly);
-      if (controller.signal.aborted) return;
-      setItems(resp.items);
+      if (controller.signal.aborted) throw new Error('aborted');
+      return resp.items;
+    },
+    onSuccess: (newItems) => {
+      setItems(newItems);
       setDecisions(new Map());
-    } catch (err) {
-      if (controller.signal.aborted) return;
-      setError(err instanceof Error ? err.message : 'Failed to load items');
-    } finally {
-      if (!controller.signal.aborted) setLoading(false);
-    }
-  }, [flaggedOnly]);
+    },
+  });
+
+  const exportMutation = useMutation<Blob, Error, EbayExportGenerateItem[]>({
+    mutationFn: (exportItems) => api.generateEbayCSV(exportItems),
+    onSuccess: (blob, exportItems) => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'ebay_import.csv';
+      a.click();
+      URL.revokeObjectURL(url);
+      setExportCount(exportItems.length);
+      setPhase('export');
+    },
+  });
+
+  const loading = fetchMutation.isPending || exportMutation.isPending;
+  const error = fetchMutation.error?.message ?? exportMutation.error?.message ?? null;
+
+  const fetchItems = useCallback(() => {
+    fetchMutation.mutate();
+  }, [fetchMutation]);
 
   useEffect(() => {
     fetchControllerRef.current?.abort();
     setItems([]);
     setDecisions(new Map());
-    setError(null);
+    fetchMutation.reset();
+    exportMutation.reset();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [flaggedOnly]);
 
   const setDecision = (purchaseId: string, decision: Decision) => {
@@ -123,7 +140,7 @@ export default function EbayExportTab() {
     setDecisions(next);
   };
 
-  const handleExport = async () => {
+  const handleExport = () => {
     const exportItems: EbayExportGenerateItem[] = [];
     for (const [purchaseId, decision] of decisions) {
       if (decision.action === 'accept') {
@@ -131,24 +148,7 @@ export default function EbayExportTab() {
       }
     }
     if (exportItems.length === 0) return;
-
-    setLoading(true);
-    setError(null);
-    try {
-      const blob = await api.generateEbayCSV(exportItems);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'ebay_import.csv';
-      a.click();
-      URL.revokeObjectURL(url);
-      setExportCount(exportItems.length);
-      setPhase('export');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to generate CSV');
-    } finally {
-      setLoading(false);
-    }
+    exportMutation.mutate(exportItems);
   };
 
   const acceptedCount = useMemo(() =>

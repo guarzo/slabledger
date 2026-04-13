@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo } from 'react';
+import { useMutation } from '@tanstack/react-query';
 import { api } from '../../js/api';
 import type { ShopifyPriceSyncMatch, ShopifyPriceSyncResponse } from '../../types/campaigns';
 import { centsToDollars, dollarsToCents } from '../utils/formatters';
@@ -17,7 +18,6 @@ import { SectionTable } from './ShopifyPriceReviewFlow';
 export default function ShopifySyncPage({ embedded = false }: { embedded?: boolean } = {}) {
   const toast = useToast();
   const [phase, setPhase] = useState<Phase>('upload');
-  const [loading, setLoading] = useState(false);
 
   // CSV state
   const [parsedCSV, setParsedCSV] = useState<ParsedCSV | null>(null);
@@ -31,6 +31,48 @@ export default function ShopifySyncPage({ embedded = false }: { embedded?: boole
   // Sort & filter controls
   const [filter, setFilter] = useState<SyncFilter>('all');
   const [sort, setSort] = useState<SyncSort>('delta');
+
+  const fileMutation = useMutation<void, Error, File>({
+    mutationFn: async (file: File) => {
+      const text = await file.text();
+      const csv = detectAndParseCSV(text);
+      if (csv.items.length === 0) {
+        throw new Error('CSV appears empty');
+      }
+
+      setParsedCSV(csv);
+
+      // Split into cert-bearing and non-cert items
+      const withCerts = csv.items.filter(i => i.certNumber);
+      const noCerts = csv.items.filter(i => !i.certNumber);
+      setNoCertCount(noCerts.length);
+
+      if (withCerts.length === 0) {
+        throw new Error('No items with cert numbers found in CSV');
+      }
+
+      // Call API
+      const apiItems = withCerts.map(i => ({
+        certNumber: i.certNumber,
+        currentPriceCents: dollarsToCents(i.price),
+        grader: i.grader,
+      }));
+
+      const resp: ShopifyPriceSyncResponse = await api.shopifyPriceSync(apiItems);
+      setMatched(resp.matched);
+      setUnmatched(resp.unmatched);
+      setPhase('review');
+      const formatLabel = csv.format === 'ebay' ? 'eBay' : 'Shopify';
+      toast.success(`${formatLabel} CSV: matched ${resp.matched.length} items, ${resp.unmatched.length} unmatched`);
+    },
+    onError: (err) => {
+      toast.error(err.message ?? 'Failed to process CSV');
+    },
+  });
+
+  const handleFile = useCallback((file: File) => {
+    fileMutation.mutate(file);
+  }, [fileMutation]);
 
   // Filter to mismatches, apply user sort/filter, split into two sections
   const { userReviewed, clDerived, alignedCount, filterCounts } = useMemo(() => {
@@ -53,50 +95,6 @@ export default function ShopifySyncPage({ embedded = false }: { embedded?: boole
   }, [matched, filter, sort]);
 
   const allMismatches = useMemo(() => [...userReviewed, ...clDerived], [userReviewed, clDerived]);
-
-  const handleFile = useCallback(async (file: File) => {
-    try {
-      setLoading(true);
-      const text = await file.text();
-      const csv = detectAndParseCSV(text);
-      if (csv.items.length === 0) {
-        toast.error('CSV appears empty');
-        setLoading(false);
-        return;
-      }
-
-      setParsedCSV(csv);
-
-      // Split into cert-bearing and non-cert items
-      const withCerts = csv.items.filter(i => i.certNumber);
-      const noCerts = csv.items.filter(i => !i.certNumber);
-      setNoCertCount(noCerts.length);
-
-      if (withCerts.length === 0) {
-        toast.error('No items with cert numbers found in CSV');
-        setLoading(false);
-        return;
-      }
-
-      // Call API
-      const apiItems = withCerts.map(i => ({
-        certNumber: i.certNumber,
-        currentPriceCents: dollarsToCents(i.price),
-        grader: i.grader,
-      }));
-
-      const resp: ShopifyPriceSyncResponse = await api.shopifyPriceSync(apiItems);
-      setMatched(resp.matched);
-      setUnmatched(resp.unmatched);
-      setPhase('review');
-      const formatLabel = csv.format === 'ebay' ? 'eBay' : 'Shopify';
-      toast.success(`${formatLabel} CSV: matched ${resp.matched.length} items, ${resp.unmatched.length} unmatched`);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to process CSV');
-    } finally {
-      setLoading(false);
-    }
-  }, [toast]);
 
   const setDecisionFor = useCallback((certNumber: string, decision: ItemDecision | undefined) => {
     setDecisions(prev => {
@@ -230,7 +228,7 @@ export default function ShopifySyncPage({ embedded = false }: { embedded?: boole
       {/* Upload phase */}
       {phase === 'upload' && (
         <CardShell variant="default" padding="lg">
-          {loading ? (
+          {fileMutation.isPending ? (
             <div className="flex flex-col items-center py-12">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--brand-500)] mb-3" />
               <div className="text-sm text-[var(--text-muted)]">Processing CSV and matching inventory...</div>
