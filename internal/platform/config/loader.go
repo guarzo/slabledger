@@ -231,6 +231,8 @@ func FromEnv(base Config) Config {
 	// Adapter API keys and tokens
 	cfg.Adapters.PSAToken = os.Getenv("PSA_ACCESS_TOKEN")
 	cfg.Adapters.PricingAPIKey = os.Getenv("PRICING_API_KEY")
+	cfg.Adapters.GoogleOAuthEnv = os.Getenv("GOOGLE_OAUTH_ENV")
+	cfg.Adapters.LocalAPIToken = os.Getenv("LOCAL_API_TOKEN")
 	cfg.Adapters.AzureAIEndpoint = os.Getenv("AZURE_AI_ENDPOINT")
 	cfg.Adapters.AzureAIKey = os.Getenv("AZURE_AI_API_KEY")
 	cfg.Adapters.AzureAIDeployment = os.Getenv("AZURE_AI_DEPLOYMENT")

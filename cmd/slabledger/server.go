@@ -236,6 +236,8 @@ func startWebServer(ctx context.Context, deps ServerDependencies) error {
 		AdminEmails:               cfg.Auth.AdminEmails,
 		DatabasePath:              cfg.Database.Path,
 		TimingStore:               timingStore,
+		GoogleOAuthEnv:            cfg.Adapters.GoogleOAuthEnv,
+		LocalAPIToken:             cfg.Adapters.LocalAPIToken,
 	})
 	mux := router.Setup()
 
