@@ -19,7 +19,6 @@ import (
 	domainAuth "github.com/guarzo/slabledger/internal/domain/auth"
 	domainDHListing "github.com/guarzo/slabledger/internal/domain/dhlisting"
 	domainExport "github.com/guarzo/slabledger/internal/domain/export"
-	domainFavorites "github.com/guarzo/slabledger/internal/domain/favorites"
 	domainFinance "github.com/guarzo/slabledger/internal/domain/finance"
 	domainCampaigns "github.com/guarzo/slabledger/internal/domain/inventory"
 	domainPortfolio "github.com/guarzo/slabledger/internal/domain/portfolio"
@@ -35,7 +34,6 @@ type ServerDependencies struct {
 	HealthChecker             domainPricing.HealthChecker
 	APITracker                domainPricing.APITracker
 	AuthService               domainAuth.Service
-	FavoritesService          domainFavorites.Service
 	CampaignsService          domainCampaigns.Service
 	ArbitrageService          domainArbitrage.Service
 	PortfolioService          domainPortfolio.Service
@@ -195,7 +193,6 @@ func startWebServer(ctx context.Context, deps ServerDependencies) error {
 		APIStatusHandler:          apiStatusHandler,
 		SPAHandler:                spaHandler,
 		AuthService:               deps.AuthService,
-		FavoritesService:          deps.FavoritesService,
 		CampaignsHandler:          campaignsHandler,
 		CampaignsService:          deps.CampaignsService,
 		PriceHintsHandler:         deps.PriceHintsHandler,

@@ -56,7 +56,7 @@ describe('api module', () => {
     });
 
     it('GET request parses JSON response', async () => {
-      const mockData = { cards: [{ name: 'Pikachu' }] };
+      const mockData = { campaigns: [{ id: '1', name: 'Test' }] };
       globalThis.fetch = vi.fn().mockResolvedValue({
         ok: true,
         json: () => Promise.resolve(mockData),
@@ -65,7 +65,7 @@ describe('api module', () => {
 
       // Import fresh api instance
       const { api } = await import('../src/js/api');
-      await api.getFavorites();
+      await api.listCampaigns();
       expect(globalThis.fetch).toHaveBeenCalled();
     });
 
@@ -78,7 +78,7 @@ describe('api module', () => {
       });
 
       const { api } = await import('../src/js/api');
-      await expect(api.getFavorites()).rejects.toThrow();
+      await expect(api.listCampaigns()).rejects.toThrow();
     });
   });
 });

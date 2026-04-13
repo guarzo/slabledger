@@ -24,7 +24,6 @@ import (
 	scoringadapter "github.com/guarzo/slabledger/internal/adapters/scoring"
 	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
 	"github.com/guarzo/slabledger/internal/domain/auth"
-	"github.com/guarzo/slabledger/internal/domain/favorites"
 	"github.com/guarzo/slabledger/internal/domain/picks"
 	"github.com/guarzo/slabledger/internal/platform/crypto"
 )
@@ -216,10 +215,6 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		}
 	}
 
-	// Initialize favorites
-	favoritesRepo := sqlite.NewFavoritesRepository(db.DB)
-	favoritesService := favorites.NewService(favoritesRepo)
-
 	// Card ID mapping repository (caches external provider IDs)
 	cardIDMappingRepo := sqlite.NewCardIDMappingRepository(db.DB)
 
@@ -402,7 +397,6 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		PriceProvImpl:     priceProvImpl,
 		PriceRepo:         priceRepo,
 		AuthService:       authService,
-		FavoritesService:  favoritesService,
 		CampaignsService:  campaignsService,
 		ArbitrageService:  arbSvc,
 		PortfolioService:  portSvc,

@@ -1,5 +1,5 @@
 /**
- * Campaign-related API methods — core CRUD, cards, favorites
+ * Campaign-related API methods — core CRUD, cards
  *
  * Sub-modules handle the rest:
  * - campaignPurchases.ts — purchase CRUD, price overrides, sell sheets
@@ -7,7 +7,6 @@
  * - campaignImports.ts — imports, exports, cert entry, price review
  */
 
-import type { FavoriteInput, FavoritesList, ToggleFavoriteResponse } from '../../types/favorites';
 import type { Campaign, CreateCampaignInput } from '../../types/campaigns';
 import type { APIClient } from './client';
 
@@ -22,10 +21,6 @@ import './campaignImports';
 
 declare module './client' {
   interface APIClient {
-    // Favorites
-    getFavorites(page?: number, pageSize?: number): Promise<FavoritesList>;
-    toggleFavorite(input: FavoriteInput): Promise<ToggleFavoriteResponse>;
-
     // Campaign CRUD
     listCampaigns(activeOnly?: boolean): Promise<Campaign[]>;
     deleteCampaign(id: string): Promise<void>;
@@ -41,15 +36,6 @@ declare module './client' {
 
 import { APIClient as _APIClient } from './client';
 const proto = _APIClient.prototype;
-
-// Favorites endpoints
-proto.getFavorites = async function (this: APIClient, page = 1, pageSize = 100): Promise<FavoritesList> {
-  return this.get<FavoritesList>(`/favorites?page=${page}&page_size=${pageSize}`);
-};
-
-proto.toggleFavorite = async function (this: APIClient, input: FavoriteInput): Promise<ToggleFavoriteResponse> {
-  return this.post<ToggleFavoriteResponse>('/favorites/toggle', input);
-};
 
 // Campaign endpoints
 proto.listCampaigns = async function (this: APIClient, activeOnly = false): Promise<Campaign[]> {

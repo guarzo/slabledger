@@ -12,7 +12,6 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/httpserver/middleware"
 	"github.com/guarzo/slabledger/internal/domain/arbitrage"
 	"github.com/guarzo/slabledger/internal/domain/auth"
-	"github.com/guarzo/slabledger/internal/domain/favorites"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/domain/portfolio"
@@ -29,7 +28,6 @@ type Router struct {
 	adminHandler              *handlers.AdminHandlers
 	authMW                    *middleware.AuthMiddleware
 	authRateLimiter           *middleware.RateLimiter
-	favoritesHandler          *handlers.FavoritesHandlers
 	campaignsHandler          *handlers.CampaignsHandler
 	priceHintsHandler         *handlers.PriceHintsHandler
 	cardRequestHandler        *handlers.CardRequestHandlers
@@ -63,7 +61,6 @@ type RouterConfig struct {
 	APIStatusHandler          *handlers.APIStatusHandler
 	SPAHandler                *handlers.SPAHandler
 	AuthService               auth.Service
-	FavoritesService          favorites.Service
 	CampaignsHandler          *handlers.CampaignsHandler
 	CampaignsService          inventory.Service
 	ArbitrageService          arbitrage.Service
@@ -142,10 +139,6 @@ func NewRouter(cfg RouterConfig) *Router {
 		rt.adminHandler = handlers.NewAdminHandlers(cfg.AuthService, rt.logger)
 		rt.authMW = middleware.NewAuthMiddleware(cfg.AuthService, rt.logger)
 		rt.authRateLimiter = middleware.NewAuthRateLimiter(10, time.Second, nil, rt.logger)
-
-		if cfg.FavoritesService != nil {
-			rt.favoritesHandler = handlers.NewFavoritesHandlers(cfg.FavoritesService, rt.logger)
-		}
 	}
 	// Enable local API token auth even without OAuth
 	if token := rt.localAPIToken; token != "" {
@@ -251,15 +244,6 @@ func (rt *Router) Setup() http.Handler {
 	mux.HandleFunc("/login", rt.spaHandler.HandleIndex)
 	mux.HandleFunc("/campaigns", rt.spaHandler.HandleIndex)
 
-	// Favorites page requires authentication
-	if rt.authMW != nil {
-		mux.Handle("/favorites", rt.authMW.RequireAuth(http.HandlerFunc(rt.spaHandler.HandleIndex)))
-	} else {
-		mux.HandleFunc("/favorites", func(w http.ResponseWriter, r *http.Request) {
-			http.Redirect(w, r, "/login", http.StatusFound)
-		})
-	}
-
 	// Authentication routes
 	if rt.authHandler != nil {
 		mux.Handle("/auth/google/login", rt.authRateLimiter.Middleware(http.HandlerFunc(rt.authHandler.HandleGoogleLogin)))
@@ -267,25 +251,6 @@ func (rt *Router) Setup() http.Handler {
 		mux.Handle("/api/auth/logout", rt.authRateLimiter.Middleware(http.HandlerFunc(rt.authHandler.HandleLogout)))
 		mux.Handle("/api/auth/user", rt.authRateLimiter.Middleware(rt.authMW.RequireAuth(http.HandlerFunc(rt.authHandler.HandleGetCurrentUser))))
 		rt.logger.Info(context.Background(), "authentication routes registered")
-	}
-
-	// Favorites routes
-	if rt.favoritesHandler != nil && rt.authMW != nil {
-		mux.Handle("/api/favorites", rt.authMW.RequireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			switch r.Method {
-			case http.MethodGet:
-				rt.favoritesHandler.HandleListFavorites(w, r)
-			case http.MethodPost:
-				rt.favoritesHandler.HandleAddFavorite(w, r)
-			case http.MethodDelete:
-				rt.favoritesHandler.HandleRemoveFavorite(w, r)
-			default:
-				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-			}
-		})))
-		mux.Handle("/api/favorites/toggle", rt.authMW.RequireAuth(http.HandlerFunc(rt.favoritesHandler.HandleToggleFavorite)))
-		mux.Handle("/api/favorites/check", rt.authMW.RequireAuth(http.HandlerFunc(rt.favoritesHandler.HandleCheckFavorites)))
-		rt.logger.Info(context.Background(), "favorites routes registered")
 	}
 
 	// CL Card Catalog search

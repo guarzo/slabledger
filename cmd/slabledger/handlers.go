@@ -18,7 +18,6 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/auth"
 	"github.com/guarzo/slabledger/internal/domain/dhlisting"
 	"github.com/guarzo/slabledger/internal/domain/export"
-	"github.com/guarzo/slabledger/internal/domain/favorites"
 	"github.com/guarzo/slabledger/internal/domain/finance"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
@@ -40,7 +39,6 @@ type handlerInputs struct {
 	PriceProvImpl     pricing.PriceProvider
 	PriceRepo         *sqlite.DBTracker
 	AuthService       auth.Service
-	FavoritesService  favorites.Service
 	CampaignsService  inventory.Service
 	ArbitrageService  arbitrage.Service
 	PortfolioService  portfolio.Service
@@ -241,7 +239,6 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 		HealthChecker:             in.PriceRepo,
 		APITracker:                in.PriceRepo,
 		AuthService:               in.AuthService,
-		FavoritesService:          in.FavoritesService,
 		CampaignsService:          in.CampaignsService,
 		ArbitrageService:          in.ArbitrageService,
 		PortfolioService:          in.PortfolioService,
