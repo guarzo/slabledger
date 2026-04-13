@@ -29,7 +29,7 @@ export DH_ENTERPRISE_API_KEY="your_key"
 - **CSV Import** - Bulk import purchases from PSA CSV exports with automatic grade extraction
 - **P&L Analytics** - Campaign-level and channel-level profit/loss, ROI, sell-through rate, and average days-to-sell
 - **Inventory Aging** - Track unsold cards with days held and market direction signals (rising/falling/stable)
-- **Market Signals** - Compare real-time sold prices against Card Ladder valuations to inform sell-channel decisions
+- **Market Signals** - Compare real-time sold prices against current DoubleHolo market data to inform sell-channel decisions
 - **DH Pricing** - Graded card pricing via DoubleHolo enterprise API
 - **Card Pricing** - Look up current prices across all grades and sources
 - **Favorites** - Save and track cards of interest
@@ -44,10 +44,10 @@ PSA sources already-graded cards through automated campaigns. You configure buy 
 |---------|-----------|
 | **eBay** | Market price minus ~12.35% fees |
 | **TCGPlayer** | Online marketplace, similar fee structure |
-| **Local** (GameStop, card shows) | 90% of Card Ladder value, no listing fees |
+| **Local** (card shows, local shops) | 90% of CL value, no listing fees |
 | **Other** | Website sales, direct sales, etc. |
 
-The system compares real-time sold data against Card Ladder valuations to reveal market direction, helping you choose the optimal sell channel.
+The system compares real-time sold data against DoubleHolo market data to reveal market direction, helping you choose the optimal sell channel.
 
 ## Stack
 
@@ -55,7 +55,7 @@ Go backend with SQLite, React + Radix UI + TanStack Query + Vite + Tailwind fron
 
 ## Requirements
 
-- Go 1.25.2+
+- Go 1.26+
 - DH Enterprise API key (optional — enables pricing)
 - Node.js 18+ (for frontend development)
 
@@ -71,6 +71,8 @@ LOG_LEVEL="info"                # debug, info, warn, error
 ```
 
 ## API Endpoints
+
+Core campaign endpoints. See [docs/API.md](docs/API.md) for the complete reference.
 
 ### Campaigns
 | Method | Path | Description |
