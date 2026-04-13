@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"time"
+
+	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
 func (s *service) CreateCampaign(ctx context.Context, c *Campaign) error {
@@ -113,7 +115,20 @@ func (s *service) CreateSale(ctx context.Context, sa *Sale, campaign *Campaign, 
 	now := time.Now()
 	sa.CreatedAt = now
 	sa.UpdatedAt = now
-	return s.sales.CreateSale(ctx, sa)
+	if err := s.sales.CreateSale(ctx, sa); err != nil {
+		return err
+	}
+
+	// Best-effort: clear eBay export flag since the card is now sold
+	if clearErr := s.purchases.ClearEbayExportFlags(ctx, []string{sa.PurchaseID}); clearErr != nil {
+		if s.logger != nil {
+			s.logger.Warn(ctx, "create sale: failed to clear ebay export flag",
+				observability.String("purchaseID", sa.PurchaseID),
+				observability.Err(clearErr))
+		}
+	}
+
+	return nil
 }
 
 func (s *service) ListSalesByCampaign(ctx context.Context, campaignID string, limit, offset int) ([]Sale, error) {
