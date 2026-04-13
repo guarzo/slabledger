@@ -9,89 +9,27 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/ai"
 )
 
-// mockLLMProvider is an inline mock for ai.LLMProvider.
-type mockLLMProvider struct {
-	// calls tracks the number of times StreamCompletion was called.
-	calls int
-	// responses is a list of functions, each invoked in order.
-	// Each function receives the request and calls the stream callback.
-	responses []func(req CompletionRequest, stream func(CompletionChunk)) error
-}
-
-func (m *mockLLMProvider) StreamCompletion(ctx context.Context, req CompletionRequest, stream func(CompletionChunk)) error {
-	idx := m.calls
-	m.calls++
-	if idx < len(m.responses) {
-		return m.responses[idx](req, stream)
-	}
-	// Default: return empty content with no tool calls.
-	stream(CompletionChunk{Delta: "default response"})
-	return nil
-}
-
-// mockToolExecutor is an inline mock for ai.FilteredToolExecutor.
-type mockToolExecutor struct {
-	// executeFunc is called when Execute is invoked.
-	executeFunc func(ctx context.Context, toolName string, arguments string) (string, error)
-	// definitions are returned by Definitions and DefinitionsFor.
-	definitions []ToolDefinition
-	// executeCalls tracks calls made to Execute.
-	executeCalls []struct {
-		ToolName  string
-		Arguments string
-	}
-}
-
-func (m *mockToolExecutor) Execute(ctx context.Context, toolName string, arguments string) (string, error) {
-	m.executeCalls = append(m.executeCalls, struct {
-		ToolName  string
-		Arguments string
-	}{toolName, arguments})
-	if m.executeFunc != nil {
-		return m.executeFunc(ctx, toolName, arguments)
-	}
-	return `{"ok": true}`, nil
-}
-
-func (m *mockToolExecutor) Definitions() []ToolDefinition {
-	return m.definitions
-}
-
-func (m *mockToolExecutor) DefinitionsFor(names []string) []ToolDefinition {
-	nameSet := make(map[string]bool, len(names))
-	for _, n := range names {
-		nameSet[n] = true
-	}
-	var result []ToolDefinition
-	for _, d := range m.definitions {
-		if nameSet[d.Name] {
-			result = append(result, d)
-		}
-	}
-	return result
-}
-
 // chunkContent returns an LLM response function that emits a single delta chunk.
-func chunkContent(content string) func(req CompletionRequest, stream func(CompletionChunk)) error {
-	return func(req CompletionRequest, stream func(CompletionChunk)) error {
-		stream(CompletionChunk{Delta: content})
+func chunkContent(content string) func(req ai.CompletionRequest, stream func(ai.CompletionChunk)) error {
+	return func(req ai.CompletionRequest, stream func(ai.CompletionChunk)) error {
+		stream(ai.CompletionChunk{Delta: content})
 		return nil
 	}
 }
 
 // chunkToolCall returns an LLM response function that emits a single tool call.
-func chunkToolCall(id, name, args string) func(req CompletionRequest, stream func(CompletionChunk)) error {
-	return func(req CompletionRequest, stream func(CompletionChunk)) error {
-		stream(CompletionChunk{
-			ToolCalls: []ToolCall{{ID: id, Name: name, Arguments: args}},
+func chunkToolCall(id, name, args string) func(req ai.CompletionRequest, stream func(ai.CompletionChunk)) error {
+	return func(req ai.CompletionRequest, stream func(ai.CompletionChunk)) error {
+		stream(ai.CompletionChunk{
+			ToolCalls: []ai.ToolCall{{ID: id, Name: name, Arguments: args}},
 		})
 		return nil
 	}
 }
 
 // chunkError returns an LLM response function that returns an error.
-func chunkError(err error) func(req CompletionRequest, stream func(CompletionChunk)) error {
-	return func(req CompletionRequest, stream func(CompletionChunk)) error {
+func chunkError(err error) func(req ai.CompletionRequest, stream func(ai.CompletionChunk)) error {
+	return func(req ai.CompletionRequest, stream func(ai.CompletionChunk)) error {
 		return err
 	}
 }
@@ -100,7 +38,7 @@ func chunkError(err error) func(req CompletionRequest, stream func(CompletionChu
 
 func TestGenerateDigest_NoToolCalls(t *testing.T) {
 	llm := &mockLLMProvider{
-		responses: []func(CompletionRequest, func(CompletionChunk)) error{
+		Responses: []func(CompletionRequest, func(CompletionChunk)) error{
 			chunkContent("Weekly digest content here."),
 		},
 	}
@@ -134,16 +72,16 @@ func TestGenerateDigest_WithToolCalls(t *testing.T) {
 	// Round 1: LLM returns a tool call.
 	// Round 2: LLM returns final content.
 	llm := &mockLLMProvider{
-		responses: []func(CompletionRequest, func(CompletionChunk)) error{
+		Responses: []func(CompletionRequest, func(CompletionChunk)) error{
 			chunkToolCall("tc-1", "list_campaigns", `{}`),
 			chunkContent("Final analysis after tool."),
 		},
 	}
 	executor := &mockToolExecutor{
-		definitions: []ai.ToolDefinition{
+		ToolDefinitions: []ai.ToolDefinition{
 			{Name: "list_campaigns", Description: "Lists campaigns"},
 		},
-		executeFunc: func(_ context.Context, toolName, arguments string) (string, error) {
+		ExecuteFn: func(_ context.Context, toolName, arguments string) (string, error) {
 			return `{"campaigns": []}`, nil
 		},
 	}
@@ -156,14 +94,14 @@ func TestGenerateDigest_WithToolCalls(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if llm.calls != 2 {
-		t.Errorf("expected 2 LLM calls, got %d", llm.calls)
+	if llm.Calls != 2 {
+		t.Errorf("expected 2 LLM calls, got %d", llm.Calls)
 	}
-	if len(executor.executeCalls) != 1 {
-		t.Errorf("expected 1 tool execution, got %d", len(executor.executeCalls))
+	if len(executor.ExecuteCalls) != 1 {
+		t.Fatalf("expected 1 tool execution, got %d", len(executor.ExecuteCalls))
 	}
-	if executor.executeCalls[0].ToolName != "list_campaigns" {
-		t.Errorf("expected tool %q, got %q", "list_campaigns", executor.executeCalls[0].ToolName)
+	if executor.ExecuteCalls[0].ToolName != "list_campaigns" {
+		t.Errorf("expected tool %q, got %q", "list_campaigns", executor.ExecuteCalls[0].ToolName)
 	}
 
 	// Verify we received tool start/result events.
@@ -192,7 +130,7 @@ func TestGenerateDigest_WithToolCalls(t *testing.T) {
 func TestGenerateDigest_LLMError(t *testing.T) {
 	wantErr := errors.New("LLM is unavailable")
 	llm := &mockLLMProvider{
-		responses: []func(CompletionRequest, func(CompletionChunk)) error{
+		Responses: []func(CompletionRequest, func(CompletionChunk)) error{
 			chunkError(wantErr),
 		},
 	}
@@ -212,7 +150,7 @@ func TestAnalyzeCampaign_FormatsPrompt(t *testing.T) {
 	campaignID := "campaign-42"
 	var capturedReqs []CompletionRequest
 	llm := &mockLLMProvider{
-		responses: []func(CompletionRequest, func(CompletionChunk)) error{
+		Responses: []func(CompletionRequest, func(CompletionChunk)) error{
 			func(req CompletionRequest, stream func(CompletionChunk)) error {
 				capturedReqs = append(capturedReqs, req)
 				stream(CompletionChunk{Delta: "Campaign analysis result."})
@@ -253,7 +191,7 @@ func TestAssessPurchase_FormatsPrompt(t *testing.T) {
 	}
 	var capturedReqs []CompletionRequest
 	llm := &mockLLMProvider{
-		responses: []func(CompletionRequest, func(CompletionChunk)) error{
+		Responses: []func(CompletionRequest, func(CompletionChunk)) error{
 			func(req CompletionRequest, stream func(CompletionChunk)) error {
 				capturedReqs = append(capturedReqs, req)
 				stream(CompletionChunk{Delta: "Purchase assessment result."})
@@ -282,7 +220,7 @@ func TestAssessPurchase_FormatsPrompt(t *testing.T) {
 func TestCollectDigest_ReturnsContent(t *testing.T) {
 	want := "Full digest content returned synchronously."
 	llm := &mockLLMProvider{
-		responses: []func(CompletionRequest, func(CompletionChunk)) error{
+		Responses: []func(CompletionRequest, func(CompletionChunk)) error{
 			chunkContent(want),
 		},
 	}
@@ -303,7 +241,7 @@ func TestMaxToolRounds_Exceeded(t *testing.T) {
 	// OpDigest has operationMaxRounds=4, so provide enough responses
 	// to exhaust all rounds and trigger the error.
 	llm := &mockLLMProvider{
-		responses: []func(CompletionRequest, func(CompletionChunk)) error{
+		Responses: []func(CompletionRequest, func(CompletionChunk)) error{
 			chunkToolCall("tc-1", "list_campaigns", `{}`),
 			chunkToolCall("tc-2", "list_campaigns", `{}`),
 			chunkToolCall("tc-3", "list_campaigns", `{}`),
@@ -312,7 +250,7 @@ func TestMaxToolRounds_Exceeded(t *testing.T) {
 		},
 	}
 	executor := &mockToolExecutor{
-		definitions: []ai.ToolDefinition{
+		ToolDefinitions: []ai.ToolDefinition{
 			{Name: "list_campaigns", Description: "Lists campaigns"},
 		},
 	}
@@ -326,8 +264,8 @@ func TestMaxToolRounds_Exceeded(t *testing.T) {
 		t.Errorf("expected IsMaxRoundsExceeded error, got: %v", err)
 	}
 	// OpDigest maxRounds=4, so LLM should have been called exactly 4 times.
-	if llm.calls != 4 {
-		t.Errorf("expected 4 LLM calls, got %d", llm.calls)
+	if llm.Calls != 4 {
+		t.Errorf("expected 4 LLM calls, got %d", llm.Calls)
 	}
 }
 
@@ -390,7 +328,7 @@ func TestLargeToolResult_Truncated(t *testing.T) {
 	largeResult := strings.Repeat(`{"id":"card-1","name":"Charizard"},`, 1000) // ~35K chars
 	var round2Messages []Message
 	llm := &mockLLMProvider{
-		responses: []func(CompletionRequest, func(CompletionChunk)) error{
+		Responses: []func(CompletionRequest, func(CompletionChunk)) error{
 			chunkToolCall("tc-1", "get_global_inventory", `{}`),
 			func(req CompletionRequest, stream func(CompletionChunk)) error {
 				round2Messages = req.Messages
@@ -400,10 +338,10 @@ func TestLargeToolResult_Truncated(t *testing.T) {
 		},
 	}
 	executor := &mockToolExecutor{
-		definitions: []ai.ToolDefinition{
+		ToolDefinitions: []ai.ToolDefinition{
 			{Name: "get_global_inventory", Description: "Gets inventory"},
 		},
-		executeFunc: func(_ context.Context, _, _ string) (string, error) {
+		ExecuteFn: func(_ context.Context, _, _ string) (string, error) {
 			return largeResult, nil
 		},
 	}
@@ -438,7 +376,7 @@ func TestToolExecutionError_WrappedInJSON(t *testing.T) {
 	toolErr := errors.New("tool database unavailable")
 	var round2Messages []Message
 	llm := &mockLLMProvider{
-		responses: []func(CompletionRequest, func(CompletionChunk)) error{
+		Responses: []func(CompletionRequest, func(CompletionChunk)) error{
 			// Round 1: return a tool call.
 			chunkToolCall("tc-1", "list_campaigns", `{}`),
 			// Round 2: capture the messages that include the error JSON.
@@ -450,10 +388,10 @@ func TestToolExecutionError_WrappedInJSON(t *testing.T) {
 		},
 	}
 	executor := &mockToolExecutor{
-		definitions: []ai.ToolDefinition{
+		ToolDefinitions: []ai.ToolDefinition{
 			{Name: "list_campaigns", Description: "Lists campaigns"},
 		},
-		executeFunc: func(_ context.Context, toolName, _ string) (string, error) {
+		ExecuteFn: func(_ context.Context, toolName, _ string) (string, error) {
 			return "", toolErr
 		},
 	}

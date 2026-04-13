@@ -4,12 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
-	"sync"
 	"time"
 
-	"github.com/guarzo/slabledger/internal/domain/ai"
-	"github.com/guarzo/slabledger/internal/domain/errors"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/domain/scoring"
 )
@@ -101,9 +97,21 @@ func (s *service) AnalyzeCampaign(ctx context.Context, campaignID string, stream
 	var scoreCard *scoring.ScoreCard
 	if s.scoringData != nil {
 		data, err := s.scoringData.CampaignData(ctx, campaignID)
-		if err == nil && data != nil {
+		if err != nil {
+			if s.logger != nil {
+				s.logger.Warn(ctx, "AnalyzeCampaign: failed to load scoring data — proceeding without scorecard",
+					observability.String("campaignID", campaignID),
+					observability.Err(err))
+			}
+		} else if data != nil {
 			sc, scErr := BuildScoreCard(campaignID, "campaign", data, scoring.CampaignAnalysisProfile)
-			if scErr == nil {
+			if scErr != nil {
+				if s.logger != nil {
+					s.logger.Warn(ctx, "AnalyzeCampaign: failed to build scorecard — proceeding without",
+						observability.String("campaignID", campaignID),
+						observability.Err(scErr))
+				}
+			} else {
 				scoreCard = &sc
 				s.recordGaps(ctx, sc, "", "")
 			}
@@ -134,9 +142,21 @@ func (s *service) AssessPurchase(ctx context.Context, req PurchaseAssessmentRequ
 	var scoreCard *scoring.ScoreCard
 	if s.scoringData != nil {
 		data, err := s.scoringData.PurchaseData(ctx, req)
-		if err == nil && data != nil {
+		if err != nil {
+			if s.logger != nil {
+				s.logger.Warn(ctx, "AssessPurchase: failed to load scoring data — proceeding without scorecard",
+					observability.String("certNumber", req.CertNumber),
+					observability.Err(err))
+			}
+		} else if data != nil {
 			sc, scErr := BuildScoreCard(req.CertNumber, "purchase", data, scoring.PurchaseAssessmentProfile)
-			if scErr == nil {
+			if scErr != nil {
+				if s.logger != nil {
+					s.logger.Warn(ctx, "AssessPurchase: failed to build scorecard — proceeding without",
+						observability.String("certNumber", req.CertNumber),
+						observability.Err(scErr))
+				}
+			} else {
 				scoreCard = &sc
 				s.recordGaps(ctx, sc, req.CardName, req.SetName)
 			}
@@ -217,276 +237,4 @@ func (s *service) CollectDigest(ctx context.Context) (string, error) {
 func (s *service) CollectLiquidation(ctx context.Context) (string, error) {
 	sysPrompt := liquidationSystemPrompt + s.priorContext(ctx, AnalysisLiquidation)
 	return s.runAnalysis(ctx, OpLiquidation, sysPrompt, liquidationUserPrompt, func(StreamEvent) {})
-}
-
-// operationMaxRounds overrides s.maxToolRounds per operation.
-// PurchaseAssessment needs only 1 round since scores are pre-computed.
-// CampaignAnalysis and Liquidation use 3 rounds to accommodate batch tools
-// and larger workflows (prompt says 2 rounds but suggest_price_batch may
-// need a separate round after reading EV data).
-// Digest uses 4 rounds: 9 broad tools, then EV batch, then optional deep dive, plus escape hatch.
-var operationMaxRounds = map[AIOperation]int{
-	OpPurchaseAssessment: 1,
-	OpCampaignAnalysis:   3,
-	OpDigest:             4,
-	OpLiquidation:        3,
-}
-
-// toolCallingLoop orchestrates the LLM -> tool -> LLM cycle.
-func (s *service) toolCallingLoop(ctx context.Context, operation AIOperation, systemPrompt string, messages []Message, stream func(StreamEvent)) (string, error) {
-	maxRounds := s.maxToolRounds
-	if override, ok := operationMaxRounds[operation]; ok {
-		maxRounds = override
-	}
-	var tools []ToolDefinition
-	if names, ok := operationTools[operation]; ok {
-		if filtered, fOk := s.executor.(FilteredToolExecutor); fOk {
-			tools = filtered.DefinitionsFor(names)
-		} else {
-			tools = s.executor.Definitions()
-		}
-	} else {
-		tools = s.executor.Definitions()
-	}
-	var conversationState any
-	start := time.Now()
-	var totalUsage TokenUsage
-	lastRound := 0
-	var lastToolNames []string
-
-	for round := 0; round < maxRounds; round++ {
-		lastRound = round
-		temp := s.temperature
-		completionReq := CompletionRequest{
-			SystemPrompt:      systemPrompt,
-			Messages:          messages,
-			Tools:             tools,
-			Temperature:       &temp,
-			MaxTokens:         s.maxTokens,
-			ConversationState: conversationState,
-			ReasoningEffort:   "medium",
-			Store:             true,
-		}
-
-		var fullContent strings.Builder
-		var toolCalls []ToolCall
-		var newConversationState any
-
-		err := s.llm.StreamCompletion(ctx, completionReq, func(chunk CompletionChunk) {
-			if chunk.Delta != "" {
-				fullContent.WriteString(chunk.Delta)
-				stream(StreamEvent{Type: EventDelta, Content: chunk.Delta})
-			}
-			if len(chunk.ToolCalls) > 0 {
-				toolCalls = append(toolCalls, chunk.ToolCalls...)
-			}
-			if chunk.ConversationState != nil {
-				newConversationState = chunk.ConversationState
-			}
-			if chunk.Usage != nil {
-				totalUsage.InputTokens += chunk.Usage.InputTokens
-				totalUsage.OutputTokens += chunk.Usage.OutputTokens
-				totalUsage.TotalTokens += chunk.Usage.TotalTokens
-			}
-		})
-		if err != nil {
-			ai.RecordCall(ctx, s.tracker, s.logger, operation, err, start, lastRound+1, &totalUsage)
-			return "", fmt.Errorf("llm completion (round %d): %w", round, err)
-		}
-
-		// Diagnostic: log round results for debugging duplicate-item errors.
-		if s.logger != nil {
-			stateStr := "<nil>"
-			if newConversationState != nil {
-				stateStr = fmt.Sprintf("%v", newConversationState)
-			}
-			tcIDs := make([]string, len(toolCalls))
-			for i, tc := range toolCalls {
-				tcIDs[i] = fmt.Sprintf("%s(item=%s)", tc.ID, tc.ItemID)
-			}
-			s.logger.Info(ctx, "tool-calling loop round completed",
-				observability.Int("round", round),
-				observability.Int("toolCalls", len(toolCalls)),
-				observability.String("conversationState", stateStr),
-				observability.String("toolCallIDs", strings.Join(tcIDs, ", ")),
-			)
-		}
-
-		if len(toolCalls) == 0 {
-			content := fullContent.String()
-			if isLLMRefusal(content) {
-				refusalErr := errors.NewAppError(ErrCodeLLMRefusal, "LLM returned a refusal instead of analysis").
-					WithContext("content", truncateToolResult(content, 200))
-				ai.RecordCall(ctx, s.tracker, s.logger, operation, refusalErr, start, lastRound+1, &totalUsage)
-				return "", refusalErr
-			}
-			ai.RecordCall(ctx, s.tracker, s.logger, operation, nil, start, lastRound+1, &totalUsage)
-			return content, nil
-		}
-
-		lastToolNames = lastToolNames[:0]
-		for _, tc := range toolCalls {
-			lastToolNames = append(lastToolNames, tc.Name)
-		}
-
-		// If the provider returned a non-empty conversation state, it manages
-		// history internally. Chain via state and clear local messages to avoid
-		// re-sending full history. We still append the assistant message with
-		// tool calls — the adapter uses this to build function_call +
-		// function_call_output input items.
-		//
-		// Guard against empty strings: an empty state would clear messages
-		// but fail to enable chaining (PreviousResponseID = ""), causing the
-		// next round to re-send function_call items with server-generated IDs
-		// that the API already has — triggering a "Duplicate item" 400 error.
-		if id, ok := newConversationState.(string); ok && id != "" {
-			conversationState = newConversationState
-			messages = nil
-		} else if newConversationState != nil && !ok {
-			// Non-string state (future-proofing) — trust it as-is.
-			conversationState = newConversationState
-			messages = nil
-		}
-
-		messages = append(messages, Message{
-			Role:      RoleAssistant,
-			Content:   fullContent.String(),
-			ToolCalls: toolCalls,
-		})
-
-		// Execute tool calls concurrently — tools are safe for parallel execution.
-		type toolResult struct {
-			tc     ToolCall
-			result string
-		}
-		results := make([]toolResult, len(toolCalls))
-		var wg sync.WaitGroup
-		for i, tc := range toolCalls {
-			wg.Add(1)
-			go func(idx int, call ToolCall) {
-				defer wg.Done()
-				defer func() {
-					if r := recover(); r != nil {
-						errMsg := fmt.Sprintf(`{"error": "panic: %v"}`, r)
-						results[idx] = toolResult{tc: call, result: errMsg}
-						if s.logger != nil {
-							s.logger.Error(ctx, "tool execution panicked",
-								observability.String("tool", call.Name),
-								observability.String("panic", fmt.Sprintf("%v", r)),
-							)
-						}
-					}
-				}()
-				toolCtx, toolCancel := context.WithTimeout(ctx, toolCallTimeout)
-				res, execErr := s.executor.Execute(toolCtx, call.Name, call.Arguments)
-				toolCancel()
-				if execErr != nil {
-					res = fmt.Sprintf(`{"error": %q}`, execErr.Error())
-					if s.logger != nil {
-						s.logger.Warn(ctx, "tool execution failed",
-							observability.String("tool", call.Name),
-							observability.Err(execErr),
-						)
-					}
-				}
-				res = truncateToolResult(res, maxToolResultChars)
-				results[idx] = toolResult{tc: call, result: res}
-			}(i, tc)
-		}
-
-		stream(StreamEvent{Type: EventToolStart, ToolName: toolCalls[0].Name})
-		wg.Wait()
-		stream(StreamEvent{Type: EventToolResult, ToolName: toolCalls[0].Name})
-
-		for _, tr := range results {
-			messages = append(messages, Message{
-				Role:       RoleTool,
-				Content:    tr.result,
-				ToolCallID: tr.tc.ID,
-			})
-		}
-	}
-
-	err := errors.NewAppError(ErrCodeMaxRoundsExceeded, "exceeded maximum tool call rounds").
-		WithContext("maxRounds", maxRounds).WithContext("lastTools", strings.Join(lastToolNames, ", "))
-	ai.RecordCall(ctx, s.tracker, s.logger, operation, err, start, maxRounds, &totalUsage)
-	return "", err
-}
-
-// maxPriorContextLen caps the prior analysis content appended to the system prompt.
-// This prevents old, large analyses from consuming too many input tokens.
-const maxPriorContextLen = 2000
-
-// priorContext fetches the most recent completed analysis of the given type from
-// the cache and returns a system prompt section summarizing it. Returns "" if no
-// cache is configured or no prior analysis exists.
-func (s *service) priorContext(ctx context.Context, analysisType AnalysisType) string {
-	if s.cache == nil {
-		return ""
-	}
-	cached, err := s.cache.Get(ctx, analysisType)
-	if err != nil {
-		if s.logger != nil {
-			s.logger.Warn(ctx, "failed to fetch prior analysis for context",
-				observability.String("type", string(analysisType)),
-				observability.Err(err))
-		}
-		return ""
-	}
-	if cached == nil || cached.Status != StatusComplete || cached.Content == "" {
-		return ""
-	}
-
-	content := cached.Content
-	if len(content) > maxPriorContextLen {
-		content = content[:maxPriorContextLen] + "\n\n[... truncated — see full prior analysis in the cache]"
-	}
-
-	age := time.Since(cached.CompletedAt).Round(time.Hour)
-	return fmt.Sprintf(`
-
-## Prior Analysis (%s ago)
-Below is your previous %s analysis. Reference it to track changes, follow up on prior recommendations, and note what improved or worsened. Do NOT repeat it — focus on what's new or different.
-
-<prior_analysis>
-%s
-</prior_analysis>`, age, analysisType, content)
-}
-
-// isLLMRefusal detects common refusal patterns from Azure content filters or
-// model safety systems. These refusals should not be cached as successful results
-// because they poison the prior context for subsequent runs.
-func isLLMRefusal(content string) bool {
-	lower := strings.ToLower(strings.TrimSpace(content))
-	refusalPatterns := []string{
-		"i'm sorry, but i cannot assist",
-		"i'm sorry, but i can't assist",
-		"i cannot assist with that request",
-		"i can't assist with that request",
-		"i'm unable to help with that",
-		"i'm not able to assist",
-		"as an ai, i cannot",
-	}
-	for _, pattern := range refusalPatterns {
-		if strings.Contains(lower, pattern) {
-			return true
-		}
-	}
-	return false
-}
-
-// truncateToolResult caps a tool result string at maxLen characters.
-// If truncated, it tries to cut at the last newline within the limit to
-// avoid splitting a JSON line, and appends a notice so the LLM knows
-// the data was cut short.
-func truncateToolResult(result string, maxLen int) string {
-	if len(result) <= maxLen {
-		return result
-	}
-	cut := result[:maxLen]
-	// Try to cut at a newline boundary to avoid splitting a JSON object mid-field.
-	if idx := strings.LastIndex(cut, "\n"); idx > maxLen/2 {
-		cut = cut[:idx]
-	}
-	return cut + "\n\n[... truncated — tool returned " + fmt.Sprintf("%d", len(result)) + " chars, showing first " + fmt.Sprintf("%d", len(cut)) + "]"
 }

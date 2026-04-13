@@ -28,39 +28,21 @@ func (s *service) generateCaptionAsync(post *SocialPost) {
 	}
 
 	userPrompt := buildUserPrompt(post.PostType, cards)
-	var result strings.Builder
-	var usage ai.TokenUsage
-	start := time.Now()
-
-	err = s.llm.StreamCompletion(ctx, ai.CompletionRequest{
-		SystemPrompt: captionSystemPrompt,
-		Messages: []ai.Message{
-			{Role: ai.RoleUser, Content: userPrompt},
-		},
-		MaxTokens: 512,
-	}, func(chunk ai.CompletionChunk) {
-		result.WriteString(chunk.Delta)
-		if chunk.Usage != nil {
-			usage = *chunk.Usage
-		}
-	})
+	raw, err := s.streamCaption(ctx, userPrompt)
 	if err != nil {
-		ai.RecordCall(ctx, s.tracker, s.logger, ai.OpSocialCaption, err, start, 0, &usage)
 		s.logError(ctx, "generate caption", post.PostType, err)
 		errCtx, errCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer errCancel()
 		_ = s.repo.UpdatePostCaption(errCtx, post.ID, placeholderCaption, "") //nolint:errcheck // best-effort
-		errCancel()
 		return
 	}
-
-	ai.RecordCall(ctx, s.tracker, s.logger, ai.OpSocialCaption, nil, start, 0, &usage)
 
 	// Use a fresh context for DB writes so they succeed even if the LLM
 	// context is near its 3-minute deadline.
 	dbCtx, dbCancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer dbCancel()
 
-	title, caption, hashtags := parseCaptionResponse(result.String())
+	title, caption, hashtags := parseCaptionResponse(raw)
 	if err := s.repo.UpdatePostCaption(dbCtx, post.ID, caption, hashtags); err != nil {
 		if s.logger != nil {
 			s.logger.Error(dbCtx, "social: failed to save generated caption",
@@ -86,6 +68,32 @@ func (s *service) generateCaptionAsync(post *SocialPost) {
 			observability.String("postType", string(post.PostType)),
 			observability.Int("captionLen", len(caption)))
 	}
+}
+
+// streamCaption calls the LLM to generate a caption for the given prompt and
+// returns the raw response string. It records telemetry on both success and failure.
+func (s *service) streamCaption(ctx context.Context, userPrompt string) (string, error) {
+	var result strings.Builder
+	var usage ai.TokenUsage
+	start := time.Now()
+
+	err := s.llm.StreamCompletion(ctx, ai.CompletionRequest{
+		SystemPrompt: captionSystemPrompt,
+		Messages: []ai.Message{
+			{Role: ai.RoleUser, Content: userPrompt},
+		},
+		MaxTokens: 512,
+	}, func(chunk ai.CompletionChunk) {
+		result.WriteString(chunk.Delta)
+		if chunk.Usage != nil {
+			usage = *chunk.Usage
+		}
+	})
+	ai.RecordCall(ctx, s.tracker, s.logger, ai.OpSocialCaption, err, start, 0, &usage)
+	if err != nil {
+		return "", fmt.Errorf("stream caption: %w", err)
+	}
+	return result.String(), nil
 }
 
 // generateBackgroundsAsync generates AI background images for a post in a background goroutine.

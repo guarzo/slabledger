@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/ai"
@@ -162,30 +161,12 @@ func (s *service) RegenerateCaption(ctx context.Context, id string, stream func(
 	}
 
 	userPrompt := buildUserPrompt(post.PostType, cards)
-	var result strings.Builder
-	var usage ai.TokenUsage
-	start := time.Now()
-
-	err = s.llm.StreamCompletion(ctx, ai.CompletionRequest{
-		SystemPrompt: captionSystemPrompt,
-		Messages: []ai.Message{
-			{Role: ai.RoleUser, Content: userPrompt},
-		},
-		MaxTokens: 512,
-	}, func(chunk ai.CompletionChunk) {
-		result.WriteString(chunk.Delta)
-		if chunk.Usage != nil {
-			usage = *chunk.Usage
-		}
-	})
+	raw, err := s.streamCaption(ctx, userPrompt)
 	if err != nil {
-		ai.RecordCall(ctx, s.tracker, s.logger, ai.OpSocialCaption, err, start, 0, &usage)
-		return fmt.Errorf("stream caption: %w", err)
+		return err
 	}
 
-	ai.RecordCall(ctx, s.tracker, s.logger, ai.OpSocialCaption, nil, start, 0, &usage)
-
-	title, caption, hashtags := parseCaptionResponse(result.String())
+	title, caption, hashtags := parseCaptionResponse(raw)
 	if updateErr := s.repo.UpdatePostCaption(ctx, id, caption, hashtags); updateErr != nil {
 		return fmt.Errorf("save caption: %w", updateErr)
 	}
