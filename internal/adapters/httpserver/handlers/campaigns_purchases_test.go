@@ -307,9 +307,21 @@ func TestHandleCertLookup(t *testing.T) {
 			method:     http.MethodGet,
 			certNumber: "99999999",
 			lookupFn: func(_ context.Context, _ string) (*inventory.CertInfo, *inventory.MarketSnapshot, error) {
-				return nil, nil, fmt.Errorf("cert not found")
+				return nil, nil, inventory.ErrCertNotFound
 			},
 			expectedStatus: http.StatusNotFound,
+			checkBody: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				decodeErrorResponse(t, rec)
+			},
+		},
+		{
+			name:       "internal error returns 500",
+			method:     http.MethodGet,
+			certNumber: "99999999",
+			lookupFn: func(_ context.Context, _ string) (*inventory.CertInfo, *inventory.MarketSnapshot, error) {
+				return nil, nil, fmt.Errorf("database connection failed")
+			},
+			expectedStatus: http.StatusInternalServerError,
 			checkBody: func(t *testing.T, rec *httptest.ResponseRecorder) {
 				decodeErrorResponse(t, rec)
 			},
