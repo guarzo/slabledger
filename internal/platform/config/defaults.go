@@ -104,11 +104,6 @@ func Default() Config {
 			Interval: 6 * time.Hour,
 			MaxAge:   7 * 24 * time.Hour,
 		},
-		PicksRefresh: PicksRefreshConfig{
-			Enabled:     true,
-			Interval:    24 * time.Hour,
-			ContentHour: 3,
-		},
 		CardLadder: CardLadderConfig{
 			Enabled:     true, // runs automatically when credentials are configured
 			Interval:    24 * time.Hour,

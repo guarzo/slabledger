@@ -211,10 +211,6 @@ func FromEnv(base Config) Config {
 	envDurationPositive("METRICS_POLL_INTERVAL", &cfg.MetricsPoll.Interval)
 	envDurationPositive("METRICS_POLL_MAX_AGE", &cfg.MetricsPoll.MaxAge)
 
-	// Picks refresh scheduler
-	envBool("PICKS_REFRESH_ENABLED", &cfg.PicksRefresh.Enabled, true)
-	envIntRange("PICKS_REFRESH_HOUR", &cfg.PicksRefresh.ContentHour, -1, 23)
-
 	// Card Ladder scheduler
 	envBool("CARDLADDER_REFRESH_ENABLED", &cfg.CardLadder.Enabled, false)
 	envIntRange("CARDLADDER_REFRESH_HOUR", &cfg.CardLadder.RefreshHour, 0, 23)

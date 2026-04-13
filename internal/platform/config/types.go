@@ -174,7 +174,6 @@ type Config struct {
 	SocialContent    SocialContentConfig
 	SocialPublish    SocialPublishConfig
 	MetricsPoll      MetricsPollConfig
-	PicksRefresh     PicksRefreshConfig
 	CardLadder       CardLadderConfig
 	MarketMovers     MarketMoversConfig
 	GoogleSheets     GoogleSheetsConfig
@@ -278,13 +277,6 @@ type MetricsPollConfig struct {
 	MaxAge   time.Duration // stop polling posts older than this (default: 168h / 7 days)
 }
 
-// PicksRefreshConfig controls the daily AI picks generation scheduler.
-type PicksRefreshConfig struct {
-	Enabled     bool
-	Interval    time.Duration // how often to run (default: 24h)
-	ContentHour int           // hour (0-23 UTC) to schedule runs; -1 = use default delay (default: 3)
-}
-
 // CardLadderConfig controls the Card Ladder value refresh scheduler.
 type CardLadderConfig struct {
 	Enabled     bool          // Enable CL refresh scheduler (default: false)
@@ -296,13 +288,6 @@ type CardLadderConfig struct {
 type MarketMoversConfig struct {
 	Enabled     bool // Enable MM refresh scheduler (default: true)
 	RefreshHour int  // Hour (0-23 UTC) to schedule daily runs (default: 5)
-}
-
-// ApplyDefaults sets zero-valued fields to sensible defaults.
-func (c *PicksRefreshConfig) ApplyDefaults() {
-	if c.Interval <= 0 {
-		c.Interval = 24 * time.Hour
-	}
 }
 
 // ApplyDefaults sets zero-valued fields to sensible defaults.
