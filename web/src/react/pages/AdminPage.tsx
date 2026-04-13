@@ -5,7 +5,7 @@
 import { useState } from 'react';
 import { Tabs } from 'radix-ui';
 import { api } from '../../js/api';
-import { Button, SectionErrorBoundary, TabNavigation } from '../ui';
+import { Button, SectionErrorBoundary, TabNavigation, ErrorAlert } from '../ui';
 import type { Tab } from '../ui';
 import { UsersTab } from './admin/UsersTab';
 import { CardDataTab } from './admin/CardDataTab';
@@ -64,7 +64,7 @@ export default function AdminPage() {
           </Button>
         </div>
         {backupError && (
-          <p className="text-sm text-[var(--danger)] mt-1">Backup failed: {backupError}</p>
+          <ErrorAlert message={`Backup failed: ${backupError}`} className="mt-1" />
         )}
         <p className="text-sm text-[var(--text-muted)] mt-1">
           {TAB_SUBTITLES[activeTab] ?? ''}

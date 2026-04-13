@@ -1,3 +1,8 @@
+// General-purpose grade badge using grade-color logic and size variants.
+// For social slide styling, see:
+// web/src/react/components/social/slides/primitives/GradeBadge.tsx
+// They are separate intentionally — the social version uses post-type gradient theming.
+
 interface GradeBadgeProps {
   grader?: string;
   grade: number;
