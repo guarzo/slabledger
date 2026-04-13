@@ -53,6 +53,8 @@ type Router struct {
 	logger                    observability.Logger
 	databasePath              string
 	timingStore               *middleware.TimingStore
+	googleOAuthEnv            string
+	localAPIToken             string
 }
 
 // RouterConfig holds configuration for creating a new Router
@@ -91,6 +93,8 @@ type RouterConfig struct {
 	AdminEmails               []string
 	DatabasePath              string
 	TimingStore               *middleware.TimingStore
+	GoogleOAuthEnv            string // controls login button visibility; "production" shows it
+	LocalAPIToken             string // dev-mode bearer bypass; empty = disabled
 }
 
 // NewRouter creates a new router with the given configuration
@@ -104,6 +108,8 @@ func NewRouter(cfg RouterConfig) *Router {
 		logger:             cfg.Logger,
 		databasePath:       cfg.DatabasePath,
 		timingStore:        cfg.TimingStore,
+		googleOAuthEnv:     cfg.GoogleOAuthEnv,
+		localAPIToken:      cfg.LocalAPIToken,
 	}
 
 	if cfg.CampaignsHandler != nil {
@@ -133,7 +139,7 @@ func NewRouter(cfg RouterConfig) *Router {
 
 	// Create auth middleware — supports OAuth sessions and/or local API token
 	if cfg.AuthService != nil {
-		oauthEnv := strings.ToLower(os.Getenv("GOOGLE_OAUTH_ENV"))
+		oauthEnv := strings.ToLower(rt.googleOAuthEnv)
 		secureCookies := oauthEnv != "development" && oauthEnv != "dev"
 		rt.authHandler = handlers.NewAuthHandlers(cfg.AuthService, rt.logger, secureCookies, cfg.AdminEmails)
 		rt.adminHandler = handlers.NewAdminHandlers(cfg.AuthService, rt.logger)
@@ -145,7 +151,7 @@ func NewRouter(cfg RouterConfig) *Router {
 		}
 	}
 	// Enable local API token auth even without OAuth
-	if token := os.Getenv("LOCAL_API_TOKEN"); token != "" {
+	if token := rt.localAPIToken; token != "" {
 		if rt.authMW == nil {
 			rt.authMW = middleware.NewAuthMiddleware(nil, rt.logger)
 		}
