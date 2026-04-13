@@ -3,10 +3,7 @@ import { usePortfolioHealth, useWeeklyReview, useCapitalSummary } from '../queri
 import HeroStatsBar from '../components/portfolio/HeroStatsBar';
 import InvoiceReadinessPanel from '../components/portfolio/InvoiceReadinessPanel';
 import WeeklyReviewSection from '../components/portfolio/WeeklyReviewSection';
-import WatchlistSection from '../components/watchlist/WatchlistSection';
 import AIAnalysisWidget from '../components/advisor/AIAnalysisWidget';
-import PicksList from '../components/picks/PicksList';
-import AcquisitionWatchlist from '../components/picks/AcquisitionWatchlist';
 import { SectionErrorBoundary } from '../ui';
 
 export default function DashboardPage() {
@@ -62,22 +59,8 @@ export default function DashboardPage() {
             collapsible
           />
         </SectionErrorBoundary>
-      </div>
+       </div>
 
-      {/* Opportunities */}
-      <div className="mb-6">
-        <SectionErrorBoundary sectionName="Opportunities">
-          <div className="space-y-4">
-            <PicksList />
-            <AcquisitionWatchlist />
-          </div>
-        </SectionErrorBoundary>
       </div>
-
-      {/* Watchlist */}
-      <div className="mb-6">
-        <WatchlistSection maxItems={8} />
-      </div>
-    </div>
-  );
+   );
 }

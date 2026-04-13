@@ -301,7 +301,7 @@ func (s *service) backfillMetadataFromCL(ctx context.Context, purchase *Purchase
 
 	if err := s.purchases.UpdatePurchaseCardMetadata(ctx, purchase.ID, cardName, cardNumber, setName); err != nil {
 		if s.logger != nil {
-			s.logger.Debug(ctx, "UpdatePurchaseCardMetadata failed", observability.String("purchaseID", purchase.ID), observability.Err(err))
+			s.logger.Warn(ctx, "UpdatePurchaseCardMetadata failed", observability.String("purchaseID", purchase.ID), observability.Err(err))
 		}
 		return
 	}

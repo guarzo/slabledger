@@ -32,21 +32,10 @@ export const queryKeys = {
     globalInventory: ['portfolio', 'globalInventory'] as const,
     sellSheetItems: ['portfolio', 'sellSheetItems'] as const,
   },
-  favorites: {
-    all: ['favorites'] as const,
-    list: (page: number, pageSize: number) => ['favorites', 'list', page, pageSize] as const,
-  },
-  pricing: {
-    sets: ['pricing', 'sets'] as const,
-    search: (query: string) => ['pricing', 'search', query] as const,
-    cardPrice: (key: string | string[]) => ['pricing', 'card', key] as const,
-  },
   admin: {
     allowlist: ['admin', 'allowlist'] as const,
     users: ['admin', 'users'] as const,
     apiUsage: ['admin', 'apiUsage'] as const,
-    cacheStats: ['admin', 'cacheStats'] as const,
-    cardRequests: ['admin', 'cardRequests'] as const,
     pricingDiagnostics: ['admin', 'pricingDiagnostics'] as const,
     priceOverrideStats: ['admin', 'priceOverrideStats'] as const,
     aiUsage: ['admin', 'aiUsage'] as const,

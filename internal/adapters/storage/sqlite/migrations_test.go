@@ -31,7 +31,6 @@ func TestRunMigrations(t *testing.T) {
 		"user_tokens",
 		"user_sessions",
 		"oauth_states",
-		"favorites",
 		"allowed_emails",
 		"campaigns",
 		"campaign_purchases",

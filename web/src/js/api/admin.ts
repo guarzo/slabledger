@@ -2,9 +2,9 @@
  * Admin-related API methods
  */
 
-import type { APIUsageResponse, CacheStatsResponse, PricingDiagnosticsResponse, PriceOverrideStats, CachedAnalysis, AdvisorAnalysisType, AIUsageResponse, DHStatusResponse, DHBulkMatchResponse, DHUnmatchedResponse, DHFixMatchRequest, DHFixMatchResponse, DHSelectMatchRequest, DHPushConfig } from '../../types/apiStatus';
+import type { APIUsageResponse, PricingDiagnosticsResponse, PriceOverrideStats, CachedAnalysis, AdvisorAnalysisType, AIUsageResponse, DHStatusResponse, DHBulkMatchResponse, DHUnmatchedResponse, DHFixMatchRequest, DHFixMatchResponse, DHSelectMatchRequest, DHPushConfig } from '../../types/apiStatus';
 import type { AllowedEmail, AdminUser, CLStatusResponse, CLSyncResult, IntegrationFailuresReport, MMStatusResponse, MMSyncResult, PSASyncStatusResponse } from '../../types/admin';
-import type { APIClient, CardRequestSubmission } from './client';
+import type { APIClient } from './client';
 import { APIError } from './client';
 
 /* ------------------------------------------------------------------ */
@@ -18,16 +18,12 @@ declare module './client' {
     removeAllowedEmail(email: string): Promise<void>;
     getAdminUsers(): Promise<AdminUser[]>;
     getAdminApiUsage(): Promise<APIUsageResponse>;
-    getAdminCacheStats(): Promise<CacheStatsResponse>;
     getPricingDiagnostics(): Promise<PricingDiagnosticsResponse>;
     getAdvisorCache(type: AdvisorAnalysisType): Promise<CachedAnalysis>;
     refreshAdvisorCache(type: AdvisorAnalysisType): Promise<void>;
     getPriceOverrideStats(): Promise<PriceOverrideStats>;
     getAIUsage(): Promise<AIUsageResponse>;
     getBackup(): Promise<Blob>;
-    getCardRequests(): Promise<CardRequestSubmission[]>;
-    submitCardRequest(id: number): Promise<{ status: string; requestId: string }>;
-    submitAllCardRequests(): Promise<{ submitted: number; errors: number }>;
     getCardLadderStatus(): Promise<CLStatusResponse>;
     getCardLadderFailures(limit?: number): Promise<IntegrationFailuresReport>;
     saveCardLadderConfig(config: { email: string; password: string; collectionId: string; firebaseApiKey: string }): Promise<{ status: string }>;
@@ -83,10 +79,6 @@ proto.getAdminApiUsage = async function (this: APIClient): Promise<APIUsageRespo
   return this.get<APIUsageResponse>('/admin/api-usage');
 };
 
-proto.getAdminCacheStats = async function (this: APIClient): Promise<CacheStatsResponse> {
-  return this.get<CacheStatsResponse>('/admin/cache-stats');
-};
-
 proto.getPricingDiagnostics = async function (this: APIClient): Promise<PricingDiagnosticsResponse> {
   return this.get<PricingDiagnosticsResponse>('/admin/pricing-diagnostics');
 };
@@ -119,18 +111,6 @@ proto.getAIUsage = async function (this: APIClient): Promise<AIUsageResponse> {
 proto.getBackup = async function (this: APIClient): Promise<Blob> {
   const response = await this.fetchWithRetry(`${this.baseURL}/admin/backup`, {});
   return response.blob();
-};
-
-proto.getCardRequests = async function (this: APIClient): Promise<CardRequestSubmission[]> {
-  return this.get<CardRequestSubmission[]>('/admin/card-requests');
-};
-
-proto.submitCardRequest = async function (this: APIClient, id: number): Promise<{ status: string; requestId: string }> {
-  return this.post<{ status: string; requestId: string }>(`/admin/card-requests/${id}/submit`);
-};
-
-proto.submitAllCardRequests = async function (this: APIClient): Promise<{ submitted: number; errors: number }> {
-  return this.post<{ submitted: number; errors: number }>('/admin/card-requests/submit-all');
 };
 
 proto.getCardLadderStatus = async function (this: APIClient) {

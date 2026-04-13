@@ -75,16 +75,6 @@ type PriceRefreshConfig struct {
 	Enabled bool
 }
 
-// CacheWarmupConfig controls the card cache warmup scheduler
-type CacheWarmupConfig struct {
-	// Enable/disable warmup (default: true)
-	Enabled bool
-	// How often to run warmup (default: 24h)
-	Interval time.Duration
-	// Delay between GetCards calls to respect rate limits (default: 2s)
-	RateLimitDelay time.Duration
-}
-
 // SessionCleanupConfig controls session cleanup scheduling
 type SessionCleanupConfig struct {
 	Enabled  bool
@@ -176,16 +166,13 @@ type Config struct {
 	Maintenance      MaintenanceConfig
 	Auth             AuthConfig
 	PriceRefresh     PriceRefreshConfig
-	CacheWarmup      CacheWarmupConfig
 	SessionCleanup   SessionCleanupConfig
 	InventoryRefresh InventoryRefreshConfig
 	SnapshotEnrich   SnapshotEnrichConfig
-	SnapshotHistory  SnapshotHistoryConfig
 	AdvisorRefresh   AdvisorRefreshConfig
 	SocialContent    SocialContentConfig
 	SocialPublish    SocialPublishConfig
 	MetricsPoll      MetricsPollConfig
-	PicksRefresh     PicksRefreshConfig
 	CardLadder       CardLadderConfig
 	MarketMovers     MarketMoversConfig
 	GoogleSheets     GoogleSheetsConfig
@@ -201,12 +188,6 @@ type AdvisorRefreshConfig struct {
 	InitialDelay  time.Duration // delay before first run (default: 2m)
 	RefreshHour   int           // hour (0-23 UTC) to schedule runs; -1 = use InitialDelay (default: 4)
 	MaxToolRounds int           // max LLM tool-calling rounds per analysis (default: 5)
-}
-
-// SnapshotHistoryConfig controls daily archival of market snapshots.
-type SnapshotHistoryConfig struct {
-	Enabled  bool
-	Interval time.Duration // how often to archive (default: 24h)
 }
 
 // SnapshotEnrichConfig controls the background snapshot enrichment scheduler.
@@ -289,13 +270,6 @@ type MetricsPollConfig struct {
 	MaxAge   time.Duration // stop polling posts older than this (default: 168h / 7 days)
 }
 
-// PicksRefreshConfig controls the daily AI picks generation scheduler.
-type PicksRefreshConfig struct {
-	Enabled     bool
-	Interval    time.Duration // how often to run (default: 24h)
-	ContentHour int           // hour (0-23 UTC) to schedule runs; -1 = use default delay (default: 3)
-}
-
 // CardLadderConfig controls the Card Ladder value refresh scheduler.
 type CardLadderConfig struct {
 	Enabled     bool          // Enable CL refresh scheduler (default: false)
@@ -307,13 +281,6 @@ type CardLadderConfig struct {
 type MarketMoversConfig struct {
 	Enabled     bool // Enable MM refresh scheduler (default: true)
 	RefreshHour int  // Hour (0-23 UTC) to schedule daily runs (default: 5)
-}
-
-// ApplyDefaults sets zero-valued fields to sensible defaults.
-func (c *PicksRefreshConfig) ApplyDefaults() {
-	if c.Interval <= 0 {
-		c.Interval = 24 * time.Hour
-	}
 }
 
 // ApplyDefaults sets zero-valued fields to sensible defaults.

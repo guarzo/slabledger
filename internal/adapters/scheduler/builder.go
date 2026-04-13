@@ -11,7 +11,6 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/advisor"
 	"github.com/guarzo/slabledger/internal/domain/ai"
 	"github.com/guarzo/slabledger/internal/domain/auth"
-	domainCards "github.com/guarzo/slabledger/internal/domain/cards"
 	"github.com/guarzo/slabledger/internal/domain/intelligence"
 	domainCampaigns "github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
@@ -28,15 +27,11 @@ type BuildDeps struct {
 	AccessTracker     pricing.AccessTracker
 	RefreshCandidates pricing.RefreshCandidateProvider
 	PriceProvider     pricing.PriceProvider
-	CardProvider      domainCards.CardProvider
 	AuthService       auth.Service // may be nil if auth is not configured
 	Logger            observability.Logger
 
 	// Sync state (shared by DH schedulers)
 	SyncStateStore SyncStateStore
-
-	// Cache warmup dependencies (optional)
-	NewSetsProvider NewSetIDsProvider
 
 	// Inventory snapshot refresh dependencies (optional)
 	InventoryLister   InventoryLister
@@ -44,10 +39,6 @@ type BuildDeps struct {
 
 	// Snapshot enrichment dependencies (optional)
 	SnapshotEnrichService SnapshotEnrichService
-
-	// Snapshot history archival dependencies (optional)
-	SnapshotHistoryLister   SnapshotHistoryLister
-	SnapshotHistoryRecorder domainCampaigns.SnapshotHistoryRecorder
 
 	// Advisor refresh dependencies (optional)
 	AdvisorCollector AdvisorCollector
@@ -62,9 +53,6 @@ type BuildDeps struct {
 	MetricsPostLister social.MetricsPostLister
 	MetricsSaver      social.MetricsSaver
 	InsightsPoller    social.InsightsPoller
-
-	// Picks generation dependencies (optional)
-	PicksGenerator PicksGenerator
 
 	// Social publish dependencies (optional — enabled when RenderServiceURL is configured)
 	SocialPublisher   SocialPublisher
@@ -103,7 +91,6 @@ type BuildDeps struct {
 	CardLadderValueUpdater   CardLadderValueUpdater
 	CardLadderGemRateUpdater CardLadderGemRateUpdater
 	CardLadderSyncUpdater    CardLadderSyncUpdater
-	CardLadderCLRecorder     domainCampaigns.CLValueHistoryRecorder
 	CardLadderSalesStore     *sqlite.CLSalesStore
 
 	// Market Movers dependencies (optional)
@@ -196,19 +183,6 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 		schedulers = append(schedulers, NewGapCleanupScheduler(deps.GapStore, deps.Logger))
 	}
 
-	// Card cache warmup scheduler (if enabled)
-	if cfg.CacheWarmup.Enabled {
-		warmupConfig := CacheWarmupConfig{
-			Enabled:        cfg.CacheWarmup.Enabled,
-			Interval:       cfg.CacheWarmup.Interval,
-			RateLimitDelay: cfg.CacheWarmup.RateLimitDelay,
-		}
-		warmupScheduler := NewCacheWarmupScheduler(
-			deps.CardProvider, deps.Logger, warmupConfig, deps.NewSetsProvider,
-		)
-		schedulers = append(schedulers, warmupScheduler)
-	}
-
 	// Inventory snapshot refresh scheduler (if dependencies are provided)
 	if deps.InventoryLister != nil && deps.SnapshotRefresher != nil {
 		invConfig := config.InventoryRefreshConfig{
@@ -231,19 +205,6 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 			deps.SnapshotEnrichService, deps.Logger, cfg.SnapshotEnrich,
 		)
 		schedulers = append(schedulers, enrichScheduler)
-	}
-
-	// Snapshot history archival scheduler (if dependencies are provided)
-	if deps.SnapshotHistoryLister != nil && deps.SnapshotHistoryRecorder != nil {
-		historyConfig := SnapshotHistoryConfig{
-			Enabled:  cfg.SnapshotHistory.Enabled,
-			Interval: cfg.SnapshotHistory.Interval,
-		}
-		historyScheduler := NewSnapshotHistoryScheduler(
-			deps.SnapshotHistoryLister, deps.SnapshotHistoryRecorder,
-			deps.Logger, historyConfig,
-		)
-		schedulers = append(schedulers, historyScheduler)
 	}
 
 	// Advisor refresh scheduler (if advisor service and cache store are provided)
@@ -313,13 +274,6 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 		))
 	}
 
-	// Picks refresh scheduler (if generator is provided)
-	if deps.PicksGenerator != nil {
-		schedulers = append(schedulers, NewPicksRefreshScheduler(
-			deps.PicksGenerator, deps.Logger, cfg.PicksRefresh,
-		))
-	}
-
 	// Card Ladder value refresh scheduler.
 	// Created whenever the store and purchase interfaces are available, even if
 	// no client exists yet at startup. SetClient is called by the handler when
@@ -337,7 +291,6 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 			deps.CardLadderClient, deps.CardLadderStore,
 			deps.CardLadderPurchaseLister, deps.CardLadderValueUpdater,
 			deps.CardLadderGemRateUpdater,
-			deps.CardLadderCLRecorder,
 			deps.CardLadderSalesStore,
 			deps.Logger, cfg.CardLadder,
 			clOpts...,

@@ -54,7 +54,6 @@ const PAGES = [
   { name: 'inventory-expanded', path: '/inventory', filterTab: 'Sell Sheet', expandRow: true, desktopOnly: true },
   { name: 'tools', path: '/tools' },
   { name: 'admin-users', path: '/admin' },
-  { name: 'admin-card-data', path: '/admin', tabLabel: 'Card Data' },
   { name: 'admin-pricing', path: '/admin', tabLabel: 'Pricing' },
   { name: 'admin-stats', path: '/admin', tabLabel: 'Stats' },
   { name: 'admin-integrations', path: '/admin', tabLabel: 'Integrations' },

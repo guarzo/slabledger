@@ -12,7 +12,6 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/httpserver/middleware"
 	"github.com/guarzo/slabledger/internal/domain/arbitrage"
 	"github.com/guarzo/slabledger/internal/domain/auth"
-	"github.com/guarzo/slabledger/internal/domain/favorites"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/domain/portfolio"
@@ -24,16 +23,13 @@ type Router struct {
 	handler                   *handlers.Handler
 	healthHandler             *handlers.HealthHandler
 	apiStatusHandler          *handlers.APIStatusHandler
-	cacheStatusHandler        *handlers.CacheStatusHandler
 	spaHandler                *handlers.SPAHandler
 	authHandler               *handlers.AuthHandlers
 	adminHandler              *handlers.AdminHandlers
 	authMW                    *middleware.AuthMiddleware
 	authRateLimiter           *middleware.RateLimiter
-	favoritesHandler          *handlers.FavoritesHandlers
 	campaignsHandler          *handlers.CampaignsHandler
 	priceHintsHandler         *handlers.PriceHintsHandler
-	cardRequestHandler        *handlers.CardRequestHandlers
 	pricingDiagnosticsHandler *handlers.PricingDiagnosticsHandler
 	pricingAPIHandler         *handlers.PricingAPIHandler
 	advisorHandler            *handlers.AdvisorHandler
@@ -43,7 +39,6 @@ type Router struct {
 	priceFlagsHandler         *handlers.PriceFlagsHandler
 	cardLadderHandler         *handlers.CardLadderHandler
 	marketMoversHandler       *handlers.MarketMoversHandler
-	picksHandler              *handlers.PicksHandler
 	opportunitiesHandler      *handlers.OpportunitiesHandler
 	dhHandler                 *handlers.DHHandler
 	sellSheetItemsHandler     *handlers.SellSheetItemsHandler
@@ -62,17 +57,14 @@ type RouterConfig struct {
 	Handler                   *handlers.Handler
 	HealthHandler             *handlers.HealthHandler
 	APIStatusHandler          *handlers.APIStatusHandler
-	CacheStatusHandler        *handlers.CacheStatusHandler
 	SPAHandler                *handlers.SPAHandler
 	AuthService               auth.Service
-	FavoritesService          favorites.Service
 	CampaignsHandler          *handlers.CampaignsHandler
 	CampaignsService          inventory.Service
 	ArbitrageService          arbitrage.Service
 	PortfolioService          portfolio.Service
 	TuningService             tuning.Service
 	PriceHintsHandler         *handlers.PriceHintsHandler
-	CardRequestHandler        *handlers.CardRequestHandlers
 	PricingDiagnosticsHandler *handlers.PricingDiagnosticsHandler
 	PricingAPIKey             string                          // Bearer token; empty = pricing API disabled
 	CampaignsRepo             handlers.CertPriceLookup        // For pricing API handler
@@ -83,7 +75,6 @@ type RouterConfig struct {
 	PriceFlagsHandler         *handlers.PriceFlagsHandler     // Price flag admin; nil = disabled
 	CardLadderHandler         *handlers.CardLadderHandler     // Card Ladder admin; nil = disabled
 	MarketMoversHandler       *handlers.MarketMoversHandler   // Market Movers admin; nil = disabled
-	PicksHandler              *handlers.PicksHandler          // AI picks; nil = disabled
 	OpportunitiesHandler      *handlers.OpportunitiesHandler  // Arbitrage opportunities; nil = disabled
 	DHHandler                 *handlers.DHHandler             // DH bulk match + intelligence; nil = disabled
 	SellSheetItemsHandler     *handlers.SellSheetItemsHandler // Sell sheet persistence; nil = disabled
@@ -100,16 +91,15 @@ type RouterConfig struct {
 // NewRouter creates a new router with the given configuration
 func NewRouter(cfg RouterConfig) *Router {
 	rt := &Router{
-		handler:            cfg.Handler,
-		healthHandler:      cfg.HealthHandler,
-		apiStatusHandler:   cfg.APIStatusHandler,
-		cacheStatusHandler: cfg.CacheStatusHandler,
-		spaHandler:         cfg.SPAHandler,
-		logger:             cfg.Logger,
-		databasePath:       cfg.DatabasePath,
-		timingStore:        cfg.TimingStore,
-		googleOAuthEnv:     cfg.GoogleOAuthEnv,
-		localAPIToken:      cfg.LocalAPIToken,
+		handler:          cfg.Handler,
+		healthHandler:    cfg.HealthHandler,
+		apiStatusHandler: cfg.APIStatusHandler,
+		spaHandler:       cfg.SPAHandler,
+		logger:           cfg.Logger,
+		databasePath:     cfg.DatabasePath,
+		timingStore:      cfg.TimingStore,
+		googleOAuthEnv:   cfg.GoogleOAuthEnv,
+		localAPIToken:    cfg.LocalAPIToken,
 	}
 
 	if cfg.CampaignsHandler != nil {
@@ -129,10 +119,6 @@ func NewRouter(cfg RouterConfig) *Router {
 		rt.priceHintsHandler = cfg.PriceHintsHandler
 	}
 
-	if cfg.CardRequestHandler != nil {
-		rt.cardRequestHandler = cfg.CardRequestHandler
-	}
-
 	if cfg.PricingDiagnosticsHandler != nil {
 		rt.pricingDiagnosticsHandler = cfg.PricingDiagnosticsHandler
 	}
@@ -145,10 +131,6 @@ func NewRouter(cfg RouterConfig) *Router {
 		rt.adminHandler = handlers.NewAdminHandlers(cfg.AuthService, rt.logger)
 		rt.authMW = middleware.NewAuthMiddleware(cfg.AuthService, rt.logger)
 		rt.authRateLimiter = middleware.NewAuthRateLimiter(10, time.Second, nil, rt.logger)
-
-		if cfg.FavoritesService != nil {
-			rt.favoritesHandler = handlers.NewFavoritesHandlers(cfg.FavoritesService, rt.logger)
-		}
 	}
 	// Enable local API token auth even without OAuth
 	if token := rt.localAPIToken; token != "" {
@@ -185,10 +167,6 @@ func NewRouter(cfg RouterConfig) *Router {
 
 	if cfg.MarketMoversHandler != nil {
 		rt.marketMoversHandler = cfg.MarketMoversHandler
-	}
-
-	if cfg.PicksHandler != nil {
-		rt.picksHandler = cfg.PicksHandler
 	}
 
 	if cfg.OpportunitiesHandler != nil {
@@ -254,15 +232,6 @@ func (rt *Router) Setup() http.Handler {
 	mux.HandleFunc("/login", rt.spaHandler.HandleIndex)
 	mux.HandleFunc("/campaigns", rt.spaHandler.HandleIndex)
 
-	// Favorites page requires authentication
-	if rt.authMW != nil {
-		mux.Handle("/favorites", rt.authMW.RequireAuth(http.HandlerFunc(rt.spaHandler.HandleIndex)))
-	} else {
-		mux.HandleFunc("/favorites", func(w http.ResponseWriter, r *http.Request) {
-			http.Redirect(w, r, "/login", http.StatusFound)
-		})
-	}
-
 	// Authentication routes
 	if rt.authHandler != nil {
 		mux.Handle("/auth/google/login", rt.authRateLimiter.Middleware(http.HandlerFunc(rt.authHandler.HandleGoogleLogin)))
@@ -270,40 +239,6 @@ func (rt *Router) Setup() http.Handler {
 		mux.Handle("/api/auth/logout", rt.authRateLimiter.Middleware(http.HandlerFunc(rt.authHandler.HandleLogout)))
 		mux.Handle("/api/auth/user", rt.authRateLimiter.Middleware(rt.authMW.RequireAuth(http.HandlerFunc(rt.authHandler.HandleGetCurrentUser))))
 		rt.logger.Info(context.Background(), "authentication routes registered")
-	}
-
-	// Favorites routes
-	if rt.favoritesHandler != nil && rt.authMW != nil {
-		mux.Handle("/api/favorites", rt.authMW.RequireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			switch r.Method {
-			case http.MethodGet:
-				rt.favoritesHandler.HandleListFavorites(w, r)
-			case http.MethodPost:
-				rt.favoritesHandler.HandleAddFavorite(w, r)
-			case http.MethodDelete:
-				rt.favoritesHandler.HandleRemoveFavorite(w, r)
-			default:
-				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-			}
-		})))
-		mux.Handle("/api/favorites/toggle", rt.authMW.RequireAuth(http.HandlerFunc(rt.favoritesHandler.HandleToggleFavorite)))
-		mux.Handle("/api/favorites/check", rt.authMW.RequireAuth(http.HandlerFunc(rt.favoritesHandler.HandleCheckFavorites)))
-		rt.logger.Info(context.Background(), "favorites routes registered")
-	}
-
-	// Core API endpoints — require authentication to protect external API budget
-	if rt.authMW != nil {
-		mux.Handle("/api/cards/search", rt.authMW.RequireAuth(http.HandlerFunc(rt.handler.HandleCardSearch)))
-		mux.Handle("/api/cards/pricing", rt.authMW.RequireAuth(http.HandlerFunc(rt.handler.HandleCardPricing)))
-	} else {
-		// Fail closed: reject requests when auth middleware is not configured
-		// rather than exposing external API budget to unauthenticated callers.
-		noAuth := func(w http.ResponseWriter, _ *http.Request) {
-			http.Error(w, "authentication not configured", http.StatusServiceUnavailable)
-		}
-		mux.HandleFunc("/api/cards/search", noAuth)
-		mux.HandleFunc("/api/cards/pricing", noAuth)
-		rt.logger.Warn(context.Background(), "card search/pricing routes registered without auth — requests will be rejected")
 	}
 
 	// CL Card Catalog search
@@ -322,9 +257,6 @@ func (rt *Router) Setup() http.Handler {
 
 	// AI Advisor routes
 	rt.registerAdvisorRoutes(mux)
-
-	// AI Picks routes
-	rt.registerPicksRoutes(mux)
 
 	// Arbitrage opportunities routes
 	rt.registerOpportunitiesRoutes(mux)

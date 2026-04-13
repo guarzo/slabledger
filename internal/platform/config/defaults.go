@@ -57,11 +57,6 @@ func Default() Config {
 			BurstPauseDuration: 10 * time.Second,
 			Enabled:            true,
 		},
-		CacheWarmup: CacheWarmupConfig{
-			Enabled:        true,
-			Interval:       24 * time.Hour,
-			RateLimitDelay: 2 * time.Second,
-		},
 		SessionCleanup: SessionCleanupConfig{
 			Enabled:  true,
 			Interval: 1 * time.Hour,
@@ -79,10 +74,6 @@ func Default() Config {
 			RetryInterval: 30 * time.Minute,
 			BatchSize:     3,
 			MaxRetries:    5,
-		},
-		SnapshotHistory: SnapshotHistoryConfig{
-			Enabled:  true,
-			Interval: 24 * time.Hour,
 		},
 		AdvisorRefresh: AdvisorRefreshConfig{
 			Enabled:       true,
@@ -108,11 +99,6 @@ func Default() Config {
 			Enabled:  false, // disabled by default
 			Interval: 6 * time.Hour,
 			MaxAge:   7 * 24 * time.Hour,
-		},
-		PicksRefresh: PicksRefreshConfig{
-			Enabled:     true,
-			Interval:    24 * time.Hour,
-			ContentHour: 3,
 		},
 		CardLadder: CardLadderConfig{
 			Enabled:     true, // runs automatically when credentials are configured

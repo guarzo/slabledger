@@ -9,7 +9,6 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/clients/gsheets"
 	igclient "github.com/guarzo/slabledger/internal/adapters/clients/instagram"
 	"github.com/guarzo/slabledger/internal/adapters/clients/marketmovers"
-	"github.com/guarzo/slabledger/internal/adapters/clients/tcgdex"
 	"github.com/guarzo/slabledger/internal/adapters/httpserver/handlers"
 	"github.com/guarzo/slabledger/internal/adapters/scheduler"
 	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
@@ -19,11 +18,9 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/auth"
 	"github.com/guarzo/slabledger/internal/domain/dhlisting"
 	"github.com/guarzo/slabledger/internal/domain/export"
-	"github.com/guarzo/slabledger/internal/domain/favorites"
 	"github.com/guarzo/slabledger/internal/domain/finance"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
-	"github.com/guarzo/slabledger/internal/domain/picks"
 	"github.com/guarzo/slabledger/internal/domain/portfolio"
 	"github.com/guarzo/slabledger/internal/domain/pricing"
 	"github.com/guarzo/slabledger/internal/domain/social"
@@ -38,11 +35,9 @@ type handlerInputs struct {
 	Cfg               *config.Config
 	Logger            observability.Logger
 	DB                *sqlite.DB
-	CardProvImpl      *tcgdex.TCGdex
 	PriceProvImpl     pricing.PriceProvider
 	PriceRepo         *sqlite.DBTracker
 	AuthService       auth.Service
-	FavoritesService  favorites.Service
 	CampaignsService  inventory.Service
 	ArbitrageService  arbitrage.Service
 	PortfolioService  portfolio.Service
@@ -52,7 +47,6 @@ type handlerInputs struct {
 	PurchaseStore     *sqlite.PurchaseStore
 	SellSheetStore    *sqlite.SellSheetStore
 	CardIDMappingRepo *sqlite.CardIDMappingRepository
-	CardRequestRepo   *sqlite.CardRequestRepository
 	IntelRepo         *sqlite.MarketIntelligenceRepository
 	SuggestionsRepo   *sqlite.DHSuggestionsRepository
 	AdvisorService    advisor.Service
@@ -69,7 +63,6 @@ type handlerInputs struct {
 	MMStore           *sqlite.MarketMoversStore
 	MMClient          *marketmovers.Client
 	DHClient          *dh.Client
-	PicksService      picks.Service
 	SchedulerResult   *scheduler.BuildResult
 	GSheetsClient     *gsheets.Client
 	PendingItemsRepo  *sqlite.PendingItemsRepository
@@ -125,12 +118,6 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 			Interval:      in.Cfg.PSASync.Interval.String(),
 			Logger:        logger,
 		})
-	}
-
-	// Picks handler (nil when service is disabled)
-	var picksHandler *handlers.PicksHandler
-	if in.PicksService != nil {
-		picksHandler = handlers.NewPicksHandler(in.PicksService, logger)
 	}
 
 	// Opportunities (arbitrage endpoints)
@@ -195,9 +182,6 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 	pricingDiagRepo := sqlite.NewPricingDiagnosticsRepository(in.DB.DB)
 	pricingDiagHandler := handlers.NewPricingDiagnosticsHandler(pricingDiagRepo, logger)
 
-	// Card request handler (read-only)
-	cardRequestHandler := handlers.NewCardRequestHandlers(in.CardRequestRepo, nil, "", logger)
-
 	// Advisor handler (if advisor was initialized)
 	var advisorHandler *handlers.AdvisorHandler
 	if in.AdvisorService != nil {
@@ -239,19 +223,15 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 	deps := ServerDependencies{
 		Config:                    in.Cfg,
 		Logger:                    logger,
-		CardProv:                  in.CardProvImpl,
 		PriceProv:                 in.PriceProvImpl,
 		HealthChecker:             in.PriceRepo,
 		APITracker:                in.PriceRepo,
 		AuthService:               in.AuthService,
-		FavoritesService:          in.FavoritesService,
 		CampaignsService:          in.CampaignsService,
 		ArbitrageService:          in.ArbitrageService,
 		PortfolioService:          in.PortfolioService,
 		TuningService:             in.TuningService,
-		CacheStatsProvider:        in.CardProvImpl,
 		PriceHintsHandler:         priceHintsHandler,
-		CardRequestHandler:        cardRequestHandler,
 		PricingDiagnosticsHandler: pricingDiagHandler,
 		CampaignsRepo:             in.PurchaseStore,
 		PricingAPIKey:             in.Cfg.Adapters.PricingAPIKey,
@@ -263,7 +243,6 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 		CardLadderHandler:         clHandler,
 		MarketMoversHandler:       mmHandler,
 		PSASyncHandler:            psaSyncHandler,
-		PicksHandler:              picksHandler,
 		OpportunitiesHandler:      opportunitiesHandler,
 		DHHandler:                 dhHandler,
 		SellSheetItemsHandler:     sellSheetItemsHandler,

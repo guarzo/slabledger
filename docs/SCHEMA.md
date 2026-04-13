@@ -244,123 +244,6 @@ Dropped in migration 000038. Was used for external pricing source discovery; sou
 
 ---
 
-### `card_request_submissions`
-Tracks card IDs submitted to external pricing services.
-
-| Column | Type | Constraints | Notes |
-|--------|------|-------------|-------|
-| `id` | INTEGER | PK, AUTOINCREMENT | |
-| `cert_number` | TEXT | NOT NULL | |
-| `grader` | TEXT | NOT NULL DEFAULT 'PSA' | |
-| `card_name` | TEXT | NOT NULL DEFAULT '' | |
-| `set_name` | TEXT | NOT NULL DEFAULT '' | |
-| `card_number` | TEXT | NOT NULL DEFAULT '' | |
-| `grade` | TEXT | NOT NULL DEFAULT '' | |
-| `front_image_url` | TEXT | NOT NULL DEFAULT '' | |
-| `variant` | TEXT | NOT NULL DEFAULT '' | |
-| `status` | TEXT | NOT NULL DEFAULT 'pending' | e.g. 'pending','submitted' |
-| `cardhedger_request_id` | TEXT | NOT NULL DEFAULT '' | Response ID from external service (legacy column name) |
-| `submitted_at` | DATETIME | | When submitted to provider |
-| `created_at` | DATETIME | NOT NULL DEFAULT CURRENT_TIMESTAMP | |
-| `updated_at` | DATETIME | NOT NULL DEFAULT CURRENT_TIMESTAMP | |
-
-**Unique:** `(grader, cert_number)`
-
-**Indexes:** none (unique constraint only)
-
-**Foreign Keys:** none
-
----
-
-### `market_snapshot_history`
-Daily archive of market data snapshots for unsold inventory — enables price trajectory analysis.
-
-| Column | Type | Constraints | Notes |
-|--------|------|-------------|-------|
-| `id` | INTEGER | PK, AUTOINCREMENT | |
-| `card_name` | TEXT | NOT NULL | |
-| `set_name` | TEXT | NOT NULL | |
-| `card_number` | TEXT | NOT NULL DEFAULT '' | |
-| `grade_value` | REAL | NOT NULL | Numeric grade (e.g. 10.0) |
-| `median_cents` | INTEGER | NOT NULL DEFAULT 0 | |
-| `conservative_cents` | INTEGER | NOT NULL DEFAULT 0 | |
-| `optimistic_cents` | INTEGER | NOT NULL DEFAULT 0 | |
-| `last_sold_cents` | INTEGER | NOT NULL DEFAULT 0 | |
-| `lowest_list_cents` | INTEGER | NOT NULL DEFAULT 0 | |
-| `estimated_value_cents` | INTEGER | NOT NULL DEFAULT 0 | |
-| `active_listings` | INTEGER | NOT NULL DEFAULT 0 | |
-| `sales_last_30d` | INTEGER | NOT NULL DEFAULT 0 | |
-| `sales_last_90d` | INTEGER | NOT NULL DEFAULT 0 | |
-| `daily_velocity` | REAL | NOT NULL DEFAULT 0 | Cards sold per day |
-| `weekly_velocity` | REAL | NOT NULL DEFAULT 0 | |
-| `trend_30d` | REAL | NOT NULL DEFAULT 0 | Price trend over 30 days |
-| `trend_90d` | REAL | NOT NULL DEFAULT 0 | |
-| `volatility` | REAL | NOT NULL DEFAULT 0 | Price volatility metric |
-| `source_count` | INTEGER | NOT NULL DEFAULT 0 | Number of pricing sources |
-| `fusion_confidence` | REAL | NOT NULL DEFAULT 0 | |
-| `snapshot_json` | TEXT | NOT NULL DEFAULT '' | Full snapshot blob |
-| `snapshot_date` | DATE | NOT NULL | |
-| `created_at` | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | |
-
-**Unique:** `(card_name, set_name, card_number, grade_value, snapshot_date)`
-
-**Indexes:**
-- `idx_msh_card_grade_date` UNIQUE on `(card_name, set_name, card_number, grade_value, snapshot_date)`
-- `idx_msh_date` on `(snapshot_date DESC)`
-
-**Foreign Keys:** none
-
----
-
-### `population_history`
-Tracks PSA population counts over time for population-based analytics.
-
-| Column | Type | Constraints | Notes |
-|--------|------|-------------|-------|
-| `id` | INTEGER | PK, AUTOINCREMENT | |
-| `card_name` | TEXT | NOT NULL | |
-| `set_name` | TEXT | NOT NULL | |
-| `card_number` | TEXT | NOT NULL DEFAULT '' | |
-| `grade_value` | REAL | NOT NULL | |
-| `grader` | TEXT | NOT NULL DEFAULT 'PSA' | |
-| `population` | INTEGER | NOT NULL | Total pop at this grade |
-| `pop_higher` | INTEGER | NOT NULL DEFAULT 0 | Pop at grades above this |
-| `observation_date` | DATE | NOT NULL | |
-| `source` | TEXT | NOT NULL DEFAULT 'csv_import' | How the data was ingested |
-| `created_at` | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | |
-
-**Unique:** `(card_name, set_name, card_number, grade_value, grader, observation_date)`
-
-**Indexes:** `idx_pop_history_card_date` UNIQUE on `(card_name, set_name, card_number, grade_value, grader, observation_date)`
-
-**Foreign Keys:** none
-
----
-
-### `cl_value_history`
-Tracks Card Ladder (CL) value changes per cert over time.
-
-| Column | Type | Constraints | Notes |
-|--------|------|-------------|-------|
-| `id` | INTEGER | PK, AUTOINCREMENT | |
-| `cert_number` | TEXT | NOT NULL | |
-| `card_name` | TEXT | NOT NULL | |
-| `set_name` | TEXT | NOT NULL | |
-| `card_number` | TEXT | NOT NULL DEFAULT '' | |
-| `grade_value` | REAL | NOT NULL | |
-| `cl_value_cents` | INTEGER | NOT NULL | Card Ladder valuation |
-| `observation_date` | DATE | NOT NULL | |
-| `source` | TEXT | NOT NULL DEFAULT 'csv_import' | |
-| `created_at` | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | |
-
-**Unique:** `(cert_number, observation_date)`
-
-**Indexes:** `idx_cl_history_cert_date` UNIQUE on `(cert_number, observation_date)`
-
-**Foreign Keys:** none
-
----
-
 ### `advisor_cache`
 Cached results from the AI advisor scheduler (one row per analysis type).
 
@@ -501,28 +384,6 @@ OAuth access/refresh tokens, scoped to a session.
 **Foreign Keys:**
 - `user_id → users(id)` ON DELETE CASCADE
 - `session_id → user_sessions(id)` ON DELETE CASCADE
-
----
-
-### `favorites`
-User-saved favorite cards for quick access.
-
-| Column | Type | Constraints | Notes |
-|--------|------|-------------|-------|
-| `id` | INTEGER | PK, AUTOINCREMENT | |
-| `user_id` | INTEGER | NOT NULL | |
-| `card_name` | TEXT | NOT NULL | |
-| `set_name` | TEXT | NOT NULL | |
-| `card_number` | TEXT | NOT NULL DEFAULT '' | |
-| `image_url` | TEXT | | |
-| `notes` | TEXT | | |
-| `created_at` | DATETIME | NOT NULL DEFAULT CURRENT_TIMESTAMP | |
-
-**Unique:** `(user_id, card_name, set_name, card_number)`
-
-**Indexes:** `idx_favorites_user_created` on `(user_id, created_at DESC)`
-
-**Foreign Keys:** `user_id → users(id)` ON DELETE CASCADE
 
 ---
 
@@ -719,57 +580,6 @@ Price data quality flags raised by users for review.
 - `purchase_id → campaign_purchases(id)` ON DELETE CASCADE
 - `flagged_by → users(id)`
 - `resolved_by → users(id)`
-
----
-
-### `ai_picks`
-AI-generated acquisition picks (daily card recommendations).
-
-| Column | Type | Constraints | Notes |
-|--------|------|-------------|-------|
-| `id` | INTEGER | PK, AUTOINCREMENT | |
-| `pick_date` | DATE | NOT NULL | |
-| `card_name` | TEXT | NOT NULL | |
-| `set_name` | TEXT | NOT NULL | |
-| `grade` | TEXT | NOT NULL | |
-| `direction` | TEXT | NOT NULL, CHECK IN ('buy','watch','avoid') | |
-| `confidence` | TEXT | NOT NULL, CHECK IN ('high','medium','low') | |
-| `buy_thesis` | TEXT | NOT NULL | |
-| `target_buy_price` | INTEGER | | In cents |
-| `expected_sell_price` | INTEGER | | In cents |
-| `signals_json` | TEXT | NOT NULL DEFAULT '[]' | |
-| `rank` | INTEGER | NOT NULL | |
-| `source` | TEXT | NOT NULL, CHECK IN ('ai','watchlist_reassessment') | |
-| `created_at` | DATETIME | DEFAULT CURRENT_TIMESTAMP | |
-
-**Unique:** `(pick_date, card_name, set_name, grade)`
-
-**Indexes:** `idx_ai_picks_date` on `(pick_date)`
-
-**Foreign Keys:** none
-
----
-
-### `acquisition_watchlist`
-User/AI acquisition watchlist for cards to track.
-
-| Column | Type | Constraints | Notes |
-|--------|------|-------------|-------|
-| `id` | INTEGER | PK, AUTOINCREMENT | |
-| `card_name` | TEXT | NOT NULL | |
-| `set_name` | TEXT | NOT NULL | |
-| `grade` | TEXT | NOT NULL | |
-| `source` | TEXT | NOT NULL, CHECK IN ('manual','auto_from_pick') | |
-| `active` | INTEGER | NOT NULL DEFAULT 1 | Boolean |
-| `latest_pick_id` | INTEGER | REFERENCES ai_picks(id) ON DELETE SET NULL | |
-| `added_at` | DATETIME | DEFAULT CURRENT_TIMESTAMP | |
-| `updated_at` | DATETIME | DEFAULT CURRENT_TIMESTAMP | |
-
-**Unique:** `(card_name, set_name, grade)` WHERE `active = 1` (partial)
-
-**Indexes:** `idx_acq_watchlist_active` on `(active)`
-
-**Foreign Keys:** `latest_pick_id → ai_picks(id)` ON DELETE SET NULL
 
 ---
 
@@ -1057,7 +867,6 @@ users
 ├── user_sessions          (user_id → users.id CASCADE DELETE)
 │   └── user_tokens        (session_id → user_sessions.id CASCADE DELETE)
 ├── user_tokens            (user_id → users.id CASCADE DELETE)
-├── favorites              (user_id → users.id CASCADE DELETE)
 ├── allowed_emails         (added_by → users.id SET NULL)
 └── price_flags            (flagged_by → users.id, resolved_by → users.id)
 
@@ -1072,9 +881,6 @@ social_posts
 ├── social_post_cards      (post_id → social_posts.id CASCADE DELETE)
 └── instagram_post_metrics (post_id → social_posts.id CASCADE DELETE)
 
-ai_picks
-└── acquisition_watchlist  (latest_pick_id → ai_picks.id SET NULL)
-
 ── Standalone tables (no FK dependencies) ──
 api_calls
 ai_calls
@@ -1084,10 +890,6 @@ sync_state
 cashflow_config
 invoices
 revocation_flags
-card_request_submissions
-market_snapshot_history
-population_history
-cl_value_history
 advisor_cache
 instagram_config
 oauth_states

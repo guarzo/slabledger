@@ -5,7 +5,6 @@ import (
 	"errors"
 	"testing"
 
-	domainCards "github.com/guarzo/slabledger/internal/domain/cards"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/mathutil"
 	"github.com/guarzo/slabledger/internal/domain/pricing"
@@ -13,7 +12,7 @@ import (
 
 // mockPriceProvider implements pricing.PriceProvider for testing.
 type mockPriceProvider struct {
-	lookupFn func(ctx context.Context, setName string, card domainCards.Card) (*pricing.Price, error)
+	lookupFn func(ctx context.Context, setName string, card pricing.CardLookup) (*pricing.Price, error)
 }
 
 func (m *mockPriceProvider) GetPrice(context.Context, pricing.Card) (*pricing.Price, error) {
@@ -21,7 +20,7 @@ func (m *mockPriceProvider) GetPrice(context.Context, pricing.Card) (*pricing.Pr
 }
 func (m *mockPriceProvider) Available() bool { return true }
 func (m *mockPriceProvider) Name() string    { return "mock" }
-func (m *mockPriceProvider) LookupCard(ctx context.Context, setName string, card domainCards.Card) (*pricing.Price, error) {
+func (m *mockPriceProvider) LookupCard(ctx context.Context, setName string, card pricing.CardLookup) (*pricing.Price, error) {
 	return m.lookupFn(ctx, setName, card)
 }
 
@@ -314,7 +313,7 @@ var testCard = inventory.CardIdentity{
 
 func TestGetLastSoldCents_ValidGrades(t *testing.T) {
 	mock := &mockPriceProvider{
-		lookupFn: func(_ context.Context, _ string, _ domainCards.Card) (*pricing.Price, error) {
+		lookupFn: func(_ context.Context, _ string, _ pricing.CardLookup) (*pricing.Price, error) {
 			return &pricing.Price{
 				LastSoldByGrade: &pricing.LastSoldByGrade{
 					PSA10: &pricing.GradeSaleInfo{LastSoldPrice: 10050, SaleCount: 5},
@@ -351,7 +350,7 @@ func TestGetLastSoldCents_ValidGrades(t *testing.T) {
 
 func TestGetLastSoldCents_InvalidGrade(t *testing.T) {
 	mock := &mockPriceProvider{
-		lookupFn: func(_ context.Context, _ string, _ domainCards.Card) (*pricing.Price, error) {
+		lookupFn: func(_ context.Context, _ string, _ pricing.CardLookup) (*pricing.Price, error) {
 			return &pricing.Price{}, nil
 		},
 	}
@@ -365,7 +364,7 @@ func TestGetLastSoldCents_InvalidGrade(t *testing.T) {
 func TestGetLastSoldCents_ProviderError(t *testing.T) {
 	provErr := errors.New("provider down")
 	mock := &mockPriceProvider{
-		lookupFn: func(_ context.Context, _ string, _ domainCards.Card) (*pricing.Price, error) {
+		lookupFn: func(_ context.Context, _ string, _ pricing.CardLookup) (*pricing.Price, error) {
 			return nil, provErr
 		},
 	}
@@ -378,7 +377,7 @@ func TestGetLastSoldCents_ProviderError(t *testing.T) {
 
 func TestGetLastSoldCents_NilLastSoldByGrade(t *testing.T) {
 	mock := &mockPriceProvider{
-		lookupFn: func(_ context.Context, _ string, _ domainCards.Card) (*pricing.Price, error) {
+		lookupFn: func(_ context.Context, _ string, _ pricing.CardLookup) (*pricing.Price, error) {
 			return &pricing.Price{}, nil
 		},
 	}
@@ -394,7 +393,7 @@ func TestGetLastSoldCents_NilLastSoldByGrade(t *testing.T) {
 
 func TestGetLastSoldCents_PSA7(t *testing.T) {
 	mock := &mockPriceProvider{
-		lookupFn: func(_ context.Context, _ string, _ domainCards.Card) (*pricing.Price, error) {
+		lookupFn: func(_ context.Context, _ string, _ pricing.CardLookup) (*pricing.Price, error) {
 			return &pricing.Price{
 				LastSoldByGrade: &pricing.LastSoldByGrade{
 					PSA7: &pricing.GradeSaleInfo{LastSoldPrice: 15000},
@@ -438,7 +437,7 @@ func TestGetLastSoldCents_RawBehavior(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mock := &mockPriceProvider{
-				lookupFn: func(_ context.Context, _ string, _ domainCards.Card) (*pricing.Price, error) {
+				lookupFn: func(_ context.Context, _ string, _ pricing.CardLookup) (*pricing.Price, error) {
 					return tt.price, nil
 				},
 			}
@@ -456,7 +455,7 @@ func TestGetLastSoldCents_RawBehavior(t *testing.T) {
 
 func TestGetMarketSnapshot_FullSnapshot(t *testing.T) {
 	mock := &mockPriceProvider{
-		lookupFn: func(_ context.Context, _ string, _ domainCards.Card) (*pricing.Price, error) {
+		lookupFn: func(_ context.Context, _ string, _ pricing.CardLookup) (*pricing.Price, error) {
 			return &pricing.Price{
 				LastSoldByGrade: &pricing.LastSoldByGrade{
 					PSA10: &pricing.GradeSaleInfo{LastSoldPrice: 10000, LastSoldDate: "2025-01-15", SaleCount: 5},
@@ -535,7 +534,7 @@ func TestGetMarketSnapshot_FullSnapshot(t *testing.T) {
 
 func TestGetMarketSnapshot_InvalidGrade(t *testing.T) {
 	mock := &mockPriceProvider{
-		lookupFn: func(_ context.Context, _ string, _ domainCards.Card) (*pricing.Price, error) {
+		lookupFn: func(_ context.Context, _ string, _ pricing.CardLookup) (*pricing.Price, error) {
 			return &pricing.Price{}, nil
 		},
 	}
@@ -548,7 +547,7 @@ func TestGetMarketSnapshot_InvalidGrade(t *testing.T) {
 
 func TestGetMarketSnapshot_NilPrice(t *testing.T) {
 	mock := &mockPriceProvider{
-		lookupFn: func(_ context.Context, _ string, _ domainCards.Card) (*pricing.Price, error) {
+		lookupFn: func(_ context.Context, _ string, _ pricing.CardLookup) (*pricing.Price, error) {
 			return nil, nil
 		},
 	}
@@ -564,7 +563,7 @@ func TestGetMarketSnapshot_NilPrice(t *testing.T) {
 
 func TestGetMarketSnapshot_FallbackLogic(t *testing.T) {
 	mock := &mockPriceProvider{
-		lookupFn: func(_ context.Context, _ string, _ domainCards.Card) (*pricing.Price, error) {
+		lookupFn: func(_ context.Context, _ string, _ pricing.CardLookup) (*pricing.Price, error) {
 			return &pricing.Price{
 				Grades: pricing.GradedPrices{PSA10Cents: 5000},
 			}, nil
@@ -614,7 +613,7 @@ func TestGetMarketSnapshot_FallbackLogic(t *testing.T) {
 func TestGetMarketSnapshot_LastSoldFallbackChain(t *testing.T) {
 	t.Run("fallback to eBay when LastSoldByGrade is nil", func(t *testing.T) {
 		mock := &mockPriceProvider{
-			lookupFn: func(_ context.Context, _ string, _ domainCards.Card) (*pricing.Price, error) {
+			lookupFn: func(_ context.Context, _ string, _ pricing.CardLookup) (*pricing.Price, error) {
 				return &pricing.Price{
 					GradeDetails: map[string]*pricing.GradeDetail{
 						"psa8": {
@@ -639,7 +638,7 @@ func TestGetMarketSnapshot_LastSoldFallbackChain(t *testing.T) {
 
 	t.Run("fallback to estimate when eBay missing", func(t *testing.T) {
 		mock := &mockPriceProvider{
-			lookupFn: func(_ context.Context, _ string, _ domainCards.Card) (*pricing.Price, error) {
+			lookupFn: func(_ context.Context, _ string, _ pricing.CardLookup) (*pricing.Price, error) {
 				return &pricing.Price{
 					GradeDetails: map[string]*pricing.GradeDetail{
 						"psa9": {
@@ -667,7 +666,7 @@ func TestGetMarketSnapshot_LastSoldFallbackChain(t *testing.T) {
 
 	t.Run("nil GradeDetail entry does not panic", func(t *testing.T) {
 		mock := &mockPriceProvider{
-			lookupFn: func(_ context.Context, _ string, _ domainCards.Card) (*pricing.Price, error) {
+			lookupFn: func(_ context.Context, _ string, _ pricing.CardLookup) (*pricing.Price, error) {
 				return &pricing.Price{
 					// Key exists but value is nil — must not panic
 					GradeDetails: map[string]*pricing.GradeDetail{
@@ -688,7 +687,7 @@ func TestGetMarketSnapshot_LastSoldFallbackChain(t *testing.T) {
 
 	t.Run("actual LastSoldByGrade takes priority over eBay fallback", func(t *testing.T) {
 		mock := &mockPriceProvider{
-			lookupFn: func(_ context.Context, _ string, _ domainCards.Card) (*pricing.Price, error) {
+			lookupFn: func(_ context.Context, _ string, _ pricing.CardLookup) (*pricing.Price, error) {
 				return &pricing.Price{
 					LastSoldByGrade: &pricing.LastSoldByGrade{
 						PSA10: &pricing.GradeSaleInfo{LastSoldPrice: 20000, SaleCount: 5},
@@ -714,7 +713,7 @@ func TestGetMarketSnapshot_LastSoldFallbackChain(t *testing.T) {
 
 func TestGetMarketSnapshot_SourcesPassthrough(t *testing.T) {
 	mock := &mockPriceProvider{
-		lookupFn: func(_ context.Context, _ string, _ domainCards.Card) (*pricing.Price, error) {
+		lookupFn: func(_ context.Context, _ string, _ pricing.CardLookup) (*pricing.Price, error) {
 			return &pricing.Price{
 				Grades:  pricing.GradedPrices{PSA10Cents: 10000},
 				Sources: []string{"ebay", "tcgplayer"},

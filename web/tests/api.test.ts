@@ -3,6 +3,7 @@ import {
   APIError,
   isAPIError,
 } from '../src/js/api';
+import type { Campaign } from '../src/types/campaigns';
 
 describe('api module', () => {
   describe('APIError', () => {
@@ -56,17 +57,18 @@ describe('api module', () => {
     });
 
     it('GET request parses JSON response', async () => {
-      const mockData = { cards: [{ name: 'Pikachu' }] };
+      const mockCampaigns: Campaign[] = [{ id: '1', name: 'Test', sport: '', yearRange: '', gradeRange: '', priceRange: '', clConfidence: '', buyTermsCLPct: 0, dailySpendCapCents: 0, inclusionList: '', exclusionMode: false, phase: 'pending', psaSourcingFeeCents: 0, ebayFeePct: 0, expectedFillRate: 0, createdAt: '', updatedAt: '' }];
       globalThis.fetch = vi.fn().mockResolvedValue({
         ok: true,
-        json: () => Promise.resolve(mockData),
+        json: () => Promise.resolve(mockCampaigns),
         status: 200,
       });
 
       // Import fresh api instance
       const { api } = await import('../src/js/api');
-      await api.getFavorites();
+      const result = await api.listCampaigns();
       expect(globalThis.fetch).toHaveBeenCalled();
+      expect(result).toEqual(mockCampaigns);
     });
 
     it('throws APIError on non-ok response', async () => {
@@ -78,7 +80,7 @@ describe('api module', () => {
       });
 
       const { api } = await import('../src/js/api');
-      await expect(api.getFavorites()).rejects.toThrow();
+      await expect(api.listCampaigns()).rejects.toThrow();
     });
   });
 });

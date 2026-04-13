@@ -11,7 +11,6 @@
 import './campaigns';
 import './admin';
 import './social';
-import './picks';
 
 // Re-export everything consumers depend on from client.ts
 export {
@@ -21,14 +20,10 @@ export {
 } from './client';
 
 export type {
-  CardRequestSubmission,
-  CardSearchResult,
-  SearchCardsResponse,
   APIRequestOptions,
 } from './client';
 
 // Re-export types that the old api.ts re-exported
-export type { CardPricingResponse } from '../../types/pricing';
 export type { AllowedEmail, AdminUser } from '../../types/admin';
 
 // Create and export the singleton

@@ -3,15 +3,13 @@
  *
  * Sticky header with logo, navigation, and user dropdown menu.
  */
-import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { DropdownMenu } from 'radix-ui';
 import Navigation from './Navigation';
 import StatusIndicator from './StatusIndicator';
 import { useAuth } from '../contexts/AuthContext';
 import logoSrc from '../../assets/logo.png';
-
-const PriceLookupDrawer = lazy(() => import('./PriceLookupDrawer'));
 
 function UserInitial({ name }: { name: string }) {
   const initial = name.charAt(0).toUpperCase();
@@ -26,7 +24,6 @@ export default function Header() {
   const { user, loading, logout } = useAuth();
   const [isScrolled, setIsScrolled] = useState(false);
   const [avatarError, setAvatarError] = useState(false);
-  const [lookupOpen, setLookupOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const closeMenu = useCallback(() => setMenuOpen(false), []);
   const location = useLocation();
@@ -111,19 +108,7 @@ export default function Header() {
         </div>
 
         {/* Right Actions */}
-        <div className="flex gap-3 items-center">
-          <button
-            type="button"
-            onClick={() => setLookupOpen(true)}
-            className="p-2 rounded-[var(--radius-md)] text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface-2)]/60 transition-colors"
-            aria-label="Price Lookup"
-            title="Price Lookup"
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
-              <circle cx="11" cy="11" r="8" />
-              <line x1="21" y1="21" x2="16.65" y2="16.65" />
-            </svg>
-          </button>
+         <div className="flex gap-3 items-center">
           <StatusIndicator />
           {loading ? (
             <span className="text-xs text-[var(--text-muted)]">...</span>
@@ -193,14 +178,8 @@ export default function Header() {
       {menuOpen && (
         <div className="md:hidden border-t border-[rgba(255,255,255,0.06)] bg-[var(--surface-1)]/95 backdrop-blur-xl">
           <Navigation mobile onNavigate={closeMenu} />
-        </div>
-      )}
-
-      {lookupOpen && (
-        <Suspense fallback={null}>
-          <PriceLookupDrawer open={lookupOpen} onOpenChange={setLookupOpen} />
-        </Suspense>
-      )}
-    </header>
-  );
-}
+         </div>
+       )}
+     </header>
+   );
+ }

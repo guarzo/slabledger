@@ -34,26 +34,12 @@ export const useAdminUsers = createAdminQuery(
   () => api.getAdminUsers(),
 );
 
-export const useCardRequests = createAdminQuery(
-  queryKeys.admin.cardRequests,
-  () => api.getCardRequests(),
-);
-
 export function useAdminApiUsage(options?: AdminQueryOptions) {
   return useQuery({
     queryKey: queryKeys.admin.apiUsage,
     queryFn: () => api.getAdminApiUsage(),
     refetchInterval: 60_000,
     staleTime: 30_000,
-    enabled: options?.enabled ?? true,
-  });
-}
-
-export function useAdminCacheStats(options?: AdminQueryOptions) {
-  return useQuery({
-    queryKey: queryKeys.admin.cacheStats,
-    queryFn: () => api.getAdminCacheStats(),
-    staleTime: 60_000,
     enabled: options?.enabled ?? true,
   });
 }
@@ -94,26 +80,6 @@ export function usePricingDiagnostics(options?: AdminQueryOptions) {
     queryFn: () => api.getPricingDiagnostics(),
     staleTime: 60_000,
     enabled: options?.enabled ?? true,
-  });
-}
-
-export function useSubmitCardRequest() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (id: number) => api.submitCardRequest(id),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.admin.cardRequests });
-    },
-  });
-}
-
-export function useSubmitAllCardRequests() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: () => api.submitAllCardRequests(),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.admin.cardRequests });
-    },
   });
 }
 

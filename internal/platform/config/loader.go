@@ -164,11 +164,6 @@ func FromEnv(base Config) Config {
 	envDurationPositive("PRICE_BURST_PAUSE_DURATION", &cfg.PriceRefresh.BurstPauseDuration)
 	envBool("PRICE_REFRESH_ENABLED", &cfg.PriceRefresh.Enabled, true)
 
-	// Cache warmup
-	envBool("CACHE_WARMUP_ENABLED", &cfg.CacheWarmup.Enabled, true)
-	envDuration("CACHE_WARMUP_INTERVAL", &cfg.CacheWarmup.Interval)
-	envDuration("CACHE_WARMUP_RATE_LIMIT_DELAY", &cfg.CacheWarmup.RateLimitDelay)
-
 	// Session cleanup
 	envBool("SESSION_CLEANUP_ENABLED", &cfg.SessionCleanup.Enabled, true)
 	envDuration("SESSION_CLEANUP_INTERVAL", &cfg.SessionCleanup.Interval)
@@ -186,10 +181,6 @@ func FromEnv(base Config) Config {
 	envIntPositive("SNAPSHOT_ENRICH_BATCH_SIZE", &cfg.SnapshotEnrich.BatchSize)
 	envDurationPositive("SNAPSHOT_ENRICH_RETRY_INTERVAL", &cfg.SnapshotEnrich.RetryInterval)
 	envIntPositive("SNAPSHOT_ENRICH_MAX_RETRIES", &cfg.SnapshotEnrich.MaxRetries)
-
-	// Snapshot history scheduler
-	envBool("SNAPSHOT_HISTORY_ENABLED", &cfg.SnapshotHistory.Enabled, true)
-	envDurationPositive("SNAPSHOT_HISTORY_INTERVAL", &cfg.SnapshotHistory.Interval)
 
 	// Advisor refresh scheduler
 	envBool("ADVISOR_REFRESH_ENABLED", &cfg.AdvisorRefresh.Enabled, true)
@@ -215,10 +206,6 @@ func FromEnv(base Config) Config {
 	envBool("METRICS_POLL_ENABLED", &cfg.MetricsPoll.Enabled, false)
 	envDurationPositive("METRICS_POLL_INTERVAL", &cfg.MetricsPoll.Interval)
 	envDurationPositive("METRICS_POLL_MAX_AGE", &cfg.MetricsPoll.MaxAge)
-
-	// Picks refresh scheduler
-	envBool("PICKS_REFRESH_ENABLED", &cfg.PicksRefresh.Enabled, true)
-	envIntRange("PICKS_REFRESH_HOUR", &cfg.PicksRefresh.ContentHour, -1, 23)
 
 	// Card Ladder scheduler
 	envBool("CARDLADDER_REFRESH_ENABLED", &cfg.CardLadder.Enabled, false)

@@ -6,14 +6,12 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	"github.com/guarzo/slabledger/internal/adapters/clients/marketmovers"
-	"github.com/guarzo/slabledger/internal/adapters/clients/tcgdex"
 	"github.com/guarzo/slabledger/internal/adapters/scheduler"
 	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
 	"github.com/guarzo/slabledger/internal/domain/advisor"
 	"github.com/guarzo/slabledger/internal/domain/auth"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
-	"github.com/guarzo/slabledger/internal/domain/picks"
 	"github.com/guarzo/slabledger/internal/domain/pricing"
 	"github.com/guarzo/slabledger/internal/domain/social"
 	"github.com/guarzo/slabledger/internal/platform/config"
@@ -26,14 +24,12 @@ type schedulerDeps struct {
 	DBTracker            *sqlite.DBTracker
 	RefreshCandidates    pricing.RefreshCandidateProvider
 	PriceProvImpl        pricing.PriceProvider
-	CardProvImpl         *tcgdex.TCGdex
 	AuthService          auth.Service
 	SyncStateRepo        *sqlite.SyncStateRepository
 	CardIDMappingRepo    *sqlite.CardIDMappingRepository
 	CampaignStore        *sqlite.CampaignStore
 	PurchaseStore        *sqlite.PurchaseStore
 	DHStore              *sqlite.DHStore
-	SnapshotStore        *sqlite.SnapshotStore
 	CampaignsService     inventory.Service
 	CertLookup           inventory.CertLookup
 	CertEnrichJob        *scheduler.CertEnrichJob // pre-built; nil if PSA not configured
@@ -47,7 +43,6 @@ type schedulerDeps struct {
 	MetricsPostLister    social.MetricsPostLister
 	MetricsSaver         social.MetricsSaver
 	InsightsPoller       social.InsightsPoller
-	PicksService         picks.Service
 	CardLadderClient     *cardladder.Client
 	CardLadderStore      *sqlite.CardLadderStore
 	CardLadderSalesStore *sqlite.CLSalesStore
@@ -72,16 +67,12 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 		AccessTracker:            deps.DBTracker,
 		RefreshCandidates:        deps.RefreshCandidates,
 		PriceProvider:            deps.PriceProvImpl,
-		CardProvider:             deps.CardProvImpl,
 		AuthService:              deps.AuthService,
 		Logger:                   deps.Logger,
 		SyncStateStore:           deps.SyncStateRepo,
-		NewSetsProvider:          deps.CardProvImpl.RegistryManager(),
 		InventoryLister:          &inventoryListAdapter{repo: deps.PurchaseStore},
 		SnapshotRefresher:        &snapshotRefreshAdapter{svc: deps.CampaignsService},
 		SnapshotEnrichService:    deps.CampaignsService,
-		SnapshotHistoryLister:    deps.PurchaseStore,
-		SnapshotHistoryRecorder:  deps.SnapshotStore,
 		AdvisorCollector:         deps.AdvisorService,
 		AdvisorCache:             deps.AdvisorCacheRepo,
 		AICallTracker:            deps.AICallRepo,
@@ -90,14 +81,12 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 		MetricsPostLister:        deps.MetricsPostLister,
 		MetricsSaver:             deps.MetricsSaver,
 		InsightsPoller:           deps.InsightsPoller,
-		PicksGenerator:           deps.PicksService,
 		CardLadderClient:         deps.CardLadderClient,
 		CardLadderStore:          deps.CardLadderStore,
 		CardLadderPurchaseLister: deps.PurchaseStore,
 		CardLadderValueUpdater:   deps.PurchaseStore,
 		CardLadderGemRateUpdater: deps.PurchaseStore,
 		CardLadderSyncUpdater:    deps.PurchaseStore,
-		CardLadderCLRecorder:     deps.SnapshotStore,
 		CardLadderSalesStore:     deps.CardLadderSalesStore,
 	}
 	// Wire Market Movers (nil-safe: only set if non-nil to avoid typed-nil interface issues)
