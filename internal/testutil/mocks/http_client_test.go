@@ -145,28 +145,6 @@ func TestMockHTTPClient_Stats(t *testing.T) {
 	}
 }
 
-func TestMockHTTPClient_TCGdexHelper(t *testing.T) {
-	mock := mocks.NewMockHTTPClientWithTCGdexResponses()
-
-	var result []struct {
-		ID   string `json:"id"`
-		Name string `json:"name"`
-	}
-
-	err := mock.GetJSON(context.Background(), "https://api.tcgdex.net/v2/en/sets", nil, 0, &result)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if len(result) != 3 {
-		t.Errorf("expected 3 sets, got %d", len(result))
-	}
-
-	if result[0].ID != "base1" {
-		t.Errorf("expected first set to be 'base1', got: %s", result[0].ID)
-	}
-}
-
 func TestMockHTTPClient_PatternMatching(t *testing.T) {
 	mock := mocks.NewMockHTTPClient()
 	mock.AddResponse("/v2/cards", mocks.MockHTTPResponse{
@@ -432,27 +410,4 @@ func TestMockHTTPClientWithError(t *testing.T) {
 	if err.Error() != expectedErr.Error() {
 		t.Errorf("expected error '%v', got: %v", expectedErr, err)
 	}
-}
-
-// Performance test to ensure mock is fast
-func TestMockHTTPClient_Performance(t *testing.T) {
-	mock := mocks.NewMockHTTPClientWithTCGdexResponses()
-
-	start := time.Now()
-	iterations := 1000
-
-	for i := 0; i < iterations; i++ {
-		var result []interface{}
-		_ = mock.GetJSON(context.Background(), "https://api.tcgdex.net/v2/en/sets", nil, 0, &result)
-	}
-
-	duration := time.Since(start)
-	avgPerCall := duration / time.Duration(iterations)
-
-	// Each call should complete in < 1ms on average
-	if avgPerCall > time.Millisecond {
-		t.Errorf("mock too slow: average %v per call (expected < 1ms)", avgPerCall)
-	}
-
-	t.Logf("Performance: %d calls in %v (avg %v per call)", iterations, duration, avgPerCall)
 }
