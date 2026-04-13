@@ -40,9 +40,9 @@ func (s *service) handleExistingPSAPurchase(ctx context.Context, existing *Purch
 	buyCostChanged := existing.BuyCostCents == 0 && row.PricePaid > 0
 
 	metadataChanged := false
-	if isGenericSetName(existing.SetName) || existing.CardNumber == "" {
+	if IsGenericSetName(existing.SetName) || existing.CardNumber == "" {
 		parsed := parseCardMetadataFromTitle(row.ListingTitle, row.Category)
-		metadataChanged = (isGenericSetName(existing.SetName) && !isGenericSetName(parsed.SetName)) ||
+		metadataChanged = (IsGenericSetName(existing.SetName) && !IsGenericSetName(parsed.SetName)) ||
 			(existing.CardNumber == "" && parsed.CardNumber != "")
 	}
 
@@ -85,10 +85,10 @@ func (s *service) handleExistingPSAPurchase(ctx context.Context, existing *Purch
 	metadataWritten := false
 	metadataFailed := false
 	newName, newNum, newSet := existing.CardName, existing.CardNumber, existing.SetName
-	if isGenericSetName(existing.SetName) || existing.CardNumber == "" {
+	if IsGenericSetName(existing.SetName) || existing.CardNumber == "" {
 		parsed := parseCardMetadataFromTitle(row.ListingTitle, row.Category)
 		needsUpdate := false
-		if isGenericSetName(existing.SetName) && !isGenericSetName(parsed.SetName) {
+		if IsGenericSetName(existing.SetName) && !IsGenericSetName(parsed.SetName) {
 			newSet = parsed.SetName
 			needsUpdate = true
 		}

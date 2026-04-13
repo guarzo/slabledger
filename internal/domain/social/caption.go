@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/guarzo/slabledger/internal/domain/ai"
+	"github.com/guarzo/slabledger/internal/domain/llmutil"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
@@ -315,7 +316,7 @@ func parseCaptionResponse(raw string) (title, caption, hashtags string) {
 		return "", "", ""
 	}
 
-	cleaned := sanitizeLLMJSON(stripMarkdownFences(raw))
+	cleaned := sanitizeLLMJSON(llmutil.StripMarkdownFences(raw))
 
 	var resp captionResponse
 	if err := json.Unmarshal([]byte(cleaned), &resp); err == nil && resp.Caption != "" {
@@ -325,15 +326,6 @@ func parseCaptionResponse(raw string) (title, caption, hashtags string) {
 	// Fallback: text-based parsing (no title) — use fence-stripped string
 	caption, hashtags = parseCaption(cleaned)
 	return "", caption, hashtags
-}
-
-// stripMarkdownFences removes ```json / ``` wrappers from LLM output.
-func stripMarkdownFences(s string) string {
-	s = strings.TrimSpace(s)
-	s = strings.TrimPrefix(s, "```json")
-	s = strings.TrimPrefix(s, "```")
-	s = strings.TrimSuffix(s, "```")
-	return strings.TrimSpace(s)
 }
 
 // sanitizeLLMJSON fixes common JSON issues from LLM output, such as
