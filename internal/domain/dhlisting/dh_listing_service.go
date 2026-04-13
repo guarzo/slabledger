@@ -84,13 +84,13 @@ func WithDHListingCandidatesSaver(saver DHListingCandidatesSaver) DHListingServi
 	return func(s *dhListingService) { s.candidatesSaver = saver }
 }
 
-// NewDHListingService creates a new DHListingService.
+// NewDHListingService creates a new Service.
 // purchaseLookup and logger are required; all other dependencies are optional.
 func NewDHListingService(
 	purchaseLookup DHListingPurchaseLookup,
 	logger observability.Logger,
 	opts ...DHListingServiceOption,
-) (DHListingService, error) {
+) (Service, error) {
 	if purchaseLookup == nil {
 		return nil, fmt.Errorf("purchaseLookup is required")
 	}
@@ -107,7 +107,7 @@ func NewDHListingService(
 	return s, nil
 }
 
-// ListPurchases implements DHListingService.
+// ListPurchases implements Service.
 func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []string) DHListingResult {
 	if s.lister == nil || len(certNumbers) == 0 {
 		return DHListingResult{}
