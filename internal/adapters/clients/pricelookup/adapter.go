@@ -244,9 +244,9 @@ func (a *Adapter) GetMarketSnapshot(ctx context.Context, card inventory.CardIden
 }
 
 // getPrice fetches the price for a card from the underlying PriceProvider.
-// Strategy: always looks up by card name/set — DH card ID caching is handled
-// internally by the DHPriceProvider. Callers that have a DH card ID will benefit
-// from cache hits without needing to pass the ID through this adapter layer.
+// Strategy: looks up by card name, set, and card number — DH card ID caching is
+// handled internally by the DHPriceProvider. Callers that have a DH card ID will
+// benefit from cache hits without needing to pass the ID through this adapter layer.
 func (a *Adapter) getPrice(ctx context.Context, card inventory.CardIdentity) (*pricing.Price, error) {
 	c := domainCards.Card{Name: card.CardName, Number: card.CardNumber, SetName: card.SetName, PSAListingTitle: card.PSAListingTitle}
 	price, err := a.provider.LookupCard(ctx, card.SetName, c)

@@ -126,7 +126,7 @@ func initializeSocialService(
 			Endpoint:       cfg.Adapters.AzureAIEndpoint,
 			APIKey:         cfg.Adapters.AzureAIKey,
 			DeploymentName: cfg.Adapters.SocialAIDeployment,
-		}, azureai.WithLogger(logger))
+		}, azureai.WithLogger(logger), azureai.WithCompletionTimeout(cfg.Adapters.AzureAICompletionTimeout))
 		if socialErr != nil {
 			logger.Warn(ctx, "social AI client init failed, falling back to advisor model",
 				observability.Err(socialErr))

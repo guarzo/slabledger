@@ -865,37 +865,58 @@ func TestGetPrice_CardLookup(t *testing.T) {
 }
 
 // TestGetPrice_TransientClientError verifies that errors from the underlying MarketDataClient
-// (e.g. transient HTTP 500s handled by httpx retry) are propagated cleanly by the provider.
-// Retry/circuit-breaker logic lives in the httpx layer; this test verifies the provider
-// correctly surfaces the final error after all retries are exhausted.
+// are propagated cleanly by the provider. Retry/circuit-breaker logic lives in the httpx layer;
+// this test verifies the provider correctly surfaces the final error after all retries are exhausted.
 func TestGetPrice_TransientClientError(t *testing.T) {
-	attempts := 0
-	client := &mocks.MockDHMarketDataClient{
-		RecentSalesFn: func(_ context.Context, _ int) ([]dh.RecentSale, error) {
-			attempts++
-			return nil, errors.New("server error: 500")
-		},
-	}
-	lookup := &mocks.MockDHCardIDLookup{
-		GetExternalIDFn: func(_ context.Context, _, _, _, _ string) (string, error) {
-			return "12345", nil // valid card ID
+	cases := []struct {
+		name             string
+		recentSalesErr   error
+		expectErr        bool
+		expectNilPrice   bool
+		expectedAttempts int
+	}{
+		{
+			name:             "server error propagates cleanly",
+			recentSalesErr:   errors.New("server error: 500"),
+			expectErr:        true,
+			expectNilPrice:   true,
+			expectedAttempts: 1,
 		},
 	}
 
-	p := New(client, lookup)
-	got, err := p.GetPrice(context.Background(), pricing.Card{
-		Name: "Charizard", Set: "Base Set", Number: "4",
-	})
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			attempts := 0
+			client := &mocks.MockDHMarketDataClient{
+				RecentSalesFn: func(_ context.Context, _ int) ([]dh.RecentSale, error) {
+					attempts++
+					return nil, tc.recentSalesErr
+				},
+			}
+			lookup := &mocks.MockDHCardIDLookup{
+				GetExternalIDFn: func(_ context.Context, _, _, _, _ string) (string, error) {
+					return "12345", nil
+				},
+			}
 
-	if err == nil {
-		t.Fatalf("expected error from transient client failure, got result: %+v", got)
-	}
-	if got != nil {
-		t.Errorf("expected nil price on error, got %+v", got)
-	}
-	// The client should have been called exactly once (retry is handled by httpx, not here)
-	if attempts != 1 {
-		t.Errorf("expected 1 attempt at the provider level, got %d", attempts)
+			p := New(client, lookup)
+			got, err := p.GetPrice(context.Background(), pricing.Card{
+				Name: "Charizard", Set: "Base Set", Number: "4",
+			})
+
+			if tc.expectErr && err == nil {
+				t.Fatalf("expected error, got result: %+v", got)
+			}
+			if !tc.expectErr && err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if tc.expectNilPrice && got != nil {
+				t.Errorf("expected nil price, got %+v", got)
+			}
+			if attempts != tc.expectedAttempts {
+				t.Errorf("expected %d attempt(s) at the provider level, got %d", tc.expectedAttempts, attempts)
+			}
+		})
 	}
 }
 

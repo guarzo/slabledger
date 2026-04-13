@@ -101,34 +101,64 @@ func TestDefinitionsFor_Empty(t *testing.T) {
 	}
 }
 
-// TestExecute_GetCapitalSummary_NilFinanceService verifies that get_capital_summary returns an
-// error gracefully when no financeService is injected (nil guard regression test).
+// TestExecute_GetCapitalSummary_NilFinanceService verifies that get_capital_summary behaves
+// correctly with and without an injected financeService (nil guard regression test).
 func TestExecute_GetCapitalSummary_NilFinanceService(t *testing.T) {
-	// Create executor without WithFinanceService — financeService will be nil
-	e := newTestExecutor(&mocks.MockInventoryService{})
+	cases := []struct {
+		name               string
+		withFinanceService bool
+		expectErr          bool
+		expectErrContains  string
+		expectResult       string
+	}{
+		{
+			name:               "nil financeService returns error",
+			withFinanceService: false,
+			expectErr:          true,
+			expectErrContains:  "not available",
+			expectResult:       "",
+		},
+	}
 
-	// Tool must still be registered even with nil financeService
-	var found bool
-	for _, def := range e.Definitions() {
-		if def.Name == "get_capital_summary" {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Fatal("get_capital_summary tool not registered when financeService is nil")
-	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var e *CampaignToolExecutor
+			if tc.withFinanceService {
+				e = NewCampaignToolExecutor(&mocks.MockInventoryService{}, WithFinanceService(&mocks.MockFinanceService{}))
+			} else {
+				e = newTestExecutor(&mocks.MockInventoryService{})
+			}
 
-	// Execute should return error "finance service not available", not panic
-	result, err := e.Execute(context.Background(), "get_capital_summary", "{}")
-	if err == nil {
-		t.Fatalf("expected error for nil financeService, got result: %s", result)
-	}
-	if result != "" {
-		t.Errorf("expected empty result on error, got %q", result)
-	}
-	if !strings.Contains(err.Error(), "not available") {
-		t.Errorf("error %q does not mention 'not available'", err.Error())
+			// Tool must still be registered regardless of financeService presence
+			var found bool
+			for _, def := range e.Definitions() {
+				if def.Name == "get_capital_summary" {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Fatal("get_capital_summary tool not registered")
+			}
+
+			result, err := e.Execute(context.Background(), "get_capital_summary", "{}")
+
+			if tc.expectErr {
+				if err == nil {
+					t.Fatalf("expected error, got result: %s", result)
+				}
+				if result != tc.expectResult {
+					t.Errorf("expected result %q, got %q", tc.expectResult, result)
+				}
+				if tc.expectErrContains != "" && !strings.Contains(err.Error(), tc.expectErrContains) {
+					t.Errorf("error %q does not contain %q", err.Error(), tc.expectErrContains)
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+			}
+		})
 	}
 }
 
