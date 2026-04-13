@@ -5,6 +5,8 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
+	dhlistingadapter "github.com/guarzo/slabledger/internal/adapters/clients/dhlisting"
 	"github.com/guarzo/slabledger/internal/adapters/clients/psa"
 	"github.com/guarzo/slabledger/internal/adapters/scheduler"
 	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
@@ -61,6 +63,7 @@ func initializeCampaignsService(
 	priceProvImpl pricing.PriceProvider,
 	intelRepo *sqlite.MarketIntelligenceRepository,
 	mmStore *sqlite.MarketMoversStore,
+	dhClient *dh.Client,
 ) campaignsInitResult {
 	// Create individual stores instead of composite repository
 	campaignStore := sqlite.NewCampaignStore(db.DB, logger)
@@ -118,6 +121,13 @@ func initializeCampaignsService(
 			return result, nil
 		})
 		campaignOpts = append(campaignOpts, inventory.WithMMMappings(mmAdapter))
+	}
+
+	// DH sold notifier — retires items on DH when a sale is recorded locally.
+	if dhClient != nil && dhClient.EnterpriseAvailable() {
+		campaignOpts = append(campaignOpts,
+			inventory.WithDHSoldNotifier(dhlistingadapter.NewInventoryListerAdapter(dhClient)),
+		)
 	}
 
 	campaignsService := inventory.NewService(

@@ -140,6 +140,13 @@ type CertEnrichEnqueuer interface {
 	Enqueue(certNumber string)
 }
 
+// DHSoldNotifier is called when a purchase is confirmed as sold locally.
+// It updates the corresponding DH inventory item to sold status so the item is
+// retired on the DH platform. Implementations should be idempotent.
+type DHSoldNotifier interface {
+	MarkInventorySold(ctx context.Context, dhInventoryID int) error
+}
+
 // CertInfo contains card details resolved from a PSA certificate number.
 type CertInfo struct {
 	CertNumber string  `json:"certNumber"`
@@ -197,6 +204,10 @@ type service struct {
 	// certEnrichQueue enqueues cert numbers for background enrichment (optional).
 	// A scheduler job processes cert numbers sequentially, respecting PSA API rate limits (100/day).
 	certEnrichQueue CertEnrichEnqueuer
+
+	// dhSoldNotifier notifies DH when a purchase is sold locally so the item is
+	// retired on the DH platform. Optional — if nil, no DH call is made on sale.
+	dhSoldNotifier DHSoldNotifier
 
 	// disableBackgroundWorkers is a test-only flag to prevent background workers from running.
 	// When true, the crack cache worker will not start even if priceProv is set.
@@ -277,6 +288,12 @@ func WithIntelligenceRepo(r intelligence.Repository) ServiceOption {
 // WithPendingItemRepository enables persistent storage of ambiguous/unmatched import items.
 func WithPendingItemRepository(r PendingItemRepository) ServiceOption {
 	return func(s *service) { s.pendingItemRepo = r }
+}
+
+// WithDHSoldNotifier injects a DH sold notifier so that when a purchase is
+// confirmed as sold locally, the corresponding DH inventory item is retired.
+func WithDHSoldNotifier(n DHSoldNotifier) ServiceOption {
+	return func(s *service) { s.dhSoldNotifier = n }
 }
 
 func NewService(

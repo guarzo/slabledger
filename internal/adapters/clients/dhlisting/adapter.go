@@ -7,6 +7,7 @@ import (
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	"github.com/guarzo/slabledger/internal/domain/dhlisting"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 )
 
 // --- DHCertResolver adapter ---
@@ -131,4 +132,12 @@ func (a *InventoryListerAdapter) SyncChannels(ctx context.Context, inventoryID i
 	return err
 }
 
+// MarkInventorySold transitions the DH inventory item to "sold" status,
+// retiring it from the DH platform when a sale is recorded locally.
+func (a *InventoryListerAdapter) MarkInventorySold(ctx context.Context, inventoryID int) error {
+	_, err := a.client.UpdateInventory(ctx, inventoryID, dh.InventoryUpdate{Status: inventory.DHStatusSold})
+	return err
+}
+
 var _ dhlisting.DHInventoryLister = (*InventoryListerAdapter)(nil)
+var _ inventory.DHSoldNotifier = (*InventoryListerAdapter)(nil)
