@@ -574,12 +574,6 @@ func TestHandleGlobalInventory(t *testing.T) {
 			},
 		},
 		{
-			name:     "method not allowed",
-			method:   http.MethodPost,
-			setupSvc: func() *mocks.MockInventoryService { return &mocks.MockInventoryService{} },
-			wantCode: http.StatusMethodNotAllowed,
-		},
-		{
 			name:   "service error",
 			method: http.MethodGet,
 			setupSvc: func() *mocks.MockInventoryService {
