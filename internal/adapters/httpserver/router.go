@@ -30,7 +30,6 @@ type Router struct {
 	authRateLimiter           *middleware.RateLimiter
 	campaignsHandler          *handlers.CampaignsHandler
 	priceHintsHandler         *handlers.PriceHintsHandler
-	cardRequestHandler        *handlers.CardRequestHandlers
 	pricingDiagnosticsHandler *handlers.PricingDiagnosticsHandler
 	pricingAPIHandler         *handlers.PricingAPIHandler
 	advisorHandler            *handlers.AdvisorHandler
@@ -66,7 +65,6 @@ type RouterConfig struct {
 	PortfolioService          portfolio.Service
 	TuningService             tuning.Service
 	PriceHintsHandler         *handlers.PriceHintsHandler
-	CardRequestHandler        *handlers.CardRequestHandlers
 	PricingDiagnosticsHandler *handlers.PricingDiagnosticsHandler
 	PricingAPIKey             string                          // Bearer token; empty = pricing API disabled
 	CampaignsRepo             handlers.CertPriceLookup        // For pricing API handler
@@ -119,10 +117,6 @@ func NewRouter(cfg RouterConfig) *Router {
 
 	if cfg.PriceHintsHandler != nil {
 		rt.priceHintsHandler = cfg.PriceHintsHandler
-	}
-
-	if cfg.CardRequestHandler != nil {
-		rt.cardRequestHandler = cfg.CardRequestHandler
 	}
 
 	if cfg.PricingDiagnosticsHandler != nil {

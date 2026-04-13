@@ -268,7 +268,6 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		ctx, cfg, logger, db, priceProvImpl, intelRepo, mmStore,
 	)
 	campaignsService := campaignsInit.service
-	cardRequestRepo := campaignsInit.cardRequestRepo
 	certLookup := campaignsInit.certLookup
 	arbSvc := campaignsInit.arbSvc
 	portSvc := campaignsInit.portSvc
@@ -398,7 +397,6 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		PurchaseStore:     campaignsInit.purchaseStore,
 		SellSheetStore:    campaignsInit.sellSheetStore,
 		CardIDMappingRepo: cardIDMappingRepo,
-		CardRequestRepo:   cardRequestRepo,
 		IntelRepo:         intelRepo,
 		SuggestionsRepo:   suggestionsRepo,
 		AdvisorService:    advisorService,

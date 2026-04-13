@@ -39,7 +39,6 @@ type ServerDependencies struct {
 	PortfolioService          domainPortfolio.Service
 	TuningService             domainTuning.Service
 	PriceHintsHandler         *handlers.PriceHintsHandler
-	CardRequestHandler        *handlers.CardRequestHandlers
 	PricingDiagnosticsHandler *handlers.PricingDiagnosticsHandler
 	CampaignsRepo             handlers.CertPriceLookup        // For pricing API (cert price lookup)
 	PricingAPIKey             string                          // Bearer token; empty = pricing API disabled
@@ -195,7 +194,6 @@ func startWebServer(ctx context.Context, deps ServerDependencies) error {
 		CampaignsHandler:          campaignsHandler,
 		CampaignsService:          deps.CampaignsService,
 		PriceHintsHandler:         deps.PriceHintsHandler,
-		CardRequestHandler:        deps.CardRequestHandler,
 		PricingDiagnosticsHandler: deps.PricingDiagnosticsHandler,
 		PricingAPIKey:             deps.PricingAPIKey,
 		CampaignsRepo:             deps.CampaignsRepo,

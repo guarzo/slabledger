@@ -51,11 +51,6 @@ func (rt *Router) registerAdminRoutes(mux *http.ServeMux) {
 		if rt.pricingDiagnosticsHandler != nil {
 			mux.Handle("GET /api/admin/pricing-diagnostics", rt.authMW.RequireAdmin(http.HandlerFunc(rt.pricingDiagnosticsHandler.HandlePricingDiagnostics)))
 		}
-		if rt.cardRequestHandler != nil {
-			mux.Handle("GET /api/admin/card-requests", rt.authMW.RequireAdmin(http.HandlerFunc(rt.cardRequestHandler.HandleListCardRequests)))
-			mux.Handle("POST /api/admin/card-requests/{id}/submit", rt.authMW.RequireAdmin(http.HandlerFunc(rt.cardRequestHandler.HandleSubmitCardRequest)))
-			mux.Handle("POST /api/admin/card-requests/submit-all", rt.authMW.RequireAdmin(http.HandlerFunc(rt.cardRequestHandler.HandleSubmitAllCardRequests)))
-		}
 		if rt.campaignsHandler != nil {
 			mux.Handle("GET /api/admin/price-override-stats", rt.authMW.RequireAdmin(http.HandlerFunc(rt.campaignsHandler.HandlePriceOverrideStats)))
 		}

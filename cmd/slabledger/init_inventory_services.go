@@ -31,24 +31,23 @@ type exportReaderComposite struct {
 
 // campaignsInitResult holds all values returned by initializeCampaignsService.
 type campaignsInitResult struct {
-	service         inventory.Service
-	campaignStore   *sqlite.CampaignStore
-	purchaseStore   *sqlite.PurchaseStore
-	saleStore       *sqlite.SaleStore
-	analyticsStore  *sqlite.AnalyticsStore
-	financeStore    *sqlite.FinanceStore
-	pricingStore    *sqlite.PricingStore
-	dhStore         *sqlite.DHStore
-	snapshotStore   *sqlite.SnapshotStore
-	sellSheetStore  *sqlite.SellSheetStore
-	cardRequestRepo *sqlite.CardRequestRepository
-	certLookup      inventory.CertLookup
-	certEnrichJob   *scheduler.CertEnrichJob // nil if PSA not configured
-	arbSvc          arbitrage.Service
-	portSvc         portfolio.Service
-	tuningSvc       tuning.Service
-	financeService  finance.Service
-	exportService   export.Service
+	service        inventory.Service
+	campaignStore  *sqlite.CampaignStore
+	purchaseStore  *sqlite.PurchaseStore
+	saleStore      *sqlite.SaleStore
+	analyticsStore *sqlite.AnalyticsStore
+	financeStore   *sqlite.FinanceStore
+	pricingStore   *sqlite.PricingStore
+	dhStore        *sqlite.DHStore
+	snapshotStore  *sqlite.SnapshotStore
+	sellSheetStore *sqlite.SellSheetStore
+	certLookup     inventory.CertLookup
+	certEnrichJob  *scheduler.CertEnrichJob // nil if PSA not configured
+	arbSvc         arbitrage.Service
+	portSvc        portfolio.Service
+	tuningSvc      tuning.Service
+	financeService finance.Service
+	exportService  export.Service
 }
 
 // initializeCampaignsService creates the campaigns service with all options
@@ -96,9 +95,6 @@ func initializeCampaignsService(
 		campaignOpts = append(campaignOpts, inventory.WithCertEnrichEnqueuer(certEnrichJobForSvc))
 		logger.Info(ctx, "PSA cert lookup and cert enrichment enabled")
 	}
-
-	// Card request repository (tracks certs without linked cards)
-	cardRequestRepo := sqlite.NewCardRequestRepository(db.DB)
 
 	// History recorders — track CL values and population changes during CSV imports.
 	campaignOpts = append(campaignOpts,
@@ -186,23 +182,22 @@ func initializeCampaignsService(
 	financeSvc := finance.New(financeStore, uuid.NewString)
 
 	return campaignsInitResult{
-		service:         campaignsService,
-		campaignStore:   campaignStore,
-		purchaseStore:   purchaseStore,
-		saleStore:       saleStore,
-		analyticsStore:  analyticsStore,
-		financeStore:    financeStore,
-		pricingStore:    pricingStore,
-		dhStore:         dhStore,
-		snapshotStore:   snapshotStore,
-		sellSheetStore:  sellSheetStore,
-		cardRequestRepo: cardRequestRepo,
-		certLookup:      certLookup,
-		certEnrichJob:   certEnrichJobForSvc,
-		arbSvc:          arbSvc,
-		portSvc:         portSvc,
-		tuningSvc:       tuningSvc,
-		financeService:  financeSvc,
-		exportService:   exportSvc,
+		service:        campaignsService,
+		campaignStore:  campaignStore,
+		purchaseStore:  purchaseStore,
+		saleStore:      saleStore,
+		analyticsStore: analyticsStore,
+		financeStore:   financeStore,
+		pricingStore:   pricingStore,
+		dhStore:        dhStore,
+		snapshotStore:  snapshotStore,
+		sellSheetStore: sellSheetStore,
+		certLookup:     certLookup,
+		certEnrichJob:  certEnrichJobForSvc,
+		arbSvc:         arbSvc,
+		portSvc:        portSvc,
+		tuningSvc:      tuningSvc,
+		financeService: financeSvc,
+		exportService:  exportSvc,
 	}
 }

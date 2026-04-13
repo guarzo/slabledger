@@ -47,7 +47,6 @@ type handlerInputs struct {
 	PurchaseStore     *sqlite.PurchaseStore
 	SellSheetStore    *sqlite.SellSheetStore
 	CardIDMappingRepo *sqlite.CardIDMappingRepository
-	CardRequestRepo   *sqlite.CardRequestRepository
 	IntelRepo         *sqlite.MarketIntelligenceRepository
 	SuggestionsRepo   *sqlite.DHSuggestionsRepository
 	AdvisorService    advisor.Service
@@ -183,9 +182,6 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 	pricingDiagRepo := sqlite.NewPricingDiagnosticsRepository(in.DB.DB)
 	pricingDiagHandler := handlers.NewPricingDiagnosticsHandler(pricingDiagRepo, logger)
 
-	// Card request handler (read-only)
-	cardRequestHandler := handlers.NewCardRequestHandlers(in.CardRequestRepo, nil, "", logger)
-
 	// Advisor handler (if advisor was initialized)
 	var advisorHandler *handlers.AdvisorHandler
 	if in.AdvisorService != nil {
@@ -236,7 +232,6 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 		PortfolioService:          in.PortfolioService,
 		TuningService:             in.TuningService,
 		PriceHintsHandler:         priceHintsHandler,
-		CardRequestHandler:        cardRequestHandler,
 		PricingDiagnosticsHandler: pricingDiagHandler,
 		CampaignsRepo:             in.PurchaseStore,
 		PricingAPIKey:             in.Cfg.Adapters.PricingAPIKey,
