@@ -163,6 +163,7 @@ type Service interface {
 	CRUDService
 	AnalyticsService
 	ImportService
+	FinanceService
 	PricingService
 	CertLookupService
 	SnapshotService
