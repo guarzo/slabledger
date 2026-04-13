@@ -2,8 +2,6 @@ package scheduler
 
 import (
 	"context"
-	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -12,61 +10,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// mockSnapshotEnrichService implements SnapshotEnrichService for testing.
-type mockSnapshotEnrichService struct {
-	mu               sync.Mutex
-	pendingProcessed int
-	pendingSkipped   int
-	pendingFailed    int
-	retryProcessed   int
-	retrySkipped     int
-	retryFailed      int
-	pendingCallCount int32
-	retryCallCount   int32
-	pendingLimitSeen int
-	retryLimitSeen   int
-}
-
-func (m *mockSnapshotEnrichService) ProcessPendingSnapshots(_ context.Context, limit int) (processed, skipped, failed int, err error) {
-	atomic.AddInt32(&m.pendingCallCount, 1)
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.pendingLimitSeen = limit
-	return m.pendingProcessed, m.pendingSkipped, m.pendingFailed, nil
-}
-
-func (m *mockSnapshotEnrichService) RetryFailedSnapshots(_ context.Context, limit int) (processed, skipped, failed int, err error) {
-	atomic.AddInt32(&m.retryCallCount, 1)
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.retryLimitSeen = limit
-	return m.retryProcessed, m.retrySkipped, m.retryFailed, nil
-}
-
-func (m *mockSnapshotEnrichService) PendingCallCount() int32 {
-	return atomic.LoadInt32(&m.pendingCallCount)
-}
-
-func (m *mockSnapshotEnrichService) RetryCallCount() int32 {
-	return atomic.LoadInt32(&m.retryCallCount)
-}
-
-func (m *mockSnapshotEnrichService) PendingLimitSeen() int {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.pendingLimitSeen
-}
-
-func (m *mockSnapshotEnrichService) RetryLimitSeen() int {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.retryLimitSeen
-}
-
 // --- Config default tests ---
 
 func TestNewSnapshotEnrichScheduler_DefaultInterval(t *testing.T) {
-	svc := &mockSnapshotEnrichService{}
+	svc := &mocks.MockSnapshotEnrichService{}
 	logger := mocks.NewMockLogger()
 
 	s := NewSnapshotEnrichScheduler(svc, logger, config.SnapshotEnrichConfig{
@@ -79,7 +26,7 @@ func TestNewSnapshotEnrichScheduler_DefaultInterval(t *testing.T) {
 }
 
 func TestNewSnapshotEnrichScheduler_DefaultRetryInterval(t *testing.T) {
-	svc := &mockSnapshotEnrichService{}
+	svc := &mocks.MockSnapshotEnrichService{}
 	logger := mocks.NewMockLogger()
 
 	s := NewSnapshotEnrichScheduler(svc, logger, config.SnapshotEnrichConfig{
@@ -93,7 +40,7 @@ func TestNewSnapshotEnrichScheduler_DefaultRetryInterval(t *testing.T) {
 }
 
 func TestNewSnapshotEnrichScheduler_DefaultBatchSize(t *testing.T) {
-	svc := &mockSnapshotEnrichService{}
+	svc := &mocks.MockSnapshotEnrichService{}
 	logger := mocks.NewMockLogger()
 
 	s := NewSnapshotEnrichScheduler(svc, logger, config.SnapshotEnrichConfig{
@@ -108,7 +55,7 @@ func TestNewSnapshotEnrichScheduler_DefaultBatchSize(t *testing.T) {
 }
 
 func TestNewSnapshotEnrichScheduler_AllDefaults(t *testing.T) {
-	svc := &mockSnapshotEnrichService{}
+	svc := &mocks.MockSnapshotEnrichService{}
 	logger := mocks.NewMockLogger()
 
 	s := NewSnapshotEnrichScheduler(svc, logger, config.SnapshotEnrichConfig{
@@ -121,7 +68,7 @@ func TestNewSnapshotEnrichScheduler_AllDefaults(t *testing.T) {
 }
 
 func TestNewSnapshotEnrichScheduler_ExplicitValues(t *testing.T) {
-	svc := &mockSnapshotEnrichService{}
+	svc := &mocks.MockSnapshotEnrichService{}
 	logger := mocks.NewMockLogger()
 
 	s := NewSnapshotEnrichScheduler(svc, logger, config.SnapshotEnrichConfig{
@@ -140,7 +87,7 @@ func TestNewSnapshotEnrichScheduler_ExplicitValues(t *testing.T) {
 }
 
 func TestNewSnapshotEnrichScheduler_NegativeValues(t *testing.T) {
-	svc := &mockSnapshotEnrichService{}
+	svc := &mocks.MockSnapshotEnrichService{}
 	logger := mocks.NewMockLogger()
 
 	s := NewSnapshotEnrichScheduler(svc, logger, config.SnapshotEnrichConfig{
@@ -161,7 +108,7 @@ func TestNewSnapshotEnrichScheduler_NegativeValues(t *testing.T) {
 // --- Disabled / nil service guard tests ---
 
 func TestSnapshotEnrichScheduler_DisabledDoesNotStart(t *testing.T) {
-	svc := &mockSnapshotEnrichService{}
+	svc := &mocks.MockSnapshotEnrichService{}
 	logger := mocks.NewMockLogger()
 
 	s := NewSnapshotEnrichScheduler(svc, logger, config.SnapshotEnrichConfig{
@@ -213,10 +160,10 @@ func TestSnapshotEnrichScheduler_NilServiceDoesNotStart(t *testing.T) {
 // --- tickPending tests ---
 
 func TestSnapshotEnrichScheduler_TickPending(t *testing.T) {
-	svc := &mockSnapshotEnrichService{
-		pendingProcessed: 3,
-		pendingSkipped:   1,
-		pendingFailed:    0,
+	svc := &mocks.MockSnapshotEnrichService{
+		PendingProcessed: 3,
+		PendingSkipped:   1,
+		PendingFailed:    0,
 	}
 	logger := mocks.NewMockLogger()
 
@@ -235,7 +182,7 @@ func TestSnapshotEnrichScheduler_TickPending(t *testing.T) {
 }
 
 func TestSnapshotEnrichScheduler_TickPendingDefaultBatchSize(t *testing.T) {
-	svc := &mockSnapshotEnrichService{}
+	svc := &mocks.MockSnapshotEnrichService{}
 	logger := mocks.NewMockLogger()
 
 	s := NewSnapshotEnrichScheduler(svc, logger, config.SnapshotEnrichConfig{
@@ -250,10 +197,10 @@ func TestSnapshotEnrichScheduler_TickPendingDefaultBatchSize(t *testing.T) {
 }
 
 func TestSnapshotEnrichScheduler_TickPendingZeroResults(t *testing.T) {
-	svc := &mockSnapshotEnrichService{
-		pendingProcessed: 0,
-		pendingSkipped:   0,
-		pendingFailed:    0,
+	svc := &mocks.MockSnapshotEnrichService{
+		PendingProcessed: 0,
+		PendingSkipped:   0,
+		PendingFailed:    0,
 	}
 	logger := mocks.NewMockLogger()
 
@@ -272,10 +219,10 @@ func TestSnapshotEnrichScheduler_TickPendingZeroResults(t *testing.T) {
 // --- tickRetry tests ---
 
 func TestSnapshotEnrichScheduler_TickRetry(t *testing.T) {
-	svc := &mockSnapshotEnrichService{
-		retryProcessed: 2,
-		retrySkipped:   0,
-		retryFailed:    1,
+	svc := &mocks.MockSnapshotEnrichService{
+		RetryProcessed: 2,
+		RetrySkipped:   0,
+		RetryFailed:    1,
 	}
 	logger := mocks.NewMockLogger()
 
@@ -293,7 +240,7 @@ func TestSnapshotEnrichScheduler_TickRetry(t *testing.T) {
 }
 
 func TestSnapshotEnrichScheduler_TickRetryDefaultBatchSize(t *testing.T) {
-	svc := &mockSnapshotEnrichService{}
+	svc := &mocks.MockSnapshotEnrichService{}
 	logger := mocks.NewMockLogger()
 
 	s := NewSnapshotEnrichScheduler(svc, logger, config.SnapshotEnrichConfig{
@@ -308,10 +255,10 @@ func TestSnapshotEnrichScheduler_TickRetryDefaultBatchSize(t *testing.T) {
 }
 
 func TestSnapshotEnrichScheduler_TickRetryZeroResults(t *testing.T) {
-	svc := &mockSnapshotEnrichService{
-		retryProcessed: 0,
-		retrySkipped:   0,
-		retryFailed:    0,
+	svc := &mocks.MockSnapshotEnrichService{
+		RetryProcessed: 0,
+		RetrySkipped:   0,
+		RetryFailed:    0,
 	}
 	logger := mocks.NewMockLogger()
 
@@ -330,7 +277,7 @@ func TestSnapshotEnrichScheduler_TickRetryZeroResults(t *testing.T) {
 // --- Start/Stop lifecycle tests ---
 
 func TestSnapshotEnrichScheduler_StartAndStop(t *testing.T) {
-	svc := &mockSnapshotEnrichService{}
+	svc := &mocks.MockSnapshotEnrichService{}
 	logger := mocks.NewMockLogger()
 
 	s := NewSnapshotEnrichScheduler(svc, logger, config.SnapshotEnrichConfig{
@@ -375,7 +322,7 @@ func TestSnapshotEnrichScheduler_StartAndStop(t *testing.T) {
 }
 
 func TestSnapshotEnrichScheduler_ContextCancellationStopsLoops(t *testing.T) {
-	svc := &mockSnapshotEnrichService{}
+	svc := &mocks.MockSnapshotEnrichService{}
 	logger := mocks.NewMockLogger()
 
 	s := NewSnapshotEnrichScheduler(svc, logger, config.SnapshotEnrichConfig{
@@ -418,7 +365,7 @@ func TestSnapshotEnrichScheduler_ContextCancellationStopsLoops(t *testing.T) {
 }
 
 func TestSnapshotEnrichScheduler_StopIdempotent(t *testing.T) {
-	svc := &mockSnapshotEnrichService{}
+	svc := &mocks.MockSnapshotEnrichService{}
 	logger := mocks.NewMockLogger()
 
 	s := NewSnapshotEnrichScheduler(svc, logger, config.SnapshotEnrichConfig{
@@ -439,7 +386,7 @@ func TestSnapshotEnrichScheduler_WGAddBeforeGoroutine(t *testing.T) {
 	// could return before the goroutine increments the counter, causing a
 	// premature return from Wait(). We test this by starting and immediately
 	// stopping — Wait() must block until both goroutines have finished.
-	svc := &mockSnapshotEnrichService{}
+	svc := &mocks.MockSnapshotEnrichService{}
 	logger := mocks.NewMockLogger()
 
 	s := NewSnapshotEnrichScheduler(svc, logger, config.SnapshotEnrichConfig{
@@ -471,9 +418,9 @@ func TestSnapshotEnrichScheduler_BothLoopsRun(t *testing.T) {
 	// Use very short intervals and no initial delay is not possible since
 	// RunLoop has a hardcoded InitialDelay. But we can call the tick methods
 	// directly to verify both paths work.
-	svc := &mockSnapshotEnrichService{
-		pendingProcessed: 1,
-		retryProcessed:   1,
+	svc := &mocks.MockSnapshotEnrichService{
+		PendingProcessed: 1,
+		RetryProcessed:   1,
 	}
 	logger := mocks.NewMockLogger()
 

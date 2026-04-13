@@ -211,7 +211,7 @@ func (s *service) processSnapshotsByStatus(ctx context.Context, status SnapshotS
 		switch result {
 		case snapshotCancelled:
 			// Context was cancelled — stop processing and leave remaining purchases unchanged
-			return processed, skipped, failed, nil
+			return processed, skipped, failed, ctx.Err()
 		case snapshotSuccess:
 			if err := s.purchases.UpdatePurchaseSnapshotStatus(ctx, p.ID, SnapshotStatusNone, 0); err != nil && s.logger != nil {
 				s.logger.Warn(ctx, "failed to clear snapshot status",
