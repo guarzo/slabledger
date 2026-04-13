@@ -27,9 +27,9 @@ type CampaignsHandler struct {
 	portSvc           portfolio.Service
 	tuningSvc         tuning.Service
 	logger            observability.Logger
-	dhListingSvc      dhlisting.DHListingService // optional: lists cards on DH after cert import
-	financeService    finance.Service            // optional: finance operations
-	exportService     export.Service             // optional: sell sheet and eBay export
+	dhListingSvc      dhlisting.Service // optional: lists cards on DH after cert import
+	financeService    finance.Service   // optional: finance operations
+	exportService     export.Service    // optional: sell sheet and eBay export
 	baseCtx           context.Context
 	bgWG              sync.WaitGroup // tracks background goroutines (e.g. DH listing)
 	sheetFetcher      SheetFetcher   // optional: fetches PSA data from Google Sheets
@@ -41,7 +41,7 @@ type CampaignsHandler struct {
 type CampaignsHandlerOption func(*CampaignsHandler)
 
 // WithDHListingService enables DH listing after cert import.
-func WithDHListingService(svc dhlisting.DHListingService) CampaignsHandlerOption {
+func WithDHListingService(svc dhlisting.Service) CampaignsHandlerOption {
 	return func(h *CampaignsHandler) { h.dhListingSvc = svc }
 }
 

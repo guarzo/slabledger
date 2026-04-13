@@ -10,7 +10,7 @@ import "context"
 // growing further (ISP). Implementations coordinate multiple external
 // dependencies (cert resolver, pusher, lister, persistence) that are
 // injected via functional options.
-type DHListingService interface {
+type Service interface {
 	// ListPurchases resolves the given cert numbers to purchases, performs
 	// inline match-and-push for any that are pending, then transitions them
 	// to listed status with channel sync. It runs synchronously; the caller
