@@ -101,6 +101,67 @@ func TestDefinitionsFor_Empty(t *testing.T) {
 	}
 }
 
+// TestExecute_GetCapitalSummary_NilFinanceService verifies that get_capital_summary behaves
+// correctly with and without an injected financeService (nil guard regression test).
+func TestExecute_GetCapitalSummary_NilFinanceService(t *testing.T) {
+	cases := []struct {
+		name               string
+		withFinanceService bool
+		expectErr          bool
+		expectErrContains  string
+		expectResult       string
+	}{
+		{
+			name:               "nil financeService returns error",
+			withFinanceService: false,
+			expectErr:          true,
+			expectErrContains:  "not available",
+			expectResult:       "",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var e *CampaignToolExecutor
+			if tc.withFinanceService {
+				e = NewCampaignToolExecutor(&mocks.MockInventoryService{}, WithFinanceService(&mocks.MockFinanceService{}))
+			} else {
+				e = newTestExecutor(&mocks.MockInventoryService{})
+			}
+
+			// Tool must still be registered regardless of financeService presence
+			var found bool
+			for _, def := range e.Definitions() {
+				if def.Name == "get_capital_summary" {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Fatal("get_capital_summary tool not registered")
+			}
+
+			result, err := e.Execute(context.Background(), "get_capital_summary", "{}")
+
+			if tc.expectErr {
+				if err == nil {
+					t.Fatalf("expected error, got result: %s", result)
+				}
+				if result != tc.expectResult {
+					t.Errorf("expected result %q, got %q", tc.expectResult, result)
+				}
+				if tc.expectErrContains != "" && !strings.Contains(err.Error(), tc.expectErrContains) {
+					t.Errorf("error %q does not contain %q", err.Error(), tc.expectErrContains)
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+			}
+		})
+	}
+}
+
 // TestExecute_UnknownTool verifies that calling an unregistered tool returns an error.
 func TestExecute_UnknownTool(t *testing.T) {
 	e := newTestExecutor(&mocks.MockInventoryService{})

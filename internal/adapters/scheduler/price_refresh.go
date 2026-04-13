@@ -3,6 +3,7 @@ package scheduler
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
@@ -20,7 +21,9 @@ type PriceRefreshScheduler struct {
 	priceProvider       pricing.PriceProvider
 	logger              observability.Logger
 	config              Config
+	stateMu             sync.Mutex // guards consecutiveFailures and lastFailureAt
 	consecutiveFailures int
+	lastFailureAt       time.Time // zero if no failure since startup
 }
 
 // NewPriceRefreshScheduler creates a new price refresh scheduler.
@@ -76,13 +79,19 @@ func (s *PriceRefreshScheduler) refreshBatch(ctx context.Context) {
 
 	cards, err := s.candidates.GetRefreshCandidates(ctx, s.config.BatchSize)
 	if err != nil {
+		s.stateMu.Lock()
 		s.consecutiveFailures++
+		s.lastFailureAt = time.Now()
+		failures := s.consecutiveFailures
+		s.stateMu.Unlock()
 		s.logger.Error(ctx, "failed to get refresh candidates",
 			observability.Err(err),
-			observability.Int("consecutive_failures", s.consecutiveFailures))
+			observability.Int("consecutive_failures", failures))
 		return
 	}
+	s.stateMu.Lock()
 	s.consecutiveFailures = 0
+	s.stateMu.Unlock()
 
 	if len(cards) == 0 {
 		s.logger.Debug(ctx, "no cards to refresh")
@@ -222,19 +231,41 @@ func (s *PriceRefreshScheduler) refreshBatch(ctx context.Context) {
 	s.logAPIUsageSummary(ctx)
 
 	if errorCount > 0 {
+		s.stateMu.Lock()
 		s.consecutiveFailures++
+		s.lastFailureAt = time.Now()
+		failures := s.consecutiveFailures
+		s.stateMu.Unlock()
+		s.logger.Info(ctx, "refresh batch completed",
+			observability.Int("total", len(cards)),
+			observability.Int("success", successCount),
+			observability.Int("no_data", noDataCount),
+			observability.Int("errors", errorCount),
+			observability.Int("skipped", skippedCount),
+			observability.Int("consecutive_failures", failures),
+			observability.Duration("duration", duration))
 	} else {
+		s.stateMu.Lock()
 		s.consecutiveFailures = 0
+		failures := s.consecutiveFailures
+		// lastFailureAt intentionally preserved — shows when the last failure was, even after recovery
+		s.stateMu.Unlock()
+		s.logger.Info(ctx, "refresh batch completed",
+			observability.Int("total", len(cards)),
+			observability.Int("success", successCount),
+			observability.Int("no_data", noDataCount),
+			observability.Int("errors", errorCount),
+			observability.Int("skipped", skippedCount),
+			observability.Int("consecutive_failures", failures),
+			observability.Duration("duration", duration))
 	}
+}
 
-	s.logger.Info(ctx, "refresh batch completed",
-		observability.Int("total", len(cards)),
-		observability.Int("success", successCount),
-		observability.Int("no_data", noDataCount),
-		observability.Int("errors", errorCount),
-		observability.Int("skipped", skippedCount),
-		observability.Int("consecutive_failures", s.consecutiveFailures),
-		observability.Duration("duration", duration))
+// LastFailureAt returns the time of the last refresh failure, or zero if no failure has occurred.
+func (s *PriceRefreshScheduler) LastFailureAt() time.Time {
+	s.stateMu.Lock()
+	defer s.stateMu.Unlock()
+	return s.lastFailureAt
 }
 
 // logAPIUsageSummary logs daily API usage for each provider after a refresh cycle.
