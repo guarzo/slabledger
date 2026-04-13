@@ -78,6 +78,11 @@ func (s *service) RefreshCLValuesGlobal(ctx context.Context, rows []CLExportRow)
 		}
 		purchase.CLValueCents = newCLCents
 
+		// Note: The following post-update block (DH push, metadata backfill, history, snapshot)
+		// mirrors the import update path at the "refreshed" case below, but diverges intentionally:
+		// this refresh path also re-triggers DH push when an already-listed item's market value
+		// changes, and tracks snapshotDeferred for the result summary.
+
 		// Flag for DH push if eligible (first-time push).
 		if purchase.NeedsDHPush() {
 			if err := s.purchases.UpdatePurchaseDHPushStatus(ctx, purchase.ID, DHPushStatusPending); err != nil && s.logger != nil {
@@ -240,6 +245,11 @@ func (s *service) ImportCLExportGlobal(ctx context.Context, rows []CLExportRow) 
 			}
 			existing.CLValueCents = newCLCents
 
+			// Note: This update path mirrors the CL refresh path above but intentionally omits
+			// the re-push-on-value-change logic (DH re-enroll on CL value change) because
+			// the import flow uses cached pre-import pricing, so value deltas are less meaningful.
+			// Snapshot deferral here is best-effort with no tracking in the result summary.
+
 			// Flag for DH push if eligible
 			if existing.NeedsDHPush() {
 				if err := s.purchases.UpdatePurchaseDHPushStatus(ctx, existing.ID, DHPushStatusPending); err != nil && s.logger != nil {
@@ -331,7 +341,14 @@ func (s *service) ImportCLExportGlobal(ctx context.Context, rows []CLExportRow) 
 			result.ByCampaign[campaign.ID] = summary
 			// Cache newly created purchase so duplicate cert rows in the same batch
 			// are handled as refreshes rather than allocation attempts.
-			if created, err := s.purchases.GetPurchaseByCertNumber(ctx, "PSA", row.SlabSerial); err == nil && created != nil {
+			created, lookupErr := s.purchases.GetPurchaseByCertNumber(ctx, "PSA", row.SlabSerial)
+			if lookupErr != nil {
+				if s.logger != nil {
+					s.logger.Warn(ctx, "post-allocation cache update failed — duplicate cert risk",
+						observability.String("certNumber", row.SlabSerial),
+						observability.Err(lookupErr))
+				}
+			} else if created != nil {
 				existingMap[row.SlabSerial] = created
 			}
 

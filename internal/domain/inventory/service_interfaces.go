@@ -104,6 +104,6 @@ type CertLookupService interface {
 // SnapshotService handles background market snapshot refresh (used by schedulers).
 type SnapshotService interface {
 	RefreshPurchaseSnapshot(ctx context.Context, purchaseID string, card CardIdentity, grade float64, clValueCents int) bool
-	ProcessPendingSnapshots(ctx context.Context, limit int) (processed, skipped, failed int)
-	RetryFailedSnapshots(ctx context.Context, limit int) (processed, skipped, failed int)
+	ProcessPendingSnapshots(ctx context.Context, limit int) (processed, skipped, failed int, err error)
+	RetryFailedSnapshots(ctx context.Context, limit int) (processed, skipped, failed int, err error)
 }
