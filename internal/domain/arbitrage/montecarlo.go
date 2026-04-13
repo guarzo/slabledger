@@ -171,33 +171,27 @@ func runSimulation(
 	return MonteCarloResult{
 		Label:        label,
 		Simulations:  n,
-		MedianROI:    mcPercentileFloat(rois, 0.50),
-		P10ROI:       mcPercentileFloat(rois, 0.10),
-		P90ROI:       mcPercentileFloat(rois, 0.90),
-		MedianProfit: mcPercentileInt(profits, 0.50),
-		P10Profit:    mcPercentileInt(profits, 0.10),
-		P90Profit:    mcPercentileInt(profits, 0.90),
-		MedianVolume: mcPercentileInt(volumes, 0.50),
+		MedianROI:    mcPercentile(rois, 0.50),
+		P10ROI:       mcPercentile(rois, 0.10),
+		P90ROI:       mcPercentile(rois, 0.90),
+		MedianProfit: mcPercentile(profits, 0.50),
+		P10Profit:    mcPercentile(profits, 0.10),
+		P90Profit:    mcPercentile(profits, 0.90),
+		MedianVolume: mcPercentile(volumes, 0.50),
 	}
 }
 
-func mcPercentileFloat(sorted []float64, p float64) float64 {
-	if len(sorted) == 0 {
-		return 0
-	}
-	idx := int(math.Round(p * float64(len(sorted)-1)))
-	if idx < 0 {
-		idx = 0
-	}
-	if idx >= len(sorted) {
-		idx = len(sorted) - 1
-	}
-	return sorted[idx]
+// ordered is a type constraint for number types that can be sorted.
+type ordered interface {
+	~int | ~float64
 }
 
-func mcPercentileInt(sorted []int, p float64) int {
+// mcPercentile returns the value at percentile p (0.0-1.0) from a pre-sorted slice.
+// Returns the zero value of T if the slice is empty.
+func mcPercentile[T ordered](sorted []T, p float64) T {
 	if len(sorted) == 0 {
-		return 0
+		var zero T
+		return zero
 	}
 	idx := int(math.Round(p * float64(len(sorted)-1)))
 	if idx < 0 {

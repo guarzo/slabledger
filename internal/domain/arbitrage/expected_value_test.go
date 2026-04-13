@@ -3,17 +3,19 @@ package arbitrage
 import "testing"
 
 func TestComputeExpectedValue(t *testing.T) {
-	ev := computeExpectedValue(
-		"Charizard", "12345", 9,
-		8500, // costBasis
-		0.72, // sell-through
-		0.15, // 15% median margin
-		1.0,  // normal liquidity
-		0.0,  // no trend
-		45.0, // avg 45 days unsold
-		0.05, // 5% annual capital cost
-		25,   // data points
-	)
+	ev := computeExpectedValue(EVInput{
+		CardName:               "Charizard",
+		CertNumber:             "12345",
+		Grade:                  9,
+		CostBasis:              8500,
+		SegmentSellThrough:     0.72,
+		SegmentMedianMarginPct: 0.15,
+		LiquidityFactor:        1.0,
+		TrendAdjustment:        0.0,
+		AvgDaysUnsold:          45.0,
+		AnnualCapitalCostRate:  0.05,
+		DataPoints:             25,
+	})
 
 	if ev.EVCents <= 0 {
 		t.Errorf("expected positive EV for profitable segment, got %d", ev.EVCents)
@@ -27,17 +29,19 @@ func TestComputeExpectedValue(t *testing.T) {
 }
 
 func TestComputeExpectedValue_Negative(t *testing.T) {
-	ev := computeExpectedValue(
-		"Pikachu", "67890", 8,
-		10000, // high cost basis
-		0.20,  // low sell-through
-		-0.10, // negative margin
-		0.5,   // low liquidity
-		-0.05, // declining trend
-		90.0,  // avg 90 days unsold
-		0.05,  // 5% annual capital cost
-		3,     // few data points
-	)
+	ev := computeExpectedValue(EVInput{
+		CardName:               "Pikachu",
+		CertNumber:             "67890",
+		Grade:                  8,
+		CostBasis:              10000,
+		SegmentSellThrough:     0.20,
+		SegmentMedianMarginPct: -0.10,
+		LiquidityFactor:        0.5,
+		TrendAdjustment:        -0.05,
+		AvgDaysUnsold:          90.0,
+		AnnualCapitalCostRate:  0.05,
+		DataPoints:             3,
+	})
 
 	if ev.EVCents >= 0 {
 		t.Errorf("expected negative EV for unprofitable segment, got %d", ev.EVCents)
