@@ -8,6 +8,7 @@ const POST_TYPE_CONFIG: Record<PostType, { label: string; color: string; bg: str
   new_arrivals: { label: 'New Arrivals', color: 'text-blue-400', bg: 'bg-blue-500/10' },
   price_movers: { label: 'Price Movers', color: 'text-amber-400', bg: 'bg-amber-500/10' },
   hot_deals: { label: 'Hot Deals', color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
+  dh_instagram: { label: 'DoubleHolo', color: 'text-purple-400', bg: 'bg-purple-500/10' },
 };
 
 const STATUS_CONFIG: Record<PostStatus, { classes: string; label: string }> = {
@@ -15,8 +16,6 @@ const STATUS_CONFIG: Record<PostStatus, { classes: string; label: string }> = {
   publishing: { classes: 'bg-yellow-500/10 text-yellow-400 animate-pulse', label: 'Publishing...' },
   published: { classes: 'bg-purple-500/10 text-purple-400', label: 'Published' },
   failed: { classes: 'bg-red-500/10 text-red-400', label: 'Failed' },
-  approved: { classes: 'bg-emerald-500/10 text-emerald-400', label: 'Approved' },
-  rejected: { classes: 'bg-red-500/10 text-red-400', label: 'Rejected' },
 };
 
 interface PostCardProps {
@@ -52,7 +51,7 @@ export default function PostCard({ post, onPreview, onPublish, onDelete }: PostC
     ? post.caption.length > 150 ? post.caption.slice(0, 150) + '...' : post.caption
     : 'No caption generated';
 
-  const isPublishable = post.status === 'draft' || post.status === 'failed' || post.status === 'approved';
+  const isPublishable = post.status === 'draft' || post.status === 'failed';
   const isDeletable = post.status !== 'publishing';
 
   return (

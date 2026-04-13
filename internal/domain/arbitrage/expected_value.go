@@ -4,19 +4,8 @@ import (
 	"math"
 
 	"github.com/guarzo/slabledger/internal/domain/constants"
+	"github.com/guarzo/slabledger/internal/domain/mathutil"
 )
-
-// confidenceLabel returns a confidence string based on data point count.
-func confidenceLabel(n int) string {
-	switch {
-	case n >= 20:
-		return "high"
-	case n >= 5:
-		return "medium"
-	default:
-		return "low"
-	}
-}
 
 // ExpectedValue contains the EV computation for a single card.
 type ExpectedValue struct {
@@ -114,6 +103,6 @@ func computeExpectedValue(in EVInput) *ExpectedValue {
 		SegmentSellThrough: in.SegmentSellThrough,
 		LiquidityFactor:    in.LiquidityFactor,
 		TrendAdjustment:    in.TrendAdjustment,
-		Confidence:         confidenceLabel(in.DataPoints),
+		Confidence:         mathutil.ConfidenceLabel(in.DataPoints),
 	}
 }

@@ -102,7 +102,7 @@ func (r *SocialRepository) GetPurchaseIDsInExistingPosts(ctx context.Context, pu
 		placeholders[i] = "?"
 		args = append(args, id)
 	}
-	args = append(args, string(postType), string(social.PostStatusRejected))
+	args = append(args, string(postType), string(social.PostStatusFailed))
 
 	query := fmt.Sprintf(
 		`SELECT DISTINCT spc.purchase_id
@@ -172,7 +172,7 @@ func (r *SocialRepository) GetAvailableCardsForPosts(ctx context.Context) ([]soc
 		     WHERE sp.status NOT IN (?, ?)
 		 )
 		 ORDER BY p.created_at DESC`,
-		string(social.PostStatusRejected), string(social.PostStatusFailed))
+		string(social.PostStatusFailed), string(social.PostStatusFailed))
 	if err != nil {
 		return nil, fmt.Errorf("query available cards for posts: %w", err)
 	}

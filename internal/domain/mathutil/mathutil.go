@@ -34,3 +34,29 @@ func FormatGrade(v float64) string {
 	}
 	return strconv.FormatFloat(v, 'f', -1, 64)
 }
+
+// ConfidenceLabel returns a confidence string ("high", "medium", "low") based on data point count.
+// Thresholds: ≥20 → "high", ≥5 → "medium", else → "low".
+func ConfidenceLabel(n int) string {
+	switch {
+	case n >= 20:
+		return "high"
+	case n >= 5:
+		return "medium"
+	default:
+		return "low"
+	}
+}
+
+// ConfidenceScore returns a numeric confidence weight derived from data point count.
+// Thresholds: ≥20 → 1.0, ≥5 → 0.6, else → 0.3.
+func ConfidenceScore(n int) float64 {
+	switch {
+	case n >= 20:
+		return 1.0
+	case n >= 5:
+		return 0.6
+	default:
+		return 0.3
+	}
+}

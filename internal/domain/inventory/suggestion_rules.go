@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"strings"
+
+	"github.com/guarzo/slabledger/internal/domain/mathutil"
 )
 
 func suggestTopCharacterExpansion(_ context.Context, insights *PortfolioInsights, campaigns []Campaign) []CampaignSuggestion {
@@ -55,7 +57,7 @@ func suggestTopCharacterExpansion(_ context.Context, insights *PortfolioInsights
 			Title: fmt.Sprintf("Expand %s to more campaigns", seg.Label),
 			Rationale: fmt.Sprintf("%s has %.0f%% ROI across %d sales in %d inventory. Adding to: %s",
 				seg.Label, seg.ROI*100, seg.SoldCount, seg.CampaignCount, strings.Join(missingCampaigns, ", ")),
-			Confidence: confidenceLabel(seg.SoldCount),
+			Confidence: mathutil.ConfidenceLabel(seg.SoldCount),
 			DataPoints: seg.PurchaseCount,
 			SuggestedParams: CampaignSuggestionParams{
 				Name:          fmt.Sprintf("%s Focus", seg.Label),
@@ -66,7 +68,7 @@ func suggestTopCharacterExpansion(_ context.Context, insights *PortfolioInsights
 				ExpectedROI:       seg.ROI,
 				ExpectedMarginPct: seg.AvgMarginPct,
 				AvgDaysToSell:     seg.AvgDaysToSell,
-				DataConfidence:    confidenceLabel(seg.SoldCount),
+				DataConfidence:    mathutil.ConfidenceLabel(seg.SoldCount),
 			},
 		})
 	}
@@ -108,7 +110,7 @@ func suggestGradeSweetSpot(_ context.Context, insights *PortfolioInsights, campa
 		Title: fmt.Sprintf("%s Sweet Spot Campaign", bestGrade.Label),
 		Rationale: fmt.Sprintf("%s is the best-performing grade at %.0f%% ROI with %d sales, covered by %d of %d campaigns",
 			bestGrade.Label, bestGrade.ROI*100, bestGrade.SoldCount, bestGrade.CampaignCount, activeCampaigns),
-		Confidence: confidenceLabel(bestGrade.SoldCount),
+		Confidence: mathutil.ConfidenceLabel(bestGrade.SoldCount),
 		DataPoints: bestGrade.PurchaseCount,
 		SuggestedParams: CampaignSuggestionParams{
 			Name:       fmt.Sprintf("%s Focused", bestGrade.Label),
@@ -118,7 +120,7 @@ func suggestGradeSweetSpot(_ context.Context, insights *PortfolioInsights, campa
 			ExpectedROI:       bestGrade.ROI,
 			ExpectedMarginPct: bestGrade.AvgMarginPct,
 			AvgDaysToSell:     bestGrade.AvgDaysToSell,
-			DataConfidence:    confidenceLabel(bestGrade.SoldCount),
+			DataConfidence:    mathutil.ConfidenceLabel(bestGrade.SoldCount),
 		},
 	})
 
@@ -138,7 +140,7 @@ func suggestCoverageGapCampaigns(_ context.Context, insights *PortfolioInsights)
 			Type:       "gap",
 			Title:      fmt.Sprintf("Coverage Gap: %s", seg.Label),
 			Rationale:  gap.Reason,
-			Confidence: confidenceLabel(seg.SoldCount),
+			Confidence: mathutil.ConfidenceLabel(seg.SoldCount),
 			DataPoints: seg.PurchaseCount,
 			SuggestedParams: CampaignSuggestionParams{
 				Name:          fmt.Sprintf("%s Campaign", seg.Label),
@@ -149,7 +151,7 @@ func suggestCoverageGapCampaigns(_ context.Context, insights *PortfolioInsights)
 				ExpectedROI:       seg.ROI,
 				ExpectedMarginPct: seg.AvgMarginPct,
 				AvgDaysToSell:     seg.AvgDaysToSell,
-				DataConfidence:    confidenceLabel(seg.SoldCount),
+				DataConfidence:    mathutil.ConfidenceLabel(seg.SoldCount),
 			},
 		})
 	}

@@ -87,6 +87,48 @@ func TestToDollars(t *testing.T) {
 	}
 }
 
+func TestConfidenceLabel(t *testing.T) {
+	tests := []struct {
+		n    int
+		want string
+	}{
+		{0, "low"},
+		{1, "low"},
+		{4, "low"},
+		{5, "medium"},
+		{10, "medium"},
+		{19, "medium"},
+		{20, "high"},
+		{100, "high"},
+	}
+	for _, tt := range tests {
+		got := ConfidenceLabel(tt.n)
+		if got != tt.want {
+			t.Errorf("ConfidenceLabel(%d) = %q, want %q", tt.n, got, tt.want)
+		}
+	}
+}
+
+func TestConfidenceScore(t *testing.T) {
+	tests := []struct {
+		n    int
+		want float64
+	}{
+		{0, 0.3},
+		{4, 0.3},
+		{5, 0.6},
+		{19, 0.6},
+		{20, 1.0},
+		{50, 1.0},
+	}
+	for _, tt := range tests {
+		got := ConfidenceScore(tt.n)
+		if got != tt.want {
+			t.Errorf("ConfidenceScore(%d) = %v, want %v", tt.n, got, tt.want)
+		}
+	}
+}
+
 func TestFormatGrade(t *testing.T) {
 	tests := []struct {
 		name  string

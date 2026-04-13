@@ -60,13 +60,20 @@ func (s *GapStore) GetGapReport(ctx context.Context, since time.Time) (*scoring.
 	}
 
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT g.factor_name, COUNT(DISTINCT g.entity_type || '|' || g.entity_id) as cnt,
-		        (SELECT reason FROM scoring_data_gaps r
-		         WHERE r.factor_name = g.factor_name AND r.recorded_at >= ?
-		         GROUP BY reason ORDER BY COUNT(*) DESC LIMIT 1) as top_reason
+		`WITH ranked_reasons AS (
+		     SELECT factor_name, reason,
+		            ROW_NUMBER() OVER (PARTITION BY factor_name ORDER BY COUNT(*) DESC) AS rn
+		     FROM scoring_data_gaps
+		     WHERE recorded_at >= ?
+		     GROUP BY factor_name, reason
+		 )
+		 SELECT g.factor_name,
+		        COUNT(DISTINCT g.entity_type || '|' || g.entity_id) AS cnt,
+		        rr.reason AS top_reason
 		 FROM scoring_data_gaps g
+		 JOIN ranked_reasons rr ON rr.factor_name = g.factor_name AND rr.rn = 1
 		 WHERE g.recorded_at >= ?
-		 GROUP BY g.factor_name
+		 GROUP BY g.factor_name, rr.reason
 		 ORDER BY cnt DESC`, since, since)
 	if err != nil {
 		return nil, err

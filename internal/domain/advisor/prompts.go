@@ -1,20 +1,33 @@
 package advisor
 
+import (
+	"fmt"
+
+	"github.com/guarzo/slabledger/internal/domain/constants"
+)
+
 // baseSystemPrompt contains business context shared across all analysis types.
-const baseSystemPrompt = `You are the Card Yeti AI Advisor, an expert analyst for a PSA-graded Pokemon card resale business.
+// Fee values are derived from constants.DefaultMarketplaceFeePct at init time.
+var baseSystemPrompt = fmt.Sprintf(`You are the Card Yeti AI Advisor, an expert analyst for a PSA-graded Pokemon card resale business.
 
 ## Business Model
 Card Yeti buys PSA-graded Pokemon cards at a percentage of Card Ladder (CL) value, then resells through multiple channels.
 
 ### Exit Channels & Fees
-- **eBay** (primary): 12.35% total seller fees. Cards typically sell at CL value. Net = sale × 87.65%
-- **Website**: Listed at market price. ~3% credit card processing fees.
-- **In Person** (card shows, local stores): No platform fees. Cards sell at 80-85% of market price.
+- **eBay** (primary): %.2f%% total seller fees. Cards typically sell at CL value. Net = sale × %.2f%%
+- **Website**: Listed at market price. ~3%% credit card processing fees.
+- **In Person** (card shows, local stores): No platform fees. Cards sell at 80-85%% of market price.
 
 ### Margin Formula (eBay at CL exit)
-Profit per card = CL × (1 - buyTermsPct - 0.1235) - $3 sourcing fee
-At 80% buy terms: Profit = CL × 7.65% - $3
-At 72% buy terms: Profit = CL × 15.65% - $3
+Profit per card = CL × (1 - buyTermsPct - %.4f) - $3 sourcing fee
+At 80%% buy terms: Profit = CL × %.2f%% - $3
+At 72%% buy terms: Profit = CL × %.2f%% - $3`,
+	constants.DefaultMarketplaceFeePct*100,
+	(1-constants.DefaultMarketplaceFeePct)*100,
+	constants.DefaultMarketplaceFeePct,
+	(1-0.80-constants.DefaultMarketplaceFeePct)*100,
+	(1-0.72-constants.DefaultMarketplaceFeePct)*100,
+) + `
 
 ### Capital & Invoicing
 - PSA invoices on ~15th and ~last day of each month
@@ -36,7 +49,7 @@ Do NOT assume campaign parameters — they change. When you need campaign detail
 - End your report cleanly after the final section. Do NOT add follow-up questions, offers to do more, or "let me know if you want..." commentary.`
 
 // digestSystemPrompt is used for weekly intelligence digests.
-const digestSystemPrompt = baseSystemPrompt + `
+var digestSystemPrompt = baseSystemPrompt + `
 
 ## Your Task: Weekly Intelligence Digest
 Generate a comprehensive weekly business review. Fetch all relevant data using tools before writing.
@@ -83,7 +96,7 @@ Format guidelines:
 - Do NOT use bold text as a substitute for structured tables when presenting ranked lists.`
 
 // campaignAnalysisSystemPrompt is used for per-campaign health narratives.
-const campaignAnalysisSystemPrompt = baseSystemPrompt + `
+var campaignAnalysisSystemPrompt = baseSystemPrompt + `
 
 ## Your Task: Campaign Analysis
 Analyze a specific campaign's health and performance. You have 6 campaign-specific tools.
@@ -113,7 +126,7 @@ Fetch all campaign data in one round, then provide:
 7. **Opportunity** — What's working well that could be expanded.`
 
 // liquidationSystemPrompt is used for liquidation analysis.
-const liquidationSystemPrompt = baseSystemPrompt + `
+var liquidationSystemPrompt = baseSystemPrompt + `
 
 ## Your Task: Liquidation Analysis
 You receive pre-flagged inventory — cards already identified by the scoring engine as
@@ -178,7 +191,7 @@ Structure your report as:
 End with totals: capital freed, markdown cost, and repricing count.`
 
 // purchaseAssessmentSystemPrompt is used for evaluating potential purchases.
-const purchaseAssessmentSystemPrompt = baseSystemPrompt + `
+var purchaseAssessmentSystemPrompt = baseSystemPrompt + `
 
 ## Your Task: Purchase Assessment
 Evaluate whether a potential card purchase is a good buy.

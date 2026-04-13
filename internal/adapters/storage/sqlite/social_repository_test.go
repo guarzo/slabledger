@@ -265,7 +265,7 @@ func TestSocialRepository_SetPublishing(t *testing.T) {
 	}{
 		{"from draft", "soc-pbing-1", social.PostStatusDraft, false},
 		{"from failed (clears error)", "soc-pbing-2", social.PostStatusDraft, true},
-		{"from approved", "soc-pbing-3", social.PostStatusApproved, false},
+		{"from draft (second)", "soc-pbing-3", social.PostStatusDraft, false},
 	}
 	for _, tc := range transitionTests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -659,8 +659,8 @@ func TestSocialRepository_GetPurchaseIDsInExistingPosts(t *testing.T) {
 		{PostID: "soc-exist-post1", PurchaseID: "soc-exist-p1", SlideOrder: 1},
 	}))
 
-	// Create a rejected post with p2 — should be excluded from results.
-	rejectedPost := newTestSocialPost("soc-exist-post2", social.PostTypeNewArrivals, social.PostStatusRejected)
+	// Create a failed post with p2 — should be excluded from results.
+	rejectedPost := newTestSocialPost("soc-exist-post2", social.PostTypeNewArrivals, social.PostStatusFailed)
 	require.NoError(t, repo.CreatePost(ctx, rejectedPost))
 	require.NoError(t, repo.AddPostCards(ctx, "soc-exist-post2", []social.PostCard{
 		{PostID: "soc-exist-post2", PurchaseID: "soc-exist-p2", SlideOrder: 1},
@@ -779,8 +779,8 @@ func TestSocialRepository_GetAvailableCardsForPosts(t *testing.T) {
 		{PostID: "soc-avail-draft", PurchaseID: "soc-avail-p4", SlideOrder: 1},
 	}))
 
-	// Add p5 to a rejected post (should still be available).
-	rejPost := newTestSocialPost("soc-avail-rej", social.PostTypeNewArrivals, social.PostStatusRejected)
+	// Add p5 to a failed post (should still be available).
+	rejPost := newTestSocialPost("soc-avail-rej", social.PostTypeNewArrivals, social.PostStatusFailed)
 	require.NoError(t, repo.CreatePost(ctx, rejPost))
 	require.NoError(t, repo.AddPostCards(ctx, "soc-avail-rej", []social.PostCard{
 		{PostID: "soc-avail-rej", PurchaseID: "soc-avail-p5", SlideOrder: 1},

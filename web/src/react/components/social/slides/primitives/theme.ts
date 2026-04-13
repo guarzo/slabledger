@@ -51,6 +51,18 @@ export const SLIDE_THEMES: Record<PostType, SlideTheme> = {
     coverGlow: 'rgba(217, 119, 6, 0.1)',
     coverBadgeLabel: 'TRENDING UP',
   },
+  dh_instagram: {
+    label: 'DoubleHolo',
+    accentPrimary: 'text-purple-400',
+    accentBg: 'bg-purple-500/15 border-purple-500/30 text-purple-300',
+    gradientBar: 'from-transparent via-purple-500 to-indigo-400',
+    glowColor: 'rgba(168,85,247,0.15)',
+    overlayAccent: 'rgba(168,85,247,0.08)',
+    coverBg: 'linear-gradient(150deg, #0e0a1a 0%, #0a0e1a 50%, #0a0a1a 100%)',
+    coverAccent: '#9333ea',
+    coverGlow: 'rgba(147, 51, 234, 0.12)',
+    coverBadgeLabel: 'DOUBLEHOLO',
+  },
 };
 
 export function getTheme(postType: PostType): SlideTheme {

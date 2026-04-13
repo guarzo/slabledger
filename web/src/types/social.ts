@@ -1,5 +1,5 @@
-export type PostType = 'new_arrivals' | 'price_movers' | 'hot_deals';
-export type PostStatus = 'draft' | 'publishing' | 'published' | 'failed' | 'approved' | 'rejected';
+export type PostType = 'new_arrivals' | 'price_movers' | 'hot_deals' | 'dh_instagram';
+export type PostStatus = 'draft' | 'publishing' | 'published' | 'failed';
 
 export interface SocialPost {
   id: string;
@@ -30,6 +30,8 @@ export interface PostCardDetail {
   askingPriceCents: number;
   clValueCents: number;
   trend30d: number;
+  createdAt: string;
+  sold: boolean;
 }
 
 export interface SocialPostDetail extends SocialPost {
