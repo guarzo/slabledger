@@ -27,6 +27,21 @@ type PriceLookup interface {
 }
 
 // MarketSnapshot captures a point-in-time view of market data for a card at a specific grade.
+// It is a value object — there is no identity field; equality is field-for-field.
+//
+// Field groups:
+//   - Basic: LastSoldCents, LastSoldDate, SaleCount, GradePriceCents, LowestListCents, ActiveListings
+//   - Sales volume: SalesLast30d, SalesLast90d
+//   - Percentile distribution: ConservativeCents (P25), MedianCents (P50), OptimisticCents (P75), P10Cents, P90Cents
+//   - Trend: Trend30d, Trend90d, Volatility
+//   - Velocity: DailyVelocity, WeeklyVelocity, MonthlyVelocity
+//   - Short-term signal: Avg7DayCents
+//   - Source metadata: SourceCount, Sources, Confidence, SourcePrices, DistSampleSize, DistPeriodDays
+//   - Estimate (secondary source): EstimatedValueCents, EstimateSource, IsEstimated
+//   - Diagnostic flags: PricingGap
+//   - CL reference: CLValueCents, CLDeviationPct, CLAnchorApplied
+//
+// Zero values mean "no data available" for that field — a zero GradePriceCents is not a free card.
 type MarketSnapshot struct {
 	LastSoldCents     int     `json:"lastSoldCents"`
 	LastSoldDate      string  `json:"lastSoldDate,omitempty"`
