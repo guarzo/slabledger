@@ -54,13 +54,6 @@ test.describe('Dashboard Page - Rendering', () => {
     // Should show dashboard heading
     await expect(page.locator('h1')).toContainText('Dashboard');
   });
-
-  test('should redirect favorites to dashboard', async ({ page }) => {
-    await setupPageWithMocks(page, '/favorites');
-
-    // /favorites redirects to / (dashboard) — verify URL
-    await expect(page).toHaveURL('/');
-  });
 });
 
 test.describe('Navigation @smoke', () => {

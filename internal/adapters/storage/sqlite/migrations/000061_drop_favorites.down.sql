@@ -10,3 +10,5 @@ CREATE TABLE IF NOT EXISTS favorites (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     UNIQUE(user_id, card_name, set_name, card_number)
 );
+
+CREATE INDEX idx_favorites_user_created ON favorites(user_id, created_at DESC);
