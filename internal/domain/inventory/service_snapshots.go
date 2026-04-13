@@ -116,7 +116,7 @@ func applyCLCorrection(snapshot *MarketSnapshot, clValueCents int) {
 // captureMarketSnapshot performs a best-effort market snapshot lookup and applies it to the receiver.
 // Skips lookup when the set name is generic (e.g. "TCG Cards") to avoid capturing wrong data.
 func (s *service) captureMarketSnapshot(ctx context.Context, r snapshotReceiver, card CardIdentity, grade float64, clValueCents int) {
-	if s.priceProv != nil && card.CardName != "" && grade > 0 && !isGenericSetName(card.SetName) {
+	if s.priceProv != nil && card.CardName != "" && grade > 0 && !IsGenericSetName(card.SetName) {
 		snapshot, err := s.priceProv.GetMarketSnapshot(ctx, card, grade)
 		if err != nil {
 			if s.logger != nil {
@@ -143,7 +143,7 @@ func (s *service) recaptureMarketSnapshot(ctx context.Context, purchaseID string
 // recaptureMarketSnapshotDetailed fetches a fresh market snapshot and returns a detailed result
 // distinguishing skipped/unprocessable inputs, provider errors, and DB write failures.
 func (s *service) recaptureMarketSnapshotDetailed(ctx context.Context, purchaseID string, card CardIdentity, grade float64, clValueCents int) snapshotResult {
-	if s.priceProv == nil || card.CardName == "" || grade <= 0 || isGenericSetName(card.SetName) {
+	if s.priceProv == nil || card.CardName == "" || grade <= 0 || IsGenericSetName(card.SetName) {
 		return snapshotSkipped
 	}
 	snapshot, err := s.priceProv.GetMarketSnapshot(ctx, card, grade)
@@ -255,7 +255,7 @@ func (s *service) processSnapshotsByStatus(ctx context.Context, status SnapshotS
 // needsSnapshotRecovery returns true when a purchase has valid card metadata
 // but never had a market snapshot captured (e.g. provider was down during import).
 func needsSnapshotRecovery(p *Purchase) bool {
-	return p.SnapshotDate == "" && p.CardName != "" && p.GradeValue > 0 && !isGenericSetName(p.SetName)
+	return p.SnapshotDate == "" && p.CardName != "" && p.GradeValue > 0 && !IsGenericSetName(p.SetName)
 }
 
 // backfillMetadataFromCL updates card metadata (name, number, set) on the purchase
@@ -266,7 +266,7 @@ func (s *service) backfillMetadataFromCL(ctx context.Context, purchase *Purchase
 	// Determine which fields need backfill independently.
 	nameNeeds := purchase.CardName == ""
 	numberNeeds := purchase.CardNumber == ""
-	setNeeds := isGenericSetName(purchase.SetName) && row.Set != ""
+	setNeeds := IsGenericSetName(purchase.SetName) && row.Set != ""
 
 	if !nameNeeds && !numberNeeds && !setNeeds {
 		return

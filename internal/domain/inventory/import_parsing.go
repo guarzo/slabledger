@@ -18,11 +18,6 @@ func IsGenericSetName(setName string) bool {
 	return constants.IsGenericSetName(setName)
 }
 
-// Deprecated: use IsGenericSetName instead.
-func isGenericSetName(setName string) bool {
-	return IsGenericSetName(setName)
-}
-
 var (
 	// Matches #-prefixed card numbers like "#25/25", "#68", "#TG23" anywhere in title
 	hashCardNumberRegex = regexp.MustCompile(`#([A-Za-z0-9-]+(?:/[A-Za-z0-9-]+)?)`)

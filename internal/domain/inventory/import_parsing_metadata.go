@@ -143,7 +143,7 @@ func resolveSetName(titleSet, category string) (string, string) {
 	resolved := resolvePSACategory(category)
 
 	// When set is still generic after mapping, use the parsed title set
-	if isGenericSetName(resolved) && titleSet != "" {
+	if IsGenericSetName(resolved) && titleSet != "" {
 		resolved = titleSet
 	}
 
@@ -154,7 +154,7 @@ func resolveSetName(titleSet, category string) (string, string) {
 	// Determine warning after all resolution steps so a generic titleSet
 	// that remains generic after resolvePSACategory is correctly flagged.
 	var warning string
-	if isGenericSetName(resolved) {
+	if IsGenericSetName(resolved) {
 		warning = "set name remains generic after resolution"
 	}
 
@@ -221,7 +221,7 @@ func ExportParseCardMetadataFromTitle(listingTitle, category string) (string, st
 }
 
 func ExportIsGenericSetName(setName string) bool {
-	return isGenericSetName(setName)
+	return IsGenericSetName(setName)
 }
 
 // extractYearFromTitle extracts the leading 4-digit year from a PSA listing title.

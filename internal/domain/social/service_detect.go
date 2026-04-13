@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/ai"
+	"github.com/guarzo/slabledger/internal/domain/llmutil"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
@@ -57,7 +58,7 @@ func (s *service) llmGenerate(ctx context.Context) (int, error) {
 	ai.RecordCall(ctx, s.tracker, s.logger, ai.OpSocialSuggestion, nil, start, 0, &usage)
 
 	// Parse JSON response — strip markdown fences and fix control characters
-	raw := sanitizeLLMJSON(stripMarkdownFences(result.String()))
+	raw := sanitizeLLMJSON(llmutil.StripMarkdownFences(result.String()))
 
 	var resp postSuggestionResponse
 	if err := json.Unmarshal([]byte(raw), &resp); err != nil {

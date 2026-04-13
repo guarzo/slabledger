@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	"github.com/guarzo/slabledger/internal/domain/llmutil"
 )
 
 // candidateRequest is the JSON schema for LLM candidate generation output.
@@ -118,7 +120,7 @@ func BuildScoringPrompt(candidates []candidateRequest, profile ProfitabilityProf
 
 // ParseCandidates parses the LLM's candidate generation response.
 func ParseCandidates(raw string) ([]candidateRequest, error) {
-	cleaned := cleanJSONResponse(raw)
+	cleaned := llmutil.StripMarkdownFences(raw)
 	var candidates []candidateRequest
 	if err := json.Unmarshal([]byte(cleaned), &candidates); err != nil {
 		return nil, fmt.Errorf("parse candidates: %w", err)
@@ -167,7 +169,7 @@ func parseSignalDirection(s string) SignalDirection {
 
 // ParseScoredPicks parses the LLM's scoring response into domain Pick objects.
 func ParseScoredPicks(raw string) ([]Pick, error) {
-	cleaned := cleanJSONResponse(raw)
+	cleaned := llmutil.StripMarkdownFences(raw)
 	var scored []scoredPick
 	if err := json.Unmarshal([]byte(cleaned), &scored); err != nil {
 		return nil, fmt.Errorf("parse scored picks: %w", err)
@@ -199,13 +201,4 @@ func ParseScoredPicks(raw string) ([]Pick, error) {
 		})
 	}
 	return result, nil
-}
-
-// cleanJSONResponse strips markdown code fences from LLM responses.
-func cleanJSONResponse(raw string) string {
-	s := strings.TrimSpace(raw)
-	s = strings.TrimPrefix(s, "```json")
-	s = strings.TrimPrefix(s, "```")
-	s = strings.TrimSuffix(s, "```")
-	return strings.TrimSpace(s)
 }
