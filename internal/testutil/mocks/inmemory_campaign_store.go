@@ -740,18 +740,24 @@ func (m *InMemoryCampaignStore) GetPurchasesWithSales(ctx context.Context, campa
 	if m.GetPurchasesWithSalesFn != nil {
 		return m.GetPurchasesWithSalesFn(ctx, campaignID)
 	}
-	var result []inventory.PurchaseWithSale
-	for _, p := range m.Purchases {
+	ids := make([]string, 0, len(m.Purchases))
+	for id, p := range m.Purchases {
 		if p.CampaignID == campaignID {
-			pws := inventory.PurchaseWithSale{Purchase: *p}
-			for _, s := range m.Sales {
-				if s.PurchaseID == p.ID {
-					pws.Sale = s
-					break
-				}
-			}
-			result = append(result, pws)
+			ids = append(ids, id)
 		}
+	}
+	sort.Strings(ids)
+	var result []inventory.PurchaseWithSale
+	for _, id := range ids {
+		p := m.Purchases[id]
+		pws := inventory.PurchaseWithSale{Purchase: *p}
+		for _, s := range m.Sales {
+			if s.PurchaseID == p.ID {
+				pws.Sale = s
+				break
+			}
+		}
+		result = append(result, pws)
 	}
 	return result, nil
 }
