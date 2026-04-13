@@ -4,7 +4,7 @@ import { queryKeys } from './queryKeys';
 import type { DHFixMatchRequest, DHSelectMatchRequest } from '../../types/apiStatus';
 
 /** Options shared by all admin read queries */
-interface AdminQueryOptions {
+export interface AdminQueryOptions {
   enabled?: boolean;
 }
 
@@ -39,7 +39,7 @@ export const useCardRequests = createAdminQuery(
   () => api.getCardRequests(),
 );
 
-export function useAdminApiUsage(options?: { enabled?: boolean }) {
+export function useAdminApiUsage(options?: AdminQueryOptions) {
   return useQuery({
     queryKey: queryKeys.admin.apiUsage,
     queryFn: () => api.getAdminApiUsage(),
@@ -49,7 +49,7 @@ export function useAdminApiUsage(options?: { enabled?: boolean }) {
   });
 }
 
-export function useAdminCacheStats(options?: { enabled?: boolean }) {
+export function useAdminCacheStats(options?: AdminQueryOptions) {
   return useQuery({
     queryKey: queryKeys.admin.cacheStats,
     queryFn: () => api.getAdminCacheStats(),
@@ -79,7 +79,7 @@ export function useRemoveAllowedEmail() {
   });
 }
 
-export function usePriceOverrideStats(options?: { enabled?: boolean }) {
+export function usePriceOverrideStats(options?: AdminQueryOptions) {
   return useQuery({
     queryKey: queryKeys.admin.priceOverrideStats,
     queryFn: () => api.getPriceOverrideStats(),
@@ -88,7 +88,7 @@ export function usePriceOverrideStats(options?: { enabled?: boolean }) {
   });
 }
 
-export function usePricingDiagnostics(options?: { enabled?: boolean }) {
+export function usePricingDiagnostics(options?: AdminQueryOptions) {
   return useQuery({
     queryKey: queryKeys.admin.pricingDiagnostics,
     queryFn: () => api.getPricingDiagnostics(),
@@ -117,7 +117,7 @@ export function useSubmitAllCardRequests() {
   });
 }
 
-export function useAIUsage(options?: { enabled?: boolean }) {
+export function useAIUsage(options?: AdminQueryOptions) {
   return useQuery({
     queryKey: queryKeys.admin.aiUsage,
     queryFn: () => api.getAIUsage(),
@@ -127,7 +127,7 @@ export function useAIUsage(options?: { enabled?: boolean }) {
   });
 }
 
-export function usePriceFlags(status: 'open' | 'resolved' | 'all', options?: { enabled?: boolean }) {
+export function usePriceFlags(status: 'open' | 'resolved' | 'all', options?: AdminQueryOptions) {
   return useQuery({
     queryKey: queryKeys.admin.priceFlags(status),
     queryFn: () => api.listPriceFlags(status),
@@ -148,7 +148,7 @@ export function useResolvePriceFlag() {
   });
 }
 
-export function useCardLadderStatus(options?: { enabled?: boolean }) {
+export function useCardLadderStatus(options?: AdminQueryOptions) {
   return useQuery({
     queryKey: queryKeys.admin.cardLadderStatus,
     queryFn: () => api.getCardLadderStatus(),
@@ -157,7 +157,7 @@ export function useCardLadderStatus(options?: { enabled?: boolean }) {
   });
 }
 
-export function useCardLadderFailures(options?: { enabled?: boolean }) {
+export function useCardLadderFailures(options?: AdminQueryOptions) {
   return useQuery({
     queryKey: queryKeys.admin.cardLadderFailures,
     queryFn: () => api.getCardLadderFailures(50),
@@ -197,7 +197,7 @@ export function useSyncCardLadderCollection() {
   });
 }
 
-export function useMarketMoversStatus(options?: { enabled?: boolean }) {
+export function useMarketMoversStatus(options?: AdminQueryOptions) {
   return useQuery({
     queryKey: queryKeys.admin.marketMoversStatus,
     queryFn: () => api.getMarketMoversStatus(),
@@ -206,7 +206,7 @@ export function useMarketMoversStatus(options?: { enabled?: boolean }) {
   });
 }
 
-export function useMarketMoversFailures(options?: { enabled?: boolean }) {
+export function useMarketMoversFailures(options?: AdminQueryOptions) {
   return useQuery({
     queryKey: queryKeys.admin.marketMoversFailures,
     queryFn: () => api.getMarketMoversFailures(50),
@@ -246,7 +246,7 @@ export function useSyncMarketMoversCollection() {
   });
 }
 
-export function useDHStatus(options?: { enabled?: boolean }) {
+export function useDHStatus(options?: AdminQueryOptions) {
   return useQuery({
     queryKey: queryKeys.admin.dhStatus,
     queryFn: () => api.getDHStatus(),
@@ -268,7 +268,7 @@ export function useTriggerDHBulkMatch() {
   });
 }
 
-export function useDHUnmatched(options?: { enabled?: boolean }) {
+export function useDHUnmatched(options?: AdminQueryOptions) {
   return useQuery({
     queryKey: queryKeys.admin.dhUnmatched,
     queryFn: () => api.getDHUnmatched(),
@@ -321,7 +321,7 @@ export function useUndismissDHMatch() {
   });
 }
 
-export function usePSASyncStatus(options?: { enabled?: boolean }) {
+export function usePSASyncStatus(options?: AdminQueryOptions) {
   return useQuery({
     queryKey: queryKeys.admin.psaSyncStatus,
     queryFn: () => api.getPSASyncStatus(),

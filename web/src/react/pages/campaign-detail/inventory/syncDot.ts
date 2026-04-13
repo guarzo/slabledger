@@ -21,8 +21,9 @@ export function syncDotProps(
   function within24h(ts: string | undefined): boolean {
     if (!ts) return false;
     const t = new Date(ts).getTime();
-    if (isNaN(t) || t > now) return false;
-    return now - t < threshold;
+    if (isNaN(t)) return false;
+    if (t >= now) return true; // future or now → treat as just synced
+    return now - t <= threshold;
   }
 
   const cl = within24h(clSyncedAt);

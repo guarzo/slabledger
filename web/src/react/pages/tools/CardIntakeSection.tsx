@@ -45,6 +45,17 @@ export function LegacyCard({ icon, title, description, children }: {
   );
 }
 
+/* ── downloadBlob ─────────────────────────────────────────────────── */
+
+function downloadBlob(blob: Blob, filename: string, revokeDelayMs = 100): void {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), revokeDelayMs);
+}
+
 /* ── Icons ────────────────────────────────────────────────────────── */
 
 function ShopBagIcon() {
@@ -149,12 +160,7 @@ function MMExportCard() {
   const exportMutation = useMutation<Blob, Error, boolean>({
     mutationFn: (missing: boolean) => api.globalExportMM(missing),
     onSuccess: (blob) => {
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'market-movers-export.csv';
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      downloadBlob(blob, 'market-movers-export.csv');
       toast.success('Market Movers CSV exported');
     },
     onError: (err) => {
@@ -278,12 +284,7 @@ function CLExportCard() {
   const exportMutation = useMutation<Blob, Error, boolean>({
     mutationFn: (missing: boolean) => api.globalExportCL(missing),
     onSuccess: (blob) => {
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'card_ladder_import.csv';
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 100);
+      downloadBlob(blob, 'card_ladder_import.csv');
       toast.success('Card Ladder CSV exported');
     },
     onError: (err) => {
