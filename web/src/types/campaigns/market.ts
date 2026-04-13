@@ -19,6 +19,7 @@ export interface SourcePrice {
 export interface MarketSnapshot {
   lastSoldCents: number;
   lastSoldDate?: string;
+  midPriceCents?: number;
   saleCount?: number;
   gradePriceCents: number;
   lowestListCents?: number;
