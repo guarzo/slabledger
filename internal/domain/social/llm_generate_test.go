@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync"
 	"testing"
 
 	"github.com/guarzo/slabledger/internal/domain/ai"
@@ -34,16 +35,27 @@ func (m *mockLLMProvider) StreamCompletion(_ context.Context, _ ai.CompletionReq
 // --- mock AI call tracker ---
 
 type mockAITracker struct {
+	mu    sync.Mutex
 	calls []*ai.AICallRecord
 }
 
 func (m *mockAITracker) RecordAICall(_ context.Context, call *ai.AICallRecord) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.calls = append(m.calls, call)
 	return nil
 }
 
 func (m *mockAITracker) GetAIUsage(_ context.Context) (*ai.AIUsageStats, error) {
 	return &ai.AIUsageStats{}, nil
+}
+
+func (m *mockAITracker) callsCopy() []*ai.AICallRecord {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make([]*ai.AICallRecord, len(m.calls))
+	copy(out, m.calls)
+	return out
 }
 
 // --- helper to build a service with LLM configured ---
@@ -123,6 +135,7 @@ func TestLLMGenerate_HappyPath(t *testing.T) {
 	svc := newLLMService(repo, llm, tracker)
 
 	n, err := svc.llmGenerate(ctx)
+	svc.Wait() // drain background caption/background goroutines before asserting
 
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -134,10 +147,11 @@ func TestLLMGenerate_HappyPath(t *testing.T) {
 		t.Errorf("repo.CreatePost calls: got %d, want 1", createdPosts)
 	}
 	// Tracker should have been called with social_suggestion operation.
-	if len(tracker.calls) == 0 {
+	calls := tracker.callsCopy()
+	if len(calls) == 0 {
 		t.Error("expected tracker to be called, but it was not")
-	} else if tracker.calls[0].Operation != ai.OpSocialSuggestion {
-		t.Errorf("tracker operation: got %q, want %q", tracker.calls[0].Operation, ai.OpSocialSuggestion)
+	} else if calls[0].Operation != ai.OpSocialSuggestion {
+		t.Errorf("tracker operation: got %q, want %q", calls[0].Operation, ai.OpSocialSuggestion)
 	}
 }
 
@@ -192,12 +206,13 @@ func TestLLMGenerate_LLMError(t *testing.T) {
 	svc := newLLMService(repo, llm, tracker)
 
 	_, err := svc.llmGenerate(ctx)
+	svc.Wait()
 
 	if err == nil {
 		t.Error("expected error from LLM, got nil")
 	}
 	// Tracker should still be called even on error.
-	if len(tracker.calls) == 0 {
+	if len(tracker.callsCopy()) == 0 {
 		t.Error("expected tracker to be called on LLM error, but it was not")
 	}
 }
@@ -331,10 +346,11 @@ func TestStreamCaption_HappyPath(t *testing.T) {
 		t.Error("expected non-empty result, got empty")
 	}
 	// Tracker should record the social_caption operation.
-	if len(tracker.calls) == 0 {
+	calls := tracker.callsCopy()
+	if len(calls) == 0 {
 		t.Error("expected tracker to be called")
-	} else if tracker.calls[0].Operation != ai.OpSocialCaption {
-		t.Errorf("tracker operation: got %q, want %q", tracker.calls[0].Operation, ai.OpSocialCaption)
+	} else if calls[0].Operation != ai.OpSocialCaption {
+		t.Errorf("tracker operation: got %q, want %q", calls[0].Operation, ai.OpSocialCaption)
 	}
 }
 
@@ -355,7 +371,7 @@ func TestStreamCaption_LLMError(t *testing.T) {
 		t.Error("expected error from LLM, got nil")
 	}
 	// Tracker must still be called even on error.
-	if len(tracker.calls) == 0 {
+	if len(tracker.callsCopy()) == 0 {
 		t.Error("expected tracker to be called even on LLM error")
 	}
 }
