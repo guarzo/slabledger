@@ -180,10 +180,6 @@ func parseAnalysisType(w http.ResponseWriter, r *http.Request) (advisor.Analysis
 
 // HandleDigest generates a weekly intelligence digest via SSE.
 func (h *AdvisorHandler) HandleDigest(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeError(w, http.StatusMethodNotAllowed, "Method not allowed")
-		return
-	}
 	if requireUser(w, r) == nil {
 		return
 	}
@@ -195,10 +191,6 @@ func (h *AdvisorHandler) HandleDigest(w http.ResponseWriter, r *http.Request) {
 
 // HandleCampaignAnalysis generates a campaign health and tuning narrative via SSE.
 func (h *AdvisorHandler) HandleCampaignAnalysis(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeError(w, http.StatusMethodNotAllowed, "Method not allowed")
-		return
-	}
 	if requireUser(w, r) == nil {
 		return
 	}
@@ -221,10 +213,6 @@ func (h *AdvisorHandler) HandleCampaignAnalysis(w http.ResponseWriter, r *http.R
 
 // HandleLiquidationAnalysis generates liquidation candidates via SSE.
 func (h *AdvisorHandler) HandleLiquidationAnalysis(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeError(w, http.StatusMethodNotAllowed, "Method not allowed")
-		return
-	}
 	if requireUser(w, r) == nil {
 		return
 	}
@@ -236,10 +224,6 @@ func (h *AdvisorHandler) HandleLiquidationAnalysis(w http.ResponseWriter, r *htt
 
 // HandlePurchaseAssessment evaluates a potential purchase via SSE.
 func (h *AdvisorHandler) HandlePurchaseAssessment(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeError(w, http.StatusMethodNotAllowed, "Method not allowed")
-		return
-	}
 	if requireUser(w, r) == nil {
 		return
 	}

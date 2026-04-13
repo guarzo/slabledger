@@ -259,19 +259,6 @@ func TestHandleRefreshTrigger(t *testing.T) {
 
 // --- HandleDigest ---
 
-func TestHandleDigest_MethodNotAllowed(t *testing.T) {
-	h := newAdvisorHandler(&mocks.MockAdvisorService{}, nil)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/advisor/digest", nil)
-	req = withUser(req)
-	rec := httptest.NewRecorder()
-	h.HandleDigest(rec, req)
-
-	if rec.Code != http.StatusMethodNotAllowed {
-		t.Fatalf("expected 405, got %d", rec.Code)
-	}
-}
-
 func TestHandleDigest_RequiresUser(t *testing.T) {
 	h := newAdvisorHandler(&mocks.MockAdvisorService{}, nil)
 
@@ -347,19 +334,6 @@ func TestHandleCampaignAnalysis_Success(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), "data: [DONE]") {
 		t.Errorf("expected DONE sentinel in SSE body")
-	}
-}
-
-func TestHandleCampaignAnalysis_MethodNotAllowed(t *testing.T) {
-	h := newAdvisorHandler(&mocks.MockAdvisorService{}, nil)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/advisor/campaign", nil)
-	req = withUser(req)
-	rec := httptest.NewRecorder()
-	h.HandleCampaignAnalysis(rec, req)
-
-	if rec.Code != http.StatusMethodNotAllowed {
-		t.Fatalf("expected 405, got %d", rec.Code)
 	}
 }
 
@@ -471,18 +445,5 @@ func TestHandlePurchaseAssessment_RequiresUser(t *testing.T) {
 
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("expected 401, got %d", rec.Code)
-	}
-}
-
-func TestHandlePurchaseAssessment_MethodNotAllowed(t *testing.T) {
-	h := newAdvisorHandler(&mocks.MockAdvisorService{}, nil)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/advisor/purchase", nil)
-	req = withUser(req)
-	rec := httptest.NewRecorder()
-	h.HandlePurchaseAssessment(rec, req)
-
-	if rec.Code != http.StatusMethodNotAllowed {
-		t.Fatalf("expected 405, got %d", rec.Code)
 	}
 }
