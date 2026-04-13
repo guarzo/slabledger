@@ -111,6 +111,7 @@ func TestPurchaseStore_ListPurchasesByCampaign(t *testing.T) {
 		{name: "one purchase for camp-2", campaignID: "lc-camp-2", limit: 100, offset: 0, wantCount: 1},
 		{name: "empty for unknown campaign", campaignID: "unknown", limit: 100, offset: 0, wantCount: 0},
 		{name: "limit 1 returns only one", campaignID: "lc-camp-1", limit: 1, offset: 0, wantCount: 1},
+		{name: "offset 1 skips first result", campaignID: "lc-camp-1", limit: 100, offset: 1, wantCount: 1},
 	}
 
 	for _, tt := range tests {
