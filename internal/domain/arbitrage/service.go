@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
@@ -44,6 +45,14 @@ func WithLogger(logger observability.Logger) ServiceOption {
 	}
 }
 
+// WithProjectionCache enables TTL-based caching of RunProjection results.
+// Use newProjectionCache(5 * time.Minute) for production.
+func WithProjectionCache(ttl time.Duration) ServiceOption {
+	return func(s *service) {
+		s.projCache = newProjectionCache(ttl)
+	}
+}
+
 // service implements Service.
 type service struct {
 	campaigns inventory.CampaignRepository
@@ -51,6 +60,7 @@ type service struct {
 	analytics inventory.AnalyticsRepository
 	finance   inventory.FinanceRepository
 	priceProv inventory.PriceLookup
+	projCache *projectionCache // optional; if nil, projection runs on every call
 	logger    observability.Logger
 }
 

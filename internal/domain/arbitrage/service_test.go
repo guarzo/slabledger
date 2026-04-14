@@ -539,3 +539,62 @@ func TestRunSimulation_PerCardCostNoPanic(t *testing.T) {
 		t.Errorf("expected simulation to run with 12 history entries, got Confidence=%q", result.Confidence)
 	}
 }
+
+// TestRunProjection_UsesCacheOnSecondCall verifies that RunProjection caches results
+// and returns the same pointer on cached hits.
+func TestRunProjection_UsesCacheOnSecondCall(t *testing.T) {
+	campaignID := "camp-cache-test"
+	campaign := &inventory.Campaign{
+		ID:                  campaignID,
+		Name:                "Cache Test",
+		BuyTermsCLPct:       0.65,
+		GradeRange:          "9-9",
+		PSASourcingFeeCents: 100,
+	}
+
+	// Build sample history with enough entries to trigger full simulation
+	history := []inventory.PurchaseWithSale{
+		{Purchase: inventory.Purchase{BuyCostCents: 500, GradeValue: 9, CLValueCents: 2000}, Sale: &inventory.Sale{NetProfitCents: 200, SaleFeeCents: 100}},
+		{Purchase: inventory.Purchase{BuyCostCents: 10000, GradeValue: 9, CLValueCents: 15000}, Sale: &inventory.Sale{NetProfitCents: 3000, SaleFeeCents: 1800}},
+		{Purchase: inventory.Purchase{BuyCostCents: 600, GradeValue: 9, CLValueCents: 2200}, Sale: &inventory.Sale{NetProfitCents: 250, SaleFeeCents: 110}},
+		{Purchase: inventory.Purchase{BuyCostCents: 9500, GradeValue: 9, CLValueCents: 14000}, Sale: &inventory.Sale{NetProfitCents: 2800, SaleFeeCents: 1700}},
+		{Purchase: inventory.Purchase{BuyCostCents: 700, GradeValue: 9, CLValueCents: 2500}, Sale: &inventory.Sale{NetProfitCents: 300, SaleFeeCents: 120}},
+		{Purchase: inventory.Purchase{BuyCostCents: 11000, GradeValue: 9, CLValueCents: 16000}, Sale: &inventory.Sale{NetProfitCents: 3200, SaleFeeCents: 1900}},
+		{Purchase: inventory.Purchase{BuyCostCents: 450, GradeValue: 9, CLValueCents: 1800}, Sale: &inventory.Sale{NetProfitCents: 180, SaleFeeCents: 90}},
+		{Purchase: inventory.Purchase{BuyCostCents: 12000, GradeValue: 9, CLValueCents: 17000}, Sale: &inventory.Sale{NetProfitCents: 3500, SaleFeeCents: 2000}},
+		{Purchase: inventory.Purchase{BuyCostCents: 800, GradeValue: 9, CLValueCents: 2800}, Sale: &inventory.Sale{NetProfitCents: 350, SaleFeeCents: 130}},
+		{Purchase: inventory.Purchase{BuyCostCents: 9000, GradeValue: 9, CLValueCents: 13500}, Sale: &inventory.Sale{NetProfitCents: 2600, SaleFeeCents: 1600}},
+		{Purchase: inventory.Purchase{BuyCostCents: 550, GradeValue: 9, CLValueCents: 2100}, Sale: &inventory.Sale{NetProfitCents: 220, SaleFeeCents: 105}},
+		{Purchase: inventory.Purchase{BuyCostCents: 10500, GradeValue: 9, CLValueCents: 15500}, Sale: &inventory.Sale{NetProfitCents: 3100, SaleFeeCents: 1850}},
+	}
+
+	svc := NewService(
+		&stubCampaignRepo{campaign: campaign},
+		&stubPurchaseRepo{},
+		&stubAnalyticsRepo{data: history},
+		&stubFinanceRepo{},
+		WithProjectionCache(5*time.Minute),
+	)
+
+	// Call RunProjection twice
+	result1, err := svc.RunProjection(context.Background(), campaignID)
+	if err != nil {
+		t.Fatalf("first call failed: %v", err)
+	}
+	if result1 == nil {
+		t.Fatal("first call returned nil result")
+	}
+
+	result2, err := svc.RunProjection(context.Background(), campaignID)
+	if err != nil {
+		t.Fatalf("second call failed: %v", err)
+	}
+	if result2 == nil {
+		t.Fatal("second call returned nil result")
+	}
+
+	// Verify both results are identical (same pointer, cached)
+	if result1 != result2 {
+		t.Errorf("expected same pointer (cached), but got different pointers")
+	}
+}

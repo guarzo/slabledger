@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -148,6 +149,7 @@ func initializeCampaignsService(
 		financeStore,   // FinanceRepository
 		arbitrage.WithPriceLookup(priceLookupAdapter),
 		arbitrage.WithLogger(logger),
+		arbitrage.WithProjectionCache(5*time.Minute),
 	)
 
 	portSvc := portfolio.NewService(
