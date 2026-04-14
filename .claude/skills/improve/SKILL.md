@@ -139,12 +139,28 @@ Using Phase 1 data as a guide, do targeted code reading. Phase 1 points at *wher
 The split is deliberate: Agent 1 is the high-value "senior reviewer" agent, and its findings should dominate the final top 10. Agents 2 and 3 are the floor — they catch the boring-but-real issues.
 
 - **Agent 1 — Semantic & architectural (the one that matters most)**: Categories 1 (Maintainability at the service/package level), 3 (Duplicate logic across packages), 6 (Architecture & code smells). **Prime this agent** by having it read `docs/ARCHITECTURE.md` and `internal/README.md` first, so it has a mental model of the intended layering before it looks for drift. **Target 3 findings by default.** Return up to 5 only if all 5 would independently earn a top-10 slot — no borderline Low-severity picks to hit a quota. Returning 2 excellent findings is a better outcome than 5 mixed ones; the orchestrator backfills Low-severity spots from other agents if needed.
-- **Agent 2 — Correctness & quality**: Categories 2 (Dead Code), 4 (Code Quality / swallowed errors), 5 (Tests), 9 (Performance & Concurrency). **Target 3 findings by default**, up to 5 if warranted. **Prime this agent** by reading the language idiom rules that match the scope: `~/.config/opencode/skills/code-simplifier/rules/go.md` for backend scope, `~/.config/opencode/skills/code-simplifier/rules/typescript.md` for frontend scope, both for full-codebase. These codify project idiom conventions (error wrapping, interface placement, `context` usage, `slices`/`maps`, etc.). If a file doesn't exist (running in a different harness), proceed without it. **Don't re-surface findings that `make check`/`golangci-lint` already flagged** — Agent 2's value is what linters miss (deviations from idiom rules, swallowed errors lint can't see because they're technically handled, test assertions that never fail).
+- **Agent 2 — Correctness & quality**: Categories 2 (Dead Code), 4 (Code Quality / swallowed errors), 5 (Tests), 9 (Performance & Concurrency). **Target 3 findings by default**, up to 5 if warranted. **Prime this agent** by reading the language idiom rules that match the scope: `~/.config/opencode/skills/code-simplifier/rules/go.md` for backend scope, `~/.config/opencode/skills/code-simplifier/rules/typescript.md` for frontend scope, both for full-codebase. These codify project idiom conventions (error wrapping, interface placement, `context` usage, `slices`/`maps`, etc.). If a file doesn't exist (running in a different harness), proceed without it. **Don't re-surface findings that `make check`/`golangci-lint` already flagged** — Agent 2's value is what linters miss (deviations from idiom rules, swallowed errors lint can't see because they're technically handled, test assertions that never fail). **Evidence-verification rule: before reporting anything as dead code or "unused export", run a grep for the identifier across the whole repo (including `cmd/`, `internal/`, and `*_test.go`) and confirm no callers exist. Coverage gaps for wiring code are expected — they are not evidence of dead code. Dead-code and unused-export claims require grep evidence, not intuition or zero-coverage inference. If you haven't grepped, don't flag.**
 - **Agent 3 — Surface & dependencies**: Categories 7 (UX), 8 (Docs), 10 (Deps). **Target 2 findings, max 3** — this category often produces low-impact noise, so keep the budget tight. Return 0 if nothing warrants a top-10 slot.
 
-### What to pass each agent
+### How to structure each agent's prompt
 
-Give each agent the same Phase 1 summary block (not raw output — summary):
+**The strict output contract must be the FIRST block of the agent prompt — before role, before Phase 1 data, before anything else.** Observed failure mode: when the contract is buried mid-prompt or placed at the end, sub-agents ignore it and produce prose preambles ("Now I have enough data...", "Here are my findings...", "Based on my analysis..."). Putting it first, as the first thing the agent reads, fixes this.
+
+Order each agent prompt as 5 blocks:
+
+**Block 1 — Strict output contract (the FIRST block):**
+
+```
+STRICT OUTPUT CONTRACT — read this before anything else:
+- Your response MUST begin with the literal characters `### #1:` — no prose preamble, no acknowledgement sentence, no "Now I have enough data", no "Here are my findings", no "Based on my analysis". The orchestrator discards everything before the first `###`.
+- Your response MUST end with the last finding's fields — no concluding summary, no "Let me know if you need more detail".
+- If nothing warrants a top-10 slot, your response is the single line `No findings worth top-10 consideration.` and nothing else.
+- Padding is a failure mode. Returning fewer findings than your target is valid and expected when the code doesn't warrant more — a two-finding return from Agent 1 tells the orchestrator something real.
+```
+
+**Block 2 — Role, categories, and priming reads** (copy the bullet for this agent from the Agent-roles list above, and include the specific priming reads: `docs/ARCHITECTURE.md` + `internal/README.md` for Agent 1; the `code-simplifier` rule files for Agent 2).
+
+**Block 3 — Phase 1 data summary:**
 
 ```
 Scope: <full | backend | frontend | diff | package>
@@ -155,22 +171,12 @@ Files over 500 LOC: <list with line counts>
 return nil, nil occurrences: <count, plus file:line list>
 Lint/check failures from `make check`: <summary>
 npm audit findings: <summary>
-Previous findings (from memory): <titles + status>
+Previous findings (from memory): <titles + status, so the agent can annotate new/persists/regression>
 ```
 
-Also tell Agent 1 to read `docs/ARCHITECTURE.md` and `internal/README.md` before doing anything else. That grounding is what lets it spot drift instead of surface issues.
+**Block 4 — Finding format** (the template from Step 4).
 
-### What each agent returns
-
-Each agent returns findings in the exact format from Step 4 (title, Category, Type, Severity, Effort, Location, 2–3 sentence description, suggested approach).
-
-**Strict output shape — tell each agent this explicitly in its brief:**
-
-- The response MUST begin with the literal characters `### #1:` — no prose preamble, no "Now I have enough data", no "Here are my findings", no acknowledgement sentence.
-- The response MUST end with the last finding's fields — no concluding summary, no "Let me know if you need more detail".
-- If the agent found nothing worth a top-10 slot in its categories, the response should be the single line `No findings worth top-10 consideration.` and nothing else.
-
-Padding is worse than a short response. A two-finding return from Agent 1 is a valid outcome and tells the orchestrator something real — don't coax agents into filling budgets.
+**Block 5 — Kickoff sentence**, literally: `Now begin. First character of your response must be '#'.` This re-asserts the contract at the moment generation starts.
 
 Review across these categories (skip categories not applicable to the current scope per the table in Step 0):
 
