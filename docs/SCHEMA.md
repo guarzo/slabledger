@@ -1,6 +1,6 @@
 # Database Schema Reference
 
-SlabLedger uses SQLite in WAL mode. Migrations are embedded in the binary and run automatically on startup. Migration files live in `internal/adapters/storage/sqlite/migrations/` (60 pairs, `000001`–`000060`).
+SlabLedger uses SQLite in WAL mode. Migrations are embedded in the binary and run automatically on startup. Migration files live in `internal/adapters/storage/sqlite/migrations/` (66 pairs, `000001`–`000066`).
 
 All monetary values are stored in **cents** (integer). Timestamps use `DATETIME`/`TIMESTAMP` as SQLite text in UTC. Boolean columns use `INTEGER` (`0`/`1`).
 
@@ -455,6 +455,16 @@ Individual graded cards bought under a campaign.
 | `mm_active_low_cents` | INTEGER | NOT NULL DEFAULT 0 | Market Movers lowest active listing; added migration 000048 |
 | `cl_synced_at` | TEXT | DEFAULT '' | When card was last synced to Card Ladder; added migration 000052 |
 | `mm_value_updated_at` | TEXT | NOT NULL DEFAULT '' | When MM value was last refreshed; added migration 000053 |
+| `received_at` | DATETIME | DEFAULT NULL | ISO datetime when PSA returned the card; added migration 000058 |
+| `psa_ship_date` | TEXT | NOT NULL DEFAULT '' | Date PSA shipped the card to user; added migration 000058 |
+| `dh_last_synced_at` | TEXT | NOT NULL DEFAULT '' | Last time DH push pipeline ran for this card; added migration 000059 |
+| `mm_last_error` | TEXT | NOT NULL DEFAULT '' | Last MM integration error message; added migration 000060 |
+| `mm_last_error_at` | TEXT | NOT NULL DEFAULT '' | ISO datetime of last MM error; added migration 000060 |
+| `cl_last_error` | TEXT | NOT NULL DEFAULT '' | Last Card Ladder integration error; added migration 000060 |
+| `cl_last_error_at` | TEXT | NOT NULL DEFAULT '' | ISO datetime of last CL error; added migration 000060 |
+| `cl_value_updated_at` | TEXT | NOT NULL DEFAULT '' | When CL value was last refreshed; added migration 000060 |
+| `mid_price_cents` | INTEGER | NOT NULL DEFAULT 0 | Mid-market price from DH snapshot; added migration 000066 |
+| `last_sold_date` | TEXT | NOT NULL DEFAULT '' | ISO date of last DH sale; added migration 000066 |
 
 **Unique:** `(grader, cert_number)`
 
@@ -468,6 +478,8 @@ Individual graded cards bought under a campaign.
 - `idx_purchases_dh_cert_status` on `(dh_cert_status)` WHERE `dh_cert_status != ''` (partial); added migration 000030
 - `idx_campaign_purchases_dh_push_status` on `(dh_push_status)` WHERE `dh_push_status != ''` (partial); added migration 000035
 - `idx_purchases_gem_rate_id` on `(gem_rate_id)` WHERE `gem_rate_id != ''` (partial); added migration 000040, converted to partial in 000043
+- `idx_purchases_mm_last_error` on `(mm_last_error)` WHERE `mm_last_error != ''` (partial); added migration 000060
+- `idx_purchases_cl_last_error` on `(cl_last_error)` WHERE `cl_last_error != ''` (partial); added migration 000060
 
 **Foreign Keys:** `campaign_id → campaigns(id)` ON DELETE CASCADE
 
@@ -512,6 +524,34 @@ Sale records for purchased cards (one per purchase, enforced by UNIQUE).
 - `idx_sales_order_id` on `(order_id)` WHERE `order_id != ''` (partial unique); added migration 000030
 
 **Foreign Keys:** `purchase_id → campaign_purchases(id)` ON DELETE CASCADE
+
+---
+
+### `psa_pending_items`
+PSA card items awaiting cert resolution or campaign matching. Tracks ambiguous or unmatched certs from PSA partner feeds that need manual or algorithmic resolution.
+
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| `id` | TEXT | PK | UUID |
+| `cert_number` | TEXT | NOT NULL UNIQUE | PSA cert ID |
+| `card_name` | TEXT | NOT NULL DEFAULT '' | Card name |
+| `set_name` | TEXT | NOT NULL DEFAULT '' | Set name |
+| `card_number` | TEXT | NOT NULL DEFAULT '' | Card number |
+| `grade` | REAL | NOT NULL DEFAULT 0 | PSA grade |
+| `buy_cost_cents` | INTEGER | NOT NULL DEFAULT 0 | Purchase price in cents |
+| `purchase_date` | TEXT | NOT NULL DEFAULT '' | ISO date of purchase |
+| `status` | TEXT | NOT NULL CHECK IN ('ambiguous', 'unmatched') | Resolution state |
+| `candidates` | TEXT | NOT NULL DEFAULT '[]' | JSON array of candidate campaigns (for ambiguous) |
+| `source` | TEXT | NOT NULL CHECK IN ('scheduler', 'manual') | How the item entered pending state |
+| `created_at` | DATETIME | NOT NULL DEFAULT CURRENT_TIMESTAMP | |
+| `resolved_at` | DATETIME | DEFAULT NULL | When resolution occurred (NULL if unresolved) |
+| `resolved_campaign_id` | TEXT | DEFAULT NULL | Campaign ID after resolution; added migration 000055 |
+
+**Unique:** `(cert_number)`
+
+**Indexes:** none
+
+**Foreign Keys:** none (external resolution may link to campaigns)
 
 ---
 
