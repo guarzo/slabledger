@@ -72,7 +72,16 @@ Present the opener as **two paragraphs plus a close**:
 
 If portfolio/suggestions returns nothing meaningful AND no crunch AND no listing bottleneck, the opener can legitimately produce a hold verdict for item 1 — that's a real signal that there's nothing to do, not a failure to find something.
 
-**Paragraph 2 — "Portfolio at a glance:"** One compressed line. Per-active-campaign: `Name ROI% / ST% / N unsold $X.XK` separated by ` • `. Then: `Outstanding $X.XK / N.N weeks to cover / trend ↗|↘|→`. Then **upcoming invoices** (not just one): list every unpaid invoice from `/api/credit/invoices` with due date in the next 4 weeks, formatted as `Invoices: $X.XK due YYYY-MM-DD, $Y.YK due YYYY-MM-DD` — multi-invoice horizon matters because the user often has one invoice landing while the next is two weeks out, and capital planning is for the rolling window, not just next Friday. Then **always** a capital-crunch line: `In-hand $X.XK of $Y.YK unsold (rest in-transit for invoice YYYY-MM-DD), DH listed: N of M mapped` — this is the single most important signal for what the user can actually do this week, and the opener is wrong when it treats in-transit cards as liquidatable. If in-hand capital × 1.1 < next invoice amount, mark this paragraph with a ⚠ and spell out the gap explicitly ("⚠ capital crunch: $X.XK in-hand can't cover $Y.YK invoice; short ~$Z.ZK").
+**Paragraph 2 — "Portfolio at a glance:"** One compressed line. Per-active-campaign format depends on the in-transit share:
+
+- If **in-transit ≤ 50%** of the campaign's unsold count, use `Name ROI% / ST% / N unsold $X.XK` (single combined figure — the distinction doesn't materially change what the user can do).
+- If **in-transit > 50%** (common during a large invoice cycle), use `Name ROI% / ST% / Nₕ in-hand + Mᵢ in-transit $X.XK` (subscripts literal: `5ₕ + 11ᵢ`). This makes it obvious when a campaign's headline capital is not actually sellable. Always do this split for campaigns at 100% in-transit — their headline dollar number is misleading otherwise.
+
+Separate campaigns with ` • `. Omit healthy campaigns with total unsold value under ~$500 unless they're on a top-3 candidate list.
+
+Then: `Outstanding $X.XK / N.N weeks to cover / trend ↗|↘|→`. Then **upcoming invoices** (not just one): list every unpaid invoice from `/api/credit/invoices` with due date in the next 4 weeks, formatted as `Invoices: $X.XK due YYYY-MM-DD, $Y.YK due YYYY-MM-DD`. Multi-invoice horizon matters because the user often has one invoice landing while the next is two weeks out, and capital planning is for the rolling window, not just next Friday.
+
+Then **always** a capital-crunch line: `In-hand $X.XK of $Y.YK unsold (rest in-transit for invoice YYYY-MM-DD), DH listed: N of M mapped` — this is the single most important signal for what the user can actually do this week, and the opener is wrong when it treats in-transit cards as liquidatable. If in-hand capital × 1.1 < next invoice amount, mark this paragraph with a ⚠ and spell out the gap explicitly ("⚠ capital crunch: $X.XK in-hand can't cover $Y.YK invoice; short ~$Z.ZK").
 
 **Close:** Targeted question referencing the strongest action, not a generic menu. Example: *"Want me to walk through the Wildcard liquidation list, pull up C7 tuning detail, or take something else?"*
 
@@ -324,7 +333,7 @@ Every parameter-change, new-campaign, or material tuning recommendation carries 
 | **Medium (M)** | 10–29 observations, OR ≥30 observations with CV ≥ 20% |
 | **Low (L)** | < 10 observations OR < 4 weeks of history |
 
-Coefficient of variation = `stddev / mean` of the metric driving the recommendation (ROI, sell-through, or days-to-sell — whichever the recommendation is predicated on). If the tuning endpoint doesn't return variance for a given metric, fall back to obs-count-only bands and say so: `(Medium confidence, obs-count only — variance not available)`. The `/api/campaigns/{id}/projections` response also returns its own `confidence` string ("low"/"medium"/"high") that can be mapped directly to H|M|L when that endpoint is the source. When multiple bands match (e.g. obs-count qualifies for Medium but history-length qualifies for Low), use the lower confidence band.
+Coefficient of variation = `stddev / mean` of the metric driving the recommendation (ROI, sell-through, or days-to-sell — whichever the recommendation is predicated on). If the tuning endpoint doesn't return variance for a given metric, fall back to obs-count-only bands and say so: `(Medium confidence, obs-count only — variance not available)`. The `/api/campaigns/{id}/projections` and `/api/portfolio/suggestions` responses also return a `confidence` string ("low"/"medium"/"high") — treat that as a **hint**, not authoritative. The skill's obs-count rule above wins on disagreement: a server-labeled "medium" with 8 observations is Low per the table, not Medium. State the rule-applied band, not the server label. When multiple bands match (e.g. obs-count qualifies for Medium but history-length qualifies for Low), use the lower confidence band.
 
 ### "Hold" verdict rule
 
