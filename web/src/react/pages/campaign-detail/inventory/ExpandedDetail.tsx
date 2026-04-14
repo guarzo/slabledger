@@ -34,36 +34,12 @@ function formatHoldReason(reason: string): string {
   return reason || 'Unknown reason';
 }
 
-/** Compact CL sync status dot with tooltip text. */
-function CLSyncIndicator({ syncedAt }: { syncedAt?: string }) {
-  if (!syncedAt) {
-    return (
-      <div className="mt-2 flex items-center gap-1.5 text-xs text-[var(--text-muted)]">
-        <span className="inline-block w-2 h-2 rounded-full bg-gray-500" />
-        <span>Not synced to CardLadder</span>
-      </div>
-    );
-  }
-  const parsed = new Date(syncedAt);
-  if (isNaN(parsed.getTime())) {
-    return (
-      <div className="mt-2 flex items-center gap-1.5 text-xs text-[var(--text-muted)]">
-        <span className="inline-block w-2 h-2 rounded-full bg-gray-400" />
-        <span>CL synced (unknown date)</span>
-      </div>
-    );
-  }
-  const ageMs = Date.now() - parsed.getTime();
-  const ageDays = Math.max(0, Math.floor(ageMs / 86_400_000));
-  // Green = synced within 2 days, amber = within 14 days, red = stale
-  const color = ageDays <= 2 ? 'bg-emerald-400' : ageDays <= 14 ? 'bg-amber-400' : 'bg-red-400';
-  const label = ageDays === 0 ? 'today' : ageDays === 1 ? 'yesterday' : `${ageDays}d ago`;
-  return (
-    <div className="mt-2 flex items-center gap-1.5 text-xs text-[var(--text-muted)]">
-      <span className={`inline-block w-2 h-2 rounded-full ${color}`} />
-      <span>CL synced {label}</span>
-    </div>
-  );
+/** Formats a YYYY-MM-DD sale date as a short readable string, e.g. "Apr 10". */
+function formatSaleDate(dateStr?: string): string | undefined {
+  if (!dateStr) return undefined;
+  const d = new Date(dateStr + 'T00:00:00'); // force local midnight to avoid UTC offset shift
+  if (isNaN(d.getTime())) return undefined;
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 export default function ExpandedDetail({ item, onReviewed, campaignId, onOpenFlagDialog, onResolveFlag, onApproveDHPush, onSetPrice }: ExpandedDetailProps) {
@@ -77,12 +53,12 @@ export default function ExpandedDetail({ item, onReviewed, campaignId, onOpenFla
 
   const clCents = purchase.clValueCents;
   const mmCents = purchase.mmValueCents ?? 0;
-  const marketCents = snap?.medianCents ?? 0;
+  const dhMidCents = snap?.midPriceCents ?? 0;
   const lastSoldCents = snap?.lastSoldCents ?? 0;
 
   const sources = useMemo(
-    () => buildPriceSources({ clCents, marketCents, costCents: cb, lastSoldCents, mmCents }),
-    [clCents, marketCents, cb, lastSoldCents, mmCents],
+    () => buildPriceSources({ clCents, dhMidCents, costCents: cb, lastSoldCents, mmCents }),
+    [clCents, dhMidCents, cb, lastSoldCents, mmCents],
   );
 
   const preSelected = useMemo(
@@ -121,22 +97,38 @@ export default function ExpandedDetail({ item, onReviewed, campaignId, onOpenFla
       {/* 3-column price signal grid, 8 cards */}
       <div className="grid grid-cols-3 gap-3 mb-4">
         <PriceSignalCard label="Cost Basis" valueCents={cb} />
-        <PriceSignalCard label="Card Ladder" valueCents={clCents} />
-        <PriceSignalCard label="Market Movers" valueCents={mmCents} updatedAt={purchase.mmValueUpdatedAt} />
         <PriceSignalCard
-          label="Market (Median)"
-          valueCents={marketCents}
-          highlight={marketCents > 0 && marketCents > cb ? 'success' : marketCents > 0 && marketCents < cb ? 'danger' : undefined}
+          label="Card Ladder"
+          valueCents={clCents}
+          updatedAt={purchase.clSyncedAt}
+          freshnessThresholds={{ green: 2, amber: 14 }}
         />
-        <PriceSignalCard label="Last Sold" valueCents={lastSoldCents} />
-        <PriceSignalCard label="Lowest eBay Listing" valueCents={snap?.lowestListCents ?? 0} />
         <PriceSignalCard
-          label="Current Override"
+          label="Market Movers"
+          valueCents={mmCents}
+          updatedAt={purchase.mmValueUpdatedAt}
+        />
+        <PriceSignalCard
+          label="DH Market"
+          valueCents={dhMidCents}
+          highlight={dhMidCents > 0 && dhMidCents > cb ? 'success' : dhMidCents > 0 && dhMidCents < cb ? 'danger' : undefined}
+          updatedAt={purchase.dhLastSyncedAt}
+          freshnessThresholds={{ green: 1, amber: 3 }}
+        />
+        <PriceSignalCard
+          label="Last Sold"
+          valueCents={lastSoldCents}
+          subtitle={formatSaleDate(snap?.lastSoldDate)}
+        />
+        <PriceSignalCard label="Lowest eBay" valueCents={snap?.lowestListCents ?? 0} />
+        <PriceSignalCard
+          label="Override"
           valueCents={purchase.overridePriceCents ?? 0}
           highlight={purchase.overridePriceCents ? 'warning' : 'muted'}
+          updatedAt={purchase.overridePriceCents ? purchase.overrideSetAt : undefined}
         />
         <PriceSignalCard
-          label="DH Listed"
+          label="Listed"
           valueCents={purchase.dhListingPriceCents ?? 0}
         />
       </div>
@@ -154,11 +146,6 @@ export default function ExpandedDetail({ item, onReviewed, campaignId, onOpenFla
         onFlag={onOpenFlagDialog}
         isSubmitting={isSubmitting}
       />
-
-      {/* CL Sync indicator */}
-      {purchase.certNumber && (
-        <CLSyncIndicator syncedAt={purchase.clSyncedAt} />
-      )}
 
       {/* Ship date chip (only when not yet received) */}
       {purchase.psaShipDate && !purchase.receivedAt && (

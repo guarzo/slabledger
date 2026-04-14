@@ -146,6 +146,19 @@ func (a *Adapter) GetMarketSnapshot(ctx context.Context, card inventory.CardIden
 		snap.SalesLast30d = price.Market.SalesLast30d
 		snap.SalesLast90d = price.Market.SalesLast90d
 		snap.Volatility = price.Market.Volatility
+		if price.Market.MidPriceCents > 0 {
+			snap.MidPriceCents = int(price.Market.MidPriceCents)
+		}
+		// Fall back to DH card-level last_sale only when grade-specific scan produced nothing.
+		// Grade-specific data (set at lines 94-108 above) is more precise; card-level market
+		// data is grade-agnostic and should not overwrite a grade-matched result.
+		// Date is only assigned alongside cents so the two values always refer to the same sale.
+		if snap.LastSoldCents == 0 && price.Market.LastSoldCents > 0 {
+			snap.LastSoldCents = int(price.Market.LastSoldCents)
+			if price.Market.LastSoldDate != "" {
+				snap.LastSoldDate = price.Market.LastSoldDate
+			}
+		}
 	}
 
 	// Sales velocity

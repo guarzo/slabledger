@@ -10,7 +10,7 @@ type Phase = 'review' | 'export';
 function sourcesForItem(item: EbayExportItem) {
   return buildPriceSources({
     clCents: item.clValueCents,
-    marketCents: item.marketMedianCents,
+    dhMidCents: item.marketMedianCents,
     costCents: item.costBasisCents,
     lastSoldCents: item.lastSoldCents,
   });

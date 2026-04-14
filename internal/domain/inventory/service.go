@@ -30,7 +30,7 @@ type PriceLookup interface {
 // It is a value object — there is no identity field; equality is field-for-field.
 //
 // Field groups:
-//   - Basic: LastSoldCents, LastSoldDate, SaleCount, GradePriceCents, LowestListCents, ActiveListings
+//   - Basic: LastSoldCents, LastSoldDate, MidPriceCents, SaleCount, GradePriceCents, LowestListCents, ActiveListings
 //   - Sales volume: SalesLast30d, SalesLast90d
 //   - Percentile distribution: ConservativeCents (P25), MedianCents (P50), OptimisticCents (P75), P10Cents, P90Cents
 //   - Trend: Trend30d, Trend90d, Volatility
@@ -45,6 +45,7 @@ type PriceLookup interface {
 type MarketSnapshot struct {
 	LastSoldCents     int     `json:"lastSoldCents"`
 	LastSoldDate      string  `json:"lastSoldDate,omitempty"`
+	MidPriceCents     int     `json:"midPriceCents,omitempty"`
 	SaleCount         int     `json:"saleCount,omitempty"`
 	GradePriceCents   int     `json:"gradePriceCents"`
 	LowestListCents   int     `json:"lowestListCents,omitempty"`
