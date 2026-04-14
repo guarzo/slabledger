@@ -304,8 +304,9 @@ func (s *service) GetWeeklyReviewSummary(ctx context.Context) (*inventory.Weekly
 	}
 
 	summary := &inventory.WeeklyReviewSummary{
-		WeekStart: thisWeekStr,
-		WeekEnd:   thisWeekEndStr,
+		WeekStart:    thisWeekStr,
+		WeekEnd:      thisWeekEndStr,
+		DaysIntoWeek: int(now.Weekday()),
 	}
 
 	channelProfits := make(map[inventory.SaleChannel]int)

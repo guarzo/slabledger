@@ -164,6 +164,7 @@ type WeeklyReviewSummary struct {
 	ProfitLastWeekCents  int               `json:"profitLastWeekCents"`
 	ByChannel            []ChannelPNL      `json:"byChannel"`
 	WeeksToCover         float64           `json:"weeksToCover"`
+	DaysIntoWeek         int               `json:"daysIntoWeek"` // 0=Sunday, 1=Monday … 6=Saturday
 	TopPerformers        []WeeklyPerformer `json:"topPerformers"`
 	BottomPerformers     []WeeklyPerformer `json:"bottomPerformers"`
 }

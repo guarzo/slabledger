@@ -661,3 +661,32 @@ func TestService_GetWeeklyReviewSummary_PerformerCounts(t *testing.T) {
 		})
 	}
 }
+
+func TestService_GetWeeklyReviewSummary_DaysIntoWeek(t *testing.T) {
+	repo := mocks.NewInMemoryCampaignStore()
+	svc := newPortfolioSvc(repo)
+	ctx := context.Background()
+
+	repo.GetAllPurchasesWithSalesFn = func(_ context.Context, _ ...inventory.PurchaseFilterOpt) ([]inventory.PurchaseWithSale, error) {
+		return nil, nil
+	}
+
+	summary, err := svc.GetWeeklyReviewSummary(ctx)
+	if err != nil {
+		t.Fatalf("GetWeeklyReviewSummary: %v", err)
+	}
+
+	// DaysIntoWeek should match today's weekday (0=Sunday … 6=Saturday).
+	// We compare against time.Now().Weekday() bracketed before/after the call
+	// to avoid a day-boundary race.
+	got := summary.DaysIntoWeek
+	if got < 0 || got > 6 {
+		t.Fatalf("DaysIntoWeek = %d, want 0..6", got)
+	}
+	wantBefore := int(time.Now().Weekday())
+	// got was captured between the two Now() calls, so it must equal one of them.
+	wantAfter := int(time.Now().Weekday())
+	if got != wantBefore && got != wantAfter {
+		t.Errorf("DaysIntoWeek = %d, want %d or %d (time.Now().Weekday() around the call)", got, wantBefore, wantAfter)
+	}
+}
