@@ -179,7 +179,9 @@ Then focus on cards where any of the following hold:
 - Current list price has drifted more than 15% from the market signal
 - AI-suggested price differs from listed price by more than 10%
 
-Present a table of candidates: card, days held, current list, suggested list, suggested channel, reason. Ask the user which ones to queue for actual price updates. For each approved row, issue `PATCH /api/purchases/{purchaseId}/price-override` with `{"priceCents": ..., "source": "manual"}`.
+Present a table of candidates: card, days held, current list, suggested list, suggested channel, reason, **projected days-to-sell delta** (how much faster the card moves at suggested price vs current), and **projected $ delta** (expected recovery change per card). Each row also carries a confidence band per the Recommendation rules — typically M or L because inventory samples are small. Ask the user which ones to queue for actual price updates. For each approved row, issue `PATCH /api/purchases/{purchaseId}/price-override` — see Mutations.
+
+Repricing is a capital-positive action (faster turn on held inventory) — the capital guardrail does NOT apply.
 
 ### Playbook D — "Does the strategy doc still match reality?"
 
