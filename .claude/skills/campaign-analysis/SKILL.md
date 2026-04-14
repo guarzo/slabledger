@@ -279,7 +279,7 @@ Every parameter-change, new-campaign, or material tuning recommendation carries 
 | **Medium (M)** | 10–29 observations, OR ≥30 observations with CV ≥ 20% |
 | **Low (L)** | < 10 observations OR < 4 weeks of history |
 
-Coefficient of variation = `stddev / mean` of the metric driving the recommendation (ROI, sell-through, or days-to-sell — whichever the recommendation is predicated on). If the tuning endpoint doesn't return variance for a given metric, fall back to obs-count-only bands and say so: `(Medium confidence, obs-count only — variance not available)`. The `/api/campaigns/{id}/projections` response also returns its own `confidence` string ("low"/"medium"/"high") that can be mapped directly to H|M|L when that endpoint is the source.
+Coefficient of variation = `stddev / mean` of the metric driving the recommendation (ROI, sell-through, or days-to-sell — whichever the recommendation is predicated on). If the tuning endpoint doesn't return variance for a given metric, fall back to obs-count-only bands and say so: `(Medium confidence, obs-count only — variance not available)`. The `/api/campaigns/{id}/projections` response also returns its own `confidence` string ("low"/"medium"/"high") that can be mapped directly to H|M|L when that endpoint is the source. When multiple bands match (e.g. obs-count qualifies for Medium but history-length qualifies for Low), use the lower confidence band.
 
 ### "Hold" verdict rule
 
@@ -289,11 +289,11 @@ When signal is weak, recommend holding — explicitly — instead of synthesizin
 - Proposed parameter change magnitude is < 3 percentage points AND confidence is Medium or Low.
 - Sell-through drop is < 5pp AND observation count is < 20.
 
-Say it out loud: *"Hold — this week's ROI drop is 0.4σ from the 8-week mean, within noise. I'd keep current params."* Silence is not acceptable; the user learns *why* nothing is being changed.
+Say it out loud — in the default rule-of-thumb form: *"Hold — this week's ROI is 7%, within ±10% of the 8.2% trailing-4-week mean. Noise, not signal. I'd keep current params."* (The σ form is used only when you actually computed σ via 4× `weekOffset` calls.) Silence is not acceptable; the user learns *why* nothing is being changed.
 
 ### Capital guardrail
 
-Checked before emitting any **ramp-up** recommendation — actions that deploy more capital. Ramp-ups include: raise buy terms, raise daily spend cap, propose a new campaign, expand an inclusion list. DH push approvals and liquidation actions are capital-positive and are NOT subject to this rule.
+Checked before emitting any **ramp-up** recommendation — actions that deploy more capital. Ramp-ups include: raise buy terms, raise daily spend cap, propose a new campaign, expand an inclusion list. DH push approvals are excluded (they move existing inventory, not new spend); liquidation actions are excluded (they recover capital, not deploy it).
 
 | Posture | Rule | Effect |
 |---------|------|--------|
