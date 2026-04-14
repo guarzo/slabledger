@@ -339,11 +339,11 @@ Coefficient of variation = `stddev / mean` of the metric driving the recommendat
 
 When signal is weak, recommend holding — explicitly — instead of synthesizing a change. A hold fires when *any* of the following is true for the metric driving the recommendation:
 
-- Week-over-week delta is within 1σ of historical WoW variance. If rolling variance isn't available from the endpoint, use a rule-of-thumb: WoW delta within ±10% of the campaign's trailing-4-week mean. (Computing a true σ requires 4 sequential calls to `/api/portfolio/weekly-review?weekOffset=N` — only do that if the user specifically asks; default to the rule-of-thumb.)
+- Week-over-week delta is within the noise band. Use the rule-of-thumb: WoW delta within ±10% of the campaign's trailing-4-week mean (or trailing-mean if full 4 weeks aren't available). Note: the `/api/portfolio/weekly-review` endpoint returns *only* the current week + previous week in a single record and silently ignores `?weekOffset=N` (despite accepting the param) — there is no reliable way to fetch 4 weeks of history through the current API, so the rule-of-thumb is the authoritative test, not a fallback. If a user explicitly wants a σ-based check, tell them the endpoint doesn't support it and ask whether an approximation from the last-two-weeks figures is useful.
 - Proposed parameter change magnitude is < 3 percentage points AND confidence is Medium or Low.
 - Sell-through drop is < 5pp AND observation count is < 20.
 
-Say it out loud — in the default rule-of-thumb form: *"Hold — this week's ROI is 7%, within ±10% of the 8.2% trailing-4-week mean. Noise, not signal. I'd keep current params."* (The σ form is used only when you actually computed σ via 4× `weekOffset` calls.) Silence is not acceptable; the user learns *why* nothing is being changed.
+Say it out loud in the rule-of-thumb form: *"Hold — this week's ROI is 7%, within ±10% of the 8.2% trailing-mean. Noise, not signal. I'd keep current params."* Silence is not acceptable; the user learns *why* nothing is being changed.
 
 ### Capital guardrail
 
