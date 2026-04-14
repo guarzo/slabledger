@@ -152,13 +152,13 @@ Fetch in parallel:
 The approach:
 
 1. Pick the invoice to cover (next-due from `/credit/invoices`, or user-selected). Note the invoice's `pendingReceiptCents` (cards bought but not yet received) and `sellThroughPct` — these contextualize how much of the invoice's inventory is already moving.
-2. Compute target recovery = `invoiceAmount × 1.1` for buffer.
+2. Compute target recovery = `invoiceAmount × 1.1` for buffer. State this target at the top of the response ("Target: $X.XK to cover $Y.YK invoice + 10% buffer").
 3. Exclude any purchase IDs already on the sell sheet (from `/sell-sheet/items`).
 4. Rank candidate cards by (a) shortest expected days-to-sell, (b) highest EV/dollar, (c) best channel fit using the net-proceeds math in *Data conventions*.
-5. Walk down the ranked list accumulating projected net proceeds until the running total meets the target.
-6. Present as a table: card, cert, recommended channel, recommended price, projected net proceeds, running total.
+5. Walk down the ranked list accumulating projected net proceeds until the running total meets the target. Stop as soon as target is met — don't pad the list.
+6. Present as a table: card, cert, recommended channel, recommended price, projected net proceeds, running total. End the table with a summary line: `Selected N cards, $X.XK projected recovery vs $Y.YK target (Confidence: H|M|L based on days-to-sell sample)`.
 
-Respect the strategy doc's exit-channel hierarchy. Flag any card recommended into a channel it's gated out of.
+Respect the strategy doc's exit-channel hierarchy. Flag any card recommended into a channel it's gated out of. Liquidation is a capital-positive action — the capital guardrail in the Recommendation rules does NOT apply here.
 
 **Action: add to sell sheet.** When the user approves cards from the table, add them to the persistent sell sheet via `PUT /api/sell-sheet/items` with `{"purchaseIds": ["id1", "id2", ...]}`. This queues them in the web UI's sell sheet view for pricing and listing. Confirm what was added: *"Added 8 cards to the sell sheet ($X,XXX projected recovery). You can review and adjust prices in the Sell Sheet tab."*
 
