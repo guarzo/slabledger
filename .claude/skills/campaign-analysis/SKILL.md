@@ -1,7 +1,7 @@
 ---
 name: campaign-analysis
 description: Analyze campaign performance — portfolio health, P&L, sell-through, aging inventory, liquidation planning, tuning recommendations, capital position, DH marketplace optimization, coverage gaps, and new campaign design. Use whenever the user asks about campaign status, which cards to liquidate, whether to adjust parameters, aging inventory, invoice coverage, strategy doc refinement, DoubleHolo listings or intelligence, what niches to expand into, AI price suggestions, or any follow-up about Pokemon card campaigns — even if they don't say "campaign-analysis" explicitly.
-argument-hint: "[optional: health | weekly | tuning | campaign <id-or-name>]"
+argument-hint: "[optional: health | weekly | tuning | campaign <id-or-name> | gaps | dh]"
 allowed-tools: ["Bash", "Read", "Glob", "Grep", "Edit"]
 ---
 
@@ -117,7 +117,7 @@ Fetch in parallel:
 - `GET /api/credit/invoices` — outstanding invoices, due dates, amounts, sell-through data per invoice (the response enriches each invoice with `pendingReceiptCents`, `sellThroughPct`, `soldCount`, `totalCount`)
 - `GET /api/credit/summary` — outstanding balance, weeks to cover
 - `GET /api/inventory` — global unsold inventory with aging
-- `GET /api/sell-sheet` — target price, min price, suggested channel per card
+- `POST /api/sell-sheet` — target price, min price, suggested channel per card (note: this is POST, not GET)
 - `GET /api/sell-sheet/items` — current contents of the persistent sell sheet (purchase IDs already queued)
 - `GET /api/campaigns/{id}/expected-values` for each campaign with significant unsold capital — EV cents, EV/dollar, sell probability
 
@@ -279,24 +279,24 @@ When recommending DH as a sales channel (in any playbook), note that eBay listin
 
 | Channel | Sell price (% of market) | Fee | Availability |
 |---------|--------------------------|-----|--------------|
-| eBay (via DH) | 100% | 12% | Always — eBay listings flow through DoubleHolo, not direct CSV export |
-| Shopify | 100% | 4% | Always, but lower traffic than eBay |
-| Card show | 80% | 0% | Not daily — only when a show is scheduled |
-| LCS (local card shop) | 72% | 0% | Varies by shop |
+| eBay (via DH) | 100% | 12.35% | Always — eBay listings flow through DoubleHolo, not direct CSV export |
+| Shopify | 100% | ~2% | Always, but lower traffic than eBay |
+| Card show | 80–90% | 0% | Not daily — only when a show is scheduled |
+| LGS (local game store) | 70–80% | 0% | Varies by shop; liquidation backstop |
 
 Net proceeds math when ranking channels for a liquidation or repricing recommendation:
 
-- **eBay:** `market × 0.88 − $3` (listing/shipping friction)
-- **Shopify:** `market × 0.96`
-- **Card show:** `market × 0.80` (only include when a show is actually upcoming)
-- **LCS:** `market × 0.72`
+- **eBay:** `market × 0.8765 − $3` (12.35% fee + listing/shipping friction)
+- **Shopify:** `market × 0.98`
+- **Card show:** `market × 0.85` (midpoint of 80-90%; only include when a show is actually upcoming)
+- **LGS:** `market × 0.75` (midpoint of 70-80%)
 
 Channel selection hierarchy when recommending liquidation:
 
-1. Shopify first if the card has traffic signal or the user wants the clean 96% recovery.
+1. Shopify first if the card has traffic signal or the user wants the clean ~98% recovery.
 2. eBay for anything else that needs to move reliably at high volume.
 3. Card show for high-value cards when a show falls inside the liquidation window.
-4. LCS as the speed option — instant cash at 72%, use when recovery speed beats recovery percentage (e.g. covering an imminent invoice).
+4. LGS as the speed option — instant cash at 70-80%, use when recovery speed beats recovery percentage (e.g. covering an imminent invoice).
 
 ### Parsing responses
 
