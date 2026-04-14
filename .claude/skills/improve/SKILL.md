@@ -1,12 +1,26 @@
 ---
 name: improve
-description: Holistic codebase review — quality, maintainability, dead code, duplication, UX friction — produces a prioritized top-10 list of improvements. Use when the user asks about tech debt, what to refactor, code audit, codebase health, what needs fixing, improvement opportunities, or general code quality review.
+description: Holistic codebase review focused on architecture drift, duplicate logic across packages, code smells, quality, tests, and UX — returns up to 10 high-impact improvements (sharp over padded). Use when the user asks about tech debt, what to refactor, code audit, codebase health, what needs fixing, improvement opportunities, or general code quality review.
 argument-hint: "[backend | frontend | diff | since:<date> | <package-name>]"
 ---
 
 # Codebase Improvement Review
 
-Perform a holistic codebase review and produce a force-ranked top-10 list of the highest-impact improvements. Use this skill to continuously improve the SlabLedger codebase.
+Perform a holistic codebase review and produce a ranked list (up to 10) of the highest-impact improvements. Use this skill to continuously improve the SlabLedger codebase.
+
+## What this skill is for (read before every run)
+
+The value of this skill is finding what linters can't. `golangci-lint`, `make check`, `npm run lint`, and `tsc` already catch formatting, simple error handling, unused imports, and basic type errors — those results feed Phase 1 as *inputs*, they are not the output. The goal of Phase 2 and the top-10 synthesis is to surface things a thoughtful reviewer would flag:
+
+- **Architectural drift** — business logic leaked into HTTP handlers or SQLite queries; domain packages depending on concrete adapters; responsibilities that have slid to the wrong layer
+- **Duplicate logic, not duplicate code** — two packages computing the same business concept with different implementations (e.g. fee math, price scoring, campaign health done two ways)
+- **Misplaced responsibilities** — one service doing four jobs; god-objects; handlers calculating things they should delegate
+- **Dead abstractions** — interfaces with one implementation and no test substitutes; wrapper types that add nothing; config options no caller uses
+- **Code smells** — parallel if/switch chains dispatching on the same type; stringly-typed APIs; boolean flag parameters; primitive obsession; feature envy; round-trip transformations
+
+**Ranking rule:** if a finding could have been produced by a linter, `make check`, or a basic grep for `TODO`, it does not belong in the top 10 unless it is a genuine correctness or security issue. Every high-ranked finding should be something that required reading code and reasoning — not just tool output. See Step 4 for the reserved-slots rule.
+
+**Better to return 6 sharp findings than 10 mediocre ones.** Do not pad.
 
 ## Step 0: Parse argument and determine scope
 
@@ -21,7 +35,19 @@ Parse the argument to determine review scope:
 | `since:<date>` | Files changed since date (e.g. `since:2026-04-10`) | Scoped to changed files | All applicable |
 | `<package>` | Specific package deep dive | Backend scoped to package | All applicable, deep dive |
 
-**Diff-aware mode:** For `diff` or `since:<date>`, use `git diff --name-only` to get the list of changed files. For `diff`, use the date from the last run stored in the memory file. For `since:<date>`, parse the date from the argument. Scope both Phase 1 and Phase 2 to only those files. This is useful as a lightweight post-work check rather than a full sweep.
+**Diff-aware mode:** For `diff` or `since:<date>`, scope both Phase 1 and Phase 2 to the files changed in that window. This is useful as a lightweight post-work check rather than a full sweep.
+
+- For `diff`: read `Last Run Commit` from the memory file (Step 5 writes it). Then:
+  ```bash
+  git diff --name-only "<last_run_commit>"..HEAD
+  ```
+  If no `Last Run Commit` is stored (first run, or older memory format), fall back to using the memory's `Last Run` date via the `since:<date>` path below.
+- For `since:<date>`: dates are ISO 8601 (`YYYY-MM-DD`). Run:
+  ```bash
+  git log --since="<date>" --name-only --pretty=format: | sort -u | grep -v '^$'
+  ```
+
+Pass the resulting file list as the scope for Phase 1 (run tests/lint scoped to packages touched) and Phase 2 (read only those files). If the file list is empty, print "No changes since last run" and stop — do not run a full sweep.
 
 **Package argument validation:** If the argument is not a recognized keyword (`backend`, `frontend`, `diff`, or `since:*`), verify it matches an existing directory under `internal/` (any level — `domain/`, `adapters/httpserver/`, `adapters/storage/sqlite/`, `adapters/scheduler/`, `platform/`, etc.) or `web/src/`. If no match, list available packages and ask the user to pick one.
 
@@ -35,27 +61,35 @@ Run all available tooling to establish a factual baseline. Execute commands in p
 
 ### Backend commands (skip if scope is `frontend`)
 
-Run these in parallel:
+**Parallelism:** issue these as parallel Bash tool calls in a single message — do not use shell `&` backgrounding, and do not run them serially. Capture each command's output; failures are findings, not blockers.
 
 ```bash
-# Quality checks: lint + architecture import check + file size check
+# Quality gate: lint + architecture import check + file size check.
+# This is the single source of truth for lint/architecture findings — don't also run golangci-lint separately.
 make check
 
 # Tests + coverage data
 go test -race -timeout 10m -coverprofile=coverage.out ./...
-
-# Per-function coverage breakdown
-go tool cover -func=coverage.out
-
-# Structured lint findings
-golangci-lint run --out-format json
 ```
 
-For package-scoped runs, add the package path to test/lint commands:
+After those complete, run (sequentially, since they depend on `coverage.out`):
+
 ```bash
-go test -race -coverprofile=coverage.out ./internal/domain/<package>/...
-golangci-lint run --out-format json ./internal/domain/<package>/...
+# Total coverage — last line of output
+go tool cover -func=coverage.out | tail -1
+
+# Per-function coverage, sorted by coverage ascending (top of list = least covered)
+# Only keep the tail; don't dump the whole thing into context.
+go tool cover -func=coverage.out | sort -k3 -n | head -40
 ```
+
+**Integration tests are intentionally out of scope.** `internal/integration/` uses the `integration` build tag and requires API keys in `.env`; running them during `/improve` would fail on missing creds.
+
+For package-scoped runs, restrict tests to the package:
+```bash
+go test -race -coverprofile=coverage.out ./internal/<path-to-package>/...
+```
+`make check` always runs the full repo — that's fine for package scope too, since the architecture and file-size checks are cheap.
 
 ### Frontend commands (skip if scope is `backend` or a specific package)
 
@@ -84,23 +118,51 @@ Capture any findings — unused modules or vulnerabilities are findings, not blo
 Use Glob and Grep to gather:
 
 1. **File sizes** — Find all `.go` files (excluding `*_test.go` and `testutil/mocks/`) and count lines. Flag files approaching or exceeding the 500-line guideline.
-2. **Coverage by package** — Parse the `go tool cover -func=coverage.out` output. Extract the overall coverage percentage (the last line: `total:`) and per-package coverage. Sort packages by coverage ascending. Flag any functions at 0% in critical packages (`campaigns`, `pricing`, `auth`, `storage/sqlite`).
+2. **Coverage by package** — Use the `go tool cover -func=coverage.out | tail -1` total from Phase 1, and the `| sort -k3 -n | head -40` slice for the least-covered functions. Flag any functions at 0% in critical packages (`inventory`, `pricing`, `auth`, `storage/sqlite`, `arbitrage`, `finance`).
 3. **Test file gaps** — List packages that have no `_test.go` files at all.
 4. **LOC distribution** — Count lines per top-level package (`internal/domain/*`, `internal/adapters/*`, `internal/platform/*`, `cmd/*`, `web/src/*`).
+5. **Silent-failure pattern** — Grep for `return nil, nil` in non-test Go files. Each match is a potential silent failure (a function hands back a nil result with no error context). Capture the file:line list and the count; Phase 2 Category 4 triages which are legitimate (e.g. cache miss) vs. bugs.
+   ```bash
+   grep -rn "return nil, nil" --include="*.go" . | grep -v _test.go | grep -v /testutil/
+   ```
 
 For package-scoped or diff-scoped runs, restrict structural analysis to the relevant files.
 
 ## Step 3: Phase 2 — Qualitative Analysis
 
-Using Phase 1 data as a guide, do targeted code reading. Prioritize areas the numbers flagged — large files, low-coverage packages, lint warnings — then broaden.
+Using Phase 1 data as a guide, do targeted code reading. Phase 1 points at *where* to look; Phase 2 decides *what matters*. Remember the ranking rule at the top — the goal is findings a linter couldn't have produced.
 
-**Parallelize with sub-agents:** For full-codebase or backend scope, spawn up to 3 Explore agents in parallel, each responsible for a subset of categories. Share the Phase 1 data summary with each agent so they have context. Each agent should return its top findings using the format from Step 4.
+**Parallelize with sub-agents.** For full-codebase or backend scope, spawn 3 Explore agents in parallel in a single message. For narrow scopes (single package, diff, frontend-only), run in the main context — sub-agents add overhead that isn't worth it for small reviews.
 
-- **Agent 1 — Structural concerns**: Categories 1 (Maintainability), 2 (Dead Code), 3 (Duplication)
-- **Agent 2 — Correctness concerns**: Categories 4 (Code Quality), 5 (Tests), 6 (Architecture), 9 (Performance)
-- **Agent 3 — Surface concerns**: Categories 7 (UX Friction), 8 (Documentation), 10 (Dependencies)
+### Agent roles
 
-For narrow scopes (single package, diff, frontend-only), running in the main context is fine — sub-agents add overhead that isn't worth it for small reviews.
+The split is deliberate: Agent 1 is the high-value "senior reviewer" agent, and its findings should dominate the final top 10. Agents 2 and 3 are the floor — they catch the boring-but-real issues.
+
+- **Agent 1 — Semantic & architectural (the one that matters most)**: Categories 1 (Maintainability at the service/package level), 3 (Duplicate logic across packages), 6 (Architecture & code smells). **Prime this agent** by having it read `docs/ARCHITECTURE.md` and `internal/README.md` first, so it has a mental model of the intended layering before it looks for drift. Ask for up to 5 findings; accept 2 excellent ones over 5 mediocre ones.
+- **Agent 2 — Correctness & quality**: Categories 2 (Dead Code), 4 (Code Quality / swallowed errors), 5 (Tests), 9 (Performance & Concurrency). Up to 5 findings. **Prime this agent** by reading the language idiom rules that match the scope: `~/.config/opencode/skills/code-simplifier/rules/go.md` for backend scope, `~/.config/opencode/skills/code-simplifier/rules/typescript.md` for frontend scope, both for full-codebase. These codify project idiom conventions (error wrapping, interface placement, `context` usage, `slices`/`maps`, etc.). If a file doesn't exist (running in a different harness), proceed without it. **Don't re-surface findings that `make check`/`golangci-lint` already flagged** — Agent 2's value is what linters miss (deviations from idiom rules, swallowed errors lint can't see because they're technically handled, test assertions that never fail).
+- **Agent 3 — Surface & dependencies**: Categories 7 (UX), 8 (Docs), 10 (Deps). Up to 3 findings — this category often produces low-impact noise, so keep the budget tight.
+
+### What to pass each agent
+
+Give each agent the same Phase 1 summary block (not raw output — summary):
+
+```
+Scope: <full | backend | frontend | diff | package>
+Coverage total: <N%>
+Least-covered functions (top 20): <list>
+Zero-test packages: <list>
+Files over 500 LOC: <list with line counts>
+return nil, nil occurrences: <count, plus file:line list>
+Lint/check failures from `make check`: <summary>
+npm audit findings: <summary>
+Previous findings (from memory): <titles + status>
+```
+
+Also tell Agent 1 to read `docs/ARCHITECTURE.md` and `internal/README.md` before doing anything else. That grounding is what lets it spot drift instead of surface issues.
+
+### What each agent returns
+
+Each agent returns findings in the exact format from Step 4 (title, Category, Type, Severity, Effort, Location, 2–3 sentence description, suggested approach). No prose preambles, no "here's what I found" — just the structured findings, each one standing on its own. If an agent couldn't find anything worth reporting in its categories, it should say so rather than padding.
 
 Review across these categories (skip categories not applicable to the current scope per the table in Step 0):
 
@@ -115,8 +177,19 @@ Review across these categories (skip categories not applicable to the current sc
 - Look for stale imports in `go.mod` or unused dependencies in `package.json`
 
 ### Category 3: Duplication
-- Look for similar logic repeated across packages (fee calculations, error handling patterns, HTTP handler boilerplate)
-- On the frontend, look for components with overlapping functionality
+
+Three flavors, in order of importance. **Logic duplication is the payoff of this skill** — most linters can find code duplication, none can find this.
+
+1. **Logic duplication (highest value)** — two packages computing the same business concept with different implementations. Examples: fee math done in the inventory service and again in a handler; "is this sale revocable" implemented two different ways; campaign health score computed in two places with different thresholds. Finding technique:
+   ```bash
+   # Hunt for common business verbs across packages — then compare implementations side by side
+   grep -rn --include="*.go" -E "func [A-Za-z]*(Calculate|Compute|Apply|Derive|Score|Fee|Cost|Margin|Value|Status|Health)" internal/
+   ```
+   Cluster results by concept name. For each cluster with >1 implementation, read both and decide: are they computing the same thing? If yes, that's a finding.
+2. **Conceptual duplication** — two types or interfaces that model the same domain concept. Examples: two `Sale` structs with overlapping fields, two "price" abstractions, two ways to represent money. Find via: list types per package and look for overlapping names or similar shapes in sibling packages.
+3. **Code duplication (lowest value, often linter-catchable)** — identical or near-identical byte-level copies. Spot check files with similar names (e.g., `parse_cl.go`, `parse_psa.go`, `parse_mm.go`) for copy-paste drift. If the drift is semantically meaningful (one branch handles a case the other doesn't), that's actually a logic duplication finding — flag it as such.
+
+On the frontend, look for components with overlapping functionality — two badge components, two modal wrappers, two different table implementations.
 
 ### Category 4: Code Quality
 - Triage lint warnings from Phase 1 by severity
@@ -128,10 +201,29 @@ Review across these categories (skip categories not applicable to the current sc
 - Look for tests that don't assert anything meaningful (happy-path only)
 - Check for missing edge case coverage on critical business logic (campaigns P&L, pricing, CSV parsing)
 
-### Category 6: Architecture
-- Check for hexagonal violations or near-violations beyond what `check-imports.sh` catches
-- Look for business logic leaking into adapter packages (HTTP handlers doing calculations, SQLite queries embedding business rules)
-- Identify domain packages that have grown too broad and should be split
+### Category 6: Architecture & code smells
+
+`check-imports.sh` catches the mechanical hexagonal violations. This category is about the ones it can't catch — the ones that require reading code and asking "does this belong here?"
+
+**Drift patterns:**
+- Business logic leaking into adapter packages — HTTP handlers doing calculations, SQLite queries embedding business rules, scheduler code making policy decisions
+- Domain packages that have grown too broad and should be split (the inventory `Service` with 30+ methods is the canonical warning sign)
+- Interfaces defined in adapter packages but consumed by domain packages (wrong direction)
+- Cross-imports between sibling sub-packages under `internal/domain/` (forbidden by the flat-sibling rule — but subtle cases where one sub-package re-exports another's types are the ones that slip through)
+
+**Code smells to hunt for** (each of these is a reviewer judgment call, not a lint):
+- **God services** — one struct with >10 methods spanning multiple responsibilities. Split by concern.
+- **Parallel dispatch chains** — multiple if/switch blocks in different files branching on the same type or enum. Often refactorable to polymorphism, a dispatch table, or a single shared helper.
+- **One-implementation interfaces** — interfaces with a single impl and no test double. Usually premature abstraction; inline the concrete type until a second impl appears.
+- **Feature envy** — a function that calls more methods on its parameter than on its receiver. The behavior probably belongs on the parameter's type.
+- **Stringly-typed APIs** — function parameters that are strings but really enumerate a small set of values (`channel string` where only "ebay"/"tcgplayer"/"local" are valid). Should be a typed constant.
+- **Boolean flag parameters** — `DoThing(..., isUrgent bool)` is usually two methods smashed into one; the caller site will flip-flop the flag.
+- **Primitive obsession** — money, times, IDs passed as `int` or `string` instead of typed wrappers. Especially suspicious when the same int parameter appears in many signatures.
+- **Round-trip transformations** — data that goes `A→B→A` or `A→B→C→A` across layers without meaningful change. Usually means a layer isn't earning its keep.
+- **Data clumps** — the same 3+ parameters passed together through many call sites. Usually wants a struct.
+- **Shotgun surgery indicators** — if Phase 1 shows many files changed together in recent commits for the same feature, that's a shape-fit problem worth investigating.
+
+When reporting an architectural or smell finding: show the evidence (two file paths with the parallel dispatch, or the god-service method list, or the interface and its single impl). Abstract claims without evidence don't make the cut.
 
 ### Category 7: UX Friction (full codebase and frontend scope only)
 - Run the Playwright screenshot suite to capture current UI state:
@@ -158,28 +250,57 @@ Review across these categories (skip categories not applicable to the current sc
 - Review `npm audit` output from Phase 1 for known vulnerabilities
 - Check for pinned vs floating dependency versions that could cause supply chain risk
 
-## Step 4: Synthesize and rank — Top 10
+## Step 4: Synthesize and rank — up to 10
 
-From all Phase 1 and Phase 2 findings, force-rank to the **10 highest-impact items**. Use this ranking logic: severity weighted against effort. High-severity/small-effort items rank highest; low-severity/large-effort items rank lowest.
+From all Phase 1 and Phase 2 findings, select **up to 10** of the highest-impact items. Don't pad: if only 6 findings deserve a spot, return 6. If only 3, return 3. Seven sharp findings beats ten diluted ones — dilution trains the reader to ignore the list.
 
-Present each finding in this exact format:
+### Ranking logic
+
+Severity weighted against effort. High-severity / small-effort items rank highest; low-severity / large-effort items rank lowest. The rough matrix:
+
+| | Small effort | Medium effort | Large effort |
+|---|---|---|---|
+| **High severity** | top of list | middle | bottom, but still include |
+| **Medium severity** | upper middle | middle | only if impact is large |
+| **Low severity** | lower middle | usually cut | cut |
+
+### Reserve for semantic findings
+
+At least **3 of the top 10 slots** should be semantic/architectural findings from Agent 1 (logic duplication, architecture drift, code smells) — things that required reading code and reasoning, not just reading tool output.
+
+If Agent 1 returned fewer than 3 findings worthy of the top 10, that's a signal to look harder before synthesizing — not to fill with linter-catchable noise. It's explicitly fine to return 7 strong findings rather than pad to 10 with weak items. A surfaced "we didn't find much this run" is a valid outcome and tells the reader something real.
+
+### Field definitions (read before using the template)
+
+- **Type**
+  - **Issue**: objectively verifiable — failing test, missing test, architecture-check violation, dead code, security flaw.
+  - **Observation**: judgment call — code smell, UX friction, API ergonomics, naming.
+- **Category**: Maintainability | Dead Code | Duplication | Quality | Tests | Architecture | UX | Docs | Performance | Dependencies
+- **Severity**
+  - **High**: correctness, security, data loss, or widely felt drag on daily development
+  - **Medium**: real pain for some workflows, but not a blocker
+  - **Low**: polish, ergonomics, minor inconsistency
+- **Effort**
+  - **Small**: < 1hr, usually one file
+  - **Medium**: 1–4hr, coordinated change across a few files
+  - **Large**: 4hr+, likely needs design discussion
+
+### Finding format
+
+Present each finding in this exact shape:
 
 ```
 ### #N: [Short title]
-**Category**: Maintainability | Dead Code | Duplication | Quality | Tests | Architecture | UX | Docs
+**Category**: [see categories above]
 **Type**: Issue | Observation
 **Severity**: High | Medium | Low
-**Effort**: Small (< 1hr) | Medium (1-4hr) | Large (4hr+)
+**Effort**: Small | Medium | Large
 **Location**: file_path:line_number (or package name for broad issues)
 
-[2-3 sentence description of the problem and why it matters]
+[2-3 sentence description. State what's wrong AND why it matters — the cost of leaving it alone. For semantic findings, include the specific evidence: the two places doing the same thing, the god-service's method list, the interface with its one impl.]
 
 **Suggested approach**: [1-2 sentences on how to fix it]
 ```
-
-**Type definitions:**
-- **Issue**: Objectively verifiable — lint failure, missing tests, architecture violation, dead code
-- **Observation**: Judgment call — UX could be better, naming is confusing, API ergonomics
 
 If there are previous findings from Step 1, note for each item whether it is **new**, **persists** from last run, or represents a **regression**.
 
@@ -194,14 +315,15 @@ description: Latest codebase review findings from /improve skill — used for tr
 type: project
 ---
 
-## Last Run: [today's date]
+## Last Run: [YYYY-MM-DD, ISO 8601]
 **Scope**: [full | backend | frontend | diff | <package>]
+**Last Run Commit**: `[output of git rev-parse HEAD at run time]`
 
 ### Metrics History
-| Date | Scope | Coverage | Lint | 500+ LOC | nil,nil | npm audit |
-|------|-------|----------|------|----------|---------|-----------|
-| [today] | [scope] | [N%] | [N] | [N] | [N] | [N] |
-| [prev] | [scope] | [N%] | [N] | [N] | [N] | [N] |
+| Date | Scope | Coverage | Lint | 500+ LOC | Zero-test pkgs | nil,nil | npm audit |
+|------|-------|----------|------|----------|----------------|---------|-----------|
+| [today] | [scope] | [N%] | [N] | [N] | [N] | [N] | [N] |
+| [prev] | [scope] | [N%] | [N] | [N] | [N] | [N] | [N] |
 
 ### Top Findings
 1. [Title] — opened [date], status: open
