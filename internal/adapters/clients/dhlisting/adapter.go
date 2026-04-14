@@ -4,6 +4,7 @@ package dhlisting
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	"github.com/guarzo/slabledger/internal/domain/dhlisting"
@@ -143,3 +144,57 @@ func (a *InventoryAdapter) MarkInventorySold(ctx context.Context, inventoryID in
 
 var _ dhlisting.DHInventoryLister = (*InventoryAdapter)(nil)
 var _ inventory.DHSoldNotifier = (*InventoryAdapter)(nil)
+
+// --- DHInventorySnapshotFetcher adapter ---
+
+// snapshotPageSize matches the inventory poll scheduler; DH accepts up to 100/page.
+const snapshotPageSize = 100
+
+// maxSnapshotPages prevents unbounded pagination if DH misreports totals.
+const maxSnapshotPages = 500
+
+// InventorySnapshotAdapter wraps a dh.Client to implement
+// dhlisting.DHInventorySnapshotFetcher by paginating ListInventory with no
+// updated_since filter to collect the full authoritative set of inventory IDs.
+type InventorySnapshotAdapter struct {
+	client interface {
+		ListInventory(ctx context.Context, filters dh.InventoryFilters) (*dh.InventoryListResponse, error)
+	}
+}
+
+// NewInventorySnapshotAdapter creates a new InventorySnapshotAdapter.
+func NewInventorySnapshotAdapter(client interface {
+	ListInventory(ctx context.Context, filters dh.InventoryFilters) (*dh.InventoryListResponse, error)
+}) *InventorySnapshotAdapter {
+	return &InventorySnapshotAdapter{client: client}
+}
+
+// FetchAllInventoryIDs paginates GET /inventory with no filters and returns
+// the set of DH inventory IDs. Any page error fails the whole call so the
+// reconciler never acts on a partial snapshot. Pagination stops on the first
+// short or empty page rather than trusting Meta.TotalCount — an underreported
+// total would cause us to treat a partial snapshot as complete and
+// incorrectly reset healthy items.
+func (a *InventorySnapshotAdapter) FetchAllInventoryIDs(ctx context.Context) (map[int]struct{}, error) {
+	ids := make(map[int]struct{})
+	for page := 1; page <= maxSnapshotPages; page++ {
+		resp, err := a.client.ListInventory(ctx, dh.InventoryFilters{
+			Page:    page,
+			PerPage: snapshotPageSize,
+		})
+		if err != nil {
+			return nil, err
+		}
+		for _, item := range resp.Items {
+			if item.DHInventoryID != 0 {
+				ids[item.DHInventoryID] = struct{}{}
+			}
+		}
+		if len(resp.Items) < snapshotPageSize {
+			return ids, nil
+		}
+	}
+	return nil, fmt.Errorf("DH snapshot: exceeded max pages (%d), possible API miscount", maxSnapshotPages)
+}
+
+var _ dhlisting.DHInventorySnapshotFetcher = (*InventorySnapshotAdapter)(nil)

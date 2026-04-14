@@ -287,6 +287,17 @@ export function useUndismissDHMatch() {
   });
 }
 
+export function useReconcileDH() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.reconcileDH(),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.admin.dhStatus });
+      qc.invalidateQueries({ queryKey: queryKeys.admin.dhUnmatched });
+    },
+  });
+}
+
 export function usePSASyncStatus(options?: AdminQueryOptions) {
   return useQuery({
     queryKey: queryKeys.admin.psaSyncStatus,

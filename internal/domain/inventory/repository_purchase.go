@@ -94,4 +94,10 @@ type PurchaseRepository interface {
 	// status to pending in a single transaction, preventing the scheduler from
 	// observing a half-updated record.
 	ApproveHeldPurchase(ctx context.Context, purchaseID string) error
+	// ResetDHFieldsForRepush atomically clears the DH inventory linkage
+	// (inventory ID, listing price, channels, status) and sets push status to
+	// pending so the scheduler re-enrolls the purchase. Preserves dh_card_id,
+	// dh_cert_status, and dh_candidates (cert resolution remains valid).
+	// Used by reconciliation when DH inventory has drifted from local state.
+	ResetDHFieldsForRepush(ctx context.Context, purchaseID string) error
 }

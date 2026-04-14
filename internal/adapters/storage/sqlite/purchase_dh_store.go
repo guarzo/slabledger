@@ -115,6 +115,26 @@ func (ps *PurchaseStore) ApproveHeldPurchase(ctx context.Context, purchaseID str
 	return tx.Commit()
 }
 
+// ResetDHFieldsForRepush atomically clears the DH inventory linkage and sets
+// push status to pending. dh_card_id, dh_cert_status, and dh_candidates are
+// preserved so cert resolution from the prior cycle can be reused.
+// dh_hold_reason is cleared to match ApproveHeldPurchase's invariant that a
+// pending row never carries a stale hold reason.
+func (ps *PurchaseStore) ResetDHFieldsForRepush(ctx context.Context, purchaseID string) error {
+	return ps.execAndExpectRow(ctx, "reset DH fields for repush",
+		`UPDATE campaign_purchases
+		 SET dh_inventory_id = 0,
+		     dh_push_status = ?,
+		     dh_status = '',
+		     dh_listing_price_cents = 0,
+		     dh_channels_json = '[]',
+		     dh_hold_reason = '',
+		     updated_at = ?
+		 WHERE id = ?`,
+		inventory.DHPushStatusPending, time.Now(), purchaseID,
+	)
+}
+
 // GetPurchasesByDHPushStatus returns received, unsold purchases with the given DH push status.
 // Items that have not yet been received (received_at IS NULL) are excluded so that only
 // physically-in-hand inventory is sent to DH.

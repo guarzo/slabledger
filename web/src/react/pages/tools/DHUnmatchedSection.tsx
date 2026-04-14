@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useDHStatus, useDHUnmatched, useFixDHMatch, useSelectDHMatch, useDismissDHMatch, useUndismissDHMatch } from '../../queries/useAdminQueries';
+import { useDHStatus, useDHUnmatched, useFixDHMatch, useSelectDHMatch, useDismissDHMatch, useUndismissDHMatch, useReconcileDH } from '../../queries/useAdminQueries';
 import { useToast } from '../../contexts/ToastContext';
 import { formatCents } from '../../utils/formatters';
 import { Button, CardShell } from '../../ui';
@@ -225,15 +225,64 @@ export default function DHUnmatchedSection() {
   const unmatchedCount = status?.unmatched_count ?? 0;
   const dismissedCount = status?.dismissed_count ?? 0;
   const totalCount = unmatchedCount + dismissedCount;
+  const dhConfigured = status !== undefined;
   const { data: unmatchedData, isLoading: unmatchedLoading } = useDHUnmatched({ enabled: totalCount > 0 });
   const dismissMutation = useDismissDHMatch();
   const undismissMutation = useUndismissDHMatch();
+  const reconcileMutation = useReconcileDH();
   const toast = useToast();
 
   const [dismissingId, setDismissingId] = useState<string | null>(null);
   const [undismissingId, setUndismissingId] = useState<string | null>(null);
 
-  if (totalCount === 0) return null;
+  const handleReconcile = async () => {
+    if (!window.confirm(
+      'Reconcile local inventory against DoubleHolo?\n\n' +
+      'Any local items whose DH listing has disappeared will be reset to pending ' +
+      'so the push scheduler re-enrolls them. Runs synchronously — may take a minute.'
+    )) return;
+    try {
+      const result = await reconcileMutation.mutateAsync();
+      const parts = [
+        `${result.scanned} scanned`,
+        `${result.missingOnDH} missing on DH`,
+        `${result.reset} reset`,
+      ];
+      if (result.errors?.length) parts.push(`${result.errors.length} errors`);
+      toast.success(`Reconcile done: ${parts.join(' · ')}`);
+    } catch {
+      toast.error('Reconcile failed — see server logs');
+    }
+  };
+
+  if (totalCount === 0 && !dhConfigured) return null;
+
+  if (totalCount === 0) {
+    return (
+      <CardShell padding="lg">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center justify-center w-6 h-6 rounded bg-[var(--info)]/15 text-[var(--info)] text-[10px] font-bold leading-none">
+              DH
+            </span>
+            <h3 className="text-sm font-semibold text-[var(--text)]">DoubleHolo Sync</h3>
+          </div>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={handleReconcile}
+            loading={reconcileMutation.isPending}
+            disabled={reconcileMutation.isPending}
+          >
+            Reconcile with DoubleHolo
+          </Button>
+        </div>
+        <p className="mt-2 text-xs text-[var(--text-muted)]">
+          No unmatched cards. Use reconcile if DH inventory was cleared externally.
+        </p>
+      </CardShell>
+    );
+  }
 
   const handleDismiss = async (purchaseId: string) => {
     setDismissingId(purchaseId);
@@ -270,9 +319,20 @@ export default function DHUnmatchedSection() {
           </span>
           <h3 className="text-sm font-semibold text-[var(--text)]">Unmatched Cards</h3>
         </div>
-        <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-[var(--warning)]/15 text-[var(--warning)] text-xs font-semibold">
-          {unmatchedCount}
-        </span>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleReconcile}
+            loading={reconcileMutation.isPending}
+            disabled={reconcileMutation.isPending}
+          >
+            Reconcile
+          </Button>
+          <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-[var(--warning)]/15 text-[var(--warning)] text-xs font-semibold">
+            {unmatchedCount}
+          </span>
+        </div>
       </div>
 
       {unmatchedData?.unmatched && unmatchedData.unmatched.length > 0 ? (

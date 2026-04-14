@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
+	"github.com/guarzo/slabledger/internal/domain/dhlisting"
 	"github.com/guarzo/slabledger/internal/domain/intelligence"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
@@ -112,8 +113,11 @@ type DHHandler struct {
 	dhApproveService  DHApproveService // optional: approve held pushes + push config
 	matchConfirmer    DHMatchConfirmer // optional: confirms matches with DH for learning
 
+	reconciler dhlisting.Reconciler // optional: DH inventory reconciliation
+
 	bgWG             sync.WaitGroup
 	bulkMatchMu      sync.Mutex
+	reconcileMu      sync.Mutex
 	bulkMatchRunning atomic.Bool
 	bulkMatchError   atomic.Value // stores last bulk match error string (or "")
 	bulkMatchFailed  atomic.Int64 // failed count from last completed bulk match run
@@ -143,10 +147,11 @@ type DHHandlerDeps struct {
 	SuggestCounter    DHSuggestionsCounter
 	Logger            observability.Logger
 	BaseCtx           context.Context
-	HealthReporter    DHHealthReporter // optional: API health metrics
-	CountsFetcher     DHCountsFetcher  // optional: DH inventory/order counts
-	DHApproveService  DHApproveService // optional: approve held pushes + push config
-	MatchConfirmer    DHMatchConfirmer // optional: confirms matches with DH for learning
+	HealthReporter    DHHealthReporter     // optional: API health metrics
+	CountsFetcher     DHCountsFetcher      // optional: DH inventory/order counts
+	DHApproveService  DHApproveService     // optional: approve held pushes + push config
+	MatchConfirmer    DHMatchConfirmer     // optional: confirms matches with DH for learning
+	Reconciler        dhlisting.Reconciler // optional: DH inventory reconciliation
 }
 
 // NewDHHandler creates a new DHHandler with the given dependencies.
@@ -175,6 +180,7 @@ func NewDHHandler(deps DHHandlerDeps) *DHHandler {
 		countsFetcher:     deps.CountsFetcher,
 		dhApproveService:  deps.DHApproveService,
 		matchConfirmer:    deps.MatchConfirmer,
+		reconciler:        deps.Reconciler,
 	}
 	h.bulkMatchError.Store("")
 	return h
