@@ -252,13 +252,15 @@ Fetch in parallel:
 
 For each coverage gap, the response includes a `segment` (with ROI, sell-through, avg days-to-sell from historical data), a `reason` (why it's a gap), and an `opportunity` (suggested action). Present the top gaps ranked by ROI, with caveats on sample size.
 
-For each promising gap, sketch what a new campaign would look like:
+**Before proposing anything:** apply the capital guardrail. New campaigns are ramp-up — they deploy more capital. Under "tight" posture, caveat each proposal with the outstanding-balance context. Under "critical" posture, block new-campaign proposals entirely and redirect to defensive moves (liquidate, reduce caps).
+
+For each promising gap (that survives the capital guardrail), sketch what a new campaign would look like:
 1. Proposed name and next available canonical number (from the config loaded at Step 0)
 2. Year range, grade range, price range based on the segment data
 3. Suggested buy terms (reference similar existing campaigns)
-4. Expected fill rate and daily spend cap
+4. Expected fill rate and daily spend cap, with sized projection: `est. +$X.XK/mo at proposed cap (Confidence: H|M|L based on segment sample size)`
 
-Cross-reference against the strategy doc to check whether any gaps were intentionally excluded (e.g., sealed product, sports cards). If the user wants to proceed, a campaign can be created via `POST /api/campaigns`.
+Cross-reference against the strategy doc to check whether any gaps were intentionally excluded (e.g., sealed product, sports cards). If the user wants to proceed, a campaign can be created via `POST /api/campaigns` — see Mutations.
 
 ### Playbook G — "How are our DH listings doing?" / marketplace optimization
 
