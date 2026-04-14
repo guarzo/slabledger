@@ -49,7 +49,7 @@ Parse the argument to determine review scope:
 
 Pass the resulting file list as the scope for Phase 1 (run tests/lint scoped to packages touched) and Phase 2 (read only those files). If the file list is empty, print "No changes since last run" and stop — do not run a full sweep.
 
-**Package argument validation:** If the argument is not a recognized keyword (`backend`, `frontend`, `diff`, or `since:*`), verify it matches an existing directory under `internal/` (any level — `domain/`, `adapters/httpserver/`, `adapters/storage/sqlite/`, `adapters/scheduler/`, `platform/`, etc.) or `web/src/`. If no match, list available packages and ask the user to pick one.
+**Package argument validation:** The `<package>` scope is **backend only**. If the argument is not a recognized keyword (`backend`, `frontend`, `diff`, or `since:*`), verify it matches an existing directory under `internal/` (any level — `domain/`, `adapters/httpserver/`, `adapters/storage/sqlite/`, `adapters/scheduler/`, `platform/`, etc.). If no match, list available backend packages and ask the user to pick one. To review a frontend area, use the `frontend` scope (there is no per-package frontend deep dive — the web tree is small enough that `frontend` is the appropriate granularity).
 
 ## Step 1: Check for previous findings
 
@@ -138,9 +138,9 @@ Using Phase 1 data as a guide, do targeted code reading. Phase 1 points at *wher
 
 The split is deliberate: Agent 1 is the high-value "senior reviewer" agent, and its findings should dominate the final top 10. Agents 2 and 3 are the floor — they catch the boring-but-real issues.
 
-- **Agent 1 — Semantic & architectural (the one that matters most)**: Categories 1 (Maintainability at the service/package level), 3 (Duplicate logic across packages), 6 (Architecture & code smells). **Prime this agent** by having it read `docs/ARCHITECTURE.md` and `internal/README.md` first, so it has a mental model of the intended layering before it looks for drift. Ask for up to 5 findings; accept 2 excellent ones over 5 mediocre ones.
-- **Agent 2 — Correctness & quality**: Categories 2 (Dead Code), 4 (Code Quality / swallowed errors), 5 (Tests), 9 (Performance & Concurrency). Up to 5 findings. **Prime this agent** by reading the language idiom rules that match the scope: `~/.config/opencode/skills/code-simplifier/rules/go.md` for backend scope, `~/.config/opencode/skills/code-simplifier/rules/typescript.md` for frontend scope, both for full-codebase. These codify project idiom conventions (error wrapping, interface placement, `context` usage, `slices`/`maps`, etc.). If a file doesn't exist (running in a different harness), proceed without it. **Don't re-surface findings that `make check`/`golangci-lint` already flagged** — Agent 2's value is what linters miss (deviations from idiom rules, swallowed errors lint can't see because they're technically handled, test assertions that never fail).
-- **Agent 3 — Surface & dependencies**: Categories 7 (UX), 8 (Docs), 10 (Deps). Up to 3 findings — this category often produces low-impact noise, so keep the budget tight.
+- **Agent 1 — Semantic & architectural (the one that matters most)**: Categories 1 (Maintainability at the service/package level), 3 (Duplicate logic across packages), 6 (Architecture & code smells). **Prime this agent** by having it read `docs/ARCHITECTURE.md` and `internal/README.md` first, so it has a mental model of the intended layering before it looks for drift. **Target 3 findings by default.** Return up to 5 only if all 5 would independently earn a top-10 slot — no borderline Low-severity picks to hit a quota. Returning 2 excellent findings is a better outcome than 5 mixed ones; the orchestrator backfills Low-severity spots from other agents if needed.
+- **Agent 2 — Correctness & quality**: Categories 2 (Dead Code), 4 (Code Quality / swallowed errors), 5 (Tests), 9 (Performance & Concurrency). **Target 3 findings by default**, up to 5 if warranted. **Prime this agent** by reading the language idiom rules that match the scope: `~/.config/opencode/skills/code-simplifier/rules/go.md` for backend scope, `~/.config/opencode/skills/code-simplifier/rules/typescript.md` for frontend scope, both for full-codebase. These codify project idiom conventions (error wrapping, interface placement, `context` usage, `slices`/`maps`, etc.). If a file doesn't exist (running in a different harness), proceed without it. **Don't re-surface findings that `make check`/`golangci-lint` already flagged** — Agent 2's value is what linters miss (deviations from idiom rules, swallowed errors lint can't see because they're technically handled, test assertions that never fail).
+- **Agent 3 — Surface & dependencies**: Categories 7 (UX), 8 (Docs), 10 (Deps). **Target 2 findings, max 3** — this category often produces low-impact noise, so keep the budget tight. Return 0 if nothing warrants a top-10 slot.
 
 ### What to pass each agent
 
@@ -162,7 +162,15 @@ Also tell Agent 1 to read `docs/ARCHITECTURE.md` and `internal/README.md` before
 
 ### What each agent returns
 
-Each agent returns findings in the exact format from Step 4 (title, Category, Type, Severity, Effort, Location, 2–3 sentence description, suggested approach). No prose preambles, no "here's what I found" — just the structured findings, each one standing on its own. If an agent couldn't find anything worth reporting in its categories, it should say so rather than padding.
+Each agent returns findings in the exact format from Step 4 (title, Category, Type, Severity, Effort, Location, 2–3 sentence description, suggested approach).
+
+**Strict output shape — tell each agent this explicitly in its brief:**
+
+- The response MUST begin with the literal characters `### #1:` — no prose preamble, no "Now I have enough data", no "Here are my findings", no acknowledgement sentence.
+- The response MUST end with the last finding's fields — no concluding summary, no "Let me know if you need more detail".
+- If the agent found nothing worth a top-10 slot in its categories, the response should be the single line `No findings worth top-10 consideration.` and nothing else.
+
+Padding is worse than a short response. A two-finding return from Agent 1 is a valid outcome and tells the orchestrator something real — don't coax agents into filling budgets.
 
 Review across these categories (skip categories not applicable to the current scope per the table in Step 0):
 
@@ -364,13 +372,13 @@ After presenting the top 10, offer these options:
 > - **'go'** to start working on #1
 > - **'quick wins'** to tackle all Small-effort items in sequence
 > - **'compare'** to see how metrics changed over time
-> - **'diff'** to see what changed since the last run"
+> - **'changed'** to see what code changed since the last run (different from the `diff` scope mode — this is a summary, not a fresh review)"
 
 From there, be conversational:
 - If the user picks a number, provide deeper analysis of that finding — show the specific code, explain the trade-offs, discuss approach options
 - If the user says "go" or picks a number to work on, help implement the fix
 - If the user says "quick wins", filter to Small-effort items and work through them in order
 - If the user says "compare", show the metrics history table with trend arrows
-- If the user says "diff", run `git diff` from the last run date and summarize what changed
+- If the user says "changed", summarize what's changed in the codebase since the last run (use `Last Run Commit` from memory: `git diff --stat "<last_run_commit>"..HEAD` for a file-level overview, and `git log "<last_run_commit>"..HEAD --oneline` for the commit list). This is a conversational summary, not a re-run of the review — if they want a scoped re-review, they should invoke `/improve diff` instead
 - If the user wants to reorder priorities, adjust and re-present
 - If the user is done, wrap up
