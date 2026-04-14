@@ -110,6 +110,147 @@ func TestFinanceService_ListInvoices(t *testing.T) {
 	}
 }
 
+// TestListInvoices_BackfillsTotalCents verifies that invoices with TotalCents=0
+// and a non-empty InvoiceDate have TotalCents populated via
+// SumPurchaseCostByInvoiceDate. Legacy rows may have been inserted without a
+// total, and we enrich on read (no write-back).
+func TestListInvoices_BackfillsTotalCents(t *testing.T) {
+	tests := []struct {
+		name           string
+		invoices       []inventory.Invoice
+		sumByDate      map[string]int
+		sumErr         error
+		wantTotals     map[string]int // invoiceDate → expected TotalCents
+		wantSumCalls   map[string]int // invoiceDate → expected call count
+		wantErr        bool
+		wantErrSubstr  string
+	}{
+		{
+			name: "backfills zero TotalCents from sum",
+			invoices: []inventory.Invoice{
+				{ID: "inv-1", InvoiceDate: "2026-01-01", TotalCents: 0},
+			},
+			sumByDate:    map[string]int{"2026-01-01": 12345},
+			wantTotals:   map[string]int{"2026-01-01": 12345},
+			wantSumCalls: map[string]int{"2026-01-01": 1},
+		},
+		{
+			name: "wraps error from SumPurchaseCostByInvoiceDate",
+			invoices: []inventory.Invoice{
+				{ID: "inv-err", InvoiceDate: "2026-03-15", TotalCents: 0},
+			},
+			sumErr:        errors.New("db boom"),
+			wantErr:       true,
+			wantErrSubstr: "backfill invoice total for 2026-03-15",
+		},
+		{
+			name: "skips invoice with empty InvoiceDate (no call, no backfill)",
+			invoices: []inventory.Invoice{
+				{ID: "inv-blank", InvoiceDate: "", TotalCents: 0},
+			},
+			wantTotals:   map[string]int{"": 0},
+			wantSumCalls: map[string]int{},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			sumCalls := map[string]int{}
+			repo := &mocks.FinanceRepositoryMock{}
+			repo.ListInvoicesFn = func(_ context.Context) ([]inventory.Invoice, error) {
+				// Return a copy so the service mutation does not leak to the table.
+				out := make([]inventory.Invoice, len(tc.invoices))
+				copy(out, tc.invoices)
+				return out, nil
+			}
+			repo.GetPendingReceiptByInvoiceDateFn = func(_ context.Context, _ []string) (map[string]int, error) {
+				return map[string]int{}, nil
+			}
+			repo.SumPurchaseCostByInvoiceDateFn = func(_ context.Context, date string) (int, error) {
+				sumCalls[date]++
+				if tc.sumErr != nil {
+					return 0, tc.sumErr
+				}
+				return tc.sumByDate[date], nil
+			}
+			svc := newFinanceSvc(repo)
+
+			invoices, err := svc.ListInvoices(context.Background())
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				if tc.wantErrSubstr != "" && !strings.Contains(err.Error(), tc.wantErrSubstr) {
+					t.Errorf("expected error to contain %q, got %q", tc.wantErrSubstr, err.Error())
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			for _, inv := range invoices {
+				want, ok := tc.wantTotals[inv.InvoiceDate]
+				if !ok {
+					continue
+				}
+				if inv.TotalCents != want {
+					t.Errorf("invoice %s: expected TotalCents=%d, got %d", inv.InvoiceDate, want, inv.TotalCents)
+				}
+			}
+			for date, want := range tc.wantSumCalls {
+				if sumCalls[date] != want {
+					t.Errorf("expected %d SumPurchaseCostByInvoiceDate call(s) for %s, got %d", want, date, sumCalls[date])
+				}
+			}
+			// No unexpected calls to dates not in wantSumCalls.
+			for date, got := range sumCalls {
+				if _, ok := tc.wantSumCalls[date]; !ok && got != 0 {
+					t.Errorf("unexpected SumPurchaseCostByInvoiceDate call for %s (%d times)", date, got)
+				}
+			}
+		})
+	}
+}
+
+// TestListInvoices_DoesNotBackfillNonZeroTotalCents verifies invoices that
+// already have a non-zero TotalCents are untouched and the sum function is
+// never invoked.
+func TestListInvoices_DoesNotBackfillNonZeroTotalCents(t *testing.T) {
+	sumCalls := 0
+	repo := &mocks.FinanceRepositoryMock{}
+	repo.ListInvoicesFn = func(_ context.Context) ([]inventory.Invoice, error) {
+		return []inventory.Invoice{
+			{ID: "inv-1", InvoiceDate: "2026-01-01", TotalCents: 25000},
+			{ID: "inv-2", InvoiceDate: "2026-02-01", TotalCents: 9999},
+		}, nil
+	}
+	repo.GetPendingReceiptByInvoiceDateFn = func(_ context.Context, _ []string) (map[string]int, error) {
+		return map[string]int{}, nil
+	}
+	repo.SumPurchaseCostByInvoiceDateFn = func(_ context.Context, _ string) (int, error) {
+		sumCalls++
+		return 12345, nil
+	}
+	svc := newFinanceSvc(repo)
+
+	invoices, err := svc.ListInvoices(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if sumCalls != 0 {
+		t.Errorf("expected 0 calls to SumPurchaseCostByInvoiceDate, got %d", sumCalls)
+	}
+	if len(invoices) != 2 {
+		t.Fatalf("expected 2 invoices, got %d", len(invoices))
+	}
+	if invoices[0].TotalCents != 25000 {
+		t.Errorf("invoice 0 TotalCents mutated: expected 25000, got %d", invoices[0].TotalCents)
+	}
+	if invoices[1].TotalCents != 9999 {
+		t.Errorf("invoice 1 TotalCents mutated: expected 9999, got %d", invoices[1].TotalCents)
+	}
+}
+
 // --- UpdateInvoice ---
 
 func TestFinanceService_UpdateInvoice(t *testing.T) {

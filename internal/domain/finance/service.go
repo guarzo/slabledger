@@ -109,6 +109,16 @@ func (s *service) ListInvoices(ctx context.Context) ([]inventory.Invoice, error)
 
 	for i := range invoices {
 		invoices[i].PendingReceiptCents = pending[invoices[i].InvoiceDate]
+
+		// Backfill TotalCents for legacy/manually-created invoices that were never
+		// populated on PSA import. Pure in-memory enrichment — no write-back.
+		if invoices[i].TotalCents == 0 && invoices[i].InvoiceDate != "" {
+			total, err := s.repo.SumPurchaseCostByInvoiceDate(ctx, invoices[i].InvoiceDate)
+			if err != nil {
+				return nil, fmt.Errorf("backfill invoice total for %s: %w", invoices[i].InvoiceDate, err)
+			}
+			invoices[i].TotalCents = total
+		}
 	}
 	return invoices, nil
 }
