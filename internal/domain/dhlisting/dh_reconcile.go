@@ -29,7 +29,7 @@ type DHReconcileResetter interface {
 
 // ReconcileResult summarises a reconciliation run.
 type ReconcileResult struct {
-	Scanned     int      // unsold purchases examined
+	Scanned     int      // DH-linked unsold purchases examined (DHInventoryID != 0)
 	MissingOnDH int      // purchases whose DHInventoryID was not present on DH
 	Reset       int      // purchases successfully flipped to pending
 	Errors      []string // per-item reset errors (purchaseID: message)

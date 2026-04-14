@@ -1051,14 +1051,16 @@ func (m *InMemoryCampaignStore) ResetDHFieldsForRepush(ctx context.Context, purc
 	if m.ResetDHFieldsForRepushFn != nil {
 		return m.ResetDHFieldsForRepushFn(ctx, purchaseID)
 	}
-	if p, ok := m.Purchases[purchaseID]; ok {
-		p.DHInventoryID = 0
-		p.DHPushStatus = inventory.DHPushStatusPending
-		p.DHStatus = ""
-		p.DHListingPriceCents = 0
-		p.DHChannelsJSON = "[]"
-		p.UpdatedAt = time.Now()
+	p, ok := m.Purchases[purchaseID]
+	if !ok {
+		return inventory.ErrPurchaseNotFound
 	}
+	p.DHInventoryID = 0
+	p.DHPushStatus = inventory.DHPushStatusPending
+	p.DHStatus = ""
+	p.DHListingPriceCents = 0
+	p.DHChannelsJSON = "[]"
+	p.UpdatedAt = time.Now()
 	return nil
 }
 

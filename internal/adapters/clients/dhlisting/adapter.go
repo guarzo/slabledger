@@ -171,7 +171,10 @@ func NewInventorySnapshotAdapter(client interface {
 
 // FetchAllInventoryIDs paginates GET /inventory with no filters and returns
 // the set of DH inventory IDs. Any page error fails the whole call so the
-// reconciler never acts on a partial snapshot.
+// reconciler never acts on a partial snapshot. Pagination stops on the first
+// short or empty page rather than trusting Meta.TotalCount — an underreported
+// total would cause us to treat a partial snapshot as complete and
+// incorrectly reset healthy items.
 func (a *InventorySnapshotAdapter) FetchAllInventoryIDs(ctx context.Context) (map[int]struct{}, error) {
 	ids := make(map[int]struct{})
 	for page := 1; page <= maxSnapshotPages; page++ {
@@ -187,7 +190,7 @@ func (a *InventorySnapshotAdapter) FetchAllInventoryIDs(ctx context.Context) (ma
 				ids[item.DHInventoryID] = struct{}{}
 			}
 		}
-		if len(resp.Items) == 0 || len(ids) >= resp.Meta.TotalCount {
+		if len(resp.Items) < snapshotPageSize {
 			return ids, nil
 		}
 	}
