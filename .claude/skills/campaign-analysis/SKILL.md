@@ -47,7 +47,7 @@ Set `BASE_URL=$PRODUCTION_URL` if that works. Fall back to `http://localhost:808
 
 Fetch these in parallel:
 
-- `GET /api/campaigns` — for name ↔ UUID resolution; filter out archived
+- `GET /api/campaigns` — for name ↔ UUID resolution; filter out archived AND synthetic buckets (the `External` campaign has `buyTermsCLPct == 0` and `dailySpendCapCents == 0` — it's a catch-all for pre-campaign purchases, not a real campaign, and should be excluded from the portfolio-at-a-glance line)
 - `GET /api/portfolio/health` — per-campaign status, reason, capital at risk
 - `GET /api/portfolio/weekly-review` — week-over-week deltas
 - `GET /api/portfolio/insights` — cross-campaign segmentation by character, grade, era, tier
@@ -296,6 +296,12 @@ These rules are referenced by every playbook that emits a recommendation. Keepin
 ### Sizing
 
 Every parameter-change, new-campaign, or material tuning recommendation carries a projected $ impact, time horizon, and confidence band — uniformly. Format: `est. +$X.XK/mo at current fill (Confidence: H|M|L)`. When the projections endpoint can't produce a clean counterfactual (sparse data, wide variance), say so explicitly: `est. +$X/mo (Low confidence, N obs)`. For one-time-recovery actions (DH push approval, sell-sheet liquidation batch), replace `/mo at current fill` with `recovery`: `est. +$X.XK recovery (Confidence: H|M|L)` — the `recovery` variant marks a non-recurring event, not ongoing monthly income. Confidence band always sits inside parentheses, regardless of variant. Never drop the number silently — that makes recommendations impossible to prioritize.
+
+**Projections time unit.** The `/api/campaigns/{id}/projections` response returns `medianProfitCents` as the projected median profit **per one Monte Carlo purchase cycle** (not per month). Convert to a monthly figure only when you have a defensible cycle-to-month mapping from the tuning data (e.g. campaign fills ~weekly → multiply by 4). When the mapping is unclear, report `est. +$X.XK per projection cycle` and note the cycle semantics; don't pretend `/mo`. The same `medianProfitCents` also appears in `p10ProfitCents` / `p90ProfitCents` — use the spread to inform the confidence band (wide p10↔p90 relative to median → Low).
+
+**Projections endpoint quirks.** Two real failure modes to handle:
+- `confidence: null` on every scenario — Task 0 expected a confidence string; in practice the field is often null. Treat as unmapped and fall back to the tuning endpoint's obs-count bands (per the Confidence bands rule).
+- All-zero scenarios (every scenario has `medianROI: 0`, `medianProfitCents: 0`, `medianVolume: 0`) — Monte Carlo didn't converge due to thin sample. Do NOT emit a sized recommendation; instead surface a Low-confidence hold-adjacent note: "projections couldn't converge on Wildcard (thin sample) — recommend manual grade-level review via `/api/campaigns/{id}/tuning` before parameter changes." This is a distinct failure mode from the hold verdict rule — the rule fires on weak signal; this fires on unusable signal.
 
 ### Confidence bands
 
