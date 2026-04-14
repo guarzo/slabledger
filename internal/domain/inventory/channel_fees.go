@@ -9,14 +9,22 @@ import (
 // DefaultWebsiteFeePct is the fee percentage for website/online store sales (3% credit card processing).
 const DefaultWebsiteFeePct = 0.03
 
+// EffectiveFeePct returns the campaign's eBay fee percentage,
+// falling back to constants.DefaultMarketplaceFeePct when the campaign has no
+// valid fee set. A fee of 0, negative, or >= 1 (i.e. >= 100%) is treated as
+// unset, matching the validation in ComputeCrackAnalysis.
+func EffectiveFeePct(c *Campaign) float64 {
+	if c.EbayFeePct <= 0 || c.EbayFeePct >= 1 {
+		return constants.DefaultMarketplaceFeePct
+	}
+	return c.EbayFeePct
+}
+
 // CalculateSaleFee computes marketplace fees for a given channel and sale price.
 func CalculateSaleFee(channel SaleChannel, salePriceCents int, campaign *Campaign) int {
 	switch NormalizeChannel(channel) {
 	case SaleChannelEbay:
-		feePct := campaign.EbayFeePct
-		if feePct == 0 {
-			feePct = constants.DefaultMarketplaceFeePct
-		}
+		feePct := EffectiveFeePct(campaign)
 		return int(math.Round(float64(salePriceCents) * feePct))
 	case SaleChannelWebsite:
 		return int(math.Round(float64(salePriceCents) * DefaultWebsiteFeePct))

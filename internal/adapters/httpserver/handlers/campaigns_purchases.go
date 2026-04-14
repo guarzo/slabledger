@@ -162,6 +162,26 @@ func (h *CampaignsHandler) HandleBulkSales(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, http.StatusCreated, result)
 }
 
+// requirePurchaseInCampaign fetches a purchase and verifies it belongs to the given campaign.
+// Writes the appropriate HTTP error and returns (nil, false) on failure.
+func (h *CampaignsHandler) requirePurchaseInCampaign(w http.ResponseWriter, r *http.Request, campaignID, purchaseID string) (*inventory.Purchase, bool) {
+	purchase, err := h.service.GetPurchase(r.Context(), purchaseID)
+	if err != nil {
+		if inventory.IsPurchaseNotFound(err) {
+			writeError(w, http.StatusNotFound, "Purchase not found")
+			return nil, false
+		}
+		h.logger.Error(r.Context(), "failed to get purchase", observability.Err(err))
+		writeError(w, http.StatusInternalServerError, "Internal server error")
+		return nil, false
+	}
+	if purchase.CampaignID != campaignID {
+		writeError(w, http.StatusForbidden, "Purchase does not belong to this campaign")
+		return nil, false
+	}
+	return purchase, true
+}
+
 // HandleDeletePurchase handles DELETE /api/campaigns/{id}/purchases/{purchaseId}.
 func (h *CampaignsHandler) HandleDeletePurchase(w http.ResponseWriter, r *http.Request) {
 	campaignID, ok := pathID(w, r, "id", "Campaign ID")
@@ -174,18 +194,8 @@ func (h *CampaignsHandler) HandleDeletePurchase(w http.ResponseWriter, r *http.R
 	}
 
 	// Verify the purchase belongs to this campaign
-	purchase, err := h.service.GetPurchase(r.Context(), purchaseID)
-	if err != nil {
-		if inventory.IsPurchaseNotFound(err) {
-			writeError(w, http.StatusNotFound, "Purchase not found")
-			return
-		}
-		h.logger.Error(r.Context(), "failed to get purchase", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
-		return
-	}
-	if purchase.CampaignID != campaignID {
-		writeError(w, http.StatusForbidden, "Purchase does not belong to this campaign")
+	_, ok = h.requirePurchaseInCampaign(w, r, campaignID, purchaseID)
+	if !ok {
 		return
 	}
 
@@ -213,18 +223,8 @@ func (h *CampaignsHandler) HandleDeleteSale(w http.ResponseWriter, r *http.Reque
 	}
 
 	// Verify the purchase belongs to this campaign
-	purchase, err := h.service.GetPurchase(r.Context(), purchaseID)
-	if err != nil {
-		if inventory.IsPurchaseNotFound(err) {
-			writeError(w, http.StatusNotFound, "Purchase not found")
-			return
-		}
-		h.logger.Error(r.Context(), "failed to get purchase", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
-		return
-	}
-	if purchase.CampaignID != campaignID {
-		writeError(w, http.StatusForbidden, "Purchase does not belong to this campaign")
+	_, ok = h.requirePurchaseInCampaign(w, r, campaignID, purchaseID)
+	if !ok {
 		return
 	}
 

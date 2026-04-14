@@ -45,8 +45,8 @@ test.describe('Accessibility - Page Level Scans @a11y', () => {
     await mockAllAPIs(page);
   });
 
-  test('Pricing page should have no critical accessibility violations', async ({ page }) => {
-    await page.goto('/pricing');
+  test('Tools page should have no critical accessibility violations', async ({ page }) => {
+    await page.goto('/tools');
     await waitForPageReady(page);
 
     const accessibilityScanResults = await createAxeBuilder(page)
@@ -97,7 +97,7 @@ test.describe('Accessibility - Component Level Scans @a11y', () => {
   });
 
   test('Navigation should be accessible', async ({ page }) => {
-    await page.goto('/pricing');
+    await page.goto('/tools');
     await page.waitForLoadState('domcontentloaded');
     await page.waitForTimeout(300);
 
@@ -116,7 +116,7 @@ test.describe('Accessibility - Component Level Scans @a11y', () => {
   });
 
   test('Search form should be accessible', async ({ page }) => {
-    await page.goto('/pricing');
+    await page.goto('/tools');
     await waitForPageReady(page);
 
     const searchInput = page.locator('input[type="text"]');
@@ -141,7 +141,7 @@ test.describe('Accessibility - Keyboard Navigation @a11y', () => {
   });
 
   test('should be able to navigate page using keyboard only', async ({ page }) => {
-    await page.goto('/pricing');
+    await page.goto('/tools');
     await waitForPageReady(page);
 
     // Tab through interactive elements
@@ -161,7 +161,7 @@ test.describe('Accessibility - Keyboard Navigation @a11y', () => {
   });
 
   test('interactive elements should have visible focus indicators', async ({ page }) => {
-    await page.goto('/pricing');
+    await page.goto('/tools');
     await waitForPageReady(page);
 
     // Tab to first interactive element
@@ -187,7 +187,7 @@ test.describe('Accessibility - Keyboard Navigation @a11y', () => {
   });
 
   test('skip link should exist for keyboard users', async ({ page }) => {
-    await page.goto('/pricing');
+    await page.goto('/tools');
     await page.waitForLoadState('domcontentloaded');
 
     // Many accessible sites have skip links
@@ -216,7 +216,7 @@ test.describe('Accessibility - Color Contrast @a11y', () => {
 
   test('light mode should meet WCAG AA contrast requirements', async ({ page }) => {
     await page.emulateMedia({ colorScheme: 'light' });
-    await page.goto('/pricing');
+    await page.goto('/tools');
     await waitForPageReady(page);
 
     const accessibilityScanResults = await createAxeBuilder(page)
@@ -244,7 +244,7 @@ test.describe('Accessibility - Color Contrast @a11y', () => {
 
   test('dark mode should meet WCAG AA contrast requirements', async ({ page }) => {
     await page.emulateMedia({ colorScheme: 'dark' });
-    await page.goto('/pricing');
+    await page.goto('/tools');
     await waitForPageReady(page);
 
     const accessibilityScanResults = await createAxeBuilder(page)
@@ -277,7 +277,7 @@ test.describe('Accessibility - ARIA and Semantics @a11y', () => {
   });
 
   test('should have proper heading hierarchy', async ({ page }) => {
-    await page.goto('/pricing');
+    await page.goto('/tools');
     await waitForPageReady(page);
 
     const accessibilityScanResults = await createAxeBuilder(page)
@@ -289,7 +289,7 @@ test.describe('Accessibility - ARIA and Semantics @a11y', () => {
   });
 
   test('images should have alt text', async ({ page }) => {
-    await page.goto('/pricing');
+    await page.goto('/tools');
     await waitForPageReady(page);
 
     const accessibilityScanResults = await createAxeBuilder(page)
@@ -303,7 +303,7 @@ test.describe('Accessibility - ARIA and Semantics @a11y', () => {
   });
 
   test('ARIA attributes should be valid', async ({ page }) => {
-    await page.goto('/pricing');
+    await page.goto('/tools');
     await waitForPageReady(page);
 
     const accessibilityScanResults = await createAxeBuilder(page)
@@ -323,7 +323,7 @@ test.describe('Accessibility - ARIA and Semantics @a11y', () => {
   });
 
   test('landmark regions should be properly defined', async ({ page }) => {
-    await page.goto('/pricing');
+    await page.goto('/tools');
     await waitForPageReady(page);
 
     const accessibilityScanResults = await createAxeBuilder(page)
@@ -345,7 +345,7 @@ test.describe('Accessibility - Mobile/Touch @a11y', () => {
     await page.setViewportSize({ width: 375, height: 667 });
     await mockAllAPIs(page);
 
-    await page.goto('/pricing');
+    await page.goto('/tools');
     await waitForPageReady(page);
 
     const accessibilityScanResults = await createAxeBuilder(page)
@@ -362,7 +362,7 @@ test.describe('Accessibility - Mobile/Touch @a11y', () => {
     await page.setViewportSize({ width: 375, height: 667 });
     await mockAllAPIs(page);
 
-    await page.goto('/pricing');
+    await page.goto('/tools');
     await waitForPageReady(page);
 
     // Check that buttons meet minimum touch target size (44x44)

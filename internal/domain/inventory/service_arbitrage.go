@@ -25,10 +25,7 @@ func (s *service) crackCandidatesForCampaign(ctx context.Context, campaign *Camp
 		return nil, err
 	}
 
-	ebayFee := campaign.EbayFeePct
-	if ebayFee == 0 {
-		ebayFee = constants.DefaultMarketplaceFeePct
-	}
+	ebayFee := EffectiveFeePct(campaign)
 
 	var candidates []string
 	for _, p := range unsold {

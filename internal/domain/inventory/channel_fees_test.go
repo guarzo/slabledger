@@ -1,6 +1,42 @@
 package inventory
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/guarzo/slabledger/internal/domain/constants"
+)
+
+func TestEffectiveFeePct(t *testing.T) {
+	tests := []struct {
+		name     string
+		campaign *Campaign
+		want     float64
+	}{
+		{
+			name:     "returns campaign fee when set",
+			campaign: &Campaign{EbayFeePct: 0.10},
+			want:     0.10,
+		},
+		{
+			name:     "returns default when campaign fee is zero",
+			campaign: &Campaign{EbayFeePct: 0},
+			want:     constants.DefaultMarketplaceFeePct,
+		},
+		{
+			name:     "returns campaign fee when set to non-standard value",
+			campaign: &Campaign{EbayFeePct: 0.08},
+			want:     0.08,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := EffectiveFeePct(tt.campaign)
+			if got != tt.want {
+				t.Errorf("EffectiveFeePct() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
 
 func TestCalculateSaleFee(t *testing.T) {
 	campaign := &Campaign{EbayFeePct: 0.1235}

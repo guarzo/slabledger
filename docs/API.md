@@ -91,7 +91,7 @@ Returns overall system health.
 {
   "status": "healthy",
   "timestamp": "2025-01-01T00:00:00Z",
-  "providers": { "cards": true, "prices": true },
+  "providers": { "prices": true },
   "database": "healthy"
 }
 ```
@@ -181,83 +181,52 @@ Returns AI call usage statistics broken down by operation.
 
 ---
 
-## Cards & Pricing
+## Card Catalog
 
-### `GET /api/cards/search`
+### `GET /api/cards/catalog`
 
 Auth: RequireAuth
 
-Searches cards by name, set, or number. Also accepts `POST` with JSON body.
+Searches the Card Ladder card catalog by query string.
 
-**Query params (GET):** `q` (string, required)
-
-**Body (POST):**
-```json
-{ "query": "Charizard Base Set", "limit": 10 }
-```
-`limit` defaults to 10, max 100.
+**Query params:**
+- `q` (string, required) — search query (card name, set, player, etc.)
+- `limit` (int, optional, default 20, max 100) — results per page
+- `page` (int, optional, default 0) — zero-based page index
+- `condition` (string, optional) — filter by condition
+- `set` (string, optional) — filter by set name
+- `gradingCompany` (string, optional) — filter by grading company (e.g. `PSA`)
+- `category` (string, optional) — filter by card category
 
 **Response:** `200 OK`
 ```json
 {
-  "cards": [
+  "hits": [
     {
-      "id": "tcgdex-id",
-      "name": "Charizard",
+      "id": "cl-id-123",
+      "gemRateId": "gem-123",
+      "psaSpecId": 45678,
+      "label": "Charizard",
+      "player": "",
+      "set": "Base Set",
+      "year": "1999",
       "number": "4",
-      "set": "base1",
-      "setName": "Base Set",
-      "rarity": "Rare Holo",
-      "imageUrl": "https://...",
-      "marketPrice": 350.00,
-      "score": 0.95
+      "category": "Pokemon",
+      "condition": "10",
+      "gradingCompany": "PSA",
+      "currentValue": 1200.00,
+      "marketValue": 1195.00,
+      "numSales": 12,
+      "score": 0.95,
+      "lastSoldDate": "2025-04-10",
+      "image": "https://..."
     }
   ],
-  "total": 1
+  "totalHits": 1
 }
 ```
 
----
-
-### `GET /api/cards/pricing`
-
-Auth: RequireAuth
-
-Looks up price data for a specific card.
-
-**Query params:** `name` (required, max 200), `set` (optional, max 200), `number` (optional, max 50)
-
-**Response:** `200 OK`
-```json
-{
-  "card": "Charizard",
-  "set": "Base Set",
-  "number": "4",
-  "rawUSD": 120.00,
-  "psa8": 250.00,
-  "psa9": 400.00,
-  "psa10": 1200.00,
-  "confidence": 0.92,
-  "matchQuality": "good",
-  "conservativePsa10": 1100.00,
-  "conservativePsa9": 370.00,
-  "conservativeRaw": 110.00,
-  "lastSold": {
-    "psa10": { "lastSoldPrice": 1250.00, "lastSoldDate": "2025-01-01", "saleCount": 5 }
-  },
-  "gradeData": {
-    "10": {
-      "ebay": { "price": 1200.00, "confidence": "high", "salesCount": 12, "trend": "up", "median": 1195.00 },
-      "estimate": { "price": 1180.00, "low": 1100.00, "high": 1280.00, "confidence": 0.9 }
-    }
-  },
-  "market": { "activeListings": 8, "lowestListing": 1100.00, "sales30d": 4, "sales90d": 12 },
-  "velocity": { "dailyAverage": 0.15, "weeklyAverage": 1.0, "monthlyTotal": 4 },
-  "sources": ["doubleholo"]
-}
-```
-
-**Errors:** `400` missing name; `404` no pricing data found; `503` pricing not available
+**Errors:** `400` missing `q`; `500` search failed
 
 ---
 
