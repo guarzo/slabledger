@@ -407,3 +407,295 @@ func TestExportService_GenerateGlobalSellSheet(t *testing.T) {
 		})
 	}
 }
+
+// --- GenerateSelectedSellSheet ---
+
+// makePurchaseWithMarketData creates a purchase with market snapshot data populated.
+func makePurchaseWithMarketData(id, cert, card string) *inventory.Purchase {
+	return &inventory.Purchase{
+		ID:           id,
+		CertNumber:   cert,
+		CardName:     card,
+		SetName:      "Base Set",
+		CardNumber:   "4",
+		GradeValue:   9,
+		Grader:       "PSA",
+		ReceivedAt:   receivedAt(),
+		PurchaseDate: time.Now().Add(-30 * 24 * time.Hour).Format(time.DateOnly), // 30 days ago
+		// Market snapshot data (so HasAnyPriceData returns true)
+		MarketSnapshotData: inventory.MarketSnapshotData{
+			MedianCents:       10000,
+			ConservativeCents: 8000,
+			LastSoldCents:     9500,
+			SnapshotDate:      time.Now().Format(time.RFC3339), // Required for SnapshotFromPurchase to work
+		},
+	}
+}
+
+func TestExportService_GenerateSelectedSellSheet(t *testing.T) {
+	tests := []struct {
+		name        string
+		purchaseIDs []string
+		purchaseMap map[string]*inventory.Purchase
+		listFn      func(context.Context, bool) ([]inventory.Campaign, error) // for ListCampaigns
+		wantCount   int
+		wantErr     bool
+	}{
+		{
+			name:        "returns only selected purchases with market data",
+			purchaseIDs: []string{"p1", "p2"},
+			purchaseMap: map[string]*inventory.Purchase{
+				"p1": makePurchaseWithMarketData("p1", "11111111", "Charizard"),
+				"p2": makePurchaseWithMarketData("p2", "22222222", "Blastoise"),
+				"p3": makePurchaseWithMarketData("p3", "33333333", "Venusaur"),
+			},
+			listFn: func(_ context.Context, _ bool) ([]inventory.Campaign, error) {
+				return []inventory.Campaign{}, nil
+			},
+			wantCount: 2,
+		},
+		{
+			name:        "empty selection returns empty sheet",
+			purchaseIDs: []string{},
+			purchaseMap: map[string]*inventory.Purchase{
+				"p1": makePurchaseWithMarketData("p1", "11111111", "Charizard"),
+			},
+			listFn: func(_ context.Context, _ bool) ([]inventory.Campaign, error) {
+				return []inventory.Campaign{}, nil
+			},
+			wantCount: 0,
+		},
+		{
+			name:        "skips purchases without ReceivedAt",
+			purchaseIDs: []string{"p1", "p2"},
+			purchaseMap: map[string]*inventory.Purchase{
+				"p1": makePurchaseWithMarketData("p1", "11111111", "Charizard"),
+				"p2": {
+					ID:         "p2",
+					CertNumber: "22222222",
+					CardName:   "Pikachu",
+					GradeValue: 10,
+					Grader:     "PSA",
+					ReceivedAt: nil, // not received yet
+					MarketSnapshotData: inventory.MarketSnapshotData{
+						MedianCents:       5000,
+						ConservativeCents: 4000,
+					},
+				},
+			},
+			listFn: func(_ context.Context, _ bool) ([]inventory.Campaign, error) {
+				return []inventory.Campaign{}, nil
+			},
+			wantCount: 1,
+		},
+		{
+			name:        "skips missing purchases",
+			purchaseIDs: []string{"p1", "p-missing"},
+			purchaseMap: map[string]*inventory.Purchase{
+				"p1": makePurchaseWithMarketData("p1", "11111111", "Charizard"),
+			},
+			listFn: func(_ context.Context, _ bool) ([]inventory.Campaign, error) {
+				return []inventory.Campaign{}, nil
+			},
+			wantCount: 1,
+		},
+		{
+			name:        "repo error on GetPurchasesByIDs propagated",
+			purchaseIDs: []string{"p1"},
+			purchaseMap: nil, // signal error
+			wantErr:     true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := &stubExportReader{}
+			if tc.purchaseMap != nil {
+				purchaseMapCopy := tc.purchaseMap
+				repo.getPurchasesByIDsFn = func(_ context.Context, _ []string) (map[string]*inventory.Purchase, error) {
+					return purchaseMapCopy, nil
+				}
+			} else if tc.wantErr {
+				repo.getPurchasesByIDsFn = func(_ context.Context, _ []string) (map[string]*inventory.Purchase, error) {
+					return nil, errors.New("repo error")
+				}
+			}
+
+			if tc.listFn != nil {
+				repo.listCampaignsFn = tc.listFn
+			}
+
+			svc := export.New(repo)
+			sheet, err := svc.GenerateSelectedSellSheet(context.Background(), tc.purchaseIDs)
+
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if sheet == nil {
+				t.Fatal("expected non-nil sell sheet")
+			}
+			if len(sheet.Items) != tc.wantCount {
+				t.Errorf("item count = %d, want %d", len(sheet.Items), tc.wantCount)
+			}
+		})
+	}
+}
+
+// --- MatchShopifyPrices ---
+
+func TestExportService_MatchShopifyPrices(t *testing.T) {
+	tests := []struct {
+		name           string
+		items          []inventory.ShopifyPriceSyncItem
+		purchaseMap    map[string]*inventory.Purchase
+		wantMatchCount int
+		wantUnmatched  []string
+		wantErr        bool
+	}{
+		{
+			name: "matches single purchase by cert number",
+			items: []inventory.ShopifyPriceSyncItem{
+				{CertNumber: "12345678", CurrentPriceCents: 5000},
+			},
+			purchaseMap: map[string]*inventory.Purchase{
+				"12345678": {
+					ID:         "p1",
+					CertNumber: "12345678",
+					CardName:   "Charizard",
+					SetName:    "Base Set",
+					GradeValue: 10,
+					Grader:     "PSA",
+					ReceivedAt: receivedAt(),
+				},
+			},
+			wantMatchCount: 1,
+			wantUnmatched:  []string{},
+		},
+		{
+			name:           "empty items list returns empty results",
+			items:          []inventory.ShopifyPriceSyncItem{},
+			purchaseMap:    map[string]*inventory.Purchase{},
+			wantMatchCount: 0,
+			wantUnmatched:  []string{},
+		},
+		{
+			name: "unmatched cert numbers are tracked",
+			items: []inventory.ShopifyPriceSyncItem{
+				{CertNumber: "11111111", CurrentPriceCents: 3000},
+				{CertNumber: "22222222", CurrentPriceCents: 4000},
+			},
+			purchaseMap: map[string]*inventory.Purchase{
+				"11111111": {
+					ID:         "p1",
+					CertNumber: "11111111",
+					CardName:   "Pikachu",
+					GradeValue: 9,
+					Grader:     "PSA",
+					ReceivedAt: receivedAt(),
+				},
+			},
+			wantMatchCount: 1,
+			wantUnmatched:  []string{"22222222"},
+		},
+		{
+			name: "multiple matches",
+			items: []inventory.ShopifyPriceSyncItem{
+				{CertNumber: "11111111", CurrentPriceCents: 3000},
+				{CertNumber: "22222222", CurrentPriceCents: 4000},
+				{CertNumber: "33333333", CurrentPriceCents: 5000},
+			},
+			purchaseMap: map[string]*inventory.Purchase{
+				"11111111": {
+					ID:         "p1",
+					CertNumber: "11111111",
+					CardName:   "Pikachu",
+					GradeValue: 9,
+					Grader:     "PSA",
+					ReceivedAt: receivedAt(),
+				},
+				"22222222": {
+					ID:         "p2",
+					CertNumber: "22222222",
+					CardName:   "Meowth",
+					GradeValue: 8,
+					Grader:     "PSA",
+					ReceivedAt: receivedAt(),
+				},
+				"33333333": {
+					ID:         "p3",
+					CertNumber: "33333333",
+					CardName:   "Psyduck",
+					GradeValue: 7,
+					Grader:     "PSA",
+					ReceivedAt: receivedAt(),
+				},
+			},
+			wantMatchCount: 3,
+			wantUnmatched:  []string{},
+		},
+		{
+			name: "repo error propagated",
+			items: []inventory.ShopifyPriceSyncItem{
+				{CertNumber: "11111111", CurrentPriceCents: 3000},
+			},
+			purchaseMap: nil, // signal error
+			wantErr:     true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := &stubExportReader{}
+			if tc.purchaseMap != nil {
+				purchaseMapCopy := tc.purchaseMap
+				repo.getPurchasesByCertNumbersFn = func(_ context.Context, _ []string) (map[string]*inventory.Purchase, error) {
+					return purchaseMapCopy, nil
+				}
+			} else if tc.wantErr {
+				repo.getPurchasesByCertNumbersFn = func(_ context.Context, _ []string) (map[string]*inventory.Purchase, error) {
+					return nil, errors.New("repo error")
+				}
+			}
+
+			svc := export.New(repo)
+			resp, err := svc.MatchShopifyPrices(context.Background(), tc.items)
+
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if resp == nil {
+				t.Fatal("expected non-nil response")
+			}
+			if len(resp.Matched) != tc.wantMatchCount {
+				t.Errorf("matched count = %d, want %d", len(resp.Matched), tc.wantMatchCount)
+			}
+			if len(resp.Unmatched) != len(tc.wantUnmatched) {
+				t.Errorf("unmatched count = %d, want %d", len(resp.Unmatched), len(tc.wantUnmatched))
+			}
+			for _, wantCert := range tc.wantUnmatched {
+				found := false
+				for _, gotCert := range resp.Unmatched {
+					if gotCert == wantCert {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Errorf("expected unmatched cert %q not found", wantCert)
+				}
+			}
+		})
+	}
+}
