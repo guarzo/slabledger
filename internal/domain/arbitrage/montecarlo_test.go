@@ -81,6 +81,95 @@ func TestRunMonteCarloProjection_InsufficientData(t *testing.T) {
 	}
 }
 
+// TestRunMonteCarloProjection_ConfidenceAlwaysSet is a regression test that
+// locks in the invariant that RunMonteCarloProjection always populates
+// Confidence with one of: "insufficient", "low", "medium", "high".
+// The campaign-analysis skill historically treated empty Confidence as a gap.
+func TestRunMonteCarloProjection_ConfidenceAlwaysSet(t *testing.T) {
+	buildHistory := func(count int) []inventory.PurchaseWithSale {
+		history := make([]inventory.PurchaseWithSale, 0, count)
+		for i := 0; i < count; i++ {
+			pw := inventory.PurchaseWithSale{
+				Purchase: inventory.Purchase{
+					BuyCostCents:        5000 + i*100,
+					PSASourcingFeeCents: 300,
+					GradeValue:          float64(8 + i%3),
+					CLValueCents:        10000 + i*200,
+				},
+			}
+			if i%3 != 0 {
+				pw.Sale = &inventory.Sale{
+					NetProfitCents: 500 + i*50,
+					SaleFeeCents:   800,
+				}
+			}
+			history = append(history, pw)
+		}
+		return history
+	}
+
+	validConfidences := map[string]bool{
+		"insufficient": true,
+		"low":          true,
+		"medium":       true,
+		"high":         true,
+	}
+
+	tests := []struct {
+		name           string
+		historyCount   int
+		wantConfidence string // exact expected value
+	}{
+		{
+			name:           "empty history → insufficient",
+			historyCount:   0,
+			wantConfidence: "insufficient",
+		},
+		{
+			name:           "5 items (below min threshold) → insufficient",
+			historyCount:   5,
+			wantConfidence: "insufficient",
+		},
+		{
+			name:           "15 items (above min, below medium) → low",
+			historyCount:   15,
+			wantConfidence: "low",
+		},
+		{
+			name:           "35 items (above medium, below high) → medium",
+			historyCount:   35,
+			wantConfidence: "medium",
+		},
+		{
+			name:           "60 items (above high threshold) → high",
+			historyCount:   60,
+			wantConfidence: "high",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			campaign := &inventory.Campaign{BuyTermsCLPct: 0.60, GradeRange: "8-10"}
+			history := buildHistory(tt.historyCount)
+
+			result := RunMonteCarloProjection(campaign, history)
+
+			if result == nil {
+				t.Fatal("expected non-nil result")
+			}
+			if result.Confidence == "" {
+				t.Fatal("Confidence must never be empty")
+			}
+			if !validConfidences[result.Confidence] {
+				t.Errorf("Confidence %q is not one of the allowed values (insufficient/low/medium/high)", result.Confidence)
+			}
+			if result.Confidence != tt.wantConfidence {
+				t.Errorf("expected Confidence %q for %d items, got %q", tt.wantConfidence, tt.historyCount, result.Confidence)
+			}
+		})
+	}
+}
+
 func TestRunMonteCarloProjection_SufficientData(t *testing.T) {
 	campaign := &inventory.Campaign{BuyTermsCLPct: 0.60, GradeRange: "8-10"}
 	var history []inventory.PurchaseWithSale
