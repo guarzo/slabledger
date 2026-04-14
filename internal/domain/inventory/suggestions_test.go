@@ -56,7 +56,7 @@ func TestGenerateSuggestions_TopCharacterExpansion(t *testing.T) {
 func TestGenerateSuggestions_CharacterAdjustments(t *testing.T) {
 	insights := &PortfolioInsights{
 		ByCharacter: []SegmentPerformance{
-			{Label: "Charizard", ROI: 0.30, SoldCount: 10, PurchaseCount: 12, CampaignCount: 2},
+			{Label: "Charizard", ROI: 0.30, SoldCount: 10, PurchaseCount: 12, CampaignCount: 2, AvgMarginPct: 0.22, AvgDaysToSell: 18},
 			{Label: "Pikachu", ROI: -0.10, SoldCount: 8, PurchaseCount: 15, CampaignCount: 1},
 			{Label: "Blastoise", ROI: 0.20, SoldCount: 6, PurchaseCount: 8, CampaignCount: 1},
 		},
@@ -78,6 +78,16 @@ func TestGenerateSuggestions_CharacterAdjustments(t *testing.T) {
 			}
 			if s.Title == "Add top performers to Test Campaign" {
 				foundAdd = true
+				// ExpectedMetrics should be propagated from Charizard (top-ROI add).
+				if math.Abs(s.ExpectedMetrics.ExpectedROI-0.30) > 1e-6 {
+					t.Errorf("expected ExpectedROI ~0.30 from Charizard, got %f", s.ExpectedMetrics.ExpectedROI)
+				}
+				if math.Abs(s.ExpectedMetrics.ExpectedMarginPct-0.22) > 1e-6 {
+					t.Errorf("expected ExpectedMarginPct ~0.22 from Charizard, got %f", s.ExpectedMetrics.ExpectedMarginPct)
+				}
+				if math.Abs(s.ExpectedMetrics.AvgDaysToSell-18) > 1e-6 {
+					t.Errorf("expected AvgDaysToSell ~18 from Charizard, got %f", s.ExpectedMetrics.AvgDaysToSell)
+				}
 			}
 		}
 	}
@@ -118,12 +128,13 @@ func TestGenerateSuggestions_CoverageGap(t *testing.T) {
 
 func TestGenerateSuggestions_ChannelInformedBuyTerms(t *testing.T) {
 	cases := []struct {
-		name         string
-		insights     *PortfolioInsights
-		campaigns    []Campaign
-		wantCampaign string // empty means no suggestion expected
-		wantNewTerms float64
-		wantExact    bool
+		name            string
+		insights        *PortfolioInsights
+		campaigns       []Campaign
+		wantCampaign    string // empty means no suggestion expected
+		wantNewTerms    float64
+		wantExact       bool
+		wantExpectedROI float64 // expected ExpectedMetrics.ExpectedROI (weighted margin)
 	}{
 		{
 			name: "weighted margin already meets target",
@@ -157,10 +168,11 @@ func TestGenerateSuggestions_ChannelInformedBuyTerms(t *testing.T) {
 				},
 				DataSummary: InsightsDataSummary{TotalPurchases: 50, TotalSales: 20},
 			},
-			campaigns:    []Campaign{{Name: "Underperformer", Phase: PhaseActive, BuyTermsCLPct: 0.85}},
-			wantCampaign: "Underperformer",
-			wantNewTerms: 0.78,
-			wantExact:    true,
+			campaigns:       []Campaign{{Name: "Underperformer", Phase: PhaseActive, BuyTermsCLPct: 0.85}},
+			wantCampaign:    "Underperformer",
+			wantNewTerms:    0.78,
+			wantExact:       true,
+			wantExpectedROI: 0.03,
 		},
 		{
 			name: "floor respected at 70%",
@@ -171,10 +183,11 @@ func TestGenerateSuggestions_ChannelInformedBuyTerms(t *testing.T) {
 				},
 				DataSummary: InsightsDataSummary{TotalPurchases: 50, TotalSales: 20},
 			},
-			campaigns:    []Campaign{{Name: "Bleeding", Phase: PhaseActive, BuyTermsCLPct: 0.74}},
-			wantCampaign: "Bleeding",
-			wantNewTerms: 0.70,
-			wantExact:    true,
+			campaigns:       []Campaign{{Name: "Bleeding", Phase: PhaseActive, BuyTermsCLPct: 0.74}},
+			wantCampaign:    "Bleeding",
+			wantNewTerms:    0.70,
+			wantExact:       true,
+			wantExpectedROI: -0.05,
 		},
 		{
 			name: "no channel data",
@@ -193,10 +206,11 @@ func TestGenerateSuggestions_ChannelInformedBuyTerms(t *testing.T) {
 				},
 				DataSummary: InsightsDataSummary{TotalPurchases: 40, TotalSales: 25},
 			},
-			campaigns:    []Campaign{{Name: "Solo eBay", Phase: PhaseActive, BuyTermsCLPct: 0.85}},
-			wantCampaign: "Solo eBay",
-			wantNewTerms: 0.77,
-			wantExact:    true,
+			campaigns:       []Campaign{{Name: "Solo eBay", Phase: PhaseActive, BuyTermsCLPct: 0.85}},
+			wantCampaign:    "Solo eBay",
+			wantNewTerms:    0.77,
+			wantExact:       true,
+			wantExpectedROI: 0.02,
 		},
 		{
 			name: "mixed channels below buffer",
@@ -296,6 +310,15 @@ func TestGenerateSuggestions_ChannelInformedBuyTerms(t *testing.T) {
 					t.Errorf("expected newTerms %.4f, got %.4f", tc.wantNewTerms, match.SuggestedParams.BuyTermsCLPct)
 				}
 			}
+			// ExpectedMetrics.ExpectedROI should equal the weighted-average margin
+			// (the rule uses it as a best-available ROI proxy).
+			if match.ExpectedMetrics.ExpectedROI == 0 {
+				t.Errorf("expected non-zero ExpectedROI, got 0")
+			}
+			if math.Abs(match.ExpectedMetrics.ExpectedROI-tc.wantExpectedROI) > 1e-9 {
+				t.Errorf("expected ExpectedROI %.4f (weighted margin), got %.4f",
+					tc.wantExpectedROI, match.ExpectedMetrics.ExpectedROI)
+			}
 		})
 	}
 }
@@ -318,6 +341,13 @@ func TestGenerateSuggestions_SpendCapRebalancing(t *testing.T) {
 			found = true
 			if s.SuggestedParams.DailySpendCapCents != 27500 {
 				t.Errorf("expected avg cap 27500, got %d", s.SuggestedParams.DailySpendCapCents)
+			}
+			// Non-ROI branch sets ExpectedROI = OverallROI (0.20).
+			if s.ExpectedMetrics.ExpectedROI == 0 {
+				t.Errorf("expected non-zero ExpectedROI, got 0")
+			}
+			if math.Abs(s.ExpectedMetrics.ExpectedROI-0.20) > 1e-9 {
+				t.Errorf("expected ExpectedROI ~0.20 (OverallROI), got %f", s.ExpectedMetrics.ExpectedROI)
 			}
 		}
 	}
@@ -426,6 +456,13 @@ func TestROIWeightedSpendCaps(t *testing.T) {
 			if !containsAll(s.Rationale, "raise", "High ROI", "lower", "Low ROI") {
 				t.Errorf("expected ROI-weighted rationale, got: %s", s.Rationale)
 			}
+			// ROI-weighted branch sets ExpectedROI = avgROI (OverallROI = 0.20).
+			if s.ExpectedMetrics.ExpectedROI == 0 {
+				t.Errorf("expected non-zero ExpectedROI, got 0")
+			}
+			if math.Abs(s.ExpectedMetrics.ExpectedROI-0.20) > 1e-9 {
+				t.Errorf("expected ExpectedROI ~0.20 (avgROI), got %f", s.ExpectedMetrics.ExpectedROI)
+			}
 		}
 	}
 	if !found {
@@ -477,6 +514,10 @@ func TestPhaseTransition_ActivatePending(t *testing.T) {
 	for _, s := range resp.Adjustments {
 		if s.Title == "Activate Pending Charizard" {
 			found = true
+			// bestROI of matching segment (Charizard = 0.25) should propagate.
+			if math.Abs(s.ExpectedMetrics.ExpectedROI-0.25) > 1e-6 {
+				t.Errorf("expected ExpectedROI ~0.25 (Charizard bestROI), got %f", s.ExpectedMetrics.ExpectedROI)
+			}
 		}
 	}
 	if !found {
@@ -510,6 +551,7 @@ func TestGenerateSuggestions_BuyTermsFromLiquidation(t *testing.T) {
 		wantNewTerms   float64
 		wantConfidence string
 		wantDataPoints int
+		wantMarginPct  float64 // expected ExpectedROI == ExpectedMarginPct (eBay channel margin)
 	}{
 		{
 			name: "below loss threshold",
@@ -539,6 +581,7 @@ func TestGenerateSuggestions_BuyTermsFromLiquidation(t *testing.T) {
 			wantNewTerms:   0.77,
 			wantConfidence: "high",
 			wantDataPoints: 22,
+			wantMarginPct:  0.18,
 		},
 		{
 			name: "bucket $30-50/sale → reduction 5%",
@@ -551,6 +594,7 @@ func TestGenerateSuggestions_BuyTermsFromLiquidation(t *testing.T) {
 			wantNewTerms:   0.75,
 			wantConfidence: "high",
 			wantDataPoints: 13,
+			wantMarginPct:  0.20,
 		},
 		{
 			name: "bucket >$50/sale → reduction 8%",
@@ -563,6 +607,7 @@ func TestGenerateSuggestions_BuyTermsFromLiquidation(t *testing.T) {
 			wantNewTerms:   0.74,
 			wantConfidence: "medium",
 			wantDataPoints: 8,
+			wantMarginPct:  0.22,
 		},
 		{
 			name: "floor clamps reduction",
@@ -575,6 +620,7 @@ func TestGenerateSuggestions_BuyTermsFromLiquidation(t *testing.T) {
 			wantNewTerms:   0.70,
 			wantConfidence: "high",
 			wantDataPoints: 10,
+			wantMarginPct:  0.15,
 		},
 		{
 			name: "already at floor — skip",
@@ -603,6 +649,7 @@ func TestGenerateSuggestions_BuyTermsFromLiquidation(t *testing.T) {
 			wantNewTerms:   0.77,
 			wantConfidence: "high",
 			wantDataPoints: 10,
+			wantMarginPct:  0.15,
 		},
 		{
 			name: "sample size tier — 9 sales → medium",
@@ -615,6 +662,7 @@ func TestGenerateSuggestions_BuyTermsFromLiquidation(t *testing.T) {
 			wantNewTerms:   0.77,
 			wantConfidence: "medium",
 			wantDataPoints: 9,
+			wantMarginPct:  0.15,
 		},
 		{
 			name: "archived campaign skipped",
@@ -700,6 +748,15 @@ func TestGenerateSuggestions_BuyTermsFromLiquidation(t *testing.T) {
 			}
 			if match.DataPoints != tc.wantDataPoints {
 				t.Errorf("expected DataPoints %d, got %d", tc.wantDataPoints, match.DataPoints)
+			}
+			// ExpectedROI == ExpectedMarginPct == h.EbayChannelMarginPct (marketplace margin proxy).
+			if math.Abs(match.ExpectedMetrics.ExpectedROI-tc.wantMarginPct) > 1e-9 {
+				t.Errorf("expected ExpectedROI %.4f (EbayChannelMarginPct), got %.4f",
+					tc.wantMarginPct, match.ExpectedMetrics.ExpectedROI)
+			}
+			if math.Abs(match.ExpectedMetrics.ExpectedMarginPct-tc.wantMarginPct) > 1e-9 {
+				t.Errorf("expected ExpectedMarginPct %.4f (EbayChannelMarginPct), got %.4f",
+					tc.wantMarginPct, match.ExpectedMetrics.ExpectedMarginPct)
 			}
 		})
 	}
