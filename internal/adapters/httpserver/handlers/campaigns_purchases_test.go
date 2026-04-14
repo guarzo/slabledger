@@ -1078,8 +1078,8 @@ func TestRequirePurchaseInCampaign(t *testing.T) {
 				}
 				return
 			}
-			if !ok {
-				t.Errorf("expected ok=true")
+			if !ok || purchase == nil {
+				t.Fatalf("expected ok=true and non-nil purchase, got ok=%v purchase=%v", ok, purchase)
 			}
 			if purchase.ID != tt.wantPurchaseID {
 				t.Errorf("purchase.ID = %q, want %q", purchase.ID, tt.wantPurchaseID)

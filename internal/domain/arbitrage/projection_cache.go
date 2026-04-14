@@ -56,3 +56,18 @@ func (c *projectionCache) set(key projectionCacheKey, result *MonteCarloComparis
 		expiresAt: time.Now().Add(c.ttl),
 	}
 }
+
+// copyMonteCarloComparison returns a deep copy of c so callers cannot mutate
+// cached state through the returned pointer. MonteCarloResult is a value type
+// (only scalars), so copying the Scenarios slice is sufficient.
+func copyMonteCarloComparison(c *MonteCarloComparison) *MonteCarloComparison {
+	if c == nil {
+		return nil
+	}
+	cp := *c // copy all scalar fields and slice header
+	if c.Scenarios != nil {
+		cp.Scenarios = make([]MonteCarloResult, len(c.Scenarios))
+		copy(cp.Scenarios, c.Scenarios)
+	}
+	return &cp
+}

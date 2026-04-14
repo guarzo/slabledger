@@ -410,6 +410,9 @@ func TestExportService_GenerateGlobalSellSheet(t *testing.T) {
 
 // --- GenerateSelectedSellSheet ---
 
+// testNow is a fixed timestamp used in tests to ensure deterministic output.
+var testNow = time.Date(2023, 1, 15, 12, 0, 0, 0, time.UTC)
+
 // makePurchaseWithMarketData creates a purchase with market snapshot data populated.
 func makePurchaseWithMarketData(id, cert, card string) *inventory.Purchase {
 	return &inventory.Purchase{
@@ -421,13 +424,13 @@ func makePurchaseWithMarketData(id, cert, card string) *inventory.Purchase {
 		GradeValue:   9,
 		Grader:       "PSA",
 		ReceivedAt:   receivedAt(),
-		PurchaseDate: time.Now().Add(-30 * 24 * time.Hour).Format(time.DateOnly), // 30 days ago
+		PurchaseDate: testNow.Add(-30 * 24 * time.Hour).Format(time.DateOnly), // 30 days before testNow
 		// Market snapshot data (so HasAnyPriceData returns true)
 		MarketSnapshotData: inventory.MarketSnapshotData{
 			MedianCents:       10000,
 			ConservativeCents: 8000,
 			LastSoldCents:     9500,
-			SnapshotDate:      time.Now().Format(time.RFC3339), // Required for SnapshotFromPurchase to work
+			SnapshotDate:      testNow.Format(time.RFC3339), // Required for SnapshotFromPurchase to work
 		},
 	}
 }

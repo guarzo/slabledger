@@ -893,3 +893,34 @@ func TestCachedAdapter_GetMarketSnapshot_Cached(t *testing.T) {
 		t.Errorf("snapshots differ: %d != %d", snap1.GradePriceCents, snap2.GradePriceCents)
 	}
 }
+
+// TestCacheKey_NoCollision verifies that cacheKey produces distinct keys for
+// cards whose field values, if naively concatenated with "|", would collide.
+func TestCacheKey_NoCollision(t *testing.T) {
+	tests := []struct {
+		name  string
+		cardA inventory.CardIdentity
+		cardB inventory.CardIdentity
+	}{
+		{
+			name:  "field boundary shift via pipe in CardName",
+			cardA: inventory.CardIdentity{CardName: "A|B", SetName: "C", CardNumber: "1", PSAListingTitle: ""},
+			cardB: inventory.CardIdentity{CardName: "A", SetName: "B|C", CardNumber: "1", PSAListingTitle: ""},
+		},
+		{
+			name:  "empty fields with pipe content shifted",
+			cardA: inventory.CardIdentity{CardName: "X|", SetName: "", CardNumber: "1", PSAListingTitle: ""},
+			cardB: inventory.CardIdentity{CardName: "X", SetName: "|", CardNumber: "1", PSAListingTitle: ""},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			keyA := cacheKey(tt.cardA)
+			keyB := cacheKey(tt.cardB)
+			if keyA == keyB {
+				t.Errorf("cacheKey collision: cardA=%+v cardB=%+v both produce %q", tt.cardA, tt.cardB, keyA)
+			}
+		})
+	}
+}

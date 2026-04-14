@@ -178,9 +178,9 @@ func (s *service) RunProjection(ctx context.Context, campaignID string) (*MonteC
 		}
 		key := projectionCacheKey{campaignID: campaignID, purchaseCount: len(data), soldCount: soldCount}
 		if cached, ok := s.projCache.get(key); ok {
-			// Return a copy to prevent callers from mutating cached state.
-			cp := *cached
-			return &cp, nil
+			// Return a deep copy to prevent callers from mutating cached state.
+			// MonteCarloResult is scalar-only, so copying the Scenarios slice is sufficient.
+			return copyMonteCarloComparison(cached), nil
 		}
 		result := RunMonteCarloProjection(campaign, data)
 		s.projCache.set(key, result)

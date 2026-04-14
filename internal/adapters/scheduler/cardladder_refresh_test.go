@@ -267,10 +267,9 @@ var _ DHPushStatusUpdater = (*mockCLDHPushUpdater)(nil)
 // Phase function tests: pushNewCards, removeSoldCards, refreshSalesComps
 // ---------------------------------------------------------------------------
 
-// TestPushNewCards_FilterLogic tests the filtering logic of pushNewCards.
-// We test that it correctly identifies which purchases to push based on:
-// - Has a cert number
-// - Not already in existingMaps
+// TestPushNewCards_FilterLogic tests the filtering logic of pushNewCards
+// via the filterUnmappedCerts helper. We verify it correctly identifies
+// which purchases to push based on: has a cert number + not already mapped.
 func TestPushNewCards_FilterLogic(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -323,29 +322,15 @@ func TestPushNewCards_FilterLogic(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Build set of already-mapped certs
-			mappedCerts := make(map[string]bool, len(tt.existingMaps))
-			for _, m := range tt.existingMaps {
-				mappedCerts[m.SlabSerial] = true
-			}
-
-			// Count purchases that would be pushed
-			count := 0
-			for i := range tt.purchases {
-				p := &tt.purchases[i]
-				if p.CertNumber == "" || mappedCerts[p.CertNumber] {
-					continue
-				}
-				count++
-			}
-
-			assert.Equal(t, tt.expectCount, count, "filter count mismatch")
+			got := filterUnmappedCerts(tt.purchases, tt.existingMaps)
+			assert.Equal(t, tt.expectCount, len(got), "filter count mismatch")
 		})
 	}
 }
 
-// TestRemoveSoldCards_IdentifySold tests identifying sold cards.
-// Sold cards are those in existingMaps but NOT in unsoldPurchases.
+// TestRemoveSoldCards_IdentifySold tests identifying sold cards via the
+// identifySoldMappings helper. Sold cards are those in existingMaps but NOT
+// in unsoldPurchases.
 func TestRemoveSoldCards_IdentifySold(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -393,29 +378,15 @@ func TestRemoveSoldCards_IdentifySold(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Build set of unsold cert numbers
-			unsoldCerts := make(map[string]bool, len(tt.unsoldPurch))
-			for _, p := range tt.unsoldPurch {
-				if p.CertNumber != "" {
-					unsoldCerts[p.CertNumber] = true
-				}
-			}
-
-			// Count sold (mappings NOT in unsold set)
-			sold := 0
-			for _, m := range tt.existingMaps {
-				if !unsoldCerts[m.SlabSerial] {
-					sold++
-				}
-			}
-
-			assert.Equal(t, tt.expectSold, sold, "sold count mismatch")
+			sold := identifySoldMappings(tt.unsoldPurch, tt.existingMaps)
+			assert.Equal(t, tt.expectSold, len(sold), "sold count mismatch")
 		})
 	}
 }
 
-// TestRefreshSalesComps_Dedup tests deduplication logic.
-// We should fetch comps only once per unique (gemRateID, condition) pair.
+// TestRefreshSalesComps_Dedup tests deduplication logic via the
+// dedupGemRateConditionPairs helper. We should fetch comps only once per
+// unique (gemRateID, condition) pair.
 func TestRefreshSalesComps_Dedup(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -467,18 +438,8 @@ func TestRefreshSalesComps_Dedup(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			type compKey struct{ gemRateID, condition string }
-			seen := make(map[compKey]bool)
-
-			for _, m := range tt.mappings {
-				if m.CLGemRateID == "" || m.CLCondition == "" {
-					continue
-				}
-				key := compKey{m.CLGemRateID, m.CLCondition}
-				seen[key] = true
-			}
-
-			assert.Equal(t, tt.expectFetch, len(seen), "fetch count mismatch")
+			pairs := dedupGemRateConditionPairs(tt.mappings)
+			assert.Equal(t, tt.expectFetch, len(pairs), "fetch count mismatch")
 		})
 	}
 }

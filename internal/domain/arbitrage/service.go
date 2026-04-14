@@ -31,6 +31,17 @@ type Service interface {
 // ServiceOption configures the arbitrage service.
 type ServiceOption func(*service)
 
+// service implements Service.
+type service struct {
+	campaigns inventory.CampaignRepository
+	purchases inventory.PurchaseRepository
+	analytics inventory.AnalyticsRepository
+	finance   inventory.FinanceRepository
+	priceProv inventory.PriceLookup
+	projCache *projectionCache // optional; if nil, projection runs on every call
+	logger    observability.Logger
+}
+
 // WithPriceLookup injects the price lookup dependency.
 func WithPriceLookup(priceProv inventory.PriceLookup) ServiceOption {
 	return func(s *service) {
@@ -53,15 +64,19 @@ func WithProjectionCache(ttl time.Duration) ServiceOption {
 	}
 }
 
-// service implements Service.
-type service struct {
-	campaigns inventory.CampaignRepository
-	purchases inventory.PurchaseRepository
-	analytics inventory.AnalyticsRepository
-	finance   inventory.FinanceRepository
-	priceProv inventory.PriceLookup
-	projCache *projectionCache // optional; if nil, projection runs on every call
-	logger    observability.Logger
+// requestScopedPriceProv returns a per-call cached wrapper around s.priceProv if the
+// underlying provider supports it, or s.priceProv itself otherwise.
+// Returns nil when no price provider is configured.
+func (s *service) requestScopedPriceProv() inventory.PriceLookup {
+	if s.priceProv == nil {
+		return nil
+	}
+	if cacher, ok := s.priceProv.(interface {
+		WithRequestCache() inventory.PriceLookup
+	}); ok {
+		return cacher.WithRequestCache()
+	}
+	return s.priceProv
 }
 
 // NewService creates a new arbitrage Service.
@@ -103,13 +118,7 @@ func (s *service) crackCandidatesForCampaign(ctx context.Context, campaign *inve
 		return []CrackAnalysis{}, nil
 	}
 
-	// Wrap price provider with a per-call cache to prevent duplicate lookups per card.
-	priceProv := s.priceProv
-	if cacher, ok := s.priceProv.(interface {
-		WithRequestCache() inventory.PriceLookup
-	}); ok {
-		priceProv = cacher.WithRequestCache()
-	}
+	priceProv := s.requestScopedPriceProv()
 
 	unsold, err := s.purchases.ListUnsoldPurchases(ctx, campaign.ID)
 	if err != nil {
@@ -183,13 +192,7 @@ func (s *service) GetCrackOpportunities(ctx context.Context) ([]CrackAnalysis, e
 		return []CrackAnalysis{}, nil
 	}
 
-	// Wrap price provider with a per-call cache to prevent duplicate lookups per card.
-	priceProv := s.priceProv
-	if cacher, ok := s.priceProv.(interface {
-		WithRequestCache() inventory.PriceLookup
-	}); ok {
-		priceProv = cacher.WithRequestCache()
-	}
+	priceProv := s.requestScopedPriceProv()
 
 	allCampaigns, err := s.campaigns.ListCampaigns(ctx, true)
 	if err != nil {
@@ -378,13 +381,7 @@ func (s *service) GetAcquisitionTargets(ctx context.Context) ([]AcquisitionOppor
 		return []AcquisitionOpportunity{}, nil
 	}
 
-	// Wrap price provider with a per-call cache to prevent duplicate lookups per card.
-	priceProv := s.priceProv
-	if cacher, ok := s.priceProv.(interface {
-		WithRequestCache() inventory.PriceLookup
-	}); ok {
-		priceProv = cacher.WithRequestCache()
-	}
+	priceProv := s.requestScopedPriceProv()
 
 	allCampaigns, err := s.campaigns.ListCampaigns(ctx, true)
 	if err != nil {

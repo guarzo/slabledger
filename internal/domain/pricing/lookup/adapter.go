@@ -67,8 +67,14 @@ func (a *Adapter) WithRequestCache() inventory.PriceLookup {
 }
 
 // cacheKey generates a unique key for a card identity.
+// Uses length-prefixed encoding to prevent collisions when field values contain the separator.
 func cacheKey(card inventory.CardIdentity) string {
-	return card.CardName + "|" + card.SetName + "|" + card.CardNumber + "|" + card.PSAListingTitle
+	return fmt.Sprintf("%d|%s%d|%s%d|%s%d|%s",
+		len(card.CardName), card.CardName,
+		len(card.SetName), card.SetName,
+		len(card.CardNumber), card.CardNumber,
+		len(card.PSAListingTitle), card.PSAListingTitle,
+	)
 }
 
 // GetLastSoldCents returns the last sold price in cents for a card at a given grade.
