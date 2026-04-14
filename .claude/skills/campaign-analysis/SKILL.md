@@ -275,10 +275,10 @@ Fetch in parallel:
 
 Present:
 1. **Integration health.** How many cards are matched vs unmatched vs pending push? If `unmatchedCount` is high, suggest running a bulk match.
-2. **Inventory alerts.** DH flags cards in your inventory as "hottest cards" (demand spike) or "consider selling" (market signal). Surface these with the reasoning and confidence score. Cards flagged as hot with stale listings are the highest priority.
-3. **Push queue.** Cards with `dh_push_status = "pending"` are waiting to be approved for listing. If any are held up, the user can approve them via `POST /api/dh/approve/{purchaseId}`.
+2. **Inventory alerts.** DH flags cards in your inventory as "hottest cards" (demand spike) or "consider selling" (market signal). Surface these with the reasoning and confidence score. Cards flagged as hot with stale listings are the highest priority — size the opportunity: `est. +$X.XK recovery within N days (Confidence: H|M|L mapped from DH's own confidence score)`.
+3. **Push queue.** Cards with `dh_push_status = "pending"` are waiting to be approved for listing. Prioritize by days-queued + projected $ recovery: `N cards, oldest queued D days, est. +$X.XK recovery (Confidence: H|M|L)`. Approve via `POST /api/dh/approve/{purchaseId}` — see Mutations.
 
-When recommending DH as a sales channel (in any playbook), note that eBay listings now flow through DH — there's no separate eBay CSV export. DH handles multi-channel distribution.
+When recommending DH as a sales channel (in any playbook), note that eBay listings now flow through DH — there's no separate eBay CSV export. DH handles multi-channel distribution. DH approvals are capital-positive (they turn inventory into sales), so the capital guardrail does NOT apply.
 
 ## Conversational guidelines
 
