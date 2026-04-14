@@ -107,11 +107,12 @@ Fetch in parallel:
 
 Present per campaign:
 
-1. Which grades or price tiers are dragging ROI (with data-point counts — caveat anything with <10 observations).
+1. Which grades or price tiers are dragging ROI (with data-point counts).
 2. What the empirical optimal buy % looks like vs the current term.
-3. Specific parameter change recommendations with confidence level.
-4. Cross-reference each recommendation against the strategy doc's design intent — flag divergences.
-5. A prioritized list of proposed edits. If the user approves any, we can apply them via `PUT /api/campaigns/{id}`.
+3. Specific parameter change recommendations. Every recommendation carries sized $ impact, horizon, and confidence band per the Recommendation rules. If the proposed change is a ramp-up (raising buy terms or daily cap), apply the capital guardrail before emitting — caveat under "tight" posture, block under "critical".
+4. Apply the hold verdict rule before recommending sub-threshold changes (<3pp change with Medium-or-lower confidence — recommend hold explicitly rather than suggesting it).
+5. Cross-reference each recommendation against the strategy doc's design intent — flag divergences.
+6. A prioritized list of proposed edits. If the user approves any, apply them via `PUT /api/campaigns/{id}` — see Mutations.
 
 **Escalation: revocation.** If a campaign is critically underperforming (negative ROI with >20 observations, or health status "critical"), raise the possibility of revoking it entirely. Fetch `GET /api/portfolio/revocations` to check if any existing flags are pending. To create a new revocation flag: `POST /api/portfolio/revocations` with `{"segmentLabel": "...", "segmentDimension": "...", "reason": "..."}`. Then fetch the generated email via `GET /api/portfolio/revocations/{flagId}/email` for PSA notification. Only suggest revocation when tuning adjustments clearly aren't sufficient — this is a last resort, not a first response to a bad week.
 
@@ -131,10 +132,10 @@ Campaign N — <Name>
 - Buy Terms: P%
 - Daily Spend Cap: $D
 - Inclusion List: <comma-separated card names, or "None (open net)">
-- <Changed: Buy terms 80% → 77%>   OR   <No change>
+- <Changed: Buy terms 80% → 77%   Proj: +$1.1K/mo (H)>   OR   <No change>
 ```
 
-Every campaign in the canonical list appears in numeric order, even the ones with `No change`. If a field is not yet stored in the API (e.g. InclusionList for a campaign that's pure "open net"), show `None (open net)`.
+Every campaign in the canonical list appears in numeric order, even the ones with `No change`. If a field is not yet stored in the API (e.g. InclusionList for a campaign that's pure "open net"), show `None (open net)`. Every `Changed:` line carries the sized projection annotation `Proj: +$X/mo (H|M|L)` per the Recommendation rules; `No change` lines need no annotation.
 
 ### Playbook B — "What should we liquidate to pay our invoice?"
 
