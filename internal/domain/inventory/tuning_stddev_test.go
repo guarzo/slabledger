@@ -69,13 +69,13 @@ func TestEnrichPriceTierStddev(t *testing.T) {
 	const eps = 1e-9
 
 	// Tiers:
-	//  [0, 1000)      — "low"
-	//  [1000, 5000)   — "mid"
-	//  [5000, 0)      — "high" (0 max means +inf)
+	//  [0, 1000)           — "low"
+	//  [1000, 5000)        — "mid"
+	//  [5000, math.MaxInt) — "high"
 	tiers := []PriceTierPerformance{
 		{TierLabel: "low", TierMinCents: 0, TierMaxCents: 1000},
 		{TierLabel: "mid", TierMinCents: 1000, TierMaxCents: 5000},
-		{TierLabel: "high", TierMinCents: 5000, TierMaxCents: 0},
+		{TierLabel: "high", TierMinCents: 5000, TierMaxCents: math.MaxInt},
 	}
 
 	// Data:
@@ -135,21 +135,6 @@ func TestEnrichPriceTierStddev(t *testing.T) {
 	}
 	if tiers[2].CV != 0 {
 		t.Errorf("high tier cv: got %v, want 0", tiers[2].CV)
-	}
-}
-
-func TestEnrichPriceTierStddev_UnboundedHighTier(t *testing.T) {
-	// TierMaxCents == 0 should match any cost >= TierMinCents.
-	tiers := []PriceTierPerformance{
-		{TierLabel: "high", TierMinCents: 5000, TierMaxCents: 0},
-	}
-	data := []PurchaseWithSale{
-		{Purchase: Purchase{BuyCostCents: 6000}, Sale: &Sale{NetProfitCents: 600}},   // roi 0.1
-		{Purchase: Purchase{BuyCostCents: 10000}, Sale: &Sale{NetProfitCents: 3000}}, // roi 0.3
-	}
-	EnrichPriceTierStddev(tiers, data)
-	if tiers[0].RoiStddev == 0 {
-		t.Errorf("expected non-zero stddev for unbounded-high tier with 2 sales")
 	}
 }
 

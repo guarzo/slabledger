@@ -27,8 +27,11 @@ func ComputeROIStats(rois []float64) (stddev, cv float64) {
 
 // EnrichPriceTierStddev computes RoiStddev and CV for each PriceTierPerformance entry
 // using per-sale ROI values derived from data.
-// A sale's tier is matched by (BuyCostCents + PSASourcingFeeCents) ∈ [TierMinCents, TierMaxCents).
-// TierMaxCents == 0 is treated as +∞.
+// Tier match uses BuyCostCents only (matching ComputePriceTierPerformance); the ROI
+// denominator uses BuyCostCents + PSASourcingFeeCents (consistent with ComputeROIStats'
+// per-sale net-profit-over-total-cost intent). The top tier is expected to carry
+// TierMaxCents == math.MaxInt (as emitted by ComputePriceTierPerformance); there is
+// no special case for TierMaxCents == 0.
 func EnrichPriceTierStddev(tiers []PriceTierPerformance, data []PurchaseWithSale) {
 	if len(tiers) == 0 {
 		return
@@ -38,13 +41,14 @@ func EnrichPriceTierStddev(tiers []PriceTierPerformance, data []PurchaseWithSale
 		if d.Sale == nil {
 			continue
 		}
-		cost := d.Purchase.BuyCostCents + d.Purchase.PSASourcingFeeCents
-		if cost <= 0 {
+		bucketCost := d.Purchase.BuyCostCents
+		roiCost := d.Purchase.BuyCostCents + d.Purchase.PSASourcingFeeCents
+		if roiCost <= 0 {
 			continue
 		}
-		roi := float64(d.Sale.NetProfitCents) / float64(cost)
+		roi := float64(d.Sale.NetProfitCents) / float64(roiCost)
 		for i, tier := range tiers {
-			if cost >= tier.TierMinCents && (tier.TierMaxCents == 0 || cost < tier.TierMaxCents) {
+			if bucketCost >= tier.TierMinCents && bucketCost < tier.TierMaxCents {
 				tierROIs[i] = append(tierROIs[i], roi)
 				break
 			}
