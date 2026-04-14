@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/guarzo/slabledger/internal/domain/constants"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
@@ -98,10 +97,7 @@ func (s *service) crackCandidatesForCampaign(ctx context.Context, campaign *inve
 		return nil, err
 	}
 
-	ebayFee := campaign.EbayFeePct
-	if ebayFee == 0 {
-		ebayFee = constants.DefaultMarketplaceFeePct
-	}
+	ebayFee := inventory.EffectiveFeePct(campaign)
 
 	var results []CrackAnalysis
 	for _, p := range unsold {
@@ -175,11 +171,7 @@ func (s *service) GetCrackOpportunities(ctx context.Context) ([]CrackAnalysis, e
 	// Build campaignID → ebayFee map to avoid per-campaign DB lookups.
 	ebayFeeMap := make(map[string]float64, len(allCampaigns))
 	for _, c := range allCampaigns {
-		fee := c.EbayFeePct
-		if fee == 0 {
-			fee = constants.DefaultMarketplaceFeePct
-		}
-		ebayFeeMap[c.ID] = fee
+		ebayFeeMap[c.ID] = inventory.EffectiveFeePct(&c)
 	}
 
 	allUnsold, err := s.purchases.ListAllUnsoldPurchases(ctx)
@@ -365,11 +357,7 @@ func (s *service) GetAcquisitionTargets(ctx context.Context) ([]AcquisitionOppor
 	// Build campaignID → ebayFee map to avoid per-campaign DB lookups.
 	ebayFeeMap := make(map[string]float64, len(allCampaigns))
 	for _, c := range allCampaigns {
-		fee := c.EbayFeePct
-		if fee == 0 {
-			fee = constants.DefaultMarketplaceFeePct
-		}
-		ebayFeeMap[c.ID] = fee
+		ebayFeeMap[c.ID] = inventory.EffectiveFeePct(&c)
 	}
 
 	allUnsold, err := s.purchases.ListAllUnsoldPurchases(ctx)

@@ -7,7 +7,6 @@ import (
 	"sort"
 	"time"
 
-	"github.com/guarzo/slabledger/internal/domain/constants"
 	"github.com/guarzo/slabledger/internal/domain/intelligence"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
@@ -83,11 +82,7 @@ func (s *service) enrichSellSheetItem(_ context.Context, purchase *inventory.Pur
 	// Deduct marketplace fees for eBay/TCGPlayer channels to project net revenue.
 	// grossModeFee skips fee deduction (used by price sync to return gross prices).
 	if ebayFeePct != grossModeFee && item.TargetSellPrice > 0 && inventory.NormalizeChannel(item.RecommendedChannel) == inventory.SaleChannelEbay {
-		feePct := ebayFeePct
-		if feePct == 0 {
-			feePct = constants.DefaultMarketplaceFeePct
-		}
-		item.TargetSellPrice -= int(math.Round(float64(item.TargetSellPrice) * feePct))
+		item.TargetSellPrice -= int(math.Round(float64(item.TargetSellPrice) * ebayFeePct))
 	}
 
 	// Preserve the algorithmically computed price before override
@@ -156,7 +151,7 @@ func (s *service) GenerateSellSheet(ctx context.Context, campaignID string, purc
 			continue
 		}
 
-		item, ok := s.enrichSellSheetItem(ctx, purchase, "", campaign.EbayFeePct, crackSet)
+		item, ok := s.enrichSellSheetItem(ctx, purchase, "", inventory.EffectiveFeePct(campaign), crackSet)
 		if !ok {
 			sheet.Totals.SkippedItems++
 			continue
@@ -250,7 +245,7 @@ func (s *service) buildCrossCampaignSellSheet(ctx context.Context, purchases []*
 		var feePct float64
 		if c := campaignMap[purchase.CampaignID]; c != nil {
 			campName = c.Name
-			feePct = c.EbayFeePct
+			feePct = inventory.EffectiveFeePct(c)
 		}
 		item, ok := s.enrichSellSheetItem(ctx, purchase, campName, feePct, crackSet)
 		if !ok {
