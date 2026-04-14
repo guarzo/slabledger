@@ -129,6 +129,17 @@ type Campaign struct {
 	ExpectedFillRate    float64   `json:"expectedFillRate"`    // Target fill rate as percentage (0-100)
 	CreatedAt           time.Time `json:"createdAt"`
 	UpdatedAt           time.Time `json:"updatedAt"`
+	Kind                string    `json:"kind"` // Derived at HTTP layer: "external" or "standard" (not persisted)
+}
+
+// SetKind sets the Kind field based on the campaign ID.
+// Kind is derived at the HTTP layer and not persisted.
+func (c *Campaign) SetKind() {
+	if c.ID == ExternalCampaignID {
+		c.Kind = "external"
+	} else {
+		c.Kind = "standard"
+	}
 }
 
 // SnapshotStatus represents the state of background market snapshot enrichment.
