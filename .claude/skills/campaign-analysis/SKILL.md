@@ -53,23 +53,44 @@ Fetch these in parallel:
 - `GET /api/portfolio/insights` — cross-campaign segmentation by character, grade, era, tier
 - `GET /api/credit/summary` — outstanding balance, weeks to cover, recovery trend
 - `GET /api/credit/invoices` — next invoice date and amount (matters for the liquidation playbook)
+- `GET /api/campaigns/{id}/tuning` for each active campaign — needed to pre-screen tuning candidates for the opener
+- `GET /api/campaigns/{id}/projections` for each active campaign that tuning flags as having a material proposed change — required so paragraph 1 carries sized $ impact. Skip projections for campaigns tuning doesn't flag.
 
-Present a short conversational opening:
+Present the opener as **two paragraphs plus a close**:
 
-1. **Most actionable finding first.** One sentence: what needs attention right now?
-2. **Per-campaign health** with specific dollar figures: status, ROI, sell-through %, unsold count, capital at risk.
-3. **Week-over-week deltas** with specific numbers, e.g. *"Purchases up 20% (47 vs 39), but profit down 5%"*.
-4. **Capital position** framed as *outstanding balance / weeks to cover / recovery trend*. Do NOT frame this as distance to any credit limit — PSA credit limits are no longer a constraint.
-5. **Next invoice** one sentence: amount and due date.
-6. **Open question.** Always end with: *"What would you like to dig into — Wildcard, liquidation for the invoice, parameter updates, or something else?"*
+**Paragraph 1 — "This week I'd do these 3 things:"** Numbered list. Each item names an action, targets (campaign / cards / invoice), sized $ impact with horizon, and confidence band (see Recommendation rules). If the strongest item is a hold verdict, state it directly as item 1 ("Hold — this week's signal is within noise…"). Pick three from the union of: invoice-cover liquidations (Playbook B logic), tuning changes (Playbook A), DH approvals / price overrides (Playbook C, Playbook G), or coverage-gap prompts (Playbook F). Apply the capital guardrail on any ramp-up before it reaches this list.
 
-Keep it concise. The goal is to prompt a follow-up, not dump a report.
+**Paragraph 2 — "Portfolio at a glance:"** One compressed line. Per-active-campaign: `Name ROI% / ST% / N unsold $X.XK` separated by ` • `. Then: `Outstanding $X.XK / N.N weeks to cover / trend ↗|↘|→`. Then: `Next invoice $X.XK due YYYY-MM-DD`.
 
-#### Example opening turn
+**Close:** Targeted question referencing the strongest action, not a generic menu. Example: *"Want me to walk through the Wildcard liquidation list, pull up C7 tuning detail, or take something else?"*
+
+Keep it concise — the goal is to prompt a focused follow-up, not dump a report.
+
+#### Example opening turn — clean signal
 
 > **User:** /campaign-analysis
 >
-> **Assistant:** Quick read on the active campaigns. [Most performing campaign] is the standout — [ROI]% ROI, [sell-through]% sell-through, [N] unsold ($X,XXX at risk). [Underperforming campaign] is dragging — [ROI]% ROI, [sell-through]% sell-through after [N] days. Outstanding balance is $XX.XK with N.N weeks to cover at current velocity. Next invoice is $X.XK due [date]. Want to dig into [campaign name], talk through liquidation options for the invoice, or review parameter updates?
+> **Assistant:** This week I'd do these 3 things:
+> 1. Liquidate ~$4.2K of Wildcard via DH to cover the 4/22 invoice (net ~$3.7K, est. 8 days, Confidence: H).
+> 2. Drop Campaign 7 buy terms 80→76% — empirical optimum over 42 obs, est. +$1.1K/mo at current fill (Confidence: H).
+> 3. Approve 8 pending DH pushes (oldest queued 11 days, est. +$2.3K recovery, Confidence: M).
+>
+> **Portfolio at a glance:** Wildcard 14% ROI / 38% ST / 47 unsold $18.2K • C7 3% ROI / 22% ST / 61 unsold $12.6K • C3 9% ROI / 41% ST / 22 unsold $5.8K • Outstanding $41.8K / 3.2 weeks to cover / trend → • Next invoice $8.2K due 4/22.
+>
+> Want me to walk through the Wildcard liquidation list, dig into C7 tuning, or pull up the DH approvals?
+
+#### Example opening turn — hold verdict
+
+> **User:** /campaign-analysis
+>
+> **Assistant:** This week I'd do these 3 things:
+> 1. Hold — WoW ROI of 12% is within ±10% of the 11.8% trailing-4-week mean. Noise, not signal. No parameter changes indicated.
+> 2. Approve 4 pending DH pushes (oldest queued 9 days, est. +$1.1K recovery, Confidence: M).
+> 3. Review the 6 aging-inventory candidates flagged in Playbook C (days-held > 2× channel velocity, Confidence: M).
+>
+> **Portfolio at a glance:** Wildcard 13% ROI / 36% ST / 45 unsold $17.8K • C7 7% ROI / 31% ST / 38 unsold $8.2K • C3 10% ROI / 44% ST / 19 unsold $4.9K • Outstanding $38.4K / 3.0 weeks to cover / trend ↘ • Next invoice $7.6K due 4/29.
+>
+> Pull up the DH approvals, look at the aging candidates, or something else?
 
 ## Step 4 — Follow-up playbooks
 
