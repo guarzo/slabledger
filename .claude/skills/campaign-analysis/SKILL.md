@@ -263,6 +263,54 @@ When recommending DH as a sales channel (in any playbook), note that eBay listin
 5. Flag risks proactively — slow inventory, duplicate accumulations, $0 buy costs, cards gated out of their suggested channel.
 6. Keep it conversational. Natural language, not bullet-heavy reports.
 
+## Recommendation rules
+
+These rules are referenced by every playbook that emits a recommendation. Keeping them here avoids drift between playbooks.
+
+### Sizing
+
+Every parameter-change, new-campaign, or material tuning recommendation carries a projected $ impact, time horizon, and confidence band — uniformly. Format: `est. +$X.XK/mo at current fill (Confidence: H|M|L)`. When the projections endpoint can't produce a clean counterfactual (sparse data, wide variance), say so explicitly: `est. +$X/mo (Low confidence, N obs)`. Never drop the number silently — that makes recommendations impossible to prioritize.
+
+### Confidence bands
+
+| Band | Rule |
+|------|------|
+| **High (H)** | ≥30 observations AND coefficient of variation < 20% |
+| **Medium (M)** | 10–29 observations, OR ≥30 observations with CV ≥ 20% |
+| **Low (L)** | < 10 observations OR < 4 weeks of history |
+
+Coefficient of variation = `stddev / mean` of the metric driving the recommendation (ROI, sell-through, or days-to-sell — whichever the recommendation is predicated on). If the tuning endpoint doesn't return variance for a given metric, fall back to obs-count-only bands and say so: `(Medium confidence, obs-count only — variance not available)`. The `/api/campaigns/{id}/projections` response also returns its own `confidence` string ("low"/"medium"/"high") that can be mapped directly to H|M|L when that endpoint is the source.
+
+### "Hold" verdict rule
+
+When signal is weak, recommend holding — explicitly — instead of synthesizing a change. A hold fires when *any* of the following is true for the metric driving the recommendation:
+
+- Week-over-week delta is within 1σ of historical WoW variance. If rolling variance isn't available from the endpoint, use a rule-of-thumb: WoW delta within ±10% of the campaign's trailing-4-week mean. (Computing a true σ requires 4 sequential calls to `/api/portfolio/weekly-review?weekOffset=N` — only do that if the user specifically asks; default to the rule-of-thumb.)
+- Proposed parameter change magnitude is < 3 percentage points AND confidence is Medium or Low.
+- Sell-through drop is < 5pp AND observation count is < 20.
+
+Say it out loud: *"Hold — this week's ROI drop is 0.4σ from the 8-week mean, within noise. I'd keep current params."* Silence is not acceptable; the user learns *why* nothing is being changed.
+
+### Capital guardrail
+
+Checked before emitting any **ramp-up** recommendation — actions that deploy more capital. Ramp-ups include: raise buy terms, raise daily spend cap, propose a new campaign, expand an inclusion list. DH push approvals and liquidation actions are capital-positive and are NOT subject to this rule.
+
+| Posture | Rule | Effect |
+|---------|------|--------|
+| Healthy | `weeksToCover ≤ 5` AND `recoveryTrend != "worsening"` AND `alertLevel != "critical"` | No caveat; proceed. |
+| Tight | `weeksToCover > 5` OR `recoveryTrend == "worsening"` | Caveat: *"capital posture is tight: $X outstanding, N.N weeks to cover, trend ↗ — sizing the downside if fill rate under-performs"*. |
+| Critical | `alertLevel == "critical"` | Block the ramp-up. Recommend defensive posture (liquidate, reduce daily cap, pause aggressive DH) instead. |
+
+Data sources: `GET /api/portfolio/health`, `GET /api/credit/summary` (already fetched in Step 3).
+
+### Sequencing
+
+When two or more recommendations interact — a liquidation target sits in a campaign also getting a buy-term change, a DH push conflicts with a pending price override, a daily-cap change affects a campaign also proposed for ramp-up — end the response with a short numbered Sequence block explaining the order. Example:
+
+> **Sequence:** (1) apply the Campaign 7 buy-term drop first — no point liquidating at current terms and then lowering. (2) Queue the Wildcard sell-sheet adds. (3) DH approvals last.
+
+For independent recommendations, skip the Sequence block; the numbered list in the opener is enough.
+
 ## Data conventions
 
 - **All monetary values are in cents.** Divide by 100 and format as `$X,XXX.XX`.
