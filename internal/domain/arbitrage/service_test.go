@@ -140,6 +140,9 @@ func (r *stubPurchaseRepo) UpdatePurchaseDHHoldReason(_ context.Context, _, _ st
 }
 func (r *stubPurchaseRepo) SetHeldWithReason(_ context.Context, _, _ string) error { return nil }
 func (r *stubPurchaseRepo) ApproveHeldPurchase(_ context.Context, _ string) error  { return nil }
+func (r *stubPurchaseRepo) ResetDHFieldsForRepush(_ context.Context, _ string) error {
+	return nil
+}
 
 type stubAnalyticsRepo struct {
 	data []inventory.PurchaseWithSale

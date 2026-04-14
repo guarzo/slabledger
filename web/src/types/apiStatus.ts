@@ -123,6 +123,14 @@ export interface DHBulkMatchResponse {
   status: string;
 }
 
+export interface DHReconcileResponse {
+  scanned: number;
+  missingOnDH: number;
+  reset: number;
+  errors?: string[];
+  resetIds?: string[];
+}
+
 export interface DHCandidate {
   dh_card_id: number;
   card_name: string;

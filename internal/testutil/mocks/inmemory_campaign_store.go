@@ -69,6 +69,7 @@ type InMemoryCampaignStore struct {
 	UpdatePurchaseDHHoldReasonFn   func(ctx context.Context, id string, reason string) error
 	SetHeldWithReasonFn            func(ctx context.Context, purchaseID string, reason string) error
 	ApproveHeldPurchaseFn          func(ctx context.Context, purchaseID string) error
+	ResetDHFieldsForRepushFn       func(ctx context.Context, purchaseID string) error
 	GetDHPushConfigFn              func(ctx context.Context) (*inventory.DHPushConfig, error)
 	SaveDHPushConfigFn             func(ctx context.Context, cfg *inventory.DHPushConfig) error
 	GetPurchasesByDHPushStatusFn   func(ctx context.Context, status string, limit int) ([]inventory.Purchase, error)
@@ -1042,6 +1043,21 @@ func (m *InMemoryCampaignStore) SetHeldWithReason(ctx context.Context, purchaseI
 func (m *InMemoryCampaignStore) ApproveHeldPurchase(ctx context.Context, purchaseID string) error {
 	if m.ApproveHeldPurchaseFn != nil {
 		return m.ApproveHeldPurchaseFn(ctx, purchaseID)
+	}
+	return nil
+}
+
+func (m *InMemoryCampaignStore) ResetDHFieldsForRepush(ctx context.Context, purchaseID string) error {
+	if m.ResetDHFieldsForRepushFn != nil {
+		return m.ResetDHFieldsForRepushFn(ctx, purchaseID)
+	}
+	if p, ok := m.Purchases[purchaseID]; ok {
+		p.DHInventoryID = 0
+		p.DHPushStatus = inventory.DHPushStatusPending
+		p.DHStatus = ""
+		p.DHListingPriceCents = 0
+		p.DHChannelsJSON = "[]"
+		p.UpdatedAt = time.Now()
 	}
 	return nil
 }

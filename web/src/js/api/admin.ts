@@ -2,7 +2,7 @@
  * Admin-related API methods
  */
 
-import type { APIUsageResponse, PricingDiagnosticsResponse, PriceOverrideStats, CachedAnalysis, AdvisorAnalysisType, AIUsageResponse, DHStatusResponse, DHBulkMatchResponse, DHUnmatchedResponse, DHFixMatchRequest, DHFixMatchResponse, DHSelectMatchRequest, DHPushConfig } from '../../types/apiStatus';
+import type { APIUsageResponse, PricingDiagnosticsResponse, PriceOverrideStats, CachedAnalysis, AdvisorAnalysisType, AIUsageResponse, DHStatusResponse, DHBulkMatchResponse, DHUnmatchedResponse, DHFixMatchRequest, DHFixMatchResponse, DHSelectMatchRequest, DHPushConfig, DHReconcileResponse } from '../../types/apiStatus';
 import type { AllowedEmail, AdminUser, CLStatusResponse, CLSyncResult, IntegrationFailuresReport, MMStatusResponse, MMSyncResult, PSASyncStatusResponse } from '../../types/admin';
 import type { APIClient } from './client';
 import { APIError } from './client';
@@ -42,6 +42,7 @@ declare module './client' {
     dismissDHMatch(purchaseId: string): Promise<{ status: string }>;
     undismissDHMatch(purchaseId: string): Promise<{ status: string }>;
     approveDHPush(purchaseId: string): Promise<{ status: string }>;
+    reconcileDH(): Promise<DHReconcileResponse>;
     getDHPushConfig(): Promise<DHPushConfig>;
     saveDHPushConfig(config: DHPushConfig): Promise<DHPushConfig>;
     getPSASyncStatus(): Promise<PSASyncStatusResponse>;
@@ -185,6 +186,10 @@ proto.undismissDHMatch = async function (this: APIClient, purchaseId: string): P
 
 proto.approveDHPush = async function (this: APIClient, purchaseId: string): Promise<{ status: string }> {
   return this.post<{ status: string }>(`/dh/approve/${encodeURIComponent(purchaseId)}`);
+};
+
+proto.reconcileDH = async function (this: APIClient): Promise<DHReconcileResponse> {
+  return this.post<DHReconcileResponse>('/dh/reconcile');
 };
 
 proto.getDHPushConfig = async function (this: APIClient): Promise<DHPushConfig> {
