@@ -593,8 +593,9 @@ func TestRunProjection_UsesCacheOnSecondCall(t *testing.T) {
 		t.Fatal("second call returned nil result")
 	}
 
-	// Verify both results are identical (same pointer, cached)
-	if result1 != result2 {
-		t.Errorf("expected same pointer (cached), but got different pointers")
+	// The cache returns a copy (to prevent mutation of cached state), so pointers will differ.
+	// Verify the results are structurally equal by comparing sample size and confidence.
+	if result1.SampleSize != result2.SampleSize || result1.Confidence != result2.Confidence {
+		t.Errorf("cached result mismatch: first=%+v second=%+v", result1, result2)
 	}
 }

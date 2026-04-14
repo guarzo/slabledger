@@ -6,10 +6,12 @@ import (
 )
 
 // projectionCacheKey identifies a unique projection computation.
-// purchaseCount is included so that a campaign with new purchases invalidates the cache.
+// purchaseCount + soldCount together ensure the cache is invalidated when purchases are
+// added/removed OR when a sale is recorded (soldCount changes).
 type projectionCacheKey struct {
 	campaignID    string
 	purchaseCount int
+	soldCount     int
 }
 
 type projectionCacheEntry struct {

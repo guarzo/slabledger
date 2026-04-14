@@ -170,9 +170,17 @@ func (s *service) RunProjection(ctx context.Context, campaignID string) (*MonteC
 	}
 
 	if s.projCache != nil {
-		key := projectionCacheKey{campaignID: campaignID, purchaseCount: len(data)}
+		soldCount := 0
+		for _, d := range data {
+			if d.Sale != nil {
+				soldCount++
+			}
+		}
+		key := projectionCacheKey{campaignID: campaignID, purchaseCount: len(data), soldCount: soldCount}
 		if cached, ok := s.projCache.get(key); ok {
-			return cached, nil
+			// Return a copy to prevent callers from mutating cached state.
+			cp := *cached
+			return &cp, nil
 		}
 		result := RunMonteCarloProjection(campaign, data)
 		s.projCache.set(key, result)
