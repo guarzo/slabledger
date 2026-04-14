@@ -304,6 +304,7 @@ func (rt *Router) registerDHRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /api/dh/dismiss", rt.authMW.RequireAuth(http.HandlerFunc(rt.dhHandler.HandleDismissMatch)))
 	mux.Handle("POST /api/dh/undismiss", rt.authMW.RequireAuth(http.HandlerFunc(rt.dhHandler.HandleUndismissMatch)))
 	mux.Handle("POST /api/dh/approve/{purchaseId}", rt.authMW.RequireAuth(http.HandlerFunc(rt.dhHandler.HandleApproveDHPush)))
+	mux.Handle("POST /api/dh/reconcile", rt.authMW.RequireAdmin(http.HandlerFunc(rt.dhHandler.HandleReconcile)))
 	mux.Handle("GET /api/admin/dh-push-config", rt.authMW.RequireAdmin(http.HandlerFunc(rt.dhHandler.HandleGetDHPushConfig)))
 	mux.Handle("PUT /api/admin/dh-push-config", rt.authMW.RequireAdmin(http.HandlerFunc(rt.dhHandler.HandleSaveDHPushConfig)))
 	rt.logger.Info(context.Background(), "DH routes registered")

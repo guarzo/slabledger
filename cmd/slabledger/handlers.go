@@ -128,6 +128,15 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 	// DH handler (bulk match + intelligence; nil when client is not configured)
 	var dhHandler *handlers.DHHandler
 	if in.DHClient != nil && in.DHClient.EnterpriseAvailable() {
+		reconciler, err := dhlisting.NewReconciler(
+			dhlistingadapter.NewInventorySnapshotAdapter(in.DHClient),
+			in.PurchaseStore,
+			in.PurchaseStore,
+			logger,
+		)
+		if err != nil {
+			logger.Warn(ctx, "DH reconciler init failed", observability.Err(err))
+		}
 		dhHandler = handlers.NewDHHandler(handlers.DHHandlerDeps{
 			CertResolver:      in.DHClient,
 			CardIDSaver:       in.CardIDMappingRepo,
@@ -147,6 +156,7 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 			CountsFetcher:     in.DHClient,
 			DHApproveService:  in.CampaignsService,
 			MatchConfirmer:    in.DHClient,
+			Reconciler:        reconciler,
 		})
 		logger.Info(ctx, "DH handler initialized")
 	}

@@ -791,6 +791,19 @@ func (m *mockRepo) ApproveHeldPurchase(_ context.Context, purchaseID string) err
 	return nil
 }
 
+func (m *mockRepo) ResetDHFieldsForRepush(_ context.Context, purchaseID string) error {
+	p, ok := m.purchases[purchaseID]
+	if !ok {
+		return ErrPurchaseNotFound
+	}
+	p.DHInventoryID = 0
+	p.DHPushStatus = DHPushStatusPending
+	p.DHStatus = ""
+	p.DHListingPriceCents = 0
+	p.DHChannelsJSON = "[]"
+	return nil
+}
+
 func (m *mockRepo) GetDHPushConfig(_ context.Context) (*DHPushConfig, error) {
 	if m.dhPushConfig != nil {
 		return m.dhPushConfig, nil
