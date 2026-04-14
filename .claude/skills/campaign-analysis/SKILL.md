@@ -135,7 +135,7 @@ Campaign N — <Name>
 - <Changed: Buy terms 80% → 77%   Proj: +$1.1K/mo (H)>   OR   <No change>
 ```
 
-Every campaign in the canonical list appears in numeric order, even the ones with `No change`. If a field is not yet stored in the API (e.g. InclusionList for a campaign that's pure "open net"), show `None (open net)`. Every `Changed:` line carries the sized projection annotation `Proj: +$X/mo (H|M|L)` per the Recommendation rules; `No change` lines need no annotation.
+Every campaign in the canonical list appears in numeric order, even the ones with `No change`. If a field is not yet stored in the API (e.g. InclusionList for a campaign that's pure "open net"), show `None (open net)`. Every `Changed:` line carries the sized projection annotation `Proj: +$X.XK/mo (H|M|L)` — a compact form of the Sizing rule's canonical `est. +$X.XK/mo at current fill (Confidence: H|M|L)`, shortened here because the annotation lives inline on a one-line list item. `No change` lines need no annotation.
 
 ### Playbook B — "What should we liquidate to pay our invoice?"
 
