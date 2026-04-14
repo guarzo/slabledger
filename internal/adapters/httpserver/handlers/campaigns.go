@@ -131,6 +131,7 @@ func (h *CampaignsHandler) HandleCreateCampaign(w http.ResponseWriter, r *http.R
 		return
 	}
 
+	c.SetKind()
 	writeJSON(w, http.StatusCreated, c)
 }
 
@@ -179,6 +180,7 @@ func (h *CampaignsHandler) HandleUpdateCampaign(w http.ResponseWriter, r *http.R
 		writeError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
+	c.SetKind()
 	writeJSON(w, http.StatusOK, c)
 }
 
