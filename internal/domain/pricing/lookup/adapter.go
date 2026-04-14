@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"sync"
 
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/mathutil"
@@ -50,6 +51,70 @@ func NewAdapter(provider pricing.PriceProvider) *Adapter {
 	return &Adapter{provider: provider}
 }
 
+// cachedAdapter wraps Adapter with a per-request in-memory cache.
+// A new cachedAdapter should be created per call via WithRequestCache().
+// It caches the full Price per card identity so multiple grade lookups
+// for the same card only hit the provider once.
+type cachedAdapter struct {
+	inner *Adapter
+	cache sync.Map // key: "cardName|setName|cardNumber|psaListingTitle" → *pricing.Price
+}
+
+// WithRequestCache returns a new cache-aware adapter for use within a single function call.
+// Do NOT reuse across requests — the cache has no TTL.
+func (a *Adapter) WithRequestCache() inventory.PriceLookup {
+	return &cachedAdapter{inner: a}
+}
+
+// cacheKey generates a unique key for a card identity.
+func cacheKey(card inventory.CardIdentity) string {
+	return card.CardName + "|" + card.SetName + "|" + card.CardNumber + "|" + card.PSAListingTitle
+}
+
+// GetLastSoldCents returns the last sold price in cents for a card at a given grade.
+// Uses the cache to avoid duplicate lookups for the same card.
+func (ca *cachedAdapter) GetLastSoldCents(ctx context.Context, card inventory.CardIdentity, grade float64) (int, error) {
+	key := cacheKey(card)
+
+	// Check cache
+	if v, ok := ca.cache.Load(key); ok {
+		price := v.(*pricing.Price)
+		return ca.inner.extractLastSoldCents(price, grade)
+	}
+
+	// Fetch and cache
+	price, err := ca.inner.getPrice(ctx, card)
+	if err != nil {
+		return 0, err
+	}
+	if price != nil {
+		ca.cache.Store(key, price)
+	}
+	return ca.inner.extractLastSoldCents(price, grade)
+}
+
+// GetMarketSnapshot returns a comprehensive market snapshot for a card at a given grade.
+// Uses the cache to avoid duplicate lookups for the same card.
+func (ca *cachedAdapter) GetMarketSnapshot(ctx context.Context, card inventory.CardIdentity, grade float64) (*inventory.MarketSnapshot, error) {
+	key := cacheKey(card)
+
+	// Check cache
+	if v, ok := ca.cache.Load(key); ok {
+		price := v.(*pricing.Price)
+		return ca.inner.buildMarketSnapshot(price, grade)
+	}
+
+	// Fetch and cache
+	price, err := ca.inner.getPrice(ctx, card)
+	if err != nil {
+		return nil, err
+	}
+	if price != nil {
+		ca.cache.Store(key, price)
+	}
+	return ca.inner.buildMarketSnapshot(price, grade)
+}
+
 // GetLastSoldCents returns the last sold price in cents for a card at a given grade.
 func (a *Adapter) GetLastSoldCents(ctx context.Context, card inventory.CardIdentity, grade float64) (int, error) {
 	if !validGrade(grade) {
@@ -59,6 +124,12 @@ func (a *Adapter) GetLastSoldCents(ctx context.Context, card inventory.CardIdent
 	if err != nil {
 		return 0, err
 	}
+	return a.extractLastSoldCents(price, grade)
+}
+
+// extractLastSoldCents extracts the last sold price for a grade from a Price object.
+// This is extracted as a separate method to support both direct and cached lookups.
+func (a *Adapter) extractLastSoldCents(price *pricing.Price, grade float64) (int, error) {
 	if price == nil {
 		return 0, nil
 	}
@@ -84,6 +155,12 @@ func (a *Adapter) GetMarketSnapshot(ctx context.Context, card inventory.CardIden
 	if err != nil {
 		return nil, err
 	}
+	return a.buildMarketSnapshot(price, grade)
+}
+
+// buildMarketSnapshot builds a MarketSnapshot from a Price object.
+// This is extracted as a separate method to support both direct and cached lookups.
+func (a *Adapter) buildMarketSnapshot(price *pricing.Price, grade float64) (*inventory.MarketSnapshot, error) {
 	if price == nil {
 		return nil, nil
 	}

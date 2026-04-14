@@ -92,6 +92,15 @@ func (s *service) crackCandidatesForCampaign(ctx context.Context, campaign *inve
 		}
 		return []CrackAnalysis{}, nil
 	}
+
+	// Wrap price provider with a per-call cache to prevent duplicate lookups per card.
+	priceProv := s.priceProv
+	if cacher, ok := s.priceProv.(interface {
+		WithRequestCache() inventory.PriceLookup
+	}); ok {
+		priceProv = cacher.WithRequestCache()
+	}
+
 	unsold, err := s.purchases.ListUnsoldPurchases(ctx, campaign.ID)
 	if err != nil {
 		return nil, err
@@ -111,7 +120,7 @@ func (s *service) crackCandidatesForCampaign(ctx context.Context, campaign *inve
 
 		rawCents := 0
 		gradedCents := 0
-		if v, err := s.priceProv.GetLastSoldCents(ctx, card, 0); err != nil {
+		if v, err := priceProv.GetLastSoldCents(ctx, card, 0); err != nil {
 			if s.logger != nil {
 				s.logger.Warn(ctx, "crack analysis: raw price lookup failed",
 					observability.String("cardName", p.CardName),
@@ -120,7 +129,7 @@ func (s *service) crackCandidatesForCampaign(ctx context.Context, campaign *inve
 		} else {
 			rawCents = v
 		}
-		if v, err := s.priceProv.GetLastSoldCents(ctx, card, p.GradeValue); err != nil {
+		if v, err := priceProv.GetLastSoldCents(ctx, card, p.GradeValue); err != nil {
 			if s.logger != nil {
 				s.logger.Warn(ctx, "crack analysis: graded price lookup failed",
 					observability.String("cardName", p.CardName),
@@ -163,6 +172,15 @@ func (s *service) GetCrackOpportunities(ctx context.Context) ([]CrackAnalysis, e
 		}
 		return []CrackAnalysis{}, nil
 	}
+
+	// Wrap price provider with a per-call cache to prevent duplicate lookups per card.
+	priceProv := s.priceProv
+	if cacher, ok := s.priceProv.(interface {
+		WithRequestCache() inventory.PriceLookup
+	}); ok {
+		priceProv = cacher.WithRequestCache()
+	}
+
 	allCampaigns, err := s.campaigns.ListCampaigns(ctx, true)
 	if err != nil {
 		return nil, fmt.Errorf("list active campaigns: %w", err)
@@ -198,7 +216,7 @@ func (s *service) GetCrackOpportunities(ctx context.Context) ([]CrackAnalysis, e
 
 		rawCents := 0
 		gradedCents := 0
-		if v, err := s.priceProv.GetLastSoldCents(ctx, card, 0); err != nil {
+		if v, err := priceProv.GetLastSoldCents(ctx, card, 0); err != nil {
 			if s.logger != nil {
 				s.logger.Warn(ctx, "crack analysis: raw price lookup failed",
 					observability.String("cardName", p.CardName),
@@ -207,7 +225,7 @@ func (s *service) GetCrackOpportunities(ctx context.Context) ([]CrackAnalysis, e
 		} else {
 			rawCents = v
 		}
-		if v, err := s.priceProv.GetLastSoldCents(ctx, card, p.GradeValue); err != nil {
+		if v, err := priceProv.GetLastSoldCents(ctx, card, p.GradeValue); err != nil {
 			if s.logger != nil {
 				s.logger.Warn(ctx, "crack analysis: graded price lookup failed",
 					observability.String("cardName", p.CardName),
@@ -349,6 +367,15 @@ func (s *service) GetAcquisitionTargets(ctx context.Context) ([]AcquisitionOppor
 		}
 		return []AcquisitionOpportunity{}, nil
 	}
+
+	// Wrap price provider with a per-call cache to prevent duplicate lookups per card.
+	priceProv := s.priceProv
+	if cacher, ok := s.priceProv.(interface {
+		WithRequestCache() inventory.PriceLookup
+	}); ok {
+		priceProv = cacher.WithRequestCache()
+	}
+
 	allCampaigns, err := s.campaigns.ListCampaigns(ctx, true)
 	if err != nil {
 		return nil, fmt.Errorf("list active campaigns: %w", err)
@@ -384,7 +411,7 @@ func (s *service) GetAcquisitionTargets(ctx context.Context) ([]AcquisitionOppor
 		seen[key] = true
 		card := p.ToCardIdentity()
 		rawNMCents := 0
-		if v, err := s.priceProv.GetLastSoldCents(ctx, card, 0); err != nil {
+		if v, err := priceProv.GetLastSoldCents(ctx, card, 0); err != nil {
 			if s.logger != nil {
 				s.logger.Warn(ctx, "acquisition targets: raw price lookup failed",
 					observability.String("cardName", p.CardName),
@@ -398,7 +425,7 @@ func (s *service) GetAcquisitionTargets(ctx context.Context) ([]AcquisitionOppor
 		}
 		gradedEstimates := make(map[string]int)
 		for _, grade := range []float64{8, 9, 10} {
-			v, err := s.priceProv.GetLastSoldCents(ctx, card, grade)
+			v, err := priceProv.GetLastSoldCents(ctx, card, grade)
 			if err != nil {
 				if s.logger != nil {
 					s.logger.Warn(ctx, "acquisition targets: graded price lookup failed",

@@ -743,3 +743,153 @@ func TestGetMarketSnapshot_SourcesPassthrough(t *testing.T) {
 		t.Errorf("LastSoldCents = %d, want 10500 (from Ebay fallback)", snap.LastSoldCents)
 	}
 }
+
+// --- Request-scoped cache tests ---
+
+func TestCachedAdapter_DeduplicatesCalls(t *testing.T) {
+	ctx := context.Background()
+
+	callCount := 0
+	mock := &mockPriceProvider{
+		lookupFn: func(_ context.Context, _ string, _ pricing.CardLookup) (*pricing.Price, error) {
+			callCount++
+			return &pricing.Price{
+				LastSoldByGrade: &pricing.LastSoldByGrade{
+					PSA10: &pricing.GradeSaleInfo{LastSoldPrice: 10000},
+					PSA9:  &pricing.GradeSaleInfo{LastSoldPrice: 5000},
+				},
+			}, nil
+		},
+	}
+
+	base := NewAdapter(mock)
+	cached := base.WithRequestCache()
+
+	card := inventory.CardIdentity{CardName: "Charizard", SetName: "Base Set"}
+
+	// Call twice for the same card+grade
+	v1, err := cached.GetLastSoldCents(ctx, card, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	v2, err := cached.GetLastSoldCents(ctx, card, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if v1 != v2 {
+		t.Errorf("v1=%d, v2=%d, expected same value", v1, v2)
+	}
+	if callCount != 1 {
+		t.Errorf("provider called %d times, want 1 (should be cached)", callCount)
+	}
+}
+
+func TestCachedAdapter_DifferentCardsDontCross(t *testing.T) {
+	ctx := context.Background()
+
+	callCount := 0
+	mock := &mockPriceProvider{
+		lookupFn: func(_ context.Context, _ string, card pricing.CardLookup) (*pricing.Price, error) {
+			callCount++
+			if card.Name == "Charizard" {
+				return &pricing.Price{
+					LastSoldByGrade: &pricing.LastSoldByGrade{
+						PSA10: &pricing.GradeSaleInfo{LastSoldPrice: 10000},
+					},
+				}, nil
+			}
+			return &pricing.Price{
+				LastSoldByGrade: &pricing.LastSoldByGrade{
+					PSA10: &pricing.GradeSaleInfo{LastSoldPrice: 2000},
+				},
+			}, nil
+		},
+	}
+
+	base := NewAdapter(mock)
+	cached := base.WithRequestCache()
+
+	charizard := inventory.CardIdentity{CardName: "Charizard", SetName: "Base Set"}
+	blastoise := inventory.CardIdentity{CardName: "Blastoise", SetName: "Base Set"}
+
+	v1, _ := cached.GetLastSoldCents(ctx, charizard, 10)
+	v2, _ := cached.GetLastSoldCents(ctx, blastoise, 10)
+	v3, _ := cached.GetLastSoldCents(ctx, charizard, 10) // Should hit cache
+
+	if v1 == v2 {
+		t.Errorf("different cards returned same price: %d == %d", v1, v2)
+	}
+	if callCount != 2 {
+		t.Errorf("provider called %d times, want 2", callCount)
+	}
+	if v1 != 10000 || v2 != 2000 || v3 != 10000 {
+		t.Errorf("prices wrong: v1=%d, v2=%d, v3=%d", v1, v2, v3)
+	}
+}
+
+func TestCachedAdapter_DifferentGradesCacheTogether(t *testing.T) {
+	ctx := context.Background()
+
+	callCount := 0
+	mock := &mockPriceProvider{
+		lookupFn: func(_ context.Context, _ string, _ pricing.CardLookup) (*pricing.Price, error) {
+			callCount++
+			return &pricing.Price{
+				LastSoldByGrade: &pricing.LastSoldByGrade{
+					PSA10: &pricing.GradeSaleInfo{LastSoldPrice: 10000},
+					PSA9:  &pricing.GradeSaleInfo{LastSoldPrice: 5000},
+					PSA8:  &pricing.GradeSaleInfo{LastSoldPrice: 2500},
+				},
+			}, nil
+		},
+	}
+
+	base := NewAdapter(mock)
+	cached := base.WithRequestCache()
+
+	card := inventory.CardIdentity{CardName: "Charizard", SetName: "Base Set"}
+
+	// Call for different grades of the same card
+	v10, _ := cached.GetLastSoldCents(ctx, card, 10)
+	v9, _ := cached.GetLastSoldCents(ctx, card, 9)
+	v8, _ := cached.GetLastSoldCents(ctx, card, 8)
+	v10_2, _ := cached.GetLastSoldCents(ctx, card, 10) // Should hit cache
+
+	if callCount != 1 {
+		t.Errorf("provider called %d times, want 1 (all grades from same card)", callCount)
+	}
+	if v10 != 10000 || v9 != 5000 || v8 != 2500 || v10_2 != 10000 {
+		t.Errorf("prices wrong: v10=%d, v9=%d, v8=%d, v10_2=%d", v10, v9, v8, v10_2)
+	}
+}
+
+func TestCachedAdapter_GetMarketSnapshot_Cached(t *testing.T) {
+	ctx := context.Background()
+
+	callCount := 0
+	mock := &mockPriceProvider{
+		lookupFn: func(_ context.Context, _ string, _ pricing.CardLookup) (*pricing.Price, error) {
+			callCount++
+			return &pricing.Price{
+				Grades: pricing.GradedPrices{PSA10Cents: 9500},
+				Market: &pricing.MarketData{LowestListing: 8000},
+			}, nil
+		},
+	}
+
+	base := NewAdapter(mock)
+	cached := base.WithRequestCache()
+
+	card := inventory.CardIdentity{CardName: "Charizard", SetName: "Base Set"}
+
+	snap1, _ := cached.GetMarketSnapshot(ctx, card, 10)
+	snap2, _ := cached.GetMarketSnapshot(ctx, card, 10)
+
+	if callCount != 1 {
+		t.Errorf("provider called %d times, want 1", callCount)
+	}
+	if snap1.GradePriceCents != snap2.GradePriceCents {
+		t.Errorf("snapshots differ: %d != %d", snap1.GradePriceCents, snap2.GradePriceCents)
+	}
+}
