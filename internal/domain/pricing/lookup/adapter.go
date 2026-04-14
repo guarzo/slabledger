@@ -74,6 +74,9 @@ func cacheKey(card inventory.CardIdentity) string {
 // GetLastSoldCents returns the last sold price in cents for a card at a given grade.
 // Uses the cache to avoid duplicate lookups for the same card.
 func (ca *cachedAdapter) GetLastSoldCents(ctx context.Context, card inventory.CardIdentity, grade float64) (int, error) {
+	if !validGrade(grade) {
+		return 0, fmt.Errorf("unsupported grade: %g", grade)
+	}
 	key := cacheKey(card)
 
 	// Check cache
@@ -96,6 +99,9 @@ func (ca *cachedAdapter) GetLastSoldCents(ctx context.Context, card inventory.Ca
 // GetMarketSnapshot returns a comprehensive market snapshot for a card at a given grade.
 // Uses the cache to avoid duplicate lookups for the same card.
 func (ca *cachedAdapter) GetMarketSnapshot(ctx context.Context, card inventory.CardIdentity, grade float64) (*inventory.MarketSnapshot, error) {
+	if !validGrade(grade) {
+		return nil, fmt.Errorf("unsupported grade: %g", grade)
+	}
 	key := cacheKey(card)
 
 	// Check cache

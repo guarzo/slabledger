@@ -246,6 +246,8 @@ func (s *service) buildCrossCampaignSellSheet(ctx context.Context, purchases []*
 		if c := campaignMap[purchase.CampaignID]; c != nil {
 			campName = c.Name
 			feePct = inventory.EffectiveFeePct(c)
+		} else {
+			feePct = inventory.EffectiveFeePct(&inventory.Campaign{})
 		}
 		item, ok := s.enrichSellSheetItem(ctx, purchase, campName, feePct, crackSet)
 		if !ok {
