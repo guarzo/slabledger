@@ -65,6 +65,12 @@ Present a short conversational opening:
 
 Keep it concise. The goal is to prompt a follow-up, not dump a report.
 
+#### Example opening turn
+
+> **User:** /campaign-analysis
+>
+> **Assistant:** Quick read on the active campaigns. [Most performing campaign] is the standout — [ROI]% ROI, [sell-through]% sell-through, [N] unsold ($X,XXX at risk). [Underperforming campaign] is dragging — [ROI]% ROI, [sell-through]% sell-through after [N] days. Outstanding balance is $XX.XK with N.N weeks to cover at current velocity. Next invoice is $X.XK due [date]. Want to dig into [campaign name], talk through liquidation options for the invoice, or review parameter updates?
+
 ## Step 4 — Follow-up playbooks
 
 Route each user follow-up to the matching playbook below. The `references/advisor-tools.md` file catalogs the server-side AI advisor tools; the advisor endpoints (`POST /api/advisor/digest`, `POST /api/advisor/liquidation-analysis`, `POST /api/advisor/campaign-analysis`) run an LLM loop over those tools and can be used as a sanity check against playbook output when time permits.
@@ -92,7 +98,7 @@ Present per campaign:
 
 When the user asks for an **updated campaign list** (or an updated parameter list, or a summary of the proposed changes), reproduce **all canonical campaigns** in the format below — not just the ones being changed. For each campaign, show every parameter field and annotate it with either `Changed: <field> <old> → <new>` (one line per change) or `No change`. The user uses this format as a reviewable diff against the strategy doc.
 
-Use the canonical numbering from `docs/private/campaign-analysis-config.md`. Pull live field values from `GET /api/campaigns` so the list reflects current state, not the strategy doc's stated intent (they can disagree — that's exactly the signal Playbook D surfaces).
+Use the canonical numbering from the config loaded at Step 0. Pull live field values from `GET /api/campaigns` so the list reflects current state, not the strategy doc's stated intent (they can disagree — that's exactly the signal Playbook D surfaces).
 
 ```
 Campaign N — <Name>
@@ -107,7 +113,7 @@ Campaign N — <Name>
 - <Changed: Buy terms 80% → 77%>   OR   <No change>
 ```
 
-All 10 campaigns must appear in numeric order, even the ones with `No change`. Pull live field values from `GET /api/campaigns` so the list reflects current state, not the strategy doc's stated intent (they can disagree — that's exactly the signal Playbook D surfaces). If a field is not yet stored in the API (e.g. InclusionList for a campaign that's pure "open net"), show `None (open net)`.
+Every campaign in the canonical list appears in numeric order, even the ones with `No change`. If a field is not yet stored in the API (e.g. InclusionList for a campaign that's pure "open net"), show `None (open net)`.
 
 ### Playbook B — "What should we liquidate to pay our invoice?"
 
@@ -223,7 +229,7 @@ Fetch in parallel:
 For each coverage gap, the response includes a `segment` (with ROI, sell-through, avg days-to-sell from historical data), a `reason` (why it's a gap), and an `opportunity` (suggested action). Present the top gaps ranked by ROI, with caveats on sample size.
 
 For each promising gap, sketch what a new campaign would look like:
-1. Proposed name and canonical number (next after 10)
+1. Proposed name and next available canonical number (from the config loaded at Step 0)
 2. Year range, grade range, price range based on the segment data
 3. Suggested buy terms (reference similar existing campaigns)
 4. Expected fill rate and daily spend cap
@@ -250,30 +256,21 @@ When recommending DH as a sales channel (in any playbook), note that eBay listin
 
 ## Conversational guidelines
 
-1. Lead with the most actionable finding. One sentence. Then details.
-2. Use specific dollar amounts and percentages. Round to sensible precision.
-3. Connect data to strategy-doc sections when possible.
-4. Always end with a question that invites the user deeper.
+1. Lead with the most actionable finding, then details. Be direct about what's not working — don't hedge.
+2. Use specific dollar amounts and percentages, rounded to sensible precision. Caveat anything with < 10 observations so the reader knows when a number is noisy.
+3. Cross-reference findings against the strategy doc. When checking for campaign mismatches, compare the purchase era, grade, character, and price against the campaign's parameters from the doc.
+4. End every response with a question that invites the user deeper.
 5. Flag risks proactively — slow inventory, duplicate accumulations, $0 buy costs, cards gated out of their suggested channel.
-6. Be direct about what's not working. Don't hedge.
-7. Caveat small sample sizes (< 10 observations). The reader should know when a number is noisy.
-8. Keep it conversational. Natural language, not bullet-heavy reports.
-9. When checking for campaign mismatches, compare the purchase era, grade, character, and price against the campaign's parameters from the strategy doc.
-
-### Example opening turn
-
-> **User:** /campaign-analysis
->
-> **Assistant:** Quick read on the active campaigns. [Most performing campaign] is the standout — [ROI]% ROI, [sell-through]% sell-through, [N] unsold ($X,XXX at risk). [Underperforming campaign] is dragging — [ROI]% ROI, [sell-through]% sell-through after [N] days. Outstanding balance is $XX.XK with N.N weeks to cover at current velocity. Next invoice is $X.XK due [date]. Want to dig into [campaign name], talk through liquidation options for the invoice, or review parameter updates?
+6. Keep it conversational. Natural language, not bullet-heavy reports.
 
 ## Data conventions
 
 - **All monetary values are in cents.** Divide by 100 and format as `$X,XXX.XX`.
 - **Buy terms** are decimals (`0.80` = 80% of CL value).
 - **ROI** is a decimal ratio (`0.08` = 8%).
-- **Capital summary** — see `docs/private/campaign-analysis-config.md` for operator-specific conventions. Use `outstandingCents`, `weeksToCover`, `recoveryTrend`, and `alertLevel`.
+- **Capital summary fields:** `outstandingCents`, `weeksToCover`, `recoveryTrend`, `alertLevel`. Operator-specific framing (what's "healthy", labels for alert levels) lives in the config file loaded at Step 0.
 - **~1 week delay** between a PSA purchase being consummated and the card arriving. Campaigns with < 2 weeks of history and 0% sell-through aren't necessarily underperforming — the cards may not be in hand yet.
-- **Canonical campaigns** — see `docs/private/campaign-analysis-config.md` for the full numbered list. Map names to API UUIDs via the name / year range / grade range fields on the campaign detail.
+- **Canonical campaign numbering** is in the config file loaded at Step 0. Map names to API UUIDs via the name / year range / grade range fields on the campaign detail.
 
 ### Exit channels
 
@@ -298,63 +295,32 @@ Channel selection hierarchy when recommending liquidation:
 3. Card show for high-value cards when a show falls inside the liquidation window.
 4. LGS as the speed option — instant cash at 70-80%, use when recovery speed beats recovery percentage (e.g. covering an imminent invoice).
 
-### Parsing responses
+## Mutations
 
-Pipe every curl through `jq` and project only the fields you'll cite. Never paste raw JSON into the response — large endpoints (weekly-review, inventory, capital-timeline) return multi-KB payloads that bury the signal. Helpers:
+Every write endpoint the playbooks reach for, in one place. Use the purchase UUID (`id` field), not the cert number, for all purchase-level operations.
 
-```bash
-# cents → dollars
-jq '.amountCents / 100'
+| Intent | Verb + path | Body | Playbook |
+|--------|-------------|------|----------|
+| Reassign purchase to a different campaign | `PATCH /api/purchases/{id}/campaign` | `{"campaignId":"..."}` | ad-hoc |
+| Fix a missing or wrong buy cost | `PATCH /api/purchases/{id}/buy-cost` | `{"buyCostCents":18699}` | ad-hoc |
+| Override a sale/list price | `PATCH /api/purchases/{id}/price-override` | `{"priceCents":..., "source":"manual"}` | C |
+| Accept a pending AI price suggestion | `POST /api/purchases/{id}/accept-ai-suggestion` | — | C |
+| Dismiss a pending AI price suggestion | `DELETE /api/purchases/{id}/ai-suggestion` | — | C |
+| Queue cards on the persistent sell sheet | `PUT /api/sell-sheet/items` | `{"purchaseIds": ["id1", ...]}` | B |
+| Approve a DH push for a purchase | `POST /api/dh/approve/{id}` | — | G |
+| Raise a revocation flag | `POST /api/portfolio/revocations` | `{"segmentLabel":"...", "segmentDimension":"...", "reason":"..."}` | A |
+| Generate the revocation notification email | `GET /api/portfolio/revocations/{flagId}/email` | — | A |
+| Update campaign parameters | `PUT /api/campaigns/{id}` | Campaign fields | A |
+| Create a new campaign | `POST /api/campaigns` | Campaign fields | F |
 
-# drop archived campaigns
-jq 'map(select(.phase != "archived"))'
+Never apply any of these silently — present the proposed change to the user and only fire the mutation after approval.
 
-# trim a campaign list to the fields we actually cite
-jq '[.[] | {id, name, phase, buyTermsCLPct, dailySpendCapCents}]'
+## References
 
-# weekly-review: extract week-over-week deltas
-jq '{purchases: [.purchasesThisWeek, .purchasesLastWeek],
-     spend: [(.spendThisWeekCents/100), (.spendLastWeekCents/100)],
-     sales: [.salesThisWeek, .salesLastWeek],
-     profit: [(.profitThisWeekCents/100), (.profitLastWeekCents/100)],
-     topPerformers: [.topPerformers[] | {cardName, profitCents, channel, daysToSell}]}'
-```
+Load these on demand, not upfront:
 
-### Weekly review response fields
-
-The `/api/portfolio/weekly-review` response (`WeeklyReviewSummary`) contains:
-- `weekStart`, `weekEnd` — date range (YYYY-MM-DD)
-- `purchasesThisWeek` / `purchasesLastWeek` — purchase counts
-- `spendThisWeekCents` / `spendLastWeekCents` — total spend
-- `salesThisWeek` / `salesLastWeek` — sale counts
-- `revenueThisWeekCents` / `revenueLastWeekCents` — gross revenue
-- `profitThisWeekCents` / `profitLastWeekCents` — net profit
-- `byChannel` — array of `{channel, saleCount, revenueCents, feesCents, netProfitCents, avgDaysToSell}`
-- `weeksToCover` — capital deployment estimate
-- `topPerformers` / `bottomPerformers` — arrays of `{cardName, certNumber, grade, profitCents, channel, daysToSell}`
-
-## Key API field names
-
-| Field | JSON key | Notes |
-|-------|----------|-------|
-| Buy cost | `buyCostCents` | Use this; `purchasePriceCents` is a common mis-guess and will silently return null |
-| Grade | `gradeValue` | Float — supports half-grades like 8.5 |
-| CL value | `clValueCents` | Card Ladder value at time of purchase |
-| Card name | `cardName` | Cleaned name from cert lookup |
-| PSA title | `psaListingTitle` | Full PSA label text |
-| Cert number | `certNumber` | PSA cert number |
-| Purchase ID | `id` | UUID — use this for API operations, NOT the cert number |
-| Campaign ID | `id` | String UUID on `Campaign`, NOT an integer |
-
-## Purchase operations
-
-- **Reassign:** `PATCH /api/purchases/{purchaseId}/campaign` — body: `{"campaignId":"..."}` — moves a purchase between campaigns.
-- **Update buy cost:** `PATCH /api/purchases/{purchaseId}/buy-cost` — body: `{"buyCostCents":18699}` — fixes missing or incorrect purchase prices.
-- **Price override:** `PATCH /api/purchases/{purchaseId}/price-override` — body: `{"priceCents":..., "source":"manual"}` — overrides the sale price.
-- **Accept AI suggestion:** `POST /api/purchases/{purchaseId}/accept-ai-suggestion` — applies a pending AI-suggested price as the override.
-- **Dismiss AI suggestion:** `DELETE /api/purchases/{purchaseId}/ai-suggestion` — dismisses a pending AI suggestion without applying it.
-
-Use the purchase UUID (`id` field), not the cert number, for all API operations.
+- `references/api-cheatsheet.md` — jq patterns for projecting curl output, weekly-review response fields, and the JSON-key-to-concept table (covers the `buyCostCents` vs `purchasePriceCents` trap and the string-UUID `id` convention on both `Purchase` and `Campaign`). Read when you're writing a curl and need to confirm a field name.
+- `references/advisor-tools.md` — catalog of server-side AI advisor tools and which advisor operations use them. Read when the user asks about the advisor endpoints (`/api/advisor/digest`, `/api/advisor/liquidation-analysis`, `/api/advisor/campaign-analysis`) or you want to sanity-check playbook output.
 
 ## Appendix — Explicit mode shortcuts
 
@@ -369,7 +335,3 @@ These are the old named modes. Most of the time they're unnecessary — the defa
 | `campaign <id-or-name>` | Run Playbook E directly; resolve a name through `/api/campaigns` if given one |
 | `gaps` | Run Playbook F directly — coverage gap analysis and new campaign design |
 | `dh` | Run Playbook G directly — DH marketplace status and intelligence |
-
-## Reference
-
-See `references/advisor-tools.md` for the catalog of server-side AI advisor tools and which advisor operations use them.
