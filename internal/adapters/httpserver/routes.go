@@ -201,6 +201,7 @@ func (rt *Router) registerCampaignRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/portfolio/revocations/{flagId}/email", authRoute(rt.campaignsHandler.HandleRevocationEmail))
 	mux.Handle("GET /api/portfolio/capital-timeline", authRoute(rt.campaignsHandler.HandleCapitalTimeline))
 	mux.Handle("GET /api/portfolio/weekly-review", authRoute(rt.campaignsHandler.HandleWeeklyReview))
+	mux.Handle("GET /api/portfolio/weekly-history", authRoute(rt.campaignsHandler.HandleWeeklyHistory))
 
 	// Cert lookup endpoint
 	mux.Handle("GET /api/certs/{certNumber}", authRoute(rt.campaignsHandler.HandleCertLookup))
