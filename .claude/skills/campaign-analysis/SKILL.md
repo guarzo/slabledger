@@ -58,7 +58,7 @@ Fetch these in parallel:
 
 Present the opener as **two paragraphs plus a close**:
 
-**Paragraph 1 — "This week I'd do these 3 things:"** Numbered list. Each item names an action, targets (campaign / cards / invoice), sized $ impact with horizon, and confidence band (see Recommendation rules). If the strongest item is a hold verdict, state it directly as item 1 ("Hold — this week's signal is within noise…"). Pick three from the union of: invoice-cover liquidations (Playbook B logic), tuning changes (Playbook A), DH approvals / price overrides (Playbook C, Playbook G), or coverage-gap prompts (Playbook F). Apply the capital guardrail on any ramp-up before it reaches this list.
+**Paragraph 1 — "This week I'd do these 3 things:"** Numbered list. Each item names an action, targets (campaign / cards / invoice), sized $ impact with horizon, and confidence band (see Recommendation rules). If the strongest item is a hold verdict, state it directly as item 1 ("Hold — this week's signal is within noise…"); hold items carry no sized $ or confidence band because there is no action being proposed. Pick three from the union of: invoice-cover liquidations (Playbook B logic), tuning changes (Playbook A), DH approvals / price overrides (Playbook C, Playbook G), or coverage-gap prompts (Playbook F). Apply the capital guardrail on any ramp-up before it reaches this list.
 
 **Paragraph 2 — "Portfolio at a glance:"** One compressed line. Per-active-campaign: `Name ROI% / ST% / N unsold $X.XK` separated by ` • `. Then: `Outstanding $X.XK / N.N weeks to cover / trend ↗|↘|→`. Then: `Next invoice $X.XK due YYYY-MM-DD`.
 
@@ -71,9 +71,9 @@ Keep it concise — the goal is to prompt a focused follow-up, not dump a report
 > **User:** /campaign-analysis
 >
 > **Assistant:** This week I'd do these 3 things:
-> 1. Liquidate ~$4.2K of Wildcard via DH to cover the 4/22 invoice (net ~$3.7K, est. 8 days, Confidence: H).
+> 1. Liquidate ~$4.2K of Wildcard via DH to cover the 4/22 invoice — net ~$3.7K, est. 8 days (Confidence: H).
 > 2. Drop Campaign 7 buy terms 80→76% — empirical optimum over 42 obs, est. +$1.1K/mo at current fill (Confidence: H).
-> 3. Approve 8 pending DH pushes (oldest queued 11 days, est. +$2.3K recovery, Confidence: M).
+> 3. Approve 8 pending DH pushes — oldest queued 11 days, est. +$2.3K recovery (Confidence: M).
 >
 > **Portfolio at a glance:** Wildcard 14% ROI / 38% ST / 47 unsold $18.2K • C7 3% ROI / 22% ST / 61 unsold $12.6K • C3 9% ROI / 41% ST / 22 unsold $5.8K • Outstanding $41.8K / 3.2 weeks to cover / trend → • Next invoice $8.2K due 4/22.
 >
@@ -85,7 +85,7 @@ Keep it concise — the goal is to prompt a focused follow-up, not dump a report
 >
 > **Assistant:** This week I'd do these 3 things:
 > 1. Hold — WoW ROI of 12% is within ±10% of the 11.8% trailing-4-week mean. Noise, not signal. No parameter changes indicated.
-> 2. Approve 4 pending DH pushes (oldest queued 9 days, est. +$1.1K recovery, Confidence: M).
+> 2. Approve 4 pending DH pushes — oldest queued 9 days, est. +$1.1K recovery (Confidence: M).
 > 3. Review the 6 aging-inventory candidates flagged in Playbook C (days-held > 2× channel velocity, Confidence: M).
 >
 > **Portfolio at a glance:** Wildcard 13% ROI / 36% ST / 45 unsold $17.8K • C7 7% ROI / 31% ST / 38 unsold $8.2K • C3 10% ROI / 44% ST / 19 unsold $4.9K • Outstanding $38.4K / 3.0 weeks to cover / trend ↘ • Next invoice $7.6K due 4/29.
@@ -290,7 +290,7 @@ These rules are referenced by every playbook that emits a recommendation. Keepin
 
 ### Sizing
 
-Every parameter-change, new-campaign, or material tuning recommendation carries a projected $ impact, time horizon, and confidence band — uniformly. Format: `est. +$X.XK/mo at current fill (Confidence: H|M|L)`. When the projections endpoint can't produce a clean counterfactual (sparse data, wide variance), say so explicitly: `est. +$X/mo (Low confidence, N obs)`. Never drop the number silently — that makes recommendations impossible to prioritize.
+Every parameter-change, new-campaign, or material tuning recommendation carries a projected $ impact, time horizon, and confidence band — uniformly. Format: `est. +$X.XK/mo at current fill (Confidence: H|M|L)`. When the projections endpoint can't produce a clean counterfactual (sparse data, wide variance), say so explicitly: `est. +$X/mo (Low confidence, N obs)`. For one-time-recovery actions (DH push approval, sell-sheet liquidation batch), replace `/mo at current fill` with `recovery`: `est. +$X.XK recovery (Confidence: H|M|L)` — the `recovery` variant marks a non-recurring event, not ongoing monthly income. Confidence band always sits inside parentheses, regardless of variant. Never drop the number silently — that makes recommendations impossible to prioritize.
 
 ### Confidence bands
 
