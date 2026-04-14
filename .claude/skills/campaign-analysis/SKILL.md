@@ -71,7 +71,7 @@ Keep it concise — the goal is to prompt a focused follow-up, not dump a report
 > **User:** /campaign-analysis
 >
 > **Assistant:** This week I'd do these 3 things:
-> 1. Liquidate ~$4.2K of Wildcard via DH to cover the 4/22 invoice — net ~$3.7K, est. 8 days (Confidence: H).
+> 1. Liquidate ~$4.2K of Wildcard via DH to cover the 4/22 invoice — est. +$3.7K recovery, ~8 days to turn (Confidence: H).
 > 2. Drop Campaign 7 buy terms 80→76% — empirical optimum over 42 obs, est. +$1.1K/mo at current fill (Confidence: H).
 > 3. Approve 8 pending DH pushes — oldest queued 11 days, est. +$2.3K recovery (Confidence: M).
 >
@@ -201,7 +201,7 @@ Re-read `docs/private/CAMPAIGN_STRATEGY.md` with fresh eyes, then walk each sect
 - **Current text:** quoted
 - **What the data shows:** specific numbers with sample sizes
 - **Proposed text:** concrete replacement wording
-- **Confidence:** high / medium / low based on sample size and variance
+- **Confidence:** high / medium / low based on sample size and variance (this rating applies to the proposed doc edit itself, not the Recommendation rules H/M/L bands, which cover live-data recommendations)
 
 Present the proposed edits as a numbered list. Apply only the ones the user approves — never silently edit the doc.
 
