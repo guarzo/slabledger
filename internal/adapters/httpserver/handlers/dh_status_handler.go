@@ -115,6 +115,34 @@ func (h *DHHandler) HandleInventoryAlerts(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusOK, map[string]any{"alerts": alerts, "count": len(alerts)})
 }
 
+// HandleGetDHPending returns received, unsold purchases with dh_push_status = 'pending'.
+// Each item includes mid-market price and a data-freshness confidence signal.
+func (h *DHHandler) HandleGetDHPending(w http.ResponseWriter, r *http.Request) {
+	if requireUser(w, r) == nil {
+		return
+	}
+	if h.pendingLister == nil {
+		writeError(w, http.StatusServiceUnavailable, "DH pending lister not available")
+		return
+	}
+	ctx := r.Context()
+
+	items, err := h.pendingLister.ListDHPendingItems(ctx)
+	if err != nil {
+		h.logger.Error(ctx, "list DH pending items", observability.Err(err))
+		writeError(w, http.StatusInternalServerError, "failed to list DH pending items")
+		return
+	}
+	if items == nil {
+		items = []inventory.DHPendingItem{}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"items": items,
+		"count": len(items),
+	})
+}
+
 type dhStatusResponse struct {
 	IntelligenceCount     int             `json:"intelligence_count"`
 	IntelligenceLastFetch string          `json:"intelligence_last_fetch"`
