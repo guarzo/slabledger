@@ -53,6 +53,8 @@ Fetch these in parallel:
 - `GET /api/portfolio/insights` — cross-campaign segmentation by character, grade, era, tier
 - `GET /api/credit/summary` — outstanding balance, weeks to cover, recovery trend
 - `GET /api/credit/invoices` — next invoice date and amount (matters for the liquidation playbook)
+- `GET /api/inventory` — required so the opener can distinguish **in-hand** inventory (received, sellable now) from **in-transit** inventory (purchased but not yet received). Bucket by `purchase.invoiceDate`: items with `invoiceDate ≤ today − 7 days` are in-hand; items with `invoiceDate > today − 7 days` are in-transit (the ~1-week PSA receipt delay from the Data conventions). Sum `purchase.buyCostCents` per bucket so you know how much capital is *actually* sellable right now versus stuck in the pipeline.
+- `GET /api/dh/status` — reads `dh_listings_count` vs `dh_inventory_count` vs `pending_count`. This tells you how much of the in-hand inventory is actually *listed* and generating sales signal. A large received-but-not-listed gap is a common blocker the opener should surface.
 - `GET /api/campaigns/{id}/tuning` for each active campaign — needed to pre-screen tuning candidates for the opener
 - `GET /api/campaigns/{id}/projections` for each active campaign that tuning flags as having a material proposed change — required so paragraph 1 carries sized $ impact. Skip projections for campaigns tuning doesn't flag.
 
@@ -60,7 +62,7 @@ Present the opener as **two paragraphs plus a close**:
 
 **Paragraph 1 — "This week I'd do these 3 things:"** Numbered list. Each item names an action, targets (campaign / cards / invoice), sized $ impact with horizon, and confidence band (see Recommendation rules). If the strongest item is a hold verdict, state it directly as item 1 ("Hold — this week's signal is within noise…"); hold items carry no sized $ or confidence band because there is no action being proposed. Pick three from the union of: invoice-cover liquidations (Playbook B logic), tuning changes (Playbook A), DH approvals / price overrides (Playbook C, Playbook G), or coverage-gap prompts (Playbook F). Apply the capital guardrail on any ramp-up before it reaches this list.
 
-**Paragraph 2 — "Portfolio at a glance:"** One compressed line. Per-active-campaign: `Name ROI% / ST% / N unsold $X.XK` separated by ` • `. Then: `Outstanding $X.XK / N.N weeks to cover / trend ↗|↘|→`. Then: `Next invoice $X.XK due YYYY-MM-DD`.
+**Paragraph 2 — "Portfolio at a glance:"** One compressed line. Per-active-campaign: `Name ROI% / ST% / N unsold $X.XK` separated by ` • `. Then: `Outstanding $X.XK / N.N weeks to cover / trend ↗|↘|→`. Then: `Next invoice $X.XK due YYYY-MM-DD`. Then **always** a capital-crunch line: `In-hand $X.XK of $Y.YK unsold (rest in-transit for invoice YYYY-MM-DD), DH listed: N of M mapped` — this is the single most important signal for what the user can actually do this week, and the opener is wrong when it treats in-transit cards as liquidatable. If in-hand capital × 1.1 < next invoice amount, mark this paragraph with a ⚠ and spell out the gap explicitly ("⚠ capital crunch: $X.XK in-hand can't cover $Y.YK invoice; short ~$Z.ZK").
 
 **Close:** Targeted question referencing the strongest action, not a generic menu. Example: *"Want me to walk through the Wildcard liquidation list, pull up C7 tuning detail, or take something else?"*
 
@@ -153,10 +155,11 @@ The approach:
 
 1. Pick the invoice to cover (next-due from `/credit/invoices`, or user-selected). Note the invoice's `pendingReceiptCents` (cards bought but not yet received) and `sellThroughPct` — these contextualize how much of the invoice's inventory is already moving.
 2. Compute target recovery = `invoiceAmount × 1.1` for buffer. State this target at the top of the response ("Target: $X.XK to cover $Y.YK invoice + 10% buffer").
-3. Exclude any purchase IDs already on the sell sheet (from `/sell-sheet/items`).
-4. Rank candidate cards by (a) shortest expected days-to-sell, (b) highest EV/dollar, (c) best channel fit using the net-proceeds math in *Data conventions*.
-5. Walk down the ranked list accumulating projected net proceeds until the running total meets the target. Stop as soon as target is met — don't pad the list.
-6. Present as a table: card, cert, recommended channel, recommended price, projected net proceeds, running total. End the table with a summary line: `Selected N cards, $X.XK projected recovery vs $Y.YK target (Confidence: H|M|L based on days-to-sell sample)`.
+3. **Feasibility precondition — before ranking anything.** Filter `/api/inventory` to the in-hand set (items with `invoiceDate ≤ today − 7 days`, i.e. received and physically sellable). Sum their `buyCostCents`. If `in-hand × 1.1 < target`, this is a capital crunch — liquidation from on-hand alone can't close the gap. Do NOT pad the list with in-transit cards (they're not sellable yet). Instead, say so and present options: (a) **partial coverage** — best cards from in-hand toward a partial payment, (b) **wait for receipt** — list cards arriving in the next 1–7 days by expected-arrival date, or (c) **invoice timing** — suggest the user negotiate or defer the invoice. Pick the option(s) matching the gap size, don't just pick (a).
+4. Exclude any purchase IDs already on the sell sheet (from `/sell-sheet/items`).
+5. Rank in-hand candidate cards by (a) shortest expected days-to-sell, (b) highest EV/dollar, (c) best channel fit using the net-proceeds math in *Data conventions*.
+6. Walk down the ranked list accumulating projected net proceeds until the running total meets the target (or exhausts in-hand inventory if the crunch precondition fired). Stop as soon as target is met — don't pad.
+7. Present as a table: card, cert, recommended channel, recommended price, projected net proceeds, running total. End the table with a summary line: `Selected N cards from in-hand, $X.XK projected recovery vs $Y.YK target (Confidence: H|M|L based on days-to-sell sample)`. If the crunch precondition fired, the summary line reads: `⚠ Partial coverage: $X.XK from N in-hand cards vs $Y.YK target — short $Z.ZK`.
 
 Respect the strategy doc's exit-channel hierarchy. Flag any card recommended into a channel it's gated out of. Liquidation is a capital-positive action — the capital guardrail in the Recommendation rules does NOT apply here.
 
