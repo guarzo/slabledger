@@ -16,7 +16,7 @@ function ReviewRow({ match, decision, onDecide }: {
   const sources = useMemo(
     () => buildPriceSources({
       clCents: match.clValueCents,
-      marketCents: match.marketPriceCents,
+      dhMidCents: match.marketPriceCents,
       costCents: match.costBasisCents,
       lastSoldCents: match.lastSoldCents,
     }),

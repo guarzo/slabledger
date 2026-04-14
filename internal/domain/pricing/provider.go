@@ -56,6 +56,9 @@ type GradedPrices struct {
 type MarketData struct {
 	ActiveListings  int
 	LowestListing   int64
+	MidPriceCents   int64  // DH mid-market price in cents (mid_price from card_lookup)
+	LastSoldCents   int64  // DH last sale price (last_sale from card_lookup)
+	LastSoldDate    string // DH last sale date, e.g. "2026-04-10"
 	SalesLast30d    int
 	SalesLast90d    int
 	Volatility      float64

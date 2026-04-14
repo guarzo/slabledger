@@ -244,11 +244,13 @@ func (ps *PurchaseStore) UpdateExternalPurchaseFields(ctx context.Context, id st
 func (ps *PurchaseStore) UpdatePurchaseMarketSnapshot(ctx context.Context, id string, snap inventory.MarketSnapshotData) error {
 	result, err := ps.db.ExecContext(ctx,
 		`UPDATE campaign_purchases SET last_sold_cents = ?, lowest_list_cents = ?, conservative_cents = ?,
-			median_cents = ?, active_listings = ?, sales_last_30d = ?, trend_30d = ?, snapshot_date = ?,
+			median_cents = ?, mid_price_cents = ?, last_sold_date = ?,
+			active_listings = ?, sales_last_30d = ?, trend_30d = ?, snapshot_date = ?,
 			snapshot_json = ?, updated_at = ?
 		WHERE id = ?`,
 		snap.LastSoldCents, snap.LowestListCents, snap.ConservativeCents,
-		snap.MedianCents, snap.ActiveListings, snap.SalesLast30d, snap.Trend30d, snap.SnapshotDate,
+		snap.MedianCents, snap.MidPriceCents, snap.LastSoldDate,
+		snap.ActiveListings, snap.SalesLast30d, snap.Trend30d, snap.SnapshotDate,
 		snap.SnapshotJSON, time.Now(), id,
 	)
 	if err != nil {

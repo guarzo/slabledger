@@ -8,7 +8,7 @@ export type PreSelection =
 /** Standard price source labels and keys used across all PriceDecisionBar consumers. */
 export function buildPriceSources(prices: {
   clCents: number;
-  marketCents: number;
+  dhMidCents: number;
   costCents: number;
   lastSoldCents: number;
   mmCents?: number;
@@ -21,7 +21,7 @@ export function buildPriceSources(prices: {
     sources.push({ label: 'MM', priceCents: prices.mmCents, source: 'mm' });
   }
   sources.push(
-    { label: 'Market', priceCents: prices.marketCents, source: 'market' },
+    { label: 'DH', priceCents: prices.dhMidCents, source: 'dh' },
     { label: 'Last Sold', priceCents: prices.lastSoldCents, source: 'last_sold' },
   );
   return sources;

@@ -115,7 +115,7 @@ export default function ShopifySyncPage({ embedded = false }: { embedded?: boole
       if (existing?.action === 'skip') continue;
       const sources = buildPriceSources({
         clCents: m.clValueCents,
-        marketCents: m.marketPriceCents,
+        dhMidCents: m.marketPriceCents,
         costCents: m.costBasisCents,
         lastSoldCents: m.lastSoldCents,
       });
