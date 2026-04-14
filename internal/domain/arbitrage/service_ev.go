@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/guarzo/slabledger/internal/domain/constants"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 )
 
@@ -64,10 +63,7 @@ func (s *service) GetExpectedValues(ctx context.Context, campaignID string) (*EV
 			}
 		}
 
-		feePct := campaign.EbayFeePct
-		if feePct == 0 {
-			feePct = constants.DefaultMarketplaceFeePct
-		}
+		feePct := inventory.EffectiveFeePct(campaign)
 		ev := computeExpectedValue(EVInput{
 			CardName:               p.CardName,
 			CertNumber:             p.CertNumber,
@@ -131,10 +127,7 @@ func (s *service) EvaluatePurchase(ctx context.Context, campaignID string, cardN
 	}
 
 	if seg == nil {
-		feePct := campaign.EbayFeePct
-		if feePct == 0 {
-			feePct = constants.DefaultMarketplaceFeePct
-		}
+		feePct := inventory.EffectiveFeePct(campaign)
 		return computeExpectedValue(EVInput{
 			CardName:              cardName,
 			Grade:                 grade,
@@ -148,10 +141,7 @@ func (s *service) EvaluatePurchase(ctx context.Context, campaignID string, cardN
 	}
 
 	costBasis := buyCostCents + campaign.PSASourcingFeeCents
-	feePct := campaign.EbayFeePct
-	if feePct == 0 {
-		feePct = constants.DefaultMarketplaceFeePct
-	}
+	feePct := inventory.EffectiveFeePct(campaign)
 
 	return computeExpectedValue(EVInput{
 		CardName:               cardName,
@@ -177,6 +167,24 @@ func (s *service) RunProjection(ctx context.Context, campaignID string) (*MonteC
 	data, err := s.analytics.GetPurchasesWithSales(ctx, campaignID)
 	if err != nil {
 		return nil, err
+	}
+
+	if s.projCache != nil {
+		soldCount := 0
+		for _, d := range data {
+			if d.Sale != nil {
+				soldCount++
+			}
+		}
+		key := projectionCacheKey{campaignID: campaignID, purchaseCount: len(data), soldCount: soldCount}
+		if cached, ok := s.projCache.get(key); ok {
+			// Return a deep copy to prevent callers from mutating cached state.
+			// MonteCarloResult is scalar-only, so copying the Scenarios slice is sufficient.
+			return copyMonteCarloComparison(cached), nil
+		}
+		result := RunMonteCarloProjection(campaign, data)
+		s.projCache.set(key, result)
+		return result, nil
 	}
 
 	return RunMonteCarloProjection(campaign, data), nil

@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"time"
 
-	"github.com/guarzo/slabledger/internal/domain/constants"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
@@ -31,6 +31,17 @@ type Service interface {
 // ServiceOption configures the arbitrage service.
 type ServiceOption func(*service)
 
+// service implements Service.
+type service struct {
+	campaigns inventory.CampaignRepository
+	purchases inventory.PurchaseRepository
+	analytics inventory.AnalyticsRepository
+	finance   inventory.FinanceRepository
+	priceProv inventory.PriceLookup
+	projCache *projectionCache // optional; if nil, projection runs on every call
+	logger    observability.Logger
+}
+
 // WithPriceLookup injects the price lookup dependency.
 func WithPriceLookup(priceProv inventory.PriceLookup) ServiceOption {
 	return func(s *service) {
@@ -45,14 +56,27 @@ func WithLogger(logger observability.Logger) ServiceOption {
 	}
 }
 
-// service implements Service.
-type service struct {
-	campaigns inventory.CampaignRepository
-	purchases inventory.PurchaseRepository
-	analytics inventory.AnalyticsRepository
-	finance   inventory.FinanceRepository
-	priceProv inventory.PriceLookup
-	logger    observability.Logger
+// WithProjectionCache enables TTL-based caching of RunProjection results.
+// Use newProjectionCache(5 * time.Minute) for production.
+func WithProjectionCache(ttl time.Duration) ServiceOption {
+	return func(s *service) {
+		s.projCache = newProjectionCache(ttl)
+	}
+}
+
+// requestScopedPriceProv returns a per-call cached wrapper around s.priceProv if the
+// underlying provider supports it, or s.priceProv itself otherwise.
+// Returns nil when no price provider is configured.
+func (s *service) requestScopedPriceProv() inventory.PriceLookup {
+	if s.priceProv == nil {
+		return nil
+	}
+	if cacher, ok := s.priceProv.(interface {
+		WithRequestCache() inventory.PriceLookup
+	}); ok {
+		return cacher.WithRequestCache()
+	}
+	return s.priceProv
 }
 
 // NewService creates a new arbitrage Service.
@@ -93,15 +117,15 @@ func (s *service) crackCandidatesForCampaign(ctx context.Context, campaign *inve
 		}
 		return []CrackAnalysis{}, nil
 	}
+
+	priceProv := s.requestScopedPriceProv()
+
 	unsold, err := s.purchases.ListUnsoldPurchases(ctx, campaign.ID)
 	if err != nil {
 		return nil, err
 	}
 
-	ebayFee := campaign.EbayFeePct
-	if ebayFee == 0 {
-		ebayFee = constants.DefaultMarketplaceFeePct
-	}
+	ebayFee := inventory.EffectiveFeePct(campaign)
 
 	var results []CrackAnalysis
 	for _, p := range unsold {
@@ -115,7 +139,7 @@ func (s *service) crackCandidatesForCampaign(ctx context.Context, campaign *inve
 
 		rawCents := 0
 		gradedCents := 0
-		if v, err := s.priceProv.GetLastSoldCents(ctx, card, 0); err != nil {
+		if v, err := priceProv.GetLastSoldCents(ctx, card, 0); err != nil {
 			if s.logger != nil {
 				s.logger.Warn(ctx, "crack analysis: raw price lookup failed",
 					observability.String("cardName", p.CardName),
@@ -124,7 +148,7 @@ func (s *service) crackCandidatesForCampaign(ctx context.Context, campaign *inve
 		} else {
 			rawCents = v
 		}
-		if v, err := s.priceProv.GetLastSoldCents(ctx, card, p.GradeValue); err != nil {
+		if v, err := priceProv.GetLastSoldCents(ctx, card, p.GradeValue); err != nil {
 			if s.logger != nil {
 				s.logger.Warn(ctx, "crack analysis: graded price lookup failed",
 					observability.String("cardName", p.CardName),
@@ -167,6 +191,9 @@ func (s *service) GetCrackOpportunities(ctx context.Context) ([]CrackAnalysis, e
 		}
 		return []CrackAnalysis{}, nil
 	}
+
+	priceProv := s.requestScopedPriceProv()
+
 	allCampaigns, err := s.campaigns.ListCampaigns(ctx, true)
 	if err != nil {
 		return nil, fmt.Errorf("list active campaigns: %w", err)
@@ -175,11 +202,7 @@ func (s *service) GetCrackOpportunities(ctx context.Context) ([]CrackAnalysis, e
 	// Build campaignID → ebayFee map to avoid per-campaign DB lookups.
 	ebayFeeMap := make(map[string]float64, len(allCampaigns))
 	for _, c := range allCampaigns {
-		fee := c.EbayFeePct
-		if fee == 0 {
-			fee = constants.DefaultMarketplaceFeePct
-		}
-		ebayFeeMap[c.ID] = fee
+		ebayFeeMap[c.ID] = inventory.EffectiveFeePct(&c)
 	}
 
 	allUnsold, err := s.purchases.ListAllUnsoldPurchases(ctx)
@@ -206,7 +229,7 @@ func (s *service) GetCrackOpportunities(ctx context.Context) ([]CrackAnalysis, e
 
 		rawCents := 0
 		gradedCents := 0
-		if v, err := s.priceProv.GetLastSoldCents(ctx, card, 0); err != nil {
+		if v, err := priceProv.GetLastSoldCents(ctx, card, 0); err != nil {
 			if s.logger != nil {
 				s.logger.Warn(ctx, "crack analysis: raw price lookup failed",
 					observability.String("cardName", p.CardName),
@@ -215,7 +238,7 @@ func (s *service) GetCrackOpportunities(ctx context.Context) ([]CrackAnalysis, e
 		} else {
 			rawCents = v
 		}
-		if v, err := s.priceProv.GetLastSoldCents(ctx, card, p.GradeValue); err != nil {
+		if v, err := priceProv.GetLastSoldCents(ctx, card, p.GradeValue); err != nil {
 			if s.logger != nil {
 				s.logger.Warn(ctx, "crack analysis: graded price lookup failed",
 					observability.String("cardName", p.CardName),
@@ -357,6 +380,9 @@ func (s *service) GetAcquisitionTargets(ctx context.Context) ([]AcquisitionOppor
 		}
 		return []AcquisitionOpportunity{}, nil
 	}
+
+	priceProv := s.requestScopedPriceProv()
+
 	allCampaigns, err := s.campaigns.ListCampaigns(ctx, true)
 	if err != nil {
 		return nil, fmt.Errorf("list active campaigns: %w", err)
@@ -365,11 +391,7 @@ func (s *service) GetAcquisitionTargets(ctx context.Context) ([]AcquisitionOppor
 	// Build campaignID → ebayFee map to avoid per-campaign DB lookups.
 	ebayFeeMap := make(map[string]float64, len(allCampaigns))
 	for _, c := range allCampaigns {
-		fee := c.EbayFeePct
-		if fee == 0 {
-			fee = constants.DefaultMarketplaceFeePct
-		}
-		ebayFeeMap[c.ID] = fee
+		ebayFeeMap[c.ID] = inventory.EffectiveFeePct(&c)
 	}
 
 	allUnsold, err := s.purchases.ListAllUnsoldPurchases(ctx)
@@ -396,7 +418,7 @@ func (s *service) GetAcquisitionTargets(ctx context.Context) ([]AcquisitionOppor
 		seen[key] = true
 		card := p.ToCardIdentity()
 		rawNMCents := 0
-		if v, err := s.priceProv.GetLastSoldCents(ctx, card, 0); err != nil {
+		if v, err := priceProv.GetLastSoldCents(ctx, card, 0); err != nil {
 			if s.logger != nil {
 				s.logger.Warn(ctx, "acquisition targets: raw price lookup failed",
 					observability.String("cardName", p.CardName),
@@ -410,7 +432,7 @@ func (s *service) GetAcquisitionTargets(ctx context.Context) ([]AcquisitionOppor
 		}
 		gradedEstimates := make(map[string]int)
 		for _, grade := range []float64{8, 9, 10} {
-			v, err := s.priceProv.GetLastSoldCents(ctx, card, grade)
+			v, err := priceProv.GetLastSoldCents(ctx, card, grade)
 			if err != nil {
 				if s.logger != nil {
 					s.logger.Warn(ctx, "acquisition targets: graded price lookup failed",

@@ -1000,3 +1000,90 @@ func TestHandleDismissAISuggestion(t *testing.T) {
 		})
 	}
 }
+
+// --- requirePurchaseInCampaign ---
+
+func TestRequirePurchaseInCampaign(t *testing.T) {
+	tests := []struct {
+		name           string
+		campaignID     string
+		purchaseID     string
+		setupMock      func(*mocks.MockInventoryService)
+		wantStatus     int
+		wantPurchaseID string
+	}{
+		{
+			name:       "returns purchase when campaign matches",
+			campaignID: "camp-1",
+			purchaseID: "purch-1",
+			setupMock: func(m *mocks.MockInventoryService) {
+				m.GetPurchaseFn = func(_ context.Context, id string) (*inventory.Purchase, error) {
+					return &inventory.Purchase{ID: id, CampaignID: "camp-1"}, nil
+				}
+			},
+			wantStatus:     0, // no error response written
+			wantPurchaseID: "purch-1",
+		},
+		{
+			name:       "writes 404 when purchase not found",
+			campaignID: "camp-1",
+			purchaseID: "missing",
+			setupMock: func(m *mocks.MockInventoryService) {
+				m.GetPurchaseFn = func(_ context.Context, _ string) (*inventory.Purchase, error) {
+					return nil, inventory.ErrPurchaseNotFound
+				}
+			},
+			wantStatus: http.StatusNotFound,
+		},
+		{
+			name:       "writes 403 when purchase belongs to different campaign",
+			campaignID: "camp-1",
+			purchaseID: "purch-other",
+			setupMock: func(m *mocks.MockInventoryService) {
+				m.GetPurchaseFn = func(_ context.Context, id string) (*inventory.Purchase, error) {
+					return &inventory.Purchase{ID: id, CampaignID: "camp-2"}, nil
+				}
+			},
+			wantStatus: http.StatusForbidden,
+		},
+		{
+			name:       "writes 500 on internal service error",
+			campaignID: "camp-1",
+			purchaseID: "purch-1",
+			setupMock: func(m *mocks.MockInventoryService) {
+				m.GetPurchaseFn = func(_ context.Context, _ string) (*inventory.Purchase, error) {
+					return nil, fmt.Errorf("database error")
+				}
+			},
+			wantStatus: http.StatusInternalServerError,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := &mocks.MockInventoryService{}
+			tt.setupMock(svc)
+			h := newTestHandler(svc)
+
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodDelete, "/", nil)
+
+			purchase, ok := h.requirePurchaseInCampaign(rec, req, tt.campaignID, tt.purchaseID)
+			if tt.wantStatus != 0 {
+				if rec.Code != tt.wantStatus {
+					t.Errorf("status = %d, want %d", rec.Code, tt.wantStatus)
+				}
+				if ok {
+					t.Errorf("expected ok=false")
+				}
+				return
+			}
+			if !ok || purchase == nil {
+				t.Fatalf("expected ok=true and non-nil purchase, got ok=%v purchase=%v", ok, purchase)
+			}
+			if purchase.ID != tt.wantPurchaseID {
+				t.Errorf("purchase.ID = %q, want %q", purchase.ID, tt.wantPurchaseID)
+			}
+		})
+	}
+}

@@ -76,7 +76,7 @@ export function PendingItemsCard() {
   return (
     <div className="rounded-xl border border-[var(--surface-2)] bg-[var(--surface-0)] p-4">
       <div className="flex items-center justify-between mb-3">
-        <h4 className="text-sm font-semibold text-[var(--text)]">Pending Items</h4>
+        <h3 className="text-sm font-semibold text-[var(--text)]">Pending Items</h3>
         {items.length > 0 && (
           <span className="text-xs px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-400 font-medium">
             {items.length}
