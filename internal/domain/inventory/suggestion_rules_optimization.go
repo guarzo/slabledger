@@ -88,6 +88,7 @@ func suggestSpendCapRebalancing(_ context.Context, insights *PortfolioInsights, 
 						DailySpendCapCents: avgCap,
 					},
 					ExpectedMetrics: ExpectedMetrics{
+						ExpectedROI:    avgROI,
 						DataConfidence: "low",
 					},
 				})
@@ -107,6 +108,7 @@ func suggestSpendCapRebalancing(_ context.Context, insights *PortfolioInsights, 
 				DailySpendCapCents: avgCap,
 			},
 			ExpectedMetrics: ExpectedMetrics{
+				ExpectedROI:    insights.DataSummary.OverallROI,
 				DataConfidence: "low",
 			},
 		})
@@ -171,12 +173,27 @@ func suggestCharacterAdjustments(_ context.Context, insights *PortfolioInsights,
 					InclusionList: fmt.Sprintf("remove: %s", strings.Join(removes, ", ")),
 				},
 				ExpectedMetrics: ExpectedMetrics{
+					// Removing a segment — expected improvement is directional only.
+					ExpectedROI:    0,
 					DataConfidence: "medium",
 				},
 			})
 		}
 
 		if len(adds) > 0 {
+			// Find the best matching segment in `sorted` for the top add
+			// (adds[0] is the highest-ROI entry because `sorted` is ordered
+			// by ROI descending and adds preserves that order).
+			var expectedROI, expectedMargin, avgDays float64
+			for _, seg := range sorted {
+				if strings.EqualFold(strings.TrimSpace(seg.Label), adds[0]) {
+					expectedROI = seg.ROI
+					expectedMargin = seg.AvgMarginPct
+					avgDays = seg.AvgDaysToSell
+					break
+				}
+			}
+
 			suggestions = append(suggestions, CampaignSuggestion{
 				Type:  "adjust",
 				Title: fmt.Sprintf("Add top performers to %s", c.Name),
@@ -189,7 +206,10 @@ func suggestCharacterAdjustments(_ context.Context, insights *PortfolioInsights,
 					InclusionList: fmt.Sprintf("add: %s", strings.Join(adds, ", ")),
 				},
 				ExpectedMetrics: ExpectedMetrics{
-					DataConfidence: "medium",
+					ExpectedROI:       expectedROI,
+					ExpectedMarginPct: expectedMargin,
+					AvgDaysToSell:     avgDays,
+					DataConfidence:    "medium",
 				},
 			})
 		}
@@ -241,11 +261,16 @@ func suggestPhaseTransitions(_ context.Context, insights *PortfolioInsights, cam
 		// PhasePending activation uses insights.ByCharacter directly — no metrics needed
 		if c.Phase == PhasePending && c.InclusionList != "" {
 			var profitableChars []string
+			var bestROI float64
+			inclNames := SplitInclusionList(c.InclusionList)
 			for _, seg := range insights.ByCharacter {
 				if seg.ROI > suggActivateMinROI && seg.SoldCount >= suggMinSoldForConfidence {
-					for _, name := range SplitInclusionList(c.InclusionList) {
+					for _, name := range inclNames {
 						if strings.EqualFold(strings.TrimSpace(name), seg.Label) {
 							profitableChars = append(profitableChars, fmt.Sprintf("%s (%.0f%% ROI)", seg.Label, seg.ROI*100))
+							if seg.ROI > bestROI {
+								bestROI = seg.ROI
+							}
 						}
 					}
 				}
@@ -262,6 +287,7 @@ func suggestPhaseTransitions(_ context.Context, insights *PortfolioInsights, cam
 						Name: c.Name,
 					},
 					ExpectedMetrics: ExpectedMetrics{
+						ExpectedROI:    bestROI,
 						DataConfidence: "medium",
 					},
 				})

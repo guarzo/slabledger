@@ -231,8 +231,11 @@ func suggestChannelInformedBuyTerms(_ context.Context, insights *PortfolioInsigh
 				BuyTermsCLPct: newTerms,
 			},
 			ExpectedMetrics: ExpectedMetrics{
+				// If margin improves, ROI improves proportionally — use weightedMargin as a best-available proxy.
+				ExpectedROI:       weightedMargin,
 				ExpectedMarginPct: suggTargetMargin,
-				DataConfidence:    confidence,
+				// InsightsDataSummary does not track AvgDaysToSell, leave at zero.
+				DataConfidence: confidence,
 			},
 		})
 	}
@@ -321,7 +324,11 @@ func suggestBuyTermsFromLiquidation(_ context.Context, campaigns []Campaign, hea
 				BuyTermsCLPct: newTerms,
 			},
 			ExpectedMetrics: ExpectedMetrics{
-				DataConfidence: confidence,
+				// The marketplace-channel margin is what the reduced buy terms
+				// preserves, so report it as the expected ROI/margin proxy.
+				ExpectedROI:       h.EbayChannelMarginPct,
+				ExpectedMarginPct: h.EbayChannelMarginPct,
+				DataConfidence:    confidence,
 			},
 		})
 	}
