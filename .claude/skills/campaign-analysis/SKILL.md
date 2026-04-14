@@ -47,29 +47,71 @@ Set `BASE_URL=$PRODUCTION_URL` if that works. Fall back to `http://localhost:808
 
 Fetch these in parallel:
 
-- `GET /api/campaigns` — for name ↔ UUID resolution; filter out archived
+- `GET /api/campaigns` — for name ↔ UUID resolution; filter out archived AND synthetic buckets (the `External` campaign has `buyTermsCLPct == 0` and `dailySpendCapCents == 0` — it's a catch-all for pre-campaign purchases, not a real campaign, and should be excluded from the portfolio-at-a-glance line)
 - `GET /api/portfolio/health` — per-campaign status, reason, capital at risk
 - `GET /api/portfolio/weekly-review` — week-over-week deltas
 - `GET /api/portfolio/insights` — cross-campaign segmentation by character, grade, era, tier
 - `GET /api/credit/summary` — outstanding balance, weeks to cover, recovery trend
-- `GET /api/credit/invoices` — next invoice date and amount (matters for the liquidation playbook)
+- `GET /api/credit/invoices` — list of *all* unpaid invoices with due dates. Note: `amountCents` returns `null` per-invoice in this endpoint; pull the amount for the *next* invoice from `/api/credit/summary` (`nextInvoiceAmountCents`). Use this endpoint to plan a multi-invoice horizon (next 2–4 weeks of obligations), not just one invoice.
+- `GET /api/portfolio/suggestions` — **the primary source of pre-computed actionable suggestions**. Returns `adjustments` (sized parameter-change recommendations like "Lower buy terms on Modern from 80% to 75%" with `confidence`, `dataPoints`, and `rationale`) and `newCampaigns` (coverage-gap ideas with expected ROI and confidence). The opener's top-3 should draw from this list before doing any Monte Carlo math of its own — the server has already computed sized, confidence-banded recommendations the prose just needs to surface. Filter to confidence `high` or `medium` for paragraph 1.
+- `GET /api/inventory` — required so the opener can distinguish **in-hand** inventory (received, sellable now) from **in-transit** inventory (purchased but not yet received). Bucket by `purchase.invoiceDate`: items with `invoiceDate ≤ today − 7 days` are in-hand; items with `invoiceDate > today − 7 days` are in-transit (the ~1-week PSA receipt delay from the Data conventions). Sum `purchase.buyCostCents` per bucket so you know how much capital is *actually* sellable right now versus stuck in the pipeline.
+- `GET /api/dh/status` — reads `dh_listings_count` vs `dh_inventory_count` vs `pending_count`. This tells you how much of the in-hand inventory is actually *listed* and generating sales signal. A large received-but-not-listed gap (e.g. 3 listed of 101 mapped) is a real bottleneck the opener should surface as a top-3 candidate, because tuning and liquidation are downstream of having listings up.
+- `GET /api/campaigns/{id}/tuning` for each active campaign — needed when portfolio/suggestions doesn't already cover a tuning question or when the user asks for grade-level detail.
+- `GET /api/campaigns/{id}/projections` ONLY when validating a specific tuning suggestion's projected impact (the projections endpoint is heavy and often returns null confidence; prefer portfolio/suggestions' pre-computed sizing).
 
-Present a short conversational opening:
+Present the opener as **two paragraphs plus a close**:
 
-1. **Most actionable finding first.** One sentence: what needs attention right now?
-2. **Per-campaign health** with specific dollar figures: status, ROI, sell-through %, unsold count, capital at risk.
-3. **Week-over-week deltas** with specific numbers, e.g. *"Purchases up 20% (47 vs 39), but profit down 5%"*.
-4. **Capital position** framed as *outstanding balance / weeks to cover / recovery trend*. Do NOT frame this as distance to any credit limit — PSA credit limits are no longer a constraint.
-5. **Next invoice** one sentence: amount and due date.
-6. **Open question.** Always end with: *"What would you like to dig into — Wildcard, liquidation for the invoice, parameter updates, or something else?"*
+**Paragraph 1 — "This week I'd do these 3 things:"** Numbered list. Each item names an action, targets (campaign / cards / invoice), sized $ impact with horizon, and confidence band (see Recommendation rules). If the strongest item is a hold verdict, state it directly as item 1 ("Hold — this week's signal is within noise…"); hold items carry no sized $ or confidence band because there is no action being proposed.
 
-Keep it concise. The goal is to prompt a follow-up, not dump a report.
+**Where the top-3 actually come from**, in priority order:
 
-#### Example opening turn
+1. **Capital crunch first** — if in-hand × 1.1 < next invoice amount, the crunch IS item 1 (with options per Playbook B's feasibility precondition). Don't bury it.
+2. **DH listing bottleneck** — if `dh_listings_count` is much smaller than `dh_inventory_count` or `pending_count`, approving the queue is usually the highest-leverage sales lever and beats most tuning suggestions. Promote it to item 1 or 2.
+3. **`/api/portfolio/suggestions` adjustments + newCampaigns** — high/medium-confidence entries with ≥10 dataPoints. Pull `title` + `rationale` + `expectedROI` directly; don't re-derive from projections. Apply the capital guardrail to any ramp-up (raise buy terms, raise daily cap, new campaign).
+4. Coverage-gap prompts (Playbook F) and DH inventory alerts (Playbook G) only after the above are exhausted.
+
+If portfolio/suggestions returns nothing meaningful AND no crunch AND no listing bottleneck, the opener can legitimately produce a hold verdict for item 1 — that's a real signal that there's nothing to do, not a failure to find something.
+
+**Paragraph 2 — "Portfolio at a glance:"** One compressed line. Per-active-campaign format depends on the in-transit share:
+
+- If **in-transit ≤ 50%** of the campaign's unsold count, use `Name ROI% / ST% / N unsold $X.XK` (single combined figure — the distinction doesn't materially change what the user can do).
+- If **in-transit > 50%** (common during a large invoice cycle), use `Name ROI% / ST% / Nₕ in-hand + Mᵢ in-transit $X.XK` (subscripts literal: `5ₕ + 11ᵢ`). This makes it obvious when a campaign's headline capital is not actually sellable. Always do this split for campaigns at 100% in-transit — their headline dollar number is misleading otherwise.
+
+Separate campaigns with ` • `. Omit healthy campaigns with total unsold value under ~$500 unless they're on a top-3 candidate list.
+
+Then: `Outstanding $X.XK / N.N weeks to cover / trend ↗|↘|→`. Then **upcoming invoices** (not just one): list every unpaid invoice from `/api/credit/invoices` with due date in the next 4 weeks, formatted as `Invoices: $X.XK due YYYY-MM-DD, $Y.YK due YYYY-MM-DD`. Multi-invoice horizon matters because the user often has one invoice landing while the next is two weeks out, and capital planning is for the rolling window, not just next Friday.
+
+Then **always** a capital-crunch line: `In-hand $X.XK of $Y.YK unsold (rest in-transit for invoice YYYY-MM-DD), DH listed: N of M mapped` — this is the single most important signal for what the user can actually do this week, and the opener is wrong when it treats in-transit cards as liquidatable. If in-hand capital × 1.1 < next invoice amount, mark this paragraph with a ⚠ and spell out the gap explicitly ("⚠ capital crunch: $X.XK in-hand can't cover $Y.YK invoice; short ~$Z.ZK").
+
+**Close:** Targeted question referencing the strongest action, not a generic menu. Example: *"Want me to walk through the Wildcard liquidation list, pull up C7 tuning detail, or take something else?"*
+
+Keep it concise — the goal is to prompt a focused follow-up, not dump a report.
+
+#### Example opening turn — clean signal
 
 > **User:** /campaign-analysis
 >
-> **Assistant:** Quick read on the active campaigns. [Most performing campaign] is the standout — [ROI]% ROI, [sell-through]% sell-through, [N] unsold ($X,XXX at risk). [Underperforming campaign] is dragging — [ROI]% ROI, [sell-through]% sell-through after [N] days. Outstanding balance is $XX.XK with N.N weeks to cover at current velocity. Next invoice is $X.XK due [date]. Want to dig into [campaign name], talk through liquidation options for the invoice, or review parameter updates?
+> **Assistant:** This week I'd do these 3 things:
+> 1. Liquidate ~$4.2K of Wildcard via DH to cover the 4/22 invoice — est. +$3.7K recovery, ~8 days to turn (Confidence: H).
+> 2. Drop Campaign 7 buy terms 80→76% — empirical optimum over 42 obs, est. +$1.1K/mo at current fill (Confidence: H).
+> 3. Approve 8 pending DH pushes — oldest queued 11 days, est. +$2.3K recovery (Confidence: M).
+>
+> **Portfolio at a glance:** Wildcard 14% ROI / 38% ST / 47 unsold $18.2K • C7 3% ROI / 22% ST / 61 unsold $12.6K • C3 9% ROI / 41% ST / 22 unsold $5.8K • Outstanding $41.8K / 3.2 weeks to cover / trend → • Next invoice $8.2K due 4/22.
+>
+> Want me to walk through the Wildcard liquidation list, dig into C7 tuning, or pull up the DH approvals?
+
+#### Example opening turn — hold verdict
+
+> **User:** /campaign-analysis
+>
+> **Assistant:** This week I'd do these 3 things:
+> 1. Hold — WoW ROI of 12% is within ±10% of the 11.8% trailing-week mean. Noise, not signal. No parameter changes indicated.
+> 2. Approve 4 pending DH pushes — oldest queued 9 days, est. +$1.1K recovery (Confidence: M).
+> 3. Review the 6 aging-inventory candidates flagged in Playbook C (days-held > 2× channel velocity, Confidence: M).
+>
+> **Portfolio at a glance:** Wildcard 13% ROI / 36% ST / 45 unsold $17.8K • C7 7% ROI / 31% ST / 38 unsold $8.2K • C3 10% ROI / 44% ST / 19 unsold $4.9K • Outstanding $38.4K / 3.0 weeks to cover / trend ↘ • Next invoice $7.6K due 4/29.
+>
+> Pull up the DH approvals, look at the aging candidates, or something else?
 
 ## Step 4 — Follow-up playbooks
 
@@ -86,11 +128,12 @@ Fetch in parallel:
 
 Present per campaign:
 
-1. Which grades or price tiers are dragging ROI (with data-point counts — caveat anything with <10 observations).
+1. Which grades or price tiers are dragging ROI (with data-point counts).
 2. What the empirical optimal buy % looks like vs the current term.
-3. Specific parameter change recommendations with confidence level.
-4. Cross-reference each recommendation against the strategy doc's design intent — flag divergences.
-5. A prioritized list of proposed edits. If the user approves any, we can apply them via `PUT /api/campaigns/{id}`.
+3. Specific parameter change recommendations. Every recommendation carries sized $ impact, horizon, and confidence band per the Recommendation rules. If the proposed change is a ramp-up (raising buy terms or daily cap), apply the capital guardrail before emitting — caveat under "tight" posture, block under "critical".
+4. Apply the hold verdict rule before recommending sub-threshold changes (<3pp change with Medium-or-lower confidence — recommend hold explicitly rather than suggesting it).
+5. Cross-reference each recommendation against the strategy doc's design intent — flag divergences.
+6. A prioritized list of proposed edits. If the user approves any, apply them via `PUT /api/campaigns/{id}` — see Mutations.
 
 **Escalation: revocation.** If a campaign is critically underperforming (negative ROI with >20 observations, or health status "critical"), raise the possibility of revoking it entirely. Fetch `GET /api/portfolio/revocations` to check if any existing flags are pending. To create a new revocation flag: `POST /api/portfolio/revocations` with `{"segmentLabel": "...", "segmentDimension": "...", "reason": "..."}`. Then fetch the generated email via `GET /api/portfolio/revocations/{flagId}/email` for PSA notification. Only suggest revocation when tuning adjustments clearly aren't sufficient — this is a last resort, not a first response to a bad week.
 
@@ -110,10 +153,10 @@ Campaign N — <Name>
 - Buy Terms: P%
 - Daily Spend Cap: $D
 - Inclusion List: <comma-separated card names, or "None (open net)">
-- <Changed: Buy terms 80% → 77%>   OR   <No change>
+- <Changed: Buy terms 80% → 77%   Proj: +$1.1K/mo (H)>   OR   <No change>
 ```
 
-Every campaign in the canonical list appears in numeric order, even the ones with `No change`. If a field is not yet stored in the API (e.g. InclusionList for a campaign that's pure "open net"), show `None (open net)`.
+Every campaign in the canonical list appears in numeric order, even the ones with `No change`. If a field is not yet stored in the API (e.g. InclusionList for a campaign that's pure "open net"), show `None (open net)`. Every `Changed:` line carries the sized projection annotation `Proj: +$X.XK/mo (H|M|L)` — a compact form of the Sizing rule's canonical `est. +$X.XK/mo at current fill (Confidence: H|M|L)`, shortened here because the annotation lives inline on a one-line list item. `No change` lines need no annotation.
 
 ### Playbook B — "What should we liquidate to pay our invoice?"
 
@@ -130,13 +173,14 @@ Fetch in parallel:
 The approach:
 
 1. Pick the invoice to cover (next-due from `/credit/invoices`, or user-selected). Note the invoice's `pendingReceiptCents` (cards bought but not yet received) and `sellThroughPct` — these contextualize how much of the invoice's inventory is already moving.
-2. Compute target recovery = `invoiceAmount × 1.1` for buffer.
-3. Exclude any purchase IDs already on the sell sheet (from `/sell-sheet/items`).
-4. Rank candidate cards by (a) shortest expected days-to-sell, (b) highest EV/dollar, (c) best channel fit using the net-proceeds math in *Data conventions*.
-5. Walk down the ranked list accumulating projected net proceeds until the running total meets the target.
-6. Present as a table: card, cert, recommended channel, recommended price, projected net proceeds, running total.
+2. Compute target recovery = `invoiceAmount × 1.1` for buffer. State this target at the top of the response ("Target: $X.XK to cover $Y.YK invoice + 10% buffer").
+3. **Feasibility precondition — before ranking anything.** Filter `/api/inventory` to the in-hand set (items with `invoiceDate ≤ today − 7 days`, i.e. received and physically sellable). Sum their `buyCostCents`. If `in-hand × 1.1 < target`, this is a capital crunch — liquidation from on-hand alone can't close the gap. Do NOT pad the list with in-transit cards (they're not sellable yet). Instead, say so and present options: (a) **partial coverage** — best cards from in-hand toward a partial payment, (b) **wait for receipt** — list cards arriving in the next 1–7 days by expected-arrival date, or (c) **invoice timing** — suggest the user negotiate or defer the invoice. Pick the option(s) matching the gap size, don't just pick (a).
+4. Exclude any purchase IDs already on the sell sheet (from `/sell-sheet/items`).
+5. Rank in-hand candidate cards by (a) shortest expected days-to-sell, (b) highest EV/dollar, (c) best channel fit using the net-proceeds math in *Data conventions*.
+6. Walk down the ranked list accumulating projected net proceeds until the running total meets the target (or exhausts in-hand inventory if the crunch precondition fired). Stop as soon as target is met — don't pad.
+7. Present as a table: card, cert, recommended channel, recommended price, projected net proceeds, running total. End the table with a summary line: `Selected N cards from in-hand, $X.XK projected recovery vs $Y.YK target (Confidence: H|M|L based on days-to-sell sample)`. If the crunch precondition fired, the summary line reads: `⚠ Partial coverage: $X.XK from N in-hand cards vs $Y.YK target — short $Z.ZK`.
 
-Respect the strategy doc's exit-channel hierarchy. Flag any card recommended into a channel it's gated out of.
+Respect the strategy doc's exit-channel hierarchy. Flag any card recommended into a channel it's gated out of. Liquidation is a capital-positive action — the capital guardrail in the Recommendation rules does NOT apply here.
 
 **Action: add to sell sheet.** When the user approves cards from the table, add them to the persistent sell sheet via `PUT /api/sell-sheet/items` with `{"purchaseIds": ["id1", "id2", ...]}`. This queues them in the web UI's sell sheet view for pricing and listing. Confirm what was added: *"Added 8 cards to the sell sheet ($X,XXX projected recovery). You can review and adjust prices in the Sell Sheet tab."*
 
@@ -157,7 +201,9 @@ Then focus on cards where any of the following hold:
 - Current list price has drifted more than 15% from the market signal
 - AI-suggested price differs from listed price by more than 10%
 
-Present a table of candidates: card, days held, current list, suggested list, suggested channel, reason. Ask the user which ones to queue for actual price updates. For each approved row, issue `PATCH /api/purchases/{purchaseId}/price-override` with `{"priceCents": ..., "source": "manual"}`.
+Present a table of candidates: card, days held, current list, suggested list, suggested channel, reason, **projected days-to-sell delta** (how much faster the card moves at suggested price vs current), and **projected $ delta** (expected recovery change per card). Each row also carries a confidence band per the Recommendation rules — typically M or L because inventory samples are small. Ask the user which ones to queue for actual price updates. For each approved row, issue `PATCH /api/purchases/{purchaseId}/price-override` — see Mutations.
+
+Repricing is a capital-positive action (faster turn on held inventory) — the capital guardrail does NOT apply.
 
 ### Playbook D — "Does the strategy doc still match reality?"
 
@@ -177,7 +223,7 @@ Re-read `docs/private/CAMPAIGN_STRATEGY.md` with fresh eyes, then walk each sect
 - **Current text:** quoted
 - **What the data shows:** specific numbers with sample sizes
 - **Proposed text:** concrete replacement wording
-- **Confidence:** high / medium / low based on sample size and variance
+- **Confidence:** high / medium / low based on sample size and variance (this rating applies to the proposed doc edit itself, not the Recommendation rules H/M/L bands, which cover live-data recommendations)
 
 Present the proposed edits as a numbered list. Apply only the ones the user approves — never silently edit the doc.
 
@@ -228,13 +274,15 @@ Fetch in parallel:
 
 For each coverage gap, the response includes a `segment` (with ROI, sell-through, avg days-to-sell from historical data), a `reason` (why it's a gap), and an `opportunity` (suggested action). Present the top gaps ranked by ROI, with caveats on sample size.
 
-For each promising gap, sketch what a new campaign would look like:
+**Before proposing anything:** apply the capital guardrail. New campaigns are ramp-up — they deploy more capital. Under "tight" posture, caveat each proposal with the outstanding-balance context. Under "critical" posture, block new-campaign proposals entirely and redirect to defensive moves (liquidate, reduce caps).
+
+For each promising gap (that survives the capital guardrail), sketch what a new campaign would look like:
 1. Proposed name and next available canonical number (from the config loaded at Step 0)
 2. Year range, grade range, price range based on the segment data
 3. Suggested buy terms (reference similar existing campaigns)
-4. Expected fill rate and daily spend cap
+4. Expected fill rate and daily spend cap, with sized projection: `est. +$X.XK/mo at proposed cap (Confidence: H|M|L based on segment sample size)`
 
-Cross-reference against the strategy doc to check whether any gaps were intentionally excluded (e.g., sealed product, sports cards). If the user wants to proceed, a campaign can be created via `POST /api/campaigns`.
+Cross-reference against the strategy doc to check whether any gaps were intentionally excluded (e.g., sealed product, sports cards). If the user wants to proceed, a campaign can be created via `POST /api/campaigns` — see Mutations.
 
 ### Playbook G — "How are our DH listings doing?" / marketplace optimization
 
@@ -249,10 +297,10 @@ Fetch in parallel:
 
 Present:
 1. **Integration health.** How many cards are matched vs unmatched vs pending push? If `unmatchedCount` is high, suggest running a bulk match.
-2. **Inventory alerts.** DH flags cards in your inventory as "hottest cards" (demand spike) or "consider selling" (market signal). Surface these with the reasoning and confidence score. Cards flagged as hot with stale listings are the highest priority.
-3. **Push queue.** Cards with `dh_push_status = "pending"` are waiting to be approved for listing. If any are held up, the user can approve them via `POST /api/dh/approve/{purchaseId}`.
+2. **Inventory alerts.** DH flags cards in your inventory as "hottest cards" (demand spike) or "consider selling" (market signal). Surface these with the reasoning and confidence score. Cards flagged as hot with stale listings are the highest priority — size the opportunity: `est. +$X.XK recovery within N days (Confidence: H|M|L mapped from DH's own confidence score)`.
+3. **Push queue.** Cards with `dh_push_status = "pending"` are waiting to be approved for listing. Prioritize by days-queued + projected $ recovery: `N cards, oldest queued D days, est. +$X.XK recovery (Confidence: H|M|L)`. Approve via `POST /api/dh/approve/{purchaseId}` — see Mutations.
 
-When recommending DH as a sales channel (in any playbook), note that eBay listings now flow through DH — there's no separate eBay CSV export. DH handles multi-channel distribution.
+When recommending DH as a sales channel (in any playbook), note that eBay listings now flow through DH — there's no separate eBay CSV export. DH handles multi-channel distribution. DH approvals are capital-positive (they turn inventory into sales), so the capital guardrail does NOT apply.
 
 ## Conversational guidelines
 
@@ -262,6 +310,60 @@ When recommending DH as a sales channel (in any playbook), note that eBay listin
 4. End every response with a question that invites the user deeper.
 5. Flag risks proactively — slow inventory, duplicate accumulations, $0 buy costs, cards gated out of their suggested channel.
 6. Keep it conversational. Natural language, not bullet-heavy reports.
+
+## Recommendation rules
+
+These rules are referenced by every playbook that emits a recommendation. Keeping them here avoids drift between playbooks.
+
+### Sizing
+
+Every parameter-change, new-campaign, or material tuning recommendation carries a projected $ impact, time horizon, and confidence band — uniformly. Format: `est. +$X.XK/mo at current fill (Confidence: H|M|L)`. When the projections endpoint can't produce a clean counterfactual (sparse data, wide variance), say so explicitly: `est. +$X/mo (Low confidence, N obs)`. For one-time-recovery actions (DH push approval, sell-sheet liquidation batch), replace `/mo at current fill` with `recovery`: `est. +$X.XK recovery (Confidence: H|M|L)` — the `recovery` variant marks a non-recurring event, not ongoing monthly income. Confidence band always sits inside parentheses, regardless of variant. Never drop the number silently — that makes recommendations impossible to prioritize.
+
+**Projections time unit.** The `/api/campaigns/{id}/projections` response returns `medianProfitCents` as the projected median profit **per one Monte Carlo purchase cycle** (not per month). Convert to a monthly figure only when you have a defensible cycle-to-month mapping from the tuning data (e.g. campaign fills ~weekly → multiply by 4). When the mapping is unclear, report `est. +$X.XK per projection cycle` and note the cycle semantics; don't pretend `/mo`. The same `medianProfitCents` also appears in `p10ProfitCents` / `p90ProfitCents` — use the spread to inform the confidence band (wide p10↔p90 relative to median → Low).
+
+**Projections endpoint quirks.** Two real failure modes to handle:
+- `confidence: null` on every scenario — Task 0 expected a confidence string; in practice the field is often null. Treat as unmapped and fall back to the tuning endpoint's obs-count bands (per the Confidence bands rule).
+- All-zero scenarios (every scenario has `medianROI: 0`, `medianProfitCents: 0`, `medianVolume: 0`) — Monte Carlo didn't converge due to thin sample. Do NOT emit a sized recommendation; instead surface a Low-confidence hold-adjacent note: "projections couldn't converge on Wildcard (thin sample) — recommend manual grade-level review via `/api/campaigns/{id}/tuning` before parameter changes." This is a distinct failure mode from the hold verdict rule — the rule fires on weak signal; this fires on unusable signal.
+
+### Confidence bands
+
+| Band | Rule |
+|------|------|
+| **High (H)** | ≥30 observations AND coefficient of variation < 20% |
+| **Medium (M)** | 10–29 observations, OR ≥30 observations with CV ≥ 20% |
+| **Low (L)** | < 10 observations OR < 4 weeks of history |
+
+Coefficient of variation = `stddev / mean` of the metric driving the recommendation (ROI, sell-through, or days-to-sell — whichever the recommendation is predicated on). If the tuning endpoint doesn't return variance for a given metric, fall back to obs-count-only bands and say so: `(Medium confidence, obs-count only — variance not available)`. The `/api/campaigns/{id}/projections` and `/api/portfolio/suggestions` responses also return a `confidence` string ("low"/"medium"/"high") — treat that as a **hint**, not authoritative. The skill's obs-count rule above wins on disagreement: a server-labeled "medium" with 8 observations is Low per the table, not Medium. State the rule-applied band, not the server label. When multiple bands match (e.g. obs-count qualifies for Medium but history-length qualifies for Low), use the lower confidence band.
+
+### "Hold" verdict rule
+
+When signal is weak, recommend holding — explicitly — instead of synthesizing a change. A hold fires when *any* of the following is true for the metric driving the recommendation:
+
+- Week-over-week delta is within the noise band. Use the rule-of-thumb: WoW delta within ±10% of the campaign's trailing-4-week mean (or trailing-mean if full 4 weeks aren't available). Note: the `/api/portfolio/weekly-review` endpoint returns *only* the current week + previous week in a single record and silently ignores `?weekOffset=N` (despite accepting the param) — there is no reliable way to fetch 4 weeks of history through the current API, so the rule-of-thumb is the authoritative test, not a fallback. If a user explicitly wants a σ-based check, tell them the endpoint doesn't support it and ask whether an approximation from the last-two-weeks figures is useful.
+- Proposed parameter change magnitude is < 3 percentage points AND confidence is Medium or Low.
+- Sell-through drop is < 5pp AND observation count is < 20.
+
+Say it out loud in the rule-of-thumb form: *"Hold — this week's ROI is 7%, within ±10% of the 8.2% trailing-mean. Noise, not signal. I'd keep current params."* Silence is not acceptable; the user learns *why* nothing is being changed.
+
+### Capital guardrail
+
+Checked before emitting any **ramp-up** recommendation — actions that deploy more capital. Ramp-ups include: raise buy terms, raise daily spend cap, propose a new campaign, expand an inclusion list. DH push approvals are excluded (they move existing inventory, not new spend); liquidation actions are excluded (they recover capital, not deploy it).
+
+| Posture | Rule | Effect |
+|---------|------|--------|
+| Healthy | `weeksToCover ≤ 5` AND `recoveryTrend != "worsening"` AND `alertLevel != "critical"` | No caveat; proceed. |
+| Tight | `weeksToCover > 5` OR `recoveryTrend == "worsening"` | Caveat: *"capital posture is tight: $X outstanding, N.N weeks to cover, trend ↗ — sizing the downside if fill rate under-performs"*. |
+| Critical | `alertLevel == "critical"` | Block the ramp-up. Recommend defensive posture (liquidate, reduce daily cap, pause aggressive DH) instead. |
+
+Data sources: `GET /api/portfolio/health`, `GET /api/credit/summary` (already fetched in Step 3).
+
+### Sequencing
+
+When two or more recommendations interact — a liquidation target sits in a campaign also getting a buy-term change, a DH push conflicts with a pending price override, a daily-cap change affects a campaign also proposed for ramp-up — end the response with a short numbered Sequence block explaining the order. Example:
+
+> **Sequence:** (1) apply the Campaign 7 buy-term drop first — no point liquidating at current terms and then lowering. (2) Queue the Wildcard sell-sheet adds. (3) DH approvals last.
+
+For independent recommendations, skip the Sequence block; the numbered list in the opener is enough.
 
 ## Data conventions
 
