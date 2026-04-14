@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
+	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/platform/config"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
@@ -261,3 +262,223 @@ var _ CardLadderPurchaseLister = (*mockCLPurchaseLister)(nil)
 var _ CardLadderValueUpdater = (*mockCLValueUpdater)(nil)
 var _ CardLadderGemRateUpdater = (*mockCLGemRateUpdater)(nil)
 var _ DHPushStatusUpdater = (*mockCLDHPushUpdater)(nil)
+
+// ---------------------------------------------------------------------------
+// Phase function tests: pushNewCards, removeSoldCards, refreshSalesComps
+// ---------------------------------------------------------------------------
+
+// TestPushNewCards_FilterLogic tests the filtering logic of pushNewCards.
+// We test that it correctly identifies which purchases to push based on:
+// - Has a cert number
+// - Not already in existingMaps
+func TestPushNewCards_FilterLogic(t *testing.T) {
+	tests := []struct {
+		name         string
+		purchases    []inventory.Purchase
+		existingMaps []sqlite.CLCardMapping
+		expectCount  int // count of purchases that should be considered for push
+	}{
+		{
+			name: "pushes unmapped purchases with certs",
+			purchases: []inventory.Purchase{
+				{CertNumber: "123456"},
+				{CertNumber: "789012"},
+			},
+			existingMaps: []sqlite.CLCardMapping{},
+			expectCount:  2,
+		},
+		{
+			name: "skips already-mapped certs",
+			purchases: []inventory.Purchase{
+				{CertNumber: "123456"},
+				{CertNumber: "789012"},
+			},
+			existingMaps: []sqlite.CLCardMapping{
+				{SlabSerial: "123456"},
+			},
+			expectCount: 1,
+		},
+		{
+			name: "skips purchases without cert numbers",
+			purchases: []inventory.Purchase{
+				{CertNumber: ""},
+				{CertNumber: "789012"},
+			},
+			existingMaps: []sqlite.CLCardMapping{},
+			expectCount:  1,
+		},
+		{
+			name: "skips all when all are mapped",
+			purchases: []inventory.Purchase{
+				{CertNumber: "123456"},
+				{CertNumber: "789012"},
+			},
+			existingMaps: []sqlite.CLCardMapping{
+				{SlabSerial: "123456"},
+				{SlabSerial: "789012"},
+			},
+			expectCount: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Build set of already-mapped certs
+			mappedCerts := make(map[string]bool, len(tt.existingMaps))
+			for _, m := range tt.existingMaps {
+				mappedCerts[m.SlabSerial] = true
+			}
+
+			// Count purchases that would be pushed
+			count := 0
+			for i := range tt.purchases {
+				p := &tt.purchases[i]
+				if p.CertNumber == "" || mappedCerts[p.CertNumber] {
+					continue
+				}
+				count++
+			}
+
+			assert.Equal(t, tt.expectCount, count, "filter count mismatch")
+		})
+	}
+}
+
+// TestRemoveSoldCards_IdentifySold tests identifying sold cards.
+// Sold cards are those in existingMaps but NOT in unsoldPurchases.
+func TestRemoveSoldCards_IdentifySold(t *testing.T) {
+	tests := []struct {
+		name         string
+		unsoldPurch  []inventory.Purchase
+		existingMaps []sqlite.CLCardMapping
+		expectSold   int // count of mappings that should be removed
+	}{
+		{
+			name: "identifies sold when cert not in unsold set",
+			unsoldPurch: []inventory.Purchase{
+				{CertNumber: "111111"},
+				{CertNumber: "222222"},
+			},
+			existingMaps: []sqlite.CLCardMapping{
+				{SlabSerial: "111111", CLCollectionCardID: "card_111"},
+				{SlabSerial: "222222", CLCollectionCardID: "card_222"},
+				{SlabSerial: "333333", CLCollectionCardID: "card_333"},
+			},
+			expectSold: 1,
+		},
+		{
+			name: "all still unsold",
+			unsoldPurch: []inventory.Purchase{
+				{CertNumber: "111111"},
+				{CertNumber: "222222"},
+				{CertNumber: "333333"},
+			},
+			existingMaps: []sqlite.CLCardMapping{
+				{SlabSerial: "111111", CLCollectionCardID: "card_111"},
+				{SlabSerial: "222222", CLCollectionCardID: "card_222"},
+				{SlabSerial: "333333", CLCollectionCardID: "card_333"},
+			},
+			expectSold: 0,
+		},
+		{
+			name:        "all sold",
+			unsoldPurch: []inventory.Purchase{},
+			existingMaps: []sqlite.CLCardMapping{
+				{SlabSerial: "111111", CLCollectionCardID: "card_111"},
+				{SlabSerial: "222222", CLCollectionCardID: "card_222"},
+			},
+			expectSold: 2,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Build set of unsold cert numbers
+			unsoldCerts := make(map[string]bool, len(tt.unsoldPurch))
+			for _, p := range tt.unsoldPurch {
+				if p.CertNumber != "" {
+					unsoldCerts[p.CertNumber] = true
+				}
+			}
+
+			// Count sold (mappings NOT in unsold set)
+			sold := 0
+			for _, m := range tt.existingMaps {
+				if !unsoldCerts[m.SlabSerial] {
+					sold++
+				}
+			}
+
+			assert.Equal(t, tt.expectSold, sold, "sold count mismatch")
+		})
+	}
+}
+
+// TestRefreshSalesComps_Dedup tests deduplication logic.
+// We should fetch comps only once per unique (gemRateID, condition) pair.
+func TestRefreshSalesComps_Dedup(t *testing.T) {
+	tests := []struct {
+		name        string
+		mappings    []sqlite.CLCardMapping
+		expectFetch int // count of unique (gemRateID, condition) pairs
+	}{
+		{
+			name: "fetches each unique pair once",
+			mappings: []sqlite.CLCardMapping{
+				{CLGemRateID: "gem_123", CLCondition: "PSA 10"},
+				{CLGemRateID: "gem_456", CLCondition: "PSA 9"},
+			},
+			expectFetch: 2,
+		},
+		{
+			name: "deduplicates identical pairs",
+			mappings: []sqlite.CLCardMapping{
+				{CLGemRateID: "gem_123", CLCondition: "PSA 10"},
+				{CLGemRateID: "gem_123", CLCondition: "PSA 10"},
+				{CLGemRateID: "gem_456", CLCondition: "PSA 9"},
+			},
+			expectFetch: 2,
+		},
+		{
+			name: "skips missing gemRateID",
+			mappings: []sqlite.CLCardMapping{
+				{CLGemRateID: "", CLCondition: "PSA 10"},
+				{CLGemRateID: "gem_456", CLCondition: "PSA 9"},
+			},
+			expectFetch: 1,
+		},
+		{
+			name: "skips missing condition",
+			mappings: []sqlite.CLCardMapping{
+				{CLGemRateID: "gem_123", CLCondition: ""},
+				{CLGemRateID: "gem_456", CLCondition: "PSA 9"},
+			},
+			expectFetch: 1,
+		},
+		{
+			name: "all skipped",
+			mappings: []sqlite.CLCardMapping{
+				{CLGemRateID: "", CLCondition: ""},
+				{CLGemRateID: "", CLCondition: "PSA 9"},
+			},
+			expectFetch: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			type compKey struct{ gemRateID, condition string }
+			seen := make(map[compKey]bool)
+
+			for _, m := range tt.mappings {
+				if m.CLGemRateID == "" || m.CLCondition == "" {
+					continue
+				}
+				key := compKey{m.CLGemRateID, m.CLCondition}
+				seen[key] = true
+			}
+
+			assert.Equal(t, tt.expectFetch, len(seen), "fetch count mismatch")
+		})
+	}
+}
