@@ -105,7 +105,7 @@ Keep it concise — the goal is to prompt a focused follow-up, not dump a report
 > **User:** /campaign-analysis
 >
 > **Assistant:** This week I'd do these 3 things:
-> 1. Hold — WoW ROI of 12% is within ±10% of the 11.8% trailing-4-week mean. Noise, not signal. No parameter changes indicated.
+> 1. Hold — WoW ROI of 12% is within ±10% of the 11.8% trailing-week mean. Noise, not signal. No parameter changes indicated.
 > 2. Approve 4 pending DH pushes — oldest queued 9 days, est. +$1.1K recovery (Confidence: M).
 > 3. Review the 6 aging-inventory candidates flagged in Playbook C (days-held > 2× channel velocity, Confidence: M).
 >
