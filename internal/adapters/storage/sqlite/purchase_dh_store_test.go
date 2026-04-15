@@ -198,3 +198,70 @@ func TestListDHPendingItems_EmptyReturnsNonNilSlice(t *testing.T) {
 	require.NotNil(t, items)
 	assert.Len(t, items, 0)
 }
+
+// TestCountDHPipelineHealth covers the filters that make the dashboard counts
+// match the queue list and expose the "unenrolled" black-hole bucket.
+func TestCountDHPipelineHealth(t *testing.T) {
+	repo := setupCampaignsRepo(t)
+	ctx := context.Background()
+	now := time.Now().Truncate(time.Second)
+	received := now.Format(time.RFC3339)
+
+	active := &inventory.Campaign{ID: "camp-active", Name: "Active", Phase: inventory.PhaseActive, CreatedAt: now, UpdatedAt: now}
+	closed := &inventory.Campaign{ID: "camp-closed", Name: "Closed", Phase: inventory.PhaseClosed, CreatedAt: now, UpdatedAt: now}
+	require.NoError(t, repo.CreateCampaign(ctx, active))
+	require.NoError(t, repo.CreateCampaign(ctx, closed))
+
+	mkPurchase := func(id, campaignID string, received *string, pushStatus inventory.DHPushStatus, invID int) *inventory.Purchase {
+		return &inventory.Purchase{
+			ID: id, CampaignID: campaignID,
+			CardName: "Charizard", SetName: "Base Set",
+			CertNumber: id, Grader: "PSA", GradeValue: 9,
+			BuyCostCents: 10000, PurchaseDate: "2026-01-01",
+			ReceivedAt: received, DHPushStatus: pushStatus, DHInventoryID: invID,
+			CreatedAt: now, UpdatedAt: now,
+		}
+	}
+
+	cases := []*inventory.Purchase{
+		// Counts in pending_received: pending + received + unsold + active campaign.
+		mkPurchase("pending-received-1", "camp-active", &received, inventory.DHPushStatusPending, 0),
+		mkPurchase("pending-received-2", "camp-active", &received, inventory.DHPushStatusPending, 0),
+		// Not received → should not count toward pending_received.
+		mkPurchase("pending-not-received", "camp-active", nil, inventory.DHPushStatusPending, 0),
+		// Closed campaign → excluded.
+		mkPurchase("pending-closed", "camp-closed", &received, inventory.DHPushStatusPending, 0),
+		// Counts as unenrolled_received: empty status + received + inv_id=0 + unsold + active.
+		mkPurchase("unenrolled-1", "camp-active", &received, "", 0),
+		mkPurchase("unenrolled-2", "camp-active", &received, "", 0),
+		// Empty status but not received → excluded from both buckets (the scenario
+		// where a PSA-sheet sync created the row but the card hasn't been scanned).
+		mkPurchase("unenrolled-not-received", "camp-active", nil, "", 0),
+		// Matched (has inventory ID) → not unenrolled.
+		mkPurchase("matched", "camp-active", &received, inventory.DHPushStatusMatched, 42),
+	}
+	for _, p := range cases {
+		require.NoError(t, repo.CreatePurchase(ctx, p))
+	}
+
+	// Mark the sold row to exclude it from both buckets.
+	require.NoError(t, repo.CreateSale(ctx, &inventory.Sale{
+		ID: "sale-unenrolled-2", PurchaseID: "unenrolled-2",
+		SaleChannel: inventory.SaleChannelEbay, SalePriceCents: 12000,
+		SaleDate: "2026-01-05", CreatedAt: now, UpdatedAt: now,
+	}))
+
+	health, err := repo.CountDHPipelineHealth(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 2, health.PendingReceived, "pending-received-1 + pending-received-2")
+	assert.Equal(t, 1, health.UnenrolledReceived, "only unenrolled-1 (unenrolled-2 is sold, unenrolled-not-received has no receipt)")
+}
+
+// TestCountDHPipelineHealth_EmptyDatabaseReturnsZero guards the initial state.
+func TestCountDHPipelineHealth_EmptyDatabaseReturnsZero(t *testing.T) {
+	repo := setupCampaignsRepo(t)
+	health, err := repo.CountDHPipelineHealth(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, 0, health.PendingReceived)
+	assert.Equal(t, 0, health.UnenrolledReceived)
+}

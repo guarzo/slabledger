@@ -1090,6 +1090,10 @@ func (m *InMemoryCampaignStore) CountUnsoldByDHPushStatus(_ context.Context) (ma
 	return map[string]int{}, nil
 }
 
+func (m *InMemoryCampaignStore) CountDHPipelineHealth(_ context.Context) (inventory.DHPipelineHealth, error) {
+	return inventory.DHPipelineHealth{}, nil
+}
+
 func (m *InMemoryCampaignStore) GetSellSheetItems(ctx context.Context) ([]string, error) {
 	if m.GetSellSheetItemsFn != nil {
 		return m.GetSellSheetItemsFn(ctx)

@@ -67,6 +67,7 @@ type DHSuggestionsCounter interface {
 // DHStatusCounter returns DH push status counts without loading full purchase data.
 type DHStatusCounter interface {
 	CountUnsoldByDHPushStatus(ctx context.Context) (map[string]int, error)
+	CountDHPipelineHealth(ctx context.Context) (inventory.DHPipelineHealth, error)
 }
 
 // DHPendingLister returns the list of received, unsold purchases pending DH push.

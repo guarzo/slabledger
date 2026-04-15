@@ -427,3 +427,153 @@ func TestResolveCert(t *testing.T) {
 		})
 	}
 }
+
+// The following tests cover the DH push pipeline enrollment that ScanCert and
+// ImportCerts do so that newly-received inventory actually flows into the DH
+// sync pipeline instead of getting stranded with an empty dh_push_status.
+
+func TestImportCerts_NewCertEnrollsForDHPush(t *testing.T) {
+	repo := newMockRepo()
+	repo.campaigns[ExternalCampaignID] = &Campaign{ID: ExternalCampaignID, Name: ExternalCampaignName}
+	certLookup := &mockCertLookup{
+		lookupFn: func(_ context.Context, cert string) (*CertInfo, error) {
+			return &CertInfo{CertNumber: cert, CardName: "Charizard", Grade: 9, Category: "BASE SET", CardNumber: "4"}, nil
+		},
+	}
+	svc := &service{
+		campaigns: repo, purchases: repo, sales: repo, analytics: repo,
+		finance: repo, pricing: repo, dh: repo, certLookup: certLookup,
+		idGen: func() string { return "new-id" },
+	}
+
+	if _, err := svc.ImportCerts(context.Background(), []string{"12345678"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	created := repo.purchases["new-id"]
+	if created == nil {
+		t.Fatal("purchase not created")
+	}
+	if created.DHPushStatus != DHPushStatusPending {
+		t.Errorf("dhPushStatus = %q, want %q", created.DHPushStatus, DHPushStatusPending)
+	}
+}
+
+func TestImportCerts_ExistingCertEnrollsForDHPush(t *testing.T) {
+	// A "matched" row in real life always has DHInventoryID != 0; NeedsDHPush
+	// uses the inventory-id check, not the status string, to detect that case.
+	tests := []struct {
+		name          string
+		initialStatus DHPushStatus
+		initialInvID  int
+		wantStatus    DHPushStatus
+	}{
+		{"empty status enrolls", "", 0, DHPushStatusPending},
+		{"matched is preserved", DHPushStatusMatched, 42, DHPushStatusMatched},
+		{"held is preserved", DHPushStatusHeld, 0, DHPushStatusHeld},
+		{"unmatched is preserved", DHPushStatusUnmatched, 0, DHPushStatusUnmatched},
+		{"dismissed is preserved", DHPushStatusDismissed, 0, DHPushStatusDismissed},
+		{"manual is preserved", DHPushStatusManual, 99, DHPushStatusManual},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := newMockRepo()
+			repo.purchases["p1"] = &Purchase{
+				ID: "p1", CertNumber: "11111111", Grader: "PSA",
+				CardName: "Charizard", DHPushStatus: tc.initialStatus,
+				DHInventoryID: tc.initialInvID,
+			}
+			repo.certNumbers["11111111"] = true
+
+			svc := &service{
+				campaigns: repo, purchases: repo, sales: repo, analytics: repo,
+				finance: repo, pricing: repo, dh: repo,
+				idGen: func() string { return "unused" },
+			}
+			if _, err := svc.ImportCerts(context.Background(), []string{"11111111"}); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got := repo.purchases["p1"].DHPushStatus; got != tc.wantStatus {
+				t.Errorf("dhPushStatus = %q, want %q", got, tc.wantStatus)
+			}
+		})
+	}
+}
+
+func TestScanCert_ExistingEnrollsForDHPush(t *testing.T) {
+	tests := []struct {
+		name          string
+		initialStatus DHPushStatus
+		initialInvID  int
+		wantStatus    DHPushStatus
+	}{
+		{"empty status enrolls", "", 0, DHPushStatusPending},
+		{"matched is preserved", DHPushStatusMatched, 42, DHPushStatusMatched},
+		{"held is preserved", DHPushStatusHeld, 0, DHPushStatusHeld},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := newMockRepo()
+			repo.purchases["p1"] = &Purchase{
+				ID: "p1", CertNumber: "11111111", Grader: "PSA",
+				CardName: "Charizard", DHPushStatus: tc.initialStatus,
+				DHInventoryID: tc.initialInvID,
+			}
+			svc := &service{
+				campaigns: repo, purchases: repo, sales: repo, analytics: repo,
+				finance: repo, pricing: repo, dh: repo,
+				idGen: func() string { return "unused" },
+			}
+			if _, err := svc.ScanCert(context.Background(), "11111111"); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got := repo.purchases["p1"].DHPushStatus; got != tc.wantStatus {
+				t.Errorf("dhPushStatus = %q, want %q", got, tc.wantStatus)
+			}
+		})
+	}
+}
+
+func TestScanCert_ResetsExhaustedSnapshot(t *testing.T) {
+	repo := newMockRepo()
+	repo.purchases["p1"] = &Purchase{
+		ID: "p1", CertNumber: "11111111", Grader: "PSA",
+		CardName: "Charizard", DHPushStatus: "",
+		SnapshotStatus: SnapshotStatusExhausted, SnapshotRetryCount: 5,
+	}
+	svc := &service{
+		campaigns: repo, purchases: repo, sales: repo, analytics: repo,
+		finance: repo, pricing: repo, dh: repo,
+		idGen: func() string { return "unused" },
+	}
+	if _, err := svc.ScanCert(context.Background(), "11111111"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	p := repo.purchases["p1"]
+	if p.SnapshotStatus != SnapshotStatusPending {
+		t.Errorf("snapshotStatus = %q, want %q", p.SnapshotStatus, SnapshotStatusPending)
+	}
+	if p.SnapshotRetryCount != 0 {
+		t.Errorf("snapshotRetryCount = %d, want 0", p.SnapshotRetryCount)
+	}
+}
+
+func TestScanCert_DoesNotResetHealthySnapshot(t *testing.T) {
+	repo := newMockRepo()
+	repo.purchases["p1"] = &Purchase{
+		ID: "p1", CertNumber: "11111111", Grader: "PSA",
+		CardName: "Charizard", DHPushStatus: "",
+		SnapshotStatus: SnapshotStatusNone, SnapshotRetryCount: 0,
+	}
+	svc := &service{
+		campaigns: repo, purchases: repo, sales: repo, analytics: repo,
+		finance: repo, pricing: repo, dh: repo,
+		idGen: func() string { return "unused" },
+	}
+	if _, err := svc.ScanCert(context.Background(), "11111111"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if p := repo.purchases["p1"]; p.SnapshotStatus != SnapshotStatusNone {
+		t.Errorf("snapshotStatus = %q, want empty/none", p.SnapshotStatus)
+	}
+}

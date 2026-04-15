@@ -83,6 +83,7 @@ func (s *service) ImportCerts(ctx context.Context, certNumbers []string) (*CertI
 						observability.Err(recvErr))
 				}
 			}
+			s.enrollExistingInDHPushPipeline(ctx, existing, certNum, "cert import")
 			result.AlreadyExisted++
 			continue
 		}
@@ -135,6 +136,7 @@ func (s *service) ImportCerts(ctx context.Context, certNumbers []string) (*CertI
 			PurchaseDate:        now.Format("2006-01-02"),
 			PSAListingTitle:     info.Subject,
 			EbayExportFlaggedAt: &now,
+			DHPushStatus:        DHPushStatusPending,
 			CreatedAt:           now,
 			UpdatedAt:           now,
 		}
@@ -228,6 +230,7 @@ func (s *service) ScanCert(ctx context.Context, certNumber string) (*ScanCertRes
 				observability.Err(recvErr))
 		}
 	}
+	s.enrollExistingInDHPushPipeline(ctx, existing, certNumber, "scan cert")
 
 	return &ScanCertResult{
 		Status:     "existing",
@@ -235,6 +238,48 @@ func (s *service) ScanCert(ctx context.Context, certNumber string) (*ScanCertRes
 		PurchaseID: existing.ID,
 		CampaignID: existing.CampaignID,
 	}, nil
+}
+
+// enrollExistingInDHPushPipeline flips dh_push_status to 'pending' for a
+// received, unsold purchase that hasn't already been matched/held/dismissed,
+// and resets an exhausted snapshot so the pricing scheduler will retry. This
+// is what transitions a PSA-sheet-synced row into the DH sync pipeline at the
+// point of physical receipt. The guard relies on Purchase.NeedsDHPush() to
+// leave terminal states alone.
+func (s *service) enrollExistingInDHPushPipeline(ctx context.Context, p *Purchase, cert, source string) {
+	if p == nil || !p.NeedsDHPush() {
+		return
+	}
+	if err := s.purchases.UpdatePurchaseDHPushStatus(ctx, p.ID, DHPushStatusPending); err != nil {
+		if s.logger != nil {
+			s.logger.Warn(ctx, source+": failed to enroll in DH push pipeline",
+				observability.String("cert", cert),
+				observability.String("purchaseID", p.ID),
+				observability.Err(err))
+		}
+		return
+	}
+	if s.logger != nil {
+		s.logger.Info(ctx, source+": enrolled in DH push pipeline",
+			observability.String("cert", cert),
+			observability.String("purchaseID", p.ID))
+	}
+	if p.SnapshotStatus == SnapshotStatusExhausted {
+		if err := s.purchases.UpdatePurchaseSnapshotStatus(ctx, p.ID, SnapshotStatusPending, 0); err != nil {
+			if s.logger != nil {
+				s.logger.Warn(ctx, source+": failed to reset exhausted snapshot status",
+					observability.String("cert", cert),
+					observability.String("purchaseID", p.ID),
+					observability.Err(err))
+			}
+			return
+		}
+		if s.logger != nil {
+			s.logger.Info(ctx, source+": reset exhausted snapshot status to pending",
+				observability.String("cert", cert),
+				observability.String("purchaseID", p.ID))
+		}
+	}
 }
 
 // ResolveCert looks up a PSA cert number via the external PSA API.

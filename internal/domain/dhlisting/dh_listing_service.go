@@ -142,7 +142,13 @@ func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []stri
 		}
 
 		if p.DHInventoryID == 0 {
-			continue // not yet pushed to DH
+			// Not yet pushed to DH and not eligible for inline push. This used
+			// to silently drop the row; log so stranded purchases are visible.
+			s.logger.Warn(ctx, "dh listing: purchase not enrolled in push pipeline; skipping",
+				observability.String("cert", p.CertNumber),
+				observability.String("purchaseID", p.ID),
+				observability.String("dhPushStatus", string(p.DHPushStatus)))
+			continue
 		}
 
 		if err := s.lister.UpdateInventoryStatus(ctx, p.DHInventoryID, inventory.DHStatusListed); err != nil {

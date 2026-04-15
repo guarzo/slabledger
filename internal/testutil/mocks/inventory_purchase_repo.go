@@ -47,6 +47,7 @@ type PurchaseRepositoryMock struct {
 	UpdatePurchaseDHPushStatusFn         func(ctx context.Context, id string, status string) error
 	GetPurchasesByDHPushStatusFn         func(ctx context.Context, status string, limit int) ([]inventory.Purchase, error)
 	CountUnsoldByDHPushStatusFn          func(ctx context.Context) (map[string]int, error)
+	CountDHPipelineHealthFn              func(ctx context.Context) (inventory.DHPipelineHealth, error)
 	UpdatePurchaseDHCandidatesFn         func(ctx context.Context, id, candidatesJSON string) error
 	UpdatePurchaseDHHoldReasonFn         func(ctx context.Context, id, reason string) error
 	SetHeldWithReasonFn                  func(ctx context.Context, purchaseID, reason string) error
@@ -320,6 +321,13 @@ func (m *PurchaseRepositoryMock) CountUnsoldByDHPushStatus(ctx context.Context) 
 		return m.CountUnsoldByDHPushStatusFn(ctx)
 	}
 	return map[string]int{}, nil
+}
+
+func (m *PurchaseRepositoryMock) CountDHPipelineHealth(ctx context.Context) (inventory.DHPipelineHealth, error) {
+	if m.CountDHPipelineHealthFn != nil {
+		return m.CountDHPipelineHealthFn(ctx)
+	}
+	return inventory.DHPipelineHealth{}, nil
 }
 
 func (m *PurchaseRepositoryMock) UpdatePurchaseDHCandidates(ctx context.Context, id string, candidatesJSON string) error {
