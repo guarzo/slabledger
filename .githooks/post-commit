@@ -1,0 +1,7 @@
+#!/bin/sh
+# Auto-backup docs/private after every slabledger commit.
+# Runs detached so a failing backup never blocks the commit.
+ROOT="$(git rev-parse --show-toplevel)"
+if [ -x "$ROOT/scripts/backup-private.sh" ]; then
+  (cd "$ROOT" && ./scripts/backup-private.sh >/dev/null 2>&1 &)
+fi
