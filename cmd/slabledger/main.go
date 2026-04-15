@@ -399,6 +399,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		CardIDMappingRepo: cardIDMappingRepo,
 		IntelRepo:         intelRepo,
 		SuggestionsRepo:   suggestionsRepo,
+		DemandRepo:        demandRepo,
 		AdvisorService:    advisorService,
 		AdvisorCacheRepo:  advisorCacheRepo,
 		AzureAIClient:     azureAIClient,

@@ -16,6 +16,7 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/ai"
 	"github.com/guarzo/slabledger/internal/domain/arbitrage"
 	"github.com/guarzo/slabledger/internal/domain/auth"
+	"github.com/guarzo/slabledger/internal/domain/demand"
 	"github.com/guarzo/slabledger/internal/domain/dhlisting"
 	"github.com/guarzo/slabledger/internal/domain/export"
 	"github.com/guarzo/slabledger/internal/domain/finance"
@@ -49,6 +50,7 @@ type handlerInputs struct {
 	CardIDMappingRepo *sqlite.CardIDMappingRepository
 	IntelRepo         *sqlite.MarketIntelligenceRepository
 	SuggestionsRepo   *sqlite.DHSuggestionsRepository
+	DemandRepo        *sqlite.DHDemandRepository
 	AdvisorService    advisor.Service
 	AdvisorCacheRepo  *sqlite.AdvisorCacheRepository
 	AzureAIClient     advisor.LLMProvider
@@ -165,6 +167,17 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 	// Sell sheet items handler
 	sellSheetItemsHandler := handlers.NewSellSheetItemsHandler(in.SellSheetStore, logger)
 
+	// Niches handler (DH niche-opportunity leaderboard). Requires the DH
+	// demand repo; coverage lookup runs against the campaigns DB.
+	var nichesHandler *handlers.NichesHandler
+	if in.DemandRepo != nil {
+		coverage := sqlite.NewCampaignCoverageLookup(in.DB.DB)
+		nichesHandler = handlers.NewNichesHandler(
+			demand.NewService(in.DemandRepo, coverage),
+			logger,
+		)
+	}
+
 	// Card catalog handler (CL card catalog search; nil when CL is not configured)
 	var cardCatalogHandler *handlers.CardCatalogHandler
 	if in.CLClient != nil && in.CLClient.Available() {
@@ -257,6 +270,7 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 		DHHandler:                 dhHandler,
 		SellSheetItemsHandler:     sellSheetItemsHandler,
 		CardCatalogHandler:        cardCatalogHandler,
+		NichesHandler:             nichesHandler,
 	}
 	// Build DHListingService from available components.
 	// Nil-safe: only create the service if at least the lister client is available.
