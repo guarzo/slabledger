@@ -197,5 +197,5 @@ ci: install lint test coverage build
 # Git hooks
 hooks:
 	git config core.hooksPath .githooks
-	chmod +x .githooks/pre-commit
+	chmod +x .githooks/pre-commit .githooks/post-commit
 	@echo "Git hooks installed."

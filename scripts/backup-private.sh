@@ -20,7 +20,10 @@ EOF
   exit 0
 fi
 
-cd "$PRIVATE_DIR"
+cd "$PRIVATE_DIR" || {
+  echo "backup-private.sh: failed to cd into $PRIVATE_DIR" >&2
+  exit 1
+}
 
 DIRTY=0
 [ -n "$(git status --porcelain)" ] && DIRTY=1
@@ -44,8 +47,14 @@ if [ "$DIRTY" -eq 1 ]; then
     MSG="backup: $(date -u +%Y-%m-%dT%H:%M:%SZ) (manual)"
   fi
 
-  git add -A
-  git commit -m "$MSG" >/dev/null
+  if ! git add -A; then
+    echo "backup-private.sh: git add failed" >&2
+    exit 1
+  fi
+  if ! git commit -m "$MSG"; then
+    echo "backup-private.sh: git commit failed" >&2
+    exit 1
+  fi
 fi
 
 if ! PUSH_OUTPUT="$(git push 2>&1)"; then

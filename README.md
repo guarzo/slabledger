@@ -28,10 +28,10 @@ export DH_ENTERPRISE_API_KEY="your_key"
 
 ```bash
 git clone https://github.com/guarzo/slabledger-private.git docs/private
-./scripts/install-hooks.sh
+make hooks
 ```
 
-Manual checkpoint: `./scripts/backup-private.sh`. After the hook is installed, any `git commit` in slabledger also pushes pending `docs/private/` changes in the background.
+Manual checkpoint: `./scripts/backup-private.sh`. After `make hooks`, any `git commit` in slabledger also pushes pending `docs/private/` changes in the background via `.githooks/post-commit`.
 
 ## Features
 
