@@ -923,7 +923,7 @@ func TestHandleProjections(t *testing.T) {
 			setupArb: func() *mocks.MockArbitrageService {
 				return &mocks.MockArbitrageService{
 					RunProjectionFn: func(_ context.Context, id string) (*arbitrage.MonteCarloComparison, error) {
-						return &arbitrage.MonteCarloComparison{}, nil
+						return &arbitrage.MonteCarloComparison{SampleSize: 12, Confidence: "low"}, nil
 					},
 				}
 			},
@@ -940,6 +940,17 @@ func TestHandleProjections(t *testing.T) {
 			},
 			wantCode: http.StatusNotFound,
 		},
+		{
+			name: "insufficient data returns 422",
+			setupArb: func() *mocks.MockArbitrageService {
+				return &mocks.MockArbitrageService{
+					RunProjectionFn: func(_ context.Context, _ string) (*arbitrage.MonteCarloComparison, error) {
+						return &arbitrage.MonteCarloComparison{SampleSize: 5, Confidence: "insufficient"}, nil
+					},
+				}
+			},
+			wantCode: http.StatusUnprocessableEntity,
+		},
 	}
 
 	for _, tc := range tests {
@@ -954,6 +965,68 @@ func TestHandleProjections(t *testing.T) {
 				t.Fatalf("expected %d, got %d; body: %s", tc.wantCode, rec.Code, rec.Body.String())
 			}
 		})
+	}
+}
+
+func TestHandleProjections_InsufficientData_BodyShape(t *testing.T) {
+	arb := &mocks.MockArbitrageService{
+		RunProjectionFn: func(_ context.Context, _ string) (*arbitrage.MonteCarloComparison, error) {
+			return &arbitrage.MonteCarloComparison{SampleSize: 5, Confidence: "insufficient"}, nil
+		},
+	}
+	h := newTestHandlerFull(&mocks.MockInventoryService{}, arb, nil, nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/campaigns/c1/projections", nil)
+	req.SetPathValue("id", "c1")
+	rec := httptest.NewRecorder()
+	h.HandleProjections(rec, req)
+
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422, got %d; body: %s", rec.Code, rec.Body.String())
+	}
+	if ct := rec.Header().Get("Content-Type"); ct != "application/json" {
+		t.Errorf("expected Content-Type application/json, got %q", ct)
+	}
+
+	var body map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body["error"] != "insufficient_data" {
+		t.Errorf("expected error=insufficient_data, got %v", body["error"])
+	}
+	// JSON numbers decode to float64.
+	if body["minRequired"] != float64(10) {
+		t.Errorf("expected minRequired=10, got %v", body["minRequired"])
+	}
+	if body["available"] != float64(5) {
+		t.Errorf("expected available=5, got %v", body["available"])
+	}
+}
+
+func TestHandleProjections_SufficientData_ReturnsFullBody(t *testing.T) {
+	arb := &mocks.MockArbitrageService{
+		RunProjectionFn: func(_ context.Context, _ string) (*arbitrage.MonteCarloComparison, error) {
+			return &arbitrage.MonteCarloComparison{SampleSize: 12, Confidence: "low"}, nil
+		},
+	}
+	h := newTestHandlerFull(&mocks.MockInventoryService{}, arb, nil, nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/campaigns/c1/projections", nil)
+	req.SetPathValue("id", "c1")
+	rec := httptest.NewRecorder()
+	h.HandleProjections(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d; body: %s", rec.Code, rec.Body.String())
+	}
+	var body map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body["confidence"] != "low" {
+		t.Errorf("expected confidence=low, got %v", body["confidence"])
+	}
+	if body["sampleSize"] != float64(12) {
+		t.Errorf("expected sampleSize=12, got %v", body["sampleSize"])
 	}
 }
 

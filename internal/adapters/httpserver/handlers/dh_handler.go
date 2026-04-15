@@ -69,6 +69,11 @@ type DHStatusCounter interface {
 	CountUnsoldByDHPushStatus(ctx context.Context) (map[string]int, error)
 }
 
+// DHPendingLister returns the list of received, unsold purchases pending DH push.
+type DHPendingLister interface {
+	ListDHPendingItems(ctx context.Context) ([]inventory.DHPendingItem, error)
+}
+
 // DHHealthReporter provides API health metrics.
 type DHHealthReporter interface {
 	Health() *dh.HealthTracker
@@ -102,6 +107,7 @@ type DHHandler struct {
 	pushStatusUpdater DHPushStatusUpdater // optional: sets dh_push_status after bulk match
 	candidatesSaver   DHCandidatesSaver   // optional: stores ambiguous candidates
 	statusCounter     DHStatusCounter     // optional: efficient push status counts
+	pendingLister     DHPendingLister     // optional: lists DH pending pipeline items
 	intelRepo         intelligence.Repository
 	suggestionsRepo   intelligence.SuggestionsRepository
 	intelCounter      DHIntelligenceCounter
@@ -141,6 +147,7 @@ type DHHandlerDeps struct {
 	PushStatusUpdater DHPushStatusUpdater // optional: sets dh_push_status after bulk match
 	CandidatesSaver   DHCandidatesSaver   // optional: stores ambiguous candidates
 	StatusCounter     DHStatusCounter     // optional: efficient push status counts
+	PendingLister     DHPendingLister     // optional: lists DH pending pipeline items
 	IntelRepo         intelligence.Repository
 	SuggestionsRepo   intelligence.SuggestionsRepository
 	IntelCounter      DHIntelligenceCounter
@@ -170,6 +177,7 @@ func NewDHHandler(deps DHHandlerDeps) *DHHandler {
 		pushStatusUpdater: deps.PushStatusUpdater,
 		candidatesSaver:   deps.CandidatesSaver,
 		statusCounter:     deps.StatusCounter,
+		pendingLister:     deps.PendingLister,
 		intelRepo:         deps.IntelRepo,
 		suggestionsRepo:   deps.SuggestionsRepo,
 		intelCounter:      deps.IntelCounter,

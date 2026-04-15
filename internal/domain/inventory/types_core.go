@@ -263,6 +263,18 @@ func DHCardKey(cardName, setName, cardNumber string) string {
 	return cardName + "|" + setName + "|" + cardNumber
 }
 
+// DHPendingItem represents a received, unsold card currently in the DH push pipeline.
+// Used by GET /api/dh/pending to show the operator what's queued for DH listing.
+type DHPendingItem struct {
+	PurchaseID            string  `json:"purchaseId"`
+	CardName              string  `json:"cardName"`
+	SetName               string  `json:"setName,omitempty"`
+	Grade                 float64 `json:"grade"`
+	RecommendedPriceCents int     `json:"recommendedPriceCents"`
+	DaysQueued            int     `json:"daysQueued"`
+	DHConfidence          string  `json:"dhConfidence"` // "high" (<24h), "medium" (<7d), "low" (>7d or never synced)
+}
+
 // Invoice tracks a PSA invoice cycle for capital exposure management.
 type Invoice struct {
 	ID                  string    `json:"id"`

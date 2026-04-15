@@ -537,6 +537,113 @@ func TestHandleWeeklyReview(t *testing.T) {
 	}
 }
 
+func TestHandleWeeklyHistory_DefaultsTo8Weeks(t *testing.T) {
+	var gotWeeks int
+	portSvc := &mocks.MockPortfolioService{
+		GetWeeklyHistoryFn: func(_ context.Context, weeks int) ([]inventory.WeeklyReviewSummary, error) {
+			gotWeeks = weeks
+			return make([]inventory.WeeklyReviewSummary, weeks), nil
+		},
+	}
+	h := newTestHandlerFull(&mocks.MockInventoryService{}, nil, portSvc, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/portfolio/weekly-history", nil)
+	rec := httptest.NewRecorder()
+	h.HandleWeeklyHistory(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	if gotWeeks != 8 {
+		t.Fatalf("expected service called with weeks=8, got %d", gotWeeks)
+	}
+	var out []inventory.WeeklyReviewSummary
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+		t.Fatalf("failed to decode body: %v", err)
+	}
+	if len(out) != 8 {
+		t.Fatalf("expected 8 summaries, got %d", len(out))
+	}
+}
+
+func TestHandleWeeklyHistory_RespectsWeeksParam(t *testing.T) {
+	var gotWeeks int
+	portSvc := &mocks.MockPortfolioService{
+		GetWeeklyHistoryFn: func(_ context.Context, weeks int) ([]inventory.WeeklyReviewSummary, error) {
+			gotWeeks = weeks
+			return make([]inventory.WeeklyReviewSummary, weeks), nil
+		},
+	}
+	h := newTestHandlerFull(&mocks.MockInventoryService{}, nil, portSvc, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/portfolio/weekly-history?weeks=4", nil)
+	rec := httptest.NewRecorder()
+	h.HandleWeeklyHistory(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	if gotWeeks != 4 {
+		t.Fatalf("expected service called with weeks=4, got %d", gotWeeks)
+	}
+	var out []inventory.WeeklyReviewSummary
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+		t.Fatalf("failed to decode body: %v", err)
+	}
+	if len(out) != 4 {
+		t.Fatalf("expected 4 summaries, got %d", len(out))
+	}
+}
+
+func TestHandleWeeklyHistory_InvalidWeeksParam(t *testing.T) {
+	tests := []struct {
+		name  string
+		query string
+	}{
+		{"non-numeric", "weeks=abc"},
+		{"zero", "weeks=0"},
+		{"negative", "weeks=-1"},
+		{"too-large", "weeks=53"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			portSvc := &mocks.MockPortfolioService{
+				GetWeeklyHistoryFn: func(_ context.Context, weeks int) ([]inventory.WeeklyReviewSummary, error) {
+					t.Fatalf("service should not be called for invalid input")
+					return nil, nil
+				},
+			}
+			h := newTestHandlerFull(&mocks.MockInventoryService{}, nil, portSvc, nil)
+
+			req := httptest.NewRequest(http.MethodGet, "/api/portfolio/weekly-history?"+tt.query, nil)
+			rec := httptest.NewRecorder()
+			h.HandleWeeklyHistory(rec, req)
+
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("expected 400, got %d", rec.Code)
+			}
+		})
+	}
+}
+
+func TestHandleWeeklyHistory_ServiceError(t *testing.T) {
+	portSvc := &mocks.MockPortfolioService{
+		GetWeeklyHistoryFn: func(_ context.Context, _ int) ([]inventory.WeeklyReviewSummary, error) {
+			return nil, fmt.Errorf("boom")
+		},
+	}
+	h := newTestHandlerFull(&mocks.MockInventoryService{}, nil, portSvc, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/portfolio/weekly-history?weeks=4", nil)
+	rec := httptest.NewRecorder()
+	h.HandleWeeklyHistory(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d", rec.Code)
+	}
+}
+
 func TestHandleListRevocationFlags(t *testing.T) {
 	tests := []struct {
 		name        string

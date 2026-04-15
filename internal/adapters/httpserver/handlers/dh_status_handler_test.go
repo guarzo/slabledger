@@ -102,6 +102,18 @@ func (m *mockDHCountsFetcher) GetOrders(ctx context.Context, filters dh.OrderFil
 	return &dh.OrdersResponse{}, nil
 }
 
+// mockDHPendingLister implements DHPendingLister.
+type mockDHPendingLister struct {
+	ListDHPendingItemsFn func(ctx context.Context) ([]inventory.DHPendingItem, error)
+}
+
+func (m *mockDHPendingLister) ListDHPendingItems(ctx context.Context) ([]inventory.DHPendingItem, error) {
+	if m.ListDHPendingItemsFn != nil {
+		return m.ListDHPendingItemsFn(ctx)
+	}
+	return nil, nil
+}
+
 // mockDHPurchaseLister implements DHPurchaseLister.
 type mockDHPurchaseLister struct {
 	ListAllUnsoldPurchasesFn func(ctx context.Context) ([]inventory.Purchase, error)
@@ -544,6 +556,108 @@ func TestHandleInventoryAlerts_SuggestionsError(t *testing.T) {
 	req := authenticatedRequest(httptest.NewRequest(http.MethodGet, "/api/dh/inventory-alerts", nil))
 	rec := httptest.NewRecorder()
 	h.HandleInventoryAlerts(rec, req)
+
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+	decodeErrorResponse(t, rec)
+}
+
+// --- HandleGetDHPending ---
+
+// newTestDHHandlerWithPending builds a DHHandler wired with a DHPendingLister for tests.
+func newTestDHHandlerWithPending(pendingLister DHPendingLister) *DHHandler {
+	return NewDHHandler(DHHandlerDeps{
+		PendingLister: pendingLister,
+		Logger:        mocks.NewMockLogger(),
+		BaseCtx:       context.Background(),
+	})
+}
+
+func TestHandleGetDHPending_ReturnsList(t *testing.T) {
+	lister := &mockDHPendingLister{
+		ListDHPendingItemsFn: func(_ context.Context) ([]inventory.DHPendingItem, error) {
+			return []inventory.DHPendingItem{
+				{
+					PurchaseID:            "p1",
+					CardName:              "Charizard",
+					SetName:               "Base Set",
+					Grade:                 9,
+					RecommendedPriceCents: 50000,
+					DaysQueued:            3,
+					DHConfidence:          "medium",
+				},
+			}, nil
+		},
+	}
+
+	h := newTestDHHandlerWithPending(lister)
+	req := authenticatedRequest(httptest.NewRequest(http.MethodGet, "/api/dh/pending", nil))
+	rec := httptest.NewRecorder()
+	h.HandleGetDHPending(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var resp struct {
+		Items []inventory.DHPendingItem `json:"items"`
+		Count int                       `json:"count"`
+	}
+	require.NoError(t, json.NewDecoder(rec.Body).Decode(&resp))
+	assert.Equal(t, 1, resp.Count)
+	require.Len(t, resp.Items, 1)
+	assert.Equal(t, "p1", resp.Items[0].PurchaseID)
+	assert.Equal(t, "Charizard", resp.Items[0].CardName)
+	assert.Equal(t, "medium", resp.Items[0].DHConfidence)
+}
+
+func TestHandleGetDHPending_NilLister_Returns503(t *testing.T) {
+	h := newTestDHHandlerWithPending(nil)
+	req := authenticatedRequest(httptest.NewRequest(http.MethodGet, "/api/dh/pending", nil))
+	rec := httptest.NewRecorder()
+	h.HandleGetDHPending(rec, req)
+
+	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
+	decodeErrorResponse(t, rec)
+}
+
+func TestHandleGetDHPending_EmptyList(t *testing.T) {
+	lister := &mockDHPendingLister{
+		ListDHPendingItemsFn: func(_ context.Context) ([]inventory.DHPendingItem, error) {
+			return nil, nil
+		},
+	}
+
+	h := newTestDHHandlerWithPending(lister)
+	req := authenticatedRequest(httptest.NewRequest(http.MethodGet, "/api/dh/pending", nil))
+	rec := httptest.NewRecorder()
+	h.HandleGetDHPending(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var resp map[string]json.RawMessage
+	require.NoError(t, json.NewDecoder(rec.Body).Decode(&resp))
+	assert.Equal(t, json.RawMessage("[]"), resp["items"])
+	assert.Equal(t, json.RawMessage("0"), resp["count"])
+}
+
+func TestHandleGetDHPending_Unauthenticated(t *testing.T) {
+	h := newTestDHHandlerWithPending(&mockDHPendingLister{})
+	req := httptest.NewRequest(http.MethodGet, "/api/dh/pending", nil)
+	rec := httptest.NewRecorder()
+	h.HandleGetDHPending(rec, req)
+
+	assert.Equal(t, http.StatusUnauthorized, rec.Code)
+}
+
+func TestHandleGetDHPending_ListerError(t *testing.T) {
+	lister := &mockDHPendingLister{
+		ListDHPendingItemsFn: func(_ context.Context) ([]inventory.DHPendingItem, error) {
+			return nil, fmt.Errorf("db error")
+		},
+	}
+
+	h := newTestDHHandlerWithPending(lister)
+	req := authenticatedRequest(httptest.NewRequest(http.MethodGet, "/api/dh/pending", nil))
+	rec := httptest.NewRecorder()
+	h.HandleGetDHPending(rec, req)
 
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 	decodeErrorResponse(t, rec)
