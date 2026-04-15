@@ -86,8 +86,8 @@ func TestCampaignSignals(t *testing.T) {
 			name: "inclusion list campaign one accelerator",
 			rows: []demand.CharacterCache{
 				charRow("Pikachu", 11, 22.1, 34, computed),
-				charRow("Charizard", 8, 2.0, 52, computed),  // below accel threshold
-				charRow("Umbreon", 21, -8.3, 18, computed),  // decelerating
+				charRow("Charizard", 8, 2.0, 52, computed), // below accel threshold
+				charRow("Umbreon", 21, -8.3, 18, computed), // decelerating
 			},
 			campaigns: []demand.ActiveCampaign{{ID: 1, Name: "Vintage Core", InclusionList: "Charizard,Pikachu,Umbreon", GradeRange: "9-10"}},
 			wantSigs:  1,

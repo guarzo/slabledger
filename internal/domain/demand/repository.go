@@ -22,7 +22,7 @@ type Repository interface {
 // by the campaign-signals service to correlate per-campaign market data.
 // Kept minimal — only the fields needed to filter characters and grades.
 type ActiveCampaign struct {
-	ID            int64  // Numeric ID only; non-numeric IDs (e.g. "external") are excluded.
+	ID            int64 // Numeric ID only; non-numeric IDs (e.g. "external") are excluded.
 	Name          string
 	GradeRange    string // e.g. "9-10"; empty means no grade constraint.
 	InclusionList string // Comma-separated; empty means open-net.

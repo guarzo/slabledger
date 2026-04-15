@@ -67,7 +67,7 @@ type CampaignSignal struct {
 
 // CampaignSignalContributor is a single character's contribution to a signal.
 type CampaignSignalContributor struct {
-	Character         string   // Display name (original casing from the cache row).
+	Character         string // Display name (original casing from the cache row).
 	VelocityChangePct float64
 	MedianDaysToSell  *float64 // Nil if DH's string value failed to parse.
 	SampleSize        int
@@ -79,11 +79,11 @@ type CampaignSignalContributor struct {
 // during CampaignSignals computation. Only rows with a non-nil
 // velocity_change_pct survive indexing.
 type signalEntry struct {
-	displayName  string
-	vChange      float64
-	medianDays   *float64
-	sampleSize   int
-	computedAt   *time.Time
+	displayName string
+	vChange     float64
+	medianDays  *float64
+	sampleSize  int
+	computedAt  *time.Time
 }
 
 // signalVelocityJSON is the domain-local mirror of the velocity_json blob

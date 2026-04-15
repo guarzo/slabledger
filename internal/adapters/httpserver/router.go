@@ -68,21 +68,21 @@ type RouterConfig struct {
 	TuningService             tuning.Service
 	PriceHintsHandler         *handlers.PriceHintsHandler
 	PricingDiagnosticsHandler *handlers.PricingDiagnosticsHandler
-	PricingAPIKey             string                          // Bearer token; empty = pricing API disabled
-	CampaignsRepo             handlers.CertPriceLookup        // For pricing API handler
-	AdvisorHandler            *handlers.AdvisorHandler        // AI advisor; nil = disabled
-	SocialHandler             *handlers.SocialHandler         // Social content; nil = disabled
-	InstagramHandler          *handlers.InstagramHandler      // Instagram publishing; nil = disabled
-	AIStatusHandler           *handlers.AIStatusHandler       // AI usage stats; nil = disabled
-	PriceFlagsHandler         *handlers.PriceFlagsHandler     // Price flag admin; nil = disabled
-	CardLadderHandler         *handlers.CardLadderHandler     // Card Ladder admin; nil = disabled
-	MarketMoversHandler       *handlers.MarketMoversHandler   // Market Movers admin; nil = disabled
-	OpportunitiesHandler      *handlers.OpportunitiesHandler  // Arbitrage opportunities; nil = disabled
-	DHHandler                 *handlers.DHHandler             // DH bulk match + intelligence; nil = disabled
-	SellSheetItemsHandler     *handlers.SellSheetItemsHandler // Sell sheet persistence; nil = disabled
-	CardCatalogHandler        *handlers.CardCatalogHandler    // CL card catalog search; nil = disabled
-	PSASyncHandler            *handlers.PSASyncHandler        // PSA pending items + admin status; nil = disabled
-	NichesHandler             *handlers.NichesHandler         // DH niche-opportunity leaderboard; nil = disabled
+	PricingAPIKey             string                           // Bearer token; empty = pricing API disabled
+	CampaignsRepo             handlers.CertPriceLookup         // For pricing API handler
+	AdvisorHandler            *handlers.AdvisorHandler         // AI advisor; nil = disabled
+	SocialHandler             *handlers.SocialHandler          // Social content; nil = disabled
+	InstagramHandler          *handlers.InstagramHandler       // Instagram publishing; nil = disabled
+	AIStatusHandler           *handlers.AIStatusHandler        // AI usage stats; nil = disabled
+	PriceFlagsHandler         *handlers.PriceFlagsHandler      // Price flag admin; nil = disabled
+	CardLadderHandler         *handlers.CardLadderHandler      // Card Ladder admin; nil = disabled
+	MarketMoversHandler       *handlers.MarketMoversHandler    // Market Movers admin; nil = disabled
+	OpportunitiesHandler      *handlers.OpportunitiesHandler   // Arbitrage opportunities; nil = disabled
+	DHHandler                 *handlers.DHHandler              // DH bulk match + intelligence; nil = disabled
+	SellSheetItemsHandler     *handlers.SellSheetItemsHandler  // Sell sheet persistence; nil = disabled
+	CardCatalogHandler        *handlers.CardCatalogHandler     // CL card catalog search; nil = disabled
+	PSASyncHandler            *handlers.PSASyncHandler         // PSA pending items + admin status; nil = disabled
+	NichesHandler             *handlers.NichesHandler          // DH niche-opportunity leaderboard; nil = disabled
 	CampaignSignalsHandler    *handlers.CampaignSignalsHandler // DH campaign signals; nil = disabled
 	Logger                    observability.Logger
 	AdminEmails               []string
