@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -352,6 +353,21 @@ func (h *CampaignsHandler) HandleProjections(w http.ResponseWriter, r *http.Requ
 		writeError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
+
+	// Return 422 when there is insufficient data to run a meaningful simulation.
+	// Callers (e.g. campaign-analysis skill) can branch on the status code rather
+	// than parsing the body.
+	if result != nil && result.Confidence == "insufficient" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"error":       "insufficient_data",
+			"minRequired": 10,
+			"available":   result.SampleSize,
+		})
+		return
+	}
+
 	writeJSON(w, http.StatusOK, result)
 }
 

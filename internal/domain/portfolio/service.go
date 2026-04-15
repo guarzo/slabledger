@@ -19,6 +19,7 @@ type Service interface {
 	GetCampaignSuggestions(ctx context.Context) (*inventory.SuggestionsResponse, error)
 	GetCapitalTimeline(ctx context.Context) (*inventory.CapitalTimeline, error)
 	GetWeeklyReviewSummary(ctx context.Context) (*inventory.WeeklyReviewSummary, error)
+	GetWeeklyHistory(ctx context.Context, weeks int) ([]inventory.WeeklyReviewSummary, error)
 }
 
 type service struct {
@@ -332,10 +333,30 @@ func (s *service) GetWeeklyReviewSummary(ctx context.Context) (*inventory.Weekly
 		return nil, err
 	}
 
-	summary := &inventory.WeeklyReviewSummary{
-		WeekStart:    thisWeekStr,
-		WeekEnd:      thisWeekEndStr,
-		DaysIntoWeek: int(now.Weekday()),
+	summary := computeWeekSummary(allData, thisWeekStr, thisWeekEndStr, lastWeekStr, lastWeekEndStr)
+	summary.DaysIntoWeek = int(now.Weekday())
+
+	capitalRaw, err := s.finance.GetCapitalRawData(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("get capital data for weekly review: %w", err)
+	}
+	if capitalRaw != nil {
+		capital := inventory.ComputeCapitalSummary(capitalRaw)
+		summary.WeeksToCover = capital.WeeksToCover
+	} else {
+		summary.WeeksToCover = inventory.WeeksToCoverNoData
+	}
+
+	return &summary, nil
+}
+
+// computeWeekSummary aggregates purchase and sale data into a single week summary.
+// weekStart/weekEnd define the "this week" window; lastWeekStart/lastWeekEnd define "last week".
+// The caller is responsible for populating WeeksToCover and DaysIntoWeek.
+func computeWeekSummary(allData []inventory.PurchaseWithSale, weekStart, weekEnd, lastWeekStart, lastWeekEnd string) inventory.WeeklyReviewSummary {
+	summary := inventory.WeeklyReviewSummary{
+		WeekStart: weekStart,
+		WeekEnd:   weekEnd,
 	}
 
 	channelProfits := make(map[inventory.SaleChannel]int)
@@ -348,17 +369,17 @@ func (s *service) GetWeeklyReviewSummary(ctx context.Context) (*inventory.Weekly
 
 	for _, d := range allData {
 		pd := d.Purchase.PurchaseDate
-		if pd >= thisWeekStr && pd <= thisWeekEndStr {
+		if pd >= weekStart && pd <= weekEnd {
 			summary.PurchasesThisWeek++
 			summary.SpendThisWeekCents += d.Purchase.BuyCostCents + d.Purchase.PSASourcingFeeCents
-		} else if pd >= lastWeekStr && pd <= lastWeekEndStr {
+		} else if pd >= lastWeekStart && pd <= lastWeekEnd {
 			summary.PurchasesLastWeek++
 			summary.SpendLastWeekCents += d.Purchase.BuyCostCents + d.Purchase.PSASourcingFeeCents
 		}
 
 		if d.Sale != nil {
 			sd := d.Sale.SaleDate
-			if sd >= thisWeekStr && sd <= thisWeekEndStr {
+			if sd >= weekStart && sd <= weekEnd {
 				summary.SalesThisWeek++
 				summary.RevenueThisWeekCents += d.Sale.SalePriceCents
 				summary.ProfitThisWeekCents += d.Sale.NetProfitCents
@@ -375,7 +396,7 @@ func (s *service) GetWeeklyReviewSummary(ctx context.Context) (*inventory.Weekly
 					Channel:     string(d.Sale.SaleChannel),
 					DaysToSell:  d.Sale.DaysToSell,
 				})
-			} else if sd >= lastWeekStr && sd <= lastWeekEndStr {
+			} else if sd >= lastWeekStart && sd <= lastWeekEnd {
 				summary.SalesLastWeek++
 				summary.RevenueLastWeekCents += d.Sale.SalePriceCents
 				summary.ProfitLastWeekCents += d.Sale.NetProfitCents
@@ -403,7 +424,6 @@ func (s *service) GetWeeklyReviewSummary(ctx context.Context) (*inventory.Weekly
 	})
 
 	const maxPerformers = 5
-
 	if len(topSales) > 2*maxPerformers {
 		summary.TopPerformers = topSales[:maxPerformers]
 		summary.BottomPerformers = topSales[len(topSales)-maxPerformers:]
@@ -415,16 +435,51 @@ func (s *service) GetWeeklyReviewSummary(ctx context.Context) (*inventory.Weekly
 		summary.BottomPerformers = nil
 	}
 
-	capitalRaw, err := s.finance.GetCapitalRawData(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("get capital data for weekly review: %w", err)
+	return summary
+}
+
+// GetWeeklyHistory returns the N most recent weeks (including the current week) in
+// reverse chronological order. weeks must be between 1 and 52. If weeks <= 0, defaults to 8.
+// WeeksToCover is not populated on historical entries — it reflects a point-in-time capital
+// position, so only GetWeeklyReviewSummary fills it.
+func (s *service) GetWeeklyHistory(ctx context.Context, weeks int) ([]inventory.WeeklyReviewSummary, error) {
+	if weeks <= 0 {
+		weeks = 8
 	}
-	if capitalRaw != nil {
-		capital := inventory.ComputeCapitalSummary(capitalRaw)
-		summary.WeeksToCover = capital.WeeksToCover
-	} else {
-		summary.WeeksToCover = inventory.WeeksToCoverNoData
+	if weeks > 52 {
+		weeks = 52
 	}
 
-	return summary, nil
+	now := time.Now()
+	weekday := now.Weekday()
+	if weekday == time.Sunday {
+		weekday = 7
+	}
+	currentWeekStart := now.AddDate(0, 0, -int(weekday-time.Monday))
+
+	// Load one extra week on the trailing edge so the oldest week's "last week"
+	// comparison window has data.
+	sinceDate := currentWeekStart.AddDate(0, 0, -(weeks+1)*7).Format("2006-01-02")
+	allData, err := s.analytics.GetAllPurchasesWithSales(ctx, inventory.WithSinceDate(sinceDate), inventory.WithExcludeArchived())
+	if err != nil {
+		return nil, err
+	}
+
+	summaries := make([]inventory.WeeklyReviewSummary, 0, weeks)
+	for i := 0; i < weeks; i++ {
+		wStart := currentWeekStart.AddDate(0, 0, -i*7)
+		wEnd := wStart.AddDate(0, 0, 6)
+		lwStart := wStart.AddDate(0, 0, -7)
+		lwEnd := wStart.AddDate(0, 0, -1)
+
+		sum := computeWeekSummary(allData,
+			wStart.Format("2006-01-02"),
+			wEnd.Format("2006-01-02"),
+			lwStart.Format("2006-01-02"),
+			lwEnd.Format("2006-01-02"),
+		)
+		summaries = append(summaries, sum)
+	}
+
+	return summaries, nil
 }
