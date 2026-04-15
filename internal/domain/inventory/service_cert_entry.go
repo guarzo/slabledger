@@ -82,6 +82,11 @@ func (s *service) ImportCerts(ctx context.Context, certNumbers []string) (*CertI
 						observability.String("cert", certNum),
 						observability.Err(recvErr))
 				}
+			} else {
+				// Reflect the DB write on the in-memory struct so the
+				// subsequent NeedsDHPush() guard sees the receipt.
+				receivedStr := now.Format(time.RFC3339)
+				existing.ReceivedAt = &receivedStr
 			}
 			s.enrollExistingInDHPushPipeline(ctx, existing, certNum, "cert import")
 			result.AlreadyExisted++
@@ -119,6 +124,7 @@ func (s *service) ImportCerts(ctx context.Context, certNumbers []string) (*CertI
 			cardName = cardName + " " + info.Variety
 		}
 
+		receivedStr := now.Format(time.RFC3339)
 		purchase := &Purchase{
 			ID:                  s.idGen(),
 			CampaignID:          ExternalCampaignID,
@@ -136,6 +142,7 @@ func (s *service) ImportCerts(ctx context.Context, certNumbers []string) (*CertI
 			PurchaseDate:        now.Format("2006-01-02"),
 			PSAListingTitle:     info.Subject,
 			EbayExportFlaggedAt: &now,
+			ReceivedAt:          &receivedStr,
 			DHPushStatus:        DHPushStatusPending,
 			CreatedAt:           now,
 			UpdatedAt:           now,
@@ -229,6 +236,11 @@ func (s *service) ScanCert(ctx context.Context, certNumber string) (*ScanCertRes
 				observability.String("cert", certNumber),
 				observability.Err(recvErr))
 		}
+	} else {
+		// Reflect the DB write on the in-memory struct so the subsequent
+		// NeedsDHPush() guard sees the receipt.
+		receivedStr := now.Format(time.RFC3339)
+		existing.ReceivedAt = &receivedStr
 	}
 	s.enrollExistingInDHPushPipeline(ctx, existing, certNumber, "scan cert")
 
