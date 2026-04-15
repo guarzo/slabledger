@@ -5,7 +5,44 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 )
+
+// dbLikePurchaseRepo wraps mockRepo so Get* methods return a shallow copy of
+// the stored Purchase. This mirrors the SQLite adapter's semantics: a later
+// SetReceivedAt writes through to the DB but does NOT mutate the caller's
+// in-memory struct. Used to guard against mock-vs-real divergence where the
+// shared-pointer mock accidentally masks bugs that require the service to
+// update its local copy after a DB write.
+type dbLikePurchaseRepo struct {
+	*mockRepo
+}
+
+func (d *dbLikePurchaseRepo) GetPurchaseByCertNumber(ctx context.Context, grader, certNumber string) (*Purchase, error) {
+	p, err := d.mockRepo.GetPurchaseByCertNumber(ctx, grader, certNumber)
+	if err != nil || p == nil {
+		return p, err
+	}
+	cp := *p
+	return &cp, nil
+}
+
+func (d *dbLikePurchaseRepo) GetPurchasesByGraderAndCertNumbers(ctx context.Context, grader string, certNumbers []string) (map[string]*Purchase, error) {
+	src, err := d.mockRepo.GetPurchasesByGraderAndCertNumbers(ctx, grader, certNumbers)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]*Purchase, len(src))
+	for k, p := range src {
+		if p == nil {
+			out[k] = nil
+			continue
+		}
+		cp := *p
+		out[k] = &cp
+	}
+	return out, nil
+}
 
 type mockCertLookup struct {
 	lookupFn func(ctx context.Context, certNumber string) (*CertInfo, error)
@@ -425,5 +462,261 @@ func TestResolveCert(t *testing.T) {
 				t.Errorf("cardName = %q, want %q", info.CardName, tc.wantName)
 			}
 		})
+	}
+}
+
+// The following tests cover the DH push pipeline enrollment that ScanCert and
+// ImportCerts do so that newly-received inventory actually flows into the DH
+// sync pipeline instead of getting stranded with an empty dh_push_status.
+
+func TestImportCerts_NewCertEnrollsForDHPush(t *testing.T) {
+	repo := newMockRepo()
+	repo.campaigns[ExternalCampaignID] = &Campaign{ID: ExternalCampaignID, Name: ExternalCampaignName}
+	certLookup := &mockCertLookup{
+		lookupFn: func(_ context.Context, cert string) (*CertInfo, error) {
+			return &CertInfo{CertNumber: cert, CardName: "Charizard", Grade: 9, Category: "BASE SET", CardNumber: "4"}, nil
+		},
+	}
+	svc := &service{
+		campaigns: repo, purchases: repo, sales: repo, analytics: repo,
+		finance: repo, pricing: repo, dh: repo, certLookup: certLookup,
+		idGen: func() string { return "new-id" },
+	}
+
+	if _, err := svc.ImportCerts(context.Background(), []string{"12345678"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	created := repo.purchases["new-id"]
+	if created == nil {
+		t.Fatal("purchase not created")
+	}
+	if created.DHPushStatus != DHPushStatusPending {
+		t.Errorf("dhPushStatus = %q, want %q", created.DHPushStatus, DHPushStatusPending)
+	}
+}
+
+func TestImportCerts_ExistingCertEnrollsForDHPush(t *testing.T) {
+	// A "matched" row in real life always has DHInventoryID != 0; NeedsDHPush
+	// uses the inventory-id check, not the status string, to detect that case.
+	tests := []struct {
+		name          string
+		initialStatus DHPushStatus
+		initialInvID  int
+		wantStatus    DHPushStatus
+	}{
+		{"empty status enrolls", "", 0, DHPushStatusPending},
+		{"matched is preserved", DHPushStatusMatched, 42, DHPushStatusMatched},
+		{"held is preserved", DHPushStatusHeld, 0, DHPushStatusHeld},
+		{"unmatched is preserved", DHPushStatusUnmatched, 0, DHPushStatusUnmatched},
+		{"dismissed is preserved", DHPushStatusDismissed, 0, DHPushStatusDismissed},
+		{"manual is preserved", DHPushStatusManual, 99, DHPushStatusManual},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := newMockRepo()
+			repo.purchases["p1"] = &Purchase{
+				ID: "p1", CertNumber: "11111111", Grader: "PSA",
+				CardName: "Charizard", DHPushStatus: tc.initialStatus,
+				DHInventoryID: tc.initialInvID,
+			}
+			repo.certNumbers["11111111"] = true
+
+			svc := &service{
+				campaigns: repo, purchases: repo, sales: repo, analytics: repo,
+				finance: repo, pricing: repo, dh: repo,
+				idGen: func() string { return "unused" },
+			}
+			if _, err := svc.ImportCerts(context.Background(), []string{"11111111"}); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got := repo.purchases["p1"].DHPushStatus; got != tc.wantStatus {
+				t.Errorf("dhPushStatus = %q, want %q", got, tc.wantStatus)
+			}
+		})
+	}
+}
+
+func TestScanCert_ExistingEnrollsForDHPush(t *testing.T) {
+	tests := []struct {
+		name          string
+		initialStatus DHPushStatus
+		initialInvID  int
+		wantStatus    DHPushStatus
+	}{
+		{"empty status enrolls", "", 0, DHPushStatusPending},
+		{"matched is preserved", DHPushStatusMatched, 42, DHPushStatusMatched},
+		{"held is preserved", DHPushStatusHeld, 0, DHPushStatusHeld},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := newMockRepo()
+			repo.purchases["p1"] = &Purchase{
+				ID: "p1", CertNumber: "11111111", Grader: "PSA",
+				CardName: "Charizard", DHPushStatus: tc.initialStatus,
+				DHInventoryID: tc.initialInvID,
+			}
+			svc := &service{
+				campaigns: repo, purchases: repo, sales: repo, analytics: repo,
+				finance: repo, pricing: repo, dh: repo,
+				idGen: func() string { return "unused" },
+			}
+			if _, err := svc.ScanCert(context.Background(), "11111111"); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got := repo.purchases["p1"].DHPushStatus; got != tc.wantStatus {
+				t.Errorf("dhPushStatus = %q, want %q", got, tc.wantStatus)
+			}
+		})
+	}
+}
+
+func TestScanCert_ResetsExhaustedSnapshot(t *testing.T) {
+	repo := newMockRepo()
+	repo.purchases["p1"] = &Purchase{
+		ID: "p1", CertNumber: "11111111", Grader: "PSA",
+		CardName: "Charizard", DHPushStatus: "",
+		SnapshotStatus: SnapshotStatusExhausted, SnapshotRetryCount: 5,
+	}
+	svc := &service{
+		campaigns: repo, purchases: repo, sales: repo, analytics: repo,
+		finance: repo, pricing: repo, dh: repo,
+		idGen: func() string { return "unused" },
+	}
+	if _, err := svc.ScanCert(context.Background(), "11111111"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	p := repo.purchases["p1"]
+	if p.SnapshotStatus != SnapshotStatusPending {
+		t.Errorf("snapshotStatus = %q, want %q", p.SnapshotStatus, SnapshotStatusPending)
+	}
+	if p.SnapshotRetryCount != 0 {
+		t.Errorf("snapshotRetryCount = %d, want 0", p.SnapshotRetryCount)
+	}
+}
+
+// TestScanCert_FirstReceiptEnrollsAgainstRealDBSemantics is the regression
+// guard for the stale-ReceivedAt bug. It uses a repo wrapper that returns a
+// COPY from GetPurchaseByCertNumber, mirroring the SQLite adapter. In the
+// "first-time receipt" scenario the service must reflect its own SetReceivedAt
+// write on the local struct before NeedsDHPush() runs — otherwise enrollment
+// is silently skipped. The shared-pointer mockRepo hides this bug.
+func TestScanCert_FirstReceiptEnrollsAgainstRealDBSemantics(t *testing.T) {
+	base := newMockRepo()
+	base.purchases["p1"] = &Purchase{
+		ID: "p1", CertNumber: "11111111", Grader: "PSA",
+		CardName: "Charizard",
+		// Crucially: ReceivedAt is nil — this is a PSA-sheet-synced row
+		// that has never been received before.
+		ReceivedAt:   nil,
+		DHPushStatus: "",
+	}
+	wrapped := &dbLikePurchaseRepo{mockRepo: base}
+
+	svc := &service{
+		campaigns: base, purchases: wrapped, sales: base, analytics: base,
+		finance: base, pricing: base, dh: base,
+		idGen: func() string { return "unused" },
+	}
+	if _, err := svc.ScanCert(context.Background(), "11111111"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// The stored row should now be enrolled in the DH push pipeline.
+	stored := base.purchases["p1"]
+	if stored.DHPushStatus != DHPushStatusPending {
+		t.Errorf("dhPushStatus = %q, want %q (enrollment was silently skipped — regression of the stale-ReceivedAt fix)",
+			stored.DHPushStatus, DHPushStatusPending)
+	}
+	if stored.ReceivedAt == nil {
+		t.Errorf("receivedAt was never persisted")
+	}
+}
+
+// TestImportCerts_FirstReceiptExistingEnrollsAgainstRealDBSemantics is the
+// ImportCerts counterpart of the above — same stale-ReceivedAt bug, different
+// entry point.
+func TestImportCerts_FirstReceiptExistingEnrollsAgainstRealDBSemantics(t *testing.T) {
+	base := newMockRepo()
+	base.campaigns[ExternalCampaignID] = &Campaign{ID: ExternalCampaignID, Name: ExternalCampaignName}
+	base.purchases["p1"] = &Purchase{
+		ID: "p1", CertNumber: "11111111", Grader: "PSA",
+		CardName:     "Charizard",
+		ReceivedAt:   nil,
+		DHPushStatus: "",
+	}
+	base.certNumbers["11111111"] = true
+	wrapped := &dbLikePurchaseRepo{mockRepo: base}
+
+	svc := &service{
+		campaigns: base, purchases: wrapped, sales: base, analytics: base,
+		finance: base, pricing: base, dh: base,
+		idGen: func() string { return "unused" },
+	}
+	if _, err := svc.ImportCerts(context.Background(), []string{"11111111"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	stored := base.purchases["p1"]
+	if stored.DHPushStatus != DHPushStatusPending {
+		t.Errorf("dhPushStatus = %q, want %q", stored.DHPushStatus, DHPushStatusPending)
+	}
+}
+
+// TestImportCerts_NewCertSetsReceivedAtOnStructLiteral guards the new-cert
+// ordering fix: the struct literal carries ReceivedAt so the initial insert
+// is atomic (status + received together). A SetReceivedAt failure after that
+// no longer strands the row with pending status and no receipt.
+func TestImportCerts_NewCertSetsReceivedAtOnStructLiteral(t *testing.T) {
+	repo := newMockRepo()
+	repo.campaigns[ExternalCampaignID] = &Campaign{ID: ExternalCampaignID, Name: ExternalCampaignName}
+	certLookup := &mockCertLookup{
+		lookupFn: func(_ context.Context, cert string) (*CertInfo, error) {
+			return &CertInfo{CertNumber: cert, CardName: "Charizard", Grade: 9, Category: "BASE SET", CardNumber: "4"}, nil
+		},
+	}
+	svc := &service{
+		campaigns: repo, purchases: repo, sales: repo, analytics: repo,
+		finance: repo, pricing: repo, dh: repo, certLookup: certLookup,
+		idGen: func() string { return "new-id" },
+	}
+	if _, err := svc.ImportCerts(context.Background(), []string{"12345678"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	created := repo.purchases["new-id"]
+	if created == nil {
+		t.Fatal("purchase not created")
+	}
+	if created.ReceivedAt == nil {
+		t.Error("ReceivedAt is nil on the created row; struct-literal fix not in place")
+	}
+	if created.DHPushStatus != DHPushStatusPending {
+		t.Errorf("dhPushStatus = %q, want %q", created.DHPushStatus, DHPushStatusPending)
+	}
+	// Sanity: the parsed ReceivedAt is close to now.
+	if created.ReceivedAt != nil {
+		if _, err := time.Parse(time.RFC3339, *created.ReceivedAt); err != nil {
+			t.Errorf("ReceivedAt not in RFC3339 form: %v", err)
+		}
+	}
+}
+
+func TestScanCert_DoesNotResetHealthySnapshot(t *testing.T) {
+	repo := newMockRepo()
+	repo.purchases["p1"] = &Purchase{
+		ID: "p1", CertNumber: "11111111", Grader: "PSA",
+		CardName: "Charizard", DHPushStatus: "",
+		SnapshotStatus: SnapshotStatusNone, SnapshotRetryCount: 0,
+	}
+	svc := &service{
+		campaigns: repo, purchases: repo, sales: repo, analytics: repo,
+		finance: repo, pricing: repo, dh: repo,
+		idGen: func() string { return "unused" },
+	}
+	if _, err := svc.ScanCert(context.Background(), "11111111"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if p := repo.purchases["p1"]; p.SnapshotStatus != SnapshotStatusNone {
+		t.Errorf("snapshotStatus = %q, want empty/none", p.SnapshotStatus)
 	}
 }

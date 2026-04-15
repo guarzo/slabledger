@@ -744,7 +744,10 @@ func (m *mockRepo) GetPurchasesByDHCertStatus(_ context.Context, _ string, _ int
 	return nil, nil
 }
 
-func (m *mockRepo) UpdatePurchaseDHPushStatus(_ context.Context, _ string, _ string) error {
+func (m *mockRepo) UpdatePurchaseDHPushStatus(_ context.Context, id string, status string) error {
+	if p, ok := m.purchases[id]; ok && p != nil {
+		p.DHPushStatus = status
+	}
 	return nil
 }
 
@@ -754,6 +757,10 @@ func (m *mockRepo) GetPurchasesByDHPushStatus(_ context.Context, _ string, _ int
 
 func (m *mockRepo) CountUnsoldByDHPushStatus(_ context.Context) (map[string]int, error) {
 	return map[string]int{}, nil
+}
+
+func (m *mockRepo) CountDHPipelineHealth(_ context.Context) (DHPipelineHealth, error) {
+	return DHPipelineHealth{}, nil
 }
 
 func (m *mockRepo) UpdatePurchaseDHCandidates(_ context.Context, _ string, _ string) error {
