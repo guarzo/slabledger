@@ -327,6 +327,7 @@ var TrackedEndpoints = []string{
 	"/api/portfolio/insights",
 	"/api/portfolio/capital-timeline",
 	"/api/portfolio/weekly-review",
+	"/api/portfolio/weekly-history",
 	"/api/campaigns/{id}/tuning",
 	"/api/campaigns/{id}/sell-sheet",
 }

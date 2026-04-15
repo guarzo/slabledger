@@ -627,6 +627,23 @@ func TestHandleWeeklyHistory_InvalidWeeksParam(t *testing.T) {
 	}
 }
 
+func TestHandleWeeklyHistory_ServiceError(t *testing.T) {
+	portSvc := &mocks.MockPortfolioService{
+		GetWeeklyHistoryFn: func(_ context.Context, _ int) ([]inventory.WeeklyReviewSummary, error) {
+			return nil, fmt.Errorf("boom")
+		},
+	}
+	h := newTestHandlerFull(&mocks.MockInventoryService{}, nil, portSvc, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/portfolio/weekly-history?weeks=4", nil)
+	rec := httptest.NewRecorder()
+	h.HandleWeeklyHistory(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d", rec.Code)
+	}
+}
+
 func TestHandleListRevocationFlags(t *testing.T) {
 	tests := []struct {
 		name        string
