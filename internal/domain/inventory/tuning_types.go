@@ -13,6 +13,8 @@ type GradePerformance struct {
 	NetProfitCents    int     `json:"netProfitCents"`
 	ROI               float64 `json:"roi"`
 	AvgBuyPctOfCL     float64 `json:"avgBuyPctOfCL"`
+	RoiStddev         float64 `json:"roiStddev"` // population stddev of per-sale ROIs; 0 if < 2 sales
+	CV                float64 `json:"cv"`        // coefficient of variation = RoiStddev / |ROI|; 0 if ROI==0
 }
 
 // PriceTierPerformance contains P&L metrics for a cost basis price tier.
@@ -30,6 +32,8 @@ type PriceTierPerformance struct {
 	NetProfitCents    int     `json:"netProfitCents"`
 	ROI               float64 `json:"roi"`
 	AvgBuyPctOfCL     float64 `json:"avgBuyPctOfCL"`
+	RoiStddev         float64 `json:"roiStddev"` // population stddev of per-sale ROIs; 0 if < 2 sales
+	CV                float64 `json:"cv"`        // coefficient of variation = RoiStddev / |ROI|; 0 if ROI==0
 }
 
 // CardPerformance contains performance data for a single purchase with current market context.
