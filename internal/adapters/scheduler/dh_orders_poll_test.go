@@ -131,6 +131,28 @@ func TestDHOrdersPoll_Disabled(t *testing.T) {
 	}
 }
 
+func TestMapDHChannel(t *testing.T) {
+	logger := mocks.NewMockLogger()
+	ctx := context.Background()
+	cases := []struct {
+		name string
+		in   string
+		want inventory.SaleChannel
+	}{
+		{"dh native", "dh", inventory.SaleChannelDoubleHolo},
+		{"ebay", "ebay", inventory.SaleChannelEbay},
+		{"shopify", "shopify", inventory.SaleChannelWebsite},
+		{"unknown", "flea_market", inventory.SaleChannelOther},
+		{"empty", "", inventory.SaleChannelOther},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := mapDHChannel(ctx, tc.in, logger)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
 func intPtr(v int) *int { return &v }
 
 // Compile-time interface check.

@@ -111,7 +111,7 @@ func (s *DHOrdersPollScheduler) poll(ctx context.Context) {
 		rows = append(rows, inventory.OrdersExportRow{
 			OrderNumber:  order.OrderID,
 			Date:         parseDHSoldAt(order.SoldAt),
-			SalesChannel: mapDHChannel(order.Channel),
+			SalesChannel: mapDHChannel(ctx, order.Channel, s.logger),
 			ProductTitle: order.CardName,
 			Grader:       "PSA",
 			CertNumber:   order.CertNumber,
@@ -207,17 +207,21 @@ func (s *DHOrdersPollScheduler) updateDHOrdersCheckpoint(ctx context.Context, or
 	}
 }
 
-// mapDHChannel converts a DH channel string to a inventory.SaleChannel.
-func mapDHChannel(channel string) inventory.SaleChannel {
+// mapDHChannel converts a DH channel string to an inventory.SaleChannel.
+// Unknown channels default to SaleChannelOther with a Warn log — never drop
+// the order, but surface the miscategorization so it can be fixed.
+func mapDHChannel(ctx context.Context, channel string, logger observability.Logger) inventory.SaleChannel {
 	switch channel {
+	case "dh":
+		return inventory.SaleChannelDoubleHolo
 	case "ebay":
 		return inventory.SaleChannelEbay
 	case "shopify":
 		return inventory.SaleChannelWebsite
-	case "dh":
-		return inventory.SaleChannelInPerson
 	default:
-		return inventory.SaleChannelInPerson
+		logger.Warn(ctx, "dh orders poll: unknown channel, defaulting to 'other'",
+			observability.String("channel", channel))
+		return inventory.SaleChannelOther
 	}
 }
 
