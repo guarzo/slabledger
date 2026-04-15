@@ -18,6 +18,17 @@ type Repository interface {
 	ListCharacterCache(ctx context.Context, window string) ([]CharacterCache, error)
 }
 
+// ActiveCampaign describes a single active campaign's targeting rules, used
+// by the campaign-signals service to correlate per-campaign market data.
+// Kept minimal — only the fields needed to filter characters and grades.
+type ActiveCampaign struct {
+	ID            int64  // Numeric ID only; non-numeric IDs (e.g. "external") are excluded.
+	Name          string
+	GradeRange    string // e.g. "9-10"; empty means no grade constraint.
+	InclusionList string // Comma-separated; empty means open-net.
+	ExclusionMode bool   // If true, InclusionList is an exclusion list.
+}
+
 // CampaignCoverageLookup answers coverage questions for a niche bucket
 // (character, era, grade). The real implementation is wired in T5/T6 against
 // the campaigns store; for now this interface is the seam the Service depends
@@ -31,4 +42,9 @@ type CampaignCoverageLookup interface {
 	// UnsoldCountFor returns the count of our unsold inventory matching the
 	// bucket. Zero means the niche is uncovered by our holdings.
 	UnsoldCountFor(ctx context.Context, character, era string, grade int) (int, error)
+
+	// ActiveCampaigns returns all campaigns with Phase="active". Campaigns with
+	// non-numeric IDs are omitted (the ID field only holds int64). Returns an
+	// empty slice when there are no active campaigns.
+	ActiveCampaigns(ctx context.Context) ([]ActiveCampaign, error)
 }

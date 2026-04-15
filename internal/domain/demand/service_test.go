@@ -32,6 +32,9 @@ func (uncoveredCampaigns) CampaignsCovering(ctx context.Context, character, era 
 func (uncoveredCampaigns) UnsoldCountFor(ctx context.Context, character, era string, grade int) (int, error) {
 	return 0, nil
 }
+func (uncoveredCampaigns) ActiveCampaigns(ctx context.Context) ([]demand.ActiveCampaign, error) {
+	return []demand.ActiveCampaign{}, nil
+}
 
 // coveredOnlyFor covers a single bucket; everything else is uncovered.
 type coveredOnlyFor struct {
@@ -53,6 +56,9 @@ func (c coveredOnlyFor) UnsoldCountFor(ctx context.Context, character, era strin
 		return c.unsold, nil
 	}
 	return 0, nil
+}
+func (coveredOnlyFor) ActiveCampaigns(ctx context.Context) ([]demand.ActiveCampaign, error) {
+	return []demand.ActiveCampaign{}, nil
 }
 
 // --- Fixtures ---
