@@ -134,12 +134,12 @@ func gradeInRange(grade int, rangeStr string) bool {
 // characterMatchesInclusion returns true if the campaign's inclusion list
 // allows the given character name. Mirrors
 // inventory.PurchaseMatchesCampaign's inclusion semantics (without set name,
-// because character-level niches don't carry a set). Empty inclusion lists
-// are a wildcard (match) in inclusion mode, and reject-none in exclusion
-// mode.
+// because character-level niches don't carry a set): when the list is empty
+// the inclusion/exclusion check is skipped entirely, so the character matches
+// regardless of mode.
 func characterMatchesInclusion(character, inclusionList string, exclusionMode bool) bool {
-	if inclusionList == "" {
-		return !exclusionMode
+	if strings.TrimSpace(inclusionList) == "" {
+		return true
 	}
 	entries := inventory.SplitInclusionList(inclusionList)
 	lowerChar := strings.ToLower(character)

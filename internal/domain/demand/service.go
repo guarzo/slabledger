@@ -71,6 +71,40 @@ func (s *Service) Leaderboard(ctx context.Context, opts LeaderboardOpts) ([]Nich
 		grades = []int{opts.Grade}
 	}
 
+	// Coverage is keyed on (character, grade) today — era is a no-op in the
+	// SQLite-backed CampaignCoverageLookup because the campaign schema has no
+	// era field. Memoize to cut CampaignsCovering + UnsoldCountFor from once
+	// per (character, era, grade) triple down to once per (character, grade)
+	// pair, which also survives intact if CampaignCoverageLookup starts
+	// honoring era later: at worst we redo the lookup per era if the cache
+	// key gains the era dimension.
+	type coverageKey struct {
+		character string
+		grade     int
+	}
+	coverageCache := make(map[coverageKey]NicheCoverage)
+	coverageFor := func(character, era string, grade int) (NicheCoverage, error) {
+		key := coverageKey{character: character, grade: grade}
+		if cov, ok := coverageCache[key]; ok {
+			return cov, nil
+		}
+		campaignIDs, err := s.campaigns.CampaignsCovering(ctx, character, era, grade)
+		if err != nil {
+			return NicheCoverage{}, fmt.Errorf("campaigns covering (%s/%s/%d): %w", character, era, grade, err)
+		}
+		unsold, err := s.campaigns.UnsoldCountFor(ctx, character, era, grade)
+		if err != nil {
+			return NicheCoverage{}, fmt.Errorf("unsold count (%s/%s/%d): %w", character, era, grade, err)
+		}
+		cov := NicheCoverage{
+			OurUnsoldCount:    unsold,
+			ActiveCampaignIDs: campaignIDs,
+			Covered:           len(campaignIDs) > 0,
+		}
+		coverageCache[key] = cov
+		return cov, nil
+	}
+
 	out := make([]NicheOpportunity, 0, len(rows)*len(grades))
 	for _, row := range rows {
 		demand, ok := parseCharacterDemand(row)
@@ -91,7 +125,7 @@ func (s *Service) Leaderboard(ctx context.Context, opts LeaderboardOpts) ([]Nich
 			}
 			market := parseCharacterMarket(row)
 			for _, grade := range grades {
-				bucket, bErr := s.buildBucket(ctx, row.Character, era, grade, eraDemand, market)
+				bucket, bErr := s.buildBucket(row.Character, era, grade, eraDemand, market, coverageFor)
 				if bErr != nil {
 					return nil, bErr
 				}
@@ -108,26 +142,19 @@ func (s *Service) Leaderboard(ctx context.Context, opts LeaderboardOpts) ([]Nich
 }
 
 // buildBucket joins a (character, era, grade) triple to coverage and returns
-// the fully-scored NicheOpportunity.
+// the fully-scored NicheOpportunity. The coverage callback memoizes
+// CampaignsCovering + UnsoldCountFor across buckets in a single Leaderboard
+// call to avoid per-triple SQL round trips.
 func (s *Service) buildBucket(
-	ctx context.Context,
 	character, era string,
 	grade int,
 	demand *NicheDemand,
 	market *NicheMarket,
+	coverageFor func(character, era string, grade int) (NicheCoverage, error),
 ) (NicheOpportunity, error) {
-	campaignIDs, err := s.campaigns.CampaignsCovering(ctx, character, era, grade)
+	coverage, err := coverageFor(character, era, grade)
 	if err != nil {
-		return NicheOpportunity{}, fmt.Errorf("campaigns covering (%s/%s/%d): %w", character, era, grade, err)
-	}
-	unsold, err := s.campaigns.UnsoldCountFor(ctx, character, era, grade)
-	if err != nil {
-		return NicheOpportunity{}, fmt.Errorf("unsold count (%s/%s/%d): %w", character, era, grade, err)
-	}
-	coverage := NicheCoverage{
-		OurUnsoldCount:    unsold,
-		ActiveCampaignIDs: campaignIDs,
-		Covered:           len(campaignIDs) > 0,
+		return NicheOpportunity{}, err
 	}
 
 	demandScore := 0.0

@@ -2,6 +2,7 @@ package demand_test
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"testing"
 
@@ -97,8 +98,8 @@ func TestService_Leaderboard_EmptyCache(t *testing.T) {
 func TestService_Leaderboard_InvalidWindow(t *testing.T) {
 	svc := demand.NewService(newRepoWithRows(nil), uncoveredCampaigns{})
 	_, err := svc.Leaderboard(context.Background(), demand.LeaderboardOpts{Window: "60d"})
-	if err == nil {
-		t.Fatalf("expected ErrInvalidWindow; got nil")
+	if !errors.Is(err, demand.ErrInvalidWindow) {
+		t.Fatalf("expected ErrInvalidWindow; got %v", err)
 	}
 }
 
@@ -309,8 +310,10 @@ func TestOpportunityScore_CoverageAndSaturation(t *testing.T) {
 }
 
 func TestOpportunityScore_VelocityClamp(t *testing.T) {
-	big := 10.0
-	neg := -10.0
+	// velocityChangePct is DH's percentage-point form (15.2 = +15.2%), so
+	// anything with |v| > 50 must clamp to the ±0.5 fractional ceiling.
+	big := 100.0
+	neg := -100.0
 	highClamp := demand.OpportunityScore(1.0, &big, 0, demand.NicheCoverage{})
 	lowClamp := demand.OpportunityScore(1.0, &neg, 0, demand.NicheCoverage{})
 	if highClamp != 1.5 {

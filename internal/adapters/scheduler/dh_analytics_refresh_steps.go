@@ -14,13 +14,28 @@ import (
 
 // refreshCharacters runs Step 1: union characters from top-characters (overall +
 // per era), velocity, saturation, then upserts character cache rows. Returns
-// the character-name set, top_cards IDs for step 2 seeding, and API call count.
+// the (ranked) character-name set, top_cards IDs for step 2 seeding, and API
+// call count. Ranking is order-of-first-appearance across the four sources, so
+// overall-top entries outrank per-era entries, which outrank velocity and
+// saturation entries — matters when the result is capped at
+// maxCharactersPerRun.
 func (s *DHAnalyticsRefreshScheduler) refreshCharacters(ctx context.Context) (
 	characters map[string]struct{},
 	topCardIDs []int,
 	apiCalls int,
 ) {
 	characters = make(map[string]struct{})
+	orderedCharacters := make([]string, 0, maxCharactersPerRun)
+	addCharacter := func(name string) {
+		if name == "" {
+			return
+		}
+		if _, seen := characters[name]; seen {
+			return
+		}
+		characters[name] = struct{}{}
+		orderedCharacters = append(orderedCharacters, name)
+	}
 	cardIDSet := make(map[int]struct{})
 
 	// 1a. Top characters overall.
@@ -33,9 +48,7 @@ func (s *DHAnalyticsRefreshScheduler) refreshCharacters(ctx context.Context) (
 	if overallTop != nil {
 		overallEntries = overallTop.CharacterDemand
 		for _, e := range overallEntries {
-			if e.CharacterName != "" {
-				characters[e.CharacterName] = struct{}{}
-			}
+			addCharacter(e.CharacterName)
 		}
 	}
 
@@ -63,9 +76,7 @@ func (s *DHAnalyticsRefreshScheduler) refreshCharacters(ctx context.Context) (
 			continue
 		}
 		for _, e := range resp.CharacterDemand {
-			if e.CharacterName != "" {
-				characters[e.CharacterName] = struct{}{}
-			}
+			addCharacter(e.CharacterName)
 			eraEntries = append(eraEntries, e)
 		}
 	}
@@ -83,9 +94,7 @@ func (s *DHAnalyticsRefreshScheduler) refreshCharacters(ctx context.Context) (
 	if velResp != nil {
 		velocityEntries = velResp.Characters
 		for _, e := range velocityEntries {
-			if e.CharacterName != "" {
-				characters[e.CharacterName] = struct{}{}
-			}
+			addCharacter(e.CharacterName)
 		}
 	}
 
@@ -101,27 +110,22 @@ func (s *DHAnalyticsRefreshScheduler) refreshCharacters(ctx context.Context) (
 	if satResp != nil {
 		saturationEntries = satResp.Characters
 		for _, e := range saturationEntries {
-			if e.CharacterName != "" {
-				characters[e.CharacterName] = struct{}{}
-			}
+			addCharacter(e.CharacterName)
 		}
 	}
 
-	// Cap character set size. Map iteration is non-deterministic at the tail,
-	// but DH already ranks the hot entries so the cap should only drop rows
-	// we were unlikely to surface anyway.
-	if len(characters) > maxCharactersPerRun {
+	// Cap character set size. orderedCharacters preserves order-of-first-
+	// appearance across the four sources (overall → era → velocity →
+	// saturation), so a prefix trim keeps DH's highest-ranked entries.
+	if len(orderedCharacters) > maxCharactersPerRun {
+		total := len(orderedCharacters)
+		orderedCharacters = orderedCharacters[:maxCharactersPerRun]
 		trimmed := make(map[string]struct{}, maxCharactersPerRun)
-		i := 0
-		for k := range characters {
-			if i >= maxCharactersPerRun {
-				break
-			}
-			trimmed[k] = struct{}{}
-			i++
+		for _, name := range orderedCharacters {
+			trimmed[name] = struct{}{}
 		}
 		s.logger.Info(ctx, "character set capped",
-			observability.Int("total", len(characters)),
+			observability.Int("total", total),
 			observability.Int("kept", maxCharactersPerRun))
 		characters = trimmed
 	}
@@ -135,7 +139,7 @@ func (s *DHAnalyticsRefreshScheduler) refreshCharacters(ctx context.Context) (
 	velocityByChar := indexVelocity(velocityEntries)
 	saturationByChar := indexSaturation(saturationEntries)
 
-	for name := range characters {
+	for _, name := range orderedCharacters {
 		row := demand.CharacterCache{
 			Character: name,
 			Window:    s.config.Window,

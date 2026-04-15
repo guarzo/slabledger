@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -72,7 +73,7 @@ func (r *DHDemandRepository) GetCardCache(ctx context.Context, cardID, window st
 		cardID, window,
 	)
 	result, err := scanCardCacheRow(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
@@ -176,7 +177,7 @@ func (r *DHDemandRepository) GetCharacterCache(ctx context.Context, character, w
 		character, window,
 	)
 	result, err := scanCharacterCacheRow(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {

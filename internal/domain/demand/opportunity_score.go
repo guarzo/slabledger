@@ -9,10 +9,14 @@ const DefaultSaturationThreshold = 100
 // components. Phase 2 will replace this with a calibrated formula; the
 // function signature is the seam.
 //
+// velocityChangePct is expected in DH's wire format — percentage points
+// (e.g. 15.2 means +15.2%). It is normalized to a fraction (0.152) and
+// clamped to ±0.5 before being folded into the bonus.
+//
 // Formula:
 //
 //	score = demand_score
-//	      × velocity_bonus      (1 + velocityChangePct clamped to [-0.5, +0.5]; nil treated as 0)
+//	      × velocity_bonus      (1 + clamp(velocityChangePct / 100, -0.5, +0.5); nil treated as 0)
 //	      × saturation_penalty  (0.5 if active_listing_count > threshold, else 1.0)
 //	      × coverage_penalty    (1.0 if uncovered, 0.3 if at least one campaign covers)
 //
@@ -21,7 +25,7 @@ const DefaultSaturationThreshold = 100
 func OpportunityScore(demandScore float64, velocityChangePct *float64, activeListingCount int, coverage NicheCoverage) float64 {
 	velocityBonus := 1.0
 	if velocityChangePct != nil {
-		v := *velocityChangePct
+		v := *velocityChangePct / 100.0 // DH returns percentage points; normalize to fraction
 		if v < -0.5 {
 			v = -0.5
 		}
