@@ -84,6 +84,12 @@ type PurchaseRepository interface {
 	UpdatePurchaseDHPushStatus(ctx context.Context, id string, status string) error
 	GetPurchasesByDHPushStatus(ctx context.Context, status string, limit int) ([]Purchase, error)
 	CountUnsoldByDHPushStatus(ctx context.Context) (map[string]int, error)
+	// CountDHPipelineHealth returns finer-grained counts for the DH push
+	// pipeline dashboard. PendingReceived matches what /api/dh/pending actually
+	// drains (dh_push_status='pending' AND received_at IS NOT NULL).
+	// UnenrolledReceived counts received, unsold rows with no push-pipeline
+	// state — the "black hole" bucket that was previously invisible.
+	CountDHPipelineHealth(ctx context.Context) (DHPipelineHealth, error)
 	UpdatePurchaseDHCandidates(ctx context.Context, id string, candidatesJSON string) error
 	UpdatePurchaseDHHoldReason(ctx context.Context, id string, reason string) error
 	// SetHeldWithReason atomically sets the push status to held and records

@@ -274,6 +274,16 @@ func DHCardKey(cardName, setName, cardNumber string) string {
 	return cardName + "|" + setName + "|" + cardNumber
 }
 
+// DHPipelineHealth is a small set of counts the DH status dashboard uses to
+// reconcile "how many things the system says are queued" with "how many things
+// the queue endpoint actually returns". PendingReceived matches the draining
+// query in ListDHPendingItems; UnenrolledReceived surfaces the previously
+// invisible bucket of received rows that never got dh_push_status set.
+type DHPipelineHealth struct {
+	PendingReceived    int `json:"pendingReceived"`
+	UnenrolledReceived int `json:"unenrolledReceived"`
+}
+
 // DHPendingItem represents a received, unsold card currently in the DH push pipeline.
 // Used by GET /api/dh/pending to show the operator what's queued for DH listing.
 type DHPendingItem struct {

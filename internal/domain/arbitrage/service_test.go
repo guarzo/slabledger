@@ -132,6 +132,9 @@ func (r *stubPurchaseRepo) GetPurchasesByDHPushStatus(_ context.Context, _ strin
 func (r *stubPurchaseRepo) CountUnsoldByDHPushStatus(_ context.Context) (map[string]int, error) {
 	return nil, nil
 }
+func (r *stubPurchaseRepo) CountDHPipelineHealth(_ context.Context) (inventory.DHPipelineHealth, error) {
+	return inventory.DHPipelineHealth{}, nil
+}
 func (r *stubPurchaseRepo) UpdatePurchaseDHCandidates(_ context.Context, _, _ string) error {
 	return nil
 }

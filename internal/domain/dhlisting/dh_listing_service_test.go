@@ -167,6 +167,44 @@ func TestListPurchases_EmptyInput(t *testing.T) {
 	}
 }
 
+// TestListPurchases_UnenrolledPurchaseIsSkippedNotProcessed asserts that a
+// purchase with no DH inventory ID and an empty dh_push_status is skipped
+// rather than silently treated as "listed". Regression guard for the bug that
+// stranded cert intake → DH sync.
+func TestListPurchases_UnenrolledPurchaseIsSkippedNotProcessed(t *testing.T) {
+	certNum := "77777777"
+	unenrolled := &inventory.Purchase{
+		ID:            "p-unenrolled",
+		CertNumber:    certNum,
+		DHInventoryID: 0,
+		DHPushStatus:  "",
+	}
+	lookup := &mockPurchaseLookup{
+		purchases: map[string]*inventory.Purchase{certNum: unenrolled},
+	}
+	lister := &mockInventoryLister{}
+	updater := &mockFieldsUpdater{}
+
+	svc := newTestService(t, lookup,
+		WithDHListingLister(lister),
+		WithDHListingFieldsUpdater(updater),
+	)
+	result := svc.ListPurchases(context.Background(), []string{certNum})
+
+	if result.Listed != 0 {
+		t.Errorf("Listed: got %d, want 0 (unenrolled must not be listed)", result.Listed)
+	}
+	if result.Synced != 0 {
+		t.Errorf("Synced: got %d, want 0", result.Synced)
+	}
+	if result.Total != 1 {
+		t.Errorf("Total: got %d, want 1", result.Total)
+	}
+	if len(updater.calls) != 0 {
+		t.Errorf("UpdatePurchaseDHFields called %d times, want 0 (unenrolled row should not be touched)", len(updater.calls))
+	}
+}
+
 // TestDisambiguateCandidates covers the package-level disambiguateCandidates
 // function (white-box test; requires package dhlisting).
 func TestDisambiguateCandidates(t *testing.T) {

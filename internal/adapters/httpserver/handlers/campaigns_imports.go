@@ -289,6 +289,13 @@ func (h *CampaignsHandler) HandleScanCert(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	// Existing unsold certs just had received_at set and were enrolled in the
+	// DH push pipeline. Trigger a listing run so in-flight items promote from
+	// in_stock → listed without waiting for an unrelated import.
+	if result.Status == "existing" {
+		h.triggerDHListing([]string{req.CertNumber})
+	}
+
 	writeJSON(w, http.StatusOK, result)
 }
 

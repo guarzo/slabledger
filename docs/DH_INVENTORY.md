@@ -5,9 +5,22 @@ How cards flow from local inventory to DH's marketplace.
 ## Overview
 
 ```
-PSA Cert Import → CL Value (manual) → Cert Resolution → Inventory Push → Channel Sync
-     (CSV)         (at import time)       (DH API)          (DH API)       (eBay/Shopify)
+Ingestion → Enrollment → Cert Resolution → Inventory Push → List Transition → Channel Sync
+ (source)   (pending)      (DH API)          (DH API)         (in_stock→listed)  (eBay/Shopify)
 ```
+
+The pipeline is gated on `dh_push_status = 'pending'`: the DH push scheduler
+and the inline listing path both skip any row that isn't explicitly enrolled,
+so every ingestion source has to flip `dh_push_status` itself. Ingestion paths
+that enroll:
+
+| Source | Where | Enrolls? |
+|---|---|---|
+| CardLadder CSV import | `service_import_cl.go` | yes (via `NeedsDHPush()` + `UpdatePurchaseDHPushStatus`) |
+| Cert Intake — new cert | `service_cert_entry.go` `ImportCerts` | yes (sets `dh_push_status='pending'` on creation) |
+| Cert Intake — existing cert (scan on receipt) | `service_cert_entry.go` `ScanCert` | yes (enrolls on receipt, guarded by `NeedsDHPush()`) |
+| CardLadder scheduled refresh | `cardladder_refresh.go` | only re-enrolls already-pushed rows on CL value change |
+| PSA sheet sync / PSA TXT import | `service_import_psa.go` | no — relies on a later Cert Intake scan to enroll |
 
 ## Pipeline States (`dh_push_status`)
 
@@ -29,8 +42,11 @@ A purchase becomes eligible for DH push when:
 - Its `dh_push_status` is not already `pending`, `unmatched`, or `manual`
 
 **Triggers:**
-- PSA import sets status to `pending` when `NeedsDHPush()` returns true
-- A CL value change on an already-pushed item re-enrolls it as `pending` (re-push). `CLValueCents` is entered manually at import time — there is no automated CardLadder sync.
+- Cert Intake (`ScanCert` on an existing row, `ImportCerts` for a brand-new cert) sets `dh_push_status='pending'` at the moment the card is physically received — the canonical enrollment event for PSA-sheet-synced inventory. An `ScanCert` enrollment also resets a `snapshot_status='exhausted'` row back to `pending` so the pricing scheduler will retry after the DH card ID becomes available.
+- CardLadder CSV import sets `pending` on matched rows via `NeedsDHPush()`.
+- A CL value change on an already-pushed item re-enrolls it as `pending` (re-push), via the scheduled CardLadder refresh.
+
+PSA sheet sync and PSA TXT import do NOT set `dh_push_status` themselves; they create rows that stay unenrolled until a Cert Intake scan flips them.
 
 **Guard:** Items with `CLValueCents == 0` are skipped by the push scheduler (left as `pending` until CL value arrives).
 

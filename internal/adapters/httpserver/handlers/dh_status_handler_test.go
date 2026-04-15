@@ -64,6 +64,7 @@ func (m *mockDHSuggestCounter) LatestFetchedAt(ctx context.Context) (string, err
 // mockDHStatusCounter implements DHStatusCounter.
 type mockDHStatusCounter struct {
 	CountUnsoldByDHPushStatusFn func(ctx context.Context) (map[string]int, error)
+	CountDHPipelineHealthFn     func(ctx context.Context) (inventory.DHPipelineHealth, error)
 }
 
 func (m *mockDHStatusCounter) CountUnsoldByDHPushStatus(ctx context.Context) (map[string]int, error) {
@@ -71,6 +72,13 @@ func (m *mockDHStatusCounter) CountUnsoldByDHPushStatus(ctx context.Context) (ma
 		return m.CountUnsoldByDHPushStatusFn(ctx)
 	}
 	return map[string]int{}, nil
+}
+
+func (m *mockDHStatusCounter) CountDHPipelineHealth(ctx context.Context) (inventory.DHPipelineHealth, error) {
+	if m.CountDHPipelineHealthFn != nil {
+		return m.CountDHPipelineHealthFn(ctx)
+	}
+	return inventory.DHPipelineHealth{}, nil
 }
 
 // mockDHHealthReporter implements DHHealthReporter.

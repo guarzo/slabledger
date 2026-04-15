@@ -194,6 +194,33 @@ func (ps *PurchaseStore) CountUnsoldByDHPushStatus(ctx context.Context) (map[str
 	return counts, rows.Err()
 }
 
+// CountDHPipelineHealth returns the two counts the DH status dashboard needs to
+// reconcile its aggregate with the actual queue: how many received-and-pending
+// rows there are (matches ListDHPendingItems' draining query) and how many
+// received rows have never been enrolled in the push pipeline at all.
+// Both counts exclude sold rows and rows in closed campaigns.
+func (ps *PurchaseStore) CountDHPipelineHealth(ctx context.Context) (inventory.DHPipelineHealth, error) {
+	var health inventory.DHPipelineHealth
+	err := ps.db.QueryRowContext(ctx, `
+		SELECT
+			COALESCE(SUM(CASE WHEN p.dh_push_status = 'pending' THEN 1 ELSE 0 END), 0) AS pending_received,
+			COALESCE(SUM(CASE
+				WHEN (p.dh_push_status IS NULL OR p.dh_push_status = '')
+				     AND p.dh_inventory_id = 0
+				THEN 1 ELSE 0 END), 0) AS unenrolled_received
+		FROM campaign_purchases p
+		INNER JOIN campaigns c ON c.id = p.campaign_id
+		LEFT JOIN campaign_sales s ON s.purchase_id = p.id
+		WHERE s.id IS NULL
+		  AND p.received_at IS NOT NULL
+		  AND c.phase != 'closed'
+	`).Scan(&health.PendingReceived, &health.UnenrolledReceived)
+	if err != nil {
+		return inventory.DHPipelineHealth{}, fmt.Errorf("count dh pipeline health: %w", err)
+	}
+	return health, nil
+}
+
 // ListDHPendingItems returns received, unsold purchases that are queued for the DH push
 // pipeline (dh_push_status = 'pending') with an active parent campaign. Each row carries
 // a confidence label based on when DH inventory was last synced for the purchase.

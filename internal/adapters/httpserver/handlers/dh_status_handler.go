@@ -160,6 +160,15 @@ type dhStatusResponse struct {
 	DHInventoryCount      int             `json:"dh_inventory_count,omitempty"`
 	DHListingsCount       int             `json:"dh_listings_count,omitempty"`
 	DHOrdersCount         int             `json:"dh_orders_count,omitempty"`
+	// PendingReceivedCount is what /api/dh/pending actually drains
+	// (dh_push_status='pending' AND received_at IS NOT NULL). It can lag
+	// PendingCount when CL refresh has enrolled rows that haven't been
+	// received yet — the difference between the two points at the receipt gap.
+	PendingReceivedCount int `json:"pending_received_count"`
+	// UnenrolledReceivedCount is the "black hole": received, unsold rows with
+	// no push-pipeline state. Non-zero means Cert Intake is creating rows that
+	// the DH sync cannot see. Should normally be 0 after the enrollment fix.
+	UnenrolledReceivedCount int `json:"unenrolled_received_count"`
 }
 
 // HandleGetStatus returns aggregate stats for the DH integration.
@@ -217,6 +226,15 @@ func (h *DHHandler) HandleGetStatus(w http.ResponseWriter, r *http.Request) {
 		resp.DismissedCount = counts[inventory.DHPushStatusDismissed]
 		resp.PendingCount = counts[inventory.DHPushStatusPending]
 		resp.MappedCount = counts[inventory.DHPushStatusMatched] + counts[inventory.DHPushStatusManual]
+
+		health, err := h.statusCounter.CountDHPipelineHealth(ctx)
+		if err != nil {
+			// Log but don't fail — the legacy counts still render the page.
+			h.logger.Warn(ctx, "dh status: count pipeline health", observability.Err(err))
+		} else {
+			resp.PendingReceivedCount = health.PendingReceived
+			resp.UnenrolledReceivedCount = health.UnenrolledReceived
+		}
 	}
 
 	// API health metrics
