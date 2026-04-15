@@ -134,7 +134,7 @@ func TestGenerateSuggestions_ChannelInformedBuyTerms(t *testing.T) {
 		wantCampaign    string // empty means no suggestion expected
 		wantNewTerms    float64
 		wantExact       bool
-		wantExpectedROI float64 // expected ExpectedMetrics.ExpectedROI (weighted margin)
+		wantExpectedROI float64 // expected ExpectedMetrics.ExpectedROI = suggTargetMargin / newTerms
 	}{
 		{
 			name: "weighted margin already meets target",
@@ -172,7 +172,7 @@ func TestGenerateSuggestions_ChannelInformedBuyTerms(t *testing.T) {
 			wantCampaign:    "Underperformer",
 			wantNewTerms:    0.78,
 			wantExact:       true,
-			wantExpectedROI: 0.03,
+			wantExpectedROI: 0.10 / 0.78,
 		},
 		{
 			name: "floor respected at 70%",
@@ -187,7 +187,7 @@ func TestGenerateSuggestions_ChannelInformedBuyTerms(t *testing.T) {
 			wantCampaign:    "Bleeding",
 			wantNewTerms:    0.70,
 			wantExact:       true,
-			wantExpectedROI: -0.05,
+			wantExpectedROI: 0.10 / 0.70,
 		},
 		{
 			name: "no channel data",
@@ -210,7 +210,7 @@ func TestGenerateSuggestions_ChannelInformedBuyTerms(t *testing.T) {
 			wantCampaign:    "Solo eBay",
 			wantNewTerms:    0.77,
 			wantExact:       true,
-			wantExpectedROI: 0.02,
+			wantExpectedROI: 0.10 / 0.77,
 		},
 		{
 			name: "mixed channels below buffer",
@@ -310,13 +310,14 @@ func TestGenerateSuggestions_ChannelInformedBuyTerms(t *testing.T) {
 					t.Errorf("expected newTerms %.4f, got %.4f", tc.wantNewTerms, match.SuggestedParams.BuyTermsCLPct)
 				}
 			}
-			// ExpectedMetrics.ExpectedROI should equal the weighted-average margin
-			// (the rule uses it as a best-available ROI proxy).
+			// ExpectedROI is derived from the projected margin (suggTargetMargin)
+			// and the suggested buy terms so it describes the post-adjustment
+			// state consistently with ExpectedMarginPct.
 			if match.ExpectedMetrics.ExpectedROI == 0 {
 				t.Errorf("expected non-zero ExpectedROI, got 0")
 			}
 			if math.Abs(match.ExpectedMetrics.ExpectedROI-tc.wantExpectedROI) > 1e-9 {
-				t.Errorf("expected ExpectedROI %.4f (weighted margin), got %.4f",
+				t.Errorf("expected ExpectedROI %.4f (suggTargetMargin/newTerms), got %.4f",
 					tc.wantExpectedROI, match.ExpectedMetrics.ExpectedROI)
 			}
 		})
@@ -551,7 +552,7 @@ func TestGenerateSuggestions_BuyTermsFromLiquidation(t *testing.T) {
 		wantNewTerms   float64
 		wantConfidence string
 		wantDataPoints int
-		wantMarginPct  float64 // expected ExpectedROI == ExpectedMarginPct (eBay channel margin)
+		wantMarginPct  float64 // expected ExpectedMarginPct == h.EbayChannelMarginPct
 	}{
 		{
 			name: "below loss threshold",
@@ -749,14 +750,17 @@ func TestGenerateSuggestions_BuyTermsFromLiquidation(t *testing.T) {
 			if match.DataPoints != tc.wantDataPoints {
 				t.Errorf("expected DataPoints %d, got %d", tc.wantDataPoints, match.DataPoints)
 			}
-			// ExpectedROI == ExpectedMarginPct == h.EbayChannelMarginPct (marketplace margin proxy).
-			if math.Abs(match.ExpectedMetrics.ExpectedROI-tc.wantMarginPct) > 1e-9 {
-				t.Errorf("expected ExpectedROI %.4f (EbayChannelMarginPct), got %.4f",
-					tc.wantMarginPct, match.ExpectedMetrics.ExpectedROI)
-			}
+			// ExpectedMarginPct == h.EbayChannelMarginPct.
+			// ExpectedROI is derived as margin/newTerms so both fields describe
+			// the projected post-adjustment state consistently.
 			if math.Abs(match.ExpectedMetrics.ExpectedMarginPct-tc.wantMarginPct) > 1e-9 {
 				t.Errorf("expected ExpectedMarginPct %.4f (EbayChannelMarginPct), got %.4f",
 					tc.wantMarginPct, match.ExpectedMetrics.ExpectedMarginPct)
+			}
+			wantROI := tc.wantMarginPct / tc.wantNewTerms
+			if math.Abs(match.ExpectedMetrics.ExpectedROI-wantROI) > 1e-9 {
+				t.Errorf("expected ExpectedROI %.4f (margin/newTerms), got %.4f",
+					wantROI, match.ExpectedMetrics.ExpectedROI)
 			}
 		})
 	}

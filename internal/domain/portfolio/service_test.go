@@ -671,21 +671,19 @@ func TestService_GetWeeklyReviewSummary_DaysIntoWeek(t *testing.T) {
 		return nil, nil
 	}
 
+	// Bracket the service call with time.Now().Weekday() readings so the assertion
+	// tolerates a day-boundary race (the service also calls time.Now() internally).
+	wantBefore := int(time.Now().Weekday())
 	summary, err := svc.GetWeeklyReviewSummary(ctx)
+	wantAfter := int(time.Now().Weekday())
 	if err != nil {
 		t.Fatalf("GetWeeklyReviewSummary: %v", err)
 	}
 
-	// DaysIntoWeek should match today's weekday (0=Sunday … 6=Saturday).
-	// We compare against time.Now().Weekday() bracketed before/after the call
-	// to avoid a day-boundary race.
 	got := summary.DaysIntoWeek
 	if got < 0 || got > 6 {
 		t.Fatalf("DaysIntoWeek = %d, want 0..6", got)
 	}
-	wantBefore := int(time.Now().Weekday())
-	// got was captured between the two Now() calls, so it must equal one of them.
-	wantAfter := int(time.Now().Weekday())
 	if got != wantBefore && got != wantAfter {
 		t.Errorf("DaysIntoWeek = %d, want %d or %d (time.Now().Weekday() around the call)", got, wantBefore, wantAfter)
 	}

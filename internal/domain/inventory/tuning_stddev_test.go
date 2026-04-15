@@ -78,24 +78,26 @@ func TestEnrichPriceTierStddev(t *testing.T) {
 		{TierLabel: "high", TierMinCents: 5000, TierMaxCents: math.MaxInt},
 	}
 
+	// Tier matching uses bucketCost = BuyCostCents only.
+	// ROI uses roiCost = BuyCostCents + PSASourcingFeeCents.
 	// Data:
-	//  "low" tier: single sale (cost=500) → <2 sales → stddev=0
-	//  "mid" tier: two sales (cost=2000, 3000) → >=2 sales → non-zero stddev
+	//  "low" tier: 1 sale (bucketCost=400) → <2 sales → stddev=0
+	//  "mid" tier: 2 sales (bucketCost=1500, 2500) → >=2 sales → non-zero stddev
 	//  "high" tier: no sales → stddev=0
-	//  Sale matching no tier: negative (impossible since min=0), so skip-tier case is synthesized via cost=0 purchase (skipped for zero cost).
-	//  Sale with zero cost: skipped.
+	//  Zero-roiCost purchase: skipped.
+	//  Unsold (Sale == nil): skipped.
 	data := []PurchaseWithSale{
 		{
-			Purchase: Purchase{BuyCostCents: 400, PSASourcingFeeCents: 100}, // cost=500, low tier
-			Sale:     &Sale{NetProfitCents: 50},                             // roi = 0.1
+			Purchase: Purchase{BuyCostCents: 400, PSASourcingFeeCents: 100}, // bucketCost=400 (low), roiCost=500
+			Sale:     &Sale{NetProfitCents: 50},                             // roi = 50/500 = 0.1
 		},
 		{
-			Purchase: Purchase{BuyCostCents: 1500, PSASourcingFeeCents: 500}, // cost=2000, mid tier
-			Sale:     &Sale{NetProfitCents: 200},                             // roi = 0.1
+			Purchase: Purchase{BuyCostCents: 1500, PSASourcingFeeCents: 500}, // bucketCost=1500 (mid), roiCost=2000
+			Sale:     &Sale{NetProfitCents: 200},                             // roi = 200/2000 = 0.1
 		},
 		{
-			Purchase: Purchase{BuyCostCents: 2500, PSASourcingFeeCents: 500}, // cost=3000, mid tier
-			Sale:     &Sale{NetProfitCents: 900},                             // roi = 0.3
+			Purchase: Purchase{BuyCostCents: 2500, PSASourcingFeeCents: 500}, // bucketCost=2500 (mid), roiCost=3000
+			Sale:     &Sale{NetProfitCents: 900},                             // roi = 900/3000 = 0.3
 		},
 		{
 			// Zero cost — should be skipped entirely.
