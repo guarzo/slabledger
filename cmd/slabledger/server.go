@@ -58,6 +58,7 @@ type ServerDependencies struct {
 	SellSheetItemsHandler     *handlers.SellSheetItemsHandler // Sell sheet persistence; nil = disabled
 	CardCatalogHandler        *handlers.CardCatalogHandler    // CL card catalog search; nil = disabled
 	NichesHandler             *handlers.NichesHandler         // DH niche-opportunity leaderboard; nil = disabled
+	CampaignSignalsHandler    *handlers.CampaignSignalsHandler // DH campaign signals; nil = disabled
 	SheetFetcher              handlers.SheetFetcher           // optional: Google Sheets fetcher for PSA sync
 	SheetsSpreadsheetID       string                          // Google Sheets spreadsheet ID
 	SheetsTabName             string                          // Google Sheets tab name
@@ -211,6 +212,7 @@ func startWebServer(ctx context.Context, deps ServerDependencies) error {
 		SellSheetItemsHandler:     deps.SellSheetItemsHandler,
 		CardCatalogHandler:        deps.CardCatalogHandler,
 		NichesHandler:             deps.NichesHandler,
+		CampaignSignalsHandler:    deps.CampaignSignalsHandler,
 		Logger:                    logger,
 		AdminEmails:               cfg.Auth.AdminEmails,
 		DatabasePath:              cfg.Database.Path,

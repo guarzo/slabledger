@@ -45,6 +45,7 @@ type Router struct {
 	cardCatalogHandler        *handlers.CardCatalogHandler
 	psaSyncHandler            *handlers.PSASyncHandler
 	nichesHandler             *handlers.NichesHandler
+	campaignSignalsHandler    *handlers.CampaignSignalsHandler
 	pricingAPIKey             string
 	logger                    observability.Logger
 	databasePath              string
@@ -82,6 +83,7 @@ type RouterConfig struct {
 	CardCatalogHandler        *handlers.CardCatalogHandler    // CL card catalog search; nil = disabled
 	PSASyncHandler            *handlers.PSASyncHandler        // PSA pending items + admin status; nil = disabled
 	NichesHandler             *handlers.NichesHandler         // DH niche-opportunity leaderboard; nil = disabled
+	CampaignSignalsHandler    *handlers.CampaignSignalsHandler // DH campaign signals; nil = disabled
 	Logger                    observability.Logger
 	AdminEmails               []string
 	DatabasePath              string
@@ -193,6 +195,10 @@ func NewRouter(cfg RouterConfig) *Router {
 
 	if cfg.NichesHandler != nil {
 		rt.nichesHandler = cfg.NichesHandler
+	}
+
+	if cfg.CampaignSignalsHandler != nil {
+		rt.campaignSignalsHandler = cfg.CampaignSignalsHandler
 	}
 
 	if cfg.PricingAPIKey != "" && cfg.CampaignsRepo != nil {
