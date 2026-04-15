@@ -123,5 +123,10 @@ func Default() Config {
 			SocialPollInterval: 5 * time.Second,
 			SocialPollTimeout:  3 * time.Minute,
 		},
+		DHAnalyticsRefresh: DHAnalyticsRefreshConfig{
+			Enabled:     false, // launch gate — opt-in until DH impression pipeline is healthy
+			RefreshHour: 3,     // 3 AM UTC, after DH nightly analytics rollup (~03:30 UTC)
+			Window:      "30d",
+		},
 	}
 }

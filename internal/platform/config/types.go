@@ -178,7 +178,19 @@ type Config struct {
 	GoogleSheets     GoogleSheetsConfig
 	PSASync          PSASyncConfig
 	DH               DHConfig
+	DHAnalyticsRefresh DHAnalyticsRefreshConfig
 	Adapters         AdapterConfig
+}
+
+// DHAnalyticsRefreshConfig controls the daily DH demand analytics refresh
+// scheduler (niche-opportunity leaderboard cache). Disabled by default — this
+// is a launch gate until the DH impression pipeline is healthy. When enabled,
+// the scheduler wakes once per day (RefreshHour UTC, default 3am) and refills
+// the dh_card_cache / dh_character_cache tables.
+type DHAnalyticsRefreshConfig struct {
+	Enabled     bool
+	RefreshHour int    // UTC hour 0–23; default 3
+	Window      string // demand signal window, e.g. "30d" (default)
 }
 
 // AdvisorRefreshConfig controls the background AI advisor analysis scheduler.
