@@ -22,6 +22,17 @@ export DH_ENTERPRISE_API_KEY="your_key"
 # Open http://localhost:8081
 ```
 
+### Private docs backup (optional)
+
+`docs/private/` is gitignored but backed up to a separate private repo. On a fresh clone:
+
+```bash
+git clone https://github.com/guarzo/slabledger-private.git docs/private
+make hooks
+```
+
+Manual checkpoint: `./scripts/backup-private.sh`. After `make hooks`, any `git commit` in slabledger also pushes pending `docs/private/` changes in the background via `.githooks/post-commit`.
+
 ## Features
 
 - **Campaign Management** - Create and configure PSA Direct Buy campaigns with buy parameters, daily spend caps, and fee settings
