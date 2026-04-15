@@ -661,3 +661,59 @@ func TestService_GetWeeklyReviewSummary_PerformerCounts(t *testing.T) {
 		})
 	}
 }
+
+func TestService_GetWeeklyHistory(t *testing.T) {
+	cases := []struct {
+		name    string
+		weeks   int
+		wantLen int
+	}{
+		{name: "explicit 4 weeks", weeks: 4, wantLen: 4},
+		{name: "default when <= 0", weeks: 0, wantLen: 8},
+		{name: "default when negative", weeks: -3, wantLen: 8},
+		{name: "clamped at 52", weeks: 100, wantLen: 52},
+		{name: "upper bound exact", weeks: 52, wantLen: 52},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := mocks.NewInMemoryCampaignStore()
+			svc := newPortfolioSvc(repo)
+			ctx := context.Background()
+
+			// Empty fixtures are fine — we're verifying windowing and count.
+			repo.GetAllPurchasesWithSalesFn = func(_ context.Context, _ ...inventory.PurchaseFilterOpt) ([]inventory.PurchaseWithSale, error) {
+				return nil, nil
+			}
+
+			summaries, err := svc.GetWeeklyHistory(ctx, tc.weeks)
+			if err != nil {
+				t.Fatalf("GetWeeklyHistory: %v", err)
+			}
+
+			if len(summaries) != tc.wantLen {
+				t.Fatalf("summaries len = %d, want %d", len(summaries), tc.wantLen)
+			}
+
+			// Verify descending WeekStart order (most recent first).
+			for i := 1; i < len(summaries); i++ {
+				if summaries[i-1].WeekStart <= summaries[i].WeekStart {
+					t.Errorf("summaries[%d].WeekStart %q should be > summaries[%d].WeekStart %q",
+						i-1, summaries[i-1].WeekStart, i, summaries[i].WeekStart)
+				}
+			}
+
+			// Verify that weeks are exactly 7 days apart.
+			for i := 1; i < len(summaries); i++ {
+				prev, err1 := time.Parse("2006-01-02", summaries[i-1].WeekStart)
+				cur, err2 := time.Parse("2006-01-02", summaries[i].WeekStart)
+				if err1 != nil || err2 != nil {
+					t.Fatalf("parse week starts: %v / %v", err1, err2)
+				}
+				if diff := prev.Sub(cur); diff != 7*24*time.Hour {
+					t.Errorf("summaries[%d] - summaries[%d] = %v, want 168h", i-1, i, diff)
+				}
+			}
+		})
+	}
+}

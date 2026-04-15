@@ -9,7 +9,7 @@ import type {
   ChannelVelocity, PortfolioInsights, SuggestionsResponse,
   RevocationFlag, CapitalTimeline, WeeklyReviewSummary,
 } from '../../types/campaigns';
-import { APIClient } from './client';
+import { APIClient, isAPIError } from './client';
 
 declare module './client' {
   interface APIClient {
@@ -142,6 +142,38 @@ proto.getActivationChecklist = async function (this: APIClient, campaignId: stri
 };
 
 // Monte Carlo projections
+// The server returns HTTP 422 with {error:"insufficient_data", minRequired, available}
+// when the campaign has fewer than 10 completed sales. We surface that as a
+// MonteCarloComparison with confidence:"insufficient" so UI consumers can branch
+// on the payload instead of having to catch an exception.
 proto.getProjections = async function (this: APIClient, campaignId: string): Promise<MonteCarloComparison> {
-  return this.get<MonteCarloComparison>(`/campaigns/${campaignId}/projections`);
+  try {
+    return await this.get<MonteCarloComparison>(`/campaigns/${campaignId}/projections`);
+  } catch (err) {
+    if (isAPIError(err) && err.status === 422) {
+      const body = err.data as { available?: number } | undefined;
+      return {
+        current: emptyMonteCarloResult('current'),
+        scenarios: [],
+        bestScenarioIndex: 0,
+        sampleSize: body?.available ?? 0,
+        confidence: 'insufficient',
+      };
+    }
+    throw err;
+  }
 };
+
+function emptyMonteCarloResult(label: string) {
+  return {
+    label,
+    simulations: 0,
+    medianROI: 0,
+    p10ROI: 0,
+    p90ROI: 0,
+    medianProfitCents: 0,
+    p10ProfitCents: 0,
+    p90ProfitCents: 0,
+    medianVolume: 0,
+  };
+}

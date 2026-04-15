@@ -201,6 +201,7 @@ func (rt *Router) registerCampaignRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/portfolio/revocations/{flagId}/email", authRoute(rt.campaignsHandler.HandleRevocationEmail))
 	mux.Handle("GET /api/portfolio/capital-timeline", authRoute(rt.campaignsHandler.HandleCapitalTimeline))
 	mux.Handle("GET /api/portfolio/weekly-review", authRoute(rt.campaignsHandler.HandleWeeklyReview))
+	mux.Handle("GET /api/portfolio/weekly-history", authRoute(rt.campaignsHandler.HandleWeeklyHistory))
 
 	// Cert lookup endpoint
 	mux.Handle("GET /api/certs/{certNumber}", authRoute(rt.campaignsHandler.HandleCertLookup))
@@ -299,6 +300,7 @@ func (rt *Router) registerDHRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/dh/suggestions", rt.authMW.RequireAuth(http.HandlerFunc(rt.dhHandler.HandleGetSuggestions)))
 	mux.Handle("GET /api/dh/suggestions/inventory-alerts", rt.authMW.RequireAuth(http.HandlerFunc(rt.dhHandler.HandleInventoryAlerts)))
 	mux.Handle("GET /api/dh/status", rt.authMW.RequireAuth(http.HandlerFunc(rt.dhHandler.HandleGetStatus)))
+	mux.Handle("GET /api/dh/pending", rt.authMW.RequireAuth(http.HandlerFunc(rt.dhHandler.HandleGetDHPending)))
 	mux.Handle("POST /api/dh/fix-match", rt.authMW.RequireAuth(http.HandlerFunc(rt.dhHandler.HandleFixMatch)))
 	mux.Handle("POST /api/dh/select-match", rt.authMW.RequireAuth(http.HandlerFunc(rt.dhHandler.HandleSelectMatch)))
 	mux.Handle("POST /api/dh/dismiss", rt.authMW.RequireAuth(http.HandlerFunc(rt.dhHandler.HandleDismissMatch)))
@@ -325,6 +327,7 @@ var TrackedEndpoints = []string{
 	"/api/portfolio/insights",
 	"/api/portfolio/capital-timeline",
 	"/api/portfolio/weekly-review",
+	"/api/portfolio/weekly-history",
 	"/api/campaigns/{id}/tuning",
 	"/api/campaigns/{id}/sell-sheet",
 }

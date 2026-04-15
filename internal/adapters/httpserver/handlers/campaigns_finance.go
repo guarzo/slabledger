@@ -3,6 +3,7 @@ package handlers
 import (
 	stderrors "errors"
 	"net/http"
+	"strconv"
 
 	"github.com/guarzo/slabledger/internal/domain/errors"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
@@ -174,6 +175,34 @@ func (h *CampaignsHandler) HandleWeeklyReview(w http.ResponseWriter, r *http.Req
 		return
 	}
 	writeJSON(w, http.StatusOK, summary)
+}
+
+// HandleWeeklyHistory handles GET /api/portfolio/weekly-history?weeks=N.
+// Returns the N most recent weekly summaries in reverse chronological order.
+// Defaults to 8 weeks if not specified. Maximum 52 weeks.
+func (h *CampaignsHandler) HandleWeeklyHistory(w http.ResponseWriter, r *http.Request) {
+	weeksStr := r.URL.Query().Get("weeks")
+	weeks := 8
+	if weeksStr != "" {
+		n, err := strconv.Atoi(weeksStr)
+		if err != nil || n < 1 {
+			writeError(w, http.StatusBadRequest, "weeks must be a positive integer")
+			return
+		}
+		if n > 52 {
+			writeError(w, http.StatusBadRequest, "weeks must be at most 52")
+			return
+		}
+		weeks = n
+	}
+
+	summaries, ok := serviceCall(w, r.Context(), h.logger, "failed to get weekly history", func() ([]inventory.WeeklyReviewSummary, error) {
+		return h.portSvc.GetWeeklyHistory(r.Context(), weeks)
+	})
+	if !ok {
+		return
+	}
+	writeJSONList(w, http.StatusOK, summaries)
 }
 
 // HandleListRevocationFlags handles GET /api/portfolio/revocations.

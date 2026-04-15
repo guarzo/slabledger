@@ -194,6 +194,82 @@ func (ps *PurchaseStore) CountUnsoldByDHPushStatus(ctx context.Context) (map[str
 	return counts, rows.Err()
 }
 
+// ListDHPendingItems returns received, unsold purchases that are queued for the DH push
+// pipeline (dh_push_status = 'pending') with an active parent campaign. Each row carries
+// a confidence label based on when DH inventory was last synced for the purchase.
+func (ps *PurchaseStore) ListDHPendingItems(ctx context.Context) ([]inventory.DHPendingItem, error) {
+	query := `
+		SELECT p.id, p.card_name, p.set_name, p.grade_value,
+		       p.mid_price_cents, p.dh_last_synced_at, p.created_at
+		FROM campaign_purchases p
+		INNER JOIN campaigns c ON c.id = p.campaign_id
+		LEFT JOIN campaign_sales s ON s.purchase_id = p.id
+		WHERE p.dh_push_status = 'pending'
+		  AND p.received_at IS NOT NULL
+		  AND s.id IS NULL
+		  AND c.phase != 'closed'
+		ORDER BY p.updated_at DESC`
+	rows, err := ps.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("query dh pending items: %w", err)
+	}
+	defer rows.Close() //nolint:errcheck // best-effort close
+
+	items := make([]inventory.DHPendingItem, 0)
+	now := time.Now()
+	for rows.Next() {
+		var (
+			purchaseID     string
+			cardName       string
+			setName        string
+			grade          float64
+			midPriceCents  int
+			dhLastSyncedAt string
+			createdAt      time.Time
+		)
+		if err := rows.Scan(&purchaseID, &cardName, &setName, &grade,
+			&midPriceCents, &dhLastSyncedAt, &createdAt); err != nil {
+			return nil, fmt.Errorf("scan dh pending item: %w", err)
+		}
+
+		confidence := "low"
+		var daysQueued int
+		if dhLastSyncedAt != "" {
+			if syncedAt, parseErr := time.Parse(time.RFC3339, dhLastSyncedAt); parseErr == nil {
+				elapsed := now.Sub(syncedAt)
+				daysQueued = int(elapsed.Hours() / 24)
+				switch {
+				case elapsed < 24*time.Hour:
+					confidence = "high"
+				case elapsed < 7*24*time.Hour:
+					confidence = "medium"
+				default:
+					confidence = "low"
+				}
+			} else {
+				// Unparseable timestamp — fall back to created_at age.
+				daysQueued = int(now.Sub(createdAt).Hours() / 24)
+			}
+		} else {
+			daysQueued = int(now.Sub(createdAt).Hours() / 24)
+		}
+
+		items = append(items, inventory.DHPendingItem{
+			PurchaseID:            purchaseID,
+			CardName:              cardName,
+			SetName:               setName,
+			Grade:                 grade,
+			RecommendedPriceCents: midPriceCents,
+			DaysQueued:            daysQueued,
+			DHConfidence:          confidence,
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate dh pending items: %w", err)
+	}
+	return items, nil
+}
+
 // UpdatePurchaseGemRateID sets the CL gemRateID on a purchase.
 func (ps *PurchaseStore) UpdatePurchaseGemRateID(ctx context.Context, id, gemRateID string) error {
 	return ps.execAndExpectRow(ctx, "update gem rate ID",
