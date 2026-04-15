@@ -664,9 +664,9 @@ func TestService_GetWeeklyReviewSummary_PerformerCounts(t *testing.T) {
 
 func TestService_GetWeeklyHistory(t *testing.T) {
 	cases := []struct {
-		name     string
-		weeks    int
-		wantLen  int
+		name    string
+		weeks   int
+		wantLen int
 	}{
 		{name: "explicit 4 weeks", weeks: 4, wantLen: 4},
 		{name: "default when <= 0", weeks: 0, wantLen: 8},

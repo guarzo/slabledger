@@ -138,10 +138,10 @@ func TestListDHPendingItems_ConfidenceFromLastSynced(t *testing.T) {
 		}
 	}
 
-	mkPurchase("p-high", "c-high", now.Add(-2*time.Hour), true)     // <24h → high
-	mkPurchase("p-med", "c-med", now.Add(-3*24*time.Hour), true)    // <7d → medium
-	mkPurchase("p-low", "c-low", now.Add(-10*24*time.Hour), true)   // >7d → low
-	mkPurchase("p-never", "c-never", time.Time{}, false)            // never synced → low
+	mkPurchase("p-high", "c-high", now.Add(-2*time.Hour), true)   // <24h → high
+	mkPurchase("p-med", "c-med", now.Add(-3*24*time.Hour), true)  // <7d → medium
+	mkPurchase("p-low", "c-low", now.Add(-10*24*time.Hour), true) // >7d → low
+	mkPurchase("p-never", "c-never", time.Time{}, false)          // never synced → low
 
 	items, err := repo.ListDHPendingItems(ctx)
 	require.NoError(t, err)
