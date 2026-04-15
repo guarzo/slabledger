@@ -73,6 +73,7 @@ type InMemoryCampaignStore struct {
 	GetDHPushConfigFn              func(ctx context.Context) (*inventory.DHPushConfig, error)
 	SaveDHPushConfigFn             func(ctx context.Context, cfg *inventory.DHPushConfig) error
 	GetPurchasesByDHPushStatusFn   func(ctx context.Context, status string, limit int) ([]inventory.Purchase, error)
+	CountDHPipelineHealthFn        func(ctx context.Context) (inventory.DHPipelineHealth, error)
 	GetSellSheetItemsFn            func(ctx context.Context) ([]string, error)
 	AddSellSheetItemsFn            func(ctx context.Context, purchaseIDs []string) error
 	RemoveSellSheetItemsFn         func(ctx context.Context, purchaseIDs []string) error
@@ -1090,7 +1091,10 @@ func (m *InMemoryCampaignStore) CountUnsoldByDHPushStatus(_ context.Context) (ma
 	return map[string]int{}, nil
 }
 
-func (m *InMemoryCampaignStore) CountDHPipelineHealth(_ context.Context) (inventory.DHPipelineHealth, error) {
+func (m *InMemoryCampaignStore) CountDHPipelineHealth(ctx context.Context) (inventory.DHPipelineHealth, error) {
+	if m.CountDHPipelineHealthFn != nil {
+		return m.CountDHPipelineHealthFn(ctx)
+	}
 	return inventory.DHPipelineHealth{}, nil
 }
 
