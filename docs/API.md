@@ -2987,6 +2987,71 @@ Returns cross-campaign slab crack arbitrage candidates (cards where raw value ex
 
 ---
 
+## Intelligence
+
+### `GET /api/intelligence/niches`
+
+Auth: RequireAuth
+
+Returns ranked acquisition-niche opportunities: `(character, era, grade)` buckets where consumer demand is strong relative to our current campaign coverage. Backed by cached DoubleHolo analytics data refreshed daily by the DH analytics scheduler.
+
+**Query parameters** (all optional):
+
+| Param | Values | Default | Notes |
+|---|---|---|---|
+| `window` | `7d`, `30d` | `30d` | Demand/analytics aggregation window |
+| `limit` | 1..200 | 50 | Clamped to 200 |
+| `sort` | `opportunity_score`, `demand_score`, `velocity_change_pct`, `low_coverage` | `opportunity_score` | |
+| `min_data_quality` | `""`, `proxy`, `full` | `""` | When `full`, excludes proxy-only rows — use post-launch-gate |
+| `era` | DH era enum (e.g. `sword_shield`) | — | Optional filter |
+| `grade` | 7..10 | — | Optional filter; 0 or missing = all grades |
+
+**Response:** `200 OK`
+```json
+{
+  "opportunities": [
+    {
+      "character": "Umbreon",
+      "era": "sword_shield",
+      "grade": 10,
+      "demand": {
+        "score": 0.82,
+        "views": 843,
+        "wishlist_adds": 47,
+        "data_quality": "proxy",
+        "computed_at": "2026-04-15T02:00:00Z"
+      },
+      "market": {
+        "median_days_to_sell": 9.8,
+        "velocity_change_pct": 15.2,
+        "active_listing_count": 42,
+        "sample_size": 312,
+        "analytics_not_computed": false,
+        "computed_at": "2026-04-15T03:15:00Z"
+      },
+      "coverage": {
+        "our_unsold_count": 2,
+        "active_campaign_ids": [],
+        "covered": false
+      },
+      "opportunity_score": 0.64
+    }
+  ],
+  "meta": {
+    "window": "30d",
+    "limit": 50,
+    "sort": "opportunity_score",
+    "total_count": 387
+  }
+}
+```
+
+`demand` is `null` when no demand data is cached for the bucket. `market` is `null` when analytics returned `404 analytics_not_computed` (normal during DH's initial pipeline warmup). `market.median_days_to_sell` and `market.velocity_change_pct` are `null` when the underlying JSON lacked those fields.
+
+**Errors:** `400` invalid `window`, `sort`, or out-of-range `grade`; `500` internal
+
+---
+
 ## Social Metrics
 
 ### `GET /api/social/posts/{id}/metrics`

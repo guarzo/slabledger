@@ -871,6 +871,50 @@ Maps purchase cert numbers to Market Movers collectible IDs for value sync. Adde
 
 ---
 
+### `dh_card_cache`
+Per-card DH enterprise analytics + demand cache. Populated by the daily DH analytics refresh scheduler (`DH_ANALYTICS_REFRESH_ENABLED`). Keyed by `(card_id, window)`. Added in migration 000067.
+
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| `card_id` | TEXT | PK part | DH card ID (stringified) |
+| `window` | TEXT | PK part | `'7d'` or `'30d'` |
+| `demand_score` | REAL | nullable | From `/market/demand_signals`; NULL when card lacked demand data |
+| `demand_data_quality` | TEXT | nullable | `'proxy'` \| `'full'` \| NULL |
+| `demand_json` | TEXT | nullable | Full demand_signals response blob |
+| `velocity_json` | TEXT | nullable | velocity subtree from batch_analytics |
+| `trend_json` | TEXT | nullable | trend subtree |
+| `saturation_json` | TEXT | nullable | saturation subtree |
+| `price_distribution_json` | TEXT | nullable | price_distribution subtree |
+| `analytics_computed_at` | TIMESTAMP | nullable | DH's `computed_at` for analytics; NULL = not computed (404) |
+| `demand_computed_at` | TIMESTAMP | nullable | DH's `computed_at` for demand |
+| `fetched_at` | TIMESTAMP | NOT NULL | When we last upserted the row |
+
+**Indexes:** `idx_card_cache_demand_score` on `demand_score DESC`
+
+**Foreign Keys:** none (DH card IDs aren't FK'd to our tables)
+
+---
+
+### `dh_character_cache`
+Per-character DH analytics + demand cache. Populated by the same scheduler as `dh_card_cache`. Keyed by `(character, window)`. Added in migration 000067.
+
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| `character` | TEXT | PK part | DH-normalized Pokemon character name |
+| `window` | TEXT | PK part | `'7d'` or `'30d'` |
+| `demand_json` | TEXT | nullable | `/character_demand` response (includes `by_era` when scheduler requested it) |
+| `velocity_json` | TEXT | nullable | From `/characters/velocity` |
+| `saturation_json` | TEXT | nullable | From `/characters/saturation` |
+| `demand_computed_at` | TIMESTAMP | nullable | |
+| `analytics_computed_at` | TIMESTAMP | nullable | |
+| `fetched_at` | TIMESTAMP | NOT NULL | |
+
+**Indexes:** none (PK lookup + full scan for leaderboard)
+
+**Foreign Keys:** none
+
+---
+
 ## Views
 
 ### ~~`stale_prices`~~ — DROPPED (migration 000038)
@@ -943,4 +987,6 @@ sell_sheet_items
 dh_push_config
 marketmovers_config
 mm_card_mappings
+dh_card_cache
+dh_character_cache
 ```
