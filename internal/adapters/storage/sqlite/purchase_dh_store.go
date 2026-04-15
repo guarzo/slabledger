@@ -286,6 +286,40 @@ func (ps *PurchaseStore) UpdatePurchasePSASpecID(ctx context.Context, id string,
 	)
 }
 
+// ListUnsoldDHCardIDs returns the distinct dh_card_id values for unsold purchases
+// in non-closed campaigns. Used by the DH demand analytics refresh scheduler to
+// seed per-card analytics calls with our own inventory. Rows where dh_card_id is
+// zero or NULL are skipped.
+func (ps *PurchaseStore) ListUnsoldDHCardIDs(ctx context.Context) ([]int, error) {
+	query := `
+		SELECT DISTINCT p.dh_card_id
+		FROM campaign_purchases p
+		INNER JOIN campaigns c ON c.id = p.campaign_id
+		LEFT JOIN campaign_sales s ON s.purchase_id = p.id
+		WHERE s.id IS NULL
+		  AND c.phase != 'closed'
+		  AND p.dh_card_id IS NOT NULL
+		  AND p.dh_card_id != 0`
+	rows, err := ps.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("list unsold dh card ids: %w", err)
+	}
+	defer rows.Close() //nolint:errcheck // best-effort close
+
+	var ids []int
+	for rows.Next() {
+		var id int
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan dh card id: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate dh card ids: %w", err)
+	}
+	return ids, nil
+}
+
 // UpdatePurchaseCLCardMetadata persists Card Ladder catalog metadata (player, variation, category) on a purchase.
 func (ps *PurchaseStore) UpdatePurchaseCLCardMetadata(ctx context.Context, id, player, variation, category string) error {
 	return ps.execAndExpectRow(ctx, "update CL card metadata",

@@ -250,6 +250,11 @@ func FromEnv(base Config) Config {
 	envDurationPositive("DH_SOCIAL_POLL_INTERVAL", &cfg.DH.SocialPollInterval)
 	envDurationPositive("DH_SOCIAL_POLL_TIMEOUT", &cfg.DH.SocialPollTimeout)
 
+	// DH demand analytics refresh (niche-opportunity leaderboard cache).
+	envBool("DH_ANALYTICS_REFRESH_ENABLED", &cfg.DHAnalyticsRefresh.Enabled, false)
+	envIntRange("DH_ANALYTICS_REFRESH_HOUR", &cfg.DHAnalyticsRefresh.RefreshHour, 0, 23)
+	envString("DH_ANALYTICS_REFRESH_WINDOW", &cfg.DHAnalyticsRefresh.Window)
+
 	// Google Sheets credentials (JSON key is base64-encoded in .env)
 	if v := os.Getenv("GOOGLE_SHEETS_CREDENTIALS_JSON"); v != "" {
 		v = strings.TrimSpace(v)

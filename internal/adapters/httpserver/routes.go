@@ -312,6 +312,16 @@ func (rt *Router) registerDHRoutes(mux *http.ServeMux) {
 	rt.logger.Info(context.Background(), "DH routes registered")
 }
 
+// registerIntelligenceRoutes wires the DH-backed market intelligence endpoints
+// (niche-opportunity leaderboard).
+func (rt *Router) registerIntelligenceRoutes(mux *http.ServeMux) {
+	if rt.nichesHandler == nil || rt.authMW == nil {
+		return
+	}
+	mux.Handle("GET /api/intelligence/niches", rt.authMW.RequireAuth(http.HandlerFunc(rt.nichesHandler.HandleListNiches)))
+	rt.logger.Info(context.Background(), "intelligence routes registered")
+}
+
 // registerOpportunitiesRoutes wires the cross-campaign arbitrage opportunity endpoints.
 func (rt *Router) registerOpportunitiesRoutes(mux *http.ServeMux) {
 	if rt.opportunitiesHandler == nil || rt.authMW == nil {

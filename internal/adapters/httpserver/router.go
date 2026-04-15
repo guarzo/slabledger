@@ -44,6 +44,7 @@ type Router struct {
 	sellSheetItemsHandler     *handlers.SellSheetItemsHandler
 	cardCatalogHandler        *handlers.CardCatalogHandler
 	psaSyncHandler            *handlers.PSASyncHandler
+	nichesHandler             *handlers.NichesHandler
 	pricingAPIKey             string
 	logger                    observability.Logger
 	databasePath              string
@@ -80,6 +81,7 @@ type RouterConfig struct {
 	SellSheetItemsHandler     *handlers.SellSheetItemsHandler // Sell sheet persistence; nil = disabled
 	CardCatalogHandler        *handlers.CardCatalogHandler    // CL card catalog search; nil = disabled
 	PSASyncHandler            *handlers.PSASyncHandler        // PSA pending items + admin status; nil = disabled
+	NichesHandler             *handlers.NichesHandler         // DH niche-opportunity leaderboard; nil = disabled
 	Logger                    observability.Logger
 	AdminEmails               []string
 	DatabasePath              string
@@ -189,6 +191,10 @@ func NewRouter(cfg RouterConfig) *Router {
 		rt.psaSyncHandler = cfg.PSASyncHandler
 	}
 
+	if cfg.NichesHandler != nil {
+		rt.nichesHandler = cfg.NichesHandler
+	}
+
 	if cfg.PricingAPIKey != "" && cfg.CampaignsRepo != nil {
 		rt.pricingAPIHandler = handlers.NewPricingAPIHandler(cfg.CampaignsRepo, cfg.Logger)
 		rt.pricingAPIKey = cfg.PricingAPIKey
@@ -263,6 +269,9 @@ func (rt *Router) Setup() http.Handler {
 
 	// DH routes
 	rt.registerDHRoutes(mux)
+
+	// Intelligence (niche leaderboard) routes
+	rt.registerIntelligenceRoutes(mux)
 
 	// Social content & Instagram routes
 	rt.registerSocialRoutes(mux)

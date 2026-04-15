@@ -11,6 +11,7 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/advisor"
 	"github.com/guarzo/slabledger/internal/domain/ai"
 	"github.com/guarzo/slabledger/internal/domain/auth"
+	"github.com/guarzo/slabledger/internal/domain/demand"
 	"github.com/guarzo/slabledger/internal/domain/intelligence"
 	domainCampaigns "github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
@@ -65,6 +66,8 @@ type BuildDeps struct {
 	DHClient           *dh.Client
 	DHIntelligenceRepo intelligence.Repository
 	DHSuggestionsRepo  intelligence.SuggestionsRepository
+	DHDemandRepo       demand.Repository  // niche-opportunity cache (T1/T3)
+	DHUnsoldCardLister UnsoldDHCardLister // seeds analytics with our inventory
 
 	// DH v2 dependencies (optional)
 	DHOrdersClient        DHOrdersClient
@@ -308,6 +311,19 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 		}
 		schedulers = append(schedulers, NewDHIntelligenceRefreshScheduler(
 			deps.DHClient, deps.DHIntelligenceRepo, deps.Logger, dhIntelConfig,
+		))
+	}
+
+	// DH demand analytics refresh scheduler (daily; niche-opportunity cache).
+	// Feature-flagged via cfg.DHAnalyticsRefresh.Enabled — off by default until
+	// the DH impression pipeline is healthy (launch gate).
+	if deps.DHClient != nil && deps.DHClient.EnterpriseAvailable() && deps.DHDemandRepo != nil {
+		schedulers = append(schedulers, NewDHAnalyticsRefreshScheduler(
+			deps.DHClient,
+			deps.DHDemandRepo,
+			deps.DHUnsoldCardLister,
+			deps.Logger,
+			cfg.DHAnalyticsRefresh,
 		))
 	}
 
