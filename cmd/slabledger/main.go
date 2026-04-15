@@ -237,6 +237,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	// DH repositories (always created — tables exist after migration 000028)
 	intelRepo := sqlite.NewMarketIntelligenceRepository(db.DB)
 	suggestionsRepo := sqlite.NewDHSuggestionsRepository(db.DB)
+	demandRepo := sqlite.NewDHDemandRepository(db.DB)
 
 	priceProvImpl, err := initializePriceProviders(
 		ctx, logger, cardIDMappingRepo,
@@ -367,6 +368,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		DHClient:             dhClient,
 		DHIntelligenceRepo:   intelRepo,
 		DHSuggestionsRepo:    suggestionsRepo,
+		DHDemandRepo:         demandRepo,
 		GapStore:             gapStore,
 		PSASpreadsheetID:     cfg.GoogleSheets.SpreadsheetID,
 		PSATabName:           cfg.GoogleSheets.TabName,
@@ -397,6 +399,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		CardIDMappingRepo: cardIDMappingRepo,
 		IntelRepo:         intelRepo,
 		SuggestionsRepo:   suggestionsRepo,
+		DemandRepo:        demandRepo,
 		AdvisorService:    advisorService,
 		AdvisorCacheRepo:  advisorCacheRepo,
 		AzureAIClient:     azureAIClient,
