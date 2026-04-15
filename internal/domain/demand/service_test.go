@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/demand"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
@@ -297,6 +298,70 @@ func TestService_Leaderboard_LimitTruncates(t *testing.T) {
 	}
 	if len(out) != 2 {
 		t.Fatalf("want limit=2; got %d", len(out))
+	}
+}
+
+func TestService_Leaderboard_AccelerationPopulated(t *testing.T) {
+	velocityJSON := `{"median_days_to_sell":9.5,"sample_size":120,"velocity_change_pct":14.2,"computed_at":"2026-04-15T03:00:00Z"}`
+	rows := []demand.CharacterCache{
+		{
+			Character:           "Umbreon",
+			Window:              "30d",
+			DemandJSON:          strPtr(demandJSONWithEras("Umbreon", 0.9, "full")),
+			VelocityJSON:        strPtr(velocityJSON),
+			AnalyticsComputedAt: func() *time.Time { t := time.Date(2026, 4, 15, 3, 0, 0, 0, time.UTC); return &t }(),
+		},
+	}
+	svc := demand.NewService(newRepoWithRows(rows), uncoveredCampaigns{})
+
+	out, err := svc.Leaderboard(context.Background(), demand.LeaderboardOpts{
+		Window: "30d",
+		Era:    "sword_shield",
+		Grade:  10,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(out) != 1 {
+		t.Fatalf("want 1 bucket; got %d", len(out))
+	}
+	o := out[0]
+	if o.Acceleration == nil {
+		t.Fatalf("want Acceleration populated; got nil")
+	}
+	if o.Acceleration.MedianVelocityChangePct != 14.2 {
+		t.Errorf("want MedianVelocityChangePct=14.2; got %f", o.Acceleration.MedianVelocityChangePct)
+	}
+	if o.Acceleration.TotalCount != 1 {
+		t.Errorf("want TotalCount=1; got %d", o.Acceleration.TotalCount)
+	}
+	if o.Acceleration.AcceleratingCount != 1 {
+		t.Errorf("want AcceleratingCount=1 (14.2 >= threshold); got %d", o.Acceleration.AcceleratingCount)
+	}
+	if o.Acceleration.DataQuality != demand.DataQualityFull {
+		t.Errorf("want DataQuality=%q; got %q", demand.DataQualityFull, o.Acceleration.DataQuality)
+	}
+}
+
+func TestService_Leaderboard_AccelerationNilWhenNoVelocity(t *testing.T) {
+	rows := []demand.CharacterCache{
+		{Character: "Umbreon", Window: "30d", DemandJSON: strPtr(demandJSONWithEras("Umbreon", 0.9, "full"))},
+	}
+	svc := demand.NewService(newRepoWithRows(rows), uncoveredCampaigns{})
+
+	out, err := svc.Leaderboard(context.Background(), demand.LeaderboardOpts{
+		Window: "30d",
+		Era:    "sword_shield",
+		Grade:  10,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(out) != 1 {
+		t.Fatalf("want 1 bucket; got %d", len(out))
+	}
+	if out[0].Acceleration != nil {
+		t.Fatalf("want Acceleration nil when no velocity data; got %+v", out[0].Acceleration)
 	}
 }
 

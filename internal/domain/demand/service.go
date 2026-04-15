@@ -168,7 +168,7 @@ func (s *Service) buildBucket(
 		activeListingCount = market.ActiveListingCount
 	}
 
-	return NicheOpportunity{
+	niche := NicheOpportunity{
 		Character:        character,
 		Era:              era,
 		Grade:            grade,
@@ -176,7 +176,21 @@ func (s *Service) buildBucket(
 		Market:           market,
 		Coverage:         coverage,
 		OpportunityScore: OpportunityScore(demandScore, velocityChange, activeListingCount, coverage),
-	}, nil
+	}
+	if market != nil && market.VelocityChangePct != nil {
+		accel := &NicheAcceleration{
+			MedianVelocityChangePct: *market.VelocityChangePct,
+			TotalCount:              1,
+			AcceleratingCount:       0,
+			DataQuality:             DataQualityFull,
+			ComputedAt:              market.ComputedAt,
+		}
+		if *market.VelocityChangePct >= AccelerationThresholdPct {
+			accel.AcceleratingCount = 1
+		}
+		niche.Acceleration = accel
+	}
+	return niche, nil
 }
 
 // --- Sort ---

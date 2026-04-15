@@ -110,8 +110,20 @@ type NicheOpportunity struct {
 	Grade            int    // PSA grade, or 0 for raw / unspecified
 	Demand           *NicheDemand
 	Market           *NicheMarket
+	Acceleration     *NicheAcceleration // populated when velocity_change_pct is available
 	Coverage         NicheCoverage
 	OpportunityScore float64
+}
+
+// NicheAcceleration is the market-acceleration summary for a niche bucket.
+// Nil when no character cache row with a parseable velocity_change_pct
+// matched the niche.
+type NicheAcceleration struct {
+	MedianVelocityChangePct float64
+	AcceleratingCount       int
+	TotalCount              int
+	DataQuality             string // "full" when any contributor has full data
+	ComputedAt              *time.Time
 }
 
 // NicheDemand is the demand-axis summary for a niche bucket.
