@@ -61,6 +61,7 @@ func (s *service) GetPortfolioHealth(ctx context.Context) (*inventory.PortfolioH
 		return nil, fmt.Errorf("all purchases with sales: %w", err)
 	}
 	healthByCampaign := computeChannelHealthByCampaign(allData)
+	inHandStats := computeInHandStatsByCampaign(allData)
 
 	health := &inventory.PortfolioHealth{}
 	totalSoldCostBasis := 0
@@ -128,21 +129,26 @@ func (s *service) GetPortfolioHealth(ctx context.Context) (*inventory.PortfolioH
 			}
 		}
 
+		stats := inHandStats[c.ID]
 		ch := inventory.CampaignHealth{
-			CampaignID:           c.ID,
-			CampaignName:         c.Name,
-			Phase:                c.Phase,
-			ROI:                  pnl.ROI,
-			SellThroughPct:       pnl.SellThroughPct,
-			AvgDaysToSell:        pnl.AvgDaysToSell,
-			TotalPurchases:       pnl.TotalPurchases,
-			TotalUnsold:          pnl.TotalUnsold,
-			CapitalAtRisk:        capitalAtRisk,
-			HealthStatus:         status,
-			HealthReason:         reason,
-			LiquidationLossCents: liquidationLossCents,
-			LiquidationSaleCount: liquidationSaleCount,
-			EbayChannelMarginPct: ebayMarginPct,
+			CampaignID:            c.ID,
+			CampaignName:          c.Name,
+			Phase:                 c.Phase,
+			ROI:                   pnl.ROI,
+			SellThroughPct:        pnl.SellThroughPct,
+			AvgDaysToSell:         pnl.AvgDaysToSell,
+			TotalPurchases:        pnl.TotalPurchases,
+			TotalUnsold:           pnl.TotalUnsold,
+			CapitalAtRisk:         capitalAtRisk,
+			HealthStatus:          status,
+			HealthReason:          reason,
+			LiquidationLossCents:  liquidationLossCents,
+			LiquidationSaleCount:  liquidationSaleCount,
+			EbayChannelMarginPct:  ebayMarginPct,
+			InHandUnsoldCount:     stats[0],
+			InHandCapitalCents:    stats[1],
+			InTransitUnsoldCount:  stats[2],
+			InTransitCapitalCents: stats[3],
 		}
 		health.Campaigns = append(health.Campaigns, ch)
 		health.TotalDeployed += pnl.TotalSpendCents
@@ -232,6 +238,29 @@ func computeChannelHealthByCampaign(data []inventory.PurchaseWithSale) map[strin
 	return result
 }
 
+// computeInHandStatsByCampaign buckets unsold purchases by received_at IS NOT NULL (in-hand) vs NULL (in-transit).
+// Returns map[campaignID] -> [inHandCount, inHandCostCents, inTransitCount, inTransitCostCents].
+func computeInHandStatsByCampaign(data []inventory.PurchaseWithSale) map[string][4]int {
+	result := make(map[string][4]int)
+	for _, d := range data {
+		if d.Sale != nil {
+			continue
+		}
+		cid := d.Purchase.CampaignID
+		cost := d.Purchase.BuyCostCents + d.Purchase.PSASourcingFeeCents
+		cur := result[cid]
+		if d.Purchase.ReceivedAt != nil {
+			cur[0]++
+			cur[1] += cost
+		} else {
+			cur[2]++
+			cur[3] += cost
+		}
+		result[cid] = cur
+	}
+	return result
+}
+
 func (s *service) GetCampaignSuggestions(ctx context.Context) (*inventory.SuggestionsResponse, error) {
 	data, err := s.analytics.GetAllPurchasesWithSales(ctx, inventory.WithExcludeArchived())
 	if err != nil {
@@ -305,6 +334,7 @@ func (s *service) GetWeeklyReviewSummary(ctx context.Context) (*inventory.Weekly
 	}
 
 	summary := computeWeekSummary(allData, thisWeekStr, thisWeekEndStr, lastWeekStr, lastWeekEndStr)
+	summary.DaysIntoWeek = int(now.Weekday())
 
 	capitalRaw, err := s.finance.GetCapitalRawData(ctx)
 	if err != nil {
@@ -322,7 +352,7 @@ func (s *service) GetWeeklyReviewSummary(ctx context.Context) (*inventory.Weekly
 
 // computeWeekSummary aggregates purchase and sale data into a single week summary.
 // weekStart/weekEnd define the "this week" window; lastWeekStart/lastWeekEnd define "last week".
-// The caller is responsible for populating WeeksToCover.
+// The caller is responsible for populating WeeksToCover and DaysIntoWeek.
 func computeWeekSummary(allData []inventory.PurchaseWithSale, weekStart, weekEnd, lastWeekStart, lastWeekEnd string) inventory.WeeklyReviewSummary {
 	summary := inventory.WeeklyReviewSummary{
 		WeekStart: weekStart,

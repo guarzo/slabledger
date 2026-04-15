@@ -93,7 +93,25 @@ func (s *service) GetCampaignTuning(ctx context.Context, campaignID string) (*in
 		return nil, err
 	}
 
+	gradeROIs := make(map[float64][]float64)
+	for _, d := range data {
+		if d.Sale == nil {
+			continue
+		}
+		cost := d.Purchase.BuyCostCents + d.Purchase.PSASourcingFeeCents
+		if cost > 0 {
+			roi := float64(d.Sale.NetProfitCents) / float64(cost)
+			gradeROIs[d.Purchase.GradeValue] = append(gradeROIs[d.Purchase.GradeValue], roi)
+		}
+	}
+	for i := range byGrade {
+		rois := gradeROIs[byGrade[i].Grade]
+		byGrade[i].RoiStddev, byGrade[i].CV = inventory.ComputeROIStats(rois)
+	}
+
 	fixedTiers, relativeTiers := inventory.ComputePriceTierPerformance(data)
+	inventory.EnrichPriceTierStddev(fixedTiers, data)
+	inventory.EnrichPriceTierStddev(relativeTiers, data)
 	topPerformers, bottomPerformers := inventory.ComputeCardPerformance(data, 5)
 	threshold := inventory.ComputeBuyThresholdAnalysis(data, campaign.BuyTermsCLPct)
 

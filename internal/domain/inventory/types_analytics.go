@@ -185,4 +185,10 @@ type CampaignHealth struct {
 	LiquidationLossCents int     `json:"liquidationLossCents"` // sum of negative net profit on inperson+cardshow sales; always ≤ 0
 	LiquidationSaleCount int     `json:"liquidationSaleCount"` // count of sales contributing to the loss
 	EbayChannelMarginPct float64 `json:"ebayChannelMarginPct"` // net profit / revenue on eBay + TCGPlayer sales combined; 0 if no marketplace sales. JSON field name retained for frontend compatibility.
+
+	// In-hand vs in-transit breakdown (received_at IS NOT NULL = in hand)
+	InHandUnsoldCount     int `json:"inHandUnsoldCount"`     // unsold cards physically received
+	InHandCapitalCents    int `json:"inHandCapitalCents"`    // cost of in-hand unsold cards
+	InTransitUnsoldCount  int `json:"inTransitUnsoldCount"`  // unsold cards still at PSA
+	InTransitCapitalCents int `json:"inTransitCapitalCents"` // cost of in-transit unsold cards
 }

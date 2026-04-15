@@ -108,6 +108,9 @@ func (h *CampaignsHandler) HandleListCampaigns(w http.ResponseWriter, r *http.Re
 	if !ok {
 		return
 	}
+	for i := range list {
+		list[i].SetKind()
+	}
 	writeJSONList(w, http.StatusOK, list)
 }
 
@@ -128,6 +131,7 @@ func (h *CampaignsHandler) HandleCreateCampaign(w http.ResponseWriter, r *http.R
 		return
 	}
 
+	c.SetKind()
 	writeJSON(w, http.StatusCreated, c)
 }
 
@@ -147,6 +151,7 @@ func (h *CampaignsHandler) HandleGetCampaign(w http.ResponseWriter, r *http.Requ
 		writeError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
+	c.SetKind()
 	writeJSON(w, http.StatusOK, c)
 }
 
@@ -175,6 +180,7 @@ func (h *CampaignsHandler) HandleUpdateCampaign(w http.ResponseWriter, r *http.R
 		writeError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
+	c.SetKind()
 	writeJSON(w, http.StatusOK, c)
 }
 

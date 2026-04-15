@@ -231,8 +231,13 @@ func suggestChannelInformedBuyTerms(_ context.Context, insights *PortfolioInsigh
 				BuyTermsCLPct: newTerms,
 			},
 			ExpectedMetrics: ExpectedMetrics{
+				// Projected ROI ≈ projected margin / fill rate (assumes sale ≈ CL).
+				// Derived from the same projected values as ExpectedMarginPct so both fields
+				// describe the post-adjustment state consistently.
+				ExpectedROI:       expectedROIFromMargin(suggTargetMargin, newTerms),
 				ExpectedMarginPct: suggTargetMargin,
-				DataConfidence:    confidence,
+				// InsightsDataSummary does not track AvgDaysToSell, leave at zero.
+				DataConfidence: confidence,
 			},
 		})
 	}
@@ -321,12 +326,28 @@ func suggestBuyTermsFromLiquidation(_ context.Context, campaigns []Campaign, hea
 				BuyTermsCLPct: newTerms,
 			},
 			ExpectedMetrics: ExpectedMetrics{
-				DataConfidence: confidence,
+				// Projected ROI ≈ margin / fill rate (assumes sale ≈ CL).
+				// Derived from the same projected margin used for ExpectedMarginPct so both
+				// fields describe the post-adjustment state consistently.
+				ExpectedROI:       expectedROIFromMargin(h.EbayChannelMarginPct, newTerms),
+				ExpectedMarginPct: h.EbayChannelMarginPct,
+				DataConfidence:    confidence,
 			},
 		})
 	}
 
 	return suggestions
+}
+
+// expectedROIFromMargin approximates post-adjustment ROI from a projected
+// channel margin and the target buy-terms CL%. For a fill at buyTerms*CL sold
+// at CL, ROI = (1 - buyTerms)/buyTerms and Margin = (1 - buyTerms), so
+// ROI ≈ Margin / buyTerms. Returns 0 when inputs are non-positive.
+func expectedROIFromMargin(margin, buyTermsCLPct float64) float64 {
+	if margin <= 0 || buyTermsCLPct <= 0 {
+		return 0
+	}
+	return margin / buyTermsCLPct
 }
 
 // computeBuyTermsReduction maps observed average liquidation loss per sale
