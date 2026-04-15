@@ -116,14 +116,14 @@ func TestFinanceService_ListInvoices(t *testing.T) {
 // total, and we enrich on read (no write-back).
 func TestListInvoices_BackfillsTotalCents(t *testing.T) {
 	tests := []struct {
-		name           string
-		invoices       []inventory.Invoice
-		sumByDate      map[string]int
-		sumErr         error
-		wantTotals     map[string]int // invoiceDate → expected TotalCents
-		wantSumCalls   map[string]int // invoiceDate → expected call count
-		wantErr        bool
-		wantErrSubstr  string
+		name          string
+		invoices      []inventory.Invoice
+		sumByDate     map[string]int
+		sumErr        error
+		wantTotals    map[string]int // invoiceDate → expected TotalCents
+		wantSumCalls  map[string]int // invoiceDate → expected call count
+		wantErr       bool
+		wantErrSubstr string
 	}{
 		{
 			name: "backfills zero TotalCents from sum",
