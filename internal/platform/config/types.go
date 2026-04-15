@@ -158,28 +158,28 @@ func (c *InventoryRefreshConfig) ApplyDefaults() {
 
 // Config holds all application configuration organized into logical groups
 type Config struct {
-	Mode             ModeConfig
-	Cache            CacheConfig
-	Server           ServerConfig
-	Logging          LoggingConfig
-	Database         DatabaseConfig
-	Maintenance      MaintenanceConfig
-	Auth             AuthConfig
-	PriceRefresh     PriceRefreshConfig
-	SessionCleanup   SessionCleanupConfig
-	InventoryRefresh InventoryRefreshConfig
-	SnapshotEnrich   SnapshotEnrichConfig
-	AdvisorRefresh   AdvisorRefreshConfig
-	SocialContent    SocialContentConfig
-	SocialPublish    SocialPublishConfig
-	MetricsPoll      MetricsPollConfig
-	CardLadder       CardLadderConfig
-	MarketMovers     MarketMoversConfig
-	GoogleSheets     GoogleSheetsConfig
-	PSASync          PSASyncConfig
-	DH               DHConfig
+	Mode               ModeConfig
+	Cache              CacheConfig
+	Server             ServerConfig
+	Logging            LoggingConfig
+	Database           DatabaseConfig
+	Maintenance        MaintenanceConfig
+	Auth               AuthConfig
+	PriceRefresh       PriceRefreshConfig
+	SessionCleanup     SessionCleanupConfig
+	InventoryRefresh   InventoryRefreshConfig
+	SnapshotEnrich     SnapshotEnrichConfig
+	AdvisorRefresh     AdvisorRefreshConfig
+	SocialContent      SocialContentConfig
+	SocialPublish      SocialPublishConfig
+	MetricsPoll        MetricsPollConfig
+	CardLadder         CardLadderConfig
+	MarketMovers       MarketMoversConfig
+	GoogleSheets       GoogleSheetsConfig
+	PSASync            PSASyncConfig
+	DH                 DHConfig
 	DHAnalyticsRefresh DHAnalyticsRefreshConfig
-	Adapters         AdapterConfig
+	Adapters           AdapterConfig
 }
 
 // DHAnalyticsRefreshConfig controls the daily DH demand analytics refresh

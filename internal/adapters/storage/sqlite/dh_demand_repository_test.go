@@ -17,9 +17,9 @@ func newDemandRepo(t *testing.T) (*DHDemandRepository, func()) {
 	return repo, func() { db.Close() }
 }
 
-func strPtr(s string) *string           { return &s }
-func floatPtr(f float64) *float64       { return &f }
-func timePtr(t time.Time) *time.Time    { return &t }
+func strPtr(s string) *string        { return &s }
+func floatPtr(f float64) *float64    { return &f }
+func timePtr(t time.Time) *time.Time { return &t }
 
 func TestDHDemand_UpsertAndGetCardCache(t *testing.T) {
 	repo, cleanup := newDemandRepo(t)
@@ -127,8 +127,8 @@ func TestDHDemand_ListCardCacheByDemandScore(t *testing.T) {
 		{CardID: "a", Window: "30d", DemandScore: floatPtr(0.2), FetchedAt: fetched},
 		{CardID: "b", Window: "30d", DemandScore: floatPtr(0.9), FetchedAt: fetched},
 		{CardID: "c", Window: "30d", DemandScore: floatPtr(0.5), FetchedAt: fetched},
-		{CardID: "d", Window: "30d", DemandScore: nil, FetchedAt: fetched},                // should be excluded
-		{CardID: "e", Window: "7d", DemandScore: floatPtr(0.99), FetchedAt: fetched},      // wrong window
+		{CardID: "d", Window: "30d", DemandScore: nil, FetchedAt: fetched},           // should be excluded
+		{CardID: "e", Window: "7d", DemandScore: floatPtr(0.99), FetchedAt: fetched}, // wrong window
 	}
 	for _, r := range rows {
 		require.NoError(t, repo.UpsertCardCache(ctx, r))

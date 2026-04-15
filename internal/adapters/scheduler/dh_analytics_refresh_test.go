@@ -23,12 +23,12 @@ type fakeAnalyticsClient struct {
 	batchAnalyticsFn      func(ctx context.Context, cardIDs []int, fields []string) (*dh.BatchAnalyticsResponse, error)
 	demandSignalsFn       func(ctx context.Context, cardIDs []int, window string) (*dh.DemandSignalsResponse, error)
 
-	topCharactersCalls      int
-	characterVelocityCalls  int
+	topCharactersCalls       int
+	characterVelocityCalls   int
 	characterSaturationCalls int
-	characterDemandCalls    int
-	batchAnalyticsCalls     int
-	demandSignalsCalls      int
+	characterDemandCalls     int
+	batchAnalyticsCalls      int
+	demandSignalsCalls       int
 }
 
 func (f *fakeAnalyticsClient) EnterpriseAvailable() bool { return f.available }

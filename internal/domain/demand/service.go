@@ -199,15 +199,15 @@ func velocityOf(o NicheOpportunity) float64 {
 // character row. It is a domain-local struct to keep the demand package free
 // of adapter imports.
 type characterDemandJSON struct {
-	CharacterName     string                  `json:"character_name"`
-	CardCount         int                     `json:"card_count"`
-	AvgDemandScore    float64                 `json:"avg_demand_score"`
-	TotalViews        int                     `json:"total_views"`
-	TotalSearchClicks int                     `json:"total_search_clicks"`
-	TotalWishlistAdds int                     `json:"total_wishlist_adds"`
-	DataQuality       string                  `json:"data_quality"`
-	ComputedAt        string                  `json:"computed_at"`
-	ByEra             map[string]byEraJSON    `json:"by_era,omitempty"`
+	CharacterName     string               `json:"character_name"`
+	CardCount         int                  `json:"card_count"`
+	AvgDemandScore    float64              `json:"avg_demand_score"`
+	TotalViews        int                  `json:"total_views"`
+	TotalSearchClicks int                  `json:"total_search_clicks"`
+	TotalWishlistAdds int                  `json:"total_wishlist_adds"`
+	DataQuality       string               `json:"data_quality"`
+	ComputedAt        string               `json:"computed_at"`
+	ByEra             map[string]byEraJSON `json:"by_era,omitempty"`
 }
 
 type byEraJSON struct {

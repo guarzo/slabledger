@@ -152,13 +152,13 @@ type nichesMeta struct {
 }
 
 type nicheOpportunityDTO struct {
-	Character        string             `json:"character"`
-	Era              string             `json:"era"`
-	Grade            int                `json:"grade"`
-	Demand           *nicheDemandDTO    `json:"demand"`
-	Market           *nicheMarketDTO    `json:"market"`
-	Coverage         nicheCoverageDTO   `json:"coverage"`
-	OpportunityScore float64            `json:"opportunity_score"`
+	Character        string           `json:"character"`
+	Era              string           `json:"era"`
+	Grade            int              `json:"grade"`
+	Demand           *nicheDemandDTO  `json:"demand"`
+	Market           *nicheMarketDTO  `json:"market"`
+	Coverage         nicheCoverageDTO `json:"coverage"`
+	OpportunityScore float64          `json:"opportunity_score"`
 }
 
 type nicheDemandDTO struct {

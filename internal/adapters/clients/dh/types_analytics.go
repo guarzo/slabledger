@@ -93,21 +93,21 @@ type DemandSignalsResponse struct {
 
 // DemandSignal is a single per-card demand entry.
 type DemandSignal struct {
-	CardID                   int      `json:"card_id"`
-	DemandScore              float64  `json:"demand_score"`
-	DataQuality              string   `json:"data_quality"`
-	Views                    *int     `json:"views,omitempty"`
-	SearchClicks             *int     `json:"search_clicks,omitempty"`
-	WishlistAdds             *int     `json:"wishlist_adds,omitempty"`
-	AvgDailySales            *float64 `json:"avg_daily_sales,omitempty"`
-	ActiveBids               *int     `json:"active_bids,omitempty"`
-	HighestBidPctOfAsk       *float64 `json:"highest_bid_pct_of_ask,omitempty"`
-	DemandPressure7d         *float64 `json:"demand_pressure_7d,omitempty"`
-	SupplySaturationShift    *float64 `json:"supply_saturation_shift,omitempty"`
-	EbayActiveListingCount   *int     `json:"ebay_active_listing_count,omitempty"`
-	EbayActiveListing7dAgo   *int     `json:"ebay_active_listing_count_7d_ago,omitempty"`
-	RawSales24h              int      `json:"raw_sales_24h"`
-	RawAvgDailySales7d       *float64 `json:"raw_avg_daily_sales_7d,omitempty"`
+	CardID                 int      `json:"card_id"`
+	DemandScore            float64  `json:"demand_score"`
+	DataQuality            string   `json:"data_quality"`
+	Views                  *int     `json:"views,omitempty"`
+	SearchClicks           *int     `json:"search_clicks,omitempty"`
+	WishlistAdds           *int     `json:"wishlist_adds,omitempty"`
+	AvgDailySales          *float64 `json:"avg_daily_sales,omitempty"`
+	ActiveBids             *int     `json:"active_bids,omitempty"`
+	HighestBidPctOfAsk     *float64 `json:"highest_bid_pct_of_ask,omitempty"`
+	DemandPressure7d       *float64 `json:"demand_pressure_7d,omitempty"`
+	SupplySaturationShift  *float64 `json:"supply_saturation_shift,omitempty"`
+	EbayActiveListingCount *int     `json:"ebay_active_listing_count,omitempty"`
+	EbayActiveListing7dAgo *int     `json:"ebay_active_listing_count_7d_ago,omitempty"`
+	RawSales24h            int      `json:"raw_sales_24h"`
+	RawAvgDailySales7d     *float64 `json:"raw_avg_daily_sales_7d,omitempty"`
 }
 
 // CharacterDemandResponse is returned from
@@ -118,13 +118,13 @@ type CharacterDemandResponse struct {
 
 // CharacterDemandEntry is a single character-aggregated demand row.
 type CharacterDemandEntry struct {
-	CharacterName     string                 `json:"character_name"`
-	CardCount         int                    `json:"card_count"`
-	AvgDemandScore    float64                `json:"avg_demand_score"`
-	TotalViews        int                    `json:"total_views"`
-	TotalSearchClicks int                    `json:"total_search_clicks"`
-	TotalWishlistAdds int                    `json:"total_wishlist_adds"`
-	ByEra             map[string]ByEraEntry  `json:"by_era,omitempty"`
+	CharacterName     string                `json:"character_name"`
+	CardCount         int                   `json:"card_count"`
+	AvgDemandScore    float64               `json:"avg_demand_score"`
+	TotalViews        int                   `json:"total_views"`
+	TotalSearchClicks int                   `json:"total_search_clicks"`
+	TotalWishlistAdds int                   `json:"total_wishlist_adds"`
+	ByEra             map[string]ByEraEntry `json:"by_era,omitempty"`
 }
 
 // ByEraEntry is the per-era breakdown inside a character demand entry.

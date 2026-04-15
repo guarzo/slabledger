@@ -16,7 +16,7 @@ import (
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
 )
 
-func floatPtr(v float64) *float64 { return &v }
+func floatPtr(v float64) *float64    { return &v }
 func timePtr(t time.Time) *time.Time { return &t }
 
 func TestNichesHandler_HappyPath(t *testing.T) {
