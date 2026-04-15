@@ -13,7 +13,8 @@ import (
 // interface matching this shape (typically just Leaderboard). This mock
 // satisfies any such interface.
 type DemandServiceMock struct {
-	LeaderboardFn func(ctx context.Context, opts demand.LeaderboardOpts) ([]demand.NicheOpportunity, error)
+	LeaderboardFn      func(ctx context.Context, opts demand.LeaderboardOpts) ([]demand.NicheOpportunity, error)
+	CampaignSignalsFn  func(ctx context.Context) (demand.CampaignSignalsResponse, error)
 }
 
 func (m *DemandServiceMock) Leaderboard(ctx context.Context, opts demand.LeaderboardOpts) ([]demand.NicheOpportunity, error) {
@@ -21,4 +22,11 @@ func (m *DemandServiceMock) Leaderboard(ctx context.Context, opts demand.Leaderb
 		return m.LeaderboardFn(ctx, opts)
 	}
 	return nil, nil
+}
+
+func (m *DemandServiceMock) CampaignSignals(ctx context.Context) (demand.CampaignSignalsResponse, error) {
+	if m.CampaignSignalsFn != nil {
+		return m.CampaignSignalsFn(ctx)
+	}
+	return demand.CampaignSignalsResponse{}, nil
 }
