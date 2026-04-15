@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/dhevents"
@@ -44,7 +45,10 @@ func (s *DHEventStore) Record(ctx context.Context, e dhevents.Event) error {
 		string(e.Source),
 		nullIfEmpty(e.Notes),
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("record dh event: %w", err)
+	}
+	return nil
 }
 
 // CountByTypeSince returns the number of events of the given type recorded
@@ -56,7 +60,7 @@ func (s *DHEventStore) CountByTypeSince(ctx context.Context, t dhevents.Type, si
 		string(t), since.UTC().Format(time.RFC3339),
 	).Scan(&n)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("count dh events by type: %w", err)
 	}
 	return n, nil
 }
