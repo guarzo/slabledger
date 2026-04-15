@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/guarzo/slabledger/internal/domain/demand"
 )
 
 func newDemandRepo(t *testing.T) (*DHDemandRepository, func()) {
@@ -15,9 +17,9 @@ func newDemandRepo(t *testing.T) (*DHDemandRepository, func()) {
 	return repo, func() { db.Close() }
 }
 
-func strPtr(s string) *string   { return &s }
-func floatPtr(f float64) *float64 { return &f }
-func timePtr(t time.Time) *time.Time { return &t }
+func strPtr(s string) *string           { return &s }
+func floatPtr(f float64) *float64       { return &f }
+func timePtr(t time.Time) *time.Time    { return &t }
 
 func TestDHDemand_UpsertAndGetCardCache(t *testing.T) {
 	repo, cleanup := newDemandRepo(t)
@@ -27,7 +29,7 @@ func TestDHDemand_UpsertAndGetCardCache(t *testing.T) {
 	fetched := time.Now().Truncate(time.Second).UTC()
 	computed := fetched.Add(-1 * time.Hour)
 
-	initial := DHCardCacheRow{
+	initial := demand.CardCache{
 		CardID:              "card-123",
 		Window:              "30d",
 		DemandScore:         floatPtr(0.72),
@@ -93,7 +95,7 @@ func TestDHDemand_UpsertCardCache_AllNullableFieldsNil(t *testing.T) {
 	defer cleanup()
 	ctx := context.Background()
 
-	row := DHCardCacheRow{
+	row := demand.CardCache{
 		CardID:    "analytics-only",
 		Window:    "7d",
 		FetchedAt: time.Now().Truncate(time.Second).UTC(),
@@ -121,12 +123,12 @@ func TestDHDemand_ListCardCacheByDemandScore(t *testing.T) {
 
 	fetched := time.Now().Truncate(time.Second).UTC()
 
-	rows := []DHCardCacheRow{
+	rows := []demand.CardCache{
 		{CardID: "a", Window: "30d", DemandScore: floatPtr(0.2), FetchedAt: fetched},
 		{CardID: "b", Window: "30d", DemandScore: floatPtr(0.9), FetchedAt: fetched},
 		{CardID: "c", Window: "30d", DemandScore: floatPtr(0.5), FetchedAt: fetched},
-		{CardID: "d", Window: "30d", DemandScore: nil, FetchedAt: fetched}, // should be excluded
-		{CardID: "e", Window: "7d", DemandScore: floatPtr(0.99), FetchedAt: fetched}, // wrong window
+		{CardID: "d", Window: "30d", DemandScore: nil, FetchedAt: fetched},                // should be excluded
+		{CardID: "e", Window: "7d", DemandScore: floatPtr(0.99), FetchedAt: fetched},      // wrong window
 	}
 	for _, r := range rows {
 		require.NoError(t, repo.UpsertCardCache(ctx, r))
@@ -153,7 +155,7 @@ func TestDHDemand_CardDataQualityStats(t *testing.T) {
 	ctx := context.Background()
 
 	fetched := time.Now().Truncate(time.Second).UTC()
-	rows := []DHCardCacheRow{
+	rows := []demand.CardCache{
 		{CardID: "p1", Window: "30d", DemandDataQuality: strPtr("proxy"), FetchedAt: fetched},
 		{CardID: "p2", Window: "30d", DemandDataQuality: strPtr("proxy"), FetchedAt: fetched},
 		{CardID: "f1", Window: "30d", DemandDataQuality: strPtr("full"), FetchedAt: fetched},
@@ -178,7 +180,7 @@ func TestDHDemand_UpsertAndGetCharacterCache(t *testing.T) {
 	ctx := context.Background()
 
 	fetched := time.Now().Truncate(time.Second).UTC()
-	initial := DHCharacterCacheRow{
+	initial := demand.CharacterCache{
 		Character:           "Umbreon",
 		Window:              "30d",
 		DemandJSON:          strPtr(`{"character":"Umbreon","total_views":843,"by_era":{"sword_shield":{"avg_demand_score":0.82}}}`),
@@ -228,7 +230,7 @@ func TestDHDemand_ListCharacterCache(t *testing.T) {
 	ctx := context.Background()
 
 	fetched := time.Now().Truncate(time.Second).UTC()
-	rows := []DHCharacterCacheRow{
+	rows := []demand.CharacterCache{
 		{Character: "Umbreon", Window: "30d", FetchedAt: fetched},
 		{Character: "Charizard", Window: "30d", FetchedAt: fetched},
 		{Character: "Blastoise", Window: "30d", FetchedAt: fetched},

@@ -1,0 +1,354 @@
+package demand
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"sort"
+	"time"
+)
+
+// gradeBuckets enumerated for Phase 1 graded niche buckets.
+// `raw_near_mint` is mentioned in the design doc but comes from
+// price_distribution.by_grade — defer to a later pass.
+var gradeBuckets = []int{7, 8, 9, 10}
+
+// Sort modes supported by LeaderboardOpts.Sort.
+const (
+	SortOpportunityScore  = "opportunity_score"
+	SortDemandScore       = "demand_score"
+	SortVelocityChangePct = "velocity_change_pct"
+	SortLowCoverage       = "low_coverage"
+)
+
+// Data-quality filter values.
+const (
+	QualityProxy = "proxy"
+	QualityFull  = "full"
+)
+
+// ErrInvalidWindow is returned when LeaderboardOpts.Window is not "7d" or "30d".
+var ErrInvalidWindow = errors.New("demand: window must be \"7d\" or \"30d\"")
+
+// Service orchestrates niche-opportunity computation on top of the demand
+// Repository and a CampaignCoverageLookup.
+type Service struct {
+	repo      Repository
+	campaigns CampaignCoverageLookup
+}
+
+// NewService constructs a Service. Both dependencies are required.
+func NewService(repo Repository, campaigns CampaignCoverageLookup) *Service {
+	return &Service{repo: repo, campaigns: campaigns}
+}
+
+// LeaderboardOpts controls a Leaderboard call.
+type LeaderboardOpts struct {
+	Window         string // "7d" or "30d"
+	Limit          int    // <=0 means no limit
+	Sort           string // one of the Sort* constants; empty → SortOpportunityScore
+	MinDataQuality string // "", "proxy", or "full"; "full" excludes proxy rows
+	Era            string // optional filter; empty = no filter
+	Grade          int    // optional filter; 0 = no filter (emits all grades)
+}
+
+// Leaderboard returns the top niche opportunities with 3-axis scoring.
+// It reads character-cache rows for the given window, parses each row's
+// demand_json (including by_era aggregates), enumerates grade buckets, joins
+// to campaign coverage, computes opportunity scores, sorts, and limits.
+func (s *Service) Leaderboard(ctx context.Context, opts LeaderboardOpts) ([]NicheOpportunity, error) {
+	if opts.Window != "7d" && opts.Window != "30d" {
+		return nil, ErrInvalidWindow
+	}
+	rows, err := s.repo.ListCharacterCache(ctx, opts.Window)
+	if err != nil {
+		return nil, fmt.Errorf("list character cache: %w", err)
+	}
+
+	grades := gradeBuckets
+	if opts.Grade != 0 {
+		grades = []int{opts.Grade}
+	}
+
+	out := make([]NicheOpportunity, 0, len(rows)*len(grades))
+	for _, row := range rows {
+		demand, ok := parseCharacterDemand(row)
+		if !ok {
+			continue
+		}
+
+		// Build one bucket per (era, grade), plus the "all eras" bucket for
+		// characters whose demand_json has no by_era breakdown.
+		eras := erasForRow(demand, opts.Era)
+		for _, era := range eras {
+			eraDemand, eraOK := eraDemandFor(demand, era)
+			if !eraOK {
+				continue
+			}
+			if !qualityAllowed(opts.MinDataQuality, eraDemand.DataQuality) {
+				continue
+			}
+			market := parseCharacterMarket(row)
+			for _, grade := range grades {
+				bucket, bErr := s.buildBucket(ctx, row.Character, era, grade, eraDemand, market)
+				if bErr != nil {
+					return nil, bErr
+				}
+				out = append(out, bucket)
+			}
+		}
+	}
+
+	sortOpportunities(out, opts.Sort)
+	if opts.Limit > 0 && len(out) > opts.Limit {
+		out = out[:opts.Limit]
+	}
+	return out, nil
+}
+
+// buildBucket joins a (character, era, grade) triple to coverage and returns
+// the fully-scored NicheOpportunity.
+func (s *Service) buildBucket(
+	ctx context.Context,
+	character, era string,
+	grade int,
+	demand *NicheDemand,
+	market *NicheMarket,
+) (NicheOpportunity, error) {
+	campaignIDs, err := s.campaigns.CampaignsCovering(ctx, character, era, grade)
+	if err != nil {
+		return NicheOpportunity{}, fmt.Errorf("campaigns covering (%s/%s/%d): %w", character, era, grade, err)
+	}
+	unsold, err := s.campaigns.UnsoldCountFor(ctx, character, era, grade)
+	if err != nil {
+		return NicheOpportunity{}, fmt.Errorf("unsold count (%s/%s/%d): %w", character, era, grade, err)
+	}
+	coverage := NicheCoverage{
+		OurUnsoldCount:    unsold,
+		ActiveCampaignIDs: campaignIDs,
+		Covered:           len(campaignIDs) > 0,
+	}
+
+	demandScore := 0.0
+	if demand != nil {
+		demandScore = demand.Score
+	}
+	var velocityChange *float64
+	activeListingCount := 0
+	if market != nil {
+		velocityChange = market.VelocityChangePct
+		activeListingCount = market.ActiveListingCount
+	}
+
+	return NicheOpportunity{
+		Character:        character,
+		Era:              era,
+		Grade:            grade,
+		Demand:           demand,
+		Market:           market,
+		Coverage:         coverage,
+		OpportunityScore: OpportunityScore(demandScore, velocityChange, activeListingCount, coverage),
+	}, nil
+}
+
+// --- Sort ---
+
+func sortOpportunities(out []NicheOpportunity, mode string) {
+	switch mode {
+	case SortDemandScore:
+		sort.SliceStable(out, func(i, j int) bool {
+			return demandOf(out[i]) > demandOf(out[j])
+		})
+	case SortVelocityChangePct:
+		sort.SliceStable(out, func(i, j int) bool {
+			return velocityOf(out[i]) > velocityOf(out[j])
+		})
+	case SortLowCoverage:
+		sort.SliceStable(out, func(i, j int) bool {
+			ci, cj := out[i].Coverage.Covered, out[j].Coverage.Covered
+			if ci != cj {
+				return !ci // uncovered first
+			}
+			return out[i].OpportunityScore > out[j].OpportunityScore
+		})
+	default: // SortOpportunityScore (or empty)
+		sort.SliceStable(out, func(i, j int) bool {
+			return out[i].OpportunityScore > out[j].OpportunityScore
+		})
+	}
+}
+
+func demandOf(o NicheOpportunity) float64 {
+	if o.Demand == nil {
+		return 0
+	}
+	return o.Demand.Score
+}
+
+func velocityOf(o NicheOpportunity) float64 {
+	if o.Market == nil || o.Market.VelocityChangePct == nil {
+		return 0
+	}
+	return *o.Market.VelocityChangePct
+}
+
+// --- JSON parsing helpers ---
+
+// characterDemandJSON mirrors the shape of the cached demand_json blob for a
+// character row. It is a domain-local struct to keep the demand package free
+// of adapter imports.
+type characterDemandJSON struct {
+	CharacterName     string                  `json:"character_name"`
+	CardCount         int                     `json:"card_count"`
+	AvgDemandScore    float64                 `json:"avg_demand_score"`
+	TotalViews        int                     `json:"total_views"`
+	TotalSearchClicks int                     `json:"total_search_clicks"`
+	TotalWishlistAdds int                     `json:"total_wishlist_adds"`
+	DataQuality       string                  `json:"data_quality"`
+	ComputedAt        string                  `json:"computed_at"`
+	ByEra             map[string]byEraJSON    `json:"by_era,omitempty"`
+}
+
+type byEraJSON struct {
+	CardCount         int     `json:"card_count"`
+	AvgDemandScore    float64 `json:"avg_demand_score"`
+	TotalViews        int     `json:"total_views"`
+	TotalSearchClicks int     `json:"total_search_clicks"`
+	TotalWishlistAdds int     `json:"total_wishlist_adds"`
+	DataQuality       string  `json:"data_quality"`
+}
+
+// characterVelocityJSON / characterSaturationJSON mirror the cached JSON
+// blobs for a character row's velocity + saturation surfaces.
+type characterVelocityJSON struct {
+	MedianDaysToSell  *float64 `json:"median_days_to_sell"`
+	SampleSize        int      `json:"sample_size"`
+	VelocityChangePct *float64 `json:"velocity_change_pct"`
+	ComputedAt        string   `json:"computed_at"`
+}
+
+type characterSaturationJSON struct {
+	ActiveListingCount int    `json:"active_listing_count"`
+	ComputedAt         string `json:"computed_at"`
+}
+
+// parseCharacterDemand extracts the demand-axis view from a character cache
+// row. Returns (nil, false) if the demand JSON is missing or unparseable.
+func parseCharacterDemand(row CharacterCache) (*characterDemandJSON, bool) {
+	if row.DemandJSON == nil {
+		return nil, false
+	}
+	var cd characterDemandJSON
+	if err := json.Unmarshal([]byte(*row.DemandJSON), &cd); err != nil {
+		return nil, false
+	}
+	return &cd, true
+}
+
+// parseCharacterMarket extracts the market-axis view (velocity + saturation)
+// from a character cache row. Returns nil if both surfaces are absent.
+func parseCharacterMarket(row CharacterCache) *NicheMarket {
+	m := &NicheMarket{}
+	has := false
+
+	if row.VelocityJSON != nil {
+		var v characterVelocityJSON
+		if err := json.Unmarshal([]byte(*row.VelocityJSON), &v); err == nil {
+			m.MedianDaysToSell = v.MedianDaysToSell
+			m.VelocityChangePct = v.VelocityChangePct
+			m.SampleSize = v.SampleSize
+			has = true
+		}
+	}
+	if row.SaturationJSON != nil {
+		var s characterSaturationJSON
+		if err := json.Unmarshal([]byte(*row.SaturationJSON), &s); err == nil {
+			m.ActiveListingCount = s.ActiveListingCount
+			has = true
+		}
+	}
+	if !has {
+		// Row has no analytics — flag for callers.
+		if row.AnalyticsComputedAt == nil {
+			return &NicheMarket{AnalyticsNotComputed: true}
+		}
+		return nil
+	}
+	m.ComputedAt = row.AnalyticsComputedAt
+	return m
+}
+
+// erasForRow returns the set of eras to emit buckets for. If the caller
+// filtered by opts.Era we honour it; otherwise we emit every era present in
+// the demand_json's by_era map. If there is no by_era map, we emit a single
+// "" bucket for the character overall.
+func erasForRow(demand *characterDemandJSON, filter string) []string {
+	if filter != "" {
+		return []string{filter}
+	}
+	if len(demand.ByEra) == 0 {
+		return []string{""}
+	}
+	eras := make([]string, 0, len(demand.ByEra))
+	for era := range demand.ByEra {
+		eras = append(eras, era)
+	}
+	sort.Strings(eras)
+	return eras
+}
+
+// eraDemandFor returns the NicheDemand for a given era within a character's
+// demand JSON. An empty era means "character overall".
+func eraDemandFor(demand *characterDemandJSON, era string) (*NicheDemand, bool) {
+	if era == "" {
+		return &NicheDemand{
+			Score:        demand.AvgDemandScore,
+			Views:        demand.TotalViews,
+			WishlistAdds: demand.TotalWishlistAdds,
+			DataQuality:  demand.DataQuality,
+			ComputedAt:   parseTime(demand.ComputedAt),
+		}, true
+	}
+	entry, ok := demand.ByEra[era]
+	if !ok {
+		return nil, false
+	}
+	quality := entry.DataQuality
+	if quality == "" {
+		quality = demand.DataQuality
+	}
+	return &NicheDemand{
+		Score:        entry.AvgDemandScore,
+		Views:        entry.TotalViews,
+		WishlistAdds: entry.TotalWishlistAdds,
+		DataQuality:  quality,
+		ComputedAt:   parseTime(demand.ComputedAt),
+	}, true
+}
+
+// qualityAllowed returns true if the row's data_quality satisfies the filter.
+func qualityAllowed(minQuality, rowQuality string) bool {
+	switch minQuality {
+	case "", QualityProxy:
+		return true
+	case QualityFull:
+		return rowQuality == QualityFull
+	default:
+		return true
+	}
+}
+
+// parseTime parses a DH-style timestamp. Best-effort — returns the zero
+// time.Time on any error, which is fine for downstream API shaping.
+func parseTime(s string) time.Time {
+	if s == "" {
+		return time.Time{}
+	}
+	for _, layout := range []string{time.RFC3339Nano, time.RFC3339, "2006-01-02T15:04:05"} {
+		if t, err := time.Parse(layout, s); err == nil {
+			return t
+		}
+	}
+	return time.Time{}
+}

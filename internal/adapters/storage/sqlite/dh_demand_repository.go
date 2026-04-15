@@ -5,15 +5,16 @@ import (
 	"database/sql"
 	"fmt"
 	"time"
+
+	"github.com/guarzo/slabledger/internal/domain/demand"
 )
+
+// Compile-time interface check.
+var _ demand.Repository = (*DHDemandRepository)(nil)
 
 // DHDemandRepository provides access to the dh_card_cache and
 // dh_character_cache tables, which persist demand and analytics signals
-// fetched from the DoubleHolo enterprise API.
-//
-// Task 3 will introduce a domain-level interface (in internal/domain/demand)
-// that this repository implements. For now it exposes only SQLite-adapter
-// row types and CRUD methods.
+// fetched from the DoubleHolo enterprise API. It implements demand.Repository.
 type DHDemandRepository struct {
 	db *sql.DB
 }
@@ -23,49 +24,10 @@ func NewDHDemandRepository(db *sql.DB) *DHDemandRepository {
 	return &DHDemandRepository{db: db}
 }
 
-// DHCardCacheRow is the adapter-level row representation for dh_card_cache.
-// Nullable columns map to pointer fields so NULL vs. empty-string can be
-// distinguished by callers.
-type DHCardCacheRow struct {
-	CardID                string
-	Window                string // "7d" or "30d"
-	DemandScore           *float64
-	DemandDataQuality     *string // "proxy" | "full"
-	DemandJSON            *string
-	VelocityJSON          *string
-	TrendJSON             *string
-	SaturationJSON        *string
-	PriceDistributionJSON *string
-	AnalyticsComputedAt   *time.Time
-	DemandComputedAt      *time.Time
-	FetchedAt             time.Time
-}
-
-// DHCharacterCacheRow is the adapter-level row representation for dh_character_cache.
-type DHCharacterCacheRow struct {
-	Character           string
-	Window              string
-	DemandJSON          *string
-	VelocityJSON        *string
-	SaturationJSON      *string
-	DemandComputedAt    *time.Time
-	AnalyticsComputedAt *time.Time
-	FetchedAt           time.Time
-}
-
-// DHDemandQualityStats summarises demand_data_quality distribution for a
-// given window, used by the daily refresh scheduler metrics.
-type DHDemandQualityStats struct {
-	ProxyCount       int
-	FullCount        int
-	NullQualityCount int // rows without demand_data_quality (analytics-only or 404'd)
-	TotalRows        int
-}
-
 // --- Card cache CRUD ---
 
 // UpsertCardCache inserts or updates a dh_card_cache row keyed by (card_id, window).
-func (r *DHDemandRepository) UpsertCardCache(ctx context.Context, row DHCardCacheRow) error {
+func (r *DHDemandRepository) UpsertCardCache(ctx context.Context, row demand.CardCache) error {
 	_, err := r.db.ExecContext(ctx,
 		`INSERT INTO dh_card_cache (
 			card_id, window,
@@ -99,7 +61,7 @@ func (r *DHDemandRepository) UpsertCardCache(ctx context.Context, row DHCardCach
 }
 
 // GetCardCache returns the cached row for (cardID, window), or (nil, nil) if not found.
-func (r *DHDemandRepository) GetCardCache(ctx context.Context, cardID, window string) (*DHCardCacheRow, error) {
+func (r *DHDemandRepository) GetCardCache(ctx context.Context, cardID, window string) (*demand.CardCache, error) {
 	row := r.db.QueryRowContext(ctx,
 		`SELECT card_id, window,
 			demand_score, demand_data_quality,
@@ -121,9 +83,8 @@ func (r *DHDemandRepository) GetCardCache(ctx context.Context, cardID, window st
 
 // ListCardCacheByDemandScore returns rows for the given window ordered by
 // demand_score DESC. Rows with a NULL demand_score are excluded — they
-// cannot be ranked meaningfully and the caller (the niches handler) only
-// wants rows that actually carry a demand signal.
-func (r *DHDemandRepository) ListCardCacheByDemandScore(ctx context.Context, window string, limit int) (_ []DHCardCacheRow, err error) {
+// cannot be ranked meaningfully.
+func (r *DHDemandRepository) ListCardCacheByDemandScore(ctx context.Context, window string, limit int) (_ []demand.CardCache, err error) {
 	rows, err := r.db.QueryContext(ctx,
 		`SELECT card_id, window,
 			demand_score, demand_data_quality,
@@ -144,7 +105,7 @@ func (r *DHDemandRepository) ListCardCacheByDemandScore(ctx context.Context, win
 		}
 	}()
 
-	results := make([]DHCardCacheRow, 0, limit)
+	results := make([]demand.CardCache, 0, limit)
 	for rows.Next() {
 		r, scanErr := scanCardCacheRow(rows)
 		if scanErr != nil {
@@ -157,8 +118,8 @@ func (r *DHDemandRepository) ListCardCacheByDemandScore(ctx context.Context, win
 
 // CardDataQualityStats returns the distribution of demand_data_quality values
 // across dh_card_cache rows for a given window.
-func (r *DHDemandRepository) CardDataQualityStats(ctx context.Context, window string) (DHDemandQualityStats, error) {
-	var stats DHDemandQualityStats
+func (r *DHDemandRepository) CardDataQualityStats(ctx context.Context, window string) (demand.QualityStats, error) {
+	var stats demand.QualityStats
 	err := r.db.QueryRowContext(ctx,
 		`SELECT
 			COUNT(*) FILTER (WHERE demand_data_quality = 'proxy') AS proxy_count,
@@ -170,7 +131,7 @@ func (r *DHDemandRepository) CardDataQualityStats(ctx context.Context, window st
 		window,
 	).Scan(&stats.ProxyCount, &stats.FullCount, &stats.NullQualityCount, &stats.TotalRows)
 	if err != nil {
-		return DHDemandQualityStats{}, fmt.Errorf("card data quality stats: %w", err)
+		return demand.QualityStats{}, fmt.Errorf("card data quality stats: %w", err)
 	}
 	return stats, nil
 }
@@ -178,7 +139,7 @@ func (r *DHDemandRepository) CardDataQualityStats(ctx context.Context, window st
 // --- Character cache CRUD ---
 
 // UpsertCharacterCache inserts or updates a dh_character_cache row keyed by (character, window).
-func (r *DHDemandRepository) UpsertCharacterCache(ctx context.Context, row DHCharacterCacheRow) error {
+func (r *DHDemandRepository) UpsertCharacterCache(ctx context.Context, row demand.CharacterCache) error {
 	_, err := r.db.ExecContext(ctx,
 		`INSERT INTO dh_character_cache (
 			character, window,
@@ -205,7 +166,7 @@ func (r *DHDemandRepository) UpsertCharacterCache(ctx context.Context, row DHCha
 }
 
 // GetCharacterCache returns the cached row for (character, window), or (nil, nil) if not found.
-func (r *DHDemandRepository) GetCharacterCache(ctx context.Context, character, window string) (*DHCharacterCacheRow, error) {
+func (r *DHDemandRepository) GetCharacterCache(ctx context.Context, character, window string) (*demand.CharacterCache, error) {
 	row := r.db.QueryRowContext(ctx,
 		`SELECT character, window,
 			demand_json, velocity_json, saturation_json,
@@ -226,7 +187,7 @@ func (r *DHDemandRepository) GetCharacterCache(ctx context.Context, character, w
 
 // ListCharacterCache returns all character cache rows for the given window,
 // ordered by character ascending.
-func (r *DHDemandRepository) ListCharacterCache(ctx context.Context, window string) (_ []DHCharacterCacheRow, err error) {
+func (r *DHDemandRepository) ListCharacterCache(ctx context.Context, window string) (_ []demand.CharacterCache, err error) {
 	rows, err := r.db.QueryContext(ctx,
 		`SELECT character, window,
 			demand_json, velocity_json, saturation_json,
@@ -245,7 +206,7 @@ func (r *DHDemandRepository) ListCharacterCache(ctx context.Context, window stri
 		}
 	}()
 
-	results := make([]DHCharacterCacheRow, 0, 32)
+	results := make([]demand.CharacterCache, 0, 32)
 	for rows.Next() {
 		r, scanErr := scanCharacterCacheRow(rows)
 		if scanErr != nil {
@@ -258,9 +219,9 @@ func (r *DHDemandRepository) ListCharacterCache(ctx context.Context, window stri
 
 // --- row scanners ---
 
-func scanCardCacheRow(s scanner) (*DHCardCacheRow, error) {
+func scanCardCacheRow(s scanner) (*demand.CardCache, error) {
 	var (
-		row                   DHCardCacheRow
+		row                   demand.CardCache
 		demandScore           sql.NullFloat64
 		demandDataQuality     sql.NullString
 		demandJSON            sql.NullString
@@ -293,9 +254,9 @@ func scanCardCacheRow(s scanner) (*DHCardCacheRow, error) {
 	return &row, nil
 }
 
-func scanCharacterCacheRow(s scanner) (*DHCharacterCacheRow, error) {
+func scanCharacterCacheRow(s scanner) (*demand.CharacterCache, error) {
 	var (
-		row                 DHCharacterCacheRow
+		row                 demand.CharacterCache
 		demandJSON          sql.NullString
 		velocityJSON        sql.NullString
 		saturationJSON      sql.NullString
