@@ -155,12 +155,9 @@ func (rt *Router) registerCampaignRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/campaigns/{id}/projections", authRoute(rt.campaignsHandler.HandleProjections))
 
 	// Global purchase endpoints (cross-campaign)
-	mux.Handle("POST /api/purchases/refresh-cl", authRoute(rt.campaignsHandler.HandleGlobalRefreshCL))
-	mux.Handle("POST /api/purchases/import-cl", authRoute(rt.campaignsHandler.HandleGlobalImportCL))
 	mux.Handle("POST /api/purchases/import-psa", authRoute(rt.campaignsHandler.HandleGlobalImportPSA))
 	mux.Handle("POST /api/purchases/sync-psa-sheets", authRoute(rt.campaignsHandler.HandleSyncPSASheets))
 	// PSA pending items are served under /api/admin/psa-sync/pending/ (see registerAdminRoutes)
-	mux.Handle("GET /api/purchases/export-cl", authRoute(rt.campaignsHandler.HandleGlobalExportCL))
 	mux.Handle("GET /api/purchases/export-mm", authRoute(rt.campaignsHandler.HandleGlobalExportMM))
 	mux.Handle("POST /api/purchases/refresh-mm", authRoute(rt.campaignsHandler.HandleGlobalRefreshMM))
 	mux.Handle("POST /api/purchases/import-external", authRoute(rt.campaignsHandler.HandleGlobalImportExternal))

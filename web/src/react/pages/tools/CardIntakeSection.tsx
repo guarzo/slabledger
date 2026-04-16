@@ -2,7 +2,7 @@ import { useState, useRef } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { api } from '../../../js/api';
 import { reportError } from '../../../js/errors';
-import type { ExternalImportResult, GlobalImportResult, MMRefreshResult } from '../../../types/campaigns';
+import type { ExternalImportResult, MMRefreshResult } from '../../../types/campaigns';
 import { getErrorMessage } from '../../utils/formatters';
 import { useToast } from '../../contexts/ToastContext';
 import { Button, CardShell } from '../../ui';
@@ -275,108 +275,6 @@ function MMImportCard() {
   );
 }
 
-/* ── CLExportCard ────────────────────────────────────────────────── */
-
-function CLExportCard() {
-  const [missingOnly, setMissingOnly] = useState(false);
-  const toast = useToast();
-
-  const exportMutation = useMutation<Blob, Error, boolean>({
-    mutationFn: (missing: boolean) => api.globalExportCL(missing),
-    onSuccess: (blob) => {
-      downloadBlob(blob, 'card_ladder_import.csv');
-      toast.success('Card Ladder CSV exported');
-    },
-    onError: (err) => {
-      toast.error(getErrorMessage(err, 'Failed to export'));
-    },
-  });
-
-  return (
-    <LegacyCard
-      icon={<DownloadIcon />}
-      title="CL CSV Export"
-      description="Download inventory CSV to import into Card Ladder manually"
-    >
-      <div className="flex flex-col gap-2 w-full">
-        <label htmlFor="missing-only-cl" className="flex items-center gap-1.5 text-xs text-[var(--text-muted)] cursor-pointer select-none">
-          <input
-            id="missing-only-cl"
-            type="checkbox"
-            checked={missingOnly}
-            onChange={(e) => setMissingOnly(e.target.checked)}
-            className="accent-[var(--brand-500)]"
-          />
-          Only missing CL data
-        </label>
-        <Button size="sm" variant="secondary" fullWidth loading={exportMutation.isPending} onClick={() => exportMutation.mutate(missingOnly)}>
-          Download CSV
-        </Button>
-      </div>
-    </LegacyCard>
-  );
-}
-
-/* ── CLImportCard ────────────────────────────────────────────────── */
-
-function CLImportCard() {
-  const fileRef = useRef<HTMLInputElement>(null);
-  const toast = useToast();
-
-  const importMutation = useMutation<GlobalImportResult, Error, File>({
-    mutationFn: (file: File) => api.globalImportCL(file),
-    onSuccess: (res) => {
-      const hasProblems = res.unmatched > 0 || res.ambiguous > 0 || res.skipped > 0 || res.failed > 0 || (res.errors?.length ?? 0) > 0;
-      const summary = [
-        res.allocated > 0 && `${res.allocated} allocated`,
-        res.refreshed > 0 && `${res.refreshed} refreshed`,
-        res.unmatched > 0 && `${res.unmatched} unmatched`,
-        res.ambiguous > 0 && `${res.ambiguous} ambiguous`,
-        res.skipped > 0 && `${res.skipped} skipped`,
-        res.failed > 0 && `${res.failed} failed`,
-      ].filter(Boolean).join(', ');
-      if (hasProblems) {
-        toast.warning(`CL import: ${summary}`);
-      } else {
-        toast.success(`CL import: ${summary || '0 changes'}`);
-      }
-    },
-    onError: (err) => {
-      toast.error(getErrorMessage(err, 'Failed to import'));
-    },
-  });
-
-  return (
-    <LegacyCard
-      icon={<UploadIcon />}
-      title="CL CSV Import"
-      description="Upload a Card Ladder CSV to allocate and refresh purchases"
-    >
-      <Button size="sm" variant="secondary" fullWidth loading={importMutation.isPending} onClick={() => fileRef.current?.click()}>
-        Upload CSV
-      </Button>
-      <input
-        ref={fileRef}
-        type="file"
-        accept=".csv"
-        className="hidden"
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          if (file) importMutation.mutate(file);
-          e.target.value = '';
-        }}
-      />
-      {importMutation.data && (
-        <div className="mt-2 text-xs text-[var(--text-muted)]">
-          {importMutation.data.allocated > 0 && <span className="text-[var(--success)] mr-2">{importMutation.data.allocated} allocated</span>}
-          {importMutation.data.refreshed > 0 && <span className="text-[var(--info)] mr-2">{importMutation.data.refreshed} refreshed</span>}
-          {importMutation.data.unmatched > 0 && <span className="text-[var(--warning)]">{importMutation.data.unmatched} unmatched</span>}
-        </div>
-      )}
-    </LegacyCard>
-  );
-}
-
 /* ── CardIntakeSection ───────────────────────────────────────────── */
 
 export default function CardIntakeSection() {
@@ -385,8 +283,6 @@ export default function CardIntakeSection() {
       <ExternalImportCard />
       <MMExportCard />
       <MMImportCard />
-      <CLExportCard />
-      <CLImportCard />
     </div>
   );
 }

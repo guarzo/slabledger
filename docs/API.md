@@ -929,60 +929,6 @@ Runs a Monte Carlo projection for campaign outcomes.
 
 ## Global Purchases
 
-### `POST /api/purchases/refresh-cl`
-
-Auth: RequireAuth
-
-Refreshes CL values across all campaigns from a Card Ladder export CSV upload.
-
-**Body:** `multipart/form-data` — `file` field (CSV, max 10MB)
-
-Required CSV columns: `slab serial #`, `current value`
-
-**Response:** `200 OK` — `GlobalCLRefreshResult`
-```json
-{
-  "updated": 15,
-  "notFound": 2,
-  "failed": 0,
-  "results": [
-    { "certNumber": "12345678", "status": "updated", "oldValueCents": 110000, "newValueCents": 120000 }
-  ],
-  "byCampaign": { "uuid": { "campaignName": "Q1", "updated": 15 } }
-}
-```
-
----
-
-### `POST /api/purchases/import-cl`
-
-Auth: RequireAuth
-
-Imports and auto-allocates purchases from a Card Ladder export CSV.
-
-**Body:** `multipart/form-data` — `file` field (CSV, max 10MB)
-
-Required CSV columns: `slab serial #`, `investment`, `current value`
-
-Optional columns: `date purchased` (M/D/YYYY), `card`, `player`, `set`, `number`, `condition`, `population`
-
-**Response:** `200 OK` — `GlobalImportResult`
-```json
-{
-  "allocated": 10,
-  "refreshed": 5,
-  "unmatched": 2,
-  "ambiguous": 1,
-  "skipped": 0,
-  "failed": 0,
-  "results": [
-    { "certNumber": "12345678", "status": "allocated", "campaignId": "uuid", "campaignName": "Q1" }
-  ]
-}
-```
-
----
-
 ### `POST /api/purchases/import-psa`
 
 Auth: RequireAuth
@@ -1006,20 +952,6 @@ Optional columns: `price paid`, `date` (M/D/YYYY), `invoice date`, `was refunded
   "results": [...]
 }
 ```
-
----
-
-### `GET /api/purchases/export-cl`
-
-Auth: RequireAuth
-
-Exports all unsold inventory as a Card Ladder import-format CSV.
-
-**Query params:** `missing_cl_only=true` (optional, export only items without CL values)
-
-**Response:** `200 OK` with `Content-Type: text/csv`, `Content-Disposition: attachment; filename="card_ladder_import.csv"`
-
-CSV columns: `Date Purchased`, `Cert #`, `Grader`, `Investment`, `Estimated Value`, `Notes`, `Date Sold`, `Sold Price`
 
 ---
 

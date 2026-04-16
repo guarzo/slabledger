@@ -40,10 +40,7 @@ type MockInventoryService struct {
 	GetGlobalInventoryAgingFn   func(ctx context.Context) (*inventory.InventoryResult, error)
 	GetFlaggedInventoryFn       func(ctx context.Context) ([]inventory.AgingItem, error)
 	RefreshCrackCandidatesFn    func(ctx context.Context) error
-	RefreshCLValuesGlobalFn     func(ctx context.Context, rows []inventory.CLExportRow) (*inventory.GlobalCLRefreshResult, error)
-	ImportCLExportGlobalFn      func(ctx context.Context, rows []inventory.CLExportRow) (*inventory.GlobalImportResult, error)
 	ImportPSAExportGlobalFn     func(ctx context.Context, rows []inventory.PSAExportRow) (*inventory.PSAImportResult, error)
-	ExportCLFormatGlobalFn      func(ctx context.Context, missingCLOnly bool) ([]inventory.CLExportEntry, error)
 	ExportMMFormatGlobalFn      func(ctx context.Context, missingMMOnly bool) ([]inventory.MMExportEntry, error)
 	RefreshMMValuesGlobalFn     func(ctx context.Context, rows []inventory.MMRefreshRow) (*inventory.MMRefreshResult, error)
 	ReassignPurchaseFn          func(ctx context.Context, purchaseID string, newCampaignID string) error
@@ -262,27 +259,6 @@ func (m *MockInventoryService) RefreshCrackCandidates(ctx context.Context) error
 		return m.RefreshCrackCandidatesFn(ctx)
 	}
 	return nil
-}
-
-func (m *MockInventoryService) RefreshCLValuesGlobal(ctx context.Context, rows []inventory.CLExportRow) (*inventory.GlobalCLRefreshResult, error) {
-	if m.RefreshCLValuesGlobalFn != nil {
-		return m.RefreshCLValuesGlobalFn(ctx, rows)
-	}
-	return &inventory.GlobalCLRefreshResult{}, nil
-}
-
-func (m *MockInventoryService) ImportCLExportGlobal(ctx context.Context, rows []inventory.CLExportRow) (*inventory.GlobalImportResult, error) {
-	if m.ImportCLExportGlobalFn != nil {
-		return m.ImportCLExportGlobalFn(ctx, rows)
-	}
-	return &inventory.GlobalImportResult{}, nil
-}
-
-func (m *MockInventoryService) ExportCLFormatGlobal(ctx context.Context, missingCLOnly bool) ([]inventory.CLExportEntry, error) {
-	if m.ExportCLFormatGlobalFn != nil {
-		return m.ExportCLFormatGlobalFn(ctx, missingCLOnly)
-	}
-	return []inventory.CLExportEntry{}, nil
 }
 
 func (m *MockInventoryService) ExportMMFormatGlobal(ctx context.Context, missingMMOnly bool) ([]inventory.MMExportEntry, error) {

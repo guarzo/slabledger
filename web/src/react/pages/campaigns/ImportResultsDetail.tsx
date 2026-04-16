@@ -1,15 +1,15 @@
 import { useState, useMemo, useEffect } from 'react';
 import { api } from '../../../js/api';
-import type { Campaign, GlobalImportItemResult } from '../../../types/campaigns';
-import { formatCents, getErrorMessage } from '../../utils/formatters';
+import type { Campaign, PSAImportItemResult } from '../../../types/campaigns';
+import { getErrorMessage } from '../../utils/formatters';
 import { isAPIError } from '../../../js/api';
 
-interface ActionableItem extends GlobalImportItemResult {
+interface ActionableItem extends PSAImportItemResult {
   rowId: string;
 }
 
 interface ImportResultsDetailProps {
-  results: GlobalImportItemResult[];
+  results: PSAImportItemResult[];
   campaigns: Campaign[];
   onItemResolved: () => void;
 }
@@ -39,7 +39,7 @@ export default function ImportResultsDetail({ results, campaigns, onItemResolved
 
   if (actionable.length === 0) return null;
 
-  function getCampaignOptions(item: GlobalImportItemResult): Campaign[] {
+  function getCampaignOptions(item: PSAImportItemResult): Campaign[] {
     if (item.status === 'ambiguous' && item.candidates) {
       return item.candidates
         .map(id => campaignMap[id])
@@ -49,12 +49,12 @@ export default function ImportResultsDetail({ results, campaigns, onItemResolved
   }
 
   function canAssign(item: ActionableItem): boolean {
-    return !!selected[item.rowId] && submitting !== item.rowId && item.buyCostCents != null && item.grade != null;
+    return !!selected[item.rowId] && submitting !== item.rowId && item.grade != null;
   }
 
   async function handleAssign(item: ActionableItem) {
     const targetId = selected[item.rowId];
-    if (!targetId || item.buyCostCents == null) return;
+    if (!targetId) return;
     if (item.grade == null) {
       setResolved(prev => ({ ...prev, [item.rowId]: 'error: Grade is required' }));
       return;
@@ -68,12 +68,8 @@ export default function ImportResultsDetail({ results, campaigns, onItemResolved
         cardName: item.cardName ?? '',
         certNumber: item.certNumber,
         gradeValue: item.grade,
-        buyCostCents: item.buyCostCents,
-        ...(item.clValueCents != null && { clValueCents: item.clValueCents }),
         psaSourcingFeeCents: campaign.psaSourcingFeeCents,
-        purchaseDate: item.purchaseDate ?? new Date().toLocaleDateString('en-CA'),
-        setName: item.setName,
-        cardNumber: item.cardNumber,
+        purchaseDate: new Date().toLocaleDateString('en-CA'),
         population: item.population,
       });
       setResolved(prev => ({ ...prev, [item.rowId]: 'ok' }));
@@ -103,7 +99,6 @@ export default function ImportResultsDetail({ results, campaigns, onItemResolved
               <th className="text-left py-1 px-2 text-[var(--text-muted)]">Cert #</th>
               <th className="text-left py-1 px-2 text-[var(--text-muted)]">Card</th>
               <th className="text-center py-1 px-2 text-[var(--text-muted)]">Grade</th>
-              <th className="text-right py-1 px-2 text-[var(--text-muted)]">Cost</th>
               <th className="text-center py-1 px-2 text-[var(--text-muted)]">Status</th>
               <th className="text-left py-1 px-2 text-[var(--text-muted)]">Campaign</th>
               <th className="py-1 px-2"></th>
@@ -119,9 +114,6 @@ export default function ImportResultsDetail({ results, campaigns, onItemResolved
                   <td className="py-1.5 px-2 text-[var(--text-muted)]">{item.certNumber}</td>
                   <td className="py-1.5 px-2 text-[var(--text)]">{item.cardName}</td>
                   <td className="py-1.5 px-2 text-center text-[var(--text)]">{item.grade || '-'}</td>
-                  <td className="py-1.5 px-2 text-right text-[var(--text)]">
-                    {item.buyCostCents ? formatCents(item.buyCostCents) : '-'}
-                  </td>
                   <td className="py-1.5 px-2 text-center">
                     {status === 'ok' ? (
                       <span className="text-[var(--success)]">Assigned</span>
