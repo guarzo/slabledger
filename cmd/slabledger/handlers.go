@@ -166,6 +166,7 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 			Reconciler:        reconciler,
 			OrdersIngester:    ordersIngester, // nil-safe; handler returns 503 if unwired
 			// TODO(task-24): inject event recorder (dhevents.Recorder) for dismiss/select-match events
+			// TODO(task-24): wire SyncStateReader and EventCountsStore for orders-ingest health fields
 		})
 		logger.Info(ctx, "DH handler initialized")
 	}

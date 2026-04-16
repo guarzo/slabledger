@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	"github.com/guarzo/slabledger/internal/adapters/scheduler"
@@ -106,6 +107,16 @@ type DHOrdersIngester interface {
 	RunOnce(ctx context.Context, since string) (*scheduler.DHOrdersPollSummary, error)
 }
 
+// SyncStateReader reads sync state values. Satisfied by *sqlite.SyncStateRepository.
+type SyncStateReader interface {
+	Get(ctx context.Context, key string) (string, error)
+}
+
+// EventCountsStore provides aggregate event counts. Satisfied by *sqlite.DHEventStore.
+type EventCountsStore interface {
+	CountByTypeSince(ctx context.Context, t dhevents.Type, since time.Time) (int, error)
+}
+
 // DHHandler handles DH bulk match, export, intelligence, and suggestions endpoints.
 type DHHandler struct {
 	certResolver      DHCertResolver
@@ -127,8 +138,10 @@ type DHHandler struct {
 	countsFetcher     DHCountsFetcher  // optional: DH inventory/order counts
 	dhApproveService  DHApproveService // optional: approve held pushes + push config
 	matchConfirmer    DHMatchConfirmer // optional: confirms matches with DH for learning
-	ordersIngester    DHOrdersIngester // optional: POST /api/dh/ingest-orders manual trigger
+	ordersIngester    DHOrdersIngester  // optional: POST /api/dh/ingest-orders manual trigger
 	eventRec          dhevents.Recorder // optional: records DH state-change events
+	syncStateReader   SyncStateReader   // optional: reads dh_orders_last_poll timestamp
+	eventCountsStore  EventCountsStore  // optional: 24h event counts for orders ingest health
 
 	reconciler dhlisting.Reconciler // optional: DH inventory reconciliation
 
@@ -172,6 +185,8 @@ type DHHandlerDeps struct {
 	Reconciler        dhlisting.Reconciler // optional: DH inventory reconciliation
 	OrdersIngester    DHOrdersIngester     // optional: enables POST /api/dh/ingest-orders
 	EventRecorder     dhevents.Recorder    // optional: records DH state-change events
+	SyncStateReader   SyncStateReader      // optional: reads dh_orders_last_poll timestamp
+	EventCountsStore  EventCountsStore     // optional: 24h event counts for orders ingest health
 }
 
 // NewDHHandler creates a new DHHandler with the given dependencies.
@@ -204,6 +219,8 @@ func NewDHHandler(deps DHHandlerDeps) *DHHandler {
 		reconciler:        deps.Reconciler,
 		ordersIngester:    deps.OrdersIngester,
 		eventRec:          deps.EventRecorder,
+		syncStateReader:   deps.SyncStateReader,
+		eventCountsStore:  deps.EventCountsStore,
 	}
 	h.bulkMatchError.Store("")
 	return h
