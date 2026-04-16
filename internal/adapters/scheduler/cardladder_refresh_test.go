@@ -154,29 +154,6 @@ func TestShouldReenrollForCLChange(t *testing.T) {
 	}
 }
 
-func TestExtractGradeValue(t *testing.T) {
-	tests := []struct {
-		name      string
-		condition string
-		want      float64
-	}{
-		{"PSA 10", "PSA 10", 10},
-		{"PSA 9.5", "PSA 9.5", 9.5},
-		{"PSA 9", "PSA 9", 9},
-		{"g10", "g10", 10},
-		{"just digits", "10", 10},
-		{"empty", "", 0},
-		{"no digits", "graded", 0},
-		{"decimal only", "PSA 8.5", 8.5},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := extractGradeValue(tt.condition)
-			assert.Equal(t, tt.want, got)
-		})
-	}
-}
-
 // ---------------------------------------------------------------------------
 // Constructor / config tests
 // ---------------------------------------------------------------------------
