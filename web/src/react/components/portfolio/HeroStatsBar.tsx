@@ -45,15 +45,15 @@ export default function HeroStatsBar({ health, capital }: HeroStatsBarProps) {
         <div className="flex flex-wrap gap-6 pb-1">
           <div>
             <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Deployed</div>
-            <div className="text-base font-semibold text-[#cbd5e1]">{formatCents(health.totalDeployedCents ?? 0)}</div>
+            <div className="text-base font-semibold text-[var(--text)]">{formatCents(health.totalDeployedCents ?? 0)}</div>
           </div>
           <div>
             <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Recovered</div>
-            <div className="text-base font-semibold text-[#cbd5e1]">{formatCents(health.totalRecoveredCents ?? 0)}</div>
+            <div className="text-base font-semibold text-[var(--text)]">{formatCents(health.totalRecoveredCents ?? 0)}</div>
           </div>
           <div>
             <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">At Risk</div>
-            <div className="text-base font-semibold text-[#cbd5e1]">{formatCents(health.totalAtRiskCents ?? 0)}</div>
+            <div className="text-base font-semibold text-[var(--text)]">{formatCents(health.totalAtRiskCents ?? 0)}</div>
           </div>
           {capital && (
             <>
@@ -70,13 +70,17 @@ export default function HeroStatsBar({ health, capital }: HeroStatsBarProps) {
               </div>
               <div>
                 <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Outstanding</div>
-                <div className="text-base font-semibold text-[#cbd5e1]">{formatCents(capital.outstandingCents)}</div>
+                <div className={`text-base font-semibold ${
+                  capital.alertLevel === 'critical' ? 'text-[var(--danger)]'
+                    : capital.alertLevel === 'warning' ? 'text-[var(--warning)]'
+                    : 'text-[var(--text)]'
+                }`}>{formatCents(capital.outstandingCents)}</div>
               </div>
               {capital.recoveryRate30dCents > 0 && (
                 <div>
                   <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">30d Recovery</div>
                   <div className="flex items-center gap-1">
-                    <span className="text-base font-semibold text-[#cbd5e1]">{formatCents(capital.recoveryRate30dCents)}</span>
+                    <span className="text-base font-semibold text-[var(--text)]">{formatCents(capital.recoveryRate30dCents)}</span>
                     <TrendArrow trend={trendToArrow[capital.recoveryTrend]} />
                   </div>
                 </div>
