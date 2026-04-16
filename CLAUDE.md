@@ -39,7 +39,7 @@ internal/
     portfolio/      # Inventory aging, price signals, portfolio health analysis
     tuning/         # Campaign parameter optimization, tuning suggestions and analytics
     finance/        # Invoices, cashflow, capital tracking, revocation flags
-    export/         # Sell sheet, eBay CSV, Shopify price sync
+    export/         # Sell sheet generation
     dhlisting/      # DH listing push pipeline coordination
     advisor/        # AI advisor interfaces, tool loop, tracking
     ai/             # LLM provider, image generation, tool executor interfaces
@@ -96,7 +96,7 @@ The inventory domain (`internal/domain/inventory/`) is the core campaigns and in
 - **portfolio**: Inventory aging, price signals, portfolio health analysis
 - **tuning**: Campaign parameter optimization, tuning suggestions and analytics
 - **finance**: Invoices, cashflow forecasting, capital tracking, revocation flags
-- **export**: Sell sheet generation, eBay CSV, Shopify price sync
+- **export**: Sell sheet generation
 - **dhlisting**: DH listing push pipeline coordination
 
 ## Database

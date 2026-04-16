@@ -4,17 +4,11 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"sort"
 	"time"
 
-	"github.com/guarzo/slabledger/internal/domain/intelligence"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
-	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/domain/timeutil"
 )
-
-// grossModeFee signals enrichSellSheetItem to skip fee deduction, returning gross prices.
-const grossModeFee = -1.0
 
 // --- Sell Sheet ---
 
@@ -80,8 +74,7 @@ func (s *service) enrichSellSheetItem(_ context.Context, purchase *inventory.Pur
 	item.RecommendedChannel, item.ChannelLabel = recommendChannel(purchase.GradeValue, item.CurrentMarket, item.Signals)
 
 	// Deduct marketplace fees for eBay/TCGPlayer channels to project net revenue.
-	// grossModeFee skips fee deduction (used by price sync to return gross prices).
-	if ebayFeePct != grossModeFee && item.TargetSellPrice > 0 && inventory.NormalizeChannel(item.RecommendedChannel) == inventory.SaleChannelEbay {
+	if item.TargetSellPrice > 0 && inventory.NormalizeChannel(item.RecommendedChannel) == inventory.SaleChannelEbay {
 		item.TargetSellPrice -= int(math.Round(float64(item.TargetSellPrice) * ebayFeePct))
 	}
 
@@ -286,177 +279,4 @@ func computeTargetPrice(snapshot *inventory.MarketSnapshot, recommendation strin
 	default:
 		return snapshot.MedianCents
 	}
-}
-
-// MatchShopifyPrices matches Shopify CSV items against inventory by cert number
-// and returns suggested market-based prices (gross, no fee deduction).
-func (s *service) MatchShopifyPrices(ctx context.Context, items []inventory.ShopifyPriceSyncItem) (*inventory.ShopifyPriceSyncResponse, error) {
-	// Collect all cert numbers for a single grader-agnostic batch lookup
-	certs := make([]string, len(items))
-	for i, item := range items {
-		certs[i] = item.CertNumber
-	}
-	purchaseMap, err := s.repo.GetPurchasesByCertNumbers(ctx, certs)
-	if err != nil {
-		return nil, fmt.Errorf("lookup purchases by cert: %w", err)
-	}
-
-	resp := &inventory.ShopifyPriceSyncResponse{}
-	for _, item := range items {
-		purchase, ok := purchaseMap[item.CertNumber]
-		if !ok {
-			resp.Unmatched = append(resp.Unmatched, item.CertNumber)
-			continue
-		}
-
-		// Enrich with sell sheet logic — gross price (no fee deduction) for price sync comparison
-		sellItem, hasMarket := s.enrichSellSheetItem(ctx, purchase, "", grossModeFee, nil)
-
-		match := inventory.ShopifyPriceSyncMatch{
-			CertNumber:            item.CertNumber,
-			CardName:              sellItem.CardName,
-			SetName:               sellItem.SetName,
-			CardNumber:            sellItem.CardNumber,
-			Grade:                 sellItem.Grade,
-			Grader:                sellItem.Grader,
-			CurrentPriceCents:     item.CurrentPriceCents,
-			SuggestedPriceCents:   sellItem.TargetSellPrice,
-			MinimumPriceCents:     sellItem.MinimumAcceptPrice,
-			CostBasisCents:        sellItem.CostBasisCents,
-			CLValueCents:          sellItem.CLValueCents,
-			Recommendation:        sellItem.Recommendation,
-			HasMarketData:         hasMarket,
-			OverridePriceCents:    purchase.OverridePriceCents,
-			OverrideSource:        purchase.OverrideSource,
-			AISuggestedPriceCents: purchase.AISuggestedPriceCents,
-		}
-		if sellItem.CurrentMarket != nil {
-			match.MarketPriceCents = sellItem.CurrentMarket.MedianCents
-			match.LastSoldCents = sellItem.CurrentMarket.LastSoldCents
-		}
-
-		// Compute recommended price using resolution hierarchy
-		recPrice, recSource := recommendedPrice(purchase, sellItem.CurrentMarket)
-		match.RecommendedPriceCents = recPrice
-		match.RecommendedSource = recSource
-		match.ReviewedAt = purchase.ReviewedAt
-
-		if item.CurrentPriceCents > 0 && match.SuggestedPriceCents > 0 {
-			match.PriceDeltaPct = float64(match.SuggestedPriceCents-item.CurrentPriceCents) / float64(item.CurrentPriceCents)
-		}
-		resp.Matched = append(resp.Matched, match)
-	}
-
-	if resp.Unmatched == nil {
-		resp.Unmatched = []string{}
-	}
-	if resp.Matched == nil {
-		resp.Matched = []inventory.ShopifyPriceSyncMatch{}
-	}
-
-	// Batch-enrich with DH market intelligence (best-effort — skip on error)
-	if s.intelRepo != nil && len(resp.Matched) > 0 {
-		keys := make([]intelligence.CardKey, len(resp.Matched))
-		for i, m := range resp.Matched {
-			keys[i] = intelligence.CardKey{
-				CardName:   m.CardName,
-				SetName:    m.SetName,
-				CardNumber: m.CardNumber,
-			}
-		}
-		if intelMap, err := s.intelRepo.GetByCards(ctx, keys); err == nil {
-			for i := range resp.Matched {
-				if mi, ok := intelMap[keys[i]]; ok {
-					resp.Matched[i].Intel = convertIntel(mi)
-				}
-			}
-		} else if s.logger != nil {
-			s.logger.Warn(ctx, "intel enrichment failed", observability.Err(err))
-		}
-	}
-
-	return resp, nil
-}
-
-// recommendedPrice resolves the recommended price for a purchase using the hierarchy:
-// 1. User-reviewed price (if set)
-// 2. CL value (if > 0)
-// 3. Market median (if > 0)
-func recommendedPrice(p *inventory.Purchase, snapshot *inventory.MarketSnapshot) (int, string) {
-	if p.ReviewedPriceCents > 0 {
-		return p.ReviewedPriceCents, "user_reviewed"
-	}
-	if p.CLValueCents > 0 {
-		return p.CLValueCents, "card_ladder"
-	}
-	if snapshot != nil && snapshot.MedianCents > 0 {
-		return snapshot.MedianCents, "market"
-	}
-	return 0, ""
-}
-
-// convertIntel converts a domain MarketIntelligence into the API-facing PriceSyncIntel.
-// Returns nil if the input is nil.
-func convertIntel(mi *intelligence.MarketIntelligence) *inventory.PriceSyncIntel {
-	if mi == nil {
-		return nil
-	}
-	out := &inventory.PriceSyncIntel{
-		FetchedAt: mi.FetchedAt.Format(time.RFC3339),
-	}
-	if mi.Sentiment != nil {
-		out.SentimentScore = mi.Sentiment.Score
-		out.SentimentTrend = mi.Sentiment.Trend
-		out.SentimentMentions = mi.Sentiment.MentionCount
-	}
-	if mi.Forecast != nil {
-		out.ForecastCents = mi.Forecast.PredictedPriceCents
-		out.ForecastConfidence = mi.Forecast.Confidence
-		if !mi.Forecast.ForecastDate.IsZero() {
-			out.ForecastDate = mi.Forecast.ForecastDate.Format(time.RFC3339)
-		}
-	}
-	if mi.Insights != nil {
-		out.InsightHeadline = mi.Insights.Headline
-		out.InsightDetail = mi.Insights.Detail
-	}
-
-	// Recent sales — last 5, newest first (defensive copy to avoid mutating input)
-	recentSales := make([]intelligence.Sale, len(mi.RecentSales))
-	copy(recentSales, mi.RecentSales)
-	sort.Slice(recentSales, func(i, j int) bool {
-		return recentSales[i].SoldAt.After(recentSales[j].SoldAt)
-	})
-	out.RecentSalesCount = len(recentSales)
-	limit := min(5, len(recentSales))
-	for i := 0; i < limit; i++ {
-		sale := recentSales[i]
-		out.RecentSales = append(out.RecentSales, inventory.PriceSyncSale{
-			SoldAt:     sale.SoldAt.Format(time.RFC3339),
-			Grade:      sale.Grade,
-			PriceCents: sale.PriceCents,
-			Platform:   sale.Platform,
-		})
-	}
-
-	// Population — PSA entries only
-	for _, p := range mi.Population {
-		if p.GradingCompany == "PSA" {
-			out.Population = append(out.Population, inventory.PriceSyncPop{
-				Grade: p.Grade,
-				Count: p.Count,
-			})
-		}
-	}
-
-	// Grading ROI
-	for _, r := range mi.GradingROI {
-		out.GradingROI = append(out.GradingROI, inventory.PriceSyncROI{
-			Grade:        r.Grade,
-			AvgSaleCents: r.AvgSaleCents,
-			ROI:          r.ROI,
-		})
-	}
-
-	return out
 }

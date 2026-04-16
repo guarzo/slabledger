@@ -20,9 +20,6 @@ type ExportReader interface {
 	// Purchases (from PurchaseRepository)
 	GetPurchasesByIDs(ctx context.Context, purchaseIDs []string) (map[string]*inventory.Purchase, error)
 	ListAllUnsoldPurchases(ctx context.Context) ([]inventory.Purchase, error)
-	ListEbayFlaggedPurchases(ctx context.Context) ([]inventory.Purchase, error)
-	ClearEbayExportFlags(ctx context.Context, purchaseIDs []string) error
-	GetPurchasesByCertNumbers(ctx context.Context, certNumbers []string) (map[string]*inventory.Purchase, error)
 	// Campaigns
 	GetCampaign(ctx context.Context, id string) (*inventory.Campaign, error)
 	ListCampaigns(ctx context.Context, activeOnly bool) ([]inventory.Campaign, error)

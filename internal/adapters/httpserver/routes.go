@@ -169,8 +169,6 @@ func (rt *Router) registerCampaignRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /api/purchases/import-certs", authRoute(rt.campaignsHandler.HandleImportCerts))
 	mux.Handle("POST /api/purchases/scan-cert", authRoute(rt.campaignsHandler.HandleScanCert))
 	mux.Handle("POST /api/purchases/resolve-cert", authRoute(rt.campaignsHandler.HandleResolveCert))
-	mux.Handle("GET /api/purchases/export-ebay", authRoute(rt.campaignsHandler.HandleListEbayExport))
-	mux.Handle("POST /api/purchases/export-ebay/generate", authRoute(rt.campaignsHandler.HandleGenerateEbayCSV))
 	mux.Handle("PATCH /api/purchases/{purchaseId}/campaign", authRoute(rt.campaignsHandler.HandleReassignPurchase))
 	mux.Handle("PATCH /api/purchases/{purchaseId}/buy-cost", authRoute(rt.campaignsHandler.HandleUpdateBuyCost))
 
@@ -209,14 +207,10 @@ func (rt *Router) registerCampaignRoutes(mux *http.ServeMux) {
 	// Cert lookup endpoint
 	mux.Handle("GET /api/certs/{certNumber}", authRoute(rt.campaignsHandler.HandleCertLookup))
 
-	// Shopify price sync
-	mux.Handle("POST /api/shopify/price-sync", authRoute(rt.campaignsHandler.HandleShopifyPriceSync))
-
 	// SPA routing for campaign deep links and portfolio pages
 	mux.HandleFunc("/campaigns/", rt.spaHandler.HandleIndex)
 	mux.HandleFunc("/insights", rt.spaHandler.HandleIndex)
 	mux.HandleFunc("/suggestions", rt.spaHandler.HandleIndex)
-	mux.HandleFunc("/shopify-sync", rt.spaHandler.HandleIndex)
 
 	rt.logger.Info(context.Background(), "campaign routes registered")
 }

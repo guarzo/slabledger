@@ -440,34 +440,3 @@ func (h *CampaignsHandler) HandleCreatePriceFlag(w http.ResponseWriter, r *http.
 		"flaggedAt": time.Now().Format(time.RFC3339),
 	})
 }
-
-// HandleShopifyPriceSync handles POST /api/shopify/price-sync.
-func (h *CampaignsHandler) HandleShopifyPriceSync(w http.ResponseWriter, r *http.Request) {
-	if h.exportService == nil {
-		writeError(w, http.StatusServiceUnavailable, "Export service not available")
-		return
-	}
-
-	var req struct {
-		Items []inventory.ShopifyPriceSyncItem `json:"items"`
-	}
-	if !decodeBody(w, r, &req) {
-		return
-	}
-	if len(req.Items) == 0 {
-		writeError(w, http.StatusBadRequest, "At least one item is required")
-		return
-	}
-	const maxShopifyPriceSyncItems = 5000
-	if len(req.Items) > maxShopifyPriceSyncItems {
-		writeError(w, http.StatusBadRequest, fmt.Sprintf("Too many items (max %d)", maxShopifyPriceSyncItems))
-		return
-	}
-	resp, ok := serviceCall(w, r.Context(), h.logger, "shopify price sync failed", func() (*inventory.ShopifyPriceSyncResponse, error) {
-		return h.exportService.MatchShopifyPrices(r.Context(), req.Items)
-	})
-	if !ok {
-		return
-	}
-	writeJSON(w, http.StatusOK, resp)
-}

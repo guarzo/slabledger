@@ -1087,56 +1087,6 @@ Remove the sale record for a purchase, returning the item to unsold inventory.
 
 ---
 
-### `GET /api/purchases/export-ebay`
-
-Auth: RequireAuth
-
-Returns unsold inventory items for eBay export review.
-
-**Query params:** `flagged_only=true` (optional)
-
-**Response:** `200 OK` — `EbayExportListResponse`
-```json
-{
-  "items": [
-    {
-      "purchaseId": "uuid",
-      "certNumber": "12345678",
-      "cardName": "Charizard",
-      "setName": "Base Set",
-      "gradeValue": 10,
-      "grader": "PSA",
-      "clValueCents": 120000,
-      "marketMedianCents": 115000,
-      "suggestedPriceCents": 120000,
-      "hasCLValue": true,
-      "hasMarketData": true
-    }
-  ]
-}
-```
-
----
-
-### `POST /api/purchases/export-ebay/generate`
-
-Auth: RequireAuth
-
-Generates an eBay bulk listing CSV file.
-
-**Body:**
-```json
-{
-  "items": [
-    { "purchaseId": "uuid", "priceCents": 130000 }
-  ]
-}
-```
-
-**Response:** `200 OK` with `Content-Type: text/csv`, `Content-Disposition: attachment; filename=ebay_import.csv`
-
----
-
 ### `PATCH /api/purchases/{purchaseId}/campaign`
 
 Auth: RequireAuth
@@ -1555,45 +1505,6 @@ Looks up a PSA cert number and returns card info plus current market snapshot.
 ```
 
 **Errors:** `404` cert lookup failed
-
----
-
-### `POST /api/shopify/price-sync`
-
-Auth: RequireAuth
-
-Matches Shopify inventory items against internal purchases and returns price recommendations.
-
-**Body:**
-```json
-{
-  "items": [
-    { "certNumber": "12345678", "grader": "PSA", "currentPriceCents": 120000 }
-  ]
-}
-```
-Max 5,000 items.
-
-**Response:** `200 OK` — `ShopifyPriceSyncResponse`
-```json
-{
-  "matched": [
-    {
-      "certNumber": "12345678",
-      "cardName": "Charizard",
-      "grade": 10,
-      "currentPriceCents": 120000,
-      "suggestedPriceCents": 130000,
-      "minimumPriceCents": 90000,
-      "recommendation": "Increase price",
-      "priceDeltaPct": 0.083
-    }
-  ],
-  "unmatched": []
-}
-```
-
-**Errors:** `400` no items / too many items (>5000)
 
 ---
 
