@@ -160,11 +160,17 @@ export default function OverviewTab({
 
           {fillRate.length > 0 && expectedFillRate && (() => {
             const avgFillRatePct = fillRate.reduce((sum, d) => sum + (d.fillRatePct ?? 0), 0) / fillRate.length;
+            const actualPct = avgFillRatePct * 100;
+            const fillColor = actualPct >= expectedFillRate
+              ? 'text-[var(--success)]'
+              : actualPct >= expectedFillRate * 0.75
+              ? 'text-[var(--warning)]'
+              : 'text-[var(--danger)]';
             return (
               <div className="p-3 bg-[var(--surface-1)] rounded-xl border border-[var(--surface-2)]">
                 <h3 className="text-sm font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">Fill Rate vs Target</h3>
                 <div className="flex items-center gap-4 text-sm">
-                  <div><span className="text-[var(--text-muted)]">Actual:</span> <span className="text-[var(--text)] font-medium">{(avgFillRatePct * 100).toFixed(1)}%</span></div>
+                  <div><span className="text-[var(--text-muted)]">Actual:</span> <span className={`font-medium ${fillColor}`}>{actualPct.toFixed(1)}%</span></div>
                   <div><span className="text-[var(--text-muted)]">Expected:</span> <span className="text-[var(--text)] font-medium">{expectedFillRate}%</span></div>
                 </div>
               </div>

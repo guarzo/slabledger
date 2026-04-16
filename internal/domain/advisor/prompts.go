@@ -261,4 +261,3 @@ Format guidelines:
 - Use markdown tables as specified above.
 - Be specific: cert, cost, target prices, freed capital in dollars.
 - Do NOT add any H2 headings beyond the five listed above.`
-

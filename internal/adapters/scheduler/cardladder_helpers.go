@@ -14,11 +14,11 @@ import (
 
 // CL failure reason tags. Short, stable strings used by the /failures admin endpoint.
 const (
-	CLReasonNoImageMatch     = "no_image_match"
-	CLReasonNoCertMatch      = "no_cert_match"
-	CLReasonNoValue          = "no_value"
-	CLReasonAPIError         = "api_error"
-	CLReasonCatalogFallback  = "catalog_fallback"
+	CLReasonNoImageMatch    = "no_image_match"
+	CLReasonNoCertMatch     = "no_cert_match"
+	CLReasonNoValue         = "no_value"
+	CLReasonAPIError        = "api_error"
+	CLReasonCatalogFallback = "catalog_fallback"
 )
 
 // fetchCatalogFallbackValue queries the CL cards catalog (grade-specific) for a

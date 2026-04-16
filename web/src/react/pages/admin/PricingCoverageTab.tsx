@@ -36,8 +36,8 @@ export function PricingCoverageTab({ enabled = true }: { enabled?: boolean }) {
         <SummaryCard label="Inventory Cards" value={totalUnsold} />
         <SummaryCard label="DH Mapped" value={totalMappedCards} color={dhColor} />
         <SummaryCard label="Unmapped" value={unmappedCards} color={unmappedCards > 0 ? 'var(--warning)' : undefined} />
-        <SummaryCard label="CL Priced" value={`${clPricedCards} / ${totalUnsold}`} color={clPricedCards > 0 ? 'var(--success)' : 'var(--text-muted)'} />
-        <SummaryCard label="MM Priced" value={`${mmPricedCards} / ${totalUnsold}`} color={mmPricedCards > 0 ? 'var(--success)' : 'var(--text-muted)'} />
+        <SummaryCard label="CL Priced" value={`${clPricedCards} / ${totalUnsold}`} color="var(--text-muted)" />
+        <SummaryCard label="MM Priced" value={`${mmPricedCards} / ${totalUnsold}`} color="var(--text-muted)" />
       </div>
 
       {/* Recent failure patterns */}
