@@ -17,19 +17,6 @@ const (
 	FactorCoverageImpact  = "coverage_impact"
 )
 
-var PurchaseAssessmentProfile = WeightProfile{
-	Name: "purchase_assessment",
-	Weights: []FactorWeight{
-		{Name: FactorROIPotential, Weight: 0.25},
-		{Name: FactorMarketTrend, Weight: 0.20},
-		{Name: FactorLiquidity, Weight: 0.20},
-		{Name: FactorPortfolioFit, Weight: 0.15},
-		{Name: FactorGradeFit, Weight: 0.10},
-		{Name: FactorScarcity, Weight: 0.05},
-		{Name: FactorMarketAlignment, Weight: 0.05},
-	},
-}
-
 var CampaignAnalysisProfile = WeightProfile{
 	Name: "campaign_analysis",
 	Weights: []FactorWeight{

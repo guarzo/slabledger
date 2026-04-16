@@ -230,6 +230,7 @@ type Purchase struct {
 	CardVariation string `json:"cardVariation,omitempty"` // Card variation (e.g. "Holo Rare", "1st Edition")
 	CardCategory  string `json:"cardCategory,omitempty"`  // Sport/category (e.g. "Pokemon", "Basketball")
 	CLSyncedAt    string `json:"clSyncedAt,omitempty"`    // When card was last synced to CL collection (RFC3339)
+	CLLastError   string `json:"clLastError,omitempty"`   // Last CL mapping/pricing failure reason tag (e.g. "no_value", "catalog_fallback")
 
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`

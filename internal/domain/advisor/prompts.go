@@ -72,7 +72,19 @@ call at most 1-2 targeted tools (get_campaign_tuning, get_campaign_pnl).
 Do NOT call get_campaign_tuning or get_campaign_pnl for every campaign — that data is already
 summarized in get_dashboard_summary and get_portfolio_insights.
 
-**After your tool rounds, write your report immediately. Do NOT make additional tool calls.**`
+**After your tool rounds, write your report immediately. Do NOT make additional tool calls.**
+
+## Output Format — Required Section Schema
+Your report MUST use EXACTLY these six H2 headings in this exact order, with no additions, renames, or omissions. The frontend parses these headings to render each section as its own card. Extra H2s, misspelled headings, or missing sections will break the UI.
+
+## Executive Summary
+## Top Actions
+## Portfolio Performance
+## Capital & Cashflow
+## Portfolio Health
+## Watchlist & Alerts
+
+Do not add any H2 headings beyond this set. Use H3 and lower as needed within each section.`
 
 const digestUserPrompt = `Generate my weekly intelligence digest. Fetch current data on:
 1. Weekly performance (week-over-week changes)
@@ -81,19 +93,31 @@ const digestUserPrompt = `Generate my weekly intelligence digest. Fetch current 
 4. Inventory signals (flagged cards needing action)
 5. Arbitrage opportunities (acquisition targets and deslab candidates)
 
-Structure your report as:
-1. **Executive Summary** — 2-3 sentence overview of this week
-2. **Performance** — purchases, spend, sales, revenue, profit vs last week
-3. **Cash Flow** — outstanding balance, 30d recovery rate, weeks to cover, recovery trend, unpaid invoices
-4. **Top Actions** — 3-5 specific prioritized recommendations
-5. **Segment Insights** — outperformers and underperformers by character/grade/era
-6. **Watch List** — cards flagged by inventory signals (stale, markdown, profit capture) plus any segments needing attention
-7. **Arbitrage Opportunities** — top acquisition targets (buy raw, grade for profit) and deslab candidates (sell raw beats selling graded)
+Structure your report using these six H2 sections, in this exact order:
+
+## Executive Summary
+2-3 sentence overview of this week — the single most important thing to know.
+
+## Top Actions
+3-5 specific prioritized recommendations for the next 7 days. Bulleted list. Each action names the card/campaign, the action, and the expected outcome in dollars.
+
+## Portfolio Performance
+Purchases, spend, sales, revenue, profit vs last week. Markdown table of best/worst profit contributors: | Card | Grade | Profit | Channel |
+
+## Capital & Cashflow
+Outstanding balance, 30d recovery rate, weeks to cover, recovery trend, unpaid invoices. Flag any capital-pressure risks.
+
+## Portfolio Health
+Segment insights (character, grade, era): which segments are outperforming or underperforming, with dollar impact. Flag concentration risk.
+
+## Watchlist & Alerts
+Cards flagged by inventory signals (stale, markdown, profit capture) PLUS top acquisition targets and deslab candidates. Markdown tables grouped by category.
 
 Format guidelines:
-- Use markdown tables for any list of cards, contributors, or comparable data (e.g. best profit contributors, weakest sales, watch list cards). Example: | Card | Grade | Profit | Channel |
+- Use markdown tables for any list of cards, contributors, or comparable data. Example: | Card | Grade | Profit | Channel |
 - Keep paragraphs concise. Prefer bullet points for action items.
-- Do NOT use bold text as a substitute for structured tables when presenting ranked lists.`
+- Do NOT use bold text as a substitute for structured tables when presenting ranked lists.
+- Do NOT add any H2 headings beyond the six listed above.`
 
 // campaignAnalysisSystemPrompt is used for per-campaign health narratives.
 var campaignAnalysisSystemPrompt = baseSystemPrompt + `
@@ -112,18 +136,42 @@ All take the campaign ID. This gives you everything for the analysis.
 
 **Round 2**: Escape hatch only if a Round 1 tool failed or returned incomplete data.
 
-**After your tool rounds, write your analysis immediately. Do NOT make additional tool calls.**`
+**After your tool rounds, write your analysis immediately. Do NOT make additional tool calls.**
+
+## Output Format — Required Section Schema
+Your analysis MUST use EXACTLY these five H2 headings in this exact order, with no additions, renames, or omissions. The frontend parses these headings to render each section as its own card. Extra H2s, misspelled headings, or missing sections will break the UI.
+
+## Performance Snapshot
+## What's Working
+## What's Not
+## Tuning Recommendations
+## Inventory Position
+
+Do not add any H2 headings beyond this set. Use H3 and lower as needed within each section.`
 
 const campaignAnalysisUserPrompt = `Analyze campaign ID: %s
 
-Fetch all campaign data in one round, then provide:
-1. **Health Assessment** — Is this campaign performing as designed? ROI, sell-through, avg days to sell vs expectations.
-2. **Channel Performance** — Which channels are working? Revenue, fees, and net profit per channel.
-3. **Market Conditions** — Current market alignment for this segment (trending up/down/stable, liquidity from inventory aging data).
-4. **Tuning Recommendations** — Specific parameter adjustments (buy terms, price range, grade range, spend cap) with reasoning and expected impact.
-5. **Problem Cards** — Cards held too long, declining in value, or with negative EV. Include cert, days held, and recommended action.
-6. **Deslab Candidates** — Any cards where selling raw beats selling graded (if any found).
-7. **Opportunity** — What's working well that could be expanded.`
+Fetch all campaign data in one round, then structure your analysis using these five H2 sections, in this exact order:
+
+## Performance Snapshot
+Is this campaign performing as designed? ROI, sell-through, avg days to sell vs expectations. Channel performance (revenue, fees, net profit per channel).
+
+## What's Working
+Profitable grades/tiers, market segments aligned with the campaign thesis, pricing strategies yielding good margins. Be specific: grades, characters, dollar amounts.
+
+## What's Not
+Underperforming grades/tiers, cards held too long, declining value, negative EV. Include cert, days held where applicable.
+
+## Tuning Recommendations
+Specific parameter adjustments (buy terms, price range, grade range, spend cap) with reasoning and expected impact in dollars. Mark each as high/medium/low priority.
+
+## Inventory Position
+Aging breakdown, concentration, deslab candidates (if any), problem cards requiring immediate action.
+
+Format guidelines:
+- Use markdown tables for any list of cards or comparable data.
+- Be specific: dollar amounts, percentages, grades, characters.
+- Do NOT add any H2 headings beyond the five listed above.`
 
 // liquidationSystemPrompt is used for liquidation analysis.
 var liquidationSystemPrompt = baseSystemPrompt + `
@@ -170,7 +218,18 @@ If you have repricing recommendations, call suggest_price_batch in the same roun
 
 **Round 3**: Escape hatch for follow-up calls if needed. Prefer completing the report after Round 2.
 
-**After your tool rounds, write your analysis immediately. Do NOT make additional tool calls.**`
+**After your tool rounds, write your analysis immediately. Do NOT make additional tool calls.**
+
+## Output Format — Required Section Schema
+Your report MUST use EXACTLY these five H2 headings in this exact order, with no additions, renames, or omissions. The frontend parses these headings to render each section as its own card. Extra H2s, misspelled headings, or missing sections will break the UI.
+
+## Aggressive Markdowns
+## Auction Candidates
+## Hold / Wait
+## Dead Weight
+## Totals
+
+Do not add any H2 headings beyond this set. Use H3 and lower as needed within each section.`
 
 const liquidationUserPrompt = `Run a liquidation analysis on my flagged inventory.
 
@@ -181,113 +240,25 @@ Focus your judgment on three decisions:
 
 Do not repeat data from the flags — I can see those in the UI.
 
-Structure your report as:
-1. **Capital Position** — outstanding balance, recovery rate, weeks to cover, recovery trend, capital tied up in stale inventory
-2. **Reprice Recommendations** — table: card, current price, new price, reasoning
-3. **Auction Candidates** — table: card, why auction beats fixed, suggested start price
-4. **Markdown Actions** — table: card, cost basis, current market, recommended action, carrying cost math, capital freed
-5. **Summary** — total capital recoverable, total markdown cost, net repricing impact, suggestion stats
+Structure your report using these five H2 sections, in this exact order:
 
-End with totals: capital freed, markdown cost, and repricing count.`
+## Aggressive Markdowns
+Cards where we should drop the price fast to free capital. Table: | Card | Cost Basis | Current Market | New Price | Carrying Cost Math | Capital Freed |
 
-// purchaseAssessmentSystemPrompt is used for evaluating potential purchases.
-var purchaseAssessmentSystemPrompt = baseSystemPrompt + `
+## Auction Candidates
+Cards that will move better at auction than at a fixed price. Table: | Card | Why Auction Beats Fixed | Suggested Start Price |
 
-## Your Task: Purchase Assessment
-Evaluate whether a potential card purchase is a good buy.
-Consider: market conditions, historical performance of similar cards in this campaign,
-liquidity (how fast will it sell), and expected value.
-Give a clear BUY / CAUTION / PASS rating with reasoning.
+## Hold / Wait
+Cards that look stale on paper but where the signal is noisy or the trajectory is improving — don't act yet. Brief rationale per card, not a table.
 
-## Tool Strategy
-You have a **1-round tool budget** and 4 tools. Call all of them together:
-- get_cert_lookup — current market data for this specific card
-- get_campaign_tuning — grade/tier performance for this campaign
-- get_campaign_pnl — campaign health and ROI context
-- evaluate_purchase — pre-computed EV and profitability analysis
+## Dead Weight
+Cards worth liquidating at cost or loss to exit. Table: | Card | Cost Basis | Current Market | Recommended Action | Capital Freed |
 
-**After your tool round, write your assessment immediately.**`
+## Totals
+Running totals across the above sections: total capital recoverable, total markdown cost, net repricing impact, suggestion stats (acceptance rate, cards repriced).
 
-const purchaseAssessmentUserPrompt = `Evaluate this potential purchase:
-- **Card**: %s (Grade: PSA %s)
-- **Buy Cost**: $%.2f
-- **Campaign**: %s (ID: %s)
-- **Set**: %s
-- **Cert**: %s
-- **CL Value**: $%.2f
+Format guidelines:
+- Use markdown tables as specified above.
+- Be specific: cert, cost, target prices, freed capital in dollars.
+- Do NOT add any H2 headings beyond the five listed above.`
 
-Call all 4 tools in one round, then provide:
-1. **Rating**: BUY / CAUTION / PASS
-2. **Market Assessment**: Current price, trend, velocity, liquidity for this card/grade
-3. **Campaign Fit**: How does this grade perform in this campaign? ROI, sell-through, avg days to sell.
-4. **Expected Outcome**: Estimated profit, days to sell, recommended exit channel
-5. **Risks**: What could go wrong (CL overvaluation, low liquidity, declining market)
-6. **Verdict**: One-sentence summary`
-
-const scoreCardInjectionTemplate = `
-
-## Pre-Computed Score Card
-
-The scoring engine has analyzed this entity. Use these scores as your quantitative
-foundation. You MUST use the engine_verdict as your starting point. You may adjust
-the verdict by at most one step if you have strong qualitative reasons — if you do,
-you MUST populate adjustment_reason.
-
-Do NOT contradict factor values or confidence. Your job is to interpret the scores:
-explain WHY the factors look the way they do, identify the key insight, and produce
-actionable signals.
-
-%s
-`
-
-const structuredOutputInstruction = `
-
-## Output Format
-
-You MUST respond with valid JSON matching this schema. Do NOT include markdown formatting
-or code fences around the JSON. The response must be parseable as raw JSON.
-
-%s
-`
-
-const purchaseAssessmentSchema = `{
-  "score_card": "... echo back unchanged ...",
-  "verdict": "strong_buy | buy | lean_buy | hold | lean_sell | sell | strong_sell",
-  "adjustment_reason": "string or null — required if verdict differs from engine_verdict",
-  "key_insight": "Single most important takeaway (1 sentence)",
-  "signals": [
-    {
-      "factor": "factor_name",
-      "direction": "bullish | bearish | neutral",
-      "title": "3-5 word title",
-      "detail": "1-sentence explanation with numbers",
-      "metric": "display value like '+17.2%%' or '42 sales/mo'"
-    }
-  ],
-  "expected_roi": 0.23,
-  "portfolio_impact": {
-    "character_concentration": "low | medium | high",
-    "grade_concentration": "low | medium | high",
-    "campaign_grade_roi": 0.18
-  },
-  "grade_fit": {
-    "grade": "PSA 10",
-    "campaign_avg_roi_for_grade": 0.15,
-    "campaign_sell_through_for_grade": 0.72
-  }
-}`
-
-const campaignAnalysisSchema = `{
-  "score_card": "... echo back unchanged ...",
-  "verdict": "strong_buy | buy | lean_buy | hold | lean_sell | sell | strong_sell",
-  "adjustment_reason": "string or null",
-  "key_insight": "Single most important takeaway",
-  "signals": [{"factor": "", "direction": "", "title": "", "detail": "", "metric": ""}],
-  "health_status": "healthy | caution | warning | critical",
-  "recommendations": [
-    {"type": "buy_threshold | grade | tier | spend_cap | channel | market", "action": "...", "expected_impact": "...", "priority": "high | medium | low"}
-  ],
-  "problem_areas": [
-    {"area": "...", "issue": "...", "suggestion": "..."}
-  ]
-}`

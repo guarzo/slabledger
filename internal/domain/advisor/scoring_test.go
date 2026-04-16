@@ -22,36 +22,6 @@ func TestBuildScoreCard(t *testing.T) {
 		wantErrType  error
 	}{
 		{
-			name:       "purchase with partial data",
-			entityID:   "cert-123",
-			entityType: "purchase",
-			data: &PurchaseFactorData{
-				PriceChangePct:    ptrFloat(15.0),
-				SalesPerMonth:     ptrFloat(8.0),
-				ROIPct:            ptrFloat(20.0),
-				ConcentrationRisk: "low",
-				PriceConfidence:   0.9,
-				MarketSource:      "doubleholo",
-			},
-			profile:    scoring.PurchaseAssessmentProfile,
-			minFactors: 3,
-			maxGaps:    4,
-			exactGaps:  -1,
-		},
-		{
-			name:       "purchase insufficient data",
-			entityID:   "cert-456",
-			entityType: "purchase",
-			data: &PurchaseFactorData{
-				PriceConfidence: 0.5,
-				MarketSource:    "test",
-			},
-			profile:     scoring.PurchaseAssessmentProfile,
-			wantErr:     true,
-			wantErrType: &scoring.ErrInsufficientData{},
-			exactGaps:   -1,
-		},
-		{
 			name:       "campaign with partial data",
 			entityID:   "camp-1",
 			entityType: "campaign",
@@ -105,7 +75,7 @@ func TestBuildScoreCard(t *testing.T) {
 			entityID:   "bad-1",
 			entityType: "unknown",
 			data:       "not a valid type",
-			profile:    scoring.PurchaseAssessmentProfile,
+			profile:    scoring.CampaignAnalysisProfile,
 			wantErr:    true,
 			exactGaps:  -1,
 		},

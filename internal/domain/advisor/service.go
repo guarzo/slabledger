@@ -8,7 +8,7 @@ import (
 )
 
 // Service defines the AI advisor analysis capabilities.
-// Streaming methods (Generate*, Analyze*, Assess*) emit events via callback.
+// Streaming methods (Generate*, Analyze*) emit events via callback.
 // Collect methods return the full markdown result synchronously.
 type Service interface {
 	// GenerateDigest produces a narrative weekly intelligence digest.
@@ -19,9 +19,6 @@ type Service interface {
 
 	// AnalyzeLiquidation identifies cards to consider selling now with pricing.
 	AnalyzeLiquidation(ctx context.Context, stream func(StreamEvent)) error
-
-	// AssessPurchase scores a potential purchase with reasoning.
-	AssessPurchase(ctx context.Context, req PurchaseAssessmentRequest, stream func(StreamEvent)) error
 
 	// CollectDigest runs the digest analysis and returns the full markdown result.
 	CollectDigest(ctx context.Context) (string, error)
@@ -65,7 +62,6 @@ func WithCacheStore(c CacheStore) ServiceOption {
 
 // ScoringDataProvider gathers raw data needed by factor computers.
 type ScoringDataProvider interface {
-	PurchaseData(ctx context.Context, req PurchaseAssessmentRequest) (*PurchaseFactorData, error)
 	CampaignData(ctx context.Context, campaignID string) (*CampaignFactorData, error)
 }
 

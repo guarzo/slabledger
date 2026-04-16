@@ -12,7 +12,6 @@ type MockAdvisorService struct {
 	GenerateDigestFn     func(ctx context.Context, stream func(advisor.StreamEvent)) error
 	AnalyzeCampaignFn    func(ctx context.Context, campaignID string, stream func(advisor.StreamEvent)) error
 	AnalyzeLiquidationFn func(ctx context.Context, stream func(advisor.StreamEvent)) error
-	AssessPurchaseFn     func(ctx context.Context, req advisor.PurchaseAssessmentRequest, stream func(advisor.StreamEvent)) error
 	CollectDigestFn      func(ctx context.Context) (string, error)
 	CollectLiquidationFn func(ctx context.Context) (string, error)
 }
@@ -36,13 +35,6 @@ func (m *MockAdvisorService) AnalyzeCampaign(ctx context.Context, campaignID str
 func (m *MockAdvisorService) AnalyzeLiquidation(ctx context.Context, stream func(advisor.StreamEvent)) error {
 	if m.AnalyzeLiquidationFn != nil {
 		return m.AnalyzeLiquidationFn(ctx, stream)
-	}
-	return nil
-}
-
-func (m *MockAdvisorService) AssessPurchase(ctx context.Context, req advisor.PurchaseAssessmentRequest, stream func(advisor.StreamEvent)) error {
-	if m.AssessPurchaseFn != nil {
-		return m.AssessPurchaseFn(ctx, req, stream)
 	}
 	return nil
 }

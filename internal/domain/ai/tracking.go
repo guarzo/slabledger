@@ -13,10 +13,9 @@ import (
 type AIOperation string
 
 const (
-	OpDigest             AIOperation = "digest"
-	OpCampaignAnalysis   AIOperation = "campaign_analysis"
-	OpLiquidation        AIOperation = "liquidation"
-	OpPurchaseAssessment AIOperation = "purchase_assessment"
+	OpDigest           AIOperation = "digest"
+	OpCampaignAnalysis AIOperation = "campaign_analysis"
+	OpLiquidation      AIOperation = "liquidation"
 )
 
 // AIStatus classifies the outcome of an AI API call.
@@ -98,7 +97,7 @@ type AICallTracker interface {
 }
 
 // AIOperations lists all known AI operation names in display order.
-var AIOperations = []AIOperation{OpDigest, OpCampaignAnalysis, OpLiquidation, OpPurchaseAssessment}
+var AIOperations = []AIOperation{OpDigest, OpCampaignAnalysis, OpLiquidation}
 
 func ClassifyAIError(err error) (AIStatus, string) {
 	if err == nil {

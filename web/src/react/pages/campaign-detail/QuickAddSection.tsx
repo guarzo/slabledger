@@ -4,9 +4,8 @@ import type { CertLookupResult, QuickAddRequest } from '../../../types/campaigns
 import { formatCents, getErrorMessage, localToday } from '../../utils/formatters';
 import { useToast } from '../../contexts/ToastContext';
 import { Input, Button } from '../../ui';
-import AIAnalysisWidget from '../../components/advisor/AIAnalysisWidget';
 
-export default function QuickAddSection({ campaignId, campaignName, onAdded }: { campaignId: string; campaignName: string; onAdded: () => void }) {
+export default function QuickAddSection({ campaignId, onAdded }: { campaignId: string; onAdded: () => void }) {
   const [certNumber, setCertNumber] = useState('');
   const [lookupResult, setLookupResult] = useState<CertLookupResult | null>(null);
   const [lookingUp, setLookingUp] = useState(false);
@@ -118,25 +117,6 @@ export default function QuickAddSection({ campaignId, campaignName, onAdded }: {
               Add Purchase
             </Button>
           </div>
-
-          {/* AI Purchase Assessment */}
-          {buyCost && (
-            <AIAnalysisWidget
-              endpoint="purchase-assessment"
-              body={{
-                campaignId,
-                campaignName,
-                cardName: lookupResult.cert.cardName,
-                setName: lookupResult.cert.brand,
-                grade: lookupResult.cert.grade,
-                buyCostCents: Math.round(parseFloat(buyCost) * 100),
-                certNumber: lookupResult.cert.certNumber,
-              }}
-              title="AI Purchase Assessment"
-              buttonLabel="Assess Purchase"
-              description="Get an AI-powered BUY / CAUTION / PASS rating with market analysis and portfolio fit."
-            />
-          )}
         </div>
       )}
     </div>

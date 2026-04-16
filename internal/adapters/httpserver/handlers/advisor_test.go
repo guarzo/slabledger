@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/advisor"
-	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
 )
 
@@ -370,80 +369,3 @@ func TestHandleLiquidationAnalysis_RequiresUser(t *testing.T) {
 	}
 }
 
-// --- HandlePurchaseAssessment ---
-
-func TestHandlePurchaseAssessment_ValidationErrors(t *testing.T) {
-	tests := []struct {
-		name string
-		body string
-	}{
-		{"missing campaignId", `{"campaignId":"","cardName":"Charizard","grade":"9","buyCostCents":5000}`},
-		{"missing cardName", `{"campaignId":"c1","cardName":"","grade":"9","buyCostCents":5000}`},
-		{"missing grade", `{"campaignId":"c1","cardName":"Charizard","buyCostCents":5000}`},
-		{"missing buyCostCents", `{"campaignId":"c1","cardName":"Charizard","grade":"9"}`},
-		{"invalid json", `{bad`},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			h := newAdvisorHandler(&mocks.MockAdvisorService{}, nil)
-			req := httptest.NewRequest(http.MethodPost, "/api/advisor/purchase", bytes.NewBufferString(tt.body))
-			req = withUser(req)
-			rec := httptest.NewRecorder()
-			h.HandlePurchaseAssessment(rec, req)
-
-			if rec.Code != http.StatusBadRequest {
-				t.Fatalf("expected 400, got %d; body: %s", rec.Code, rec.Body.String())
-			}
-		})
-	}
-}
-
-func TestHandlePurchaseAssessment_Success(t *testing.T) {
-	svc := &mocks.MockAdvisorService{
-		AssessPurchaseFn: func(_ context.Context, req advisor.PurchaseAssessmentRequest, stream func(advisor.StreamEvent)) error {
-			stream(advisor.StreamEvent{Type: advisor.EventDelta, Content: "assessment for " + req.CardName})
-			return nil
-		},
-	}
-	campaignsSvc := &mocks.MockInventoryService{
-		GetCampaignFn: func(_ context.Context, id string) (*inventory.Campaign, error) {
-			return &inventory.Campaign{ID: id, Name: "Test Campaign"}, nil
-		},
-	}
-	h := NewAdvisorHandler(svc, campaignsSvc, nil, mocks.NewMockLogger())
-
-	grade := "9"
-	buyCost := 5000
-	bodyData := map[string]any{
-		"campaignId":   "c1",
-		"cardName":     "Charizard",
-		"grade":        grade,
-		"buyCostCents": buyCost,
-	}
-	bodyBytes, _ := json.Marshal(bodyData)
-	req := httptest.NewRequest(http.MethodPost, "/api/advisor/purchase", bytes.NewBuffer(bodyBytes))
-	req = withUser(req)
-	rec := httptest.NewRecorder()
-	h.HandlePurchaseAssessment(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d; body: %s", rec.Code, rec.Body.String())
-	}
-	if !strings.Contains(rec.Body.String(), "data: [DONE]") {
-		t.Error("expected DONE sentinel in SSE response")
-	}
-}
-
-func TestHandlePurchaseAssessment_RequiresUser(t *testing.T) {
-	h := newAdvisorHandler(&mocks.MockAdvisorService{}, nil)
-
-	req := httptest.NewRequest(http.MethodPost, "/api/advisor/purchase", bytes.NewBufferString(`{}`))
-	// No withUser
-	rec := httptest.NewRecorder()
-	h.HandlePurchaseAssessment(rec, req)
-
-	if rec.Code != http.StatusUnauthorized {
-		t.Fatalf("expected 401, got %d", rec.Code)
-	}
-}

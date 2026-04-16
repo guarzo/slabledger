@@ -6,40 +6,91 @@ const NOW = new Date('2026-04-11T12:00:00Z').getTime();
 describe('syncDotProps', () => {
   afterEach(() => vi.useRealTimers());
 
-  function run(cl?: string, mm?: string, dh?: string) {
-    vi.setSystemTime(NOW);
-    return syncDotProps(cl, mm, dh);
+  function iso(hoursAgo: number): string {
+    return new Date(NOW - hoursAgo * 3600000).toISOString();
   }
 
-  it('green when all 3 synced within 24h', () => {
-    const ts = new Date(NOW - 2 * 3600000).toISOString(); // 2h ago
-    const { color } = run(ts, ts, ts);
+  it('green when DH has price and synced within 24h', () => {
+    vi.setSystemTime(NOW);
+    const ts = iso(2);
+    const { color } = syncDotProps({
+      clSyncedAt: ts,
+      mmValueUpdatedAt: ts,
+      dhLastSyncedAt: ts,
+      clHasValue: true,
+      hasMMValue: true,
+      hasDHPrice: true,
+    });
     expect(color).toBe('#22c55e');
   });
 
-  it('yellow when 1 synced within 24h', () => {
-    const fresh = new Date(NOW - 3600000).toISOString();   // 1h ago
-    const stale = new Date(NOW - 48 * 3600000).toISOString(); // 2d ago
-    const { color } = run(fresh, stale, stale);
+  it('yellow when DH synced recently but has no price', () => {
+    vi.setSystemTime(NOW);
+    const { color } = syncDotProps({
+      dhLastSyncedAt: iso(2),
+      hasDHPrice: false,
+      clSyncedAt: iso(2),
+      clHasValue: true,
+    });
     expect(color).toBe('#f59e0b');
   });
 
-  it('red when none synced within 24h', () => {
-    const stale = new Date(NOW - 48 * 3600000).toISOString();
-    const { color } = run(stale, stale, stale);
+  it('yellow when DH stale but CL has a fresh value', () => {
+    vi.setSystemTime(NOW);
+    const { color } = syncDotProps({
+      dhLastSyncedAt: iso(48),
+      hasDHPrice: false,
+      clSyncedAt: iso(2),
+      clHasValue: true,
+    });
+    expect(color).toBe('#f59e0b');
+  });
+
+  it('red when everything is stale', () => {
+    vi.setSystemTime(NOW);
+    const { color } = syncDotProps({
+      clSyncedAt: iso(48),
+      mmValueUpdatedAt: iso(48),
+      dhLastSyncedAt: iso(48),
+      clHasValue: true,
+      hasMMValue: true,
+      hasDHPrice: true,
+    });
     expect(color).toBe('#ef4444');
   });
 
-  it('red when all timestamps undefined', () => {
-    const { color } = run(undefined, undefined, undefined);
-    expect(color).toBe('#ef4444');
+  it('grey when nothing has ever synced', () => {
+    vi.setSystemTime(NOW);
+    const { color } = syncDotProps({});
+    expect(color).toBe('#6b7280');
   });
 
-  it('tooltip includes CL, MM, DH labels', () => {
-    const ts = new Date(NOW - 2 * 3600000).toISOString();
-    const { tooltip } = run(ts, ts, ts);
-    expect(tooltip).toContain('CL ·');
-    expect(tooltip).toContain('MM ·');
-    expect(tooltip).toContain('DH ·');
+  it('tooltip distinguishes CL matched-without-value from fresh match', () => {
+    vi.setSystemTime(NOW);
+    const { tooltip } = syncDotProps({
+      clSyncedAt: iso(2),
+      hasDHPrice: false,
+      dhLastSyncedAt: iso(2),
+      clLastError: 'no_value',
+    });
+    expect(tooltip).toContain('CL · matched, no value');
+  });
+
+  it('tooltip labels catalog fallback distinctly', () => {
+    vi.setSystemTime(NOW);
+    const { tooltip } = syncDotProps({
+      clSyncedAt: iso(2),
+      clLastError: 'catalog_fallback',
+    });
+    expect(tooltip).toContain('CL · catalog fallback');
+  });
+
+  it('tooltip labels api_error distinctly', () => {
+    vi.setSystemTime(NOW);
+    const { tooltip } = syncDotProps({
+      clSyncedAt: iso(2),
+      clLastError: 'api_error',
+    });
+    expect(tooltip).toContain('CL · api error');
   });
 });

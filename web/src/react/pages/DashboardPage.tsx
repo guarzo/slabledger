@@ -1,9 +1,9 @@
+import { Link } from 'react-router-dom';
 import PokeballLoader from '../PokeballLoader';
 import { usePortfolioHealth, useWeeklyReview, useCapitalSummary } from '../queries/useCampaignQueries';
 import HeroStatsBar from '../components/portfolio/HeroStatsBar';
 import InvoiceReadinessPanel from '../components/portfolio/InvoiceReadinessPanel';
 import WeeklyReviewSection from '../components/portfolio/WeeklyReviewSection';
-import AIAnalysisWidget from '../components/advisor/AIAnalysisWidget';
 import { SectionErrorBoundary } from '../ui';
 
 export default function DashboardPage() {
@@ -47,19 +47,20 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* AI Weekly Intelligence */}
-      <div className="mb-6">
-        <SectionErrorBoundary sectionName="AI Advisor">
-          <AIAnalysisWidget
-            endpoint="digest"
-            cacheType="digest"
-            title="Weekly Intelligence"
-            buttonLabel="Generate Digest"
-            description="Get an AI-powered weekly review with performance insights, capital exposure assessment, and prioritized action items."
-            collapsible
-          />
-        </SectionErrorBoundary>
-       </div>
+      {/* Insights hub link — replaces the inline AI widget */}
+      <Link
+        to="/insights"
+        className="mb-6 flex items-center justify-between gap-4 p-4 rounded-xl border border-[var(--surface-2)] bg-[var(--surface-1)] hover:border-[var(--brand-500)]/40 hover:bg-[var(--surface-2)]/30 transition-colors"
+      >
+        <div className="flex items-center gap-3">
+          <span className="text-xl" aria-hidden="true">&#x2728;</span>
+          <div>
+            <div className="text-sm font-semibold text-[var(--text)]">Weekly digest and liquidation plan live on Insights</div>
+            <div className="text-xs text-[var(--text-muted)]">Structured AI reports with section-by-section breakdown.</div>
+          </div>
+        </div>
+        <span className="text-sm text-[var(--brand-400)] font-medium">Open Insights &rarr;</span>
+      </Link>
 
       </div>
    );

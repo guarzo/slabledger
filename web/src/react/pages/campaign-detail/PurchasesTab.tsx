@@ -27,7 +27,6 @@ function PricingBadge({ purchase }: { purchase: Purchase }) {
 
 interface PurchasesTabProps {
   campaignId: string;
-  campaignName: string;
   purchases: Purchase[];
   soldPurchaseIds: Set<string>;
 }
@@ -226,7 +225,7 @@ function PurchaseDesktopRow({ purchase, soldPurchaseIds, otherCampaigns, reassig
   );
 }
 
-export default function PurchasesTab({ campaignId, campaignName, purchases, soldPurchaseIds }: PurchasesTabProps) {
+export default function PurchasesTab({ campaignId, purchases, soldPurchaseIds }: PurchasesTabProps) {
   const isMobile = useMediaQuery('(max-width: 768px)');
   const queryClient = useQueryClient();
   const deleteMutation = useDeletePurchase(campaignId);
@@ -276,7 +275,7 @@ export default function PurchasesTab({ campaignId, campaignName, purchases, sold
   return (
     <div id="tabpanel-purchases" role="tabpanel" aria-labelledby="purchases">
       <div className="mb-4">
-        <QuickAddSection campaignId={campaignId} campaignName={campaignName} onAdded={handleExternalAdd} />
+        <QuickAddSection campaignId={campaignId} onAdded={handleExternalAdd} />
       </div>
 
       {purchases.length === 0 ? (

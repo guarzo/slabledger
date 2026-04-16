@@ -152,8 +152,6 @@ func adminAnalyze(ctx context.Context, args []string) error {
 	_, advisorSvc, _, err := initializeAdvisorService(
 		ctx, &cfg, logger, db, aiCallRepo, campaignsService,
 		[]scoringadapter.ProviderOption{
-			scoringadapter.WithArbitrageService(arbSvc),
-			scoringadapter.WithPortfolioService(portSvc),
 			scoringadapter.WithTuningService(tuningSvc),
 		},
 		advisorToolOpts...,

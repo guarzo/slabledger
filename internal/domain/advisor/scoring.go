@@ -14,20 +14,6 @@ const (
 	gapNoPopulationData  = "no_population_data"
 )
 
-// PurchaseFactorData contains raw inputs for purchase assessment factor computers.
-type PurchaseFactorData struct {
-	PriceChangePct    *float64
-	SalesPerMonth     *float64
-	ROIPct            *float64
-	PSA10Pop          *int
-	Trend30dPct       *float64
-	ConcentrationRisk string
-	GradeROI          *float64
-	CampaignAvgROI    *float64
-	PriceConfidence   float64
-	MarketSource      string
-}
-
 // CampaignFactorData contains raw inputs for campaign analysis factor computers.
 type CampaignFactorData struct {
 	ROIPct          *float64
@@ -73,8 +59,6 @@ func BuildScoreCard(entityID, entityType string, data any, profile scoring.Weigh
 	var gaps []scoring.DataGap
 
 	switch d := data.(type) {
-	case *PurchaseFactorData:
-		factors, gaps = purchaseFactors(d)
 	case *CampaignFactorData:
 		factors, gaps = campaignFactors(d)
 	case *LiquidationFactorData:
@@ -108,39 +92,6 @@ func addOrGap(factors *[]scoring.Factor, gaps *[]scoring.DataGap, present bool, 
 	} else {
 		*gaps = append(*gaps, scoring.DataGap{FactorName: name, Reason: reason})
 	}
-}
-
-func purchaseFactors(d *PurchaseFactorData) ([]scoring.Factor, []scoring.DataGap) {
-	var factors []scoring.Factor
-	var gaps []scoring.DataGap
-
-	addOrGap(&factors, &gaps, d.PriceChangePct != nil, func() scoring.Factor {
-		return scoring.ComputeMarketTrend(*d.PriceChangePct, d.PriceConfidence, d.MarketSource)
-	}, scoring.FactorMarketTrend, gapNoMarketData)
-
-	addOrGap(&factors, &gaps, d.SalesPerMonth != nil, func() scoring.Factor {
-		return scoring.ComputeLiquidity(*d.SalesPerMonth, d.PriceConfidence, d.MarketSource)
-	}, scoring.FactorLiquidity, gapInsufficientSales)
-
-	addOrGap(&factors, &gaps, d.ROIPct != nil, func() scoring.Factor {
-		return scoring.ComputeROIPotential(*d.ROIPct, d.PriceConfidence, d.MarketSource)
-	}, scoring.FactorROIPotential, gapNoMarketData)
-
-	factors = append(factors, scoring.ComputePortfolioFit(d.ConcentrationRisk, 1.0, "portfolio"))
-
-	addOrGap(&factors, &gaps, d.PSA10Pop != nil, func() scoring.Factor {
-		return scoring.ComputeScarcity(*d.PSA10Pop, d.PriceConfidence, d.MarketSource)
-	}, scoring.FactorScarcity, gapNoPopulationData)
-
-	addOrGap(&factors, &gaps, d.GradeROI != nil && d.CampaignAvgROI != nil, func() scoring.Factor {
-		return scoring.ComputeGradeFit(*d.GradeROI, *d.CampaignAvgROI, d.PriceConfidence, d.MarketSource)
-	}, scoring.FactorGradeFit, gapInsufficientSales)
-
-	addOrGap(&factors, &gaps, d.Trend30dPct != nil, func() scoring.Factor {
-		return scoring.ComputeMarketAlignment(*d.Trend30dPct, d.PriceConfidence, d.MarketSource)
-	}, scoring.FactorMarketAlignment, gapNoMarketData)
-
-	return factors, gaps
 }
 
 func campaignFactors(d *CampaignFactorData) ([]scoring.Factor, []scoring.DataGap) {

@@ -228,7 +228,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
            {([
              { key: 'needs_attention' as const, label: 'Needs Attention', color: 'var(--warning)' },
              { key: 'in_hand' as const, label: 'In Hand', color: 'var(--success)' },
-             { key: 'ready_to_list' as const, label: 'Ready to List', color: 'var(--brand-400)' },
+             { key: 'ready_to_list' as const, label: 'Pending DH Listing', color: 'var(--brand-400)' },
              { key: 'ai_suggestion' as const, label: 'AI Suggestions', color: 'var(--brand-400)' },
              { key: 'sell_sheet' as const, label: 'Sell Sheet', color: 'var(--brand-400)' },
              { key: 'all' as const, label: 'All', color: 'var(--text)' },

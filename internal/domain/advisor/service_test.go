@@ -178,45 +178,6 @@ func TestAnalyzeCampaign_FormatsPrompt(t *testing.T) {
 	}
 }
 
-func TestAssessPurchase_FormatsPrompt(t *testing.T) {
-	purchaseReq := PurchaseAssessmentRequest{
-		CampaignID:   "camp-7",
-		CampaignName: "Vintage Holo",
-		CardName:     "Charizard",
-		SetName:      "Base Set",
-		Grade:        "10",
-		BuyCostCents: 50000,
-		CLValueCents: 70000,
-		CertNumber:   "12345678",
-	}
-	var capturedReqs []CompletionRequest
-	llm := &mockLLMProvider{
-		Responses: []func(CompletionRequest, func(CompletionChunk)) error{
-			func(req CompletionRequest, stream func(CompletionChunk)) error {
-				capturedReqs = append(capturedReqs, req)
-				stream(CompletionChunk{Delta: "Purchase assessment result."})
-				return nil
-			},
-		},
-	}
-	executor := &mockToolExecutor{}
-	svc := NewService(llm, executor)
-
-	err := svc.AssessPurchase(context.Background(), purchaseReq, func(StreamEvent) {})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(capturedReqs) == 0 {
-		t.Fatal("no completion requests captured")
-	}
-	userMsg := capturedReqs[0].Messages[0].Content
-	for _, want := range []string{"Charizard", "10", "500.00", "Vintage Holo", "camp-7", "Base Set", "12345678", "700.00"} {
-		if !strings.Contains(userMsg, want) {
-			t.Errorf("user prompt missing %q; got:\n%s", want, userMsg)
-		}
-	}
-}
-
 func TestCollectDigest_ReturnsContent(t *testing.T) {
 	want := "Full digest content returned synchronously."
 	llm := &mockLLMProvider{

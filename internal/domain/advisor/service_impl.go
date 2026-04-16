@@ -2,7 +2,6 @@ package advisor
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -49,10 +48,6 @@ var operationTools = map[AIOperation][]string{
 		"get_suggestion_stats", "get_inventory_alerts",
 		"get_expected_values_batch", "suggest_price_batch",
 	},
-	OpPurchaseAssessment: {
-		"get_campaign_tuning", "get_cert_lookup",
-		"evaluate_purchase", "get_campaign_pnl",
-	},
 }
 
 type service struct {
@@ -93,37 +88,7 @@ func (s *service) GenerateDigest(ctx context.Context, stream func(StreamEvent)) 
 
 func (s *service) AnalyzeCampaign(ctx context.Context, campaignID string, stream func(StreamEvent)) error {
 	userPrompt := fmt.Sprintf(campaignAnalysisUserPrompt, campaignID)
-
-	var scoreCard *scoring.ScoreCard
-	if s.scoringData != nil {
-		data, err := s.scoringData.CampaignData(ctx, campaignID)
-		if err != nil {
-			if s.logger != nil {
-				s.logger.Warn(ctx, "AnalyzeCampaign: failed to load scoring data — proceeding without scorecard",
-					observability.String("campaignID", campaignID),
-					observability.Err(err))
-			}
-		} else if data != nil {
-			sc, scErr := BuildScoreCard(campaignID, "campaign", data, scoring.CampaignAnalysisProfile)
-			if scErr != nil {
-				if s.logger != nil {
-					s.logger.Warn(ctx, "AnalyzeCampaign: failed to build scorecard — proceeding without",
-						observability.String("campaignID", campaignID),
-						observability.Err(scErr))
-				}
-			} else {
-				scoreCard = &sc
-				s.recordGaps(ctx, sc, "", "")
-			}
-		}
-	}
-
-	if scoreCard == nil {
-		_, err := s.runAnalysis(ctx, OpCampaignAnalysis, campaignAnalysisSystemPrompt, userPrompt, stream)
-		return err
-	}
-
-	_, err := s.runScoredAnalysis(ctx, OpCampaignAnalysis, campaignAnalysisSystemPrompt, userPrompt, scoreCard, campaignAnalysisSchema, stream)
+	_, err := s.runAnalysis(ctx, OpCampaignAnalysis, campaignAnalysisSystemPrompt, userPrompt, stream)
 	return err
 }
 
@@ -133,100 +98,11 @@ func (s *service) AnalyzeLiquidation(ctx context.Context, stream func(StreamEven
 	return err
 }
 
-func (s *service) AssessPurchase(ctx context.Context, req PurchaseAssessmentRequest, stream func(StreamEvent)) error {
-	userPrompt := fmt.Sprintf(purchaseAssessmentUserPrompt,
-		req.CardName, req.Grade, float64(req.BuyCostCents)/100,
-		req.CampaignName, req.CampaignID, req.SetName, req.CertNumber, float64(req.CLValueCents)/100,
-	)
-
-	var scoreCard *scoring.ScoreCard
-	if s.scoringData != nil {
-		data, err := s.scoringData.PurchaseData(ctx, req)
-		if err != nil {
-			if s.logger != nil {
-				s.logger.Warn(ctx, "AssessPurchase: failed to load scoring data — proceeding without scorecard",
-					observability.String("certNumber", req.CertNumber),
-					observability.Err(err))
-			}
-		} else if data != nil {
-			sc, scErr := BuildScoreCard(req.CertNumber, "purchase", data, scoring.PurchaseAssessmentProfile)
-			if scErr != nil {
-				if s.logger != nil {
-					s.logger.Warn(ctx, "AssessPurchase: failed to build scorecard — proceeding without",
-						observability.String("certNumber", req.CertNumber),
-						observability.Err(scErr))
-				}
-			} else {
-				scoreCard = &sc
-				s.recordGaps(ctx, sc, req.CardName, req.SetName)
-			}
-		}
-	}
-
-	if scoreCard == nil {
-		_, err := s.runAnalysis(ctx, OpPurchaseAssessment, purchaseAssessmentSystemPrompt, userPrompt, stream)
-		return err
-	}
-
-	_, err := s.runScoredAnalysis(ctx, OpPurchaseAssessment, purchaseAssessmentSystemPrompt, userPrompt, scoreCard, purchaseAssessmentSchema, stream)
-	if err != nil {
-		fallback := scoring.FallbackResult(*scoreCard)
-		if fbJSON, fbErr := json.Marshal(fallback); fbErr == nil {
-			stream(StreamEvent{Type: EventDelta, Content: string(fbJSON)})
-			return nil
-		}
-	}
-	return err
-}
-
 func (s *service) runAnalysis(ctx context.Context, operation AIOperation, systemPrompt, userPrompt string, stream func(StreamEvent)) (string, error) {
 	messages := []Message{
 		{Role: RoleUser, Content: userPrompt},
 	}
 	return s.toolCallingLoop(ctx, operation, systemPrompt, messages, stream)
-}
-
-// runScoredAnalysis augments the system prompt with a pre-computed ScoreCard and
-// structured output schema, then delegates to the tool-calling loop.
-func (s *service) runScoredAnalysis(ctx context.Context, operation AIOperation, baseSystemPrompt, userPrompt string, scoreCard *scoring.ScoreCard, schema string, stream func(StreamEvent)) (string, error) {
-	sysPrompt := baseSystemPrompt
-	if scoreCard != nil {
-		if scoreJSON, err := json.Marshal(scoreCard); err == nil {
-			stream(StreamEvent{Type: EventScore, Content: string(scoreJSON)})
-			sysPrompt += fmt.Sprintf(scoreCardInjectionTemplate, string(scoreJSON))
-		}
-	}
-	sysPrompt += fmt.Sprintf(structuredOutputInstruction, schema)
-	messages := []Message{{Role: RoleUser, Content: userPrompt}}
-	return s.toolCallingLoop(ctx, operation, sysPrompt, messages, stream)
-}
-
-// recordGaps persists data gaps from a ScoreCard in the background.
-func (s *service) recordGaps(ctx context.Context, sc scoring.ScoreCard, cardName, setName string) {
-	if s.gapStore == nil || len(sc.DataGaps) == 0 {
-		return
-	}
-	records := make([]scoring.GapRecord, len(sc.DataGaps))
-	for i, g := range sc.DataGaps {
-		records[i] = scoring.GapRecord{
-			FactorName: g.FactorName,
-			Reason:     g.Reason,
-			EntityType: sc.EntityType,
-			EntityID:   sc.EntityID,
-			CardName:   cardName,
-			SetName:    setName,
-		}
-	}
-	go func() {
-		bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if err := s.gapStore.RecordGaps(bgCtx, records); err != nil && s.logger != nil {
-			s.logger.Warn(bgCtx, "failed to record data gaps",
-				observability.Err(err),
-				observability.String("entityID", sc.EntityID),
-			)
-		}
-	}()
 }
 
 func (s *service) CollectDigest(ctx context.Context) (string, error) {

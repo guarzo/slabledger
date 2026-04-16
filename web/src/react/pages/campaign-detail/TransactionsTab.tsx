@@ -7,13 +7,12 @@ type SubView = 'purchases' | 'sales';
 
 interface TransactionsTabProps {
   campaignId: string;
-  campaignName: string;
   purchases: Purchase[];
   sales: Sale[];
   soldPurchaseIds: Set<string>;
 }
 
-export default function TransactionsTab({ campaignId, campaignName, purchases, sales, soldPurchaseIds }: TransactionsTabProps) {
+export default function TransactionsTab({ campaignId, purchases, sales, soldPurchaseIds }: TransactionsTabProps) {
   const [view, setView] = useState<SubView>('purchases');
 
   return (
@@ -54,7 +53,6 @@ export default function TransactionsTab({ campaignId, campaignName, purchases, s
       {view === 'purchases' ? (
         <PurchasesTab
           campaignId={campaignId}
-          campaignName={campaignName}
           purchases={purchases}
           soldPurchaseIds={soldPurchaseIds}
         />
