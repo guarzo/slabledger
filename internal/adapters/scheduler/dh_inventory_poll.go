@@ -136,40 +136,19 @@ func (s *DHInventoryPollScheduler) poll(ctx context.Context) {
 	skipped := 0
 	var latestUpdatedAt string
 
-	certSet := make(map[string]struct{}, len(allItems))
-	for _, item := range allItems {
-		certSet[item.CertNumber] = struct{}{}
-	}
-	certs := make([]string, 0, len(certSet))
-	for c := range certSet {
-		certs = append(certs, c)
-	}
-	purchaseIDByCert, lookupErr := s.lookup.GetPurchaseIDsByCertNumbers(ctx, certs)
-	if lookupErr != nil {
-		s.logger.Warn(ctx, "dh inventory poll: batch cert lookup failed; falling back to per-item",
-			observability.Err(lookupErr))
-		purchaseIDByCert = nil // signal fallback below
-	}
-
 	for _, item := range allItems {
 		// Always advance the checkpoint so persistent failures don't block progress.
 		if item.UpdatedAt > latestUpdatedAt {
 			latestUpdatedAt = item.UpdatedAt
 		}
 
-		var purchaseID string
-		if purchaseIDByCert != nil {
-			purchaseID = purchaseIDByCert[item.CertNumber]
-		} else {
-			id, perItemErr := s.lookup.GetPurchaseIDByCertNumber(ctx, item.CertNumber)
-			if perItemErr != nil {
-				s.logger.Warn(ctx, "dh inventory poll: cert lookup error",
-					observability.String("cert", item.CertNumber),
-					observability.Err(perItemErr))
-				skipped++
-				continue
-			}
-			purchaseID = id
+		purchaseID, prevDHStatus, lookupErr := s.lookup.GetDHStatusByCertNumber(ctx, item.CertNumber)
+		if lookupErr != nil {
+			s.logger.Warn(ctx, "dh inventory poll: cert lookup error",
+				observability.String("cert", item.CertNumber),
+				observability.Err(lookupErr))
+			skipped++
+			continue
 		}
 		if purchaseID == "" {
 			s.logger.Debug(ctx, "dh inventory poll: cert not found in local system",
@@ -197,9 +176,7 @@ func (s *DHInventoryPollScheduler) poll(ctx context.Context) {
 
 		updated++
 
-		// Record a state-transition event for pushed / listed observations.
-		// Other statuses (empty, unknown) are ignored — the event table only
-		// captures named transitions.
+		// Existing pushed / listed observation events.
 		var eventType dhevents.Type
 		switch item.Status {
 		case dh.InventoryStatusInStock:
@@ -212,6 +189,22 @@ func (s *DHInventoryPollScheduler) poll(ctx context.Context) {
 				PurchaseID:    purchaseID,
 				CertNumber:    item.CertNumber,
 				Type:          eventType,
+				NewDHStatus:   item.Status,
+				DHInventoryID: item.DHInventoryID,
+				DHCardID:      item.DHCardID,
+				Source:        dhevents.SourceDHInventoryPoll,
+			})
+		}
+
+		// New: transition event. DH only exposes in_stock / listed / sold,
+		// so a listed → in_stock transition is the only "unlisted" shape
+		// slabledger can observe from the inventory API.
+		if prevDHStatus == inventory.DHStatusListed && item.Status == dh.InventoryStatusInStock {
+			s.recordEvent(ctx, dhevents.Event{
+				PurchaseID:    purchaseID,
+				CertNumber:    item.CertNumber,
+				Type:          dhevents.TypeUnlisted,
+				PrevDHStatus:  prevDHStatus,
 				NewDHStatus:   item.Status,
 				DHInventoryID: item.DHInventoryID,
 				DHCardID:      item.DHCardID,
