@@ -9,6 +9,7 @@ import (
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	"github.com/guarzo/slabledger/internal/adapters/scheduler"
+	"github.com/guarzo/slabledger/internal/domain/dhevents"
 	"github.com/guarzo/slabledger/internal/domain/dhlisting"
 	"github.com/guarzo/slabledger/internal/domain/intelligence"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
@@ -127,6 +128,7 @@ type DHHandler struct {
 	dhApproveService  DHApproveService // optional: approve held pushes + push config
 	matchConfirmer    DHMatchConfirmer // optional: confirms matches with DH for learning
 	ordersIngester    DHOrdersIngester // optional: POST /api/dh/ingest-orders manual trigger
+	eventRec          dhevents.Recorder // optional: records DH state-change events
 
 	reconciler dhlisting.Reconciler // optional: DH inventory reconciliation
 
@@ -169,6 +171,7 @@ type DHHandlerDeps struct {
 	MatchConfirmer    DHMatchConfirmer     // optional: confirms matches with DH for learning
 	Reconciler        dhlisting.Reconciler // optional: DH inventory reconciliation
 	OrdersIngester    DHOrdersIngester     // optional: enables POST /api/dh/ingest-orders
+	EventRecorder     dhevents.Recorder    // optional: records DH state-change events
 }
 
 // NewDHHandler creates a new DHHandler with the given dependencies.
@@ -200,6 +203,7 @@ func NewDHHandler(deps DHHandlerDeps) *DHHandler {
 		matchConfirmer:    deps.MatchConfirmer,
 		reconciler:        deps.Reconciler,
 		ordersIngester:    deps.OrdersIngester,
+		eventRec:          deps.EventRecorder,
 	}
 	h.bulkMatchError.Store("")
 	return h
@@ -208,6 +212,19 @@ func NewDHHandler(deps DHHandlerDeps) *DHHandler {
 // Wait blocks until all background goroutines (e.g. bulk match) have completed.
 // Call during graceful shutdown to avoid writing to a closed database.
 func (h *DHHandler) Wait() { h.bgWG.Wait() }
+
+// recordEvent emits a DH state-change event to the recorder if present.
+// Failures are logged but do not abort the calling operation.
+func (h *DHHandler) recordEvent(ctx context.Context, e dhevents.Event) {
+	if h.eventRec == nil {
+		return
+	}
+	if err := h.eventRec.Record(ctx, e); err != nil {
+		h.logger.Warn(ctx, "dh handler: record event failed",
+			observability.String("type", string(e.Type)),
+			observability.Err(err))
+	}
+}
 
 // pushAndPersistDH builds an InventoryItem, pushes it to DH, and persists the DH fields.
 // Returns the DH inventory ID on success. Errors are classified for callers:

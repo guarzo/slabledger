@@ -165,6 +165,7 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 			MatchConfirmer:    in.DHClient,
 			Reconciler:        reconciler,
 			OrdersIngester:    ordersIngester, // nil-safe; handler returns 503 if unwired
+			// TODO(task-24): inject event recorder (dhevents.Recorder) for dismiss/select-match events
 		})
 		logger.Info(ctx, "DH handler initialized")
 	}

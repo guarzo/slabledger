@@ -38,6 +38,7 @@ const (
 	SourceManualUI        Source = "manual_ui"
 	SourceCLRefresh       Source = "cl_refresh"
 	SourceDHListing       Source = "dh_listing"
+	SourceDHPush          Source = "dh_push"
 )
 
 // Event is one row in the dh_state_events table.

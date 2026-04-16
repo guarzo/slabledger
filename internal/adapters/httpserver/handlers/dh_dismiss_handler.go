@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/guarzo/slabledger/internal/domain/dhevents"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
@@ -54,6 +55,15 @@ func (h *DHHandler) HandleDismissMatch(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to dismiss purchase")
 		return
 	}
+
+	h.recordEvent(ctx, dhevents.Event{
+		PurchaseID:     p.ID,
+		CertNumber:     p.CertNumber,
+		Type:           dhevents.TypeDismissed,
+		PrevPushStatus: inventory.DHPushStatusUnmatched,
+		NewPushStatus:  inventory.DHPushStatusDismissed,
+		Source:         dhevents.SourceManualUI,
+	})
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "dismissed"})
 }

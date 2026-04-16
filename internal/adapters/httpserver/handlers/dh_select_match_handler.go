@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
+	"github.com/guarzo/slabledger/internal/domain/dhevents"
 	"github.com/guarzo/slabledger/internal/domain/dhlisting"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
@@ -141,6 +142,16 @@ func (h *DHHandler) HandleSelectMatch(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+
+	h.recordEvent(ctx, dhevents.Event{
+		PurchaseID:    purchase.ID,
+		CertNumber:    purchase.CertNumber,
+		Type:          dhevents.TypePushed,
+		NewPushStatus: inventory.DHPushStatusManual,
+		DHInventoryID: inventoryID,
+		DHCardID:      req.DHCardID,
+		Source:        dhevents.SourceManualUI,
+	})
 
 	// Teach DH the correct match so future lookups resolve automatically.
 	if h.matchConfirmer != nil && purchase.CertNumber != "" {
