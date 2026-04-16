@@ -40,7 +40,7 @@ This codebase follows **Hexagonal Architecture** (also known as Ports and Adapte
  │    ├── auth/           (authentication)         │
  │    ├── cards/          (card interfaces)        │
  │    ├── constants/      (shared constants)       │
- │    ├── export/         (sell sheet, eBay CSV)   │
+ │    ├── export/         (sell sheet generation)  │
  │    ├── favorites/      (favorites management)   │
  │    ├── finance/        (invoices, cashflow)     │
  │    ├── intelligence/   (DH market data)         │
@@ -93,7 +93,7 @@ This codebase follows **Hexagonal Architecture** (also known as Ports and Adapte
 | `arbitrage/` | Crack candidates, acquisition targets, expected value, Monte Carlo |
 | `cards/` | `CardRepository` interface for card metadata |
 | `constants/` | Shared application constants |
-| `export/` | Sell sheet generation, eBay CSV, Shopify price sync |
+| `export/` | Sell sheet generation |
 | `favorites/` | Favorites management |
 | `finance/` | Invoices, cashflow, capital tracking, revocation flags |
 | `intelligence/` | DH market intelligence repository and types |
