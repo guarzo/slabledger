@@ -248,15 +248,15 @@ func (h *DHHandler) recordEvent(ctx context.Context, e dhevents.Event) {
 //   - errDHPushNoInventoryID: push succeeded but no inventory ID was returned
 //   - errDHPersistFailed: push succeeded but local persistence failed
 //   - other errors: push API failure
-func (h *DHHandler) pushAndPersistDH(ctx context.Context, purchase *inventory.Purchase, dhCardID, marketValueCents int) (int, error) {
+func (h *DHHandler) pushAndPersistDH(ctx context.Context, purchase *inventory.Purchase, dhCardID, listingPriceCents int) (int, error) {
 	item := dh.InventoryItem{
-		DHCardID:         dhCardID,
-		CertNumber:       purchase.CertNumber,
-		GradingCompany:   dh.GraderPSA,
-		Grade:            purchase.GradeValue,
-		CostBasisCents:   purchase.BuyCostCents,
-		MarketValueCents: dh.IntPtr(marketValueCents),
-		Status:           dh.InventoryStatusInStock,
+		DHCardID:          dhCardID,
+		CertNumber:        purchase.CertNumber,
+		GradingCompany:    dh.GraderPSA,
+		Grade:             purchase.GradeValue,
+		CostBasisCents:    purchase.BuyCostCents,
+		ListingPriceCents: dh.IntPtr(listingPriceCents),
+		Status:            dh.InventoryStatusInStock,
 	}
 
 	pushResp, err := h.inventoryPusher.PushInventory(ctx, []dh.InventoryItem{item})

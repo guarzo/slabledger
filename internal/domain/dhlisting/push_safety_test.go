@@ -7,8 +7,8 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 )
 
-// TestResolveMarketValueCents covers all three priority paths.
-func TestResolveMarketValueCents(t *testing.T) {
+// TestResolveListingPriceCents covers all three priority paths.
+func TestResolveListingPriceCents(t *testing.T) {
 	tests := []struct {
 		name               string
 		reviewedPriceCents int
@@ -16,16 +16,16 @@ func TestResolveMarketValueCents(t *testing.T) {
 		want               int
 	}{
 		{
-			name:               "reviewed price wins over CLValue",
+			name:               "reviewed price returned",
 			reviewedPriceCents: 5000,
 			clValueCents:       3000,
 			want:               5000,
 		},
 		{
-			name:               "CLValue used when no reviewed price",
+			name:               "no reviewed price returns 0 (CL is no longer a fallback)",
 			reviewedPriceCents: 0,
 			clValueCents:       3000,
-			want:               3000,
+			want:               0,
 		},
 		{
 			name:               "zero when both are zero",
@@ -47,7 +47,7 @@ func TestResolveMarketValueCents(t *testing.T) {
 				ReviewedPriceCents: tc.reviewedPriceCents,
 				CLValueCents:       tc.clValueCents,
 			}
-			got := ResolveMarketValueCents(p)
+			got := ResolveListingPriceCents(p)
 			if got != tc.want {
 				t.Errorf("got %d, want %d", got, tc.want)
 			}
@@ -87,11 +87,11 @@ func TestEvaluateHoldTriggers_InitialPush(t *testing.T) {
 			wantHeld:           false,
 		},
 		{
-			name:         "market value far below floor: hold",
-			buyCostCents: 10000,
-			clValueCents: 1000, // 10% of cost — well below any reasonable floor
-			wantHeld:     true,
-			wantContains: "initial_value_mismatch",
+			name:               "listing price far below floor: hold",
+			buyCostCents:       10000,
+			reviewedPriceCents: 1000, // 10% of cost — well below any reasonable floor
+			wantHeld:           true,
+			wantContains:       "initial_value_mismatch",
 		},
 	}
 
@@ -154,7 +154,7 @@ func TestEvaluateHoldTriggers_RePush(t *testing.T) {
 			name:                     "price swing above threshold: hold",
 			dhInventoryID:            99,
 			dhListingPriceCents:      10000,
-			clValueCents:             18000, // +80% swing
+			reviewedPriceCents:       18000, // +80% swing
 			swingPctThreshold:        30,
 			swingMinCents:            100,
 			disagreementPctThreshold: highPct, // disable disagreement
@@ -167,7 +167,7 @@ func TestEvaluateHoldTriggers_RePush(t *testing.T) {
 			name:                     "price swing above pct but below min cents: no hold",
 			dhInventoryID:            99,
 			dhListingPriceCents:      10000,
-			clValueCents:             18000, // +80%
+			reviewedPriceCents:       18000, // +80%
 			swingPctThreshold:        30,
 			swingMinCents:            highCents, // min cents far above actual delta
 			disagreementPctThreshold: highPct,
@@ -179,6 +179,7 @@ func TestEvaluateHoldTriggers_RePush(t *testing.T) {
 			name:                     "source disagreement above threshold: hold",
 			dhInventoryID:            99,
 			dhListingPriceCents:      12000,
+			reviewedPriceCents:       12000,   // newValue > 0 so triggers run
 			clValueCents:             10000,
 			lastSoldCents:            20000,   // cl=10000 vs lastSold=20000 = 50% diff
 			swingPctThreshold:        highPct, // disable swing
@@ -193,7 +194,7 @@ func TestEvaluateHoldTriggers_RePush(t *testing.T) {
 			name:                     "only one price source: no source disagreement",
 			dhInventoryID:            99,
 			dhListingPriceCents:      10000,
-			clValueCents:             12000,   // only one source present
+			reviewedPriceCents:       12000,   // only one source present (no CL/lastSold)
 			swingPctThreshold:        highPct, // disable swing
 			swingMinCents:            highCents,
 			disagreementPctThreshold: 20,
@@ -202,17 +203,21 @@ func TestEvaluateHoldTriggers_RePush(t *testing.T) {
 			wantHeld:                 false,
 		},
 		{
-			name:                     "unreviewed CL change above threshold: hold",
+			// This trigger is largely vestigial now: with reviewed-only resolver,
+			// EvaluateHoldTriggers short-circuits when there's no reviewed price,
+			// so checkUnreviewedCLChange only fires if the operator manually
+			// clears reviewedPriceCents back to 0 between pushes (rare).
+			name:                     "unreviewed CL change requires zero reviewed price → no hold (newValue==0)",
 			dhInventoryID:            99,
 			dhListingPriceCents:      10000,
-			clValueCents:             18000,   // +80% change from lastPushed
+			reviewedPriceCents:       0,
+			clValueCents:             18000,   // +80% change — but ignored, newValue==0
 			swingPctThreshold:        highPct, // disable swing
 			swingMinCents:            highCents,
 			disagreementPctThreshold: highPct, // disable disagreement
 			unreviewedChangePct:      30,
 			unreviewedChangeMin:      100,
-			wantHeld:                 true,
-			wantContains:             "unreviewed_cl_change",
+			wantHeld:                 false,
 		},
 		{
 			name:                     "reviewed price present: unreviewed CL check skipped",

@@ -356,27 +356,29 @@ func TestClient_DelistChannels(t *testing.T) {
 
 func intPtr(v int) *int { return &v }
 
-func TestInventoryItem_MarketValueCents_Serialization(t *testing.T) {
-	// With market value
-	mv := 45000
+func TestInventoryItem_ListingPriceCents_Serialization(t *testing.T) {
+	// With listing price preset
+	lp := 45000
 	item := InventoryItem{
-		DHCardID:         12345,
-		CertNumber:       "98765",
-		GradingCompany:   "psa",
-		Grade:            9,
-		CostBasisCents:   15000,
-		MarketValueCents: &mv,
-		Status:           InventoryStatusInStock,
+		DHCardID:          12345,
+		CertNumber:        "98765",
+		GradingCompany:    "psa",
+		Grade:             9,
+		CostBasisCents:    15000,
+		ListingPriceCents: &lp,
+		Status:            InventoryStatusInStock,
 	}
 	b, err := json.Marshal(item)
 	require.NoError(t, err)
-	require.Contains(t, string(b), `"market_value_cents":45000`)
+	require.Contains(t, string(b), `"listing_price_cents":45000`)
+	// Defensive: never send the deprecated market_value_cents field
+	require.NotContains(t, string(b), "market_value_cents")
 
-	// Without market value (omitted)
-	item.MarketValueCents = nil
+	// Without listing price (omitted) — DH falls back to catalog
+	item.ListingPriceCents = nil
 	b, err = json.Marshal(item)
 	require.NoError(t, err)
-	require.NotContains(t, string(b), "market_value_cents")
+	require.NotContains(t, string(b), "listing_price_cents")
 
 	// IntPtr helper: zero returns nil
 	require.Nil(t, IntPtr(0))

@@ -76,10 +76,7 @@ export function SellSheetActions({
             {onBulkListOnDH && listableIds.length > 0 && (
               <button
                 type="button"
-                onClick={() => {
-                  onBulkListOnDH(listableIds);
-                  onClearSelected();
-                }}
+                onClick={() => onBulkListOnDH(listableIds)}
                 className="text-sm font-medium px-3 py-1.5 rounded-md bg-[var(--success)]/15 text-[var(--success)] hover:bg-[var(--success)]/25 transition-colors"
                 title="Publish selected items on DH"
               >

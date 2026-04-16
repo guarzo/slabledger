@@ -127,14 +127,21 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
   const handleBulkListOnDH = useCallback(async (purchaseIds: string[]) => {
     if (purchaseIds.length === 0) return;
     const results = await Promise.allSettled(purchaseIds.map(id => api.listPurchaseOnDH(id)));
-    const failed = results.filter(r => r.status === 'rejected').length;
-    const listed = purchaseIds.length - failed;
+    const succeededIds = purchaseIds.filter((_, i) => results[i].status === 'fulfilled');
+    const failed = purchaseIds.length - succeededIds.length;
     if (failed === 0) {
-      toast.success(`Listed ${listed} on DH`);
-    } else if (listed === 0) {
+      toast.success(`Listed ${succeededIds.length} on DH`);
+    } else if (succeededIds.length === 0) {
       toast.error(`Failed to list ${failed} on DH`);
     } else {
-      toast.error(`Listed ${listed}, ${failed} failed`);
+      toast.error(`Listed ${succeededIds.length}, ${failed} failed`);
+    }
+    if (succeededIds.length > 0) {
+      setSelected(prev => {
+        const next = new Set(prev);
+        for (const id of succeededIds) next.delete(id);
+        return next;
+      });
     }
     invalidateInventory();
   }, [toast, invalidateInventory]);

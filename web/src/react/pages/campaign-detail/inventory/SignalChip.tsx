@@ -52,14 +52,15 @@ export default function SignalChip({
   if (hideWhenZero && valueCents <= 0) return null;
 
   const dotColor = updatedAt ? freshnessDotColor(updatedAt, freshnessThresholds) : null;
-  const delta = deltaVsCostCents != null && valueCents > 0
+  const costBasis = deltaVsCostCents != null ? valueCents - deltaVsCostCents : 0;
+  const delta = deltaVsCostCents != null && valueCents > 0 && costBasis > 0
     ? {
         sign: deltaVsCostCents > 0 ? '+' : '',
         color:
           deltaVsCostCents > 0 ? 'var(--success)'
           : deltaVsCostCents < 0 ? 'var(--danger)'
           : 'var(--text-muted)',
-        pct: Math.round((deltaVsCostCents / Math.max(1, valueCents - deltaVsCostCents)) * 100),
+        pct: Math.round((deltaVsCostCents / costBasis) * 100),
       }
     : null;
 

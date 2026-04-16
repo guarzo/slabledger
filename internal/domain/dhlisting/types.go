@@ -80,11 +80,11 @@ type DHCertResolver interface {
 
 // DHInventoryPushItem is a single item to push to DH inventory.
 type DHInventoryPushItem struct {
-	DHCardID         int
-	CertNumber       string
-	Grade            float64
-	CostBasisCents   int
-	MarketValueCents int // 0 means let DH use internal lookup
+	DHCardID          int
+	CertNumber        string
+	Grade             float64
+	CostBasisCents    int
+	ListingPriceCents int // 0 means omit — DH uses catalog fallback
 }
 
 // DHInventoryPushResultItem is the per-item response from an inventory push.
@@ -106,8 +106,12 @@ type DHInventoryPusher interface {
 }
 
 // DHInventoryLister transitions DH inventory items to listed and syncs channels.
+//
+// UpdateInventoryStatus may carry an optional listingPriceCents to set/update
+// the listing price in the same PATCH call. Pass 0 to omit. On success,
+// returns the listing_price_cents that DH has on the item after the update.
 type DHInventoryLister interface {
-	UpdateInventoryStatus(ctx context.Context, inventoryID int, status string) error
+	UpdateInventoryStatus(ctx context.Context, inventoryID int, status string, listingPriceCents int) (int, error)
 	SyncChannels(ctx context.Context, inventoryID int, channels []string) error
 }
 

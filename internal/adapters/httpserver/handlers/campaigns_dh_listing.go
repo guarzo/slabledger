@@ -48,6 +48,17 @@ func (h *CampaignsHandler) HandleListPurchaseOnDH(w http.ResponseWriter, r *http
 		writeError(w, http.StatusConflict, "Purchase already listed on DH")
 		return
 	}
+	if p.DHStatus != inventory.DHStatusInStock {
+		writeError(w, http.StatusConflict, "Purchase is not in_stock on DH")
+		return
+	}
+	// DH now honors our listing_price_cents as-is, so we require a reviewed
+	// price before listing. Stale or missing prices are rejected here rather
+	// than silently letting DH fall back to its catalog value.
+	if p.ReviewedPriceCents == 0 {
+		writeError(w, http.StatusConflict, "Review the price before listing on DH")
+		return
+	}
 
 	result := h.dhListingSvc.ListPurchases(r.Context(), []string{p.CertNumber})
 	if result.Error != nil {

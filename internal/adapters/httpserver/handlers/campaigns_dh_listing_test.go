@@ -2,8 +2,10 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
@@ -26,11 +28,12 @@ func TestHandleListPurchaseOnDH(t *testing.T) {
 
 	readyPurchase := func() *inventory.Purchase {
 		return &inventory.Purchase{
-			ID:            purchaseID,
-			CertNumber:    "CERT123",
-			ReceivedAt:    receivedAt,
-			DHInventoryID: 42,
-			DHStatus:      inventory.DHStatusInStock,
+			ID:                 purchaseID,
+			CertNumber:         "CERT123",
+			ReceivedAt:         receivedAt,
+			DHInventoryID:      42,
+			DHStatus:           inventory.DHStatusInStock,
+			ReviewedPriceCents: 50000, // required: DH now honors listing_price_cents as-is
 		}
 	}
 
@@ -58,6 +61,12 @@ func TestHandleListPurchaseOnDH(t *testing.T) {
 			getPurchase:   func(ctx context.Context, id string) (*inventory.Purchase, error) { return nil, inventory.ErrPurchaseNotFound },
 			wantStatus:    http.StatusNotFound,
 			wantErrSubstr: "not found",
+		},
+		{
+			name:          "inventory service error → 500",
+			getPurchase:   func(ctx context.Context, id string) (*inventory.Purchase, error) { return nil, errors.New("db error") },
+			wantStatus:    http.StatusInternalServerError,
+			wantErrSubstr: "Internal",
 		},
 		{
 			name: "not received → 409",
@@ -88,6 +97,16 @@ func TestHandleListPurchaseOnDH(t *testing.T) {
 			},
 			wantStatus:    http.StatusConflict,
 			wantErrSubstr: "already listed",
+		},
+		{
+			name: "no reviewed price → 409",
+			getPurchase: func(ctx context.Context, id string) (*inventory.Purchase, error) {
+				p := readyPurchase()
+				p.ReviewedPriceCents = 0
+				return p, nil
+			},
+			wantStatus:    http.StatusConflict,
+			wantErrSubstr: "Review the price",
 		},
 		{
 			name:          "dh listing service not configured → 503",
@@ -142,7 +161,7 @@ func TestHandleListPurchaseOnDH(t *testing.T) {
 				}
 			}
 			if tt.wantListedFrom != nil {
-				if len(capturedCerts) != len(tt.wantListedFrom) || (len(capturedCerts) > 0 && capturedCerts[0] != tt.wantListedFrom[0]) {
+				if !slices.Equal(capturedCerts, tt.wantListedFrom) {
 					t.Errorf("ListPurchases called with %v, want %v", capturedCerts, tt.wantListedFrom)
 				}
 			}

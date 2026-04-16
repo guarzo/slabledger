@@ -203,37 +203,50 @@ func TestDHPush_NoCertNumber_MarksUnmatched(t *testing.T) {
 	assert.Empty(t, fieldsUpdater.Calls)
 }
 
-func TestDHPush_NoCLValue_LeavesAsPending(t *testing.T) {
+// TestDHPush_NoReviewedPrice_PushesWithoutPreset verifies that the scheduler
+// no longer blocks the push on having a price. With DH's listing_price_cents
+// API change, push happens without a preset (DH catalog fallback) so the item
+// gets matched + assigned an inventory ID. The actual list-time price gate
+// lives on the manual List-on-DH path.
+func TestDHPush_NoReviewedPrice_PushesWithoutPreset(t *testing.T) {
 	purchase := inventory.Purchase{
-		ID:           "pur-nocl",
-		CertNumber:   "12345678",
-		CardName:     "Pikachu",
-		SetName:      "Base Set",
-		CLValueCents: 0, // no CL value yet
+		ID:                 "pur-noreview",
+		CertNumber:         "12345678",
+		CardName:           "Pikachu",
+		SetName:            "Base Set",
+		BuyCostCents:       5000,
+		CLValueCents:       9000, // CL is no longer used by ResolveListingPriceCents
+		ReviewedPriceCents: 0,    // no reviewed price → no preset sent to DH
 	}
 	lister := &mockDHPushPendingLister{
 		ListFn: func(_ context.Context, _ string, _ int) ([]inventory.Purchase, error) {
 			return []inventory.Purchase{purchase}, nil
 		},
 	}
-	resolverCalled := false
+	var capturedItem dh.InventoryItem
 	certResolver := &mockDHPushCertResolver{
 		ResolveFn: func(_ context.Context, _ dh.CertResolveRequest) (*dh.CertResolution, error) {
-			resolverCalled = true
 			return &dh.CertResolution{Status: dh.CertStatusMatched, DHCardID: 42}, nil
 		},
 	}
 	statusUpdater := &mockDHPushStatusUpdater{}
-	pusher := &mockDHPushInventoryPusher{}
+	pusher := &mockDHPushInventoryPusher{
+		PushFn: func(_ context.Context, items []dh.InventoryItem) (*dh.InventoryPushResponse, error) {
+			capturedItem = items[0]
+			return &dh.InventoryPushResponse{
+				Results: []dh.InventoryResult{{DHInventoryID: 99, Status: "in_stock"}},
+			}, nil
+		},
+	}
 	fieldsUpdater := &mocks.MockDHFieldsUpdater{}
 	cardIDSaver := &mockDHPushCardIDSaver{}
 
 	s := newTestDHPushScheduler(lister, statusUpdater, certResolver, pusher, fieldsUpdater, cardIDSaver)
 	s.push(context.Background())
 
-	assert.False(t, resolverCalled, "cert resolver should not be called when CL value is 0")
-	assert.Empty(t, statusUpdater.Calls, "purchase should stay pending when CL value is 0")
-	assert.Empty(t, fieldsUpdater.Calls)
+	assert.Nil(t, capturedItem.ListingPriceCents, "listing_price_cents should be omitted when no reviewed price")
+	require.Len(t, statusUpdater.Calls, 1, "purchase should still transition to matched")
+	assert.Equal(t, inventory.DHPushStatusMatched, statusUpdater.Calls[0].Status)
 }
 
 func TestDHPush_CertResolveError_LeavesAsPending(t *testing.T) {
@@ -339,9 +352,9 @@ func TestDHPush_SuccessPath_UpdatesFields(t *testing.T) {
 		CardName:     "Umbreon ex",
 		SetName:      "SV Promo",
 		CardNumber:   "176",
-		GradeValue:   10,
-		BuyCostCents: 6000,
-		CLValueCents: 8000,
+		GradeValue:         10,
+		BuyCostCents:       6000,
+		ReviewedPriceCents: 8000, // reviewed price → DH listing_price_cents preset
 	}
 	lister := &mockDHPushPendingLister{
 		ListFn: func(_ context.Context, _ string, _ int) ([]inventory.Purchase, error) {
@@ -360,8 +373,8 @@ func TestDHPush_SuccessPath_UpdatesFields(t *testing.T) {
 			assert.Equal(t, "22222222", items[0].CertNumber)
 			assert.Equal(t, float64(10), items[0].Grade)
 			assert.Equal(t, 6000, items[0].CostBasisCents)
-			require.NotNil(t, items[0].MarketValueCents)
-			assert.Equal(t, 8000, *items[0].MarketValueCents)
+			require.NotNil(t, items[0].ListingPriceCents)
+			assert.Equal(t, 8000, *items[0].ListingPriceCents)
 			return &dh.InventoryPushResponse{
 				Results: []dh.InventoryResult{
 					{DHInventoryID: 555, Status: "in_stock", AssignedPriceCents: 9000},
@@ -569,7 +582,7 @@ func TestDHPush_Hold_RecordsHeldEvent(t *testing.T) {
 		SetName:      "Base Set",
 		CardNumber:   "4",
 		BuyCostCents: 10000,
-		CLValueCents: 3000, // market value = 3000, floor = 50% of 10000 = 5000
+		ReviewedPriceCents: 3000, // listing_price_cents = 3000, floor = 50% of 10000 = 5000
 		DHCardID:     42,   // already mapped, skip cert resolve
 	}
 	lister := &mockDHPushPendingLister{
@@ -622,7 +635,7 @@ func TestDHPush_NilEventRecorderIsSafe(t *testing.T) {
 		CardName:     "Charizard",
 		SetName:      "Base Set",
 		BuyCostCents: 10000,
-		CLValueCents: 3000,
+		ReviewedPriceCents: 3000,
 		DHCardID:     42,
 	}
 	lister := &mockDHPushPendingLister{

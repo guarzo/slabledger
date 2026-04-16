@@ -106,9 +106,9 @@ export default function MobileCard({ item, selected, onToggle, onRecordSale, onF
         {item.purchase.clValueCents > 0 && (
           <div><span className="text-[var(--text-muted)]">CL:</span> <span className="text-[var(--text)] tabular-nums">{formatCents(item.purchase.clValueCents)}</span></div>
         )}
-        {snap && price > 0 && (() => {
-          const ebaySource = getSourceByType(snap.sourcePrices, 'ebay');
-          const estSource = getSourceByType(snap.sourcePrices, 'estimate');
+        {price > 0 && (() => {
+          const ebaySource = snap ? getSourceByType(snap.sourcePrices, 'ebay') : undefined;
+          const estSource = snap ? getSourceByType(snap.sourcePrices, 'estimate') : undefined;
           if (ebaySource || estSource) {
             return (
               <>
@@ -140,7 +140,7 @@ export default function MobileCard({ item, selected, onToggle, onRecordSale, onF
               <span className="text-[var(--text)] tabular-nums inline-flex items-center gap-1">
                 {formatCents(price)}
                 <TrendArrow trend={trend} size="sm" />
-                <ConfidenceIndicator confidence={snap.confidence ?? null} size="sm" />
+                <ConfidenceIndicator confidence={snap?.confidence ?? null} size="sm" />
               </span>
             </div>
           );

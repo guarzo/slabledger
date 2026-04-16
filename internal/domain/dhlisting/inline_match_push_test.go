@@ -219,7 +219,7 @@ func TestInlineMatchAndPush(t *testing.T) {
 			wantStatusSet:     inventory.DHPushStatusMatched,
 		},
 		{
-			name: "market value zero (no CLValue or reviewed price): returns 0 after resolve",
+			name: "no reviewed price: push still proceeds without listing_price_cents preset",
 			purchase: func() *inventory.Purchase {
 				p := basePurchase()
 				p.CLValueCents = 0
@@ -229,8 +229,17 @@ func TestInlineMatchAndPush(t *testing.T) {
 			resolver: &mockCertResolver{
 				resp: &DHCertResolution{Status: DHCertStatusMatched, DHCardID: 123},
 			},
-			pusher:          &mockPusher{},
-			wantInventoryID: 0,
+			pusher: &mockPusher{
+				resp: &DHInventoryPushResult{
+					Results: []DHInventoryPushResultItem{
+						{DHInventoryID: 200, Status: "in_stock"},
+					},
+				},
+			},
+			fieldsUpdater:     &mockFieldsUpdater{},
+			pushStatusUpdater: &mockPushStatusUpdater{},
+			wantInventoryID:   200,
+			wantStatusSet:     inventory.DHPushStatusMatched,
 		},
 		{
 			name:     "pusher error: returns 0",
@@ -358,11 +367,11 @@ func TestListPurchases_InlinePendingPush(t *testing.T) {
 			ID:            "p-pending",
 			CertNumber:    certNum,
 			DHInventoryID: 0,
-			DHPushStatus:  inventory.DHPushStatusPending,
-			CLValueCents:  20000,
-			BuyCostCents:  10000,
-			CardName:      "Pikachu",
-			SetName:       "Base Set",
+			DHPushStatus:       inventory.DHPushStatusPending,
+			ReviewedPriceCents: 20000, // required by the listing gate
+			BuyCostCents:       10000,
+			CardName:           "Pikachu",
+			SetName:            "Base Set",
 		}
 	}
 
@@ -442,9 +451,10 @@ func TestListPurchases_SyncChannelsFailure(t *testing.T) {
 	ctx := context.Background()
 	certNum := "22222222"
 	purchase := &inventory.Purchase{
-		ID:            "p-sync-fail",
-		CertNumber:    certNum,
-		DHInventoryID: 77,
+		ID:                 "p-sync-fail",
+		CertNumber:         certNum,
+		DHInventoryID:      77,
+		ReviewedPriceCents: 50000, // required by listing gate
 	}
 
 	lookup := &mockPurchaseLookup{
