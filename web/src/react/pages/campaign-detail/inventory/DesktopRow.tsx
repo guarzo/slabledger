@@ -8,6 +8,7 @@ import {
   getSourceByType, marketTooltip,
   formatPL,
   getReviewStatus, statusBorderColor, isHotSeller, formatReceivedDate,
+  mostRecentSale, relativeTime,
   syncDotProps,
 } from './utils';
 import { isReadyToList } from './inventoryCalcs';
@@ -63,11 +64,14 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
 
   const reviewStatus = getReviewStatus(item);
   const hotSeller = isHotSeller(item);
-  const dot = syncDotProps(
-    item.purchase.clSyncedAt,
-    item.purchase.mmValueUpdatedAt,
-    item.purchase.dhLastSyncedAt,
-  );
+  const dot = syncDotProps({
+    clSyncedAt: item.purchase.clSyncedAt,
+    mmValueUpdatedAt: item.purchase.mmValueUpdatedAt,
+    dhLastSyncedAt: item.purchase.dhLastSyncedAt,
+    clHasValue: (item.purchase.clValueCents ?? 0) > 0,
+    hasMMValue: (item.purchase.mmValueCents ?? 0) > 0,
+    hasDHPrice: (snap?.gradePriceCents ?? 0) > 0 || (snap?.lastSoldCents ?? 0) > 0,
+  });
 
   return (
     <div
@@ -153,11 +157,19 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
         {price > 0 ? (() => {
           const displaySource = snap ? (getSourceByType(snap.sourcePrices, 'ebay') || getSourceByType(snap.sourcePrices, 'estimate')) : undefined;
           const confidence = displaySource?.confidence ?? snap?.confidence ?? null;
+          const sale = mostRecentSale(item);
           return (
-            <div className="flex items-center justify-end gap-1">
-              <span className="text-[var(--text)] tabular-nums">{formatCents(price)}</span>
-              <ConfidenceIndicator confidence={confidence as 'high' | 'medium' | 'low' | null} size="sm" />
-              <TrendArrow trend={trend} size="sm" />
+            <div className="flex flex-col items-end gap-[1px]">
+              <div className="flex items-center justify-end gap-1">
+                <span className="text-[var(--text)] tabular-nums">{formatCents(price)}</span>
+                <ConfidenceIndicator confidence={confidence as 'high' | 'medium' | 'low' | null} size="sm" />
+                <TrendArrow trend={trend} size="sm" />
+              </div>
+              {sale?.date && (
+                <span className="text-[10px] text-[var(--text-muted)] tabular-nums leading-none">
+                  sold {relativeTime(sale.date)}
+                </span>
+              )}
             </div>
           );
         })() : (

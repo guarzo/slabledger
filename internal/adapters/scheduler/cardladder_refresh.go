@@ -74,7 +74,8 @@ type CLRunStats struct {
 	OrphansRepushed int       `json:"orphansRepushed"` // Orphan cards re-pushed to the CL collection this run.
 	NoImageMatch    int       `json:"noImageMatch"`    // Unsold purchases with no CL card matched via image URL.
 	NoCertMatch     int       `json:"noCertMatch"`     // Unsold purchases that also failed cert-regex fallback.
-	NoValue         int       `json:"noValue"`         // Matched but CL card.CurrentValue was 0.
+	NoValue         int       `json:"noValue"`         // Matched but both CL collection and cards catalog reported $0.
+	CatalogFallback int       `json:"catalogFallback"` // Matched at $0 in collection but CL cards catalog had a non-zero value.
 }
 
 // CardLadderRefreshScheduler refreshes CL values from the Card Ladder API daily.
@@ -273,7 +274,7 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 	s.logger.Info(ctx, "CL refresh: catalog values loaded",
 		observability.Int("catalogEntries", len(catalogValues)))
 
-	updated, mapped, skipped, noValue := 0, 0, 0, 0
+	updated, mapped, skipped, noValue, catalogFallback := 0, 0, 0, 0, 0
 
 	// Track which purchase IDs had a successful CL card match + value update
 	// this run. Used for the second-pass error persistence over unmatched
@@ -355,15 +356,24 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 		// Firestore-sourced "g9" form captured in `condition` above.
 		effectiveCLValue := pickCLValue(catalogValues, gemRateID, card.Condition, card.CurrentValue)
 		newCLCents := mathutil.ToCentsInt(effectiveCLValue)
+		fellBack := false
 		if newCLCents <= 0 {
-			// Matched but CL reports no market value. Persist so the admin
-			// UI can show "matched without a price" distinct from "unmapped".
-			// Mark as matched so the second pass doesn't overwrite the
-			// `no_value` reason with `no_image_match`.
-			noValue++
-			matchedPurchaseIDs[purchase.ID] = true
-			s.recordCLError(ctx, purchase.ID, CLReasonNoValue)
-			continue
+			// Collection index reports $0. Try the CL cards catalog (grade-specific,
+			// market-wide view) — often has a usable value when the user's specific
+			// collection entry is stuck at zero.
+			newCLCents = s.fetchCatalogFallbackValue(ctx, client, purchase)
+			if newCLCents <= 0 {
+				// Catalog also has nothing. Persist so the admin UI can show
+				// "matched without a price" distinct from "unmapped". Mark as
+				// matched so the second pass doesn't overwrite the `no_value`
+				// reason with `no_image_match`.
+				noValue++
+				matchedPurchaseIDs[purchase.ID] = true
+				s.recordCLError(ctx, purchase.ID, CLReasonNoValue)
+				continue
+			}
+			fellBack = true
+			catalogFallback++
 		}
 
 		oldCLCents := purchase.CLValueCents
@@ -397,8 +407,14 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 		updated++
 		matchedPurchaseIDs[purchase.ID] = true
 		resolvedMappings[purchase.CertNumber] = true
-		// Clear any prior CL error now that this purchase is successfully priced.
-		s.recordCLError(ctx, purchase.ID, "")
+		if fellBack {
+			// Tag rows priced from the catalog fallback so operators can see
+			// which rows are using the workaround, and how many.
+			s.recordCLError(ctx, purchase.ID, CLReasonCatalogFallback)
+		} else {
+			// Clear any prior CL error now that this purchase is successfully priced.
+			s.recordCLError(ctx, purchase.ID, "")
+		}
 	}
 
 	// Second pass: for every unsold purchase that did NOT get matched this run,
@@ -517,7 +533,8 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 		observability.Int("orphansRepushed", orphansRepushed),
 		observability.Int("noImageMatch", noImageMatch),
 		observability.Int("noCertMatch", noCertMatch),
-		observability.Int("noValue", noValue))
+		observability.Int("noValue", noValue),
+		observability.Int("catalogFallback", catalogFallback))
 
 	s.statsMu.Lock()
 	s.lastRunStats = &CLRunStats{
@@ -534,6 +551,7 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 		NoImageMatch:    noImageMatch,
 		NoCertMatch:     noCertMatch,
 		NoValue:         noValue,
+		CatalogFallback: catalogFallback,
 	}
 	s.statsMu.Unlock()
 

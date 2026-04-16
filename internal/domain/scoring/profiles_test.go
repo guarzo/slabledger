@@ -6,7 +6,6 @@ import (
 )
 
 var testProfiles = []WeightProfile{
-	PurchaseAssessmentProfile,
 	CampaignAnalysisProfile,
 	LiquidationProfile,
 	CampaignSuggestionsProfile,

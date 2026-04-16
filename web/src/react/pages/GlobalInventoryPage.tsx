@@ -1,9 +1,9 @@
 import { useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { useSellSheet } from '../hooks/useSellSheet';
 import { useGlobalInventory } from '../queries/useCampaignQueries';
 import { SectionErrorBoundary } from '../ui';
 import InventoryTab from './campaign-detail/InventoryTab';
-import AIAnalysisWidget from '../components/advisor/AIAnalysisWidget';
 
 export default function GlobalInventoryPage() {
   const { data: items = [], warnings, isLoading, isError, error } = useGlobalInventory();
@@ -58,17 +58,20 @@ export default function GlobalInventoryPage() {
         {pageSellSheetCount} items &middot; {new Date().toLocaleDateString()} &middot; card-yeti.com
       </div>
 
-      {/* AI Liquidation Analysis — hidden when printing */}
-      <div className="mt-6 print:hidden">
-        <AIAnalysisWidget
-          endpoint="liquidation-analysis"
-          cacheType="liquidation"
-          title="Liquidation Analysis"
-          buttonLabel="Analyze Liquidation"
-          description="Identify cards where selling now — even below market — frees capital more efficiently than holding. Factors in capital pressure, carrying costs, trends, and liquidity."
-          collapsible
-        />
-      </div>
+      {/* Liquidation analysis link — full report lives on Insights */}
+      <Link
+        to="/insights"
+        className="mt-6 print:hidden flex items-center justify-between gap-4 p-4 rounded-xl border border-[var(--surface-2)] bg-[var(--surface-1)] hover:border-[var(--brand-500)]/40 hover:bg-[var(--surface-2)]/30 transition-colors"
+      >
+        <div className="flex items-center gap-3">
+          <span className="text-xl" aria-hidden="true">&#x2728;</span>
+          <div>
+            <div className="text-sm font-semibold text-[var(--text)]">Liquidation plan lives on Insights</div>
+            <div className="text-xs text-[var(--text-muted)]">Markdowns, auction picks, hold list, and totals — as structured sections.</div>
+          </div>
+        </div>
+        <span className="text-sm text-[var(--brand-400)] font-medium">Open Insights &rarr;</span>
+      </Link>
     </div>
   );
 }

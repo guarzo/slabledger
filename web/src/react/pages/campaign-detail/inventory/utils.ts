@@ -281,7 +281,7 @@ export function statusBadge(item: AgingItem): { label: string; color: string } {
   }
 }
 
-function relativeTime(isoDate: string): string {
+export function relativeTime(isoDate: string): string {
   if (!isoDate) return 'unknown';
   const ts = new Date(isoDate).getTime();
   if (isNaN(ts)) return 'unknown';

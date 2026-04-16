@@ -220,7 +220,6 @@ func (rt *Router) registerAdvisorRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /api/advisor/digest", rt.authMW.RequireAuth(http.HandlerFunc(rt.advisorHandler.HandleDigest)))
 	mux.Handle("POST /api/advisor/campaign-analysis", rt.authMW.RequireAuth(http.HandlerFunc(rt.advisorHandler.HandleCampaignAnalysis)))
 	mux.Handle("POST /api/advisor/liquidation-analysis", rt.authMW.RequireAuth(http.HandlerFunc(rt.advisorHandler.HandleLiquidationAnalysis)))
-	mux.Handle("POST /api/advisor/purchase-assessment", rt.authMW.RequireAuth(http.HandlerFunc(rt.advisorHandler.HandlePurchaseAssessment)))
 	mux.Handle("GET /api/advisor/cache/{type}", rt.authMW.RequireAuth(http.HandlerFunc(rt.advisorHandler.HandleGetCached)))
 	mux.Handle("POST /api/advisor/refresh/{type}", rt.authMW.RequireAuth(http.HandlerFunc(rt.advisorHandler.HandleRefreshTrigger)))
 	mux.HandleFunc("/advisor", rt.spaHandler.HandleIndex)

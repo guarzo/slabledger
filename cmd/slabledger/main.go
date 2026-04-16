@@ -300,8 +300,6 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	azureAIClient, advisorService, advisorCacheRepo, err := initializeAdvisorService(
 		ctx, cfg, logger, db, aiCallRepo, campaignsService,
 		[]scoringadapter.ProviderOption{
-			scoringadapter.WithArbitrageService(arbSvc),
-			scoringadapter.WithPortfolioService(portSvc),
 			scoringadapter.WithTuningService(tuningSvc),
 		},
 		advisorToolOpts...,

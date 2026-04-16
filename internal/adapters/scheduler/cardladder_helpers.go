@@ -2,21 +2,72 @@ package scheduler
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
 	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
+	"github.com/guarzo/slabledger/internal/domain/mathutil"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
 // CL failure reason tags. Short, stable strings used by the /failures admin endpoint.
 const (
-	CLReasonNoImageMatch = "no_image_match"
-	CLReasonNoCertMatch  = "no_cert_match"
-	CLReasonNoValue      = "no_value"
-	CLReasonAPIError     = "api_error"
+	CLReasonNoImageMatch     = "no_image_match"
+	CLReasonNoCertMatch      = "no_cert_match"
+	CLReasonNoValue          = "no_value"
+	CLReasonAPIError         = "api_error"
+	CLReasonCatalogFallback  = "catalog_fallback"
 )
+
+// fetchCatalogFallbackValue queries the CL cards catalog (grade-specific) for a
+// non-zero market value when the user's collectioncards entry reports $0. The
+// collection-side valuation can sit at zero indefinitely for cards CL's batch
+// pipeline lacks sales data on (niche sets, lower grades, new releases); the
+// catalog is CL's market-wide view and often has a usable value.
+//
+// Returns 0 if the catalog also has no usable value or if the API call fails.
+// Requires gemRateID and a PSA grade on the purchase — returns 0 otherwise.
+func (s *CardLadderRefreshScheduler) fetchCatalogFallbackValue(ctx context.Context, client *cardladder.Client, purchase *inventory.Purchase) int {
+	if purchase.GemRateID == "" || purchase.GradeValue <= 0 {
+		return 0
+	}
+
+	grader := purchase.Grader
+	if grader == "" {
+		grader = "PSA"
+	}
+	filters := map[string]string{
+		"gemRateId":      purchase.GemRateID,
+		"condition":      fmt.Sprintf("%s %s", grader, mathutil.FormatGrade(purchase.GradeValue)),
+		"gradingCompany": strings.ToLower(grader),
+	}
+
+	resp, err := client.FetchCardCatalog(ctx, "", filters, 0, 1)
+	if err != nil {
+		s.logger.Warn(ctx, "CL refresh: catalog fallback fetch failed",
+			observability.String("cert", purchase.CertNumber),
+			observability.String("gemRateId", purchase.GemRateID),
+			observability.Err(err))
+		return 0
+	}
+	if len(resp.Hits) == 0 {
+		return 0
+	}
+
+	hit := resp.Hits[0]
+	// Prefer CurrentValue (what CL displays); fall back to MarketValue if CurrentValue is also zero.
+	value := hit.CurrentValue
+	if value <= 0 {
+		value = hit.MarketValue
+	}
+	if value <= 0 {
+		return 0
+	}
+	return mathutil.ToCentsInt(value)
+}
 
 // recordCLError persists a failure reason (or clears it when reason=="") on a
 // purchase. Never fails the refresh loop — diagnostics are best-effort — but

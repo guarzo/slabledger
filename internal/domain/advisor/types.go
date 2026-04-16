@@ -25,15 +25,3 @@ const (
 )
 
 type StreamEvent = ai.StreamEvent
-
-// PurchaseAssessmentRequest provides context for evaluating a potential purchase.
-type PurchaseAssessmentRequest struct {
-	CampaignID   string `json:"campaignId"`
-	CampaignName string `json:"campaignName"`
-	CardName     string `json:"cardName"`
-	SetName      string `json:"setName,omitempty"`
-	Grade        string `json:"grade"`
-	BuyCostCents int    `json:"buyCostCents"`
-	CLValueCents int    `json:"clValueCents,omitempty"`
-	CertNumber   string `json:"certNumber,omitempty"`
-}

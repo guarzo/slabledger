@@ -191,7 +191,7 @@ func TestScore_InsufficientFactors(t *testing.T) {
 				Factors:    tt.factors,
 				DataGaps:   tt.gaps,
 			}
-			_, err := Score(req, PurchaseAssessmentProfile)
+			_, err := Score(req, CampaignAnalysisProfile)
 			if err == nil {
 				t.Fatal("expected ErrInsufficientData, got nil")
 			}
