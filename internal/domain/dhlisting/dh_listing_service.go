@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
 	"github.com/guarzo/slabledger/internal/domain/dhevents"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
@@ -24,6 +25,7 @@ type dhListingService struct {
 	fieldsUpdater     DHListingFieldsUpdater
 	pushStatusUpdater DHListingPushStatusUpdater
 	candidatesSaver   DHListingCandidatesSaver
+	resetter          DHReconcileResetter // optional: auto-resets stale DH inventory IDs inline
 	logger            observability.Logger
 	eventRec          dhevents.Recorder // may be nil
 }
@@ -84,6 +86,13 @@ func WithDHListingPushStatusUpdater(u DHListingPushStatusUpdater) DHListingServi
 // WithDHListingCandidatesSaver enables storing ambiguous DH candidates.
 func WithDHListingCandidatesSaver(saver DHListingCandidatesSaver) DHListingServiceOption {
 	return func(s *dhListingService) { s.candidatesSaver = saver }
+}
+
+// WithDHListingResetter enables inline reset of stale DH inventory IDs.
+// When UpdateInventoryStatus returns ERR_PROV_NOT_FOUND, the purchase is
+// reset to pending so the push pipeline re-enrolls it on the next run.
+func WithDHListingResetter(r DHReconcileResetter) DHListingServiceOption {
+	return func(s *dhListingService) { s.resetter = r }
 }
 
 // WithEventRecorder injects a DH event recorder. Optional — if nil, no
@@ -190,10 +199,25 @@ func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []stri
 
 		dhListingPrice, err := s.lister.UpdateInventoryStatus(ctx, p.DHInventoryID, inventory.DHStatusListed, listingPrice)
 		if err != nil {
-			s.logger.Warn(ctx, "dh listing: status update failed",
-				observability.String("cert", p.CertNumber),
-				observability.Int("inventoryID", p.DHInventoryID),
-				observability.Err(err))
+			if apperrors.HasErrorCode(err, apperrors.ErrCodeProviderNotFound) {
+				s.logger.Error(ctx, "dh listing: stale inventory ID — resetting for re-push",
+					observability.String("cert", p.CertNumber),
+					observability.String("purchaseID", p.ID),
+					observability.Int("staleDHInventoryID", p.DHInventoryID),
+					observability.Err(err))
+				if s.resetter != nil {
+					if resetErr := s.resetter.ResetDHFieldsForRepush(ctx, p.ID); resetErr != nil {
+						s.logger.Warn(ctx, "dh listing: failed to reset stale DH fields",
+							observability.String("cert", p.CertNumber),
+							observability.Err(resetErr))
+					}
+				}
+			} else {
+				s.logger.Warn(ctx, "dh listing: status update failed",
+					observability.String("cert", p.CertNumber),
+					observability.Int("inventoryID", p.DHInventoryID),
+					observability.Err(err))
+			}
 			skipped++
 			continue
 		}

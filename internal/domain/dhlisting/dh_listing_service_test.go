@@ -5,10 +5,21 @@ import (
 	"errors"
 	"testing"
 
+	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
 	"github.com/guarzo/slabledger/internal/domain/dhevents"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
+
+type mockResetter struct {
+	resetErr   error
+	resetCalls []string // purchaseIDs passed to ResetDHFieldsForRepush
+}
+
+func (m *mockResetter) ResetDHFieldsForRepush(_ context.Context, purchaseID string) error {
+	m.resetCalls = append(m.resetCalls, purchaseID)
+	return m.resetErr
+}
 
 // --- mock implementations ---
 
@@ -439,6 +450,85 @@ func TestDisambiguateCandidates(t *testing.T) {
 			}
 			if !tc.wantSaveCalled && saveCalled {
 				t.Error("expected saveFn not to be called, but it was")
+			}
+		})
+	}
+}
+
+// TestListPurchases_StaleInventoryID covers inline reset behavior when
+// UpdateInventoryStatus returns ERR_PROV_NOT_FOUND (DH item removed remotely).
+func TestListPurchases_StaleInventoryID(t *testing.T) {
+	notFoundErr := apperrors.ProviderNotFound("DH", "VendorInventoryItem id=522")
+
+	tests := []struct {
+		name            string
+		purchase        *inventory.Purchase
+		listerErr       error
+		resetErr        error
+		wantListed      int
+		wantSkipped     int
+		wantResetCalls  int
+		wantResetPurchaseID string
+	}{
+		{
+			name: "resets and skips when item missing on DH",
+			purchase: &inventory.Purchase{
+				ID:                 "p-stale",
+				CertNumber:         "12341234",
+				DHInventoryID:      522,
+				DHCardID:           7,
+				ReviewedPriceCents: 60000,
+			},
+			listerErr:           notFoundErr,
+			wantListed:          0,
+			wantSkipped:         1,
+			wantResetCalls:      1,
+			wantResetPurchaseID: "p-stale",
+		},
+		{
+			name: "still skips when reset itself errors",
+			purchase: &inventory.Purchase{
+				ID:                 "p-stale-2",
+				CertNumber:         "43214321",
+				DHInventoryID:      522,
+				ReviewedPriceCents: 60000,
+			},
+			listerErr:      notFoundErr,
+			resetErr:       errors.New("db error"),
+			wantListed:     0,
+			wantSkipped:    1,
+			wantResetCalls: 1,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			lookup := &mockPurchaseLookup{
+				purchases: map[string]*inventory.Purchase{tc.purchase.CertNumber: tc.purchase},
+			}
+			lister := &mockInventoryLister{updateStatusErr: tc.listerErr}
+			resetter := &mockResetter{resetErr: tc.resetErr}
+
+			svc := newTestService(t, lookup,
+				WithDHListingLister(lister),
+				WithDHListingResetter(resetter),
+			)
+
+			result := svc.ListPurchases(context.Background(), []string{tc.purchase.CertNumber})
+
+			if result.Listed != tc.wantListed {
+				t.Errorf("Listed: got %d, want %d", result.Listed, tc.wantListed)
+			}
+			if result.Skipped != tc.wantSkipped {
+				t.Errorf("Skipped: got %d, want %d", result.Skipped, tc.wantSkipped)
+			}
+			if len(resetter.resetCalls) != tc.wantResetCalls {
+				t.Errorf("ResetDHFieldsForRepush calls: got %d, want %d", len(resetter.resetCalls), tc.wantResetCalls)
+			}
+			if tc.wantResetPurchaseID != "" {
+				if len(resetter.resetCalls) == 0 || resetter.resetCalls[0] != tc.wantResetPurchaseID {
+					t.Errorf("ResetDHFieldsForRepush purchaseID: got %v, want %s", resetter.resetCalls, tc.wantResetPurchaseID)
+				}
 			}
 		})
 	}
