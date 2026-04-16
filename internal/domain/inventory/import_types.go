@@ -22,103 +22,6 @@ type QuickAddRequest struct {
 	PurchaseDate string `json:"purchaseDate,omitempty"` // defaults to today
 }
 
-// CLExportRow represents a single row parsed from a Card Ladder export CSV.
-type CLExportRow struct {
-	DatePurchased string  // Already converted to YYYY-MM-DD
-	Card          string  // Full card description
-	Player        string  // Clean card name (e.g. "Mewtwo-Rev.foil", "Umbreon Ex")
-	Set           string  // Set name
-	Number        string  // Card number within set
-	Condition     string  // e.g. "PSA 8"
-	Investment    float64 // Buy cost in dollars
-	CurrentValue  float64 // CL current value in dollars
-	SlabSerial    string  // Cert number
-	Population    int     // Population count
-}
-
-// ParseCLDate converts Card Ladder date format (M/D/YYYY) to YYYY-MM-DD.
-func ParseCLDate(dateStr string) (string, error) {
-	t, err := time.ParseInLocation("1/2/2006", strings.TrimSpace(dateStr), time.UTC)
-	if err != nil {
-		return "", fmt.Errorf("invalid date %q: expected M/D/YYYY", dateStr)
-	}
-	return t.Format("2006-01-02"), nil
-}
-
-// CLExportEntry represents a row in Card Ladder import CSV format.
-type CLExportEntry struct {
-	DatePurchased  string  // M/D/YYYY for CL
-	CertNumber     string  // Slab serial / cert number
-	Grader         string  // Always "PSA" for us
-	Investment     float64 // Buy cost in dollars
-	EstimatedValue float64 // CL value in dollars
-}
-
-// CLRefreshItemResult contains per-row outcome for CL refreshes.
-type CLRefreshItemResult struct {
-	CertNumber     string `json:"certNumber"`
-	CardName       string `json:"cardName,omitempty"`
-	OldValueCents  int    `json:"oldValueCents"`
-	NewValueCents  int    `json:"newValueCents"`
-	Status         string `json:"status"` // "updated", "skipped", "failed"
-	Error          string `json:"error,omitempty"`
-	SnapshotQueued bool   `json:"snapshotQueued,omitempty"`
-}
-
-// GlobalCLRefreshResult summarizes the outcome of a global (cross-campaign) CL value refresh.
-type GlobalCLRefreshResult struct {
-	Updated    int                               `json:"updated"`
-	NotFound   int                               `json:"notFound"`
-	Failed     int                               `json:"failed"`
-	Errors     []ImportError                     `json:"errors,omitempty"`
-	Results    []CLRefreshItemResult             `json:"results,omitempty"`
-	ByCampaign map[string]CampaignRefreshSummary `json:"byCampaign,omitempty"`
-}
-
-// CampaignRefreshSummary counts updates within a single campaign during a global refresh.
-type CampaignRefreshSummary struct {
-	CampaignName string `json:"campaignName"`
-	Updated      int    `json:"updated"`
-}
-
-// GlobalImportResult summarizes the outcome of a global CL import with auto-allocation.
-type GlobalImportResult struct {
-	Allocated  int                              `json:"allocated"`
-	Refreshed  int                              `json:"refreshed"`
-	Unmatched  int                              `json:"unmatched"`
-	Ambiguous  int                              `json:"ambiguous"`
-	Skipped    int                              `json:"skipped"`
-	Failed     int                              `json:"failed"`
-	Errors     []ImportError                    `json:"errors,omitempty"`
-	Results    []GlobalImportItemResult         `json:"results,omitempty"`
-	ByCampaign map[string]CampaignImportSummary `json:"byCampaign,omitempty"`
-}
-
-// GlobalImportItemResult contains per-row outcome for global imports.
-type GlobalImportItemResult struct {
-	CertNumber   string   `json:"certNumber"`
-	CardName     string   `json:"cardName,omitempty"`
-	Grade        float64  `json:"grade,omitempty"`
-	Status       string   `json:"status"` // "allocated", "refreshed", "unmatched", "ambiguous", "skipped", "failed"
-	CampaignID   string   `json:"campaignId,omitempty"`
-	CampaignName string   `json:"campaignName,omitempty"`
-	Candidates   []string `json:"candidates,omitempty"`
-	Error        string   `json:"error,omitempty"`
-	BuyCostCents int      `json:"buyCostCents,omitempty"`
-	CLValueCents int      `json:"clValueCents,omitempty"`
-	PurchaseDate string   `json:"purchaseDate,omitempty"`
-	SetName      string   `json:"setName,omitempty"`
-	CardNumber   string   `json:"cardNumber,omitempty"`
-	Population   int      `json:"population,omitempty"`
-}
-
-// CampaignImportSummary counts allocations and refreshes within a single campaign during a global import.
-type CampaignImportSummary struct {
-	CampaignName string `json:"campaignName"`
-	Allocated    int    `json:"allocated"`
-	Refreshed    int    `json:"refreshed"`
-}
-
 // PSAExportRow represents a single row parsed from a PSA communication spreadsheet.
 type PSAExportRow struct {
 	Date           string  // Purchase date (YYYY-MM-DD after conversion)
@@ -133,6 +36,13 @@ type PSAExportRow struct {
 	WasRefunded    bool    // Whether the purchase was refunded
 	FrontImageURL  string  // Front card image URL
 	BackImageURL   string  // Back card image URL
+}
+
+// CampaignImportSummary counts allocations and refreshes within a single campaign during an import.
+type CampaignImportSummary struct {
+	CampaignName string `json:"campaignName"`
+	Allocated    int    `json:"allocated"`
+	Refreshed    int    `json:"refreshed"`
 }
 
 // PSAImportResult summarizes the outcome of a PSA CSV import.
@@ -195,16 +105,6 @@ func ParsePSADate(dateStr string) (string, error) {
 		return "", fmt.Errorf("invalid date %q: expected M/D/YYYY or YYYY-MM-DD", dateStr)
 	}
 	return t.Format("2006-01-02"), nil
-}
-
-// CLCardName returns the best available card name from CL export data.
-// Prefers the Player field (clean name like "Umbreon Ex") over
-// the Card field (verbose like "2025 Pokemon ... Umbreon Ex ... PSA 10").
-func CLCardName(row CLExportRow) string {
-	if row.Player != "" {
-		return row.Player
-	}
-	return row.Card
 }
 
 // ShopifyExportRow represents a single row parsed from a Shopify product export CSV.
