@@ -71,7 +71,9 @@ func (m *MockDHFieldsUpdater) UpdatePurchaseDHFields(ctx context.Context, id str
 type MockPurchaseByCertLookup struct {
 	GetPurchaseIDByCertNumberFn   func(ctx context.Context, certNumber string) (string, error)
 	GetPurchaseIDsByCertNumbersFn func(ctx context.Context, certNumbers []string) (map[string]string, error)
+	GetDHStatusByCertNumberFn     func(ctx context.Context, certNumber string) (string, string, error)
 	Mapping                       map[string]string // fallback: certNumber -> purchaseID
+	DHStatusByCert                map[string]string // fallback: certNumber -> dhStatus (used alongside Mapping)
 }
 
 func (m *MockPurchaseByCertLookup) GetPurchaseIDByCertNumber(ctx context.Context, certNumber string) (string, error) {
@@ -98,4 +100,19 @@ func (m *MockPurchaseByCertLookup) GetPurchaseIDsByCertNumbers(ctx context.Conte
 		}
 	}
 	return out, nil
+}
+
+func (m *MockPurchaseByCertLookup) GetDHStatusByCertNumber(ctx context.Context, certNumber string) (string, string, error) {
+	if m.GetDHStatusByCertNumberFn != nil {
+		return m.GetDHStatusByCertNumberFn(ctx, certNumber)
+	}
+	id := ""
+	if m.Mapping != nil {
+		id = m.Mapping[certNumber]
+	}
+	status := ""
+	if m.DHStatusByCert != nil {
+		status = m.DHStatusByCert[certNumber]
+	}
+	return id, status, nil
 }

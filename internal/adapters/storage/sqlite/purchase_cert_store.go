@@ -169,6 +169,20 @@ func (ps *PurchaseStore) GetPurchaseIDByCertNumber(ctx context.Context, certNumb
 	return id, err
 }
 
+// GetDHStatusByCertNumber returns the purchase ID and current dh_status for the
+// given cert number. Returns ("", "", nil) when the cert is not found — same
+// missing-cert contract as GetPurchaseIDByCertNumber.
+func (ps *PurchaseStore) GetDHStatusByCertNumber(ctx context.Context, certNumber string) (string, string, error) {
+	var id, dhStatus string
+	err := ps.db.QueryRowContext(ctx,
+		`SELECT id, dh_status FROM campaign_purchases WHERE cert_number = ?`, certNumber,
+	).Scan(&id, &dhStatus)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", "", nil
+	}
+	return id, dhStatus, err
+}
+
 // GetPurchaseIDsByCertNumbers returns a cert→purchaseID map for the given certs.
 // Certs with no matching purchase are simply absent from the map. Inputs are
 // chunked to stay within SQLite's parameter limit. If a cert exists under

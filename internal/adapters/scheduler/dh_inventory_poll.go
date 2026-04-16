@@ -28,10 +28,13 @@ type DHFieldsUpdater interface {
 
 // PurchaseByCertLookup resolves cert numbers to purchase IDs. The single-cert
 // variant is retained for callers that look up one cert; the batch variant
-// enables N→1 round-trip reduction on poll loops.
+// enables N→1 round-trip reduction on poll loops. GetDHStatusByCertNumber
+// additionally returns the current dh_status so callers can detect DH-side
+// transitions (e.g. listed → in_stock) without a second round trip.
 type PurchaseByCertLookup interface {
 	GetPurchaseIDByCertNumber(ctx context.Context, certNumber string) (string, error)
 	GetPurchaseIDsByCertNumbers(ctx context.Context, certNumbers []string) (map[string]string, error)
+	GetDHStatusByCertNumber(ctx context.Context, certNumber string) (purchaseID string, dhStatus string, err error)
 }
 
 // DHInventoryPollConfig controls the inventory poll scheduler.
