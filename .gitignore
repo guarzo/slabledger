@@ -71,6 +71,7 @@ cmd/**/data/
 .claude/*
 !.claude/commands/
 !.claude/skills/
+!.claude/overnight-config.yaml
 
 web/node_modules
 
