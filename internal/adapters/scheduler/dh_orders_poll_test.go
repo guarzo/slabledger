@@ -153,6 +153,34 @@ func TestMapDHChannel(t *testing.T) {
 	}
 }
 
+func TestDHOrdersPoll_RunOnce_HonorsCallerSince(t *testing.T) {
+	var capturedSince string
+	client := &mocks.MockDHOrdersClient{
+		GetOrdersFn: func(_ context.Context, f dh.OrderFilters) (*dh.OrdersResponse, error) {
+			capturedSince = f.Since
+			return &dh.OrdersResponse{Meta: dh.PaginationMeta{TotalCount: 0}}, nil
+		},
+	}
+	syncStore := newMockSyncStateStore()
+	// Pre-seed a different value in sync state to prove RunOnce ignores it.
+	require.NoError(t, syncStore.Set(context.Background(), syncStateKeyDHOrdersPoll, "2020-01-01T00:00:00Z"))
+
+	s := NewDHOrdersPollScheduler(client, syncStore, &mocks.MockInventoryService{},
+		mocks.NewMockLogger(), DHOrdersPollConfig{Enabled: true, Interval: 1 * time.Hour})
+
+	summary, err := s.RunOnce(context.Background(), "2025-06-01T00:00:00Z")
+	require.NoError(t, err)
+	assert.Equal(t, "2025-06-01T00:00:00Z", capturedSince,
+		"RunOnce should pass through the caller-supplied since, not read from sync state")
+	assert.Equal(t, "2025-06-01T00:00:00Z", summary.Since)
+	assert.Equal(t, 0, summary.OrdersFetched)
+
+	// RunOnce must NOT advance the checkpoint — it's a one-off manual call.
+	stored, _ := syncStore.Get(context.Background(), syncStateKeyDHOrdersPoll)
+	assert.Equal(t, "2020-01-01T00:00:00Z", stored,
+		"RunOnce should not touch the sync-state checkpoint")
+}
+
 func intPtr(v int) *int { return &v }
 
 // Compile-time interface check.

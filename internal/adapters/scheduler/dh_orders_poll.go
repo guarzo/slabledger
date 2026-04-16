@@ -15,6 +15,18 @@ const syncStateKeyDHOrdersPoll = "dh_orders_last_poll"
 // maxOrderPagesPerPoll prevents unbounded pagination if the DH API misreports totals.
 const maxOrderPagesPerPoll = 100
 
+// DHOrdersPollSummary captures the outcome of one ingest pass, returned by
+// both the scheduled poll loop and the manual /api/dh/ingest-orders handler.
+type DHOrdersPollSummary struct {
+	Since         string // the since timestamp that was used
+	OrdersFetched int    // total orders returned by DH
+	Matched       int    // newly created sales (from BulkSaleResult.Created)
+	AlreadySold   int    // skipped: purchase already has a sale (len(importResult.AlreadySold))
+	NotFound      int    // skipped: cert not found in local system (len(importResult.NotFound))
+	Failed        int    // bulk sale failures (BulkSaleResult.Failed)
+	LatestSoldAt  string // max sold_at observed across the batch (empty if no orders)
+}
+
 // DHOrdersClient is the subset of dh.Client used by the orders poll scheduler.
 type DHOrdersClient interface {
 	GetOrders(ctx context.Context, filters dh.OrderFilters) (*dh.OrdersResponse, error)
@@ -75,38 +87,28 @@ func (s *DHOrdersPollScheduler) Start(ctx context.Context) {
 	}, s.poll)
 }
 
-// poll fetches new DH orders and records them as sales via ImportOrdersSales + ConfirmOrdersSales.
-func (s *DHOrdersPollScheduler) poll(ctx context.Context) {
-	since, err := s.syncState.Get(ctx, syncStateKeyDHOrdersPoll)
-	if err != nil {
-		s.logger.Warn(ctx, "failed to read dh orders sync state, defaulting to 24h ago",
-			observability.Err(err))
-	}
-	if since == "" {
-		since = time.Now().UTC().Add(-24 * time.Hour).Format(time.RFC3339)
-	}
+// RunOnce executes one ingest pass against DH orders with a caller-supplied
+// since timestamp. Returns a summary struct describing the outcome. Does NOT
+// advance the sync-state checkpoint — callers that want persistence (e.g.
+// the scheduled poll loop) are responsible for calling syncState.Set after
+// inspecting the returned LatestSoldAt.
+//
+// Used by both the scheduled poll loop (via poll()) and the manual
+// POST /api/dh/ingest-orders endpoint.
+func (s *DHOrdersPollScheduler) RunOnce(ctx context.Context, since string) (*DHOrdersPollSummary, error) {
+	summary := &DHOrdersPollSummary{Since: since}
 
 	allOrders, err := s.fetchAllPages(ctx, since)
 	if err != nil {
-		s.logger.Warn(ctx, "dh orders poll failed",
-			observability.String("since", since),
-			observability.Err(err))
-		return
+		return summary, fmt.Errorf("fetch all pages: %w", err)
 	}
-
+	summary.OrdersFetched = len(allOrders)
 	if len(allOrders) == 0 {
-		s.logger.Debug(ctx, "dh orders poll: no new orders",
-			observability.String("since", since))
-		return
+		return summary, nil
 	}
-
-	s.logger.Info(ctx, "dh orders poll received orders",
-		observability.Int("count", len(allOrders)),
-		observability.String("since", since))
 
 	rows := make([]inventory.OrdersExportRow, 0, len(allOrders))
 	certToOrderID := make(map[string]string, len(allOrders))
-
 	for _, order := range allOrders {
 		rows = append(rows, inventory.OrdersExportRow{
 			OrderNumber:  order.OrderID,
@@ -123,26 +125,14 @@ func (s *DHOrdersPollScheduler) poll(ctx context.Context) {
 
 	importResult, err := s.campaignSvc.ImportOrdersSales(ctx, rows)
 	if err != nil {
-		s.logger.Warn(ctx, "dh orders import failed",
-			observability.Err(err))
-		return
+		return summary, fmt.Errorf("import orders: %w", err)
 	}
-
-	for _, skip := range importResult.AlreadySold {
-		s.logger.Info(ctx, "dh orders poll: already sold",
-			observability.String("cert", skip.CertNumber),
-			observability.String("title", skip.ProductTitle))
-	}
-	for _, skip := range importResult.NotFound {
-		s.logger.Warn(ctx, "dh orders poll: cert not found",
-			observability.String("cert", skip.CertNumber),
-			observability.String("title", skip.ProductTitle))
-	}
+	summary.AlreadySold = len(importResult.AlreadySold)
+	summary.NotFound = len(importResult.NotFound)
+	summary.LatestSoldAt = findLatestSoldAt(allOrders)
 
 	if len(importResult.Matched) == 0 {
-		s.logger.Info(ctx, "dh orders poll: no new matches to confirm")
-		s.updateDHOrdersCheckpoint(ctx, allOrders)
-		return
+		return summary, nil
 	}
 
 	confirmItems := make([]inventory.OrdersConfirmItem, 0, len(importResult.Matched))
@@ -158,19 +148,55 @@ func (s *DHOrdersPollScheduler) poll(ctx context.Context) {
 
 	bulkResult, err := s.campaignSvc.ConfirmOrdersSales(ctx, confirmItems)
 	if err != nil {
-		s.logger.Warn(ctx, "dh orders confirm failed",
+		return summary, fmt.Errorf("confirm orders: %w", err)
+	}
+	summary.Matched = bulkResult.Created
+	summary.Failed = bulkResult.Failed
+
+	return summary, nil
+}
+
+// poll runs one scheduled ingest pass. It resolves the since checkpoint from
+// sync state, delegates to RunOnce, logs the result, and advances the
+// checkpoint so the next tick picks up where this one left off.
+func (s *DHOrdersPollScheduler) poll(ctx context.Context) {
+	since, err := s.syncState.Get(ctx, syncStateKeyDHOrdersPoll)
+	if err != nil {
+		s.logger.Warn(ctx, "failed to read dh orders sync state, defaulting to 24h ago",
 			observability.Err(err))
+	}
+	if since == "" {
+		since = time.Now().UTC().Add(-24 * time.Hour).Format(time.RFC3339)
+	}
+
+	summary, runErr := s.RunOnce(ctx, since)
+	if runErr != nil {
+		s.logger.Warn(ctx, "dh orders poll failed",
+			observability.String("since", since),
+			observability.Err(runErr))
+		return
+	}
+
+	if summary.OrdersFetched == 0 {
+		s.logger.Debug(ctx, "dh orders poll: no new orders",
+			observability.String("since", since))
 		return
 	}
 
 	s.logger.Info(ctx, "dh orders poll completed",
-		observability.Int("matched", len(importResult.Matched)),
-		observability.Int("created", bulkResult.Created),
-		observability.Int("failed", bulkResult.Failed),
-		observability.Int("alreadySold", len(importResult.AlreadySold)),
-		observability.Int("notFound", len(importResult.NotFound)))
+		observability.Int("orders", summary.OrdersFetched),
+		observability.Int("matched", summary.Matched),
+		observability.Int("already_sold", summary.AlreadySold),
+		observability.Int("not_found", summary.NotFound),
+		observability.Int("failed", summary.Failed))
 
-	s.updateDHOrdersCheckpoint(ctx, allOrders)
+	if summary.LatestSoldAt != "" {
+		if setErr := s.syncState.Set(ctx, syncStateKeyDHOrdersPoll, summary.LatestSoldAt); setErr != nil {
+			s.logger.Warn(ctx, "failed to update dh orders sync state",
+				observability.String("timestamp", summary.LatestSoldAt),
+				observability.Err(setErr))
+		}
+	}
 }
 
 // fetchAllPages retrieves all order pages from DH.
@@ -192,19 +218,6 @@ func (s *DHOrdersPollScheduler) fetchAllPages(ctx context.Context, since string)
 		page++
 	}
 	return allOrders, nil
-}
-
-// updateDHOrdersCheckpoint advances the sync state to the latest sold_at timestamp.
-func (s *DHOrdersPollScheduler) updateDHOrdersCheckpoint(ctx context.Context, orders []dh.Order) {
-	latest := findLatestSoldAt(orders)
-	if latest == "" {
-		return
-	}
-	if err := s.syncState.Set(ctx, syncStateKeyDHOrdersPoll, latest); err != nil {
-		s.logger.Warn(ctx, "failed to update dh orders sync state",
-			observability.String("timestamp", latest),
-			observability.Err(err))
-	}
 }
 
 // mapDHChannel converts a DH channel string to an inventory.SaleChannel.
