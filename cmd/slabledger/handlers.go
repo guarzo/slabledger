@@ -266,6 +266,7 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 				dhlisting.WithDHListingFieldsUpdater(in.PurchaseStore),
 				dhlisting.WithDHListingPushStatusUpdater(in.PurchaseStore),
 				dhlisting.WithDHListingCandidatesSaver(in.PurchaseStore),
+				dhlisting.WithDHListingResetter(in.PurchaseStore),
 			)
 		}
 		if in.CardIDMappingRepo != nil {
