@@ -147,3 +147,95 @@ func TestConfirmOrdersSales(t *testing.T) {
 		t.Error("expected sale-1 to exist in repo")
 	}
 }
+
+func TestConfirmOrdersSales_UpdatesDHStatusForInventoriedItems(t *testing.T) {
+	repo := newMockRepo()
+	campaign := &Campaign{ID: "camp-1", Name: "Test Campaign", EbayFeePct: 0.1235}
+	repo.campaigns["camp-1"] = campaign
+
+	// Purchase with DH state (DHInventoryID != 0)
+	repo.purchases["purch-dh"] = &Purchase{
+		ID:            "purch-dh",
+		CampaignID:    "camp-1",
+		CertNumber:    "111111",
+		CardName:      "Charizard",
+		BuyCostCents:  10000,
+		GradeValue:    9,
+		PurchaseDate:  "2026-01-01",
+		DHStatus:      DHStatusListed,
+		DHInventoryID: 12345,
+		DHCardID:      54321,
+		DHCertStatus:  "verified",
+	}
+
+	idCounter := 0
+	svc := NewService(repo, repo, repo, repo, repo, repo, repo, WithIDGenerator(func() string {
+		idCounter++
+		return fmt.Sprintf("sale-%d", idCounter)
+	}))
+	defer svc.Close()
+
+	items := []OrdersConfirmItem{
+		{PurchaseID: "purch-dh", SaleChannel: SaleChannelEbay, SaleDate: "2026-03-10", SalePriceCents: 20000},
+	}
+
+	result, err := svc.ConfirmOrdersSales(context.Background(), items)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.Created != 1 {
+		t.Errorf("created: got %d, want 1", result.Created)
+	}
+
+	// Verify the purchase's DHStatus was updated to "sold"
+	p := repo.purchases["purch-dh"]
+	if p.DHStatus != DHStatusSold {
+		t.Errorf("purchase DHStatus: got %q, want %q", p.DHStatus, DHStatusSold)
+	}
+}
+
+func TestConfirmOrdersSales_SkipsDHStatusForNonInventoriedItems(t *testing.T) {
+	repo := newMockRepo()
+	campaign := &Campaign{ID: "camp-1", Name: "Test Campaign", EbayFeePct: 0.1235}
+	repo.campaigns["camp-1"] = campaign
+
+	// Purchase without DH state (DHInventoryID == 0)
+	repo.purchases["purch-no-dh"] = &Purchase{
+		ID:            "purch-no-dh",
+		CampaignID:    "camp-1",
+		CertNumber:    "222222",
+		CardName:      "Pikachu",
+		BuyCostCents:  5000,
+		GradeValue:    10,
+		PurchaseDate:  "2026-01-01",
+		DHStatus:      DHStatusListed,
+		DHInventoryID: 0, // No DH inventory
+	}
+
+	idCounter := 0
+	svc := NewService(repo, repo, repo, repo, repo, repo, repo, WithIDGenerator(func() string {
+		idCounter++
+		return fmt.Sprintf("sale-%d", idCounter)
+	}))
+	defer svc.Close()
+
+	items := []OrdersConfirmItem{
+		{PurchaseID: "purch-no-dh", SaleChannel: SaleChannelEbay, SaleDate: "2026-03-10", SalePriceCents: 10000},
+	}
+
+	result, err := svc.ConfirmOrdersSales(context.Background(), items)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.Created != 1 {
+		t.Errorf("created: got %d, want 1", result.Created)
+	}
+
+	// Verify the purchase's DHStatus was NOT changed (still "listed") because DHInventoryID is 0
+	p := repo.purchases["purch-no-dh"]
+	if p.DHStatus != DHStatusListed {
+		t.Errorf("purchase DHStatus: got %q, want %q (should not have changed)", p.DHStatus, DHStatusListed)
+	}
+}

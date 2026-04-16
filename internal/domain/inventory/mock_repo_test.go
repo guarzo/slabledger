@@ -751,6 +751,13 @@ func (m *mockRepo) UpdatePurchaseDHPushStatus(_ context.Context, id string, stat
 	return nil
 }
 
+func (m *mockRepo) UpdatePurchaseDHStatus(_ context.Context, id string, status string) error {
+	if p, ok := m.purchases[id]; ok && p != nil {
+		p.DHStatus = DHStatus(status)
+	}
+	return nil
+}
+
 func (m *mockRepo) GetPurchasesByDHPushStatus(_ context.Context, _ string, _ int) ([]Purchase, error) {
 	return nil, nil
 }

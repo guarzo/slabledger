@@ -60,6 +60,15 @@ func (ps *PurchaseStore) UpdatePurchaseDHPushStatus(ctx context.Context, id stri
 	)
 }
 
+// UpdatePurchaseDHStatus updates only the dh_status column on a purchase.
+// Targeted update — does not touch other DH fields.
+func (ps *PurchaseStore) UpdatePurchaseDHStatus(ctx context.Context, id string, status string) error {
+	return ps.execAndExpectRow(ctx, "update DH status",
+		`UPDATE campaign_purchases SET dh_status = ?, updated_at = ? WHERE id = ?`,
+		status, time.Now(), id,
+	)
+}
+
 // UpdatePurchaseDHCandidates stores disambiguation candidates JSON on a purchase.
 func (ps *PurchaseStore) UpdatePurchaseDHCandidates(ctx context.Context, id string, candidatesJSON string) error {
 	return ps.execAndExpectRow(ctx, "update DH candidates",
