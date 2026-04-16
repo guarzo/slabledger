@@ -71,8 +71,7 @@ function AppContent() {
               <Route path="/opportunities" element={<Navigate to="/" replace />} />
               <Route path="/insights" element={<Navigate to="/" replace />} />
               <Route path="/pricing" element={<Navigate to="/" replace />} />
-              <Route path="/shopify-sync" element={<Navigate to="/tools" replace />} />
-              <Route path="/suggestions" element={<Navigate to="/" replace />} />
+<Route path="/suggestions" element={<Navigate to="/" replace />} />
               {/* Campaigns */}
               <Route path="/campaigns" element={
                 <ProtectedRoute>

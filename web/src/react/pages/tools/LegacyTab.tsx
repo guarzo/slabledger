@@ -1,21 +1,10 @@
 import { useState } from 'react';
-import { Button, SectionErrorBoundary } from '../../ui';
-import ShopifySyncPage from '../ShopifySyncPage';
+import { Button } from '../../ui';
 import CardIntakeSection from './CardIntakeSection';
 import { LegacyCard } from './CardIntakeSection';
 import SalesImportSection from './SalesImportSection';
 
-type ExpandedCard = 'sales' | 'priceSync' | null;
-
-function SyncIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
-      <polyline points="23 4 23 10 17 10" />
-      <polyline points="1 20 1 14 7 14" />
-      <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" />
-    </svg>
-  );
-}
+type ExpandedCard = 'sales' | null;
 
 function ReceiptIcon() {
   return (
@@ -54,23 +43,6 @@ export default function LegacyTab() {
       {/* Expandable tool cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
         <LegacyCard
-          icon={<SyncIcon />}
-          title="Price Sync"
-          description="Sync prices with Shopify store"
-        >
-          <Button
-            size="sm"
-            variant={expandedCard === 'priceSync' ? 'primary' : 'secondary'}
-            fullWidth
-            onClick={() => toggle('priceSync')}
-            aria-expanded={expandedCard === 'priceSync'}
-            aria-controls="priceSync-panel"
-          >
-            {expandedCard === 'priceSync' ? 'Collapse' : 'Open Price Sync'}
-          </Button>
-        </LegacyCard>
-
-        <LegacyCard
           icon={<ReceiptIcon />}
           title="Import Sales"
           description="Import sales from order CSVs"
@@ -87,15 +59,6 @@ export default function LegacyTab() {
           </Button>
         </LegacyCard>
       </div>
-
-      {/* Expanded content — full-width below grid */}
-      {expandedCard === 'priceSync' && (
-        <div id="priceSync-panel" role="region" aria-label="Price Sync">
-          <SectionErrorBoundary sectionName="Price Sync">
-            <ShopifySyncPage embedded />
-          </SectionErrorBoundary>
-        </div>
-      )}
 
       {expandedCard === 'sales' && <SalesImportSection />}
     </>

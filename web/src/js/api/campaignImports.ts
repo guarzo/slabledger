@@ -1,10 +1,10 @@
 /**
- * Campaign import/export API methods: PSA, CL, external, orders, Shopify, cert entry, price review
+ * Campaign import/export API methods: PSA, CL, external, orders, cert entry, price review
  */
 
 import type {
   GlobalImportResult, PSAImportResult, ExternalImportResult,
-  CertLookupResult, ShopifyPriceSyncResponse,
+  CertLookupResult,
   CertImportResult,
   OrdersImportResult, OrdersConfirmItem, BulkSaleResult,
   ScanCertResponse, ResolveCertResponse, MMRefreshResult,
@@ -32,9 +32,6 @@ declare module './client' {
     // Orders sales import
     importOrdersSales(file: File): Promise<OrdersImportResult>;
     confirmOrdersSales(items: OrdersConfirmItem[]): Promise<BulkSaleResult>;
-
-    // Shopify
-    shopifyPriceSync(items: { certNumber: string; currentPriceCents: number; grader: string }[]): Promise<ShopifyPriceSyncResponse>;
 
     // Cert entry
     importCerts(certNumbers: string[]): Promise<CertImportResult>;
@@ -98,7 +95,7 @@ proto.syncPSASheets = async function (this: APIClient): Promise<PSAImportResult>
   return this.post<PSAImportResult>('/purchases/sync-psa-sheets', {});
 };
 
-// External (Shopify) CSV import
+// External CSV import
 proto.globalImportExternal = async function (this: APIClient, file: File): Promise<ExternalImportResult> {
   return this.uploadFile<ExternalImportResult>('/purchases/import-external', file);
 };
@@ -110,11 +107,6 @@ proto.importOrdersSales = async function (this: APIClient, file: File): Promise<
 
 proto.confirmOrdersSales = async function (this: APIClient, items: OrdersConfirmItem[]): Promise<BulkSaleResult> {
   return this.post<BulkSaleResult>('/purchases/import-orders/confirm', items);
-};
-
-// Shopify price sync
-proto.shopifyPriceSync = async function (this: APIClient, items: { certNumber: string; currentPriceCents: number; grader: string }[]): Promise<ShopifyPriceSyncResponse> {
-  return this.post<ShopifyPriceSyncResponse>('/shopify/price-sync', { items });
 };
 
 // Cert entry
