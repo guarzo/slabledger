@@ -101,29 +101,44 @@ func (s *service) ImportOrdersSales(ctx context.Context, rows []OrdersExportRow)
 func (s *service) ConfirmOrdersSales(ctx context.Context, items []OrdersConfirmItem) (*BulkSaleResult, error) {
 	result := &BulkSaleResult{}
 
+	ids := make([]string, 0, len(items))
 	for _, item := range items {
-		purchase, err := s.purchases.GetPurchase(ctx, item.PurchaseID)
-		if err != nil {
+		ids = append(ids, item.PurchaseID)
+	}
+	purchaseMap, err := s.purchases.GetPurchasesByIDs(ctx, ids)
+	if err != nil {
+		return nil, fmt.Errorf("load purchases: %w", err)
+	}
+	saleMap, err := s.sales.GetSalesByPurchaseIDs(ctx, ids)
+	if err != nil {
+		return nil, fmt.Errorf("load existing sales: %w", err)
+	}
+	allCampaigns, err := s.campaigns.ListCampaigns(ctx, false)
+	if err != nil {
+		return nil, fmt.Errorf("list campaigns: %w", err)
+	}
+	campaignMap := make(map[string]*Campaign, len(allCampaigns))
+	for i := range allCampaigns {
+		campaignMap[allCampaigns[i].ID] = &allCampaigns[i]
+	}
+
+	for _, item := range items {
+		purchase, ok := purchaseMap[item.PurchaseID]
+		if !ok {
 			result.Failed++
 			result.Errors = append(result.Errors, BulkSaleError{PurchaseID: item.PurchaseID, Error: "purchase not found"})
 			continue
 		}
 
 		// Check for existing sale to prevent duplicates (e.g. double-submit)
-		existingSale, saleErr := s.sales.GetSaleByPurchaseID(ctx, item.PurchaseID)
-		if saleErr != nil && !errors.HasErrorCode(saleErr, ErrCodeSaleNotFound) {
-			result.Failed++
-			result.Errors = append(result.Errors, BulkSaleError{PurchaseID: item.PurchaseID, Error: "sale lookup failed"})
-			continue
-		}
-		if existingSale != nil {
+		if _, alreadySold := saleMap[item.PurchaseID]; alreadySold {
 			result.Failed++
 			result.Errors = append(result.Errors, BulkSaleError{PurchaseID: item.PurchaseID, Error: "already sold"})
 			continue
 		}
 
-		campaign, err := s.campaigns.GetCampaign(ctx, purchase.CampaignID)
-		if err != nil {
+		campaign, ok := campaignMap[purchase.CampaignID]
+		if !ok {
 			result.Failed++
 			result.Errors = append(result.Errors, BulkSaleError{PurchaseID: item.PurchaseID, Error: "campaign not found"})
 			continue
