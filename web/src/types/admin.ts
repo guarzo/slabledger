@@ -54,6 +54,7 @@ export interface CLLastRun {
   cardsPushed: number;
   cardsRemoved: number;
   orphanMappings: number;
+  orphansRepushed: number;
   noImageMatch: number;
   noCertMatch: number;
   noValue: number;

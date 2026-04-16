@@ -71,6 +71,7 @@ type CLRunStats struct {
 	CardsPushed    int       `json:"cardsPushed"`
 	CardsRemoved   int       `json:"cardsRemoved"`
 	OrphanMappings int       `json:"orphanMappings"` // Persistent mappings that neither matched a CL card this run nor correspond to a sold purchase.
+	OrphansRepushed int      `json:"orphansRepushed"` // Orphan cards re-pushed to the CL collection this run.
 	NoImageMatch   int       `json:"noImageMatch"`   // Unsold purchases with no CL card matched via image URL.
 	NoCertMatch    int       `json:"noCertMatch"`    // Unsold purchases that also failed cert-regex fallback.
 	NoValue        int       `json:"noValue"`        // Matched but CL card.CurrentValue was 0.
@@ -409,26 +410,50 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 	}
 
 	// Orphan audit: persistent mappings whose cert is still in the unsold
-	// set but didn't resolve to a CL card this run. These are the ~144
-	// stuck rows the user reported — not actionable in THIS PR, but
-	// counting + logging them makes the cleanup fix tractable later.
+	// set but didn't resolve to a CL card this run — the card is missing
+	// from the remote CL collection. Re-push these so CL has the card and
+	// future sync runs can update values.
 	orphanMappings := 0
-	var orphanSamples []string
+	var orphanCerts []string
 	for _, m := range existingMappings {
 		if resolvedMappings[m.SlabSerial] {
 			continue
 		}
 		if _, stillUnsold := certToPurchase[m.SlabSerial]; stillUnsold {
 			orphanMappings++
-			if len(orphanSamples) < 10 {
-				orphanSamples = append(orphanSamples, m.SlabSerial)
-			}
+			orphanCerts = append(orphanCerts, m.SlabSerial)
 		}
 	}
-	if orphanMappings > 0 {
-		s.logger.Warn(ctx, "CL refresh: orphan mappings detected (stored but unresolved this run)",
-			observability.Int("orphanMappings", orphanMappings),
-			observability.String("sampleCerts", strings.Join(orphanSamples, ",")))
+	orphansRepushed := 0
+	if orphanMappings > 0 && cfg.FirebaseUID != "" {
+		s.logger.Info(ctx, "CL refresh: re-pushing orphan cards missing from collection",
+			observability.Int("orphanMappings", orphanMappings))
+		// Note: pushSingleCard calls ResolveAndCreateCard which always creates
+		// a new Firestore doc. If the remote card exists but our fetch missed it,
+		// this could create a duplicate. CL has no "create-if-not-exists" API.
+		// SaveMapping (upsert by slab_serial PK) overwrites the old mapping with
+		// the new doc ID, so locally we stay consistent. A Firestore-side dedup
+		// would require a new CL client method to query by cert first.
+		for _, cert := range orphanCerts {
+			if ctx.Err() != nil {
+				break
+			}
+			p := certToPurchase[cert]
+			grader := strings.ToLower(p.Grader)
+			if grader == "" {
+				grader = "psa"
+			}
+			if err := s.pushSingleCard(ctx, client, cfg.FirebaseUID, cfg.CollectionID, p, grader); err != nil {
+				s.logger.Warn(ctx, "CL refresh: failed to re-push orphan card",
+					observability.String("cert", cert),
+					observability.Err(err))
+				continue
+			}
+			orphansRepushed++
+		}
+		s.logger.Info(ctx, "CL refresh: orphan re-push complete",
+			observability.Int("orphans", orphanMappings),
+			observability.Int("repushed", orphansRepushed))
 	}
 
 	// Phase 2: fetch sales comps for mapped cards with gemRateIDs.
@@ -478,24 +503,26 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 		observability.Int("pushed", cardsPushed),
 		observability.Int("removed", cardsRemoved),
 		observability.Int("orphanMappings", orphanMappings),
+		observability.Int("orphansRepushed", orphansRepushed),
 		observability.Int("noImageMatch", noImageMatch),
 		observability.Int("noCertMatch", noCertMatch),
 		observability.Int("noValue", noValue))
 
 	s.statsMu.Lock()
 	s.lastRunStats = &CLRunStats{
-		LastRunAt:      start,
-		DurationMs:     time.Since(start).Milliseconds(),
-		Updated:        updated,
-		Mapped:         mapped,
-		Skipped:        skipped,
-		TotalCLCards:   len(cards),
-		CardsPushed:    cardsPushed,
-		CardsRemoved:   cardsRemoved,
-		OrphanMappings: orphanMappings,
-		NoImageMatch:   noImageMatch,
-		NoCertMatch:    noCertMatch,
-		NoValue:        noValue,
+		LastRunAt:       start,
+		DurationMs:      time.Since(start).Milliseconds(),
+		Updated:         updated,
+		Mapped:          mapped,
+		Skipped:         skipped,
+		TotalCLCards:    len(cards),
+		CardsPushed:     cardsPushed,
+		CardsRemoved:    cardsRemoved,
+		OrphanMappings:  orphanMappings,
+		OrphansRepushed: orphansRepushed,
+		NoImageMatch:    noImageMatch,
+		NoCertMatch:     noCertMatch,
+		NoValue:         noValue,
 	}
 	s.statsMu.Unlock()
 
