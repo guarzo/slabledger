@@ -16,7 +16,6 @@ that enroll:
 
 | Source | Where | Enrolls? |
 |---|---|---|
-| CardLadder CSV import | `service_import_cl.go` | yes (via `NeedsDHPush()` + `UpdatePurchaseDHPushStatus`) |
 | Cert Intake — new cert | `service_cert_entry.go` `ImportCerts` | yes (sets `dh_push_status='pending'` on creation) |
 | Cert Intake — existing cert (scan on receipt) | `service_cert_entry.go` `ScanCert` | yes (enrolls on receipt, guarded by `NeedsDHPush()`) |
 | CardLadder scheduled refresh | `cardladder_refresh.go` | only re-enrolls already-pushed rows on CL value change |
@@ -130,11 +129,9 @@ All sites use `ResolveMarketValueCents()` (reviewed price > CL value) as `market
 
 When CL value changes on an already-pushed item:
 
-1. **CL import service** (`service_import_cl.go`): detects `DHInventoryID != 0 && newCL != oldCL`, sets status back to `pending`
+1. **CardLadder refresh scheduler** (`cardladder_refresh.go`): detects `DHInventoryID != 0 && newCL != oldCL`, sets status back to `pending`
 2. **Push scheduler** picks it up, sees `DHCardID` already set, skips cert resolution, pushes with updated `market_value_cents`
 3. DH's upsert semantics update the existing inventory item
-
-> Note: `CLValueCents` is entered manually at import time. There is no automated CardLadder scheduler — the `cardladder_refresh.go` scheduler is a legacy component that is no longer active.
 
 ## Push Safety Gates
 
@@ -202,5 +199,4 @@ For `unmatched` cards:
 | Push status DB ops | `internal/adapters/storage/sqlite/purchases_repository_dh.go` |
 | Card ID mapping cache | `internal/adapters/storage/sqlite/card_id_mapping_repository.go` |
 | HTTP handlers | `internal/adapters/httpserver/handlers/dh_*.go` |
-| CL import (re-push trigger) | `internal/domain/inventory/service_import_cl.go` |
 | Scheduler wiring | `internal/adapters/scheduler/builder.go` |

@@ -88,7 +88,7 @@ The inventory domain (`internal/domain/inventory/`) is the core campaigns and in
 - **8 focused repository interfaces**: CampaignRepository, PurchaseRepository, SaleRepository, AnalyticsRepository, FinanceRepository, PricingRepository, DHRepository, SnapshotRepository
 - **Service**: CRUD + imports + analytics; delegates computation to sibling sub-packages
 - **PriceLookup**: Optional interface for market signal computation (injected via `WithPriceLookup` functional option)
-- **Import**: CSV parsing lives directly in the `inventory` package (parse_cl.go, parse_psa.go, parse_mm.go, parse_shopify.go, parse_orders.go)
+- **Import**: CSV parsing lives directly in the `inventory` package (parse_psa.go, parse_mm.go, parse_shopify.go, parse_orders.go)
 - **Channel fees**: eBay/TCGPlayer use campaign's `ebayFeePct`; local/other = 0%
 
 ### Sibling sub-packages (flat siblings under `internal/domain/`, no cross-imports between them)
