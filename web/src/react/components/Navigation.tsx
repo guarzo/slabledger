@@ -18,6 +18,7 @@ export default function Navigation({ mobile, onNavigate }: NavigationProps) {
     { path: '/', label: 'Dashboard', shortLabel: 'Home' },
     { path: '/inventory', label: 'Inventory', shortLabel: 'Inventory' },
     { path: '/campaigns', label: 'Campaigns', shortLabel: 'Campaigns' },
+    { path: '/insights', label: 'Insights', shortLabel: 'Insights' },
     { path: '/tools', label: 'Tools', shortLabel: 'Tools' },
   ];
 

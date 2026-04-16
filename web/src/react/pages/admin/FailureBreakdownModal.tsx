@@ -25,7 +25,8 @@ const REASON_DESCRIPTIONS: Record<string, string> = {
   // Card Ladder
   no_image_match: 'No CL card matched the purchase by image URL or cert',
   no_cert_match: 'Purchase has no cert number to fallback-match',
-  no_value: 'CL card matched but reported $0 current value',
+  no_value: 'CL collection and cards catalog both reported $0',
+  catalog_fallback: 'CL collection reported $0 — priced from the CL cards catalog instead',
 };
 
 export function FailureBreakdownModal({ title, report, onClose }: Props) {

@@ -99,7 +99,6 @@ export default function CampaignDetailPage() {
           <SectionErrorBoundary sectionName="Transactions">
             <TransactionsTab
               campaignId={campaignId}
-              campaignName={campaign.name}
               purchases={purchases}
               sales={sales}
               soldPurchaseIds={soldPurchaseIds}

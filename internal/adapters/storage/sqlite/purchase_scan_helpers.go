@@ -21,7 +21,7 @@ const purchaseColumns = `id, campaign_id, card_name, cert_number, card_number, s
 	reviewed_price_cents, reviewed_at, review_source,
 	dh_card_id, dh_inventory_id, dh_cert_status, dh_listing_price_cents, dh_channels_json, dh_status, dh_push_status, dh_candidates, dh_hold_reason,
 	gem_rate_id, psa_spec_id,
-	card_player, card_variation, card_category, cl_synced_at, dh_last_synced_at,
+	card_player, card_variation, card_category, cl_synced_at, cl_last_error, dh_last_synced_at,
 	mid_price_cents, last_sold_date`
 
 // purchaseColumnsAliased is the same column list with the "p." table alias for JOIN queries.
@@ -39,7 +39,7 @@ const purchaseColumnsAliased = `p.id, p.campaign_id, p.card_name, p.cert_number,
 	p.reviewed_price_cents, p.reviewed_at, p.review_source,
 	p.dh_card_id, p.dh_inventory_id, p.dh_cert_status, p.dh_listing_price_cents, p.dh_channels_json, p.dh_status, p.dh_push_status, p.dh_candidates, p.dh_hold_reason,
 		p.gem_rate_id, p.psa_spec_id,
-		p.card_player, p.card_variation, p.card_category, p.cl_synced_at, p.dh_last_synced_at,
+		p.card_player, p.card_variation, p.card_category, p.cl_synced_at, p.cl_last_error, p.dh_last_synced_at,
 		p.mid_price_cents, p.last_sold_date`
 
 // saleColumnsAliased is the SELECT column list for campaign_sales with "s." alias, used in LEFT JOIN queries.
@@ -93,7 +93,7 @@ func purchaseScanDests(p *inventory.Purchase) []any {
 		&p.ReviewedPriceCents, &p.ReviewedAt, &p.ReviewSource,
 		&p.DHCardID, &p.DHInventoryID, &p.DHCertStatus, &p.DHListingPriceCents, &p.DHChannelsJSON, &p.DHStatus, &p.DHPushStatus, &p.DHCandidatesJSON, &p.DHHoldReason,
 		&p.GemRateID, &p.PSASpecID,
-		&p.CardPlayer, &p.CardVariation, &p.CardCategory, &p.CLSyncedAt, &p.DHLastSyncedAt,
+		&p.CardPlayer, &p.CardVariation, &p.CardCategory, &p.CLSyncedAt, &p.CLLastError, &p.DHLastSyncedAt,
 		&p.MidPriceCents, &p.LastSoldDate,
 	}
 }

@@ -281,11 +281,17 @@ export function statusBadge(item: AgingItem): { label: string; color: string } {
   }
 }
 
-function relativeTime(isoDate: string): string {
+export function relativeTime(isoDate: string): string {
   if (!isoDate) return 'unknown';
-  const ts = new Date(isoDate).getTime();
+  let ts: number;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) {
+    const [y, m, d] = isoDate.split('-').map(Number);
+    ts = new Date(y, m - 1, d).getTime();
+  } else {
+    ts = new Date(isoDate).getTime();
+  }
   if (isNaN(ts)) return 'unknown';
-  const diff = Date.now() - ts;
+  const diff = Math.max(0, Date.now() - ts);
   const days = Math.floor(diff / 86400000);
   if (days === 0) return 'today';
   if (days === 1) return '1d ago';

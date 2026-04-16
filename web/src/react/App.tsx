@@ -25,6 +25,7 @@ const CampaignsPage = lazy(() => import('./pages/CampaignsPage'));
 const CampaignDetailPage = lazy(() => import('./pages/CampaignDetailPage'));
 const AdminPage = lazy(() => import('./pages/AdminPage'));
 const GlobalInventoryPage = lazy(() => import('./pages/GlobalInventoryPage'));
+const InsightsPage = lazy(() => import('./pages/InsightsPage'));
 const ToolsPage = lazy(() => import('./pages/ToolsPage'));
 
 function AppContent() {
@@ -69,7 +70,6 @@ function AppContent() {
               <Route path="/watchlist" element={<Navigate to="/" replace />} />
               <Route path="/favorites" element={<Navigate to="/" replace />} />
               <Route path="/opportunities" element={<Navigate to="/" replace />} />
-              <Route path="/insights" element={<Navigate to="/" replace />} />
               <Route path="/pricing" element={<Navigate to="/" replace />} />
               <Route path="/suggestions" element={<Navigate to="/" replace />} />
               {/* Campaigns */}
@@ -92,6 +92,14 @@ function AppContent() {
                 <ProtectedRoute>
                   <PageTransition>
                     <GlobalInventoryPage />
+                  </PageTransition>
+                </ProtectedRoute>
+              } />
+              {/* Insights (AI reports hub) */}
+              <Route path="/insights" element={
+                <ProtectedRoute>
+                  <PageTransition>
+                    <InsightsPage />
                   </PageTransition>
                 </ProtectedRoute>
               } />

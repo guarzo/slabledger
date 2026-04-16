@@ -14,7 +14,6 @@ const operationLabels: Record<string, string> = {
   digest: 'Weekly Digest',
   campaign_analysis: 'Campaign Analysis',
   liquidation: 'Liquidation Analysis',
-  purchase_assessment: 'Purchase Assessment',
 };
 
 function OperationRow({ op }: { op: AIOperationSummary }) {

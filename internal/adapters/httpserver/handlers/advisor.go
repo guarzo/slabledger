@@ -222,67 +222,6 @@ func (h *AdvisorHandler) HandleLiquidationAnalysis(w http.ResponseWriter, r *htt
 	})
 }
 
-// HandlePurchaseAssessment evaluates a potential purchase via SSE.
-func (h *AdvisorHandler) HandlePurchaseAssessment(w http.ResponseWriter, r *http.Request) {
-	if requireUser(w, r) == nil {
-		return
-	}
-
-	var dto struct {
-		CampaignID   string  `json:"campaignId"`
-		CardName     string  `json:"cardName"`
-		SetName      string  `json:"setName"`
-		Grade        *string `json:"grade"`
-		BuyCostCents *int    `json:"buyCostCents"`
-		CLValueCents int     `json:"clValueCents"`
-		CertNumber   string  `json:"certNumber"`
-	}
-	if !decodeBody(w, r, &dto) {
-		return
-	}
-	if dto.CampaignID == "" || dto.CardName == "" {
-		writeError(w, http.StatusBadRequest, "campaignId and cardName required")
-		return
-	}
-	if dto.Grade == nil {
-		writeError(w, http.StatusBadRequest, "grade is required")
-		return
-	}
-	if dto.BuyCostCents == nil {
-		writeError(w, http.StatusBadRequest, "buyCostCents is required")
-		return
-	}
-
-	// Resolve campaign name for prompt context.
-	var campaignName string
-	if h.campaignsSvc != nil {
-		if c, err := h.campaignsSvc.GetCampaign(r.Context(), dto.CampaignID); err == nil && c != nil {
-			campaignName = c.Name
-		} else if err != nil {
-			h.logger.Warn(r.Context(), "could not resolve campaign name for purchase assessment",
-				observability.String("campaignId", dto.CampaignID), observability.Err(err))
-		}
-	}
-	if campaignName == "" {
-		campaignName = dto.CampaignID // fallback: use ID if lookup fails
-	}
-
-	req := advisor.PurchaseAssessmentRequest{
-		CampaignID:   dto.CampaignID,
-		CampaignName: campaignName,
-		CardName:     dto.CardName,
-		SetName:      dto.SetName,
-		Grade:        *dto.Grade,
-		BuyCostCents: *dto.BuyCostCents,
-		CLValueCents: dto.CLValueCents,
-		CertNumber:   dto.CertNumber,
-	}
-
-	h.streamAnalysis(w, r, func(stream func(advisor.StreamEvent)) error {
-		return h.service.AssessPurchase(r.Context(), req, stream)
-	})
-}
-
 // streamAnalysis sets up SSE headers and runs an analysis function, streaming events to the client.
 func (h *AdvisorHandler) streamAnalysis(w http.ResponseWriter, r *http.Request, fn func(func(advisor.StreamEvent)) error) {
 	flusher, ok := w.(http.Flusher)
