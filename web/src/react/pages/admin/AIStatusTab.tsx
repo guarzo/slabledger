@@ -23,7 +23,7 @@ function OperationRow({ op }: { op: AIOperationSummary }) {
       <td className="py-2 pr-4 text-sm text-[var(--text)]">{label}</td>
       <td className="py-2 pr-4 text-sm text-[var(--text)] text-right">{op.calls}</td>
       <td className="py-2 pr-4 text-sm text-right">
-        <span className={op.errors > 0 ? 'text-[var(--danger)]' : 'text-[var(--text)]'}>{op.errors}</span>
+        <span className={op.errors > 0 ? 'text-[var(--danger)]' : 'text-[var(--text-muted)]'}>{op.errors}</span>
       </td>
       <td className="py-2 pr-4 text-sm text-right">
         <span className={op.successRate < 90 && op.calls > 0 ? 'text-[var(--warning)]' : 'text-[var(--text)]'}>
@@ -83,7 +83,7 @@ export function AIStatusTab({ enabled = true }: { enabled?: boolean }) {
           label="Success Rate"
           value={summary.totalCalls > 0 ? `${summary.successRate.toFixed(1)}%` : '-'}
           sub={summary.rateLimitHits > 0 ? `${summary.rateLimitHits} rate limited` : undefined}
-          color={summary.totalCalls > 0 && summary.successRate < 90 ? 'var(--warning)' : undefined}
+          color={summary.totalCalls > 0 ? (summary.successRate >= 90 ? 'var(--success)' : summary.successRate >= 75 ? 'var(--warning)' : 'var(--danger)') : undefined}
         />
         <SummaryCard
           label="Total Tokens"

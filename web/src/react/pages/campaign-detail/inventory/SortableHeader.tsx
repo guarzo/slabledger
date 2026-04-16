@@ -20,7 +20,7 @@ export default function SortableHeader({ label, sortKey, currentKey, currentDir,
       <button
         type="button"
         aria-label={`Sort by ${label}${active ? `, sorted ${currentDir === 'asc' ? 'ascending' : 'descending'}` : ''}`}
-        className={`inline-flex items-center gap-1 cursor-pointer select-none transition-colors duration-150 bg-transparent border-none p-0 font-inherit text-inherit ${active ? 'text-[var(--brand-400)]' : 'text-[var(--text-muted)] hover:text-[var(--text)]'}`}
+        className={`inline-flex items-center gap-1 cursor-pointer select-none transition-colors duration-150 bg-transparent border-none p-0 font-inherit text-inherit ${active ? 'text-[var(--brand-400)]' : 'text-[var(--text)] hover:text-[var(--brand-400)]'}`}
         onClick={() => onSort(sortKey)}
       >
         {label}

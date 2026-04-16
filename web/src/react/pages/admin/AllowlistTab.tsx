@@ -3,7 +3,6 @@ import type { AllowedEmail } from '../../../types/admin';
 import PokeballLoader from '../../PokeballLoader';
 import { useAllowlist, useAddAllowedEmail, useRemoveAllowedEmail } from '../../queries/useAdminQueries';
 import { Button } from '../../ui';
-import { formatAdminDate } from './adminUtils';
 
 function formatMutationError(err: unknown): string {
   if (err instanceof Error) return err.message;
@@ -103,7 +102,7 @@ export function AllowlistTab({ enabled = true }: { enabled?: boolean }) {
                   <td className="glass-table-td text-[var(--text)]">{ae.Email ?? '-'}</td>
                   <td className="glass-table-td text-[var(--text-muted)] hidden sm:table-cell">{ae.Notes || '-'}</td>
                   <td className="glass-table-td text-[var(--text-muted)] hidden md:table-cell">
-                    {formatAdminDate(ae.CreatedAt)}
+                    {ae.CreatedAt ? new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(ae.CreatedAt)) : '-'}
                   </td>
                   <td className="glass-table-td text-right">
                     <Button

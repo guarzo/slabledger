@@ -245,7 +245,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                 key={tab.key}
                 type="button"
                 onClick={() => setFilterTab(tab.key)}
-                className={`shrink-0 text-xs font-medium px-3 py-1.5 rounded-full border transition-colors ${
+                className={`shrink-0 text-xs font-semibold px-3 py-1.5 rounded-full border transition-colors ${
                   filterTab === tab.key
                     ? 'border-[var(--brand-500)] bg-[var(--brand-500)]/10 text-[var(--brand-400)]'
                     : 'border-[var(--surface-2)] text-[var(--text-muted)] hover:text-[var(--text)] hover:border-[var(--text-muted)]'
