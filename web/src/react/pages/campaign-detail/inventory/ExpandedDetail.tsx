@@ -4,9 +4,10 @@ import type { AgingItem } from '../../../../types/campaigns';
 import { api } from '../../../../js/api';
 import { useToast } from '../../../contexts/ToastContext';
 import { queryKeys } from '../../../queries/queryKeys';
-import PriceSignalCard from './PriceSignalCard';
+import SellPriceHero from './SellPriceHero';
+import SignalChip from './SignalChip';
 import CompSummaryPanel from './CompSummaryPanel';
-import { costBasis, formatShipDate } from './utils';
+import { costBasis, formatShipDate, mostRecentSale } from './utils';
 import { PriceDecisionBar, buildPriceSources, preSelectSource, Button } from '../../../ui';
 
 interface ExpandedDetailProps {
@@ -34,14 +35,6 @@ function formatHoldReason(reason: string): string {
   return reason || 'Unknown reason';
 }
 
-/** Formats a YYYY-MM-DD sale date as a short readable string, e.g. "Apr 10". */
-function formatSaleDate(dateStr?: string): string | undefined {
-  if (!dateStr) return undefined;
-  const d = new Date(dateStr + 'T00:00:00'); // force local midnight to avoid UTC offset shift
-  if (isNaN(d.getTime())) return undefined;
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-}
-
 export default function ExpandedDetail({ item, onReviewed, campaignId, onOpenFlagDialog, onResolveFlag, onApproveDHPush, onSetPrice }: ExpandedDetailProps) {
   const queryClient = useQueryClient();
   const toast = useToast();
@@ -54,7 +47,7 @@ export default function ExpandedDetail({ item, onReviewed, campaignId, onOpenFla
   const clCents = purchase.clValueCents;
   const mmCents = purchase.mmValueCents ?? 0;
   const dhMidCents = snap?.midPriceCents ?? 0;
-  const lastSoldCents = snap?.lastSoldCents ?? 0;
+  const lastSoldCents = mostRecentSale(item)?.cents ?? 0;
 
   const sources = useMemo(
     () => buildPriceSources({ clCents, dhMidCents, costCents: cb, lastSoldCents, mmCents }),
@@ -92,50 +85,54 @@ export default function ExpandedDetail({ item, onReviewed, campaignId, onOpenFla
     }
   };
 
+  const lowestListCents = snap?.lowestListCents ?? 0;
+  const overrideCents = purchase.overridePriceCents ?? 0;
+  const listedCents = purchase.dhListingPriceCents ?? 0;
+
   return (
     <div className="glass-vrow-expanded px-6 py-4 border-t border-[rgba(255,255,255,0.05)]">
-      {/* 3-column price signal grid, 8 cards */}
-      <div className="grid grid-cols-3 gap-3 mb-4">
-        <PriceSignalCard label="Cost Basis" valueCents={cb} />
-        <PriceSignalCard
+      {/* Hero: most recent sale + comp context + range bar */}
+      <SellPriceHero item={item} costBasisCents={cb} />
+
+      {/* Supporting signal chips — compact, hide when optional + zero */}
+      <div className="mb-4 flex flex-wrap items-stretch gap-2">
+        <SignalChip label="Cost Basis" valueCents={cb} />
+        <SignalChip
           label="Card Ladder"
           valueCents={clCents}
+          deltaVsCostCents={clCents > 0 ? clCents - cb : undefined}
           updatedAt={purchase.clSyncedAt}
           freshnessThresholds={{ green: 2, amber: 14 }}
         />
-        <PriceSignalCard
+        <SignalChip
           label="Market Movers"
           valueCents={mmCents}
+          hideWhenZero
+          deltaVsCostCents={mmCents > 0 ? mmCents - cb : undefined}
           updatedAt={purchase.mmValueUpdatedAt}
         />
-        <PriceSignalCard
+        <SignalChip
           label="DH Market"
           valueCents={dhMidCents}
-          highlight={dhMidCents > 0 && dhMidCents > cb ? 'success' : dhMidCents > 0 && dhMidCents < cb ? 'danger' : undefined}
+          hideWhenZero
+          deltaVsCostCents={dhMidCents > 0 ? dhMidCents - cb : undefined}
           updatedAt={purchase.dhLastSyncedAt}
           freshnessThresholds={{ green: 1, amber: 3 }}
         />
-        <PriceSignalCard
-          label="Last Sold"
-          valueCents={lastSoldCents}
-          subtitle={formatSaleDate(snap?.lastSoldDate)}
-        />
-        <PriceSignalCard label="Lowest eBay" valueCents={snap?.lowestListCents ?? 0} />
-        <PriceSignalCard
+        <SignalChip label="Lowest eBay" valueCents={lowestListCents} hideWhenZero />
+        <SignalChip
           label="Override"
-          valueCents={purchase.overridePriceCents ?? 0}
-          highlight={purchase.overridePriceCents ? 'warning' : 'muted'}
-          updatedAt={purchase.overridePriceCents ? purchase.overrideSetAt : undefined}
+          valueCents={overrideCents}
+          hideWhenZero
+          tone="warning"
+          updatedAt={purchase.overrideSetAt}
         />
-        <PriceSignalCard
-          label="Listed"
-          valueCents={purchase.dhListingPriceCents ?? 0}
-        />
+        <SignalChip label="Listed" valueCents={listedCents} hideWhenZero />
       </div>
 
-      {/* Comp Summary Panel */}
+      {/* Comp Summary Panel — refined, detailed breakdown */}
       {item.compSummary && item.compSummary.recentComps > 0 && (
-        <CompSummaryPanel comp={item.compSummary} />
+        <CompSummaryPanel comp={item.compSummary} costBasisCents={cb} />
       )}
 
       {/* Price decision bar */}

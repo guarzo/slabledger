@@ -9,6 +9,7 @@ export interface TabCounts {
   ai_suggestion: number;
   card_show: number;
   in_hand: number;
+  ready_to_list: number;
   all: number;
 }
 
@@ -25,14 +26,15 @@ export interface InventoryMeta {
 }
 
 export function computeInventoryMeta(items: AgingItem[]): InventoryMeta {
-  const stats: ReviewStats = { total: items.length, needsReview: 0, reviewed: 0, flagged: 0 };
-  const counts: TabCounts = { needs_attention: 0, ai_suggestion: 0, card_show: 0, in_hand: 0, all: items.length };
+  const stats: ReviewStats = { total: items.length, needsReview: 0, reviewed: 0, flagged: 0, aging60d: 0 };
+  const counts: TabCounts = { needs_attention: 0, ai_suggestion: 0, card_show: 0, in_hand: 0, ready_to_list: 0, all: items.length };
   let totalCost = 0;
   let totalMarket = 0;
   for (const item of items) {
     if (item.hasOpenFlag) stats.flagged++;
     if (item.purchase.reviewedAt) stats.reviewed++;
     else stats.needsReview++;
+    if (item.daysHeld >= 60) stats.aging60d++;
 
     const status = getReviewStatus(item);
     if ((EXCEPTION_STATUSES as readonly string[]).includes(status) || isDHHeld(item)) {
@@ -41,9 +43,10 @@ export function computeInventoryMeta(items: AgingItem[]): InventoryMeta {
     if ((item.purchase.aiSuggestedPriceCents ?? 0) > 0) counts.ai_suggestion++;
     if (item.purchase.receivedAt && isCardShowCandidate(item)) counts.card_show++;
     if (item.purchase.receivedAt) counts.in_hand++;
+    if (isReadyToList(item)) counts.ready_to_list++;
 
     totalCost += costBasis(item.purchase);
-    if (item.currentMarket) totalMarket += bestPrice(item.currentMarket);
+    totalMarket += bestPrice(item);
   }
   return {
     reviewStats: stats,
@@ -56,7 +59,14 @@ export function isDHHeld(item: AgingItem): boolean {
   return item.purchase.dhPushStatus === 'held';
 }
 
-export type FilterTab = 'needs_attention' | 'ai_suggestion' | 'sell_sheet' | 'all' | 'card_show' | 'in_hand';
+// isReadyToList: received (intake complete) but not yet listed on DH.
+// Used to surface cert-intake items that have been pushed to DH inventory
+// so a human can review price before flipping them live.
+export function isReadyToList(item: AgingItem): boolean {
+  return !!item.purchase.receivedAt && item.purchase.dhStatus !== 'listed';
+}
+
+export type FilterTab = 'needs_attention' | 'ai_suggestion' | 'sell_sheet' | 'all' | 'card_show' | 'in_hand' | 'ready_to_list';
 
 export function filterAndSortItems(
   items: AgingItem[],
@@ -93,6 +103,7 @@ export function filterAndSortItems(
         if (filterTab === 'ai_suggestion') return (i.purchase.aiSuggestedPriceCents ?? 0) > 0;
         if (filterTab === 'card_show') return !!i.purchase.receivedAt && isCardShowCandidate(i);
         if (filterTab === 'in_hand') return !!i.purchase.receivedAt;
+        if (filterTab === 'ready_to_list') return isReadyToList(i);
         return false;
       });
     }
@@ -113,13 +124,13 @@ export function filterAndSortItems(
       case 'cost':
         return dir * (costBasis(a.purchase) - costBasis(b.purchase));
       case 'market': {
-        const ma = a.currentMarket ? bestPrice(a.currentMarket) : 0;
-        const mb = b.currentMarket ? bestPrice(b.currentMarket) : 0;
+        const ma = bestPrice(a);
+        const mb = bestPrice(b);
         return dir * (ma - mb);
       }
       case 'pl': {
-        const pa = unrealizedPL(costBasis(a.purchase), a.currentMarket) ?? -Infinity;
-        const pb = unrealizedPL(costBasis(b.purchase), b.currentMarket) ?? -Infinity;
+        const pa = unrealizedPL(costBasis(a.purchase), a) ?? -Infinity;
+        const pb = unrealizedPL(costBasis(b.purchase), b) ?? -Infinity;
         return dir * (pa - pb);
       }
       case 'days':

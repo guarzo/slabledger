@@ -52,6 +52,7 @@ export default function ReviewSummaryBar({ stats, searchQuery, onSearchChange, s
             <StatBlock label="Unreviewed" value={stats.needsReview} colorClass="text-[var(--warning)]" onClick={() => onStatClick?.('unreviewed')} />
             <StatBlock label="Reviewed" value={stats.reviewed} colorClass="text-[var(--success)]" />
             <StatBlock label="Flagged" value={stats.flagged} colorClass="text-[var(--danger)]" onClick={() => onStatClick?.('flagged')} />
+            <StatBlock label="Aging 60d+" value={stats.aging60d} colorClass={stats.aging60d > 0 ? 'text-[var(--warning)]' : undefined} />
           </>
         )}
       </div>

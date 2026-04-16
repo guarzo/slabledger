@@ -506,6 +506,8 @@ func TestCLSales_GetCompSummary(t *testing.T) {
 		assert.Len(t, summary.PriceCentsList, 8)
 		// LastSaleDate should be the most recent
 		assert.NotEmpty(t, summary.LastSaleDate)
+		// LastSaleCents should be the price of the most recent sale (daysAgo=5, 58000)
+		assert.Equal(t, 58000, summary.LastSaleCents)
 		// ByPlatform should have both eBay and TCGPlayer
 		assert.GreaterOrEqual(t, len(summary.ByPlatform), 2)
 	})

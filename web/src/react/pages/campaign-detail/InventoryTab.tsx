@@ -40,7 +40,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
     reviewStats, tabCounts, showEV, evPortfolio, evMap,
     pageSellSheetCount, sellSheetActive, filteredAndSortedItems,
     totalCost, totalMarket, totalPL,
-    handleSort, handleReviewed, handleResolveFlag, handleApproveDHPush, handleFlagSubmit, handlePrint, handleDelete,
+    handleSort, handleReviewed, handleResolveFlag, handleApproveDHPush, handleListOnDH, handleBulkListOnDH, handleFlagSubmit, handlePrint, handleDelete,
     toggleSelect, toggleAll, toggleExpand,
     openSaleModal, closeSaleModal, handleFixPricing, handleSetPrice,
     handlePriceSaved, handleHintSaved, sellSheet, toast,
@@ -199,6 +199,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
             toast.success(`Removed ${ids.length} item${ids.length > 1 ? 's' : ''} from sell sheet`);
           }}
           onRecordSale={openSaleModal}
+          onBulkListOnDH={handleBulkListOnDH}
           onClearSelected={() => setSelected(new Set())}
           isPrinting={isPrinting}
           pageSellSheetCount={pageSellSheetCount}
@@ -227,6 +228,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
            {([
              { key: 'needs_attention' as const, label: 'Needs Attention', color: 'var(--warning)' },
              { key: 'in_hand' as const, label: 'In Hand', color: 'var(--success)' },
+             { key: 'ready_to_list' as const, label: 'Ready to List', color: 'var(--brand-400)' },
              { key: 'ai_suggestion' as const, label: 'AI Suggestions', color: 'var(--brand-400)' },
              { key: 'sell_sheet' as const, label: 'Sell Sheet', color: 'var(--brand-400)' },
              { key: 'all' as const, label: 'All', color: 'var(--text)' },
@@ -234,6 +236,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
            ] as const).filter(tab => {
              if (tab.key === 'ai_suggestion') return tabCounts.ai_suggestion > 0;
              if (tab.key === 'in_hand') return tabCounts.in_hand > 0;
+             if (tab.key === 'ready_to_list') return tabCounts.ready_to_list > 0;
              return true;
            }).map(tab => {
             const count = tab.key === 'sell_sheet' ? pageSellSheetCount : tabCounts[tab.key];
@@ -308,6 +311,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                     onFixPricing={() => handleFixPricing(item.purchase)}
                     onSetPrice={() => handleSetPrice(item)}
                     onDelete={() => handleDelete(item)}
+                    onListOnDH={handleListOnDH}
                     ev={evMap.get(item.purchase.certNumber)}
                     showCampaignColumn={showCampaignColumn}
                     isOnSellSheet={!sellSheetActive && sellSheet.has(item.purchase.id)}
@@ -337,6 +341,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                         onFixPricing={() => handleFixPricing(item.purchase)}
                         onSetPrice={() => handleSetPrice(item)}
                         onDelete={() => handleDelete(item)}
+                        onListOnDH={handleListOnDH}
                         ev={evMap.get(item.purchase.certNumber)}
                         showCampaignColumn={showCampaignColumn}
                         isOnSellSheet={!sellSheetActive && sellSheet.has(item.purchase.id)}
@@ -362,8 +367,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
             <SortableHeader label="Market" sortKey="market" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-right" style={{ width: '120px' }} />
             <SortableHeader label="P/L" sortKey="pl" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-right print-hide-col" style={{ width: '72px' }} />
             <SortableHeader label="Days" sortKey="days" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-center print-hide-col" style={{ width: '40px' }} />
-            <div className="glass-table-th flex-shrink-0 text-center print-hide-col" style={{ width: '80px' }}>DH</div>
-            <div className="glass-table-th flex-shrink-0 text-center print-hide-col" style={{ width: '20px' }}></div>
+            <div className="glass-table-th flex-shrink-0 text-center print-hide-actions" style={{ width: '48px' }}>List</div>
             <div className="glass-table-th flex-shrink-0 text-center print-hide-actions" style={{ width: '48px' }}>Sell</div>
             <div className="glass-table-th flex-shrink-0 !px-1 print-hide-actions" style={{ width: '28px' }}></div>
           </div>
@@ -372,7 +376,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
             {isPrinting ? (
               filteredAndSortedItems.map((item, index) => {
                 const isExpanded = expandedId === item.purchase.id;
-                const rowPl = unrealizedPL(costBasis(item.purchase), item.currentMarket);
+                const rowPl = unrealizedPL(costBasis(item.purchase), item);
                 const plStatus = rowPl != null ? (rowPl > 0 ? 'positive' : rowPl < 0 ? 'negative' : 'neutral') : 'neutral';
                 const isSelected = selected.has(item.purchase.id);
                 return (
@@ -387,6 +391,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                         onFixPricing={() => handleFixPricing(item.purchase)}
                         onSetPrice={() => handleSetPrice(item)}
                         onDelete={() => handleDelete(item)}
+                        onListOnDH={handleListOnDH}
                         showCampaignColumn={showCampaignColumn}
                         isOnSellSheet={!sellSheetActive && sellSheet.has(item.purchase.id)}
                       />
@@ -400,7 +405,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                 {rowVirtualizer.getVirtualItems().map(virtualRow => {
                   const item = filteredAndSortedItems[virtualRow.index];
                   const isExpanded = expandedId === item.purchase.id;
-                  const rowPl = unrealizedPL(costBasis(item.purchase), item.currentMarket);
+                  const rowPl = unrealizedPL(costBasis(item.purchase), item);
                   const plStatus = rowPl != null ? (rowPl > 0 ? 'positive' : rowPl < 0 ? 'negative' : 'neutral') : 'neutral';
                   const isSelected = selected.has(item.purchase.id);
                   return (
@@ -428,6 +433,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                           onFixPricing={() => handleFixPricing(item.purchase)}
                           onSetPrice={() => handleSetPrice(item)}
                           onDelete={() => handleDelete(item)}
+                          onListOnDH={handleListOnDH}
                           showCampaignColumn={showCampaignColumn}
                           isOnSellSheet={!sellSheetActive && sellSheet.has(item.purchase.id)}
                         />

@@ -3,10 +3,66 @@ package handlers
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"time"
 
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
+
+// HandleListPurchaseOnDH handles POST /api/purchases/{purchaseId}/list-on-dh.
+// Manually transitions a purchase from in_stock to listed on DH. The purchase
+// must be received and already pushed to DH inventory.
+func (h *CampaignsHandler) HandleListPurchaseOnDH(w http.ResponseWriter, r *http.Request) {
+	purchaseID, ok := pathID(w, r, "purchaseId", "Purchase ID")
+	if !ok {
+		return
+	}
+
+	if h.dhListingSvc == nil {
+		writeError(w, http.StatusServiceUnavailable, "DH listing service not configured")
+		return
+	}
+
+	p, err := h.service.GetPurchase(r.Context(), purchaseID)
+	if err != nil {
+		if inventory.IsPurchaseNotFound(err) {
+			writeError(w, http.StatusNotFound, "Purchase not found")
+			return
+		}
+		h.logger.Error(r.Context(), "failed to get purchase for DH listing",
+			observability.Err(err), observability.String("purchaseId", purchaseID))
+		writeError(w, http.StatusInternalServerError, "Internal server error")
+		return
+	}
+
+	if p.ReceivedAt == nil {
+		writeError(w, http.StatusConflict, "Purchase has not been received yet")
+		return
+	}
+	if p.DHInventoryID == 0 {
+		writeError(w, http.StatusConflict, "Purchase not yet pushed to DH inventory")
+		return
+	}
+	if p.DHStatus == inventory.DHStatusListed {
+		writeError(w, http.StatusConflict, "Purchase already listed on DH")
+		return
+	}
+
+	result := h.dhListingSvc.ListPurchases(r.Context(), []string{p.CertNumber})
+	if result.Error != nil {
+		h.logger.Error(r.Context(), "dh listing failed",
+			observability.Err(result.Error), observability.String("purchaseId", purchaseID))
+		writeError(w, http.StatusInternalServerError, "DH listing failed")
+		return
+	}
+	if result.Listed == 0 {
+		writeError(w, http.StatusInternalServerError, "DH listing did not list the purchase")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, result)
+}
 
 // triggerDHListing runs in the background so it doesn't delay the HTTP response.
 func (h *CampaignsHandler) triggerDHListing(certNumbers []string) {

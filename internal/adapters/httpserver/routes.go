@@ -184,6 +184,9 @@ func (rt *Router) registerCampaignRoutes(mux *http.ServeMux) {
 	mux.Handle("PATCH /api/purchases/{purchaseId}/review-price", authRoute(rt.campaignsHandler.HandleSetReviewedPrice))
 	mux.Handle("POST /api/purchases/{purchaseId}/flag", authRoute(rt.campaignsHandler.HandleCreatePriceFlag))
 
+	// Manual DH listing (post-cert-intake flow)
+	mux.Handle("POST /api/purchases/{purchaseId}/list-on-dh", authRoute(rt.campaignsHandler.HandleListPurchaseOnDH))
+
 	// Credit & Invoice endpoints
 	mux.Handle("GET /api/credit/summary", authRoute(rt.campaignsHandler.HandleCapitalSummary))
 	mux.Handle("GET /api/credit/config", authRoute(rt.campaignsHandler.HandleGetCashflowConfig))
@@ -307,7 +310,6 @@ func (rt *Router) registerDHRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /api/dh/undismiss", rt.authMW.RequireAuth(http.HandlerFunc(rt.dhHandler.HandleUndismissMatch)))
 	mux.Handle("POST /api/dh/approve/{purchaseId}", rt.authMW.RequireAuth(http.HandlerFunc(rt.dhHandler.HandleApproveDHPush)))
 	mux.Handle("POST /api/dh/reconcile", rt.authMW.RequireAdmin(http.HandlerFunc(rt.dhHandler.HandleReconcile)))
-	mux.Handle("POST /api/dh/ingest-orders", rt.authMW.RequireAdmin(http.HandlerFunc(rt.dhHandler.HandleIngestOrders)))
 	mux.Handle("GET /api/admin/dh-push-config", rt.authMW.RequireAdmin(http.HandlerFunc(rt.dhHandler.HandleGetDHPushConfig)))
 	mux.Handle("PUT /api/admin/dh-push-config", rt.authMW.RequireAdmin(http.HandlerFunc(rt.dhHandler.HandleSaveDHPushConfig)))
 	rt.logger.Info(context.Background(), "DH routes registered")

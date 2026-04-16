@@ -15,6 +15,7 @@ type CompSummary struct {
 	CompsAboveCost int                 `json:"compsAboveCost"`
 	ByPlatform     []PlatformBreakdown `json:"byPlatform"`
 	LastSaleDate   string              `json:"lastSaleDate"`
+	LastSaleCents  int                 `json:"lastSaleCents"`
 	PriceCentsList []int               `json:"-"`
 }
 
