@@ -12,6 +12,7 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/auth"
 	"github.com/guarzo/slabledger/internal/domain/demand"
 	"github.com/guarzo/slabledger/internal/domain/dhevents"
+	"github.com/guarzo/slabledger/internal/domain/dhlisting"
 	"github.com/guarzo/slabledger/internal/domain/intelligence"
 	domainCampaigns "github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
@@ -51,6 +52,9 @@ type BuildDeps struct {
 	DHSuggestionsRepo  intelligence.SuggestionsRepository
 	DHDemandRepo       demand.Repository  // niche-opportunity cache (T1/T3)
 	DHUnsoldCardLister UnsoldDHCardLister // seeds analytics with our inventory
+
+	// DH inventory reconciler (optional; enables the daily DH reconcile scheduler).
+	DHReconciler dhlisting.Reconciler
 
 	// DH event recorder (shared across DH schedulers)
 	EventRecorder dhevents.Recorder
@@ -301,6 +305,20 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 			deps.EventRecorder,
 			deps.Logger,
 			inventoryPollCfg,
+		))
+	}
+
+	// DH inventory reconciliation scheduler (daily drift scan).
+	if deps.DHReconciler != nil {
+		reconcileCfg := config.DHReconcileConfig{
+			Enabled:     cfg.DHReconcile.Enabled,
+			Interval:    cfg.DHReconcile.Interval,
+			RefreshHour: cfg.DHReconcile.RefreshHour,
+		}
+		schedulers = append(schedulers, NewDHReconcileScheduler(
+			deps.DHReconciler,
+			deps.Logger,
+			reconcileCfg,
 		))
 	}
 

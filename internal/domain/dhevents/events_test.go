@@ -4,7 +4,7 @@ import "testing"
 
 func TestTypeAndSourceConstantsAreDistinct(t *testing.T) {
 	types := []Type{
-		TypeEnrolled, TypePushed, TypeListed, TypeChannelSynced,
+		TypeEnrolled, TypePushed, TypeListed, TypeUnlisted, TypeChannelSynced,
 		TypeSold, TypeOrphanSale, TypeAlreadySold, TypeHeld,
 		TypeDismissed, TypeUnmatched, TypeCardIDResolved,
 	}

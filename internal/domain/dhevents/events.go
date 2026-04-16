@@ -16,6 +16,7 @@ const (
 	TypeEnrolled       Type = "enrolled"
 	TypePushed         Type = "pushed"
 	TypeListed         Type = "listed"
+	TypeUnlisted       Type = "unlisted"
 	TypeChannelSynced  Type = "channel_synced"
 	TypeSold           Type = "sold"
 	TypeOrphanSale     Type = "orphan_sale"

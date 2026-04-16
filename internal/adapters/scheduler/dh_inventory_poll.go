@@ -26,12 +26,11 @@ type DHFieldsUpdater interface {
 	UpdatePurchaseDHFields(ctx context.Context, id string, update inventory.DHFieldsUpdate) error
 }
 
-// PurchaseByCertLookup resolves cert numbers to purchase IDs. The single-cert
-// variant is retained for callers that look up one cert; the batch variant
-// enables N→1 round-trip reduction on poll loops.
+// PurchaseByCertLookup resolves a cert number to its local purchase ID and
+// current dh_status in a single round trip, so the poll loop can detect
+// DH-side transitions (e.g. listed → in_stock).
 type PurchaseByCertLookup interface {
-	GetPurchaseIDByCertNumber(ctx context.Context, certNumber string) (string, error)
-	GetPurchaseIDsByCertNumbers(ctx context.Context, certNumbers []string) (map[string]string, error)
+	GetDHStatusByCertNumber(ctx context.Context, certNumber string) (purchaseID string, dhStatus string, err error)
 }
 
 // DHInventoryPollConfig controls the inventory poll scheduler.
@@ -133,40 +132,19 @@ func (s *DHInventoryPollScheduler) poll(ctx context.Context) {
 	skipped := 0
 	var latestUpdatedAt string
 
-	certSet := make(map[string]struct{}, len(allItems))
-	for _, item := range allItems {
-		certSet[item.CertNumber] = struct{}{}
-	}
-	certs := make([]string, 0, len(certSet))
-	for c := range certSet {
-		certs = append(certs, c)
-	}
-	purchaseIDByCert, lookupErr := s.lookup.GetPurchaseIDsByCertNumbers(ctx, certs)
-	if lookupErr != nil {
-		s.logger.Warn(ctx, "dh inventory poll: batch cert lookup failed; falling back to per-item",
-			observability.Err(lookupErr))
-		purchaseIDByCert = nil // signal fallback below
-	}
-
 	for _, item := range allItems {
 		// Always advance the checkpoint so persistent failures don't block progress.
 		if item.UpdatedAt > latestUpdatedAt {
 			latestUpdatedAt = item.UpdatedAt
 		}
 
-		var purchaseID string
-		if purchaseIDByCert != nil {
-			purchaseID = purchaseIDByCert[item.CertNumber]
-		} else {
-			id, perItemErr := s.lookup.GetPurchaseIDByCertNumber(ctx, item.CertNumber)
-			if perItemErr != nil {
-				s.logger.Warn(ctx, "dh inventory poll: cert lookup error",
-					observability.String("cert", item.CertNumber),
-					observability.Err(perItemErr))
-				skipped++
-				continue
-			}
-			purchaseID = id
+		purchaseID, prevDHStatus, lookupErr := s.lookup.GetDHStatusByCertNumber(ctx, item.CertNumber)
+		if lookupErr != nil {
+			s.logger.Warn(ctx, "dh inventory poll: cert lookup error",
+				observability.String("cert", item.CertNumber),
+				observability.Err(lookupErr))
+			skipped++
+			continue
 		}
 		if purchaseID == "" {
 			s.logger.Debug(ctx, "dh inventory poll: cert not found in local system",
@@ -194,18 +172,23 @@ func (s *DHInventoryPollScheduler) poll(ctx context.Context) {
 
 		updated++
 
-		// Record a state-transition event for pushed / listed observations.
-		// Other statuses (empty, unknown) are ignored — the event table only
-		// captures named transitions.
+		// Emit an observation event. A listed → in_stock drop is the only
+		// "unlisted" shape DH's inventory API exposes (it reports in_stock /
+		// listed / sold only), so classify as TypeUnlisted rather than the
+		// generic TypePushed to avoid double-counting in downstream aggregations.
 		var eventType dhevents.Type
 		switch item.Status {
 		case dh.InventoryStatusInStock:
-			eventType = dhevents.TypePushed
+			if prevDHStatus == inventory.DHStatusListed {
+				eventType = dhevents.TypeUnlisted
+			} else {
+				eventType = dhevents.TypePushed
+			}
 		case dh.InventoryStatusListed:
 			eventType = dhevents.TypeListed
 		}
 		if eventType != "" {
-			s.recordEvent(ctx, dhevents.Event{
+			evt := dhevents.Event{
 				PurchaseID:    purchaseID,
 				CertNumber:    item.CertNumber,
 				Type:          eventType,
@@ -213,7 +196,11 @@ func (s *DHInventoryPollScheduler) poll(ctx context.Context) {
 				DHInventoryID: item.DHInventoryID,
 				DHCardID:      item.DHCardID,
 				Source:        dhevents.SourceDHInventoryPoll,
-			})
+			}
+			if eventType == dhevents.TypeUnlisted {
+				evt.PrevDHStatus = prevDHStatus
+			}
+			s.recordEvent(ctx, evt)
 		}
 	}
 
