@@ -23,19 +23,22 @@ const MOCK_USER = {
   last_login_at: '2026-04-07T00:00:00Z',
 };
 
-/** Mock only the auth endpoint so the frontend thinks we're logged in as admin. */
+/** Mock auth + any endpoints that won't resolve cleanly in the screenshot environment. */
 async function setupAuth(page: import('@playwright/test').Page, opts?: { skipAuth?: boolean }) {
   // Add bearer token so the backend authenticates API requests
   await page.setExtraHTTPHeaders({ Authorization: `Bearer ${AUTH_TOKEN}` });
 
   // Mock the auth/user endpoint — the frontend checks this to determine login state.
-  // We can't rely on the backend's token-based auth here because the frontend
-  // expects a session cookie flow; mocking this one endpoint is simplest.
   await page.route('**/api/auth/user', async (route) => {
     if (opts?.skipAuth) {
       return route.fulfill({ status: 401, contentType: 'application/json', body: JSON.stringify({ error: 'unauthorized' }) });
     }
     return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_USER) });
+  });
+
+  // Mock advisor SSE endpoints — these fail without a configured AI provider
+  await page.route('**/api/advisor/**', async (route) => {
+    return route.fulfill({ status: 200, contentType: 'text/event-stream', body: '' });
   });
 }
 
@@ -50,8 +53,8 @@ const PAGES = [
   { name: 'dashboard', path: '/' },
   { name: 'campaigns', path: '/campaigns' },
   { name: 'campaign-detail', path: () => `/campaigns/${firstCampaignId || 'unknown'}` },
-  { name: 'inventory', path: '/inventory', filterTab: 'Sell Sheet' },
-  { name: 'inventory-expanded', path: '/inventory', filterTab: 'Sell Sheet', expandRow: true, desktopOnly: true },
+  { name: 'inventory', path: '/inventory' },
+  { name: 'inventory-expanded', path: '/inventory', expandRow: true, desktopOnly: true },
   { name: 'tools', path: '/tools' },
   { name: 'admin-users', path: '/admin' },
   { name: 'admin-pricing', path: '/admin', tabLabel: 'Pricing' },
@@ -96,6 +99,15 @@ async function screenshotPage(
     await page.waitForTimeout(800);
     // Wait for any newly triggered requests to settle
     await page.waitForLoadState('networkidle').catch(() => {});
+    // Wait for "Loading..." text to clear (e.g. integration status cards)
+    try {
+      await page.waitForFunction(() => {
+        const els = document.querySelectorAll('p');
+        return ![...els].some(el => /^Loading .* status/.test(el.textContent || ''));
+      }, { timeout: 10000 });
+    } catch {
+      // Some loading states may not resolve (e.g. missing external service config)
+    }
   }
 
   // If a specific filter tab is requested (e.g. inventory filter buttons), click it.
@@ -120,17 +132,13 @@ async function screenshotPage(
   // Row may not exist if backend is unavailable (CI without Go server).
   if (pg.expandRow) {
     try {
-      const row = page.locator('div[role="row"]:has(div[role="gridcell"])').first();
+      const row = page.locator('div[role="row"]').first();
       await row.click({ timeout: 10000 });
       await page.waitForTimeout(500);
       // Wait for the expanded detail panel to appear
-      try {
-        await page.locator('.glass-vrow-expanded').waitFor({ state: 'visible', timeout: 5000 });
-      } catch {
-        // Expansion may not be available (e.g. mobile view)
-      }
+      await page.locator('.glass-vrow-expanded').waitFor({ state: 'visible', timeout: 5000 });
     } catch {
-      // Rows may not exist (e.g. empty inventory with no backend data)
+      // Rows may not exist or expansion may not be available
     }
   }
 
