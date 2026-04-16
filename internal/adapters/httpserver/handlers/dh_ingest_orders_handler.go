@@ -27,7 +27,10 @@ func (h *DHHandler) HandleIngestOrders(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := time.Parse(time.RFC3339, since); err != nil {
-		writeError(w, http.StatusBadRequest, "since must be RFC3339: "+err.Error())
+		h.logger.Info(r.Context(), "dh ingest orders handler: invalid since",
+			observability.String("since", since),
+			observability.Err(err))
+		writeError(w, http.StatusBadRequest, "since must be RFC3339 format (e.g. 2026-01-01T00:00:00Z)")
 		return
 	}
 

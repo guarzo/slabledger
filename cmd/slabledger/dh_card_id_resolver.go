@@ -11,10 +11,18 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
+// maxCertsPerBatch is DH's documented per-request limit for the batch cert
+// resolution endpoint (see internal/adapters/clients/dh/certs.go). Callers
+// pass arbitrary-size slices; the adapter chunks internally.
+const maxCertsPerBatch = 500
+
 // dhCardIDResolverAdapter satisfies inventory.CardIDResolver by submitting a
 // batch cert resolution job to DH, polling until the job completes or a
 // timeout elapses, and returning cert_number → stringified dh_card_id for
 // every successfully matched cert.
+//
+// Large cert lists are automatically chunked at maxCertsPerBatch so the
+// caller (batchResolveCardIDs) doesn't need to know about the DH limit.
 //
 // The interface returns map[string]string because it is shared with other
 // external-ID sources (e.g. CardLadder); DH card IDs are numeric and are
@@ -38,16 +46,39 @@ func newDHCardIDResolverAdapter(client *dh.Client, logger observability.Logger) 
 	}
 }
 
-// ResolveCardIDsByCerts submits the given certs to DH's async batch endpoint,
-// polls the returned job until completion (or timeout), and returns the
-// cert → card_id map for successfully matched certs. The grader parameter
-// is accepted for interface compatibility but not passed to DH (DH infers
-// the grader from the cert number).
+// ResolveCardIDsByCerts submits the given certs to DH's async batch endpoint
+// (chunked at maxCertsPerBatch), polls each returned job until completion (or
+// timeout), and returns the cert → card_id map for successfully matched
+// certs. The grader parameter is accepted for interface compatibility but
+// not passed to DH (DH infers the grader from the cert number).
+//
+// An error from any chunk aborts the whole operation; partial results from
+// earlier chunks are discarded.
 func (a *dhCardIDResolverAdapter) ResolveCardIDsByCerts(ctx context.Context, certs []string, grader string) (map[string]string, error) {
 	if len(certs) == 0 {
 		return map[string]string{}, nil
 	}
 
+	out := make(map[string]string, len(certs))
+	for start := 0; start < len(certs); start += maxCertsPerBatch {
+		end := start + maxCertsPerBatch
+		if end > len(certs) {
+			end = len(certs)
+		}
+		resolved, err := a.resolveChunk(ctx, certs[start:end])
+		if err != nil {
+			return nil, err
+		}
+		for k, v := range resolved {
+			out[k] = v
+		}
+	}
+	return out, nil
+}
+
+// resolveChunk submits a single batch (≤ maxCertsPerBatch) and polls the job
+// to completion.
+func (a *dhCardIDResolverAdapter) resolveChunk(ctx context.Context, certs []string) (map[string]string, error) {
 	reqs := make([]dh.CertResolveRequest, 0, len(certs))
 	for _, c := range certs {
 		reqs = append(reqs, dh.CertResolveRequest{CertNumber: c})

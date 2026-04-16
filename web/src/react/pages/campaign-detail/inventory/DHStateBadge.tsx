@@ -23,8 +23,9 @@ export function DHStateBadge({ dhPushStatus, dhStatus, dhCardId }: DHStateBadgeP
           onClick={(e) => e.stopPropagation()}
           className="text-xs text-[var(--brand-500)] hover:text-[var(--brand-400)]"
           title="View on DoubleHolo"
+          aria-label="View on DoubleHolo"
         >
-          ↗
+          <span aria-hidden="true">↗</span>
         </a>
       )}
     </span>
