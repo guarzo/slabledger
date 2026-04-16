@@ -201,7 +201,7 @@ Three flavors, in order of importance. **Logic duplication is the payoff of this
    ```
    Cluster results by concept name. For each cluster with >1 implementation, read both and decide: are they computing the same thing? If yes, that's a finding.
 2. **Conceptual duplication** — two types or interfaces that model the same domain concept. Examples: two `Sale` structs with overlapping fields, two "price" abstractions, two ways to represent money. Find via: list types per package and look for overlapping names or similar shapes in sibling packages.
-3. **Code duplication (lowest value, often linter-catchable)** — identical or near-identical byte-level copies. Spot check files with similar names (e.g., `parse_cl.go`, `parse_psa.go`, `parse_mm.go`) for copy-paste drift. If the drift is semantically meaningful (one branch handles a case the other doesn't), that's actually a logic duplication finding — flag it as such.
+3. **Code duplication (lowest value, often linter-catchable)** — identical or near-identical byte-level copies. Spot check files with similar names (e.g., `parse_psa.go`, `parse_mm.go`, `parse_shopify.go`) for copy-paste drift. If the drift is semantically meaningful (one branch handles a case the other doesn't), that's actually a logic duplication finding — flag it as such.
 
 On the frontend, look for components with overlapping functionality — two badge components, two modal wrappers, two different table implementations.
 
