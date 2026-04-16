@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
+	"github.com/guarzo/slabledger/internal/domain/dhevents"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
 	"github.com/stretchr/testify/assert"
@@ -546,6 +547,104 @@ func TestDHPush_MultiplePurchases_AllProcessed(t *testing.T) {
 	assert.ElementsMatch(t, []string{"pur-a", "pur-b"}, matchedCalls)
 }
 
+// ---------------------------------------------------------------------------
+// Hold setter mock
+// ---------------------------------------------------------------------------
+
+type mockDHPushHoldSetter struct {
+	Calls []struct{ ID, Reason string }
+}
+
+func (m *mockDHPushHoldSetter) SetHeldWithReason(_ context.Context, purchaseID, reason string) error {
+	m.Calls = append(m.Calls, struct{ ID, Reason string }{purchaseID, reason})
+	return nil
+}
+
+func TestDHPush_Hold_RecordsHeldEvent(t *testing.T) {
+	// Market value (3000) < 50% of buy cost (10000) triggers initial_value_mismatch hold.
+	purchase := inventory.Purchase{
+		ID:           "pur-hold-1",
+		CertNumber:   "11112222",
+		CardName:     "Charizard",
+		SetName:      "Base Set",
+		CardNumber:   "4",
+		BuyCostCents: 10000,
+		CLValueCents: 3000, // market value = 3000, floor = 50% of 10000 = 5000
+		DHCardID:     42,   // already mapped, skip cert resolve
+	}
+	lister := &mockDHPushPendingLister{
+		ListFn: func(_ context.Context, _ string, _ int) ([]inventory.Purchase, error) {
+			return []inventory.Purchase{purchase}, nil
+		},
+	}
+	statusUpdater := &mockDHPushStatusUpdater{}
+	certResolver := &mockDHPushCertResolver{}
+	pusher := &mockDHPushInventoryPusher{}
+	fieldsUpdater := &mocks.MockDHFieldsUpdater{}
+	cardIDSaver := &mockDHPushCardIDSaver{}
+	holdSetter := &mockDHPushHoldSetter{}
+	rec := &mocks.MockEventRecorder{}
+
+	s := NewDHPushScheduler(
+		lister, statusUpdater, certResolver, pusher, fieldsUpdater, cardIDSaver,
+		mocks.NewMockLogger(),
+		DHPushConfig{Enabled: true, Interval: 1 * time.Hour},
+		WithDHPushHoldSetter(holdSetter),
+		WithDHPushEventRecorder(rec),
+	)
+	s.push(context.Background())
+
+	// Hold setter should have been called.
+	require.Len(t, holdSetter.Calls, 1)
+	assert.Equal(t, "pur-hold-1", holdSetter.Calls[0].ID)
+	assert.Contains(t, holdSetter.Calls[0].Reason, "initial_value_mismatch")
+
+	// Event recorder should have captured TypeHeld.
+	require.Len(t, rec.Events, 1)
+	evt := rec.Events[0]
+	assert.Equal(t, dhevents.TypeHeld, evt.Type)
+	assert.Equal(t, "pur-hold-1", evt.PurchaseID)
+	assert.Equal(t, "11112222", evt.CertNumber)
+	assert.Equal(t, inventory.DHPushStatusHeld, evt.NewPushStatus)
+	assert.Equal(t, 42, evt.DHCardID)
+	assert.Contains(t, evt.Notes, "initial_value_mismatch")
+	assert.Equal(t, dhevents.SourceDHPush, evt.Source)
+
+	// No push should have occurred.
+	assert.Empty(t, fieldsUpdater.Calls)
+}
+
+func TestDHPush_NilEventRecorderIsSafe(t *testing.T) {
+	// Same hold scenario but without event recorder — should not panic.
+	purchase := inventory.Purchase{
+		ID:           "pur-hold-nil",
+		CertNumber:   "33334444",
+		CardName:     "Charizard",
+		SetName:      "Base Set",
+		BuyCostCents: 10000,
+		CLValueCents: 3000,
+		DHCardID:     42,
+	}
+	lister := &mockDHPushPendingLister{
+		ListFn: func(_ context.Context, _ string, _ int) ([]inventory.Purchase, error) {
+			return []inventory.Purchase{purchase}, nil
+		},
+	}
+	holdSetter := &mockDHPushHoldSetter{}
+
+	s := NewDHPushScheduler(
+		lister, &mockDHPushStatusUpdater{}, &mockDHPushCertResolver{},
+		&mockDHPushInventoryPusher{}, &mocks.MockDHFieldsUpdater{}, &mockDHPushCardIDSaver{},
+		mocks.NewMockLogger(),
+		DHPushConfig{Enabled: true, Interval: 1 * time.Hour},
+		WithDHPushHoldSetter(holdSetter),
+		// no WithDHPushEventRecorder
+	)
+	s.push(context.Background())
+
+	require.Len(t, holdSetter.Calls, 1, "hold should still be set even without event recorder")
+}
+
 // Compile-time interface checks
 var _ DHPushPendingLister = (*mockDHPushPendingLister)(nil)
 var _ DHPushStatusUpdater = (*mockDHPushStatusUpdater)(nil)
@@ -553,3 +652,4 @@ var _ DHPushCertResolver = (*mockDHPushCertResolver)(nil)
 var _ DHPushInventoryPusher = (*mockDHPushInventoryPusher)(nil)
 var _ DHPushCardIDSaver = (*mockDHPushCardIDSaver)(nil)
 var _ DHFieldsUpdater = (*mocks.MockDHFieldsUpdater)(nil)
+var _ DHPushHoldSetter = (*mockDHPushHoldSetter)(nil)

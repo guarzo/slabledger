@@ -12,6 +12,7 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/scheduler"
 	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
 	"github.com/guarzo/slabledger/internal/domain/arbitrage"
+	"github.com/guarzo/slabledger/internal/domain/dhevents"
 	"github.com/guarzo/slabledger/internal/domain/export"
 	"github.com/guarzo/slabledger/internal/domain/finance"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
@@ -65,6 +66,7 @@ func initializeCampaignsService(
 	intelRepo *sqlite.MarketIntelligenceRepository,
 	mmStore *sqlite.MarketMoversStore,
 	dhClient *dh.Client,
+	eventRecorder dhevents.Recorder,
 ) campaignsInitResult {
 	// Create individual stores instead of composite repository
 	campaignStore := sqlite.NewCampaignStore(db.DB, logger)
@@ -124,10 +126,23 @@ func initializeCampaignsService(
 		campaignOpts = append(campaignOpts, inventory.WithMMMappings(mmAdapter))
 	}
 
+	// DH event recorder — records dh_state_events for enrollment and card-id-resolution.
+	if eventRecorder != nil {
+		campaignOpts = append(campaignOpts, inventory.WithEventRecorder(eventRecorder))
+	}
+
 	// DH sold notifier — retires items on DH when a sale is recorded locally.
 	if dhClient != nil && dhClient.EnterpriseAvailable() {
 		campaignOpts = append(campaignOpts,
 			inventory.WithDHSoldNotifier(dhlistingadapter.NewInventoryAdapter(dhClient)),
+		)
+	}
+
+	// DH cert → card_id resolver. Feeds batchResolveCardIDs in the inventory
+	// service after PSA/CL imports so dh_card_id gets persisted.
+	if dhClient != nil && dhClient.EnterpriseAvailable() {
+		campaignOpts = append(campaignOpts,
+			inventory.WithCardIDResolver(newDHCardIDResolverAdapter(dhClient, logger)),
 		)
 	}
 

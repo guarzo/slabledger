@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/guarzo/slabledger/internal/domain/dhevents"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
@@ -24,6 +25,7 @@ type dhListingService struct {
 	pushStatusUpdater DHListingPushStatusUpdater
 	candidatesSaver   DHListingCandidatesSaver
 	logger            observability.Logger
+	eventRec          dhevents.Recorder // may be nil
 }
 
 // DHListingPurchaseLookup retrieves purchases by cert numbers.
@@ -84,6 +86,12 @@ func WithDHListingCandidatesSaver(saver DHListingCandidatesSaver) DHListingServi
 	return func(s *dhListingService) { s.candidatesSaver = saver }
 }
 
+// WithEventRecorder injects a DH event recorder. Optional — if nil, no
+// events are written but listing behavior is unchanged.
+func WithEventRecorder(r dhevents.Recorder) DHListingServiceOption {
+	return func(s *dhListingService) { s.eventRec = r }
+}
+
 // NewDHListingService creates a new Service.
 // purchaseLookup and logger are required; all other dependencies are optional.
 func NewDHListingService(
@@ -107,6 +115,19 @@ func NewDHListingService(
 	return s, nil
 }
 
+// recordEvent writes an event to the recorder if available.
+// If recording fails, the error is logged but does not abort the operation.
+func (s *dhListingService) recordEvent(ctx context.Context, e dhevents.Event) {
+	if s.eventRec == nil {
+		return
+	}
+	if err := s.eventRec.Record(ctx, e); err != nil {
+		s.logger.Warn(ctx, "dh listing: record event failed",
+			observability.String("type", string(e.Type)),
+			observability.Err(err))
+	}
+}
+
 // ListPurchases implements Service.
 func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []string) DHListingResult {
 	if s.lister == nil || len(certNumbers) == 0 {
@@ -126,16 +147,18 @@ func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []stri
 	}
 	sort.Strings(sortedCerts)
 
-	listed, synced := 0, 0
+	listed, synced, skipped := 0, 0, 0
 	for _, cn := range sortedCerts {
 		p := purchases[cn]
 		// If pending DH push, do inline match + push first.
 		if p.DHInventoryID == 0 && p.DHPushStatus == inventory.DHPushStatusPending {
 			if s.certResolver == nil || s.pusher == nil {
+				skipped++
 				continue // no DH match client — skip
 			}
 			invID := s.inlineMatchAndPush(ctx, p)
 			if invID == 0 {
+				skipped++
 				continue // unmatched or failed — skip listing
 			}
 			p.DHInventoryID = invID
@@ -148,6 +171,7 @@ func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []stri
 				observability.String("cert", p.CertNumber),
 				observability.String("purchaseID", p.ID),
 				observability.String("dhPushStatus", string(p.DHPushStatus)))
+			skipped++
 			continue
 		}
 
@@ -156,6 +180,7 @@ func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []stri
 				observability.String("cert", p.CertNumber),
 				observability.Int("inventoryID", p.DHInventoryID),
 				observability.Err(err))
+			skipped++
 			continue
 		}
 		listed++
@@ -182,6 +207,7 @@ func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []stri
 				}
 			}
 			listed-- // revert the listed count
+			skipped++
 			continue
 		}
 		synced++
@@ -194,6 +220,7 @@ func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []stri
 					observability.String("cert", p.CertNumber),
 					observability.Err(marshalErr))
 				listed--
+				skipped++
 				continue
 			}
 			if persistErr := s.fieldsUpdater.UpdatePurchaseDHFields(ctx, p.ID, inventory.DHFieldsUpdate{
@@ -203,8 +230,26 @@ func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []stri
 				s.logger.Error(ctx, "dh listing: failed to persist listed status — decrementing listed count",
 					observability.String("cert", p.CertNumber), observability.Err(persistErr))
 				listed--
+				skipped++
 				continue
 			}
+			s.recordEvent(ctx, dhevents.Event{
+				PurchaseID:    p.ID,
+				CertNumber:    p.CertNumber,
+				Type:          dhevents.TypeListed,
+				NewDHStatus:   string(inventory.DHStatusListed),
+				DHInventoryID: p.DHInventoryID,
+				DHCardID:      p.DHCardID,
+				Source:        dhevents.SourceDHListing,
+			})
+			s.recordEvent(ctx, dhevents.Event{
+				PurchaseID:    p.ID,
+				CertNumber:    p.CertNumber,
+				Type:          dhevents.TypeChannelSynced,
+				Notes:         string(channelsJSON),
+				DHInventoryID: p.DHInventoryID,
+				Source:        dhevents.SourceDHListing,
+			})
 		}
 	}
 
@@ -218,7 +263,7 @@ func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []stri
 			observability.Int("certs", len(certNumbers)))
 	}
 
-	return DHListingResult{Listed: listed, Synced: synced, Total: len(purchases)}
+	return DHListingResult{Listed: listed, Synced: synced, Skipped: skipped, Total: len(purchases)}
 }
 
 // inlineMatchAndPush resolves a single cert against DH and pushes inventory.
@@ -309,6 +354,17 @@ func (s *dhListingService) inlineMatchAndPush(ctx context.Context, p *inventory.
 			}
 		}
 
+		s.recordEvent(ctx, dhevents.Event{
+			PurchaseID:    p.ID,
+			CertNumber:    p.CertNumber,
+			Type:          dhevents.TypePushed,
+			NewPushStatus: string(inventory.DHPushStatusMatched),
+			NewDHStatus:   r.Status, // from DHInventoryPushResultItem.Status — "in_stock" or "listed"
+			DHInventoryID: r.DHInventoryID,
+			DHCardID:      dhCardID,
+			Source:        dhevents.SourceDHListing,
+		})
+
 		return r.DHInventoryID
 	}
 
@@ -349,6 +405,14 @@ func (s *dhListingService) markInlineUnmatched(ctx context.Context, p *inventory
 				observability.String("cert", p.CertNumber), observability.Err(err))
 		}
 	}
+	s.recordEvent(ctx, dhevents.Event{
+		PurchaseID:    p.ID,
+		CertNumber:    p.CertNumber,
+		Type:          dhevents.TypeUnmatched,
+		NewPushStatus: string(inventory.DHPushStatusUnmatched),
+		Notes:         dhStatus,
+		Source:        dhevents.SourceDHListing,
+	})
 	s.logger.Warn(ctx, "inline dh cert resolve: unmatched",
 		observability.String("cert", p.CertNumber),
 		observability.String("dh_status", dhStatus))

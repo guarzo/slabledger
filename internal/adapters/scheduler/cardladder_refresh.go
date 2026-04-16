@@ -9,6 +9,7 @@ import (
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
 	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
+	"github.com/guarzo/slabledger/internal/domain/dhevents"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/mathutil"
 	"github.com/guarzo/slabledger/internal/domain/observability"
@@ -53,6 +54,12 @@ func WithCLSyncUpdater(u CardLadderSyncUpdater) CardLadderRefreshOption {
 	return func(s *CardLadderRefreshScheduler) { s.syncUpdater = u }
 }
 
+// WithCLEventRecorder enables DH state-event recording for CL-refresh-driven
+// re-enrollment transitions. Optional — nil means no events are written.
+func WithCLEventRecorder(r dhevents.Recorder) CardLadderRefreshOption {
+	return func(s *CardLadderRefreshScheduler) { s.eventRec = r }
+}
+
 // CLRunStats holds the counters from the most recent Card Ladder refresh run.
 type CLRunStats struct {
 	LastRunAt      time.Time `json:"lastRunAt"`
@@ -82,6 +89,7 @@ type CardLadderRefreshScheduler struct {
 	syncUpdater    CardLadderSyncUpdater // optional: sets cl_synced_at on push
 	salesStore     *sqlite.CLSalesStore
 	dhPushUpdater  DHPushStatusUpdater // optional: re-enrolls changed items for DH push
+	eventRec       dhevents.Recorder   // optional: records DH state-transition events
 	logger         observability.Logger
 	config         config.CardLadderConfig
 	lastRunStats   *CLRunStats
@@ -112,6 +120,19 @@ func (s *CardLadderRefreshScheduler) getClient() *cardladder.Client {
 	s.clientMu.RLock()
 	defer s.clientMu.RUnlock()
 	return s.client
+}
+
+// recordEvent is a nil-safe helper that writes a DH state event. Failures are
+// logged at Warn and never propagated to the caller.
+func (s *CardLadderRefreshScheduler) recordEvent(ctx context.Context, e dhevents.Event) {
+	if s.eventRec == nil {
+		return
+	}
+	if err := s.eventRec.Record(ctx, e); err != nil {
+		s.logger.Warn(ctx, "CL refresh: record dh event failed",
+			observability.String("type", string(e.Type)),
+			observability.Err(err))
+	}
 }
 
 // NewCardLadderRefreshScheduler creates a new CL refresh scheduler.
@@ -341,12 +362,23 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 			continue
 		}
 
-		// Re-enroll already-pushed items for DH re-push when market value changes.
-		if s.dhPushUpdater != nil && purchase.DHInventoryID != 0 && newCLCents != oldCLCents {
+		// Re-enroll for DH push when market value changes. Two qualifying cases:
+		//  1. Already-pushed rows (DHInventoryID != 0) — so DH picks up the new price.
+		//  2. Received-but-unmatched rows — so a fresh cert resolve is attempted
+		//     with the new market value, which may push it above a price floor.
+		if s.dhPushUpdater != nil && newCLCents != oldCLCents && shouldReenrollForCLChange(purchase) {
 			if err := s.dhPushUpdater.UpdatePurchaseDHPushStatus(ctx, purchase.ID, inventory.DHPushStatusPending); err != nil {
 				s.logger.Warn(ctx, "CL refresh: failed to re-enroll for DH push",
 					observability.String("cert", purchase.CertNumber),
 					observability.Err(err))
+			} else {
+				s.recordEvent(ctx, dhevents.Event{
+					PurchaseID:    purchase.ID,
+					CertNumber:    purchase.CertNumber,
+					Type:          dhevents.TypeEnrolled,
+					NewPushStatus: inventory.DHPushStatusPending,
+					Source:        dhevents.SourceCLRefresh,
+				})
 			}
 		}
 
@@ -468,4 +500,20 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 	s.statsMu.Unlock()
 
 	return nil
+}
+
+// shouldReenrollForCLChange returns true when a CL value change should
+// trigger DH push-pipeline re-enrollment. Two qualifying cases:
+//  1. Already-pushed rows (DHInventoryID != 0) — re-enrolled so DH picks up
+//     the new price.
+//  2. Received-but-unmatched rows — re-enrolled so a fresh cert resolve is
+//     attempted with the new market value, which may push it above a floor.
+func shouldReenrollForCLChange(p *inventory.Purchase) bool {
+	if p.DHInventoryID != 0 {
+		return true
+	}
+	if p.ReceivedAt != nil && (p.DHPushStatus == inventory.DHPushStatusUnmatched || p.DHPushStatus == "") {
+		return true
+	}
+	return false
 }

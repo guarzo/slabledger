@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -14,6 +15,7 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	"github.com/guarzo/slabledger/internal/adapters/httpserver/middleware"
 	"github.com/guarzo/slabledger/internal/domain/auth"
+	"github.com/guarzo/slabledger/internal/domain/dhevents"
 	"github.com/guarzo/slabledger/internal/domain/intelligence"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
@@ -690,4 +692,69 @@ func TestHandleInventoryAlerts_PurchasesError(t *testing.T) {
 
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 	decodeErrorResponse(t, rec)
+}
+
+// --- Orders-ingest health fields ---
+
+type mockSyncStateReader struct{ val string }
+
+func (m *mockSyncStateReader) Get(_ context.Context, _ string) (string, error) {
+	return m.val, nil
+}
+
+type mockEventCountsStore struct{ counts map[dhevents.Type]int }
+
+func (m *mockEventCountsStore) CountByTypeSince(_ context.Context, t dhevents.Type, _ time.Time) (int, error) {
+	return m.counts[t], nil
+}
+
+func TestHandleGetStatus_OrdersIngestHealthFields(t *testing.T) {
+	syncReader := &mockSyncStateReader{val: "2026-04-15T12:00:00Z"}
+	eventCounts := &mockEventCountsStore{
+		counts: map[dhevents.Type]int{
+			dhevents.TypeSold:        5,
+			dhevents.TypeOrphanSale:  2,
+			dhevents.TypeAlreadySold: 1,
+		},
+	}
+
+	h := NewDHHandler(DHHandlerDeps{
+		Logger:           mocks.NewMockLogger(),
+		SyncStateReader:  syncReader,
+		EventCountsStore: eventCounts,
+	})
+
+	req := authenticatedRequest(httptest.NewRequest(http.MethodGet, "/api/dh/status", nil))
+	rr := httptest.NewRecorder()
+	h.HandleGetStatus(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+
+	var body map[string]any
+	require.NoError(t, json.NewDecoder(rr.Body).Decode(&body))
+	assert.Equal(t, "2026-04-15T12:00:00Z", body["last_orders_poll_at"])
+	assert.InDelta(t, 5, body["orders_matched_count_24h"], 0.01)
+	assert.InDelta(t, 2, body["orders_orphan_count_24h"], 0.01)
+	assert.InDelta(t, 1, body["orders_already_sold_count_24h"], 0.01)
+}
+
+func TestHandleGetStatus_OrdersIngestHealthNilSafe(t *testing.T) {
+	// Neither syncStateReader nor eventCountsStore set — fields should be omitted/zero.
+	h := NewDHHandler(DHHandlerDeps{
+		Logger: mocks.NewMockLogger(),
+	})
+
+	req := authenticatedRequest(httptest.NewRequest(http.MethodGet, "/api/dh/status", nil))
+	rr := httptest.NewRecorder()
+	h.HandleGetStatus(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+
+	var body map[string]any
+	require.NoError(t, json.NewDecoder(rr.Body).Decode(&body))
+	// omitempty fields should not appear
+	assert.Nil(t, body["last_orders_poll_at"])
+	assert.Nil(t, body["orders_matched_count_24h"])
+	assert.Nil(t, body["orders_orphan_count_24h"])
+	assert.Nil(t, body["orders_already_sold_count_24h"])
 }

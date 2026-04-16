@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/guarzo/slabledger/internal/domain/dhevents"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
@@ -276,6 +277,13 @@ func (s *service) enrollExistingInDHPushPipeline(ctx context.Context, p *Purchas
 			observability.String("cert", cert),
 			observability.String("purchaseID", p.ID))
 	}
+	s.recordEvent(ctx, dhevents.Event{
+		PurchaseID:    p.ID,
+		CertNumber:    p.CertNumber,
+		Type:          dhevents.TypeEnrolled,
+		NewPushStatus: DHPushStatusPending,
+		Source:        dhevents.SourceCertIntake,
+	})
 	if p.SnapshotStatus == SnapshotStatusExhausted {
 		if err := s.purchases.UpdatePurchaseSnapshotStatus(ctx, p.ID, SnapshotStatusPending, 0); err != nil {
 			if s.logger != nil {

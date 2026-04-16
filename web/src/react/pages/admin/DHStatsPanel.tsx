@@ -113,6 +113,31 @@ export function DHStatsPanel({ enabled = true }: { enabled?: boolean }) {
         </div>
       </div>
 
+      {/* Orders ingest health */}
+      {status?.last_orders_poll_at && (
+        <div className="rounded-xl bg-[var(--surface-1)] border border-[var(--surface-2)] p-4">
+          <h4 className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide mb-3">Orders ingest (24h)</h4>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div>
+              <div className="text-xs text-[var(--text-muted)] mb-1">Last poll</div>
+              <div className="font-mono text-sm text-[var(--text-secondary)]">{new Date(status.last_orders_poll_at).toLocaleString()}</div>
+            </div>
+            <div>
+              <div className="text-xs text-[var(--text-muted)] mb-1">Matched</div>
+              <div className="text-lg font-semibold text-[#34d399]">{status.orders_matched_count_24h ?? 0}</div>
+            </div>
+            <div>
+              <div className="text-xs text-[var(--text-muted)] mb-1">Orphan</div>
+              <div className="text-lg font-semibold text-[#fbbf24]">{status.orders_orphan_count_24h ?? 0}</div>
+            </div>
+            <div>
+              <div className="text-xs text-[var(--text-muted)] mb-1">Already sold</div>
+              <div className="text-lg font-semibold text-[var(--text-secondary)]">{status.orders_already_sold_count_24h ?? 0}</div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Market Data */}
       <div>
         <h4 className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide mb-2">Market Data</h4>

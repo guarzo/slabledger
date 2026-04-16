@@ -174,6 +174,21 @@ func (s *service) ConfirmOrdersSales(ctx context.Context, items []OrdersConfirmI
 			continue
 		}
 
+		// Flip local dh_status to 'sold' so the inventory UI reflects reality.
+		// Best-effort: a failure logs Error but does not roll back the sale.
+		// Only update for items that had DH state (DHInventoryID != 0) — items
+		// with no DH history are usually eBay-CSV imports and shouldn't be flagged
+		// as DH-sold.
+		if purchase.DHInventoryID != 0 {
+			if err := s.purchases.UpdatePurchaseDHStatus(ctx, purchase.ID, string(DHStatusSold)); err != nil {
+				if s.logger != nil {
+					s.logger.Error(ctx, "confirm sales: failed to update dh_status to sold",
+						observability.String("purchaseID", purchase.ID),
+						observability.Err(err))
+				}
+			}
+		}
+
 		// Notify DH that this item has sold so it is retired on their platform.
 		// This is best-effort: a failure does not roll back the local sale record.
 		if s.dhSoldNotifier != nil && purchase.DHInventoryID != 0 {

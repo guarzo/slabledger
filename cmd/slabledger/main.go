@@ -239,6 +239,9 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	suggestionsRepo := sqlite.NewDHSuggestionsRepository(db.DB)
 	demandRepo := sqlite.NewDHDemandRepository(db.DB)
 
+	// DH event store — records pipeline state transitions (migration 000068)
+	eventStore := sqlite.NewDHEventStore(db.DB)
+
 	priceProvImpl, err := initializePriceProviders(
 		ctx, logger, cardIDMappingRepo,
 		dhClient,
@@ -265,7 +268,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	}
 
 	campaignsInit := initializeCampaignsService(
-		ctx, cfg, logger, db, priceProvImpl, intelRepo, mmStore, dhClient,
+		ctx, cfg, logger, db, priceProvImpl, intelRepo, mmStore, dhClient, eventStore,
 	)
 	campaignsService := campaignsInit.service
 	certLookup := campaignsInit.certLookup
@@ -366,6 +369,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		MMClient:             mmClient,
 		MMStore:              mmStore,
 		DHClient:             dhClient,
+		DHEventStore:         eventStore,
 		DHIntelligenceRepo:   intelRepo,
 		DHSuggestionsRepo:    suggestionsRepo,
 		DHDemandRepo:         demandRepo,
@@ -414,6 +418,8 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		MMStore:           mmStore,
 		MMClient:          mmClient,
 		DHClient:          dhClient,
+		DHEventStore:      eventStore,
+		SyncStateRepo:     syncStateRepo,
 		SchedulerResult:   schedulerResult,
 		GSheetsClient:     gsheetsClient,
 		PendingItemsRepo:  pendingItemsRepo,

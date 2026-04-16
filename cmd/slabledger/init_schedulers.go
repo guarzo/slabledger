@@ -49,6 +49,7 @@ type schedulerDeps struct {
 	MMClient             *marketmovers.Client
 	MMStore              *sqlite.MarketMoversStore
 	DHClient             *dh.Client
+	DHEventStore         *sqlite.DHEventStore
 	DHIntelligenceRepo   *sqlite.MarketIntelligenceRepository
 	DHSuggestionsRepo    *sqlite.DHSuggestionsRepository
 	DHDemandRepo         *sqlite.DHDemandRepository
@@ -89,6 +90,10 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 		CardLadderGemRateUpdater: deps.PurchaseStore,
 		CardLadderSyncUpdater:    deps.PurchaseStore,
 		CardLadderSalesStore:     deps.CardLadderSalesStore,
+	}
+	// Wire DH event recorder (nil-safe)
+	if deps.DHEventStore != nil {
+		buildDeps.EventRecorder = deps.DHEventStore
 	}
 	// Wire Market Movers (nil-safe: only set if non-nil to avoid typed-nil interface issues)
 	if deps.MMClient != nil {

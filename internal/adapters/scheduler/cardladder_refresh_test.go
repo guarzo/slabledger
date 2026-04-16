@@ -7,6 +7,7 @@ import (
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
 	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
+	"github.com/guarzo/slabledger/internal/domain/dhevents"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/platform/config"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
@@ -106,6 +107,52 @@ func (m *mockCLGemRateUpdater) UpdatePurchaseCLCardMetadata(ctx context.Context,
 // ---------------------------------------------------------------------------
 // Helper functions tests
 // ---------------------------------------------------------------------------
+
+func TestShouldReenrollForCLChange(t *testing.T) {
+	received := "2026-04-01"
+	cases := []struct {
+		name     string
+		purchase inventory.Purchase
+		want     bool
+	}{
+		{
+			name:     "already-pushed row always re-enrolls",
+			purchase: inventory.Purchase{ID: "p1", DHInventoryID: 42, ReceivedAt: &received, DHPushStatus: inventory.DHPushStatusMatched},
+			want:     true,
+		},
+		{
+			name:     "received unmatched row re-enrolls (NEW behavior)",
+			purchase: inventory.Purchase{ID: "p2", DHInventoryID: 0, ReceivedAt: &received, DHPushStatus: inventory.DHPushStatusUnmatched},
+			want:     true,
+		},
+		{
+			name:     "received empty-status row re-enrolls (NEW behavior)",
+			purchase: inventory.Purchase{ID: "p3", DHInventoryID: 0, ReceivedAt: &received, DHPushStatus: ""},
+			want:     true,
+		},
+		{
+			name:     "unreceived unmatched row does not re-enroll",
+			purchase: inventory.Purchase{ID: "p4", DHInventoryID: 0, ReceivedAt: nil, DHPushStatus: inventory.DHPushStatusUnmatched},
+			want:     false,
+		},
+		{
+			name:     "held unmatched row does not re-enroll",
+			purchase: inventory.Purchase{ID: "p5", DHInventoryID: 0, ReceivedAt: &received, DHPushStatus: inventory.DHPushStatusHeld},
+			want:     false,
+		},
+		{
+			name:     "dismissed received row does not re-enroll",
+			purchase: inventory.Purchase{ID: "p6", DHInventoryID: 0, ReceivedAt: &received, DHPushStatus: inventory.DHPushStatusDismissed},
+			want:     false,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := shouldReenrollForCLChange(&tc.purchase)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
 
 func TestExtractGradeValue(t *testing.T) {
 	tests := []struct {
@@ -223,6 +270,54 @@ func TestWithCLDHPushUpdater_ReEnrollsOnValueChange(t *testing.T) {
 		WithCLDHPushUpdater(dhPushUpdater),
 	)
 	require.NotNil(t, s.dhPushUpdater, "dhPushUpdater should be set via functional option")
+}
+
+// TestWithCLEventRecorder_WiredAndRecords verifies the WithCLEventRecorder
+// functional option wires up the recorder and that the nil-safe recordEvent
+// helper forwards the call when configured. This is the unit-level guard
+// for the Task 11 re-enrollment site — the emission site is exercised through
+// the recordEvent path exactly as production does.
+func TestWithCLEventRecorder_WiredAndRecords(t *testing.T) {
+	rec := &mocks.MockEventRecorder{}
+	s := NewCardLadderRefreshScheduler(
+		nil, nil,
+		&mockCLPurchaseLister{},
+		&mockCLValueUpdater{},
+		&mockCLGemRateUpdater{},
+		nil,
+		mocks.NewMockLogger(),
+		config.CardLadderConfig{Enabled: true, Interval: 24 * time.Hour},
+		WithCLEventRecorder(rec),
+	)
+	require.NotNil(t, s.eventRec, "eventRec should be set via functional option")
+
+	s.recordEvent(context.Background(), dhevents.Event{
+		PurchaseID:    "p1",
+		CertNumber:    "C1",
+		Type:          dhevents.TypeEnrolled,
+		NewPushStatus: inventory.DHPushStatusPending,
+		Source:        dhevents.SourceCLRefresh,
+	})
+
+	require.Len(t, rec.Events, 1)
+	assert.Equal(t, dhevents.TypeEnrolled, rec.Events[0].Type)
+	assert.Equal(t, dhevents.SourceCLRefresh, rec.Events[0].Source)
+	assert.Equal(t, "p1", rec.Events[0].PurchaseID)
+}
+
+// TestRecordEvent_NilRecorderIsSafe verifies the nil-safe path in recordEvent.
+func TestRecordEvent_NilRecorderIsSafe(t *testing.T) {
+	s := NewCardLadderRefreshScheduler(
+		nil, nil,
+		&mockCLPurchaseLister{},
+		&mockCLValueUpdater{},
+		&mockCLGemRateUpdater{},
+		nil,
+		mocks.NewMockLogger(),
+		config.CardLadderConfig{Enabled: true, Interval: 24 * time.Hour},
+	)
+	// Should not panic when eventRec is nil.
+	s.recordEvent(context.Background(), dhevents.Event{Type: dhevents.TypeEnrolled})
 }
 
 // ---------------------------------------------------------------------------

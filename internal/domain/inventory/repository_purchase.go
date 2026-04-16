@@ -82,6 +82,13 @@ type PurchaseRepository interface {
 	UpdatePurchaseDHFields(ctx context.Context, id string, update DHFieldsUpdate) error
 	GetPurchasesByDHCertStatus(ctx context.Context, status string, limit int) ([]Purchase, error)
 	UpdatePurchaseDHPushStatus(ctx context.Context, id string, status string) error
+	// UpdatePurchaseDHStatus updates only the dh_status column on a purchase.
+	// This is a targeted update that does not touch any other DH fields, unlike
+	// UpdatePurchaseDHFields which overwrites the full field set.
+	UpdatePurchaseDHStatus(ctx context.Context, id string, status string) error
+	// UpdatePurchaseDHCardID updates only the dh_card_id column on a purchase.
+	// Targeted update that does not touch any other DH fields.
+	UpdatePurchaseDHCardID(ctx context.Context, id string, cardID int) error
 	GetPurchasesByDHPushStatus(ctx context.Context, status string, limit int) ([]Purchase, error)
 	CountUnsoldByDHPushStatus(ctx context.Context) (map[string]int, error)
 	// CountDHPipelineHealth returns finer-grained counts for the DH push

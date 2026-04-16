@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
+	"github.com/guarzo/slabledger/internal/domain/dhevents"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
@@ -43,6 +44,7 @@ type DHInventoryPollScheduler struct {
 	syncState SyncStateStore
 	updater   DHFieldsUpdater
 	lookup    PurchaseByCertLookup
+	eventRec  dhevents.Recorder // may be nil
 	logger    observability.Logger
 	config    DHInventoryPollConfig
 }
@@ -53,6 +55,7 @@ func NewDHInventoryPollScheduler(
 	syncState SyncStateStore,
 	updater DHFieldsUpdater,
 	lookup PurchaseByCertLookup,
+	eventRec dhevents.Recorder, // may be nil for tests / unwired
 	logger observability.Logger,
 	config DHInventoryPollConfig,
 ) *DHInventoryPollScheduler {
@@ -65,6 +68,7 @@ func NewDHInventoryPollScheduler(
 		syncState:  syncState,
 		updater:    updater,
 		lookup:     lookup,
+		eventRec:   eventRec,
 		logger:     logger.With(context.Background(), observability.String("component", "dh-inventory-poll")),
 		config:     config,
 	}
@@ -86,6 +90,18 @@ func (s *DHInventoryPollScheduler) Start(ctx context.Context) {
 		StopChan: s.Done(),
 		Logger:   s.logger,
 	}, s.poll)
+}
+
+// recordEvent emits an event to the recorder if present. Failures are logged but do not abort.
+func (s *DHInventoryPollScheduler) recordEvent(ctx context.Context, e dhevents.Event) {
+	if s.eventRec == nil {
+		return
+	}
+	if err := s.eventRec.Record(ctx, e); err != nil {
+		s.logger.Warn(ctx, "dh inventory poll: record event failed",
+			observability.String("type", string(e.Type)),
+			observability.Err(err))
+	}
 }
 
 // poll fetches inventory status from DH and writes updates back to local purchase records.
@@ -153,6 +169,28 @@ func (s *DHInventoryPollScheduler) poll(ctx context.Context) {
 		}
 
 		updated++
+
+		// Record a state-transition event for pushed / listed observations.
+		// Other statuses (empty, unknown) are ignored — the event table only
+		// captures named transitions.
+		var eventType dhevents.Type
+		switch item.Status {
+		case dh.InventoryStatusInStock:
+			eventType = dhevents.TypePushed
+		case dh.InventoryStatusListed:
+			eventType = dhevents.TypeListed
+		}
+		if eventType != "" {
+			s.recordEvent(ctx, dhevents.Event{
+				PurchaseID:    purchaseID,
+				CertNumber:    item.CertNumber,
+				Type:          eventType,
+				NewDHStatus:   item.Status,
+				DHInventoryID: item.DHInventoryID,
+				DHCardID:      item.DHCardID,
+				Source:        dhevents.SourceDHInventoryPoll,
+			})
+		}
 	}
 
 	s.logger.Info(ctx, "dh inventory poll completed",
