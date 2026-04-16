@@ -96,7 +96,7 @@ func (ss *SaleStore) scanSalesChunk(ctx context.Context, query string, args []an
 	}
 	defer func() {
 		if cerr := rows.Close(); err == nil && cerr != nil {
-			err = cerr
+			err = fmt.Errorf("close sales rows in purchase ids chunk: %w", cerr)
 		}
 	}()
 	for rows.Next() {
