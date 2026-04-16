@@ -25,7 +25,7 @@ func recommendedPrice(p *Purchase, snapshot *MarketSnapshot) (int, string) {
 
 // --- Price Review ---
 // NOTE: Sell-sheet generation (GenerateSellSheet, GenerateGlobalSellSheet,
-// GenerateSelectedSellSheet, MatchShopifyPrices) lives in internal/domain/export/.
+// GenerateSelectedSellSheet) lives in internal/domain/export/.
 // inventory.Service does not expose those methods.
 
 func (s *service) SetReviewedPrice(ctx context.Context, purchaseID string, priceCents int, source string) error {

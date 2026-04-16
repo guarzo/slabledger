@@ -58,7 +58,7 @@ internal/
     portfolio/              # Inventory aging, price signals, portfolio health
     tuning/                 # Campaign parameter optimization and analytics
     finance/                # Invoices, cashflow, capital tracking, revocation flags
-    export/                 # Sell sheet, eBay CSV, Shopify price sync
+    export/                 # Sell sheet generation
     dhlisting/              # DH listing push pipeline coordination
     cards/                  # CardRepository interface
     favorites/              # Favorites service

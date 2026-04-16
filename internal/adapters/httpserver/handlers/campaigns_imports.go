@@ -333,55 +333,6 @@ func (h *CampaignsHandler) HandleResolveCert(w http.ResponseWriter, r *http.Requ
 	})
 }
 
-// HandleListEbayExport handles GET /api/purchases/export-ebay.
-func (h *CampaignsHandler) HandleListEbayExport(w http.ResponseWriter, r *http.Request) {
-	if h.exportService == nil {
-		writeError(w, http.StatusServiceUnavailable, "Export service not available")
-		return
-	}
-
-	flaggedOnly := r.URL.Query().Get("flagged_only") == "true"
-	resp, ok := serviceCall(w, r.Context(), h.logger, "list ebay export items failed", func() (*inventory.EbayExportListResponse, error) {
-		return h.exportService.ListEbayExportItems(r.Context(), flaggedOnly)
-	})
-	if !ok {
-		return
-	}
-	writeJSON(w, http.StatusOK, resp)
-}
-
-// HandleGenerateEbayCSV handles POST /api/purchases/export-ebay/generate.
-func (h *CampaignsHandler) HandleGenerateEbayCSV(w http.ResponseWriter, r *http.Request) {
-	if h.exportService == nil {
-		writeError(w, http.StatusServiceUnavailable, "Export service not available")
-		return
-	}
-
-	const maxBytes = 1 << 20 // 1MB
-	r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
-	var req inventory.EbayExportGenerateRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid JSON body")
-		return
-	}
-	if len(req.Items) == 0 {
-		writeError(w, http.StatusBadRequest, "No items provided")
-		return
-	}
-
-	csvBytes, err := h.exportService.GenerateEbayCSV(r.Context(), req.Items)
-	if err != nil {
-		h.logger.Error(r.Context(), "generate ebay CSV failed", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
-		return
-	}
-
-	w.Header().Set("Content-Type", "text/csv")
-	w.Header().Set("Content-Disposition", "attachment; filename=ebay_import.csv")
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(csvBytes) //nolint:errcheck // response already committed; write error unactionable
-}
-
 // HandleImportOrders handles POST /api/purchases/import-orders.
 // Accepts an orders export CSV, matches PSA certs against inventory, and returns
 // categorized results for review before confirmation.
