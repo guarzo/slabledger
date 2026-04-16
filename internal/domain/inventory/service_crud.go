@@ -141,10 +141,19 @@ func (s *service) CreateBulkSales(ctx context.Context, campaignID string, channe
 		return nil, fmt.Errorf("campaign not found: %w", err)
 	}
 
+	ids := make([]string, 0, len(items))
+	for _, item := range items {
+		ids = append(ids, item.PurchaseID)
+	}
+	purchasesByID, err := s.purchases.GetPurchasesByIDs(ctx, ids)
+	if err != nil {
+		return nil, fmt.Errorf("load purchases: %w", err)
+	}
+
 	result := &BulkSaleResult{}
 	for _, item := range items {
-		purchase, err := s.purchases.GetPurchase(ctx, item.PurchaseID)
-		if err != nil {
+		purchase, ok := purchasesByID[item.PurchaseID]
+		if !ok {
 			result.Failed++
 			result.Errors = append(result.Errors, BulkSaleError{PurchaseID: item.PurchaseID, Error: "purchase not found"})
 			continue
