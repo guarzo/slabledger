@@ -133,12 +133,34 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
 
   const handleBulkListOnDH = useCallback(async (purchaseIds: string[]) => {
     if (purchaseIds.length === 0) return;
+    setDHListingInFlight(prev => {
+      const next = new Set(prev);
+      for (const id of purchaseIds) next.add(id);
+      return next;
+    });
     const CHUNK_SIZE = 5;
     const results: PromiseSettledResult<unknown>[] = [];
     for (let i = 0; i < purchaseIds.length; i += CHUNK_SIZE) {
       const chunk = purchaseIds.slice(i, i + CHUNK_SIZE);
       const chunkResults = await Promise.allSettled(chunk.map(id => api.listPurchaseOnDH(id)));
       results.push(...chunkResults);
+      // Update in-flight and optimistic state per chunk so UI responds progressively.
+      const chunkSucceeded: string[] = [];
+      for (let j = 0; j < chunk.length; j++) {
+        if (chunkResults[j].status === 'fulfilled') chunkSucceeded.push(chunk[j]);
+      }
+      if (chunkSucceeded.length > 0) {
+        setDHListedOptimistic(prev => {
+          const next = new Set(prev);
+          for (const id of chunkSucceeded) next.add(id);
+          return next;
+        });
+      }
+      setDHListingInFlight(prev => {
+        const next = new Set(prev);
+        for (const id of chunk) next.delete(id);
+        return next;
+      });
     }
     const succeededIds = purchaseIds.filter((_, i) => results[i].status === 'fulfilled');
     const failed = purchaseIds.length - succeededIds.length;

@@ -428,6 +428,12 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 	if orphanMappings > 0 && cfg.FirebaseUID != "" {
 		s.logger.Info(ctx, "CL refresh: re-pushing orphan cards missing from collection",
 			observability.Int("orphanMappings", orphanMappings))
+		// Note: pushSingleCard calls ResolveAndCreateCard which always creates
+		// a new Firestore doc. If the remote card exists but our fetch missed it,
+		// this could create a duplicate. CL has no "create-if-not-exists" API.
+		// SaveMapping (upsert by slab_serial PK) overwrites the old mapping with
+		// the new doc ID, so locally we stay consistent. A Firestore-side dedup
+		// would require a new CL client method to query by cert first.
 		for _, cert := range orphanCerts {
 			if ctx.Err() != nil {
 				break

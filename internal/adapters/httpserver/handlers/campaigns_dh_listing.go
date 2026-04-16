@@ -70,18 +70,19 @@ func (h *CampaignsHandler) HandleListPurchaseOnDH(w http.ResponseWriter, r *http
 	if result.Listed == 0 {
 		// Re-read the purchase to give a specific reason for the failure.
 		updated, readErr := h.service.GetPurchase(r.Context(), purchaseID)
-		if readErr == nil && updated.DHStatus == inventory.DHStatusListed {
-			// Listed status was set but channel sync failed, causing a revert.
-			// The local state may have been reverted in the background — but
-			// if it still shows listed, the listing actually succeeded.
+		if readErr != nil {
+			writeError(w, http.StatusBadGateway, "DH listing failed — check server logs for details")
+			return
+		}
+		if updated.DHStatus == inventory.DHStatusListed {
 			writeJSON(w, http.StatusOK, result)
 			return
 		}
-		msg := "DH listing failed — check server logs for details"
-		if readErr == nil && updated.DHInventoryID == 0 {
-			msg = "DH inventory item no longer exists — run Reconcile to re-push"
+		if updated.DHInventoryID == 0 {
+			writeError(w, http.StatusBadGateway, "DH inventory item no longer exists — run Reconcile to re-push")
+			return
 		}
-		writeError(w, http.StatusBadGateway, msg)
+		writeError(w, http.StatusBadGateway, "DH listing failed — check server logs for details")
 		return
 	}
 
