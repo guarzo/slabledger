@@ -65,6 +65,8 @@ type handlerInputs struct {
 	MMStore           *sqlite.MarketMoversStore
 	MMClient          *marketmovers.Client
 	DHClient          *dh.Client
+	DHEventStore      *sqlite.DHEventStore
+	SyncStateRepo     *sqlite.SyncStateRepository
 	SchedulerResult   *scheduler.BuildResult
 	GSheetsClient     *gsheets.Client
 	PendingItemsRepo  *sqlite.PendingItemsRepository
@@ -165,8 +167,9 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 			MatchConfirmer:    in.DHClient,
 			Reconciler:        reconciler,
 			OrdersIngester:    ordersIngester, // nil-safe; handler returns 503 if unwired
-			// TODO(task-24): inject event recorder (dhevents.Recorder) for dismiss/select-match events
-			// TODO(task-24): wire SyncStateReader and EventCountsStore for orders-ingest health fields
+			EventRecorder:     in.DHEventStore,
+			SyncStateReader:   in.SyncStateRepo,
+			EventCountsStore:  in.DHEventStore,
 		})
 		logger.Info(ctx, "DH handler initialized")
 	}
@@ -298,6 +301,9 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 		}
 		if in.CardIDMappingRepo != nil {
 			listingOpts = append(listingOpts, dhlisting.WithDHListingCardIDSaver(in.CardIDMappingRepo))
+		}
+		if in.DHEventStore != nil {
+			listingOpts = append(listingOpts, dhlisting.WithEventRecorder(in.DHEventStore))
 		}
 		svc, err := dhlisting.NewDHListingService(
 			in.CampaignsService, in.Logger, listingOpts...,

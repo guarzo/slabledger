@@ -9,6 +9,7 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	dhlistingadapter "github.com/guarzo/slabledger/internal/adapters/clients/dhlisting"
 	"github.com/guarzo/slabledger/internal/adapters/clients/psa"
+	"github.com/guarzo/slabledger/internal/domain/dhevents"
 	"github.com/guarzo/slabledger/internal/adapters/scheduler"
 	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
 	"github.com/guarzo/slabledger/internal/domain/arbitrage"
@@ -65,6 +66,7 @@ func initializeCampaignsService(
 	intelRepo *sqlite.MarketIntelligenceRepository,
 	mmStore *sqlite.MarketMoversStore,
 	dhClient *dh.Client,
+	eventRecorder dhevents.Recorder,
 ) campaignsInitResult {
 	// Create individual stores instead of composite repository
 	campaignStore := sqlite.NewCampaignStore(db.DB, logger)
@@ -122,6 +124,11 @@ func initializeCampaignsService(
 			return result, nil
 		})
 		campaignOpts = append(campaignOpts, inventory.WithMMMappings(mmAdapter))
+	}
+
+	// DH event recorder — records dh_state_events for enrollment and card-id-resolution.
+	if eventRecorder != nil {
+		campaignOpts = append(campaignOpts, inventory.WithEventRecorder(eventRecorder))
 	}
 
 	// DH sold notifier — retires items on DH when a sale is recorded locally.

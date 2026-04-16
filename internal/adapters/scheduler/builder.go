@@ -12,6 +12,7 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/ai"
 	"github.com/guarzo/slabledger/internal/domain/auth"
 	"github.com/guarzo/slabledger/internal/domain/demand"
+	"github.com/guarzo/slabledger/internal/domain/dhevents"
 	"github.com/guarzo/slabledger/internal/domain/intelligence"
 	domainCampaigns "github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
@@ -68,6 +69,9 @@ type BuildDeps struct {
 	DHSuggestionsRepo  intelligence.SuggestionsRepository
 	DHDemandRepo       demand.Repository  // niche-opportunity cache (T1/T3)
 	DHUnsoldCardLister UnsoldDHCardLister // seeds analytics with our inventory
+
+	// DH event recorder (shared across DH schedulers)
+	EventRecorder dhevents.Recorder
 
 	// DH v2 dependencies (optional)
 	DHOrdersClient        DHOrdersClient
@@ -291,6 +295,9 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 		if deps.CardLadderSyncUpdater != nil {
 			clOpts = append(clOpts, WithCLSyncUpdater(deps.CardLadderSyncUpdater))
 		}
+		if deps.EventRecorder != nil {
+			clOpts = append(clOpts, WithCLEventRecorder(deps.EventRecorder))
+		}
 		clRefresh = NewCardLadderRefreshScheduler(
 			deps.CardLadderClient, deps.CardLadderStore,
 			deps.CardLadderPurchaseLister, deps.CardLadderValueUpdater,
@@ -350,7 +357,7 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 			deps.DHOrdersClient,
 			deps.SyncStateStore,
 			deps.CampaignService,
-			nil, // TODO(task-24): wire event recorder
+			deps.EventRecorder,
 			deps.Logger,
 			ordersPollCfg,
 		)
@@ -368,7 +375,7 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 			deps.SyncStateStore,
 			deps.DHFieldsUpdater,
 			deps.PurchaseByCertLookup,
-			nil, // TODO(task-24): wire event recorder
+			deps.EventRecorder,
 			deps.Logger,
 			inventoryPollCfg,
 		))
@@ -391,6 +398,9 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 		}
 		if deps.DHPushHoldSetter != nil {
 			pushOpts = append(pushOpts, WithDHPushHoldSetter(deps.DHPushHoldSetter))
+		}
+		if deps.EventRecorder != nil {
+			pushOpts = append(pushOpts, WithDHPushEventRecorder(deps.EventRecorder))
 		}
 		schedulers = append(schedulers, NewDHPushScheduler(
 			deps.DHPushPendingLister,
