@@ -152,7 +152,7 @@ export default function CampaignsTab({
                             className="h-full rounded-full transition-all duration-300"
                             style={{
                               width: `${st * 100}%`,
-                              background: st >= 0.5 ? 'var(--success)' : 'var(--warning)',
+                              background: st >= 0.5 ? 'var(--success)' : st >= 0.10 ? 'var(--warning)' : 'var(--danger)',
                             }}
                           />
                         </div>

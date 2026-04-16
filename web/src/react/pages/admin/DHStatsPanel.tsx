@@ -49,7 +49,7 @@ export function DHStatsPanel({ enabled = true }: { enabled?: boolean }) {
   if (error && !status) {
     return (
       <CardShell padding="lg">
-        <p className="text-red-400 text-sm">Failed to load DH status. Integration may not be configured.</p>
+        <p className="text-[var(--danger)] text-sm">Failed to load DH status. Integration may not be configured.</p>
       </CardShell>
     );
   }
@@ -124,11 +124,11 @@ export function DHStatsPanel({ enabled = true }: { enabled?: boolean }) {
             </div>
             <div>
               <div className="text-xs text-[var(--text-muted)] mb-1">Matched</div>
-              <div className="text-lg font-semibold text-[#34d399]">{status.orders_matched_count_24h ?? 0}</div>
+              <div className="text-lg font-semibold text-[var(--success)]">{status.orders_matched_count_24h ?? 0}</div>
             </div>
             <div>
               <div className="text-xs text-[var(--text-muted)] mb-1">Orphan</div>
-              <div className="text-lg font-semibold text-[#fbbf24]">{status.orders_orphan_count_24h ?? 0}</div>
+              <div className="text-lg font-semibold text-[var(--warning)]">{status.orders_orphan_count_24h ?? 0}</div>
             </div>
             <div>
               <div className="text-xs text-[var(--text-muted)] mb-1">Already sold</div>
