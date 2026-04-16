@@ -139,6 +139,10 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 		if err != nil {
 			logger.Warn(ctx, "DH reconciler init failed", observability.Err(err))
 		}
+		var ordersIngester handlers.DHOrdersIngester
+		if in.SchedulerResult != nil && in.SchedulerResult.DHOrdersPoll != nil {
+			ordersIngester = in.SchedulerResult.DHOrdersPoll
+		}
 		dhHandler = handlers.NewDHHandler(handlers.DHHandlerDeps{
 			CertResolver:      in.DHClient,
 			CardIDSaver:       in.CardIDMappingRepo,
@@ -160,6 +164,7 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 			DHApproveService:  in.CampaignsService,
 			MatchConfirmer:    in.DHClient,
 			Reconciler:        reconciler,
+			OrdersIngester:    ordersIngester, // nil-safe; handler returns 503 if unwired
 		})
 		logger.Info(ctx, "DH handler initialized")
 	}

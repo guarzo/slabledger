@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
+	"github.com/guarzo/slabledger/internal/adapters/scheduler"
 	"github.com/guarzo/slabledger/internal/domain/dhlisting"
 	"github.com/guarzo/slabledger/internal/domain/intelligence"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
@@ -98,6 +99,12 @@ type DHCountsFetcher interface {
 	GetOrders(ctx context.Context, filters dh.OrderFilters) (*dh.OrdersResponse, error)
 }
 
+// DHOrdersIngester performs a one-shot ingest pass against DH /orders.
+// Satisfied by *scheduler.DHOrdersPollScheduler.
+type DHOrdersIngester interface {
+	RunOnce(ctx context.Context, since string) (*scheduler.DHOrdersPollSummary, error)
+}
+
 // DHHandler handles DH bulk match, export, intelligence, and suggestions endpoints.
 type DHHandler struct {
 	certResolver      DHCertResolver
@@ -119,6 +126,7 @@ type DHHandler struct {
 	countsFetcher     DHCountsFetcher  // optional: DH inventory/order counts
 	dhApproveService  DHApproveService // optional: approve held pushes + push config
 	matchConfirmer    DHMatchConfirmer // optional: confirms matches with DH for learning
+	ordersIngester    DHOrdersIngester // optional: POST /api/dh/ingest-orders manual trigger
 
 	reconciler dhlisting.Reconciler // optional: DH inventory reconciliation
 
@@ -160,6 +168,7 @@ type DHHandlerDeps struct {
 	DHApproveService  DHApproveService     // optional: approve held pushes + push config
 	MatchConfirmer    DHMatchConfirmer     // optional: confirms matches with DH for learning
 	Reconciler        dhlisting.Reconciler // optional: DH inventory reconciliation
+	OrdersIngester    DHOrdersIngester     // optional: enables POST /api/dh/ingest-orders
 }
 
 // NewDHHandler creates a new DHHandler with the given dependencies.
@@ -190,6 +199,7 @@ func NewDHHandler(deps DHHandlerDeps) *DHHandler {
 		dhApproveService:  deps.DHApproveService,
 		matchConfirmer:    deps.MatchConfirmer,
 		reconciler:        deps.Reconciler,
+		ordersIngester:    deps.OrdersIngester,
 	}
 	h.bulkMatchError.Store("")
 	return h

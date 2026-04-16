@@ -129,6 +129,7 @@ type BuildResult struct {
 	SocialPublish     *SocialPublishScheduler       // nil if auto-publishing is not configured
 	CertEnrichJob     *CertEnrichJob                // nil if cert lookup is not configured
 	CrackCacheJob     *CrackCacheRefreshJob         // nil if inventory service is not configured
+	DHOrdersPoll      *DHOrdersPollScheduler        // nil if DH orders poll is not configured
 }
 
 // BuildGroup constructs a scheduler Group from centralized configuration and dependencies.
@@ -339,18 +340,20 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 	}
 
 	// DH v2: Orders poll scheduler
+	var dhOrdersPoll *DHOrdersPollScheduler
 	if deps.DHOrdersClient != nil && deps.SyncStateStore != nil && deps.CampaignService != nil {
 		ordersPollCfg := DHOrdersPollConfig{
 			Enabled:  cfg.DH.Enabled,
 			Interval: cfg.DH.OrdersPollInterval,
 		}
-		schedulers = append(schedulers, NewDHOrdersPollScheduler(
+		dhOrdersPoll = NewDHOrdersPollScheduler(
 			deps.DHOrdersClient,
 			deps.SyncStateStore,
 			deps.CampaignService,
 			deps.Logger,
 			ordersPollCfg,
-		))
+		)
+		schedulers = append(schedulers, dhOrdersPoll)
 	}
 
 	// DH v2: Inventory status poll scheduler
@@ -452,5 +455,6 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 		SocialPublish:     socialPublishScheduler,
 		CertEnrichJob:     certEnrichJob,
 		CrackCacheJob:     crackCacheJob,
+		DHOrdersPoll:      dhOrdersPoll,
 	}
 }
