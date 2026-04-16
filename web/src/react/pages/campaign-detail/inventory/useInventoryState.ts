@@ -114,13 +114,20 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
     }
   }, [toast, invalidateInventory]);
 
+  const [dhListingInFlight, setDHListingInFlight] = useState<Set<string>>(new Set());
+  const [dhListedOptimistic, setDHListedOptimistic] = useState<Set<string>>(new Set());
+
   const handleListOnDH = useCallback(async (purchaseId: string) => {
+    setDHListingInFlight(prev => new Set(prev).add(purchaseId));
     try {
       await api.listPurchaseOnDH(purchaseId);
       toast.success('Listed on DH');
+      setDHListedOptimistic(prev => new Set(prev).add(purchaseId));
       invalidateInventory();
     } catch (err) {
       toast.error(getErrorMessage(err, 'Failed to list on DH'));
+    } finally {
+      setDHListingInFlight(prev => { const next = new Set(prev); next.delete(purchaseId); return next; });
     }
   }, [toast, invalidateInventory]);
 
@@ -321,6 +328,8 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
     handleResolveFlag,
     handleApproveDHPush,
     handleListOnDH,
+    dhListingInFlight,
+    dhListedOptimistic,
     handleBulkListOnDH,
     handleFlagSubmit,
     handlePrint,

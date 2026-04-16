@@ -214,7 +214,10 @@ func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []stri
 			} else if s.fieldsUpdater != nil {
 				// Persist reverted status locally so readers don't see stale data.
 				if persistErr := s.fieldsUpdater.UpdatePurchaseDHFields(ctx, p.ID, inventory.DHFieldsUpdate{
-					DHStatus: inventory.DHStatusInStock,
+					CardID:      p.DHCardID,
+					InventoryID: p.DHInventoryID,
+					CertStatus:  DHCertStatusMatched,
+					DHStatus:    inventory.DHStatusInStock,
 				}); persistErr != nil {
 					s.logger.Warn(ctx, "dh listing: failed to persist reverted status",
 						observability.String("cert", p.CertNumber), observability.Err(persistErr))
@@ -238,6 +241,9 @@ func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []stri
 				continue
 			}
 			if persistErr := s.fieldsUpdater.UpdatePurchaseDHFields(ctx, p.ID, inventory.DHFieldsUpdate{
+				CardID:            p.DHCardID,
+				InventoryID:       p.DHInventoryID,
+				CertStatus:        DHCertStatusMatched,
 				DHStatus:          inventory.DHStatusListed,
 				ChannelsJSON:      string(channelsJSON),
 				ListingPriceCents: dhListingPrice,
