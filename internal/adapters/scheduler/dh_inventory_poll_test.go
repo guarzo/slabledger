@@ -6,7 +6,9 @@ import (
 	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
+	"github.com/guarzo/slabledger/internal/domain/dhevents"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -39,7 +41,7 @@ func TestDHInventoryPoll_UpdatesPurchase(t *testing.T) {
 	}
 
 	s := NewDHInventoryPollScheduler(
-		client, syncStore, updater, lookup,
+		client, syncStore, updater, lookup, nil,
 		mocks.NewMockLogger(),
 		DHInventoryPollConfig{Enabled: true, Interval: 1 * time.Hour},
 	)
@@ -86,7 +88,7 @@ func TestDHInventoryPoll_SkipUnknownCert(t *testing.T) {
 	}
 
 	s := NewDHInventoryPollScheduler(
-		client, syncStore, updater, lookup,
+		client, syncStore, updater, lookup, nil,
 		mocks.NewMockLogger(),
 		DHInventoryPollConfig{Enabled: true, Interval: 1 * time.Hour},
 	)
@@ -102,6 +104,7 @@ func TestDHInventoryPoll_Disabled(t *testing.T) {
 		newMockSyncStateStore(),
 		&mocks.MockDHFieldsUpdater{},
 		&mocks.MockPurchaseByCertLookup{},
+		nil,
 		mocks.NewMockLogger(),
 		DHInventoryPollConfig{Enabled: false},
 	)
@@ -117,6 +120,80 @@ func TestDHInventoryPoll_Disabled(t *testing.T) {
 	case <-time.After(1 * time.Second):
 		t.Fatal("scheduler should return immediately when disabled")
 	}
+}
+
+func TestDHInventoryPoll_RecordsEvents(t *testing.T) {
+	client := &mocks.MockDHInventoryListClient{
+		ListInventoryFn: func(_ context.Context, _ dh.InventoryFilters) (*dh.InventoryListResponse, error) {
+			return &dh.InventoryListResponse{
+				Items: []dh.InventoryListItem{
+					{DHInventoryID: 1001, DHCardID: 101, CertNumber: "c-in-stock", Status: "in_stock", UpdatedAt: "2026-04-03T10:00:00Z"},
+					{DHInventoryID: 1002, DHCardID: 102, CertNumber: "c-listed", Status: "listed", UpdatedAt: "2026-04-03T10:01:00Z"},
+					{DHInventoryID: 1003, DHCardID: 103, CertNumber: "c-unknown", Status: "unknown", UpdatedAt: "2026-04-03T10:02:00Z"},
+				},
+				Meta: dh.PaginationMeta{Page: 1, PerPage: 100, TotalCount: 3},
+			}, nil
+		},
+	}
+
+	syncStore := newMockSyncStateStore()
+	updater := &mocks.MockDHFieldsUpdater{}
+	lookup := &mocks.MockPurchaseByCertLookup{
+		Mapping: map[string]string{
+			"c-in-stock": "pur-in-stock",
+			"c-listed":   "pur-listed",
+			"c-unknown":  "pur-unknown",
+		},
+	}
+	recorder := &mockEventRecorder{}
+
+	s := NewDHInventoryPollScheduler(
+		client, syncStore, updater, lookup, recorder,
+		mocks.NewMockLogger(),
+		DHInventoryPollConfig{Enabled: true, Interval: 1 * time.Hour},
+	)
+
+	s.poll(context.Background())
+
+	// Count events by type
+	byType := make(map[dhevents.Type]int)
+	for _, e := range recorder.events {
+		byType[e.Type]++
+	}
+	assert.Equal(t, 1, byType[dhevents.TypePushed], "one pushed event for in_stock status")
+	assert.Equal(t, 1, byType[dhevents.TypeListed], "one listed event for listed status")
+	assert.Equal(t, 0, byType[dhevents.Type("")], "no events for unknown status")
+	assert.Equal(t, 2, len(recorder.events), "exactly two events total")
+
+	// Verify the pushed event has the expected fields
+	var pushedEvent dhevents.Event
+	for _, e := range recorder.events {
+		if e.Type == dhevents.TypePushed {
+			pushedEvent = e
+			break
+		}
+	}
+	assert.Equal(t, "pur-in-stock", pushedEvent.PurchaseID)
+	assert.Equal(t, "c-in-stock", pushedEvent.CertNumber)
+	assert.Equal(t, "in_stock", pushedEvent.NewDHStatus)
+	assert.Equal(t, 1001, pushedEvent.DHInventoryID)
+	assert.Equal(t, 101, pushedEvent.DHCardID)
+	assert.Equal(t, dhevents.SourceDHInventoryPoll, pushedEvent.Source)
+
+	// Verify the listed event has the expected fields
+	var listedEvent dhevents.Event
+	for _, e := range recorder.events {
+		if e.Type == dhevents.TypeListed {
+			listedEvent = e
+			break
+		}
+	}
+	assert.Equal(t, "pur-listed", listedEvent.PurchaseID)
+	assert.Equal(t, "c-listed", listedEvent.CertNumber)
+	assert.Equal(t, "listed", listedEvent.NewDHStatus)
+	assert.Equal(t, 1002, listedEvent.DHInventoryID)
+	assert.Equal(t, 102, listedEvent.DHCardID)
+	assert.Equal(t, dhevents.SourceDHInventoryPoll, listedEvent.Source)
 }
 
 // Verify UpdatePurchaseDHFields is called via the DHFieldsUpdater interface.

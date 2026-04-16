@@ -368,6 +368,7 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 			deps.SyncStateStore,
 			deps.DHFieldsUpdater,
 			deps.PurchaseByCertLookup,
+			nil, // TODO(task-24): wire event recorder
 			deps.Logger,
 			inventoryPollCfg,
 		))
