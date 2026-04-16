@@ -198,8 +198,8 @@ func TestDHInventoryPoll_RecordsEvents(t *testing.T) {
 
 // TestDHInventoryPoll_RecordsUnlistedOnListedToInStock verifies that when
 // a purchase's prior dh_status is "listed" and DH now reports "in_stock",
-// a TypeUnlisted event is recorded in addition to the regular TypePushed
-// event.
+// the observation is classified as TypeUnlisted instead of the regular
+// TypePushed — downstream TypePushed counts should not include unlists.
 func TestDHInventoryPoll_RecordsUnlistedOnListedToInStock(t *testing.T) {
 	client := &mocks.MockDHInventoryListClient{
 		ListInventoryFn: func(_ context.Context, _ dh.InventoryFilters) (*dh.InventoryListResponse, error) {
@@ -246,6 +246,14 @@ func TestDHInventoryPoll_RecordsUnlistedOnListedToInStock(t *testing.T) {
 	assert.Equal(t, 544, unlisted.DHInventoryID)
 	assert.Equal(t, 590, unlisted.DHCardID)
 	assert.Equal(t, dhevents.SourceDHInventoryPoll, unlisted.Source)
+
+	// TypeUnlisted replaces TypePushed on this transition; verify no push
+	// was also recorded for the same poll tick.
+	for _, e := range recorder.Events {
+		if e.Type == dhevents.TypePushed {
+			t.Fatalf("did not expect a TypePushed event on listed→in_stock transition; got one for cert %q", e.CertNumber)
+		}
+	}
 }
 
 // TestDHInventoryPoll_DoesNotRecordUnlistedOnFreshInStock verifies that

@@ -17,13 +17,11 @@ import (
 // on its next tick (default every 5 minutes).
 type DHReconcileScheduler struct {
 	StopHandle
-	statsMu      sync.RWMutex
-	reconciler   dhlisting.Reconciler
-	logger       observability.Logger
-	config       config.DHReconcileConfig
-	lastResult   *dhlisting.ReconcileResult
-	lastRunAt    time.Time
-	lastRunError string
+	statsMu    sync.RWMutex
+	reconciler dhlisting.Reconciler
+	logger     observability.Logger
+	config     config.DHReconcileConfig
+	lastResult *dhlisting.ReconcileResult
 }
 
 // NewDHReconcileScheduler constructs the scheduler. The reconciler must be
@@ -58,23 +56,20 @@ func (s *DHReconcileScheduler) Start(ctx context.Context) {
 		Logger:       s.logger,
 		LogFields:    []observability.Field{observability.Int("refreshHour", s.config.RefreshHour)},
 	}, func(ctx context.Context) {
-		_ = s.RunOnce(ctx) //nolint:errcheck — errors already logged
+		// Error is logged inside RunOnce; the loop callback is fire-and-forget.
+		_ = s.RunOnce(ctx)
 	})
 }
 
 // RunOnce executes a single reconciliation cycle. Exported for manual trigger
 // (e.g. from an admin HTTP handler).
 func (s *DHReconcileScheduler) RunOnce(ctx context.Context) error {
-	start := time.Now()
 	result, err := s.reconciler.Reconcile(ctx)
 
 	s.statsMu.Lock()
-	s.lastRunAt = start
 	if err != nil {
-		s.lastRunError = err.Error()
 		s.lastResult = nil
 	} else {
-		s.lastRunError = ""
 		s.lastResult = &result
 	}
 	s.statsMu.Unlock()

@@ -26,14 +26,10 @@ type DHFieldsUpdater interface {
 	UpdatePurchaseDHFields(ctx context.Context, id string, update inventory.DHFieldsUpdate) error
 }
 
-// PurchaseByCertLookup resolves cert numbers to purchase IDs. The single-cert
-// variant is retained for callers that look up one cert; the batch variant
-// enables N→1 round-trip reduction on poll loops. GetDHStatusByCertNumber
-// additionally returns the current dh_status so callers can detect DH-side
-// transitions (e.g. listed → in_stock) without a second round trip.
+// PurchaseByCertLookup resolves a cert number to its local purchase ID and
+// current dh_status in a single round trip, so the poll loop can detect
+// DH-side transitions (e.g. listed → in_stock).
 type PurchaseByCertLookup interface {
-	GetPurchaseIDByCertNumber(ctx context.Context, certNumber string) (string, error)
-	GetPurchaseIDsByCertNumbers(ctx context.Context, certNumbers []string) (map[string]string, error)
 	GetDHStatusByCertNumber(ctx context.Context, certNumber string) (purchaseID string, dhStatus string, err error)
 }
 
@@ -176,16 +172,23 @@ func (s *DHInventoryPollScheduler) poll(ctx context.Context) {
 
 		updated++
 
-		// Existing pushed / listed observation events.
+		// Emit an observation event. A listed → in_stock drop is the only
+		// "unlisted" shape DH's inventory API exposes (it reports in_stock /
+		// listed / sold only), so classify as TypeUnlisted rather than the
+		// generic TypePushed to avoid double-counting in downstream aggregations.
 		var eventType dhevents.Type
 		switch item.Status {
 		case dh.InventoryStatusInStock:
-			eventType = dhevents.TypePushed
+			if prevDHStatus == inventory.DHStatusListed {
+				eventType = dhevents.TypeUnlisted
+			} else {
+				eventType = dhevents.TypePushed
+			}
 		case dh.InventoryStatusListed:
 			eventType = dhevents.TypeListed
 		}
 		if eventType != "" {
-			s.recordEvent(ctx, dhevents.Event{
+			evt := dhevents.Event{
 				PurchaseID:    purchaseID,
 				CertNumber:    item.CertNumber,
 				Type:          eventType,
@@ -193,23 +196,11 @@ func (s *DHInventoryPollScheduler) poll(ctx context.Context) {
 				DHInventoryID: item.DHInventoryID,
 				DHCardID:      item.DHCardID,
 				Source:        dhevents.SourceDHInventoryPoll,
-			})
-		}
-
-		// New: transition event. DH only exposes in_stock / listed / sold,
-		// so a listed → in_stock transition is the only "unlisted" shape
-		// slabledger can observe from the inventory API.
-		if prevDHStatus == inventory.DHStatusListed && item.Status == dh.InventoryStatusInStock {
-			s.recordEvent(ctx, dhevents.Event{
-				PurchaseID:    purchaseID,
-				CertNumber:    item.CertNumber,
-				Type:          dhevents.TypeUnlisted,
-				PrevDHStatus:  prevDHStatus,
-				NewDHStatus:   item.Status,
-				DHInventoryID: item.DHInventoryID,
-				DHCardID:      item.DHCardID,
-				Source:        dhevents.SourceDHInventoryPoll,
-			})
+			}
+			if eventType == dhevents.TypeUnlisted {
+				evt.PrevDHStatus = prevDHStatus
+			}
+			s.recordEvent(ctx, evt)
 		}
 	}
 

@@ -131,7 +131,7 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 			logger,
 		)
 		if err != nil {
-			logger.Warn(ctx, "DH reconciler init failed", observability.Err(err))
+			logger.Error(ctx, "DH reconciler init failed; admin reconcile endpoint disabled", observability.Err(err))
 		}
 		var ordersIngester handlers.DHOrdersIngester
 		if in.SchedulerResult != nil && in.SchedulerResult.DHOrdersPoll != nil {

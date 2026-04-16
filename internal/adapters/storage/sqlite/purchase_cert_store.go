@@ -155,23 +155,11 @@ func (ps *PurchaseStore) SetReceivedAt(ctx context.Context, purchaseID string, r
 	)
 }
 
-// GetPurchaseIDByCertNumber returns the purchase ID for a given cert number.
-// If multiple purchases share the cert number under different graders, an arbitrary
-// row is returned; callers with grader context should use GetPurchasesByGraderAndCertNumbers.
-func (ps *PurchaseStore) GetPurchaseIDByCertNumber(ctx context.Context, certNumber string) (string, error) {
-	var id string
-	err := ps.db.QueryRowContext(ctx,
-		`SELECT id FROM campaign_purchases WHERE cert_number = ?`, certNumber,
-	).Scan(&id)
-	if errors.Is(err, sql.ErrNoRows) {
-		return "", nil
-	}
-	return id, err
-}
-
 // GetDHStatusByCertNumber returns the purchase ID and current dh_status for the
-// given cert number. Returns ("", "", nil) when the cert is not found — same
-// missing-cert contract as GetPurchaseIDByCertNumber.
+// given cert number. Returns ("", "", nil) when the cert is not found. If
+// multiple purchases share the cert number under different graders, an
+// arbitrary row is returned; callers with grader context should use
+// GetPurchasesByGraderAndCertNumbers instead.
 func (ps *PurchaseStore) GetDHStatusByCertNumber(ctx context.Context, certNumber string) (string, string, error) {
 	var id, dhStatus string
 	err := ps.db.QueryRowContext(ctx,
@@ -181,55 +169,6 @@ func (ps *PurchaseStore) GetDHStatusByCertNumber(ctx context.Context, certNumber
 		return "", "", nil
 	}
 	return id, dhStatus, err
-}
-
-// GetPurchaseIDsByCertNumbers returns a cert→purchaseID map for the given certs.
-// Certs with no matching purchase are simply absent from the map. Inputs are
-// chunked to stay within SQLite's parameter limit. If a cert exists under
-// multiple graders, an arbitrary row's ID is returned (matching the single-cert
-// variant's behavior).
-func (ps *PurchaseStore) GetPurchaseIDsByCertNumbers(ctx context.Context, certNumbers []string) (map[string]string, error) {
-	if len(certNumbers) == 0 {
-		return make(map[string]string), nil
-	}
-
-	const chunkSize = 500
-	result := make(map[string]string, len(certNumbers))
-
-	for start := 0; start < len(certNumbers); start += chunkSize {
-		end := min(start+chunkSize, len(certNumbers))
-		chunk := certNumbers[start:end]
-
-		placeholders := make([]string, len(chunk))
-		args := make([]any, len(chunk))
-		for i, cn := range chunk {
-			placeholders[i] = "?"
-			args[i] = cn
-		}
-
-		query := `SELECT id, cert_number FROM campaign_purchases WHERE cert_number IN (` + strings.Join(placeholders, ",") + `)`
-		rows, err := ps.db.QueryContext(ctx, query, args...)
-		if err != nil {
-			return nil, fmt.Errorf("query purchase IDs by cert chunk: %w", err)
-		}
-		for rows.Next() {
-			var id, cert string
-			if err := rows.Scan(&id, &cert); err != nil {
-				_ = rows.Close() //nolint:errcheck
-				return nil, fmt.Errorf("scan purchase IDs by cert chunk: %w", err)
-			}
-			result[cert] = id
-		}
-		if err := rows.Err(); err != nil {
-			_ = rows.Close() //nolint:errcheck
-			return nil, fmt.Errorf("rows err in purchase IDs by cert chunk: %w", err)
-		}
-		if err := rows.Close(); err != nil {
-			return nil, fmt.Errorf("close rows in purchase IDs by cert chunk: %w", err)
-		}
-	}
-
-	return result, nil
 }
 
 // DeletePurchase removes a purchase and its associated sales within a transaction.

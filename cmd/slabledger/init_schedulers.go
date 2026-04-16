@@ -133,7 +133,9 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 	}
 	// Construct DH reconciler once; shared with scheduler (handlers.go builds
 	// its own instance for the admin endpoint — that's intentional and fine
-	// since the reconciler is stateless).
+	// since the reconciler is stateless). All inputs are verified non-nil
+	// above, so construction failure here is a wiring defect — log loudly
+	// so the daily drift scan's absence doesn't go unnoticed.
 	if deps.DHClient != nil && deps.DHClient.EnterpriseAvailable() && deps.PurchaseStore != nil {
 		reconciler, err := dhlisting.NewReconciler(
 			dhlistingadapter.NewInventorySnapshotAdapter(deps.DHClient),
@@ -142,7 +144,7 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 			deps.Logger,
 		)
 		if err != nil {
-			deps.Logger.Warn(ctx, "DH reconciler init failed", observability.Err(err))
+			deps.Logger.Error(ctx, "DH reconciler init failed; daily drift scan disabled", observability.Err(err))
 		} else {
 			buildDeps.DHReconciler = reconciler
 		}
