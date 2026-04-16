@@ -46,7 +46,7 @@ func (s *service) GetCapitalSummary(ctx context.Context) (*inventory.CapitalSumm
 	if err != nil {
 		return nil, fmt.Errorf("list invoices for projection: %w", err)
 	}
-	projection := ComputeInvoiceProjection(invoices, time.Now())
+	projection := inventory.ComputeInvoiceProjection(invoices, time.Now())
 	summary.NextInvoiceDate = projection.NextInvoiceDate
 	summary.NextInvoiceDueDate = projection.NextInvoiceDueDate
 	summary.NextInvoiceAmountCents = projection.NextInvoiceAmountCents
