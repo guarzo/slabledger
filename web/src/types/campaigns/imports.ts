@@ -10,29 +10,6 @@ export interface ImportError {
   error: string;
 }
 
-/** Status values returned by CL import endpoints. */
-export type GlobalImportResultStatus =
-  | 'allocated' | 'refreshed' | 'updated' | 'refunded'
-  | 'unmatched' | 'ambiguous' | 'skipped' | 'failed';
-
-/** Per-row result for CL (global) imports. */
-export interface GlobalImportItemResult {
-  certNumber: string;
-  cardName?: string;
-  grade?: number;
-  status: GlobalImportResultStatus;
-  campaignId?: string;
-  campaignName?: string;
-  candidates?: string[];
-  error?: string;
-  buyCostCents?: number;
-  clValueCents?: number;
-  purchaseDate?: string;
-  setName?: string;
-  cardNumber?: string;
-  population?: number;
-}
-
 /** Status values returned by PSA import endpoints. */
 export type PSAImportResultStatus =
   | 'allocated' | 'updated' | 'refunded'
@@ -49,18 +26,6 @@ export interface PSAImportItemResult {
   candidates?: string[];
   error?: string;
   population?: number;
-}
-
-export interface GlobalImportResult {
-  allocated: number;
-  refreshed: number;
-  unmatched: number;
-  ambiguous: number;
-  skipped: number;
-  failed: number;
-  errors?: ImportError[];
-  results?: GlobalImportItemResult[];
-  byCampaign?: Record<string, { campaignName: string; allocated: number; refreshed: number }>;
 }
 
 export interface PSAImportResult {

@@ -1,9 +1,9 @@
 /**
- * Campaign import/export API methods: PSA, CL, external, orders, cert entry, price review
+ * Campaign import/export API methods: PSA, external, orders, cert entry, price review
  */
 
 import type {
-  GlobalImportResult, PSAImportResult, ExternalImportResult,
+  PSAImportResult, ExternalImportResult,
   CertLookupResult,
   CertImportResult,
   OrdersImportResult, OrdersConfirmItem, BulkSaleResult,
@@ -19,8 +19,6 @@ declare module './client' {
     lookupCert(certNumber: string): Promise<CertLookupResult>;
 
     // Global imports / exports
-    globalImportCL(file: File): Promise<GlobalImportResult>;
-    globalExportCL(missingCLOnly?: boolean): Promise<Blob>;
     globalExportMM(missingMMOnly?: boolean): Promise<Blob>;
     globalRefreshMM(file: File): Promise<MMRefreshResult>;
 
@@ -59,19 +57,6 @@ proto.lookupCert = async function (this: APIClient, certNumber: string): Promise
 };
 
 // Global purchase endpoints (cross-campaign)
-proto.globalImportCL = async function (this: APIClient, file: File): Promise<GlobalImportResult> {
-  return this.uploadFile<GlobalImportResult>('/purchases/import-cl', file);
-};
-
-proto.globalExportCL = async function (this: APIClient, missingCLOnly?: boolean): Promise<Blob> {
-  const params = missingCLOnly ? '?missing_cl_only=true' : '';
-  const response = await this.fetchWithRetry(
-    `${this.baseURL}/purchases/export-cl${params}`,
-    {},
-  );
-  return response.blob();
-};
-
 proto.globalExportMM = async function (this: APIClient, missingMMOnly?: boolean): Promise<Blob> {
   const params = missingMMOnly ? '?missing_mm_only=true' : '';
   const response = await this.fetchWithRetry(
