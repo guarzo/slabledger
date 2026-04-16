@@ -56,38 +56,57 @@ func (ss *SaleStore) GetSaleByPurchaseID(ctx context.Context, purchaseID string)
 	return &s, nil
 }
 
-func (ss *SaleStore) GetSalesByPurchaseIDs(ctx context.Context, purchaseIDs []string) (result map[string]*inventory.Sale, err error) {
+func (ss *SaleStore) GetSalesByPurchaseIDs(ctx context.Context, purchaseIDs []string) (map[string]*inventory.Sale, error) {
 	if len(purchaseIDs) == 0 {
 		return map[string]*inventory.Sale{}, nil
 	}
-	placeholders := make([]byte, 0, len(purchaseIDs)*2-1)
-	args := make([]any, len(purchaseIDs))
-	for i, id := range purchaseIDs {
-		if i > 0 {
-			placeholders = append(placeholders, ',')
+
+	// Chunk to stay under SQLite's parameter limit (default 999, newer 32766).
+	// Matches the chunkSize used by GetPurchasesByCertNumbers / GetPurchasesByIDs.
+	const chunkSize = 500
+	result := make(map[string]*inventory.Sale, len(purchaseIDs))
+
+	for start := 0; start < len(purchaseIDs); start += chunkSize {
+		end := min(start+chunkSize, len(purchaseIDs))
+		chunk := purchaseIDs[start:end]
+
+		placeholders := make([]byte, 0, len(chunk)*2-1)
+		args := make([]any, len(chunk))
+		for i, id := range chunk {
+			if i > 0 {
+				placeholders = append(placeholders, ',')
+			}
+			placeholders = append(placeholders, '?')
+			args[i] = id
 		}
-		placeholders = append(placeholders, '?')
-		args[i] = id
+
+		query := `SELECT ` + saleColumns + ` FROM campaign_sales WHERE purchase_id IN (` + string(placeholders) + `)`
+		if err := ss.scanSalesChunk(ctx, query, args, result); err != nil {
+			return nil, err
+		}
 	}
-	query := `SELECT ` + saleColumns + ` FROM campaign_sales WHERE purchase_id IN (` + string(placeholders) + `)`
+
+	return result, nil
+}
+
+func (ss *SaleStore) scanSalesChunk(ctx context.Context, query string, args []any, into map[string]*inventory.Sale) (err error) {
 	rows, err := ss.db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("query sales by purchase ids: %w", err)
+		return fmt.Errorf("query sales by purchase ids chunk: %w", err)
 	}
 	defer func() {
 		if cerr := rows.Close(); err == nil && cerr != nil {
 			err = cerr
 		}
 	}()
-	result = make(map[string]*inventory.Sale, len(purchaseIDs))
 	for rows.Next() {
 		s, scanErr := scanSale(rows)
 		if scanErr != nil {
-			return nil, scanErr
+			return scanErr
 		}
-		result[s.PurchaseID] = &s
+		into[s.PurchaseID] = &s
 	}
-	return result, rows.Err()
+	return rows.Err()
 }
 
 func (ss *SaleStore) ListSalesByCampaign(ctx context.Context, campaignID string, limit, offset int) ([]inventory.Sale, error) {

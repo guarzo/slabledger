@@ -65,7 +65,7 @@ type CLRunStats struct {
 	LastRunAt       time.Time `json:"lastRunAt"`
 	DurationMs      int64     `json:"durationMs"`
 	Updated         int       `json:"updated"`
-	Mapped          int       `json:"mapped"`  // Kept for backwards compatibility; equals Updated by construction.
+	Mapped          int       `json:"mapped"`  // Successful mapping saves; differs from Updated when CL reports no value (counted as NoValue), so Mapped >= Updated.
 	Skipped         int       `json:"skipped"` // CL cards that did not match a purchase (CL-side perspective).
 	TotalCLCards    int       `json:"totalCLCards"`
 	CardsPushed     int       `json:"cardsPushed"`

@@ -49,71 +49,85 @@ func bulkMatchHandler(lister DHPurchaseLister, saver DHCardIDSaver) *DHHandler {
 	})
 }
 
-func TestHandleBulkMatch_Unauthenticated(t *testing.T) {
-	h := bulkMatchHandler(&mockDHPurchaseLister{}, &bulkMatchCardIDSaver{})
-
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/dh/bulk-match", nil)
-	// No user — requireUser must reject.
-	h.HandleBulkMatch(rec, req)
-
-	if rec.Code != http.StatusUnauthorized {
-		t.Fatalf("status: got %d, want 401", rec.Code)
-	}
-}
-
-func TestHandleBulkMatch_ListPurchasesError(t *testing.T) {
-	lister := &mockDHPurchaseLister{
-		ListAllUnsoldPurchasesFn: func(_ context.Context) ([]inventory.Purchase, error) {
-			return nil, errors.New("db down")
+// TestHandleBulkMatch covers the synchronous entry-path branches. The
+// concurrency case (TestHandleBulkMatch_AcceptedAndConcurrentRejected) lives
+// separately because forcing channel/wg coordination into a table struct hurts
+// readability.
+func TestHandleBulkMatch(t *testing.T) {
+	tests := []struct {
+		name string
+		// lister/saver factories let each case configure only what it needs.
+		lister   func() *mockDHPurchaseLister
+		saver    func() *bulkMatchCardIDSaver
+		withAuth bool
+		wantCode int
+		// wantMutexReleased asserts that a follow-up call does NOT receive
+		// 409 — useful for verifying the failure paths unlock the mutex.
+		wantMutexReleased bool
+	}{
+		{
+			name:     "no user → 401",
+			lister:   func() *mockDHPurchaseLister { return &mockDHPurchaseLister{} },
+			saver:    func() *bulkMatchCardIDSaver { return &bulkMatchCardIDSaver{} },
+			withAuth: false,
+			wantCode: http.StatusUnauthorized,
+		},
+		{
+			name: "list purchases fails → 500 with mutex released",
+			lister: func() *mockDHPurchaseLister {
+				return &mockDHPurchaseLister{
+					ListAllUnsoldPurchasesFn: func(_ context.Context) ([]inventory.Purchase, error) {
+						return nil, errors.New("db down")
+					},
+				}
+			},
+			saver:             func() *bulkMatchCardIDSaver { return &bulkMatchCardIDSaver{} },
+			withAuth:          true,
+			wantCode:          http.StatusInternalServerError,
+			wantMutexReleased: true,
+		},
+		{
+			name:   "get mapped set fails → 500 with mutex released",
+			lister: func() *mockDHPurchaseLister { return &mockDHPurchaseLister{} },
+			saver: func() *bulkMatchCardIDSaver {
+				return &bulkMatchCardIDSaver{
+					GetMappedSetFn: func(_ context.Context, _ string) (map[string]string, error) {
+						return nil, errors.New("db down")
+					},
+				}
+			},
+			withAuth:          true,
+			wantCode:          http.StatusInternalServerError,
+			wantMutexReleased: true,
 		},
 	}
-	h := bulkMatchHandler(lister, &bulkMatchCardIDSaver{})
 
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/dh/bulk-match", nil)
-	req = withUser(req)
-	h.HandleBulkMatch(rec, req)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := bulkMatchHandler(tt.lister(), tt.saver())
 
-	if rec.Code != http.StatusInternalServerError {
-		t.Fatalf("status: got %d, want 500 (body=%s)", rec.Code, rec.Body.String())
-	}
-	// The mutex must have been released so a follow-up call is not falsely 409.
-	rec2 := httptest.NewRecorder()
-	req2 := httptest.NewRequest(http.MethodPost, "/api/dh/bulk-match", nil)
-	req2 = withUser(req2)
-	h.HandleBulkMatch(rec2, req2)
-	if rec2.Code == http.StatusConflict {
-		t.Errorf("second call after lister failure should not be 409 — mutex was not released")
-	}
-	h.Wait()
-}
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodPost, "/api/dh/bulk-match", nil)
+			if tt.withAuth {
+				req = withUser(req)
+			}
+			h.HandleBulkMatch(rec, req)
 
-func TestHandleBulkMatch_GetMappedSetError(t *testing.T) {
-	saver := &bulkMatchCardIDSaver{
-		GetMappedSetFn: func(_ context.Context, _ string) (map[string]string, error) {
-			return nil, errors.New("db down")
-		},
+			if rec.Code != tt.wantCode {
+				t.Fatalf("status: got %d, want %d (body=%s)", rec.Code, tt.wantCode, rec.Body.String())
+			}
+			if tt.wantMutexReleased {
+				rec2 := httptest.NewRecorder()
+				req2 := httptest.NewRequest(http.MethodPost, "/api/dh/bulk-match", nil)
+				req2 = withUser(req2)
+				h.HandleBulkMatch(rec2, req2)
+				if rec2.Code == http.StatusConflict {
+					t.Errorf("follow-up call returned 409 — mutex was not released after the failure")
+				}
+			}
+			h.Wait()
+		})
 	}
-	h := bulkMatchHandler(&mockDHPurchaseLister{}, saver)
-
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/dh/bulk-match", nil)
-	req = withUser(req)
-	h.HandleBulkMatch(rec, req)
-
-	if rec.Code != http.StatusInternalServerError {
-		t.Fatalf("status: got %d, want 500 (body=%s)", rec.Code, rec.Body.String())
-	}
-	// Mutex must be released after the GetMappedSet failure too.
-	rec2 := httptest.NewRecorder()
-	req2 := httptest.NewRequest(http.MethodPost, "/api/dh/bulk-match", nil)
-	req2 = withUser(req2)
-	h.HandleBulkMatch(rec2, req2)
-	if rec2.Code == http.StatusConflict {
-		t.Errorf("second call after mapped-set failure should not be 409 — mutex was not released")
-	}
-	h.Wait()
 }
 
 func TestHandleBulkMatch_AcceptedAndConcurrentRejected(t *testing.T) {

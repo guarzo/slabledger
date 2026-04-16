@@ -20,31 +20,44 @@ func fixMatchValidationHandler() *DHHandler {
 	})
 }
 
-func TestHandleFixMatch_Unauthenticated(t *testing.T) {
-	h := fixMatchValidationHandler()
-
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/dh/fix-match",
-		strings.NewReader(`{"purchaseId":"p1","dhUrl":"https://doubleholo.com/card/123/foo"}`))
-	// No user in context — requireUser must reject.
-	h.HandleFixMatch(rec, req)
-
-	if rec.Code != http.StatusUnauthorized {
-		t.Fatalf("status: got %d, want 401", rec.Code)
+// TestHandleFixMatch_AuthAndBody covers the early request-validation guards
+// that don't touch any service dependency: missing user → 401 and malformed
+// JSON body → 400.
+func TestHandleFixMatch_AuthAndBody(t *testing.T) {
+	tests := []struct {
+		name     string
+		body     string
+		withAuth bool
+		wantCode int
+	}{
+		{
+			name:     "no user → 401",
+			body:     `{"purchaseId":"p1","dhUrl":"https://doubleholo.com/card/123/foo"}`,
+			withAuth: false,
+			wantCode: http.StatusUnauthorized,
+		},
+		{
+			name:     "malformed JSON body → 400",
+			body:     `{not json`,
+			withAuth: true,
+			wantCode: http.StatusBadRequest,
+		},
 	}
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := fixMatchValidationHandler()
 
-func TestHandleFixMatch_InvalidBody(t *testing.T) {
-	h := fixMatchValidationHandler()
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodPost, "/api/dh/fix-match", strings.NewReader(tt.body))
+			if tt.withAuth {
+				req = withUser(req)
+			}
+			h.HandleFixMatch(rec, req)
 
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/dh/fix-match",
-		strings.NewReader(`{not json`))
-	req = withUser(req)
-	h.HandleFixMatch(rec, req)
-
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("status: got %d, want 400", rec.Code)
+			if rec.Code != tt.wantCode {
+				t.Fatalf("status: got %d, want %d (body=%s)", rec.Code, tt.wantCode, rec.Body.String())
+			}
+		})
 	}
 }
 

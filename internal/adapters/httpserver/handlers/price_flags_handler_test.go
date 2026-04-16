@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strconv"
 	"testing"
 
 	"github.com/guarzo/slabledger/internal/domain/inventory"
@@ -18,26 +17,125 @@ func newPriceFlagsHandler(svc *mocks.MockPricingService) *PriceFlagsHandler {
 
 // --- HandleListPriceFlags ---
 
-func TestHandleListPriceFlags_StatusFiltering(t *testing.T) {
-	tests := []struct {
-		name       string
-		query      string
-		wantStatus string
-		wantCode   int
-	}{
-		{"explicit open", "?status=open", "open", http.StatusOK},
-		{"explicit resolved", "?status=resolved", "resolved", http.StatusOK},
-		{"explicit all", "?status=all", "all", http.StatusOK},
-		{"empty defaults to open", "", "open", http.StatusOK},
-		{"invalid status rejected", "?status=bogus", "", http.StatusBadRequest},
+func TestHandleListPriceFlags(t *testing.T) {
+	twoFlags := []inventory.PriceFlagWithContext{
+		{PriceFlag: inventory.PriceFlag{ID: 1, PurchaseID: "p1", FlaggedBy: 7, Reason: inventory.PriceFlagWrongMatch}},
+		{PriceFlag: inventory.PriceFlag{ID: 2, PurchaseID: "p2", FlaggedBy: 7, Reason: inventory.PriceFlagStaleData}},
 	}
+
+	tests := []struct {
+		name string
+		// query is appended to the URL.
+		query string
+		// listResult is what the mock service returns when invoked.
+		// If listError is non-nil, listResult is ignored.
+		listResult []inventory.PriceFlagWithContext
+		listError  error
+
+		wantCode int
+		// wantStatus is the value the service should receive (only checked
+		// when wantCode is OK and the service is expected to be called).
+		wantStatus string
+		// wantServiceCalled asserts whether the mock should be invoked.
+		// Invalid-status requests must short-circuit before the service.
+		wantServiceCalled bool
+		// wantBodyTotal verifies the JSON body's "total" field on OK
+		// responses. Use -1 to skip.
+		wantBodyTotal int
+		// wantBodyFlagsLen verifies len(body.flags). Use -1 to skip.
+		wantBodyFlagsLen int
+		// wantNonNullFlags asserts the JSON "flags" key is `[]` not `null`.
+		wantNonNullFlags bool
+	}{
+		{
+			name:              "explicit open",
+			query:             "?status=open",
+			listResult:        []inventory.PriceFlagWithContext{},
+			wantCode:          http.StatusOK,
+			wantStatus:        "open",
+			wantServiceCalled: true,
+			wantBodyTotal:     0,
+			wantBodyFlagsLen:  0,
+		},
+		{
+			name:              "explicit resolved",
+			query:             "?status=resolved",
+			listResult:        []inventory.PriceFlagWithContext{},
+			wantCode:          http.StatusOK,
+			wantStatus:        "resolved",
+			wantServiceCalled: true,
+			wantBodyTotal:     0,
+			wantBodyFlagsLen:  0,
+		},
+		{
+			name:              "explicit all",
+			query:             "?status=all",
+			listResult:        []inventory.PriceFlagWithContext{},
+			wantCode:          http.StatusOK,
+			wantStatus:        "all",
+			wantServiceCalled: true,
+			wantBodyTotal:     0,
+			wantBodyFlagsLen:  0,
+		},
+		{
+			name:              "empty defaults to open",
+			query:             "",
+			listResult:        []inventory.PriceFlagWithContext{},
+			wantCode:          http.StatusOK,
+			wantStatus:        "open",
+			wantServiceCalled: true,
+			wantBodyTotal:     0,
+			wantBodyFlagsLen:  0,
+		},
+		{
+			name:              "invalid status rejected without calling service",
+			query:             "?status=bogus",
+			wantCode:          http.StatusBadRequest,
+			wantServiceCalled: false,
+			wantBodyTotal:     -1,
+			wantBodyFlagsLen:  -1,
+		},
+		{
+			name:              "nil result becomes empty array",
+			query:             "",
+			listResult:        nil,
+			wantCode:          http.StatusOK,
+			wantStatus:        "open",
+			wantServiceCalled: true,
+			wantBodyTotal:     0,
+			wantBodyFlagsLen:  0,
+			wantNonNullFlags:  true,
+		},
+		{
+			name:              "returns flags and total preserved",
+			query:             "",
+			listResult:        twoFlags,
+			wantCode:          http.StatusOK,
+			wantStatus:        "open",
+			wantServiceCalled: true,
+			wantBodyTotal:     len(twoFlags),
+			wantBodyFlagsLen:  len(twoFlags),
+		},
+		{
+			name:              "service error → 500",
+			query:             "",
+			listError:         inventory.ErrCampaignNotFound,
+			wantCode:          http.StatusInternalServerError,
+			wantServiceCalled: true,
+			wantBodyTotal:     -1,
+			wantBodyFlagsLen:  -1,
+		},
+	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var receivedStatus string
+			called := false
 			svc := &mocks.MockPricingService{
 				ListPriceFlagsFn: func(_ context.Context, status string) ([]inventory.PriceFlagWithContext, error) {
+					called = true
 					receivedStatus = status
-					return []inventory.PriceFlagWithContext{}, nil
+					return tt.listResult, tt.listError
 				},
 			}
 			h := newPriceFlagsHandler(svc)
@@ -49,201 +147,138 @@ func TestHandleListPriceFlags_StatusFiltering(t *testing.T) {
 			if rec.Code != tt.wantCode {
 				t.Fatalf("status: got %d, want %d (body=%s)", rec.Code, tt.wantCode, rec.Body.String())
 			}
-			if tt.wantCode == http.StatusOK && receivedStatus != tt.wantStatus {
+			if called != tt.wantServiceCalled {
+				t.Errorf("service called: got %t, want %t", called, tt.wantServiceCalled)
+			}
+			if tt.wantServiceCalled && tt.wantCode == http.StatusOK && receivedStatus != tt.wantStatus {
 				t.Errorf("service status: got %q, want %q", receivedStatus, tt.wantStatus)
+			}
+
+			if tt.wantBodyTotal == -1 && tt.wantBodyFlagsLen == -1 {
+				return
+			}
+			var body struct {
+				Flags []inventory.PriceFlagWithContext `json:"flags"`
+				Total int                              `json:"total"`
+			}
+			if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+				t.Fatalf("decode: %v", err)
+			}
+			if tt.wantBodyTotal >= 0 && body.Total != tt.wantBodyTotal {
+				t.Errorf("total: got %d, want %d", body.Total, tt.wantBodyTotal)
+			}
+			if tt.wantBodyFlagsLen >= 0 && len(body.Flags) != tt.wantBodyFlagsLen {
+				t.Errorf("flags length: got %d, want %d", len(body.Flags), tt.wantBodyFlagsLen)
+			}
+			if tt.wantNonNullFlags && body.Flags == nil {
+				t.Errorf("flags should be empty array, not null")
+			}
+			// Sanity check on the populated case.
+			if len(twoFlags) > 0 && tt.wantBodyFlagsLen == len(twoFlags) {
+				if body.Flags[0].ID != twoFlags[0].ID || body.Flags[1].ID != twoFlags[1].ID {
+					t.Errorf("flag IDs not preserved: got %v %v", body.Flags[0].ID, body.Flags[1].ID)
+				}
 			}
 		})
 	}
 }
 
-func TestHandleListPriceFlags_NilResultBecomesEmptyArray(t *testing.T) {
-	svc := &mocks.MockPricingService{
-		ListPriceFlagsFn: func(_ context.Context, _ string) ([]inventory.PriceFlagWithContext, error) {
-			return nil, nil
-		},
-	}
-	h := newPriceFlagsHandler(svc)
-
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/api/admin/price-flags", nil)
-	h.HandleListPriceFlags(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rec.Code)
-	}
-	var body struct {
-		Flags []inventory.PriceFlagWithContext `json:"flags"`
-		Total int                              `json:"total"`
-	}
-	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if body.Flags == nil {
-		t.Errorf("flags should be empty array, not null")
-	}
-	if body.Total != 0 {
-		t.Errorf("total: got %d, want 0", body.Total)
-	}
-}
-
-func TestHandleListPriceFlags_ReturnsFlagsAndTotal(t *testing.T) {
-	flags := []inventory.PriceFlagWithContext{
-		{PriceFlag: inventory.PriceFlag{ID: 1, PurchaseID: "p1", FlaggedBy: 7, Reason: inventory.PriceFlagWrongMatch}},
-		{PriceFlag: inventory.PriceFlag{ID: 2, PurchaseID: "p2", FlaggedBy: 7, Reason: inventory.PriceFlagStaleData}},
-	}
-	svc := &mocks.MockPricingService{
-		ListPriceFlagsFn: func(_ context.Context, _ string) ([]inventory.PriceFlagWithContext, error) {
-			return flags, nil
-		},
-	}
-	h := newPriceFlagsHandler(svc)
-
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/api/admin/price-flags", nil)
-	h.HandleListPriceFlags(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rec.Code)
-	}
-	var body struct {
-		Flags []inventory.PriceFlagWithContext `json:"flags"`
-		Total int                              `json:"total"`
-	}
-	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if body.Total != len(flags) {
-		t.Errorf("total: got %d, want %d", body.Total, len(flags))
-	}
-	if len(body.Flags) != len(flags) {
-		t.Fatalf("flags: got %d, want %d", len(body.Flags), len(flags))
-	}
-	if body.Flags[0].ID != flags[0].ID || body.Flags[1].ID != flags[1].ID {
-		t.Errorf("flag IDs not preserved: got %v %v", body.Flags[0].ID, body.Flags[1].ID)
-	}
-}
-
-func TestHandleListPriceFlags_ServiceError(t *testing.T) {
-	svc := &mocks.MockPricingService{
-		ListPriceFlagsFn: func(_ context.Context, _ string) ([]inventory.PriceFlagWithContext, error) {
-			return nil, inventory.ErrCampaignNotFound
-		},
-	}
-	h := newPriceFlagsHandler(svc)
-
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/api/admin/price-flags", nil)
-	h.HandleListPriceFlags(rec, req)
-
-	if rec.Code != http.StatusInternalServerError {
-		t.Fatalf("expected 500, got %d", rec.Code)
-	}
-}
-
 // --- HandleResolvePriceFlag ---
 
-func TestHandleResolvePriceFlag_Success(t *testing.T) {
-	var capturedID, capturedUserID int64
-	svc := &mocks.MockPricingService{
-		ResolvePriceFlagFn: func(_ context.Context, flagID int64, resolvedBy int64) error {
-			capturedID = flagID
-			capturedUserID = resolvedBy
-			return nil
+func TestHandleResolvePriceFlag(t *testing.T) {
+	tests := []struct {
+		name string
+		// flagIDPath is the path-value passed via SetPathValue. Empty string
+		// for cases where the test exercises a path that won't reach the
+		// service.
+		flagIDPath string
+		// withAuth controls whether withUser() wraps the request.
+		withAuth bool
+		// resolveError is what the mock returns. nil means success.
+		resolveError error
+
+		wantCode             int
+		wantServiceCalled    bool
+		wantCapturedFlagID   int64
+		wantCapturedResolver int64 // 42 from withUser
+	}{
+		{
+			name:                 "success → 204 with captured IDs",
+			flagIDPath:           "123",
+			withAuth:             true,
+			wantCode:             http.StatusNoContent,
+			wantServiceCalled:    true,
+			wantCapturedFlagID:   123,
+			wantCapturedResolver: 42,
+		},
+		{
+			name:              "invalid flagID → 400, service not called",
+			flagIDPath:        "not-a-number",
+			withAuth:          true,
+			wantCode:          http.StatusBadRequest,
+			wantServiceCalled: false,
+		},
+		{
+			name:              "no user → 401, service not called",
+			flagIDPath:        "1",
+			withAuth:          false,
+			wantCode:          http.StatusUnauthorized,
+			wantServiceCalled: false,
+		},
+		{
+			name:              "not found → 404",
+			flagIDPath:        "999",
+			withAuth:          true,
+			resolveError:      inventory.ErrPriceFlagNotFound,
+			wantCode:          http.StatusNotFound,
+			wantServiceCalled: true,
+		},
+		{
+			name:              "other service error → 500",
+			flagIDPath:        "1",
+			withAuth:          true,
+			resolveError:      inventory.ErrCampaignNotFound,
+			wantCode:          http.StatusInternalServerError,
+			wantServiceCalled: true,
 		},
 	}
-	h := newPriceFlagsHandler(svc)
 
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPatch, "/api/admin/price-flags/123/resolve", nil)
-	req.SetPathValue("flagId", "123")
-	req = withUser(req)
-	h.HandleResolvePriceFlag(rec, req)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var capturedID, capturedUserID int64
+			called := false
+			svc := &mocks.MockPricingService{
+				ResolvePriceFlagFn: func(_ context.Context, flagID int64, resolvedBy int64) error {
+					called = true
+					capturedID = flagID
+					capturedUserID = resolvedBy
+					return tt.resolveError
+				},
+			}
+			h := newPriceFlagsHandler(svc)
 
-	if rec.Code != http.StatusNoContent {
-		t.Fatalf("expected 204, got %d (body=%s)", rec.Code, rec.Body.String())
-	}
-	if capturedID != 123 {
-		t.Errorf("flagID: got %d, want 123", capturedID)
-	}
-	if capturedUserID != 42 {
-		t.Errorf("resolvedBy: got %d, want 42 (from withUser)", capturedUserID)
-	}
-}
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodPatch, "/api/admin/price-flags/"+tt.flagIDPath+"/resolve", nil)
+			req.SetPathValue("flagId", tt.flagIDPath)
+			if tt.withAuth {
+				req = withUser(req)
+			}
+			h.HandleResolvePriceFlag(rec, req)
 
-func TestHandleResolvePriceFlag_InvalidFlagID(t *testing.T) {
-	svc := &mocks.MockPricingService{
-		ResolvePriceFlagFn: func(_ context.Context, _ int64, _ int64) error {
-			t.Fatalf("service should not be called when flagID is invalid")
-			return nil
-		},
-	}
-	h := newPriceFlagsHandler(svc)
-
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPatch, "/api/admin/price-flags/not-a-number/resolve", nil)
-	req.SetPathValue("flagId", "not-a-number")
-	req = withUser(req)
-	h.HandleResolvePriceFlag(rec, req)
-
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d", rec.Code)
-	}
-}
-
-func TestHandleResolvePriceFlag_Unauthorized(t *testing.T) {
-	svc := &mocks.MockPricingService{
-		ResolvePriceFlagFn: func(_ context.Context, _ int64, _ int64) error {
-			t.Fatalf("service should not be called when user is missing")
-			return nil
-		},
-	}
-	h := newPriceFlagsHandler(svc)
-
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPatch, "/api/admin/price-flags/1/resolve", nil)
-	req.SetPathValue("flagId", "1")
-	// No user context.
-	h.HandleResolvePriceFlag(rec, req)
-
-	if rec.Code != http.StatusUnauthorized {
-		t.Fatalf("expected 401, got %d", rec.Code)
-	}
-}
-
-func TestHandleResolvePriceFlag_NotFound(t *testing.T) {
-	svc := &mocks.MockPricingService{
-		ResolvePriceFlagFn: func(_ context.Context, _ int64, _ int64) error {
-			return inventory.ErrPriceFlagNotFound
-		},
-	}
-	h := newPriceFlagsHandler(svc)
-
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPatch, "/api/admin/price-flags/999/resolve", nil)
-	req.SetPathValue("flagId", strconv.Itoa(999))
-	req = withUser(req)
-	h.HandleResolvePriceFlag(rec, req)
-
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("expected 404, got %d (body=%s)", rec.Code, rec.Body.String())
-	}
-}
-
-func TestHandleResolvePriceFlag_ServiceError(t *testing.T) {
-	svc := &mocks.MockPricingService{
-		ResolvePriceFlagFn: func(_ context.Context, _ int64, _ int64) error {
-			return inventory.ErrCampaignNotFound // any non-NotFound error
-		},
-	}
-	h := newPriceFlagsHandler(svc)
-
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPatch, "/api/admin/price-flags/1/resolve", nil)
-	req.SetPathValue("flagId", "1")
-	req = withUser(req)
-	h.HandleResolvePriceFlag(rec, req)
-
-	if rec.Code != http.StatusInternalServerError {
-		t.Fatalf("expected 500, got %d", rec.Code)
+			if rec.Code != tt.wantCode {
+				t.Fatalf("status: got %d, want %d (body=%s)", rec.Code, tt.wantCode, rec.Body.String())
+			}
+			if called != tt.wantServiceCalled {
+				t.Errorf("service called: got %t, want %t", called, tt.wantServiceCalled)
+			}
+			if tt.wantServiceCalled && tt.resolveError == nil {
+				if capturedID != tt.wantCapturedFlagID {
+					t.Errorf("flagID captured: got %d, want %d", capturedID, tt.wantCapturedFlagID)
+				}
+				if capturedUserID != tt.wantCapturedResolver {
+					t.Errorf("resolvedBy captured: got %d, want %d", capturedUserID, tt.wantCapturedResolver)
+				}
+			}
+		})
 	}
 }

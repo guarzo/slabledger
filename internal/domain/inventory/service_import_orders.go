@@ -188,6 +188,10 @@ func (s *service) ConfirmOrdersSales(ctx context.Context, items []OrdersConfirmI
 			result.Errors = append(result.Errors, BulkSaleError{PurchaseID: item.PurchaseID, Error: err.Error()})
 			continue
 		}
+		// Mark this purchase as sold within this batch so a duplicate item.PurchaseID
+		// later in the loop is rejected by the saleMap guard rather than racing into
+		// CreateSale and tripping the DB UNIQUE constraint.
+		saleMap[item.PurchaseID] = sa
 
 		// Flip local dh_status to 'sold' so the inventory UI reflects reality.
 		// Best-effort: a failure logs Error but does not roll back the sale.

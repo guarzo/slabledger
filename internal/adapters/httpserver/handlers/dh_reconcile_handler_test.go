@@ -34,67 +34,79 @@ func newReconcileTestHandler(rec dhlisting.Reconciler) *DHHandler {
 	})
 }
 
-func TestHandleReconcile_NotConfigured(t *testing.T) {
-	h := newReconcileTestHandler(nil)
-
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/dh/reconcile", nil)
-	h.HandleReconcile(rec, req)
-
-	if rec.Code != http.StatusServiceUnavailable {
-		t.Fatalf("status: got %d, want 503", rec.Code)
-	}
-}
-
-func TestHandleReconcile_Success(t *testing.T) {
-	want := dhlisting.ReconcileResult{
+// TestHandleReconcile groups the synchronous (non-concurrent) entry-path cases.
+// The concurrency case lives in TestHandleReconcile_ConcurrentRunsRejected
+// because forcing channel/wg coordination into a table struct hurts readability.
+func TestHandleReconcile(t *testing.T) {
+	successResult := dhlisting.ReconcileResult{
 		Scanned:     50,
 		MissingOnDH: 3,
 		Reset:       2,
 		Errors:      []string{"p9: write conflict"},
 		ResetIDs:    []string{"p1", "p2"},
 	}
-	svc := &mockReconciler{
-		ReconcileFn: func(_ context.Context) (dhlisting.ReconcileResult, error) {
-			return want, nil
+
+	tests := []struct {
+		name string
+		// reconciler is the dhlisting.Reconciler injected. nil means "not
+		// configured" → 503.
+		reconciler dhlisting.Reconciler
+		wantCode   int
+		// wantBody is non-nil for the success case to verify response shape.
+		wantBody *dhlisting.ReconcileResult
+	}{
+		{
+			name:       "reconciler not configured → 503",
+			reconciler: nil,
+			wantCode:   http.StatusServiceUnavailable,
+		},
+		{
+			name: "success → 200 with full ReconcileResponse shape",
+			reconciler: &mockReconciler{
+				ReconcileFn: func(_ context.Context) (dhlisting.ReconcileResult, error) {
+					return successResult, nil
+				},
+			},
+			wantCode: http.StatusOK,
+			wantBody: &successResult,
+		},
+		{
+			name: "service error → 502",
+			reconciler: &mockReconciler{
+				ReconcileFn: func(_ context.Context) (dhlisting.ReconcileResult, error) {
+					return dhlisting.ReconcileResult{}, errors.New("DH 500")
+				},
+			},
+			wantCode: http.StatusBadGateway,
 		},
 	}
-	h := newReconcileTestHandler(svc)
 
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/dh/reconcile", nil)
-	h.HandleReconcile(rec, req)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := newReconcileTestHandler(tt.reconciler)
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status: got %d, want 200 (body=%s)", rec.Code, rec.Body.String())
-	}
-	var got reconcileResponse
-	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if got.Scanned != want.Scanned ||
-		got.MissingOnDH != want.MissingOnDH ||
-		got.Reset != want.Reset ||
-		len(got.Errors) != len(want.Errors) ||
-		len(got.ResetIDs) != len(want.ResetIDs) {
-		t.Errorf("response shape mismatch: got %+v, want %+v", got, want)
-	}
-}
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodPost, "/api/dh/reconcile", nil)
+			h.HandleReconcile(rec, req)
 
-func TestHandleReconcile_ServiceError(t *testing.T) {
-	svc := &mockReconciler{
-		ReconcileFn: func(_ context.Context) (dhlisting.ReconcileResult, error) {
-			return dhlisting.ReconcileResult{}, errors.New("DH 500")
-		},
-	}
-	h := newReconcileTestHandler(svc)
-
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/dh/reconcile", nil)
-	h.HandleReconcile(rec, req)
-
-	if rec.Code != http.StatusBadGateway {
-		t.Fatalf("status: got %d, want 502 (body=%s)", rec.Code, rec.Body.String())
+			if rec.Code != tt.wantCode {
+				t.Fatalf("status: got %d, want %d (body=%s)", rec.Code, tt.wantCode, rec.Body.String())
+			}
+			if tt.wantBody == nil {
+				return
+			}
+			var got reconcileResponse
+			if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+				t.Fatalf("decode: %v", err)
+			}
+			if got.Scanned != tt.wantBody.Scanned ||
+				got.MissingOnDH != tt.wantBody.MissingOnDH ||
+				got.Reset != tt.wantBody.Reset ||
+				len(got.Errors) != len(tt.wantBody.Errors) ||
+				len(got.ResetIDs) != len(tt.wantBody.ResetIDs) {
+				t.Errorf("response shape mismatch: got %+v, want %+v", got, *tt.wantBody)
+			}
+		})
 	}
 }
 

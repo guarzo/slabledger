@@ -133,9 +133,13 @@ func (s *DHInventoryPollScheduler) poll(ctx context.Context) {
 	skipped := 0
 	var latestUpdatedAt string
 
-	certs := make([]string, 0, len(allItems))
+	certSet := make(map[string]struct{}, len(allItems))
 	for _, item := range allItems {
-		certs = append(certs, item.CertNumber)
+		certSet[item.CertNumber] = struct{}{}
+	}
+	certs := make([]string, 0, len(certSet))
+	for c := range certSet {
+		certs = append(certs, c)
 	}
 	purchaseIDByCert, lookupErr := s.lookup.GetPurchaseIDsByCertNumbers(ctx, certs)
 	if lookupErr != nil {
