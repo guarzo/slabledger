@@ -26,7 +26,7 @@ export function splitByH2(markdown: string): ParsedSection[] {
     buffer = [];
   };
 
-  const h2Re = /^##\s+(.+?)\s*$/;
+  const h2Re = /^##\s+(.+?)(?:\s+##)?\s*$/;
   for (const line of lines) {
     const match = h2Re.exec(line);
     if (match) {

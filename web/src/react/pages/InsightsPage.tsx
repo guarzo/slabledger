@@ -111,7 +111,7 @@ function CachedReportPanel({
   const [refreshError, setRefreshError] = useState<string | null>(null);
 
   const status = data?.status ?? 'empty';
-  const isRunning = status === 'running';
+  const isRunning = status === 'running' || status === 'pending';
   const hasContent = status === 'complete' && !!data?.content;
   const hasError = status === 'error';
 
@@ -188,10 +188,11 @@ function CampaignReportPanel() {
       }
     >
       <div className="flex items-center gap-2 bg-[var(--surface-1)] border border-[var(--surface-2)] rounded-xl p-3">
-        <label className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+        <label htmlFor="campaign-select" className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
           Campaign
         </label>
         <select
+          id="campaign-select"
           value={selectedId}
           onChange={e => {
             setSelectedId(e.target.value);

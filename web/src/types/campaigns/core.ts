@@ -77,7 +77,7 @@ export interface Purchase {
   gemRateId?: string;
   psaSpecId?: number;
   clSyncedAt?: string;
-  clLastError?: string;
+  clLastError?: 'no_value' | 'catalog_fallback' | 'api_error' | 'no_image_match' | 'no_cert_match';
   createdAt: string;
   updatedAt: string;
   // Market snapshot at time of purchase

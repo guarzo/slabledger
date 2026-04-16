@@ -20,8 +20,8 @@ export interface SyncDotInput {
   clHasValue?: boolean;
   /** Does MM currently have a usable value on the row? */
   hasMMValue?: boolean;
-  /** Current CL error/status tag, if any (e.g. 'no_value', 'catalog_fallback'). */
-  clLastError?: string;
+  /** Current CL error/status tag, if any. */
+  clLastError?: 'no_value' | 'catalog_fallback' | 'api_error' | 'no_image_match' | 'no_cert_match';
 }
 
 /** Returns color + tooltip for the per-row sync freshness dot.
@@ -40,8 +40,7 @@ export function syncDotProps(input: SyncDotInput): SyncDotProps {
     if (!ts) return false;
     const t = new Date(ts).getTime();
     if (isNaN(t)) return false;
-    if (t >= now) return true;
-    return now - t <= threshold;
+    return t <= now && now - t <= threshold;
   }
 
   const dhFresh = within24h(dhLastSyncedAt);
@@ -74,12 +73,14 @@ export function syncDotProps(input: SyncDotInput): SyncDotProps {
   return { color, tooltip };
 }
 
-function clLine(ts: string | undefined, hasValue: boolean | undefined, lastError: string | undefined): string {
+function clLine(ts: string | undefined, hasValue: boolean | undefined, lastError: SyncDotInput['clLastError']): string {
   if (!ts) return 'CL · never';
   const age = timeAgo(ts);
   if (lastError === 'no_value') return `CL · matched, no value · ${age}`;
   if (lastError === 'catalog_fallback') return `CL · catalog fallback · ${age}`;
   if (lastError === 'api_error') return `CL · api error · ${age}`;
+  if (lastError === 'no_image_match') return `CL · no image match · ${age}`;
+  if (lastError === 'no_cert_match') return `CL · no cert match · ${age}`;
   if (hasValue) return `CL · ✓ · ${age}`;
   return `CL · ${age}`;
 }

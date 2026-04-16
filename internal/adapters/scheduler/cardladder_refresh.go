@@ -368,6 +368,7 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 				// API failure — distinct from a genuine catalog miss. Tag the row
 				// so ops can see whether CL is misbehaving vs actually empty.
 				matchedPurchaseIDs[purchase.ID] = true
+				resolvedMappings[purchase.CertNumber] = true
 				s.recordCLError(ctx, purchase.ID, CLReasonAPIError)
 				continue
 			}
@@ -378,6 +379,7 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 				// reason with `no_image_match`.
 				noValue++
 				matchedPurchaseIDs[purchase.ID] = true
+				resolvedMappings[purchase.CertNumber] = true
 				s.recordCLError(ctx, purchase.ID, CLReasonNoValue)
 				continue
 			}
