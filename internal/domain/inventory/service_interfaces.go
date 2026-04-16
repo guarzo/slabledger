@@ -39,10 +39,7 @@ type AnalyticsService interface {
 
 // ImportService handles CSV imports, cert entry, and external data ingestion.
 type ImportService interface {
-	RefreshCLValuesGlobal(ctx context.Context, rows []CLExportRow) (*GlobalCLRefreshResult, error)
-	ImportCLExportGlobal(ctx context.Context, rows []CLExportRow) (*GlobalImportResult, error)
 	ImportPSAExportGlobal(ctx context.Context, rows []PSAExportRow) (*PSAImportResult, error)
-	ExportCLFormatGlobal(ctx context.Context, missingCLOnly bool) ([]CLExportEntry, error)
 	ExportMMFormatGlobal(ctx context.Context, missingMMOnly bool) ([]MMExportEntry, error)
 	RefreshMMValuesGlobal(ctx context.Context, rows []MMRefreshRow) (*MMRefreshResult, error)
 

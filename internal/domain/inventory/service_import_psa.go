@@ -390,3 +390,14 @@ func (s *service) autoDetectInvoices(ctx context.Context, rows []PSAExportRow) (
 	}
 	return created, updated
 }
+
+// filterOutExternal returns a copy of campaigns with the external campaign removed.
+func filterOutExternal(campaigns []Campaign) []Campaign {
+	filtered := make([]Campaign, 0, len(campaigns))
+	for _, c := range campaigns {
+		if c.ID != ExternalCampaignID {
+			filtered = append(filtered, c)
+		}
+	}
+	return filtered
+}

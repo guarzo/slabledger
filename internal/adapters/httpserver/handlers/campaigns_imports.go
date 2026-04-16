@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/csv"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"time"
@@ -13,99 +12,6 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
-
-// HandleGlobalRefreshCL handles POST /api/purchases/refresh-cl.
-// Accepts a full CL export CSV and refreshes CL values across all inventory.
-func (h *CampaignsHandler) HandleGlobalRefreshCL(w http.ResponseWriter, r *http.Request) {
-	rows, ok := h.parseGlobalCSVUpload(w, r)
-	if !ok {
-		return
-	}
-
-	clRows, parseErrors, err := inventory.ParseCLRefreshRows(rows)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	if len(parseErrors) > 0 {
-		writeError(w, http.StatusBadRequest, parseErrors[0].Message)
-		return
-	}
-
-	result, ok := serviceCall(w, r.Context(), h.logger, "global CL refresh failed", func() (*inventory.GlobalCLRefreshResult, error) {
-		return h.service.RefreshCLValuesGlobal(r.Context(), clRows)
-	})
-	if !ok {
-		return
-	}
-	writeJSON(w, http.StatusOK, result)
-}
-
-// HandleGlobalImportCL handles POST /api/purchases/import-cl.
-// Accepts a full CL export CSV, auto-allocates new purchases to campaigns, and refreshes existing ones.
-func (h *CampaignsHandler) HandleGlobalImportCL(w http.ResponseWriter, r *http.Request) {
-	rows, ok := h.parseGlobalCSVUpload(w, r)
-	if !ok {
-		return
-	}
-
-	clRows, parseErrors, err := inventory.ParseCLImportRows(rows)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	if len(parseErrors) > 0 {
-		writeError(w, http.StatusBadRequest, parseErrors[0].Message)
-		return
-	}
-
-	result, ok := serviceCall(w, r.Context(), h.logger, "global CL import failed", func() (*inventory.GlobalImportResult, error) {
-		return h.service.ImportCLExportGlobal(r.Context(), clRows)
-	})
-	if !ok {
-		return
-	}
-
-	writeJSON(w, http.StatusOK, result)
-}
-
-// HandleGlobalExportCL handles GET /api/purchases/export-cl.
-// Returns a CSV file of all unsold inventory in Card Ladder import format.
-func (h *CampaignsHandler) HandleGlobalExportCL(w http.ResponseWriter, r *http.Request) {
-	missingCLOnly := r.URL.Query().Get("missing_cl_only") == "true"
-	entries, err := h.service.ExportCLFormatGlobal(r.Context(), missingCLOnly)
-	if err != nil {
-		h.logger.Error(r.Context(), "global CL export failed", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
-		return
-	}
-
-	w.Header().Set("Content-Type", "text/csv")
-	w.Header().Set("Content-Disposition", `attachment; filename="card_ladder_import.csv"`)
-	w.WriteHeader(http.StatusOK)
-	writer := csv.NewWriter(w)
-	if err := writer.Write([]string{"Date Purchased", "Cert #", "Grader", "Investment", "Estimated Value", "Notes", "Date Sold", "Sold Price"}); err != nil {
-		h.logger.Error(r.Context(), "csv header write failed", observability.Err(err))
-		return
-	}
-	for _, e := range entries {
-		if err := writer.Write([]string{
-			e.DatePurchased,
-			e.CertNumber,
-			e.Grader,
-			fmt.Sprintf("%.2f", e.Investment),
-			fmt.Sprintf("%.2f", e.EstimatedValue),
-			"", "", "",
-		}); err != nil {
-			h.logger.Error(r.Context(), "csv row write failed", observability.Err(err))
-			return
-		}
-	}
-	writer.Flush()
-	if err := writer.Error(); err != nil {
-		h.logger.Error(r.Context(), "csv flush failed", observability.Err(err))
-	}
-}
 
 // HandleGlobalImportPSA handles POST /api/purchases/import-psa.
 // Accepts a PSA export CSV file and imports graded card data across all inventory.
