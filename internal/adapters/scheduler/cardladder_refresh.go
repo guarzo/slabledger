@@ -192,7 +192,6 @@ func (s *CardLadderRefreshScheduler) RunOnce(ctx context.Context) error {
 }
 
 var certFromImageRe = regexp.MustCompile(`/cert/(\d+)/`)
-var gradeDigitsRe = regexp.MustCompile(`(\d+(?:\.\d+)?)`)
 
 func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 	start := time.Now()
