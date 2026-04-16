@@ -131,6 +131,52 @@ func gradeInRange(grade int, rangeStr string) bool {
 	return grade >= lo && grade <= hi
 }
 
+// ActiveCampaigns returns all campaigns with phase=active. Campaigns whose
+// ID is non-numeric (e.g. "external") are omitted — ActiveCampaign.ID is
+// typed as int64 and can't hold them. An empty slice is returned when there
+// are no qualifying campaigns.
+func (l *CampaignCoverageLookup) ActiveCampaigns(ctx context.Context) ([]demand.ActiveCampaign, error) {
+	rows, err := l.db.QueryContext(ctx,
+		`SELECT id, name, grade_range, inclusion_list, exclusion_mode
+		 FROM campaigns
+		 WHERE phase = ?`,
+		string(inventory.PhaseActive),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query active campaigns: %w", err)
+	}
+	defer rows.Close() //nolint:errcheck
+
+	out := []demand.ActiveCampaign{}
+	for rows.Next() {
+		var (
+			idStr         string
+			name          string
+			gradeRange    string
+			inclusionList string
+			exclusionMode bool
+		)
+		if err := rows.Scan(&idStr, &name, &gradeRange, &inclusionList, &exclusionMode); err != nil {
+			return nil, fmt.Errorf("scan campaign: %w", err)
+		}
+		id, err := strconv.ParseInt(idStr, 10, 64)
+		if err != nil {
+			continue // non-numeric IDs (e.g. "external") omitted
+		}
+		out = append(out, demand.ActiveCampaign{
+			ID:            id,
+			Name:          name,
+			GradeRange:    gradeRange,
+			InclusionList: inclusionList,
+			ExclusionMode: exclusionMode,
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate campaigns: %w", err)
+	}
+	return out, nil
+}
+
 // characterMatchesInclusion returns true if the campaign's inclusion list
 // allows the given character name. Mirrors
 // inventory.PurchaseMatchesCampaign's inclusion semantics (without set name,

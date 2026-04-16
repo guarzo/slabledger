@@ -44,6 +44,12 @@ func TestNichesHandler_HappyPath(t *testing.T) {
 						SampleSize:         312,
 						ComputedAt:         timePtr(analytics),
 					},
+					Acceleration: &demand.NicheAcceleration{
+						MedianVelocityChangePct: 14.2,
+						AcceleratingCount:       1,
+						TotalCount:              1,
+						DataQuality:             demand.QualityFull,
+					},
 					Coverage: demand.NicheCoverage{
 						OurUnsoldCount: 2, ActiveCampaignIDs: []int64{}, Covered: false,
 					},
@@ -85,6 +91,12 @@ func TestNichesHandler_HappyPath(t *testing.T) {
 	assert.False(t, o.Market.AnalyticsNotComputed)
 	require.NotNil(t, o.Market.ComputedAt)
 	assert.Equal(t, "2026-04-15T03:15:00Z", *o.Market.ComputedAt)
+
+	require.NotNil(t, o.Acceleration)
+	assert.Equal(t, 14.2, o.Acceleration.MedianVelocityChangePct)
+	assert.Equal(t, 1, o.Acceleration.AcceleratingCount)
+	assert.Equal(t, 1, o.Acceleration.TotalCount)
+	assert.Equal(t, demand.QualityFull, o.Acceleration.DataQuality)
 
 	assert.Equal(t, 2, o.Coverage.OurUnsoldCount)
 	assert.NotNil(t, o.Coverage.ActiveCampaignIDs)

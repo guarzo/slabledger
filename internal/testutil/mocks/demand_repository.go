@@ -73,6 +73,7 @@ func (m *DemandRepositoryMock) ListCharacterCache(ctx context.Context, window st
 type CampaignCoverageLookupMock struct {
 	CampaignsCoveringFn func(ctx context.Context, character, era string, grade int) ([]int64, error)
 	UnsoldCountForFn    func(ctx context.Context, character, era string, grade int) (int, error)
+	ActiveCampaignsFn   func(ctx context.Context) ([]demand.ActiveCampaign, error)
 }
 
 var _ demand.CampaignCoverageLookup = (*CampaignCoverageLookupMock)(nil)
@@ -89,4 +90,11 @@ func (m *CampaignCoverageLookupMock) UnsoldCountFor(ctx context.Context, charact
 		return m.UnsoldCountForFn(ctx, character, era, grade)
 	}
 	return 0, nil
+}
+
+func (m *CampaignCoverageLookupMock) ActiveCampaigns(ctx context.Context) ([]demand.ActiveCampaign, error) {
+	if m.ActiveCampaignsFn != nil {
+		return m.ActiveCampaignsFn(ctx)
+	}
+	return []demand.ActiveCampaign{}, nil
 }

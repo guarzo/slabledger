@@ -40,27 +40,28 @@ type ServerDependencies struct {
 	TuningService             domainTuning.Service
 	PriceHintsHandler         *handlers.PriceHintsHandler
 	PricingDiagnosticsHandler *handlers.PricingDiagnosticsHandler
-	CampaignsRepo             handlers.CertPriceLookup        // For pricing API (cert price lookup)
-	PricingAPIKey             string                          // Bearer token; empty = pricing API disabled
-	AdvisorHandler            *handlers.AdvisorHandler        // AI advisor; nil = disabled
-	SocialHandler             *handlers.SocialHandler         // Social content; nil = disabled
-	InstagramHandler          *handlers.InstagramHandler      // Instagram publishing; nil = disabled
-	AIStatusHandler           *handlers.AIStatusHandler       // AI usage stats; nil = disabled
-	PriceFlagsHandler         *handlers.PriceFlagsHandler     // Price flag admin; nil = disabled
-	CardLadderHandler         *handlers.CardLadderHandler     // Card Ladder admin; nil = disabled
-	MarketMoversHandler       *handlers.MarketMoversHandler   // Market Movers admin; nil = disabled
-	PSASyncHandler            *handlers.PSASyncHandler        // PSA pending items + admin status; nil = disabled
-	OpportunitiesHandler      *handlers.OpportunitiesHandler  // Arbitrage opportunities; nil = disabled
-	DHHandler                 *handlers.DHHandler             // DH bulk match + intelligence; nil = disabled
-	DHListingService          domainDHListing.Service         // optional: orchestrates DH listing after cert import
-	ExportService             domainExport.Service            // optional: sell sheet and eBay export
-	FinanceService            domainFinance.Service           // optional: finance operations
-	SellSheetItemsHandler     *handlers.SellSheetItemsHandler // Sell sheet persistence; nil = disabled
-	CardCatalogHandler        *handlers.CardCatalogHandler    // CL card catalog search; nil = disabled
-	NichesHandler             *handlers.NichesHandler         // DH niche-opportunity leaderboard; nil = disabled
-	SheetFetcher              handlers.SheetFetcher           // optional: Google Sheets fetcher for PSA sync
-	SheetsSpreadsheetID       string                          // Google Sheets spreadsheet ID
-	SheetsTabName             string                          // Google Sheets tab name
+	CampaignsRepo             handlers.CertPriceLookup         // For pricing API (cert price lookup)
+	PricingAPIKey             string                           // Bearer token; empty = pricing API disabled
+	AdvisorHandler            *handlers.AdvisorHandler         // AI advisor; nil = disabled
+	SocialHandler             *handlers.SocialHandler          // Social content; nil = disabled
+	InstagramHandler          *handlers.InstagramHandler       // Instagram publishing; nil = disabled
+	AIStatusHandler           *handlers.AIStatusHandler        // AI usage stats; nil = disabled
+	PriceFlagsHandler         *handlers.PriceFlagsHandler      // Price flag admin; nil = disabled
+	CardLadderHandler         *handlers.CardLadderHandler      // Card Ladder admin; nil = disabled
+	MarketMoversHandler       *handlers.MarketMoversHandler    // Market Movers admin; nil = disabled
+	PSASyncHandler            *handlers.PSASyncHandler         // PSA pending items + admin status; nil = disabled
+	OpportunitiesHandler      *handlers.OpportunitiesHandler   // Arbitrage opportunities; nil = disabled
+	DHHandler                 *handlers.DHHandler              // DH bulk match + intelligence; nil = disabled
+	DHListingService          domainDHListing.Service          // optional: orchestrates DH listing after cert import
+	ExportService             domainExport.Service             // optional: sell sheet and eBay export
+	FinanceService            domainFinance.Service            // optional: finance operations
+	SellSheetItemsHandler     *handlers.SellSheetItemsHandler  // Sell sheet persistence; nil = disabled
+	CardCatalogHandler        *handlers.CardCatalogHandler     // CL card catalog search; nil = disabled
+	NichesHandler             *handlers.NichesHandler          // DH niche-opportunity leaderboard; nil = disabled
+	CampaignSignalsHandler    *handlers.CampaignSignalsHandler // DH campaign signals; nil = disabled
+	SheetFetcher              handlers.SheetFetcher            // optional: Google Sheets fetcher for PSA sync
+	SheetsSpreadsheetID       string                           // Google Sheets spreadsheet ID
+	SheetsTabName             string                           // Google Sheets tab name
 }
 
 // EnvVarValidation holds the result of environment variable validation
@@ -211,6 +212,7 @@ func startWebServer(ctx context.Context, deps ServerDependencies) error {
 		SellSheetItemsHandler:     deps.SellSheetItemsHandler,
 		CardCatalogHandler:        deps.CardCatalogHandler,
 		NichesHandler:             deps.NichesHandler,
+		CampaignSignalsHandler:    deps.CampaignSignalsHandler,
 		Logger:                    logger,
 		AdminEmails:               cfg.Auth.AdminEmails,
 		DatabasePath:              cfg.Database.Path,

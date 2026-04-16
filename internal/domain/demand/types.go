@@ -110,8 +110,26 @@ type NicheOpportunity struct {
 	Grade            int    // PSA grade, or 0 for raw / unspecified
 	Demand           *NicheDemand
 	Market           *NicheMarket
+	Acceleration     *NicheAcceleration // populated when velocity_change_pct is available
 	Coverage         NicheCoverage
 	OpportunityScore float64
+}
+
+// NicheAcceleration is the market-acceleration summary for a niche bucket.
+// Nil when no character cache row with a parseable velocity_change_pct
+// matched the niche.
+//
+// When attached to a NicheOpportunity (leaderboard use), the bucket is always
+// a single character/grade pair, so TotalCount is always 1 and
+// AcceleratingCount is 0 or 1. These fields exist to mirror the shape of
+// CampaignSignal (where the counts aggregate across many characters) so that
+// callers can use the same field names across both surfaces.
+type NicheAcceleration struct {
+	MedianVelocityChangePct float64
+	AcceleratingCount       int
+	TotalCount              int
+	DataQuality             string // "full" when any contributor has full data
+	ComputedAt              *time.Time
 }
 
 // NicheDemand is the demand-axis summary for a niche bucket.
@@ -141,7 +159,3 @@ type NicheCoverage struct {
 	ActiveCampaignIDs []int64
 	Covered           bool
 }
-
-// CampaignCoverage is a helper type that restates NicheCoverage for callers
-// that want a standalone value (e.g. coverage lookups in tests).
-type CampaignCoverage = NicheCoverage
