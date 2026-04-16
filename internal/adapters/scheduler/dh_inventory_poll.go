@@ -26,9 +26,12 @@ type DHFieldsUpdater interface {
 	UpdatePurchaseDHFields(ctx context.Context, id string, update inventory.DHFieldsUpdate) error
 }
 
-// PurchaseByCertLookup resolves a cert number to a purchase ID.
+// PurchaseByCertLookup resolves cert numbers to purchase IDs. The single-cert
+// variant is retained for callers that look up one cert; the batch variant
+// enables N→1 round-trip reduction on poll loops.
 type PurchaseByCertLookup interface {
 	GetPurchaseIDByCertNumber(ctx context.Context, certNumber string) (string, error)
+	GetPurchaseIDsByCertNumbers(ctx context.Context, certNumbers []string) (map[string]string, error)
 }
 
 // DHInventoryPollConfig controls the inventory poll scheduler.
@@ -130,19 +133,40 @@ func (s *DHInventoryPollScheduler) poll(ctx context.Context) {
 	skipped := 0
 	var latestUpdatedAt string
 
+	certSet := make(map[string]struct{}, len(allItems))
+	for _, item := range allItems {
+		certSet[item.CertNumber] = struct{}{}
+	}
+	certs := make([]string, 0, len(certSet))
+	for c := range certSet {
+		certs = append(certs, c)
+	}
+	purchaseIDByCert, lookupErr := s.lookup.GetPurchaseIDsByCertNumbers(ctx, certs)
+	if lookupErr != nil {
+		s.logger.Warn(ctx, "dh inventory poll: batch cert lookup failed; falling back to per-item",
+			observability.Err(lookupErr))
+		purchaseIDByCert = nil // signal fallback below
+	}
+
 	for _, item := range allItems {
 		// Always advance the checkpoint so persistent failures don't block progress.
 		if item.UpdatedAt > latestUpdatedAt {
 			latestUpdatedAt = item.UpdatedAt
 		}
 
-		purchaseID, lookupErr := s.lookup.GetPurchaseIDByCertNumber(ctx, item.CertNumber)
-		if lookupErr != nil {
-			s.logger.Warn(ctx, "dh inventory poll: cert lookup error",
-				observability.String("cert", item.CertNumber),
-				observability.Err(lookupErr))
-			skipped++
-			continue
+		var purchaseID string
+		if purchaseIDByCert != nil {
+			purchaseID = purchaseIDByCert[item.CertNumber]
+		} else {
+			id, perItemErr := s.lookup.GetPurchaseIDByCertNumber(ctx, item.CertNumber)
+			if perItemErr != nil {
+				s.logger.Warn(ctx, "dh inventory poll: cert lookup error",
+					observability.String("cert", item.CertNumber),
+					observability.Err(perItemErr))
+				skipped++
+				continue
+			}
+			purchaseID = id
 		}
 		if purchaseID == "" {
 			s.logger.Debug(ctx, "dh inventory poll: cert not found in local system",

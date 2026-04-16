@@ -402,6 +402,11 @@ func (s *service) GetAcquisitionTargets(ctx context.Context) ([]AcquisitionOppor
 	opportunities := []AcquisitionOpportunity{}
 	seen := make(map[string]bool)
 	for _, p := range allUnsold {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+		}
 		ebayFee, ok := ebayFeeMap[p.CampaignID]
 		if !ok {
 			if s.logger != nil {

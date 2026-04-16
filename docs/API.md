@@ -129,8 +129,7 @@ Returns API call statistics for all pricing providers.
         "remaining": 950,
         "successRate": 98.0,
         "avgLatencyMs": 220.5,
-        "rateLimitHits": 0,
-        "minuteCalls": 3
+        "rateLimitHits": 0
       },
       "blocked": false,
       "lastCallAt": "2025-01-01T00:00:00Z"

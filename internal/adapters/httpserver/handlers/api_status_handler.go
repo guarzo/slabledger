@@ -48,7 +48,6 @@ type providerDay struct {
 	SuccessRate   float64    `json:"successRate"`
 	AvgLatencyMs  float64    `json:"avgLatencyMs"`
 	RateLimitHits int64      `json:"rateLimitHits"`
-	MinuteCalls   int64      `json:"minuteCalls"`
 	Last429At     *time.Time `json:"last429At,omitempty"`
 }
 

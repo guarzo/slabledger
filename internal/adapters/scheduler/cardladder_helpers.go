@@ -2,7 +2,6 @@ package scheduler
 
 import (
 	"context"
-	"strconv"
 	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
@@ -33,15 +32,6 @@ func (s *CardLadderRefreshScheduler) recordCLError(ctx context.Context, purchase
 			observability.String("reason", reason),
 			observability.Err(err))
 	}
-}
-
-// extractGradeValue parses "PSA 9", "PSA 9.5", or "g9" → numeric grade value.
-func extractGradeValue(condition string) float64 {
-	if m := gradeDigitsRe.FindString(condition); m != "" {
-		v, _ := strconv.ParseFloat(m, 64)
-		return v
-	}
-	return 0
 }
 
 // filterUnmappedCerts returns the subset of purchases that have a cert number

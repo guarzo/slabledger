@@ -7,7 +7,6 @@ export interface ProviderDay {
   successRate: number;
   avgLatencyMs: number;
   rateLimitHits: number;
-  minuteCalls: number;
   last429At?: string;
 }
 
