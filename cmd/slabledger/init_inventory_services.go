@@ -131,6 +131,14 @@ func initializeCampaignsService(
 		)
 	}
 
+	// DH cert → card_id resolver. Feeds batchResolveCardIDs in the inventory
+	// service after PSA/CL imports so dh_card_id gets persisted.
+	if dhClient != nil && dhClient.EnterpriseAvailable() {
+		campaignOpts = append(campaignOpts,
+			inventory.WithCardIDResolver(newDHCardIDResolverAdapter(dhClient, logger)),
+		)
+	}
+
 	campaignsService := inventory.NewService(
 		campaignStore,  // CampaignRepository
 		purchaseStore,  // PurchaseRepository
