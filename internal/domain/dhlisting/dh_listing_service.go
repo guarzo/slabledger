@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/guarzo/slabledger/internal/domain/dhevents"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
@@ -24,6 +25,7 @@ type dhListingService struct {
 	pushStatusUpdater DHListingPushStatusUpdater
 	candidatesSaver   DHListingCandidatesSaver
 	logger            observability.Logger
+	eventRec          dhevents.Recorder // may be nil
 }
 
 // DHListingPurchaseLookup retrieves purchases by cert numbers.
@@ -84,6 +86,12 @@ func WithDHListingCandidatesSaver(saver DHListingCandidatesSaver) DHListingServi
 	return func(s *dhListingService) { s.candidatesSaver = saver }
 }
 
+// WithEventRecorder injects a DH event recorder. Optional — if nil, no
+// events are written but listing behavior is unchanged.
+func WithEventRecorder(r dhevents.Recorder) DHListingServiceOption {
+	return func(s *dhListingService) { s.eventRec = r }
+}
+
 // NewDHListingService creates a new Service.
 // purchaseLookup and logger are required; all other dependencies are optional.
 func NewDHListingService(
@@ -105,6 +113,19 @@ func NewDHListingService(
 		opt(s)
 	}
 	return s, nil
+}
+
+// recordEvent writes an event to the recorder if available.
+// If recording fails, the error is logged but does not abort the operation.
+func (s *dhListingService) recordEvent(ctx context.Context, e dhevents.Event) {
+	if s.eventRec == nil {
+		return
+	}
+	if err := s.eventRec.Record(ctx, e); err != nil {
+		s.logger.Warn(ctx, "dh listing: record event failed",
+			observability.String("type", string(e.Type)),
+			observability.Err(err))
+	}
 }
 
 // ListPurchases implements Service.
@@ -212,6 +233,23 @@ func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []stri
 				skipped++
 				continue
 			}
+			s.recordEvent(ctx, dhevents.Event{
+				PurchaseID:    p.ID,
+				CertNumber:    p.CertNumber,
+				Type:          dhevents.TypeListed,
+				NewDHStatus:   string(inventory.DHStatusListed),
+				DHInventoryID: p.DHInventoryID,
+				DHCardID:      p.DHCardID,
+				Source:        dhevents.SourceDHListing,
+			})
+			s.recordEvent(ctx, dhevents.Event{
+				PurchaseID:    p.ID,
+				CertNumber:    p.CertNumber,
+				Type:          dhevents.TypeChannelSynced,
+				Notes:         string(channelsJSON),
+				DHInventoryID: p.DHInventoryID,
+				Source:        dhevents.SourceDHListing,
+			})
 		}
 	}
 
@@ -316,6 +354,17 @@ func (s *dhListingService) inlineMatchAndPush(ctx context.Context, p *inventory.
 			}
 		}
 
+		s.recordEvent(ctx, dhevents.Event{
+			PurchaseID:    p.ID,
+			CertNumber:    p.CertNumber,
+			Type:          dhevents.TypePushed,
+			NewPushStatus: string(inventory.DHPushStatusMatched),
+			NewDHStatus:   r.Status, // from DHInventoryPushResultItem.Status — "in_stock" or "listed"
+			DHInventoryID: r.DHInventoryID,
+			DHCardID:      dhCardID,
+			Source:        dhevents.SourceDHListing,
+		})
+
 		return r.DHInventoryID
 	}
 
@@ -356,6 +405,14 @@ func (s *dhListingService) markInlineUnmatched(ctx context.Context, p *inventory
 				observability.String("cert", p.CertNumber), observability.Err(err))
 		}
 	}
+	s.recordEvent(ctx, dhevents.Event{
+		PurchaseID:    p.ID,
+		CertNumber:    p.CertNumber,
+		Type:          dhevents.TypeUnmatched,
+		NewPushStatus: string(inventory.DHPushStatusUnmatched),
+		Notes:         dhStatus,
+		Source:        dhevents.SourceDHListing,
+	})
 	s.logger.Warn(ctx, "inline dh cert resolve: unmatched",
 		observability.String("cert", p.CertNumber),
 		observability.String("dh_status", dhStatus))

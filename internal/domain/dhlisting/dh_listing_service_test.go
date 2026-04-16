@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/guarzo/slabledger/internal/domain/dhevents"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
@@ -52,6 +53,19 @@ func (m *mockFieldsUpdater) UpdatePurchaseDHFields(_ context.Context, _ string, 
 	return m.updateErr
 }
 
+type mockEventRecorder struct {
+	events []dhevents.Event
+	err    error
+}
+
+func (m *mockEventRecorder) Record(_ context.Context, e dhevents.Event) error {
+	if m.err != nil {
+		return m.err
+	}
+	m.events = append(m.events, e)
+	return nil
+}
+
 func newTestService(t *testing.T, lookup DHListingPurchaseLookup, opts ...DHListingServiceOption) Service {
 	t.Helper()
 	svc, err := NewDHListingService(lookup, observability.NewNoopLogger(), opts...)
@@ -59,6 +73,76 @@ func newTestService(t *testing.T, lookup DHListingPurchaseLookup, opts ...DHList
 		t.Fatalf("NewDHListingService: %v", err)
 	}
 	return svc
+}
+
+// TestListPurchases_RecordsListedAndChannelSyncedEvents asserts that TypeListed
+// and TypeChannelSynced events are emitted on successful listing.
+func TestListPurchases_RecordsListedAndChannelSyncedEvents(t *testing.T) {
+	certNum := "55555555"
+	purchase := &inventory.Purchase{
+		ID:            "purchase-1",
+		CertNumber:    certNum,
+		DHInventoryID: 99,
+		DHCardID:      42,
+	}
+
+	lookup := &mockPurchaseLookup{
+		purchases: map[string]*inventory.Purchase{certNum: purchase},
+	}
+	lister := &mockInventoryLister{}
+	fieldsUpdater := &mockFieldsUpdater{}
+	eventRec := &mockEventRecorder{}
+
+	svc := newTestService(t, lookup,
+		WithDHListingLister(lister),
+		WithDHListingFieldsUpdater(fieldsUpdater),
+		WithEventRecorder(eventRec),
+	)
+
+	result := svc.ListPurchases(context.Background(), []string{certNum})
+
+	if result.Listed != 1 {
+		t.Errorf("Listed: got %d, want 1", result.Listed)
+	}
+	if result.Synced != 1 {
+		t.Errorf("Synced: got %d, want 1", result.Synced)
+	}
+
+	// Check that listed and channel_synced events were recorded
+	if len(eventRec.events) != 2 {
+		t.Fatalf("expected 2 events, got %d", len(eventRec.events))
+	}
+
+	listedEvent := eventRec.events[0]
+	if listedEvent.Type != dhevents.TypeListed {
+		t.Errorf("first event: expected type %s, got %s", dhevents.TypeListed, listedEvent.Type)
+	}
+	if listedEvent.PurchaseID != "purchase-1" {
+		t.Errorf("first event: expected purchaseID purchase-1, got %s", listedEvent.PurchaseID)
+	}
+	if listedEvent.CertNumber != certNum {
+		t.Errorf("first event: expected cert %s, got %s", certNum, listedEvent.CertNumber)
+	}
+	if listedEvent.DHInventoryID != 99 {
+		t.Errorf("first event: expected inventoryID 99, got %d", listedEvent.DHInventoryID)
+	}
+	if listedEvent.DHCardID != 42 {
+		t.Errorf("first event: expected cardID 42, got %d", listedEvent.DHCardID)
+	}
+	if listedEvent.Source != dhevents.SourceDHListing {
+		t.Errorf("first event: expected source %s, got %s", dhevents.SourceDHListing, listedEvent.Source)
+	}
+
+	syncedEvent := eventRec.events[1]
+	if syncedEvent.Type != dhevents.TypeChannelSynced {
+		t.Errorf("second event: expected type %s, got %s", dhevents.TypeChannelSynced, syncedEvent.Type)
+	}
+	if syncedEvent.PurchaseID != "purchase-1" {
+		t.Errorf("second event: expected purchaseID purchase-1, got %s", syncedEvent.PurchaseID)
+	}
+	if syncedEvent.Source != dhevents.SourceDHListing {
+		t.Errorf("second event: expected source %s, got %s", dhevents.SourceDHListing, syncedEvent.Source)
+	}
 }
 
 // TestListPurchases covers the three key scenarios for ListPurchases in a
