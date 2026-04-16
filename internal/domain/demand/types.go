@@ -48,58 +48,6 @@ type QualityStats struct {
 	TotalRows        int
 }
 
-// --- Higher-level domain views (extracted from the cached JSON blobs) ---
-
-// CardDemand is the numerically normalised per-card demand view.
-type CardDemand struct {
-	CardID       string
-	Score        float64
-	DataQuality  string // "proxy" | "full"
-	Views        int
-	WishlistAdds int
-	ComputedAt   time.Time
-}
-
-// CardAnalytics is the per-card velocity/trend/saturation/price-distribution
-// view, numerically normalised (DH card-level velocity returns numbers as
-// strings on the wire).
-type CardAnalytics struct {
-	MedianDaysToSell   *float64
-	VelocityChangePct  *float64
-	ActiveListingCount int
-	SampleSize         int
-	ComputedAt         *time.Time
-}
-
-// CharacterDemand is the per-character demand aggregate, with an optional
-// per-era breakdown.
-type CharacterDemand struct {
-	Character      string
-	CardCount      int
-	AvgDemandScore float64
-	TotalViews     int
-	TotalWishlist  int
-	ByEra          map[string]ByEraDemand
-	ComputedAt     time.Time
-}
-
-// ByEraDemand is the per-era slice within a CharacterDemand.
-type ByEraDemand struct {
-	CardCount      int
-	AvgDemandScore float64
-	TotalViews     int
-	TotalWishlist  int
-}
-
-// CharacterAnalytics is the per-character velocity + saturation view.
-type CharacterAnalytics struct {
-	MedianDaysToSell   *float64
-	VelocityChangePct  *float64
-	ActiveListingCount int
-	SampleSize         int
-	ComputedAt         *time.Time
-}
-
 // --- Leaderboard output types ---
 
 // NicheOpportunity is a single bucket on the niche leaderboard, scored on
