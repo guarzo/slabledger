@@ -109,5 +109,10 @@ func Default() Config {
 			RefreshHour: 4,     // 04:00 UTC, after DH nightly analytics rollup (03:15 UTC)
 			Window:      "30d",
 		},
+		DHReconcile: DHReconcileConfig{
+			Enabled:     true,
+			Interval:    24 * time.Hour,
+			RefreshHour: 6, // 06:00 UTC, after the 04:00/05:00 refresh cluster
+		},
 	}
 }
