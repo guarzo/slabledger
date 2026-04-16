@@ -357,30 +357,48 @@ func TestClient_DelistChannels(t *testing.T) {
 func intPtr(v int) *int { return &v }
 
 func TestInventoryItem_ListingPriceCents_Serialization(t *testing.T) {
-	// With listing price preset
-	lp := 45000
-	item := InventoryItem{
-		DHCardID:          12345,
-		CertNumber:        "98765",
-		GradingCompany:    "psa",
-		Grade:             9,
-		CostBasisCents:    15000,
-		ListingPriceCents: &lp,
-		Status:            InventoryStatusInStock,
+	tests := []struct {
+		name              string
+		listingPriceCents *int
+		wantContains      string
+		wantNotContains   string
+	}{
+		{
+			name:              "with listing price",
+			listingPriceCents: intPtr(45000),
+			wantContains:      `"listing_price_cents":45000`,
+			wantNotContains:   "market_value_cents",
+		},
+		{
+			name:            "without listing price omits field",
+			wantNotContains: "listing_price_cents",
+		},
 	}
-	b, err := json.Marshal(item)
-	require.NoError(t, err)
-	require.Contains(t, string(b), `"listing_price_cents":45000`)
-	// Defensive: never send the deprecated market_value_cents field
-	require.NotContains(t, string(b), "market_value_cents")
 
-	// Without listing price (omitted) — DH falls back to catalog
-	item.ListingPriceCents = nil
-	b, err = json.Marshal(item)
-	require.NoError(t, err)
-	require.NotContains(t, string(b), "listing_price_cents")
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			item := InventoryItem{
+				DHCardID:          12345,
+				CertNumber:        "98765",
+				GradingCompany:    "psa",
+				Grade:             9,
+				CostBasisCents:    15000,
+				ListingPriceCents: tc.listingPriceCents,
+				Status:            InventoryStatusInStock,
+			}
+			b, err := json.Marshal(item)
+			require.NoError(t, err)
+			if tc.wantContains != "" {
+				require.Contains(t, string(b), tc.wantContains)
+			}
+			if tc.wantNotContains != "" {
+				require.NotContains(t, string(b), tc.wantNotContains)
+			}
+		})
+	}
 
-	// IntPtr helper: zero returns nil
-	require.Nil(t, IntPtr(0))
-	require.Equal(t, 45000, *IntPtr(45000))
+	t.Run("IntPtr helper", func(t *testing.T) {
+		require.Nil(t, IntPtr(0))
+		require.Equal(t, 45000, *IntPtr(45000))
+	})
 }

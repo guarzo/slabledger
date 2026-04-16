@@ -57,8 +57,10 @@ func TestHandleListPurchaseOnDH(t *testing.T) {
 			wantListedFrom: []string{"CERT123"},
 		},
 		{
-			name:          "purchase not found → 404",
-			getPurchase:   func(ctx context.Context, id string) (*inventory.Purchase, error) { return nil, inventory.ErrPurchaseNotFound },
+			name: "purchase not found → 404",
+			getPurchase: func(ctx context.Context, id string) (*inventory.Purchase, error) {
+				return nil, inventory.ErrPurchaseNotFound
+			},
 			wantStatus:    http.StatusNotFound,
 			wantErrSubstr: "not found",
 		},
@@ -168,4 +170,3 @@ func TestHandleListPurchaseOnDH(t *testing.T) {
 		})
 	}
 }
-

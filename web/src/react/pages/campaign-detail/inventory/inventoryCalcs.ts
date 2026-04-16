@@ -59,11 +59,10 @@ export function isDHHeld(item: AgingItem): boolean {
   return item.purchase.dhPushStatus === 'held';
 }
 
-// isReadyToList: received (intake complete) but not yet listed on DH.
-// Used to surface cert-intake items that have been pushed to DH inventory
-// so a human can review price before flipping them live.
+// isReadyToList: received (intake complete), pushed to DH inventory, but not yet listed.
+// Used to surface items that a human can review price on before flipping live.
 export function isReadyToList(item: AgingItem): boolean {
-  return !!item.purchase.receivedAt && item.purchase.dhStatus !== 'listed';
+  return !!item.purchase.receivedAt && !!item.purchase.dhInventoryId && item.purchase.dhStatus !== 'listed';
 }
 
 export type FilterTab = 'needs_attention' | 'ai_suggestion' | 'sell_sheet' | 'all' | 'card_show' | 'in_hand' | 'ready_to_list';

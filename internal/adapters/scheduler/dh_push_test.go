@@ -347,11 +347,11 @@ func TestDHPush_InventoryPushError_LeavesAsPending(t *testing.T) {
 
 func TestDHPush_SuccessPath_UpdatesFields(t *testing.T) {
 	purchase := inventory.Purchase{
-		ID:           "pur-5",
-		CertNumber:   "22222222",
-		CardName:     "Umbreon ex",
-		SetName:      "SV Promo",
-		CardNumber:   "176",
+		ID:                 "pur-5",
+		CertNumber:         "22222222",
+		CardName:           "Umbreon ex",
+		SetName:            "SV Promo",
+		CardNumber:         "176",
 		GradeValue:         10,
 		BuyCostCents:       6000,
 		ReviewedPriceCents: 8000, // reviewed price → DH listing_price_cents preset
@@ -576,14 +576,14 @@ func (m *mockDHPushHoldSetter) SetHeldWithReason(_ context.Context, purchaseID, 
 func TestDHPush_Hold_RecordsHeldEvent(t *testing.T) {
 	// Market value (3000) < 50% of buy cost (10000) triggers initial_value_mismatch hold.
 	purchase := inventory.Purchase{
-		ID:           "pur-hold-1",
-		CertNumber:   "11112222",
-		CardName:     "Charizard",
-		SetName:      "Base Set",
-		CardNumber:   "4",
-		BuyCostCents: 10000,
+		ID:                 "pur-hold-1",
+		CertNumber:         "11112222",
+		CardName:           "Charizard",
+		SetName:            "Base Set",
+		CardNumber:         "4",
+		BuyCostCents:       10000,
 		ReviewedPriceCents: 3000, // listing_price_cents = 3000, floor = 50% of 10000 = 5000
-		DHCardID:     42,   // already mapped, skip cert resolve
+		DHCardID:           42,   // already mapped, skip cert resolve
 	}
 	lister := &mockDHPushPendingLister{
 		ListFn: func(_ context.Context, _ string, _ int) ([]inventory.Purchase, error) {
@@ -630,13 +630,13 @@ func TestDHPush_Hold_RecordsHeldEvent(t *testing.T) {
 func TestDHPush_NilEventRecorderIsSafe(t *testing.T) {
 	// Same hold scenario but without event recorder — should not panic.
 	purchase := inventory.Purchase{
-		ID:           "pur-hold-nil",
-		CertNumber:   "33334444",
-		CardName:     "Charizard",
-		SetName:      "Base Set",
-		BuyCostCents: 10000,
+		ID:                 "pur-hold-nil",
+		CertNumber:         "33334444",
+		CardName:           "Charizard",
+		SetName:            "Base Set",
+		BuyCostCents:       10000,
 		ReviewedPriceCents: 3000,
-		DHCardID:     42,
+		DHCardID:           42,
 	}
 	lister := &mockDHPushPendingLister{
 		ListFn: func(_ context.Context, _ string, _ int) ([]inventory.Purchase, error) {

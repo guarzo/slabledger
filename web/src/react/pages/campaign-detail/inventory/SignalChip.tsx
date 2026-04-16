@@ -10,7 +10,7 @@ const defaultThresholds: FreshnessThresholds = { green: 3, amber: 7 };
 interface SignalChipProps {
   label: string;
   valueCents: number;
-  /** When true, render nothing if valueCents is 0. Cost / CL anchors pass false. */
+  /** When true, render nothing if valueCents is non-positive (<= 0). Cost / CL anchors pass false. */
   hideWhenZero?: boolean;
   /** Optional context delta vs. cost basis (in cents), rendered as colored % tag. */
   deltaVsCostCents?: number;

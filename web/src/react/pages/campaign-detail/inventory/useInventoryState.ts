@@ -126,7 +126,13 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
 
   const handleBulkListOnDH = useCallback(async (purchaseIds: string[]) => {
     if (purchaseIds.length === 0) return;
-    const results = await Promise.allSettled(purchaseIds.map(id => api.listPurchaseOnDH(id)));
+    const CHUNK_SIZE = 5;
+    const results: PromiseSettledResult<unknown>[] = [];
+    for (let i = 0; i < purchaseIds.length; i += CHUNK_SIZE) {
+      const chunk = purchaseIds.slice(i, i + CHUNK_SIZE);
+      const chunkResults = await Promise.allSettled(chunk.map(id => api.listPurchaseOnDH(id)));
+      results.push(...chunkResults);
+    }
     const succeededIds = purchaseIds.filter((_, i) => results[i].status === 'fulfilled');
     const failed = purchaseIds.length - succeededIds.length;
     if (failed === 0) {

@@ -364,9 +364,9 @@ func TestListPurchases_InlinePendingPush(t *testing.T) {
 
 	makePending := func() *inventory.Purchase {
 		return &inventory.Purchase{
-			ID:            "p-pending",
-			CertNumber:    certNum,
-			DHInventoryID: 0,
+			ID:                 "p-pending",
+			CertNumber:         certNum,
+			DHInventoryID:      0,
 			DHPushStatus:       inventory.DHPushStatusPending,
 			ReviewedPriceCents: 20000, // required by the listing gate
 			BuyCostCents:       10000,

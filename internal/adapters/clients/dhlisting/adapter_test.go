@@ -200,13 +200,13 @@ func TestInventoryPusherAdapter_PushInventory_Success(t *testing.T) {
 			},
 			wantDHItems: []dh.InventoryItem{
 				{
-					DHCardID:         42,
-					CertNumber:       "12345678",
-					GradingCompany:   dh.GraderPSA,
-					Grade:            9.0,
-					CostBasisCents:   5000,
+					DHCardID:          42,
+					CertNumber:        "12345678",
+					GradingCompany:    dh.GraderPSA,
+					Grade:             9.0,
+					CostBasisCents:    5000,
 					ListingPriceCents: intPtr(8000),
-					Status:           dh.InventoryStatusInStock,
+					Status:            dh.InventoryStatusInStock,
 				},
 			},
 			dhResp: &dh.InventoryPushResponse{
@@ -238,13 +238,13 @@ func TestInventoryPusherAdapter_PushInventory_Success(t *testing.T) {
 			},
 			wantDHItems: []dh.InventoryItem{
 				{
-					DHCardID:         7,
-					CertNumber:       "00000001",
-					GradingCompany:   dh.GraderPSA,
-					Grade:            10.0,
-					CostBasisCents:   2000,
+					DHCardID:          7,
+					CertNumber:        "00000001",
+					GradingCompany:    dh.GraderPSA,
+					Grade:             10.0,
+					CostBasisCents:    2000,
 					ListingPriceCents: nil,
-					Status:           dh.InventoryStatusInStock,
+					Status:            dh.InventoryStatusInStock,
 				},
 			},
 			dhResp: &dh.InventoryPushResponse{

@@ -179,7 +179,7 @@ func TestEvaluateHoldTriggers_RePush(t *testing.T) {
 			name:                     "source disagreement above threshold: hold",
 			dhInventoryID:            99,
 			dhListingPriceCents:      12000,
-			reviewedPriceCents:       12000,   // newValue > 0 so triggers run
+			reviewedPriceCents:       12000, // newValue > 0 so triggers run
 			clValueCents:             10000,
 			lastSoldCents:            20000,   // cl=10000 vs lastSold=20000 = 50% diff
 			swingPctThreshold:        highPct, // disable swing
