@@ -136,39 +136,6 @@ export interface ResolveCertResponse {
   subject: string;
 }
 
-// eBay export
-
-export interface EbayExportItem {
-  purchaseId: string;
-  certNumber: string;
-  cardName: string;
-  setName: string;
-  cardNumber: string;
-  cardYear: string;
-  gradeValue: number;
-  grader: string;
-  clValueCents: number;
-  marketMedianCents: number;
-  suggestedPriceCents: number;
-  hasCLValue: boolean;
-  hasMarketData: boolean;
-  frontImageUrl?: string;
-  backImageUrl?: string;
-  costBasisCents: number;
-  lastSoldCents: number;
-  reviewedPriceCents?: number;
-  reviewedAt?: string;
-}
-
-export interface EbayExportListResponse {
-  items: EbayExportItem[];
-}
-
-export interface EbayExportGenerateItem {
-  purchaseId: string;
-  priceCents: number;
-}
-
 // Orders sales import types
 
 export interface OrdersImportMatch {

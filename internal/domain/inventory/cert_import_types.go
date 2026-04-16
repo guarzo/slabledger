@@ -28,44 +28,6 @@ type CertImportError struct {
 	Error      string `json:"error"`
 }
 
-// EbayExportItem is one row in the eBay export review screen.
-// SuggestedPriceCents defaults to CLValueCents, falling back to MedianCents.
-type EbayExportItem struct {
-	PurchaseID          string  `json:"purchaseId"`
-	CertNumber          string  `json:"certNumber"`
-	CardName            string  `json:"cardName"`
-	SetName             string  `json:"setName"`
-	CardNumber          string  `json:"cardNumber"`
-	CardYear            string  `json:"cardYear"`
-	GradeValue          float64 `json:"gradeValue"`
-	Grader              string  `json:"grader"`
-	CLValueCents        int     `json:"clValueCents"`
-	MarketMedianCents   int     `json:"marketMedianCents"`
-	SuggestedPriceCents int     `json:"suggestedPriceCents"`
-	HasCLValue          bool    `json:"hasCLValue"`
-	HasMarketData       bool    `json:"hasMarketData"`
-	FrontImageURL       string  `json:"frontImageUrl,omitempty"`
-	BackImageURL        string  `json:"backImageUrl,omitempty"`
-	CostBasisCents      int     `json:"costBasisCents"`
-	LastSoldCents       int     `json:"lastSoldCents"`
-	ReviewedPriceCents  int     `json:"reviewedPriceCents,omitempty"`
-	ReviewedAt          string  `json:"reviewedAt,omitempty"`
-}
-
-type EbayExportListResponse struct {
-	Items []EbayExportItem `json:"items"`
-}
-
-// EbayExportGenerateItem pairs a purchase with the user's chosen listing price.
-type EbayExportGenerateItem struct {
-	PurchaseID string `json:"purchaseId"`
-	PriceCents int    `json:"priceCents"`
-}
-
-type EbayExportGenerateRequest struct {
-	Items []EbayExportGenerateItem `json:"items"`
-}
-
 // ScanCertRequest is the input for POST /api/purchases/scan-cert.
 type ScanCertRequest struct {
 	CertNumber string `json:"certNumber"`
