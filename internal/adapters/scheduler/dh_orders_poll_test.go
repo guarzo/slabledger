@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
+	"github.com/guarzo/slabledger/internal/domain/dhevents"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
 	"github.com/stretchr/testify/assert"
@@ -21,7 +22,7 @@ func TestDHOrdersPoll_NoOrders(t *testing.T) {
 	syncStore := newMockSyncStateStore()
 	svc := &mocks.MockInventoryService{}
 
-	s := NewDHOrdersPollScheduler(client, syncStore, svc, mocks.NewMockLogger(), DHOrdersPollConfig{
+	s := NewDHOrdersPollScheduler(client, syncStore, svc, nil, mocks.NewMockLogger(), DHOrdersPollConfig{
 		Enabled:  true,
 		Interval: 1 * time.Hour,
 	})
@@ -91,7 +92,7 @@ func TestDHOrdersPoll_RecordsSale(t *testing.T) {
 		},
 	}
 
-	s := NewDHOrdersPollScheduler(client, syncStore, svc, mocks.NewMockLogger(), DHOrdersPollConfig{
+	s := NewDHOrdersPollScheduler(client, syncStore, svc, nil, mocks.NewMockLogger(), DHOrdersPollConfig{
 		Enabled:  true,
 		Interval: 1 * time.Hour,
 	})
@@ -114,6 +115,7 @@ func TestDHOrdersPoll_Disabled(t *testing.T) {
 		&mocks.MockDHOrdersClient{},
 		newMockSyncStateStore(),
 		&mocks.MockInventoryService{},
+		nil,
 		mocks.NewMockLogger(),
 		DHOrdersPollConfig{Enabled: false},
 	)
@@ -166,7 +168,7 @@ func TestDHOrdersPoll_RunOnce_HonorsCallerSince(t *testing.T) {
 	require.NoError(t, syncStore.Set(context.Background(), syncStateKeyDHOrdersPoll, "2020-01-01T00:00:00Z"))
 
 	s := NewDHOrdersPollScheduler(client, syncStore, &mocks.MockInventoryService{},
-		mocks.NewMockLogger(), DHOrdersPollConfig{Enabled: true, Interval: 1 * time.Hour})
+		nil, mocks.NewMockLogger(), DHOrdersPollConfig{Enabled: true, Interval: 1 * time.Hour})
 
 	summary, err := s.RunOnce(context.Background(), "2025-06-01T00:00:00Z")
 	require.NoError(t, err)
@@ -182,6 +184,76 @@ func TestDHOrdersPoll_RunOnce_HonorsCallerSince(t *testing.T) {
 }
 
 func intPtr(v int) *int { return &v }
+
+type mockEventRecorder struct {
+	events []dhevents.Event
+}
+
+func (m *mockEventRecorder) Record(_ context.Context, e dhevents.Event) error {
+	m.events = append(m.events, e)
+	return nil
+}
+
+func TestDHOrdersPoll_RecordsEvents(t *testing.T) {
+	client := &mocks.MockDHOrdersClient{
+		GetOrdersFn: func(_ context.Context, _ dh.OrderFilters) (*dh.OrdersResponse, error) {
+			return &dh.OrdersResponse{
+				Orders: []dh.Order{
+					{OrderID: "order-matched", CertNumber: "c-matched", Channel: "ebay", SoldAt: "2026-04-02T14:30:00Z", SalePriceCents: 7500, Grade: 10},
+					{OrderID: "order-orphan", CertNumber: "c-orphan", Channel: "dh", SoldAt: "2026-04-02T14:31:00Z", SalePriceCents: 5000, Grade: 9},
+					{OrderID: "order-already", CertNumber: "c-already", Channel: "shopify", SoldAt: "2026-04-02T14:32:00Z", SalePriceCents: 6000, Grade: 9},
+				},
+				Meta: dh.PaginationMeta{Page: 1, PerPage: 100, TotalCount: 3},
+			}, nil
+		},
+	}
+	svc := &mocks.MockInventoryService{
+		ImportOrdersSalesFn: func(_ context.Context, _ []inventory.OrdersExportRow) (*inventory.OrdersImportResult, error) {
+			return &inventory.OrdersImportResult{
+				Matched:     []inventory.OrdersImportMatch{{CertNumber: "c-matched", PurchaseID: "pur-matched", SaleChannel: inventory.SaleChannelEbay, SaleDate: "2026-04-02", SalePriceCents: 7500}},
+				NotFound:    []inventory.OrdersImportSkip{{CertNumber: "c-orphan"}},
+				AlreadySold: []inventory.OrdersImportSkip{{CertNumber: "c-already"}},
+			}, nil
+		},
+		ConfirmOrdersSalesFn: func(_ context.Context, _ []inventory.OrdersConfirmItem) (*inventory.BulkSaleResult, error) {
+			return &inventory.BulkSaleResult{Created: 1}, nil
+		},
+	}
+	recorder := &mockEventRecorder{}
+	s := NewDHOrdersPollScheduler(
+		client,
+		newMockSyncStateStore(),
+		svc,
+		recorder,
+		mocks.NewMockLogger(),
+		DHOrdersPollConfig{Enabled: true, Interval: 1 * time.Hour},
+	)
+
+	_, err := s.RunOnce(context.Background(), "2026-04-01T00:00:00Z")
+	require.NoError(t, err)
+
+	byType := make(map[dhevents.Type]int)
+	for _, e := range recorder.events {
+		byType[e.Type]++
+	}
+	assert.Equal(t, 1, byType[dhevents.TypeSold], "one sold event per matched order")
+	assert.Equal(t, 1, byType[dhevents.TypeOrphanSale], "one orphan_sale event per NotFound")
+	assert.Equal(t, 1, byType[dhevents.TypeAlreadySold], "one already_sold event per AlreadySold skip")
+
+	// Verify the sold event has the expected fields populated.
+	var soldEvent dhevents.Event
+	for _, e := range recorder.events {
+		if e.Type == dhevents.TypeSold {
+			soldEvent = e
+			break
+		}
+	}
+	assert.Equal(t, "pur-matched", soldEvent.PurchaseID)
+	assert.Equal(t, "c-matched", soldEvent.CertNumber)
+	assert.Equal(t, "order-matched", soldEvent.DHOrderID)
+	assert.Equal(t, 7500, soldEvent.SalePriceCents)
+	assert.Equal(t, dhevents.SourceDHOrdersPoll, soldEvent.Source)
+}
 
 // Compile-time interface check.
 var _ DHOrdersClient = (*mocks.MockDHOrdersClient)(nil)

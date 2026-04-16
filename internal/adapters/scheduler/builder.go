@@ -350,6 +350,7 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 			deps.DHOrdersClient,
 			deps.SyncStateStore,
 			deps.CampaignService,
+			nil, // TODO(task-24): wire event recorder
 			deps.Logger,
 			ordersPollCfg,
 		)

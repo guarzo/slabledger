@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
+	"github.com/guarzo/slabledger/internal/domain/dhevents"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
@@ -44,6 +45,7 @@ type DHOrdersPollScheduler struct {
 	client      DHOrdersClient
 	syncState   SyncStateStore
 	campaignSvc inventory.ImportService
+	eventRec    dhevents.Recorder // may be nil
 	logger      observability.Logger
 	config      DHOrdersPollConfig
 }
@@ -53,6 +55,7 @@ func NewDHOrdersPollScheduler(
 	client DHOrdersClient,
 	syncState SyncStateStore,
 	campaignSvc inventory.ImportService,
+	eventRec dhevents.Recorder, // may be nil for tests / unwired
 	logger observability.Logger,
 	config DHOrdersPollConfig,
 ) *DHOrdersPollScheduler {
@@ -64,6 +67,7 @@ func NewDHOrdersPollScheduler(
 		client:      client,
 		syncState:   syncState,
 		campaignSvc: campaignSvc,
+		eventRec:    eventRec,
 		logger:      logger.With(context.Background(), observability.String("component", "dh-orders-poll")),
 		config:      config,
 	}
@@ -85,6 +89,18 @@ func (s *DHOrdersPollScheduler) Start(ctx context.Context) {
 		StopChan: s.Done(),
 		Logger:   s.logger,
 	}, s.poll)
+}
+
+// recordEvent emits an event to the recorder if present. Failures are logged but do not abort.
+func (s *DHOrdersPollScheduler) recordEvent(ctx context.Context, e dhevents.Event) {
+	if s.eventRec == nil {
+		return
+	}
+	if err := s.eventRec.Record(ctx, e); err != nil {
+		s.logger.Warn(ctx, "dh orders poll: record event failed",
+			observability.String("type", string(e.Type)),
+			observability.Err(err))
+	}
 }
 
 // RunOnce executes one ingest pass against DH orders with a caller-supplied
@@ -131,6 +147,33 @@ func (s *DHOrdersPollScheduler) RunOnce(ctx context.Context, since string) (*DHO
 	summary.NotFound = len(importResult.NotFound)
 	summary.LatestSoldAt = findLatestSoldAt(allOrders)
 
+	// Emit orphan and already_sold events (don't depend on ConfirmOrdersSales).
+	for _, nf := range importResult.NotFound {
+		var priceCents int
+		for _, o := range allOrders {
+			if o.CertNumber == nf.CertNumber {
+				priceCents = o.SalePriceCents
+				break
+			}
+		}
+		s.recordEvent(ctx, dhevents.Event{
+			CertNumber:     nf.CertNumber,
+			Type:           dhevents.TypeOrphanSale,
+			DHOrderID:      certToOrderID[nf.CertNumber],
+			SalePriceCents: priceCents,
+			Source:         dhevents.SourceDHOrdersPoll,
+			Notes:          "no local purchase matched this cert",
+		})
+	}
+	for _, as := range importResult.AlreadySold {
+		s.recordEvent(ctx, dhevents.Event{
+			CertNumber: as.CertNumber,
+			Type:       dhevents.TypeAlreadySold,
+			DHOrderID:  certToOrderID[as.CertNumber],
+			Source:     dhevents.SourceDHOrdersPoll,
+		})
+	}
+
 	if len(importResult.Matched) == 0 {
 		return summary, nil
 	}
@@ -152,6 +195,19 @@ func (s *DHOrdersPollScheduler) RunOnce(ctx context.Context, since string) (*DHO
 	}
 	summary.Matched = bulkResult.Created
 	summary.Failed = bulkResult.Failed
+
+	// Emit sold events for newly-created sales.
+	for _, m := range importResult.Matched {
+		s.recordEvent(ctx, dhevents.Event{
+			PurchaseID:     m.PurchaseID,
+			CertNumber:     m.CertNumber,
+			Type:           dhevents.TypeSold,
+			NewDHStatus:    string(inventory.DHStatusSold),
+			DHOrderID:      certToOrderID[m.CertNumber],
+			SalePriceCents: m.SalePriceCents,
+			Source:         dhevents.SourceDHOrdersPoll,
+		})
+	}
 
 	return summary, nil
 }
