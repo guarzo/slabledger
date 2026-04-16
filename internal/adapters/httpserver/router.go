@@ -33,8 +33,6 @@ type Router struct {
 	pricingDiagnosticsHandler *handlers.PricingDiagnosticsHandler
 	pricingAPIHandler         *handlers.PricingAPIHandler
 	advisorHandler            *handlers.AdvisorHandler
-	socialHandler             *handlers.SocialHandler
-	instagramHandler          *handlers.InstagramHandler
 	aiUsageHandler            *handlers.AIStatusHandler
 	priceFlagsHandler         *handlers.PriceFlagsHandler
 	cardLadderHandler         *handlers.CardLadderHandler
@@ -71,8 +69,6 @@ type RouterConfig struct {
 	PricingAPIKey             string                           // Bearer token; empty = pricing API disabled
 	CampaignsRepo             handlers.CertPriceLookup         // For pricing API handler
 	AdvisorHandler            *handlers.AdvisorHandler         // AI advisor; nil = disabled
-	SocialHandler             *handlers.SocialHandler          // Social content; nil = disabled
-	InstagramHandler          *handlers.InstagramHandler       // Instagram publishing; nil = disabled
 	AIStatusHandler           *handlers.AIStatusHandler        // AI usage stats; nil = disabled
 	PriceFlagsHandler         *handlers.PriceFlagsHandler      // Price flag admin; nil = disabled
 	CardLadderHandler         *handlers.CardLadderHandler      // Card Ladder admin; nil = disabled
@@ -147,14 +143,6 @@ func NewRouter(cfg RouterConfig) *Router {
 
 	if cfg.AdvisorHandler != nil {
 		rt.advisorHandler = cfg.AdvisorHandler
-	}
-
-	if cfg.SocialHandler != nil {
-		rt.socialHandler = cfg.SocialHandler
-	}
-
-	if cfg.InstagramHandler != nil {
-		rt.instagramHandler = cfg.InstagramHandler
 	}
 
 	if cfg.AIStatusHandler != nil {
@@ -278,9 +266,6 @@ func (rt *Router) Setup() http.Handler {
 
 	// Intelligence (niche leaderboard) routes
 	rt.registerIntelligenceRoutes(mux)
-
-	// Social content & Instagram routes
-	rt.registerSocialRoutes(mux)
 
 	// Pricing API (public, bearer token auth)
 	rt.registerPricingAPIRoutes(mux)

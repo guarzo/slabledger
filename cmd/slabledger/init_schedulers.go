@@ -13,7 +13,6 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/domain/pricing"
-	"github.com/guarzo/slabledger/internal/domain/social"
 	"github.com/guarzo/slabledger/internal/platform/config"
 )
 
@@ -36,13 +35,6 @@ type schedulerDeps struct {
 	AdvisorService       advisor.Service
 	AdvisorCacheRepo     *sqlite.AdvisorCacheRepository
 	AICallRepo           *sqlite.AICallRepository
-	SocialService        social.Service
-	SocialRepo           *sqlite.SocialRepository
-	PublisherConfigured  bool
-	IGTokenRefresher     scheduler.InstagramTokenRefresher
-	MetricsPostLister    social.MetricsPostLister
-	MetricsSaver         social.MetricsSaver
-	InsightsPoller       social.InsightsPoller
 	CardLadderClient     *cardladder.Client
 	CardLadderStore      *sqlite.CardLadderStore
 	CardLadderSalesStore *sqlite.CLSalesStore
@@ -78,11 +70,6 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 		AdvisorCollector:         deps.AdvisorService,
 		AdvisorCache:             deps.AdvisorCacheRepo,
 		AICallTracker:            deps.AICallRepo,
-		SocialContentDetector:    deps.SocialService,
-		InstagramTokenRefresher:  deps.IGTokenRefresher,
-		MetricsPostLister:        deps.MetricsPostLister,
-		MetricsSaver:             deps.MetricsSaver,
-		InsightsPoller:           deps.InsightsPoller,
 		CardLadderClient:         deps.CardLadderClient,
 		CardLadderStore:          deps.CardLadderStore,
 		CardLadderPurchaseLister: deps.PurchaseStore,
@@ -170,11 +157,6 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 		buildDeps.CrackCacheService = deps.CampaignsService
 	}
 
-	// Wire social publish (nil-safe: only set if publisher was actually configured)
-	if deps.PublisherConfigured {
-		buildDeps.SocialPublisher = deps.SocialService
-		buildDeps.SocialPublishRepo = deps.SocialRepo
-	}
 	schedulerResult := scheduler.BuildGroup(deps.Config, buildDeps)
 	schedulerResult.Group.StartAll(schedulerCtx)
 

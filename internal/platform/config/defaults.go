@@ -20,7 +20,6 @@ func Default() Config {
 			IdleTimeout:              60 * time.Second,
 			ShutdownTimeout:          5 * time.Second,
 			SchedulerShutdownTimeout: 30 * time.Second,
-			MediaDir:                 "./data/media",
 		},
 		Logging: LoggingConfig{
 			Level: "info",
@@ -82,24 +81,6 @@ func Default() Config {
 			RefreshHour:   4, // 4 AM UTC
 			MaxToolRounds: 5, // hard cap; prompt guides LLM to 2 rounds, service default is 3, 5 is safety margin
 		},
-		SocialContent: SocialContentConfig{
-			Enabled:      false, // disabled by default
-			Interval:     24 * time.Hour,
-			InitialDelay: 5 * time.Minute,
-			ContentHour:  5, // 5 AM UTC
-		},
-		SocialPublish: SocialPublishConfig{
-			RenderServiceURL: "", // disabled by default; set to enable auto-publishing
-			StartHour:        9,  // 9 AM server local time
-			EndHour:          21, // 9 PM server local time
-			IntervalMinutes:  60, // check every hour
-			MaxDaily:         10, // max 10 posts per day
-		},
-		MetricsPoll: MetricsPollConfig{
-			Enabled:  false, // disabled by default
-			Interval: 6 * time.Hour,
-			MaxAge:   7 * 24 * time.Hour,
-		},
 		CardLadder: CardLadderConfig{
 			Enabled:     true, // runs automatically when credentials are configured
 			Interval:    24 * time.Hour,
@@ -116,12 +97,12 @@ func Default() Config {
 			SyncHour:     10, // 10 AM UTC (1 hour after PSA updates at 9am)
 		},
 		DH: DHConfig{
-			Enabled:            true,
-			CacheTTLHours:      24,
-			RateLimitRPS:       1,
-			SocialHour:         6,
-			SocialPollInterval: 5 * time.Second,
-			SocialPollTimeout:  3 * time.Minute,
+			Enabled:               true,
+			CacheTTLHours:         24,
+			RateLimitRPS:          1,
+			OrdersPollInterval:    30 * time.Minute,
+			InventoryPollInterval: 2 * time.Hour,
+			PushInterval:          5 * time.Minute,
 		},
 		DHAnalyticsRefresh: DHAnalyticsRefreshConfig{
 			Enabled:     false, // launch gate — opt-in until DH impression pipeline is healthy

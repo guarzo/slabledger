@@ -6,7 +6,6 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	"github.com/guarzo/slabledger/internal/adapters/clients/marketmovers"
-	"github.com/guarzo/slabledger/internal/adapters/clients/renderservice"
 	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
 	"github.com/guarzo/slabledger/internal/domain/advisor"
 	"github.com/guarzo/slabledger/internal/domain/ai"
@@ -18,7 +17,6 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/domain/pricing"
 	"github.com/guarzo/slabledger/internal/domain/scoring"
-	"github.com/guarzo/slabledger/internal/domain/social"
 	"github.com/guarzo/slabledger/internal/platform/config"
 )
 
@@ -46,22 +44,6 @@ type BuildDeps struct {
 	AdvisorCollector AdvisorCollector
 	AdvisorCache     advisor.CacheStore
 	AICallTracker    ai.AICallTracker
-
-	// Social content dependencies (optional)
-	SocialContentDetector   SocialContentDetector
-	InstagramTokenRefresher InstagramTokenRefresher
-
-	// Metrics poll dependencies (optional)
-	MetricsPostLister social.MetricsPostLister
-	MetricsSaver      social.MetricsSaver
-	InsightsPoller    social.InsightsPoller
-
-	// Social publish dependencies (optional — enabled when RenderServiceURL is configured)
-	SocialPublisher   SocialPublisher
-	SocialPublishRepo SocialPublishRepo
-
-	// DH social dependencies (optional — enabled when DH enterprise is configured)
-	DHSocialRepo DHSocialRepo
 
 	// DH dependencies (optional)
 	DHClient           *dh.Client
@@ -130,7 +112,6 @@ type BuildResult struct {
 	CardLadderRefresh *CardLadderRefreshScheduler   // nil if Card Ladder is not configured
 	MMRefresh         *MarketMoversRefreshScheduler // nil if Market Movers is not configured
 	PSASync           *PSASyncScheduler             // nil if PSA sync is not configured
-	SocialPublish     *SocialPublishScheduler       // nil if auto-publishing is not configured
 	CertEnrichJob     *CertEnrichJob                // nil if cert lookup is not configured
 	CrackCacheJob     *CrackCacheRefreshJob         // nil if inventory service is not configured
 	DHOrdersPoll      *DHOrdersPollScheduler        // nil if DH orders poll is not configured
@@ -221,64 +202,6 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 			deps.AdvisorCollector, deps.AdvisorCache,
 			deps.AICallTracker,
 			deps.Logger, cfg.AdvisorRefresh,
-		))
-	}
-
-	// Social content scheduler (if detector is provided)
-	if deps.SocialContentDetector != nil {
-		var socialOpts []SocialContentOption
-		if deps.InstagramTokenRefresher != nil {
-			socialOpts = append(socialOpts, WithTokenRefresher(deps.InstagramTokenRefresher))
-		}
-		schedulers = append(schedulers, NewSocialContentScheduler(
-			deps.SocialContentDetector, deps.Logger, cfg.SocialContent, socialOpts...,
-		))
-	}
-
-	// Social publish scheduler (if render service URL is configured)
-	cfg.SocialPublish.ApplyDefaults()
-	var socialPublishScheduler *SocialPublishScheduler
-	if cfg.SocialPublish.RenderServiceURL != "" && deps.SocialPublisher != nil && deps.SocialPublishRepo != nil {
-		renderClient := renderservice.NewClient(cfg.SocialPublish.RenderServiceURL)
-		publishCfg := SocialPublishSchedulerConfig{
-			StartHour:        cfg.SocialPublish.StartHour,
-			EndHour:          cfg.SocialPublish.EndHour,
-			IntervalMinutes:  cfg.SocialPublish.IntervalMinutes,
-			MaxDaily:         cfg.SocialPublish.MaxDaily,
-			RenderServiceURL: cfg.SocialPublish.RenderServiceURL,
-			fixedHour:        -1,
-		}
-		socialPublishScheduler = NewSocialPublishScheduler(
-			deps.SocialPublishRepo,
-			renderClient,
-			deps.SocialPublisher,
-			cfg.Server.MediaDir,
-			publishCfg,
-			deps.Logger,
-		)
-		schedulers = append(schedulers, socialPublishScheduler)
-	}
-
-	// DH social scheduler (if DH enterprise is configured)
-	if cfg.DH.SocialEnabled && deps.DHClient != nil && deps.DHClient.EnterpriseAvailable() && deps.DHSocialRepo != nil {
-		dhSocialCfg := DHSocialSchedulerConfig{
-			Hour:         cfg.DH.SocialHour,
-			PollInterval: cfg.DH.SocialPollInterval,
-			PollTimeout:  cfg.DH.SocialPollTimeout,
-		}
-		schedulers = append(schedulers, NewDHSocialScheduler(
-			deps.DHClient,
-			deps.DHSocialRepo,
-			deps.Logger,
-			dhSocialCfg,
-		))
-	}
-
-	// Metrics poll scheduler (if all dependencies are provided)
-	if deps.MetricsPostLister != nil && deps.MetricsSaver != nil && deps.InsightsPoller != nil {
-		schedulers = append(schedulers, NewMetricsPollScheduler(
-			deps.MetricsPostLister, deps.MetricsSaver, deps.InsightsPoller,
-			deps.Logger, cfg.MetricsPoll,
 		))
 	}
 
@@ -464,7 +387,6 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 		CardLadderRefresh: clRefresh,
 		MMRefresh:         mmRefresh,
 		PSASync:           psaSync,
-		SocialPublish:     socialPublishScheduler,
 		CertEnrichJob:     certEnrichJob,
 		CrackCacheJob:     crackCacheJob,
 		DHOrdersPoll:      dhOrdersPoll,

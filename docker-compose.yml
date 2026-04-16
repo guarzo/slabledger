@@ -48,15 +48,6 @@ services:
       PRICE_MAX_BURST_CALLS: ${PRICE_MAX_BURST_CALLS:-10}
 
       # =====================================================================
-      # Auto Instagram Publishing (optional — set RENDER_SERVICE_URL to enable)
-      # =====================================================================
-      RENDER_SERVICE_URL: ${RENDER_SERVICE_URL:-}
-      SOCIAL_PUBLISH_START_HOUR: ${SOCIAL_PUBLISH_START_HOUR:-9}
-      SOCIAL_PUBLISH_END_HOUR: ${SOCIAL_PUBLISH_END_HOUR:-21}
-      SOCIAL_PUBLISH_INTERVAL_MINUTES: ${SOCIAL_PUBLISH_INTERVAL_MINUTES:-60}
-      AUTO_PUBLISH_MAX_DAILY: ${AUTO_PUBLISH_MAX_DAILY:-10}
-
-      # =====================================================================
       # Server Configuration
       # =====================================================================
       LOG_LEVEL: ${LOG_LEVEL:-info}
@@ -96,27 +87,6 @@ services:
     #     reservations:
     #       cpus: '1'
      #       memory: 1G
-
-  render-service:
-    build:
-      context: .
-      dockerfile: services/render/Dockerfile
-    container_name: slabledger-render
-    ports:
-      - "${RENDER_PORT:-3001}:3001"
-    environment:
-      PORT: 3001
-      API_BASE_URL: "http://app:8081"
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/health"]
-      interval: 30s
-      timeout: 10s
-      start_period: 30s
-      retries: 3
-    networks:
-      - app_network
-    restart: unless-stopped
-
 
   # =========================================================================
   # Note: Caddy reverse proxy runs separately on the host

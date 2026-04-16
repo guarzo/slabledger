@@ -49,7 +49,6 @@ This codebase follows **Hexagonal Architecture** (also known as Ports and Adapte
  │    ├── picks/          (acquisition watchlist)  │
  │    ├── pricing/        (price interfaces/models)│
  │    ├── scoring/        (price scoring factors)  │
- │    ├── social/         (social content)         │
  │    └── storage/        (storage interfaces)     │
 └───────────────────┬─────────────────────────────┘
                     │ (uses)
@@ -103,7 +102,6 @@ This codebase follows **Hexagonal Architecture** (also known as Ports and Adapte
 | `picks/` | AI-driven acquisition watchlist service |
 | `pricing/` | `PriceProvider` interface, graded prices, market data models |
 | `scoring/` | Price scoring factors and profiles |
-| `social/` | Social content generation |
 | `storage/` | Storage interfaces |
 
 **Rules**:

@@ -1,10 +1,8 @@
 import { CardLadderTab } from './CardLadderTab';
 import { DHTab } from './DHTab';
-import { InstagramTab } from './InstagramTab';
 import { MarketMoversTab } from './MarketMoversTab';
 import { PSASyncTab } from './PSASyncTab';
 import { useCardLadderStatus, useDHStatus, useMarketMoversStatus, usePSASyncStatus } from '../../queries/useAdminQueries';
-import { useInstagramStatus } from '../../queries/useSocialQueries';
 
 function StatusBadge({ connected, label }: { connected: boolean; label: string }) {
   return (
@@ -18,13 +16,11 @@ function StatusBadge({ connected, label }: { connected: boolean; label: string }
 export function IntegrationsTab({ enabled = true }: { enabled?: boolean }) {
   const { data: dhStatus } = useDHStatus({ enabled });
   const { data: clStatus } = useCardLadderStatus({ enabled });
-  const { data: igStatus } = useInstagramStatus(enabled);
   const { data: mmStatus } = useMarketMoversStatus({ enabled });
   const { data: psaStatus } = usePSASyncStatus({ enabled });
 
   const dhHealthy = dhStatus?.api_health ? dhStatus.api_health.success_rate >= 0.95 : false;
   const clConnected = clStatus?.configured ?? false;
-  const igConnected = igStatus?.connected ?? false;
   const mmConnected = mmStatus?.configured ?? false;
   const psaConfigured = psaStatus?.configured ?? false;
 
@@ -46,16 +42,6 @@ export function IntegrationsTab({ enabled = true }: { enabled?: boolean }) {
           <StatusBadge connected={clConnected} label={clConnected ? 'Connected' : 'Not connected'} />
         </div>
         <CardLadderTab enabled={enabled} />
-      </section>
-
-      <hr className="border-[var(--surface-2)]" />
-
-      <section>
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base font-semibold text-[var(--text)]">Instagram</h3>
-          <StatusBadge connected={igConnected} label={igConnected ? 'Connected' : 'Not connected'} />
-        </div>
-        <InstagramTab enabled={enabled} />
       </section>
 
       <hr className="border-[var(--surface-2)]" />

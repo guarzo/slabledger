@@ -10,7 +10,6 @@
 // Side-effect imports: each file augments APIClient.prototype
 import './campaigns';
 import './admin';
-import './social';
 
 // Re-export everything consumers depend on from client.ts
 export {

@@ -7,7 +7,6 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/scheduler"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
-	"github.com/guarzo/slabledger/internal/domain/social"
 )
 
 // shutdownGracefully stops schedulers and waits for in-flight background
@@ -18,7 +17,6 @@ func shutdownGracefully(
 	cancelScheduler context.CancelFunc,
 	schedulerResult *scheduler.BuildResult,
 	hOut handlerOutputs,
-	socialService social.Service,
 	campaignsService inventory.Service,
 	shutdownTimeout time.Duration,
 ) {
@@ -48,14 +46,6 @@ func shutdownGracefully(
 	if hOut.AdvisorHandler != nil {
 		hOut.AdvisorHandler.Wait()
 	}
-
-	// Wait for in-flight social handler background goroutines (HandleGenerate)
-	if hOut.SocialHandler != nil {
-		hOut.SocialHandler.Wait()
-	}
-
-	// Wait for in-flight social caption generation goroutines
-	socialService.Wait()
 
 	// Shut down campaign service background workers
 	if campaignsService != nil {

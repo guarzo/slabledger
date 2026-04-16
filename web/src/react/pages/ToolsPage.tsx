@@ -1,4 +1,4 @@
-import { Suspense, lazy, useState } from 'react';
+import { useState } from 'react';
 import { Tabs } from 'radix-ui';
 import { useSearchParams } from 'react-router-dom';
 import { useCampaigns } from '../queries/useCampaignQueries';
@@ -8,14 +8,10 @@ import LegacyTab from './tools/LegacyTab';
 import type { PSAImportResult } from '../../types/campaigns';
 import TabNavigation from '../ui/TabNavigation';
 import { SectionErrorBoundary } from '../ui';
-import PokeballLoader from '../PokeballLoader';
-
-const ContentPage = lazy(() => import('./ContentPage'));
 
 const TABS = [
   { id: 'daily-ops', label: 'Daily Ops' },
   { id: 'card-intake', label: 'Card Intake' },
-  { id: 'content', label: 'Content' },
   { id: 'legacy', label: 'Legacy' },
 ] as const;
 
@@ -51,14 +47,6 @@ export default function ToolsPage() {
         <Tabs.Content value="card-intake">
           <SectionErrorBoundary sectionName="Card Intake">
             <CardIntakeTab />
-          </SectionErrorBoundary>
-        </Tabs.Content>
-
-        <Tabs.Content value="content">
-          <SectionErrorBoundary sectionName="Content">
-            <Suspense fallback={<div className="py-8 text-center"><PokeballLoader /></div>}>
-              <ContentPage embedded />
-            </Suspense>
           </SectionErrorBoundary>
         </Tabs.Content>
 
