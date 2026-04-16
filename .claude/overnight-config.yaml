@@ -1,0 +1,20 @@
+improve_skill: my:improve
+max_iterations: 15
+max_wrap_iterations: 3
+branch_prefix: overnight-improvements
+gates:
+  - name: make check
+    command: make check
+  - name: go tests
+    command: go test -race -timeout 10m ./...
+  - name: web lint
+    command: cd web && npm run lint:strict
+  - name: web typecheck
+    command: cd web && npm run typecheck
+  - name: web tests
+    command: cd web && npm test
+do_nots:
+  - "Do not mock the database in integration tests."
+  - "Do not split cmd/slabledger/main.go (accepted tech debt)."
+  - "Do not parse card numbers from titles — only from cert lookup."
+  - "Do not touch files outside the scope of the finding. Scope discipline over cleanup."
