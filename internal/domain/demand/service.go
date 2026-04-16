@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strconv"
 	"time"
 )
 
@@ -26,6 +27,9 @@ const (
 const (
 	QualityProxy = "proxy"
 	QualityFull  = "full"
+	// QualityEmpty is returned by CampaignSignals when no signal contributors
+	// were found (distinct from "proxy"/"full" which apply to demand signals).
+	QualityEmpty = "empty"
 )
 
 // ErrInvalidWindow is returned when LeaderboardOpts.Window is not "7d" or "30d".
@@ -168,7 +172,7 @@ func (s *Service) buildBucket(
 		activeListingCount = market.ActiveListingCount
 	}
 
-	return NicheOpportunity{
+	niche := NicheOpportunity{
 		Character:        character,
 		Era:              era,
 		Grade:            grade,
@@ -176,7 +180,21 @@ func (s *Service) buildBucket(
 		Market:           market,
 		Coverage:         coverage,
 		OpportunityScore: OpportunityScore(demandScore, velocityChange, activeListingCount, coverage),
-	}, nil
+	}
+	if market != nil && market.VelocityChangePct != nil {
+		accel := &NicheAcceleration{
+			MedianVelocityChangePct: *market.VelocityChangePct,
+			TotalCount:              1,
+			AcceleratingCount:       0,
+			DataQuality:             QualityFull,
+			ComputedAt:              market.ComputedAt,
+		}
+		if *market.VelocityChangePct >= AccelerationThresholdPct {
+			accel.AcceleratingCount = 1
+		}
+		niche.Acceleration = accel
+	}
+	return niche, nil
 }
 
 // --- Sort ---
@@ -248,8 +266,11 @@ type byEraJSON struct {
 
 // characterVelocityJSON / characterSaturationJSON mirror the cached JSON
 // blobs for a character row's velocity + saturation surfaces.
+// DH character-level velocity returns MedianDaysToSell as a numeric string
+// on the wire (e.g. "9.8"), not a JSON number — matches the card-level
+// signalVelocityJSON type used in campaign_signals.go.
 type characterVelocityJSON struct {
-	MedianDaysToSell  *float64 `json:"median_days_to_sell"`
+	MedianDaysToSell  string   `json:"median_days_to_sell"`
 	SampleSize        int      `json:"sample_size"`
 	VelocityChangePct *float64 `json:"velocity_change_pct"`
 	ComputedAt        string   `json:"computed_at"`
@@ -282,7 +303,9 @@ func parseCharacterMarket(row CharacterCache) *NicheMarket {
 	if row.VelocityJSON != nil {
 		var v characterVelocityJSON
 		if err := json.Unmarshal([]byte(*row.VelocityJSON), &v); err == nil {
-			m.MedianDaysToSell = v.MedianDaysToSell
+			if parsed, pErr := strconv.ParseFloat(v.MedianDaysToSell, 64); pErr == nil {
+				m.MedianDaysToSell = &parsed
+			}
 			m.VelocityChangePct = v.VelocityChangePct
 			m.SampleSize = v.SampleSize
 			has = true

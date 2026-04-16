@@ -152,13 +152,14 @@ type nichesMeta struct {
 }
 
 type nicheOpportunityDTO struct {
-	Character        string           `json:"character"`
-	Era              string           `json:"era"`
-	Grade            int              `json:"grade"`
-	Demand           *nicheDemandDTO  `json:"demand"`
-	Market           *nicheMarketDTO  `json:"market"`
-	Coverage         nicheCoverageDTO `json:"coverage"`
-	OpportunityScore float64          `json:"opportunity_score"`
+	Character        string                `json:"character"`
+	Era              string                `json:"era"`
+	Grade            int                   `json:"grade"`
+	Demand           *nicheDemandDTO       `json:"demand"`
+	Market           *nicheMarketDTO       `json:"market"`
+	Acceleration     *nicheAccelerationDTO `json:"acceleration"`
+	Coverage         nicheCoverageDTO      `json:"coverage"`
+	OpportunityScore float64               `json:"opportunity_score"`
 }
 
 type nicheDemandDTO struct {
@@ -176,6 +177,14 @@ type nicheMarketDTO struct {
 	SampleSize           int      `json:"sample_size"`
 	AnalyticsNotComputed bool     `json:"analytics_not_computed"`
 	ComputedAt           *string  `json:"computed_at"`
+}
+
+type nicheAccelerationDTO struct {
+	MedianVelocityChangePct float64 `json:"median_velocity_change_pct"`
+	AcceleratingCount       int     `json:"accelerating_count"`
+	TotalCount              int     `json:"total_count"`
+	DataQuality             string  `json:"data_quality"`
+	ComputedAt              *string `json:"computed_at"`
 }
 
 type nicheCoverageDTO struct {
@@ -209,6 +218,15 @@ func toNicheDTO(o demand.NicheOpportunity) nicheOpportunityDTO {
 			SampleSize:           o.Market.SampleSize,
 			AnalyticsNotComputed: o.Market.AnalyticsNotComputed,
 			ComputedAt:           formatTimePtrFromPtr(o.Market.ComputedAt),
+		}
+	}
+	if o.Acceleration != nil {
+		dto.Acceleration = &nicheAccelerationDTO{
+			MedianVelocityChangePct: o.Acceleration.MedianVelocityChangePct,
+			AcceleratingCount:       o.Acceleration.AcceleratingCount,
+			TotalCount:              o.Acceleration.TotalCount,
+			DataQuality:             o.Acceleration.DataQuality,
+			ComputedAt:              formatTimePtrFromPtr(o.Acceleration.ComputedAt),
 		}
 	}
 	return dto

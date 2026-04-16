@@ -171,3 +171,29 @@ func TestCampaignCoverageLookup_UnsoldCountFor(t *testing.T) {
 		assert.Equal(t, 0, count)
 	})
 }
+
+func TestCampaignCoverageLookup_ActiveCampaigns(t *testing.T) {
+	db := setupTestDB(t)
+	lookup := NewCampaignCoverageLookup(db.DB)
+	ctx := context.Background()
+
+	// Numeric active with inclusion list + grade range
+	seedCampaign(t, db, "1", "Vintage Core", "9-10", "Charizard,Pikachu", "active", false)
+	// Non-numeric active (should be skipped)
+	seedCampaign(t, db, "external", "External", "9-10", "Charizard", "active", false)
+	// Numeric paused (should be skipped)
+	seedCampaign(t, db, "2", "Paused", "8-9", "", "paused", false)
+
+	got, err := lookup.ActiveCampaigns(ctx)
+	require.NoError(t, err)
+
+	if len(got) != 1 {
+		t.Fatalf("want 1 campaign, got %d: %+v", len(got), got)
+	}
+	if got[0].ID != 1 || got[0].Name != "Vintage Core" {
+		t.Errorf("want ID=1 Name=Vintage Core, got %+v", got[0])
+	}
+	if got[0].InclusionList != "Charizard,Pikachu" || got[0].GradeRange != "9-10" {
+		t.Errorf("want inclusion+grade preserved, got %+v", got[0])
+	}
+}
