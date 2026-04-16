@@ -54,7 +54,6 @@ internal/
     observability/  # Logger, MetricsRecorder interfaces
     pricing/        # PriceProvider interface, graded prices, market data
     scoring/        # Price scoring factors and profiles
-    social/         # Social content generation domain
     storage/        # Cache and storage interfaces
     timeutil/       # Time utility functions
   adapters/         # Interface implementations
@@ -65,10 +64,9 @@ internal/
       tcgdex/       # TCGdex.dev card/set metadata (EN + JA, no API key)
       google/       # Google OAuth
       httpx/        # Unified HTTP client (retry + circuit breaker)
-      instagram/    # Instagram OAuth + carousel publishing
       azureai/      # Azure AI completions
     storage/sqlite/ # SQLite persistence + migrations
-    scheduler/      # Background jobs (price refresh, session cleanup, social content, advisor, snapshots)
+    scheduler/      # Background jobs (price refresh, session cleanup, advisor, snapshots)
   platform/         # Cross-cutting concerns
     cache/          # Type-safe cache
     cardutil/       # Card name/set normalization (pure utility, no external deps)
@@ -104,9 +102,9 @@ The inventory domain (`internal/domain/inventory/`) is the core campaigns and in
 ## Database
 
 SQLite with WAL mode. All monetary values in **cents**. Migrations managed by `golang-migrate/migrate/v4`
-and embedded in the binary via `embed.FS`. Migrations run automatically on startup. 64 migration pairs (`000001`–`000064`).
+and embedded in the binary via `embed.FS`. Migrations run automatically on startup. 68 migration pairs (`000001`–`000068`).
 
-Migration files: `internal/adapters/storage/sqlite/migrations/` (64 migration pairs)
+Migration files: `internal/adapters/storage/sqlite/migrations/` (68 migration pairs)
 
 See [internal/README.md](internal/README.md) for step-by-step migration creation.
 
@@ -118,7 +116,7 @@ See `.env.example` for the complete list with descriptions. Key groups:
 - **DH**: `DH_API_BASE_URL`, `DH_ENTERPRISE_API_KEY`
 - **AI**: `AZURE_AI_ENDPOINT`, `AZURE_AI_API_KEY`, `AZURE_AI_DEPLOYMENT`
 - **Auth**: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `ENCRYPTION_KEY`
-- **Schedulers**: `PRICE_REFRESH_ENABLED`, `ADVISOR_REFRESH_HOUR`, `SOCIAL_CONTENT_HOUR`
+- **Schedulers**: `PRICE_REFRESH_ENABLED`, `ADVISOR_REFRESH_HOUR`
 
 ## Pricing Pipeline
 
