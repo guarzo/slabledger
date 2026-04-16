@@ -50,28 +50,40 @@ Fetch these in parallel:
 - `GET /api/campaigns` — for name ↔ UUID resolution; filter out archived campaigns and any campaign with `kind == "external"` (synthetic catch-all buckets for pre-campaign purchases — excluded from the portfolio-at-a-glance line)
 - `GET /api/portfolio/health` — per-campaign status, reason, capital at risk
 - `GET /api/portfolio/weekly-review` — week-over-week deltas
-- `GET /api/portfolio/insights` — cross-campaign segmentation by character, grade, era, tier
+- `GET /api/portfolio/insights` — cross-campaign segmentation by character, grade, era, tier. **Fetch AND parse** — extract `byCharacter` (filter `soldCount ≥ 3`, sort by ROI desc), `byGrade`, `byPriceTier`, `byCharacterGrade` standouts, and `coverageGaps` before drafting the opener. Listing only the response keys is not analysis.
+- `GET /api/portfolio/weekly-history?weeks=8` — trailing 8-week summaries (newest first). Used by the hold-verdict rule for the trailing-mean comparison; fetching it in the opener avoids a second round-trip when item-1 is a candidate for hold.
+- `GET /api/portfolio/channel-velocity` — average days-to-sell per channel. Sources channel-shift recommendations and feeds the days-to-sell delta math in repricing playbooks.
 - `GET /api/credit/summary` — outstanding balance, weeks to cover, recovery trend
 - `GET /api/credit/invoices` — list of *all* unpaid invoices with due dates and `totalCents` per row (backfilled from purchase costs for legacy rows). Use this endpoint to plan a multi-invoice horizon (next 2–4 weeks of obligations), not just one invoice.
-- `GET /api/portfolio/suggestions` — **the primary source of pre-computed actionable suggestions**. Returns `adjustments` (sized parameter-change recommendations like "Lower buy terms on Modern from 80% to 75%" with `confidence`, `dataPoints`, and `rationale`) and `newCampaigns` (coverage-gap ideas with expected ROI and confidence). The opener's top-3 should draw from this list before doing any Monte Carlo math of its own — the server has already computed sized, confidence-banded recommendations the prose just needs to surface. Filter to confidence `high` or `medium` for paragraph 1.
+- `GET /api/portfolio/suggestions` — pre-computed adjustments + new-campaign ideas. **Apply the stale-suggestion filter** (Recommendation rules) before surfacing any entry: drop suggestions targeting fields on a campaign whose `updatedAt` is within the last 72h. Treat the remainder as one input among several, not the primary source — the per-campaign tuning + insights segmentation below has the higher-resolution signal.
 - `GET /api/inventory` — per-purchase inventory detail; the opener uses the `inHandUnsoldCount`, `inHandCapitalCents`, `inTransitUnsoldCount`, and `inTransitCapitalCents` fields already on each `CampaignHealth` entry from `/api/portfolio/health` to distinguish **in-hand** (received, sellable now) from **in-transit** (purchased but not yet received) capital. Fetch `/api/inventory` when you need per-card detail for a specific campaign, not just portfolio-wide sums.
-- `GET /api/dh/status` — reads `dh_listings_count` vs `dh_inventory_count` vs `pending_count`. This tells you how much of the in-hand inventory is actually *listed* and generating sales signal. A large received-but-not-listed gap (e.g. 3 listed of 101 mapped) is a real bottleneck the opener should surface as a top-3 candidate, because tuning and liquidation are downstream of having listings up.
+- `GET /api/dh/status` — reads `dh_listings_count` vs `dh_inventory_count` vs `pending_count`. This tells you how much of the in-hand inventory is actually *listed* and generating sales signal. A large received-but-not-listed gap is informational by default; promote it to a top-3 candidate ONLY if the operator config lists `dh_listing_gap` in `operationalPriorities` (otherwise it's a known-system-issue for some operators).
 - `GET /api/dh/pending` — the actual per-item pending-push queue (not just the aggregate count). Returns `{items: DHPendingItem[], count: int}` where each item carries `{purchaseId, cardName, setName, grade, recommendedPriceCents, daysQueued, dhConfidence}`. `dhConfidence` is `"high"` (listing synced <24h ago), `"medium"` (<7d), `"low"` (>7d or never synced) — use this as a data-freshness signal when reasoning about whether the queued recommendation is still trustworthy. This is the right endpoint for prioritizing the approval queue by `daysQueued` and sizing projected recovery from `recommendedPriceCents`.
-- `GET /api/campaigns/{id}/tuning` for each active campaign — needed when portfolio/suggestions doesn't already cover a tuning question or when the user asks for grade-level detail.
-- `GET /api/campaigns/{id}/projections` ONLY when validating a specific tuning suggestion's projected impact (the projections endpoint is heavy; prefer portfolio/suggestions' pre-computed sizing).
+- `GET /api/campaigns/{id}/tuning` for **each** active campaign with ≥10 purchases — grade × price-tier × `avgBuyPctOfCL` is the highest-resolution tuning signal in the API. The opener's top-3 should look here BEFORE leaning on `/portfolio/suggestions`. Run these in parallel — one call per campaign — not sequentially.
+- `GET /api/campaigns/{id}/fill-rate` for each active campaign — daily spend vs cap (30-day rolling). Replaces fabricated fill stats from the strategy doc when the opener wants to flag a campaign that's pegged at cap (ramp candidate) or running well below cap (supply constraint, not a tuning issue).
+- `GET /api/intelligence/niches?window=30d&limit=20` — demand-driven acquisition opportunities by `(character, era, grade)`. Each row carries `demand_score`, `opportunity_score`, `velocity_change_pct`, and `current_coverage` (how many active campaigns already cover this segment). High opportunity score with zero coverage = coverage-gap candidate; high velocity change with thin coverage = ramp candidate.
+- `GET /api/intelligence/campaign-signals` — per-campaign velocity acceleration. A sharply decelerating campaign is a tuning candidate (drop terms, narrow scope); an accelerating campaign is a ramp candidate (capital guardrail applies).
+- `GET /api/opportunities/crack` — slabs in inventory where raw value > slabbed value net of cracking cost. Capital-positive moves; bypass the capital guardrail.
+- `GET /api/opportunities/acquisition` — raw-to-graded acquisition mispricings (cards worth buying raw and grading). Feeds Playbook F coverage-gap analysis and provides additional top-3 candidates when a clear $ spread exists.
+- `GET /api/campaigns/{id}/projections` ONLY when validating a specific tuning suggestion's projected impact (the projections endpoint is heavy; prefer per-campaign `/tuning` byGrade for sizing).
 
 Present the opener as **two paragraphs plus a close**:
 
 **Paragraph 1 — "This week I'd do these 3 things:"** Numbered list. Each item names an action, targets (campaign / cards / invoice), sized $ impact with horizon, and confidence band (see Recommendation rules). If the strongest item is a hold verdict, state it directly as item 1 ("Hold — this week's signal is within noise…"); hold items carry no sized $ or confidence band because there is no action being proposed.
 
-**Where the top-3 actually come from**, in priority order:
+**Where the top-3 actually come from**, in priority order. Walk down the list, skip items with no qualifying signal, take the strongest 3:
 
 1. **Capital crunch first** — if in-hand × 1.1 < next invoice amount, the crunch IS item 1 (with options per Playbook B's feasibility precondition). Don't bury it.
-2. **DH listing bottleneck** — if `dh_listings_count` is much smaller than `dh_inventory_count` or `pending_count`, approving the queue is usually the highest-leverage sales lever and beats most tuning suggestions. Promote it to item 1 or 2.
-3. **`/api/portfolio/suggestions` adjustments + newCampaigns** — high/medium-confidence entries with ≥10 dataPoints. Pull `title` + `rationale` + `expectedROI` directly; don't re-derive from projections. Apply the capital guardrail to any ramp-up (raise buy terms, raise daily cap, new campaign).
-4. Coverage-gap prompts (Playbook F) and DH inventory alerts (Playbook G) only after the above are exhausted.
+2. **Grade-level margin leaks from `/tuning`** — any `(campaign, grade)` row with `avgBuyPctOfCL ≥ 0.93` AND `purchaseCount ≥ 10` is paying near-full CL on that grade. Sized recommendation: drop terms, raise CL confidence, split the grade into its own campaign, or cut the grade from scope. This is usually the single highest-signal source of opener candidates.
+3. **Character inclusion gaps from `/insights.byCharacter`** — characters with `soldCount ≥ 5` AND `roi ≥ 0.20` that appear in zero or only 1–2 active campaigns. Sized as `expected revenue = avg net per sale × current monthly sale rate × campaigns-being-added`. Margin-neutral moves are a free win.
+4. **Low-grade underexposure from `/insights.byGrade`** — PSA 5/6/7 rows with ROI > 30% appearing in < 4 campaigns. Expansion candidate (drop a grade floor, add a low-grade engine).
+5. **Velocity acceleration/deceleration from `/intelligence/campaign-signals`** — sharply decelerating campaign = tuning candidate; accelerating with headroom = ramp candidate (capital guardrail applies).
+6. **Crack opportunities from `/opportunities/crack`** — capital-positive, bypasses guardrail. Surface when total `netGainCents` across the queue exceeds ~$1K.
+7. **`/api/portfolio/suggestions` adjustments + newCampaigns** — high/medium-confidence entries with ≥10 dataPoints, **AFTER applying the stale-suggestion filter** (Recommendation rules). Cross-reference each surviving entry against `/tuning` byGrade for sized impact — never echo verbatim.
+8. **DH listing bottleneck** — only if `dh_listing_gap` is in `operationalPriorities` from the operator config; otherwise treat as informational, not top-3.
+9. Coverage-gap prompts (Playbook F) and DH inventory alerts (Playbook G) only after the above are exhausted.
 
-If portfolio/suggestions returns nothing meaningful AND no crunch AND no listing bottleneck, the opener can legitimately produce a hold verdict for item 1 — that's a real signal that there's nothing to do, not a failure to find something.
+If nothing in 1–8 fires, the opener can legitimately produce a hold verdict for item 1 — that's a real signal that there's nothing to do, not a failure to find something. Cite the trailing-mean from `/portfolio/weekly-history` to justify the hold.
 
 **Paragraph 2 — "Portfolio at a glance:"** One compressed line. Per-active-campaign format depends on the in-transit share:
 
@@ -120,21 +132,33 @@ Route each user follow-up to the matching playbook below. The `references/adviso
 
 ### Playbook A — "What campaign updates should we make?"
 
-Trigger phrases: *"what updates should we make", "campaign tuning", "parameter adjustments", "should we change buy terms"*.
+Trigger phrases: *"what updates should we make", "campaign tuning", "parameter adjustments", "should we change buy terms", "what should we change in our campaigns"*.
 
-Fetch in parallel:
-- `GET /api/campaigns/{id}/tuning` for each active campaign — grade-level ROI, price-tier performance, buy threshold analysis
-- `GET /api/portfolio/suggestions` — server-side data-driven suggestions
-- `GET /api/campaigns/{id}/projections` — Monte Carlo against alternative parameters (only fetch if tuning flags a specific change worth sizing)
+This playbook is the most-asked question and the one where opener output most often disappoints. The answer must be substantive: per-campaign verdicts grounded in `/tuning` byGrade and `/insights` segment data, not generic suggestions echoed from the server.
 
-Present per campaign:
+Fetch in parallel (most should already be in the opener cache from Step 3):
+- `GET /api/campaigns/{id}/tuning` for **every** active campaign — grade-level ROI, price-tier performance, `avgBuyPctOfCL`, `roiStddev`, `cv`. Run all calls in parallel, not sequentially.
+- `GET /api/campaigns/{id}/fill-rate` for each active campaign — pegged-at-cap vs supply-constrained.
+- `GET /api/portfolio/insights` — `byCharacter`, `byGrade`, `byPriceTier`, `byCharacterGrade`, `coverageGaps`. PARSE these segments; don't just list keys.
+- `GET /api/portfolio/suggestions` — server-side suggestions (apply stale-suggestion filter before use).
+- `GET /api/intelligence/campaign-signals` — per-campaign acceleration/deceleration.
+- `GET /api/intelligence/niches?window=30d` — coverage-gap demand signal.
+- `GET /api/opportunities/crack` and `GET /api/opportunities/acquisition` — cross-campaign arbitrage.
+- `GET /api/portfolio/weekly-history?weeks=8` — trailing means for hold-verdict checks.
+- `GET /api/campaigns/{id}/projections` — only when validating a specific candidate change worth sizing (heavy endpoint).
 
-1. Which grades or price tiers are dragging ROI (with data-point counts).
-2. What the empirical optimal buy % looks like vs the current term.
-3. Specific parameter change recommendations. Every recommendation carries sized $ impact, horizon, and confidence band per the Recommendation rules. If the proposed change is a ramp-up (raising buy terms or daily cap), apply the capital guardrail before emitting — caveat under "tight" posture, block under "critical".
-4. Apply the hold verdict rule before recommending sub-threshold changes (<3pp change with Medium-or-lower confidence — recommend hold explicitly rather than suggesting it).
-5. Cross-reference each recommendation against the strategy doc's design intent — flag divergences.
-6. A prioritized list of proposed edits. If the user approves any, apply them via `PUT /api/campaigns/{id}` — see Mutations.
+**Required output structure (do not skip sections, do not return without a per-campaign verdict block):**
+
+State the **capital posture** once at the top (`Healthy / Tight / Critical` from the guardrail rule), then:
+
+1. **Per-campaign verdict — every active campaign in canonical numeric order.** One of: `RAMP UP / TIGHTEN / HOLD / WIND DOWN / WATCH`. Each verdict carries one sentence of justification citing the metrics that drove it (e.g. `TIGHTEN — PSA 9 at 97.1% of CL on 92 fills, 32% ST, 0.2% ROI`). A `HOLD` must cite the trailing-mean from `/portfolio/weekly-history` per the hold-verdict rule. A campaign whose verdict is HOLD/WATCH still appears in the list — silence is not acceptable.
+2. **Top parameter changes ranked by sized $ impact** (with confidence band; hold-verdict rule applied; capital guardrail applied to ramp-ups). Each backed by `(campaign, grade)` data from `/tuning`, not generic suggestions. State the current value, proposed value, sample size (`n=N`), and projected impact (`Proj: +$X.XK/mo (H|M|L)`).
+3. **Inclusion-list adds/trims from `/insights.byCharacter`** — characters with `soldCount ≥ 5` AND `roi ≥ 0.20` not yet covered (or undercovered). Per-campaign list of proposed adds with sized expected revenue. Also surface trims for high-`n` low-ROI characters dragging the portfolio (`soldCount ≥ 20` AND `roi < 0.05`).
+4. **Coverage shifts** — niches the portfolio should expand into (`/intelligence/niches` rows with high `opportunity_score` and `current_coverage = 0`) or campaigns that should narrow (`/insights.byPriceTier` drag tiers). Proposed action per row.
+5. **Cross-campaign arbitrage** — crack candidates and acquisition mispricings worth > $200 net. Capital-positive, bypass the guardrail.
+6. **Stale-suggestion note** — one line: *"Filtered N stale server suggestions (campaigns updated within last 72h)."* (or *"No stale suggestions filtered."*).
+
+Then a **prioritized list of proposed mutations** the user can approve. If the user approves any, apply them via `PUT /api/campaigns/{id}` — see Mutations. Cross-reference each recommendation against the strategy doc's design intent and flag divergences.
 
 **Escalation: revocation.** If a campaign is critically underperforming (negative ROI with >20 observations, or health status "critical"), raise the possibility of revoking it entirely. Fetch `GET /api/portfolio/revocations` to check if any existing flags are pending. To create a new revocation flag: `POST /api/portfolio/revocations` with `{"segmentLabel": "...", "segmentDimension": "...", "reason": "..."}`. Then fetch the generated email via `GET /api/portfolio/revocations/{flagId}/email` for PSA notification. Only suggest revocation when tuning adjustments clearly aren't sufficient — this is a last resort, not a first response to a bad week.
 
@@ -312,6 +336,24 @@ When recommending DH as a sales channel (in any playbook), note that eBay listin
 5. Flag risks proactively — slow inventory, duplicate accumulations, $0 buy costs, cards gated out of their suggested channel.
 6. Keep it conversational. Natural language, not bullet-heavy reports.
 
+## Data integrity
+
+Every numeric claim about purchases, sales, capital, campaign state, or market signals must come from a curl issued **this session**. Do not recall purchase IDs, prices, sell-through %, fill stats, or campaign params from prior conversations, the strategy doc, or memory. The strategy doc is for design intent (margin formulas, channel hierarchy, character lists); live data comes from the API.
+
+Operating rules:
+
+- Open the response with a one-line **Data sources** prefix listing the endpoints fetched this turn. Compact form is fine: `Data sources: /api/portfolio/{health,insights,suggestions,weekly-review,weekly-history,channel-velocity}, /api/credit/{summary,invoices}, /api/dh/{status,pending}, /api/intelligence/{niches,campaign-signals}, /api/opportunities/{crack,acquisition}, /api/campaigns/{id}/{tuning,fill-rate} ×N`.
+- If an endpoint returned 4xx/5xx, an empty body, or was skipped intentionally, name it explicitly. Do not paper over a missing fetch with prior knowledge.
+- **Parse what you fetch.** When you fetch `/insights` or `/tuning`, surface at least one segment-level aggregate (`byCharacter` row, `byGrade` row, `byPriceTier` row, or `(campaign, grade) avgBuyPctOfCL`) before drafting the opener. Listing the response keys is not analysis.
+- Re-fetch after any mutation, and after >5 minutes within a session.
+
+Failure modes to avoid:
+
+- Fabricating per-campaign stats from a stale strategy-doc table when a live API endpoint exists.
+- Echoing `/api/portfolio/suggestions` entries verbatim without cross-referencing `/tuning` byGrade for sized impact.
+- Listing `keys` of a JSON response and treating that printout as analysis.
+- Citing an endpoint's data when you didn't actually call it this session.
+
 ## Recommendation rules
 
 These rules are referenced by every playbook that emits a recommendation. Keeping them here avoids drift between playbooks.
@@ -326,6 +368,14 @@ Every parameter-change, new-campaign, or material tuning recommendation carries 
 - **HTTP 422 with `{error: "insufficient_data", minRequired: 10, available: N}`** — the campaign has fewer than 10 completed sales, so projections aren't meaningful. This is the semantic "not enough data" signal. Do NOT emit a sized recommendation; instead say plainly: *"Projections unavailable: N/10 completed sales on Wildcard — run more before projections are meaningful. Falling back to tuning-endpoint grade-level review."* Then use `/api/campaigns/{id}/tuning` for whatever grade-level signal exists.
 - `confidence: null` on every scenario — the field is often null on 200 responses. Treat as unmapped and fall back to the tuning endpoint's obs-count bands (per the Confidence bands rule).
 - All-zero scenarios (every scenario has `medianROI: 0`, `medianProfitCents: 0`, `medianVolume: 0`) — Monte Carlo didn't converge even though the sample cleared the 422 threshold. Do NOT emit a sized recommendation; instead surface a Low-confidence hold-adjacent note: "projections couldn't converge on Wildcard (thin sample) — recommend manual grade-level review via `/api/campaigns/{id}/tuning` before parameter changes." This is a distinct failure mode from the hold verdict rule — the rule fires on weak signal; this fires on unusable signal.
+
+### Stale-suggestion filter
+
+`/api/portfolio/suggestions` recommendations are computed against currently-stored campaign params. Before surfacing any suggestion in the opener or Playbook A, check `campaigns[i].updatedAt` from `/api/campaigns`. If the targeted campaign was updated within the last 72 hours AND the suggestion targets a changed field (buy terms, daily cap, grade range, CL confidence, inclusion list), the suggestion is stale — drop it from the top-3.
+
+State the filter outcome once per response: *"Filtered N stale server suggestions (campaigns updated within last 72h)."* If nothing was filtered, the line is *"No stale suggestions filtered."* — silence makes it impossible to tell whether the filter ran.
+
+This rule exists because the highest-leverage tuning changes (drop terms, raise CL confidence) are the exact ones the operator most often makes manually between sessions, so the server's pre-computed adjustments are most likely to be stale precisely when they sound most authoritative.
 
 ### Confidence bands
 
