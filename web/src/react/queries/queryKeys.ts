@@ -48,15 +48,6 @@ export const queryKeys = {
     dhUnmatched: ['admin', 'dhUnmatched'] as const,
     psaSyncStatus: ['admin', 'psaSyncStatus'] as const,
   },
-  social: {
-    all: ['social'] as const,
-    list: () => ['social', 'list'] as const,
-    detail: (id: string) => ['social', id] as const,
-  },
-  instagram: {
-    all: ['instagram'] as const,
-    status: () => ['instagram', 'status'] as const,
-  },
   purchases: {
     psaPendingItems: ['purchases', 'psaPendingItems'] as const,
   },

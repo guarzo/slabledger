@@ -270,21 +270,3 @@ type OrdersResponse struct {
 	Orders []Order        `json:"orders"`
 	Meta   PaginationMeta `json:"meta"`
 }
-
-// DHInstagramGenerateRequest is the request body for POST /api/v1/enterprise/instagram/generate.
-type DHInstagramGenerateRequest struct {
-	Scope    string `json:"scope"`
-	Strategy string `json:"strategy"`
-	Headline string `json:"headline,omitempty"`
-}
-
-// DHInstagramGenerateResponse is the response from POST /api/v1/enterprise/instagram/generate.
-type DHInstagramGenerateResponse struct {
-	PostID int64 `json:"post_id"`
-}
-
-// DHInstagramStatusResponse is the response from GET /api/v1/enterprise/instagram/posts/:id/status.
-type DHInstagramStatusResponse struct {
-	RenderStatus   string   `json:"render_status"`    // "generating" | "ready" | "failed"
-	SlideImageURLs []string `json:"slide_image_urls"` // non-nil when render_status == "ready"
-}

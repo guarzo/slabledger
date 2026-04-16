@@ -67,7 +67,6 @@ internal/
     mathutil/               # CalculateTrend, CalculatePercentChange, etc.
     ai/                     # LLMProvider, ImageGenerator, ToolExecutor interfaces
     advisor/                # AI advisor service and tool loop
-    social/                 # Social content generation domain
     picks/                  # Acquisition watchlist (AI-driven picks)
 
   adapters/                 # Interface implementations
@@ -82,9 +81,8 @@ internal/
       google/               # Google OAuth service
       httpx/                # Unified HTTP client with retry + circuit breaker
       azureai/              # Azure AI completions and image generation
-      instagram/            # Instagram OAuth + carousel publishing
     storage/sqlite/         # SQLite repository implementations + migrations
-    scheduler/              # Background jobs (price refresh, session cleanup, advisor, social)
+    scheduler/              # Background jobs (price refresh, session cleanup, advisor)
 
   platform/                 # Cross-cutting concerns
     cache/                  # Type-safe cache (memory + file)
@@ -260,9 +258,6 @@ To support multi-tenant usage, the following changes would be required:
 | `pricing` | `HealthChecker` | `repository.go` | 1 | Provider health |
 | `auth` | `Service` | `service.go` | 14 | OAuth flow, session management, allowlist |
 | `auth` | `Repository` | `repository.go` | ~14 | Auth persistence |
-| `social` | `Service` | `service.go` | 8 | Social post generation and publishing |
-| `social` | `Publisher` | `service.go` | 1 | Instagram carousel publish |
-| `social` | `Repository` | `repository.go` | ~8 | Social post persistence |
 | `advisor` | `Service` | `service.go` | 6 | AI advisor analysis (streaming) |
 | `advisor` | `CacheStore` | `cache.go` | 5 | Advisor result persistence |
 | `ai` | `LLMProvider` | `llm.go` | 1 | LLM completion (Azure AI) |

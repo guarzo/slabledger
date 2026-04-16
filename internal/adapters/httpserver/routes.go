@@ -233,43 +233,6 @@ func (rt *Router) registerAdvisorRoutes(mux *http.ServeMux) {
 	rt.logger.Info(context.Background(), "AI advisor routes registered")
 }
 
-// registerSocialRoutes wires social content, media serving, and Instagram integration endpoints.
-func (rt *Router) registerSocialRoutes(mux *http.ServeMux) {
-	if rt.socialHandler != nil && rt.authMW != nil {
-		mux.Handle("GET /api/social/posts", rt.authMW.RequireAdmin(http.HandlerFunc(rt.socialHandler.HandleListPosts)))
-		mux.Handle("GET /api/social/posts/{id}", rt.authMW.RequireAdmin(http.HandlerFunc(rt.socialHandler.HandleGetPost)))
-		mux.Handle("POST /api/social/posts/generate", rt.authMW.RequireAdmin(http.HandlerFunc(rt.socialHandler.HandleGenerate)))
-		mux.Handle("PATCH /api/social/posts/{id}/caption", rt.authMW.RequireAdmin(http.HandlerFunc(rt.socialHandler.HandleUpdateCaption)))
-		mux.Handle("DELETE /api/social/posts/{id}", rt.authMW.RequireAdmin(http.HandlerFunc(rt.socialHandler.HandleDelete)))
-		mux.Handle("POST /api/social/posts/{id}/regenerate-caption", rt.authMW.RequireAdmin(http.HandlerFunc(rt.socialHandler.HandleRegenerateCaption)))
-		mux.Handle("POST /api/social/posts/{id}/upload-slides", rt.authMW.RequireAdmin(http.HandlerFunc(rt.socialHandler.HandleUploadSlides)))
-		mux.Handle("GET /api/social/posts/{id}/metrics", rt.authMW.RequireAdmin(http.HandlerFunc(rt.socialHandler.HandleGetMetrics)))
-		mux.Handle("GET /api/social/metrics/summary", rt.authMW.RequireAdmin(http.HandlerFunc(rt.socialHandler.HandleGetMetricsSummary)))
-		mux.Handle("/content", rt.authMW.RequireAdmin(http.HandlerFunc(rt.spaHandler.HandleIndex)))
-		rt.logger.Info(context.Background(), "social content routes registered")
-	}
-
-	// Media serving route — unauthenticated (Instagram API needs public access)
-	if rt.socialHandler != nil {
-		mux.HandleFunc("GET /api/media/social/{postId}/{filename}", rt.socialHandler.HandleServeMedia)
-	}
-
-	// Image proxy — requires admin (only used by social content publish UI)
-	if rt.socialHandler != nil && rt.authMW != nil {
-		mux.Handle("GET /api/image-proxy", rt.authMW.RequireAdmin(http.HandlerFunc(rt.socialHandler.HandleImageProxy)))
-	}
-
-	// Instagram integration routes — require admin
-	if rt.instagramHandler != nil && rt.authMW != nil {
-		mux.Handle("GET /api/instagram/status", rt.authMW.RequireAdmin(http.HandlerFunc(rt.instagramHandler.HandleStatus)))
-		mux.Handle("POST /api/instagram/connect", rt.authMW.RequireAdmin(http.HandlerFunc(rt.instagramHandler.HandleConnect)))
-		mux.HandleFunc("/auth/instagram/callback", rt.instagramHandler.HandleCallback) // public — OAuth redirect
-		mux.Handle("POST /api/instagram/disconnect", rt.authMW.RequireAdmin(http.HandlerFunc(rt.instagramHandler.HandleDisconnect)))
-		mux.Handle("POST /api/social/posts/{id}/publish", rt.authMW.RequireAdmin(http.HandlerFunc(rt.instagramHandler.HandlePublish)))
-		rt.logger.Info(context.Background(), "instagram integration routes registered")
-	}
-}
-
 // registerPricingAPIRoutes wires the public pricing API endpoints (bearer token auth).
 func (rt *Router) registerPricingAPIRoutes(mux *http.ServeMux) {
 	if rt.pricingAPIHandler == nil {

@@ -15,12 +15,8 @@ This document describes how SlabLedger integrates large language models — what
 | `AZURE_AI_ENDPOINT` | `""` | Azure AI Foundry or Azure OpenAI endpoint |
 | `AZURE_AI_API_KEY` | `""` | API key |
 | `AZURE_AI_DEPLOYMENT` | `"gpt-5.4"` | Default model deployment (advisor, picks) |
-| `SOCIAL_AI_DEPLOYMENT` | same as above | Optional separate model for social content |
-| `IMAGE_AI_DEPLOYMENT` | `""` | Image generation model (e.g. `dall-e-3`) |
-| `IMAGE_AI_QUALITY` | `"medium"` | Image quality: `low`, `medium`, `high` |
-| `IMAGE_AI_ENABLED` | `false` | Gate for background image generation |
 
-If `AZURE_AI_ENDPOINT` or `AZURE_AI_API_KEY` is empty, the advisor, picks, and social LLM features all degrade gracefully to no-ops or rule-based fallbacks.
+If `AZURE_AI_ENDPOINT` or `AZURE_AI_API_KEY` is empty, the advisor and picks LLM features degrade gracefully to no-ops or rule-based fallbacks.
 
 ### API versions
 
@@ -156,52 +152,18 @@ The pipeline is idempotent: if picks already exist for today, it skips the run. 
 
 ---
 
-### 3. Social content
-
-**Package:** `internal/domain/social/`  
-**Scheduler:** `internal/adapters/scheduler/social_content.go` — daily at `SOCIAL_CONTENT_HOUR` (default 05:00 UTC)
-
-Social content generation is **gated by `SOCIAL_CONTENT_ENABLED`** (default `false`).
-
-Two modes operate depending on whether an LLM provider is configured:
-
-| Mode | When | Behaviour |
-|---|---|---|
-| LLM-powered | `llm != nil` | LLM suggests post groupings from up to 100 unsold cards, then generates captions per post |
-| Rule-based fallback | `llm == nil` | Detects new arrivals (≤7 days old), price movers (≥15% 30-day change), hot deals (<70% median CL) |
-
-#### LLM calls
-
-| Call | Max tokens | Operation tracked |
-|---|---|---|
-| Post grouping suggestions | 2 048 | `social_suggestion` |
-| Caption per post | 512 | `social_caption` |
-
-Caption output is parsed as JSON `{title, caption, hashtags}` with a text-split fallback.
-
-#### Image generation
-
-When `IMAGE_AI_ENABLED=true`, `ImageGenerator.GenerateImage()` is called to produce:
-- A cover image (`1024×1024`) for the post
-- One background image per card slide
-
-Images are stored at `social/{postID}/bg-cover.png`, `bg-1.png`, etc. The theme keyword is derived from the Pokémon name.
-
----
-
 ## Scheduler summary
 
 | Scheduler | Default trigger | Timeout | Retries |
 |---|---|---|---|
 | Advisor refresh | Daily at 04:00 UTC | 20 min per analysis | 2× with 5-min backoff |
-| Social content | Daily at 05:00 UTC | 5 min | — |
 | Picks refresh | Daily at 03:00 UTC | — | — (idempotent) |
 
 ---
 
 ## AI call tracking
 
-All LLM calls are recorded via `ai.AICallTracker` (implemented by `sqlite.AICallRepository`). Tracked operations: `digest`, `campaign_analysis`, `liquidation`, `purchase_assessment`, `social_caption`, `social_suggestion`.
+All LLM calls are recorded via `ai.AICallTracker` (implemented by `sqlite.AICallRepository`). Tracked operations: `digest`, `campaign_analysis`, `liquidation`, `purchase_assessment`.
 
 Usage stats are exposed via the `/api/ai/usage` endpoint.
 
@@ -215,10 +177,5 @@ Usage stats are exposed via the `/api/ai/usage` endpoint.
 AZURE_AI_ENDPOINT + AZURE_AI_KEY
     └─ azureai.NewClient (deployment = AZURE_AI_DEPLOYMENT)
          ├─ advisor.NewService(llmProvider, CampaignToolExecutor)
-         ├─ picks.NewService(picksRepo, llmProvider, ...)
-         └─ social.NewService(repo, WithLLM(llmProvider))  [may use SOCIAL_AI_DEPLOYMENT]
-
-IMAGE_AI_ENABLED + IMAGE_AI_DEPLOYMENT
-    └─ azureai.NewImageClient (deployment = IMAGE_AI_DEPLOYMENT)
-         └─ social.NewService(repo, WithImageGenerator(imgClient))
+         └─ picks.NewService(picksRepo, llmProvider, ...)
 ```

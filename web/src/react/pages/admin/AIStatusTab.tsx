@@ -15,8 +15,6 @@ const operationLabels: Record<string, string> = {
   campaign_analysis: 'Campaign Analysis',
   liquidation: 'Liquidation Analysis',
   purchase_assessment: 'Purchase Assessment',
-  social_caption: 'Social Captions',
-  social_suggestion: 'Social Post Suggestions',
 };
 
 function OperationRow({ op }: { op: AIOperationSummary }) {
@@ -133,7 +131,7 @@ export function AIStatusTab({ enabled = true }: { enabled?: boolean }) {
       {summary.totalCalls === 0 && (
         <div className="text-center py-8 text-[var(--text-muted)]">
           <p className="text-sm">No AI calls recorded yet.</p>
-          <p className="text-xs mt-1">AI usage metrics will appear here once the advisor or social caption generation runs.</p>
+          <p className="text-xs mt-1">AI usage metrics will appear here once the advisor runs.</p>
         </div>
       )}
 

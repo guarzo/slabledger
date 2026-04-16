@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -16,7 +15,6 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/clients/httpx"
 	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
 	"github.com/guarzo/slabledger/internal/platform/resilience"
-	"github.com/stretchr/testify/require"
 )
 
 func newTestClient(serverURL string) *Client {
@@ -459,132 +457,5 @@ func TestSearchCards_ValidatesResultNames(t *testing.T) {
 	var appErr *apperrors.AppError
 	if !errors.As(err, &appErr) || appErr.Code != apperrors.ErrCodeProviderInvalidResp {
 		t.Errorf("expected ProviderInvalidResponse for empty name, got: %v", err)
-	}
-}
-
-func TestClient_GenerateInstagramPost(t *testing.T) {
-	tests := []struct {
-		name       string
-		scope      string
-		strategy   string
-		headline   string
-		serverResp string
-		statusCode int
-		wantPostID int64
-		wantErr    bool
-	}{
-		{
-			name:       "success",
-			scope:      "own_inventory",
-			strategy:   "inventory_top_expensive",
-			headline:   "",
-			serverResp: `{"post_id": 42}`,
-			statusCode: http.StatusOK,
-			wantPostID: 42,
-		},
-		{
-			name:       "server error",
-			scope:      "own_inventory",
-			strategy:   "inventory_top_expensive",
-			serverResp: `{"error":"internal"}`,
-			statusCode: http.StatusInternalServerError,
-			wantErr:    true,
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				require.Equal(t, http.MethodPost, r.Method)
-				require.Equal(t, "/api/v1/enterprise/instagram/generate", r.URL.Path)
-				require.Equal(t, "Bearer test_api_key", r.Header.Get("Authorization"))
-
-				var req DHInstagramGenerateRequest
-				require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
-				require.Equal(t, tc.scope, req.Scope)
-				require.Equal(t, tc.strategy, req.Strategy)
-
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(tc.statusCode)
-				_, _ = w.Write([]byte(tc.serverResp))
-			}))
-			defer server.Close()
-
-			c := newTestClient(server.URL)
-			postID, err := c.GenerateInstagramPost(context.Background(), tc.scope, tc.strategy, tc.headline)
-			if tc.wantErr {
-				require.Error(t, err)
-				return
-			}
-			require.NoError(t, err)
-			require.Equal(t, tc.wantPostID, postID)
-		})
-	}
-}
-
-func TestClient_PollInstagramPostStatus(t *testing.T) {
-	tests := []struct {
-		name           string
-		postID         int64
-		serverResp     string
-		statusCode     int
-		wantStatus     string
-		wantSlideCount int
-		wantErr        bool
-	}{
-		{
-			name:       "generating",
-			postID:     42,
-			serverResp: `{"render_status":"generating","slide_image_urls":null}`,
-			statusCode: http.StatusOK,
-			wantStatus: "generating",
-		},
-		{
-			name:           "ready with slides",
-			postID:         42,
-			serverResp:     `{"render_status":"ready","slide_image_urls":["https://cdn.example.com/1.jpg","https://cdn.example.com/2.jpg"]}`,
-			statusCode:     http.StatusOK,
-			wantStatus:     "ready",
-			wantSlideCount: 2,
-		},
-		{
-			name:       "failed",
-			postID:     42,
-			serverResp: `{"render_status":"failed","slide_image_urls":null}`,
-			statusCode: http.StatusOK,
-			wantStatus: "failed",
-		},
-		{
-			name:       "server error",
-			postID:     42,
-			serverResp: `{"error":"not found"}`,
-			statusCode: http.StatusNotFound,
-			wantErr:    true,
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				require.Equal(t, http.MethodGet, r.Method)
-				require.Equal(t, fmt.Sprintf("/api/v1/enterprise/instagram/posts/%d/status", tc.postID), r.URL.Path)
-				require.Equal(t, "Bearer test_api_key", r.Header.Get("Authorization"))
-
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(tc.statusCode)
-				_, _ = w.Write([]byte(tc.serverResp))
-			}))
-			defer server.Close()
-
-			c := newTestClient(server.URL)
-			resp, err := c.PollInstagramPostStatus(context.Background(), tc.postID)
-			if tc.wantErr {
-				require.Error(t, err)
-				return
-			}
-			require.NoError(t, err)
-			require.Equal(t, tc.wantStatus, resp.RenderStatus)
-			require.Len(t, resp.SlideImageURLs, tc.wantSlideCount)
-		})
 	}
 }

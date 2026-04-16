@@ -1,14 +1,13 @@
 package main
 
 // init_services.go initializes optional external services: price providers, AI-powered services
-// (advisor, social, image generation), metrics polling, and third-party integrations
-// (Card Ladder, Market Movers). Core inventory/campaign services are initialized in
-// init_inventory_services.go. Scheduler initialization is in init_schedulers.go.
+// (advisor), and third-party integrations (Card Ladder, Market Movers). Core inventory/campaign
+// services are initialized in init_inventory_services.go. Scheduler initialization is in
+// init_schedulers.go.
 
 import (
 	"context"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/advisortool"
@@ -16,17 +15,13 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	"github.com/guarzo/slabledger/internal/adapters/clients/dhprice"
-	igclient "github.com/guarzo/slabledger/internal/adapters/clients/instagram"
 	"github.com/guarzo/slabledger/internal/adapters/clients/marketmovers"
-	"github.com/guarzo/slabledger/internal/adapters/scheduler"
 	scoringadapter "github.com/guarzo/slabledger/internal/adapters/scoring"
-	"github.com/guarzo/slabledger/internal/adapters/storage/mediafs"
 	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
 	"github.com/guarzo/slabledger/internal/domain/advisor"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/domain/pricing"
-	"github.com/guarzo/slabledger/internal/domain/social"
 	"github.com/guarzo/slabledger/internal/platform/config"
 	"github.com/guarzo/slabledger/internal/platform/crypto"
 )
@@ -97,146 +92,6 @@ func initializeAdvisorService(
 		observability.String("deployment", cfg.Adapters.AzureAIDeployment))
 
 	return llmProvider, advisorSvc, advisorCacheRepo, nil
-}
-
-// initializeSocialService creates the social content service, including
-// optional Instagram integration when configured.
-type socialServiceResult struct {
-	service             social.Service
-	repo                *sqlite.SocialRepository
-	igClient            *igclient.Client
-	igStore             *sqlite.InstagramStore
-	igTokenRefresher    scheduler.InstagramTokenRefresher
-	publisherConfigured bool
-}
-
-func initializeSocialService(
-	ctx context.Context,
-	cfg *config.Config,
-	logger observability.Logger,
-	db *sqlite.DB,
-	azureAIClient advisor.LLMProvider,
-	aiCallRepo *sqlite.AICallRepository,
-) socialServiceResult {
-	socialRepo := sqlite.NewSocialRepository(db.DB)
-	socialOpts := []social.ServiceOption{
-		social.WithLogger(logger),
-		social.WithAITracker(aiCallRepo),
-	}
-
-	// Use a separate model for social content if SOCIAL_AI_DEPLOYMENT is configured.
-	socialLLM := azureAIClient
-	if cfg.Adapters.SocialAIDeployment != "" && cfg.Adapters.SocialAIDeployment != cfg.Adapters.AzureAIDeployment {
-		socialClient, socialErr := azureai.NewClient(azureai.Config{
-			Endpoint:       cfg.Adapters.AzureAIEndpoint,
-			APIKey:         cfg.Adapters.AzureAIKey,
-			DeploymentName: cfg.Adapters.SocialAIDeployment,
-		}, azureai.WithLogger(logger), azureai.WithCompletionTimeout(cfg.Adapters.AzureAICompletionTimeout))
-		if socialErr != nil {
-			logger.Warn(ctx, "social AI client init failed, falling back to advisor model",
-				observability.Err(socialErr))
-		} else {
-			socialLLM = socialClient
-			logger.Info(ctx, "social content using separate model",
-				observability.String("deployment", cfg.Adapters.SocialAIDeployment))
-		}
-	}
-	if socialLLM != nil {
-		socialOpts = append(socialOpts, social.WithLLM(socialLLM))
-	}
-
-	// Initialize image generation if enabled
-	initImageGeneration(ctx, cfg, logger, &socialOpts)
-
-	// Initialize Instagram integration (requires encryption + Instagram config)
-	igConfig := config.LoadInstagramOAuthConfig()
-	var igClient *igclient.Client
-	var igStore *sqlite.InstagramStore
-	var igTokenRefresher scheduler.InstagramTokenRefresher
-	var publisherConfigured bool
-
-	if igConfig.IsConfigured() && cfg.Auth.EncryptionKey != "" {
-		igEncryptor, igErr := crypto.NewAESEncryptor(cfg.Auth.EncryptionKey)
-		if igErr != nil {
-			logger.Error(ctx, "Instagram encryption init failed — Instagram integration disabled",
-				observability.Err(igErr))
-		} else {
-			igClient = igclient.NewClient(igConfig.AppID, igConfig.AppSecret, igConfig.RedirectURI, logger)
-			igStore = sqlite.NewInstagramStore(db.DB, igEncryptor)
-
-			publisher := igclient.NewPublisherAdapter(igClient)
-			tokenProvider := igclient.NewTokenProvider(igStore)
-			socialOpts = append(socialOpts, social.WithPublisher(publisher, tokenProvider))
-			publisherConfigured = true
-
-			igTokenRefresher = igclient.NewTokenRefresher(igClient, igStore, logger)
-			logger.Info(ctx, "Instagram integration initialized")
-		}
-	}
-
-	socialService := social.NewService(socialRepo, socialOpts...)
-
-	return socialServiceResult{
-		service:             socialService,
-		repo:                socialRepo,
-		igClient:            igClient,
-		igStore:             igStore,
-		igTokenRefresher:    igTokenRefresher,
-		publisherConfigured: publisherConfigured,
-	}
-}
-
-// initImageGeneration configures image generation if enabled and all prerequisites are met.
-func initImageGeneration(ctx context.Context, cfg *config.Config, logger observability.Logger, socialOpts *[]social.ServiceOption) {
-	if !cfg.Adapters.ImageAIEnabled || cfg.Adapters.ImageAIDeployment == "" ||
-		cfg.Adapters.AzureAIEndpoint == "" || cfg.Adapters.AzureAIKey == "" {
-		return
-	}
-
-	imgClient, imgErr := azureai.NewImageClient(azureai.Config{
-		Endpoint:       cfg.Adapters.AzureAIEndpoint,
-		APIKey:         cfg.Adapters.AzureAIKey,
-		DeploymentName: cfg.Adapters.ImageAIDeployment,
-	}, azureai.WithImageLogger(logger))
-	if imgErr != nil {
-		logger.Warn(ctx, "image generation client init failed", observability.Err(imgErr))
-		return
-	}
-
-	mediaDir := os.Getenv("MEDIA_DIR")
-	if mediaDir == "" {
-		mediaDir = "./data/media"
-	}
-
-	baseURL := os.Getenv("BASE_URL")
-	if baseURL == "" {
-		logger.Warn(ctx, "BASE_URL not set; AI background generation disabled (cannot construct public URLs)")
-		return
-	}
-
-	*socialOpts = append(*socialOpts, social.WithImageGenerator(imgClient, cfg.Adapters.ImageAIQuality, mediaDir, baseURL))
-	*socialOpts = append(*socialOpts, social.WithMediaStore(mediafs.NewStore(mediaDir)))
-	logger.Info(ctx, "AI background generation enabled",
-		observability.String("deployment", cfg.Adapters.ImageAIDeployment),
-		observability.String("quality", cfg.Adapters.ImageAIQuality))
-}
-
-// initializeMetricsPoller creates the metrics repository and, when an Instagram
-// client and token store are available, the insights poller adapter.
-func initializeMetricsPoller(
-	ctx context.Context,
-	db *sqlite.DB,
-	igClient *igclient.Client,
-	igStore *sqlite.InstagramStore,
-	logger observability.Logger,
-) (*sqlite.MetricsRepository, social.InsightsPoller) {
-	metricsRepo := sqlite.NewMetricsRepository(db.DB)
-	var poller social.InsightsPoller
-	if igClient != nil && igStore != nil {
-		poller = igclient.NewInsightsPollerAdapter(igClient, igStore)
-		logger.Info(ctx, "Instagram insights poller initialized")
-	}
-	return metricsRepo, poller
 }
 
 // initializeCardLadder creates the Card Ladder client, auth, and store.
