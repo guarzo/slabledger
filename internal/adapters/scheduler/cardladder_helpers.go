@@ -2,7 +2,6 @@ package scheduler
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
@@ -28,11 +27,20 @@ const (
 // pipeline lacks sales data on (niche sets, lower grades, new releases); the
 // catalog is CL's market-wide view and often has a usable value.
 //
-// Returns 0 if the catalog also has no usable value or if the API call fails.
-// Requires gemRateID and a PSA grade on the purchase — returns 0 otherwise.
-func (s *CardLadderRefreshScheduler) fetchCatalogFallbackValue(ctx context.Context, client *cardladder.Client, purchase *inventory.Purchase) int {
-	if purchase.GemRateID == "" || purchase.GradeValue <= 0 {
-		return 0
+// Callers pass the canonical gemRateID and condition resolved earlier in the
+// refresh loop (from Firestore, the CL card record, or existing mapping) so
+// this function doesn't drift from the values already persisted for mapping.
+//
+// Returns (cents, nil) on success — cents may be 0 when the catalog has no
+// usable value. Returns (0, err) if the API call itself fails, so callers can
+// distinguish a genuine "no catalog data" miss from transient provider errors
+// and tag the purchase accordingly (no_value vs api_error).
+//
+// gemRateID empty or resolvedCondition empty → returns (0, nil) without
+// hitting the API.
+func (s *CardLadderRefreshScheduler) fetchCatalogFallbackValue(ctx context.Context, client *cardladder.Client, purchase *inventory.Purchase, resolvedGemRateID, resolvedCondition string) (int, error) {
+	if resolvedGemRateID == "" || resolvedCondition == "" {
+		return 0, nil
 	}
 
 	grader := purchase.Grader
@@ -40,8 +48,8 @@ func (s *CardLadderRefreshScheduler) fetchCatalogFallbackValue(ctx context.Conte
 		grader = "PSA"
 	}
 	filters := map[string]string{
-		"gemRateId":      purchase.GemRateID,
-		"condition":      fmt.Sprintf("%s %s", grader, mathutil.FormatGrade(purchase.GradeValue)),
+		"gemRateId":      resolvedGemRateID,
+		"condition":      resolvedCondition,
 		"gradingCompany": strings.ToLower(grader),
 	}
 
@@ -49,12 +57,12 @@ func (s *CardLadderRefreshScheduler) fetchCatalogFallbackValue(ctx context.Conte
 	if err != nil {
 		s.logger.Warn(ctx, "CL refresh: catalog fallback fetch failed",
 			observability.String("cert", purchase.CertNumber),
-			observability.String("gemRateId", purchase.GemRateID),
+			observability.String("gemRateId", resolvedGemRateID),
 			observability.Err(err))
-		return 0
+		return 0, err
 	}
 	if len(resp.Hits) == 0 {
-		return 0
+		return 0, nil
 	}
 
 	hit := resp.Hits[0]
@@ -64,9 +72,9 @@ func (s *CardLadderRefreshScheduler) fetchCatalogFallbackValue(ctx context.Conte
 		value = hit.MarketValue
 	}
 	if value <= 0 {
-		return 0
+		return 0, nil
 	}
-	return mathutil.ToCentsInt(value)
+	return mathutil.ToCentsInt(value), nil
 }
 
 // recordCLError persists a failure reason (or clears it when reason=="") on a

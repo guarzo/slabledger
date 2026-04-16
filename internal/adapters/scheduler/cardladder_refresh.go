@@ -360,9 +360,18 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 		if newCLCents <= 0 {
 			// Collection index reports $0. Try the CL cards catalog (grade-specific,
 			// market-wide view) — often has a usable value when the user's specific
-			// collection entry is stuck at zero.
-			newCLCents = s.fetchCatalogFallbackValue(ctx, client, purchase)
-			if newCLCents <= 0 {
+			// collection entry is stuck at zero. Pass the canonical gemRateID and
+			// condition already resolved above so the catalog lookup matches what
+			// we just saved to the mapping.
+			fallbackCents, fbErr := s.fetchCatalogFallbackValue(ctx, client, purchase, gemRateID, condition)
+			if fbErr != nil {
+				// API failure — distinct from a genuine catalog miss. Tag the row
+				// so ops can see whether CL is misbehaving vs actually empty.
+				matchedPurchaseIDs[purchase.ID] = true
+				s.recordCLError(ctx, purchase.ID, CLReasonAPIError)
+				continue
+			}
+			if fallbackCents <= 0 {
 				// Catalog also has nothing. Persist so the admin UI can show
 				// "matched without a price" distinct from "unmapped". Mark as
 				// matched so the second pass doesn't overwrite the `no_value`
@@ -372,6 +381,7 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 				s.recordCLError(ctx, purchase.ID, CLReasonNoValue)
 				continue
 			}
+			newCLCents = fallbackCents
 			fellBack = true
 			catalogFallback++
 		}

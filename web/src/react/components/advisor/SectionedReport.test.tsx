@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import SectionedReport, { splitByH2 } from './SectionedReport';
+import SectionedReport from './SectionedReport';
+import { splitByH2 } from './splitByH2';
 
 describe('splitByH2', () => {
   it('splits markdown on H2 headings', () => {

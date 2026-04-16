@@ -71,7 +71,7 @@ describe('syncDotProps', () => {
       clSyncedAt: iso(2),
       hasDHPrice: false,
       dhLastSyncedAt: iso(2),
-      clReason: 'no_value',
+      clLastError: 'no_value',
     });
     expect(tooltip).toContain('CL · matched, no value');
   });
@@ -80,8 +80,17 @@ describe('syncDotProps', () => {
     vi.setSystemTime(NOW);
     const { tooltip } = syncDotProps({
       clSyncedAt: iso(2),
-      clReason: 'catalog_fallback',
+      clLastError: 'catalog_fallback',
     });
     expect(tooltip).toContain('CL · catalog fallback');
+  });
+
+  it('tooltip labels api_error distinctly', () => {
+    vi.setSystemTime(NOW);
+    const { tooltip } = syncDotProps({
+      clSyncedAt: iso(2),
+      clLastError: 'api_error',
+    });
+    expect(tooltip).toContain('CL · api error');
   });
 });

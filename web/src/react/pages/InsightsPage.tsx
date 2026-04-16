@@ -249,7 +249,9 @@ function ErrorBanner({ children }: { children: React.ReactNode }) {
 }
 
 function formatAge(updatedAt: string): string {
-  const ms = Date.now() - new Date(updatedAt).getTime();
+  const t = new Date(updatedAt).getTime();
+  if (!Number.isFinite(t)) return 'Updated unknown';
+  const ms = Math.max(0, Date.now() - t);
   const mins = Math.floor(ms / 60_000);
   if (mins < 1) return 'Updated just now';
   if (mins < 60) return `Updated ${mins}m ago`;

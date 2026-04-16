@@ -71,6 +71,7 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
     clHasValue: (item.purchase.clValueCents ?? 0) > 0,
     hasMMValue: (item.purchase.mmValueCents ?? 0) > 0,
     hasDHPrice: (snap?.gradePriceCents ?? 0) > 0 || (snap?.lastSoldCents ?? 0) > 0,
+    clLastError: item.purchase.clLastError,
   });
 
   return (

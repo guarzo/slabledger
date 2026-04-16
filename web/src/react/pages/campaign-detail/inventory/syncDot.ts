@@ -20,8 +20,8 @@ export interface SyncDotInput {
   clHasValue?: boolean;
   /** Does MM currently have a usable value on the row? */
   hasMMValue?: boolean;
-  /** Current CL error reason tag, if any (e.g. 'no_value', 'catalog_fallback'). */
-  clReason?: string;
+  /** Current CL error/status tag, if any (e.g. 'no_value', 'catalog_fallback'). */
+  clLastError?: string;
 }
 
 /** Returns color + tooltip for the per-row sync freshness dot.
@@ -32,7 +32,7 @@ export interface SyncDotInput {
  *  Grey   — nothing has ever synced.
  */
 export function syncDotProps(input: SyncDotInput): SyncDotProps {
-  const { clSyncedAt, mmValueUpdatedAt, dhLastSyncedAt, hasDHPrice, clHasValue, hasMMValue, clReason } = input;
+  const { clSyncedAt, mmValueUpdatedAt, dhLastSyncedAt, hasDHPrice, clHasValue, hasMMValue, clLastError } = input;
   const now = Date.now();
   const threshold = 24 * 60 * 60 * 1000;
 
@@ -66,7 +66,7 @@ export function syncDotProps(input: SyncDotInput): SyncDotProps {
   }
 
   const tooltip = [
-    clLine(clSyncedAt, clHasValue, clReason),
+    clLine(clSyncedAt, clHasValue, clLastError),
     sourceLine('MM', mmValueUpdatedAt, hasMMValue),
     sourceLine('DH', dhLastSyncedAt, hasDHPrice),
   ].join('\n');
@@ -74,11 +74,12 @@ export function syncDotProps(input: SyncDotInput): SyncDotProps {
   return { color, tooltip };
 }
 
-function clLine(ts: string | undefined, hasValue: boolean | undefined, reason: string | undefined): string {
+function clLine(ts: string | undefined, hasValue: boolean | undefined, lastError: string | undefined): string {
   if (!ts) return 'CL · never';
   const age = timeAgo(ts);
-  if (reason === 'no_value') return `CL · matched, no value · ${age}`;
-  if (reason === 'catalog_fallback') return `CL · catalog fallback · ${age}`;
+  if (lastError === 'no_value') return `CL · matched, no value · ${age}`;
+  if (lastError === 'catalog_fallback') return `CL · catalog fallback · ${age}`;
+  if (lastError === 'api_error') return `CL · api error · ${age}`;
   if (hasValue) return `CL · ✓ · ${age}`;
   return `CL · ${age}`;
 }
