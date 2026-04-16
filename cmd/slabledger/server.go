@@ -43,8 +43,6 @@ type ServerDependencies struct {
 	CampaignsRepo             handlers.CertPriceLookup         // For pricing API (cert price lookup)
 	PricingAPIKey             string                           // Bearer token; empty = pricing API disabled
 	AdvisorHandler            *handlers.AdvisorHandler         // AI advisor; nil = disabled
-	SocialHandler             *handlers.SocialHandler          // Social content; nil = disabled
-	InstagramHandler          *handlers.InstagramHandler       // Instagram publishing; nil = disabled
 	AIStatusHandler           *handlers.AIStatusHandler        // AI usage stats; nil = disabled
 	PriceFlagsHandler         *handlers.PriceFlagsHandler      // Price flag admin; nil = disabled
 	CardLadderHandler         *handlers.CardLadderHandler      // Card Ladder admin; nil = disabled
@@ -200,8 +198,6 @@ func startWebServer(ctx context.Context, deps ServerDependencies) error {
 		PricingAPIKey:             deps.PricingAPIKey,
 		CampaignsRepo:             deps.CampaignsRepo,
 		AdvisorHandler:            deps.AdvisorHandler,
-		SocialHandler:             deps.SocialHandler,
-		InstagramHandler:          deps.InstagramHandler,
 		AIStatusHandler:           deps.AIStatusHandler,
 		PriceFlagsHandler:         deps.PriceFlagsHandler,
 		CardLadderHandler:         deps.CardLadderHandler,

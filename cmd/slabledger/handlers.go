@@ -7,7 +7,6 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	dhlistingadapter "github.com/guarzo/slabledger/internal/adapters/clients/dhlisting"
 	"github.com/guarzo/slabledger/internal/adapters/clients/gsheets"
-	igclient "github.com/guarzo/slabledger/internal/adapters/clients/instagram"
 	"github.com/guarzo/slabledger/internal/adapters/clients/marketmovers"
 	"github.com/guarzo/slabledger/internal/adapters/httpserver/handlers"
 	"github.com/guarzo/slabledger/internal/adapters/scheduler"
@@ -24,7 +23,6 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/domain/portfolio"
 	"github.com/guarzo/slabledger/internal/domain/pricing"
-	"github.com/guarzo/slabledger/internal/domain/social"
 	"github.com/guarzo/slabledger/internal/domain/tuning"
 	"github.com/guarzo/slabledger/internal/platform/config"
 )
@@ -55,11 +53,6 @@ type handlerInputs struct {
 	AdvisorCacheRepo  *sqlite.AdvisorCacheRepository
 	AzureAIClient     advisor.LLMProvider
 	AICallRepo        *sqlite.AICallRepository
-	SocialService     social.Service
-	SocialRepo        *sqlite.SocialRepository
-	IGClient          *igclient.Client
-	IGStore           *sqlite.InstagramStore
-	MetricsRepo       *sqlite.MetricsRepository
 	CLClient          *cardladder.Client
 	CLStore           *sqlite.CardLadderStore
 	MMStore           *sqlite.MarketMoversStore
@@ -75,7 +68,6 @@ type handlerInputs struct {
 type handlerOutputs struct {
 	DHHandler      *handlers.DHHandler
 	AdvisorHandler *handlers.AdvisorHandler
-	SocialHandler  *handlers.SocialHandler
 }
 
 // createHandlers constructs all HTTP handlers, wires scheduler refresh
@@ -212,21 +204,6 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 		advisorHandler = handlers.NewAdvisorHandler(in.AdvisorService, in.CampaignsService, in.AdvisorCacheRepo, logger)
 	}
 
-	// Social handler
-	mediaDir := in.Cfg.Server.MediaDir
-	baseURL := in.Cfg.Server.BaseURL
-	if baseURL == "" {
-		logger.Warn(ctx, "BASE_URL is not set — slide URLs will be derived from request headers")
-	} else {
-		logger.Info(ctx, "BASE_URL configured",
-			observability.String("baseURL", baseURL))
-	}
-	socialHandler := handlers.NewSocialHandler(in.SocialService, in.SocialRepo, logger, mediaDir, baseURL,
-		handlers.WithBaseCtx(ctx))
-
-	// Wire metrics repository into social handler for API endpoints
-	socialHandler.WithMetricsRepo(in.MetricsRepo)
-
 	// AI status handler — only wire tracker when an LLM provider is configured
 	var aiTracker ai.AICallTracker
 	if in.AzureAIClient != nil {
@@ -236,12 +213,6 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 
 	// Price flags handler
 	priceFlagsHandler := handlers.NewPriceFlagsHandler(in.CampaignsService, logger)
-
-	// Instagram handler (if client + store were initialized)
-	var igHandler *handlers.InstagramHandler
-	if in.IGClient != nil && in.IGStore != nil && in.AuthService != nil {
-		igHandler = handlers.NewInstagramHandler(in.IGClient, in.IGStore, in.SocialService, in.AuthService, logger)
-	}
 
 	// Assemble ServerDependencies
 	deps := ServerDependencies{
@@ -260,8 +231,6 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 		CampaignsRepo:             in.PurchaseStore,
 		PricingAPIKey:             in.Cfg.Adapters.PricingAPIKey,
 		AdvisorHandler:            advisorHandler,
-		SocialHandler:             socialHandler,
-		InstagramHandler:          igHandler,
 		AIStatusHandler:           aiStatusHandler,
 		PriceFlagsHandler:         priceFlagsHandler,
 		CardLadderHandler:         clHandler,
@@ -316,7 +285,6 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 	out := handlerOutputs{
 		DHHandler:      dhHandler,
 		AdvisorHandler: advisorHandler,
-		SocialHandler:  socialHandler,
 	}
 	return deps, out
 }
