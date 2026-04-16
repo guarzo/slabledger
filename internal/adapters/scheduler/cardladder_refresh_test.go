@@ -107,6 +107,52 @@ func (m *mockCLGemRateUpdater) UpdatePurchaseCLCardMetadata(ctx context.Context,
 // Helper functions tests
 // ---------------------------------------------------------------------------
 
+func TestShouldReenrollForCLChange(t *testing.T) {
+	received := "2026-04-01"
+	cases := []struct {
+		name     string
+		purchase inventory.Purchase
+		want     bool
+	}{
+		{
+			name:     "already-pushed row always re-enrolls",
+			purchase: inventory.Purchase{ID: "p1", DHInventoryID: 42, ReceivedAt: &received, DHPushStatus: inventory.DHPushStatusMatched},
+			want:     true,
+		},
+		{
+			name:     "received unmatched row re-enrolls (NEW behavior)",
+			purchase: inventory.Purchase{ID: "p2", DHInventoryID: 0, ReceivedAt: &received, DHPushStatus: inventory.DHPushStatusUnmatched},
+			want:     true,
+		},
+		{
+			name:     "received empty-status row re-enrolls (NEW behavior)",
+			purchase: inventory.Purchase{ID: "p3", DHInventoryID: 0, ReceivedAt: &received, DHPushStatus: ""},
+			want:     true,
+		},
+		{
+			name:     "unreceived unmatched row does not re-enroll",
+			purchase: inventory.Purchase{ID: "p4", DHInventoryID: 0, ReceivedAt: nil, DHPushStatus: inventory.DHPushStatusUnmatched},
+			want:     false,
+		},
+		{
+			name:     "held unmatched row does not re-enroll",
+			purchase: inventory.Purchase{ID: "p5", DHInventoryID: 0, ReceivedAt: &received, DHPushStatus: inventory.DHPushStatusHeld},
+			want:     false,
+		},
+		{
+			name:     "dismissed received row does not re-enroll",
+			purchase: inventory.Purchase{ID: "p6", DHInventoryID: 0, ReceivedAt: &received, DHPushStatus: inventory.DHPushStatusDismissed},
+			want:     false,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := shouldReenrollForCLChange(&tc.purchase)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
 func TestExtractGradeValue(t *testing.T) {
 	tests := []struct {
 		name      string

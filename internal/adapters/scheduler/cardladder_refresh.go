@@ -341,8 +341,11 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 			continue
 		}
 
-		// Re-enroll already-pushed items for DH re-push when market value changes.
-		if s.dhPushUpdater != nil && purchase.DHInventoryID != 0 && newCLCents != oldCLCents {
+		// Re-enroll for DH push when market value changes. Two qualifying cases:
+		//  1. Already-pushed rows (DHInventoryID != 0) — so DH picks up the new price.
+		//  2. Received-but-unmatched rows — so a fresh cert resolve is attempted
+		//     with the new market value, which may push it above a price floor.
+		if s.dhPushUpdater != nil && newCLCents != oldCLCents && shouldReenrollForCLChange(purchase) {
 			if err := s.dhPushUpdater.UpdatePurchaseDHPushStatus(ctx, purchase.ID, inventory.DHPushStatusPending); err != nil {
 				s.logger.Warn(ctx, "CL refresh: failed to re-enroll for DH push",
 					observability.String("cert", purchase.CertNumber),
@@ -468,4 +471,20 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 	s.statsMu.Unlock()
 
 	return nil
+}
+
+// shouldReenrollForCLChange returns true when a CL value change should
+// trigger DH push-pipeline re-enrollment. Two qualifying cases:
+//  1. Already-pushed rows (DHInventoryID != 0) — re-enrolled so DH picks up
+//     the new price.
+//  2. Received-but-unmatched rows — re-enrolled so a fresh cert resolve is
+//     attempted with the new market value, which may push it above a floor.
+func shouldReenrollForCLChange(p *inventory.Purchase) bool {
+	if p.DHInventoryID != 0 {
+		return true
+	}
+	if p.ReceivedAt != nil && (p.DHPushStatus == inventory.DHPushStatusUnmatched || p.DHPushStatus == "") {
+		return true
+	}
+	return false
 }
