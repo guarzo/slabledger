@@ -5,11 +5,13 @@ import (
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
+	dhlistingadapter "github.com/guarzo/slabledger/internal/adapters/clients/dhlisting"
 	"github.com/guarzo/slabledger/internal/adapters/clients/marketmovers"
 	"github.com/guarzo/slabledger/internal/adapters/scheduler"
 	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
 	"github.com/guarzo/slabledger/internal/domain/advisor"
 	"github.com/guarzo/slabledger/internal/domain/auth"
+	"github.com/guarzo/slabledger/internal/domain/dhlisting"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/domain/pricing"
@@ -128,6 +130,22 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 	}
 	if deps.PurchaseStore != nil {
 		buildDeps.DHUnsoldCardLister = deps.PurchaseStore
+	}
+	// Construct DH reconciler once; shared with scheduler (handlers.go builds
+	// its own instance for the admin endpoint — that's intentional and fine
+	// since the reconciler is stateless).
+	if deps.DHClient != nil && deps.DHClient.EnterpriseAvailable() && deps.PurchaseStore != nil {
+		reconciler, err := dhlisting.NewReconciler(
+			dhlistingadapter.NewInventorySnapshotAdapter(deps.DHClient),
+			deps.PurchaseStore,
+			deps.PurchaseStore,
+			deps.Logger,
+		)
+		if err != nil {
+			deps.Logger.Warn(ctx, "DH reconciler init failed", observability.Err(err))
+		} else {
+			buildDeps.DHReconciler = reconciler
+		}
 	}
 	if deps.GapStore != nil {
 		buildDeps.GapStore = deps.GapStore
