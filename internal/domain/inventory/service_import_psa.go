@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/guarzo/slabledger/internal/domain/dhevents"
 	"github.com/guarzo/slabledger/internal/domain/mathutil"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
@@ -268,6 +269,13 @@ func (s *service) handleNewPSAPurchase(ctx context.Context, row PSAExportRow, gr
 				Status: "failed", Error: err.Error(),
 			}
 		}
+		s.recordEvent(ctx, dhevents.Event{
+			PurchaseID:    p.ID,
+			CertNumber:    p.CertNumber,
+			Type:          dhevents.TypeEnrolled,
+			NewPushStatus: DHPushStatusPending,
+			Source:        dhevents.SourcePSAImport,
+		})
 		return PSAImportItemResult{
 			CertNumber: row.CertNumber, CardName: meta.CardName, Grade: gradeValue,
 			Status: "allocated", CampaignID: campaign.ID, CampaignName: campaign.Name,

@@ -4,6 +4,7 @@ import (
 	"context"
 	"strconv"
 
+	"github.com/guarzo/slabledger/internal/domain/dhevents"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
@@ -78,6 +79,13 @@ func (s *service) batchResolveCardIDs(ctx context.Context, certs []string) {
 			}
 			continue
 		}
+		s.recordEvent(ctx, dhevents.Event{
+			PurchaseID: purchase.ID,
+			CertNumber: cert,
+			Type:       dhevents.TypeCardIDResolved,
+			DHCardID:   cardID,
+			Source:     dhevents.SourcePSAImport,
+		})
 		persisted++
 	}
 

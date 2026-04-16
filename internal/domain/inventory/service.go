@@ -5,6 +5,7 @@ import (
 	"errors"
 	"sync"
 
+	"github.com/guarzo/slabledger/internal/domain/dhevents"
 	"github.com/guarzo/slabledger/internal/domain/intelligence"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
@@ -194,6 +195,7 @@ type service struct {
 	certLookup         CertLookup
 	cardIDResolver     CardIDResolver
 	mmMappings         MMMappingProvider // optional — MM search title enrichment for export
+	eventRec           dhevents.Recorder // optional — DH state-transition event recorder
 	logger             observability.Logger
 	idGen              func() string // generates unique IDs; must be injected via WithIDGenerator
 	maxSnapshotRetries int           // max retry attempts for failed snapshots (0 = unlimited)
@@ -295,6 +297,28 @@ func WithPendingItemRepository(r PendingItemRepository) ServiceOption {
 // confirmed as sold locally, the corresponding DH inventory item is retired.
 func WithDHSoldNotifier(n DHSoldNotifier) ServiceOption {
 	return func(s *service) { s.dhSoldNotifier = n }
+}
+
+// WithEventRecorder enables dh_state_events recording for enrollment and
+// card-id-resolution transitions written by this service. Optional — nil
+// means no events are written.
+func WithEventRecorder(r dhevents.Recorder) ServiceOption {
+	return func(s *service) { s.eventRec = r }
+}
+
+// recordEvent is a nil-safe helper that writes a DH state event. Failures are
+// logged at Warn and never propagated to the caller.
+func (s *service) recordEvent(ctx context.Context, e dhevents.Event) {
+	if s.eventRec == nil {
+		return
+	}
+	if err := s.eventRec.Record(ctx, e); err != nil {
+		if s.logger != nil {
+			s.logger.Warn(ctx, "inventory: record dh event failed",
+				observability.String("type", string(e.Type)),
+				observability.Err(err))
+		}
+	}
 }
 
 func NewService(

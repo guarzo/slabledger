@@ -3,8 +3,34 @@ package inventory
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
+
+	"github.com/guarzo/slabledger/internal/domain/dhevents"
 )
+
+// stubEventRecorder captures events for assertions in tests. Thread-safe so
+// callers can pass it to batchResolveCardIDs (which runs on a background
+// goroutine in production but is called synchronously in tests).
+type stubEventRecorder struct {
+	mu     sync.Mutex
+	events []dhevents.Event
+}
+
+func (r *stubEventRecorder) Record(_ context.Context, e dhevents.Event) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.events = append(r.events, e)
+	return nil
+}
+
+func (r *stubEventRecorder) snapshot() []dhevents.Event {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]dhevents.Event, len(r.events))
+	copy(out, r.events)
+	return out
+}
 
 // stubCardIDResolver is a test-local mock for the inventory.CardIDResolver
 // interface. Lives in this file only — do not promote to testutil/mocks.
@@ -146,5 +172,52 @@ func TestBatchResolveCardIDs(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestBatchResolveCardIDs_RecordsEvents verifies that every successfully
+// persisted cert→card_id resolution emits a TypeCardIDResolved event with
+// the expected fields and SourcePSAImport source.
+func TestBatchResolveCardIDs_RecordsEvents(t *testing.T) {
+	repo := newMockRepo()
+	repo.purchases["p1"] = &Purchase{ID: "p1", CertNumber: "C1"}
+	repo.purchases["p2"] = &Purchase{ID: "p2", CertNumber: "C2"}
+
+	rec := &stubEventRecorder{}
+	svc := &service{
+		purchases: repo,
+		eventRec:  rec,
+		cardIDResolver: &stubCardIDResolver{
+			fn: func(_ context.Context, _ []string, _ string) (map[string]string, error) {
+				return map[string]string{"C1": "100", "C2": "200"}, nil
+			},
+		},
+	}
+
+	svc.batchResolveCardIDs(context.Background(), []string{"C1", "C2"})
+
+	events := rec.snapshot()
+	if len(events) != 2 {
+		t.Fatalf("events = %d, want 2", len(events))
+	}
+	byCert := make(map[string]dhevents.Event, len(events))
+	for _, e := range events {
+		byCert[e.CertNumber] = e
+	}
+	for cert, wantID := range map[string]int{"C1": 100, "C2": 200} {
+		got, ok := byCert[cert]
+		if !ok {
+			t.Errorf("no event for cert %q", cert)
+			continue
+		}
+		if got.Type != dhevents.TypeCardIDResolved {
+			t.Errorf("cert %q: type = %q, want %q", cert, got.Type, dhevents.TypeCardIDResolved)
+		}
+		if got.DHCardID != wantID {
+			t.Errorf("cert %q: DHCardID = %d, want %d", cert, got.DHCardID, wantID)
+		}
+		if got.Source != dhevents.SourcePSAImport {
+			t.Errorf("cert %q: source = %q, want %q", cert, got.Source, dhevents.SourcePSAImport)
+		}
 	}
 }

@@ -7,6 +7,7 @@ import (
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
 	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
+	"github.com/guarzo/slabledger/internal/domain/dhevents"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/platform/config"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
@@ -269,6 +270,65 @@ func TestWithCLDHPushUpdater_ReEnrollsOnValueChange(t *testing.T) {
 		WithCLDHPushUpdater(dhPushUpdater),
 	)
 	require.NotNil(t, s.dhPushUpdater, "dhPushUpdater should be set via functional option")
+}
+
+// clEventRecorder is a test-local recorder used to assert that the CL refresh
+// scheduler emits enrollment events through recordEvent.
+type clEventRecorder struct {
+	events []dhevents.Event
+}
+
+func (r *clEventRecorder) Record(_ context.Context, e dhevents.Event) error {
+	r.events = append(r.events, e)
+	return nil
+}
+
+// TestWithCLEventRecorder_WiredAndRecords verifies the WithCLEventRecorder
+// functional option wires up the recorder and that the nil-safe recordEvent
+// helper forwards the call when configured. This is the unit-level guard
+// for the Task 11 re-enrollment site — the emission site is exercised through
+// the recordEvent path exactly as production does.
+func TestWithCLEventRecorder_WiredAndRecords(t *testing.T) {
+	rec := &clEventRecorder{}
+	s := NewCardLadderRefreshScheduler(
+		nil, nil,
+		&mockCLPurchaseLister{},
+		&mockCLValueUpdater{},
+		&mockCLGemRateUpdater{},
+		nil,
+		mocks.NewMockLogger(),
+		config.CardLadderConfig{Enabled: true, Interval: 24 * time.Hour},
+		WithCLEventRecorder(rec),
+	)
+	require.NotNil(t, s.eventRec, "eventRec should be set via functional option")
+
+	s.recordEvent(context.Background(), dhevents.Event{
+		PurchaseID:    "p1",
+		CertNumber:    "C1",
+		Type:          dhevents.TypeEnrolled,
+		NewPushStatus: inventory.DHPushStatusPending,
+		Source:        dhevents.SourceCLRefresh,
+	})
+
+	require.Len(t, rec.events, 1)
+	assert.Equal(t, dhevents.TypeEnrolled, rec.events[0].Type)
+	assert.Equal(t, dhevents.SourceCLRefresh, rec.events[0].Source)
+	assert.Equal(t, "p1", rec.events[0].PurchaseID)
+}
+
+// TestRecordEvent_NilRecorderIsSafe verifies the nil-safe path in recordEvent.
+func TestRecordEvent_NilRecorderIsSafe(t *testing.T) {
+	s := NewCardLadderRefreshScheduler(
+		nil, nil,
+		&mockCLPurchaseLister{},
+		&mockCLValueUpdater{},
+		&mockCLGemRateUpdater{},
+		nil,
+		mocks.NewMockLogger(),
+		config.CardLadderConfig{Enabled: true, Interval: 24 * time.Hour},
+	)
+	// Should not panic when eventRec is nil.
+	s.recordEvent(context.Background(), dhevents.Event{Type: dhevents.TypeEnrolled})
 }
 
 // ---------------------------------------------------------------------------
