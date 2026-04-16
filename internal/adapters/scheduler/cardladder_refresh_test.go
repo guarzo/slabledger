@@ -515,3 +515,75 @@ func TestRefreshSalesComps_Dedup(t *testing.T) {
 		})
 	}
 }
+
+// TestCollectGemRateIDs verifies we merge gemRateIDs from firestore data and
+// existing mappings, ignoring blanks. Order-independent comparison.
+func TestCollectGemRateIDs(t *testing.T) {
+	tests := []struct {
+		name          string
+		firestoreData map[string]cardladder.FirestoreCardData
+		mappings      []sqlite.CLCardMapping
+		want          []string
+	}{
+		{
+			name: "merges and dedupes",
+			firestoreData: map[string]cardladder.FirestoreCardData{
+				"doc1": {GemRateID: "gem_a"},
+				"doc2": {GemRateID: "gem_b"},
+			},
+			mappings: []sqlite.CLCardMapping{
+				{CLGemRateID: "gem_b"}, // duplicate of firestore
+				{CLGemRateID: "gem_c"},
+			},
+			want: []string{"gem_a", "gem_b", "gem_c"},
+		},
+		{
+			name:          "drops blanks from both sources",
+			firestoreData: map[string]cardladder.FirestoreCardData{"doc1": {GemRateID: ""}},
+			mappings:      []sqlite.CLCardMapping{{CLGemRateID: ""}, {CLGemRateID: "gem_a"}},
+			want:          []string{"gem_a"},
+		},
+		{
+			name:          "all empty returns empty",
+			firestoreData: nil,
+			mappings:      nil,
+			want:          []string{},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := collectGemRateIDs(tt.firestoreData, tt.mappings)
+			assert.ElementsMatch(t, tt.want, got)
+		})
+	}
+}
+
+// TestPickCLValue verifies the catalog-preferred / collection-fallback logic.
+func TestPickCLValue(t *testing.T) {
+	catalog := map[string]float64{
+		"gem_a|PSA 9":  3370.56,
+		"gem_a|PSA 10": 35501.98,
+		"gem_b|PSA 9":  0, // catalog present but non-positive → fall back
+	}
+	tests := []struct {
+		name            string
+		gemRateID       string
+		condition       string
+		collectionValue float64
+		want            float64
+	}{
+		{"catalog hit overrides stale collection", "gem_a", "PSA 9", 2365.86, 3370.56},
+		{"different grade same gem uses its own entry", "gem_a", "PSA 10", 12000, 35501.98},
+		{"catalog has zero → fall back to collection", "gem_b", "PSA 9", 100.50, 100.50},
+		{"missing gem → fall back", "gem_z", "PSA 9", 42.00, 42.00},
+		{"missing condition pair → fall back", "gem_a", "PSA 8", 1100.00, 1100.00},
+		{"blank gemRateID skips catalog lookup", "", "PSA 9", 50, 50},
+		{"blank condition skips catalog lookup", "gem_a", "", 75, 75},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := pickCLValue(catalog, tt.gemRateID, tt.condition, tt.collectionValue)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
