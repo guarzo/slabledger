@@ -97,9 +97,12 @@ func Default() Config {
 			SyncHour:     10, // 10 AM UTC (1 hour after PSA updates at 9am)
 		},
 		DH: DHConfig{
-			Enabled:       true,
-			CacheTTLHours: 24,
-			RateLimitRPS:  1,
+			Enabled:               true,
+			CacheTTLHours:         24,
+			RateLimitRPS:          1,
+			OrdersPollInterval:    30 * time.Minute,
+			InventoryPollInterval: 2 * time.Hour,
+			PushInterval:          5 * time.Minute,
 		},
 		DHAnalyticsRefresh: DHAnalyticsRefreshConfig{
 			Enabled:     false, // launch gate — opt-in until DH impression pipeline is healthy
