@@ -172,7 +172,6 @@ type Service interface {
 	CRUDService
 	AnalyticsService
 	ImportService
-	FinanceService
 	PricingService
 	CertLookupService
 	SnapshotService
@@ -362,7 +361,6 @@ var (
 	_ CRUDService       = (*service)(nil)
 	_ AnalyticsService  = (*service)(nil)
 	_ ImportService     = (*service)(nil)
-	_ FinanceService    = (*service)(nil)
 	_ PricingService    = (*service)(nil)
 	_ CertLookupService = (*service)(nil)
 	_ SnapshotService   = (*service)(nil)

@@ -55,19 +55,6 @@ type ImportService interface {
 	ResolveCert(ctx context.Context, certNumber string) (*CertInfo, error)
 }
 
-// FinanceService handles capital, invoices, and revocation operations.
-type FinanceService interface {
-	GetCapitalSummary(ctx context.Context) (*CapitalSummary, error)
-	GetCashflowConfig(ctx context.Context) (*CashflowConfig, error)
-	UpdateCashflowConfig(ctx context.Context, cfg *CashflowConfig) error
-	ListInvoices(ctx context.Context) ([]Invoice, error)
-	UpdateInvoice(ctx context.Context, inv *Invoice) error
-
-	FlagForRevocation(ctx context.Context, segmentLabel, segmentDimension, reason string) (*RevocationFlag, error)
-	ListRevocationFlags(ctx context.Context) ([]RevocationFlag, error)
-	GenerateRevocationEmail(ctx context.Context, flagID string) (string, error)
-}
-
 // PricingService handles price overrides, AI suggestions, review, and flags.
 type PricingService interface {
 	UpdateBuyCost(ctx context.Context, purchaseID string, buyCostCents int) error
