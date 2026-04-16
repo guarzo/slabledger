@@ -143,7 +143,7 @@ func TestHandleListPurchaseOnDH(t *testing.T) {
 				return dhlisting.DHListingResult{Listed: 0, Total: 1}
 			},
 			wantStatus:    http.StatusBadGateway,
-			wantErrSubstr: "Reconcile",
+			wantErrSubstr: "re-enroll",
 		},
 	}
 
