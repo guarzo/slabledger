@@ -56,7 +56,7 @@ export default function AdminPage() {
       <div className="mb-6">
         <div className="flex items-center justify-between">
           <h1 className="text-[22px] font-bold text-[var(--text)] tracking-tight">Admin</h1>
-          <Button onClick={handleDownloadBackup} loading={backupLoading}>
+          <Button variant="secondary" onClick={handleDownloadBackup} loading={backupLoading}>
             {backupLoading ? 'Downloading...' : 'Download Backup'}
           </Button>
         </div>

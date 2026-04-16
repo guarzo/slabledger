@@ -77,8 +77,8 @@ export function DHTab({ enabled = true }: { enabled?: boolean }) {
             </p>
           )}
           {status?.pending_count !== undefined && status.pending_count > 0 && (
-            <p className="text-xs text-[var(--text-muted)]">
-              Pending push: <span className="text-yellow-400">{status.pending_count}</span>
+            <p className="text-sm font-medium text-[var(--text-muted)]">
+              Pending push: <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-full bg-yellow-400/15 text-yellow-400 font-semibold text-xs">{status.pending_count}</span>
             </p>
           )}
         </div>

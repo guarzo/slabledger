@@ -20,6 +20,8 @@ export function PricingCoverageTab({ enabled = true }: { enabled?: boolean }) {
 
   const { totalMappedCards, unmappedCards, clPricedCards, mmPricedCards, totalUnsold, recentFailures } = diag;
   const totalCards = totalMappedCards + unmappedCards;
+  const dhRatio = totalCards > 0 ? totalMappedCards / totalCards : null;
+  const dhColor = dhRatio === null ? undefined : dhRatio >= 0.80 ? 'var(--success)' : dhRatio >= 0.50 ? 'var(--warning)' : 'var(--danger)';
 
   return (
     <div className="space-y-6">
@@ -32,7 +34,7 @@ export function PricingCoverageTab({ enabled = true }: { enabled?: boolean }) {
       {/* Summary cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         <SummaryCard label="Inventory Cards" value={totalUnsold} />
-        <SummaryCard label="DH Mapped" value={totalMappedCards} color={totalMappedCards === totalCards ? 'var(--success)' : undefined} />
+        <SummaryCard label="DH Mapped" value={totalMappedCards} color={dhColor} />
         <SummaryCard label="Unmapped" value={unmappedCards} color={unmappedCards > 0 ? 'var(--warning)' : undefined} />
         <SummaryCard label="CL Priced" value={`${clPricedCards} / ${totalUnsold}`} color={clPricedCards > 0 ? 'var(--success)' : 'var(--text-muted)'} />
         <SummaryCard label="MM Priced" value={`${mmPricedCards} / ${totalUnsold}`} color={mmPricedCards > 0 ? 'var(--success)' : 'var(--text-muted)'} />

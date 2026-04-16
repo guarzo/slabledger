@@ -14,6 +14,18 @@ import {
 import { isReadyToList } from './inventoryCalcs';
 import { dhBadgeFor, DH_BADGE_COLORS } from './dhBadge';
 
+const DH_BADGE_TITLES: Record<string, string> = {
+  sold:       'Sold on DoubleHolo',
+  listed:     'Currently listed on DoubleHolo marketplace',
+  'in stock': 'In DoubleHolo inventory — not yet listed',
+  held:       'DoubleHolo push is on hold pending review',
+  unmatched:  'Could not be matched to a DoubleHolo card',
+  dismissed:  'DoubleHolo listing was dismissed',
+  pending:    'Waiting to be pushed to DoubleHolo inventory',
+  pushed:     'Submitted to DoubleHolo — awaiting confirmation',
+  unenrolled: 'Not enrolled in DoubleHolo',
+};
+
 const BADGE_COLORS = [
   { bg: 'rgba(99,102,241,0.1)', text: '#818cf8' },
   { bg: 'rgba(168,85,247,0.1)', text: '#c084fc' },
@@ -201,7 +213,7 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
       </div>
       <div className="glass-table-td flex-shrink-0 text-center !px-1 print-hide-actions" style={{ width: '56px' }} onClick={e => e.stopPropagation()}>
         {dhListedOverride ? (
-          <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${DH_BADGE_COLORS.listed}`} title="DH: listed">listed</span>
+          <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${DH_BADGE_COLORS.listed}`} title={DH_BADGE_TITLES['listed']}>listed</span>
         ) : onListOnDH && isReadyToList(item) && !!item.purchase.dhInventoryId ? (
           <button
             type="button"
@@ -220,7 +232,7 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
           const badge = dhBadgeFor(item.purchase.dhPushStatus, item.purchase.dhStatus);
           if (badge === 'unenrolled') return null;
           return (
-            <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${DH_BADGE_COLORS[badge]}`} title={`DH: ${badge}`}>
+            <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${DH_BADGE_COLORS[badge]}`} title={DH_BADGE_TITLES[badge] ?? badge}>
               {badge}
             </span>
           );
