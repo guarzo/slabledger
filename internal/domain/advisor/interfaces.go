@@ -36,8 +36,6 @@ const (
 	OpCampaignAnalysis   = ai.OpCampaignAnalysis
 	OpLiquidation        = ai.OpLiquidation
 	OpPurchaseAssessment = ai.OpPurchaseAssessment
-	OpSocialCaption      = ai.OpSocialCaption
-	OpSocialSuggestion   = ai.OpSocialSuggestion
 )
 
 const (

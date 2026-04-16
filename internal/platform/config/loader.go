@@ -124,8 +124,6 @@ func FromEnv(base Config) Config {
 	envDuration("HTTP_READ_TIMEOUT", &cfg.Server.ReadTimeout)
 	envDuration("HTTP_WRITE_TIMEOUT", &cfg.Server.WriteTimeout)
 	envDuration("HTTP_IDLE_TIMEOUT", &cfg.Server.IdleTimeout)
-	envString("BASE_URL", &cfg.Server.BaseURL)
-	envString("MEDIA_DIR", &cfg.Server.MediaDir)
 	if v := os.Getenv("SHUTDOWN_TIMEOUT_SECONDS"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			cfg.Server.SchedulerShutdownTimeout = time.Duration(n) * time.Second
@@ -208,12 +206,6 @@ func FromEnv(base Config) Config {
 	if cfg.Adapters.AzureAIDeployment == "" {
 		cfg.Adapters.AzureAIDeployment = "gpt-5.4"
 	}
-	cfg.Adapters.ImageAIDeployment = os.Getenv("IMAGE_AI_DEPLOYMENT")
-	cfg.Adapters.ImageAIQuality = os.Getenv("IMAGE_AI_QUALITY")
-	if cfg.Adapters.ImageAIQuality == "" {
-		cfg.Adapters.ImageAIQuality = "medium"
-	}
-	cfg.Adapters.ImageAIEnabled = parseBool(os.Getenv("IMAGE_AI_ENABLED"), false)
 	cfg.Adapters.DHEnterpriseKey = os.Getenv("DH_ENTERPRISE_API_KEY")
 	envString("DH_API_BASE_URL", &cfg.Adapters.DHBaseURL)
 	envDurationPositive("AZURE_AI_TIMEOUT", &cfg.Adapters.AzureAICompletionTimeout)

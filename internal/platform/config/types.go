@@ -25,8 +25,6 @@ type ServerConfig struct {
 	IdleTimeout              time.Duration // HTTP idle timeout
 	ShutdownTimeout          time.Duration // Graceful HTTP server shutdown timeout
 	SchedulerShutdownTimeout time.Duration // Graceful scheduler shutdown timeout (SHUTDOWN_TIMEOUT_SECONDS)
-	BaseURL                  string        // Public base URL for generating absolute links (optional)
-	MediaDir                 string        // Directory for media file storage (default: ./data/media)
 }
 
 // LoggingConfig controls logging behavior
@@ -103,9 +101,6 @@ type AdapterConfig struct {
 	AzureAIEndpoint          string        // AZURE_AI_ENDPOINT - Azure AI Foundry endpoint URL
 	AzureAIKey               string        // AZURE_AI_API_KEY - Azure AI API key
 	AzureAIDeployment        string        // AZURE_AI_DEPLOYMENT - Model deployment name (default: gpt-5.4)
-	ImageAIDeployment        string        // IMAGE_AI_DEPLOYMENT - Image generation model deployment name
-	ImageAIQuality           string        // IMAGE_AI_QUALITY - Image quality: low, medium, high (default: medium)
-	ImageAIEnabled           bool          // IMAGE_AI_ENABLED - Enable AI background generation (default: false)
 	DHEnterpriseKey          string        // DH_ENTERPRISE_API_KEY - Bearer token for enterprise endpoints
 	DHBaseURL                string        // DH_API_BASE_URL
 	AzureAICompletionTimeout time.Duration // AZURE_AI_TIMEOUT - Completion poll fallback timeout (default: 3m)

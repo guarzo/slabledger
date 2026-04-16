@@ -20,7 +20,6 @@ func Default() Config {
 			IdleTimeout:              60 * time.Second,
 			ShutdownTimeout:          5 * time.Second,
 			SchedulerShutdownTimeout: 30 * time.Second,
-			MediaDir:                 "./data/media",
 		},
 		Logging: LoggingConfig{
 			Level: "info",
