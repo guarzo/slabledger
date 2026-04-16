@@ -560,16 +560,6 @@ func (m *mockDHPushHoldSetter) SetHeldWithReason(_ context.Context, purchaseID, 
 	return nil
 }
 
-// pushEventRecorder is a test-local recorder for asserting DH push scheduler events.
-type pushEventRecorder struct {
-	events []dhevents.Event
-}
-
-func (r *pushEventRecorder) Record(_ context.Context, e dhevents.Event) error {
-	r.events = append(r.events, e)
-	return nil
-}
-
 func TestDHPush_Hold_RecordsHeldEvent(t *testing.T) {
 	// Market value (3000) < 50% of buy cost (10000) triggers initial_value_mismatch hold.
 	purchase := inventory.Purchase{
@@ -593,7 +583,7 @@ func TestDHPush_Hold_RecordsHeldEvent(t *testing.T) {
 	fieldsUpdater := &mocks.MockDHFieldsUpdater{}
 	cardIDSaver := &mockDHPushCardIDSaver{}
 	holdSetter := &mockDHPushHoldSetter{}
-	rec := &pushEventRecorder{}
+	rec := &mocks.MockEventRecorder{}
 
 	s := NewDHPushScheduler(
 		lister, statusUpdater, certResolver, pusher, fieldsUpdater, cardIDSaver,
@@ -610,8 +600,8 @@ func TestDHPush_Hold_RecordsHeldEvent(t *testing.T) {
 	assert.Contains(t, holdSetter.Calls[0].Reason, "initial_value_mismatch")
 
 	// Event recorder should have captured TypeHeld.
-	require.Len(t, rec.events, 1)
-	evt := rec.events[0]
+	require.Len(t, rec.Events, 1)
+	evt := rec.Events[0]
 	assert.Equal(t, dhevents.TypeHeld, evt.Type)
 	assert.Equal(t, "pur-hold-1", evt.PurchaseID)
 	assert.Equal(t, "11112222", evt.CertNumber)

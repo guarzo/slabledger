@@ -64,19 +64,3 @@ func (s *DHEventStore) CountByTypeSince(ctx context.Context, t dhevents.Type, si
 	}
 	return n, nil
 }
-
-// nullIfEmpty returns nil (SQL NULL) when s is empty, otherwise s.
-func nullIfEmpty(s string) any {
-	if s == "" {
-		return nil
-	}
-	return s
-}
-
-// zeroAsNull returns nil (SQL NULL) when i is zero, otherwise i.
-func zeroAsNull(i int) any {
-	if i == 0 {
-		return nil
-	}
-	return i
-}

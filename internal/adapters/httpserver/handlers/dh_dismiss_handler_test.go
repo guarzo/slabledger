@@ -15,16 +15,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// mockEventRecorder is a test-local recorder for asserting DH state-event emission.
-type mockEventRecorder struct {
-	events []dhevents.Event
-}
-
-func (r *mockEventRecorder) Record(_ context.Context, e dhevents.Event) error {
-	r.events = append(r.events, e)
-	return nil
-}
-
 func TestHandleDismissMatch_RecordsDismissedEvent(t *testing.T) {
 	purchaseID := "pur-dismiss-1"
 	purchase := &inventory.Purchase{
@@ -38,7 +28,7 @@ func TestHandleDismissMatch_RecordsDismissedEvent(t *testing.T) {
 			return purchase, nil
 		},
 	}
-	rec := &mockEventRecorder{}
+	rec := &mocks.MockEventRecorder{}
 
 	h := NewDHHandler(DHHandlerDeps{
 		PurchaseLister:    repo,
@@ -55,8 +45,8 @@ func TestHandleDismissMatch_RecordsDismissedEvent(t *testing.T) {
 	h.HandleDismissMatch(rr, req)
 
 	require.Equal(t, http.StatusOK, rr.Code)
-	require.Len(t, rec.events, 1)
-	evt := rec.events[0]
+	require.Len(t, rec.Events, 1)
+	evt := rec.Events[0]
 	assert.Equal(t, dhevents.TypeDismissed, evt.Type)
 	assert.Equal(t, purchaseID, evt.PurchaseID)
 	assert.Equal(t, "12345678", evt.CertNumber)

@@ -80,7 +80,7 @@ func TestHandleSelectMatch_RecordsPushedEvent(t *testing.T) {
 		},
 	}
 
-	rec := &mockEventRecorder{}
+	rec := &mocks.MockEventRecorder{}
 
 	h := NewDHHandler(DHHandlerDeps{
 		PurchaseLister:    repo,
@@ -101,8 +101,8 @@ func TestHandleSelectMatch_RecordsPushedEvent(t *testing.T) {
 	h.HandleSelectMatch(rr, req)
 
 	require.Equal(t, http.StatusOK, rr.Code, "body: %s", rr.Body.String())
-	require.Len(t, rec.events, 1)
-	evt := rec.events[0]
+	require.Len(t, rec.Events, 1)
+	evt := rec.Events[0]
 	assert.Equal(t, dhevents.TypePushed, evt.Type)
 	assert.Equal(t, purchaseID, evt.PurchaseID)
 	assert.Equal(t, "87654321", evt.CertNumber)

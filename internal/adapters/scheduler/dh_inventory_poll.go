@@ -175,9 +175,9 @@ func (s *DHInventoryPollScheduler) poll(ctx context.Context) {
 		// captures named transitions.
 		var eventType dhevents.Type
 		switch item.Status {
-		case "in_stock":
+		case dh.InventoryStatusInStock:
 			eventType = dhevents.TypePushed
-		case "listed":
+		case dh.InventoryStatusListed:
 			eventType = dhevents.TypeListed
 		}
 		if eventType != "" {

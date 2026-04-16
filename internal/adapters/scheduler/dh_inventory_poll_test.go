@@ -145,7 +145,7 @@ func TestDHInventoryPoll_RecordsEvents(t *testing.T) {
 			"c-unknown":  "pur-unknown",
 		},
 	}
-	recorder := &mockEventRecorder{}
+	recorder := &mocks.MockEventRecorder{}
 
 	s := NewDHInventoryPollScheduler(
 		client, syncStore, updater, lookup, recorder,
@@ -157,17 +157,17 @@ func TestDHInventoryPoll_RecordsEvents(t *testing.T) {
 
 	// Count events by type
 	byType := make(map[dhevents.Type]int)
-	for _, e := range recorder.events {
+	for _, e := range recorder.Events {
 		byType[e.Type]++
 	}
 	assert.Equal(t, 1, byType[dhevents.TypePushed], "one pushed event for in_stock status")
 	assert.Equal(t, 1, byType[dhevents.TypeListed], "one listed event for listed status")
 	assert.Equal(t, 0, byType[dhevents.Type("")], "no events for unknown status")
-	assert.Equal(t, 2, len(recorder.events), "exactly two events total")
+	assert.Equal(t, 2, len(recorder.Events), "exactly two events total")
 
 	// Verify the pushed event has the expected fields
 	var pushedEvent dhevents.Event
-	for _, e := range recorder.events {
+	for _, e := range recorder.Events {
 		if e.Type == dhevents.TypePushed {
 			pushedEvent = e
 			break
@@ -182,7 +182,7 @@ func TestDHInventoryPoll_RecordsEvents(t *testing.T) {
 
 	// Verify the listed event has the expected fields
 	var listedEvent dhevents.Event
-	for _, e := range recorder.events {
+	for _, e := range recorder.Events {
 		if e.Type == dhevents.TypeListed {
 			listedEvent = e
 			break

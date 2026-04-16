@@ -134,10 +134,10 @@ type DHHandler struct {
 	suggestCounter    DHSuggestionsCounter
 	logger            observability.Logger
 	baseCtx           context.Context
-	healthReporter    DHHealthReporter // optional: API health metrics
-	countsFetcher     DHCountsFetcher  // optional: DH inventory/order counts
-	dhApproveService  DHApproveService // optional: approve held pushes + push config
-	matchConfirmer    DHMatchConfirmer // optional: confirms matches with DH for learning
+	healthReporter    DHHealthReporter  // optional: API health metrics
+	countsFetcher     DHCountsFetcher   // optional: DH inventory/order counts
+	dhApproveService  DHApproveService  // optional: approve held pushes + push config
+	matchConfirmer    DHMatchConfirmer  // optional: confirms matches with DH for learning
 	ordersIngester    DHOrdersIngester  // optional: POST /api/dh/ingest-orders manual trigger
 	eventRec          dhevents.Recorder // optional: records DH state-change events
 	syncStateReader   SyncStateReader   // optional: reads dh_orders_last_poll timestamp

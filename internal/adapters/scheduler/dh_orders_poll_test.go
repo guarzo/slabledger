@@ -185,15 +185,6 @@ func TestDHOrdersPoll_RunOnce_HonorsCallerSince(t *testing.T) {
 
 func intPtr(v int) *int { return &v }
 
-type mockEventRecorder struct {
-	events []dhevents.Event
-}
-
-func (m *mockEventRecorder) Record(_ context.Context, e dhevents.Event) error {
-	m.events = append(m.events, e)
-	return nil
-}
-
 func TestDHOrdersPoll_RecordsEvents(t *testing.T) {
 	client := &mocks.MockDHOrdersClient{
 		GetOrdersFn: func(_ context.Context, _ dh.OrderFilters) (*dh.OrdersResponse, error) {
@@ -219,7 +210,7 @@ func TestDHOrdersPoll_RecordsEvents(t *testing.T) {
 			return &inventory.BulkSaleResult{Created: 1}, nil
 		},
 	}
-	recorder := &mockEventRecorder{}
+	recorder := &mocks.MockEventRecorder{}
 	s := NewDHOrdersPollScheduler(
 		client,
 		newMockSyncStateStore(),
@@ -233,7 +224,7 @@ func TestDHOrdersPoll_RecordsEvents(t *testing.T) {
 	require.NoError(t, err)
 
 	byType := make(map[dhevents.Type]int)
-	for _, e := range recorder.events {
+	for _, e := range recorder.Events {
 		byType[e.Type]++
 	}
 	assert.Equal(t, 1, byType[dhevents.TypeSold], "one sold event per matched order")
@@ -242,7 +233,7 @@ func TestDHOrdersPoll_RecordsEvents(t *testing.T) {
 
 	// Verify the sold event has the expected fields populated.
 	var soldEvent dhevents.Event
-	for _, e := range recorder.events {
+	for _, e := range recorder.Events {
 		if e.Type == dhevents.TypeSold {
 			soldEvent = e
 			break

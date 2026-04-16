@@ -272,24 +272,13 @@ func TestWithCLDHPushUpdater_ReEnrollsOnValueChange(t *testing.T) {
 	require.NotNil(t, s.dhPushUpdater, "dhPushUpdater should be set via functional option")
 }
 
-// clEventRecorder is a test-local recorder used to assert that the CL refresh
-// scheduler emits enrollment events through recordEvent.
-type clEventRecorder struct {
-	events []dhevents.Event
-}
-
-func (r *clEventRecorder) Record(_ context.Context, e dhevents.Event) error {
-	r.events = append(r.events, e)
-	return nil
-}
-
 // TestWithCLEventRecorder_WiredAndRecords verifies the WithCLEventRecorder
 // functional option wires up the recorder and that the nil-safe recordEvent
 // helper forwards the call when configured. This is the unit-level guard
 // for the Task 11 re-enrollment site — the emission site is exercised through
 // the recordEvent path exactly as production does.
 func TestWithCLEventRecorder_WiredAndRecords(t *testing.T) {
-	rec := &clEventRecorder{}
+	rec := &mocks.MockEventRecorder{}
 	s := NewCardLadderRefreshScheduler(
 		nil, nil,
 		&mockCLPurchaseLister{},
@@ -310,10 +299,10 @@ func TestWithCLEventRecorder_WiredAndRecords(t *testing.T) {
 		Source:        dhevents.SourceCLRefresh,
 	})
 
-	require.Len(t, rec.events, 1)
-	assert.Equal(t, dhevents.TypeEnrolled, rec.events[0].Type)
-	assert.Equal(t, dhevents.SourceCLRefresh, rec.events[0].Source)
-	assert.Equal(t, "p1", rec.events[0].PurchaseID)
+	require.Len(t, rec.Events, 1)
+	assert.Equal(t, dhevents.TypeEnrolled, rec.Events[0].Type)
+	assert.Equal(t, dhevents.SourceCLRefresh, rec.Events[0].Source)
+	assert.Equal(t, "p1", rec.Events[0].PurchaseID)
 }
 
 // TestRecordEvent_NilRecorderIsSafe verifies the nil-safe path in recordEvent.
