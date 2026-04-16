@@ -79,7 +79,7 @@ func (h *CampaignsHandler) HandleListPurchaseOnDH(w http.ResponseWriter, r *http
 			return
 		}
 		if updated.DHInventoryID == 0 {
-			writeError(w, http.StatusBadGateway, "DH inventory item no longer exists — run Reconcile to re-push")
+			writeError(w, http.StatusBadGateway, "DH inventory item no longer exists — it has been reset and will re-enroll on next import")
 			return
 		}
 		writeError(w, http.StatusBadGateway, "DH listing failed — check server logs for details")

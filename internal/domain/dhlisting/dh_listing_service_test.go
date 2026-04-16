@@ -5,10 +5,21 @@ import (
 	"errors"
 	"testing"
 
+	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
 	"github.com/guarzo/slabledger/internal/domain/dhevents"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
+
+type mockResetter struct {
+	resetErr   error
+	resetCalls []string // purchaseIDs passed to ResetDHFieldsForRepush
+}
+
+func (m *mockResetter) ResetDHFieldsForRepush(_ context.Context, purchaseID string) error {
+	m.resetCalls = append(m.resetCalls, purchaseID)
+	return m.resetErr
+}
 
 // --- mock implementations ---
 
@@ -441,5 +452,81 @@ func TestDisambiguateCandidates(t *testing.T) {
 				t.Error("expected saveFn not to be called, but it was")
 			}
 		})
+	}
+}
+
+// TestListPurchases_StaleInventoryID_ResetsAndSkips asserts that when
+// UpdateInventoryStatus returns ERR_PROV_NOT_FOUND (the DH item was removed),
+// the purchase is reset for re-push and counted as skipped — not listed.
+func TestListPurchases_StaleInventoryID_ResetsAndSkips(t *testing.T) {
+	certNum := "12341234"
+	purchase := &inventory.Purchase{
+		ID:                 "p-stale",
+		CertNumber:         certNum,
+		DHInventoryID:      522,
+		DHCardID:           7,
+		ReviewedPriceCents: 60000,
+	}
+
+	lookup := &mockPurchaseLookup{
+		purchases: map[string]*inventory.Purchase{certNum: purchase},
+	}
+	lister := &mockInventoryLister{
+		updateStatusErr: apperrors.ProviderNotFound("DH", "VendorInventoryItem id=522"),
+	}
+	resetter := &mockResetter{}
+
+	svc := newTestService(t, lookup,
+		WithDHListingLister(lister),
+		WithDHListingResetter(resetter),
+	)
+
+	result := svc.ListPurchases(context.Background(), []string{certNum})
+
+	if result.Listed != 0 {
+		t.Errorf("Listed: got %d, want 0", result.Listed)
+	}
+	if result.Skipped != 1 {
+		t.Errorf("Skipped: got %d, want 1", result.Skipped)
+	}
+	if len(resetter.resetCalls) != 1 || resetter.resetCalls[0] != "p-stale" {
+		t.Errorf("ResetDHFieldsForRepush calls: got %v, want [p-stale]", resetter.resetCalls)
+	}
+}
+
+// TestListPurchases_StaleInventoryID_ResetFailure asserts that when the
+// resetter itself errors, the item is still skipped and the failure is tolerated.
+func TestListPurchases_StaleInventoryID_ResetFailure(t *testing.T) {
+	certNum := "43214321"
+	purchase := &inventory.Purchase{
+		ID:                 "p-stale-2",
+		CertNumber:         certNum,
+		DHInventoryID:      522,
+		ReviewedPriceCents: 60000,
+	}
+
+	lookup := &mockPurchaseLookup{
+		purchases: map[string]*inventory.Purchase{certNum: purchase},
+	}
+	lister := &mockInventoryLister{
+		updateStatusErr: apperrors.ProviderNotFound("DH", "VendorInventoryItem id=522"),
+	}
+	resetter := &mockResetter{resetErr: errors.New("db error")}
+
+	svc := newTestService(t, lookup,
+		WithDHListingLister(lister),
+		WithDHListingResetter(resetter),
+	)
+
+	result := svc.ListPurchases(context.Background(), []string{certNum})
+
+	if result.Listed != 0 {
+		t.Errorf("Listed: got %d, want 0", result.Listed)
+	}
+	if result.Skipped != 1 {
+		t.Errorf("Skipped: got %d, want 1", result.Skipped)
+	}
+	if len(resetter.resetCalls) != 1 {
+		t.Errorf("ResetDHFieldsForRepush calls: got %d, want 1", len(resetter.resetCalls))
 	}
 }
