@@ -208,11 +208,19 @@ func collectContributors(c ActiveCampaign, idx map[string]signalEntry) []signalE
 		return out
 	}
 
+	// Precompute the lowercased inclusion tokens once. SplitInclusionList
+	// already trims whitespace and drops empty entries, so we only need to
+	// lowercase here.
 	entries := inventory.SplitInclusionList(trimmed)
+	normalized := make([]string, len(entries))
+	for i, e := range entries {
+		normalized[i] = strings.ToLower(e)
+	}
+
 	for key, entry := range idx {
 		matched := false
-		for _, e := range entries {
-			if strings.Contains(key, strings.ToLower(strings.TrimSpace(e))) {
+		for _, token := range normalized {
+			if strings.Contains(key, token) {
 				matched = true
 				break
 			}
