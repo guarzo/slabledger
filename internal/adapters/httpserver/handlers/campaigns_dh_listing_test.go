@@ -117,13 +117,33 @@ func TestHandleListPurchaseOnDH(t *testing.T) {
 			wantErrSubstr: "not configured",
 		},
 		{
-			name:        "listing returns zero listed → 500",
+			name:        "listing returns zero listed → 502",
 			getPurchase: func(ctx context.Context, id string) (*inventory.Purchase, error) { return readyPurchase(), nil },
 			listFn: func(ctx context.Context, certs []string) dhlisting.DHListingResult {
 				return dhlisting.DHListingResult{Listed: 0, Total: 1}
 			},
-			wantStatus:    http.StatusInternalServerError,
-			wantErrSubstr: "did not list",
+			wantStatus:    http.StatusBadGateway,
+			wantErrSubstr: "check server logs",
+		},
+		{
+			name: "listing returns zero listed with stale inventory ID → 502 reconcile hint",
+			getPurchase: func() func(ctx context.Context, id string) (*inventory.Purchase, error) {
+				call := 0
+				return func(ctx context.Context, id string) (*inventory.Purchase, error) {
+					call++
+					if call == 1 {
+						return readyPurchase(), nil // initial validation passes
+					}
+					p := readyPurchase()
+					p.DHInventoryID = 0 // re-read shows ID was cleared
+					return p, nil
+				}
+			}(),
+			listFn: func(ctx context.Context, certs []string) dhlisting.DHListingResult {
+				return dhlisting.DHListingResult{Listed: 0, Total: 1}
+			},
+			wantStatus:    http.StatusBadGateway,
+			wantErrSubstr: "Reconcile",
 		},
 	}
 

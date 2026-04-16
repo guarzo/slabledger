@@ -11,6 +11,7 @@ import {
   syncDotProps,
 } from './utils';
 import { isReadyToList } from './inventoryCalcs';
+import { dhBadgeFor, DH_BADGE_COLORS } from './dhBadge';
 
 const BADGE_COLORS = [
   { bg: 'rgba(99,102,241,0.1)', text: '#818cf8' },
@@ -37,11 +38,13 @@ interface DesktopRowProps {
   onSetPrice?: () => void;
   onDelete?: () => void;
   onListOnDH?: (purchaseId: string) => void;
+  dhListingLoading?: boolean;
+  dhListedOverride?: boolean;
   showCampaignColumn?: boolean;
   isOnSellSheet?: boolean;
 }
 
-export default function DesktopRow({ item, selected, onToggle, onExpand, onRecordSale, onFixPricing, onSetPrice, onDelete, onListOnDH, showCampaignColumn, isOnSellSheet }: DesktopRowProps) {
+export default function DesktopRow({ item, selected, onToggle, onExpand, onRecordSale, onFixPricing, onSetPrice, onDelete, onListOnDH, dhListingLoading, dhListedOverride, showCampaignColumn, isOnSellSheet }: DesktopRowProps) {
   const cb = costBasis(item.purchase);
   const snap = item.currentMarket;
   const daysColor = daysHeldColor(item.daysHeld);
@@ -183,17 +186,32 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
           style={{ color: dot.color, fontSize: '10px', lineHeight: 1 }}
         >&#9679;</span>
       </div>
-      <div className="glass-table-td flex-shrink-0 text-center !px-1 print-hide-actions" style={{ width: '48px' }} onClick={e => e.stopPropagation()}>
-        {onListOnDH && isReadyToList(item) && !!item.purchase.dhInventoryId && (
+      <div className="glass-table-td flex-shrink-0 text-center !px-1 print-hide-actions" style={{ width: '56px' }} onClick={e => e.stopPropagation()}>
+        {dhListedOverride ? (
+          <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${DH_BADGE_COLORS.listed}`} title="DH: listed">listed</span>
+        ) : onListOnDH && isReadyToList(item) && !!item.purchase.dhInventoryId ? (
           <button
             type="button"
             onClick={() => onListOnDH(item.purchase.id)}
-            className="text-xs font-medium px-2 py-1 rounded bg-[var(--success)]/15 text-[var(--success)] hover:bg-[var(--success)]/30 transition-colors"
+            disabled={dhListingLoading}
+            className={`text-xs font-medium px-2 py-1 rounded transition-colors ${
+              dhListingLoading
+                ? 'bg-[var(--surface-2)] text-[var(--text-muted)] cursor-wait'
+                : 'bg-[var(--success)]/15 text-[var(--success)] hover:bg-[var(--success)]/30'
+            }`}
             title="Publish this item on DH"
           >
-            List
+            {dhListingLoading ? 'Listing…' : 'List'}
           </button>
-        )}
+        ) : (() => {
+          const badge = dhBadgeFor(item.purchase.dhPushStatus, item.purchase.dhStatus);
+          if (badge === 'unenrolled') return null;
+          return (
+            <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${DH_BADGE_COLORS[badge]}`} title={`DH: ${badge}`}>
+              {badge}
+            </span>
+          );
+        })()}
       </div>
       {/* Sell button */}
       <div className="glass-table-td flex-shrink-0 text-center !px-1 print-hide-actions" style={{ width: '48px' }} onClick={e => e.stopPropagation()}>

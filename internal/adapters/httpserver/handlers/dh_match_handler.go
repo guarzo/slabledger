@@ -94,6 +94,14 @@ func (h *DHHandler) runBulkMatch(ctx context.Context, purchases []inventory.Purc
 			continue
 		}
 
+		// Skip unreceived purchases — cert resolution can proceed but setting
+		// dh_push_status to matched on an unreceived item creates a dead state
+		// where the push scheduler (which requires received_at) never processes it.
+		if p.ReceivedAt == nil {
+			skipped++
+			continue
+		}
+
 		key := p.DHCardKey()
 
 		// If this card identity already has a valid mapping, skip the API call

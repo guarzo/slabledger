@@ -8,6 +8,7 @@ import {
   deriveSignalDirection, deriveSignalDelta, isHotSeller, formatReceivedDate,
 } from './utils';
 import { isReadyToList } from './inventoryCalcs';
+import { dhBadgeFor, DH_BADGE_COLORS } from './dhBadge';
 
 interface MobileCardProps {
   item: AgingItem;
@@ -18,12 +19,14 @@ interface MobileCardProps {
   onSetPrice?: () => void;
   onDelete?: () => void;
   onListOnDH?: (purchaseId: string) => void;
+  dhListingLoading?: boolean;
+  dhListedOverride?: boolean;
   ev?: ExpectedValue;
   showCampaignColumn?: boolean;
   isOnSellSheet?: boolean;
 }
 
-export default function MobileCard({ item, selected, onToggle, onRecordSale, onFixPricing, onSetPrice, onDelete, onListOnDH, ev, showCampaignColumn, isOnSellSheet }: MobileCardProps) {
+export default function MobileCard({ item, selected, onToggle, onRecordSale, onFixPricing, onSetPrice, onDelete, onListOnDH, dhListingLoading, dhListedOverride, ev, showCampaignColumn, isOnSellSheet }: MobileCardProps) {
   const cb = costBasis(item.purchase);
   const snap = item.currentMarket;
   const daysColor = daysHeldColor(item.daysHeld);
@@ -214,16 +217,31 @@ export default function MobileCard({ item, selected, onToggle, onRecordSale, onF
             Fix
           </button>
         )}
-        {onListOnDH && isReadyToList(item) && !!item.purchase.dhInventoryId && (
+        {dhListedOverride ? (
+          <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${DH_BADGE_COLORS.listed}`} title="DH: listed">listed</span>
+        ) : onListOnDH && isReadyToList(item) && !!item.purchase.dhInventoryId ? (
           <button
             type="button"
             onClick={() => onListOnDH(item.purchase.id)}
-            className="text-xs font-medium px-2 py-1 rounded bg-[var(--success)]/15 text-[var(--success)] hover:bg-[var(--success)]/25 transition-colors"
+            disabled={dhListingLoading}
+            className={`text-xs font-medium px-2 py-1 rounded transition-colors ${
+              dhListingLoading
+                ? 'bg-[var(--surface-2)] text-[var(--text-muted)] cursor-wait'
+                : 'bg-[var(--success)]/15 text-[var(--success)] hover:bg-[var(--success)]/25'
+            }`}
             title="Publish this item on DH"
           >
-            List
+            {dhListingLoading ? 'Listing…' : 'List'}
           </button>
-        )}
+        ) : (() => {
+          const badge = dhBadgeFor(item.purchase.dhPushStatus, item.purchase.dhStatus);
+          if (badge === 'unenrolled') return null;
+          return (
+            <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${DH_BADGE_COLORS[badge]}`} title={`DH: ${badge}`}>
+              {badge}
+            </span>
+          );
+        })()}
         <button
           type="button"
           onClick={onRecordSale}
