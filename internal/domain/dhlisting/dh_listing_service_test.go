@@ -205,6 +205,33 @@ func TestListPurchases_UnenrolledPurchaseIsSkippedNotProcessed(t *testing.T) {
 	}
 }
 
+// TestListPurchases_SkippedCounterIncrements asserts that purchases hitting
+// skip paths increment the Skipped counter in the result.
+func TestListPurchases_SkippedCounterIncrements(t *testing.T) {
+	certNum := "88888888"
+	// Unenrolled purchase: DHInventoryID == 0 && DHPushStatus != pending
+	unenrolled := &inventory.Purchase{
+		ID:            "p-unenrolled",
+		CertNumber:    certNum,
+		DHInventoryID: 0,
+		DHPushStatus:  "", // not pending
+	}
+	lookup := &mockPurchaseLookup{
+		purchases: map[string]*inventory.Purchase{certNum: unenrolled},
+	}
+	lister := &mockInventoryLister{}
+
+	svc := newTestService(t, lookup, WithDHListingLister(lister))
+	result := svc.ListPurchases(context.Background(), []string{certNum})
+
+	if result.Skipped < 1 {
+		t.Errorf("Skipped: got %d, want >= 1", result.Skipped)
+	}
+	if result.Total != 1 {
+		t.Errorf("Total: got %d, want 1", result.Total)
+	}
+}
+
 // TestDisambiguateCandidates covers the package-level disambiguateCandidates
 // function (white-box test; requires package dhlisting).
 func TestDisambiguateCandidates(t *testing.T) {

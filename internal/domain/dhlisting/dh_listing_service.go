@@ -126,16 +126,18 @@ func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []stri
 	}
 	sort.Strings(sortedCerts)
 
-	listed, synced := 0, 0
+	listed, synced, skipped := 0, 0, 0
 	for _, cn := range sortedCerts {
 		p := purchases[cn]
 		// If pending DH push, do inline match + push first.
 		if p.DHInventoryID == 0 && p.DHPushStatus == inventory.DHPushStatusPending {
 			if s.certResolver == nil || s.pusher == nil {
+				skipped++
 				continue // no DH match client — skip
 			}
 			invID := s.inlineMatchAndPush(ctx, p)
 			if invID == 0 {
+				skipped++
 				continue // unmatched or failed — skip listing
 			}
 			p.DHInventoryID = invID
@@ -148,6 +150,7 @@ func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []stri
 				observability.String("cert", p.CertNumber),
 				observability.String("purchaseID", p.ID),
 				observability.String("dhPushStatus", string(p.DHPushStatus)))
+			skipped++
 			continue
 		}
 
@@ -156,6 +159,7 @@ func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []stri
 				observability.String("cert", p.CertNumber),
 				observability.Int("inventoryID", p.DHInventoryID),
 				observability.Err(err))
+			skipped++
 			continue
 		}
 		listed++
@@ -182,6 +186,7 @@ func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []stri
 				}
 			}
 			listed-- // revert the listed count
+			skipped++
 			continue
 		}
 		synced++
@@ -194,6 +199,7 @@ func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []stri
 					observability.String("cert", p.CertNumber),
 					observability.Err(marshalErr))
 				listed--
+				skipped++
 				continue
 			}
 			if persistErr := s.fieldsUpdater.UpdatePurchaseDHFields(ctx, p.ID, inventory.DHFieldsUpdate{
@@ -203,6 +209,7 @@ func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []stri
 				s.logger.Error(ctx, "dh listing: failed to persist listed status — decrementing listed count",
 					observability.String("cert", p.CertNumber), observability.Err(persistErr))
 				listed--
+				skipped++
 				continue
 			}
 		}
@@ -218,7 +225,7 @@ func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []stri
 			observability.Int("certs", len(certNumbers)))
 	}
 
-	return DHListingResult{Listed: listed, Synced: synced, Total: len(purchases)}
+	return DHListingResult{Listed: listed, Synced: synced, Skipped: skipped, Total: len(purchases)}
 }
 
 // inlineMatchAndPush resolves a single cert against DH and pushes inventory.
