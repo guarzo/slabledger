@@ -301,67 +301,80 @@ func TestService_Leaderboard_LimitTruncates(t *testing.T) {
 	}
 }
 
-func TestService_Leaderboard_AccelerationPopulated(t *testing.T) {
-	velocityJSON := `{"median_days_to_sell":9.5,"sample_size":120,"velocity_change_pct":14.2,"computed_at":"2026-04-15T03:00:00Z"}`
-	rows := []demand.CharacterCache{
+func TestService_Leaderboard_Acceleration(t *testing.T) {
+	computedAt := time.Date(2026, 4, 15, 3, 0, 0, 0, time.UTC)
+	velocityWithChange := `{"median_days_to_sell":"9.5","sample_size":120,"velocity_change_pct":14.2,"computed_at":"2026-04-15T03:00:00Z"}`
+
+	tests := []struct {
+		name                    string
+		rows                    []demand.CharacterCache
+		wantAccelerationPresent bool
+		wantMedianVelocity      float64
+		wantAcceleratingCount   int
+		wantTotalCount          int
+	}{
 		{
-			Character:           "Umbreon",
-			Window:              "30d",
-			DemandJSON:          strPtr(demandJSONWithEras("Umbreon", 0.9, "full")),
-			VelocityJSON:        strPtr(velocityJSON),
-			AnalyticsComputedAt: func() *time.Time { t := time.Date(2026, 4, 15, 3, 0, 0, 0, time.UTC); return &t }(),
+			name: "populated when row has velocity_change_pct",
+			rows: []demand.CharacterCache{{
+				Character:           "Umbreon",
+				Window:              "30d",
+				DemandJSON:          strPtr(demandJSONWithEras("Umbreon", 0.9, "full")),
+				VelocityJSON:        strPtr(velocityWithChange),
+				AnalyticsComputedAt: &computedAt,
+			}},
+			wantAccelerationPresent: true,
+			wantMedianVelocity:      14.2,
+			wantAcceleratingCount:   1,
+			wantTotalCount:          1,
+		},
+		{
+			name: "nil when row has no velocity data",
+			rows: []demand.CharacterCache{{
+				Character:  "Umbreon",
+				Window:     "30d",
+				DemandJSON: strPtr(demandJSONWithEras("Umbreon", 0.9, "full")),
+			}},
+			wantAccelerationPresent: false,
 		},
 	}
-	svc := demand.NewService(newRepoWithRows(rows), uncoveredCampaigns{})
 
-	out, err := svc.Leaderboard(context.Background(), demand.LeaderboardOpts{
-		Window: "30d",
-		Era:    "sword_shield",
-		Grade:  10,
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(out) != 1 {
-		t.Fatalf("want 1 bucket; got %d", len(out))
-	}
-	o := out[0]
-	if o.Acceleration == nil {
-		t.Fatalf("want Acceleration populated; got nil")
-	}
-	if o.Acceleration.MedianVelocityChangePct != 14.2 {
-		t.Errorf("want MedianVelocityChangePct=14.2; got %f", o.Acceleration.MedianVelocityChangePct)
-	}
-	if o.Acceleration.TotalCount != 1 {
-		t.Errorf("want TotalCount=1; got %d", o.Acceleration.TotalCount)
-	}
-	if o.Acceleration.AcceleratingCount != 1 {
-		t.Errorf("want AcceleratingCount=1 (14.2 >= threshold); got %d", o.Acceleration.AcceleratingCount)
-	}
-	if o.Acceleration.DataQuality != demand.DataQualityFull {
-		t.Errorf("want DataQuality=%q; got %q", demand.DataQualityFull, o.Acceleration.DataQuality)
-	}
-}
-
-func TestService_Leaderboard_AccelerationNilWhenNoVelocity(t *testing.T) {
-	rows := []demand.CharacterCache{
-		{Character: "Umbreon", Window: "30d", DemandJSON: strPtr(demandJSONWithEras("Umbreon", 0.9, "full"))},
-	}
-	svc := demand.NewService(newRepoWithRows(rows), uncoveredCampaigns{})
-
-	out, err := svc.Leaderboard(context.Background(), demand.LeaderboardOpts{
-		Window: "30d",
-		Era:    "sword_shield",
-		Grade:  10,
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(out) != 1 {
-		t.Fatalf("want 1 bucket; got %d", len(out))
-	}
-	if out[0].Acceleration != nil {
-		t.Fatalf("want Acceleration nil when no velocity data; got %+v", out[0].Acceleration)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			svc := demand.NewService(newRepoWithRows(tc.rows), uncoveredCampaigns{})
+			out, err := svc.Leaderboard(context.Background(), demand.LeaderboardOpts{
+				Window: "30d",
+				Era:    "sword_shield",
+				Grade:  10,
+			})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(out) != 1 {
+				t.Fatalf("want 1 bucket; got %d", len(out))
+			}
+			o := out[0]
+			if !tc.wantAccelerationPresent {
+				if o.Acceleration != nil {
+					t.Fatalf("want Acceleration nil; got %+v", o.Acceleration)
+				}
+				return
+			}
+			if o.Acceleration == nil {
+				t.Fatalf("want Acceleration populated; got nil")
+			}
+			if o.Acceleration.MedianVelocityChangePct != tc.wantMedianVelocity {
+				t.Errorf("want MedianVelocityChangePct=%v; got %v", tc.wantMedianVelocity, o.Acceleration.MedianVelocityChangePct)
+			}
+			if o.Acceleration.TotalCount != tc.wantTotalCount {
+				t.Errorf("want TotalCount=%d; got %d", tc.wantTotalCount, o.Acceleration.TotalCount)
+			}
+			if o.Acceleration.AcceleratingCount != tc.wantAcceleratingCount {
+				t.Errorf("want AcceleratingCount=%d; got %d", tc.wantAcceleratingCount, o.Acceleration.AcceleratingCount)
+			}
+			if o.Acceleration.DataQuality != demand.QualityFull {
+				t.Errorf("want DataQuality=%q; got %q", demand.QualityFull, o.Acceleration.DataQuality)
+			}
+		})
 	}
 }
 

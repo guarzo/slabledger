@@ -33,6 +33,10 @@ func (h *CampaignSignalsHandler) HandleGetCampaignSignals(w http.ResponseWriter,
 		writeError(w, http.StatusInternalServerError, "failed to compute campaign signals")
 		return
 	}
+	if resp.SkippedRows > 0 {
+		h.logger.Warn(r.Context(), "campaign signals: skipped unparseable cache rows",
+			observability.Int("skipped_rows", resp.SkippedRows))
+	}
 
 	writeJSON(w, http.StatusOK, toCampaignSignalsDTO(resp))
 }

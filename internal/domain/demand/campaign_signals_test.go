@@ -48,20 +48,16 @@ func charRowNoChange(name string, computed time.Time) demand.CharacterCache {
 	}
 }
 
-// activeCampaignsStub is a CampaignCoverageLookup test double that returns a
-// fixed list of active campaigns. The other methods are no-ops.
-type activeCampaignsStub struct {
-	campaigns []demand.ActiveCampaign
-}
-
-func (s activeCampaignsStub) CampaignsCovering(ctx context.Context, character, era string, grade int) ([]int64, error) {
-	return nil, nil
-}
-func (s activeCampaignsStub) UnsoldCountFor(ctx context.Context, character, era string, grade int) (int, error) {
-	return 0, nil
-}
-func (s activeCampaignsStub) ActiveCampaigns(ctx context.Context) ([]demand.ActiveCampaign, error) {
-	return s.campaigns, nil
+// campaignLookupWith builds a CampaignCoverageLookupMock whose ActiveCampaigns
+// returns the given list. Leaves the other Fn fields nil so the defaults
+// (empty coverage, zero unsold) apply — CampaignSignals only reads
+// ActiveCampaigns.
+func campaignLookupWith(campaigns []demand.ActiveCampaign) *mocks.CampaignCoverageLookupMock {
+	return &mocks.CampaignCoverageLookupMock{
+		ActiveCampaignsFn: func(ctx context.Context) ([]demand.ActiveCampaign, error) {
+			return campaigns, nil
+		},
+	}
 }
 
 func TestCampaignSignals(t *testing.T) {
@@ -80,7 +76,7 @@ func TestCampaignSignals(t *testing.T) {
 			rows:      nil,
 			campaigns: []demand.ActiveCampaign{{ID: 1, Name: "Modern", InclusionList: ""}},
 			wantSigs:  0,
-			wantQual:  demand.DataQualityEmpty,
+			wantQual:  demand.QualityEmpty,
 		},
 		{
 			name: "inclusion list campaign one accelerator",
@@ -92,7 +88,7 @@ func TestCampaignSignals(t *testing.T) {
 			campaigns: []demand.ActiveCampaign{{ID: 1, Name: "Vintage Core", InclusionList: "Charizard,Pikachu,Umbreon", GradeRange: "9-10"}},
 			wantSigs:  1,
 			wantTop:   "Pikachu",
-			wantQual:  demand.DataQualityFull,
+			wantQual:  demand.QualityFull,
 		},
 		{
 			name: "open net campaign matches all cached characters",
@@ -103,7 +99,7 @@ func TestCampaignSignals(t *testing.T) {
 			campaigns: []demand.ActiveCampaign{{ID: 4, Name: "Modern", InclusionList: ""}},
 			wantSigs:  1,
 			wantTop:   "Pikachu",
-			wantQual:  demand.DataQualityFull,
+			wantQual:  demand.QualityFull,
 		},
 		{
 			name: "inclusion list with no cache overlap produces no signal",
@@ -112,7 +108,7 @@ func TestCampaignSignals(t *testing.T) {
 			},
 			campaigns: []demand.ActiveCampaign{{ID: 7, Name: "Crystal", InclusionList: "Kingdra,Kabutops"}},
 			wantSigs:  0,
-			wantQual:  demand.DataQualityEmpty,
+			wantQual:  demand.QualityEmpty,
 		},
 		{
 			name: "character with null velocity_change_pct is excluded from contributors",
@@ -123,7 +119,7 @@ func TestCampaignSignals(t *testing.T) {
 			campaigns: []demand.ActiveCampaign{{ID: 1, Name: "Vintage Core", InclusionList: "Pikachu,Charizard"}},
 			wantSigs:  1,
 			wantTop:   "Charizard",
-			wantQual:  demand.DataQualityFull,
+			wantQual:  demand.QualityFull,
 		},
 		{
 			name: "top accelerating list capped at 5",
@@ -139,7 +135,24 @@ func TestCampaignSignals(t *testing.T) {
 			campaigns: []demand.ActiveCampaign{{ID: 4, Name: "Modern", InclusionList: ""}},
 			wantSigs:  1,
 			wantTop:   "A",
-			wantQual:  demand.DataQualityFull,
+			wantQual:  demand.QualityFull,
+		},
+		{
+			name: "exclusion mode excludes listed characters",
+			rows: []demand.CharacterCache{
+				charRow("Pikachu", 11, 22.1, 34, computed),
+				charRow("Charizard", 8, 15.7, 52, computed),
+				charRow("Gengar", 12, 10.0, 20, computed),
+			},
+			campaigns: []demand.ActiveCampaign{{
+				ID:            5,
+				Name:          "No Pikachu",
+				InclusionList: "Pikachu",
+				ExclusionMode: true,
+			}},
+			wantSigs: 1,
+			wantTop:  "Charizard",
+			wantQual: demand.QualityFull,
 		},
 	}
 
@@ -151,7 +164,7 @@ func TestCampaignSignals(t *testing.T) {
 					return rows, nil
 				},
 			}
-			svc := demand.NewService(repo, activeCampaignsStub{campaigns: tc.campaigns})
+			svc := demand.NewService(repo, campaignLookupWith(tc.campaigns))
 
 			resp, err := svc.CampaignSignals(context.Background())
 			if err != nil {
@@ -174,6 +187,66 @@ func TestCampaignSignals(t *testing.T) {
 				if len(resp.Signals[0].TopAccelerating) > demand.TopContributorsLimit {
 					t.Errorf("top list exceeds cap: %d", len(resp.Signals[0].TopAccelerating))
 				}
+			}
+		})
+	}
+}
+
+// TestCampaignSignals_MedianVelocity verifies the median calculation via
+// the public CampaignSignals surface. Even count: average of two middles.
+// Odd count: middle element.
+func TestCampaignSignals_MedianVelocity(t *testing.T) {
+	computed := time.Date(2026, 4, 15, 3, 15, 0, 0, time.UTC)
+
+	tests := []struct {
+		name       string
+		vChanges   []float64 // velocity_change_pct for each character
+		wantMedian float64
+	}{
+		{
+			// Odd count: sorted [10, 20, 30] → middle = 20
+			name:       "odd count uses middle element",
+			vChanges:   []float64{30.0, 10.0, 20.0},
+			wantMedian: 20.0,
+		},
+		{
+			// Even count: sorted [10, 20] → (10+20)/2 = 15
+			name:       "even count averages two middles",
+			vChanges:   []float64{20.0, 10.0},
+			wantMedian: 15.0,
+		},
+		{
+			// Open net case: 22.1 and 10.0 → (10.0+22.1)/2 = 16.05
+			name:       "open net two characters",
+			vChanges:   []float64{22.1, 10.0},
+			wantMedian: 16.05,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var rows []demand.CharacterCache
+			for i, v := range tc.vChanges {
+				rows = append(rows, charRow("Char"+strconv.Itoa(i), 10, v, 10, computed))
+			}
+			repo := &mocks.DemandRepositoryMock{
+				ListCharacterCacheFn: func(ctx context.Context, window string) ([]demand.CharacterCache, error) {
+					return rows, nil
+				},
+			}
+			campaign := demand.ActiveCampaign{ID: 1, Name: "Test", InclusionList: ""}
+			svc := demand.NewService(repo, campaignLookupWith([]demand.ActiveCampaign{campaign}))
+
+			resp, err := svc.CampaignSignals(context.Background())
+			if err != nil {
+				t.Fatalf("CampaignSignals: %v", err)
+			}
+			if len(resp.Signals) != 1 {
+				t.Fatalf("want 1 signal, got %d", len(resp.Signals))
+			}
+			got := resp.Signals[0].MedianVelocityChangePct
+			if got != tc.wantMedian {
+				t.Errorf("want median=%v, got %v", tc.wantMedian, got)
 			}
 		})
 	}

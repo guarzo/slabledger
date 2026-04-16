@@ -26,15 +26,6 @@ const (
 	TopContributorsLimit = 5
 )
 
-// DataQuality values returned by CampaignSignals.
-//
-// Market analytics either have velocity data or they don't — there's no
-// "proxy" tier for this surface (that concept is specific to demand signals).
-const (
-	DataQualityFull  = "full"
-	DataQualityEmpty = "empty"
-)
-
 // CampaignSignalsResponse is the return of Service.CampaignSignals.
 type CampaignSignalsResponse struct {
 	// ComputedAt is the min analytics_computed_at across all contributing rows,
@@ -46,6 +37,11 @@ type CampaignSignalsResponse struct {
 	// character. Campaigns whose character set doesn't intersect the cache are
 	// omitted entirely — not included with TrackedCharacters=0.
 	Signals []CampaignSignal
+	// SkippedRows is the count of character cache rows that were present but
+	// had to be excluded from the index due to unparseable velocity_json. A
+	// non-zero value indicates corrupt or unexpected cache content and should
+	// be logged by the caller for observability.
+	SkippedRows int
 }
 
 // CampaignSignal summarises DH market acceleration for a single campaign's
@@ -57,8 +53,11 @@ type CampaignSignal struct {
 	AcceleratingCount       int // Subset where velocity_change_pct >= AccelerationThresholdPct.
 	DeceleratingCount       int // Subset where velocity_change_pct <= DecelerationThresholdPct.
 	MedianVelocityChangePct float64
-	DataQuality             string // Always "full" when TrackedCharacters > 0.
-	ComputedAt              *time.Time
+	// DataQuality is always QualityFull when TrackedCharacters > 0. It is set
+	// by buildCampaignSignal; construct CampaignSignal values through that
+	// function rather than assembling struct literals directly.
+	DataQuality string
+	ComputedAt  *time.Time
 	// TopAccelerating is sorted by velocity_change_pct desc, capped at TopContributorsLimit.
 	TopAccelerating []CampaignSignalContributor
 	// TopDecelerating is sorted by velocity_change_pct asc, capped at TopContributorsLimit.
@@ -115,7 +114,7 @@ func (s *Service) CampaignSignals(ctx context.Context) (CampaignSignalsResponse,
 	// Build an index from lowercased character name → signalEntry.
 	// Only rows with a valid VelocityJSON, non-nil AnalyticsComputedAt, and a
 	// non-nil velocity_change_pct are included.
-	index := buildSignalIndex(rows)
+	index, skippedRows := buildSignalIndex(rows)
 
 	var signals []CampaignSignal
 	for _, c := range campaigns {
@@ -128,34 +127,48 @@ func (s *Service) CampaignSignals(ctx context.Context) (CampaignSignalsResponse,
 	}
 
 	resp := CampaignSignalsResponse{
-		Signals: signals,
+		Signals:     signals,
+		SkippedRows: skippedRows,
 	}
 	if len(signals) > 0 {
-		resp.DataQuality = DataQualityFull
+		resp.DataQuality = QualityFull
 		resp.ComputedAt = minComputedAt(signals)
 	} else {
-		resp.DataQuality = DataQualityEmpty
+		resp.DataQuality = QualityEmpty
 	}
 	return resp, nil
 }
 
 // buildSignalIndex constructs a map from lowercased character name to its
 // parsed signalEntry. Rows missing VelocityJSON, AnalyticsComputedAt, invalid
-// JSON, or a nil velocity_change_pct are silently skipped.
-func buildSignalIndex(rows []CharacterCache) map[string]signalEntry {
+// JSON, or a nil velocity_change_pct are silently skipped. The second return
+// value is the count of rows that had a non-nil VelocityJSON but failed to
+// parse — a non-zero count indicates unexpected cache corruption that the
+// caller should surface for observability.
+func buildSignalIndex(rows []CharacterCache) (map[string]signalEntry, int) {
 	idx := make(map[string]signalEntry, len(rows))
+	skipped := 0
 	for _, row := range rows {
+		// Nil VelocityJSON or AnalyticsComputedAt is expected for newly-ingested
+		// rows before the scheduler has run; skip silently. If all rows for a
+		// campaign are nil-guarded out, that campaign will be absent from the
+		// response entirely (not shown with TrackedCharacters=0).
 		if row.VelocityJSON == nil || row.AnalyticsComputedAt == nil {
 			continue
 		}
 		var v signalVelocityJSON
 		if err := json.Unmarshal([]byte(*row.VelocityJSON), &v); err != nil {
-			continue // unparseable — skip row
+			skipped++ // non-nil velocity_json failed to parse — unexpected
+			continue
 		}
 		if v.VelocityChangePct == nil {
 			continue // no change metric — exclude from contributors
 		}
 		var medianDays *float64
+		// DH omits median_days_to_sell for low-volume characters (empty string
+		// on the wire). ParseFloat failure is expected in that case and nil is
+		// the correct zero value. If DH regresses to omitting the field
+		// entirely, it will also parse as empty string and produce nil.
 		if parsed, err := strconv.ParseFloat(v.MedianDaysToSell, 64); err == nil {
 			medianDays = &parsed
 		}
@@ -167,19 +180,28 @@ func buildSignalIndex(rows []CharacterCache) map[string]signalEntry {
 			computedAt:  row.AnalyticsComputedAt,
 		}
 	}
-	return idx
+	return idx, skipped
 }
 
 // collectContributors returns the signalEntry values from idx that belong to
 // the given campaign's character slice. Matching mirrors
 // characterMatchesInclusion in campaign_coverage.go: case-insensitive
 // substring check when an inclusion list is set; all entries when open-net.
+//
+// GradeRange is intentionally not applied here: the character cache aggregates
+// velocity across all grades, so grade-range filtering would require
+// per-grade cache rows that do not currently exist. Signals therefore reflect
+// the campaign's character universe regardless of targeted grades.
 func collectContributors(c ActiveCampaign, idx map[string]signalEntry) []signalEntry {
 	var out []signalEntry
 	trimmed := strings.TrimSpace(c.InclusionList)
 
 	if trimmed == "" {
-		// Open-net: every indexed character contributes.
+		// Open-net: every indexed character contributes. An empty InclusionList
+		// means "match all" regardless of ExclusionMode, matching the behaviour
+		// of characterMatchesInclusion in campaign_coverage.go. For very large
+		// caches (>~10k entries) the full traversal may be worth bounding with
+		// a per-campaign cap; acceptable at current cache sizes.
 		for _, entry := range idx {
 			out = append(out, entry)
 		}
@@ -238,7 +260,7 @@ func buildCampaignSignal(c ActiveCampaign, contributors []signalEntry) CampaignS
 		AcceleratingCount:       len(accel),
 		DeceleratingCount:       len(decel),
 		MedianVelocityChangePct: median,
-		DataQuality:             DataQualityFull,
+		DataQuality:             QualityFull,
 		ComputedAt:              computedAt,
 		TopAccelerating:         topAccel,
 		TopDecelerating:         topDecel,
@@ -248,11 +270,9 @@ func buildCampaignSignal(c ActiveCampaign, contributors []signalEntry) CampaignS
 // toContributors converts a sorted signalEntry slice to CampaignSignalContributor,
 // capped at limit.
 func toContributors(entries []signalEntry, limit int) []CampaignSignalContributor {
-	if len(entries) > limit {
-		entries = entries[:limit]
-	}
-	out := make([]CampaignSignalContributor, len(entries))
-	for i, e := range entries {
+	n := min(len(entries), limit)
+	out := make([]CampaignSignalContributor, n)
+	for i, e := range entries[:n] {
 		out[i] = CampaignSignalContributor{
 			Character:         e.displayName,
 			VelocityChangePct: e.vChange,

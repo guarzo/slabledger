@@ -48,7 +48,7 @@ func TestNichesHandler_HappyPath(t *testing.T) {
 						MedianVelocityChangePct: 14.2,
 						AcceleratingCount:       1,
 						TotalCount:              1,
-						DataQuality:             demand.DataQualityFull,
+						DataQuality:             demand.QualityFull,
 					},
 					Coverage: demand.NicheCoverage{
 						OurUnsoldCount: 2, ActiveCampaignIDs: []int64{}, Covered: false,
@@ -92,15 +92,11 @@ func TestNichesHandler_HappyPath(t *testing.T) {
 	require.NotNil(t, o.Market.ComputedAt)
 	assert.Equal(t, "2026-04-15T03:15:00Z", *o.Market.ComputedAt)
 
-	if o.Acceleration == nil {
-		t.Fatalf("want acceleration block, got nil")
-	}
-	if o.Acceleration.MedianVelocityChangePct != 14.2 {
-		t.Errorf("want median=14.2, got %f", o.Acceleration.MedianVelocityChangePct)
-	}
+	require.NotNil(t, o.Acceleration)
+	assert.Equal(t, 14.2, o.Acceleration.MedianVelocityChangePct)
 	assert.Equal(t, 1, o.Acceleration.AcceleratingCount)
 	assert.Equal(t, 1, o.Acceleration.TotalCount)
-	assert.Equal(t, demand.DataQualityFull, o.Acceleration.DataQuality)
+	assert.Equal(t, demand.QualityFull, o.Acceleration.DataQuality)
 
 	assert.Equal(t, 2, o.Coverage.OurUnsoldCount)
 	assert.NotNil(t, o.Coverage.ActiveCampaignIDs)

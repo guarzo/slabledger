@@ -9,112 +9,104 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/guarzo/slabledger/internal/domain/demand"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
 )
 
-type campaignSignalsServiceStub struct {
-	resp demand.CampaignSignalsResponse
-	err  error
-}
-
-func (s campaignSignalsServiceStub) CampaignSignals(ctx context.Context) (demand.CampaignSignalsResponse, error) {
-	return s.resp, s.err
-}
-
-func TestCampaignSignalsHandler_HappyPath(t *testing.T) {
+func TestCampaignSignalsHandler(t *testing.T) {
 	computed := time.Date(2026, 4, 15, 3, 15, 0, 0, time.UTC)
 	median := 11.0
-	svc := campaignSignalsServiceStub{
-		resp: demand.CampaignSignalsResponse{
-			ComputedAt:  &computed,
-			DataQuality: demand.DataQualityFull,
-			Signals: []demand.CampaignSignal{{
-				CampaignID:              1,
-				CampaignName:            "Vintage Core",
-				TrackedCharacters:       3,
-				AcceleratingCount:       1,
-				DeceleratingCount:       0,
-				MedianVelocityChangePct: 12.4,
-				DataQuality:             demand.DataQualityFull,
-				ComputedAt:              &computed,
-				TopAccelerating: []demand.CampaignSignalContributor{
-					{Character: "Pikachu", VelocityChangePct: 22.1, MedianDaysToSell: &median, SampleSize: 34},
+
+	happyResp := demand.CampaignSignalsResponse{
+		ComputedAt:  &computed,
+		DataQuality: demand.QualityFull,
+		Signals: []demand.CampaignSignal{{
+			CampaignID:              1,
+			CampaignName:            "Vintage Core",
+			TrackedCharacters:       3,
+			AcceleratingCount:       1,
+			DeceleratingCount:       0,
+			MedianVelocityChangePct: 12.4,
+			DataQuality:             demand.QualityFull,
+			ComputedAt:              &computed,
+			TopAccelerating: []demand.CampaignSignalContributor{
+				{Character: "Pikachu", VelocityChangePct: 22.1, MedianDaysToSell: &median, SampleSize: 34},
+			},
+		}},
+	}
+	emptyResp := demand.CampaignSignalsResponse{
+		DataQuality: demand.QualityEmpty,
+		Signals:     nil,
+	}
+
+	tests := []struct {
+		name       string
+		mockResp   demand.CampaignSignalsResponse
+		mockErr    error
+		wantStatus int
+		assertBody func(t *testing.T, body campaignSignalsResponseDTO)
+	}{
+		{
+			name:       "happy path",
+			mockResp:   happyResp,
+			wantStatus: http.StatusOK,
+			assertBody: func(t *testing.T, body campaignSignalsResponseDTO) {
+				assert.Equal(t, "full", body.DataQuality)
+				require.Len(t, body.Signals, 1)
+				sig := body.Signals[0]
+				assert.Equal(t, int64(1), sig.CampaignID)
+				assert.Equal(t, "Vintage Core", sig.CampaignName)
+				require.Len(t, sig.TopAccelerating, 1)
+				assert.Equal(t, "Pikachu", sig.TopAccelerating[0].Character)
+				// TopDecelerating must serialize as [] not null so JSON consumers
+				// don't need a nil-check on every signal.
+				require.NotNil(t, sig.TopDecelerating)
+				assert.Empty(t, sig.TopDecelerating)
+			},
+		},
+		{
+			name:       "empty cache",
+			mockResp:   emptyResp,
+			wantStatus: http.StatusOK,
+			assertBody: func(t *testing.T, body campaignSignalsResponseDTO) {
+				require.NotNil(t, body.Signals, "signals must be [] not null")
+				assert.Empty(t, body.Signals)
+				assert.Equal(t, "empty", body.DataQuality)
+				assert.Nil(t, body.ComputedAt)
+			},
+		},
+		{
+			name:       "service error",
+			mockErr:    errors.New("boom"),
+			wantStatus: http.StatusInternalServerError,
+			assertBody: nil,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			svc := &mocks.DemandServiceMock{
+				CampaignSignalsFn: func(ctx context.Context) (demand.CampaignSignalsResponse, error) {
+					return tc.mockResp, tc.mockErr
 				},
-			}},
-		},
-	}
+			}
 
-	h := NewCampaignSignalsHandler(svc, mocks.NewMockLogger())
-	req := httptest.NewRequest(http.MethodGet, "/api/intelligence/campaign-signals", nil)
-	w := httptest.NewRecorder()
+			h := NewCampaignSignalsHandler(svc, mocks.NewMockLogger())
+			req := httptest.NewRequest(http.MethodGet, "/api/intelligence/campaign-signals", nil)
+			w := httptest.NewRecorder()
 
-	h.HandleGetCampaignSignals(w, req)
+			h.HandleGetCampaignSignals(w, req)
 
-	if w.Code != http.StatusOK {
-		t.Fatalf("want 200, got %d: %s", w.Code, w.Body.String())
-	}
-	var resp campaignSignalsResponseDTO
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if resp.DataQuality != "full" {
-		t.Errorf("want data_quality=full, got %s", resp.DataQuality)
-	}
-	if len(resp.Signals) != 1 {
-		t.Fatalf("want 1 signal, got %d", len(resp.Signals))
-	}
-	if resp.Signals[0].CampaignID != 1 || resp.Signals[0].CampaignName != "Vintage Core" {
-		t.Errorf("want campaign 1, got %+v", resp.Signals[0])
-	}
-	if len(resp.Signals[0].TopAccelerating) != 1 || resp.Signals[0].TopAccelerating[0].Character != "Pikachu" {
-		t.Errorf("want Pikachu in top_accelerating, got %+v", resp.Signals[0].TopAccelerating)
-	}
-	if resp.Signals[0].TopDecelerating == nil {
-		t.Errorf("want top_decelerating to be [] not nil (would serialize as null)")
-	}
-}
-
-func TestCampaignSignalsHandler_Empty(t *testing.T) {
-	svc := campaignSignalsServiceStub{
-		resp: demand.CampaignSignalsResponse{
-			DataQuality: demand.DataQualityEmpty,
-			Signals:     nil,
-		},
-	}
-	h := NewCampaignSignalsHandler(svc, mocks.NewMockLogger())
-	req := httptest.NewRequest(http.MethodGet, "/api/intelligence/campaign-signals", nil)
-	w := httptest.NewRecorder()
-
-	h.HandleGetCampaignSignals(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("want 200, got %d", w.Code)
-	}
-	var resp campaignSignalsResponseDTO
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if resp.Signals == nil {
-		t.Errorf("want signals to be [] not null")
-	}
-	if resp.DataQuality != "empty" {
-		t.Errorf("want quality=empty, got %s", resp.DataQuality)
-	}
-	if resp.ComputedAt != nil {
-		t.Errorf("want computed_at=null, got %v", resp.ComputedAt)
-	}
-}
-
-func TestCampaignSignalsHandler_ServiceError(t *testing.T) {
-	svc := campaignSignalsServiceStub{
-		err: errors.New("boom"),
-	}
-	h := NewCampaignSignalsHandler(svc, mocks.NewMockLogger())
-	req := httptest.NewRequest(http.MethodGet, "/api/intelligence/campaign-signals", nil)
-	w := httptest.NewRecorder()
-
-	h.HandleGetCampaignSignals(w, req)
-	if w.Code != http.StatusInternalServerError {
-		t.Fatalf("want 500, got %d", w.Code)
+			require.Equal(t, tc.wantStatus, w.Code, "body=%s", w.Body.String())
+			if tc.assertBody == nil {
+				return
+			}
+			var body campaignSignalsResponseDTO
+			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+			tc.assertBody(t, body)
+		})
 	}
 }

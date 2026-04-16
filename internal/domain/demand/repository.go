@@ -29,11 +29,27 @@ type ActiveCampaign struct {
 	ExclusionMode bool   // If true, InclusionList is an exclusion list.
 }
 
+// ActiveCampaignSource is the narrow interface used by CampaignSignals to
+// enumerate active campaigns. Separating it from CampaignCoverageLookup
+// makes the two access patterns explicit: per-niche indexed lookup (leaderboard)
+// vs. full table scan (campaign signals).
+type ActiveCampaignSource interface {
+	// ActiveCampaigns returns all campaigns with Phase="active". Campaigns with
+	// non-numeric IDs are omitted (the ID field only holds int64). Returns an
+	// empty slice when there are no active campaigns.
+	ActiveCampaigns(ctx context.Context) ([]ActiveCampaign, error)
+}
+
 // CampaignCoverageLookup answers coverage questions for a niche bucket
 // (character, era, grade). The real implementation is wired in T5/T6 against
 // the campaigns store; for now this interface is the seam the Service depends
 // on so it can be fully unit-tested.
+//
+// It embeds ActiveCampaignSource so the same concrete type can satisfy both
+// interfaces without two separate injection points on Service.
 type CampaignCoverageLookup interface {
+	ActiveCampaignSource
+
 	// CampaignsCovering returns active campaign IDs whose inclusion rules match
 	// the given (character, era, grade) triple. An empty slice means no campaign
 	// currently targets this niche.
@@ -42,9 +58,4 @@ type CampaignCoverageLookup interface {
 	// UnsoldCountFor returns the count of our unsold inventory matching the
 	// bucket. Zero means the niche is uncovered by our holdings.
 	UnsoldCountFor(ctx context.Context, character, era string, grade int) (int, error)
-
-	// ActiveCampaigns returns all campaigns with Phase="active". Campaigns with
-	// non-numeric IDs are omitted (the ID field only holds int64). Returns an
-	// empty slice when there are no active campaigns.
-	ActiveCampaigns(ctx context.Context) ([]ActiveCampaign, error)
 }
