@@ -62,19 +62,19 @@ func WithCLEventRecorder(r dhevents.Recorder) CardLadderRefreshOption {
 
 // CLRunStats holds the counters from the most recent Card Ladder refresh run.
 type CLRunStats struct {
-	LastRunAt      time.Time `json:"lastRunAt"`
-	DurationMs     int64     `json:"durationMs"`
-	Updated        int       `json:"updated"`
-	Mapped         int       `json:"mapped"`  // Kept for backwards compatibility; equals Updated by construction.
-	Skipped        int       `json:"skipped"` // CL cards that did not match a purchase (CL-side perspective).
-	TotalCLCards   int       `json:"totalCLCards"`
-	CardsPushed    int       `json:"cardsPushed"`
-	CardsRemoved   int       `json:"cardsRemoved"`
-	OrphanMappings int       `json:"orphanMappings"` // Persistent mappings that neither matched a CL card this run nor correspond to a sold purchase.
-	OrphansRepushed int      `json:"orphansRepushed"` // Orphan cards re-pushed to the CL collection this run.
-	NoImageMatch   int       `json:"noImageMatch"`   // Unsold purchases with no CL card matched via image URL.
-	NoCertMatch    int       `json:"noCertMatch"`    // Unsold purchases that also failed cert-regex fallback.
-	NoValue        int       `json:"noValue"`        // Matched but CL card.CurrentValue was 0.
+	LastRunAt       time.Time `json:"lastRunAt"`
+	DurationMs      int64     `json:"durationMs"`
+	Updated         int       `json:"updated"`
+	Mapped          int       `json:"mapped"`  // Kept for backwards compatibility; equals Updated by construction.
+	Skipped         int       `json:"skipped"` // CL cards that did not match a purchase (CL-side perspective).
+	TotalCLCards    int       `json:"totalCLCards"`
+	CardsPushed     int       `json:"cardsPushed"`
+	CardsRemoved    int       `json:"cardsRemoved"`
+	OrphanMappings  int       `json:"orphanMappings"`  // Persistent mappings that neither matched a CL card this run nor correspond to a sold purchase.
+	OrphansRepushed int       `json:"orphansRepushed"` // Orphan cards re-pushed to the CL collection this run.
+	NoImageMatch    int       `json:"noImageMatch"`    // Unsold purchases with no CL card matched via image URL.
+	NoCertMatch     int       `json:"noCertMatch"`     // Unsold purchases that also failed cert-regex fallback.
+	NoValue         int       `json:"noValue"`         // Matched but CL card.CurrentValue was 0.
 }
 
 // CardLadderRefreshScheduler refreshes CL values from the Card Ladder API daily.
