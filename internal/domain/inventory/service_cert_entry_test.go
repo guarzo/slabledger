@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"testing"
 	"time"
+
+	"github.com/guarzo/slabledger/internal/domain/dhevents"
 )
 
 // dbLikePurchaseRepo wraps mockRepo so Get* methods return a shallow copy of
@@ -698,6 +700,69 @@ func TestImportCerts_NewCertSetsReceivedAtOnStructLiteral(t *testing.T) {
 		if _, err := time.Parse(time.RFC3339, *created.ReceivedAt); err != nil {
 			t.Errorf("ReceivedAt not in RFC3339 form: %v", err)
 		}
+	}
+}
+
+// TestEnrollExistingInDHPushPipeline_RecordsEvent verifies that a successful
+// enrollment emits a TypeEnrolled event with SourceCertIntake.
+func TestEnrollExistingInDHPushPipeline_RecordsEvent(t *testing.T) {
+	repo := newMockRepo()
+	receivedAt := time.Now().Format(time.RFC3339)
+	repo.purchases["p1"] = &Purchase{
+		ID: "p1", CertNumber: "11111111", Grader: "PSA",
+		CardName: "Charizard", DHPushStatus: "",
+		ReceivedAt: &receivedAt,
+	}
+	rec := &stubEventRecorder{}
+	svc := &service{
+		campaigns: repo, purchases: repo, sales: repo, analytics: repo,
+		finance: repo, pricing: repo, dh: repo, eventRec: rec,
+		idGen: func() string { return "unused" },
+	}
+
+	svc.enrollExistingInDHPushPipeline(context.Background(), repo.purchases["p1"], "11111111", "cert import")
+
+	events := rec.snapshot()
+	if len(events) != 1 {
+		t.Fatalf("events = %d, want 1", len(events))
+	}
+	e := events[0]
+	if e.Type != dhevents.TypeEnrolled {
+		t.Errorf("type = %q, want %q", e.Type, dhevents.TypeEnrolled)
+	}
+	if e.PurchaseID != "p1" {
+		t.Errorf("purchaseID = %q, want p1", e.PurchaseID)
+	}
+	if e.CertNumber != "11111111" {
+		t.Errorf("certNumber = %q, want 11111111", e.CertNumber)
+	}
+	if e.NewPushStatus != DHPushStatusPending {
+		t.Errorf("newPushStatus = %q, want %q", e.NewPushStatus, DHPushStatusPending)
+	}
+	if e.Source != dhevents.SourceCertIntake {
+		t.Errorf("source = %q, want %q", e.Source, dhevents.SourceCertIntake)
+	}
+}
+
+// TestEnrollExistingInDHPushPipeline_SkipsWhenNotNeeded verifies no event is
+// recorded when NeedsDHPush() is false (e.g. already matched).
+func TestEnrollExistingInDHPushPipeline_SkipsWhenNotNeeded(t *testing.T) {
+	repo := newMockRepo()
+	repo.purchases["p1"] = &Purchase{
+		ID: "p1", CertNumber: "11111111", Grader: "PSA",
+		DHPushStatus: DHPushStatusMatched, DHInventoryID: 42,
+	}
+	rec := &stubEventRecorder{}
+	svc := &service{
+		campaigns: repo, purchases: repo, sales: repo, analytics: repo,
+		finance: repo, pricing: repo, dh: repo, eventRec: rec,
+		idGen: func() string { return "unused" },
+	}
+
+	svc.enrollExistingInDHPushPipeline(context.Background(), repo.purchases["p1"], "11111111", "cert import")
+
+	if got := len(rec.snapshot()); got != 0 {
+		t.Errorf("events = %d, want 0 (matched rows should not re-enroll)", got)
 	}
 }
 

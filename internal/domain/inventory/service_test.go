@@ -4,12 +4,35 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"sync/atomic"
 	"testing"
 
+	"github.com/guarzo/slabledger/internal/domain/dhevents"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
 )
+
+// captureEventRecorder is a thread-safe recorder for black-box tests.
+type captureEventRecorder struct {
+	mu     sync.Mutex
+	events []dhevents.Event
+}
+
+func (r *captureEventRecorder) Record(_ context.Context, e dhevents.Event) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.events = append(r.events, e)
+	return nil
+}
+
+func (r *captureEventRecorder) snapshot() []dhevents.Event {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]dhevents.Event, len(r.events))
+	copy(out, r.events)
+	return out
+}
 
 // testIDGen returns a deterministic ID generator for tests.
 func testIDGen() func() string {
@@ -485,6 +508,71 @@ func TestService_ImportPSAExportGlobal_Allocate(t *testing.T) {
 	}
 	if result.Results[0].CampaignID != c.ID {
 		t.Errorf("CampaignID = %q, want %q", result.Results[0].CampaignID, c.ID)
+	}
+
+	// Verify the newly-allocated purchase is enrolled in the DH push pipeline.
+	// Without this, the DH push scheduler silently skips the row and it never
+	// gets matched to a DH card_id or pushed to DH inventory.
+	p, err := repo.GetPurchaseByCertNumber(ctx, "PSA", "PSA001")
+	if err != nil {
+		t.Fatalf("lookup new purchase by cert: %v", err)
+	}
+	if p == nil {
+		t.Fatal("new purchase not found after import")
+	}
+	if p.DHPushStatus != inventory.DHPushStatusPending {
+		t.Errorf("DHPushStatus = %q, want %q (new PSA imports must enroll in DH push pipeline)", p.DHPushStatus, inventory.DHPushStatusPending)
+	}
+}
+
+// TestService_ImportPSAExportGlobal_RecordsEnrollmentEvent verifies that a
+// newly-allocated PSA import emits a TypeEnrolled event with SourcePSAImport.
+func TestService_ImportPSAExportGlobal_RecordsEnrollmentEvent(t *testing.T) {
+	repo := mocks.NewInMemoryCampaignStore()
+	rec := &captureEventRecorder{}
+	svc := inventory.NewService(
+		repo, repo, repo, repo, repo, repo, repo,
+		withTestIDGen(),
+		inventory.WithEventRecorder(rec),
+	)
+	ctx := context.Background()
+
+	c := &inventory.Campaign{Name: "Vintage", Sport: "Pokemon", BuyTermsCLPct: 0.78, GradeRange: "8-10", PSASourcingFeeCents: 300}
+	if err := svc.CreateCampaign(ctx, c); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+	c.Phase = inventory.PhaseActive
+	if err := svc.UpdateCampaign(ctx, c); err != nil {
+		t.Fatalf("setup activate: %v", err)
+	}
+
+	rows := []inventory.PSAExportRow{
+		{CertNumber: "PSA001", ListingTitle: "2022 POKEMON CHARIZARD PSA 9", Grade: 9, PricePaid: 500, Date: "2026-01-15", Category: "Pokemon"},
+	}
+	if _, err := svc.ImportPSAExportGlobal(ctx, rows); err != nil {
+		t.Fatalf("ImportPSAExportGlobal: %v", err)
+	}
+
+	// Filter to TypeEnrolled events for the allocated cert (batchResolveCardIDs
+	// may also fire events if a cardIDResolver were set — here we didn't set one).
+	var enrolled []dhevents.Event
+	for _, e := range rec.snapshot() {
+		if e.Type == dhevents.TypeEnrolled {
+			enrolled = append(enrolled, e)
+		}
+	}
+	if len(enrolled) != 1 {
+		t.Fatalf("enrolled events = %d, want 1", len(enrolled))
+	}
+	got := enrolled[0]
+	if got.CertNumber != "PSA001" {
+		t.Errorf("certNumber = %q, want PSA001", got.CertNumber)
+	}
+	if got.NewPushStatus != inventory.DHPushStatusPending {
+		t.Errorf("newPushStatus = %q, want %q", got.NewPushStatus, inventory.DHPushStatusPending)
+	}
+	if got.Source != dhevents.SourcePSAImport {
+		t.Errorf("source = %q, want %q", got.Source, dhevents.SourcePSAImport)
 	}
 }
 

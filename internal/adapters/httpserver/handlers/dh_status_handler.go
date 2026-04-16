@@ -4,8 +4,10 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
+	"github.com/guarzo/slabledger/internal/domain/dhevents"
 	"github.com/guarzo/slabledger/internal/domain/intelligence"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
@@ -15,6 +17,11 @@ import (
 // because DoubleHolo's API requires a "since" parameter and this pre-dates all
 // Card Yeti activity on the platform, ensuring we capture every order.
 const ordersEpoch = "2020-01-01T00:00:00Z"
+
+// syncKeyDHOrdersPoll is the sync_state key where the orders-poll scheduler
+// persists its last-poll timestamp. Matches the constant in
+// internal/adapters/scheduler/dh_orders_poll.go.
+const syncKeyDHOrdersPoll = "dh_orders_last_poll"
 
 // HandleGetIntelligence returns market intelligence for a specific card.
 func (h *DHHandler) HandleGetIntelligence(w http.ResponseWriter, r *http.Request) {
@@ -160,6 +167,11 @@ type dhStatusResponse struct {
 	DHInventoryCount      int             `json:"dh_inventory_count,omitempty"`
 	DHListingsCount       int             `json:"dh_listings_count,omitempty"`
 	DHOrdersCount         int             `json:"dh_orders_count,omitempty"`
+	// Orders-ingest health fields (populated from dh_state_events + sync state).
+	LastOrdersPollAt          string `json:"last_orders_poll_at,omitempty"`
+	OrdersMatchedCount24h     int    `json:"orders_matched_count_24h,omitempty"`
+	OrdersOrphanCount24h      int    `json:"orders_orphan_count_24h,omitempty"`
+	OrdersAlreadySoldCount24h int    `json:"orders_already_sold_count_24h,omitempty"`
 	// PendingReceivedCount is what /api/dh/pending actually drains
 	// (dh_push_status='pending' AND received_at IS NOT NULL). It can lag
 	// PendingCount when CL refresh has enrolled rows that haven't been
@@ -281,6 +293,25 @@ func (h *DHHandler) HandleGetStatus(w http.ResponseWriter, r *http.Request) {
 			}
 		}()
 		wg.Wait()
+	}
+
+	// Orders-ingest health fields (best-effort).
+	if h.syncStateReader != nil {
+		if v, err := h.syncStateReader.Get(ctx, syncKeyDHOrdersPoll); err == nil && v != "" {
+			resp.LastOrdersPollAt = v
+		}
+	}
+	if h.eventCountsStore != nil {
+		since := time.Now().Add(-24 * time.Hour)
+		if n, err := h.eventCountsStore.CountByTypeSince(ctx, dhevents.TypeSold, since); err == nil {
+			resp.OrdersMatchedCount24h = n
+		}
+		if n, err := h.eventCountsStore.CountByTypeSince(ctx, dhevents.TypeOrphanSale, since); err == nil {
+			resp.OrdersOrphanCount24h = n
+		}
+		if n, err := h.eventCountsStore.CountByTypeSince(ctx, dhevents.TypeAlreadySold, since); err == nil {
+			resp.OrdersAlreadySoldCount24h = n
+		}
 	}
 
 	writeJSON(w, http.StatusOK, resp)

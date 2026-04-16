@@ -117,6 +117,10 @@ export interface DHStatusResponse {
   dh_inventory_count?: number;
   dh_listings_count?: number;
   dh_orders_count?: number;
+  last_orders_poll_at?: string;
+  orders_matched_count_24h?: number;
+  orders_orphan_count_24h?: number;
+  orders_already_sold_count_24h?: number;
 }
 
 export interface DHBulkMatchResponse {

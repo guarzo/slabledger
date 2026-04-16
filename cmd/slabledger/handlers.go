@@ -65,6 +65,8 @@ type handlerInputs struct {
 	MMStore           *sqlite.MarketMoversStore
 	MMClient          *marketmovers.Client
 	DHClient          *dh.Client
+	DHEventStore      *sqlite.DHEventStore
+	SyncStateRepo     *sqlite.SyncStateRepository
 	SchedulerResult   *scheduler.BuildResult
 	GSheetsClient     *gsheets.Client
 	PendingItemsRepo  *sqlite.PendingItemsRepository
@@ -139,6 +141,10 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 		if err != nil {
 			logger.Warn(ctx, "DH reconciler init failed", observability.Err(err))
 		}
+		var ordersIngester handlers.DHOrdersIngester
+		if in.SchedulerResult != nil && in.SchedulerResult.DHOrdersPoll != nil {
+			ordersIngester = in.SchedulerResult.DHOrdersPoll
+		}
 		dhHandler = handlers.NewDHHandler(handlers.DHHandlerDeps{
 			CertResolver:      in.DHClient,
 			CardIDSaver:       in.CardIDMappingRepo,
@@ -160,6 +166,10 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 			DHApproveService:  in.CampaignsService,
 			MatchConfirmer:    in.DHClient,
 			Reconciler:        reconciler,
+			OrdersIngester:    ordersIngester, // nil-safe; handler returns 503 if unwired
+			EventRecorder:     in.DHEventStore,
+			SyncStateReader:   in.SyncStateRepo,
+			EventCountsStore:  in.DHEventStore,
 		})
 		logger.Info(ctx, "DH handler initialized")
 	}
@@ -291,6 +301,9 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 		}
 		if in.CardIDMappingRepo != nil {
 			listingOpts = append(listingOpts, dhlisting.WithDHListingCardIDSaver(in.CardIDMappingRepo))
+		}
+		if in.DHEventStore != nil {
+			listingOpts = append(listingOpts, dhlisting.WithEventRecorder(in.DHEventStore))
 		}
 		svc, err := dhlisting.NewDHListingService(
 			in.CampaignsService, in.Logger, listingOpts...,

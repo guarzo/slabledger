@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
+	"github.com/guarzo/slabledger/internal/domain/dhevents"
 	"github.com/guarzo/slabledger/internal/domain/dhlisting"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
@@ -89,6 +90,12 @@ func WithDHPushHoldSetter(setter DHPushHoldSetter) DHPushOption {
 	return func(s *DHPushScheduler) { s.holdSetter = setter }
 }
 
+// WithDHPushEventRecorder enables DH state-event recording for hold
+// transitions driven by the push scheduler's safety gates.
+func WithDHPushEventRecorder(r dhevents.Recorder) DHPushOption {
+	return func(s *DHPushScheduler) { s.eventRec = r }
+}
+
 // DHPushScheduler matches pending purchases against DH and pushes inventory.
 type DHPushScheduler struct {
 	StopHandle
@@ -101,8 +108,21 @@ type DHPushScheduler struct {
 	candidatesSaver DHPushCandidatesSaver
 	configLoader    DHPushConfigLoader
 	holdSetter      DHPushHoldSetter
+	eventRec        dhevents.Recorder // optional: records DH state-change events
 	logger          observability.Logger
 	config          DHPushConfig
+}
+
+// recordEvent emits an event to the recorder if present. Failures are logged but do not abort.
+func (s *DHPushScheduler) recordEvent(ctx context.Context, e dhevents.Event) {
+	if s.eventRec == nil {
+		return
+	}
+	if err := s.eventRec.Record(ctx, e); err != nil {
+		s.logger.Warn(ctx, "dh push: record event failed",
+			observability.String("type", string(e.Type)),
+			observability.Err(err))
+	}
 }
 
 // NewDHPushScheduler creates a new DH push scheduler.
@@ -281,16 +301,32 @@ func (s *DHPushScheduler) processPurchase(ctx context.Context, p inventory.Purch
 			observability.String("purchaseID", p.ID),
 			observability.String("cert", p.CertNumber),
 			observability.String("reason", holdReason))
+		held := false
 		if s.holdSetter != nil {
 			if updateErr := s.holdSetter.SetHeldWithReason(ctx, p.ID, holdReason); updateErr != nil {
 				s.logger.Warn(ctx, "dh push: failed to set held status+reason",
 					observability.String("purchaseID", p.ID), observability.Err(updateErr))
+			} else {
+				held = true
 			}
 		} else {
 			if updateErr := s.statusUpdater.UpdatePurchaseDHPushStatus(ctx, p.ID, inventory.DHPushStatusHeld); updateErr != nil {
 				s.logger.Warn(ctx, "dh push: failed to set held status",
 					observability.String("purchaseID", p.ID), observability.Err(updateErr))
+			} else {
+				held = true
 			}
+		}
+		if held {
+			s.recordEvent(ctx, dhevents.Event{
+				PurchaseID:    p.ID,
+				CertNumber:    p.CertNumber,
+				Type:          dhevents.TypeHeld,
+				NewPushStatus: inventory.DHPushStatusHeld,
+				DHCardID:      dhCardID,
+				Notes:         holdReason,
+				Source:        dhevents.SourceDHPush,
+			})
 		}
 		return processHeld
 	}

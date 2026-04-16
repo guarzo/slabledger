@@ -3,6 +3,7 @@ import { formatCents, daysHeldColor } from '../../../utils/formatters';
 import { TrendArrow, ConfidenceIndicator, GradeBadge } from '../../../ui';
 import { DropdownMenu } from 'radix-ui';
 import MarketplaceLinks from './MarketplaceLinks';
+import { DHStateBadge } from './DHStateBadge';
 import {
   costBasis, bestPrice, unrealizedPL, marketTrend,
   getSourceByType, marketTooltip,
@@ -173,6 +174,10 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
       </div>
       {/* Days held */}
       <div className={`glass-table-td flex-shrink-0 text-center print-hide-col ${daysColor}`} style={{ width: '40px' }}>{item.daysHeld}</div>
+      {/* DH Status */}
+      <div className="glass-table-td flex-shrink-0 text-center print-hide-col" style={{ width: '80px' }}>
+        <DHStateBadge dhPushStatus={item.purchase.dhPushStatus} dhStatus={item.purchase.dhStatus} dhCardId={item.purchase.dhCardId} />
+      </div>
       {/* Sync freshness dot */}
       <div className="glass-table-td flex-shrink-0 text-center print-hide-col" style={{ width: '20px' }}>
         <span

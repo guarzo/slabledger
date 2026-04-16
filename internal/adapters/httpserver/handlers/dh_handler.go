@@ -6,8 +6,11 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
+	"github.com/guarzo/slabledger/internal/adapters/scheduler"
+	"github.com/guarzo/slabledger/internal/domain/dhevents"
 	"github.com/guarzo/slabledger/internal/domain/dhlisting"
 	"github.com/guarzo/slabledger/internal/domain/intelligence"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
@@ -98,6 +101,22 @@ type DHCountsFetcher interface {
 	GetOrders(ctx context.Context, filters dh.OrderFilters) (*dh.OrdersResponse, error)
 }
 
+// DHOrdersIngester performs a one-shot ingest pass against DH /orders.
+// Satisfied by *scheduler.DHOrdersPollScheduler.
+type DHOrdersIngester interface {
+	RunOnce(ctx context.Context, since string) (*scheduler.DHOrdersPollSummary, error)
+}
+
+// SyncStateReader reads sync state values. Satisfied by *sqlite.SyncStateRepository.
+type SyncStateReader interface {
+	Get(ctx context.Context, key string) (string, error)
+}
+
+// EventCountsStore provides aggregate event counts. Satisfied by *sqlite.DHEventStore.
+type EventCountsStore interface {
+	CountByTypeSince(ctx context.Context, t dhevents.Type, since time.Time) (int, error)
+}
+
 // DHHandler handles DH bulk match, export, intelligence, and suggestions endpoints.
 type DHHandler struct {
 	certResolver      DHCertResolver
@@ -115,10 +134,14 @@ type DHHandler struct {
 	suggestCounter    DHSuggestionsCounter
 	logger            observability.Logger
 	baseCtx           context.Context
-	healthReporter    DHHealthReporter // optional: API health metrics
-	countsFetcher     DHCountsFetcher  // optional: DH inventory/order counts
-	dhApproveService  DHApproveService // optional: approve held pushes + push config
-	matchConfirmer    DHMatchConfirmer // optional: confirms matches with DH for learning
+	healthReporter    DHHealthReporter  // optional: API health metrics
+	countsFetcher     DHCountsFetcher   // optional: DH inventory/order counts
+	dhApproveService  DHApproveService  // optional: approve held pushes + push config
+	matchConfirmer    DHMatchConfirmer  // optional: confirms matches with DH for learning
+	ordersIngester    DHOrdersIngester  // optional: POST /api/dh/ingest-orders manual trigger
+	eventRec          dhevents.Recorder // optional: records DH state-change events
+	syncStateReader   SyncStateReader   // optional: reads dh_orders_last_poll timestamp
+	eventCountsStore  EventCountsStore  // optional: 24h event counts for orders ingest health
 
 	reconciler dhlisting.Reconciler // optional: DH inventory reconciliation
 
@@ -160,6 +183,10 @@ type DHHandlerDeps struct {
 	DHApproveService  DHApproveService     // optional: approve held pushes + push config
 	MatchConfirmer    DHMatchConfirmer     // optional: confirms matches with DH for learning
 	Reconciler        dhlisting.Reconciler // optional: DH inventory reconciliation
+	OrdersIngester    DHOrdersIngester     // optional: enables POST /api/dh/ingest-orders
+	EventRecorder     dhevents.Recorder    // optional: records DH state-change events
+	SyncStateReader   SyncStateReader      // optional: reads dh_orders_last_poll timestamp
+	EventCountsStore  EventCountsStore     // optional: 24h event counts for orders ingest health
 }
 
 // NewDHHandler creates a new DHHandler with the given dependencies.
@@ -190,6 +217,10 @@ func NewDHHandler(deps DHHandlerDeps) *DHHandler {
 		dhApproveService:  deps.DHApproveService,
 		matchConfirmer:    deps.MatchConfirmer,
 		reconciler:        deps.Reconciler,
+		ordersIngester:    deps.OrdersIngester,
+		eventRec:          deps.EventRecorder,
+		syncStateReader:   deps.SyncStateReader,
+		eventCountsStore:  deps.EventCountsStore,
 	}
 	h.bulkMatchError.Store("")
 	return h
@@ -198,6 +229,19 @@ func NewDHHandler(deps DHHandlerDeps) *DHHandler {
 // Wait blocks until all background goroutines (e.g. bulk match) have completed.
 // Call during graceful shutdown to avoid writing to a closed database.
 func (h *DHHandler) Wait() { h.bgWG.Wait() }
+
+// recordEvent emits a DH state-change event to the recorder if present.
+// Failures are logged but do not abort the calling operation.
+func (h *DHHandler) recordEvent(ctx context.Context, e dhevents.Event) {
+	if h.eventRec == nil {
+		return
+	}
+	if err := h.eventRec.Record(ctx, e); err != nil {
+		h.logger.Warn(ctx, "dh handler: record event failed",
+			observability.String("type", string(e.Type)),
+			observability.Err(err))
+	}
+}
 
 // pushAndPersistDH builds an InventoryItem, pushes it to DH, and persists the DH fields.
 // Returns the DH inventory ID on success. Errors are classified for callers:
