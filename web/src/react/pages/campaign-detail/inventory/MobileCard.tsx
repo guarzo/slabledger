@@ -7,6 +7,7 @@ import {
   getSourceByType, fmtDateShort, plColor, formatPL, mostRecentSale,
   deriveSignalDirection, deriveSignalDelta, isHotSeller, formatReceivedDate,
 } from './utils';
+import { isReadyToList } from './inventoryCalcs';
 
 interface MobileCardProps {
   item: AgingItem;
@@ -213,7 +214,7 @@ export default function MobileCard({ item, selected, onToggle, onRecordSale, onF
             Fix
           </button>
         )}
-        {onListOnDH && item.purchase.dhStatus !== 'listed' && !!item.purchase.dhInventoryId && (
+        {onListOnDH && isReadyToList(item) && !!item.purchase.dhInventoryId && (
           <button
             type="button"
             onClick={() => onListOnDH(item.purchase.id)}

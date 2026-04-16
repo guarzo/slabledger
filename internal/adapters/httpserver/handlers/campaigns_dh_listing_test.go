@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/guarzo/slabledger/internal/domain/dhlisting"
@@ -136,7 +137,7 @@ func TestHandleListPurchaseOnDH(t *testing.T) {
 			}
 			if tt.wantErrSubstr != "" {
 				msg := decodeErrorResponse(t, rec)
-				if !containsSubstring(msg, tt.wantErrSubstr) {
+				if !strings.Contains(msg, tt.wantErrSubstr) {
 					t.Errorf("error body = %q, want substring %q", msg, tt.wantErrSubstr)
 				}
 			}
@@ -149,11 +150,3 @@ func TestHandleListPurchaseOnDH(t *testing.T) {
 	}
 }
 
-func containsSubstring(s, sub string) bool {
-	for i := 0; i+len(sub) <= len(s); i++ {
-		if s[i:i+len(sub)] == sub {
-			return true
-		}
-	}
-	return false
-}

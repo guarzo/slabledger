@@ -1,17 +1,10 @@
 import type { AgingItem } from '../../../../types/campaigns';
 import { formatCents } from '../../../utils/formatters';
-import { mostRecentSale } from './utils';
+import { mostRecentSale, formatShipDate } from './utils';
 
 interface SellPriceHeroProps {
   item: AgingItem;
   costBasisCents: number;
-}
-
-function formatSaleDate(dateStr?: string): string | undefined {
-  if (!dateStr) return undefined;
-  const d = new Date(dateStr + 'T00:00:00');
-  if (isNaN(d.getTime())) return undefined;
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 function clampPct(v: number): number {
@@ -62,7 +55,7 @@ export default function SellPriceHero({ item, costBasisCents }: SellPriceHeroPro
               </span>
               {recent.date && (
                 <span className="text-xs text-[var(--text-muted)]">
-                  {formatSaleDate(recent.date)}
+                  {formatShipDate(recent.date)}
                 </span>
               )}
             </div>

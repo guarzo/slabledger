@@ -183,7 +183,6 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
           style={{ color: dot.color, fontSize: '10px', lineHeight: 1 }}
         >&#9679;</span>
       </div>
-      {/* List on DH button — only when ready to list with a DH inventory ID */}
       <div className="glass-table-td flex-shrink-0 text-center !px-1 print-hide-actions" style={{ width: '48px' }} onClick={e => e.stopPropagation()}>
         {onListOnDH && isReadyToList(item) && !!item.purchase.dhInventoryId && (
           <button

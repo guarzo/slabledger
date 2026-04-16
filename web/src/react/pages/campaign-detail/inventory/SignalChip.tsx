@@ -52,13 +52,16 @@ export default function SignalChip({
   if (hideWhenZero && valueCents <= 0) return null;
 
   const dotColor = updatedAt ? freshnessDotColor(updatedAt, freshnessThresholds) : null;
-  const showDelta = deltaVsCostCents != null && valueCents > 0;
-  const deltaSign = showDelta && deltaVsCostCents !== undefined
-    ? (deltaVsCostCents > 0 ? '+' : deltaVsCostCents < 0 ? '' : '')
-    : '';
-  const deltaColor = showDelta && deltaVsCostCents !== undefined
-    ? (deltaVsCostCents > 0 ? 'var(--success)' : deltaVsCostCents < 0 ? 'var(--danger)' : 'var(--text-muted)')
-    : 'var(--text-muted)';
+  const delta = deltaVsCostCents != null && valueCents > 0
+    ? {
+        sign: deltaVsCostCents > 0 ? '+' : '',
+        color:
+          deltaVsCostCents > 0 ? 'var(--success)'
+          : deltaVsCostCents < 0 ? 'var(--danger)'
+          : 'var(--text-muted)',
+        pct: Math.round((deltaVsCostCents / Math.max(1, valueCents - deltaVsCostCents)) * 100),
+      }
+    : null;
 
   return (
     <div className="inline-flex items-center gap-2 rounded-md border border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.02)] px-2.5 py-1.5">
@@ -80,9 +83,9 @@ export default function SignalChip({
           >
             {valueCents > 0 ? formatCents(valueCents) : '\u2014'}
           </span>
-          {showDelta && (
-            <span className="text-[10px] tabular-nums" style={{ color: deltaColor }}>
-              {deltaSign}{Math.round((deltaVsCostCents! / Math.max(1, valueCents - deltaVsCostCents!)) * 100)}%
+          {delta && (
+            <span className="text-[10px] tabular-nums" style={{ color: delta.color }}>
+              {delta.sign}{delta.pct}%
             </span>
           )}
         </div>

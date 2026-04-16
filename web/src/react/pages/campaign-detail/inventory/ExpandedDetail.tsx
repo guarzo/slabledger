@@ -94,7 +94,6 @@ export default function ExpandedDetail({ item, onReviewed, campaignId, onOpenFla
       {/* Hero: most recent sale + comp context + range bar */}
       <SellPriceHero item={item} costBasisCents={cb} />
 
-      {/* Supporting signal chips — compact, hide when optional + zero */}
       <div className="mb-4 flex flex-wrap items-stretch gap-2">
         <SignalChip label="Cost Basis" valueCents={cb} />
         <SignalChip
@@ -130,7 +129,6 @@ export default function ExpandedDetail({ item, onReviewed, campaignId, onOpenFla
         <SignalChip label="Listed" valueCents={listedCents} hideWhenZero />
       </div>
 
-      {/* Comp Summary Panel — refined, detailed breakdown */}
       {item.compSummary && item.compSummary.recentComps > 0 && (
         <CompSummaryPanel comp={item.compSummary} costBasisCents={cb} />
       )}

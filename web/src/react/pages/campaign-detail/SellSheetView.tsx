@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import type { AgingItem } from '../../../types/campaigns';
 import type { PriceFlagReason } from '../../../types/campaigns/priceReview';
 import { Button } from '../../ui';
@@ -36,11 +37,12 @@ export function SellSheetActions({
   pageSellSheetCount,
   onPrint,
 }: SellSheetActionsProps) {
-  const listableIds = onBulkListOnDH
-    ? items
-        .filter(i => selected.has(i.purchase.id) && isReadyToList(i) && !!i.purchase.dhInventoryId)
-        .map(i => i.purchase.id)
-    : [];
+  const listableIds = useMemo(() => {
+    if (!onBulkListOnDH || selected.size === 0) return [];
+    return items
+      .filter(i => selected.has(i.purchase.id) && isReadyToList(i) && !!i.purchase.dhInventoryId)
+      .map(i => i.purchase.id);
+  }, [onBulkListOnDH, selected, items]);
 
   return (
     <>
