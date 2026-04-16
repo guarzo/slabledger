@@ -11,15 +11,12 @@ import (
 // Returns nil on cold start (before background worker populated it).
 type CrackCandidateProvider func(ctx context.Context) map[string]bool
 
-// Service handles sell sheet generation and eBay/Shopify exports.
+// Service handles sell sheet generation.
 type Service interface {
 	// Sell sheet
 	GenerateSellSheet(ctx context.Context, campaignID string, purchaseIDs []string) (*inventory.SellSheet, error)
 	GenerateGlobalSellSheet(ctx context.Context) (*inventory.SellSheet, error)
 	GenerateSelectedSellSheet(ctx context.Context, purchaseIDs []string) (*inventory.SellSheet, error)
-	// eBay export
-	ListEbayExportItems(ctx context.Context, flaggedOnly bool) (*inventory.EbayExportListResponse, error)
-	GenerateEbayCSV(ctx context.Context, items []inventory.EbayExportGenerateItem) ([]byte, error)
 }
 
 // service is the concrete implementation of Service.

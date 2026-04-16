@@ -169,8 +169,6 @@ func (rt *Router) registerCampaignRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /api/purchases/import-certs", authRoute(rt.campaignsHandler.HandleImportCerts))
 	mux.Handle("POST /api/purchases/scan-cert", authRoute(rt.campaignsHandler.HandleScanCert))
 	mux.Handle("POST /api/purchases/resolve-cert", authRoute(rt.campaignsHandler.HandleResolveCert))
-	mux.Handle("GET /api/purchases/export-ebay", authRoute(rt.campaignsHandler.HandleListEbayExport))
-	mux.Handle("POST /api/purchases/export-ebay/generate", authRoute(rt.campaignsHandler.HandleGenerateEbayCSV))
 	mux.Handle("PATCH /api/purchases/{purchaseId}/campaign", authRoute(rt.campaignsHandler.HandleReassignPurchase))
 	mux.Handle("PATCH /api/purchases/{purchaseId}/buy-cost", authRoute(rt.campaignsHandler.HandleUpdateBuyCost))
 

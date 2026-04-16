@@ -3,7 +3,6 @@ package export_test
 import (
 	"context"
 	"errors"
-	"strings"
 	"testing"
 	"time"
 
@@ -16,16 +15,14 @@ import (
 // stubExportReader implements export.ExportReader for testing.
 // Each method delegates to a function field; nil fields return safe defaults.
 type stubExportReader struct {
-	getSellSheetItemsFn        func(ctx context.Context) ([]string, error)
-	addSellSheetItemsFn        func(ctx context.Context, purchaseIDs []string) error
-	removeSellSheetItemsFn     func(ctx context.Context, purchaseIDs []string) error
-	clearSellSheetFn           func(ctx context.Context) error
-	getPurchasesByIDsFn        func(ctx context.Context, purchaseIDs []string) (map[string]*inventory.Purchase, error)
-	listAllUnsoldPurchasesFn   func(ctx context.Context) ([]inventory.Purchase, error)
-	listEbayFlaggedPurchasesFn func(ctx context.Context) ([]inventory.Purchase, error)
-	clearEbayExportFlagsFn     func(ctx context.Context, purchaseIDs []string) error
-	getCampaignFn              func(ctx context.Context, id string) (*inventory.Campaign, error)
-	listCampaignsFn            func(ctx context.Context, activeOnly bool) ([]inventory.Campaign, error)
+	getSellSheetItemsFn      func(ctx context.Context) ([]string, error)
+	addSellSheetItemsFn      func(ctx context.Context, purchaseIDs []string) error
+	removeSellSheetItemsFn   func(ctx context.Context, purchaseIDs []string) error
+	clearSellSheetFn         func(ctx context.Context) error
+	getPurchasesByIDsFn      func(ctx context.Context, purchaseIDs []string) (map[string]*inventory.Purchase, error)
+	listAllUnsoldPurchasesFn func(ctx context.Context) ([]inventory.Purchase, error)
+	getCampaignFn            func(ctx context.Context, id string) (*inventory.Campaign, error)
+	listCampaignsFn          func(ctx context.Context, activeOnly bool) ([]inventory.Campaign, error)
 }
 
 func (s *stubExportReader) GetSellSheetItems(ctx context.Context) ([]string, error) {
@@ -70,20 +67,6 @@ func (s *stubExportReader) ListAllUnsoldPurchases(ctx context.Context) ([]invent
 	return []inventory.Purchase{}, nil
 }
 
-func (s *stubExportReader) ListEbayFlaggedPurchases(ctx context.Context) ([]inventory.Purchase, error) {
-	if s.listEbayFlaggedPurchasesFn != nil {
-		return s.listEbayFlaggedPurchasesFn(ctx)
-	}
-	return []inventory.Purchase{}, nil
-}
-
-func (s *stubExportReader) ClearEbayExportFlags(ctx context.Context, purchaseIDs []string) error {
-	if s.clearEbayExportFlagsFn != nil {
-		return s.clearEbayExportFlagsFn(ctx, purchaseIDs)
-	}
-	return nil
-}
-
 func (s *stubExportReader) GetCampaign(ctx context.Context, id string) (*inventory.Campaign, error) {
 	if s.getCampaignFn != nil {
 		return s.getCampaignFn(ctx, id)
@@ -105,200 +88,6 @@ var _ export.ExportReader = (*stubExportReader)(nil)
 func receivedAt() *string {
 	s := time.Now().Format(time.RFC3339)
 	return &s
-}
-
-// --- GenerateEbayCSV ---
-
-func TestExportService_GenerateEbayCSV(t *testing.T) {
-	psaPurchase := &inventory.Purchase{
-		ID:         "psa-1",
-		CertNumber: "12345678",
-		CardName:   "Charizard",
-		SetName:    "Base Set",
-		CardNumber: "4",
-		CardYear:   "1999",
-		GradeValue: 10,
-		Grader:     "PSA",
-	}
-
-	tests := []struct {
-		name            string
-		items           []inventory.EbayExportGenerateItem
-		purchasesByIDs  map[string]*inventory.Purchase
-		wantErr         bool
-		wantErrContains string
-		wantCSVContains string
-	}{
-		{
-			name:            "error — empty items slice",
-			items:           []inventory.EbayExportGenerateItem{},
-			wantErr:         true,
-			wantErrContains: "no items",
-		},
-		{
-			name: "error — item with zero price",
-			items: []inventory.EbayExportGenerateItem{
-				{PurchaseID: "psa-1", PriceCents: 0},
-			},
-			wantErr:         true,
-			wantErrContains: "invalid price",
-		},
-		{
-			name: "error — duplicate purchase IDs",
-			items: []inventory.EbayExportGenerateItem{
-				{PurchaseID: "psa-1", PriceCents: 5000},
-				{PurchaseID: "psa-1", PriceCents: 5000},
-			},
-			wantErr:         true,
-			wantErrContains: "duplicate",
-		},
-		{
-			name: "error — purchase not found in repo",
-			items: []inventory.EbayExportGenerateItem{
-				{PurchaseID: "missing", PriceCents: 5000},
-			},
-			purchasesByIDs:  map[string]*inventory.Purchase{},
-			wantErr:         true,
-			wantErrContains: "not found",
-		},
-		{
-			name: "success — single PSA item",
-			items: []inventory.EbayExportGenerateItem{
-				{PurchaseID: "psa-1", PriceCents: 10000},
-			},
-			purchasesByIDs: map[string]*inventory.Purchase{
-				"psa-1": psaPurchase,
-			},
-			wantCSVContains: "Charizard",
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			repo := &stubExportReader{}
-			if tc.purchasesByIDs != nil {
-				pids := tc.purchasesByIDs
-				repo.getPurchasesByIDsFn = func(_ context.Context, _ []string) (map[string]*inventory.Purchase, error) {
-					return pids, nil
-				}
-			}
-			svc := export.New(repo)
-
-			csvBytes, err := svc.GenerateEbayCSV(context.Background(), tc.items)
-			if tc.wantErr {
-				if err == nil {
-					t.Fatal("expected error, got nil")
-				}
-				if tc.wantErrContains != "" && !strings.Contains(err.Error(), tc.wantErrContains) {
-					t.Errorf("expected error to contain %q, got: %v", tc.wantErrContains, err)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			if len(csvBytes) == 0 {
-				t.Fatal("expected non-empty CSV output")
-			}
-			if tc.wantCSVContains != "" && !strings.Contains(string(csvBytes), tc.wantCSVContains) {
-				t.Errorf("expected CSV to contain %q", tc.wantCSVContains)
-			}
-		})
-	}
-}
-
-// --- ListEbayExportItems ---
-
-func TestExportService_ListEbayExportItems(t *testing.T) {
-	psaPurchases := []inventory.Purchase{
-		{
-			ID:           "p-1",
-			CertNumber:   "11111111",
-			CardName:     "Pikachu",
-			Grader:       "PSA",
-			GradeValue:   9,
-			CLValueCents: 8000,
-		},
-		{
-			ID:                 "p-2",
-			CertNumber:         "22222222",
-			CardName:           "Blastoise",
-			Grader:             "PSA",
-			GradeValue:         8,
-			MarketSnapshotData: inventory.MarketSnapshotData{MedianCents: 5000},
-		},
-	}
-
-	tests := []struct {
-		name        string
-		flaggedOnly bool
-		flaggedFn   func(context.Context) ([]inventory.Purchase, error)
-		allFn       func(context.Context) ([]inventory.Purchase, error)
-		wantLen     int
-		wantErr     bool
-	}{
-		{
-			name:        "flagged-only returns PSA items",
-			flaggedOnly: true,
-			flaggedFn: func(_ context.Context) ([]inventory.Purchase, error) {
-				return psaPurchases, nil
-			},
-			wantLen: 2,
-		},
-		{
-			name:        "all unsold returns PSA items",
-			flaggedOnly: false,
-			allFn: func(_ context.Context) ([]inventory.Purchase, error) {
-				return psaPurchases, nil
-			},
-			wantLen: 2,
-		},
-		{
-			name:        "non-PSA purchases are filtered out",
-			flaggedOnly: true,
-			flaggedFn: func(_ context.Context) ([]inventory.Purchase, error) {
-				return []inventory.Purchase{
-					{ID: "p-3", Grader: "BGS", CardName: "Mewtwo"},
-				}, nil
-			},
-			wantLen: 0,
-		},
-		{
-			name:        "repo error propagated",
-			flaggedOnly: true,
-			flaggedFn: func(_ context.Context) ([]inventory.Purchase, error) {
-				return nil, errors.New("db error")
-			},
-			wantErr: true,
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			repo := &stubExportReader{}
-			if tc.flaggedFn != nil {
-				repo.listEbayFlaggedPurchasesFn = tc.flaggedFn
-			}
-			if tc.allFn != nil {
-				repo.listAllUnsoldPurchasesFn = tc.allFn
-			}
-			svc := export.New(repo)
-
-			resp, err := svc.ListEbayExportItems(context.Background(), tc.flaggedOnly)
-			if tc.wantErr {
-				if err == nil {
-					t.Fatal("expected error, got nil")
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			if len(resp.Items) != tc.wantLen {
-				t.Errorf("expected %d items, got %d", tc.wantLen, len(resp.Items))
-			}
-		})
-	}
 }
 
 // --- GenerateSellSheet ---
