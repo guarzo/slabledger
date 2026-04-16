@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useState, useMemo, type FormEvent } from 'react';
 import type { AllowedEmail } from '../../../types/admin';
 import PokeballLoader from '../../PokeballLoader';
 import { useAllowlist, useAddAllowedEmail, useRemoveAllowedEmail } from '../../queries/useAdminQueries';
@@ -30,6 +30,12 @@ export function AllowlistTab({ enabled = true }: { enabled?: boolean }) {
   };
 
   const allowlist = emails;
+  const dateFormatter = useMemo(() => new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' }), []);
+  const formatAllowlistDate = (raw: string | undefined) => {
+    if (!raw) return '-';
+    const d = new Date(raw);
+    return isNaN(d.getTime()) ? '-' : dateFormatter.format(d);
+  };
 
   return (
     <div className="space-y-6">
@@ -102,7 +108,7 @@ export function AllowlistTab({ enabled = true }: { enabled?: boolean }) {
                   <td className="glass-table-td text-[var(--text)]">{ae.Email ?? '-'}</td>
                   <td className="glass-table-td text-[var(--text-muted)] hidden sm:table-cell">{ae.Notes || '-'}</td>
                   <td className="glass-table-td text-[var(--text-muted)] hidden md:table-cell">
-                    {ae.CreatedAt ? new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(ae.CreatedAt)) : '-'}
+                    {formatAllowlistDate(ae.CreatedAt)}
                   </td>
                   <td className="glass-table-td text-right">
                     <Button

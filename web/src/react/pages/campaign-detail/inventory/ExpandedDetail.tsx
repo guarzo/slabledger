@@ -90,9 +90,7 @@ export default function ExpandedDetail({ item, onReviewed, campaignId, onOpenFla
   const overrideCents = purchase.overridePriceCents ?? 0;
   const listedCents = purchase.dhListingPriceCents ?? 0;
 
-  const purchaseDateDisplay = purchase.purchaseDate
-    ? new Date(purchase.purchaseDate).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
-    : null;
+  const purchaseDateDisplay = purchase.purchaseDate ? formatShipDate(purchase.purchaseDate) : null;
 
   return (
     <div className="glass-vrow-expanded px-6 py-4 border-t border-[rgba(255,255,255,0.05)]">
