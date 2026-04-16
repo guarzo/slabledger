@@ -8,6 +8,7 @@ import SellPriceHero from './SellPriceHero';
 import SignalChip from './SignalChip';
 import CompSummaryPanel from './CompSummaryPanel';
 import { costBasis, formatShipDate, mostRecentSale } from './utils';
+import { formatCents } from '../../../utils/formatters';
 import { PriceDecisionBar, buildPriceSources, preSelectSource, Button } from '../../../ui';
 
 interface ExpandedDetailProps {
@@ -89,10 +90,41 @@ export default function ExpandedDetail({ item, onReviewed, campaignId, onOpenFla
   const overrideCents = purchase.overridePriceCents ?? 0;
   const listedCents = purchase.dhListingPriceCents ?? 0;
 
+  const purchaseDateDisplay = purchase.purchaseDate ? formatShipDate(purchase.purchaseDate) : null;
+
   return (
     <div className="glass-vrow-expanded px-6 py-4 border-t border-[rgba(255,255,255,0.05)]">
-      {/* Hero: most recent sale + comp context + range bar */}
-      <SellPriceHero item={item} costBasisCents={cb} />
+      <div className="flex gap-4 items-start">
+        {/* Left: purchase summary panel */}
+        <div className="shrink-0 w-44 rounded-lg border border-[rgba(255,255,255,0.07)] bg-[rgba(255,255,255,0.03)] px-3 py-2.5 flex flex-col gap-1.5 text-xs">
+          {purchaseDateDisplay && (
+            <div>
+              <span className="text-[var(--text-muted)] uppercase tracking-wide text-[10px]">Acquired</span>
+              <div className="text-[var(--text)] mt-0.5">{purchaseDateDisplay}</div>
+            </div>
+          )}
+          <div>
+            <span className="text-[var(--text-muted)] uppercase tracking-wide text-[10px]">Grade</span>
+            <div className="text-[var(--text)] mt-0.5">{purchase.grader ?? 'PSA'} {purchase.gradeValue}</div>
+          </div>
+          <div>
+            <span className="text-[var(--text-muted)] uppercase tracking-wide text-[10px]">Cost Basis</span>
+            <div className="text-[var(--text)] mt-0.5">{formatCents(cb)}</div>
+          </div>
+          {purchase.certNumber && (
+            <div>
+              <span className="text-[var(--text-muted)] uppercase tracking-wide text-[10px]">Cert #</span>
+              <div className="text-[var(--text)] mt-0.5 font-mono">{purchase.certNumber}</div>
+            </div>
+          )}
+        </div>
+
+        {/* Right: price signals + hero */}
+        <div className="flex-1 min-w-0">
+          {/* Hero: most recent sale + comp context + range bar */}
+          <SellPriceHero item={item} costBasisCents={cb} />
+        </div>
+      </div>
 
       <div className="mb-4 flex flex-wrap items-stretch gap-2">
         <SignalChip label="Cost Basis" valueCents={cb} />
