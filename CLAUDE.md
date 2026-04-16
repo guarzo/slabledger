@@ -102,9 +102,9 @@ The inventory domain (`internal/domain/inventory/`) is the core campaigns and in
 ## Database
 
 SQLite with WAL mode. All monetary values in **cents**. Migrations managed by `golang-migrate/migrate/v4`
-and embedded in the binary via `embed.FS`. Migrations run automatically on startup. 68 migration pairs (`000001`–`000068`).
+and embedded in the binary via `embed.FS`. Migrations run automatically on startup. 69 migration pairs (`000001`–`000069`).
 
-Migration files: `internal/adapters/storage/sqlite/migrations/` (68 migration pairs)
+Migration files: `internal/adapters/storage/sqlite/migrations/` (69 migration pairs)
 
 See [internal/README.md](internal/README.md) for step-by-step migration creation.
 
