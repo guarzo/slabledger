@@ -3,7 +3,6 @@ package export
 import (
 	"context"
 
-	"github.com/guarzo/slabledger/internal/domain/intelligence"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
@@ -21,16 +20,13 @@ type Service interface {
 	// eBay export
 	ListEbayExportItems(ctx context.Context, flaggedOnly bool) (*inventory.EbayExportListResponse, error)
 	GenerateEbayCSV(ctx context.Context, items []inventory.EbayExportGenerateItem) ([]byte, error)
-	// Shopify
-	MatchShopifyPrices(ctx context.Context, items []inventory.ShopifyPriceSyncItem) (*inventory.ShopifyPriceSyncResponse, error)
 }
 
 // service is the concrete implementation of Service.
 type service struct {
 	repo      ExportReader
-	crackProv CrackCandidateProvider  // optional
-	intelRepo intelligence.Repository // optional, for MatchShopifyPrices
-	logger    observability.Logger    // optional
+	crackProv CrackCandidateProvider // optional
+	logger    observability.Logger   // optional
 }
 
 // Option is a functional option for configuring the export service.
@@ -39,11 +35,6 @@ type Option func(*service)
 // WithCrackCandidateProvider injects the crack candidate provider.
 func WithCrackCandidateProvider(p CrackCandidateProvider) Option {
 	return func(s *service) { s.crackProv = p }
-}
-
-// WithIntelligenceRepo injects the intelligence repository for price sync.
-func WithIntelligenceRepo(repo intelligence.Repository) Option {
-	return func(s *service) { s.intelRepo = repo }
 }
 
 // WithLogger injects an optional logger.

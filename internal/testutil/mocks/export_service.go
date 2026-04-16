@@ -13,7 +13,6 @@ type MockExportService struct {
 	GenerateSelectedSellSheetFn func(ctx context.Context, purchaseIDs []string) (*inventory.SellSheet, error)
 	ListEbayExportItemsFn       func(ctx context.Context, flaggedOnly bool) (*inventory.EbayExportListResponse, error)
 	GenerateEbayCsvFn           func(ctx context.Context, items []inventory.EbayExportGenerateItem) ([]byte, error)
-	MatchShopifyPricesFn        func(ctx context.Context, items []inventory.ShopifyPriceSyncItem) (*inventory.ShopifyPriceSyncResponse, error)
 }
 
 var _ export.Service = (*MockExportService)(nil)
@@ -51,11 +50,4 @@ func (m *MockExportService) GenerateEbayCSV(ctx context.Context, items []invento
 		return m.GenerateEbayCsvFn(ctx, items)
 	}
 	return []byte{}, nil
-}
-
-func (m *MockExportService) MatchShopifyPrices(ctx context.Context, items []inventory.ShopifyPriceSyncItem) (*inventory.ShopifyPriceSyncResponse, error) {
-	if m.MatchShopifyPricesFn != nil {
-		return m.MatchShopifyPricesFn(ctx, items)
-	}
-	return &inventory.ShopifyPriceSyncResponse{}, nil
 }

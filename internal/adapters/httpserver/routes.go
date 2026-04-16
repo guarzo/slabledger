@@ -209,14 +209,10 @@ func (rt *Router) registerCampaignRoutes(mux *http.ServeMux) {
 	// Cert lookup endpoint
 	mux.Handle("GET /api/certs/{certNumber}", authRoute(rt.campaignsHandler.HandleCertLookup))
 
-	// Shopify price sync
-	mux.Handle("POST /api/shopify/price-sync", authRoute(rt.campaignsHandler.HandleShopifyPriceSync))
-
 	// SPA routing for campaign deep links and portfolio pages
 	mux.HandleFunc("/campaigns/", rt.spaHandler.HandleIndex)
 	mux.HandleFunc("/insights", rt.spaHandler.HandleIndex)
 	mux.HandleFunc("/suggestions", rt.spaHandler.HandleIndex)
-	mux.HandleFunc("/shopify-sync", rt.spaHandler.HandleIndex)
 
 	rt.logger.Info(context.Background(), "campaign routes registered")
 }

@@ -185,9 +185,6 @@ func initializeCampaignsService(
 	exportOpts := []export.Option{
 		export.WithLogger(logger),
 	}
-	if intelRepo != nil {
-		exportOpts = append(exportOpts, export.WithIntelligenceRepo(intelRepo))
-	}
 	// Create a minimal composite wrapper to satisfy ExportReader interface
 	exportReader := &exportReaderComposite{
 		SellSheetStore: sellSheetStore,
