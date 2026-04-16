@@ -81,14 +81,12 @@ func (h *DHHandler) HandleFixMatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	marketValue := dhlisting.ResolveMarketValueCents(purchase)
-	if marketValue == 0 {
-		writeError(w, http.StatusBadRequest, "purchase has no market value yet")
-		return
-	}
+	// listing_price_cents is an optional preset on push (DH catalog fallback
+	// when omitted). Don't gate the push on price.
+	listingPrice := dhlisting.ResolveListingPriceCents(purchase)
 
 	// Push to DH inventory and persist fields
-	inventoryID, pushErr := h.pushAndPersistDH(ctx, purchase, dhCardID, marketValue)
+	inventoryID, pushErr := h.pushAndPersistDH(ctx, purchase, dhCardID, listingPrice)
 	if pushErr != nil {
 		switch {
 		case errors.Is(pushErr, errDHPersistFailed):

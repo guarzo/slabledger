@@ -133,13 +133,13 @@ type CertResolutionJobStatus struct {
 
 // InventoryItem is a single item to push to DH inventory.
 type InventoryItem struct {
-	DHCardID         int     `json:"dh_card_id"`
-	CertNumber       string  `json:"cert_number"`
-	GradingCompany   string  `json:"grading_company"`
-	Grade            float64 `json:"grade"`
-	CostBasisCents   int     `json:"cost_basis_cents"`
-	MarketValueCents *int    `json:"market_value_cents,omitempty"` // current market value; DH uses internal lookup when omitted
-	Status           string  `json:"status,omitempty"`             // "in_stock" (default) or "listed"
+	DHCardID          int     `json:"dh_card_id"`
+	CertNumber        string  `json:"cert_number"`
+	GradingCompany    string  `json:"grading_company"`
+	Grade             float64 `json:"grade"`
+	CostBasisCents    int     `json:"cost_basis_cents"`
+	ListingPriceCents *int    `json:"listing_price_cents,omitempty"` // when set, DH honors as-is; when omitted, DH uses catalog (fallback: cost_basis × 1.5)
+	Status            string  `json:"status,omitempty"`              // "in_stock" (default) or "listed"
 }
 
 // IntPtr returns a pointer to v, or nil when v is zero.
@@ -148,6 +148,21 @@ func IntPtr(v int) *int {
 		return nil
 	}
 	return &v
+}
+
+// NewInStockItem builds an InventoryItem for an in_stock push. When
+// listingPriceCents is 0 the field is omitted and DH falls back to its catalog
+// value.
+func NewInStockItem(dhCardID int, certNumber string, grade float64, costBasisCents, listingPriceCents int) InventoryItem {
+	return InventoryItem{
+		DHCardID:          dhCardID,
+		CertNumber:        certNumber,
+		GradingCompany:    GraderPSA,
+		Grade:             grade,
+		CostBasisCents:    costBasisCents,
+		ListingPriceCents: IntPtr(listingPriceCents),
+		Status:            InventoryStatusInStock,
+	}
 }
 
 // InventoryPushRequest is the request body for POST /inventory.
@@ -173,12 +188,15 @@ func MarshalChannels(channels []InventoryChannelStatus) string {
 	return string(b)
 }
 
-// InventoryResult is the per-item response from inventory push.
+// InventoryResult is the per-item response from inventory push (POST /inventory)
+// and the full response from inventory update (PATCH /inventory/:id).
+// AssignedPriceCents is populated on POST; ListingPriceCents on PATCH.
 type InventoryResult struct {
 	DHInventoryID      int                      `json:"dh_inventory_id"`
 	CertNumber         string                   `json:"cert_number"`
 	Status             string                   `json:"status"` // "in_stock", "listed", "failed"
-	AssignedPriceCents int                      `json:"assigned_price_cents"`
+	AssignedPriceCents int                      `json:"assigned_price_cents,omitempty"`
+	ListingPriceCents  int                      `json:"listing_price_cents,omitempty"`
 	Channels           []InventoryChannelStatus `json:"channels,omitempty"`
 	Error              string                   `json:"error,omitempty"`
 }
@@ -221,8 +239,9 @@ type PaginationMeta struct {
 
 // InventoryUpdate is the request body for PATCH /inventory/:id.
 type InventoryUpdate struct {
-	Status         string `json:"status,omitempty"`
-	CostBasisCents *int   `json:"cost_basis_cents,omitempty"`
+	Status            string `json:"status,omitempty"`
+	CostBasisCents    *int   `json:"cost_basis_cents,omitempty"`
+	ListingPriceCents *int   `json:"listing_price_cents,omitempty"` // when set on PATCH, DH honors as-is (updates live ask if already listed, else preset for next list)
 }
 
 // ChannelSyncRequest is the request body for POST /inventory/:id/sync.

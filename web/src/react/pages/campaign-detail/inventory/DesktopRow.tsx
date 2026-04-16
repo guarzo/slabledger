@@ -3,7 +3,6 @@ import { formatCents, daysHeldColor } from '../../../utils/formatters';
 import { TrendArrow, ConfidenceIndicator, GradeBadge } from '../../../ui';
 import { DropdownMenu } from 'radix-ui';
 import MarketplaceLinks from './MarketplaceLinks';
-import { DHStateBadge } from './DHStateBadge';
 import {
   costBasis, bestPrice, unrealizedPL, marketTrend,
   getSourceByType, marketTooltip,
@@ -11,6 +10,7 @@ import {
   getReviewStatus, statusBorderColor, isHotSeller, formatReceivedDate,
   syncDotProps,
 } from './utils';
+import { isReadyToList } from './inventoryCalcs';
 
 const BADGE_COLORS = [
   { bg: 'rgba(99,102,241,0.1)', text: '#818cf8' },
@@ -36,16 +36,17 @@ interface DesktopRowProps {
   onFixPricing?: () => void;
   onSetPrice?: () => void;
   onDelete?: () => void;
+  onListOnDH?: (purchaseId: string) => void;
   showCampaignColumn?: boolean;
   isOnSellSheet?: boolean;
 }
 
-export default function DesktopRow({ item, selected, onToggle, onExpand, onRecordSale, onFixPricing, onSetPrice, onDelete, showCampaignColumn, isOnSellSheet }: DesktopRowProps) {
+export default function DesktopRow({ item, selected, onToggle, onExpand, onRecordSale, onFixPricing, onSetPrice, onDelete, onListOnDH, showCampaignColumn, isOnSellSheet }: DesktopRowProps) {
   const cb = costBasis(item.purchase);
   const snap = item.currentMarket;
   const daysColor = daysHeldColor(item.daysHeld);
-  const price = snap ? bestPrice(snap) : 0;
-  const pl = unrealizedPL(cb, snap);
+  const price = bestPrice(item);
+  const pl = unrealizedPL(cb, item);
   const trend = snap ? marketTrend(snap) : null;
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -146,8 +147,8 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
       <div className="glass-table-td flex-shrink-0 text-right text-[var(--text)] tabular-nums" style={{ width: '72px' }}>{formatCents(cb)}</div>
       <div className="glass-table-td flex-shrink-0 text-right" style={{ width: '120px' }}
         title={snap ? marketTooltip(snap, cb) : undefined}>
-        {snap && price > 0 ? (() => {
-          const displaySource = getSourceByType(snap.sourcePrices, 'ebay') || getSourceByType(snap.sourcePrices, 'estimate');
+        {price > 0 ? (() => {
+          const displaySource = snap ? (getSourceByType(snap.sourcePrices, 'ebay') || getSourceByType(snap.sourcePrices, 'estimate')) : undefined;
           const confidence = displaySource?.confidence ?? snap?.confidence ?? null;
           return (
             <div className="flex items-center justify-end gap-1">
@@ -174,10 +175,6 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
       </div>
       {/* Days held */}
       <div className={`glass-table-td flex-shrink-0 text-center print-hide-col ${daysColor}`} style={{ width: '40px' }}>{item.daysHeld}</div>
-      {/* DH Status */}
-      <div className="glass-table-td flex-shrink-0 text-center print-hide-col" style={{ width: '80px' }}>
-        <DHStateBadge dhPushStatus={item.purchase.dhPushStatus} dhStatus={item.purchase.dhStatus} dhCardId={item.purchase.dhCardId} />
-      </div>
       {/* Sync freshness dot */}
       <div className="glass-table-td flex-shrink-0 text-center print-hide-col" style={{ width: '20px' }}>
         <span
@@ -185,6 +182,18 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
           aria-label="Sync freshness"
           style={{ color: dot.color, fontSize: '10px', lineHeight: 1 }}
         >&#9679;</span>
+      </div>
+      <div className="glass-table-td flex-shrink-0 text-center !px-1 print-hide-actions" style={{ width: '48px' }} onClick={e => e.stopPropagation()}>
+        {onListOnDH && isReadyToList(item) && !!item.purchase.dhInventoryId && (
+          <button
+            type="button"
+            onClick={() => onListOnDH(item.purchase.id)}
+            className="text-xs font-medium px-2 py-1 rounded bg-[var(--success)]/15 text-[var(--success)] hover:bg-[var(--success)]/30 transition-colors"
+            title="Publish this item on DH"
+          >
+            List
+          </button>
+        )}
       </div>
       {/* Sell button */}
       <div className="glass-table-td flex-shrink-0 text-center !px-1 print-hide-actions" style={{ width: '48px' }} onClick={e => e.stopPropagation()}>

@@ -10,15 +10,41 @@ export function costBasis(p: { buyCostCents: number; psaSourcingFeeCents: number
   return p.buyCostCents + p.psaSourcingFeeCents;
 }
 
-/** Best available market price for a card. */
-export function bestPrice(snap: MarketSnapshot): number {
+/** Best available market price from a raw snapshot. Falls back across medianCents / gradePriceCents / lastSoldCents. */
+export function bestPriceFromSnap(snap: MarketSnapshot): number {
   return snap.medianCents || snap.gradePriceCents || snap.lastSoldCents || 0;
 }
 
-/** Unrealized P/L in cents relative to cost basis. */
-export function unrealizedPL(costBasisCents: number, snap: MarketSnapshot | undefined): number | null {
-  if (!snap) return null;
-  const price = bestPrice(snap);
+/**
+ * Best "what this is actually selling for" price for an item. Prefers the most recent real sale
+ * from comp analytics when available, since that is the single truest indicator of current market;
+ * otherwise falls back to snapshot-derived signals.
+ */
+export function bestPrice(item: AgingItem): number {
+  const compLast = item.compSummary?.lastSaleCents ?? 0;
+  if (compLast > 0) return compLast;
+  return item.currentMarket ? bestPriceFromSnap(item.currentMarket) : 0;
+}
+
+/**
+ * The most recent real sale for an item — prefers comp analytics (literal most-recent sold price),
+ * falls back to the snapshot's lastSold. Returns null when no sale data exists.
+ */
+export function mostRecentSale(item: AgingItem): { cents: number; date?: string } | null {
+  const cs = item.compSummary;
+  if (cs && cs.lastSaleCents > 0) {
+    return { cents: cs.lastSaleCents, date: cs.lastSaleDate || undefined };
+  }
+  const snap = item.currentMarket;
+  if (snap && snap.lastSoldCents > 0) {
+    return { cents: snap.lastSoldCents, date: snap.lastSoldDate };
+  }
+  return null;
+}
+
+/** Unrealized P/L in cents relative to cost basis, using the same best-price logic as the UI. */
+export function unrealizedPL(costBasisCents: number, item: AgingItem): number | null {
+  const price = bestPrice(item);
   if (price <= 0) return null;
   return price - costBasisCents;
 }
@@ -102,9 +128,10 @@ export function marketTooltip(snap: MarketSnapshot, costBasisCents: number): str
     lines.push(`30d trend: ${sign}${(snap.trend30d * 100).toFixed(0)}%`);
   }
 
-  // P/L
-  const pl = unrealizedPL(costBasisCents, snap);
-  if (pl != null) {
+  // P/L (tooltip context has only the snapshot, so derive from snapshot signals)
+  const snapPrice = bestPriceFromSnap(snap);
+  if (snapPrice > 0) {
+    const pl = snapPrice - costBasisCents;
     const sign = pl >= 0 ? '+' : '';
     lines.push(`Est. P/L: ${sign}${formatCents(pl)}`);
   }

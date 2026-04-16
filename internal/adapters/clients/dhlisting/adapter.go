@@ -75,15 +75,7 @@ func NewInventoryPusherAdapter(client interface {
 func (a *InventoryPusherAdapter) PushInventory(ctx context.Context, items []dhlisting.DHInventoryPushItem) (*dhlisting.DHInventoryPushResult, error) {
 	dhItems := make([]dh.InventoryItem, len(items))
 	for i, item := range items {
-		dhItems[i] = dh.InventoryItem{
-			DHCardID:         item.DHCardID,
-			CertNumber:       item.CertNumber,
-			GradingCompany:   dh.GraderPSA,
-			Grade:            item.Grade,
-			CostBasisCents:   item.CostBasisCents,
-			MarketValueCents: dh.IntPtr(item.MarketValueCents),
-			Status:           dh.InventoryStatusInStock,
-		}
+		dhItems[i] = dh.NewInStockItem(item.DHCardID, item.CertNumber, item.Grade, item.CostBasisCents, item.ListingPriceCents)
 	}
 
 	resp, err := a.client.PushInventory(ctx, dhItems)
@@ -125,9 +117,23 @@ func NewInventoryAdapter(client interface {
 	return &InventoryAdapter{client: client}
 }
 
-func (a *InventoryAdapter) UpdateInventoryStatus(ctx context.Context, inventoryID int, status string) error {
-	_, err := a.client.UpdateInventory(ctx, inventoryID, dh.InventoryUpdate{Status: status})
-	return err
+// UpdateInventoryStatus PATCHes /inventory/:id with the new status and (when
+// listingPriceCents > 0) sets the listing price in the same call. Returns
+// the listing_price_cents that DH has on the item after the update — use
+// this to persist locally, since DH no longer auto-assigns a different value.
+func (a *InventoryAdapter) UpdateInventoryStatus(ctx context.Context, inventoryID int, status string, listingPriceCents int) (int, error) {
+	update := dh.InventoryUpdate{Status: status}
+	if listingPriceCents > 0 {
+		update.ListingPriceCents = dh.IntPtr(listingPriceCents)
+	}
+	resp, err := a.client.UpdateInventory(ctx, inventoryID, update)
+	if err != nil {
+		return 0, err
+	}
+	if resp == nil {
+		return 0, nil
+	}
+	return resp.ListingPriceCents, nil
 }
 
 func (a *InventoryAdapter) SyncChannels(ctx context.Context, inventoryID int, channels []string) error {

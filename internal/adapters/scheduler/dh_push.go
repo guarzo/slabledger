@@ -279,14 +279,14 @@ func (s *DHPushScheduler) processPurchase(ctx context.Context, p inventory.Purch
 		}
 	}
 
-	// Never push before we have a market value — leave as pending for retry.
-	marketValue := dhlisting.ResolveMarketValueCents(&p)
-	if marketValue == 0 {
-		s.logger.Debug(ctx, "dh push: no market value yet, leaving as pending",
-			observability.String("purchaseID", p.ID),
-			observability.String("cert", p.CertNumber))
-		return processSkipped
-	}
+	// Resolve reviewed price as the listing_price_cents preset. 0 means
+	// "omit from the request" — DH then uses its catalog fallback for the
+	// preset, which is fine because the actual listing-time PATCH will
+	// re-send the reviewed price (and is gated on reviewed > 0). We no
+	// longer block the push itself on having a price: we want the item
+	// matched and in_stock on DH ASAP so the manual list flow has a ready
+	// dh_inventory_id to PATCH against.
+	listingPrice := dhlisting.ResolveListingPriceCents(&p)
 
 	if !alreadyMapped {
 		resolved, result := s.resolveCert(ctx, p, mappedSet)
@@ -331,15 +331,7 @@ func (s *DHPushScheduler) processPurchase(ctx context.Context, p inventory.Purch
 		return processHeld
 	}
 
-	item := dh.InventoryItem{
-		DHCardID:         dhCardID,
-		CertNumber:       p.CertNumber,
-		GradingCompany:   dh.GraderPSA,
-		Grade:            p.GradeValue,
-		CostBasisCents:   p.BuyCostCents,
-		MarketValueCents: dh.IntPtr(marketValue),
-		Status:           dh.InventoryStatusInStock,
-	}
+	item := dh.NewInStockItem(dhCardID, p.CertNumber, p.GradeValue, p.BuyCostCents, listingPrice)
 
 	pushResp, err := s.inventoryPush.PushInventory(ctx, []dh.InventoryItem{item})
 	if err != nil {

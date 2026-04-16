@@ -114,6 +114,44 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
     }
   }, [toast, invalidateInventory]);
 
+  const handleListOnDH = useCallback(async (purchaseId: string) => {
+    try {
+      await api.listPurchaseOnDH(purchaseId);
+      toast.success('Listed on DH');
+      invalidateInventory();
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Failed to list on DH'));
+    }
+  }, [toast, invalidateInventory]);
+
+  const handleBulkListOnDH = useCallback(async (purchaseIds: string[]) => {
+    if (purchaseIds.length === 0) return;
+    const CHUNK_SIZE = 5;
+    const results: PromiseSettledResult<unknown>[] = [];
+    for (let i = 0; i < purchaseIds.length; i += CHUNK_SIZE) {
+      const chunk = purchaseIds.slice(i, i + CHUNK_SIZE);
+      const chunkResults = await Promise.allSettled(chunk.map(id => api.listPurchaseOnDH(id)));
+      results.push(...chunkResults);
+    }
+    const succeededIds = purchaseIds.filter((_, i) => results[i].status === 'fulfilled');
+    const failed = purchaseIds.length - succeededIds.length;
+    if (failed === 0) {
+      toast.success(`Listed ${succeededIds.length} on DH`);
+    } else if (succeededIds.length === 0) {
+      toast.error(`Failed to list ${failed} on DH`);
+    } else {
+      toast.error(`Listed ${succeededIds.length}, ${failed} failed`);
+    }
+    if (succeededIds.length > 0) {
+      setSelected(prev => {
+        const next = new Set(prev);
+        for (const id of succeededIds) next.delete(id);
+        return next;
+      });
+    }
+    invalidateInventory();
+  }, [toast, invalidateInventory]);
+
   const handleFlagSubmit = useCallback(async (reason: PriceFlagReason) => {
     if (!flagTarget) return;
     setFlagSubmitting(true);
@@ -213,7 +251,7 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
   }
 
   function handleSetPrice(item: AgingItem) {
-    const currentPrice = item.currentMarket ? bestPrice(item.currentMarket) : 0;
+    const currentPrice = bestPrice(item);
     setPriceTarget({
       purchaseId: item.purchase.id,
       cardName: item.purchase.cardName,
@@ -282,6 +320,8 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
     handleReviewed,
     handleResolveFlag,
     handleApproveDHPush,
+    handleListOnDH,
+    handleBulkListOnDH,
     handleFlagSubmit,
     handlePrint,
     handleDelete,

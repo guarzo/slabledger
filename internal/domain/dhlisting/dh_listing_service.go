@@ -175,7 +175,21 @@ func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []stri
 			continue
 		}
 
-		if err := s.lister.UpdateInventoryStatus(ctx, p.DHInventoryID, inventory.DHStatusListed); err != nil {
+		// Gate: require a reviewed price before flipping an item to listed on
+		// DH. DH now honors listing_price_cents as-is, so sending anything
+		// that wasn't human-approved (e.g. a stale CL value) risks listing at
+		// the wrong price. Without reviewed, skip and leave the item in_stock.
+		listingPrice := ResolveListingPriceCents(p)
+		if listingPrice == 0 {
+			s.logger.Warn(ctx, "dh listing: no reviewed price; skipping list transition",
+				observability.String("cert", p.CertNumber),
+				observability.String("purchaseID", p.ID))
+			skipped++
+			continue
+		}
+
+		dhListingPrice, err := s.lister.UpdateInventoryStatus(ctx, p.DHInventoryID, inventory.DHStatusListed, listingPrice)
+		if err != nil {
 			s.logger.Warn(ctx, "dh listing: status update failed",
 				observability.String("cert", p.CertNumber),
 				observability.Int("inventoryID", p.DHInventoryID),
@@ -192,7 +206,7 @@ func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []stri
 				observability.Int("inventoryID", p.DHInventoryID),
 				observability.Err(err))
 			// Revert status so the item doesn't stay "listed" without channel sync.
-			if revertErr := s.lister.UpdateInventoryStatus(ctx, p.DHInventoryID, inventory.DHStatusInStock); revertErr != nil {
+			if _, revertErr := s.lister.UpdateInventoryStatus(ctx, p.DHInventoryID, inventory.DHStatusInStock, 0); revertErr != nil {
 				s.logger.Error(ctx, "dh listing: failed to revert status after sync failure",
 					observability.String("cert", p.CertNumber),
 					observability.Int("inventoryID", p.DHInventoryID),
@@ -224,8 +238,9 @@ func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []stri
 				continue
 			}
 			if persistErr := s.fieldsUpdater.UpdatePurchaseDHFields(ctx, p.ID, inventory.DHFieldsUpdate{
-				DHStatus:     inventory.DHStatusListed,
-				ChannelsJSON: string(channelsJSON),
+				DHStatus:          inventory.DHStatusListed,
+				ChannelsJSON:      string(channelsJSON),
+				ListingPriceCents: dhListingPrice,
 			}); persistErr != nil {
 				s.logger.Error(ctx, "dh listing: failed to persist listed status — decrementing listed count",
 					observability.String("cert", p.CertNumber), observability.Err(persistErr))
@@ -304,17 +319,18 @@ func (s *dhListingService) inlineMatchAndPush(ctx context.Context, p *inventory.
 		}
 	}
 
-	marketValue := ResolveMarketValueCents(p)
-	if marketValue == 0 {
-		return 0
-	}
+	// Reviewed price becomes the DH listing_price_cents preset. 0 means omit —
+	// DH uses catalog fallback. We don't gate the push on having a price:
+	// items land in_stock regardless, and the list transition (gated elsewhere)
+	// re-sends the price when the user clicks List on DH.
+	listingPrice := ResolveListingPriceCents(p)
 
 	item := DHInventoryPushItem{
-		DHCardID:         dhCardID,
-		CertNumber:       p.CertNumber,
-		Grade:            p.GradeValue,
-		CostBasisCents:   p.BuyCostCents,
-		MarketValueCents: marketValue,
+		DHCardID:          dhCardID,
+		CertNumber:        p.CertNumber,
+		Grade:             p.GradeValue,
+		CostBasisCents:    p.BuyCostCents,
+		ListingPriceCents: listingPrice,
 	}
 
 	pushResp, pushErr := s.pusher.PushInventory(ctx, []DHInventoryPushItem{item})

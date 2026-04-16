@@ -38,6 +38,9 @@ declare module './client' {
     // Reassign
     reassignPurchase(purchaseId: string, campaignId: string): Promise<void>;
 
+    // DH listing (manual transition from in_stock to listed)
+    listPurchaseOnDH(purchaseId: string): Promise<{ listed: number; synced: number; skipped: number; total: number }>;
+
     // Bulk sales
     createBulkSales(campaignId: string, saleChannel: string, saleDate: string, items: { purchaseId: string; salePriceCents: number }[]): Promise<import('../../types/campaigns').BulkSaleResult>;
 
@@ -140,6 +143,10 @@ proto.reassignPurchase = async function (this: APIClient, purchaseId: string, ca
     }
   );
   await this.expectNoContent(response);
+};
+
+proto.listPurchaseOnDH = async function (this: APIClient, purchaseId: string): Promise<{ listed: number; synced: number; skipped: number; total: number }> {
+  return this.post<{ listed: number; synced: number; skipped: number; total: number }>(`/purchases/${encodeURIComponent(purchaseId)}/list-on-dh`);
 };
 
 proto.createBulkSales = async function (this: APIClient, campaignId: string, saleChannel: string, saleDate: string, items: { purchaseId: string; salePriceCents: number }[]): Promise<import('../../types/campaigns').BulkSaleResult> {

@@ -187,6 +187,12 @@ func (s *CLSalesStore) GetCompSummary(ctx context.Context, gemRateID, certNumber
 		return nil, err
 	}
 
+	// recentPrices is sorted by sale_date ASC, so the last element is the most recent sale.
+	var lastSaleCents int
+	if len(recentPrices) > 0 {
+		lastSaleCents = recentPrices[len(recentPrices)-1]
+	}
+
 	return &inventory.CompSummary{
 		GemRateID:      gemRateID,
 		TotalComps:     totalComps,
@@ -197,6 +203,7 @@ func (s *CLSalesStore) GetCompSummary(ctx context.Context, gemRateID, certNumber
 		Trend90d:       trend,
 		ByPlatform:     platforms,
 		LastSaleDate:   lastSaleDate.String,
+		LastSaleCents:  lastSaleCents,
 		PriceCentsList: recentPrices,
 	}, nil
 }

@@ -48,4 +48,5 @@ export interface ReviewStats {
   needsReview: number;
   reviewed: number;
   flagged: number;
+  aging60d: number;
 }
