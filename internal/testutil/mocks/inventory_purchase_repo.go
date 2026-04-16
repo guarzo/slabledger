@@ -46,6 +46,7 @@ type PurchaseRepositoryMock struct {
 	GetPurchasesByDHCertStatusFn         func(ctx context.Context, status string, limit int) ([]inventory.Purchase, error)
 	UpdatePurchaseDHPushStatusFn         func(ctx context.Context, id string, status string) error
 	UpdatePurchaseDHStatusFn             func(ctx context.Context, id string, status string) error
+	UpdatePurchaseDHCardIDFn             func(ctx context.Context, id string, cardID int) error
 	GetPurchasesByDHPushStatusFn         func(ctx context.Context, status string, limit int) ([]inventory.Purchase, error)
 	CountUnsoldByDHPushStatusFn          func(ctx context.Context) (map[string]int, error)
 	CountDHPipelineHealthFn              func(ctx context.Context) (inventory.DHPipelineHealth, error)
@@ -313,6 +314,13 @@ func (m *PurchaseRepositoryMock) UpdatePurchaseDHPushStatus(ctx context.Context,
 func (m *PurchaseRepositoryMock) UpdatePurchaseDHStatus(ctx context.Context, id string, status string) error {
 	if m.UpdatePurchaseDHStatusFn != nil {
 		return m.UpdatePurchaseDHStatusFn(ctx, id, status)
+	}
+	return nil
+}
+
+func (m *PurchaseRepositoryMock) UpdatePurchaseDHCardID(ctx context.Context, id string, cardID int) error {
+	if m.UpdatePurchaseDHCardIDFn != nil {
+		return m.UpdatePurchaseDHCardIDFn(ctx, id, cardID)
 	}
 	return nil
 }

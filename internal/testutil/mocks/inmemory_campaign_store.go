@@ -66,6 +66,7 @@ type InMemoryCampaignStore struct {
 	GetPurchasesByDHCertStatusFn   func(ctx context.Context, status string, limit int) ([]inventory.Purchase, error)
 	UpdatePurchaseDHPushStatusFn   func(ctx context.Context, id string, status string) error
 	UpdatePurchaseDHStatusFn       func(ctx context.Context, id string, status string) error
+	UpdatePurchaseDHCardIDFn       func(ctx context.Context, id string, cardID int) error
 	UpdatePurchaseDHCandidatesFn   func(ctx context.Context, id string, candidatesJSON string) error
 	UpdatePurchaseDHHoldReasonFn   func(ctx context.Context, id string, reason string) error
 	SetHeldWithReasonFn            func(ctx context.Context, purchaseID string, reason string) error
@@ -1024,6 +1025,16 @@ func (m *InMemoryCampaignStore) UpdatePurchaseDHPushStatus(ctx context.Context, 
 func (m *InMemoryCampaignStore) UpdatePurchaseDHStatus(ctx context.Context, id string, status string) error {
 	if m.UpdatePurchaseDHStatusFn != nil {
 		return m.UpdatePurchaseDHStatusFn(ctx, id, status)
+	}
+	return nil
+}
+
+func (m *InMemoryCampaignStore) UpdatePurchaseDHCardID(ctx context.Context, id string, cardID int) error {
+	if m.UpdatePurchaseDHCardIDFn != nil {
+		return m.UpdatePurchaseDHCardIDFn(ctx, id, cardID)
+	}
+	if p, ok := m.Purchases[id]; ok && p != nil {
+		p.DHCardID = cardID
 	}
 	return nil
 }

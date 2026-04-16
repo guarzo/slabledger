@@ -129,6 +129,9 @@ func (r *stubPurchaseRepo) UpdatePurchaseDHPushStatus(_ context.Context, _ strin
 func (r *stubPurchaseRepo) UpdatePurchaseDHStatus(_ context.Context, _ string, _ string) error {
 	return nil
 }
+func (r *stubPurchaseRepo) UpdatePurchaseDHCardID(_ context.Context, _ string, _ int) error {
+	return nil
+}
 func (r *stubPurchaseRepo) GetPurchasesByDHPushStatus(_ context.Context, _ string, _ int) ([]inventory.Purchase, error) {
 	return nil, nil
 }
