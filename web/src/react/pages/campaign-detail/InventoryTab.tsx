@@ -345,7 +345,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                         onDelete={() => handleDelete(item)}
                         onListOnDH={handleListOnDH}
                         dhListingLoading={dhListingInFlight.has(item.purchase.id)}
-                    dhListedOverride={dhListedOptimistic.has(item.purchase.id)}
+                        dhListedOverride={dhListedOptimistic.has(item.purchase.id)}
                         ev={evMap.get(item.purchase.certNumber)}
                         showCampaignColumn={showCampaignColumn}
                         isOnSellSheet={!sellSheetActive && sellSheet.has(item.purchase.id)}
@@ -398,7 +398,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                         onDelete={() => handleDelete(item)}
                         onListOnDH={handleListOnDH}
                         dhListingLoading={dhListingInFlight.has(item.purchase.id)}
-                    dhListedOverride={dhListedOptimistic.has(item.purchase.id)}
+                        dhListedOverride={dhListedOptimistic.has(item.purchase.id)}
                         showCampaignColumn={showCampaignColumn}
                         isOnSellSheet={!sellSheetActive && sellSheet.has(item.purchase.id)}
                       />
@@ -442,7 +442,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                           onDelete={() => handleDelete(item)}
                           onListOnDH={handleListOnDH}
                           dhListingLoading={dhListingInFlight.has(item.purchase.id)}
-                    dhListedOverride={dhListedOptimistic.has(item.purchase.id)}
+                          dhListedOverride={dhListedOptimistic.has(item.purchase.id)}
                           showCampaignColumn={showCampaignColumn}
                           isOnSellSheet={!sellSheetActive && sellSheet.has(item.purchase.id)}
                         />

@@ -116,6 +116,8 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
 
   const [dhListingInFlight, setDHListingInFlight] = useState<Set<string>>(new Set());
   const [dhListedOptimistic, setDHListedOptimistic] = useState<Set<string>>(new Set());
+  // Clear optimistic overrides when fresh data arrives (items prop updates after refetch).
+  useEffect(() => { if (dhListedOptimistic.size > 0) setDHListedOptimistic(new Set()); }, [items]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleListOnDH = useCallback(async (purchaseId: string) => {
     setDHListingInFlight(prev => new Set(prev).add(purchaseId));
