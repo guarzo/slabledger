@@ -2,6 +2,7 @@ package demand_test
 
 import (
 	"context"
+	"math"
 	"strconv"
 	"testing"
 	"time"
@@ -245,7 +246,11 @@ func TestCampaignSignals_MedianVelocity(t *testing.T) {
 				t.Fatalf("want 1 signal, got %d", len(resp.Signals))
 			}
 			got := resp.Signals[0].MedianVelocityChangePct
-			if got != tc.wantMedian {
+			// Tolerance comparison: the (22.1+10.0)/2 path involves IEEE 754
+			// rounding that happens to match the 16.05 literal today, but
+			// that's fragile for a median calculation. 1e-9 is well under any
+			// precision we care about for a percentage-point metric.
+			if math.Abs(got-tc.wantMedian) > 1e-9 {
 				t.Errorf("want median=%v, got %v", tc.wantMedian, got)
 			}
 		})

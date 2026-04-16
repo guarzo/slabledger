@@ -243,9 +243,22 @@ func buildCampaignSignal(c ActiveCampaign, contributors []signalEntry) CampaignS
 		}
 	}
 
-	// Sort accelerating desc, decelerating asc.
-	sort.Slice(accel, func(i, j int) bool { return accel[i].vChange > accel[j].vChange })
-	sort.Slice(decel, func(i, j int) bool { return decel[i].vChange < decel[j].vChange })
+	// Sort accelerating desc, decelerating asc. Ties on vChange resolve by
+	// displayName ascending so the output is stable across runs — sort.Slice
+	// is not itself stable, and characters clustered at common values like 0.0
+	// would otherwise reorder between invocations.
+	sort.Slice(accel, func(i, j int) bool {
+		if accel[i].vChange != accel[j].vChange {
+			return accel[i].vChange > accel[j].vChange
+		}
+		return accel[i].displayName < accel[j].displayName
+	})
+	sort.Slice(decel, func(i, j int) bool {
+		if decel[i].vChange != decel[j].vChange {
+			return decel[i].vChange < decel[j].vChange
+		}
+		return decel[i].displayName < decel[j].displayName
+	})
 
 	topAccel := toContributors(accel, TopContributorsLimit)
 	topDecel := toContributors(decel, TopContributorsLimit)

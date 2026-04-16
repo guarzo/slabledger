@@ -23,43 +23,30 @@ func newRepoWithRows(rows []demand.CharacterCache) *mocks.DemandRepositoryMock {
 	}
 }
 
-// uncoveredCampaigns is a CampaignCoverageLookup that returns no coverage for
-// any bucket — useful as a baseline.
-type uncoveredCampaigns struct{}
-
-func (uncoveredCampaigns) CampaignsCovering(ctx context.Context, character, era string, grade int) ([]int64, error) {
-	return nil, nil
-}
-func (uncoveredCampaigns) UnsoldCountFor(ctx context.Context, character, era string, grade int) (int, error) {
-	return 0, nil
-}
-func (uncoveredCampaigns) ActiveCampaigns(ctx context.Context) ([]demand.ActiveCampaign, error) {
-	return []demand.ActiveCampaign{}, nil
+// uncoveredLookup returns a CampaignCoverageLookupMock baseline: no coverage
+// on any bucket, no active campaigns. The mock's default Fn-nil behavior
+// already does this, but the named helper makes test intent explicit.
+func uncoveredLookup() *mocks.CampaignCoverageLookupMock {
+	return &mocks.CampaignCoverageLookupMock{}
 }
 
-// coveredOnlyFor covers a single bucket; everything else is uncovered.
-type coveredOnlyFor struct {
-	character string
-	era       string
-	grade     int
-	ids       []int64
-	unsold    int
-}
-
-func (c coveredOnlyFor) CampaignsCovering(ctx context.Context, character, era string, grade int) ([]int64, error) {
-	if character == c.character && era == c.era && grade == c.grade {
-		return c.ids, nil
+// coveredOnlyForLookup returns a lookup mock that claims coverage for a
+// single (character, era, grade) bucket; everything else is uncovered.
+func coveredOnlyForLookup(character, era string, grade int, ids []int64, unsold int) *mocks.CampaignCoverageLookupMock {
+	return &mocks.CampaignCoverageLookupMock{
+		CampaignsCoveringFn: func(_ context.Context, c, e string, g int) ([]int64, error) {
+			if c == character && e == era && g == grade {
+				return ids, nil
+			}
+			return nil, nil
+		},
+		UnsoldCountForFn: func(_ context.Context, c, e string, g int) (int, error) {
+			if c == character && e == era && g == grade {
+				return unsold, nil
+			}
+			return 0, nil
+		},
 	}
-	return nil, nil
-}
-func (c coveredOnlyFor) UnsoldCountFor(ctx context.Context, character, era string, grade int) (int, error) {
-	if character == c.character && era == c.era && grade == c.grade {
-		return c.unsold, nil
-	}
-	return 0, nil
-}
-func (coveredOnlyFor) ActiveCampaigns(ctx context.Context) ([]demand.ActiveCampaign, error) {
-	return []demand.ActiveCampaign{}, nil
 }
 
 // --- Fixtures ---
@@ -88,7 +75,7 @@ func demandJSONWithEras(character string, baseScore float64, quality string) str
 
 func TestService_Leaderboard_EmptyCache(t *testing.T) {
 	repo := newRepoWithRows(nil)
-	svc := demand.NewService(repo, uncoveredCampaigns{})
+	svc := demand.NewService(repo, uncoveredLookup())
 
 	out, err := svc.Leaderboard(context.Background(), demand.LeaderboardOpts{
 		Window: "30d",
@@ -103,7 +90,7 @@ func TestService_Leaderboard_EmptyCache(t *testing.T) {
 }
 
 func TestService_Leaderboard_InvalidWindow(t *testing.T) {
-	svc := demand.NewService(newRepoWithRows(nil), uncoveredCampaigns{})
+	svc := demand.NewService(newRepoWithRows(nil), uncoveredLookup())
 	_, err := svc.Leaderboard(context.Background(), demand.LeaderboardOpts{Window: "60d"})
 	if !errors.Is(err, demand.ErrInvalidWindow) {
 		t.Fatalf("expected ErrInvalidWindow; got %v", err)
@@ -119,7 +106,7 @@ func TestService_Leaderboard_GradeFilter_BucketCountAndSort(t *testing.T) {
 		{Character: "Blastoise", Window: "30d", DemandJSON: strPtr(demandJSONWithEras("Blastoise", 0.3, "full"))},
 	}
 	repo := newRepoWithRows(rows)
-	svc := demand.NewService(repo, uncoveredCampaigns{})
+	svc := demand.NewService(repo, uncoveredLookup())
 
 	out, err := svc.Leaderboard(context.Background(), demand.LeaderboardOpts{
 		Window: "30d",
@@ -153,7 +140,7 @@ func TestService_Leaderboard_MinDataQualityFull_ExcludesProxy(t *testing.T) {
 		{Character: "ProxyChar", Window: "30d", DemandJSON: strPtr(demandJSONWithEras("ProxyChar", 0.9, "proxy"))},
 		{Character: "FullChar", Window: "30d", DemandJSON: strPtr(demandJSONWithEras("FullChar", 0.6, "full"))},
 	}
-	svc := demand.NewService(newRepoWithRows(rows), uncoveredCampaigns{})
+	svc := demand.NewService(newRepoWithRows(rows), uncoveredLookup())
 
 	out, err := svc.Leaderboard(context.Background(), demand.LeaderboardOpts{
 		Window:         "30d",
@@ -181,7 +168,7 @@ func TestService_Leaderboard_SortDemandScoreDesc(t *testing.T) {
 		{Character: "Low", Window: "7d", DemandJSON: strPtr(demandJSONWithEras("Low", 0.2, "full"))},
 		{Character: "High", Window: "7d", DemandJSON: strPtr(demandJSONWithEras("High", 0.8, "full"))},
 	}
-	svc := demand.NewService(newRepoWithRows(rows), uncoveredCampaigns{})
+	svc := demand.NewService(newRepoWithRows(rows), uncoveredLookup())
 
 	out, err := svc.Leaderboard(context.Background(), demand.LeaderboardOpts{
 		Window: "7d",
@@ -203,13 +190,7 @@ func TestService_Leaderboard_SortLowCoverage_UncoveredFirst(t *testing.T) {
 	}
 	// Only a single grade-10 sword_shield bucket for CoveredChar is covered;
 	// everything else (including its scarlet_violet bucket) is uncovered.
-	svc := demand.NewService(newRepoWithRows(rows), coveredOnlyFor{
-		character: "CoveredChar",
-		era:       "sword_shield",
-		grade:     10,
-		ids:       []int64{42},
-		unsold:    3,
-	})
+	svc := demand.NewService(newRepoWithRows(rows), coveredOnlyForLookup("CoveredChar", "sword_shield", 10, []int64{42}, 3))
 
 	out, err := svc.Leaderboard(context.Background(), demand.LeaderboardOpts{
 		Window: "30d",
@@ -236,7 +217,7 @@ func TestService_Leaderboard_EraFilter(t *testing.T) {
 	rows := []demand.CharacterCache{
 		{Character: "C1", Window: "30d", DemandJSON: strPtr(demandJSONWithEras("C1", 0.7, "full"))},
 	}
-	svc := demand.NewService(newRepoWithRows(rows), uncoveredCampaigns{})
+	svc := demand.NewService(newRepoWithRows(rows), uncoveredLookup())
 
 	out, err := svc.Leaderboard(context.Background(), demand.LeaderboardOpts{
 		Window: "30d",
@@ -258,7 +239,7 @@ func TestService_Leaderboard_DefaultGrades_EmitsAllFour(t *testing.T) {
 	rows := []demand.CharacterCache{
 		{Character: "C1", Window: "30d", DemandJSON: strPtr(demandJSONWithEras("C1", 0.7, "full"))},
 	}
-	svc := demand.NewService(newRepoWithRows(rows), uncoveredCampaigns{})
+	svc := demand.NewService(newRepoWithRows(rows), uncoveredLookup())
 
 	out, err := svc.Leaderboard(context.Background(), demand.LeaderboardOpts{
 		Window: "30d",
@@ -286,7 +267,7 @@ func TestService_Leaderboard_LimitTruncates(t *testing.T) {
 		{Character: "A", Window: "30d", DemandJSON: strPtr(demandJSONWithEras("A", 0.9, "full"))},
 		{Character: "B", Window: "30d", DemandJSON: strPtr(demandJSONWithEras("B", 0.5, "full"))},
 	}
-	svc := demand.NewService(newRepoWithRows(rows), uncoveredCampaigns{})
+	svc := demand.NewService(newRepoWithRows(rows), uncoveredLookup())
 
 	out, err := svc.Leaderboard(context.Background(), demand.LeaderboardOpts{
 		Window: "30d",
@@ -340,7 +321,7 @@ func TestService_Leaderboard_Acceleration(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			svc := demand.NewService(newRepoWithRows(tc.rows), uncoveredCampaigns{})
+			svc := demand.NewService(newRepoWithRows(tc.rows), uncoveredLookup())
 			out, err := svc.Leaderboard(context.Background(), demand.LeaderboardOpts{
 				Window: "30d",
 				Era:    "sword_shield",
