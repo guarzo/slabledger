@@ -69,33 +69,22 @@ func (m *MockDHFieldsUpdater) UpdatePurchaseDHFields(ctx context.Context, id str
 
 // MockPurchaseByCertLookup is a test double for scheduler.PurchaseByCertLookup.
 type MockPurchaseByCertLookup struct {
-	GetPurchaseIDByCertNumberFn   func(ctx context.Context, certNumber string) (string, error)
-	GetPurchaseIDsByCertNumbersFn func(ctx context.Context, certNumbers []string) (map[string]string, error)
-	Mapping                       map[string]string // fallback: certNumber -> purchaseID
+	GetDHStatusByCertNumberFn func(ctx context.Context, certNumber string) (string, string, error)
+	Mapping                   map[string]string // fallback: certNumber -> purchaseID
+	DHStatusByCert            map[string]string // fallback: certNumber -> dhStatus (used alongside Mapping)
 }
 
-func (m *MockPurchaseByCertLookup) GetPurchaseIDByCertNumber(ctx context.Context, certNumber string) (string, error) {
-	if m.GetPurchaseIDByCertNumberFn != nil {
-		return m.GetPurchaseIDByCertNumberFn(ctx, certNumber)
+func (m *MockPurchaseByCertLookup) GetDHStatusByCertNumber(ctx context.Context, certNumber string) (string, string, error) {
+	if m.GetDHStatusByCertNumberFn != nil {
+		return m.GetDHStatusByCertNumberFn(ctx, certNumber)
 	}
+	id := ""
 	if m.Mapping != nil {
-		return m.Mapping[certNumber], nil
+		id = m.Mapping[certNumber]
 	}
-	return "", nil
-}
-
-func (m *MockPurchaseByCertLookup) GetPurchaseIDsByCertNumbers(ctx context.Context, certNumbers []string) (map[string]string, error) {
-	if m.GetPurchaseIDsByCertNumbersFn != nil {
-		return m.GetPurchaseIDsByCertNumbersFn(ctx, certNumbers)
+	status := ""
+	if m.DHStatusByCert != nil {
+		status = m.DHStatusByCert[certNumber]
 	}
-	if m.Mapping == nil {
-		return make(map[string]string), nil
-	}
-	out := make(map[string]string, len(certNumbers))
-	for _, c := range certNumbers {
-		if id, ok := m.Mapping[c]; ok {
-			out[c] = id
-		}
-	}
-	return out, nil
+	return id, status, nil
 }

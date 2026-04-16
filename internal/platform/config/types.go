@@ -166,6 +166,7 @@ type Config struct {
 	PSASync            PSASyncConfig
 	DH                 DHConfig
 	DHAnalyticsRefresh DHAnalyticsRefreshConfig
+	DHReconcile        DHReconcileConfig
 	Adapters           AdapterConfig
 }
 
@@ -178,6 +179,24 @@ type DHAnalyticsRefreshConfig struct {
 	Enabled     bool
 	RefreshHour int    // UTC hour 0–23; default 3
 	Window      string // demand signal window, e.g. "30d" (default)
+}
+
+// DHReconcileConfig controls the daily DH inventory reconciliation scheduler.
+// The reconciler diffs the local view of DH linkage against a fresh DH
+// inventory snapshot, and resets local DH fields for purchases whose
+// dh_inventory_id is no longer present on DH. The push scheduler then
+// re-enrolls them as in_stock on its next tick.
+type DHReconcileConfig struct {
+	Enabled     bool          // default: true
+	Interval    time.Duration // default: 24h
+	RefreshHour int           // UTC hour 0-23; default 6 (after the 04:00/05:00 refresh cluster)
+}
+
+// ApplyDefaults sets zero-valued fields to sensible defaults.
+func (c *DHReconcileConfig) ApplyDefaults() {
+	if c.Interval <= 0 {
+		c.Interval = 24 * time.Hour
+	}
 }
 
 // AdvisorRefreshConfig controls the background AI advisor analysis scheduler.

@@ -221,6 +221,11 @@ func FromEnv(base Config) Config {
 	envIntRange("DH_ANALYTICS_REFRESH_HOUR", &cfg.DHAnalyticsRefresh.RefreshHour, 0, 23)
 	envString("DH_ANALYTICS_REFRESH_WINDOW", &cfg.DHAnalyticsRefresh.Window)
 
+	// DH inventory reconciliation scheduler.
+	envBool("DH_RECONCILE_ENABLED", &cfg.DHReconcile.Enabled, true)
+	envDurationPositive("DH_RECONCILE_INTERVAL", &cfg.DHReconcile.Interval)
+	envIntRange("DH_RECONCILE_HOUR", &cfg.DHReconcile.RefreshHour, 0, 23)
+
 	// Google Sheets credentials (JSON key is base64-encoded in .env)
 	if v := os.Getenv("GOOGLE_SHEETS_CREDENTIALS_JSON"); v != "" {
 		v = strings.TrimSpace(v)

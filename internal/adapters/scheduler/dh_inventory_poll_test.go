@@ -196,6 +196,112 @@ func TestDHInventoryPoll_RecordsEvents(t *testing.T) {
 	assert.Equal(t, dhevents.SourceDHInventoryPoll, listedEvent.Source)
 }
 
+// TestDHInventoryPoll_RecordsUnlistedOnListedToInStock verifies that when
+// a purchase's prior dh_status is "listed" and DH now reports "in_stock",
+// the observation is classified as TypeUnlisted instead of the regular
+// TypePushed — downstream TypePushed counts should not include unlists.
+func TestDHInventoryPoll_RecordsUnlistedOnListedToInStock(t *testing.T) {
+	client := &mocks.MockDHInventoryListClient{
+		ListInventoryFn: func(_ context.Context, _ dh.InventoryFilters) (*dh.InventoryListResponse, error) {
+			return &dh.InventoryListResponse{
+				Items: []dh.InventoryListItem{{
+					DHInventoryID: 544,
+					DHCardID:      590,
+					CertNumber:    "120460864",
+					Status:        dh.InventoryStatusInStock,
+					UpdatedAt:     "2026-04-16T09:00:00Z",
+				}},
+				Meta: dh.PaginationMeta{Page: 1, PerPage: 100, TotalCount: 1},
+			}, nil
+		},
+	}
+	syncStore := newMockSyncStateStore()
+	updater := &mocks.MockDHFieldsUpdater{}
+	lookup := &mocks.MockPurchaseByCertLookup{
+		Mapping:        map[string]string{"120460864": "purchase-1"},
+		DHStatusByCert: map[string]string{"120460864": "listed"},
+	}
+	recorder := &mocks.MockEventRecorder{}
+
+	s := NewDHInventoryPollScheduler(
+		client, syncStore, updater, lookup, recorder,
+		mocks.NewMockLogger(),
+		DHInventoryPollConfig{Enabled: true, Interval: 1 * time.Hour},
+	)
+	s.poll(context.Background())
+
+	// Locate the TypeUnlisted event.
+	var unlisted *dhevents.Event
+	for i := range recorder.Events {
+		if recorder.Events[i].Type == dhevents.TypeUnlisted {
+			unlisted = &recorder.Events[i]
+			break
+		}
+	}
+	require.NotNil(t, unlisted, "expected a TypeUnlisted event")
+	assert.Equal(t, "purchase-1", unlisted.PurchaseID)
+	assert.Equal(t, "120460864", unlisted.CertNumber)
+	assert.Equal(t, "listed", unlisted.PrevDHStatus)
+	assert.Equal(t, dh.InventoryStatusInStock, unlisted.NewDHStatus)
+	assert.Equal(t, 544, unlisted.DHInventoryID)
+	assert.Equal(t, 590, unlisted.DHCardID)
+	assert.Equal(t, dhevents.SourceDHInventoryPoll, unlisted.Source)
+
+	// TypeUnlisted replaces TypePushed on this transition; verify no push
+	// was also recorded for the same poll tick.
+	for _, e := range recorder.Events {
+		if e.Type == dhevents.TypePushed {
+			t.Fatalf("did not expect a TypePushed event on listed→in_stock transition; got one for cert %q", e.CertNumber)
+		}
+	}
+}
+
+// TestDHInventoryPoll_DoesNotRecordUnlistedOnFreshInStock verifies that
+// when prior dh_status is empty or already in_stock, no TypeUnlisted
+// event is emitted (the regular TypePushed event still fires, as today).
+func TestDHInventoryPoll_DoesNotRecordUnlistedOnFreshInStock(t *testing.T) {
+	tests := []struct {
+		name       string
+		priorState string
+	}{
+		{"no prior state", ""},
+		{"already in_stock", "in_stock"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			client := &mocks.MockDHInventoryListClient{
+				ListInventoryFn: func(_ context.Context, _ dh.InventoryFilters) (*dh.InventoryListResponse, error) {
+					return &dh.InventoryListResponse{
+						Items: []dh.InventoryListItem{{
+							DHInventoryID: 1, CertNumber: "C1",
+							Status: dh.InventoryStatusInStock, UpdatedAt: "2026-04-16T09:00:00Z",
+						}},
+						Meta: dh.PaginationMeta{Page: 1, PerPage: 100, TotalCount: 1},
+					}, nil
+				},
+			}
+			lookup := &mocks.MockPurchaseByCertLookup{
+				Mapping:        map[string]string{"C1": "p1"},
+				DHStatusByCert: map[string]string{"C1": tc.priorState},
+			}
+			recorder := &mocks.MockEventRecorder{}
+			s := NewDHInventoryPollScheduler(
+				client, newMockSyncStateStore(), &mocks.MockDHFieldsUpdater{},
+				lookup, recorder,
+				mocks.NewMockLogger(),
+				DHInventoryPollConfig{Enabled: true, Interval: 1 * time.Hour},
+			)
+			s.poll(context.Background())
+
+			for _, e := range recorder.Events {
+				if e.Type == dhevents.TypeUnlisted {
+					t.Fatalf("did not expect a TypeUnlisted event, got one with prev=%q", e.PrevDHStatus)
+				}
+			}
+		})
+	}
+}
+
 // Verify UpdatePurchaseDHFields is called via the DHFieldsUpdater interface.
 var _ DHFieldsUpdater = (*mocks.MockDHFieldsUpdater)(nil)
 var _ PurchaseByCertLookup = (*mocks.MockPurchaseByCertLookup)(nil)
