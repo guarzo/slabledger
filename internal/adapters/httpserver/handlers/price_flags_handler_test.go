@@ -173,8 +173,10 @@ func TestHandleListPriceFlags(t *testing.T) {
 			if tt.wantNonNullFlags && body.Flags == nil {
 				t.Errorf("flags should be empty array, not null")
 			}
-			// Sanity check on the populated case.
-			if len(twoFlags) > 0 && tt.wantBodyFlagsLen == len(twoFlags) {
+			// Sanity check on the populated case. Re-check actual length so a
+			// length-mismatch error above (t.Errorf, not Fatalf) doesn't lead
+			// to a panic indexing a too-short slice.
+			if tt.wantBodyFlagsLen == len(twoFlags) && len(body.Flags) >= len(twoFlags) {
 				if body.Flags[0].ID != twoFlags[0].ID || body.Flags[1].ID != twoFlags[1].ID {
 					t.Errorf("flag IDs not preserved: got %v %v", body.Flags[0].ID, body.Flags[1].ID)
 				}

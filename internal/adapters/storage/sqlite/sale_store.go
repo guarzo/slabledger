@@ -102,11 +102,14 @@ func (ss *SaleStore) scanSalesChunk(ctx context.Context, query string, args []an
 	for rows.Next() {
 		s, scanErr := scanSale(rows)
 		if scanErr != nil {
-			return scanErr
+			return fmt.Errorf("scan sale row in purchase ids chunk: %w", scanErr)
 		}
 		into[s.PurchaseID] = &s
 	}
-	return rows.Err()
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate sales rows in purchase ids chunk: %w", err)
+	}
+	return nil
 }
 
 func (ss *SaleStore) ListSalesByCampaign(ctx context.Context, campaignID string, limit, offset int) ([]inventory.Sale, error) {
