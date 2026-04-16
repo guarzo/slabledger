@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
 	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
@@ -70,6 +71,50 @@ func identifySoldMappings(unsoldPurchases []inventory.Purchase, existingMappings
 		}
 	}
 	return result
+}
+
+// catalogValueKey builds the lookup key used in the catalog value map.
+// Condition here is the grade-string form returned by the CL `cards` index
+// (e.g. "PSA 9"), NOT the Firestore `g9` form.
+func catalogValueKey(gemRateID, condition string) string {
+	return gemRateID + "|" + condition
+}
+
+// collectGemRateIDs returns the union of gemRateIDs found in firestore data
+// and existing mappings, with blanks removed. Order is not guaranteed.
+func collectGemRateIDs(firestoreData map[string]cardladder.FirestoreCardData, mappings []sqlite.CLCardMapping) []string {
+	seen := make(map[string]struct{}, len(firestoreData)+len(mappings))
+	for _, fd := range firestoreData {
+		if fd.GemRateID != "" {
+			seen[fd.GemRateID] = struct{}{}
+		}
+	}
+	for _, m := range mappings {
+		if m.CLGemRateID != "" {
+			seen[m.CLGemRateID] = struct{}{}
+		}
+	}
+	out := make([]string, 0, len(seen))
+	for id := range seen {
+		out = append(out, id)
+	}
+	return out
+}
+
+// pickCLValue returns the authoritative CL value for a matched card. It
+// prefers the CL `cards` catalog value (live market value), falling back to
+// the collectioncards-index value when the catalog has no entry for this
+// (gemRateID, condition) pair or the catalog value is non-positive.
+//
+// The collection index stores a snapshot that CL does not refresh, so relying
+// on it alone causes prices to freeze shortly after a card is added.
+func pickCLValue(catalog map[string]float64, gemRateID, condition string, collectionValue float64) float64 {
+	if gemRateID != "" && condition != "" {
+		if v, ok := catalog[catalogValueKey(gemRateID, condition)]; ok && v > 0 {
+			return v
+		}
+	}
+	return collectionValue
 }
 
 // compKey is a unique (gemRateID, condition) pair used for sales-comp dedup.

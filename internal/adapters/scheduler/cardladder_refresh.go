@@ -266,6 +266,13 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 		mappingByCLCardID[existingMappings[i].CLCollectionCardID] = &existingMappings[i]
 	}
 
+	// Batch-fetch live catalog values. The collectioncards index we already
+	// loaded carries a stale `currentValue` snapshot; the `cards` index is
+	// what CL's UI renders as "CL Value" and is the authoritative live price.
+	catalogValues := s.fetchCatalogValues(ctx, client, collectGemRateIDs(firestoreData, existingMappings))
+	s.logger.Info(ctx, "CL refresh: catalog values loaded",
+		observability.Int("catalogEntries", len(catalogValues)))
+
 	updated, mapped, skipped, noValue := 0, 0, 0, 0
 
 	// Track which purchase IDs had a successful CL card match + value update
@@ -341,8 +348,13 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 			}
 		}
 
-		// Update CL value
-		newCLCents := mathutil.ToCentsInt(card.CurrentValue)
+		// Update CL value. Prefer the live catalog value (matches CL's UI);
+		// fall back to the collection snapshot when the catalog has no entry
+		// for this (gemRateID, condition) pair. card.Condition is the
+		// grade-string form ("PSA 9") used by the catalog index — NOT the
+		// Firestore-sourced "g9" form captured in `condition` above.
+		effectiveCLValue := pickCLValue(catalogValues, gemRateID, card.Condition, card.CurrentValue)
+		newCLCents := mathutil.ToCentsInt(effectiveCLValue)
 		if newCLCents <= 0 {
 			// Matched but CL reports no market value. Persist so the admin
 			// UI can show "matched without a price" distinct from "unmapped".
