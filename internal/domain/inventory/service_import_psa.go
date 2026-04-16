@@ -250,6 +250,7 @@ func (s *service) handleNewPSAPurchase(ctx context.Context, row PSAExportRow, gr
 			BackImageURL:        row.BackImageURL,
 			PurchaseSource:      row.PurchaseSource,
 			PSAListingTitle:     row.ListingTitle,
+			DHPushStatus:        DHPushStatusPending,
 		}
 		// Only defer snapshot to background worker when a price provider is available
 		if s.priceProv != nil {

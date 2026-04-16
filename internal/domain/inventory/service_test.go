@@ -486,6 +486,20 @@ func TestService_ImportPSAExportGlobal_Allocate(t *testing.T) {
 	if result.Results[0].CampaignID != c.ID {
 		t.Errorf("CampaignID = %q, want %q", result.Results[0].CampaignID, c.ID)
 	}
+
+	// Verify the newly-allocated purchase is enrolled in the DH push pipeline.
+	// Without this, the DH push scheduler silently skips the row and it never
+	// gets matched to a DH card_id or pushed to DH inventory.
+	p, err := repo.GetPurchaseByCertNumber(ctx, "PSA", "PSA001")
+	if err != nil {
+		t.Fatalf("lookup new purchase by cert: %v", err)
+	}
+	if p == nil {
+		t.Fatal("new purchase not found after import")
+	}
+	if p.DHPushStatus != inventory.DHPushStatusPending {
+		t.Errorf("DHPushStatus = %q, want %q (new PSA imports must enroll in DH push pipeline)", p.DHPushStatus, inventory.DHPushStatusPending)
+	}
 }
 
 func TestService_ImportPSAExportGlobal_SkipExisting(t *testing.T) {
