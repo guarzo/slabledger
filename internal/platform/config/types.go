@@ -103,7 +103,6 @@ type AdapterConfig struct {
 	AzureAIEndpoint          string        // AZURE_AI_ENDPOINT - Azure AI Foundry endpoint URL
 	AzureAIKey               string        // AZURE_AI_API_KEY - Azure AI API key
 	AzureAIDeployment        string        // AZURE_AI_DEPLOYMENT - Model deployment name (default: gpt-5.4)
-	SocialAIDeployment       string        // SOCIAL_AI_DEPLOYMENT - Separate model for social content (default: same as AzureAIDeployment)
 	ImageAIDeployment        string        // IMAGE_AI_DEPLOYMENT - Image generation model deployment name
 	ImageAIQuality           string        // IMAGE_AI_QUALITY - Image quality: low, medium, high (default: medium)
 	ImageAIEnabled           bool          // IMAGE_AI_ENABLED - Enable AI background generation (default: false)
@@ -120,10 +119,6 @@ type DHConfig struct {
 	OrdersPollInterval    time.Duration // default: 30m
 	InventoryPollInterval time.Duration // default: 2h
 	PushInterval          time.Duration // default: 5m
-	SocialEnabled         bool
-	SocialHour            int           // UTC hour to fire (0–23); default: 6
-	SocialPollInterval    time.Duration // How often to poll DH for render status; default: 5s
-	SocialPollTimeout     time.Duration // Max wait before abandoning a DH post; default: 3m
 }
 
 // InventoryRefreshConfig controls the inventory snapshot refresh scheduler
@@ -170,9 +165,6 @@ type Config struct {
 	InventoryRefresh   InventoryRefreshConfig
 	SnapshotEnrich     SnapshotEnrichConfig
 	AdvisorRefresh     AdvisorRefreshConfig
-	SocialContent      SocialContentConfig
-	SocialPublish      SocialPublishConfig
-	MetricsPoll        MetricsPollConfig
 	CardLadder         CardLadderConfig
 	MarketMovers       MarketMoversConfig
 	GoogleSheets       GoogleSheetsConfig
@@ -227,39 +219,6 @@ func (c *SnapshotEnrichConfig) ApplyDefaults() {
 	}
 }
 
-// SocialContentConfig controls the background social content generation scheduler.
-type SocialContentConfig struct {
-	Enabled      bool
-	Interval     time.Duration // how often to run detection (default: 24h)
-	InitialDelay time.Duration // delay before first run (default: 5m)
-	ContentHour  int           // hour (0-23 UTC) to schedule runs; -1 = use InitialDelay (default: 5)
-}
-
-// SocialPublishConfig controls the automated Instagram publish scheduler.
-type SocialPublishConfig struct {
-	// RenderServiceURL is the base URL of the Puppeteer render sidecar.
-	// Empty = auto-publishing disabled; the scheduler is not started.
-	RenderServiceURL string
-	// StartHour is the earliest hour (0–23, server local time) for auto-publishing.
-	StartHour int
-	// EndHour is the latest hour (exclusive) for auto-publishing.
-	EndHour int
-	// IntervalMinutes controls how often the publish scheduler ticks.
-	IntervalMinutes int
-	// MaxDaily is the maximum number of posts auto-published per calendar day.
-	MaxDaily int
-}
-
-// ApplyDefaults fills in zero-valued fields with sensible defaults.
-func (c *SocialPublishConfig) ApplyDefaults() {
-	if c.IntervalMinutes == 0 {
-		c.IntervalMinutes = 60
-	}
-	if c.MaxDaily == 0 {
-		c.MaxDaily = 3
-	}
-}
-
 // GoogleSheetsConfig holds credentials and target for Google Sheets API access.
 type GoogleSheetsConfig struct {
 	CredentialsJSON string // Service account JSON key content
@@ -273,13 +232,6 @@ type PSASyncConfig struct {
 	Interval     time.Duration // how often to run sync (default: 24h)
 	InitialDelay time.Duration // delay before first run (default: 5m)
 	SyncHour     int           // hour (0-23 UTC) to schedule runs; -1 = use InitialDelay (default: 10)
-}
-
-// MetricsPollConfig controls the Instagram metrics polling scheduler.
-type MetricsPollConfig struct {
-	Enabled  bool
-	Interval time.Duration // how often to poll (default: 6h)
-	MaxAge   time.Duration // stop polling posts older than this (default: 168h / 7 days)
 }
 
 // CardLadderConfig controls the Card Ladder value refresh scheduler.

@@ -189,24 +189,6 @@ func FromEnv(base Config) Config {
 	envIntRange("ADVISOR_REFRESH_HOUR", &cfg.AdvisorRefresh.RefreshHour, -1, 23)
 	envIntPositive("ADVISOR_MAX_TOOL_ROUNDS", &cfg.AdvisorRefresh.MaxToolRounds)
 
-	// Social content scheduler
-	envBool("SOCIAL_CONTENT_ENABLED", &cfg.SocialContent.Enabled, false)
-	envDurationPositive("SOCIAL_CONTENT_INTERVAL", &cfg.SocialContent.Interval)
-	envDurationPositive("SOCIAL_CONTENT_INITIAL_DELAY", &cfg.SocialContent.InitialDelay)
-	envIntRange("SOCIAL_CONTENT_HOUR", &cfg.SocialContent.ContentHour, -1, 23)
-
-	// Social publish scheduler
-	envString("RENDER_SERVICE_URL", &cfg.SocialPublish.RenderServiceURL)
-	envIntRange("SOCIAL_PUBLISH_START_HOUR", &cfg.SocialPublish.StartHour, 0, 23)
-	envIntRange("SOCIAL_PUBLISH_END_HOUR", &cfg.SocialPublish.EndHour, 0, 23)
-	envIntPositive("SOCIAL_PUBLISH_INTERVAL_MINUTES", &cfg.SocialPublish.IntervalMinutes)
-	envIntPositive("AUTO_PUBLISH_MAX_DAILY", &cfg.SocialPublish.MaxDaily)
-
-	// Metrics poll scheduler
-	envBool("METRICS_POLL_ENABLED", &cfg.MetricsPoll.Enabled, false)
-	envDurationPositive("METRICS_POLL_INTERVAL", &cfg.MetricsPoll.Interval)
-	envDurationPositive("METRICS_POLL_MAX_AGE", &cfg.MetricsPoll.MaxAge)
-
 	// Card Ladder scheduler
 	envBool("CARDLADDER_REFRESH_ENABLED", &cfg.CardLadder.Enabled, false)
 	envIntRange("CARDLADDER_REFRESH_HOUR", &cfg.CardLadder.RefreshHour, 0, 23)
@@ -226,10 +208,6 @@ func FromEnv(base Config) Config {
 	if cfg.Adapters.AzureAIDeployment == "" {
 		cfg.Adapters.AzureAIDeployment = "gpt-5.4"
 	}
-	cfg.Adapters.SocialAIDeployment = os.Getenv("SOCIAL_AI_DEPLOYMENT")
-	if cfg.Adapters.SocialAIDeployment == "" {
-		cfg.Adapters.SocialAIDeployment = cfg.Adapters.AzureAIDeployment
-	}
 	cfg.Adapters.ImageAIDeployment = os.Getenv("IMAGE_AI_DEPLOYMENT")
 	cfg.Adapters.ImageAIQuality = os.Getenv("IMAGE_AI_QUALITY")
 	if cfg.Adapters.ImageAIQuality == "" {
@@ -245,10 +223,6 @@ func FromEnv(base Config) Config {
 	envDuration("DH_ORDERS_POLL_INTERVAL", &cfg.DH.OrdersPollInterval)
 	envDuration("DH_INVENTORY_POLL_INTERVAL", &cfg.DH.InventoryPollInterval)
 	envDuration("DH_PUSH_INTERVAL", &cfg.DH.PushInterval)
-	envBool("DH_SOCIAL_ENABLED", &cfg.DH.SocialEnabled, false)
-	envIntRange("DH_SOCIAL_HOUR", &cfg.DH.SocialHour, 0, 23)
-	envDurationPositive("DH_SOCIAL_POLL_INTERVAL", &cfg.DH.SocialPollInterval)
-	envDurationPositive("DH_SOCIAL_POLL_TIMEOUT", &cfg.DH.SocialPollTimeout)
 
 	// DH demand analytics refresh (niche-opportunity leaderboard cache).
 	envBool("DH_ANALYTICS_REFRESH_ENABLED", &cfg.DHAnalyticsRefresh.Enabled, false)
