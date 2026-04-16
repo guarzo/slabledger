@@ -18,7 +18,7 @@ func TestTypeAndSourceConstantsAreDistinct(t *testing.T) {
 
 	sources := []Source{
 		SourceDHOrdersPoll, SourceDHInventoryPoll, SourceCertIntake,
-		SourceCLImport, SourcePSAImport, SourceManualUI,
+		SourcePSAImport, SourceManualUI,
 		SourceCLRefresh, SourceDHListing,
 	}
 	seenSrc := make(map[Source]bool, len(sources))

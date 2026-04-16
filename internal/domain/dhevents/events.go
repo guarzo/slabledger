@@ -32,9 +32,8 @@ type Source string
 const (
 	SourceDHOrdersPoll    Source = "dh_orders_poll"
 	SourceDHInventoryPoll Source = "dh_inventory_poll"
-	SourceCertIntake      Source = "cert_intake"
-	SourceCLImport        Source = "cl_import"
-	SourcePSAImport       Source = "psa_import"
+	SourceCertIntake Source = "cert_intake"
+	SourcePSAImport  Source = "psa_import"
 	SourceManualUI        Source = "manual_ui"
 	SourceCLRefresh       Source = "cl_refresh"
 	SourceDHListing       Source = "dh_listing"

@@ -280,7 +280,7 @@ export default function OperationsTab({ campaigns, operationState, setOperationS
           {psaResult.byCampaign && Object.keys(psaResult.byCampaign).length > 0 && (
             <div className="mt-2 text-xs text-[var(--text-muted)]">
               {Object.entries(psaResult.byCampaign).map(([campaignId, s]) => (
-                <div key={campaignId}>{s.campaignName}: {s.allocated} new, {s.refreshed} refreshed</div>
+                <div key={campaignId}>{s.campaignName}: {s.allocated} allocated</div>
               ))}
             </div>
           )}

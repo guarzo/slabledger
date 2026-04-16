@@ -41,7 +41,7 @@ export interface PSAImportResult {
   certEnrichmentPending?: number;
   errors?: ImportError[];
   results?: PSAImportItemResult[];
-  byCampaign?: Record<string, { campaignName: string; allocated: number; refreshed: number }>;
+  byCampaign?: Record<string, { campaignName: string; allocated: number }>;
 }
 
 export interface ExternalImportResult {

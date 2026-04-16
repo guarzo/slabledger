@@ -38,11 +38,10 @@ type PSAExportRow struct {
 	BackImageURL   string  // Back card image URL
 }
 
-// CampaignImportSummary counts allocations and refreshes within a single campaign during an import.
+// CampaignImportSummary counts allocations within a single campaign during an import.
 type CampaignImportSummary struct {
 	CampaignName string `json:"campaignName"`
 	Allocated    int    `json:"allocated"`
-	Refreshed    int    `json:"refreshed"`
 }
 
 // PSAImportResult summarizes the outcome of a PSA CSV import.
