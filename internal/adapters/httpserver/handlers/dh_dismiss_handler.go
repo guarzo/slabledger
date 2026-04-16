@@ -112,5 +112,14 @@ func (h *DHHandler) HandleUndismissMatch(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	h.recordEvent(ctx, dhevents.Event{
+		PurchaseID:     p.ID,
+		CertNumber:     p.CertNumber,
+		Type:           dhevents.TypeUnmatched,
+		PrevPushStatus: inventory.DHPushStatusDismissed,
+		NewPushStatus:  inventory.DHPushStatusUnmatched,
+		Source:         dhevents.SourceManualUI,
+	})
+
 	writeJSON(w, http.StatusOK, map[string]string{"status": "unmatched"})
 }

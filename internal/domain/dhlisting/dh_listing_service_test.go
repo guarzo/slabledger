@@ -308,8 +308,8 @@ func TestListPurchases_SkippedCounterIncrements(t *testing.T) {
 	svc := newTestService(t, lookup, WithDHListingLister(lister))
 	result := svc.ListPurchases(context.Background(), []string{certNum})
 
-	if result.Skipped < 1 {
-		t.Errorf("Skipped: got %d, want >= 1", result.Skipped)
+	if result.Skipped != 1 {
+		t.Errorf("Skipped: got %d, want 1", result.Skipped)
 	}
 	if result.Total != 1 {
 		t.Errorf("Total: got %d, want 1", result.Total)

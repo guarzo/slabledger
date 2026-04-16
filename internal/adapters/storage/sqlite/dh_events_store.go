@@ -21,18 +21,24 @@ func NewDHEventStore(db *sql.DB) *DHEventStore {
 }
 
 // Record inserts one event row. Zero-value string/int fields become SQL NULL.
+//
+// event_at is explicitly written as RFC3339 (rather than relying on the
+// DEFAULT CURRENT_TIMESTAMP, which stores "YYYY-MM-DD HH:MM:SS") so that
+// string comparisons in CountByTypeSince — which uses RFC3339 — are correct.
+// The DEFAULT remains a safety net for any direct SQL inserts.
 func (s *DHEventStore) Record(ctx context.Context, e dhevents.Event) error {
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO dh_state_events (
-			purchase_id, cert_number, event_type,
+			purchase_id, cert_number, event_at, event_type,
 			prev_push_status, new_push_status,
 			prev_dh_status, new_dh_status,
 			dh_inventory_id, dh_card_id,
 			dh_order_id, sale_price_cents,
 			source, notes
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		nullIfEmpty(e.PurchaseID),
 		nullIfEmpty(e.CertNumber),
+		time.Now().UTC().Format(time.RFC3339),
 		string(e.Type),
 		nullIfEmpty(e.PrevPushStatus),
 		nullIfEmpty(e.NewPushStatus),

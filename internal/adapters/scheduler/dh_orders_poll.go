@@ -125,6 +125,7 @@ func (s *DHOrdersPollScheduler) RunOnce(ctx context.Context, since string) (*DHO
 
 	rows := make([]inventory.OrdersExportRow, 0, len(allOrders))
 	certToOrderID := make(map[string]string, len(allOrders))
+	certToPriceCents := make(map[string]int, len(allOrders))
 	for _, order := range allOrders {
 		rows = append(rows, inventory.OrdersExportRow{
 			OrderNumber:  order.OrderID,
@@ -137,6 +138,7 @@ func (s *DHOrdersPollScheduler) RunOnce(ctx context.Context, since string) (*DHO
 			UnitPrice:    float64(order.SalePriceCents) / 100.0,
 		})
 		certToOrderID[order.CertNumber] = order.OrderID
+		certToPriceCents[order.CertNumber] = order.SalePriceCents
 	}
 
 	importResult, err := s.campaignSvc.ImportOrdersSales(ctx, rows)
@@ -149,18 +151,11 @@ func (s *DHOrdersPollScheduler) RunOnce(ctx context.Context, since string) (*DHO
 
 	// Emit orphan and already_sold events (don't depend on ConfirmOrdersSales).
 	for _, nf := range importResult.NotFound {
-		var priceCents int
-		for _, o := range allOrders {
-			if o.CertNumber == nf.CertNumber {
-				priceCents = o.SalePriceCents
-				break
-			}
-		}
 		s.recordEvent(ctx, dhevents.Event{
 			CertNumber:     nf.CertNumber,
 			Type:           dhevents.TypeOrphanSale,
 			DHOrderID:      certToOrderID[nf.CertNumber],
-			SalePriceCents: priceCents,
+			SalePriceCents: certToPriceCents[nf.CertNumber],
 			Source:         dhevents.SourceDHOrdersPoll,
 			Notes:          "no local purchase matched this cert",
 		})
@@ -196,8 +191,16 @@ func (s *DHOrdersPollScheduler) RunOnce(ctx context.Context, since string) (*DHO
 	summary.Matched = bulkResult.Created
 	summary.Failed = bulkResult.Failed
 
-	// Emit sold events for newly-created sales.
+	// Emit sold events only for items where sale creation succeeded. Items that
+	// failed during ConfirmOrdersSales must NOT emit a sold event.
+	failedIDs := make(map[string]bool, len(bulkResult.Errors))
+	for _, e := range bulkResult.Errors {
+		failedIDs[e.PurchaseID] = true
+	}
 	for _, m := range importResult.Matched {
+		if failedIDs[m.PurchaseID] {
+			continue
+		}
 		s.recordEvent(ctx, dhevents.Event{
 			PurchaseID:     m.PurchaseID,
 			CertNumber:     m.CertNumber,

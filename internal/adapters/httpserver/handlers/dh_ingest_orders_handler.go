@@ -36,7 +36,7 @@ func (h *DHHandler) HandleIngestOrders(w http.ResponseWriter, r *http.Request) {
 		h.logger.Error(r.Context(), "dh ingest orders handler: RunOnce failed",
 			observability.String("since", since),
 			observability.Err(err))
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeError(w, http.StatusInternalServerError, "failed to ingest orders")
 		return
 	}
 

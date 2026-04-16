@@ -135,23 +135,26 @@ func (h *DHHandler) HandleSelectMatch(w http.ResponseWriter, r *http.Request) {
 		if err := h.pushStatusUpdater.UpdatePurchaseDHPushStatus(ctx, purchase.ID, inventory.DHPushStatusManual); err != nil {
 			h.logger.Warn(ctx, "select match: failed to set manual status",
 				observability.String("purchaseID", purchase.ID), observability.Err(err))
-		} else if h.candidatesSaver != nil {
-			if err := h.candidatesSaver.UpdatePurchaseDHCandidates(ctx, purchase.ID, ""); err != nil {
-				h.logger.Warn(ctx, "select match: failed to clear candidates",
-					observability.String("purchaseID", purchase.ID), observability.Err(err))
+		} else {
+			// Only emit the pushed event once the status flip actually persisted,
+			// so consumers of dh_state_events see a consistent view.
+			h.recordEvent(ctx, dhevents.Event{
+				PurchaseID:    purchase.ID,
+				CertNumber:    purchase.CertNumber,
+				Type:          dhevents.TypePushed,
+				NewPushStatus: inventory.DHPushStatusManual,
+				DHInventoryID: inventoryID,
+				DHCardID:      req.DHCardID,
+				Source:        dhevents.SourceManualUI,
+			})
+			if h.candidatesSaver != nil {
+				if err := h.candidatesSaver.UpdatePurchaseDHCandidates(ctx, purchase.ID, ""); err != nil {
+					h.logger.Warn(ctx, "select match: failed to clear candidates",
+						observability.String("purchaseID", purchase.ID), observability.Err(err))
+				}
 			}
 		}
 	}
-
-	h.recordEvent(ctx, dhevents.Event{
-		PurchaseID:    purchase.ID,
-		CertNumber:    purchase.CertNumber,
-		Type:          dhevents.TypePushed,
-		NewPushStatus: inventory.DHPushStatusManual,
-		DHInventoryID: inventoryID,
-		DHCardID:      req.DHCardID,
-		Source:        dhevents.SourceManualUI,
-	})
 
 	// Teach DH the correct match so future lookups resolve automatically.
 	if h.matchConfirmer != nil && purchase.CertNumber != "" {

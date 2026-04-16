@@ -62,6 +62,7 @@ func (a *dhCardIDResolverAdapter) ResolveCardIDsByCerts(ctx context.Context, cer
 	}
 
 	deadline := time.Now().Add(a.timeout)
+	unknownStatusCount := 0
 	for {
 		if time.Now().After(deadline) {
 			return nil, fmt.Errorf("batch cert resolve: job %s did not complete within %s", batch.JobID, a.timeout)
@@ -86,9 +87,13 @@ func (a *dhCardIDResolverAdapter) ResolveCardIDsByCerts(ctx context.Context, cer
 		case "queued", "processing":
 			// fall through to sleep
 		default:
+			unknownStatusCount++
 			a.logger.Warn(ctx, "batch cert resolve: unexpected job status",
 				observability.String("job_id", batch.JobID),
 				observability.String("status", job.Status))
+			if unknownStatusCount >= 3 {
+				return nil, fmt.Errorf("batch cert resolve: job %s returned unexpected status %q %d times", batch.JobID, job.Status, unknownStatusCount)
+			}
 		}
 
 		select {

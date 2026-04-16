@@ -20,6 +20,7 @@ export function DHStateBadge({ dhPushStatus, dhStatus, dhCardId }: DHStateBadgeP
           href={`https://doubleholo.com/card/${dhCardId}`}
           target="_blank"
           rel="noreferrer"
+          onClick={(e) => e.stopPropagation()}
           className="text-xs text-[var(--brand-500)] hover:text-[var(--brand-400)]"
           title="View on DoubleHolo"
         >

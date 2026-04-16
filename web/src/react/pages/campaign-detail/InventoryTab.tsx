@@ -363,6 +363,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
             <SortableHeader label="P/L" sortKey="pl" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-right print-hide-col" style={{ width: '72px' }} />
             <SortableHeader label="Days" sortKey="days" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-center print-hide-col" style={{ width: '40px' }} />
             <div className="glass-table-th flex-shrink-0 text-center print-hide-col" style={{ width: '80px' }}>DH</div>
+            <div className="glass-table-th flex-shrink-0 text-center print-hide-col" style={{ width: '20px' }}></div>
             <div className="glass-table-th flex-shrink-0 text-center print-hide-actions" style={{ width: '48px' }}>Sell</div>
             <div className="glass-table-th flex-shrink-0 !px-1 print-hide-actions" style={{ width: '28px' }}></div>
           </div>
