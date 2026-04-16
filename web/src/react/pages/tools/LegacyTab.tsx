@@ -3,10 +3,9 @@ import { Button, SectionErrorBoundary } from '../../ui';
 import ShopifySyncPage from '../ShopifySyncPage';
 import CardIntakeSection from './CardIntakeSection';
 import { LegacyCard } from './CardIntakeSection';
-import EbayDescriptionSection from './EbayDescriptionSection';
 import SalesImportSection from './SalesImportSection';
 
-type ExpandedCard = 'ebay' | 'sales' | 'priceSync' | null;
+type ExpandedCard = 'sales' | 'priceSync' | null;
 
 function SyncIcon() {
   return (
@@ -14,15 +13,6 @@ function SyncIcon() {
       <polyline points="23 4 23 10 17 10" />
       <polyline points="1 20 1 14 7 14" />
       <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" />
-    </svg>
-  );
-}
-
-function TagIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
-      <path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z" />
-      <line x1="7" y1="7" x2="7.01" y2="7" />
     </svg>
   );
 }
@@ -81,23 +71,6 @@ export default function LegacyTab() {
         </LegacyCard>
 
         <LegacyCard
-          icon={<TagIcon />}
-          title="eBay Export"
-          description="Generate eBay bulk listing CSV"
-        >
-          <Button
-            size="sm"
-            variant={expandedCard === 'ebay' ? 'primary' : 'secondary'}
-            fullWidth
-            onClick={() => toggle('ebay')}
-            aria-expanded={expandedCard === 'ebay'}
-            aria-controls="ebay-panel"
-          >
-            {expandedCard === 'ebay' ? 'Collapse' : 'Open eBay Export'}
-          </Button>
-        </LegacyCard>
-
-        <LegacyCard
           icon={<ReceiptIcon />}
           title="Import Sales"
           description="Import sales from order CSVs"
@@ -123,8 +96,6 @@ export default function LegacyTab() {
           </SectionErrorBoundary>
         </div>
       )}
-
-      {expandedCard === 'ebay' && <EbayDescriptionSection />}
 
       {expandedCard === 'sales' && <SalesImportSection />}
     </>

@@ -1,11 +1,11 @@
 /**
- * Campaign import/export API methods: PSA, CL, external, orders, Shopify, eBay, cert entry, price review
+ * Campaign import/export API methods: PSA, CL, external, orders, Shopify, cert entry, price review
  */
 
 import type {
   GlobalImportResult, PSAImportResult, ExternalImportResult,
   CertLookupResult, ShopifyPriceSyncResponse,
-  CertImportResult, EbayExportListResponse, EbayExportGenerateItem,
+  CertImportResult,
   OrdersImportResult, OrdersConfirmItem, BulkSaleResult,
   ScanCertResponse, ResolveCertResponse, MMRefreshResult,
 } from '../../types/campaigns';
@@ -36,12 +36,10 @@ declare module './client' {
     // Shopify
     shopifyPriceSync(items: { certNumber: string; currentPriceCents: number; grader: string }[]): Promise<ShopifyPriceSyncResponse>;
 
-    // Cert entry & eBay export
+    // Cert entry
     importCerts(certNumbers: string[]): Promise<CertImportResult>;
     scanCert(certNumber: string): Promise<ScanCertResponse>;
     resolveCert(certNumber: string): Promise<ResolveCertResponse>;
-    listEbayExportItems(flaggedOnly: boolean): Promise<EbayExportListResponse>;
-    generateEbayCSV(items: EbayExportGenerateItem[]): Promise<Blob>;
 
     // Price review & flags
     setReviewedPrice(purchaseId: string, priceCents: number, source: string): Promise<{ success: boolean; reviewedAt: string }>;
@@ -130,24 +128,6 @@ proto.scanCert = async function (this: APIClient, certNumber: string): Promise<S
 
 proto.resolveCert = async function (this: APIClient, certNumber: string): Promise<ResolveCertResponse> {
   return this.post<ResolveCertResponse>('/purchases/resolve-cert', { certNumber });
-};
-
-// eBay export
-proto.listEbayExportItems = async function (this: APIClient, flaggedOnly: boolean): Promise<EbayExportListResponse> {
-  const params = flaggedOnly ? '?flagged_only=true' : '';
-  return this.get<EbayExportListResponse>(`/purchases/export-ebay${params}`);
-};
-
-proto.generateEbayCSV = async function (this: APIClient, items: EbayExportGenerateItem[]): Promise<Blob> {
-  const response = await this.fetchWithRetry(
-    `${this.baseURL}/purchases/export-ebay/generate`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ items }),
-    },
-  );
-  return response.blob();
 };
 
 // Price review & flag endpoints
