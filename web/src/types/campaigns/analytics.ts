@@ -74,6 +74,7 @@ export interface CompSummary {
   compsAboveCost: number;
   byPlatform: PlatformBreakdown[];
   lastSaleDate: string;
+  lastSaleCents: number;
 }
 
 export interface AgingItem {

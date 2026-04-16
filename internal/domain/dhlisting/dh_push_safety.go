@@ -8,16 +8,14 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 )
 
-// ResolveMarketValueCents returns the best available price for DH push:
-// reviewed price > CL value > 0.
-func ResolveMarketValueCents(p *inventory.Purchase) int {
-	if p.ReviewedPriceCents > 0 {
-		return p.ReviewedPriceCents
-	}
-	if p.CLValueCents > 0 {
-		return p.CLValueCents
-	}
-	return 0
+// ResolveListingPriceCents returns the reviewed price for DH listing.
+// Only ReviewedPriceCents is used — DH now honors this value as-is at list
+// transition. CL is deliberately excluded: it can be stale and we don't want
+// to silently list at a wrong price. Returns 0 when no reviewed price is
+// set, which callers treat as "omit listing_price_cents and let DH's
+// catalog fallback take over" (fine for in_stock, rejected at list time).
+func ResolveListingPriceCents(p *inventory.Purchase) int {
+	return p.ReviewedPriceCents
 }
 
 // EvaluateHoldTriggers checks whether a push should be held for review.
@@ -29,7 +27,7 @@ func EvaluateHoldTriggers(p *inventory.Purchase, cfg inventory.DHPushConfig) str
 		return checkInitialPushValueMismatch(p, cfg.InitialPushValueFloorPct)
 	}
 
-	newValue := ResolveMarketValueCents(p)
+	newValue := ResolveListingPriceCents(p)
 	lastPushed := p.DHListingPriceCents
 	if lastPushed == 0 || newValue == 0 {
 		return ""
@@ -132,7 +130,7 @@ func checkInitialPushValueMismatch(p *inventory.Purchase, floorPct int) string {
 	if p.BuyCostCents == 0 {
 		return ""
 	}
-	marketValue := ResolveMarketValueCents(p)
+	marketValue := ResolveListingPriceCents(p)
 	if marketValue == 0 {
 		return ""
 	}

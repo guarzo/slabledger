@@ -272,18 +272,11 @@ func (h *DHHandler) pushMatchedToDH(ctx context.Context, purchases []inventory.P
 		if !ok {
 			continue
 		}
-		if p.CertNumber == "" || p.DHInventoryID != 0 || dhlisting.ResolveMarketValueCents(&p) == 0 || p.BuyCostCents <= 0 {
+		listingPrice := dhlisting.ResolveListingPriceCents(&p)
+		if p.CertNumber == "" || p.DHInventoryID != 0 || listingPrice == 0 || p.BuyCostCents <= 0 {
 			continue
 		}
-		items = append(items, dh.InventoryItem{
-			DHCardID:         dhCardID,
-			CertNumber:       p.CertNumber,
-			GradingCompany:   dh.GraderPSA,
-			Grade:            p.GradeValue,
-			CostBasisCents:   p.BuyCostCents,
-			MarketValueCents: dh.IntPtr(dhlisting.ResolveMarketValueCents(&p)),
-			Status:           dh.InventoryStatusInStock,
-		})
+		items = append(items, dh.NewInStockItem(dhCardID, p.CertNumber, p.GradeValue, p.BuyCostCents, listingPrice))
 	}
 
 	if len(items) == 0 {

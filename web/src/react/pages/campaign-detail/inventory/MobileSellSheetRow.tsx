@@ -9,8 +9,7 @@ interface MobileSellSheetRowProps {
 
 export default function MobileSellSheetRow({ item, onTap }: MobileSellSheetRowProps) {
   const cb = costBasis(item.purchase);
-  const snap = item.currentMarket;
-  const market = snap ? bestPrice(snap) : 0;
+  const market = bestPrice(item);
   const clValue = item.purchase.clValueCents ?? 0;
   const recPrice = item.recommendedPriceCents ?? item.purchase.reviewedPriceCents ?? 0;
   const recProfitable = recPrice > 0 && recPrice > cb;

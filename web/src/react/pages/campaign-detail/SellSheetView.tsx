@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import type { AgingItem } from '../../../types/campaigns';
 import type { PriceFlagReason } from '../../../types/campaigns/priceReview';
 import { Button } from '../../ui';
@@ -5,6 +6,7 @@ import RecordSaleModal from './RecordSaleModal';
 import PriceHintDialog from '../../PriceHintDialog';
 import PriceOverrideDialog from '../../PriceOverrideDialog';
 import PriceFlagDialog from './inventory/PriceFlagDialog';
+import { isReadyToList } from './inventory/inventoryCalcs';
 
 /* ── Sell-sheet action bar (shown when items are selected) ───────── */
 
@@ -15,6 +17,7 @@ interface SellSheetActionsProps {
   onAddToSellSheet: (ids: string[]) => void;
   onRemoveFromSellSheet: (ids: string[]) => void;
   onRecordSale: (items: AgingItem[]) => void;
+  onBulkListOnDH?: (ids: string[]) => void;
   onClearSelected: () => void;
   isPrinting: boolean;
   pageSellSheetCount: number;
@@ -28,11 +31,19 @@ export function SellSheetActions({
   onAddToSellSheet,
   onRemoveFromSellSheet,
   onRecordSale,
+  onBulkListOnDH,
   onClearSelected,
   isPrinting,
   pageSellSheetCount,
   onPrint,
 }: SellSheetActionsProps) {
+  const listableIds = useMemo(() => {
+    if (!onBulkListOnDH || selected.size === 0) return [];
+    return items
+      .filter(i => selected.has(i.purchase.id) && isReadyToList(i) && !!i.purchase.dhInventoryId)
+      .map(i => i.purchase.id);
+  }, [onBulkListOnDH, selected, items]);
+
   return (
     <>
       {selected.size > 0 && (
@@ -61,6 +72,16 @@ export function SellSheetActions({
               >
                 Add to Sell Sheet ({selected.size})
               </Button>
+            )}
+            {onBulkListOnDH && listableIds.length > 0 && (
+              <button
+                type="button"
+                onClick={() => onBulkListOnDH(listableIds)}
+                className="text-sm font-medium px-3 py-1.5 rounded-md bg-[var(--success)]/15 text-[var(--success)] hover:bg-[var(--success)]/25 transition-colors"
+                title="Publish selected items on DH"
+              >
+                List on DH ({listableIds.length})
+              </button>
             )}
             <Button
               size="sm"

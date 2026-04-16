@@ -196,17 +196,17 @@ func TestInventoryPusherAdapter_PushInventory_Success(t *testing.T) {
 		{
 			name: "single item with market value",
 			items: []dhlisting.DHInventoryPushItem{
-				{DHCardID: 42, CertNumber: "12345678", Grade: 9.0, CostBasisCents: 5000, MarketValueCents: 8000},
+				{DHCardID: 42, CertNumber: "12345678", Grade: 9.0, CostBasisCents: 5000, ListingPriceCents: 8000},
 			},
 			wantDHItems: []dh.InventoryItem{
 				{
-					DHCardID:         42,
-					CertNumber:       "12345678",
-					GradingCompany:   dh.GraderPSA,
-					Grade:            9.0,
-					CostBasisCents:   5000,
-					MarketValueCents: intPtr(8000),
-					Status:           dh.InventoryStatusInStock,
+					DHCardID:          42,
+					CertNumber:        "12345678",
+					GradingCompany:    dh.GraderPSA,
+					Grade:             9.0,
+					CostBasisCents:    5000,
+					ListingPriceCents: intPtr(8000),
+					Status:            dh.InventoryStatusInStock,
 				},
 			},
 			dhResp: &dh.InventoryPushResponse{
@@ -234,17 +234,17 @@ func TestInventoryPusherAdapter_PushInventory_Success(t *testing.T) {
 		{
 			name: "zero market value maps to nil pointer",
 			items: []dhlisting.DHInventoryPushItem{
-				{DHCardID: 7, CertNumber: "00000001", Grade: 10.0, CostBasisCents: 2000, MarketValueCents: 0},
+				{DHCardID: 7, CertNumber: "00000001", Grade: 10.0, CostBasisCents: 2000, ListingPriceCents: 0},
 			},
 			wantDHItems: []dh.InventoryItem{
 				{
-					DHCardID:         7,
-					CertNumber:       "00000001",
-					GradingCompany:   dh.GraderPSA,
-					Grade:            10.0,
-					CostBasisCents:   2000,
-					MarketValueCents: nil,
-					Status:           dh.InventoryStatusInStock,
+					DHCardID:          7,
+					CertNumber:        "00000001",
+					GradingCompany:    dh.GraderPSA,
+					Grade:             10.0,
+					CostBasisCents:    2000,
+					ListingPriceCents: nil,
+					Status:            dh.InventoryStatusInStock,
 				},
 			},
 			dhResp: &dh.InventoryPushResponse{
@@ -298,16 +298,16 @@ func TestInventoryPusherAdapter_PushInventory_Success(t *testing.T) {
 				if item.Status != dh.InventoryStatusInStock {
 					t.Errorf("item[%d].Status: got %q, want %q", i, item.Status, dh.InventoryStatusInStock)
 				}
-				// MarketValueCents pointer check
-				if want.MarketValueCents == nil {
-					if item.MarketValueCents != nil {
-						t.Errorf("item[%d].MarketValueCents: got %d, want nil", i, *item.MarketValueCents)
+				// ListingPriceCents pointer check
+				if want.ListingPriceCents == nil {
+					if item.ListingPriceCents != nil {
+						t.Errorf("item[%d].ListingPriceCents: got %d, want nil", i, *item.ListingPriceCents)
 					}
 				} else {
-					if item.MarketValueCents == nil {
-						t.Errorf("item[%d].MarketValueCents: got nil, want %d", i, *want.MarketValueCents)
-					} else if *item.MarketValueCents != *want.MarketValueCents {
-						t.Errorf("item[%d].MarketValueCents: got %d, want %d", i, *item.MarketValueCents, *want.MarketValueCents)
+					if item.ListingPriceCents == nil {
+						t.Errorf("item[%d].ListingPriceCents: got nil, want %d", i, *want.ListingPriceCents)
+					} else if *item.ListingPriceCents != *want.ListingPriceCents {
+						t.Errorf("item[%d].ListingPriceCents: got %d, want %d", i, *item.ListingPriceCents, *want.ListingPriceCents)
 					}
 				}
 			}
@@ -402,7 +402,7 @@ func TestInventoryAdapter_UpdateInventoryStatus_Success(t *testing.T) {
 	}
 
 	adapter := NewInventoryAdapter(mock)
-	err := adapter.UpdateInventoryStatus(context.Background(), 42, "listed")
+	_, err := adapter.UpdateInventoryStatus(context.Background(), 42, "listed", 0)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -411,6 +411,9 @@ func TestInventoryAdapter_UpdateInventoryStatus_Success(t *testing.T) {
 	}
 	if capturedUpdate.Status != "listed" {
 		t.Errorf("status: got %q, want %q", capturedUpdate.Status, "listed")
+	}
+	if capturedUpdate.ListingPriceCents != nil {
+		t.Errorf("ListingPriceCents: want nil when 0 passed in, got %v", capturedUpdate.ListingPriceCents)
 	}
 }
 
@@ -454,7 +457,7 @@ func TestInventoryAdapter_UpdateInventoryStatus_Error(t *testing.T) {
 	}
 
 	adapter := NewInventoryAdapter(mock)
-	err := adapter.UpdateInventoryStatus(context.Background(), 1, "listed")
+	_, err := adapter.UpdateInventoryStatus(context.Background(), 1, "listed", 0)
 	if !errors.Is(err, wantErr) {
 		t.Errorf("error: got %v, want %v", err, wantErr)
 	}

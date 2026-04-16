@@ -4,9 +4,10 @@ import { TrendArrow, ConfidenceIndicator, GradeBadge } from '../../../ui';
 import MarketplaceLinks from './MarketplaceLinks';
 import {
   costBasis, bestPrice, unrealizedPL, marketTrend, velocityLabel,
-  getSourceByType, fmtDateShort, plColor, formatPL,
+  getSourceByType, fmtDateShort, plColor, formatPL, mostRecentSale,
   deriveSignalDirection, deriveSignalDelta, isHotSeller, formatReceivedDate,
 } from './utils';
+import { isReadyToList } from './inventoryCalcs';
 
 interface MobileCardProps {
   item: AgingItem;
@@ -16,17 +17,18 @@ interface MobileCardProps {
   onFixPricing?: () => void;
   onSetPrice?: () => void;
   onDelete?: () => void;
+  onListOnDH?: (purchaseId: string) => void;
   ev?: ExpectedValue;
   showCampaignColumn?: boolean;
   isOnSellSheet?: boolean;
 }
 
-export default function MobileCard({ item, selected, onToggle, onRecordSale, onFixPricing, onSetPrice, onDelete, ev, showCampaignColumn, isOnSellSheet }: MobileCardProps) {
+export default function MobileCard({ item, selected, onToggle, onRecordSale, onFixPricing, onSetPrice, onDelete, onListOnDH, ev, showCampaignColumn, isOnSellSheet }: MobileCardProps) {
   const cb = costBasis(item.purchase);
   const snap = item.currentMarket;
   const daysColor = daysHeldColor(item.daysHeld);
-  const price = snap ? bestPrice(snap) : 0;
-  const pl = unrealizedPL(cb, snap);
+  const price = bestPrice(item);
+  const pl = unrealizedPL(cb, item);
   const trend = snap ? marketTrend(snap) : null;
   const velocity = snap ? velocityLabel(snap) : null;
   const direction = deriveSignalDirection(item);
@@ -104,9 +106,9 @@ export default function MobileCard({ item, selected, onToggle, onRecordSale, onF
         {item.purchase.clValueCents > 0 && (
           <div><span className="text-[var(--text-muted)]">CL:</span> <span className="text-[var(--text)] tabular-nums">{formatCents(item.purchase.clValueCents)}</span></div>
         )}
-        {snap && price > 0 && (() => {
-          const ebaySource = getSourceByType(snap.sourcePrices, 'ebay');
-          const estSource = getSourceByType(snap.sourcePrices, 'estimate');
+        {price > 0 && (() => {
+          const ebaySource = snap ? getSourceByType(snap.sourcePrices, 'ebay') : undefined;
+          const estSource = snap ? getSourceByType(snap.sourcePrices, 'estimate') : undefined;
           if (ebaySource || estSource) {
             return (
               <>
@@ -138,7 +140,7 @@ export default function MobileCard({ item, selected, onToggle, onRecordSale, onF
               <span className="text-[var(--text)] tabular-nums inline-flex items-center gap-1">
                 {formatCents(price)}
                 <TrendArrow trend={trend} size="sm" />
-                <ConfidenceIndicator confidence={snap.confidence ?? null} size="sm" />
+                <ConfidenceIndicator confidence={snap?.confidence ?? null} size="sm" />
               </span>
             </div>
           );
@@ -149,15 +151,19 @@ export default function MobileCard({ item, selected, onToggle, onRecordSale, onF
             <span className="text-[var(--text)] tabular-nums">{formatCents(snap.conservativeCents)} - {formatCents(snap.optimisticCents)}</span>
           </div>
         ) : null}
-        {snap && snap.lastSoldCents > 0 && (
-          <div>
-            <span className="text-[var(--text-muted)]">Last sold:</span>{' '}
-            <span className="text-[var(--text)] tabular-nums">
-              {formatCents(snap.lastSoldCents)}
-              {snap.lastSoldDate && <span className="text-[var(--text-muted)]"> ({fmtDateShort(snap.lastSoldDate)})</span>}
-            </span>
-          </div>
-        )}
+        {(() => {
+          const recent = mostRecentSale(item);
+          if (!recent) return null;
+          return (
+            <div>
+              <span className="text-[var(--text-muted)]">Last sold:</span>{' '}
+              <span className="text-[var(--text)] tabular-nums">
+                {formatCents(recent.cents)}
+                {recent.date && <span className="text-[var(--text-muted)]"> ({fmtDateShort(recent.date)})</span>}
+              </span>
+            </div>
+          );
+        })()}
         {snap?.lowestListCents ? (
           <div>
             <span className="text-[var(--text-muted)]">Low list:</span>{' '}
@@ -206,6 +212,16 @@ export default function MobileCard({ item, selected, onToggle, onRecordSale, onF
             title="Override price lookup"
           >
             Fix
+          </button>
+        )}
+        {onListOnDH && isReadyToList(item) && !!item.purchase.dhInventoryId && (
+          <button
+            type="button"
+            onClick={() => onListOnDH(item.purchase.id)}
+            className="text-xs font-medium px-2 py-1 rounded bg-[var(--success)]/15 text-[var(--success)] hover:bg-[var(--success)]/25 transition-colors"
+            title="Publish this item on DH"
+          >
+            List
           </button>
         )}
         <button

@@ -31,12 +31,15 @@ func (m *mockPurchaseLookup) GetPurchasesByCertNumbers(_ context.Context, certNu
 }
 
 type mockInventoryLister struct {
-	updateStatusErr error
-	syncChannelsErr error
+	updateStatusErr      error
+	syncChannelsErr      error
+	returnedListingPrice int
+	lastListingPriceSent int
 }
 
-func (m *mockInventoryLister) UpdateInventoryStatus(_ context.Context, _ int, _ string) error {
-	return m.updateStatusErr
+func (m *mockInventoryLister) UpdateInventoryStatus(_ context.Context, _ int, _ string, listingPriceCents int) (int, error) {
+	m.lastListingPriceSent = listingPriceCents
+	return m.returnedListingPrice, m.updateStatusErr
 }
 
 func (m *mockInventoryLister) SyncChannels(_ context.Context, _ int, _ []string) error {
@@ -80,10 +83,11 @@ func newTestService(t *testing.T, lookup DHListingPurchaseLookup, opts ...DHList
 func TestListPurchases_RecordsListedAndChannelSyncedEvents(t *testing.T) {
 	certNum := "55555555"
 	purchase := &inventory.Purchase{
-		ID:            "purchase-1",
-		CertNumber:    certNum,
-		DHInventoryID: 99,
-		DHCardID:      42,
+		ID:                 "purchase-1",
+		CertNumber:         certNum,
+		DHInventoryID:      99,
+		DHCardID:           42,
+		ReviewedPriceCents: 50000, // required by listing gate
 	}
 
 	lookup := &mockPurchaseLookup{
@@ -150,9 +154,10 @@ func TestListPurchases_RecordsListedAndChannelSyncedEvents(t *testing.T) {
 func TestListPurchases(t *testing.T) {
 	certNum := "55555555"
 	purchase := &inventory.Purchase{
-		ID:            "purchase-1",
-		CertNumber:    certNum,
-		DHInventoryID: 99,
+		ID:                 "purchase-1",
+		CertNumber:         certNum,
+		DHInventoryID:      99,
+		ReviewedPriceCents: 50000, // required by listing gate
 	}
 
 	tests := []struct {
@@ -182,7 +187,7 @@ func TestListPurchases(t *testing.T) {
 			name: "PersistFailure_DecrementsListedCount",
 			lookup: &mockPurchaseLookup{
 				purchases: map[string]*inventory.Purchase{
-					"12345678": {ID: "purchase-2", CertNumber: "12345678", DHInventoryID: 42},
+					"12345678": {ID: "purchase-2", CertNumber: "12345678", DHInventoryID: 42, ReviewedPriceCents: 50000},
 				},
 			},
 			lister:        &mockInventoryLister{},
