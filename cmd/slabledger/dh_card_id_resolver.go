@@ -61,10 +61,7 @@ func (a *dhCardIDResolverAdapter) ResolveCardIDsByCerts(ctx context.Context, cer
 
 	out := make(map[string]string, len(certs))
 	for start := 0; start < len(certs); start += maxCertsPerBatch {
-		end := start + maxCertsPerBatch
-		if end > len(certs) {
-			end = len(certs)
-		}
+		end := min(start+maxCertsPerBatch, len(certs))
 		resolved, err := a.resolveChunk(ctx, certs[start:end])
 		if err != nil {
 			return nil, err
