@@ -331,15 +331,7 @@ func (s *DHPushScheduler) processPurchase(ctx context.Context, p inventory.Purch
 		return processHeld
 	}
 
-	item := dh.InventoryItem{
-		DHCardID:          dhCardID,
-		CertNumber:        p.CertNumber,
-		GradingCompany:    dh.GraderPSA,
-		Grade:             p.GradeValue,
-		CostBasisCents:    p.BuyCostCents,
-		ListingPriceCents: dh.IntPtr(listingPrice), // nil when 0 — DH uses catalog fallback
-		Status:            dh.InventoryStatusInStock,
-	}
+	item := dh.NewInStockItem(dhCardID, p.CertNumber, p.GradeValue, p.BuyCostCents, listingPrice)
 
 	pushResp, err := s.inventoryPush.PushInventory(ctx, []dh.InventoryItem{item})
 	if err != nil {

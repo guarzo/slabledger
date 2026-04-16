@@ -150,6 +150,21 @@ func IntPtr(v int) *int {
 	return &v
 }
 
+// NewInStockItem builds an InventoryItem for an in_stock push. When
+// listingPriceCents is 0 the field is omitted and DH falls back to its catalog
+// value.
+func NewInStockItem(dhCardID int, certNumber string, grade float64, costBasisCents, listingPriceCents int) InventoryItem {
+	return InventoryItem{
+		DHCardID:          dhCardID,
+		CertNumber:        certNumber,
+		GradingCompany:    GraderPSA,
+		Grade:             grade,
+		CostBasisCents:    costBasisCents,
+		ListingPriceCents: IntPtr(listingPriceCents),
+		Status:            InventoryStatusInStock,
+	}
+}
+
 // InventoryPushRequest is the request body for POST /inventory.
 type InventoryPushRequest struct {
 	Items []InventoryItem `json:"items"`

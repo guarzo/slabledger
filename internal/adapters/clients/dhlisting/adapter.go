@@ -75,15 +75,7 @@ func NewInventoryPusherAdapter(client interface {
 func (a *InventoryPusherAdapter) PushInventory(ctx context.Context, items []dhlisting.DHInventoryPushItem) (*dhlisting.DHInventoryPushResult, error) {
 	dhItems := make([]dh.InventoryItem, len(items))
 	for i, item := range items {
-		dhItems[i] = dh.InventoryItem{
-			DHCardID:          item.DHCardID,
-			CertNumber:        item.CertNumber,
-			GradingCompany:    dh.GraderPSA,
-			Grade:             item.Grade,
-			CostBasisCents:    item.CostBasisCents,
-			ListingPriceCents: dh.IntPtr(item.ListingPriceCents),
-			Status:            dh.InventoryStatusInStock,
-		}
+		dhItems[i] = dh.NewInStockItem(item.DHCardID, item.CertNumber, item.Grade, item.CostBasisCents, item.ListingPriceCents)
 	}
 
 	resp, err := a.client.PushInventory(ctx, dhItems)
