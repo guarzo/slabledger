@@ -201,3 +201,88 @@ func TestSyncPurchasePrice(t *testing.T) {
 		})
 	}
 }
+
+func TestSyncDriftedPurchases(t *testing.T) {
+	drift := []inventory.Purchase{
+		{ID: "a", DHInventoryID: 1, ReviewedPriceCents: 11000, DHListingPriceCents: 10000, DHStatus: inventory.DHStatusListed},
+		{ID: "b", DHInventoryID: 2, ReviewedPriceCents: 22000, DHListingPriceCents: 20000, DHStatus: inventory.DHStatusListed},
+		{ID: "c", DHInventoryID: 3, ReviewedPriceCents: 33000, DHListingPriceCents: 30000, DHStatus: inventory.DHStatusInStock},
+	}
+	lookup := &fakeLookup{
+		purchases: map[string]*inventory.Purchase{
+			"a": &drift[0], "b": &drift[1], "c": &drift[2],
+		},
+		drift: drift,
+	}
+	updater := &fakeUpdater{}
+	writer := &fakeWriter{}
+	resetter := &fakeResetter{}
+
+	svc := newTestService(lookup, updater, writer, resetter)
+	got := svc.SyncDriftedPurchases(context.Background())
+
+	if got.Total != 3 {
+		t.Errorf("Total = %d, want 3", got.Total)
+	}
+	if got.ByOutcome[OutcomeSynced] != 3 {
+		t.Errorf("synced = %d, want 3 (map: %v)", got.ByOutcome[OutcomeSynced], got.ByOutcome)
+	}
+	if len(updater.calls) != 3 {
+		t.Errorf("updater calls = %d, want 3", len(updater.calls))
+	}
+}
+
+func TestSyncDriftedPurchases_EmptyDriftList(t *testing.T) {
+	lookup := &fakeLookup{}
+	updater := &fakeUpdater{}
+	writer := &fakeWriter{}
+	resetter := &fakeResetter{}
+	svc := newTestService(lookup, updater, writer, resetter)
+
+	got := svc.SyncDriftedPurchases(context.Background())
+	if got.Total != 0 || len(updater.calls) != 0 {
+		t.Errorf("expected no work, got total=%d calls=%d", got.Total, len(updater.calls))
+	}
+}
+
+// fakeUpdaterFn lets a test supply per-call behavior.
+type fakeUpdaterFn struct {
+	fn func(ctx context.Context, inventoryID int, status string, price int) (int, error)
+}
+
+func (f *fakeUpdaterFn) UpdateInventoryStatus(ctx context.Context, inventoryID int, status string, price int) (int, error) {
+	return f.fn(ctx, inventoryID, status, price)
+}
+
+func TestSyncDriftedPurchases_ContinuesOnError(t *testing.T) {
+	drift := []inventory.Purchase{
+		{ID: "err", DHInventoryID: 1, ReviewedPriceCents: 11000, DHListingPriceCents: 10000, DHStatus: inventory.DHStatusListed},
+		{ID: "ok", DHInventoryID: 2, ReviewedPriceCents: 22000, DHListingPriceCents: 20000, DHStatus: inventory.DHStatusListed},
+	}
+	lookup := &fakeLookup{
+		purchases: map[string]*inventory.Purchase{"err": &drift[0], "ok": &drift[1]},
+		drift:     drift,
+	}
+	var callCount int
+	updater := &fakeUpdaterFn{
+		fn: func(_ context.Context, _ int, _ string, price int) (int, error) {
+			callCount++
+			if callCount == 1 {
+				return 0, errors.New("transient")
+			}
+			return price, nil
+		},
+	}
+	writer := &fakeWriter{}
+	resetter := &fakeResetter{}
+
+	svc := newTestService(lookup, updater, writer, resetter)
+	got := svc.SyncDriftedPurchases(context.Background())
+
+	if got.Total != 2 {
+		t.Errorf("Total = %d, want 2", got.Total)
+	}
+	if got.ByOutcome[OutcomeError] != 1 || got.ByOutcome[OutcomeSynced] != 1 {
+		t.Errorf("outcomes = %v, want error=1 synced=1", got.ByOutcome)
+	}
+}

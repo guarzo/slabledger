@@ -112,7 +112,25 @@ func (s *service) SyncPurchasePrice(ctx context.Context, purchaseID string) Sync
 	return res
 }
 
-// SyncDriftedPurchases is implemented in Task 6.
 func (s *service) SyncDriftedPurchases(ctx context.Context) SyncBatchResult {
-	return SyncBatchResult{ByOutcome: map[Outcome]int{}}
+	result := SyncBatchResult{ByOutcome: map[Outcome]int{}}
+
+	drift, err := s.lookup.ListDHPriceDrift(ctx)
+	if err != nil {
+		s.logger.Warn(ctx, "dh price sync: list drift failed", observability.Err(err))
+		return result
+	}
+
+	for i := range drift {
+		r := s.SyncPurchasePrice(ctx, drift[i].ID)
+		result.Total++
+		result.ByOutcome[r.Outcome]++
+	}
+
+	s.logger.Info(ctx, "dh price sync: batch done",
+		observability.Int("total", result.Total),
+		observability.Int("synced", result.ByOutcome[OutcomeSynced]),
+		observability.Int("errors", result.ByOutcome[OutcomeError]),
+		observability.Int("stale", result.ByOutcome[OutcomeStaleInventoryID]))
+	return result
 }
