@@ -82,7 +82,9 @@ func (j *PricingEnrichJob) Enqueue(certNumber string) {
 	if len(pricers) == 0 {
 		if j.logger != nil {
 			j.logger.Warn(context.Background(), "pricing enqueue dropped: no pricers configured",
-				observability.String("cert", certNumber))
+				observability.String("cert", certNumber),
+				observability.Int("pricers", len(pricers)),
+				observability.Int("queueDepth", len(j.ch)))
 		}
 		return
 	}
@@ -97,7 +99,9 @@ func (j *PricingEnrichJob) Enqueue(certNumber string) {
 	default:
 		if j.logger != nil {
 			j.logger.Warn(context.Background(), "pricing enqueue queue full, dropping cert",
-				observability.String("cert", certNumber))
+				observability.String("cert", certNumber),
+				observability.Int("pricers", len(pricers)),
+				observability.Int("queueDepth", len(j.ch)))
 		}
 	}
 }
