@@ -47,9 +47,9 @@ import { api, APIError } from '../../../../js/api';
 
 function makeWrapper() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return function Wrapper({ children }: { children: React.ReactNode }) {
-    return React.createElement(QueryClientProvider, { client: queryClient }, children);
-  };
+  const wrapper = ({ children }: { children: React.ReactNode }) =>
+    React.createElement(QueryClientProvider, { client: queryClient }, children);
+  return { wrapper, queryClient };
 }
 
 // ---------------------------------------------------------------------------
@@ -71,7 +71,9 @@ describe('useInventoryState — handleListOnDH', () => {
       new APIError('DH listing failed', 500)
     );
 
-    const { result } = renderHook(() => useInventoryState(EMPTY_ITEMS, 'camp-1'), { wrapper: makeWrapper() });
+    const { wrapper, queryClient } = makeWrapper();
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+    const { result } = renderHook(() => useInventoryState(EMPTY_ITEMS, 'camp-1'), { wrapper });
 
     await act(async () => {
       await result.current.handleListOnDH('purchase-1');
@@ -79,6 +81,7 @@ describe('useInventoryState — handleListOnDH', () => {
 
     expect(result.current.dhListedOptimistic.has('purchase-1')).toBe(false);
     expect(result.current.dhListingInFlight.size).toBe(0);
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['campaigns', 'camp-1', 'inventory'] });
   });
 
   it('sets dhListedOptimistic when 409 reports already listed', async () => {
@@ -86,13 +89,41 @@ describe('useInventoryState — handleListOnDH', () => {
       new APIError('Purchase already listed on DH', 409, undefined, { error: 'Purchase already listed on DH' })
     );
 
-    const { result } = renderHook(() => useInventoryState(EMPTY_ITEMS, 'camp-1'), { wrapper: makeWrapper() });
+    const { wrapper, queryClient } = makeWrapper();
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+    const { result } = renderHook(() => useInventoryState(EMPTY_ITEMS, 'camp-1'), { wrapper });
 
     await act(async () => {
       await result.current.handleListOnDH('purchase-2');
     });
 
     expect(result.current.dhListedOptimistic.has('purchase-2')).toBe(true);
+    expect(result.current.dhListingInFlight.size).toBe(0);
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['campaigns', 'camp-1', 'inventory'] });
+  });
+});
+
+describe('useInventoryState — handleBulkListOnDH', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('treats 409 already-listed rejections as success in bulk', async () => {
+    vi.mocked(api.listPurchaseOnDH)
+      .mockResolvedValueOnce({ listed: 1, synced: 1, skipped: 0, total: 1 } as never)
+      .mockRejectedValueOnce(
+        new APIError('Purchase already listed on DH', 409, undefined, { error: 'Purchase already listed on DH' })
+      );
+
+    const { wrapper } = makeWrapper();
+    const { result } = renderHook(() => useInventoryState(EMPTY_ITEMS, 'camp-1'), { wrapper });
+
+    await act(async () => {
+      await result.current.handleBulkListOnDH(['p-a', 'p-b']);
+    });
+
+    expect(result.current.dhListedOptimistic.has('p-a')).toBe(true);
+    expect(result.current.dhListedOptimistic.has('p-b')).toBe(true);
     expect(result.current.dhListingInFlight.size).toBe(0);
   });
 });

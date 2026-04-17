@@ -41,6 +41,20 @@ describe('APIClient error message construction', () => {
     });
   });
 
+  it('prefers data.error over data.message when both are present', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      status: 409,
+      statusText: 'Conflict',
+      json: async () => ({ error: 'primary', message: 'secondary' }),
+    }));
+
+    await expect(client.get('/some-endpoint')).rejects.toMatchObject({
+      message: 'primary',
+      status: 409,
+    });
+  });
+
   it('falls back to generic message when neither field is present', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: false,

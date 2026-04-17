@@ -14,6 +14,12 @@ import type { SortKey, SortDir } from './utils';
 import { computeInventoryMeta, filterAndSortItems } from './inventoryCalcs';
 import type { FilterTab } from './inventoryCalcs';
 
+const isAlreadyListedError = (err: unknown): boolean =>
+  isAPIError(err) && err.status === 409 && err.data?.error === 'Purchase already listed on DH';
+
+const isEffectiveSuccess = (r: PromiseSettledResult<unknown>): boolean =>
+  r.status === 'fulfilled' || (r.status === 'rejected' && isAlreadyListedError(r.reason));
+
 export function useInventoryState(items: AgingItem[], campaignId?: string) {
   const queryClient = useQueryClient();
   const toast = useToast();
@@ -155,7 +161,7 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
       // Update in-flight and optimistic state per chunk so UI responds progressively.
       const chunkSucceeded: string[] = [];
       for (let j = 0; j < chunk.length; j++) {
-        if (chunkResults[j].status === 'fulfilled') chunkSucceeded.push(chunk[j]);
+        if (isEffectiveSuccess(chunkResults[j])) chunkSucceeded.push(chunk[j]);
       }
       if (chunkSucceeded.length > 0) {
         setDHListedOptimistic(prev => {
@@ -170,7 +176,7 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
         return next;
       });
     }
-    const succeededIds = purchaseIds.filter((_, i) => results[i].status === 'fulfilled');
+    const succeededIds = purchaseIds.filter((_, i) => isEffectiveSuccess(results[i]));
     const failed = purchaseIds.length - succeededIds.length;
     if (failed === 0) {
       toast.success(`Listed ${succeededIds.length} on DH`);
