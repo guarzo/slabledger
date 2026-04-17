@@ -304,3 +304,106 @@ func TestPurchaseStore_UpdatePurchaseDHPriceSync(t *testing.T) {
 	// Sanity: other DH fields untouched.
 	assert.Equal(t, 777, got.DHInventoryID)
 }
+
+// TestPurchaseStore_ListDHPriceDrift verifies the query returns exactly the
+// unsold purchases whose reviewed price diverges from dh_listing_price_cents.
+// Items that have no DH inventory ID, no reviewed price, are dismissed/held,
+// or are sold must all be excluded.
+func TestPurchaseStore_ListDHPriceDrift(t *testing.T) {
+	repo := setupCampaignsRepo(t)
+	ctx := context.Background()
+	now := time.Now().Truncate(time.Second)
+
+	c := &inventory.Campaign{ID: "camp-drift", Name: "Active", Phase: inventory.PhaseActive, CreatedAt: now, UpdatedAt: now}
+	require.NoError(t, repo.CreateCampaign(ctx, c))
+
+	// Drifted: reviewed != dh_listing_price. Must be returned.
+	drifted := &inventory.Purchase{
+		ID: "pur-drift", CampaignID: "camp-drift",
+		CardName: "Charizard", CertNumber: "11111111", Grader: "PSA", GradeValue: 9,
+		BuyCostCents: 5000, PurchaseDate: "2026-01-01",
+		ReviewedPriceCents:  15000,
+		DHInventoryID:       100,
+		DHListingPriceCents: 10000,
+		CreatedAt:           now, UpdatedAt: now,
+	}
+	// In sync: reviewed == dh_listing_price. Excluded.
+	inSync := &inventory.Purchase{
+		ID: "pur-sync", CampaignID: "camp-drift",
+		CardName: "Blastoise", CertNumber: "22222222", Grader: "PSA", GradeValue: 9,
+		BuyCostCents: 5000, PurchaseDate: "2026-01-01",
+		ReviewedPriceCents:  10000,
+		DHInventoryID:       101,
+		DHListingPriceCents: 10000,
+		CreatedAt:           now, UpdatedAt: now,
+	}
+	// No inventory ID: excluded.
+	noInv := &inventory.Purchase{
+		ID: "pur-noinv", CampaignID: "camp-drift",
+		CardName: "Venusaur", CertNumber: "33333333", Grader: "PSA", GradeValue: 9,
+		BuyCostCents: 5000, PurchaseDate: "2026-01-01",
+		ReviewedPriceCents: 10000,
+		CreatedAt:          now, UpdatedAt: now,
+	}
+	// Zero reviewed: excluded.
+	noReview := &inventory.Purchase{
+		ID: "pur-noreview", CampaignID: "camp-drift",
+		CardName: "Mewtwo", CertNumber: "44444444", Grader: "PSA", GradeValue: 9,
+		BuyCostCents: 5000, PurchaseDate: "2026-01-01",
+		DHInventoryID:       102,
+		DHListingPriceCents: 8000,
+		CreatedAt:           now, UpdatedAt: now,
+	}
+	// Dismissed: excluded.
+	dismissed := &inventory.Purchase{
+		ID: "pur-dismissed", CampaignID: "camp-drift",
+		CardName: "Mew", CertNumber: "55555555", Grader: "PSA", GradeValue: 9,
+		BuyCostCents: 5000, PurchaseDate: "2026-01-01",
+		ReviewedPriceCents:  15000,
+		DHInventoryID:       103,
+		DHListingPriceCents: 10000,
+		DHPushStatus:        inventory.DHPushStatusDismissed,
+		CreatedAt:           now, UpdatedAt: now,
+	}
+	// Held: excluded.
+	held := &inventory.Purchase{
+		ID: "pur-held", CampaignID: "camp-drift",
+		CardName: "Lugia", CertNumber: "66666666", Grader: "PSA", GradeValue: 9,
+		BuyCostCents: 5000, PurchaseDate: "2026-01-01",
+		ReviewedPriceCents:  15000,
+		DHInventoryID:       104,
+		DHListingPriceCents: 10000,
+		DHPushStatus:        inventory.DHPushStatusHeld,
+		CreatedAt:           now, UpdatedAt: now,
+	}
+	// Sold: excluded even though it drifts.
+	sold := &inventory.Purchase{
+		ID: "pur-sold", CampaignID: "camp-drift",
+		CardName: "Ho-Oh", CertNumber: "77777777", Grader: "PSA", GradeValue: 9,
+		BuyCostCents: 5000, PurchaseDate: "2026-01-01",
+		ReviewedPriceCents:  15000,
+		DHInventoryID:       105,
+		DHListingPriceCents: 10000,
+		CreatedAt:           now, UpdatedAt: now,
+	}
+
+	for _, p := range []*inventory.Purchase{drifted, inSync, noInv, noReview, dismissed, held, sold} {
+		require.NoError(t, repo.CreatePurchase(ctx, p), "seed %s", p.ID)
+	}
+	require.NoError(t, repo.CreateSale(ctx, &inventory.Sale{
+		ID: "sale-sold", PurchaseID: "pur-sold",
+		SaleChannel: inventory.SaleChannelEbay, SalePriceCents: 16000,
+		SaleDate: "2026-01-10", CreatedAt: now, UpdatedAt: now,
+	}))
+
+	got, err := repo.ListDHPriceDrift(ctx)
+	require.NoError(t, err)
+	if len(got) != 1 {
+		names := make([]string, len(got))
+		for i, p := range got {
+			names[i] = p.ID
+		}
+		t.Fatalf("expected 1 drifted purchase, got %d: %v", len(got), names)
+	}
+	assert.Equal(t, "pur-drift", got[0].ID)
+}
