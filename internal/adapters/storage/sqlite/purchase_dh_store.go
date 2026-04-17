@@ -4,8 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"github.com/guarzo/slabledger/internal/domain/inventory"
+	"strconv"
 	"time"
+
+	"github.com/guarzo/slabledger/internal/domain/intelligence"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 )
 
 func (ps *PurchaseStore) UpdatePurchaseDHFields(ctx context.Context, id string, update inventory.DHFieldsUpdate) error {
@@ -363,6 +366,51 @@ func (ps *PurchaseStore) ListUnsoldDHCardIDs(ctx context.Context) ([]int, error)
 		return nil, fmt.Errorf("iterate dh card ids: %w", err)
 	}
 	return ids, nil
+}
+
+// ListUnsoldDHCardSeeds returns distinct (dh_card_id, card_name, set_name, card_number)
+// tuples for unsold purchases in non-closed campaigns where dh_card_id is set.
+// Used by the DH intelligence refresh scheduler to seed the market_intelligence
+// table with cards we own but for which intelligence has not yet been fetched.
+func (ps *PurchaseStore) ListUnsoldDHCardSeeds(ctx context.Context) ([]intelligence.SeedCandidate, error) {
+	query := `
+		SELECT p.dh_card_id, p.card_name, p.set_name, p.card_number
+		FROM campaign_purchases p
+		INNER JOIN campaigns c ON c.id = p.campaign_id
+		LEFT JOIN campaign_sales s ON s.purchase_id = p.id
+		WHERE s.id IS NULL
+		  AND c.phase != 'closed'
+		  AND p.dh_card_id IS NOT NULL
+		  AND p.dh_card_id != 0
+		GROUP BY p.dh_card_id, p.card_name, p.set_name, p.card_number`
+	rows, err := ps.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("list unsold dh card seeds: %w", err)
+	}
+	defer rows.Close() //nolint:errcheck // best-effort close
+
+	var seeds []intelligence.SeedCandidate
+	for rows.Next() {
+		var (
+			id     int
+			name   string
+			set    string
+			number string
+		)
+		if err := rows.Scan(&id, &name, &set, &number); err != nil {
+			return nil, fmt.Errorf("scan dh card seed: %w", err)
+		}
+		seeds = append(seeds, intelligence.SeedCandidate{
+			DHCardID:   strconv.Itoa(id),
+			CardName:   name,
+			SetName:    set,
+			CardNumber: number,
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate dh card seeds: %w", err)
+	}
+	return seeds, nil
 }
 
 // UpdatePurchaseCLCardMetadata persists Card Ladder catalog metadata (player, variation, category) on a purchase.

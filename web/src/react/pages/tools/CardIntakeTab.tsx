@@ -5,7 +5,7 @@ import { centsToDollars, dollarsToCents, formatCents } from '../../utils/formatt
 import SignalChip from '../campaign-detail/inventory/SignalChip';
 
 type CertStatus = 'scanning' | 'existing' | 'sold' | 'returned' | 'resolving' | 'resolved' | 'failed' | 'importing' | 'imported';
-type ListingStatus = 'idle' | 'setting-price' | 'listing' | 'listed' | 'list-error';
+type ListingStatus = 'setting-price' | 'listing' | 'listed' | 'list-error';
 
 interface CertRow {
   certNumber: string;

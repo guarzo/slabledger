@@ -3,6 +3,7 @@
  */
 
 import type { SaleChannel } from './core';
+import type { MarketSnapshot } from './market';
 
 /** Shared error shape for import results. */
 export interface ImportError {
@@ -91,7 +92,7 @@ export interface ScanCertResponse {
   purchaseId?: string;
   campaignId?: string;
   buyCostCents?: number;
-  market?: import('./market').MarketSnapshot;
+  market?: MarketSnapshot;
 }
 
 export interface ResolveCertResponse {
