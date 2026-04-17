@@ -77,7 +77,7 @@ export default function OverviewTab({
       <div id="tabpanel-overview" role="tabpanel" aria-labelledby="overview" className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <StatCard label="Total Spent" value={formatCents(totalSpent)} />
         <StatCard label="Revenue" value={formatCents(totalRevenue)} />
-        <StatCard label="Net Profit" value={formatCents(totalProfit)} color={totalProfit >= 0 ? 'green' : 'red'} />
+        <StatCard label="Net Profit" value={formatCents(totalProfit)} color={totalProfit >= 0 ? 'green' : 'red'} large />
         <StatCard label="Sell-Through" value={`${sellThrough}%`} color={parseFloat(sellThrough) >= 50 ? 'green' : parseFloat(sellThrough) < 10 ? 'red' : undefined} />
         <StatCard label="Cards Purchased" value={String(purchaseCount)} />
         <StatCard label="Cards Sold" value={String(saleCount)} />
