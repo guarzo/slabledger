@@ -338,7 +338,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	var dhPriceSyncService dhpricing.Service
 	if dhClient != nil && dhClient.EnterpriseAvailable() && campaignsInit.purchaseStore != nil {
 		dhPriceSyncService = dhpricing.NewService(
-			campaignsInit.purchaseStore, // PurchaseLookup: GetPurchase + ListDHPriceDrift
+			campaignsInit.purchaseStore,                    // PurchaseLookup: GetPurchase + ListDHPriceDrift
 			dhlistingadapter.NewInventoryAdapter(dhClient), // DHPriceUpdater
 			campaignsInit.purchaseStore,                    // DHPriceWriter: UpdatePurchaseDHPriceSync
 			campaignsInit.purchaseStore,                    // DHReconcileResetter
@@ -389,39 +389,39 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	pendingItemsRepo := sqlite.NewPendingItemsRepository(db.DB)
 
 	deps, hOut := createHandlers(ctx, handlerInputs{
-		Cfg:               cfg,
-		Logger:            logger,
-		DB:                db,
-		PriceProvImpl:     priceProvImpl,
-		PriceRepo:         priceRepo,
-		AuthService:       authService,
-		CampaignsService:  campaignsService,
-		ArbitrageService:  arbSvc,
-		PortfolioService:  portSvc,
-		TuningService:     tuningSvc,
-		FinanceService:    financeService,
-		ExportService:     exportService,
-		PurchaseStore:     campaignsInit.purchaseStore,
-		SellSheetStore:    campaignsInit.sellSheetStore,
-		CardIDMappingRepo: cardIDMappingRepo,
-		IntelRepo:         intelRepo,
-		SuggestionsRepo:   suggestionsRepo,
-		DemandRepo:        demandRepo,
-		AdvisorService:    advisorService,
-		AdvisorCacheRepo:  advisorCacheRepo,
-		AzureAIClient:     azureAIClient,
-		AICallRepo:        aiCallRepo,
-		CLClient:          clClient,
-		CLStore:           clStore,
-		MMStore:           mmStore,
-		MMClient:          mmClient,
-		DHClient:          dhClient,
-		DHEventStore:      eventStore,
+		Cfg:                cfg,
+		Logger:             logger,
+		DB:                 db,
+		PriceProvImpl:      priceProvImpl,
+		PriceRepo:          priceRepo,
+		AuthService:        authService,
+		CampaignsService:   campaignsService,
+		ArbitrageService:   arbSvc,
+		PortfolioService:   portSvc,
+		TuningService:      tuningSvc,
+		FinanceService:     financeService,
+		ExportService:      exportService,
+		PurchaseStore:      campaignsInit.purchaseStore,
+		SellSheetStore:     campaignsInit.sellSheetStore,
+		CardIDMappingRepo:  cardIDMappingRepo,
+		IntelRepo:          intelRepo,
+		SuggestionsRepo:    suggestionsRepo,
+		DemandRepo:         demandRepo,
+		AdvisorService:     advisorService,
+		AdvisorCacheRepo:   advisorCacheRepo,
+		AzureAIClient:      azureAIClient,
+		AICallRepo:         aiCallRepo,
+		CLClient:           clClient,
+		CLStore:            clStore,
+		MMStore:            mmStore,
+		MMClient:           mmClient,
+		DHClient:           dhClient,
+		DHEventStore:       eventStore,
 		DHPriceSyncService: dhPriceSyncService,
-		SyncStateRepo:     syncStateRepo,
-		SchedulerResult:   schedulerResult,
-		GSheetsClient:     gsheetsClient,
-		PendingItemsRepo:  pendingItemsRepo,
+		SyncStateRepo:      syncStateRepo,
+		SchedulerResult:    schedulerResult,
+		GSheetsClient:      gsheetsClient,
+		PendingItemsRepo:   pendingItemsRepo,
 	})
 	serverErr := startWebServer(ctx, deps)
 

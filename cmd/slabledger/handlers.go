@@ -32,39 +32,39 @@ import (
 // assemble the ServerDependencies struct. Every field is set by runServer
 // before calling createHandlers.
 type handlerInputs struct {
-	Cfg               *config.Config
-	Logger            observability.Logger
-	DB                *sqlite.DB
-	PriceProvImpl     pricing.PriceProvider
-	PriceRepo         *sqlite.DBTracker
-	AuthService       auth.Service
-	CampaignsService  inventory.Service
-	ArbitrageService  arbitrage.Service
+	Cfg                *config.Config
+	Logger             observability.Logger
+	DB                 *sqlite.DB
+	PriceProvImpl      pricing.PriceProvider
+	PriceRepo          *sqlite.DBTracker
+	AuthService        auth.Service
+	CampaignsService   inventory.Service
+	ArbitrageService   arbitrage.Service
 	DHPriceSyncService dhpricing.Service
-	PortfolioService  portfolio.Service
-	TuningService     tuning.Service
-	FinanceService    finance.Service
-	ExportService     export.Service
-	PurchaseStore     *sqlite.PurchaseStore
-	SellSheetStore    *sqlite.SellSheetStore
-	CardIDMappingRepo *sqlite.CardIDMappingRepository
-	IntelRepo         *sqlite.MarketIntelligenceRepository
-	SuggestionsRepo   *sqlite.DHSuggestionsRepository
-	DemandRepo        *sqlite.DHDemandRepository
-	AdvisorService    advisor.Service
-	AdvisorCacheRepo  *sqlite.AdvisorCacheRepository
-	AzureAIClient     advisor.LLMProvider
-	AICallRepo        *sqlite.AICallRepository
-	CLClient          *cardladder.Client
-	CLStore           *sqlite.CardLadderStore
-	MMStore           *sqlite.MarketMoversStore
-	MMClient          *marketmovers.Client
-	DHClient          *dh.Client
-	DHEventStore      *sqlite.DHEventStore
-	SyncStateRepo     *sqlite.SyncStateRepository
-	SchedulerResult   *scheduler.BuildResult
-	GSheetsClient     *gsheets.Client
-	PendingItemsRepo  *sqlite.PendingItemsRepository
+	PortfolioService   portfolio.Service
+	TuningService      tuning.Service
+	FinanceService     finance.Service
+	ExportService      export.Service
+	PurchaseStore      *sqlite.PurchaseStore
+	SellSheetStore     *sqlite.SellSheetStore
+	CardIDMappingRepo  *sqlite.CardIDMappingRepository
+	IntelRepo          *sqlite.MarketIntelligenceRepository
+	SuggestionsRepo    *sqlite.DHSuggestionsRepository
+	DemandRepo         *sqlite.DHDemandRepository
+	AdvisorService     advisor.Service
+	AdvisorCacheRepo   *sqlite.AdvisorCacheRepository
+	AzureAIClient      advisor.LLMProvider
+	AICallRepo         *sqlite.AICallRepository
+	CLClient           *cardladder.Client
+	CLStore            *sqlite.CardLadderStore
+	MMStore            *sqlite.MarketMoversStore
+	MMClient           *marketmovers.Client
+	DHClient           *dh.Client
+	DHEventStore       *sqlite.DHEventStore
+	SyncStateRepo      *sqlite.SyncStateRepository
+	SchedulerResult    *scheduler.BuildResult
+	GSheetsClient      *gsheets.Client
+	PendingItemsRepo   *sqlite.PendingItemsRepository
 }
 
 // handlerOutputs holds the constructed handlers that are also needed post-

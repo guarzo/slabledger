@@ -280,7 +280,7 @@ func TestPurchaseStore_UpdatePurchaseDHPriceSync(t *testing.T) {
 	p := &inventory.Purchase{
 		ID:                  "pur-sync-1",
 		CampaignID:          "camp-sync",
-		CardName:             "Charizard",
+		CardName:            "Charizard",
 		CertNumber:          "99887766",
 		Grader:              "PSA",
 		GradeValue:          9,
