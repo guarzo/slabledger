@@ -234,7 +234,7 @@ export default function MobileCard({ item, selected, onToggle, onRecordSale, onF
             {dhListingLoading ? 'Listing…' : 'List'}
           </button>
         ) : (() => {
-          const badge = dhBadgeFor(item.purchase.dhPushStatus, item.purchase.dhStatus);
+          const badge = dhBadgeFor(item.purchase.dhPushStatus, item.purchase.dhStatus, item.purchase.receivedAt);
           if (badge === 'unenrolled') return null;
           return (
             <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${DH_BADGE_COLORS[badge]}`} title={`DH: ${badge}`}>
