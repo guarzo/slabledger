@@ -15,8 +15,30 @@ type MarketIntelligence struct {
 	RecentSales []Sale
 	Population  []PopulationEntry
 	Insights    *Insights
+	Velocity    *Velocity
+	Trend       *Trend
 
 	FetchedAt time.Time
+}
+
+// Velocity captures sell-through momentum across trailing windows. Source:
+// DH `/cards/{id}/velocity` or the `velocity` block of `batch_analytics`.
+// SampleSize < 5 means the percentages are noise — consumers should
+// downweight accordingly.
+type Velocity struct {
+	SellThrough30dPct float64
+	SellThrough60dPct float64
+	SellThrough90dPct float64
+	SampleSize        int
+	LastFetch         time.Time
+}
+
+// Trend captures sales-count volume across trailing windows. Source: DH
+// `/cards/{id}/trend` or the `trend` block of `batch_analytics`.
+type Trend struct {
+	Volume7d  int
+	Volume30d int
+	Volume90d int
 }
 
 // Sentiment represents community sentiment for a card.

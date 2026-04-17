@@ -29,6 +29,8 @@ func (r *MarketIntelligenceRepository) Store(ctx context.Context, intel *intelli
 	sentimentScore, sentimentMentions, sentimentTrend := encodeNullSentiment(intel.Sentiment)
 	forecastPrice, forecastConf, forecastDate := encodeNullForecast(intel.Forecast)
 	insightsHeadline, insightsDetail := encodeNullInsights(intel.Insights)
+	st30, st60, st90, sampleSize, velLastFetch := encodeNullVelocity(intel.Velocity)
+	vol7, vol30, vol90 := encodeNullTrend(intel.Trend)
 
 	gradingROI, err := marshalJSON(intel.GradingROI)
 	if err != nil {
@@ -51,8 +53,11 @@ func (r *MarketIntelligenceRepository) Store(ctx context.Context, intel *intelli
 			forecast_price_cents, forecast_confidence, forecast_date,
 			grading_roi, recent_sales, population,
 			insights_headline, insights_detail,
+			volume_7d, volume_30d, volume_90d,
+			sell_through_30d_pct, sell_through_60d_pct, sell_through_90d_pct,
+			velocity_sample_size, velocity_last_fetch,
 			fetched_at, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(card_name, set_name, card_number) DO UPDATE SET
 			dh_card_id = excluded.dh_card_id,
 			sentiment_score = excluded.sentiment_score,
@@ -66,6 +71,14 @@ func (r *MarketIntelligenceRepository) Store(ctx context.Context, intel *intelli
 			population = excluded.population,
 			insights_headline = excluded.insights_headline,
 			insights_detail = excluded.insights_detail,
+			volume_7d = excluded.volume_7d,
+			volume_30d = excluded.volume_30d,
+			volume_90d = excluded.volume_90d,
+			sell_through_30d_pct = excluded.sell_through_30d_pct,
+			sell_through_60d_pct = excluded.sell_through_60d_pct,
+			sell_through_90d_pct = excluded.sell_through_90d_pct,
+			velocity_sample_size = excluded.velocity_sample_size,
+			velocity_last_fetch = excluded.velocity_last_fetch,
 			fetched_at = excluded.fetched_at,
 			updated_at = excluded.updated_at`,
 		intel.CardName, intel.SetName, intel.CardNumber, intel.DHCardID,
@@ -73,6 +86,9 @@ func (r *MarketIntelligenceRepository) Store(ctx context.Context, intel *intelli
 		forecastPrice, forecastConf, forecastDate,
 		gradingROI, recentSales, population,
 		insightsHeadline, insightsDetail,
+		vol7, vol30, vol90,
+		st30, st60, st90,
+		sampleSize, velLastFetch,
 		intel.FetchedAt, now, now,
 	)
 	if err != nil {
@@ -88,7 +104,11 @@ func (r *MarketIntelligenceRepository) GetByCard(ctx context.Context, cardName, 
 			sentiment_score, sentiment_mentions, sentiment_trend,
 			forecast_price_cents, forecast_confidence, forecast_date,
 			grading_roi, recent_sales, population,
-			insights_headline, insights_detail, fetched_at
+			insights_headline, insights_detail,
+			volume_7d, volume_30d, volume_90d,
+			sell_through_30d_pct, sell_through_60d_pct, sell_through_90d_pct,
+			velocity_sample_size, velocity_last_fetch,
+			fetched_at
 		FROM market_intelligence
 		WHERE card_name = ? AND set_name = ? AND card_number = ?`,
 		cardName, setName, cardNumber,
@@ -102,7 +122,11 @@ func (r *MarketIntelligenceRepository) GetByDHCardID(ctx context.Context, dhCard
 			sentiment_score, sentiment_mentions, sentiment_trend,
 			forecast_price_cents, forecast_confidence, forecast_date,
 			grading_roi, recent_sales, population,
-			insights_headline, insights_detail, fetched_at
+			insights_headline, insights_detail,
+			volume_7d, volume_30d, volume_90d,
+			sell_through_30d_pct, sell_through_60d_pct, sell_through_90d_pct,
+			velocity_sample_size, velocity_last_fetch,
+			fetched_at
 		FROM market_intelligence
 		WHERE dh_card_id = ?`,
 		dhCardID,
@@ -117,7 +141,11 @@ func (r *MarketIntelligenceRepository) GetStale(ctx context.Context, maxAge time
 			sentiment_score, sentiment_mentions, sentiment_trend,
 			forecast_price_cents, forecast_confidence, forecast_date,
 			grading_roi, recent_sales, population,
-			insights_headline, insights_detail, fetched_at
+			insights_headline, insights_detail,
+			volume_7d, volume_30d, volume_90d,
+			sell_through_30d_pct, sell_through_60d_pct, sell_through_90d_pct,
+			velocity_sample_size, velocity_last_fetch,
+			fetched_at
 		FROM market_intelligence
 		WHERE fetched_at < ?
 		ORDER BY fetched_at ASC
@@ -198,7 +226,11 @@ func (r *MarketIntelligenceRepository) getByCardsChunk(ctx context.Context, keys
 		sentiment_score, sentiment_mentions, sentiment_trend,
 		forecast_price_cents, forecast_confidence, forecast_date,
 		grading_roi, recent_sales, population,
-		insights_headline, insights_detail, fetched_at
+		insights_headline, insights_detail,
+		volume_7d, volume_30d, volume_90d,
+		sell_through_30d_pct, sell_through_60d_pct, sell_through_90d_pct,
+		velocity_sample_size, velocity_last_fetch,
+		fetched_at
 	FROM market_intelligence
 	WHERE ` + strings.Join(conditions, " OR ")
 
@@ -254,18 +286,26 @@ func (r *MarketIntelligenceRepository) scanOne(ctx context.Context, query string
 // scanIntelRow scans a single row into a MarketIntelligence.
 func scanIntelRow(row scanner) (*intelligence.MarketIntelligence, error) {
 	var (
-		intel             intelligence.MarketIntelligence
-		sentimentScore    sql.NullFloat64
-		sentimentMentions sql.NullInt64
-		sentimentTrend    sql.NullString
-		forecastPrice     sql.NullInt64
-		forecastConf      sql.NullFloat64
-		forecastDate      sql.NullString
-		gradingROI        sql.NullString
-		recentSales       sql.NullString
-		population        sql.NullString
-		insightsHeadline  sql.NullString
-		insightsDetail    sql.NullString
+		intel              intelligence.MarketIntelligence
+		sentimentScore     sql.NullFloat64
+		sentimentMentions  sql.NullInt64
+		sentimentTrend     sql.NullString
+		forecastPrice      sql.NullInt64
+		forecastConf       sql.NullFloat64
+		forecastDate       sql.NullString
+		gradingROI         sql.NullString
+		recentSales        sql.NullString
+		population         sql.NullString
+		insightsHeadline   sql.NullString
+		insightsDetail     sql.NullString
+		volume7d           sql.NullInt64
+		volume30d          sql.NullInt64
+		volume90d          sql.NullInt64
+		sellThrough30d     sql.NullFloat64
+		sellThrough60d     sql.NullFloat64
+		sellThrough90d     sql.NullFloat64
+		velocitySampleSize sql.NullInt64
+		velocityLastFetch  sql.NullTime
 	)
 
 	if err := row.Scan(
@@ -273,7 +313,11 @@ func scanIntelRow(row scanner) (*intelligence.MarketIntelligence, error) {
 		&sentimentScore, &sentimentMentions, &sentimentTrend,
 		&forecastPrice, &forecastConf, &forecastDate,
 		&gradingROI, &recentSales, &population,
-		&insightsHeadline, &insightsDetail, &intel.FetchedAt,
+		&insightsHeadline, &insightsDetail,
+		&volume7d, &volume30d, &volume90d,
+		&sellThrough30d, &sellThrough60d, &sellThrough90d,
+		&velocitySampleSize, &velocityLastFetch,
+		&intel.FetchedAt,
 	); err != nil {
 		return nil, err
 	}
@@ -281,6 +325,8 @@ func scanIntelRow(row scanner) (*intelligence.MarketIntelligence, error) {
 	intel.Sentiment = decodeNullSentiment(sentimentScore, sentimentMentions, sentimentTrend)
 	intel.Forecast = decodeNullForecast(forecastPrice, forecastConf, forecastDate)
 	intel.Insights = decodeNullInsights(insightsHeadline, insightsDetail)
+	intel.Trend = decodeNullTrend(volume7d, volume30d, volume90d)
+	intel.Velocity = decodeNullVelocity(sellThrough30d, sellThrough60d, sellThrough90d, velocitySampleSize, velocityLastFetch)
 
 	if gradingROI.Valid && gradingROI.String != "" {
 		if err := json.Unmarshal([]byte(gradingROI.String), &intel.GradingROI); err != nil {
@@ -365,6 +411,54 @@ func decodeNullInsights(headline, detail sql.NullString) *intelligence.Insights 
 		Headline: headline.String,
 		Detail:   detail.String,
 	}
+}
+
+func encodeNullTrend(t *intelligence.Trend) (sql.NullInt64, sql.NullInt64, sql.NullInt64) {
+	if t == nil {
+		return sql.NullInt64{}, sql.NullInt64{}, sql.NullInt64{}
+	}
+	return sql.NullInt64{Int64: int64(t.Volume7d), Valid: true},
+		sql.NullInt64{Int64: int64(t.Volume30d), Valid: true},
+		sql.NullInt64{Int64: int64(t.Volume90d), Valid: true}
+}
+
+func decodeNullTrend(v7, v30, v90 sql.NullInt64) *intelligence.Trend {
+	if !v7.Valid && !v30.Valid && !v90.Valid {
+		return nil
+	}
+	return &intelligence.Trend{
+		Volume7d:  int(v7.Int64),
+		Volume30d: int(v30.Int64),
+		Volume90d: int(v90.Int64),
+	}
+}
+
+func encodeNullVelocity(v *intelligence.Velocity) (sql.NullFloat64, sql.NullFloat64, sql.NullFloat64, sql.NullInt64, sql.NullTime) {
+	if v == nil {
+		return sql.NullFloat64{}, sql.NullFloat64{}, sql.NullFloat64{}, sql.NullInt64{}, sql.NullTime{}
+	}
+	lf := sql.NullTime{Time: v.LastFetch, Valid: !v.LastFetch.IsZero()}
+	return sql.NullFloat64{Float64: v.SellThrough30dPct, Valid: true},
+		sql.NullFloat64{Float64: v.SellThrough60dPct, Valid: true},
+		sql.NullFloat64{Float64: v.SellThrough90dPct, Valid: true},
+		sql.NullInt64{Int64: int64(v.SampleSize), Valid: true},
+		lf
+}
+
+func decodeNullVelocity(st30, st60, st90 sql.NullFloat64, sampleSize sql.NullInt64, lastFetch sql.NullTime) *intelligence.Velocity {
+	if !st30.Valid && !st60.Valid && !st90.Valid && !sampleSize.Valid {
+		return nil
+	}
+	v := &intelligence.Velocity{
+		SellThrough30dPct: st30.Float64,
+		SellThrough60dPct: st60.Float64,
+		SellThrough90dPct: st90.Float64,
+		SampleSize:        int(sampleSize.Int64),
+	}
+	if lastFetch.Valid {
+		v.LastFetch = lastFetch.Time
+	}
+	return v
 }
 
 // marshalJSON marshals v to a JSON string, returning sql.NullString.

@@ -120,6 +120,8 @@ func (s *DHIntelligenceRefreshScheduler) refresh(ctx context.Context) {
 	s.logger.Info(ctx, "refreshing stale DH intelligence",
 		observability.Int("count", len(stale)))
 
+	analyticsByID := s.fetchBatchAnalytics(ctx, dhCardIDsFromStale(stale))
+
 	var refreshed, failed int
 	for _, entry := range stale {
 		cardIDInt, convErr := strconv.Atoi(entry.DHCardID)
@@ -145,6 +147,7 @@ func (s *DHIntelligenceRefreshScheduler) refresh(ctx context.Context) {
 				observability.String("dh_card_id", entry.DHCardID))
 			// Update fetched_at so this entry isn't re-selected every run
 			entry.FetchedAt = time.Now()
+			dh.MergeAnalyticsIntoIntelligence(&entry, analyticsByID[cardIDInt])
 			if storeErr := s.intelRepo.Store(ctx, &entry); storeErr != nil {
 				s.logger.Warn(ctx, "failed to update fetched_at for empty DH entry",
 					observability.String("dh_card_id", entry.DHCardID),
@@ -154,6 +157,7 @@ func (s *DHIntelligenceRefreshScheduler) refresh(ctx context.Context) {
 		}
 
 		intel := dh.ConvertToIntelligence(resp, entry.CardName, entry.SetName, entry.CardNumber, entry.DHCardID)
+		dh.MergeAnalyticsIntoIntelligence(intel, analyticsByID[cardIDInt])
 
 		if storeErr := s.intelRepo.Store(ctx, intel); storeErr != nil {
 			s.logger.Warn(ctx, "failed to store refreshed intelligence",
@@ -169,6 +173,41 @@ func (s *DHIntelligenceRefreshScheduler) refresh(ctx context.Context) {
 	s.logger.Info(ctx, "DH intelligence refresh complete",
 		observability.Int("refreshed", refreshed),
 		observability.Int("failed", failed))
+}
+
+// fetchBatchAnalytics calls DH's batch_analytics for the given card IDs and
+// returns a per-card-id map. Failures degrade gracefully to an empty map so
+// the refresh loop keeps running on the market-data path.
+func (s *DHIntelligenceRefreshScheduler) fetchBatchAnalytics(ctx context.Context, cardIDs []int) map[int]*dh.CardAnalytics {
+	if len(cardIDs) == 0 {
+		return nil
+	}
+	resp, err := s.dhClient.BatchAnalytics(ctx, cardIDs, []string{"velocity", "trend"})
+	if err != nil {
+		s.logger.Warn(ctx, "batch_analytics failed; refresh will continue without velocity/volume",
+			observability.Int("card_ids", len(cardIDs)),
+			observability.Err(err))
+		return nil
+	}
+	out := make(map[int]*dh.CardAnalytics, len(resp.Results))
+	for i := range resp.Results {
+		r := &resp.Results[i]
+		out[r.CardID] = r
+	}
+	return out
+}
+
+// dhCardIDsFromStale returns the numeric card IDs from a slice of stale
+// intelligence entries, skipping any with non-numeric IDs (same skip rule
+// used in the main refresh loop).
+func dhCardIDsFromStale(stale []intelligence.MarketIntelligence) []int {
+	out := make([]int, 0, len(stale))
+	for _, e := range stale {
+		if id, err := strconv.Atoi(e.DHCardID); err == nil {
+			out = append(out, id)
+		}
+	}
+	return out
 }
 
 // seed creates initial market_intelligence rows for unsold inventory cards
@@ -188,11 +227,12 @@ func (s *DHIntelligenceRefreshScheduler) seed(ctx context.Context, budget int) i
 		return budget
 	}
 
-	var seeded, skipped, failed int
+	// Filter to candidates we'll actually fetch (not already stored, numeric ID),
+	// so batch_analytics is called once for the whole seed set.
+	fetchables := make([]intelligence.SeedCandidate, 0, len(candidates))
+	cardIDs := make([]int, 0, len(candidates))
+	var skipped, failed int
 	for _, c := range candidates {
-		if budget <= 0 {
-			break
-		}
 		existing, err := s.intelRepo.GetByDHCardID(ctx, c.DHCardID)
 		if err != nil {
 			s.logger.Warn(ctx, "failed to check existing intelligence",
@@ -205,8 +245,7 @@ func (s *DHIntelligenceRefreshScheduler) seed(ctx context.Context, budget int) i
 			skipped++
 			continue
 		}
-
-		cardIDInt, convErr := strconv.Atoi(c.DHCardID)
+		id, convErr := strconv.Atoi(c.DHCardID)
 		if convErr != nil {
 			s.logger.Warn(ctx, "skipping non-numeric DH card ID seed",
 				observability.String("dh_card_id", c.DHCardID),
@@ -215,7 +254,20 @@ func (s *DHIntelligenceRefreshScheduler) seed(ctx context.Context, budget int) i
 			failed++
 			continue
 		}
+		fetchables = append(fetchables, c)
+		cardIDs = append(cardIDs, id)
+	}
 
+	// Trim to budget before the batch_analytics call.
+	if len(fetchables) > budget {
+		fetchables = fetchables[:budget]
+		cardIDs = cardIDs[:budget]
+	}
+	analyticsByID := s.fetchBatchAnalytics(ctx, cardIDs)
+
+	var seeded int
+	for i, c := range fetchables {
+		cardIDInt := cardIDs[i]
 		resp, fetchErr := s.dhClient.MarketDataEnterprise(ctx, cardIDInt)
 		if fetchErr != nil {
 			s.logger.Warn(ctx, "failed to fetch DH market data for seed",
@@ -228,6 +280,7 @@ func (s *DHIntelligenceRefreshScheduler) seed(ctx context.Context, budget int) i
 		budget--
 
 		intel := dh.ConvertToIntelligence(resp, c.CardName, c.SetName, c.CardNumber, c.DHCardID)
+		dh.MergeAnalyticsIntoIntelligence(intel, analyticsByID[cardIDInt])
 		if storeErr := s.intelRepo.Store(ctx, intel); storeErr != nil {
 			s.logger.Warn(ctx, "failed to store seeded intelligence",
 				observability.String("dh_card_id", c.DHCardID),
