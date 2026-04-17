@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
-import { api } from '../../../js/api';
+import { api, isAPIError } from '../../../js/api';
 import type { ScanCertResponse, ResolveCertResponse, CertImportResult, MarketSnapshot } from '../../../types/campaigns';
 import { formatCents } from '../../utils/formatters';
 import PriceDecisionBar from '../../ui/PriceDecisionBar';
@@ -79,6 +79,10 @@ export default function CardIntakeTab() {
       await api.listPurchaseOnDH(row.purchaseId);
       updateCert(certNumber, { listingStatus: 'listed' });
     } catch (err) {
+      if (isAPIError(err) && err.status === 409 && err.data?.error === 'Purchase already listed on DH') {
+        updateCert(certNumber, { listingStatus: 'listed' });
+        return;
+      }
       const msg = err instanceof Error ? err.message : 'Listing failed';
       updateCert(certNumber, {
         listingStatus: 'list-error',

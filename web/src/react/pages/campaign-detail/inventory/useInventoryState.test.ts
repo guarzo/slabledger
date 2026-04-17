@@ -110,7 +110,7 @@ describe('useInventoryState — handleBulkListOnDH', () => {
 
   it('treats 409 already-listed rejections as success in bulk', async () => {
     vi.mocked(api.listPurchaseOnDH)
-      .mockResolvedValueOnce({ listed: 1, synced: 1, skipped: 0, total: 1 } as never)
+      .mockResolvedValueOnce({ listed: 1, synced: 1, skipped: 0, total: 1 })
       .mockRejectedValueOnce(
         new APIError('Purchase already listed on DH', 409, undefined, { error: 'Purchase already listed on DH' })
       );
