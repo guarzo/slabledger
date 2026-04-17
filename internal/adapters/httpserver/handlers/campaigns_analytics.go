@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -398,6 +399,8 @@ func (h *CampaignsHandler) HandleSetReviewedPrice(w http.ResponseWriter, r *http
 		writeError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
+	h.triggerDHPriceSync(purchaseID)
+
 	writeJSON(w, http.StatusOK, map[string]any{
 		"success":    true,
 		"reviewedAt": time.Now().Format(time.RFC3339),
@@ -439,4 +442,25 @@ func (h *CampaignsHandler) HandleCreatePriceFlag(w http.ResponseWriter, r *http.
 		"id":        flagID,
 		"flaggedAt": time.Now().Format(time.RFC3339),
 	})
+}
+
+// triggerDHPriceSync runs in the background so it doesn't delay the HTTP
+// response. Mirrors triggerDHListing in campaigns_dh_listing.go.
+func (h *CampaignsHandler) triggerDHPriceSync(purchaseID string) {
+	if h.dhPriceSyncer == nil || purchaseID == "" {
+		return
+	}
+	h.bgWG.Add(1)
+	go func() {
+		defer h.bgWG.Done()
+		defer func() {
+			if r := recover(); r != nil {
+				h.logger.Error(h.baseCtx, "panic in triggerDHPriceSync",
+					observability.String("panic", fmt.Sprintf("%v", r)))
+			}
+		}()
+		ctx, cancel := context.WithTimeout(h.baseCtx, 5*time.Minute)
+		defer cancel()
+		h.dhPriceSyncer.SyncPurchasePrice(ctx, purchaseID)
+	}()
 }

@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -264,4 +265,219 @@ func TestCountDHPipelineHealth_EmptyDatabaseReturnsZero(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 0, health.PendingReceived)
 	assert.Equal(t, 0, health.UnenrolledReceived)
+}
+
+// TestPurchaseStore_UpdatePurchaseDHPriceSync verifies the narrow update that
+// the DH price re-sync flow relies on: only dh_listing_price_cents and
+// dh_last_synced_at change; every other DH field on the row is preserved.
+func TestPurchaseStore_UpdatePurchaseDHPriceSync(t *testing.T) {
+	now := time.Now().Truncate(time.Second)
+	existingSync := "2026-03-01T00:00:00Z"
+
+	tests := []struct {
+		name              string
+		initialDHSyncedAt string
+		newPriceCents     int
+		syncedAt          time.Time
+		wantPriceCents    int
+		wantSyncedAtRFC   string
+	}{
+		{
+			name:              "first sync from empty timestamp",
+			initialDHSyncedAt: "",
+			newPriceCents:     12000,
+			syncedAt:          time.Date(2026, 4, 17, 12, 0, 0, 0, time.UTC),
+			wantPriceCents:    12000,
+			wantSyncedAtRFC:   "2026-04-17T12:00:00Z",
+		},
+		{
+			name:              "overwrites an existing timestamp",
+			initialDHSyncedAt: existingSync,
+			newPriceCents:     14000,
+			syncedAt:          time.Date(2026, 4, 17, 15, 30, 0, 0, time.UTC),
+			wantPriceCents:    14000,
+			wantSyncedAtRFC:   "2026-04-17T15:30:00Z",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := setupCampaignsRepo(t)
+			ctx := context.Background()
+
+			c := &inventory.Campaign{ID: "camp-sync", Name: "Active", Phase: inventory.PhaseActive, CreatedAt: now, UpdatedAt: now}
+			require.NoError(t, repo.CreateCampaign(ctx, c))
+
+			p := &inventory.Purchase{
+				ID:                  "pur-sync-1",
+				CampaignID:          "camp-sync",
+				CardName:            "Charizard",
+				CertNumber:          "99887766",
+				Grader:              "PSA",
+				GradeValue:          9,
+				BuyCostCents:        5000,
+				PurchaseDate:        "2026-01-01",
+				ReviewedPriceCents:  12000,
+				DHInventoryID:       777,
+				DHListingPriceCents: 10000,
+				DHLastSyncedAt:      tc.initialDHSyncedAt,
+				CreatedAt:           now,
+				UpdatedAt:           now,
+			}
+			require.NoError(t, repo.CreatePurchase(ctx, p))
+
+			require.NoError(t, repo.UpdatePurchaseDHPriceSync(ctx, p.ID, tc.newPriceCents, tc.syncedAt))
+
+			got, err := repo.GetPurchase(ctx, p.ID)
+			require.NoError(t, err)
+			assert.Equal(t, tc.wantPriceCents, got.DHListingPriceCents)
+			assert.Equal(t, tc.wantSyncedAtRFC, got.DHLastSyncedAt)
+			// Sanity: other DH fields untouched.
+			assert.Equal(t, 777, got.DHInventoryID)
+		})
+	}
+}
+
+// TestPurchaseStore_ListDHPriceDrift verifies the query returns exactly the
+// unsold purchases whose reviewed price diverges from dh_listing_price_cents.
+// Each case seeds one or more purchases and asserts which IDs are returned.
+func TestPurchaseStore_ListDHPriceDrift(t *testing.T) {
+	now := time.Now().Truncate(time.Second)
+
+	// purchaseSpec describes a seed purchase with the DH-relevant fields that
+	// affect the drift query. The test fills in boilerplate fields from a
+	// shared template to keep cases focused on what's being tested.
+	type purchaseSpec struct {
+		id                  string
+		reviewedPriceCents  int
+		dhInventoryID       int
+		dhListingPriceCents int
+		dhPushStatus        string
+		sold                bool
+	}
+
+	// sellCert increments per test row to avoid UNIQUE constraint collisions.
+	nextCert := 11111111
+
+	tests := []struct {
+		name    string
+		seeds   []purchaseSpec
+		wantIDs []string
+	}{
+		{
+			name: "drifted purchase is returned",
+			seeds: []purchaseSpec{
+				{id: "drift", reviewedPriceCents: 15000, dhInventoryID: 100, dhListingPriceCents: 10000},
+			},
+			wantIDs: []string{"drift"},
+		},
+		{
+			name: "in-sync reviewed == DH price is excluded",
+			seeds: []purchaseSpec{
+				{id: "sync", reviewedPriceCents: 10000, dhInventoryID: 101, dhListingPriceCents: 10000},
+			},
+			wantIDs: nil,
+		},
+		{
+			name: "purchase with no DH inventory ID is excluded",
+			seeds: []purchaseSpec{
+				{id: "noinv", reviewedPriceCents: 10000, dhInventoryID: 0},
+			},
+			wantIDs: nil,
+		},
+		{
+			name: "zero reviewed price is excluded",
+			seeds: []purchaseSpec{
+				{id: "noreview", reviewedPriceCents: 0, dhInventoryID: 102, dhListingPriceCents: 8000},
+			},
+			wantIDs: nil,
+		},
+		{
+			name: "dismissed push status is excluded",
+			seeds: []purchaseSpec{
+				{id: "dismissed", reviewedPriceCents: 15000, dhInventoryID: 103, dhListingPriceCents: 10000, dhPushStatus: inventory.DHPushStatusDismissed},
+			},
+			wantIDs: nil,
+		},
+		{
+			name: "held push status is excluded",
+			seeds: []purchaseSpec{
+				{id: "held", reviewedPriceCents: 15000, dhInventoryID: 104, dhListingPriceCents: 10000, dhPushStatus: inventory.DHPushStatusHeld},
+			},
+			wantIDs: nil,
+		},
+		{
+			name: "sold drifted purchase is excluded",
+			seeds: []purchaseSpec{
+				{id: "sold", reviewedPriceCents: 15000, dhInventoryID: 105, dhListingPriceCents: 10000, sold: true},
+			},
+			wantIDs: nil,
+		},
+		{
+			name: "mixed pool returns only the drifted row",
+			seeds: []purchaseSpec{
+				{id: "mix-drift", reviewedPriceCents: 15000, dhInventoryID: 200, dhListingPriceCents: 10000},
+				{id: "mix-sync", reviewedPriceCents: 10000, dhInventoryID: 201, dhListingPriceCents: 10000},
+				{id: "mix-dismissed", reviewedPriceCents: 15000, dhInventoryID: 202, dhListingPriceCents: 10000, dhPushStatus: inventory.DHPushStatusDismissed},
+			},
+			wantIDs: []string{"mix-drift"},
+		},
+		{
+			name:    "empty store returns empty slice",
+			seeds:   nil,
+			wantIDs: nil,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := setupCampaignsRepo(t)
+			ctx := context.Background()
+
+			c := &inventory.Campaign{ID: "camp", Name: "Active", Phase: inventory.PhaseActive, CreatedAt: now, UpdatedAt: now}
+			require.NoError(t, repo.CreateCampaign(ctx, c))
+
+			for _, s := range tc.seeds {
+				cert := nextCert
+				nextCert++
+				p := &inventory.Purchase{
+					ID:                  s.id,
+					CampaignID:          "camp",
+					CardName:            "Card-" + s.id,
+					CertNumber:          fmt.Sprintf("%08d", cert),
+					Grader:              "PSA",
+					GradeValue:          9,
+					BuyCostCents:        5000,
+					PurchaseDate:        "2026-01-01",
+					ReviewedPriceCents:  s.reviewedPriceCents,
+					DHInventoryID:       s.dhInventoryID,
+					DHListingPriceCents: s.dhListingPriceCents,
+					DHPushStatus:        s.dhPushStatus,
+					CreatedAt:           now,
+					UpdatedAt:           now,
+				}
+				require.NoError(t, repo.CreatePurchase(ctx, p), "seed %s", s.id)
+				if s.sold {
+					require.NoError(t, repo.CreateSale(ctx, &inventory.Sale{
+						ID:             "sale-" + s.id,
+						PurchaseID:     s.id,
+						SaleChannel:    inventory.SaleChannelEbay,
+						SalePriceCents: 16000,
+						SaleDate:       "2026-01-10",
+						CreatedAt:      now,
+						UpdatedAt:      now,
+					}))
+				}
+			}
+
+			got, err := repo.ListDHPriceDrift(ctx)
+			require.NoError(t, err)
+
+			gotIDs := make([]string, len(got))
+			for i, p := range got {
+				gotIDs[i] = p.ID
+			}
+			assert.ElementsMatch(t, tc.wantIDs, gotIDs)
+		})
+	}
 }

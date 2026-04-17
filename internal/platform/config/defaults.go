@@ -114,5 +114,9 @@ func Default() Config {
 			Interval:    24 * time.Hour,
 			RefreshHour: 6, // 06:00 UTC, after the 04:00/05:00 refresh cluster
 		},
+		DHPriceSync: DHPriceSyncConfig{
+			Enabled:  true,
+			Interval: 15 * time.Minute,
+		},
 	}
 }

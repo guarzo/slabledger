@@ -18,11 +18,13 @@ import (
 	// Concrete implementations (only imported in main for wiring - Hexagonal Architecture)
 	"github.com/guarzo/slabledger/internal/adapters/advisortool"
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
+	dhlistingadapter "github.com/guarzo/slabledger/internal/adapters/clients/dhlisting"
 	"github.com/guarzo/slabledger/internal/adapters/clients/google"
 	"github.com/guarzo/slabledger/internal/adapters/clients/gsheets"
 	scoringadapter "github.com/guarzo/slabledger/internal/adapters/scoring"
 	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
 	"github.com/guarzo/slabledger/internal/domain/auth"
+	"github.com/guarzo/slabledger/internal/domain/dhpricing"
 	"github.com/guarzo/slabledger/internal/platform/crypto"
 )
 
@@ -330,6 +332,20 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		}
 	}
 
+	// DH price re-sync service: drives both the inline goroutine on review-price
+	// edits (via CampaignsHandler) and the periodic reconciliation scheduler.
+	// Constructed once so both consumers share the same instance.
+	var dhPriceSyncService dhpricing.Service
+	if dhClient != nil && dhClient.EnterpriseAvailable() && campaignsInit.purchaseStore != nil {
+		dhPriceSyncService = dhpricing.NewService(
+			campaignsInit.purchaseStore,                    // PurchaseLookup: GetPurchase + ListDHPriceDrift
+			dhlistingadapter.NewInventoryAdapter(dhClient), // DHPriceUpdater
+			campaignsInit.purchaseStore,                    // DHPriceWriter: UpdatePurchaseDHPriceSync
+			campaignsInit.purchaseStore,                    // DHReconcileResetter
+			logger,
+		)
+	}
+
 	sDeps := schedulerDeps{
 		Config:               cfg,
 		Logger:               logger,
@@ -359,6 +375,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		DHIntelligenceRepo:   intelRepo,
 		DHSuggestionsRepo:    suggestionsRepo,
 		DHDemandRepo:         demandRepo,
+		DHPriceSyncService:   dhPriceSyncService,
 		GapStore:             gapStore,
 		PSASpreadsheetID:     cfg.GoogleSheets.SpreadsheetID,
 		PSATabName:           cfg.GoogleSheets.TabName,
@@ -372,38 +389,39 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	pendingItemsRepo := sqlite.NewPendingItemsRepository(db.DB)
 
 	deps, hOut := createHandlers(ctx, handlerInputs{
-		Cfg:               cfg,
-		Logger:            logger,
-		DB:                db,
-		PriceProvImpl:     priceProvImpl,
-		PriceRepo:         priceRepo,
-		AuthService:       authService,
-		CampaignsService:  campaignsService,
-		ArbitrageService:  arbSvc,
-		PortfolioService:  portSvc,
-		TuningService:     tuningSvc,
-		FinanceService:    financeService,
-		ExportService:     exportService,
-		PurchaseStore:     campaignsInit.purchaseStore,
-		SellSheetStore:    campaignsInit.sellSheetStore,
-		CardIDMappingRepo: cardIDMappingRepo,
-		IntelRepo:         intelRepo,
-		SuggestionsRepo:   suggestionsRepo,
-		DemandRepo:        demandRepo,
-		AdvisorService:    advisorService,
-		AdvisorCacheRepo:  advisorCacheRepo,
-		AzureAIClient:     azureAIClient,
-		AICallRepo:        aiCallRepo,
-		CLClient:          clClient,
-		CLStore:           clStore,
-		MMStore:           mmStore,
-		MMClient:          mmClient,
-		DHClient:          dhClient,
-		DHEventStore:      eventStore,
-		SyncStateRepo:     syncStateRepo,
-		SchedulerResult:   schedulerResult,
-		GSheetsClient:     gsheetsClient,
-		PendingItemsRepo:  pendingItemsRepo,
+		Cfg:                cfg,
+		Logger:             logger,
+		DB:                 db,
+		PriceProvImpl:      priceProvImpl,
+		PriceRepo:          priceRepo,
+		AuthService:        authService,
+		CampaignsService:   campaignsService,
+		ArbitrageService:   arbSvc,
+		PortfolioService:   portSvc,
+		TuningService:      tuningSvc,
+		FinanceService:     financeService,
+		ExportService:      exportService,
+		PurchaseStore:      campaignsInit.purchaseStore,
+		SellSheetStore:     campaignsInit.sellSheetStore,
+		CardIDMappingRepo:  cardIDMappingRepo,
+		IntelRepo:          intelRepo,
+		SuggestionsRepo:    suggestionsRepo,
+		DemandRepo:         demandRepo,
+		AdvisorService:     advisorService,
+		AdvisorCacheRepo:   advisorCacheRepo,
+		AzureAIClient:      azureAIClient,
+		AICallRepo:         aiCallRepo,
+		CLClient:           clClient,
+		CLStore:            clStore,
+		MMStore:            mmStore,
+		MMClient:           mmClient,
+		DHClient:           dhClient,
+		DHEventStore:       eventStore,
+		DHPriceSyncService: dhPriceSyncService,
+		SyncStateRepo:      syncStateRepo,
+		SchedulerResult:    schedulerResult,
+		GSheetsClient:      gsheetsClient,
+		PendingItemsRepo:   pendingItemsRepo,
 	})
 	serverErr := startWebServer(ctx, deps)
 

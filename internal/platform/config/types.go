@@ -167,6 +167,7 @@ type Config struct {
 	DH                 DHConfig
 	DHAnalyticsRefresh DHAnalyticsRefreshConfig
 	DHReconcile        DHReconcileConfig
+	DHPriceSync        DHPriceSyncConfig
 	Adapters           AdapterConfig
 }
 
@@ -196,6 +197,23 @@ type DHReconcileConfig struct {
 func (c *DHReconcileConfig) ApplyDefaults() {
 	if c.Interval <= 0 {
 		c.Interval = 24 * time.Hour
+	}
+}
+
+// DHPriceSyncConfig controls the DH price re-sync scheduler. Periodically
+// reconciles drift between reviewed_price_cents and dh_listing_price_cents
+// for purchases already pushed to or listed on DH. Also runs inline on
+// every review-price edit; the scheduler is the safety net for
+// failed/missed inline syncs.
+type DHPriceSyncConfig struct {
+	Enabled  bool          // default: true
+	Interval time.Duration // default: 15m
+}
+
+// ApplyDefaults sets zero-valued fields to sensible defaults.
+func (c *DHPriceSyncConfig) ApplyDefaults() {
+	if c.Interval <= 0 {
+		c.Interval = 15 * time.Minute
 	}
 }
 

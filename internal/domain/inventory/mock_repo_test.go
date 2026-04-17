@@ -825,6 +825,14 @@ func (m *mockRepo) ResetDHFieldsForRepush(_ context.Context, purchaseID string) 
 	return nil
 }
 
+func (m *mockRepo) UpdatePurchaseDHPriceSync(_ context.Context, _ string, _ int, _ time.Time) error {
+	return nil
+}
+
+func (m *mockRepo) ListDHPriceDrift(_ context.Context) ([]Purchase, error) {
+	return nil, nil
+}
+
 func (m *mockRepo) GetDHPushConfig(_ context.Context) (*DHPushConfig, error) {
 	if m.dhPushConfig != nil {
 		return m.dhPushConfig, nil
