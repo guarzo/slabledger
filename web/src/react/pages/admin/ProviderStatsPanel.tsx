@@ -130,8 +130,7 @@ export function CLStatsPanel({ enabled = true }: { enabled?: boolean }) {
   const lr = status.lastRun;
 
   const diagnosticsShown =
-    !!lr &&
-    (lr.noImageMatch > 0 || lr.noCertMatch > 0 || lr.noValue > 0 || lr.orphanMappings > 0);
+    !!lr && (lr.certResolveFailed > 0 || lr.noValue > 0 || lr.noCert > 0);
   const showRemoteActivity = !!lr && (lr.cardsPushed > 0 || lr.cardsRemoved > 0);
 
   return (
@@ -161,7 +160,7 @@ export function CLStatsPanel({ enabled = true }: { enabled?: boolean }) {
             sub={formatMs(lr.durationMs)}
           />
           <SummaryCard label="Updated this run" value={lr.updated} />
-          <SummaryCard label="Total CL Cards" value={lr.totalCLCards} />
+          <SummaryCard label="New Mappings" value={lr.resolved} />
           {showRemoteActivity ? (
             <SummaryCard
               label="Uploaded this run"
@@ -169,7 +168,7 @@ export function CLStatsPanel({ enabled = true }: { enabled?: boolean }) {
               sub={lr.cardsRemoved > 0 ? `${lr.cardsRemoved} deleted` : undefined}
             />
           ) : (
-            <SummaryCard label="Skipped (CL side)" value={lr.skipped} />
+            <SummaryCard label="Total Purchases" value={lr.totalPurchases} />
           )}
         </div>
       )}
@@ -179,26 +178,20 @@ export function CLStatsPanel({ enabled = true }: { enabled?: boolean }) {
         <div className="space-y-2">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <SummaryCard
-              label="No Image Match"
-              value={lr.noImageMatch}
-              color={lr.noImageMatch > 0 ? 'var(--warning)' : undefined}
-              sub="Purchases with no CL card"
+              label="Cert Resolve Failed"
+              value={lr.certResolveFailed}
+              color={lr.certResolveFailed > 0 ? 'var(--warning)' : undefined}
+              sub="CL didn't recognize cert"
             />
             <SummaryCard
               label="No Cert on Purchase"
-              value={lr.noCertMatch}
-              sub="Can't fallback-match"
+              value={lr.noCert}
+              sub="Can't look up without cert"
             />
             <SummaryCard
-              label="Matched, No Value"
+              label="Resolved, No Value"
               value={lr.noValue}
-              sub="CL returned $0"
-            />
-            <SummaryCard
-              label="Orphan Mappings"
-              value={lr.orphanMappings}
-              color={lr.orphanMappings > 0 ? 'var(--warning)' : undefined}
-              sub="Stored but unresolved"
+              sub="Catalog returned $0"
             />
           </div>
           <button

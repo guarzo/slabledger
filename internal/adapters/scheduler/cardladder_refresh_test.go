@@ -340,8 +340,10 @@ var _ DHPushStatusUpdater = (*mockCLDHPushUpdater)(nil)
 // ---------------------------------------------------------------------------
 
 // TestPushNewCards_FilterLogic tests the filtering logic of pushNewCards
-// via the filterUnmappedCerts helper. We verify it correctly identifies
-// which purchases to push based on: has a cert number + not already mapped.
+// via the filterUnmappedCerts helper. A cert counts as "already pushed" only
+// when its mapping has a non-empty CLCollectionCardID — pricing-only mappings
+// created by the cert-first refresh flow have no doc ID yet and still need
+// to be pushed for CL UI hygiene.
 func TestPushNewCards_FilterLogic(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -359,15 +361,26 @@ func TestPushNewCards_FilterLogic(t *testing.T) {
 			expectCount:  2,
 		},
 		{
-			name: "skips already-mapped certs",
+			name: "skips already-pushed certs (have doc id)",
 			purchases: []inventory.Purchase{
 				{CertNumber: "123456"},
 				{CertNumber: "789012"},
 			},
 			existingMaps: []sqlite.CLCardMapping{
-				{SlabSerial: "123456"},
+				{SlabSerial: "123456", CLCollectionCardID: "doc_abc"},
 			},
 			expectCount: 1,
+		},
+		{
+			name: "still pushes pricing-only mappings (no doc id)",
+			purchases: []inventory.Purchase{
+				{CertNumber: "123456"},
+				{CertNumber: "789012"},
+			},
+			existingMaps: []sqlite.CLCardMapping{
+				{SlabSerial: "123456"}, // pricing mapping, no push yet
+			},
+			expectCount: 2,
 		},
 		{
 			name: "skips purchases without cert numbers",
@@ -379,14 +392,14 @@ func TestPushNewCards_FilterLogic(t *testing.T) {
 			expectCount:  1,
 		},
 		{
-			name: "skips all when all are mapped",
+			name: "skips all when all are pushed",
 			purchases: []inventory.Purchase{
 				{CertNumber: "123456"},
 				{CertNumber: "789012"},
 			},
 			existingMaps: []sqlite.CLCardMapping{
-				{SlabSerial: "123456"},
-				{SlabSerial: "789012"},
+				{SlabSerial: "123456", CLCollectionCardID: "doc_a"},
+				{SlabSerial: "789012", CLCollectionCardID: "doc_b"},
 			},
 			expectCount: 0,
 		},
@@ -512,78 +525,6 @@ func TestRefreshSalesComps_Dedup(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			pairs := dedupGemRateConditionPairs(tt.mappings)
 			assert.Equal(t, tt.expectFetch, len(pairs), "fetch count mismatch")
-		})
-	}
-}
-
-// TestCollectGemRateIDs verifies we merge gemRateIDs from firestore data and
-// existing mappings, ignoring blanks. Order-independent comparison.
-func TestCollectGemRateIDs(t *testing.T) {
-	tests := []struct {
-		name          string
-		firestoreData map[string]cardladder.FirestoreCardData
-		mappings      []sqlite.CLCardMapping
-		want          []string
-	}{
-		{
-			name: "merges and dedupes",
-			firestoreData: map[string]cardladder.FirestoreCardData{
-				"doc1": {GemRateID: "gem_a"},
-				"doc2": {GemRateID: "gem_b"},
-			},
-			mappings: []sqlite.CLCardMapping{
-				{CLGemRateID: "gem_b"}, // duplicate of firestore
-				{CLGemRateID: "gem_c"},
-			},
-			want: []string{"gem_a", "gem_b", "gem_c"},
-		},
-		{
-			name:          "drops blanks from both sources",
-			firestoreData: map[string]cardladder.FirestoreCardData{"doc1": {GemRateID: ""}},
-			mappings:      []sqlite.CLCardMapping{{CLGemRateID: ""}, {CLGemRateID: "gem_a"}},
-			want:          []string{"gem_a"},
-		},
-		{
-			name:          "all empty returns empty",
-			firestoreData: nil,
-			mappings:      nil,
-			want:          []string{},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := collectGemRateIDs(tt.firestoreData, tt.mappings)
-			assert.ElementsMatch(t, tt.want, got)
-		})
-	}
-}
-
-// TestPickCLValue verifies the catalog-preferred / collection-fallback logic.
-func TestPickCLValue(t *testing.T) {
-	catalog := map[string]float64{
-		"gem_a|PSA 9":  3370.56,
-		"gem_a|PSA 10": 35501.98,
-		"gem_b|PSA 9":  0, // catalog present but non-positive → fall back
-	}
-	tests := []struct {
-		name            string
-		gemRateID       string
-		condition       string
-		collectionValue float64
-		want            float64
-	}{
-		{"catalog hit overrides stale collection", "gem_a", "PSA 9", 2365.86, 3370.56},
-		{"different grade same gem uses its own entry", "gem_a", "PSA 10", 12000, 35501.98},
-		{"catalog has zero → fall back to collection", "gem_b", "PSA 9", 100.50, 100.50},
-		{"missing gem → fall back", "gem_z", "PSA 9", 42.00, 42.00},
-		{"missing condition pair → fall back", "gem_a", "PSA 8", 1100.00, 1100.00},
-		{"blank gemRateID skips catalog lookup", "", "PSA 9", 50, 50},
-		{"blank condition skips catalog lookup", "gem_a", "", 75, 75},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := pickCLValue(catalog, tt.gemRateID, tt.condition, tt.collectionValue)
-			assert.Equal(t, tt.want, got)
 		})
 	}
 }

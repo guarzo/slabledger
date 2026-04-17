@@ -148,6 +148,25 @@ func (s *CardLadderStore) SaveMapping(ctx context.Context, slabSerial, clCardID,
 	return nil
 }
 
+// SaveMappingPricing upserts a cert→gemRateID+condition mapping without
+// touching cl_collection_card_id. Used by the cert-first refresh flow that
+// resolves pricing via BuildCollectionCard (cert → gemRateID) without a push
+// to the CL remote collection, so an existing pushed doc ID is preserved.
+func (s *CardLadderStore) SaveMappingPricing(ctx context.Context, slabSerial, gemRateID, condition string) error {
+	if _, err := s.db.ExecContext(ctx,
+		`INSERT INTO cl_card_mappings (slab_serial, cl_collection_card_id, cl_gem_rate_id, cl_condition, updated_at)
+		 VALUES (?, '', ?, ?, ?)
+		 ON CONFLICT(slab_serial) DO UPDATE SET
+		   cl_gem_rate_id = excluded.cl_gem_rate_id,
+		   cl_condition = excluded.cl_condition,
+		   updated_at = excluded.updated_at`,
+		slabSerial, gemRateID, condition, time.Now().UTC().Format(time.RFC3339),
+	); err != nil {
+		return fmt.Errorf("upsert cl pricing mapping %s: %w", slabSerial, err)
+	}
+	return nil
+}
+
 // GetMapping returns a mapping for a cert, or nil if not found.
 // The nil-on-missing contract is intentional: callers treat "no mapping yet" as
 // a valid state, not an error.
