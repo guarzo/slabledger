@@ -75,15 +75,33 @@ func (j *PricingEnrichJob) activePricers() []SinglePurchasePricer {
 // Enqueue submits a cert number for background pricing (non-blocking).
 // Full queue drops silently — the daily refresh will catch up.
 func (j *PricingEnrichJob) Enqueue(certNumber string) {
-	if certNumber == "" || len(j.activePricers()) == 0 {
+	if certNumber == "" {
+		return
+	}
+	pricers := j.activePricers()
+	if len(pricers) == 0 {
+		if j.logger != nil {
+			j.logger.Warn(context.Background(), "pricing enqueue dropped: no pricers configured",
+				observability.String("cert", certNumber),
+				observability.Int("pricers", len(pricers)),
+				observability.Int("queueDepth", len(j.ch)))
+		}
 		return
 	}
 	select {
 	case j.ch <- certNumber:
+		if j.logger != nil {
+			j.logger.Info(context.Background(), "pricing enqueue accepted",
+				observability.String("cert", certNumber),
+				observability.Int("pricers", len(pricers)),
+				observability.Int("queueDepth", len(j.ch)))
+		}
 	default:
 		if j.logger != nil {
 			j.logger.Warn(context.Background(), "pricing enqueue queue full, dropping cert",
-				observability.String("cert", certNumber))
+				observability.String("cert", certNumber),
+				observability.Int("pricers", len(pricers)),
+				observability.Int("queueDepth", len(j.ch)))
 		}
 	}
 }
@@ -121,6 +139,7 @@ func (j *PricingEnrichJob) worker(ctx context.Context) {
 // Errors from one provider don't short-circuit the others — each pricer already
 // records its own per-purchase failure reason for the admin UI.
 func (j *PricingEnrichJob) priceOne(ctx context.Context, certNum string) {
+	j.logger.Info(ctx, "pricing-enrich: processing cert", observability.String("cert", certNum))
 	purchase, err := j.repo.GetPurchaseByCertNumber(ctx, "PSA", certNum)
 	if err != nil {
 		j.logger.Warn(ctx, "pricing-enrich: failed to load purchase",
@@ -129,9 +148,15 @@ func (j *PricingEnrichJob) priceOne(ctx context.Context, certNum string) {
 		return
 	}
 	if purchase == nil {
+		j.logger.Warn(ctx, "pricing-enrich: purchase not found for enqueued cert",
+			observability.String("cert", certNum))
 		return
 	}
-	for _, p := range j.activePricers() {
+	pricers := j.activePricers()
+	j.logger.Info(ctx, "pricing-enrich: fanning out to pricers",
+		observability.String("cert", certNum),
+		observability.Int("pricers", len(pricers)))
+	for _, p := range pricers {
 		if err := p.PriceSinglePurchase(ctx, purchase); err != nil {
 			j.logger.Warn(ctx, "pricing-enrich: pricer failed",
 				observability.String("cert", certNum),
