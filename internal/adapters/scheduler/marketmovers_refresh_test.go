@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/marketmovers"
@@ -201,9 +202,12 @@ func TestSearchByNameGrade_NoResults(t *testing.T) {
 }
 
 func TestSearchByNameGrade_EmptyGrader_DefaultsPSA(t *testing.T) {
-	var gotQuery string
+	// Capture only the first request — a name-only retry fires on zero hits,
+	// and we want to assert the primary query includes the default grader.
+	var firstQuery string
+	var once sync.Once
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotQuery = r.URL.Query().Get("input")
+		once.Do(func() { firstQuery = r.URL.Query().Get("input") })
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write(buildMMSearchResponse(t, nil))
 	}))
@@ -215,7 +219,73 @@ func TestSearchByNameGrade_EmptyGrader_DefaultsPSA(t *testing.T) {
 		Grader:     "", // empty — should default to PSA
 		GradeValue: 7,
 	})
-	assert.Contains(t, gotQuery, "PSA", "empty grader should default to PSA in the query")
+	assert.Contains(t, firstQuery, "PSA", "empty grader should default to PSA in the query")
+}
+
+// TestSearchByNameGrade_NormalizesPSATitle verifies the primary query uses the
+// cardutil-normalized card name, not the raw PSA title with hyphen-joined
+// abbreviations. Without this, MM's name search returns zero hits for common
+// cards whose DB name is stored as the all-caps PSA listing title.
+func TestSearchByNameGrade_NormalizesPSATitle(t *testing.T) {
+	var firstQuery string
+	var once sync.Once
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		once.Do(func() { firstQuery = r.URL.Query().Get("input") })
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(buildMMSearchResponse(t, []map[string]any{
+			{"item": map[string]any{"id": float64(77), "searchTitle": "Charizard V Champions Path PSA 10", "collectibleType": "sports-card"}},
+		}))
+	}))
+	defer srv.Close()
+
+	s := newMMSchedulerWithServer(srv)
+	id, _, _, _, err := s.searchByNameGrade(context.Background(), &inventory.Purchase{
+		// PSA listing title — noisy, all-caps, truncated abbreviations.
+		CardName:   "CHARIZARD V CHMPN.PATH ELITE TRNR.BOX",
+		Grader:     "PSA",
+		GradeValue: 10,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, int64(77), id)
+	assert.NotContains(t, firstQuery, "CHMPN", "normalized query should strip trailing PSA title noise")
+	assert.NotContains(t, firstQuery, "TRNR", "normalized query should strip trailing PSA title noise")
+	assert.Contains(t, firstQuery, "CHARIZARD V", "normalized query should keep core name + card-type suffix")
+}
+
+// TestSearchByNameGrade_RetriesNameOnlyAfterZeroHits verifies that when the
+// primary "{name} {grader} {grade}" query returns zero results, we retry with
+// just the normalized name before giving up.
+func TestSearchByNameGrade_RetriesNameOnlyAfterZeroHits(t *testing.T) {
+	queries := []string{}
+	var mu sync.Mutex
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		queries = append(queries, r.URL.Query().Get("input"))
+		callNum := len(queries)
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		// First call: zero hits. Second call: a matching result.
+		if callNum == 1 {
+			_, _ = w.Write(buildMMSearchResponse(t, nil))
+			return
+		}
+		_, _ = w.Write(buildMMSearchResponse(t, []map[string]any{
+			{"item": map[string]any{"id": float64(99), "searchTitle": "Dragonite Holo Base Set", "collectibleType": "sports-card"}},
+		}))
+	}))
+	defer srv.Close()
+
+	s := newMMSchedulerWithServer(srv)
+	id, _, _, _, err := s.searchByNameGrade(context.Background(), &inventory.Purchase{
+		CardName:   "DRAGONITE-HOLO",
+		Grader:     "PSA",
+		GradeValue: 9,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, int64(99), id, "retry should surface the hit")
+	require.Len(t, queries, 2, "expected one primary + one name-only retry")
+	assert.Contains(t, queries[0], "PSA", "primary query should include grader")
+	assert.NotContains(t, queries[1], "PSA", "retry should drop grader to broaden search")
 }
 
 // ---------------------------------------------------------------------------
