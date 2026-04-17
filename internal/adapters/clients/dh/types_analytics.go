@@ -86,6 +86,33 @@ type PriceDistributionBucket struct {
 	SampleSize int     `json:"sample_size"`
 }
 
+// GradedSalesAnalyticsResponse is returned from
+// GET /enterprise/cards/{id}/graded-sales-analytics. RecentSales carries
+// individual sales with timestamps suitable for client-side weekly
+// aggregation (Story 3 trajectory aggregator).
+type GradedSalesAnalyticsResponse struct {
+	HasData        bool                              `json:"has_data"`
+	CardID         int                               `json:"card_id"`
+	TotalSales     int                               `json:"total_sales"`
+	AvgPrice       float64                           `json:"avg_price"`
+	MedianPrice    float64                           `json:"median_price"`
+	PriceChange7d  *float64                          `json:"price_change_7d"`
+	PriceChange30d *float64                          `json:"price_change_30d"`
+	PeriodStats    map[string]GradedSalesPeriodStats `json:"period_stats"`
+	RecentSales    []RecentSale                      `json:"recent_sales"`
+}
+
+// GradedSalesPeriodStats is the shape of `period_stats.*` — DH currently
+// populates `count` but may leave other fields null.
+type GradedSalesPeriodStats struct {
+	Count       int      `json:"count"`
+	AvgPrice    *float64 `json:"avg_price"`
+	MedianPrice *float64 `json:"median_price"`
+	MinPrice    *float64 `json:"min_price"`
+	MaxPrice    *float64 `json:"max_price"`
+	Volume      *float64 `json:"volume"`
+}
+
 // DemandSignalsResponse is returned from GET /market/demand_signals.
 type DemandSignalsResponse struct {
 	DemandSignals []DemandSignal `json:"demand_signals"`

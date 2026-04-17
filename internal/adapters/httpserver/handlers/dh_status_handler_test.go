@@ -379,9 +379,17 @@ func TestHandleGetIntelligence_Found(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, rec.Code)
 
-	var resp intelligence.MarketIntelligence
+	var resp struct {
+		Intelligence    intelligence.MarketIntelligence `json:"intelligence"`
+		Trajectory      []intelligence.WeeklyBucket     `json:"trajectory"`
+		TrajectoryScore *intelligence.TrajectoryScore   `json:"trajectory_score"`
+	}
 	require.NoError(t, json.NewDecoder(rec.Body).Decode(&resp))
-	assert.Equal(t, "Charizard", resp.CardName)
+	assert.Equal(t, "Charizard", resp.Intelligence.CardName)
+	// No trajectory repo is wired in this test helper, so the handler must
+	// omit trajectory + trajectory_score from the response.
+	assert.Empty(t, resp.Trajectory, "trajectory should be absent when no trajectory repo is wired")
+	assert.Nil(t, resp.TrajectoryScore, "trajectory_score should be absent when no trajectory repo is wired")
 }
 
 func TestHandleGetIntelligence_NotFound(t *testing.T) {

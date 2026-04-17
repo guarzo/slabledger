@@ -240,6 +240,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	intelRepo := sqlite.NewMarketIntelligenceRepository(db.DB)
 	suggestionsRepo := sqlite.NewDHSuggestionsRepository(db.DB)
 	demandRepo := sqlite.NewDHDemandRepository(db.DB)
+	trajectoryRepo := sqlite.NewCardPriceTrajectoryRepository(db.DB)
 
 	// DH event store — records pipeline state transitions (migration 000068)
 	eventStore := sqlite.NewDHEventStore(db.DB)
@@ -375,6 +376,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		DHIntelligenceRepo:   intelRepo,
 		DHSuggestionsRepo:    suggestionsRepo,
 		DHDemandRepo:         demandRepo,
+		DHTrajectoryRepo:     trajectoryRepo,
 		DHPriceSyncService:   dhPriceSyncService,
 		GapStore:             gapStore,
 		PSASpreadsheetID:     cfg.GoogleSheets.SpreadsheetID,
@@ -405,6 +407,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		SellSheetStore:     campaignsInit.sellSheetStore,
 		CardIDMappingRepo:  cardIDMappingRepo,
 		IntelRepo:          intelRepo,
+		TrajectoryRepo:     trajectoryRepo,
 		SuggestionsRepo:    suggestionsRepo,
 		DemandRepo:         demandRepo,
 		AdvisorService:     advisorService,
