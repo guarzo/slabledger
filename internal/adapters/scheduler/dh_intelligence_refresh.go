@@ -20,14 +20,32 @@ type DHIntelligenceRefreshConfig struct {
 	MaxPerRun int           // default 50
 }
 
-// DHIntelligenceRefreshScheduler periodically refreshes stale market intelligence
-// by re-fetching data from the DH API.
+// IntelligenceSeedLister returns cards we own that should have a market_intelligence
+// row. The scheduler diffs this list against existing rows and seeds the missing ones.
+type IntelligenceSeedLister interface {
+	ListUnsoldDHCardSeeds(ctx context.Context) ([]intelligence.SeedCandidate, error)
+}
+
+// DHIntelligenceRefreshScheduler periodically seeds market_intelligence with cards
+// we own and refreshes stale entries by re-fetching from the DH API.
 type DHIntelligenceRefreshScheduler struct {
 	StopHandle
-	dhClient  *dh.Client
-	intelRepo intelligence.Repository
-	logger    observability.Logger
-	config    DHIntelligenceRefreshConfig
+	dhClient   *dh.Client
+	intelRepo  intelligence.Repository
+	seedLister IntelligenceSeedLister // optional; when nil, only the refresh pass runs
+	logger     observability.Logger
+	config     DHIntelligenceRefreshConfig
+}
+
+// IntelligenceRefreshOption configures optional dependencies on the scheduler.
+type IntelligenceRefreshOption func(*DHIntelligenceRefreshScheduler)
+
+// WithIntelligenceSeedLister enables the seed pass that creates initial
+// market_intelligence rows for cards in unsold inventory. Without this,
+// the scheduler only refreshes rows that already exist — meaning an empty
+// table stays empty.
+func WithIntelligenceSeedLister(l IntelligenceSeedLister) IntelligenceRefreshOption {
+	return func(s *DHIntelligenceRefreshScheduler) { s.seedLister = l }
 }
 
 // NewDHIntelligenceRefreshScheduler creates a new DH intelligence refresh scheduler.
@@ -36,6 +54,7 @@ func NewDHIntelligenceRefreshScheduler(
 	intelRepo intelligence.Repository,
 	logger observability.Logger,
 	config DHIntelligenceRefreshConfig,
+	opts ...IntelligenceRefreshOption,
 ) *DHIntelligenceRefreshScheduler {
 	if config.Interval == 0 {
 		config.Interval = 1 * time.Hour
@@ -47,13 +66,17 @@ func NewDHIntelligenceRefreshScheduler(
 		config.CacheTTL = 24 * time.Hour
 	}
 
-	return &DHIntelligenceRefreshScheduler{
+	s := &DHIntelligenceRefreshScheduler{
 		StopHandle: NewStopHandle(),
 		dhClient:   dhClient,
 		intelRepo:  intelRepo,
 		logger:     logger.With(context.Background(), observability.String("component", "dh-intelligence-refresh")),
 		config:     config,
 	}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
 }
 
 // Start begins the background intelligence refresh scheduler.
@@ -72,11 +95,18 @@ func (s *DHIntelligenceRefreshScheduler) Start(ctx context.Context) {
 	}, s.refresh)
 }
 
-// refresh fetches stale intelligence entries and re-fetches market data from DH.
+// refresh seeds intelligence for cards we own that don't have a row yet, then
+// re-fetches stale entries. Both phases share the per-run budget so a
+// long-tail seed can't starve refreshes.
 func (s *DHIntelligenceRefreshScheduler) refresh(ctx context.Context) {
 	s.logger.Debug(ctx, "running DH intelligence refresh")
 
-	stale, err := s.intelRepo.GetStale(ctx, s.config.CacheTTL, s.config.MaxPerRun)
+	budget := s.seed(ctx, s.config.MaxPerRun)
+	if budget <= 0 {
+		return
+	}
+
+	stale, err := s.intelRepo.GetStale(ctx, s.config.CacheTTL, budget)
 	if err != nil {
 		s.logger.Error(ctx, "failed to get stale intelligence entries", observability.Err(err))
 		return
@@ -139,4 +169,81 @@ func (s *DHIntelligenceRefreshScheduler) refresh(ctx context.Context) {
 	s.logger.Info(ctx, "DH intelligence refresh complete",
 		observability.Int("refreshed", refreshed),
 		observability.Int("failed", failed))
+}
+
+// seed creates initial market_intelligence rows for unsold inventory cards
+// that don't yet have one. Returns the remaining per-run budget for the
+// subsequent refresh phase.
+func (s *DHIntelligenceRefreshScheduler) seed(ctx context.Context, budget int) int {
+	if s.seedLister == nil || budget <= 0 {
+		return budget
+	}
+
+	candidates, err := s.seedLister.ListUnsoldDHCardSeeds(ctx)
+	if err != nil {
+		s.logger.Error(ctx, "failed to list intelligence seed candidates", observability.Err(err))
+		return budget
+	}
+	if len(candidates) == 0 {
+		return budget
+	}
+
+	var seeded, skipped, failed int
+	for _, c := range candidates {
+		if budget <= 0 {
+			break
+		}
+		existing, err := s.intelRepo.GetByDHCardID(ctx, c.DHCardID)
+		if err != nil {
+			s.logger.Warn(ctx, "failed to check existing intelligence",
+				observability.String("dh_card_id", c.DHCardID),
+				observability.Err(err))
+			failed++
+			continue
+		}
+		if existing != nil {
+			skipped++
+			continue
+		}
+
+		cardIDInt, convErr := strconv.Atoi(c.DHCardID)
+		if convErr != nil {
+			s.logger.Warn(ctx, "skipping non-numeric DH card ID seed",
+				observability.String("dh_card_id", c.DHCardID),
+				observability.String("card_name", c.CardName),
+				observability.Err(convErr))
+			failed++
+			continue
+		}
+
+		resp, fetchErr := s.dhClient.MarketDataEnterprise(ctx, cardIDInt)
+		if fetchErr != nil {
+			s.logger.Warn(ctx, "failed to fetch DH market data for seed",
+				observability.String("dh_card_id", c.DHCardID),
+				observability.Err(fetchErr))
+			failed++
+			budget--
+			continue
+		}
+		budget--
+
+		intel := dh.ConvertToIntelligence(resp, c.CardName, c.SetName, c.CardNumber, c.DHCardID)
+		if storeErr := s.intelRepo.Store(ctx, intel); storeErr != nil {
+			s.logger.Warn(ctx, "failed to store seeded intelligence",
+				observability.String("dh_card_id", c.DHCardID),
+				observability.Err(storeErr))
+			failed++
+			continue
+		}
+		seeded++
+	}
+
+	if seeded > 0 || failed > 0 {
+		s.logger.Info(ctx, "DH intelligence seed complete",
+			observability.Int("seeded", seeded),
+			observability.Int("skipped_existing", skipped),
+			observability.Int("failed", failed),
+			observability.Int("remaining_budget", budget))
+	}
+	return budget
 }
