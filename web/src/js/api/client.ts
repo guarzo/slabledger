@@ -134,7 +134,7 @@ export class APIClient {
         }
 
         const error = new APIError(
-          data.message || `API error: ${response.status} ${response.statusText}`,
+          data.error || data.message || `API error: ${response.status} ${response.statusText}`,
           response.status,
           data.code,
           data,
