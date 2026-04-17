@@ -152,6 +152,12 @@ func (r *stubPurchaseRepo) ApproveHeldPurchase(_ context.Context, _ string) erro
 func (r *stubPurchaseRepo) ResetDHFieldsForRepush(_ context.Context, _ string) error {
 	return nil
 }
+func (r *stubPurchaseRepo) UpdatePurchaseDHPriceSync(_ context.Context, _ string, _ int, _ time.Time) error {
+	return nil
+}
+func (r *stubPurchaseRepo) ListDHPriceDrift(_ context.Context) ([]inventory.Purchase, error) {
+	return nil, nil
+}
 
 type stubAnalyticsRepo struct {
 	data []inventory.PurchaseWithSale

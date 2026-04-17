@@ -226,6 +226,10 @@ func FromEnv(base Config) Config {
 	envDurationPositive("DH_RECONCILE_INTERVAL", &cfg.DHReconcile.Interval)
 	envIntRange("DH_RECONCILE_HOUR", &cfg.DHReconcile.RefreshHour, 0, 23)
 
+	// DH price-sync scheduler (reconciles reviewed_price_cents vs dh_listing_price_cents)
+	envBool("DH_PRICE_SYNC_ENABLED", &cfg.DHPriceSync.Enabled, true)
+	envDurationPositive("DH_PRICE_SYNC_INTERVAL", &cfg.DHPriceSync.Interval)
+
 	// Google Sheets credentials (JSON key is base64-encoded in .env)
 	if v := os.Getenv("GOOGLE_SHEETS_CREDENTIALS_JSON"); v != "" {
 		v = strings.TrimSpace(v)

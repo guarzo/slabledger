@@ -55,6 +55,8 @@ type PurchaseRepositoryMock struct {
 	SetHeldWithReasonFn                  func(ctx context.Context, purchaseID, reason string) error
 	ApproveHeldPurchaseFn                func(ctx context.Context, purchaseID string) error
 	ResetDHFieldsForRepushFn             func(ctx context.Context, purchaseID string) error
+	UpdatePurchaseDHPriceSyncFn          func(ctx context.Context, id string, listingPriceCents int, syncedAt time.Time) error
+	ListDHPriceDriftFn                   func(ctx context.Context) ([]inventory.Purchase, error)
 }
 
 var _ inventory.PurchaseRepository = (*PurchaseRepositoryMock)(nil)
@@ -379,4 +381,18 @@ func (m *PurchaseRepositoryMock) ResetDHFieldsForRepush(ctx context.Context, pur
 		return m.ResetDHFieldsForRepushFn(ctx, purchaseID)
 	}
 	return nil
+}
+
+func (m *PurchaseRepositoryMock) UpdatePurchaseDHPriceSync(ctx context.Context, id string, listingPriceCents int, syncedAt time.Time) error {
+	if m.UpdatePurchaseDHPriceSyncFn != nil {
+		return m.UpdatePurchaseDHPriceSyncFn(ctx, id, listingPriceCents, syncedAt)
+	}
+	return nil
+}
+
+func (m *PurchaseRepositoryMock) ListDHPriceDrift(ctx context.Context) ([]inventory.Purchase, error) {
+	if m.ListDHPriceDriftFn != nil {
+		return m.ListDHPriceDriftFn(ctx)
+	}
+	return []inventory.Purchase{}, nil
 }

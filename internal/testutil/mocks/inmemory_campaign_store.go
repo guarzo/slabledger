@@ -72,6 +72,8 @@ type InMemoryCampaignStore struct {
 	SetHeldWithReasonFn            func(ctx context.Context, purchaseID string, reason string) error
 	ApproveHeldPurchaseFn          func(ctx context.Context, purchaseID string) error
 	ResetDHFieldsForRepushFn       func(ctx context.Context, purchaseID string) error
+	UpdatePurchaseDHPriceSyncFn    func(ctx context.Context, id string, listingPriceCents int, syncedAt time.Time) error
+	ListDHPriceDriftFn             func(ctx context.Context) ([]inventory.Purchase, error)
 	GetDHPushConfigFn              func(ctx context.Context) (*inventory.DHPushConfig, error)
 	SaveDHPushConfigFn             func(ctx context.Context, cfg *inventory.DHPushConfig) error
 	GetPurchasesByDHPushStatusFn   func(ctx context.Context, status string, limit int) ([]inventory.Purchase, error)
@@ -1082,6 +1084,20 @@ func (m *InMemoryCampaignStore) ResetDHFieldsForRepush(ctx context.Context, purc
 	p.DHChannelsJSON = "[]"
 	p.UpdatedAt = time.Now()
 	return nil
+}
+
+func (m *InMemoryCampaignStore) UpdatePurchaseDHPriceSync(ctx context.Context, id string, listingPriceCents int, syncedAt time.Time) error {
+	if m.UpdatePurchaseDHPriceSyncFn != nil {
+		return m.UpdatePurchaseDHPriceSyncFn(ctx, id, listingPriceCents, syncedAt)
+	}
+	return nil
+}
+
+func (m *InMemoryCampaignStore) ListDHPriceDrift(ctx context.Context) ([]inventory.Purchase, error) {
+	if m.ListDHPriceDriftFn != nil {
+		return m.ListDHPriceDriftFn(ctx)
+	}
+	return []inventory.Purchase{}, nil
 }
 
 func (m *InMemoryCampaignStore) GetDHPushConfig(ctx context.Context) (*inventory.DHPushConfig, error) {

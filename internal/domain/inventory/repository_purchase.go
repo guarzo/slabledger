@@ -113,4 +113,16 @@ type PurchaseRepository interface {
 	// dh_cert_status, and dh_candidates (cert resolution remains valid).
 	// Used by reconciliation when DH inventory has drifted from local state.
 	ResetDHFieldsForRepush(ctx context.Context, purchaseID string) error
+	// UpdatePurchaseDHPriceSync updates dh_listing_price_cents and
+	// dh_last_synced_at in a single targeted UPDATE. Unlike
+	// UpdatePurchaseDHFields, it does not touch any other DH columns.
+	// Used by the DH price re-sync path after a successful DH PATCH.
+	UpdatePurchaseDHPriceSync(ctx context.Context, id string, listingPriceCents int, syncedAt time.Time) error
+
+	// ListDHPriceDrift returns unsold purchases where DH is known
+	// (dh_inventory_id > 0), the reviewed price is positive, and the
+	// reviewed price differs from the price DH currently has
+	// (dh_listing_price_cents). Excludes dismissed/held push statuses.
+	// Ordered oldest-synced first so stale items sync first.
+	ListDHPriceDrift(ctx context.Context) ([]Purchase, error)
 }

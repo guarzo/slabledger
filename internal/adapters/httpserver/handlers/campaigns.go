@@ -20,6 +20,12 @@ type SheetFetcher interface {
 	ReadSheet(ctx context.Context, spreadsheetID, sheetName string) ([][]string, error)
 }
 
+// DHPriceSyncer queues a DH price-sync for one purchase. Fire-and-forget
+// from the handler's perspective — errors are logged by the service.
+type DHPriceSyncer interface {
+	SyncPurchasePrice(ctx context.Context, purchaseID string)
+}
+
 // CampaignsHandler handles campaign-related HTTP requests.
 type CampaignsHandler struct {
 	service           inventory.Service
@@ -28,6 +34,7 @@ type CampaignsHandler struct {
 	tuningSvc         tuning.Service
 	logger            observability.Logger
 	dhListingSvc      dhlisting.Service // optional: lists cards on DH after cert import
+	dhPriceSyncer     DHPriceSyncer     // optional: async DH price re-sync on SetReviewedPrice
 	financeService    finance.Service   // optional: finance operations
 	exportService     export.Service    // optional: sell sheet and eBay export
 	baseCtx           context.Context
@@ -43,6 +50,11 @@ type CampaignsHandlerOption func(*CampaignsHandler)
 // WithDHListingService enables DH listing after cert import.
 func WithDHListingService(svc dhlisting.Service) CampaignsHandlerOption {
 	return func(h *CampaignsHandler) { h.dhListingSvc = svc }
+}
+
+// WithDHPriceSyncer enables async DH price re-sync on reviewed-price changes.
+func WithDHPriceSyncer(syncer DHPriceSyncer) CampaignsHandlerOption {
+	return func(h *CampaignsHandler) { h.dhPriceSyncer = syncer }
 }
 
 // WithFinanceService enables finance operations on campaigns.

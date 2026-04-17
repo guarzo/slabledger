@@ -13,6 +13,7 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/demand"
 	"github.com/guarzo/slabledger/internal/domain/dhevents"
 	"github.com/guarzo/slabledger/internal/domain/dhlisting"
+	"github.com/guarzo/slabledger/internal/domain/dhpricing"
 	"github.com/guarzo/slabledger/internal/domain/intelligence"
 	domainCampaigns "github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
@@ -56,6 +57,9 @@ type BuildDeps struct {
 
 	// DH inventory reconciler (optional; enables the daily DH reconcile scheduler).
 	DHReconciler dhlisting.Reconciler
+
+	// DH price-sync service (optional; enables the DH price-sync reconciliation scheduler).
+	DHPriceSyncService dhpricing.Service
 
 	// DH event recorder (shared across DH schedulers)
 	EventRecorder dhevents.Recorder
@@ -324,6 +328,18 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 			deps.DHReconciler,
 			deps.Logger,
 			reconcileCfg,
+		))
+	}
+
+	// DH price-sync scheduler: reconciles reviewed price vs DH listing price.
+	if deps.DHPriceSyncService != nil {
+		schedulers = append(schedulers, NewDHPriceSyncScheduler(
+			deps.DHPriceSyncService,
+			deps.Logger,
+			DHPriceSyncConfig{
+				Enabled:  cfg.DHPriceSync.Enabled,
+				Interval: cfg.DHPriceSync.Interval,
+			},
 		))
 	}
 

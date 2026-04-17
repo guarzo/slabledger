@@ -18,6 +18,7 @@ import (
 	domainArbitrage "github.com/guarzo/slabledger/internal/domain/arbitrage"
 	domainAuth "github.com/guarzo/slabledger/internal/domain/auth"
 	domainDHListing "github.com/guarzo/slabledger/internal/domain/dhlisting"
+	domainDHPricing "github.com/guarzo/slabledger/internal/domain/dhpricing"
 	domainExport "github.com/guarzo/slabledger/internal/domain/export"
 	domainFinance "github.com/guarzo/slabledger/internal/domain/finance"
 	domainCampaigns "github.com/guarzo/slabledger/internal/domain/inventory"
@@ -51,6 +52,7 @@ type ServerDependencies struct {
 	OpportunitiesHandler      *handlers.OpportunitiesHandler   // Arbitrage opportunities; nil = disabled
 	DHHandler                 *handlers.DHHandler              // DH bulk match + intelligence; nil = disabled
 	DHListingService          domainDHListing.Service          // optional: orchestrates DH listing after cert import
+	DHPriceSyncService        domainDHPricing.Service          // optional: async DH price re-sync on reviewed-price edits
 	ExportService             domainExport.Service             // optional: sell sheet and eBay export
 	FinanceService            domainFinance.Service            // optional: finance operations
 	SellSheetItemsHandler     *handlers.SellSheetItemsHandler  // Sell sheet persistence; nil = disabled
@@ -162,6 +164,9 @@ func startWebServer(ctx context.Context, deps ServerDependencies) error {
 		var opts []handlers.CampaignsHandlerOption
 		if deps.DHListingService != nil {
 			opts = append(opts, handlers.WithDHListingService(deps.DHListingService))
+		}
+		if deps.DHPriceSyncService != nil {
+			opts = append(opts, handlers.WithDHPriceSyncer(dhPriceSyncerAdapter{inner: deps.DHPriceSyncService}))
 		}
 		if deps.FinanceService != nil {
 			opts = append(opts, handlers.WithFinanceService(deps.FinanceService))
@@ -291,4 +296,14 @@ func startWebServer(ctx context.Context, deps ServerDependencies) error {
 	serverErrMu.Lock()
 	defer serverErrMu.Unlock()
 	return serverErr
+}
+
+// dhPriceSyncerAdapter bridges the handler-layer DHPriceSyncer interface
+// (void return) to the domain dhpricing.Service (returns SyncResult). The
+// handler fires this in a background goroutine and does not use the result;
+// failures are logged inside the service.
+type dhPriceSyncerAdapter struct{ inner domainDHPricing.Service }
+
+func (a dhPriceSyncerAdapter) SyncPurchasePrice(ctx context.Context, purchaseID string) {
+	_ = a.inner.SyncPurchasePrice(ctx, purchaseID)
 }
