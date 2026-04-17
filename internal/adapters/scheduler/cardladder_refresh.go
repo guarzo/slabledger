@@ -68,7 +68,8 @@ type CLRunStats struct {
 	Resolved          int       `json:"resolved"`          // Certs newly resolved to gemRateID via BuildCollectionCard this run.
 	NoCert            int       `json:"noCert"`            // Purchases with no cert number (can't look up).
 	CertResolveFailed int       `json:"certResolveFailed"` // BuildCollectionCard errored or returned no gemRateID.
-	NoValue           int       `json:"noValue"`           // Resolved to gemRateID but catalog had no value.
+	EstimateFailed    int       `json:"estimateFailed"`    // CardEstimate callable errored after cert resolved.
+	NoValue           int       `json:"noValue"`           // Resolved to gemRateID but CardEstimate returned no value.
 	CardsPushed       int       `json:"cardsPushed"`       // Cards pushed to CL remote collection (UI hygiene).
 	CardsRemoved      int       `json:"cardsRemoved"`      // Sold cards removed from CL remote collection (UI hygiene).
 }
@@ -236,9 +237,12 @@ func (s *CardLadderRefreshScheduler) PriceSinglePurchase(ctx context.Context, p 
 		return nil // resolveGemRate already recorded the failure reason.
 	}
 
-	values := s.fetchCatalogValues(ctx, client, []string{gemRateID})
-	value, hit := values[catalogValueKey(gemRateID, condition)]
-	if !hit || value <= 0 {
+	value, err := s.fetchCLEstimate(ctx, client, gemRateID, condition, p.CardName)
+	if err != nil {
+		s.recordCLError(ctx, p.ID, CLReasonAPIError)
+		return nil
+	}
+	if value <= 0 {
 		s.recordCLError(ctx, p.ID, CLReasonNoValue)
 		return nil
 	}
@@ -352,29 +356,21 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 		resolvedPurchases = append(resolvedPurchases, resolved{p, gemRateID, condition})
 	}
 
-	// Phase 2: batch-fetch live catalog values for every unique gemRateID we
-	// resolved.
-	gemRateSet := make(map[string]struct{}, len(resolvedPurchases))
-	for _, r := range resolvedPurchases {
-		gemRateSet[r.gemRateID] = struct{}{}
-	}
-	gemRateIDs := make([]string, 0, len(gemRateSet))
-	for id := range gemRateSet {
-		gemRateIDs = append(gemRateIDs, id)
-	}
-	catalogValues := s.fetchCatalogValues(ctx, client, gemRateIDs)
-	s.logger.Info(ctx, "CL refresh: catalog values loaded",
-		observability.Int("gemRateIds", len(gemRateIDs)),
-		observability.Int("catalogEntries", len(catalogValues)))
-
-	// Phase 3: apply catalog values to purchases. Record per-purchase errors
-	// (no_value) for the admin UI.
+	// Phase 2+3: fetch the live CardEstimate for each resolved (gemRateID,
+	// condition) pair and apply it. One callable per card — the public `cards`
+	// search index doesn't reliably surface the gemRateIDs BuildCollectionCard
+	// returns, so we hit the canonical estimate function directly.
 	for _, r := range resolvedPurchases {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		value, hit := catalogValues[catalogValueKey(r.gemRateID, r.condition)]
-		if !hit || value <= 0 {
+		value, err := s.fetchCLEstimate(ctx, client, r.gemRateID, r.condition, r.purchase.CardName)
+		if err != nil {
+			stats.EstimateFailed++
+			s.recordCLError(ctx, r.purchase.ID, CLReasonAPIError)
+			continue
+		}
+		if value <= 0 {
 			stats.NoValue++
 			s.recordCLError(ctx, r.purchase.ID, CLReasonNoValue)
 			continue
@@ -444,6 +440,7 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 		observability.Int("resolved", stats.Resolved),
 		observability.Int("noCert", stats.NoCert),
 		observability.Int("certResolveFailed", stats.CertResolveFailed),
+		observability.Int("estimateFailed", stats.EstimateFailed),
 		observability.Int("noValue", stats.NoValue),
 		observability.Int("cardsPushed", stats.CardsPushed),
 		observability.Int("cardsRemoved", stats.CardsRemoved))

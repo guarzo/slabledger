@@ -2,72 +2,43 @@ package scheduler
 
 import (
 	"context"
-	"strings"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
-// Tunables for catalog batching. Chosen so the encoded URL stays under ~2.5KB
-// (each gemRateID is 40 hex chars + comma) and a single batch rarely needs
-// more than a handful of pages.
-const (
-	catalogBatchSize     = 25
-	catalogPageSize      = 200
-	catalogMaxPagesBatch = 20
-)
-
-// fetchCatalogValues looks up live market values from the CL `cards` index
-// for the given gemRateIDs and returns a map keyed by (gemRateID|condition).
+// fetchCLEstimate calls CL's CardEstimate Firebase callable (the same function
+// powering the CL website's live card value) for a single
+// (gemRateID, displayCondition) pair.
 //
-// The `cards` index is the same data source CL's website renders as "CL Value",
-// so its `currentValue` reflects the freshly computed market value. The
-// `collectioncards` index that runOnce iterates stores a snapshot that CL
-// does not refresh — relying on it causes prices to freeze after ingest. We
-// use the catalog value here and fall back to the stale collection value only
-// when the catalog has no entry for the (gemRateID, condition) pair.
+// Why not the `cards` search index? The gemRateIDs returned by
+// BuildCollectionCard are not reliably present in the public `cards` index —
+// especially for newer sets — so filtering that index produced 0-hit results
+// for most of our inventory even though CL has valuations for those cards.
+// CardEstimate reads the canonical valuation store directly and returns
+// non-zero values for the same IDs the index misses.
 //
-// Failures of individual batches are logged and skipped; the loop does not
-// abort. The returned map may therefore be partial.
-func (s *CardLadderRefreshScheduler) fetchCatalogValues(ctx context.Context, client *cardladder.Client, gemRateIDs []string) map[string]float64 {
-	result := make(map[string]float64, len(gemRateIDs)*4)
-	if client == nil || len(gemRateIDs) == 0 {
-		return result
+// Returns (0, nil) on a resolved-but-no-value card (caller tags no_value) and
+// (0, err) on a transient API failure (caller tags api_error).
+func (s *CardLadderRefreshScheduler) fetchCLEstimate(ctx context.Context, client *cardladder.Client, gemRateID, displayCondition, description string) (float64, error) {
+	if client == nil || gemRateID == "" || displayCondition == "" {
+		return 0, nil
 	}
-
-	for i := 0; i < len(gemRateIDs); i += catalogBatchSize {
-		if ctx.Err() != nil {
-			break
-		}
-		end := min(i+catalogBatchSize, len(gemRateIDs))
-		chunk := gemRateIDs[i:end]
-		filters := map[string]string{
-			"gemRateId": strings.Join(chunk, ","),
-		}
-
-		for page := range catalogMaxPagesBatch {
-			if ctx.Err() != nil {
-				break
-			}
-			resp, err := client.FetchCardCatalog(ctx, "", filters, page, catalogPageSize)
-			if err != nil {
-				s.logger.Warn(ctx, "CL refresh: catalog batch fetch failed",
-					observability.Int("batchStart", i),
-					observability.Int("batchSize", len(chunk)),
-					observability.Int("page", page),
-					observability.Err(err))
-				break
-			}
-			for _, h := range resp.Hits {
-				if h.CurrentValue <= 0 || h.GemRateID == "" || h.Condition == "" {
-					continue
-				}
-				result[catalogValueKey(h.GemRateID, h.Condition)] = h.CurrentValue
-			}
-			if len(resp.Hits) < catalogPageSize {
-				break
-			}
-		}
+	resp, err := client.CardEstimate(ctx, cardladder.CardEstimateRequest{
+		GemRateID:      gemRateID,
+		GradingCompany: "psa",
+		Condition:      firestoreConditionFor(displayCondition),
+		Description:    description,
+	})
+	if err != nil {
+		s.logger.Warn(ctx, "CL refresh: card estimate failed",
+			observability.String("gemRateId", gemRateID),
+			observability.String("condition", displayCondition),
+			observability.Err(err))
+		return 0, err
 	}
-	return result
+	if resp == nil {
+		return 0, nil
+	}
+	return resp.EstimatedValue, nil
 }
