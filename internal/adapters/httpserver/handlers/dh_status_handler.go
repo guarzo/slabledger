@@ -23,7 +23,9 @@ const ordersEpoch = "2020-01-01T00:00:00Z"
 // internal/adapters/scheduler/dh_orders_poll.go.
 const syncKeyDHOrdersPoll = "dh_orders_last_poll"
 
-// HandleGetIntelligence returns market intelligence for a specific card.
+// HandleGetIntelligence returns market intelligence for a specific card,
+// including the weekly trajectory + CL-lag score when the trajectory repo is
+// wired and there are buckets stored for the card's DH ID.
 func (h *DHHandler) HandleGetIntelligence(w http.ResponseWriter, r *http.Request) {
 	if requireUser(w, r) == nil {
 		return
@@ -49,7 +51,20 @@ func (h *DHHandler) HandleGetIntelligence(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	writeJSON(w, http.StatusOK, intel)
+	resp := map[string]any{
+		"intelligence": intel,
+	}
+	if h.trajectoryRepo != nil && intel.DHCardID != "" {
+		buckets, tErr := h.trajectoryRepo.GetByDHCardID(ctx, intel.DHCardID)
+		if tErr != nil {
+			h.logger.Warn(ctx, "get trajectory", observability.Err(tErr))
+		} else if len(buckets) > 0 {
+			resp["trajectory"] = buckets
+			resp["trajectory_score"] = intelligence.ComputeTrajectoryScore(buckets, 0)
+		}
+	}
+
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // HandleGetSuggestions returns the latest DH buy/sell suggestions.

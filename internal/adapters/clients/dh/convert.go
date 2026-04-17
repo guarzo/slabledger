@@ -1,6 +1,7 @@
 package dh
 
 import (
+	"strconv"
 	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/intelligence"
@@ -85,4 +86,51 @@ func ConvertToIntelligence(resp *MarketDataResponse, cardName, setName, cardNumb
 	}
 
 	return intel
+}
+
+// MergeAnalyticsIntoIntelligence copies velocity + trend fields from DH's
+// batch_analytics response onto the intelligence record in place. Fields
+// return as nil if DH hasn't computed that surface yet, which is normal —
+// callers should not treat a partial fill as an error.
+func MergeAnalyticsIntoIntelligence(intel *intelligence.MarketIntelligence, ca *CardAnalytics) {
+	if intel == nil || ca == nil {
+		return
+	}
+	if ca.Trend != nil {
+		intel.Trend = &intelligence.Trend{
+			Volume7d:  ca.Trend.Volume7d,
+			Volume30d: ca.Trend.Volume30d,
+			Volume90d: ca.Trend.Volume90d,
+		}
+	}
+	if ca.Velocity != nil {
+		v := &intelligence.Velocity{
+			SampleSize: ca.Velocity.SampleSize,
+			LastFetch:  time.Now(),
+		}
+		v.SellThrough30dPct = parseSellThroughPct(ca.Velocity.SellThrough, "30d")
+		v.SellThrough60dPct = parseSellThroughPct(ca.Velocity.SellThrough, "60d")
+		v.SellThrough90dPct = parseSellThroughPct(ca.Velocity.SellThrough, "90d")
+		intel.Velocity = v
+	}
+}
+
+// parseSellThroughPct reads a window value from DH's string-keyed sell_through
+// map. DH returns percentages as stringified floats ("45.2"); the zero-value
+// return on missing/malformed keys is safe because a 0.0 sell-through is
+// indistinguishable from "no data" for operator-facing lenses (and SampleSize
+// is the authoritative confidence gate).
+func parseSellThroughPct(m map[string]string, window string) float64 {
+	if m == nil {
+		return 0
+	}
+	s, ok := m[window]
+	if !ok || s == "" {
+		return 0
+	}
+	f, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return 0
+	}
+	return f
 }

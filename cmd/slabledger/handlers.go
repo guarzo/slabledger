@@ -49,6 +49,7 @@ type handlerInputs struct {
 	SellSheetStore     *sqlite.SellSheetStore
 	CardIDMappingRepo  *sqlite.CardIDMappingRepository
 	IntelRepo          *sqlite.MarketIntelligenceRepository
+	TrajectoryRepo     *sqlite.CardPriceTrajectoryRepository
 	SuggestionsRepo    *sqlite.DHSuggestionsRepository
 	DemandRepo         *sqlite.DHDemandRepository
 	AdvisorService     advisor.Service
@@ -150,6 +151,7 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 			StatusCounter:     in.PurchaseStore,
 			PendingLister:     in.PurchaseStore,
 			IntelRepo:         in.IntelRepo,
+			TrajectoryRepo:    in.TrajectoryRepo,
 			SuggestionsRepo:   in.SuggestionsRepo,
 			IntelCounter:      in.IntelRepo,
 			SuggestCounter:    in.SuggestionsRepo,

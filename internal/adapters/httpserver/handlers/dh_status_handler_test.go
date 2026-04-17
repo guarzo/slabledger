@@ -379,9 +379,11 @@ func TestHandleGetIntelligence_Found(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, rec.Code)
 
-	var resp intelligence.MarketIntelligence
+	var resp struct {
+		Intelligence intelligence.MarketIntelligence `json:"intelligence"`
+	}
 	require.NoError(t, json.NewDecoder(rec.Body).Decode(&resp))
-	assert.Equal(t, "Charizard", resp.CardName)
+	assert.Equal(t, "Charizard", resp.Intelligence.CardName)
 }
 
 func TestHandleGetIntelligence_NotFound(t *testing.T) {

@@ -49,6 +49,7 @@ type schedulerDeps struct {
 	DHIntelligenceRepo   *sqlite.MarketIntelligenceRepository
 	DHSuggestionsRepo    *sqlite.DHSuggestionsRepository
 	DHDemandRepo         *sqlite.DHDemandRepository
+	DHTrajectoryRepo     *sqlite.CardPriceTrajectoryRepository
 	DHPriceSyncService   dhpricing.Service
 	GapStore             *sqlite.GapStore
 	PSASheetFetcher      scheduler.SheetFetcher
@@ -124,6 +125,9 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 	}
 	if deps.DHIntelligenceRepo != nil {
 		buildDeps.DHIntelligenceRepo = deps.DHIntelligenceRepo
+	}
+	if deps.DHTrajectoryRepo != nil {
+		buildDeps.DHTrajectoryRepo = deps.DHTrajectoryRepo
 	}
 	if deps.DHSuggestionsRepo != nil {
 		buildDeps.DHSuggestionsRepo = deps.DHSuggestionsRepo

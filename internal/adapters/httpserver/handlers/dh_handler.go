@@ -129,6 +129,7 @@ type DHHandler struct {
 	statusCounter     DHStatusCounter     // optional: efficient push status counts
 	pendingLister     DHPendingLister     // optional: lists DH pending pipeline items
 	intelRepo         intelligence.Repository
+	trajectoryRepo    intelligence.TrajectoryRepository // optional: weekly CL-lag trajectory
 	suggestionsRepo   intelligence.SuggestionsRepository
 	intelCounter      DHIntelligenceCounter
 	suggestCounter    DHSuggestionsCounter
@@ -173,6 +174,7 @@ type DHHandlerDeps struct {
 	StatusCounter     DHStatusCounter     // optional: efficient push status counts
 	PendingLister     DHPendingLister     // optional: lists DH pending pipeline items
 	IntelRepo         intelligence.Repository
+	TrajectoryRepo    intelligence.TrajectoryRepository // optional: weekly CL-lag trajectory
 	SuggestionsRepo   intelligence.SuggestionsRepository
 	IntelCounter      DHIntelligenceCounter
 	SuggestCounter    DHSuggestionsCounter
@@ -207,6 +209,7 @@ func NewDHHandler(deps DHHandlerDeps) *DHHandler {
 		statusCounter:     deps.StatusCounter,
 		pendingLister:     deps.PendingLister,
 		intelRepo:         deps.IntelRepo,
+		trajectoryRepo:    deps.TrajectoryRepo,
 		suggestionsRepo:   deps.SuggestionsRepo,
 		intelCounter:      deps.IntelCounter,
 		suggestCounter:    deps.SuggestCounter,

@@ -50,6 +50,7 @@ type BuildDeps struct {
 	// DH dependencies (optional)
 	DHClient                 *dh.Client
 	DHIntelligenceRepo       intelligence.Repository
+	DHTrajectoryRepo         intelligence.TrajectoryRepository
 	DHSuggestionsRepo        intelligence.SuggestionsRepository
 	DHDemandRepo             demand.Repository      // niche-opportunity cache (T1/T3)
 	DHUnsoldCardLister       UnsoldDHCardLister     // seeds analytics with our inventory
@@ -268,6 +269,23 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 			deps.DHUnsoldCardLister,
 			deps.Logger,
 			cfg.DHAnalyticsRefresh,
+		))
+	}
+
+	// Card trajectory refresh scheduler (weekly). Uses DH's graded-sales-analytics
+	// recent_sales array, which DH returns empty as of 2026-04-18 even when
+	// total_sales > 0. The scheduler runs harmlessly (skips cards with no
+	// recent_sales) until DH populates the field.
+	if deps.DHClient != nil && deps.DHClient.EnterpriseAvailable() && deps.DHTrajectoryRepo != nil && deps.DHIntelligenceSeedLister != nil {
+		schedulers = append(schedulers, NewCardTrajectoryRefreshScheduler(
+			deps.DHClient,
+			deps.DHTrajectoryRepo,
+			deps.DHIntelligenceSeedLister,
+			deps.Logger,
+			CardTrajectoryRefreshConfig{
+				Enabled:  cfg.DH.Enabled,
+				Interval: 7 * 24 * time.Hour,
+			},
 		))
 	}
 
