@@ -1197,74 +1197,78 @@ func TestHandleCreatePriceFlag(t *testing.T) {
 
 // --- HandleSetReviewedPrice DH price-sync trigger ---
 
-// dhPriceSyncerFn adapts a func to the DHPriceSyncer interface for tests.
-type dhPriceSyncerFn func(ctx context.Context, purchaseID string)
-
-func (f dhPriceSyncerFn) SyncPurchasePrice(ctx context.Context, id string) { f(ctx, id) }
-
-func TestHandleSetReviewedPrice_TriggersDHPriceSync(t *testing.T) {
-	var syncCalls int32
-	doneCh := make(chan struct{}, 1)
-
-	svc := &mocks.MockInventoryService{
-		SetReviewedPriceFn: func(_ context.Context, _ string, _ int, _ string) error { return nil },
-	}
-	syncer := dhPriceSyncerFn(func(_ context.Context, id string) {
-		atomic.AddInt32(&syncCalls, 1)
-		if id != "p1" {
-			t.Errorf("syncer got id=%q, want p1", id)
-		}
-		doneCh <- struct{}{}
-	})
-
-	h := NewCampaignsHandler(svc, nil, nil, nil, mocks.NewMockLogger(), context.Background(),
-		WithDHPriceSyncer(syncer))
-
-	body := strings.NewReader(`{"priceCents":12000,"source":"manual"}`)
-	req := httptest.NewRequest(http.MethodPatch, "/api/purchases/p1/review-price", body)
-	req.SetPathValue("purchaseId", "p1")
-	rec := httptest.NewRecorder()
-	h.HandleSetReviewedPrice(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
-	}
-
-	select {
-	case <-doneCh:
-	case <-time.After(time.Second):
-		t.Fatal("dhPriceSyncer was not invoked within 1s")
-	}
-	h.WaitBackground()
-	if got := atomic.LoadInt32(&syncCalls); got != 1 {
-		t.Errorf("sync called %d times, want 1", got)
-	}
-}
-
-func TestHandleSetReviewedPrice_NoSyncOnError(t *testing.T) {
-	var syncCalls int32
-	svc := &mocks.MockInventoryService{
-		SetReviewedPriceFn: func(_ context.Context, _ string, _ int, _ string) error {
-			return inventory.ErrPurchaseNotFound
+func TestHandleSetReviewedPrice_DHPriceSyncTrigger(t *testing.T) {
+	tests := []struct {
+		name             string
+		setReviewedErr   error
+		wantStatus       int
+		wantSyncCalls    int32
+		waitForSyncerRun bool
+	}{
+		{
+			name:             "success fires syncer exactly once",
+			setReviewedErr:   nil,
+			wantStatus:       http.StatusOK,
+			wantSyncCalls:    1,
+			waitForSyncerRun: true,
+		},
+		{
+			name:             "purchase not found → no syncer call",
+			setReviewedErr:   inventory.ErrPurchaseNotFound,
+			wantStatus:       http.StatusNotFound,
+			wantSyncCalls:    0,
+			waitForSyncerRun: false,
 		},
 	}
-	syncer := dhPriceSyncerFn(func(_ context.Context, _ string) {
-		atomic.AddInt32(&syncCalls, 1)
-	})
-	h := NewCampaignsHandler(svc, nil, nil, nil, mocks.NewMockLogger(), context.Background(),
-		WithDHPriceSyncer(syncer))
 
-	body := strings.NewReader(`{"priceCents":12000,"source":"manual"}`)
-	req := httptest.NewRequest(http.MethodPatch, "/api/purchases/p1/review-price", body)
-	req.SetPathValue("purchaseId", "p1")
-	rec := httptest.NewRecorder()
-	h.HandleSetReviewedPrice(rec, req)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var syncCalls int32
+			doneCh := make(chan struct{}, 1)
 
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("status = %d, want 404", rec.Code)
-	}
-	h.WaitBackground()
-	if got := atomic.LoadInt32(&syncCalls); got != 0 {
-		t.Errorf("sync called %d times on error, want 0", got)
+			svc := &mocks.MockInventoryService{
+				SetReviewedPriceFn: func(_ context.Context, _ string, _ int, _ string) error {
+					return tc.setReviewedErr
+				},
+			}
+			syncer := &mocks.MockDHPriceSyncer{
+				SyncPurchasePriceFn: func(_ context.Context, id string) {
+					atomic.AddInt32(&syncCalls, 1)
+					if id != "p1" {
+						t.Errorf("syncer got id=%q, want p1", id)
+					}
+					select {
+					case doneCh <- struct{}{}:
+					default:
+					}
+				},
+			}
+
+			h := NewCampaignsHandler(svc, nil, nil, nil, mocks.NewMockLogger(), context.Background(),
+				WithDHPriceSyncer(syncer))
+
+			body := strings.NewReader(`{"priceCents":12000,"source":"manual"}`)
+			req := httptest.NewRequest(http.MethodPatch, "/api/purchases/p1/review-price", body)
+			req.SetPathValue("purchaseId", "p1")
+			rec := httptest.NewRecorder()
+			h.HandleSetReviewedPrice(rec, req)
+
+			if rec.Code != tc.wantStatus {
+				t.Fatalf("status = %d, want %d; body=%s", rec.Code, tc.wantStatus, rec.Body.String())
+			}
+
+			if tc.waitForSyncerRun {
+				select {
+				case <-doneCh:
+				case <-time.After(time.Second):
+					t.Fatal("syncer was not invoked within 1s")
+				}
+			}
+			h.WaitBackground()
+
+			if got := atomic.LoadInt32(&syncCalls); got != tc.wantSyncCalls {
+				t.Errorf("sync called %d times, want %d", got, tc.wantSyncCalls)
+			}
+		})
 	}
 }

@@ -118,6 +118,7 @@ func (s *service) SyncDriftedPurchases(ctx context.Context) SyncBatchResult {
 	drift, err := s.lookup.ListDHPriceDrift(ctx)
 	if err != nil {
 		s.logger.Warn(ctx, "dh price sync: list drift failed", observability.Err(err))
+		result.ListErr = err
 		return result
 	}
 

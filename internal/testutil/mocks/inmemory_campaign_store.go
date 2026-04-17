@@ -1097,7 +1097,7 @@ func (m *InMemoryCampaignStore) ListDHPriceDrift(ctx context.Context) ([]invento
 	if m.ListDHPriceDriftFn != nil {
 		return m.ListDHPriceDriftFn(ctx)
 	}
-	return nil, nil
+	return []inventory.Purchase{}, nil
 }
 
 func (m *InMemoryCampaignStore) GetDHPushConfig(ctx context.Context) (*inventory.DHPushConfig, error) {

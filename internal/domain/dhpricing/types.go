@@ -32,10 +32,14 @@ type SyncResult struct {
 	Err             error
 }
 
-// SyncBatchResult aggregates a batch run of SyncDriftedPurchases.
+// SyncBatchResult aggregates a batch run of SyncDriftedPurchases. If the
+// initial ListDHPriceDrift call fails, ListErr is set and the batch returns
+// with no per-purchase work done — callers can distinguish "no drift found"
+// (ListErr == nil, Total == 0) from "query failed" (ListErr != nil).
 type SyncBatchResult struct {
 	Total     int
 	ByOutcome map[Outcome]int
+	ListErr   error
 }
 
 // PurchaseLookup reads purchases for the price-sync flow.

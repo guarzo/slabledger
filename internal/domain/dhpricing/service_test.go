@@ -243,6 +243,29 @@ func TestSyncDriftedPurchases_EmptyDriftList(t *testing.T) {
 	if got.Total != 0 || len(updater.calls) != 0 {
 		t.Errorf("expected no work, got total=%d calls=%d", got.Total, len(updater.calls))
 	}
+	if got.ListErr != nil {
+		t.Errorf("ListErr = %v, want nil", got.ListErr)
+	}
+}
+
+func TestSyncDriftedPurchases_ListErrorSurfaces(t *testing.T) {
+	listErr := errors.New("db unavailable")
+	lookup := &fakeLookup{listErr: listErr}
+	updater := &fakeUpdater{}
+	writer := &fakeWriter{}
+	resetter := &fakeResetter{}
+	svc := newTestService(lookup, updater, writer, resetter)
+
+	got := svc.SyncDriftedPurchases(context.Background())
+	if got.ListErr == nil || !errors.Is(got.ListErr, listErr) {
+		t.Errorf("ListErr = %v, want %v", got.ListErr, listErr)
+	}
+	if got.Total != 0 {
+		t.Errorf("Total = %d, want 0 on list failure", got.Total)
+	}
+	if len(updater.calls) != 0 {
+		t.Errorf("updater should not be called on list failure, got %d calls", len(updater.calls))
+	}
 }
 
 // fakeUpdaterFn lets a test supply per-call behavior.
