@@ -50,33 +50,25 @@ func recvCerts(t *testing.T, ch <-chan string, n int, timeout time.Duration) []s
 	return out
 }
 
-// fakePurchaseRepo is a PurchaseRepository stub that only implements the one
-// method PricingEnrichJob needs.
-type fakePurchaseRepo struct {
-	inventory.PurchaseRepository
-	mu    sync.Mutex
-	byKey map[string]*inventory.Purchase
-}
-
-func newFakePurchaseRepo() *fakePurchaseRepo {
-	return &fakePurchaseRepo{byKey: map[string]*inventory.Purchase{}}
-}
-
-func (r *fakePurchaseRepo) put(cert string, p *inventory.Purchase) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.byKey[cert] = p
-}
-
-func (r *fakePurchaseRepo) GetPurchaseByCertNumber(_ context.Context, _ string, cert string) (*inventory.Purchase, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.byKey[cert], nil
+// newPurchaseRepo wires a PurchaseRepositoryMock backed by an in-memory cert
+// index so the pricing-enrich tests don't duplicate repo boilerplate. Only
+// GetPurchaseByCertNumber is exercised by PricingEnrichJob; the other Fn
+// fields stay nil (the mock returns zero values, unused by this suite).
+func newPurchaseRepo(byCert map[string]*inventory.Purchase) *mocks.PurchaseRepositoryMock {
+	var mu sync.Mutex
+	return &mocks.PurchaseRepositoryMock{
+		GetPurchaseByCertNumberFn: func(_ context.Context, _ string, cert string) (*inventory.Purchase, error) {
+			mu.Lock()
+			defer mu.Unlock()
+			return byCert[cert], nil
+		},
+	}
 }
 
 func TestPricingEnrichJob_EnqueueFansOutToAllPricers(t *testing.T) {
-	repo := newFakePurchaseRepo()
-	repo.put("C1", &inventory.Purchase{ID: "p1", CertNumber: "C1", CardName: "Charizard"})
+	repo := newPurchaseRepo(map[string]*inventory.Purchase{
+		"C1": {ID: "p1", CertNumber: "C1", CardName: "Charizard"},
+	})
 
 	cl := newFakePricer("cl", 2)
 	mm := newFakePricer("mm", 2)
@@ -98,8 +90,9 @@ func TestPricingEnrichJob_EnqueueFansOutToAllPricers(t *testing.T) {
 }
 
 func TestPricingEnrichJob_EnqueueBeforeSetPricersIsNoOp(t *testing.T) {
-	repo := newFakePurchaseRepo()
-	repo.put("C1", &inventory.Purchase{ID: "p1", CertNumber: "C1"})
+	repo := newPurchaseRepo(map[string]*inventory.Purchase{
+		"C1": {ID: "p1", CertNumber: "C1"},
+	})
 
 	job := NewPricingEnrichJob(repo, mocks.NewMockLogger())
 
@@ -122,8 +115,9 @@ func TestPricingEnrichJob_EnqueueBeforeSetPricersIsNoOp(t *testing.T) {
 }
 
 func TestPricingEnrichJob_OnePricerFailureDoesNotBlockOther(t *testing.T) {
-	repo := newFakePurchaseRepo()
-	repo.put("C2", &inventory.Purchase{ID: "p2", CertNumber: "C2"})
+	repo := newPurchaseRepo(map[string]*inventory.Purchase{
+		"C2": {ID: "p2", CertNumber: "C2"},
+	})
 
 	failing := newFakePricer("cl", 1)
 	failing.failMode = true
@@ -147,8 +141,9 @@ func TestPricingEnrichJob_OnePricerFailureDoesNotBlockOther(t *testing.T) {
 }
 
 func TestPricingEnrichJob_SetPricersLateUnblocksEnqueue(t *testing.T) {
-	repo := newFakePurchaseRepo()
-	repo.put("C3", &inventory.Purchase{ID: "p3", CertNumber: "C3"})
+	repo := newPurchaseRepo(map[string]*inventory.Purchase{
+		"C3": {ID: "p3", CertNumber: "C3"},
+	})
 
 	job := NewPricingEnrichJob(repo, mocks.NewMockLogger())
 	ctx, cancel := context.WithCancel(context.Background())

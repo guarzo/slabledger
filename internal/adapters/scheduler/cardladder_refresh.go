@@ -245,6 +245,10 @@ func (s *CardLadderRefreshScheduler) PriceSinglePurchase(ctx context.Context, p 
 	if err := s.valueUpdater.UpdatePurchaseCLValue(ctx, p.ID, newCLCents, p.Population); err != nil {
 		return err
 	}
+	// Keep the in-memory purchase consistent with the DB so the next pricer
+	// in PricingEnrichJob (MM, today) and any caller iterating this purchase
+	// operate on the freshly persisted value instead of a stale snapshot.
+	p.CLValueCents = newCLCents
 	s.recordCLError(ctx, p.ID, "")
 
 	if s.dhPushUpdater != nil && newCLCents != oldCLCents && shouldReenrollForCLChange(p) {
@@ -253,6 +257,7 @@ func (s *CardLadderRefreshScheduler) PriceSinglePurchase(ctx context.Context, p 
 				observability.String("cert", p.CertNumber),
 				observability.Err(err))
 		} else {
+			p.DHPushStatus = inventory.DHPushStatusPending
 			s.recordEvent(ctx, dhevents.Event{
 				PurchaseID:    p.ID,
 				CertNumber:    p.CertNumber,
@@ -379,6 +384,7 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 				observability.Err(err))
 			continue
 		}
+		r.purchase.CLValueCents = newCLCents
 		stats.Updated++
 		s.recordCLError(ctx, r.purchase.ID, "")
 
@@ -392,6 +398,7 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 					observability.String("cert", r.purchase.CertNumber),
 					observability.Err(err))
 			} else {
+				r.purchase.DHPushStatus = inventory.DHPushStatusPending
 				s.recordEvent(ctx, dhevents.Event{
 					PurchaseID:    r.purchase.ID,
 					CertNumber:    r.purchase.CertNumber,
