@@ -220,6 +220,7 @@ func (s *service) ScanCert(ctx context.Context, certNumber string) (*ScanCertRes
 			PurchaseID:   existing.ID,
 			CampaignID:   existing.CampaignID,
 			BuyCostCents: existing.BuyCostCents,
+			Market:       s.buildEnrichedSnapshot(existing),
 		}, nil
 	}
 
@@ -252,6 +253,7 @@ func (s *service) ScanCert(ctx context.Context, certNumber string) (*ScanCertRes
 		PurchaseID:   existing.ID,
 		CampaignID:   existing.CampaignID,
 		BuyCostCents: existing.BuyCostCents,
+		Market:       s.buildEnrichedSnapshot(existing),
 	}, nil
 }
 
