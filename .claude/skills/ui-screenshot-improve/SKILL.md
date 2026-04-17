@@ -1,13 +1,13 @@
 ---
 name: ui-screenshot-improve
-description: Visual UI improvement skill for SlabLedger. Captures fresh screenshots of every page via `make screenshots`, analyzes them systematically for UI issues (contrast, hierarchy, status semantics, density, legibility, misleading states), then identifies and fixes the top 3 highest-priority issues with build verification after each fix. Use this whenever the user asks about UI polish, visual bugs, layout problems, or wants to run a visual improvement pass. Designed to work as a self-contained unit inside an overnight improvement loop — one call equals one complete screenshot cycle plus up to 3 verified fixes.
+description: Visual UI improvement skill for SlabLedger. Captures fresh screenshots of every page via `make screenshots`, analyzes them systematically for UI issues (layout, spacing, hierarchy, user flow, empty states, affordances, contrast, status semantics), then identifies and fixes the top 3 highest-priority issues with build verification after each fix. Use this whenever the user asks about UI polish, visual bugs, layout problems, UX quality, or wants to run a visual improvement pass. Designed to work as a self-contained unit inside an overnight improvement loop — one call equals one complete screenshot cycle plus up to 3 verified fixes.
 ---
 
 # UI Screenshot Improve
 
 A self-contained visual improvement skill: **capture → analyze → rank → fix → verify**.
 
-Each invocation takes fresh screenshots, identifies the top 3 UI issues across all pages, implements targeted code fixes, and verifies each with a build check.
+Each invocation takes fresh screenshots, finds the top 3 impactful UI issues across all pages, implements targeted code fixes, and verifies each with a build check.
 
 ## Step 1: Capture fresh screenshots
 
@@ -35,59 +35,68 @@ web/screenshots/tools.png
 
 Use the Read tool on all desktop screenshots simultaneously in a single message. Read mobile screenshots (`web/screenshots/mobile/`) only if a desktop screenshot reveals a layout concern that likely has a mobile dimension.
 
-## Step 3: Analyze each screenshot
+## Step 3: Analyze each screenshot across eight dimensions
 
-For each screenshot, assess these five dimensions:
+Look at each page with fresh eyes, as if you've never seen this app before. Ask: *what would confuse or frustrate a real user here?* Work through each dimension:
 
-**Information hierarchy** — Are the most important data points the most visually prominent? Labels should clearly defer to their values. Counts and numbers should be easy to parse at a glance without hunting for context.
+**1. Layout and spatial composition**
+Alignment, breathing room, and grid coherence. Are elements sitting at awkward sizes relative to each other? Is whitespace distributed intentionally — generous where it guides the eye, tight where it creates grouping? Look for: orphaned elements, uneven column widths, cards that are way too tall/short for their content, items that wrap in ugly ways, sections that feel unanchored or disconnected from the rest of the page.
 
-**Contrast and readability** — Column headers, secondary labels, and muted text should be legible without competing with primary content. Low-contrast text that's meant to be read (not decorative) is a bug.
+**2. Typography hierarchy**
+Do heading sizes, weights, and colors create an unmistakable reading order? Primary values (dollar amounts, counts, status) should dominate their labels. Secondary metadata should recede. Look for: body text that's the same size as headings, labels visually competing with their values, numbers that are hard to parse because font weight doesn't differentiate them, line lengths that are too wide to read comfortably.
 
-**Status semantics** — Errors and critical operational states must look alarming (red/danger). Expected/neutral states (e.g., "not connected" when no credentials are saved) should look calm and informational, not alarming. Warning states should be visually distinct from both. Mismatched semantics (red error for a non-error state, or a critical metric shown in neutral text) are high-priority findings.
+**3. Information hierarchy**
+Are the most important data points the most visually prominent? A new user should be able to name the 3 most important facts on a page within 2 seconds. Look for: critical metrics buried in a sea of equal-weight items, actionable states hidden in muted text, key numbers that require hunting to find.
 
-**Density balance** — Layouts that are too crowded are hard to scan. Layouts with large wasted whitespace feel broken and miss an opportunity to show useful context.
+**4. Empty states, zero states, and loading states**
+Pages or sections that have no data (zero campaigns, no results, nothing pending) should look intentional and helpful — not broken. Look for: blank sections with no explanation, raw "0" values with no context, tables with headers but no rows that look like a rendering failure.
 
-**Actionability and self-explanation** — Status badges, chips, and counts should be self-explanatory. A new user glancing at the page should understand what they're seeing without relying on learned knowledge of the codebase.
+**5. User flow and primary actions**
+The most important action on each page should be the most visually prominent. Navigation between related pages should feel obvious. Look for: primary buttons buried at the bottom of a long form, CTAs that blend into the background, pages where it's unclear what the user is supposed to do next, related data split across tabs in a way that forces unnecessary clicks.
+
+**6. Interaction clarity and affordances**
+Clickable elements should look clickable. Expandable rows, sortable columns, and hoverable chips should have visual cues. Look for: rows that expand on click but have no visual indicator, buttons with insufficient padding that are hard to click, chips or badges that look interactive but aren't, or vice versa.
+
+**7. Contrast and readability**
+Muted/secondary text should still be legible at normal reading distance. Low-contrast text that serves a functional purpose (not just decorative) is a bug. Look for: timestamps, labels, or secondary values that are effectively invisible against the background.
+
+**8. Status semantics**
+Errors and critical states must look alarming. Neutral states (not yet configured, nothing pending) should look calm. Warnings should be visually distinct from both. Look for: danger red on non-error states, neutral white on genuinely alarming values, warning/success colors applied unconditionally regardless of the actual value.
 
 ## Step 4: Rank all findings
 
 After reviewing all screenshots, list every identified issue and rank by:
 
-🔴 **Critical** — confuses users, looks broken, or actively misleads (e.g., red error banner for a non-error state, operational failure metrics shown without visual alarm, critical counts in unreadable low-contrast text)
+🔴 **Critical** — actively confuses or misleads users, looks broken, or hides important operational state
+🟡 **Important** — usability friction, unclear hierarchy, data that's hard to scan or act on
+🟢 **Polish** — minor aesthetics, consistency, density refinements
 
-🟡 **Important** — usability friction, unclear hierarchy, data that should surface but doesn't read prominently enough, misleading neutral state where a colored state is warranted
+**Select the top 3 highest-priority findings by impact, not ease of fix.**
 
-🟢 **Polish** — aesthetics, minor consistency, density refinements, tooltip copy improvements
+Before finalizing the top 3, apply this diversity constraint: **at most 1 of the 3 selected fixes may be a semantic color change** (adding/changing a color class or CSS variable on an existing element). If your top 3 are all color tweaks, bump the most impactful non-color finding into the top 3 and drop the weakest color fix.
 
-Select the **top 3** highest-priority findings. Within a priority tier, prefer issues that can be fixed with the smallest file footprint (1–2 files).
-
-Skip any finding that would require touching more than 3 files or that involves structural layout changes beyond CSS/class tweaks — log it as a finding but mark it out-of-scope.
+Skip any finding that would require touching more than 3 files — log it as out-of-scope. Layout changes within a single component (spacing, sizing, element order, adding/removing a wrapper div) are fair game.
 
 ## Step 5: Fix each issue (one at a time)
 
-For each of the 3 selected issues, working in priority order:
+For each of the 3 selected issues, in priority order:
 
-1. **Identify the responsible component file** — trace the screenshot element to its React/TypeScript source. Touch the minimum number of files.
-2. **Read the file** before editing — never edit without reading first.
-3. **Implement the fix** following the project's existing conventions:
-   - Tailwind utility classes
-   - CSS variables: `var(--text)`, `var(--text-muted)`, `var(--danger)`, `var(--warning)`, `var(--success)`, `var(--brand-400)`, `var(--surface-1)`, `var(--surface-2)`, etc.
-   - No new npm dependencies
-   - No new abstractions or helper functions beyond what the change requires
-4. **Verify**: `cd /workspace/web && npm run build`
+1. **Trace it to source** — identify the responsible React/TypeScript file in `web/src/`. Read the file before editing.
+2. **Implement the fix** following project conventions:
+   - Tailwind utility classes for all styling: spacing (`p-`, `m-`, `gap-`, `space-y-`), layout (`flex`, `grid`, `items-`, `justify-`), sizing (`w-`, `h-`, `max-w-`), typography (`text-`, `font-`, `leading-`)
+   - CSS variables for semantic colors: `var(--text)`, `var(--text-muted)`, `var(--danger)`, `var(--warning)`, `var(--success)`, `var(--brand-400)`, `var(--surface-1)`, `var(--surface-2)`
+   - No new npm dependencies, no new abstractions beyond what the fix requires
+3. **Verify**: `cd /workspace/web && npm run build`
    - Exit 0 → fix stands ✅
-   - Non-zero → revert the file to its original content, mark fix as ❌ failed, continue to next issue
-5. Proceed to the next issue regardless of success or failure.
+   - Non-zero → revert to original, mark ❌, continue
 
 ## Step 6: Capture after-screenshots
-
-After all fixes are applied (regardless of individual success/failure), run `make screenshots` again to capture the post-fix state:
 
 ```bash
 cd /workspace && make screenshots
 ```
 
-This overwrites `web/screenshots/` with the updated renders. These become the baseline for the next invocation and are included in any PR diff for visual review. If this second run fails, note it in the report but do not revert the fixes — the build already passed.
+This overwrites `web/screenshots/` with post-fix renders. If the run fails, note it but don't revert — the build already passed.
 
 ## Step 7: Return a structured results report
 
@@ -97,38 +106,24 @@ This overwrites `web/screenshots/` with the updated renders. These become the ba
 ### All findings (ranked)
 1. 🔴 [Title] — [Page] — [one-line description]
 2. 🟡 [Title] — [Page] — [one-line description]
-3. 🟡 [Title] — [Page] — [one-line description]
-4. 🟢 [Title] — [Page] — [one-line description]
-(continue for all found)
+...
 
 ### Top 3 — outcomes
-1. ✅ [Title] — `path/to/file.tsx` — [one-line description of what changed]
-2. ✅ [Title] — `path/to/file.tsx` — [one-line description of what changed]
+1. ✅ [Title] — `path/to/file.tsx` — [what changed]
+2. ✅ [Title] — `path/to/file.tsx` — [what changed]
 3. ❌ [Title] — build failed, reverted
 
 ### Not attempted (out of scope or below top 3)
 - [brief list]
 
 ### After-screenshots
-✅ Re-captured — `web/screenshots/` updated with post-fix renders
-❌ Re-capture failed — screenshots may be stale
+✅ Re-captured — `web/screenshots/` updated
 ```
 
-## Conventions and constraints
+## Constraints
 
-- **Frontend only** — This skill touches React/TypeScript files in `web/src/`. Go files and backend code are out of scope.
-- **Scope discipline** — If a fix requires more than 3 files, it belongs in a dedicated task, not this skill. Log it and move on.
-- **Build gate is mandatory** — Never leave a broken build. If the build fails, always revert before moving on.
-- **No regressions** — Fixes should be surgical. Prefer changing a class name or a color variable over restructuring a component.
-- **Project conventions** — See `/workspace/CLAUDE.md` for project-specific rules. The key ones: Tailwind + CSS vars for styling, `var(--danger/warning/success)` for semantic colors.
-
-## Integration with overnight-improve
-
-This skill is designed as a **self-contained unit of work**: one invocation = one screenshot cycle + up to 3 fixes. It handles its own verification.
-
-To wire into overnight-improve's loop, update overnight-improve to call this as a "do" action rather than a "get findings" action — it does not return unimplemented findings. Overnight-improve's role is to run gates (from `overnight-config.yaml`) and commit after this skill completes.
-
-Suggested `overnight-config.yaml` addition:
-```yaml
-ui_improve_skill: workspace:ui-screenshot-improve
-```
+- **Frontend only** — `web/src/` files only. Go files are out of scope.
+- **Scope discipline** — More than 3 files = out of scope for this skill.
+- **Build gate is mandatory** — Always revert on build failure.
+- **No color-only runs** — The diversity constraint in Step 4 is not optional. If every finding you see is a color fix, look harder at layout, spacing, and flow until you find a real structural issue.
+- **Project conventions** — See `/workspace/CLAUDE.md`.
