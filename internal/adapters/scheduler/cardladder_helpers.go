@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
@@ -77,11 +78,19 @@ func identifySoldMappings(unsoldPurchases []inventory.Purchase, existingMappings
 	return result
 }
 
-// catalogValueKey builds the lookup key used in the catalog value map.
-// Condition here is the grade-string form returned by the CL `cards` index
-// (e.g. "PSA 9"), NOT the Firestore `g9` form.
-func catalogValueKey(gemRateID, condition string) string {
-	return gemRateID + "|" + condition
+// firestoreConditionFor converts the display-form condition stored in
+// cl_card_mappings.cl_condition (e.g. "PSA 10", "PSA 8.5") into the Firestore
+// form ("g10", "g8_5") expected by CardEstimate and other Firebase callables.
+// Unrecognised inputs fall through unchanged so upstream code can still
+// surface them.
+func firestoreConditionFor(displayCondition string) string {
+	d := strings.TrimSpace(displayCondition)
+	upper := strings.ToUpper(d)
+	if strings.HasPrefix(upper, "PSA ") {
+		grade := strings.TrimSpace(d[len("PSA "):])
+		return "g" + strings.ReplaceAll(grade, ".", "_")
+	}
+	return displayCondition
 }
 
 // compKey is a unique (gemRateID, condition) pair used for sales-comp dedup.
