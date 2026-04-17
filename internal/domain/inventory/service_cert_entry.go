@@ -215,10 +215,11 @@ func (s *service) ScanCert(ctx context.Context, certNumber string) (*ScanCertRes
 
 	if _, hasSale := salesMap[existing.ID]; hasSale {
 		return &ScanCertResult{
-			Status:     "sold",
-			CardName:   existing.CardName,
-			PurchaseID: existing.ID,
-			CampaignID: existing.CampaignID,
+			Status:       "sold",
+			CardName:     existing.CardName,
+			PurchaseID:   existing.ID,
+			CampaignID:   existing.CampaignID,
+			BuyCostCents: existing.BuyCostCents,
 		}, nil
 	}
 
@@ -246,10 +247,11 @@ func (s *service) ScanCert(ctx context.Context, certNumber string) (*ScanCertRes
 	s.enrollExistingInDHPushPipeline(ctx, existing, certNumber, "scan cert")
 
 	return &ScanCertResult{
-		Status:     "existing",
-		CardName:   existing.CardName,
-		PurchaseID: existing.ID,
-		CampaignID: existing.CampaignID,
+		Status:       "existing",
+		CardName:     existing.CardName,
+		PurchaseID:   existing.ID,
+		CampaignID:   existing.CampaignID,
+		BuyCostCents: existing.BuyCostCents,
 	}, nil
 }
 
