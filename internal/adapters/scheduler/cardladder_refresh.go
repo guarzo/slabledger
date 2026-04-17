@@ -68,7 +68,8 @@ type CLRunStats struct {
 	Resolved          int       `json:"resolved"`          // Certs newly resolved to gemRateID via BuildCollectionCard this run.
 	NoCert            int       `json:"noCert"`            // Purchases with no cert number (can't look up).
 	CertResolveFailed int       `json:"certResolveFailed"` // BuildCollectionCard errored or returned no gemRateID.
-	NoValue           int       `json:"noValue"`           // Resolved to gemRateID but catalog had no value.
+	EstimateFailed    int       `json:"estimateFailed"`    // CardEstimate callable errored after cert resolved.
+	NoValue           int       `json:"noValue"`           // Resolved to gemRateID but CardEstimate returned no value.
 	CardsPushed       int       `json:"cardsPushed"`       // Cards pushed to CL remote collection (UI hygiene).
 	CardsRemoved      int       `json:"cardsRemoved"`      // Sold cards removed from CL remote collection (UI hygiene).
 }
@@ -365,7 +366,7 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 		}
 		value, err := s.fetchCLEstimate(ctx, client, r.gemRateID, r.condition, r.purchase.CardName)
 		if err != nil {
-			stats.CertResolveFailed++
+			stats.EstimateFailed++
 			s.recordCLError(ctx, r.purchase.ID, CLReasonAPIError)
 			continue
 		}
@@ -439,6 +440,7 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 		observability.Int("resolved", stats.Resolved),
 		observability.Int("noCert", stats.NoCert),
 		observability.Int("certResolveFailed", stats.CertResolveFailed),
+		observability.Int("estimateFailed", stats.EstimateFailed),
 		observability.Int("noValue", stats.NoValue),
 		observability.Int("cardsPushed", stats.CardsPushed),
 		observability.Int("cardsRemoved", stats.CardsRemoved))
