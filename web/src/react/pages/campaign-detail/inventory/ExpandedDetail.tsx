@@ -188,10 +188,10 @@ export default function ExpandedDetail({ item, onReviewed, campaignId, onOpenFla
         </div>
       )}
       {item.purchase.dhPushStatus === 'held' && onApproveDHPush && (
-        <div className="mt-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
+        <div className="mt-3 p-3 rounded-lg bg-[var(--warning-bg)] border border-[var(--warning-border)]">
           <div className="flex items-center justify-between">
             <div>
-              <span className="text-xs font-semibold text-amber-400 uppercase">DH Push Held</span>
+              <span className="text-xs font-semibold text-[var(--warning)] uppercase">DH Push Held</span>
               <p className="text-sm text-[var(--text-muted)] mt-0.5">
                 {formatHoldReason(item.purchase.dhHoldReason ?? '')}
               </p>
