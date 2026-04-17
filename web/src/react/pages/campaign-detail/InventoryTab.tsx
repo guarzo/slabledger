@@ -34,6 +34,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
     saleModalOpen, saleModalItems,
     hintTarget, setHintTarget, priceTarget, setPriceTarget,
     flagTarget, setFlagTarget, flagSubmitting,
+    fixMatchTarget, setFixMatchTarget,
     sortKey, sortDir, searchQuery, setSearchQuery,
     isPrinting, statsExpanded, setStatsExpanded,
     filterTab, setFilterTab, showAll, setShowAll, debouncedSearch,
@@ -42,7 +43,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
     totalCost, totalMarket, totalPL,
     handleSort, handleReviewed, handleResolveFlag, handleApproveDHPush, handleListOnDH, dhListingInFlight, dhListedOptimistic, handleBulkListOnDH, handleFlagSubmit, handlePrint, handleDelete,
     toggleSelect, toggleAll, toggleExpand,
-    openSaleModal, closeSaleModal, handleFixPricing, handleSetPrice,
+    openSaleModal, closeSaleModal, handleFixPricing, handleFixDHMatch, handleFixDHMatchSaved, handleSetPrice,
     handlePriceSaved, handleHintSaved, sellSheet, toast,
   } = state;
 
@@ -311,6 +312,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                     onToggle={() => toggleSelect(item.purchase.id)}
                     onRecordSale={() => openSaleModal([item])}
                     onFixPricing={() => handleFixPricing(item.purchase)}
+                    onFixDHMatch={() => handleFixDHMatch(item.purchase)}
                     onSetPrice={() => handleSetPrice(item)}
                     onDelete={() => handleDelete(item)}
                     onListOnDH={handleListOnDH}
@@ -343,6 +345,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                         onToggle={() => toggleSelect(item.purchase.id)}
                         onRecordSale={() => openSaleModal([item])}
                         onFixPricing={() => handleFixPricing(item.purchase)}
+                        onFixDHMatch={() => handleFixDHMatch(item.purchase)}
                         onSetPrice={() => handleSetPrice(item)}
                         onDelete={() => handleDelete(item)}
                         onListOnDH={handleListOnDH}
@@ -396,6 +399,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                         onExpand={() => toggleExpand(item.purchase.id)}
                         onRecordSale={() => openSaleModal([item])}
                         onFixPricing={() => handleFixPricing(item.purchase)}
+                        onFixDHMatch={() => handleFixDHMatch(item.purchase)}
                         onSetPrice={() => handleSetPrice(item)}
                         onDelete={() => handleDelete(item)}
                         onListOnDH={handleListOnDH}
@@ -440,6 +444,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                           onExpand={() => toggleExpand(item.purchase.id)}
                           onRecordSale={() => openSaleModal([item])}
                           onFixPricing={() => handleFixPricing(item.purchase)}
+                          onFixDHMatch={() => handleFixDHMatch(item.purchase)}
                           onSetPrice={() => handleSetPrice(item)}
                           onDelete={() => handleDelete(item)}
                           onListOnDH={handleListOnDH}
@@ -478,6 +483,9 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
         onFlagCancel={() => setFlagTarget(null)}
         onFlagSubmit={handleFlagSubmit}
         flagSubmitting={flagSubmitting}
+        fixMatchTarget={fixMatchTarget}
+        onFixMatchClose={() => setFixMatchTarget(null)}
+        onFixMatchSaved={handleFixDHMatchSaved}
       />
     </div>
   );

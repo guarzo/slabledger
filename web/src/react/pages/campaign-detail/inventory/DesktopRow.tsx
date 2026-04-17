@@ -49,6 +49,7 @@ interface DesktopRowProps {
   onExpand: () => void;
   onRecordSale: () => void;
   onFixPricing?: () => void;
+  onFixDHMatch?: () => void;
   onSetPrice?: () => void;
   onDelete?: () => void;
   onListOnDH?: (purchaseId: string) => void;
@@ -58,7 +59,7 @@ interface DesktopRowProps {
   isOnSellSheet?: boolean;
 }
 
-export default function DesktopRow({ item, selected, onToggle, onExpand, onRecordSale, onFixPricing, onSetPrice, onDelete, onListOnDH, dhListingLoading, dhListedOverride, showCampaignColumn, isOnSellSheet }: DesktopRowProps) {
+export default function DesktopRow({ item, selected, onToggle, onExpand, onRecordSale, onFixPricing, onFixDHMatch, onSetPrice, onDelete, onListOnDH, dhListingLoading, dhListedOverride, showCampaignColumn, isOnSellSheet }: DesktopRowProps) {
   const cb = costBasis(item.purchase);
   const snap = item.currentMarket;
   const daysColor = daysHeldColor(item.daysHeld);
@@ -288,6 +289,14 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
                   className="px-3 py-2 text-sm text-[var(--text-muted)] hover:bg-[rgba(255,255,255,0.04)] hover:text-[var(--text)] outline-none cursor-default"
                 >
                   Fix Pricing
+                </DropdownMenu.Item>
+              )}
+              {onFixDHMatch && (
+                <DropdownMenu.Item
+                  onSelect={onFixDHMatch}
+                  className="px-3 py-2 text-sm text-[var(--text-muted)] hover:bg-[rgba(255,255,255,0.04)] hover:text-[var(--text)] outline-none cursor-default"
+                >
+                  Fix DH Match
                 </DropdownMenu.Item>
               )}
               {onDelete && (

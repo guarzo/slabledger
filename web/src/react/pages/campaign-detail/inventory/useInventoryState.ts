@@ -42,6 +42,12 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
   } | null>(null);
   const [flagTarget, setFlagTarget] = useState<{ purchaseId: string; cardName: string; grade: number } | null>(null);
   const [flagSubmitting, setFlagSubmitting] = useState(false);
+  const [fixMatchTarget, setFixMatchTarget] = useState<{
+    purchaseId: string;
+    cardName: string;
+    certNumber?: string;
+    currentDHCardId?: number;
+  } | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>('name');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [searchQuery, setSearchQuery] = useState('');
@@ -293,6 +299,19 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
     setHintTarget({ cardName: purchase.cardName, setName: purchase.setName, cardNumber: purchase.cardNumber });
   }
 
+  function handleFixDHMatch(purchase: Purchase) {
+    setFixMatchTarget({
+      purchaseId: purchase.id,
+      cardName: purchase.cardName,
+      certNumber: purchase.certNumber,
+      currentDHCardId: purchase.dhCardId,
+    });
+  }
+
+  function handleFixDHMatchSaved() {
+    invalidateInventory();
+  }
+
   function handleSetPrice(item: AgingItem) {
     const currentPrice = bestPrice(item);
     setPriceTarget({
@@ -342,6 +361,7 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
     priceTarget, setPriceTarget,
     flagTarget, setFlagTarget,
     flagSubmitting,
+    fixMatchTarget, setFixMatchTarget,
     sortKey, sortDir,
     searchQuery, setSearchQuery,
     isPrinting,
@@ -376,6 +396,8 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
     openSaleModal,
     closeSaleModal,
     handleFixPricing,
+    handleFixDHMatch,
+    handleFixDHMatchSaved,
     handleSetPrice,
     handlePriceSaved,
     handleHintSaved,
