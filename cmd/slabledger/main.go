@@ -345,6 +345,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		CampaignsService:     campaignsService,
 		CertLookup:           certLookup,
 		CertEnrichJob:        campaignsInit.certEnrichJob,
+		PricingEnrichJob:     campaignsInit.pricingEnrichJob,
 		AdvisorService:       advisorService,
 		AdvisorCacheRepo:     advisorCacheRepo,
 		AICallRepo:           aiCallRepo,

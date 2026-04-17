@@ -35,22 +35,23 @@ type exportReaderComposite struct {
 
 // campaignsInitResult holds all values returned by initializeCampaignsService.
 type campaignsInitResult struct {
-	service        inventory.Service
-	campaignStore  *sqlite.CampaignStore
-	purchaseStore  *sqlite.PurchaseStore
-	saleStore      *sqlite.SaleStore
-	analyticsStore *sqlite.AnalyticsStore
-	financeStore   *sqlite.FinanceStore
-	pricingStore   *sqlite.PricingStore
-	dhStore        *sqlite.DHStore
-	sellSheetStore *sqlite.SellSheetStore
-	certLookup     inventory.CertLookup
-	certEnrichJob  *scheduler.CertEnrichJob // nil if PSA not configured
-	arbSvc         arbitrage.Service
-	portSvc        portfolio.Service
-	tuningSvc      tuning.Service
-	financeService finance.Service
-	exportService  export.Service
+	service          inventory.Service
+	campaignStore    *sqlite.CampaignStore
+	purchaseStore    *sqlite.PurchaseStore
+	saleStore        *sqlite.SaleStore
+	analyticsStore   *sqlite.AnalyticsStore
+	financeStore     *sqlite.FinanceStore
+	pricingStore     *sqlite.PricingStore
+	dhStore          *sqlite.DHStore
+	sellSheetStore   *sqlite.SellSheetStore
+	certLookup       inventory.CertLookup
+	certEnrichJob    *scheduler.CertEnrichJob    // nil if PSA not configured
+	pricingEnrichJob *scheduler.PricingEnrichJob // pricers are attached later once CL/MM schedulers exist
+	arbSvc           arbitrage.Service
+	portSvc          portfolio.Service
+	tuningSvc        tuning.Service
+	financeService   finance.Service
+	exportService    export.Service
 }
 
 // initializeCampaignsService creates the campaigns service with all options
@@ -146,6 +147,13 @@ func initializeCampaignsService(
 		)
 	}
 
+	// Pricing enrichment job — on-demand CL+MM pricing triggered by intake.
+	// Pricers are attached later in initializeSchedulers once the CL/MM
+	// schedulers exist; until then the enqueuer is a no-op so injecting it
+	// here is safe even when CL/MM are disabled.
+	pricingEnrichJob := scheduler.NewPricingEnrichJob(purchaseStore, logger)
+	campaignOpts = append(campaignOpts, inventory.WithPricingEnqueuer(pricingEnrichJob))
+
 	campaignsService := inventory.NewService(
 		campaignStore,  // CampaignRepository
 		purchaseStore,  // PurchaseRepository
@@ -197,21 +205,22 @@ func initializeCampaignsService(
 	financeSvc := finance.New(financeStore, uuid.NewString)
 
 	return campaignsInitResult{
-		service:        campaignsService,
-		campaignStore:  campaignStore,
-		purchaseStore:  purchaseStore,
-		saleStore:      saleStore,
-		analyticsStore: analyticsStore,
-		financeStore:   financeStore,
-		pricingStore:   pricingStore,
-		dhStore:        dhStore,
-		sellSheetStore: sellSheetStore,
-		certLookup:     certLookup,
-		certEnrichJob:  certEnrichJobForSvc,
-		arbSvc:         arbSvc,
-		portSvc:        portSvc,
-		tuningSvc:      tuningSvc,
-		financeService: financeSvc,
-		exportService:  exportSvc,
+		service:          campaignsService,
+		campaignStore:    campaignStore,
+		purchaseStore:    purchaseStore,
+		saleStore:        saleStore,
+		analyticsStore:   analyticsStore,
+		financeStore:     financeStore,
+		pricingStore:     pricingStore,
+		dhStore:          dhStore,
+		sellSheetStore:   sellSheetStore,
+		certLookup:       certLookup,
+		certEnrichJob:    certEnrichJobForSvc,
+		pricingEnrichJob: pricingEnrichJob,
+		arbSvc:           arbSvc,
+		portSvc:          portSvc,
+		tuningSvc:        tuningSvc,
+		financeService:   financeSvc,
+		exportService:    exportSvc,
 	}
 }

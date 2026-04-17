@@ -142,6 +142,17 @@ type CertEnrichEnqueuer interface {
 	Enqueue(certNumber string)
 }
 
+// PricingEnqueuer enqueues certificate numbers for immediate on-demand
+// pricing via each configured price provider (CL, MM). Intake paths call this
+// after creating a purchase so freshly scanned inventory gets priced without
+// waiting for the daily refresh cycle.
+//
+// Implementations must be non-blocking — intake flows should not stall on a
+// full queue or slow provider.
+type PricingEnqueuer interface {
+	Enqueue(certNumber string)
+}
+
 // DHSoldNotifier is called when a purchase is confirmed as sold locally.
 // It updates the corresponding DH inventory item to sold status so the item is
 // retired on the DH platform. Implementations should be idempotent.
@@ -207,6 +218,11 @@ type service struct {
 	// A scheduler job processes cert numbers sequentially, respecting PSA API rate limits (100/day).
 	certEnrichQueue CertEnrichEnqueuer
 
+	// pricingQueue enqueues cert numbers for on-demand CL+MM pricing (optional).
+	// The intake flow calls this after creating a purchase so freshly scanned
+	// inventory gets priced without waiting for the daily scheduler.
+	pricingQueue PricingEnqueuer
+
 	// dhSoldNotifier notifies DH when a purchase is sold locally so the item is
 	// retired on the DH platform. Optional — if nil, no DH call is made on sale.
 	dhSoldNotifier DHSoldNotifier
@@ -256,6 +272,12 @@ func WithLogger(l observability.Logger) ServiceOption {
 // If not provided, no cert enrichment will occur (optional).
 func WithCertEnrichEnqueuer(q CertEnrichEnqueuer) ServiceOption {
 	return func(s *service) { s.certEnrichQueue = q }
+}
+
+// WithPricingEnqueuer injects a pricing enqueuer for intake-time CL+MM pricing.
+// If not provided, new certs wait for the daily refresh cycle (optional).
+func WithPricingEnqueuer(q PricingEnqueuer) ServiceOption {
+	return func(s *service) { s.pricingQueue = q }
 }
 
 // WithDisableBackgroundWorkers is a test-only option that prevents background workers

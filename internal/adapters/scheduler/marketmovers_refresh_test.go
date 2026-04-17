@@ -230,10 +230,12 @@ func TestSearchByNameGrade_EmptyGrader_DefaultsPSA(t *testing.T) {
 // abbreviations. Without this, MM's name search returns zero hits for common
 // cards whose DB name is stored as the all-caps PSA listing title.
 func TestSearchByNameGrade_NormalizesPSATitle(t *testing.T) {
-	var firstQuery string
-	var once sync.Once
+	var mu sync.Mutex
+	var queries []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		once.Do(func() { firstQuery = r.URL.Query().Get("input") })
+		mu.Lock()
+		queries = append(queries, r.URL.Query().Get("input"))
+		mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write(buildMMSearchResponse(t, []map[string]any{
 			{"item": map[string]any{"id": float64(77), "searchTitle": "Charizard V Champions Path PSA 10", "collectibleType": "sports-card"}},
@@ -250,9 +252,10 @@ func TestSearchByNameGrade_NormalizesPSATitle(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, int64(77), id)
-	assert.NotContains(t, firstQuery, "CHMPN", "normalized query should strip trailing PSA title noise")
-	assert.NotContains(t, firstQuery, "TRNR", "normalized query should strip trailing PSA title noise")
-	assert.Contains(t, firstQuery, "CHARIZARD V", "normalized query should keep core name + card-type suffix")
+	require.NotEmpty(t, queries)
+	assert.NotContains(t, queries[0], "CHMPN", "normalized query should strip trailing PSA title noise")
+	assert.NotContains(t, queries[0], "TRNR", "normalized query should strip trailing PSA title noise")
+	assert.Contains(t, queries[0], "CHARIZARD V", "normalized query should keep core name + card-type suffix")
 }
 
 // TestSearchByNameGrade_RetriesNameOnlyAfterZeroHits verifies that when the

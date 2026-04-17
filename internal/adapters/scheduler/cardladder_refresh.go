@@ -187,6 +187,93 @@ func (s *CardLadderRefreshScheduler) RunOnce(ctx context.Context) error {
 	return s.runOnce(ctx)
 }
 
+// PriceSinglePurchase resolves and applies CL pricing for one purchase on
+// demand. Used by the intake-time pricing enqueuer so freshly scanned certs
+// don't have to wait for the daily refresh cycle.
+//
+// The per-purchase path mirrors runOnce's phases 1–3 for a single cert:
+// resolve gemRateID+condition (cached or via BuildCollectionCard), fetch the
+// catalog value, update the purchase, and re-enroll for DH push on value
+// change. Phases 4–6 (sales comps, CL-UI push/remove) are daily-only.
+//
+// Returns nil when the integration isn't configured — on-demand pricing is
+// best-effort and must not surface errors to the intake flow.
+func (s *CardLadderRefreshScheduler) PriceSinglePurchase(ctx context.Context, p *inventory.Purchase) error {
+	if p == nil {
+		return nil
+	}
+	client := s.getClient()
+	if client == nil {
+		s.logger.Debug(ctx, "CL price: no client configured, skipping",
+			observability.String("cert", p.CertNumber))
+		return nil
+	}
+	cfg, err := s.store.GetConfig(ctx)
+	if err != nil {
+		return err
+	}
+	if cfg == nil {
+		return nil
+	}
+
+	if p.CertNumber == "" {
+		s.recordCLError(ctx, p.ID, CLReasonNoCert)
+		return nil
+	}
+
+	// Seed the mapping cache from storage so resolveGemRate reuses an existing
+	// (gemRateID, condition) pair when available.
+	mappingByCert := make(map[string]sqlite.CLCardMapping, 1)
+	if m, mErr := s.store.GetMapping(ctx, p.CertNumber); mErr == nil && m != nil {
+		mappingByCert[p.CertNumber] = *m
+	}
+
+	gemRateID, condition, ok := s.resolveGemRate(ctx, client, p, mappingByCert)
+	if !ok {
+		return nil // resolveGemRate already recorded the failure reason.
+	}
+
+	values := s.fetchCatalogValues(ctx, client, []string{gemRateID})
+	value, hit := values[catalogValueKey(gemRateID, condition)]
+	if !hit || value <= 0 {
+		s.recordCLError(ctx, p.ID, CLReasonNoValue)
+		return nil
+	}
+
+	newCLCents := mathutil.ToCentsInt(value)
+	oldCLCents := p.CLValueCents
+	if err := s.valueUpdater.UpdatePurchaseCLValue(ctx, p.ID, newCLCents, p.Population); err != nil {
+		return err
+	}
+	// Keep the in-memory purchase consistent with the DB so the next pricer
+	// in PricingEnrichJob (MM, today) and any caller iterating this purchase
+	// operate on the freshly persisted value instead of a stale snapshot.
+	p.CLValueCents = newCLCents
+	s.recordCLError(ctx, p.ID, "")
+
+	if s.dhPushUpdater != nil && newCLCents != oldCLCents && shouldReenrollForCLChange(p) {
+		if err := s.dhPushUpdater.UpdatePurchaseDHPushStatus(ctx, p.ID, inventory.DHPushStatusPending); err != nil {
+			s.logger.Warn(ctx, "CL price: failed to re-enroll for DH push",
+				observability.String("cert", p.CertNumber),
+				observability.Err(err))
+		} else {
+			p.DHPushStatus = inventory.DHPushStatusPending
+			s.recordEvent(ctx, dhevents.Event{
+				PurchaseID:    p.ID,
+				CertNumber:    p.CertNumber,
+				Type:          dhevents.TypeEnrolled,
+				NewPushStatus: inventory.DHPushStatusPending,
+				Source:        dhevents.SourceCLRefresh,
+			})
+		}
+	}
+
+	s.logger.Info(ctx, "CL price: applied on-demand pricing",
+		observability.String("cert", p.CertNumber),
+		observability.Int("clValueCents", newCLCents))
+	return nil
+}
+
 // runOnce executes the cert-first refresh cycle:
 //  1. List unsold purchases.
 //  2. For each purchase with a cert, ensure we have a gemRateID+condition
@@ -297,6 +384,7 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 				observability.Err(err))
 			continue
 		}
+		r.purchase.CLValueCents = newCLCents
 		stats.Updated++
 		s.recordCLError(ctx, r.purchase.ID, "")
 
@@ -310,6 +398,7 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 					observability.String("cert", r.purchase.CertNumber),
 					observability.Err(err))
 			} else {
+				r.purchase.DHPushStatus = inventory.DHPushStatusPending
 				s.recordEvent(ctx, dhevents.Event{
 					PurchaseID:    r.purchase.ID,
 					CertNumber:    r.purchase.CertNumber,
