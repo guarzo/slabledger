@@ -6,6 +6,7 @@ import RecordSaleModal from './RecordSaleModal';
 import PriceHintDialog from '../../PriceHintDialog';
 import PriceOverrideDialog from '../../PriceOverrideDialog';
 import PriceFlagDialog from './inventory/PriceFlagDialog';
+import FixDHMatchDialog from './inventory/FixDHMatchDialog';
 import { isReadyToList } from './inventory/inventoryCalcs';
 
 /* ── Sell-sheet action bar (shown when items are selected) ───────── */
@@ -138,6 +139,15 @@ interface SellSheetModalsProps {
   onFlagCancel: () => void;
   onFlagSubmit: (reason: PriceFlagReason) => void;
   flagSubmitting: boolean;
+  // FixDHMatchDialog
+  fixMatchTarget: {
+    purchaseId: string;
+    cardName: string;
+    certNumber?: string;
+    currentDHCardId?: number;
+  } | null;
+  onFixMatchClose: () => void;
+  onFixMatchSaved: () => void;
 }
 
 export function SellSheetModals({
@@ -155,6 +165,9 @@ export function SellSheetModals({
   onFlagCancel,
   onFlagSubmit,
   flagSubmitting,
+  fixMatchTarget,
+  onFixMatchClose,
+  onFixMatchSaved,
 }: SellSheetModalsProps) {
   return (
     <>
@@ -196,6 +209,17 @@ export function SellSheetModals({
           onSubmit={onFlagSubmit}
           onCancel={onFlagCancel}
           isSubmitting={flagSubmitting}
+        />
+      )}
+
+      {fixMatchTarget && (
+        <FixDHMatchDialog
+          purchaseId={fixMatchTarget.purchaseId}
+          cardName={fixMatchTarget.cardName}
+          certNumber={fixMatchTarget.certNumber}
+          currentDHCardId={fixMatchTarget.currentDHCardId}
+          onClose={onFixMatchClose}
+          onSaved={onFixMatchSaved}
         />
       )}
     </>
