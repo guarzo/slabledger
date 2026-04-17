@@ -54,7 +54,9 @@ export function DHStatsPanel({ enabled = true }: { enabled?: boolean }) {
     );
   }
 
-  const pendingCount = status?.pending_count ?? 0;
+  const enrolledPending = status?.pending_count ?? 0;
+  const pendingCount = status?.pending_received_count ?? 0;
+  const awaitingReceipt = Math.max(enrolledPending - pendingCount, 0);
   const mappedCount = status?.mapped_count ?? 0;
   const unmatchedCount = status?.unmatched_count ?? 0;
 
@@ -156,6 +158,7 @@ export function DHStatsPanel({ enabled = true }: { enabled?: boolean }) {
             label="Pending Push"
             value={pendingCount}
             color={pendingCount > 0 ? 'var(--info)' : undefined}
+            sub={awaitingReceipt > 0 ? `${awaitingReceipt} awaiting receipt` : undefined}
           />
           <SummaryCard
             label="Mapped Cards"

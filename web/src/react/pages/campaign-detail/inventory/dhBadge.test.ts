@@ -19,8 +19,14 @@ describe('dhBadgeFor', () => {
     expect(dhBadgeFor('held', undefined)).toBe('held');
     expect(dhBadgeFor('unmatched', undefined)).toBe('unmatched');
     expect(dhBadgeFor('dismissed', undefined)).toBe('dismissed');
-    expect(dhBadgeFor('pending', undefined)).toBe('pending');
     expect(dhBadgeFor('matched', undefined)).toBe('pushed');
+  });
+
+  it('splits pending by receivedAt presence', () => {
+    expect(dhBadgeFor('pending', undefined, '2026-04-17T05:00:00Z')).toBe('pending');
+    expect(dhBadgeFor('pending', undefined)).toBe('awaiting intake');
+    expect(dhBadgeFor('pending', undefined, null)).toBe('awaiting intake');
+    expect(dhBadgeFor('pending', undefined, '')).toBe('awaiting intake');
   });
 
   it('returns unenrolled for empty or unknown push status', () => {

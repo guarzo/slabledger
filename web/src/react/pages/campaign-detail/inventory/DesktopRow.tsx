@@ -21,7 +21,8 @@ const DH_BADGE_TITLES: Record<string, string> = {
   held:       'DoubleHolo push is on hold pending review',
   unmatched:  'Could not be matched to a DoubleHolo card',
   dismissed:  'DoubleHolo listing was dismissed',
-  pending:    'Waiting to be pushed to DoubleHolo inventory',
+  pending:    'Received and waiting to be pushed to DoubleHolo inventory',
+  'awaiting intake': 'Enrolled in DoubleHolo push pipeline — waiting for cert to be scanned in',
   pushed:     'Submitted to DoubleHolo — awaiting confirmation',
   unenrolled: 'Not enrolled in DoubleHolo',
 };
@@ -229,7 +230,7 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
             {dhListingLoading ? 'Listing…' : 'List'}
           </button>
         ) : (() => {
-          const badge = dhBadgeFor(item.purchase.dhPushStatus, item.purchase.dhStatus);
+          const badge = dhBadgeFor(item.purchase.dhPushStatus, item.purchase.dhStatus, item.purchase.receivedAt);
           if (badge === 'unenrolled') return null;
           return (
             <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${DH_BADGE_COLORS[badge]}`} title={DH_BADGE_TITLES[badge] ?? badge}>
