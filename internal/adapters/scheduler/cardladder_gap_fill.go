@@ -2,18 +2,18 @@ package scheduler
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
 	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
-	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/mathutil"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
+// refreshSalesComps fetches recent sales comps for every unique
+// (gemRateID, condition) pair in the provided mappings and upserts them into
+// the CL sales comps store. Rate-limited by the client's built-in limiter.
 func (s *CardLadderRefreshScheduler) refreshSalesComps(ctx context.Context, client *cardladder.Client, mappings []sqlite.CLCardMapping) {
-	type compKey struct{ gemRateID, condition string }
 	seen := make(map[compKey]bool, len(mappings))
 	fetched := 0
 
@@ -76,84 +76,4 @@ func (s *CardLadderRefreshScheduler) refreshSalesComps(ctx context.Context, clie
 
 	s.logger.Info(ctx, "CL sales: refresh complete",
 		observability.Int("cardsProcessed", fetched))
-}
-
-// gapFillGemRateIDs queries the CL cards index for purchases that still have no gemRateID.
-// Matches on player name + condition + grading company. Rate limited by the client's built-in limiter.
-func (s *CardLadderRefreshScheduler) gapFillGemRateIDs(ctx context.Context, client *cardladder.Client, purchases []inventory.Purchase) {
-	filled := 0
-	for i := range purchases {
-		p := &purchases[i]
-		if p.GemRateID != "" || p.CardName == "" {
-			continue
-		}
-
-		select {
-		case <-ctx.Done():
-			return
-		default:
-		}
-
-		// Build condition label from grade: "PSA 10", "PSA 9", etc.
-		grader := p.Grader
-		if grader == "" {
-			grader = "PSA"
-		}
-		condition := fmt.Sprintf("%s %s", grader, mathutil.FormatGrade(p.GradeValue))
-
-		filters := map[string]string{
-			"condition":      condition,
-			"gradingCompany": strings.ToLower(grader),
-		}
-
-		resp, err := client.FetchCardCatalog(ctx, p.CardName, filters, 0, 5)
-		if err != nil {
-			s.logger.Warn(ctx, "CL gap-fill: search failed",
-				observability.String("card", p.CardName),
-				observability.Err(err))
-			continue
-		}
-
-		if len(resp.Hits) == 0 {
-			continue
-		}
-
-		// Take the top result — highest score match
-		hit := resp.Hits[0]
-		if hit.GemRateID == "" {
-			continue
-		}
-
-		if err := s.gemRateUpdater.UpdatePurchaseGemRateID(ctx, p.ID, hit.GemRateID); err != nil {
-			s.logger.Warn(ctx, "CL gap-fill: failed to persist gemRateID",
-				observability.String("cert", p.CertNumber),
-				observability.Err(err))
-			continue
-		}
-		p.GemRateID = hit.GemRateID
-
-		if hit.PSASpecID != 0 {
-			if err := s.gemRateUpdater.UpdatePurchasePSASpecID(ctx, p.ID, hit.PSASpecID); err != nil {
-				s.logger.Warn(ctx, "CL gap-fill: failed to persist psaSpecId",
-					observability.String("cert", p.CertNumber),
-					observability.Err(err))
-			}
-		}
-
-		// Persist player/variation/category for MM export enrichment.
-		if hit.Player != "" || hit.Variation != "" || hit.Category != "" {
-			if err := s.gemRateUpdater.UpdatePurchaseCLCardMetadata(ctx, p.ID, hit.Player, hit.Variation, hit.Category); err != nil {
-				s.logger.Warn(ctx, "CL gap-fill: failed to persist card metadata",
-					observability.String("cert", p.CertNumber),
-					observability.Err(err))
-			}
-		}
-
-		filled++
-	}
-
-	if filled > 0 {
-		s.logger.Info(ctx, "CL gap-fill: complete",
-			observability.Int("filled", filled))
-	}
 }
