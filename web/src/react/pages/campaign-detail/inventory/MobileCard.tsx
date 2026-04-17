@@ -224,6 +224,7 @@ export default function MobileCard({ item, selected, onToggle, onRecordSale, onF
             onClick={onFixDHMatch}
             className="text-xs text-[var(--info)] underline"
             title="Re-map to correct DH card"
+            aria-label="Re-map to correct DH card"
           >
             DH
           </button>

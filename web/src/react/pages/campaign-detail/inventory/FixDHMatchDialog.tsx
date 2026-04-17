@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { api, isAPIError } from '../../../../js/api';
 import { useToast } from '../../../contexts/ToastContext';
 
-const DH_URL_PATTERN = /doubleholo\.com\/card\/(\d+)/;
+const DH_URL_PATTERN = /^(?:https?:\/\/)?(?:www\.)?doubleholo\.com\/card\/(\d+)(?:[/?#]|$)/;
 
 interface FixDHMatchDialogProps {
   purchaseId: string;
