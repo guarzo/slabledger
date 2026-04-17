@@ -109,6 +109,8 @@ export interface DHStatusResponse {
   unmatched_count: number;
   dismissed_count: number;
   pending_count: number;
+  pending_received_count?: number;
+  unenrolled_received_count?: number;
   mapped_count: number;
   bulk_match_running: boolean;
   bulk_match_error?: string;

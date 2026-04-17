@@ -6,10 +6,15 @@ export type DHBadgeLabel =
   | 'unmatched'
   | 'dismissed'
   | 'pending'
+  | 'awaiting intake'
   | 'pushed'
   | 'unenrolled';
 
-export function dhBadgeFor(dhPushStatus?: string, dhStatus?: string): DHBadgeLabel {
+export function dhBadgeFor(
+  dhPushStatus?: string,
+  dhStatus?: string,
+  receivedAt?: string | null,
+): DHBadgeLabel {
   if (dhStatus === 'sold') return 'sold';
   if (dhStatus === 'listed') return 'listed';
   if (dhStatus === 'in_stock') return 'in stock';
@@ -21,7 +26,7 @@ export function dhBadgeFor(dhPushStatus?: string, dhStatus?: string): DHBadgeLab
     case 'dismissed':
       return 'dismissed';
     case 'pending':
-      return 'pending';
+      return receivedAt ? 'pending' : 'awaiting intake';
     case 'matched':
       return 'pushed';
     default:
@@ -37,6 +42,7 @@ export const DH_BADGE_COLORS: Record<DHBadgeLabel, string> = {
   unmatched: 'bg-[rgba(248,113,113,0.1)] text-[#f87171]',
   dismissed: 'bg-[rgba(248,113,113,0.1)] text-[#f87171]',
   pending: 'bg-[rgba(245,158,11,0.1)] text-[#fbbf24]',
+  'awaiting intake': 'bg-[var(--surface-2)] text-[var(--text-muted)]',
   pushed: 'bg-[rgba(245,158,11,0.1)] text-[#fbbf24]',
   unenrolled: 'bg-[var(--surface-2)] text-[var(--text-muted)]',
 };
