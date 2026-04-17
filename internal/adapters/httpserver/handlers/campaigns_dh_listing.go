@@ -93,10 +93,22 @@ func (h *CampaignsHandler) HandleListPurchaseOnDH(w http.ResponseWriter, r *http
 			return
 		}
 		if updated.DHInventoryID == 0 {
-			// Either the inline push couldn't match this cert, or a stale inventory
-			// ID was reset after ERR_PROV_NOT_FOUND. Either way the push scheduler
-			// will retry automatically on its next cycle.
-			writeError(w, http.StatusBadGateway, "DH push failed — will retry automatically on next sync")
+			// The inline push didn't land an inventory ID. If the service moved
+			// the purchase into an actionable push state (unmatched / held /
+			// dismissed), return the same specific 409 the upstream precondition
+			// uses instead of a misleading "will retry" message. Otherwise the
+			// failure was transient (cert resolve / push API error / persist
+			// failure) and the scheduler will retry it.
+			switch updated.DHPushStatus {
+			case inventory.DHPushStatusUnmatched:
+				writeError(w, http.StatusConflict, "Cert could not be matched to a DH card")
+			case inventory.DHPushStatusHeld:
+				writeError(w, http.StatusConflict, "DH push is held for review — approve it first")
+			case inventory.DHPushStatusDismissed:
+				writeError(w, http.StatusConflict, "DH push was dismissed for this purchase")
+			default:
+				writeError(w, http.StatusBadGateway, "DH push failed — will retry automatically on next sync")
+			}
 			return
 		}
 		writeError(w, http.StatusBadGateway, "DH listing failed — check server logs for details")
