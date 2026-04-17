@@ -202,9 +202,10 @@ func (s *CardLadderRefreshScheduler) PriceSinglePurchase(ctx context.Context, p 
 	if p == nil {
 		return nil
 	}
+	s.logger.Info(ctx, "CL price: invoked", observability.String("cert", p.CertNumber))
 	client := s.getClient()
 	if client == nil {
-		s.logger.Debug(ctx, "CL price: no client configured, skipping",
+		s.logger.Info(ctx, "CL price: no client configured, skipping",
 			observability.String("cert", p.CertNumber))
 		return nil
 	}
@@ -213,6 +214,8 @@ func (s *CardLadderRefreshScheduler) PriceSinglePurchase(ctx context.Context, p 
 		return err
 	}
 	if cfg == nil {
+		s.logger.Info(ctx, "CL price: config not found, skipping",
+			observability.String("cert", p.CertNumber))
 		return nil
 	}
 

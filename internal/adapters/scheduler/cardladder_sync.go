@@ -79,8 +79,10 @@ func (s *CardLadderRefreshScheduler) pushSingleCard(
 		return err
 	}
 
-	// Save the local mapping
-	if err := s.store.SaveMapping(ctx, p.CertNumber, result.DocumentName, result.GemRateID, result.GemRateCondition); err != nil {
+	// Save the local mapping. cl_condition must be the display form (e.g. "PSA 9")
+	// because the pricing flow keys the catalog-value lookup by it — the Firestore
+	// "g9" form would miss every catalog hit.
+	if err := s.store.SaveMapping(ctx, p.CertNumber, result.DocumentName, result.GemRateID, result.Condition); err != nil {
 		s.logger.Error(ctx, "CL push: failed to save mapping after Firestore write — orphaned remote card",
 			observability.String("cert", p.CertNumber),
 			observability.String("docName", result.DocumentName),

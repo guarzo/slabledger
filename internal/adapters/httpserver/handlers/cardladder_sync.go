@@ -231,7 +231,9 @@ func (h *CardLadderHandler) addCardToCollection(ctx context.Context, client *car
 
 	// Save the local mapping — if this fails, we risk duplicate pushes on next sync,
 	// so treat it as a hard error rather than continuing with a stale mapping set.
-	if err := h.store.SaveMapping(ctx, req.CertNumber, result.DocumentName, result.GemRateID, result.GemRateCondition); err != nil {
+	// cl_condition must be the display form (e.g. "PSA 9"); the pricing flow keys
+	// the catalog lookup by it, so the "g9" form would miss every catalog hit.
+	if err := h.store.SaveMapping(ctx, req.CertNumber, result.DocumentName, result.GemRateID, result.Condition); err != nil {
 		h.logger.Error(ctx, "failed to save CL mapping after Firestore write",
 			observability.String("cert", req.CertNumber), observability.Err(err))
 		// Best-effort compensating delete to avoid orphaned remote document.

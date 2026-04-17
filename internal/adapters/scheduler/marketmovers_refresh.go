@@ -154,9 +154,10 @@ func (s *MarketMoversRefreshScheduler) PriceSinglePurchase(ctx context.Context, 
 	if p == nil {
 		return nil
 	}
+	s.logger.Info(ctx, "MM price: invoked", observability.String("cert", p.CertNumber))
 	client := s.getClient()
 	if client == nil {
-		s.logger.Debug(ctx, "MM price: client not initialized, skipping",
+		s.logger.Info(ctx, "MM price: client not initialized, skipping",
 			observability.String("cert", p.CertNumber))
 		return nil
 	}
@@ -165,6 +166,8 @@ func (s *MarketMoversRefreshScheduler) PriceSinglePurchase(ctx context.Context, 
 		return err
 	}
 	if cfg == nil {
+		s.logger.Info(ctx, "MM price: config not found, skipping",
+			observability.String("cert", p.CertNumber))
 		return nil
 	}
 
