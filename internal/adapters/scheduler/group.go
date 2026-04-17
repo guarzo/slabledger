@@ -22,6 +22,12 @@ func NewGroup(schedulers ...Scheduler) *Group {
 	return &Group{schedulers: schedulers}
 }
 
+// Add registers an additional scheduler with the group. Must be called before
+// StartAll so the new scheduler participates in Start/Stop/Wait.
+func (g *Group) Add(s Scheduler) {
+	g.schedulers = append(g.schedulers, s)
+}
+
 // StartAll starts each scheduler in its own goroutine.
 func (g *Group) StartAll(ctx context.Context) {
 	for _, s := range g.schedulers {

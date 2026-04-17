@@ -90,6 +90,13 @@ func (s *service) ImportCerts(ctx context.Context, certNumbers []string) (*CertI
 				existing.ReceivedAt = &receivedStr
 			}
 			s.enrollExistingInDHPushPipeline(ctx, existing, certNum, "cert import")
+			// An existing cert re-scanned at intake is likely a receipt event for a
+			// row that was created earlier (PSA sheet sync, CSV import). Price it
+			// now so the operator sees CL/MM values on the scan screen instead of
+			// waiting for the daily refresh.
+			if s.pricingQueue != nil {
+				s.pricingQueue.Enqueue(certNum)
+			}
 			result.AlreadyExisted++
 			continue
 		}
@@ -165,6 +172,9 @@ func (s *service) ImportCerts(ctx context.Context, certNumbers []string) (*CertI
 
 		if s.certEnrichQueue != nil {
 			s.certEnrichQueue.Enqueue(certNum)
+		}
+		if s.pricingQueue != nil {
+			s.pricingQueue.Enqueue(certNum)
 		}
 
 		importedCerts = append(importedCerts, certNum)
@@ -246,6 +256,9 @@ func (s *service) ScanCert(ctx context.Context, certNumber string) (*ScanCertRes
 		existing.ReceivedAt = &receivedStr
 	}
 	s.enrollExistingInDHPushPipeline(ctx, existing, certNumber, "scan cert")
+	if s.pricingQueue != nil {
+		s.pricingQueue.Enqueue(certNumber)
+	}
 
 	return &ScanCertResult{
 		Status:       "existing",
