@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"context"
+	"math"
 	"strconv"
 	"time"
 
@@ -162,7 +163,7 @@ func convertRecentSales(sales []dh.RecentSale) []intelligence.Sale {
 			SoldAt:         t,
 			GradingCompany: s.GradingCompany,
 			Grade:          s.Grade,
-			PriceCents:     int64(s.Price * 100),
+			PriceCents:     int64(math.Round(s.Price * 100)),
 			Platform:       s.Platform,
 		})
 	}

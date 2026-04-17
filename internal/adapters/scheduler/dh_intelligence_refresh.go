@@ -267,9 +267,6 @@ func (s *DHIntelligenceRefreshScheduler) seed(ctx context.Context, budget int) i
 
 	var seeded int
 	for i, c := range fetchables {
-		if budget <= 0 {
-			break
-		}
 		cardIDInt := cardIDs[i]
 		resp, fetchErr := s.dhClient.MarketDataEnterprise(ctx, cardIDInt)
 		if fetchErr != nil {
