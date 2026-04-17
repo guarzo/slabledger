@@ -91,6 +91,7 @@ export interface ScanCertResponse {
   purchaseId?: string;
   campaignId?: string;
   buyCostCents?: number;
+  market?: import('./market').MarketSnapshot;
 }
 
 export interface ResolveCertResponse {
