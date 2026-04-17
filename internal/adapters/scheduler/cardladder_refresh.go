@@ -2,7 +2,6 @@ package scheduler
 
 import (
 	"context"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -62,20 +61,16 @@ func WithCLEventRecorder(r dhevents.Recorder) CardLadderRefreshOption {
 
 // CLRunStats holds the counters from the most recent Card Ladder refresh run.
 type CLRunStats struct {
-	LastRunAt       time.Time `json:"lastRunAt"`
-	DurationMs      int64     `json:"durationMs"`
-	Updated         int       `json:"updated"`
-	Mapped          int       `json:"mapped"`  // Count of successful SaveMapping calls; logically separate from Updated. SaveMapping failures (which only log) don't block Updated, and zero-value cards short-circuit to NoValue without incrementing Updated, so the two counters can diverge in either direction.
-	Skipped         int       `json:"skipped"` // CL cards that did not match a purchase (CL-side perspective).
-	TotalCLCards    int       `json:"totalCLCards"`
-	CardsPushed     int       `json:"cardsPushed"`
-	CardsRemoved    int       `json:"cardsRemoved"`
-	OrphanMappings  int       `json:"orphanMappings"`  // Persistent mappings that neither matched a CL card this run nor correspond to a sold purchase.
-	OrphansRepushed int       `json:"orphansRepushed"` // Orphan cards re-pushed to the CL collection this run.
-	NoImageMatch    int       `json:"noImageMatch"`    // Unsold purchases with no CL card matched via image URL.
-	NoCertMatch     int       `json:"noCertMatch"`     // Unsold purchases that also failed cert-regex fallback.
-	NoValue         int       `json:"noValue"`         // Matched but both CL collection and cards catalog reported $0.
-	CatalogFallback int       `json:"catalogFallback"` // Matched at $0 in collection but CL cards catalog had a non-zero value.
+	LastRunAt         time.Time `json:"lastRunAt"`
+	DurationMs        int64     `json:"durationMs"`
+	TotalPurchases    int       `json:"totalPurchases"`    // Unsold purchases considered this run.
+	Updated           int       `json:"updated"`           // Purchases whose CL value was refreshed.
+	Resolved          int       `json:"resolved"`          // Certs newly resolved to gemRateID via BuildCollectionCard this run.
+	NoCert            int       `json:"noCert"`            // Purchases with no cert number (can't look up).
+	CertResolveFailed int       `json:"certResolveFailed"` // BuildCollectionCard errored or returned no gemRateID.
+	NoValue           int       `json:"noValue"`           // Resolved to gemRateID but catalog had no value.
+	CardsPushed       int       `json:"cardsPushed"`       // Cards pushed to CL remote collection (UI hygiene).
+	CardsRemoved      int       `json:"cardsRemoved"`      // Sold cards removed from CL remote collection (UI hygiene).
 }
 
 // CardLadderRefreshScheduler refreshes CL values from the Card Ladder API daily.
@@ -192,8 +187,14 @@ func (s *CardLadderRefreshScheduler) RunOnce(ctx context.Context) error {
 	return s.runOnce(ctx)
 }
 
-var certFromImageRe = regexp.MustCompile(`/cert/(\d+)/`)
-
+// runOnce executes the cert-first refresh cycle:
+//  1. List unsold purchases.
+//  2. For each purchase with a cert, ensure we have a gemRateID+condition
+//     (cached in cl_card_mappings, or resolved fresh via BuildCollectionCard).
+//  3. Batch-fetch catalog values for all resolved gemRateIDs.
+//  4. Apply values to purchases; record per-purchase errors for the admin UI.
+//  5. Phase 2 (sales comps), Phase 4 (push to CL remote for UI hygiene),
+//     Phase 5 (remove sold cards from CL remote).
 func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 	start := time.Now()
 
@@ -213,361 +214,223 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 		return nil
 	}
 
-	// Fetch all collection cards
-	cards, err := client.FetchAllCollection(ctx, cfg.CollectionID)
-	if err != nil {
-		s.logger.Error(ctx, "CL refresh: failed to fetch collection", observability.Err(err))
-		return err
-	}
-	s.logger.Info(ctx, "CL refresh: fetched collection",
-		observability.Int("cardCount", len(cards)))
-
-	// Fetch gemRateId data from Firestore
-	var firestoreData map[string]cardladder.FirestoreCardData
-	if cfg.FirebaseUID != "" {
-		firestoreData, err = client.FetchFirestoreCards(ctx, cfg.FirebaseUID, cfg.CollectionID)
-		if err != nil {
-			s.logger.Warn(ctx, "CL refresh: failed to fetch Firestore card data", observability.Err(err))
-			// Continue without gemRateId data — values still sync, just no sales comps
-		} else {
-			s.logger.Info(ctx, "CL refresh: fetched Firestore data",
-				observability.Int("cardsWithGemRate", len(firestoreData)))
-		}
-	}
-
-	// Load all unsold purchases for image URL matching
 	purchases, err := s.purchaseLister.ListAllUnsoldPurchases(ctx)
 	if err != nil {
 		s.logger.Error(ctx, "CL refresh: failed to list purchases", observability.Err(err))
 		return err
 	}
 
-	// Build image URL → purchase map for matching
-	imageToPurchase := make(map[string]*inventory.Purchase, len(purchases))
-	certToPurchase := make(map[string]*inventory.Purchase, len(purchases))
-	for i := range purchases {
-		p := &purchases[i]
-		if p.FrontImageURL != "" {
-			imageToPurchase[p.FrontImageURL] = p
-		}
-		if p.CertNumber != "" {
-			certToPurchase[p.CertNumber] = p
-		}
-	}
-
-	// Load existing mappings
-	mappingsLoadErr := false
 	existingMappings, err := s.store.ListMappings(ctx)
 	if err != nil {
-		s.logger.Warn(ctx, "CL refresh: failed to load card mappings — CL→purchase resolution, sales-comp, and collection reconciliation phases will be degraded or skipped this run", observability.Err(err))
-		mappingsLoadErr = true
+		s.logger.Warn(ctx, "CL refresh: failed to load card mappings — continuing without mapping cache", observability.Err(err))
 	}
-	mappingByCLCardID := make(map[string]*sqlite.CLCardMapping, len(existingMappings))
-	for i := range existingMappings {
-		mappingByCLCardID[existingMappings[i].CLCollectionCardID] = &existingMappings[i]
+	mappingByCert := make(map[string]sqlite.CLCardMapping, len(existingMappings))
+	for _, m := range existingMappings {
+		mappingByCert[m.SlabSerial] = m
 	}
 
-	// Batch-fetch live catalog values. The collectioncards index we already
-	// loaded carries a stale `currentValue` snapshot; the `cards` index is
-	// what CL's UI renders as "CL Value" and is the authoritative live price.
-	catalogValues := s.fetchCatalogValues(ctx, client, collectGemRateIDs(firestoreData, existingMappings))
+	// Phase 1: resolve (cert → gemRateID+condition) for every purchase that
+	// needs it. Collect the gemRateIDs we care about so Phase 2 can batch
+	// catalog fetches.
+	type resolved struct {
+		purchase  *inventory.Purchase
+		gemRateID string
+		condition string
+	}
+	resolvedPurchases := make([]resolved, 0, len(purchases))
+	stats := CLRunStats{TotalPurchases: len(purchases)}
+
+	for i := range purchases {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		p := &purchases[i]
+		if p.CertNumber == "" {
+			stats.NoCert++
+			s.recordCLError(ctx, p.ID, CLReasonNoCert)
+			continue
+		}
+
+		gemRateID, condition, ok := s.resolveGemRate(ctx, client, p, mappingByCert)
+		if !ok {
+			stats.CertResolveFailed++
+			continue
+		}
+		if _, cached := mappingByCert[p.CertNumber]; !cached {
+			stats.Resolved++
+		}
+		resolvedPurchases = append(resolvedPurchases, resolved{p, gemRateID, condition})
+	}
+
+	// Phase 2: batch-fetch live catalog values for every unique gemRateID we
+	// resolved.
+	gemRateSet := make(map[string]struct{}, len(resolvedPurchases))
+	for _, r := range resolvedPurchases {
+		gemRateSet[r.gemRateID] = struct{}{}
+	}
+	gemRateIDs := make([]string, 0, len(gemRateSet))
+	for id := range gemRateSet {
+		gemRateIDs = append(gemRateIDs, id)
+	}
+	catalogValues := s.fetchCatalogValues(ctx, client, gemRateIDs)
 	s.logger.Info(ctx, "CL refresh: catalog values loaded",
+		observability.Int("gemRateIds", len(gemRateIDs)),
 		observability.Int("catalogEntries", len(catalogValues)))
 
-	updated, mapped, skipped, noValue, catalogFallback := 0, 0, 0, 0, 0
-
-	// Track which purchase IDs had a successful CL card match + value update
-	// this run. Used for the second-pass error persistence over unmatched
-	// purchases (so the admin UI shows per-card failure reasons).
-	matchedPurchaseIDs := make(map[string]bool, len(purchases))
-	// Track which existing mapping SlabSerials resolved to a CL card hit
-	// this run. Any mapping NOT in this set but whose cert IS still in
-	// unsoldCerts is an "orphan": a stored mapping that no longer points
-	// to a live CL remote card — likely cleanup work the follow-up PR
-	// will tackle after we see the logged samples.
-	resolvedMappings := make(map[string]bool, len(existingMappings))
-
-	for _, card := range cards {
-		// Try to find the matching purchase
-		var purchase *inventory.Purchase
-
-		// First check if we have a cached mapping
-		if m, ok := mappingByCLCardID[card.CollectionCardID]; ok {
-			purchase = certToPurchase[m.SlabSerial]
-			if purchase != nil {
-				resolvedMappings[m.SlabSerial] = true
-			}
+	// Phase 3: apply catalog values to purchases. Record per-purchase errors
+	// (no_value) for the admin UI.
+	for _, r := range resolvedPurchases {
+		if ctx.Err() != nil {
+			return ctx.Err()
 		}
-
-		// Primary match: image URL
-		if purchase == nil && card.Image != "" {
-			purchase = imageToPurchase[card.Image]
-		}
-
-		// Fallback: extract cert from image URL path
-		if purchase == nil && card.Image != "" {
-			if matches := certFromImageRe.FindStringSubmatch(card.Image); len(matches) > 1 {
-				purchase = certToPurchase[matches[1]]
-			}
-		}
-
-		if purchase == nil {
-			skipped++
+		value, hit := catalogValues[catalogValueKey(r.gemRateID, r.condition)]
+		if !hit || value <= 0 {
+			stats.NoValue++
+			s.recordCLError(ctx, r.purchase.ID, CLReasonNoValue)
 			continue
 		}
-
-		// Save/update mapping
-		// Use Firestore gemRate data if available, otherwise preserve existing mapping values
-		condition := card.Condition
-		gemRateID := ""
-		if fd, ok := firestoreData[card.CollectionCardID]; ok {
-			gemRateID = fd.GemRateID
-			if fd.GemRateCondition != "" {
-				condition = fd.GemRateCondition
-			}
-		} else if existing, ok := mappingByCLCardID[card.CollectionCardID]; ok {
-			// No Firestore entry — preserve previously stored gemRateID
-			gemRateID = existing.CLGemRateID
-		}
-
-		if err := s.store.SaveMapping(ctx, purchase.CertNumber, card.CollectionCardID, gemRateID, condition); err != nil {
-			s.logger.Warn(ctx, "CL refresh: failed to save mapping",
-				observability.String("cert", purchase.CertNumber),
-				observability.Err(err))
-		} else {
-			mapped++
-		}
-
-		// Persist gemRateID on purchase if resolved
-		if gemRateID != "" && s.gemRateUpdater != nil && purchase.GemRateID == "" {
-			if err := s.gemRateUpdater.UpdatePurchaseGemRateID(ctx, purchase.ID, gemRateID); err != nil {
-				s.logger.Warn(ctx, "CL refresh: failed to persist gemRateID",
-					observability.String("cert", purchase.CertNumber),
-					observability.Err(err))
-			} else {
-				purchase.GemRateID = gemRateID // keep in-memory slice in sync for gap-fill phase
-			}
-		}
-
-		// Update CL value. Prefer the live catalog value (matches CL's UI);
-		// fall back to the collection snapshot when the catalog has no entry
-		// for this (gemRateID, condition) pair. card.Condition is the
-		// grade-string form ("PSA 9") used by the catalog index — NOT the
-		// Firestore-sourced "g9" form captured in `condition` above.
-		effectiveCLValue := pickCLValue(catalogValues, gemRateID, card.Condition, card.CurrentValue)
-		newCLCents := mathutil.ToCentsInt(effectiveCLValue)
-		fellBack := false
-		if newCLCents <= 0 {
-			// Collection index reports $0. Try the CL cards catalog (grade-specific,
-			// market-wide view) — often has a usable value when the user's specific
-			// collection entry is stuck at zero. Pass the canonical gemRateID and
-			// condition already resolved above so the catalog lookup matches what
-			// we just saved to the mapping.
-			fallbackCents, fbErr := s.fetchCatalogFallbackValue(ctx, client, purchase, gemRateID, condition)
-			if fbErr != nil {
-				// API failure — distinct from a genuine catalog miss. Tag the row
-				// so ops can see whether CL is misbehaving vs actually empty.
-				matchedPurchaseIDs[purchase.ID] = true
-				resolvedMappings[purchase.CertNumber] = true
-				s.recordCLError(ctx, purchase.ID, CLReasonAPIError)
-				continue
-			}
-			if fallbackCents <= 0 {
-				// Catalog also has nothing. Persist so the admin UI can show
-				// "matched without a price" distinct from "unmapped". Mark as
-				// matched so the second pass doesn't overwrite the `no_value`
-				// reason with `no_image_match`.
-				noValue++
-				matchedPurchaseIDs[purchase.ID] = true
-				resolvedMappings[purchase.CertNumber] = true
-				s.recordCLError(ctx, purchase.ID, CLReasonNoValue)
-				continue
-			}
-			newCLCents = fallbackCents
-			fellBack = true
-			catalogFallback++
-		}
-
-		oldCLCents := purchase.CLValueCents
-		if err := s.valueUpdater.UpdatePurchaseCLValue(ctx, purchase.ID, newCLCents, purchase.Population); err != nil {
+		newCLCents := mathutil.ToCentsInt(value)
+		oldCLCents := r.purchase.CLValueCents
+		if err := s.valueUpdater.UpdatePurchaseCLValue(ctx, r.purchase.ID, newCLCents, r.purchase.Population); err != nil {
 			s.logger.Warn(ctx, "CL refresh: failed to update CL value",
-				observability.String("cert", purchase.CertNumber),
+				observability.String("cert", r.purchase.CertNumber),
 				observability.Err(err))
 			continue
 		}
+		stats.Updated++
+		s.recordCLError(ctx, r.purchase.ID, "")
 
 		// Re-enroll for DH push when market value changes. Two qualifying cases:
 		//  1. Already-pushed rows (DHInventoryID != 0) — so DH picks up the new price.
 		//  2. Received-but-unmatched rows — so a fresh cert resolve is attempted
 		//     with the new market value, which may push it above a price floor.
-		if s.dhPushUpdater != nil && newCLCents != oldCLCents && shouldReenrollForCLChange(purchase) {
-			if err := s.dhPushUpdater.UpdatePurchaseDHPushStatus(ctx, purchase.ID, inventory.DHPushStatusPending); err != nil {
+		if s.dhPushUpdater != nil && newCLCents != oldCLCents && shouldReenrollForCLChange(r.purchase) {
+			if err := s.dhPushUpdater.UpdatePurchaseDHPushStatus(ctx, r.purchase.ID, inventory.DHPushStatusPending); err != nil {
 				s.logger.Warn(ctx, "CL refresh: failed to re-enroll for DH push",
-					observability.String("cert", purchase.CertNumber),
+					observability.String("cert", r.purchase.CertNumber),
 					observability.Err(err))
 			} else {
 				s.recordEvent(ctx, dhevents.Event{
-					PurchaseID:    purchase.ID,
-					CertNumber:    purchase.CertNumber,
+					PurchaseID:    r.purchase.ID,
+					CertNumber:    r.purchase.CertNumber,
 					Type:          dhevents.TypeEnrolled,
 					NewPushStatus: inventory.DHPushStatusPending,
 					Source:        dhevents.SourceCLRefresh,
 				})
 			}
 		}
-
-		updated++
-		matchedPurchaseIDs[purchase.ID] = true
-		resolvedMappings[purchase.CertNumber] = true
-		if fellBack {
-			// Tag rows priced from the catalog fallback so operators can see
-			// which rows are using the workaround, and how many.
-			s.recordCLError(ctx, purchase.ID, CLReasonCatalogFallback)
-		} else {
-			// Clear any prior CL error now that this purchase is successfully priced.
-			s.recordCLError(ctx, purchase.ID, "")
-		}
 	}
 
-	// Second pass: for every unsold purchase that did NOT get matched this run,
-	// persist a failure reason tag so the admin UI can group and show why.
-	// This is how we know which cards to investigate in the follow-up PR.
-	noImageMatch, noCertMatch := 0, 0
-	for i := range purchases {
-		p := &purchases[i]
-		if matchedPurchaseIDs[p.ID] {
-			continue
-		}
-		reason := CLReasonNoImageMatch
-		if p.CertNumber == "" {
-			reason = CLReasonNoCertMatch
-			noCertMatch++
-		} else {
-			noImageMatch++
-		}
-		s.recordCLError(ctx, p.ID, reason)
-	}
-
-	// Orphan audit: persistent mappings whose cert is still in the unsold
-	// set but didn't resolve to a CL card this run — the card is missing
-	// from the remote CL collection. Re-push these so CL has the card and
-	// future sync runs can update values.
-	orphanMappings := 0
-	var orphanCerts []string
-	for _, m := range existingMappings {
-		if resolvedMappings[m.SlabSerial] {
-			continue
-		}
-		if _, stillUnsold := certToPurchase[m.SlabSerial]; stillUnsold {
-			orphanMappings++
-			orphanCerts = append(orphanCerts, m.SlabSerial)
-		}
-	}
-	orphansRepushed := 0
-	if orphanMappings > 0 && cfg.FirebaseUID != "" {
-		s.logger.Info(ctx, "CL refresh: re-pushing orphan cards missing from collection",
-			observability.Int("orphanMappings", orphanMappings))
-		// Note: pushSingleCard calls ResolveAndCreateCard which always creates
-		// a new Firestore doc. If the remote card exists but our fetch missed it,
-		// this could create a duplicate. CL has no "create-if-not-exists" API.
-		// SaveMapping (upsert by slab_serial PK) overwrites the old mapping with
-		// the new doc ID, so locally we stay consistent. A Firestore-side dedup
-		// would require a new CL client method to query by cert first.
-		for _, cert := range orphanCerts {
-			if ctx.Err() != nil {
-				break
-			}
-			p := certToPurchase[cert]
-			grader := strings.ToLower(p.Grader)
-			if grader == "" {
-				grader = "psa"
-			}
-			if err := s.pushSingleCard(ctx, client, cfg.FirebaseUID, cfg.CollectionID, p, grader); err != nil {
-				s.logger.Warn(ctx, "CL refresh: failed to re-push orphan card",
-					observability.String("cert", cert),
-					observability.Err(err))
-				continue
-			}
-			orphansRepushed++
-		}
-		s.logger.Info(ctx, "CL refresh: orphan re-push complete",
-			observability.Int("orphans", orphanMappings),
-			observability.Int("repushed", orphansRepushed))
-	}
-
-	// Phase 2: fetch sales comps for mapped cards with gemRateIDs.
-	// Note: newly created mappings from this run are intentionally deferred
-	// to the next refresh cycle to avoid extra API calls during initial sync.
+	// Phase 4: refresh sales comps (uses the fresh mapping set).
+	freshMappings, _ := s.store.ListMappings(ctx)
 	if s.salesStore != nil {
-		s.refreshSalesComps(ctx, client, existingMappings)
+		s.refreshSalesComps(ctx, client, freshMappings)
 	}
 
-	// Phase 3: gap-fill gemRateIDs for purchases not matched via collection/Firestore.
-	if s.gemRateUpdater != nil {
-		s.gapFillGemRateIDs(ctx, client, purchases)
-	}
-
-	// Phase 4: push new unsold purchases (with certs) that aren't yet in the CL collection.
-	// Reload mappings so any new mappings created by the main loop are included in the
-	// dedup check — using the stale snapshot would cause the main loop's newly-mapped
-	// certs to appear unmapped and get pushed a second time (duplicate Firestore docs).
-	// Skip entirely if the original ListMappings call failed: we cannot safely determine
-	// which certs are already in the remote collection.
+	// Phase 5: push new certs to the CL remote collection for UI hygiene.
+	// Not required for pricing (that happens via BuildCollectionCard above) —
+	// only matters so the user's CL collection view reflects our inventory.
 	cardsPushed := 0
-	if cfg.FirebaseUID != "" && !mappingsLoadErr {
-		freshMappings, freshErr := s.store.ListMappings(ctx)
-		if freshErr != nil {
-			s.logger.Warn(ctx, "CL push: skipping — could not reload mappings for dedup check", observability.Err(freshErr))
-		} else {
-			cardsPushed = s.pushNewCards(ctx, client, cfg.FirebaseUID, cfg.CollectionID, purchases, freshMappings)
-		}
+	if cfg.FirebaseUID != "" {
+		cardsPushed = s.pushNewCards(ctx, client, cfg.FirebaseUID, cfg.CollectionID, purchases, freshMappings)
 	}
+	stats.CardsPushed = cardsPushed
 
-	// Phase 5: remove sold cards from the CL collection.
-	// Uses existingMappings (the pre-loop snapshot) intentionally: sold cards were already
-	// absent from Firestore before this run began, so freshness is not required for deletes.
-	// Phase 4 needed a fresh snapshot to avoid re-pushing cards just mapped in the main loop;
-	// Phase 5 has no equivalent hazard — it only deletes mappings whose cert is no longer
-	// in the unsold set, which cannot change within a single run.
+	// Phase 6: remove sold cards from the CL remote collection.
 	cardsRemoved := 0
 	if cfg.FirebaseUID != "" {
-		cardsRemoved = s.removeSoldCards(ctx, client, cfg.FirebaseUID, cfg.CollectionID, purchases, existingMappings)
+		cardsRemoved = s.removeSoldCards(ctx, client, cfg.FirebaseUID, cfg.CollectionID, purchases, freshMappings)
 	}
+	stats.CardsRemoved = cardsRemoved
+
+	stats.LastRunAt = start
+	stats.DurationMs = time.Since(start).Milliseconds()
 
 	s.logger.Info(ctx, "CL refresh: complete",
-		observability.Int("updated", updated),
-		observability.Int("mapped", mapped),
-		observability.Int("skipped", skipped),
-		observability.Int("totalCLCards", len(cards)),
-		observability.Int("pushed", cardsPushed),
-		observability.Int("removed", cardsRemoved),
-		observability.Int("orphanMappings", orphanMappings),
-		observability.Int("orphansRepushed", orphansRepushed),
-		observability.Int("noImageMatch", noImageMatch),
-		observability.Int("noCertMatch", noCertMatch),
-		observability.Int("noValue", noValue),
-		observability.Int("catalogFallback", catalogFallback))
+		observability.Int("totalPurchases", stats.TotalPurchases),
+		observability.Int("updated", stats.Updated),
+		observability.Int("resolved", stats.Resolved),
+		observability.Int("noCert", stats.NoCert),
+		observability.Int("certResolveFailed", stats.CertResolveFailed),
+		observability.Int("noValue", stats.NoValue),
+		observability.Int("cardsPushed", stats.CardsPushed),
+		observability.Int("cardsRemoved", stats.CardsRemoved))
 
 	s.statsMu.Lock()
-	s.lastRunStats = &CLRunStats{
-		LastRunAt:       start,
-		DurationMs:      time.Since(start).Milliseconds(),
-		Updated:         updated,
-		Mapped:          mapped,
-		Skipped:         skipped,
-		TotalCLCards:    len(cards),
-		CardsPushed:     cardsPushed,
-		CardsRemoved:    cardsRemoved,
-		OrphanMappings:  orphanMappings,
-		OrphansRepushed: orphansRepushed,
-		NoImageMatch:    noImageMatch,
-		NoCertMatch:     noCertMatch,
-		NoValue:         noValue,
-		CatalogFallback: catalogFallback,
-	}
+	s.lastRunStats = &stats
 	s.statsMu.Unlock()
 
 	return nil
+}
+
+// resolveGemRate returns the (gemRateID, condition) pair for a purchase, using
+// the cached mapping when possible and calling BuildCollectionCard when not.
+// On success it persists the mapping and the purchase's gemRateID. On failure
+// it records a CLReasonAPIError tag and returns ok=false.
+func (s *CardLadderRefreshScheduler) resolveGemRate(
+	ctx context.Context,
+	client *cardladder.Client,
+	p *inventory.Purchase,
+	mappingByCert map[string]sqlite.CLCardMapping,
+) (gemRateID, condition string, ok bool) {
+	if m, cached := mappingByCert[p.CertNumber]; cached && m.CLGemRateID != "" && m.CLCondition != "" {
+		return m.CLGemRateID, m.CLCondition, true
+	}
+
+	grader := strings.ToLower(p.Grader)
+	if grader == "" {
+		grader = "psa"
+	}
+
+	resp, err := client.BuildCollectionCard(ctx, p.CertNumber, grader)
+	if err != nil {
+		s.logger.Warn(ctx, "CL refresh: BuildCollectionCard failed",
+			observability.String("cert", p.CertNumber),
+			observability.Err(err))
+		s.recordCLError(ctx, p.ID, CLReasonAPIError)
+		return "", "", false
+	}
+	if resp.GemRateID == "" || resp.Condition == "" {
+		s.logger.Warn(ctx, "CL refresh: BuildCollectionCard returned no gemRateID or condition",
+			observability.String("cert", p.CertNumber),
+			observability.String("gemRateId", resp.GemRateID),
+			observability.String("condition", resp.Condition))
+		s.recordCLError(ctx, p.ID, CLReasonCertResolveFailed)
+		return "", "", false
+	}
+
+	if err := s.store.SaveMappingPricing(ctx, p.CertNumber, resp.GemRateID, resp.Condition); err != nil {
+		s.logger.Warn(ctx, "CL refresh: failed to save pricing mapping",
+			observability.String("cert", p.CertNumber),
+			observability.Err(err))
+		// Soft failure — we can still price this run, but the mapping won't
+		// be cached next run. Return the resolved values anyway.
+	} else {
+		mappingByCert[p.CertNumber] = sqlite.CLCardMapping{
+			SlabSerial:  p.CertNumber,
+			CLGemRateID: resp.GemRateID,
+			CLCondition: resp.Condition,
+		}
+	}
+	if s.gemRateUpdater != nil {
+		if p.GemRateID == "" {
+			if err := s.gemRateUpdater.UpdatePurchaseGemRateID(ctx, p.ID, resp.GemRateID); err != nil {
+				s.logger.Warn(ctx, "CL refresh: failed to persist gemRateID on purchase",
+					observability.String("cert", p.CertNumber),
+					observability.Err(err))
+			} else {
+				p.GemRateID = resp.GemRateID
+			}
+		}
+		if resp.Player != "" || resp.Variation != "" || resp.Category != "" {
+			if err := s.gemRateUpdater.UpdatePurchaseCLCardMetadata(ctx, p.ID, resp.Player, resp.Variation, resp.Category); err != nil {
+				s.logger.Warn(ctx, "CL refresh: failed to persist card metadata",
+					observability.String("cert", p.CertNumber),
+					observability.Err(err))
+			}
+		}
+	}
+	return resp.GemRateID, resp.Condition, true
 }
 
 // shouldReenrollForCLChange returns true when a CL value change should

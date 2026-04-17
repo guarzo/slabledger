@@ -178,7 +178,7 @@ export function CardLadderTab({ enabled = true }: { enabled?: boolean }) {
               <p className="text-xs text-[var(--text-muted)]">
                 {(lastRun.updated ?? 0) > 0
                   ? <span className="text-[var(--success)]">{lastRun.updated} updated</span>
-                  : <span>0 updated</span>} · {lastRun.mapped ?? 0} mapped · {lastRun.skipped ?? 0} skipped · {lastRun.totalCLCards ?? 0} total CL cards
+                  : <span>0 updated</span>} · {lastRun.resolved ?? 0} newly resolved · {lastRun.totalPurchases ?? 0} purchases
               </p>
               {((lastRun.cardsPushed ?? 0) > 0 || (lastRun.cardsRemoved ?? 0) > 0) && (
                 <p className="text-xs text-[var(--text-muted)]">

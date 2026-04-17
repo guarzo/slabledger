@@ -47,17 +47,14 @@ export interface CLPriceStats {
 export interface CLLastRun {
   lastRunAt: string;
   durationMs: number;
+  totalPurchases: number;
   updated: number;
-  mapped: number;
-  skipped: number;
-  totalCLCards: number;
+  resolved: number;
+  noCert: number;
+  certResolveFailed: number;
+  noValue: number;
   cardsPushed: number;
   cardsRemoved: number;
-  orphanMappings: number;
-  orphansRepushed: number;
-  noImageMatch: number;
-  noCertMatch: number;
-  noValue: number;
 }
 
 export interface CLStatusResponse {
