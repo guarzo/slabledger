@@ -133,7 +133,7 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
       setDHListedOptimistic(prev => new Set(prev).add(purchaseId));
       invalidateInventory();
     } catch (err) {
-      if (isAPIError(err) && err.status === 409 && err.data?.error === 'Purchase already listed on DH') {
+      if (isAlreadyListedError(err)) {
         toast.success('Listed on DH');
         setDHListedOptimistic(prev => new Set(prev).add(purchaseId));
       } else {

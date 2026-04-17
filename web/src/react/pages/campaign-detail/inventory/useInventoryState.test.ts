@@ -115,7 +115,8 @@ describe('useInventoryState — handleBulkListOnDH', () => {
         new APIError('Purchase already listed on DH', 409, undefined, { error: 'Purchase already listed on DH' })
       );
 
-    const { wrapper } = makeWrapper();
+    const { wrapper, queryClient } = makeWrapper();
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
     const { result } = renderHook(() => useInventoryState(EMPTY_ITEMS, 'camp-1'), { wrapper });
 
     await act(async () => {
@@ -125,5 +126,6 @@ describe('useInventoryState — handleBulkListOnDH', () => {
     expect(result.current.dhListedOptimistic.has('p-a')).toBe(true);
     expect(result.current.dhListedOptimistic.has('p-b')).toBe(true);
     expect(result.current.dhListingInFlight.size).toBe(0);
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['campaigns', 'camp-1', 'inventory'] });
   });
 });
