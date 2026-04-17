@@ -56,6 +56,17 @@ type PopulationEntry struct {
 	Count          int
 }
 
+// SeedCandidate identifies a card for which we want to fetch initial market
+// intelligence. The DH refresh scheduler uses this to seed rows into
+// market_intelligence — the existing GetStale loop only refreshes rows that
+// already exist, so without seeding the table stays empty forever.
+type SeedCandidate struct {
+	DHCardID   string
+	CardName   string
+	SetName    string
+	CardNumber string
+}
+
 // Insights holds AI-generated market insights.
 type Insights struct {
 	Headline string

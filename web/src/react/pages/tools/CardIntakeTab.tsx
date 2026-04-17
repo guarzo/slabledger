@@ -1,11 +1,13 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
-import { api } from '../../../js/api';
+import { api, isAPIError } from '../../../js/api';
 import type { ScanCertResponse, ResolveCertResponse, CertImportResult, MarketSnapshot } from '../../../types/campaigns';
-import { centsToDollars, dollarsToCents, formatCents } from '../../utils/formatters';
-import SignalChip from '../campaign-detail/inventory/SignalChip';
+import { formatCents } from '../../utils/formatters';
+import PriceDecisionBar from '../../ui/PriceDecisionBar';
+import { buildPriceSources } from '../../ui/priceDecisionHelpers';
+import type { PreSelection } from '../../ui/priceDecisionHelpers';
 
 type CertStatus = 'scanning' | 'existing' | 'sold' | 'returned' | 'resolving' | 'resolved' | 'failed' | 'importing' | 'imported';
-type ListingStatus = 'idle' | 'setting-price' | 'listing' | 'listed' | 'list-error';
+type ListingStatus = 'setting-price' | 'listing' | 'listed' | 'list-error';
 
 interface CertRow {
   certNumber: string;
@@ -16,8 +18,6 @@ interface CertRow {
   error?: string;
   buyCostCents?: number;
   market?: MarketSnapshot;
-  expanded?: boolean;
-  priceInput?: string;
   listingStatus?: ListingStatus;
   listingError?: string;
 }
@@ -57,34 +57,16 @@ export default function CardIntakeTab() {
     }
   }, [updateCert]);
 
-  const handleExpandListing = useCallback((certNumber: string) => {
-    setCerts(prev => {
-      const next = new Map(prev);
-      const row = next.get(certNumber);
-      if (!row) return prev;
-      const nowExpanded = !row.expanded;
-      const seed = row.market?.conservativeCents
-        ?? row.market?.medianCents
-        ?? row.market?.gradePriceCents
-        ?? 0;
-      const priceInput =
-        !row.expanded && seed > 0 ? centsToDollars(seed) : (row.priceInput ?? '');
-      next.set(certNumber, { ...row, expanded: nowExpanded, priceInput, listingError: undefined });
-      return next;
-    });
-  }, []);
-
-  const handleSetPriceAndList = useCallback(async (certNumber: string) => {
+  const handleSetPriceAndList = useCallback(async (certNumber: string, priceCents: number, source: string) => {
     const row = certsRef.current.get(certNumber);
     if (!row?.purchaseId) return;
-    const priceCents = dollarsToCents(row.priceInput ?? '');
     if (priceCents <= 0) {
       updateCert(certNumber, { listingError: 'Enter a valid price before listing.' });
       return;
     }
     updateCert(certNumber, { listingStatus: 'setting-price', listingError: undefined });
     try {
-      await api.setReviewedPrice(row.purchaseId, priceCents, 'intake');
+      await api.setReviewedPrice(row.purchaseId, priceCents, source);
     } catch (err) {
       updateCert(certNumber, {
         listingStatus: 'list-error',
@@ -95,8 +77,12 @@ export default function CardIntakeTab() {
     updateCert(certNumber, { listingStatus: 'listing' });
     try {
       await api.listPurchaseOnDH(row.purchaseId);
-      updateCert(certNumber, { listingStatus: 'listed', expanded: false });
+      updateCert(certNumber, { listingStatus: 'listed' });
     } catch (err) {
+      if (isAPIError(err) && err.status === 409 && err.data?.error === 'Purchase already listed on DH') {
+        updateCert(certNumber, { listingStatus: 'listed' });
+        return;
+      }
       const msg = err instanceof Error ? err.message : 'Listing failed';
       updateCert(certNumber, {
         listingStatus: 'list-error',
@@ -105,10 +91,6 @@ export default function CardIntakeTab() {
           : msg,
       });
     }
-  }, [updateCert]);
-
-  const handlePriceChange = useCallback((certNumber: string, value: string) => {
-    updateCert(certNumber, { priceInput: value });
   }, [updateCert]);
 
   const handleScan = useCallback(async (certNumber: string) => {
@@ -287,9 +269,7 @@ export default function CardIntakeTab() {
               highlighted={row.certNumber === highlightedCert}
               onReturn={handleReturnToInventory}
               onDismiss={handleDismiss}
-              onExpand={handleExpandListing}
               onList={handleSetPriceAndList}
-              onPriceChange={handlePriceChange}
             />
           ))}
         </div>
@@ -385,21 +365,33 @@ function CertRowItem({
   highlighted,
   onReturn,
   onDismiss,
-  onExpand,
   onList,
-  onPriceChange,
 }: {
   row: CertRow;
   highlighted?: boolean;
   onReturn: (certNumber: string) => void;
   onDismiss: (certNumber: string) => void;
-  onExpand: (certNumber: string) => void;
-  onList: (certNumber: string) => void;
-  onPriceChange: (certNumber: string, value: string) => void;
+  onList: (certNumber: string, priceCents: number, source: string) => void;
 }) {
   const s = STATUS_STYLE[row.status];
   const canList = (row.status === 'existing' || row.status === 'returned') && !!row.purchaseId;
-  const showListedChip = row.listingStatus === 'listed';
+  const { market, buyCostCents, listingStatus, listingError } = row;
+  const busy = listingStatus === 'setting-price' || listingStatus === 'listing';
+  const listed = listingStatus === 'listed';
+
+  const sources = canList
+    ? buildPriceSources({
+        clCents: market?.clValueCents ?? 0,
+        dhMidCents: market?.gradePriceCents ?? 0,
+        costCents: buyCostCents ?? 0,
+        lastSoldCents: market?.lastSoldCents ?? 0,
+        mmCents: market?.sourcePrices?.find(p => p.source === 'MarketMovers')?.priceCents ?? 0,
+      })
+    : [];
+  const dhCents = market?.gradePriceCents ?? 0;
+  const preSelected: PreSelection = dhCents > 0
+    ? { kind: 'source', source: 'dh' }
+    : { kind: 'none' };
 
   return (
     <div
@@ -425,23 +417,6 @@ function CertRowItem({
           )}
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          {showListedChip && (
-            <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold bg-[var(--success)]/15 text-[var(--success)]">
-              ✓ Listed
-            </span>
-          )}
-          {canList && !showListedChip && (
-            <button
-              onClick={() => onExpand(row.certNumber)}
-              className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
-                row.expanded
-                  ? 'bg-[var(--brand-500)]/30 text-[var(--brand-400)]'
-                  : 'bg-[var(--brand-500)]/15 text-[var(--brand-400)] hover:bg-[var(--brand-500)]/30'
-              }`}
-            >
-              {row.expanded ? 'Close' : '$ List'}
-            </button>
-          )}
           {row.status === 'sold' && (
             <button
               onClick={() => onReturn(row.certNumber)}
@@ -465,97 +440,22 @@ function CertRowItem({
         </div>
       </div>
 
-      {row.expanded && (
-        <ListingPanel row={row} onPriceChange={onPriceChange} onList={onList} />
-      )}
-    </div>
-  );
-}
-
-function ListingPanel({
-  row,
-  onPriceChange,
-  onList,
-}: {
-  row: CertRow;
-  onPriceChange: (certNumber: string, value: string) => void;
-  onList: (certNumber: string) => void;
-}) {
-  const { market, priceInput, listingStatus, listingError, certNumber, purchaseId, buyCostCents } = row;
-  const busy = listingStatus === 'setting-price' || listingStatus === 'listing';
-  const listed = listingStatus === 'listed';
-
-  const cost = buyCostCents ?? 0;
-  const dh = market?.gradePriceCents ?? 0;
-  const cl = market?.clValueCents ?? 0;
-  const mm = market?.sourcePrices?.find(p => p.source === 'MarketMovers')?.priceCents ?? 0;
-  const lastSold = market?.lastSoldCents ?? 0;
-  const lastSoldDate = market?.lastSoldDate;
-
-  const deltaIfCost = (v: number) => (cost > 0 && v > 0 ? v - cost : undefined);
-  const hasAnyData = cost > 0 || dh > 0 || cl > 0 || mm > 0 || lastSold > 0;
-
-  return (
-    <div className="border-t border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.015)] px-4 py-3">
-      {hasAnyData ? (
-        <div className="flex flex-wrap gap-2 mb-3">
-          <SignalChip label="Cost" valueCents={cost} />
-          <SignalChip label="DH" valueCents={dh} deltaVsCostCents={deltaIfCost(dh)} />
-          <SignalChip label="CL" valueCents={cl} deltaVsCostCents={deltaIfCost(cl)} />
-          <SignalChip label="MM" valueCents={mm} deltaVsCostCents={deltaIfCost(mm)} />
-          <SignalChip
-            label="Last Sold"
-            valueCents={lastSold}
-            deltaVsCostCents={deltaIfCost(lastSold)}
-            subtitle={lastSoldDate ? new Date(lastSoldDate).toLocaleDateString() : undefined}
+      {canList && (
+        <div className="border-t border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.015)] px-4 py-2.5">
+          <PriceDecisionBar
+            sources={sources}
+            preSelected={preSelected}
+            recommendedSource="dh"
+            costBasisCents={buyCostCents}
+            status={listed ? 'accepted' : 'pending'}
+            isSubmitting={busy}
+            confirmLabel={listingStatus === 'setting-price' ? 'Setting price…' : 'List on DH'}
+            onConfirm={(priceCents, source) => onList(row.certNumber, priceCents, source)}
           />
+          {listingError && (
+            <p className="text-xs text-[var(--danger)] mt-2">{listingError}</p>
+          )}
         </div>
-      ) : (
-        <p className="text-xs text-[var(--text-muted)] mb-3">No market data on file — enter price manually.</p>
-      )}
-
-      <div className="flex items-center gap-2">
-        <div className="flex items-center gap-2 rounded-md border border-[rgba(255,255,255,0.06)] bg-[var(--surface-2)] pl-2.5 pr-1 py-1">
-          <span className="text-xs text-[var(--text-muted)]">$</span>
-          <input
-            type="number"
-            min="0"
-            step="0.01"
-            value={priceInput ?? ''}
-            onChange={e => onPriceChange(certNumber, e.target.value)}
-            disabled={busy || listed}
-            placeholder="0.00"
-            className="w-24 bg-transparent font-mono text-sm tabular-nums text-[var(--text)] focus:outline-none disabled:opacity-50"
-          />
-        </div>
-        <button
-          onClick={() => onList(certNumber)}
-          disabled={busy || listed || !purchaseId}
-          className="rounded-lg bg-[var(--brand-500)] px-4 py-1.5 text-xs font-semibold text-white hover:bg-[var(--brand-600)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-        >
-          {busy
-            ? listingStatus === 'setting-price' ? 'Setting price…' : 'Listing…'
-            : listed
-            ? '✓ Listed'
-            : 'List on DH'}
-        </button>
-        {purchaseId && market && dh > 0 && !busy && !listed && (
-          <button
-            type="button"
-            onClick={() => onPriceChange(certNumber, centsToDollars(dh))}
-            className="text-[10px] font-medium text-[var(--text-muted)] hover:text-[var(--text)] transition-colors"
-            title="Reset to DH price"
-          >
-            Use DH ({formatCents(dh)})
-          </button>
-        )}
-      </div>
-
-      {listingError && (
-        <p className="text-xs text-[var(--danger)] mt-2">{listingError}</p>
-      )}
-      {!purchaseId && (
-        <p className="text-xs text-[var(--text-muted)] mt-2">Scan again after import to enable listing.</p>
       )}
     </div>
   );
