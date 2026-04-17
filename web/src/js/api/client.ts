@@ -256,7 +256,12 @@ export class APIClient {
       try {
         const data = JSON.parse(text);
         if (data.error) {
-          throw new APIError(data.message || data.error, response.status, data.code, data);
+          throw new APIError(
+            data.error || data.message || `API error: ${response.status} ${response.statusText}`,
+            response.status,
+            data.code,
+            data,
+          );
         }
       } catch (e) {
         // If it's our APIError, rethrow it
@@ -306,7 +311,7 @@ export class APIClient {
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
         throw new APIError(
-          data.message || `Upload failed: ${response.status} ${response.statusText}`,
+          data.error || data.message || `Upload failed: ${response.status} ${response.statusText}`,
           response.status,
           data.code,
           data,

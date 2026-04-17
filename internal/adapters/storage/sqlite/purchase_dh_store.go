@@ -382,6 +382,9 @@ func (ps *PurchaseStore) ListUnsoldDHCardSeeds(ctx context.Context) ([]intellige
 		  AND c.phase != 'closed'
 		  AND p.dh_card_id IS NOT NULL
 		  AND p.dh_card_id != 0
+		  AND NOT EXISTS (
+		    SELECT 1 FROM market_intelligence m WHERE m.dh_card_id = CAST(p.dh_card_id AS TEXT)
+		  )
 		GROUP BY p.dh_card_id, p.card_name, p.set_name, p.card_number`
 	rows, err := ps.db.QueryContext(ctx, query)
 	if err != nil {
