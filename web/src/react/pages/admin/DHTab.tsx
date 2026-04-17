@@ -28,7 +28,7 @@ export function DHTab({ enabled = true }: { enabled?: boolean }) {
   if (error && !status) {
     return (
       <CardShell padding="lg">
-        <p className="text-red-400 text-sm">Failed to load DH status. Integration may not be configured.</p>
+        <p className="text-[var(--danger)] text-sm">Failed to load DH status. Integration may not be configured.</p>
       </CardShell>
     );
   }
@@ -53,7 +53,7 @@ export function DHTab({ enabled = true }: { enabled?: boolean }) {
         {/* Header row */}
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            <span className={`w-2 h-2 rounded-full shrink-0 ${apiHealth && apiHealth.success_rate >= 0.95 ? 'bg-emerald-400' : 'bg-yellow-400'}`} />
+            <span className={`w-2 h-2 rounded-full shrink-0 ${apiHealth && apiHealth.success_rate >= 0.95 ? 'bg-[var(--success)]' : 'bg-[var(--warning)]'}`} />
             <span className="text-sm font-semibold text-[var(--text)]">
               {apiHealth && apiHealth.success_rate >= 0.95 ? 'Healthy' : 'Degraded'}
             </span>
@@ -70,7 +70,7 @@ export function DHTab({ enabled = true }: { enabled?: boolean }) {
           )}
           {status?.unmatched_count !== undefined && (
             <p className="text-xs text-[var(--text-muted)]">
-              Unmatched: <span className={status.unmatched_count > 0 ? 'text-orange-400' : 'text-[var(--text)]'}>{status.unmatched_count}</span>
+              Unmatched: <span className={status.unmatched_count > 0 ? 'text-[var(--warning)]' : 'text-[var(--text)]'}>{status.unmatched_count}</span>
               {(status.dismissed_count ?? 0) > 0 && (
                 <span className="text-[var(--text-muted)]"> ({status.dismissed_count} dismissed)</span>
               )}
@@ -78,7 +78,7 @@ export function DHTab({ enabled = true }: { enabled?: boolean }) {
           )}
           {status?.pending_count !== undefined && status.pending_count > 0 && (
             <p className="text-sm font-medium text-[var(--text-muted)]">
-              Pending push: <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-full bg-yellow-400/15 text-yellow-400 font-semibold text-xs">{status.pending_count}</span>
+              Pending push: <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-full bg-[var(--warning-bg)] text-[var(--warning)] font-semibold text-xs">{status.pending_count}</span>
             </p>
           )}
         </div>
@@ -94,9 +94,9 @@ export function DHTab({ enabled = true }: { enabled?: boolean }) {
 
       {/* Bulk Match Error */}
       {status?.bulk_match_error && (
-        <div className="rounded-xl border border-red-500/40 bg-red-500/10 p-4">
-          <h4 className="text-sm font-semibold text-red-400 mb-1">Bulk Match Stopped</h4>
-          <p className="text-sm text-red-300">{status.bulk_match_error}</p>
+        <div className="rounded-xl border border-[var(--danger-border)] bg-[var(--danger-bg)] p-4">
+          <h4 className="text-sm font-semibold text-[var(--danger)] mb-1">Bulk Match Stopped</h4>
+          <p className="text-sm text-[var(--danger)]">{status.bulk_match_error}</p>
         </div>
       )}
 

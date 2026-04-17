@@ -43,6 +43,7 @@
      =================================== */
   --primary: #2563eb;
   --primary-hover: #1d4ed8;
+  --accent: var(--brand-400);     /* Brand interaction color for selected states and focus */
 
   /* ===================================
      LINK COLORS
@@ -109,6 +110,8 @@
   --surface-4: #4b5563;       /* Highest elevation surface */
   --surface-hover: #1f2937;   /* Hover state for interactive surfaces */
   --surface-overlay: rgba(0, 0, 0, 0.5);  /* Modal/overlay backdrop */
+  --surface-raised: var(--surface-2);     /* Elevated surface for inputs and controls */
+  --border: var(--surface-3);             /* Default element border color */
 
   /* ===================================
      TEXT COLORS
@@ -116,6 +119,7 @@
   --text: #e5e7eb;            /* Primary text */
   --text-muted: #b0b8c4;      /* Secondary text - improved contrast (WCAG AA) */
   --text-subtle: #8b95a5;     /* Tertiary text / hints - improved contrast */
+  --text-secondary: var(--text-muted);    /* Alias for secondary/de-emphasised text */
   --color-text-inverse: #ffffff;  /* Text on colored backgrounds (buttons, badges) */
 
   /* ===================================

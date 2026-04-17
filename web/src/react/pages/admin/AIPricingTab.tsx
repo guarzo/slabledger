@@ -66,7 +66,7 @@ export function AIPricingTab({ enabled = true }: { enabled?: boolean }) {
           </div>
           <div className="rounded-xl bg-[var(--surface-1)] border border-[var(--surface-2)] p-4">
             <div className="text-xs text-[var(--text-muted)]">12% Cost Markup</div>
-            <div className="text-xl font-semibold text-[var(--success)]">{stats.costMarkupCount}</div>
+            <div className="text-xl font-semibold text-[var(--text)]">{stats.costMarkupCount}</div>
             <div className="text-xs text-[var(--text-muted)]">Quick markup button</div>
           </div>
           <div className="rounded-xl bg-[var(--surface-1)] border border-[var(--surface-2)] p-4">

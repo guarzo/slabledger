@@ -57,10 +57,10 @@ export default function InvoiceReadinessPanel({ capital }: InvoiceReadinessPanel
 
       {/* Headline: amount owed on next invoice */}
       <div className="flex items-baseline gap-3 mb-1">
-        <span className="text-2xl font-bold text-[var(--text)]">
+        <span className={`text-2xl font-bold ${overdue ? 'text-[var(--danger)]' : 'text-[var(--text)]'}`}>
           {formatCents(capital.nextInvoiceAmountCents)}
         </span>
-        <span className="text-xs text-[var(--text-muted)]">
+        <span className={`text-xs ${overdue ? 'text-[var(--danger)]' : daysUntil <= 7 ? 'text-[var(--warning)]' : 'text-[var(--text-muted)]'}`}>
           due {capital.nextInvoiceDueDate ?? '—'} · {daysLabel}
         </span>
       </div>

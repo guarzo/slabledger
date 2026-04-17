@@ -237,6 +237,8 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
              if (tab.key === 'ai_suggestion') return tabCounts.ai_suggestion > 0;
              if (tab.key === 'in_hand') return tabCounts.in_hand > 0;
              if (tab.key === 'ready_to_list') return tabCounts.ready_to_list > 0;
+             if (tab.key === 'sell_sheet') return pageSellSheetCount > 0;
+             if (tab.key === 'card_show') return tabCounts.card_show > 0;
              return true;
            }).map(tab => {
             const count = tab.key === 'sell_sheet' ? pageSellSheetCount : tabCounts[tab.key];

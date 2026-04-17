@@ -31,7 +31,7 @@ function PendingRow({ item }: { item: PSAPendingItem }) {
       <td className="py-2 pr-3 text-sm text-right">{formatCents(item.buyCostCents)}</td>
       <td className="py-2 pr-3">
         <span className={`text-xs px-1.5 py-0.5 rounded ${
-          item.status === 'ambiguous' ? 'bg-yellow-500/20 text-yellow-400' : 'bg-orange-500/20 text-orange-400'
+          item.status === 'ambiguous' ? 'bg-[var(--warning-bg)] text-[var(--warning)]' : 'bg-[var(--danger-bg)] text-[var(--danger)]'
         }`}>
           {item.status}
         </span>
@@ -51,7 +51,7 @@ function PendingRow({ item }: { item: PSAPendingItem }) {
         <button
           onClick={handleAssign}
           disabled={!selectedCampaign || assign.isPending}
-          className="text-xs px-2 py-1 rounded bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-50"
+          className="text-xs px-2 py-1 rounded bg-[var(--brand-500)] text-white hover:opacity-90 disabled:opacity-50"
         >
           Assign
         </button>
@@ -78,7 +78,7 @@ export function PendingItemsCard() {
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-semibold text-[var(--text)]">Pending Items</h3>
         {items.length > 0 && (
-          <span className="text-xs px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-400 font-medium">
+          <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--warning-bg)] text-[var(--warning)] font-medium">
             {items.length}
           </span>
         )}
@@ -87,7 +87,7 @@ export function PendingItemsCard() {
       {isLoading && <PokeballLoader size="sm" />}
 
       {!isLoading && isError && (
-        <p className="text-sm text-red-400">Failed to load pending items.</p>
+        <p className="text-sm text-[var(--danger)]">Failed to load pending items.</p>
       )}
 
       {!isLoading && !isError && items.length === 0 && (

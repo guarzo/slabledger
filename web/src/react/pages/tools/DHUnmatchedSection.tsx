@@ -329,9 +329,11 @@ export default function DHUnmatchedSection() {
           >
             Reconcile
           </Button>
-          <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-[var(--warning)]/15 text-[var(--warning)] text-xs font-semibold">
-            {unmatchedCount}
-          </span>
+          {unmatchedCount > 0 && (
+            <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-[var(--warning)]/15 text-[var(--warning)] text-xs font-semibold">
+              {unmatchedCount}
+            </span>
+          )}
         </div>
       </div>
 

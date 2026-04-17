@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
 	"github.com/guarzo/slabledger/internal/domain/dhevents"
+	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
@@ -461,13 +461,13 @@ func TestListPurchases_StaleInventoryID(t *testing.T) {
 	notFoundErr := apperrors.ProviderNotFound("DH", "VendorInventoryItem id=522")
 
 	tests := []struct {
-		name            string
-		purchase        *inventory.Purchase
-		listerErr       error
-		resetErr        error
-		wantListed      int
-		wantSkipped     int
-		wantResetCalls  int
+		name                string
+		purchase            *inventory.Purchase
+		listerErr           error
+		resetErr            error
+		wantListed          int
+		wantSkipped         int
+		wantResetCalls      int
 		wantResetPurchaseID string
 	}{
 		{

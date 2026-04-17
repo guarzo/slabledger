@@ -52,7 +52,7 @@ function IconCircle({ color, children }: { color: string; children: ReactNode })
 
 function SyncIcon() {
   return (
-    <IconCircle color="bg-emerald-500/15 text-emerald-400">
+    <IconCircle color="bg-[var(--success)]/15 text-[var(--success)]">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
         <polyline points="23 4 23 10 17 10" />
         <polyline points="1 20 1 14 7 14" />
@@ -64,7 +64,7 @@ function SyncIcon() {
 
 function CloudSyncIcon() {
   return (
-    <IconCircle color="bg-emerald-500/15 text-emerald-400">
+    <IconCircle color="bg-[var(--success)]/15 text-[var(--success)]">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
         <path d="M12 9.75v6.75m0 0-3-3m3 3 3-3m-8.25 1.5a4.5 4.5 0 0 1-1.41-8.775 5.25 5.25 0 0 1 10.233-2.33 3 3 0 0 1 3.758 3.848A3.752 3.752 0 0 1 18 19.5H6.75Z" />
       </svg>
@@ -269,11 +269,11 @@ export default function OperationsTab({ campaigns, operationState, setOperationS
           <div className="flex flex-wrap gap-3 text-xs">
             {psaResult.allocated > 0 && <span className="text-[var(--success)]">{psaResult.allocated} allocated</span>}
             {psaResult.updated > 0 && <span className="text-[var(--info)]">{psaResult.updated} updated</span>}
-            {psaResult.refunded > 0 && <span className="text-orange-400">{psaResult.refunded} refunded</span>}
+            {psaResult.refunded > 0 && <span className="text-[var(--warning)]">{psaResult.refunded} refunded</span>}
             {psaResult.invoicesCreated != null && psaResult.invoicesCreated > 0 && <span className="text-cyan-400">{psaResult.invoicesCreated} invoices created</span>}
             {psaResult.invoicesUpdated != null && psaResult.invoicesUpdated > 0 && <span className="text-cyan-400">{psaResult.invoicesUpdated} invoices updated</span>}
             {psaResult.unmatched > 0 && <span className="text-[var(--warning)]">{psaResult.unmatched} unmatched</span>}
-            {psaResult.ambiguous > 0 && <span className="text-orange-400">{psaResult.ambiguous} ambiguous</span>}
+            {psaResult.ambiguous > 0 && <span className="text-[var(--warning)]">{psaResult.ambiguous} ambiguous</span>}
             {psaResult.skipped > 0 && <span className="text-[var(--text-muted)]">{psaResult.skipped} skipped</span>}
             {psaResult.failed > 0 && <span className="text-[var(--danger)]">{psaResult.failed} failed</span>}
           </div>

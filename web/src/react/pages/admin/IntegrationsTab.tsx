@@ -7,8 +7,8 @@ import { useCardLadderStatus, useDHStatus, useMarketMoversStatus, usePSASyncStat
 function StatusBadge({ connected, label }: { connected: boolean; label: string }) {
   return (
     <span className="flex items-center gap-1.5 text-xs">
-      <span className={`w-1.5 h-1.5 rounded-full ${connected ? 'bg-emerald-400' : 'bg-gray-500'}`} />
-      <span className={connected ? 'text-emerald-400' : 'text-[var(--text-muted)]'}>{label}</span>
+      <span className={`w-1.5 h-1.5 rounded-full ${connected ? 'bg-[var(--success)]' : 'bg-[var(--text-muted)]'}`} />
+      <span className={connected ? 'text-[var(--success)]' : 'text-[var(--text-muted)]'}>{label}</span>
     </span>
   );
 }

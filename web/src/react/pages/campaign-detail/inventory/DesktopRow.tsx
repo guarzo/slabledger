@@ -137,12 +137,12 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
             );
           })()}
           <span className="text-[var(--text)] truncate">
-            {hotSeller && <span className="text-amber-400 mr-1" title="High demand">★</span>}
+            {hotSeller && <span className="text-[var(--warning)] mr-1" title="High demand">★</span>}
             {isOnSellSheet && <span className="text-gray-400 mr-1 text-xs" title="On sell sheet">&#9864;</span>}
             {item.purchase.cardName}
           </span>
           {item.priceAnomaly && (
-            <span className="shrink-0 text-xs text-amber-500" title={item.anomalyReason || 'Pricing may be inaccurate'}>&#9888;</span>
+            <span className="shrink-0 text-xs text-[var(--warning)]" title={item.anomalyReason || 'Pricing may be inaccurate'}>&#9888;</span>
           )}
           {item.purchase.cardName && item.purchase.setName && (
             <MarketplaceLinks
@@ -298,7 +298,7 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
                         onDelete();
                       }
                     }}
-                    className="px-3 py-2 text-sm text-red-400 hover:bg-[rgba(248,113,113,0.08)] hover:text-red-300 outline-none cursor-default"
+                    className="px-3 py-2 text-sm text-[var(--danger)] hover:bg-[var(--danger-bg)] hover:text-[var(--danger)] outline-none cursor-default"
                   >
                     Delete
                   </DropdownMenu.Item>

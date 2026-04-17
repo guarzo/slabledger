@@ -368,4 +368,3 @@ func TestHandleLiquidationAnalysis_RequiresUser(t *testing.T) {
 		t.Fatalf("expected 401, got %d", rec.Code)
 	}
 }
-

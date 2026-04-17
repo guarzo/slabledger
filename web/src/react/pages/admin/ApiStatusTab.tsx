@@ -58,7 +58,7 @@ function ProviderCard({ provider }: { provider: ProviderStatus }) {
         </div>
         <div>
           <div className="text-[var(--text-muted)] text-xs">Rate Limit Hits</div>
-          <div className="text-[var(--text)] font-medium">{today.rateLimitHits}</div>
+          <div className={`font-medium ${today.rateLimitHits > 0 ? 'text-[var(--warning)]' : 'text-[var(--text)]'}`}>{today.rateLimitHits}</div>
         </div>
       </div>
     </div>
