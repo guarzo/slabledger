@@ -90,6 +90,7 @@ export interface ScanCertResponse {
   cardName?: string;
   purchaseId?: string;
   campaignId?: string;
+  buyCostCents?: number;
 }
 
 export interface ResolveCertResponse {

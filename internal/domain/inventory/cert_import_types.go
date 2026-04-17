@@ -35,10 +35,11 @@ type ScanCertRequest struct {
 
 // ScanCertResult is the response from POST /api/purchases/scan-cert.
 type ScanCertResult struct {
-	Status     string `json:"status"` // "existing", "sold", "new"
-	CardName   string `json:"cardName,omitempty"`
-	PurchaseID string `json:"purchaseId,omitempty"`
-	CampaignID string `json:"campaignId,omitempty"`
+	Status       string `json:"status"` // "existing", "sold", "new"
+	CardName     string `json:"cardName,omitempty"`
+	PurchaseID   string `json:"purchaseId,omitempty"`
+	CampaignID   string `json:"campaignId,omitempty"`
+	BuyCostCents int    `json:"buyCostCents,omitempty"`
 }
 
 // ResolveCertRequest is the input for POST /api/purchases/resolve-cert.
