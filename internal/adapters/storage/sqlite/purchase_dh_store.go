@@ -424,12 +424,18 @@ func (ps *PurchaseStore) UpdatePurchaseCLCardMetadata(ctx context.Context, id, p
 	)
 }
 
-// UpdatePurchaseDHPriceSync updates dh_listing_price_cents and dh_last_synced_at
-// in a single targeted UPDATE. Used by the DH price re-sync path after a successful
-// DH PATCH.
-// TODO(dh-reprice): real SQL implementation lands in Task 2.
-func (ps *PurchaseStore) UpdatePurchaseDHPriceSync(_ context.Context, _ string, _ int, _ time.Time) error {
-	return fmt.Errorf("UpdatePurchaseDHPriceSync: not yet implemented")
+// UpdatePurchaseDHPriceSync updates only dh_listing_price_cents and
+// dh_last_synced_at. Used by the DH price re-sync flow after a successful
+// DH PATCH; avoids the full-field overwrite of UpdatePurchaseDHFields.
+func (ps *PurchaseStore) UpdatePurchaseDHPriceSync(ctx context.Context, id string, listingPriceCents int, syncedAt time.Time) error {
+	return ps.execAndExpectRow(ctx, "update dh price sync",
+		`UPDATE campaign_purchases
+		 SET dh_listing_price_cents = ?,
+		     dh_last_synced_at      = ?,
+		     updated_at             = ?
+		 WHERE id = ?`,
+		listingPriceCents, syncedAt.UTC().Format(time.RFC3339), time.Now(), id,
+	)
 }
 
 // ListDHPriceDrift returns unsold purchases whose reviewed price differs from the

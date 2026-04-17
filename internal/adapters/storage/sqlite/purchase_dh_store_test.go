@@ -265,3 +265,42 @@ func TestCountDHPipelineHealth_EmptyDatabaseReturnsZero(t *testing.T) {
 	assert.Equal(t, 0, health.PendingReceived)
 	assert.Equal(t, 0, health.UnenrolledReceived)
 }
+
+// TestPurchaseStore_UpdatePurchaseDHPriceSync verifies the narrow update that
+// the DH price re-sync flow relies on: only dh_listing_price_cents and
+// dh_last_synced_at change; every other DH field on the row is preserved.
+func TestPurchaseStore_UpdatePurchaseDHPriceSync(t *testing.T) {
+	repo := setupCampaignsRepo(t)
+	ctx := context.Background()
+	now := time.Now().Truncate(time.Second)
+
+	c := &inventory.Campaign{ID: "camp-sync", Name: "Active", Phase: inventory.PhaseActive, CreatedAt: now, UpdatedAt: now}
+	require.NoError(t, repo.CreateCampaign(ctx, c))
+
+	p := &inventory.Purchase{
+		ID:                  "pur-sync-1",
+		CampaignID:          "camp-sync",
+		CardName:             "Charizard",
+		CertNumber:          "99887766",
+		Grader:              "PSA",
+		GradeValue:          9,
+		BuyCostCents:        5000,
+		PurchaseDate:        "2026-01-01",
+		ReviewedPriceCents:  12000,
+		DHInventoryID:       777,
+		DHListingPriceCents: 10000,
+		CreatedAt:           now,
+		UpdatedAt:           now,
+	}
+	require.NoError(t, repo.CreatePurchase(ctx, p))
+
+	syncedAt := time.Date(2026, 4, 17, 12, 0, 0, 0, time.UTC)
+	require.NoError(t, repo.UpdatePurchaseDHPriceSync(ctx, p.ID, 12000, syncedAt))
+
+	got, err := repo.GetPurchase(ctx, p.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 12000, got.DHListingPriceCents)
+	assert.Equal(t, syncedAt.UTC().Format(time.RFC3339), got.DHLastSyncedAt)
+	// Sanity: other DH fields untouched.
+	assert.Equal(t, 777, got.DHInventoryID)
+}
