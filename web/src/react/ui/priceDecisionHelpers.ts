@@ -21,7 +21,7 @@ export function buildPriceSources(prices: {
     sources.push({ label: 'MM', priceCents: prices.mmCents, source: 'mm' });
   }
   sources.push(
-    { label: 'DH', priceCents: prices.dhMidCents, source: 'dh' },
+    { label: 'DH', priceCents: prices.dhMidCents, source: 'market' },
     { label: 'Last Sold', priceCents: prices.lastSoldCents, source: 'last_sold' },
   );
   return sources;

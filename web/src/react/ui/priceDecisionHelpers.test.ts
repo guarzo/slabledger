@@ -10,10 +10,10 @@ describe('buildPriceSources', () => {
       lastSoldCents: 1800,
     });
 
-    expect(sources.map(s => s.source)).toEqual(['cost_markup', 'cl', 'dh', 'last_sold']);
+    expect(sources.map(s => s.source)).toEqual(['cost_markup', 'cl', 'market', 'last_sold']);
     expect(sources[0]).toMatchObject({ label: 'Cost', source: 'cost_markup', priceCents: 500 });
     expect(sources[1]).toMatchObject({ label: 'CL', source: 'cl', priceCents: 1000 });
-    expect(sources[2]).toMatchObject({ label: 'DH', source: 'dh', priceCents: 2000 });
+    expect(sources[2]).toMatchObject({ label: 'DH', source: 'market', priceCents: 2000 });
     expect(sources[3]).toMatchObject({ label: 'Last Sold', source: 'last_sold', priceCents: 1800 });
   });
 
@@ -26,9 +26,9 @@ describe('buildPriceSources', () => {
       mmCents: 1500,
     });
 
-    expect(sources.map(s => s.source)).toEqual(['cost_markup', 'cl', 'mm', 'dh', 'last_sold']);
+    expect(sources.map(s => s.source)).toEqual(['cost_markup', 'cl', 'mm', 'market', 'last_sold']);
     expect(sources[2]).toMatchObject({ label: 'MM', source: 'mm', priceCents: 1500 });
-    expect(sources[3]).toMatchObject({ label: 'DH', source: 'dh', priceCents: 2000 });
+    expect(sources[3]).toMatchObject({ label: 'DH', source: 'market', priceCents: 2000 });
     expect(sources[4]).toMatchObject({ label: 'Last Sold', source: 'last_sold', priceCents: 1800 });
   });
 
@@ -41,7 +41,7 @@ describe('buildPriceSources', () => {
       mmCents: 0,
     });
 
-    expect(sources.map(s => s.source)).toEqual(['cost_markup', 'cl', 'dh', 'last_sold']);
+    expect(sources.map(s => s.source)).toEqual(['cost_markup', 'cl', 'market', 'last_sold']);
   });
 
   it('omits MM when mmCents is undefined', () => {
@@ -53,7 +53,7 @@ describe('buildPriceSources', () => {
       mmCents: undefined,
     });
 
-    expect(sources.map(s => s.source)).toEqual(['cost_markup', 'cl', 'dh', 'last_sold']);
+    expect(sources.map(s => s.source)).toEqual(['cost_markup', 'cl', 'market', 'last_sold']);
   });
 });
 

@@ -40,16 +40,30 @@ func (h *CampaignsHandler) HandleListPurchaseOnDH(w http.ResponseWriter, r *http
 		writeError(w, http.StatusConflict, "Purchase has not been received yet")
 		return
 	}
-	if p.DHInventoryID == 0 {
-		writeError(w, http.StatusConflict, "Purchase not yet pushed to DH inventory")
-		return
-	}
 	if p.DHStatus == inventory.DHStatusListed {
 		writeError(w, http.StatusConflict, "Purchase already listed on DH")
 		return
 	}
-	if p.DHStatus != inventory.DHStatusInStock {
+	// When the item has an inventory ID, it must be in_stock to transition
+	// to listed. When it doesn't, the listing service will do an inline
+	// match + push first (for DHPushStatusPending items), then list.
+	if p.DHInventoryID != 0 && p.DHStatus != inventory.DHStatusInStock {
 		writeError(w, http.StatusConflict, "Purchase is not in_stock on DH")
+		return
+	}
+	if p.DHInventoryID == 0 && p.DHPushStatus != inventory.DHPushStatusPending {
+		// Not yet pushed and not eligible for inline push (held / unmatched /
+		// dismissed / empty). Reject with a reason the user can act on.
+		switch p.DHPushStatus {
+		case inventory.DHPushStatusHeld:
+			writeError(w, http.StatusConflict, "DH push is held for review — approve it first")
+		case inventory.DHPushStatusUnmatched:
+			writeError(w, http.StatusConflict, "Cert could not be matched to a DH card")
+		case inventory.DHPushStatusDismissed:
+			writeError(w, http.StatusConflict, "DH push was dismissed for this purchase")
+		default:
+			writeError(w, http.StatusConflict, "Purchase not yet pushed to DH inventory")
+		}
 		return
 	}
 	// DH now honors our listing_price_cents as-is, so we require a reviewed
@@ -79,7 +93,10 @@ func (h *CampaignsHandler) HandleListPurchaseOnDH(w http.ResponseWriter, r *http
 			return
 		}
 		if updated.DHInventoryID == 0 {
-			writeError(w, http.StatusBadGateway, "DH inventory item no longer exists — it has been reset and will re-enroll on next import")
+			// Either the inline push couldn't match this cert, or a stale inventory
+			// ID was reset after ERR_PROV_NOT_FOUND. Either way the push scheduler
+			// will retry automatically on its next cycle.
+			writeError(w, http.StatusBadGateway, "DH push failed — will retry automatically on next sync")
 			return
 		}
 		writeError(w, http.StatusBadGateway, "DH listing failed — check server logs for details")

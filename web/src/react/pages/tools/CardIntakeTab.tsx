@@ -390,7 +390,7 @@ function CertRowItem({
     : [];
   const dhCents = market?.gradePriceCents ?? 0;
   const preSelected: PreSelection = dhCents > 0
-    ? { kind: 'source', source: 'dh' }
+    ? { kind: 'source', source: 'market' }
     : { kind: 'none' };
 
   return (
@@ -445,7 +445,7 @@ function CertRowItem({
           <PriceDecisionBar
             sources={sources}
             preSelected={preSelected}
-            recommendedSource="dh"
+            recommendedSource="market"
             costBasisCents={buyCostCents}
             status={listed ? 'accepted' : 'pending'}
             isSubmitting={busy}

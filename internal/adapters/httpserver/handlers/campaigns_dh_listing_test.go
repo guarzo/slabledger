@@ -81,7 +81,7 @@ func TestHandleListPurchaseOnDH(t *testing.T) {
 			wantErrSubstr: "received",
 		},
 		{
-			name: "not yet pushed to DH → 409",
+			name: "not yet pushed to DH and not pending → 409",
 			getPurchase: func(ctx context.Context, id string) (*inventory.Purchase, error) {
 				p := readyPurchase()
 				p.DHInventoryID = 0
@@ -89,6 +89,31 @@ func TestHandleListPurchaseOnDH(t *testing.T) {
 			},
 			wantStatus:    http.StatusConflict,
 			wantErrSubstr: "not yet pushed",
+		},
+		{
+			name: "pending DH push is forwarded to service for inline push + list",
+			getPurchase: func(ctx context.Context, id string) (*inventory.Purchase, error) {
+				p := readyPurchase()
+				p.DHInventoryID = 0
+				p.DHPushStatus = inventory.DHPushStatusPending
+				return p, nil
+			},
+			listFn: func(ctx context.Context, certs []string) dhlisting.DHListingResult {
+				return dhlisting.DHListingResult{Listed: 1, Synced: 1, Total: 1}
+			},
+			wantStatus:     http.StatusOK,
+			wantListedFrom: []string{"CERT123"},
+		},
+		{
+			name: "held DH push → 409 with held-specific message",
+			getPurchase: func(ctx context.Context, id string) (*inventory.Purchase, error) {
+				p := readyPurchase()
+				p.DHInventoryID = 0
+				p.DHPushStatus = inventory.DHPushStatusHeld
+				return p, nil
+			},
+			wantStatus:    http.StatusConflict,
+			wantErrSubstr: "held for review",
 		},
 		{
 			name: "already listed → 409",
@@ -143,7 +168,7 @@ func TestHandleListPurchaseOnDH(t *testing.T) {
 				return dhlisting.DHListingResult{Listed: 0, Total: 1}
 			},
 			wantStatus:    http.StatusBadGateway,
-			wantErrSubstr: "re-enroll",
+			wantErrSubstr: "will retry automatically",
 		},
 	}
 
