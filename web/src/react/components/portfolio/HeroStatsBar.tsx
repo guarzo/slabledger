@@ -53,7 +53,7 @@ export default function HeroStatsBar({ health, capital }: HeroStatsBarProps) {
           </div>
           <div>
             <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">At Risk</div>
-            <div className="text-base font-semibold text-[var(--text)]">{formatCents(health.totalAtRiskCents ?? 0)}</div>
+            <div className={`text-base font-semibold ${(health.totalAtRiskCents ?? 0) > 0 ? 'text-[var(--warning)]' : 'text-[var(--text)]'}`}>{formatCents(health.totalAtRiskCents ?? 0)}</div>
           </div>
           {capital && (
             <>

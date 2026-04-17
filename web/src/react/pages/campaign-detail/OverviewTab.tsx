@@ -78,7 +78,7 @@ export default function OverviewTab({
         <StatCard label="Total Spent" value={formatCents(totalSpent)} />
         <StatCard label="Revenue" value={formatCents(totalRevenue)} />
         <StatCard label="Net Profit" value={formatCents(totalProfit)} color={totalProfit >= 0 ? 'green' : 'red'} />
-        <StatCard label="Sell-Through" value={`${sellThrough}%`} />
+        <StatCard label="Sell-Through" value={`${sellThrough}%`} color={parseFloat(sellThrough) >= 50 ? 'green' : parseFloat(sellThrough) < 10 ? 'red' : undefined} />
         <StatCard label="Cards Purchased" value={String(purchaseCount)} />
         <StatCard label="Cards Sold" value={String(saleCount)} />
         <StatCard label="Unsold" value={String(unsoldCount)} />
