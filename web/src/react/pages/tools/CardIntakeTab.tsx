@@ -1,7 +1,8 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { api } from '../../../js/api';
 import type { ScanCertResponse, ResolveCertResponse, CertImportResult, MarketSnapshot } from '../../../types/campaigns';
-import { formatCents, centsToDollars, dollarsToCents } from '../../utils/formatters';
+import { centsToDollars, dollarsToCents, formatCents } from '../../utils/formatters';
+import SignalChip from '../campaign-detail/inventory/SignalChip';
 
 type CertStatus = 'scanning' | 'existing' | 'sold' | 'returned' | 'resolving' | 'resolved' | 'failed' | 'importing' | 'imported';
 type ListingStatus = 'idle' | 'setting-price' | 'listing' | 'listed' | 'list-error';
@@ -15,7 +16,6 @@ interface CertRow {
   error?: string;
   buyCostCents?: number;
   market?: MarketSnapshot;
-  marketLoading?: boolean;
   expanded?: boolean;
   priceInput?: string;
   listingStatus?: ListingStatus;
@@ -45,23 +45,10 @@ export default function CardIntakeTab() {
     });
   }, []);
 
-  const fetchMarketData = useCallback(async (certNumber: string) => {
-    updateCert(certNumber, { marketLoading: true });
-    try {
-      const result = await api.lookupCert(certNumber);
-      updateCert(certNumber, { marketLoading: false, market: result.market });
-    } catch {
-      updateCert(certNumber, { marketLoading: false });
-    }
-  }, [updateCert]);
-
   const resolveInBackground = useCallback(async (certNumber: string) => {
     try {
       const info: ResolveCertResponse = await api.resolveCert(certNumber);
-      updateCert(certNumber, {
-        status: 'resolved',
-        cardName: info.cardName,
-      });
+      updateCert(certNumber, { status: 'resolved', cardName: info.cardName });
     } catch (err) {
       updateCert(certNumber, {
         status: 'failed',
@@ -76,10 +63,12 @@ export default function CardIntakeTab() {
       const row = next.get(certNumber);
       if (!row) return prev;
       const nowExpanded = !row.expanded;
+      const seed = row.market?.conservativeCents
+        ?? row.market?.medianCents
+        ?? row.market?.gradePriceCents
+        ?? 0;
       const priceInput =
-        !row.expanded && row.market?.conservativeCents
-          ? centsToDollars(row.market.conservativeCents)
-          : (row.priceInput ?? '');
+        !row.expanded && seed > 0 ? centsToDollars(seed) : (row.priceInput ?? '');
       next.set(certNumber, { ...row, expanded: nowExpanded, priceInput, listingError: undefined });
       return next;
     });
@@ -141,22 +130,14 @@ export default function CardIntakeTab() {
     try {
       const result: ScanCertResponse = await api.scanCert(certNumber);
 
-      if (result.status === 'existing') {
+      if (result.status === 'existing' || result.status === 'sold') {
         updateCert(certNumber, {
-          status: 'existing',
+          status: result.status,
           cardName: result.cardName,
           purchaseId: result.purchaseId,
           campaignId: result.campaignId,
           buyCostCents: result.buyCostCents,
-        });
-        fetchMarketData(certNumber);
-      } else if (result.status === 'sold') {
-        updateCert(certNumber, {
-          status: 'sold',
-          cardName: result.cardName,
-          purchaseId: result.purchaseId,
-          campaignId: result.campaignId,
-          buyCostCents: result.buyCostCents,
+          market: result.market,
         });
       } else {
         updateCert(certNumber, { status: 'resolving' });
@@ -168,7 +149,7 @@ export default function CardIntakeTab() {
         error: err instanceof Error ? err.message : 'Scan failed',
       });
     }
-  }, [updateCert, resolveInBackground, fetchMarketData]);
+  }, [updateCert, resolveInBackground]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
@@ -270,7 +251,7 @@ export default function CardIntakeTab() {
 
   return (
     <div className="space-y-3">
-      {/* Input */}
+      {/* Scan input */}
       <div className="flex items-center gap-2">
         <input
           ref={inputRef}
@@ -279,26 +260,26 @@ export default function CardIntakeTab() {
           onChange={e => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="Scan or type cert number..."
-          className="flex-1 rounded border-2 border-blue-500 bg-gray-900 px-3 py-2.5 font-mono text-base text-gray-100 placeholder-gray-500 focus:border-blue-400 focus:outline-none"
+          className="flex-1 rounded-lg border border-[var(--brand-500)]/60 bg-[var(--surface-1)] px-3 py-2.5 font-mono text-base text-[var(--text)] placeholder:text-[var(--text-muted)] focus:border-[var(--brand-400)] focus:outline-none focus:ring-1 focus:ring-[var(--brand-400)]/40"
           autoFocus
         />
-        <span className="text-xs text-gray-500 whitespace-nowrap">↵ Enter</span>
+        <span className="text-xs text-[var(--text-muted)] whitespace-nowrap">↵ Enter</span>
       </div>
 
       {/* Stats bar */}
       {stats.total > 0 && (
-        <div className="flex flex-wrap gap-4 rounded bg-gray-800 px-3 py-2 text-xs">
-          <span><span className="text-green-400">●</span> <span className="text-gray-400">{stats.existing} in inventory</span></span>
-          <span><span className="text-amber-400">●</span> <span className="text-gray-400">{stats.sold} sold</span></span>
-          <span><span className="text-blue-400">●</span> <span className="text-gray-400">{stats.newCerts} new</span></span>
-          <span><span className="text-red-400">●</span> <span className="text-gray-400">{stats.failed} failed</span></span>
-          <span className="ml-auto text-gray-500">{stats.total} scanned</span>
+        <div className="flex flex-wrap items-center gap-4 rounded-lg border border-[var(--surface-2)] bg-[var(--surface-1)] px-3 py-2 text-xs">
+          <StatDot color="var(--success)" label={`${stats.existing} in inventory`} />
+          <StatDot color="var(--warning)" label={`${stats.sold} sold`} />
+          <StatDot color="var(--brand-400)" label={`${stats.newCerts} new`} />
+          <StatDot color="var(--danger)" label={`${stats.failed} failed`} />
+          <span className="ml-auto text-[var(--text-muted)]">{stats.total} scanned</span>
         </div>
       )}
 
       {/* Cert rows */}
       {displayRows.length > 0 && (
-        <div className="flex flex-col gap-1">
+        <div className="flex flex-col gap-2">
           {displayRows.map(row => (
             <CertRowItem
               key={row.certNumber}
@@ -316,24 +297,24 @@ export default function CardIntakeTab() {
 
       {/* Import error */}
       {importError && (
-        <div className="rounded border border-red-700 bg-red-900/30 p-3 text-sm text-red-300">
+        <div className="rounded-lg border border-[var(--danger)]/40 bg-[var(--danger)]/10 p-3 text-sm text-[var(--danger)]">
           {importError}
         </div>
       )}
 
-      {/* Staging area for new certs */}
+      {/* Staging area */}
       {resolvedCount > 0 && (
-        <div className="rounded border border-dashed border-blue-500 bg-blue-900/10 p-3">
+        <div className="rounded-lg border border-dashed border-[var(--brand-500)]/50 bg-[var(--brand-500)]/5 p-3">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-blue-300">
-              {resolvedCount} NEW CERT{resolvedCount > 1 ? 'S' : ''} STAGED
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-[var(--brand-400)]">
+              {resolvedCount} new cert{resolvedCount > 1 ? 's' : ''} staged
             </span>
             <button
               onClick={handleImportNew}
               disabled={importLoading}
-              className="rounded bg-blue-600 px-4 py-1.5 text-xs font-medium text-white hover:bg-blue-500 disabled:opacity-50"
+              className="rounded-lg bg-[var(--brand-500)] px-4 py-1.5 text-xs font-semibold text-white hover:bg-[var(--brand-600)] disabled:opacity-50 transition-colors"
             >
-              {importLoading ? 'Importing...' : `Import ${resolvedCount} New Cert${resolvedCount > 1 ? 's' : ''}`}
+              {importLoading ? 'Importing…' : `Import ${resolvedCount} New`}
             </button>
           </div>
         </div>
@@ -342,94 +323,60 @@ export default function CardIntakeTab() {
   );
 }
 
-function PriceChip({ market, loading }: { market?: MarketSnapshot; loading?: boolean }) {
-  if (loading) {
-    return <span className="ml-2 text-[10px] text-gray-500 animate-pulse">···</span>;
-  }
-  if (!market) return null;
-  const price = market.conservativeCents ?? market.medianCents ?? market.lastSoldCents;
-  if (!price) return null;
-  const conf = market.confidence ?? 0;
-  const cls =
-    conf >= 0.7
-      ? 'bg-emerald-900/40 text-emerald-300 border-emerald-800'
-      : conf >= 0.4
-      ? 'bg-amber-900/40 text-amber-300 border-amber-800'
-      : 'bg-gray-800 text-gray-400 border-gray-700';
+function StatDot({ color, label }: { color: string; label: string }) {
   return (
-    <span
-      className={`ml-2 inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-medium tabular-nums ${cls}`}
-      title={`Last sold: ${formatCents(market.lastSoldCents)} · Median: ${formatCents(market.medianCents)}`}
-    >
-      {formatCents(price)}
+    <span className="flex items-center gap-1.5">
+      <span className="w-1.5 h-1.5 rounded-full" style={{ background: color }} />
+      <span className="text-[var(--text-muted)]">{label}</span>
     </span>
   );
 }
 
-function PanelStat({ label, value }: { label: string; value: string }) {
+const STATUS_STYLE: Record<CertStatus, {
+  leftBorder: string;
+  pillBg: string;
+  pillText: string;
+  label: string;
+}> = {
+  scanning:  { leftBorder: 'var(--surface-3)',  pillBg: 'rgba(255,255,255,0.06)',       pillText: 'var(--text-muted)', label: 'Checking…' },
+  existing:  { leftBorder: 'var(--success)',    pillBg: 'rgba(52,211,153,0.12)',        pillText: 'var(--success)',    label: '✓ In inventory' },
+  returned:  { leftBorder: 'var(--success)',    pillBg: 'rgba(52,211,153,0.12)',        pillText: 'var(--success)',    label: '✓ Returned' },
+  sold:      { leftBorder: 'var(--warning)',    pillBg: 'rgba(251,191,36,0.12)',        pillText: 'var(--warning)',    label: '⚠ Sold' },
+  resolving: { leftBorder: 'var(--brand-500)',  pillBg: 'rgba(90,93,232,0.15)',         pillText: 'var(--brand-400)',  label: '⟳ Looking up…' },
+  resolved:  { leftBorder: 'var(--brand-500)',  pillBg: 'rgba(90,93,232,0.15)',         pillText: 'var(--brand-400)',  label: '★ New' },
+  importing: { leftBorder: 'var(--brand-500)',  pillBg: 'rgba(90,93,232,0.15)',         pillText: 'var(--brand-400)',  label: '⟳ Importing…' },
+  imported:  { leftBorder: 'var(--success)',    pillBg: 'rgba(52,211,153,0.12)',        pillText: 'var(--success)',    label: '✓ Imported' },
+  failed:    { leftBorder: 'var(--danger)',     pillBg: 'rgba(248,113,113,0.12)',       pillText: 'var(--danger)',     label: '✗ Failed' },
+};
+
+function StatusPill({ status }: { status: CertStatus }) {
+  const s = STATUS_STYLE[status];
   return (
-    <div>
-      <div className="text-[10px] uppercase tracking-wider text-gray-500 mb-0.5">{label}</div>
-      <div className="text-xs font-semibold tabular-nums text-gray-200">{value}</div>
-    </div>
+    <span
+      className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap"
+      style={{ background: s.pillBg, color: s.pillText }}
+    >
+      {s.label}
+    </span>
   );
 }
 
-function ListingPanel({
-  row,
-  onPriceChange,
-  onList,
-}: {
-  row: CertRow;
-  onPriceChange: (certNumber: string, value: string) => void;
-  onList: (certNumber: string) => void;
-}) {
-  const { market, priceInput, listingStatus, listingError, certNumber, purchaseId } = row;
-  const busy = listingStatus === 'setting-price' || listingStatus === 'listing';
-  const listed = listingStatus === 'listed';
-
+function InlinePrice({ market, buyCostCents }: { market?: MarketSnapshot; buyCostCents?: number }) {
+  if (!market) return null;
+  const price = market.gradePriceCents || market.medianCents || market.lastSoldCents;
+  if (!price) return null;
+  const delta = buyCostCents && buyCostCents > 0 ? price - buyCostCents : 0;
+  const pct = buyCostCents && buyCostCents > 0 ? Math.round((delta / buyCostCents) * 100) : 0;
+  const deltaColor = delta > 0 ? 'var(--success)' : delta < 0 ? 'var(--danger)' : 'var(--text-muted)';
   return (
-    <div className="bg-gray-800/50 border-t border-gray-700 px-3 py-2.5">
-      {market ? (
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-x-4 gap-y-1 mb-2.5 text-[11px]">
-          <PanelStat label="Cost" value={row.buyCostCents ? formatCents(row.buyCostCents) : '—'} />
-          <PanelStat label="DH" value={formatCents(market.gradePriceCents)} />
-          <PanelStat label="CL" value={formatCents(market.clValueCents)} />
-          <PanelStat label="MM" value={formatCents(market.sourcePrices?.find(s => s.source === 'MarketMovers')?.priceCents)} />
-          <PanelStat label="Last Sold" value={formatCents(market.lastSoldCents)} />
-        </div>
-      ) : (
-        <p className="text-[11px] text-gray-500 mb-2">Market data unavailable — enter price manually.</p>
+    <span className="inline-flex items-baseline gap-1.5 text-xs tabular-nums">
+      <span className="font-semibold text-[var(--text)]">{formatCents(price)}</span>
+      {pct !== 0 && (
+        <span className="text-[10px]" style={{ color: deltaColor }}>
+          {pct > 0 ? '+' : ''}{pct}%
+        </span>
       )}
-      <div className="flex items-center gap-2 mb-2">
-        <span className="text-gray-400 text-xs">$</span>
-        <input
-          type="number"
-          min="0"
-          step="0.01"
-          value={priceInput ?? ''}
-          onChange={e => onPriceChange(certNumber, e.target.value)}
-          disabled={busy || listed}
-          placeholder="0.00"
-          className="w-28 rounded border border-gray-600 bg-gray-900 px-2 py-1 font-mono text-xs tabular-nums text-gray-100 focus:border-blue-400 focus:outline-none disabled:opacity-50"
-        />
-        <button
-          onClick={() => onList(certNumber)}
-          disabled={busy || listed || !purchaseId}
-          className="rounded border border-gray-600 px-3 py-1 text-xs text-gray-300 hover:border-blue-500 hover:text-blue-300 disabled:opacity-40 transition-colors"
-        >
-          {busy
-            ? listingStatus === 'setting-price' ? 'Setting price…' : 'Listing…'
-            : listed
-            ? '✓ Listed'
-            : 'List on DH'}
-        </button>
-      </div>
-      {listingError && <p className="text-[11px] text-red-400">{listingError}</p>}
-      {!purchaseId && (
-        <p className="text-[11px] text-gray-500">Scan again after import to enable listing.</p>
-      )}
-    </div>
+    </span>
   );
 }
 
@@ -450,82 +397,165 @@ function CertRowItem({
   onList: (certNumber: string) => void;
   onPriceChange: (certNumber: string, value: string) => void;
 }) {
-  const statusConfig: Record<CertStatus, { bg: string; border: string; certColor: string; label: string }> = {
-    scanning:  { bg: 'bg-gray-800',       border: 'border-gray-600',    certColor: 'text-gray-400',    label: 'Checking...' },
-    existing:  { bg: 'bg-emerald-950/30', border: 'border-emerald-800', certColor: 'text-emerald-300', label: '✓ In inventory' },
-    sold:      { bg: 'bg-amber-950/30',   border: 'border-amber-700',   certColor: 'text-amber-300',   label: '⚠ Sold' },
-    returned:  { bg: 'bg-emerald-950/30', border: 'border-emerald-800', certColor: 'text-emerald-300', label: '✓ Returned' },
-    resolving: { bg: 'bg-blue-950/30',    border: 'border-blue-800',    certColor: 'text-blue-300',    label: '⟳ Looking up...' },
-    resolved:  { bg: 'bg-blue-950/30',    border: 'border-blue-800',    certColor: 'text-blue-300',    label: '★ New' },
-    failed:    { bg: 'bg-red-950/30',     border: 'border-red-800',     certColor: 'text-red-300',     label: '✗ Failed' },
-    importing: { bg: 'bg-blue-950/30',    border: 'border-blue-800',    certColor: 'text-blue-300',    label: '⟳ Importing...' },
-    imported:  { bg: 'bg-emerald-950/30', border: 'border-emerald-800', certColor: 'text-emerald-300', label: '✓ Imported' },
-  };
-
-  const cfg = statusConfig[row.status];
+  const s = STATUS_STYLE[row.status];
   const canList = (row.status === 'existing' || row.status === 'returned') && !!row.purchaseId;
   const showListedChip = row.listingStatus === 'listed';
 
   return (
     <div
-      className={`rounded border transition-all ${cfg.bg} ${cfg.border}${highlighted ? ' ring-2 ring-yellow-400' : ''}`}
+      className={`overflow-hidden rounded-xl border bg-[var(--surface-1)] transition-all ${
+        highlighted ? 'border-[var(--warning)] ring-2 ring-[var(--warning)]/30' : 'border-[var(--surface-2)]'
+      }`}
+      style={{ borderLeft: `3px solid ${s.leftBorder}` }}
     >
-      {/* Row header */}
-      <div className="flex items-center justify-between px-3 py-2 text-sm">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className={`font-mono ${cfg.certColor} min-w-[80px]`}>{row.certNumber}</span>
-          <span className={`${cfg.certColor} min-w-[110px] text-xs`}>{cfg.label}</span>
-          {row.cardName && <span className="text-gray-400 text-xs truncate">{row.cardName}</span>}
+      <div className="flex items-center justify-between gap-3 px-4 py-2.5">
+        <div className="flex items-center gap-3 min-w-0">
+          <span className="font-mono text-sm font-medium text-[var(--text)] tabular-nums">
+            {row.certNumber}
+          </span>
+          <StatusPill status={row.status} />
+          {row.cardName && (
+            <span className="text-sm text-[var(--text)] truncate">{row.cardName}</span>
+          )}
           {row.error && row.status === 'failed' && (
-            <span className="text-red-400 text-xs truncate">{row.error}</span>
+            <span className="text-xs text-[var(--danger)] truncate">{row.error}</span>
           )}
           {(row.status === 'existing' || row.status === 'returned') && (
-            <PriceChip market={row.market} loading={row.marketLoading} />
+            <InlinePrice market={row.market} buyCostCents={row.buyCostCents} />
           )}
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {showListedChip && (
-            <span className="inline-flex items-center rounded border border-purple-700 bg-purple-900/40 px-2 py-0.5 text-[10px] text-purple-300">
+            <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold bg-[var(--success)]/15 text-[var(--success)]">
               ✓ Listed
             </span>
           )}
           {canList && !showListedChip && (
             <button
               onClick={() => onExpand(row.certNumber)}
-              className={`rounded border px-2 py-1 text-xs transition-colors ${
+              className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
                 row.expanded
-                  ? 'border-blue-500 text-blue-300'
-                  : 'border-gray-600 text-gray-300 hover:border-blue-500 hover:text-blue-300'
+                  ? 'bg-[var(--brand-500)]/30 text-[var(--brand-400)]'
+                  : 'bg-[var(--brand-500)]/15 text-[var(--brand-400)] hover:bg-[var(--brand-500)]/30'
               }`}
             >
-              $ List
+              {row.expanded ? 'Close' : '$ List'}
             </button>
           )}
           {row.status === 'sold' && (
             <button
               onClick={() => onReturn(row.certNumber)}
-              className="rounded bg-amber-600 px-3 py-1 text-xs font-medium text-white hover:bg-amber-500"
+              className="rounded-md bg-[var(--warning)]/15 px-3 py-1.5 text-xs font-semibold text-[var(--warning)] hover:bg-[var(--warning)]/30 transition-colors"
             >
-              Return to Inventory
+              Return
             </button>
           )}
           {row.status === 'failed' && (
             <button
               onClick={() => onDismiss(row.certNumber)}
-              className="rounded border border-gray-600 px-2 py-1 text-xs text-gray-400 hover:bg-gray-700"
+              aria-label="Dismiss"
+              className="rounded-md p-1 text-[var(--text-muted)] hover:bg-[var(--surface-2)] hover:text-[var(--text)] transition-colors"
             >
               ✕
             </button>
           )}
           {(row.status === 'resolved' || row.status === 'imported') && (
-            <span className="text-[10px] text-gray-600 italic">scan again to list</span>
+            <span className="text-[10px] text-[var(--text-muted)] italic">scan again to list</span>
           )}
         </div>
       </div>
 
-      {/* Listing panel */}
       {row.expanded && (
         <ListingPanel row={row} onPriceChange={onPriceChange} onList={onList} />
+      )}
+    </div>
+  );
+}
+
+function ListingPanel({
+  row,
+  onPriceChange,
+  onList,
+}: {
+  row: CertRow;
+  onPriceChange: (certNumber: string, value: string) => void;
+  onList: (certNumber: string) => void;
+}) {
+  const { market, priceInput, listingStatus, listingError, certNumber, purchaseId, buyCostCents } = row;
+  const busy = listingStatus === 'setting-price' || listingStatus === 'listing';
+  const listed = listingStatus === 'listed';
+
+  const cost = buyCostCents ?? 0;
+  const dh = market?.gradePriceCents ?? 0;
+  const cl = market?.clValueCents ?? 0;
+  const mm = market?.sourcePrices?.find(p => p.source === 'MarketMovers')?.priceCents ?? 0;
+  const lastSold = market?.lastSoldCents ?? 0;
+  const lastSoldDate = market?.lastSoldDate;
+
+  const deltaIfCost = (v: number) => (cost > 0 && v > 0 ? v - cost : undefined);
+  const hasAnyData = cost > 0 || dh > 0 || cl > 0 || mm > 0 || lastSold > 0;
+
+  return (
+    <div className="border-t border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.015)] px-4 py-3">
+      {hasAnyData ? (
+        <div className="flex flex-wrap gap-2 mb-3">
+          <SignalChip label="Cost" valueCents={cost} />
+          <SignalChip label="DH" valueCents={dh} deltaVsCostCents={deltaIfCost(dh)} />
+          <SignalChip label="CL" valueCents={cl} deltaVsCostCents={deltaIfCost(cl)} />
+          <SignalChip label="MM" valueCents={mm} deltaVsCostCents={deltaIfCost(mm)} />
+          <SignalChip
+            label="Last Sold"
+            valueCents={lastSold}
+            deltaVsCostCents={deltaIfCost(lastSold)}
+            subtitle={lastSoldDate ? new Date(lastSoldDate).toLocaleDateString() : undefined}
+          />
+        </div>
+      ) : (
+        <p className="text-xs text-[var(--text-muted)] mb-3">No market data on file — enter price manually.</p>
+      )}
+
+      <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 rounded-md border border-[rgba(255,255,255,0.06)] bg-[var(--surface-2)] pl-2.5 pr-1 py-1">
+          <span className="text-xs text-[var(--text-muted)]">$</span>
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            value={priceInput ?? ''}
+            onChange={e => onPriceChange(certNumber, e.target.value)}
+            disabled={busy || listed}
+            placeholder="0.00"
+            className="w-24 bg-transparent font-mono text-sm tabular-nums text-[var(--text)] focus:outline-none disabled:opacity-50"
+          />
+        </div>
+        <button
+          onClick={() => onList(certNumber)}
+          disabled={busy || listed || !purchaseId}
+          className="rounded-lg bg-[var(--brand-500)] px-4 py-1.5 text-xs font-semibold text-white hover:bg-[var(--brand-600)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        >
+          {busy
+            ? listingStatus === 'setting-price' ? 'Setting price…' : 'Listing…'
+            : listed
+            ? '✓ Listed'
+            : 'List on DH'}
+        </button>
+        {purchaseId && market && dh > 0 && !busy && !listed && (
+          <button
+            type="button"
+            onClick={() => onPriceChange(certNumber, centsToDollars(dh))}
+            className="text-[10px] font-medium text-[var(--text-muted)] hover:text-[var(--text)] transition-colors"
+            title="Reset to DH price"
+          >
+            Use DH ({formatCents(dh)})
+          </button>
+        )}
+      </div>
+
+      {listingError && (
+        <p className="text-xs text-[var(--danger)] mt-2">{listingError}</p>
+      )}
+      {!purchaseId && (
+        <p className="text-xs text-[var(--text-muted)] mt-2">Scan again after import to enable listing.</p>
       )}
     </div>
   );
