@@ -16,6 +16,7 @@ interface MobileCardProps {
   onToggle: () => void;
   onRecordSale: () => void;
   onFixPricing?: () => void;
+  onFixDHMatch?: () => void;
   onSetPrice?: () => void;
   onDelete?: () => void;
   onListOnDH?: (purchaseId: string) => void;
@@ -26,7 +27,7 @@ interface MobileCardProps {
   isOnSellSheet?: boolean;
 }
 
-export default function MobileCard({ item, selected, onToggle, onRecordSale, onFixPricing, onSetPrice, onDelete, onListOnDH, dhListingLoading, dhListedOverride, ev, showCampaignColumn, isOnSellSheet }: MobileCardProps) {
+export default function MobileCard({ item, selected, onToggle, onRecordSale, onFixPricing, onFixDHMatch, onSetPrice, onDelete, onListOnDH, dhListingLoading, dhListedOverride, ev, showCampaignColumn, isOnSellSheet }: MobileCardProps) {
   const cb = costBasis(item.purchase);
   const snap = item.currentMarket;
   const daysColor = daysHeldColor(item.daysHeld);
@@ -215,6 +216,16 @@ export default function MobileCard({ item, selected, onToggle, onRecordSale, onF
             title="Override price lookup"
           >
             Fix
+          </button>
+        )}
+        {onFixDHMatch && (
+          <button
+            type="button"
+            onClick={onFixDHMatch}
+            className="text-xs text-[var(--info)] underline"
+            title="Re-map to correct DH card"
+          >
+            DH
           </button>
         )}
         {dhListedOverride ? (
