@@ -7,7 +7,7 @@ import { useToast } from '../../../contexts/ToastContext';
 import { useSellSheet } from '../../../hooks/useSellSheet';
 import { queryKeys } from '../../../queries/queryKeys';
 import { useExpectedValues } from '../../../queries/useCampaignQueries';
-import { api } from '../../../../js/api';
+import { api, isAPIError } from '../../../../js/api';
 import { getErrorMessage } from '../../../utils/formatters';
 import { costBasis, bestPrice } from './utils';
 import type { SortKey, SortDir } from './utils';
@@ -127,7 +127,13 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
       setDHListedOptimistic(prev => new Set(prev).add(purchaseId));
       invalidateInventory();
     } catch (err) {
-      toast.error(getErrorMessage(err, 'Failed to list on DH'));
+      if (isAPIError(err) && err.status === 409 && err.data?.error === 'Purchase already listed on DH') {
+        toast.success('Listed on DH');
+        setDHListedOptimistic(prev => new Set(prev).add(purchaseId));
+      } else {
+        toast.error(getErrorMessage(err, 'Failed to list on DH'));
+      }
+      invalidateInventory();
     } finally {
       setDHListingInFlight(prev => { const next = new Set(prev); next.delete(purchaseId); return next; });
     }
