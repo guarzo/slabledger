@@ -1,0 +1,4 @@
+-- Intentionally empty. The up migration backfills a data corruption; reversing
+-- it would re-corrupt mappings and break pricing for every row it "restored".
+-- If you need to roll back the accompanying code change, do so without
+-- touching the mapping rows.
