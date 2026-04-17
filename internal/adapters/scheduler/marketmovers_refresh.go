@@ -11,6 +11,7 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/mathutil"
 	"github.com/guarzo/slabledger/internal/domain/observability"
+	"github.com/guarzo/slabledger/internal/platform/cardutil"
 	"github.com/guarzo/slabledger/internal/platform/config"
 )
 
@@ -200,7 +201,7 @@ func (s *MarketMoversRefreshScheduler) runOnce(ctx context.Context) error {
 		// Resolve collectible ID — use cached mapping or search the API
 		mapping, hasCached := mappingByCert[p.CertNumber]
 		if !hasCached {
-			cid, mid, searchTitle, reason, err := s.resolveCollectibleID(ctx, p)
+			cid, mid, searchTitle, reason, err := s.resolveCollectibleID(ctx, client, p)
 			if err != nil {
 				s.logger.Warn(ctx, "MM refresh: failed to resolve collectible ID",
 					observability.String("cert", p.CertNumber),
@@ -320,7 +321,10 @@ func (s *MarketMoversRefreshScheduler) recordMMError(ctx context.Context, purcha
 //
 // Any candidate returned by either path is validated via tokenized title matching (see
 // tokenMatchesTitle) before the ID is cached.
-func (s *MarketMoversRefreshScheduler) resolveCollectibleID(ctx context.Context, p *inventory.Purchase) (collectibleID, masterID int64, searchTitle, reason string, err error) {
+//
+// The client is passed in so that all MM API calls in a single resolve cycle hit the
+// same underlying transport even if SetClient() is invoked concurrently.
+func (s *MarketMoversRefreshScheduler) resolveCollectibleID(ctx context.Context, client *marketmovers.Client, p *inventory.Purchase) (collectibleID, masterID int64, searchTitle, reason string, err error) {
 	if p.CardName == "" {
 		return 0, 0, "", MMReasonNoCardName, nil
 	}
@@ -329,7 +333,7 @@ func (s *MarketMoversRefreshScheduler) resolveCollectibleID(ctx context.Context,
 	// to name search so we still get a chance to map.
 	certReason := ""
 	if p.CertNumber != "" {
-		cid, mid, title, r, cerr := s.searchByCert(ctx, p)
+		cid, mid, title, r, cerr := s.searchByCert(ctx, client, p)
 		if cerr != nil {
 			s.logger.Warn(ctx, "MM: cert-based search failed, falling back to name search",
 				observability.String("cert", p.CertNumber),
@@ -345,7 +349,7 @@ func (s *MarketMoversRefreshScheduler) resolveCollectibleID(ctx context.Context,
 	}
 
 	// 2. Fall back to name + grade search with relevance validation.
-	cid, mid, title, nameReason, err := s.searchByNameGrade(ctx, p)
+	cid, mid, title, nameReason, err := s.searchByNameGrade(ctx, client, p)
 	if err != nil || cid != 0 {
 		return cid, mid, title, "", err
 	}
@@ -359,48 +363,77 @@ func (s *MarketMoversRefreshScheduler) resolveCollectibleID(ctx context.Context,
 	return 0, 0, "", combined, nil
 }
 
+// normalizedCardName converts the raw PSA listing title stored on
+// Purchase.CardName into a clean search term for MM's catalog. Falls back to
+// the raw CardName only when normalization would strip everything.
+func normalizedCardName(p *inventory.Purchase) string {
+	if n := cardutil.SimplifyForSearch(cardutil.NormalizePurchaseName(p.CardName)); n != "" {
+		return n
+	}
+	return p.CardName
+}
+
 // searchByCert searches MM using the PSA cert number as the query. Returns a
-// reason code when no usable result is found (0 results vs. all-rejected).
-func (s *MarketMoversRefreshScheduler) searchByCert(ctx context.Context, p *inventory.Purchase) (collectibleID, masterID int64, searchTitle, reason string, err error) {
-	results, err := s.getClient().SearchCollectibles(ctx, p.CertNumber, 0, 3)
+// reason code when no usable result is found.
+//
+// Token validation runs against the normalized card name: raw PSA titles like
+// "PIKACHU-HOLO LEGEND MAKER" tokenize in ways that never match MM's catalog,
+// so skipping normalization spuriously rejects valid hits.
+func (s *MarketMoversRefreshScheduler) searchByCert(ctx context.Context, client *marketmovers.Client, p *inventory.Purchase) (collectibleID, masterID int64, searchTitle, reason string, err error) {
+	results, err := client.SearchCollectibles(ctx, p.CertNumber, 0, 3)
 	if err != nil {
 		return 0, 0, "", "", fmt.Errorf("search by cert: %w", err)
 	}
 	if len(results.Items) == 0 {
 		return 0, 0, "", MMReasonNoCertResults, nil
 	}
+	normalizedName := normalizedCardName(p)
 	for _, r := range results.Items {
-		if tokenMatchesTitle(p.CardName, r.Item.SearchTitle) {
+		if tokenMatchesTitle(normalizedName, r.Item.SearchTitle) {
 			return r.Item.ID, r.Item.MasterID, r.Item.SearchTitle, "", nil
 		}
 	}
-	// Promoted from Debug: this is the evidence we need to calibrate
-	// tokenMatchesTitle in the follow-up fix PR.
 	s.logger.Info(ctx, "MM: cert search all results rejected by token match",
 		observability.String("cert", p.CertNumber),
 		observability.String("cardName", p.CardName),
+		observability.String("normalized", normalizedName),
 		observability.String("sampleResultTitle", results.Items[0].Item.SearchTitle),
 		observability.Int("resultCount", len(results.Items)))
 	return 0, 0, "", MMReasonCertTokenMismatch, nil
 }
 
-// searchByNameGrade searches MM using "{CardName} {Grader} {Grade}" and validates
-// that the top result's SearchTitle contains the card name before returning the IDs.
-// Returns a reason code when no usable result is found.
-func (s *MarketMoversRefreshScheduler) searchByNameGrade(ctx context.Context, p *inventory.Purchase) (collectibleID, masterID int64, searchTitle, reason string, err error) {
+// searchByNameGrade searches MM by card name (normalized from the PSA listing
+// title on Purchase.CardName) and validates the top result via tokenized
+// matching. Returns a reason code when no usable result is found.
+//
+// If the primary "{name} {grader} {grade}" query returns 0 hits, retries with
+// "{name}" alone — MM indexes grade as structured metadata on some cards, so
+// dropping the grade token can surface rows the first query misses.
+func (s *MarketMoversRefreshScheduler) searchByNameGrade(ctx context.Context, client *marketmovers.Client, p *inventory.Purchase) (collectibleID, masterID int64, searchTitle, reason string, err error) {
 	grader := p.Grader
 	if grader == "" {
 		grader = "PSA"
 	}
-	// Omit grade when it is zero (unset) to avoid a spurious "0" token in the query.
-	var query string
+	normalizedName := normalizedCardName(p)
+
+	var primaryQuery string
 	if p.GradeValue == 0 {
-		query = fmt.Sprintf("%s %s", p.CardName, grader)
+		primaryQuery = fmt.Sprintf("%s %s", normalizedName, grader)
 	} else {
-		query = fmt.Sprintf("%s %s %s", p.CardName, grader, mathutil.FormatGrade(p.GradeValue))
+		primaryQuery = fmt.Sprintf("%s %s %s", normalizedName, grader, mathutil.FormatGrade(p.GradeValue))
 	}
 
-	results, err := s.getClient().SearchCollectibles(ctx, query, 0, 5)
+	cid, mid, title, reason, err := s.runMMNameQuery(ctx, client, p, primaryQuery)
+	if reason != MMReasonNoNameResults {
+		return cid, mid, title, reason, err
+	}
+	return s.runMMNameQuery(ctx, client, p, normalizedName)
+}
+
+// runMMNameQuery executes one MM SearchCollectibles call and validates the top
+// result via tokenized matching against the normalized card name.
+func (s *MarketMoversRefreshScheduler) runMMNameQuery(ctx context.Context, client *marketmovers.Client, p *inventory.Purchase, query string) (collectibleID, masterID int64, searchTitle, reason string, err error) {
+	results, err := client.SearchCollectibles(ctx, query, 0, 5)
 	if err != nil {
 		return 0, 0, "", "", fmt.Errorf("search by name: %w", err)
 	}
@@ -408,14 +441,13 @@ func (s *MarketMoversRefreshScheduler) searchByNameGrade(ctx context.Context, p 
 		return 0, 0, "", MMReasonNoNameResults, nil
 	}
 
-	// Validate relevance: reject the top result if tokenized matching fails,
-	// since a mismatch means MM returned a completely unrelated card.
+	normalizedName := normalizedCardName(p)
 	top := results.Items[0]
-	if !tokenMatchesTitle(p.CardName, top.Item.SearchTitle) {
-		// Promoted from Debug: needed to diagnose mapping failures from logs.
+	if !tokenMatchesTitle(normalizedName, top.Item.SearchTitle) {
 		s.logger.Info(ctx, "MM: name search top result rejected by token match",
 			observability.String("cert", p.CertNumber),
 			observability.String("cardName", p.CardName),
+			observability.String("normalized", normalizedName),
 			observability.String("query", query),
 			observability.String("resultTitle", top.Item.SearchTitle))
 		return 0, 0, "", MMReasonNameTokenMismatch, nil
