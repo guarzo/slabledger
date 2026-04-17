@@ -17,6 +17,7 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/auth"
 	"github.com/guarzo/slabledger/internal/domain/demand"
 	"github.com/guarzo/slabledger/internal/domain/dhlisting"
+	"github.com/guarzo/slabledger/internal/domain/dhpricing"
 	"github.com/guarzo/slabledger/internal/domain/export"
 	"github.com/guarzo/slabledger/internal/domain/finance"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
@@ -39,6 +40,7 @@ type handlerInputs struct {
 	AuthService       auth.Service
 	CampaignsService  inventory.Service
 	ArbitrageService  arbitrage.Service
+	DHPriceSyncService dhpricing.Service
 	PortfolioService  portfolio.Service
 	TuningService     tuning.Service
 	FinanceService    finance.Service
@@ -288,6 +290,7 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 	// Wire services from initialization
 	deps.ExportService = in.ExportService
 	deps.FinanceService = in.FinanceService
+	deps.DHPriceSyncService = in.DHPriceSyncService
 
 	// Wire Google Sheets for PSA sync (if client + spreadsheet configured)
 	if in.GSheetsClient != nil && in.Cfg.GoogleSheets.SpreadsheetID != "" {

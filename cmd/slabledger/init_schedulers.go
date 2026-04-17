@@ -12,6 +12,7 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/advisor"
 	"github.com/guarzo/slabledger/internal/domain/auth"
 	"github.com/guarzo/slabledger/internal/domain/dhlisting"
+	"github.com/guarzo/slabledger/internal/domain/dhpricing"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/domain/pricing"
@@ -48,6 +49,7 @@ type schedulerDeps struct {
 	DHIntelligenceRepo   *sqlite.MarketIntelligenceRepository
 	DHSuggestionsRepo    *sqlite.DHSuggestionsRepository
 	DHDemandRepo         *sqlite.DHDemandRepository
+	DHPriceSyncService   dhpricing.Service
 	GapStore             *sqlite.GapStore
 	PSASheetFetcher      scheduler.SheetFetcher
 	PSASpreadsheetID     string
@@ -128,6 +130,9 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 	}
 	if deps.DHDemandRepo != nil {
 		buildDeps.DHDemandRepo = deps.DHDemandRepo
+	}
+	if deps.DHPriceSyncService != nil {
+		buildDeps.DHPriceSyncService = deps.DHPriceSyncService
 	}
 	if deps.PurchaseStore != nil {
 		buildDeps.DHUnsoldCardLister = deps.PurchaseStore
