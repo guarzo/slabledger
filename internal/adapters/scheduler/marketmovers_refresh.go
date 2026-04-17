@@ -144,6 +144,82 @@ func (s *MarketMoversRefreshScheduler) RunOnce(ctx context.Context) error {
 	return s.runOnce(ctx)
 }
 
+// PriceSinglePurchase resolves and applies MM pricing for one purchase on
+// demand. Used by the intake-time pricing enqueuer so freshly scanned certs
+// don't have to wait for the daily refresh cycle.
+//
+// Returns nil when the integration isn't configured — on-demand pricing is
+// best-effort and must not surface errors to the intake flow.
+func (s *MarketMoversRefreshScheduler) PriceSinglePurchase(ctx context.Context, p *inventory.Purchase) error {
+	if p == nil {
+		return nil
+	}
+	client := s.getClient()
+	if client == nil {
+		s.logger.Debug(ctx, "MM price: client not initialized, skipping",
+			observability.String("cert", p.CertNumber))
+		return nil
+	}
+	cfg, err := s.store.GetConfig(ctx)
+	if err != nil {
+		return err
+	}
+	if cfg == nil {
+		return nil
+	}
+
+	mapping, err := s.store.GetMapping(ctx, p.CertNumber)
+	if err != nil {
+		s.logger.Warn(ctx, "MM price: failed to load mapping",
+			observability.String("cert", p.CertNumber),
+			observability.Err(err))
+	}
+
+	if mapping == nil {
+		cid, mid, searchTitle, reason, resolveErr := s.resolveCollectibleID(ctx, client, p)
+		if resolveErr != nil {
+			s.recordMMError(ctx, p.ID, MMReasonAPIError)
+			return resolveErr
+		}
+		if cid == 0 {
+			s.recordMMError(ctx, p.ID, reason)
+			return nil
+		}
+		if err := s.store.SaveMapping(ctx, p.CertNumber, cid, mid, searchTitle); err != nil {
+			s.logger.Warn(ctx, "MM price: failed to save mapping",
+				observability.String("cert", p.CertNumber),
+				observability.Err(err))
+		}
+		mapping = &sqlite.MMCardMapping{SlabSerial: p.CertNumber, MMCollectibleID: cid, MasterID: mid, SearchTitle: searchTitle}
+	}
+
+	dateFrom := time.Now().UTC().AddDate(0, 0, -30)
+	stats, err := client.FetchDailyStats(ctx, mapping.MMCollectibleID, dateFrom)
+	if err != nil {
+		s.recordMMError(ctx, p.ID, MMReasonAPIError)
+		return err
+	}
+
+	avgPrice, trendPct, sales30d := computeMMSignals(stats.DailyStats)
+	if avgPrice <= 0 {
+		s.recordMMError(ctx, p.ID, MMReasonNoSalesData)
+		return nil
+	}
+
+	mmValueCents := mathutil.ToCentsInt(avgPrice)
+	activeLowCents := s.fetchActiveLowCents(ctx, client, mapping.MMCollectibleID, p.CertNumber)
+	if err := s.valueUpdater.UpdatePurchaseMMSignals(ctx, p.ID, mmValueCents, trendPct, sales30d, activeLowCents); err != nil {
+		s.recordMMError(ctx, p.ID, MMReasonAPIError)
+		return err
+	}
+	s.recordMMError(ctx, p.ID, "")
+
+	s.logger.Info(ctx, "MM price: applied on-demand pricing",
+		observability.String("cert", p.CertNumber),
+		observability.Int("mmValueCents", mmValueCents))
+	return nil
+}
+
 func (s *MarketMoversRefreshScheduler) runOnce(ctx context.Context) error {
 	start := time.Now()
 	cfg, err := s.store.GetConfig(ctx)

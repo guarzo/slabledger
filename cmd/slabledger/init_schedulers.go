@@ -33,7 +33,8 @@ type schedulerDeps struct {
 	DHStore              *sqlite.DHStore
 	CampaignsService     inventory.Service
 	CertLookup           inventory.CertLookup
-	CertEnrichJob        *scheduler.CertEnrichJob // pre-built; nil if PSA not configured
+	CertEnrichJob        *scheduler.CertEnrichJob    // pre-built; nil if PSA not configured
+	PricingEnrichJob     *scheduler.PricingEnrichJob // pre-built; wired into inventory service as the pricing enqueuer
 	AdvisorService       advisor.Service
 	AdvisorCacheRepo     *sqlite.AdvisorCacheRepository
 	AICallRepo           *sqlite.AICallRepository
@@ -179,6 +180,14 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 	}
 
 	schedulerResult := scheduler.BuildGroup(deps.Config, buildDeps)
+
+	// Wire the pricing-enrich job's providers now that CL/MM schedulers exist.
+	// A nil pricer (CL or MM not configured) is filtered inside SetPricers.
+	if deps.PricingEnrichJob != nil {
+		deps.PricingEnrichJob.SetPricers(schedulerResult.CardLadderRefresh, schedulerResult.MMRefresh)
+		schedulerResult.Group.Add(deps.PricingEnrichJob)
+	}
+
 	schedulerResult.Group.StartAll(schedulerCtx)
 
 	return &schedulerResult, cancelScheduler
