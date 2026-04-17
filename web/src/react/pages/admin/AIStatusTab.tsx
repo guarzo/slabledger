@@ -94,6 +94,7 @@ export function AIStatusTab({ enabled = true }: { enabled?: boolean }) {
           label="Avg Latency"
           value={summary.totalCalls > 0 ? formatLatency(summary.avgLatencyMs) : '-'}
           sub={summary.lastCallAt ? `Last: ${formatAdminDate(summary.lastCallAt)}` : 'No calls yet'}
+          color={summary.totalCalls > 0 ? (summary.avgLatencyMs > 60000 ? 'var(--danger)' : summary.avgLatencyMs > 30000 ? 'var(--warning)' : undefined) : undefined}
         />
         <SummaryCard
           label="Est. Cost (7d)"

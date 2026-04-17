@@ -9,10 +9,10 @@ import { PRICE_FLAG_LABELS } from '../../../types/campaigns/priceReview';
 type FilterStatus = 'open' | 'resolved' | 'all';
 
 const REASON_COLORS: Record<string, string> = {
-  wrong_match: 'bg-red-400/15 text-red-400',
-  stale_data: 'bg-yellow-400/15 text-yellow-400',
-  wrong_grade: 'bg-orange-400/15 text-orange-400',
-  source_disagreement: 'bg-blue-400/15 text-blue-400',
+  wrong_match: 'bg-[var(--danger-bg)] text-[var(--danger)]',
+  stale_data: 'bg-[var(--warning-bg)] text-[var(--warning)]',
+  wrong_grade: 'bg-[var(--warning-bg)] text-[var(--warning)]',
+  source_disagreement: 'bg-[var(--info-bg)] text-[var(--info)]',
   other: 'bg-[var(--surface-2)] text-[var(--text-muted)]',
 };
 
