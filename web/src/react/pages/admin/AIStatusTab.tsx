@@ -26,7 +26,7 @@ function OperationRow({ op }: { op: AIOperationSummary }) {
         <span className={op.errors > 0 ? 'text-[var(--danger)]' : 'text-[var(--text-muted)]'}>{op.errors}</span>
       </td>
       <td className="py-2 pr-4 text-sm text-right">
-        <span className={op.successRate < 90 && op.calls > 0 ? 'text-[var(--warning)]' : 'text-[var(--text)]'}>
+        <span className={op.calls > 0 ? (op.successRate < 50 ? 'text-[var(--danger)]' : op.successRate < 90 ? 'text-[var(--warning)]' : 'text-[var(--text)]') : 'text-[var(--text)]'}>
           {op.calls > 0 ? `${op.successRate.toFixed(0)}%` : '-'}
         </span>
       </td>
@@ -94,6 +94,7 @@ export function AIStatusTab({ enabled = true }: { enabled?: boolean }) {
           label="Avg Latency"
           value={summary.totalCalls > 0 ? formatLatency(summary.avgLatencyMs) : '-'}
           sub={summary.lastCallAt ? `Last: ${formatAdminDate(summary.lastCallAt)}` : 'No calls yet'}
+          color={summary.totalCalls > 0 ? (summary.avgLatencyMs > 60000 ? 'var(--danger)' : summary.avgLatencyMs > 30000 ? 'var(--warning)' : undefined) : undefined}
         />
         <SummaryCard
           label="Est. Cost (7d)"

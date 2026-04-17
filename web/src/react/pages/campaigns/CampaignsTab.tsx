@@ -146,13 +146,13 @@ export default function CampaignsTab({
                     const st = Math.max(0, Math.min(pnl.sellThroughPct ?? 0, 1));
                     return (
                       <div className="hidden md:flex items-center gap-2">
-                        <span>{pnl.totalSold}/{pnl.totalPurchases}</span>
-                        <div className="w-12 h-1.5 rounded-full bg-[var(--surface-3)] overflow-hidden" title={`Sell-through: ${formatPct(pnl.sellThroughPct)}`}>
+                        <span>{formatPct(pnl.sellThroughPct)}</span>
+                        <div className="w-12 h-1.5 rounded-full bg-[var(--surface-3)] overflow-hidden" title={`${pnl.totalSold}/${pnl.totalPurchases} sold`}>
                           <div
                             className="h-full rounded-full transition-all duration-300"
                             style={{
                               width: `${st * 100}%`,
-                              background: st >= 0.5 ? 'var(--success)' : 'var(--warning)',
+                              background: st >= 0.5 ? 'var(--success)' : st >= 0.10 ? 'var(--warning)' : 'var(--danger)',
                             }}
                           />
                         </div>

@@ -48,7 +48,7 @@ export function PSASyncTab({ enabled = true }: { enabled?: boolean }) {
         {/* Header row */}
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
+            <span className="w-2 h-2 rounded-full bg-[var(--success)] shrink-0" />
             <span className="text-sm font-semibold text-[var(--text)]">Configured</span>
           </div>
           <span className="text-xs text-[var(--text-muted)] font-mono">
@@ -61,7 +61,7 @@ export function PSASyncTab({ enabled = true }: { enabled?: boolean }) {
           <p className="text-xs text-[var(--text-muted)]">Interval: {data.interval}</p>
           {data.pendingCount != null && data.pendingCount > 0 && (
             <p className="text-xs">
-              <span className="text-orange-400 font-medium">{data.pendingCount} pending items</span>
+              <span className="text-[var(--warning)] font-medium">{data.pendingCount} pending items</span>
               <span className="text-[var(--text-muted)]"> need review in Operations tab</span>
             </p>
           )}
@@ -82,10 +82,10 @@ export function PSASyncTab({ enabled = true }: { enabled?: boolean }) {
             {(lastRun.unmatched > 0 || lastRun.ambiguous > 0 || lastRun.failed > 0 || lastRun.parseErrors > 0) && (
               <p className="text-xs text-[var(--text-muted)]">
                 {[
-                  lastRun.unmatched > 0 && <span key="unmatched" className="text-orange-400">{lastRun.unmatched} unmatched</span>,
-                  lastRun.ambiguous > 0 && <span key="ambiguous" className="text-yellow-400">{lastRun.ambiguous} ambiguous</span>,
-                  lastRun.failed > 0 && <span key="failed" className="text-red-400">{lastRun.failed} failed</span>,
-                  lastRun.parseErrors > 0 && <span key="parseErrors" className="text-orange-400">{lastRun.parseErrors} parse errors</span>,
+                  lastRun.unmatched > 0 && <span key="unmatched" className="text-[var(--warning)]">{lastRun.unmatched} unmatched</span>,
+                  lastRun.ambiguous > 0 && <span key="ambiguous" className="text-[var(--warning)]">{lastRun.ambiguous} ambiguous</span>,
+                  lastRun.failed > 0 && <span key="failed" className="text-[var(--danger)]">{lastRun.failed} failed</span>,
+                  lastRun.parseErrors > 0 && <span key="parseErrors" className="text-[var(--danger)]">{lastRun.parseErrors} parse errors</span>,
                 ]
                   .filter(Boolean)
                   .reduce<ReactNode[]>((acc, el, i) => (i === 0 ? [el] : [...acc, ' · ', el]), [])}

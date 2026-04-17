@@ -9,10 +9,10 @@ import { PRICE_FLAG_LABELS } from '../../../types/campaigns/priceReview';
 type FilterStatus = 'open' | 'resolved' | 'all';
 
 const REASON_COLORS: Record<string, string> = {
-  wrong_match: 'bg-red-400/15 text-red-400',
-  stale_data: 'bg-yellow-400/15 text-yellow-400',
-  wrong_grade: 'bg-orange-400/15 text-orange-400',
-  source_disagreement: 'bg-blue-400/15 text-blue-400',
+  wrong_match: 'bg-[var(--danger-bg)] text-[var(--danger)]',
+  stale_data: 'bg-[var(--warning-bg)] text-[var(--warning)]',
+  wrong_grade: 'bg-[var(--warning-bg)] text-[var(--warning)]',
+  source_disagreement: 'bg-[var(--info-bg)] text-[var(--info)]',
   other: 'bg-[var(--surface-2)] text-[var(--text-muted)]',
 };
 
@@ -202,9 +202,16 @@ export function PriceFlagsTab({ enabled = true }: { enabled?: boolean }) {
 
       {/* Flag list */}
       {flags.length === 0 ? (
-        <div className="text-center py-8 text-[var(--text-muted)]">
-          <p className="text-sm">No {filter === 'all' ? '' : filter} flags found.</p>
-        </div>
+        filter === 'open' ? (
+          <div className="text-center py-8 text-[var(--success)]">
+            <div className="text-2xl mb-2">✓</div>
+            <p className="text-sm font-medium">All clear — no open price flags.</p>
+          </div>
+        ) : (
+          <div className="text-center py-8 text-[var(--text-muted)]">
+            <p className="text-sm">No {filter} flags found.</p>
+          </div>
+        )
       ) : (
         <div className="max-h-[min(600px,calc(100vh-350px))] overflow-y-auto scrollbar-dark space-y-3">
           {flags.map((flag) => (

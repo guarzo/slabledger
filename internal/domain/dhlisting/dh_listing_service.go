@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"strings"
 
-	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
 	"github.com/guarzo/slabledger/internal/domain/dhevents"
+	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )

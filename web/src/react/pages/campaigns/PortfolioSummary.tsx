@@ -32,9 +32,7 @@ export default function PortfolioSummary({ campaignCount, pnlMap }: PortfolioSum
             className="h-full rounded-full transition-all duration-500"
             style={{
               width: `${Math.min((totalRevenue / totalSpent) * 100, 100)}%`,
-              background: totalRevenue >= totalSpent
-                ? 'linear-gradient(90deg, var(--success), #34d399)'
-                : 'linear-gradient(90deg, var(--warning), #fbbf24)',
+              background: totalRevenue >= totalSpent ? 'var(--success)' : 'var(--warning)',
             }}
           />
         </div>
