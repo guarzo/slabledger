@@ -27,6 +27,22 @@ Try to read `docs/private/CAMPAIGN_STRATEGY.md`. It contains campaign design int
 
 If the file is missing (fresh checkout, sanitised worktree), don't fail. Tell the user: *"Strategy doc not found at docs/private/CAMPAIGN_STRATEGY.md — I'll analyse numerically but won't cross-reference design intent. Want to point me at it?"* and continue with data-only analysis.
 
+### Step 1a — Parse current campaign parameters from the strategy doc
+
+**The strategy doc is the source of truth for current campaign parameters.** The app stores only buy terms, daily cap, and eBay fee — it does NOT store year range, grade range, price range, CL confidence, or inclusion lists. `/api/campaigns` and `/api/campaigns/{id}` return empty strings for those fields. The "Quick-Copy Campaign Formats" section at the bottom of the strategy doc has the actual current values.
+
+**Extract and hold in working memory for every active campaign**:
+- Year range (e.g. `1999-2003`)
+- Grade range (e.g. `PSA 9-10`)
+- Price range (CL Value, e.g. `$150-$5000`)
+- CL confidence floor (e.g. `2`)
+- Buy terms (cross-check against API `buyTermsCLPct`; strategy doc wins on disagreement — that's a Playbook D signal)
+- Daily spend cap (cross-check against API `dailySpendCapCents`)
+- **Inclusion list** — the exact character list, or `None (open net)`
+- **Exclusion markers** — characters explicitly removed and why (e.g. "Mew removed from C1 to stop Ancient Mew flood")
+
+Before recommending any inclusion-list change, verify against the parsed list. Recommending "add X to campaign Y" when X is already there is a failure mode the skill must prevent.
+
 ## Step 2 — Resolve auth and pick the base URL
 
 All endpoints except `/api/health` require authentication. Resolve in this order:
@@ -74,8 +90,8 @@ Present the opener as **two paragraphs plus a close**:
 **Where the top-3 actually come from**, in priority order. Walk down the list, skip items with no qualifying signal, take the strongest 3:
 
 1. **Capital crunch first** — if in-hand × 1.1 < next invoice amount, the crunch IS item 1 (with options per Playbook B's feasibility precondition). Don't bury it.
-2. **Grade-level margin leaks from `/tuning`** — any `(campaign, grade)` row with `avgBuyPctOfCL ≥ 0.93` AND `purchaseCount ≥ 10` is paying near-full CL on that grade. Sized recommendation: drop terms, raise CL confidence, split the grade into its own campaign, or cut the grade from scope. This is usually the single highest-signal source of opener candidates.
-3. **Character inclusion gaps from `/insights.byCharacter`** — characters with `soldCount ≥ 5` AND `roi ≥ 0.20` that appear in zero or only 1–2 active campaigns. Sized as `expected revenue = avg net per sale × current monthly sale rate × campaigns-being-added`. Margin-neutral moves are a free win.
+2. **CL-lag edges from `/tuning` and `/insights.byCharacterGrade`** — any `(campaign, grade)` or `(character, grade)` row with `avgBuyPctOfCL ≤ 0.80` AND `roi ≥ 0.20` AND `soldCount ≥ 3` means CL drifted *up* after purchase (CL caught up to market) — this is the operator's winning pattern and should be replicated. Propose matching new buys: same era + same grade tier + similar thin-comp character pool. Avoid the inverse pattern (`avgBuyPctOfCL ≥ 0.93` AND `roi ≤ 0.05`) — that's CL-led-market segments where expansion compounds loss. The fix for those is **scope narrowing (year / price / confidence)**, not terms cutting. See also "CL-lag vs. CL-lead framing" in Data conventions.
+3. **Character inclusion gaps from `/insights.byCharacter` and `byCharacterGrade`** — characters with `soldCount ≥ 5` AND `roi ≥ 0.20` that are absent from the relevant campaign's inclusion list. **Apply the popular-tier exclusion** (see Recommendation rules): never recommend adding Charizard, Pikachu, Blastoise, Venusaur, Mewtwo, Mew, Umbreon, Eevee, Lugia, Ho-Oh, Gengar, or Rayquaza unless a specific `(character, grade, era)` pocket — e.g. Gengar PSA 6 — is showing the CL-lag pattern above. The default assumption for popular-tier is *already contested, already bid, already in your lists.* Sized as `expected revenue = avg net per sale × current monthly sale rate × campaigns-being-added`. **Verify against inclusion lists parsed from the strategy doc (Step 1a) before proposing — the API returns empty strings and is not authoritative.**
 4. **Low-grade underexposure from `/insights.byGrade`** — PSA 5/6/7 rows with ROI > 30% appearing in < 4 campaigns. Expansion candidate (drop a grade floor, add a low-grade engine).
 5. **Velocity acceleration/deceleration from `/intelligence/campaign-signals`** — sharply decelerating campaign = tuning candidate; accelerating with headroom = ramp candidate (capital guardrail applies).
 6. **Crack opportunities from `/opportunities/crack`** — capital-positive, bypasses guardrail. Surface when total `netGainCents` across the queue exceeds ~$1K.
@@ -327,6 +343,25 @@ Present:
 
 When recommending DH as a sales channel (in any playbook), note that eBay listings now flow through DH — there's no separate eBay CSV export. DH handles multi-channel distribution. DH approvals are capital-positive (they turn inventory into sales), so the capital guardrail does NOT apply.
 
+## Step 5 — Retrospective (mandatory at session end)
+
+Every `/campaign-analysis` conversation must close with a short retrospective block. The goal is to compound the skill's quality over time by capturing what couldn't be answered from the data we have.
+
+**When to write it.** At the end of a session, right before the closing question, or when the user signals they're wrapping up ("thanks, that's it for tonight", "ok let's apply these", etc.). Don't write it on every individual turn — once per session.
+
+**What to capture.** Four buckets, each 1-3 bullets. Skip any bucket that's empty, don't invent filler:
+
+1. **Data gaps encountered** — endpoints that returned empty (`intelligence_count: 0`, niches empty, signals empty, etc.), fields missing from responses, hypotheses we couldn't test from current data.
+2. **DH-side asks** — things we believe DH should be populating but isn't, or new intelligence fields we'd want. These feed the next dated `docs/private/YYYY-MM-DD-dh-data-ask.md`.
+3. **Client-side work that would unblock future analyses** — new aggregations, new heuristics, migrations, etc.
+4. **Lessons about the operator's edge / thesis** — anything learned this session about how they think, what moves they respect, what corrections they pushed back on. This is the most valuable bucket and the easiest to skip — don't skip it.
+
+**Where it goes.** Append to `docs/private/campaign-analysis-wishlist.md` in the **Retrospective log** section at the bottom. One bullet per session, dated. Also append any new items to the relevant tables above it (external data gaps / internal work / hypotheses). If an item already exists, don't duplicate — add a date-stamped "reconfirmed" note to the existing row instead.
+
+**Show the user what you're appending** — a brief recap of the retrospective bullets in the response, so they can correct or amend before it lands in the file. Then write the file.
+
+**One-artefact-per-session discipline.** Drafts of messages to partners (DH, PSA, LGS) go into dated files: `docs/private/YYYY-MM-DD-<partner>-data-ask.md` (or similar). Don't overwrite a previous day's file — keep the trail linear so we can track what was sent, what was answered, and what's still open.
+
 ## Conversational guidelines
 
 1. Lead with the most actionable finding, then details. Be direct about what's not working — don't hedge.
@@ -417,10 +452,66 @@ When two or more recommendations interact — a liquidation target sits in a cam
 
 For independent recommendations, skip the Sequence block; the numbered list in the opener is enough.
 
+### Popular-tier character exclusion
+
+The operator's edge is on characters competing buyers *aren't* chasing. Never default-recommend adding any of these characters to a campaign inclusion list, regardless of how strong the character's segment ROI looks in the aggregate data:
+
+**Popular tier (do not default-recommend):** Charizard, Pikachu, Blastoise, Venusaur, Mewtwo, Mew, Umbreon, Eevee, Lugia, Ho-Oh, Gengar, Rayquaza.
+
+The assumption is these are already contested, already in your lists where they belong, and adding them elsewhere just bids against yourself and other Partner Offers buyers.
+
+**Narrow-pocket exception.** A specific `(character, grade, era)` combination from the popular tier IS recommendable if `/insights.byCharacterGrade` shows it matches the CL-lag pattern (`avgBuyPctOfCL ≤ 0.80 AND roi ≥ 0.20 AND soldCount ≥ 3`). Examples that qualify: "Gengar PSA 6" (not Gengar in general), "Mew PSA 8 vintage" (not Mew in general). State the grade + era explicitly so the add is narrow, not broad.
+
+**Positive tier to mine for edge:** 2nd-tier vintage/mid-era Pokemon the operator has explicitly flagged (Absol, Typhlosion, Feraligatr, Meganium) plus the broader "Other" character bucket from `byCharacter` — that bucket held 200 fills and 10% ROI on average in one sampled session, meaning the uncaptured long tail has signal.
+
+### Sub-$150 modern floor
+
+Never recommend lowering floors or adding character pockets that would capture sub-$150 *modern* (2016+) supply. The combination of $3 flat PSA sourcing fee (2%+ of cost at that tier) and high price volatility on modern alt-arts makes this the structural loss zone. Sub-$150 vintage / mid-era / EX-era does NOT carry the same penalty — different price dynamics, lower volatility, same $3 fee but distributed over cleaner margin.
+
+### Turnover gate
+
+Any ramp recommendation must carry an expected days-to-sell ≤ 30 based on the segment's historical `avgDaysToSell` (or `bestChannel`'s days-to-sell if segment data is thin). If the segment's avgDaysToSell > 30, the recommendation becomes a patient-capital play — surface it only with an explicit caveat: *"Ramp candidate but avgDaysToSell is X days — requires cash to sit. Skip unless you have reserves."* Operator has thin cash reserves and worst-case-LGS@70% is the liquidation floor — ramp must turn.
+
+### Cap-diagnostic rule
+
+Before interpreting a campaign's multi-day cap utilization %, check whether the daily cap can fit multiple fills of the campaign's expected per-fill cost. **Low cap utilization on a high-per-fill-cost campaign ≠ "supply is thin."** It usually means "a single fill eats most of the cap, and spike-day second fills are getting lost to cap exhaustion."
+
+The check:
+
+1. Compute **expected per-fill buy cost** from the campaign's price range: `midpoint(priceRange) × buyTerms + $3 sourcing fee`. E.g., a $500-$5000 campaign at 75% has expected per-fill cost ~$2,065 mid-range, and top-of-range fills at $3,753.
+2. Compare to daily cap:
+   - If `cap ≥ 3 × expected per-fill cost`: cap has room for multi-fill days — low utilization genuinely indicates thin supply.
+   - If `cap < 3 × expected per-fill cost`: cap is binding on spike days regardless of multi-day utilization. Recommend cap raise *before* concluding the campaign is supply-constrained.
+3. Flag explicitly in the recommendation: *"C7 cap is $5,000 against expected per-fill cost of ~$2,065 (mid-range) — single fill of a top-of-range Crystal card consumes 75%+ of cap. Multi-day 20% utilization is consistent with 'cap eats one fill' rather than 'supply is thin.'"*
+
+This rule was added because the skill initially recommended lowering C7's floor based on 20% multi-day utilization. The operator corrected: Crystal cards land $3K-$7K, so the $5K cap was the bottleneck, not the floor. The diagnostic check above would have caught this.
+
+### Partner-ask verification
+
+Before drafting a data-ask to a third party (DH, PSA, CardLadder, etc.) based on "this endpoint returns 0" or "this field is empty," **verify the gap isn't on our side first.** An empty response usually has three possible causes, and only one of them is a partner gap:
+
+1. **Partner doesn't have the data** — legitimate partner ask.
+2. **Partner has it, but our scheduler / seed / trigger isn't pulling it** — local bug.
+3. **Partner has it and we pulled it, but it's stored in a different field / table than we're reading** — local query bug.
+
+Ask three questions before filing a partner-ask:
+
+- Is there a scheduler or job that should be populating this field? If so, has it run recently? Check via logs, API health endpoints, or manually running the job.
+- Is the data already in a related table or field that we're not surfacing? (E.g., PSA pop lives in `market_intelligence.population` even though `dh/status` shows `intelligence_count: 0`.)
+- Does the partner's documented API already return this? If yes, the gap is our pull, not their provision.
+
+Only items that clear all three checks go into the dated `docs/private/YYYY-MM-DD-<partner>-data-ask.md` draft. Items that fail any of them go into the internal-work table of the wishlist as a local-side fix.
+
+This rule was added because the first 2026-04-17 DH draft included "intelligence_count: 0" and "no pop data" as DH asks. Both turned out to be local seeding bugs — the scheduler only refreshed existing rows and nothing seeded the table. Operator caught it and corrected the draft before sending.
+
 ## Data conventions
 
 - **All monetary values are in cents.** Divide by 100 and format as `$X,XXX.XX`.
-- **Buy terms** are decimals (`0.80` = 80% of CL value).
+- **Buy terms** are decimals (`0.80` = 80% of CL value). These are contract terms PSA fills against at purchase moment.
+- **`avgBuyPctOfCL` is NOT your buy terms.** The tuning endpoint's `avgBuyPctOfCL` (and the equivalent field on `/insights` segments) is **realized cost ÷ current CL value** — a post-purchase ratio that includes CL drift since fill. When it's materially different from your contract terms, you're seeing CL move, not terms change. Never phrase this as "you're buying at X% of CL" — say "realized cost is X% of current CL" or "CL has drifted Y pp since purchase." Confusing these two was a real, documented failure mode of this skill.
+- **CL-lag vs. CL-lead framing.** The same `avgBuyPctOfCL` field tells two different stories depending on direction:
+  - **CL-lag (edge captured):** `avgBuyPctOfCL < contract terms` → CL drifted *up* after purchase → you bought before CL caught up to market. Surface segments with `avgBuyPctOfCL ≤ 0.80 AND roi ≥ 0.20` as patterns to replicate.
+  - **CL-lead (edge lost):** `avgBuyPctOfCL > contract terms` → CL drifted *down* after purchase → CL was above market, now correcting. Surface segments with `avgBuyPctOfCL ≥ 0.93 AND roi ≤ 0.05` as segments to narrow scope in (year, price, confidence), **not** as terms-cut candidates. Terms cuts reduce fill rate without fixing the root cause, which is CL unreliability on that segment.
 - **ROI** is a decimal ratio (`0.08` = 8%).
 - **Capital summary fields:** `outstandingCents`, `weeksToCover`, `recoveryTrend`, `alertLevel`. Operator-specific framing (what's "healthy", labels for alert levels) lives in the config file loaded at Step 0.
 - **~1 week delay** between a PSA purchase being consummated and the card arriving. Campaigns with < 2 weeks of history and 0% sell-through aren't necessarily underperforming — the cards may not be in hand yet.

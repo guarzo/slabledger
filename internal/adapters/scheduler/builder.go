@@ -47,11 +47,12 @@ type BuildDeps struct {
 	AICallTracker    ai.AICallTracker
 
 	// DH dependencies (optional)
-	DHClient           *dh.Client
-	DHIntelligenceRepo intelligence.Repository
-	DHSuggestionsRepo  intelligence.SuggestionsRepository
-	DHDemandRepo       demand.Repository  // niche-opportunity cache (T1/T3)
-	DHUnsoldCardLister UnsoldDHCardLister // seeds analytics with our inventory
+	DHClient                 *dh.Client
+	DHIntelligenceRepo       intelligence.Repository
+	DHSuggestionsRepo        intelligence.SuggestionsRepository
+	DHDemandRepo             demand.Repository      // niche-opportunity cache (T1/T3)
+	DHUnsoldCardLister       UnsoldDHCardLister     // seeds analytics with our inventory
+	DHIntelligenceSeedLister IntelligenceSeedLister // seeds market_intelligence with our inventory
 
 	// DH inventory reconciler (optional; enables the daily DH reconcile scheduler).
 	DHReconciler dhlisting.Reconciler
@@ -244,8 +245,12 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 			CacheTTL:  time.Duration(cfg.DH.CacheTTLHours) * time.Hour,
 			MaxPerRun: 50,
 		}
+		var intelOpts []IntelligenceRefreshOption
+		if deps.DHIntelligenceSeedLister != nil {
+			intelOpts = append(intelOpts, WithIntelligenceSeedLister(deps.DHIntelligenceSeedLister))
+		}
 		schedulers = append(schedulers, NewDHIntelligenceRefreshScheduler(
-			deps.DHClient, deps.DHIntelligenceRepo, deps.Logger, dhIntelConfig,
+			deps.DHClient, deps.DHIntelligenceRepo, deps.Logger, dhIntelConfig, intelOpts...,
 		))
 	}
 

@@ -130,6 +130,7 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 	}
 	if deps.PurchaseStore != nil {
 		buildDeps.DHUnsoldCardLister = deps.PurchaseStore
+		buildDeps.DHIntelligenceSeedLister = deps.PurchaseStore
 	}
 	// Construct DH reconciler once; shared with scheduler (handlers.go builds
 	// its own instance for the admin endpoint — that's intentional and fine
