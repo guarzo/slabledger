@@ -81,7 +81,7 @@ func TestHandleListPurchaseOnDH(t *testing.T) {
 			wantErrSubstr: "received",
 		},
 		{
-			name: "not yet pushed to DH → 409",
+			name: "not yet pushed to DH and not pending → 409",
 			getPurchase: func(ctx context.Context, id string) (*inventory.Purchase, error) {
 				p := readyPurchase()
 				p.DHInventoryID = 0
@@ -89,6 +89,31 @@ func TestHandleListPurchaseOnDH(t *testing.T) {
 			},
 			wantStatus:    http.StatusConflict,
 			wantErrSubstr: "not yet pushed",
+		},
+		{
+			name: "pending DH push is forwarded to service for inline push + list",
+			getPurchase: func(ctx context.Context, id string) (*inventory.Purchase, error) {
+				p := readyPurchase()
+				p.DHInventoryID = 0
+				p.DHPushStatus = inventory.DHPushStatusPending
+				return p, nil
+			},
+			listFn: func(ctx context.Context, certs []string) dhlisting.DHListingResult {
+				return dhlisting.DHListingResult{Listed: 1, Synced: 1, Total: 1}
+			},
+			wantStatus:     http.StatusOK,
+			wantListedFrom: []string{"CERT123"},
+		},
+		{
+			name: "held DH push → 409 with held-specific message",
+			getPurchase: func(ctx context.Context, id string) (*inventory.Purchase, error) {
+				p := readyPurchase()
+				p.DHInventoryID = 0
+				p.DHPushStatus = inventory.DHPushStatusHeld
+				return p, nil
+			},
+			wantStatus:    http.StatusConflict,
+			wantErrSubstr: "held for review",
 		},
 		{
 			name: "already listed → 409",
@@ -143,7 +168,79 @@ func TestHandleListPurchaseOnDH(t *testing.T) {
 				return dhlisting.DHListingResult{Listed: 0, Total: 1}
 			},
 			wantStatus:    http.StatusBadGateway,
-			wantErrSubstr: "re-enroll",
+			wantErrSubstr: "will retry automatically",
+		},
+		{
+			name: "inline push left purchase unmatched → 409 with unmatched message",
+			getPurchase: func() func(ctx context.Context, id string) (*inventory.Purchase, error) {
+				call := 0
+				return func(ctx context.Context, id string) (*inventory.Purchase, error) {
+					call++
+					if call == 1 {
+						p := readyPurchase()
+						p.DHInventoryID = 0
+						p.DHPushStatus = inventory.DHPushStatusPending // precondition: allowed through
+						return p, nil
+					}
+					p := readyPurchase()
+					p.DHInventoryID = 0
+					p.DHPushStatus = inventory.DHPushStatusUnmatched // service marked it unmatched
+					return p, nil
+				}
+			}(),
+			listFn: func(ctx context.Context, certs []string) dhlisting.DHListingResult {
+				return dhlisting.DHListingResult{Listed: 0, Skipped: 1, Total: 1}
+			},
+			wantStatus:    http.StatusConflict,
+			wantErrSubstr: "could not be matched",
+		},
+		{
+			name: "inline push ended in held state → 409 with held-specific message",
+			getPurchase: func() func(ctx context.Context, id string) (*inventory.Purchase, error) {
+				call := 0
+				return func(ctx context.Context, id string) (*inventory.Purchase, error) {
+					call++
+					if call == 1 {
+						p := readyPurchase()
+						p.DHInventoryID = 0
+						p.DHPushStatus = inventory.DHPushStatusPending
+						return p, nil
+					}
+					p := readyPurchase()
+					p.DHInventoryID = 0
+					p.DHPushStatus = inventory.DHPushStatusHeld
+					return p, nil
+				}
+			}(),
+			listFn: func(ctx context.Context, certs []string) dhlisting.DHListingResult {
+				return dhlisting.DHListingResult{Listed: 0, Skipped: 1, Total: 1}
+			},
+			wantStatus:    http.StatusConflict,
+			wantErrSubstr: "held for review",
+		},
+		{
+			name: "inline push was dismissed → 409 with dismissed message",
+			getPurchase: func() func(ctx context.Context, id string) (*inventory.Purchase, error) {
+				call := 0
+				return func(ctx context.Context, id string) (*inventory.Purchase, error) {
+					call++
+					if call == 1 {
+						p := readyPurchase()
+						p.DHInventoryID = 0
+						p.DHPushStatus = inventory.DHPushStatusPending
+						return p, nil
+					}
+					p := readyPurchase()
+					p.DHInventoryID = 0
+					p.DHPushStatus = inventory.DHPushStatusDismissed
+					return p, nil
+				}
+			}(),
+			listFn: func(ctx context.Context, certs []string) dhlisting.DHListingResult {
+				return dhlisting.DHListingResult{Listed: 0, Skipped: 1, Total: 1}
+			},
+			wantStatus:    http.StatusConflict,
+			wantErrSubstr: "dismissed",
 		},
 	}
 

@@ -91,7 +91,7 @@ screenshots: build web-build
 	@echo "Taking screenshots of all pages (real backend)..."
 	@LOCAL_API_TOKEN=$(SCREENSHOT_TOKEN) DATABASE_PATH=data/slabledger.db ./slabledger --web --port 4173 & SERVER_PID=$$! ; \
 	  sleep 3 ; \
-	  cd web && CI=1 SCREENSHOT_TOKEN=$(SCREENSHOT_TOKEN) ./node_modules/.bin/playwright test tests/screenshot-all-pages.spec.ts --project=chromium ; \
+	  cd web && CI=1 SCREENSHOT_BACKEND=1 SCREENSHOT_TOKEN=$(SCREENSHOT_TOKEN) ./node_modules/.bin/playwright test tests/screenshot-all-pages.spec.ts --project=chromium ; \
 	  EXIT=$$? ; kill $$SERVER_PID 2>/dev/null ; exit $$EXIT
 	@echo "Screenshots saved to web/screenshots/"
 

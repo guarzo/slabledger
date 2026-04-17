@@ -154,6 +154,10 @@ async function screenshotPage(
 }
 
 test.describe('screenshot all pages', () => {
+  // Requires the Go backend on port 4173 — run via `make screenshots`.
+  // CI jobs that only start the Vite preview server (browser-matrix, frontend-ci)
+  // don't set SCREENSHOT_BACKEND, so the tests skip there instead of timing out.
+  test.skip(!process.env.SCREENSHOT_BACKEND, 'Go backend required — run via `make screenshots`');
   test.use({ actionTimeout: 60000 });
 
   // Fetch the first campaign ID from the real backend before running tests
