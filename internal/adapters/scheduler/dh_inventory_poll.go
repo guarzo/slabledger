@@ -153,6 +153,17 @@ func (s *DHInventoryPollScheduler) poll(ctx context.Context) {
 			continue
 		}
 
+		// Sold items are owned by the orders poll, which also creates the
+		// campaign_sales row. Writing dh_status='sold' here without a sale
+		// makes the UI show the cert as on-hand.
+		if item.Status == dh.InventoryStatusSold {
+			s.logger.Debug(ctx, "dh inventory poll: skipping sold item, orders poll will record sale",
+				observability.String("purchaseID", purchaseID),
+				observability.String("cert", item.CertNumber))
+			skipped++
+			continue
+		}
+
 		if updateErr := s.updater.UpdatePurchaseDHFields(ctx, purchaseID, inventory.DHFieldsUpdate{
 			CardID:            item.DHCardID,
 			InventoryID:       item.DHInventoryID,

@@ -302,6 +302,77 @@ func TestDHInventoryPoll_DoesNotRecordUnlistedOnFreshInStock(t *testing.T) {
 	}
 }
 
+// TestDHInventoryPoll_SoldStatus_SkipsUpdate verifies that when DH reports a
+// cert as sold, the inventory poll does NOT overwrite dh_status or emit an
+// observation event — the orders poll is the sole writer for sold transitions
+// (it also creates the campaign_sales row, which the UI uses to mark the cert
+// as on-hand vs sold).
+func TestDHInventoryPoll_SoldStatus_SkipsUpdate(t *testing.T) {
+	cases := []struct {
+		name        string
+		status      string
+		wantCalls   int
+		wantEventTy dhevents.Type
+	}{
+		{
+			name:        "sold is skipped",
+			status:      dh.InventoryStatusSold,
+			wantCalls:   0,
+			wantEventTy: "",
+		},
+		{
+			name:        "listed still updates (control)",
+			status:      dh.InventoryStatusListed,
+			wantCalls:   1,
+			wantEventTy: dhevents.TypeListed,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			client := &mocks.MockDHInventoryListClient{
+				ListInventoryFn: func(_ context.Context, _ dh.InventoryFilters) (*dh.InventoryListResponse, error) {
+					return &dh.InventoryListResponse{
+						Items: []dh.InventoryListItem{{
+							DHInventoryID: 777, DHCardID: 222,
+							CertNumber: "cert-x", Status: tc.status,
+							UpdatedAt: "2026-04-18T05:00:00Z",
+						}},
+						Meta: dh.PaginationMeta{Page: 1, PerPage: 100, TotalCount: 1},
+					}, nil
+				},
+			}
+			syncStore := newMockSyncStateStore()
+			updater := &mocks.MockDHFieldsUpdater{}
+			lookup := &mocks.MockPurchaseByCertLookup{
+				Mapping:        map[string]string{"cert-x": "pur-x"},
+				DHStatusByCert: map[string]string{"cert-x": "listed"},
+			}
+			recorder := &mocks.MockEventRecorder{}
+
+			s := NewDHInventoryPollScheduler(
+				client, syncStore, updater, lookup, recorder,
+				mocks.NewMockLogger(),
+				DHInventoryPollConfig{Enabled: true, Interval: 1 * time.Hour},
+			)
+			s.poll(context.Background())
+
+			assert.Len(t, updater.Calls, tc.wantCalls)
+
+			if tc.wantEventTy == "" {
+				assert.Empty(t, recorder.Events, "no events expected for sold status")
+			} else {
+				require.Len(t, recorder.Events, 1)
+				assert.Equal(t, tc.wantEventTy, recorder.Events[0].Type)
+			}
+
+			// Checkpoint must advance regardless of skip, so a sold-heavy
+			// page doesn't wedge the scheduler.
+			assert.Equal(t, "2026-04-18T05:00:00Z", syncStore.values[syncStateKeyDHInventoryPoll])
+		})
+	}
+}
+
 // Verify UpdatePurchaseDHFields is called via the DHFieldsUpdater interface.
 var _ DHFieldsUpdater = (*mocks.MockDHFieldsUpdater)(nil)
 var _ PurchaseByCertLookup = (*mocks.MockPurchaseByCertLookup)(nil)
