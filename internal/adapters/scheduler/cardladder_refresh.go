@@ -464,7 +464,12 @@ func (s *CardLadderRefreshScheduler) resolveGemRate(
 	p *inventory.Purchase,
 	mappingByCert map[string]sqlite.CLCardMapping,
 ) (gemRateID, condition string, ok bool) {
-	if m, cached := mappingByCert[p.CertNumber]; cached && m.CLGemRateID != "" && m.CLCondition != "" {
+	// Bypass the cache when set_name is generic so BuildCollectionCard fires
+	// and the repair block below (which needs resp.Set) can run. Without this,
+	// rows with pre-existing cached mappings (typical for certs whose previous
+	// CL resolution only populated gemRateID+condition) would keep their
+	// generic set_name forever.
+	if m, cached := mappingByCert[p.CertNumber]; cached && m.CLGemRateID != "" && m.CLCondition != "" && !constants.IsGenericSetName(p.SetName) {
 		return m.CLGemRateID, m.CLCondition, true
 	}
 
