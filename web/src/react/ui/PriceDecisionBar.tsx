@@ -101,6 +101,7 @@ export default function PriceDecisionBar({
 
   const hasSelection = selectedSource !== null || (customValue !== '' && dollarsToCents(customValue) > 0);
   const allDisabled = disabled || isSubmitting;
+  const noPriceData = sources.every(s => s.priceCents === 0) && dollarsToCents(customValue) === 0;
 
   // Compute live margin from current selection vs cost basis
   const currentCents = dollarsToCents(customValue);
@@ -161,6 +162,27 @@ export default function PriceDecisionBar({
           <Button variant="ghost" size="sm" onClick={onReset} disabled={disabled}>
             Undo
           </Button>
+        )}
+      </div>
+    );
+  }
+
+  if (noPriceData && status === 'pending') {
+    return (
+      <div className="flex items-center gap-3 flex-wrap rounded-md border border-[var(--warning-border,rgba(245,158,11,0.3))] bg-[var(--warning-bg,rgba(245,158,11,0.08))] px-3 py-2">
+        <div className="flex items-center gap-2">
+          <span className="text-[var(--warning)]" aria-hidden="true">&#9888;</span>
+          <div className="flex flex-col">
+            <span className="text-xs font-semibold text-[var(--warning)]">No price data</span>
+            <span className="text-[10px] text-[var(--text-muted)]">CL, DH, and last-sold signals are all missing — investigate before pricing.</span>
+          </div>
+        </div>
+        {onFlag && (
+          <div className="ml-auto">
+            <Button variant="warning" size="sm" onClick={onFlag} disabled={allDisabled}>
+              Flag for Fix
+            </Button>
+          </div>
         )}
       </div>
     );

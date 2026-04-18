@@ -407,8 +407,8 @@ export default function CardIntakeTab() {
       {batchStats.total > 0 && (
         <div className="flex flex-wrap items-center gap-4 rounded-lg border border-[var(--surface-2)] bg-[var(--surface-1)] px-3 py-2 text-xs">
           <StatDot color="var(--success)" label={`${batchStats.ready} ready to list`} />
-          {batchStats.syncing > 0 && <StatDot color="var(--brand-400)" label={`${batchStats.syncing} syncing`} />}
-          {batchStats.listed > 0 && <StatDot color="var(--success)" label={`${batchStats.listed} listed`} />}
+          {batchStats.syncing > 0 && <StatDot color="var(--brand-400)" label={`${batchStats.syncing} syncing`} pulse />}
+          {batchStats.listed > 0 && <StatDot color="var(--success)" label={`${batchStats.listed} listed`} icon="check" />}
           {batchStats.failed > 0 && <StatDot color="var(--danger)" label={`${batchStats.failed} failed/sold`} />}
           <span className="ml-auto text-[var(--text-muted)]">{batchStats.total} scanned</span>
           {(batchStats.listed > 0 || batchStats.failed > 0) && (
@@ -482,10 +482,16 @@ export default function CardIntakeTab() {
   );
 }
 
-function StatDot({ color, label }: { color: string; label: string }) {
+function StatDot({ color, label, icon, pulse }: { color: string; label: string; icon?: 'check'; pulse?: boolean }) {
   return (
     <span className="flex items-center gap-1.5">
-      <span className="w-1.5 h-1.5 rounded-full" style={{ background: color }} />
+      {icon === 'check' ? (
+        <span className="inline-flex items-center justify-center w-3 h-3 text-[10px] font-bold leading-none" style={{ color }} aria-hidden="true">
+          &#10003;
+        </span>
+      ) : (
+        <span className={`w-1.5 h-1.5 rounded-full ${pulse ? 'animate-pulse' : ''}`} style={{ background: color }} />
+      )}
       <span className="text-[var(--text-muted)]">{label}</span>
     </span>
   );
@@ -539,17 +545,36 @@ function InlinePrice({ market, buyCostCents }: { market?: MarketSnapshot; buyCos
   );
 }
 
-function SyncingIndicator({ firstScanAt }: { firstScanAt?: number }) {
+const STALL_THRESHOLD_SEC = 60;
+
+function syncBlockerLabel(row: CertRow): string {
+  const dh = hasDHMatch(row);
+  const cl = hasCLPrice(row);
+  if (!dh && !cl) return 'Waiting for DH match + CL price';
+  if (!dh) return 'Waiting for DH match';
+  if (!cl) return 'Waiting for CL price';
+  return 'Syncing';
+}
+
+function SyncingIndicator({ row }: { row: CertRow }) {
   const [tick, setTick] = useState(0);
   useEffect(() => {
     const id = window.setInterval(() => setTick(t => t + 1), 1000);
     return () => window.clearInterval(id);
   }, []);
-  const elapsedSec = firstScanAt ? Math.max(0, Math.floor((Date.now() - firstScanAt) / 1000)) : 0;
+  const elapsedSec = row.firstScanAt ? Math.max(0, Math.floor((Date.now() - row.firstScanAt) / 1000)) : 0;
+  const stalled = elapsedSec >= STALL_THRESHOLD_SEC;
+  const label = syncBlockerLabel(row);
+  const color = stalled ? 'var(--warning)' : 'var(--brand-400)';
+  const textColor = stalled ? 'text-[var(--warning)]' : 'text-[var(--text-muted)]';
   return (
-    <span className="inline-flex items-center gap-1.5 text-[10px] text-[var(--text-muted)]" data-tick={tick}>
-      <span className="w-1.5 h-1.5 rounded-full bg-[var(--brand-400)] animate-pulse" />
-      Syncing DH + CL… {elapsedSec > 0 ? `${elapsedSec}s` : ''}
+    <span
+      className={`inline-flex items-center gap-1.5 text-[10px] ${textColor}`}
+      data-tick={tick}
+      title={stalled ? `Stalled ${elapsedSec}s — try Fix DH Match or check pricing sync` : undefined}
+    >
+      <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: color }} />
+      {label}{stalled ? ' — stalled' : '…'} {elapsedSec > 0 ? `${elapsedSec}s` : ''}
     </span>
   );
 }
@@ -614,7 +639,7 @@ function CertRowItem({
             <InlinePrice market={row.market} buyCostCents={row.buyCostCents} />
           )}
           {awaitingSync && !canList && row.status !== 'resolving' && (
-            <SyncingIndicator firstScanAt={row.firstScanAt} />
+            <SyncingIndicator row={row} />
           )}
         </div>
         <div className="flex items-center gap-2 shrink-0">

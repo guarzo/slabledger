@@ -73,11 +73,24 @@ describe('inventoryCalcs', () => {
 
     it('counts items with AI suggestions under needs_attention', () => {
       const items = [
-        makeItem({ purchase: { id: '1', aiSuggestedPriceCents: 5000, reviewedAt: '2026-04-10T00:00:00Z' } }),
-        makeItem({ purchase: { id: '2', reviewedAt: '2026-04-10T00:00:00Z' } }),
+        makeItem({ purchase: { id: '1', aiSuggestedPriceCents: 5000, reviewedAt: '2026-04-10T00:00:00Z', receivedAt: '2026-04-09T00:00:00Z' } }),
+        makeItem({ purchase: { id: '2', reviewedAt: '2026-04-10T00:00:00Z', receivedAt: '2026-04-09T00:00:00Z' } }),
       ];
       const meta = computeInventoryMeta(items);
       expect(meta.tabCounts.needs_attention).toBe(1);
+    });
+
+    it('excludes awaiting-intake items from needsReview and needs_attention', () => {
+      const items = [
+        // in-hand, unreviewed, no price data → needs attention + unreviewed
+        makeItem({ purchase: { id: '1', receivedAt: '2026-04-08T00:00:00Z', clValueCents: 0, reviewedAt: undefined } }),
+        // awaiting intake, no data → should NOT count toward unreviewed or needs_attention
+        makeItem({ purchase: { id: '2', receivedAt: undefined, clValueCents: 0, reviewedAt: undefined } }),
+      ];
+      const meta = computeInventoryMeta(items);
+      expect(meta.reviewStats.needsReview).toBe(1);
+      expect(meta.tabCounts.needs_attention).toBe(1);
+      expect(meta.tabCounts.awaiting_intake).toBe(1);
     });
 
     it('returns correct structure with all tab counts', () => {
@@ -86,9 +99,9 @@ describe('inventoryCalcs', () => {
 
       expect(meta).toHaveProperty('tabCounts');
       expect(meta.tabCounts).toHaveProperty('needs_attention');
-      expect(meta.tabCounts).toHaveProperty('card_show');
       expect(meta.tabCounts).toHaveProperty('in_hand');
       expect(meta.tabCounts).toHaveProperty('ready_to_list');
+      expect(meta.tabCounts).toHaveProperty('awaiting_intake');
       expect(meta.tabCounts).toHaveProperty('all');
     });
   });
@@ -214,29 +227,6 @@ describe('inventoryCalcs', () => {
       expect(result[0].purchase.cardName).toBe('Charizard');
     });
 
-    // A pending-PSA cert can't be brought to a card show, so even when the
-    // item matches every other card-show heuristic (grade 7 here) it must be
-    // excluded until receivedAt is stamped.
-    it('excludes non-on-hand items from card_show filter', () => {
-      const items = [
-        makeItem({ purchase: { id: '1', gradeValue: 7, receivedAt: '2026-04-08T00:00:00Z' } }),
-        makeItem({ purchase: { id: '2', gradeValue: 7, receivedAt: undefined } }),
-      ];
-
-      const result = filterAndSortItems(items, {
-        debouncedSearch: '',
-        showAll: false,
-        filterTab: 'card_show',
-        sellSheetHas: () => false,
-        sortKey: 'days',
-        sortDir: 'desc',
-        evMap: new Map(),
-      });
-
-      expect(result).toHaveLength(1);
-      expect(result[0].purchase.id).toBe('1');
-    });
-
     // Users can pre-add a cert to their sell sheet before it arrives, but
     // the sell-sheet view (and any printed sheet) should hide it until the
     // cert is physically received.
@@ -262,16 +252,4 @@ describe('inventoryCalcs', () => {
     });
   });
 
-  describe('computeInventoryMeta card_show count', () => {
-    it('only counts on-hand items toward card_show badge', () => {
-      const items = [
-        makeItem({ purchase: { id: '1', gradeValue: 7, receivedAt: '2026-04-08T00:00:00Z' } }),
-        makeItem({ purchase: { id: '2', gradeValue: 7, receivedAt: undefined } }),
-        makeItem({ purchase: { id: '3', gradeValue: 7, receivedAt: '2026-04-09T00:00:00Z' } }),
-      ];
-
-      const meta = computeInventoryMeta(items);
-      expect(meta.tabCounts.card_show).toBe(2);
-    });
-  });
 });

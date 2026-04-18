@@ -18,9 +18,10 @@ interface StatBlockProps {
   value: number;
   colorClass?: string;
   onClick?: () => void;
+  title?: string;
 }
 
-function StatBlock({ label, value, colorClass, onClick }: StatBlockProps) {
+function StatBlock({ label, value, colorClass, onClick, title }: StatBlockProps) {
   const clickable = onClick && value > 0;
   return (
     <div
@@ -29,6 +30,7 @@ function StatBlock({ label, value, colorClass, onClick }: StatBlockProps) {
       role={clickable ? 'button' : undefined}
       tabIndex={clickable ? 0 : undefined}
       onKeyDown={clickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } } : undefined}
+      title={title}
     >
       <div className={`text-lg font-semibold tabular-nums ${colorClass ?? 'text-[var(--text)]'}`}>
         {value}
@@ -49,7 +51,7 @@ export default function ReviewSummaryBar({ stats, searchQuery, onSearchChange, s
         <StatBlock label="Cards" value={stats.total} />
         {!isMobile && (
           <>
-            <StatBlock label="Unreviewed" value={stats.needsReview} colorClass={stats.needsReview > 0 ? 'text-[var(--warning)]' : 'text-[var(--success)]'} onClick={() => onStatClick?.('unreviewed')} />
+            <StatBlock label="Unreviewed" value={stats.needsReview} colorClass={stats.needsReview > 0 ? 'text-[var(--warning)]' : 'text-[var(--success)]'} onClick={() => onStatClick?.('unreviewed')} title="In-hand cards that haven't been reviewed yet — excludes cards still awaiting intake" />
             <StatBlock label="Reviewed" value={stats.reviewed} colorClass={stats.reviewed > 0 ? 'text-[var(--success)]' : undefined} />
             <StatBlock label="Flagged" value={stats.flagged} colorClass="text-[var(--danger)]" onClick={() => onStatClick?.('flagged')} />
             <StatBlock label="Aging 60d+" value={stats.aging60d} colorClass={stats.aging60d > 0 ? 'text-[var(--warning)]' : undefined} />
@@ -70,8 +72,9 @@ export default function ReviewSummaryBar({ stats, searchQuery, onSearchChange, s
           variant={showAll ? 'primary' : 'secondary'}
           size="sm"
           onClick={onToggleShowAll}
+          title={showAll ? 'Return to filter tabs' : 'Show every card, ignoring filter tabs'}
         >
-          {showAll ? 'Show Unreviewed' : 'Show All'}
+          {showAll ? 'Use Filters' : 'Show All'}
         </Button>
       </div>
     </div>
