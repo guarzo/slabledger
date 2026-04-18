@@ -8,6 +8,7 @@ import (
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
 	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
+	"github.com/guarzo/slabledger/internal/domain/constants"
 	"github.com/guarzo/slabledger/internal/domain/dhevents"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/mathutil"
@@ -33,6 +34,7 @@ type CardLadderGemRateUpdater interface {
 	UpdatePurchaseGemRateID(ctx context.Context, purchaseID, gemRateID string) error
 	UpdatePurchasePSASpecID(ctx context.Context, purchaseID string, psaSpecID int) error
 	UpdatePurchaseCLCardMetadata(ctx context.Context, id, player, variation, category string) error
+	UpdatePurchaseSetName(ctx context.Context, purchaseID, setName string) error
 }
 
 // CardLadderRefreshOption configures optional dependencies on a CardLadderRefreshScheduler.
@@ -462,7 +464,12 @@ func (s *CardLadderRefreshScheduler) resolveGemRate(
 	p *inventory.Purchase,
 	mappingByCert map[string]sqlite.CLCardMapping,
 ) (gemRateID, condition string, ok bool) {
-	if m, cached := mappingByCert[p.CertNumber]; cached && m.CLGemRateID != "" && m.CLCondition != "" {
+	// Bypass the cache when set_name is generic so BuildCollectionCard fires
+	// and the repair block below (which needs resp.Set) can run. Without this,
+	// rows with pre-existing cached mappings (typical for certs whose previous
+	// CL resolution only populated gemRateID+condition) would keep their
+	// generic set_name forever.
+	if m, cached := mappingByCert[p.CertNumber]; cached && m.CLGemRateID != "" && m.CLCondition != "" && !constants.IsGenericSetName(p.SetName) {
 		return m.CLGemRateID, m.CLCondition, true
 	}
 
@@ -516,6 +523,19 @@ func (s *CardLadderRefreshScheduler) resolveGemRate(
 				s.logger.Warn(ctx, "CL refresh: failed to persist card metadata",
 					observability.String("cert", p.CertNumber),
 					observability.Err(err))
+			}
+		}
+		// Repair set_name when PSA returned a generic value (e.g. "TCG Cards"
+		// for older certs). CL's Set field carries the real set for any cert
+		// CL can resolve, so adopt it only when the current value is generic.
+		if constants.IsGenericSetName(p.SetName) && !constants.IsGenericSetName(resp.Set) {
+			if err := s.gemRateUpdater.UpdatePurchaseSetName(ctx, p.ID, resp.Set); err != nil {
+				s.logger.Warn(ctx, "CL refresh: failed to persist set name from CL",
+					observability.String("cert", p.CertNumber),
+					observability.String("clSet", resp.Set),
+					observability.Err(err))
+			} else {
+				p.SetName = resp.Set
 			}
 		}
 	}

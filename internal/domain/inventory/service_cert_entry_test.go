@@ -94,6 +94,94 @@ func TestImportCerts_NewCert(t *testing.T) {
 	}
 }
 
+// TestImportCerts_GenericPSACategoryStoresEmptySetName guards against PSA's
+// catch-all "TCG Cards" / "Pokemon Cards" categories leaking into set_name on
+// older certs. Downstream CL enrichment fills the real set name; persisting
+// the generic value here pollutes inventory and breaks price lookups.
+func TestImportCerts_GenericPSACategoryStoresEmptySetName(t *testing.T) {
+	cases := []struct {
+		name     string
+		category string
+	}{
+		{name: "TCG Cards", category: "TCG Cards"},
+		{name: "Pokemon Cards", category: "Pokemon Cards"},
+		{name: "empty category", category: ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := newMockRepo()
+			repo.campaigns[ExternalCampaignID] = &Campaign{ID: ExternalCampaignID, Name: ExternalCampaignName}
+			certLookup := &mockCertLookup{
+				lookupFn: func(_ context.Context, cert string) (*CertInfo, error) {
+					return &CertInfo{
+						CertNumber: cert, CardName: "Houndoom", Grade: 9.0,
+						Year: "2004", Category: tc.category, CardNumber: "10", Population: 100,
+					}, nil
+				},
+			}
+			svc := &service{campaigns: repo, purchases: repo, sales: repo, analytics: repo, finance: repo, pricing: repo, dh: repo, certLookup: certLookup, idGen: func() string { return "test-id" }}
+
+			if _, err := svc.ImportCerts(context.Background(), []string{"999"}); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			created := repo.purchases["test-id"]
+			if created == nil {
+				t.Fatal("purchase was not created")
+			}
+			if created.SetName != "" {
+				t.Errorf("setName = %q, want empty for generic category %q", created.SetName, tc.category)
+			}
+		})
+	}
+}
+
+// TestImportCerts_ConcreteCategoryAdoptsResolvedSetName guards the happy path:
+// when PSA returns a real category, the resolved set name is persisted.
+func TestImportCerts_ConcreteCategoryAdoptsResolvedSetName(t *testing.T) {
+	cases := []struct {
+		name         string
+		certs        []string
+		lookupReturn *CertInfo
+	}{
+		{
+			name:  "BASE SET",
+			certs: []string{"42"},
+			lookupReturn: &CertInfo{
+				CardName: "Charizard", Grade: 10,
+				Year: "1999", Category: "BASE SET", CardNumber: "4",
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := newMockRepo()
+			repo.campaigns[ExternalCampaignID] = &Campaign{ID: ExternalCampaignID, Name: ExternalCampaignName}
+			certLookup := &mockCertLookup{
+				lookupFn: func(_ context.Context, cert string) (*CertInfo, error) {
+					out := *tc.lookupReturn
+					out.CertNumber = cert
+					return &out, nil
+				},
+			}
+			svc := &service{campaigns: repo, purchases: repo, sales: repo, analytics: repo, finance: repo, pricing: repo, dh: repo, certLookup: certLookup, idGen: func() string { return "test-id" }}
+
+			if _, err := svc.ImportCerts(context.Background(), tc.certs); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			created := repo.purchases["test-id"]
+			if created == nil {
+				t.Fatal("purchase was not created")
+			}
+			if created.SetName == "" {
+				t.Errorf("setName should be set for non-generic category, got empty")
+			}
+			if IsGenericSetName(created.SetName) {
+				t.Errorf("setName %q is still generic; ResolvePSACategory should have mapped it", created.SetName)
+			}
+		})
+	}
+}
+
 func TestImportCerts_ExistingCert(t *testing.T) {
 	repo := newMockRepo()
 	repo.purchases["existing-id"] = &Purchase{ID: "existing-id", CertNumber: "12345678", Grader: "PSA"}

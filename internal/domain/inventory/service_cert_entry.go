@@ -119,9 +119,13 @@ func (s *service) ImportCerts(ctx context.Context, certNumbers []string) (*CertI
 			continue
 		}
 
-		setName := info.Category
-		if setName != "" {
-			resolved := ResolvePSACategory(setName)
+		// Only adopt PSA's Category when it's a real set. PSA returns generic
+		// values like "TCG Cards" for many older certs; persisting those as the
+		// set name pollutes inventory and breaks downstream price lookups. Leave
+		// SetName empty and let CL enrichment (resolveGemRate) fill it in.
+		setName := ""
+		if info.Category != "" {
+			resolved := ResolvePSACategory(info.Category)
 			if !IsGenericSetName(resolved) {
 				setName = resolved
 			}
