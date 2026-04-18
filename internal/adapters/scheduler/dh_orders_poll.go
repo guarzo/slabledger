@@ -128,7 +128,14 @@ func (s *DHOrdersPollScheduler) RunOnce(ctx context.Context, since string) (*DHO
 	certToOrderID := make(map[string]string, len(allOrders))
 	certToPriceCents := make(map[string]int, len(allOrders))
 	for _, order := range allOrders {
-		grade, _ := strconv.ParseFloat(order.Grade, 64)
+		grade, err := strconv.ParseFloat(order.Grade, 64)
+		if err != nil {
+			s.logger.Warn(ctx, "dh orders poll: could not parse grade, falling back to 0",
+				observability.String("orderID", order.OrderID),
+				observability.String("cert", order.CertNumber),
+				observability.String("grade", order.Grade),
+				observability.Err(err))
+		}
 		rows = append(rows, inventory.OrdersExportRow{
 			OrderNumber:  order.OrderID,
 			Date:         parseDHSoldAt(order.SoldAt),

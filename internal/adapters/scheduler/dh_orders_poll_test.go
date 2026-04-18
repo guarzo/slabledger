@@ -183,6 +183,35 @@ func TestDHOrdersPoll_RunOnce_HonorsCallerSince(t *testing.T) {
 		"RunOnce should not touch the sync-state checkpoint")
 }
 
+func TestDHOrdersPoll_MalformedGrade_FallsBackToZero(t *testing.T) {
+	client := &mocks.MockDHOrdersClient{
+		GetOrdersFn: func(_ context.Context, _ dh.OrderFilters) (*dh.OrdersResponse, error) {
+			return &dh.OrdersResponse{
+				Orders: []dh.Order{
+					{OrderID: "ord-bad", CertNumber: "cert-bad", Channel: "ebay", SoldAt: "2026-04-02T00:00:00Z", SalePriceCents: 1000, Grade: "not-a-number"},
+				},
+				Meta: dh.PaginationMeta{Page: 1, PerPage: 100, TotalCount: 1},
+			}, nil
+		},
+	}
+	var capturedGrade float64
+	svc := &mocks.MockInventoryService{
+		ImportOrdersSalesFn: func(_ context.Context, rows []inventory.OrdersExportRow) (*inventory.OrdersImportResult, error) {
+			require.Len(t, rows, 1)
+			capturedGrade = rows[0].Grade
+			return &inventory.OrdersImportResult{}, nil
+		},
+	}
+
+	s := NewDHOrdersPollScheduler(client, newMockSyncStateStore(), svc, nil, mocks.NewMockLogger(),
+		DHOrdersPollConfig{Enabled: true, Interval: 1 * time.Hour})
+
+	summary, err := s.RunOnce(context.Background(), "2026-04-01T00:00:00Z")
+	require.NoError(t, err, "malformed grade must not abort the ingest pass — grade is advisory, sale creation must proceed")
+	assert.Equal(t, 1, summary.OrdersFetched)
+	assert.Equal(t, float64(0), capturedGrade, "malformed grade should fall back to 0 (grade is unused downstream, we just surface it via Warn log)")
+}
+
 func intPtr(v int) *int { return &v }
 
 func TestDHOrdersPoll_RecordsEvents(t *testing.T) {
