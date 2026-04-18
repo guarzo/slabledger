@@ -26,17 +26,33 @@ export default function PortfolioSummary({ campaignCount, pnlMap }: PortfolioSum
         <StatCard label="P&L" value={`${formatCents(totalProfit)} (${formatPct(roi)})`} color={totalProfit >= 0 ? 'green' : 'red'} />
         <StatCard label="Unsold" value={`${totalUnsold}`} />
       </div>
-      {totalSpent > 0 && (
-        <div className="w-full h-1.5 rounded-full bg-[var(--surface-2)] overflow-hidden">
-          <div
-            className="h-full rounded-full transition-all duration-500"
-            style={{
-              width: `${Math.min((totalRevenue / totalSpent) * 100, 100)}%`,
-              background: totalRevenue >= totalSpent ? 'var(--success)' : 'var(--warning)',
-            }}
-          />
-        </div>
-      )}
+      {totalSpent > 0 && (() => {
+        const recoveryPct = (totalRevenue / totalSpent) * 100;
+        return (
+          <div>
+            <div className="flex items-center justify-between text-xs text-[var(--text-muted)] mb-1">
+              <span>Capital recovered</span>
+              <span className="tabular-nums text-[var(--text)] font-medium">{recoveryPct.toFixed(0)}%</span>
+            </div>
+            <div
+              className="w-full h-1.5 rounded-full bg-[var(--surface-2)] overflow-hidden"
+              role="progressbar"
+              aria-label={`Capital recovered: ${formatCents(totalRevenue)} of ${formatCents(totalSpent)} invested (${recoveryPct.toFixed(0)}%)`}
+              aria-valuenow={Math.round(recoveryPct)}
+              aria-valuemin={0}
+              aria-valuemax={100}
+            >
+              <div
+                className="h-full rounded-full transition-all duration-500"
+                style={{
+                  width: `${Math.min(recoveryPct, 100)}%`,
+                  background: totalRevenue >= totalSpent ? 'var(--success)' : 'var(--warning)',
+                }}
+              />
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

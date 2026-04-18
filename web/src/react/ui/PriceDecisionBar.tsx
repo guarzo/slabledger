@@ -219,7 +219,7 @@ export default function PriceDecisionBar({
 
       {onFlag && (
         <div className="ml-auto">
-          <Button variant="danger" size="sm" onClick={onFlag} disabled={allDisabled}>
+          <Button variant="secondary" size="sm" onClick={onFlag} disabled={allDisabled}>
             Flag Price Issue
           </Button>
         </div>

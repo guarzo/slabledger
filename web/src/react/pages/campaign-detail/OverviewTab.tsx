@@ -71,6 +71,16 @@ export default function OverviewTab({
     [daysToSell]
   );
 
+  const hasPurchases = purchaseCount > 0;
+  const sellThroughNum = parseFloat(sellThrough);
+  const sellThroughColor = !hasPurchases
+    ? undefined
+    : sellThroughNum >= 50
+      ? 'green'
+      : sellThroughNum < 10
+        ? 'red'
+        : undefined;
+
   return (
     <div className="space-y-6">
       {/* Stat cards */}
@@ -78,10 +88,19 @@ export default function OverviewTab({
         <StatCard label="Total Spent" value={formatCents(totalSpent)} />
         <StatCard label="Revenue" value={formatCents(totalRevenue)} />
         <StatCard label="Net Profit" value={formatCents(totalProfit)} color={totalProfit >= 0 ? 'green' : 'red'} large />
-        <StatCard label="Sell-Through" value={`${sellThrough}%`} color={parseFloat(sellThrough) >= 50 ? 'green' : parseFloat(sellThrough) < 10 ? 'red' : undefined} />
+        <StatCard
+          label="ROI"
+          value={pnl && hasPurchases ? formatPct(pnl.roi) : '—'}
+          color={pnl && hasPurchases ? (pnl.roi >= 0 ? 'green' : 'red') : undefined}
+        />
+        <StatCard label="Sell-Through" value={`${sellThrough}%`} color={sellThroughColor} />
         <StatCard label="Cards Purchased" value={String(purchaseCount)} />
         <StatCard label="Cards Sold" value={String(saleCount)} />
         <StatCard label="Unsold" value={String(unsoldCount)} />
+        <StatCard
+          label="Avg Days to Sell"
+          value={pnl && saleCount > 0 ? pnl.avgDaysToSell.toFixed(1) : '—'}
+        />
         <StatCard label="Daily Cap" value={formatCents(dailySpendCapCents)} />
       </div>
 
@@ -90,18 +109,7 @@ export default function OverviewTab({
         <div className="py-8 text-center"><PokeballLoader /></div>
       ) : (
         <>
-          {pnl && (
-            <div>
-              <h3 className="text-sm font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-3">P&L Summary</h3>
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                <StatCard label="Total Spend" value={formatCents(pnl.totalSpendCents)} />
-                <StatCard label="Revenue" value={formatCents(pnl.totalRevenueCents)} />
-                <StatCard label="Net Profit" value={formatCents(pnl.netProfitCents)} color={pnl.netProfitCents >= 0 ? 'green' : 'red'} />
-                <StatCard label="ROI" value={formatPct(pnl.roi)} color={pnl.roi >= 0 ? 'green' : 'red'} />
-                <StatCard label="Avg Days to Sell" value={pnl.avgDaysToSell.toFixed(1)} />
-              </div>
-            </div>
-          )}
+
 
           {channelPnl.length > 0 && (
             <div>

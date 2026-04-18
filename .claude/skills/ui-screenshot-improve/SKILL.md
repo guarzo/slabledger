@@ -276,7 +276,7 @@ A single quiet cycle is not enough — the skill might have missed something. Tw
 To run this skill unattended (e.g., overnight), wrap it in the `ralph-loop` plugin. The skill's own two-cycle quiescence rule (see "Completion signaling" above) handles exit:
 
 ```
-/ralph-loop "Run the ui-screenshot-improve skill per its SKILL.md. The skill itself defines the UI_CLEAN completion rule — emit <promise>UI_CLEAN</promise> only when its two-cycle quiescence condition is met." --max-iterations 20 --completion-promise "UI_CLEAN"
+/ralph-loop:ralph-loop "Run the ui-screenshot-improve skill per its SKILL.md. The skill itself defines the UI_CLEAN completion rule — emit <promise>UI_CLEAN</promise> only when its two-cycle quiescence condition is met." --max-iterations 20 --completion-promise "UI_CLEAN"
 ```
 
 - `--max-iterations 20` is the real safety net (~60 verified fixes over an overnight run). Adjust to taste.
