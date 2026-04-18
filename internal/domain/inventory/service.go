@@ -135,6 +135,9 @@ func (f MMMappingFunc) ListMMSearchTitles(ctx context.Context) (map[string]strin
 // CertLookup resolves PSA certificate numbers to card details.
 type CertLookup interface {
 	LookupCert(ctx context.Context, certNumber string) (*CertInfo, error)
+	// LookupImages fetches front/back slab image URLs for a PSA cert. Returns
+	// empty strings (not an error) when PSA has no images for the cert.
+	LookupImages(ctx context.Context, certNumber string) (front, back string, err error)
 }
 
 // CertEnrichEnqueuer enqueues certificate numbers for background enrichment.

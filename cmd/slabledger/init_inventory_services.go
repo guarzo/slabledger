@@ -99,6 +99,10 @@ func initializeCampaignsService(
 		certEnrichJobForSvc = scheduler.NewCertEnrichJob(certAdapter, purchaseStore, logger)
 		campaignOpts = append(campaignOpts, inventory.WithCertEnrichEnqueuer(certEnrichJobForSvc))
 		logger.Info(ctx, "PSA cert lookup and cert enrichment enabled")
+
+		if cfg.Maintenance.BackfillImages {
+			enqueueImageBackfill(ctx, purchaseStore, certEnrichJobForSvc, logger)
+		}
 	}
 
 	if intelRepo != nil {
@@ -223,4 +227,29 @@ func initializeCampaignsService(
 		financeService:   financeSvc,
 		exportService:    exportSvc,
 	}
+}
+
+// enqueueImageBackfill re-enqueues unsold PSA purchases with empty image URLs
+// onto the cert-enrichment queue so the async worker fills them from PSA.
+// Safe to run repeatedly: rows that already have images will skip the PSA call
+// inside enrichImages.
+func enqueueImageBackfill(ctx context.Context, repo inventory.PurchaseRepository, enq *scheduler.CertEnrichJob, logger observability.Logger) {
+	unsold, err := repo.ListAllUnsoldPurchases(ctx)
+	if err != nil {
+		logger.Warn(ctx, "image backfill: list unsold purchases failed", observability.Err(err))
+		return
+	}
+	var enqueued int
+	for _, p := range unsold {
+		if p.Grader != "PSA" || p.CertNumber == "" {
+			continue
+		}
+		if p.FrontImageURL != "" || p.BackImageURL != "" {
+			continue
+		}
+		enq.Enqueue(p.CertNumber)
+		enqueued++
+	}
+	logger.Info(ctx, "image backfill: enqueued unsold PSA certs with missing images",
+		observability.Int("count", enqueued))
 }

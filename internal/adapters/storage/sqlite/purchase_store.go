@@ -329,6 +329,13 @@ func (ps *PurchaseStore) UpdatePurchaseCardMetadata(ctx context.Context, id stri
 	)
 }
 
+func (ps *PurchaseStore) UpdatePurchaseImages(ctx context.Context, id string, frontURL, backURL string) error {
+	return ps.execAndExpectRow(ctx, "update images",
+		`UPDATE campaign_purchases SET front_image_url = ?, back_image_url = ?, updated_at = ? WHERE id = ?`,
+		frontURL, backURL, time.Now(), id,
+	)
+}
+
 // UpdatePurchaseSetName overwrites set_name for a purchase. Used by the CL
 // refresh scheduler when BuildCollectionCard returns a concrete set for a cert
 // whose stored set_name is generic (e.g. "TCG Cards" from PSA on older certs).

@@ -73,6 +73,9 @@ func (r *stubPurchaseRepo) UpdatePurchaseMMValue(_ context.Context, _ string, _ 
 func (r *stubPurchaseRepo) UpdatePurchaseCardMetadata(_ context.Context, _, _, _, _ string) error {
 	return nil
 }
+func (r *stubPurchaseRepo) UpdatePurchaseImages(_ context.Context, _, _, _ string) error {
+	return nil
+}
 func (r *stubPurchaseRepo) UpdatePurchaseGrade(_ context.Context, _ string, _ float64) error {
 	return nil
 }

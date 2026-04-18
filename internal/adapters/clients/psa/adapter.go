@@ -45,3 +45,21 @@ func (a *CertAdapter) LookupCert(ctx context.Context, certNumber string) (*inven
 		PopHigher:  info.PopulationHigher,
 	}, nil
 }
+
+// LookupImages resolves a PSA certificate number to front/back slab image URLs.
+func (a *CertAdapter) LookupImages(ctx context.Context, certNumber string) (string, string, error) {
+	images, err := a.client.GetImages(ctx, certNumber)
+	if err != nil {
+		return "", "", fmt.Errorf("PSA image lookup %s: %w", certNumber, err)
+	}
+
+	var front, back string
+	for _, img := range images {
+		if img.IsFrontImage {
+			front = img.ImageURL
+		} else {
+			back = img.ImageURL
+		}
+	}
+	return front, back, nil
+}

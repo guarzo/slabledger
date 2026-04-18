@@ -230,7 +230,8 @@ func TestService_CreateSale_SameDateAllowed(t *testing.T) {
 // mockCertLookup is a local test double for CertLookup using the Fn-field pattern.
 // The shared version lives in testutil/mocks.MockCertLookup for use by other packages.
 type mockCertLookup struct {
-	LookupCertFn func(ctx context.Context, certNumber string) (*inventory.CertInfo, error)
+	LookupCertFn   func(ctx context.Context, certNumber string) (*inventory.CertInfo, error)
+	LookupImagesFn func(ctx context.Context, certNumber string) (string, string, error)
 }
 
 func (m *mockCertLookup) LookupCert(ctx context.Context, certNumber string) (*inventory.CertInfo, error) {
@@ -238,6 +239,13 @@ func (m *mockCertLookup) LookupCert(ctx context.Context, certNumber string) (*in
 		return m.LookupCertFn(ctx, certNumber)
 	}
 	return nil, nil
+}
+
+func (m *mockCertLookup) LookupImages(ctx context.Context, certNumber string) (string, string, error) {
+	if m.LookupImagesFn != nil {
+		return m.LookupImagesFn(ctx, certNumber)
+	}
+	return "", "", nil
 }
 
 // mockPriceLookup is a local test double for PriceLookup using the Fn-field pattern.
