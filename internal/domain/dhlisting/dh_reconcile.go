@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/guarzo/slabledger/internal/domain/dhevents"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
@@ -47,15 +48,27 @@ type reconcileService struct {
 	fetcher   DHInventorySnapshotFetcher
 	purchases DHReconcilePurchaseLister
 	resetter  DHReconcileResetter
+	eventRec  dhevents.Recorder // optional: when set, every reset emits a TypeUnlisted event
 	logger    observability.Logger
 }
 
-// NewReconciler constructs a Reconciler. All dependencies are required.
+// ReconcilerOption configures optional dependencies on a Reconciler.
+type ReconcilerOption func(*reconcileService)
+
+// WithReconcileEventRecorder injects an event recorder so each reset emits a
+// dh_state_events row with source='dh_reconcile'. Without it, runs are
+// invisible outside the logs.
+func WithReconcileEventRecorder(r dhevents.Recorder) ReconcilerOption {
+	return func(s *reconcileService) { s.eventRec = r }
+}
+
+// NewReconciler constructs a Reconciler. All positional dependencies are required.
 func NewReconciler(
 	fetcher DHInventorySnapshotFetcher,
 	purchases DHReconcilePurchaseLister,
 	resetter DHReconcileResetter,
 	logger observability.Logger,
+	opts ...ReconcilerOption,
 ) (Reconciler, error) {
 	if fetcher == nil {
 		return nil, fmt.Errorf("fetcher is required")
@@ -69,12 +82,16 @@ func NewReconciler(
 	if logger == nil {
 		return nil, fmt.Errorf("logger is required")
 	}
-	return &reconcileService{
+	s := &reconcileService{
 		fetcher:   fetcher,
 		purchases: purchases,
 		resetter:  resetter,
 		logger:    logger,
-	}, nil
+	}
+	for _, o := range opts {
+		o(s)
+	}
+	return s, nil
 }
 
 // Reconcile fetches the DH inventory snapshot, compares it against local
@@ -114,6 +131,23 @@ func (s *reconcileService) Reconcile(ctx context.Context) (ReconcileResult, erro
 		}
 		result.Reset++
 		result.ResetIDs = append(result.ResetIDs, p.ID)
+
+		if s.eventRec != nil {
+			if recErr := s.eventRec.Record(ctx, dhevents.Event{
+				PurchaseID:    p.ID,
+				CertNumber:    p.CertNumber,
+				Type:          dhevents.TypeUnlisted,
+				PrevDHStatus:  string(p.DHStatus),
+				DHInventoryID: p.DHInventoryID,
+				DHCardID:      p.DHCardID,
+				Source:        dhevents.SourceDHReconcile,
+				Notes:         "inventory ID missing from DH snapshot",
+			}); recErr != nil {
+				s.logger.Warn(ctx, "dh reconcile: record event failed",
+					observability.String("purchaseID", p.ID),
+					observability.Err(recErr))
+			}
+		}
 	}
 
 	sort.Strings(result.ResetIDs)
