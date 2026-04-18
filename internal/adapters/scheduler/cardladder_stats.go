@@ -22,8 +22,9 @@ func WithCLStatsStore(ss *sqlite.SchedulerStatsStore) CardLadderRefreshOption {
 // GetLastRunStats returns a copy of the stats from the most recent refresh run,
 // or nil if no run has completed yet. When in-memory stats are absent (cold
 // start after server restart) and a stats store is configured, the most
-// recent persisted row is loaded and returned.
-func (s *CardLadderRefreshScheduler) GetLastRunStats() *CLRunStats {
+// recent persisted row is loaded and returned. The caller's context governs
+// the DB fallback so request cancellation propagates to the stats load.
+func (s *CardLadderRefreshScheduler) GetLastRunStats(ctx context.Context) *CLRunStats {
 	s.statsMu.RLock()
 	if s.lastRunStats != nil {
 		cp := *s.lastRunStats
@@ -35,9 +36,9 @@ func (s *CardLadderRefreshScheduler) GetLastRunStats() *CLRunStats {
 	if s.statsStore == nil {
 		return nil
 	}
-	row, err := s.statsStore.Get(context.Background(), CLRunStatsName)
+	row, err := s.statsStore.Get(ctx, CLRunStatsName)
 	if err != nil {
-		s.logger.Warn(context.Background(), "CL refresh: load persisted stats failed",
+		s.logger.Warn(ctx, "CL refresh: load persisted stats failed",
 			observability.Err(err))
 		return nil
 	}
@@ -46,19 +47,23 @@ func (s *CardLadderRefreshScheduler) GetLastRunStats() *CLRunStats {
 	}
 	var stats CLRunStats
 	if err := json.Unmarshal([]byte(row.StatsJSON), &stats); err != nil {
-		s.logger.Warn(context.Background(), "CL refresh: unmarshal persisted stats failed",
+		s.logger.Warn(ctx, "CL refresh: unmarshal persisted stats failed",
 			observability.Err(err))
 		return nil
 	}
 	// Cache the loaded row so subsequent reads skip the DB round-trip until
-	// the next runOnce overwrites it.
+	// the next runOnce overwrites it. Return from s.lastRunStats (not the
+	// local `stats`) so a concurrent runOnce that updated the cache between
+	// our DB load and this lock acquisition wins — fresher always beats the
+	// DB snapshot we just read.
 	s.statsMu.Lock()
 	if s.lastRunStats == nil {
 		cp := stats
 		s.lastRunStats = &cp
 	}
+	cp := *s.lastRunStats
 	s.statsMu.Unlock()
-	return &stats
+	return &cp
 }
 
 // persistStats writes the most recent run stats to the stats store when one
