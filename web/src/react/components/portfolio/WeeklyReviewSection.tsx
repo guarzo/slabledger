@@ -65,16 +65,24 @@ function MetricTile({ title, current, previous, isCents, className }: {
 export default function WeeklyReviewSection({ data }: { data: WeeklyReviewSummary }) {
   const [open, setOpen] = useState(true);
 
-  const weekLabel = useMemo(() => {
+  const { weekLabel, inProgress, daysElapsed } = useMemo(() => {
     const start = new Date(data.weekStart + 'T12:00:00');
     const end = new Date(data.weekEnd + 'T12:00:00');
     const fmt = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    return `${fmt(start)} - ${fmt(end)}`;
+    const now = new Date();
+    const inProg = now < end;
+    const msPerDay = 24 * 60 * 60 * 1000;
+    const elapsed = Math.min(7, Math.max(1, Math.ceil((now.getTime() - start.getTime()) / msPerDay)));
+    return { weekLabel: `${fmt(start)} - ${fmt(end)}`, inProgress: inProg, daysElapsed: elapsed };
   }, [data.weekStart, data.weekEnd]);
 
   return (
     <div className="p-4 bg-[var(--surface-1)] rounded-xl border border-[var(--surface-2)]">
-      <CollapsibleHeader title={`Weekly Review (${weekLabel})`} open={open} onToggle={() => setOpen(!open)} />
+      <CollapsibleHeader
+        title={`Weekly Review (${weekLabel})${inProgress ? ` \u00b7 in progress \u2014 day ${daysElapsed} of 7` : ''}`}
+        open={open}
+        onToggle={() => setOpen(!open)}
+      />
       {open && (
         <div className="mt-3 space-y-4">
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
