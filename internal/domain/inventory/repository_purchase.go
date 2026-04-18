@@ -51,6 +51,7 @@ type PurchaseRepository interface {
 	UpdatePurchaseCLSyncedAt(ctx context.Context, id string, syncedAt string) error
 	UpdatePurchaseMMValue(ctx context.Context, id string, mmValueCents int) error
 	UpdatePurchaseCardMetadata(ctx context.Context, id string, cardName, cardNumber, setName string) error
+	UpdatePurchaseImages(ctx context.Context, id string, frontURL, backURL string) error
 	UpdatePurchaseGrade(ctx context.Context, id string, gradeValue float64) error
 	UpdateExternalPurchaseFields(ctx context.Context, id string, p *Purchase) error
 	UpdatePurchaseMarketSnapshot(ctx context.Context, id string, snap MarketSnapshotData) error

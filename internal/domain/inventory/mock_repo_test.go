@@ -364,6 +364,16 @@ func (m *mockRepo) UpdatePurchaseCardMetadata(_ context.Context, id string, card
 	return nil
 }
 
+func (m *mockRepo) UpdatePurchaseImages(_ context.Context, id string, frontURL, backURL string) error {
+	p, ok := m.purchases[id]
+	if !ok {
+		return ErrPurchaseNotFound
+	}
+	p.FrontImageURL = frontURL
+	p.BackImageURL = backURL
+	return nil
+}
+
 func (m *mockRepo) UpdatePurchaseGrade(_ context.Context, id string, gradeValue float64) error {
 	p, ok := m.purchases[id]
 	if !ok {

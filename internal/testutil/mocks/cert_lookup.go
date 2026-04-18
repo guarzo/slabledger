@@ -17,7 +17,8 @@ import (
 //	    },
 //	}
 type MockCertLookup struct {
-	LookupCertFn func(ctx context.Context, certNumber string) (*inventory.CertInfo, error)
+	LookupCertFn   func(ctx context.Context, certNumber string) (*inventory.CertInfo, error)
+	LookupImagesFn func(ctx context.Context, certNumber string) (string, string, error)
 }
 
 var _ inventory.CertLookup = (*MockCertLookup)(nil)
@@ -27,4 +28,11 @@ func (m *MockCertLookup) LookupCert(ctx context.Context, certNumber string) (*in
 		return m.LookupCertFn(ctx, certNumber)
 	}
 	return nil, nil
+}
+
+func (m *MockCertLookup) LookupImages(ctx context.Context, certNumber string) (string, string, error) {
+	if m.LookupImagesFn != nil {
+		return m.LookupImagesFn(ctx, certNumber)
+	}
+	return "", "", nil
 }

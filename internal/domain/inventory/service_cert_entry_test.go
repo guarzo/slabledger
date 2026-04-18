@@ -47,11 +47,19 @@ func (d *dbLikePurchaseRepo) GetPurchasesByGraderAndCertNumbers(ctx context.Cont
 }
 
 type mockCertLookup struct {
-	lookupFn func(ctx context.Context, certNumber string) (*CertInfo, error)
+	lookupFn       func(ctx context.Context, certNumber string) (*CertInfo, error)
+	lookupImagesFn func(ctx context.Context, certNumber string) (string, string, error)
 }
 
 func (m *mockCertLookup) LookupCert(ctx context.Context, certNumber string) (*CertInfo, error) {
 	return m.lookupFn(ctx, certNumber)
+}
+
+func (m *mockCertLookup) LookupImages(ctx context.Context, certNumber string) (string, string, error) {
+	if m.lookupImagesFn != nil {
+		return m.lookupImagesFn(ctx, certNumber)
+	}
+	return "", "", nil
 }
 
 func TestImportCerts_NewCert(t *testing.T) {

@@ -179,6 +179,39 @@ func (j *CertEnrichJob) enrichSingleCert(ctx context.Context, certNum string) {
 		}
 	}
 
+	j.enrichImages(ctx, purchase, certNum)
+
 	// Card metadata is now enriched. Snapshots will be captured separately via ProcessPendingSnapshots
 	// if needed, or by other background jobs.
+}
+
+// enrichImages fetches slab images from PSA and updates the purchase when both
+// image URLs are currently empty. Skipping when either field is already set
+// preserves sheet-supplied URLs and avoids spending PSA budget on rows that
+// have already been populated.
+func (j *CertEnrichJob) enrichImages(ctx context.Context, purchase *inventory.Purchase, certNum string) {
+	if purchase.FrontImageURL != "" || purchase.BackImageURL != "" {
+		return
+	}
+
+	front, back, err := j.certLookup.LookupImages(ctx, certNum)
+	if err != nil {
+		if j.logger != nil {
+			j.logger.Warn(ctx, "cert enrichment: PSA image lookup failed",
+				observability.String("cert", certNum),
+				observability.Err(err))
+		}
+		return
+	}
+	if front == "" && back == "" {
+		return
+	}
+
+	if err := j.repo.UpdatePurchaseImages(ctx, purchase.ID, front, back); err != nil {
+		if j.logger != nil {
+			j.logger.Warn(ctx, "cert enrichment: failed to update images",
+				observability.String("cert", certNum),
+				observability.Err(err))
+		}
+	}
 }

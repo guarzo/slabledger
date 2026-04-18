@@ -54,6 +54,7 @@ type InMemoryCampaignStore struct {
 	UpdatePurchaseCLSyncedAtFn     func(ctx context.Context, id string, syncedAt string) error
 	UpdatePurchaseMMValueFn        func(ctx context.Context, id string, mmValueCents int) error
 	UpdatePurchaseCardMetadataFn   func(ctx context.Context, id string, cardName, cardNumber, setName string) error
+	UpdatePurchaseImagesFn         func(ctx context.Context, id string, frontURL, backURL string) error
 	UpdatePurchaseGradeFn          func(ctx context.Context, id string, gradeValue float64) error
 	UpdateExternalPurchaseFieldsFn func(ctx context.Context, id string, p *inventory.Purchase) error
 	UpdatePurchaseMarketSnapshotFn func(ctx context.Context, id string, snap inventory.MarketSnapshotData) error
@@ -392,6 +393,19 @@ func (m *InMemoryCampaignStore) UpdatePurchaseCardMetadata(ctx context.Context, 
 	p.CardName = cardName
 	p.CardNumber = cardNumber
 	p.SetName = setName
+	return nil
+}
+
+func (m *InMemoryCampaignStore) UpdatePurchaseImages(ctx context.Context, id, frontURL, backURL string) error {
+	if m.UpdatePurchaseImagesFn != nil {
+		return m.UpdatePurchaseImagesFn(ctx, id, frontURL, backURL)
+	}
+	p, ok := m.Purchases[id]
+	if !ok {
+		return inventory.ErrPurchaseNotFound
+	}
+	p.FrontImageURL = frontURL
+	p.BackImageURL = backURL
 	return nil
 }
 

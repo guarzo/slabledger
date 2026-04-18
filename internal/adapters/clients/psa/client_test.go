@@ -539,6 +539,50 @@ func TestCertAdapter_LookupCert(t *testing.T) {
 	}
 }
 
+func TestCertAdapter_LookupImages(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/cert/GetImagesByCertNumber/12345678" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode([]ImageInfo{
+			{IsFrontImage: true, ImageURL: "https://example.com/front.jpg"},
+			{IsFrontImage: false, ImageURL: "https://example.com/back.jpg"},
+		})
+	}))
+	defer server.Close()
+
+	adapter := NewCertAdapter(newTestClient(t, server.URL))
+	front, back, err := adapter.LookupImages(context.Background(), "12345678")
+	if err != nil {
+		t.Fatalf("LookupImages error: %v", err)
+	}
+	if front != "https://example.com/front.jpg" {
+		t.Errorf("front = %q, want front.jpg", front)
+	}
+	if back != "https://example.com/back.jpg" {
+		t.Errorf("back = %q, want back.jpg", back)
+	}
+}
+
+func TestCertAdapter_LookupImages_EmptyResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `[]`)
+	}))
+	defer server.Close()
+
+	adapter := NewCertAdapter(newTestClient(t, server.URL))
+	front, back, err := adapter.LookupImages(context.Background(), "12345678")
+	if err != nil {
+		t.Fatalf("LookupImages error: %v", err)
+	}
+	if front != "" || back != "" {
+		t.Errorf("expected empty URLs, got front=%q back=%q", front, back)
+	}
+}
+
 func TestCertAdapter_LookupCert_FallbackGradeDescription(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		resp := CertResponse{
