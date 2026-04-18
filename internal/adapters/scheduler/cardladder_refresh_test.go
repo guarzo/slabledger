@@ -71,11 +71,13 @@ type mockCLGemRateUpdater struct {
 	UpdateGemRateFn                func(ctx context.Context, purchaseID, gemRateID string) error
 	UpdatePSASpecFn                func(ctx context.Context, purchaseID string, psaSpecID int) error
 	UpdatePurchaseCLCardMetadataFn func(ctx context.Context, id, player, variation, category string) error
+	UpdatePurchaseSetNameFn        func(ctx context.Context, purchaseID, setName string) error
 	GemRateCalls                   []struct{ PurchaseID, GemRateID string }
 	PSASpecCalls                   []struct {
 		PurchaseID string
 		PSASpecID  int
 	}
+	SetNameCalls []struct{ PurchaseID, SetName string }
 }
 
 func (m *mockCLGemRateUpdater) UpdatePurchaseGemRateID(ctx context.Context, purchaseID, gemRateID string) error {
@@ -100,6 +102,14 @@ func (m *mockCLGemRateUpdater) UpdatePurchasePSASpecID(ctx context.Context, purc
 func (m *mockCLGemRateUpdater) UpdatePurchaseCLCardMetadata(ctx context.Context, id, player, variation, category string) error {
 	if m.UpdatePurchaseCLCardMetadataFn != nil {
 		return m.UpdatePurchaseCLCardMetadataFn(ctx, id, player, variation, category)
+	}
+	return nil
+}
+
+func (m *mockCLGemRateUpdater) UpdatePurchaseSetName(ctx context.Context, purchaseID, setName string) error {
+	m.SetNameCalls = append(m.SetNameCalls, struct{ PurchaseID, SetName string }{purchaseID, setName})
+	if m.UpdatePurchaseSetNameFn != nil {
+		return m.UpdatePurchaseSetNameFn(ctx, purchaseID, setName)
 	}
 	return nil
 }
