@@ -49,14 +49,29 @@ type APIUsageStats struct {
 	BlockedUntil  *time.Time
 }
 
-// PricingDiagnostics summarizes pricing data quality across the inventory.
+// PricingDiagnostics summarizes the DH pipeline stage of every unsold purchase.
+//
+// Listed + ReadyToList + Unmatched + Matching + AwaitingReceipt equals
+// TotalUnsold. Stages are derived from campaign_purchases.(dh_status,
+// dh_push_status, received_at) on unsold, non-closed purchases. UnmatchedCards
+// matches the DH Unmatched Cards reconcile screen.
+//
+// Pipeline actor per stage:
+//   - AwaitingReceipt: external (PSA hasn't returned the slab)
+//   - Matching:        system (DH push scheduler, runs every 5 min)
+//   - Unmatched:       user (fix via Reconcile screen)
+//   - ReadyToList:     user (click to push to eBay/Shopify)
+//   - Listed:          done (live on DH)
 type PricingDiagnostics struct {
-	TotalMappedCards int              `json:"totalMappedCards"`
-	UnmappedCards    int              `json:"unmappedCards"`
-	CLPricedCards    int              `json:"clPricedCards"`
-	MMPricedCards    int              `json:"mmPricedCards"`
-	TotalUnsold      int              `json:"totalUnsold"`
-	RecentFailures   []FailureSummary `json:"recentFailures"`
+	ListedCards          int              `json:"listedCards"`
+	ReadyToListCards     int              `json:"readyToListCards"`
+	UnmatchedCards       int              `json:"unmatchedCards"`
+	MatchingCards        int              `json:"matchingCards"`
+	AwaitingReceiptCards int              `json:"awaitingReceiptCards"`
+	CLPricedCards        int              `json:"clPricedCards"`
+	MMPricedCards        int              `json:"mmPricedCards"`
+	TotalUnsold          int              `json:"totalUnsold"`
+	RecentFailures       []FailureSummary `json:"recentFailures"`
 }
 
 // FailureSummary aggregates recent API failures by provider and error type.

@@ -33,8 +33,11 @@ export interface FailureSummary {
 }
 
 export interface PricingDiagnosticsResponse {
-  totalMappedCards: number;
-  unmappedCards: number;
+  listedCards: number;
+  readyToListCards: number;
+  unmatchedCards: number;
+  matchingCards: number;
+  awaitingReceiptCards: number;
   clPricedCards: number;
   mmPricedCards: number;
   totalUnsold: number;
