@@ -37,32 +37,48 @@ func (r *PricingDiagnosticsRepository) GetPricingDiagnostics(ctx context.Context
 	return diag, nil
 }
 
-// queryMappingCoverage counts how many inventory cards have DH mappings vs not.
+// queryMappingCoverage buckets unsold purchases into the DH pipeline stages.
+// Precedence (first match wins) reflects the pipeline direction:
+//  1. listed            — dh_status in (listed, sold); live on DH
+//  2. ready_to_list     — matched/manual + dh_status in_stock; waiting for user
+//  3. unmatched         — unmatched/dismissed; needs human reconcile
+//  4. matching          — pending/held/blank + received_at NOT NULL; scheduler will drain
+//  5. awaiting_receipt  — anything else (includes pending without received_at)
+//
+// The five stages sum to TotalUnsold and unmatched aligns with the DH Unmatched
+// Cards reconcile screen.
 func (r *PricingDiagnosticsRepository) queryMappingCoverage(ctx context.Context, diag *pricing.PricingDiagnostics) error {
 	row := r.db.QueryRowContext(ctx, `
-		WITH inventory AS (
-			SELECT DISTINCT cp.card_name, cp.set_name, COALESCE(cp.card_number, '') AS card_number
+		SELECT
+			COALESCE(SUM(CASE WHEN bucket = 'listed' THEN 1 ELSE 0 END), 0) AS listed,
+			COALESCE(SUM(CASE WHEN bucket = 'ready_to_list' THEN 1 ELSE 0 END), 0) AS ready_to_list,
+			COALESCE(SUM(CASE WHEN bucket = 'unmatched' THEN 1 ELSE 0 END), 0) AS unmatched,
+			COALESCE(SUM(CASE WHEN bucket = 'matching' THEN 1 ELSE 0 END), 0) AS matching,
+			COALESCE(SUM(CASE WHEN bucket = 'awaiting_receipt' THEN 1 ELSE 0 END), 0) AS awaiting_receipt
+		FROM (
+			SELECT
+				CASE
+					WHEN cp.dh_status IN ('listed', 'sold') THEN 'listed'
+					WHEN cp.dh_push_status IN ('matched', 'manual') THEN 'ready_to_list'
+					WHEN cp.dh_push_status IN ('unmatched', 'dismissed') THEN 'unmatched'
+					WHEN cp.received_at IS NOT NULL THEN 'matching'
+					ELSE 'awaiting_receipt'
+				END AS bucket
 			FROM campaign_purchases cp
 			JOIN campaigns c ON cp.campaign_id = c.id
 			LEFT JOIN campaign_sales cs ON cp.id = cs.purchase_id
 			WHERE cs.id IS NULL AND c.phase != 'closed'
 		)
-		SELECT
-			COUNT(*) AS total,
-			COALESCE(SUM(CASE WHEN m.external_id IS NOT NULL THEN 1 ELSE 0 END), 0) AS mapped
-		FROM inventory inv
-		LEFT JOIN card_id_mappings m
-			ON m.card_name = inv.card_name
-			AND m.set_name = inv.set_name
-			AND m.collector_number = inv.card_number
-			AND m.provider = 'doubleholo'
 	`)
-	var total, mapped int
-	if err := row.Scan(&total, &mapped); err != nil {
+	if err := row.Scan(
+		&diag.ListedCards,
+		&diag.ReadyToListCards,
+		&diag.UnmatchedCards,
+		&diag.MatchingCards,
+		&diag.AwaitingReceiptCards,
+	); err != nil {
 		return fmt.Errorf("query mapping coverage: %w", err)
 	}
-	diag.TotalMappedCards = mapped
-	diag.UnmappedCards = total - mapped
 	return nil
 }
 
