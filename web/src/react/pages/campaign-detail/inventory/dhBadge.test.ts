@@ -17,13 +17,13 @@ describe('dhBadgeFor', () => {
 
   it('falls through to push status when dh_status is empty', () => {
     expect(dhBadgeFor('held', undefined)).toBe('held');
-    expect(dhBadgeFor('unmatched', undefined)).toBe('unmatched');
+    expect(dhBadgeFor('unmatched', undefined)).toBe('no DH match');
     expect(dhBadgeFor('dismissed', undefined)).toBe('dismissed');
     expect(dhBadgeFor('matched', undefined)).toBe('pushed');
   });
 
   it('splits pending by receivedAt presence', () => {
-    expect(dhBadgeFor('pending', undefined, '2026-04-17T05:00:00Z')).toBe('pending');
+    expect(dhBadgeFor('pending', undefined, '2026-04-17T05:00:00Z')).toBe('matching DH');
     expect(dhBadgeFor('pending', undefined)).toBe('awaiting intake');
     expect(dhBadgeFor('pending', undefined, null)).toBe('awaiting intake');
     expect(dhBadgeFor('pending', undefined, '')).toBe('awaiting intake');

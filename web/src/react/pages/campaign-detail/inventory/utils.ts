@@ -27,6 +27,21 @@ export function bestPrice(item: AgingItem): number {
 }
 
 /**
+ * True when at least one *canonical* pricing signal is available: CL value,
+ * DH grade price, or last-sold (from comps or snapshot). Derived fields like
+ * MM, override, and DH median/mid are intentionally excluded so the inline
+ * "no price data" warning matches what the row UI actually references.
+ */
+export function hasCanonicalPriceSignal(item: AgingItem): boolean {
+  if ((item.purchase.clValueCents ?? 0) > 0) return true;
+  const snap = item.currentMarket;
+  if (snap && (snap.gradePriceCents ?? 0) > 0) return true;
+  if ((item.compSummary?.lastSaleCents ?? 0) > 0) return true;
+  if (snap && (snap.lastSoldCents ?? 0) > 0) return true;
+  return false;
+}
+
+/**
  * The most recent real sale for an item — prefers comp analytics (literal most-recent sold price),
  * falls back to the snapshot's lastSold. Returns null when no sale data exists.
  */
@@ -317,17 +332,6 @@ export function relativeTime(isoDate: string): string {
 /** A card is a "hot seller" if it has 3+ sales in the last 30 days and the last sold price >= target price. */
 export function isHotSeller(item: AgingItem): boolean {
   return checkHotSeller(item.currentMarket, item.recommendedPriceCents ?? 0);
-}
-
-/** A card is a "card show candidate" if it has in-person signals or matches the legacy heuristic. */
-export function isCardShowCandidate(item: AgingItem): boolean {
-  if (item.signals?.profitCaptureDeclining || item.signals?.profitCaptureSpike || item.signals?.crackCandidate) {
-    return true;
-  }
-   if (isHotSeller(item)) return true;
-   if (item.purchase.gradeValue === 7) return true;
-   if (item.currentMarket?.trend30d != null && item.currentMarket.trend30d > 0.05) return true;
-   return false;
 }
 
 /** Format an ISO date string to "Mon D, YYYY" format (e.g., "Apr 5, 2026"). */

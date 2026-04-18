@@ -20,6 +20,7 @@ interface MobileCardProps {
   onSetPrice?: () => void;
   onDelete?: () => void;
   onListOnDH?: (purchaseId: string) => void;
+  onRemoveFromSellSheet?: () => void;
   dhListingLoading?: boolean;
   dhListedOverride?: boolean;
   ev?: ExpectedValue;
@@ -27,7 +28,7 @@ interface MobileCardProps {
   isOnSellSheet?: boolean;
 }
 
-export default function MobileCard({ item, selected, onToggle, onRecordSale, onFixPricing, onFixDHMatch, onSetPrice, onDelete, onListOnDH, dhListingLoading, dhListedOverride, ev, showCampaignColumn, isOnSellSheet }: MobileCardProps) {
+export default function MobileCard({ item, selected, onToggle, onRecordSale, onFixPricing, onFixDHMatch, onSetPrice, onDelete, onListOnDH, onRemoveFromSellSheet, dhListingLoading, dhListedOverride, ev, showCampaignColumn, isOnSellSheet }: MobileCardProps) {
   const cb = costBasis(item.purchase);
   const snap = item.currentMarket;
   const daysColor = daysHeldColor(item.daysHeld);
@@ -227,6 +228,17 @@ export default function MobileCard({ item, selected, onToggle, onRecordSale, onF
             aria-label="Re-map to correct DH card"
           >
             DH
+          </button>
+        )}
+        {isOnSellSheet && onRemoveFromSellSheet && (
+          <button
+            type="button"
+            onClick={onRemoveFromSellSheet}
+            className="text-xs text-[var(--text-muted)] underline"
+            title="Remove from sell sheet"
+            aria-label="Remove from sell sheet"
+          >
+            Remove
           </button>
         )}
         {dhListedOverride ? (

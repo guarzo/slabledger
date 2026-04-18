@@ -3,9 +3,9 @@ export type DHBadgeLabel =
   | 'listed'
   | 'in stock'
   | 'held'
-  | 'unmatched'
+  | 'no DH match'
   | 'dismissed'
-  | 'pending'
+  | 'matching DH'
   | 'awaiting intake'
   | 'pushed'
   | 'unenrolled';
@@ -22,11 +22,11 @@ export function dhBadgeFor(
     case 'held':
       return 'held';
     case 'unmatched':
-      return 'unmatched';
+      return 'no DH match';
     case 'dismissed':
       return 'dismissed';
     case 'pending':
-      return receivedAt ? 'pending' : 'awaiting intake';
+      return receivedAt ? 'matching DH' : 'awaiting intake';
     case 'matched':
       return 'pushed';
     default:
@@ -39,9 +39,9 @@ export const DH_BADGE_COLORS: Record<DHBadgeLabel, string> = {
   listed: 'bg-[rgba(34,211,153,0.1)] text-[#34d399]',
   'in stock': 'bg-[rgba(99,102,241,0.1)] text-[#818cf8]',
   held: 'bg-[rgba(248,113,113,0.1)] text-[#f87171]',
-  unmatched: 'bg-[rgba(248,113,113,0.1)] text-[#f87171]',
+  'no DH match': 'bg-[rgba(248,113,113,0.1)] text-[#f87171]',
   dismissed: 'bg-[rgba(248,113,113,0.1)] text-[#f87171]',
-  pending: 'bg-[rgba(245,158,11,0.1)] text-[#fbbf24]',
+  'matching DH': 'bg-[rgba(245,158,11,0.1)] text-[#fbbf24]',
   'awaiting intake': 'bg-[var(--surface-2)] text-[var(--text-muted)]',
   pushed: 'bg-[rgba(245,158,11,0.1)] text-[#fbbf24]',
   unenrolled: 'bg-[var(--surface-2)] text-[var(--text-muted)]',
