@@ -8,7 +8,7 @@ import {
   formatPL,
   getReviewStatus, statusBorderColor, isHotSeller, formatReceivedDate,
   referencePricesTooltip,
-  syncDotProps, hasAnyPriceSignal,
+  syncDotProps, hasCanonicalPriceSignal,
 } from './utils';
 import { isReadyToList } from './inventoryCalcs';
 import { dhBadgeFor, DH_BADGE_COLORS } from './dhBadge';
@@ -171,7 +171,7 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
       <div className="glass-table-td flex-shrink-0 text-right text-[var(--text)] tabular-nums" style={{ width: '72px' }}>{formatCents(cb)}</div>
       <div className="glass-table-td flex-shrink-0 text-right" style={{ width: '140px' }}>
         <div className="flex flex-col items-end gap-[1px]">
-          {listCents === 0 && !hasAnyPriceSignal(item) ? (
+          {listCents === 0 && !hasCanonicalPriceSignal(item) ? (
             <button
               type="button"
               onClick={e => { e.stopPropagation(); (onFixPricing ?? onExpand)(); }}

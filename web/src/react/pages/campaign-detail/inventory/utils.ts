@@ -26,21 +26,19 @@ export function bestPrice(item: AgingItem): number {
   return item.currentMarket ? bestPriceFromSnap(item.currentMarket) : 0;
 }
 
-/** True when at least one pricing signal is available — CL, MM, any DH market price, comp sale, or manual override. */
-export function hasAnyPriceSignal(item: AgingItem): boolean {
-  const p = item.purchase;
-  if ((p.clValueCents ?? 0) > 0) return true;
-  if ((p.mmValueCents ?? 0) > 0) return true;
-  if ((p.overridePriceCents ?? 0) > 0) return true;
-  if ((item.compSummary?.lastSaleCents ?? 0) > 0) return true;
+/**
+ * True when at least one *canonical* pricing signal is available: CL value,
+ * DH grade price, or last-sold (from comps or snapshot). Derived fields like
+ * MM, override, and DH median/mid are intentionally excluded so the inline
+ * "no price data" warning matches what the row UI actually references.
+ */
+export function hasCanonicalPriceSignal(item: AgingItem): boolean {
+  if ((item.purchase.clValueCents ?? 0) > 0) return true;
   const snap = item.currentMarket;
-  if (!snap) return false;
-  return (
-    (snap.medianCents ?? 0) > 0 ||
-    (snap.gradePriceCents ?? 0) > 0 ||
-    (snap.lastSoldCents ?? 0) > 0 ||
-    (snap.midPriceCents ?? 0) > 0
-  );
+  if (snap && (snap.gradePriceCents ?? 0) > 0) return true;
+  if ((item.compSummary?.lastSaleCents ?? 0) > 0) return true;
+  if (snap && (snap.lastSoldCents ?? 0) > 0) return true;
+  return false;
 }
 
 /**

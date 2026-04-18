@@ -170,7 +170,7 @@
   --glow-brand-color: rgba(99, 102, 241, 0.4);
   --glow-white: rgba(255, 255, 255, 0.8);
   --glow-violet: 0 0 40px rgba(139, 92, 246, 0.5);
-  --glow-psa10: 0 0 20px rgba(220, 38, 38, 0.2);
+  --glow-psa10: 0 0 20px rgba(251, 191, 36, 0.25);
   --glow-psa9: 0 0 20px rgba(37, 99, 235, 0.2);
 
   /* Navigation shadows */
@@ -179,7 +179,7 @@
   --shadow-brand-scroll: 0 8px 32px rgba(99, 102, 241, 0.15);
 
   /* PSA highlight gradients */
-  --gradient-psa10-highlight: linear-gradient(90deg, rgba(220, 38, 38, 0.06) 0%, transparent 100%);
+  --gradient-psa10-highlight: linear-gradient(90deg, rgba(251, 191, 36, 0.08) 0%, transparent 100%);
   --gradient-psa9-highlight: linear-gradient(90deg, rgba(37, 99, 235, 0.04) 0%, transparent 100%);
 
   /* ===================================

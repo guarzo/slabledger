@@ -472,6 +472,10 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                           dhListedOverride={dhListedOptimistic.has(item.purchase.id)}
                           showCampaignColumn={showCampaignColumn}
                           isOnSellSheet={!sellSheetActive && sellSheet.has(item.purchase.id)}
+                          onRemoveFromSellSheet={sellSheet.has(item.purchase.id) ? () => {
+                            sellSheet.remove([item.purchase.id]);
+                            toast.success('Removed from sell sheet');
+                          } : undefined}
                         />
                       </div>
                       {isExpanded && <ExpandedDetail item={item} onReviewed={handleReviewed} campaignId={campaignId} onOpenFlagDialog={() => setFlagTarget({ purchaseId: item.purchase.id, cardName: item.purchase.cardName, grade: item.purchase.gradeValue })} onResolveFlag={handleResolveFlag} onApproveDHPush={handleApproveDHPush} onSetPrice={() => handleSetPrice(item)} />}
