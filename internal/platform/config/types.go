@@ -53,6 +53,11 @@ type MaintenanceConfig struct {
 	// AccessLogCleanupEnabled controls whether the cleanup scheduler is active.
 	// Default: true
 	AccessLogCleanupEnabled bool
+
+	// BackfillImages enqueues unsold PSA purchases with empty image URLs onto
+	// the cert-enrichment queue at startup so they pick up front/back slab
+	// images from PSA. Opt-in because it consumes PSA daily budget.
+	BackfillImages bool
 }
 
 // PriceRefreshConfig controls the price refresh scheduler
