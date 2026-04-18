@@ -56,6 +56,7 @@ type ConfirmMatchBatchResponse struct {
 const (
 	InventoryStatusInStock = "in_stock"
 	InventoryStatusListed  = "listed"
+	InventoryStatusSold    = "sold"
 )
 
 // --- DH Channel & Grading Constants ---
