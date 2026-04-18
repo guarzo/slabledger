@@ -22,6 +22,13 @@ type IntegrationFailuresReport struct {
 	Samples  []IntegrationFailureSample `json:"samples"`
 }
 
+// ReasonUnprocessed is a synthetic reason tag used for purchases that have no
+// provider value and no recorded error. These rows slip through the scheduler's
+// tagging paths (cancelled ctx, clobbered value, never-enumerated) and are
+// otherwise invisible to the admin UI. Surfacing them as a distinct bucket is
+// the observability fix for "many products with no price data and no reason."
+const ReasonUnprocessed = "unprocessed"
+
 // maxIntegrationFailureSamples caps the sample list returned by
 // queryIntegrationFailures even if a caller passes a larger limit. The
 // HTTP handlers already clamp via parsePagination, but this is
@@ -31,23 +38,27 @@ const maxIntegrationFailureSamples = 200
 // queryIntegrationFailures is the shared implementation behind
 // MarketMoversStore.GetMMFailures and CardLadderStore.GetCLFailures.
 //
-// It joins unsold, non-archived purchases with a non-empty failure column
-// (either mm_last_error or cl_last_error) and returns:
-//   - a grouped count by reason tag
-//   - a bounded sample list (sorted by most recent error first)
+// It returns:
+//   - grouped counts by reason tag for rows whose reason column is non-empty
+//   - a synthetic "unprocessed" count for rows whose value column is 0 and
+//     whose reason column is empty (silent misses the scheduler never tagged)
+//   - a bounded sample list combining both, sorted by most recent first;
+//     unprocessed rows are sorted by the purchase's updated_at since they
+//     have no error timestamp of their own.
 //
 // Column names are parameterized so one function handles both integrations;
-// values are constrained to a small allowlist in the per-integration wrappers,
-// so the string interpolation is safe from injection.
-func queryIntegrationFailures(ctx context.Context, db *sql.DB, reasonCol, reasonAtCol string, sampleLimit int) (*IntegrationFailuresReport, error) {
-	// Validate reason + reason-timestamp column as a pair so a caller can't mix
-	// mm_last_error with cl_last_error_at or vice versa. The allowlist doubles
-	// as the only-ever safe values for the string interpolation below.
+// values are constrained to a small allowlist, so the string interpolation
+// is safe from injection.
+func queryIntegrationFailures(ctx context.Context, db *sql.DB, reasonCol, reasonAtCol, valueCol string, sampleLimit int) (*IntegrationFailuresReport, error) {
+	// Validate reason + reason-timestamp + value column as a triple so a
+	// caller can't mix mm_last_error with cl_last_error_at or cl_value_cents
+	// with mm_last_error. The allowlist doubles as the only-ever safe values
+	// for the string interpolation below.
 	switch {
-	case reasonCol == "mm_last_error" && reasonAtCol == "mm_last_error_at":
-	case reasonCol == "cl_last_error" && reasonAtCol == "cl_last_error_at":
+	case reasonCol == "mm_last_error" && reasonAtCol == "mm_last_error_at" && valueCol == "mm_value_cents":
+	case reasonCol == "cl_last_error" && reasonAtCol == "cl_last_error_at" && valueCol == "cl_value_cents":
 	default:
-		return nil, fmt.Errorf("queryIntegrationFailures: invalid column pair (%q, %q)", reasonCol, reasonAtCol)
+		return nil, fmt.Errorf("queryIntegrationFailures: invalid column triple (%q, %q, %q)", reasonCol, reasonAtCol, valueCol)
 	}
 	if sampleLimit <= 0 || sampleLimit > maxIntegrationFailureSamples {
 		sampleLimit = maxIntegrationFailureSamples
@@ -57,7 +68,7 @@ func queryIntegrationFailures(ctx context.Context, db *sql.DB, reasonCol, reason
 		ByReason: make(map[string]int),
 	}
 
-	// Aggregated counts by reason.
+	// Aggregated counts by reason (tagged failures only).
 	countsSQL := fmt.Sprintf(`
 		SELECT p.%s AS reason, COUNT(*) AS cnt
 		FROM campaign_purchases p
@@ -90,16 +101,63 @@ func queryIntegrationFailures(ctx context.Context, db *sql.DB, reasonCol, reason
 		return nil, fmt.Errorf("integration failure counts close: %w", err)
 	}
 
-	// Bounded sample list, most recent errors first.
-	samplesSQL := fmt.Sprintf(`
-		SELECT p.id, COALESCE(p.cert_number, ''), COALESCE(p.card_name, ''), p.%s, p.%s
+	// Synthetic "unprocessed" count — rows with no value AND no error tag.
+	// These are silent misses (cancelled ctx mid-loop, clobbered value, never
+	// reached by scheduler) that /failures would otherwise hide.
+	unprocessedSQL := fmt.Sprintf(`
+		SELECT COUNT(*)
 		FROM campaign_purchases p
 		INNER JOIN campaigns c ON c.id = p.campaign_id
 		LEFT JOIN campaign_sales s ON s.purchase_id = p.id
-		WHERE s.id IS NULL AND c.phase != 'closed' AND p.%s != ''
-		ORDER BY p.%s DESC
+		WHERE s.id IS NULL AND c.phase != 'closed'
+		  AND (p.%s = 0 OR p.%s IS NULL)
+		  AND (p.%s = '' OR p.%s IS NULL)
+	`, valueCol, valueCol, reasonCol, reasonCol)
+
+	var unprocessedCount int
+	if err := db.QueryRowContext(ctx, unprocessedSQL).Scan(&unprocessedCount); err != nil {
+		return nil, fmt.Errorf("integration unprocessed count: %w", err)
+	}
+	if unprocessedCount > 0 {
+		report.ByReason[ReasonUnprocessed] = unprocessedCount
+	}
+
+	// Bounded sample list, most recent first. We UNION the tagged failures
+	// (sorted by error timestamp) with unprocessed rows (sorted by updated_at)
+	// so the UI shows a coherent "here's what needs attention" view.
+	samplesSQL := fmt.Sprintf(`
+		SELECT id, cert_number, card_name, reason, error_at, sort_key FROM (
+			SELECT p.id AS id,
+			       COALESCE(p.cert_number, '') AS cert_number,
+			       COALESCE(p.card_name, '') AS card_name,
+			       p.%s AS reason,
+			       p.%s AS error_at,
+			       p.%s AS sort_key
+			FROM campaign_purchases p
+			INNER JOIN campaigns c ON c.id = p.campaign_id
+			LEFT JOIN campaign_sales s ON s.purchase_id = p.id
+			WHERE s.id IS NULL AND c.phase != 'closed' AND p.%s != ''
+
+			UNION ALL
+
+			SELECT p.id AS id,
+			       COALESCE(p.cert_number, '') AS cert_number,
+			       COALESCE(p.card_name, '') AS card_name,
+			       '%s' AS reason,
+			       '' AS error_at,
+			       p.updated_at AS sort_key
+			FROM campaign_purchases p
+			INNER JOIN campaigns c ON c.id = p.campaign_id
+			LEFT JOIN campaign_sales s ON s.purchase_id = p.id
+			WHERE s.id IS NULL AND c.phase != 'closed'
+			  AND (p.%s = 0 OR p.%s IS NULL)
+			  AND (p.%s = '' OR p.%s IS NULL)
+		)
+		ORDER BY sort_key DESC
 		LIMIT ?
-	`, reasonCol, reasonAtCol, reasonCol, reasonAtCol)
+	`, reasonCol, reasonAtCol, reasonAtCol, reasonCol,
+		ReasonUnprocessed,
+		valueCol, valueCol, reasonCol, reasonCol)
 
 	sampleRows, err := db.QueryContext(ctx, samplesSQL, sampleLimit)
 	if err != nil {
@@ -109,7 +167,8 @@ func queryIntegrationFailures(ctx context.Context, db *sql.DB, reasonCol, reason
 
 	for sampleRows.Next() {
 		var s IntegrationFailureSample
-		if err := sampleRows.Scan(&s.PurchaseID, &s.CertNumber, &s.CardName, &s.Reason, &s.ErrorAt); err != nil {
+		var sortKey string
+		if err := sampleRows.Scan(&s.PurchaseID, &s.CertNumber, &s.CardName, &s.Reason, &s.ErrorAt, &sortKey); err != nil {
 			return nil, fmt.Errorf("integration failure sample scan: %w", err)
 		}
 		report.Samples = append(report.Samples, s)

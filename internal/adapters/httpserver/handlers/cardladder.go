@@ -16,8 +16,10 @@ import (
 type CLRefresher interface {
 	RunOnce(ctx context.Context) error
 	// GetLastRunStats returns stats from the most recent refresh run, or nil if
-	// no run has completed yet.
-	GetLastRunStats() *scheduler.CLRunStats
+	// no run has completed yet. Accepts a context so the DB fallback path
+	// (used when in-memory stats have been wiped by a restart) honors request
+	// cancellation and deadlines.
+	GetLastRunStats(ctx context.Context) *scheduler.CLRunStats
 	// SetClient replaces the API client used by the scheduler (e.g. after
 	// credentials are saved at runtime).
 	SetClient(client *cardladder.Client)
@@ -142,7 +144,7 @@ func (h *CardLadderHandler) HandleStatus(w http.ResponseWriter, r *http.Request)
 	refresher := h.refresher
 	h.mu.Unlock()
 	if refresher != nil {
-		if stats := refresher.GetLastRunStats(); stats != nil {
+		if stats := refresher.GetLastRunStats(r.Context()); stats != nil {
 			status["lastRun"] = stats
 		}
 	}

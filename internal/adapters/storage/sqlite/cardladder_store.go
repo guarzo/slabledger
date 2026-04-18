@@ -228,7 +228,7 @@ type CLPriceStats struct {
 // failure reason, grouped by reason with a bounded sample list for the UI.
 // sampleLimit is clamped inside queryIntegrationFailures.
 func (s *CardLadderStore) GetCLFailures(ctx context.Context, sampleLimit int) (*IntegrationFailuresReport, error) {
-	return queryIntegrationFailures(ctx, s.db, "cl_last_error", "cl_last_error_at", sampleLimit)
+	return queryIntegrationFailures(ctx, s.db, "cl_last_error", "cl_last_error_at", "cl_value_cents", sampleLimit)
 }
 
 // GetCLPriceStats computes summary statistics about CL value freshness across unsold inventory.
