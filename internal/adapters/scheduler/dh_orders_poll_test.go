@@ -44,7 +44,7 @@ func TestDHOrdersPoll_RecordsSale(t *testing.T) {
 						SalePriceCents: 7500,
 						Channel:        "ebay",
 						SoldAt:         "2026-04-02T14:30:00Z",
-						Grade:          10,
+						Grade:          "10",
 						Fees: dh.OrderFees{
 							ChannelFeeCents: intPtr(994),
 						},
@@ -190,9 +190,9 @@ func TestDHOrdersPoll_RecordsEvents(t *testing.T) {
 		GetOrdersFn: func(_ context.Context, _ dh.OrderFilters) (*dh.OrdersResponse, error) {
 			return &dh.OrdersResponse{
 				Orders: []dh.Order{
-					{OrderID: "order-matched", CertNumber: "c-matched", Channel: "ebay", SoldAt: "2026-04-02T14:30:00Z", SalePriceCents: 7500, Grade: 10},
-					{OrderID: "order-orphan", CertNumber: "c-orphan", Channel: "dh", SoldAt: "2026-04-02T14:31:00Z", SalePriceCents: 5000, Grade: 9},
-					{OrderID: "order-already", CertNumber: "c-already", Channel: "shopify", SoldAt: "2026-04-02T14:32:00Z", SalePriceCents: 6000, Grade: 9},
+					{OrderID: "order-matched", CertNumber: "c-matched", Channel: "ebay", SoldAt: "2026-04-02T14:30:00Z", SalePriceCents: 7500, Grade: "10"},
+					{OrderID: "order-orphan", CertNumber: "c-orphan", Channel: "dh", SoldAt: "2026-04-02T14:31:00Z", SalePriceCents: 5000, Grade: "9"},
+					{OrderID: "order-already", CertNumber: "c-already", Channel: "shopify", SoldAt: "2026-04-02T14:32:00Z", SalePriceCents: 6000, Grade: "9"},
 				},
 				Meta: dh.PaginationMeta{Page: 1, PerPage: 100, TotalCount: 3},
 			}, nil
