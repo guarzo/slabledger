@@ -150,6 +150,10 @@ func (j *CertEnrichJob) enrichSingleCert(ctx context.Context, certNum string) {
 		}
 	}
 
+	// Run image backfill before the grade branches below, which have early
+	// returns that would otherwise skip it for zero-grade certs.
+	j.enrichImages(ctx, purchase, certNum)
+
 	// Persist grade from cert if it differs from the purchase.
 	// Fallback chain: cert info → existing purchase → parsed from PSA listing title.
 	if info.Grade == 0 && purchase.GradeValue != 0 {
@@ -178,8 +182,6 @@ func (j *CertEnrichJob) enrichSingleCert(ctx context.Context, certNum string) {
 			}
 		}
 	}
-
-	j.enrichImages(ctx, purchase, certNum)
 
 	// Card metadata is now enriched. Snapshots will be captured separately via ProcessPendingSnapshots
 	// if needed, or by other background jobs.
