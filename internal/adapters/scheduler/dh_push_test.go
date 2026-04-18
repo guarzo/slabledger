@@ -311,6 +311,69 @@ func TestDHPush_CertNotMatched_MarksUnmatched(t *testing.T) {
 	assert.Equal(t, inventory.DHPushStatusUnmatched, statusUpdater.Calls[0].Status)
 }
 
+// TestDHPush_MarkUnmatched_EmitsEvent verifies that every pending→unmatched
+// transition records a dh_state_events row. Without this event, the state
+// churn between pending (set by cl_refresh re-enrollment) and unmatched (set
+// here) has no audit trail — cards get stuck and operators can't see why.
+func TestDHPush_MarkUnmatched_EmitsEvent(t *testing.T) {
+	cases := []struct {
+		name        string
+		purchase    inventory.Purchase
+		resolveResp *dh.CertResolution
+		wantNotes   string
+	}{
+		{
+			name:      "no cert number",
+			purchase:  inventory.Purchase{ID: "p1", DHPushStatus: inventory.DHPushStatusPending},
+			wantNotes: "purchase has no cert number",
+		},
+		{
+			name:        "cert resolve returns not_found",
+			purchase:    inventory.Purchase{ID: "p2", CertNumber: "c2", DHPushStatus: inventory.DHPushStatusPending},
+			resolveResp: &dh.CertResolution{Status: dh.CertStatusNotFound},
+			wantNotes:   "cert resolve returned not_found",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			purchase := tc.purchase
+			lister := &mockDHPushPendingLister{
+				ListFn: func(_ context.Context, _ string, _ int) ([]inventory.Purchase, error) {
+					return []inventory.Purchase{purchase}, nil
+				},
+			}
+			certResolver := &mockDHPushCertResolver{
+				ResolveFn: func(_ context.Context, _ dh.CertResolveRequest) (*dh.CertResolution, error) {
+					return tc.resolveResp, nil
+				},
+			}
+			statusUpdater := &mockDHPushStatusUpdater{}
+			pusher := &mockDHPushInventoryPusher{}
+			fieldsUpdater := &mocks.MockDHFieldsUpdater{}
+			cardIDSaver := &mockDHPushCardIDSaver{}
+			recorder := &mocks.MockEventRecorder{}
+
+			s := NewDHPushScheduler(
+				lister, statusUpdater, certResolver, pusher, fieldsUpdater, cardIDSaver,
+				mocks.NewMockLogger(),
+				DHPushConfig{Enabled: true, Interval: 1 * time.Hour},
+				WithDHPushEventRecorder(recorder),
+			)
+			s.push(context.Background())
+
+			require.Len(t, recorder.Events, 1)
+			got := recorder.Events[0]
+			assert.Equal(t, dhevents.TypeUnmatched, got.Type)
+			assert.Equal(t, purchase.ID, got.PurchaseID)
+			assert.Equal(t, purchase.CertNumber, got.CertNumber)
+			assert.Equal(t, string(inventory.DHPushStatusPending), got.PrevPushStatus)
+			assert.Equal(t, string(inventory.DHPushStatusUnmatched), got.NewPushStatus)
+			assert.Equal(t, dhevents.SourceDHPush, got.Source)
+			assert.Equal(t, tc.wantNotes, got.Notes)
+		})
+	}
+}
+
 func TestDHPush_InventoryPushError_LeavesAsPending(t *testing.T) {
 	purchase := inventory.Purchase{
 		ID:           "pur-4",

@@ -5,9 +5,12 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/guarzo/slabledger/internal/domain/dhevents"
 	"github.com/guarzo/slabledger/internal/domain/dhlisting"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type stubSnapshotFetcher struct {
@@ -153,6 +156,66 @@ func TestReconcile(t *testing.T) {
 					t.Errorf("ResetIDs[%d] = %q, want %q", i, got.ResetIDs[i], id)
 				}
 			}
+		})
+	}
+}
+
+// TestReconcile_EmitsUnlistedEvent verifies that each successful reset records
+// a dh_state_events row so operators can confirm the reconciler ran and which
+// purchases it touched. Without this event, reconciler runs are invisible
+// outside the log stream.
+func TestReconcile_EmitsUnlistedEvent(t *testing.T) {
+	cases := []struct {
+		name       string
+		snapshot   map[int]struct{}
+		purchases  []inventory.Purchase
+		wantEvents []dhevents.Event
+	}{
+		{
+			name:     "records event per reset, nothing for healthy or unlinked rows",
+			snapshot: idSet(101),
+			purchases: []inventory.Purchase{
+				{ID: "p1", CertNumber: "c1", DHInventoryID: 101, DHCardID: 55, DHStatus: inventory.DHStatusListed},
+				{ID: "p2", CertNumber: "c2", DHInventoryID: 200, DHCardID: 77, DHStatus: inventory.DHStatusListed},
+				{ID: "p3", CertNumber: "c3", DHInventoryID: 0},
+			},
+			wantEvents: []dhevents.Event{{
+				PurchaseID:    "p2",
+				CertNumber:    "c2",
+				Type:          dhevents.TypeUnlisted,
+				PrevDHStatus:  string(inventory.DHStatusListed),
+				DHInventoryID: 200,
+				DHCardID:      77,
+				Source:        dhevents.SourceDHReconcile,
+				Notes:         "inventory ID missing from DH snapshot",
+			}},
+		},
+		{
+			name:      "no events when nothing drifts",
+			snapshot:  idSet(101, 102),
+			purchases: []inventory.Purchase{{ID: "p1", DHInventoryID: 101}, {ID: "p2", DHInventoryID: 102}},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := &mocks.PurchaseRepositoryMock{
+				ListAllUnsoldPurchasesFn: func(_ context.Context) ([]inventory.Purchase, error) {
+					return tc.purchases, nil
+				},
+			}
+			rec := &mocks.MockEventRecorder{}
+			recon, err := dhlisting.NewReconciler(
+				stubSnapshotFetcher{ids: tc.snapshot},
+				repo, repo,
+				mocks.NewMockLogger(),
+				dhlisting.WithReconcileEventRecorder(rec),
+			)
+			require.NoError(t, err)
+
+			_, err = recon.Reconcile(context.Background())
+			require.NoError(t, err)
+			assert.Equal(t, tc.wantEvents, rec.Events)
 		})
 	}
 }
