@@ -184,32 +184,54 @@ func TestDHOrdersPoll_RunOnce_HonorsCallerSince(t *testing.T) {
 }
 
 func TestDHOrdersPoll_MalformedGrade_FallsBackToZero(t *testing.T) {
-	client := &mocks.MockDHOrdersClient{
-		GetOrdersFn: func(_ context.Context, _ dh.OrderFilters) (*dh.OrdersResponse, error) {
-			return &dh.OrdersResponse{
-				Orders: []dh.Order{
-					{OrderID: "ord-bad", CertNumber: "cert-bad", Channel: "ebay", SoldAt: "2026-04-02T00:00:00Z", SalePriceCents: 1000, Grade: "not-a-number"},
+	// Grade is advisory in the orders flow — ImportOrdersSales never reads it.
+	// A malformed grade must surface via a Warn log (see dh_orders_poll.go) and
+	// fall back to 0 rather than aborting the ingest pass or dropping the order.
+	cases := []struct {
+		name        string
+		order       dh.Order
+		expectGrade float64
+	}{
+		{
+			name:        "malformed grade falls back to 0",
+			order:       dh.Order{OrderID: "ord-bad", CertNumber: "cert-bad", Channel: "ebay", SoldAt: "2026-04-02T00:00:00Z", SalePriceCents: 1000, Grade: "not-a-number"},
+			expectGrade: 0,
+		},
+		{
+			name:        "well-formed grade parses",
+			order:       dh.Order{OrderID: "ord-ok", CertNumber: "cert-ok", Channel: "ebay", SoldAt: "2026-04-02T00:00:00Z", SalePriceCents: 1000, Grade: "9.5"},
+			expectGrade: 9.5,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			client := &mocks.MockDHOrdersClient{
+				GetOrdersFn: func(_ context.Context, _ dh.OrderFilters) (*dh.OrdersResponse, error) {
+					return &dh.OrdersResponse{
+						Orders: []dh.Order{tc.order},
+						Meta:   dh.PaginationMeta{Page: 1, PerPage: 100, TotalCount: 1},
+					}, nil
 				},
-				Meta: dh.PaginationMeta{Page: 1, PerPage: 100, TotalCount: 1},
-			}, nil
-		},
-	}
-	var capturedGrade float64
-	svc := &mocks.MockInventoryService{
-		ImportOrdersSalesFn: func(_ context.Context, rows []inventory.OrdersExportRow) (*inventory.OrdersImportResult, error) {
-			require.Len(t, rows, 1)
-			capturedGrade = rows[0].Grade
-			return &inventory.OrdersImportResult{}, nil
-		},
-	}
+			}
+			var capturedGrade float64
+			svc := &mocks.MockInventoryService{
+				ImportOrdersSalesFn: func(_ context.Context, rows []inventory.OrdersExportRow) (*inventory.OrdersImportResult, error) {
+					require.Len(t, rows, 1)
+					capturedGrade = rows[0].Grade
+					return &inventory.OrdersImportResult{}, nil
+				},
+			}
 
-	s := NewDHOrdersPollScheduler(client, newMockSyncStateStore(), svc, nil, mocks.NewMockLogger(),
-		DHOrdersPollConfig{Enabled: true, Interval: 1 * time.Hour})
+			s := NewDHOrdersPollScheduler(client, newMockSyncStateStore(), svc, nil, mocks.NewMockLogger(),
+				DHOrdersPollConfig{Enabled: true, Interval: 1 * time.Hour})
 
-	summary, err := s.RunOnce(context.Background(), "2026-04-01T00:00:00Z")
-	require.NoError(t, err, "malformed grade must not abort the ingest pass — grade is advisory, sale creation must proceed")
-	assert.Equal(t, 1, summary.OrdersFetched)
-	assert.Equal(t, float64(0), capturedGrade, "malformed grade should fall back to 0 (grade is unused downstream, we just surface it via Warn log)")
+			summary, err := s.RunOnce(context.Background(), "2026-04-01T00:00:00Z")
+			require.NoError(t, err)
+			assert.Equal(t, 1, summary.OrdersFetched)
+			assert.Equal(t, tc.expectGrade, capturedGrade)
+		})
+	}
 }
 
 func intPtr(v int) *int { return &v }
