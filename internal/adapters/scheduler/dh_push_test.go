@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -317,10 +318,12 @@ func TestDHPush_CertNotMatched_MarksUnmatched(t *testing.T) {
 // here) has no audit trail — cards get stuck and operators can't see why.
 func TestDHPush_MarkUnmatched_EmitsEvent(t *testing.T) {
 	cases := []struct {
-		name        string
-		purchase    inventory.Purchase
-		resolveResp *dh.CertResolution
-		wantNotes   string
+		name           string
+		purchase       inventory.Purchase
+		resolveResp    *dh.CertResolution
+		wantNotes      string
+		updateErr      error // when set, UpdatePurchaseDHPushStatus fails
+		expectNoEvents bool  // when true, asserts recorder.Events is empty
 	}{
 		{
 			name:      "no cert number",
@@ -332,6 +335,12 @@ func TestDHPush_MarkUnmatched_EmitsEvent(t *testing.T) {
 			purchase:    inventory.Purchase{ID: "p2", CertNumber: "c2", DHPushStatus: inventory.DHPushStatusPending},
 			resolveResp: &dh.CertResolution{Status: dh.CertStatusNotFound},
 			wantNotes:   "cert resolve returned not_found",
+		},
+		{
+			name:           "status update failure suppresses event",
+			purchase:       inventory.Purchase{ID: "p3", DHPushStatus: inventory.DHPushStatusPending},
+			updateErr:      errors.New("db locked"),
+			expectNoEvents: true,
 		},
 	}
 	for _, tc := range cases {
@@ -347,7 +356,9 @@ func TestDHPush_MarkUnmatched_EmitsEvent(t *testing.T) {
 					return tc.resolveResp, nil
 				},
 			}
-			statusUpdater := &mockDHPushStatusUpdater{}
+			statusUpdater := &mockDHPushStatusUpdater{
+				UpdateFn: func(_ context.Context, _, _ string) error { return tc.updateErr },
+			}
 			pusher := &mockDHPushInventoryPusher{}
 			fieldsUpdater := &mocks.MockDHFieldsUpdater{}
 			cardIDSaver := &mockDHPushCardIDSaver{}
@@ -360,6 +371,11 @@ func TestDHPush_MarkUnmatched_EmitsEvent(t *testing.T) {
 				WithDHPushEventRecorder(recorder),
 			)
 			s.push(context.Background())
+
+			if tc.expectNoEvents {
+				assert.Empty(t, recorder.Events, "no event should be emitted when the status update fails")
+				return
+			}
 
 			require.Len(t, recorder.Events, 1)
 			got := recorder.Events[0]

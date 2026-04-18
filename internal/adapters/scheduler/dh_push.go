@@ -255,7 +255,9 @@ func (s *DHPushScheduler) processPurchase(ctx context.Context, p inventory.Purch
 	if p.CertNumber == "" {
 		s.logger.Warn(ctx, "dh push: purchase has no cert number, marking unmatched",
 			observability.String("purchaseID", p.ID))
-		s.markUnmatched(ctx, p, "purchase has no cert number")
+		if !s.markUnmatched(ctx, p, "purchase has no cert number") {
+			return processSkipped
+		}
 		return processUnmatched
 	}
 
@@ -433,7 +435,9 @@ func (s *DHPushScheduler) resolveCert(ctx context.Context, p inventory.Purchase,
 			observability.String("purchaseID", p.ID),
 			observability.String("cert", p.CertNumber),
 			observability.String("status", resp.Status))
-		s.markUnmatched(ctx, p, "cert resolve returned "+resp.Status)
+		if !s.markUnmatched(ctx, p, "cert resolve returned "+resp.Status) {
+			return 0, processSkipped
+		}
 		return 0, processUnmatched
 	}
 }
@@ -456,7 +460,9 @@ func (s *DHPushScheduler) resolveAmbiguousCert(ctx context.Context, p inventory.
 		s.logger.Debug(ctx, "dh push: cert ambiguous, marking unmatched",
 			observability.String("purchaseID", p.ID),
 			observability.String("cert", p.CertNumber))
-		s.markUnmatched(ctx, p, "ambiguous with no disambiguation")
+		if !s.markUnmatched(ctx, p, "ambiguous with no disambiguation") {
+			return 0, processSkipped
+		}
 		return 0, processUnmatched
 	}
 
@@ -480,12 +486,16 @@ func (s *DHPushScheduler) saveCardIDMapping(ctx context.Context, p inventory.Pur
 // visible in dh_state_events — without it, the row silently churns between
 // pending (set by cl_refresh re-enrollment) and unmatched (set here) with no
 // audit trail, which made it hard to diagnose stuck cards.
-func (s *DHPushScheduler) markUnmatched(ctx context.Context, p inventory.Purchase, reason string) {
+//
+// Returns true if the status update succeeded. Callers should treat a false
+// return as processSkipped, not processUnmatched — the transition didn't
+// happen, so counting it as "unmatched this cycle" misrepresents the batch.
+func (s *DHPushScheduler) markUnmatched(ctx context.Context, p inventory.Purchase, reason string) bool {
 	prev := string(p.DHPushStatus)
 	if updateErr := s.statusUpdater.UpdatePurchaseDHPushStatus(ctx, p.ID, inventory.DHPushStatusUnmatched); updateErr != nil {
 		s.logger.Warn(ctx, "dh push: failed to set unmatched status",
 			observability.String("purchaseID", p.ID), observability.Err(updateErr))
-		return
+		return false
 	}
 	s.recordEvent(ctx, dhevents.Event{
 		PurchaseID:     p.ID,
@@ -496,6 +506,7 @@ func (s *DHPushScheduler) markUnmatched(ctx context.Context, p inventory.Purchas
 		Source:         dhevents.SourceDHPush,
 		Notes:          reason,
 	})
+	return true
 }
 
 // Compile-time checks that dh.Client satisfies the push client interfaces.

@@ -169,7 +169,9 @@ func TestReconcile_EmitsUnlistedEvent(t *testing.T) {
 		name       string
 		snapshot   map[int]struct{}
 		purchases  []inventory.Purchase
+		recordErr  error // when set, MockEventRecorder.Record returns this
 		wantEvents []dhevents.Event
+		wantReset  int // reset count should be unaffected by recorder failures
 	}{
 		{
 			name:     "records event per reset, nothing for healthy or unlinked rows",
@@ -189,11 +191,31 @@ func TestReconcile_EmitsUnlistedEvent(t *testing.T) {
 				Source:        dhevents.SourceDHReconcile,
 				Notes:         "inventory ID missing from DH snapshot",
 			}},
+			wantReset: 1,
 		},
 		{
 			name:      "no events when nothing drifts",
 			snapshot:  idSet(101, 102),
 			purchases: []inventory.Purchase{{ID: "p1", DHInventoryID: 101}, {ID: "p2", DHInventoryID: 102}},
+		},
+		{
+			name:     "recorder error is swallowed; reset still counted",
+			snapshot: idSet(101),
+			purchases: []inventory.Purchase{
+				{ID: "p2", CertNumber: "c2", DHInventoryID: 200, DHCardID: 77, DHStatus: inventory.DHStatusListed},
+			},
+			recordErr: errors.New("db locked"),
+			wantEvents: []dhevents.Event{{
+				PurchaseID:    "p2",
+				CertNumber:    "c2",
+				Type:          dhevents.TypeUnlisted,
+				PrevDHStatus:  string(inventory.DHStatusListed),
+				DHInventoryID: 200,
+				DHCardID:      77,
+				Source:        dhevents.SourceDHReconcile,
+				Notes:         "inventory ID missing from DH snapshot",
+			}},
+			wantReset: 1,
 		},
 	}
 
@@ -204,7 +226,9 @@ func TestReconcile_EmitsUnlistedEvent(t *testing.T) {
 					return tc.purchases, nil
 				},
 			}
-			rec := &mocks.MockEventRecorder{}
+			rec := &mocks.MockEventRecorder{
+				RecordFn: func(_ context.Context, _ dhevents.Event) error { return tc.recordErr },
+			}
 			recon, err := dhlisting.NewReconciler(
 				stubSnapshotFetcher{ids: tc.snapshot},
 				repo, repo,
@@ -213,9 +237,10 @@ func TestReconcile_EmitsUnlistedEvent(t *testing.T) {
 			)
 			require.NoError(t, err)
 
-			_, err = recon.Reconcile(context.Background())
-			require.NoError(t, err)
+			result, err := recon.Reconcile(context.Background())
+			require.NoError(t, err, "recorder errors must be swallowed; Reconcile must not propagate them")
 			assert.Equal(t, tc.wantEvents, rec.Events)
+			assert.Equal(t, tc.wantReset, result.Reset, "recorder failure must not affect reset count")
 		})
 	}
 }
