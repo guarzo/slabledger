@@ -79,8 +79,10 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
   // first arrive and the user hasn't manually selected a tab.
   useEffect(() => {
     if (userTabChosenRef.current || items.length === 0) return;
-    if (tabCounts.needs_attention > 0) return;
+    // Mark auto-default as resolved on the first non-empty render so a later drop
+    // in needs_attention to zero doesn't auto-switch tabs out from under the user.
     userTabChosenRef.current = true;
+    if (tabCounts.needs_attention > 0) return;
     if (tabCounts.ready_to_list > 0) {
       setFilterTab('ready_to_list');
     } else {

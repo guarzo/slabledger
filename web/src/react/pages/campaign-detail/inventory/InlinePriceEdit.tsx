@@ -30,6 +30,8 @@ export default function InlinePriceEdit({ purchaseId, currentCents, costBasisCen
   };
 
   const commit = async () => {
+    // Guard against double-fire (e.g., Enter keydown followed by blur).
+    if (saving) return;
     const cents = dollarsToCents(value);
     if (cents <= 0 || cents === currentCents) {
       cancel();

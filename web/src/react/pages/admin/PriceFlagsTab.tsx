@@ -149,7 +149,9 @@ export function PriceFlagsTab({ enabled = true }: { enabled?: boolean }) {
   }
 
   const flags = data?.flags ?? [];
-  const totalCount = (allData?.total ?? data?.total) ?? 0;
+  // Use only the global ('all') total so the "All" count doesn't flash a filtered subtotal
+  // while allData is still loading.
+  const totalCount = allData?.total ?? 0;
 
   const filterTabs: { id: FilterStatus; label: string; count: number }[] = [
     { id: 'open', label: 'Open', count: openCount },

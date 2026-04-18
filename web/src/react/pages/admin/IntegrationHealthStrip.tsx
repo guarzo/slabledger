@@ -43,8 +43,8 @@ export function IntegrationHealthStrip({ enabled = true }: { enabled?: boolean }
   const { data: psa } = usePSASyncStatus({ enabled });
 
   const dhHealth = dh?.api_health;
-  const dhStatus: TileStatus = !dh ? 'unknown' : (dhHealth && dhHealth.success_rate < 95 ? 'warning' : 'healthy');
-  const dhMetric = dhHealth ? `${dhHealth.success_rate.toFixed(1)}% API` : '—';
+  const dhStatus: TileStatus = !dh ? 'unknown' : (dhHealth && dhHealth.success_rate < 0.95 ? 'warning' : 'healthy');
+  const dhMetric = dhHealth ? `${(dhHealth.success_rate * 100).toFixed(1)}% API` : '—';
   const dhDetail = dhHealth ? `${dhHealth.total_calls.toLocaleString()} calls · ${dhHealth.failures} failures` : undefined;
 
   const clStatus: TileStatus = !cl ? 'unknown' : (cl.configured ? 'healthy' : 'warning');

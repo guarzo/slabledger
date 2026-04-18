@@ -29,7 +29,13 @@ interface CertRow {
 
 const STORAGE_KEY_PREFIX = 'intake:queue:';
 function storageKey(): string {
-  return `${STORAGE_KEY_PREFIX}${new Date().toISOString().slice(0, 10)}`;
+  // Use the operator's local date so the queue doesn't roll over at UTC midnight
+  // (e.g., mid-afternoon in Pacific time).
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${STORAGE_KEY_PREFIX}${yyyy}-${mm}-${dd}`;
 }
 
 function loadQueue(): Map<string, CertRow> {
@@ -94,6 +100,8 @@ export default function CardIntakeTab() {
   const inputRef = useRef<HTMLInputElement>(null);
   const certsRef = useRef(certs);
   certsRef.current = certs;
+  // Tracks certs with an in-flight scanCert poll so we don't stack concurrent calls.
+  const inflightPollsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => { inputRef.current?.focus(); }, []);
 
@@ -139,6 +147,8 @@ export default function CardIntakeTab() {
   }, [updateCert]);
 
   const pollCert = useCallback(async (certNumber: string) => {
+    if (inflightPollsRef.current.has(certNumber)) return;
+    inflightPollsRef.current.add(certNumber);
     try {
       const result: ScanCertResponse = await api.scanCert(certNumber);
       if (result.status === 'existing' || result.status === 'sold') {
@@ -157,6 +167,8 @@ export default function CardIntakeTab() {
       // For 'new', backend is still working — nothing to update.
     } catch {
       // Transient poll failure — next tick will retry.
+    } finally {
+      inflightPollsRef.current.delete(certNumber);
     }
   }, [updateCert]);
 
@@ -286,10 +298,11 @@ export default function CardIntakeTab() {
   };
 
   const handleClearCompleted = () => {
+    // Keep 'sold' rows: they still have a "Return to inventory" recovery action.
     setCerts(prev => {
       const next = new Map(prev);
       for (const [k, row] of next) {
-        if (row.listingStatus === 'listed' || row.status === 'failed' || row.status === 'sold') {
+        if (row.listingStatus === 'listed' || row.status === 'failed') {
           next.delete(k);
         }
       }
@@ -402,6 +415,7 @@ export default function CardIntakeTab() {
             <button
               onClick={handleClearCompleted}
               className="text-[var(--text-muted)] hover:text-[var(--text)] underline underline-offset-2 text-[11px]"
+              title="Remove listed + failed rows (sold rows are kept so you can Return them)"
             >
               Clear completed
             </button>
