@@ -6,7 +6,6 @@ const EXCEPTION_STATUSES = ['large_gap', 'no_data', 'flagged'] as const;
 
 export interface TabCounts {
   needs_attention: number;
-  ai_suggestion: number;
   card_show: number;
   in_hand: number;
   ready_to_list: number;
@@ -27,7 +26,7 @@ export interface InventoryMeta {
 
 export function computeInventoryMeta(items: AgingItem[]): InventoryMeta {
   const stats: ReviewStats = { total: items.length, needsReview: 0, reviewed: 0, flagged: 0, aging60d: 0 };
-  const counts: TabCounts = { needs_attention: 0, ai_suggestion: 0, card_show: 0, in_hand: 0, ready_to_list: 0, all: items.length };
+  const counts: TabCounts = { needs_attention: 0, card_show: 0, in_hand: 0, ready_to_list: 0, all: items.length };
   let totalCost = 0;
   let totalMarket = 0;
   for (const item of items) {
@@ -37,10 +36,9 @@ export function computeInventoryMeta(items: AgingItem[]): InventoryMeta {
     if (item.daysHeld >= 60) stats.aging60d++;
 
     const status = getReviewStatus(item);
-    if ((EXCEPTION_STATUSES as readonly string[]).includes(status) || isDHHeld(item)) {
+    if (needsAttention(item, status)) {
       counts.needs_attention++;
     }
-    if ((item.purchase.aiSuggestedPriceCents ?? 0) > 0) counts.ai_suggestion++;
     if (item.purchase.receivedAt && isCardShowCandidate(item)) counts.card_show++;
     if (item.purchase.receivedAt) counts.in_hand++;
     if (isReadyToList(item)) counts.ready_to_list++;
@@ -59,13 +57,20 @@ export function isDHHeld(item: AgingItem): boolean {
   return item.purchase.dhPushStatus === 'held';
 }
 
+export function needsAttention(item: AgingItem, status = getReviewStatus(item)): boolean {
+  if ((EXCEPTION_STATUSES as readonly string[]).includes(status)) return true;
+  if (isDHHeld(item)) return true;
+  if ((item.purchase.aiSuggestedPriceCents ?? 0) > 0) return true;
+  return false;
+}
+
 // isReadyToList: received (intake complete), pushed to DH inventory, but not yet listed.
 // Used to surface items that a human can review price on before flipping live.
 export function isReadyToList(item: AgingItem): boolean {
   return !!item.purchase.receivedAt && !!item.purchase.dhInventoryId && item.purchase.dhStatus !== 'listed';
 }
 
-export type FilterTab = 'needs_attention' | 'ai_suggestion' | 'sell_sheet' | 'all' | 'card_show' | 'in_hand' | 'ready_to_list';
+export type FilterTab = 'needs_attention' | 'sell_sheet' | 'all' | 'card_show' | 'in_hand' | 'ready_to_list';
 
 export function filterAndSortItems(
   items: AgingItem[],
@@ -96,10 +101,7 @@ export function filterAndSortItems(
       result = result.filter(i => sellSheetHas(i.purchase.id) && !!i.purchase.receivedAt);
     } else if (filterTab !== 'all') {
       result = result.filter(i => {
-        if (filterTab === 'needs_attention') {
-          return (EXCEPTION_STATUSES as readonly string[]).includes(getReviewStatus(i)) || isDHHeld(i);
-        }
-        if (filterTab === 'ai_suggestion') return (i.purchase.aiSuggestedPriceCents ?? 0) > 0;
+        if (filterTab === 'needs_attention') return needsAttention(i);
         if (filterTab === 'card_show') return !!i.purchase.receivedAt && isCardShowCandidate(i);
         if (filterTab === 'in_hand') return !!i.purchase.receivedAt;
         if (filterTab === 'ready_to_list') return isReadyToList(i);

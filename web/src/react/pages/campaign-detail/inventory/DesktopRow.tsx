@@ -1,18 +1,18 @@
 import type { AgingItem } from '../../../../types/campaigns';
 import { formatCents, daysHeldColor } from '../../../utils/formatters';
-import { TrendArrow, ConfidenceIndicator, GradeBadge } from '../../../ui';
+import { GradeBadge } from '../../../ui';
 import { DropdownMenu } from 'radix-ui';
 import MarketplaceLinks from './MarketplaceLinks';
 import {
-  costBasis, bestPrice, unrealizedPL, marketTrend,
-  getSourceByType, marketTooltip,
+  costBasis, bestPrice, unrealizedPL,
   formatPL,
   getReviewStatus, statusBorderColor, isHotSeller, formatReceivedDate,
-  mostRecentSale, relativeTime,
+  referencePricesTooltip,
   syncDotProps,
 } from './utils';
 import { isReadyToList } from './inventoryCalcs';
 import { dhBadgeFor, DH_BADGE_COLORS } from './dhBadge';
+import InlinePriceEdit from './InlinePriceEdit';
 
 const DH_BADGE_TITLES: Record<string, string> = {
   sold:       'Sold on DoubleHolo',
@@ -53,19 +53,20 @@ interface DesktopRowProps {
   onSetPrice?: () => void;
   onDelete?: () => void;
   onListOnDH?: (purchaseId: string) => void;
+  onInlinePriceSave?: (purchaseId: string, priceCents: number) => Promise<void>;
   dhListingLoading?: boolean;
   dhListedOverride?: boolean;
   showCampaignColumn?: boolean;
   isOnSellSheet?: boolean;
 }
 
-export default function DesktopRow({ item, selected, onToggle, onExpand, onRecordSale, onFixPricing, onFixDHMatch, onSetPrice, onDelete, onListOnDH, dhListingLoading, dhListedOverride, showCampaignColumn, isOnSellSheet }: DesktopRowProps) {
+export default function DesktopRow({ item, selected, onToggle, onExpand, onRecordSale, onFixPricing, onFixDHMatch, onSetPrice, onDelete, onListOnDH, onInlinePriceSave, dhListingLoading, dhListedOverride, showCampaignColumn, isOnSellSheet }: DesktopRowProps) {
   const cb = costBasis(item.purchase);
   const snap = item.currentMarket;
   const daysColor = daysHeldColor(item.daysHeld);
-  const price = bestPrice(item);
+  const listCents = item.purchase.reviewedPriceCents ?? item.purchase.dhListingPriceCents ?? 0;
+  const recommendedCents = item.recommendedPriceCents ?? bestPrice(item);
   const pl = unrealizedPL(cb, item);
-  const trend = snap ? marketTrend(snap) : null;
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     const target = e.target as HTMLElement;
@@ -167,29 +168,29 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
         <GradeBadge grader={item.purchase.grader || 'PSA'} grade={item.purchase.gradeValue} size="sm" />
       </div>
       <div className="glass-table-td flex-shrink-0 text-right text-[var(--text)] tabular-nums" style={{ width: '72px' }}>{formatCents(cb)}</div>
-      <div className="glass-table-td flex-shrink-0 text-right" style={{ width: '120px' }}
-        title={snap ? marketTooltip(snap, cb) : undefined}>
-        {price > 0 ? (() => {
-          const displaySource = snap ? (getSourceByType(snap.sourcePrices, 'ebay') || getSourceByType(snap.sourcePrices, 'estimate')) : undefined;
-          const confidence = displaySource?.confidence ?? snap?.confidence ?? null;
-          const sale = mostRecentSale(item);
-          return (
-            <div className="flex flex-col items-end gap-[1px]">
-              <div className="flex items-center justify-end gap-1">
-                <span className="text-[var(--text)] tabular-nums">{formatCents(price)}</span>
-                <ConfidenceIndicator confidence={confidence as 'high' | 'medium' | 'low' | null} size="sm" />
-                <TrendArrow trend={trend} size="sm" />
-              </div>
-              {sale?.date && (
-                <span className="text-[10px] text-[var(--text-muted)] tabular-nums leading-none">
-                  sold {relativeTime(sale.date)}
-                </span>
-              )}
-            </div>
-          );
-        })() : (
-          <span className="text-xs text-[var(--text-muted)]">-</span>
-        )}
+      <div className="glass-table-td flex-shrink-0 text-right" style={{ width: '140px' }}>
+        <div className="flex flex-col items-end gap-[1px]">
+          {onInlinePriceSave ? (
+            <InlinePriceEdit
+              purchaseId={item.purchase.id}
+              currentCents={listCents}
+              costBasisCents={cb}
+              onSave={onInlinePriceSave}
+            />
+          ) : (
+            <span className="tabular-nums text-[var(--text)]">
+              {listCents > 0 ? formatCents(listCents) : <span className="text-[var(--text-muted)]">—</span>}
+            </span>
+          )}
+          {recommendedCents > 0 && recommendedCents !== listCents && (
+            <span
+              className="text-[10px] text-[var(--text-muted)] tabular-nums leading-none cursor-help"
+              title={referencePricesTooltip(item)}
+            >
+              rec {formatCents(recommendedCents)}
+            </span>
+          )}
+        </div>
       </div>
       {/* Unrealized P/L */}
       <div className="glass-table-td flex-shrink-0 text-right tabular-nums print-hide-col" style={{ width: '72px' }}>
