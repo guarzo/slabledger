@@ -26,6 +26,23 @@ export function bestPrice(item: AgingItem): number {
   return item.currentMarket ? bestPriceFromSnap(item.currentMarket) : 0;
 }
 
+/** True when at least one pricing signal is available — CL, MM, any DH market price, comp sale, or manual override. */
+export function hasAnyPriceSignal(item: AgingItem): boolean {
+  const p = item.purchase;
+  if ((p.clValueCents ?? 0) > 0) return true;
+  if ((p.mmValueCents ?? 0) > 0) return true;
+  if ((p.overridePriceCents ?? 0) > 0) return true;
+  if ((item.compSummary?.lastSaleCents ?? 0) > 0) return true;
+  const snap = item.currentMarket;
+  if (!snap) return false;
+  return (
+    (snap.medianCents ?? 0) > 0 ||
+    (snap.gradePriceCents ?? 0) > 0 ||
+    (snap.lastSoldCents ?? 0) > 0 ||
+    (snap.midPriceCents ?? 0) > 0
+  );
+}
+
 /**
  * The most recent real sale for an item — prefers comp analytics (literal most-recent sold price),
  * falls back to the snapshot's lastSold. Returns null when no sale data exists.
@@ -317,17 +334,6 @@ export function relativeTime(isoDate: string): string {
 /** A card is a "hot seller" if it has 3+ sales in the last 30 days and the last sold price >= target price. */
 export function isHotSeller(item: AgingItem): boolean {
   return checkHotSeller(item.currentMarket, item.recommendedPriceCents ?? 0);
-}
-
-/** A card is a "card show candidate" if it has in-person signals or matches the legacy heuristic. */
-export function isCardShowCandidate(item: AgingItem): boolean {
-  if (item.signals?.profitCaptureDeclining || item.signals?.profitCaptureSpike || item.signals?.crackCandidate) {
-    return true;
-  }
-   if (isHotSeller(item)) return true;
-   if (item.purchase.gradeValue === 7) return true;
-   if (item.currentMarket?.trend30d != null && item.currentMarket.trend30d > 0.05) return true;
-   return false;
 }
 
 /** Format an ISO date string to "Mon D, YYYY" format (e.g., "Apr 5, 2026"). */

@@ -232,8 +232,8 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
         const secondary = [
           { key: 'all' as const, label: 'All', count: tabCounts.all, alwaysShow: true },
           { key: 'in_hand' as const, label: 'In Hand', count: tabCounts.in_hand, alwaysShow: false },
+          { key: 'awaiting_intake' as const, label: 'Awaiting Intake', count: tabCounts.awaiting_intake, alwaysShow: false },
           { key: 'sell_sheet' as const, label: 'Sell Sheet', count: pageSellSheetCount, alwaysShow: false },
-          { key: 'card_show' as const, label: 'Card Show', count: tabCounts.card_show, alwaysShow: false },
         ].filter(t => t.alwaysShow || t.count > 0);
         const pillClass = (isActive: boolean, size: 'primary' | 'secondary') => {
           const base = 'shrink-0 inline-flex items-center rounded-full border transition-colors tabular-nums';
@@ -365,6 +365,10 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                         ev={evMap.get(item.purchase.certNumber)}
                         showCampaignColumn={showCampaignColumn}
                         isOnSellSheet={!sellSheetActive && sellSheet.has(item.purchase.id)}
+                        onRemoveFromSellSheet={sellSheet.has(item.purchase.id) ? () => {
+                          sellSheet.remove([item.purchase.id]);
+                          toast.success('Removed from sell sheet');
+                        } : undefined}
                       />
                     </div>
                   );
@@ -418,6 +422,10 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                         dhListedOverride={dhListedOptimistic.has(item.purchase.id)}
                         showCampaignColumn={showCampaignColumn}
                         isOnSellSheet={!sellSheetActive && sellSheet.has(item.purchase.id)}
+                        onRemoveFromSellSheet={sellSheet.has(item.purchase.id) ? () => {
+                          sellSheet.remove([item.purchase.id]);
+                          toast.success('Removed from sell sheet');
+                        } : undefined}
                       />
                     </div>
                     {isExpanded && <ExpandedDetail item={item} onReviewed={handleReviewed} campaignId={campaignId} onOpenFlagDialog={() => setFlagTarget({ purchaseId: item.purchase.id, cardName: item.purchase.cardName, grade: item.purchase.gradeValue })} onResolveFlag={handleResolveFlag} onApproveDHPush={handleApproveDHPush} onSetPrice={() => handleSetPrice(item)} />}

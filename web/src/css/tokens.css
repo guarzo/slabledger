@@ -93,9 +93,9 @@
   /* ===================================
      PSA-GRADE COLORS
      =================================== */
-  --grade-psa10: #dc2626;    /* Red - PSA 10 Gem Mint */
+  --grade-psa10: #fbbf24;    /* Gold - PSA 10 Gem Mint (avoids warning-red confusion) */
   --grade-psa9: #2563eb;     /* Blue - PSA 9 Mint */
-  --grade-psa8: #f59e0b;     /* Amber - PSA 8 */
+  --grade-psa8: #a16207;     /* Dark amber - PSA 8 (distinct from gold PSA 10) */
   --grade-bgs10: #000000;    /* Black - BGS 10 Black Label */
   --grade-cgc: #f59e0b;      /* Orange/Amber - CGC grades */
 

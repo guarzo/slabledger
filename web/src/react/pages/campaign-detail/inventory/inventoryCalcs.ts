@@ -1,14 +1,14 @@
 import type { AgingItem, ReviewStats, ExpectedValue } from '../../../../types/campaigns';
-import { costBasis, bestPrice, unrealizedPL, getReviewStatus, reviewUrgencySort, isCardShowCandidate } from './utils';
+import { costBasis, bestPrice, unrealizedPL, getReviewStatus, reviewUrgencySort } from './utils';
 import type { SortKey, SortDir } from './utils';
 
 const EXCEPTION_STATUSES = ['large_gap', 'no_data', 'flagged'] as const;
 
 export interface TabCounts {
   needs_attention: number;
-  card_show: number;
   in_hand: number;
   ready_to_list: number;
+  awaiting_intake: number;
   all: number;
 }
 
@@ -26,21 +26,21 @@ export interface InventoryMeta {
 
 export function computeInventoryMeta(items: AgingItem[]): InventoryMeta {
   const stats: ReviewStats = { total: items.length, needsReview: 0, reviewed: 0, flagged: 0, aging60d: 0 };
-  const counts: TabCounts = { needs_attention: 0, card_show: 0, in_hand: 0, ready_to_list: 0, all: items.length };
+  const counts: TabCounts = { needs_attention: 0, in_hand: 0, ready_to_list: 0, awaiting_intake: 0, all: items.length };
   let totalCost = 0;
   let totalMarket = 0;
   for (const item of items) {
     if (item.hasOpenFlag) stats.flagged++;
     if (item.purchase.reviewedAt) stats.reviewed++;
-    else stats.needsReview++;
+    else if (item.purchase.receivedAt) stats.needsReview++;
     if (item.daysHeld >= 60) stats.aging60d++;
 
     const status = getReviewStatus(item);
     if (needsAttention(item, status)) {
       counts.needs_attention++;
     }
-    if (item.purchase.receivedAt && isCardShowCandidate(item)) counts.card_show++;
     if (item.purchase.receivedAt) counts.in_hand++;
+    else counts.awaiting_intake++;
     if (isReadyToList(item)) counts.ready_to_list++;
 
     totalCost += costBasis(item.purchase);
@@ -58,6 +58,8 @@ export function isDHHeld(item: AgingItem): boolean {
 }
 
 export function needsAttention(item: AgingItem, status = getReviewStatus(item)): boolean {
+  // Pre-intake cards can't be meaningfully acted on yet — don't flag them as needing attention.
+  if (!item.purchase.receivedAt) return false;
   if ((EXCEPTION_STATUSES as readonly string[]).includes(status)) return true;
   if (isDHHeld(item)) return true;
   if ((item.purchase.aiSuggestedPriceCents ?? 0) > 0) return true;
@@ -70,7 +72,7 @@ export function isReadyToList(item: AgingItem): boolean {
   return !!item.purchase.receivedAt && !!item.purchase.dhInventoryId && item.purchase.dhStatus !== 'listed';
 }
 
-export type FilterTab = 'needs_attention' | 'sell_sheet' | 'all' | 'card_show' | 'in_hand' | 'ready_to_list';
+export type FilterTab = 'needs_attention' | 'sell_sheet' | 'all' | 'in_hand' | 'ready_to_list' | 'awaiting_intake';
 
 export function filterAndSortItems(
   items: AgingItem[],
@@ -102,9 +104,9 @@ export function filterAndSortItems(
     } else if (filterTab !== 'all') {
       result = result.filter(i => {
         if (filterTab === 'needs_attention') return needsAttention(i);
-        if (filterTab === 'card_show') return !!i.purchase.receivedAt && isCardShowCandidate(i);
         if (filterTab === 'in_hand') return !!i.purchase.receivedAt;
         if (filterTab === 'ready_to_list') return isReadyToList(i);
+        if (filterTab === 'awaiting_intake') return !i.purchase.receivedAt;
         return false;
       });
     }

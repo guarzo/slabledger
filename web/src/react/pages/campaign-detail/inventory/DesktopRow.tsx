@@ -8,23 +8,23 @@ import {
   formatPL,
   getReviewStatus, statusBorderColor, isHotSeller, formatReceivedDate,
   referencePricesTooltip,
-  syncDotProps,
+  syncDotProps, hasAnyPriceSignal,
 } from './utils';
 import { isReadyToList } from './inventoryCalcs';
 import { dhBadgeFor, DH_BADGE_COLORS } from './dhBadge';
 import InlinePriceEdit from './InlinePriceEdit';
 
 const DH_BADGE_TITLES: Record<string, string> = {
-  sold:       'Sold on DoubleHolo',
-  listed:     'Currently listed on DoubleHolo marketplace',
-  'in stock': 'In DoubleHolo inventory — not yet listed',
-  held:       'DoubleHolo push is on hold pending review',
-  unmatched:  'Could not be matched to a DoubleHolo card',
-  dismissed:  'DoubleHolo listing was dismissed',
-  pending:    'Received and waiting to be pushed to DoubleHolo inventory',
+  sold:              'Sold on DoubleHolo',
+  listed:            'Currently listed on DoubleHolo marketplace',
+  'in stock':        'In DoubleHolo inventory — not yet listed',
+  held:              'DoubleHolo push is on hold pending review',
+  'no DH match':     'No matching DoubleHolo card found — use "Fix DH Match" to map manually',
+  dismissed:         'DoubleHolo listing was dismissed',
+  'matching DH':     'Searching DoubleHolo for a matching card',
   'awaiting intake': 'Enrolled in DoubleHolo push pipeline — waiting for cert to be scanned in',
-  pushed:     'Submitted to DoubleHolo — awaiting confirmation',
-  unenrolled: 'Not enrolled in DoubleHolo',
+  pushed:            'Submitted to DoubleHolo — awaiting confirmation',
+  unenrolled:        'Not enrolled in DoubleHolo',
 };
 
 const BADGE_COLORS = [
@@ -54,13 +54,14 @@ interface DesktopRowProps {
   onDelete?: () => void;
   onListOnDH?: (purchaseId: string) => void;
   onInlinePriceSave?: (purchaseId: string, priceCents: number) => Promise<void>;
+  onRemoveFromSellSheet?: () => void;
   dhListingLoading?: boolean;
   dhListedOverride?: boolean;
   showCampaignColumn?: boolean;
   isOnSellSheet?: boolean;
 }
 
-export default function DesktopRow({ item, selected, onToggle, onExpand, onRecordSale, onFixPricing, onFixDHMatch, onSetPrice, onDelete, onListOnDH, onInlinePriceSave, dhListingLoading, dhListedOverride, showCampaignColumn, isOnSellSheet }: DesktopRowProps) {
+export default function DesktopRow({ item, selected, onToggle, onExpand, onRecordSale, onFixPricing, onFixDHMatch, onSetPrice, onDelete, onListOnDH, onInlinePriceSave, onRemoveFromSellSheet, dhListingLoading, dhListedOverride, showCampaignColumn, isOnSellSheet }: DesktopRowProps) {
   const cb = costBasis(item.purchase);
   const snap = item.currentMarket;
   const daysColor = daysHeldColor(item.daysHeld);
@@ -170,7 +171,17 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
       <div className="glass-table-td flex-shrink-0 text-right text-[var(--text)] tabular-nums" style={{ width: '72px' }}>{formatCents(cb)}</div>
       <div className="glass-table-td flex-shrink-0 text-right" style={{ width: '140px' }}>
         <div className="flex flex-col items-end gap-[1px]">
-          {onInlinePriceSave ? (
+          {listCents === 0 && !hasAnyPriceSignal(item) ? (
+            <button
+              type="button"
+              onClick={e => { e.stopPropagation(); (onFixPricing ?? onExpand)(); }}
+              className="text-[11px] font-medium text-[var(--warning)] hover:underline inline-flex items-center gap-1"
+              title="No CL, DH, or last-sold price data — click to investigate"
+            >
+              <span aria-hidden="true">&#9888;</span>
+              no price data
+            </button>
+          ) : onInlinePriceSave ? (
             <InlinePriceEdit
               purchaseId={item.purchase.id}
               currentCents={listCents}
@@ -298,6 +309,14 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
                   className="px-3 py-2 text-sm text-[var(--text-muted)] hover:bg-[rgba(255,255,255,0.04)] hover:text-[var(--text)] outline-none cursor-default"
                 >
                   Fix DH Match
+                </DropdownMenu.Item>
+              )}
+              {isOnSellSheet && onRemoveFromSellSheet && (
+                <DropdownMenu.Item
+                  onSelect={onRemoveFromSellSheet}
+                  className="px-3 py-2 text-sm text-[var(--text-muted)] hover:bg-[rgba(255,255,255,0.04)] hover:text-[var(--text)] outline-none cursor-default"
+                >
+                  Remove from Sell Sheet
                 </DropdownMenu.Item>
               )}
               {onDelete && (
