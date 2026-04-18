@@ -92,6 +92,10 @@ type BuildDeps struct {
 	CardLadderSyncUpdater    CardLadderSyncUpdater
 	CardLadderSalesStore     *sqlite.CLSalesStore
 
+	// SchedulerStatsStore persists per-scheduler lastRun stats so the admin UI
+	// survives server restarts. Optional — when nil, stats remain in-memory.
+	SchedulerStatsStore *sqlite.SchedulerStatsStore
+
 	// Market Movers dependencies (optional)
 	MMClient         *marketmovers.Client
 	MMStore          *sqlite.MarketMoversStore
@@ -230,6 +234,9 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 		}
 		if deps.EventRecorder != nil {
 			clOpts = append(clOpts, WithCLEventRecorder(deps.EventRecorder))
+		}
+		if deps.SchedulerStatsStore != nil {
+			clOpts = append(clOpts, WithCLStatsStore(deps.SchedulerStatsStore))
 		}
 		clRefresh = NewCardLadderRefreshScheduler(
 			deps.CardLadderClient, deps.CardLadderStore,

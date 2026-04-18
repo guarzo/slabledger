@@ -20,7 +20,9 @@ function formatMs(ms: number): string {
 export function MMStatsPanel({ enabled = true }: { enabled?: boolean }) {
   const { data: status, isLoading, isError } = useMarketMoversStatus({ enabled });
   const [showFailures, setShowFailures] = useState(false);
-  const { data: failures } = useMarketMoversFailures({ enabled: showFailures });
+  // Fetch failures eagerly so the diagnostics row can surface the
+  // "unprocessed" bucket — rows with no MM value and no error tag.
+  const { data: failures } = useMarketMoversFailures({ enabled });
 
   if (isLoading) return <PokeballLoader size="sm" />;
   if (isError) return <p className="text-[var(--danger)] text-sm">Failed to load status.</p>;
@@ -28,9 +30,11 @@ export function MMStatsPanel({ enabled = true }: { enabled?: boolean }) {
 
   const ps = status.priceStats;
   const lr = status.lastRun;
+  const unprocessed = failures?.byReason?.unprocessed ?? 0;
 
   const diagnosticsShown =
-    !!lr && (lr.tokenMismatches > 0 || lr.noSalesData > 0 || lr.searchFailed > 0);
+    (!!lr && (lr.tokenMismatches > 0 || lr.noSalesData > 0 || lr.searchFailed > 0)) ||
+    unprocessed > 0;
   const showRemoteActivity =
     !!lr && ((lr.uploadedLastRun ?? 0) > 0 || (lr.deletedLastRun ?? 0) > 0);
 
@@ -80,21 +84,34 @@ export function MMStatsPanel({ enabled = true }: { enabled?: boolean }) {
 
       {/* Row 3: diagnostics — only when there are failures worth investigating.
           searchFailed intentionally lives in row 2 (always visible) so it
-          isn't duplicated here. */}
-      {diagnosticsShown && lr && (
+          isn't duplicated here. "Unprocessed" is current-state (rows with no
+          value and no error tag) — orthogonal to last-run counts. */}
+      {diagnosticsShown && (
         <div className="space-y-2">
-          <div className="grid grid-cols-2 gap-3">
-            <SummaryCard
-              label="Token Mismatches"
-              value={lr.tokenMismatches}
-              color={lr.tokenMismatches > 0 ? 'var(--warning)' : undefined}
-              sub="Search hits all rejected"
-            />
-            <SummaryCard
-              label="No 30-day Sales"
-              value={lr.noSalesData}
-              sub="Mapped but no recent price"
-            />
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {unprocessed > 0 && (
+              <SummaryCard
+                label="Unprocessed"
+                value={unprocessed}
+                color="var(--warning)"
+                sub="No value, no error tag"
+              />
+            )}
+            {lr && (
+              <>
+                <SummaryCard
+                  label="Token Mismatches"
+                  value={lr.tokenMismatches}
+                  color={lr.tokenMismatches > 0 ? 'var(--warning)' : undefined}
+                  sub="Search hits all rejected"
+                />
+                <SummaryCard
+                  label="No 30-day Sales"
+                  value={lr.noSalesData}
+                  sub="Mapped but no recent price"
+                />
+              </>
+            )}
           </div>
           <button
             type="button"
@@ -120,7 +137,11 @@ export function MMStatsPanel({ enabled = true }: { enabled?: boolean }) {
 export function CLStatsPanel({ enabled = true }: { enabled?: boolean }) {
   const { data: status, isLoading, isError } = useCardLadderStatus({ enabled });
   const [showFailures, setShowFailures] = useState(false);
-  const { data: failures } = useCardLadderFailures({ enabled: showFailures });
+  // Fetch failures eagerly (not just on modal open) so the diagnostics row
+  // can surface the "unprocessed" bucket — rows with no CL value and no
+  // error tag. Without this, silent misses stay invisible until the user
+  // clicks through to the modal.
+  const { data: failures } = useCardLadderFailures({ enabled });
 
   if (isLoading) return <PokeballLoader size="sm" />;
   if (isError) return <p className="text-[var(--danger)] text-sm">Failed to load status.</p>;
@@ -128,9 +149,11 @@ export function CLStatsPanel({ enabled = true }: { enabled?: boolean }) {
 
   const ps = status.priceStats;
   const lr = status.lastRun;
+  const unprocessed = failures?.byReason?.unprocessed ?? 0;
 
   const diagnosticsShown =
-    !!lr && (lr.certResolveFailed > 0 || lr.noValue > 0 || lr.noCert > 0);
+    (!!lr && (lr.certResolveFailed > 0 || lr.noValue > 0 || lr.noCert > 0)) ||
+    unprocessed > 0;
   const showRemoteActivity = !!lr && (lr.cardsPushed > 0 || lr.cardsRemoved > 0);
 
   return (
@@ -173,26 +196,41 @@ export function CLStatsPanel({ enabled = true }: { enabled?: boolean }) {
         </div>
       )}
 
-      {/* Row 3: diagnostics */}
-      {diagnosticsShown && lr && (
+      {/* Row 3: diagnostics. "Unprocessed" is current state (inventory with no
+          value and no error tag); the other three reflect what the last run
+          tagged. Shown together so silent misses are visible alongside
+          recorded failures. */}
+      {diagnosticsShown && (
         <div className="space-y-2">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <SummaryCard
-              label="Cert Resolve Failed"
-              value={lr.certResolveFailed}
-              color={lr.certResolveFailed > 0 ? 'var(--warning)' : undefined}
-              sub="CL didn't recognize cert"
-            />
-            <SummaryCard
-              label="No Cert on Purchase"
-              value={lr.noCert}
-              sub="Can't look up without cert"
-            />
-            <SummaryCard
-              label="Resolved, No Value"
-              value={lr.noValue}
-              sub="Catalog returned $0"
-            />
+            {unprocessed > 0 && (
+              <SummaryCard
+                label="Unprocessed"
+                value={unprocessed}
+                color="var(--warning)"
+                sub="No value, no error tag"
+              />
+            )}
+            {lr && (
+              <>
+                <SummaryCard
+                  label="Cert Resolve Failed"
+                  value={lr.certResolveFailed}
+                  color={lr.certResolveFailed > 0 ? 'var(--warning)' : undefined}
+                  sub="CL didn't recognize cert"
+                />
+                <SummaryCard
+                  label="No Cert on Purchase"
+                  value={lr.noCert}
+                  sub="Can't look up without cert"
+                />
+                <SummaryCard
+                  label="Resolved, No Value"
+                  value={lr.noValue}
+                  sub="Catalog returned $0"
+                />
+              </>
+            )}
           </div>
           <button
             type="button"

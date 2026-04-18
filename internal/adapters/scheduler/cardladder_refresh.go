@@ -88,23 +88,12 @@ type CardLadderRefreshScheduler struct {
 	gemRateUpdater CardLadderGemRateUpdater
 	syncUpdater    CardLadderSyncUpdater // optional: sets cl_synced_at on push
 	salesStore     *sqlite.CLSalesStore
-	dhPushUpdater  DHPushStatusUpdater // optional: re-enrolls changed items for DH push
-	eventRec       dhevents.Recorder   // optional: records DH state-transition events
+	dhPushUpdater  DHPushStatusUpdater         // optional: re-enrolls changed items for DH push
+	eventRec       dhevents.Recorder           // optional: records DH state-transition events
+	statsStore     *sqlite.SchedulerStatsStore // optional: persists lastRunStats across restarts
 	logger         observability.Logger
 	config         config.CardLadderConfig
 	lastRunStats   *CLRunStats
-}
-
-// GetLastRunStats returns a copy of the stats from the most recent refresh run,
-// or nil if no run has completed yet.
-func (s *CardLadderRefreshScheduler) GetLastRunStats() *CLRunStats {
-	s.statsMu.RLock()
-	defer s.statsMu.RUnlock()
-	if s.lastRunStats == nil {
-		return nil
-	}
-	cp := *s.lastRunStats
-	return &cp
 }
 
 // SetClient replaces the API client used by the scheduler. This is called when
@@ -450,6 +439,8 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 	s.statsMu.Lock()
 	s.lastRunStats = &stats
 	s.statsMu.Unlock()
+
+	s.persistStats(ctx, stats)
 
 	return nil
 }

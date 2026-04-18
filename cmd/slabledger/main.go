@@ -317,6 +317,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	if clStore != nil {
 		clSalesStore = sqlite.NewCLSalesStore(db.DB)
 	}
+	schedulerStatsStore := sqlite.NewSchedulerStatsStore(db.DB)
 
 	// Initialize Market Movers client (store was created earlier for campaigns service)
 	mmClient, _ := initializeMarketMovers(ctx, logger, db, clEncryptor)
@@ -369,6 +370,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		CardLadderClient:     clClient,
 		CardLadderStore:      clStore,
 		CardLadderSalesStore: clSalesStore,
+		SchedulerStatsStore:  schedulerStatsStore,
 		MMClient:             mmClient,
 		MMStore:              mmStore,
 		DHClient:             dhClient,

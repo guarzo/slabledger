@@ -22,6 +22,7 @@ const REASON_DESCRIPTIONS: Record<string, string> = {
   // Shared — the modal is used for both MM and CL so this description must
   // be provider-neutral.
   api_error: 'External API returned an error',
+  unprocessed: 'No value and no error tag — scheduler never tagged the row',
   // Card Ladder
   no_image_match: 'No CL card matched the purchase by image URL or cert',
   no_cert_match: 'Purchase has no cert number to fallback-match',
