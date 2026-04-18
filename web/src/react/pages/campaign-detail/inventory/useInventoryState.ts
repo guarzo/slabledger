@@ -54,6 +54,7 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
   const [isPrinting, setIsPrinting] = useState(false);
   const [statsExpanded, setStatsExpanded] = useState(false);
   const [filterTab, setFilterTab] = useState<FilterTab>('needs_attention');
+  const userTabChosenRef = useRef(false);
   const [showAll, setShowAll] = useState(false);
   const debouncedSearch = useDebounce(searchQuery, 300);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -73,6 +74,24 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
     () => computeInventoryMeta(items),
     [items],
   );
+
+  // Smart default tab: needs_attention → ready_to_list → all. Runs once when items
+  // first arrive and the user hasn't manually selected a tab.
+  useEffect(() => {
+    if (userTabChosenRef.current || items.length === 0) return;
+    if (tabCounts.needs_attention > 0) return;
+    userTabChosenRef.current = true;
+    if (tabCounts.ready_to_list > 0) {
+      setFilterTab('ready_to_list');
+    } else {
+      setFilterTab('all');
+    }
+  }, [items.length, tabCounts.needs_attention, tabCounts.ready_to_list]);
+
+  const chooseFilterTab = useCallback((tab: FilterTab) => {
+    userTabChosenRef.current = true;
+    setFilterTab(tab);
+  }, []);
 
   function handleSort(key: SortKey) {
     if (sortKey === key) {
@@ -342,6 +361,17 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
     invalidateInventory({ sellSheet: true });
   }
 
+  const handleInlinePriceSave = useCallback(async (purchaseId: string, priceCents: number) => {
+    try {
+      await api.setReviewedPrice(purchaseId, priceCents, 'manual');
+      toast.success('Price saved');
+      invalidateInventory({ sellSheet: true });
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Failed to save price'));
+      throw err;
+    }
+  }, [toast, invalidateInventory]);
+
   function handleHintSaved() {
     invalidateInventory();
   }
@@ -366,7 +396,7 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
     searchQuery, setSearchQuery,
     isPrinting,
     statsExpanded, setStatsExpanded,
-    filterTab, setFilterTab,
+    filterTab, setFilterTab: chooseFilterTab,
     showAll, setShowAll,
     debouncedSearch,
     // Computed
@@ -400,6 +430,7 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
     handleFixDHMatchSaved,
     handleSetPrice,
     handlePriceSaved,
+    handleInlinePriceSave,
     handleHintSaved,
     // Sell sheet
     sellSheet,

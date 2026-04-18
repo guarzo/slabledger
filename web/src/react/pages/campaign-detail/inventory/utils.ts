@@ -78,6 +78,20 @@ export function getSourceByType(sources: SourcePrice[] | undefined, type: 'ebay'
   return sources.find(s => /estimate/i.test(s.source));
 }
 
+/** Reference prices shown in the row tooltip: CL, DH grade, last comp sale, cost basis. */
+export function referencePricesTooltip(item: AgingItem): string {
+  const lines: string[] = [];
+  const cl = item.purchase.clValueCents ?? 0;
+  if (cl > 0) lines.push(`CL: ${formatCents(cl)}`);
+  const dh = item.currentMarket?.gradePriceCents ?? 0;
+  if (dh > 0) lines.push(`DH: ${formatCents(dh)}`);
+  const lastSale = item.compSummary?.lastSaleCents ?? item.currentMarket?.lastSoldCents ?? 0;
+  if (lastSale > 0) lines.push(`Last Sale: ${formatCents(lastSale)}`);
+  const cost = costBasis(item.purchase);
+  if (cost > 0) lines.push(`Cost: ${formatCents(cost)}`);
+  return lines.join('\n');
+}
+
 /** Format a YYYY-MM-DD date string to short form (e.g., "3/5"). */
 export function fmtDateShort(dateStr: string): string {
   const [, m, d] = dateStr.split('-');
