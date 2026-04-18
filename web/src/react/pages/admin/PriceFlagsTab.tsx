@@ -2,7 +2,6 @@ import { useState } from 'react';
 import PokeballLoader from '../../PokeballLoader';
 import { usePriceFlags, useResolvePriceFlag } from '../../queries/useAdminQueries';
 import { formatCents } from '../../utils/formatters';
-import { SummaryCard } from './shared';
 import type { PriceFlagWithContext } from '../../../types/campaigns/priceReview';
 import { PRICE_FLAG_LABELS } from '../../../types/campaigns/priceReview';
 
@@ -150,40 +149,23 @@ export function PriceFlagsTab({ enabled = true }: { enabled?: boolean }) {
   }
 
   const flags = data?.flags ?? [];
+  const totalCount = (allData?.total ?? data?.total) ?? 0;
 
-  const filterTabs: { id: FilterStatus; label: string }[] = [
-    { id: 'open', label: 'Open' },
-    { id: 'resolved', label: 'Resolved' },
-    { id: 'all', label: 'All' },
+  const filterTabs: { id: FilterStatus; label: string; count: number }[] = [
+    { id: 'open', label: 'Open', count: openCount },
+    { id: 'resolved', label: 'Resolved', count: resolvedCount },
+    { id: 'all', label: 'All', count: totalCount },
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {error && data && (
         <div className="p-3 rounded-lg bg-[var(--warning-bg)] border border-[var(--warning-border)] text-[var(--warning)] text-sm">
           Failed to refresh — showing cached data
         </div>
       )}
 
-      {/* Summary */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-        <SummaryCard
-          label="Open Flags"
-          value={openCount}
-          color={openCount > 0 ? 'var(--danger)' : undefined}
-        />
-        <SummaryCard
-          label="Resolved"
-          value={resolvedCount}
-          color="var(--success)"
-        />
-        <SummaryCard
-          label="Total"
-          value={(allData?.total ?? data?.total) ?? 0}
-        />
-      </div>
-
-      {/* Filter tabs */}
+      {/* Filter tabs — counts inline */}
       <div className="flex gap-1 border-b border-[var(--surface-2)]">
         {filterTabs.map((tab) => (
           <button
@@ -195,7 +177,7 @@ export function PriceFlagsTab({ enabled = true }: { enabled?: boolean }) {
                 : 'text-[var(--text-muted)] hover:text-[var(--text)]'
             }`}
           >
-            {tab.label}
+            {tab.label} <span className="ml-1 text-[var(--text-muted)] tabular-nums">({tab.count})</span>
           </button>
         ))}
       </div>

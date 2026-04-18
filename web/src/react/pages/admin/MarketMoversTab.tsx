@@ -1,27 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
-import { useMarketMoversStatus, useSaveMarketMoversConfig, useTriggerMarketMoversRefresh } from '../../queries/useAdminQueries';
+import { useMarketMoversStatus, useSaveMarketMoversConfig, useTriggerMarketMoversRefresh, useSyncMarketMoversCollection } from '../../queries/useAdminQueries';
 import { useToast } from '../../contexts/ToastContext';
 import { CardShell } from '../../ui/CardShell';
 import Button from '../../ui/Button';
 import { formatAdminDate } from './adminUtils';
 
-function StatLine({ label, value, accent }: { label: string; value: string | number; accent?: 'green' | 'red' | 'yellow' }) {
-  const color =
-    accent === 'green' ? 'text-emerald-400' :
-    accent === 'red'   ? 'text-red-400' :
-    accent === 'yellow'? 'text-yellow-400' :
-    'text-[var(--text)]';
-  return (
-    <p className="text-xs text-[var(--text-muted)]">
-      {label}: <span className={color}>{value}</span>
-    </p>
-  );
-}
-
 export function MarketMoversTab({ enabled = true }: { enabled?: boolean }) {
   const { data: status, isLoading, error } = useMarketMoversStatus({ enabled });
   const saveMutation = useSaveMarketMoversConfig();
   const refreshMutation = useTriggerMarketMoversRefresh();
+  const syncMutation = useSyncMarketMoversCollection();
   const toast = useToast();
 
   const [username, setUsername] = useState('');
@@ -36,11 +24,7 @@ export function MarketMoversTab({ enabled = true }: { enabled?: boolean }) {
   }, [status?.configured, status?.username]);
 
   if (!enabled) {
-    return (
-      <CardShell padding="lg">
-        <p className="text-[var(--text-muted)]">Market Movers integration is not enabled.</p>
-      </CardShell>
-    );
+    return <NotConfigured message="Market Movers integration is not enabled." />;
   }
 
   const handleSave = async (e: React.FormEvent) => {
@@ -63,10 +47,25 @@ export function MarketMoversTab({ enabled = true }: { enabled?: boolean }) {
     }
   };
 
+  const handleSyncCollection = async () => {
+    try {
+      const result = await syncMutation.mutateAsync();
+      if (result.failed > 0) {
+        toast.warning(`MM sync: ${result.synced} synced, ${result.skipped} skipped, ${result.failed} failed`);
+      } else if (result.synced === 0 && result.skipped === 0) {
+        toast.info('All items already synced to Market Movers');
+      } else {
+        toast.success(`MM sync: ${result.synced} items added to Market Movers collection`);
+      }
+    } catch {
+      toast.error('Failed to sync Market Movers collection');
+    }
+  };
+
   if (isLoading) {
     return (
       <CardShell padding="lg">
-        <p className="text-[var(--text-muted)]">Loading Market Movers status...</p>
+        <p className="text-[var(--text-muted)]">Loading Market Movers status…</p>
       </CardShell>
     );
   }
@@ -109,113 +108,102 @@ export function MarketMoversTab({ enabled = true }: { enabled?: boolean }) {
 
   if (error && !status) {
     return (
-      <div className="space-y-4 mt-4">
-        <CardShell padding="lg">
-          <p className="text-red-400 text-sm mb-4">Failed to load Market Movers status.</p>
-          <h3 className="text-base font-semibold text-[var(--text)] mb-4">Connect Market Movers</h3>
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-2 h-2 rounded-full bg-gray-500" />
-            <span className="text-sm text-[var(--text-muted)]">Not connected</span>
-          </div>
-          {credentialForm}
-        </CardShell>
-      </div>
+      <CardShell padding="lg">
+        <p className="text-red-400 text-sm mb-4">Failed to load Market Movers status.</p>
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-2 h-2 rounded-full bg-gray-500" />
+          <span className="text-sm text-[var(--text-muted)]">Not connected</span>
+        </div>
+        {credentialForm}
+      </CardShell>
     );
   }
 
-  const lastRun = status?.lastRun;
-  const priceStats = status?.priceStats;
+  if (!status?.configured) {
+    return (
+      <CardShell padding="lg">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-2 h-2 rounded-full bg-gray-500" />
+          <span className="text-sm text-[var(--text-muted)]">Not connected</span>
+        </div>
+        {credentialForm}
+      </CardShell>
+    );
+  }
+
+  const lastRun = status.lastRun;
+  const priceStats = status.priceStats;
 
   return (
-    <div className="space-y-4 mt-4">
-      {status?.configured ? (
-        <CardShell padding="lg">
-          {/* Header row */}
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
-              <span className="text-sm font-semibold text-[var(--text)]">Connected</span>
-            </div>
-            <span className="text-xs text-[var(--text-muted)]">{status.username}</span>
-          </div>
+    <CardShell padding="lg">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
+          <span className="text-sm font-semibold text-[var(--text)]">Connected</span>
+        </div>
+        <span className="text-xs text-[var(--text-muted)]">{status.username}</span>
+      </div>
 
-          {/* Info rows */}
-          <div className="space-y-1 mb-3">
-            {status.cardsMapped !== undefined && (
-              <p className="text-xs text-[var(--text-muted)]">Cards mapped: {status.cardsMapped}</p>
-            )}
-          </div>
-
-          {/* Price Coverage — compact inline */}
-          {priceStats && (
-            <div className="space-y-1 mb-3">
-              <StatLine
-                label="With MM price"
-                value={`${priceStats.withMMPrice} / ${priceStats.unsoldTotal}`}
-                accent={priceStats.withMMPrice > 0 ? 'green' : undefined}
-              />
-              <StatLine
-                label="Synced to collection"
-                value={priceStats.syncedCount}
-                accent={priceStats.syncedCount > 0 ? 'green' : undefined}
-              />
-              <StatLine
-                label="Stale (>7 days)"
-                value={priceStats.staleCount}
-                accent={priceStats.staleCount > 0 ? 'yellow' : undefined}
-              />
-            </div>
-          )}
-
-          {/* Collapsible credentials update */}
-          <details>
-            <summary className="text-xs text-[var(--brand-400)] cursor-pointer mt-3 select-none">Update credentials</summary>
-            <div className="mt-3">
-              {credentialForm}
-            </div>
-          </details>
-
-          {/* Last Refresh block */}
-          {lastRun && (
-            <div className="mt-4 pt-4 border-t border-[var(--surface-2)] space-y-1">
-              <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">Last Refresh</p>
-              <p className="text-xs text-[var(--text-muted)]">
-                Ran at {formatAdminDate(lastRun.lastRunAt)} · {Number.isFinite(lastRun.durationMs) ? (lastRun.durationMs / 1000).toFixed(1) : '?'}s
-              </p>
-              <p className="text-xs text-[var(--text-muted)]">
-                {lastRun.updated > 0
-                  ? <span className="text-[var(--success)]">{lastRun.updated} updated</span>
-                  : <span>0 updated</span>} · {lastRun.newMappings} new · {lastRun.skipped} skipped
-                {lastRun.searchFailed > 0 && (
-                  <> · <span className="text-red-400">{lastRun.searchFailed} errors</span></>
-                )}
-              </p>
-            </div>
-          )}
-        </CardShell>
-      ) : (
-        <CardShell padding="lg">
-          <h3 className="text-base font-semibold text-[var(--text)] mb-4">Connect Market Movers</h3>
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-2 h-2 rounded-full bg-gray-500" />
-            <span className="text-sm text-[var(--text-muted)]">Not connected</span>
-          </div>
-          {credentialForm}
-        </CardShell>
+      {priceStats && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+          <Stat label="Mapped" value={status.cardsMapped ?? 0} />
+          <Stat label="Priced" value={`${priceStats.withMMPrice}/${priceStats.unsoldTotal}`} tone={priceStats.withMMPrice > 0 ? 'success' : 'default'} />
+          <Stat label="In collection" value={priceStats.syncedCount} />
+          <Stat label="Stale >7d" value={priceStats.staleCount} tone={priceStats.staleCount > 0 ? 'warning' : 'default'} />
+        </div>
       )}
 
-      {/* Manual Refresh — separate action card */}
-      {status?.configured && (
-        <CardShell padding="lg">
-          <h3 className="text-base font-semibold text-[var(--text)] mb-2">Manual Refresh</h3>
-          <p className="text-sm text-[var(--text-muted)] mb-3">
-            Trigger a Market Movers value sync. Searches for each unsold card by name/grade and fetches the 30-day avg sale price.
+      <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-[var(--surface-2)]">
+        <Button variant="secondary" size="sm" onClick={handleSyncCollection} loading={syncMutation.isPending}>
+          Sync collection
+        </Button>
+        <Button variant="secondary" size="sm" onClick={handleRefresh} loading={refreshMutation.isPending}>
+          Refresh values
+        </Button>
+      </div>
+
+      <details className="mt-3">
+        <summary className="text-xs text-[var(--brand-400)] cursor-pointer select-none">Update credentials</summary>
+        <div className="mt-3">{credentialForm}</div>
+      </details>
+
+      {lastRun && (
+        <div className="mt-4 pt-3 border-t border-[var(--surface-2)] space-y-1">
+          <p className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wider">Last Refresh</p>
+          <p className="text-xs text-[var(--text-muted)]">
+            {formatAdminDate(lastRun.lastRunAt)} · {Number.isFinite(lastRun.durationMs) ? (lastRun.durationMs / 1000).toFixed(1) : '?'}s
           </p>
-          <Button variant="secondary" size="sm" onClick={handleRefresh} loading={refreshMutation.isPending}>
-            Trigger Refresh
-          </Button>
-        </CardShell>
+          <p className="text-xs text-[var(--text-muted)]">
+            {lastRun.updated > 0
+              ? <span className="text-[var(--success)]">{lastRun.updated} updated</span>
+              : <span>0 updated</span>} · {lastRun.newMappings} new · {lastRun.skipped} skipped
+            {lastRun.searchFailed > 0 && (
+              <> · <span className="text-red-400">{lastRun.searchFailed} errors</span></>
+            )}
+          </p>
+        </div>
       )}
+    </CardShell>
+  );
+}
+
+function NotConfigured({ message }: { message: string }) {
+  return (
+    <CardShell padding="lg">
+      <p className="text-[var(--text-muted)]">{message}</p>
+    </CardShell>
+  );
+}
+
+function Stat({ label, value, tone = 'default' }: { label: string; value: number | string; tone?: 'default' | 'warning' | 'success' }) {
+  const valueColor =
+    tone === 'warning' ? 'text-[var(--warning)]' :
+    tone === 'success' ? 'text-[var(--success)]' :
+    'text-[var(--text)]';
+  return (
+    <div className="min-w-0">
+      <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">{label}</div>
+      <div className={`text-sm font-semibold tabular-nums ${valueColor}`}>{value}</div>
     </div>
   );
 }

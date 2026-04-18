@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useCardLadderStatus, useSaveCardLadderConfig, useTriggerCardLadderRefresh } from '../../queries/useAdminQueries';
+import { useCardLadderStatus, useSaveCardLadderConfig, useTriggerCardLadderRefresh, useSyncCardLadderCollection } from '../../queries/useAdminQueries';
 import { useToast } from '../../contexts/ToastContext';
 import { CardShell } from '../../ui/CardShell';
 import Button from '../../ui/Button';
@@ -9,6 +9,7 @@ export function CardLadderTab({ enabled = true }: { enabled?: boolean }) {
   const { data: status, isLoading, error } = useCardLadderStatus({ enabled });
   const saveMutation = useSaveCardLadderConfig();
   const refreshMutation = useTriggerCardLadderRefresh();
+  const syncMutation = useSyncCardLadderCollection();
   const toast = useToast();
 
   const [email, setEmail] = useState('');
@@ -52,10 +53,25 @@ export function CardLadderTab({ enabled = true }: { enabled?: boolean }) {
     }
   };
 
+  const handleSyncCollection = async () => {
+    try {
+      const result = await syncMutation.mutateAsync();
+      if (result.failed > 0) {
+        toast.warning(`CL sync: ${result.synced} synced, ${result.skipped} skipped, ${result.failed} failed`);
+      } else if (result.synced === 0 && result.skipped === 0) {
+        toast.info('All items already synced to Card Ladder');
+      } else {
+        toast.success(`CL sync: ${result.synced} cards synced to Card Ladder`);
+      }
+    } catch {
+      toast.error('Failed to sync Card Ladder collection');
+    }
+  };
+
   if (isLoading) {
     return (
       <CardShell padding="lg">
-        <p className="text-[var(--text-muted)]">Loading Card Ladder status...</p>
+        <p className="text-[var(--text-muted)]">Loading Card Ladder status…</p>
       </CardShell>
     );
   }
@@ -123,100 +139,93 @@ export function CardLadderTab({ enabled = true }: { enabled?: boolean }) {
 
   if (error && !status) {
     return (
-      <div className="space-y-4 mt-4">
-        <CardShell padding="lg">
-          <p className="text-[var(--text-muted)] text-sm mb-4">No credentials saved — enter your Card Ladder email and password to connect.</p>
-          <h3 className="text-base font-semibold text-[var(--text)] mb-4">Connect Card Ladder</h3>
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-2 h-2 rounded-full bg-gray-500" />
-            <span className="text-sm text-[var(--text-muted)]">Not connected</span>
-          </div>
-          {credentialForm}
-        </CardShell>
-      </div>
+      <CardShell padding="lg">
+        <p className="text-[var(--text-muted)] text-sm mb-4">No credentials saved — enter your Card Ladder email and password to connect.</p>
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-2 h-2 rounded-full bg-gray-500" />
+          <span className="text-sm text-[var(--text-muted)]">Not connected</span>
+        </div>
+        {credentialForm}
+      </CardShell>
     );
   }
 
-  const lastRun = status?.lastRun;
+  if (!status?.configured) {
+    return (
+      <CardShell padding="lg">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-2 h-2 rounded-full bg-gray-500" />
+          <span className="text-sm text-[var(--text-muted)]">Not connected</span>
+        </div>
+        {credentialForm}
+      </CardShell>
+    );
+  }
+
+  const lastRun = status.lastRun;
 
   return (
-    <div className="space-y-4 mt-4">
-      {status?.configured ? (
-        <CardShell padding="lg">
-          {/* Header row */}
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
-              <span className="text-sm font-semibold text-[var(--text)]">Connected</span>
-            </div>
-            <span className="text-xs text-[var(--text-muted)]">{status.email}</span>
-          </div>
+    <CardShell padding="lg">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
+          <span className="text-sm font-semibold text-[var(--text)]">Connected</span>
+        </div>
+        <span className="text-xs text-[var(--text-muted)]">{status.email}</span>
+      </div>
 
-          {/* Info rows */}
-          <div className="space-y-1 mb-3">
-            <p className="text-xs text-[var(--text-muted)]">Collection: {status.collectionId}</p>
-            {status.cardsMapped !== undefined && (
-              <p className="text-xs text-[var(--text-muted)]">Cards mapped: {status.cardsMapped}</p>
-            )}
-          </div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+        <Stat label="Mapped" value={status.cardsMapped ?? 0} />
+        <Stat label="Collection" value={status.collectionId ?? '—'} />
+      </div>
 
-          {/* Collapsible credentials update */}
-          <details>
-            <summary className="text-xs text-[var(--brand-400)] cursor-pointer mt-3 select-none">Update credentials</summary>
-            <div className="mt-3">
-              {credentialForm}
-            </div>
-          </details>
+      <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-[var(--surface-2)]">
+        <Button variant="secondary" size="sm" onClick={handleSyncCollection} loading={syncMutation.isPending}>
+          Sync collection
+        </Button>
+        <Button variant="secondary" size="sm" onClick={handleRefresh} loading={refreshMutation.isPending}>
+          Refresh values
+        </Button>
+      </div>
 
-          {/* Last Refresh block */}
-          {lastRun && (
-            <div className="mt-4 pt-4 border-t border-[var(--surface-2)] space-y-1">
-              <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">Last Refresh</p>
-              <p className="text-xs text-[var(--text-muted)]">
-                Ran at {formatAdminDate(lastRun.lastRunAt)} · {Number.isFinite(lastRun.durationMs) ? (lastRun.durationMs / 1000).toFixed(1) : '?'}s
-              </p>
-              <p className="text-xs text-[var(--text-muted)]">
-                {(lastRun.updated ?? 0) > 0
-                  ? <span className="text-[var(--success)]">{lastRun.updated} updated</span>
-                  : <span>0 updated</span>} · {lastRun.resolved ?? 0} newly resolved · {lastRun.totalPurchases ?? 0} purchases
-              </p>
-              {((lastRun.cardsPushed ?? 0) > 0 || (lastRun.cardsRemoved ?? 0) > 0) && (
-                <p className="text-xs text-[var(--text-muted)]">
-                  {(lastRun.cardsPushed ?? 0) > 0 && (
-                    <span className="text-[var(--success)]">{lastRun.cardsPushed} pushed</span>
-                  )}
-                  {(lastRun.cardsPushed ?? 0) > 0 && (lastRun.cardsRemoved ?? 0) > 0 && ' · '}
-                  {(lastRun.cardsRemoved ?? 0) > 0 && (
-                    <span className="text-amber-400">{lastRun.cardsRemoved} removed</span>
-                  )}
-                </p>
-              )}
-            </div>
-          )}
-        </CardShell>
-      ) : (
-        <CardShell padding="lg">
-          <h3 className="text-base font-semibold text-[var(--text)] mb-4">Connect Card Ladder</h3>
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-2 h-2 rounded-full bg-gray-500" />
-            <span className="text-sm text-[var(--text-muted)]">Not connected</span>
-          </div>
-          {credentialForm}
-        </CardShell>
-      )}
+      <details className="mt-3">
+        <summary className="text-xs text-[var(--brand-400)] cursor-pointer select-none">Update credentials</summary>
+        <div className="mt-3">{credentialForm}</div>
+      </details>
 
-      {/* Trigger Refresh — separate action card */}
-      {status?.configured && (
-        <CardShell padding="lg">
-          <h3 className="text-base font-semibold text-[var(--text)] mb-2">Manual Refresh</h3>
-          <p className="text-sm text-[var(--text-muted)] mb-3">
-            Trigger a Card Ladder value sync. This fetches your collection and updates CL values for matched cards.
+      {lastRun && (
+        <div className="mt-4 pt-3 border-t border-[var(--surface-2)] space-y-1">
+          <p className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wider">Last Refresh</p>
+          <p className="text-xs text-[var(--text-muted)]">
+            {formatAdminDate(lastRun.lastRunAt)} · {Number.isFinite(lastRun.durationMs) ? (lastRun.durationMs / 1000).toFixed(1) : '?'}s
           </p>
-          <Button variant="secondary" size="sm" onClick={handleRefresh} loading={refreshMutation.isPending}>
-            Trigger Refresh
-          </Button>
-        </CardShell>
+          <p className="text-xs text-[var(--text-muted)]">
+            {(lastRun.updated ?? 0) > 0
+              ? <span className="text-[var(--success)]">{lastRun.updated} updated</span>
+              : <span>0 updated</span>} · {lastRun.resolved ?? 0} newly resolved · {lastRun.totalPurchases ?? 0} purchases
+          </p>
+          {((lastRun.cardsPushed ?? 0) > 0 || (lastRun.cardsRemoved ?? 0) > 0) && (
+            <p className="text-xs text-[var(--text-muted)]">
+              {(lastRun.cardsPushed ?? 0) > 0 && (
+                <span className="text-[var(--success)]">{lastRun.cardsPushed} pushed</span>
+              )}
+              {(lastRun.cardsPushed ?? 0) > 0 && (lastRun.cardsRemoved ?? 0) > 0 && ' · '}
+              {(lastRun.cardsRemoved ?? 0) > 0 && (
+                <span className="text-amber-400">{lastRun.cardsRemoved} removed</span>
+              )}
+            </p>
+          )}
+        </div>
       )}
+    </CardShell>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: number | string }) {
+  return (
+    <div className="min-w-0">
+      <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">{label}</div>
+      <div className="text-sm font-semibold tabular-nums text-[var(--text)] truncate" title={String(value)}>{value}</div>
     </div>
   );
 }
