@@ -127,11 +127,16 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 	// DH handler (bulk match + intelligence; nil when client is not configured)
 	var dhHandler *handlers.DHHandler
 	if in.DHClient != nil && in.DHClient.EnterpriseAvailable() {
+		var reconcileOpts []dhlisting.ReconcilerOption
+		if in.DHEventStore != nil {
+			reconcileOpts = append(reconcileOpts, dhlisting.WithReconcileEventRecorder(in.DHEventStore))
+		}
 		reconciler, err := dhlisting.NewReconciler(
 			dhlistingadapter.NewInventorySnapshotAdapter(in.DHClient),
 			in.PurchaseStore,
 			in.PurchaseStore,
 			logger,
+			reconcileOpts...,
 		)
 		if err != nil {
 			logger.Error(ctx, "DH reconciler init failed; admin reconcile endpoint disabled", observability.Err(err))

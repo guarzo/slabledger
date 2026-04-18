@@ -148,11 +148,16 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 	// above, so construction failure here is a wiring defect — log loudly
 	// so the daily drift scan's absence doesn't go unnoticed.
 	if deps.DHClient != nil && deps.DHClient.EnterpriseAvailable() && deps.PurchaseStore != nil {
+		var reconcileOpts []dhlisting.ReconcilerOption
+		if deps.DHEventStore != nil {
+			reconcileOpts = append(reconcileOpts, dhlisting.WithReconcileEventRecorder(deps.DHEventStore))
+		}
 		reconciler, err := dhlisting.NewReconciler(
 			dhlistingadapter.NewInventorySnapshotAdapter(deps.DHClient),
 			deps.PurchaseStore,
 			deps.PurchaseStore,
 			deps.Logger,
+			reconcileOpts...,
 		)
 		if err != nil {
 			deps.Logger.Error(ctx, "DH reconciler init failed; daily drift scan disabled", observability.Err(err))
