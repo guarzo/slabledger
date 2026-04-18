@@ -66,7 +66,7 @@ func TestCertResolverAdapter_ResolveCert_Success(t *testing.T) {
 				CardName:   "Charizard",
 				SetName:    "Base Set",
 				CardNumber: "4",
-				Grade:      9.0,
+				Grade:      "9.0",
 				ImageURL:   "https://example.com/img.jpg",
 			},
 			wantRes: &dhlisting.DHCertResolution{

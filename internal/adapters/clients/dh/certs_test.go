@@ -30,7 +30,7 @@ func TestClient_ResolveCert(t *testing.T) {
 			CardName:                "Charizard",
 			SetName:                 "Base Set",
 			CardNumber:              "4/102",
-			Grade:                   10.0,
+			Grade:                   "10.0",
 			ImageURL:                "https://example.com/charizard.png",
 			CurrentMarketPriceCents: 1487500,
 		}
@@ -52,7 +52,7 @@ func TestClient_ResolveCert(t *testing.T) {
 	require.Equal(t, 42, resp.DHCardID)
 	require.Equal(t, "Charizard", resp.CardName)
 	require.Equal(t, "Base Set", resp.SetName)
-	require.Equal(t, 10.0, resp.Grade)
+	require.Equal(t, "10.0", resp.Grade)
 	require.Equal(t, 1487500, resp.CurrentMarketPriceCents)
 }
 
@@ -108,7 +108,7 @@ func TestClient_GetCertResolutionJob(t *testing.T) {
 					DHCardID:   42,
 					CardName:   "Charizard",
 					SetName:    "Base Set",
-					Grade:      10.0,
+					Grade:      "10.0",
 				},
 				{
 					CertNumber: "87654321",
@@ -116,7 +116,7 @@ func TestClient_GetCertResolutionJob(t *testing.T) {
 					DHCardID:   101,
 					CardName:   "Pikachu",
 					SetName:    "Jungle",
-					Grade:      9.0,
+					Grade:      "9.0",
 				},
 			},
 		}
@@ -138,7 +138,7 @@ func TestClient_GetCertResolutionJob(t *testing.T) {
 	require.Equal(t, "matched", resp.Results[0].Status)
 	require.Equal(t, 42, resp.Results[0].DHCardID)
 	require.Equal(t, "87654321", resp.Results[1].CertNumber)
-	require.Equal(t, 9.0, resp.Results[1].Grade)
+	require.Equal(t, "9.0", resp.Results[1].Grade)
 }
 
 func TestClient_ConfirmMatch(t *testing.T) {

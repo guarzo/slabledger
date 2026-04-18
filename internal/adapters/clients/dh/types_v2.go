@@ -88,7 +88,7 @@ type CertResolution struct {
 	CardName                string                    `json:"card_name,omitempty"`
 	SetName                 string                    `json:"set_name,omitempty"`
 	CardNumber              string                    `json:"card_number,omitempty"`
-	Grade                   float64                   `json:"grade,omitempty"`
+	Grade                   string                    `json:"grade,omitempty"`
 	ImageURL                string                    `json:"image_url,omitempty"`
 	CurrentMarketPriceCents int                       `json:"current_market_price_cents,omitempty"`
 	Candidates              []CertResolutionCandidate `json:"candidates,omitempty"`
@@ -270,7 +270,7 @@ type Order struct {
 	DHCardID       int       `json:"dh_card_id"`
 	CardName       string    `json:"card_name"`
 	SetName        string    `json:"set_name"`
-	Grade          float64   `json:"grade"`
+	Grade          string    `json:"grade"`
 	SalePriceCents int       `json:"sale_price_cents"`
 	Channel        string    `json:"channel"` // "dh", "ebay", "shopify"
 	Fees           OrderFees `json:"fees"`

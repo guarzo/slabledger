@@ -44,7 +44,7 @@ func TestDHOrdersPoll_RecordsSale(t *testing.T) {
 						SalePriceCents: 7500,
 						Channel:        "ebay",
 						SoldAt:         "2026-04-02T14:30:00Z",
-						Grade:          10,
+						Grade:          "10",
 						Fees: dh.OrderFees{
 							ChannelFeeCents: intPtr(994),
 						},
@@ -183,6 +183,57 @@ func TestDHOrdersPoll_RunOnce_HonorsCallerSince(t *testing.T) {
 		"RunOnce should not touch the sync-state checkpoint")
 }
 
+func TestDHOrdersPoll_MalformedGrade_FallsBackToZero(t *testing.T) {
+	// Grade is advisory in the orders flow — ImportOrdersSales never reads it.
+	// A malformed grade must surface via a Warn log (see dh_orders_poll.go) and
+	// fall back to 0 rather than aborting the ingest pass or dropping the order.
+	cases := []struct {
+		name        string
+		order       dh.Order
+		expectGrade float64
+	}{
+		{
+			name:        "malformed grade falls back to 0",
+			order:       dh.Order{OrderID: "ord-bad", CertNumber: "cert-bad", Channel: "ebay", SoldAt: "2026-04-02T00:00:00Z", SalePriceCents: 1000, Grade: "not-a-number"},
+			expectGrade: 0,
+		},
+		{
+			name:        "well-formed grade parses",
+			order:       dh.Order{OrderID: "ord-ok", CertNumber: "cert-ok", Channel: "ebay", SoldAt: "2026-04-02T00:00:00Z", SalePriceCents: 1000, Grade: "9.5"},
+			expectGrade: 9.5,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			client := &mocks.MockDHOrdersClient{
+				GetOrdersFn: func(_ context.Context, _ dh.OrderFilters) (*dh.OrdersResponse, error) {
+					return &dh.OrdersResponse{
+						Orders: []dh.Order{tc.order},
+						Meta:   dh.PaginationMeta{Page: 1, PerPage: 100, TotalCount: 1},
+					}, nil
+				},
+			}
+			var capturedGrade float64
+			svc := &mocks.MockInventoryService{
+				ImportOrdersSalesFn: func(_ context.Context, rows []inventory.OrdersExportRow) (*inventory.OrdersImportResult, error) {
+					require.Len(t, rows, 1)
+					capturedGrade = rows[0].Grade
+					return &inventory.OrdersImportResult{}, nil
+				},
+			}
+
+			s := NewDHOrdersPollScheduler(client, newMockSyncStateStore(), svc, nil, mocks.NewMockLogger(),
+				DHOrdersPollConfig{Enabled: true, Interval: 1 * time.Hour})
+
+			summary, err := s.RunOnce(context.Background(), "2026-04-01T00:00:00Z")
+			require.NoError(t, err)
+			assert.Equal(t, 1, summary.OrdersFetched)
+			assert.Equal(t, tc.expectGrade, capturedGrade)
+		})
+	}
+}
+
 func intPtr(v int) *int { return &v }
 
 func TestDHOrdersPoll_RecordsEvents(t *testing.T) {
@@ -190,9 +241,9 @@ func TestDHOrdersPoll_RecordsEvents(t *testing.T) {
 		GetOrdersFn: func(_ context.Context, _ dh.OrderFilters) (*dh.OrdersResponse, error) {
 			return &dh.OrdersResponse{
 				Orders: []dh.Order{
-					{OrderID: "order-matched", CertNumber: "c-matched", Channel: "ebay", SoldAt: "2026-04-02T14:30:00Z", SalePriceCents: 7500, Grade: 10},
-					{OrderID: "order-orphan", CertNumber: "c-orphan", Channel: "dh", SoldAt: "2026-04-02T14:31:00Z", SalePriceCents: 5000, Grade: 9},
-					{OrderID: "order-already", CertNumber: "c-already", Channel: "shopify", SoldAt: "2026-04-02T14:32:00Z", SalePriceCents: 6000, Grade: 9},
+					{OrderID: "order-matched", CertNumber: "c-matched", Channel: "ebay", SoldAt: "2026-04-02T14:30:00Z", SalePriceCents: 7500, Grade: "10"},
+					{OrderID: "order-orphan", CertNumber: "c-orphan", Channel: "dh", SoldAt: "2026-04-02T14:31:00Z", SalePriceCents: 5000, Grade: "9"},
+					{OrderID: "order-already", CertNumber: "c-already", Channel: "shopify", SoldAt: "2026-04-02T14:32:00Z", SalePriceCents: 6000, Grade: "9"},
 				},
 				Meta: dh.PaginationMeta{Page: 1, PerPage: 100, TotalCount: 3},
 			}, nil
