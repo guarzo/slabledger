@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import type { WeeklyReviewSummary, WeeklyPerformer } from '../../../types/campaigns';
 import { formatCents } from '../../utils/formatters';
 import { saleChannelLabels } from '../../utils/campaignConstants';
@@ -64,17 +64,33 @@ function MetricTile({ title, current, previous, isCents, className }: {
 
 export default function WeeklyReviewSection({ data }: { data: WeeklyReviewSummary }) {
   const [open, setOpen] = useState(true);
+  // Tick once per minute so `now` stays fresh without re-rendering on every paint.
+  // The minute granularity is enough — the header only shows the current day of week.
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    const interval = window.setInterval(() => setNowMs(Date.now()), 60_000);
+    return () => window.clearInterval(interval);
+  }, []);
 
   const { weekLabel, inProgress, daysElapsed } = useMemo(() => {
+    // Anchor at local start-of-day so the "day X of 7" count doesn't jitter with time-of-day.
+    const startOfDay = (d: Date): Date => {
+      const copy = new Date(d);
+      copy.setHours(0, 0, 0, 0);
+      return copy;
+    };
     const start = new Date(data.weekStart + 'T12:00:00');
     const end = new Date(data.weekEnd + 'T12:00:00');
     const fmt = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    const now = new Date();
-    const inProg = now < end;
+    const now = new Date(nowMs);
+    const inProg = now >= start && now < end;
     const msPerDay = 24 * 60 * 60 * 1000;
-    const elapsed = Math.min(7, Math.max(1, Math.ceil((now.getTime() - start.getTime()) / msPerDay)));
+    const elapsed = Math.min(
+      7,
+      Math.max(1, Math.floor((startOfDay(now).getTime() - startOfDay(start).getTime()) / msPerDay) + 1),
+    );
     return { weekLabel: `${fmt(start)} - ${fmt(end)}`, inProgress: inProg, daysElapsed: elapsed };
-  }, [data.weekStart, data.weekEnd]);
+  }, [data.weekStart, data.weekEnd, nowMs]);
 
   return (
     <div className="p-4 bg-[var(--surface-1)] rounded-xl border border-[var(--surface-2)]">

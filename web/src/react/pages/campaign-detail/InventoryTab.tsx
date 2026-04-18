@@ -44,7 +44,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
     handleSort, handleReviewed, handleResolveFlag, handleApproveDHPush, handleListOnDH, dhListingInFlight, dhListedOptimistic, handleBulkListOnDH, handleFlagSubmit, handlePrint, handleDelete,
     toggleSelect, toggleAll, toggleExpand,
     openSaleModal, closeSaleModal, handleFixPricing, handleFixDHMatch, handleFixDHMatchSaved, handleSetPrice,
-    handlePriceSaved, handleHintSaved, sellSheet, toast,
+    handlePriceSaved, handleHintSaved, handleInlinePriceSave, sellSheet, toast,
   } = state;
 
   const rowVirtualizer = useVirtualizer({
@@ -223,52 +223,63 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
         />
       </div>
 
-      {/* Filter tabs — visible when not in showAll mode */}
-      {!showAll && (
-        <div className="flex items-center gap-2 mb-3 overflow-x-auto scrollbar-none sell-sheet-no-print">
-           {([
-             { key: 'needs_attention' as const, label: 'Needs Attention', color: 'var(--warning)' },
-             { key: 'in_hand' as const, label: 'In Hand', color: 'var(--success)' },
-             { key: 'ready_to_list' as const, label: 'Pending DH Listing', color: 'var(--brand-400)' },
-             { key: 'ai_suggestion' as const, label: 'AI Suggestions', color: 'var(--brand-400)' },
-             { key: 'sell_sheet' as const, label: 'Sell Sheet', color: 'var(--brand-400)' },
-             { key: 'all' as const, label: 'All', color: 'var(--text)' },
-             { key: 'card_show' as const, label: 'Card Show', color: 'var(--brand-400)' },
-           ] as const).filter(tab => {
-             if (tab.key === 'ai_suggestion') return tabCounts.ai_suggestion > 0;
-             if (tab.key === 'in_hand') return tabCounts.in_hand > 0;
-             if (tab.key === 'ready_to_list') return tabCounts.ready_to_list > 0;
-             if (tab.key === 'sell_sheet') return pageSellSheetCount > 0;
-             if (tab.key === 'card_show') return tabCounts.card_show > 0;
-             return true;
-           }).map(tab => {
-            const count = tab.key === 'sell_sheet' ? pageSellSheetCount : tabCounts[tab.key];
-            return (
-              <button
-                key={tab.key}
-                type="button"
-                onClick={() => setFilterTab(tab.key)}
-                className={`shrink-0 text-xs font-semibold px-3 py-1.5 rounded-full border transition-colors ${
-                  filterTab === tab.key
-                    ? 'border-[var(--brand-500)] bg-[var(--brand-500)]/10 text-[var(--brand-400)]'
-                    : 'border-[var(--surface-2)] text-[var(--text-muted)] hover:text-[var(--text)] hover:border-[var(--text-muted)]'
-                }`}
-              >
-                {tab.label}
-                <span
-                  className="ml-1.5 inline-block min-w-[18px] text-center text-[10px] font-semibold px-1 py-[1px] rounded-full"
-                  style={{
-                    background: filterTab === tab.key ? `color-mix(in srgb, ${tab.color} 15%, transparent)` : 'rgba(255,255,255,0.06)',
-                    color: filterTab === tab.key ? tab.color : 'var(--text-muted)',
-                  }}
-                >
-                  {count}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      )}
+      {/* Filter tabs — two-tier: action queues on top, view filters below */}
+      {!showAll && (() => {
+        const primary = [
+          { key: 'needs_attention' as const, label: 'Needs Attention', count: tabCounts.needs_attention, alwaysShow: true },
+          { key: 'ready_to_list' as const, label: 'Pending DH Listing', count: tabCounts.ready_to_list, alwaysShow: false },
+        ].filter(t => t.alwaysShow || t.count > 0);
+        const secondary = [
+          { key: 'all' as const, label: 'All', count: tabCounts.all, alwaysShow: true },
+          { key: 'in_hand' as const, label: 'In Hand', count: tabCounts.in_hand, alwaysShow: false },
+          { key: 'sell_sheet' as const, label: 'Sell Sheet', count: pageSellSheetCount, alwaysShow: false },
+          { key: 'card_show' as const, label: 'Card Show', count: tabCounts.card_show, alwaysShow: false },
+        ].filter(t => t.alwaysShow || t.count > 0);
+        const pillClass = (isActive: boolean, size: 'primary' | 'secondary') => {
+          const base = 'shrink-0 inline-flex items-center rounded-full border transition-colors tabular-nums';
+          const sizing = size === 'primary' ? 'text-xs font-semibold px-3 py-1.5' : 'text-[11px] font-medium px-2.5 py-1';
+          const state = isActive
+            ? 'border-[var(--brand-500)] bg-[var(--brand-500)]/10 text-[var(--brand-400)]'
+            : 'border-[var(--surface-2)] text-[var(--text-muted)] hover:text-[var(--text)] hover:border-[var(--text-muted)]';
+          return `${base} ${sizing} ${state}`;
+        };
+        const countClass = (isActive: boolean, size: 'primary' | 'secondary') => {
+          const base = 'ml-1.5 inline-flex items-center justify-center rounded-full text-[10px] font-semibold px-1 tabular-nums';
+          const sizing = size === 'primary' ? 'min-w-[22px] h-[18px]' : 'min-w-[20px] h-[16px]';
+          const state = isActive
+            ? 'bg-[var(--brand-500)]/20 text-[var(--brand-300)]'
+            : 'bg-[rgba(255,255,255,0.06)] text-[var(--text-muted)]';
+          return `${base} ${sizing} ${state}`;
+        };
+        return (
+          <div className="flex flex-col gap-2 mb-3 sell-sheet-no-print">
+            <div className="flex items-center gap-2 overflow-x-auto scrollbar-none">
+              {primary.map(tab => {
+                const isActive = filterTab === tab.key;
+                return (
+                  <button key={tab.key} type="button" onClick={() => setFilterTab(tab.key)} className={pillClass(isActive, 'primary')}>
+                    {tab.label}
+                    <span className={countClass(isActive, 'primary')}>{tab.count}</span>
+                  </button>
+                );
+              })}
+            </div>
+            {secondary.length > 0 && (
+              <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none">
+                {secondary.map(tab => {
+                  const isActive = filterTab === tab.key;
+                  return (
+                    <button key={tab.key} type="button" onClick={() => setFilterTab(tab.key)} className={pillClass(isActive, 'secondary')}>
+                      {tab.label}
+                      <span className={countClass(isActive, 'secondary')}>{tab.count}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {debouncedSearch && (
         <div className="text-xs text-[var(--text-subtle)] mb-2 pl-1 sell-sheet-no-print">
@@ -373,7 +384,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
             <SortableHeader label="Card" sortKey="name" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="flex-1 min-w-0" />
             <SortableHeader label="Gr" sortKey="grade" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-center" style={{ width: '48px' }} />
             <SortableHeader label="Cost" sortKey="cost" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-right" style={{ width: '72px' }} />
-            <SortableHeader label="Market" sortKey="market" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-right" style={{ width: '120px' }} />
+            <SortableHeader label="List / Rec" sortKey="market" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-right" style={{ width: '140px' }} />
             <SortableHeader label="P/L" sortKey="pl" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-right print-hide-col" style={{ width: '72px' }} />
             <SortableHeader label="Days" sortKey="days" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-center print-hide-col" style={{ width: '40px' }} />
             <div className="glass-table-th flex-shrink-0 text-center print-hide-col" style={{ width: '20px' }}></div>
@@ -448,6 +459,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                           onSetPrice={() => handleSetPrice(item)}
                           onDelete={() => handleDelete(item)}
                           onListOnDH={handleListOnDH}
+                          onInlinePriceSave={handleInlinePriceSave}
                           dhListingLoading={dhListingInFlight.has(item.purchase.id)}
                           dhListedOverride={dhListedOptimistic.has(item.purchase.id)}
                           showCampaignColumn={showCampaignColumn}

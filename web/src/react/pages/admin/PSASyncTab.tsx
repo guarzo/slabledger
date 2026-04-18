@@ -43,68 +43,64 @@ export function PSASyncTab({ enabled = true }: { enabled?: boolean }) {
   const lastRun = data.lastRun;
 
   return (
-    <div className="space-y-4 mt-4">
-      <CardShell padding="lg">
-        {/* Header row */}
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-[var(--success)] shrink-0" />
-            <span className="text-sm font-semibold text-[var(--text)]">Configured</span>
-          </div>
-          <span className="text-xs text-[var(--text-muted)] font-mono">
-            {data.spreadsheetId && data.spreadsheetId.length > 12 ? `${data.spreadsheetId.slice(0, 12)}...` : data.spreadsheetId}
-          </span>
+    <CardShell padding="lg">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-[var(--success)] shrink-0" />
+          <span className="text-sm font-semibold text-[var(--text)]">Configured</span>
         </div>
+        <span className="text-xs text-[var(--text-muted)] font-mono">
+          {data.spreadsheetId && data.spreadsheetId.length > 12 ? `${data.spreadsheetId.slice(0, 12)}…` : data.spreadsheetId}
+        </span>
+      </div>
 
-        {/* Info rows */}
-        <div className="space-y-1 mb-3">
-          <p className="text-xs text-[var(--text-muted)]">Interval: {data.interval}</p>
-          {data.pendingCount != null && data.pendingCount > 0 && (
-            <p className="text-xs">
-              <span className="text-[var(--warning)] font-medium">{data.pendingCount} pending items</span>
-              <span className="text-[var(--text-muted)]"> need review in Operations tab</span>
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-3">
+        <Stat label="Interval" value={data.interval || '—'} />
+        <Stat label="Pending review" value={data.pendingCount ?? 0} tone={(data.pendingCount ?? 0) > 0 ? 'warning' : 'default'} />
+      </div>
+
+      <div className="flex items-center gap-2 pt-3 border-t border-[var(--surface-2)]">
+        <Button variant="secondary" size="sm" onClick={handleRefresh} loading={refreshMutation.isPending}>
+          Sync from Sheets
+        </Button>
+        <span className="text-xs text-[var(--text-muted)]">Fetches the configured Google Sheet and imports new or updated rows.</span>
+      </div>
+
+      {lastRun && (
+        <div className="mt-4 pt-3 border-t border-[var(--surface-2)] space-y-1">
+          <p className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wider">Last Refresh</p>
+          <p className="text-xs text-[var(--text-muted)]">
+            {formatAdminDate(lastRun.lastRunAt)} · {Number.isFinite(lastRun.durationMs) ? (lastRun.durationMs / 1000).toFixed(1) : '?'}s
+          </p>
+          <p className="text-xs text-[var(--text-muted)]">
+            {lastRun.allocated > 0
+              ? <span className="text-[var(--success)]">{lastRun.allocated} allocated</span>
+              : <span>0 allocated</span>} · {lastRun.updated} updated · {lastRun.refunded} refunded · {lastRun.totalRows} total
+          </p>
+          {(lastRun.unmatched > 0 || lastRun.ambiguous > 0 || lastRun.failed > 0 || lastRun.parseErrors > 0) && (
+            <p className="text-xs text-[var(--text-muted)]">
+              {[
+                lastRun.unmatched > 0 && <span key="unmatched" className="text-[var(--warning)]">{lastRun.unmatched} unmatched</span>,
+                lastRun.ambiguous > 0 && <span key="ambiguous" className="text-[var(--warning)]">{lastRun.ambiguous} ambiguous</span>,
+                lastRun.failed > 0 && <span key="failed" className="text-[var(--danger)]">{lastRun.failed} failed</span>,
+                lastRun.parseErrors > 0 && <span key="parseErrors" className="text-[var(--danger)]">{lastRun.parseErrors} parse errors</span>,
+              ]
+                .filter(Boolean)
+                .reduce<ReactNode[]>((acc, el, i) => (i === 0 ? [el] : [...acc, ' · ', el]), [])}
             </p>
           )}
         </div>
+      )}
+    </CardShell>
+  );
+}
 
-        {/* Last Refresh block */}
-        {lastRun && (
-          <div className="mt-4 pt-4 border-t border-[var(--surface-2)] space-y-1">
-            <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">Last Refresh</p>
-            <p className="text-xs text-[var(--text-muted)]">
-              Ran at {formatAdminDate(lastRun.lastRunAt)} · {Number.isFinite(lastRun.durationMs) ? (lastRun.durationMs / 1000).toFixed(1) : '?'}s
-            </p>
-            <p className="text-xs text-[var(--text-muted)]">
-              {lastRun.allocated > 0
-                ? <span className="text-[var(--success)]">{lastRun.allocated} allocated</span>
-                : <span>0 allocated</span>} · {lastRun.updated} updated · {lastRun.refunded} refunded · {lastRun.totalRows} total
-            </p>
-            {(lastRun.unmatched > 0 || lastRun.ambiguous > 0 || lastRun.failed > 0 || lastRun.parseErrors > 0) && (
-              <p className="text-xs text-[var(--text-muted)]">
-                {[
-                  lastRun.unmatched > 0 && <span key="unmatched" className="text-[var(--warning)]">{lastRun.unmatched} unmatched</span>,
-                  lastRun.ambiguous > 0 && <span key="ambiguous" className="text-[var(--warning)]">{lastRun.ambiguous} ambiguous</span>,
-                  lastRun.failed > 0 && <span key="failed" className="text-[var(--danger)]">{lastRun.failed} failed</span>,
-                  lastRun.parseErrors > 0 && <span key="parseErrors" className="text-[var(--danger)]">{lastRun.parseErrors} parse errors</span>,
-                ]
-                  .filter(Boolean)
-                  .reduce<ReactNode[]>((acc, el, i) => (i === 0 ? [el] : [...acc, ' · ', el]), [])}
-              </p>
-            )}
-          </div>
-        )}
-      </CardShell>
-
-      {/* Manual Refresh — separate action card */}
-      <CardShell padding="lg">
-        <h3 className="text-base font-semibold text-[var(--text)] mb-2">Manual Refresh</h3>
-        <p className="text-sm text-[var(--text-muted)] mb-3">
-          Trigger a PSA Sheets sync. This fetches the configured Google Sheet and imports new or updated rows.
-        </p>
-        <Button variant="secondary" size="sm" onClick={handleRefresh} loading={refreshMutation.isPending}>
-          Trigger Sync
-        </Button>
-      </CardShell>
+function Stat({ label, value, tone = 'default' }: { label: string; value: number | string; tone?: 'default' | 'warning' }) {
+  const valueColor = tone === 'warning' ? 'text-[var(--warning)]' : 'text-[var(--text)]';
+  return (
+    <div className="min-w-0">
+      <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">{label}</div>
+      <div className={`text-sm font-semibold tabular-nums ${valueColor}`}>{value}</div>
     </div>
   );
 }

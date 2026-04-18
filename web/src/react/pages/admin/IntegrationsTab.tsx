@@ -3,6 +3,7 @@ import { DHTab } from './DHTab';
 import { MarketMoversTab } from './MarketMoversTab';
 import { PSASyncTab } from './PSASyncTab';
 import { useCardLadderStatus, useDHStatus, useMarketMoversStatus, usePSASyncStatus } from '../../queries/useAdminQueries';
+import SalesImportSection from '../tools/SalesImportSection';
 
 function StatusBadge({ connected, label }: { connected: boolean; label: string }) {
   return (
@@ -62,6 +63,16 @@ export function IntegrationsTab({ enabled = true }: { enabled?: boolean }) {
           <StatusBadge connected={psaConfigured} label={psaConfigured ? 'Configured' : 'Not configured'} />
         </div>
         <PSASyncTab enabled={enabled} />
+      </section>
+
+      <hr className="border-[var(--surface-2)]" />
+
+      <section>
+        <div className="mb-4">
+          <h3 className="text-base font-semibold text-[var(--text)]">Import Sales</h3>
+          <p className="text-xs text-[var(--text-muted)] mt-0.5">Import sales from order CSVs.</p>
+        </div>
+        <SalesImportSection />
       </section>
     </div>
   );

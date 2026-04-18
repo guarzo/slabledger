@@ -28,6 +28,7 @@ export default function PortfolioSummary({ campaignCount, pnlMap }: PortfolioSum
       </div>
       {totalSpent > 0 && (() => {
         const recoveryPct = (totalRevenue / totalSpent) * 100;
+        const clampedRecovery = Math.max(0, Math.min(100, recoveryPct));
         return (
           <div>
             <div className="flex items-center justify-between text-xs text-[var(--text-muted)] mb-1">
@@ -38,14 +39,14 @@ export default function PortfolioSummary({ campaignCount, pnlMap }: PortfolioSum
               className="w-full h-1.5 rounded-full bg-[var(--surface-2)] overflow-hidden"
               role="progressbar"
               aria-label={`Capital recovered: ${formatCents(totalRevenue)} of ${formatCents(totalSpent)} invested (${recoveryPct.toFixed(0)}%)`}
-              aria-valuenow={Math.round(recoveryPct)}
+              aria-valuenow={Math.round(clampedRecovery)}
               aria-valuemin={0}
               aria-valuemax={100}
             >
               <div
                 className="h-full rounded-full transition-all duration-500"
                 style={{
-                  width: `${Math.min(recoveryPct, 100)}%`,
+                  width: `${clampedRecovery}%`,
                   background: totalRevenue >= totalSpent ? 'var(--success)' : 'var(--warning)',
                 }}
               />

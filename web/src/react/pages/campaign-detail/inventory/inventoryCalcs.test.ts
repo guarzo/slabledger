@@ -5,7 +5,7 @@ import type { AgingItem, Purchase } from '../../../../types/campaigns';
 type TestPurchase = Pick<Purchase,
   'id' | 'cardName' | 'gradeValue' | 'certNumber' | 'receivedAt' |
   'campaignId' | 'clValueCents' | 'buyCostCents' | 'psaSourcingFeeCents' | 'purchaseDate' |
-  'createdAt' | 'updatedAt'
+  'createdAt' | 'updatedAt' | 'aiSuggestedPriceCents' | 'reviewedAt'
 > & {
   setName?: string;
   cardNumber?: string;
@@ -71,15 +71,24 @@ describe('inventoryCalcs', () => {
       expect(meta.tabCounts.all).toBe(2);
     });
 
+    it('counts items with AI suggestions under needs_attention', () => {
+      const items = [
+        makeItem({ purchase: { id: '1', aiSuggestedPriceCents: 5000, reviewedAt: '2026-04-10T00:00:00Z' } }),
+        makeItem({ purchase: { id: '2', reviewedAt: '2026-04-10T00:00:00Z' } }),
+      ];
+      const meta = computeInventoryMeta(items);
+      expect(meta.tabCounts.needs_attention).toBe(1);
+    });
+
     it('returns correct structure with all tab counts', () => {
       const items = [makeItem()];
       const meta = computeInventoryMeta(items);
 
       expect(meta).toHaveProperty('tabCounts');
       expect(meta.tabCounts).toHaveProperty('needs_attention');
-      expect(meta.tabCounts).toHaveProperty('ai_suggestion');
       expect(meta.tabCounts).toHaveProperty('card_show');
       expect(meta.tabCounts).toHaveProperty('in_hand');
+      expect(meta.tabCounts).toHaveProperty('ready_to_list');
       expect(meta.tabCounts).toHaveProperty('all');
     });
   });

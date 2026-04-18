@@ -13,21 +13,21 @@ import { StatsTab } from './admin/StatsTab';
 import { IntegrationsTab } from './admin/IntegrationsTab';
 
 const adminTabs: readonly Tab<string>[] = [
-  { id: 'users', label: 'Users' },
-  { id: 'pricing', label: 'Pricing' },
   { id: 'stats', label: 'Stats' },
+  { id: 'pricing', label: 'Pricing' },
   { id: 'integrations', label: 'Integrations' },
+  { id: 'users', label: 'Users' },
 ] as const;
 
 const TAB_SUBTITLES: Record<string, string> = {
-  users: 'Manage allowed users and view registered accounts.',
-  pricing: 'Review pricing coverage, flags, and price overrides.',
   stats: 'Monitor AI usage, API health, and integration statistics.',
-  integrations: 'Connect and configure external services.',
+  pricing: 'Review price flags and overrides.',
+  integrations: 'Connect, configure, and sync external services.',
+  users: 'Manage allowed users and view registered accounts.',
 };
 
 export default function AdminPage() {
-  const [activeTab, setActiveTab] = useState('users');
+  const [activeTab, setActiveTab] = useState('stats');
   const [backupLoading, setBackupLoading] = useState<boolean>(false);
   const [backupError, setBackupError] = useState<string | null>(null);
 
