@@ -37,16 +37,16 @@ func (r *PricingDiagnosticsRepository) GetPricingDiagnostics(ctx context.Context
 	return diag, nil
 }
 
-// queryMappingCoverage buckets unsold purchases into the DH pipeline stages.
+// queryMappingCoverage buckets unsold purchases into the DH pipeline stages
+// and also yields TotalUnsold from the same snapshot so the invariant
+// "stages sum to TotalUnsold" holds even under concurrent writes.
+//
 // Precedence (first match wins) reflects the pipeline direction:
 //  1. listed            — dh_status in (listed, sold); live on DH
 //  2. ready_to_list     — matched/manual + dh_status in_stock; waiting for user
 //  3. unmatched         — unmatched/dismissed; needs human reconcile
 //  4. matching          — pending/held/blank + received_at NOT NULL; scheduler will drain
 //  5. awaiting_receipt  — anything else (includes pending without received_at)
-//
-// The five stages sum to TotalUnsold and unmatched aligns with the DH Unmatched
-// Cards reconcile screen.
 func (r *PricingDiagnosticsRepository) queryMappingCoverage(ctx context.Context, diag *pricing.PricingDiagnostics) error {
 	row := r.db.QueryRowContext(ctx, `
 		SELECT
@@ -54,7 +54,8 @@ func (r *PricingDiagnosticsRepository) queryMappingCoverage(ctx context.Context,
 			COALESCE(SUM(CASE WHEN bucket = 'ready_to_list' THEN 1 ELSE 0 END), 0) AS ready_to_list,
 			COALESCE(SUM(CASE WHEN bucket = 'unmatched' THEN 1 ELSE 0 END), 0) AS unmatched,
 			COALESCE(SUM(CASE WHEN bucket = 'matching' THEN 1 ELSE 0 END), 0) AS matching,
-			COALESCE(SUM(CASE WHEN bucket = 'awaiting_receipt' THEN 1 ELSE 0 END), 0) AS awaiting_receipt
+			COALESCE(SUM(CASE WHEN bucket = 'awaiting_receipt' THEN 1 ELSE 0 END), 0) AS awaiting_receipt,
+			COUNT(*) AS total_unsold
 		FROM (
 			SELECT
 				CASE
@@ -76,6 +77,7 @@ func (r *PricingDiagnosticsRepository) queryMappingCoverage(ctx context.Context,
 		&diag.UnmatchedCards,
 		&diag.MatchingCards,
 		&diag.AwaitingReceiptCards,
+		&diag.TotalUnsold,
 	); err != nil {
 		return fmt.Errorf("query mapping coverage: %w", err)
 	}
@@ -83,10 +85,11 @@ func (r *PricingDiagnosticsRepository) queryMappingCoverage(ctx context.Context,
 }
 
 // queryPriceCoverage counts unsold inventory cards with CL and MM prices.
+// TotalUnsold is populated by queryMappingCoverage so the widget's per-price
+// ratios share a denominator with the pipeline stages.
 func (r *PricingDiagnosticsRepository) queryPriceCoverage(ctx context.Context, diag *pricing.PricingDiagnostics) error {
 	row := r.db.QueryRowContext(ctx, `
 		SELECT
-			COUNT(*) AS total_unsold,
 			COALESCE(SUM(CASE WHEN cp.cl_value_cents > 0 THEN 1 ELSE 0 END), 0) AS cl_priced,
 			COALESCE(SUM(CASE WHEN cp.mm_value_cents > 0 THEN 1 ELSE 0 END), 0) AS mm_priced
 		FROM campaign_purchases cp
@@ -94,7 +97,7 @@ func (r *PricingDiagnosticsRepository) queryPriceCoverage(ctx context.Context, d
 		LEFT JOIN campaign_sales cs ON cp.id = cs.purchase_id
 		WHERE cs.id IS NULL AND c.phase != 'closed'
 	`)
-	if err := row.Scan(&diag.TotalUnsold, &diag.CLPricedCards, &diag.MMPricedCards); err != nil {
+	if err := row.Scan(&diag.CLPricedCards, &diag.MMPricedCards); err != nil {
 		return fmt.Errorf("query price coverage: %w", err)
 	}
 	return nil
