@@ -265,7 +265,7 @@ export default function DHUnmatchedSection() {
             <span className="inline-flex items-center justify-center w-6 h-6 rounded bg-[var(--info)]/15 text-[var(--info)] text-[10px] font-bold leading-none">
               DH
             </span>
-            <h3 className="text-sm font-semibold text-[var(--text)]">DoubleHolo Sync</h3>
+            <h2 className="text-sm font-semibold text-[var(--text)]">DoubleHolo Sync</h2>
           </div>
           <Button
             variant="secondary"
@@ -317,7 +317,7 @@ export default function DHUnmatchedSection() {
           <span className="inline-flex items-center justify-center w-6 h-6 rounded bg-[var(--warning)]/15 text-[var(--warning)] text-[10px] font-bold leading-none">
             DH
           </span>
-          <h3 className="text-sm font-semibold text-[var(--text)]">Unmatched Cards</h3>
+          <h2 className="text-sm font-semibold text-[var(--text)]">Unmatched Cards</h2>
         </div>
         <div className="flex items-center gap-2">
           <Button
