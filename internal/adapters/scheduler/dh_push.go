@@ -248,6 +248,7 @@ func (s *DHPushScheduler) push(ctx context.Context) {
 	matched := 0
 	unmatched := 0
 	skipped := 0
+	cappedUnmatched := 0
 	held := 0
 
 	for _, p := range pending {
@@ -263,8 +264,15 @@ func (s *DHPushScheduler) push(ctx context.Context) {
 			// this cap, a cert DH can't match (unknown promo variant, stale
 			// catalog, matched-with-zero response) gets re-resolved every 5
 			// minutes indefinitely. See maxDHPushSkipAttempts for the rationale.
+			// The counts on the summary log are kept unambiguous: skipped stays
+			// as the raw count of processSkipped returns (including capped ones);
+			// cappedUnmatched tracks how many of those were transitioned to
+			// unmatched this cycle; unmatched is also bumped so the pipeline-wide
+			// unmatched total lines up with what the DB will reflect after the
+			// cycle.
 			if s.giveUpOnSkipIfNeeded(ctx, p) {
 				unmatched++
+				cappedUnmatched++
 			}
 		case processHeld:
 			held++
@@ -275,6 +283,7 @@ func (s *DHPushScheduler) push(ctx context.Context) {
 		observability.Int("total", len(pending)),
 		observability.Int("matched", matched),
 		observability.Int("unmatched", unmatched),
+		observability.Int("cappedUnmatched", cappedUnmatched),
 		observability.Int("skipped", skipped),
 		observability.Int("held", held),
 	)
