@@ -48,8 +48,8 @@ type mockInventoryLister struct {
 	lastListingPriceSent int
 }
 
-func (m *mockInventoryLister) UpdateInventoryStatus(_ context.Context, _ int, _ string, listingPriceCents int) (int, error) {
-	m.lastListingPriceSent = listingPriceCents
+func (m *mockInventoryLister) UpdateInventoryStatus(_ context.Context, _ int, update DHInventoryStatusUpdate) (int, error) {
+	m.lastListingPriceSent = update.ListingPriceCents
 	return m.returnedListingPrice, m.updateStatusErr
 }
 

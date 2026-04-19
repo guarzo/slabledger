@@ -9,6 +9,7 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	"github.com/guarzo/slabledger/internal/domain/dhlisting"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
+	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
 // --- DHCertResolver adapter ---
@@ -75,7 +76,14 @@ func NewInventoryPusherAdapter(client interface {
 func (a *InventoryPusherAdapter) PushInventory(ctx context.Context, items []dhlisting.DHInventoryPushItem) (*dhlisting.DHInventoryPushResult, error) {
 	dhItems := make([]dh.InventoryItem, len(items))
 	for i, item := range items {
-		dhItems[i] = dh.NewInStockItem(item.DHCardID, item.CertNumber, item.Grade, item.CostBasisCents, item.ListingPriceCents)
+		dhItem := dh.NewInStockItem(item.DHCardID, item.CertNumber, item.Grade, item.CostBasisCents, item.ListingPriceCents)
+		if item.CertImageURLFront != "" {
+			dhItem.CertImageURLFront = item.CertImageURLFront
+		}
+		if item.CertImageURLBack != "" {
+			dhItem.CertImageURLBack = item.CertImageURLBack
+		}
+		dhItems[i] = dhItem
 	}
 
 	resp, err := a.client.PushInventory(ctx, dhItems)
@@ -102,31 +110,71 @@ var _ dhlisting.DHInventoryPusher = (*InventoryPusherAdapter)(nil)
 // InventoryAdapter wraps a dh.Client to implement dhlisting.DHInventoryLister
 // and inventory.DHSoldNotifier. It handles both read/list operations and
 // inventory status mutations (listing updates and sold transitions).
+//
+// When transitioning to "listed" and the underlying client supports
+// dh.PSAKeyRotator, UpdateInventoryStatus will rotate PSA keys on 401/422
+// via dh.UpdateInventoryWithRotation.
 type InventoryAdapter struct {
 	client interface {
 		UpdateInventory(ctx context.Context, inventoryID int, update dh.InventoryUpdate) (*dh.InventoryResult, error)
 		SyncChannels(ctx context.Context, inventoryID int, channels []string) (*dh.ChannelSyncResponse, error)
 	}
+	rotator dh.PSAKeyRotator     // optional; inferred from client if it implements the interface
+	logger  observability.Logger // optional; defaults to noop
 }
 
-// NewInventoryAdapter creates a new InventoryAdapter.
+// NewInventoryAdapter creates a new InventoryAdapter. If the client implements
+// dh.PSAKeyRotator, rotation is wired up automatically.
 func NewInventoryAdapter(client interface {
 	UpdateInventory(ctx context.Context, inventoryID int, update dh.InventoryUpdate) (*dh.InventoryResult, error)
 	SyncChannels(ctx context.Context, inventoryID int, channels []string) (*dh.ChannelSyncResponse, error)
 }) *InventoryAdapter {
-	return &InventoryAdapter{client: client}
+	a := &InventoryAdapter{client: client, logger: observability.NewNoopLogger()}
+	if r, ok := client.(dh.PSAKeyRotator); ok {
+		a.rotator = r
+	}
+	return a
 }
 
-// UpdateInventoryStatus PATCHes /inventory/:id with the new status and (when
-// listingPriceCents > 0) sets the listing price in the same call. Returns
-// the listing_price_cents that DH has on the item after the update — use
-// this to persist locally, since DH no longer auto-assigns a different value.
-func (a *InventoryAdapter) UpdateInventoryStatus(ctx context.Context, inventoryID int, status string, listingPriceCents int) (int, error) {
-	update := dh.InventoryUpdate{Status: status}
-	if listingPriceCents > 0 {
-		update.ListingPriceCents = dh.IntPtr(listingPriceCents)
+// WithLogger sets the logger used for rotation diagnostics.
+func (a *InventoryAdapter) WithLogger(l observability.Logger) *InventoryAdapter {
+	if l != nil {
+		a.logger = l
 	}
-	resp, err := a.client.UpdateInventory(ctx, inventoryID, update)
+	return a
+}
+
+// UpdateInventoryStatus PATCHes /inventory/:id with the new status, listing
+// price, and (when set) cert image URLs. When update.Status == "listed" and
+// a rotator is configured, PSA auth/rate-limit errors trigger key rotation.
+// On exhaustion, the returned error wraps dh.ErrPSAKeysExhausted.
+func (a *InventoryAdapter) UpdateInventoryStatus(ctx context.Context, inventoryID int, update dhlisting.DHInventoryStatusUpdate) (int, error) {
+	dhUpdate := dh.InventoryUpdate{Status: update.Status}
+	if update.ListingPriceCents > 0 {
+		dhUpdate.ListingPriceCents = dh.IntPtr(update.ListingPriceCents)
+	}
+	if update.CertImageURLFront != "" {
+		dhUpdate.CertImageURLFront = update.CertImageURLFront
+	}
+	if update.CertImageURLBack != "" {
+		dhUpdate.CertImageURLBack = update.CertImageURLBack
+	}
+
+	var (
+		resp *dh.InventoryResult
+		err  error
+	)
+	if update.Status == "listed" && a.rotator != nil {
+		resp, err = dh.UpdateInventoryWithRotation(
+			ctx, inventoryID, dhUpdate,
+			a.client.UpdateInventory,
+			a.rotator.RotatePSAKey,
+			a.logger,
+			"dh listing",
+		)
+	} else {
+		resp, err = a.client.UpdateInventory(ctx, inventoryID, dhUpdate)
+	}
 	if err != nil {
 		return 0, err
 	}

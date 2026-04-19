@@ -460,12 +460,12 @@ func TestInventoryItem_ListingPriceCents_Serialization(t *testing.T) {
 
 func TestInventoryItem_CertImageURL_Serialization(t *testing.T) {
 	tests := []struct {
-		name       string
-		item       InventoryItem
-		wantFront  string
-		wantBack   string
-		hasFront   bool
-		hasBack    bool
+		name      string
+		item      InventoryItem
+		wantFront string
+		wantBack  string
+		hasFront  bool
+		hasBack   bool
 	}{
 		{
 			name: "both URLs set",

@@ -5,8 +5,12 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	"github.com/guarzo/slabledger/internal/domain/dhlisting"
+	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
+	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
 // --- Local mocks (inline interface fields, not central mocks) ---
@@ -402,7 +406,7 @@ func TestInventoryAdapter_UpdateInventoryStatus_Success(t *testing.T) {
 	}
 
 	adapter := NewInventoryAdapter(mock)
-	_, err := adapter.UpdateInventoryStatus(context.Background(), 42, "listed", 0)
+	_, err := adapter.UpdateInventoryStatus(context.Background(), 42, dhlisting.DHInventoryStatusUpdate{Status: "listed"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -457,7 +461,7 @@ func TestInventoryAdapter_UpdateInventoryStatus_Error(t *testing.T) {
 	}
 
 	adapter := NewInventoryAdapter(mock)
-	_, err := adapter.UpdateInventoryStatus(context.Background(), 1, "listed", 0)
+	_, err := adapter.UpdateInventoryStatus(context.Background(), 1, dhlisting.DHInventoryStatusUpdate{Status: "listed"})
 	if !errors.Is(err, wantErr) {
 		t.Errorf("error: got %v, want %v", err, wantErr)
 	}
@@ -484,4 +488,78 @@ func TestInventoryAdapter_SyncChannels_Error(t *testing.T) {
 // intPtr is a test helper that returns a pointer to v.
 func intPtr(v int) *int {
 	return &v
+}
+
+// fakeDHListerClient is a minimal stand-in for the subset of *dh.Client
+// used by InventoryAdapter. It also implements dh.PSAKeyRotator.
+type fakeDHListerClient struct {
+	updateFn func(ctx context.Context, id int, upd dh.InventoryUpdate) (*dh.InventoryResult, error)
+	syncFn   func(ctx context.Context, id int, channels []string) (*dh.ChannelSyncResponse, error)
+	rotateFn func() bool
+	resetFn  func()
+}
+
+func (f *fakeDHListerClient) UpdateInventory(ctx context.Context, id int, upd dh.InventoryUpdate) (*dh.InventoryResult, error) {
+	return f.updateFn(ctx, id, upd)
+}
+
+func (f *fakeDHListerClient) SyncChannels(ctx context.Context, id int, channels []string) (*dh.ChannelSyncResponse, error) {
+	if f.syncFn != nil {
+		return f.syncFn(ctx, id, channels)
+	}
+	return &dh.ChannelSyncResponse{}, nil
+}
+
+func (f *fakeDHListerClient) RotatePSAKey() bool {
+	if f.rotateFn != nil {
+		return f.rotateFn()
+	}
+	return false
+}
+
+func (f *fakeDHListerClient) ResetPSAKeyRotation() {
+	if f.resetFn != nil {
+		f.resetFn()
+	}
+}
+
+func TestInventoryAdapter_UpdateInventoryStatus_PassesImagesAndRotates(t *testing.T) {
+	var capturedUpdates []dh.InventoryUpdate
+	rotateCalls := 0
+	updateErrs := []error{
+		apperrors.ProviderAuthFailed("dh", errors.New("HTTP 401")), // first call: 401
+		nil, // second call: success
+	}
+
+	fake := &fakeDHListerClient{
+		updateFn: func(_ context.Context, id int, upd dh.InventoryUpdate) (*dh.InventoryResult, error) {
+			capturedUpdates = append(capturedUpdates, upd)
+			idx := len(capturedUpdates) - 1
+			if idx < len(updateErrs) && updateErrs[idx] != nil {
+				return nil, updateErrs[idx]
+			}
+			return &dh.InventoryResult{DHInventoryID: id, Status: upd.Status, ListingPriceCents: 1000}, nil
+		},
+		rotateFn: func() bool {
+			rotateCalls++
+			return rotateCalls <= 1 // allow exactly one rotation
+		},
+	}
+
+	a := NewInventoryAdapter(fake)
+	a.WithLogger(observability.NewNoopLogger())
+
+	priceOut, err := a.UpdateInventoryStatus(context.Background(), 42, dhlisting.DHInventoryStatusUpdate{
+		Status:            "listed",
+		ListingPriceCents: 1000,
+		CertImageURLFront: "https://example.com/front.jpg",
+		CertImageURLBack:  "https://example.com/back.jpg",
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1000, priceOut)
+
+	require.Len(t, capturedUpdates, 2, "expected one 401 then one retry")
+	require.Equal(t, "https://example.com/front.jpg", capturedUpdates[0].CertImageURLFront)
+	require.Equal(t, "https://example.com/back.jpg", capturedUpdates[0].CertImageURLBack)
+	require.Equal(t, 1, rotateCalls)
 }

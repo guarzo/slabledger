@@ -197,7 +197,12 @@ func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []stri
 			continue
 		}
 
-		dhListingPrice, err := s.lister.UpdateInventoryStatus(ctx, p.DHInventoryID, inventory.DHStatusListed, listingPrice)
+		dhListingPrice, err := s.lister.UpdateInventoryStatus(ctx, p.DHInventoryID, DHInventoryStatusUpdate{
+			Status:            inventory.DHStatusListed,
+			ListingPriceCents: listingPrice,
+			CertImageURLFront: p.FrontImageURL,
+			CertImageURLBack:  p.BackImageURL,
+		})
 		if err != nil {
 			if apperrors.HasErrorCode(err, apperrors.ErrCodeProviderNotFound) {
 				s.logger.Error(ctx, "dh listing: stale inventory ID — resetting for re-push",
@@ -230,7 +235,9 @@ func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []stri
 				observability.Int("inventoryID", p.DHInventoryID),
 				observability.Err(err))
 			// Revert status so the item doesn't stay "listed" without channel sync.
-			if _, revertErr := s.lister.UpdateInventoryStatus(ctx, p.DHInventoryID, inventory.DHStatusInStock, 0); revertErr != nil {
+			if _, revertErr := s.lister.UpdateInventoryStatus(ctx, p.DHInventoryID, DHInventoryStatusUpdate{
+				Status: inventory.DHStatusInStock,
+			}); revertErr != nil {
 				s.logger.Error(ctx, "dh listing: failed to revert status after sync failure",
 					observability.String("cert", p.CertNumber),
 					observability.Int("inventoryID", p.DHInventoryID),
