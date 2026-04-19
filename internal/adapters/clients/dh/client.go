@@ -337,6 +337,52 @@ func IsPSARateLimitError(err error) bool {
 		strings.Contains(msg, "daily limit reached")
 }
 
+// ErrPSAKeysExhausted is returned by UpdateInventoryWithRotation when all
+// configured PSA API keys have been rotated through without success. The
+// wrapped cause is the final underlying DH error.
+var ErrPSAKeysExhausted = goerrors.New("dh: PSA keys exhausted")
+
+// IsPSAAuthError returns true when err represents a PSA auth failure
+// surfaced through the DH enterprise PATCH /inventory/:id response (HTTP 401).
+// DH maps 401 through httpx to apperrors.ErrCodeProviderAuth.
+func IsPSAAuthError(err error) bool {
+	return apperrors.HasErrorCode(err, apperrors.ErrCodeProviderAuth)
+}
+
+// UpdateInventoryWithRotation calls doUpdate, rotating PSA API keys on 401
+// auth errors and 422 PSA rate-limit errors. rotateFn should be nil when
+// the caller doesn't support key rotation (in which case this helper reduces
+// to a plain doUpdate call). On exhaustion, returns ErrPSAKeysExhausted
+// wrapping the final underlying error.
+func UpdateInventoryWithRotation(
+	ctx context.Context,
+	inventoryID int,
+	update InventoryUpdate,
+	doUpdate func(context.Context, int, InventoryUpdate) (*InventoryResult, error),
+	rotateFn func() bool,
+	logger observability.Logger,
+	logPrefix string,
+) (*InventoryResult, error) {
+	resp, err := doUpdate(ctx, inventoryID, update)
+	if err == nil || rotateFn == nil {
+		return resp, err
+	}
+
+	for IsPSAAuthError(err) || IsPSARateLimitError(err) {
+		if !rotateFn() {
+			return nil, fmt.Errorf("%w: %w", ErrPSAKeysExhausted, err)
+		}
+		logger.Info(ctx, logPrefix+": PSA key rejected, rotated to next key",
+			observability.Int("inventory_id", inventoryID))
+		resp, err = doUpdate(ctx, inventoryID, update)
+		if err == nil {
+			return resp, nil
+		}
+	}
+
+	return nil, err
+}
+
 // ResolveCertWithRotation calls resolve, rotating PSA API keys on rate limit errors.
 // rotateFn should be nil when the resolver doesn't support key rotation.
 func ResolveCertWithRotation(
