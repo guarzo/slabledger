@@ -37,11 +37,11 @@ type DHReconcileResetter interface {
 
 // ReconcileResult summarises a reconciliation run.
 type ReconcileResult struct {
-	Scanned     int      // DH-linked unsold purchases examined (DHInventoryID != 0)
-	MissingOnDH int      // purchases whose DHInventoryID was not present on DH
-	Reset       int      // purchases successfully flipped to pending
-	Errors      []string // per-item reset errors (purchaseID: message)
-	ResetIDs    []string // purchase IDs that were reset
+	Scanned     int      `json:"scanned"`     // DH-linked unsold purchases examined (DHInventoryID != 0)
+	MissingOnDH int      `json:"missingOnDH"` // purchases whose DHInventoryID was not present on DH
+	Reset       int      `json:"reset"`       // purchases successfully flipped to pending
+	Errors      []string `json:"errors"`      // per-item reset errors (purchaseID: message)
+	ResetIDs    []string `json:"resetIDs"`    // purchase IDs that were reset
 }
 
 // Reconciler detects drift between local DH linkage and the authoritative DH
