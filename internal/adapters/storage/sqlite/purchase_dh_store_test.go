@@ -384,6 +384,44 @@ func TestResetDHFieldsForRepushDueToDelete_SetsTimestamp(t *testing.T) {
 		"dh_unlisted_detected_at (%v) should be >= before (%v)", *got.DHUnlistedDetectedAt, before)
 }
 
+// TestClearDHUnlistedDetectedAt_Nils verifies the listing service's clear path:
+// after a successful re-list, the timestamp is nulled out so the UI badge disappears.
+func TestClearDHUnlistedDetectedAt_Nils(t *testing.T) {
+	repo := setupCampaignsRepo(t)
+	ctx := context.Background()
+	now := time.Now().Truncate(time.Second)
+
+	c := &inventory.Campaign{ID: "camp-clear", Name: "Active", Phase: inventory.PhaseActive, CreatedAt: now, UpdatedAt: now}
+	require.NoError(t, repo.CreateCampaign(ctx, c))
+
+	p := &inventory.Purchase{
+		ID:            "pur-clear-1",
+		CampaignID:    "camp-clear",
+		CardName:      "Blastoise",
+		CertNumber:    "66554433",
+		Grader:        "PSA",
+		GradeValue:    9,
+		BuyCostCents:  40000,
+		PurchaseDate:  "2026-01-01",
+		DHInventoryID: 77,
+		CreatedAt:     now,
+		UpdatedAt:     now,
+	}
+	require.NoError(t, repo.CreatePurchase(ctx, p))
+
+	require.NoError(t, repo.ResetDHFieldsForRepushDueToDelete(ctx, p.ID))
+	// Sanity: timestamp is set before we clear it.
+	seeded, err := repo.GetPurchase(ctx, p.ID)
+	require.NoError(t, err)
+	require.NotNil(t, seeded.DHUnlistedDetectedAt)
+
+	require.NoError(t, repo.ClearDHUnlistedDetectedAt(ctx, p.ID))
+
+	got, err := repo.GetPurchase(ctx, p.ID)
+	require.NoError(t, err)
+	assert.Nil(t, got.DHUnlistedDetectedAt)
+}
+
 // TestPurchaseStore_ListDHPriceDrift verifies the query returns exactly the
 // unsold purchases whose reviewed price diverges from dh_listing_price_cents.
 // Each case seeds one or more purchases and asserts which IDs are returned.
