@@ -141,6 +141,18 @@ Runs a `DELETE FROM card_access_log WHERE accessed_at < ...` query using the `ac
 | `Enabled` | `SESSION_CLEANUP_ENABLED` | `true` | Enable/disable |
 | `Interval` | `SESSION_CLEANUP_INTERVAL` | `1h` | How often to run |
 
+### DH Inventory Reconciliation
+
+**File:** `dh_reconcile.go`
+**Purpose:** Hourly drift scan that diffs local DH linkage against a fresh DH inventory snapshot. Purchases whose `dh_inventory_id` is no longer present on DH have their local DH fields cleared so the push scheduler re-enrolls them as `in_stock` on its next tick.
+
+| Config | Env Var | Default | Description |
+|--------|---------|---------|-------------|
+| `Enabled` | `DH_RECONCILE_ENABLED` | `true` | Enable/disable |
+| `Interval` | `DH_RECONCILE_INTERVAL` | `1h` | How often to run |
+
+A manual trigger is available at `POST /api/admin/dh-reconcile/trigger` (admin-only).
+
 ## Startup Timing
 
 Schedulers coordinate their startup to avoid conflicts:

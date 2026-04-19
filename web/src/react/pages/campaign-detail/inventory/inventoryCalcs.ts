@@ -66,10 +66,35 @@ export function needsAttention(item: AgingItem, status = getReviewStatus(item)):
   return false;
 }
 
-// isReadyToList: received (intake complete), pushed to DH inventory, but not yet listed.
-// Used to surface items that a human can review price on before flipping live.
+// isReadyToList: received (intake complete), pushed to DH inventory, not yet
+// listed, AND has a reviewed price. Without a reviewed price the "List on DH"
+// action would 409, so those items belong in `needsPriceReview` instead.
 export function isReadyToList(item: AgingItem): boolean {
-  return !!item.purchase.receivedAt && !!item.purchase.dhInventoryId && item.purchase.dhStatus !== 'listed';
+  return (
+    !!item.purchase.receivedAt &&
+    !!item.purchase.dhInventoryId &&
+    item.purchase.dhStatus !== 'listed' &&
+    (item.purchase.reviewedPriceCents ?? 0) > 0
+  );
+}
+
+// needsPriceReview: received, pushed to DH, not listed, but no reviewed price.
+// Drives the "Set price" row button (which expands the row to reveal the
+// PriceDecisionBar) rather than a "List on DH" button that would hit a 409.
+export function needsPriceReview(item: AgingItem): boolean {
+  return (
+    !!item.purchase.receivedAt &&
+    !!item.purchase.dhInventoryId &&
+    item.purchase.dhStatus !== 'listed' &&
+    (item.purchase.reviewedPriceCents ?? 0) === 0
+  );
+}
+
+// wasUnlistedFromDH: the DH reconciler detected this item was deleted
+// from DH's authoritative inventory snapshot. Drives the
+// "Re-list (removed from DH)" row badge. Clears on successful re-list.
+export function wasUnlistedFromDH(item: AgingItem): boolean {
+  return !!item.purchase.dhUnlistedDetectedAt;
 }
 
 export type FilterTab = 'needs_attention' | 'sell_sheet' | 'all' | 'in_hand' | 'ready_to_list' | 'awaiting_intake';

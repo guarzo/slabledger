@@ -1,8 +1,10 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
 
+	"github.com/guarzo/slabledger/internal/domain/dhlisting"
 	domainobs "github.com/guarzo/slabledger/internal/domain/observability"
 )
 
@@ -45,4 +47,60 @@ func (h *DHHandler) HandleReconcile(w http.ResponseWriter, r *http.Request) {
 		Errors:      result.Errors,
 		ResetIDs:    result.ResetIDs,
 	})
+}
+
+// DHReconcileRunner runs a reconcile cycle on demand and exposes the last
+// result. The scheduler.DHReconcileScheduler already satisfies this interface.
+type DHReconcileRunner interface {
+	RunOnce(ctx context.Context) error
+	GetLastRunResult() *dhlisting.ReconcileResult
+}
+
+// DHReconcileHandler exposes the DH reconciler over HTTP for admin-triggered
+// runs. Mirrors the shape of PSASyncHandler's manual refresh path.
+type DHReconcileHandler struct {
+	runner DHReconcileRunner
+	logger domainobs.Logger
+}
+
+// NewDHReconcileHandler constructs a DHReconcileHandler. A nil runner is
+// allowed and causes HandleTrigger to return 503 so deployments without a
+// configured scheduler still boot.
+func NewDHReconcileHandler(runner DHReconcileRunner, logger domainobs.Logger) *DHReconcileHandler {
+	return &DHReconcileHandler{runner: runner, logger: logger}
+}
+
+// HandleTrigger runs the reconciler synchronously and returns its result.
+// POST /api/admin/dh-reconcile/trigger
+func (h *DHReconcileHandler) HandleTrigger(w http.ResponseWriter, r *http.Request) {
+	if h.runner == nil {
+		writeError(w, http.StatusServiceUnavailable, "DH reconcile not configured")
+		return
+	}
+	if err := h.runner.RunOnce(r.Context()); err != nil {
+		h.logger.Error(r.Context(), "dh reconcile trigger failed", domainobs.Err(err))
+		writeError(w, http.StatusBadGateway, "DH reconcile failed")
+		return
+	}
+	result := h.runner.GetLastRunResult()
+	if result == nil {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"scanned":     0,
+			"missingOnDH": 0,
+			"reset":       0,
+			"errors":      []string{},
+			"resetIds":    []string{},
+		})
+		return
+	}
+	// Normalize nil slices so the wire payload always emits `[]` not `null` —
+	// keeps the response shape identical to the zero-body case and avoids
+	// forcing every client to tolerate both forms.
+	if result.Errors == nil {
+		result.Errors = []string{}
+	}
+	if result.ResetIDs == nil {
+		result.ResetIDs = []string{}
+	}
+	writeJSON(w, http.StatusOK, result)
 }

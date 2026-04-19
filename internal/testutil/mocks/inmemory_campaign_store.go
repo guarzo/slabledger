@@ -26,67 +26,68 @@ type InMemoryCampaignStore struct {
 	CashflowConfig  *inventory.CashflowConfig
 
 	// Optional overrides (Fn-field pattern)
-	CreateCampaignFn               func(ctx context.Context, c *inventory.Campaign) error
-	GetCampaignFn                  func(ctx context.Context, id string) (*inventory.Campaign, error)
-	ListCampaignsFn                func(ctx context.Context, activeOnly bool) ([]inventory.Campaign, error)
-	UpdateCampaignFn               func(ctx context.Context, c *inventory.Campaign) error
-	DeleteCampaignFn               func(ctx context.Context, id string) error
-	CreatePurchaseFn               func(ctx context.Context, p *inventory.Purchase) error
-	GetPurchaseFn                  func(ctx context.Context, id string) (*inventory.Purchase, error)
-	DeletePurchaseFn               func(ctx context.Context, id string) error
-	ListPurchasesByCampaignFn      func(ctx context.Context, campaignID string, limit, offset int) ([]inventory.Purchase, error)
-	ListUnsoldPurchasesFn          func(ctx context.Context, campaignID string) ([]inventory.Purchase, error)
-	ListAllUnsoldPurchasesFn       func(ctx context.Context) ([]inventory.Purchase, error)
-	CountPurchasesByCampaignFn     func(ctx context.Context, campaignID string) (int, error)
-	CreateSaleFn                   func(ctx context.Context, s *inventory.Sale) error
-	GetSaleByPurchaseIDFn          func(ctx context.Context, purchaseID string) (*inventory.Sale, error)
-	ListSalesByCampaignFn          func(ctx context.Context, campaignID string, limit, offset int) ([]inventory.Sale, error)
-	DeleteSaleFn                   func(ctx context.Context, saleID string) error
-	DeleteSaleByPurchaseIDFn       func(ctx context.Context, purchaseID string) error
-	GetCampaignPNLFn               func(ctx context.Context, campaignID string) (*inventory.CampaignPNL, error)
-	GetPNLByChannelFn              func(ctx context.Context, campaignID string) ([]inventory.ChannelPNL, error)
-	GetDailySpendFn                func(ctx context.Context, campaignID string, days int) ([]inventory.DailySpend, error)
-	GetDaysToSellDistributionFn    func(ctx context.Context, campaignID string) ([]inventory.DaysToSellBucket, error)
-	GetPerformanceByGradeFn        func(ctx context.Context, campaignID string) ([]inventory.GradePerformance, error)
-	GetPurchasesWithSalesFn        func(ctx context.Context, campaignID string) ([]inventory.PurchaseWithSale, error)
-	GetPurchaseByCertNumberFn      func(ctx context.Context, grader, certNumber string) (*inventory.Purchase, error)
-	UpdatePurchaseCLValueFn        func(ctx context.Context, id string, clValueCents int, population int) error
-	UpdatePurchaseCLSyncedAtFn     func(ctx context.Context, id string, syncedAt string) error
-	UpdatePurchaseMMValueFn        func(ctx context.Context, id string, mmValueCents int) error
-	UpdatePurchaseCardMetadataFn   func(ctx context.Context, id string, cardName, cardNumber, setName string) error
-	UpdatePurchaseImagesFn         func(ctx context.Context, id string, frontURL, backURL string) error
-	UpdatePurchaseGradeFn          func(ctx context.Context, id string, gradeValue float64) error
-	UpdateExternalPurchaseFieldsFn func(ctx context.Context, id string, p *inventory.Purchase) error
-	UpdatePurchaseMarketSnapshotFn func(ctx context.Context, id string, snap inventory.MarketSnapshotData) error
-	UpdatePurchaseCampaignFn       func(ctx context.Context, purchaseID, campaignID string, sourcingFeeCents int) error
-	UpdatePurchasePSAFieldsFn      func(ctx context.Context, id string, fields inventory.PSAUpdateFields) error
-	GetAllPurchasesWithSalesFn     func(ctx context.Context, opts ...inventory.PurchaseFilterOpt) ([]inventory.PurchaseWithSale, error)
-	GetGlobalPNLByChannelFn        func(ctx context.Context) ([]inventory.ChannelPNL, error)
-	GetPurchasesByCertNumbersFn    func(ctx context.Context, certNumbers []string) (map[string]*inventory.Purchase, error)
-	UpdatePurchaseDHFieldsFn       func(ctx context.Context, id string, update inventory.DHFieldsUpdate) error
-	GetPurchasesByDHCertStatusFn   func(ctx context.Context, status string, limit int) ([]inventory.Purchase, error)
-	UpdatePurchaseDHPushStatusFn   func(ctx context.Context, id string, status string) error
-	UpdatePurchaseDHStatusFn       func(ctx context.Context, id string, status string) error
-	UpdatePurchaseDHCardIDFn       func(ctx context.Context, id string, cardID int) error
-	UpdatePurchaseDHCandidatesFn   func(ctx context.Context, id string, candidatesJSON string) error
-	UpdatePurchaseDHHoldReasonFn   func(ctx context.Context, id string, reason string) error
-	SetHeldWithReasonFn            func(ctx context.Context, purchaseID string, reason string) error
-	ApproveHeldPurchaseFn          func(ctx context.Context, purchaseID string) error
-	ResetDHFieldsForRepushFn       func(ctx context.Context, purchaseID string) error
-	UpdatePurchaseDHPriceSyncFn    func(ctx context.Context, id string, listingPriceCents int, syncedAt time.Time) error
-	ListDHPriceDriftFn             func(ctx context.Context) ([]inventory.Purchase, error)
-	GetDHPushConfigFn              func(ctx context.Context) (*inventory.DHPushConfig, error)
-	SaveDHPushConfigFn             func(ctx context.Context, cfg *inventory.DHPushConfig) error
-	GetPurchasesByDHPushStatusFn   func(ctx context.Context, status string, limit int) ([]inventory.Purchase, error)
-	CountDHPipelineHealthFn        func(ctx context.Context) (inventory.DHPipelineHealth, error)
-	GetSellSheetItemsFn            func(ctx context.Context) ([]string, error)
-	AddSellSheetItemsFn            func(ctx context.Context, purchaseIDs []string) error
-	RemoveSellSheetItemsFn         func(ctx context.Context, purchaseIDs []string) error
-	ClearSellSheetFn               func(ctx context.Context) error
-	OpenFlagPurchaseIDsFn          func(ctx context.Context) (map[string]int64, error)
-	GetCapitalRawDataFn            func(ctx context.Context) (*inventory.CapitalRawData, error)
-	GetInvoiceSellThroughFn        func(ctx context.Context, invoiceDate string) (inventory.InvoiceSellThrough, error)
-	UpdateCashflowConfigFn         func(ctx context.Context, cfg *inventory.CashflowConfig) error
+	CreateCampaignFn                    func(ctx context.Context, c *inventory.Campaign) error
+	GetCampaignFn                       func(ctx context.Context, id string) (*inventory.Campaign, error)
+	ListCampaignsFn                     func(ctx context.Context, activeOnly bool) ([]inventory.Campaign, error)
+	UpdateCampaignFn                    func(ctx context.Context, c *inventory.Campaign) error
+	DeleteCampaignFn                    func(ctx context.Context, id string) error
+	CreatePurchaseFn                    func(ctx context.Context, p *inventory.Purchase) error
+	GetPurchaseFn                       func(ctx context.Context, id string) (*inventory.Purchase, error)
+	DeletePurchaseFn                    func(ctx context.Context, id string) error
+	ListPurchasesByCampaignFn           func(ctx context.Context, campaignID string, limit, offset int) ([]inventory.Purchase, error)
+	ListUnsoldPurchasesFn               func(ctx context.Context, campaignID string) ([]inventory.Purchase, error)
+	ListAllUnsoldPurchasesFn            func(ctx context.Context) ([]inventory.Purchase, error)
+	CountPurchasesByCampaignFn          func(ctx context.Context, campaignID string) (int, error)
+	CreateSaleFn                        func(ctx context.Context, s *inventory.Sale) error
+	GetSaleByPurchaseIDFn               func(ctx context.Context, purchaseID string) (*inventory.Sale, error)
+	ListSalesByCampaignFn               func(ctx context.Context, campaignID string, limit, offset int) ([]inventory.Sale, error)
+	DeleteSaleFn                        func(ctx context.Context, saleID string) error
+	DeleteSaleByPurchaseIDFn            func(ctx context.Context, purchaseID string) error
+	GetCampaignPNLFn                    func(ctx context.Context, campaignID string) (*inventory.CampaignPNL, error)
+	GetPNLByChannelFn                   func(ctx context.Context, campaignID string) ([]inventory.ChannelPNL, error)
+	GetDailySpendFn                     func(ctx context.Context, campaignID string, days int) ([]inventory.DailySpend, error)
+	GetDaysToSellDistributionFn         func(ctx context.Context, campaignID string) ([]inventory.DaysToSellBucket, error)
+	GetPerformanceByGradeFn             func(ctx context.Context, campaignID string) ([]inventory.GradePerformance, error)
+	GetPurchasesWithSalesFn             func(ctx context.Context, campaignID string) ([]inventory.PurchaseWithSale, error)
+	GetPurchaseByCertNumberFn           func(ctx context.Context, grader, certNumber string) (*inventory.Purchase, error)
+	UpdatePurchaseCLValueFn             func(ctx context.Context, id string, clValueCents int, population int) error
+	UpdatePurchaseCLSyncedAtFn          func(ctx context.Context, id string, syncedAt string) error
+	UpdatePurchaseMMValueFn             func(ctx context.Context, id string, mmValueCents int) error
+	UpdatePurchaseCardMetadataFn        func(ctx context.Context, id string, cardName, cardNumber, setName string) error
+	UpdatePurchaseImagesFn              func(ctx context.Context, id string, frontURL, backURL string) error
+	UpdatePurchaseGradeFn               func(ctx context.Context, id string, gradeValue float64) error
+	UpdateExternalPurchaseFieldsFn      func(ctx context.Context, id string, p *inventory.Purchase) error
+	UpdatePurchaseMarketSnapshotFn      func(ctx context.Context, id string, snap inventory.MarketSnapshotData) error
+	UpdatePurchaseCampaignFn            func(ctx context.Context, purchaseID, campaignID string, sourcingFeeCents int) error
+	UpdatePurchasePSAFieldsFn           func(ctx context.Context, id string, fields inventory.PSAUpdateFields) error
+	GetAllPurchasesWithSalesFn          func(ctx context.Context, opts ...inventory.PurchaseFilterOpt) ([]inventory.PurchaseWithSale, error)
+	GetGlobalPNLByChannelFn             func(ctx context.Context) ([]inventory.ChannelPNL, error)
+	GetPurchasesByCertNumbersFn         func(ctx context.Context, certNumbers []string) (map[string]*inventory.Purchase, error)
+	UpdatePurchaseDHFieldsFn            func(ctx context.Context, id string, update inventory.DHFieldsUpdate) error
+	GetPurchasesByDHCertStatusFn        func(ctx context.Context, status string, limit int) ([]inventory.Purchase, error)
+	UpdatePurchaseDHPushStatusFn        func(ctx context.Context, id string, status string) error
+	UpdatePurchaseDHStatusFn            func(ctx context.Context, id string, status string) error
+	UpdatePurchaseDHCardIDFn            func(ctx context.Context, id string, cardID int) error
+	UpdatePurchaseDHCandidatesFn        func(ctx context.Context, id string, candidatesJSON string) error
+	UpdatePurchaseDHHoldReasonFn        func(ctx context.Context, id string, reason string) error
+	SetHeldWithReasonFn                 func(ctx context.Context, purchaseID string, reason string) error
+	ApproveHeldPurchaseFn               func(ctx context.Context, purchaseID string) error
+	ResetDHFieldsForRepushFn            func(ctx context.Context, purchaseID string) error
+	ResetDHFieldsForRepushDueToDeleteFn func(ctx context.Context, purchaseID string) error
+	UpdatePurchaseDHPriceSyncFn         func(ctx context.Context, id string, listingPriceCents int, syncedAt time.Time) error
+	ListDHPriceDriftFn                  func(ctx context.Context) ([]inventory.Purchase, error)
+	GetDHPushConfigFn                   func(ctx context.Context) (*inventory.DHPushConfig, error)
+	SaveDHPushConfigFn                  func(ctx context.Context, cfg *inventory.DHPushConfig) error
+	GetPurchasesByDHPushStatusFn        func(ctx context.Context, status string, limit int) ([]inventory.Purchase, error)
+	CountDHPipelineHealthFn             func(ctx context.Context) (inventory.DHPipelineHealth, error)
+	GetSellSheetItemsFn                 func(ctx context.Context) ([]string, error)
+	AddSellSheetItemsFn                 func(ctx context.Context, purchaseIDs []string) error
+	RemoveSellSheetItemsFn              func(ctx context.Context, purchaseIDs []string) error
+	ClearSellSheetFn                    func(ctx context.Context) error
+	OpenFlagPurchaseIDsFn               func(ctx context.Context) (map[string]int64, error)
+	GetCapitalRawDataFn                 func(ctx context.Context) (*inventory.CapitalRawData, error)
+	GetInvoiceSellThroughFn             func(ctx context.Context, invoiceDate string) (inventory.InvoiceSellThrough, error)
+	UpdateCashflowConfigFn              func(ctx context.Context, cfg *inventory.CashflowConfig) error
 }
 
 // Compile-time interface checks.
@@ -1096,7 +1097,28 @@ func (m *InMemoryCampaignStore) ResetDHFieldsForRepush(ctx context.Context, purc
 	p.DHStatus = ""
 	p.DHListingPriceCents = 0
 	p.DHChannelsJSON = "[]"
+	p.DHHoldReason = ""
 	p.UpdatedAt = time.Now()
+	return nil
+}
+
+func (m *InMemoryCampaignStore) ResetDHFieldsForRepushDueToDelete(ctx context.Context, purchaseID string) error {
+	if m.ResetDHFieldsForRepushDueToDeleteFn != nil {
+		return m.ResetDHFieldsForRepushDueToDeleteFn(ctx, purchaseID)
+	}
+	p, ok := m.Purchases[purchaseID]
+	if !ok {
+		return inventory.ErrPurchaseNotFound
+	}
+	p.DHInventoryID = 0
+	p.DHPushStatus = inventory.DHPushStatusPending
+	p.DHStatus = ""
+	p.DHListingPriceCents = 0
+	p.DHChannelsJSON = "[]"
+	p.DHHoldReason = ""
+	now := time.Now()
+	p.DHUnlistedDetectedAt = &now
+	p.UpdatedAt = now
 	return nil
 }
 

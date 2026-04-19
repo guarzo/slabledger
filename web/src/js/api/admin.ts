@@ -2,7 +2,7 @@
  * Admin-related API methods
  */
 
-import type { APIUsageResponse, PricingDiagnosticsResponse, PriceOverrideStats, CachedAnalysis, AdvisorAnalysisType, AIUsageResponse, DHStatusResponse, DHBulkMatchResponse, DHUnmatchedResponse, DHFixMatchRequest, DHFixMatchResponse, DHSelectMatchRequest, DHPushConfig, DHReconcileResponse } from '../../types/apiStatus';
+import type { APIUsageResponse, PricingDiagnosticsResponse, PriceOverrideStats, CachedAnalysis, AdvisorAnalysisType, AIUsageResponse, DHStatusResponse, DHBulkMatchResponse, DHUnmatchedResponse, DHFixMatchRequest, DHFixMatchResponse, DHSelectMatchRequest, DHPushConfig, DHReconcileResponse, DHReconcileTriggerResult } from '../../types/apiStatus';
 import type { AllowedEmail, AdminUser, CLStatusResponse, CLSyncResult, IntegrationFailuresReport, MMStatusResponse, MMSyncResult, PSASyncStatusResponse } from '../../types/admin';
 import type { APIClient } from './client';
 import { APIError } from './client';
@@ -47,6 +47,7 @@ declare module './client' {
     saveDHPushConfig(config: DHPushConfig): Promise<DHPushConfig>;
     getPSASyncStatus(): Promise<PSASyncStatusResponse>;
     triggerPSASyncRefresh(): Promise<{ status: string }>;
+    triggerDHReconcile(): Promise<DHReconcileTriggerResult>;
   }
 }
 
@@ -206,4 +207,8 @@ proto.getPSASyncStatus = async function (this: APIClient): Promise<PSASyncStatus
 
 proto.triggerPSASyncRefresh = async function (this: APIClient) {
   return this.post<{ status: string }>('/admin/psa-sync/refresh');
+};
+
+proto.triggerDHReconcile = async function (this: APIClient) {
+  return this.post<DHReconcileTriggerResult>('/admin/dh-reconcile/trigger');
 };

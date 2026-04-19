@@ -24,17 +24,24 @@ type DHReconcilePurchaseLister interface {
 }
 
 // DHReconcileResetter atomically clears DH inventory linkage on a purchase.
+//
+// ResetDHFieldsForRepush is used by the inline listing service when a stale
+// inventory ID is detected mid-push. ResetDHFieldsForRepushDueToDelete is used
+// by the reconciler when a purchase has been unlisted on DH (inventory ID
+// missing from the authoritative snapshot); it additionally stamps
+// dh_unlisted_detected_at so the UI can surface the state.
 type DHReconcileResetter interface {
 	ResetDHFieldsForRepush(ctx context.Context, purchaseID string) error
+	ResetDHFieldsForRepushDueToDelete(ctx context.Context, purchaseID string) error
 }
 
 // ReconcileResult summarises a reconciliation run.
 type ReconcileResult struct {
-	Scanned     int      // DH-linked unsold purchases examined (DHInventoryID != 0)
-	MissingOnDH int      // purchases whose DHInventoryID was not present on DH
-	Reset       int      // purchases successfully flipped to pending
-	Errors      []string // per-item reset errors (purchaseID: message)
-	ResetIDs    []string // purchase IDs that were reset
+	Scanned     int      `json:"scanned"`     // DH-linked unsold purchases examined (DHInventoryID != 0)
+	MissingOnDH int      `json:"missingOnDH"` // purchases whose DHInventoryID was not present on DH
+	Reset       int      `json:"reset"`       // purchases successfully flipped to pending
+	Errors      []string `json:"errors"`      // per-item reset errors (purchaseID: message)
+	ResetIDs    []string `json:"resetIds"`    // purchase IDs that were reset
 }
 
 // Reconciler detects drift between local DH linkage and the authoritative DH
@@ -121,7 +128,7 @@ func (s *reconcileService) Reconcile(ctx context.Context) (ReconcileResult, erro
 		}
 		result.MissingOnDH++
 
-		if err := s.resetter.ResetDHFieldsForRepush(ctx, p.ID); err != nil {
+		if err := s.resetter.ResetDHFieldsForRepushDueToDelete(ctx, p.ID); err != nil {
 			s.logger.Warn(ctx, "dh reconcile: reset failed",
 				observability.String("purchaseID", p.ID),
 				observability.Int("dhInventoryID", p.DHInventoryID),

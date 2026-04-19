@@ -14,12 +14,18 @@ import (
 )
 
 type mockResetter struct {
-	resetErr   error
-	resetCalls []string // purchaseIDs passed to ResetDHFieldsForRepush
+	resetErr         error
+	resetCalls       []string // purchaseIDs passed to ResetDHFieldsForRepush
+	resetDeleteCalls []string // purchaseIDs passed to ResetDHFieldsForRepushDueToDelete
 }
 
 func (m *mockResetter) ResetDHFieldsForRepush(_ context.Context, purchaseID string) error {
 	m.resetCalls = append(m.resetCalls, purchaseID)
+	return m.resetErr
+}
+
+func (m *mockResetter) ResetDHFieldsForRepushDueToDelete(_ context.Context, purchaseID string) error {
+	m.resetDeleteCalls = append(m.resetDeleteCalls, purchaseID)
 	return m.resetErr
 }
 
@@ -67,6 +73,16 @@ type mockFieldsUpdater struct {
 func (m *mockFieldsUpdater) UpdatePurchaseDHFields(_ context.Context, _ string, update inventory.DHFieldsUpdate) error {
 	m.calls = append(m.calls, update)
 	return m.updateErr
+}
+
+type mockUnlistedClearer struct {
+	calls []string
+	err   error
+}
+
+func (m *mockUnlistedClearer) ClearDHUnlistedDetectedAt(_ context.Context, purchaseID string) error {
+	m.calls = append(m.calls, purchaseID)
+	return m.err
 }
 
 type mockEventRecorder struct {
@@ -159,6 +175,79 @@ func TestListPurchases_RecordsListedAndChannelSyncedEvents(t *testing.T) {
 	}
 	if syncedEvent.Source != dhevents.SourceDHListing {
 		t.Errorf("second event: expected source %s, got %s", dhevents.SourceDHListing, syncedEvent.Source)
+	}
+}
+
+// TestListPurchases_ClearsUnlistedDetectedAtOnSuccess asserts that after a
+// successful list (UpdateInventoryStatus + SyncChannels + persist all succeed),
+// the unlisted clearer is invoked with the purchase ID to remove the
+// "unlisted-on-DH" badge. A clearer error must NOT fail the list operation —
+// this is a best-effort UI cleanup.
+func TestListPurchases_ClearsUnlistedDetectedAtOnSuccess(t *testing.T) {
+	certNum := "33334444"
+	purchase := &inventory.Purchase{
+		ID:                 "purchase-clear-1",
+		CertNumber:         certNum,
+		DHInventoryID:      101,
+		DHCardID:           7,
+		ReviewedPriceCents: 75000,
+	}
+
+	tests := []struct {
+		name        string
+		clearerErr  error
+		wantListed  int
+		wantSynced  int
+		wantCallIDs []string
+	}{
+		{
+			name:        "clearer invoked with purchase ID after successful list",
+			clearerErr:  nil,
+			wantListed:  1,
+			wantSynced:  1,
+			wantCallIDs: []string{"purchase-clear-1"},
+		},
+		{
+			name:        "clearer error does not fail the listing",
+			clearerErr:  errors.New("db write failed"),
+			wantListed:  1,
+			wantSynced:  1,
+			wantCallIDs: []string{"purchase-clear-1"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			lookup := &mockPurchaseLookup{
+				purchases: map[string]*inventory.Purchase{certNum: purchase},
+			}
+			lister := &mockInventoryLister{}
+			fieldsUpdater := &mockFieldsUpdater{}
+			clearer := &mockUnlistedClearer{err: tc.clearerErr}
+
+			svc := newTestService(t, lookup,
+				WithDHListingLister(lister),
+				WithDHListingFieldsUpdater(fieldsUpdater),
+				WithDHListingUnlistedClearer(clearer),
+			)
+
+			result := svc.ListPurchases(context.Background(), []string{certNum})
+
+			if result.Listed != tc.wantListed {
+				t.Errorf("Listed: got %d, want %d", result.Listed, tc.wantListed)
+			}
+			if result.Synced != tc.wantSynced {
+				t.Errorf("Synced: got %d, want %d", result.Synced, tc.wantSynced)
+			}
+			if len(clearer.calls) != len(tc.wantCallIDs) {
+				t.Fatalf("clearer.calls: got %d, want %d (%v)", len(clearer.calls), len(tc.wantCallIDs), clearer.calls)
+			}
+			for i, want := range tc.wantCallIDs {
+				if clearer.calls[i] != want {
+					t.Errorf("clearer.calls[%d]: got %q, want %q", i, clearer.calls[i], want)
+				}
+			}
+		})
 	}
 }
 

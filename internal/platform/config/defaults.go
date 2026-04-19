@@ -110,9 +110,8 @@ func Default() Config {
 			Window:      "30d",
 		},
 		DHReconcile: DHReconcileConfig{
-			Enabled:     true,
-			Interval:    24 * time.Hour,
-			RefreshHour: 6, // 06:00 UTC, after the 04:00/05:00 refresh cluster
+			Enabled:  true,
+			Interval: 1 * time.Hour,
 		},
 		DHPriceSync: DHPriceSyncConfig{
 			Enabled:  true,

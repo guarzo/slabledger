@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/guarzo/slabledger/internal/domain/dhlisting"
+	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
 )
 
@@ -159,5 +160,111 @@ func TestHandleReconcile_ConcurrentRunsRejected(t *testing.T) {
 
 	if first.Code != http.StatusOK {
 		t.Errorf("first call: got %d, want 200", first.Code)
+	}
+}
+
+// mockDHReconcileRunner is a test double for handlers.DHReconcileRunner.
+// Uses the Fn-field pattern to match the project's mock conventions.
+type mockDHReconcileRunner struct {
+	RunOnceFn          func(ctx context.Context) error
+	GetLastRunResultFn func() *dhlisting.ReconcileResult
+}
+
+func (m *mockDHReconcileRunner) RunOnce(ctx context.Context) error {
+	if m.RunOnceFn != nil {
+		return m.RunOnceFn(ctx)
+	}
+	return nil
+}
+
+func (m *mockDHReconcileRunner) GetLastRunResult() *dhlisting.ReconcileResult {
+	if m.GetLastRunResultFn != nil {
+		return m.GetLastRunResultFn()
+	}
+	return nil
+}
+
+// TestDHReconcileHandler_Trigger exercises the admin trigger endpoint.
+// The runner contract is RunOnce + GetLastRunResult, mirroring
+// DHReconcileScheduler so it plugs in directly at wiring time.
+func TestDHReconcileHandler_Trigger(t *testing.T) {
+	tests := []struct {
+		name            string
+		runner          *mockDHReconcileRunner
+		wantStatus      int
+		expectResult    bool // success case asserts Scanned=5/Reset=2 in the unmarshalled body
+		expectZeroBody  bool // success-but-nil-result case asserts the fallback zero-shape body
+	}{
+		{
+			name: "success returns result",
+			runner: &mockDHReconcileRunner{
+				RunOnceFn: func(context.Context) error { return nil },
+				GetLastRunResultFn: func() *dhlisting.ReconcileResult {
+					return &dhlisting.ReconcileResult{Scanned: 5, MissingOnDH: 2, Reset: 2}
+				},
+			},
+			wantStatus:   http.StatusOK,
+			expectResult: true,
+		},
+		{
+			name: "runner error returns 502",
+			runner: &mockDHReconcileRunner{
+				RunOnceFn: func(context.Context) error { return errors.New("boom") },
+			},
+			wantStatus: http.StatusBadGateway,
+		},
+		{
+			name: "success with nil last result returns 200 zero body",
+			runner: &mockDHReconcileRunner{
+				RunOnceFn:          func(context.Context) error { return nil },
+				GetLastRunResultFn: func() *dhlisting.ReconcileResult { return nil },
+			},
+			wantStatus:     http.StatusOK,
+			expectZeroBody: true,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			h := NewDHReconcileHandler(tc.runner, observability.NewNoopLogger())
+			req := httptest.NewRequest(http.MethodPost, "/api/admin/dh-reconcile/trigger", nil)
+			rec := httptest.NewRecorder()
+			h.HandleTrigger(rec, req)
+			if rec.Code != tc.wantStatus {
+				t.Errorf("status: got %d, want %d", rec.Code, tc.wantStatus)
+			}
+			if tc.expectResult {
+				var got dhlisting.ReconcileResult
+				if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+					t.Fatalf("unmarshal body: %v", err)
+				}
+				if got.Scanned != 5 || got.Reset != 2 {
+					t.Errorf("result: got %+v, want Scanned=5 Reset=2", got)
+				}
+			}
+			if tc.expectZeroBody {
+				var body map[string]any
+				if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+					t.Fatalf("unmarshal zero body: %v", err)
+				}
+				for _, key := range []string{"scanned", "missingOnDH", "reset", "errors", "resetIds"} {
+					if _, ok := body[key]; !ok {
+						t.Errorf("zero body missing key %q; got %v", key, body)
+					}
+				}
+			}
+		})
+	}
+}
+
+// TestDHReconcileHandler_Trigger_NilRunner verifies that constructing the
+// handler without a runner (e.g. DH scheduler disabled) makes the endpoint
+// return 503 instead of panicking.
+func TestDHReconcileHandler_Trigger_NilRunner(t *testing.T) {
+	h := NewDHReconcileHandler(nil, observability.NewNoopLogger())
+	req := httptest.NewRequest(http.MethodPost, "/api/admin/dh-reconcile/trigger", nil)
+	rec := httptest.NewRecorder()
+	h.HandleTrigger(rec, req)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Errorf("status: got %d, want %d", rec.Code, http.StatusServiceUnavailable)
 	}
 }

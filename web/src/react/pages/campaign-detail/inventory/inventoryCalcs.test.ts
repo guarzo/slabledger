@@ -1,11 +1,18 @@
 import { describe, it, expect } from 'vitest';
-import { computeInventoryMeta, filterAndSortItems } from './inventoryCalcs';
+import {
+  computeInventoryMeta,
+  filterAndSortItems,
+  isReadyToList,
+  needsPriceReview,
+  wasUnlistedFromDH,
+} from './inventoryCalcs';
 import type { AgingItem, Purchase } from '../../../../types/campaigns';
 
 type TestPurchase = Pick<Purchase,
   'id' | 'cardName' | 'gradeValue' | 'certNumber' | 'receivedAt' |
   'campaignId' | 'clValueCents' | 'buyCostCents' | 'psaSourcingFeeCents' | 'purchaseDate' |
-  'createdAt' | 'updatedAt' | 'aiSuggestedPriceCents' | 'reviewedAt'
+  'createdAt' | 'updatedAt' | 'aiSuggestedPriceCents' | 'reviewedAt' |
+  'dhInventoryId' | 'dhStatus' | 'reviewedPriceCents' | 'dhUnlistedDetectedAt'
 > & {
   setName?: string;
   cardNumber?: string;
@@ -252,4 +259,186 @@ describe('inventoryCalcs', () => {
     });
   });
 
+  describe('isReadyToList', () => {
+    it('returns true when received, pushed to DH, not listed, and has a reviewed price', () => {
+      const item = makeItem({
+        purchase: {
+          receivedAt: '2026-04-08T00:00:00Z',
+          dhInventoryId: 42,
+          dhStatus: 'in_stock',
+          reviewedPriceCents: 9000,
+        },
+      });
+      expect(isReadyToList(item)).toBe(true);
+    });
+
+    it('returns false when reviewedPriceCents is 0', () => {
+      const item = makeItem({
+        purchase: {
+          receivedAt: '2026-04-08T00:00:00Z',
+          dhInventoryId: 42,
+          dhStatus: 'in_stock',
+          reviewedPriceCents: 0,
+        },
+      });
+      expect(isReadyToList(item)).toBe(false);
+    });
+
+    it('returns false when reviewedPriceCents is undefined', () => {
+      const item = makeItem({
+        purchase: {
+          receivedAt: '2026-04-08T00:00:00Z',
+          dhInventoryId: 42,
+          dhStatus: 'in_stock',
+          reviewedPriceCents: undefined,
+        },
+      });
+      expect(isReadyToList(item)).toBe(false);
+    });
+
+    it('returns false when not received', () => {
+      const item = makeItem({
+        purchase: {
+          receivedAt: undefined,
+          dhInventoryId: 42,
+          dhStatus: 'in_stock',
+          reviewedPriceCents: 9000,
+        },
+      });
+      expect(isReadyToList(item)).toBe(false);
+    });
+
+    it('returns false when not pushed to DH', () => {
+      const item = makeItem({
+        purchase: {
+          receivedAt: '2026-04-08T00:00:00Z',
+          dhInventoryId: undefined,
+          dhStatus: 'in_stock',
+          reviewedPriceCents: 9000,
+        },
+      });
+      expect(isReadyToList(item)).toBe(false);
+    });
+
+    it('returns false when already listed', () => {
+      const item = makeItem({
+        purchase: {
+          receivedAt: '2026-04-08T00:00:00Z',
+          dhInventoryId: 42,
+          dhStatus: 'listed',
+          reviewedPriceCents: 9000,
+        },
+      });
+      expect(isReadyToList(item)).toBe(false);
+    });
+  });
+
+  describe('needsPriceReview', () => {
+    it('returns true when received + pushed to DH + not listed + no reviewed price', () => {
+      const item = makeItem({
+        purchase: {
+          receivedAt: '2026-04-08T00:00:00Z',
+          dhInventoryId: 42,
+          dhStatus: 'in_stock',
+          reviewedPriceCents: 0,
+        },
+      });
+      expect(needsPriceReview(item)).toBe(true);
+    });
+
+    it('returns true when reviewedPriceCents is undefined', () => {
+      const item = makeItem({
+        purchase: {
+          receivedAt: '2026-04-08T00:00:00Z',
+          dhInventoryId: 42,
+          dhStatus: 'in_stock',
+          reviewedPriceCents: undefined,
+        },
+      });
+      expect(needsPriceReview(item)).toBe(true);
+    });
+
+    it('returns false when a reviewed price is set', () => {
+      const item = makeItem({
+        purchase: {
+          receivedAt: '2026-04-08T00:00:00Z',
+          dhInventoryId: 42,
+          dhStatus: 'in_stock',
+          reviewedPriceCents: 9000,
+        },
+      });
+      expect(needsPriceReview(item)).toBe(false);
+    });
+
+    it('returns false when not received', () => {
+      const item = makeItem({
+        purchase: {
+          receivedAt: undefined,
+          dhInventoryId: 42,
+          dhStatus: 'in_stock',
+          reviewedPriceCents: 0,
+        },
+      });
+      expect(needsPriceReview(item)).toBe(false);
+    });
+
+    it('returns false when not pushed to DH', () => {
+      const item = makeItem({
+        purchase: {
+          receivedAt: '2026-04-08T00:00:00Z',
+          dhInventoryId: undefined,
+          dhStatus: 'in_stock',
+          reviewedPriceCents: 0,
+        },
+      });
+      expect(needsPriceReview(item)).toBe(false);
+    });
+
+    it('returns false when already listed', () => {
+      const item = makeItem({
+        purchase: {
+          receivedAt: '2026-04-08T00:00:00Z',
+          dhInventoryId: 42,
+          dhStatus: 'listed',
+          reviewedPriceCents: 0,
+        },
+      });
+      expect(needsPriceReview(item)).toBe(false);
+    });
+
+    it('is mutually exclusive with isReadyToList for any given item', () => {
+      const base = {
+        receivedAt: '2026-04-08T00:00:00Z',
+        dhInventoryId: 42,
+        dhStatus: 'in_stock',
+      } as const;
+
+      const withPrice = makeItem({ purchase: { ...base, reviewedPriceCents: 9000 } });
+      expect(isReadyToList(withPrice)).toBe(true);
+      expect(needsPriceReview(withPrice)).toBe(false);
+
+      const withoutPrice = makeItem({ purchase: { ...base, reviewedPriceCents: 0 } });
+      expect(isReadyToList(withoutPrice)).toBe(false);
+      expect(needsPriceReview(withoutPrice)).toBe(true);
+    });
+  });
+
+  describe('wasUnlistedFromDH', () => {
+    it('returns true when dhUnlistedDetectedAt is set', () => {
+      const item = makeItem({
+        purchase: { dhUnlistedDetectedAt: '2026-04-15T12:00:00Z' },
+      });
+      expect(wasUnlistedFromDH(item)).toBe(true);
+    });
+
+    it('returns false when dhUnlistedDetectedAt is undefined', () => {
+      const item = makeItem({ purchase: { dhUnlistedDetectedAt: undefined } });
+      expect(wasUnlistedFromDH(item)).toBe(false);
+    });
+
+    it('returns false when dhUnlistedDetectedAt is empty string', () => {
+      const item = makeItem({ purchase: { dhUnlistedDetectedAt: '' } });
+      expect(wasUnlistedFromDH(item)).toBe(false);
+    });
+  });
 });

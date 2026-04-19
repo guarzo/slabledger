@@ -225,7 +225,6 @@ func FromEnv(base Config) Config {
 	// DH inventory reconciliation scheduler.
 	envBool("DH_RECONCILE_ENABLED", &cfg.DHReconcile.Enabled, true)
 	envDurationPositive("DH_RECONCILE_INTERVAL", &cfg.DHReconcile.Interval)
-	envIntRange("DH_RECONCILE_HOUR", &cfg.DHReconcile.RefreshHour, 0, 23)
 
 	// DH price-sync scheduler (reconciles reviewed_price_cents vs dh_listing_price_cents)
 	envBool("DH_PRICE_SYNC_ENABLED", &cfg.DHPriceSync.Enabled, true)

@@ -129,6 +129,7 @@ type BuildResult struct {
 	CertEnrichJob     *CertEnrichJob                // nil if cert lookup is not configured
 	CrackCacheJob     *CrackCacheRefreshJob         // nil if inventory service is not configured
 	DHOrdersPoll      *DHOrdersPollScheduler        // nil if DH orders poll is not configured
+	DHReconcile       *DHReconcileScheduler         // nil if DH reconciler is not configured
 }
 
 // BuildGroup constructs a scheduler Group from centralized configuration and dependencies.
@@ -139,6 +140,7 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 	var psaSync *PSASyncScheduler
 	var certEnrichJob *CertEnrichJob
 	var crackCacheJob *CrackCacheRefreshJob
+	var dhReconcile *DHReconcileScheduler
 
 	// Price refresh scheduler
 	schedulerConfig := Config{
@@ -343,18 +345,18 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 		))
 	}
 
-	// DH inventory reconciliation scheduler (daily drift scan).
+	// DH inventory reconciliation scheduler (hourly drift scan).
 	if deps.DHReconciler != nil {
 		reconcileCfg := config.DHReconcileConfig{
-			Enabled:     cfg.DHReconcile.Enabled,
-			Interval:    cfg.DHReconcile.Interval,
-			RefreshHour: cfg.DHReconcile.RefreshHour,
+			Enabled:  cfg.DHReconcile.Enabled,
+			Interval: cfg.DHReconcile.Interval,
 		}
-		schedulers = append(schedulers, NewDHReconcileScheduler(
+		dhReconcile = NewDHReconcileScheduler(
 			deps.DHReconciler,
 			deps.Logger,
 			reconcileCfg,
-		))
+		)
+		schedulers = append(schedulers, dhReconcile)
 	}
 
 	// DH price-sync scheduler: reconciles reviewed price vs DH listing price.
@@ -457,5 +459,6 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 		CertEnrichJob:     certEnrichJob,
 		CrackCacheJob:     crackCacheJob,
 		DHOrdersPoll:      dhOrdersPoll,
+		DHReconcile:       dhReconcile,
 	}
 }
