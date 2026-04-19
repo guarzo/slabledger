@@ -344,6 +344,8 @@ func (s *DHPushScheduler) processPurchase(ctx context.Context, p inventory.Purch
 	}
 
 	item := dh.NewInStockItem(dhCardID, p.CertNumber, p.GradeValue, p.BuyCostCents, listingPrice)
+	item.CertImageURLFront = p.FrontImageURL
+	item.CertImageURLBack = p.BackImageURL
 
 	pushResp, err := s.inventoryPush.PushInventory(ctx, []dh.InventoryItem{item})
 	if err != nil {

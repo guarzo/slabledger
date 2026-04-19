@@ -3,6 +3,7 @@ package dhlisting
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strconv"
@@ -143,6 +144,12 @@ func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []stri
 		return DHListingResult{}
 	}
 
+	// Reset PSA key rotation so a previously-exhausted rotation index from a
+	// push cycle doesn't silently fail every list attempt in this call.
+	if rotator, ok := s.lister.(PSAKeyRotator); ok {
+		rotator.ResetPSAKeyRotation()
+	}
+
 	purchases, err := s.purchaseLookup.GetPurchasesByCertNumbers(ctx, certNumbers)
 	if err != nil {
 		s.logger.Warn(ctx, "dh listing: batch cert lookup failed", observability.Err(err))
@@ -197,7 +204,12 @@ func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []stri
 			continue
 		}
 
-		dhListingPrice, err := s.lister.UpdateInventoryStatus(ctx, p.DHInventoryID, inventory.DHStatusListed, listingPrice)
+		dhListingPrice, err := s.lister.UpdateInventoryStatus(ctx, p.DHInventoryID, DHInventoryStatusUpdate{
+			Status:            inventory.DHStatusListed,
+			ListingPriceCents: listingPrice,
+			CertImageURLFront: p.FrontImageURL,
+			CertImageURLBack:  p.BackImageURL,
+		})
 		if err != nil {
 			if apperrors.HasErrorCode(err, apperrors.ErrCodeProviderNotFound) {
 				s.logger.Error(ctx, "dh listing: stale inventory ID — resetting for re-push",
@@ -211,6 +223,32 @@ func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []stri
 							observability.String("cert", p.CertNumber),
 							observability.Err(resetErr))
 					}
+				}
+			} else if errors.Is(err, ErrPSAKeysExhausted) {
+				s.logger.Warn(ctx, "dh listing: PSA keys exhausted — deferring list",
+					observability.String("cert", p.CertNumber),
+					observability.String("purchaseID", p.ID),
+					observability.Err(err))
+				s.recordEvent(ctx, dhevents.Event{
+					PurchaseID:    p.ID,
+					CertNumber:    p.CertNumber,
+					Type:          dhevents.TypeListDeferred,
+					DHInventoryID: p.DHInventoryID,
+					DHCardID:      p.DHCardID,
+					Source:        dhevents.SourceDHListing,
+					Notes:         "psa_auth_exhausted",
+				})
+				// Short-circuit the batch: rotation state is shared across
+				// all purchases in this call, so retrying subsequent items
+				// would just re-exhaust and spam events. Count the current
+				// purchase plus every untouched one as skipped so the result
+				// invariant Listed + Synced + Skipped == Total holds.
+				return DHListingResult{
+					Listed:  listed,
+					Synced:  synced,
+					Skipped: len(purchases) - listed - synced,
+					Total:   len(purchases),
+					Error:   err,
 				}
 			} else {
 				s.logger.Warn(ctx, "dh listing: status update failed",
@@ -230,7 +268,9 @@ func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []stri
 				observability.Int("inventoryID", p.DHInventoryID),
 				observability.Err(err))
 			// Revert status so the item doesn't stay "listed" without channel sync.
-			if _, revertErr := s.lister.UpdateInventoryStatus(ctx, p.DHInventoryID, inventory.DHStatusInStock, 0); revertErr != nil {
+			if _, revertErr := s.lister.UpdateInventoryStatus(ctx, p.DHInventoryID, DHInventoryStatusUpdate{
+				Status: inventory.DHStatusInStock,
+			}); revertErr != nil {
 				s.logger.Error(ctx, "dh listing: failed to revert status after sync failure",
 					observability.String("cert", p.CertNumber),
 					observability.Int("inventoryID", p.DHInventoryID),
@@ -361,6 +401,8 @@ func (s *dhListingService) inlineMatchAndPush(ctx context.Context, p *inventory.
 		Grade:             p.GradeValue,
 		CostBasisCents:    p.BuyCostCents,
 		ListingPriceCents: listingPrice,
+		CertImageURLFront: p.FrontImageURL,
+		CertImageURLBack:  p.BackImageURL,
 	}
 
 	pushResp, pushErr := s.pusher.PushInventory(ctx, []DHInventoryPushItem{item})

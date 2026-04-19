@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/guarzo/slabledger/internal/domain/dhlisting"
 	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
@@ -68,7 +69,10 @@ func (s *service) SyncPurchasePrice(ctx context.Context, purchaseID string) Sync
 	res.OldListingCents = p.DHListingPriceCents
 
 	status := string(p.DHStatus)
-	newDHPrice, err := s.updater.UpdateInventoryStatus(ctx, p.DHInventoryID, status, reviewed)
+	newDHPrice, err := s.updater.UpdateInventoryStatus(ctx, p.DHInventoryID, dhlisting.DHInventoryStatusUpdate{
+		Status:            status,
+		ListingPriceCents: reviewed,
+	})
 	if err != nil {
 		if apperrors.HasErrorCode(err, apperrors.ErrCodeProviderNotFound) {
 			s.logger.Warn(ctx, "dh price sync: stale inventory id — resetting",
