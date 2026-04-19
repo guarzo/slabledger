@@ -1114,6 +1114,7 @@ func (m *InMemoryCampaignStore) ResetDHFieldsForRepushDueToDelete(ctx context.Co
 	p.DHStatus = ""
 	p.DHListingPriceCents = 0
 	p.DHChannelsJSON = "[]"
+	p.DHHoldReason = ""
 	now := time.Now()
 	p.DHUnlistedDetectedAt = &now
 	p.UpdatedAt = now
