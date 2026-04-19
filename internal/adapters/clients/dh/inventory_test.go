@@ -402,3 +402,105 @@ func TestInventoryItem_ListingPriceCents_Serialization(t *testing.T) {
 		require.Equal(t, 45000, *IntPtr(45000))
 	})
 }
+
+func TestInventoryItem_CertImageURL_Serialization(t *testing.T) {
+	tests := []struct {
+		name       string
+		item       InventoryItem
+		wantFront  string
+		wantBack   string
+		hasFront   bool
+		hasBack    bool
+	}{
+		{
+			name: "both URLs set",
+			item: InventoryItem{
+				DHCardID:          1,
+				CertNumber:        "c1",
+				GradingCompany:    "psa",
+				Grade:             9.0,
+				CostBasisCents:    100,
+				CertImageURLFront: "https://example.com/front.jpg",
+				CertImageURLBack:  "https://example.com/back.jpg",
+			},
+			wantFront: "https://example.com/front.jpg",
+			wantBack:  "https://example.com/back.jpg",
+			hasFront:  true,
+			hasBack:   true,
+		},
+		{
+			name: "only front URL set",
+			item: InventoryItem{
+				DHCardID:          1,
+				CertNumber:        "c1",
+				GradingCompany:    "psa",
+				Grade:             9.0,
+				CostBasisCents:    100,
+				CertImageURLFront: "https://example.com/front.jpg",
+			},
+			wantFront: "https://example.com/front.jpg",
+			hasFront:  true,
+			hasBack:   false,
+		},
+		{
+			name: "neither URL set",
+			item: InventoryItem{
+				DHCardID:       1,
+				CertNumber:     "c1",
+				GradingCompany: "psa",
+				Grade:          9.0,
+				CostBasisCents: 100,
+			},
+			hasFront: false,
+			hasBack:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			b, err := json.Marshal(tt.item)
+			require.NoError(t, err)
+
+			var got map[string]any
+			require.NoError(t, json.Unmarshal(b, &got))
+
+			if tt.hasFront {
+				require.Equal(t, tt.wantFront, got["cert_image_url_front"])
+			} else {
+				_, present := got["cert_image_url_front"]
+				require.False(t, present, "cert_image_url_front should be omitted when empty")
+			}
+			if tt.hasBack {
+				require.Equal(t, tt.wantBack, got["cert_image_url_back"])
+			} else {
+				_, present := got["cert_image_url_back"]
+				require.False(t, present, "cert_image_url_back should be omitted when empty")
+			}
+		})
+	}
+}
+
+func TestInventoryUpdate_CertImageURL_Serialization(t *testing.T) {
+	upd := InventoryUpdate{
+		Status:            "listed",
+		CertImageURLFront: "https://example.com/front.jpg",
+		CertImageURLBack:  "https://example.com/back.jpg",
+	}
+	b, err := json.Marshal(upd)
+	require.NoError(t, err)
+
+	var got map[string]any
+	require.NoError(t, json.Unmarshal(b, &got))
+	require.Equal(t, "https://example.com/front.jpg", got["cert_image_url_front"])
+	require.Equal(t, "https://example.com/back.jpg", got["cert_image_url_back"])
+
+	emptyUpd := InventoryUpdate{Status: "listed"}
+	b, err = json.Marshal(emptyUpd)
+	require.NoError(t, err)
+	got = nil
+	require.NoError(t, json.Unmarshal(b, &got))
+	_, frontPresent := got["cert_image_url_front"]
+	_, backPresent := got["cert_image_url_back"]
+	require.False(t, frontPresent)
+	require.False(t, backPresent)
+}
