@@ -368,6 +368,8 @@ func (s *dhListingService) inlineMatchAndPush(ctx context.Context, p *inventory.
 		Grade:             p.GradeValue,
 		CostBasisCents:    p.BuyCostCents,
 		ListingPriceCents: listingPrice,
+		CertImageURLFront: p.FrontImageURL,
+		CertImageURLBack:  p.BackImageURL,
 	}
 
 	pushResp, pushErr := s.pusher.PushInventory(ctx, []DHInventoryPushItem{item})

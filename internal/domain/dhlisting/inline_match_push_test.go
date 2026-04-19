@@ -21,11 +21,13 @@ func (m *mockCertResolver) ResolveCert(_ context.Context, _ DHCertResolveRequest
 }
 
 type mockPusher struct {
-	resp *DHInventoryPushResult
-	err  error
+	resp     *DHInventoryPushResult
+	err      error
+	captured []DHInventoryPushItem
 }
 
-func (m *mockPusher) PushInventory(_ context.Context, _ []DHInventoryPushItem) (*DHInventoryPushResult, error) {
+func (m *mockPusher) PushInventory(_ context.Context, items []DHInventoryPushItem) (*DHInventoryPushResult, error) {
+	m.captured = append(m.captured, items...)
 	return m.resp, m.err
 }
 
@@ -353,6 +355,48 @@ func TestInlineMatchAndPush(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestInlineMatchAndPush_PassesImageURLs verifies that the front/back cert image
+// URLs on the Purchase are threaded into the DHInventoryPushItem so DH can skip
+// its own PSA lookup.
+func TestInlineMatchAndPush_PassesImageURLs(t *testing.T) {
+	pusher := &mockPusher{
+		resp: &DHInventoryPushResult{
+			Results: []DHInventoryPushResultItem{{DHInventoryID: 77, Status: "in_stock"}},
+		},
+	}
+	resolver := &mockCertResolver{
+		resp: &DHCertResolution{Status: DHCertStatusMatched, DHCardID: 100},
+	}
+
+	svc := newInlineTestSvc(
+		&mockPurchaseLookup{},
+		resolver,
+		pusher,
+		&mockFieldsUpdater{},
+		&mockPushStatusUpdater{},
+		nil,
+		nil,
+	)
+
+	p := basePurchase()
+	p.FrontImageURL = "https://example.com/front.jpg"
+	p.BackImageURL = "https://example.com/back.jpg"
+
+	invID := svc.inlineMatchAndPush(context.Background(), p)
+	if invID != 77 {
+		t.Fatalf("inventoryID: got %d, want 77", invID)
+	}
+	if len(pusher.captured) != 1 {
+		t.Fatalf("captured items: got %d, want 1", len(pusher.captured))
+	}
+	if got, want := pusher.captured[0].CertImageURLFront, "https://example.com/front.jpg"; got != want {
+		t.Errorf("CertImageURLFront: got %q, want %q", got, want)
+	}
+	if got, want := pusher.captured[0].CertImageURLBack, "https://example.com/back.jpg"; got != want {
+		t.Errorf("CertImageURLBack: got %q, want %q", got, want)
 	}
 }
 
