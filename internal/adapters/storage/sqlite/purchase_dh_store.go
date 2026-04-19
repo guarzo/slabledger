@@ -159,7 +159,7 @@ func (ps *PurchaseStore) ResetDHFieldsForRepush(ctx context.Context, purchaseID 
 // ResetDHFieldsForRepushDueToDelete mirrors ResetDHFieldsForRepush (clears
 // dh_inventory_id, dh_status, dh_listing_price_cents, dh_channels_json,
 // dh_hold_reason; sets dh_push_status='pending'; preserves reviewed_price_cents,
-// dh_card_id, dh_cert_status) and additionally stamps dh_unlisted_detected_at
+// dh_card_id, dh_cert_status, dh_candidates) and additionally stamps dh_unlisted_detected_at
 // so the UI can badge the row as "unlisted on DH — will be re-pushed." Called by
 // the DH reconciler when a purchase's dh_inventory_id is missing from the
 // authoritative DH inventory snapshot.

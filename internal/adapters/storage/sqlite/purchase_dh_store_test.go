@@ -376,6 +376,7 @@ func TestResetDHFieldsForRepushDueToDelete_SetsTimestamp(t *testing.T) {
 	assert.Equal(t, 0, got.DHInventoryID)
 	assert.Equal(t, inventory.DHStatus(""), got.DHStatus)
 	assert.Equal(t, inventory.DHPushStatusPending, got.DHPushStatus)
+	assert.Equal(t, 0, got.DHListingPriceCents)
 	// Reviewed price must be preserved — repush reuses the prior review.
 	assert.Equal(t, 9000, got.ReviewedPriceCents)
 	// Timestamp stamped at or after the "before" capture.
