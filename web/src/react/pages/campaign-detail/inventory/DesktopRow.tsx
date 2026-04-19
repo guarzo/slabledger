@@ -10,7 +10,7 @@ import {
   referencePricesTooltip,
   syncDotProps, hasCanonicalPriceSignal,
 } from './utils';
-import { isReadyToList } from './inventoryCalcs';
+import { isReadyToList, needsPriceReview, wasUnlistedFromDH } from './inventoryCalcs';
 import { dhBadgeFor, DH_BADGE_COLORS } from './dhBadge';
 import InlinePriceEdit from './InlinePriceEdit';
 
@@ -226,31 +226,51 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
         >&#9679;</span>
       </div>
       <div className="glass-table-td flex-shrink-0 text-center !px-1 print-hide-actions" style={{ width: '56px' }} onClick={e => e.stopPropagation()}>
-        {dhListedOverride ? (
-          <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${DH_BADGE_COLORS.listed}`} title={DH_BADGE_TITLES['listed']}>listed</span>
-        ) : onListOnDH && isReadyToList(item) && !!item.purchase.dhInventoryId ? (
-          <button
-            type="button"
-            onClick={() => onListOnDH(item.purchase.id)}
-            disabled={dhListingLoading}
-            className={`text-xs font-medium px-2 py-1 rounded transition-colors ${
-              dhListingLoading
-                ? 'bg-[var(--surface-2)] text-[var(--text-muted)] cursor-wait'
-                : 'bg-[var(--success)]/15 text-[var(--success)] hover:bg-[var(--success)]/30'
-            }`}
-            title="Publish this item on DH"
-          >
-            {dhListingLoading ? 'Listing…' : 'List'}
-          </button>
-        ) : (() => {
-          const badge = dhBadgeFor(item.purchase.dhPushStatus, item.purchase.dhStatus, item.purchase.receivedAt);
-          if (badge === 'unenrolled') return null;
-          return (
-            <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${DH_BADGE_COLORS[badge]}`} title={DH_BADGE_TITLES[badge] ?? badge}>
-              {badge}
+        <div className="flex flex-col items-center gap-0.5">
+          {wasUnlistedFromDH(item) && (
+            <span
+              className="text-[9px] font-medium px-1 py-0.5 rounded bg-[var(--warning)]/15 text-[var(--warning)] leading-none"
+              title="Item was removed from DH — will be re-pushed + listed"
+            >
+              Re-list
             </span>
-          );
-        })()}
+          )}
+          {dhListedOverride ? (
+            <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${DH_BADGE_COLORS.listed}`} title={DH_BADGE_TITLES['listed']}>listed</span>
+          ) : onListOnDH && isReadyToList(item) && !!item.purchase.dhInventoryId ? (
+            <button
+              type="button"
+              onClick={() => onListOnDH(item.purchase.id)}
+              disabled={dhListingLoading}
+              className={`text-xs font-medium px-2 py-1 rounded transition-colors ${
+                dhListingLoading
+                  ? 'bg-[var(--surface-2)] text-[var(--text-muted)] cursor-wait'
+                  : 'bg-[var(--success)]/15 text-[var(--success)] hover:bg-[var(--success)]/30'
+              }`}
+              title="Publish this item on DH"
+            >
+              {dhListingLoading ? 'Listing…' : 'List'}
+            </button>
+          ) : needsPriceReview(item) ? (
+            <button
+              type="button"
+              onClick={onExpand}
+              className="text-xs font-medium px-2 py-1 rounded bg-[var(--warning)]/15 text-[var(--warning)] hover:bg-[var(--warning)]/30 transition-colors"
+              title="Set a reviewed price before listing"
+              aria-label="Set reviewed price before listing on DH"
+            >
+              Set price
+            </button>
+          ) : (() => {
+            const badge = dhBadgeFor(item.purchase.dhPushStatus, item.purchase.dhStatus, item.purchase.receivedAt);
+            if (badge === 'unenrolled') return null;
+            return (
+              <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${DH_BADGE_COLORS[badge]}`} title={DH_BADGE_TITLES[badge] ?? badge}>
+                {badge}
+              </span>
+            );
+          })()}
+        </div>
       </div>
       {/* Sell button */}
       <div className="glass-table-td flex-shrink-0 text-center !px-1 print-hide-actions" style={{ width: '48px' }} onClick={e => e.stopPropagation()}>
