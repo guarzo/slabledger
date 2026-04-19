@@ -356,6 +356,61 @@ func TestClient_DelistChannels(t *testing.T) {
 
 func intPtr(v int) *int { return &v }
 
+func TestClient_UpdateInventory_PSAHeaderOnListed(t *testing.T) {
+	tests := []struct {
+		name       string
+		update     InventoryUpdate
+		psaKeys    string
+		wantPSAHdr string
+	}{
+		{
+			name:       "status=listed with keys sends PSA header",
+			update:     InventoryUpdate{Status: "listed"},
+			psaKeys:    "key_alpha,key_beta",
+			wantPSAHdr: "key_alpha",
+		},
+		{
+			name:       "status=in_stock with keys does NOT send PSA header",
+			update:     InventoryUpdate{Status: "in_stock"},
+			psaKeys:    "key_alpha",
+			wantPSAHdr: "",
+		},
+		{
+			name:       "status=listed without keys does NOT send PSA header",
+			update:     InventoryUpdate{Status: "listed"},
+			psaKeys:    "",
+			wantPSAHdr: "",
+		},
+		{
+			name:       "status=sold with keys does NOT send PSA header",
+			update:     InventoryUpdate{Status: "sold"},
+			psaKeys:    "key_alpha",
+			wantPSAHdr: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var gotPSAHdr string
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				require.Equal(t, http.MethodPatch, r.Method)
+				gotPSAHdr = r.Header.Get("X-PSA-API-Key")
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(InventoryResult{DHInventoryID: 1, Status: tt.update.Status})
+			}))
+			defer server.Close()
+
+			c := newTestClient(server.URL)
+			if tt.psaKeys != "" {
+				WithPSAKeys(tt.psaKeys)(c)
+			}
+			_, err := c.UpdateInventory(context.Background(), 1, tt.update)
+			require.NoError(t, err)
+			require.Equal(t, tt.wantPSAHdr, gotPSAHdr)
+		})
+	}
+}
+
 func TestInventoryItem_ListingPriceCents_Serialization(t *testing.T) {
 	tests := []struct {
 		name              string

@@ -282,8 +282,8 @@ func (c *Client) postEnterprise(ctx context.Context, fullURL string, body any, d
 	return c.doEnterprise(ctx, "POST", fullURL, body, dest)
 }
 
-func (c *Client) patchEnterprise(ctx context.Context, fullURL string, body any, dest any) error {
-	return c.doEnterprise(ctx, "PATCH", fullURL, body, dest)
+func (c *Client) patchEnterprise(ctx context.Context, fullURL string, body any, dest any, extraHeaders ...map[string]string) error {
+	return c.doEnterprise(ctx, "PATCH", fullURL, body, dest, extraHeaders...)
 }
 
 func (c *Client) deleteEnterprise(ctx context.Context, fullURL string, body any, dest any) error {
