@@ -41,7 +41,7 @@ type ReconcileResult struct {
 	MissingOnDH int      `json:"missingOnDH"` // purchases whose DHInventoryID was not present on DH
 	Reset       int      `json:"reset"`       // purchases successfully flipped to pending
 	Errors      []string `json:"errors"`      // per-item reset errors (purchaseID: message)
-	ResetIDs    []string `json:"resetIDs"`    // purchase IDs that were reset
+	ResetIDs    []string `json:"resetIds"`    // purchase IDs that were reset
 }
 
 // Reconciler detects drift between local DH linkage and the authoritative DH

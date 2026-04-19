@@ -210,6 +210,14 @@ func TestDHReconcileHandler_Trigger(t *testing.T) {
 			},
 			wantStatus: http.StatusBadGateway,
 		},
+		{
+			name: "success with nil last result returns 200 zero body",
+			runner: &mockDHReconcileRunner{
+				RunOnceFn:          func(context.Context) error { return nil },
+				GetLastRunResultFn: func() *dhlisting.ReconcileResult { return nil },
+			},
+			wantStatus: http.StatusOK,
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -220,13 +228,24 @@ func TestDHReconcileHandler_Trigger(t *testing.T) {
 			if rec.Code != tc.wantStatus {
 				t.Errorf("status: got %d, want %d", rec.Code, tc.wantStatus)
 			}
-			if tc.wantStatus == http.StatusOK {
+			if tc.wantStatus == http.StatusOK && tc.runner.GetLastRunResultFn != nil && tc.runner.GetLastRunResultFn() != nil {
 				var got dhlisting.ReconcileResult
 				if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 					t.Fatalf("unmarshal body: %v", err)
 				}
 				if got.Scanned != 5 || got.Reset != 2 {
 					t.Errorf("result: got %+v, want Scanned=5 Reset=2", got)
+				}
+			}
+			if tc.name == "success with nil last result returns 200 zero body" {
+				var body map[string]any
+				if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+					t.Fatalf("unmarshal zero body: %v", err)
+				}
+				for _, key := range []string{"scanned", "missingOnDH", "reset", "errors", "resetIds"} {
+					if _, ok := body[key]; !ok {
+						t.Errorf("zero body missing key %q; got %v", key, body)
+					}
 				}
 			}
 		})

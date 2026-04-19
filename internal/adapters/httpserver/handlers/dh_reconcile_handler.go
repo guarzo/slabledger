@@ -89,7 +89,7 @@ func (h *DHReconcileHandler) HandleTrigger(w http.ResponseWriter, r *http.Reques
 			"missingOnDH": 0,
 			"reset":       0,
 			"errors":      []string{},
-			"resetIDs":    []string{},
+			"resetIds":    []string{},
 		})
 		return
 	}
