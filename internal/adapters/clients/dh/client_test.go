@@ -473,6 +473,7 @@ func TestUpdateInventoryWithRotation(t *testing.T) {
 		updateResult  *InventoryResult
 		rotateReturns []bool // sequence of RotatePSAKey return values
 		wantErr       error  // sentinel to check via errors.Is (nil = expect success)
+		wantRawError  bool   // expect a non-nil non-sentinel error (passthrough)
 		wantCalls     int    // how many times updateFn should have been invoked
 	}{
 		{
@@ -506,10 +507,10 @@ func TestUpdateInventoryWithRotation(t *testing.T) {
 			wantCalls:     3,
 		},
 		{
-			name:       "non-PSA error does NOT rotate and returns raw error",
-			updateErrs: []error{errors.New("HTTP 500: internal server error")},
-			wantErr:    nil, // expect passthrough non-sentinel error
-			wantCalls:  1,
+			name:         "non-PSA error does NOT rotate and returns raw error",
+			updateErrs:   []error{errors.New("HTTP 500: internal server error")},
+			wantRawError: true, // expect passthrough non-sentinel error
+			wantCalls:    1,
 		},
 	}
 
@@ -548,7 +549,7 @@ func TestUpdateInventoryWithRotation(t *testing.T) {
 			switch {
 			case tt.wantErr != nil:
 				require.ErrorIs(t, err, tt.wantErr)
-			case tt.name == "non-PSA error does NOT rotate and returns raw error":
+			case tt.wantRawError:
 				require.Error(t, err)
 				require.NotErrorIs(t, err, ErrPSAKeysExhausted)
 			default:

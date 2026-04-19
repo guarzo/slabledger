@@ -342,9 +342,16 @@ func IsPSARateLimitError(err error) bool {
 // wrapped cause is the final underlying DH error.
 var ErrPSAKeysExhausted = goerrors.New("dh: PSA keys exhausted")
 
-// IsPSAAuthError returns true when err represents a PSA auth failure
-// surfaced through the DH enterprise PATCH /inventory/:id response (HTTP 401).
-// DH maps 401 through httpx to apperrors.ErrCodeProviderAuth.
+// IsPSAAuthError returns true when err is a provider-level auth failure
+// (HTTP 401 or 403) surfaced through httpx as apperrors.ErrCodeProviderAuth.
+//
+// Strictly, this predicate cannot distinguish a rejected X-PSA-API-Key from a
+// rejected DH enterprise Bearer token — both surface as ErrCodeProviderAuth.
+// UpdateInventoryWithRotation is only invoked from the listing path where the
+// PSA header is present, so auth errors there are overwhelmingly PSA-side.
+// If the enterprise Bearer is ever revoked, rotation will cycle through all
+// PSA keys and return ErrPSAKeysExhausted wrapping the underlying auth error;
+// the wrapped cause lets callers disambiguate by inspecting the error body.
 func IsPSAAuthError(err error) bool {
 	return apperrors.HasErrorCode(err, apperrors.ErrCodeProviderAuth)
 }
