@@ -16,6 +16,7 @@ const (
 	TypeEnrolled       Type = "enrolled"
 	TypePushed         Type = "pushed"
 	TypeListed         Type = "listed"
+	TypeListDeferred   Type = "list_deferred" // list attempt deferred due to transient PSA issue (e.g. exhausted keys)
 	TypeUnlisted       Type = "unlisted"
 	TypeChannelSynced  Type = "channel_synced"
 	TypeSold           Type = "sold"

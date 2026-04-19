@@ -10,10 +10,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"golang.org/x/time/rate"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/httpx"
 	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
+	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/platform/resilience"
 )
 
@@ -458,4 +460,112 @@ func TestSearchCards_ValidatesResultNames(t *testing.T) {
 	if !errors.As(err, &appErr) || appErr.Code != apperrors.ErrCodeProviderInvalidResp {
 		t.Errorf("expected ProviderInvalidResponse for empty name, got: %v", err)
 	}
+}
+
+func TestUpdateInventoryWithRotation(t *testing.T) {
+	authErr := apperrors.ProviderAuthFailed(providerName, errors.New("HTTP 401: unauthorized"))
+	rateLimitErr := errors.New("PSA API rate limit exceeded")
+	successResult := &InventoryResult{DHInventoryID: 1, Status: "listed"}
+
+	tests := []struct {
+		name          string
+		updateErrs    []error // sequence of errors returned from successive update calls
+		updateResult  *InventoryResult
+		rotateReturns []bool // sequence of RotatePSAKey return values
+		wantErr       error  // sentinel to check via errors.Is (nil = expect success)
+		wantRawError  bool   // expect a non-nil non-sentinel error (passthrough)
+		wantCalls     int    // how many times updateFn should have been invoked
+	}{
+		{
+			name:         "success on first try — no rotation",
+			updateErrs:   []error{nil},
+			updateResult: successResult,
+			wantErr:      nil,
+			wantCalls:    1,
+		},
+		{
+			name:          "401 then success after one rotation",
+			updateErrs:    []error{authErr, nil},
+			updateResult:  successResult,
+			rotateReturns: []bool{true},
+			wantErr:       nil,
+			wantCalls:     2,
+		},
+		{
+			name:          "422 rate limit then success after one rotation",
+			updateErrs:    []error{rateLimitErr, nil},
+			updateResult:  successResult,
+			rotateReturns: []bool{true},
+			wantErr:       nil,
+			wantCalls:     2,
+		},
+		{
+			name:          "401 through all keys — exhausted",
+			updateErrs:    []error{authErr, authErr, authErr},
+			rotateReturns: []bool{true, true, false},
+			wantErr:       ErrPSAKeysExhausted,
+			wantCalls:     3,
+		},
+		{
+			name:         "non-PSA error does NOT rotate and returns raw error",
+			updateErrs:   []error{errors.New("HTTP 500: internal server error")},
+			wantRawError: true, // expect passthrough non-sentinel error
+			wantCalls:    1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			callCount := 0
+			doUpdate := func(_ context.Context, _ int, _ InventoryUpdate) (*InventoryResult, error) {
+				idx := callCount
+				callCount++
+				if idx < len(tt.updateErrs) {
+					return tt.updateResult, tt.updateErrs[idx]
+				}
+				return tt.updateResult, nil
+			}
+			rotateIdx := 0
+			rotateFn := func() bool {
+				if rotateIdx < len(tt.rotateReturns) {
+					r := tt.rotateReturns[rotateIdx]
+					rotateIdx++
+					return r
+				}
+				return false
+			}
+
+			_, err := UpdateInventoryWithRotation(
+				context.Background(),
+				1,
+				InventoryUpdate{Status: "listed"},
+				doUpdate,
+				rotateFn,
+				nopLogger{},
+				"test",
+			)
+
+			require.Equal(t, tt.wantCalls, callCount)
+			switch {
+			case tt.wantErr != nil:
+				require.ErrorIs(t, err, tt.wantErr)
+			case tt.wantRawError:
+				require.Error(t, err)
+				require.NotErrorIs(t, err, ErrPSAKeysExhausted)
+			default:
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
+// nopLogger is a no-op observability.Logger for tests.
+type nopLogger struct{}
+
+func (nopLogger) Debug(context.Context, string, ...observability.Field) {}
+func (nopLogger) Info(context.Context, string, ...observability.Field)  {}
+func (nopLogger) Warn(context.Context, string, ...observability.Field)  {}
+func (nopLogger) Error(context.Context, string, ...observability.Field) {}
+func (nopLogger) With(context.Context, ...observability.Field) observability.Logger {
+	return nopLogger{}
 }

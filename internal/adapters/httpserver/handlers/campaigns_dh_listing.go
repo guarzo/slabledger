@@ -2,10 +2,12 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
 
+	"github.com/guarzo/slabledger/internal/domain/dhlisting"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
@@ -76,6 +78,13 @@ func (h *CampaignsHandler) HandleListPurchaseOnDH(w http.ResponseWriter, r *http
 
 	result := h.dhListingSvc.ListPurchases(r.Context(), []string{p.CertNumber})
 	if result.Error != nil {
+		if errors.Is(result.Error, dhlisting.ErrPSAKeysExhausted) {
+			h.logger.Warn(r.Context(), "dh listing: PSA keys exhausted — deferring",
+				observability.Err(result.Error), observability.String("purchaseId", purchaseID))
+			writeError(w, http.StatusBadGateway,
+				"DH listing deferred — PSA authentication temporarily unavailable, please try again in a few minutes")
+			return
+		}
 		h.logger.Error(r.Context(), "dh listing failed",
 			observability.Err(result.Error), observability.String("purchaseId", purchaseID))
 		writeError(w, http.StatusInternalServerError, "DH listing failed")

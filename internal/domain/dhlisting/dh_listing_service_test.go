@@ -3,6 +3,8 @@ package dhlisting
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/guarzo/slabledger/internal/domain/dhevents"
@@ -48,8 +50,8 @@ type mockInventoryLister struct {
 	lastListingPriceSent int
 }
 
-func (m *mockInventoryLister) UpdateInventoryStatus(_ context.Context, _ int, _ string, listingPriceCents int) (int, error) {
-	m.lastListingPriceSent = listingPriceCents
+func (m *mockInventoryLister) UpdateInventoryStatus(_ context.Context, _ int, update DHInventoryStatusUpdate) (int, error) {
+	m.lastListingPriceSent = update.ListingPriceCents
 	return m.returnedListingPrice, m.updateStatusErr
 }
 
@@ -452,6 +454,186 @@ func TestDisambiguateCandidates(t *testing.T) {
 				t.Error("expected saveFn not to be called, but it was")
 			}
 		})
+	}
+}
+
+// mockInventoryListerWithRotator is a lister mock that also implements
+// PSAKeyRotator, so ListPurchases can type-assert and exercise the rotation
+// reset and exhaustion paths.
+type mockInventoryListerWithRotator struct {
+	updateFn func(ctx context.Context, id int, upd DHInventoryStatusUpdate) (int, error)
+	syncFn   func(ctx context.Context, id int, channels []string) error
+	rotateFn func() bool
+	resetFn  func()
+}
+
+func (m *mockInventoryListerWithRotator) UpdateInventoryStatus(ctx context.Context, id int, upd DHInventoryStatusUpdate) (int, error) {
+	return m.updateFn(ctx, id, upd)
+}
+
+func (m *mockInventoryListerWithRotator) SyncChannels(ctx context.Context, id int, channels []string) error {
+	return m.syncFn(ctx, id, channels)
+}
+
+func (m *mockInventoryListerWithRotator) RotatePSAKey() bool {
+	if m.rotateFn != nil {
+		return m.rotateFn()
+	}
+	return false
+}
+
+func (m *mockInventoryListerWithRotator) ResetPSAKeyRotation() {
+	if m.resetFn != nil {
+		m.resetFn()
+	}
+}
+
+// TestListPurchases_ResetsPSARotationAtStart asserts that the service calls
+// ResetPSAKeyRotation at the start of each ListPurchases invocation so an
+// exhausted rotation index from a prior push cycle doesn't poison this call.
+func TestListPurchases_ResetsPSARotationAtStart(t *testing.T) {
+	resetCalls := 0
+	lister := &mockInventoryListerWithRotator{
+		updateFn: func(_ context.Context, _ int, upd DHInventoryStatusUpdate) (int, error) {
+			return upd.ListingPriceCents, nil
+		},
+		syncFn:  func(context.Context, int, []string) error { return nil },
+		resetFn: func() { resetCalls++ },
+	}
+
+	purchase := &inventory.Purchase{
+		ID:                 "p1",
+		CertNumber:         "c1",
+		DHInventoryID:      5,
+		DHPushStatus:       inventory.DHPushStatusMatched,
+		DHStatus:           inventory.DHStatusInStock,
+		ReviewedPriceCents: 1000,
+		FrontImageURL:      "https://x/a.jpg",
+	}
+	lookup := &mockPurchaseLookup{
+		purchases: map[string]*inventory.Purchase{"c1": purchase},
+	}
+
+	svc := newTestService(t, lookup, WithDHListingLister(lister))
+
+	_ = svc.ListPurchases(context.Background(), []string{"c1"})
+
+	if resetCalls != 1 {
+		t.Errorf("ResetPSAKeyRotation calls: got %d, want 1", resetCalls)
+	}
+}
+
+// TestListPurchases_PassesImagesOnStatusUpdate asserts that the primary
+// listing call threads FrontImageURL/BackImageURL through to
+// DHInventoryStatusUpdate so DH can skip its own PSA lookup.
+func TestListPurchases_PassesImagesOnStatusUpdate(t *testing.T) {
+	var capturedUpdates []DHInventoryStatusUpdate
+	lister := &mockInventoryListerWithRotator{
+		updateFn: func(_ context.Context, _ int, upd DHInventoryStatusUpdate) (int, error) {
+			capturedUpdates = append(capturedUpdates, upd)
+			return upd.ListingPriceCents, nil
+		},
+		syncFn: func(context.Context, int, []string) error { return nil },
+	}
+
+	purchase := &inventory.Purchase{
+		ID:                 "p1",
+		CertNumber:         "c1",
+		DHInventoryID:      5,
+		DHPushStatus:       inventory.DHPushStatusMatched,
+		DHStatus:           inventory.DHStatusInStock,
+		ReviewedPriceCents: 1000,
+		FrontImageURL:      "https://x/front.jpg",
+		BackImageURL:       "https://x/back.jpg",
+	}
+	lookup := &mockPurchaseLookup{
+		purchases: map[string]*inventory.Purchase{"c1": purchase},
+	}
+
+	svc := newTestService(t, lookup, WithDHListingLister(lister))
+
+	_ = svc.ListPurchases(context.Background(), []string{"c1"})
+
+	if len(capturedUpdates) != 1 {
+		t.Fatalf("expected 1 captured update, got %d", len(capturedUpdates))
+	}
+	if capturedUpdates[0].Status != inventory.DHStatusListed {
+		t.Errorf("Status: got %q, want %q", capturedUpdates[0].Status, inventory.DHStatusListed)
+	}
+	if capturedUpdates[0].ListingPriceCents != 1000 {
+		t.Errorf("ListingPriceCents: got %d, want 1000", capturedUpdates[0].ListingPriceCents)
+	}
+	if capturedUpdates[0].CertImageURLFront != "https://x/front.jpg" {
+		t.Errorf("CertImageURLFront: got %q, want https://x/front.jpg", capturedUpdates[0].CertImageURLFront)
+	}
+	if capturedUpdates[0].CertImageURLBack != "https://x/back.jpg" {
+		t.Errorf("CertImageURLBack: got %q, want https://x/back.jpg", capturedUpdates[0].CertImageURLBack)
+	}
+}
+
+// TestListPurchases_PSAExhaustionRecordsEventAndSurfacesError asserts that
+// when UpdateInventoryStatus returns an error wrapping ErrPSAKeysExhausted,
+// the service (1) records a TypeListDeferred event with notes
+// "psa_auth_exhausted", (2) short-circuits the batch, and (3) surfaces the
+// wrapped sentinel on DHListingResult.Error.
+func TestListPurchases_PSAExhaustionRecordsEventAndSurfacesError(t *testing.T) {
+	lister := &mockInventoryListerWithRotator{
+		updateFn: func(_ context.Context, _ int, _ DHInventoryStatusUpdate) (int, error) {
+			return 0, fmt.Errorf("%w: underlying 401", ErrPSAKeysExhausted)
+		},
+		syncFn: func(context.Context, int, []string) error { return nil },
+	}
+	eventRec := &mockEventRecorder{}
+
+	purchase := &inventory.Purchase{
+		ID:                 "p1",
+		CertNumber:         "c1",
+		DHInventoryID:      5,
+		DHCardID:           42,
+		DHPushStatus:       inventory.DHPushStatusMatched,
+		DHStatus:           inventory.DHStatusInStock,
+		ReviewedPriceCents: 1000,
+		// no image URLs — forces PSA fallback that then fails
+	}
+	lookup := &mockPurchaseLookup{
+		purchases: map[string]*inventory.Purchase{"c1": purchase},
+	}
+
+	svc := newTestService(t, lookup,
+		WithDHListingLister(lister),
+		WithEventRecorder(eventRec),
+	)
+
+	result := svc.ListPurchases(context.Background(), []string{"c1"})
+
+	if !errors.Is(result.Error, ErrPSAKeysExhausted) {
+		t.Errorf("result.Error: got %v, want wrap of ErrPSAKeysExhausted", result.Error)
+	}
+	if result.Listed != 0 {
+		t.Errorf("Listed: got %d, want 0", result.Listed)
+	}
+
+	deferredCount := 0
+	for _, e := range eventRec.events {
+		if e.Type != dhevents.TypeListDeferred {
+			continue
+		}
+		deferredCount++
+		if e.PurchaseID != "p1" {
+			t.Errorf("deferred event PurchaseID: got %q, want p1", e.PurchaseID)
+		}
+		if e.CertNumber != "c1" {
+			t.Errorf("deferred event CertNumber: got %q, want c1", e.CertNumber)
+		}
+		if e.Source != dhevents.SourceDHListing {
+			t.Errorf("deferred event Source: got %q, want %q", e.Source, dhevents.SourceDHListing)
+		}
+		if !strings.Contains(e.Notes, "psa_auth_exhausted") {
+			t.Errorf("deferred event Notes: got %q, want to contain psa_auth_exhausted", e.Notes)
+		}
+	}
+	if deferredCount != 1 {
+		t.Errorf("TypeListDeferred events: got %d, want 1", deferredCount)
 	}
 }
 

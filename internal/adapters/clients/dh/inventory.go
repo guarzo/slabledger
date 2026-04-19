@@ -65,11 +65,22 @@ func (c *Client) ListInventory(ctx context.Context, filters InventoryFilters) (*
 }
 
 // UpdateInventory updates an inventory item on DH (status and/or cost basis).
+// When transitioning an item to "listed", DH performs a PSA cert lookup to
+// resolve the card image. We inject X-PSA-API-Key so DH can use our key rather
+// than its own; a 401 response means the key is bad or exhausted and callers
+// can rotate via UpdateInventoryWithRotation.
 func (c *Client) UpdateInventory(ctx context.Context, inventoryID int, update InventoryUpdate) (*InventoryResult, error) {
 	fullURL := fmt.Sprintf("%s/api/v1/enterprise/inventory/%d", c.baseURL, inventoryID)
 
+	var extraHeaders map[string]string
+	if update.Status == InventoryStatusListed {
+		if key := c.currentPSAKey(); key != "" {
+			extraHeaders = map[string]string{"X-PSA-API-Key": key}
+		}
+	}
+
 	var resp InventoryResult
-	if err := c.patchEnterprise(ctx, fullURL, update, &resp); err != nil {
+	if err := c.patchEnterprise(ctx, fullURL, update, &resp, extraHeaders); err != nil {
 		return nil, err
 	}
 	return &resp, nil

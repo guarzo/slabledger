@@ -141,6 +141,10 @@ type InventoryItem struct {
 	CostBasisCents    int     `json:"cost_basis_cents"`
 	ListingPriceCents *int    `json:"listing_price_cents,omitempty"` // when set, DH honors as-is; when omitted, DH uses catalog (fallback: cost_basis × 1.5)
 	Status            string  `json:"status,omitempty"`              // "in_stock" (default) or "listed"
+	// CertImageURLFront/Back let us pass PSA slab images directly so DH can skip
+	// its own PSA lookup. Either may be set; both use omitempty.
+	CertImageURLFront string `json:"cert_image_url_front,omitempty"`
+	CertImageURLBack  string `json:"cert_image_url_back,omitempty"`
 }
 
 // IntPtr returns a pointer to v, or nil when v is zero.
@@ -243,6 +247,8 @@ type InventoryUpdate struct {
 	Status            string `json:"status,omitempty"`
 	CostBasisCents    *int   `json:"cost_basis_cents,omitempty"`
 	ListingPriceCents *int   `json:"listing_price_cents,omitempty"` // when set on PATCH, DH honors as-is (updates live ask if already listed, else preset for next list)
+	CertImageURLFront string `json:"cert_image_url_front,omitempty"`
+	CertImageURLBack  string `json:"cert_image_url_back,omitempty"`
 }
 
 // ChannelSyncRequest is the request body for POST /inventory/:id/sync.

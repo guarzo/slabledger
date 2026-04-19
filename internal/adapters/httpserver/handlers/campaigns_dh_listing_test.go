@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -241,6 +242,17 @@ func TestHandleListPurchaseOnDH(t *testing.T) {
 			},
 			wantStatus:    http.StatusConflict,
 			wantErrSubstr: "dismissed",
+		},
+		{
+			name:        "PSA keys exhausted → 502 with toast-friendly message",
+			getPurchase: func(ctx context.Context, id string) (*inventory.Purchase, error) { return readyPurchase(), nil },
+			listFn: func(ctx context.Context, certs []string) dhlisting.DHListingResult {
+				return dhlisting.DHListingResult{
+					Error: fmt.Errorf("%w: underlying 401", dhlisting.ErrPSAKeysExhausted),
+				}
+			},
+			wantStatus:    http.StatusBadGateway,
+			wantErrSubstr: "PSA authentication temporarily unavailable",
 		},
 	}
 

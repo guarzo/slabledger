@@ -356,6 +356,61 @@ func TestClient_DelistChannels(t *testing.T) {
 
 func intPtr(v int) *int { return &v }
 
+func TestClient_UpdateInventory_PSAHeaderOnListed(t *testing.T) {
+	tests := []struct {
+		name       string
+		update     InventoryUpdate
+		psaKeys    string
+		wantPSAHdr string
+	}{
+		{
+			name:       "status=listed with keys sends PSA header",
+			update:     InventoryUpdate{Status: "listed"},
+			psaKeys:    "key_alpha,key_beta",
+			wantPSAHdr: "key_alpha",
+		},
+		{
+			name:       "status=in_stock with keys does NOT send PSA header",
+			update:     InventoryUpdate{Status: "in_stock"},
+			psaKeys:    "key_alpha",
+			wantPSAHdr: "",
+		},
+		{
+			name:       "status=listed without keys does NOT send PSA header",
+			update:     InventoryUpdate{Status: "listed"},
+			psaKeys:    "",
+			wantPSAHdr: "",
+		},
+		{
+			name:       "status=sold with keys does NOT send PSA header",
+			update:     InventoryUpdate{Status: "sold"},
+			psaKeys:    "key_alpha",
+			wantPSAHdr: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var gotPSAHdr string
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				require.Equal(t, http.MethodPatch, r.Method)
+				gotPSAHdr = r.Header.Get("X-PSA-API-Key")
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(InventoryResult{DHInventoryID: 1, Status: tt.update.Status})
+			}))
+			defer server.Close()
+
+			c := newTestClient(server.URL)
+			if tt.psaKeys != "" {
+				WithPSAKeys(tt.psaKeys)(c)
+			}
+			_, err := c.UpdateInventory(context.Background(), 1, tt.update)
+			require.NoError(t, err)
+			require.Equal(t, tt.wantPSAHdr, gotPSAHdr)
+		})
+	}
+}
+
 func TestInventoryItem_ListingPriceCents_Serialization(t *testing.T) {
 	tests := []struct {
 		name              string
@@ -401,4 +456,106 @@ func TestInventoryItem_ListingPriceCents_Serialization(t *testing.T) {
 		require.Nil(t, IntPtr(0))
 		require.Equal(t, 45000, *IntPtr(45000))
 	})
+}
+
+func TestInventoryItem_CertImageURL_Serialization(t *testing.T) {
+	tests := []struct {
+		name      string
+		item      InventoryItem
+		wantFront string
+		wantBack  string
+		hasFront  bool
+		hasBack   bool
+	}{
+		{
+			name: "both URLs set",
+			item: InventoryItem{
+				DHCardID:          1,
+				CertNumber:        "c1",
+				GradingCompany:    "psa",
+				Grade:             9.0,
+				CostBasisCents:    100,
+				CertImageURLFront: "https://example.com/front.jpg",
+				CertImageURLBack:  "https://example.com/back.jpg",
+			},
+			wantFront: "https://example.com/front.jpg",
+			wantBack:  "https://example.com/back.jpg",
+			hasFront:  true,
+			hasBack:   true,
+		},
+		{
+			name: "only front URL set",
+			item: InventoryItem{
+				DHCardID:          1,
+				CertNumber:        "c1",
+				GradingCompany:    "psa",
+				Grade:             9.0,
+				CostBasisCents:    100,
+				CertImageURLFront: "https://example.com/front.jpg",
+			},
+			wantFront: "https://example.com/front.jpg",
+			hasFront:  true,
+			hasBack:   false,
+		},
+		{
+			name: "neither URL set",
+			item: InventoryItem{
+				DHCardID:       1,
+				CertNumber:     "c1",
+				GradingCompany: "psa",
+				Grade:          9.0,
+				CostBasisCents: 100,
+			},
+			hasFront: false,
+			hasBack:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			b, err := json.Marshal(tt.item)
+			require.NoError(t, err)
+
+			var got map[string]any
+			require.NoError(t, json.Unmarshal(b, &got))
+
+			if tt.hasFront {
+				require.Equal(t, tt.wantFront, got["cert_image_url_front"])
+			} else {
+				_, present := got["cert_image_url_front"]
+				require.False(t, present, "cert_image_url_front should be omitted when empty")
+			}
+			if tt.hasBack {
+				require.Equal(t, tt.wantBack, got["cert_image_url_back"])
+			} else {
+				_, present := got["cert_image_url_back"]
+				require.False(t, present, "cert_image_url_back should be omitted when empty")
+			}
+		})
+	}
+}
+
+func TestInventoryUpdate_CertImageURL_Serialization(t *testing.T) {
+	upd := InventoryUpdate{
+		Status:            "listed",
+		CertImageURLFront: "https://example.com/front.jpg",
+		CertImageURLBack:  "https://example.com/back.jpg",
+	}
+	b, err := json.Marshal(upd)
+	require.NoError(t, err)
+
+	var got map[string]any
+	require.NoError(t, json.Unmarshal(b, &got))
+	require.Equal(t, "https://example.com/front.jpg", got["cert_image_url_front"])
+	require.Equal(t, "https://example.com/back.jpg", got["cert_image_url_back"])
+
+	emptyUpd := InventoryUpdate{Status: "listed"}
+	b, err = json.Marshal(emptyUpd)
+	require.NoError(t, err)
+	got = nil
+	require.NoError(t, json.Unmarshal(b, &got))
+	_, frontPresent := got["cert_image_url_front"]
+	_, backPresent := got["cert_image_url_back"]
+	require.False(t, frontPresent)
+	require.False(t, backPresent)
 }

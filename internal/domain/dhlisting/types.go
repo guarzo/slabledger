@@ -1,6 +1,27 @@
 package dhlisting
 
-import "context"
+import (
+	"context"
+	"errors"
+)
+
+// ErrPSAKeysExhausted signals that a listing attempt failed because all
+// configured PSA API keys have been rotated through without success.
+//
+// Contract: DHInventoryLister implementations MUST return or wrap this
+// domain-level sentinel (not merely the underlying dh.ErrPSAKeysExhausted)
+// so callers can detect exhaustion via errors.Is(err, ErrPSAKeysExhausted)
+// without importing the dh adapter package. The underlying adapter-side
+// sentinel, when relevant, should be wrapped alongside as the cause.
+var ErrPSAKeysExhausted = errors.New("dh: PSA keys exhausted")
+
+// PSAKeyRotator is implemented by lister adapters that support PSA API key
+// rotation. Defined in the domain so services can type-assert without
+// importing the dh adapter package.
+type PSAKeyRotator interface {
+	RotatePSAKey() bool
+	ResetPSAKeyRotation()
+}
 
 // DHListingService orchestrates the multi-step DH listing workflow:
 // cert resolution → card ID saving → market value resolution → inventory push
@@ -84,7 +105,21 @@ type DHInventoryPushItem struct {
 	CertNumber        string
 	Grade             float64
 	CostBasisCents    int
-	ListingPriceCents int // 0 means omit — DH uses catalog fallback
+	ListingPriceCents int    // 0 means omit — DH uses catalog fallback
+	CertImageURLFront string // optional; when set, DH skips its PSA lookup
+	CertImageURLBack  string // optional; when set, DH skips its PSA lookup
+}
+
+// DHInventoryStatusUpdate carries the fields that UpdateInventoryStatus can
+// mutate on a DH inventory item. Image URLs are optional; when either is set
+// on a transition to "listed", DH uses them instead of doing its own PSA
+// lookup, which keeps the listing path functional when PSA is rate-limited
+// or authentication is failing.
+type DHInventoryStatusUpdate struct {
+	Status            string
+	ListingPriceCents int // 0 means omit
+	CertImageURLFront string
+	CertImageURLBack  string
 }
 
 // DHInventoryPushResultItem is the per-item response from an inventory push.
@@ -107,11 +142,13 @@ type DHInventoryPusher interface {
 
 // DHInventoryLister transitions DH inventory items to listed and syncs channels.
 //
-// UpdateInventoryStatus may carry an optional listingPriceCents to set/update
-// the listing price in the same PATCH call. Pass 0 to omit. On success,
-// returns the listing_price_cents that DH has on the item after the update.
+// UpdateInventoryStatus returns the listing_price_cents that DH has on the
+// item after the update. When update.Status == "listed" and the implementation
+// supports PSA key rotation, a 401 response from DH causes automatic rotation
+// through configured PSA keys; on exhaustion, the error wraps
+// dh.ErrPSAKeysExhausted (detectable via errors.Is).
 type DHInventoryLister interface {
-	UpdateInventoryStatus(ctx context.Context, inventoryID int, status string, listingPriceCents int) (int, error)
+	UpdateInventoryStatus(ctx context.Context, inventoryID int, update DHInventoryStatusUpdate) (int, error)
 	SyncChannels(ctx context.Context, inventoryID int, channels []string) error
 }
 
