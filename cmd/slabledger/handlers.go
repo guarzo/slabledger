@@ -233,6 +233,13 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 	// Price flags handler
 	priceFlagsHandler := handlers.NewPriceFlagsHandler(in.CampaignsService, logger)
 
+	// DH reconcile trigger handler (admin-only). Only wired when the scheduler
+	// is configured; otherwise the handler remains nil and the route is skipped.
+	var dhReconcileHandler *handlers.DHReconcileHandler
+	if in.SchedulerResult != nil && in.SchedulerResult.DHReconcile != nil {
+		dhReconcileHandler = handlers.NewDHReconcileHandler(in.SchedulerResult.DHReconcile, logger)
+	}
+
 	// Assemble ServerDependencies
 	deps := ServerDependencies{
 		Config:                    in.Cfg,
@@ -257,6 +264,7 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 		PSASyncHandler:            psaSyncHandler,
 		OpportunitiesHandler:      opportunitiesHandler,
 		DHHandler:                 dhHandler,
+		DHReconcileHandler:        dhReconcileHandler,
 		SellSheetItemsHandler:     sellSheetItemsHandler,
 		CardCatalogHandler:        cardCatalogHandler,
 		NichesHandler:             nichesHandler,
@@ -276,6 +284,7 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 				dhlisting.WithDHListingPushStatusUpdater(in.PurchaseStore),
 				dhlisting.WithDHListingCandidatesSaver(in.PurchaseStore),
 				dhlisting.WithDHListingResetter(in.PurchaseStore),
+				dhlisting.WithDHListingUnlistedClearer(in.PurchaseStore),
 			)
 		}
 		if in.CardIDMappingRepo != nil {

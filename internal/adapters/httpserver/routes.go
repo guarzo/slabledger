@@ -265,6 +265,9 @@ func (rt *Router) registerDHRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /api/dh/reconcile", rt.authMW.RequireAdmin(http.HandlerFunc(rt.dhHandler.HandleReconcile)))
 	mux.Handle("GET /api/admin/dh-push-config", rt.authMW.RequireAdmin(http.HandlerFunc(rt.dhHandler.HandleGetDHPushConfig)))
 	mux.Handle("PUT /api/admin/dh-push-config", rt.authMW.RequireAdmin(http.HandlerFunc(rt.dhHandler.HandleSaveDHPushConfig)))
+	if rt.dhReconcileHandler != nil {
+		mux.Handle("POST /api/admin/dh-reconcile/trigger", rt.authMW.RequireAdmin(http.HandlerFunc(rt.dhReconcileHandler.HandleTrigger)))
+	}
 	rt.logger.Info(context.Background(), "DH routes registered")
 }
 
