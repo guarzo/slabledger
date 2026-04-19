@@ -32,7 +32,7 @@ func (cs *CampaignStore) CreateCampaign(ctx context.Context, c *inventory.Campai
 	_, err := cs.db.ExecContext(ctx, query,
 		c.ID, c.Name, c.Sport, c.YearRange, c.GradeRange, c.PriceRange,
 		c.CLConfidence, c.BuyTermsCLPct, c.DailySpendCapCents, c.InclusionList,
-		c.ExclusionMode, c.Phase, c.PSASourcingFeeCents, c.EbayFeePct, c.ExpectedFillRate, c.CreatedAt, c.UpdatedAt,
+		c.ExclusionMode, string(c.Phase), c.PSASourcingFeeCents, c.EbayFeePct, c.ExpectedFillRate, c.CreatedAt, c.UpdatedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("create campaign: %w", err)
@@ -155,7 +155,7 @@ func (cs *CampaignStore) UpdateCampaign(ctx context.Context, c *inventory.Campai
 	result, err := cs.db.ExecContext(ctx, query,
 		c.Name, c.Sport, c.YearRange, c.GradeRange, c.PriceRange,
 		c.CLConfidence, c.BuyTermsCLPct, c.DailySpendCapCents, c.InclusionList,
-		c.ExclusionMode, c.Phase, c.PSASourcingFeeCents, c.EbayFeePct, c.ExpectedFillRate, c.UpdatedAt, c.ID,
+		c.ExclusionMode, string(c.Phase), c.PSASourcingFeeCents, c.EbayFeePct, c.ExpectedFillRate, c.UpdatedAt, c.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("update campaign: %w", err)

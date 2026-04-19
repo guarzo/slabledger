@@ -15,24 +15,23 @@ CONTAINER_HOME="$(eval echo ~)"
 
 # Handle Claude Code config
 if [ -d "$CONTAINER_HOME/.claude" ]; then
-    # Detect the host username from Claude's marketplace config (written by host Claude)
-    HOST_HOME=""
+    # Detect all host usernames referenced in Claude's config. Over a container's
+    # lifetime multiple host usernames may have been written (e.g. node, tng),
+    # and we need a symlink for each so stale absolute paths still resolve.
     MARKETPLACE_CFG="$CONTAINER_HOME/.claude/plugins/known_marketplaces.json"
-    if [ -f "$MARKETPLACE_CFG" ]; then
-        HOST_HOME=$(grep -oP '"installLocation":\s*"\K/home/[^/]+' "$MARKETPLACE_CFG" | head -1)
-    fi
-    # Fallback: scan installed_plugins.json
-    if [ -z "$HOST_HOME" ]; then
-        INSTALLED_CFG="$CONTAINER_HOME/.claude/plugins/installed_plugins.json"
-        if [ -f "$INSTALLED_CFG" ]; then
-            HOST_HOME=$(grep -oP '"installPath":\s*"\K/home/[^/]+' "$INSTALLED_CFG" | head -1)
+    INSTALLED_CFG="$CONTAINER_HOME/.claude/plugins/installed_plugins.json"
+    HOST_HOMES=$(
+        {
+            [ -f "$MARKETPLACE_CFG" ] && grep -oP '"installLocation":\s*"\K/home/[^/]+' "$MARKETPLACE_CFG"
+            [ -f "$INSTALLED_CFG" ]   && grep -oP '"installPath":\s*"\K/home/[^/]+' "$INSTALLED_CFG"
+        } 2>/dev/null | sort -u
+    )
+    for HOST_HOME in $HOST_HOMES; do
+        if [ -n "$HOST_HOME" ] && [ "$HOST_HOME" != "$CONTAINER_HOME" ] && [ ! -e "$HOST_HOME" ]; then
+            echo "🔗 Creating symlink $HOST_HOME -> $CONTAINER_HOME (Claude Code host path fix)"
+            sudo ln -sfn "$CONTAINER_HOME" "$HOST_HOME"
         fi
-    fi
-    # Create symlink if host home differs from container home
-    if [ -n "$HOST_HOME" ] && [ "$HOST_HOME" != "$CONTAINER_HOME" ] && [ ! -e "$HOST_HOME" ]; then
-        echo "🔗 Creating symlink $HOST_HOME -> $CONTAINER_HOME (Claude Code host path fix)"
-        sudo ln -sfn "$CONTAINER_HOME" "$HOST_HOME"
-    fi
+    done
 fi
 
 # Handle OpenCode config - detect host home from opencode config

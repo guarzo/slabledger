@@ -21,6 +21,7 @@ RUN apt-get update && apt-get install -y \
     git-lfs \
     # Database tools
     sqlite3 \
+    postgresql-client \
     # Network tools
     curl \
     wget \

@@ -85,7 +85,7 @@ services:
       POSTGRES_PASSWORD: slabledger
       POSTGRES_DB: slabledger
     ports:
-      - "5433:5432"
+      - "5434:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     networks:
