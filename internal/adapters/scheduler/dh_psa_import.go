@@ -75,7 +75,9 @@ func (s *DHPushScheduler) tryPSAImportOrUnmatch(ctx context.Context, p inventory
 }
 
 // applyPSAImportSuccess persists DH IDs + status for a successful psa_import
-// result. Emits a matched state event so audit trails reflect the transition.
+// result. No state event is emitted, matching the existing catalog-match
+// happy path in processPurchase — dh_state_events only records exceptional
+// transitions (held, unmatched), not routine matches.
 func (s *DHPushScheduler) applyPSAImportSuccess(ctx context.Context, p inventory.Purchase, result dh.PSAImportResult, mappedSet map[string]string) processResult {
 	if result.DHCardID == 0 || result.DHInventoryID == 0 {
 		s.logger.Warn(ctx, "dh push: psa_import success missing IDs, treating as skip",
