@@ -22,6 +22,11 @@ const (
 	processUnmatched
 	processSkipped
 	processHeld
+	// processMatchedComplete indicates the purchase matched AND was fully
+	// persisted inline (used by the psa_import fallback, which creates
+	// inventory server-side). Callers should treat it like processMatched
+	// for counting but skip the normal PushInventory step.
+	processMatchedComplete
 )
 
 // DHPushPendingLister returns purchases pending DH push.
@@ -108,6 +113,7 @@ type DHPushScheduler struct {
 	candidatesSaver DHPushCandidatesSaver
 	configLoader    DHPushConfigLoader
 	holdSetter      DHPushHoldSetter
+	psaImporter     DHPushPSAImporter // optional: off-catalog cert fallback
 	eventRec        dhevents.Recorder // optional: records DH state-change events
 	logger          observability.Logger
 	config          DHPushConfig
@@ -218,7 +224,7 @@ func (s *DHPushScheduler) push(ctx context.Context) {
 
 	for _, p := range pending {
 		switch s.processPurchase(ctx, p, mappedSet, pushCfg) {
-		case processMatched:
+		case processMatched, processMatchedComplete:
 			matched++
 		case processUnmatched:
 			unmatched++
@@ -289,10 +295,17 @@ func (s *DHPushScheduler) processPurchase(ctx context.Context, p inventory.Purch
 
 	if !alreadyMapped {
 		resolved, result := s.resolveCert(ctx, p, mappedSet)
-		if result != processMatched {
+		switch result {
+		case processMatched:
+			dhCardID = resolved
+		case processMatchedComplete:
+			// psa_import fallback already created the inventory on DH's side
+			// and persisted fields+status inline. Return without running the
+			// normal PushInventory/fieldsUpdater path.
+			return processMatched
+		default:
 			return result
 		}
-		dhCardID = resolved
 	}
 
 	if holdReason := dhlisting.EvaluateHoldTriggers(&p, pushCfg); holdReason != "" {
@@ -431,14 +444,11 @@ func (s *DHPushScheduler) resolveCert(ctx context.Context, p inventory.Purchase,
 		return s.resolveAmbiguousCert(ctx, p, resp.Candidates, mappedSet)
 
 	default:
-		s.logger.Debug(ctx, "dh push: cert not matched, marking unmatched",
+		s.logger.Debug(ctx, "dh push: cert not matched, attempting psa_import fallback",
 			observability.String("purchaseID", p.ID),
 			observability.String("cert", p.CertNumber),
 			observability.String("status", resp.Status))
-		if !s.markUnmatched(ctx, p, "cert resolve returned "+resp.Status) {
-			return 0, processSkipped
-		}
-		return 0, processUnmatched
+		return 0, s.tryPSAImportOrUnmatch(ctx, p, mappedSet, "cert resolve returned "+resp.Status)
 	}
 }
 
@@ -457,13 +467,10 @@ func (s *DHPushScheduler) resolveAmbiguousCert(ctx context.Context, p inventory.
 	}
 
 	if resolved == 0 {
-		s.logger.Debug(ctx, "dh push: cert ambiguous, marking unmatched",
+		s.logger.Debug(ctx, "dh push: cert ambiguous with no disambiguation, attempting psa_import fallback",
 			observability.String("purchaseID", p.ID),
 			observability.String("cert", p.CertNumber))
-		if !s.markUnmatched(ctx, p, "ambiguous with no disambiguation") {
-			return 0, processSkipped
-		}
-		return 0, processUnmatched
+		return 0, s.tryPSAImportOrUnmatch(ctx, p, mappedSet, "ambiguous with no disambiguation")
 	}
 
 	s.saveCardIDMapping(ctx, p, resolved, mappedSet)

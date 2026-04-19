@@ -390,6 +390,8 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 		if deps.EventRecorder != nil {
 			pushOpts = append(pushOpts, WithDHPushEventRecorder(deps.EventRecorder))
 		}
+		// DH client also implements PSAImport for the off-catalog fallback.
+		pushOpts = append(pushOpts, WithDHPushPSAImporter(deps.DHClient))
 		schedulers = append(schedulers, NewDHPushScheduler(
 			deps.DHPushPendingLister,
 			deps.DHPushStatusUpdater,
