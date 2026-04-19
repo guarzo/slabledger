@@ -27,8 +27,6 @@ func parseTimestamp(s string) time.Time {
 
 // toNullString converts an empty string to a NULL-valued sql.NullString,
 // and a non-empty string to a valid sql.NullString.
-//
-//nolint:unused // used by wave-2 dh_suggestions_repository port
 func toNullString(s string) sql.NullString {
 	if s == "" {
 		return sql.NullString{Valid: false}
@@ -37,8 +35,6 @@ func toNullString(s string) sql.NullString {
 }
 
 // nullIfEmpty returns nil (SQL NULL) when s is empty, otherwise s.
-//
-//nolint:unused // used by wave-2 dh_events_store port
 func nullIfEmpty(s string) any {
 	if s == "" {
 		return nil
@@ -47,8 +43,6 @@ func nullIfEmpty(s string) any {
 }
 
 // zeroAsNull returns nil (SQL NULL) when i is zero, otherwise i.
-//
-//nolint:unused // used by wave-2 dh_events_store port
 func zeroAsNull(i int) any {
 	if i == 0 {
 		return nil
