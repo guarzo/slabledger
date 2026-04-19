@@ -238,14 +238,15 @@ func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []stri
 					Source:        dhevents.SourceDHListing,
 					Notes:         "psa_auth_exhausted",
 				})
-				skipped++
 				// Short-circuit the batch: rotation state is shared across
 				// all purchases in this call, so retrying subsequent items
-				// would just re-exhaust and spam events.
+				// would just re-exhaust and spam events. Count the current
+				// purchase plus every untouched one as skipped so the result
+				// invariant Listed + Synced + Skipped == Total holds.
 				return DHListingResult{
 					Listed:  listed,
 					Synced:  synced,
-					Skipped: skipped,
+					Skipped: len(purchases) - listed - synced,
 					Total:   len(purchases),
 					Error:   err,
 				}
