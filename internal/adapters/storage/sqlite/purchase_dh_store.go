@@ -156,6 +156,43 @@ func (ps *PurchaseStore) ResetDHFieldsForRepush(ctx context.Context, purchaseID 
 	)
 }
 
+// ResetDHFieldsForRepushDueToDelete mirrors ResetDHFieldsForRepush (clears
+// dh_inventory_id, dh_status, dh_listing_price_cents, dh_channels_json,
+// dh_hold_reason; sets dh_push_status='pending'; preserves reviewed_price_cents,
+// dh_card_id, dh_cert_status, dh_candidates) and additionally stamps dh_unlisted_detected_at
+// so the UI can badge the row as "unlisted on DH — will be re-pushed." Called by
+// the DH reconciler when a purchase's dh_inventory_id is missing from the
+// authoritative DH inventory snapshot.
+func (ps *PurchaseStore) ResetDHFieldsForRepushDueToDelete(ctx context.Context, purchaseID string) error {
+	now := time.Now()
+	return ps.execAndExpectRow(ctx, "reset DH fields for repush (DH delete)",
+		`UPDATE campaign_purchases
+		 SET dh_inventory_id = 0,
+		     dh_push_status = ?,
+		     dh_status = '',
+		     dh_listing_price_cents = 0,
+		     dh_channels_json = '[]',
+		     dh_hold_reason = '',
+		     dh_unlisted_detected_at = ?,
+		     updated_at = ?
+		 WHERE id = ?`,
+		inventory.DHPushStatusPending, now, now, purchaseID,
+	)
+}
+
+// ClearDHUnlistedDetectedAt nulls out dh_unlisted_detected_at. Called by the
+// listing service when a purchase successfully transitions to 'listed' so the
+// UI badge disappears after a successful re-list.
+func (ps *PurchaseStore) ClearDHUnlistedDetectedAt(ctx context.Context, purchaseID string) error {
+	return ps.execAndExpectRow(ctx, "clear dh_unlisted_detected_at",
+		`UPDATE campaign_purchases
+		 SET dh_unlisted_detected_at = NULL,
+		     updated_at = ?
+		 WHERE id = ?`,
+		time.Now(), purchaseID,
+	)
+}
+
 // GetPurchasesByDHPushStatus returns received, unsold purchases with the given DH push status.
 // Items that have not yet been received (received_at IS NULL) are excluded so that only
 // physically-in-hand inventory is sent to DH.

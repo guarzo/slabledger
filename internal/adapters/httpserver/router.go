@@ -39,6 +39,7 @@ type Router struct {
 	marketMoversHandler       *handlers.MarketMoversHandler
 	opportunitiesHandler      *handlers.OpportunitiesHandler
 	dhHandler                 *handlers.DHHandler
+	dhReconcileHandler        *handlers.DHReconcileHandler
 	sellSheetItemsHandler     *handlers.SellSheetItemsHandler
 	cardCatalogHandler        *handlers.CardCatalogHandler
 	psaSyncHandler            *handlers.PSASyncHandler
@@ -75,6 +76,7 @@ type RouterConfig struct {
 	MarketMoversHandler       *handlers.MarketMoversHandler    // Market Movers admin; nil = disabled
 	OpportunitiesHandler      *handlers.OpportunitiesHandler   // Arbitrage opportunities; nil = disabled
 	DHHandler                 *handlers.DHHandler              // DH bulk match + intelligence; nil = disabled
+	DHReconcileHandler        *handlers.DHReconcileHandler     // Admin DH reconcile trigger; nil = disabled
 	SellSheetItemsHandler     *handlers.SellSheetItemsHandler  // Sell sheet persistence; nil = disabled
 	CardCatalogHandler        *handlers.CardCatalogHandler     // CL card catalog search; nil = disabled
 	PSASyncHandler            *handlers.PSASyncHandler         // PSA pending items + admin status; nil = disabled
@@ -167,6 +169,10 @@ func NewRouter(cfg RouterConfig) *Router {
 
 	if cfg.DHHandler != nil {
 		rt.dhHandler = cfg.DHHandler
+	}
+
+	if cfg.DHReconcileHandler != nil {
+		rt.dhReconcileHandler = cfg.DHReconcileHandler
 	}
 
 	if cfg.SellSheetItemsHandler != nil {

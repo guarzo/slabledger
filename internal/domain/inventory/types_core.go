@@ -222,6 +222,10 @@ type Purchase struct {
 	DHHoldReason        string       `json:"dhHoldReason,omitempty"`        // Why a re-push was held
 	DHCandidatesJSON    string       `json:"dhCandidatesJson,omitempty"`    // Ambiguous cert resolution candidates JSON
 	DHLastSyncedAt      string       `json:"dhLastSyncedAt,omitempty"`      // When DH inventory was last polled for this purchase (RFC3339)
+	// DHUnlistedDetectedAt is set by the DH reconciler when this purchase's
+	// dh_inventory_id was missing from the DH inventory snapshot (i.e. deleted
+	// on DH). Cleared when the purchase is successfully re-listed. NULL otherwise.
+	DHUnlistedDetectedAt *time.Time `json:"dhUnlistedDetectedAt,omitempty"`
 
 	// --- Card Ladder enrichment ---
 	GemRateID     string `json:"gemRateId,omitempty"`     // CL gemRateID (grade-agnostic card variant identifier)

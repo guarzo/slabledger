@@ -530,11 +530,14 @@ Lists purchases for a campaign (paginated).
     "snapshotStatus": "pending",
     "overridePriceCents": 0,
     "aiSuggestedPriceCents": 0,
+    "dhUnlistedDetectedAt": null,
     "createdAt": "2025-01-01T00:00:00Z",
     "updatedAt": "2025-01-01T00:00:00Z"
   }
 ]
 ```
+
+`dhUnlistedDetectedAt` is set by the DH reconciler when an item appears deleted on DH (drives the "unlisted on DH" inventory badge); cleared automatically on successful re-list.
 
 ---
 
@@ -2158,6 +2161,31 @@ Saves the DH push safety configuration.
 **Response:** `200 OK` — updated `DHPushConfig`
 
 **Errors:** `400` validation error; `503` DH approve service not configured
+
+---
+
+### `POST /api/admin/dh-reconcile/trigger`
+
+Auth: RequireAdmin
+
+Runs the DH inventory reconciler synchronously, scanning for purchases that were
+deleted on DH and resetting their push state so the push pipeline can re-enrol
+them. Mirrors the hourly scheduler's work on demand.
+
+**Body:** (empty)
+
+**Response:** `200 OK` — `ReconcileResult`
+```json
+{
+  "scanned": 42,
+  "missingOnDH": 3,
+  "reset": 3,
+  "errors": [],
+  "resetIds": ["p-123", "p-456", "p-789"]
+}
+```
+
+**Errors:** `502` reconcile run failed; `503` DH reconciler not configured
 
 ---
 

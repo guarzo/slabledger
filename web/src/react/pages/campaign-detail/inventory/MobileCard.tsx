@@ -7,7 +7,7 @@ import {
   getSourceByType, fmtDateShort, plColor, formatPL, mostRecentSale,
   deriveSignalDirection, deriveSignalDelta, isHotSeller, formatReceivedDate,
 } from './utils';
-import { isReadyToList } from './inventoryCalcs';
+import { isReadyToList, needsPriceReview, wasUnlistedFromDH } from './inventoryCalcs';
 import { dhBadgeFor, DH_BADGE_COLORS } from './dhBadge';
 
 interface MobileCardProps {
@@ -241,9 +241,17 @@ export default function MobileCard({ item, selected, onToggle, onRecordSale, onF
             Remove
           </button>
         )}
+        {wasUnlistedFromDH(item) && (
+          <span
+            className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-[var(--warning)]/15 text-[var(--warning)]"
+            title="Item was removed from DH — will be re-pushed + listed"
+          >
+            Re-list (removed from DH)
+          </span>
+        )}
         {dhListedOverride ? (
           <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${DH_BADGE_COLORS.listed}`} title="DH: listed">listed</span>
-        ) : onListOnDH && isReadyToList(item) && !!item.purchase.dhInventoryId ? (
+        ) : onListOnDH && isReadyToList(item) ? (
           <button
             type="button"
             onClick={() => onListOnDH(item.purchase.id)}
@@ -256,6 +264,16 @@ export default function MobileCard({ item, selected, onToggle, onRecordSale, onF
             title="Publish this item on DH"
           >
             {dhListingLoading ? 'Listing…' : 'List'}
+          </button>
+        ) : onSetPrice && needsPriceReview(item) ? (
+          <button
+            type="button"
+            onClick={onSetPrice}
+            className="text-xs font-medium px-2 py-1 rounded bg-[var(--warning)]/15 text-[var(--warning)] hover:bg-[var(--warning)]/30 transition-colors"
+            title="Set a reviewed price before listing"
+            aria-label="Set reviewed price before listing on DH"
+          >
+            Set price
           </button>
         ) : (() => {
           const badge = dhBadgeFor(item.purchase.dhPushStatus, item.purchase.dhStatus, item.purchase.receivedAt);

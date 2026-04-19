@@ -101,11 +101,16 @@ func TestReconcile(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			purchases := tc.purchases // capture
+			var plainResetCalls []string
 			repo := &mocks.PurchaseRepositoryMock{
 				ListAllUnsoldPurchasesFn: func(_ context.Context) ([]inventory.Purchase, error) {
 					return purchases, nil
 				},
 				ResetDHFieldsForRepushFn: func(_ context.Context, id string) error {
+					plainResetCalls = append(plainResetCalls, id)
+					return nil
+				},
+				ResetDHFieldsForRepushDueToDeleteFn: func(_ context.Context, id string) error {
 					if err, ok := tc.resetErrForIDs[id]; ok {
 						return err
 					}
@@ -155,6 +160,11 @@ func TestReconcile(t *testing.T) {
 				if got.ResetIDs[i] != id {
 					t.Errorf("ResetIDs[%d] = %q, want %q", i, got.ResetIDs[i], id)
 				}
+			}
+			// Reconciler must use the delete-aware variant so rows get stamped
+			// with dh_unlisted_detected_at, never the plain reset.
+			if len(plainResetCalls) != 0 {
+				t.Errorf("plain ResetDHFieldsForRepush called %d times (%v); reconciler must use ResetDHFieldsForRepushDueToDelete", len(plainResetCalls), plainResetCalls)
 			}
 		})
 	}

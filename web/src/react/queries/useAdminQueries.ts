@@ -298,6 +298,16 @@ export function useReconcileDH() {
   });
 }
 
+export function useTriggerDHReconcile() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.triggerDHReconcile(),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.admin.dhStatus });
+    },
+  });
+}
+
 export function usePSASyncStatus(options?: AdminQueryOptions) {
   return useQuery({
     queryKey: queryKeys.admin.psaSyncStatus,
