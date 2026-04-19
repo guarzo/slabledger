@@ -11,6 +11,85 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestDHPushAttempts_IncrementAndReset verifies the attempt-counter lifecycle
+// that keeps stuck certs from hammering DH every 5 minutes forever:
+//   - IncrementDHPushAttempts increments atomically and returns the new count.
+//   - UpdatePurchaseDHPushStatus('unmatched') preserves the counter so the
+//     event history retains how many cycles were wasted before we gave up.
+//   - UpdatePurchaseDHPushStatus('pending' | 'matched') resets it so a fresh
+//     CL re-enrollment or a successful push starts with a clean retry budget.
+//   - ApproveHeldPurchase and ResetDHFieldsForRepush also reset, since both
+//     are re-enrollment transitions that should behave like a fresh pending.
+func TestDHPushAttempts_IncrementAndReset(t *testing.T) {
+	repo := setupCampaignsRepo(t)
+	ctx := context.Background()
+	now := time.Now().Truncate(time.Second)
+
+	require.NoError(t, repo.CreateCampaign(ctx, &inventory.Campaign{
+		ID: "camp-atmpts", Name: "Attempts", Phase: inventory.PhaseActive, CreatedAt: now, UpdatedAt: now,
+	}))
+	p := &inventory.Purchase{
+		ID:           "purch-atmpts",
+		CampaignID:   "camp-atmpts",
+		CardName:     "Gengar",
+		CertNumber:   "144203755",
+		Grader:       "PSA",
+		GradeValue:   10,
+		BuyCostCents: 40000,
+		PurchaseDate: "2026-04-01",
+		DHPushStatus: inventory.DHPushStatusPending,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}
+	require.NoError(t, repo.CreatePurchase(ctx, p))
+
+	// Increment three times: counter rolls up 1 → 2 → 3.
+	for i := 1; i <= 3; i++ {
+		got, err := repo.IncrementDHPushAttempts(ctx, p.ID)
+		require.NoError(t, err)
+		assert.Equal(t, i, got, "IncrementDHPushAttempts should return new count")
+	}
+
+	// Flip to 'unmatched' — counter stays so operators can see how stuck it was.
+	require.NoError(t, repo.UpdatePurchaseDHPushStatus(ctx, p.ID, inventory.DHPushStatusUnmatched))
+	fetched, err := repo.GetPurchase(ctx, p.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 3, fetched.DHPushAttempts, "unmatched transition must preserve attempt counter")
+
+	// CL re-enrollment flips back to 'pending' — counter resets.
+	require.NoError(t, repo.UpdatePurchaseDHPushStatus(ctx, p.ID, inventory.DHPushStatusPending))
+	fetched, err = repo.GetPurchase(ctx, p.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 0, fetched.DHPushAttempts, "pending re-enrollment must reset attempt counter")
+
+	// Rack up a few more, then test that 'matched' also resets.
+	_, err = repo.IncrementDHPushAttempts(ctx, p.ID)
+	require.NoError(t, err)
+	_, err = repo.IncrementDHPushAttempts(ctx, p.ID)
+	require.NoError(t, err)
+	require.NoError(t, repo.UpdatePurchaseDHPushStatus(ctx, p.ID, inventory.DHPushStatusMatched))
+	fetched, err = repo.GetPurchase(ctx, p.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 0, fetched.DHPushAttempts, "matched transition must reset attempt counter")
+
+	// ApproveHeldPurchase: queue up attempts, mark held, then approve → reset.
+	_, err = repo.IncrementDHPushAttempts(ctx, p.ID)
+	require.NoError(t, err)
+	require.NoError(t, repo.SetHeldWithReason(ctx, p.ID, "price drift"))
+	require.NoError(t, repo.ApproveHeldPurchase(ctx, p.ID))
+	fetched, err = repo.GetPurchase(ctx, p.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 0, fetched.DHPushAttempts, "ApproveHeldPurchase must reset attempt counter")
+
+	// ResetDHFieldsForRepush: same story — re-enrollment path, reset.
+	_, err = repo.IncrementDHPushAttempts(ctx, p.ID)
+	require.NoError(t, err)
+	require.NoError(t, repo.ResetDHFieldsForRepush(ctx, p.ID))
+	fetched, err = repo.GetPurchase(ctx, p.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 0, fetched.DHPushAttempts, "ResetDHFieldsForRepush must reset attempt counter")
+}
+
 // TestListDHPendingItems_ReturnsOnlyPendingReceivedUnsold verifies the filter:
 // only purchases with dh_push_status='pending', received_at NOT NULL, no sale,
 // and a non-closed parent campaign are returned.

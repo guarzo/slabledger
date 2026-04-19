@@ -114,6 +114,7 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 			buildDeps.DHPushStatusUpdater = deps.PurchaseStore
 			buildDeps.DHPushCandidatesSaver = deps.PurchaseStore
 			buildDeps.DHPushHoldSetter = deps.PurchaseStore
+			buildDeps.DHPushAttemptsTracker = deps.PurchaseStore
 		}
 		if deps.DHStore != nil {
 			buildDeps.DHPushConfigLoader = deps.DHStore

@@ -219,6 +219,7 @@ type Purchase struct {
 	DHChannelsJSON      string       `json:"dhChannelsJson,omitempty"`      // Per-channel sync status JSON blob
 	DHStatus            DHStatus     `json:"dhStatus,omitempty"`            // DH inventory status
 	DHPushStatus        DHPushStatus `json:"dhPushStatus,omitempty"`        // Pipeline status: "", "pending", "matched", "unmatched", "manual", "held"
+	DHPushAttempts      int          `json:"dhPushAttempts,omitempty"`      // Consecutive DH push skip count; reset when row re-enters pending or matched
 	DHHoldReason        string       `json:"dhHoldReason,omitempty"`        // Why a re-push was held
 	DHCandidatesJSON    string       `json:"dhCandidatesJson,omitempty"`    // Ambiguous cert resolution candidates JSON
 	DHLastSyncedAt      string       `json:"dhLastSyncedAt,omitempty"`      // When DH inventory was last polled for this purchase (RFC3339)

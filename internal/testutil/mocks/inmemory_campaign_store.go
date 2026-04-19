@@ -66,6 +66,7 @@ type InMemoryCampaignStore struct {
 	UpdatePurchaseDHFieldsFn            func(ctx context.Context, id string, update inventory.DHFieldsUpdate) error
 	GetPurchasesByDHCertStatusFn        func(ctx context.Context, status string, limit int) ([]inventory.Purchase, error)
 	UpdatePurchaseDHPushStatusFn        func(ctx context.Context, id string, status string) error
+	IncrementDHPushAttemptsFn           func(ctx context.Context, id string) (int, error)
 	UpdatePurchaseDHStatusFn            func(ctx context.Context, id string, status string) error
 	UpdatePurchaseDHCardIDFn            func(ctx context.Context, id string, cardID int) error
 	UpdatePurchaseDHCandidatesFn        func(ctx context.Context, id string, candidatesJSON string) error
@@ -1037,6 +1038,13 @@ func (m *InMemoryCampaignStore) UpdatePurchaseDHPushStatus(ctx context.Context, 
 		return m.UpdatePurchaseDHPushStatusFn(ctx, id, status)
 	}
 	return nil
+}
+
+func (m *InMemoryCampaignStore) IncrementDHPushAttempts(ctx context.Context, id string) (int, error) {
+	if m.IncrementDHPushAttemptsFn != nil {
+		return m.IncrementDHPushAttemptsFn(ctx, id)
+	}
+	return 0, nil
 }
 
 func (m *InMemoryCampaignStore) UpdatePurchaseDHStatus(ctx context.Context, id string, status string) error {
