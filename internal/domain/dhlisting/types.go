@@ -5,11 +5,14 @@ import (
 	"errors"
 )
 
-// ErrPSAKeysExhausted is surfaced by DHInventoryLister implementations when
-// all configured PSA API keys have been rotated through without success on a
-// status-listed update. This is a domain-level re-export of the underlying
-// dh.ErrPSAKeysExhausted so callers can detect the exhaustion case without
-// importing the dh adapter package.
+// ErrPSAKeysExhausted signals that a listing attempt failed because all
+// configured PSA API keys have been rotated through without success.
+//
+// Contract: DHInventoryLister implementations MUST return or wrap this
+// domain-level sentinel (not merely the underlying dh.ErrPSAKeysExhausted)
+// so callers can detect exhaustion via errors.Is(err, ErrPSAKeysExhausted)
+// without importing the dh adapter package. The underlying adapter-side
+// sentinel, when relevant, should be wrapped alongside as the cause.
 var ErrPSAKeysExhausted = errors.New("dh: PSA keys exhausted")
 
 // PSAKeyRotator is implemented by lister adapters that support PSA API key

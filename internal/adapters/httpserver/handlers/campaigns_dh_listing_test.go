@@ -243,6 +243,17 @@ func TestHandleListPurchaseOnDH(t *testing.T) {
 			wantStatus:    http.StatusConflict,
 			wantErrSubstr: "dismissed",
 		},
+		{
+			name:        "PSA keys exhausted → 502 with toast-friendly message",
+			getPurchase: func(ctx context.Context, id string) (*inventory.Purchase, error) { return readyPurchase(), nil },
+			listFn: func(ctx context.Context, certs []string) dhlisting.DHListingResult {
+				return dhlisting.DHListingResult{
+					Error: fmt.Errorf("%w: underlying 401", dhlisting.ErrPSAKeysExhausted),
+				}
+			},
+			wantStatus:    http.StatusBadGateway,
+			wantErrSubstr: "PSA authentication temporarily unavailable",
+		},
 	}
 
 	for _, tt := range tests {
@@ -286,52 +297,5 @@ func TestHandleListPurchaseOnDH(t *testing.T) {
 				}
 			}
 		})
-	}
-}
-
-// TestHandleListPurchaseOnDH_PSAExhaustion verifies that when the DH listing
-// service surfaces ErrPSAKeysExhausted, the handler maps it to a 502 with a
-// user-actionable message (so the UI can show a retry-later toast) instead of
-// a generic 500.
-func TestHandleListPurchaseOnDH_PSAExhaustion(t *testing.T) {
-	const purchaseID = "p1"
-	receivedAtStr := "2026-04-16T00:00:00Z"
-	receivedAt := &receivedAtStr
-
-	svc := &mocks.MockInventoryService{
-		GetPurchaseFn: func(ctx context.Context, id string) (*inventory.Purchase, error) {
-			return &inventory.Purchase{
-				ID:                 purchaseID,
-				CertNumber:         "CERT123",
-				ReceivedAt:         receivedAt,
-				DHInventoryID:      42,
-				DHStatus:           inventory.DHStatusInStock,
-				ReviewedPriceCents: 50000,
-			}, nil
-		},
-	}
-
-	dhSvc := &mocks.MockDHListingService{
-		ListPurchasesFn: func(ctx context.Context, certs []string) dhlisting.DHListingResult {
-			return dhlisting.DHListingResult{
-				Error: fmt.Errorf("%w: underlying 401", dhlisting.ErrPSAKeysExhausted),
-			}
-		},
-	}
-
-	h := newTestHandlerWithDHListing(svc, dhSvc)
-
-	req := httptest.NewRequest(http.MethodPost, "/api/purchases/"+purchaseID+"/list-on-dh", nil)
-	req.SetPathValue("purchaseId", purchaseID)
-	rec := httptest.NewRecorder()
-
-	h.HandleListPurchaseOnDH(rec, req)
-
-	if rec.Code != http.StatusBadGateway {
-		t.Fatalf("status = %d, want %d; body: %s", rec.Code, http.StatusBadGateway, rec.Body.String())
-	}
-	msg := decodeErrorResponse(t, rec)
-	if !strings.Contains(msg, "PSA authentication temporarily unavailable") {
-		t.Errorf("error body = %q, want substring %q", msg, "PSA authentication temporarily unavailable")
 	}
 }

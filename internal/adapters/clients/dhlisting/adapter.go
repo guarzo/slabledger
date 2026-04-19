@@ -145,6 +145,28 @@ func (a *InventoryAdapter) WithLogger(l observability.Logger) *InventoryAdapter 
 	return a
 }
 
+// RotatePSAKey delegates to the underlying client's key rotator when available.
+// Returns false when no rotator is configured so callers treat it as exhausted.
+// Required so *InventoryAdapter satisfies dh.PSAKeyRotator (and the mirror
+// domain interface dhlisting.PSAKeyRotator), which dhListingService uses to
+// reset rotation state at the top of each ListPurchases call.
+func (a *InventoryAdapter) RotatePSAKey() bool {
+	if a.rotator == nil {
+		return false
+	}
+	return a.rotator.RotatePSAKey()
+}
+
+// ResetPSAKeyRotation delegates to the underlying client when available; no-op
+// otherwise. See RotatePSAKey for why InventoryAdapter satisfies the rotator
+// interface directly rather than relying on the embedded field.
+func (a *InventoryAdapter) ResetPSAKeyRotation() {
+	if a.rotator == nil {
+		return
+	}
+	a.rotator.ResetPSAKeyRotation()
+}
+
 // UpdateInventoryStatus PATCHes /inventory/:id with the new status, listing
 // price, and (when set) cert image URLs. When update.Status == "listed" and
 // a rotator is configured, PSA auth/rate-limit errors trigger key rotation.
@@ -202,6 +224,8 @@ func (a *InventoryAdapter) MarkInventorySold(ctx context.Context, inventoryID in
 
 var _ dhlisting.DHInventoryLister = (*InventoryAdapter)(nil)
 var _ inventory.DHSoldNotifier = (*InventoryAdapter)(nil)
+var _ dh.PSAKeyRotator = (*InventoryAdapter)(nil)
+var _ dhlisting.PSAKeyRotator = (*InventoryAdapter)(nil)
 
 // --- DHInventorySnapshotFetcher adapter ---
 

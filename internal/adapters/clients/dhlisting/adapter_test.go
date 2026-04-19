@@ -563,3 +563,43 @@ func TestInventoryAdapter_UpdateInventoryStatus_PassesImagesAndRotates(t *testin
 	require.Equal(t, "https://example.com/back.jpg", capturedUpdates[0].CertImageURLBack)
 	require.Equal(t, 1, rotateCalls)
 }
+
+// TestInventoryAdapter_ImplementsRotatorInterfaces pins down that
+// *InventoryAdapter itself satisfies dh.PSAKeyRotator and the domain mirror
+// dhlisting.PSAKeyRotator. This is load-bearing: dhListingService.ListPurchases
+// type-asserts its lister to dhlisting.PSAKeyRotator to reset rotation state
+// at the top of each call. If the adapter loses those methods, the reset
+// silently no-ops in production and rotation state leaks between cycles.
+func TestInventoryAdapter_ImplementsRotatorInterfaces(t *testing.T) {
+	resetCalls := 0
+	rotateCalls := 0
+	fake := &fakeDHListerClient{
+		updateFn: func(_ context.Context, _ int, _ dh.InventoryUpdate) (*dh.InventoryResult, error) {
+			return &dh.InventoryResult{}, nil
+		},
+		rotateFn: func() bool { rotateCalls++; return true },
+		resetFn:  func() { resetCalls++ },
+	}
+	a := NewInventoryAdapter(fake)
+
+	// Compile-time + runtime assertions: the adapter must satisfy both
+	// the adapter-side and domain-side rotator interfaces.
+	var _ dh.PSAKeyRotator = a
+	var _ dhlisting.PSAKeyRotator = a
+
+	// Delegation: adapter methods must forward to the underlying client.
+	a.ResetPSAKeyRotation()
+	require.Equal(t, 1, resetCalls, "ResetPSAKeyRotation must delegate to the rotator")
+	require.True(t, a.RotatePSAKey())
+	require.Equal(t, 1, rotateCalls, "RotatePSAKey must delegate to the rotator")
+
+	// Without a rotator, methods must be safe no-ops (false / silent return).
+	bare := NewInventoryAdapter(&fakeDHListerClient{
+		updateFn: func(_ context.Context, _ int, _ dh.InventoryUpdate) (*dh.InventoryResult, error) {
+			return &dh.InventoryResult{}, nil
+		},
+	})
+	bare.rotator = nil // force the nil-rotator path
+	require.False(t, bare.RotatePSAKey())
+	bare.ResetPSAKeyRotation() // must not panic
+}
