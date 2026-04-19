@@ -3,15 +3,14 @@ package scheduler
 import (
 	"context"
 	"sync"
-	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/dhlisting"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/platform/config"
 )
 
-// DHReconcileScheduler wraps the dhlisting.Reconciler and runs it on a
-// daily cadence. The reconciler diffs local DH linkage against a fresh DH
+// DHReconcileScheduler wraps the dhlisting.Reconciler and runs it on an
+// hourly cadence. The reconciler diffs local DH linkage against a fresh DH
 // inventory snapshot and resets any local purchases whose dh_inventory_id
 // is no longer on DH. The push scheduler then re-enrolls the reset rows
 // on its next tick (default every 5 minutes).
@@ -50,11 +49,10 @@ func (s *DHReconcileScheduler) Start(ctx context.Context) {
 	RunLoop(ctx, LoopConfig{
 		Name:         "dh-reconcile",
 		Interval:     s.config.Interval,
-		InitialDelay: timeUntilHour(time.Now(), s.config.RefreshHour),
+		InitialDelay: 0,
 		WG:           s.WG(),
 		StopChan:     s.Done(),
 		Logger:       s.logger,
-		LogFields:    []observability.Field{observability.Int("refreshHour", s.config.RefreshHour)},
 	}, func(ctx context.Context) {
 		// Error is logged inside RunOnce; the loop callback is fire-and-forget.
 		_ = s.RunOnce(ctx)

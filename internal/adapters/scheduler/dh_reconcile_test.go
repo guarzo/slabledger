@@ -51,7 +51,7 @@ func TestDHReconcileScheduler_RunOnceCallsReconcile(t *testing.T) {
 		result: dhlisting.ReconcileResult{Scanned: 100, MissingOnDH: 5, Reset: 5},
 	}
 	s := NewDHReconcileScheduler(rec, mocks.NewMockLogger(),
-		config.DHReconcileConfig{Enabled: true, Interval: 24 * time.Hour, RefreshHour: 6})
+		config.DHReconcileConfig{Enabled: true, Interval: 1 * time.Hour})
 
 	err := s.RunOnce(context.Background())
 	require.NoError(t, err)
@@ -62,7 +62,7 @@ func TestDHReconcileScheduler_RunOnceReturnsReconcileError(t *testing.T) {
 	wantErr := errors.New("snapshot failed")
 	rec := &fakeReconciler{err: wantErr}
 	s := NewDHReconcileScheduler(rec, mocks.NewMockLogger(),
-		config.DHReconcileConfig{Enabled: true, Interval: 24 * time.Hour, RefreshHour: 6})
+		config.DHReconcileConfig{Enabled: true, Interval: 1 * time.Hour})
 
 	err := s.RunOnce(context.Background())
 	require.Error(t, err)
@@ -72,6 +72,6 @@ func TestDHReconcileScheduler_RunOnceReturnsReconcileError(t *testing.T) {
 func TestDHReconcileScheduler_DefaultIntervalApplied(t *testing.T) {
 	rec := &fakeReconciler{}
 	s := NewDHReconcileScheduler(rec, mocks.NewMockLogger(),
-		config.DHReconcileConfig{Enabled: true, Interval: 0, RefreshHour: 6})
-	assert.Equal(t, 24*time.Hour, s.config.Interval, "zero interval should default to 24h")
+		config.DHReconcileConfig{Enabled: true, Interval: 0})
+	assert.Equal(t, 1*time.Hour, s.config.Interval, "zero interval should default to 1h")
 }

@@ -343,12 +343,11 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 		))
 	}
 
-	// DH inventory reconciliation scheduler (daily drift scan).
+	// DH inventory reconciliation scheduler (hourly drift scan).
 	if deps.DHReconciler != nil {
 		reconcileCfg := config.DHReconcileConfig{
-			Enabled:     cfg.DHReconcile.Enabled,
-			Interval:    cfg.DHReconcile.Interval,
-			RefreshHour: cfg.DHReconcile.RefreshHour,
+			Enabled:  cfg.DHReconcile.Enabled,
+			Interval: cfg.DHReconcile.Interval,
 		}
 		schedulers = append(schedulers, NewDHReconcileScheduler(
 			deps.DHReconciler,
