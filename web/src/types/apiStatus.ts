@@ -139,6 +139,14 @@ export interface DHReconcileResponse {
   resetIds?: string[];
 }
 
+export interface DHReconcileTriggerResult {
+  scanned: number;
+  missingOnDH: number;
+  reset: number;
+  errors: string[];
+  resetIds: string[];
+}
+
 export interface DHCandidate {
   dh_card_id: number;
   card_name: string;

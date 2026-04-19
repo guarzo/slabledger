@@ -1,6 +1,8 @@
-import { useDHStatus } from '../../queries/useAdminQueries';
+import { useDHStatus, useTriggerDHReconcile } from '../../queries/useAdminQueries';
 import { formatPct } from '../../utils/formatters';
 import { CardShell } from '../../ui/CardShell';
+import Button from '../../ui/Button';
+import { useToast } from '../../contexts/ToastContext';
 import { SummaryCard } from './shared';
 import { formatAdminDate } from './adminUtils';
 
@@ -29,6 +31,23 @@ function HealthCard({ label, value, valueColor, sub }: HealthCardProps) {
 
 export function DHStatsPanel({ enabled = true }: { enabled?: boolean }) {
   const { data: status, isLoading, error } = useDHStatus({ enabled });
+  const reconcileMutation = useTriggerDHReconcile();
+  const toast = useToast();
+
+  const handleReconcile = async () => {
+    try {
+      const result = await reconcileMutation.mutateAsync();
+      if (result.reset > 0) {
+        toast.success(`Reset ${result.reset} items removed from DH`);
+      } else if (result.errors.length > 0) {
+        toast.warning(`${result.reset} reset, ${result.errors.length} errors — check logs`);
+      } else {
+        toast.success('All DH-linked items still present on DH');
+      }
+    } catch {
+      toast.error('DH reconcile failed');
+    }
+  };
 
   if (!enabled) {
     return (
@@ -71,6 +90,22 @@ export function DHStatsPanel({ enabled = true }: { enabled?: boolean }) {
 
   return (
     <div className="space-y-4 mt-4">
+      {/* Manual sync action */}
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-xs text-[var(--text-muted)]">
+          Sync DH to reset items that are no longer listed on DoubleHolo.
+        </div>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={handleReconcile}
+          loading={reconcileMutation.isPending}
+          disabled={reconcileMutation.isPending}
+        >
+          {reconcileMutation.isPending ? 'Syncing…' : 'Sync DH now'}
+        </Button>
+      </div>
+
       {/* Integration Health */}
       <div>
         <h4 className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide mb-2">Integration Health</h4>
