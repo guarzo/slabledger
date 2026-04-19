@@ -24,8 +24,15 @@ type DHReconcilePurchaseLister interface {
 }
 
 // DHReconcileResetter atomically clears DH inventory linkage on a purchase.
+//
+// ResetDHFieldsForRepush is used by the inline listing service when a stale
+// inventory ID is detected mid-push. ResetDHFieldsForRepushDueToDelete is used
+// by the reconciler when a purchase has been unlisted on DH (inventory ID
+// missing from the authoritative snapshot); it additionally stamps
+// dh_unlisted_detected_at so the UI can surface the state.
 type DHReconcileResetter interface {
 	ResetDHFieldsForRepush(ctx context.Context, purchaseID string) error
+	ResetDHFieldsForRepushDueToDelete(ctx context.Context, purchaseID string) error
 }
 
 // ReconcileResult summarises a reconciliation run.
@@ -121,7 +128,7 @@ func (s *reconcileService) Reconcile(ctx context.Context) (ReconcileResult, erro
 		}
 		result.MissingOnDH++
 
-		if err := s.resetter.ResetDHFieldsForRepush(ctx, p.ID); err != nil {
+		if err := s.resetter.ResetDHFieldsForRepushDueToDelete(ctx, p.ID); err != nil {
 			s.logger.Warn(ctx, "dh reconcile: reset failed",
 				observability.String("purchaseID", p.ID),
 				observability.Int("dhInventoryID", p.DHInventoryID),

@@ -12,12 +12,18 @@ import (
 )
 
 type mockResetter struct {
-	resetErr   error
-	resetCalls []string // purchaseIDs passed to ResetDHFieldsForRepush
+	resetErr         error
+	resetCalls       []string // purchaseIDs passed to ResetDHFieldsForRepush
+	resetDeleteCalls []string // purchaseIDs passed to ResetDHFieldsForRepushDueToDelete
 }
 
 func (m *mockResetter) ResetDHFieldsForRepush(_ context.Context, purchaseID string) error {
 	m.resetCalls = append(m.resetCalls, purchaseID)
+	return m.resetErr
+}
+
+func (m *mockResetter) ResetDHFieldsForRepushDueToDelete(_ context.Context, purchaseID string) error {
+	m.resetDeleteCalls = append(m.resetDeleteCalls, purchaseID)
 	return m.resetErr
 }
 
