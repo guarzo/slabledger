@@ -93,5 +93,14 @@ func (h *DHReconcileHandler) HandleTrigger(w http.ResponseWriter, r *http.Reques
 		})
 		return
 	}
+	// Normalize nil slices so the wire payload always emits `[]` not `null` —
+	// keeps the response shape identical to the zero-body case and avoids
+	// forcing every client to tolerate both forms.
+	if result.Errors == nil {
+		result.Errors = []string{}
+	}
+	if result.ResetIDs == nil {
+		result.ResetIDs = []string{}
+	}
 	writeJSON(w, http.StatusOK, result)
 }

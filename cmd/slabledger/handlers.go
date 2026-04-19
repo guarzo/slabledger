@@ -233,12 +233,15 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 	// Price flags handler
 	priceFlagsHandler := handlers.NewPriceFlagsHandler(in.CampaignsService, logger)
 
-	// DH reconcile trigger handler (admin-only). Only wired when the scheduler
-	// is configured; otherwise the handler remains nil and the route is skipped.
-	var dhReconcileHandler *handlers.DHReconcileHandler
+	// DH reconcile trigger handler (admin-only). Always constructed — the handler
+	// is nil-runner-safe (returns 503 "not configured" when the scheduler is
+	// missing) so the route stays registered and returns a meaningful status
+	// instead of a 404 when DH is disabled.
+	var dhReconcileRunner handlers.DHReconcileRunner
 	if in.SchedulerResult != nil && in.SchedulerResult.DHReconcile != nil {
-		dhReconcileHandler = handlers.NewDHReconcileHandler(in.SchedulerResult.DHReconcile, logger)
+		dhReconcileRunner = in.SchedulerResult.DHReconcile
 	}
+	dhReconcileHandler := handlers.NewDHReconcileHandler(dhReconcileRunner, logger)
 
 	// Assemble ServerDependencies
 	deps := ServerDependencies{

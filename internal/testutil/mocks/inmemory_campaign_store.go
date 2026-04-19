@@ -1097,6 +1097,7 @@ func (m *InMemoryCampaignStore) ResetDHFieldsForRepush(ctx context.Context, purc
 	p.DHStatus = ""
 	p.DHListingPriceCents = 0
 	p.DHChannelsJSON = "[]"
+	p.DHHoldReason = ""
 	p.UpdatedAt = time.Now()
 	return nil
 }

@@ -2,12 +2,17 @@ package scheduler
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/guarzo/slabledger/internal/domain/dhlisting"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/platform/config"
 )
+
+// ErrReconcileInProgress is returned when RunOnce is called while another
+// reconcile cycle is already executing (scheduled tick or prior admin trigger).
+var ErrReconcileInProgress = fmt.Errorf("DH reconcile already in progress")
 
 // DHReconcileScheduler wraps the dhlisting.Reconciler and runs it on an
 // hourly cadence. The reconciler diffs local DH linkage against a fresh DH
@@ -17,6 +22,7 @@ import (
 type DHReconcileScheduler struct {
 	StopHandle
 	statsMu    sync.RWMutex
+	running    sync.Mutex // single-flight guard: scheduled loop + admin trigger must not overlap
 	reconciler dhlisting.Reconciler
 	logger     observability.Logger
 	config     config.DHReconcileConfig
@@ -54,14 +60,29 @@ func (s *DHReconcileScheduler) Start(ctx context.Context) {
 		StopChan:     s.Done(),
 		Logger:       s.logger,
 	}, func(ctx context.Context) {
-		// Error is logged inside RunOnce; the loop callback is fire-and-forget.
-		_ = s.RunOnce(ctx)
+		if !s.running.TryLock() {
+			s.logger.Info(ctx, "DH reconcile skipping tick: previous run still in progress")
+			return
+		}
+		defer s.running.Unlock()
+		// Error is logged inside runOnce; the loop callback is fire-and-forget.
+		_ = s.runOnce(ctx)
 	})
 }
 
 // RunOnce executes a single reconciliation cycle. Exported for manual trigger
-// (e.g. from an admin HTTP handler).
+// (e.g. from an admin HTTP handler). Returns ErrReconcileInProgress if a cycle
+// is already running (background tick or prior manual trigger).
 func (s *DHReconcileScheduler) RunOnce(ctx context.Context) error {
+	if !s.running.TryLock() {
+		return ErrReconcileInProgress
+	}
+	defer s.running.Unlock()
+	return s.runOnce(ctx)
+}
+
+// runOnce does the actual reconcile work. Callers must hold s.running.
+func (s *DHReconcileScheduler) runOnce(ctx context.Context) error {
 	result, err := s.reconciler.Reconcile(ctx)
 
 	s.statsMu.Lock()

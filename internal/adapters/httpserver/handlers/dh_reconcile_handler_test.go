@@ -189,9 +189,11 @@ func (m *mockDHReconcileRunner) GetLastRunResult() *dhlisting.ReconcileResult {
 // DHReconcileScheduler so it plugs in directly at wiring time.
 func TestDHReconcileHandler_Trigger(t *testing.T) {
 	tests := []struct {
-		name       string
-		runner     *mockDHReconcileRunner
-		wantStatus int
+		name            string
+		runner          *mockDHReconcileRunner
+		wantStatus      int
+		expectResult    bool // success case asserts Scanned=5/Reset=2 in the unmarshalled body
+		expectZeroBody  bool // success-but-nil-result case asserts the fallback zero-shape body
 	}{
 		{
 			name: "success returns result",
@@ -201,7 +203,8 @@ func TestDHReconcileHandler_Trigger(t *testing.T) {
 					return &dhlisting.ReconcileResult{Scanned: 5, MissingOnDH: 2, Reset: 2}
 				},
 			},
-			wantStatus: http.StatusOK,
+			wantStatus:   http.StatusOK,
+			expectResult: true,
 		},
 		{
 			name: "runner error returns 502",
@@ -216,7 +219,8 @@ func TestDHReconcileHandler_Trigger(t *testing.T) {
 				RunOnceFn:          func(context.Context) error { return nil },
 				GetLastRunResultFn: func() *dhlisting.ReconcileResult { return nil },
 			},
-			wantStatus: http.StatusOK,
+			wantStatus:     http.StatusOK,
+			expectZeroBody: true,
 		},
 	}
 	for _, tc := range tests {
@@ -228,7 +232,7 @@ func TestDHReconcileHandler_Trigger(t *testing.T) {
 			if rec.Code != tc.wantStatus {
 				t.Errorf("status: got %d, want %d", rec.Code, tc.wantStatus)
 			}
-			if tc.wantStatus == http.StatusOK && tc.runner.GetLastRunResultFn != nil && tc.runner.GetLastRunResultFn() != nil {
+			if tc.expectResult {
 				var got dhlisting.ReconcileResult
 				if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 					t.Fatalf("unmarshal body: %v", err)
@@ -237,7 +241,7 @@ func TestDHReconcileHandler_Trigger(t *testing.T) {
 					t.Errorf("result: got %+v, want Scanned=5 Reset=2", got)
 				}
 			}
-			if tc.name == "success with nil last result returns 200 zero body" {
+			if tc.expectZeroBody {
 				var body map[string]any
 				if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 					t.Fatalf("unmarshal zero body: %v", err)

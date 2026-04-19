@@ -244,6 +244,14 @@ func (rt *Router) registerPricingAPIRoutes(mux *http.ServeMux) {
 
 // registerDHRoutes wires the DH bulk match, export, intelligence, and suggestions endpoints.
 func (rt *Router) registerDHRoutes(mux *http.ServeMux) {
+	// The admin reconcile trigger lives on its own handler (not dhHandler) and
+	// should be registered even when dhHandler is nil — the handler itself
+	// returns 503 when the reconcile scheduler is absent, which is more
+	// informative than a 404 on a missing route.
+	if rt.dhReconcileHandler != nil && rt.authMW != nil {
+		mux.Handle("POST /api/admin/dh-reconcile/trigger", rt.authMW.RequireAdmin(http.HandlerFunc(rt.dhReconcileHandler.HandleTrigger)))
+	}
+
 	if rt.dhHandler == nil || rt.authMW == nil {
 		if rt.dhHandler != nil {
 			rt.logger.Warn(context.Background(), "skipping DH route registration: auth middleware not configured")
@@ -265,9 +273,6 @@ func (rt *Router) registerDHRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /api/dh/reconcile", rt.authMW.RequireAdmin(http.HandlerFunc(rt.dhHandler.HandleReconcile)))
 	mux.Handle("GET /api/admin/dh-push-config", rt.authMW.RequireAdmin(http.HandlerFunc(rt.dhHandler.HandleGetDHPushConfig)))
 	mux.Handle("PUT /api/admin/dh-push-config", rt.authMW.RequireAdmin(http.HandlerFunc(rt.dhHandler.HandleSaveDHPushConfig)))
-	if rt.dhReconcileHandler != nil {
-		mux.Handle("POST /api/admin/dh-reconcile/trigger", rt.authMW.RequireAdmin(http.HandlerFunc(rt.dhReconcileHandler.HandleTrigger)))
-	}
 	rt.logger.Info(context.Background(), "DH routes registered")
 }
 

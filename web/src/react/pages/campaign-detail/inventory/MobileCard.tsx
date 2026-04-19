@@ -251,7 +251,7 @@ export default function MobileCard({ item, selected, onToggle, onRecordSale, onF
         )}
         {dhListedOverride ? (
           <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${DH_BADGE_COLORS.listed}`} title="DH: listed">listed</span>
-        ) : onListOnDH && isReadyToList(item) && !!item.purchase.dhInventoryId ? (
+        ) : onListOnDH && isReadyToList(item) ? (
           <button
             type="button"
             onClick={() => onListOnDH(item.purchase.id)}
