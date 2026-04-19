@@ -25,7 +25,8 @@ type dhListingService struct {
 	fieldsUpdater     DHListingFieldsUpdater
 	pushStatusUpdater DHListingPushStatusUpdater
 	candidatesSaver   DHListingCandidatesSaver
-	resetter          DHReconcileResetter // optional: auto-resets stale DH inventory IDs inline
+	resetter          DHReconcileResetter      // optional: auto-resets stale DH inventory IDs inline
+	unlistedClearer   DHListingUnlistedClearer // optional: clears dh_unlisted_detected_at on successful list
 	logger            observability.Logger
 	eventRec          dhevents.Recorder // may be nil
 }
@@ -48,6 +49,14 @@ type DHListingPushStatusUpdater interface {
 // DHListingCandidatesSaver stores DH cert resolution candidates on a purchase.
 type DHListingCandidatesSaver interface {
 	UpdatePurchaseDHCandidates(ctx context.Context, id string, candidatesJSON string) error
+}
+
+// DHListingUnlistedClearer clears the dh_unlisted_detected_at timestamp on a
+// purchase after it successfully transitions back to `listed` on DH. The
+// column is a UI badge marker set by the reconciler when a DH-side delisting
+// is detected; clearing it removes the "unlisted on DH" indicator.
+type DHListingUnlistedClearer interface {
+	ClearDHUnlistedDetectedAt(ctx context.Context, purchaseID string) error
 }
 
 // DHListingServiceOption configures optional dependencies on dhListingService.
@@ -93,6 +102,14 @@ func WithDHListingCandidatesSaver(saver DHListingCandidatesSaver) DHListingServi
 // reset to pending so the push pipeline re-enrolls it on the next run.
 func WithDHListingResetter(r DHReconcileResetter) DHListingServiceOption {
 	return func(s *dhListingService) { s.resetter = r }
+}
+
+// WithDHListingUnlistedClearer enables best-effort clearing of the
+// dh_unlisted_detected_at timestamp when a purchase successfully re-lists on
+// DH. If unset, the "unlisted on DH" badge persists until the reconciler
+// clears it through its own path.
+func WithDHListingUnlistedClearer(c DHListingUnlistedClearer) DHListingServiceOption {
+	return func(s *dhListingService) { s.unlistedClearer = c }
 }
 
 // WithEventRecorder injects a DH event recorder. Optional — if nil, no
@@ -295,6 +312,16 @@ func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []stri
 				DHInventoryID: p.DHInventoryID,
 				Source:        dhevents.SourceDHListing,
 			})
+
+			// Best-effort: clear the "unlisted on DH" badge now that the item
+			// is listed again. A failure here must not abort the listing.
+			if s.unlistedClearer != nil {
+				if clearErr := s.unlistedClearer.ClearDHUnlistedDetectedAt(ctx, p.ID); clearErr != nil {
+					s.logger.Warn(ctx, "dh listing: failed to clear dh_unlisted_detected_at",
+						observability.String("purchaseID", p.ID),
+						observability.Err(clearErr))
+				}
+			}
 		}
 	}
 
