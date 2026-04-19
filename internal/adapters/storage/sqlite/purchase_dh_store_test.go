@@ -338,6 +338,52 @@ func TestPurchaseStore_UpdatePurchaseDHPriceSync(t *testing.T) {
 	}
 }
 
+// TestResetDHFieldsForRepushDueToDelete_SetsTimestamp verifies that the
+// DH-delete variant of the repush reset clears the same DH fields as the
+// standard reset, preserves reviewed_price_cents, and stamps
+// dh_unlisted_detected_at with the current time so the UI can badge the row.
+func TestResetDHFieldsForRepushDueToDelete_SetsTimestamp(t *testing.T) {
+	repo := setupCampaignsRepo(t)
+	ctx := context.Background()
+	now := time.Now().Truncate(time.Second)
+
+	c := &inventory.Campaign{ID: "camp-del", Name: "Active", Phase: inventory.PhaseActive, CreatedAt: now, UpdatedAt: now}
+	require.NoError(t, repo.CreateCampaign(ctx, c))
+
+	p := &inventory.Purchase{
+		ID:                  "pur-del-1",
+		CampaignID:          "camp-del",
+		CardName:            "Charizard",
+		CertNumber:          "55443322",
+		Grader:              "PSA",
+		GradeValue:          10,
+		BuyCostCents:        60000,
+		PurchaseDate:        "2026-01-01",
+		ReviewedPriceCents:  9000,
+		DHInventoryID:       42,
+		DHStatus:            inventory.DHStatusListed,
+		DHListingPriceCents: 10000,
+		CreatedAt:           now,
+		UpdatedAt:           now,
+	}
+	require.NoError(t, repo.CreatePurchase(ctx, p))
+
+	before := time.Now()
+	require.NoError(t, repo.ResetDHFieldsForRepushDueToDelete(ctx, p.ID))
+
+	got, err := repo.GetPurchase(ctx, p.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 0, got.DHInventoryID)
+	assert.Equal(t, inventory.DHStatus(""), got.DHStatus)
+	assert.Equal(t, inventory.DHPushStatusPending, got.DHPushStatus)
+	// Reviewed price must be preserved — repush reuses the prior review.
+	assert.Equal(t, 9000, got.ReviewedPriceCents)
+	// Timestamp stamped at or after the "before" capture.
+	require.NotNil(t, got.DHUnlistedDetectedAt)
+	assert.False(t, before.After(*got.DHUnlistedDetectedAt),
+		"dh_unlisted_detected_at (%v) should be >= before (%v)", *got.DHUnlistedDetectedAt, before)
+}
+
 // TestPurchaseStore_ListDHPriceDrift verifies the query returns exactly the
 // unsold purchases whose reviewed price diverges from dh_listing_price_cents.
 // Each case seeds one or more purchases and asserts which IDs are returned.
