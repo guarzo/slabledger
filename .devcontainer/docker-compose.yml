@@ -45,6 +45,7 @@ services:
       LOG_LEVEL: debug
       LOG_JSON: "false"
       DATABASE_PATH: /workspace/data/slabledger.db
+      DATABASE_URL: postgresql://slabledger:slabledger@postgres:5432/slabledger?sslmode=disable
 
       # OAuth redirect for local development
       EBAY_REDIRECT_URI: http://localhost:8081/auth/ebay/callback
@@ -59,6 +60,10 @@ services:
     networks:
       - dev_network
 
+    depends_on:
+      postgres:
+        condition: service_healthy
+
     # Ports
     ports:
       - "8081:8081"      # Application
@@ -72,9 +77,29 @@ services:
     #       cpus: '4'
     #       memory: 8G
 
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: slabledger
+      POSTGRES_PASSWORD: slabledger
+      POSTGRES_DB: slabledger
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - dev_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U slabledger -d slabledger"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
 volumes:
   go-modules:
   command-history:
+  pgdata:
 
 networks:
   dev_network:
