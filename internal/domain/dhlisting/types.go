@@ -1,6 +1,24 @@
 package dhlisting
 
-import "context"
+import (
+	"context"
+	"errors"
+)
+
+// ErrPSAKeysExhausted is surfaced by DHInventoryLister implementations when
+// all configured PSA API keys have been rotated through without success on a
+// status-listed update. This is a domain-level re-export of the underlying
+// dh.ErrPSAKeysExhausted so callers can detect the exhaustion case without
+// importing the dh adapter package.
+var ErrPSAKeysExhausted = errors.New("dh: PSA keys exhausted")
+
+// PSAKeyRotator is implemented by lister adapters that support PSA API key
+// rotation. Defined in the domain so services can type-assert without
+// importing the dh adapter package.
+type PSAKeyRotator interface {
+	RotatePSAKey() bool
+	ResetPSAKeyRotation()
+}
 
 // DHListingService orchestrates the multi-step DH listing workflow:
 // cert resolution → card ID saving → market value resolution → inventory push

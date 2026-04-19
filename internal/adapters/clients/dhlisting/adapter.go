@@ -4,6 +4,7 @@ package dhlisting
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
@@ -176,6 +177,9 @@ func (a *InventoryAdapter) UpdateInventoryStatus(ctx context.Context, inventoryI
 		resp, err = a.client.UpdateInventory(ctx, inventoryID, dhUpdate)
 	}
 	if err != nil {
+		if errors.Is(err, dh.ErrPSAKeysExhausted) {
+			return 0, fmt.Errorf("%w: %w", dhlisting.ErrPSAKeysExhausted, err)
+		}
 		return 0, err
 	}
 	if resp == nil {

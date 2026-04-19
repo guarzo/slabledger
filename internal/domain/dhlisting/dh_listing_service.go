@@ -3,6 +3,7 @@ package dhlisting
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strconv"
@@ -143,6 +144,12 @@ func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []stri
 		return DHListingResult{}
 	}
 
+	// Reset PSA key rotation so a previously-exhausted rotation index from a
+	// push cycle doesn't silently fail every list attempt in this call.
+	if rotator, ok := s.lister.(PSAKeyRotator); ok {
+		rotator.ResetPSAKeyRotation()
+	}
+
 	purchases, err := s.purchaseLookup.GetPurchasesByCertNumbers(ctx, certNumbers)
 	if err != nil {
 		s.logger.Warn(ctx, "dh listing: batch cert lookup failed", observability.Err(err))
@@ -216,6 +223,31 @@ func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []stri
 							observability.String("cert", p.CertNumber),
 							observability.Err(resetErr))
 					}
+				}
+			} else if errors.Is(err, ErrPSAKeysExhausted) {
+				s.logger.Warn(ctx, "dh listing: PSA keys exhausted — deferring list",
+					observability.String("cert", p.CertNumber),
+					observability.String("purchaseID", p.ID),
+					observability.Err(err))
+				s.recordEvent(ctx, dhevents.Event{
+					PurchaseID:    p.ID,
+					CertNumber:    p.CertNumber,
+					Type:          dhevents.TypeListDeferred,
+					DHInventoryID: p.DHInventoryID,
+					DHCardID:      p.DHCardID,
+					Source:        dhevents.SourceDHListing,
+					Notes:         "psa_auth_exhausted",
+				})
+				skipped++
+				// Short-circuit the batch: rotation state is shared across
+				// all purchases in this call, so retrying subsequent items
+				// would just re-exhaust and spam events.
+				return DHListingResult{
+					Listed:  listed,
+					Synced:  synced,
+					Skipped: skipped,
+					Total:   len(purchases),
+					Error:   err,
 				}
 			} else {
 				s.logger.Warn(ctx, "dh listing: status update failed",
