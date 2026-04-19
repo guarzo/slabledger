@@ -164,7 +164,7 @@ func (a *InventoryAdapter) UpdateInventoryStatus(ctx context.Context, inventoryI
 		resp *dh.InventoryResult
 		err  error
 	)
-	if update.Status == "listed" && a.rotator != nil {
+	if update.Status == inventory.DHStatusListed && a.rotator != nil {
 		resp, err = dh.UpdateInventoryWithRotation(
 			ctx, inventoryID, dhUpdate,
 			a.client.UpdateInventory,
