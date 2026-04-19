@@ -74,6 +74,13 @@ export interface Purchase {
   dhHoldReason?: string;
   dhCandidatesJson?: string;
   dhLastSyncedAt?: string;
+  /**
+   * Set by the DH reconciler when a purchase previously known to DH is missing
+   * from the authoritative inventory snapshot (i.e. the item was unlisted or
+   * deleted on DH's side). Cleared on a successful re-list. Drives the
+   * "Re-list (removed from DH)" row badge.
+   */
+  dhUnlistedDetectedAt?: string;
   gemRateId?: string;
   psaSpecId?: number;
   clSyncedAt?: string;
