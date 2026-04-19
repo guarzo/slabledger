@@ -129,6 +129,9 @@ func (r *stubPurchaseRepo) GetPurchasesByDHCertStatus(_ context.Context, _ strin
 func (r *stubPurchaseRepo) UpdatePurchaseDHPushStatus(_ context.Context, _ string, _ string) error {
 	return nil
 }
+func (r *stubPurchaseRepo) IncrementDHPushAttempts(_ context.Context, _ string) (int, error) {
+	return 0, nil
+}
 func (r *stubPurchaseRepo) UpdatePurchaseDHStatus(_ context.Context, _ string, _ string) error {
 	return nil
 }

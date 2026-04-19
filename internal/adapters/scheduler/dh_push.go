@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"time"
 
@@ -14,6 +15,15 @@ import (
 )
 
 const dhPushBatchLimit = 50
+
+// maxDHPushSkipAttempts caps the number of consecutive processSkipped outcomes
+// on a single pending purchase before the scheduler flips it to 'unmatched'.
+// At the default 5-minute interval that's ~50 minutes of retrying before
+// handing the row off to the operator-facing unmatched queue — long enough to
+// ride out transient errors, short enough to stop hammering DH with the same
+// unsolvable cert indefinitely. The counter is reset whenever the row
+// transitions back into 'pending' (re-enrollment) or 'matched' (success).
+const maxDHPushSkipAttempts = 10
 
 type processResult int
 
@@ -70,6 +80,15 @@ type DHPushHoldSetter interface {
 	SetHeldWithReason(ctx context.Context, purchaseID string, reason string) error
 }
 
+// DHPushAttemptsTracker atomically increments a purchase's consecutive
+// skip-attempt counter and returns the new value. Injected into the
+// DH push scheduler to cap indefinite retry loops when DH can't match a cert
+// (e.g. unknown promo variant). Optional: when nil the scheduler retries
+// forever, matching the pre-cap behavior.
+type DHPushAttemptsTracker interface {
+	IncrementDHPushAttempts(ctx context.Context, purchaseID string) (int, error)
+}
+
 // DHPushConfig controls the DH push scheduler.
 type DHPushConfig struct {
 	Enabled  bool
@@ -101,6 +120,14 @@ func WithDHPushEventRecorder(r dhevents.Recorder) DHPushOption {
 	return func(s *DHPushScheduler) { s.eventRec = r }
 }
 
+// WithDHPushAttemptsTracker enables retry-attempt capping. When supplied, the
+// scheduler increments the counter on each processSkipped outcome and flips
+// the row to 'unmatched' once maxDHPushSkipAttempts is reached so DH isn't
+// re-resolved every cycle for a cert it genuinely can't match.
+func WithDHPushAttemptsTracker(t DHPushAttemptsTracker) DHPushOption {
+	return func(s *DHPushScheduler) { s.attemptsTracker = t }
+}
+
 // DHPushScheduler matches pending purchases against DH and pushes inventory.
 type DHPushScheduler struct {
 	StopHandle
@@ -113,8 +140,9 @@ type DHPushScheduler struct {
 	candidatesSaver DHPushCandidatesSaver
 	configLoader    DHPushConfigLoader
 	holdSetter      DHPushHoldSetter
-	psaImporter     DHPushPSAImporter // optional: off-catalog cert fallback
-	eventRec        dhevents.Recorder // optional: records DH state-change events
+	psaImporter     DHPushPSAImporter     // optional: off-catalog cert fallback
+	attemptsTracker DHPushAttemptsTracker // optional: caps consecutive skip retries
+	eventRec        dhevents.Recorder     // optional: records DH state-change events
 	logger          observability.Logger
 	config          DHPushConfig
 }
@@ -230,6 +258,14 @@ func (s *DHPushScheduler) push(ctx context.Context) {
 			unmatched++
 		case processSkipped:
 			skipped++
+			// Bump the per-purchase attempts counter and move the row out of
+			// 'pending' once it's been skipped too many cycles in a row. Without
+			// this cap, a cert DH can't match (unknown promo variant, stale
+			// catalog, matched-with-zero response) gets re-resolved every 5
+			// minutes indefinitely. See maxDHPushSkipAttempts for the rationale.
+			if s.giveUpOnSkipIfNeeded(ctx, p) {
+				unmatched++
+			}
 		case processHeld:
 			held++
 		}
@@ -488,6 +524,33 @@ func (s *DHPushScheduler) saveCardIDMapping(ctx context.Context, p inventory.Pur
 		return
 	}
 	mappedSet[p.DHCardKey()] = externalID
+}
+
+// giveUpOnSkipIfNeeded increments the skip-attempt counter for p and, once the
+// cap is reached, flips the row to 'unmatched' so it stops hammering DH.
+// Returns true when the row was transitioned to unmatched (so the caller can
+// reclassify it in the batch counters). The counter is read after the
+// increment so we cap on the Nth consecutive skip rather than N+1.
+func (s *DHPushScheduler) giveUpOnSkipIfNeeded(ctx context.Context, p inventory.Purchase) bool {
+	if s.attemptsTracker == nil {
+		return false
+	}
+	attempts, err := s.attemptsTracker.IncrementDHPushAttempts(ctx, p.ID)
+	if err != nil {
+		s.logger.Warn(ctx, "dh push: failed to increment attempts",
+			observability.String("purchaseID", p.ID),
+			observability.String("cert", p.CertNumber),
+			observability.Err(err))
+		return false
+	}
+	if attempts < maxDHPushSkipAttempts {
+		return false
+	}
+	s.logger.Info(ctx, "dh push: attempt cap reached, marking unmatched",
+		observability.String("purchaseID", p.ID),
+		observability.String("cert", p.CertNumber),
+		observability.Int("attempts", attempts))
+	return s.markUnmatched(ctx, p, fmt.Sprintf("skipped %d consecutive cycles without resolution", attempts))
 }
 
 // markUnmatched sets a purchase's DH push status to unmatched and emits an

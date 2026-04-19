@@ -56,11 +56,39 @@ func (ps *PurchaseStore) GetPurchasesByDHCertStatus(ctx context.Context, status 
 }
 
 // UpdatePurchaseDHPushStatus updates the dh_push_status field on a purchase.
+// When the new status is 'pending' or 'matched' the attempt counter is reset
+// to 0 in the same UPDATE so a successful resolve or a fresh re-enrollment
+// starts a clean retry budget. Transitions to 'unmatched' preserve the counter
+// as diagnostic signal for how many cycles were wasted before we gave up.
 func (ps *PurchaseStore) UpdatePurchaseDHPushStatus(ctx context.Context, id string, status string) error {
 	return ps.execAndExpectRow(ctx, "update DH push status",
-		`UPDATE campaign_purchases SET dh_push_status = ?, updated_at = ? WHERE id = ?`,
-		status, time.Now(), id,
+		`UPDATE campaign_purchases
+		 SET dh_push_status = ?,
+		     dh_push_attempts = CASE WHEN ? IN ('pending', 'matched') THEN 0 ELSE dh_push_attempts END,
+		     updated_at = ?
+		 WHERE id = ?`,
+		status, status, time.Now(), id,
 	)
+}
+
+// IncrementDHPushAttempts atomically increments the skip-attempt counter and
+// returns the new value. The scheduler uses the returned count to decide when
+// a cert has been retried enough times to warrant moving it out of 'pending'
+// and into 'unmatched', where it becomes user-actionable.
+func (ps *PurchaseStore) IncrementDHPushAttempts(ctx context.Context, id string) (int, error) {
+	var newCount int
+	err := ps.db.QueryRowContext(ctx,
+		`UPDATE campaign_purchases
+		 SET dh_push_attempts = dh_push_attempts + 1,
+		     updated_at = ?
+		 WHERE id = ?
+		 RETURNING dh_push_attempts`,
+		time.Now(), id,
+	).Scan(&newCount)
+	if err != nil {
+		return 0, fmt.Errorf("increment dh push attempts: %w", err)
+	}
+	return newCount, nil
 }
 
 // UpdatePurchaseDHStatus updates only the dh_status column on a purchase.
@@ -119,7 +147,7 @@ func (ps *PurchaseStore) ApproveHeldPurchase(ctx context.Context, purchaseID str
 	now := time.Now()
 	result, err := tx.ExecContext(ctx,
 		`UPDATE campaign_purchases
-		 SET dh_push_status = ?, dh_hold_reason = '', updated_at = ?
+		 SET dh_push_status = ?, dh_hold_reason = '', dh_push_attempts = 0, updated_at = ?
 		 WHERE id = ?`,
 		inventory.DHPushStatusPending, now, purchaseID,
 	)
@@ -146,6 +174,7 @@ func (ps *PurchaseStore) ResetDHFieldsForRepush(ctx context.Context, purchaseID 
 		`UPDATE campaign_purchases
 		 SET dh_inventory_id = 0,
 		     dh_push_status = ?,
+		     dh_push_attempts = 0,
 		     dh_status = '',
 		     dh_listing_price_cents = 0,
 		     dh_channels_json = '[]',

@@ -754,6 +754,15 @@ func (m *mockRepo) GetPurchasesByDHCertStatus(_ context.Context, _ string, _ int
 	return nil, nil
 }
 
+func (m *mockRepo) IncrementDHPushAttempts(_ context.Context, id string) (int, error) {
+	p, ok := m.purchases[id]
+	if !ok {
+		return 0, ErrPurchaseNotFound
+	}
+	p.DHPushAttempts++
+	return p.DHPushAttempts, nil
+}
+
 func (m *mockRepo) UpdatePurchaseDHPushStatus(_ context.Context, id string, status string) error {
 	if p, ok := m.purchases[id]; ok && p != nil {
 		p.DHPushStatus = status
