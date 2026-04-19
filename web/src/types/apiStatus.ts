@@ -143,8 +143,9 @@ export interface DHReconcileTriggerResult {
   scanned: number;
   missingOnDH: number;
   reset: number;
-  errors: string[];
-  resetIds: string[];
+  // Go omits zero-length slices as JSON null, so these arrive as null on a clean run.
+  errors?: string[] | null;
+  resetIds?: string[] | null;
 }
 
 export interface DHCandidate {

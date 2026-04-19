@@ -37,10 +37,11 @@ export function DHStatsPanel({ enabled = true }: { enabled?: boolean }) {
   const handleReconcile = async () => {
     try {
       const result = await reconcileMutation.mutateAsync();
+      const errorCount = result.errors?.length ?? 0;
       if (result.reset > 0) {
         toast.success(`Reset ${result.reset} items removed from DH`);
-      } else if (result.errors.length > 0) {
-        toast.warning(`${result.reset} reset, ${result.errors.length} errors — check logs`);
+      } else if (errorCount > 0) {
+        toast.warning(`${result.reset} reset, ${errorCount} errors — check logs`);
       } else {
         toast.success('All DH-linked items still present on DH');
       }
