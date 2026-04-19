@@ -390,6 +390,170 @@ func TestDHPush_MarkUnmatched_EmitsEvent(t *testing.T) {
 	}
 }
 
+// mockDHPushAttemptsTracker records calls and returns a preset count.
+type mockDHPushAttemptsTracker struct {
+	CountFn func(ctx context.Context, id string) (int, error)
+	Calls   []string
+}
+
+func (m *mockDHPushAttemptsTracker) IncrementDHPushAttempts(ctx context.Context, id string) (int, error) {
+	m.Calls = append(m.Calls, id)
+	if m.CountFn != nil {
+		return m.CountFn(ctx, id)
+	}
+	return 0, nil
+}
+
+// TestDHPush_AttemptsTracker_CapsRetries verifies the skip-attempt cap:
+// below the cap, a skipped purchase stays 'pending' for another cycle; at the
+// cap, the scheduler flips the row to 'unmatched' with a diagnostic note and
+// emits a TypeUnmatched event so DH stops getting resolve-hammered with an
+// unsolvable cert. Push-API error is used as the skip trigger because it
+// exercises a late-stage processSkipped path that already has a valid cert
+// resolution (matched DHCardID), proving the cap runs after resolve succeeds.
+func TestDHPush_AttemptsTracker_CapsRetries(t *testing.T) {
+	cases := []struct {
+		name              string
+		attemptsFn        func(ctx context.Context, id string) (int, error)
+		wantMarkUnmatched bool
+		wantEventNotes    string
+	}{
+		{
+			name: "below cap — stays pending",
+			attemptsFn: func(_ context.Context, _ string) (int, error) {
+				return maxDHPushSkipAttempts - 1, nil
+			},
+			wantMarkUnmatched: false,
+		},
+		{
+			name: "at cap — flips to unmatched",
+			attemptsFn: func(_ context.Context, _ string) (int, error) {
+				return maxDHPushSkipAttempts, nil
+			},
+			wantMarkUnmatched: true,
+			wantEventNotes:    fmt.Sprintf("skipped %d consecutive cycles without resolution", maxDHPushSkipAttempts),
+		},
+		{
+			name: "over cap — flips to unmatched",
+			attemptsFn: func(_ context.Context, _ string) (int, error) {
+				return maxDHPushSkipAttempts + 3, nil
+			},
+			wantMarkUnmatched: true,
+			wantEventNotes:    fmt.Sprintf("skipped %d consecutive cycles without resolution", maxDHPushSkipAttempts+3),
+		},
+		{
+			name: "increment errors — tolerated, no markUnmatched",
+			attemptsFn: func(_ context.Context, _ string) (int, error) {
+				return 0, errors.New("db unavailable")
+			},
+			wantMarkUnmatched: false,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			purchase := inventory.Purchase{
+				ID:           "p-cap",
+				CertNumber:   "55555555",
+				CardName:     "Rocket's Tyranitar",
+				DHPushStatus: inventory.DHPushStatusPending,
+			}
+			lister := &mockDHPushPendingLister{
+				ListFn: func(_ context.Context, _ string, _ int) ([]inventory.Purchase, error) {
+					return []inventory.Purchase{purchase}, nil
+				},
+			}
+			certResolver := &mockDHPushCertResolver{
+				ResolveFn: func(_ context.Context, _ dh.CertResolveRequest) (*dh.CertResolution, error) {
+					return &dh.CertResolution{Status: dh.CertStatusMatched, DHCardID: 10}, nil
+				},
+			}
+			pusher := &mockDHPushInventoryPusher{
+				PushFn: func(_ context.Context, _ []dh.InventoryItem) (*dh.InventoryPushResponse, error) {
+					return nil, errors.New("push API error")
+				},
+			}
+			statusUpdater := &mockDHPushStatusUpdater{}
+			fieldsUpdater := &mocks.MockDHFieldsUpdater{}
+			cardIDSaver := &mockDHPushCardIDSaver{}
+			tracker := &mockDHPushAttemptsTracker{CountFn: tc.attemptsFn}
+			recorder := &mocks.MockEventRecorder{}
+
+			s := NewDHPushScheduler(
+				lister, statusUpdater, certResolver, pusher, fieldsUpdater, cardIDSaver,
+				mocks.NewMockLogger(),
+				DHPushConfig{Enabled: true, Interval: 1 * time.Hour},
+				WithDHPushAttemptsTracker(tracker),
+				WithDHPushEventRecorder(recorder),
+			)
+			s.push(context.Background())
+
+			// Tracker always incremented once per skipped purchase.
+			assert.Equal(t, []string{purchase.ID}, tracker.Calls)
+
+			if !tc.wantMarkUnmatched {
+				assert.Empty(t, statusUpdater.Calls,
+					"row should stay pending when cap not reached or increment errored")
+				assert.Empty(t, recorder.Events, "no event expected when row stays pending")
+				return
+			}
+
+			require.Len(t, statusUpdater.Calls, 1)
+			assert.Equal(t, purchase.ID, statusUpdater.Calls[0].ID)
+			assert.Equal(t, inventory.DHPushStatusUnmatched, statusUpdater.Calls[0].Status)
+
+			require.Len(t, recorder.Events, 1)
+			evt := recorder.Events[0]
+			assert.Equal(t, dhevents.TypeUnmatched, evt.Type)
+			assert.Equal(t, purchase.ID, evt.PurchaseID)
+			assert.Equal(t, tc.wantEventNotes, evt.Notes)
+			assert.Equal(t, dhevents.SourceDHPush, evt.Source)
+		})
+	}
+}
+
+// TestDHPush_AttemptsTracker_NotWired_PreservesLegacyBehavior ensures the cap
+// feature is fully opt-in. With no tracker configured, a skipped push leaves
+// the row pending and emits no event — matching the behavior from before the
+// cap was introduced so unrelated call sites aren't silently changed.
+func TestDHPush_AttemptsTracker_NotWired_PreservesLegacyBehavior(t *testing.T) {
+	purchase := inventory.Purchase{
+		ID:           "p-legacy",
+		CertNumber:   "66666666",
+		CardName:     "Espeon",
+		DHPushStatus: inventory.DHPushStatusPending,
+	}
+	lister := &mockDHPushPendingLister{
+		ListFn: func(_ context.Context, _ string, _ int) ([]inventory.Purchase, error) {
+			return []inventory.Purchase{purchase}, nil
+		},
+	}
+	certResolver := &mockDHPushCertResolver{
+		ResolveFn: func(_ context.Context, _ dh.CertResolveRequest) (*dh.CertResolution, error) {
+			return &dh.CertResolution{Status: dh.CertStatusMatched, DHCardID: 10}, nil
+		},
+	}
+	pusher := &mockDHPushInventoryPusher{
+		PushFn: func(_ context.Context, _ []dh.InventoryItem) (*dh.InventoryPushResponse, error) {
+			return nil, errors.New("push API error")
+		},
+	}
+	statusUpdater := &mockDHPushStatusUpdater{}
+	fieldsUpdater := &mocks.MockDHFieldsUpdater{}
+	cardIDSaver := &mockDHPushCardIDSaver{}
+	recorder := &mocks.MockEventRecorder{}
+
+	s := NewDHPushScheduler(
+		lister, statusUpdater, certResolver, pusher, fieldsUpdater, cardIDSaver,
+		mocks.NewMockLogger(),
+		DHPushConfig{Enabled: true, Interval: 1 * time.Hour},
+		WithDHPushEventRecorder(recorder),
+	)
+	s.push(context.Background())
+
+	assert.Empty(t, statusUpdater.Calls)
+	assert.Empty(t, recorder.Events)
+}
+
 func TestDHPush_InventoryPushError_LeavesAsPending(t *testing.T) {
 	purchase := inventory.Purchase{
 		ID:           "pur-4",

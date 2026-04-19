@@ -754,9 +754,24 @@ func (m *mockRepo) GetPurchasesByDHCertStatus(_ context.Context, _ string, _ int
 	return nil, nil
 }
 
+func (m *mockRepo) IncrementDHPushAttempts(_ context.Context, id string) (int, error) {
+	p, ok := m.purchases[id]
+	if !ok {
+		return 0, ErrPurchaseNotFound
+	}
+	p.DHPushAttempts++
+	return p.DHPushAttempts, nil
+}
+
 func (m *mockRepo) UpdatePurchaseDHPushStatus(_ context.Context, id string, status string) error {
 	if p, ok := m.purchases[id]; ok && p != nil {
 		p.DHPushStatus = status
+		// Mirror production semantics: transitions into pending (re-enrollment)
+		// or matched (success) reset the retry counter so the next retry budget
+		// starts fresh. Unmatched preserves the count as diagnostic signal.
+		if status == DHPushStatusPending || status == DHPushStatusMatched {
+			p.DHPushAttempts = 0
+		}
 	}
 	return nil
 }
@@ -818,6 +833,7 @@ func (m *mockRepo) ApproveHeldPurchase(_ context.Context, purchaseID string) err
 	}
 	p := m.purchases[purchaseID]
 	p.DHPushStatus = DHPushStatusPending
+	p.DHPushAttempts = 0
 	m.dhHoldReasons[purchaseID] = ""
 	return nil
 }
@@ -829,6 +845,7 @@ func (m *mockRepo) ResetDHFieldsForRepush(_ context.Context, purchaseID string) 
 	}
 	p.DHInventoryID = 0
 	p.DHPushStatus = DHPushStatusPending
+	p.DHPushAttempts = 0
 	p.DHStatus = ""
 	p.DHListingPriceCents = 0
 	p.DHChannelsJSON = "[]"

@@ -79,6 +79,7 @@ type BuildDeps struct {
 	DHPushCandidatesSaver DHPushCandidatesSaver
 	DHPushConfigLoader    DHPushConfigLoader
 	DHPushHoldSetter      DHPushHoldSetter
+	DHPushAttemptsTracker DHPushAttemptsTracker
 
 	// Scoring gap cleanup dependencies (optional)
 	GapStore scoring.GapStore
@@ -388,6 +389,9 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 		}
 		if deps.DHPushHoldSetter != nil {
 			pushOpts = append(pushOpts, WithDHPushHoldSetter(deps.DHPushHoldSetter))
+		}
+		if deps.DHPushAttemptsTracker != nil {
+			pushOpts = append(pushOpts, WithDHPushAttemptsTracker(deps.DHPushAttemptsTracker))
 		}
 		if deps.EventRecorder != nil {
 			pushOpts = append(pushOpts, WithDHPushEventRecorder(deps.EventRecorder))

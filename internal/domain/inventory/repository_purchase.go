@@ -83,6 +83,10 @@ type PurchaseRepository interface {
 	UpdatePurchaseDHFields(ctx context.Context, id string, update DHFieldsUpdate) error
 	GetPurchasesByDHCertStatus(ctx context.Context, status string, limit int) ([]Purchase, error)
 	UpdatePurchaseDHPushStatus(ctx context.Context, id string, status string) error
+	// IncrementDHPushAttempts atomically increments the per-purchase skip-attempt
+	// counter and returns the new value. Used by the DH push scheduler to cap
+	// indefinite retry loops for certs DH can't match.
+	IncrementDHPushAttempts(ctx context.Context, id string) (int, error)
 	// UpdatePurchaseDHStatus updates only the dh_status column on a purchase.
 	// This is a targeted update that does not touch any other DH fields, unlike
 	// UpdatePurchaseDHFields which overwrites the full field set.
