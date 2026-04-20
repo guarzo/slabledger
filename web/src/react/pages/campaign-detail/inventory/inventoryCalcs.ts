@@ -57,6 +57,17 @@ export function isDHHeld(item: AgingItem): boolean {
   return item.purchase.dhPushStatus === 'held';
 }
 
+// hasCommittedPrice: operator has committed a listing price, either via the
+// inline review flow (reviewedPriceCents) or the "Set Price" dialog
+// (overridePriceCents). Backend ResolveListingPriceCents uses the same
+// reviewed-then-override fallback when pushing prices to DH.
+function hasCommittedPrice(item: AgingItem): boolean {
+  return (
+    (item.purchase.reviewedPriceCents ?? 0) > 0 ||
+    (item.purchase.overridePriceCents ?? 0) > 0
+  );
+}
+
 export function needsAttention(item: AgingItem, status = getReviewStatus(item)): boolean {
   // Pre-intake cards can't be meaningfully acted on yet — don't flag them as needing attention.
   if (!item.purchase.receivedAt) return false;
@@ -64,33 +75,32 @@ export function needsAttention(item: AgingItem, status = getReviewStatus(item)):
   if (isDHHeld(item)) return true;
   // An AI suggestion only warrants attention when the operator hasn't committed
   // a price yet — once reviewed or overridden, the suggestion is superseded.
-  const hasCommittedPrice =
-    !!item.purchase.reviewedAt || (item.purchase.overridePriceCents ?? 0) > 0;
-  if (!hasCommittedPrice && (item.purchase.aiSuggestedPriceCents ?? 0) > 0) return true;
+  if (!hasCommittedPrice(item) && (item.purchase.aiSuggestedPriceCents ?? 0) > 0) return true;
   return false;
 }
 
 // isReadyToList: received (intake complete), pushed to DH inventory, not yet
-// listed, AND has a reviewed price. Without a reviewed price the "List on DH"
-// action would 409, so those items belong in `needsPriceReview` instead.
+// listed, AND has a committed price. Without one the "List on DH" action
+// would 409, so those items belong in `needsPriceReview` instead.
 export function isReadyToList(item: AgingItem): boolean {
   return (
     !!item.purchase.receivedAt &&
     !!item.purchase.dhInventoryId &&
     item.purchase.dhStatus !== 'listed' &&
-    (item.purchase.reviewedPriceCents ?? 0) > 0
+    hasCommittedPrice(item)
   );
 }
 
-// needsPriceReview: received, pushed to DH, not listed, but no reviewed price.
-// Drives the "Set price" row button (which expands the row to reveal the
-// PriceDecisionBar) rather than a "List on DH" button that would hit a 409.
+// needsPriceReview: received, pushed to DH, not listed, but no committed
+// price yet. Drives the "Set price" row button (which expands the row to
+// reveal the PriceDecisionBar) rather than a "List on DH" button that
+// would hit a 409.
 export function needsPriceReview(item: AgingItem): boolean {
   return (
     !!item.purchase.receivedAt &&
     !!item.purchase.dhInventoryId &&
     item.purchase.dhStatus !== 'listed' &&
-    (item.purchase.reviewedPriceCents ?? 0) === 0
+    !hasCommittedPrice(item)
   );
 }
 

@@ -83,12 +83,13 @@ describe('inventoryCalcs', () => {
       const items = [
         // unreviewed with AI suggestion → needs attention
         makeItem({ purchase: { id: '1', aiSuggestedPriceCents: 5000, reviewedAt: undefined, receivedAt: '2026-04-09T00:00:00Z' } }),
-        // reviewed with lingering AI suggestion → NOT needs attention (suggestion superseded)
-        makeItem({ purchase: { id: '2', aiSuggestedPriceCents: 5000, reviewedAt: '2026-04-10T00:00:00Z', receivedAt: '2026-04-09T00:00:00Z' } }),
+        // reviewed with lingering AI suggestion → NOT needs attention (suggestion superseded).
+        // Backend invariant: reviewedAt is only stamped when reviewedPriceCents > 0.
+        makeItem({ purchase: { id: '2', aiSuggestedPriceCents: 5000, reviewedPriceCents: 8000, reviewedAt: '2026-04-10T00:00:00Z', receivedAt: '2026-04-09T00:00:00Z' } }),
         // override set with lingering AI suggestion → NOT needs attention
         makeItem({ purchase: { id: '3', aiSuggestedPriceCents: 5000, overridePriceCents: 7000, receivedAt: '2026-04-09T00:00:00Z' } }),
         // reviewed, no AI → NOT needs attention
-        makeItem({ purchase: { id: '4', reviewedAt: '2026-04-10T00:00:00Z', receivedAt: '2026-04-09T00:00:00Z' } }),
+        makeItem({ purchase: { id: '4', reviewedPriceCents: 8000, reviewedAt: '2026-04-10T00:00:00Z', receivedAt: '2026-04-09T00:00:00Z' } }),
       ];
       const meta = computeInventoryMeta(items);
       expect(meta.tabCounts.needs_attention).toBe(1);
@@ -290,19 +291,33 @@ describe('inventoryCalcs', () => {
       expect(isReadyToList(item)).toBe(true);
     });
 
-    it('returns false when reviewedPriceCents is 0', () => {
+    it('returns true when only an override price is set (Set Price dialog commit)', () => {
       const item = makeItem({
         purchase: {
           receivedAt: '2026-04-08T00:00:00Z',
           dhInventoryId: 42,
           dhStatus: 'in_stock',
           reviewedPriceCents: 0,
+          overridePriceCents: 12500,
+        },
+      });
+      expect(isReadyToList(item)).toBe(true);
+    });
+
+    it('returns false when reviewed and override are both 0', () => {
+      const item = makeItem({
+        purchase: {
+          receivedAt: '2026-04-08T00:00:00Z',
+          dhInventoryId: 42,
+          dhStatus: 'in_stock',
+          reviewedPriceCents: 0,
+          overridePriceCents: 0,
         },
       });
       expect(isReadyToList(item)).toBe(false);
     });
 
-    it('returns false when reviewedPriceCents is undefined', () => {
+    it('returns false when reviewedPriceCents is undefined and no override', () => {
       const item = makeItem({
         purchase: {
           receivedAt: '2026-04-08T00:00:00Z',
@@ -352,19 +367,20 @@ describe('inventoryCalcs', () => {
   });
 
   describe('needsPriceReview', () => {
-    it('returns true when received + pushed to DH + not listed + no reviewed price', () => {
+    it('returns true when received + pushed to DH + not listed + no committed price', () => {
       const item = makeItem({
         purchase: {
           receivedAt: '2026-04-08T00:00:00Z',
           dhInventoryId: 42,
           dhStatus: 'in_stock',
           reviewedPriceCents: 0,
+          overridePriceCents: 0,
         },
       });
       expect(needsPriceReview(item)).toBe(true);
     });
 
-    it('returns true when reviewedPriceCents is undefined', () => {
+    it('returns true when reviewedPriceCents is undefined and no override', () => {
       const item = makeItem({
         purchase: {
           receivedAt: '2026-04-08T00:00:00Z',
@@ -383,6 +399,19 @@ describe('inventoryCalcs', () => {
           dhInventoryId: 42,
           dhStatus: 'in_stock',
           reviewedPriceCents: 9000,
+        },
+      });
+      expect(needsPriceReview(item)).toBe(false);
+    });
+
+    it('returns false when only an override price is set', () => {
+      const item = makeItem({
+        purchase: {
+          receivedAt: '2026-04-08T00:00:00Z',
+          dhInventoryId: 42,
+          dhStatus: 'in_stock',
+          reviewedPriceCents: 0,
+          overridePriceCents: 12500,
         },
       });
       expect(needsPriceReview(item)).toBe(false);
@@ -431,11 +460,15 @@ describe('inventoryCalcs', () => {
         dhStatus: 'in_stock',
       } as const;
 
-      const withPrice = makeItem({ purchase: { ...base, reviewedPriceCents: 9000 } });
-      expect(isReadyToList(withPrice)).toBe(true);
-      expect(needsPriceReview(withPrice)).toBe(false);
+      const withReviewed = makeItem({ purchase: { ...base, reviewedPriceCents: 9000 } });
+      expect(isReadyToList(withReviewed)).toBe(true);
+      expect(needsPriceReview(withReviewed)).toBe(false);
 
-      const withoutPrice = makeItem({ purchase: { ...base, reviewedPriceCents: 0 } });
+      const withOverride = makeItem({ purchase: { ...base, overridePriceCents: 12500 } });
+      expect(isReadyToList(withOverride)).toBe(true);
+      expect(needsPriceReview(withOverride)).toBe(false);
+
+      const withoutPrice = makeItem({ purchase: { ...base, reviewedPriceCents: 0, overridePriceCents: 0 } });
       expect(isReadyToList(withoutPrice)).toBe(false);
       expect(needsPriceReview(withoutPrice)).toBe(true);
     });
