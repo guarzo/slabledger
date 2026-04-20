@@ -12,7 +12,7 @@ export interface Action {
   title: string;
   detail: string;
   link: ActionLink;
-  impactCents?: number;
+  impactUsd?: number;
 }
 
 export interface AIAcceptRate {
@@ -23,8 +23,8 @@ export interface AIAcceptRate {
 
 export interface Signals {
   aiAcceptRate: AIAcceptRate;
-  liquidationRecoverableCents: number;
-  spikeProfitCents: number;
+  liquidationRecoverableUsd: number;
+  spikeProfitUsd: number;
   spikeCertCount: number;
   stuckInPipelineCount: number;
 }

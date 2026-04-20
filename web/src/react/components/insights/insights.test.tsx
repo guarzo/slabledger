@@ -26,7 +26,7 @@ describe('DoNowSection', () => {
     }];
     wrap(<DoNowSection actions={actions} />);
     expect(screen.getByText(/Run profit-capture/i)).toBeInTheDocument();
-    const link = screen.getByRole('link', { name: /Open/ });
+    const link = screen.getByRole('link', { name: /Open:\s*Run profit-capture/i });
     expect(link).toHaveAttribute('href', '/global-inventory?filter=spike');
   });
 });
@@ -35,8 +35,8 @@ describe('HealthSignalsTiles', () => {
   it('shows em-dash for AI accept rate when nothing resolved', () => {
     const signals: Signals = {
       aiAcceptRate: { pct: 0, accepted: 0, resolved: 0 },
-      liquidationRecoverableCents: 0,
-      spikeProfitCents: 0,
+      liquidationRecoverableUsd: 0,
+      spikeProfitUsd: 0,
       spikeCertCount: 0,
       stuckInPipelineCount: 0,
     };

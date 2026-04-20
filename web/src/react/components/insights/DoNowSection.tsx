@@ -36,6 +36,7 @@ export default function DoNowSection({ actions }: { actions: Action[] }) {
             </div>
             <Link
               to={{ pathname: a.link.path, search: queryString(a.link.query) }}
+              aria-label={`Open: ${a.title}`}
               className="text-xs text-[var(--brand-400)] hover:underline"
             >
               Open →

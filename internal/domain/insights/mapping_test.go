@@ -62,6 +62,7 @@ func TestDeriveRowStatus(t *testing.T) {
 		{"act beats tune", map[string]TuningCell{"buyPct": {Severity: SeverityAct}, "years": {Severity: SeverityTune}}, StatusAct},
 		{"retire recommendation = Kill", map[string]TuningCell{"buyPct": {Severity: SeverityAct, Recommendation: "Retire campaign (-12% ROI, 90d)"}}, StatusKill},
 		{"close recommendation = Kill", map[string]TuningCell{"buyPct": {Severity: SeverityAct, Recommendation: "Close campaign"}}, StatusKill},
+		{"retire lowercase still kills", map[string]TuningCell{"buyPct": {Severity: SeverityAct, Recommendation: "retire this campaign"}}, StatusKill},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

@@ -62,3 +62,15 @@ func TestInsightsHandler_HandleOverview_ServiceError(t *testing.T) {
 		t.Fatalf("status = %d, want 500", w.Code)
 	}
 }
+
+func TestInsightsHandler_HandleOverview_Unauthorized(t *testing.T) {
+	t.Parallel()
+	svc := &stubInsightsSvc{resp: &insights.Overview{}}
+	h := handlers.NewInsightsHandler(svc, mocks.NewMockLogger())
+	req := httptest.NewRequest(http.MethodGet, "/api/insights/overview", nil)
+	w := httptest.NewRecorder()
+	h.HandleOverview(w, req)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", w.Code)
+	}
+}

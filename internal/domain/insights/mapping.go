@@ -36,8 +36,8 @@ func DeriveCellSeverity(confidence int) Severity {
 // otherwise the most severe cell wins.
 func DeriveRowStatus(cells map[string]TuningCell) Status {
 	for _, c := range cells {
-		r := strings.TrimSpace(c.Recommendation)
-		if strings.HasPrefix(r, "Retire") || strings.HasPrefix(r, "Close") {
+		r := strings.ToLower(strings.TrimSpace(c.Recommendation))
+		if strings.HasPrefix(r, "retire") || strings.HasPrefix(r, "close") {
 			return StatusKill
 		}
 	}

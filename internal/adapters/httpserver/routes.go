@@ -232,7 +232,9 @@ func (rt *Router) registerInsightsRoutes(mux *http.ServeMux) {
 		return
 	}
 	mux.Handle("GET /api/insights/overview", rt.authMW.RequireAuth(http.HandlerFunc(rt.insightsHandler.HandleOverview)))
-	rt.logger.Info(context.Background(), "insights routes registered")
+	rt.logger.Info(context.Background(), "insights routes registered",
+		observability.String("component", "insights"),
+		observability.String("route", "/api/insights/overview"))
 }
 
 // registerPricingAPIRoutes wires the public pricing API endpoints (bearer token auth).
@@ -320,6 +322,7 @@ var TrackedEndpoints = []string{
 	"/api/portfolio/weekly-history",
 	"/api/campaigns/{id}/tuning",
 	"/api/campaigns/{id}/sell-sheet",
+	"/api/insights/overview",
 }
 
 // ApplyMiddleware wraps the router with middleware layers.

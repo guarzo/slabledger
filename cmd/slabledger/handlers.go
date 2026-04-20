@@ -227,13 +227,16 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 
 	// Insights handler composes per-campaign tuning and portfolio-wide signals
 	// for the Insights page.
-	insightsSvc := insights.NewService(insights.Deps{
-		Campaigns: in.CampaignStore,
-		Tuning:    in.TuningService,
-		Pricing:   in.CampaignsService,
-		Logger:    logger,
-	})
-	insightsHandler := handlers.NewInsightsHandler(insightsSvc, logger)
+	var insightsHandler *handlers.InsightsHandler
+	if in.CampaignStore != nil && in.TuningService != nil && in.CampaignsService != nil {
+		insightsSvc := insights.NewService(insights.Deps{
+			Campaigns: in.CampaignStore,
+			Tuning:    in.TuningService,
+			Pricing:   in.CampaignsService,
+			Logger:    logger,
+		})
+		insightsHandler = handlers.NewInsightsHandler(insightsSvc, logger)
+	}
 
 	// AI status handler — only wire tracker when an LLM provider is configured
 	var aiTracker ai.AICallTracker

@@ -1,5 +1,5 @@
 import type { Signals } from '../../../types/insights';
-import { formatCents } from '../../utils/formatters';
+import { currency } from '../../utils/formatters';
 
 type Tone = 'good' | 'warn' | 'bad' | 'muted';
 
@@ -25,19 +25,19 @@ export default function HealthSignalsTiles({ signals }: { signals: Signals }) {
         />
         <Tile
           label="Liquidation recoverable"
-          value={formatCents(signals.liquidationRecoverableCents)}
+          value={currency(signals.liquidationRecoverableUsd)}
           sub={
-            signals.liquidationRecoverableCents > 0
+            signals.liquidationRecoverableUsd > 0
               ? 'capital freed by current plan'
               : 'no forced-markdowns today'
           }
-          tone={signals.liquidationRecoverableCents > 0 ? 'good' : 'muted'}
+          tone={signals.liquidationRecoverableUsd > 0 ? 'good' : 'muted'}
         />
         <Tile
           label="Spike profit queued"
-          value={formatCents(signals.spikeProfitCents)}
+          value={currency(signals.spikeProfitUsd)}
           sub={`${signals.spikeCertCount} cert${signals.spikeCertCount === 1 ? '' : 's'} awaiting capture`}
-          tone={signals.spikeProfitCents > 0 ? 'good' : 'muted'}
+          tone={signals.spikeProfitUsd > 0 ? 'good' : 'muted'}
         />
         <Tile
           label="Stuck in DH pipeline"

@@ -68,17 +68,13 @@ func (s *service) signals(ctx context.Context) (Signals, error) {
 					observability.String("err", err.Error()))
 			}
 		} else if stats != nil {
-			// Resolved = accepted + dismissed. PriceOverrideStats does not currently
-			// expose dismissed; in v1 we treat resolved == accepted, which makes Pct
-			// render as 100% whenever any have been accepted and 0% when none have.
-			// When PriceOverrideStats is extended with a Dismissed field, include it
-			// in the resolved denominator here.
 			accepted := stats.AIAcceptedCount
-			resolved := accepted
+			// Denominator is unknown until PriceOverrideStats exposes dismissed/total-reviewed.
+			// Until then, Resolved stays 0 and Pct is reported as 0% so the frontend
+			// renders "—" (its unresolved-denominator empty-state) rather than a
+			// misleading 100%.
+			resolved := 0
 			pct := 0.0
-			if resolved > 0 {
-				pct = (float64(accepted) / float64(resolved)) * 100.0
-			}
 			out.AIAcceptRate = AIAcceptRate{Pct: pct, Accepted: accepted, Resolved: resolved}
 		}
 	}
@@ -101,6 +97,13 @@ func (s *service) campaignRows(ctx context.Context) ([]TuningRow, error) {
 				s.deps.Logger.Warn(ctx, "tuning fetch failed for campaign",
 					observability.String("campaignId", c.ID),
 					observability.String("err", err.Error()))
+			}
+			continue
+		}
+		if resp == nil {
+			if s.deps.Logger != nil {
+				s.deps.Logger.Warn(ctx, "tuning fetch returned nil response",
+					observability.String("campaignId", c.ID))
 			}
 			continue
 		}

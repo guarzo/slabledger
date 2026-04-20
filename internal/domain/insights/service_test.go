@@ -70,7 +70,8 @@ func TestService_GetOverview_IncludesOnlyActiveCampaigns(t *testing.T) {
 	if row.CampaignID != active.ID {
 		t.Errorf("expected row for active campaign, got %q", row.CampaignID)
 	}
-	if row.Cells["buyPct"].Recommendation == "" {
+	cell, ok := row.Cells["buyPct"]
+	if !ok || cell.Recommendation == "" {
 		t.Errorf("expected buyPct cell to be populated, got empty")
 	}
 	if row.Status != insights.StatusAct {
@@ -97,14 +98,15 @@ func TestService_GetOverview_AIAcceptRate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// With 2 accepted and 0 known-dismissed, resolved == accepted == 2, pct == 100%.
+	// Denominator is unknown in v1: Accepted is surfaced but Resolved stays 0
+	// and Pct stays 0 so the frontend renders "—" instead of a misleading 100%.
 	if got.Signals.AIAcceptRate.Accepted != 2 {
 		t.Errorf("Accepted = %d, want 2", got.Signals.AIAcceptRate.Accepted)
 	}
-	if got.Signals.AIAcceptRate.Resolved != 2 {
-		t.Errorf("Resolved = %d, want 2 (accepted + dismissed when dismissed unknown)", got.Signals.AIAcceptRate.Resolved)
+	if got.Signals.AIAcceptRate.Resolved != 0 {
+		t.Errorf("Resolved = %d, want 0 (denominator unknown until dismissed exposed)", got.Signals.AIAcceptRate.Resolved)
 	}
-	if got.Signals.AIAcceptRate.Pct != 100.0 {
-		t.Errorf("Pct = %v, want 100.0", got.Signals.AIAcceptRate.Pct)
+	if got.Signals.AIAcceptRate.Pct != 0.0 {
+		t.Errorf("Pct = %v, want 0.0 (denominator unknown until dismissed exposed)", got.Signals.AIAcceptRate.Pct)
 	}
 }

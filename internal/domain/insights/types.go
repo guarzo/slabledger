@@ -21,12 +21,12 @@ const (
 
 // Action is one row in the "Do now" section.
 type Action struct {
-	ID          string     `json:"id"`
-	Severity    Severity   `json:"severity"` // "act" or "tune" only in v1
-	Title       string     `json:"title"`
-	Detail      string     `json:"detail"`
-	Link        ActionLink `json:"link"`
-	ImpactCents int        `json:"impactCents,omitempty"`
+	ID        string     `json:"id"`
+	Severity  Severity   `json:"severity"` // "act" or "tune" only in v1
+	Title     string     `json:"title"`
+	Detail    string     `json:"detail"`
+	Link      ActionLink `json:"link"`
+	ImpactUsd float64    `json:"impactUsd,omitempty"`
 }
 
 // ActionLink points the frontend at a target page + optional filter query.
@@ -37,11 +37,11 @@ type ActionLink struct {
 
 // Signals are the four health-signal tiles.
 type Signals struct {
-	AIAcceptRate                AIAcceptRate `json:"aiAcceptRate"`
-	LiquidationRecoverableCents int          `json:"liquidationRecoverableCents"`
-	SpikeProfitCents            int          `json:"spikeProfitCents"`
-	SpikeCertCount              int          `json:"spikeCertCount"`
-	StuckInPipelineCount        int          `json:"stuckInPipelineCount"`
+	AIAcceptRate              AIAcceptRate `json:"aiAcceptRate"`
+	LiquidationRecoverableUsd float64      `json:"liquidationRecoverableUsd"`
+	SpikeProfitUsd            float64      `json:"spikeProfitUsd"`
+	SpikeCertCount            int          `json:"spikeCertCount"`
+	StuckInPipelineCount      int          `json:"stuckInPipelineCount"`
 }
 
 // AIAcceptRate is the 7-day AI suggestion acceptance rate.
