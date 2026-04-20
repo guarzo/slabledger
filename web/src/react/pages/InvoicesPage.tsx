@@ -26,13 +26,24 @@ function statusPill(status: Invoice['status'], daysToDue: number) {
   );
 }
 
+// Compare dates at day granularity. ISO date-only strings (YYYY-MM-DD) are
+// parsed by JS as UTC midnight, but new Date() is local — mixing them skews
+// the diff by up to a day in most timezones. Anchor both ends at UTC
+// midnight when the input is date-only so the result is stable.
 function daysUntil(dateStr?: string): number {
   if (!dateStr) return 0;
-  const d = new Date(dateStr);
-  if (Number.isNaN(d.getTime())) return 0;
-  const now = new Date();
   const msPerDay = 1000 * 60 * 60 * 24;
-  return Math.round((d.getTime() - now.getTime()) / msPerDay);
+  const now = new Date();
+  const todayUtc = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+  const isoDateOnly = /^\d{4}-\d{2}-\d{2}$/.exec(dateStr);
+  if (isoDateOnly) {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const targetUtc = Date.UTC(y, m - 1, d);
+    return Math.floor((targetUtc - todayUtc) / msPerDay);
+  }
+  const parsed = new Date(dateStr);
+  if (Number.isNaN(parsed.getTime())) return 0;
+  return Math.floor((parsed.getTime() - todayUtc) / msPerDay);
 }
 
 function InvoiceRow({ inv }: { inv: Invoice }) {
