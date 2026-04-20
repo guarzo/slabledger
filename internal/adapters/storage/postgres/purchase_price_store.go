@@ -20,8 +20,15 @@ func (ps *PurchaseStore) UpdatePurchasePriceOverride(ctx context.Context, purcha
 	if priceCents > 0 {
 		setAt = now.Format(time.RFC3339)
 	}
+	// Committing an override supersedes any outstanding AI suggestion — clear it
+	// so the item stops showing up in "Needs Attention" on that signal.
 	result, err := ps.db.ExecContext(ctx,
-		`UPDATE campaign_purchases SET override_price_cents = $1, override_source = $2, override_set_at = $3, updated_at = $4 WHERE id = $5`,
+		`UPDATE campaign_purchases
+		 SET override_price_cents = $1, override_source = $2, override_set_at = $3,
+		     ai_suggested_price_cents = CASE WHEN $1 > 0 THEN 0 ELSE ai_suggested_price_cents END,
+		     ai_suggested_at         = CASE WHEN $1 > 0 THEN '' ELSE ai_suggested_at END,
+		     updated_at = $4
+		 WHERE id = $5`,
 		priceCents, source, setAt, now, purchaseID,
 	)
 	if err != nil {

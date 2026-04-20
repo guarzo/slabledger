@@ -62,7 +62,11 @@ export function needsAttention(item: AgingItem, status = getReviewStatus(item)):
   if (!item.purchase.receivedAt) return false;
   if ((EXCEPTION_STATUSES as readonly string[]).includes(status)) return true;
   if (isDHHeld(item)) return true;
-  if ((item.purchase.aiSuggestedPriceCents ?? 0) > 0) return true;
+  // An AI suggestion only warrants attention when the operator hasn't committed
+  // a price yet — once reviewed or overridden, the suggestion is superseded.
+  const hasCommittedPrice =
+    !!item.purchase.reviewedAt || (item.purchase.overridePriceCents ?? 0) > 0;
+  if (!hasCommittedPrice && (item.purchase.aiSuggestedPriceCents ?? 0) > 0) return true;
   return false;
 }
 
