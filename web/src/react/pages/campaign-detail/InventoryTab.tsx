@@ -136,6 +136,11 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
               onChange={toggleAll} className="rounded" />
             Select all
           </label>
+          {filteredAndSortedItems.length === 0 && (
+            <div className="py-10 text-center text-[var(--text-muted)] text-sm">
+              {debouncedSearch ? `No cards match "${debouncedSearch}"` : 'No cards in this view'}
+            </div>
+          )}
           <div ref={mobileScrollRef} className={isPrinting ? '' : 'max-h-[calc(100vh-280px)] max-h-[calc(100dvh-280px)] overflow-y-auto scrollbar-dark overscroll-contain touch-pan-y'}>
             {isPrinting ? (
               filteredAndSortedItems.map((item) => (
@@ -222,6 +227,11 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
             <div className="glass-table-th flex-shrink-0 !px-1 print-hide-actions" style={{ width: '28px' }}></div>
           </div>
           {/* Rows */}
+          {filteredAndSortedItems.length === 0 && (
+            <div className="py-10 text-center text-[var(--text-muted)] text-sm">
+              {debouncedSearch ? `No cards match "${debouncedSearch}"` : 'No cards in this view'}
+            </div>
+          )}
           <div ref={scrollContainerRef} className={isPrinting ? '' : 'max-h-[600px] overflow-y-auto overflow-x-hidden scrollbar-dark'}>
             {isPrinting ? (
               filteredAndSortedItems.map((item, index) => {

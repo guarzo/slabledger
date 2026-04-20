@@ -3,6 +3,18 @@
     "linear_slabledger": {
       "type": "http",
       "url": "https://mcp.linear.app/mcp"
+    },
+    "playwright_local": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@playwright/mcp@latest",
+        "--headless",
+        "--browser", "chromium",
+        "--executable-path", "/home/vscode/.cache/ms-playwright/chromium_headless_shell-1217/chrome-headless-shell-linux64/chrome-headless-shell",
+        "--no-sandbox",
+        "--viewport-size", "1440,900"
+      ]
     }
   }
 }

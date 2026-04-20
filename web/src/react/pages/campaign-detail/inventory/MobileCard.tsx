@@ -228,7 +228,7 @@ export default function MobileCard({ item, selected, onToggle, onRecordSale, onF
             title="Re-map to correct DH card"
             aria-label="Re-map to correct DH card"
           >
-            DH
+            Fix DH
           </button>
         )}
         {onUnmatchDH && (

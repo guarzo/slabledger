@@ -14,6 +14,13 @@ const statusBadge = {
   Kill: 'bg-[var(--danger)]/25 text-[var(--danger)] font-bold',
 } as const;
 
+const statusLabel = {
+  Act: 'Action',
+  Tune: 'Tune',
+  OK: 'OK',
+  Kill: 'Kill',
+} as const;
+
 const columns: Array<{ key: TuningColumn; label: string }> = [
   { key: 'buyPct', label: 'Buy %' },
   { key: 'characters', label: 'Characters' },
@@ -45,7 +52,7 @@ export default function CampaignTuningTable({ rows }: { rows: TuningRow[] }) {
           {columns.map(c => (
             <div key={c.key}>{c.label}</div>
           ))}
-          <div className="w-14 text-right">Status</div>
+          <div className="w-16 text-right">Status</div>
         </div>
         {rows.map(row => (
           <Link
@@ -62,9 +69,9 @@ export default function CampaignTuningTable({ rows }: { rows: TuningRow[] }) {
                 </div>
               );
             })}
-            <div className="w-14 text-right">
+            <div className="w-16 text-right">
               <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] ${statusBadge[row.status]}`}>
-                {row.status}
+                {statusLabel[row.status]}
               </span>
             </div>
           </Link>
