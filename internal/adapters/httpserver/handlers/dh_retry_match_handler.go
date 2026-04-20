@@ -72,7 +72,10 @@ func (h *DHHandler) HandleRetryMatch(w http.ResponseWriter, r *http.Request) {
 		case dh.CertStatusMatched:
 			dhCardID := resolution.DHCardID
 			if h.cardIDSaver != nil {
-				_ = h.cardIDSaver.SaveExternalID(ctx, purchase.CardName, purchase.SetName, purchase.CardNumber, pricing.SourceDH, fmt.Sprintf("%d", dhCardID))
+				if err := h.cardIDSaver.SaveExternalID(ctx, purchase.CardName, purchase.SetName, purchase.CardNumber, pricing.SourceDH, fmt.Sprintf("%d", dhCardID)); err != nil {
+					h.logger.Warn(ctx, "retry match: save external card ID", observability.Err(err),
+						observability.String("cardName", purchase.CardName), observability.String("setName", purchase.SetName))
+				}
 			}
 			listingPrice := dhlisting.ResolveListingPriceCents(purchase)
 			inventoryID, pushErr := h.pushAndPersistDH(ctx, purchase, dhCardID, listingPrice)
@@ -89,7 +92,10 @@ func (h *DHHandler) HandleRetryMatch(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			if h.candidatesSaver != nil {
-				_ = h.candidatesSaver.UpdatePurchaseDHCandidates(ctx, purchase.ID, "")
+				if err := h.candidatesSaver.UpdatePurchaseDHCandidates(ctx, purchase.ID, ""); err != nil {
+					h.logger.Warn(ctx, "retry match: clear candidates after cert resolve", observability.Err(err),
+						observability.String("purchaseID", purchase.ID))
+				}
 			}
 			writeJSON(w, http.StatusOK, retryMatchResponse{Status: "ok", DHCardID: dhCardID, DHInventoryID: inventoryID})
 			return
@@ -174,10 +180,16 @@ func (h *DHHandler) HandleRetryMatch(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if h.cardIDSaver != nil && result.DHCardID != 0 {
-			_ = h.cardIDSaver.SaveExternalID(ctx, purchase.CardName, purchase.SetName, purchase.CardNumber, pricing.SourceDH, fmt.Sprintf("%d", result.DHCardID))
+			if err := h.cardIDSaver.SaveExternalID(ctx, purchase.CardName, purchase.SetName, purchase.CardNumber, pricing.SourceDH, fmt.Sprintf("%d", result.DHCardID)); err != nil {
+				h.logger.Warn(ctx, "retry match: save external card ID after PSA import", observability.Err(err),
+					observability.String("cardName", purchase.CardName), observability.String("setName", purchase.SetName))
+			}
 		}
 		if h.candidatesSaver != nil {
-			_ = h.candidatesSaver.UpdatePurchaseDHCandidates(ctx, purchase.ID, "")
+			if err := h.candidatesSaver.UpdatePurchaseDHCandidates(ctx, purchase.ID, ""); err != nil {
+				h.logger.Warn(ctx, "retry match: clear candidates after PSA import", observability.Err(err),
+					observability.String("purchaseID", purchase.ID))
+			}
 		}
 		writeJSON(w, http.StatusOK, retryMatchResponse{
 			Status:        "ok",

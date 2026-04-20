@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import type { AgingItem, EVPortfolio } from '../../../../types/campaigns';
 import type { ReviewStats } from '../../../../types/campaigns/priceReview';
 import type { TabCounts, FilterTab } from './inventoryCalcs';
@@ -55,6 +56,17 @@ export default function InventoryHeader({
   onStatClick, onAddToSellSheet, onRemoveFromSellSheet,
   onRecordSale, onBulkListOnDH, onClearSelected, onPrint,
 }: InventoryHeaderProps) {
+  const primary = useMemo(() => [
+    { key: 'needs_attention' as const, label: 'Needs Attention', count: tabCounts.needs_attention, alwaysShow: true },
+    { key: 'ready_to_list' as const, label: 'Pending DH Listing', count: tabCounts.ready_to_list, alwaysShow: false },
+  ].filter(t => t.alwaysShow || t.count > 0), [tabCounts]);
+  const secondary = useMemo(() => [
+    { key: 'all' as const, label: 'All', count: tabCounts.all, alwaysShow: true },
+    { key: 'in_hand' as const, label: 'In Hand', count: tabCounts.in_hand, alwaysShow: false },
+    { key: 'awaiting_intake' as const, label: 'Awaiting Intake', count: tabCounts.awaiting_intake, alwaysShow: false },
+    { key: 'sell_sheet' as const, label: 'Sell Sheet', count: pageSellSheetCount, alwaysShow: false },
+  ].filter(t => t.alwaysShow || t.count > 0), [tabCounts, pageSellSheetCount]);
+
   if (isMobile && sellSheetActive) return null;
 
   const pillClass = (isActive: boolean, size: 'primary' | 'secondary') => {
@@ -73,17 +85,6 @@ export default function InventoryHeader({
       : 'bg-[rgba(255,255,255,0.06)] text-[var(--text-muted)]';
     return `${base} ${sizing} ${stateClass}`;
   };
-
-  const primary = [
-    { key: 'needs_attention' as const, label: 'Needs Attention', count: tabCounts.needs_attention, alwaysShow: true },
-    { key: 'ready_to_list' as const, label: 'Pending DH Listing', count: tabCounts.ready_to_list, alwaysShow: false },
-  ].filter(t => t.alwaysShow || t.count > 0);
-  const secondary = [
-    { key: 'all' as const, label: 'All', count: tabCounts.all, alwaysShow: true },
-    { key: 'in_hand' as const, label: 'In Hand', count: tabCounts.in_hand, alwaysShow: false },
-    { key: 'awaiting_intake' as const, label: 'Awaiting Intake', count: tabCounts.awaiting_intake, alwaysShow: false },
-    { key: 'sell_sheet' as const, label: 'Sell Sheet', count: pageSellSheetCount, alwaysShow: false },
-  ].filter(t => t.alwaysShow || t.count > 0);
 
   return (
     <>

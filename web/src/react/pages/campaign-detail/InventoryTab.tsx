@@ -109,7 +109,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
         selected={selected}
         campaignId={campaignId}
         isPrinting={isPrinting}
-        onStatClick={() => { setShowAll(false); setFilterTab('needs_attention'); }}
+        onStatClick={(_target) => { setShowAll(false); setFilterTab('needs_attention'); }}
         onAddToSellSheet={(ids) => { sellSheet.add(ids); toast.success(`Added ${ids.length} item${ids.length > 1 ? 's' : ''} to sell sheet`); }}
         onRemoveFromSellSheet={(ids) => { sellSheet.remove(ids); toast.success(`Removed ${ids.length} item${ids.length > 1 ? 's' : ''} from sell sheet`); }}
         onRecordSale={openSaleModal}
