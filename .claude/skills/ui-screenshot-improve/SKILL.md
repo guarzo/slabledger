@@ -42,7 +42,7 @@ Do not carry an item forward under "Deferred / intentional" for a fourth cycle. 
 cd /workspace && make screenshots
 ```
 
-This builds the Go backend, builds the frontend, starts the server with local data (`data/slabledger.db`), runs Playwright, and saves screenshots to `web/screenshots/`. If the command fails (non-zero exit), stop immediately — do not analyze stale screenshots.
+This builds the Go backend, builds the frontend, starts the server against the devcontainer Postgres via `DATABASE_URL`, runs Playwright, and saves screenshots to `web/screenshots/`. If the command fails (non-zero exit), stop immediately — do not analyze stale screenshots.
 
 Expected output files (desktop):
 ```
