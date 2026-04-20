@@ -63,9 +63,13 @@ func (h *DHHandler) HandleRetryMatch(w http.ResponseWriter, r *http.Request) {
 			SetName:    purchase.SetName,
 			CardNumber: purchase.CardNumber,
 		})
-		if resolveErr == nil {
-			switch resolution.Status {
-			case dh.CertStatusMatched:
+		if resolveErr != nil {
+			h.logger.Error(ctx, "retry match: cert resolver error", observability.Err(resolveErr))
+			writeError(w, http.StatusBadGateway, "cert resolver failed")
+			return
+		}
+		switch resolution.Status {
+		case dh.CertStatusMatched:
 				dhCardID := resolution.DHCardID
 				if h.cardIDSaver != nil {
 					_ = h.cardIDSaver.SaveExternalID(ctx, purchase.CardName, purchase.SetName, purchase.CardNumber, pricing.SourceDH, fmt.Sprintf("%d", dhCardID))
@@ -112,9 +116,8 @@ func (h *DHHandler) HandleRetryMatch(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 				// Ambiguous with no candidates — fall through to PSA import.
-			}
-			// CertStatusNotFound or ambiguous with no candidates: fall through.
 		}
+		// CertStatusNotFound or ambiguous with no candidates: fall through.
 	}
 
 	// Step 2: PSA import fallback.

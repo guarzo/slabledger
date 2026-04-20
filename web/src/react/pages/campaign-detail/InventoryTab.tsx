@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { AgingItem } from '../../../types/campaigns';
+import type { Purchase } from '../../../types/campaigns/core';
 import PokeballLoader from '../../PokeballLoader';
 import { formatCents, formatPct } from '../../utils/formatters';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
@@ -85,6 +86,9 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
       />
     );
   }
+
+  const getOnUnmatchDH = (purchase: Purchase) =>
+    purchase.dhPushStatus === 'matched' ? () => handleUnmatchDH(purchase) : undefined;
 
   return (
     <div>
@@ -322,7 +326,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                     onRecordSale={() => openSaleModal([item])}
                     onFixPricing={() => handleFixPricing(item.purchase)}
                     onFixDHMatch={() => handleFixDHMatch(item.purchase)}
-                    onUnmatchDH={item.purchase.dhPushStatus === 'matched' ? () => handleUnmatchDH(item.purchase) : undefined}
+                    onUnmatchDH={getOnUnmatchDH(item.purchase)}
                     onSetPrice={() => handleSetPrice(item)}
                     onDelete={() => handleDelete(item)}
                     onListOnDH={handleListOnDH}
@@ -356,7 +360,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                         onRecordSale={() => openSaleModal([item])}
                         onFixPricing={() => handleFixPricing(item.purchase)}
                         onFixDHMatch={() => handleFixDHMatch(item.purchase)}
-                        onUnmatchDH={item.purchase.dhPushStatus === 'matched' ? () => handleUnmatchDH(item.purchase) : undefined}
+                        onUnmatchDH={getOnUnmatchDH(item.purchase)}
                         onSetPrice={() => handleSetPrice(item)}
                         onDelete={() => handleDelete(item)}
                         onListOnDH={handleListOnDH}
@@ -415,7 +419,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                       onRecordSale={() => openSaleModal([item])}
                       onFixPricing={() => handleFixPricing(item.purchase)}
                       onFixDHMatch={() => handleFixDHMatch(item.purchase)}
-                      onUnmatchDH={item.purchase.dhPushStatus === 'matched' ? () => handleUnmatchDH(item.purchase) : undefined}
+                      onUnmatchDH={getOnUnmatchDH(item.purchase)}
                       onSetPrice={() => handleSetPrice(item)}
                       onDelete={() => handleDelete(item)}
                       onListOnDH={handleListOnDH}
@@ -465,7 +469,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                           onRecordSale={() => openSaleModal([item])}
                           onFixPricing={() => handleFixPricing(item.purchase)}
                           onFixDHMatch={() => handleFixDHMatch(item.purchase)}
-                          onUnmatchDH={item.purchase.dhPushStatus === 'matched' ? () => handleUnmatchDH(item.purchase) : undefined}
+                          onUnmatchDH={getOnUnmatchDH(item.purchase)}
                           onSetPrice={() => handleSetPrice(item)}
                           onDelete={() => handleDelete(item)}
                           onListOnDH={handleListOnDH}

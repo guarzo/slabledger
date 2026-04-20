@@ -3,6 +3,7 @@ package dhprice
 import (
 	"context"
 	"errors"
+	"strconv"
 	"testing"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
@@ -236,15 +237,37 @@ func TestGetPrice_NilResult(t *testing.T) {
 }
 
 func TestGetPrice_InvalidCardIDReturnsError(t *testing.T) {
-	idLookupBad := &mocks.MockDHCardIDLookup{
-		GetExternalIDFn: func(_ context.Context, _, _, _, _ string) (string, error) {
-			return "not-a-number", nil
+	cases := []struct {
+		name        string
+		lookupID    string
+		lookupErr   error
+		card        pricing.Card
+		expectedErr error
+	}{
+		{
+			name:        "NonIntegerExternalID",
+			lookupID:    "not-a-number",
+			card:        pricing.Card{Name: "Test", Set: "Set", Number: "1"},
+			expectedErr: strconv.ErrSyntax,
 		},
 	}
-	p := New(&mocks.MockDHMarketDataClient{}, idLookupBad)
-	_, err := p.GetPrice(context.Background(), pricing.Card{Name: "Test", Set: "Set", Number: "1"})
-	if err == nil {
-		t.Fatal("expected error for non-integer external ID, got nil")
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			idLookup := &mocks.MockDHCardIDLookup{
+				GetExternalIDFn: func(_ context.Context, _, _, _, _ string) (string, error) {
+					return tc.lookupID, tc.lookupErr
+				},
+			}
+			p := New(&mocks.MockDHMarketDataClient{}, idLookup)
+			_, err := p.GetPrice(context.Background(), tc.card)
+			if err == nil {
+				t.Fatal("expected error for non-integer external ID, got nil")
+			}
+			if tc.expectedErr != nil && !errors.Is(err, tc.expectedErr) {
+				t.Errorf("expected errors.Is(err, %v), got: %v", tc.expectedErr, err)
+			}
+		})
 	}
 }
 

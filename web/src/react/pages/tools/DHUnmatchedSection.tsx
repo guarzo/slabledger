@@ -117,6 +117,8 @@ function UnmatchedRow({ card, onDismiss, isDismissing }: {
     }
   };
 
+  const anyMutationPending = selectMutation.isPending || retryMutation.isPending || fixMutation.isPending;
+
   return (
     <tr className="border-b border-[var(--surface-2)]/50">
       <td className="py-2 px-3 text-sm font-mono text-[var(--text-muted)]">{card.cert_number}</td>
@@ -130,7 +132,7 @@ function UnmatchedRow({ card, onDismiss, isDismissing }: {
           {candidates.length > 0 && (
             <div className="flex flex-col gap-1">
               {visibleCandidates.map((c) => (
-                <CandidateCard key={c.dh_card_id} candidate={c} onSelect={handleSelect} isPending={selectingCardId === c.dh_card_id && (selectMutation.isPending || retryMutation.isPending || fixMutation.isPending)} isDisabled={selectMutation.isPending || retryMutation.isPending || fixMutation.isPending || (selectingCardId !== null && selectingCardId !== c.dh_card_id)} />
+                <CandidateCard key={c.dh_card_id} candidate={c} onSelect={handleSelect} isPending={selectingCardId === c.dh_card_id && anyMutationPending} isDisabled={anyMutationPending || (selectingCardId !== null && selectingCardId !== c.dh_card_id)} />
               ))}
               {hiddenCount > 0 && !showAll && (
                 <button
@@ -157,7 +159,7 @@ function UnmatchedRow({ card, onDismiss, isDismissing }: {
                  size="sm"
                  onClick={handleFix}
                  loading={fixMutation.isPending}
-                 disabled={fixMutation.isPending}
+                 disabled={anyMutationPending}
                >
                  Fix
                </Button>
@@ -166,7 +168,7 @@ function UnmatchedRow({ card, onDismiss, isDismissing }: {
                  size="sm"
                  onClick={handleRetry}
                  loading={retryMutation.isPending}
-                 disabled={retryMutation.isPending || fixMutation.isPending || selectMutation.isPending}
+                 disabled={anyMutationPending}
                >
                  Retry
                </Button>
@@ -175,7 +177,7 @@ function UnmatchedRow({ card, onDismiss, isDismissing }: {
                  size="sm"
                  onClick={() => onDismiss(card.purchase_id)}
                  loading={isDismissing}
-                 disabled={isDismissing}
+                 disabled={isDismissing || anyMutationPending}
                  className="text-[var(--text-muted)] hover:text-[var(--text)]"
                >
                  Skip

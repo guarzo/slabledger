@@ -68,7 +68,7 @@ DROP INDEX IF EXISTS public.idx_price_flags_resolved_by;
 -- Undo Fix 3: Recreate duplicate index
 -- ================================================================
 
-CREATE UNIQUE INDEX idx_users_google_id ON users(google_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id);
 
 -- ================================================================
 -- Undo Fix 2: Disable RLS and drop bypass policies
