@@ -71,4 +71,3 @@ func TestValidateEnvironmentVariables(t *testing.T) {
 		})
 	}
 }
-

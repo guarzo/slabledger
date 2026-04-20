@@ -189,11 +189,11 @@ func (m *mockDHReconcileRunner) GetLastRunResult() *dhlisting.ReconcileResult {
 // DHReconcileScheduler so it plugs in directly at wiring time.
 func TestDHReconcileHandler_Trigger(t *testing.T) {
 	tests := []struct {
-		name            string
-		runner          *mockDHReconcileRunner
-		wantStatus      int
-		expectResult    bool // success case asserts Scanned=5/Reset=2 in the unmarshalled body
-		expectZeroBody  bool // success-but-nil-result case asserts the fallback zero-shape body
+		name           string
+		runner         *mockDHReconcileRunner
+		wantStatus     int
+		expectResult   bool // success case asserts Scanned=5/Reset=2 in the unmarshalled body
+		expectZeroBody bool // success-but-nil-result case asserts the fallback zero-shape body
 	}{
 		{
 			name: "success returns result",
