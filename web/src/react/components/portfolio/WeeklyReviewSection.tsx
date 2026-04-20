@@ -4,18 +4,20 @@ import { formatCents } from '../../utils/formatters';
 import { saleChannelLabels } from '../../utils/campaignConstants';
 import CollapsibleHeader from './CollapsibleHeader';
 
-function DeltaIndicator({ current, previous, isCents = false }: { current: number; previous: number; isCents?: boolean }) {
+function DeltaIndicator({ current, previous, isCents = false, muted = false }: { current: number; previous: number; isCents?: boolean; muted?: boolean }) {
   if (previous === 0 && current === 0) return <span className="text-[var(--text-muted)]">--</span>;
   const delta = previous !== 0 ? ((current - previous) / Math.abs(previous)) * 100 : (current > 0 ? 100 : current < 0 ? -100 : 0);
   const isUp = delta > 0;
   const isDown = delta < 0;
-  const color = isUp ? 'text-[var(--success)]' : isDown ? 'text-[var(--danger)]' : 'text-[var(--text-muted)]';
+  const semanticColor = isUp ? 'text-[var(--success)]' : isDown ? 'text-[var(--danger)]' : 'text-[var(--text-muted)]';
+  const color = muted ? 'text-[var(--text)]' : semanticColor;
   const arrow = isUp ? '\u2191' : isDown ? '\u2193' : '';
   const displayVal = isCents ? formatCents(current) : current.toString();
+  const arrowColor = muted ? 'text-[var(--text-muted)]' : '';
 
   return (
     <span className={color}>
-      {displayVal} {arrow && <span className="text-xs">{arrow} {Math.abs(delta).toFixed(0)}%</span>}
+      {displayVal} {arrow && <span className={`text-xs ${arrowColor}`}>{arrow} {Math.abs(delta).toFixed(0)}%</span>}
     </span>
   );
 }
@@ -45,18 +47,19 @@ function PerformerList({ title, items, titleColorClass, itemColorClass }: {
   );
 }
 
-function MetricTile({ title, current, previous, isCents, className }: {
+function MetricTile({ title, current, previous, isCents, className, muted }: {
   title: string;
   current: number;
   previous: number;
   isCents?: boolean;
   className?: string;
+  muted?: boolean;
 }) {
   return (
     <div className={`bg-[var(--surface-0)]/40 rounded-xl border border-[var(--surface-2)]/50 p-3 text-center ${className ?? ''}`}>
       <div className="text-xs text-[var(--text-muted)] mb-1">{title}</div>
       <div className="text-sm font-semibold">
-        <DeltaIndicator current={current} previous={previous} isCents={isCents} />
+        <DeltaIndicator current={current} previous={previous} isCents={isCents} muted={muted} />
       </div>
     </div>
   );
@@ -102,11 +105,11 @@ export default function WeeklyReviewSection({ data }: { data: WeeklyReviewSummar
       {open && (
         <div className="mt-3 space-y-4">
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-            <MetricTile title="Purchases" current={data.purchasesThisWeek} previous={data.purchasesLastWeek} />
-            <MetricTile title="Spend" current={data.spendThisWeekCents} previous={data.spendLastWeekCents} isCents />
-            <MetricTile title="Sales" current={data.salesThisWeek} previous={data.salesLastWeek} />
-            <MetricTile title="Revenue" current={data.revenueThisWeekCents} previous={data.revenueLastWeekCents} isCents />
-            <MetricTile title="Profit" current={data.profitThisWeekCents} previous={data.profitLastWeekCents} isCents className="col-span-2 sm:col-span-1" />
+            <MetricTile title="Purchases" current={data.purchasesThisWeek} previous={data.purchasesLastWeek} muted={inProgress} />
+            <MetricTile title="Spend" current={data.spendThisWeekCents} previous={data.spendLastWeekCents} isCents muted={inProgress} />
+            <MetricTile title="Sales" current={data.salesThisWeek} previous={data.salesLastWeek} muted={inProgress} />
+            <MetricTile title="Revenue" current={data.revenueThisWeekCents} previous={data.revenueLastWeekCents} isCents muted={inProgress} />
+            <MetricTile title="Profit" current={data.profitThisWeekCents} previous={data.profitLastWeekCents} isCents className="col-span-2 sm:col-span-1" muted={inProgress} />
           </div>
 
           {((data.topPerformers?.length ?? 0) > 0 || (data.bottomPerformers?.length ?? 0) > 0) && (

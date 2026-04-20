@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import type { PortfolioHealth, CapitalSummary } from '../../../types/campaigns';
 import { formatCents, formatPct, formatWeeksToCover } from '../../utils/formatters';
 import { EmptyState } from '../../ui';
@@ -89,9 +90,13 @@ export default function HeroStatsBar({ health, capital }: HeroStatsBarProps) {
           )}
           {capital && capital.unpaidInvoiceCount > 0 && (
             <div className="flex items-center self-center">
-              <span className="text-xs font-medium text-[var(--warning)] bg-[var(--warning)]/10 px-2 py-0.5 rounded-full">
-                {capital.unpaidInvoiceCount} unpaid invoice{capital.unpaidInvoiceCount !== 1 ? 's' : ''}
-              </span>
+              <Link
+                to="/invoices"
+                aria-label={`Open ${capital.unpaidInvoiceCount} unpaid invoice${capital.unpaidInvoiceCount !== 1 ? 's' : ''}`}
+                className="text-xs font-medium text-[var(--warning)] bg-[var(--warning)]/10 hover:bg-[var(--warning)]/20 px-2 py-0.5 rounded-full transition-colors"
+              >
+                {capital.unpaidInvoiceCount} unpaid invoice{capital.unpaidInvoiceCount !== 1 ? 's' : ''} →
+              </Link>
             </div>
           )}
         </div>

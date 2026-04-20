@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import type { CapitalSummary } from '../../../types/campaigns';
 import { formatCents, formatWeeksToCover } from '../../utils/formatters';
 import TrendArrow from '../../ui/TrendArrow';
@@ -52,7 +53,13 @@ export default function CapitalExposurePanel({ capital }: CapitalExposurePanelPr
       {(capital.unpaidInvoiceCount > 0 || capital.refundedCents > 0) && (
         <div className="text-xs text-[var(--text-muted)]">
           {capital.unpaidInvoiceCount > 0 && (
-            <span>{capital.unpaidInvoiceCount} unpaid invoice{capital.unpaidInvoiceCount !== 1 ? 's' : ''}</span>
+            <Link
+              to="/invoices"
+              aria-label={`Open ${capital.unpaidInvoiceCount} unpaid invoice${capital.unpaidInvoiceCount !== 1 ? 's' : ''}`}
+              className="text-[var(--warning)] hover:underline"
+            >
+              {capital.unpaidInvoiceCount} unpaid invoice{capital.unpaidInvoiceCount !== 1 ? 's' : ''} →
+            </Link>
           )}
           {capital.refundedCents > 0 && (
             <span>{capital.unpaidInvoiceCount > 0 ? ' | ' : ''}{formatCents(capital.refundedCents)} refunded</span>

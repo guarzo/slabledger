@@ -70,7 +70,9 @@ export function DHStatsPanel({ enabled = true }: { enabled?: boolean }) {
   if (error && !status) {
     return (
       <CardShell padding="lg">
-        <p className="text-[var(--danger)] text-sm">Failed to load DH status. Integration may not be configured.</p>
+        <p className="text-[var(--danger)] text-sm">
+          Failed to load DH status. Configure credentials in the Integrations tab.
+        </p>
       </CardShell>
     );
   }

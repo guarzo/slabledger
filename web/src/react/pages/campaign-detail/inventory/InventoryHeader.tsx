@@ -59,13 +59,13 @@ export default function InventoryHeader({
   const primary = useMemo(() => [
     { key: 'needs_attention' as const, label: 'Needs Attention', count: tabCounts.needs_attention, alwaysShow: true },
     { key: 'ready_to_list' as const, label: 'Pending DH Listing', count: tabCounts.ready_to_list, alwaysShow: false },
-  ].filter(t => t.alwaysShow || t.count > 0), [tabCounts]);
+    { key: 'sell_sheet' as const, label: 'Sell Sheet', count: pageSellSheetCount, alwaysShow: false },
+  ].filter(t => t.alwaysShow || t.count > 0), [tabCounts, pageSellSheetCount]);
   const secondary = useMemo(() => [
     { key: 'all' as const, label: 'All', count: tabCounts.all, alwaysShow: true },
     { key: 'in_hand' as const, label: 'In Hand', count: tabCounts.in_hand, alwaysShow: false },
     { key: 'awaiting_intake' as const, label: 'Awaiting Intake', count: tabCounts.awaiting_intake, alwaysShow: false },
-    { key: 'sell_sheet' as const, label: 'Sell Sheet', count: pageSellSheetCount, alwaysShow: false },
-  ].filter(t => t.alwaysShow || t.count > 0), [tabCounts, pageSellSheetCount]);
+  ].filter(t => t.alwaysShow || t.count > 0), [tabCounts]);
 
   if (isMobile && sellSheetActive) return null;
 
@@ -217,7 +217,7 @@ export default function InventoryHeader({
       {/* Filter tabs */}
       {!showAll && (
         <div className="flex flex-col gap-2 mb-3 sell-sheet-no-print">
-          <div className="flex items-center gap-2 overflow-x-auto scrollbar-none">
+          <div className="flex flex-wrap items-center gap-2">
             {primary.map(tab => {
               const isActive = filterTab === tab.key;
               return (
@@ -229,7 +229,7 @@ export default function InventoryHeader({
             })}
           </div>
           {secondary.length > 0 && (
-            <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none">
+            <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1.5">
               {secondary.map(tab => {
                 const isActive = filterTab === tab.key;
                 return (
