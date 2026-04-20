@@ -83,12 +83,13 @@ describe('inventoryCalcs', () => {
       const items = [
         // unreviewed with AI suggestion → needs attention
         makeItem({ purchase: { id: '1', aiSuggestedPriceCents: 5000, reviewedAt: undefined, receivedAt: '2026-04-09T00:00:00Z' } }),
-        // reviewed with lingering AI suggestion → NOT needs attention (suggestion superseded)
-        makeItem({ purchase: { id: '2', aiSuggestedPriceCents: 5000, reviewedAt: '2026-04-10T00:00:00Z', receivedAt: '2026-04-09T00:00:00Z' } }),
+        // reviewed with lingering AI suggestion → NOT needs attention (suggestion superseded).
+        // Backend invariant: reviewedAt is only stamped when reviewedPriceCents > 0.
+        makeItem({ purchase: { id: '2', aiSuggestedPriceCents: 5000, reviewedPriceCents: 8000, reviewedAt: '2026-04-10T00:00:00Z', receivedAt: '2026-04-09T00:00:00Z' } }),
         // override set with lingering AI suggestion → NOT needs attention
         makeItem({ purchase: { id: '3', aiSuggestedPriceCents: 5000, overridePriceCents: 7000, receivedAt: '2026-04-09T00:00:00Z' } }),
         // reviewed, no AI → NOT needs attention
-        makeItem({ purchase: { id: '4', reviewedAt: '2026-04-10T00:00:00Z', receivedAt: '2026-04-09T00:00:00Z' } }),
+        makeItem({ purchase: { id: '4', reviewedPriceCents: 8000, reviewedAt: '2026-04-10T00:00:00Z', receivedAt: '2026-04-09T00:00:00Z' } }),
       ];
       const meta = computeInventoryMeta(items);
       expect(meta.tabCounts.needs_attention).toBe(1);

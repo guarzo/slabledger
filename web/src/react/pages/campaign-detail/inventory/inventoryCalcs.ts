@@ -57,19 +57,6 @@ export function isDHHeld(item: AgingItem): boolean {
   return item.purchase.dhPushStatus === 'held';
 }
 
-export function needsAttention(item: AgingItem, status = getReviewStatus(item)): boolean {
-  // Pre-intake cards can't be meaningfully acted on yet — don't flag them as needing attention.
-  if (!item.purchase.receivedAt) return false;
-  if ((EXCEPTION_STATUSES as readonly string[]).includes(status)) return true;
-  if (isDHHeld(item)) return true;
-  // An AI suggestion only warrants attention when the operator hasn't committed
-  // a price yet — once reviewed or overridden, the suggestion is superseded.
-  const hasCommittedPrice =
-    !!item.purchase.reviewedAt || (item.purchase.overridePriceCents ?? 0) > 0;
-  if (!hasCommittedPrice && (item.purchase.aiSuggestedPriceCents ?? 0) > 0) return true;
-  return false;
-}
-
 // hasCommittedPrice: operator has committed a listing price, either via the
 // inline review flow (reviewedPriceCents) or the "Set Price" dialog
 // (overridePriceCents). Backend ResolveListingPriceCents uses the same
@@ -79,6 +66,17 @@ function hasCommittedPrice(item: AgingItem): boolean {
     (item.purchase.reviewedPriceCents ?? 0) > 0 ||
     (item.purchase.overridePriceCents ?? 0) > 0
   );
+}
+
+export function needsAttention(item: AgingItem, status = getReviewStatus(item)): boolean {
+  // Pre-intake cards can't be meaningfully acted on yet — don't flag them as needing attention.
+  if (!item.purchase.receivedAt) return false;
+  if ((EXCEPTION_STATUSES as readonly string[]).includes(status)) return true;
+  if (isDHHeld(item)) return true;
+  // An AI suggestion only warrants attention when the operator hasn't committed
+  // a price yet — once reviewed or overridden, the suggestion is superseded.
+  if (!hasCommittedPrice(item) && (item.purchase.aiSuggestedPriceCents ?? 0) > 0) return true;
+  return false;
 }
 
 // isReadyToList: received (intake complete), pushed to DH inventory, not yet
