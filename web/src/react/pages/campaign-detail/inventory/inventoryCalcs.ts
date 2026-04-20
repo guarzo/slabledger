@@ -25,14 +25,13 @@ export interface InventoryMeta {
 }
 
 export function computeInventoryMeta(items: AgingItem[]): InventoryMeta {
-  const stats: ReviewStats = { total: items.length, needsReview: 0, reviewed: 0, flagged: 0, aging60d: 0 };
+  const stats: ReviewStats = { total: items.length, reviewed: 0, flagged: 0, aging60d: 0 };
   const counts: TabCounts = { needs_attention: 0, in_hand: 0, ready_to_list: 0, awaiting_intake: 0, all: items.length };
   let totalCost = 0;
   let totalMarket = 0;
   for (const item of items) {
     if (item.hasOpenFlag) stats.flagged++;
     if (item.purchase.reviewedAt) stats.reviewed++;
-    else if (item.purchase.receivedAt) stats.needsReview++;
     if (item.daysHeld >= 60) stats.aging60d++;
 
     const status = getReviewStatus(item);
