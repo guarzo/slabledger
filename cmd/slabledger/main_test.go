@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -73,60 +72,3 @@ func TestValidateEnvironmentVariables(t *testing.T) {
 	}
 }
 
-func TestResolveDatabasePath(t *testing.T) {
-	tests := []struct {
-		name      string
-		input     string
-		wantErr   bool
-		checkFunc func(t *testing.T, result string)
-	}{
-		{
-			name:    "empty path returns error",
-			input:   "",
-			wantErr: true,
-		},
-		{
-			name:    "absolute path returned cleaned",
-			input:   "/tmp/data/../data/test.db",
-			wantErr: false,
-			checkFunc: func(t *testing.T, result string) {
-				expected := "/tmp/data/test.db"
-				if result != expected {
-					t.Errorf("expected %q, got %q", expected, result)
-				}
-			},
-		},
-		{
-			name:    "relative path returns absolute path",
-			input:   "data/test.db",
-			wantErr: false,
-			checkFunc: func(t *testing.T, result string) {
-				if !filepath.IsAbs(result) {
-					t.Errorf("expected absolute path, got %q", result)
-				}
-				// Should end with data/test.db
-				if filepath.Base(result) != "test.db" {
-					t.Errorf("expected path to end with test.db, got %q", result)
-				}
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result, err := resolveDatabasePath(tt.input)
-			if tt.wantErr {
-				if err == nil {
-					t.Error("expected error, got nil")
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			if tt.checkFunc != nil {
-				tt.checkFunc(t, result)
-			}
-		})
-	}
-}

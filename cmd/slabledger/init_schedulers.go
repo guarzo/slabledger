@@ -8,7 +8,7 @@ import (
 	dhlistingadapter "github.com/guarzo/slabledger/internal/adapters/clients/dhlisting"
 	"github.com/guarzo/slabledger/internal/adapters/clients/marketmovers"
 	"github.com/guarzo/slabledger/internal/adapters/scheduler"
-	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
+	"github.com/guarzo/slabledger/internal/adapters/storage/postgres"
 	"github.com/guarzo/slabledger/internal/domain/advisor"
 	"github.com/guarzo/slabledger/internal/domain/auth"
 	"github.com/guarzo/slabledger/internal/domain/dhlisting"
@@ -23,36 +23,36 @@ import (
 type schedulerDeps struct {
 	Config               *config.Config
 	Logger               observability.Logger
-	DBTracker            *sqlite.DBTracker
+	DBTracker            *postgres.DBTracker
 	RefreshCandidates    pricing.RefreshCandidateProvider
 	PriceProvImpl        pricing.PriceProvider
 	AuthService          auth.Service
-	SyncStateRepo        *sqlite.SyncStateRepository
-	CardIDMappingRepo    *sqlite.CardIDMappingRepository
-	CampaignStore        *sqlite.CampaignStore
-	PurchaseStore        *sqlite.PurchaseStore
-	DHStore              *sqlite.DHStore
+	SyncStateRepo        *postgres.SyncStateRepository
+	CardIDMappingRepo    *postgres.CardIDMappingRepository
+	CampaignStore        *postgres.CampaignStore
+	PurchaseStore        *postgres.PurchaseStore
+	DHStore              *postgres.DHStore
 	CampaignsService     inventory.Service
 	CertLookup           inventory.CertLookup
 	CertEnrichJob        *scheduler.CertEnrichJob    // pre-built; nil if PSA not configured
 	PricingEnrichJob     *scheduler.PricingEnrichJob // pre-built; wired into inventory service as the pricing enqueuer
 	AdvisorService       advisor.Service
-	AdvisorCacheRepo     *sqlite.AdvisorCacheRepository
-	AICallRepo           *sqlite.AICallRepository
+	AdvisorCacheRepo     *postgres.AdvisorCacheRepository
+	AICallRepo           *postgres.AICallRepository
 	CardLadderClient     *cardladder.Client
-	CardLadderStore      *sqlite.CardLadderStore
-	CardLadderSalesStore *sqlite.CLSalesStore
-	SchedulerStatsStore  *sqlite.SchedulerStatsStore
+	CardLadderStore      *postgres.CardLadderStore
+	CardLadderSalesStore *postgres.CLSalesStore
+	SchedulerStatsStore  *postgres.SchedulerStatsStore
 	MMClient             *marketmovers.Client
-	MMStore              *sqlite.MarketMoversStore
+	MMStore              *postgres.MarketMoversStore
 	DHClient             *dh.Client
-	DHEventStore         *sqlite.DHEventStore
-	DHIntelligenceRepo   *sqlite.MarketIntelligenceRepository
-	DHSuggestionsRepo    *sqlite.DHSuggestionsRepository
-	DHDemandRepo         *sqlite.DHDemandRepository
-	DHTrajectoryRepo     *sqlite.CardPriceTrajectoryRepository
+	DHEventStore         *postgres.DHEventStore
+	DHIntelligenceRepo   *postgres.MarketIntelligenceRepository
+	DHSuggestionsRepo    *postgres.DHSuggestionsRepository
+	DHDemandRepo         *postgres.DHDemandRepository
+	DHTrajectoryRepo     *postgres.CardPriceTrajectoryRepository
 	DHPriceSyncService   dhpricing.Service
-	GapStore             *sqlite.GapStore
+	GapStore             *postgres.GapStore
 	PSASheetFetcher      scheduler.SheetFetcher
 	PSASpreadsheetID     string
 	PSATabName           string

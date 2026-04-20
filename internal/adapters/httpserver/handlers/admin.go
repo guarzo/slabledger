@@ -1,14 +1,8 @@
 package handlers
 
 import (
-	"database/sql"
-	"fmt"
-	"io"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/auth"
 	"github.com/guarzo/slabledger/internal/domain/observability"
@@ -97,80 +91,17 @@ func (h *AdminHandlers) HandleRemoveAllowedEmail(w http.ResponseWriter, r *http.
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
-// HandleBackup streams a consistent SQLite backup as a downloadable file.
-func HandleBackup(dbPath string, logger observability.Logger) http.HandlerFunc {
+// HandleBackup previously streamed a SQLite VACUUM INTO backup. Backups are
+// now handled automatically by Supabase (daily snapshots with PITR on Pro).
+// The endpoint is retained to avoid breaking callers — it returns 410 Gone
+// with a pointer to the Supabase dashboard. The dbPath argument is ignored.
+func HandleBackup(_ string, _ observability.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			writeError(w, http.StatusMethodNotAllowed, "Method not allowed")
 			return
 		}
-
-		// Open source database for VACUUM INTO
-		srcDB, err := sql.Open("sqlite3", dbPath)
-		if err != nil {
-			logger.Error(r.Context(), "backup: failed to open source db", observability.Err(err))
-			writeError(w, http.StatusInternalServerError, "Internal server error")
-			return
-		}
-		defer func() {
-			if cerr := srcDB.Close(); cerr != nil {
-				logger.Error(r.Context(), "backup: failed to close source db", observability.Err(cerr))
-			}
-		}()
-
-		tmpFile, err := os.CreateTemp("", "slabledger-backup-*.db")
-		if err != nil {
-			logger.Error(r.Context(), "backup: failed to create temp file", observability.Err(err))
-			writeError(w, http.StatusInternalServerError, "Internal server error")
-			return
-		}
-		tmpPath := tmpFile.Name()
-		if cerr := tmpFile.Close(); cerr != nil {
-			logger.Error(r.Context(), "backup: failed to close temp file", observability.Err(cerr))
-		}
-		defer func() {
-			if rerr := os.Remove(tmpPath); rerr != nil {
-				logger.Error(r.Context(), "backup: failed to remove temp file", observability.Err(rerr))
-			}
-		}()
-
-		if !filepath.IsAbs(tmpPath) {
-			logger.Error(r.Context(), "backup: temp path is not absolute", observability.String("path", tmpPath))
-			writeError(w, http.StatusInternalServerError, "Internal server error")
-			return
-		}
-		if strings.ContainsAny(tmpPath, "'\";\n\r") {
-			logger.Error(r.Context(), "backup: temp path contains unsafe characters", observability.String("path", tmpPath))
-			writeError(w, http.StatusInternalServerError, "Internal server error")
-			return
-		}
-
-		// Defense in depth: escape single quotes even after validation above
-		sanitizedPath := strings.ReplaceAll(tmpPath, "'", "''")
-		if _, err := srcDB.ExecContext(r.Context(), fmt.Sprintf("VACUUM INTO '%s'", sanitizedPath)); err != nil {
-			logger.Error(r.Context(), "backup: VACUUM INTO failed", observability.Err(err))
-			writeError(w, http.StatusInternalServerError, "Internal server error")
-			return
-		}
-
-		f, err := os.Open(tmpPath)
-		if err != nil {
-			logger.Error(r.Context(), "backup: failed to open backup file", observability.Err(err))
-			writeError(w, http.StatusInternalServerError, "Internal server error")
-			return
-		}
-		defer func() {
-			if cerr := f.Close(); cerr != nil {
-				logger.Error(r.Context(), "backup: failed to close backup file", observability.Err(cerr))
-			}
-		}()
-
-		filename := fmt.Sprintf("slabledger-backup-%s.db", time.Now().Format("2006-01-02"))
-		w.Header().Set("Content-Type", "application/octet-stream")
-		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
-		if _, err := io.Copy(w, f); err != nil {
-			logger.Error(r.Context(), "backup: failed to write response", observability.Err(err))
-		}
+		writeError(w, http.StatusGone, "Backups are managed by Supabase; use the Supabase dashboard (Database → Backups) to download a dump.")
 	}
 }
 

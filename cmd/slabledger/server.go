@@ -218,7 +218,7 @@ func startWebServer(ctx context.Context, deps ServerDependencies) error {
 		CampaignSignalsHandler:    deps.CampaignSignalsHandler,
 		Logger:                    logger,
 		AdminEmails:               cfg.Auth.AdminEmails,
-		DatabasePath:              cfg.Database.Path,
+		DatabasePath:              "",
 		TimingStore:               timingStore,
 		GoogleOAuthEnv:            cfg.Adapters.GoogleOAuthEnv,
 		LocalAPIToken:             cfg.Adapters.LocalAPIToken,

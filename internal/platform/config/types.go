@@ -35,7 +35,7 @@ type LoggingConfig struct {
 
 // DatabaseConfig controls database storage
 type DatabaseConfig struct {
-	Path           string // Path to SQLite database file (default: data/slabledger.db)
+	URL            string // PostgreSQL connection URL (DATABASE_URL)
 	MigrationsPath string // Path to migrations directory (empty = use embedded migrations)
 }
 

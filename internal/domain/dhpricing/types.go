@@ -57,14 +57,14 @@ type DHPriceUpdater interface {
 }
 
 // DHPriceWriter persists DH price + sync timestamp locally after a
-// successful PATCH. Satisfied by *sqlite.PurchaseStore.
+// successful PATCH. Satisfied by *postgres.PurchaseStore.
 type DHPriceWriter interface {
 	UpdatePurchaseDHPriceSync(ctx context.Context, id string, listingPriceCents int, syncedAt time.Time) error
 }
 
 // DHReconcileResetter resets stale DH linkage when DH reports an inventory
 // ID it no longer recognizes (ERR_PROV_NOT_FOUND). Satisfied by
-// *sqlite.PurchaseStore. Declared here (rather than imported from
+// *postgres.PurchaseStore. Declared here (rather than imported from
 // dhlisting) to preserve the flat-siblings invariant.
 type DHReconcileResetter interface {
 	ResetDHFieldsForRepush(ctx context.Context, purchaseID string) error

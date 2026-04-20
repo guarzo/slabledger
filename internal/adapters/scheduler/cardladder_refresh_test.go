@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
-	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
+	"github.com/guarzo/slabledger/internal/adapters/storage/postgres"
 	"github.com/guarzo/slabledger/internal/domain/dhevents"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/platform/config"
@@ -358,7 +358,7 @@ func TestPushNewCards_FilterLogic(t *testing.T) {
 	tests := []struct {
 		name         string
 		purchases    []inventory.Purchase
-		existingMaps []sqlite.CLCardMapping
+		existingMaps []postgres.CLCardMapping
 		expectCount  int // count of purchases that should be considered for push
 	}{
 		{
@@ -367,7 +367,7 @@ func TestPushNewCards_FilterLogic(t *testing.T) {
 				{CertNumber: "123456"},
 				{CertNumber: "789012"},
 			},
-			existingMaps: []sqlite.CLCardMapping{},
+			existingMaps: []postgres.CLCardMapping{},
 			expectCount:  2,
 		},
 		{
@@ -376,7 +376,7 @@ func TestPushNewCards_FilterLogic(t *testing.T) {
 				{CertNumber: "123456"},
 				{CertNumber: "789012"},
 			},
-			existingMaps: []sqlite.CLCardMapping{
+			existingMaps: []postgres.CLCardMapping{
 				{SlabSerial: "123456", CLCollectionCardID: "doc_abc"},
 			},
 			expectCount: 1,
@@ -387,7 +387,7 @@ func TestPushNewCards_FilterLogic(t *testing.T) {
 				{CertNumber: "123456"},
 				{CertNumber: "789012"},
 			},
-			existingMaps: []sqlite.CLCardMapping{
+			existingMaps: []postgres.CLCardMapping{
 				{SlabSerial: "123456"}, // pricing mapping, no push yet
 			},
 			expectCount: 2,
@@ -398,7 +398,7 @@ func TestPushNewCards_FilterLogic(t *testing.T) {
 				{CertNumber: ""},
 				{CertNumber: "789012"},
 			},
-			existingMaps: []sqlite.CLCardMapping{},
+			existingMaps: []postgres.CLCardMapping{},
 			expectCount:  1,
 		},
 		{
@@ -407,7 +407,7 @@ func TestPushNewCards_FilterLogic(t *testing.T) {
 				{CertNumber: "123456"},
 				{CertNumber: "789012"},
 			},
-			existingMaps: []sqlite.CLCardMapping{
+			existingMaps: []postgres.CLCardMapping{
 				{SlabSerial: "123456", CLCollectionCardID: "doc_a"},
 				{SlabSerial: "789012", CLCollectionCardID: "doc_b"},
 			},
@@ -430,7 +430,7 @@ func TestRemoveSoldCards_IdentifySold(t *testing.T) {
 	tests := []struct {
 		name         string
 		unsoldPurch  []inventory.Purchase
-		existingMaps []sqlite.CLCardMapping
+		existingMaps []postgres.CLCardMapping
 		expectSold   int // count of mappings that should be removed
 	}{
 		{
@@ -439,7 +439,7 @@ func TestRemoveSoldCards_IdentifySold(t *testing.T) {
 				{CertNumber: "111111"},
 				{CertNumber: "222222"},
 			},
-			existingMaps: []sqlite.CLCardMapping{
+			existingMaps: []postgres.CLCardMapping{
 				{SlabSerial: "111111", CLCollectionCardID: "card_111"},
 				{SlabSerial: "222222", CLCollectionCardID: "card_222"},
 				{SlabSerial: "333333", CLCollectionCardID: "card_333"},
@@ -453,7 +453,7 @@ func TestRemoveSoldCards_IdentifySold(t *testing.T) {
 				{CertNumber: "222222"},
 				{CertNumber: "333333"},
 			},
-			existingMaps: []sqlite.CLCardMapping{
+			existingMaps: []postgres.CLCardMapping{
 				{SlabSerial: "111111", CLCollectionCardID: "card_111"},
 				{SlabSerial: "222222", CLCollectionCardID: "card_222"},
 				{SlabSerial: "333333", CLCollectionCardID: "card_333"},
@@ -463,7 +463,7 @@ func TestRemoveSoldCards_IdentifySold(t *testing.T) {
 		{
 			name:        "all sold",
 			unsoldPurch: []inventory.Purchase{},
-			existingMaps: []sqlite.CLCardMapping{
+			existingMaps: []postgres.CLCardMapping{
 				{SlabSerial: "111111", CLCollectionCardID: "card_111"},
 				{SlabSerial: "222222", CLCollectionCardID: "card_222"},
 			},
@@ -485,12 +485,12 @@ func TestRemoveSoldCards_IdentifySold(t *testing.T) {
 func TestRefreshSalesComps_Dedup(t *testing.T) {
 	tests := []struct {
 		name        string
-		mappings    []sqlite.CLCardMapping
+		mappings    []postgres.CLCardMapping
 		expectFetch int // count of unique (gemRateID, condition) pairs
 	}{
 		{
 			name: "fetches each unique pair once",
-			mappings: []sqlite.CLCardMapping{
+			mappings: []postgres.CLCardMapping{
 				{CLGemRateID: "gem_123", CLCondition: "PSA 10"},
 				{CLGemRateID: "gem_456", CLCondition: "PSA 9"},
 			},
@@ -498,7 +498,7 @@ func TestRefreshSalesComps_Dedup(t *testing.T) {
 		},
 		{
 			name: "deduplicates identical pairs",
-			mappings: []sqlite.CLCardMapping{
+			mappings: []postgres.CLCardMapping{
 				{CLGemRateID: "gem_123", CLCondition: "PSA 10"},
 				{CLGemRateID: "gem_123", CLCondition: "PSA 10"},
 				{CLGemRateID: "gem_456", CLCondition: "PSA 9"},
@@ -507,7 +507,7 @@ func TestRefreshSalesComps_Dedup(t *testing.T) {
 		},
 		{
 			name: "skips missing gemRateID",
-			mappings: []sqlite.CLCardMapping{
+			mappings: []postgres.CLCardMapping{
 				{CLGemRateID: "", CLCondition: "PSA 10"},
 				{CLGemRateID: "gem_456", CLCondition: "PSA 9"},
 			},
@@ -515,7 +515,7 @@ func TestRefreshSalesComps_Dedup(t *testing.T) {
 		},
 		{
 			name: "skips missing condition",
-			mappings: []sqlite.CLCardMapping{
+			mappings: []postgres.CLCardMapping{
 				{CLGemRateID: "gem_123", CLCondition: ""},
 				{CLGemRateID: "gem_456", CLCondition: "PSA 9"},
 			},
@@ -523,7 +523,7 @@ func TestRefreshSalesComps_Dedup(t *testing.T) {
 		},
 		{
 			name: "all skipped",
-			mappings: []sqlite.CLCardMapping{
+			mappings: []postgres.CLCardMapping{
 				{CLGemRateID: "", CLCondition: ""},
 				{CLGemRateID: "", CLCondition: "PSA 9"},
 			},

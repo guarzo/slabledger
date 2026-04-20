@@ -17,7 +17,7 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/clients/dhprice"
 	"github.com/guarzo/slabledger/internal/adapters/clients/marketmovers"
 	scoringadapter "github.com/guarzo/slabledger/internal/adapters/scoring"
-	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
+	"github.com/guarzo/slabledger/internal/adapters/storage/postgres"
 	"github.com/guarzo/slabledger/internal/domain/advisor"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
@@ -30,7 +30,7 @@ import (
 func initializePriceProviders(
 	ctx context.Context,
 	logger observability.Logger,
-	cardIDMappingRepo *sqlite.CardIDMappingRepository,
+	cardIDMappingRepo *postgres.CardIDMappingRepository,
 	dhClient *dh.Client,
 ) (pricing.PriceProvider, error) {
 	if dhClient == nil || !dhClient.EnterpriseAvailable() {
@@ -49,12 +49,12 @@ func initializeAdvisorService(
 	ctx context.Context,
 	cfg *config.Config,
 	logger observability.Logger,
-	db *sqlite.DB,
-	aiCallRepo *sqlite.AICallRepository,
+	db *postgres.DB,
+	aiCallRepo *postgres.AICallRepository,
 	campaignsService inventory.Service,
 	scoringOpts []scoringadapter.ProviderOption,
 	toolOpts ...advisortool.ExecutorOption,
-) (llmProvider advisor.LLMProvider, advisorSvc advisor.Service, advisorCacheRepo *sqlite.AdvisorCacheRepository, err error) {
+) (llmProvider advisor.LLMProvider, advisorSvc advisor.Service, advisorCacheRepo *postgres.AdvisorCacheRepository, err error) {
 	if cfg.Adapters.AzureAIEndpoint == "" || cfg.Adapters.AzureAIKey == "" {
 		return nil, nil, nil, nil
 	}
@@ -70,7 +70,7 @@ func initializeAdvisorService(
 	llmProvider = client
 
 	toolExec := advisortool.NewCampaignToolExecutor(campaignsService, toolOpts...)
-	advisorCacheRepo = sqlite.NewAdvisorCacheRepository(db.DB, logger)
+	advisorCacheRepo = postgres.NewAdvisorCacheRepository(db.DB, logger)
 	advisorOpts := []advisor.ServiceOption{
 		advisor.WithLogger(logger),
 		advisor.WithAITracker(aiCallRepo),
@@ -85,7 +85,7 @@ func initializeAdvisorService(
 	advisorOpts = append(advisorOpts, advisor.WithScoringDataProvider(scoringProvider))
 
 	// Data gap tracking for scoring quality reports
-	advisorOpts = append(advisorOpts, advisor.WithGapStore(sqlite.NewGapStore(db.DB)))
+	advisorOpts = append(advisorOpts, advisor.WithGapStore(postgres.NewGapStore(db.DB)))
 
 	advisorSvc = advisor.NewService(client, toolExec, advisorOpts...)
 	logger.Info(ctx, "AI advisor initialized",
@@ -99,15 +99,15 @@ func initializeAdvisorService(
 func initializeCardLadder(
 	ctx context.Context,
 	logger observability.Logger,
-	db *sqlite.DB,
+	db *postgres.DB,
 	encryptor crypto.Encryptor,
-) (*cardladder.Client, *cardladder.FirebaseAuth, *sqlite.CardLadderStore) {
+) (*cardladder.Client, *cardladder.FirebaseAuth, *postgres.CardLadderStore) {
 	if encryptor == nil {
 		logger.Info(ctx, "Card Ladder disabled: encryption key not configured")
 		return nil, nil, nil
 	}
 
-	store := sqlite.NewCardLadderStore(db.DB, encryptor)
+	store := postgres.NewCardLadderStore(db.DB, encryptor)
 
 	// Try to load existing config to set up the client
 	clCfg, err := store.GetConfig(ctx)
@@ -136,15 +136,15 @@ func initializeCardLadder(
 func initializeMarketMovers(
 	ctx context.Context,
 	logger observability.Logger,
-	db *sqlite.DB,
+	db *postgres.DB,
 	encryptor crypto.Encryptor,
-) (*marketmovers.Client, *sqlite.MarketMoversStore) {
+) (*marketmovers.Client, *postgres.MarketMoversStore) {
 	if encryptor == nil {
 		logger.Info(ctx, "Market Movers disabled: encryption key not configured")
 		return nil, nil
 	}
 
-	store := sqlite.NewMarketMoversStore(db.DB, encryptor)
+	store := postgres.NewMarketMoversStore(db.DB, encryptor)
 
 	// Try to load existing config to set up the client
 	mmCfg, err := store.GetConfig(ctx)

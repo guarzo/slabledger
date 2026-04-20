@@ -8,7 +8,7 @@ import (
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/marketmovers"
 	"github.com/guarzo/slabledger/internal/adapters/scheduler"
-	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
+	"github.com/guarzo/slabledger/internal/adapters/storage/postgres"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
@@ -26,7 +26,7 @@ type MMRefresher interface {
 // MarketMoversHandler manages Market Movers admin endpoints.
 type MarketMoversHandler struct {
 	mu             sync.Mutex
-	store          *sqlite.MarketMoversStore
+	store          *postgres.MarketMoversStore
 	client         *marketmovers.Client
 	refresher      MMRefresher
 	purchaseLister MMPurchaseLister // optional: provides unsold purchases for sync
@@ -41,7 +41,7 @@ func (h *MarketMoversHandler) SetRefresher(r MMRefresher) {
 }
 
 // NewMarketMoversHandler creates a new Market Movers admin handler.
-func NewMarketMoversHandler(store *sqlite.MarketMoversStore, client *marketmovers.Client, logger observability.Logger) *MarketMoversHandler {
+func NewMarketMoversHandler(store *postgres.MarketMoversStore, client *marketmovers.Client, logger observability.Logger) *MarketMoversHandler {
 	return &MarketMoversHandler{store: store, client: client, logger: logger}
 }
 

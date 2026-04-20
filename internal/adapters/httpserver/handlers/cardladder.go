@@ -8,7 +8,7 @@ import (
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
 	"github.com/guarzo/slabledger/internal/adapters/scheduler"
-	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
+	"github.com/guarzo/slabledger/internal/adapters/storage/postgres"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
@@ -28,7 +28,7 @@ type CLRefresher interface {
 // CardLadderHandler manages Card Ladder admin endpoints.
 type CardLadderHandler struct {
 	mu             sync.Mutex
-	store          *sqlite.CardLadderStore
+	store          *postgres.CardLadderStore
 	client         *cardladder.Client
 	refresher      CLRefresher
 	purchaseLister CLPurchaseLister
@@ -44,7 +44,7 @@ func (h *CardLadderHandler) SetRefresher(r CLRefresher) {
 }
 
 // NewCardLadderHandler creates a new Card Ladder admin handler.
-func NewCardLadderHandler(store *sqlite.CardLadderStore, client *cardladder.Client, logger observability.Logger) *CardLadderHandler {
+func NewCardLadderHandler(store *postgres.CardLadderStore, client *cardladder.Client, logger observability.Logger) *CardLadderHandler {
 	return &CardLadderHandler{store: store, client: client, logger: logger}
 }
 
