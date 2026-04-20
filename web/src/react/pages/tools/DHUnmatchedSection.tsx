@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useDHStatus, useDHUnmatched, useFixDHMatch, useSelectDHMatch, useDismissDHMatch, useUndismissDHMatch, useReconcileDH } from '../../queries/useAdminQueries';
+import { useDHStatus, useDHUnmatched, useFixDHMatch, useSelectDHMatch, useDismissDHMatch, useUndismissDHMatch, useReconcileDH, useRetryDHMatch } from '../../queries/useAdminQueries';
 import { useToast } from '../../contexts/ToastContext';
 import { formatCents } from '../../utils/formatters';
 import { Button, CardShell } from '../../ui';
@@ -71,6 +71,8 @@ function UnmatchedRow({ card, onDismiss, isDismissing }: {
   const [selectingCardId, setSelectingCardId] = useState<number | null>(null);
   const fixMutation = useFixDHMatch();
   const selectMutation = useSelectDHMatch();
+  const retryMutation = useRetryDHMatch();
+  const [retryError, setRetryError] = useState<string | null>(null);
   const toast = useToast();
 
   const candidates = card.candidates ?? [];
@@ -101,6 +103,17 @@ function UnmatchedRow({ card, onDismiss, isDismissing }: {
       toast.success('Match fixed');
     } catch {
       toast.error('Failed to fix match');
+    }
+  };
+
+  const handleRetry = async () => {
+    setRetryError(null);
+    try {
+      await retryMutation.mutateAsync(card.purchase_id);
+      toast.success('Match retry succeeded');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Retry failed';
+      setRetryError(msg);
     }
   };
 
@@ -139,28 +152,40 @@ function UnmatchedRow({ card, onDismiss, isDismissing }: {
                 aria-label="DoubleHolo card URL"
                 className="flex-1 text-xs px-2 py-1 rounded border border-[var(--border)] bg-[var(--bg-secondary)] text-[var(--text)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--info)]"
               />
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={handleFix}
-                loading={fixMutation.isPending}
-                disabled={fixMutation.isPending}
-              >
-                Fix
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => onDismiss(card.purchase_id)}
-                loading={isDismissing}
-                disabled={isDismissing}
-                className="text-[var(--text-muted)] hover:text-[var(--text)]"
-              >
-                Skip
-              </Button>
+               <Button
+                 variant="secondary"
+                 size="sm"
+                 onClick={handleFix}
+                 loading={fixMutation.isPending}
+                 disabled={fixMutation.isPending}
+               >
+                 Fix
+               </Button>
+               <Button
+                 variant="secondary"
+                 size="sm"
+                 onClick={handleRetry}
+                 loading={retryMutation.isPending}
+                 disabled={retryMutation.isPending || fixMutation.isPending || selectMutation.isPending}
+               >
+                 Retry
+               </Button>
+               <Button
+                 variant="ghost"
+                 size="sm"
+                 onClick={() => onDismiss(card.purchase_id)}
+                 loading={isDismissing}
+                 disabled={isDismissing}
+                 className="text-[var(--text-muted)] hover:text-[var(--text)]"
+               >
+                 Skip
+               </Button>
             </div>
             {validationError && (
               <p className="text-xs text-red-400">{validationError}</p>
+            )}
+            {retryError && (
+              <p className="text-xs text-[var(--error)]">{retryError}</p>
             )}
           </div>
         </div>
