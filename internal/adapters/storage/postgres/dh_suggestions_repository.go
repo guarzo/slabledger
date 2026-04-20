@@ -54,8 +54,8 @@ func (r *DHSuggestionsRepository) StoreSuggestions(ctx context.Context, suggesti
 		if _, err := tx.ExecContext(ctx, insertSQL,
 			s.SuggestionDate, s.Type, s.Category, s.Rank, s.IsManual,
 			s.DHCardID, s.CardName, s.SetName, s.CardNumber,
-			toNullString(s.ImageURL), s.CurrentPriceCents, s.ConfidenceScore,
-			toNullString(s.Reasoning), toNullString(s.StructuredReasoning), toNullString(s.Metrics),
+			nullIfEmpty(s.ImageURL), s.CurrentPriceCents, s.ConfidenceScore,
+			nullIfEmpty(s.Reasoning), nullIfEmpty(s.StructuredReasoning), nullIfEmpty(s.Metrics),
 			s.SentimentScore, s.SentimentTrend, s.SentimentMentions,
 			s.FetchedAt,
 		); err != nil {

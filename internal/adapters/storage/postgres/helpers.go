@@ -1,7 +1,6 @@
 package postgres
 
 import (
-	"database/sql"
 	"time"
 )
 
@@ -21,15 +20,6 @@ func parseTimestamp(s string) time.Time {
 		return t
 	}
 	return time.Time{}
-}
-
-// toNullString converts an empty string to a NULL-valued sql.NullString,
-// and a non-empty string to a valid sql.NullString.
-func toNullString(s string) sql.NullString {
-	if s == "" {
-		return sql.NullString{Valid: false}
-	}
-	return sql.NullString{String: s, Valid: true}
 }
 
 // nullIfEmpty returns nil (SQL NULL) when s is empty, otherwise s.

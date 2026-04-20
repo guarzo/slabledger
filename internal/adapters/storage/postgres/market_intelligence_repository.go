@@ -354,13 +354,12 @@ func scanIntelRow(row scanner) (*intelligence.MarketIntelligence, error) {
 
 // --- nullable encoding helpers ---
 
-func encodeNullSentiment(s *intelligence.Sentiment) (sql.NullFloat64, sql.NullInt64, sql.NullString) {
+func encodeNullSentiment(s *intelligence.Sentiment) (*float64, *int64, *string) {
 	if s == nil {
-		return sql.NullFloat64{}, sql.NullInt64{}, sql.NullString{}
+		return nil, nil, nil
 	}
-	return sql.NullFloat64{Float64: s.Score, Valid: true},
-		sql.NullInt64{Int64: int64(s.MentionCount), Valid: true},
-		sql.NullString{String: s.Trend, Valid: true}
+	mentions := int64(s.MentionCount)
+	return &s.Score, &mentions, &s.Trend
 }
 
 func decodeNullSentiment(score sql.NullFloat64, mentions sql.NullInt64, trend sql.NullString) *intelligence.Sentiment {
@@ -374,13 +373,12 @@ func decodeNullSentiment(score sql.NullFloat64, mentions sql.NullInt64, trend sq
 	}
 }
 
-func encodeNullForecast(f *intelligence.Forecast) (sql.NullInt64, sql.NullFloat64, sql.NullString) {
+func encodeNullForecast(f *intelligence.Forecast) (*int64, *float64, *string) {
 	if f == nil {
-		return sql.NullInt64{}, sql.NullFloat64{}, sql.NullString{}
+		return nil, nil, nil
 	}
-	return sql.NullInt64{Int64: f.PredictedPriceCents, Valid: true},
-		sql.NullFloat64{Float64: f.Confidence, Valid: true},
-		sql.NullString{String: f.ForecastDate.Format(time.RFC3339), Valid: true}
+	dateStr := f.ForecastDate.Format(time.RFC3339)
+	return &f.PredictedPriceCents, &f.Confidence, &dateStr
 }
 
 func decodeNullForecast(price sql.NullInt64, conf sql.NullFloat64, dateStr sql.NullString) *intelligence.Forecast {
@@ -400,12 +398,11 @@ func decodeNullForecast(price sql.NullInt64, conf sql.NullFloat64, dateStr sql.N
 	return f
 }
 
-func encodeNullInsights(i *intelligence.Insights) (sql.NullString, sql.NullString) {
+func encodeNullInsights(i *intelligence.Insights) (*string, *string) {
 	if i == nil {
-		return sql.NullString{}, sql.NullString{}
+		return nil, nil
 	}
-	return sql.NullString{String: i.Headline, Valid: true},
-		sql.NullString{String: i.Detail, Valid: true}
+	return &i.Headline, &i.Detail
 }
 
 func decodeNullInsights(headline, detail sql.NullString) *intelligence.Insights {
@@ -418,13 +415,12 @@ func decodeNullInsights(headline, detail sql.NullString) *intelligence.Insights 
 	}
 }
 
-func encodeNullTrend(t *intelligence.Trend) (sql.NullInt64, sql.NullInt64, sql.NullInt64) {
+func encodeNullTrend(t *intelligence.Trend) (*int64, *int64, *int64) {
 	if t == nil {
-		return sql.NullInt64{}, sql.NullInt64{}, sql.NullInt64{}
+		return nil, nil, nil
 	}
-	return sql.NullInt64{Int64: int64(t.Volume7d), Valid: true},
-		sql.NullInt64{Int64: int64(t.Volume30d), Valid: true},
-		sql.NullInt64{Int64: int64(t.Volume90d), Valid: true}
+	v7, v30, v90 := int64(t.Volume7d), int64(t.Volume30d), int64(t.Volume90d)
+	return &v7, &v30, &v90
 }
 
 func decodeNullTrend(v7, v30, v90 sql.NullInt64) *intelligence.Trend {
@@ -438,16 +434,16 @@ func decodeNullTrend(v7, v30, v90 sql.NullInt64) *intelligence.Trend {
 	}
 }
 
-func encodeNullVelocity(v *intelligence.Velocity) (sql.NullFloat64, sql.NullFloat64, sql.NullFloat64, sql.NullInt64, sql.NullTime) {
+func encodeNullVelocity(v *intelligence.Velocity) (*float64, *float64, *float64, *int64, *time.Time) {
 	if v == nil {
-		return sql.NullFloat64{}, sql.NullFloat64{}, sql.NullFloat64{}, sql.NullInt64{}, sql.NullTime{}
+		return nil, nil, nil, nil, nil
 	}
-	lf := sql.NullTime{Time: v.LastFetch, Valid: !v.LastFetch.IsZero()}
-	return sql.NullFloat64{Float64: v.SellThrough30dPct, Valid: true},
-		sql.NullFloat64{Float64: v.SellThrough60dPct, Valid: true},
-		sql.NullFloat64{Float64: v.SellThrough90dPct, Valid: true},
-		sql.NullInt64{Int64: int64(v.SampleSize), Valid: true},
-		lf
+	sampleSize := int64(v.SampleSize)
+	var lastFetch *time.Time
+	if !v.LastFetch.IsZero() {
+		lastFetch = &v.LastFetch
+	}
+	return &v.SellThrough30dPct, &v.SellThrough60dPct, &v.SellThrough90dPct, &sampleSize, lastFetch
 }
 
 func decodeNullVelocity(st30, st60, st90 sql.NullFloat64, sampleSize sql.NullInt64, lastFetch sql.NullTime) *intelligence.Velocity {

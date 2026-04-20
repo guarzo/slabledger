@@ -35,11 +35,16 @@ func (prs *PricingStore) UpdateReviewedPrice(ctx context.Context, purchaseID str
 	}
 	// When a reviewed price is committed, any outstanding AI suggestion is
 	// superseded — clearing it keeps the "Needs Attention" filter honest.
+	// $1 is reused in three contexts (SET int, two CASE WHEN comparisons).
+	// pgx QueryExecModeExec uses extended protocol with type inference;
+	// reusing $1 in heterogenous contexts trips SQLSTATE 42P08
+	// ("inconsistent types deduced for parameter"). Explicit ::BIGINT casts
+	// pin the type consistently.
 	result, err := prs.db.ExecContext(ctx,
 		`UPDATE campaign_purchases
-		 SET reviewed_price_cents = $1, reviewed_at = $2, review_source = $3,
-		     ai_suggested_price_cents = CASE WHEN $1 > 0 THEN 0 ELSE ai_suggested_price_cents END,
-		     ai_suggested_at         = CASE WHEN $1 > 0 THEN '' ELSE ai_suggested_at END,
+		 SET reviewed_price_cents = $1::BIGINT, reviewed_at = $2, review_source = $3,
+		     ai_suggested_price_cents = CASE WHEN $1::BIGINT > 0 THEN 0 ELSE ai_suggested_price_cents END,
+		     ai_suggested_at         = CASE WHEN $1::BIGINT > 0 THEN '' ELSE ai_suggested_at END,
 		     updated_at = $4
 		 WHERE id = $5`,
 		priceCents, reviewedAt, source, now, purchaseID,
