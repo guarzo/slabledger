@@ -226,6 +226,17 @@ func (rt *Router) registerAdvisorRoutes(mux *http.ServeMux) {
 	rt.logger.Info(context.Background(), "AI advisor routes registered")
 }
 
+// registerInsightsRoutes wires the aggregate Insights endpoint.
+func (rt *Router) registerInsightsRoutes(mux *http.ServeMux) {
+	if rt.insightsHandler == nil || rt.authMW == nil {
+		return
+	}
+	mux.Handle("GET /api/insights/overview", rt.authMW.RequireAuth(http.HandlerFunc(rt.insightsHandler.HandleOverview)))
+	rt.logger.Info(context.Background(), "insights routes registered",
+		observability.String("component", "insights"),
+		observability.String("route", "/api/insights/overview"))
+}
+
 // registerPricingAPIRoutes wires the public pricing API endpoints (bearer token auth).
 func (rt *Router) registerPricingAPIRoutes(mux *http.ServeMux) {
 	if rt.pricingAPIHandler == nil {
@@ -311,6 +322,7 @@ var TrackedEndpoints = []string{
 	"/api/portfolio/weekly-history",
 	"/api/campaigns/{id}/tuning",
 	"/api/campaigns/{id}/sell-sheet",
+	"/api/insights/overview",
 }
 
 // ApplyMiddleware wraps the router with middleware layers.

@@ -424,6 +424,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		ArbitrageService:   arbSvc,
 		PortfolioService:   portSvc,
 		TuningService:      tuningSvc,
+		CampaignStore:      campaignsInit.campaignStore,
 		FinanceService:     financeService,
 		ExportService:      exportService,
 		PurchaseStore:      campaignsInit.purchaseStore,
