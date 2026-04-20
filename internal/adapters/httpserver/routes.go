@@ -226,6 +226,15 @@ func (rt *Router) registerAdvisorRoutes(mux *http.ServeMux) {
 	rt.logger.Info(context.Background(), "AI advisor routes registered")
 }
 
+// registerInsightsRoutes wires the aggregate Insights endpoint.
+func (rt *Router) registerInsightsRoutes(mux *http.ServeMux) {
+	if rt.insightsHandler == nil || rt.authMW == nil {
+		return
+	}
+	mux.Handle("GET /api/insights/overview", rt.authMW.RequireAuth(http.HandlerFunc(rt.insightsHandler.HandleOverview)))
+	rt.logger.Info(context.Background(), "insights routes registered")
+}
+
 // registerPricingAPIRoutes wires the public pricing API endpoints (bearer token auth).
 func (rt *Router) registerPricingAPIRoutes(mux *http.ServeMux) {
 	if rt.pricingAPIHandler == nil {
