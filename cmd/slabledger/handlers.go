@@ -20,6 +20,7 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/dhpricing"
 	"github.com/guarzo/slabledger/internal/domain/export"
 	"github.com/guarzo/slabledger/internal/domain/finance"
+	"github.com/guarzo/slabledger/internal/domain/insights"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/domain/portfolio"
@@ -43,6 +44,7 @@ type handlerInputs struct {
 	DHPriceSyncService dhpricing.Service
 	PortfolioService   portfolio.Service
 	TuningService      tuning.Service
+	CampaignStore      *postgres.CampaignStore
 	FinanceService     finance.Service
 	ExportService      export.Service
 	PurchaseStore      *postgres.PurchaseStore
@@ -223,6 +225,16 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 		advisorHandler = handlers.NewAdvisorHandler(in.AdvisorService, in.CampaignsService, in.AdvisorCacheRepo, logger)
 	}
 
+	// Insights handler composes per-campaign tuning and portfolio-wide signals
+	// for the Insights page.
+	insightsSvc := insights.NewService(insights.Deps{
+		Campaigns: in.CampaignStore,
+		Tuning:    in.TuningService,
+		Pricing:   in.CampaignsService,
+		Logger:    logger,
+	})
+	insightsHandler := handlers.NewInsightsHandler(insightsSvc, logger)
+
 	// AI status handler — only wire tracker when an LLM provider is configured
 	var aiTracker ai.AICallTracker
 	if in.AzureAIClient != nil {
@@ -272,6 +284,7 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 		CardCatalogHandler:        cardCatalogHandler,
 		NichesHandler:             nichesHandler,
 		CampaignSignalsHandler:    campaignSignalsHandler,
+		InsightsHandler:           insightsHandler,
 	}
 	// Build DHListingService from available components.
 	// Nil-safe: only create the service if at least the lister client is available.
