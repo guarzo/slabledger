@@ -88,6 +88,12 @@ type DHMatchConfirmer interface {
 	ConfirmMatch(ctx context.Context, req dh.ConfirmMatchRequest) (*dh.ConfirmMatchResponse, error)
 }
 
+// DHPSAImporter calls the DH PSA import endpoint for off-catalog certs.
+// Satisfied by *dh.Client.
+type DHPSAImporter interface {
+	PSAImport(ctx context.Context, items []dh.PSAImportItem) (*dh.PSAImportResponse, error)
+}
+
 // DHApproveService approves held DH push items and manages push config.
 type DHApproveService interface {
 	ApproveDHPush(ctx context.Context, purchaseID string) error
@@ -139,6 +145,7 @@ type DHHandler struct {
 	countsFetcher     DHCountsFetcher   // optional: DH inventory/order counts
 	dhApproveService  DHApproveService  // optional: approve held pushes + push config
 	matchConfirmer    DHMatchConfirmer  // optional: confirms matches with DH for learning
+	psaImporter       DHPSAImporter     // optional: PSA import fallback for retry-match
 	ordersIngester    DHOrdersIngester  // optional: POST /api/dh/ingest-orders manual trigger
 	eventRec          dhevents.Recorder // optional: records DH state-change events
 	syncStateReader   SyncStateReader   // optional: reads dh_orders_last_poll timestamp
@@ -184,6 +191,7 @@ type DHHandlerDeps struct {
 	CountsFetcher     DHCountsFetcher      // optional: DH inventory/order counts
 	DHApproveService  DHApproveService     // optional: approve held pushes + push config
 	MatchConfirmer    DHMatchConfirmer     // optional: confirms matches with DH for learning
+	PSAImporter       DHPSAImporter        // optional: PSA import fallback for retry-match
 	Reconciler        dhlisting.Reconciler // optional: DH inventory reconciliation
 	OrdersIngester    DHOrdersIngester     // optional: enables POST /api/dh/ingest-orders
 	EventRecorder     dhevents.Recorder    // optional: records DH state-change events
@@ -219,6 +227,7 @@ func NewDHHandler(deps DHHandlerDeps) *DHHandler {
 		countsFetcher:     deps.CountsFetcher,
 		dhApproveService:  deps.DHApproveService,
 		matchConfirmer:    deps.MatchConfirmer,
+		psaImporter:       deps.PSAImporter,
 		reconciler:        deps.Reconciler,
 		ordersIngester:    deps.OrdersIngester,
 		eventRec:          deps.EventRecorder,
@@ -252,6 +261,9 @@ func (h *DHHandler) recordEvent(ctx context.Context, e dhevents.Event) {
 //   - errDHPersistFailed: push succeeded but local persistence failed
 //   - other errors: push API failure
 func (h *DHHandler) pushAndPersistDH(ctx context.Context, purchase *inventory.Purchase, dhCardID, listingPriceCents int) (int, error) {
+	if h.inventoryPusher == nil {
+		return 0, fmt.Errorf("DH inventory pusher not configured")
+	}
 	item := dh.NewInStockItem(dhCardID, purchase.CertNumber, purchase.GradeValue, purchase.BuyCostCents, listingPriceCents)
 
 	pushResp, err := h.inventoryPusher.PushInventory(ctx, []dh.InventoryItem{item})
@@ -291,3 +303,4 @@ var _ DHInventoryPusher = (*dh.Client)(nil)
 var _ DHHealthReporter = (*dh.Client)(nil)
 var _ DHCountsFetcher = (*dh.Client)(nil)
 var _ DHMatchConfirmer = (*dh.Client)(nil)
+var _ DHPSAImporter = (*dh.Client)(nil)

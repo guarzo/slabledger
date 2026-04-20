@@ -339,6 +339,16 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
     invalidateInventory();
   }
 
+  const handleUnmatchDH = useCallback(async (purchase: Purchase) => {
+    try {
+      await api.unmatchDH(purchase.id);
+      toast.success('DH match removed');
+      invalidateInventory();
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Failed to remove DH match'));
+    }
+  }, [toast, invalidateInventory]);
+
   function handleSetPrice(item: AgingItem) {
     const currentPrice = bestPrice(item);
     setPriceTarget({
@@ -436,6 +446,7 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
     handleFixPricing,
     handleFixDHMatch,
     handleFixDHMatchSaved,
+    handleUnmatchDH,
     handleSetPrice,
     handlePriceSaved,
     handleInlinePriceSave,

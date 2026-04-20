@@ -1,4 +1,3 @@
-import { Link } from 'react-router-dom';
 import PokeballLoader from '../PokeballLoader';
 import { usePortfolioHealth, useWeeklyReview, useCapitalSummary } from '../queries/useCampaignQueries';
 import HeroStatsBar from '../components/portfolio/HeroStatsBar';
@@ -47,20 +46,6 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Insights hub link — replaces the inline AI widget */}
-      <Link
-        to="/insights"
-        className="mb-6 flex items-center justify-between gap-4 p-4 rounded-xl border border-[var(--surface-2)] bg-[var(--surface-1)] hover:border-[var(--brand-500)]/40 hover:bg-[var(--surface-2)]/30 transition-colors"
-      >
-        <div className="flex items-center gap-3">
-          <span className="text-xl" aria-hidden="true">&#x2728;</span>
-          <div>
-            <div className="text-sm font-semibold text-[var(--text)]">Weekly digest and liquidation plan live on Insights</div>
-            <div className="text-xs text-[var(--text-muted)]">Structured AI reports with section-by-section breakdown.</div>
-          </div>
-        </div>
-        <span className="text-sm text-[var(--brand-400)] font-medium">Open Insights &rarr;</span>
-      </Link>
 
       </div>
    );

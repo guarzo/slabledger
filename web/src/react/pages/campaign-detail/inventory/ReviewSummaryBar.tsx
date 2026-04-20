@@ -2,7 +2,7 @@ import { Button } from '../../../ui';
 import type { ReviewStats } from '../../../../types/campaigns/priceReview';
 import { useMediaQuery } from '../../../hooks/useMediaQuery';
 
-export type StatClickTarget = 'unreviewed' | 'flagged';
+export type StatClickTarget = 'flagged';
 
 interface ReviewSummaryBarProps {
   stats: ReviewStats;
@@ -51,7 +51,6 @@ export default function ReviewSummaryBar({ stats, searchQuery, onSearchChange, s
         <StatBlock label="Cards" value={stats.total} />
         {!isMobile && (
           <>
-            <StatBlock label="Unreviewed" value={stats.needsReview} colorClass={stats.needsReview > 0 ? 'text-[var(--warning)]' : 'text-[var(--success)]'} onClick={() => onStatClick?.('unreviewed')} title="In-hand cards that haven't been reviewed yet — excludes cards still awaiting intake" />
             <StatBlock label="Reviewed" value={stats.reviewed} colorClass={stats.reviewed > 0 ? 'text-[var(--success)]' : undefined} />
             <StatBlock label="Flagged" value={stats.flagged} colorClass="text-[var(--danger)]" onClick={() => onStatClick?.('flagged')} />
             <StatBlock label="Aging 60d+" value={stats.aging60d} colorClass={stats.aging60d > 0 ? 'text-[var(--warning)]' : undefined} />

@@ -45,7 +45,6 @@ export interface PriceFlagsResponse {
 
 export interface ReviewStats {
   total: number;
-  needsReview: number;
   reviewed: number;
   flagged: number;
   aging60d: number;

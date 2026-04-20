@@ -3,6 +3,7 @@ package dhprice
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"strconv"
 	"strings"
@@ -30,9 +31,10 @@ type CardIDLookup interface {
 }
 
 // gradeKey maps a combined "Company Grade" string to the canonical pricing.Grade.
-// Only high-value grades (PSA 6-10, BGS 10/9.5, CGC 9.5) are tracked because
-// the business focuses on PSA-graded cards in this range. Sales for unmapped
-// grades (e.g. PSA 1-5, raw) are intentionally skipped.
+// Only PSA grades (6-10) and BGS 10 are tracked because the business focuses on
+// PSA-graded cards. BGS 9.5 and CGC 9.5 are deliberately excluded — they trade
+// at different price points than PSA 9.5 and would distort the PSA bucket.
+// Sales for unmapped grades are intentionally skipped.
 var gradeKey = map[string]pricing.Grade{
 	"PSA 10":  pricing.GradePSA10,
 	"PSA 9":   pricing.GradePSA9,
@@ -41,8 +43,6 @@ var gradeKey = map[string]pricing.Grade{
 	"PSA 7":   pricing.GradePSA7,
 	"PSA 6":   pricing.GradePSA6,
 	"BGS 10":  pricing.GradeBGS10,
-	"BGS 9.5": pricing.GradePSA95,
-	"CGC 9.5": pricing.GradePSA95,
 }
 
 // Provider implements pricing.PriceProvider using DH recent sales.
@@ -93,12 +93,7 @@ func (p *Provider) GetPrice(ctx context.Context, card pricing.Card) (*pricing.Pr
 
 	cardID, err := strconv.Atoi(extID)
 	if err != nil {
-		if p.logger != nil {
-			p.logger.Warn(ctx, "dhprice: invalid card ID",
-				observability.String("external_id", extID),
-				observability.Err(err))
-		}
-		return nil, nil
+		return nil, fmt.Errorf("dhprice: invalid card ID %q for card %s/%s/%s: %w", extID, card.Name, card.Set, card.Number, err)
 	}
 
 	sales, err := p.client.RecentSales(ctx, cardID)

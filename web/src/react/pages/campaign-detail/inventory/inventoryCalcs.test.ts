@@ -106,15 +106,14 @@ describe('inventoryCalcs', () => {
       expect(meta.tabCounts.needs_attention).toBe(1);
     });
 
-    it('excludes awaiting-intake items from needsReview and needs_attention', () => {
+    it('excludes awaiting-intake items from needs_attention', () => {
       const items = [
-        // in-hand, unreviewed, no price data → needs attention + unreviewed
+        // in-hand, unreviewed, no price data → needs attention
         makeItem({ purchase: { id: '1', receivedAt: '2026-04-08T00:00:00Z', clValueCents: 0, reviewedAt: undefined } }),
-        // awaiting intake, no data → should NOT count toward unreviewed or needs_attention
+        // awaiting intake, no data → should NOT count toward needs_attention
         makeItem({ purchase: { id: '2', receivedAt: undefined, clValueCents: 0, reviewedAt: undefined } }),
       ];
       const meta = computeInventoryMeta(items);
-      expect(meta.reviewStats.needsReview).toBe(1);
       expect(meta.tabCounts.needs_attention).toBe(1);
       expect(meta.tabCounts.awaiting_intake).toBe(1);
     });

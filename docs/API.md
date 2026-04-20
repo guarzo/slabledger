@@ -2110,6 +2110,50 @@ Selects one of the stored ambiguous candidates for a purchase. Validates the cho
 
 ---
 
+### `POST /api/dh/unmatch`
+
+Auth: RequireAuth
+
+Resets a matched purchase back to unmatched status, clearing the DH card ID, inventory ID, and stored candidates. Use this to manually correct a bad match before retrying.
+
+**Body:**
+```json
+{ "purchaseId": "uuid" }
+```
+
+**Response:** `200 OK`
+```json
+{ "status": "ok" }
+```
+
+**Errors:** `400` missing purchaseId; `404` purchase not found; `500` DB error
+
+---
+
+### `POST /api/dh/retry-match`
+
+Auth: RequireAuth
+
+Re-runs the full DH match pipeline for an unmatched purchase. First attempts standard cert resolution; if not found or ambiguous with no candidates, falls back to PSA import. The purchase must be in `unmatched` status (call `/api/dh/unmatch` first if needed).
+
+**Body:**
+```json
+{ "purchaseId": "uuid" }
+```
+
+**Response:** `200 OK`
+```json
+{
+  "status": "ok",
+  "dhCardId": 12345,
+  "dhInventoryId": 67890
+}
+```
+
+**Errors:** `400` missing purchaseId or purchase not in unmatched status; `404` purchase not found; `422` ambiguous match (candidates updated — use Select) or PSA import unavailable; `502` DH API error
+
+---
+
 ### `POST /api/dh/approve/{purchaseId}`
 
 Auth: RequireAuth

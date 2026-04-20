@@ -189,6 +189,12 @@ export interface DHSelectMatchRequest {
   dhCardId: number;
 }
 
+export interface DHRetryMatchResponse {
+  status: string;
+  dhCardId: number;
+  dhInventoryId: number;
+}
+
 export interface DHPushConfig {
   swingPctThreshold: number;
   swingMinCents: number;
