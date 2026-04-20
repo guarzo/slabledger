@@ -333,5 +333,221 @@ func computeTrend(prices []int, dates []string, midCutoff string) float64 {
 	return float64(medRecent-medEarlier) / float64(medEarlier)
 }
 
+// GetCompSummariesByKeys is the batch form of GetCompSummary. It issues three
+// SQL queries total regardless of the number of keys: (1) resolve conditions
+// from cl_card_mappings, (2) aggregate counts/extrema, (3) fetch recent price
+// lists for median/trend. Keys whose cert has no mapping, or whose variant has
+// no recent comps, are absent from the returned map.
+func (s *CLSalesStore) GetCompSummariesByKeys(ctx context.Context, keys []inventory.CompKey) (map[inventory.CompKey]*inventory.CompSummary, error) {
+	out := make(map[inventory.CompKey]*inventory.CompSummary)
+	if len(keys) == 0 {
+		return out, nil
+	}
+
+	// 1. Batch-resolve conditions for all cert numbers.
+	certs := make([]string, 0, len(keys))
+	for _, k := range keys {
+		if k.CertNumber != "" {
+			certs = append(certs, k.CertNumber)
+		}
+	}
+	conditions, err := s.lookupConditionsBatch(ctx, certs)
+	if err != nil {
+		return nil, fmt.Errorf("batch lookup conditions: %w", err)
+	}
+
+	// Reduce keys to unique (gemRateID, condition) pairs we actually want to query,
+	// and remember the mapping back to input keys.
+	type pair struct{ gemRateID, condition string }
+	pairToKeys := make(map[pair][]inventory.CompKey)
+	gemIDs := make([]string, 0, len(keys))
+	conds := make([]string, 0, len(keys))
+	for _, k := range keys {
+		cond, ok := conditions[k.CertNumber]
+		if !ok || cond == "" {
+			continue
+		}
+		p := pair{gemRateID: k.GemRateID, condition: cond}
+		if _, seen := pairToKeys[p]; !seen {
+			gemIDs = append(gemIDs, k.GemRateID)
+			conds = append(conds, cond)
+		}
+		pairToKeys[p] = append(pairToKeys[p], k)
+	}
+	if len(pairToKeys) == 0 {
+		return out, nil
+	}
+
+	now := time.Now()
+	cutoff := now.AddDate(0, 0, -90).Format("2006-01-02")
+	midCutoff := now.AddDate(0, 0, -45).Format("2006-01-02")
+
+	// 2. Aggregation: one row per (gem_rate_id, condition) pair.
+	aggQuery := `
+		SELECT gem_rate_id, condition,
+			COUNT(*) AS total_comps,
+			COUNT(CASE WHEN sale_date >= $3 THEN 1 END) AS recent_comps,
+			MAX(CASE WHEN sale_date >= $3 THEN price_cents END) AS high_cents,
+			MIN(CASE WHEN sale_date >= $3 THEN price_cents END) AS low_cents,
+			MAX(sale_date) AS last_sale_date
+		FROM cl_sales_comps
+		WHERE (gem_rate_id, condition) IN (SELECT UNNEST($1::text[]), UNNEST($2::text[]))
+		GROUP BY gem_rate_id, condition`
+	rows, err := s.db.QueryContext(ctx, aggQuery, gemIDs, conds, cutoff)
+	if err != nil {
+		return nil, fmt.Errorf("aggregate: %w", err)
+	}
+	aggs := make(map[pair]*inventory.CompSummary)
+	for rows.Next() {
+		var p pair
+		var totalComps, recentComps int
+		var highCents, lowCents sql.NullInt64
+		var lastSaleDate sql.NullString
+		if err := rows.Scan(&p.gemRateID, &p.condition, &totalComps, &recentComps, &highCents, &lowCents, &lastSaleDate); err != nil {
+			_ = rows.Close()
+			return nil, fmt.Errorf("scan aggregate: %w", err)
+		}
+		if totalComps == 0 || recentComps == 0 {
+			continue
+		}
+		sum := &inventory.CompSummary{
+			GemRateID:    p.gemRateID,
+			TotalComps:   totalComps,
+			RecentComps:  recentComps,
+			HighestCents: int(highCents.Int64),
+			LowestCents:  int(lowCents.Int64),
+			LastSaleDate: lastSaleDate.String,
+		}
+		aggs[p] = sum
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return nil, fmt.Errorf("iterate aggregate: %w", err)
+	}
+	_ = rows.Close()
+
+	if len(aggs) == 0 {
+		return out, nil
+	}
+
+	// 3. Recent prices + sale dates for every matched pair (for median + trend).
+	priceQuery := `
+		SELECT gem_rate_id, condition, price_cents, sale_date, platform
+		FROM cl_sales_comps
+		WHERE (gem_rate_id, condition) IN (SELECT UNNEST($1::text[]), UNNEST($2::text[]))
+		  AND sale_date >= $3
+		ORDER BY gem_rate_id, condition, sale_date`
+	priceRows, err := s.db.QueryContext(ctx, priceQuery, gemIDs, conds, cutoff)
+	if err != nil {
+		return nil, fmt.Errorf("recent prices: %w", err)
+	}
+	byPair := make(map[pair][]batchPriceRow)
+	for priceRows.Next() {
+		var p pair
+		var pr batchPriceRow
+		if err := priceRows.Scan(&p.gemRateID, &p.condition, &pr.priceCents, &pr.saleDate, &pr.platform); err != nil {
+			_ = priceRows.Close()
+			return nil, fmt.Errorf("scan recent prices: %w", err)
+		}
+		byPair[p] = append(byPair[p], pr)
+	}
+	if err := priceRows.Err(); err != nil {
+		_ = priceRows.Close()
+		return nil, fmt.Errorf("iterate recent prices: %w", err)
+	}
+	_ = priceRows.Close()
+
+	// Compute median, trend, platform breakdown, attach PriceCentsList.
+	for p, sum := range aggs {
+		prs := byPair[p]
+		if len(prs) == 0 {
+			continue
+		}
+		prices := make([]int, len(prs))
+		dates := make([]string, len(prs))
+		for i, pr := range prs {
+			prices[i] = pr.priceCents
+			dates[i] = pr.saleDate
+		}
+		sum.MedianCents = medianInt(slices.Clone(prices))
+		sum.Trend90d = computeTrend(prices, dates, midCutoff)
+		sum.ByPlatform = platformBreakdownFromRows(prs)
+		sum.PriceCentsList = prices
+		if len(prs) > 0 {
+			sum.LastSaleCents = prs[len(prs)-1].priceCents
+		}
+
+		// Fan out to every input key that resolved to this (gemRateID, condition).
+		for _, k := range pairToKeys[p] {
+			// Return independent copies so callers can mutate CompsAboveCL/CompsAboveCost.
+			cs := *sum
+			out[k] = &cs
+		}
+	}
+	return out, nil
+}
+
+// lookupConditionsBatch resolves CL conditions for a slice of cert numbers in one query.
+// Returns a map keyed by cert number; missing certs are absent from the map.
+func (s *CLSalesStore) lookupConditionsBatch(ctx context.Context, certs []string) (map[string]string, error) {
+	out := make(map[string]string, len(certs))
+	if len(certs) == 0 {
+		return out, nil
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT slab_serial, cl_condition FROM cl_card_mappings WHERE slab_serial = ANY($1::text[])`,
+		certs)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var cert string
+		var cond sql.NullString
+		if err := rows.Scan(&cert, &cond); err != nil {
+			return nil, err
+		}
+		out[cert] = cond.String
+	}
+	return out, rows.Err()
+}
+
+// batchPriceRow is used internally by GetCompSummariesByKeys to hold per-row price data.
+type batchPriceRow struct {
+	priceCents int
+	saleDate   string
+	platform   string
+}
+
+// platformBreakdownFromRows builds per-platform statistics from a slice of batchPriceRow.
+func platformBreakdownFromRows(rows []batchPriceRow) []inventory.PlatformBreakdown {
+	byPlat := make(map[string][]int)
+	for _, r := range rows {
+		byPlat[r.platform] = append(byPlat[r.platform], r.priceCents)
+	}
+	out := make([]inventory.PlatformBreakdown, 0, len(byPlat))
+	for plat, prices := range byPlat {
+		sorted := slices.Clone(prices)
+		med := medianInt(sorted)
+		high, low := prices[0], prices[0]
+		for _, p := range prices {
+			if p > high {
+				high = p
+			}
+			if p < low {
+				low = p
+			}
+		}
+		out = append(out, inventory.PlatformBreakdown{
+			Platform:    plat,
+			SaleCount:   len(prices),
+			MedianCents: med,
+			HighCents:   high,
+			LowCents:    low,
+		})
+	}
+	return out
+}
+
 // Compile-time check: CLSalesStore implements CompSummaryProvider.
 var _ inventory.CompSummaryProvider = (*CLSalesStore)(nil)
