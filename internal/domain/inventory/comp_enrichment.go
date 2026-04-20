@@ -7,8 +7,8 @@ import (
 )
 
 // enrichCompSummaries attaches CompSummary to aging items that have a gemRateID.
-// Computes once per unique gemRateID + grade combination (since gemRateID is grade-agnostic)
-// and derives per-purchase CompsAboveCL and CompsAboveCost from the cached PriceCentsList.
+// Uses the batch CompSummaryProvider method so the whole set costs three SQL
+// queries regardless of how many unique variants are in the inventory page.
 func (s *service) enrichCompSummaries(ctx context.Context, items []AgingItem) {
 	if s.compProv == nil {
 		return
@@ -21,8 +21,9 @@ func (s *service) enrichCompSummaries(ctx context.Context, items []AgingItem) {
 		gradeValue float64
 	}
 
-	// Collect unique gemRateID + grade pairs with a representative cert for condition lookup
-	seen := make(map[compCacheKey]string) // key → certNumber
+	// Collect unique (gemRateID, grade) pairs, picking one representative cert each.
+	// The batch method resolves condition from that representative cert.
+	seen := make(map[compCacheKey]string)
 	for i := range items {
 		p := &items[i].Purchase
 		if p.GemRateID == "" {
@@ -33,25 +34,34 @@ func (s *service) enrichCompSummaries(ctx context.Context, items []AgingItem) {
 			seen[key] = p.CertNumber
 		}
 	}
-
 	if len(seen) == 0 {
 		return
 	}
 
-	// Compute summaries once per gemRateID + grade (threshold-agnostic)
-	cache := make(map[compCacheKey]*CompSummary, len(seen))
-	for key, certNumber := range seen {
-		summary, err := s.compProv.GetCompSummary(ctx, key.gemRateID, certNumber)
-		if err != nil {
-			if s.logger != nil {
-				s.logger.Warn(ctx, "comp summary lookup failed",
-					observability.String("gemRateId", key.gemRateID), observability.Err(err))
-			}
+	// Build the batch key list in a stable order to make logs reproducible.
+	batchKeys := make([]CompKey, 0, len(seen))
+	cacheKeyFor := make(map[CompKey]compCacheKey, len(seen))
+	for k, cert := range seen {
+		bk := CompKey{GemRateID: k.gemRateID, CertNumber: cert}
+		batchKeys = append(batchKeys, bk)
+		cacheKeyFor[bk] = k
+	}
+
+	results, err := s.compProv.GetCompSummariesByKeys(ctx, batchKeys)
+	if err != nil {
+		if s.logger != nil {
+			s.logger.Warn(ctx, "batch comp summary lookup failed", observability.Err(err))
+		}
+		return
+	}
+
+	// Re-index by cache key for O(1) attachment below.
+	cache := make(map[compCacheKey]*CompSummary, len(results))
+	for bk, summary := range results {
+		if summary == nil {
 			continue
 		}
-		if summary != nil {
-			cache[key] = summary
-		}
+		cache[cacheKeyFor[bk]] = summary
 	}
 
 	// Attach to items — derive CompsAboveCL and CompsAboveCost per-purchase
