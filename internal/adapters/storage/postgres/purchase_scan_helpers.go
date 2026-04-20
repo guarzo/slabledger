@@ -43,8 +43,6 @@ const purchaseColumnsAliased = `p.id, p.campaign_id, p.card_name, p.cert_number,
 		p.mid_price_cents, p.last_sold_date, p.dh_unlisted_detected_at`
 
 // saleColumnsAliased is the SELECT column list for campaign_sales with "s." alias, used in LEFT JOIN queries.
-//
-//nolint:unused // used by wave-3 analytics_store port
 const saleColumnsAliased = `s.id, s.purchase_id, s.sale_channel, s.sale_price_cents, s.sale_fee_cents,
 	s.sale_date, s.days_to_sell, s.net_profit_cents, s.created_at, s.updated_at,
 	s.last_sold_cents, s.lowest_list_cents, s.conservative_cents,
@@ -108,8 +106,6 @@ func scanPurchase(s scanner, p *inventory.Purchase) error {
 
 // scanPurchaseWithSale scans a row containing purchase columns followed by sale columns
 // (from a LEFT JOIN). Sale columns use sql.Null* types to handle NULL when no sale exists.
-//
-//nolint:unused // used by wave-3 analytics_store port
 func scanPurchaseWithSale(s scanner) (inventory.PurchaseWithSale, error) {
 	var pws inventory.PurchaseWithSale
 	var (

@@ -13,8 +13,6 @@ import (
 //
 // Named parseTimestamp rather than parseSQLiteTime because the Postgres
 // adapter doesn't care which DB produced the string.
-//
-//nolint:unused // used by wave-3 pricing_diagnostics port
 func parseTimestamp(s string) time.Time {
 	if t, err := time.Parse(time.RFC3339, s); err == nil {
 		return t
