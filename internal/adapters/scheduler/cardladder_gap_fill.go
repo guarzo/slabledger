@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
-	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
+	"github.com/guarzo/slabledger/internal/adapters/storage/postgres"
 	"github.com/guarzo/slabledger/internal/domain/mathutil"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
@@ -13,7 +13,7 @@ import (
 // refreshSalesComps fetches recent sales comps for every unique
 // (gemRateID, condition) pair in the provided mappings and upserts them into
 // the CL sales comps store. Rate-limited by the client's built-in limiter.
-func (s *CardLadderRefreshScheduler) refreshSalesComps(ctx context.Context, client *cardladder.Client, mappings []sqlite.CLCardMapping) {
+func (s *CardLadderRefreshScheduler) refreshSalesComps(ctx context.Context, client *cardladder.Client, mappings []postgres.CLCardMapping) {
 	seen := make(map[compKey]bool, len(mappings))
 	fetched := 0
 
@@ -54,7 +54,7 @@ func (s *CardLadderRefreshScheduler) refreshSalesComps(ctx context.Context, clie
 			if len(saleDate) > 10 {
 				saleDate = saleDate[:10]
 			}
-			if err := s.salesStore.UpsertSaleComp(ctx, sqlite.CLSaleCompRecord{
+			if err := s.salesStore.UpsertSaleComp(ctx, postgres.CLSaleCompRecord{
 				GemRateID:   comp.GemRateID,
 				Condition:   m.CLCondition,
 				ItemID:      comp.ItemID,

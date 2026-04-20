@@ -26,7 +26,7 @@ type dhAnalyticsClient interface {
 }
 
 // UnsoldDHCardLister returns the distinct dh_card_id values for our unsold
-// inventory. Implemented by *sqlite.PurchaseStore.ListUnsoldDHCardIDs.
+// inventory. Implemented by *postgres.PurchaseStore.ListUnsoldDHCardIDs.
 type UnsoldDHCardLister interface {
 	ListUnsoldDHCardIDs(ctx context.Context) ([]int, error)
 }

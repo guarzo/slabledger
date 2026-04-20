@@ -26,7 +26,9 @@ func Default() Config {
 			JSON:  false,
 		},
 		Database: DatabaseConfig{
-			Path:           "data/slabledger.db",
+			// Devcontainer default. Production sets DATABASE_URL to the
+			// Supabase transaction-pooler connection string via Fly secrets.
+			URL:            "postgresql://slabledger:slabledger@postgres:5432/slabledger?sslmode=disable",
 			MigrationsPath: "", // Empty = use embedded migrations
 		},
 		Maintenance: MaintenanceConfig{

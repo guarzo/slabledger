@@ -21,6 +21,7 @@ RUN apt-get update && apt-get install -y \
     git-lfs \
     # Database tools
     sqlite3 \
+    postgresql-client \
     # Network tools
     curl \
     wget \
@@ -116,6 +117,9 @@ RUN echo 'export PATH="$HOME/.local/bin:$HOME/.opencode/bin:$PATH"' >> /home/$US
 
 # Enable bash completion
 RUN echo "source /etc/bash_completion" >> /home/$USERNAME/.bashrc
+
+# Install flyctl (Fly.io CLI) to /usr/local/bin so it's on PATH for all users
+RUN curl -fsSL https://fly.io/install.sh | FLYCTL_INSTALL=/usr/local sh
 
 # Install OpenCode AI coding agent
 RUN curl -fsSL https://opencode.ai/install | bash

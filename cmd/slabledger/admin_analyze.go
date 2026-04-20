@@ -4,14 +4,13 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/advisortool"
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	scoringadapter "github.com/guarzo/slabledger/internal/adapters/scoring"
-	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
+	"github.com/guarzo/slabledger/internal/adapters/storage/postgres"
 	"github.com/guarzo/slabledger/internal/domain/advisor"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/platform/config"
@@ -77,19 +76,12 @@ func adminAnalyze(ctx context.Context, args []string) error {
 		fmt.Println("Configuration loaded successfully")
 		fmt.Printf("  Azure AI endpoint: %s\n", maskString(cfg.Adapters.AzureAIEndpoint))
 		fmt.Printf("  Azure AI deployment: %s\n", cfg.Adapters.AzureAIDeployment)
-		fmt.Printf("  Database path: %s\n", cfg.Database.Path)
+		fmt.Printf("  Database URL: %s\n", cfg.Database.URL)
 		return nil
 	}
 
 	// Open database
-	dbPath, err := resolveDatabasePath(cfg.Database.Path)
-	if err != nil {
-		return fmt.Errorf("resolve database path: %w", err)
-	}
-	if err := os.MkdirAll(filepath.Dir(dbPath), 0755); err != nil {
-		return fmt.Errorf("create database directory: %w", err)
-	}
-	db, err := sqlite.Open(dbPath, logger)
+	db, err := postgres.Open(cfg.Database.URL, logger)
 	if err != nil {
 		return fmt.Errorf("open database: %w", err)
 	}
@@ -99,14 +91,14 @@ func adminAnalyze(ctx context.Context, args []string) error {
 		}
 	}()
 
-	if err := sqlite.RunMigrations(db, cfg.Database.MigrationsPath); err != nil {
+	if err := postgres.RunMigrations(db, cfg.Database.MigrationsPath); err != nil {
 		return fmt.Errorf("run migrations: %w", err)
 	}
 
 	// Initialize providers (mirrors runServer wiring order)
-	cardIDMappingRepo := sqlite.NewCardIDMappingRepository(db.DB)
-	intelRepo := sqlite.NewMarketIntelligenceRepository(db.DB)
-	suggestionsRepo := sqlite.NewDHSuggestionsRepository(db.DB)
+	cardIDMappingRepo := postgres.NewCardIDMappingRepository(db.DB)
+	intelRepo := postgres.NewMarketIntelligenceRepository(db.DB)
+	suggestionsRepo := postgres.NewDHSuggestionsRepository(db.DB)
 
 	// Optional DH client
 	var dhClient *dh.Client
@@ -136,10 +128,10 @@ func adminAnalyze(ctx context.Context, args []string) error {
 	tuningSvc := campaignsInit.tuningSvc
 
 	// AI call tracking
-	aiCallRepo := sqlite.NewAICallRepository(db)
+	aiCallRepo := postgres.NewAICallRepository(db)
 
 	// Advisor tool options
-	gapStore := sqlite.NewGapStore(db.DB)
+	gapStore := postgres.NewGapStore(db.DB)
 	advisorToolOpts := []advisortool.ExecutorOption{
 		advisortool.WithIntelligenceRepo(intelRepo),
 		advisortool.WithSuggestionsRepo(suggestionsRepo),

@@ -135,7 +135,7 @@ func FromEnv(base Config) Config {
 	envBool("RATE_LIMIT_TRUST_PROXY", &cfg.Mode.TrustProxy, false)
 
 	// Database
-	envString("DATABASE_PATH", &cfg.Database.Path)
+	envString("DATABASE_URL", &cfg.Database.URL)
 	envString("MIGRATIONS_PATH", &cfg.Database.MigrationsPath)
 
 	// Maintenance
@@ -287,7 +287,7 @@ func FromFlags(base Config, args []string) (Config, error) {
 	fs.StringVar(&cfg.Cache.Path, "cache", cfg.Cache.Path, "Cache file location")
 
 	// Database flags
-	fs.StringVar(&cfg.Database.Path, "db-path", cfg.Database.Path, "Path to SQLite database file")
+	fs.StringVar(&cfg.Database.URL, "database-url", cfg.Database.URL, "PostgreSQL connection URL")
 	fs.StringVar(&cfg.Database.MigrationsPath, "migrations-path", cfg.Database.MigrationsPath, "Path to migrations directory (empty = use embedded)")
 
 	if err := fs.Parse(args); err != nil {

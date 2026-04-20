@@ -4,13 +4,13 @@ import (
 	"context"
 
 	"github.com/guarzo/slabledger/internal/adapters/scheduler"
-	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
+	"github.com/guarzo/slabledger/internal/adapters/storage/postgres"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 )
 
-// inventoryListAdapter adapts sqlite.PurchaseStore to the scheduler.InventoryLister interface.
+// inventoryListAdapter adapts postgres.PurchaseStore to the scheduler.InventoryLister interface.
 type inventoryListAdapter struct {
-	repo *sqlite.PurchaseStore
+	repo *postgres.PurchaseStore
 }
 
 func (a *inventoryListAdapter) ListUnsoldInventory(ctx context.Context) ([]scheduler.InventoryPurchase, error) {

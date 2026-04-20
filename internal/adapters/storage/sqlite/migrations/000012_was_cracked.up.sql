@@ -1,1 +1,0 @@
-ALTER TABLE campaign_sales ADD COLUMN was_cracked INTEGER NOT NULL DEFAULT 0;

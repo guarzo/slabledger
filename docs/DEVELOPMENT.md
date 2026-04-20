@@ -35,7 +35,7 @@ Key files:
 | `internal/domain/inventory/service.go` | Business logic, PriceLookup interface |
 | `internal/domain/inventory/channel_fees.go` | CalculateSaleFee, CalculateNetProfit |
 | `internal/domain/inventory/service_interfaces.go` | 8 focused repository interfaces |
-| `internal/adapters/storage/sqlite/campaigns_repository.go` | SQLite implementation |
+| `internal/adapters/storage/postgres/campaign_store.go` | Postgres implementation |
 | `internal/adapters/httpserver/handlers/campaigns.go` | HTTP handlers |
 | `internal/adapters/clients/pricelookup/adapter.go` | PriceLookup adapter |
 
@@ -61,7 +61,7 @@ svc := inventory.NewService(repos, inventory.WithPriceLookup(adapter))
 
 ### Database Migrations
 
-Migrations are in `internal/adapters/storage/sqlite/migrations/`. There are currently 60 migration pairs (`000001`–`000060`). See [docs/SCHEMA.md](SCHEMA.md) for the full schema and [internal/README.md](../internal/README.md) for step-by-step migration creation instructions.
+Migrations are in `internal/adapters/storage/postgres/migrations/`. After the April 2026 cutover from SQLite the tree was reset to a single `000001_initial_schema` representing the final-state schema; future changes are additive from `000002` onward. See [docs/SCHEMA.md](SCHEMA.md) for the full schema and [internal/README.md](../internal/README.md) for step-by-step migration creation instructions.
 
 ---
 
@@ -73,7 +73,7 @@ Migrations are in `internal/adapters/storage/sqlite/migrations/`. There are curr
 |------|-----|----------|
 | Memory | 2-4 hours | Hot data, frequently accessed |
 | File | 24 hours | Persistence across restarts |
-| SQLite | 24+ hours | Price persistence with background refresh |
+| Postgres | 24+ hours | Price persistence with background refresh |
 
 ### Recommended TTLs
 
@@ -208,3 +208,21 @@ curl http://localhost:8081/api/status/api-usage
 - **Grade extraction**: `ExtractGrade(title)` parses PSA grade from card title strings
 - **Object allocation**: Standard `new()` / `make()` — no sync.Pool
 - **Optional deps**: Functional options (`WithPriceLookup`) instead of required constructor params
+
+---
+
+## Deploying to Fly
+
+Production runs on a single Fly Machine in `iad`, backed by Supabase Postgres (`aws-1-us-east-2`).
+
+- **Secrets**: managed via `fly secrets set`. Pull the list with `fly secrets list --app slabledger`. `DATABASE_URL` points at the Supabase transaction pooler (port 6543, `?sslmode=require`). `ENCRYPTION_KEY` must remain stable — rotating it makes existing OAuth tokens undecryptable.
+- **Deploy**: `.github/workflows/fly-deploy.yml` runs `flyctl deploy --remote-only` on push to `main`. Requires `FLY_API_TOKEN` in GitHub secrets. Manual deploy: `flyctl deploy --remote-only` from the repo root.
+- **Logs**: `flyctl logs --app slabledger`. `flyctl status` for machine / health state.
+- **Rollback**: `flyctl releases list` → `flyctl deploy --image <previous-image>` or redeploy an earlier commit.
+
+## Database (Supabase)
+
+- **Prod connection**: transaction pooler at `aws-1-us-east-2.pooler.supabase.com:6543`. `pgx.QueryExecModeExec` (simple protocol) keeps it PgBouncer-compatible.
+- **Local dev**: Postgres 17 container in the devcontainer, host port `5434` / internal `postgres:5432`.
+- **Backups**: automatic daily, managed by Supabase. Dashboard → Database → Backups.
+- **Dump / restore**: `make db-pull` and `make db-push` wrap `pg_dump` / `pg_restore` in custom format. `db-push` requires typing `yes` (not `y`) and writes a timestamped remote backup file before overwriting prod.

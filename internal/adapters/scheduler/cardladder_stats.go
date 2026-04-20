@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
+	"github.com/guarzo/slabledger/internal/adapters/storage/postgres"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
@@ -15,7 +15,7 @@ const CLRunStatsName = "card_ladder_refresh"
 // WithCLStatsStore enables persistence of per-run stats so the admin UI's
 // "Last Run" panel survives server restarts. Optional — when nil, stats
 // remain in-memory only and reset on restart (prior behavior).
-func WithCLStatsStore(ss *sqlite.SchedulerStatsStore) CardLadderRefreshOption {
+func WithCLStatsStore(ss *postgres.SchedulerStatsStore) CardLadderRefreshOption {
 	return func(s *CardLadderRefreshScheduler) { s.statsStore = ss }
 }
 
@@ -79,7 +79,7 @@ func (s *CardLadderRefreshScheduler) persistStats(ctx context.Context, stats CLR
 			observability.Err(err))
 		return
 	}
-	if err := s.statsStore.Save(ctx, sqlite.SchedulerRunStats{
+	if err := s.statsStore.Save(ctx, postgres.SchedulerRunStats{
 		Name:       CLRunStatsName,
 		LastRunAt:  stats.LastRunAt,
 		DurationMs: stats.DurationMs,

@@ -232,8 +232,9 @@ func TestDatabaseConfig(t *testing.T) {
 	t.Run("default values", func(t *testing.T) {
 		cfg := Default()
 
-		if cfg.Database.Path != "data/slabledger.db" {
-			t.Errorf("expected default database path 'data/slabledger.db', got %s", cfg.Database.Path)
+		const wantURL = "postgresql://slabledger:slabledger@postgres:5432/slabledger?sslmode=disable"
+		if cfg.Database.URL != wantURL {
+			t.Errorf("expected default database URL %q, got %s", wantURL, cfg.Database.URL)
 		}
 		if cfg.Database.MigrationsPath != "" {
 			t.Errorf("expected default migrations path to be empty (use embedded), got %s", cfg.Database.MigrationsPath)
@@ -241,16 +242,14 @@ func TestDatabaseConfig(t *testing.T) {
 	})
 
 	t.Run("environment variable override", func(t *testing.T) {
-		// Save original env vars
-		origDBPath := os.Getenv("DATABASE_PATH")
+		origDBURL := os.Getenv("DATABASE_URL")
 		origMigPath := os.Getenv("MIGRATIONS_PATH")
 
-		// Clean up
 		defer func() {
-			if origDBPath != "" {
-				_ = os.Setenv("DATABASE_PATH", origDBPath)
+			if origDBURL != "" {
+				_ = os.Setenv("DATABASE_URL", origDBURL)
 			} else {
-				_ = os.Unsetenv("DATABASE_PATH")
+				_ = os.Unsetenv("DATABASE_URL")
 			}
 			if origMigPath != "" {
 				_ = os.Setenv("MIGRATIONS_PATH", origMigPath)
@@ -259,14 +258,14 @@ func TestDatabaseConfig(t *testing.T) {
 			}
 		}()
 
-		// Set test env vars
-		_ = os.Setenv("DATABASE_PATH", "/custom/path/test.db")
+		const customURL = "postgresql://user:pass@db.example.com:6543/postgres?sslmode=require"
+		_ = os.Setenv("DATABASE_URL", customURL)
 		_ = os.Setenv("MIGRATIONS_PATH", "/custom/migrations")
 
 		cfg := FromEnv(Default())
 
-		if cfg.Database.Path != "/custom/path/test.db" {
-			t.Errorf("expected database path '/custom/path/test.db' from env, got %s", cfg.Database.Path)
+		if cfg.Database.URL != customURL {
+			t.Errorf("expected database URL %q from env, got %s", customURL, cfg.Database.URL)
 		}
 		if cfg.Database.MigrationsPath != "/custom/migrations" {
 			t.Errorf("expected migrations path '/custom/migrations' from env, got %s", cfg.Database.MigrationsPath)
@@ -274,15 +273,16 @@ func TestDatabaseConfig(t *testing.T) {
 	})
 
 	t.Run("CLI flag override", func(t *testing.T) {
-		args := []string{"--db-path", "/cli/database.db", "--migrations-path", "/cli/migrations"}
+		const cliURL = "postgresql://cli:cli@localhost:5432/cli?sslmode=disable"
+		args := []string{"--database-url", cliURL, "--migrations-path", "/cli/migrations"}
 
 		cfg, err := FromFlags(Default(), args)
 		if err != nil {
 			t.Fatalf("unexpected error from FromFlags: %v", err)
 		}
 
-		if cfg.Database.Path != "/cli/database.db" {
-			t.Errorf("expected database path '/cli/database.db' from CLI flag, got %s", cfg.Database.Path)
+		if cfg.Database.URL != cliURL {
+			t.Errorf("expected database URL %q from CLI flag, got %s", cliURL, cfg.Database.URL)
 		}
 		if cfg.Database.MigrationsPath != "/cli/migrations" {
 			t.Errorf("expected migrations path '/cli/migrations' from CLI flag, got %s", cfg.Database.MigrationsPath)

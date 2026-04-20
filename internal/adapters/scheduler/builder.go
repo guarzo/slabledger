@@ -6,7 +6,7 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	"github.com/guarzo/slabledger/internal/adapters/clients/marketmovers"
-	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
+	"github.com/guarzo/slabledger/internal/adapters/storage/postgres"
 	"github.com/guarzo/slabledger/internal/domain/advisor"
 	"github.com/guarzo/slabledger/internal/domain/ai"
 	"github.com/guarzo/slabledger/internal/domain/auth"
@@ -86,20 +86,20 @@ type BuildDeps struct {
 
 	// Card Ladder dependencies (optional)
 	CardLadderClient         *cardladder.Client
-	CardLadderStore          *sqlite.CardLadderStore
+	CardLadderStore          *postgres.CardLadderStore
 	CardLadderPurchaseLister CardLadderPurchaseLister
 	CardLadderValueUpdater   CardLadderValueUpdater
 	CardLadderGemRateUpdater CardLadderGemRateUpdater
 	CardLadderSyncUpdater    CardLadderSyncUpdater
-	CardLadderSalesStore     *sqlite.CLSalesStore
+	CardLadderSalesStore     *postgres.CLSalesStore
 
 	// SchedulerStatsStore persists per-scheduler lastRun stats so the admin UI
 	// survives server restarts. Optional — when nil, stats remain in-memory.
-	SchedulerStatsStore *sqlite.SchedulerStatsStore
+	SchedulerStatsStore *postgres.SchedulerStatsStore
 
 	// Market Movers dependencies (optional)
 	MMClient         *marketmovers.Client
-	MMStore          *sqlite.MarketMoversStore
+	MMStore          *postgres.MarketMoversStore
 	MMPurchaseLister MMPurchaseLister
 	MMValueUpdater   MMValueUpdater
 

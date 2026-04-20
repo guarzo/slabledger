@@ -1,0 +1,42 @@
+# fly.toml — slabledger production configuration
+#
+# See https://fly.io/docs/reference/configuration/ for reference.
+
+app = 'slabledger'
+primary_region = 'iad'
+
+[build]
+
+[env]
+  # Fly terminates TLS at the edge and proxies to the Machine. Without this,
+  # the rate limiter sees Fly's proxy IP for all requests.
+  RATE_LIMIT_TRUST_PROXY = 'true'
+
+[http_service]
+  internal_port = 8081
+  force_https = true
+  # Schedulers (~15 goroutines) must run continuously; don't auto-stop.
+  auto_stop_machines = false
+  auto_start_machines = false
+  min_machines_running = 1
+  processes = ['app']
+
+  [[http_service.checks]]
+    grace_period = '30s'
+    interval = '30s'
+    method = 'GET'
+    timeout = '5s'
+    path = '/api/health'
+
+# Small volume for cache + media. The database lives in Supabase; if this
+# volume is lost, cache rebuilds automatically and media can be re-uploaded.
+[[mounts]]
+  source = 'slabledger_media'
+  destination = '/app/data'
+
+# Shared-cpu-2x / 2GB. ~15 schedulers + Go runtime may push close to 2GB;
+# monitor after first deploys and resize if memory pressure shows up in logs.
+[[vm]]
+  cpu_kind = 'shared'
+  cpus = 2
+  memory = '2gb'

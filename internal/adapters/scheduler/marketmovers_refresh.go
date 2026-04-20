@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/marketmovers"
-	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
+	"github.com/guarzo/slabledger/internal/adapters/storage/postgres"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/mathutil"
 	"github.com/guarzo/slabledger/internal/domain/observability"
@@ -64,7 +64,7 @@ type MarketMoversRefreshScheduler struct {
 	clientMu       sync.RWMutex
 	statsMu        sync.RWMutex
 	client         *marketmovers.Client
-	store          *sqlite.MarketMoversStore
+	store          *postgres.MarketMoversStore
 	purchaseLister MMPurchaseLister
 	valueUpdater   MMValueUpdater
 	logger         observability.Logger
@@ -102,7 +102,7 @@ func (s *MarketMoversRefreshScheduler) getClient() *marketmovers.Client {
 // NewMarketMoversRefreshScheduler creates a new Market Movers refresh scheduler.
 func NewMarketMoversRefreshScheduler(
 	client *marketmovers.Client,
-	store *sqlite.MarketMoversStore,
+	store *postgres.MarketMoversStore,
 	purchaseLister MMPurchaseLister,
 	valueUpdater MMValueUpdater,
 	logger observability.Logger,
@@ -193,7 +193,7 @@ func (s *MarketMoversRefreshScheduler) PriceSinglePurchase(ctx context.Context, 
 				observability.String("cert", p.CertNumber),
 				observability.Err(err))
 		}
-		mapping = &sqlite.MMCardMapping{SlabSerial: p.CertNumber, MMCollectibleID: cid, MasterID: mid, SearchTitle: searchTitle}
+		mapping = &postgres.MMCardMapping{SlabSerial: p.CertNumber, MMCollectibleID: cid, MasterID: mid, SearchTitle: searchTitle}
 	}
 
 	dateFrom := time.Now().UTC().AddDate(0, 0, -30)
@@ -255,7 +255,7 @@ func (s *MarketMoversRefreshScheduler) runOnce(ctx context.Context) error {
 	if err != nil {
 		s.logger.Warn(ctx, "MM refresh: failed to list mappings", observability.Err(err))
 	}
-	mappingByCert := make(map[string]sqlite.MMCardMapping, len(existingMappings))
+	mappingByCert := make(map[string]postgres.MMCardMapping, len(existingMappings))
 	for _, m := range existingMappings {
 		mappingByCert[m.SlabSerial] = m
 	}
@@ -297,7 +297,7 @@ func (s *MarketMoversRefreshScheduler) runOnce(ctx context.Context) error {
 				s.recordMMError(ctx, p.ID, reason)
 				continue
 			}
-			mapping = sqlite.MMCardMapping{SlabSerial: p.CertNumber, MMCollectibleID: cid, MasterID: mid, SearchTitle: searchTitle}
+			mapping = postgres.MMCardMapping{SlabSerial: p.CertNumber, MMCollectibleID: cid, MasterID: mid, SearchTitle: searchTitle}
 			if err := s.store.SaveMapping(ctx, p.CertNumber, cid, mid, searchTitle); err != nil {
 				s.logger.Warn(ctx, "MM refresh: failed to save mapping",
 					observability.String("cert", p.CertNumber),

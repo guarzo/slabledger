@@ -4,7 +4,7 @@ import "context"
 
 // Repository persists and retrieves the cached DH demand and analytics rows
 // that back the niche-opportunity leaderboard. The SQLite adapter
-// (internal/adapters/storage/sqlite) implements this interface.
+// (internal/adapters/storage/postgres) implements this interface.
 type Repository interface {
 	// Card cache
 	UpsertCardCache(ctx context.Context, row CardCache) error

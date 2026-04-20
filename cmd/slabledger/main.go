@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"strings"
 	"syscall"
 
@@ -22,7 +21,7 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/clients/google"
 	"github.com/guarzo/slabledger/internal/adapters/clients/gsheets"
 	scoringadapter "github.com/guarzo/slabledger/internal/adapters/scoring"
-	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
+	"github.com/guarzo/slabledger/internal/adapters/storage/postgres"
 	"github.com/guarzo/slabledger/internal/domain/auth"
 	"github.com/guarzo/slabledger/internal/domain/dhpricing"
 	"github.com/guarzo/slabledger/internal/platform/crypto"
@@ -158,19 +157,9 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	}()
 
 	// Initialize database
-	dbPath, err := resolveDatabasePath(cfg.Database.Path)
+	db, err := postgres.Open(cfg.Database.URL, logger)
 	if err != nil {
-		return fmt.Errorf("resolve database path: %w", err)
-	}
-
-	dbDir := filepath.Dir(dbPath)
-	if err := os.MkdirAll(dbDir, 0755); err != nil {
-		return fmt.Errorf("create database directory %s: %w", dbDir, err)
-	}
-
-	db, err := sqlite.Open(dbPath, logger)
-	if err != nil {
-		return fmt.Errorf("open database %s: %w", dbPath, err)
+		return fmt.Errorf("open database: %w", err)
 	}
 	// db.Close() blocks until in-flight queries complete. Safe because schedulers
 	// are stopped and HTTP server is drained before this runs.
@@ -180,16 +169,14 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		}
 	}()
 
-	logger.Info(ctx, "database opened", observability.String("path", dbPath))
-
 	migrationsPath := cfg.Database.MigrationsPath
-	if err := sqlite.RunMigrations(db, migrationsPath); err != nil {
+	if err := postgres.RunMigrations(db, migrationsPath); err != nil {
 		return fmt.Errorf("run migrations: %w", err)
 	}
 
 	// Create DB tracker (API tracking, access tracking, health checks)
-	priceRepo := sqlite.NewDBTracker(db)
-	refreshCandidateRepo := sqlite.NewRefreshCandidateRepository(db.DB)
+	priceRepo := postgres.NewDBTracker(db)
+	refreshCandidateRepo := postgres.NewRefreshCandidateRepository(db.DB)
 
 	// Initialize authentication
 	var authService auth.Service
@@ -202,7 +189,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 			return fmt.Errorf("initialize encryptor: %w", err)
 		}
 
-		authRepo = sqlite.NewAuthRepository(db.DB, encryptor)
+		authRepo = postgres.NewAuthRepository(db.DB, encryptor)
 
 		if googleConfig.IsConfigured() {
 			authService = google.NewOAuthService(
@@ -216,7 +203,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	}
 
 	// Card ID mapping repository (caches external provider IDs)
-	cardIDMappingRepo := sqlite.NewCardIDMappingRepository(db.DB)
+	cardIDMappingRepo := postgres.NewCardIDMappingRepository(db.DB)
 
 	// Initialize DH client (optional — market intelligence + pricing source)
 	var dhClient *dh.Client
@@ -237,13 +224,13 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	}
 
 	// DH repositories (always created — tables exist after migration 000028)
-	intelRepo := sqlite.NewMarketIntelligenceRepository(db.DB)
-	suggestionsRepo := sqlite.NewDHSuggestionsRepository(db.DB)
-	demandRepo := sqlite.NewDHDemandRepository(db.DB)
-	trajectoryRepo := sqlite.NewCardPriceTrajectoryRepository(db.DB)
+	intelRepo := postgres.NewMarketIntelligenceRepository(db.DB)
+	suggestionsRepo := postgres.NewDHSuggestionsRepository(db.DB)
+	demandRepo := postgres.NewDHDemandRepository(db.DB)
+	trajectoryRepo := postgres.NewCardPriceTrajectoryRepository(db.DB)
 
 	// DH event store — records pipeline state transitions (migration 000068)
-	eventStore := sqlite.NewDHEventStore(db.DB)
+	eventStore := postgres.NewDHEventStore(db.DB)
 
 	priceProvImpl, err := initializePriceProviders(
 		ctx, logger, cardIDMappingRepo,
@@ -265,9 +252,9 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	}
 
 	// Create MM store early so the campaigns service can use it for export enrichment.
-	var mmStore *sqlite.MarketMoversStore
+	var mmStore *postgres.MarketMoversStore
 	if clEncryptor != nil {
-		mmStore = sqlite.NewMarketMoversStore(db.DB, clEncryptor)
+		mmStore = postgres.NewMarketMoversStore(db.DB, clEncryptor)
 	}
 
 	campaignsInit := initializeCampaignsService(
@@ -282,13 +269,13 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	exportService := campaignsInit.exportService
 
 	// Sync state repository (for delta poll timestamps)
-	syncStateRepo := sqlite.NewSyncStateRepository(db.DB)
+	syncStateRepo := postgres.NewSyncStateRepository(db.DB)
 
 	// AI call tracking
-	aiCallRepo := sqlite.NewAICallRepository(db)
+	aiCallRepo := postgres.NewAICallRepository(db)
 
 	// Build advisor tool options — inject intelligence repos.
-	gapStore := sqlite.NewGapStore(db.DB)
+	gapStore := postgres.NewGapStore(db.DB)
 	advisorToolOpts := []advisortool.ExecutorOption{
 		advisortool.WithIntelligenceRepo(intelRepo),
 		advisortool.WithSuggestionsRepo(suggestionsRepo),
@@ -313,11 +300,11 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 
 	// Initialize Card Ladder (encryptor was created earlier for MM mapping adapter)
 	clClient, _, clStore := initializeCardLadder(ctx, logger, db, clEncryptor)
-	var clSalesStore *sqlite.CLSalesStore
+	var clSalesStore *postgres.CLSalesStore
 	if clStore != nil {
-		clSalesStore = sqlite.NewCLSalesStore(db.DB)
+		clSalesStore = postgres.NewCLSalesStore(db.DB)
 	}
-	schedulerStatsStore := sqlite.NewSchedulerStatsStore(db.DB)
+	schedulerStatsStore := postgres.NewSchedulerStatsStore(db.DB)
 
 	// Initialize Market Movers client (store was created earlier for campaigns service)
 	mmClient, _ := initializeMarketMovers(ctx, logger, db, clEncryptor)
@@ -390,7 +377,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	schedulerResult, cancelScheduler := initializeSchedulers(ctx, sDeps)
 
 	// Create pending items repository for PSA sync handler.
-	pendingItemsRepo := sqlite.NewPendingItemsRepository(db.DB)
+	pendingItemsRepo := postgres.NewPendingItemsRepository(db.DB)
 
 	deps, hOut := createHandlers(ctx, handlerInputs{
 		Cfg:                cfg,
@@ -435,19 +422,3 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	return serverErr
 }
 
-func resolveDatabasePath(configuredPath string) (string, error) {
-	if configuredPath == "" {
-		return "", fmt.Errorf("database path cannot be empty")
-	}
-
-	if filepath.IsAbs(configuredPath) {
-		return filepath.Clean(configuredPath), nil
-	}
-
-	absPath, err := filepath.Abs(configuredPath)
-	if err != nil {
-		return "", fmt.Errorf("resolve path %q to absolute: %w", configuredPath, err)
-	}
-
-	return absPath, nil
-}
