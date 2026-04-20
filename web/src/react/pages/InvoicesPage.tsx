@@ -52,7 +52,7 @@ function InvoiceRow({ inv }: { inv: Invoice }) {
   const overdue = inv.status !== 'paid' && d2d < 0;
   return (
     <tr className="border-b border-[var(--surface-2)] last:border-b-0 hover:bg-[var(--surface-2)]/30">
-      <td className="py-2.5 pr-4 text-sm text-[var(--text)] tabular-nums">{formatDate(inv.invoiceDate)}</td>
+      <td className="pl-4 py-2.5 pr-4 text-sm text-[var(--text)] tabular-nums">{formatDate(inv.invoiceDate)}</td>
       <td className="py-2.5 pr-4 text-sm text-[var(--text)] tabular-nums">
         {formatDate(inv.dueDate)}
         {inv.dueDate && inv.status !== 'paid' && (
