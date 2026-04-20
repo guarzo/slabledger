@@ -143,9 +143,9 @@ db-pull:
 	cleanup() { rm -f "$$TMP_DUMP"; } && \
 	trap cleanup EXIT && \
 	echo "Dumping prod (custom format, data-only except schema_migrations) ..." && \
-	pg_dump --no-owner --no-privileges --format=custom --file="$$TMP_DUMP" "$$PROD_DB_URL" && \
+	pg_dump --no-owner --no-privileges --format=custom -n public --extension=citext --file="$$TMP_DUMP" "$$PROD_DB_URL" && \
 	echo "Resetting local schema ..." && \
-	psql "$(LOCAL_DB_URL)" -v ON_ERROR_STOP=1 -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;' >/dev/null && \
+	psql "$(LOCAL_DB_URL)" -v ON_ERROR_STOP=1 -c 'DROP SCHEMA IF EXISTS public CASCADE;' >/dev/null && \
 	echo "Restoring into local ..." && \
 	pg_restore --no-owner --no-privileges --dbname="$(LOCAL_DB_URL)" "$$TMP_DUMP" && \
 	trap - EXIT && rm -f "$$TMP_DUMP" && \
