@@ -20,6 +20,21 @@ jobs:
     permissions:
       contents: read
 
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: slabledger
+          POSTGRES_PASSWORD: slabledger
+          POSTGRES_DB: slabledger
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U slabledger"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v6
@@ -39,6 +54,8 @@ jobs:
         ./scripts/check-file-size.sh
 
     - name: Run tests with coverage and race detection
+      env:
+        POSTGRES_TEST_URL: postgresql://slabledger:slabledger@localhost:5432/slabledger?sslmode=disable
       run: go test -race -timeout 10m -coverprofile=coverage.out -covermode=atomic ./...
 
     - name: Run linter
