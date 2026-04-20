@@ -261,6 +261,9 @@ func (h *DHHandler) recordEvent(ctx context.Context, e dhevents.Event) {
 //   - errDHPersistFailed: push succeeded but local persistence failed
 //   - other errors: push API failure
 func (h *DHHandler) pushAndPersistDH(ctx context.Context, purchase *inventory.Purchase, dhCardID, listingPriceCents int) (int, error) {
+	if h.inventoryPusher == nil {
+		return 0, fmt.Errorf("DH inventory pusher not configured")
+	}
 	item := dh.NewInStockItem(dhCardID, purchase.CertNumber, purchase.GradeValue, purchase.BuyCostCents, listingPriceCents)
 
 	pushResp, err := h.inventoryPusher.PushInventory(ctx, []dh.InventoryItem{item})

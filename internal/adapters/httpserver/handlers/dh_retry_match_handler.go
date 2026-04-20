@@ -78,7 +78,11 @@ func (h *DHHandler) HandleRetryMatch(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 				if h.pushStatusUpdater != nil {
-					_ = h.pushStatusUpdater.UpdatePurchaseDHPushStatus(ctx, purchase.ID, inventory.DHPushStatusMatched)
+					if err := h.pushStatusUpdater.UpdatePurchaseDHPushStatus(ctx, purchase.ID, inventory.DHPushStatusMatched); err != nil {
+						h.logger.Error(ctx, "retry match: update push status", observability.Err(err))
+						writeError(w, http.StatusInternalServerError, "failed to update push status")
+						return
+					}
 				}
 				if h.candidatesSaver != nil {
 					_ = h.candidatesSaver.UpdatePurchaseDHCandidates(ctx, purchase.ID, "")
@@ -91,7 +95,9 @@ func (h *DHHandler) HandleRetryMatch(w http.ResponseWriter, r *http.Request) {
 					// Save fresh candidates so the user can pick via Select.
 					if h.candidatesSaver != nil {
 						candidatesJSON, marshalErr := json.Marshal(resolution.Candidates)
-						if marshalErr == nil {
+						if marshalErr != nil {
+							h.logger.Warn(ctx, "retry match: failed to marshal candidates", observability.Err(marshalErr))
+						} else {
 							_ = h.candidatesSaver.UpdatePurchaseDHCandidates(ctx, purchase.ID, string(candidatesJSON))
 						}
 					}
@@ -139,15 +145,23 @@ func (h *DHHandler) HandleRetryMatch(w http.ResponseWriter, r *http.Request) {
 	switch result.Resolution {
 	case dh.PSAImportStatusMatched, dh.PSAImportStatusUnmatchedCreated:
 		if h.dhFieldsUpdater != nil {
-			_ = h.dhFieldsUpdater.UpdatePurchaseDHFields(ctx, purchase.ID, inventory.DHFieldsUpdate{
+			if err := h.dhFieldsUpdater.UpdatePurchaseDHFields(ctx, purchase.ID, inventory.DHFieldsUpdate{
 				CardID:      result.DHCardID,
 				InventoryID: result.DHInventoryID,
 				CertStatus:  dh.CertStatusMatched,
 				DHStatus:    inventory.DHStatusInStock,
-			})
+			}); err != nil {
+				h.logger.Error(ctx, "retry match: persist DH fields after PSA import", observability.Err(err))
+				writeError(w, http.StatusInternalServerError, "failed to persist DH fields")
+				return
+			}
 		}
 		if h.pushStatusUpdater != nil {
-			_ = h.pushStatusUpdater.UpdatePurchaseDHPushStatus(ctx, purchase.ID, inventory.DHPushStatusMatched)
+			if err := h.pushStatusUpdater.UpdatePurchaseDHPushStatus(ctx, purchase.ID, inventory.DHPushStatusMatched); err != nil {
+				h.logger.Error(ctx, "retry match: update push status after PSA import", observability.Err(err))
+				writeError(w, http.StatusInternalServerError, "failed to update push status")
+				return
+			}
 		}
 		if h.cardIDSaver != nil && result.DHCardID != 0 {
 			_ = h.cardIDSaver.SaveExternalID(ctx, purchase.CardName, purchase.SetName, purchase.CardNumber, pricing.SourceDH, fmt.Sprintf("%d", result.DHCardID))

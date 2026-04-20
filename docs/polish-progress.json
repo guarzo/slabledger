@@ -1,0 +1,18 @@
+{
+  "base_commit": "ec4d261ba803c31e8e739815f5133953f115b67d",
+  "started_at": "2026-04-20T10:53:00Z",
+  "segments": [
+    { "id": 1, "name": "domain/inventory", "paths": ["internal/domain/inventory/"], "status": "pending" },
+    { "id": 2, "name": "domain/advisor+social+scoring", "paths": ["internal/domain/advisor/", "internal/domain/social/", "internal/domain/scoring/"], "status": "pending" },
+    { "id": 3, "name": "domain/favorites+picks+cards+auth+small", "paths": ["internal/domain/favorites/", "internal/domain/picks/", "internal/domain/cards/", "internal/domain/auth/", "internal/domain/errors/", "internal/domain/constants/", "internal/domain/observability/", "internal/domain/storage/", "internal/domain/intelligence/", "internal/domain/timeutil/", "internal/domain/mathutil/", "internal/domain/pricing/"], "status": "pending" },
+    { "id": 4, "name": "domain/decomposed-siblings", "paths": ["internal/domain/arbitrage/", "internal/domain/portfolio/", "internal/domain/tuning/", "internal/domain/finance/", "internal/domain/export/", "internal/domain/dhlisting/", "internal/domain/csvimport/", "internal/domain/mmutil/"], "status": "pending" },
+    { "id": 5, "name": "adapters/httpserver", "paths": ["internal/adapters/httpserver/"], "status": "pending" },
+    { "id": 6, "name": "adapters/storage/sqlite", "paths": ["internal/adapters/storage/sqlite/"], "status": "pending" },
+    { "id": 7, "name": "adapters/clients", "paths": ["internal/adapters/clients/"], "status": "pending" },
+    { "id": 8, "name": "adapters/scheduler+scoring+advisor", "paths": ["internal/adapters/scheduler/", "internal/adapters/scoring/", "internal/adapters/advisortool/"], "status": "pending" },
+    { "id": 9, "name": "platform", "paths": ["internal/platform/"], "status": "pending" },
+    { "id": 10, "name": "cmd", "paths": ["cmd/"], "status": "pending" },
+    { "id": 11, "name": "testutil", "paths": ["internal/testutil/"], "status": "pending" },
+    { "id": 12, "name": "web", "paths": ["web/"], "status": "pending" }
+  ]
+}

@@ -48,7 +48,7 @@ export function computeInventoryMeta(items: AgingItem[]): InventoryMeta {
   return {
     reviewStats: stats,
     tabCounts: counts,
-    summary: { totalCost, totalMarket, totalPL: totalMarket > 0 ? totalMarket - totalCost : 0 },
+    summary: { totalCost, totalMarket, totalPL: totalMarket - totalCost },
   };
 }
 
