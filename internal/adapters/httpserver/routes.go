@@ -281,6 +281,7 @@ func (rt *Router) registerDHRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /api/dh/dismiss", rt.authMW.RequireAuth(http.HandlerFunc(rt.dhHandler.HandleDismissMatch)))
 	mux.Handle("POST /api/dh/undismiss", rt.authMW.RequireAuth(http.HandlerFunc(rt.dhHandler.HandleUndismissMatch)))
 	mux.Handle("POST /api/dh/unmatch", rt.authMW.RequireAuth(http.HandlerFunc(rt.dhHandler.HandleUnmatchDH)))
+	mux.Handle("POST /api/dh/retry-match", rt.authMW.RequireAuth(http.HandlerFunc(rt.dhHandler.HandleRetryMatch)))
 	mux.Handle("POST /api/dh/approve/{purchaseId}", rt.authMW.RequireAuth(http.HandlerFunc(rt.dhHandler.HandleApproveDHPush)))
 	mux.Handle("POST /api/dh/reconcile", rt.authMW.RequireAdmin(http.HandlerFunc(rt.dhHandler.HandleReconcile)))
 	mux.Handle("GET /api/admin/dh-push-config", rt.authMW.RequireAdmin(http.HandlerFunc(rt.dhHandler.HandleGetDHPushConfig)))

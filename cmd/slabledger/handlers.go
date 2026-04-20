@@ -168,6 +168,7 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 			CountsFetcher:     in.DHClient,
 			DHApproveService:  in.CampaignsService,
 			MatchConfirmer:    in.DHClient,
+			PSAImporter:       in.DHClient,
 			Reconciler:        reconciler,
 			OrdersIngester:    ordersIngester, // nil-safe; handler returns 503 if unwired
 			EventRecorder:     in.DHEventStore,
