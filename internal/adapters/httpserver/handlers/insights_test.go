@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	"github.com/guarzo/slabledger/internal/adapters/httpserver/handlers"
+	"github.com/guarzo/slabledger/internal/adapters/httpserver/middleware"
+	"github.com/guarzo/slabledger/internal/domain/auth"
 	"github.com/guarzo/slabledger/internal/domain/insights"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
 )
@@ -22,11 +24,18 @@ func (s *stubInsightsSvc) GetOverview(ctx context.Context) (*insights.Overview, 
 	return s.resp, s.err
 }
 
+func authedInsightsRequest() *http.Request {
+	req := httptest.NewRequest(http.MethodGet, "/api/insights/overview", nil)
+	user := &auth.User{ID: 1, Username: "testuser", Email: "test@example.com"}
+	ctx := context.WithValue(req.Context(), middleware.UserContextKey, user)
+	return req.WithContext(ctx)
+}
+
 func TestInsightsHandler_HandleOverview_Success(t *testing.T) {
 	t.Parallel()
 	svc := &stubInsightsSvc{resp: &insights.Overview{GeneratedAt: "2026-04-20T00:00:00Z"}}
 	h := handlers.NewInsightsHandler(svc, mocks.NewMockLogger())
-	req := httptest.NewRequest(http.MethodGet, "/api/insights/overview", nil)
+	req := authedInsightsRequest()
 	w := httptest.NewRecorder()
 	h.HandleOverview(w, req)
 
@@ -46,7 +55,7 @@ func TestInsightsHandler_HandleOverview_ServiceError(t *testing.T) {
 	t.Parallel()
 	svc := &stubInsightsSvc{err: errors.New("boom")}
 	h := handlers.NewInsightsHandler(svc, mocks.NewMockLogger())
-	req := httptest.NewRequest(http.MethodGet, "/api/insights/overview", nil)
+	req := authedInsightsRequest()
 	w := httptest.NewRecorder()
 	h.HandleOverview(w, req)
 	if w.Code != http.StatusInternalServerError {

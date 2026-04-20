@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
 	"net/http"
 
 	"github.com/guarzo/slabledger/internal/domain/insights"
@@ -21,16 +20,14 @@ func NewInsightsHandler(svc insights.Service, logger observability.Logger) *Insi
 
 // HandleOverview serves GET /api/insights/overview.
 func (h *InsightsHandler) HandleOverview(w http.ResponseWriter, r *http.Request) {
-	overview, err := h.svc.GetOverview(r.Context())
-	if err != nil {
-		h.logger.Error(r.Context(), "insights overview failed",
-			observability.String("err", err.Error()))
-		http.Error(w, "insights overview failed", http.StatusInternalServerError)
+	if requireUser(w, r) == nil {
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(overview); err != nil {
-		h.logger.Error(r.Context(), "insights overview encode failed",
-			observability.String("err", err.Error()))
+	overview, ok := serviceCall(w, r.Context(), h.logger, "insights overview failed", func() (*insights.Overview, error) {
+		return h.svc.GetOverview(r.Context())
+	})
+	if !ok {
+		return
 	}
+	writeJSON(w, http.StatusOK, overview)
 }
