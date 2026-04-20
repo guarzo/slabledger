@@ -105,8 +105,9 @@ Postgres via `jackc/pgx/v5/stdlib` (Supabase in prod, local Postgres in the devc
 All monetary values in **cents**. Migrations managed by `golang-migrate/migrate/v4` and
 embedded in the binary via `embed.FS`. Migrations run automatically on startup.
 
-Migration files: `internal/adapters/storage/postgres/migrations/` (currently 1 migration —
-`000001_initial_schema` represents the final-state schema after cutover from SQLite).
+Migration files: `internal/adapters/storage/postgres/migrations/` (currently 2 migrations —
+`000001_initial_schema` represents the final-state schema after cutover from SQLite;
+`000002_add_supabase_suggested_indexes` adds indexes recommended by Supabase's advisor).
 
 Connection is configured via `DATABASE_URL`. The transaction pooler is used for the app
 runtime; DDL works the same because `db.go` uses `pgx.QueryExecModeExec` (simple protocol).
