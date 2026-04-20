@@ -3,21 +3,18 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import type { AgingItem } from '../../../types/campaigns';
 import type { Purchase } from '../../../types/campaigns/core';
 import PokeballLoader from '../../PokeballLoader';
-import { formatCents, formatPct } from '../../utils/formatters';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { EmptyState } from '../../ui';
-import { costBasis, unrealizedPL, formatPL } from './inventory/utils';
+import { costBasis, unrealizedPL } from './inventory/utils';
 import '../../../styles/print-sell-sheet.css';
 import DesktopRow from './inventory/DesktopRow';
 import MobileCard from './inventory/MobileCard';
 import MobileSellSheetView from './inventory/MobileSellSheetView';
-import CrackCandidatesBanner from './inventory/CrackCandidatesBanner';
 import SortableHeader from './inventory/SortableHeader';
 import ExpandedDetail from './inventory/ExpandedDetail';
-import ReviewSummaryBar from './inventory/ReviewSummaryBar';
-import type { StatClickTarget } from './inventory/ReviewSummaryBar';
 import { useInventoryState } from './inventory/useInventoryState';
-import { SellSheetActions, SellSheetModals } from './SellSheetView';
+import { SellSheetModals } from './SellSheetView';
+import InventoryHeader from './inventory/InventoryHeader';
 
 export interface InventoryTabProps {
   items: AgingItem[];
@@ -72,11 +69,6 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
 
   if (loading) return <div className="py-8 text-center"><PokeballLoader /></div>;
 
-  const handleStatClick = (_target: StatClickTarget) => {
-    setShowAll(false);
-    setFilterTab('needs_attention');
-  };
-
   if (items.length === 0) {
     return (
       <EmptyState
@@ -92,210 +84,39 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
 
   return (
     <div>
-      {!(isMobile && sellSheetActive) && (<>
-      {/* Summary stat cards — collapsible on mobile */}
-      {isMobile ? (
-        <div className="mb-4 sell-sheet-no-print">
-          <button
-            type="button"
-            onClick={() => setStatsExpanded(prev => !prev)}
-            aria-expanded={statsExpanded}
-            aria-controls="inventory-stats-panel"
-            className="flex items-center justify-between w-full bg-[var(--surface-1)] rounded-xl border border-[var(--surface-2)] px-3 py-2.5 text-left"
-          >
-            <div className="flex items-center gap-3 min-w-0">
-              <span className="text-xs text-[var(--text-muted)]">{items.length} cards</span>
-              <span className="text-xs font-semibold text-[var(--text)]">{formatCents(totalCost)}</span>
-              {totalMarket > 0 && (
-                <span className={`text-xs font-semibold ${totalPL > 0 ? 'text-[var(--success)]' : totalPL < 0 ? 'text-[var(--danger)]' : 'text-[var(--text)]'}`}>
-                  {formatPL(totalPL)}
-                </span>
-              )}
-            </div>
-            <svg className={`w-4 h-4 text-[var(--text-muted)] transition-transform ${statsExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
-          {statsExpanded && (
-            <div id="inventory-stats-panel" className="mt-3 pb-4 border-b border-[rgba(255,255,255,0.05)]">
-              <div className="mb-2">
-                <div className="text-[11px] font-semibold text-[var(--brand-400)] uppercase tracking-wider mb-0.5">Unrealized P/L</div>
-                <div className={`text-2xl font-extrabold tracking-tight ${totalPL >= 0 ? 'text-[var(--success)]' : 'text-[var(--danger)]'}`}>
-                  {totalMarket > 0 ? formatPL(totalPL) : '-'}
-                </div>
-                {totalMarket > 0 && totalCost > 0 && (
-                  <div className={`text-xs mt-0.5 ${totalPL >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                    {totalPL > 0 ? '+' : ''}{formatPct(totalPL / totalCost)} return
-                  </div>
-                )}
-              </div>
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Cards</div>
-                  <div className="text-sm font-semibold text-[var(--text-secondary,#cbd5e1)]">{items.length}</div>
-                </div>
-                <div>
-                  <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Cost Basis</div>
-                  <div className="text-sm font-semibold text-[var(--text-secondary,#cbd5e1)]">{formatCents(totalCost)}</div>
-                </div>
-                <div>
-                  <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Market</div>
-                  <div className="text-sm font-semibold text-[var(--text-secondary,#cbd5e1)]">{totalMarket > 0 ? formatCents(totalMarket) : '-'}</div>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="mb-7 pb-6 border-b border-[rgba(255,255,255,0.05)] sell-sheet-no-print">
-          <div className="flex items-end gap-7">
-            <div>
-              <div className="text-[11px] font-semibold text-[var(--brand-400)] uppercase tracking-wider mb-0.5">
-                Unrealized P/L
-              </div>
-              <div className={`text-[32px] font-extrabold tracking-tight leading-none ${totalPL >= 0 ? 'text-[var(--success)]' : 'text-[var(--danger)]'}`}>
-                {totalMarket > 0 ? formatPL(totalPL) : '-'}
-              </div>
-              {totalMarket > 0 && totalCost > 0 && (
-                <div className={`text-xs mt-1 ${totalPL >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                  {totalPL > 0 ? '+' : ''}{formatPct(totalPL / totalCost)} return
-                </div>
-              )}
-            </div>
-            <div className="flex gap-6 pb-1">
-              <div>
-                <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Cards</div>
-                <div className="text-base font-semibold text-[var(--text-secondary,#cbd5e1)]">{items.length}</div>
-              </div>
-              <div>
-                <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Cost Basis</div>
-                <div className="text-base font-semibold text-[var(--text-secondary,#cbd5e1)]">{formatCents(totalCost)}</div>
-              </div>
-              <div>
-                <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Market Value</div>
-                <div className="text-base font-semibold text-[var(--text-secondary,#cbd5e1)]">{totalMarket > 0 ? formatCents(totalMarket) : '-'}</div>
-              </div>
-              {showEV && (
-                <div>
-                  <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Portfolio EV</div>
-                  <div className={`text-base font-semibold ${evPortfolio!.totalEvCents >= 0 ? 'text-[var(--success)]' : 'text-[var(--danger)]'}`}>
-                    {formatPL(evPortfolio!.totalEvCents)}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {selected.size > 0 || (sellSheetActive && pageSellSheetCount > 0) ? (
-        <SellSheetActions
-          selected={selected}
-          sellSheetActive={sellSheetActive}
-          items={items}
-          onAddToSellSheet={(ids) => {
-            sellSheet.add(ids);
-            toast.success(`Added ${ids.length} item${ids.length > 1 ? 's' : ''} to sell sheet`);
-          }}
-          onRemoveFromSellSheet={(ids) => {
-            sellSheet.remove(ids);
-            toast.success(`Removed ${ids.length} item${ids.length > 1 ? 's' : ''} from sell sheet`);
-          }}
-          onRecordSale={openSaleModal}
-          onBulkListOnDH={handleBulkListOnDH}
-          onClearSelected={() => setSelected(new Set())}
-          isPrinting={isPrinting}
-          pageSellSheetCount={pageSellSheetCount}
-          onPrint={handlePrint}
-        />
-      ) : null}
-
-      {/* Crack Candidates Banner */}
-      {campaignId && <div className="sell-sheet-no-print"><CrackCandidatesBanner campaignId={campaignId} /></div>}
-
-      {/* Review Summary Bar */}
-      <div className="mb-4 sell-sheet-no-print">
-        <ReviewSummaryBar
-          stats={reviewStats}
-          searchQuery={searchQuery}
-          onSearchChange={setSearchQuery}
-          showAll={showAll}
-          onToggleShowAll={() => setShowAll(prev => !prev)}
-          onStatClick={handleStatClick}
-        />
-      </div>
-
-      {/* Filter tabs — two-tier: action queues on top, view filters below */}
-      {!showAll && (() => {
-        const primary = [
-          { key: 'needs_attention' as const, label: 'Needs Attention', count: tabCounts.needs_attention, alwaysShow: true },
-          { key: 'ready_to_list' as const, label: 'Pending DH Listing', count: tabCounts.ready_to_list, alwaysShow: false },
-        ].filter(t => t.alwaysShow || t.count > 0);
-        const secondary = [
-          { key: 'all' as const, label: 'All', count: tabCounts.all, alwaysShow: true },
-          { key: 'in_hand' as const, label: 'In Hand', count: tabCounts.in_hand, alwaysShow: false },
-          { key: 'awaiting_intake' as const, label: 'Awaiting Intake', count: tabCounts.awaiting_intake, alwaysShow: false },
-          { key: 'sell_sheet' as const, label: 'Sell Sheet', count: pageSellSheetCount, alwaysShow: false },
-        ].filter(t => t.alwaysShow || t.count > 0);
-        const pillClass = (isActive: boolean, size: 'primary' | 'secondary') => {
-          const base = 'shrink-0 inline-flex items-center rounded-full border transition-colors tabular-nums';
-          const sizing = size === 'primary' ? 'text-xs font-semibold px-3 py-1.5' : 'text-[11px] font-medium px-2.5 py-1';
-          const state = isActive
-            ? 'border-[var(--brand-500)] bg-[var(--brand-500)]/10 text-[var(--brand-400)]'
-            : 'border-[var(--surface-2)] text-[var(--text-muted)] hover:text-[var(--text)] hover:border-[var(--text-muted)]';
-          return `${base} ${sizing} ${state}`;
-        };
-        const countClass = (isActive: boolean, size: 'primary' | 'secondary') => {
-          const base = 'ml-1.5 inline-flex items-center justify-center rounded-full text-[10px] font-semibold px-1 tabular-nums';
-          const sizing = size === 'primary' ? 'min-w-[22px] h-[18px]' : 'min-w-[20px] h-[16px]';
-          const state = isActive
-            ? 'bg-[var(--brand-500)]/20 text-[var(--brand-300)]'
-            : 'bg-[rgba(255,255,255,0.06)] text-[var(--text-muted)]';
-          return `${base} ${sizing} ${state}`;
-        };
-        return (
-          <div className="flex flex-col gap-2 mb-3 sell-sheet-no-print">
-            <div className="flex items-center gap-2 overflow-x-auto scrollbar-none">
-              {primary.map(tab => {
-                const isActive = filterTab === tab.key;
-                return (
-                  <button key={tab.key} type="button" onClick={() => setFilterTab(tab.key)} className={pillClass(isActive, 'primary')}>
-                    {tab.label}
-                    <span className={countClass(isActive, 'primary')}>{tab.count}</span>
-                  </button>
-                );
-              })}
-            </div>
-            {secondary.length > 0 && (
-              <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none">
-                {secondary.map(tab => {
-                  const isActive = filterTab === tab.key;
-                  return (
-                    <button key={tab.key} type="button" onClick={() => setFilterTab(tab.key)} className={pillClass(isActive, 'secondary')}>
-                      {tab.label}
-                      <span className={countClass(isActive, 'secondary')}>{tab.count}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        );
-      })()}
-
-      {debouncedSearch && (
-        <div className="text-xs text-[var(--text-subtle)] mb-2 pl-1 sell-sheet-no-print">
-          {filteredAndSortedItems.length} of {items.length} cards
-        </div>
-      )}
-
-      {sellSheetActive && filteredAndSortedItems.length === 0 && (
-        <div className="text-center py-12">
-          <div className="text-[var(--text-muted)] text-sm">No items on your sell sheet.</div>
-          <div className="text-[var(--text-muted)] text-xs mt-1">Select items from any tab and click &ldquo;Add to Sell Sheet&rdquo;.</div>
-        </div>
-      )}
-      </>)}
+      <InventoryHeader
+        isMobile={isMobile}
+        items={items}
+        filteredCount={filteredAndSortedItems.length}
+        totalCost={totalCost}
+        totalMarket={totalMarket}
+        totalPL={totalPL}
+        statsExpanded={statsExpanded}
+        setStatsExpanded={setStatsExpanded}
+        showEV={showEV}
+        evPortfolio={evPortfolio}
+        reviewStats={reviewStats}
+        searchQuery={searchQuery}
+        setSearchQuery={setSearchQuery}
+        showAll={showAll}
+        setShowAll={setShowAll}
+        filterTab={filterTab}
+        setFilterTab={setFilterTab}
+        tabCounts={tabCounts}
+        pageSellSheetCount={pageSellSheetCount}
+        debouncedSearch={debouncedSearch}
+        sellSheetActive={sellSheetActive}
+        selected={selected}
+        campaignId={campaignId}
+        isPrinting={isPrinting}
+        onStatClick={() => { setShowAll(false); setFilterTab('needs_attention'); }}
+        onAddToSellSheet={(ids) => { sellSheet.add(ids); toast.success(`Added ${ids.length} item${ids.length > 1 ? 's' : ''} to sell sheet`); }}
+        onRemoveFromSellSheet={(ids) => { sellSheet.remove(ids); toast.success(`Removed ${ids.length} item${ids.length > 1 ? 's' : ''} from sell sheet`); }}
+        onRecordSale={openSaleModal}
+        onBulkListOnDH={handleBulkListOnDH}
+        onClearSelected={() => setSelected(new Set())}
+        onPrint={handlePrint}
+      />
 
       {isMobile && sellSheetActive ? (
         <MobileSellSheetView

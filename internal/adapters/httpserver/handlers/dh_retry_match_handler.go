@@ -70,52 +70,52 @@ func (h *DHHandler) HandleRetryMatch(w http.ResponseWriter, r *http.Request) {
 		}
 		switch resolution.Status {
 		case dh.CertStatusMatched:
-				dhCardID := resolution.DHCardID
-				if h.cardIDSaver != nil {
-					_ = h.cardIDSaver.SaveExternalID(ctx, purchase.CardName, purchase.SetName, purchase.CardNumber, pricing.SourceDH, fmt.Sprintf("%d", dhCardID))
-				}
-				listingPrice := dhlisting.ResolveListingPriceCents(purchase)
-				inventoryID, pushErr := h.pushAndPersistDH(ctx, purchase, dhCardID, listingPrice)
-				if pushErr != nil {
-					h.logger.Error(ctx, "retry match: push inventory after cert resolve", observability.Err(pushErr))
-					writeError(w, http.StatusBadGateway, "DH push failed")
-					return
-				}
-				if h.pushStatusUpdater != nil {
-					if err := h.pushStatusUpdater.UpdatePurchaseDHPushStatus(ctx, purchase.ID, inventory.DHPushStatusMatched); err != nil {
-						h.logger.Error(ctx, "retry match: update push status", observability.Err(err))
-						writeError(w, http.StatusInternalServerError, "failed to update push status")
-						return
-					}
-				}
-				if h.candidatesSaver != nil {
-					_ = h.candidatesSaver.UpdatePurchaseDHCandidates(ctx, purchase.ID, "")
-				}
-				writeJSON(w, http.StatusOK, retryMatchResponse{Status: "ok", DHCardID: dhCardID, DHInventoryID: inventoryID})
+			dhCardID := resolution.DHCardID
+			if h.cardIDSaver != nil {
+				_ = h.cardIDSaver.SaveExternalID(ctx, purchase.CardName, purchase.SetName, purchase.CardNumber, pricing.SourceDH, fmt.Sprintf("%d", dhCardID))
+			}
+			listingPrice := dhlisting.ResolveListingPriceCents(purchase)
+			inventoryID, pushErr := h.pushAndPersistDH(ctx, purchase, dhCardID, listingPrice)
+			if pushErr != nil {
+				h.logger.Error(ctx, "retry match: push inventory after cert resolve", observability.Err(pushErr))
+				writeError(w, http.StatusBadGateway, "DH push failed")
 				return
-
-			case dh.CertStatusAmbiguous:
-				if len(resolution.Candidates) > 0 {
-					// Save fresh candidates so the user can pick via Select.
-					candidatesSaved := false
-					if h.candidatesSaver != nil {
-						candidatesJSON, marshalErr := json.Marshal(resolution.Candidates)
-						if marshalErr != nil {
-							h.logger.Warn(ctx, "retry match: failed to marshal candidates", observability.Err(marshalErr))
-						} else if saveErr := h.candidatesSaver.UpdatePurchaseDHCandidates(ctx, purchase.ID, string(candidatesJSON)); saveErr != nil {
-							h.logger.Warn(ctx, "retry match: failed to persist candidates", observability.Err(saveErr))
-						} else {
-							candidatesSaved = true
-						}
-					}
-					if candidatesSaved {
-						writeError(w, http.StatusUnprocessableEntity, "ambiguous match — candidates updated, use Select to pick one")
-					} else {
-						writeError(w, http.StatusUnprocessableEntity, "ambiguous match — use Select to pick one")
-					}
+			}
+			if h.pushStatusUpdater != nil {
+				if err := h.pushStatusUpdater.UpdatePurchaseDHPushStatus(ctx, purchase.ID, inventory.DHPushStatusMatched); err != nil {
+					h.logger.Error(ctx, "retry match: update push status", observability.Err(err))
+					writeError(w, http.StatusInternalServerError, "failed to update push status")
 					return
 				}
-				// Ambiguous with no candidates — fall through to PSA import.
+			}
+			if h.candidatesSaver != nil {
+				_ = h.candidatesSaver.UpdatePurchaseDHCandidates(ctx, purchase.ID, "")
+			}
+			writeJSON(w, http.StatusOK, retryMatchResponse{Status: "ok", DHCardID: dhCardID, DHInventoryID: inventoryID})
+			return
+
+		case dh.CertStatusAmbiguous:
+			if len(resolution.Candidates) > 0 {
+				// Save fresh candidates so the user can pick via Select.
+				candidatesSaved := false
+				if h.candidatesSaver != nil {
+					candidatesJSON, marshalErr := json.Marshal(resolution.Candidates)
+					if marshalErr != nil {
+						h.logger.Warn(ctx, "retry match: failed to marshal candidates", observability.Err(marshalErr))
+					} else if saveErr := h.candidatesSaver.UpdatePurchaseDHCandidates(ctx, purchase.ID, string(candidatesJSON)); saveErr != nil {
+						h.logger.Warn(ctx, "retry match: failed to persist candidates", observability.Err(saveErr))
+					} else {
+						candidatesSaved = true
+					}
+				}
+				if candidatesSaved {
+					writeError(w, http.StatusUnprocessableEntity, "ambiguous match — candidates updated, use Select to pick one")
+				} else {
+					writeError(w, http.StatusUnprocessableEntity, "ambiguous match — use Select to pick one")
+				}
+				return
+			}
+			// Ambiguous with no candidates — fall through to PSA import.
 		}
 		// CertStatusNotFound or ambiguous with no candidates: fall through.
 	}
