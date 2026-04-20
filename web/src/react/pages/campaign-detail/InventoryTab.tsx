@@ -43,7 +43,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
     totalCost, totalMarket, totalPL,
     handleSort, handleReviewed, handleResolveFlag, handleApproveDHPush, handleListOnDH, dhListingInFlight, dhListedOptimistic, handleBulkListOnDH, handleFlagSubmit, handlePrint, handleDelete,
     toggleSelect, toggleAll, toggleExpand,
-    openSaleModal, closeSaleModal, handleFixPricing, handleFixDHMatch, handleFixDHMatchSaved, handleSetPrice,
+    openSaleModal, closeSaleModal, handleFixPricing, handleFixDHMatch, handleFixDHMatchSaved, handleUnmatchDH, handleSetPrice,
     handlePriceSaved, handleHintSaved, handleInlinePriceSave, sellSheet, toast,
   } = state;
 
@@ -73,7 +73,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
 
   const handleStatClick = (target: StatClickTarget) => {
     setShowAll(false);
-    if (target === 'flagged' || target === 'unreviewed') {
+    if (target === 'flagged') {
       setFilterTab('needs_attention');
     }
   };
@@ -324,6 +324,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                     onRecordSale={() => openSaleModal([item])}
                     onFixPricing={() => handleFixPricing(item.purchase)}
                     onFixDHMatch={() => handleFixDHMatch(item.purchase)}
+                    onUnmatchDH={item.purchase.dhPushStatus === 'matched' ? () => handleUnmatchDH(item.purchase) : undefined}
                     onSetPrice={() => handleSetPrice(item)}
                     onDelete={() => handleDelete(item)}
                     onListOnDH={handleListOnDH}
@@ -357,6 +358,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                         onRecordSale={() => openSaleModal([item])}
                         onFixPricing={() => handleFixPricing(item.purchase)}
                         onFixDHMatch={() => handleFixDHMatch(item.purchase)}
+                        onUnmatchDH={item.purchase.dhPushStatus === 'matched' ? () => handleUnmatchDH(item.purchase) : undefined}
                         onSetPrice={() => handleSetPrice(item)}
                         onDelete={() => handleDelete(item)}
                         onListOnDH={handleListOnDH}
@@ -407,26 +409,27 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                 return (
                   <div key={item.purchase.id} className="glass-vrow" data-stripe={index % 2 === 1} data-selected={isSelected} data-pl={plStatus}>
                     <div className="text-sm">
-                      <DesktopRow
-                        item={item}
-                        selected={isSelected}
-                        onToggle={() => toggleSelect(item.purchase.id)}
-                        onExpand={() => toggleExpand(item.purchase.id)}
-                        onRecordSale={() => openSaleModal([item])}
-                        onFixPricing={() => handleFixPricing(item.purchase)}
-                        onFixDHMatch={() => handleFixDHMatch(item.purchase)}
-                        onSetPrice={() => handleSetPrice(item)}
-                        onDelete={() => handleDelete(item)}
-                        onListOnDH={handleListOnDH}
-                        dhListingLoading={dhListingInFlight.has(item.purchase.id)}
-                        dhListedOverride={dhListedOptimistic.has(item.purchase.id)}
-                        showCampaignColumn={showCampaignColumn}
-                        isOnSellSheet={!sellSheetActive && sellSheet.has(item.purchase.id)}
-                        onRemoveFromSellSheet={sellSheet.has(item.purchase.id) ? () => {
-                          sellSheet.remove([item.purchase.id]);
-                          toast.success('Removed from sell sheet');
-                        } : undefined}
-                      />
+                    <DesktopRow
+                      item={item}
+                      selected={isSelected}
+                      onToggle={() => toggleSelect(item.purchase.id)}
+                      onExpand={() => toggleExpand(item.purchase.id)}
+                      onRecordSale={() => openSaleModal([item])}
+                      onFixPricing={() => handleFixPricing(item.purchase)}
+                      onFixDHMatch={() => handleFixDHMatch(item.purchase)}
+                      onUnmatchDH={item.purchase.dhPushStatus === 'matched' ? () => handleUnmatchDH(item.purchase) : undefined}
+                      onSetPrice={() => handleSetPrice(item)}
+                      onDelete={() => handleDelete(item)}
+                      onListOnDH={handleListOnDH}
+                      dhListingLoading={dhListingInFlight.has(item.purchase.id)}
+                      dhListedOverride={dhListedOptimistic.has(item.purchase.id)}
+                      showCampaignColumn={showCampaignColumn}
+                      isOnSellSheet={!sellSheetActive && sellSheet.has(item.purchase.id)}
+                      onRemoveFromSellSheet={sellSheet.has(item.purchase.id) ? () => {
+                        sellSheet.remove([item.purchase.id]);
+                        toast.success('Removed from sell sheet');
+                      } : undefined}
+                    />
                     </div>
                     {isExpanded && <ExpandedDetail item={item} onReviewed={handleReviewed} campaignId={campaignId} onOpenFlagDialog={() => setFlagTarget({ purchaseId: item.purchase.id, cardName: item.purchase.cardName, grade: item.purchase.gradeValue })} onResolveFlag={handleResolveFlag} onApproveDHPush={handleApproveDHPush} onSetPrice={() => handleSetPrice(item)} />}
                   </div>
@@ -464,6 +467,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                           onRecordSale={() => openSaleModal([item])}
                           onFixPricing={() => handleFixPricing(item.purchase)}
                           onFixDHMatch={() => handleFixDHMatch(item.purchase)}
+                          onUnmatchDH={item.purchase.dhPushStatus === 'matched' ? () => handleUnmatchDH(item.purchase) : undefined}
                           onSetPrice={() => handleSetPrice(item)}
                           onDelete={() => handleDelete(item)}
                           onListOnDH={handleListOnDH}
