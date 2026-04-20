@@ -35,7 +35,7 @@ This spec covers a tightly-scoped fitness pass. It is **6a**; follow-ups 6b (CI/
 
 **Step 2 — fix the dominant phase.** Assuming comp summaries is the hotspot (most likely), replace the per-key loop with a single batched repository call:
 
-- Add `GetCompSummariesByKeys(ctx context.Context, keys []CompKey) (map[CompKey]*CompSummary, error)` to the `CompSummaryProvider` interface, where `CompKey = (GemRateID, CertNumber)`.
+- Add `GetCompSummariesByKeys(ctx context.Context, keys []CompKey) (map[CompKey]*CompSummary, error)` to the `CompSummaryProvider` interface, where `CompKey = (GemRateID, CertNumber)`. The caller in `enrichCompSummaries` already dedupes to one representative cert per unique `(gemRateID, grade)` group, so the keys slice reflects those unique groups.
 - Implement it in the adapter (`internal/adapters/storage/postgres/cl_sales_store.go` or wherever `GetCompSummary` lives) with a single SQL query using `WHERE (gem_rate_id, condition) IN (...)` or an `ANY($1::text[])` pattern, then group results in Go.
 - Rewrite the loop in `enrichCompSummaries` to call the batch method once and index into the returned map.
 - Keep the existing `GetCompSummary` method for callers that only need one (or remove if no one else uses it — verify with grep).
@@ -99,8 +99,8 @@ This spec covers a tightly-scoped fitness pass. It is **6a**; follow-ups 6b (CI/
 - `internal/adapters/storage/postgres/db.go` — add retry loop in `Open()`.
 - `internal/adapters/storage/postgres/metrics.go` *(new)* — `sql.DBStats` custom collector.
 - `internal/domain/inventory/comp_enrichment.go` — replace per-key loop with batch call.
-- `internal/domain/inventory/service_interfaces.go` — add `GetCompSummariesByKeys` to the comp provider interface (exact interface name to confirm during implementation).
-- `internal/adapters/storage/postgres/cl_sales_store.go` *(or equivalent)* — implement the batch method.
+- `internal/domain/inventory/comp_summary.go` — add `GetCompSummariesByKeys` method to the `CompSummaryProvider` interface.
+- `internal/adapters/storage/postgres/cl_sales_store.go` — implement the batch method on `CLSalesStore` (existing `GetCompSummary` lives there; compile-time interface check already present).
 - `internal/domain/inventory/service_analytics.go` — add phase-timing log lines to `GetInventoryAging` and `GetGlobalInventoryAging` (kept after the fix as ongoing observability).
 - `internal/testutil/mocks/` — extend the comp provider mock with the new method.
 
