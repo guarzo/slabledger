@@ -2,17 +2,23 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/platform/config"
 	"github.com/guarzo/slabledger/internal/platform/telemetry"
 	"github.com/joho/godotenv"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	// Concrete implementations (only imported in main for wiring - Hexagonal Architecture)
 	"github.com/guarzo/slabledger/internal/adapters/advisortool"
@@ -166,6 +172,34 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	defer func() {
 		if err := db.Close(); err != nil {
 			logger.Warn(ctx, "Failed to close database", observability.Err(err))
+		}
+	}()
+
+	// Prometheus metrics server on :9091 — scraped by Fly's built-in Prometheus.
+	// Separate port so app middleware (auth, rate limiter) doesn't interfere.
+	metricsReg := prometheus.NewRegistry()
+	metricsReg.MustRegister(collectors.NewGoCollector())
+	metricsReg.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
+	metricsReg.MustRegister(postgres.NewDBStatsCollector("slabledger", db.Stats))
+
+	metricsMux := http.NewServeMux()
+	metricsMux.Handle("/metrics", promhttp.HandlerFor(metricsReg, promhttp.HandlerOpts{Registry: metricsReg}))
+	metricsSrv := &http.Server{
+		Addr:              ":9091",
+		Handler:           metricsMux,
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+	go func() {
+		logger.Info(ctx, "metrics server listening", observability.String("addr", metricsSrv.Addr))
+		if err := metricsSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			logger.Error(ctx, "metrics server error", observability.Err(err))
+		}
+	}()
+	defer func() {
+		shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := metricsSrv.Shutdown(shutCtx); err != nil {
+			logger.Warn(context.Background(), "metrics server shutdown error", observability.Err(err))
 		}
 	}()
 
