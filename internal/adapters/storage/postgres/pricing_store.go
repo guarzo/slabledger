@@ -33,8 +33,15 @@ func (prs *PricingStore) UpdateReviewedPrice(ctx context.Context, purchaseID str
 	if priceCents > 0 {
 		reviewedAt = now.Format(time.RFC3339)
 	}
+	// When a reviewed price is committed, any outstanding AI suggestion is
+	// superseded — clearing it keeps the "Needs Attention" filter honest.
 	result, err := prs.db.ExecContext(ctx,
-		`UPDATE campaign_purchases SET reviewed_price_cents = $1, reviewed_at = $2, review_source = $3, updated_at = $4 WHERE id = $5`,
+		`UPDATE campaign_purchases
+		 SET reviewed_price_cents = $1, reviewed_at = $2, review_source = $3,
+		     ai_suggested_price_cents = CASE WHEN $1 > 0 THEN 0 ELSE ai_suggested_price_cents END,
+		     ai_suggested_at         = CASE WHEN $1 > 0 THEN '' ELSE ai_suggested_at END,
+		     updated_at = $4
+		 WHERE id = $5`,
 		priceCents, reviewedAt, source, now, purchaseID,
 	)
 	if err != nil {
