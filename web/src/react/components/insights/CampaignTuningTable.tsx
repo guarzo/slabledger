@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import type { TuningCell, TuningColumn, TuningRow } from '../../../types/insights';
+import type { Status, TuningCell, TuningColumn, TuningRow } from '../../../types/insights';
 
 const cellTone: Record<TuningCell['severity'], string> = {
   act: 'text-[var(--danger)]',
@@ -7,12 +7,12 @@ const cellTone: Record<TuningCell['severity'], string> = {
   ok: 'text-[var(--success)]',
 };
 
-const statusBadge = {
-  Act: 'bg-[var(--danger)]/15 text-[var(--danger)]',
-  Tune: 'bg-[var(--warning)]/15 text-[var(--warning)]',
-  OK: 'bg-[var(--success)]/15 text-[var(--success)]',
-  Kill: 'bg-[var(--danger)]/25 text-[var(--danger)] font-bold',
-} as const;
+const STATUS_META: Record<Status, { label: string; badge: string }> = {
+  Act: { label: 'Action', badge: 'bg-[var(--danger)]/15 text-[var(--danger)]' },
+  Tune: { label: 'Tune', badge: 'bg-[var(--warning)]/15 text-[var(--warning)]' },
+  OK: { label: 'OK', badge: 'bg-[var(--success)]/15 text-[var(--success)]' },
+  Kill: { label: 'Kill', badge: 'bg-[var(--danger)]/25 text-[var(--danger)] font-bold' },
+};
 
 const columns: Array<{ key: TuningColumn; label: string }> = [
   { key: 'buyPct', label: 'Buy %' },
@@ -45,7 +45,7 @@ export default function CampaignTuningTable({ rows }: { rows: TuningRow[] }) {
           {columns.map(c => (
             <div key={c.key}>{c.label}</div>
           ))}
-          <div className="w-14 text-right">Status</div>
+          <div className="w-16 text-right">Status</div>
         </div>
         {rows.map(row => (
           <Link
@@ -62,9 +62,9 @@ export default function CampaignTuningTable({ rows }: { rows: TuningRow[] }) {
                 </div>
               );
             })}
-            <div className="w-14 text-right">
-              <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] ${statusBadge[row.status]}`}>
-                {row.status}
+            <div className="w-16 text-right">
+              <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] ${STATUS_META[row.status].badge}`}>
+                {STATUS_META[row.status].label}
               </span>
             </div>
           </Link>

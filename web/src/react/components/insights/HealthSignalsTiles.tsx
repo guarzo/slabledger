@@ -42,7 +42,7 @@ export default function HealthSignalsTiles({ signals }: { signals: Signals }) {
         <Tile
           label="Stuck in DH pipeline"
           value={String(signals.stuckInPipelineCount)}
-          sub="in_stock > 14d, not listed"
+          sub="in hand > 14d, not listed"
           tone={signals.stuckInPipelineCount > 0 ? 'warn' : 'muted'}
         />
       </div>

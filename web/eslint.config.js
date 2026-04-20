@@ -8,7 +8,7 @@ import globals from 'globals';
 
 export default [
   {
-    ignores: ['dist/**', 'node_modules/**', 'playwright-report/**', 'test-results/**', '.lighthouseci/**', 'storybook-static/**'],
+    ignores: ['dist/**', 'node_modules/**', 'playwright-report/**', 'test-results/**', '.lighthouseci/**', 'storybook-static/**', 'screenshots/**'],
   },
   js.configs.recommended,
   {

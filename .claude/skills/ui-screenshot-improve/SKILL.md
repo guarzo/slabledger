@@ -6,9 +6,9 @@ description: Visual UI improvement skill for SlabLedger, focused on finding and 
 # UI Screenshot Improve
 
 A self-contained visual improvement skill:
-**load log → state check → capture → journey check → per-page audit → rank → select → fix → recapture → regress check → report & log**.
+**load log → state check → capture → stills-diff → journey check → live probe (mandatory) → per-page audit → rank → select → fix → recapture → regress check + ship-verify → report & log**.
 
-Each invocation reads what prior runs already fixed, verifies the DB has realistic data, takes fresh screenshots, walks the primary user journeys, finds the top 3 highest-friction issues, implements targeted code fixes with build verification, then confirms the fixes didn't introduce new friction before reporting.
+Each invocation reads what prior runs already fixed, verifies the DB has realistic data, takes fresh screenshots, probes 2+ user flows live via Playwright MCP (rotating flows across cycles), walks the primary user journeys, finds the top 3 highest-friction issues, implements targeted code fixes with build verification, then confirms the fixes didn't introduce new friction — and live-verifies anything shipped that the static harness doesn't capture — before reporting.
 
 ## Known blind spots
 
@@ -36,7 +36,9 @@ Any item on the deferred list for **≥3 cycles** (count the `first raised: iter
 
 1. **Re-raise** — pull back into this cycle's ranking. Most items that were out of scope for a 3-file fix become in-scope under the raised scope cap on fix 1.
 2. **Promote to epic** — write a one-paragraph epic entry pointing at the files/route work needed; continue deferring. Keeps the issue visible and actionable.
-3. **Retire** — move to the log's Retired section with a one-line justification (user confirmed intentional, page removed, convention ratified). Retired items are out of the re-examination loop permanently.
+3. **Retire** — move to the log's Retired section with a one-line justification. Retired items are out of the re-examination loop permanently. Retirement rules depend on the reason:
+   - **Convention ratified / page removed / user confirmed intentional** — paper-only justification is fine; these are genuinely closed.
+   - **"Not reachable with current data" / "couldn't verify from stills"** — retirement requires a *live probe* (Playwright MCP) that reproduces the state under which the item would appear. Without that probe, the item is not retired — it must be re-raised or promoted to an epic. Paper-only retirements for reachability reasons are what lets the skill dodge work it should be doing.
 
 Do not carry an item under "Deferred / intentional" for a fourth cycle. If none of the three outcomes fit, the skill is dodging the work — force one.
 
@@ -94,15 +96,27 @@ web/screenshots/admin-users.png
 web/screenshots/tools.png
 ```
 
-Mobile equivalents land under `web/screenshots/mobile/`.
+Mobile equivalents land under `web/screenshots/mobile/`. Live probes from Step 4.75 and Step 10b write into `web/screenshots/ad-hoc/` — create it on first use (`mkdir -p web/screenshots/ad-hoc`).
 
-## Step 3: Read screenshots in parallel
+## Step 3: Read screenshots (with rotation and a stills-diff floor)
 
-Use the Read tool on these screenshots simultaneously in a single message:
+The 12 harness pages capture initial-load state only. Re-reading the same 12 pages every cycle drains the well fast — after 2-3 cycles, new friction comes from interactions and under-sampled surfaces, not from re-squinting at the dashboard. Handle this in two ways:
 
-**Mobile AND desktop** for high-traffic pages: `dashboard`, `insights`, `inventory`, `inventory-expanded`, `campaigns`, `campaign-detail`.
+### 3a. Stills-diff floor (every cycle, cheap)
 
-**Desktop only by default** for: `admin-*`, `tools`. Pull mobile of these only if their desktop reading surfaces a layout concern with a likely mobile dimension.
+Regardless of which cycle variant you're running, start by hashing the current PNG set and comparing to the last cycle's hashes. Any page whose hash changed unexpectedly (i.e., you didn't ship a fix there) is a potential regression — flag it immediately and read that page. This catches silent breakage even when the audit's focus is elsewhere.
+
+```bash
+md5sum web/screenshots/*.png web/screenshots/mobile/*.png > /tmp/screenshots-now.md5
+# diff against web/screenshots/.last-hashes.md5 if present; overwrite at cycle end
+```
+
+### 3b. Cycle variant — read depth rotates
+
+- **Cycles where cycle_number % 3 != 0** (default — most cycles): read mobile AND desktop for `dashboard`, `insights`, `inventory`, `inventory-expanded`, `campaigns`, `campaign-detail`. Desktop only for `admin-*`, `tools`. Pull mobile of admin/tools only if desktop surfaces a layout concern with a likely mobile dimension.
+- **Every 3rd cycle** (cycle_number % 3 == 0): the static audit shrinks to the stills-diff floor from 3a — no per-page friction pass. Step 4.75's interactive probe expands from 2 flows to **4 flows × 5 min** each, chosen from surfaces the statics do not capture. This cycle's findings come from interactions, not stills. "We re-read the same 12 pages and found nothing" is not a valid outcome three cycles in a row.
+
+Track `cycle_number` from the friction log by counting iteration entries.
 
 ## Step 4: Journey sanity check
 
@@ -134,23 +148,40 @@ Look at all screenshots together. Answer three questions, one sentence each:
 
 Coherence findings rarely outrank blocking friction on their own but feed Tier C.
 
-## Step 4.75: Interactive probe
+## Step 4.75: Interactive probe (mandatory every cycle)
 
-Static screenshots hide hover, focus, keyboard, loading, and touch-targets. Pick the highest-risk page from the journey check and probe it live:
+Static screenshots are a narrow slice of the product — they catch initial page loads and miss almost everything that happens *after* someone clicks. The cycles most vulnerable to self-deception are the ones where the 12 statics look fine; that's when the real friction lives in the interactions.
 
-```bash
-cd /workspace/web && npm run dev
-```
+**Every cycle must include a live probe of at least 2 user flows, end-to-end.** Do not skip this step because the statics are clean — that is exactly when to probe.
 
-In the browser:
-- Tab through focusable elements once — is the focus ring visible on every stop? Does tab order match visual order?
-- Hover the primary CTA and any row/chip that looks clickable — does the affordance change?
-- Trigger an empty/loading/error state if reachable (slow network throttle, empty filter).
-- On mobile viewport (Chrome devtools → iPhone 14), confirm the primary action is reachable without horizontal scroll and touch targets feel ≥44px.
+### Probe transport — primary, then fallback
 
-**Escalation when statics are clean.** If the per-page static audit (Step 5) is on track to produce zero 🔴, expand this probe to **3 pages × 5 minutes each** before calling the cycle clean. Pick pages by a different criterion each cycle (highest-traffic in Journey A, most interactive elements, lowest score on Tier C) to avoid always probing the same surface. Findings here are first-class and commonly outrank static ones.
+**Primary: Playwright MCP.** Use the MCP tools (`browser_navigate`, `browser_snapshot`, `browser_click`, `browser_take_screenshot`) against a running backend — either `make screenshots` started in the background, or `cd web && npm run dev` with the Go backend on `:8081`.
 
-Log anything surprising — or explicitly say nothing surprised you. This is bounded: sanity check, not full a11y audit.
+**If the MCP is unavailable** (browser won't launch, e.g., Chrome crashpad errors in this devcontainer), fall back to an ad-hoc Node script under `web/screenshots/ad-hoc/` that uses `@playwright/test` directly against the already-working `chrome-headless-shell` binary that `make screenshots` uses. See `web/screenshots/ad-hoc/probe-iter8.mjs` for the template: spawn chromium with `--no-sandbox`, mock `/api/auth/user`, navigate, screenshot into the `ad-hoc/` directory. This is allowed by the `web/src/`-only constraint because `ad-hoc/` is not `web/tests/` — it's per-cycle scratch, not the committed test harness.
+
+Don't commit a devcontainer-specific MCP override to the project-level `.mcp.json` — hardcoded executable paths and `--no-sandbox` flags weaken browser sandboxing off-container and force that environment on every clone. If you need a custom MCP config locally, keep it in your user-scope config rather than the repo. The ad-hoc Node scripts above already spawn Chromium directly with `--no-sandbox` scoped to the skill's scratch dir, which is the safer path here. Try the plugin default first, fall back to ad-hoc if it fails within one attempt, don't spend the cycle debugging MCP.
+
+Rotate the flow set each cycle so successive runs don't re-examine the same surface. Pick 2 from this list, never the same 2 in consecutive cycles:
+
+| Flow | What to exercise |
+|---|---|
+| **Intake → listed** | tools page cert scan → assign to campaign → navigate to campaign-detail → expand an inventory row → attempt a push/list action |
+| **Campaign tuning edit** | campaigns → pick one → Tuning tab → adjust a parameter → save → observe how change is confirmed |
+| **Record a sale** | inventory row → mark sold / record sale → fill the form → submit → confirm row updates and dashboard P/L reflects it |
+| **Bulk sell-sheet** | select multiple inventory rows → add to sell sheet → switch to sell-sheet filter → print/export |
+| **Filters + search** | /inventory → toggle each filter pill → search for a cert # → clear filters → observe empty/result states |
+| **Keyboard navigation** | land on any page → tab through focusable elements → Enter on rows/chips → Escape on dialogs → verify ring visibility and order |
+| **Dialog / modal** | trigger any dialog (price flag, fix DH match, campaign form) → observe backdrop, dismiss, focus trap, mobile full-viewport |
+| **Empty → populated** | a filter or state with 0 results, then an action that populates it — does the transition feel intentional? |
+
+For each flow, spend ~5 minutes. Record what you found — or explicitly write "nothing surprised me in flow X" so future runs know the flow was probed this cycle and came up clean. Vague "looks fine" does not count as a probe.
+
+### Ship-verification: anything you built this cycle must be probed live
+
+If this cycle's fix creates a new route, new page, new state, or a surface that the static harness does not capture, **that surface must be visited live before the cycle closes** (Step 10). Navigate to it via Playwright MCP, take a screenshot into `web/screenshots/ad-hoc/<cycle>-<name>.png`, and read it back. Shipping a new page blind — as happened with the `/invoices` scaffold — is the failure mode this rule exists to prevent. Do not write "build passed + tests passed" and treat that as visual verification.
+
+Findings from Step 4.75 are first-class and commonly outrank findings from the static audit. Log them alongside Tier A findings in Step 6.
 
 ## Step 5: Friction-first audit (per page)
 
@@ -215,7 +246,7 @@ Cap at top 3 🔴 and top 3 🟡 in the inline report. Roll all 🟢 into a sing
 
 Select the **top 3 highest-friction findings by user impact, not ease of fix.**
 
-A run where all three are 🟢 is a failed run — go back through Tier A/C and find at least one real friction issue.
+A run where all three picks are 🟢 is not a *failure* (polish-only cycles are valid — see Step 11's cycle classification), but it does not advance the UI_CLEAN counter. If you land here, first double-check Tier A and Tier C for 🔴/🟡 you may have suppressed or missed — genuine polish-only is fine, but it often means the audit was too shallow.
 
 ### Suppression
 
@@ -223,7 +254,7 @@ Skip any finding already on the deferred list **unless** its re-examination thre
 
 ### Diversity constraint
 
-At most **2 of the 3** selected fixes may be *cosmetic* — label/copy, spacing/sizing, variant/color swap, adding or removing a single element. At least one fix must be *structural* — layout change affecting how users scan the page (grid/flex restructure, element reorder, surfacing a hidden action, collapsing a split flow) — or a Tier C finding. A cycle of three cosmetic fixes is a failed run even if each fix is green.
+At most **2 of the 3** selected fixes may be *cosmetic* — label/copy, spacing/sizing, variant/color swap, adding or removing a single element. At least one fix must be *structural* — layout change affecting how users scan the page (grid/flex restructure, element reorder, surfacing a hidden action, collapsing a split flow) — or a Tier C finding. A cycle of three cosmetic fixes is still valid (it just gets classified `polish-only` in Step 11 and does not advance the UI_CLEAN counter), but it's a sign the audit missed harder findings — double-check Tier A and Tier C before settling for three cosmetics.
 
 See `references/structural-vs-cosmetic.md` for worked examples of the boundary.
 
@@ -254,18 +285,36 @@ cd /workspace && make screenshots
 
 Overwrites `web/screenshots/` with post-fix renders. If the run fails, note it but don't revert — the build already passed.
 
-## Step 10: Regression check
+## Step 10: Regression check + ship-verification
 
-Build success ≠ UX success. For each page you edited:
+Build success ≠ UX success. Three checks, in order.
+
+### 10a. Harness regression check
+
+For each page you edited that the harness already covers:
 
 1. Re-read the post-fix screenshot (desktop and mobile where you pulled both).
 2. Confirm the targeted friction is actually resolved, not papered over.
 3. Scan the rest of the page for **new** friction introduced — shifted layout, newly-misaligned elements, unintended contrast changes, broken empty states.
 
-Record per fix:
-- ✅ **Clean** — resolved, no new friction.
-- ⚠️ **Resolved with side effects** — resolved but a minor new issue appeared; log for next cycle.
+### 10b. Ship-verification for anything outside the harness
+
+If this cycle's fix shipped a new route, a new page, a new dialog state, or any surface the static harness does not capture, that surface **must be probed live before the cycle closes**. Use Playwright MCP:
+
+1. Start the dev server (`cd /workspace/web && npm run dev`) or the screenshot-harness backend, whichever is already running.
+2. Navigate to the new surface via `browser_navigate`.
+3. `browser_snapshot` to confirm accessibility tree renders cleanly and key elements are reachable.
+4. `browser_take_screenshot` into `web/screenshots/ad-hoc/<cycle>-<slug>.png`, then read it back and audit it with the same Tier A lens used in Step 5.
+5. If the surface has mobile-relevant layout, `browser_resize` to 390×844 (iPhone 14) and repeat.
+
+"Build passed + unit tests passed" is not visual verification. Shipping a new page blind is what we're preventing. If the live probe turns up new friction on the just-shipped surface, record it as a `⚠️ Resolved with side effects` outcome for next cycle — don't ignore it.
+
+### 10c. Record per fix
+
+- ✅ **Clean** — resolved, no new friction, shipped-surface probed live (if applicable).
+- ⚠️ **Resolved with side effects** — resolved but a minor new issue appeared on the edited page or the newly-shipped surface. Log it for next cycle.
 - ❌ **Regressed** — new friction worse than what was fixed. Revert, mark unresolved.
+- 🕳️ **Shipped but unverified** — fix appeared to build cleanly but the new surface could not be probed live this cycle. This blocks the cycle from counting as `substantive`; next cycle must run the live probe before doing anything else.
 
 ## Step 11: Report and append to the friction log
 
@@ -287,11 +336,23 @@ Emit this structured report back to the caller:
 2. ⚠️ [Title] — `path/to/file.tsx` — what changed — regression: side effect
 3. ❌ [Title] — build failed (or regressed), reverted
 
+### User-visible impact
+One honest sentence, per fix, naming the user and the scenario in which they'd notice the difference. Not the mechanism, not the file — the *experience*.
+
+Good: *"A user whose PSA invoice is overdue can now click the dashboard chip and see which invoices are open and how much is outstanding, instead of staring at a pill that does nothing."*
+
+Bad (trivial or mechanism-shaped): *"Changed color from green to neutral."* *"Renamed Act to Action."* *"Added a link."*
+
+If you cannot write an honest user-visible-impact sentence for a fix — or if the honest sentence reads as *"a user in an uncommon corner-case state would see a slightly different color"* — the fix is 🟢 polish, not 🟡. Polish fixes do not count toward the quiescence counter (see the Completion signaling section).
+
 ### Not attempted (out of scope or below top 3)
 - brief list
 
+### Cycle classification
+One of: `substantive` (≥1 fix with a real user-visible-impact sentence), `polish-only` (all fixes 🟢 or trivial), `quiet` (no fixes shipped). This classification drives the quiescence counter.
+
 ### Completion signal
-[Emit `<promise>UI_CLEAN</promise>` only if the quiescence rule below is satisfied. Otherwise omit.]
+[Emit `<promise>UI_CLEAN</promise>` only if the quiescence rule in the Completion signaling section is satisfied. Otherwise omit, or emit `<promise>UI_CLEAN_BY_EXHAUSTION</promise>` if the exhaustion clause applies.]
 
 ### After-screenshots
 ✅ Re-captured — `web/screenshots/` updated
@@ -301,38 +362,61 @@ Then append an iteration entry to `web/screenshots/friction-log.md` using the te
 
 ## Completion signaling (for ralph-loop usage)
 
-Emit `<promise>UI_CLEAN</promise>` only when **both** are true:
+The skill emits one of three signals at the end of a cycle: `UI_CLEAN`, `UI_CLEAN_BY_EXHAUSTION`, or nothing.
 
-1. This cycle AND the two prior cycles each produced **zero 🔴 findings**.
-2. At least one **structural** finding was attempted within that three-cycle window — either fixed (per the diversity constraint) or credibly investigated and promoted to an epic.
+### `UI_CLEAN` — earned by sustained substantive work
 
-"Attempted" means fix-1 was a structural or Tier C finding, not a cosmetic tweak. Three quiet cycles with no structural work means the skill ran out of easy wins, not that the surface is clean.
+Emit `<promise>UI_CLEAN</promise>` only when **all** of the following hold:
 
-Why: two quiet cycles is too cheap when the skill's own rules let it suppress structural findings into the deferred list. Three cycles plus a required structural attempt makes "UI clean" mean *we actively went looking for harder problems and found none*, not *we ran out of easy wins*.
+1. This cycle AND the two prior cycles each produced **zero 🔴 findings** AND were classified `substantive` in Step 11 (not `polish-only` or `quiet`).
+2. At least one cycle within the last 2 shipped a **structural** fix (not just a "structural attempt"). This forces continuous structural pressure — once the skill has shipped a structural fix, the next two cycles can be cosmetic/polish, but the third must ship another structural fix or UI_CLEAN cannot be emitted.
+3. Every flow listed in Step 4.75 has been probed at least once in the last 6 cycles — "we haven't looked at the record-sale flow in 8 iterations" is a reason the surface is under-sampled, not clean.
+
+Why these three and not the old rules: the old rule ("3 cycles + 1 structural attempt in the window") let the skill ship one scaffolded route, then coast on two cosmetic cycles of neutral-color tweaks and copy changes. That's not what a user means by "UI clean." The new rules require each counted cycle to ship real user-visible work, require structural fixes to recur, and require the skill to have actually looked at a meaningful slice of the product's interactions.
+
+### `UI_CLEAN_BY_EXHAUSTION` — earned by honest searching
+
+Sometimes a product genuinely is in good shape and the skill runs out of eligible findings. Emit `<promise>UI_CLEAN_BY_EXHAUSTION</promise>` when **all** of the following hold:
+
+1. The last **4 consecutive cycles** each produced zero 🔴 findings.
+2. Across those 4 cycles, at least 6 distinct flows have been probed live (Step 4.75) and each probe report reads as "nothing surprised me" or similar — concrete-but-negative, not vague.
+3. At least 3 Tier C questions in each of the last 2 cycles returned "no gap" answers, rotating across pillars (Nav & IA / Onboarding / Missing Destinations / Product Coherence / System-Level Surfaces).
+4. No structural fix was shipped in the window — not because the skill was lazy, but because no structural candidate survived good-faith search. This is the honest "we looked, and there isn't anything left" signal.
+
+The two signals exist so the skill doesn't have to choose between lying (emit UI_CLEAN when nothing substantive happened) and spinning forever (refuse to exit). If the product is genuinely clean, use UI_CLEAN_BY_EXHAUSTION. If the skill is still finding real work, keep going.
+
+### Polish-only and quiet cycles are not failures, but they do not advance the counter
+
+A `polish-only` cycle (only 🟢-adjacent fixes, or fixes whose user-visible-impact sentence reads as trivial) is a valid cycle — it's fine to ship small improvements. But it does not count toward the 3-cycle UI_CLEAN window. This prevents the failure mode where the skill strings together cosmetic cycles to earn an unearned clean signal.
+
+A `quiet` cycle (no fixes shipped because nothing surfaced) also doesn't advance UI_CLEAN, but it does advance UI_CLEAN_BY_EXHAUSTION's 4-cycle counter *only if* Step 4.75 probes were run and at least 3 Tier C questions were answered. A quiet cycle that skipped the probe is a dodging cycle.
 
 ## Running in a ralph loop
 
-To run this skill unattended (e.g., overnight), wrap it in the `ralph-loop` plugin. The skill's own three-cycle-plus-structural-attempt quiescence rule handles exit:
+To run this skill unattended (e.g., overnight), wrap it in the `ralph-loop` plugin. Two possible exit signals — wire whichever you care about, or both:
 
 ```
-/ralph-loop:ralph-loop "Run the ui-screenshot-improve skill per its SKILL.md. The skill itself defines the UI_CLEAN completion rule — emit <promise>UI_CLEAN</promise> only when its quiescence condition is met." --max-iterations 20 --completion-promise "UI_CLEAN"
+/ralph-loop:ralph-loop "Run the ui-screenshot-improve skill per its SKILL.md. Emit <promise>UI_CLEAN</promise> when the substantive-cycle quiescence rule is met, or <promise>UI_CLEAN_BY_EXHAUSTION</promise> when the honest-search quiescence rule is met." --max-iterations 15 --completion-promise "UI_CLEAN"
 ```
 
-- `--max-iterations 20` is the real safety net (~60 verified fixes over an overnight run). Adjust to taste.
-- The promise string must match `--completion-promise` exactly.
-- `/cancel-ralph` stops the loop mid-run.
-- Each iteration sees prior commits, screenshots, and `friction-log.md`, so the loop converges.
+- **Expect fewer cycles than before.** The live probe and ship-verification steps add roughly 5-10 minutes per cycle. Budget 12-20 minutes per cycle on overnight runs, and lower `--max-iterations` to 12-15 (down from 20). Fewer, deeper cycles beat more, shallower ones — that's the whole point of the tuning.
+- `--completion-promise` accepts a single exact string. If you want to stop on either `UI_CLEAN` or `UI_CLEAN_BY_EXHAUSTION`, decide up front which you care about more and target that one; the skill will still emit the other into its report when applicable, so you'll see it in the log even if it doesn't end the loop.
+- `/ralph-loop:cancel-ralph` stops the loop mid-run.
+- Each iteration sees prior commits, screenshots, and `friction-log.md`, so the loop converges. The skill is allowed — encouraged — to reference what prior cycles probed so the rotation of flows in Step 4.75 stays honest.
 
 ## Constraints
 
-- **Frontend only** — `web/src/` files only. Go files are out of scope.
+- **Frontend only** — `web/src/` files only. Go files are out of scope. Test-harness files under `web/tests/` are also out of scope — when the skill ships a new route or page that the harness doesn't cover, use live Playwright MCP probes (Step 10b) instead of modifying the test spec.
 - **Scope discipline** — Fix 1 may touch up to 6 files or scaffold a new route/page; fixes 2 and 3 cap at 3 files. Findings larger than fix-1's budget get promoted to an epic, never silently deferred.
 - **Build gate is mandatory** — Always revert on build failure.
 - **Regression gate is mandatory** — Revert fixes that cause worse new friction than they resolve.
+- **Ship-verification is mandatory** — Anything shipped that the static harness doesn't capture must be probed live before the cycle closes (Step 10b). "Build passed + unit tests passed" is not visual verification.
+- **Live probe is mandatory every cycle** — Step 4.75 is no longer optional. Every cycle probes at least 2 user flows (4 on every 3rd cycle), rotating the flow set. Cycles that skip the probe do not count toward UI_CLEAN.
 - **User-story rule** — Every 🔴 needs the "why it hurts" sentence. Tier A/B use the user form; Tier C uses the structural form. No exceptions.
-- **No cosmetic-only runs** — The diversity constraint is not optional. At least one of three fixes must be structural (layout, flow, or Tier C).
-- **Friction log is source of truth** — Read it in Step 1, honor its suppression list *and* the re-examination rule, append to it in Step 11.
-- **UI_CLEAN is earned, not declared** — Three consecutive zero-🔴 cycles AND at least one structural attempt in that window. Two cheap cycles no longer suffice.
+- **User-visible-impact rule** — Every fix's report in Step 11 carries a user-visible-impact sentence naming the user and the scenario. If the sentence reads as mechanism-shaped or trivial, the fix is 🟢 polish and the cycle is classified `polish-only` — which does not advance the UI_CLEAN counter.
+- **Diversity constraint** — At most 2 of 3 fixes may be cosmetic. Separately: across any 2-cycle window that counts toward UI_CLEAN, at least one shipped fix must be structural (layout, flow, Tier C, or scaffolded route). Structural *attempts* (investigated but deferred to epic) do not satisfy this — shipped work does.
+- **Friction log is source of truth** — Read it in Step 1, honor its suppression list *and* the re-examination rule, append to it in Step 11. Retirements for "not reachable with current data" require a live probe, not a paper justification.
+- **UI_CLEAN is earned, not declared** — Three consecutive `substantive` zero-🔴 cycles with recurring structural pressure, OR four consecutive cycles of honest-search exhaustion. See the Completion signaling section.
 - **DB state precondition** — Never audit an unseeded DB. Step 1.5 runs `scripts/state-check.sh`; on failure, auto-runs `YES=1 make db-pull` when `$PROD_DB_URL` is set, otherwise halts. See `references/state-check.md` for rationale and override flag.
 - **Bundled references** — `references/friction-log-template.md` (log format), `references/tier-c-questions.md` (systemic lenses), `references/structural-vs-cosmetic.md` (fix classification), `references/state-check.md` (DB precondition). Read these when the relevant step cites them.
 - **Project conventions** — See `/workspace/CLAUDE.md`.

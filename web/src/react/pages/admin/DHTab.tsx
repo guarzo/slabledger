@@ -28,7 +28,16 @@ export function DHTab({ enabled = true }: { enabled?: boolean }) {
   if (error && !status) {
     return (
       <CardShell padding="lg">
-        <p className="text-[var(--danger)] text-sm">Failed to load DH status. Integration may not be configured.</p>
+        <div className="space-y-2">
+          <p className="text-sm font-semibold text-[var(--text)]">DoubleHolo isn't responding.</p>
+          <p className="text-sm text-[var(--text-muted)]">
+            DH credentials are set on the server, not in the UI. Ask the operator to verify{' '}
+            <code className="px-1 py-0.5 rounded bg-[var(--surface-2)] text-[var(--text)] text-xs">DH_ENTERPRISE_API_KEY</code>
+            {' '}and{' '}
+            <code className="px-1 py-0.5 rounded bg-[var(--surface-2)] text-[var(--text)] text-xs">DH_API_BASE_URL</code>
+            {' '}in the backend environment, then restart the service.
+          </p>
+        </div>
       </CardShell>
     );
   }
