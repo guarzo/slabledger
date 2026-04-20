@@ -199,7 +199,9 @@ Cached provider-specific external IDs for card name/set/number triples.
 
 **Primary Key:** `(card_name, set_name, collector_number, provider)`
 
-**Indexes:** `idx_card_id_mappings_provider_external_id` on `(provider, external_id)`
+**Indexes:**
+- `idx_card_id_mappings_provider_external_id` on `(provider, external_id)`
+- `idx_card_id_mappings_collector_number` on `(collector_number)`; added migration 000002
 
 **Foreign Keys:** none
 
@@ -233,6 +235,7 @@ Access log used to prioritize price staleness detection (recently viewed cards g
 - `idx_access_log_card` on `(card_name, set_name, card_number, accessed_at DESC)`
 - `idx_access_log_covering` on `(card_name, set_name, card_number, accessed_at)`
 - `idx_card_access_log_recent` on `(accessed_at DESC, card_name, set_name, card_number)`
+- `idx_card_access_log_card_number` on `(card_number)`; added migration 000002
 
 **Foreign Keys:** none
 
@@ -461,6 +464,9 @@ Individual graded cards bought under a campaign.
 - `idx_purchases_gem_rate_id` on `(gem_rate_id)` WHERE `gem_rate_id != ''` (partial); added migration 000040, converted to partial in 000043
 - `idx_purchases_mm_last_error` on `(mm_last_error)` WHERE `mm_last_error != ''` (partial); added migration 000060
 - `idx_purchases_cl_last_error` on `(cl_last_error)` WHERE `cl_last_error != ''` (partial); added migration 000060
+- `idx_campaign_purchases_received_at` on `(received_at)`; added migration 000002
+- `idx_campaign_purchases_updated_at` on `(updated_at)`; added migration 000002
+- `idx_campaign_purchases_dh_inventory_id` on `(dh_inventory_id)`; added migration 000002
 
 **Foreign Keys:** `campaign_id → campaigns(id)` ON DELETE CASCADE
 
