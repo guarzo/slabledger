@@ -134,16 +134,16 @@ PROD_DB_URL  ?= $(SUPABASE_URL)
 LOCAL_DB_URL ?= postgresql://slabledger:slabledger@postgres:5432/slabledger?sslmode=disable
 
 db-pull:
-	@if [ -z "$(PROD_DB_URL)" ]; then \
-		echo "Error: PROD_DB_URL (or SUPABASE_URL) not set"; exit 1; \
-	fi
-	@echo "Pulling Supabase → local Postgres ..."
-	@printf 'This will OVERWRITE the local database. Continue? [y/N] ' && read confirm && [ "$$confirm" = "y" ] || { printf 'Aborted.\n'; exit 1; }
-	@TMP_DUMP=$$(mktemp -t slabledger-pull.XXXXXX.dump) && \
+	@if [ -f .env ]; then set -a && . ./.env && set +a; fi && \
+	PROD_DB_URL="$${PROD_DB_URL:-$$SUPABASE_URL}" && \
+	if [ -z "$$PROD_DB_URL" ]; then echo "Error: PROD_DB_URL (or SUPABASE_URL) not set"; exit 1; fi && \
+	echo "Pulling Supabase → local Postgres ..." && \
+	if [ "$(YES)" = "1" ]; then echo "YES=1 set — skipping interactive confirmation."; else printf 'This will OVERWRITE the local database. Continue? [y/N] ' && read confirm && [ "$$confirm" = "y" ] || { printf 'Aborted.\n'; exit 1; }; fi && \
+	TMP_DUMP=$$(mktemp -t slabledger-pull.XXXXXX.dump) && \
 	cleanup() { rm -f "$$TMP_DUMP"; } && \
 	trap cleanup EXIT && \
 	echo "Dumping prod (custom format, data-only except schema_migrations) ..." && \
-	pg_dump --no-owner --no-privileges --format=custom --file="$$TMP_DUMP" "$(PROD_DB_URL)" && \
+	pg_dump --no-owner --no-privileges --format=custom --file="$$TMP_DUMP" "$$PROD_DB_URL" && \
 	echo "Resetting local schema ..." && \
 	psql "$(LOCAL_DB_URL)" -v ON_ERROR_STOP=1 -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;' >/dev/null && \
 	echo "Restoring into local ..." && \
@@ -152,24 +152,24 @@ db-pull:
 	echo "Done."
 
 db-push:
-	@if [ -z "$(PROD_DB_URL)" ]; then \
-		echo "Error: PROD_DB_URL (or SUPABASE_URL) not set"; exit 1; \
-	fi
-	@echo "Pushing local → Supabase ..."
-	@printf 'This will OVERWRITE THE PROD DATABASE. Type "yes" to continue: ' && read confirm && [ "$$confirm" = "yes" ] || { printf 'Aborted.\n'; exit 1; }
-	@TIMESTAMP=$$(date +%Y%m%d%H%M%S) && \
+	@if [ -f .env ]; then set -a && . ./.env && set +a; fi && \
+	PROD_DB_URL="$${PROD_DB_URL:-$$SUPABASE_URL}" && \
+	if [ -z "$$PROD_DB_URL" ]; then echo "Error: PROD_DB_URL (or SUPABASE_URL) not set"; exit 1; fi && \
+	echo "Pushing local → Supabase ..." && \
+	printf 'This will OVERWRITE THE PROD DATABASE. Type "yes" to continue: ' && read confirm && [ "$$confirm" = "yes" ] || { printf 'Aborted.\n'; exit 1; } && \
+	TIMESTAMP=$$(date +%Y%m%d%H%M%S) && \
 	TMP_REMOTE=$$(mktemp -t slabledger-remote.XXXXXX.dump) && \
 	TMP_LOCAL=$$(mktemp -t slabledger-local.XXXXXX.dump) && \
 	cleanup() { rm -f "$$TMP_REMOTE" "$$TMP_LOCAL"; } && \
 	trap cleanup EXIT && \
 	echo "Backing up remote to local file: slabledger-remote-$$TIMESTAMP.dump ..." && \
-	pg_dump --no-owner --no-privileges --format=custom --file="slabledger-remote-$$TIMESTAMP.dump" "$(PROD_DB_URL)" && \
+	pg_dump --no-owner --no-privileges --format=custom --file="slabledger-remote-$$TIMESTAMP.dump" "$$PROD_DB_URL" && \
 	echo "Dumping local ..." && \
 	pg_dump --no-owner --no-privileges --format=custom --file="$$TMP_LOCAL" "$(LOCAL_DB_URL)" && \
 	echo "Resetting remote schema ..." && \
-	psql "$(PROD_DB_URL)" -v ON_ERROR_STOP=1 -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;' >/dev/null && \
+	psql "$$PROD_DB_URL" -v ON_ERROR_STOP=1 -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;' >/dev/null && \
 	echo "Restoring local dump into remote ..." && \
-	pg_restore --no-owner --no-privileges --dbname="$(PROD_DB_URL)" "$$TMP_LOCAL" && \
+	pg_restore --no-owner --no-privileges --dbname="$$PROD_DB_URL" "$$TMP_LOCAL" && \
 	trap - EXIT && \
 	echo "Done. Remote backup: slabledger-remote-$$TIMESTAMP.dump"
 
