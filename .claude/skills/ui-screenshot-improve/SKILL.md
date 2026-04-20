@@ -28,6 +28,14 @@ The friction log is a per-cycle record of what was found, what was fixed, and wh
 
 If the log exists, scan the "Deferred / intentional", "Recurring", and "Design conventions ratified" sections carefully. The first two are a suppression list for findings; the third is a suppression list for proposals that would undo a locked design decision.
 
+**Edit B — Time-box deferred items (no silent persistence).** Any item on the deferred list for **≥3 cycles** (count the `first raised: iter N` tag on each deferred entry — add the tag if prior runs didn't) must be re-examined this cycle. Three outcomes are acceptable:
+
+1. **Re-raise** — pull it back into this cycle's ranking. Most deferred items that were "out of scope" for a 3-file fix become in-scope under Edit C's raised cap on fix 1.
+2. **Promote to explicit epic** — write a one-paragraph epic entry in the log pointing at the files/route work that would be needed, and continue deferring. This at least keeps the issue visible and actionable for a human.
+3. **Confirm retired** — move it to a new "Retired (no longer considered friction)" section with a one-line justification (e.g. "user confirmed intentional", "page has been removed", "convention ratified"). Once retired it's out of the re-examination loop permanently.
+
+Do not carry an item forward under "Deferred / intentional" for a fourth cycle. If none of the three outcomes fit, the skill is dodging the work — force one of them.
+
 ## Step 2: Capture fresh screenshots
 
 ```bash
@@ -114,6 +122,8 @@ In the browser:
 
 Log anything surprising into the audit — these findings are first-class and commonly outrank static ones. If nothing surprised you, say so explicitly. This step is bounded: one page, three minutes. It is a sanity check, not a full accessibility audit.
 
+**Edit F — Expand the probe when statics are clean.** If the per-page static audit (Step 5) is on track to produce **zero 🔴 findings**, expand this probe to **3 pages × 5 minutes each** before calling the cycle clean. Pick the three pages by a different criterion each cycle (e.g. "highest-traffic in Journey A", "most interactive elements per screenshot", "lowest score on Tier C systemic questions") to avoid always probing the same surface. Interactive findings discovered in the expansion are first-class and count toward the top 3.
+
 ## Step 5: Friction-first audit (per page)
 
 Now look at each page with fresh eyes, as if you've just logged in for the first time. The primary question on every screenshot is:
@@ -149,6 +159,20 @@ These are the levers for fixing friction. Don't raise them as standalone finding
 - **Status semantics** — colors misrepresenting severity (danger red on neutral states, neutral grey on genuine alarms, success/warning applied unconditionally). Common cause of trust friction.
 - **Data density & number craft** — for pages dominated by currency, counts, or tables. Numeric columns right-aligned with tabular numerals? Hero metrics with a distinct weight/size ramp vs their labels so the eye lands on the value first? Deltas carrying both direction (↑/↓) and semantic color, not color alone (a11y risk)? Zebra rows or row grouping used only when they actually aid scanning? Common cause of comprehension friction on dashboards, campaign-detail, inventory, and admin-stats.
 
+### Tier C — Systemic / product-level lens (Edit D)
+
+Tier A and B are per-page. Tier C is one pass over the whole product, answered once per cycle. These findings do **not** need the "user trying to X ends up Y because Z" sentence — they use a structural sentence: *"The product does X; it should do Y; because Z."* They still compete for the top-3 slot and can outrank per-page friction when the systemic gap is large.
+
+Answer each question in one short sentence. Any **No** or **Unclear** is a candidate finding.
+
+1. *Does the primary navigation reflect primary user tasks?* (If the top-level nav is IA-by-data-model — "Inventory / Campaigns / Admin" — rather than by task — "Intake / Selling / Reviewing / Tuning" — that is a Tier C finding, even if every individual page is clean.)
+2. *Is there a first-run / onboarding / empty-everything surface?* (A user who lands on the dashboard with no campaigns, no purchases, no intake should be told where to start. A blank dashboard is a Tier C failure.)
+3. *Does any core flow have no destination?* (Dashboard chips, inline counts, and status callouts that imply drill-in but have no target — e.g. "2 unpaid invoices" chip with no route — are Tier C. The fix usually requires a new route and is budgeted under Edit C's raised cap on fix 1.)
+4. *Does any page feel like a different product?* (Admin vs. Inventory type ramp, card shell, spacing rhythm. Cross-page incoherence is Tier C, not per-page polish.)
+5. *Is there a system-level surface that's missing entirely?* (e.g. a single "capital position over time" view, a single "what's selling this week" feed, a global search, a notifications list.) Missing surfaces are the single most-common Tier C finding and the one the skill has historically ignored.
+
+If Tier C produces no findings two cycles in a row, do not coast — rotate the questions (add your own) rather than accept silence as truth. The questions above are a starter set, not an exhaustive rubric.
+
 ## Step 6: Rank all findings by friction severity
 
 After reviewing all screenshots and journeys, list every identified issue and rank by the friction it creates for a real user:
@@ -172,9 +196,12 @@ If you can't write the sentence cleanly, it isn't 🔴 — downgrade to 🟡 or 
 **Select the top 3 highest-friction findings by user impact, not ease of fix.**
 
 - If every finding in your top 3 is 🟢 polish, you haven't looked hard enough — go back through the Tier A signals and find at least one real friction issue, even if the fix is small. A run that ships only polish fixes is a failed run.
-- **Suppression**: skip any finding already logged as "Deferred / intentional" in the friction log unless you have new evidence it matters.
-- **Diversity constraint**: at most 1 of the 3 selected fixes may be a semantic color change (adding/changing a color class or CSS variable on an existing element). Color tweaks rarely remove friction by themselves.
-- **Scope cap**: skip any finding that would require touching more than 3 files — log it as out-of-scope. Layout changes within a single component (spacing, sizing, element order, adding/removing a wrapper div, surfacing a hidden action) are fair game.
+- **Suppression**: skip any finding already logged as "Deferred / intentional" in the friction log unless (a) Edit B's time-box has elapsed and you are re-examining it, or (b) you have new evidence it matters.
+- **Diversity constraint (Edit E)**: at most **2 of the 3** selected fixes may be *cosmetic* — defined as a label/copy change, a Tailwind spacing/sizing tweak, a variant or color-class swap, or adding/removing a single element. At least one fix must be *structural* — a layout change affecting how users scan the page (grid/flex restructure, element reorder within a flow, surfacing a hidden action, collapsing a split flow into one), or a Tier C finding from Step 5. A cycle of three cosmetic fixes is a failed run even if each individual fix is green.
+- **Scope cap (Edit C)**:
+  - **Fix 1 (the biggest finding)** may touch up to **6 files** *or* scaffold a new route/page (new entry in the router + one new page component + supporting imports), provided the report in Step 10 explicitly lists the files budgeted and why. Layout restructures across a feature shell + one or two child components are fair game.
+  - **Fixes 2 and 3** stay at the ≤3-file cap.
+  - Any finding larger than fix-1's budget gets promoted to an **epic** in the log (per Edit B outcome 2), not silently deferred. Epics name the files, the flow, and a rough sketch of the destination.
 
 ## Step 7: Fix each issue (one at a time)
 
@@ -234,7 +261,7 @@ Emit this structured report back to the caller:
 - [brief list]
 
 ### Completion signal
-[Emit `<promise>UI_CLEAN</promise>` only if: zero 🔴 findings this cycle AND no 🔴 in the prior cycle's log. Otherwise omit.]
+[Emit `<promise>UI_CLEAN</promise>` only if (Edit A): zero 🔴 findings this cycle AND zero 🔴 in each of the two prior cycles' logs AND **at least one structural finding was attempted** (fixed, or credibly investigated-then-promoted-to-epic with evidence) across the three-cycle window. Otherwise omit. "Attempted" means fix-1 was a structural or Tier C finding per Edit E, not a cosmetic tweak.]
 
 ### After-screenshots
 ✅ Re-captured — `web/screenshots/` updated
@@ -246,13 +273,25 @@ Then append to `web/screenshots/friction-log.md` (create it if missing):
 ## Iteration <N> — <YYYY-MM-DD HH:MM>
 
 ### Fixed this cycle
-- ✅ [Title] — `path/to/file.tsx` — user story — regression: clean|side-effect
+- ✅ [Title] — `path/to/file.tsx` — user story — regression: clean|side-effect — kind: cosmetic|structural|tier-c
+
+### Structural attempt this cycle (Edit A/E)
+- [one-line confirmation that fix-1 was structural, or that a Tier C finding was investigated, OR that this cycle was intentionally all-cosmetic — if all-cosmetic, state why and note that UI_CLEAN cannot be emitted]
 
 ### Deferred / intentional
-- [Title] — reason (out-of-scope, intentional design, awaiting input)
+- [Title] — reason (out-of-scope, intentional design, awaiting input) — first raised: iter N
+
+### Re-examined deferred items (Edit B)
+- [Title originally from iter N] — outcome: re-raised | promoted to epic | retired — one-line justification
+
+### Epics (structural findings too large for a single cycle)
+- [Title] — files/flow sketch — estimated scope — last touched: iter N
+
+### Retired (no longer considered friction)
+- [Title] — justification
 
 ### Recurring (raised but not fully resolved across 2+ cycles)
-- [Title] — last attempt: [summary] — next move: [dig deeper / escalate out-of-scope]
+- [Title] — last attempt: [summary] — next move: [dig deeper / escalate to epic]
 
 ### Design conventions ratified this cycle
 - [One-line convention — e.g. "currency uses `font-variant-numeric: tabular-nums` and right-aligns in tables", "status chips use colored border + neutral fill, not colored fill"]
@@ -265,15 +304,17 @@ The log is append-only. Keep entries terse — this file must stay under 500 lin
 
 ## Completion signaling (for ralph-loop usage)
 
-If the skill is being driven by a ralph loop, the loop should stop when the UI is genuinely clean. Use a two-cycle quiescence rule, not a single-cycle one:
+If the skill is being driven by a ralph loop, the loop should stop when the UI is genuinely clean. Use a **three-cycle-plus-structural-attempt** quiescence rule (Edit A), not a two-cycle one:
 
-> Emit `<promise>UI_CLEAN</promise>` only when this cycle produces **zero 🔴 findings** AND the prior iteration's friction log also recorded zero 🔴 findings.
+> Emit `<promise>UI_CLEAN</promise>` only when this cycle AND the two prior cycles each produced **zero 🔴 findings**, AND **at least one structural finding was attempted** within that three-cycle window — either fixed (per Edit E's structural-fix requirement) or credibly investigated and promoted to an epic in the log (per Edit B outcome 2). A structural attempt means a layout change, a Tier C finding, or a scoped new-route/page scaffold — not three cosmetic tweaks in a row.
 
-A single quiet cycle is not enough — the skill might have missed something. Two in a row means the surface is genuinely stable.
+Why: two quiet cycles is too cheap when the skill's own rules let it suppress structural findings into the deferred list. Three cycles plus a required structural attempt makes "UI clean" mean *we actively went looking for harder problems and found none*, not *we ran out of easy wins*.
+
+Historical context: the cycle 3 and cycle 4 UI_CLEAN emissions under the old two-cycle rule both followed cycles that shipped only cosmetic fixes while six structural items sat on the deferred list. That is the failure mode this edit corrects.
 
 ## Running in a ralph loop
 
-To run this skill unattended (e.g., overnight), wrap it in the `ralph-loop` plugin. The skill's own two-cycle quiescence rule (see "Completion signaling" above) handles exit:
+To run this skill unattended (e.g., overnight), wrap it in the `ralph-loop` plugin. The skill's own three-cycle-plus-structural-attempt quiescence rule (see "Completion signaling" above) handles exit:
 
 ```
 /ralph-loop:ralph-loop "Run the ui-screenshot-improve skill per its SKILL.md. The skill itself defines the UI_CLEAN completion rule — emit <promise>UI_CLEAN</promise> only when its two-cycle quiescence condition is met." --max-iterations 20 --completion-promise "UI_CLEAN"
@@ -287,10 +328,11 @@ To run this skill unattended (e.g., overnight), wrap it in the `ralph-loop` plug
 ## Constraints
 
 - **Frontend only** — `web/src/` files only. Go files are out of scope.
-- **Scope discipline** — More than 3 files = out of scope for this skill.
+- **Scope discipline** — Fix 1 may touch up to 6 files or scaffold a new route/page per Edit C; fixes 2 and 3 cap at 3 files. Findings larger than fix-1's budget get promoted to an epic in the log, never silently deferred.
 - **Build gate is mandatory** — Always revert on build failure.
 - **Regression gate is mandatory** — Revert fixes that cause worse new friction than they resolve.
-- **User-story rule** — Every 🔴 finding needs the "user trying to X ends up Y because Z" sentence; no exceptions.
-- **No color-only runs** — The diversity constraint in Step 6 is not optional. If every finding you see is a color fix, look harder at layout, spacing, and flow until you find a real structural issue.
-- **Friction log is source of truth** — Read it in Step 1, respect its suppression list, append to it in Step 10.
+- **User-story rule** — Every 🔴 finding in Tiers A/B needs the "user trying to X ends up Y because Z" sentence; no exceptions. Tier C findings use the structural "product does X; should do Y; because Z" sentence instead.
+- **No cosmetic-only runs** — The diversity constraint in Step 6 (Edit E) is not optional. At least one of the three fixes must be structural (layout, flow, or Tier C). A cycle of three cosmetic fixes is a failed run.
+- **Friction log is source of truth** — Read it in Step 1, respect its suppression list but also honor Edit B's re-examination rule, append to it in Step 10.
+- **UI_CLEAN is earned, not declared** — Three consecutive zero-🔴 cycles AND at least one structural attempt in that window (Edit A). Two cheap cycles no longer suffice.
 - **Project conventions** — See `/workspace/CLAUDE.md`.
