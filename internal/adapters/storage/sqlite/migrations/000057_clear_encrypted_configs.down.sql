@@ -1,3 +1,0 @@
--- Down migration is a no-op: the deleted rows contained encrypted data
--- that cannot be reconstructed. Services must be re-configured after
--- the encryption key rotation.

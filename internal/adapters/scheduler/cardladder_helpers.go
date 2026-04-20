@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
+	"github.com/guarzo/slabledger/internal/adapters/storage/postgres"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
@@ -38,7 +38,7 @@ func (s *CardLadderRefreshScheduler) recordCLError(ctx context.Context, purchase
 // filterUnmappedCerts returns the subset of purchases that have a cert number
 // and are not already in the provided set of mapped certs. This is the pure
 // filter logic used by pushNewCards before it makes any API calls.
-func filterUnmappedCerts(purchases []inventory.Purchase, existingMappings []sqlite.CLCardMapping) []*inventory.Purchase {
+func filterUnmappedCerts(purchases []inventory.Purchase, existingMappings []postgres.CLCardMapping) []*inventory.Purchase {
 	mappedCerts := make(map[string]bool, len(existingMappings))
 	for _, m := range existingMappings {
 		// A mapping counts as "pushed to CL remote" only when it has a
@@ -62,14 +62,14 @@ func filterUnmappedCerts(purchases []inventory.Purchase, existingMappings []sqli
 // identifySoldMappings returns the subset of existingMappings whose cert
 // number is no longer present in unsoldPurchases. This is the pure filter
 // logic used by removeSoldCards before it makes any API calls.
-func identifySoldMappings(unsoldPurchases []inventory.Purchase, existingMappings []sqlite.CLCardMapping) []sqlite.CLCardMapping {
+func identifySoldMappings(unsoldPurchases []inventory.Purchase, existingMappings []postgres.CLCardMapping) []postgres.CLCardMapping {
 	unsoldCerts := make(map[string]bool, len(unsoldPurchases))
 	for _, p := range unsoldPurchases {
 		if p.CertNumber != "" {
 			unsoldCerts[p.CertNumber] = true
 		}
 	}
-	var result []sqlite.CLCardMapping
+	var result []postgres.CLCardMapping
 	for _, m := range existingMappings {
 		if !unsoldCerts[m.SlabSerial] {
 			result = append(result, m)
@@ -102,7 +102,7 @@ type compKey struct {
 // dedupGemRateConditionPairs returns the unique (gemRateID, condition) pairs
 // from mappings that have both fields populated. This is the pure dedup logic
 // used by refreshSalesComps to avoid redundant API calls.
-func dedupGemRateConditionPairs(mappings []sqlite.CLCardMapping) []compKey {
+func dedupGemRateConditionPairs(mappings []postgres.CLCardMapping) []compKey {
 	seen := make(map[compKey]bool, len(mappings))
 	for _, m := range mappings {
 		if m.CLGemRateID == "" || m.CLCondition == "" {

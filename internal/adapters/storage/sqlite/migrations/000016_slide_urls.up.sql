@@ -1,1 +1,0 @@
-ALTER TABLE social_posts ADD COLUMN slide_urls TEXT DEFAULT NULL;

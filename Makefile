@@ -84,12 +84,14 @@ coverage:
 	go tool cover -html=coverage.out -o coverage.html
 	@echo "Coverage report: coverage.html"
 
-# Screenshots of all pages via Playwright (uses real backend + data/slabledger.db)
+# Screenshots of all pages via Playwright (uses real backend + local Postgres).
+# Override SCREENSHOT_DB_URL to point at a non-devcontainer Postgres.
 # Output: web/screenshots/*.png (desktop) + web/screenshots/mobile/*.png (mobile)
 SCREENSHOT_TOKEN ?= playwright-screenshots
+SCREENSHOT_DB_URL ?= postgresql://slabledger:slabledger@postgres:5432/slabledger?sslmode=disable
 screenshots: build web-build
 	@echo "Taking screenshots of all pages (real backend)..."
-	@LOCAL_API_TOKEN=$(SCREENSHOT_TOKEN) DATABASE_PATH=data/slabledger.db ./slabledger --web --port 4173 & SERVER_PID=$$! ; \
+	@LOCAL_API_TOKEN=$(SCREENSHOT_TOKEN) DATABASE_URL=$(SCREENSHOT_DB_URL) ./slabledger --web --port 4173 & SERVER_PID=$$! ; \
 	  sleep 3 ; \
 	  cd web && CI=1 SCREENSHOT_BACKEND=1 SCREENSHOT_TOKEN=$(SCREENSHOT_TOKEN) ./node_modules/.bin/playwright test tests/screenshot-all-pages.spec.ts --project=chromium ; \
 	  EXIT=$$? ; kill $$SERVER_PID 2>/dev/null ; exit $$EXIT
@@ -123,61 +125,53 @@ install:
 	@echo "Installing frontend dependencies..."
 	@cd web && npm install
 
-# Database sync (requires ~/.ssh mounted into devcontainer)
-PROD_HOST ?= wanderer
-PROD_DB   ?= /app/wanderer/data/slabledger.db
-LOCAL_DB  ?= /workspace/data/slabledger.db
-SSH_OPTS  ?= -o ServerAliveInterval=60 -o ServerAliveCountMax=10
-
-db-push:
-	@echo "Pushing local DB to $(PROD_HOST):$(PROD_DB)..."
-	@if [ ! -f "$(LOCAL_DB)" ]; then echo "Error: local DB not found at $(LOCAL_DB)"; exit 1; fi
-	@printf 'This will OVERWRITE the prod database. Continue? [y/N] ' && read confirm && [ "$$confirm" = "y" ] || { printf 'Aborted.\n'; exit 1; }
-	@LOCAL_SNAPSHOT="$(LOCAL_DB).snapshot" && \
-	TIMESTAMP=$$(date +%Y%m%d%H%M%S) && TMP_REMOTE="$(PROD_DB).tmp.$$$$" && \
-	cleanup() { rm -f "$$LOCAL_SNAPSHOT"; ssh $(SSH_OPTS) "$(PROD_HOST)" "rm -f '$$TMP_REMOTE'" 2>/dev/null; } && \
-	trap cleanup EXIT && \
-	echo "Creating consistent local snapshot (sqlite3 .backup)..." && \
-	sqlite3 "$(LOCAL_DB)" ".backup '$$LOCAL_SNAPSHOT'" && \
-	echo "Backing up remote DB to $(PROD_DB).bak.$$TIMESTAMP (sqlite3 backup)..." && \
-	ssh $(SSH_OPTS) "$(PROD_HOST)" "sqlite3 '$(PROD_DB)' \".backup '$(PROD_DB).bak.$$TIMESTAMP'\"" && \
-	echo "Uploading snapshot to temporary path..." && \
-	scp $(SSH_OPTS) "$$LOCAL_SNAPSHOT" "$(PROD_HOST):$$TMP_REMOTE" && \
-	echo "Verifying transfer..." && \
-	LOCAL_SIZE=$$(wc -c < "$$LOCAL_SNAPSHOT") && \
-	REMOTE_SIZE=$$(ssh $(SSH_OPTS) "$(PROD_HOST)" "wc -c < '$$TMP_REMOTE'") && \
-	if [ "$$LOCAL_SIZE" != "$$REMOTE_SIZE" ]; then \
-		echo "Error: size mismatch (local=$$LOCAL_SIZE, remote=$$REMOTE_SIZE). Cleaning up."; \
-		exit 1; \
-	fi && \
-	echo "Restoring snapshot into production DB (WAL-safe)..." && \
-	ssh $(SSH_OPTS) "$(PROD_HOST)" "sqlite3 '$(PROD_DB)' '.restore $$TMP_REMOTE' && rm -f '$$TMP_REMOTE'" && \
-	rm -f "$$LOCAL_SNAPSHOT" && \
-	trap - EXIT && \
-	echo "Done."
+# Database sync (Supabase ↔ local Postgres via pg_dump / pg_restore)
+#
+# PROD_DB_URL — Supabase connection string (session pooler, port 5432).
+# LOCAL_DB_URL — devcontainer Postgres.
+# Both can be overridden from the environment.
+PROD_DB_URL  ?= $(SUPABASE_URL)
+LOCAL_DB_URL ?= postgresql://slabledger:slabledger@postgres:5432/slabledger?sslmode=disable
 
 db-pull:
-	@echo "Pulling prod DB from $(PROD_HOST):$(PROD_DB)..."
+	@if [ -z "$(PROD_DB_URL)" ]; then \
+		echo "Error: PROD_DB_URL (or SUPABASE_URL) not set"; exit 1; \
+	fi
+	@echo "Pulling Supabase → local Postgres ..."
 	@printf 'This will OVERWRITE the local database. Continue? [y/N] ' && read confirm && [ "$$confirm" = "y" ] || { printf 'Aborted.\n'; exit 1; }
-	@mkdir -p "$(shell dirname $(LOCAL_DB))" && \
-	TMP_REMOTE="/tmp/slabledger_backup_$$$$.db" && \
-	TMP_LOCAL="$(LOCAL_DB).tmp.$$$$" && \
-	cleanup() { rm -f "$$TMP_LOCAL" 2>/dev/null; ssh $(SSH_OPTS) "$(PROD_HOST)" "rm -f '$$TMP_REMOTE'" 2>/dev/null; } && \
+	@TMP_DUMP=$$(mktemp -t slabledger-pull.XXXXXX.dump) && \
+	cleanup() { rm -f "$$TMP_DUMP"; } && \
 	trap cleanup EXIT && \
-	echo "Creating consistent backup on remote (sqlite3 .backup)..." && \
-	ssh $(SSH_OPTS) "$(PROD_HOST)" "sqlite3 '$(PROD_DB)' \".backup '$$TMP_REMOTE'\"" && \
-	REMOTE_SIZE=$$(ssh $(SSH_OPTS) "$(PROD_HOST)" "wc -c < '$$TMP_REMOTE'") && \
-	echo "Downloading backup to temporary file..." && \
-	scp $(SSH_OPTS) "$(PROD_HOST):$$TMP_REMOTE" "$$TMP_LOCAL" && \
-	ssh $(SSH_OPTS) "$(PROD_HOST)" "rm -f '$$TMP_REMOTE'" && \
-	TMP_SIZE=$$(wc -c < "$$TMP_LOCAL") && \
-	if [ "$$TMP_SIZE" != "$$REMOTE_SIZE" ]; then \
-		echo "Error: size mismatch (local=$$TMP_SIZE, remote=$$REMOTE_SIZE). Cleaning up."; \
-		exit 1; \
-	fi && \
-	sqlite3 "$(LOCAL_DB)" ".restore '$$TMP_LOCAL'" && rm -f "$$TMP_LOCAL" && \
-	trap - EXIT && \
+	echo "Dumping prod (custom format, data-only except schema_migrations) ..." && \
+	pg_dump --no-owner --no-privileges --format=custom --file="$$TMP_DUMP" "$(PROD_DB_URL)" && \
+	echo "Resetting local schema ..." && \
+	psql "$(LOCAL_DB_URL)" -v ON_ERROR_STOP=1 -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;' >/dev/null && \
+	echo "Restoring into local ..." && \
+	pg_restore --no-owner --no-privileges --dbname="$(LOCAL_DB_URL)" "$$TMP_DUMP" && \
+	trap - EXIT && rm -f "$$TMP_DUMP" && \
 	echo "Done."
+
+db-push:
+	@if [ -z "$(PROD_DB_URL)" ]; then \
+		echo "Error: PROD_DB_URL (or SUPABASE_URL) not set"; exit 1; \
+	fi
+	@echo "Pushing local → Supabase ..."
+	@printf 'This will OVERWRITE THE PROD DATABASE. Type "yes" to continue: ' && read confirm && [ "$$confirm" = "yes" ] || { printf 'Aborted.\n'; exit 1; }
+	@TIMESTAMP=$$(date +%Y%m%d%H%M%S) && \
+	TMP_REMOTE=$$(mktemp -t slabledger-remote.XXXXXX.dump) && \
+	TMP_LOCAL=$$(mktemp -t slabledger-local.XXXXXX.dump) && \
+	cleanup() { rm -f "$$TMP_REMOTE" "$$TMP_LOCAL"; } && \
+	trap cleanup EXIT && \
+	echo "Backing up remote to local file: slabledger-remote-$$TIMESTAMP.dump ..." && \
+	pg_dump --no-owner --no-privileges --format=custom --file="slabledger-remote-$$TIMESTAMP.dump" "$(PROD_DB_URL)" && \
+	echo "Dumping local ..." && \
+	pg_dump --no-owner --no-privileges --format=custom --file="$$TMP_LOCAL" "$(LOCAL_DB_URL)" && \
+	echo "Resetting remote schema ..." && \
+	psql "$(PROD_DB_URL)" -v ON_ERROR_STOP=1 -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;' >/dev/null && \
+	echo "Restoring local dump into remote ..." && \
+	pg_restore --no-owner --no-privileges --dbname="$(PROD_DB_URL)" "$$TMP_LOCAL" && \
+	trap - EXIT && \
+	echo "Done. Remote backup: slabledger-remote-$$TIMESTAMP.dump"
 
 # Kill process on port 8081
 kill:

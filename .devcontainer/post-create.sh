@@ -60,10 +60,6 @@ fi
 echo "🔨 Building application..."
 go build -o slabledger ./cmd/slabledger
 
-# Run tests to verify setup
-echo "🧪 Running tests..."
-go test ./... -short
-
 echo "✅ Post-create setup complete!"
 echo ""
 echo "🎉 Development environment is ready!"

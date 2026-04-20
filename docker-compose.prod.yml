@@ -1,3 +1,9 @@
+# LEGACY — wanderer-only compose file, kept as emergency rollback for the
+# pre-Fly deployment. Production runs on Fly.io since 2026-04-20 and is
+# managed via `flyctl deploy` (see fly.toml and .github/workflows/fly-deploy.yml).
+# Do not modify for current development. Reaches for DATABASE_PATH (SQLite),
+# which the app no longer supports — would require reverting code to a pre-
+# cutover commit to be functional.
 
 services:
   slabledger:

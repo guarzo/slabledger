@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
-	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
+	"github.com/guarzo/slabledger/internal/adapters/storage/postgres"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
@@ -19,7 +19,7 @@ func (s *CardLadderRefreshScheduler) pushNewCards(
 	client *cardladder.Client,
 	uid, collectionID string,
 	purchases []inventory.Purchase,
-	existingMappings []sqlite.CLCardMapping,
+	existingMappings []postgres.CLCardMapping,
 ) int {
 	// Build set of already-mapped certs for quick lookup
 	mappedCerts := make(map[string]bool, len(existingMappings))
@@ -112,7 +112,7 @@ func (s *CardLadderRefreshScheduler) removeSoldCards(
 	client *cardladder.Client,
 	uid, collectionID string,
 	unsoldPurchases []inventory.Purchase,
-	existingMappings []sqlite.CLCardMapping,
+	existingMappings []postgres.CLCardMapping,
 ) int {
 	// Build set of unsold cert numbers
 	unsoldCerts := make(map[string]bool, len(unsoldPurchases))

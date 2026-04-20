@@ -10,7 +10,7 @@ import (
 	dhlistingadapter "github.com/guarzo/slabledger/internal/adapters/clients/dhlisting"
 	"github.com/guarzo/slabledger/internal/adapters/clients/psa"
 	"github.com/guarzo/slabledger/internal/adapters/scheduler"
-	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
+	"github.com/guarzo/slabledger/internal/adapters/storage/postgres"
 	"github.com/guarzo/slabledger/internal/domain/arbitrage"
 	"github.com/guarzo/slabledger/internal/domain/dhevents"
 	"github.com/guarzo/slabledger/internal/domain/export"
@@ -28,22 +28,22 @@ import (
 // required stores. Named explicitly so that adding methods to export.ExportReader
 // produces a compile error here if any store doesn't implement the new method.
 type exportReaderComposite struct {
-	*sqlite.SellSheetStore
-	*sqlite.PurchaseStore
-	*sqlite.CampaignStore
+	*postgres.SellSheetStore
+	*postgres.PurchaseStore
+	*postgres.CampaignStore
 }
 
 // campaignsInitResult holds all values returned by initializeCampaignsService.
 type campaignsInitResult struct {
 	service          inventory.Service
-	campaignStore    *sqlite.CampaignStore
-	purchaseStore    *sqlite.PurchaseStore
-	saleStore        *sqlite.SaleStore
-	analyticsStore   *sqlite.AnalyticsStore
-	financeStore     *sqlite.FinanceStore
-	pricingStore     *sqlite.PricingStore
-	dhStore          *sqlite.DHStore
-	sellSheetStore   *sqlite.SellSheetStore
+	campaignStore    *postgres.CampaignStore
+	purchaseStore    *postgres.PurchaseStore
+	saleStore        *postgres.SaleStore
+	analyticsStore   *postgres.AnalyticsStore
+	financeStore     *postgres.FinanceStore
+	pricingStore     *postgres.PricingStore
+	dhStore          *postgres.DHStore
+	sellSheetStore   *postgres.SellSheetStore
 	certLookup       inventory.CertLookup
 	certEnrichJob    *scheduler.CertEnrichJob    // nil if PSA not configured
 	pricingEnrichJob *scheduler.PricingEnrichJob // pricers are attached later once CL/MM schedulers exist
@@ -62,22 +62,22 @@ func initializeCampaignsService(
 	ctx context.Context,
 	cfg *config.Config,
 	logger observability.Logger,
-	db *sqlite.DB,
+	db *postgres.DB,
 	priceProvImpl pricing.PriceProvider,
-	intelRepo *sqlite.MarketIntelligenceRepository,
-	mmStore *sqlite.MarketMoversStore,
+	intelRepo *postgres.MarketIntelligenceRepository,
+	mmStore *postgres.MarketMoversStore,
 	dhClient *dh.Client,
 	eventRecorder dhevents.Recorder,
 ) campaignsInitResult {
 	// Create individual stores instead of composite repository
-	campaignStore := sqlite.NewCampaignStore(db.DB, logger)
-	purchaseStore := sqlite.NewPurchaseStore(db.DB, logger)
-	saleStore := sqlite.NewSaleStore(db.DB, logger)
-	analyticsStore := sqlite.NewAnalyticsStore(db.DB, logger)
-	financeStore := sqlite.NewFinanceStore(db.DB, logger)
-	pricingStore := sqlite.NewPricingStore(db.DB, logger)
-	dhStore := sqlite.NewDHStore(db.DB, logger)
-	sellSheetStore := sqlite.NewSellSheetStore(db.DB, logger)
+	campaignStore := postgres.NewCampaignStore(db.DB, logger)
+	purchaseStore := postgres.NewPurchaseStore(db.DB, logger)
+	saleStore := postgres.NewSaleStore(db.DB, logger)
+	analyticsStore := postgres.NewAnalyticsStore(db.DB, logger)
+	financeStore := postgres.NewFinanceStore(db.DB, logger)
+	pricingStore := postgres.NewPricingStore(db.DB, logger)
+	dhStore := postgres.NewDHStore(db.DB, logger)
+	sellSheetStore := postgres.NewSellSheetStore(db.DB, logger)
 
 	priceLookupAdapter := lookup.NewAdapter(priceProvImpl)
 	campaignOpts := []inventory.ServiceOption{
@@ -110,7 +110,7 @@ func initializeCampaignsService(
 	}
 
 	// Card Ladder comp analytics — CLSalesStore only needs *sql.DB (always available).
-	clSalesStore := sqlite.NewCLSalesStore(db.DB)
+	clSalesStore := postgres.NewCLSalesStore(db.DB)
 	campaignOpts = append(campaignOpts, inventory.WithCompSummaryProvider(clSalesStore))
 
 	// Market Movers search title enrichment for CSV export (optional).

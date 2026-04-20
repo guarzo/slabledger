@@ -65,7 +65,7 @@ internal/
       google/       # Google OAuth
       httpx/        # Unified HTTP client (retry + circuit breaker)
       azureai/      # Azure AI completions
-    storage/sqlite/ # SQLite persistence + migrations
+    storage/postgres/ # Postgres persistence + migrations (Supabase in prod, local Postgres in dev)
     scheduler/      # Background jobs (price refresh, session cleanup, advisor, snapshots)
   platform/         # Cross-cutting concerns
     cache/          # Type-safe cache
@@ -101,10 +101,15 @@ The inventory domain (`internal/domain/inventory/`) is the core campaigns and in
 
 ## Database
 
-SQLite with WAL mode. All monetary values in **cents**. Migrations managed by `golang-migrate/migrate/v4`
-and embedded in the binary via `embed.FS`. Migrations run automatically on startup. 69 migration pairs (`000001`–`000069`).
+Postgres via `jackc/pgx/v5/stdlib` (Supabase in prod, local Postgres in the devcontainer).
+All monetary values in **cents**. Migrations managed by `golang-migrate/migrate/v4` and
+embedded in the binary via `embed.FS`. Migrations run automatically on startup.
 
-Migration files: `internal/adapters/storage/sqlite/migrations/` (69 migration pairs)
+Migration files: `internal/adapters/storage/postgres/migrations/` (currently 1 migration —
+`000001_initial_schema` represents the final-state schema after cutover from SQLite).
+
+Connection is configured via `DATABASE_URL`. The transaction pooler is used for the app
+runtime; DDL works the same because `db.go` uses `pgx.QueryExecModeExec` (simple protocol).
 
 See [internal/README.md](internal/README.md) for step-by-step migration creation.
 
@@ -120,7 +125,7 @@ See `.env.example` for the complete list with descriptions. Key groups:
 
 ## Pricing Pipeline
 
-DH (DoubleHolo) is the sole price source via `DHPriceProvider` (`internal/adapters/clients/dhprice/`). Prices are computed in-memory from DH API calls — there is no `price_history` table (dropped in migration 000038). The price refresh scheduler warms the DH card ID cache by iterating unsold inventory from `campaign_purchases`. The `DBTracker` struct (`internal/adapters/storage/sqlite/prices.go`) provides API tracking, access tracking, and health checks. Previous pricing sources (PriceCharting, CardHedger, JustTCG, fusion engine) were removed on 2026-04-06.
+DH (DoubleHolo) is the sole price source via `DHPriceProvider` (`internal/adapters/clients/dhprice/`). Prices are computed in-memory from DH API calls — there is no `price_history` table (dropped before the Postgres cutover). The price refresh scheduler warms the DH card ID cache by iterating unsold inventory from `campaign_purchases`. The `DBTracker` struct (`internal/adapters/storage/postgres/prices.go`) provides API tracking, access tracking, and health checks. Previous pricing sources (PriceCharting, CardHedger, JustTCG, fusion engine) were removed on 2026-04-06.
 
 ## Testing
 

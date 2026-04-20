@@ -21,6 +21,14 @@ func (cfg *Config) Validate() error {
 		return apperrors.ConfigInvalid("port", cfg.Mode.WebPort, "must be between 1 and 65535")
 	}
 
+	// Validate DATABASE_URL is a Postgres connection string.
+	if cfg.Database.URL == "" {
+		return apperrors.ConfigInvalid("database-url", "", "DATABASE_URL is required")
+	}
+	if !strings.HasPrefix(cfg.Database.URL, "postgres://") && !strings.HasPrefix(cfg.Database.URL, "postgresql://") {
+		return apperrors.ConfigInvalid("database-url", cfg.Database.URL, "must start with postgres:// or postgresql://")
+	}
+
 	// Validate rate limit configuration
 	if cfg.Mode.RateLimitRequests < 1 {
 		return apperrors.ConfigInvalid("rate-limit", cfg.Mode.RateLimitRequests, "must be at least 1")

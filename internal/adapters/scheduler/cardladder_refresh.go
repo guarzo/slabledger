@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
-	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
+	"github.com/guarzo/slabledger/internal/adapters/storage/postgres"
 	"github.com/guarzo/slabledger/internal/domain/constants"
 	"github.com/guarzo/slabledger/internal/domain/dhevents"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
@@ -82,15 +82,15 @@ type CardLadderRefreshScheduler struct {
 	statsMu        sync.RWMutex
 	clientMu       sync.RWMutex
 	client         *cardladder.Client
-	store          *sqlite.CardLadderStore
+	store          *postgres.CardLadderStore
 	purchaseLister CardLadderPurchaseLister
 	valueUpdater   CardLadderValueUpdater
 	gemRateUpdater CardLadderGemRateUpdater
 	syncUpdater    CardLadderSyncUpdater // optional: sets cl_synced_at on push
-	salesStore     *sqlite.CLSalesStore
+	salesStore     *postgres.CLSalesStore
 	dhPushUpdater  DHPushStatusUpdater         // optional: re-enrolls changed items for DH push
 	eventRec       dhevents.Recorder           // optional: records DH state-transition events
-	statsStore     *sqlite.SchedulerStatsStore // optional: persists lastRunStats across restarts
+	statsStore     *postgres.SchedulerStatsStore // optional: persists lastRunStats across restarts
 	logger         observability.Logger
 	config         config.CardLadderConfig
 	lastRunStats   *CLRunStats
@@ -127,11 +127,11 @@ func (s *CardLadderRefreshScheduler) recordEvent(ctx context.Context, e dhevents
 // NewCardLadderRefreshScheduler creates a new CL refresh scheduler.
 func NewCardLadderRefreshScheduler(
 	client *cardladder.Client,
-	store *sqlite.CardLadderStore,
+	store *postgres.CardLadderStore,
 	purchaseLister CardLadderPurchaseLister,
 	valueUpdater CardLadderValueUpdater,
 	gemRateUpdater CardLadderGemRateUpdater,
-	salesStore *sqlite.CLSalesStore,
+	salesStore *postgres.CLSalesStore,
 	logger observability.Logger,
 	cfg config.CardLadderConfig,
 	opts ...CardLadderRefreshOption,
@@ -218,7 +218,7 @@ func (s *CardLadderRefreshScheduler) PriceSinglePurchase(ctx context.Context, p 
 
 	// Seed the mapping cache from storage so resolveGemRate reuses an existing
 	// (gemRateID, condition) pair when available.
-	mappingByCert := make(map[string]sqlite.CLCardMapping, 1)
+	mappingByCert := make(map[string]postgres.CLCardMapping, 1)
 	if m, mErr := s.store.GetMapping(ctx, p.CertNumber); mErr == nil && m != nil {
 		mappingByCert[p.CertNumber] = *m
 	}
@@ -309,7 +309,7 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 	if err != nil {
 		s.logger.Warn(ctx, "CL refresh: failed to load card mappings — continuing without mapping cache", observability.Err(err))
 	}
-	mappingByCert := make(map[string]sqlite.CLCardMapping, len(existingMappings))
+	mappingByCert := make(map[string]postgres.CLCardMapping, len(existingMappings))
 	for _, m := range existingMappings {
 		mappingByCert[m.SlabSerial] = m
 	}
@@ -453,7 +453,7 @@ func (s *CardLadderRefreshScheduler) resolveGemRate(
 	ctx context.Context,
 	client *cardladder.Client,
 	p *inventory.Purchase,
-	mappingByCert map[string]sqlite.CLCardMapping,
+	mappingByCert map[string]postgres.CLCardMapping,
 ) (gemRateID, condition string, ok bool) {
 	// Bypass the cache when set_name is generic so BuildCollectionCard fires
 	// and the repair block below (which needs resp.Set) can run. Without this,
@@ -493,7 +493,7 @@ func (s *CardLadderRefreshScheduler) resolveGemRate(
 		// Soft failure — we can still price this run, but the mapping won't
 		// be cached next run. Return the resolved values anyway.
 	} else {
-		mappingByCert[p.CertNumber] = sqlite.CLCardMapping{
+		mappingByCert[p.CertNumber] = postgres.CLCardMapping{
 			SlabSerial:  p.CertNumber,
 			CLGemRateID: resp.GemRateID,
 			CLCondition: resp.Condition,

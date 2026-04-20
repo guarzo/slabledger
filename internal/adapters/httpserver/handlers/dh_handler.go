@@ -107,12 +107,12 @@ type DHOrdersIngester interface {
 	RunOnce(ctx context.Context, since string) (*scheduler.DHOrdersPollSummary, error)
 }
 
-// SyncStateReader reads sync state values. Satisfied by *sqlite.SyncStateRepository.
+// SyncStateReader reads sync state values. Satisfied by *postgres.SyncStateRepository.
 type SyncStateReader interface {
 	Get(ctx context.Context, key string) (string, error)
 }
 
-// EventCountsStore provides aggregate event counts. Satisfied by *sqlite.DHEventStore.
+// EventCountsStore provides aggregate event counts. Satisfied by *postgres.DHEventStore.
 type EventCountsStore interface {
 	CountByTypeSince(ctx context.Context, t dhevents.Type, since time.Time) (int, error)
 }

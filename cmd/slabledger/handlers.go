@@ -10,7 +10,7 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/clients/marketmovers"
 	"github.com/guarzo/slabledger/internal/adapters/httpserver/handlers"
 	"github.com/guarzo/slabledger/internal/adapters/scheduler"
-	"github.com/guarzo/slabledger/internal/adapters/storage/sqlite"
+	"github.com/guarzo/slabledger/internal/adapters/storage/postgres"
 	"github.com/guarzo/slabledger/internal/domain/advisor"
 	"github.com/guarzo/slabledger/internal/domain/ai"
 	"github.com/guarzo/slabledger/internal/domain/arbitrage"
@@ -34,9 +34,9 @@ import (
 type handlerInputs struct {
 	Cfg                *config.Config
 	Logger             observability.Logger
-	DB                 *sqlite.DB
+	DB                 *postgres.DB
 	PriceProvImpl      pricing.PriceProvider
-	PriceRepo          *sqlite.DBTracker
+	PriceRepo          *postgres.DBTracker
 	AuthService        auth.Service
 	CampaignsService   inventory.Service
 	ArbitrageService   arbitrage.Service
@@ -45,27 +45,27 @@ type handlerInputs struct {
 	TuningService      tuning.Service
 	FinanceService     finance.Service
 	ExportService      export.Service
-	PurchaseStore      *sqlite.PurchaseStore
-	SellSheetStore     *sqlite.SellSheetStore
-	CardIDMappingRepo  *sqlite.CardIDMappingRepository
-	IntelRepo          *sqlite.MarketIntelligenceRepository
-	TrajectoryRepo     *sqlite.CardPriceTrajectoryRepository
-	SuggestionsRepo    *sqlite.DHSuggestionsRepository
-	DemandRepo         *sqlite.DHDemandRepository
+	PurchaseStore      *postgres.PurchaseStore
+	SellSheetStore     *postgres.SellSheetStore
+	CardIDMappingRepo  *postgres.CardIDMappingRepository
+	IntelRepo          *postgres.MarketIntelligenceRepository
+	TrajectoryRepo     *postgres.CardPriceTrajectoryRepository
+	SuggestionsRepo    *postgres.DHSuggestionsRepository
+	DemandRepo         *postgres.DHDemandRepository
 	AdvisorService     advisor.Service
-	AdvisorCacheRepo   *sqlite.AdvisorCacheRepository
+	AdvisorCacheRepo   *postgres.AdvisorCacheRepository
 	AzureAIClient      advisor.LLMProvider
-	AICallRepo         *sqlite.AICallRepository
+	AICallRepo         *postgres.AICallRepository
 	CLClient           *cardladder.Client
-	CLStore            *sqlite.CardLadderStore
-	MMStore            *sqlite.MarketMoversStore
+	CLStore            *postgres.CardLadderStore
+	MMStore            *postgres.MarketMoversStore
 	MMClient           *marketmovers.Client
 	DHClient           *dh.Client
-	DHEventStore       *sqlite.DHEventStore
-	SyncStateRepo      *sqlite.SyncStateRepository
+	DHEventStore       *postgres.DHEventStore
+	SyncStateRepo      *postgres.SyncStateRepository
 	SchedulerResult    *scheduler.BuildResult
 	GSheetsClient      *gsheets.Client
-	PendingItemsRepo   *sqlite.PendingItemsRepository
+	PendingItemsRepo   *postgres.PendingItemsRepository
 }
 
 // handlerOutputs holds the constructed handlers that are also needed post-
@@ -184,7 +184,7 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 	var nichesHandler *handlers.NichesHandler
 	var campaignSignalsHandler *handlers.CampaignSignalsHandler
 	if in.DemandRepo != nil {
-		coverage := sqlite.NewCampaignCoverageLookup(in.DB.DB)
+		coverage := postgres.NewCampaignCoverageLookup(in.DB.DB)
 		demandSvc := demand.NewService(in.DemandRepo, coverage)
 		nichesHandler = handlers.NewNichesHandler(demandSvc, logger)
 		campaignSignalsHandler = handlers.NewCampaignSignalsHandler(demandSvc, logger)
@@ -214,7 +214,7 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 	priceHintsHandler := handlers.NewPriceHintsHandler(in.CardIDMappingRepo, logger)
 
 	// Pricing diagnostics handler
-	pricingDiagRepo := sqlite.NewPricingDiagnosticsRepository(in.DB.DB)
+	pricingDiagRepo := postgres.NewPricingDiagnosticsRepository(in.DB.DB)
 	pricingDiagHandler := handlers.NewPricingDiagnosticsHandler(pricingDiagRepo, logger)
 
 	// Advisor handler (if advisor was initialized)
