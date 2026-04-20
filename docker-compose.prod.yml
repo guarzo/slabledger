@@ -15,7 +15,6 @@ services:
       - .env
     environment:
       # Override specific settings for production
-      DATABASE_PATH: /app/data/slabledger.db
       LOG_JSON: "true"
       PORT: 8081
 

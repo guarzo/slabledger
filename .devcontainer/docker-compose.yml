@@ -44,7 +44,6 @@ services:
       # Development-specific overrides
       LOG_LEVEL: debug
       LOG_JSON: "false"
-      DATABASE_PATH: /workspace/data/slabledger.db
       DATABASE_URL: postgresql://slabledger:slabledger@postgres:5432/slabledger?sslmode=disable
 
       # OAuth redirect for local development

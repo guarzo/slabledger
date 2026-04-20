@@ -110,12 +110,13 @@ else
     echo "   Set it in .env for Claude Code CLI"
 fi
 
-# Check database
-if [ -f "data/slabledger.db" ]; then
-    DB_SIZE=$(du -h data/slabledger.db | awk '{print $1}')
-    echo "💾 Database: data/slabledger.db ($DB_SIZE)"
-else
-    echo "💾 Database: not yet created (will be created on first run)"
+# Check database (Postgres)
+if command -v pg_isready >/dev/null 2>&1; then
+    if pg_isready -h postgres -U slabledger -q; then
+        echo "💾 Postgres: ready (postgres:5432)"
+    else
+        echo "⚠️  Postgres not yet ready at postgres:5432 — check docker compose logs postgres"
+    fi
 fi
 
 echo ""

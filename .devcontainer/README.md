@@ -273,24 +273,30 @@ GAMESTOP_MOCK=true SALES_MOCK=true POPULATION_MOCK=true go test ./...
 
 ## Database Management
 
-The SQLite database is stored in `data/slabledger.db` (mounted from host).
+The database is Postgres (Supabase in production, local Postgres container in
+the devcontainer). The app reads `DATABASE_URL` from `.env` and falls back to
+the devcontainer service on `postgres:5432`.
 
 ```bash
-# View database
-sqlite3 data/slabledger.db
+# Interactive psql shell against the devcontainer Postgres
+psql "$DATABASE_URL"
 
-# Check tables
-sqlite3 data/slabledger.db ".tables"
+# One-liners
+psql "$DATABASE_URL" -c '\dt'              # list tables
+psql "$DATABASE_URL" -c '\d campaigns'     # describe a table
+psql "$DATABASE_URL" -c 'SELECT COUNT(*) FROM campaign_purchases;'
 
-# View schema
-sqlite3 data/slabledger.db ".schema"
+# Dump / restore
+pg_dump --format=custom --file=local-$(date +%Y%m%d).dump "$DATABASE_URL"
+pg_restore --no-owner --no-privileges --dbname="$DATABASE_URL" local-$(date +%Y%m%d).dump
 
-# Backup database
-cp data/slabledger.db data/backup_$(date +%Y%m%d).db
-
-# Reset database (delete file, will be recreated)
-rm data/slabledger.db
+# Reset local schema (destructive — destroys all local data; app will re-run
+# migrations on next startup)
+psql "$DATABASE_URL" -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'
 ```
+
+For syncing with prod Supabase, see `make db-pull` / `make db-push` in the
+top-level Makefile.
 
 ## Web Development
 
