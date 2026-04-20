@@ -107,13 +107,9 @@ This catches: missing `DROP` in a down migration, SQL syntax errors in either di
 
 **Test isolation:** because this test drops the whole public schema, it must run in its own process or be ordered to run last. `go test` within a single package runs tests sequentially by default, which is enough — but this test **must not** use `t.Parallel()`, and any other test that also drops the schema must be ordered to cooperate. The existing `setupTestDB` uses `TRUNCATE` for isolation between tests, not `DROP`, so there's no conflict.
 
-#### 2c. Fix the Postgres store helper shape to match fresh-DB assumptions
+#### 2c. Test isolation after DROP SCHEMA
 
-`setupTestDB` currently assumes the schema is already present (it truncates `campaigns`). After this change, the first test in the run will also need migrations applied. Options:
-- Leave `setupTestDB` as-is but add a `once.Do` block that runs migrations on first call per process — simple, correct, invisible to callers.
-- Require callers to opt in with a separate `setupMigratedTestDB` helper — more explicit but requires touching every test file.
-
-Plan: `sync.Once`-based lazy migration inside `setupTestDB`. Existing tests keep working without modification.
+`setupTestDB` already calls `RunMigrations` on every invocation and reads `POSTGRES_TEST_URL` with a devcontainer fallback — no change needed for existing tests to run in CI once the Postgres service is attached. The only wrinkle is the new roundtrip test: its explicit `DROP SCHEMA public CASCADE` runs between `setupTestDB` calls in the same process. Since `golang-migrate` tracks state in `schema_migrations` (also inside `public`), dropping the schema wipes that too, and the next `setupTestDB` call re-runs migrations from scratch — which is the intended behavior. No `sync.Once` or helper reorganization required.
 
 ### 3. Rollback runbook
 
@@ -143,7 +139,6 @@ Create `docs/OPERATIONS.md` (~60-80 lines, short enough to read under pressure).
 - `docs/OPERATIONS.md` *(new)* — rollback runbook.
 - `.github/workflows/test.yml` — add `services:` block + `POSTGRES_TEST_URL` env.
 - `internal/adapters/storage/postgres/migrations_test.go` *(new)* — roundtrip test.
-- `internal/adapters/storage/postgres/testhelper_test.go` — add `sync.Once`-guarded migration on first `setupTestDB` call.
 - Branch protection is applied via `gh api` — no file change, but the implementation plan will include the exact command for reproducibility.
 
 ## Verification
