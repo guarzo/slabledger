@@ -217,7 +217,7 @@ export default function InventoryHeader({
       {/* Filter tabs */}
       {!showAll && (
         <div className="flex flex-col gap-2 mb-3 sell-sheet-no-print">
-          <div className="flex items-center gap-2 overflow-x-auto scrollbar-none">
+          <div className="flex flex-wrap items-center gap-2">
             {primary.map(tab => {
               const isActive = filterTab === tab.key;
               return (
@@ -229,7 +229,7 @@ export default function InventoryHeader({
             })}
           </div>
           {secondary.length > 0 && (
-            <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none">
+            <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1.5">
               {secondary.map(tab => {
                 const isActive = filterTab === tab.key;
                 return (
