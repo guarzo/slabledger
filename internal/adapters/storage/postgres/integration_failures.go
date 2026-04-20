@@ -33,8 +33,6 @@ const ReasonUnprocessed = "unprocessed"
 // queryIntegrationFailures even if a caller passes a larger limit. The
 // HTTP handlers already clamp via parsePagination, but this is
 // defense-in-depth for any future direct caller.
-//
-//nolint:unused // called by wave-3 cardladder_store / marketmovers_store ports
 const maxIntegrationFailureSamples = 200
 
 // queryIntegrationFailures is the shared implementation behind
@@ -51,8 +49,6 @@ const maxIntegrationFailureSamples = 200
 // Column names are parameterized so one function handles both integrations;
 // values are constrained to a small allowlist, so the string interpolation
 // is safe from injection.
-//
-//nolint:unused // called by wave-3 cardladder_store / marketmovers_store ports
 func queryIntegrationFailures(ctx context.Context, db *sql.DB, reasonCol, reasonAtCol, valueCol string, sampleLimit int) (*IntegrationFailuresReport, error) {
 	// Validate reason + reason-timestamp + value column as a triple so a
 	// caller can't mix mm_last_error with cl_last_error_at or cl_value_cents
