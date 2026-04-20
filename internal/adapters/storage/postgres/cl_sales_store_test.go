@@ -29,14 +29,17 @@ func TestCLSalesStore_GetCompSummariesByKeys(t *testing.T) {
 		        ('cert-b', 'coll-b', 'gem-b', 'PSA 9')`)
 	require.NoError(t, err)
 
-	// Insert sales comps. Use recent dates so they fall inside the 90-day window.
+	// Insert sales comps. Spread gem-a across distinct dates so ORDER BY sale_date ASC
+	// is deterministic, allowing us to assert LastSaleCents unambiguously.
+	// Prices: 9000 (Apr 16), 11000 (Apr 17), 12000 (Apr 18), 10000 (Apr 19), 13000 (Apr 20).
+	// Sorted: [9000, 10000, 11000, 12000, 13000] → median=11000, last=13000, high=13000, low=9000.
 	now := "2026-04-20"
 	for _, row := range [][]any{
-		{"gem-a", "item-a-1", now, 10000, "ebay", "PSA 10"},
-		{"gem-a", "item-a-2", now, 12000, "ebay", "PSA 10"},
-		{"gem-a", "item-a-3", now, 11000, "ebay", "PSA 10"},
-		{"gem-a", "item-a-4", now, 13000, "ebay", "PSA 10"},
-		{"gem-a", "item-a-5", now, 9000, "ebay", "PSA 10"},
+		{"gem-a", "item-a-1", "2026-04-16", 9000, "ebay", "PSA 10"},
+		{"gem-a", "item-a-2", "2026-04-17", 11000, "ebay", "PSA 10"},
+		{"gem-a", "item-a-3", "2026-04-18", 12000, "ebay", "PSA 10"},
+		{"gem-a", "item-a-4", "2026-04-19", 10000, "ebay", "PSA 10"},
+		{"gem-a", "item-a-5", now, 13000, "ebay", "PSA 10"},
 		{"gem-b", "item-b-1", now, 4000, "ebay", "PSA 9"},
 		{"gem-b", "item-b-2", now, 5000, "ebay", "PSA 9"},
 		{"gem-b", "item-b-3", now, 4500, "ebay", "PSA 9"},
@@ -65,7 +68,11 @@ func TestCLSalesStore_GetCompSummariesByKeys(t *testing.T) {
 	assert.Equal(t, 11000, a.MedianCents)
 	assert.Equal(t, 13000, a.HighestCents)
 	assert.Equal(t, 9000, a.LowestCents)
+	assert.Equal(t, 13000, a.LastSaleCents) // 2026-04-20 row is the most recent
 	assert.Len(t, a.PriceCentsList, 5)
+	require.Len(t, a.ByPlatform, 1)
+	assert.Equal(t, "ebay", a.ByPlatform[0].Platform)
+	assert.Equal(t, 5, a.ByPlatform[0].SaleCount)
 
 	b := got[inventory.CompKey{GemRateID: "gem-b", CertNumber: "cert-b"}]
 	require.NotNil(t, b)

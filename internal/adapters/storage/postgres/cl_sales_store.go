@@ -391,7 +391,7 @@ func (s *CLSalesStore) GetCompSummariesByKeys(ctx context.Context, keys []invent
 			MIN(CASE WHEN sale_date >= $3 THEN price_cents END) AS low_cents,
 			MAX(sale_date) AS last_sale_date
 		FROM cl_sales_comps
-		WHERE (gem_rate_id, condition) IN (SELECT UNNEST($1::text[]), UNNEST($2::text[]))
+		WHERE (gem_rate_id, condition) IN (SELECT * FROM UNNEST($1::text[], $2::text[]))
 		GROUP BY gem_rate_id, condition`
 	rows, err := s.db.QueryContext(ctx, aggQuery, gemIDs, conds, cutoff)
 	if err != nil {
@@ -434,7 +434,7 @@ func (s *CLSalesStore) GetCompSummariesByKeys(ctx context.Context, keys []invent
 	priceQuery := `
 		SELECT gem_rate_id, condition, price_cents, sale_date, platform
 		FROM cl_sales_comps
-		WHERE (gem_rate_id, condition) IN (SELECT UNNEST($1::text[]), UNNEST($2::text[]))
+		WHERE (gem_rate_id, condition) IN (SELECT * FROM UNNEST($1::text[], $2::text[]))
 		  AND sale_date >= $3
 		ORDER BY gem_rate_id, condition, sale_date`
 	priceRows, err := s.db.QueryContext(ctx, priceQuery, gemIDs, conds, cutoff)
@@ -473,9 +473,7 @@ func (s *CLSalesStore) GetCompSummariesByKeys(ctx context.Context, keys []invent
 		sum.Trend90d = computeTrend(prices, dates, midCutoff)
 		sum.ByPlatform = platformBreakdownFromRows(prs)
 		sum.PriceCentsList = prices
-		if len(prs) > 0 {
-			sum.LastSaleCents = prs[len(prs)-1].priceCents
-		}
+		sum.LastSaleCents = prs[len(prs)-1].priceCents
 
 		// Fan out to every input key that resolved to this (gemRateID, condition).
 		for _, k := range pairToKeys[p] {
