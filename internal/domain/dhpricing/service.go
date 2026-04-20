@@ -38,9 +38,15 @@ func NewService(
 	}
 }
 
-// resolveListingPrice is the one-line rule from dhlisting.ResolveListingPriceCents,
-// inlined here to preserve the flat-siblings invariant.
-func resolveListingPrice(p *inventory.Purchase) int { return p.ReviewedPriceCents }
+// resolveListingPrice mirrors dhlisting.ResolveListingPriceCents, inlined
+// here to preserve the flat-siblings invariant. Reviewed wins; override is
+// the fallback so "Set Price" dialog commits still drive DH listing.
+func resolveListingPrice(p *inventory.Purchase) int {
+	if p.ReviewedPriceCents > 0 {
+		return p.ReviewedPriceCents
+	}
+	return p.OverridePriceCents
+}
 
 func (s *service) SyncPurchasePrice(ctx context.Context, purchaseID string) SyncResult {
 	res := SyncResult{PurchaseID: purchaseID}

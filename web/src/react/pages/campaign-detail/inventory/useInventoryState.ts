@@ -117,6 +117,12 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
     } else {
       queryClient.invalidateQueries({ predicate: (query) => query.queryKey[0] === 'campaigns' && query.queryKey[2] === 'inventory' });
     }
+    // InventoryTab renders both campaign-scoped and GlobalInventoryPage
+    // (which reads portfolio.globalInventory). Always invalidate the global
+    // inventory key so row-level mutations (price saves, DH actions) refresh
+    // on the global page too — otherwise the user sees a stale row that
+    // looks like the save never landed.
+    queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.globalInventory });
     if (opts?.sellSheet) {
       queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.sellSheet });
     }

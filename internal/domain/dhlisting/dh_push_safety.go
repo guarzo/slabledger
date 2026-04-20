@@ -8,14 +8,18 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 )
 
-// ResolveListingPriceCents returns the reviewed price for DH listing.
-// Only ReviewedPriceCents is used — DH now honors this value as-is at list
-// transition. CL is deliberately excluded: it can be stale and we don't want
-// to silently list at a wrong price. Returns 0 when no reviewed price is
+// ResolveListingPriceCents returns the operator-committed price for DH
+// listing. ReviewedPriceCents wins; OverridePriceCents is the fallback so
+// prices set through the "Set Price" dialog (which writes override) still
+// flow to DH. CL is deliberately excluded: it can be stale and we don't
+// want to silently list at a wrong price. Returns 0 when neither field is
 // set, which callers treat as "omit listing_price_cents and let DH's
 // catalog fallback take over" (fine for in_stock, rejected at list time).
 func ResolveListingPriceCents(p *inventory.Purchase) int {
-	return p.ReviewedPriceCents
+	if p.ReviewedPriceCents > 0 {
+		return p.ReviewedPriceCents
+	}
+	return p.OverridePriceCents
 }
 
 // EvaluateHoldTriggers checks whether a push should be held for review.

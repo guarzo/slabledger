@@ -7,36 +7,48 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 )
 
-// TestResolveListingPriceCents covers all three priority paths.
+// TestResolveListingPriceCents covers the reviewed→override fallback chain.
 func TestResolveListingPriceCents(t *testing.T) {
 	tests := []struct {
 		name               string
 		reviewedPriceCents int
+		overridePriceCents int
 		clValueCents       int
 		want               int
 	}{
 		{
-			name:               "reviewed price returned",
+			name:               "reviewed price wins",
 			reviewedPriceCents: 5000,
+			overridePriceCents: 7000,
 			clValueCents:       3000,
 			want:               5000,
 		},
 		{
-			name:               "no reviewed price returns 0 (CL is no longer a fallback)",
+			name:               "override used when no reviewed price",
 			reviewedPriceCents: 0,
+			overridePriceCents: 4500,
+			clValueCents:       3000,
+			want:               4500,
+		},
+		{
+			name:               "zero when reviewed and override both zero (CL is not a fallback)",
+			reviewedPriceCents: 0,
+			overridePriceCents: 0,
 			clValueCents:       3000,
 			want:               0,
 		},
 		{
-			name:               "zero when both are zero",
+			name:               "all zero",
 			reviewedPriceCents: 0,
+			overridePriceCents: 0,
 			clValueCents:       0,
 			want:               0,
 		},
 		{
-			name:               "reviewed price = 1 is non-zero, used",
+			name:               "reviewed = 1 wins over override",
 			reviewedPriceCents: 1,
-			clValueCents:       9999,
+			overridePriceCents: 9999,
+			clValueCents:       0,
 			want:               1,
 		},
 	}
@@ -45,6 +57,7 @@ func TestResolveListingPriceCents(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			p := &inventory.Purchase{
 				ReviewedPriceCents: tc.reviewedPriceCents,
+				OverridePriceCents: tc.overridePriceCents,
 				CLValueCents:       tc.clValueCents,
 			}
 			got := ResolveListingPriceCents(p)

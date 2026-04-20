@@ -208,13 +208,14 @@ func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []stri
 			continue
 		}
 
-		// Gate: require a reviewed price before flipping an item to listed on
-		// DH. DH now honors listing_price_cents as-is, so sending anything
-		// that wasn't human-approved (e.g. a stale CL value) risks listing at
-		// the wrong price. Without reviewed, skip and leave the item in_stock.
+		// Gate: require a human-committed price (reviewed or override)
+		// before flipping an item to listed on DH. DH honors
+		// listing_price_cents as-is, so sending anything not human-approved
+		// (e.g. a stale CL value) risks listing at the wrong price. Without
+		// one, skip and leave the item in_stock.
 		listingPrice := ResolveListingPriceCents(p)
 		if listingPrice == 0 {
-			s.logger.Warn(ctx, "dh listing: no reviewed price; skipping list transition",
+			s.logger.Warn(ctx, "dh listing: no committed price; skipping list transition",
 				observability.String("cert", p.CertNumber),
 				observability.String("purchaseID", p.ID))
 			skipped++
