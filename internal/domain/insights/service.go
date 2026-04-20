@@ -16,11 +16,19 @@ type Service interface {
 	GetOverview(ctx context.Context) (*Overview, error)
 }
 
+// PricingService is the subset of inventory.Service that produces
+// price-override stats. Defined here so the insights package depends on
+// a narrow interface instead of the full inventory service.
+type PricingService interface {
+	GetPriceOverrideStats(ctx context.Context) (*inventory.PriceOverrideStats, error)
+}
+
 // Deps holds the collaborators composed into an Overview.
 // All fields except Logger are optional; the service degrades gracefully.
 type Deps struct {
 	Campaigns inventory.CampaignRepository
 	Tuning    tuning.Service
+	Pricing   PricingService
 	Logger    observability.Logger
 }
 
@@ -38,12 +46,43 @@ func (s *service) GetOverview(ctx context.Context) (*Overview, error) {
 	if err != nil {
 		return nil, fmt.Errorf("campaign rows: %w", err)
 	}
+	signals, err := s.signals(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("signals: %w", err)
+	}
 	return &Overview{
 		Actions:     []Action{},
-		Signals:     Signals{},
+		Signals:     signals,
 		Campaigns:   rows,
 		GeneratedAt: time.Now().UTC().Format(time.RFC3339),
 	}, nil
+}
+
+func (s *service) signals(ctx context.Context) (Signals, error) {
+	var out Signals
+	if s.deps.Pricing != nil {
+		stats, err := s.deps.Pricing.GetPriceOverrideStats(ctx)
+		if err != nil {
+			if s.deps.Logger != nil {
+				s.deps.Logger.Warn(ctx, "price override stats fetch failed",
+					observability.String("err", err.Error()))
+			}
+		} else if stats != nil {
+			// Resolved = accepted + dismissed. PriceOverrideStats does not currently
+			// expose dismissed; in v1 we treat resolved == accepted, which makes Pct
+			// render as 100% whenever any have been accepted and 0% when none have.
+			// When PriceOverrideStats is extended with a Dismissed field, include it
+			// in the resolved denominator here.
+			accepted := stats.AIAcceptedCount
+			resolved := accepted
+			pct := 0.0
+			if resolved > 0 {
+				pct = (float64(accepted) / float64(resolved)) * 100.0
+			}
+			out.AIAcceptRate = AIAcceptRate{Pct: pct, Accepted: accepted, Resolved: resolved}
+		}
+	}
+	return out, nil
 }
 
 func (s *service) campaignRows(ctx context.Context) ([]TuningRow, error) {

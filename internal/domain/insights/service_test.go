@@ -77,3 +77,34 @@ func TestService_GetOverview_IncludesOnlyActiveCampaigns(t *testing.T) {
 		t.Errorf("expected Status Act (confidence=20), got %q", row.Status)
 	}
 }
+
+func TestService_GetOverview_AIAcceptRate(t *testing.T) {
+	t.Parallel()
+	pricingMock := &mocks.MockPricingService{
+		GetPriceOverrideStatsFn: func(ctx context.Context) (*inventory.PriceOverrideStats, error) {
+			return &inventory.PriceOverrideStats{
+				AIAcceptedCount:    2,
+				PendingSuggestions: 3,
+			}, nil
+		},
+	}
+	svc := insights.NewService(insights.Deps{
+		Campaigns: mocks.NewInMemoryCampaignStore(),
+		Pricing:   pricingMock,
+		Logger:    mocks.NewMockLogger(),
+	})
+	got, err := svc.GetOverview(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	// With 2 accepted and 0 known-dismissed, resolved == accepted == 2, pct == 100%.
+	if got.Signals.AIAcceptRate.Accepted != 2 {
+		t.Errorf("Accepted = %d, want 2", got.Signals.AIAcceptRate.Accepted)
+	}
+	if got.Signals.AIAcceptRate.Resolved != 2 {
+		t.Errorf("Resolved = %d, want 2 (accepted + dismissed when dismissed unknown)", got.Signals.AIAcceptRate.Resolved)
+	}
+	if got.Signals.AIAcceptRate.Pct != 100.0 {
+		t.Errorf("Pct = %v, want 100.0", got.Signals.AIAcceptRate.Pct)
+	}
+}
