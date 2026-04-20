@@ -113,6 +113,12 @@ func initializeCampaignsService(
 	clSalesStore := postgres.NewCLSalesStore(db.DB)
 	campaignOpts = append(campaignOpts, inventory.WithCompSummaryProvider(clSalesStore))
 
+	// Structured logger — required so phase-timing diagnostic logs in
+	// GetInventoryAging / GetGlobalInventoryAging actually emit (guarded by
+	// `if s.logger != nil`). Without this, we're blind to where inventory
+	// page time goes.
+	campaignOpts = append(campaignOpts, inventory.WithLogger(logger))
+
 	// Market Movers search title enrichment for CSV export (optional).
 	if mmStore != nil {
 		mmAdapter := inventory.MMMappingFunc(func(ctx context.Context) (map[string]string, error) {
