@@ -28,11 +28,10 @@ primary_region = 'iad'
     timeout = '5s'
     path = '/api/health'
 
-# Small volume for cache + media. The database lives in Supabase; if this
-# volume is lost, cache rebuilds automatically and media can be re-uploaded.
-[[mounts]]
-  source = 'slabledger_media'
-  destination = '/app/data'
+# No [[mounts]]: /app/data is ephemeral container storage. The only thing
+# the app writes there is data/cache.json (file-based cache that rebuilds
+# automatically from DH API). The volume we used to have (slabledger_media)
+# was provisioned for a media-upload feature that never shipped.
 
 # Shared-cpu-2x / 2GB. ~15 schedulers + Go runtime may push close to 2GB;
 # monitor after first deploys and resize if memory pressure shows up in logs.
