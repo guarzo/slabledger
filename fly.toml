@@ -40,3 +40,9 @@ primary_region = 'iad'
   cpu_kind = 'shared'
   cpus = 2
   memory = '2gb'
+
+# Prometheus metrics scrape target. Fly's built-in Prometheus scrapes this
+# every 15s and publishes results in fly-metrics.net Grafana.
+[metrics]
+  port = 9091
+  path = '/metrics'
