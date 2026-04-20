@@ -12,7 +12,8 @@ type TestPurchase = Pick<Purchase,
   'id' | 'cardName' | 'gradeValue' | 'certNumber' | 'receivedAt' |
   'campaignId' | 'clValueCents' | 'buyCostCents' | 'psaSourcingFeeCents' | 'purchaseDate' |
   'createdAt' | 'updatedAt' | 'aiSuggestedPriceCents' | 'reviewedAt' |
-  'dhInventoryId' | 'dhStatus' | 'reviewedPriceCents' | 'dhUnlistedDetectedAt'
+  'dhInventoryId' | 'dhStatus' | 'reviewedPriceCents' | 'dhUnlistedDetectedAt' |
+  'overridePriceCents'
 > & {
   setName?: string;
   cardNumber?: string;
@@ -78,10 +79,27 @@ describe('inventoryCalcs', () => {
       expect(meta.tabCounts.all).toBe(2);
     });
 
-    it('counts items with AI suggestions under needs_attention', () => {
+    it('counts unreviewed items with AI suggestions under needs_attention', () => {
       const items = [
-        makeItem({ purchase: { id: '1', aiSuggestedPriceCents: 5000, reviewedAt: '2026-04-10T00:00:00Z', receivedAt: '2026-04-09T00:00:00Z' } }),
-        makeItem({ purchase: { id: '2', reviewedAt: '2026-04-10T00:00:00Z', receivedAt: '2026-04-09T00:00:00Z' } }),
+        // unreviewed with AI suggestion → needs attention
+        makeItem({ purchase: { id: '1', aiSuggestedPriceCents: 5000, reviewedAt: undefined, receivedAt: '2026-04-09T00:00:00Z' } }),
+        // reviewed with lingering AI suggestion → NOT needs attention (suggestion superseded)
+        makeItem({ purchase: { id: '2', aiSuggestedPriceCents: 5000, reviewedAt: '2026-04-10T00:00:00Z', receivedAt: '2026-04-09T00:00:00Z' } }),
+        // override set with lingering AI suggestion → NOT needs attention
+        makeItem({ purchase: { id: '3', aiSuggestedPriceCents: 5000, overridePriceCents: 7000, receivedAt: '2026-04-09T00:00:00Z' } }),
+        // reviewed, no AI → NOT needs attention
+        makeItem({ purchase: { id: '4', reviewedAt: '2026-04-10T00:00:00Z', receivedAt: '2026-04-09T00:00:00Z' } }),
+      ];
+      const meta = computeInventoryMeta(items);
+      expect(meta.tabCounts.needs_attention).toBe(1);
+    });
+
+    it('drops no_data items from needs_attention once a price override is set', () => {
+      const items = [
+        // received, no CL, no snapshot → no_data → needs attention
+        makeItem({ purchase: { id: '1', receivedAt: '2026-04-09T00:00:00Z', clValueCents: 0, reviewedAt: undefined } }),
+        // same, but with override committed → should NOT count
+        makeItem({ purchase: { id: '2', receivedAt: '2026-04-09T00:00:00Z', clValueCents: 0, reviewedAt: undefined, overridePriceCents: 7500 } }),
       ];
       const meta = computeInventoryMeta(items);
       expect(meta.tabCounts.needs_attention).toBe(1);
