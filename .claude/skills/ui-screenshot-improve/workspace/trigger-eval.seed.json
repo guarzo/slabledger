@@ -1,0 +1,22 @@
+[
+  {"query": "the dashboard feels really confusing to me, i can't tell where to start — can you look through the pages and figure out what's broken from a first-time user's perspective? we shipped this last week and i'm getting feedback that people can't figure out the intake flow", "should_trigger": true},
+  {"query": "our inventory page has a flat 12-column table and people keep getting lost in it. i want you to audit the whole app visually and pick the highest-friction stuff to fix — we do this about once a month so you might find old notes in web/screenshots/friction-log.md", "should_trigger": true},
+  {"query": "run a visual pass on slabledger, screenshots are in web/screenshots/", "should_trigger": true},
+  {"query": "users tap the '2 unpaid invoices' chip on the dashboard and nothing happens — that feels like a bug. more broadly, do you see other dead-end spots where the UI implies a drill-in but doesn't have one?", "should_trigger": true},
+  {"query": "clean up the inventory page — the filter panel is a mess and i want to know what a real user would stumble on. don't just polish colors, actually find friction", "should_trigger": true},
+  {"query": "i think our first-run experience is terrible. a new user lands on the dashboard with no campaigns and no intake — what do they see? is there any onboarding?", "should_trigger": true},
+  {"query": "can you do a ux review of the admin pages? they feel like they belong to a different product than the rest of the app", "should_trigger": true},
+  {"query": "the campaigns page is ugly, spend 10 min making it nicer", "should_trigger": true},
+  {"query": "i want an overnight loop that keeps improving the ui until it's genuinely clean — what's the canonical way to do that?", "should_trigger": true},
+  {"query": "we have a '⚠ 3 stale prices' callout on the dashboard. no idea if tapping it does anything, and if it does i don't know where it goes. audit this kind of pattern across the app", "should_trigger": true},
+  {"query": "add a new button to push DH listings from the campaign-detail page — should live in the action bar next to the existing 'Mark Sold' button", "should_trigger": false},
+  {"query": "fix the Go handler for /api/campaigns/push — it's hanging when DH returns a 503 instead of retrying", "should_trigger": false},
+  {"query": "reset the local dev database and re-seed it from the fixtures in data/seeds/", "should_trigger": false},
+  {"query": "i have a csv of 400 new slabs from this week's PSA return — how do i bulk-import them into slabledger?", "should_trigger": false},
+  {"query": "write a test for the portfolio.analyze() function that checks the aging-bucket thresholds are applied correctly", "should_trigger": false},
+  {"query": "refactor the PriceProvider interface so the DH adapter doesn't depend on the campaign repo — that's a layering violation", "should_trigger": false},
+  {"query": "bump jackc/pgx from v5.5 to v5.6 and deal with the deprecation warnings", "should_trigger": false},
+  {"query": "add a migration for a new invoice_tags table so we can tag invoices by liquidation vs regular", "should_trigger": false},
+  {"query": "why is the advisor response slow on the campaigns page? i'm seeing 3-4 second waits even though the data is cached", "should_trigger": false},
+  {"query": "review PR #224 — focus on the handler changes in internal/adapters/httpserver/campaigns.go", "should_trigger": false}
+]
