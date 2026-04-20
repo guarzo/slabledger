@@ -71,11 +71,9 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
 
   if (loading) return <div className="py-8 text-center"><PokeballLoader /></div>;
 
-  const handleStatClick = (target: StatClickTarget) => {
+  const handleStatClick = (_target: StatClickTarget) => {
     setShowAll(false);
-    if (target === 'flagged') {
-      setFilterTab('needs_attention');
-    }
+    setFilterTab('needs_attention');
   };
 
   if (items.length === 0) {

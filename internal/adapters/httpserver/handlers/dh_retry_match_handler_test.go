@@ -70,285 +70,290 @@ func postRetryMatch(h *DHHandler, purchaseID string) *httptest.ResponseRecorder 
 
 // ---- Tests ----
 
-func TestHandleRetryMatch_MissingAuth(t *testing.T) {
-	h := NewDHHandler(DHHandlerDeps{Logger: mocks.NewMockLogger(), BaseCtx: context.Background()})
-	body, _ := json.Marshal(retryMatchRequest{PurchaseID: "p1"})
-	req := httptest.NewRequest(http.MethodPost, "/api/dh/retry-match", bytes.NewReader(body))
-	// no auth
-	rr := httptest.NewRecorder()
-	h.HandleRetryMatch(rr, req)
-	assert.Equal(t, http.StatusUnauthorized, rr.Code)
-}
+func TestHandleRetryMatch(t *testing.T) {
+	unmatchedPurchase := func(id, cert string) *inventory.Purchase {
+		return &inventory.Purchase{
+			ID:           id,
+			CertNumber:   cert,
+			CardName:     "Charizard",
+			SetName:      "Base Set",
+			CardNumber:   "4",
+			GradeValue:   9,
+			BuyCostCents: 10000,
+			DHPushStatus: inventory.DHPushStatusUnmatched,
+		}
+	}
 
-func TestHandleRetryMatch_MissingPurchaseID(t *testing.T) {
-	h := NewDHHandler(DHHandlerDeps{Logger: mocks.NewMockLogger(), BaseCtx: context.Background()})
-	body, _ := json.Marshal(retryMatchRequest{PurchaseID: ""})
-	req := httptest.NewRequest(http.MethodPost, "/api/dh/retry-match", bytes.NewReader(body))
-	req = authenticatedRequest(req)
-	rr := httptest.NewRecorder()
-	h.HandleRetryMatch(rr, req)
-	assert.Equal(t, http.StatusBadRequest, rr.Code)
-	assert.Contains(t, rr.Body.String(), "purchaseId is required")
-}
+	matchedRepo := func(p *inventory.Purchase) *mocks.PurchaseRepositoryMock {
+		return &mocks.PurchaseRepositoryMock{
+			GetPurchaseFn:                func(_ context.Context, _ string) (*inventory.Purchase, error) { return p, nil },
+			UpdatePurchaseDHPushStatusFn: func(_ context.Context, _ string, _ string) error { return nil },
+			UpdatePurchaseDHFieldsFn:     func(_ context.Context, _ string, _ inventory.DHFieldsUpdate) error { return nil },
+			UpdatePurchaseDHCandidatesFn: func(_ context.Context, _ string, _ string) error { return nil },
+		}
+	}
 
-func TestHandleRetryMatch_PurchaseNotFound(t *testing.T) {
-	repo := &mocks.PurchaseRepositoryMock{
-		GetPurchaseFn: func(_ context.Context, id string) (*inventory.Purchase, error) {
-			return nil, inventory.ErrPurchaseNotFound
+	cases := []struct {
+		name                 string
+		purchaseID           string
+		requestAuth          bool
+		repo                 func() *mocks.PurchaseRepositoryMock
+		certResolver         DHCertResolver
+		psaImporter          DHPSAImporter
+		expectedCode         int
+		expectedBodyContains string
+		checkResponse        func(t *testing.T, resp retryMatchResponse)
+	}{
+		{
+			name:        "MissingAuth",
+			purchaseID:  "p1",
+			requestAuth: false,
+			repo: func() *mocks.PurchaseRepositoryMock {
+				return &mocks.PurchaseRepositoryMock{}
+			},
+			expectedCode: http.StatusUnauthorized,
 		},
-	}
-	h := retryMatchHandler(repo, nil, nil)
-	rr := postRetryMatch(h, "missing-id")
-	assert.Equal(t, http.StatusNotFound, rr.Code)
-}
-
-func TestHandleRetryMatch_PurchaseNotUnmatched(t *testing.T) {
-	purchase := &inventory.Purchase{
-		ID:           "p1",
-		DHPushStatus: inventory.DHPushStatusMatched, // already matched
-	}
-	repo := &mocks.PurchaseRepositoryMock{
-		GetPurchaseFn: func(_ context.Context, _ string) (*inventory.Purchase, error) {
-			return purchase, nil
+		{
+			name:        "MissingPurchaseID",
+			purchaseID:  "",
+			requestAuth: true,
+			repo: func() *mocks.PurchaseRepositoryMock {
+				return &mocks.PurchaseRepositoryMock{}
+			},
+			expectedCode:         http.StatusBadRequest,
+			expectedBodyContains: "purchaseId is required",
 		},
-	}
-	h := retryMatchHandler(repo, nil, nil)
-	rr := postRetryMatch(h, "p1")
-	assert.Equal(t, http.StatusBadRequest, rr.Code)
-	assert.Contains(t, rr.Body.String(), "not in unmatched status")
-}
-
-func TestHandleRetryMatch_ResolveCertMatched(t *testing.T) {
-	purchase := &inventory.Purchase{
-		ID:           "p1",
-		CertNumber:   "12345678",
-		CardName:     "Charizard",
-		SetName:      "Base Set",
-		CardNumber:   "4",
-		GradeValue:   9,
-		BuyCostCents: 10000,
-		DHPushStatus: inventory.DHPushStatusUnmatched,
-	}
-	repo := &mocks.PurchaseRepositoryMock{
-		GetPurchaseFn: func(_ context.Context, _ string) (*inventory.Purchase, error) {
-			return purchase, nil
+		{
+			name:        "PurchaseNotFound",
+			purchaseID:  "missing-id",
+			requestAuth: true,
+			repo: func() *mocks.PurchaseRepositoryMock {
+				return &mocks.PurchaseRepositoryMock{
+					GetPurchaseFn: func(_ context.Context, _ string) (*inventory.Purchase, error) {
+						return nil, inventory.ErrPurchaseNotFound
+					},
+				}
+			},
+			expectedCode: http.StatusNotFound,
 		},
-		UpdatePurchaseDHPushStatusFn: func(_ context.Context, _ string, _ string) error { return nil },
-		UpdatePurchaseDHFieldsFn:     func(_ context.Context, _ string, _ inventory.DHFieldsUpdate) error { return nil },
-		UpdatePurchaseDHCandidatesFn: func(_ context.Context, _ string, _ string) error { return nil },
-	}
-	certResolver := &mockDHCertResolver{
-		ResolveFn: func(_ context.Context, req dh.CertResolveRequest) (*dh.CertResolution, error) {
-			return &dh.CertResolution{Status: dh.CertStatusMatched, DHCardID: 555}, nil
+		{
+			name:        "PurchaseNotUnmatched",
+			purchaseID:  "p1",
+			requestAuth: true,
+			repo: func() *mocks.PurchaseRepositoryMock {
+				return &mocks.PurchaseRepositoryMock{
+					GetPurchaseFn: func(_ context.Context, _ string) (*inventory.Purchase, error) {
+						return &inventory.Purchase{ID: "p1", DHPushStatus: inventory.DHPushStatusMatched}, nil
+					},
+				}
+			},
+			expectedCode:         http.StatusBadRequest,
+			expectedBodyContains: "not in unmatched status",
 		},
-	}
-	h := retryMatchHandler(repo, nil, certResolver)
-	rr := postRetryMatch(h, "p1")
-	require.Equal(t, http.StatusOK, rr.Code, "body: %s", rr.Body.String())
-	var resp retryMatchResponse
-	require.NoError(t, json.NewDecoder(rr.Body).Decode(&resp))
-	assert.Equal(t, "ok", resp.Status)
-	assert.Equal(t, 555, resp.DHCardID)
-}
-
-func TestHandleRetryMatch_PSAImportMatched(t *testing.T) {
-	purchase := &inventory.Purchase{
-		ID:           "p2",
-		CertNumber:   "99887766",
-		CardName:     "Blastoise",
-		SetName:      "Base Set",
-		CardNumber:   "2",
-		GradeValue:   8,
-		BuyCostCents: 5000,
-		DHPushStatus: inventory.DHPushStatusUnmatched,
-	}
-	repo := &mocks.PurchaseRepositoryMock{
-		GetPurchaseFn: func(_ context.Context, _ string) (*inventory.Purchase, error) {
-			return purchase, nil
-		},
-		UpdatePurchaseDHPushStatusFn: func(_ context.Context, _ string, _ string) error { return nil },
-		UpdatePurchaseDHFieldsFn:     func(_ context.Context, _ string, _ inventory.DHFieldsUpdate) error { return nil },
-		UpdatePurchaseDHCandidatesFn: func(_ context.Context, _ string, _ string) error { return nil },
-	}
-	certResolver := &mockDHCertResolver{
-		ResolveFn: func(_ context.Context, _ dh.CertResolveRequest) (*dh.CertResolution, error) {
-			return &dh.CertResolution{Status: dh.CertStatusNotFound}, nil
-		},
-	}
-	psaImporter := &mockDHPSAImporter{
-		ImportFn: func(_ context.Context, _ []dh.PSAImportItem) (*dh.PSAImportResponse, error) {
-			return &dh.PSAImportResponse{
-				Results: []dh.PSAImportResult{
-					{Resolution: dh.PSAImportStatusMatched, DHCardID: 777, DHInventoryID: 666},
+		{
+			name:        "ResolveCertMatched",
+			purchaseID:  "p1",
+			requestAuth: true,
+			repo: func() *mocks.PurchaseRepositoryMock {
+				return matchedRepo(unmatchedPurchase("p1", "12345678"))
+			},
+			certResolver: &mockDHCertResolver{
+				ResolveFn: func(_ context.Context, _ dh.CertResolveRequest) (*dh.CertResolution, error) {
+					return &dh.CertResolution{Status: dh.CertStatusMatched, DHCardID: 555}, nil
 				},
-			}, nil
+			},
+			expectedCode: http.StatusOK,
+			checkResponse: func(t *testing.T, resp retryMatchResponse) {
+				t.Helper()
+				assert.Equal(t, "ok", resp.Status)
+				assert.Equal(t, 555, resp.DHCardID)
+			},
 		},
-	}
-	h := retryMatchHandler(repo, psaImporter, certResolver)
-	rr := postRetryMatch(h, "p2")
-	require.Equal(t, http.StatusOK, rr.Code, "body: %s", rr.Body.String())
-	var resp retryMatchResponse
-	require.NoError(t, json.NewDecoder(rr.Body).Decode(&resp))
-	assert.Equal(t, "ok", resp.Status)
-	assert.Equal(t, 777, resp.DHCardID)
-	assert.Equal(t, 666, resp.DHInventoryID)
-}
-
-func TestHandleRetryMatch_PSAImportUnmatchedCreated(t *testing.T) {
-	purchase := &inventory.Purchase{
-		ID:           "p3",
-		CertNumber:   "11223344",
-		CardName:     "Venusaur",
-		SetName:      "Base Set",
-		CardNumber:   "15",
-		GradeValue:   7,
-		BuyCostCents: 3000,
-		DHPushStatus: inventory.DHPushStatusUnmatched,
-	}
-	repo := &mocks.PurchaseRepositoryMock{
-		GetPurchaseFn: func(_ context.Context, _ string) (*inventory.Purchase, error) {
-			return purchase, nil
-		},
-		UpdatePurchaseDHPushStatusFn: func(_ context.Context, _ string, _ string) error { return nil },
-		UpdatePurchaseDHFieldsFn:     func(_ context.Context, _ string, _ inventory.DHFieldsUpdate) error { return nil },
-		UpdatePurchaseDHCandidatesFn: func(_ context.Context, _ string, _ string) error { return nil },
-	}
-	certResolver := &mockDHCertResolver{}
-	psaImporter := &mockDHPSAImporter{
-		ImportFn: func(_ context.Context, _ []dh.PSAImportItem) (*dh.PSAImportResponse, error) {
-			return &dh.PSAImportResponse{
-				Results: []dh.PSAImportResult{
-					{Resolution: dh.PSAImportStatusUnmatchedCreated, DHCardID: 888, DHInventoryID: 999},
+		{
+			name:        "PSAImportMatched",
+			purchaseID:  "p2",
+			requestAuth: true,
+			repo: func() *mocks.PurchaseRepositoryMock {
+				return matchedRepo(unmatchedPurchase("p2", "99887766"))
+			},
+			certResolver: &mockDHCertResolver{
+				ResolveFn: func(_ context.Context, _ dh.CertResolveRequest) (*dh.CertResolution, error) {
+					return &dh.CertResolution{Status: dh.CertStatusNotFound}, nil
 				},
-			}, nil
-		},
-	}
-	h := retryMatchHandler(repo, psaImporter, certResolver)
-	rr := postRetryMatch(h, "p3")
-	require.Equal(t, http.StatusOK, rr.Code, "body: %s", rr.Body.String())
-	var resp retryMatchResponse
-	require.NoError(t, json.NewDecoder(rr.Body).Decode(&resp))
-	assert.Equal(t, "ok", resp.Status)
-	assert.Equal(t, 888, resp.DHCardID)
-}
-
-func TestHandleRetryMatch_PSAImportPartnerCardError(t *testing.T) {
-	purchase := &inventory.Purchase{
-		ID:           "p4",
-		CertNumber:   "55667788",
-		DHPushStatus: inventory.DHPushStatusUnmatched,
-	}
-	repo := &mocks.PurchaseRepositoryMock{
-		GetPurchaseFn: func(_ context.Context, _ string) (*inventory.Purchase, error) {
-			return purchase, nil
-		},
-	}
-	certResolver := &mockDHCertResolver{}
-	psaImporter := &mockDHPSAImporter{
-		ImportFn: func(_ context.Context, _ []dh.PSAImportItem) (*dh.PSAImportResponse, error) {
-			return &dh.PSAImportResponse{
-				Results: []dh.PSAImportResult{
-					{Resolution: dh.PSAImportStatusPartnerCardError, Error: "invalid override"},
+			},
+			psaImporter: &mockDHPSAImporter{
+				ImportFn: func(_ context.Context, _ []dh.PSAImportItem) (*dh.PSAImportResponse, error) {
+					return &dh.PSAImportResponse{
+						Results: []dh.PSAImportResult{
+							{Resolution: dh.PSAImportStatusMatched, DHCardID: 777, DHInventoryID: 666},
+						},
+					}, nil
 				},
-			}, nil
+			},
+			expectedCode: http.StatusOK,
+			checkResponse: func(t *testing.T, resp retryMatchResponse) {
+				t.Helper()
+				assert.Equal(t, "ok", resp.Status)
+				assert.Equal(t, 777, resp.DHCardID)
+				assert.Equal(t, 666, resp.DHInventoryID)
+			},
+		},
+		{
+			name:        "PSAImportUnmatchedCreated",
+			purchaseID:  "p3",
+			requestAuth: true,
+			repo: func() *mocks.PurchaseRepositoryMock {
+				return matchedRepo(unmatchedPurchase("p3", "11223344"))
+			},
+			certResolver: &mockDHCertResolver{},
+			psaImporter: &mockDHPSAImporter{
+				ImportFn: func(_ context.Context, _ []dh.PSAImportItem) (*dh.PSAImportResponse, error) {
+					return &dh.PSAImportResponse{
+						Results: []dh.PSAImportResult{
+							{Resolution: dh.PSAImportStatusUnmatchedCreated, DHCardID: 888, DHInventoryID: 999},
+						},
+					}, nil
+				},
+			},
+			expectedCode: http.StatusOK,
+			checkResponse: func(t *testing.T, resp retryMatchResponse) {
+				t.Helper()
+				assert.Equal(t, "ok", resp.Status)
+				assert.Equal(t, 888, resp.DHCardID)
+			},
+		},
+		{
+			name:        "PSAImportPartnerCardError",
+			purchaseID:  "p4",
+			requestAuth: true,
+			repo: func() *mocks.PurchaseRepositoryMock {
+				return &mocks.PurchaseRepositoryMock{
+					GetPurchaseFn: func(_ context.Context, _ string) (*inventory.Purchase, error) {
+						return unmatchedPurchase("p4", "55667788"), nil
+					},
+				}
+			},
+			certResolver: &mockDHCertResolver{},
+			psaImporter: &mockDHPSAImporter{
+				ImportFn: func(_ context.Context, _ []dh.PSAImportItem) (*dh.PSAImportResponse, error) {
+					return &dh.PSAImportResponse{
+						Results: []dh.PSAImportResult{
+							{Resolution: dh.PSAImportStatusPartnerCardError, Error: "invalid override"},
+						},
+					}, nil
+				},
+			},
+			expectedCode:         http.StatusUnprocessableEntity,
+			expectedBodyContains: "partner_card_error",
+		},
+		{
+			name:        "PSAImportNil",
+			purchaseID:  "p5",
+			requestAuth: true,
+			repo: func() *mocks.PurchaseRepositoryMock {
+				return &mocks.PurchaseRepositoryMock{
+					GetPurchaseFn: func(_ context.Context, _ string) (*inventory.Purchase, error) {
+						return unmatchedPurchase("p5", "12121212"), nil
+					},
+				}
+			},
+			certResolver:         &mockDHCertResolver{},
+			psaImporter:          nil,
+			expectedCode:         http.StatusUnprocessableEntity,
+			expectedBodyContains: "PSA import not available",
+		},
+		{
+			name:        "PSAImportAPIError",
+			purchaseID:  "p6",
+			requestAuth: true,
+			repo: func() *mocks.PurchaseRepositoryMock {
+				return &mocks.PurchaseRepositoryMock{
+					GetPurchaseFn: func(_ context.Context, _ string) (*inventory.Purchase, error) {
+						return unmatchedPurchase("p6", "34343434"), nil
+					},
+				}
+			},
+			certResolver: &mockDHCertResolver{},
+			psaImporter: &mockDHPSAImporter{
+				ImportFn: func(_ context.Context, _ []dh.PSAImportItem) (*dh.PSAImportResponse, error) {
+					return nil, errors.New("DH API timeout")
+				},
+			},
+			expectedCode: http.StatusBadGateway,
+		},
+		{
+			name:        "PSAImportEmptyResults",
+			purchaseID:  "p7",
+			requestAuth: true,
+			repo: func() *mocks.PurchaseRepositoryMock {
+				return &mocks.PurchaseRepositoryMock{
+					GetPurchaseFn: func(_ context.Context, _ string) (*inventory.Purchase, error) {
+						return unmatchedPurchase("p7", "56565656"), nil
+					},
+				}
+			},
+			certResolver: &mockDHCertResolver{},
+			psaImporter: &mockDHPSAImporter{
+				ImportFn: func(_ context.Context, _ []dh.PSAImportItem) (*dh.PSAImportResponse, error) {
+					return &dh.PSAImportResponse{Results: []dh.PSAImportResult{}}, nil
+				},
+			},
+			expectedCode:         http.StatusUnprocessableEntity,
+			expectedBodyContains: "no results from DH",
+		},
+		{
+			name:        "ResolveCertAmbiguousWithCandidates",
+			purchaseID:  "p8",
+			requestAuth: true,
+			repo: func() *mocks.PurchaseRepositoryMock {
+				return &mocks.PurchaseRepositoryMock{
+					GetPurchaseFn: func(_ context.Context, _ string) (*inventory.Purchase, error) {
+						return unmatchedPurchase("p8", "78787878"), nil
+					},
+					UpdatePurchaseDHCandidatesFn: func(_ context.Context, _ string, _ string) error {
+						return nil
+					},
+				}
+			},
+			certResolver: &mockDHCertResolver{
+				ResolveFn: func(_ context.Context, _ dh.CertResolveRequest) (*dh.CertResolution, error) {
+					return &dh.CertResolution{
+						Status:     dh.CertStatusAmbiguous,
+						Candidates: []dh.CertResolutionCandidate{{DHCardID: 111}, {DHCardID: 222}},
+					}, nil
+				},
+			},
+			psaImporter:          nil,
+			expectedCode:         http.StatusUnprocessableEntity,
+			expectedBodyContains: "ambiguous",
 		},
 	}
-	h := retryMatchHandler(repo, psaImporter, certResolver)
-	rr := postRetryMatch(h, "p4")
-	assert.Equal(t, http.StatusUnprocessableEntity, rr.Code)
-	assert.Contains(t, rr.Body.String(), "partner_card_error")
-}
 
-func TestHandleRetryMatch_PSAImportNil(t *testing.T) {
-	purchase := &inventory.Purchase{
-		ID:           "p5",
-		CertNumber:   "12121212",
-		DHPushStatus: inventory.DHPushStatusUnmatched,
-	}
-	repo := &mocks.PurchaseRepositoryMock{
-		GetPurchaseFn: func(_ context.Context, _ string) (*inventory.Purchase, error) {
-			return purchase, nil
-		},
-	}
-	certResolver := &mockDHCertResolver{}
-	h := retryMatchHandler(repo, nil, certResolver) // psaImporter = nil
-	rr := postRetryMatch(h, "p5")
-	assert.Equal(t, http.StatusUnprocessableEntity, rr.Code)
-	assert.Contains(t, rr.Body.String(), "PSA import not available")
-}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := tc.repo()
+			h := retryMatchHandler(repo, tc.psaImporter, tc.certResolver)
 
-func TestHandleRetryMatch_PSAImportAPIError(t *testing.T) {
-	purchase := &inventory.Purchase{
-		ID:           "p6",
-		CertNumber:   "34343434",
-		DHPushStatus: inventory.DHPushStatusUnmatched,
-	}
-	repo := &mocks.PurchaseRepositoryMock{
-		GetPurchaseFn: func(_ context.Context, _ string) (*inventory.Purchase, error) {
-			return purchase, nil
-		},
-	}
-	certResolver := &mockDHCertResolver{}
-	psaImporter := &mockDHPSAImporter{
-		ImportFn: func(_ context.Context, _ []dh.PSAImportItem) (*dh.PSAImportResponse, error) {
-			return nil, errors.New("DH API timeout")
-		},
-	}
-	h := retryMatchHandler(repo, psaImporter, certResolver)
-	rr := postRetryMatch(h, "p6")
-	assert.Equal(t, http.StatusBadGateway, rr.Code)
-}
+			var rr *httptest.ResponseRecorder
+			if !tc.requestAuth {
+				body, _ := json.Marshal(retryMatchRequest{PurchaseID: tc.purchaseID})
+				req := httptest.NewRequest(http.MethodPost, "/api/dh/retry-match", bytes.NewReader(body))
+				rr = httptest.NewRecorder()
+				h.HandleRetryMatch(rr, req)
+			} else {
+				rr = postRetryMatch(h, tc.purchaseID)
+			}
 
-func TestHandleRetryMatch_PSAImportEmptyResults(t *testing.T) {
-	purchase := &inventory.Purchase{
-		ID:           "p7",
-		CertNumber:   "56565656",
-		DHPushStatus: inventory.DHPushStatusUnmatched,
+			assert.Equal(t, tc.expectedCode, rr.Code)
+			if tc.expectedBodyContains != "" {
+				assert.Contains(t, rr.Body.String(), tc.expectedBodyContains)
+			}
+			if tc.checkResponse != nil {
+				require.Equal(t, tc.expectedCode, rr.Code, "body: %s", rr.Body.String())
+				var resp retryMatchResponse
+				require.NoError(t, json.NewDecoder(rr.Body).Decode(&resp))
+				tc.checkResponse(t, resp)
+			}
+		})
 	}
-	repo := &mocks.PurchaseRepositoryMock{
-		GetPurchaseFn: func(_ context.Context, _ string) (*inventory.Purchase, error) {
-			return purchase, nil
-		},
-	}
-	certResolver := &mockDHCertResolver{}
-	psaImporter := &mockDHPSAImporter{
-		ImportFn: func(_ context.Context, _ []dh.PSAImportItem) (*dh.PSAImportResponse, error) {
-			return &dh.PSAImportResponse{Results: []dh.PSAImportResult{}}, nil
-		},
-	}
-	h := retryMatchHandler(repo, psaImporter, certResolver)
-	rr := postRetryMatch(h, "p7")
-	assert.Equal(t, http.StatusUnprocessableEntity, rr.Code)
-	assert.Contains(t, rr.Body.String(), "no results from DH")
-}
-
-func TestHandleRetryMatch_ResolveCertAmbiguousWithCandidates(t *testing.T) {
-	purchase := &inventory.Purchase{
-		ID:           "p8",
-		CertNumber:   "78787878",
-		DHPushStatus: inventory.DHPushStatusUnmatched,
-	}
-	var savedCandidates string
-	repo := &mocks.PurchaseRepositoryMock{
-		GetPurchaseFn: func(_ context.Context, _ string) (*inventory.Purchase, error) {
-			return purchase, nil
-		},
-		UpdatePurchaseDHCandidatesFn: func(_ context.Context, _ string, candidates string) error {
-			savedCandidates = candidates
-			return nil
-		},
-	}
-	certResolver := &mockDHCertResolver{
-		ResolveFn: func(_ context.Context, _ dh.CertResolveRequest) (*dh.CertResolution, error) {
-			return &dh.CertResolution{
-				Status:     dh.CertStatusAmbiguous,
-				Candidates: []dh.CertResolutionCandidate{{DHCardID: 111}, {DHCardID: 222}},
-			}, nil
-		},
-	}
-	h := retryMatchHandler(repo, nil, certResolver)
-	rr := postRetryMatch(h, "p8")
-	assert.Equal(t, http.StatusUnprocessableEntity, rr.Code)
-	assert.Contains(t, rr.Body.String(), "ambiguous")
-	assert.NotEmpty(t, savedCandidates, "candidates should be saved")
 }

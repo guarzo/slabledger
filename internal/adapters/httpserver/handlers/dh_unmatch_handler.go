@@ -39,6 +39,14 @@ func (h *DHHandler) HandleUnmatchDH(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if purchase.DHPushStatus != inventory.DHPushStatusMatched {
+		h.logger.Warn(ctx, "unmatch dh: invalid state for unmatch",
+			observability.String("purchaseID", purchase.ID),
+			observability.String("dhPushStatus", purchase.DHPushStatus))
+		writeError(w, http.StatusConflict, "invalid purchase state for unmatch: purchase is not matched")
+		return
+	}
+
 	// Clear DH card ID and inventory ID.
 	if h.dhFieldsUpdater != nil {
 		if err := h.dhFieldsUpdater.UpdatePurchaseDHFields(ctx, purchase.ID, inventory.DHFieldsUpdate{

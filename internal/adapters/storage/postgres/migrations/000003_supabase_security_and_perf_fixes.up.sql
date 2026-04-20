@@ -6,7 +6,7 @@
 --  enforces the creator's permissions rather than the querier's)
 -- ================================================================
 
-DROP VIEW IF EXISTS public.active_sessions;
+DROP VIEW IF EXISTS public.active_sessions CASCADE;
 CREATE VIEW public.active_sessions WITH (security_invoker = true) AS
 SELECT
     s.id,
@@ -24,13 +24,13 @@ JOIN users u ON s.user_id = u.id
 WHERE s.expires_at > NOW()
 ORDER BY s.last_accessed_at DESC;
 
-DROP VIEW IF EXISTS public.expired_sessions;
+DROP VIEW IF EXISTS public.expired_sessions CASCADE;
 CREATE VIEW public.expired_sessions WITH (security_invoker = true) AS
 SELECT id
 FROM user_sessions
 WHERE expires_at <= NOW();
 
-DROP VIEW IF EXISTS public.ai_usage_summary;
+DROP VIEW IF EXISTS public.ai_usage_summary CASCADE;
 CREATE VIEW public.ai_usage_summary WITH (security_invoker = true) AS
 SELECT
     COUNT(*) AS total_calls,
@@ -47,7 +47,7 @@ SELECT
 FROM ai_calls
 WHERE timestamp > NOW() - INTERVAL '7 days';
 
-DROP VIEW IF EXISTS public.ai_usage_by_operation;
+DROP VIEW IF EXISTS public.ai_usage_by_operation CASCADE;
 CREATE VIEW public.ai_usage_by_operation WITH (security_invoker = true) AS
 SELECT
     operation,
@@ -60,7 +60,7 @@ FROM ai_calls
 WHERE timestamp > NOW() - INTERVAL '7 days'
 GROUP BY operation;
 
-DROP VIEW IF EXISTS public.api_usage_summary;
+DROP VIEW IF EXISTS public.api_usage_summary CASCADE;
 CREATE VIEW public.api_usage_summary WITH (security_invoker = true) AS
 SELECT
     provider,
@@ -75,7 +75,7 @@ FROM api_calls
 WHERE timestamp > NOW() - INTERVAL '24 hours'
 GROUP BY provider;
 
-DROP VIEW IF EXISTS public.api_hourly_distribution;
+DROP VIEW IF EXISTS public.api_hourly_distribution CASCADE;
 CREATE VIEW public.api_hourly_distribution WITH (security_invoker = true) AS
 SELECT
     provider,
@@ -87,7 +87,7 @@ WHERE timestamp > NOW() - INTERVAL '7 days'
 GROUP BY provider, TO_CHAR(timestamp, 'YYYY-MM-DD HH24:00')
 ORDER BY hour DESC;
 
-DROP VIEW IF EXISTS public.api_daily_summary;
+DROP VIEW IF EXISTS public.api_daily_summary CASCADE;
 CREATE VIEW public.api_daily_summary WITH (security_invoker = true) AS
 SELECT
     provider,
@@ -232,9 +232,9 @@ DROP INDEX IF EXISTS public.idx_users_google_id;
 -- Fix 4: Add missing FK indexes
 -- ================================================================
 
-CREATE INDEX idx_allowed_emails_added_by ON public.allowed_emails(added_by);
-CREATE INDEX idx_price_flags_flagged_by  ON public.price_flags(flagged_by);
-CREATE INDEX idx_price_flags_resolved_by ON public.price_flags(resolved_by);
+CREATE INDEX IF NOT EXISTS idx_allowed_emails_added_by ON public.allowed_emails(added_by);
+CREATE INDEX IF NOT EXISTS idx_price_flags_flagged_by  ON public.price_flags(flagged_by);
+CREATE INDEX IF NOT EXISTS idx_price_flags_resolved_by ON public.price_flags(resolved_by);
 
 -- ================================================================
 -- Fix 5: Drop 26 unused indexes (per Supabase telemetry)

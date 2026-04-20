@@ -93,15 +93,22 @@ func (h *DHHandler) HandleRetryMatch(w http.ResponseWriter, r *http.Request) {
 			case dh.CertStatusAmbiguous:
 				if len(resolution.Candidates) > 0 {
 					// Save fresh candidates so the user can pick via Select.
+					candidatesSaved := false
 					if h.candidatesSaver != nil {
 						candidatesJSON, marshalErr := json.Marshal(resolution.Candidates)
 						if marshalErr != nil {
 							h.logger.Warn(ctx, "retry match: failed to marshal candidates", observability.Err(marshalErr))
+						} else if saveErr := h.candidatesSaver.UpdatePurchaseDHCandidates(ctx, purchase.ID, string(candidatesJSON)); saveErr != nil {
+							h.logger.Warn(ctx, "retry match: failed to persist candidates", observability.Err(saveErr))
 						} else {
-							_ = h.candidatesSaver.UpdatePurchaseDHCandidates(ctx, purchase.ID, string(candidatesJSON))
+							candidatesSaved = true
 						}
 					}
-					writeError(w, http.StatusUnprocessableEntity, "ambiguous match — candidates updated, use Select to pick one")
+					if candidatesSaved {
+						writeError(w, http.StatusUnprocessableEntity, "ambiguous match — candidates updated, use Select to pick one")
+					} else {
+						writeError(w, http.StatusUnprocessableEntity, "ambiguous match — use Select to pick one")
+					}
 					return
 				}
 				// Ambiguous with no candidates — fall through to PSA import.

@@ -28,33 +28,33 @@ CREATE INDEX IF NOT EXISTS idx_campaign_purchases_received_at
     ON campaign_purchases(received_at);
 
 -- Originally from 000001_initial_schema:
-CREATE INDEX idx_user_sessions_user_id ON user_sessions(user_id);
-CREATE INDEX idx_user_tokens_user_id ON user_tokens(user_id);
-CREATE INDEX idx_user_tokens_session_id ON user_tokens(session_id);
-CREATE UNIQUE INDEX idx_user_tokens_session_unique ON user_tokens(session_id);
-CREATE INDEX idx_user_tokens_expires_at ON user_tokens(expires_at);
-CREATE INDEX idx_oauth_states_expires ON oauth_states(expires_at);
-CREATE INDEX idx_campaign_purchases_ebay_export_flagged_at
+CREATE INDEX IF NOT EXISTS idx_user_sessions_user_id ON user_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_tokens_user_id ON user_tokens(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_tokens_session_id ON user_tokens(session_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_user_tokens_session_unique ON user_tokens(session_id);
+CREATE INDEX IF NOT EXISTS idx_user_tokens_expires_at ON user_tokens(expires_at);
+CREATE INDEX IF NOT EXISTS idx_oauth_states_expires ON oauth_states(expires_at);
+CREATE INDEX IF NOT EXISTS idx_campaign_purchases_ebay_export_flagged_at
     ON campaign_purchases (ebay_export_flagged_at)
     WHERE ebay_export_flagged_at IS NOT NULL;
-CREATE INDEX idx_purchases_dh_cert_status ON campaign_purchases(dh_cert_status)
+CREATE INDEX IF NOT EXISTS idx_purchases_dh_cert_status ON campaign_purchases(dh_cert_status)
     WHERE dh_cert_status != '';
-CREATE INDEX idx_purchases_gem_rate_id ON campaign_purchases(gem_rate_id) WHERE gem_rate_id != '';
-CREATE INDEX idx_sales_channel ON campaign_sales(sale_channel);
-CREATE INDEX idx_invoices_status ON invoices(status);
-CREATE INDEX idx_revocation_flags_status ON revocation_flags(status);
-CREATE INDEX idx_revocation_flags_segment ON revocation_flags(segment_label, segment_dimension);
-CREATE INDEX idx_ai_calls_timestamp ON ai_calls(timestamp DESC);
-CREATE INDEX idx_ai_calls_operation ON ai_calls(operation, timestamp DESC);
-CREATE INDEX idx_api_calls_timestamp ON api_calls(timestamp DESC);
-CREATE INDEX idx_api_calls_errors ON api_calls(provider, status_code) WHERE status_code >= 400;
-CREATE INDEX idx_cl_sales_comps_gem_rate ON cl_sales_comps(gem_rate_id, sale_date DESC);
-CREATE INDEX idx_dh_suggestions_card ON dh_suggestions(card_name, set_name);
-CREATE INDEX idx_scoring_gaps_factor ON scoring_data_gaps(factor_name, recorded_at);
-CREATE INDEX idx_card_cache_demand_score ON dh_card_cache(demand_score DESC);
-CREATE INDEX idx_dh_state_events_purchase ON dh_state_events(purchase_id, event_at);
-CREATE INDEX idx_dh_state_events_cert ON dh_state_events(cert_number, event_at);
-CREATE INDEX idx_card_price_trajectory_card ON card_price_trajectory(dh_card_id, week_start DESC);
+CREATE INDEX IF NOT EXISTS idx_purchases_gem_rate_id ON campaign_purchases(gem_rate_id) WHERE gem_rate_id != '';
+CREATE INDEX IF NOT EXISTS idx_sales_channel ON campaign_sales(sale_channel);
+CREATE INDEX IF NOT EXISTS idx_invoices_status ON invoices(status);
+CREATE INDEX IF NOT EXISTS idx_revocation_flags_status ON revocation_flags(status);
+CREATE INDEX IF NOT EXISTS idx_revocation_flags_segment ON revocation_flags(segment_label, segment_dimension);
+CREATE INDEX IF NOT EXISTS idx_ai_calls_timestamp ON ai_calls(timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_ai_calls_operation ON ai_calls(operation, timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_api_calls_timestamp ON api_calls(timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_api_calls_errors ON api_calls(provider, status_code) WHERE status_code >= 400;
+CREATE INDEX IF NOT EXISTS idx_cl_sales_comps_gem_rate ON cl_sales_comps(gem_rate_id, sale_date DESC);
+CREATE INDEX IF NOT EXISTS idx_dh_suggestions_card ON dh_suggestions(card_name, set_name);
+CREATE INDEX IF NOT EXISTS idx_scoring_gaps_factor ON scoring_data_gaps(factor_name, recorded_at);
+CREATE INDEX IF NOT EXISTS idx_card_cache_demand_score ON dh_card_cache(demand_score DESC);
+CREATE INDEX IF NOT EXISTS idx_dh_state_events_purchase ON dh_state_events(purchase_id, event_at);
+CREATE INDEX IF NOT EXISTS idx_dh_state_events_cert ON dh_state_events(cert_number, event_at);
+CREATE INDEX IF NOT EXISTS idx_card_price_trajectory_card ON card_price_trajectory(dh_card_id, week_start DESC);
 
 -- ================================================================
 -- Undo Fix 4: Drop FK indexes

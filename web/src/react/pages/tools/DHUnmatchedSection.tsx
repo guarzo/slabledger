@@ -130,7 +130,7 @@ function UnmatchedRow({ card, onDismiss, isDismissing }: {
           {candidates.length > 0 && (
             <div className="flex flex-col gap-1">
               {visibleCandidates.map((c) => (
-                <CandidateCard key={c.dh_card_id} candidate={c} onSelect={handleSelect} isPending={selectingCardId === c.dh_card_id && selectMutation.isPending} isDisabled={selectMutation.isPending} />
+                <CandidateCard key={c.dh_card_id} candidate={c} onSelect={handleSelect} isPending={selectingCardId === c.dh_card_id && (selectMutation.isPending || retryMutation.isPending || fixMutation.isPending)} isDisabled={selectMutation.isPending || retryMutation.isPending || fixMutation.isPending || (selectingCardId !== null && selectingCardId !== c.dh_card_id)} />
               ))}
               {hiddenCount > 0 && !showAll && (
                 <button

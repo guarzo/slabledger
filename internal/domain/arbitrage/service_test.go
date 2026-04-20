@@ -626,3 +626,327 @@ func TestRunProjection_UsesCacheOnSecondCall(t *testing.T) {
 		t.Errorf("cached result mismatch: first=%+v second=%+v", result1, result2)
 	}
 }
+
+// TestGetCrackOpportunities_NilPriceProvider verifies GetCrackOpportunities returns
+// an empty slice when no price provider is configured.
+func TestGetCrackOpportunities_NilPriceProvider(t *testing.T) {
+	campaign := &inventory.Campaign{
+		ID:         "camp-crack-nil",
+		Name:       "Test Campaign",
+		EbayFeePct: 0.1235,
+	}
+
+	svc := NewService(
+		&stubCampaignRepo{campaign: campaign},
+		&stubPurchaseRepo{unsold: []inventory.Purchase{
+			{
+				ID:           "p-crack",
+				CampaignID:   campaign.ID,
+				CardName:     "Charizard",
+				GradeValue:   8.0,
+				BuyCostCents: 10000,
+			},
+		}},
+		&stubAnalyticsRepo{},
+		&stubFinanceRepo{},
+		// Explicitly no WithPriceLookup — priceProv will be nil
+	)
+
+	results, err := svc.GetCrackOpportunities(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if results == nil {
+		t.Fatal("expected non-nil slice, got nil")
+	}
+	if len(results) != 0 {
+		t.Errorf("expected empty slice with nil priceProv, got %d results", len(results))
+	}
+}
+
+// TestGetCrackOpportunities_GradeFilter verifies that GetCrackOpportunities filters
+// out PSA 9+ purchases and includes PSA 8 and below.
+func TestGetCrackOpportunities_GradeFilter(t *testing.T) {
+	campaignID := "camp-crack-grade"
+	campaign := &inventory.Campaign{
+		ID:         campaignID,
+		Name:       "Test Campaign",
+		EbayFeePct: 0.1235,
+	}
+
+	// Two purchases: one PSA 9 (should be filtered), one PSA 8 (should appear)
+	purchases := []inventory.Purchase{
+		{
+			ID:                  "p-psa9",
+			CampaignID:          campaignID,
+			CardName:            "Blastoise",
+			CertNumber:          "cert-9",
+			GradeValue:          9.0,
+			BuyCostCents:        8000,
+			PSASourcingFeeCents: 250,
+			CLValueCents:        12000,
+		},
+		{
+			ID:                  "p-psa8",
+			CampaignID:          campaignID,
+			CardName:            "Venusaur",
+			CertNumber:          "cert-8",
+			GradeValue:          8.0,
+			BuyCostCents:        6000,
+			PSASourcingFeeCents: 200,
+			CLValueCents:        10000,
+		},
+	}
+
+	svc := NewService(
+		&stubCampaignRepo{campaign: campaign},
+		&stubPurchaseRepo{unsold: purchases},
+		&stubAnalyticsRepo{},
+		&stubFinanceRepo{},
+		WithPriceLookup(&stubPriceProvider{rawCents: 15000, gradedCents: 12000}),
+	)
+
+	results, err := svc.GetCrackOpportunities(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result (PSA 8 only), got %d", len(results))
+	}
+
+	if results[0].PurchaseID != "p-psa8" {
+		t.Errorf("expected purchase p-psa8, got %s", results[0].PurchaseID)
+	}
+	if results[0].Grade != 8.0 {
+		t.Errorf("expected grade 8.0, got %g", results[0].Grade)
+	}
+}
+
+// TestGetCrackOpportunities_PositiveMatch verifies that GetCrackOpportunities
+// correctly identifies when raw market price is higher than graded (positive crack).
+func TestGetCrackOpportunities_PositiveMatch(t *testing.T) {
+	campaignID := "camp-crack-pos"
+	campaign := &inventory.Campaign{
+		ID:         campaignID,
+		Name:       "Test Campaign",
+		EbayFeePct: 0.1235,
+	}
+
+	purchase := inventory.Purchase{
+		ID:                  "p-positive",
+		CampaignID:          campaignID,
+		CardName:            "Charizard",
+		CertNumber:          "cert-pos",
+		GradeValue:          7.0,
+		BuyCostCents:        5000,
+		PSASourcingFeeCents: 200,
+		CLValueCents:        8000,
+	}
+
+	svc := NewService(
+		&stubCampaignRepo{campaign: campaign},
+		&stubPurchaseRepo{unsold: []inventory.Purchase{purchase}},
+		&stubAnalyticsRepo{},
+		&stubFinanceRepo{},
+		// Raw is more profitable: rawCents=15000 > gradedCents=9000
+		WithPriceLookup(&stubPriceProvider{rawCents: 15000, gradedCents: 9000}),
+	)
+
+	results, err := svc.GetCrackOpportunities(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+
+	// Verify the crack advantage is positive (raw is better than graded)
+	if results[0].CrackAdvantage <= 0 {
+		t.Errorf("expected positive CrackAdvantage, got %d", results[0].CrackAdvantage)
+	}
+	if results[0].PurchaseID != "p-positive" {
+		t.Errorf("expected purchase p-positive, got %s", results[0].PurchaseID)
+	}
+}
+
+// stubFinanceRepoWithData is a variant of stubFinanceRepo that returns real capital data.
+type stubFinanceRepoWithData struct {
+	capital  *inventory.CapitalRawData
+	invoices []inventory.Invoice
+}
+
+func (r *stubFinanceRepoWithData) CreateInvoice(_ context.Context, _ *inventory.Invoice) error {
+	return nil
+}
+func (r *stubFinanceRepoWithData) GetInvoice(_ context.Context, _ string) (*inventory.Invoice, error) {
+	return nil, nil
+}
+func (r *stubFinanceRepoWithData) ListInvoices(_ context.Context) ([]inventory.Invoice, error) {
+	return r.invoices, nil
+}
+func (r *stubFinanceRepoWithData) UpdateInvoice(_ context.Context, _ *inventory.Invoice) error {
+	return nil
+}
+func (r *stubFinanceRepoWithData) SumPurchaseCostByInvoiceDate(_ context.Context, _ string) (int, error) {
+	return 0, nil
+}
+func (r *stubFinanceRepoWithData) GetPendingReceiptByInvoiceDate(_ context.Context, _ []string) (map[string]int, error) {
+	return nil, nil
+}
+func (r *stubFinanceRepoWithData) GetInvoiceSellThrough(_ context.Context, _ string) (inventory.InvoiceSellThrough, error) {
+	return inventory.InvoiceSellThrough{}, nil
+}
+func (r *stubFinanceRepoWithData) GetCashflowConfig(_ context.Context) (*inventory.CashflowConfig, error) {
+	return nil, nil
+}
+func (r *stubFinanceRepoWithData) UpdateCashflowConfig(_ context.Context, _ *inventory.CashflowConfig) error {
+	return nil
+}
+func (r *stubFinanceRepoWithData) GetCapitalRawData(_ context.Context) (*inventory.CapitalRawData, error) {
+	return r.capital, nil
+}
+func (r *stubFinanceRepoWithData) CreateRevocationFlag(_ context.Context, _ *inventory.RevocationFlag) error {
+	return nil
+}
+func (r *stubFinanceRepoWithData) ListRevocationFlags(_ context.Context) ([]inventory.RevocationFlag, error) {
+	return nil, nil
+}
+func (r *stubFinanceRepoWithData) GetLatestRevocationFlag(_ context.Context) (*inventory.RevocationFlag, error) {
+	return nil, nil
+}
+func (r *stubFinanceRepoWithData) GetRevocationFlagByID(_ context.Context, _ string) (*inventory.RevocationFlag, error) {
+	return nil, nil
+}
+func (r *stubFinanceRepoWithData) UpdateRevocationFlagStatus(_ context.Context, _ string, _ string, _ *time.Time) error {
+	return nil
+}
+
+// TestGetActivationChecklist_AllPassed verifies that GetActivationChecklist
+// returns AllPassed=true when all checks pass.
+func TestGetActivationChecklist_AllPassed(t *testing.T) {
+	campaignID := "camp-actvn-pass"
+	campaign := &inventory.Campaign{
+		ID:                 campaignID,
+		Name:               "Test Campaign",
+		DailySpendCapCents: 1000, // Small cap, no warning
+		EbayFeePct:         0.1235,
+	}
+
+	// Capital data: OK alert level (non-critical) and recovery data
+	capitalData := &inventory.CapitalRawData{
+		OutstandingCents:          100000, // $1000
+		RecoveryRate30dCents:      500000, // $5000 per month → good recovery
+		RecoveryRate30dPriorCents: 450000,
+	}
+
+	// At least one paid invoice
+	invoices := []inventory.Invoice{
+		{
+			ID:     "inv-paid",
+			Status: "paid",
+		},
+	}
+
+	svc := NewService(
+		&stubCampaignRepo{campaign: campaign},
+		&stubPurchaseRepo{},
+		&stubAnalyticsRepo{},
+		&stubFinanceRepoWithData{
+			capital:  capitalData,
+			invoices: invoices,
+		},
+	)
+
+	checklist, err := svc.GetActivationChecklist(context.Background(), campaignID)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if checklist == nil {
+		t.Fatal("expected non-nil checklist")
+	}
+
+	if !checklist.AllPassed {
+		t.Error("expected AllPassed=true, got false")
+	}
+
+	// Verify we have at least 3 checks (Capital Exposure, Invoice Cycle, Daily Exposure)
+	if len(checklist.Checks) < 3 {
+		t.Errorf("expected at least 3 checks, got %d", len(checklist.Checks))
+	}
+
+	// Verify all checks passed
+	for _, check := range checklist.Checks {
+		if !check.Passed {
+			t.Errorf("expected check %q to pass, but it failed", check.Name)
+		}
+	}
+}
+
+// TestGetActivationChecklist_FailsNoPaidInvoice verifies that GetActivationChecklist
+// returns AllPassed=false when no paid invoices exist.
+func TestGetActivationChecklist_FailsNoPaidInvoice(t *testing.T) {
+	campaignID := "camp-actvn-fail"
+	campaign := &inventory.Campaign{
+		ID:                 campaignID,
+		Name:               "Test Campaign",
+		DailySpendCapCents: 1000,
+		EbayFeePct:         0.1235,
+	}
+
+	// Capital data: OK alert level
+	capitalData := &inventory.CapitalRawData{
+		OutstandingCents:          50000,
+		RecoveryRate30dCents:      400000,
+		RecoveryRate30dPriorCents: 380000,
+	}
+
+	// No paid invoices — only unpaid
+	invoices := []inventory.Invoice{
+		{
+			ID:     "inv-unpaid",
+			Status: "unpaid",
+		},
+	}
+
+	svc := NewService(
+		&stubCampaignRepo{campaign: campaign},
+		&stubPurchaseRepo{},
+		&stubAnalyticsRepo{},
+		&stubFinanceRepoWithData{
+			capital:  capitalData,
+			invoices: invoices,
+		},
+	)
+
+	checklist, err := svc.GetActivationChecklist(context.Background(), campaignID)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if checklist == nil {
+		t.Fatal("expected non-nil checklist")
+	}
+
+	if checklist.AllPassed {
+		t.Error("expected AllPassed=false when no paid invoices, got true")
+	}
+
+	// Find the Invoice Cycle check and verify it failed
+	invoiceCycleCheckFound := false
+	for _, check := range checklist.Checks {
+		if check.Name == "Invoice Cycle Cleared" {
+			invoiceCycleCheckFound = true
+			if check.Passed {
+				t.Errorf("expected Invoice Cycle check to fail when no paid invoices, got Passed=true")
+			}
+			break
+		}
+	}
+
+	if !invoiceCycleCheckFound {
+		t.Error("expected to find 'Invoice Cycle Cleared' check in checklist")
+	}
+}
