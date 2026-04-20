@@ -276,29 +276,29 @@ DROP INDEX IF EXISTS public.idx_card_price_trajectory_card;
 -- ================================================================
 
 -- card_id_mappings: lookup by card_name (~48% of total DB query time)
-CREATE INDEX idx_card_id_mappings_card_name
+CREATE INDEX IF NOT EXISTS idx_card_id_mappings_card_name
     ON public.card_id_mappings USING btree (card_name);
 
 -- campaign_purchases: filter by dh_push_status (~27% of total DB query time)
-CREATE INDEX idx_campaign_purchases_dh_push_status
+CREATE INDEX IF NOT EXISTS idx_campaign_purchases_dh_push_status
     ON public.campaign_purchases USING btree (dh_push_status);
 
 -- dh_suggestions: MAX(fetched_at) query (~13% of total DB query time)
-CREATE INDEX idx_dh_suggestions_fetched_at
+CREATE INDEX IF NOT EXISTS idx_dh_suggestions_fetched_at
     ON public.dh_suggestions USING btree (fetched_at);
 
 -- campaign_purchases: filter/lookup by cert_number (two queries, ~7% combined)
-CREATE INDEX idx_campaign_purchases_cert_number
+CREATE INDEX IF NOT EXISTS idx_campaign_purchases_cert_number
     ON public.campaign_purchases USING btree (cert_number);
 
 -- market_intelligence: COUNT(*) with velocity_last_fetch (~2% of total)
-CREATE INDEX idx_market_intelligence_velocity_last_fetch
+CREATE INDEX IF NOT EXISTS idx_market_intelligence_velocity_last_fetch
     ON public.market_intelligence USING btree (velocity_last_fetch);
 
 -- sell_sheet_items: ORDER BY added_at (~1.5% of total)
-CREATE INDEX idx_sell_sheet_items_added_at
+CREATE INDEX IF NOT EXISTS idx_sell_sheet_items_added_at
     ON public.sell_sheet_items USING btree (added_at);
 
 -- campaign_purchases: filter by mm_value_cents for sync gap query (~1.4% of total)
-CREATE INDEX idx_campaign_purchases_mm_value_cents
+CREATE INDEX IF NOT EXISTS idx_campaign_purchases_mm_value_cents
     ON public.campaign_purchases USING btree (mm_value_cents);
