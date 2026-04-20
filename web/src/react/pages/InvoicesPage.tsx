@@ -94,7 +94,7 @@ function InvoiceCard({ inv }: { inv: Invoice }) {
           {inv.dueDate && (
             <div className={`text-[11px] ${overdue ? 'text-[var(--danger)]' : 'text-[var(--text-muted)]'}`}>
               due {formatDate(inv.dueDate)}
-              {` · ${overdue ? `${-d2d}d overdue` : d2d === 0 ? 'due today' : `${d2d}d`}`}
+              {` · ${overdue ? `${-d2d}d overdue` : d2d === 0 ? 'today' : `${d2d}d`}`}
             </div>
           )}
         </div>
