@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/guarzo/slabledger/internal/domain/insights"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
 )
 
@@ -26,5 +27,53 @@ func TestService_GetOverview_ReturnsEmptyShape_WhenAllDepsEmpty(t *testing.T) {
 	}
 	if len(got.Campaigns) != 0 {
 		t.Errorf("expected empty Campaigns, got %d", len(got.Campaigns))
+	}
+}
+
+func TestService_GetOverview_IncludesOnlyActiveCampaigns(t *testing.T) {
+	t.Parallel()
+	store := mocks.NewInMemoryCampaignStore()
+	ctx := context.Background()
+	active := &inventory.Campaign{ID: "c1", Name: "Active one", Phase: inventory.PhaseActive}
+	if err := store.CreateCampaign(ctx, active); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.CreateCampaign(ctx, &inventory.Campaign{ID: "c2", Name: "Closed one", Phase: inventory.PhaseClosed}); err != nil {
+		t.Fatal(err)
+	}
+
+	tuningMock := &mocks.MockTuningService{
+		GetCampaignTuningFn: func(ctx context.Context, id string) (*inventory.TuningResponse, error) {
+			return &inventory.TuningResponse{
+				CampaignID:   id,
+				CampaignName: "Active one",
+				Recommendations: []inventory.TuningRecommendation{
+					{Parameter: "buyTermsCLPct", CurrentVal: "55", SuggestedVal: "60", Confidence: 20, Impact: "Raise 55 → 60%"},
+				},
+			}, nil
+		},
+	}
+
+	svc := insights.NewService(insights.Deps{
+		Campaigns: store,
+		Tuning:    tuningMock,
+		Logger:    mocks.NewMockLogger(),
+	})
+	got, err := svc.GetOverview(ctx)
+	if err != nil {
+		t.Fatalf("GetOverview: %v", err)
+	}
+	if len(got.Campaigns) != 1 {
+		t.Fatalf("expected 1 campaign row, got %d", len(got.Campaigns))
+	}
+	row := got.Campaigns[0]
+	if row.CampaignID != active.ID {
+		t.Errorf("expected row for active campaign, got %q", row.CampaignID)
+	}
+	if row.Cells["buyPct"].Recommendation == "" {
+		t.Errorf("expected buyPct cell to be populated, got empty")
+	}
+	if row.Status != insights.StatusAct {
+		t.Errorf("expected Status Act (confidence=20), got %q", row.Status)
 	}
 }
