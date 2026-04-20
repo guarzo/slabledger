@@ -2,7 +2,7 @@
  * Admin-related API methods
  */
 
-import type { APIUsageResponse, PricingDiagnosticsResponse, PriceOverrideStats, CachedAnalysis, AdvisorAnalysisType, AIUsageResponse, DHStatusResponse, DHBulkMatchResponse, DHUnmatchedResponse, DHFixMatchRequest, DHFixMatchResponse, DHSelectMatchRequest, DHPushConfig, DHReconcileResponse, DHReconcileTriggerResult } from '../../types/apiStatus';
+import type { APIUsageResponse, PricingDiagnosticsResponse, PriceOverrideStats, CachedAnalysis, AdvisorAnalysisType, AIUsageResponse, DHStatusResponse, DHBulkMatchResponse, DHUnmatchedResponse, DHFixMatchRequest, DHFixMatchResponse, DHSelectMatchRequest, DHRetryMatchResponse, DHPushConfig, DHReconcileResponse, DHReconcileTriggerResult } from '../../types/apiStatus';
 import type { AllowedEmail, AdminUser, CLStatusResponse, CLSyncResult, IntegrationFailuresReport, MMStatusResponse, MMSyncResult, PSASyncStatusResponse } from '../../types/admin';
 import type { APIClient } from './client';
 import { APIError } from './client';
@@ -39,6 +39,8 @@ declare module './client' {
     getDHUnmatched(): Promise<DHUnmatchedResponse>;
     fixDHMatch(req: DHFixMatchRequest): Promise<DHFixMatchResponse>;
     selectDHMatch(req: DHSelectMatchRequest): Promise<DHFixMatchResponse>;
+    retryDHMatch(purchaseId: string): Promise<DHRetryMatchResponse>;
+    unmatchDH(purchaseId: string): Promise<{ status: string }>;
     dismissDHMatch(purchaseId: string): Promise<{ status: string }>;
     undismissDHMatch(purchaseId: string): Promise<{ status: string }>;
     approveDHPush(purchaseId: string): Promise<{ status: string }>;
@@ -175,6 +177,14 @@ proto.fixDHMatch = async function (this: APIClient, req: DHFixMatchRequest): Pro
 
 proto.selectDHMatch = async function (this: APIClient, req: DHSelectMatchRequest): Promise<DHFixMatchResponse> {
   return this.post<DHFixMatchResponse>('/dh/select-match', req);
+};
+
+proto.retryDHMatch = async function (this: APIClient, purchaseId: string): Promise<DHRetryMatchResponse> {
+  return this.post<DHRetryMatchResponse>('/dh/retry-match', { purchaseId });
+};
+
+proto.unmatchDH = async function (this: APIClient, purchaseId: string): Promise<{ status: string }> {
+  return this.post<{ status: string }>('/dh/unmatch', { purchaseId });
 };
 
 proto.dismissDHMatch = async function (this: APIClient, purchaseId: string): Promise<{ status: string }> {

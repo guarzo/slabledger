@@ -265,6 +265,28 @@ export function useSelectDHMatch() {
   });
 }
 
+export function useRetryDHMatch() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (purchaseId: string) => api.retryDHMatch(purchaseId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.admin.dhUnmatched });
+      qc.invalidateQueries({ queryKey: queryKeys.admin.dhStatus });
+    },
+  });
+}
+
+export function useUnmatchDH() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (purchaseId: string) => api.unmatchDH(purchaseId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.admin.dhUnmatched });
+      qc.invalidateQueries({ queryKey: queryKeys.admin.dhStatus });
+    },
+  });
+}
+
 export function useDismissDHMatch() {
   const qc = useQueryClient();
   return useMutation({
