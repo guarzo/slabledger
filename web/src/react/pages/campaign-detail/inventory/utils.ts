@@ -228,7 +228,11 @@ export function getReviewStatus(item: AgingItem): ReviewStatus {
   const snap = item.currentMarket;
   const p = item.purchase;
 
+  // A committed price — either a reviewed price or an override — clears the
+  // no_data / large_gap queues: the operator has picked a number, so the
+  // "no data" warning is moot.
   if (p.reviewedAt) return 'reviewed';
+  if ((p.overridePriceCents ?? 0) > 0) return 'reviewed';
   if (!snap && (p.clValueCents ?? 0) === 0) return 'no_data';
   if (hasLargeGap(item)) return 'large_gap';
 
@@ -303,8 +307,8 @@ export function statusBadge(item: AgingItem): { label: string; color: string } {
     case 'needs_review':
       return { label: 'Review', color: 'var(--warning)' };
     case 'reviewed': {
-      const reviewedAt = item.purchase.reviewedAt;
-      const relTime = reviewedAt ? relativeTime(reviewedAt) : '';
+      const stampedAt = item.purchase.reviewedAt || item.purchase.overrideSetAt;
+      const relTime = stampedAt ? relativeTime(stampedAt) : '';
       return { label: `✓ ${relTime}`, color: 'var(--success)' };
     }
   }
