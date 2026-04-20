@@ -28,6 +28,14 @@ type PlatformBreakdown struct {
 	LowCents    int    `json:"lowCents"`
 }
 
+// CompKey identifies a unique card variant + condition for comp lookup.
+// The CertNumber is used (not grade) because the existing pipeline resolves
+// condition from cl_card_mappings by cert.
+type CompKey struct {
+	GemRateID  string
+	CertNumber string
+}
+
 // CompSummaryProvider computes comp analytics for a card variant at a specific grade.
 type CompSummaryProvider interface {
 	// GetCompSummary returns aggregated comp data for a gemRateID filtered by grade.
@@ -36,6 +44,12 @@ type CompSummaryProvider interface {
 	// CompsAboveCL and CompsAboveCost are left at 0 — the caller derives them per-purchase
 	// from PriceCentsList since different purchases may have different CL values and costs.
 	GetCompSummary(ctx context.Context, gemRateID, certNumber string) (*CompSummary, error)
+
+	// GetCompSummariesByKeys is the batch form of GetCompSummary. It returns one
+	// *CompSummary per input key (same semantics: CompsAboveCL/CompsAboveCost left at 0;
+	// PriceCentsList populated so the caller can derive those per-purchase). Missing or
+	// no-data keys are absent from the returned map rather than mapping to nil.
+	GetCompSummariesByKeys(ctx context.Context, keys []CompKey) (map[CompKey]*CompSummary, error)
 }
 
 // CountAboveCost returns how many prices in the list exceed the given cost.

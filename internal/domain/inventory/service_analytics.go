@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/domain/timeutil"
@@ -192,34 +193,67 @@ func (s *service) flagPriceAnomalies(p *Purchase, snap *MarketSnapshot, item *Ag
 }
 
 func (s *service) GetInventoryAging(ctx context.Context, campaignID string) (*InventoryResult, error) {
+	start := time.Now()
+	var phasePurchases, phaseEnrich, phaseFlags, phaseComps time.Duration
+
+	t0 := time.Now()
 	unsold, err := s.purchases.ListUnsoldPurchases(ctx, campaignID)
+	phasePurchases = time.Since(t0)
 	if err != nil {
 		return nil, err
 	}
+
+	t0 = time.Now()
 	items := make([]AgingItem, 0, len(unsold))
 	for i := range unsold {
 		items = append(items, s.enrichAgingItem(ctx, &unsold[i], ""))
 	}
+	phaseEnrich = time.Since(t0)
 
 	result := &InventoryResult{Items: items}
+
+	t0 = time.Now()
 	if err := s.applyOpenFlags(ctx, items); err != nil {
 		if s.logger != nil {
 			s.logger.Warn(ctx, "applyOpenFlags failed", observability.Err(err))
 		}
 		result.Warnings = append(result.Warnings, "Price flag data unavailable")
 	}
+	phaseFlags = time.Since(t0)
+
+	t0 = time.Now()
 	s.enrichCompSummaries(ctx, items)
+	phaseComps = time.Since(t0)
+
+	if s.logger != nil {
+		s.logger.Info(ctx, "inventory aging completed",
+			observability.String("campaignId", campaignID),
+			observability.Int("itemCount", len(items)),
+			observability.Float64("totalMs", float64(time.Since(start).Milliseconds())),
+			observability.Float64("purchasesMs", float64(phasePurchases.Milliseconds())),
+			observability.Float64("enrichMs", float64(phaseEnrich.Milliseconds())),
+			observability.Float64("openFlagsMs", float64(phaseFlags.Milliseconds())),
+			observability.Float64("compSummariesMs", float64(phaseComps.Milliseconds())),
+		)
+	}
+
 	return result, nil
 }
 
 func (s *service) GetGlobalInventoryAging(ctx context.Context) (*InventoryResult, error) {
+	start := time.Now()
+	var phasePurchases, phaseCampaigns, phaseEnrich, phaseFlags, phaseComps, phaseCracks, phaseSignals time.Duration
+
+	t0 := time.Now()
 	purchases, err := s.purchases.ListAllUnsoldPurchases(ctx)
+	phasePurchases = time.Since(t0)
 	if err != nil {
 		return nil, fmt.Errorf("list unsold purchases: %w", err)
 	}
 
-	// Build campaign name lookup
+	t0 = time.Now()
 	campaignList, err := s.campaigns.ListCampaigns(ctx, false)
+	phaseCampaigns = time.Since(t0)
 	if err != nil {
 		return nil, fmt.Errorf("list campaigns: %w", err)
 	}
@@ -228,30 +262,54 @@ func (s *service) GetGlobalInventoryAging(ctx context.Context) (*InventoryResult
 		campaignNames[c.ID] = c.Name
 	}
 
+	t0 = time.Now()
 	items := make([]AgingItem, 0, len(purchases))
 	for i := range purchases {
 		items = append(items, s.enrichAgingItem(ctx, &purchases[i], campaignNames[purchases[i].CampaignID]))
 	}
+	phaseEnrich = time.Since(t0)
 
 	result := &InventoryResult{Items: items}
+
+	t0 = time.Now()
 	if err := s.applyOpenFlags(ctx, items); err != nil {
 		if s.logger != nil {
 			s.logger.Warn(ctx, "applyOpenFlags failed", observability.Err(err))
 		}
 		result.Warnings = append(result.Warnings, "Price flag data unavailable")
 	}
+	phaseFlags = time.Since(t0)
+
+	t0 = time.Now()
 	s.enrichCompSummaries(ctx, items)
+	phaseComps = time.Since(t0)
 
-	// Compute crack candidates for signal enrichment
+	t0 = time.Now()
 	crackSet := s.buildCrackCandidateSet(ctx)
+	phaseCracks = time.Since(t0)
 
-	// Apply inventory signals
+	t0 = time.Now()
 	for i := range items {
 		isCrack := crackSet[items[i].Purchase.ID]
 		sig := ComputeInventorySignals(&items[i], isCrack)
 		if sig.HasAnySignal() {
 			items[i].Signals = &sig
 		}
+	}
+	phaseSignals = time.Since(t0)
+
+	if s.logger != nil {
+		s.logger.Info(ctx, "global inventory aging completed",
+			observability.Int("itemCount", len(items)),
+			observability.Float64("totalMs", float64(time.Since(start).Milliseconds())),
+			observability.Float64("purchasesMs", float64(phasePurchases.Milliseconds())),
+			observability.Float64("campaignsMs", float64(phaseCampaigns.Milliseconds())),
+			observability.Float64("enrichMs", float64(phaseEnrich.Milliseconds())),
+			observability.Float64("openFlagsMs", float64(phaseFlags.Milliseconds())),
+			observability.Float64("compSummariesMs", float64(phaseComps.Milliseconds())),
+			observability.Float64("cracksMs", float64(phaseCracks.Milliseconds())),
+			observability.Float64("signalsMs", float64(phaseSignals.Milliseconds())),
+		)
 	}
 
 	return result, nil
