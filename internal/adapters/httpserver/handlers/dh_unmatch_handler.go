@@ -62,7 +62,10 @@ func (h *DHHandler) HandleUnmatchDH(w http.ResponseWriter, r *http.Request) {
 
 	// Clear any stored candidates.
 	if h.candidatesSaver != nil {
-		_ = h.candidatesSaver.UpdatePurchaseDHCandidates(ctx, purchase.ID, "")
+		if err := h.candidatesSaver.UpdatePurchaseDHCandidates(ctx, purchase.ID, ""); err != nil {
+			h.logger.Warn(ctx, "unmatch dh: failed to clear candidates",
+				observability.String("purchaseID", purchase.ID), observability.Err(err))
+		}
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
