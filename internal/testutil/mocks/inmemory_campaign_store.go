@@ -507,6 +507,8 @@ func (m *InMemoryCampaignStore) UpdatePurchasePriceOverride(_ context.Context, p
 	p.OverrideSource = inventory.OverrideSource(source)
 	if priceCents > 0 {
 		p.OverrideSetAt = time.Now().Format(time.RFC3339)
+		p.AISuggestedPriceCents = 0
+		p.AISuggestedAt = ""
 	} else {
 		p.OverrideSetAt = ""
 	}
@@ -979,6 +981,8 @@ func (m *InMemoryCampaignStore) UpdateReviewedPrice(_ context.Context, purchaseI
 	if priceCents > 0 {
 		p.ReviewedAt = time.Now().Format(time.RFC3339)
 		p.ReviewSource = inventory.ReviewSource(source)
+		p.AISuggestedPriceCents = 0
+		p.AISuggestedAt = ""
 	} else {
 		p.ReviewedAt = ""
 		p.ReviewSource = ""

@@ -35,11 +35,6 @@ services:
       DH_ENTERPRISE_API_KEY: ${DH_ENTERPRISE_API_KEY:-}
 
       # =====================================================================
-      # Database Configuration
-      # =====================================================================
-      DATABASE_PATH: /app/data/slabledger.db
-
-      # =====================================================================
       # Background Scheduler Configuration
       # =====================================================================
       PRICE_REFRESH_INTERVAL: ${PRICE_REFRESH_INTERVAL:-1h}

@@ -304,6 +304,11 @@ export function useTriggerDHReconcile() {
     mutationFn: () => api.triggerDHReconcile(),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.admin.dhStatus });
+      // Reconcile resets dh_inventory_id on rows DH deleted, which shifts
+      // the "Pending DH Listing" tab count — refresh inventory views so the
+      // operator sees the new counts without a manual reload.
+      qc.invalidateQueries({ queryKey: queryKeys.campaigns.all });
+      qc.invalidateQueries({ queryKey: queryKeys.portfolio.globalInventory });
     },
   });
 }
