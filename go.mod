@@ -7,7 +7,6 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.5.4
 	github.com/joho/godotenv v1.5.1
-	github.com/mattn/go-sqlite3 v1.14.42
 	github.com/openai/openai-go/v3 v3.31.0
 	github.com/sony/gobreaker v1.0.0
 	github.com/stretchr/testify v1.11.1
