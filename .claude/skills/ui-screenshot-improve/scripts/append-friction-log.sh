@@ -30,6 +30,12 @@ if ! command -v jq >/dev/null 2>&1; then
   exit 1
 fi
 
+log_dir="$(dirname "$LOG_PATH")"
+if ! mkdir -p "$log_dir"; then
+  echo "append-friction-log.sh: could not create log directory: $log_dir" >&2
+  exit 1
+fi
+
 payload="$(cat)"
 
 require() {

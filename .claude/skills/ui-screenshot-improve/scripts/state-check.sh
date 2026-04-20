@@ -9,6 +9,17 @@ set -euo pipefail
 
 DB_URL="${SCREENSHOT_DB_URL:-${LOCAL_DB_URL:-postgresql://slabledger:slabledger@postgres:5432/slabledger?sslmode=disable}}"
 
+# Strip credentials (scheme://user:pass@host...) for logging.
+redact_url() {
+  local url="$1"
+  if [[ "$url" == *"://"*"@"* ]]; then
+    printf '%s' "${url%%://*}://***@${url#*@}"
+  else
+    printf '%s' "$url"
+  fi
+}
+DB_URL_SAFE="$(redact_url "$DB_URL")"
+
 if ! command -v psql >/dev/null 2>&1; then
   echo "state-check: psql not found" >&2
   exit 2
@@ -21,7 +32,7 @@ counts_raw="$(psql "$DB_URL" -tA -c "
     (SELECT COUNT(*) FROM campaign_sales),
     (SELECT COUNT(*) FROM invoices);
 " 2>/dev/null)" || {
-  echo "state-check: could not query $DB_URL" >&2
+  echo "state-check: could not query $DB_URL_SAFE" >&2
   exit 2
 }
 
