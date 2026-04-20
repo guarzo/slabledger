@@ -13,6 +13,12 @@ go mod download
 if [ -d "web" ] && [ -f "web/package.json" ]; then
     echo "📦 Installing web dependencies..."
     (cd web && npm install)
+
+    # Install Playwright Chromium browser (cache lives at ~/.cache/ms-playwright)
+    if [ -f "web/node_modules/.bin/playwright" ]; then
+        echo "🎭 Installing Playwright Chromium browser..."
+        (cd web && npx playwright install chromium) || echo "⚠️  Playwright browser install failed, continuing..."
+    fi
 fi
 
 # Ensure ~/.local/bin is on PATH for this script (and future bash sessions)
