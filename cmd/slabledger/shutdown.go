@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/guarzo/slabledger/internal/adapters/httpserver/handlers"
 	"github.com/guarzo/slabledger/internal/adapters/scheduler"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
@@ -39,9 +40,13 @@ func shutdownGracefully(
 
 	// Wait for in-flight background DH work (bulk match + best-effort
 	// follow-ups like ConfirmMatch/DelistChannels) to finish. Bounded so a
-	// hung DH roundtrip can't block process shutdown indefinitely.
+	// hung DH roundtrip can't block process shutdown indefinitely — but no
+	// shorter than the per-goroutine DH timeout, or we'd abandon in-flight
+	// work (e.g. SchedulerShutdownTimeout defaults to 30s while a detached
+	// ConfirmMatch is allowed up to 60s).
 	if hOut.DHHandler != nil {
-		waitBounded(ctx, logger, "dh handler", hOut.DHHandler.Wait, shutdownTimeout)
+		dhWait := max(shutdownTimeout, handlers.DHBackgroundTimeout)
+		waitBounded(ctx, logger, "dh handler", hOut.DHHandler.Wait, dhWait)
 	}
 
 	// Wait for any in-flight background advisor analyses to finish. Bounded
