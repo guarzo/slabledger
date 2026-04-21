@@ -108,11 +108,13 @@ func TestHandleFixMatch_RequiredFields(t *testing.T) {
 // the wrong card must have its channels delisted so eBay/Shopify don't keep
 // advertising the wrong card after the swap.
 //
-// Matrix (oldCardID, newCardID, oldInvID, newInvID):
-//   - card changes + new inv row  → delist old inv (primary case)
-//   - same card (reconfirm)       → skip (nothing wrong to take down)
-//   - old inv == 0 (first match)  → skip (no prior listing)
-//   - old inv == new inv          → skip (DH reused the row; still live, now correct)
+// The handler guards delist on three conditions AND'd together:
+//
+//	oldInventoryID != 0             — there's a prior listing to consider
+//	oldInventoryID != newInventoryID — DH created a new row (not re-pointed)
+//	oldCardID != newCardID          — the card actually changed
+//
+// Each case below exercises a different branch of that guard chain.
 func TestHandleFixMatch_DelistOnCardChange(t *testing.T) {
 	tests := []struct {
 		name            string
@@ -123,6 +125,7 @@ func TestHandleFixMatch_DelistOnCardChange(t *testing.T) {
 		wantDelistCalls int
 	}{
 		{
+			// All three guards true → delist.
 			name:            "card swap creates new inv row → delist old",
 			oldCardID:       598,
 			oldInventoryID:  880,
@@ -131,6 +134,7 @@ func TestHandleFixMatch_DelistOnCardChange(t *testing.T) {
 			wantDelistCalls: 1,
 		},
 		{
+			// oldCardID == newCardID guard fails → skip.
 			name:            "same card reconfirm → no delist",
 			oldCardID:       598,
 			oldInventoryID:  880,
@@ -139,6 +143,7 @@ func TestHandleFixMatch_DelistOnCardChange(t *testing.T) {
 			wantDelistCalls: 0,
 		},
 		{
+			// oldInventoryID == 0 guard fails → skip. First-time match.
 			name:            "first-time match (no prior listing) → no delist",
 			oldCardID:       0,
 			oldInventoryID:  0,
@@ -147,10 +152,13 @@ func TestHandleFixMatch_DelistOnCardChange(t *testing.T) {
 			wantDelistCalls: 0,
 		},
 		{
-			name:            "DH reused inv row on same card → no delist",
+			// oldInventoryID == newInventoryID guard fails even though the card
+			// changed. DH re-pointed the existing row at the new card, so the
+			// listing that's live is now correctly associated — don't take it down.
+			name:            "DH reused inv row across card change → no delist",
 			oldCardID:       598,
 			oldInventoryID:  880,
-			newCardID:       598,
+			newCardID:       599,
 			newInventoryID:  880,
 			wantDelistCalls: 0,
 		},
@@ -176,8 +184,8 @@ func TestHandleFixMatch_DelistOnCardChange(t *testing.T) {
 				},
 			}
 
-			pusher := &mockDHInventoryPusher{
-				PushFn: func(_ context.Context, items []dh.InventoryItem) (*dh.InventoryPushResponse, error) {
+			pusher := &mocks.DHInventoryPusherMock{
+				PushInventoryFn: func(_ context.Context, items []dh.InventoryItem) (*dh.InventoryPushResponse, error) {
 					require.Len(t, items, 1)
 					assert.Equal(t, tt.newCardID, items[0].DHCardID)
 					return &dh.InventoryPushResponse{
@@ -196,7 +204,7 @@ func TestHandleFixMatch_DelistOnCardChange(t *testing.T) {
 				DHFieldsUpdater:   repo,
 				CandidatesSaver:   repo,
 				InventoryPusher:   pusher,
-				CardIDSaver:       &mockDHCardIDSaver{},
+				CardIDSaver:       &mocks.DHCardIDSaverMock{},
 				ChannelDelister:   delister,
 				Logger:            mocks.NewMockLogger(),
 				BaseCtx:           context.Background(),
