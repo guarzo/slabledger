@@ -257,9 +257,36 @@ func NewDHHandler(deps DHHandlerDeps) *DHHandler {
 	return h
 }
 
-// Wait blocks until all background goroutines (e.g. bulk match) have completed.
-// Call during graceful shutdown to avoid writing to a closed database.
+// Wait blocks until all background goroutines (bulk match, best-effort DH
+// follow-ups dispatched via dispatchBackground) have completed. Call during
+// graceful shutdown to avoid writing to a closed database.
 func (h *DHHandler) Wait() { h.bgWG.Wait() }
+
+// dispatchBackground runs fn on a tracked goroutine with a decoupled context,
+// so callers can return a response without waiting on best-effort follow-ups.
+// The original ctx is used only for its values (logger/request scope) via
+// context.WithoutCancel — cancellation from r.Context() does NOT propagate,
+// since the request is already over by the time fn runs. A 60s timeout caps
+// the detached work so a hung DH can't leak goroutines. Panics are recovered
+// and logged. The WaitGroup is incremented synchronously before return so
+// shutdown via Wait() always sees the pending goroutine.
+func (h *DHHandler) dispatchBackground(ctx context.Context, op string, fn func(context.Context)) {
+	bgCtx := context.WithoutCancel(ctx)
+	h.bgWG.Add(1)
+	go func() {
+		defer h.bgWG.Done()
+		defer func() {
+			if r := recover(); r != nil {
+				h.logger.Error(bgCtx, "dh handler: background panic",
+					observability.String("op", op),
+					observability.String("panic", fmt.Sprintf("%v", r)))
+			}
+		}()
+		runCtx, cancel := context.WithTimeout(bgCtx, 60*time.Second)
+		defer cancel()
+		fn(runCtx)
+	}()
+}
 
 // recordEvent emits a DH state-change event to the recorder if present.
 // Failures are logged but do not abort the calling operation.

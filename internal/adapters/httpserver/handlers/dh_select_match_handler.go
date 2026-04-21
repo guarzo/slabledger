@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -156,6 +157,8 @@ func (h *DHHandler) HandleSelectMatch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Teach DH the correct match so future lookups resolve automatically.
+	// Best-effort: the local match is already committed, so hand this off to
+	// a background goroutine and return the response to the user now.
 	if h.matchConfirmer != nil && purchase.CertNumber != "" {
 		confirmReq := dh.ConfirmMatchRequest{
 			CertNumber: purchase.CertNumber,
@@ -163,12 +166,16 @@ func (h *DHHandler) HandleSelectMatch(w http.ResponseWriter, r *http.Request) {
 			SetName:    purchase.SetName,
 			CardName:   purchase.CardName,
 		}
-		if _, err := h.matchConfirmer.ConfirmMatch(ctx, confirmReq); err != nil {
-			h.logger.Warn(ctx, "select match: failed to confirm match with DH",
-				observability.String("purchaseID", purchase.ID),
-				observability.String("cert", purchase.CertNumber),
-				observability.Err(err))
-		}
+		purchaseID := purchase.ID
+		certNumber := purchase.CertNumber
+		h.dispatchBackground(ctx, "select_match_confirm", func(bgCtx context.Context) {
+			if _, err := h.matchConfirmer.ConfirmMatch(bgCtx, confirmReq); err != nil {
+				h.logger.Warn(bgCtx, "select match: failed to confirm match with DH",
+					observability.String("purchaseID", purchaseID),
+					observability.String("cert", certNumber),
+					observability.Err(err))
+			}
+		})
 	}
 
 	writeJSON(w, http.StatusOK, fixMatchResponse{

@@ -37,9 +37,21 @@ func shutdownGracefully(
 			observability.String("timeout", shutdownTimeout.String()))
 	}
 
-	// Wait for in-flight background DH bulk match to finish
+	// Wait for in-flight background DH work (bulk match + best-effort
+	// follow-ups like ConfirmMatch/DelistChannels) to finish. Bounded so a
+	// hung DH roundtrip can't block process shutdown indefinitely.
 	if hOut.DHHandler != nil {
-		hOut.DHHandler.Wait()
+		dhDone := make(chan struct{})
+		go func() {
+			hOut.DHHandler.Wait()
+			close(dhDone)
+		}()
+		select {
+		case <-dhDone:
+		case <-time.After(shutdownTimeout):
+			logger.Warn(ctx, "dh handler background shutdown timed out",
+				observability.String("timeout", shutdownTimeout.String()))
+		}
 	}
 
 	// Wait for any in-flight background advisor analyses to finish

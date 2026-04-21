@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"regexp"
@@ -135,6 +136,8 @@ func (h *DHHandler) HandleFixMatch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Teach DH the correct match so future lookups resolve automatically.
+	// Best-effort: the local match is already committed, so we hand this off
+	// to a background goroutine and return the response to the user now.
 	if h.matchConfirmer != nil && purchase.CertNumber != "" {
 		confirmReq := dh.ConfirmMatchRequest{
 			CertNumber: purchase.CertNumber,
@@ -142,30 +145,40 @@ func (h *DHHandler) HandleFixMatch(w http.ResponseWriter, r *http.Request) {
 			SetName:    purchase.SetName,
 			CardName:   purchase.CardName,
 		}
-		if _, err := h.matchConfirmer.ConfirmMatch(ctx, confirmReq); err != nil {
-			h.logger.Warn(ctx, "fix match: failed to confirm match with DH",
-				observability.String("purchaseID", purchase.ID),
-				observability.String("cert", purchase.CertNumber),
-				observability.Err(err))
-		}
+		purchaseID := purchase.ID
+		certNumber := purchase.CertNumber
+		h.dispatchBackground(ctx, "fix_match_confirm", func(bgCtx context.Context) {
+			if _, err := h.matchConfirmer.ConfirmMatch(bgCtx, confirmReq); err != nil {
+				h.logger.Warn(bgCtx, "fix match: failed to confirm match with DH",
+					observability.String("purchaseID", purchaseID),
+					observability.String("cert", certNumber),
+					observability.Err(err))
+			}
+		})
 	}
 
 	// If this purchase was previously matched to a different DH card and the
 	// push created a new inventory row, take down the channels on the old
 	// listing so eBay/Shopify aren't still advertising the wrong card.
-	// Best-effort: the local match is already committed.
+	// Best-effort: the local match is already committed; run in background.
 	if h.channelDelister != nil &&
 		oldInventoryID != 0 &&
 		oldInventoryID != inventoryID &&
 		oldCardID != dhCardID {
-		if _, derr := h.channelDelister.DelistChannels(ctx, oldInventoryID, nil); derr != nil {
-			h.logger.Warn(ctx, "fix match: delist old channels failed, continuing",
-				observability.String("purchaseID", purchase.ID),
-				observability.Int("oldDHInventoryID", oldInventoryID),
-				observability.Int("oldDHCardID", oldCardID),
-				observability.Int("newDHCardID", dhCardID),
-				observability.Err(derr))
-		}
+		purchaseID := purchase.ID
+		oldInv := oldInventoryID
+		oldCard := oldCardID
+		newCard := dhCardID
+		h.dispatchBackground(ctx, "fix_match_delist", func(bgCtx context.Context) {
+			if _, derr := h.channelDelister.DelistChannels(bgCtx, oldInv, nil); derr != nil {
+				h.logger.Warn(bgCtx, "fix match: delist old channels failed, continuing",
+					observability.String("purchaseID", purchaseID),
+					observability.Int("oldDHInventoryID", oldInv),
+					observability.Int("oldDHCardID", oldCard),
+					observability.Int("newDHCardID", newCard),
+					observability.Err(derr))
+			}
+		})
 	}
 
 	writeJSON(w, http.StatusOK, fixMatchResponse{
