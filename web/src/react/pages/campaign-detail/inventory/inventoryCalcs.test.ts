@@ -5,6 +5,10 @@ import {
   isReadyToList,
   needsPriceReview,
   wasUnlistedFromDH,
+  isSkipped,
+  isDHListed,
+  isPendingDHMatch,
+  isPendingPrice,
 } from './inventoryCalcs';
 import type { AgingItem, Purchase } from '../../../../types/campaigns';
 
@@ -13,7 +17,7 @@ type TestPurchase = Pick<Purchase,
   'campaignId' | 'clValueCents' | 'buyCostCents' | 'psaSourcingFeeCents' | 'purchaseDate' |
   'createdAt' | 'updatedAt' | 'aiSuggestedPriceCents' | 'reviewedAt' |
   'dhInventoryId' | 'dhStatus' | 'reviewedPriceCents' | 'dhUnlistedDetectedAt' |
-  'overridePriceCents'
+  'overridePriceCents' | 'dhPushStatus'
 > & {
   setName?: string;
   cardNumber?: string;
@@ -47,7 +51,7 @@ function makeItem(overrides?: { purchase?: Partial<TestPurchase> } & Omit<Partia
 
 describe('inventoryCalcs', () => {
   describe('computeInventoryMeta', () => {
-    it('counts in_hand items with receivedAt set', () => {
+    it('received items without dhInventoryId land in pending_dh_match', () => {
       const items = [
         makeItem({ purchase: { receivedAt: '2026-04-08T00:00:00Z' } }),
         makeItem({ purchase: { receivedAt: undefined } }),
@@ -55,27 +59,27 @@ describe('inventoryCalcs', () => {
       ];
 
       const meta = computeInventoryMeta(items);
-      expect(meta.tabCounts.in_hand).toBe(2);
+      expect(meta.tabCounts.pending_dh_match).toBe(2);
     });
 
-    it('initializes in_hand count to 0 when no items have receivedAt', () => {
+    it('initializes pending_dh_match to 0 when no items have receivedAt', () => {
       const items = [
         makeItem({ purchase: { receivedAt: undefined } }),
         makeItem({ purchase: { receivedAt: undefined } }),
       ];
 
       const meta = computeInventoryMeta(items);
-      expect(meta.tabCounts.in_hand).toBe(0);
+      expect(meta.tabCounts.pending_dh_match).toBe(0);
     });
 
-    it('counts all items in in_hand when all have receivedAt', () => {
+    it('all received items without dhInventoryId land in pending_dh_match', () => {
       const items = [
         makeItem({ purchase: { receivedAt: '2026-04-08T00:00:00Z' } }),
         makeItem({ purchase: { receivedAt: '2026-04-09T00:00:00Z' } }),
       ];
 
       const meta = computeInventoryMeta(items);
-      expect(meta.tabCounts.in_hand).toBe(2);
+      expect(meta.tabCounts.pending_dh_match).toBe(2);
       expect(meta.tabCounts.all).toBe(2);
     });
 
@@ -132,7 +136,7 @@ describe('inventoryCalcs', () => {
   });
 
   describe('filterAndSortItems', () => {
-    it('filters items by in_hand tab (receivedAt present)', () => {
+    it('in_hand tab is a legacy alias for all — returns all items regardless of receivedAt', () => {
       const items = [
         makeItem({ purchase: { id: '1', receivedAt: '2026-04-08T00:00:00Z' } }),
         makeItem({ purchase: { id: '2', receivedAt: undefined } }),
@@ -149,12 +153,10 @@ describe('inventoryCalcs', () => {
         evMap: new Map(),
       });
 
-      expect(result).toHaveLength(2);
-      expect(result[0].purchase.id).toBe('1');
-      expect(result[1].purchase.id).toBe('3');
+      expect(result).toHaveLength(3);
     });
 
-    it('filters items by in_hand tab (receivedAt empty string)', () => {
+    it('awaiting_intake tab filters to items without receivedAt', () => {
       const items = [
         makeItem({ purchase: { id: '1', receivedAt: '2026-04-08T00:00:00Z' } }),
         makeItem({ purchase: { id: '2', receivedAt: '' } }),
@@ -164,18 +166,18 @@ describe('inventoryCalcs', () => {
       const result = filterAndSortItems(items, {
         debouncedSearch: '',
         showAll: false,
-        filterTab: 'in_hand',
+        filterTab: 'awaiting_intake',
         sellSheetHas: () => false,
         sortKey: 'days',
         sortDir: 'desc',
         evMap: new Map(),
       });
 
-      expect(result).toHaveLength(1);
-      expect(result[0].purchase.id).toBe('1');
+      expect(result).toHaveLength(2);
+      expect(result.map(r => r.purchase.id).sort()).toEqual(['2', '3']);
     });
 
-    it('returns empty array when no items have receivedAt', () => {
+    it('returns all items when no items have receivedAt and in_hand is used', () => {
       const items = [
         makeItem({ purchase: { id: '1', receivedAt: undefined } }),
         makeItem({ purchase: { id: '2', receivedAt: undefined } }),
@@ -191,7 +193,7 @@ describe('inventoryCalcs', () => {
         evMap: new Map(),
       });
 
-      expect(result).toHaveLength(0);
+      expect(result).toHaveLength(2);
     });
 
     it('returns all items when filterTab is all', () => {
@@ -489,6 +491,67 @@ describe('inventoryCalcs', () => {
     it('returns false when dhUnlistedDetectedAt is empty string', () => {
       const item = makeItem({ purchase: { dhUnlistedDetectedAt: '' } });
       expect(wasUnlistedFromDH(item)).toBe(false);
+    });
+  });
+
+  describe('bucket predicates', () => {
+    it('isSkipped returns true only when dhPushStatus is dismissed', () => {
+      expect(isSkipped(makeItem({ purchase: { dhPushStatus: 'dismissed' } }))).toBe(true);
+      expect(isSkipped(makeItem({ purchase: { dhPushStatus: 'matched' } }))).toBe(false);
+      expect(isSkipped(makeItem({ purchase: { dhPushStatus: undefined } }))).toBe(false);
+    });
+
+    it('isDHListed returns true only when dhStatus is listed', () => {
+      expect(isDHListed(makeItem({ purchase: { dhStatus: 'listed' } }))).toBe(true);
+      expect(isDHListed(makeItem({ purchase: { dhStatus: 'in stock' } }))).toBe(false);
+    });
+
+    it('isPendingDHMatch requires received and no dhInventoryId and not skipped', () => {
+      const received = '2026-04-20T00:00:00Z';
+      expect(isPendingDHMatch(makeItem({ purchase: { receivedAt: received, dhInventoryId: undefined } }))).toBe(true);
+      expect(isPendingDHMatch(makeItem({ purchase: { receivedAt: undefined, dhInventoryId: undefined } }))).toBe(false);
+      expect(isPendingDHMatch(makeItem({ purchase: { receivedAt: received, dhInventoryId: 42 } }))).toBe(false);
+      expect(isPendingDHMatch(makeItem({ purchase: { receivedAt: received, dhInventoryId: undefined, dhPushStatus: 'dismissed' } }))).toBe(false);
+    });
+
+    it('isPendingPrice requires received + matched + no committed price + not listed + not skipped', () => {
+      const received = '2026-04-20T00:00:00Z';
+      const base = { receivedAt: received, dhInventoryId: 42, dhStatus: 'in stock' as const };
+      expect(isPendingPrice(makeItem({ purchase: { ...base } }))).toBe(true);
+      expect(isPendingPrice(makeItem({ purchase: { ...base, reviewedPriceCents: 5000 } }))).toBe(false);
+      expect(isPendingPrice(makeItem({ purchase: { ...base, overridePriceCents: 5000 } }))).toBe(false);
+      expect(isPendingPrice(makeItem({ purchase: { ...base, dhStatus: 'listed' } }))).toBe(false);
+      expect(isPendingPrice(makeItem({ purchase: { ...base, dhPushStatus: 'dismissed' } }))).toBe(false);
+    });
+
+    it('partition: every item lands in exactly one secondary bucket', () => {
+      const received = '2026-04-20T00:00:00Z';
+      const items = [
+        makeItem({ purchase: { id: 'a', receivedAt: undefined } }),                                              // awaiting_intake
+        makeItem({ purchase: { id: 'b', receivedAt: received, dhPushStatus: 'dismissed' } }),                    // skipped
+        makeItem({ purchase: { id: 'c', receivedAt: received, dhStatus: 'listed', dhInventoryId: 1 } }),         // dh_listed
+        makeItem({ purchase: { id: 'd', receivedAt: received, dhInventoryId: undefined } }),                     // pending_dh_match
+        makeItem({ purchase: { id: 'e', receivedAt: received, dhInventoryId: 2, dhStatus: 'in stock' } }),       // pending_price
+        makeItem({ purchase: { id: 'f', receivedAt: received, dhInventoryId: 3, dhStatus: 'in stock', reviewedPriceCents: 5000 } }), // ready_to_list
+      ];
+
+      const meta = computeInventoryMeta(items);
+      expect(meta.tabCounts.awaiting_intake).toBe(1);
+      expect(meta.tabCounts.skipped).toBe(1);
+      expect(meta.tabCounts.dh_listed).toBe(1);
+      expect(meta.tabCounts.pending_dh_match).toBe(1);
+      expect(meta.tabCounts.pending_price).toBe(1);
+      expect(meta.tabCounts.ready_to_list).toBe(1);
+      expect(meta.tabCounts.all).toBe(6);
+      // Sum of partitioned buckets equals total.
+      const partitioned =
+        meta.tabCounts.awaiting_intake +
+        meta.tabCounts.skipped +
+        meta.tabCounts.dh_listed +
+        meta.tabCounts.pending_dh_match +
+        meta.tabCounts.pending_price +
+        meta.tabCounts.ready_to_list;
+      expect(partitioned).toBe(meta.tabCounts.all);
     });
   });
 });

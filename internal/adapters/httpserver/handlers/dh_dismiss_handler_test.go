@@ -82,3 +82,55 @@ func TestHandleDismissMatch_NilRecorderIsSafe(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, rr.Code)
 }
+
+func TestHandleDismissMatch_StateMatrix(t *testing.T) {
+	cases := []struct {
+		name      string
+		status    inventory.DHPushStatus
+		wantCode  int
+		wantEvent bool
+	}{
+		{"pending allowed", inventory.DHPushStatusPending, http.StatusOK, true},
+		{"unmatched allowed", inventory.DHPushStatusUnmatched, http.StatusOK, true},
+		{"matched allowed", inventory.DHPushStatusMatched, http.StatusOK, true},
+		{"manual allowed", inventory.DHPushStatusManual, http.StatusOK, true},
+		{"held allowed", inventory.DHPushStatusHeld, http.StatusOK, true},
+		{"already dismissed rejected", inventory.DHPushStatusDismissed, http.StatusConflict, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			purchase := &inventory.Purchase{
+				ID:           "pur-1",
+				CertNumber:   "c-1",
+				DHPushStatus: tc.status,
+			}
+			repo := &mocks.PurchaseRepositoryMock{
+				GetPurchaseFn: func(_ context.Context, _ string) (*inventory.Purchase, error) {
+					return purchase, nil
+				},
+			}
+			rec := &mocks.MockEventRecorder{}
+			h := NewDHHandler(DHHandlerDeps{
+				PurchaseLister:    repo,
+				PushStatusUpdater: repo,
+				Logger:            mocks.NewMockLogger(),
+				BaseCtx:           context.Background(),
+				EventRecorder:     rec,
+			})
+
+			body, _ := json.Marshal(dhDismissRequest{PurchaseID: "pur-1"})
+			req := authenticatedRequest(httptest.NewRequest(http.MethodPost, "/api/dh/dismiss", bytes.NewReader(body)))
+			rr := httptest.NewRecorder()
+			h.HandleDismissMatch(rr, req)
+
+			require.Equal(t, tc.wantCode, rr.Code)
+			if tc.wantEvent {
+				require.Len(t, rec.Events, 1)
+				assert.Equal(t, tc.status, rec.Events[0].PrevPushStatus)
+				assert.Equal(t, inventory.DHPushStatusDismissed, rec.Events[0].NewPushStatus)
+			} else {
+				assert.Len(t, rec.Events, 0)
+			}
+		})
+	}
+}

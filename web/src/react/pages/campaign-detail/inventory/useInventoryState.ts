@@ -75,7 +75,7 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
     [items],
   );
 
-  // Smart default tab: needs_attention → ready_to_list → all. Runs once when items
+  // Smart default tab: needs_attention → ready_to_list → pending_price → pending_dh_match → all. Runs once when items
   // first arrive and the user hasn't manually selected a tab.
   useEffect(() => {
     if (userTabChosenRef.current || items.length === 0) return;
@@ -85,10 +85,14 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
     if (tabCounts.needs_attention > 0) return;
     if (tabCounts.ready_to_list > 0) {
       setFilterTab('ready_to_list');
+    } else if (tabCounts.pending_price > 0) {
+      setFilterTab('pending_price');
+    } else if (tabCounts.pending_dh_match > 0) {
+      setFilterTab('pending_dh_match');
     } else {
       setFilterTab('all');
     }
-  }, [items.length, tabCounts.needs_attention, tabCounts.ready_to_list]);
+  }, [items.length, tabCounts.needs_attention, tabCounts.ready_to_list, tabCounts.pending_price, tabCounts.pending_dh_match]);
 
   const chooseFilterTab = useCallback((tab: FilterTab) => {
     userTabChosenRef.current = true;
@@ -150,6 +154,26 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
       invalidateInventory();
     } catch (err) {
       toast.error(getErrorMessage(err, 'Failed to approve DH push'));
+    }
+  }, [toast, invalidateInventory]);
+
+  const handleDismiss = useCallback(async (purchaseId: string) => {
+    try {
+      await api.dismissDHMatch(purchaseId);
+      toast.success('Dismissed from DH listing');
+      invalidateInventory();
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Failed to dismiss'));
+    }
+  }, [toast, invalidateInventory]);
+
+  const handleUndismiss = useCallback(async (purchaseId: string) => {
+    try {
+      await api.undismissDHMatch(purchaseId);
+      toast.success('Restored to DH pipeline');
+      invalidateInventory();
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Failed to restore'));
     }
   }, [toast, invalidateInventory]);
 
@@ -431,6 +455,8 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
     handleReviewed,
     handleResolveFlag,
     handleApproveDHPush,
+    handleDismiss,
+    handleUndismiss,
     handleListOnDH,
     dhListingInFlight,
     dhListedOptimistic,
