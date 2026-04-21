@@ -262,7 +262,8 @@ func (s *service) ScanCert(ctx context.Context, certNumber string) (*ScanCertRes
 }
 
 // newScanCertResult builds a ScanCertResult for an existing-or-sold cert,
-// copying the identity + search-helper metadata fields off the Purchase.
+// copying the identity + search-helper metadata fields off the Purchase, plus
+// the DH pipeline state the intake screen uses to gate listability.
 func newScanCertResult(status string, p *Purchase, market *MarketSnapshot) *ScanCertResult {
 	return &ScanCertResult{
 		Status:        status,
@@ -278,6 +279,10 @@ func newScanCertResult(status string, p *Purchase, market *MarketSnapshot) *Scan
 		GradeValue:    p.GradeValue,
 		Population:    p.Population,
 		DHSearchQuery: cardutil.BuildCardMatchQuery(p.SetName, p.CardName, p.CardNumber),
+		DHCardID:      p.DHCardID,
+		DHInventoryID: p.DHInventoryID,
+		DHPushStatus:  p.DHPushStatus,
+		DHStatus:      p.DHStatus,
 	}
 }
 
