@@ -129,6 +129,22 @@ func (r *CardIDMappingRepository) GetExternalIDFresh(ctx context.Context, cardNa
 	return externalID, err
 }
 
+// DeleteAutoMapping removes the auto-discovered mapping for a single
+// (cardName, setName, collectorNumber, provider) identity. Manual hints
+// (hint_source='manual') are preserved — the user set those deliberately.
+// Returns the number of rows removed (0 or 1).
+func (r *CardIDMappingRepository) DeleteAutoMapping(ctx context.Context, cardName, setName, collectorNumber, provider string) (int64, error) {
+	result, err := r.db.ExecContext(ctx,
+		`DELETE FROM card_id_mappings
+		 WHERE card_name = $1 AND set_name = $2 AND collector_number = $3 AND provider = $4 AND hint_source = 'auto'`,
+		cardName, setName, collectorNumber, provider,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("delete auto card id mapping: %w", err)
+	}
+	return result.RowsAffected()
+}
+
 // DeleteByCard removes external ID mappings for a given card name and set,
 // across all providers. When collectorNumber is non-empty, only the specific
 // variant is deleted; otherwise all variants for the card are removed.
