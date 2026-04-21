@@ -46,6 +46,13 @@ func isPriceFresh(updatedAtRFC3339 string) bool {
 // specific provider. Both CardLadderRefreshScheduler and
 // MarketMoversRefreshScheduler expose a method with this shape so the enrich
 // job can fan out without coupling to either package beyond the interface.
+//
+// Concurrency invariant: PricingEnrichJob.priceOne calls multiple pricers
+// concurrently, each on its own shallow copy of *Purchase. Implementations
+// MUST NOT mutate through Purchase pointer fields (ReceivedAt,
+// EbayExportFlaggedAt, DHUnlistedDetectedAt, etc.) — those pointers are
+// shared across the concurrent copies and writing through them would race.
+// Mutating value fields on the local copy is always safe.
 type SinglePurchasePricer interface {
 	PriceSinglePurchase(ctx context.Context, p *inventory.Purchase) error
 }
@@ -57,9 +64,11 @@ type SinglePurchasePricer interface {
 // daily cycle.
 //
 // Within one cert, pricers run concurrently — each on its own shallow copy of
-// the Purchase so concurrent field mutations (CLValueCents, DHPushStatus)
-// can't race. MM never reads fields CL mutates, so there is no logical
-// cross-pricer coupling; the copy keeps -race clean and the contract explicit.
+// the Purchase so concurrent writes to value fields (CLValueCents,
+// DHPushStatus) can't race. Pointer fields on Purchase remain shared across
+// copies; see the SinglePurchasePricer interface doc for the invariant
+// pricers must uphold. MM never reads fields CL mutates, so there is no
+// logical cross-pricer coupling today.
 //
 // Pricers are optional — if CL/MM isn't configured, the scheduler constructor
 // is passed nil and this job drops the enqueue with a warning.
@@ -204,6 +213,11 @@ func (j *PricingEnrichJob) priceOne(ctx context.Context, certNum string, workerI
 		wg.Add(1)
 		go func(pricer SinglePurchasePricer) {
 			defer wg.Done()
+			// Shallow copy: value fields are isolated per goroutine, but pointer
+			// fields (ReceivedAt, EbayExportFlaggedAt, DHUnlistedDetectedAt) are
+			// still shared. See the SinglePurchasePricer interface doc — pricers
+			// must not mutate through those pointers. Neither CL nor MM does
+			// today; enforce it in review for any new pricer.
 			pCopy := *purchase
 			if err := pricer.PriceSinglePurchase(ctx, &pCopy); err != nil {
 				j.logger.Warn(ctx, "pricing-enrich: pricer failed",
