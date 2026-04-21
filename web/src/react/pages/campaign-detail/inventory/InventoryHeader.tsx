@@ -63,7 +63,10 @@ export default function InventoryHeader({
   ].filter(t => t.alwaysShow || t.count > 0), [tabCounts, pageSellSheetCount]);
   const secondary = useMemo(() => [
     { key: 'all' as const, label: 'All', count: tabCounts.all, alwaysShow: true },
-    { key: 'in_hand' as const, label: 'In Hand', count: tabCounts.in_hand, alwaysShow: false },
+    { key: 'dh_listed' as const, label: 'DH Listed', count: tabCounts.dh_listed, alwaysShow: false },
+    { key: 'pending_dh_match' as const, label: 'Pending DH Match', count: tabCounts.pending_dh_match, alwaysShow: false },
+    { key: 'pending_price' as const, label: 'Pending Price', count: tabCounts.pending_price, alwaysShow: false },
+    { key: 'skipped' as const, label: 'Skipped on DH Listing', count: tabCounts.skipped, alwaysShow: false },
     { key: 'awaiting_intake' as const, label: 'Awaiting Intake', count: tabCounts.awaiting_intake, alwaysShow: false },
   ].filter(t => t.alwaysShow || t.count > 0), [tabCounts]);
 

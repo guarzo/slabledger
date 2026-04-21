@@ -5,6 +5,7 @@ import PokeballLoader from '../../PokeballLoader';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { EmptyState } from '../../ui';
 import { costBasis, unrealizedPL } from './inventory/utils';
+import { needsPriceReview } from './inventory/inventoryCalcs';
 import '../../../styles/print-sell-sheet.css';
 import DesktopRow from './inventory/DesktopRow';
 import MobileCard from './inventory/MobileCard';
@@ -41,7 +42,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
     handleSort, handleReviewed, handleResolveFlag, handleApproveDHPush, handleListOnDH, dhListingInFlight, dhListedOptimistic, handleBulkListOnDH, handleFlagSubmit, handlePrint, handleDelete,
     toggleSelect, toggleAll, toggleExpand,
     openSaleModal, closeSaleModal, handleFixPricing, handleFixDHMatch, handleFixDHMatchSaved, handleUnmatchDH, handleSetPrice,
-    handlePriceSaved, handleHintSaved, handleInlinePriceSave, sellSheet, toast,
+    handlePriceSaved, handleHintSaved, handleInlinePriceSave, handleDismiss, handleUndismiss, sellSheet, toast,
   } = state;
 
   const rowVirtualizer = useVirtualizer({
@@ -148,6 +149,8 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                     onSetPrice={() => handleSetPrice(item)}
                     onDelete={() => handleDelete(item)}
                     onListOnDH={handleListOnDH}
+                    onDismiss={() => handleDismiss(item.purchase.id)}
+                    onUndismiss={() => handleUndismiss(item.purchase.id)}
                     dhListingLoading={dhListingInFlight.has(item.purchase.id)}
                     dhListedOverride={dhListedOptimistic.has(item.purchase.id)}
                     ev={evMap.get(item.purchase.certNumber)}
@@ -182,6 +185,8 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                         onSetPrice={() => handleSetPrice(item)}
                         onDelete={() => handleDelete(item)}
                         onListOnDH={handleListOnDH}
+                        onDismiss={() => handleDismiss(item.purchase.id)}
+                        onUndismiss={() => handleUndismiss(item.purchase.id)}
                         dhListingLoading={dhListingInFlight.has(item.purchase.id)}
                         dhListedOverride={dhListedOptimistic.has(item.purchase.id)}
                         ev={evMap.get(item.purchase.certNumber)}
@@ -214,7 +219,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
             <SortableHeader label="P/L" sortKey="pl" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-right print-hide-col" style={{ width: '72px' }} />
             <SortableHeader label="Days" sortKey="days" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-center print-hide-col" style={{ width: '40px' }} />
             <div className="glass-table-th flex-shrink-0 text-center print-hide-col" style={{ width: '20px' }}></div>
-            <div className="glass-table-th flex-shrink-0 text-center print-hide-actions" style={{ width: '48px' }}>List</div>
+            <div className="glass-table-th flex-shrink-0 text-center print-hide-actions" style={{ width: '88px' }}>Action</div>
             <div className="glass-table-th flex-shrink-0 text-center print-hide-actions" style={{ width: '48px' }}>Sell</div>
             <div className="glass-table-th flex-shrink-0 !px-1 print-hide-actions" style={{ width: '28px' }}></div>
           </div>
@@ -246,6 +251,8 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                       onSetPrice={() => handleSetPrice(item)}
                       onDelete={() => handleDelete(item)}
                       onListOnDH={handleListOnDH}
+                      onDismiss={() => handleDismiss(item.purchase.id)}
+                      onUndismiss={() => handleUndismiss(item.purchase.id)}
                       dhListingLoading={dhListingInFlight.has(item.purchase.id)}
                       dhListedOverride={dhListedOptimistic.has(item.purchase.id)}
                       showCampaignColumn={showCampaignColumn}
@@ -256,7 +263,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                       } : undefined}
                     />
                     </div>
-                    {isExpanded && <ExpandedDetail item={item} onReviewed={handleReviewed} campaignId={campaignId} onOpenFlagDialog={() => setFlagTarget({ purchaseId: item.purchase.id, cardName: item.purchase.cardName, grade: item.purchase.gradeValue })} onResolveFlag={handleResolveFlag} onApproveDHPush={handleApproveDHPush} onSetPrice={() => handleSetPrice(item)} />}
+                    {isExpanded && <ExpandedDetail item={item} onReviewed={handleReviewed} campaignId={campaignId} onOpenFlagDialog={() => setFlagTarget({ purchaseId: item.purchase.id, cardName: item.purchase.cardName, grade: item.purchase.gradeValue })} onResolveFlag={handleResolveFlag} onApproveDHPush={handleApproveDHPush} onSetPrice={() => handleSetPrice(item)} combineWithList={needsPriceReview(item)} />}
                   </div>
                 );
               })
@@ -297,6 +304,8 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                           onDelete={() => handleDelete(item)}
                           onListOnDH={handleListOnDH}
                           onInlinePriceSave={handleInlinePriceSave}
+                          onDismiss={() => handleDismiss(item.purchase.id)}
+                          onUndismiss={() => handleUndismiss(item.purchase.id)}
                           dhListingLoading={dhListingInFlight.has(item.purchase.id)}
                           dhListedOverride={dhListedOptimistic.has(item.purchase.id)}
                           showCampaignColumn={showCampaignColumn}
@@ -307,7 +316,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                           } : undefined}
                         />
                       </div>
-                      {isExpanded && <ExpandedDetail item={item} onReviewed={handleReviewed} campaignId={campaignId} onOpenFlagDialog={() => setFlagTarget({ purchaseId: item.purchase.id, cardName: item.purchase.cardName, grade: item.purchase.gradeValue })} onResolveFlag={handleResolveFlag} onApproveDHPush={handleApproveDHPush} onSetPrice={() => handleSetPrice(item)} />}
+                      {isExpanded && <ExpandedDetail item={item} onReviewed={handleReviewed} campaignId={campaignId} onOpenFlagDialog={() => setFlagTarget({ purchaseId: item.purchase.id, cardName: item.purchase.cardName, grade: item.purchase.gradeValue })} onResolveFlag={handleResolveFlag} onApproveDHPush={handleApproveDHPush} onSetPrice={() => handleSetPrice(item)} combineWithList={needsPriceReview(item)} />}
                     </div>
                   );
                 })}

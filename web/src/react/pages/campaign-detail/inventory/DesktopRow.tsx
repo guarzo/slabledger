@@ -10,7 +10,7 @@ import {
   referencePricesTooltip,
   syncDotProps, hasCanonicalPriceSignal,
 } from './utils';
-import { isReadyToList, needsPriceReview, wasUnlistedFromDH } from './inventoryCalcs';
+import { wasUnlistedFromDH, deriveActionIntent, canDismiss } from './inventoryCalcs';
 import { dhBadgeFor, DH_BADGE_COLORS } from './dhBadge';
 import InlinePriceEdit from './InlinePriceEdit';
 
@@ -55,6 +55,8 @@ interface DesktopRowProps {
   onListOnDH?: (purchaseId: string) => void;
   onInlinePriceSave?: (purchaseId: string, priceCents: number) => Promise<void>;
   onRemoveFromSellSheet?: () => void;
+  onDismiss?: () => void;
+  onUndismiss?: () => void;
   onUnmatchDH?: () => void;
   dhListingLoading?: boolean;
   dhListedOverride?: boolean;
@@ -62,7 +64,7 @@ interface DesktopRowProps {
   isOnSellSheet?: boolean;
 }
 
-export default function DesktopRow({ item, selected, onToggle, onExpand, onRecordSale, onFixPricing, onFixDHMatch, onSetPrice, onDelete, onListOnDH, onInlinePriceSave, onRemoveFromSellSheet, onUnmatchDH, dhListingLoading, dhListedOverride, showCampaignColumn, isOnSellSheet }: DesktopRowProps) {
+export default function DesktopRow({ item, selected, onToggle, onExpand, onRecordSale, onFixPricing, onFixDHMatch, onSetPrice, onDelete, onListOnDH, onInlinePriceSave, onRemoveFromSellSheet, onDismiss, onUndismiss, onUnmatchDH, dhListingLoading, dhListedOverride, showCampaignColumn, isOnSellSheet }: DesktopRowProps) {
   const cb = costBasis(item.purchase);
   const snap = item.currentMarket;
   const daysColor = daysHeldColor(item.daysHeld);
@@ -90,6 +92,9 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
     hasDHPrice: (snap?.gradePriceCents ?? 0) > 0 || (snap?.lastSoldCents ?? 0) > 0,
     clLastError: item.purchase.clLastError,
   });
+
+  const actionIntent = deriveActionIntent(item);
+  const showDismiss = canDismiss(actionIntent);
 
   return (
     <div
@@ -226,7 +231,7 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
           style={{ color: dot.color, fontSize: '10px', lineHeight: 1 }}
         >&#9679;</span>
       </div>
-      <div className="glass-table-td flex-shrink-0 text-center !px-1 print-hide-actions" style={{ width: '56px' }} onClick={e => e.stopPropagation()}>
+      <div className="glass-table-td flex-shrink-0 text-center !px-1 print-hide-actions" style={{ width: '88px' }} onClick={e => e.stopPropagation()}>
         <div className="flex flex-col items-center gap-0.5">
           {wasUnlistedFromDH(item) && (
             <span
@@ -238,7 +243,17 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
           )}
           {dhListedOverride ? (
             <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${DH_BADGE_COLORS.listed}`} title={DH_BADGE_TITLES['listed']}>listed</span>
-          ) : onListOnDH && isReadyToList(item) ? (
+          ) : actionIntent === 'fix_match' && onFixDHMatch ? (
+            <button
+              type="button"
+              onClick={onFixDHMatch}
+              className="text-xs font-medium px-2 py-1 rounded bg-[var(--warning)]/15 text-[var(--warning)] hover:bg-[var(--warning)]/30 transition-colors"
+              title="Paste the correct DoubleHolo URL to fix the match"
+              aria-label="Fix DH Match"
+            >
+              Fix Match
+            </button>
+          ) : actionIntent === 'list' && onListOnDH ? (
             <button
               type="button"
               onClick={() => onListOnDH(item.purchase.id)}
@@ -252,15 +267,24 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
             >
               {dhListingLoading ? 'Listing…' : 'List'}
             </button>
-          ) : needsPriceReview(item) ? (
+          ) : actionIntent === 'set_and_list' ? (
             <button
               type="button"
               onClick={onExpand}
               className="text-xs font-medium px-2 py-1 rounded bg-[var(--warning)]/15 text-[var(--warning)] hover:bg-[var(--warning)]/30 transition-colors"
-              title="Set a reviewed price before listing"
-              aria-label="Set reviewed price before listing on DH"
+              title="Set a price and list on DH"
+              aria-label="Set price and list on DH"
             >
-              Set price
+              Set &amp; List
+            </button>
+          ) : actionIntent === 'restore' && onUndismiss ? (
+            <button
+              type="button"
+              onClick={onUndismiss}
+              className="text-xs font-medium px-2 py-1 rounded bg-[var(--brand-500)]/15 text-[var(--brand-400)] hover:bg-[var(--brand-500)]/30 transition-colors"
+              title="Restore to DH pipeline"
+            >
+              Restore
             </button>
           ) : (() => {
             const badge = dhBadgeFor(item.purchase.dhPushStatus, item.purchase.dhStatus, item.purchase.receivedAt);
@@ -271,6 +295,19 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
               </span>
             );
           })()}
+          {showDismiss && onDismiss && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (window.confirm('Dismiss this item from DH listing?')) onDismiss();
+              }}
+              className="text-[9px] text-[var(--text-muted)] hover:text-[var(--danger)] underline underline-offset-2"
+              title="Skip DH for this item"
+            >
+              Dismiss
+            </button>
+          )}
         </div>
       </div>
       {/* Sell button */}
@@ -338,6 +375,24 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
                   className="px-3 py-2 text-sm text-[var(--text-muted)] hover:bg-[rgba(255,255,255,0.04)] hover:text-[var(--text)] outline-none cursor-default"
                 >
                   Remove DH Match
+                </DropdownMenu.Item>
+              )}
+              {showDismiss && onDismiss && (
+                <DropdownMenu.Item
+                  onSelect={() => {
+                    if (window.confirm('Dismiss this item from DH listing?')) onDismiss();
+                  }}
+                  className="px-3 py-2 text-sm text-[var(--text-muted)] hover:bg-[rgba(255,255,255,0.04)] hover:text-[var(--text)] outline-none cursor-default"
+                >
+                  Dismiss from DH
+                </DropdownMenu.Item>
+              )}
+              {actionIntent === 'restore' && onUndismiss && (
+                <DropdownMenu.Item
+                  onSelect={onUndismiss}
+                  className="px-3 py-2 text-sm text-[var(--text-muted)] hover:bg-[rgba(255,255,255,0.04)] hover:text-[var(--text)] outline-none cursor-default"
+                >
+                  Restore to DH
                 </DropdownMenu.Item>
               )}
               {isOnSellSheet && onRemoveFromSellSheet && (

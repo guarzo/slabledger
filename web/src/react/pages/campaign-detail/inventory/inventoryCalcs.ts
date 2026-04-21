@@ -6,9 +6,14 @@ const EXCEPTION_STATUSES = ['large_gap', 'no_data', 'flagged'] as const;
 
 export interface TabCounts {
   needs_attention: number;
-  in_hand: number;
-  ready_to_list: number;
   awaiting_intake: number;
+  pending_dh_match: number;
+  pending_price: number;
+  ready_to_list: number;
+  dh_listed: number;
+  skipped: number;
+  /** Legacy alias for bookmarks using the old filter key. Equals `all`. */
+  in_hand: number;
   all: number;
 }
 
@@ -24,42 +29,10 @@ export interface InventoryMeta {
   summary: SummaryStats;
 }
 
-export function computeInventoryMeta(items: AgingItem[]): InventoryMeta {
-  const stats: ReviewStats = { total: items.length, reviewed: 0, flagged: 0, aging60d: 0 };
-  const counts: TabCounts = { needs_attention: 0, in_hand: 0, ready_to_list: 0, awaiting_intake: 0, all: items.length };
-  let totalCost = 0;
-  let totalMarket = 0;
-  for (const item of items) {
-    if (item.hasOpenFlag) stats.flagged++;
-    if (item.purchase.reviewedAt) stats.reviewed++;
-    if (item.daysHeld >= 60) stats.aging60d++;
-
-    const status = getReviewStatus(item);
-    if (needsAttention(item, status)) {
-      counts.needs_attention++;
-    }
-    if (item.purchase.receivedAt) counts.in_hand++;
-    else counts.awaiting_intake++;
-    if (isReadyToList(item)) counts.ready_to_list++;
-
-    totalCost += costBasis(item.purchase);
-    totalMarket += bestPrice(item);
-  }
-  return {
-    reviewStats: stats,
-    tabCounts: counts,
-    summary: { totalCost, totalMarket, totalPL: totalMarket - totalCost },
-  };
-}
-
 export function isDHHeld(item: AgingItem): boolean {
   return item.purchase.dhPushStatus === 'held';
 }
 
-// hasCommittedPrice: operator has committed a listing price, either via the
-// inline review flow (reviewedPriceCents) or the "Set Price" dialog
-// (overridePriceCents). Backend ResolveListingPriceCents uses the same
-// reviewed-then-override fallback when pushing prices to DH.
 function hasCommittedPrice(item: AgingItem): boolean {
   return (
     (item.purchase.reviewedPriceCents ?? 0) > 0 ||
@@ -67,21 +40,31 @@ function hasCommittedPrice(item: AgingItem): boolean {
   );
 }
 
-export function needsAttention(item: AgingItem, status = getReviewStatus(item)): boolean {
-  // Pre-intake cards can't be meaningfully acted on yet — don't flag them as needing attention.
-  if (!item.purchase.receivedAt) return false;
-  if ((EXCEPTION_STATUSES as readonly string[]).includes(status)) return true;
-  if (isDHHeld(item)) return true;
-  // An AI suggestion only warrants attention when the operator hasn't committed
-  // a price yet — once reviewed or overridden, the suggestion is superseded.
-  if (!hasCommittedPrice(item) && (item.purchase.aiSuggestedPriceCents ?? 0) > 0) return true;
-  return false;
+export function isSkipped(item: AgingItem): boolean {
+  return item.purchase.dhPushStatus === 'dismissed';
 }
 
-// isReadyToList: received (intake complete), pushed to DH inventory, not yet
-// listed, AND has a committed price. Without one the "List on DH" action
-// would 409, so those items belong in `needsPriceReview` instead.
+export function isDHListed(item: AgingItem): boolean {
+  return item.purchase.dhStatus === 'listed';
+}
+
+export function isPendingDHMatch(item: AgingItem): boolean {
+  if (!item.purchase.receivedAt) return false;
+  if (isSkipped(item)) return false;
+  if (isDHListed(item)) return false;
+  return !item.purchase.dhInventoryId;
+}
+
+export function isPendingPrice(item: AgingItem): boolean {
+  if (!item.purchase.receivedAt) return false;
+  if (isSkipped(item)) return false;
+  if (isDHListed(item)) return false;
+  if (!item.purchase.dhInventoryId) return false;
+  return !hasCommittedPrice(item);
+}
+
 export function isReadyToList(item: AgingItem): boolean {
+  if (isSkipped(item)) return false;
   return (
     !!item.purchase.receivedAt &&
     !!item.purchase.dhInventoryId &&
@@ -90,17 +73,25 @@ export function isReadyToList(item: AgingItem): boolean {
   );
 }
 
-// needsPriceReview: received, pushed to DH, not listed, but no committed
-// price yet. Drives the "Set price" row button (which expands the row to
-// reveal the PriceDecisionBar) rather than a "List on DH" button that
-// would hit a 409.
+// needsPriceReview: Existing alias — same semantic as isPendingPrice.
 export function needsPriceReview(item: AgingItem): boolean {
-  return (
-    !!item.purchase.receivedAt &&
-    !!item.purchase.dhInventoryId &&
-    item.purchase.dhStatus !== 'listed' &&
-    !hasCommittedPrice(item)
-  );
+  return isPendingPrice(item);
+}
+
+export type ActionIntent = 'fix_match' | 'set_and_list' | 'list' | 'restore' | 'none';
+
+// deriveActionIntent picks a single primary row action from the item's own
+// status. Shared by DesktopRow and MobileCard so the two stay in lockstep.
+export function deriveActionIntent(item: AgingItem): ActionIntent {
+  if (isSkipped(item)) return 'restore';
+  if (isPendingDHMatch(item)) return 'fix_match';
+  if (isPendingPrice(item)) return 'set_and_list';
+  if (isReadyToList(item)) return 'list';
+  return 'none';
+}
+
+export function canDismiss(intent: ActionIntent): boolean {
+  return intent === 'fix_match' || intent === 'set_and_list' || intent === 'list';
 }
 
 // wasUnlistedFromDH: the DH reconciler detected this item was deleted
@@ -110,7 +101,75 @@ export function wasUnlistedFromDH(item: AgingItem): boolean {
   return !!item.purchase.dhUnlistedDetectedAt;
 }
 
-export type FilterTab = 'needs_attention' | 'sell_sheet' | 'all' | 'in_hand' | 'ready_to_list' | 'awaiting_intake';
+export function needsAttention(item: AgingItem, status = getReviewStatus(item)): boolean {
+  if (!item.purchase.receivedAt) return false;
+  if (isSkipped(item)) return false;
+  if ((EXCEPTION_STATUSES as readonly string[]).includes(status)) return true;
+  if (isDHHeld(item)) return true;
+  if (!hasCommittedPrice(item) && (item.purchase.aiSuggestedPriceCents ?? 0) > 0) return true;
+  return false;
+}
+
+export function computeInventoryMeta(items: AgingItem[]): InventoryMeta {
+  const stats: ReviewStats = { total: items.length, reviewed: 0, flagged: 0, aging60d: 0 };
+  const counts: TabCounts = {
+    needs_attention: 0,
+    awaiting_intake: 0,
+    pending_dh_match: 0,
+    pending_price: 0,
+    ready_to_list: 0,
+    dh_listed: 0,
+    skipped: 0,
+    in_hand: 0,
+    all: items.length,
+  };
+  let totalCost = 0;
+  let totalMarket = 0;
+  for (const item of items) {
+    if (item.hasOpenFlag) stats.flagged++;
+    if (item.purchase.reviewedAt) stats.reviewed++;
+    if (item.daysHeld >= 60) stats.aging60d++;
+
+    const status = getReviewStatus(item);
+    if (needsAttention(item, status)) counts.needs_attention++;
+
+    // Secondary-row partition: evaluate top-down, first match wins.
+    if (!item.purchase.receivedAt) {
+      counts.awaiting_intake++;
+    } else if (isSkipped(item)) {
+      counts.skipped++;
+    } else if (isDHListed(item)) {
+      counts.dh_listed++;
+    } else if (isPendingDHMatch(item)) {
+      counts.pending_dh_match++;
+    } else if (isPendingPrice(item)) {
+      counts.pending_price++;
+    } else if (isReadyToList(item)) {
+      counts.ready_to_list++;
+    }
+
+    totalCost += costBasis(item.purchase);
+    totalMarket += bestPrice(item);
+  }
+  counts.in_hand = counts.all; // alias kept for old bookmarks
+  return {
+    reviewStats: stats,
+    tabCounts: counts,
+    summary: { totalCost, totalMarket, totalPL: totalMarket - totalCost },
+  };
+}
+
+export type FilterTab =
+  | 'needs_attention'
+  | 'sell_sheet'
+  | 'all'
+  | 'awaiting_intake'
+  | 'pending_dh_match'
+  | 'pending_price'
+  | 'ready_to_list'
+  | 'dh_listed'
+  | 'skipped'
+  | 'in_hand'; // legacy alias
 
 export function filterAndSortItems(
   items: AgingItem[],
@@ -127,7 +186,6 @@ export function filterAndSortItems(
   const { debouncedSearch, showAll, filterTab, sellSheetHas, sortKey, sortDir, evMap } = opts;
   let result = items;
 
-  // Search always overrides: if search query is set, search all items regardless of tab
   if (debouncedSearch.trim()) {
     const q = debouncedSearch.toLowerCase();
     result = result.filter(i =>
@@ -136,21 +194,27 @@ export function filterAndSortItems(
       (i.purchase.setName && i.purchase.setName.toLowerCase().includes(q))
     );
   } else if (!showAll) {
-    // Filter by active tab using getReviewStatus
     if (filterTab === 'sell_sheet') {
       result = result.filter(i => sellSheetHas(i.purchase.id) && !!i.purchase.receivedAt);
+    } else if (filterTab === 'in_hand') {
+      // Legacy alias: treat as `all`.
+      // result stays as-is
     } else if (filterTab !== 'all') {
       result = result.filter(i => {
-        if (filterTab === 'needs_attention') return needsAttention(i);
-        if (filterTab === 'in_hand') return !!i.purchase.receivedAt;
-        if (filterTab === 'ready_to_list') return isReadyToList(i);
-        if (filterTab === 'awaiting_intake') return !i.purchase.receivedAt;
-        return false;
+        switch (filterTab) {
+          case 'needs_attention': return needsAttention(i);
+          case 'awaiting_intake': return !i.purchase.receivedAt;
+          case 'pending_dh_match': return isPendingDHMatch(i);
+          case 'pending_price': return isPendingPrice(i);
+          case 'ready_to_list': return isReadyToList(i);
+          case 'dh_listed': return isDHListed(i);
+          case 'skipped': return isSkipped(i);
+          default: return false;
+        }
       });
     }
   }
 
-  // Sort: when !showAll and no search, use queue urgency sort; otherwise use user-selected sort
   if (!showAll && !debouncedSearch.trim()) {
     return [...result].sort(reviewUrgencySort);
   }
