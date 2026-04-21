@@ -203,6 +203,45 @@ func TestSyncPurchasePrice(t *testing.T) {
 	}
 }
 
+// TestSyncPurchasePrice_ResolvesNewestCommit guards the dhpricing copy of the
+// reviewed↔override resolver: when a fresh override has been committed on top
+// of a stale reviewed price, SyncPurchasePrice must push the override to DH
+// rather than the stale reviewed value.
+func TestSyncPurchasePrice_ResolvesNewestCommit(t *testing.T) {
+	const oldTS = "2026-01-01T00:00:00Z"
+	const newTS = "2026-04-21T12:00:00Z"
+
+	p := &inventory.Purchase{
+		ID:                  "pur-1",
+		DHInventoryID:       42,
+		ReviewedPriceCents:  10000,
+		ReviewedAt:          oldTS,
+		OverridePriceCents:  15000,
+		OverrideSetAt:       newTS,
+		DHListingPriceCents: 10000, // matches the stale reviewed value
+		DHStatus:            inventory.DHStatusListed,
+	}
+
+	lookup := &fakeLookup{purchases: map[string]*inventory.Purchase{"pur-1": p}}
+	updater := &fakeUpdater{}
+	writer := &fakeWriter{}
+	resetter := &fakeResetter{}
+
+	svc := newTestService(lookup, updater, writer, resetter)
+	got := svc.SyncPurchasePrice(context.Background(), "pur-1")
+
+	if got.Outcome != OutcomeSynced {
+		t.Fatalf("Outcome = %q, want %q", got.Outcome, OutcomeSynced)
+	}
+	if len(updater.calls) != 1 {
+		t.Fatalf("expected 1 updater call, got %d", len(updater.calls))
+	}
+	if updater.calls[0].listingPriceCents != 15000 {
+		t.Errorf("sent listing_price_cents = %d, want 15000 (override should win over stale reviewed)",
+			updater.calls[0].listingPriceCents)
+	}
+}
+
 func TestSyncDriftedPurchases(t *testing.T) {
 	drift := []inventory.Purchase{
 		{ID: "a", DHInventoryID: 1, ReviewedPriceCents: 11000, DHListingPriceCents: 10000, DHStatus: inventory.DHStatusListed},

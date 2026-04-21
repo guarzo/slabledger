@@ -39,13 +39,21 @@ func NewService(
 }
 
 // resolveListingPrice mirrors dhlisting.ResolveListingPriceCents, inlined
-// here to preserve the flat-siblings invariant. Reviewed wins; override is
-// the fallback so "Set Price" dialog commits still drive DH listing.
+// here to preserve the flat-siblings invariant. When both reviewed and
+// override are set, the newest commit wins via RFC3339 timestamp
+// comparison; empty timestamps fall back to the historical "reviewed
+// wins" precedence.
 func resolveListingPrice(p *inventory.Purchase) int {
-	if p.ReviewedPriceCents > 0 {
+	if p.OverridePriceCents == 0 {
 		return p.ReviewedPriceCents
 	}
-	return p.OverridePriceCents
+	if p.ReviewedPriceCents == 0 {
+		return p.OverridePriceCents
+	}
+	if p.OverrideSetAt > p.ReviewedAt {
+		return p.OverridePriceCents
+	}
+	return p.ReviewedPriceCents
 }
 
 func (s *service) SyncPurchasePrice(ctx context.Context, purchaseID string) SyncResult {
