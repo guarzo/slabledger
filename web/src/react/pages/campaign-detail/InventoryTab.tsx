@@ -1,4 +1,3 @@
-import { useEffect } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { AgingItem } from '../../../types/campaigns';
 import type { Purchase } from '../../../types/campaigns/core';
@@ -48,17 +47,10 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
   const rowVirtualizer = useVirtualizer({
     count: filteredAndSortedItems.length,
     getScrollElement: () => scrollContainerRef.current,
-    estimateSize: (index) => {
-      const item = filteredAndSortedItems[index];
-      return item && expandedId === item.purchase.id ? 268 : 64;
-    },
+    // Expanded rows have variable height; measureElement handles actual sizing.
+    estimateSize: () => 64,
     overscan: 10,
   });
-
-  // Force virtualizer to recalculate sizes when a row expands/collapses
-  useEffect(() => {
-    rowVirtualizer.measure();
-  }, [expandedId, rowVirtualizer]);
 
   const mobileVirtualizer = useVirtualizer({
     count: filteredAndSortedItems.length,
