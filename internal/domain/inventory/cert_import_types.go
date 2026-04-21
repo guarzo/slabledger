@@ -41,6 +41,15 @@ type ScanCertResult struct {
 	CampaignID   string          `json:"campaignId,omitempty"`
 	BuyCostCents int             `json:"buyCostCents,omitempty"`
 	Market       *MarketSnapshot `json:"market,omitempty"`
+
+	// Metadata for the intake-row DH-search helper. Populated only for
+	// "existing" and "sold" statuses from the underlying Purchase record.
+	FrontImageURL string  `json:"frontImageUrl,omitempty"`
+	SetName       string  `json:"setName,omitempty"`
+	CardNumber    string  `json:"cardNumber,omitempty"`
+	CardYear      string  `json:"cardYear,omitempty"`
+	GradeValue    float64 `json:"gradeValue,omitempty"`
+	Population    int     `json:"population,omitempty"`
 }
 
 // ResolveCertRequest is the input for POST /api/purchases/resolve-cert.

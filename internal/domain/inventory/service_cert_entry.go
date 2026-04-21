@@ -228,14 +228,7 @@ func (s *service) ScanCert(ctx context.Context, certNumber string) (*ScanCertRes
 	}
 
 	if _, hasSale := salesMap[existing.ID]; hasSale {
-		return &ScanCertResult{
-			Status:       "sold",
-			CardName:     existing.CardName,
-			PurchaseID:   existing.ID,
-			CampaignID:   existing.CampaignID,
-			BuyCostCents: existing.BuyCostCents,
-			Market:       s.buildEnrichedSnapshot(existing),
-		}, nil
+		return newScanCertResult("sold", existing, s.buildEnrichedSnapshot(existing)), nil
 	}
 
 	// Existing and not sold — flag for eBay export and mark received
@@ -264,14 +257,26 @@ func (s *service) ScanCert(ctx context.Context, certNumber string) (*ScanCertRes
 		s.pricingQueue.Enqueue(certNumber)
 	}
 
+	return newScanCertResult("existing", existing, s.buildEnrichedSnapshot(existing)), nil
+}
+
+// newScanCertResult builds a ScanCertResult for an existing-or-sold cert,
+// copying the identity + search-helper metadata fields off the Purchase.
+func newScanCertResult(status string, p *Purchase, market *MarketSnapshot) *ScanCertResult {
 	return &ScanCertResult{
-		Status:       "existing",
-		CardName:     existing.CardName,
-		PurchaseID:   existing.ID,
-		CampaignID:   existing.CampaignID,
-		BuyCostCents: existing.BuyCostCents,
-		Market:       s.buildEnrichedSnapshot(existing),
-	}, nil
+		Status:        status,
+		CardName:      p.CardName,
+		PurchaseID:    p.ID,
+		CampaignID:    p.CampaignID,
+		BuyCostCents:  p.BuyCostCents,
+		Market:        market,
+		FrontImageURL: p.FrontImageURL,
+		SetName:       p.SetName,
+		CardNumber:    p.CardNumber,
+		CardYear:      p.CardYear,
+		GradeValue:    p.GradeValue,
+		Population:    p.Population,
+	}
 }
 
 // enrollExistingInDHPushPipeline flips dh_push_status to 'pending' for a

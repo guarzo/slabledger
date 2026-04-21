@@ -25,6 +25,13 @@ interface CertRow {
   dhCardId?: number;
   /** Unix ms of when the row was first added — used to display "syncing…Xs" elapsed. */
   firstScanAt?: number;
+  // Search-helper metadata — populated on existing/sold scan results.
+  frontImageUrl?: string;
+  setName?: string;
+  cardNumber?: string;
+  cardYear?: string;
+  gradeValue?: number;
+  population?: number;
 }
 
 const STORAGE_KEY_PREFIX = 'intake:queue:';
@@ -90,6 +97,31 @@ function rowAwaitingSync(row: CertRow): boolean {
   return false;
 }
 
+/** Maps an existing/sold ScanCertResponse onto the CertRow fields it drives. */
+function scanFieldsFromResult(result: ScanCertResponse): Partial<CertRow> {
+  return {
+    cardName: result.cardName,
+    purchaseId: result.purchaseId,
+    campaignId: result.campaignId,
+    buyCostCents: result.buyCostCents,
+    market: result.market,
+    frontImageUrl: result.frontImageUrl,
+    setName: result.setName,
+    cardNumber: result.cardNumber,
+    cardYear: result.cardYear,
+    gradeValue: result.gradeValue,
+    population: result.population,
+  };
+}
+
+const DH_SEARCH_BASE = 'https://doubleholo.com/marketplace';
+
+/** Builds a DH marketplace search URL from a card name. Spaces become `+`. */
+function buildDHSearchURL(cardName: string): string {
+  const q = cardName.trim().split(/\s+/).map(encodeURIComponent).join('+');
+  return `${DH_SEARCH_BASE}?q=${q}`;
+}
+
 export default function CardIntakeTab() {
   const [input, setInput] = useState('');
   const [certs, setCerts] = useState<Map<string, CertRow>>(() => loadQueue());
@@ -123,11 +155,7 @@ export default function CardIntakeTab() {
     if (result.status === 'existing' || result.status === 'sold') {
       updateCert(certNumber, {
         status: result.status,
-        cardName: result.cardName,
-        purchaseId: result.purchaseId,
-        campaignId: result.campaignId,
-        buyCostCents: result.buyCostCents,
-        market: result.market,
+        ...scanFieldsFromResult(result),
       });
     } else {
       updateCert(certNumber, { status: 'resolving' });
@@ -155,13 +183,11 @@ export default function CardIntakeTab() {
         // Don't regress from imported → existing; just refresh the market snapshot.
         const current = certsRef.current.get(certNumber);
         const preserveStatus = current?.status === 'imported' ? 'imported' : result.status;
+        const fields = scanFieldsFromResult(result);
         updateCert(certNumber, {
           status: preserveStatus,
-          cardName: result.cardName ?? current?.cardName,
-          purchaseId: result.purchaseId,
-          campaignId: result.campaignId,
-          buyCostCents: result.buyCostCents,
-          market: result.market,
+          ...fields,
+          cardName: fields.cardName ?? current?.cardName,
         });
       }
       // For 'new', backend is still working — nothing to update.
@@ -602,6 +628,12 @@ function CertRowItem({
   const listed = listingStatus === 'listed';
   const showFixDH = !!row.purchaseId && !hasDHMatch(row) && (row.status === 'existing' || row.status === 'returned' || row.status === 'imported');
 
+  // Row detail expander — available for rows backed by a stored purchase,
+  // so the operator can ID the card (image, set, #) and jump to a DH search.
+  const canExpand = row.status === 'existing' || row.status === 'sold'
+    || row.status === 'returned' || row.status === 'imported';
+  const [expanded, setExpanded] = useState(false);
+
   const clCents = market?.clValueCents ?? 0;
   const dhCents = market?.gradePriceCents ?? 0;
   const lastSoldCents = market?.lastSoldCents ?? 0;
@@ -675,8 +707,25 @@ function CertRowItem({
               ✕
             </button>
           )}
+          {canExpand && (
+            <button
+              onClick={() => setExpanded(v => !v)}
+              aria-label={expanded ? 'Hide card details' : 'Show card details'}
+              aria-expanded={expanded}
+              title={expanded ? 'Hide card details' : 'Show card details (image, set, DH search)'}
+              className="rounded-md p-1 text-[var(--text-muted)] hover:bg-[var(--surface-2)] hover:text-[var(--text)] transition-colors"
+            >
+              <span aria-hidden="true" className="inline-block w-3 text-center text-xs leading-none">
+                {expanded ? '▾' : '▸'}
+              </span>
+            </button>
+          )}
         </div>
       </div>
+
+      {canExpand && expanded && (
+        <CertRowDetail row={row} />
+      )}
 
       {canList && (
         <div className="border-t border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.015)] px-4 py-2.5">
@@ -695,6 +744,88 @@ function CertRowItem({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function CertRowDetail({ row }: { row: CertRow }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = async () => {
+    if (!row.cardName) return;
+    try {
+      await navigator.clipboard.writeText(row.cardName);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Clipboard API unavailable (e.g. non-secure origin) — fail silently.
+    }
+  };
+
+  const setLine = [row.setName, row.cardNumber ? `#${row.cardNumber}` : null]
+    .filter(Boolean).join(' · ');
+  const gradeLine = [
+    row.cardYear,
+    row.gradeValue ? `PSA ${row.gradeValue}` : null,
+    row.population ? `pop ${row.population.toLocaleString()}` : null,
+  ].filter(Boolean).join(' · ');
+
+  return (
+    <div className="border-t border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.015)] px-4 py-3">
+      <div className="flex gap-4 items-start">
+        {row.frontImageUrl ? (
+          <a
+            href={row.frontImageUrl}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="shrink-0"
+            title="Open full-size image in new tab"
+          >
+            <img
+              src={row.frontImageUrl}
+              alt={row.cardName ? `Slab photo: ${row.cardName}` : 'Slab photo'}
+              className="h-32 w-auto rounded border border-[var(--surface-2)] bg-black/20 object-contain"
+              loading="lazy"
+            />
+          </a>
+        ) : (
+          <div className="shrink-0 flex h-32 w-24 items-center justify-center rounded border border-dashed border-[var(--surface-2)] text-[10px] text-[var(--text-muted)] text-center px-2">
+            No image yet
+          </div>
+        )}
+
+        <div className="flex flex-col gap-1 min-w-0 flex-1">
+          {row.cardName && (
+            <div className="text-sm font-semibold text-[var(--text)] truncate">{row.cardName}</div>
+          )}
+          {setLine && (
+            <div className="text-xs text-[var(--text-muted)]">{setLine}</div>
+          )}
+          {gradeLine && (
+            <div className="text-xs text-[var(--text-muted)]">{gradeLine}</div>
+          )}
+
+          <div className="flex flex-wrap items-center gap-2 mt-2">
+            {row.cardName && (
+              <a
+                href={buildDHSearchURL(row.cardName)}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="rounded-md bg-[var(--brand-500)]/15 px-2.5 py-1 text-[11px] font-semibold text-[var(--brand-400)] hover:bg-[var(--brand-500)]/30 transition-colors"
+              >
+                Search on DH ↗
+              </a>
+            )}
+            {row.cardName && (
+              <button
+                onClick={handleCopy}
+                className="rounded-md bg-[var(--surface-2)] px-2.5 py-1 text-[11px] font-semibold text-[var(--text-muted)] hover:text-[var(--text)] transition-colors"
+              >
+                {copied ? 'Copied ✓' : 'Copy name'}
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
