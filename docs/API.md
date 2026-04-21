@@ -1861,10 +1861,18 @@ Scans a cert number to determine if it exists in inventory, has been sold, or is
   "status": "existing",
   "cardName": "Charizard",
   "purchaseId": "uuid",
-  "campaignId": "uuid"
+  "campaignId": "uuid",
+  "buyCostCents": 100000,
+  "market": { "gradePriceCents": 150000, "clValueCents": 140000 },
+  "dhCardId": 98765,
+  "dhInventoryId": 12345,
+  "dhPushStatus": "matched",
+  "dhStatus": "in_stock"
 }
 ```
-`status` values: `existing` (unsold in inventory), `sold` (has a sale record), `new` (not in system)
+`status` values: `existing` (unsold in inventory), `sold` (has a sale record), `new` (not in system).
+
+`dhPushStatus` values (existing/sold only): `pending`, `matched`, `unmatched` (push gave up — intake should surface Fix DH Match), `manual`, `held`, `dismissed`. `dhInventoryId > 0` is the canonical "ready to list on DH" signal; the intake screen gates its price-and-list UI on this rather than on snapshot data.
 
 ---
 

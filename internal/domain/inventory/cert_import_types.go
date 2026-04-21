@@ -56,6 +56,13 @@ type ScanCertResult struct {
 	// card matching so the operator's "Search on DH" link lands on the same
 	// candidates DH's own matcher would consider.
 	DHSearchQuery string `json:"dhSearchQuery,omitempty"`
+
+	// DH pipeline state — lets the intake screen unblock once the card is
+	// pushable on DH, even if the market snapshot hasn't landed yet.
+	DHCardID      int    `json:"dhCardId,omitempty"`
+	DHInventoryID int    `json:"dhInventoryId,omitempty"`
+	DHPushStatus  string `json:"dhPushStatus,omitempty"`
+	DHStatus      string `json:"dhStatus,omitempty"`
 }
 
 // ScanCertsRequest is the input for POST /api/purchases/scan-certs, the batch

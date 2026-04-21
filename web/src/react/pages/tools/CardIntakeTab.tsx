@@ -22,8 +22,14 @@ interface CertRow {
   market?: MarketSnapshot;
   listingStatus?: ListingStatus;
   listingError?: string;
-  /** dhCardId is known once DH has matched the cert. */
+  /** dhCardId is the DH catalog match (from cert → card_id resolution). */
   dhCardId?: number;
+  /** dhInventoryId is the DH inventory line (set after a successful push). */
+  dhInventoryId?: number;
+  /** dhPushStatus tracks the push pipeline state: pending / matched / unmatched / held / dismissed. */
+  dhPushStatus?: string;
+  /** dhStatus is the DH-reported inventory status: in_stock / listed / sold. */
+  dhStatus?: string;
   /** Unix ms of when the row was first added — used to display "syncing…Xs" elapsed. */
   firstScanAt?: number;
   // Search-helper metadata — populated on existing/sold scan results.
@@ -77,16 +83,35 @@ function saveQueue(certs: Map<string, CertRow>) {
   }
 }
 
+// hasDHMatch: cert has been matched to a DH catalog card. Proxied through
+// gradePriceCents for backwards compatibility with scan results from older
+// servers that don't return dhCardId.
 function hasDHMatch(row: CertRow): boolean {
   return (row.dhCardId ?? 0) > 0 || (row.market?.gradePriceCents ?? 0) > 0;
+}
+
+// hasDHInventory: cert has been pushed to DH's inventory — this is the real
+// "ready to list" signal that mirrors the inventory tab's needsPriceReview().
+// Snapshot data can lag behind the match/push pipeline, so gating on inventory
+// push is what keeps intake unblocked for cards that are otherwise complete.
+function hasDHInventory(row: CertRow): boolean {
+  return (row.dhInventoryId ?? 0) > 0;
 }
 
 function hasCLPrice(row: CertRow): boolean {
   return (row.market?.clValueCents ?? 0) > 0;
 }
 
+// dhPushStuck: the push pipeline landed in an actionable-but-blocked state
+// (unmatched / held / dismissed). These won't resolve via polling — the user
+// needs to Fix DH Match, approve a hold, or dismiss the row manually.
+function dhPushStuck(row: CertRow): boolean {
+  const s = row.dhPushStatus;
+  return s === 'unmatched' || s === 'held' || s === 'dismissed';
+}
+
 function rowIsListable(row: CertRow): boolean {
-  return !!row.purchaseId && hasDHMatch(row) && hasCLPrice(row);
+  return !!row.purchaseId && hasDHInventory(row) && hasCLPrice(row);
 }
 
 function rowAwaitingSync(row: CertRow): boolean {
@@ -94,6 +119,9 @@ function rowAwaitingSync(row: CertRow): boolean {
   if (row.status === 'failed' || row.status === 'sold') return false;
   if (row.status === 'resolving') return true;
   if ((row.status === 'existing' || row.status === 'returned' || row.status === 'imported') && !rowIsListable(row)) {
+    // Don't keep polling a row whose push pipeline is stuck in a state the
+    // server can't recover on its own — the user has to intervene.
+    if (dhPushStuck(row)) return false;
     return true;
   }
   return false;
@@ -114,6 +142,10 @@ function scanFieldsFromResult(result: ScanCertResponse): Partial<CertRow> {
     gradeValue: result.gradeValue,
     population: result.population,
     dhSearchQuery: result.dhSearchQuery,
+    dhCardId: result.dhCardId,
+    dhInventoryId: result.dhInventoryId,
+    dhPushStatus: result.dhPushStatus,
+    dhStatus: result.dhStatus,
   };
 }
 
@@ -442,15 +474,17 @@ export default function CardIntakeTab() {
   const batchStats = useMemo(() => {
     let ready = 0;
     let syncing = 0;
+    let stuck = 0;
     let listed = 0;
     let failed = 0;
     for (const r of rows) {
       if (r.listingStatus === 'listed') listed++;
       else if (r.status === 'failed' || r.status === 'sold') failed++;
       else if (rowIsListable(r)) ready++;
+      else if (dhPushStuck(r)) stuck++;
       else if (rowAwaitingSync(r)) syncing++;
     }
-    return { ready, syncing, listed, failed, total: rows.length };
+    return { ready, syncing, stuck, listed, failed, total: rows.length };
   }, [rows]);
 
   const resolvedCount = useMemo(() => rows.filter(r => r.status === 'resolved').length, [rows]);
@@ -478,6 +512,7 @@ export default function CardIntakeTab() {
         <div className="flex flex-wrap items-center gap-4 rounded-lg border border-[var(--surface-2)] bg-[var(--surface-1)] px-3 py-2 text-xs">
           <StatDot color="var(--success)" label={`${batchStats.ready} ready to list`} />
           {batchStats.syncing > 0 && <StatDot color="var(--brand-400)" label={`${batchStats.syncing} syncing`} pulse />}
+          {batchStats.stuck > 0 && <StatDot color="var(--warning)" label={`${batchStats.stuck} needs attention`} />}
           {batchStats.listed > 0 && <StatDot color="var(--success)" label={`${batchStats.listed} listed`} icon="check" />}
           {batchStats.failed > 0 && <StatDot color="var(--danger)" label={`${batchStats.failed} failed/sold`} />}
           <span className="ml-auto text-[var(--text-muted)]">{batchStats.total} scanned</span>
@@ -618,10 +653,13 @@ function InlinePrice({ market, buyCostCents }: { market?: MarketSnapshot; buyCos
 const STALL_THRESHOLD_SEC = 60;
 
 function syncBlockerLabel(row: CertRow): string {
-  const dh = hasDHMatch(row);
+  if (row.dhPushStatus === 'unmatched') return 'DH match failed — Fix DH Match';
+  if (row.dhPushStatus === 'held') return 'DH push held for review';
+  if (row.dhPushStatus === 'dismissed') return 'DH push dismissed';
+  const inv = hasDHInventory(row);
   const cl = hasCLPrice(row);
-  if (!dh && !cl) return 'Waiting for DH match + CL price';
-  if (!dh) return 'Waiting for DH match';
+  if (!inv && !cl) return 'Waiting for DH push + CL price';
+  if (!inv) return 'Waiting for DH push';
   if (!cl) return 'Waiting for CL price';
   return 'Syncing';
 }
@@ -633,18 +671,25 @@ function SyncingIndicator({ row }: { row: CertRow }) {
     return () => window.clearInterval(id);
   }, []);
   const elapsedSec = row.firstScanAt ? Math.max(0, Math.floor((Date.now() - row.firstScanAt) / 1000)) : 0;
-  const stalled = elapsedSec >= STALL_THRESHOLD_SEC;
+  const pushStuck = dhPushStuck(row);
+  const stalled = pushStuck || elapsedSec >= STALL_THRESHOLD_SEC;
   const label = syncBlockerLabel(row);
   const color = stalled ? 'var(--warning)' : 'var(--brand-400)';
   const textColor = stalled ? 'text-[var(--warning)]' : 'text-[var(--text-muted)]';
+  const title = pushStuck
+    ? 'Push pipeline is blocked — use Fix DH Match or dismiss this row.'
+    : stalled
+      ? `Stalled ${elapsedSec}s — try Fix DH Match or dismiss and retry from the Inventory tab.`
+      : undefined;
+  const trailing = pushStuck ? '' : stalled ? ' — stalled' : '…';
   return (
     <span
       className={`inline-flex items-center gap-1.5 text-[10px] ${textColor}`}
       data-tick={tick}
-      title={stalled ? `Stalled ${elapsedSec}s — try Fix DH Match or check pricing sync` : undefined}
+      title={title}
     >
-      <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: color }} />
-      {label}{stalled ? ' — stalled' : '…'} {elapsedSec > 0 ? `${elapsedSec}s` : ''}
+      <span className={`w-1.5 h-1.5 rounded-full ${pushStuck ? '' : 'animate-pulse'}`} style={{ background: color }} />
+      {label}{trailing} {!pushStuck && elapsedSec > 0 ? `${elapsedSec}s` : ''}
     </span>
   );
 }
@@ -670,7 +715,19 @@ function CertRowItem({
   const { market, buyCostCents, listingStatus, listingError } = row;
   const busy = listingStatus === 'setting-price' || listingStatus === 'listing';
   const listed = listingStatus === 'listed';
-  const showFixDH = !!row.purchaseId && !hasDHMatch(row) && (row.status === 'existing' || row.status === 'returned' || row.status === 'imported');
+  const inPlaceableStatus = row.status === 'existing' || row.status === 'returned' || row.status === 'imported';
+  // Show Fix DH Match when the push pipeline explicitly failed the match,
+  // or (for older servers that don't return dhPushStatus) when we have no
+  // other signal that DH has matched the cert.
+  const showFixDH = !!row.purchaseId && inPlaceableStatus && (
+    row.dhPushStatus === 'unmatched' ||
+    (row.dhPushStatus === undefined && !hasDHMatch(row))
+  );
+  // A row is "stuck" when intake can't make progress without operator action
+  // (push pipeline dead-end or nothing syncing). Offer a dismiss path so the
+  // user doesn't have to wipe localStorage to unstick the queue.
+  const showDismiss = row.status === 'failed' || listed ||
+    (inPlaceableStatus && !canList && !busy && (dhPushStuck(row) || !awaitingSync));
 
   // Row detail expander — available for rows backed by a stored purchase,
   // so the operator can ID the card (image, set, #) and jump to a DH search.
@@ -720,7 +777,7 @@ function CertRowItem({
           {(row.status === 'existing' || row.status === 'returned') && (
             <InlinePrice market={row.market} buyCostCents={row.buyCostCents} />
           )}
-          {awaitingSync && !canList && row.status !== 'resolving' && (
+          {!canList && row.status !== 'resolving' && inPlaceableStatus && (awaitingSync || dhPushStuck(row)) && (
             <SyncingIndicator row={row} />
           )}
         </div>
@@ -742,10 +799,11 @@ function CertRowItem({
               Return
             </button>
           )}
-          {(row.status === 'failed' || listed) && (
+          {showDismiss && (
             <button
               onClick={() => onDismiss(row.certNumber)}
               aria-label="Dismiss"
+              title="Remove this row from the intake queue (doesn't affect the purchase)"
               className="rounded-md p-1 text-[var(--text-muted)] hover:bg-[var(--surface-2)] hover:text-[var(--text)] transition-colors"
             >
               ✕
