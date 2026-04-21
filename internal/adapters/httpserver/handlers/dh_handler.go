@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"runtime/debug"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -277,9 +278,11 @@ func (h *DHHandler) dispatchBackground(ctx context.Context, op string, fn func(c
 		defer h.bgWG.Done()
 		defer func() {
 			if r := recover(); r != nil {
+				stack := debug.Stack()
 				h.logger.Error(bgCtx, "dh handler: background panic",
 					observability.String("op", op),
-					observability.String("panic", fmt.Sprintf("%v", r)))
+					observability.String("panic", fmt.Sprintf("%v", r)),
+					observability.String("stack", string(stack)))
 			}
 		}()
 		runCtx, cancel := context.WithTimeout(bgCtx, 60*time.Second)
