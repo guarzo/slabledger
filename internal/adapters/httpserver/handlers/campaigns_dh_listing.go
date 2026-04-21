@@ -68,10 +68,14 @@ func (h *CampaignsHandler) HandleListPurchaseOnDH(w http.ResponseWriter, r *http
 		}
 		return
 	}
-	// DH now honors our listing_price_cents as-is, so we require a reviewed
-	// price before listing. Stale or missing prices are rejected here rather
-	// than silently letting DH fall back to its catalog value.
-	if p.ReviewedPriceCents == 0 {
+	// DH now honors our listing_price_cents as-is, so we require a human-
+	// committed price before listing. ResolveListingPriceCents picks the
+	// most recent commit by timestamp — reviewed vs override, whichever
+	// was set later — so the "Set Price" dialog (writes override) and the
+	// price-review flow (writes reviewed) both reach DH without one
+	// masking the other. CL is excluded so a stale catalog value doesn't
+	// silently become the listing_price_cents.
+	if dhlisting.ResolveListingPriceCents(p) == 0 {
 		writeError(w, http.StatusConflict, "Review the price before listing on DH")
 		return
 	}

@@ -137,6 +137,27 @@ func TestHandleListPurchaseOnDH(t *testing.T) {
 			wantErrSubstr: "Review the price",
 		},
 		{
+			// Price Override dialog writes OverridePriceCents, not ReviewedPriceCents.
+			// The handler must honor it the same way the listing service does via
+			// dhlisting.ResolveListingPriceCents. Mirrors what
+			// UpdatePurchasePriceOverride writes in production: price, source, and
+			// an RFC3339 override_set_at.
+			name: "override-only price allows listing",
+			getPurchase: func(ctx context.Context, id string) (*inventory.Purchase, error) {
+				p := readyPurchase()
+				p.ReviewedPriceCents = 0
+				p.OverridePriceCents = 12500
+				p.OverrideSource = inventory.OverrideSourceManual
+				p.OverrideSetAt = "2026-04-21T12:00:00Z"
+				return p, nil
+			},
+			listFn: func(ctx context.Context, certs []string) dhlisting.DHListingResult {
+				return dhlisting.DHListingResult{Listed: 1, Synced: 1, Total: 1}
+			},
+			wantStatus:     http.StatusOK,
+			wantListedFrom: []string{"CERT123"},
+		},
+		{
 			name:          "dh listing service not configured → 503",
 			omitDHSvc:     true,
 			wantStatus:    http.StatusServiceUnavailable,

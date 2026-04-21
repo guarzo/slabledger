@@ -203,6 +203,69 @@ func TestSyncPurchasePrice(t *testing.T) {
 	}
 }
 
+// TestSyncPurchasePrice_ResolvesNewestCommit guards the dhpricing copy of the
+// reviewed↔override resolver: when a fresh override has been committed on top
+// of a stale reviewed price, SyncPurchasePrice must push the override to DH
+// rather than the stale reviewed value. The second case uses a mixed-offset
+// pair where lexicographic comparison would pick the wrong side.
+func TestSyncPurchasePrice_ResolvesNewestCommit(t *testing.T) {
+	tests := []struct {
+		name             string
+		reviewedAt       string
+		overrideSetAt    string
+		wantListingCents int
+	}{
+		{
+			name:             "override is chronologically newer than reviewed",
+			reviewedAt:       "2026-01-01T00:00:00Z",
+			overrideSetAt:    "2026-04-21T12:00:00Z",
+			wantListingCents: 15000,
+		},
+		{
+			// override (13:00 UTC) is newer than reviewed (12:00 UTC) but
+			// sorts earlier as a string; requires parsed comparison.
+			name:             "override in non-UTC offset newer than reviewed in UTC",
+			reviewedAt:       "2026-04-21T12:00:00Z",
+			overrideSetAt:    "2026-04-21T08:00:00-05:00",
+			wantListingCents: 15000,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p := &inventory.Purchase{
+				ID:                  "pur-1",
+				DHInventoryID:       42,
+				ReviewedPriceCents:  10000,
+				ReviewedAt:          tc.reviewedAt,
+				OverridePriceCents:  15000,
+				OverrideSetAt:       tc.overrideSetAt,
+				DHListingPriceCents: 10000, // matches the stale reviewed value
+				DHStatus:            inventory.DHStatusListed,
+			}
+
+			lookup := &fakeLookup{purchases: map[string]*inventory.Purchase{"pur-1": p}}
+			updater := &fakeUpdater{}
+			writer := &fakeWriter{}
+			resetter := &fakeResetter{}
+
+			svc := newTestService(lookup, updater, writer, resetter)
+			got := svc.SyncPurchasePrice(context.Background(), "pur-1")
+
+			if got.Outcome != OutcomeSynced {
+				t.Fatalf("Outcome = %q, want %q", got.Outcome, OutcomeSynced)
+			}
+			if len(updater.calls) != 1 {
+				t.Fatalf("expected 1 updater call, got %d", len(updater.calls))
+			}
+			if updater.calls[0].listingPriceCents != tc.wantListingCents {
+				t.Errorf("sent listing_price_cents = %d, want %d",
+					updater.calls[0].listingPriceCents, tc.wantListingCents)
+			}
+		})
+	}
+}
+
 func TestSyncDriftedPurchases(t *testing.T) {
 	drift := []inventory.Purchase{
 		{ID: "a", DHInventoryID: 1, ReviewedPriceCents: 11000, DHListingPriceCents: 10000, DHStatus: inventory.DHStatusListed},
