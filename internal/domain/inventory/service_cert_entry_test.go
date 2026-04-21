@@ -453,6 +453,42 @@ func TestScanCert_SoldIncludesSearchHelperMetadata(t *testing.T) {
 	}
 }
 
+func TestScanCerts_Batch(t *testing.T) {
+	repo := newMockRepo()
+	repo.purchases["p1"] = &Purchase{
+		ID: "p1", CertNumber: "11111111", Grader: "PSA",
+		CardName: "Charizard", CampaignID: "camp-1",
+	}
+	repo.purchases["p2"] = &Purchase{
+		ID: "p2", CertNumber: "22222222", Grader: "PSA",
+		CardName: "Pikachu", CampaignID: "camp-1",
+	}
+	repo.sales["s1"] = &Sale{ID: "s1", PurchaseID: "p2"}
+	repo.purchaseSales["p2"] = true
+
+	svc := &service{campaigns: repo, purchases: repo, sales: repo, analytics: repo, finance: repo, pricing: repo, dh: repo, idGen: func() string { return "test-id" }}
+
+	out, err := svc.ScanCerts(context.Background(), []string{"11111111", "22222222", "33333333", "", "11111111"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(out.Results) != 3 {
+		t.Fatalf("expected 3 results (one per unique non-empty cert), got %d: %+v", len(out.Results), out.Results)
+	}
+	if out.Results["11111111"].Status != "existing" {
+		t.Errorf("11111111 status = %q, want existing", out.Results["11111111"].Status)
+	}
+	if out.Results["22222222"].Status != "sold" {
+		t.Errorf("22222222 status = %q, want sold", out.Results["22222222"].Status)
+	}
+	if out.Results["33333333"].Status != "new" {
+		t.Errorf("33333333 status = %q, want new", out.Results["33333333"].Status)
+	}
+	if len(out.Errors) != 0 {
+		t.Errorf("unexpected errors: %+v", out.Errors)
+	}
+}
+
 func TestScanCert_ExistingSetsExportFlag(t *testing.T) {
 	repo := newMockRepo()
 	repo.purchases["p1"] = &Purchase{

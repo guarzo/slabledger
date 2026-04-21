@@ -279,6 +279,33 @@ func newScanCertResult(status string, p *Purchase, market *MarketSnapshot) *Scan
 	}
 }
 
+// ScanCerts runs ScanCert for each supplied cert number and returns a map keyed
+// by cert number. Individual failures surface as Errors; the map still contains
+// an entry for every input. The cert-intake polling loop uses this endpoint to
+// avoid the per-row fan-out that was tripping the server's rate limiter.
+func (s *service) ScanCerts(ctx context.Context, certNumbers []string) (*ScanCertsResult, error) {
+	seen := make(map[string]struct{}, len(certNumbers))
+	out := &ScanCertsResult{Results: make(map[string]*ScanCertResult, len(certNumbers))}
+	for _, raw := range certNumbers {
+		cert := strings.TrimSpace(raw)
+		if cert == "" {
+			continue
+		}
+		if _, dup := seen[cert]; dup {
+			continue
+		}
+		seen[cert] = struct{}{}
+
+		result, err := s.ScanCert(ctx, cert)
+		if err != nil {
+			out.Errors = append(out.Errors, CertImportError{CertNumber: cert, Error: err.Error()})
+			continue
+		}
+		out.Results[cert] = result
+	}
+	return out, nil
+}
+
 // enrollExistingInDHPushPipeline flips dh_push_status to 'pending' for a
 // received, unsold purchase that hasn't already been matched/held/dismissed,
 // and resets an exhausted snapshot so the pricing scheduler will retry. This

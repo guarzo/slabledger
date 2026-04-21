@@ -205,6 +205,41 @@ func (h *CampaignsHandler) HandleScanCert(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusOK, result)
 }
 
+// HandleScanCerts handles POST /api/purchases/scan-certs, the batch variant
+// used by the cert-intake polling loop. One request carries many cert numbers
+// so the UI doesn't fan out into per-row polls that trip our own rate limiter.
+func (h *CampaignsHandler) HandleScanCerts(w http.ResponseWriter, r *http.Request) {
+	var req inventory.ScanCertsRequest
+	if !decodeBody(w, r, &req) {
+		return
+	}
+	if len(req.CertNumbers) == 0 {
+		writeError(w, http.StatusBadRequest, "certNumbers is required")
+		return
+	}
+
+	result, ok := serviceCall(w, r.Context(), h.logger, "scan certs failed", func() (*inventory.ScanCertsResult, error) {
+		return h.service.ScanCerts(r.Context(), req.CertNumbers)
+	})
+	if !ok {
+		return
+	}
+
+	// Mirror the single-cert handler: trigger DH listing for any existing
+	// unsold certs so in-flight items promote without waiting for an import.
+	var listingCerts []string
+	for cert, res := range result.Results {
+		if res != nil && res.Status == "existing" {
+			listingCerts = append(listingCerts, cert)
+		}
+	}
+	if len(listingCerts) > 0 {
+		h.triggerDHListing(listingCerts)
+	}
+
+	writeJSON(w, http.StatusOK, result)
+}
+
 // HandleResolveCert handles POST /api/purchases/resolve-cert.
 func (h *CampaignsHandler) HandleResolveCert(w http.ResponseWriter, r *http.Request) {
 	var req inventory.ResolveCertRequest

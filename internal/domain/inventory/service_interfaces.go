@@ -52,6 +52,7 @@ type ImportService interface {
 	ImportCerts(ctx context.Context, certNumbers []string) (*CertImportResult, error)
 	GetPurchasesByCertNumbers(ctx context.Context, certNumbers []string) (map[string]*Purchase, error)
 	ScanCert(ctx context.Context, certNumber string) (*ScanCertResult, error)
+	ScanCerts(ctx context.Context, certNumbers []string) (*ScanCertsResult, error)
 	ResolveCert(ctx context.Context, certNumber string) (*CertInfo, error)
 }
 

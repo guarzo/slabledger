@@ -174,56 +174,80 @@ export default function CardIntakeTab() {
     }
   }, [updateCert]);
 
+  const applyPollResult = useCallback((certNumber: string, result: ScanCertResponse) => {
+    if (result.status !== 'existing' && result.status !== 'sold') {
+      // For 'new', backend is still working — nothing to update.
+      return;
+    }
+    // Don't regress from imported → existing; just refresh the market snapshot.
+    const current = certsRef.current.get(certNumber);
+    const preserveStatus = current?.status === 'imported' ? 'imported' : result.status;
+    const fields = scanFieldsFromResult(result);
+    updateCert(certNumber, {
+      status: preserveStatus,
+      ...fields,
+      cardName: fields.cardName ?? current?.cardName,
+    });
+  }, [updateCert]);
+
   const pollCert = useCallback(async (certNumber: string) => {
     if (inflightPollsRef.current.has(certNumber)) return;
     inflightPollsRef.current.add(certNumber);
     try {
-      const result: ScanCertResponse = await api.scanCert(certNumber);
-      if (result.status === 'existing' || result.status === 'sold') {
-        // Don't regress from imported → existing; just refresh the market snapshot.
-        const current = certsRef.current.get(certNumber);
-        const preserveStatus = current?.status === 'imported' ? 'imported' : result.status;
-        const fields = scanFieldsFromResult(result);
-        updateCert(certNumber, {
-          status: preserveStatus,
-          ...fields,
-          cardName: fields.cardName ?? current?.cardName,
-        });
-      }
-      // For 'new', backend is still working — nothing to update.
+      const result = await api.scanCert(certNumber);
+      applyPollResult(certNumber, result);
     } catch {
       // Transient poll failure — next tick will retry.
     } finally {
       inflightPollsRef.current.delete(certNumber);
     }
-  }, [updateCert]);
+  }, [applyPollResult]);
 
-  // Rehydrate: on mount, kick polling for any rows that need it, and fire resolve for stale 'resolving'.
+  // Batch-poll every row awaiting sync in a single request. Replaces a
+  // per-row fan-out that was tripping the server's rate limiter (300 req/min)
+  // once the operator had ~20+ certs in flight.
+  const pollAwaitingCerts = useCallback(async () => {
+    const awaiting: string[] = [];
+    for (const row of certsRef.current.values()) {
+      if (rowAwaitingSync(row) && !inflightPollsRef.current.has(row.certNumber)) {
+        awaiting.push(row.certNumber);
+      }
+    }
+    if (awaiting.length === 0) return;
+    awaiting.forEach(c => inflightPollsRef.current.add(c));
+    try {
+      const batch = await api.scanCerts(awaiting);
+      for (const cert of awaiting) {
+        const result = batch.results?.[cert];
+        if (result) applyPollResult(cert, result);
+      }
+    } catch {
+      // Transient batch failure — next tick will retry.
+    } finally {
+      awaiting.forEach(c => inflightPollsRef.current.delete(c));
+    }
+  }, [applyPollResult]);
+
+  // Rehydrate: on mount, fire resolve for stale 'resolving' rows, then a
+  // single batch poll picks up everything else needing sync.
   useEffect(() => {
     const current = certsRef.current;
     for (const row of current.values()) {
       if (row.status === 'resolving') {
         void resolveInBackground(row.certNumber);
-      } else if (rowAwaitingSync(row)) {
-        void pollCert(row.certNumber);
       }
     }
+    void pollAwaitingCerts();
     // mount-only
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Single polling loop: every 4s, refresh rows awaiting sync.
+  // Single polling loop: every 4s, refresh all rows awaiting sync in one call.
   useEffect(() => {
     if (certs.size === 0) return;
-    const interval = window.setInterval(() => {
-      for (const row of certsRef.current.values()) {
-        if (rowAwaitingSync(row)) {
-          void pollCert(row.certNumber);
-        }
-      }
-    }, 4000);
+    const interval = window.setInterval(() => { void pollAwaitingCerts(); }, 4000);
     return () => window.clearInterval(interval);
-  }, [certs.size, pollCert]);
+  }, [certs.size, pollAwaitingCerts]);
 
   const handleSetPriceAndList = useCallback(async (certNumber: string, priceCents: number, source: string) => {
     const row = certsRef.current.get(certNumber);
