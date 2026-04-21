@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/guarzo/slabledger/internal/adapters/httpserver/handlers"
 	"github.com/guarzo/slabledger/internal/adapters/scheduler"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
@@ -37,18 +38,50 @@ func shutdownGracefully(
 			observability.String("timeout", shutdownTimeout.String()))
 	}
 
-	// Wait for in-flight background DH bulk match to finish
+	// Wait for in-flight background DH work (bulk match + best-effort
+	// follow-ups like ConfirmMatch/DelistChannels) to finish. Bounded so a
+	// hung DH roundtrip can't block process shutdown indefinitely — but no
+	// shorter than the per-goroutine DH timeout, or we'd abandon in-flight
+	// work (e.g. SchedulerShutdownTimeout defaults to 30s while a detached
+	// ConfirmMatch is allowed up to 60s).
 	if hOut.DHHandler != nil {
-		hOut.DHHandler.Wait()
+		dhWait := max(shutdownTimeout, handlers.DHBackgroundTimeout)
+		waitBounded(ctx, logger, "dh handler", hOut.DHHandler.Wait, dhWait)
 	}
 
-	// Wait for any in-flight background advisor analyses to finish
+	// Wait for any in-flight background advisor analyses to finish. Bounded
+	// for the same reason — a slow LLM call can't stall process shutdown.
 	if hOut.AdvisorHandler != nil {
-		hOut.AdvisorHandler.Wait()
+		waitBounded(ctx, logger, "advisor handler", hOut.AdvisorHandler.Wait, shutdownTimeout)
 	}
 
 	// Shut down campaign service background workers
 	if campaignsService != nil {
 		campaignsService.Close()
+	}
+}
+
+// waitBounded runs wait on a goroutine and returns when it completes or when
+// shutdownTimeout elapses. Used so a hung background handler can't block
+// process shutdown indefinitely; on timeout it logs a warning and returns,
+// leaving the goroutine to complete on its own.
+func waitBounded(
+	ctx context.Context,
+	logger observability.Logger,
+	name string,
+	wait func(),
+	shutdownTimeout time.Duration,
+) {
+	done := make(chan struct{})
+	go func() {
+		wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(shutdownTimeout):
+		logger.Warn(ctx, "background shutdown timed out",
+			observability.String("handler", name),
+			observability.String("timeout", shutdownTimeout.String()))
 	}
 }
