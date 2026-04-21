@@ -41,10 +41,22 @@ func (h *DHHandler) HandleDismissMatch(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "purchase not found")
 		return
 	}
-	if p.DHPushStatus != inventory.DHPushStatusUnmatched {
-		writeError(w, http.StatusConflict, "purchase is not in unmatched state")
+	// Dismiss is valid from any non-terminal push state. Reject if the item is
+	// already dismissed (idempotency) — DH-listed and sold items reach this
+	// path by having dhPushStatus stuck in matched/manual, so the same guard
+	// also covers already-dismissed without widening it further.
+	switch p.DHPushStatus {
+	case inventory.DHPushStatusPending,
+		inventory.DHPushStatusUnmatched,
+		inventory.DHPushStatusMatched,
+		inventory.DHPushStatusManual,
+		inventory.DHPushStatusHeld:
+		// allowed
+	default:
+		writeError(w, http.StatusConflict, "purchase cannot be dismissed from current state")
 		return
 	}
+	prevStatus := p.DHPushStatus
 
 	if h.pushStatusUpdater == nil {
 		writeError(w, http.StatusInternalServerError, "push status updater not configured")
@@ -60,7 +72,7 @@ func (h *DHHandler) HandleDismissMatch(w http.ResponseWriter, r *http.Request) {
 		PurchaseID:     p.ID,
 		CertNumber:     p.CertNumber,
 		Type:           dhevents.TypeDismissed,
-		PrevPushStatus: inventory.DHPushStatusUnmatched,
+		PrevPushStatus: prevStatus,
 		NewPushStatus:  inventory.DHPushStatusDismissed,
 		Source:         dhevents.SourceManualUI,
 	})
