@@ -238,7 +238,7 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
           style={{ color: dot.color, fontSize: '10px', lineHeight: 1 }}
         >&#9679;</span>
       </div>
-      <div className="glass-table-td flex-shrink-0 text-center !px-1 print-hide-actions" style={{ width: '56px' }} onClick={e => e.stopPropagation()}>
+      <div className="glass-table-td flex-shrink-0 text-center !px-1 print-hide-actions" style={{ width: '88px' }} onClick={e => e.stopPropagation()}>
         <div className="flex flex-col items-center gap-0.5">
           {wasUnlistedFromDH(item) && (
             <span
@@ -386,7 +386,9 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
               )}
               {showDismiss && onDismiss && (
                 <DropdownMenu.Item
-                  onSelect={onDismiss}
+                  onSelect={() => {
+                    if (window.confirm('Dismiss this item from DH listing?')) onDismiss();
+                  }}
                   className="px-3 py-2 text-sm text-[var(--text-muted)] hover:bg-[rgba(255,255,255,0.04)] hover:text-[var(--text)] outline-none cursor-default"
                 >
                   Dismiss from DH
