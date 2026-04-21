@@ -15,13 +15,11 @@ type unmatchDHRequest struct {
 // HandleUnmatchDH clears the DH match data for a purchase and resets its
 // push status to "unmatched", allowing it to be retried or fixed manually.
 //
-// The unmatch also:
-//   - Best-effort delists the DH inventory item from all external channels so
-//     a bad listing doesn't keep running on eBay/Shopify under the wrong card.
-//     DH has no "delete inventory item" endpoint today — TODO once it ships.
-//   - Deletes the auto card_id_mappings row for this identity so the scheduler
-//     doesn't re-push the same wrong dh_card_id on the next cycle (via the
-//     mappedSet cache in dh_push.go). Manual hints are left alone.
+// Ordering: clear local DB state first, then (best-effort) take down live
+// channel listings and drop the cached mapping. If the DB updates fail we
+// return an error without mutating external state, so retrying is safe.
+// DH has no "delete inventory item" endpoint today — once it ships, add it
+// alongside the channel delist call.
 func (h *DHHandler) HandleUnmatchDH(w http.ResponseWriter, r *http.Request) {
 	if requireUser(w, r) == nil {
 		return
@@ -56,19 +54,10 @@ func (h *DHHandler) HandleUnmatchDH(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Best-effort: take down the live channel listings before we forget the
-	// inventory ID. Failures here don't block the unmatch — the local state
-	// still needs to be cleared so the user isn't stuck. DH retains the
-	// inventory row itself (no delete endpoint yet); this only detaches it
-	// from eBay/Shopify/etc.
-	if h.channelDelister != nil && purchase.DHInventoryID != 0 {
-		if _, derr := h.channelDelister.DelistChannels(ctx, purchase.DHInventoryID, nil); derr != nil {
-			h.logger.Warn(ctx, "unmatch dh: delist channels failed, continuing",
-				observability.String("purchaseID", purchase.ID),
-				observability.Int("dhInventoryID", purchase.DHInventoryID),
-				observability.Err(derr))
-		}
-	}
+	// Capture the inventory ID before we clear it — we need it for the
+	// post-commit delist call, and UpdatePurchaseDHFields below zeroes the
+	// DB column (the in-memory struct isn't reloaded).
+	dhID := purchase.DHInventoryID
 
 	// Clear DH card ID and inventory ID.
 	if h.dhFieldsUpdater != nil {
@@ -96,6 +85,18 @@ func (h *DHHandler) HandleUnmatchDH(w http.ResponseWriter, r *http.Request) {
 		if err := h.candidatesSaver.UpdatePurchaseDHCandidates(ctx, purchase.ID, ""); err != nil {
 			h.logger.Warn(ctx, "unmatch dh: failed to clear candidates",
 				observability.String("purchaseID", purchase.ID), observability.Err(err))
+		}
+	}
+
+	// Local state is committed — now do the best-effort external and cache
+	// cleanup. Failures here are logged but don't fail the request: the user
+	// has successfully unmatched, external state can be reconciled out-of-band.
+	if h.channelDelister != nil && dhID != 0 {
+		if _, derr := h.channelDelister.DelistChannels(ctx, dhID, nil); derr != nil {
+			h.logger.Warn(ctx, "unmatch dh: delist channels failed, continuing",
+				observability.String("purchaseID", purchase.ID),
+				observability.Int("dhInventoryID", dhID),
+				observability.Err(derr))
 		}
 	}
 

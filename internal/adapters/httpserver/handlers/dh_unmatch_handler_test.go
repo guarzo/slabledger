@@ -17,40 +17,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type unmatchMappingDeleter struct {
-	called              bool
-	cardName, setName   string
-	collectorNumber     string
-	provider            string
-	rows                int64
-	err                 error
-}
-
-func (m *unmatchMappingDeleter) DeleteAutoMapping(_ context.Context, cardName, setName, collectorNumber, provider string) (int64, error) {
-	m.called = true
-	m.cardName = cardName
-	m.setName = setName
-	m.collectorNumber = collectorNumber
-	m.provider = provider
-	return m.rows, m.err
-}
-
-type unmatchChannelDelister struct {
-	called      bool
-	inventoryID int
-	channels    []string
-	err         error
-}
-
-func (d *unmatchChannelDelister) DelistChannels(_ context.Context, inventoryID int, channels []string) (*dh.ChannelSyncResponse, error) {
-	d.called = true
-	d.inventoryID = inventoryID
-	d.channels = channels
-	if d.err != nil {
-		return nil, d.err
-	}
-	return &dh.ChannelSyncResponse{}, nil
-}
+// Compile-time check that the shared mocks satisfy the handler interfaces.
+var (
+	_ DHMappingDeleter  = (*mocks.DHMappingDeleterMock)(nil)
+	_ DHChannelDelister = (*mocks.DHChannelDelisterMock)(nil)
+)
 
 func postUnmatchDH(h *DHHandler, purchaseID string) *httptest.ResponseRecorder {
 	body, _ := json.Marshal(map[string]string{"purchaseId": purchaseID})
@@ -66,8 +37,8 @@ func TestHandleUnmatchDH(t *testing.T) {
 		updatedFields     *inventory.DHFieldsUpdate
 		updatedStatus     *string
 		clearedCandidates *string
-		mappingDeleter    *unmatchMappingDeleter
-		channelDelister   *unmatchChannelDelister
+		mappingDeleter    *mocks.DHMappingDeleterMock
+		channelDelister   *mocks.DHChannelDelisterMock
 	}
 
 	cases := []struct {
@@ -75,6 +46,8 @@ func TestHandleUnmatchDH(t *testing.T) {
 		purchaseID   string
 		requestAuth  bool
 		repo         func(a *assertions) *mocks.PurchaseRepositoryMock
+		delistErr    error // injected into DHChannelDelisterMock.DelistChannelsFn
+		mappingErr   error // injected into DHMappingDeleterMock.DeleteAutoMappingFn
 		expectedCode int
 		expectedBody string
 		check        func(t *testing.T, a assertions)
@@ -129,15 +102,16 @@ func TestHandleUnmatchDH(t *testing.T) {
 			expectedBody: "invalid purchase state for unmatch",
 		},
 		{
-			name:        "UpdateDHFieldsFails",
+			name:        "UpdateDHFieldsFails_NoExternalMutation",
 			purchaseID:  "p1",
 			requestAuth: true,
 			repo: func(a *assertions) *mocks.PurchaseRepositoryMock {
 				return &mocks.PurchaseRepositoryMock{
 					GetPurchaseFn: func(_ context.Context, _ string) (*inventory.Purchase, error) {
 						return &inventory.Purchase{
-							ID:           "p1",
-							DHPushStatus: inventory.DHPushStatusMatched,
+							ID:            "p1",
+							DHPushStatus:  inventory.DHPushStatusMatched,
+							DHInventoryID: 666,
 						}, nil
 					},
 					UpdatePurchaseDHFieldsFn: func(_ context.Context, _ string, u inventory.DHFieldsUpdate) error {
@@ -155,18 +129,21 @@ func TestHandleUnmatchDH(t *testing.T) {
 				t.Helper()
 				require.NotNil(t, a.updatedFields)
 				assert.Nil(t, a.updatedStatus, "UpdatePurchaseDHPushStatus should not be called when UpdatePurchaseDHFields fails")
+				assert.False(t, a.channelDelister.Called, "delist must not run when local DB update failed")
+				assert.False(t, a.mappingDeleter.Called, "mapping delete must not run when local DB update failed")
 			},
 		},
 		{
-			name:        "UpdatePushStatusFails",
+			name:        "UpdatePushStatusFails_NoExternalMutation",
 			purchaseID:  "p1",
 			requestAuth: true,
 			repo: func(a *assertions) *mocks.PurchaseRepositoryMock {
 				return &mocks.PurchaseRepositoryMock{
 					GetPurchaseFn: func(_ context.Context, _ string) (*inventory.Purchase, error) {
 						return &inventory.Purchase{
-							ID:           "p1",
-							DHPushStatus: inventory.DHPushStatusMatched,
+							ID:            "p1",
+							DHPushStatus:  inventory.DHPushStatusMatched,
+							DHInventoryID: 666,
 						}, nil
 					},
 					UpdatePurchaseDHFieldsFn: func(_ context.Context, _ string, u inventory.DHFieldsUpdate) error {
@@ -189,6 +166,8 @@ func TestHandleUnmatchDH(t *testing.T) {
 				require.NotNil(t, a.updatedFields)
 				require.NotNil(t, a.updatedStatus)
 				assert.Nil(t, a.clearedCandidates, "UpdatePurchaseDHCandidates should not be called when UpdatePurchaseDHPushStatus fails")
+				assert.False(t, a.channelDelister.Called, "delist must not run when local DB update failed")
+				assert.False(t, a.mappingDeleter.Called, "mapping delete must not run when local DB update failed")
 			},
 		},
 		{
@@ -232,16 +211,14 @@ func TestHandleUnmatchDH(t *testing.T) {
 				assert.Equal(t, inventory.DHPushStatusUnmatched, *a.updatedStatus)
 				require.NotNil(t, a.clearedCandidates)
 				assert.Equal(t, "", *a.clearedCandidates)
-				require.NotNil(t, a.channelDelister)
-				assert.True(t, a.channelDelister.called, "DelistChannels should be called when inventory ID is set")
-				assert.Equal(t, 666, a.channelDelister.inventoryID)
-				assert.Nil(t, a.channelDelister.channels, "empty channels = delist from all")
-				require.NotNil(t, a.mappingDeleter)
-				assert.True(t, a.mappingDeleter.called, "DeleteAutoMapping should be called")
-				assert.Equal(t, "PIKACHU 1ST EDITION", a.mappingDeleter.cardName)
-				assert.Equal(t, "SPANISH", a.mappingDeleter.setName)
-				assert.Equal(t, "58", a.mappingDeleter.collectorNumber)
-				assert.Equal(t, pricing.SourceDH, a.mappingDeleter.provider)
+				assert.True(t, a.channelDelister.Called, "DelistChannels should be called when inventory ID is set")
+				assert.Equal(t, 666, a.channelDelister.InventoryID)
+				assert.Nil(t, a.channelDelister.Channels, "empty channels = delist from all")
+				assert.True(t, a.mappingDeleter.Called, "DeleteAutoMapping should be called")
+				assert.Equal(t, "PIKACHU 1ST EDITION", a.mappingDeleter.CardName)
+				assert.Equal(t, "SPANISH", a.mappingDeleter.SetName)
+				assert.Equal(t, "58", a.mappingDeleter.CollectorNumber)
+				assert.Equal(t, pricing.SourceDH, a.mappingDeleter.Provider)
 			},
 		},
 		{
@@ -278,10 +255,8 @@ func TestHandleUnmatchDH(t *testing.T) {
 			expectedCode: http.StatusOK,
 			check: func(t *testing.T, a assertions) {
 				t.Helper()
-				require.NotNil(t, a.channelDelister)
-				assert.False(t, a.channelDelister.called, "DelistChannels should be skipped when inventory ID is 0")
-				require.NotNil(t, a.mappingDeleter)
-				assert.True(t, a.mappingDeleter.called, "DeleteAutoMapping should still be called")
+				assert.False(t, a.channelDelister.Called, "DelistChannels should be skipped when inventory ID is 0")
+				assert.True(t, a.mappingDeleter.Called, "DeleteAutoMapping should still be called")
 			},
 		},
 		{
@@ -315,15 +290,55 @@ func TestHandleUnmatchDH(t *testing.T) {
 					},
 				}
 			},
+			delistErr:    errors.New("delist boom"),
 			expectedCode: http.StatusOK,
 			check: func(t *testing.T, a assertions) {
 				t.Helper()
-				require.NotNil(t, a.channelDelister)
-				assert.True(t, a.channelDelister.called)
+				assert.True(t, a.channelDelister.Called)
 				require.NotNil(t, a.updatedStatus, "unmatch must still complete when delist fails")
 				assert.Equal(t, inventory.DHPushStatusUnmatched, *a.updatedStatus)
-				require.NotNil(t, a.mappingDeleter)
-				assert.True(t, a.mappingDeleter.called, "DeleteAutoMapping should still run when delist fails")
+				assert.True(t, a.mappingDeleter.Called, "DeleteAutoMapping should still run when delist fails")
+			},
+		},
+		{
+			name:        "Success_MappingDeleteFails_ContinuesUnmatch",
+			purchaseID:  "p1",
+			requestAuth: true,
+			repo: func(a *assertions) *mocks.PurchaseRepositoryMock {
+				return &mocks.PurchaseRepositoryMock{
+					GetPurchaseFn: func(_ context.Context, _ string) (*inventory.Purchase, error) {
+						return &inventory.Purchase{
+							ID:            "p1",
+							CardName:      "FOO",
+							SetName:       "BAR",
+							CardNumber:    "1",
+							DHPushStatus:  inventory.DHPushStatusMatched,
+							DHCardID:      555,
+							DHInventoryID: 666,
+						}, nil
+					},
+					UpdatePurchaseDHFieldsFn: func(_ context.Context, _ string, u inventory.DHFieldsUpdate) error {
+						a.updatedFields = &u
+						return nil
+					},
+					UpdatePurchaseDHPushStatusFn: func(_ context.Context, _ string, status string) error {
+						a.updatedStatus = &status
+						return nil
+					},
+					UpdatePurchaseDHCandidatesFn: func(_ context.Context, _ string, c string) error {
+						a.clearedCandidates = &c
+						return nil
+					},
+				}
+			},
+			mappingErr:   errors.New("mapping delete boom"),
+			expectedCode: http.StatusOK,
+			check: func(t *testing.T, a assertions) {
+				t.Helper()
+				assert.True(t, a.channelDelister.Called)
+				assert.True(t, a.mappingDeleter.Called)
+				require.NotNil(t, a.updatedStatus, "unmatch must still complete when mapping delete fails")
+				assert.Equal(t, inventory.DHPushStatusUnmatched, *a.updatedStatus)
 			},
 		},
 	}
@@ -331,10 +346,19 @@ func TestHandleUnmatchDH(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			var a assertions
-			a.mappingDeleter = &unmatchMappingDeleter{}
-			a.channelDelister = &unmatchChannelDelister{}
-			if tc.name == "Success_DelistFails_ContinuesUnmatch" {
-				a.channelDelister.err = errors.New("delist boom")
+			a.mappingDeleter = &mocks.DHMappingDeleterMock{}
+			a.channelDelister = &mocks.DHChannelDelisterMock{}
+			if tc.delistErr != nil {
+				delistErr := tc.delistErr
+				a.channelDelister.DelistChannelsFn = func(_ context.Context, _ int, _ []string) (*dh.ChannelSyncResponse, error) {
+					return nil, delistErr
+				}
+			}
+			if tc.mappingErr != nil {
+				mappingErr := tc.mappingErr
+				a.mappingDeleter.DeleteAutoMappingFn = func(_ context.Context, _, _, _, _ string) (int64, error) {
+					return 0, mappingErr
+				}
 			}
 			repo := tc.repo(&a)
 			h := NewDHHandler(DHHandlerDeps{
