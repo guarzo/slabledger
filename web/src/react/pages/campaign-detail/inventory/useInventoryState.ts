@@ -157,6 +157,26 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
     }
   }, [toast, invalidateInventory]);
 
+  const handleDismiss = useCallback(async (purchaseId: string) => {
+    try {
+      await api.dismissDHMatch(purchaseId);
+      toast.success('Dismissed from DH listing');
+      invalidateInventory();
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Failed to dismiss'));
+    }
+  }, [toast, invalidateInventory]);
+
+  const handleUndismiss = useCallback(async (purchaseId: string) => {
+    try {
+      await api.undismissDHMatch(purchaseId);
+      toast.success('Restored to DH pipeline');
+      invalidateInventory();
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Failed to restore'));
+    }
+  }, [toast, invalidateInventory]);
+
   const [dhListingInFlight, setDHListingInFlight] = useState<Set<string>>(new Set());
   const [dhListedOptimistic, setDHListedOptimistic] = useState<Set<string>>(new Set());
   // Clear optimistic overrides when fresh data arrives (items prop updates after refetch).
@@ -435,6 +455,8 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
     handleReviewed,
     handleResolveFlag,
     handleApproveDHPush,
+    handleDismiss,
+    handleUndismiss,
     handleListOnDH,
     dhListingInFlight,
     dhListedOptimistic,
