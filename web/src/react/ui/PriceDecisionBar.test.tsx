@@ -206,4 +206,39 @@ describe('PriceDecisionBar', () => {
     render(<PriceDecisionBar sources={sources} onConfirm={() => {}} />);
     expect(screen.getByLabelText('Custom price in dollars')).toBeInTheDocument();
   });
+
+  it('preserves user selection when parent re-renders with fresh equivalent refs', async () => {
+    // Regression: polling-induced parent re-renders were resetting the
+    // user's pill choice because the seeding effect re-ran on every new
+    // reference of preSelected/sources.
+    const marketSelected: PreSelection = { kind: 'source', source: 'market' };
+    const { rerender } = render(
+      <PriceDecisionBar sources={[...sources]} preSelected={{ ...marketSelected }} onConfirm={() => {}} />
+    );
+    await userEvent.click(screen.getByRole('button', { name: /CL/ }));
+    expect(screen.getByRole('button', { name: /CL/ })).toHaveAttribute('aria-pressed', 'true');
+
+    rerender(
+      <PriceDecisionBar sources={[...sources]} preSelected={{ ...marketSelected }} onConfirm={() => {}} />
+    );
+    expect(screen.getByRole('button', { name: /CL/ })).toHaveAttribute('aria-pressed', 'true');
+
+    rerender(
+      <PriceDecisionBar sources={[...sources]} preSelected={{ ...marketSelected }} onConfirm={() => {}} />
+    );
+    expect(screen.getByRole('button', { name: /CL/ })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('re-seeds when preSelected semantically changes to a new source', () => {
+    const { rerender } = render(
+      <PriceDecisionBar sources={sources} preSelected={{ kind: 'source', source: 'market' }} onConfirm={() => {}} />
+    );
+    expect((screen.getByPlaceholderText('0.00') as HTMLInputElement).value).toBe('260.00');
+
+    rerender(
+      <PriceDecisionBar sources={sources} preSelected={{ kind: 'source', source: 'cl' }} onConfirm={() => {}} />
+    );
+    expect((screen.getByPlaceholderText('0.00') as HTMLInputElement).value).toBe('285.00');
+    expect(screen.getByRole('button', { name: /CL/ })).toHaveAttribute('aria-pressed', 'true');
+  });
 });

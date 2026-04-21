@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Button } from '../ui';
 import { formatCents, dollarsToCents, centsToDollars } from '../utils/formatters';
 import type { PreSelection } from './priceDecisionHelpers';
@@ -47,19 +47,36 @@ export default function PriceDecisionBar({
   const [customValue, setCustomValue] = useState('');
   const [lastConfirmedCents, setLastConfirmedCents] = useState(0);
 
+  // Key the seeding effect on preSelected's semantic content, not its object
+  // identity. Consumers that hand us fresh references every render (without
+  // useMemo) would otherwise reset the user's pill choice on each re-render.
+  // appliedKeyRef records the last semantic value we actually seeded from, so
+  // unrelated re-renders are no-ops and a real change still triggers a re-seed.
+  const preSelectedKey = preSelected
+    ? preSelected.kind === 'source'
+      ? `source:${preSelected.source}`
+      : preSelected.kind === 'manual'
+        ? `manual:${preSelected.priceCents}`
+        : 'none'
+    : 'undefined';
+  const appliedKeyRef = useRef<string | null>(null);
+
   useEffect(() => {
     if (!preSelected) return;
+    if (appliedKeyRef.current === preSelectedKey) return;
     if (preSelected.kind === 'source') {
       const match = sources.find(s => s.source === preSelected.source && s.priceCents > 0);
       if (match) {
         setSelectedSource(match.source);
         setCustomValue(centsToDollars(match.priceCents));
+        appliedKeyRef.current = preSelectedKey;
       }
     } else if (preSelected.kind === 'manual') {
       setSelectedSource(null);
       setCustomValue(centsToDollars(preSelected.priceCents));
+      appliedKeyRef.current = preSelectedKey;
     }
-  }, [preSelected, sources]);
+  }, [preSelectedKey, preSelected, sources]);
 
   const handleSourceClick = (src: PriceSource) => {
     setSelectedSource(src.source);
