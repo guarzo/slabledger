@@ -849,7 +849,7 @@ function CertRowDetail({ row }: { row: CertRow }) {
           )}
 
           <div className="flex flex-wrap items-center gap-2 mt-2">
-            {row.cardName && (
+            {(row.dhSearchQuery || row.cardName) && (
               <a
                 href={buildDHSearchURL(row)}
                 target="_blank"
