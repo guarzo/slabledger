@@ -114,6 +114,9 @@ export default function ExpandedDetail({ item, onReviewed, campaignId, onOpenFla
           ? 'DH push pending — check back after sync'
           : msg,
       );
+      // Set-price succeeded; reflect it in the cache so the row doesn't
+      // appear to still need a price after the operator dismisses the toast.
+      invalidateQueries();
     } finally {
       setIsSubmitting(false);
     }
