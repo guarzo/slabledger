@@ -9,17 +9,27 @@ import (
 )
 
 // ResolveListingPriceCents returns the operator-committed price for DH
-// listing. ReviewedPriceCents wins; OverridePriceCents is the fallback so
-// prices set through the "Set Price" dialog (which writes override) still
-// flow to DH. CL is deliberately excluded: it can be stale and we don't
-// want to silently list at a wrong price. Returns 0 when neither field is
-// set, which callers treat as "omit listing_price_cents and let DH's
-// catalog fallback take over" (fine for in_stock, rejected at list time).
+// listing. Both ReviewedPriceCents (price-review flow) and OverridePriceCents
+// (Set Price dialog) are treated as human commitments; when both are set,
+// the newest commit wins via timestamp comparison. RFC3339 strings sort
+// lexicographically in chronological order, and empty strings sort before
+// any populated timestamp — so a legacy row with both values but no
+// timestamps falls back to the historical "reviewed wins" precedence.
+// CL is deliberately excluded: it can be stale and we don't want to
+// silently list at a wrong price. Returns 0 when neither field is set —
+// callers treat that as "omit listing_price_cents and let DH's catalog
+// fallback take over" (fine for in_stock, rejected at list time).
 func ResolveListingPriceCents(p *inventory.Purchase) int {
-	if p.ReviewedPriceCents > 0 {
+	if p.OverridePriceCents == 0 {
 		return p.ReviewedPriceCents
 	}
-	return p.OverridePriceCents
+	if p.ReviewedPriceCents == 0 {
+		return p.OverridePriceCents
+	}
+	if p.OverrideSetAt > p.ReviewedAt {
+		return p.OverridePriceCents
+	}
+	return p.ReviewedPriceCents
 }
 
 // EvaluateHoldTriggers checks whether a push should be held for review.

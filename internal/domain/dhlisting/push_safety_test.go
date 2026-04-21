@@ -7,49 +7,73 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 )
 
-// TestResolveListingPriceCents covers the reviewed→override fallback chain.
+// TestResolveListingPriceCents covers the reviewed↔override resolution rules:
+// both fields hold operator-committed prices; when both are set, the newest
+// commit wins via RFC3339 string comparison on reviewed_at vs override_set_at.
 func TestResolveListingPriceCents(t *testing.T) {
+	const oldTS = "2026-01-01T00:00:00Z"
+	const newTS = "2026-04-21T12:00:00Z"
+
 	tests := []struct {
 		name               string
 		reviewedPriceCents int
+		reviewedAt         string
 		overridePriceCents int
+		overrideSetAt      string
 		clValueCents       int
 		want               int
 	}{
 		{
-			name:               "reviewed price wins",
+			name:               "only reviewed set",
 			reviewedPriceCents: 5000,
-			overridePriceCents: 7000,
+			reviewedAt:         newTS,
 			clValueCents:       3000,
 			want:               5000,
 		},
 		{
-			name:               "override used when no reviewed price",
-			reviewedPriceCents: 0,
+			name:               "only override set",
 			overridePriceCents: 4500,
+			overrideSetAt:      newTS,
 			clValueCents:       3000,
 			want:               4500,
 		},
 		{
-			name:               "zero when reviewed and override both zero (CL is not a fallback)",
-			reviewedPriceCents: 0,
-			overridePriceCents: 0,
-			clValueCents:       3000,
-			want:               0,
+			name:         "zero when reviewed and override both zero (CL is not a fallback)",
+			clValueCents: 3000,
+			want:         0,
 		},
 		{
-			name:               "all zero",
-			reviewedPriceCents: 0,
-			overridePriceCents: 0,
-			clValueCents:       0,
-			want:               0,
+			name: "all zero",
+			want: 0,
 		},
 		{
-			name:               "reviewed = 1 wins over override",
-			reviewedPriceCents: 1,
-			overridePriceCents: 9999,
-			clValueCents:       0,
-			want:               1,
+			// Common user flow: reviewed was set earlier, then the operator
+			// opens the Price Override dialog and commits a new value.
+			name:               "newer override wins over older reviewed",
+			reviewedPriceCents: 5000,
+			reviewedAt:         oldTS,
+			overridePriceCents: 7000,
+			overrideSetAt:      newTS,
+			want:               7000,
+		},
+		{
+			// Reverse: override was set earlier, then the operator ran a
+			// proper price-review pass. The review is the latest signal.
+			name:               "newer reviewed wins over older override",
+			reviewedPriceCents: 5000,
+			reviewedAt:         newTS,
+			overridePriceCents: 7000,
+			overrideSetAt:      oldTS,
+			want:               5000,
+		},
+		{
+			// Defensive: if we ever read a row with both prices but empty
+			// timestamps (legacy / manual edit), preserve the historical
+			// "reviewed wins" behavior rather than picking arbitrarily.
+			name:               "both set, both timestamps empty → reviewed wins",
+			reviewedPriceCents: 5000,
+			overridePriceCents: 7000,
+			want:               5000,
 		},
 	}
 
@@ -57,7 +81,9 @@ func TestResolveListingPriceCents(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			p := &inventory.Purchase{
 				ReviewedPriceCents: tc.reviewedPriceCents,
+				ReviewedAt:         tc.reviewedAt,
 				OverridePriceCents: tc.overridePriceCents,
+				OverrideSetAt:      tc.overrideSetAt,
 				CLValueCents:       tc.clValueCents,
 			}
 			got := ResolveListingPriceCents(p)
