@@ -13,7 +13,8 @@ type dhDismissRequest struct {
 	PurchaseID string `json:"purchaseId"`
 }
 
-// HandleDismissMatch marks an unmatched purchase as "dismissed" (not matchable).
+// HandleDismissMatch marks a purchase as "dismissed" from any non-terminal DH
+// push state so it is skipped by the DH listing pipeline.
 func (h *DHHandler) HandleDismissMatch(w http.ResponseWriter, r *http.Request) {
 	if requireUser(w, r) == nil {
 		return
@@ -30,7 +31,7 @@ func (h *DHHandler) HandleDismissMatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Verify the purchase exists and is currently unmatched.
+	// Verify the purchase exists and is in a dismissable state.
 	p, err := h.purchaseLister.GetPurchase(ctx, req.PurchaseID)
 	if err != nil {
 		h.logger.Error(ctx, "dismiss: get purchase", observability.Err(err))
