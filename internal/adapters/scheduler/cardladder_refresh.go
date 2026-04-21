@@ -194,6 +194,15 @@ func (s *CardLadderRefreshScheduler) PriceSinglePurchase(ctx context.Context, p 
 	if p == nil {
 		return nil
 	}
+	// Skip if this purchase was priced within FreshPriceWindow — kills the
+	// re-import / double-scan thrash. Daily refresh still runs on its own
+	// schedule and is unaffected because it calls runOnce, not this path.
+	if p.CLValueCents > 0 && isPriceFresh(p.CLValueUpdatedAt) {
+		s.logger.Info(ctx, "CL price: skipping, value is fresh",
+			observability.String("cert", p.CertNumber),
+			observability.String("updatedAt", p.CLValueUpdatedAt))
+		return nil
+	}
 	s.logger.Info(ctx, "CL price: invoked", observability.String("cert", p.CertNumber))
 	client := s.getClient()
 	if client == nil {

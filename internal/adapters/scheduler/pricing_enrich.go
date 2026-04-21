@@ -3,6 +3,7 @@ package scheduler
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
@@ -10,6 +11,36 @@ import (
 
 var _ inventory.PricingEnqueuer = (*PricingEnrichJob)(nil)
 var _ Scheduler = (*PricingEnrichJob)(nil)
+
+// Pricing-enrich throughput tunables. The previous single-worker / depth-200
+// setup dropped intake bursts because each cert blocks on 5–7 upstream HTTP
+// calls (CL + MM) — IO-bound, not CPU-bound — so parallelism is cheap on a
+// shared-cpu VM and deeper buffering absorbs CSV-scale imports.
+const (
+	pricingQueueSize   = 1000
+	pricingWorkerCount = 4
+
+	// FreshPriceWindow is how long an on-demand CL/MM price is considered
+	// current. Within this window, re-enqueuing the same cert (e.g. a CSV
+	// re-import, a double-scan at intake) skips the upstream call. Sized to
+	// comfortably cover burst re-imports without staling out the freshly
+	// scanned inventory that an operator is watching live.
+	FreshPriceWindow = 15 * time.Minute
+)
+
+// isPriceFresh reports whether an RFC3339 timestamp is within FreshPriceWindow
+// of now. An empty/unparseable timestamp is treated as stale so first-time
+// pricing always runs.
+func isPriceFresh(updatedAtRFC3339 string) bool {
+	if updatedAtRFC3339 == "" {
+		return false
+	}
+	t, err := time.Parse(time.RFC3339, updatedAtRFC3339)
+	if err != nil {
+		return false
+	}
+	return time.Since(t) < FreshPriceWindow
+}
 
 // SinglePurchasePricer drives on-demand pricing for one purchase against a
 // specific provider. Both CardLadderRefreshScheduler and
@@ -20,14 +51,18 @@ type SinglePurchasePricer interface {
 }
 
 // PricingEnrichJob bridges the intake-time pricing enqueuer to the daily
-// refresh schedulers. Given a cert number, the worker loads the purchase and
-// fans it out to every configured pricer (CL, MM) so freshly scanned inventory
-// gets priced immediately instead of waiting for the next daily cycle.
+// refresh schedulers. Given a cert number, a pool of workers loads the
+// purchase and fans it out to every configured pricer (CL, MM) so freshly
+// scanned inventory gets priced immediately instead of waiting for the next
+// daily cycle.
+//
+// Within one cert, pricers run concurrently — each on its own shallow copy of
+// the Purchase so concurrent field mutations (CLValueCents, DHPushStatus)
+// can't race. MM never reads fields CL mutates, so there is no logical
+// cross-pricer coupling; the copy keeps -race clean and the contract explicit.
 //
 // Pricers are optional — if CL/MM isn't configured, the scheduler constructor
-// is passed nil and this job just logs a debug line and moves on. The worker
-// is sequential; bulk imports that enqueue many certs will price them one at
-// a time, respecting the provider clients' own rate limiters.
+// is passed nil and this job drops the enqueue with a warning.
 type PricingEnrichJob struct {
 	StopHandle
 	ch       chan string
@@ -37,14 +72,14 @@ type PricingEnrichJob struct {
 	logger   observability.Logger
 }
 
-// NewPricingEnrichJob creates a pricing enrichment worker. Pricers can be
+// NewPricingEnrichJob creates a pricing enrichment worker pool. Pricers can be
 // injected here or later via SetPricers — the latter is needed when the
 // provider schedulers are constructed after the inventory service that owns
 // the enqueuer reference.
 func NewPricingEnrichJob(repo inventory.PurchaseRepository, logger observability.Logger, pricers ...SinglePurchasePricer) *PricingEnrichJob {
 	j := &PricingEnrichJob{
 		StopHandle: NewStopHandle(),
-		ch:         make(chan string, 200),
+		ch:         make(chan string, pricingQueueSize),
 		repo:       repo,
 		logger:     logger.With(context.Background(), observability.String("component", "pricing-enrich")),
 	}
@@ -106,19 +141,22 @@ func (j *PricingEnrichJob) Enqueue(certNumber string) {
 	}
 }
 
-// Start begins the background pricing worker.
+// Start launches the pool of background pricing workers.
 func (j *PricingEnrichJob) Start(ctx context.Context) {
 	wg := j.WG()
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		j.logger.Info(ctx, "pricing-enrich scheduler started")
-		j.worker(ctx)
-		j.logger.Info(ctx, "pricing-enrich scheduler stopped")
-	}()
+	j.logger.Info(ctx, "pricing-enrich scheduler started",
+		observability.Int("workers", pricingWorkerCount),
+		observability.Int("queueSize", pricingQueueSize))
+	for i := range pricingWorkerCount {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			j.worker(ctx, id)
+		}(i)
+	}
 }
 
-func (j *PricingEnrichJob) worker(ctx context.Context) {
+func (j *PricingEnrichJob) worker(ctx context.Context, id int) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -130,16 +168,20 @@ func (j *PricingEnrichJob) worker(ctx context.Context) {
 			if ctx.Err() != nil {
 				return
 			}
-			j.priceOne(ctx, certNum)
+			j.priceOne(ctx, certNum, id)
 		}
 	}
 }
 
-// priceOne loads the purchase for a cert and runs every configured pricer.
-// Errors from one provider don't short-circuit the others — each pricer already
-// records its own per-purchase failure reason for the admin UI.
-func (j *PricingEnrichJob) priceOne(ctx context.Context, certNum string) {
-	j.logger.Info(ctx, "pricing-enrich: processing cert", observability.String("cert", certNum))
+// priceOne loads the purchase for a cert and runs every configured pricer
+// concurrently. Each pricer gets its own shallow copy of the purchase so
+// concurrent field mutations (CLValueCents, DHPushStatus) can't race.
+// Per-pricer errors don't short-circuit the others; each pricer records its
+// own per-purchase failure reason for the admin UI.
+func (j *PricingEnrichJob) priceOne(ctx context.Context, certNum string, workerID int) {
+	j.logger.Info(ctx, "pricing-enrich: processing cert",
+		observability.String("cert", certNum),
+		observability.Int("worker", workerID))
 	purchase, err := j.repo.GetPurchaseByCertNumber(ctx, "PSA", certNum)
 	if err != nil {
 		j.logger.Warn(ctx, "pricing-enrich: failed to load purchase",
@@ -156,11 +198,19 @@ func (j *PricingEnrichJob) priceOne(ctx context.Context, certNum string) {
 	j.logger.Info(ctx, "pricing-enrich: fanning out to pricers",
 		observability.String("cert", certNum),
 		observability.Int("pricers", len(pricers)))
+
+	var wg sync.WaitGroup
 	for _, p := range pricers {
-		if err := p.PriceSinglePurchase(ctx, purchase); err != nil {
-			j.logger.Warn(ctx, "pricing-enrich: pricer failed",
-				observability.String("cert", certNum),
-				observability.Err(err))
-		}
+		wg.Add(1)
+		go func(pricer SinglePurchasePricer) {
+			defer wg.Done()
+			pCopy := *purchase
+			if err := pricer.PriceSinglePurchase(ctx, &pCopy); err != nil {
+				j.logger.Warn(ctx, "pricing-enrich: pricer failed",
+					observability.String("cert", certNum),
+					observability.Err(err))
+			}
+		}(p)
 	}
+	wg.Wait()
 }
