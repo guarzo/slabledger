@@ -75,6 +75,25 @@ func TestResolveListingPriceCents(t *testing.T) {
 			overridePriceCents: 7000,
 			want:               5000,
 		},
+		{
+			// Mixed: the override dialog was used on a row that predates
+			// reviewed_at tracking. Empty string sorts before the populated
+			// timestamp, so override (the only committed signal) wins.
+			name:               "reviewed price with empty timestamp vs populated override → override wins",
+			reviewedPriceCents: 5000,
+			overridePriceCents: 7000,
+			overrideSetAt:      newTS,
+			want:               7000,
+		},
+		{
+			// Mixed inverse: override field retained from an earlier manual
+			// set but with no timestamp, and a newer formal review followed.
+			name:               "populated reviewed vs override price with empty timestamp → reviewed wins",
+			reviewedPriceCents: 5000,
+			reviewedAt:         newTS,
+			overridePriceCents: 7000,
+			want:               5000,
+		},
 	}
 
 	for _, tc := range tests {
