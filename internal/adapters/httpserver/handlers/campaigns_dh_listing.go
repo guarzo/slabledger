@@ -68,10 +68,12 @@ func (h *CampaignsHandler) HandleListPurchaseOnDH(w http.ResponseWriter, r *http
 		}
 		return
 	}
-	// DH now honors our listing_price_cents as-is, so we require a reviewed
-	// price before listing. Stale or missing prices are rejected here rather
-	// than silently letting DH fall back to its catalog value.
-	if p.ReviewedPriceCents == 0 {
+	// DH now honors our listing_price_cents as-is, so we require a human-
+	// committed price before listing. ResolveListingPriceCents mirrors the
+	// service-layer gate: reviewed wins, override is the fallback (the "Set
+	// Price" dialog writes override). CL is excluded so a stale catalog
+	// value doesn't silently become the listing price.
+	if dhlisting.ResolveListingPriceCents(p) == 0 {
 		writeError(w, http.StatusConflict, "Review the price before listing on DH")
 		return
 	}
