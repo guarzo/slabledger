@@ -9,7 +9,7 @@ import (
 // purchaseColumns is the canonical SELECT column list for campaign_purchases (no table alias).
 const purchaseColumns = `id, campaign_id, card_name, cert_number, card_number, set_name,
 	grader, grade_value,
-	cl_value_cents, mm_value_cents, mm_trend_pct, mm_sales_30d, mm_active_low_cents, mm_value_updated_at, buy_cost_cents, psa_sourcing_fee_cents,
+	cl_value_cents, cl_value_updated_at, mm_value_cents, mm_trend_pct, mm_sales_30d, mm_active_low_cents, mm_value_updated_at, buy_cost_cents, psa_sourcing_fee_cents,
 	population, purchase_date, created_at, updated_at,
 	last_sold_cents, lowest_list_cents, conservative_cents, median_cents,
 	active_listings, sales_last_30d, trend_30d, snapshot_date, snapshot_json,
@@ -27,7 +27,7 @@ const purchaseColumns = `id, campaign_id, card_name, cert_number, card_number, s
 // purchaseColumnsAliased is the same column list with the "p." table alias for JOIN queries.
 const purchaseColumnsAliased = `p.id, p.campaign_id, p.card_name, p.cert_number, p.card_number, p.set_name,
 	p.grader, p.grade_value,
-	p.cl_value_cents, p.mm_value_cents, p.mm_trend_pct, p.mm_sales_30d, p.mm_active_low_cents, p.mm_value_updated_at, p.buy_cost_cents, p.psa_sourcing_fee_cents,
+	p.cl_value_cents, p.cl_value_updated_at, p.mm_value_cents, p.mm_trend_pct, p.mm_sales_30d, p.mm_active_low_cents, p.mm_value_updated_at, p.buy_cost_cents, p.psa_sourcing_fee_cents,
 	p.population, p.purchase_date, p.created_at, p.updated_at,
 	p.last_sold_cents, p.lowest_list_cents, p.conservative_cents, p.median_cents,
 	p.active_listings, p.sales_last_30d, p.trend_30d, p.snapshot_date, p.snapshot_json,
@@ -81,7 +81,7 @@ func purchaseScanDests(p *inventory.Purchase) []any {
 	return []any{
 		&p.ID, &p.CampaignID, &p.CardName, &p.CertNumber, &p.CardNumber, &p.SetName,
 		&p.Grader, &p.GradeValue,
-		&p.CLValueCents, &p.MMValueCents, &p.MMTrendPct, &p.MMSales30d, &p.MMActiveLowCents, &p.MMValueUpdatedAt, &p.BuyCostCents, &p.PSASourcingFeeCents,
+		&p.CLValueCents, &p.CLValueUpdatedAt, &p.MMValueCents, &p.MMTrendPct, &p.MMSales30d, &p.MMActiveLowCents, &p.MMValueUpdatedAt, &p.BuyCostCents, &p.PSASourcingFeeCents,
 		&p.Population, &p.PurchaseDate, &p.CreatedAt, &p.UpdatedAt,
 		&p.LastSoldCents, &p.LowestListCents, &p.ConservativeCents, &p.MedianCents,
 		&p.ActiveListings, &p.SalesLast30d, &p.Trend30d, &p.SnapshotDate, &p.SnapshotJSON,

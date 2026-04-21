@@ -154,6 +154,15 @@ func (s *MarketMoversRefreshScheduler) PriceSinglePurchase(ctx context.Context, 
 	if p == nil {
 		return nil
 	}
+	// Skip if this purchase was priced within FreshPriceWindow — kills the
+	// re-import / double-scan thrash. Daily refresh still runs on its own
+	// schedule and is unaffected because it calls runOnce, not this path.
+	if p.MMValueCents > 0 && isPriceFresh(p.MMValueUpdatedAt) {
+		s.logger.Info(ctx, "MM price: skipping, value is fresh",
+			observability.String("cert", p.CertNumber),
+			observability.String("updatedAt", p.MMValueUpdatedAt))
+		return nil
+	}
 	s.logger.Info(ctx, "MM price: invoked", observability.String("cert", p.CertNumber))
 	client := s.getClient()
 	if client == nil {
