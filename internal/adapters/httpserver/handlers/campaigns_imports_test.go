@@ -213,6 +213,77 @@ func TestHandleScanCert_ServiceError(t *testing.T) {
 	}
 }
 
+// --- HandleScanCerts ---
+
+func TestHandleScanCerts_Success(t *testing.T) {
+	svc := &mocks.MockInventoryService{
+		ScanCertsFn: func(_ context.Context, certs []string) (*inventory.ScanCertsResult, error) {
+			out := &inventory.ScanCertsResult{Results: map[string]*inventory.ScanCertResult{}}
+			for _, c := range certs {
+				out.Results[c] = &inventory.ScanCertResult{Status: "new"}
+			}
+			return out, nil
+		},
+	}
+	h := newTestHandler(svc)
+
+	body := strings.NewReader(`{"certNumbers":["111","222"]}`)
+	req := httptest.NewRequest("POST", "/api/purchases/scan-certs", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	h.HandleScanCerts(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandleScanCerts_EmptyRejected(t *testing.T) {
+	h := newTestHandler(&mocks.MockInventoryService{})
+
+	body := strings.NewReader(`{"certNumbers":[]}`)
+	req := httptest.NewRequest("POST", "/api/purchases/scan-certs", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	h.HandleScanCerts(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandleScanCerts_OverCapRejected(t *testing.T) {
+	svc := &mocks.MockInventoryService{
+		ScanCertsFn: func(_ context.Context, _ []string) (*inventory.ScanCertsResult, error) {
+			t.Fatal("service should not be called when request exceeds cap")
+			return nil, nil
+		},
+	}
+	h := newTestHandler(svc)
+
+	// Build a slice of maxScanCertsPerRequest + 1 certs.
+	certs := make([]string, maxScanCertsPerRequest+1)
+	for i := range certs {
+		certs[i] = fmt.Sprintf("%08d", i)
+	}
+	payload, err := json.Marshal(inventory.ScanCertsRequest{CertNumbers: certs})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	req := httptest.NewRequest("POST", "/api/purchases/scan-certs", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	h.HandleScanCerts(rec, req)
+
+	if rec.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status = %d, want 413; body: %s", rec.Code, rec.Body.String())
+	}
+}
+
 // --- HandleResolveCert ---
 
 func TestHandleResolveCert_Success(t *testing.T) {

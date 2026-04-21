@@ -52,6 +52,21 @@ type ScanCertResult struct {
 	Population    int     `json:"population,omitempty"`
 }
 
+// ScanCertsRequest is the input for POST /api/purchases/scan-certs, the batch
+// variant used by the cert-intake polling loop to avoid rate-limiting itself.
+type ScanCertsRequest struct {
+	CertNumbers []string `json:"certNumbers"`
+}
+
+// ScanCertsResult partitions batch scan responses: successful cert scans go in
+// Results (keyed by cert number), per-cert failures go in Errors. A cert
+// appears in one or the other, never both. Callers that need to reconcile
+// against their input list should check both maps.
+type ScanCertsResult struct {
+	Results map[string]*ScanCertResult `json:"results"`
+	Errors  []CertImportError          `json:"errors,omitempty"`
+}
+
 // ResolveCertRequest is the input for POST /api/purchases/resolve-cert.
 type ResolveCertRequest struct {
 	CertNumber string `json:"certNumber"`

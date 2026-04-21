@@ -27,6 +27,7 @@ type MockImportService struct {
 	ImportCertsFn               func(ctx context.Context, certNumbers []string) (*inventory.CertImportResult, error)
 	GetPurchasesByCertNumbersFn func(ctx context.Context, certNumbers []string) (map[string]*inventory.Purchase, error)
 	ScanCertFn                  func(ctx context.Context, certNumber string) (*inventory.ScanCertResult, error)
+	ScanCertsFn                 func(ctx context.Context, certNumbers []string) (*inventory.ScanCertsResult, error)
 	ResolveCertFn               func(ctx context.Context, certNumber string) (*inventory.CertInfo, error)
 }
 
@@ -100,6 +101,13 @@ func (m *MockImportService) ScanCert(ctx context.Context, certNumber string) (*i
 		return m.ScanCertFn(ctx, certNumber)
 	}
 	return &inventory.ScanCertResult{}, nil
+}
+
+func (m *MockImportService) ScanCerts(ctx context.Context, certNumbers []string) (*inventory.ScanCertsResult, error) {
+	if m.ScanCertsFn != nil {
+		return m.ScanCertsFn(ctx, certNumbers)
+	}
+	return &inventory.ScanCertsResult{Results: map[string]*inventory.ScanCertResult{}}, nil
 }
 
 func (m *MockImportService) ResolveCert(ctx context.Context, certNumber string) (*inventory.CertInfo, error) {

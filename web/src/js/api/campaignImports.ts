@@ -7,7 +7,7 @@ import type {
   CertLookupResult,
   CertImportResult,
   OrdersImportResult, OrdersConfirmItem, BulkSaleResult,
-  ScanCertResponse, ResolveCertResponse, MMRefreshResult,
+  ScanCertResponse, ScanCertsResponse, ResolveCertResponse, MMRefreshResult,
 } from '../../types/campaigns';
 import type { PriceFlagsResponse } from '../../types/campaigns/priceReview';
 import type { PSAPendingItem } from '../../types/admin';
@@ -34,6 +34,7 @@ declare module './client' {
     // Cert entry
     importCerts(certNumbers: string[]): Promise<CertImportResult>;
     scanCert(certNumber: string): Promise<ScanCertResponse>;
+    scanCerts(certNumbers: string[]): Promise<ScanCertsResponse>;
     resolveCert(certNumber: string): Promise<ResolveCertResponse>;
 
     // Price review & flags
@@ -101,6 +102,10 @@ proto.importCerts = async function (this: APIClient, certNumbers: string[]): Pro
 
 proto.scanCert = async function (this: APIClient, certNumber: string): Promise<ScanCertResponse> {
   return this.post<ScanCertResponse>('/purchases/scan-cert', { certNumber });
+};
+
+proto.scanCerts = async function (this: APIClient, certNumbers: string[]): Promise<ScanCertsResponse> {
+  return this.post<ScanCertsResponse>('/purchases/scan-certs', { certNumbers });
 };
 
 proto.resolveCert = async function (this: APIClient, certNumber: string): Promise<ResolveCertResponse> {

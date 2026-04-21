@@ -1868,6 +1868,34 @@ Scans a cert number to determine if it exists in inventory, has been sold, or is
 
 ---
 
+### `POST /api/purchases/scan-certs`
+
+Auth: RequireAuth
+
+Batch variant of `scan-cert`. Used by the cert-intake polling loop so N rows
+awaiting sync produce one request per tick instead of N.
+
+**Body:**
+```json
+{ "certNumbers": ["12345678", "99999999"] }
+```
+
+**Response:** `200 OK` — `ScanCertsResult`
+```json
+{
+  "results": {
+    "12345678": { "status": "existing", "cardName": "Charizard", "purchaseId": "uuid" },
+    "99999999": { "status": "new" }
+  },
+  "errors": []
+}
+```
+
+Each requested cert appears in either `results` or `errors`. Duplicate and
+empty entries in the request are coalesced/dropped.
+
+---
+
 ### `POST /api/purchases/resolve-cert`
 
 Auth: RequireAuth

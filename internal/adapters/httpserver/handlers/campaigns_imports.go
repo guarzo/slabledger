@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/csv"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"time"
@@ -200,6 +201,52 @@ func (h *CampaignsHandler) HandleScanCert(w http.ResponseWriter, r *http.Request
 	// in_stock → listed without waiting for an unrelated import.
 	if result.Status == "existing" {
 		h.triggerDHListing([]string{req.CertNumber})
+	}
+
+	writeJSON(w, http.StatusOK, result)
+}
+
+// maxScanCertsPerRequest caps the batch size for POST /api/purchases/scan-certs.
+// ScanCert does per-cert DB lookups, flag updates, and pipeline enrollments, so
+// an unbounded slice from a buggy or abusive client could pin a single request
+// on heavy work. 100 comfortably covers the intake screen's realistic backlog.
+const maxScanCertsPerRequest = 100
+
+// HandleScanCerts handles POST /api/purchases/scan-certs, the batch variant
+// used by the cert-intake polling loop. One request carries many cert numbers
+// so the UI doesn't fan out into per-row polls that trip our own rate limiter.
+func (h *CampaignsHandler) HandleScanCerts(w http.ResponseWriter, r *http.Request) {
+	var req inventory.ScanCertsRequest
+	if !decodeBody(w, r, &req) {
+		return
+	}
+	if len(req.CertNumbers) == 0 {
+		writeError(w, http.StatusBadRequest, "certNumbers is required")
+		return
+	}
+	if len(req.CertNumbers) > maxScanCertsPerRequest {
+		writeError(w, http.StatusRequestEntityTooLarge,
+			fmt.Sprintf("certNumbers cannot exceed %d per request", maxScanCertsPerRequest))
+		return
+	}
+
+	result, ok := serviceCall(w, r.Context(), h.logger, "scan certs failed", func() (*inventory.ScanCertsResult, error) {
+		return h.service.ScanCerts(r.Context(), req.CertNumbers)
+	})
+	if !ok {
+		return
+	}
+
+	// Mirror the single-cert handler: trigger DH listing for any existing
+	// unsold certs so in-flight items promote without waiting for an import.
+	var listingCerts []string
+	for cert, res := range result.Results {
+		if res != nil && res.Status == "existing" {
+			listingCerts = append(listingCerts, cert)
+		}
+	}
+	if len(listingCerts) > 0 {
+		h.triggerDHListing(listingCerts)
 	}
 
 	writeJSON(w, http.StatusOK, result)
