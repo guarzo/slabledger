@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import type { AgingItem } from '../../../../types/campaigns';
-import { api } from '../../../../js/api';
+import { api, isAPIError } from '../../../../js/api';
 import { useToast } from '../../../contexts/ToastContext';
 import { queryKeys } from '../../../queries/queryKeys';
 import SellPriceHero from './SellPriceHero';
@@ -19,6 +19,7 @@ interface ExpandedDetailProps {
   onResolveFlag?: (flagId: number) => void;
   onApproveDHPush?: (purchaseId: string) => void;
   onSetPrice?: () => void;
+  combineWithList?: boolean;
 }
 
 const holdReasonLabels: Record<string, string> = {
@@ -36,7 +37,7 @@ function formatHoldReason(reason: string): string {
   return reason || 'Unknown reason';
 }
 
-export default function ExpandedDetail({ item, onReviewed, campaignId, onOpenFlagDialog, onResolveFlag, onApproveDHPush, onSetPrice }: ExpandedDetailProps) {
+export default function ExpandedDetail({ item, onReviewed, campaignId, onOpenFlagDialog, onResolveFlag, onApproveDHPush, onSetPrice, combineWithList }: ExpandedDetailProps) {
   const queryClient = useQueryClient();
   const toast = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -81,6 +82,38 @@ export default function ExpandedDetail({ item, onReviewed, campaignId, onOpenFla
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to save reviewed price';
       toast.error(message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleSetAndList = async (priceCents: number, source: string) => {
+    setIsSubmitting(true);
+    try {
+      await api.setReviewedPrice(purchase.id, priceCents, source);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to save reviewed price');
+      setIsSubmitting(false);
+      return;
+    }
+    try {
+      await api.listPurchaseOnDH(purchase.id);
+      toast.success('Price set and listed on DH');
+      invalidateQueries();
+      onReviewed?.();
+    } catch (err) {
+      if (isAPIError(err) && err.status === 409 && err.data?.error === 'Purchase already listed on DH') {
+        toast.success('Price set and listed on DH');
+        invalidateQueries();
+        onReviewed?.();
+        return;
+      }
+      const msg = err instanceof Error ? err.message : 'Listing failed';
+      toast.error(
+        msg.toLowerCase().includes('stock')
+          ? 'DH push pending — check back after sync'
+          : msg,
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -169,9 +202,10 @@ export default function ExpandedDetail({ item, onReviewed, campaignId, onOpenFla
       <PriceDecisionBar
         sources={sources}
         preSelected={preSelected}
-        onConfirm={handleConfirm}
+        onConfirm={combineWithList ? handleSetAndList : handleConfirm}
         onFlag={onOpenFlagDialog}
         isSubmitting={isSubmitting}
+        confirmLabel={combineWithList ? 'List on DH' : undefined}
       />
 
       {/* Ship date chip (only when not yet received) */}
