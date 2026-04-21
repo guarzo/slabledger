@@ -10,7 +10,7 @@ import {
   referencePricesTooltip,
   syncDotProps, hasCanonicalPriceSignal,
 } from './utils';
-import { isReadyToList, needsPriceReview, wasUnlistedFromDH, isPendingDHMatch, isSkipped } from './inventoryCalcs';
+import { wasUnlistedFromDH, deriveActionIntent, canDismiss } from './inventoryCalcs';
 import { dhBadgeFor, DH_BADGE_COLORS } from './dhBadge';
 import InlinePriceEdit from './InlinePriceEdit';
 
@@ -93,15 +93,8 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
     clLastError: item.purchase.clLastError,
   });
 
-  type ActionIntent = 'fix_match' | 'set_and_list' | 'list' | 'restore' | 'none';
-  const actionIntent: ActionIntent = (() => {
-    if (isSkipped(item)) return 'restore';
-    if (isPendingDHMatch(item)) return 'fix_match';
-    if (needsPriceReview(item)) return 'set_and_list';
-    if (isReadyToList(item)) return 'list';
-    return 'none';
-  })();
-  const showDismiss = actionIntent === 'fix_match' || actionIntent === 'set_and_list' || actionIntent === 'list';
+  const actionIntent = deriveActionIntent(item);
+  const showDismiss = canDismiss(actionIntent);
 
   return (
     <div

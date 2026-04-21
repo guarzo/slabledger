@@ -78,6 +78,22 @@ export function needsPriceReview(item: AgingItem): boolean {
   return isPendingPrice(item);
 }
 
+export type ActionIntent = 'fix_match' | 'set_and_list' | 'list' | 'restore' | 'none';
+
+// deriveActionIntent picks a single primary row action from the item's own
+// status. Shared by DesktopRow and MobileCard so the two stay in lockstep.
+export function deriveActionIntent(item: AgingItem): ActionIntent {
+  if (isSkipped(item)) return 'restore';
+  if (isPendingDHMatch(item)) return 'fix_match';
+  if (isPendingPrice(item)) return 'set_and_list';
+  if (isReadyToList(item)) return 'list';
+  return 'none';
+}
+
+export function canDismiss(intent: ActionIntent): boolean {
+  return intent === 'fix_match' || intent === 'set_and_list' || intent === 'list';
+}
+
 // wasUnlistedFromDH: the DH reconciler detected this item was deleted
 // from DH's authoritative inventory snapshot. Drives the
 // "Re-list (removed from DH)" row badge. Clears on successful re-list.

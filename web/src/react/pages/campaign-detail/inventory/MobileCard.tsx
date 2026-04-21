@@ -7,7 +7,7 @@ import {
   getSourceByType, fmtDateShort, plColor, formatPL, mostRecentSale,
   deriveSignalDirection, deriveSignalDelta, isHotSeller, formatReceivedDate,
 } from './utils';
-import { isReadyToList, needsPriceReview, wasUnlistedFromDH, isPendingDHMatch, isSkipped } from './inventoryCalcs';
+import { wasUnlistedFromDH, deriveActionIntent, canDismiss } from './inventoryCalcs';
 import { dhBadgeFor, DH_BADGE_COLORS } from './dhBadge';
 
 interface MobileCardProps {
@@ -43,15 +43,8 @@ export default function MobileCard({ item, selected, onToggle, onRecordSale, onF
   const deltaPct = deriveSignalDelta(item);
   const hotSeller = isHotSeller(item);
 
-  type ActionIntent = 'fix_match' | 'set_and_list' | 'list' | 'restore' | 'none';
-  const actionIntent: ActionIntent = (() => {
-    if (isSkipped(item)) return 'restore';
-    if (isPendingDHMatch(item)) return 'fix_match';
-    if (needsPriceReview(item)) return 'set_and_list';
-    if (isReadyToList(item)) return 'list';
-    return 'none';
-  })();
-  const showDismiss = actionIntent === 'fix_match' || actionIntent === 'set_and_list' || actionIntent === 'list';
+  const actionIntent = deriveActionIntent(item);
+  const showDismiss = canDismiss(actionIntent);
 
   return (
     <div className={`p-3 bg-[var(--surface-1)] rounded-xl border ${selected ? 'border-[var(--brand-500)]' : 'border-[var(--surface-2)]'}`}>
@@ -304,10 +297,10 @@ export default function MobileCard({ item, selected, onToggle, onRecordSale, onF
             type="button"
             onClick={onSetPrice}
             className="text-xs font-medium px-2 py-1 rounded bg-[var(--warning)]/15 text-[var(--warning)] hover:bg-[var(--warning)]/30 transition-colors"
-            title="Set a price and list on DH"
-            aria-label="Set price and list on DH"
+            title="Set a reviewed price before listing on DH"
+            aria-label="Set reviewed price before listing on DH"
           >
-            Set &amp; List
+            Set Price
           </button>
         ) : actionIntent === 'restore' && onUndismiss ? (
           <button
