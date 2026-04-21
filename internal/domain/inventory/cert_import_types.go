@@ -50,6 +50,12 @@ type ScanCertResult struct {
 	CardYear      string  `json:"cardYear,omitempty"`
 	GradeValue    float64 `json:"gradeValue,omitempty"`
 	Population    int     `json:"population,omitempty"`
+
+	// DHSearchQuery is a pre-normalized query string for the DH marketplace
+	// search UI — built with the same cardutil pipeline used for backend DH
+	// card matching so the operator's "Search on DH" link lands on the same
+	// candidates DH's own matcher would consider.
+	DHSearchQuery string `json:"dhSearchQuery,omitempty"`
 }
 
 // ScanCertsRequest is the input for POST /api/purchases/scan-certs, the batch
