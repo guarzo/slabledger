@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { api, isAPIError } from '../../../js/api';
+import { reportError } from '../../../js/errors';
 import type { ScanCertResponse, ResolveCertResponse, CertImportResult, MarketSnapshot } from '../../../types/campaigns';
 import { formatCents } from '../../utils/formatters';
 import PriceDecisionBar from '../../ui/PriceDecisionBar';
@@ -220,6 +221,15 @@ export default function CardIntakeTab() {
       for (const cert of awaiting) {
         const result = batch.results?.[cert];
         if (result) applyPollResult(cert, result);
+      }
+      // Per-cert failures come back in batch.errors. Report them so they're
+      // visible via the central telemetry funnel; the inflight clear below
+      // lets the next tick retry (matching pre-batch single-poll semantics
+      // for transient errors).
+      if (batch.errors && batch.errors.length > 0) {
+        reportError('scan-certs batch', new Error(
+          `per-cert errors: ${batch.errors.map(e => `${e.certNumber}: ${e.error}`).join('; ')}`
+        ));
       }
     } catch {
       // Transient batch failure — next tick will retry.

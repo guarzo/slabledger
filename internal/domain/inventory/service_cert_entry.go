@@ -279,10 +279,11 @@ func newScanCertResult(status string, p *Purchase, market *MarketSnapshot) *Scan
 	}
 }
 
-// ScanCerts runs ScanCert for each supplied cert number and returns a map keyed
-// by cert number. Individual failures surface as Errors; the map still contains
-// an entry for every input. The cert-intake polling loop uses this endpoint to
-// avoid the per-row fan-out that was tripping the server's rate limiter.
+// ScanCerts runs ScanCert for each supplied cert number, partitioning results:
+// successes land in Results (keyed by cert number), per-cert failures land in
+// Errors. Duplicate and empty inputs are coalesced. The cert-intake polling
+// loop uses this endpoint to avoid the per-row fan-out that was tripping the
+// server's rate limiter.
 func (s *service) ScanCerts(ctx context.Context, certNumbers []string) (*ScanCertsResult, error) {
 	seen := make(map[string]struct{}, len(certNumbers))
 	out := &ScanCertsResult{Results: make(map[string]*ScanCertResult, len(certNumbers))}

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/csv"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"time"
@@ -205,6 +206,12 @@ func (h *CampaignsHandler) HandleScanCert(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusOK, result)
 }
 
+// maxScanCertsPerRequest caps the batch size for POST /api/purchases/scan-certs.
+// ScanCert does per-cert DB lookups, flag updates, and pipeline enrollments, so
+// an unbounded slice from a buggy or abusive client could pin a single request
+// on heavy work. 100 comfortably covers the intake screen's realistic backlog.
+const maxScanCertsPerRequest = 100
+
 // HandleScanCerts handles POST /api/purchases/scan-certs, the batch variant
 // used by the cert-intake polling loop. One request carries many cert numbers
 // so the UI doesn't fan out into per-row polls that trip our own rate limiter.
@@ -215,6 +222,11 @@ func (h *CampaignsHandler) HandleScanCerts(w http.ResponseWriter, r *http.Reques
 	}
 	if len(req.CertNumbers) == 0 {
 		writeError(w, http.StatusBadRequest, "certNumbers is required")
+		return
+	}
+	if len(req.CertNumbers) > maxScanCertsPerRequest {
+		writeError(w, http.StatusRequestEntityTooLarge,
+			fmt.Sprintf("certNumbers cannot exceed %d per request", maxScanCertsPerRequest))
 		return
 	}
 

@@ -453,6 +453,114 @@ func TestScanCert_SoldIncludesSearchHelperMetadata(t *testing.T) {
 	}
 }
 
+// erroringPurchaseRepo wraps mockRepo to induce a non-ErrPurchaseNotFound error
+// on a specific cert number — the only code path that turns into a ScanCerts
+// entry in Errors rather than Results.
+type erroringPurchaseRepo struct {
+	*mockRepo
+	errCert string
+}
+
+func (e *erroringPurchaseRepo) GetPurchaseByCertNumber(ctx context.Context, grader, certNumber string) (*Purchase, error) {
+	if certNumber == e.errCert {
+		return nil, errors.New("simulated DB failure")
+	}
+	return e.mockRepo.GetPurchaseByCertNumber(ctx, grader, certNumber)
+}
+
+func TestScanCerts_BatchErrorPath(t *testing.T) {
+	tests := []struct {
+		name         string
+		inputs       []string
+		errCert      string
+		wantResults  map[string]string // cert -> expected status
+		wantErrCerts []string
+	}{
+		{
+			name:         "single error among successes",
+			inputs:       []string{"11111111", "error-cert", "33333333"},
+			errCert:      "error-cert",
+			wantResults:  map[string]string{"11111111": "existing", "33333333": "new"},
+			wantErrCerts: []string{"error-cert"},
+		},
+		{
+			name:         "all errors",
+			inputs:       []string{"error-cert"},
+			errCert:      "error-cert",
+			wantResults:  map[string]string{},
+			wantErrCerts: []string{"error-cert"},
+		},
+		{
+			name:         "no errors",
+			inputs:       []string{"11111111", "33333333"},
+			errCert:      "",
+			wantResults:  map[string]string{"11111111": "existing", "33333333": "new"},
+			wantErrCerts: nil,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			base := newMockRepo()
+			base.purchases["p1"] = &Purchase{
+				ID: "p1", CertNumber: "11111111", Grader: "PSA",
+				CardName: "Charizard", CampaignID: "camp-1",
+			}
+			repo := &erroringPurchaseRepo{mockRepo: base, errCert: tc.errCert}
+			svc := &service{
+				campaigns: base, purchases: repo, sales: base, analytics: base,
+				finance: base, pricing: base, dh: base,
+				idGen: func() string { return "test-id" },
+			}
+
+			out, err := svc.ScanCerts(context.Background(), tc.inputs)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			if len(out.Results) != len(tc.wantResults) {
+				t.Errorf("results count = %d, want %d: got %+v", len(out.Results), len(tc.wantResults), out.Results)
+			}
+			for cert, wantStatus := range tc.wantResults {
+				got := out.Results[cert]
+				if got == nil {
+					t.Errorf("results[%q] missing", cert)
+					continue
+				}
+				if got.Status != wantStatus {
+					t.Errorf("results[%q].Status = %q, want %q", cert, got.Status, wantStatus)
+				}
+			}
+			if len(out.Errors) != len(tc.wantErrCerts) {
+				t.Errorf("errors count = %d, want %d: got %+v", len(out.Errors), len(tc.wantErrCerts), out.Errors)
+			}
+			for _, wantCert := range tc.wantErrCerts {
+				found := false
+				for _, e := range out.Errors {
+					if e.CertNumber == wantCert {
+						found = true
+						if e.Error == "" {
+							t.Errorf("errors[%q].Error is empty", wantCert)
+						}
+						break
+					}
+				}
+				if !found {
+					t.Errorf("expected error entry for %q", wantCert)
+				}
+			}
+			// A cert appears in exactly one of Results or Errors.
+			for cert := range out.Results {
+				for _, e := range out.Errors {
+					if e.CertNumber == cert {
+						t.Errorf("%q appears in both Results and Errors", cert)
+					}
+				}
+			}
+		})
+	}
+}
+
 func TestScanCerts_Batch(t *testing.T) {
 	repo := newMockRepo()
 	repo.purchases["p1"] = &Purchase{

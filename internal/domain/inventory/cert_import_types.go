@@ -58,9 +58,10 @@ type ScanCertsRequest struct {
 	CertNumbers []string `json:"certNumbers"`
 }
 
-// ScanCertsResult maps each requested cert number to its ScanCertResult.
-// Certs that fail to process individually are surfaced via Errors, not by
-// omission — callers always see a deterministic entry for each input.
+// ScanCertsResult partitions batch scan responses: successful cert scans go in
+// Results (keyed by cert number), per-cert failures go in Errors. A cert
+// appears in one or the other, never both. Callers that need to reconcile
+// against their input list should check both maps.
 type ScanCertsResult struct {
 	Results map[string]*ScanCertResult `json:"results"`
 	Errors  []CertImportError          `json:"errors,omitempty"`
