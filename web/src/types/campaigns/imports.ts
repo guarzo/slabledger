@@ -102,6 +102,12 @@ export interface ScanCertResponse {
   population?: number;
 }
 
+/** Batch variant of ScanCertResponse, returned by POST /api/purchases/scan-certs. */
+export interface ScanCertsResponse {
+  results: Record<string, ScanCertResponse>;
+  errors?: CertImportError[];
+}
+
 export interface ResolveCertResponse {
   certNumber: string;
   cardName: string;

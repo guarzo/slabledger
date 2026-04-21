@@ -165,6 +165,7 @@ func (rt *Router) registerCampaignRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /api/purchases/import-orders/confirm", authRoute(rt.campaignsHandler.HandleConfirmOrdersSales))
 	mux.Handle("POST /api/purchases/import-certs", authRoute(rt.campaignsHandler.HandleImportCerts))
 	mux.Handle("POST /api/purchases/scan-cert", authRoute(rt.campaignsHandler.HandleScanCert))
+	mux.Handle("POST /api/purchases/scan-certs", authRoute(rt.campaignsHandler.HandleScanCerts))
 	mux.Handle("POST /api/purchases/resolve-cert", authRoute(rt.campaignsHandler.HandleResolveCert))
 	mux.Handle("PATCH /api/purchases/{purchaseId}/campaign", authRoute(rt.campaignsHandler.HandleReassignPurchase))
 	mux.Handle("PATCH /api/purchases/{purchaseId}/buy-cost", authRoute(rt.campaignsHandler.HandleUpdateBuyCost))
