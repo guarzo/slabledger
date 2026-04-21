@@ -9,6 +9,7 @@ import (
 
 	"github.com/guarzo/slabledger/internal/domain/dhevents"
 	"github.com/guarzo/slabledger/internal/domain/observability"
+	"github.com/guarzo/slabledger/internal/platform/cardutil"
 )
 
 func (s *service) ImportCerts(ctx context.Context, certNumbers []string) (*CertImportResult, error) {
@@ -276,6 +277,7 @@ func newScanCertResult(status string, p *Purchase, market *MarketSnapshot) *Scan
 		CardYear:      p.CardYear,
 		GradeValue:    p.GradeValue,
 		Population:    p.Population,
+		DHSearchQuery: cardutil.BuildCardMatchQuery(p.SetName, p.CardName, p.CardNumber),
 	}
 }
 

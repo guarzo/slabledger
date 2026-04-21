@@ -100,6 +100,8 @@ export interface ScanCertResponse {
   cardYear?: string;
   gradeValue?: number;
   population?: number;
+  /** Pre-normalized query for the DH marketplace search (set + simplified name + number). */
+  dhSearchQuery?: string;
 }
 
 /** Batch variant of ScanCertResponse, returned by POST /api/purchases/scan-certs. */
