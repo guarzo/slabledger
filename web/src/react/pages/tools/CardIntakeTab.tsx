@@ -33,6 +33,7 @@ interface CertRow {
   cardYear?: string;
   gradeValue?: number;
   population?: number;
+  dhSearchQuery?: string;
 }
 
 const STORAGE_KEY_PREFIX = 'intake:queue:';
@@ -112,14 +113,23 @@ function scanFieldsFromResult(result: ScanCertResponse): Partial<CertRow> {
     cardYear: result.cardYear,
     gradeValue: result.gradeValue,
     population: result.population,
+    dhSearchQuery: result.dhSearchQuery,
   };
 }
 
 const DH_SEARCH_BASE = 'https://doubleholo.com/marketplace';
 
-/** Builds a DH marketplace search URL from a card name. Spaces become `+`. */
-function buildDHSearchURL(cardName: string): string {
-  const q = cardName.trim().split(/\s+/).map(encodeURIComponent).join('+');
+/**
+ * Builds a DH marketplace search URL. Prefers the backend-normalized
+ * `dhSearchQuery` (set + simplified name + number via cardutil) because that's
+ * the same pipeline DH's own matcher uses; falls back to the raw card name
+ * when the normalized query isn't available (e.g. sold rows from older scans).
+ * Spaces become `+` per DH's URL convention.
+ */
+function buildDHSearchURL(row: Pick<CertRow, 'cardName' | 'dhSearchQuery'>): string {
+  const query = (row.dhSearchQuery ?? row.cardName ?? '').trim();
+  if (!query) return DH_SEARCH_BASE;
+  const q = query.split(/\s+/).map(encodeURIComponent).join('+');
   return `${DH_SEARCH_BASE}?q=${q}`;
 }
 
@@ -841,7 +851,7 @@ function CertRowDetail({ row }: { row: CertRow }) {
           <div className="flex flex-wrap items-center gap-2 mt-2">
             {row.cardName && (
               <a
-                href={buildDHSearchURL(row.cardName)}
+                href={buildDHSearchURL(row)}
                 target="_blank"
                 rel="noreferrer noopener"
                 className="rounded-md bg-[var(--brand-500)]/15 px-2.5 py-1 text-[11px] font-semibold text-[var(--brand-400)] hover:bg-[var(--brand-500)]/30 transition-colors"

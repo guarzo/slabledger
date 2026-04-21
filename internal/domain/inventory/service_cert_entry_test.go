@@ -597,6 +597,61 @@ func TestScanCerts_Batch(t *testing.T) {
 	}
 }
 
+func TestScanCert_PopulatesDHSearchQuery(t *testing.T) {
+	// Lock in that ScanCert surfaces the normalized DH search query so the
+	// "Search on DH" link in the intake row uses the same query pipeline as
+	// backend DH card matching (set + simplified name + number).
+	tests := []struct {
+		name      string
+		purchase  Purchase
+		wantQuery string
+	}{
+		{
+			name: "set plus name plus number",
+			purchase: Purchase{
+				ID: "p1", CertNumber: "111", Grader: "PSA", CampaignID: "c",
+				CardName: "Charizard", SetName: "Base Set", CardNumber: "4",
+			},
+			wantQuery: "Base Set Charizard 4",
+		},
+		{
+			name: "name only when set and number are empty",
+			purchase: Purchase{
+				ID: "p2", CertNumber: "222", Grader: "PSA", CampaignID: "c",
+				CardName: "Pikachu",
+			},
+			wantQuery: "Pikachu",
+		},
+		{
+			name: "name plus number when set is empty",
+			purchase: Purchase{
+				ID: "p3", CertNumber: "333", Grader: "PSA", CampaignID: "c",
+				CardName: "Umbreon VMAX", CardNumber: "215",
+			},
+			wantQuery: "Umbreon VMAX 215",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := newMockRepo()
+			p := tc.purchase
+			repo.purchases["p"] = &p
+			svc := &service{
+				campaigns: repo, purchases: repo, sales: repo, analytics: repo,
+				finance: repo, pricing: repo, dh: repo,
+				idGen: func() string { return "test-id" },
+			}
+			result, err := svc.ScanCert(context.Background(), tc.purchase.CertNumber)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if result.DHSearchQuery != tc.wantQuery {
+				t.Errorf("DHSearchQuery = %q, want %q", result.DHSearchQuery, tc.wantQuery)
+			}
+		})
+	}
+}
+
 func TestScanCert_ExistingSetsExportFlag(t *testing.T) {
 	repo := newMockRepo()
 	repo.purchases["p1"] = &Purchase{
