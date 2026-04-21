@@ -221,6 +221,11 @@ func TestHandleFixMatch_DelistOnCardChange(t *testing.T) {
 
 			require.Equal(t, http.StatusOK, rr.Code, "body: %s", rr.Body.String())
 
+			// Delist now runs in a background goroutine dispatched before the
+			// response is written. Drain the dispatcher so the assertion sees
+			// the completed call state.
+			h.Wait()
+
 			if tt.wantDelistCalls == 0 {
 				assert.False(t, delister.Called, "DelistChannels must not run when there's no stranded listing")
 			} else {
