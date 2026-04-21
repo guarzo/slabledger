@@ -102,6 +102,12 @@ export interface ScanCertResponse {
   population?: number;
   /** Pre-normalized query for the DH marketplace search (set + simplified name + number). */
   dhSearchQuery?: string;
+  // DH pipeline state — lets the intake screen unblock once the card is
+  // pushable on DH, even if the market snapshot hasn't landed yet.
+  dhCardId?: number;
+  dhInventoryId?: number;
+  dhPushStatus?: string;
+  dhStatus?: string;
 }
 
 /** Batch variant of ScanCertResponse, returned by POST /api/purchases/scan-certs. */
