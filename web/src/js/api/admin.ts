@@ -171,8 +171,12 @@ proto.getDHUnmatched = async function (this: APIClient): Promise<DHUnmatchedResp
   return this.get<DHUnmatchedResponse>('/dh/unmatched');
 };
 
+// Backend serializes up to 3 DH calls (push + confirm + optional delist on a
+// card swap) plus local writes, each under a 30s/retry DH client budget and a
+// 1 RPS rate limiter. The default 30s client timeout aborts successful-but-slow
+// requests mid-flight; 90s covers the realistic worst case.
 proto.fixDHMatch = async function (this: APIClient, req: DHFixMatchRequest): Promise<DHFixMatchResponse> {
-  return this.post<DHFixMatchResponse>('/dh/fix-match', req);
+  return this.post<DHFixMatchResponse>('/dh/fix-match', req, { timeoutMs: 90_000 });
 };
 
 proto.selectDHMatch = async function (this: APIClient, req: DHSelectMatchRequest): Promise<DHFixMatchResponse> {
