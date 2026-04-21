@@ -42,7 +42,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
     handleSort, handleReviewed, handleResolveFlag, handleApproveDHPush, handleListOnDH, dhListingInFlight, dhListedOptimistic, handleBulkListOnDH, handleFlagSubmit, handlePrint, handleDelete,
     toggleSelect, toggleAll, toggleExpand,
     openSaleModal, closeSaleModal, handleFixPricing, handleFixDHMatch, handleFixDHMatchSaved, handleUnmatchDH, handleSetPrice,
-    handlePriceSaved, handleHintSaved, handleInlinePriceSave, sellSheet, toast,
+    handlePriceSaved, handleHintSaved, handleInlinePriceSave, handleDismiss, handleUndismiss, sellSheet, toast,
   } = state;
 
   const rowVirtualizer = useVirtualizer({
@@ -254,6 +254,8 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                       onSetPrice={() => handleSetPrice(item)}
                       onDelete={() => handleDelete(item)}
                       onListOnDH={handleListOnDH}
+                      onDismiss={() => handleDismiss(item.purchase.id)}
+                      onUndismiss={() => handleUndismiss(item.purchase.id)}
                       dhListingLoading={dhListingInFlight.has(item.purchase.id)}
                       dhListedOverride={dhListedOptimistic.has(item.purchase.id)}
                       showCampaignColumn={showCampaignColumn}
@@ -305,6 +307,8 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                           onDelete={() => handleDelete(item)}
                           onListOnDH={handleListOnDH}
                           onInlinePriceSave={handleInlinePriceSave}
+                          onDismiss={() => handleDismiss(item.purchase.id)}
+                          onUndismiss={() => handleUndismiss(item.purchase.id)}
                           dhListingLoading={dhListingInFlight.has(item.purchase.id)}
                           dhListedOverride={dhListedOptimistic.has(item.purchase.id)}
                           showCampaignColumn={showCampaignColumn}
