@@ -39,13 +39,36 @@ func NewService(
 }
 
 // resolveListingPrice mirrors dhlisting.ResolveListingPriceCents, inlined
-// here to preserve the flat-siblings invariant. Reviewed wins; override is
-// the fallback so "Set Price" dialog commits still drive DH listing.
+// here to preserve the flat-siblings invariant. When both reviewed and
+// override are set, the newest commit wins; timestamps are parsed so
+// RFC3339 values with different offsets order by instant, not by text.
+// Parse failure (empty or malformed) falls back to lexicographic
+// comparison, preserving the historical "reviewed wins when both empty"
+// and "populated beats empty" precedence.
 func resolveListingPrice(p *inventory.Purchase) int {
-	if p.ReviewedPriceCents > 0 {
+	if p.OverridePriceCents == 0 {
 		return p.ReviewedPriceCents
 	}
-	return p.OverridePriceCents
+	if p.ReviewedPriceCents == 0 {
+		return p.OverridePriceCents
+	}
+	if overrideNewer(p.OverrideSetAt, p.ReviewedAt) {
+		return p.OverridePriceCents
+	}
+	return p.ReviewedPriceCents
+}
+
+// overrideNewer reports whether the override commit timestamp is strictly
+// after the reviewed commit timestamp. Kept here as a sibling-local copy
+// to avoid importing dhlisting. See dhlisting.ResolveListingPriceCents
+// for the authoritative rules.
+func overrideNewer(overrideSetAt, reviewedAt string) bool {
+	tOverride, errO := time.Parse(time.RFC3339, overrideSetAt)
+	tReviewed, errR := time.Parse(time.RFC3339, reviewedAt)
+	if errO == nil && errR == nil {
+		return tOverride.After(tReviewed)
+	}
+	return overrideSetAt > reviewedAt
 }
 
 func (s *service) SyncPurchasePrice(ctx context.Context, purchaseID string) SyncResult {
