@@ -208,7 +208,7 @@ export default function MobileCard({ item, selected, onToggle, onRecordSale, onF
           </div>
         )}
       </div>
-      <div className="mt-2 ml-6 flex justify-end gap-2">
+      <div className="mt-2 ml-6 flex flex-wrap justify-end gap-2">
         {onSetPrice && (
           <button
             type="button"
@@ -299,10 +299,10 @@ export default function MobileCard({ item, selected, onToggle, onRecordSale, onF
           >
             {dhListingLoading ? 'Listing…' : 'List'}
           </button>
-        ) : actionIntent === 'set_and_list' ? (
+        ) : actionIntent === 'set_and_list' && onSetPrice ? (
           <button
             type="button"
-            onClick={onSetPrice ?? (() => { /* no-op if caller didn't wire onSetPrice */ })}
+            onClick={onSetPrice}
             className="text-xs font-medium px-2 py-1 rounded bg-[var(--warning)]/15 text-[var(--warning)] hover:bg-[var(--warning)]/30 transition-colors"
             title="Set a price and list on DH"
             aria-label="Set price and list on DH"
