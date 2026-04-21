@@ -602,19 +602,25 @@ function CertRowItem({
   const listed = listingStatus === 'listed';
   const showFixDH = !!row.purchaseId && !hasDHMatch(row) && (row.status === 'existing' || row.status === 'returned' || row.status === 'imported');
 
-  const sources = canList
-    ? buildPriceSources({
-        clCents: market?.clValueCents ?? 0,
-        dhMidCents: market?.gradePriceCents ?? 0,
-        costCents: buyCostCents ?? 0,
-        lastSoldCents: market?.lastSoldCents ?? 0,
-        mmCents: market?.sourcePrices?.find(p => p.source === 'MarketMovers')?.priceCents ?? 0,
-      })
-    : [];
+  const clCents = market?.clValueCents ?? 0;
   const dhCents = market?.gradePriceCents ?? 0;
-  const preSelected: PreSelection = dhCents > 0
-    ? { kind: 'source', source: 'market' }
-    : { kind: 'none' };
+  const lastSoldCents = market?.lastSoldCents ?? 0;
+  const mmCents = market?.sourcePrices?.find(p => p.source === 'MarketMovers')?.priceCents ?? 0;
+  const costCents = buyCostCents ?? 0;
+
+  // Memoize sources and preSelected so PriceDecisionBar's effect doesn't
+  // re-fire on every parent re-render (the 4s polling loop re-renders this
+  // tab on every tick, which would otherwise reset the user's pill choice).
+  const sources = useMemo(
+    () => canList
+      ? buildPriceSources({ clCents, dhMidCents: dhCents, costCents, lastSoldCents, mmCents })
+      : [],
+    [canList, clCents, dhCents, costCents, lastSoldCents, mmCents],
+  );
+  const preSelected = useMemo<PreSelection>(
+    () => dhCents > 0 ? { kind: 'source', source: 'market' } : { kind: 'none' },
+    [dhCents],
+  );
 
   return (
     <div
