@@ -26,9 +26,16 @@ type fixMatchResponse struct {
 	DHInventoryID int    `json:"dhInventoryId"`
 }
 
-// HandleFixMatch lets users manually resolve an unmatched card by pasting a DH URL.
-// It parses the DH card ID from the URL, saves the mapping, pushes to DH inventory,
-// persists the DH fields, and marks the purchase status as "manual".
+// HandleFixMatch lets users manually resolve a card by pasting a DH URL.
+// Usable on unmatched purchases (first-time match) or on already-matched
+// purchases whose current mapping is wrong (re-match to a different card).
+//
+// On a card swap (old dh_card_id != new dh_card_id and the push creates a
+// new dh_inventory_id), the previous listing is stranded on DH under the
+// wrong card. We best-effort DelistChannels on the old inventory ID after
+// the new match is committed locally, so eBay/Shopify aren't left advertising
+// the wrong card. DH has no delete-inventory endpoint today — the old row
+// stays on DH's side; this only detaches its channels.
 func (h *DHHandler) HandleFixMatch(w http.ResponseWriter, r *http.Request) {
 	if requireUser(w, r) == nil {
 		return
@@ -72,6 +79,12 @@ func (h *DHHandler) HandleFixMatch(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to look up purchase")
 		return
 	}
+
+	// Capture prior DH state before UpdatePurchaseDHFields overwrites it.
+	// Used later to take down channels on the stranded old listing when
+	// the user is swapping to a different DH card.
+	oldInventoryID := purchase.DHInventoryID
+	oldCardID := purchase.DHCardID
 
 	// Save card ID mapping
 	externalID := strconv.Itoa(dhCardID)
@@ -134,6 +147,24 @@ func (h *DHHandler) HandleFixMatch(w http.ResponseWriter, r *http.Request) {
 				observability.String("purchaseID", purchase.ID),
 				observability.String("cert", purchase.CertNumber),
 				observability.Err(err))
+		}
+	}
+
+	// If this purchase was previously matched to a different DH card and the
+	// push created a new inventory row, take down the channels on the old
+	// listing so eBay/Shopify aren't still advertising the wrong card.
+	// Best-effort: the local match is already committed.
+	if h.channelDelister != nil &&
+		oldInventoryID != 0 &&
+		oldInventoryID != inventoryID &&
+		oldCardID != dhCardID {
+		if _, derr := h.channelDelister.DelistChannels(ctx, oldInventoryID, nil); derr != nil {
+			h.logger.Warn(ctx, "fix match: delist old channels failed, continuing",
+				observability.String("purchaseID", purchase.ID),
+				observability.Int("oldDHInventoryID", oldInventoryID),
+				observability.Int("oldDHCardID", oldCardID),
+				observability.Int("newDHCardID", dhCardID),
+				observability.Err(derr))
 		}
 	}
 

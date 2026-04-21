@@ -1,13 +1,20 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // fixMatchValidationHandler builds a DHHandler with no production deps wired,
@@ -96,6 +103,127 @@ func TestHandleFixMatch_RequiredFields(t *testing.T) {
 // URL whose card-id segment is zero. Each case asserts both the status code
 // and the specific error-message snippet so a regression that swaps the two
 // validation branches still fails the test.
+// TestHandleFixMatch_DelistOnCardChange covers the happy path for re-matching
+// an already-matched purchase to a different DH card. The prior listing under
+// the wrong card must have its channels delisted so eBay/Shopify don't keep
+// advertising the wrong card after the swap.
+//
+// Matrix (oldCardID, newCardID, oldInvID, newInvID):
+//   - card changes + new inv row  → delist old inv (primary case)
+//   - same card (reconfirm)       → skip (nothing wrong to take down)
+//   - old inv == 0 (first match)  → skip (no prior listing)
+//   - old inv == new inv          → skip (DH reused the row; still live, now correct)
+func TestHandleFixMatch_DelistOnCardChange(t *testing.T) {
+	tests := []struct {
+		name            string
+		oldCardID       int
+		oldInventoryID  int
+		newCardID       int
+		newInventoryID  int
+		wantDelistCalls int
+	}{
+		{
+			name:            "card swap creates new inv row → delist old",
+			oldCardID:       598,
+			oldInventoryID:  880,
+			newCardID:       999,
+			newInventoryID:  881,
+			wantDelistCalls: 1,
+		},
+		{
+			name:            "same card reconfirm → no delist",
+			oldCardID:       598,
+			oldInventoryID:  880,
+			newCardID:       598,
+			newInventoryID:  880,
+			wantDelistCalls: 0,
+		},
+		{
+			name:            "first-time match (no prior listing) → no delist",
+			oldCardID:       0,
+			oldInventoryID:  0,
+			newCardID:       999,
+			newInventoryID:  881,
+			wantDelistCalls: 0,
+		},
+		{
+			name:            "DH reused inv row on same card → no delist",
+			oldCardID:       598,
+			oldInventoryID:  880,
+			newCardID:       598,
+			newInventoryID:  880,
+			wantDelistCalls: 0,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			purchase := &inventory.Purchase{
+				ID:            "p1",
+				CertNumber:    "49396327",
+				CardName:      "PIKACHU 1ST EDITION",
+				SetName:       "SPANISH",
+				CardNumber:    "58",
+				GradeValue:    10,
+				BuyCostCents:  61420,
+				DHCardID:      tt.oldCardID,
+				DHInventoryID: tt.oldInventoryID,
+				DHPushStatus:  inventory.DHPushStatusMatched,
+			}
+
+			repo := &mocks.PurchaseRepositoryMock{
+				GetPurchaseFn: func(_ context.Context, _ string) (*inventory.Purchase, error) {
+					return purchase, nil
+				},
+			}
+
+			pusher := &mockDHInventoryPusher{
+				PushFn: func(_ context.Context, items []dh.InventoryItem) (*dh.InventoryPushResponse, error) {
+					require.Len(t, items, 1)
+					assert.Equal(t, tt.newCardID, items[0].DHCardID)
+					return &dh.InventoryPushResponse{
+						Results: []dh.InventoryResult{
+							{DHInventoryID: tt.newInventoryID, Status: "in_stock", AssignedPriceCents: 77700},
+						},
+					}, nil
+				},
+			}
+
+			delister := &mocks.DHChannelDelisterMock{}
+
+			h := NewDHHandler(DHHandlerDeps{
+				PurchaseLister:    repo,
+				PushStatusUpdater: repo,
+				DHFieldsUpdater:   repo,
+				CandidatesSaver:   repo,
+				InventoryPusher:   pusher,
+				CardIDSaver:       &mockDHCardIDSaver{},
+				ChannelDelister:   delister,
+				Logger:            mocks.NewMockLogger(),
+				BaseCtx:           context.Background(),
+			})
+
+			body, _ := json.Marshal(fixMatchRequest{
+				PurchaseID: "p1",
+				DHURL:      "https://doubleholo.com/card/" + strconv.Itoa(tt.newCardID) + "/pikachu",
+			})
+			req := httptest.NewRequest(http.MethodPost, "/api/dh/fix-match", bytes.NewReader(body))
+			req = withUser(req)
+			rr := httptest.NewRecorder()
+			h.HandleFixMatch(rr, req)
+
+			require.Equal(t, http.StatusOK, rr.Code, "body: %s", rr.Body.String())
+
+			if tt.wantDelistCalls == 0 {
+				assert.False(t, delister.Called, "DelistChannels must not run when there's no stranded listing")
+			} else {
+				assert.True(t, delister.Called, "DelistChannels must run when swapping to a different card")
+				assert.Equal(t, tt.oldInventoryID, delister.InventoryID, "delist targets the OLD inventory ID")
+				assert.Nil(t, delister.Channels, "empty channels = delist from all")
+			}
+		})
+	}
+}
+
 func TestHandleFixMatch_InvalidURLOrCardID(t *testing.T) {
 	tests := []struct {
 		name             string
