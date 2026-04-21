@@ -395,6 +395,64 @@ func TestScanCert(t *testing.T) {
 	}
 }
 
+func TestScanCert_ExistingIncludesSearchHelperMetadata(t *testing.T) {
+	repo := newMockRepo()
+	repo.purchases["p1"] = &Purchase{
+		ID: "p1", CertNumber: "11111111", Grader: "PSA",
+		CardName:      "Charizard",
+		CampaignID:    "camp-1",
+		FrontImageURL: "https://example.com/front.jpg",
+		SetName:       "Base Set",
+		CardNumber:    "4",
+		CardYear:      "1999",
+		GradeValue:    10,
+		Population:    1234,
+	}
+
+	svc := &service{campaigns: repo, purchases: repo, sales: repo, analytics: repo, finance: repo, pricing: repo, dh: repo, idGen: func() string { return "test-id" }}
+
+	result, err := svc.ScanCert(context.Background(), "11111111")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.FrontImageURL != "https://example.com/front.jpg" {
+		t.Errorf("FrontImageURL = %q, want the seeded URL", result.FrontImageURL)
+	}
+	if result.SetName != "Base Set" || result.CardNumber != "4" || result.CardYear != "1999" {
+		t.Errorf("set/number/year not propagated: %+v", result)
+	}
+	if result.GradeValue != 10 || result.Population != 1234 {
+		t.Errorf("grade/population not propagated: grade=%v pop=%d", result.GradeValue, result.Population)
+	}
+}
+
+func TestScanCert_SoldIncludesSearchHelperMetadata(t *testing.T) {
+	repo := newMockRepo()
+	repo.purchases["p1"] = &Purchase{
+		ID: "p1", CertNumber: "22222222", Grader: "PSA",
+		CardName:      "Pikachu",
+		CampaignID:    "camp-1",
+		FrontImageURL: "https://example.com/pika.jpg",
+		SetName:       "Jungle",
+		CardNumber:    "60",
+	}
+	repo.sales["s1"] = &Sale{ID: "s1", PurchaseID: "p1"}
+	repo.purchaseSales["p1"] = true
+
+	svc := &service{campaigns: repo, purchases: repo, sales: repo, analytics: repo, finance: repo, pricing: repo, dh: repo, idGen: func() string { return "test-id" }}
+
+	result, err := svc.ScanCert(context.Background(), "22222222")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Status != "sold" {
+		t.Fatalf("status = %q, want sold", result.Status)
+	}
+	if result.FrontImageURL != "https://example.com/pika.jpg" || result.SetName != "Jungle" || result.CardNumber != "60" {
+		t.Errorf("metadata not propagated on sold cert: %+v", result)
+	}
+}
+
 func TestScanCert_ExistingSetsExportFlag(t *testing.T) {
 	repo := newMockRepo()
 	repo.purchases["p1"] = &Purchase{

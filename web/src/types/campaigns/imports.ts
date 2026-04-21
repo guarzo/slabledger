@@ -93,6 +93,13 @@ export interface ScanCertResponse {
   campaignId?: string;
   buyCostCents?: number;
   market?: MarketSnapshot;
+  // Populated for existing/sold statuses — used by the intake-row DH-search helper.
+  frontImageUrl?: string;
+  setName?: string;
+  cardNumber?: string;
+  cardYear?: string;
+  gradeValue?: number;
+  population?: number;
 }
 
 export interface ResolveCertResponse {
