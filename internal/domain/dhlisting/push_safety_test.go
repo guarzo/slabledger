@@ -94,6 +94,19 @@ func TestResolveListingPriceCents(t *testing.T) {
 			overridePriceCents: 7000,
 			want:               5000,
 		},
+		{
+			// Cross-offset: the override instant (13:00 UTC) is an hour
+			// AFTER the reviewed instant (12:00 UTC), but as strings
+			// "2026-04-21T08:00:00-05:00" sorts BEFORE "2026-04-21T12:00:00Z".
+			// Parsed comparison must pick override; lexicographic would have
+			// picked reviewed and silently pushed the stale price.
+			name:               "override in non-UTC offset newer than reviewed in UTC → override wins",
+			reviewedPriceCents: 5000,
+			reviewedAt:         "2026-04-21T12:00:00Z",
+			overridePriceCents: 7000,
+			overrideSetAt:      "2026-04-21T08:00:00-05:00",
+			want:               7000,
+		},
 	}
 
 	for _, tc := range tests {
