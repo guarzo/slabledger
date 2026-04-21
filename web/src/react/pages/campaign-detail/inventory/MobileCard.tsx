@@ -7,7 +7,7 @@ import {
   getSourceByType, fmtDateShort, plColor, formatPL, mostRecentSale,
   deriveSignalDirection, deriveSignalDelta, isHotSeller, formatReceivedDate,
 } from './utils';
-import { isReadyToList, needsPriceReview, wasUnlistedFromDH } from './inventoryCalcs';
+import { isReadyToList, needsPriceReview, wasUnlistedFromDH, isPendingDHMatch, isSkipped } from './inventoryCalcs';
 import { dhBadgeFor, DH_BADGE_COLORS } from './dhBadge';
 
 interface MobileCardProps {
@@ -22,6 +22,8 @@ interface MobileCardProps {
   onListOnDH?: (purchaseId: string) => void;
   onRemoveFromSellSheet?: () => void;
   onUnmatchDH?: () => void;
+  onDismiss?: () => void;
+  onUndismiss?: () => void;
   dhListingLoading?: boolean;
   dhListedOverride?: boolean;
   ev?: ExpectedValue;
@@ -29,7 +31,7 @@ interface MobileCardProps {
   isOnSellSheet?: boolean;
 }
 
-export default function MobileCard({ item, selected, onToggle, onRecordSale, onFixPricing, onFixDHMatch, onSetPrice, onDelete, onListOnDH, onRemoveFromSellSheet, onUnmatchDH, dhListingLoading, dhListedOverride, ev, showCampaignColumn, isOnSellSheet }: MobileCardProps) {
+export default function MobileCard({ item, selected, onToggle, onRecordSale, onFixPricing, onFixDHMatch, onSetPrice, onDelete, onListOnDH, onRemoveFromSellSheet, onUnmatchDH, onDismiss, onUndismiss, dhListingLoading, dhListedOverride, ev, showCampaignColumn, isOnSellSheet }: MobileCardProps) {
   const cb = costBasis(item.purchase);
   const snap = item.currentMarket;
   const daysColor = daysHeldColor(item.daysHeld);
@@ -40,6 +42,16 @@ export default function MobileCard({ item, selected, onToggle, onRecordSale, onF
   const direction = deriveSignalDirection(item);
   const deltaPct = deriveSignalDelta(item);
   const hotSeller = isHotSeller(item);
+
+  type ActionIntent = 'fix_match' | 'set_and_list' | 'list' | 'restore' | 'none';
+  const actionIntent: ActionIntent = (() => {
+    if (isSkipped(item)) return 'restore';
+    if (isPendingDHMatch(item)) return 'fix_match';
+    if (needsPriceReview(item)) return 'set_and_list';
+    if (isReadyToList(item)) return 'list';
+    return 'none';
+  })();
+  const showDismiss = actionIntent === 'fix_match' || actionIntent === 'set_and_list' || actionIntent === 'list';
 
   return (
     <div className={`p-3 bg-[var(--surface-1)] rounded-xl border ${selected ? 'border-[var(--brand-500)]' : 'border-[var(--surface-2)]'}`}>
@@ -263,7 +275,17 @@ export default function MobileCard({ item, selected, onToggle, onRecordSale, onF
         )}
         {dhListedOverride ? (
           <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${DH_BADGE_COLORS.listed}`} title="DH: listed">listed</span>
-        ) : onListOnDH && isReadyToList(item) ? (
+        ) : actionIntent === 'fix_match' && onFixDHMatch ? (
+          <button
+            type="button"
+            onClick={onFixDHMatch}
+            className="text-xs font-medium px-2 py-1 rounded bg-[var(--warning)]/15 text-[var(--warning)] hover:bg-[var(--warning)]/30 transition-colors"
+            title="Paste the correct DoubleHolo URL to fix the match"
+            aria-label="Fix DH Match"
+          >
+            Fix Match
+          </button>
+        ) : actionIntent === 'list' && onListOnDH ? (
           <button
             type="button"
             onClick={() => onListOnDH(item.purchase.id)}
@@ -277,15 +299,25 @@ export default function MobileCard({ item, selected, onToggle, onRecordSale, onF
           >
             {dhListingLoading ? 'Listing…' : 'List'}
           </button>
-        ) : onSetPrice && needsPriceReview(item) ? (
+        ) : actionIntent === 'set_and_list' ? (
           <button
             type="button"
-            onClick={onSetPrice}
+            onClick={onSetPrice ?? (() => { /* no-op if caller didn't wire onSetPrice */ })}
             className="text-xs font-medium px-2 py-1 rounded bg-[var(--warning)]/15 text-[var(--warning)] hover:bg-[var(--warning)]/30 transition-colors"
-            title="Set a reviewed price before listing"
-            aria-label="Set reviewed price before listing on DH"
+            title="Set a price and list on DH"
+            aria-label="Set price and list on DH"
           >
-            Set price
+            Set &amp; List
+          </button>
+        ) : actionIntent === 'restore' && onUndismiss ? (
+          <button
+            type="button"
+            onClick={onUndismiss}
+            className="text-xs font-medium px-2 py-1 rounded bg-[var(--brand-500)]/15 text-[var(--brand-400)] hover:bg-[var(--brand-500)]/30 transition-colors"
+            title="Restore to DH pipeline"
+            aria-label="Restore to DH pipeline"
+          >
+            Restore
           </button>
         ) : (() => {
           const badge = dhBadgeFor(item.purchase.dhPushStatus, item.purchase.dhStatus, item.purchase.receivedAt);
@@ -296,6 +328,20 @@ export default function MobileCard({ item, selected, onToggle, onRecordSale, onF
             </span>
           );
         })()}
+        {showDismiss && onDismiss && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (window.confirm('Dismiss this item from DH listing?')) onDismiss();
+            }}
+            className="text-[10px] text-[var(--text-muted)] hover:text-[var(--danger)] underline underline-offset-2"
+            title="Skip DH for this item"
+            aria-label="Dismiss this item from DH listing"
+          >
+            Dismiss
+          </button>
+        )}
         <button
           type="button"
           onClick={onRecordSale}

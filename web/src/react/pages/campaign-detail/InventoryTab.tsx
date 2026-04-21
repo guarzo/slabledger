@@ -156,6 +156,8 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                     onSetPrice={() => handleSetPrice(item)}
                     onDelete={() => handleDelete(item)}
                     onListOnDH={handleListOnDH}
+                    onDismiss={() => handleDismiss(item.purchase.id)}
+                    onUndismiss={() => handleUndismiss(item.purchase.id)}
                     dhListingLoading={dhListingInFlight.has(item.purchase.id)}
                     dhListedOverride={dhListedOptimistic.has(item.purchase.id)}
                     ev={evMap.get(item.purchase.certNumber)}
@@ -190,6 +192,8 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                         onSetPrice={() => handleSetPrice(item)}
                         onDelete={() => handleDelete(item)}
                         onListOnDH={handleListOnDH}
+                        onDismiss={() => handleDismiss(item.purchase.id)}
+                        onUndismiss={() => handleUndismiss(item.purchase.id)}
                         dhListingLoading={dhListingInFlight.has(item.purchase.id)}
                         dhListedOverride={dhListedOptimistic.has(item.purchase.id)}
                         ev={evMap.get(item.purchase.certNumber)}
