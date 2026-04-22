@@ -79,7 +79,7 @@ Known traps that have caused wrong analysis in past sessions. This block is refe
 
 Fetch these in parallel:
 
-- `GET /api/campaigns` — for name ↔ UUID resolution; filter out archived campaigns and any campaign with `kind == "external"` (synthetic catch-all buckets for pre-campaign purchases — excluded from the portfolio-at-a-glance line)
+- `GET /api/campaigns` — for name ↔ UUID resolution; filter out archived campaigns and any campaign with `kind == "external"` (synthetic catch-all buckets for pre-campaign purchases with cost basis = 0 — excluded from the portfolio-at-a-glance line AND from all ROI, margin, and sell-through calculations throughout the session; see API footguns)
 - `GET /api/portfolio/health` — per-campaign status, reason, capital at risk
 - `GET /api/portfolio/weekly-review` — week-over-week deltas
 - `GET /api/portfolio/insights` — cross-campaign segmentation by character, grade, era, tier. **Fetch AND parse** — extract `byCharacter` (filter `soldCount ≥ 3`, sort by ROI desc), `byGrade`, `byPriceTier`, `byCharacterGrade` standouts, and `coverageGaps` before drafting the opener. Listing only the response keys is not analysis.
