@@ -123,7 +123,11 @@ func (h *DHHandler) HandleSelectMatch(w http.ResponseWriter, r *http.Request) {
 				observability.Err(pushErr))
 			writeError(w, http.StatusInternalServerError, "DH push succeeded but failed to save local state")
 		case errors.Is(pushErr, errDHPushNoInventoryID):
-			writeError(w, http.StatusBadGateway, "DH push failed — no inventory ID returned")
+			h.logger.Error(ctx, "select match: DH push returned no inventory ID",
+				observability.String("purchaseID", purchase.ID),
+				observability.Int("dhCardID", req.DHCardID),
+				observability.Err(pushErr))
+			writeError(w, http.StatusBadGateway, pushErr.Error())
 		default:
 			h.logger.Error(ctx, "select match: push inventory", observability.Err(pushErr))
 			writeError(w, http.StatusBadGateway, "DH API error")

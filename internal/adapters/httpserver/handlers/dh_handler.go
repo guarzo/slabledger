@@ -345,7 +345,19 @@ func (h *DHHandler) pushAndPersistDH(ctx context.Context, purchase *inventory.Pu
 		}
 	}
 
-	return 0, errDHPushNoInventoryID
+	// Surface DH's refusal reason so callers can log and show it to the user.
+	// Without this, a failed push collapses to a generic message and leaves no breadcrumb.
+	detail := "no results returned"
+	if len(pushResp.Results) > 0 {
+		r := pushResp.Results[0]
+		switch {
+		case r.Error != "":
+			detail = fmt.Sprintf("status=%q error=%q", r.Status, r.Error)
+		default:
+			detail = fmt.Sprintf("status=%q dh_inventory_id=%d", r.Status, r.DHInventoryID)
+		}
+	}
+	return 0, fmt.Errorf("%w (%s)", errDHPushNoInventoryID, detail)
 }
 
 var (
