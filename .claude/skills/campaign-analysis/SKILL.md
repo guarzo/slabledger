@@ -27,6 +27,12 @@ Try to read `docs/private/CAMPAIGN_STRATEGY.md`. It contains campaign design int
 
 If the file is missing (fresh checkout, sanitised worktree), don't fail. Tell the user: *"Strategy doc not found at docs/private/CAMPAIGN_STRATEGY.md — I'll analyse numerically but won't cross-reference design intent. Want to point me at it?"* and continue with data-only analysis.
 
+### Step 1 addendum — Strategy-doc adversarial treatment
+
+When the strategy doc describes a **proposed or planned change** (language like "considering", "planning to", "next step", "proposed"), treat it as a claim to verify, NOT as current state. Before using any proposal's numbers in analysis, verify against live API data (`/api/campaigns`, `/api/portfolio/health`, etc.) that the change was or was NOT already applied. Do not anchor on unverified proposals.
+
+When the strategy doc states **current parameters**, cross-check against `/api/campaigns` for fields the API stores (buy terms via `buyTermsCLPct`, daily cap via `dailySpendCapCents`, eBay fee via `ebayFeePct`). Disagreement between the strategy doc and live API is a Playbook D signal — surface it, don't silently resolve it in either direction.
+
 ### Step 1a — Parse current campaign parameters from the strategy doc
 
 **The strategy doc is the source of truth for current campaign parameters.** The app stores only buy terms, daily cap, and eBay fee — it does NOT store year range, grade range, price range, CL confidence, or inclusion lists. `/api/campaigns` and `/api/campaigns/{id}` return empty strings for those fields. The "Quick-Copy Campaign Formats" section at the bottom of the strategy doc has the actual current values.
