@@ -222,13 +222,14 @@ func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []stri
 			continue
 		}
 
-		// Already listed on DH at exactly this price — skip the PATCH.
-		// DH's inventory_upsert_service unconditionally cancels and recreates
-		// MarketOrders on every request (set_listing_price!/apply_shipping_price!
-		// don't check for a value change), so unguarded re-sends churn
-		// eBay/Shopify state for no reason. The item is in the target state;
-		// count it as synced and skip both UpdateInventoryStatus and SyncChannels.
-		if p.DHStatus == inventory.DHStatusListed && p.DHListingPriceCents == listingPrice {
+		// DH's inventory_upsert_service cancels+recreates MarketOrders on
+		// every PATCH regardless of whether values changed, so skip the call
+		// when status/price/channels are already in the target state. Empty
+		// DHChannelsJSON means no prior successful sync on record — fall
+		// through in that case even if status/price look correct.
+		if p.DHStatus == inventory.DHStatusListed &&
+			p.DHListingPriceCents == listingPrice &&
+			p.DHChannelsJSON != "" {
 			synced++
 			continue
 		}
