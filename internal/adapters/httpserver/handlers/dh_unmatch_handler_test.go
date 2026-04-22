@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/pricing"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
@@ -102,7 +104,10 @@ func TestHandleUnmatchDH(t *testing.T) {
 			expectedBody: "invalid purchase state for unmatch",
 		},
 		{
-			name:        "UpdateDHFieldsFails_NoExternalMutation",
+			// Delete runs first and succeeds; then the DB fields update fails.
+			// The DH inventory is already gone but local state is not cleared —
+			// a retry will hit DH with a 404 which is treated as success.
+			name:        "DBFieldUpdateFails_AfterInventoryDelete",
 			purchaseID:  "p1",
 			requestAuth: true,
 			repo: func(a *assertions) *mocks.PurchaseRepositoryMock {
@@ -129,12 +134,15 @@ func TestHandleUnmatchDH(t *testing.T) {
 				t.Helper()
 				require.NotNil(t, a.updatedFields)
 				assert.Nil(t, a.updatedStatus, "UpdatePurchaseDHPushStatus should not be called when UpdatePurchaseDHFields fails")
-				assert.False(t, a.inventoryDeleter.Called, "delete inventory must not run when local DB update failed")
-				assert.False(t, a.mappingDeleter.Called, "mapping delete must not run when local DB update failed")
+				assert.True(t, a.inventoryDeleter.Called, "delete inventory runs before DB updates")
+				assert.False(t, a.mappingDeleter.Called, "mapping delete skipped when DB update fails")
 			},
 		},
 		{
-			name:        "UpdatePushStatusFails_NoExternalMutation",
+			// Delete runs first and succeeds; DB fields clear succeeds; status
+			// update fails. Local DB is partially mutated; a retry will clear
+			// status properly since DH inventory is already gone (404 = success).
+			name:        "DBStatusUpdateFails_AfterInventoryDelete",
 			purchaseID:  "p1",
 			requestAuth: true,
 			repo: func(a *assertions) *mocks.PurchaseRepositoryMock {
@@ -166,8 +174,8 @@ func TestHandleUnmatchDH(t *testing.T) {
 				require.NotNil(t, a.updatedFields)
 				require.NotNil(t, a.updatedStatus)
 				assert.Nil(t, a.clearedCandidates, "UpdatePurchaseDHCandidates should not be called when UpdatePurchaseDHPushStatus fails")
-				assert.False(t, a.inventoryDeleter.Called, "delete inventory must not run when local DB update failed")
-				assert.False(t, a.mappingDeleter.Called, "mapping delete must not run when local DB update failed")
+				assert.True(t, a.inventoryDeleter.Called, "delete inventory runs before DB updates")
+				assert.False(t, a.mappingDeleter.Called, "mapping delete skipped when DB update fails")
 			},
 		},
 		{
@@ -303,7 +311,48 @@ func TestHandleUnmatchDH(t *testing.T) {
 			},
 		},
 		{
-			name:        "Success_DeleteInventoryFails_ContinuesUnmatch",
+			// Non-404 delete error → return 502; local DB must not be mutated so
+			// the purchase stays "matched" and the caller can retry the unmatch.
+			name:        "DeleteInventoryFails_ReturnsError",
+			purchaseID:  "p1",
+			requestAuth: true,
+			repo: func(a *assertions) *mocks.PurchaseRepositoryMock {
+				return &mocks.PurchaseRepositoryMock{
+					GetPurchaseFn: func(_ context.Context, _ string) (*inventory.Purchase, error) {
+						return &inventory.Purchase{
+							ID:            "p1",
+							CardName:      "FOO",
+							SetName:       "BAR",
+							CardNumber:    "1",
+							DHPushStatus:  inventory.DHPushStatusMatched,
+							DHCardID:      555,
+							DHInventoryID: 666,
+						}, nil
+					},
+					UpdatePurchaseDHFieldsFn: func(_ context.Context, _ string, u inventory.DHFieldsUpdate) error {
+						a.updatedFields = &u
+						return nil
+					},
+					UpdatePurchaseDHPushStatusFn: func(_ context.Context, _ string, status string) error {
+						a.updatedStatus = &status
+						return nil
+					},
+				}
+			},
+			deleteErr:    errors.New("DH unavailable"),
+			expectedCode: http.StatusBadGateway,
+			check: func(t *testing.T, a assertions) {
+				t.Helper()
+				assert.True(t, a.inventoryDeleter.Called)
+				assert.Nil(t, a.updatedFields, "DB must not be mutated when delete fails")
+				assert.Nil(t, a.updatedStatus, "DB must not be mutated when delete fails")
+				assert.False(t, a.mappingDeleter.Called)
+			},
+		},
+		{
+			// 404 from DH means the item is already gone — treat as success and
+			// proceed to clear local state normally.
+			name:        "DeleteInventoryNotFound_TreatedAsSuccess",
 			purchaseID:  "p1",
 			requestAuth: true,
 			repo: func(a *assertions) *mocks.PurchaseRepositoryMock {
@@ -333,14 +382,14 @@ func TestHandleUnmatchDH(t *testing.T) {
 					},
 				}
 			},
-			deleteErr:    errors.New("delete boom"),
+			deleteErr:    apperrors.ProviderNotFound("dh", "inventory not found"),
 			expectedCode: http.StatusOK,
 			check: func(t *testing.T, a assertions) {
 				t.Helper()
 				assert.True(t, a.inventoryDeleter.Called)
-				require.NotNil(t, a.updatedStatus, "unmatch must still complete when delete fails")
+				require.NotNil(t, a.updatedStatus, "local state must be cleared when DH returns 404")
 				assert.Equal(t, inventory.DHPushStatusUnmatched, *a.updatedStatus)
-				assert.True(t, a.mappingDeleter.Called, "DeleteAutoMapping should still run when delete fails")
+				assert.True(t, a.mappingDeleter.Called)
 			},
 		},
 		{

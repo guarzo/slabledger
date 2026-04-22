@@ -3,6 +3,7 @@ package handlers
 import (
 	"net/http"
 
+	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/domain/pricing"
@@ -17,10 +18,11 @@ type unmatchDHRequest struct {
 // the push scheduler picks it up on the next cycle without waiting for a CL
 // price change. For not-yet-received items it sets "unmatched".
 //
-// Ordering: clear local DB state first, then best-effort delete the DH
-// inventory item (which also cancels any active market order) and drop the
-// cached mapping. DB failures abort and return an error; DH-side failures are
-// logged and do not fail the request so the caller can retry.
+// Ordering: delete the DH inventory item first so the purchase stays in
+// "matched" state if the delete fails — the matched-only guard then allows the
+// caller to retry. 404 from DH is treated as success (item already gone).
+// Only after a successful delete are the local DB fields and status cleared.
+// Mapping cache cleanup is best-effort and runs after the DB commit.
 func (h *DHHandler) HandleUnmatchDH(w http.ResponseWriter, r *http.Request) {
 	if requireUser(w, r) == nil {
 		return
@@ -55,9 +57,27 @@ func (h *DHHandler) HandleUnmatchDH(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Capture the inventory ID before we clear it — UpdatePurchaseDHFields
-	// zeroes the DB column and we need it for the post-commit DH delete.
 	dhID := purchase.DHInventoryID
+
+	// Delete the DH inventory item before mutating local state. Keeping the
+	// purchase in "matched" status until the delete succeeds means the
+	// matched-only guard lets the caller retry on a transient DH failure.
+	// 404 means the item is already gone — treat as success and proceed.
+	if h.inventoryDeleter != nil && dhID != 0 {
+		if derr := h.inventoryDeleter.DeleteInventory(ctx, dhID); derr != nil {
+			if !apperrors.HasErrorCode(derr, apperrors.ErrCodeProviderNotFound) {
+				h.logger.Error(ctx, "unmatch dh: delete inventory failed",
+					observability.String("purchaseID", purchase.ID),
+					observability.Int("dhInventoryID", dhID),
+					observability.Err(derr))
+				writeError(w, http.StatusBadGateway, "failed to delete DH inventory item")
+				return
+			}
+			h.logger.Warn(ctx, "unmatch dh: inventory not found on DH, treating as already deleted",
+				observability.String("purchaseID", purchase.ID),
+				observability.Int("dhInventoryID", dhID))
+		}
+	}
 
 	// Clear DH card ID and inventory ID.
 	if h.dhFieldsUpdater != nil {
@@ -91,20 +111,6 @@ func (h *DHHandler) HandleUnmatchDH(w http.ResponseWriter, r *http.Request) {
 		if err := h.candidatesSaver.UpdatePurchaseDHCandidates(ctx, purchase.ID, ""); err != nil {
 			h.logger.Warn(ctx, "unmatch dh: failed to clear candidates",
 				observability.String("purchaseID", purchase.ID), observability.Err(err))
-		}
-	}
-
-	// Local state is committed — now do best-effort external and cache cleanup.
-	// Failures are logged but don't fail the request.
-
-	// Delete the DH inventory item. This cancels any active market order and
-	// delists from all channels in one transaction on DH's side.
-	if h.inventoryDeleter != nil && dhID != 0 {
-		if derr := h.inventoryDeleter.DeleteInventory(ctx, dhID); derr != nil {
-			h.logger.Warn(ctx, "unmatch dh: delete inventory failed, continuing",
-				observability.String("purchaseID", purchase.ID),
-				observability.Int("dhInventoryID", dhID),
-				observability.Err(derr))
 		}
 	}
 
