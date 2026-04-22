@@ -87,9 +87,7 @@ type PriceDistributionBucket struct {
 }
 
 // GradedSalesAnalyticsResponse is returned from
-// GET /enterprise/cards/{id}/graded-sales-analytics. RecentSales carries
-// individual sales with timestamps suitable for client-side weekly
-// aggregation (Story 3 trajectory aggregator).
+// GET /enterprise/cards/{id}/graded-sales-analytics.
 type GradedSalesAnalyticsResponse struct {
 	HasData        bool                              `json:"has_data"`
 	CardID         int                               `json:"card_id"`
@@ -99,11 +97,13 @@ type GradedSalesAnalyticsResponse struct {
 	PriceChange7d  *float64                          `json:"price_change_7d"`
 	PriceChange30d *float64                          `json:"price_change_30d"`
 	PeriodStats    map[string]GradedSalesPeriodStats `json:"period_stats"`
-	RecentSales    []RecentSale                      `json:"recent_sales"`
+	RecentSales    []GradedSaleEntry                 `json:"recent_sales"`
+	Distribution   []DistributionBucket              `json:"distribution,omitempty"`
+	ByCompany      map[string]CompanyBreakdown       `json:"by_company,omitempty"`
 }
 
-// GradedSalesPeriodStats is the shape of `period_stats.*` — DH currently
-// populates `count` but may leave other fields null.
+// GradedSalesPeriodStats is the per-window aggregate inside period_stats
+// (keys: "7d", "30d", "90d").
 type GradedSalesPeriodStats struct {
 	Count       int      `json:"count"`
 	AvgPrice    *float64 `json:"avg_price"`
@@ -111,6 +111,35 @@ type GradedSalesPeriodStats struct {
 	MinPrice    *float64 `json:"min_price"`
 	MaxPrice    *float64 `json:"max_price"`
 	Volume      *float64 `json:"volume"`
+}
+
+// GradedSaleEntry is a single sale from the graded-sales-analytics endpoint.
+// This is distinct from RecentSale (used by the card detail endpoint) because
+// the field names and types differ (sale_date vs sold_at, grade is float).
+type GradedSaleEntry struct {
+	SaleDate       string  `json:"sale_date"`
+	Price          float64 `json:"price"`
+	GradingCompany string  `json:"grading_company"`
+	Grade          float64 `json:"grade"`
+	CertNumber     *string `json:"cert_number"`
+	Platform       string  `json:"platform"`
+	SaleURL        string  `json:"sale_url"`
+}
+
+// DistributionBucket is one bar of the 90-day price distribution histogram.
+type DistributionBucket struct {
+	Min   float64 `json:"min"`
+	Max   float64 `json:"max"`
+	Count int     `json:"count"`
+	Label string  `json:"label"`
+}
+
+// CompanyBreakdown is the cross-company comparison at the same numeric grade
+// over the 90-day window.
+type CompanyBreakdown struct {
+	Count       int     `json:"count"`
+	AvgPrice    float64 `json:"avg_price"`
+	MedianPrice float64 `json:"median_price"`
 }
 
 // DemandSignalsResponse is returned from GET /market/demand_signals.
