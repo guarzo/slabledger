@@ -107,7 +107,7 @@ func Default() Config {
 			PushInterval:          5 * time.Minute,
 		},
 		DHAnalyticsRefresh: DHAnalyticsRefreshConfig{
-			Enabled:     false, // launch gate — opt-in until DH impression pipeline is healthy
+			Enabled:     true,
 			RefreshHour: 4,     // 04:00 UTC, after DH nightly analytics rollup (03:15 UTC)
 			Window:      "30d",
 		},

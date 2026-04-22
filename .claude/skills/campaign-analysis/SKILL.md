@@ -33,9 +33,11 @@ When the strategy doc describes a **proposed or planned change** (language like 
 
 When the strategy doc states **current parameters**, cross-check against `/api/campaigns` for fields the API stores (buy terms via `buyTermsCLPct`, daily cap via `dailySpendCapCents`, eBay fee via `ebayFeePct`). Disagreement between the strategy doc and live API is a Playbook D signal — surface it, don't silently resolve it in either direction.
 
-### Step 1a — Parse current campaign parameters from the strategy doc
+### Step 1a — Parse current campaign parameters from the API and strategy doc
 
-**The strategy doc is the source of truth for current campaign parameters.** The app stores only buy terms, daily cap, and eBay fee — it does NOT store year range, grade range, price range, CL confidence, or inclusion lists. `/api/campaigns` and `/api/campaigns/{id}` return empty strings for those fields. The "Quick-Copy Campaign Formats" section at the bottom of the strategy doc has the actual current values.
+**`/api/campaigns` returns all campaign parameters:** year range, grade range, price range, CL confidence, inclusion list, buy terms, daily cap, and eBay fee. Use the API as the source of truth for current values.
+
+**Cross-check against the strategy doc** for design intent. The strategy doc's "Quick-Copy Campaign Formats" section describes intended parameters — if API values disagree with the strategy doc, that's a Playbook D signal (surface it, don't silently resolve in either direction).
 
 **Extract and hold in working memory for every active campaign**:
 - Year range (e.g. `1999-2003`)
@@ -73,7 +75,6 @@ Known traps that have caused wrong analysis in past sessions. This block is refe
 - **`purchaseDate` lags `createdAt` by 1–2 days.** The date a purchase appears in date-bucketed views is not the date it was made. This affects any week-boundary calculation.
 - **`/api/inventory` is unsold-only, not a purchase log.** It shows current stock. It does not show what was bought and already sold. Don't infer purchase volume from inventory count alone.
 - **External campaign: filter from all ROI and margin calculations.** The "External" campaign has `cost basis = 0` for pre-campaign purchases. Any portfolio-wide character/grade/era ROI calculation that includes External will be inflated. This is a hard exclusion, not a caveat — filter it out everywhere.
-- **`/api/campaigns` returns empty strings for year range, grade range, price range, CL confidence, and inclusion lists.** The strategy doc is authoritative for these fields (see Step 1a). The API is not. *(Fixing the API to return these fields is planned as separate backend work.)*
 
 ## Step 3 — Fetch the initial snapshot (default entry point)
 
@@ -91,8 +92,8 @@ Fetch these in parallel:
 - `GET /api/inventory` — per-purchase inventory detail; the opener uses the `inHandUnsoldCount`, `inHandCapitalCents`, `inTransitUnsoldCount`, and `inTransitCapitalCents` fields already on each `CampaignHealth` entry from `/api/portfolio/health` to distinguish **in-hand** (received, sellable now) from **in-transit** (purchased but not yet received) capital. Fetch `/api/inventory` when you need per-card detail for a specific campaign, not just portfolio-wide sums.
 - `GET /api/dh/status` — reads `dh_listings_count` vs `dh_inventory_count` vs `pending_count`. This tells you how much of the in-hand inventory is actually *listed* and generating sales signal. A large received-but-not-listed gap is informational by default; promote it to a mover candidate ONLY if the operator config lists `dh_listing_gap` in `operationalPriorities` (otherwise it's a known-system-issue for some operators).
 - `GET /api/dh/pending` — the actual per-item pending-push queue (not just the aggregate count). Returns `{items: DHPendingItem[], count: int}` where each item carries `{purchaseId, cardName, setName, grade, recommendedPriceCents, daysQueued, dhConfidence}`. `dhConfidence` is `"high"` (listing synced <24h ago), `"medium"` (<7d), `"low"` (>7d or never synced) — use this as a data-freshness signal when reasoning about whether the queued recommendation is still trustworthy. This is the right endpoint for prioritizing the approval queue by `daysQueued` and sizing projected recovery from `recommendedPriceCents`.
-- `GET /api/campaigns/{id}/tuning` for **each** active campaign with ≥10 purchases — grade × price-tier × `avgBuyPctOfCL` is the highest-resolution tuning signal in the API. The opener's movers should look here BEFORE leaning on `/portfolio/suggestions`. Run these in parallel — one call per campaign — not sequentially.
-- `GET /api/campaigns/{id}/fill-rate` for each active campaign — daily spend vs cap (30-day rolling). Replaces fabricated fill stats from the strategy doc when the opener wants to flag a campaign that's pegged at cap (ramp candidate) or running well below cap (supply constraint, not a tuning issue).
+- `GET /api/campaigns/{id}/tuning` for **each** active campaign with ≥10 purchases — **mandatory in the opener, do not defer to follow-up.** Grade × price-tier × `avgBuyPctOfCL` is the highest-resolution tuning signal in the API. The opener's movers should look here BEFORE leaning on `/portfolio/suggestions`. Run these in parallel — one call per campaign — not sequentially.
+- `GET /api/campaigns/{id}/fill-rate` for each active campaign — **mandatory in the opener, do not defer to follow-up.** Daily spend vs cap (30-day rolling). Replaces fabricated fill stats from the strategy doc when the opener wants to flag a campaign that's pegged at cap (ramp candidate) or running well below cap (supply constraint, not a tuning issue).
 - `GET /api/intelligence/niches?window=30d&limit=20` — demand-driven acquisition opportunities by `(character, era, grade)`. Each row carries `demand_score`, `opportunity_score`, `velocity_change_pct`, and `current_coverage` (how many active campaigns already cover this segment). High opportunity score with zero coverage = coverage-gap candidate; high velocity change with thin coverage = ramp candidate.
 - `GET /api/intelligence/campaign-signals` — per-campaign velocity acceleration. A sharply decelerating campaign is a tuning candidate (drop terms, narrow scope); an accelerating campaign is a ramp candidate (capital guardrail applies).
 - `GET /api/opportunities/crack` — slabs in inventory where raw value > slabbed value net of cracking cost. Capital-positive moves; bypass the capital guardrail.
@@ -107,6 +108,7 @@ For every endpoint fetched, check:
 1. **Did it return successfully?** If any returned 4xx/5xx or empty body, name it explicitly.
 2. **Is the data fresh enough?** Flag stale data — weekly-history with `weekEnd` more than 7 days ago, intelligence endpoints with 0 rows, campaign-signals with no data, etc.
 3. **What's missing that would improve this analysis?** Surface gaps proactively — e.g., "niches returned 0 rows, coverage-gap analysis unavailable", "no crack candidates exist or endpoint needs seeding."
+4. **Were per-campaign tuning and fill-rate fetched?** These are mandatory. If they were skipped or deferred, that is a data quality failure — go back and fetch them before proceeding.
 
 Output a compact **Data sources** block at the top of the opener:
 
