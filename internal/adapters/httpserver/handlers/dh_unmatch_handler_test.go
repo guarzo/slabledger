@@ -135,6 +135,8 @@ func TestHandleUnmatchDH(t *testing.T) {
 				assert.True(t, a.unmatcher.Called)
 				assert.Equal(t, inventory.DHPushStatusUnmatched, a.unmatcher.PushStatus)
 				assert.True(t, a.mappingDeleter.Called)
+				require.NotNil(t, a.clearedCandidates)
+				assert.Equal(t, "", *a.clearedCandidates)
 			},
 		},
 		{
