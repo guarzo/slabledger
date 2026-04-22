@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 
@@ -23,7 +22,8 @@ type retryMatchResponse struct {
 }
 
 // HandleRetryMatch re-runs the full DH match pipeline for a single unmatched
-// purchase: ResolveCert first, then PSAImport as fallback if cert not found.
+// purchase via PSA import with overrides. DH validates the resolved match
+// against our overrides and corrects wrong-variant matches automatically.
 func (h *DHHandler) HandleRetryMatch(w http.ResponseWriter, r *http.Request) {
 	if requireUser(w, r) == nil {
 		return
@@ -55,84 +55,13 @@ func (h *DHHandler) HandleRetryMatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Step 1: attempt standard cert resolution.
-	if h.certResolver != nil && purchase.CertNumber != "" {
-		resolution, resolveErr := h.certResolver.ResolveCert(ctx, dh.CertResolveRequest{
-			CertNumber: purchase.CertNumber,
-			CardName:   purchase.CardName,
-			SetName:    purchase.SetName,
-			CardNumber: purchase.CardNumber,
-		})
-		if resolveErr != nil {
-			h.logger.Error(ctx, "retry match: cert resolver error", observability.Err(resolveErr))
-			writeError(w, http.StatusBadGateway, "cert resolver failed")
-			return
-		}
-		switch resolution.Status {
-		case dh.CertStatusMatched:
-			dhCardID := resolution.DHCardID
-			if h.cardIDSaver != nil {
-				if err := h.cardIDSaver.SaveExternalID(ctx, purchase.CardName, purchase.SetName, purchase.CardNumber, pricing.SourceDH, fmt.Sprintf("%d", dhCardID)); err != nil {
-					h.logger.Warn(ctx, "retry match: save external card ID", observability.Err(err),
-						observability.String("cardName", purchase.CardName), observability.String("setName", purchase.SetName))
-				}
-			}
-			listingPrice := dhlisting.ResolveListingPriceCents(purchase)
-			inventoryID, pushErr := h.pushAndPersistDH(ctx, purchase, dhCardID, listingPrice)
-			if pushErr != nil {
-				h.logger.Error(ctx, "retry match: push inventory after cert resolve", observability.Err(pushErr))
-				writeError(w, http.StatusBadGateway, "DH push failed")
-				return
-			}
-			if h.pushStatusUpdater != nil {
-				if err := h.pushStatusUpdater.UpdatePurchaseDHPushStatus(ctx, purchase.ID, inventory.DHPushStatusMatched); err != nil {
-					h.logger.Error(ctx, "retry match: update push status", observability.Err(err))
-					writeError(w, http.StatusInternalServerError, "failed to update push status")
-					return
-				}
-			}
-			if h.candidatesSaver != nil {
-				if err := h.candidatesSaver.UpdatePurchaseDHCandidates(ctx, purchase.ID, ""); err != nil {
-					h.logger.Warn(ctx, "retry match: clear candidates after cert resolve", observability.Err(err),
-						observability.String("purchaseID", purchase.ID))
-				}
-			}
-			writeJSON(w, http.StatusOK, retryMatchResponse{Status: "ok", DHCardID: dhCardID, DHInventoryID: inventoryID})
-			return
-
-		case dh.CertStatusAmbiguous:
-			if len(resolution.Candidates) > 0 {
-				// Save fresh candidates so the user can pick via Select.
-				candidatesSaved := false
-				if h.candidatesSaver != nil {
-					candidatesJSON, marshalErr := json.Marshal(resolution.Candidates)
-					if marshalErr != nil {
-						h.logger.Warn(ctx, "retry match: failed to marshal candidates", observability.Err(marshalErr))
-					} else if saveErr := h.candidatesSaver.UpdatePurchaseDHCandidates(ctx, purchase.ID, string(candidatesJSON)); saveErr != nil {
-						h.logger.Warn(ctx, "retry match: failed to persist candidates", observability.Err(saveErr))
-					} else {
-						candidatesSaved = true
-					}
-				}
-				if candidatesSaved {
-					writeError(w, http.StatusUnprocessableEntity, "ambiguous match — candidates updated, use Select to pick one")
-				} else {
-					writeError(w, http.StatusUnprocessableEntity, "ambiguous match — use Select to pick one")
-				}
-				return
-			}
-			// Ambiguous with no candidates — fall through to PSA import.
-		}
-		// CertStatusNotFound or ambiguous with no candidates: fall through.
-	}
-
-	// Step 2: PSA import fallback.
 	if h.psaImporter == nil {
 		writeError(w, http.StatusUnprocessableEntity, "PSA import not available")
 		return
 	}
 
 	lang := dhlisting.InferDHLanguage(purchase.SetName, purchase.CardName)
+	listingPrice := dhlisting.ResolveListingPriceCents(purchase)
 	item := dh.PSAImportItem{
 		CertNumber:     purchase.CertNumber,
 		CostBasisCents: purchase.BuyCostCents,
@@ -143,6 +72,9 @@ func (h *DHHandler) HandleRetryMatch(w http.ResponseWriter, r *http.Request) {
 			CardNumber: purchase.CardNumber,
 			Language:   lang,
 		},
+	}
+	if listingPrice > 0 {
+		item.ListingPriceCents = &listingPrice
 	}
 
 	importResp, importErr := h.psaImporter.PSAImport(ctx, []dh.PSAImportItem{item})

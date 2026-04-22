@@ -41,7 +41,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
     totalCost, totalMarket, totalPL,
     handleSort, handleReviewed, handleResolveFlag, handleApproveDHPush, handleListOnDH, dhListingInFlight, dhListedOptimistic, handleBulkListOnDH, handleFlagSubmit, handlePrint, handleDelete,
     toggleSelect, toggleAll, toggleExpand,
-    openSaleModal, closeSaleModal, handleFixPricing, handleFixDHMatch, handleFixDHMatchSaved, handleUnmatchDH, handleSetPrice,
+    openSaleModal, closeSaleModal, handleFixPricing, handleFixDHMatch, handleFixDHMatchSaved, handleUnmatchDH, handleRetryDHMatch, handleSetPrice,
     handlePriceSaved, handleHintSaved, handleInlinePriceSave, handleDismiss, handleUndismiss, sellSheet, toast,
   } = state;
 
@@ -74,6 +74,9 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
 
   const getOnUnmatchDH = (purchase: Purchase) =>
     (purchase.dhPushStatus === 'matched' || purchase.dhPushStatus === 'manual') ? () => handleUnmatchDH(purchase) : undefined;
+
+  const getOnRetryDHMatch = (purchase: Purchase) =>
+    purchase.dhPushStatus === 'unmatched' ? () => handleRetryDHMatch(purchase) : undefined;
 
   return (
     <div>
@@ -146,6 +149,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                     onFixPricing={() => handleFixPricing(item.purchase)}
                     onFixDHMatch={() => handleFixDHMatch(item.purchase)}
                     onUnmatchDH={getOnUnmatchDH(item.purchase)}
+                    onRetryDHMatch={getOnRetryDHMatch(item.purchase)}
                     onSetPrice={() => handleSetPrice(item)}
                     onDelete={() => handleDelete(item)}
                     onListOnDH={handleListOnDH}
@@ -182,6 +186,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                         onFixPricing={() => handleFixPricing(item.purchase)}
                         onFixDHMatch={() => handleFixDHMatch(item.purchase)}
                         onUnmatchDH={getOnUnmatchDH(item.purchase)}
+                    onRetryDHMatch={getOnRetryDHMatch(item.purchase)}
                         onSetPrice={() => handleSetPrice(item)}
                         onDelete={() => handleDelete(item)}
                         onListOnDH={handleListOnDH}
@@ -248,6 +253,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                       onFixPricing={() => handleFixPricing(item.purchase)}
                       onFixDHMatch={() => handleFixDHMatch(item.purchase)}
                       onUnmatchDH={getOnUnmatchDH(item.purchase)}
+                    onRetryDHMatch={getOnRetryDHMatch(item.purchase)}
                       onSetPrice={() => handleSetPrice(item)}
                       onDelete={() => handleDelete(item)}
                       onListOnDH={handleListOnDH}
@@ -300,6 +306,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                           onFixPricing={() => handleFixPricing(item.purchase)}
                           onFixDHMatch={() => handleFixDHMatch(item.purchase)}
                           onUnmatchDH={getOnUnmatchDH(item.purchase)}
+                    onRetryDHMatch={getOnRetryDHMatch(item.purchase)}
                           onSetPrice={() => handleSetPrice(item)}
                           onDelete={() => handleDelete(item)}
                           onListOnDH={handleListOnDH}
