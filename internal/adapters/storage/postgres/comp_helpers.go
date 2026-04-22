@@ -30,9 +30,10 @@ func medianInt(vals []int) int {
 // computeTrend compares median of earlier half vs recent half of the 90-day window.
 // midCutoff splits the window: dates < midCutoff are "earlier", >= midCutoff are "recent".
 func computeTrend(prices []int, dates []string, midCutoff string) float64 {
+	n := min(len(prices), len(dates))
 	var earlier, recent []int
-	for i, d := range dates {
-		if d < midCutoff {
+	for i := 0; i < n; i++ {
+		if dates[i] < midCutoff {
 			earlier = append(earlier, prices[i])
 		} else {
 			recent = append(recent, prices[i])
@@ -56,7 +57,13 @@ func platformBreakdownFromRows(rows []batchPriceRow) []inventory.PlatformBreakdo
 		byPlat[r.platform] = append(byPlat[r.platform], r.priceCents)
 	}
 	out := make([]inventory.PlatformBreakdown, 0, len(byPlat))
-	for plat, prices := range byPlat {
+	platforms := make([]string, 0, len(byPlat))
+	for plat := range byPlat {
+		platforms = append(platforms, plat)
+	}
+	sort.Strings(platforms)
+	for _, plat := range platforms {
+		prices := byPlat[plat]
 		sorted := make([]int, len(prices))
 		copy(sorted, prices)
 		med := medianInt(sorted)

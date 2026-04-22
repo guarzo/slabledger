@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/inventory"
+	"github.com/guarzo/slabledger/internal/domain/mathutil"
 )
 
 // DHCompCacheRecord holds pre-aggregated DH sales analytics for a card+grade.
@@ -89,7 +90,7 @@ func (s *DHCompCacheStore) lookupDHInfoBatch(ctx context.Context, certs []string
 
 // gradeString formats a grade value to match the DH cache key format.
 func gradeString(gradeValue float64) string {
-	return fmt.Sprintf("%.0f", gradeValue)
+	return mathutil.FormatGrade(gradeValue)
 }
 
 // GetCompSummary returns a comp summary from the DH cache for one cert.

@@ -94,6 +94,7 @@ func (s *MarketMoversRefreshScheduler) SetClient(client *marketmovers.Client) {
 }
 
 // SetSalesStore attaches the MM sales comp store for comp enrichment.
+// Must be called before Start — not safe for concurrent use.
 func (s *MarketMoversRefreshScheduler) SetSalesStore(store *postgres.MMSalesStore) {
 	s.salesStore = store
 }

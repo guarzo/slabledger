@@ -9,8 +9,15 @@ type CompositeCompProvider struct {
 }
 
 // NewCompositeCompProvider creates a provider that tries each delegate in order.
+// Nil providers are filtered out.
 func NewCompositeCompProvider(providers ...CompSummaryProvider) *CompositeCompProvider {
-	return &CompositeCompProvider{providers: providers}
+	filtered := make([]CompSummaryProvider, 0, len(providers))
+	for _, p := range providers {
+		if p != nil {
+			filtered = append(filtered, p)
+		}
+	}
+	return &CompositeCompProvider{providers: filtered}
 }
 
 func (c *CompositeCompProvider) GetCompSummary(ctx context.Context, gemRateID, certNumber string) (*CompSummary, error) {

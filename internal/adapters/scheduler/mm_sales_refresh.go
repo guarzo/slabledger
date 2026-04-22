@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"context"
+	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/marketmovers"
 	"github.com/guarzo/slabledger/internal/adapters/storage/postgres"
@@ -41,9 +42,12 @@ func (s *MarketMoversRefreshScheduler) refreshSalesComps(ctx context.Context, cl
 
 		for _, sale := range resp.Items {
 			priceCents := mathutil.ToCentsInt(sale.FinalPrice)
-			saleDate := sale.SaleDate
-			if len(saleDate) > 10 {
-				saleDate = saleDate[:10]
+			saleDate := parseSaleDate(sale.SaleDate)
+			if saleDate == "" {
+				s.logger.Debug(ctx, "MM sales: unparseable date, skipping",
+					observability.Int64("saleId", sale.SaleID),
+					observability.String("raw", sale.SaleDate))
+				continue
 			}
 			if err := s.salesStore.UpsertSaleComp(ctx, postgres.MMSaleCompRecord{
 				MMCollectibleID: m.MMCollectibleID,
@@ -65,4 +69,13 @@ func (s *MarketMoversRefreshScheduler) refreshSalesComps(ctx context.Context, cl
 
 	s.logger.Info(ctx, "MM sales: refresh complete",
 		observability.Int("cardsProcessed", fetched))
+}
+
+func parseSaleDate(raw string) string {
+	for _, layout := range []string{"2006-01-02", time.RFC3339, "2006-01-02 15:04:05"} {
+		if t, err := time.Parse(layout, raw); err == nil {
+			return t.Format("2006-01-02")
+		}
+	}
+	return ""
 }
