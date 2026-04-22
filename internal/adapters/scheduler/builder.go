@@ -283,10 +283,7 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 	}
 
 	// Card trajectory refresh scheduler (weekly). Uses DH's graded-sales-analytics
-	// `recent_sales` array. DH may return that array empty even when
-	// `total_sales > 0`; the scheduler skips cards with no `recent_sales` and
-	// runs harmlessly until DH populates the field, at which point trajectory
-	// buckets start landing on their own.
+	// recent_sales array to build weekly price trajectory buckets.
 	if deps.DHClient != nil && deps.DHClient.EnterpriseAvailable() && deps.DHTrajectoryRepo != nil && deps.DHIntelligenceSeedLister != nil {
 		schedulers = append(schedulers, NewCardTrajectoryRefreshScheduler(
 			deps.DHClient,

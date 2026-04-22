@@ -14,10 +14,6 @@ import (
 var _ Scheduler = (*CardTrajectoryRefreshScheduler)(nil)
 
 // CardTrajectoryRefreshConfig controls the weekly trajectory refresh cadence.
-// Disabled by default — flip Enabled once DH is populating
-// graded-sales-analytics.recent_sales reliably (as of 2026-04-18 the field
-// is returned empty even when total_sales > 0, which would cause every run
-// to upsert zero buckets).
 type CardTrajectoryRefreshConfig struct {
 	Enabled        bool
 	Interval       time.Duration // default 7 days
@@ -117,9 +113,6 @@ func (s *CardTrajectoryRefreshScheduler) refresh(ctx context.Context) {
 			continue
 		}
 		if len(resp.RecentSales) == 0 {
-			// DH gap today — skip writes so we don't clobber existing buckets
-			// with empty data. Once DH populates recent_sales, this branch
-			// stops firing.
 			skipped++
 			continue
 		}
@@ -144,17 +137,14 @@ func (s *CardTrajectoryRefreshScheduler) refresh(ctx context.Context) {
 		observability.Int("failed", failed))
 }
 
-// convertRecentSales maps DH's RecentSale rows to the domain Sale shape the
-// bucketing aggregator expects. Sales with unparseable timestamps are
-// dropped (BucketSalesByWeek would skip them anyway, but doing it here keeps
-// the domain layer agnostic of DH's string formats).
-func convertRecentSales(sales []dh.RecentSale) []intelligence.Sale {
+// convertRecentSales maps DH's GradedSaleEntry rows to the domain Sale shape
+// the bucketing aggregator expects.
+func convertRecentSales(sales []dh.GradedSaleEntry) []intelligence.Sale {
 	out := make([]intelligence.Sale, 0, len(sales))
 	for _, s := range sales {
-		t, err := time.Parse("2006-01-02", s.SoldAt)
+		t, err := time.Parse("2006-01-02", s.SaleDate)
 		if err != nil {
-			// Fall back to RFC3339 in case DH ever returns full timestamps.
-			t, err = time.Parse(time.RFC3339, s.SoldAt)
+			t, err = time.Parse(time.RFC3339, s.SaleDate)
 			if err != nil {
 				continue
 			}
@@ -162,7 +152,7 @@ func convertRecentSales(sales []dh.RecentSale) []intelligence.Sale {
 		out = append(out, intelligence.Sale{
 			SoldAt:         t,
 			GradingCompany: s.GradingCompany,
-			Grade:          s.Grade,
+			Grade:          strconv.FormatFloat(s.Grade, 'f', -1, 64),
 			PriceCents:     int64(math.Round(s.Price * 100)),
 			Platform:       s.Platform,
 		})

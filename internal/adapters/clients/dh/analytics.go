@@ -228,14 +228,9 @@ func encodeCharacterListQuery(opts CharacterListOpts) string {
 // GradedSalesAnalytics returns graded-only sales analytics for a card with
 // the given grading company + grade filter. DH requires both filters —
 // calling this without them returns a 400 with "Invalid grading company or
-// grade combination". The returned envelope carries period_stats (7d/30d
-// summary buckets) and a `recent_sales` list of individual sales with
-// timestamps suitable for client-side weekly aggregation.
-//
-// As of 2026-04-18, DH populates period_stats.*.count but not
-// period_stats.*.avg_price/median_price, and recent_sales is returned empty
-// even when total_sales > 0. The pipeline consumes what DH returns — empty
-// recent_sales produces an empty trajectory.
+// grade combination". The returned envelope carries period_stats (7d/30d/90d
+// summary buckets), recent_sales (up to 10), a 90d price distribution
+// histogram, and a by_company cross-company breakdown.
 func (c *Client) GradedSalesAnalytics(ctx context.Context, cardID int, gradingCompany, grade string) (*GradedSalesAnalyticsResponse, error) {
 	params := url.Values{}
 	params.Set("grading_company", gradingCompany)
