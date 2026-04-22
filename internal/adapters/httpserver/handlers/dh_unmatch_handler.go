@@ -49,19 +49,20 @@ func (h *DHHandler) HandleUnmatchDH(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if purchase.DHPushStatus != inventory.DHPushStatusMatched {
+	if purchase.DHPushStatus != inventory.DHPushStatusMatched &&
+		purchase.DHPushStatus != inventory.DHPushStatusManual {
 		h.logger.Warn(ctx, "unmatch dh: invalid state for unmatch",
 			observability.String("purchaseID", purchase.ID),
 			observability.String("dhPushStatus", purchase.DHPushStatus))
-		writeError(w, http.StatusConflict, "invalid purchase state for unmatch: purchase is not matched")
+		writeError(w, http.StatusConflict, "invalid purchase state for unmatch: purchase must be matched or manual")
 		return
 	}
 
 	dhID := purchase.DHInventoryID
 
 	// Delete the DH inventory item before mutating local state. Keeping the
-	// purchase in "matched" status until the delete succeeds means the
-	// matched-only guard lets the caller retry on a transient DH failure.
+	// purchase in "matched" or "manual" status until the delete succeeds means the
+	// guard lets the caller retry on a transient DH failure.
 	// 404 means the item is already gone — treat as success and proceed.
 	if h.inventoryDeleter != nil && dhID != 0 {
 		if derr := h.inventoryDeleter.DeleteInventory(ctx, dhID); derr != nil {
