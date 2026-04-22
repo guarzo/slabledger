@@ -49,7 +49,8 @@ func (h *DHHandler) HandleUnmatchDH(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if purchase.DHPushStatus != inventory.DHPushStatusMatched {
+	if purchase.DHPushStatus != inventory.DHPushStatusMatched &&
+		purchase.DHPushStatus != inventory.DHPushStatusManual {
 		h.logger.Warn(ctx, "unmatch dh: invalid state for unmatch",
 			observability.String("purchaseID", purchase.ID),
 			observability.String("dhPushStatus", purchase.DHPushStatus))

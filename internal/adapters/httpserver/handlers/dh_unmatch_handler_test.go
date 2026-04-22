@@ -105,6 +105,39 @@ func TestHandleUnmatchDH(t *testing.T) {
 			expectedBody: "invalid purchase state for unmatch",
 		},
 		{
+			// Manually-fixed purchases (status="manual") should also be unmatchable.
+			name:        "Success_ManualStatus_Allowed",
+			purchaseID:  "p1",
+			requestAuth: true,
+			repo: func(a *assertions) *mocks.PurchaseRepositoryMock {
+				return &mocks.PurchaseRepositoryMock{
+					GetPurchaseFn: func(_ context.Context, _ string) (*inventory.Purchase, error) {
+						return &inventory.Purchase{
+							ID:            "p1",
+							CardName:      "FOO",
+							SetName:       "BAR",
+							CardNumber:    "1",
+							DHPushStatus:  inventory.DHPushStatusManual,
+							DHCardID:      555,
+							DHInventoryID: 666,
+						}, nil
+					},
+					UpdatePurchaseDHCandidatesFn: func(_ context.Context, _ string, c string) error {
+						a.clearedCandidates = &c
+						return nil
+					},
+				}
+			},
+			expectedCode: http.StatusOK,
+			check: func(t *testing.T, a assertions) {
+				t.Helper()
+				assert.True(t, a.inventoryDeleter.Called)
+				assert.True(t, a.unmatcher.Called)
+				assert.Equal(t, inventory.DHPushStatusUnmatched, a.unmatcher.PushStatus)
+				assert.True(t, a.mappingDeleter.Called)
+			},
+		},
+		{
 			// Delete runs first and succeeds; then the atomic DB update fails.
 			// The DH inventory is already gone but local state is not cleared —
 			// a retry will hit DH with a 404 which is treated as success.
