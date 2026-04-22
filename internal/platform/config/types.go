@@ -177,10 +177,10 @@ type Config struct {
 }
 
 // DHAnalyticsRefreshConfig controls the daily DH demand analytics refresh
-// scheduler (niche-opportunity leaderboard cache). Disabled by default — this
-// is a launch gate until the DH impression pipeline is healthy. When enabled,
-// the scheduler wakes once per day (RefreshHour UTC, default 3am) and refills
-// the dh_card_cache / dh_character_cache tables.
+// scheduler (niche-opportunity leaderboard cache). Enabled by default when the
+// DH Enterprise key is configured. The scheduler wakes once per day
+// (RefreshHour UTC, default 4am) and refills the dh_card_cache /
+// dh_character_cache tables.
 type DHAnalyticsRefreshConfig struct {
 	Enabled     bool
 	RefreshHour int    // UTC hour 0–23; default 3
