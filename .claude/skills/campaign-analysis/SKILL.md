@@ -99,6 +99,49 @@ Fetch these in parallel:
 - `GET /api/opportunities/acquisition` — raw-to-graded acquisition mispricings (cards worth buying raw and grading). Feeds Playbook F coverage-gap analysis and provides additional top-3 candidates when a clear $ spread exists.
 - `GET /api/campaigns/{id}/projections` ONLY when validating a specific tuning suggestion's projected impact (the projections endpoint is heavy; prefer per-campaign `/tuning` byGrade for sizing).
 
+### Step 3a — Data quality audit
+
+After all Step 3 fetches return, before reconciliation or drafting, audit what you got.
+
+For every endpoint fetched, check:
+1. **Did it return successfully?** If any returned 4xx/5xx or empty body, name it explicitly.
+2. **Is the data fresh enough?** Flag stale data — weekly-history with `weekEnd` more than 7 days ago, intelligence endpoints with 0 rows, campaign-signals with no data, etc.
+3. **What's missing that would improve this analysis?** Surface gaps proactively — e.g., "niches returned 0 rows, coverage-gap analysis unavailable", "no crack candidates exist or endpoint needs seeding."
+
+Output a compact **Data sources** block at the top of the opener:
+
+    Data sources: /portfolio/{health ✓, insights ✓, weekly-review ✓, weekly-history ✓, channel-velocity ✓, suggestions ✓}, /credit/{summary ✓, invoices ✓}, /dh/{status ✓, pending ✓}, /intelligence/{niches ✓, campaign-signals ✓}, /opportunities/{crack ✓, acquisition ✓}, /campaigns/{id}/{tuning ✓, fill-rate ✓} ×N
+    Missing/degraded: /intelligence/niches (0 rows), /opportunities/crack (404)
+    Impact: coverage-gap and crack analysis unavailable this session
+
+The **Impact** line is mandatory — it tells the user what they *can't* trust in this analysis because of data gaps, before any claims are made. If everything returned cleanly, the Impact line is: `Impact: all sources healthy, no analysis gaps.`
+
+This replaces the previous `Data sources:` one-liner from the Data integrity section. The audit version is richer — it names failures and their consequences.
+
+### Step 3b — Reconciliation gate
+
+After the data quality audit, before writing the opener. Answer three questions from **≥2 independent endpoints each**. If sources contradict, STOP and surface the contradiction instead of drafting.
+
+**Q1 — Is the operator buying, slowing, or paused?**
+- Sources (use 2+): `/portfolio/weekly-history` (full-week purchase counts, trailing trend), `/inventory` (recent `createdAt` dates on purchases), `/credit/invoices` (`pendingReceiptCents` — nonzero means recent buying happened)
+- **NOT** from `weekly-review.spendThisWeekCents` alone — see API footguns (partial-week trap)
+
+**Q2 — What's the sales trajectory vs trailing 4-week mean?**
+- Sources (use 2+): `/portfolio/weekly-history` (compute trailing-4-week mean from the 4 most recent full weeks), `/portfolio/health` (per-campaign sell-through), `/credit/summary` (recovery trend direction)
+- Full-week to full-week comparisons only. Never compare a partial current week to a full trailing mean.
+
+**Q3 — Does credit/summary's trajectory reconcile with observed sales pace?**
+- Sources: `/credit/summary` (`weeksToCover`, `recoveryTrend`, `alertLevel`), `/portfolio/weekly-history` (is weekly revenue trending in the same direction as `recoveryTrend` claims?)
+- If `recoveryTrend` says `"improving"` but weekly revenue from `/weekly-history` is flat or declining over the last 3+ weeks, that's a contradiction.
+
+**Contradiction handling.** If any of the three checks produces a contradiction, the opener becomes a **contradiction report** instead of analysis:
+
+> "Before I can analyze this week, these signals disagree: [specifics with endpoint citations]. Which do you trust, or should we dig into why they diverge?"
+
+No movers, no actions, no portfolio-at-a-glance — just the contradiction and a question. Resume normal analysis only after the user resolves the contradiction or tells you which source to trust.
+
+**Strategy-doc adversarial check.** After the three questions pass, if the strategy doc describes any *proposed* change (language like "considering", "planning to", "next step"), verify against live API data that the change was NOT already applied before using any of the proposal's numbers in the opener. See Step 1 addendum.
+
 Present the opener as **two paragraphs plus a close**:
 
 **Paragraph 1 — "This week I'd do these 3 things:"** Numbered list. Each item names an action, targets (campaign / cards / invoice), sized $ impact with horizon, and confidence band (see Recommendation rules). If the strongest item is a hold verdict, state it directly as item 1 ("Hold — this week's signal is within noise…"); hold items carry no sized $ or confidence band because there is no action being proposed.
