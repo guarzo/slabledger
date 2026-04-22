@@ -65,11 +65,11 @@ func (s *DHPushScheduler) tryPSAImportOrUnmatch(ctx context.Context, p inventory
 		if result.Error != "" {
 			reason += ": " + result.Error
 		}
-		s.logger.Info(ctx, "dh push: psa_import did not create inventory",
+		s.logger.Warn(ctx, "dh push: psa_import did not create inventory",
 			observability.String("purchaseID", p.ID),
 			observability.String("cert", p.CertNumber),
 			observability.String("resolution", result.Resolution),
-			observability.String("error", result.Error))
+			observability.String("dhError", result.Error))
 		return s.finalizeUnmatched(ctx, p, reason)
 	}
 }

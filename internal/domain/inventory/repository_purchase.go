@@ -123,6 +123,14 @@ type PurchaseRepository interface {
 	// UpdatePurchaseDHFields, it does not touch any other DH columns.
 	// Used by the DH price re-sync path after a successful DH PATCH.
 	UpdatePurchaseDHPriceSync(ctx context.Context, id string, listingPriceCents int, syncedAt time.Time) error
+	// UnmatchPurchaseDH atomically clears all DH tracking fields (card ID,
+	// inventory ID, cert status, listing price, channels, DH status, last
+	// synced timestamp) and sets dh_push_status to pushStatus in a single
+	// UPDATE. dh_push_attempts is reset to 0 when pushStatus is "pending" or
+	// "matched" so a fresh re-enrollment starts with a clean retry budget.
+	// Used by the unmatch handler to avoid partial state between field-clear
+	// and status-update.
+	UnmatchPurchaseDH(ctx context.Context, purchaseID string, pushStatus string) error
 
 	// ListDHPriceDrift returns unsold purchases where DH is known
 	// (dh_inventory_id > 0), the reviewed price is positive, and the

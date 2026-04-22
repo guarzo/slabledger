@@ -59,6 +59,7 @@ type PurchaseRepositoryMock struct {
 	ResetDHFieldsForRepushFn             func(ctx context.Context, purchaseID string) error
 	ResetDHFieldsForRepushDueToDeleteFn  func(ctx context.Context, purchaseID string) error
 	UpdatePurchaseDHPriceSyncFn          func(ctx context.Context, id string, listingPriceCents int, syncedAt time.Time) error
+	UnmatchPurchaseDHFn                  func(ctx context.Context, purchaseID string, pushStatus string) error
 	ListDHPriceDriftFn                   func(ctx context.Context) ([]inventory.Purchase, error)
 }
 
@@ -410,6 +411,13 @@ func (m *PurchaseRepositoryMock) ResetDHFieldsForRepushDueToDelete(ctx context.C
 func (m *PurchaseRepositoryMock) UpdatePurchaseDHPriceSync(ctx context.Context, id string, listingPriceCents int, syncedAt time.Time) error {
 	if m.UpdatePurchaseDHPriceSyncFn != nil {
 		return m.UpdatePurchaseDHPriceSyncFn(ctx, id, listingPriceCents, syncedAt)
+	}
+	return nil
+}
+
+func (m *PurchaseRepositoryMock) UnmatchPurchaseDH(ctx context.Context, purchaseID string, pushStatus string) error {
+	if m.UnmatchPurchaseDHFn != nil {
+		return m.UnmatchPurchaseDHFn(ctx, purchaseID, pushStatus)
 	}
 	return nil
 }

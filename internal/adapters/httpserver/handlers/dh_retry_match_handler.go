@@ -197,6 +197,14 @@ func (h *DHHandler) HandleRetryMatch(w http.ResponseWriter, r *http.Request) {
 			DHInventoryID: result.DHInventoryID,
 		})
 	default:
-		writeError(w, http.StatusUnprocessableEntity, fmt.Sprintf("DH could not create listing: %s", result.Resolution))
+		msg := fmt.Sprintf("DH could not create listing: %s", result.Resolution)
+		if result.Error != "" {
+			msg += ": " + result.Error
+		}
+		h.logger.Warn(ctx, "retry match: psa_import non-success",
+			observability.String("purchaseID", purchase.ID),
+			observability.String("resolution", result.Resolution),
+			observability.String("dhError", result.Error))
+		writeError(w, http.StatusUnprocessableEntity, msg)
 	}
 }

@@ -38,6 +38,28 @@ func (ps *PurchaseStore) UpdatePurchaseDHFieldsAndPushStatus(ctx context.Context
 	)
 }
 
+// UnmatchPurchaseDH atomically clears all DH tracking fields and sets the push
+// status in a single UPDATE. dh_push_attempts is reset to 0 for "pending" and
+// "matched" transitions so the re-enrolled purchase starts with a clean retry
+// budget; "unmatched" preserves the counter as a diagnostic signal.
+func (ps *PurchaseStore) UnmatchPurchaseDH(ctx context.Context, purchaseID string, pushStatus string) error {
+	return ps.execAndExpectRow(ctx, "unmatch purchase DH",
+		`UPDATE campaign_purchases
+		 SET dh_card_id           = 0,
+		     dh_inventory_id      = 0,
+		     dh_cert_status       = '',
+		     dh_listing_price_cents = 0,
+		     dh_channels_json     = '',
+		     dh_status            = '',
+		     dh_last_synced_at    = '',
+		     dh_push_status       = $1,
+		     dh_push_attempts     = CASE WHEN $2 IN ('pending', 'matched') THEN 0 ELSE dh_push_attempts END,
+		     updated_at           = $3
+		 WHERE id = $4`,
+		pushStatus, pushStatus, time.Now(), purchaseID,
+	)
+}
+
 // GetPurchasesByDHCertStatus returns purchases with the given DH cert resolution status.
 func (ps *PurchaseStore) GetPurchasesByDHCertStatus(ctx context.Context, status string, limit int) ([]inventory.Purchase, error) {
 	query := fmt.Sprintf(

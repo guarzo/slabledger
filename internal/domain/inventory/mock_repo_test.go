@@ -860,6 +860,10 @@ func (m *mockRepo) UpdatePurchaseDHPriceSync(_ context.Context, _ string, _ int,
 	return nil
 }
 
+func (m *mockRepo) UnmatchPurchaseDH(_ context.Context, _ string, _ string) error {
+	return nil
+}
+
 func (m *mockRepo) ListDHPriceDrift(_ context.Context) ([]Purchase, error) {
 	return nil, nil
 }

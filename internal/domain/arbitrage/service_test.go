@@ -164,6 +164,10 @@ func (r *stubPurchaseRepo) ResetDHFieldsForRepushDueToDelete(_ context.Context, 
 func (r *stubPurchaseRepo) UpdatePurchaseDHPriceSync(_ context.Context, _ string, _ int, _ time.Time) error {
 	return nil
 }
+func (r *stubPurchaseRepo) UnmatchPurchaseDH(_ context.Context, _ string, _ string) error {
+	return nil
+}
+
 func (r *stubPurchaseRepo) ListDHPriceDrift(_ context.Context) ([]inventory.Purchase, error) {
 	return nil, nil
 }

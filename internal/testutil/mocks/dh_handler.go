@@ -52,6 +52,46 @@ func (m *DHChannelDelisterMock) DelistChannels(ctx context.Context, inventoryID 
 	return &dh.ChannelSyncResponse{}, nil
 }
 
+// DHUnmatcherMock implements handlers.DHUnmatcher with the Fn-field pattern.
+// Tests set UnmatchPurchaseDHFn to control the return value; the most recent
+// purchaseID and pushStatus are captured for assertions.
+type DHUnmatcherMock struct {
+	UnmatchPurchaseDHFn func(ctx context.Context, purchaseID string, pushStatus string) error
+
+	Called     bool
+	PurchaseID string
+	PushStatus string
+}
+
+func (m *DHUnmatcherMock) UnmatchPurchaseDH(ctx context.Context, purchaseID string, pushStatus string) error {
+	m.Called = true
+	m.PurchaseID = purchaseID
+	m.PushStatus = pushStatus
+	if m.UnmatchPurchaseDHFn != nil {
+		return m.UnmatchPurchaseDHFn(ctx, purchaseID, pushStatus)
+	}
+	return nil
+}
+
+// DHInventoryDeleterMock implements handlers.DHInventoryDeleter with the
+// Fn-field pattern. Tests override DeleteInventoryFn; the called flag and
+// inventory ID from the most recent call are captured for assertions.
+type DHInventoryDeleterMock struct {
+	DeleteInventoryFn func(ctx context.Context, inventoryID int) error
+
+	Called      bool
+	InventoryID int
+}
+
+func (m *DHInventoryDeleterMock) DeleteInventory(ctx context.Context, inventoryID int) error {
+	m.Called = true
+	m.InventoryID = inventoryID
+	if m.DeleteInventoryFn != nil {
+		return m.DeleteInventoryFn(ctx, inventoryID)
+	}
+	return nil
+}
+
 // DHInventoryPusherMock implements handlers.DHInventoryPusher with the
 // Fn-field pattern. Tests override PushInventoryFn to return a synthesized
 // response (or error); the call count and the items sent on the most recent
