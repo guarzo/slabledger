@@ -52,9 +52,22 @@ type DHMappingDeleter interface {
 	DeleteAutoMapping(ctx context.Context, cardName, setName, collectorNumber, provider string) (int64, error)
 }
 
+// DHInventoryDeleter permanently removes a DH inventory item, cancelling any
+// active market orders and delisting from all channels in one transaction.
+// Used during unmatch to fully clean up DH-side state.
+type DHInventoryDeleter interface {
+	DeleteInventory(ctx context.Context, inventoryID int) error
+}
+
+// DHUnmatcher atomically clears all DH tracking fields and sets the push
+// status in a single DB update. Used by HandleUnmatchDH to avoid partial state
+// between the field-clear and status-update steps.
+type DHUnmatcher interface {
+	UnmatchPurchaseDH(ctx context.Context, purchaseID string, pushStatus string) error
+}
+
 // DHChannelDelister removes a DH inventory item from external sales channels.
-// Used during unmatch to take down live eBay/Shopify listings before clearing
-// local DH state.
+// Used during fix-match to take down channels on the old listing when swapping cards.
 type DHChannelDelister interface {
 	DelistChannels(ctx context.Context, inventoryID int, channels []string) (*dh.ChannelSyncResponse, error)
 }
@@ -147,7 +160,9 @@ type DHHandler struct {
 	pushStatusUpdater DHPushStatusUpdater // optional: sets dh_push_status after bulk match
 	candidatesSaver   DHCandidatesSaver   // optional: stores ambiguous candidates
 	mappingDeleter    DHMappingDeleter    // optional: removes auto card_id_mappings on unmatch
-	channelDelister   DHChannelDelister   // optional: takes down live channel listings on unmatch
+	inventoryDeleter  DHInventoryDeleter  // optional: fully deletes DH inventory item on unmatch
+	dhUnmatcher       DHUnmatcher         // optional: atomic field-clear + status set for unmatch
+	channelDelister   DHChannelDelister   // optional: takes down channels on card swap (fix-match)
 	statusCounter     DHStatusCounter     // optional: efficient push status counts
 	pendingLister     DHPendingLister     // optional: lists DH pending pipeline items
 	intelRepo         intelligence.Repository
@@ -195,7 +210,9 @@ type DHHandlerDeps struct {
 	PushStatusUpdater DHPushStatusUpdater // optional: sets dh_push_status after bulk match
 	CandidatesSaver   DHCandidatesSaver   // optional: stores ambiguous candidates
 	MappingDeleter    DHMappingDeleter    // optional: removes auto card_id_mappings on unmatch
-	ChannelDelister   DHChannelDelister   // optional: takes down live channel listings on unmatch
+	InventoryDeleter  DHInventoryDeleter  // optional: fully deletes DH inventory item on unmatch
+	DHUnmatcher       DHUnmatcher         // optional: atomic field-clear + status set for unmatch
+	ChannelDelister   DHChannelDelister   // optional: takes down channels on card swap (fix-match)
 	StatusCounter     DHStatusCounter     // optional: efficient push status counts
 	PendingLister     DHPendingLister     // optional: lists DH pending pipeline items
 	IntelRepo         intelligence.Repository
@@ -233,6 +250,8 @@ func NewDHHandler(deps DHHandlerDeps) *DHHandler {
 		pushStatusUpdater: deps.PushStatusUpdater,
 		candidatesSaver:   deps.CandidatesSaver,
 		mappingDeleter:    deps.MappingDeleter,
+		inventoryDeleter:  deps.InventoryDeleter,
+		dhUnmatcher:       deps.DHUnmatcher,
 		channelDelister:   deps.ChannelDelister,
 		statusCounter:     deps.StatusCounter,
 		pendingLister:     deps.PendingLister,
@@ -372,4 +391,5 @@ var _ DHHealthReporter = (*dh.Client)(nil)
 var _ DHCountsFetcher = (*dh.Client)(nil)
 var _ DHMatchConfirmer = (*dh.Client)(nil)
 var _ DHPSAImporter = (*dh.Client)(nil)
+var _ DHInventoryDeleter = (*dh.Client)(nil)
 var _ DHChannelDelister = (*dh.Client)(nil)

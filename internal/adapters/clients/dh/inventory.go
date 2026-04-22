@@ -98,6 +98,14 @@ func (c *Client) SyncChannels(ctx context.Context, inventoryID int, channels []s
 	return &resp, nil
 }
 
+// DeleteInventory permanently removes an inventory item from DH, cancelling any
+// active market orders and delisting from all channels in one transaction.
+// Use this on unmatch; use DelistChannels for channel-only removal (e.g. card swap).
+func (c *Client) DeleteInventory(ctx context.Context, inventoryID int) error {
+	fullURL := fmt.Sprintf("%s/api/v1/enterprise/inventory/%d", c.baseURL, inventoryID)
+	return c.deleteEnterprise(ctx, fullURL, nil, nil)
+}
+
 // DelistChannels removes a listed inventory item from specific external channels.
 // If channels is empty, delists from all channels.
 func (c *Client) DelistChannels(ctx context.Context, inventoryID int, channels []string) (*ChannelSyncResponse, error) {
