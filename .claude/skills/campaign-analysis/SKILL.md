@@ -262,7 +262,9 @@ Every numeric claim about purchases, sales, capital, campaign state, or market s
 
 Operating rules:
 
-- Open the response with a one-line **Data sources** prefix listing the endpoints fetched this turn. Compact form is fine: `Data sources: /api/portfolio/{health,insights,suggestions,weekly-review,weekly-history,channel-velocity}, /api/credit/{summary,invoices}, /api/dh/{status,pending}, /api/intelligence/{niches,campaign-signals}, /api/opportunities/{crack,acquisition}, /api/campaigns/{id}/{tuning,fill-rate} ×N`.
+- **Two-source rule for opener claims.** Every numeric claim in the opener (reconciliation summary, movers, conditional actions) must be backed by 2+ endpoints that agree, or explicitly labeled *"(single-source, unverified: [endpoint])."* This rule applies to the opener only — playbook follow-up responses can cite single endpoints since the user has already chosen what to dig into.
+- **External campaign exclusion.** Filter the External campaign (`kind == "external"`) from all ROI, margin, and sell-through calculations throughout the session. This is a hard exclusion, not a caveat. External's zero cost basis inflates every aggregate it touches.
+- **Data sources block.** The opener's data-sources block is produced by Step 3a (data quality audit). It replaces the old one-line prefix — it now names failures, staleness, and their impact on analysis. Playbook follow-up responses still use the compact one-line form: `Data sources: /api/...`.
 - If an endpoint returned 4xx/5xx, an empty body, or was skipped intentionally, name it explicitly. Do not paper over a missing fetch with prior knowledge.
 - **Parse what you fetch.** When you fetch `/insights` or `/tuning`, surface at least one segment-level aggregate (`byCharacter` row, `byGrade` row, `byPriceTier` row, or `(campaign, grade) avgBuyPctOfCL`) before drafting the opener. Listing the response keys is not analysis.
 - Re-fetch after any mutation, and after >5 minutes within a session.
