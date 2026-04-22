@@ -270,8 +270,6 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 	}
 
 	// DH demand analytics refresh scheduler (daily; niche-opportunity cache).
-	// Feature-flagged via cfg.DHAnalyticsRefresh.Enabled — off by default until
-	// the DH impression pipeline is healthy (launch gate).
 	if deps.DHClient != nil && deps.DHClient.EnterpriseAvailable() && deps.DHDemandRepo != nil {
 		schedulers = append(schedulers, NewDHAnalyticsRefreshScheduler(
 			deps.DHClient,
