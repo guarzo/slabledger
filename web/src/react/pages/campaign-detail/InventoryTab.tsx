@@ -73,7 +73,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
   }
 
   const getOnUnmatchDH = (purchase: Purchase) =>
-    purchase.dhPushStatus === 'matched' ? () => handleUnmatchDH(purchase) : undefined;
+    (purchase.dhPushStatus === 'matched' || purchase.dhPushStatus === 'manual') ? () => handleUnmatchDH(purchase) : undefined;
 
   return (
     <div>
