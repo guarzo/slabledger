@@ -54,14 +54,18 @@ type mockInventoryLister struct {
 	syncChannelsErr      error
 	returnedListingPrice int
 	lastListingPriceSent int
+	updateCalls          int
+	syncCalls            int
 }
 
 func (m *mockInventoryLister) UpdateInventoryStatus(_ context.Context, _ int, update DHInventoryStatusUpdate) (int, error) {
+	m.updateCalls++
 	m.lastListingPriceSent = update.ListingPriceCents
 	return m.returnedListingPrice, m.updateStatusErr
 }
 
 func (m *mockInventoryLister) SyncChannels(_ context.Context, _ int, _ []string) error {
+	m.syncCalls++
 	return m.syncChannelsErr
 }
 
@@ -800,6 +804,162 @@ func TestListPurchases_StaleInventoryID(t *testing.T) {
 				if len(resetter.resetCalls) == 0 || resetter.resetCalls[0] != tc.wantResetPurchaseID {
 					t.Errorf("ResetDHFieldsForRepush purchaseID: got %v, want %s", resetter.resetCalls, tc.wantResetPurchaseID)
 				}
+			}
+		})
+	}
+}
+
+// TestListPurchases_NoOpGuard asserts the exact-match no-op short-circuit:
+// when a purchase is already DHStatusListed with DHListingPriceCents equal to
+// the resolved listing price AND has a non-empty DHChannelsJSON (evidence of
+// a prior successful channel sync), ListPurchases skips the PATCH, the
+// SyncChannels call, the persist, and event emission. DH's
+// inventory_upsert_service cancels and recreates MarketOrders on every
+// request regardless of whether values changed, so unguarded re-sends churn
+// eBay/Shopify state for nothing. Drift in any of status / price / channels
+// falls through to the full path.
+func TestListPurchases_NoOpGuard(t *testing.T) {
+	const listingPrice = 34360
+
+	tests := []struct {
+		name         string
+		purchase     inventory.Purchase
+		wantUpdate   int // expected UpdateInventoryStatus calls
+		wantSync     int // expected SyncChannels calls
+		wantPersists int // expected UpdatePurchaseDHFields calls
+		wantEvents   int // expected events recorded
+		wantListed   int
+		wantSynced   int
+		wantSkipped  int
+	}{
+		{
+			name: "already listed at target price with channels synced — skip everything",
+			purchase: inventory.Purchase{
+				ID:                  "purchase-noop",
+				CertNumber:          "77778888",
+				DHInventoryID:       938,
+				DHCardID:            52340,
+				DHStatus:            inventory.DHStatusListed,
+				DHListingPriceCents: listingPrice,
+				DHChannelsJSON:      `["ebay","shopify"]`,
+				ReviewedPriceCents:  listingPrice,
+			},
+			wantUpdate:   0,
+			wantSync:     0,
+			wantPersists: 0,
+			wantEvents:   0,
+			wantListed:   0,
+			wantSynced:   1,
+			wantSkipped:  0,
+		},
+		{
+			name: "listed but price drifted — run the full path",
+			purchase: inventory.Purchase{
+				ID:                  "purchase-drift",
+				CertNumber:          "99990000",
+				DHInventoryID:       940,
+				DHCardID:            12345,
+				DHStatus:            inventory.DHStatusListed,
+				DHListingPriceCents: 30000, // DH is stale
+				DHChannelsJSON:      `["ebay","shopify"]`,
+				ReviewedPriceCents:  listingPrice,
+			},
+			wantUpdate:   1,
+			wantSync:     1,
+			wantPersists: 1,
+			wantEvents:   2, // listed + channel_synced
+			wantListed:   1,
+			wantSynced:   1,
+			wantSkipped:  0,
+		},
+		{
+			name: "listed with matching price but empty channels — run the full path",
+			purchase: inventory.Purchase{
+				ID:                  "purchase-no-channels",
+				CertNumber:          "11112222",
+				DHInventoryID:       941,
+				DHCardID:            54321,
+				DHStatus:            inventory.DHStatusListed,
+				DHListingPriceCents: listingPrice,
+				DHChannelsJSON:      "", // no record of prior sync
+				ReviewedPriceCents:  listingPrice,
+			},
+			wantUpdate:   1,
+			wantSync:     1,
+			wantPersists: 1,
+			wantEvents:   2,
+			wantListed:   1,
+			wantSynced:   1,
+			wantSkipped:  0,
+		},
+		{
+			name: "in_stock with matching price — run the full path (transition to listed)",
+			purchase: inventory.Purchase{
+				ID:                  "purchase-in-stock",
+				CertNumber:          "33334444",
+				DHInventoryID:       942,
+				DHCardID:            11111,
+				DHStatus:            inventory.DHStatusInStock,
+				DHListingPriceCents: listingPrice,
+				DHChannelsJSON:      `["ebay","shopify"]`,
+				ReviewedPriceCents:  listingPrice,
+			},
+			wantUpdate:   1,
+			wantSync:     1,
+			wantPersists: 1,
+			wantEvents:   2,
+			wantListed:   1,
+			wantSynced:   1,
+			wantSkipped:  0,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p := tc.purchase
+			lookup := &mockPurchaseLookup{
+				purchases: map[string]*inventory.Purchase{p.CertNumber: &p},
+			}
+			lister := &mockInventoryLister{returnedListingPrice: listingPrice}
+			fieldsUpdater := &mockFieldsUpdater{}
+			eventRec := &mockEventRecorder{}
+
+			svc := newTestService(t, lookup,
+				WithDHListingLister(lister),
+				WithDHListingFieldsUpdater(fieldsUpdater),
+				WithEventRecorder(eventRec),
+			)
+
+			result := svc.ListPurchases(context.Background(), []string{p.CertNumber})
+
+			if lister.updateCalls != tc.wantUpdate {
+				t.Errorf("UpdateInventoryStatus calls: got %d, want %d", lister.updateCalls, tc.wantUpdate)
+			}
+			if lister.syncCalls != tc.wantSync {
+				t.Errorf("SyncChannels calls: got %d, want %d", lister.syncCalls, tc.wantSync)
+			}
+			if len(fieldsUpdater.calls) != tc.wantPersists {
+				t.Errorf("UpdatePurchaseDHFields calls: got %d, want %d", len(fieldsUpdater.calls), tc.wantPersists)
+			}
+			if len(eventRec.events) != tc.wantEvents {
+				t.Errorf("events emitted: got %d, want %d", len(eventRec.events), tc.wantEvents)
+			}
+			if result.Listed != tc.wantListed {
+				t.Errorf("Listed: got %d, want %d", result.Listed, tc.wantListed)
+			}
+			if result.Synced != tc.wantSynced {
+				t.Errorf("Synced: got %d, want %d", result.Synced, tc.wantSynced)
+			}
+			if result.Skipped != tc.wantSkipped {
+				t.Errorf("Skipped: got %d, want %d", result.Skipped, tc.wantSkipped)
+			}
+			if result.Total != 1 {
+				t.Errorf("Total: got %d, want 1", result.Total)
+			}
+			// When we do patch, verify the reviewed price is what we sent.
+			if tc.wantUpdate == 1 && lister.lastListingPriceSent != listingPrice {
+				t.Errorf("UpdateInventoryStatus should send reviewed price %d; got %d",
+					listingPrice, lister.lastListingPriceSent)
 			}
 		})
 	}
