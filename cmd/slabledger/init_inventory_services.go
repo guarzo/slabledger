@@ -47,6 +47,8 @@ type campaignsInitResult struct {
 	certLookup       inventory.CertLookup
 	certEnrichJob    *scheduler.CertEnrichJob    // nil if PSA not configured
 	pricingEnrichJob *scheduler.PricingEnrichJob // pricers are attached later once CL/MM schedulers exist
+	mmSalesStore     *postgres.MMSalesStore
+	dhCompStore      *postgres.DHCompCacheStore
 	arbSvc           arbitrage.Service
 	portSvc          portfolio.Service
 	tuningSvc        tuning.Service
@@ -109,9 +111,12 @@ func initializeCampaignsService(
 		campaignOpts = append(campaignOpts, inventory.WithIntelligenceRepo(intelRepo))
 	}
 
-	// Card Ladder comp analytics — CLSalesStore only needs *sql.DB (always available).
+	// Comp analytics — composite provider: CL → MM → DH fallback chain.
 	clSalesStore := postgres.NewCLSalesStore(db.DB)
-	campaignOpts = append(campaignOpts, inventory.WithCompSummaryProvider(clSalesStore))
+	mmSalesStore := postgres.NewMMSalesStore(db.DB)
+	dhCompStore := postgres.NewDHCompCacheStore(db.DB)
+	compositeComp := inventory.NewCompositeCompProvider(clSalesStore, mmSalesStore, dhCompStore)
+	campaignOpts = append(campaignOpts, inventory.WithCompSummaryProvider(compositeComp))
 
 	// Structured logger — required so phase-timing diagnostic logs in
 	// GetInventoryAging / GetGlobalInventoryAging actually emit (guarded by
@@ -227,6 +232,8 @@ func initializeCampaignsService(
 		certLookup:       certLookup,
 		certEnrichJob:    certEnrichJobForSvc,
 		pricingEnrichJob: pricingEnrichJob,
+		mmSalesStore:     mmSalesStore,
+		dhCompStore:      dhCompStore,
 		arbSvc:           arbSvc,
 		portSvc:          portSvc,
 		tuningSvc:        tuningSvc,
