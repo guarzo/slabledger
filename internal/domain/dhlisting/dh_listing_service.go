@@ -222,6 +222,18 @@ func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []stri
 			continue
 		}
 
+		// DH's inventory_upsert_service cancels+recreates MarketOrders on
+		// every PATCH regardless of whether values changed, so skip the call
+		// when status/price/channels are already in the target state. Empty
+		// DHChannelsJSON means no prior successful sync on record — fall
+		// through in that case even if status/price look correct.
+		if p.DHStatus == inventory.DHStatusListed &&
+			p.DHListingPriceCents == listingPrice &&
+			p.DHChannelsJSON != "" {
+			synced++
+			continue
+		}
+
 		dhListingPrice, err := s.lister.UpdateInventoryStatus(ctx, p.DHInventoryID, DHInventoryStatusUpdate{
 			Status:            inventory.DHStatusListed,
 			ListingPriceCents: listingPrice,
