@@ -65,6 +65,16 @@ curl -sf -H "Authorization: Bearer $LOCAL_API_TOKEN" $PRODUCTION_URL/api/health
 
 Set `BASE_URL=$PRODUCTION_URL` if that works. Fall back to `http://localhost:8081` if production is unreachable. If localhost also fails, suggest `go build -o slabledger ./cmd/slabledger && ./slabledger`. Resolving auth *before* the production check matters because every fetch in the next step is authenticated.
 
+## API footguns — read before interpreting any data
+
+Known traps that have caused wrong analysis in past sessions. This block is reference, not procedural — it's here so every invocation has it in context before data interpretation begins.
+
+- **`spendThisWeekCents` is structurally low early in the week.** On Mon/Tue/Wed this field reflects 1–3 days of purchases, not a full week. Never compare it to a full-week figure or conclude "buying paused" from a partial-week number. Use `/portfolio/weekly-history` for full-week comparisons.
+- **`purchaseDate` lags `createdAt` by 1–2 days.** The date a purchase appears in date-bucketed views is not the date it was made. This affects any week-boundary calculation.
+- **`/api/inventory` is unsold-only, not a purchase log.** It shows current stock. It does not show what was bought and already sold. Don't infer purchase volume from inventory count alone.
+- **External campaign: filter from all ROI and margin calculations.** The "External" campaign has `cost basis = 0` for pre-campaign purchases. Any portfolio-wide character/grade/era ROI calculation that includes External will be inflated. This is a hard exclusion, not a caveat — filter it out everywhere.
+- **`/api/campaigns` returns empty strings for year range, grade range, price range, CL confidence, and inclusion lists.** The strategy doc is authoritative for these fields (see Step 1a). The API is not. *(Fixing the API to return these fields is planned as separate backend work.)*
+
 ## Step 3 — Fetch the initial snapshot (default entry point)
 
 Fetch these in parallel:
