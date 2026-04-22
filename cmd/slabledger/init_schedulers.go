@@ -45,12 +45,14 @@ type schedulerDeps struct {
 	SchedulerStatsStore  *postgres.SchedulerStatsStore
 	MMClient             *marketmovers.Client
 	MMStore              *postgres.MarketMoversStore
+	MMSalesStore         *postgres.MMSalesStore
 	DHClient             *dh.Client
 	DHEventStore         *postgres.DHEventStore
 	DHIntelligenceRepo   *postgres.MarketIntelligenceRepository
 	DHSuggestionsRepo    *postgres.DHSuggestionsRepository
 	DHDemandRepo         *postgres.DHDemandRepository
 	DHTrajectoryRepo     *postgres.CardPriceTrajectoryRepository
+	DHCompCacheStore     *postgres.DHCompCacheStore
 	DHPriceSyncService   dhpricing.Service
 	GapStore             *postgres.GapStore
 	PSASheetFetcher      scheduler.SheetFetcher
@@ -97,6 +99,9 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 	if deps.MMStore != nil {
 		buildDeps.MMStore = deps.MMStore
 	}
+	if deps.MMSalesStore != nil {
+		buildDeps.MMSalesStore = deps.MMSalesStore
+	}
 	if deps.PurchaseStore != nil {
 		buildDeps.MMPurchaseLister = deps.PurchaseStore
 		buildDeps.MMValueUpdater = deps.PurchaseStore
@@ -131,6 +136,9 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 	}
 	if deps.DHTrajectoryRepo != nil {
 		buildDeps.DHTrajectoryRepo = deps.DHTrajectoryRepo
+	}
+	if deps.DHCompCacheStore != nil {
+		buildDeps.DHCompCacheStore = deps.DHCompCacheStore
 	}
 	if deps.DHSuggestionsRepo != nil {
 		buildDeps.DHSuggestionsRepo = deps.DHSuggestionsRepo

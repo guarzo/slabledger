@@ -51,6 +51,7 @@ type BuildDeps struct {
 	DHClient                 *dh.Client
 	DHIntelligenceRepo       intelligence.Repository
 	DHTrajectoryRepo         intelligence.TrajectoryRepository
+	DHCompCacheStore         *postgres.DHCompCacheStore
 	DHSuggestionsRepo        intelligence.SuggestionsRepository
 	DHDemandRepo             demand.Repository      // niche-opportunity cache (T1/T3)
 	DHUnsoldCardLister       UnsoldDHCardLister     // seeds analytics with our inventory
@@ -100,6 +101,7 @@ type BuildDeps struct {
 	// Market Movers dependencies (optional)
 	MMClient         *marketmovers.Client
 	MMStore          *postgres.MarketMoversStore
+	MMSalesStore     *postgres.MMSalesStore
 	MMPurchaseLister MMPurchaseLister
 	MMValueUpdater   MMValueUpdater
 
@@ -295,6 +297,7 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 				Enabled:  cfg.DH.Enabled,
 				Interval: 7 * 24 * time.Hour,
 			},
+			deps.DHCompCacheStore,
 		))
 	}
 
@@ -450,6 +453,9 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 			deps.MMPurchaseLister, deps.MMValueUpdater,
 			deps.Logger, cfg.MarketMovers,
 		)
+		if deps.MMSalesStore != nil {
+			mmRefresh.SetSalesStore(deps.MMSalesStore)
+		}
 		schedulers = append(schedulers, mmRefresh)
 	}
 

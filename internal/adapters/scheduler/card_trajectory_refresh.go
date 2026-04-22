@@ -7,7 +7,9 @@ import (
 	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
+	"github.com/guarzo/slabledger/internal/adapters/storage/postgres"
 	"github.com/guarzo/slabledger/internal/domain/intelligence"
+	"github.com/guarzo/slabledger/internal/domain/mathutil"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
@@ -32,11 +34,12 @@ type CardTrajectoryRefreshConfig struct {
 // intelligence refresh uses.
 type CardTrajectoryRefreshScheduler struct {
 	StopHandle
-	dhClient      *dh.Client
-	trajectoryRep intelligence.TrajectoryRepository
-	seedLister    IntelligenceSeedLister
-	logger        observability.Logger
-	config        CardTrajectoryRefreshConfig
+	dhClient       *dh.Client
+	trajectoryRep  intelligence.TrajectoryRepository
+	compCacheStore *postgres.DHCompCacheStore
+	seedLister     IntelligenceSeedLister
+	logger         observability.Logger
+	config         CardTrajectoryRefreshConfig
 }
 
 // NewCardTrajectoryRefreshScheduler constructs the scheduler.
@@ -46,6 +49,7 @@ func NewCardTrajectoryRefreshScheduler(
 	seedLister IntelligenceSeedLister,
 	logger observability.Logger,
 	config CardTrajectoryRefreshConfig,
+	compCacheStore *postgres.DHCompCacheStore,
 ) *CardTrajectoryRefreshScheduler {
 	if config.Interval == 0 {
 		config.Interval = 7 * 24 * time.Hour
@@ -60,12 +64,13 @@ func NewCardTrajectoryRefreshScheduler(
 		config.Grade = "10"
 	}
 	return &CardTrajectoryRefreshScheduler{
-		StopHandle:    NewStopHandle(),
-		dhClient:      dhClient,
-		trajectoryRep: trajectoryRep,
-		seedLister:    seedLister,
-		logger:        logger.With(context.Background(), observability.String("component", "card-trajectory-refresh")),
-		config:        config,
+		StopHandle:     NewStopHandle(),
+		dhClient:       dhClient,
+		trajectoryRep:  trajectoryRep,
+		compCacheStore: compCacheStore,
+		seedLister:     seedLister,
+		logger:         logger.With(context.Background(), observability.String("component", "card-trajectory-refresh")),
+		config:         config,
 	}
 }
 
@@ -116,6 +121,8 @@ func (s *CardTrajectoryRefreshScheduler) refresh(ctx context.Context) {
 			failed++
 			continue
 		}
+		// Cache aggregate stats regardless of whether RecentSales is populated.
+		s.cacheCompAggregates(ctx, id, resp)
 		if len(resp.RecentSales) == 0 {
 			// DH gap today — skip writes so we don't clobber existing buckets
 			// with empty data. Once DH populates recent_sales, this branch
@@ -168,4 +175,39 @@ func convertRecentSales(sales []dh.RecentSale) []intelligence.Sale {
 		})
 	}
 	return out
+}
+
+// cacheCompAggregates writes DH's aggregate analytics into the comp cache.
+func (s *CardTrajectoryRefreshScheduler) cacheCompAggregates(ctx context.Context, dhCardID int, resp *dh.GradedSalesAnalyticsResponse) {
+	if s.compCacheStore == nil || resp == nil || !resp.HasData {
+		return
+	}
+	rec := postgres.DHCompCacheRecord{
+		DHCardID:    dhCardID,
+		Grade:       s.config.Grade,
+		TotalSales:  resp.TotalSales,
+		MedianCents: mathutil.ToCentsInt(resp.MedianPrice),
+		AvgCents:    mathutil.ToCentsInt(resp.AvgPrice),
+	}
+	if resp.PriceChange30d != nil {
+		pct := *resp.PriceChange30d
+		rec.PriceChange30dPct = &pct
+	}
+	if ps, ok := resp.PeriodStats["90d"]; ok {
+		rec.RecentCount90d = ps.Count
+		if ps.MinPrice != nil {
+			rec.MinCents = mathutil.ToCentsInt(*ps.MinPrice)
+		}
+		if ps.MaxPrice != nil {
+			rec.MaxCents = mathutil.ToCentsInt(*ps.MaxPrice)
+		}
+		if ps.MedianPrice != nil {
+			rec.MedianCents = mathutil.ToCentsInt(*ps.MedianPrice)
+		}
+	}
+	if err := s.compCacheStore.UpsertCache(ctx, rec); err != nil {
+		s.logger.Debug(ctx, "DH comp cache: upsert failed",
+			observability.Int("dh_card_id", dhCardID),
+			observability.Err(err))
+	}
 }

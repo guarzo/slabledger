@@ -65,6 +65,7 @@ type MarketMoversRefreshScheduler struct {
 	statsMu        sync.RWMutex
 	client         *marketmovers.Client
 	store          *postgres.MarketMoversStore
+	salesStore     *postgres.MMSalesStore
 	purchaseLister MMPurchaseLister
 	valueUpdater   MMValueUpdater
 	logger         observability.Logger
@@ -90,6 +91,12 @@ func (s *MarketMoversRefreshScheduler) SetClient(client *marketmovers.Client) {
 	s.clientMu.Lock()
 	defer s.clientMu.Unlock()
 	s.client = client
+}
+
+// SetSalesStore attaches the MM sales comp store for comp enrichment.
+// Must be called before Start — not safe for concurrent use.
+func (s *MarketMoversRefreshScheduler) SetSalesStore(store *postgres.MMSalesStore) {
+	s.salesStore = store
 }
 
 // getClient returns the current API client under the lock.
@@ -351,6 +358,11 @@ func (s *MarketMoversRefreshScheduler) runOnce(ctx context.Context) error {
 		counts.updated++
 		// Clear any prior error on this purchase now that it's successfully priced.
 		s.recordMMError(ctx, p.ID, "")
+	}
+
+	// Phase 2: refresh sales comps for comp summary enrichment.
+	if s.salesStore != nil {
+		s.refreshSalesComps(ctx, client, mappingByCert)
 	}
 
 	s.logger.Info(ctx, "MM refresh: complete",
