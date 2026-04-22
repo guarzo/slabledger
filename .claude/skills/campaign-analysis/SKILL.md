@@ -27,6 +27,12 @@ Try to read `docs/private/CAMPAIGN_STRATEGY.md`. It contains campaign design int
 
 If the file is missing (fresh checkout, sanitised worktree), don't fail. Tell the user: *"Strategy doc not found at docs/private/CAMPAIGN_STRATEGY.md — I'll analyse numerically but won't cross-reference design intent. Want to point me at it?"* and continue with data-only analysis.
 
+### Step 1 addendum — Strategy-doc adversarial treatment
+
+When the strategy doc describes a **proposed or planned change** (language like "considering", "planning to", "next step", "proposed"), treat it as a claim to verify, NOT as current state. Before using any proposal's numbers in analysis, verify against live API data (`/api/campaigns`, `/api/portfolio/health`, etc.) that the change was or was NOT already applied. Do not anchor on unverified proposals.
+
+When the strategy doc states **current parameters**, cross-check against `/api/campaigns` for fields the API stores (buy terms via `buyTermsCLPct`, daily cap via `dailySpendCapCents`, eBay fee via `ebayFeePct`). Disagreement between the strategy doc and live API is a Playbook D signal — surface it, don't silently resolve it in either direction.
+
 ### Step 1a — Parse current campaign parameters from the strategy doc
 
 **The strategy doc is the source of truth for current campaign parameters.** The app stores only buy terms, daily cap, and eBay fee — it does NOT store year range, grade range, price range, CL confidence, or inclusion lists. `/api/campaigns` and `/api/campaigns/{id}` return empty strings for those fields. The "Quick-Copy Campaign Formats" section at the bottom of the strategy doc has the actual current values.
@@ -59,11 +65,21 @@ curl -sf -H "Authorization: Bearer $LOCAL_API_TOKEN" $PRODUCTION_URL/api/health
 
 Set `BASE_URL=$PRODUCTION_URL` if that works. Fall back to `http://localhost:8081` if production is unreachable. If localhost also fails, suggest `go build -o slabledger ./cmd/slabledger && ./slabledger`. Resolving auth *before* the production check matters because every fetch in the next step is authenticated.
 
+## API footguns — read before interpreting any data
+
+Known traps that have caused wrong analysis in past sessions. This block is reference, not procedural — it's here so every invocation has it in context before data interpretation begins.
+
+- **`spendThisWeekCents` is structurally low early in the week.** On Mon/Tue/Wed this field reflects 1–3 days of purchases, not a full week. Never compare it to a full-week figure or conclude "buying paused" from a partial-week number. Use `/portfolio/weekly-history` for full-week comparisons.
+- **`purchaseDate` lags `createdAt` by 1–2 days.** The date a purchase appears in date-bucketed views is not the date it was made. This affects any week-boundary calculation.
+- **`/api/inventory` is unsold-only, not a purchase log.** It shows current stock. It does not show what was bought and already sold. Don't infer purchase volume from inventory count alone.
+- **External campaign: filter from all ROI and margin calculations.** The "External" campaign has `cost basis = 0` for pre-campaign purchases. Any portfolio-wide character/grade/era ROI calculation that includes External will be inflated. This is a hard exclusion, not a caveat — filter it out everywhere.
+- **`/api/campaigns` returns empty strings for year range, grade range, price range, CL confidence, and inclusion lists.** The strategy doc is authoritative for these fields (see Step 1a). The API is not. *(Fixing the API to return these fields is planned as separate backend work.)*
+
 ## Step 3 — Fetch the initial snapshot (default entry point)
 
 Fetch these in parallel:
 
-- `GET /api/campaigns` — for name ↔ UUID resolution; filter out archived campaigns and any campaign with `kind == "external"` (synthetic catch-all buckets for pre-campaign purchases — excluded from the portfolio-at-a-glance line)
+- `GET /api/campaigns` — for name ↔ UUID resolution; filter out archived campaigns and any campaign with `kind == "external"` (synthetic catch-all buckets for pre-campaign purchases with cost basis = 0 — excluded from the portfolio-at-a-glance line AND from all ROI, margin, and sell-through calculations throughout the session; see API footguns)
 - `GET /api/portfolio/health` — per-campaign status, reason, capital at risk
 - `GET /api/portfolio/weekly-review` — week-over-week deltas
 - `GET /api/portfolio/insights` — cross-campaign segmentation by character, grade, era, tier. **Fetch AND parse** — extract `byCharacter` (filter `soldCount ≥ 3`, sort by ROI desc), `byGrade`, `byPriceTier`, `byCharacterGrade` standouts, and `coverageGaps` before drafting the opener. Listing only the response keys is not analysis.
@@ -73,74 +89,155 @@ Fetch these in parallel:
 - `GET /api/credit/invoices` — list of *all* unpaid invoices with due dates and `totalCents` per row (backfilled from purchase costs for legacy rows). Use this endpoint to plan a multi-invoice horizon (next 2–4 weeks of obligations), not just one invoice.
 - `GET /api/portfolio/suggestions` — pre-computed adjustments + new-campaign ideas. **Apply the stale-suggestion filter** (Recommendation rules) before surfacing any entry: drop suggestions targeting fields on a campaign whose `updatedAt` is within the last 72h. Treat the remainder as one input among several, not the primary source — the per-campaign tuning + insights segmentation below has the higher-resolution signal.
 - `GET /api/inventory` — per-purchase inventory detail; the opener uses the `inHandUnsoldCount`, `inHandCapitalCents`, `inTransitUnsoldCount`, and `inTransitCapitalCents` fields already on each `CampaignHealth` entry from `/api/portfolio/health` to distinguish **in-hand** (received, sellable now) from **in-transit** (purchased but not yet received) capital. Fetch `/api/inventory` when you need per-card detail for a specific campaign, not just portfolio-wide sums.
-- `GET /api/dh/status` — reads `dh_listings_count` vs `dh_inventory_count` vs `pending_count`. This tells you how much of the in-hand inventory is actually *listed* and generating sales signal. A large received-but-not-listed gap is informational by default; promote it to a top-3 candidate ONLY if the operator config lists `dh_listing_gap` in `operationalPriorities` (otherwise it's a known-system-issue for some operators).
+- `GET /api/dh/status` — reads `dh_listings_count` vs `dh_inventory_count` vs `pending_count`. This tells you how much of the in-hand inventory is actually *listed* and generating sales signal. A large received-but-not-listed gap is informational by default; promote it to a mover candidate ONLY if the operator config lists `dh_listing_gap` in `operationalPriorities` (otherwise it's a known-system-issue for some operators).
 - `GET /api/dh/pending` — the actual per-item pending-push queue (not just the aggregate count). Returns `{items: DHPendingItem[], count: int}` where each item carries `{purchaseId, cardName, setName, grade, recommendedPriceCents, daysQueued, dhConfidence}`. `dhConfidence` is `"high"` (listing synced <24h ago), `"medium"` (<7d), `"low"` (>7d or never synced) — use this as a data-freshness signal when reasoning about whether the queued recommendation is still trustworthy. This is the right endpoint for prioritizing the approval queue by `daysQueued` and sizing projected recovery from `recommendedPriceCents`.
-- `GET /api/campaigns/{id}/tuning` for **each** active campaign with ≥10 purchases — grade × price-tier × `avgBuyPctOfCL` is the highest-resolution tuning signal in the API. The opener's top-3 should look here BEFORE leaning on `/portfolio/suggestions`. Run these in parallel — one call per campaign — not sequentially.
+- `GET /api/campaigns/{id}/tuning` for **each** active campaign with ≥10 purchases — grade × price-tier × `avgBuyPctOfCL` is the highest-resolution tuning signal in the API. The opener's movers should look here BEFORE leaning on `/portfolio/suggestions`. Run these in parallel — one call per campaign — not sequentially.
 - `GET /api/campaigns/{id}/fill-rate` for each active campaign — daily spend vs cap (30-day rolling). Replaces fabricated fill stats from the strategy doc when the opener wants to flag a campaign that's pegged at cap (ramp candidate) or running well below cap (supply constraint, not a tuning issue).
 - `GET /api/intelligence/niches?window=30d&limit=20` — demand-driven acquisition opportunities by `(character, era, grade)`. Each row carries `demand_score`, `opportunity_score`, `velocity_change_pct`, and `current_coverage` (how many active campaigns already cover this segment). High opportunity score with zero coverage = coverage-gap candidate; high velocity change with thin coverage = ramp candidate.
 - `GET /api/intelligence/campaign-signals` — per-campaign velocity acceleration. A sharply decelerating campaign is a tuning candidate (drop terms, narrow scope); an accelerating campaign is a ramp candidate (capital guardrail applies).
 - `GET /api/opportunities/crack` — slabs in inventory where raw value > slabbed value net of cracking cost. Capital-positive moves; bypass the capital guardrail.
-- `GET /api/opportunities/acquisition` — raw-to-graded acquisition mispricings (cards worth buying raw and grading). Feeds Playbook F coverage-gap analysis and provides additional top-3 candidates when a clear $ spread exists.
+- `GET /api/opportunities/acquisition` — raw-to-graded acquisition mispricings (cards worth buying raw and grading). Feeds Playbook F coverage-gap analysis and provides additional mover candidates when a clear $ spread exists.
 - `GET /api/campaigns/{id}/projections` ONLY when validating a specific tuning suggestion's projected impact (the projections endpoint is heavy; prefer per-campaign `/tuning` byGrade for sizing).
 
-Present the opener as **two paragraphs plus a close**:
+### Step 3a — Data quality audit
 
-**Paragraph 1 — "This week I'd do these 3 things:"** Numbered list. Each item names an action, targets (campaign / cards / invoice), sized $ impact with horizon, and confidence band (see Recommendation rules). If the strongest item is a hold verdict, state it directly as item 1 ("Hold — this week's signal is within noise…"); hold items carry no sized $ or confidence band because there is no action being proposed.
+After all Step 3 fetches return, before reconciliation or drafting, audit what you got.
 
-**Where the top-3 actually come from**, in priority order. Walk down the list, skip items with no qualifying signal, take the strongest 3:
+For every endpoint fetched, check:
+1. **Did it return successfully?** If any returned 4xx/5xx or empty body, name it explicitly.
+2. **Is the data fresh enough?** Flag stale data — weekly-history with `weekEnd` more than 7 days ago, intelligence endpoints with 0 rows, campaign-signals with no data, etc.
+3. **What's missing that would improve this analysis?** Surface gaps proactively — e.g., "niches returned 0 rows, coverage-gap analysis unavailable", "no crack candidates exist or endpoint needs seeding."
 
-1. **Capital crunch first** — if in-hand × 1.1 < next invoice amount, the crunch IS item 1 (with options per Playbook B's feasibility precondition). Don't bury it.
-2. **CL-lag edges from `/tuning` and `/insights.byCharacterGrade`** — any `(campaign, grade)` or `(character, grade)` row with `avgBuyPctOfCL ≤ 0.80` AND `roi ≥ 0.20` AND `soldCount ≥ 3` means CL drifted *up* after purchase (CL caught up to market) — this is the operator's winning pattern and should be replicated. Propose matching new buys: same era + same grade tier + similar thin-comp character pool. Avoid the inverse pattern (`avgBuyPctOfCL ≥ 0.93` AND `roi ≤ 0.05`) — that's CL-led-market segments where expansion compounds loss. The fix for those is **scope narrowing (year / price / confidence)**, not terms cutting. See also "CL-lag vs. CL-lead framing" in Data conventions.
-3. **Character inclusion gaps from `/insights.byCharacter` and `byCharacterGrade`** — characters with `soldCount ≥ 5` AND `roi ≥ 0.20` that are absent from the relevant campaign's inclusion list. **Apply the popular-tier exclusion** (see Recommendation rules): never recommend adding Charizard, Pikachu, Blastoise, Venusaur, Mewtwo, Mew, Umbreon, Eevee, Lugia, Ho-Oh, Gengar, or Rayquaza unless a specific `(character, grade, era)` pocket — e.g. Gengar PSA 6 — is showing the CL-lag pattern above. The default assumption for popular-tier is *already contested, already bid, already in your lists.* Sized as `expected revenue = avg net per sale × current monthly sale rate × campaigns-being-added`. **Verify against inclusion lists parsed from the strategy doc (Step 1a) before proposing — the API returns empty strings and is not authoritative.**
-4. **Low-grade underexposure from `/insights.byGrade`** — PSA 5/6/7 rows with ROI > 30% appearing in < 4 campaigns. Expansion candidate (drop a grade floor, add a low-grade engine).
-5. **Velocity acceleration/deceleration from `/intelligence/campaign-signals`** — sharply decelerating campaign = tuning candidate; accelerating with headroom = ramp candidate (capital guardrail applies).
-6. **Crack opportunities from `/opportunities/crack`** — capital-positive, bypasses guardrail. Surface when total `netGainCents` across the queue exceeds ~$1K.
-7. **`/api/portfolio/suggestions` adjustments + newCampaigns** — high/medium-confidence entries with ≥10 dataPoints, **AFTER applying the stale-suggestion filter** (Recommendation rules). Cross-reference each surviving entry against `/tuning` byGrade for sized impact — never echo verbatim.
-8. **DH listing bottleneck** — only if `dh_listing_gap` is in `operationalPriorities` from the operator config; otherwise treat as informational, not top-3.
-9. Coverage-gap prompts (Playbook F) and DH inventory alerts (Playbook G) only after the above are exhausted.
+Output a compact **Data sources** block at the top of the opener:
 
-If nothing in 1–8 fires, the opener can legitimately produce a hold verdict for item 1 — that's a real signal that there's nothing to do, not a failure to find something. Cite the trailing-mean from `/portfolio/weekly-history` to justify the hold.
+    Data sources: /portfolio/{health ✓, insights ✓, weekly-review ✓, weekly-history ✓, channel-velocity ✓, suggestions ✓}, /credit/{summary ✓, invoices ✓}, /dh/{status ✓, pending ✓}, /intelligence/{niches ✓, campaign-signals ✓}, /opportunities/{crack ✓, acquisition ✓}, /campaigns/{id}/{tuning ✓, fill-rate ✓} ×N
+    Missing/degraded: /intelligence/niches (0 rows), /opportunities/crack (404)
+    Impact: coverage-gap and crack analysis unavailable this session
 
-**Paragraph 2 — "Portfolio at a glance:"** One compressed line. Per-active-campaign format depends on the in-transit share:
+The **Impact** line is mandatory — it tells the user what they *can't* trust in this analysis because of data gaps, before any claims are made. If everything returned cleanly, the Impact line is: `Impact: all sources healthy, no analysis gaps.`
 
-- If **in-transit ≤ 50%** of the campaign's unsold count, use `Name ROI% / ST% / N unsold $X.XK` (single combined figure — the distinction doesn't materially change what the user can do).
-- If **in-transit > 50%** (common during a large invoice cycle), use `Name ROI% / ST% / Nₕ in-hand + Mᵢ in-transit $X.XK` (subscripts literal: `5ₕ + 11ᵢ`). This makes it obvious when a campaign's headline capital is not actually sellable. Always do this split for campaigns at 100% in-transit — their headline dollar number is misleading otherwise.
+This replaces the previous `Data sources:` one-liner from the Data integrity section. The audit version is richer — it names failures and their consequences.
 
-Separate campaigns with ` • `. Omit healthy campaigns with total unsold value under ~$500 unless they're on a top-3 candidate list.
+### Step 3b — Reconciliation gate
 
-Then: `Outstanding $X.XK / N.N weeks to cover / trend ↗|↘|→`. Then **upcoming invoices** (not just one): list every unpaid invoice from `/api/credit/invoices` with due date in the next 4 weeks, formatted as `Invoices: $X.XK due YYYY-MM-DD, $Y.YK due YYYY-MM-DD`. Multi-invoice horizon matters because the user often has one invoice landing while the next is two weeks out, and capital planning is for the rolling window, not just next Friday.
+After the data quality audit, before writing the opener. Answer three questions from **≥2 independent endpoints each**. If sources contradict, STOP and surface the contradiction instead of drafting.
 
-Then **always** a capital-crunch line: `In-hand $X.XK of $Y.YK unsold (rest in-transit for invoice YYYY-MM-DD), DH listed: N of M mapped` — this is the single most important signal for what the user can actually do this week, and the opener is wrong when it treats in-transit cards as liquidatable. If in-hand capital × 1.1 < next invoice amount, mark this paragraph with a ⚠ and spell out the gap explicitly ("⚠ capital crunch: $X.XK in-hand can't cover $Y.YK invoice; short ~$Z.ZK").
+**Q1 — Is the operator buying, slowing, or paused?**
+- Sources (use 2+): `/portfolio/weekly-history` (full-week purchase counts, trailing trend), `/inventory` (recent `createdAt` dates on purchases), `/credit/invoices` (`pendingReceiptCents` — nonzero means recent buying happened)
+- **NOT** from `weekly-review.spendThisWeekCents` alone — see API footguns (partial-week trap)
 
-**Close:** Targeted question referencing the strongest action, not a generic menu. Example: *"Want me to walk through the Wildcard liquidation list, pull up C7 tuning detail, or take something else?"*
+**Q2 — What's the sales trajectory vs trailing 4-week mean?**
+- Sources (use 2+): `/portfolio/weekly-history` (compute trailing-4-week mean from the 4 most recent full weeks), `/portfolio/health` (per-campaign sell-through), `/credit/summary` (recovery trend direction)
+- Full-week to full-week comparisons only. Never compare a partial current week to a full trailing mean.
+
+**Q3 — Does credit/summary's trajectory reconcile with observed sales pace?**
+- Sources: `/credit/summary` (`weeksToCover`, `recoveryTrend`, `alertLevel`), `/portfolio/weekly-history` (is weekly revenue trending in the same direction as `recoveryTrend` claims?)
+- If `recoveryTrend` says `"improving"` but weekly revenue from `/weekly-history` is flat or declining over the last 3+ weeks, that's a contradiction.
+
+**Contradiction handling.** If any of the three checks produces a contradiction, the opener becomes a **contradiction report** instead of analysis:
+
+> "Before I can analyze this week, these signals disagree: [specifics with endpoint citations]. Which do you trust, or should we dig into why they diverge?"
+
+No movers, no actions, no portfolio-at-a-glance — just the contradiction and a question. Resume normal analysis only after the user resolves the contradiction or tells you which source to trust.
+
+**Strategy-doc adversarial check.** After the three questions pass, if the strategy doc describes any *proposed* change (language like "considering", "planning to", "next step"), verify against live API data that the change was NOT already applied before using any of the proposal's numbers in the opener. See Step 1 addendum.
+
+Present the opener as **a data-sources block, reconciliation summary, movers, conditional actions, portfolio snapshot, and close**:
+
+**Data sources block** — output from Step 3a (the data quality audit). Always first.
+
+**Reconciliation summary (1 line)** — confirms the three Step 3b checks passed. State the answers concisely. Example: *"Buying active (14 purchases this week per weekly-history, consistent with trailing mean of 12/wk per same source + createdAt dates in inventory). Sales up 18% WoW vs 4-week mean (weekly-history + health). Credit recovery tracking (summary trend matches revenue direction)."*
+
+**Biggest movers (1 paragraph, factual-first)** — plain language, ordered by magnitude of change. Each mover states what changed, from what to what, and which endpoints agree.
+
+Rules:
+- No fixed count — could be 1 mover or 5, driven by data.
+- **Two-source rule:** only movers backed by 2+ endpoints make the list. Single-source observations can appear but must be labeled: *"(single-source, unverified: [endpoint])."*
+- Each mover is an observation, not a recommendation. State the fact, not the action.
+- Use the **"Where movers come from" priority list** below to identify candidates, but do not force entries from every priority level.
+
+**Where movers come from**, in priority order. Walk down the list, surface the most significant changes. Not every level will have a mover — that's fine.
+
+1. **Capital position changes** — in-hand capital vs next invoice, any crunch signal from the capital-crunch line math.
+2. **CL-lag / CL-lead shifts from `/tuning` and `/insights.byCharacterGrade`** — segments where `avgBuyPctOfCL` moved materially since last session or deviates sharply from contract terms. See "CL-lag vs. CL-lead framing" in Data conventions.
+3. **Sell-through or ROI movement from `/portfolio/health` + `/portfolio/weekly-history`** — campaigns with WoW delta outside the ±10% noise band of their trailing-4-week mean.
+4. **Fill-rate changes from `/campaigns/{id}/fill-rate`** — campaigns newly pegged at cap (ramp signal) or sharply below cap (supply or terms signal). Apply the Cap-diagnostic rule before interpreting low fill as supply-constrained.
+5. **Velocity acceleration/deceleration from `/intelligence/campaign-signals`** — sharp moves (>25% acceleration or deceleration).
+6. **Character/grade segment standouts from `/insights`** — new high-ROI characters appearing, or previously strong segments deteriorating. Apply the Popular-tier exclusion (see Recommendation rules) when surfacing character-level movers.
+7. **Crack opportunities from `/opportunities/crack`** — when total `netGainCents` across the queue exceeds ~$1K. Capital-positive, bypasses the guardrail.
+8. **DH listing gap** — only if `dh_listing_gap` is in `operationalPriorities` from operator config; otherwise treat as informational, not a mover.
+
+**Conditional actions** — after the movers paragraph, for any mover that has an obvious lever, propose an action with sizing and confidence band (per Recommendation rules). Each action must be backed by the same 2+ endpoints that supported the mover. If the data supports 0 actions, propose 0 — don't fabricate. If it supports 5, list 5. The count is data-driven, not template-driven.
+
+When the strongest signal is a hold (WoW delta within noise band per the hold-verdict rule), state it directly: *"Hold — this week's ROI of X% is within ±10% of the Y% trailing-mean. Noise, not signal. No parameter changes indicated."* A hold week with 0 actions and interesting movers is a valid, complete opener.
+
+For actions that ARE proposed, apply all existing Recommendation rules: Sizing, Confidence bands, Capital guardrail, Sequencing, Popular-tier exclusion, Sub-$150 modern floor, Turnover gate, Cap-diagnostic rule. These rules are unchanged.
+
+**Portfolio at a glance** — Per-active-campaign line (excluding External — see API footguns). Format depends on the in-transit share:
+
+- If **in-transit ≤ 50%** of the campaign's unsold count, use `Name ROI% / ST% / N unsold $X.XK` (single combined figure).
+- If **in-transit > 50%** (common during a large invoice cycle), use `Name ROI% / ST% / Nₕ in-hand + Mᵢ in-transit $X.XK` (subscripts literal: `5ₕ + 11ᵢ`). Always do this split for campaigns at 100% in-transit.
+
+Separate campaigns with ` • `. Omit healthy campaigns with total unsold value under ~$500 unless they're on a mover or action list.
+
+Then: `Outstanding $X.XK / N.N weeks to cover / trend ↗|↘|→`. Then **upcoming invoices** (4-week horizon): list every unpaid invoice from `/api/credit/invoices` with due date in the next 4 weeks, formatted as `Invoices: $X.XK due YYYY-MM-DD, $Y.YK due YYYY-MM-DD`.
+
+Then **always** a capital-crunch line: `In-hand $X.XK of $Y.YK unsold (rest in-transit), DH listed: N of M mapped`. If in-hand capital × 1.1 < next invoice amount, mark with ⚠: `⚠ capital crunch: $X.XK in-hand can't cover $Y.YK invoice; short ~$Z.ZK`.
+
+**Close** — targeted question referencing the strongest mover or action, not a generic menu. If actions were proposed, reference the top one. If no actions, reference the most interesting mover: *"Want me to dig into the C3 sell-through jump, look at why C7 fill rate dropped, or something else?"*
 
 Keep it concise — the goal is to prompt a focused follow-up, not dump a report.
 
-#### Example opening turn — clean signal
+#### Example opening turn — clean signal with actions
 
 > **User:** /campaign-analysis
 >
-> **Assistant:** This week I'd do these 3 things:
-> 1. Liquidate ~$4.2K of Wildcard via DH to cover the 4/22 invoice — est. +$3.7K recovery, ~8 days to turn (Confidence: H).
-> 2. Drop Campaign 7 buy terms 80→76% — empirical optimum over 42 obs, est. +$1.1K/mo at current fill (Confidence: H).
-> 3. Approve 8 pending DH pushes — oldest queued 11 days, est. +$2.3K recovery (Confidence: M).
+> **Assistant:**
+> Data sources: /portfolio/{health ✓, insights ✓, weekly-review ✓, weekly-history ✓, channel-velocity ✓, suggestions ✓}, /credit/{summary ✓, invoices ✓}, /dh/{status ✓, pending ✓}, /intelligence/{niches (0 rows), campaign-signals ✓}, /opportunities/{crack ✓, acquisition ✓}, /campaigns/{id}/{tuning ✓, fill-rate ✓} ×6
+> Missing/degraded: /intelligence/niches (0 rows)
+> Impact: coverage-gap analysis unavailable this session.
 >
-> **Portfolio at a glance:** Wildcard 14% ROI / 38% ST / 47 unsold $18.2K • C7 3% ROI / 22% ST / 61 unsold $12.6K • C3 9% ROI / 41% ST / 22 unsold $5.8K • Outstanding $41.8K / 3.2 weeks to cover / trend → • Next invoice $8.2K due 4/22.
+> Buying active (12 purchases this week, trailing mean 11/wk). Sales up 22% WoW vs 4-week mean (weekly-history + health). Credit recovery tracking (summary trend matches revenue direction).
 >
-> Want me to walk through the Wildcard liquidation list, dig into C7 tuning, or pull up the DH approvals?
+> Biggest movers this week: C3 sell-through jumped from 31% to 44%, driven by a DH channel surge (health + weekly-history). C7 fill rate dropped to 12% of cap — down from 35% last week (fill-rate + weekly-history spend). In-hand capital rose to $18.2K of $26.1K total unsold as this week's transit batch landed (health).
+>
+> The C3 surge and rising in-hand capital point to a clean liquidation window for the 4/29 invoice: est. +$3.7K recovery from ~$4.2K of in-hand Wildcard inventory via DH, ~8 days to turn (Confidence: H — channel-velocity + health agree on days-to-sell). C7's fill-rate drop is interesting but single-week — holding on parameter changes per the trailing-mean rule.
+>
+> **Portfolio at a glance:** Wildcard 14% / 38% ST / 47 unsold $18.2K • C7 3% / 22% ST / 61 unsold $12.6K • C3 9% / 44% ST / 22 unsold $5.8K • Outstanding $41.8K / 3.2 weeks to cover / trend → • Invoices: $8.2K due 2026-04-29 • In-hand $18.2K of $26.1K unsold (rest in-transit), DH listed: 34 of 47 mapped.
+>
+> Want me to walk through the Wildcard liquidation list, or dig into C7's fill-rate drop?
 
-#### Example opening turn — hold verdict
+#### Example opening turn — hold week, no actions
 
 > **User:** /campaign-analysis
 >
-> **Assistant:** This week I'd do these 3 things:
-> 1. Hold — WoW ROI of 12% is within ±10% of the 11.8% trailing-week mean. Noise, not signal. No parameter changes indicated.
-> 2. Approve 4 pending DH pushes — oldest queued 9 days, est. +$1.1K recovery (Confidence: M).
-> 3. Review the 6 aging-inventory candidates flagged in Playbook C (days-held > 2× channel velocity, Confidence: M).
+> **Assistant:**
+> Data sources: /portfolio/{health ✓, insights ✓, weekly-review ✓, weekly-history ✓, channel-velocity ✓, suggestions ✓}, /credit/{summary ✓, invoices ✓}, /dh/{status ✓, pending ✓}, /intelligence/{niches (0 rows), campaign-signals ✓}, /opportunities/{crack ✓, acquisition ✓}, /campaigns/{id}/{tuning ✓, fill-rate ✓} ×6
+> Missing/degraded: /intelligence/niches (0 rows)
+> Impact: coverage-gap analysis unavailable this session.
 >
-> **Portfolio at a glance:** Wildcard 13% ROI / 36% ST / 45 unsold $17.8K • C7 7% ROI / 31% ST / 38 unsold $8.2K • C3 10% ROI / 44% ST / 19 unsold $4.9K • Outstanding $38.4K / 3.0 weeks to cover / trend ↘ • Next invoice $7.6K due 4/29.
+> Buying active (11 purchases, trailing mean 12/wk). Sales flat — 1.2% below 4-week mean (weekly-history + health). Credit recovery tracking (summary trend matches).
 >
-> Pull up the DH approvals, look at the aging candidates, or something else?
+> Hold — this week's portfolio ROI of 11.4% is within ±10% of the 11.8% trailing-mean. No significant movers across campaigns. C7 fill rate steady at 34%. DH pending queue is 4 items (oldest 3 days — not urgent).
+>
+> **Portfolio at a glance:** Wildcard 13% / 36% ST / 45 unsold $17.8K • C7 7% / 31% ST / 38 unsold $8.2K • C3 10% / 44% ST / 19 unsold $4.9K • Outstanding $38.4K / 3.0 weeks to cover / trend ↘ • Invoices: $7.6K due 2026-05-06 • In-hand $15.2K of $22.8K unsold, DH listed: 31 of 45 mapped.
+>
+> Quiet week. Want me to look at the DH pending queue, review aging inventory, or something else?
+
+#### Example opening turn — contradiction detected
+
+> **User:** /campaign-analysis
+>
+> **Assistant:**
+> Data sources: /portfolio/{health ✓, insights ✓, weekly-review ✓, weekly-history ✓, ...}
+> Missing/degraded: none
+> Impact: all sources healthy.
+>
+> Before I can analyze this week, these signals disagree:
+>
+> **Buying status:** `/credit/summary` shows `recoveryTrend: "improving"` and `weeksToCover` dropped from 4.1 to 3.6, but `/portfolio/weekly-history` shows revenue declined 15% WoW for 3 consecutive weeks. An improving recovery trend with declining revenue doesn't reconcile — either the recovery metric is lagging or there's a one-time payment skewing the trend.
+>
+> Which do you trust, or should we dig into why they diverge?
 
 ## Step 4 — Follow-up playbooks
 
@@ -165,7 +262,9 @@ Every numeric claim about purchases, sales, capital, campaign state, or market s
 
 Operating rules:
 
-- Open the response with a one-line **Data sources** prefix listing the endpoints fetched this turn. Compact form is fine: `Data sources: /api/portfolio/{health,insights,suggestions,weekly-review,weekly-history,channel-velocity}, /api/credit/{summary,invoices}, /api/dh/{status,pending}, /api/intelligence/{niches,campaign-signals}, /api/opportunities/{crack,acquisition}, /api/campaigns/{id}/{tuning,fill-rate} ×N`.
+- **Two-source rule for opener claims.** Every numeric claim in the opener (reconciliation summary, movers, conditional actions) must be backed by 2+ endpoints that agree, or explicitly labeled *"(single-source, unverified: [endpoint])."* This rule applies to the opener only — playbook follow-up responses can cite single endpoints since the user has already chosen what to dig into.
+- **External campaign exclusion.** Filter the External campaign (`kind == "external"`) from all ROI, margin, and sell-through calculations throughout the session. This is a hard exclusion, not a caveat. External's zero cost basis inflates every aggregate it touches.
+- **Data sources block.** The opener's data-sources block is produced by Step 3a (data quality audit). It replaces the old one-line prefix — it now names failures, staleness, and their impact on analysis. Playbook follow-up responses still use the compact one-line form: `Data sources: /api/...`.
 - If an endpoint returned 4xx/5xx, an empty body, or was skipped intentionally, name it explicitly. Do not paper over a missing fetch with prior knowledge.
 - **Parse what you fetch.** When you fetch `/insights` or `/tuning`, surface at least one segment-level aggregate (`byCharacter` row, `byGrade` row, `byPriceTier` row, or `(campaign, grade) avgBuyPctOfCL`) before drafting the opener. Listing the response keys is not analysis.
 - Re-fetch after any mutation, and after >5 minutes within a session.
