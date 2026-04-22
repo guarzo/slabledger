@@ -17,10 +17,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Compile-time check that the shared mocks satisfy the handler interfaces.
+// Compile-time checks that the shared mocks satisfy the handler interfaces.
 var (
 	_ DHMappingDeleter   = (*mocks.DHMappingDeleterMock)(nil)
 	_ DHInventoryDeleter = (*mocks.DHInventoryDeleterMock)(nil)
+	_ DHUnmatcher        = (*mocks.DHUnmatcherMock)(nil)
 )
 
 func postUnmatchDH(h *DHHandler, purchaseID string) *httptest.ResponseRecorder {
@@ -36,9 +37,8 @@ func TestHandleUnmatchDH(t *testing.T) {
 	receivedAt := "2026-04-22T10:00:00Z"
 
 	type assertions struct {
-		updatedFields     *inventory.DHFieldsUpdate
-		updatedStatus     *string
 		clearedCandidates *string
+		unmatcher         *mocks.DHUnmatcherMock
 		mappingDeleter    *mocks.DHMappingDeleterMock
 		inventoryDeleter  *mocks.DHInventoryDeleterMock
 	}
@@ -49,6 +49,7 @@ func TestHandleUnmatchDH(t *testing.T) {
 		requestAuth  bool
 		repo         func(a *assertions) *mocks.PurchaseRepositoryMock
 		deleteErr    error // injected into DHInventoryDeleterMock.DeleteInventoryFn
+		unmatchErr   error // injected into DHUnmatcherMock.UnmatchPurchaseDHFn
 		mappingErr   error // injected into DHMappingDeleterMock.DeleteAutoMappingFn
 		expectedCode int
 		expectedBody string
@@ -104,13 +105,13 @@ func TestHandleUnmatchDH(t *testing.T) {
 			expectedBody: "invalid purchase state for unmatch",
 		},
 		{
-			// Delete runs first and succeeds; then the DB fields update fails.
+			// Delete runs first and succeeds; then the atomic DB update fails.
 			// The DH inventory is already gone but local state is not cleared —
 			// a retry will hit DH with a 404 which is treated as success.
-			name:        "DBFieldUpdateFails_AfterInventoryDelete",
+			name:        "DBUnmatchFails_AfterInventoryDelete",
 			purchaseID:  "p1",
 			requestAuth: true,
-			repo: func(a *assertions) *mocks.PurchaseRepositoryMock {
+			repo: func(_ *assertions) *mocks.PurchaseRepositoryMock {
 				return &mocks.PurchaseRepositoryMock{
 					GetPurchaseFn: func(_ context.Context, _ string) (*inventory.Purchase, error) {
 						return &inventory.Purchase{
@@ -118,63 +119,18 @@ func TestHandleUnmatchDH(t *testing.T) {
 							DHPushStatus:  inventory.DHPushStatusMatched,
 							DHInventoryID: 666,
 						}, nil
-					},
-					UpdatePurchaseDHFieldsFn: func(_ context.Context, _ string, u inventory.DHFieldsUpdate) error {
-						a.updatedFields = &u
-						return errors.New("db error")
-					},
-					UpdatePurchaseDHPushStatusFn: func(_ context.Context, _ string, status string) error {
-						a.updatedStatus = &status
-						return nil
-					},
-				}
-			},
-			expectedCode: http.StatusInternalServerError,
-			check: func(t *testing.T, a assertions) {
-				t.Helper()
-				require.NotNil(t, a.updatedFields)
-				assert.Nil(t, a.updatedStatus, "UpdatePurchaseDHPushStatus should not be called when UpdatePurchaseDHFields fails")
-				assert.True(t, a.inventoryDeleter.Called, "delete inventory runs before DB updates")
-				assert.False(t, a.mappingDeleter.Called, "mapping delete skipped when DB update fails")
-			},
-		},
-		{
-			// Delete runs first and succeeds; DB fields clear succeeds; status
-			// update fails. Local DB is partially mutated; a retry will clear
-			// status properly since DH inventory is already gone (404 = success).
-			name:        "DBStatusUpdateFails_AfterInventoryDelete",
-			purchaseID:  "p1",
-			requestAuth: true,
-			repo: func(a *assertions) *mocks.PurchaseRepositoryMock {
-				return &mocks.PurchaseRepositoryMock{
-					GetPurchaseFn: func(_ context.Context, _ string) (*inventory.Purchase, error) {
-						return &inventory.Purchase{
-							ID:            "p1",
-							DHPushStatus:  inventory.DHPushStatusMatched,
-							DHInventoryID: 666,
-						}, nil
-					},
-					UpdatePurchaseDHFieldsFn: func(_ context.Context, _ string, u inventory.DHFieldsUpdate) error {
-						a.updatedFields = &u
-						return nil
-					},
-					UpdatePurchaseDHPushStatusFn: func(_ context.Context, _ string, status string) error {
-						a.updatedStatus = &status
-						return errors.New("db error")
 					},
 					UpdatePurchaseDHCandidatesFn: func(_ context.Context, _ string, c string) error {
-						a.clearedCandidates = &c
 						return nil
 					},
 				}
 			},
+			unmatchErr:   errors.New("db error"),
 			expectedCode: http.StatusInternalServerError,
 			check: func(t *testing.T, a assertions) {
 				t.Helper()
-				require.NotNil(t, a.updatedFields)
-				require.NotNil(t, a.updatedStatus)
-				assert.Nil(t, a.clearedCandidates, "UpdatePurchaseDHCandidates should not be called when UpdatePurchaseDHPushStatus fails")
-				assert.True(t, a.inventoryDeleter.Called, "delete inventory runs before DB updates")
+				assert.True(t, a.inventoryDeleter.Called, "delete inventory runs before DB update")
+				assert.True(t, a.unmatcher.Called, "unmatch was attempted")
 				assert.False(t, a.mappingDeleter.Called, "mapping delete skipped when DB update fails")
 			},
 		},
@@ -197,14 +153,6 @@ func TestHandleUnmatchDH(t *testing.T) {
 							ReceivedAt:    nil,
 						}, nil
 					},
-					UpdatePurchaseDHFieldsFn: func(_ context.Context, _ string, u inventory.DHFieldsUpdate) error {
-						a.updatedFields = &u
-						return nil
-					},
-					UpdatePurchaseDHPushStatusFn: func(_ context.Context, _ string, status string) error {
-						a.updatedStatus = &status
-						return nil
-					},
 					UpdatePurchaseDHCandidatesFn: func(_ context.Context, _ string, c string) error {
 						a.clearedCandidates = &c
 						return nil
@@ -214,11 +162,9 @@ func TestHandleUnmatchDH(t *testing.T) {
 			expectedCode: http.StatusOK,
 			check: func(t *testing.T, a assertions) {
 				t.Helper()
-				require.NotNil(t, a.updatedFields)
-				assert.Equal(t, 0, a.updatedFields.CardID)
-				assert.Equal(t, 0, a.updatedFields.InventoryID)
-				require.NotNil(t, a.updatedStatus)
-				assert.Equal(t, inventory.DHPushStatusUnmatched, *a.updatedStatus)
+				assert.True(t, a.unmatcher.Called)
+				assert.Equal(t, "p1", a.unmatcher.PurchaseID)
+				assert.Equal(t, inventory.DHPushStatusUnmatched, a.unmatcher.PushStatus)
 				require.NotNil(t, a.clearedCandidates)
 				assert.Equal(t, "", *a.clearedCandidates)
 				assert.True(t, a.inventoryDeleter.Called, "DeleteInventory should be called when inventory ID is set")
@@ -249,14 +195,6 @@ func TestHandleUnmatchDH(t *testing.T) {
 							ReceivedAt:    &receivedAt,
 						}, nil
 					},
-					UpdatePurchaseDHFieldsFn: func(_ context.Context, _ string, u inventory.DHFieldsUpdate) error {
-						a.updatedFields = &u
-						return nil
-					},
-					UpdatePurchaseDHPushStatusFn: func(_ context.Context, _ string, status string) error {
-						a.updatedStatus = &status
-						return nil
-					},
 					UpdatePurchaseDHCandidatesFn: func(_ context.Context, _ string, c string) error {
 						a.clearedCandidates = &c
 						return nil
@@ -266,8 +204,9 @@ func TestHandleUnmatchDH(t *testing.T) {
 			expectedCode: http.StatusOK,
 			check: func(t *testing.T, a assertions) {
 				t.Helper()
-				require.NotNil(t, a.updatedStatus)
-				assert.Equal(t, inventory.DHPushStatusPending, *a.updatedStatus, "received items should go to pending for immediate retry")
+				assert.True(t, a.unmatcher.Called)
+				assert.Equal(t, inventory.DHPushStatusPending, a.unmatcher.PushStatus,
+					"received items should go to pending for immediate retry")
 				assert.True(t, a.inventoryDeleter.Called)
 				assert.Equal(t, 666, a.inventoryDeleter.InventoryID)
 			},
@@ -289,14 +228,6 @@ func TestHandleUnmatchDH(t *testing.T) {
 							DHInventoryID: 0,
 						}, nil
 					},
-					UpdatePurchaseDHFieldsFn: func(_ context.Context, _ string, u inventory.DHFieldsUpdate) error {
-						a.updatedFields = &u
-						return nil
-					},
-					UpdatePurchaseDHPushStatusFn: func(_ context.Context, _ string, status string) error {
-						a.updatedStatus = &status
-						return nil
-					},
 					UpdatePurchaseDHCandidatesFn: func(_ context.Context, _ string, c string) error {
 						a.clearedCandidates = &c
 						return nil
@@ -307,6 +238,7 @@ func TestHandleUnmatchDH(t *testing.T) {
 			check: func(t *testing.T, a assertions) {
 				t.Helper()
 				assert.False(t, a.inventoryDeleter.Called, "DeleteInventory should be skipped when inventory ID is 0")
+				assert.True(t, a.unmatcher.Called, "UnmatchPurchaseDH should still be called")
 				assert.True(t, a.mappingDeleter.Called, "DeleteAutoMapping should still be called")
 			},
 		},
@@ -316,7 +248,7 @@ func TestHandleUnmatchDH(t *testing.T) {
 			name:        "DeleteInventoryFails_ReturnsError",
 			purchaseID:  "p1",
 			requestAuth: true,
-			repo: func(a *assertions) *mocks.PurchaseRepositoryMock {
+			repo: func(_ *assertions) *mocks.PurchaseRepositoryMock {
 				return &mocks.PurchaseRepositoryMock{
 					GetPurchaseFn: func(_ context.Context, _ string) (*inventory.Purchase, error) {
 						return &inventory.Purchase{
@@ -329,14 +261,6 @@ func TestHandleUnmatchDH(t *testing.T) {
 							DHInventoryID: 666,
 						}, nil
 					},
-					UpdatePurchaseDHFieldsFn: func(_ context.Context, _ string, u inventory.DHFieldsUpdate) error {
-						a.updatedFields = &u
-						return nil
-					},
-					UpdatePurchaseDHPushStatusFn: func(_ context.Context, _ string, status string) error {
-						a.updatedStatus = &status
-						return nil
-					},
 				}
 			},
 			deleteErr:    errors.New("DH unavailable"),
@@ -344,8 +268,7 @@ func TestHandleUnmatchDH(t *testing.T) {
 			check: func(t *testing.T, a assertions) {
 				t.Helper()
 				assert.True(t, a.inventoryDeleter.Called)
-				assert.Nil(t, a.updatedFields, "DB must not be mutated when delete fails")
-				assert.Nil(t, a.updatedStatus, "DB must not be mutated when delete fails")
+				assert.False(t, a.unmatcher.Called, "DB must not be touched when delete fails")
 				assert.False(t, a.mappingDeleter.Called)
 			},
 		},
@@ -368,14 +291,6 @@ func TestHandleUnmatchDH(t *testing.T) {
 							DHInventoryID: 666,
 						}, nil
 					},
-					UpdatePurchaseDHFieldsFn: func(_ context.Context, _ string, u inventory.DHFieldsUpdate) error {
-						a.updatedFields = &u
-						return nil
-					},
-					UpdatePurchaseDHPushStatusFn: func(_ context.Context, _ string, status string) error {
-						a.updatedStatus = &status
-						return nil
-					},
 					UpdatePurchaseDHCandidatesFn: func(_ context.Context, _ string, c string) error {
 						a.clearedCandidates = &c
 						return nil
@@ -387,8 +302,8 @@ func TestHandleUnmatchDH(t *testing.T) {
 			check: func(t *testing.T, a assertions) {
 				t.Helper()
 				assert.True(t, a.inventoryDeleter.Called)
-				require.NotNil(t, a.updatedStatus, "local state must be cleared when DH returns 404")
-				assert.Equal(t, inventory.DHPushStatusUnmatched, *a.updatedStatus)
+				assert.True(t, a.unmatcher.Called, "local state must be cleared when DH returns 404")
+				assert.Equal(t, inventory.DHPushStatusUnmatched, a.unmatcher.PushStatus)
 				assert.True(t, a.mappingDeleter.Called)
 			},
 		},
@@ -409,14 +324,6 @@ func TestHandleUnmatchDH(t *testing.T) {
 							DHInventoryID: 666,
 						}, nil
 					},
-					UpdatePurchaseDHFieldsFn: func(_ context.Context, _ string, u inventory.DHFieldsUpdate) error {
-						a.updatedFields = &u
-						return nil
-					},
-					UpdatePurchaseDHPushStatusFn: func(_ context.Context, _ string, status string) error {
-						a.updatedStatus = &status
-						return nil
-					},
 					UpdatePurchaseDHCandidatesFn: func(_ context.Context, _ string, c string) error {
 						a.clearedCandidates = &c
 						return nil
@@ -428,9 +335,9 @@ func TestHandleUnmatchDH(t *testing.T) {
 			check: func(t *testing.T, a assertions) {
 				t.Helper()
 				assert.True(t, a.inventoryDeleter.Called)
+				assert.True(t, a.unmatcher.Called)
+				assert.Equal(t, inventory.DHPushStatusUnmatched, a.unmatcher.PushStatus)
 				assert.True(t, a.mappingDeleter.Called)
-				require.NotNil(t, a.updatedStatus, "unmatch must still complete when mapping delete fails")
-				assert.Equal(t, inventory.DHPushStatusUnmatched, *a.updatedStatus)
 			},
 		},
 	}
@@ -440,10 +347,17 @@ func TestHandleUnmatchDH(t *testing.T) {
 			var a assertions
 			a.mappingDeleter = &mocks.DHMappingDeleterMock{}
 			a.inventoryDeleter = &mocks.DHInventoryDeleterMock{}
+			a.unmatcher = &mocks.DHUnmatcherMock{}
 			if tc.deleteErr != nil {
 				deleteErr := tc.deleteErr
 				a.inventoryDeleter.DeleteInventoryFn = func(_ context.Context, _ int) error {
 					return deleteErr
+				}
+			}
+			if tc.unmatchErr != nil {
+				unmatchErr := tc.unmatchErr
+				a.unmatcher.UnmatchPurchaseDHFn = func(_ context.Context, _ string, _ string) error {
+					return unmatchErr
 				}
 			}
 			if tc.mappingErr != nil {
@@ -454,14 +368,13 @@ func TestHandleUnmatchDH(t *testing.T) {
 			}
 			repo := tc.repo(&a)
 			h := NewDHHandler(DHHandlerDeps{
-				PurchaseLister:    repo,
-				DHFieldsUpdater:   repo,
-				PushStatusUpdater: repo,
-				CandidatesSaver:   repo,
-				MappingDeleter:    a.mappingDeleter,
-				InventoryDeleter:  a.inventoryDeleter,
-				Logger:            mocks.NewMockLogger(),
-				BaseCtx:           context.Background(),
+				PurchaseLister:   repo,
+				CandidatesSaver:  repo,
+				MappingDeleter:   a.mappingDeleter,
+				InventoryDeleter: a.inventoryDeleter,
+				DHUnmatcher:      a.unmatcher,
+				Logger:           mocks.NewMockLogger(),
+				BaseCtx:          context.Background(),
 			})
 
 			var rr *httptest.ResponseRecorder

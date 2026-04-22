@@ -79,29 +79,18 @@ func (h *DHHandler) HandleUnmatchDH(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Clear DH card ID and inventory ID.
-	if h.dhFieldsUpdater != nil {
-		if err := h.dhFieldsUpdater.UpdatePurchaseDHFields(ctx, purchase.ID, inventory.DHFieldsUpdate{
-			CardID:      0,
-			InventoryID: 0,
-		}); err != nil {
-			h.logger.Error(ctx, "unmatch dh: clear dh fields", observability.Err(err))
-			writeError(w, http.StatusInternalServerError, "failed to clear DH fields")
-			return
-		}
-	}
-
-	// Re-queue: received items go straight to pending so the push scheduler
-	// retries on the next cycle. Not-yet-received items stay unmatched (they
-	// can't be pushed until the card arrives).
+	// Atomically clear all DH tracking fields and set the re-queue status in
+	// a single UPDATE. Received items go to "pending" so the push scheduler
+	// retries on the next cycle; not-yet-received items go to "unmatched"
+	// (they can't be pushed until the card arrives).
 	newStatus := inventory.DHPushStatusUnmatched
 	if purchase.ReceivedAt != nil {
 		newStatus = inventory.DHPushStatusPending
 	}
-	if h.pushStatusUpdater != nil {
-		if err := h.pushStatusUpdater.UpdatePurchaseDHPushStatus(ctx, purchase.ID, newStatus); err != nil {
-			h.logger.Error(ctx, "unmatch dh: set push status", observability.Err(err))
-			writeError(w, http.StatusInternalServerError, "failed to update push status")
+	if h.dhUnmatcher != nil {
+		if err := h.dhUnmatcher.UnmatchPurchaseDH(ctx, purchase.ID, newStatus); err != nil {
+			h.logger.Error(ctx, "unmatch dh: clear fields and set status", observability.Err(err))
+			writeError(w, http.StatusInternalServerError, "failed to clear DH fields")
 			return
 		}
 	}

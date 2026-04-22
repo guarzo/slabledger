@@ -59,6 +59,13 @@ type DHInventoryDeleter interface {
 	DeleteInventory(ctx context.Context, inventoryID int) error
 }
 
+// DHUnmatcher atomically clears all DH tracking fields and sets the push
+// status in a single DB update. Used by HandleUnmatchDH to avoid partial state
+// between the field-clear and status-update steps.
+type DHUnmatcher interface {
+	UnmatchPurchaseDH(ctx context.Context, purchaseID string, pushStatus string) error
+}
+
 // DHChannelDelister removes a DH inventory item from external sales channels.
 // Used during fix-match to take down channels on the old listing when swapping cards.
 type DHChannelDelister interface {
@@ -154,6 +161,7 @@ type DHHandler struct {
 	candidatesSaver   DHCandidatesSaver   // optional: stores ambiguous candidates
 	mappingDeleter    DHMappingDeleter    // optional: removes auto card_id_mappings on unmatch
 	inventoryDeleter  DHInventoryDeleter  // optional: fully deletes DH inventory item on unmatch
+	dhUnmatcher       DHUnmatcher         // optional: atomic field-clear + status set for unmatch
 	channelDelister   DHChannelDelister   // optional: takes down channels on card swap (fix-match)
 	statusCounter     DHStatusCounter     // optional: efficient push status counts
 	pendingLister     DHPendingLister     // optional: lists DH pending pipeline items
@@ -203,6 +211,7 @@ type DHHandlerDeps struct {
 	CandidatesSaver   DHCandidatesSaver   // optional: stores ambiguous candidates
 	MappingDeleter    DHMappingDeleter    // optional: removes auto card_id_mappings on unmatch
 	InventoryDeleter  DHInventoryDeleter  // optional: fully deletes DH inventory item on unmatch
+	DHUnmatcher       DHUnmatcher         // optional: atomic field-clear + status set for unmatch
 	ChannelDelister   DHChannelDelister   // optional: takes down channels on card swap (fix-match)
 	StatusCounter     DHStatusCounter     // optional: efficient push status counts
 	PendingLister     DHPendingLister     // optional: lists DH pending pipeline items
@@ -242,6 +251,7 @@ func NewDHHandler(deps DHHandlerDeps) *DHHandler {
 		candidatesSaver:   deps.CandidatesSaver,
 		mappingDeleter:    deps.MappingDeleter,
 		inventoryDeleter:  deps.InventoryDeleter,
+		dhUnmatcher:       deps.DHUnmatcher,
 		channelDelister:   deps.ChannelDelister,
 		statusCounter:     deps.StatusCounter,
 		pendingLister:     deps.PendingLister,
