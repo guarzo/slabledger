@@ -84,6 +84,16 @@ func TestNeedsDHPush(t *testing.T) {
 			want: false,
 		},
 		{
+			name: "ShippedButStatusUnmatched_NotEligible",
+			p:    Purchase{PSAShipDate: "2026-04-20", DHPushStatus: DHPushStatusUnmatched},
+			want: false,
+		},
+		{
+			name: "ShippedButStatusManual_NotEligible",
+			p:    Purchase{PSAShipDate: "2026-04-20", DHPushStatus: DHPushStatusManual},
+			want: false,
+		},
+		{
 			name: "ShippedButStatusDismissed_NotEligible",
 			p:    Purchase{PSAShipDate: "2026-04-20", DHPushStatus: DHPushStatusDismissed},
 			want: false,

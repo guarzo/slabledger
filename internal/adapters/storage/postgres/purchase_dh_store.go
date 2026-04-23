@@ -244,15 +244,13 @@ func (ps *PurchaseStore) ClearDHUnlistedDetectedAt(ctx context.Context, purchase
 	)
 }
 
-// GetPurchasesByDHPushStatus returns received, unsold purchases with the given DH push status.
-// Items that have not yet been received (received_at IS NULL) are excluded so that only
-// physically-in-hand inventory is sent to DH.
+// GetPurchasesByDHPushStatus returns received or shipped, unsold purchases with the given DH push status.
 func (ps *PurchaseStore) GetPurchasesByDHPushStatus(ctx context.Context, status string, limit int) ([]inventory.Purchase, error) {
 	query := fmt.Sprintf(
 		`SELECT %s FROM campaign_purchases p
 		 LEFT JOIN campaign_sales s ON s.purchase_id = p.id
 		 WHERE p.dh_push_status = $1
-		   AND p.received_at IS NOT NULL
+		   AND (p.received_at IS NOT NULL OR p.psa_ship_date != '')
 		   AND s.id IS NULL
 		 ORDER BY p.updated_at ASC LIMIT $2`,
 		purchaseColumnsAliased,
@@ -304,9 +302,9 @@ func (ps *PurchaseStore) CountUnsoldByDHPushStatus(ctx context.Context) (map[str
 }
 
 // CountDHPipelineHealth returns the two counts the DH status dashboard needs to
-// reconcile its aggregate with the actual queue: how many received-and-pending
-// rows there are (matches ListDHPendingItems' draining query) and how many
-// received rows have never been enrolled in the push pipeline at all.
+// reconcile its aggregate with the actual queue: how many received-or-shipped
+// pending rows there are (matches ListDHPendingItems' draining query) and how
+// many received-or-shipped rows have never been enrolled in the push pipeline.
 // Both counts exclude sold rows and rows in closed campaigns.
 func (ps *PurchaseStore) CountDHPipelineHealth(ctx context.Context) (inventory.DHPipelineHealth, error) {
 	var health inventory.DHPipelineHealth
@@ -321,7 +319,7 @@ func (ps *PurchaseStore) CountDHPipelineHealth(ctx context.Context) (inventory.D
 		INNER JOIN campaigns c ON c.id = p.campaign_id
 		LEFT JOIN campaign_sales s ON s.purchase_id = p.id
 		WHERE s.id IS NULL
-		  AND p.received_at IS NOT NULL
+		  AND (p.received_at IS NOT NULL OR p.psa_ship_date != '')
 		  AND c.phase != 'closed'
 	`).Scan(&health.PendingReceived, &health.UnenrolledReceived)
 	if err != nil {
@@ -330,9 +328,8 @@ func (ps *PurchaseStore) CountDHPipelineHealth(ctx context.Context) (inventory.D
 	return health, nil
 }
 
-// ListDHPendingItems returns received, unsold purchases that are queued for the DH push
-// pipeline (dh_push_status = 'pending') with an active parent campaign. Each row carries
-// a confidence label based on when DH inventory was last synced for the purchase.
+// ListDHPendingItems returns received or shipped, unsold purchases that are queued for the
+// DH push pipeline (dh_push_status = 'pending') with an active parent campaign.
 func (ps *PurchaseStore) ListDHPendingItems(ctx context.Context) ([]inventory.DHPendingItem, error) {
 	query := `
 		SELECT p.id, p.card_name, p.set_name, p.grade_value,
@@ -341,7 +338,7 @@ func (ps *PurchaseStore) ListDHPendingItems(ctx context.Context) ([]inventory.DH
 		INNER JOIN campaigns c ON c.id = p.campaign_id
 		LEFT JOIN campaign_sales s ON s.purchase_id = p.id
 		WHERE p.dh_push_status = 'pending'
-		  AND p.received_at IS NOT NULL
+		  AND (p.received_at IS NOT NULL OR p.psa_ship_date != '')
 		  AND s.id IS NULL
 		  AND c.phase != 'closed'
 		ORDER BY p.updated_at DESC`
