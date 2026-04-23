@@ -16,7 +16,6 @@ import (
 func velocityJSON(medianDays, vChangePct float64, sample int) string {
 	return `{
 		"median_days_to_sell": ` + strconv.FormatFloat(medianDays, 'f', -1, 64) + `,
-		"avg_days_to_sell": ` + strconv.FormatFloat(medianDays, 'f', -1, 64) + `,
 		"sell_through": {},
 		"sample_size": ` + strconv.Itoa(sample) + `,
 		"velocity_change_pct": ` + strconv.FormatFloat(vChangePct, 'f', -1, 64) + `
@@ -26,7 +25,7 @@ func velocityJSON(medianDays, vChangePct float64, sample int) string {
 // velocityJSONNoChange omits velocity_change_pct — used to verify the service
 // excludes characters with no change metric from contributors.
 func velocityJSONNoChange() string {
-	return `{"median_days_to_sell": 10, "avg_days_to_sell": 10, "sell_through": {}, "sample_size": 5}`
+	return `{"median_days_to_sell": 10, "sell_through": {}, "sample_size": 5}`
 }
 
 func charRow(name string, medianDays, vChangePct float64, sample int, computed time.Time) demand.CharacterCache {

@@ -84,16 +84,6 @@ type signalEntry struct {
 	computedAt  *time.Time
 }
 
-// signalVelocityJSON is the domain-local mirror of the velocity_json blob
-// stored in dh_character_cache (CharacterVelocityFields stored flat).
-type signalVelocityJSON struct {
-	MedianDaysToSell   *float64 `json:"median_days_to_sell"`
-	SampleSize         int      `json:"sample_size"`
-	VelocityChangePct  *float64 `json:"velocity_change_pct"`
-	AvgDailySales      *float64 `json:"avg_daily_sales"`
-	SellThroughRate30d *float64 `json:"sell_through_rate_30d"`
-}
-
 // --- CampaignSignals ---
 
 // CampaignSignals reads all characters from the 30d character cache and, for
@@ -156,7 +146,7 @@ func buildSignalIndex(rows []CharacterCache) (map[string]signalEntry, int) {
 		if row.VelocityJSON == nil || row.AnalyticsComputedAt == nil {
 			continue
 		}
-		var v signalVelocityJSON
+		var v velocityBlobJSON
 		if err := json.Unmarshal([]byte(*row.VelocityJSON), &v); err != nil {
 			skipped++ // non-nil velocity_json failed to parse — unexpected
 			continue

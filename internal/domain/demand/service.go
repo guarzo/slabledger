@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"sort"
 	"time"
+
+	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
 // gradeBuckets enumerated for Phase 1 graded niche buckets.
@@ -39,11 +41,19 @@ var ErrInvalidWindow = errors.New("demand: window must be \"7d\" or \"30d\"")
 type Service struct {
 	repo      Repository
 	campaigns CampaignCoverageLookup
+	logger    observability.Logger
 }
 
 // NewService constructs a Service. Both dependencies are required.
+// Logging defaults to a no-op; use WithLogger to inject a real logger.
 func NewService(repo Repository, campaigns CampaignCoverageLookup) *Service {
-	return &Service{repo: repo, campaigns: campaigns}
+	return &Service{repo: repo, campaigns: campaigns, logger: observability.NewNoopLogger()}
+}
+
+// WithLogger injects a logger and returns the Service for chaining.
+func (s *Service) WithLogger(l observability.Logger) *Service {
+	s.logger = l
+	return s
 }
 
 // LeaderboardOpts controls a Leaderboard call.
@@ -126,7 +136,7 @@ func (s *Service) Leaderboard(ctx context.Context, opts LeaderboardOpts) ([]Nich
 			if !qualityAllowed(opts.MinDataQuality, eraDemand.DataQuality) {
 				continue
 			}
-			market := parseCharacterMarket(row)
+			market := s.parseCharacterMarket(ctx, row)
 			for _, grade := range grades {
 				bucket, bErr := s.buildBucket(row.Character, era, grade, eraDemand, market, coverageFor)
 				if bErr != nil {
@@ -263,11 +273,12 @@ type byEraJSON struct {
 	DataQuality       string  `json:"data_quality"`
 }
 
-// characterVelocityJSON / characterSaturationJSON mirror the cached JSON
+// velocityBlobJSON / characterSaturationJSON mirror the cached JSON
 // blobs for a character row's velocity + saturation surfaces.
 // The blob stores CharacterVelocityFields directly (not the full entry),
-// so all fields are at the top level.
-type characterVelocityJSON struct {
+// so all fields are at the top level. Both Leaderboard and CampaignSignals
+// decode this same blob; they extract the fields they need.
+type velocityBlobJSON struct {
 	MedianDaysToSell   *float64 `json:"median_days_to_sell"`
 	SampleSize         int      `json:"sample_size"`
 	VelocityChangePct  *float64 `json:"velocity_change_pct"`
@@ -298,13 +309,17 @@ func parseCharacterDemand(row CharacterCache) (*characterDemandJSON, bool) {
 
 // parseCharacterMarket extracts the market-axis view (velocity + saturation)
 // from a character cache row. Returns nil if both surfaces are absent.
-func parseCharacterMarket(row CharacterCache) *NicheMarket {
+func (s *Service) parseCharacterMarket(ctx context.Context, row CharacterCache) *NicheMarket {
 	m := &NicheMarket{}
 	has := false
 
 	if row.VelocityJSON != nil {
-		var v characterVelocityJSON
-		if err := json.Unmarshal([]byte(*row.VelocityJSON), &v); err == nil {
+		var v velocityBlobJSON
+		if err := json.Unmarshal([]byte(*row.VelocityJSON), &v); err != nil {
+			s.logger.Warn(ctx, "velocity_json unmarshal failed",
+				observability.String("character", row.Character),
+				observability.Err(err))
+		} else {
 			m.MedianDaysToSell = v.MedianDaysToSell
 			m.VelocityChangePct = v.VelocityChangePct
 			m.SampleSize = v.SampleSize

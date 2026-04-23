@@ -149,12 +149,16 @@ func (s *DHAnalyticsRefreshScheduler) refreshCharacters(ctx context.Context) (
 			if blob, encErr := json.Marshal(entry); encErr == nil {
 				str := string(blob)
 				row.DemandJSON = &str
+			} else {
+				s.logger.Warn(ctx, "marshal character demand JSON", observability.String("character", name), observability.Err(encErr))
 			}
 		}
 		if entry, ok := velocityByChar[name]; ok {
 			if blob, encErr := json.Marshal(entry.Velocity); encErr == nil {
 				str := string(blob)
 				row.VelocityJSON = &str
+			} else {
+				s.logger.Warn(ctx, "marshal character velocity JSON", observability.String("character", name), observability.Err(encErr))
 			}
 			if t, tErr := parseDHTimestamp(entry.ComputedAt); tErr == nil {
 				row.AnalyticsComputedAt = &t
@@ -164,6 +168,8 @@ func (s *DHAnalyticsRefreshScheduler) refreshCharacters(ctx context.Context) (
 			if blob, encErr := json.Marshal(entry); encErr == nil {
 				str := string(blob)
 				row.SaturationJSON = &str
+			} else {
+				s.logger.Warn(ctx, "marshal character saturation JSON", observability.String("character", name), observability.Err(encErr))
 			}
 			if t, tErr := parseDHTimestamp(entry.ComputedAt); tErr == nil {
 				row.AnalyticsComputedAt = &t
@@ -253,24 +259,32 @@ func (s *DHAnalyticsRefreshScheduler) refreshCards(ctx context.Context, cardIDs 
 			if blob, encErr := json.Marshal(row.Velocity); encErr == nil {
 				str := string(blob)
 				cache.VelocityJSON = &str
+			} else {
+				s.logger.Warn(ctx, "marshal card velocity JSON", observability.Int("card_id", cardID), observability.Err(encErr))
 			}
 		}
 		if row.Trend != nil {
 			if blob, encErr := json.Marshal(row.Trend); encErr == nil {
 				str := string(blob)
 				cache.TrendJSON = &str
+			} else {
+				s.logger.Warn(ctx, "marshal card trend JSON", observability.Int("card_id", cardID), observability.Err(encErr))
 			}
 		}
 		if row.Saturation != nil {
 			if blob, encErr := json.Marshal(row.Saturation); encErr == nil {
 				str := string(blob)
 				cache.SaturationJSON = &str
+			} else {
+				s.logger.Warn(ctx, "marshal card saturation JSON", observability.Int("card_id", cardID), observability.Err(encErr))
 			}
 		}
 		if row.PriceDistribution != nil {
 			if blob, encErr := json.Marshal(row.PriceDistribution); encErr == nil {
 				str := string(blob)
 				cache.PriceDistributionJSON = &str
+			} else {
+				s.logger.Warn(ctx, "marshal card price distribution JSON", observability.Int("card_id", cardID), observability.Err(encErr))
 			}
 		}
 		if t, tErr := parseDHTimestamp(row.ComputedAt); tErr == nil {
@@ -316,6 +330,8 @@ func (s *DHAnalyticsRefreshScheduler) refreshCards(ctx context.Context, cardIDs 
 		if blob, encErr := json.Marshal(ds); encErr == nil {
 			str := string(blob)
 			cache.DemandJSON = &str
+		} else {
+			s.logger.Warn(ctx, "marshal card demand JSON", observability.Int("card_id", cardID), observability.Err(encErr))
 		}
 		cache.DemandComputedAt = &now
 		cache.FetchedAt = now
