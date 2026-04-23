@@ -33,7 +33,7 @@ func (s *service) ImportEbayOrdersSales(ctx context.Context, rows []EbayOrderRow
 	}
 	if len(certNumbers) > 0 {
 		var err error
-		certMap, err = s.purchases.GetPurchasesByCertNumbers(ctx, certNumbers)
+		certMap, err = s.purchases.GetPurchasesByGraderAndCertNumbers(ctx, "PSA", certNumbers)
 		if err != nil {
 			return nil, fmt.Errorf("batch cert lookup failed: %w", err)
 		}
@@ -79,7 +79,6 @@ func (s *service) ImportEbayOrdersSales(ctx context.Context, rows []EbayOrderRow
 			})
 			continue
 		}
-		seen[purchase.ID] = true
 
 		existingSale, saleErr := s.sales.GetSaleByPurchaseID(ctx, purchase.ID)
 		if saleErr != nil && !errors.HasErrorCode(saleErr, ErrCodeSaleNotFound) {
@@ -98,6 +97,8 @@ func (s *service) ImportEbayOrdersSales(ctx context.Context, rows []EbayOrderRow
 			})
 			continue
 		}
+
+		seen[purchase.ID] = true
 
 		var campaignLookupFailed bool
 		campaign, err := s.campaigns.GetCampaign(ctx, purchase.CampaignID)

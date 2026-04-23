@@ -185,7 +185,11 @@ func (ps *PurchaseStore) GetPurchasesByDHInventoryIDs(ctx context.Context, dhIDs
 			return nil, fmt.Errorf("scan purchases by DH inventory IDs: %w", err)
 		}
 		for i := range purchases {
-			result[purchases[i].DHInventoryID] = &purchases[i]
+			dhID := purchases[i].DHInventoryID
+			if existing, ok := result[dhID]; ok {
+				return nil, fmt.Errorf("duplicate dh_inventory_id %d: purchases %s and %s", dhID, existing.ID, purchases[i].ID)
+			}
+			result[dhID] = &purchases[i]
 		}
 	}
 

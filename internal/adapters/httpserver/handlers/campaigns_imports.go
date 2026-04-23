@@ -357,9 +357,12 @@ func isEbayCSV(rows [][]string) bool {
 		return false
 	}
 	headerMap := inventory.BuildHeaderMap(rows[1])
-	_, hasCustomLabel := headerMap["custom label"]
-	_, hasSoldFor := headerMap["sold for"]
-	return hasCustomLabel && hasSoldFor
+	for _, col := range []string{"custom label", "item title", "sold for", "sale date", "order number"} {
+		if _, ok := headerMap[col]; !ok {
+			return false
+		}
+	}
+	return true
 }
 
 // HandleConfirmOrdersSales handles POST /api/purchases/import-orders/confirm.
