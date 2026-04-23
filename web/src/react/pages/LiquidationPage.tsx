@@ -45,6 +45,27 @@ export default function LiquidationPage() {
   const selectAll = () => setSelected(new Set(items.map(i => i.purchaseId)));
   const deselectAll = () => setSelected(new Set());
 
+  const acceptSuggested = (id: string) => {
+    setSelected(prev => new Set(prev).add(id));
+    setFinalPrices(prev => {
+      const item = items.find(i => i.purchaseId === id);
+      if (!item) return prev;
+      const { [id]: _, ...rest } = prev;
+      return rest;
+    });
+  };
+
+  const acceptAllSuggested = () => {
+    const priceable = items.filter(i => i.suggestedPriceCents > 0);
+    const priceableIds = new Set(priceable.map(i => i.purchaseId));
+    setSelected(prev => new Set([...prev, ...priceableIds]));
+    setFinalPrices(prev => {
+      const next = { ...prev };
+      for (const id of priceableIds) delete next[id];
+      return next;
+    });
+  };
+
   const getFinalPrice = (item: LiquidationPreviewItem): number =>
     finalPrices[item.purchaseId] ?? item.suggestedPriceCents;
 
@@ -147,6 +168,7 @@ export default function LiquidationPage() {
           <div className="flex items-center gap-3 mb-2">
             <button type="button" onClick={selectAll} className="text-xs text-[var(--brand-500)] hover:underline">Select All</button>
             <button type="button" onClick={deselectAll} className="text-xs text-[var(--text-muted)] hover:underline">Deselect All</button>
+            <button type="button" onClick={acceptAllSuggested} className="text-xs text-green-400 hover:underline">Accept All Suggested</button>
             <span className="text-xs text-[var(--text-muted)]">{selected.size} selected</span>
           </div>
 
@@ -167,6 +189,7 @@ export default function LiquidationPage() {
                   <th className="px-3 py-2 text-right text-[var(--text-muted)] font-medium">Current</th>
                   <th className="px-3 py-2 text-right text-[var(--text-muted)] font-medium">Suggested</th>
                   <th className="px-3 py-2 text-right text-[var(--text-muted)] font-medium">Final Price</th>
+                  <th className="px-3 py-2 w-8"></th>
                 </tr>
               </thead>
               <tbody>
@@ -212,6 +235,17 @@ export default function LiquidationPage() {
                           onChange={e => handleFinalPriceChange(item.purchaseId, e.target.value)}
                           className="w-24 px-2 py-1 rounded border border-[var(--border)] bg-[var(--surface-2)] text-[var(--text)] text-right text-sm"
                         />
+                      </td>
+                      <td className="px-3 py-2">
+                        {item.suggestedPriceCents > 0 && !isSelected && (
+                          <button
+                            type="button"
+                            onClick={() => acceptSuggested(item.purchaseId)}
+                            className="text-xs text-green-400 hover:text-green-300 whitespace-nowrap"
+                          >
+                            Accept
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );
