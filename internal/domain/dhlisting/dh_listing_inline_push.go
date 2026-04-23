@@ -88,6 +88,11 @@ func (s *dhListingService) inlineMatchAndPush(ctx context.Context, p *inventory.
 
 	for _, r := range pushResp.Results {
 		if r.Status == "failed" || r.DHInventoryID == 0 {
+			s.logger.Warn(ctx, "inline dh push: result failed or missing inventory ID",
+				observability.String("purchaseID", p.ID),
+				observability.String("cert", p.CertNumber),
+				observability.String("status", r.Status),
+				observability.Int("dhInventoryID", r.DHInventoryID))
 			continue
 		}
 
