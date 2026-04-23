@@ -33,19 +33,29 @@ type ServiceOption func(*service)
 
 // service implements Service.
 type service struct {
-	campaigns inventory.CampaignRepository
-	purchases inventory.PurchaseRepository
-	analytics inventory.AnalyticsRepository
-	finance   inventory.FinanceRepository
-	priceProv inventory.PriceLookup
-	projCache *projectionCache // optional; if nil, projection runs on every call
-	logger    observability.Logger
+	campaigns   inventory.CampaignRepository
+	purchases   inventory.PurchaseRepository
+	analytics   inventory.AnalyticsRepository
+	finance     inventory.FinanceRepository
+	priceProv   inventory.PriceLookup
+	batchPricer BatchPricer
+	projCache   *projectionCache // optional; if nil, projection runs on every call
+	logger      observability.Logger
 }
 
 // WithPriceLookup injects the price lookup dependency.
 func WithPriceLookup(priceProv inventory.PriceLookup) ServiceOption {
 	return func(s *service) {
 		s.priceProv = priceProv
+	}
+}
+
+// WithBatchPricer injects the batch price distribution dependency.
+// When set, GetCrackOpportunities and GetAcquisitionTargets use batch
+// DH API calls instead of per-card lookups.
+func WithBatchPricer(bp BatchPricer) ServiceOption {
+	return func(s *service) {
+		s.batchPricer = bp
 	}
 }
 
@@ -182,92 +192,12 @@ func (s *service) crackCandidatesForCampaign(ctx context.Context, campaign *inve
 }
 
 // GetCrackOpportunities returns cross-campaign crack opportunities, computed on demand.
-// Uses a single ListAllUnsoldPurchases call to avoid N+1 DB queries.
+// Dispatches to the batch path when BatchPricer is injected, otherwise falls back to legacy.
 func (s *service) GetCrackOpportunities(ctx context.Context) ([]CrackAnalysis, error) {
-	if s.priceProv == nil {
-		if s.logger != nil {
-			s.logger.Info(ctx, "skipping crack opportunities",
-				observability.String("reason", "price provider not configured"))
-		}
-		return []CrackAnalysis{}, nil
+	if s.batchPricer != nil {
+		return s.getCrackOpportunitiesBatch(ctx)
 	}
-
-	priceProv := s.requestScopedPriceProv()
-
-	allCampaigns, err := s.campaigns.ListCampaigns(ctx, true)
-	if err != nil {
-		return nil, fmt.Errorf("list active campaigns: %w", err)
-	}
-
-	// Build campaignID → ebayFee map to avoid per-campaign DB lookups.
-	ebayFeeMap := make(map[string]float64, len(allCampaigns))
-	for _, c := range allCampaigns {
-		ebayFeeMap[c.ID] = inventory.EffectiveFeePct(&c)
-	}
-
-	allUnsold, err := s.purchases.ListAllUnsoldPurchases(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list all unsold purchases: %w", err)
-	}
-
-	var results []CrackAnalysis
-	for _, p := range allUnsold {
-		// Skip PSA 9+ from crack analysis — only PSA 8 and below are candidates.
-		if p.GradeValue >= 9 {
-			continue
-		}
-		ebayFee, ok := ebayFeeMap[p.CampaignID]
-		if !ok {
-			if s.logger != nil {
-				s.logger.Debug(ctx, "crack analysis: skipping purchase — campaign not active",
-					observability.String("purchaseID", p.ID),
-					observability.String("campaignID", p.CampaignID))
-			}
-			continue
-		}
-		card := p.ToCardIdentity()
-
-		rawCents := 0
-		gradedCents := 0
-		if v, err := priceProv.GetLastSoldCents(ctx, card, 0); err != nil {
-			if s.logger != nil {
-				s.logger.Warn(ctx, "crack analysis: raw price lookup failed",
-					observability.String("cardName", p.CardName),
-					observability.Err(err))
-			}
-		} else {
-			rawCents = v
-		}
-		if v, err := priceProv.GetLastSoldCents(ctx, card, p.GradeValue); err != nil {
-			if s.logger != nil {
-				s.logger.Warn(ctx, "crack analysis: graded price lookup failed",
-					observability.String("cardName", p.CardName),
-					observability.Float64("grade", p.GradeValue),
-					observability.Err(err))
-			}
-		} else {
-			gradedCents = v
-		}
-
-		if rawCents == 0 {
-			continue
-		}
-		if gradedCents == 0 {
-			gradedCents = p.CLValueCents
-		}
-
-		analysis := ComputeCrackAnalysis(
-			p.ID, p.CampaignID, p.CardName, p.CertNumber, p.GradeValue,
-			p.BuyCostCents, p.PSASourcingFeeCents, rawCents, gradedCents,
-			ebayFee,
-		)
-		results = append(results, *analysis)
-	}
-
-	sort.Slice(results, func(i, j int) bool {
-		return results[i].CrackAdvantage > results[j].CrackAdvantage
-	})
-	return results, nil
+	return s.getCrackOpportunitiesLegacy(ctx)
 }
 
 // GetActivationChecklist builds a pre-activation readiness checklist.
@@ -371,96 +301,12 @@ func (s *service) GetActivationChecklist(ctx context.Context, campaignID string)
 }
 
 // GetAcquisitionTargets returns raw-to-graded arbitrage opportunities across all active campaigns.
-// Uses a single ListAllUnsoldPurchases call to avoid N+1 DB queries.
+// Dispatches to the batch path when BatchPricer is injected, otherwise falls back to legacy.
 func (s *service) GetAcquisitionTargets(ctx context.Context) ([]AcquisitionOpportunity, error) {
-	if s.priceProv == nil {
-		if s.logger != nil {
-			s.logger.Info(ctx, "skipping acquisition targets",
-				observability.String("reason", "price provider not configured"))
-		}
-		return []AcquisitionOpportunity{}, nil
+	if s.batchPricer != nil {
+		return s.getAcquisitionTargetsBatch(ctx)
 	}
-
-	priceProv := s.requestScopedPriceProv()
-
-	allCampaigns, err := s.campaigns.ListCampaigns(ctx, true)
-	if err != nil {
-		return nil, fmt.Errorf("list active campaigns: %w", err)
-	}
-
-	// Build campaignID → ebayFee map to avoid per-campaign DB lookups.
-	ebayFeeMap := make(map[string]float64, len(allCampaigns))
-	for _, c := range allCampaigns {
-		ebayFeeMap[c.ID] = inventory.EffectiveFeePct(&c)
-	}
-
-	allUnsold, err := s.purchases.ListAllUnsoldPurchases(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list all unsold purchases: %w", err)
-	}
-
-	opportunities := []AcquisitionOpportunity{}
-	seen := make(map[string]bool)
-	for _, p := range allUnsold {
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		default:
-		}
-		ebayFee, ok := ebayFeeMap[p.CampaignID]
-		if !ok {
-			if s.logger != nil {
-				s.logger.Debug(ctx, "acquisition targets: skipping purchase — campaign not active",
-					observability.String("purchaseID", p.ID),
-					observability.String("campaignID", p.CampaignID))
-			}
-			continue
-		}
-		key := p.CardName + "|" + p.SetName + "|" + p.CardNumber
-		if seen[key] {
-			continue
-		}
-		seen[key] = true
-		card := p.ToCardIdentity()
-		rawNMCents := 0
-		if v, err := priceProv.GetLastSoldCents(ctx, card, 0); err != nil {
-			if s.logger != nil {
-				s.logger.Warn(ctx, "acquisition targets: raw price lookup failed",
-					observability.String("cardName", p.CardName),
-					observability.Err(err))
-			}
-		} else if v > 0 {
-			rawNMCents = v
-		}
-		if rawNMCents == 0 {
-			continue
-		}
-		gradedEstimates := make(map[string]int)
-		for _, grade := range []float64{8, 9, 10} {
-			v, err := priceProv.GetLastSoldCents(ctx, card, grade)
-			if err != nil {
-				if s.logger != nil {
-					s.logger.Warn(ctx, "acquisition targets: graded price lookup failed",
-						observability.String("cardName", p.CardName),
-						observability.Float64("grade", grade),
-						observability.Err(err))
-				}
-				continue
-			}
-			if v > 0 {
-				gradedEstimates[fmt.Sprintf("PSA %g", grade)] = v
-			}
-		}
-		opp := computeAcquisitionOpportunity(
-			p.CardName, p.SetName, p.CardNumber, p.CertNumber,
-			rawNMCents, gradedEstimates, ebayFee, "inventory",
-		)
-		if opp != nil {
-			opportunities = append(opportunities, *opp)
-		}
-	}
-	sortAcquisitionByProfit(opportunities)
-	return opportunities, nil
+	return s.getAcquisitionTargetsLegacy(ctx)
 }
 
 // GetExpectedValues, EvaluatePurchase, and RunProjection live in service_ev.go.

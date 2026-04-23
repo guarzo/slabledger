@@ -292,7 +292,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	}
 
 	campaignsInit := initializeCampaignsService(
-		ctx, cfg, logger, db, priceProvImpl, intelRepo, mmStore, dhClient, eventStore,
+		ctx, cfg, logger, db, priceProvImpl, intelRepo, mmStore, dhClient, eventStore, cardIDMappingRepo,
 	)
 	campaignsService := campaignsInit.service
 	certLookup := campaignsInit.certLookup
