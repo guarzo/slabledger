@@ -192,8 +192,17 @@ func (s *service) crackCandidatesForCampaign(ctx context.Context, campaign *inve
 }
 
 // GetCrackOpportunities returns cross-campaign crack opportunities, computed on demand.
-// Uses a single ListAllUnsoldPurchases call to avoid N+1 DB queries.
+// Dispatches to the batch path when BatchPricer is injected, otherwise falls back to legacy.
 func (s *service) GetCrackOpportunities(ctx context.Context) ([]CrackAnalysis, error) {
+	if s.batchPricer != nil {
+		return s.getCrackOpportunitiesBatch(ctx)
+	}
+	return s.getCrackOpportunitiesLegacy(ctx)
+}
+
+// getCrackOpportunitiesLegacy is the original per-card price lookup path.
+// Uses a single ListAllUnsoldPurchases call to avoid N+1 DB queries.
+func (s *service) getCrackOpportunitiesLegacy(ctx context.Context) ([]CrackAnalysis, error) {
 	if s.priceProv == nil {
 		if s.logger != nil {
 			s.logger.Info(ctx, "skipping crack opportunities",
@@ -272,6 +281,104 @@ func (s *service) GetCrackOpportunities(ctx context.Context) ([]CrackAnalysis, e
 			ebayFee,
 		)
 		results = append(results, *analysis)
+	}
+
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].CrackAdvantage > results[j].CrackAdvantage
+	})
+	return results, nil
+}
+
+// getCrackOpportunitiesBatch resolves all card IDs upfront and calls BatchPriceDistribution
+// (2-3 HTTP calls) instead of per-card GetLastSoldCents (~400+ calls).
+func (s *service) getCrackOpportunitiesBatch(ctx context.Context) ([]CrackAnalysis, error) {
+	allCampaigns, err := s.campaigns.ListCampaigns(ctx, true)
+	if err != nil {
+		return nil, fmt.Errorf("list active campaigns: %w", err)
+	}
+	ebayFeeMap := make(map[string]float64, len(allCampaigns))
+	for _, c := range allCampaigns {
+		ebayFeeMap[c.ID] = inventory.EffectiveFeePct(&c)
+	}
+
+	allUnsold, err := s.purchases.ListAllUnsoldPurchases(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list all unsold purchases: %w", err)
+	}
+
+	type cardKey struct{ name, set, number string }
+	cardToDHID := make(map[cardKey]int)
+	var dhCardIDs []int
+	for _, p := range allUnsold {
+		if p.GradeValue >= 9 {
+			continue
+		}
+		if _, ok := ebayFeeMap[p.CampaignID]; !ok {
+			continue
+		}
+		key := cardKey{p.CardName, p.SetName, p.CardNumber}
+		if _, seen := cardToDHID[key]; seen {
+			continue
+		}
+		dhID, err := s.batchPricer.ResolveDHCardID(ctx, p.CardName, p.SetName, p.CardNumber)
+		if err != nil {
+			if s.logger != nil {
+				s.logger.Warn(ctx, "crack batch: resolve failed",
+					observability.String("cardName", p.CardName), observability.Err(err))
+			}
+			cardToDHID[key] = 0
+			continue
+		}
+		cardToDHID[key] = dhID
+		if dhID > 0 {
+			dhCardIDs = append(dhCardIDs, dhID)
+		}
+	}
+
+	distributions, err := s.batchPricer.BatchPriceDistribution(ctx, dhCardIDs)
+	if err != nil {
+		return nil, fmt.Errorf("batch price distribution: %w", err)
+	}
+
+	var results []CrackAnalysis
+	for _, p := range allUnsold {
+		if p.GradeValue >= 9 {
+			continue
+		}
+		ebayFee, ok := ebayFeeMap[p.CampaignID]
+		if !ok {
+			continue
+		}
+		key := cardKey{p.CardName, p.SetName, p.CardNumber}
+		dhID := cardToDHID[key]
+		if dhID == 0 {
+			continue
+		}
+		dist, ok := distributions[dhID]
+		if !ok {
+			continue
+		}
+
+		rawBucket := dist.ByGrade["Raw"]
+		gradedBucket := dist.ByGrade[gradeKeyForValue(p.GradeValue)]
+
+		rawCents := rawBucket.MedianCents
+		if rawCents == 0 {
+			continue
+		}
+		gradedCents := gradedBucket.MedianCents
+		if gradedCents == 0 {
+			gradedCents = p.CLValueCents
+		}
+
+		analysis := ComputeCrackAnalysis(
+			p.ID, p.CampaignID, p.CardName, p.CertNumber, p.GradeValue,
+			p.BuyCostCents, p.PSASourcingFeeCents, rawCents, gradedCents,
+			ebayFee,
+		)
+		if analysis.CrackAdvantage > 0 {
+			results = append(results, *analysis)
+		}
 	}
 
 	sort.Slice(results, func(i, j int) bool {
