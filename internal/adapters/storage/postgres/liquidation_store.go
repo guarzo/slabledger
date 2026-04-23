@@ -35,7 +35,7 @@ func (s *LiquidationStore) ListUnsoldForLiquidation(ctx context.Context) ([]liqu
 	if err != nil {
 		return nil, fmt.Errorf("liquidation store: list unsold: %w", err)
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint:errcheck
 
 	var result []liquidation.UnsoldPurchase
 	for rows.Next() {
@@ -68,7 +68,7 @@ func (s *LiquidationStore) GetSaleCompsForCard(ctx context.Context, gemRateID, c
 	if err != nil {
 		return nil, fmt.Errorf("liquidation store: get sale comps: %w", err)
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint:errcheck
 
 	var result []liquidation.SaleComp
 	for rows.Next() {

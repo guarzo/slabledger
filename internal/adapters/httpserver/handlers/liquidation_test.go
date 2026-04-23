@@ -68,10 +68,10 @@ func TestHandleLiquidationPreview(t *testing.T) {
 
 func TestHandleLiquidationApply(t *testing.T) {
 	tests := []struct {
-		name       string
-		body       string
-		applyFn    func(ctx context.Context, req liquidation.ApplyRequest) (liquidation.ApplyResult, error)
-		wantStatus int
+		name        string
+		body        string
+		applyFn     func(ctx context.Context, req liquidation.ApplyRequest) (liquidation.ApplyResult, error)
+		wantStatus  int
 		wantApplied int
 	}{
 		{

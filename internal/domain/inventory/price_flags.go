@@ -31,11 +31,11 @@ func (r PriceFlagReason) Valid() bool {
 type ReviewSource string
 
 const (
-	ReviewSourceManual     ReviewSource = "manual"
-	ReviewSourceCL         ReviewSource = "cl"
-	ReviewSourceMarket     ReviewSource = "market"
-	ReviewSourceLastSold   ReviewSource = "last_sold"
-	ReviewSourceCostMarkup ReviewSource = "cost_markup"
+	ReviewSourceManual      ReviewSource = "manual"
+	ReviewSourceCL          ReviewSource = "cl"
+	ReviewSourceMarket      ReviewSource = "market"
+	ReviewSourceLastSold    ReviewSource = "last_sold"
+	ReviewSourceCostMarkup  ReviewSource = "cost_markup"
 	ReviewSourceMM          ReviewSource = "mm"
 	ReviewSourceLiquidation ReviewSource = "liquidation"
 )

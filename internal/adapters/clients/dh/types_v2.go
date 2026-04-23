@@ -99,9 +99,9 @@ type CertResolution struct {
 
 // CertResolutionCandidate is one possible match for an ambiguous cert.
 type CertResolutionCandidate struct {
-	DHCardID   int    `json:"dh_card_id"`
-	CardName   string `json:"card_name"`
-	SetName    string `json:"set_name"`
+	DHCardID   int     `json:"dh_card_id"`
+	CardName   string  `json:"card_name"`
+	SetName    string  `json:"set_name"`
 	CardNumber string  `json:"card_number"`
 	ImageURL   string  `json:"image_url"`
 	GemRateID  *string `json:"gemrate_id,omitempty"`

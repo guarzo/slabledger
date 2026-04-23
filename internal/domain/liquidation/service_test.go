@@ -36,7 +36,7 @@ func (m *mockPriceWriter) SetReviewedPrice(_ context.Context, purchaseID string,
 }
 
 type failingPriceWriter struct {
-	failID string
+	failID  string
 	applied map[string]int
 }
 

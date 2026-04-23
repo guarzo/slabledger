@@ -138,11 +138,11 @@ func minConfidence(levels ...ConfidenceLevel) ConfidenceLevel {
 		ConfidenceMedium: 2,
 		ConfidenceHigh:   3,
 	}
-	min := ConfidenceHigh
+	result := ConfidenceHigh
 	for _, l := range levels {
-		if order[l] < order[min] {
-			min = l
+		if order[l] < order[result] {
+			result = l
 		}
 	}
-	return min
+	return result
 }

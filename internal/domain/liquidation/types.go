@@ -29,24 +29,24 @@ type CompPriceResult struct {
 
 // PreviewRequest carries the discount settings for a liquidation preview.
 type PreviewRequest struct {
-	BaseDiscountPct    float64 `json:"baseDiscountPct"`
-	NoCompDiscountPct  float64 `json:"noCompDiscountPct"`
+	BaseDiscountPct   float64 `json:"baseDiscountPct"`
+	NoCompDiscountPct float64 `json:"noCompDiscountPct"`
 }
 
 // PreviewItem is one card in the preview response.
 type PreviewItem struct {
-	PurchaseID               string          `json:"purchaseId"`
-	CertNumber               string          `json:"certNumber"`
-	CardName                 string          `json:"cardName"`
-	Grade                    float64         `json:"grade"`
-	CampaignName             string          `json:"campaignName"`
-	BuyCostCents             int             `json:"buyCostCents"`
-	CLValueCents             int             `json:"clValueCents"`
-	CompPriceCents           int             `json:"compPriceCents"`
-	CompCount                int             `json:"compCount"`
-	MostRecentCompDate       string          `json:"mostRecentCompDate"`
-	ConfidenceLevel          ConfidenceLevel `json:"confidenceLevel"`
-	GapPct                   float64         `json:"gapPct"`
+	PurchaseID                string          `json:"purchaseId"`
+	CertNumber                string          `json:"certNumber"`
+	CardName                  string          `json:"cardName"`
+	Grade                     float64         `json:"grade"`
+	CampaignName              string          `json:"campaignName"`
+	BuyCostCents              int             `json:"buyCostCents"`
+	CLValueCents              int             `json:"clValueCents"`
+	CompPriceCents            int             `json:"compPriceCents"`
+	CompCount                 int             `json:"compCount"`
+	MostRecentCompDate        string          `json:"mostRecentCompDate"`
+	ConfidenceLevel           ConfidenceLevel `json:"confidenceLevel"`
+	GapPct                    float64         `json:"gapPct"`
 	CurrentReviewedPriceCents int             `json:"currentReviewedPriceCents"`
 	SuggestedPriceCents       int             `json:"suggestedPriceCents"`
 	BelowCost                 bool            `json:"belowCost"`
@@ -54,13 +54,13 @@ type PreviewItem struct {
 
 // PreviewSummary aggregates the preview results.
 type PreviewSummary struct {
-	TotalCards              int `json:"totalCards"`
-	WithComps               int `json:"withComps"`
-	WithoutComps            int `json:"withoutComps"`
-	NoData                  int `json:"noData"`
-	TotalCurrentValueCents  int `json:"totalCurrentValueCents"`
+	TotalCards               int `json:"totalCards"`
+	WithComps                int `json:"withComps"`
+	WithoutComps             int `json:"withoutComps"`
+	NoData                   int `json:"noData"`
+	TotalCurrentValueCents   int `json:"totalCurrentValueCents"`
 	TotalSuggestedValueCents int `json:"totalSuggestedValueCents"`
-	BelowCostCount          int `json:"belowCostCount"`
+	BelowCostCount           int `json:"belowCostCount"`
 }
 
 // PreviewResponse is the full preview payload.
@@ -71,8 +71,8 @@ type PreviewResponse struct {
 
 // ApplyItem specifies a new price for one purchase.
 type ApplyItem struct {
-	PurchaseID   string `json:"purchaseId"`
-	NewPriceCents int   `json:"newPriceCents"`
+	PurchaseID    string `json:"purchaseId"`
+	NewPriceCents int    `json:"newPriceCents"`
 }
 
 // ApplyRequest holds the list of price updates to apply.
