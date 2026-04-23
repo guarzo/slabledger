@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"context"
+	"strings"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
 	"github.com/guarzo/slabledger/internal/adapters/storage/postgres"
@@ -34,7 +35,9 @@ func (s *CardLadderRefreshScheduler) refreshSalesCompsDecoupled(ctx context.Cont
 		default:
 		}
 
-		resp, err := client.FetchSalesComps(ctx, card.GemRateID, card.Condition, "psa", 0, 100)
+		// CL API expects "PSA 10" format; our DB condition is "g10" format.
+		apiCondition := "PSA " + strings.ReplaceAll(strings.TrimPrefix(card.Condition, "g"), "_", ".")
+		resp, err := client.FetchSalesComps(ctx, card.GemRateID, apiCondition, "psa", 0, 100)
 		if err != nil {
 			s.logger.Warn(ctx, "CL sales: fetch failed",
 				observability.String("gemRateId", card.GemRateID),

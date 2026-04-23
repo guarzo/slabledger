@@ -64,7 +64,7 @@ func (s *LiquidationStore) GetSaleCompsForCard(ctx context.Context, gemRateID, c
 		SELECT sale_date, price_cents
 		FROM cl_sales_comps
 		WHERE gem_rate_id = $1
-		  AND condition = $2
+		  AND condition IN ($2, '')
 		ORDER BY sale_date DESC`
 
 	rows, err := s.db.QueryContext(ctx, q, gemRateID, condition)
