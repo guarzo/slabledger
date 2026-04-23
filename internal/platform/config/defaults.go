@@ -108,7 +108,7 @@ func Default() Config {
 		},
 		DHAnalyticsRefresh: DHAnalyticsRefreshConfig{
 			Enabled:     true,
-			RefreshHour: 4,     // 04:00 UTC, after DH nightly analytics rollup (03:15 UTC)
+			RefreshHour: 4, // 04:00 UTC, after DH nightly analytics rollup (03:15 UTC)
 			Window:      "30d",
 		},
 		DHReconcile: DHReconcileConfig{

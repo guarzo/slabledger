@@ -118,6 +118,11 @@ func parsePagination(r *http.Request) (limit, offset int) {
 func serviceCall[T any](w http.ResponseWriter, ctx context.Context, logger observability.Logger, msg string, fn func() (T, error)) (T, bool) {
 	result, err := fn()
 	if err != nil {
+		if ctx.Err() != nil {
+			// Client disconnected or request timed out — not a server error.
+			writeError(w, 499, "Client closed request")
+			return result, false
+		}
 		logger.Error(ctx, msg, observability.Err(err))
 		writeError(w, http.StatusInternalServerError, "Internal server error")
 		return result, false

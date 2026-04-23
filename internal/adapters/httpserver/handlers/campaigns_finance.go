@@ -8,6 +8,7 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/errors"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
+	"github.com/guarzo/slabledger/internal/domain/portfolio"
 )
 
 // HandleCapitalSummary handles GET /api/credit/summary.
@@ -120,6 +121,17 @@ func (h *CampaignsHandler) HandlePortfolioHealth(w http.ResponseWriter, r *http.
 		return
 	}
 	writeJSON(w, http.StatusOK, health)
+}
+
+// HandlePortfolioSnapshot handles GET /api/portfolio/snapshot.
+func (h *CampaignsHandler) HandlePortfolioSnapshot(w http.ResponseWriter, r *http.Request) {
+	snapshot, ok := serviceCall(w, r.Context(), h.logger, "failed to get portfolio snapshot", func() (*portfolio.PortfolioSnapshot, error) {
+		return h.portSvc.GetSnapshot(r.Context())
+	})
+	if !ok {
+		return
+	}
+	writeJSON(w, http.StatusOK, snapshot)
 }
 
 // HandlePortfolioChannelVelocity handles GET /api/portfolio/channel-velocity.

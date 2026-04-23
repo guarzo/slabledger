@@ -17,6 +17,7 @@ type MockPortfolioService struct {
 	GetCapitalTimelineFn          func(ctx context.Context) (*inventory.CapitalTimeline, error)
 	GetWeeklyReviewSummaryFn      func(ctx context.Context) (*inventory.WeeklyReviewSummary, error)
 	GetWeeklyHistoryFn            func(ctx context.Context, weeks int) ([]inventory.WeeklyReviewSummary, error)
+	GetSnapshotFn                 func(ctx context.Context) (*portfolio.PortfolioSnapshot, error)
 }
 
 var _ portfolio.Service = (*MockPortfolioService)(nil)
@@ -66,6 +67,13 @@ func (m *MockPortfolioService) GetWeeklyReviewSummary(ctx context.Context) (*inv
 func (m *MockPortfolioService) GetWeeklyHistory(ctx context.Context, weeks int) ([]inventory.WeeklyReviewSummary, error) {
 	if m.GetWeeklyHistoryFn != nil {
 		return m.GetWeeklyHistoryFn(ctx, weeks)
+	}
+	return nil, nil
+}
+
+func (m *MockPortfolioService) GetSnapshot(ctx context.Context) (*portfolio.PortfolioSnapshot, error) {
+	if m.GetSnapshotFn != nil {
+		return m.GetSnapshotFn(ctx)
 	}
 	return nil, nil
 }

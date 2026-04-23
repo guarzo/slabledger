@@ -11,6 +11,7 @@ import (
 
 	"github.com/guarzo/slabledger/internal/domain/errors"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
+	"github.com/guarzo/slabledger/internal/domain/portfolio"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
 )
 
@@ -806,5 +807,22 @@ func TestHandleRevocationEmail(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestHandlePortfolioSnapshot(t *testing.T) {
+	portSvc := &mocks.MockPortfolioService{
+		GetSnapshotFn: func(_ context.Context) (*portfolio.PortfolioSnapshot, error) {
+			return &portfolio.PortfolioSnapshot{}, nil
+		},
+	}
+	h := newTestHandlerFull(&mocks.MockInventoryService{}, nil, portSvc, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/portfolio/snapshot", nil)
+	rec := httptest.NewRecorder()
+	h.HandlePortfolioSnapshot(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
