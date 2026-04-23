@@ -84,22 +84,22 @@ type CLRunStats struct {
 // CardLadderRefreshScheduler refreshes CL values from the Card Ladder API daily.
 type CardLadderRefreshScheduler struct {
 	StopHandle
-	statsMu        sync.RWMutex
-	clientMu       sync.RWMutex
-	client         *cardladder.Client
-	store          *postgres.CardLadderStore
-	purchaseLister CardLadderPurchaseLister
-	valueUpdater   CardLadderValueUpdater
-	gemRateUpdater CardLadderGemRateUpdater
-	syncUpdater    CardLadderSyncUpdater // optional: sets cl_synced_at on push
+	statsMu          sync.RWMutex
+	clientMu         sync.RWMutex
+	client           *cardladder.Client
+	store            *postgres.CardLadderStore
+	purchaseLister   CardLadderPurchaseLister
+	valueUpdater     CardLadderValueUpdater
+	gemRateUpdater   CardLadderGemRateUpdater
+	syncUpdater      CardLadderSyncUpdater // optional: sets cl_synced_at on push
 	salesStore       *postgres.CLSalesStore
-	compRefreshStore *postgres.CompRefreshStore        // decoupled comp refresh queries
-	dhPushUpdater    DHPushStatusUpdater               // optional: re-enrolls changed items for DH push
-	eventRec       dhevents.Recorder             // optional: records DH state-transition events
-	statsStore     *postgres.SchedulerStatsStore // optional: persists lastRunStats across restarts
-	logger         observability.Logger
-	config         config.CardLadderConfig
-	lastRunStats   *CLRunStats
+	compRefreshStore *postgres.CompRefreshStore
+	dhPushUpdater    DHPushStatusUpdater           // optional: re-enrolls changed items for DH push
+	eventRec         dhevents.Recorder             // optional: records DH state-transition events
+	statsStore       *postgres.SchedulerStatsStore // optional: persists lastRunStats across restarts
+	logger           observability.Logger
+	config           config.CardLadderConfig
+	lastRunStats     *CLRunStats
 }
 
 // SetClient replaces the API client used by the scheduler. This is called when

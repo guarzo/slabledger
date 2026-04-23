@@ -26,6 +26,7 @@ func (s *CardLadderRefreshScheduler) refreshSalesCompsDecoupled(ctx context.Cont
 
 	fetched := 0
 	compsUpserted := 0
+	upsertFailed := 0
 	for _, card := range cards {
 		select {
 		case <-ctx.Done():
@@ -60,9 +61,10 @@ func (s *CardLadderRefreshScheduler) refreshSalesCompsDecoupled(ctx context.Cont
 				ItemURL:     comp.URL,
 				SlabSerial:  comp.SlabSerial,
 			}); err != nil {
-				s.logger.Debug(ctx, "CL sales: upsert failed",
+				s.logger.Warn(ctx, "CL sales: upsert failed",
 					observability.String("itemId", comp.ItemID),
 					observability.Err(err))
+				upsertFailed++
 			} else {
 				compsUpserted++
 			}
@@ -79,5 +81,6 @@ func (s *CardLadderRefreshScheduler) refreshSalesCompsDecoupled(ctx context.Cont
 	s.logger.Info(ctx, "CL sales: decoupled refresh complete",
 		observability.Int("cardsProcessed", fetched),
 		observability.Int("compsUpserted", compsUpserted),
+		observability.Int("upsertFailed", upsertFailed),
 		observability.Int("purchasesBackfilled", backfilled))
 }
