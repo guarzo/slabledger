@@ -192,6 +192,7 @@ func (rt *Router) registerCampaignRoutes(mux *http.ServeMux) {
 
 	// Portfolio endpoints
 	mux.Handle("GET /api/portfolio/health", authRoute(rt.campaignsHandler.HandlePortfolioHealth))
+	mux.Handle("GET /api/portfolio/snapshot", authRoute(rt.campaignsHandler.HandlePortfolioSnapshot))
 	mux.Handle("GET /api/portfolio/channel-velocity", authRoute(rt.campaignsHandler.HandlePortfolioChannelVelocity))
 	mux.Handle("GET /api/portfolio/insights", authRoute(rt.campaignsHandler.HandlePortfolioInsights))
 	mux.Handle("GET /api/portfolio/suggestions", authRoute(rt.campaignsHandler.HandleCampaignSuggestions))
