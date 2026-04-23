@@ -20,6 +20,7 @@ export default function Navigation({ mobile, onNavigate }: NavigationProps) {
     { path: '/campaigns', label: 'Campaigns', shortLabel: 'Campaigns' },
     { path: '/insights', label: 'Insights', shortLabel: 'Insights' },
     { path: '/tools', label: 'Tools', shortLabel: 'Tools' },
+    { path: '/liquidation', label: 'Liquidation', shortLabel: 'Liq' },
   ];
 
   const isActive = (path: string) => {
