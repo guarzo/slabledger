@@ -373,6 +373,22 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
     }
   }, [toast, invalidateInventory]);
 
+  const [dhRetryInFlight, setDHRetryInFlight] = useState<Set<string>>(new Set());
+
+  const handleRetryDHMatch = useCallback(async (purchase: Purchase) => {
+    if (dhRetryInFlight.has(purchase.id)) return;
+    setDHRetryInFlight(prev => new Set(prev).add(purchase.id));
+    try {
+      await api.retryDHMatch(purchase.id);
+      toast.success('DH match retry succeeded');
+      invalidateInventory();
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'DH match retry failed'));
+    } finally {
+      setDHRetryInFlight(prev => { const next = new Set(prev); next.delete(purchase.id); return next; });
+    }
+  }, [toast, invalidateInventory, dhRetryInFlight]);
+
   function handleSetPrice(item: AgingItem) {
     const currentPrice = bestPrice(item);
     setPriceTarget({
@@ -473,6 +489,8 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
     handleFixDHMatch,
     handleFixDHMatchSaved,
     handleUnmatchDH,
+    handleRetryDHMatch,
+    dhRetryInFlight,
     handleSetPrice,
     handlePriceSaved,
     handleInlinePriceSave,

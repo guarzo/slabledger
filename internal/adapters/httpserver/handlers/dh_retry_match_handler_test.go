@@ -151,15 +151,19 @@ func TestHandleRetryMatch(t *testing.T) {
 			expectedBodyContains: "not in unmatched status",
 		},
 		{
-			name:        "ResolveCertMatched",
+			name:        "PSAImportMatchedDirectly",
 			purchaseID:  "p1",
 			requestAuth: true,
 			repo: func() *mocks.PurchaseRepositoryMock {
 				return matchedRepo(unmatchedPurchase("p1", "12345678"))
 			},
-			certResolver: &mockDHCertResolver{
-				ResolveFn: func(_ context.Context, _ dh.CertResolveRequest) (*dh.CertResolution, error) {
-					return &dh.CertResolution{Status: dh.CertStatusMatched, DHCardID: 555}, nil
+			psaImporter: &mockDHPSAImporter{
+				ImportFn: func(_ context.Context, items []dh.PSAImportItem) (*dh.PSAImportResponse, error) {
+					return &dh.PSAImportResponse{
+						Results: []dh.PSAImportResult{
+							{Resolution: dh.PSAImportStatusMatched, DHCardID: 555, DHInventoryID: 444},
+						},
+					}, nil
 				},
 			},
 			expectedCode: http.StatusOK,
@@ -167,6 +171,7 @@ func TestHandleRetryMatch(t *testing.T) {
 				t.Helper()
 				assert.Equal(t, "ok", resp.Status)
 				assert.Equal(t, 555, resp.DHCardID)
+				assert.Equal(t, 444, resp.DHInventoryID)
 			},
 		},
 		{
@@ -300,32 +305,6 @@ func TestHandleRetryMatch(t *testing.T) {
 			},
 			expectedCode:         http.StatusUnprocessableEntity,
 			expectedBodyContains: "no results from DH",
-		},
-		{
-			name:        "ResolveCertAmbiguousWithCandidates",
-			purchaseID:  "p8",
-			requestAuth: true,
-			repo: func() *mocks.PurchaseRepositoryMock {
-				return &mocks.PurchaseRepositoryMock{
-					GetPurchaseFn: func(_ context.Context, _ string) (*inventory.Purchase, error) {
-						return unmatchedPurchase("p8", "78787878"), nil
-					},
-					UpdatePurchaseDHCandidatesFn: func(_ context.Context, _ string, _ string) error {
-						return nil
-					},
-				}
-			},
-			certResolver: &mockDHCertResolver{
-				ResolveFn: func(_ context.Context, _ dh.CertResolveRequest) (*dh.CertResolution, error) {
-					return &dh.CertResolution{
-						Status:     dh.CertStatusAmbiguous,
-						Candidates: []dh.CertResolutionCandidate{{DHCardID: 111}, {DHCardID: 222}},
-					}, nil
-				},
-			},
-			psaImporter:          nil,
-			expectedCode:         http.StatusUnprocessableEntity,
-			expectedBodyContains: "ambiguous",
 		},
 	}
 

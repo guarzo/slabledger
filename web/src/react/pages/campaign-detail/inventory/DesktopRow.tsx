@@ -58,13 +58,14 @@ interface DesktopRowProps {
   onDismiss?: () => void;
   onUndismiss?: () => void;
   onUnmatchDH?: () => void;
+  onRetryDHMatch?: () => void;
   dhListingLoading?: boolean;
   dhListedOverride?: boolean;
   showCampaignColumn?: boolean;
   isOnSellSheet?: boolean;
 }
 
-export default function DesktopRow({ item, selected, onToggle, onExpand, onRecordSale, onFixPricing, onFixDHMatch, onSetPrice, onDelete, onListOnDH, onInlinePriceSave, onRemoveFromSellSheet, onDismiss, onUndismiss, onUnmatchDH, dhListingLoading, dhListedOverride, showCampaignColumn, isOnSellSheet }: DesktopRowProps) {
+export default function DesktopRow({ item, selected, onToggle, onExpand, onRecordSale, onFixPricing, onFixDHMatch, onSetPrice, onDelete, onListOnDH, onInlinePriceSave, onRemoveFromSellSheet, onDismiss, onUndismiss, onUnmatchDH, onRetryDHMatch, dhListingLoading, dhListedOverride, showCampaignColumn, isOnSellSheet }: DesktopRowProps) {
   const cb = costBasis(item.purchase);
   const snap = item.currentMarket;
   const daysColor = daysHeldColor(item.daysHeld);
@@ -375,6 +376,14 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
                   className="px-3 py-2 text-sm text-[var(--text-muted)] hover:bg-[rgba(255,255,255,0.04)] hover:text-[var(--text)] outline-none cursor-default"
                 >
                   Remove DH Match
+                </DropdownMenu.Item>
+              )}
+              {onRetryDHMatch && (
+                <DropdownMenu.Item
+                  onSelect={onRetryDHMatch}
+                  className="px-3 py-2 text-sm text-[var(--text-muted)] hover:bg-[rgba(255,255,255,0.04)] hover:text-[var(--text)] outline-none cursor-default"
+                >
+                  Retry DH Match
                 </DropdownMenu.Item>
               )}
               {showDismiss && onDismiss && (
