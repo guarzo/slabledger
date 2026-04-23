@@ -318,11 +318,17 @@ func (m *mockRepo) GetPurchasesByCertNumbers(_ context.Context, certNumbers []st
 func (m *mockRepo) GetPurchasesByDHInventoryIDs(_ context.Context, dhIDs []int) (map[int]*Purchase, error) {
 	result := make(map[int]*Purchase, len(dhIDs))
 	for _, id := range dhIDs {
+		var match *Purchase
 		for _, p := range m.purchases {
 			if p.DHInventoryID == id {
-				result[id] = p
-				break
+				if match != nil {
+					return nil, fmt.Errorf("duplicate dh_inventory_id %d: purchases %s and %s", id, match.ID, p.ID)
+				}
+				match = p
 			}
+		}
+		if match != nil {
+			result[id] = match
 		}
 	}
 	return result, nil

@@ -416,7 +416,10 @@ func (h *CampaignsHandler) parseGlobalCSVUpload(w http.ResponseWriter, r *http.R
 		writeError(w, http.StatusRequestEntityTooLarge, "File too large (max 10MB)")
 		return nil, false
 	}
+	// Strip UTF-8 BOM if present (common in Excel/eBay exports).
+	buf = bytes.TrimPrefix(buf, []byte("\xef\xbb\xbf"))
 	reader := csv.NewReader(bytes.NewReader(buf))
+	reader.FieldsPerRecord = -1
 	records, err = reader.ReadAll()
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "Invalid CSV file")
