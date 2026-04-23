@@ -47,7 +47,7 @@ func (s *CompRefreshStore) ListUnsoldCardsNeedingComps(ctx context.Context, cuto
 	if err != nil {
 		return nil, fmt.Errorf("list unsold cards needing comps: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var result []UnsoldCardForComps
 	for rows.Next() {
