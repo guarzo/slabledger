@@ -40,7 +40,8 @@ type MatchCard struct {
 	Name     string `json:"name"`
 	SetName  string `json:"set_name"`
 	Number   string `json:"number"`
-	ImageURL string `json:"image_url"`
+	ImageURL  string  `json:"image_url"`
+	GemRateID *string `json:"gemrate_id,omitempty"`
 }
 
 // --- Search Types ---
