@@ -51,8 +51,11 @@ func NewService(repo Repository, campaigns CampaignCoverageLookup) *Service {
 }
 
 // WithLogger injects a logger and returns the Service for chaining.
+// A nil argument is ignored; the existing logger is kept.
 func (s *Service) WithLogger(l observability.Logger) *Service {
-	s.logger = l
+	if l != nil {
+		s.logger = l
+	}
 	return s
 }
 
@@ -127,6 +130,7 @@ func (s *Service) Leaderboard(ctx context.Context, opts LeaderboardOpts) ([]Nich
 
 		// Build one bucket per (era, grade), plus the "all eras" bucket for
 		// characters whose demand_json has no by_era breakdown.
+		market := s.parseCharacterMarket(ctx, row)
 		eras := erasForRow(demand, opts.Era)
 		for _, era := range eras {
 			eraDemand, eraOK := eraDemandFor(demand, era)
@@ -136,7 +140,6 @@ func (s *Service) Leaderboard(ctx context.Context, opts LeaderboardOpts) ([]Nich
 			if !qualityAllowed(opts.MinDataQuality, eraDemand.DataQuality) {
 				continue
 			}
-			market := s.parseCharacterMarket(ctx, row)
 			for _, grade := range grades {
 				bucket, bErr := s.buildBucket(row.Character, era, grade, eraDemand, market, coverageFor)
 				if bErr != nil {
