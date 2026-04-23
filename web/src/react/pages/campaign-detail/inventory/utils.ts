@@ -357,10 +357,9 @@ export function formatShipDate(dateStr: string): string {
 
 /** Returns true if the ship date is 2+ calendar days ago. */
 export function isShipmentOverdue(shipDateStr: string): boolean {
-  const shipDate = new Date(shipDateStr + 'T00:00:00');
-  const now = new Date();
-  const diffMs = now.getTime() - shipDate.getTime();
-  const diffDays = diffMs / (1000 * 60 * 60 * 24);
+  const [y, m, d] = shipDateStr.split('-').map(Number);
+  const shipDate = new Date(y, m - 1, d);
+  const diffDays = Math.floor((Date.now() - shipDate.getTime()) / 86400000);
   return diffDays >= 2;
 }
 
