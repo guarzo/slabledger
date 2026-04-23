@@ -8,6 +8,7 @@ import (
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	dhlistingadapter "github.com/guarzo/slabledger/internal/adapters/clients/dhlisting"
+	"github.com/guarzo/slabledger/internal/adapters/clients/dhprice"
 	"github.com/guarzo/slabledger/internal/adapters/clients/psa"
 	"github.com/guarzo/slabledger/internal/adapters/scheduler"
 	"github.com/guarzo/slabledger/internal/adapters/storage/postgres"
@@ -70,6 +71,7 @@ func initializeCampaignsService(
 	mmStore *postgres.MarketMoversStore,
 	dhClient *dh.Client,
 	eventRecorder dhevents.Recorder,
+	cardIDMappingRepo *postgres.CardIDMappingRepository,
 ) campaignsInitResult {
 	// Create individual stores instead of composite repository
 	campaignStore := postgres.NewCampaignStore(db.DB, logger)
@@ -180,14 +182,23 @@ func initializeCampaignsService(
 		campaignOpts...,
 	)
 
+	arbOpts := []arbitrage.ServiceOption{
+		arbitrage.WithPriceLookup(priceLookupAdapter),
+		arbitrage.WithLogger(logger),
+		arbitrage.WithProjectionCache(5 * time.Minute),
+	}
+	if dhClient != nil && dhClient.EnterpriseAvailable() && cardIDMappingRepo != nil {
+		arbOpts = append(arbOpts,
+			arbitrage.WithBatchPricer(dhprice.NewBatchAdapter(dhClient, cardIDMappingRepo)),
+		)
+	}
+
 	arbSvc := arbitrage.NewService(
 		campaignStore,  // CampaignRepository
 		purchaseStore,  // PurchaseRepository
 		analyticsStore, // AnalyticsRepository
 		financeStore,   // FinanceRepository
-		arbitrage.WithPriceLookup(priceLookupAdapter),
-		arbitrage.WithLogger(logger),
-		arbitrage.WithProjectionCache(5*time.Minute),
+		arbOpts...,
 	)
 
 	portSvc := portfolio.NewService(
