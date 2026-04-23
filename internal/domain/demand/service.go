@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"sort"
-	"strconv"
 	"time"
 )
 
@@ -266,14 +265,17 @@ type byEraJSON struct {
 
 // characterVelocityJSON / characterSaturationJSON mirror the cached JSON
 // blobs for a character row's velocity + saturation surfaces.
-// DH character-level velocity returns MedianDaysToSell as a numeric string
-// on the wire (e.g. "9.8"), not a JSON number — matches the card-level
-// signalVelocityJSON type used in campaign_signals.go.
+// The blob stores CharacterVelocityFields directly (not the full entry),
+// so all fields are at the top level.
 type characterVelocityJSON struct {
-	MedianDaysToSell  string   `json:"median_days_to_sell"`
-	SampleSize        int      `json:"sample_size"`
-	VelocityChangePct *float64 `json:"velocity_change_pct"`
-	ComputedAt        string   `json:"computed_at"`
+	MedianDaysToSell   *float64 `json:"median_days_to_sell"`
+	SampleSize         int      `json:"sample_size"`
+	VelocityChangePct  *float64 `json:"velocity_change_pct"`
+	AvgDailySales      *float64 `json:"avg_daily_sales"`
+	SellThroughRate30d *float64 `json:"sell_through_rate_30d"`
+	SalesVolume7d      *int     `json:"sales_volume_7d"`
+	SalesVolume30d     *int     `json:"sales_volume_30d"`
+	SupplyCount        *int     `json:"supply_count"`
 }
 
 type characterSaturationJSON struct {
@@ -303,11 +305,14 @@ func parseCharacterMarket(row CharacterCache) *NicheMarket {
 	if row.VelocityJSON != nil {
 		var v characterVelocityJSON
 		if err := json.Unmarshal([]byte(*row.VelocityJSON), &v); err == nil {
-			if parsed, pErr := strconv.ParseFloat(v.MedianDaysToSell, 64); pErr == nil {
-				m.MedianDaysToSell = &parsed
-			}
+			m.MedianDaysToSell = v.MedianDaysToSell
 			m.VelocityChangePct = v.VelocityChangePct
 			m.SampleSize = v.SampleSize
+			m.AvgDailySales = v.AvgDailySales
+			m.SellThroughRate30d = v.SellThroughRate30d
+			m.SalesVolume7d = v.SalesVolume7d
+			m.SalesVolume30d = v.SalesVolume30d
+			m.SupplyCount = v.SupplyCount
 			has = true
 		}
 	}

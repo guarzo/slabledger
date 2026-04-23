@@ -11,12 +11,12 @@ import (
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
 )
 
-// velocityJSON builds a velocity_json blob mirroring DH's wire format: median
-// and avg days come back as strings; velocity_change_pct is a float.
+// velocityJSON builds a velocity_json blob matching the CharacterVelocityFields
+// stored format: all numeric fields are JSON numbers (not strings).
 func velocityJSON(medianDays, vChangePct float64, sample int) string {
 	return `{
-		"median_days_to_sell": "` + strconv.FormatFloat(medianDays, 'f', -1, 64) + `",
-		"avg_days_to_sell": "` + strconv.FormatFloat(medianDays, 'f', -1, 64) + `",
+		"median_days_to_sell": ` + strconv.FormatFloat(medianDays, 'f', -1, 64) + `,
+		"avg_days_to_sell": ` + strconv.FormatFloat(medianDays, 'f', -1, 64) + `,
 		"sell_through": {},
 		"sample_size": ` + strconv.Itoa(sample) + `,
 		"velocity_change_pct": ` + strconv.FormatFloat(vChangePct, 'f', -1, 64) + `
@@ -26,7 +26,7 @@ func velocityJSON(medianDays, vChangePct float64, sample int) string {
 // velocityJSONNoChange omits velocity_change_pct — used to verify the service
 // excludes characters with no change metric from contributors.
 func velocityJSONNoChange() string {
-	return `{"median_days_to_sell": "10", "avg_days_to_sell": "10", "sell_through": {}, "sample_size": 5}`
+	return `{"median_days_to_sell": 10, "avg_days_to_sell": 10, "sell_through": {}, "sample_size": 5}`
 }
 
 func charRow(name string, medianDays, vChangePct float64, sample int, computed time.Time) demand.CharacterCache {

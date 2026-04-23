@@ -152,7 +152,7 @@ func (s *DHAnalyticsRefreshScheduler) refreshCharacters(ctx context.Context) (
 			}
 		}
 		if entry, ok := velocityByChar[name]; ok {
-			if blob, encErr := json.Marshal(entry); encErr == nil {
+			if blob, encErr := json.Marshal(entry.Velocity); encErr == nil {
 				str := string(blob)
 				row.VelocityJSON = &str
 			}

@@ -155,7 +155,7 @@ func TestDHAnalyticsRefresh_HappyPath(t *testing.T) {
 						CardCount:     10,
 						ComputedAt:    "2026-04-15T00:00:00Z",
 						Velocity: dh.CharacterVelocityFields{
-							MedianDaysToSell: 14.5,
+							MedianDaysToSell: ptrF64(14.5),
 							SampleSize:       120,
 						},
 					},
@@ -362,3 +362,5 @@ func TestDHAnalyticsRefresh_DisabledByConfig_Noop(t *testing.T) {
 		t.Fatalf("expected no work when disabled")
 	}
 }
+
+func ptrF64(v float64) *float64 { return &v }

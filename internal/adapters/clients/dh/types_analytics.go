@@ -229,16 +229,20 @@ type CharacterVelocityEntry struct {
 }
 
 // CharacterVelocityFields is the velocity block for a character row.
-// All numeric fields in character-level responses come back as float64
-// (unlike card-level which are strings).
+// Pointer fields preserve null vs zero distinction from the DH wire format.
 type CharacterVelocityFields struct {
-	MedianDaysToSell  float64                     `json:"median_days_to_sell"`
-	AvgDaysToSell     float64                     `json:"avg_days_to_sell"`
-	SellThrough       map[string]float64          `json:"sell_through"`
-	SampleSize        int                         `json:"sample_size"`
-	ByGrade           map[string]VelocityTierStat `json:"by_grade,omitempty"`
-	ByPriceTier       map[string]VelocityTierStat `json:"by_price_tier,omitempty"`
-	VelocityChangePct float64                     `json:"velocity_change_pct"`
+	MedianDaysToSell   *float64                    `json:"median_days_to_sell,omitempty"`
+	AvgDaysToSell      *float64                    `json:"avg_days_to_sell,omitempty"`
+	SellThrough        map[string]float64          `json:"sell_through"`
+	SampleSize         int                         `json:"sample_size"`
+	ByGrade            map[string]VelocityTierStat `json:"by_grade,omitempty"`
+	ByPriceTier        map[string]VelocityTierStat `json:"by_price_tier,omitempty"`
+	VelocityChangePct  *float64                    `json:"velocity_change_pct,omitempty"`
+	AvgDailySales      *float64                    `json:"avg_daily_sales,omitempty"`
+	SellThroughRate30d *float64                    `json:"sell_through_rate_30d,omitempty"`
+	SalesVolume7d      *int                        `json:"sales_volume_7d,omitempty"`
+	SalesVolume30d     *int                        `json:"sales_volume_30d,omitempty"`
+	SupplyCount        *int                        `json:"supply_count,omitempty"`
 }
 
 // CharacterSaturationResponse is returned from GET /characters/saturation.

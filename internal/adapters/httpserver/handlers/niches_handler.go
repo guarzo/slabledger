@@ -173,6 +173,11 @@ type nicheDemandDTO struct {
 type nicheMarketDTO struct {
 	MedianDaysToSell     *float64 `json:"median_days_to_sell"`
 	VelocityChangePct    *float64 `json:"velocity_change_pct"`
+	AvgDailySales        *float64 `json:"avg_daily_sales"`
+	SellThroughRate30d   *float64 `json:"sell_through_rate_30d"`
+	SalesVolume7d        *int     `json:"sales_volume_7d"`
+	SalesVolume30d       *int     `json:"sales_volume_30d"`
+	SupplyCount          *int     `json:"supply_count"`
 	ActiveListingCount   int      `json:"active_listing_count"`
 	SampleSize           int      `json:"sample_size"`
 	AnalyticsNotComputed bool     `json:"analytics_not_computed"`
@@ -214,6 +219,11 @@ func toNicheDTO(o demand.NicheOpportunity) nicheOpportunityDTO {
 		dto.Market = &nicheMarketDTO{
 			MedianDaysToSell:     o.Market.MedianDaysToSell,
 			VelocityChangePct:    o.Market.VelocityChangePct,
+			AvgDailySales:        o.Market.AvgDailySales,
+			SellThroughRate30d:   o.Market.SellThroughRate30d,
+			SalesVolume7d:        o.Market.SalesVolume7d,
+			SalesVolume30d:       o.Market.SalesVolume30d,
+			SupplyCount:          o.Market.SupplyCount,
 			ActiveListingCount:   o.Market.ActiveListingCount,
 			SampleSize:           o.Market.SampleSize,
 			AnalyticsNotComputed: o.Market.AnalyticsNotComputed,

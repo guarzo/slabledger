@@ -284,7 +284,7 @@ func TestService_Leaderboard_LimitTruncates(t *testing.T) {
 
 func TestService_Leaderboard_Acceleration(t *testing.T) {
 	computedAt := time.Date(2026, 4, 15, 3, 0, 0, 0, time.UTC)
-	velocityWithChange := `{"median_days_to_sell":"9.5","sample_size":120,"velocity_change_pct":14.2,"computed_at":"2026-04-15T03:00:00Z"}`
+	velocityWithChange := `{"median_days_to_sell":9.5,"sample_size":120,"velocity_change_pct":14.2}`
 
 	tests := []struct {
 		name                    string

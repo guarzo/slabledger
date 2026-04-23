@@ -303,11 +303,11 @@ func TestClient_CharacterVelocity_HappyPath(t *testing.T) {
 					CardCount:     8,
 					ComputedAt:    "2026-04-15T03:15:00Z",
 					Velocity: CharacterVelocityFields{
-						MedianDaysToSell:  14.0,
-						AvgDaysToSell:     16.0,
+						MedianDaysToSell:  ptrFloat64(14.0),
+						AvgDaysToSell:     ptrFloat64(16.0),
 						SellThrough:       map[string]float64{"30d": 0.4, "60d": 0.6, "90d": 0.8},
 						SampleSize:        25,
-						VelocityChangePct: 3.2,
+						VelocityChangePct: ptrFloat64(3.2),
 					},
 				},
 			},
@@ -325,7 +325,7 @@ func TestClient_CharacterVelocity_HappyPath(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, resp.Characters, 1)
-	require.Equal(t, 14.0, resp.Characters[0].Velocity.MedianDaysToSell)
+	require.Equal(t, ptrFloat64(14.0), resp.Characters[0].Velocity.MedianDaysToSell)
 	require.Equal(t, 2, resp.Pagination.Page)
 }
 
@@ -461,6 +461,8 @@ func TestClient_AnalyticsNotComputed_OtherErrorsPassThrough(t *testing.T) {
 	require.False(t, errors.Is(err, ErrAnalyticsNotComputed))
 	require.Contains(t, strings.ToLower(err.Error()), "not found")
 }
+
+func ptrFloat64(v float64) *float64 { return &v }
 
 // atoiOrZero is a tiny helper used by the chunking test to turn query-string
 // card_ids back into ints for fixture synthesis.
