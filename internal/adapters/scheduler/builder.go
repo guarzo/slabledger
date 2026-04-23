@@ -86,13 +86,14 @@ type BuildDeps struct {
 	GapStore scoring.GapStore
 
 	// Card Ladder dependencies (optional)
-	CardLadderClient         *cardladder.Client
-	CardLadderStore          *postgres.CardLadderStore
-	CardLadderPurchaseLister CardLadderPurchaseLister
-	CardLadderValueUpdater   CardLadderValueUpdater
-	CardLadderGemRateUpdater CardLadderGemRateUpdater
-	CardLadderSyncUpdater    CardLadderSyncUpdater
-	CardLadderSalesStore     *postgres.CLSalesStore
+	CardLadderClient           *cardladder.Client
+	CardLadderStore            *postgres.CardLadderStore
+	CardLadderPurchaseLister   CardLadderPurchaseLister
+	CardLadderValueUpdater     CardLadderValueUpdater
+	CardLadderGemRateUpdater   CardLadderGemRateUpdater
+	CardLadderSyncUpdater      CardLadderSyncUpdater
+	CardLadderSalesStore       *postgres.CLSalesStore
+	CardLadderCompRefreshStore *postgres.CompRefreshStore
 
 	// SchedulerStatsStore persists per-scheduler lastRun stats so the admin UI
 	// survives server restarts. Optional — when nil, stats remain in-memory.
@@ -242,6 +243,9 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 		}
 		if deps.SchedulerStatsStore != nil {
 			clOpts = append(clOpts, WithCLStatsStore(deps.SchedulerStatsStore))
+		}
+		if deps.CardLadderCompRefreshStore != nil {
+			clOpts = append(clOpts, WithCLCompRefreshStore(deps.CardLadderCompRefreshStore))
 		}
 		clRefresh = NewCardLadderRefreshScheduler(
 			deps.CardLadderClient, deps.CardLadderStore,

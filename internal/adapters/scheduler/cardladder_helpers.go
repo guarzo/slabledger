@@ -92,27 +92,3 @@ func firestoreConditionFor(displayCondition string) string {
 	}
 	return displayCondition
 }
-
-// compKey is a unique (gemRateID, condition) pair used for sales-comp dedup.
-type compKey struct {
-	gemRateID string
-	condition string
-}
-
-// dedupGemRateConditionPairs returns the unique (gemRateID, condition) pairs
-// from mappings that have both fields populated. This is the pure dedup logic
-// used by refreshSalesComps to avoid redundant API calls.
-func dedupGemRateConditionPairs(mappings []postgres.CLCardMapping) []compKey {
-	seen := make(map[compKey]bool, len(mappings))
-	for _, m := range mappings {
-		if m.CLGemRateID == "" || m.CLCondition == "" {
-			continue
-		}
-		seen[compKey{m.CLGemRateID, m.CLCondition}] = true
-	}
-	result := make([]compKey, 0, len(seen))
-	for k := range seen {
-		result = append(result, k)
-	}
-	return result
-}

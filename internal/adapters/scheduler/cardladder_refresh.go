@@ -61,6 +61,11 @@ func WithCLEventRecorder(r dhevents.Recorder) CardLadderRefreshOption {
 	return func(s *CardLadderRefreshScheduler) { s.eventRec = r }
 }
 
+// WithCLCompRefreshStore enables decoupled comp refresh (queries campaign_purchases.gem_rate_id directly).
+func WithCLCompRefreshStore(s *postgres.CompRefreshStore) CardLadderRefreshOption {
+	return func(sch *CardLadderRefreshScheduler) { sch.compRefreshStore = s }
+}
+
 // CLRunStats holds the counters from the most recent Card Ladder refresh run.
 type CLRunStats struct {
 	LastRunAt         time.Time `json:"lastRunAt"`
@@ -79,21 +84,22 @@ type CLRunStats struct {
 // CardLadderRefreshScheduler refreshes CL values from the Card Ladder API daily.
 type CardLadderRefreshScheduler struct {
 	StopHandle
-	statsMu        sync.RWMutex
-	clientMu       sync.RWMutex
-	client         *cardladder.Client
-	store          *postgres.CardLadderStore
-	purchaseLister CardLadderPurchaseLister
-	valueUpdater   CardLadderValueUpdater
-	gemRateUpdater CardLadderGemRateUpdater
-	syncUpdater    CardLadderSyncUpdater // optional: sets cl_synced_at on push
-	salesStore     *postgres.CLSalesStore
-	dhPushUpdater  DHPushStatusUpdater           // optional: re-enrolls changed items for DH push
-	eventRec       dhevents.Recorder             // optional: records DH state-transition events
-	statsStore     *postgres.SchedulerStatsStore // optional: persists lastRunStats across restarts
-	logger         observability.Logger
-	config         config.CardLadderConfig
-	lastRunStats   *CLRunStats
+	statsMu          sync.RWMutex
+	clientMu         sync.RWMutex
+	client           *cardladder.Client
+	store            *postgres.CardLadderStore
+	purchaseLister   CardLadderPurchaseLister
+	valueUpdater     CardLadderValueUpdater
+	gemRateUpdater   CardLadderGemRateUpdater
+	syncUpdater      CardLadderSyncUpdater // optional: sets cl_synced_at on push
+	salesStore       *postgres.CLSalesStore
+	compRefreshStore *postgres.CompRefreshStore
+	dhPushUpdater    DHPushStatusUpdater           // optional: re-enrolls changed items for DH push
+	eventRec         dhevents.Recorder             // optional: records DH state-transition events
+	statsStore       *postgres.SchedulerStatsStore // optional: persists lastRunStats across restarts
+	logger           observability.Logger
+	config           config.CardLadderConfig
+	lastRunStats     *CLRunStats
 }
 
 // SetClient replaces the API client used by the scheduler. This is called when
@@ -409,15 +415,15 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 		}
 	}
 
-	// Phase 4: refresh sales comps (uses the fresh mapping set).
-	freshMappings, _ := s.store.ListMappings(ctx)
+	// Phase 4: refresh sales comps (decoupled — queries gem_rate_id directly).
 	if s.salesStore != nil {
-		s.refreshSalesComps(ctx, client, freshMappings)
+		s.refreshSalesCompsDecoupled(ctx, client)
 	}
 
 	// Phase 5: push new certs to the CL remote collection for UI hygiene.
 	// Not required for pricing (that happens via BuildCollectionCard above) —
 	// only matters so the user's CL collection view reflects our inventory.
+	freshMappings, _ := s.store.ListMappings(ctx)
 	cardsPushed := 0
 	if cfg.FirebaseUID != "" {
 		cardsPushed = s.pushNewCards(ctx, client, cfg.FirebaseUID, cfg.CollectionID, purchases, freshMappings)

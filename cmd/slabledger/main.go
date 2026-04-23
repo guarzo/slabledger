@@ -335,8 +335,10 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	// Initialize Card Ladder (encryptor was created earlier for MM mapping adapter)
 	clClient, _, clStore := initializeCardLadder(ctx, logger, db, clEncryptor)
 	var clSalesStore *postgres.CLSalesStore
+	var clCompRefreshStore *postgres.CompRefreshStore
 	if clStore != nil {
 		clSalesStore = postgres.NewCLSalesStore(db.DB)
+		clCompRefreshStore = postgres.NewCompRefreshStore(db.DB)
 	}
 	schedulerStatsStore := postgres.NewSchedulerStatsStore(db.DB)
 
@@ -370,42 +372,43 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	}
 
 	sDeps := schedulerDeps{
-		Config:               cfg,
-		Logger:               logger,
-		DBTracker:            priceRepo,
-		RefreshCandidates:    refreshCandidateRepo,
-		PriceProvImpl:        priceProvImpl,
-		AuthService:          authService,
-		SyncStateRepo:        syncStateRepo,
-		CardIDMappingRepo:    cardIDMappingRepo,
-		CampaignStore:        campaignsInit.campaignStore,
-		PurchaseStore:        campaignsInit.purchaseStore,
-		DHStore:              campaignsInit.dhStore,
-		CampaignsService:     campaignsService,
-		CertLookup:           certLookup,
-		CertEnrichJob:        campaignsInit.certEnrichJob,
-		PricingEnrichJob:     campaignsInit.pricingEnrichJob,
-		AdvisorService:       advisorService,
-		AdvisorCacheRepo:     advisorCacheRepo,
-		AICallRepo:           aiCallRepo,
-		CardLadderClient:     clClient,
-		CardLadderStore:      clStore,
-		CardLadderSalesStore: clSalesStore,
-		SchedulerStatsStore:  schedulerStatsStore,
-		MMClient:             mmClient,
-		MMStore:              mmStore,
-		MMSalesStore:         campaignsInit.mmSalesStore,
-		DHClient:             dhClient,
-		DHEventStore:         eventStore,
-		DHIntelligenceRepo:   intelRepo,
-		DHSuggestionsRepo:    suggestionsRepo,
-		DHDemandRepo:         demandRepo,
-		DHTrajectoryRepo:     trajectoryRepo,
-		DHCompCacheStore:     campaignsInit.dhCompStore,
-		DHPriceSyncService:   dhPriceSyncService,
-		GapStore:             gapStore,
-		PSASpreadsheetID:     cfg.GoogleSheets.SpreadsheetID,
-		PSATabName:           cfg.GoogleSheets.TabName,
+		Config:                     cfg,
+		Logger:                     logger,
+		DBTracker:                  priceRepo,
+		RefreshCandidates:          refreshCandidateRepo,
+		PriceProvImpl:              priceProvImpl,
+		AuthService:                authService,
+		SyncStateRepo:              syncStateRepo,
+		CardIDMappingRepo:          cardIDMappingRepo,
+		CampaignStore:              campaignsInit.campaignStore,
+		PurchaseStore:              campaignsInit.purchaseStore,
+		DHStore:                    campaignsInit.dhStore,
+		CampaignsService:           campaignsService,
+		CertLookup:                 certLookup,
+		CertEnrichJob:              campaignsInit.certEnrichJob,
+		PricingEnrichJob:           campaignsInit.pricingEnrichJob,
+		AdvisorService:             advisorService,
+		AdvisorCacheRepo:           advisorCacheRepo,
+		AICallRepo:                 aiCallRepo,
+		CardLadderClient:           clClient,
+		CardLadderStore:            clStore,
+		CardLadderSalesStore:       clSalesStore,
+		CardLadderCompRefreshStore: clCompRefreshStore,
+		SchedulerStatsStore:        schedulerStatsStore,
+		MMClient:                   mmClient,
+		MMStore:                    mmStore,
+		MMSalesStore:               campaignsInit.mmSalesStore,
+		DHClient:                   dhClient,
+		DHEventStore:               eventStore,
+		DHIntelligenceRepo:         intelRepo,
+		DHSuggestionsRepo:          suggestionsRepo,
+		DHDemandRepo:               demandRepo,
+		DHTrajectoryRepo:           trajectoryRepo,
+		DHCompCacheStore:           campaignsInit.dhCompStore,
+		DHPriceSyncService:         dhPriceSyncService,
+		GapStore:                   gapStore,
+		PSASpreadsheetID:           cfg.GoogleSheets.SpreadsheetID,
+		PSATabName:                 cfg.GoogleSheets.TabName,
 	}
 	if gsheetsClient != nil {
 		sDeps.PSASheetFetcher = gsheetsClient

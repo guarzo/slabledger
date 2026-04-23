@@ -21,43 +21,44 @@ import (
 
 // schedulerDeps bundles all dependencies needed by initializeSchedulers.
 type schedulerDeps struct {
-	Config               *config.Config
-	Logger               observability.Logger
-	DBTracker            *postgres.DBTracker
-	RefreshCandidates    pricing.RefreshCandidateProvider
-	PriceProvImpl        pricing.PriceProvider
-	AuthService          auth.Service
-	SyncStateRepo        *postgres.SyncStateRepository
-	CardIDMappingRepo    *postgres.CardIDMappingRepository
-	CampaignStore        *postgres.CampaignStore
-	PurchaseStore        *postgres.PurchaseStore
-	DHStore              *postgres.DHStore
-	CampaignsService     inventory.Service
-	CertLookup           inventory.CertLookup
-	CertEnrichJob        *scheduler.CertEnrichJob    // pre-built; nil if PSA not configured
-	PricingEnrichJob     *scheduler.PricingEnrichJob // pre-built; wired into inventory service as the pricing enqueuer
-	AdvisorService       advisor.Service
-	AdvisorCacheRepo     *postgres.AdvisorCacheRepository
-	AICallRepo           *postgres.AICallRepository
-	CardLadderClient     *cardladder.Client
-	CardLadderStore      *postgres.CardLadderStore
-	CardLadderSalesStore *postgres.CLSalesStore
-	SchedulerStatsStore  *postgres.SchedulerStatsStore
-	MMClient             *marketmovers.Client
-	MMStore              *postgres.MarketMoversStore
-	MMSalesStore         *postgres.MMSalesStore
-	DHClient             *dh.Client
-	DHEventStore         *postgres.DHEventStore
-	DHIntelligenceRepo   *postgres.MarketIntelligenceRepository
-	DHSuggestionsRepo    *postgres.DHSuggestionsRepository
-	DHDemandRepo         *postgres.DHDemandRepository
-	DHTrajectoryRepo     *postgres.CardPriceTrajectoryRepository
-	DHCompCacheStore     *postgres.DHCompCacheStore
-	DHPriceSyncService   dhpricing.Service
-	GapStore             *postgres.GapStore
-	PSASheetFetcher      scheduler.SheetFetcher
-	PSASpreadsheetID     string
-	PSATabName           string
+	Config                     *config.Config
+	Logger                     observability.Logger
+	DBTracker                  *postgres.DBTracker
+	RefreshCandidates          pricing.RefreshCandidateProvider
+	PriceProvImpl              pricing.PriceProvider
+	AuthService                auth.Service
+	SyncStateRepo              *postgres.SyncStateRepository
+	CardIDMappingRepo          *postgres.CardIDMappingRepository
+	CampaignStore              *postgres.CampaignStore
+	PurchaseStore              *postgres.PurchaseStore
+	DHStore                    *postgres.DHStore
+	CampaignsService           inventory.Service
+	CertLookup                 inventory.CertLookup
+	CertEnrichJob              *scheduler.CertEnrichJob    // pre-built; nil if PSA not configured
+	PricingEnrichJob           *scheduler.PricingEnrichJob // pre-built; wired into inventory service as the pricing enqueuer
+	AdvisorService             advisor.Service
+	AdvisorCacheRepo           *postgres.AdvisorCacheRepository
+	AICallRepo                 *postgres.AICallRepository
+	CardLadderClient           *cardladder.Client
+	CardLadderStore            *postgres.CardLadderStore
+	CardLadderSalesStore       *postgres.CLSalesStore
+	CardLadderCompRefreshStore *postgres.CompRefreshStore
+	SchedulerStatsStore        *postgres.SchedulerStatsStore
+	MMClient                   *marketmovers.Client
+	MMStore                    *postgres.MarketMoversStore
+	MMSalesStore               *postgres.MMSalesStore
+	DHClient                   *dh.Client
+	DHEventStore               *postgres.DHEventStore
+	DHIntelligenceRepo         *postgres.MarketIntelligenceRepository
+	DHSuggestionsRepo          *postgres.DHSuggestionsRepository
+	DHDemandRepo               *postgres.DHDemandRepository
+	DHTrajectoryRepo           *postgres.CardPriceTrajectoryRepository
+	DHCompCacheStore           *postgres.DHCompCacheStore
+	DHPriceSyncService         dhpricing.Service
+	GapStore                   *postgres.GapStore
+	PSASheetFetcher            scheduler.SheetFetcher
+	PSASpreadsheetID           string
+	PSATabName                 string
 }
 
 // initializeSchedulers builds and starts the scheduler group, returning the
@@ -65,28 +66,29 @@ type schedulerDeps struct {
 func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.BuildResult, context.CancelFunc) {
 	schedulerCtx, cancelScheduler := context.WithCancel(ctx)
 	buildDeps := scheduler.BuildDeps{
-		APITracker:               deps.DBTracker,
-		HealthChecker:            deps.DBTracker,
-		AccessTracker:            deps.DBTracker,
-		RefreshCandidates:        deps.RefreshCandidates,
-		PriceProvider:            deps.PriceProvImpl,
-		AuthService:              deps.AuthService,
-		Logger:                   deps.Logger,
-		SyncStateStore:           deps.SyncStateRepo,
-		InventoryLister:          &inventoryListAdapter{repo: deps.PurchaseStore},
-		SnapshotRefresher:        &snapshotRefreshAdapter{svc: deps.CampaignsService},
-		SnapshotEnrichService:    deps.CampaignsService,
-		AdvisorCollector:         deps.AdvisorService,
-		AdvisorCache:             deps.AdvisorCacheRepo,
-		AICallTracker:            deps.AICallRepo,
-		CardLadderClient:         deps.CardLadderClient,
-		CardLadderStore:          deps.CardLadderStore,
-		CardLadderPurchaseLister: deps.PurchaseStore,
-		CardLadderValueUpdater:   deps.PurchaseStore,
-		CardLadderGemRateUpdater: deps.PurchaseStore,
-		CardLadderSyncUpdater:    deps.PurchaseStore,
-		CardLadderSalesStore:     deps.CardLadderSalesStore,
-		SchedulerStatsStore:      deps.SchedulerStatsStore,
+		APITracker:                 deps.DBTracker,
+		HealthChecker:              deps.DBTracker,
+		AccessTracker:              deps.DBTracker,
+		RefreshCandidates:          deps.RefreshCandidates,
+		PriceProvider:              deps.PriceProvImpl,
+		AuthService:                deps.AuthService,
+		Logger:                     deps.Logger,
+		SyncStateStore:             deps.SyncStateRepo,
+		InventoryLister:            &inventoryListAdapter{repo: deps.PurchaseStore},
+		SnapshotRefresher:          &snapshotRefreshAdapter{svc: deps.CampaignsService},
+		SnapshotEnrichService:      deps.CampaignsService,
+		AdvisorCollector:           deps.AdvisorService,
+		AdvisorCache:               deps.AdvisorCacheRepo,
+		AICallTracker:              deps.AICallRepo,
+		CardLadderClient:           deps.CardLadderClient,
+		CardLadderStore:            deps.CardLadderStore,
+		CardLadderPurchaseLister:   deps.PurchaseStore,
+		CardLadderValueUpdater:     deps.PurchaseStore,
+		CardLadderGemRateUpdater:   deps.PurchaseStore,
+		CardLadderSyncUpdater:      deps.PurchaseStore,
+		CardLadderSalesStore:       deps.CardLadderSalesStore,
+		CardLadderCompRefreshStore: deps.CardLadderCompRefreshStore,
+		SchedulerStatsStore:        deps.SchedulerStatsStore,
 	}
 	// Wire DH event recorder (nil-safe)
 	if deps.DHEventStore != nil {
