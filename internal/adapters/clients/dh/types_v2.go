@@ -35,6 +35,7 @@ type ConfirmMatchResponse struct {
 	CardName        string   `json:"card_name,omitempty"`
 	SetName         string   `json:"set_name,omitempty"`
 	CardNumber      string   `json:"card_number,omitempty"`
+	GemRateID       *string  `json:"gemrate_id,omitempty"`
 	MappingsCreated []string `json:"mappings_created,omitempty"`
 	AliasesLearned  []string `json:"aliases_learned,omitempty"`
 }
@@ -91,17 +92,19 @@ type CertResolution struct {
 	CardNumber              string                    `json:"card_number,omitempty"`
 	Grade                   string                    `json:"grade,omitempty"`
 	ImageURL                string                    `json:"image_url,omitempty"`
+	GemRateID               *string                   `json:"gemrate_id,omitempty"`
 	CurrentMarketPriceCents int                       `json:"current_market_price_cents,omitempty"`
 	Candidates              []CertResolutionCandidate `json:"candidates,omitempty"`
 }
 
 // CertResolutionCandidate is one possible match for an ambiguous cert.
 type CertResolutionCandidate struct {
-	DHCardID   int    `json:"dh_card_id"`
-	CardName   string `json:"card_name"`
-	SetName    string `json:"set_name"`
-	CardNumber string `json:"card_number"`
-	ImageURL   string `json:"image_url"`
+	DHCardID   int     `json:"dh_card_id"`
+	CardName   string  `json:"card_name"`
+	SetName    string  `json:"set_name"`
+	CardNumber string  `json:"card_number"`
+	ImageURL   string  `json:"image_url"`
+	GemRateID  *string `json:"gemrate_id,omitempty"`
 }
 
 // CertResolveBody is the request body for POST /enterprise/certs/resolve (single cert).

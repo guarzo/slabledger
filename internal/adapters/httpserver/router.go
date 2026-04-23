@@ -46,6 +46,7 @@ type Router struct {
 	psaSyncHandler            *handlers.PSASyncHandler
 	nichesHandler             *handlers.NichesHandler
 	campaignSignalsHandler    *handlers.CampaignSignalsHandler
+	liquidationHandler        *handlers.LiquidationHandler
 	pricingAPIKey             string
 	logger                    observability.Logger
 	databasePath              string
@@ -84,6 +85,7 @@ type RouterConfig struct {
 	PSASyncHandler            *handlers.PSASyncHandler         // PSA pending items + admin status; nil = disabled
 	NichesHandler             *handlers.NichesHandler          // DH niche-opportunity leaderboard; nil = disabled
 	CampaignSignalsHandler    *handlers.CampaignSignalsHandler // DH campaign signals; nil = disabled
+	LiquidationHandler        *handlers.LiquidationHandler     // Liquidation pricing; nil = disabled
 	Logger                    observability.Logger
 	AdminEmails               []string
 	DatabasePath              string
@@ -201,6 +203,10 @@ func NewRouter(cfg RouterConfig) *Router {
 		rt.campaignSignalsHandler = cfg.CampaignSignalsHandler
 	}
 
+	if cfg.LiquidationHandler != nil {
+		rt.liquidationHandler = cfg.LiquidationHandler
+	}
+
 	if cfg.PricingAPIKey != "" && cfg.CampaignsRepo != nil {
 		rt.pricingAPIHandler = handlers.NewPricingAPIHandler(cfg.CampaignsRepo, cfg.Logger)
 		rt.pricingAPIKey = cfg.PricingAPIKey
@@ -284,6 +290,9 @@ func (rt *Router) Setup() http.Handler {
 
 	// Pricing API (public, bearer token auth)
 	rt.registerPricingAPIRoutes(mux)
+
+	// Liquidation pricing routes
+	rt.registerLiquidationRoutes(mux)
 
 	return mux
 }

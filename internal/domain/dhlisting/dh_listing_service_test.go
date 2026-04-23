@@ -436,6 +436,7 @@ func TestDisambiguateCandidates(t *testing.T) {
 		cardNumber     string
 		saveFnErr      error
 		wantID         int
+		wantGemRateID  string
 		wantSaveCalled bool
 		wantErr        bool
 	}{
@@ -449,10 +450,11 @@ func TestDisambiguateCandidates(t *testing.T) {
 		{
 			name: "single candidate matching card number",
 			candidates: []DHCertCandidate{
-				{DHCardID: 42, CardNumber: "001"},
+				{DHCardID: 42, GemRateID: "gem-42", CardNumber: "001"},
 			},
 			cardNumber:     "001",
 			wantID:         42,
+			wantGemRateID:  "gem-42",
 			wantSaveCalled: false,
 		},
 		{
@@ -467,11 +469,12 @@ func TestDisambiguateCandidates(t *testing.T) {
 		{
 			name: "multiple candidates — exact card number match returns ID",
 			candidates: []DHCertCandidate{
-				{DHCardID: 10, CardNumber: "001"},
-				{DHCardID: 20, CardNumber: "002"},
+				{DHCardID: 10, GemRateID: "gem-10", CardNumber: "001"},
+				{DHCardID: 20, GemRateID: "gem-20", CardNumber: "002"},
 			},
 			cardNumber:     "001",
 			wantID:         10,
+			wantGemRateID:  "gem-10",
 			wantSaveCalled: false,
 		},
 		{
@@ -526,7 +529,7 @@ func TestDisambiguateCandidates(t *testing.T) {
 				}
 			}
 
-			id, err := disambiguateCandidates(tc.candidates, tc.cardNumber, saveFn)
+			id, gemRateID, err := disambiguateCandidates(tc.candidates, tc.cardNumber, saveFn)
 
 			if tc.wantErr {
 				if err == nil {
@@ -539,6 +542,9 @@ func TestDisambiguateCandidates(t *testing.T) {
 			}
 			if id != tc.wantID {
 				t.Errorf("expected ID %d, got %d", tc.wantID, id)
+			}
+			if gemRateID != tc.wantGemRateID {
+				t.Errorf("expected gemRateID %q, got %q", tc.wantGemRateID, gemRateID)
 			}
 			if tc.wantSaveCalled && !saveCalled {
 				t.Error("expected saveFn to be called, but it was not")

@@ -51,4 +51,7 @@ export const queryKeys = {
   purchases: {
     psaPendingItems: ['purchases', 'psaPendingItems'] as const,
   },
+  liquidation: {
+    preview: ['liquidation', 'preview'] as const,
+  },
 } as const;

@@ -36,11 +36,12 @@ type MatchResponse struct {
 
 // MatchCard is the card detail returned in a match response.
 type MatchCard struct {
-	DHCardID int    `json:"dh_card_id"`
-	Name     string `json:"name"`
-	SetName  string `json:"set_name"`
-	Number   string `json:"number"`
-	ImageURL string `json:"image_url"`
+	DHCardID  int     `json:"dh_card_id"`
+	Name      string  `json:"name"`
+	SetName   string  `json:"set_name"`
+	Number    string  `json:"number"`
+	ImageURL  string  `json:"image_url"`
+	GemRateID *string `json:"gemrate_id,omitempty"`
 }
 
 // --- Search Types ---
