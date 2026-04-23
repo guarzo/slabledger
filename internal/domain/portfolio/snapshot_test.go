@@ -31,7 +31,7 @@ func TestComputePNLByCampaign(t *testing.T) {
 		{ID: "c1", Name: "Camp 1", Phase: inventory.PhaseActive},
 		{ID: "c2", Name: "Camp 2", Phase: inventory.PhaseActive},
 	}
-	health := portfolio.ComputeHealthFromData(campaigns, data)
+	health := portfolio.ComputeHealthFromData(campaigns, data, nil)
 
 	if len(health.Campaigns) != 2 {
 		t.Fatalf("expected 2 campaigns, got %d", len(health.Campaigns))
@@ -104,7 +104,7 @@ func TestComputeHealthFromData_StatusLogic(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			campaigns := []inventory.Campaign{{ID: "c1", Name: "Test", Phase: inventory.PhaseActive}}
-			health := portfolio.ComputeHealthFromData(campaigns, tc.data)
+			health := portfolio.ComputeHealthFromData(campaigns, tc.data, nil)
 			if len(health.Campaigns) != 1 {
 				t.Fatalf("expected 1 campaign, got %d", len(health.Campaigns))
 			}

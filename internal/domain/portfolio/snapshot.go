@@ -78,10 +78,13 @@ func computePNLByCampaign(data []inventory.PurchaseWithSale) map[string]inventor
 }
 
 // ComputeHealthFromData mirrors GetPortfolioHealth but uses pre-loaded data
-// instead of N+1 GetCampaignPNL DB calls.
-func ComputeHealthFromData(campaigns []inventory.Campaign, allData []inventory.PurchaseWithSale) *inventory.PortfolioHealth {
+// instead of N+1 GetCampaignPNL DB calls. If healthByCampaign is nil it is
+// computed from allData; pass a pre-computed map to share with suggestions.
+func ComputeHealthFromData(campaigns []inventory.Campaign, allData []inventory.PurchaseWithSale, healthByCampaign map[string]inventory.CampaignHealth) *inventory.PortfolioHealth {
 	pnlByCampaign := computePNLByCampaign(allData)
-	healthByCampaign := computeChannelHealthByCampaign(allData)
+	if healthByCampaign == nil {
+		healthByCampaign = computeChannelHealthByCampaign(allData)
+	}
 	inHandStats := computeInHandStatsByCampaign(allData)
 
 	health := &inventory.PortfolioHealth{}
@@ -212,12 +215,11 @@ func (s *service) GetSnapshot(ctx context.Context) (*PortfolioSnapshot, error) {
 		return nil, fmt.Errorf("list invoices: %w", err)
 	}
 
-	// Health
-	health := ComputeHealthFromData(activeCampaigns, allData)
-
-	// Insights + Suggestions
-	insights := inventory.ComputePortfolioInsights(allData, channelPNL, allCampaigns)
+	// Health + Insights + Suggestions (share healthByCampaign)
 	healthByCampaign := computeChannelHealthByCampaign(allData)
+	health := ComputeHealthFromData(activeCampaigns, allData, healthByCampaign)
+
+	insights := inventory.ComputePortfolioInsights(allData, channelPNL, allCampaigns)
 	suggestions := inventory.GenerateSuggestions(ctx, insights, allCampaigns, healthByCampaign)
 
 	// Weekly review (current week)
@@ -238,14 +240,12 @@ func (s *service) GetSnapshot(ctx context.Context) (*PortfolioSnapshot, error) {
 		lastWeekEnd.Format("2006-01-02"),
 	)
 	weeklyReview.DaysIntoWeek = int(now.Weekday())
-	if capitalRaw != nil {
-		capital := inventory.ComputeCapitalSummary(capitalRaw)
-		weeklyReview.WeeksToCover = capital.WeeksToCover
-	} else {
-		weeklyReview.WeeksToCover = inventory.WeeksToCoverNoData
-	}
+	// ComputeCapitalSummary handles nil capitalRaw safely (returns WeeksToCoverNoData)
+	weeklyReview.WeeksToCover = inventory.ComputeCapitalSummary(capitalRaw).WeeksToCover
 
-	// Weekly history (8 weeks)
+	// Weekly history (8 weeks). Iterates allData (all-time) per week rather than
+	// the date-bounded query that GetWeeklyHistory uses — acceptable tradeoff since
+	// allData is already loaded for health/insights.
 	const historyWeeks = 8
 	history := make([]inventory.WeeklyReviewSummary, 0, historyWeeks)
 	for i := range historyWeeks {
