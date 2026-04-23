@@ -1235,6 +1235,29 @@ Updates an invoice (e.g. mark as paid, record payment).
 
 ## Portfolio
 
+### `GET /api/portfolio/snapshot`
+
+Auth: RequireAuth
+
+Composite endpoint returning health, insights, weekly-review, weekly-history (8 weeks), channel-velocity, suggestions, credit summary, and invoices in a single response. Loads shared data once server-side, avoiding redundant DB queries.
+
+**Response:**
+
+```json
+{
+  "health": { /* same as GET /api/portfolio/health */ },
+  "insights": { /* same as GET /api/portfolio/insights */ },
+  "weeklyReview": { /* same as GET /api/portfolio/weekly-review */ },
+  "weeklyHistory": [ /* same as GET /api/portfolio/weekly-history?weeks=8 */ ],
+  "channelVelocity": [ /* same as GET /api/portfolio/channel-velocity */ ],
+  "suggestions": { /* same as GET /api/portfolio/suggestions */ },
+  "creditSummary": { /* same as GET /api/credit/summary */ },
+  "invoices": [ /* same as GET /api/credit/invoices */ ]
+}
+```
+
+Individual endpoints below remain available unchanged.
+
 ### `GET /api/portfolio/health`
 
 Auth: RequireAuth
