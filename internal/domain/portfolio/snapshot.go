@@ -97,9 +97,7 @@ func ComputeHealthFromData(campaigns []inventory.Campaign, allData []inventory.P
 		capitalAtRisk := 0
 		if pnl.TotalUnsold > 0 {
 			capitalAtRisk = pnl.TotalSpendCents - pnl.TotalRevenueCents + pnl.TotalFeesCents
-			if capitalAtRisk < 0 {
-				capitalAtRisk = 0
-			}
+			capitalAtRisk = max(capitalAtRisk, 0)
 		}
 
 		status := "healthy"
@@ -250,7 +248,7 @@ func (s *service) GetSnapshot(ctx context.Context) (*PortfolioSnapshot, error) {
 	// Weekly history (8 weeks)
 	const historyWeeks = 8
 	history := make([]inventory.WeeklyReviewSummary, 0, historyWeeks)
-	for i := 0; i < historyWeeks; i++ {
+	for i := range historyWeeks {
 		wStart := weekStart.AddDate(0, 0, -i*7)
 		wEnd := wStart.AddDate(0, 0, 6)
 		lwStart := wStart.AddDate(0, 0, -7)
