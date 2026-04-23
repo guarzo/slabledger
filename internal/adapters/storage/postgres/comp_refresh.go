@@ -43,6 +43,7 @@ func (s *CompRefreshStore) ListUnsoldCardsNeedingComps(ctx context.Context, cuto
 		  AND cp.grade_value > 0
 		  AND cp.sold_date = ''
 		  AND (lc.latest IS NULL OR lc.latest < to_char(NOW() - make_interval(days => $1), 'YYYY-MM-DD'))
+		ORDER BY cp.gem_rate_id, 'PSA ' || cp.grade_value::text, cp.id DESC
 	`, cutoffDays)
 	if err != nil {
 		return nil, fmt.Errorf("list unsold cards needing comps: %w", err)
@@ -83,6 +84,9 @@ func (s *CompRefreshStore) BackfillLastSoldFromComps(ctx context.Context) (int, 
 	if err != nil {
 		return 0, fmt.Errorf("backfill last sold from comps: %w", err)
 	}
-	n, _ := res.RowsAffected()
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("backfill last sold rows affected: %w", err)
+	}
 	return int(n), nil
 }
