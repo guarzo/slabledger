@@ -218,7 +218,7 @@ func FromEnv(base Config) Config {
 	envDuration("DH_PUSH_INTERVAL", &cfg.DH.PushInterval)
 
 	// DH demand analytics refresh (niche-opportunity leaderboard cache).
-	envBool("DH_ANALYTICS_REFRESH_ENABLED", &cfg.DHAnalyticsRefresh.Enabled, false)
+	envBool("DH_ANALYTICS_REFRESH_ENABLED", &cfg.DHAnalyticsRefresh.Enabled, true)
 	envIntRange("DH_ANALYTICS_REFRESH_HOUR", &cfg.DHAnalyticsRefresh.RefreshHour, 0, 23)
 	envString("DH_ANALYTICS_REFRESH_WINDOW", &cfg.DHAnalyticsRefresh.Window)
 
