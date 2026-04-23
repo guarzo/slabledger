@@ -56,10 +56,12 @@ export default function LiquidationPage() {
   };
 
   const handleApply = () => {
-    const applyItems = Array.from(selected).map(id => {
-      const item = items.find(i => i.purchaseId === id)!;
-      return { purchaseId: id, newPriceCents: getFinalPrice(item) };
-    });
+    const applyItems = Array.from(selected)
+      .map(id => {
+        const item = items.find(i => i.purchaseId === id);
+        return item ? { purchaseId: id, newPriceCents: getFinalPrice(item) } : null;
+      })
+      .filter((x): x is NonNullable<typeof x> => x !== null);
     applyMutation.mutate(applyItems, {
       onSuccess: () => {
         setShowConfirm(false);
@@ -201,8 +203,8 @@ export default function LiquidationPage() {
                           type="number"
                           min={0}
                           step={0.01}
-                          value={(getFinalPrice(item) / 100).toFixed(2)}
-                          onChange={e => handleFinalPriceChange(item.purchaseId, e.target.value)}
+                          defaultValue={(getFinalPrice(item) / 100).toFixed(2)}
+                          onBlur={e => handleFinalPriceChange(item.purchaseId, e.target.value)}
                           className="w-24 px-2 py-1 rounded border border-[var(--border)] bg-[var(--surface-2)] text-[var(--text)] text-right text-sm"
                         />
                       </td>

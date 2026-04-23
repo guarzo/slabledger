@@ -21,8 +21,7 @@ func ComputeCompPrice(comps []SaleComp, clValueCents int) CompPriceResult {
 		filtered = filterByDate(comps, day180)
 	}
 	if len(filtered) < 3 {
-		filtered = make([]SaleComp, len(comps))
-		copy(filtered, comps)
+		filtered = append([]SaleComp(nil), comps...)
 	}
 
 	sort.Slice(filtered, func(i, j int) bool {
@@ -131,18 +130,15 @@ func lowerConfidence(c ConfidenceLevel) ConfidenceLevel {
 	}
 }
 
-func minConfidence(levels ...ConfidenceLevel) ConfidenceLevel {
+func minConfidence(a, b ConfidenceLevel) ConfidenceLevel {
 	order := map[ConfidenceLevel]int{
 		ConfidenceNone:   0,
 		ConfidenceLow:    1,
 		ConfidenceMedium: 2,
 		ConfidenceHigh:   3,
 	}
-	result := ConfidenceHigh
-	for _, l := range levels {
-		if order[l] < order[result] {
-			result = l
-		}
+	if order[a] < order[b] {
+		return a
 	}
-	return result
+	return b
 }

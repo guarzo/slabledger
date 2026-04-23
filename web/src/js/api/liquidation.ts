@@ -24,7 +24,7 @@ import { APIClient as _APIClient } from './client';
 const proto = _APIClient.prototype;
 
 proto.getLiquidationPreview = async function (this: APIClient, baseDiscountPct: number, noCompDiscountPct: number): Promise<LiquidationPreviewResponse> {
-  return this.get<LiquidationPreviewResponse>(`/liquidation/preview?baseDiscountPct=${baseDiscountPct}&noCompDiscountPct=${noCompDiscountPct}`);
+  return this.post<LiquidationPreviewResponse>('/liquidation/preview', { baseDiscountPct, noCompDiscountPct });
 };
 
 proto.applyLiquidation = async function (this: APIClient, items: LiquidationApplyItem[]): Promise<LiquidationApplyResult> {
