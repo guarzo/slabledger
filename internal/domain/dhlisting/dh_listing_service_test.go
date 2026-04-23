@@ -526,7 +526,7 @@ func TestDisambiguateCandidates(t *testing.T) {
 				}
 			}
 
-			id, err := disambiguateCandidates(tc.candidates, tc.cardNumber, saveFn)
+			id, _, err := disambiguateCandidates(tc.candidates, tc.cardNumber, saveFn)
 
 			if tc.wantErr {
 				if err == nil {

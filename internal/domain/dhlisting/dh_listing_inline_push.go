@@ -37,7 +37,7 @@ func (s *dhListingService) inlineMatchAndPush(ctx context.Context, p *inventory.
 		return 0
 	}
 
-	dhCardID, ok := s.resolveInlineDHCardID(ctx, resp, p)
+	dhCardID, candidateGemRateID, ok := s.resolveInlineDHCardID(ctx, resp, p)
 	if !ok {
 		return 0
 	}
@@ -50,12 +50,16 @@ func (s *dhListingService) inlineMatchAndPush(ctx context.Context, p *inventory.
 		}
 	}
 
-	if s.gemRateIDUpdater != nil && resp.GemRateID != "" && p.GemRateID == "" {
-		if err := s.gemRateIDUpdater.UpdatePurchaseGemRateID(ctx, p.ID, resp.GemRateID); err != nil {
+	gemRateID := resp.GemRateID
+	if gemRateID == "" {
+		gemRateID = candidateGemRateID
+	}
+	if s.gemRateIDUpdater != nil && gemRateID != "" && p.GemRateID == "" {
+		if err := s.gemRateIDUpdater.UpdatePurchaseGemRateID(ctx, p.ID, gemRateID); err != nil {
 			s.logger.Error(ctx, "inline dh resolve: failed to save gem_rate_id",
-				observability.String("cert", p.CertNumber), observability.String("gemRateID", resp.GemRateID), observability.Err(err))
+				observability.String("cert", p.CertNumber), observability.String("gemRateID", gemRateID), observability.Err(err))
 		} else {
-			p.GemRateID = resp.GemRateID
+			p.GemRateID = gemRateID
 		}
 	}
 
@@ -128,9 +132,9 @@ func (s *dhListingService) inlineMatchAndPush(ctx context.Context, p *inventory.
 
 // resolveInlineDHCardID determines the DH card ID from a cert resolution response.
 // Returns the card ID and true on success, or 0 and false if unresolvable.
-func (s *dhListingService) resolveInlineDHCardID(ctx context.Context, resp *DHCertResolution, p *inventory.Purchase) (int, bool) {
+func (s *dhListingService) resolveInlineDHCardID(ctx context.Context, resp *DHCertResolution, p *inventory.Purchase) (int, string, bool) {
 	if resp.Status == DHCertStatusMatched {
-		return resp.DHCardID, true
+		return resp.DHCardID, resp.GemRateID, true
 	}
 
 	if resp.Status == DHCertStatusAmbiguous && len(resp.Candidates) > 0 {
@@ -138,18 +142,18 @@ func (s *dhListingService) resolveInlineDHCardID(ctx context.Context, resp *DHCe
 		if s.candidatesSaver != nil {
 			saveFn = func(j string) error { return s.candidatesSaver.UpdatePurchaseDHCandidates(ctx, p.ID, j) }
 		}
-		resolved, err := disambiguateCandidates(resp.Candidates, p.CardNumber, saveFn)
+		resolved, gemRateID, err := disambiguateCandidates(resp.Candidates, p.CardNumber, saveFn)
 		if err != nil {
 			s.logger.Warn(ctx, "inline dh resolve: failed to save candidates",
 				observability.String("cert", p.CertNumber), observability.Err(err))
 		}
 		if resolved > 0 {
-			return resolved, true
+			return resolved, gemRateID, true
 		}
 	}
 
 	s.markInlineUnmatched(ctx, p, resp.Status)
-	return 0, false
+	return 0, "", false
 }
 
 // markInlineUnmatched sets the push status to unmatched and logs the outcome.
@@ -176,44 +180,46 @@ func (s *dhListingService) markInlineUnmatched(ctx context.Context, p *inventory
 // disambiguateCandidates tries card-number disambiguation on ambiguous candidates.
 // Returns the matched DHCardID (>0) on success. On failure, marshals
 // candidates to JSON and passes them to saveFn (if non-nil), then returns 0.
-func disambiguateCandidates(candidates []DHCertCandidate, cardNumber string, saveFn func(candidatesJSON string) error) (int, error) {
-	if id := disambiguateByCardNumber(candidates, cardNumber); id > 0 {
-		return id, nil
+func disambiguateCandidates(candidates []DHCertCandidate, cardNumber string, saveFn func(candidatesJSON string) error) (int, string, error) {
+	if id, gemRateID := disambiguateByCardNumber(candidates, cardNumber); id > 0 {
+		return id, gemRateID, nil
 	}
 	if saveFn != nil {
 		b, err := json.Marshal(candidates)
 		if err != nil {
-			return 0, fmt.Errorf("marshal candidates: %w", err)
+			return 0, "", fmt.Errorf("marshal candidates: %w", err)
 		}
 		if err := saveFn(string(b)); err != nil {
-			return 0, err
+			return 0, "", err
 		}
 	}
-	return 0, nil
+	return 0, "", nil
 }
 
 // disambiguateByCardNumber selects a single candidate from an ambiguous cert
 // resolution using the card_number hint. Returns the matching candidate's
 // DHCardID if exactly one candidate matches, or 0 if disambiguation fails.
-func disambiguateByCardNumber(candidates []DHCertCandidate, cardNumber string) int {
+func disambiguateByCardNumber(candidates []DHCertCandidate, cardNumber string) (int, string) {
 	normalized := normalizeCardNum(cardNumber)
 	if normalized == "" || len(candidates) == 0 {
-		return 0
+		return 0, ""
 	}
 
 	var matchID int
+	var matchGemRateID string
 	matches := 0
 	for _, c := range candidates {
 		if normalizeCardNum(c.CardNumber) == normalized {
 			matchID = c.DHCardID
+			matchGemRateID = c.GemRateID
 			matches++
 		}
 	}
 
 	if matches == 1 {
-		return matchID
+		return matchID, matchGemRateID
 	}
-	return 0
+	return 0, ""
 }
 
 // normalizeCardNum strips leading zeros, preserving a single "0" for
