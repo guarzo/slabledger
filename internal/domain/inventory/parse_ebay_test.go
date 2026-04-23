@@ -85,6 +85,15 @@ func TestParseEbayOrderRows(t *testing.T) {
 			},
 		},
 		{
+			name: "zero and negative dh_id skipped",
+			dataRows: [][]string{
+				{"1", "order-1", "buyer", "Card A", "DH-0", "$50.00", "Apr-22-26"},
+				{"2", "order-2", "buyer", "Card B", "DH--5", "$50.00", "Apr-22-26"},
+			},
+			wantRows:    0,
+			wantSkipped: 2,
+		},
+		{
 			name: "invalid_price skipped",
 			dataRows: [][]string{
 				{"1", "order-1", "buyer", "Card Title", "DH-123", "$xx", "Apr-22-26"},
@@ -130,7 +139,9 @@ func TestParseEbayOrderRows(t *testing.T) {
 			if tc.name == "missing required header" {
 				records = [][]string{
 					{},
-					{"Order Number", "Item Title", "Sold For", "Sale Date"},
+					{"Sales Record Number", "Order Number", "Buyer Username", "Custom Label", "Sold For", "Sale Date"},
+					{},
+					{"1", "order-1", "buyer", "DH-123", "$50.00", "Apr-22-26"},
 				}
 			} else {
 				records = append(records, baseHeader...)

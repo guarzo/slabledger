@@ -69,7 +69,7 @@ func ParseEbayOrderRows(records [][]string) ([]EbayOrderRow, []OrdersImportSkip,
 		switch {
 		case strings.HasPrefix(strings.ToUpper(customLabel), "DH-"):
 			id, err := strconv.Atoi(customLabel[3:])
-			if err != nil {
+			if err != nil || id <= 0 {
 				skipped = append(skipped, OrdersImportSkip{
 					ProductTitle: title,
 					Reason:       fmt.Sprintf("invalid_dh_id: %s", customLabel),

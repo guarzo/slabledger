@@ -2,6 +2,7 @@ package mocks
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"time"
 
@@ -350,6 +351,9 @@ func (m *InMemoryCampaignStore) GetPurchasesByDHInventoryIDs(ctx context.Context
 	}
 	for _, p := range m.Purchases {
 		if idSet[p.DHInventoryID] {
+			if _, exists := result[p.DHInventoryID]; exists {
+				return nil, fmt.Errorf("duplicate dh_inventory_id %d", p.DHInventoryID)
+			}
 			result[p.DHInventoryID] = p
 		}
 	}
