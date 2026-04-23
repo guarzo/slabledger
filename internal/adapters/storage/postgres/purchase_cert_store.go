@@ -148,6 +148,54 @@ func (ps *PurchaseStore) GetPurchasesByIDs(ctx context.Context, ids []string) (m
 	return result, nil
 }
 
+// GetPurchasesByDHInventoryIDs retrieves purchases by their DH inventory IDs.
+func (ps *PurchaseStore) GetPurchasesByDHInventoryIDs(ctx context.Context, dhIDs []int) (map[int]*inventory.Purchase, error) {
+	if len(dhIDs) == 0 {
+		return make(map[int]*inventory.Purchase), nil
+	}
+
+	const chunkSize = 500
+	result := make(map[int]*inventory.Purchase, len(dhIDs))
+
+	for start := 0; start < len(dhIDs); start += chunkSize {
+		end := min(start+chunkSize, len(dhIDs))
+		chunk := dhIDs[start:end]
+
+		placeholders := make([]string, len(chunk))
+		args := make([]any, len(chunk))
+		for i, id := range chunk {
+			placeholders[i] = fmt.Sprintf("$%d", i+1)
+			args[i] = id
+		}
+
+		query := `SELECT ` + purchaseColumns + ` FROM campaign_purchases
+			WHERE dh_inventory_id IN (` + strings.Join(placeholders, ",") + `)`
+
+		rows, err := ps.db.QueryContext(ctx, query, args...)
+		if err != nil {
+			return nil, fmt.Errorf("query purchases by DH inventory IDs: %w", err)
+		}
+
+		purchases, err := scanRows(ctx, rows, func(rs *sql.Rows) (inventory.Purchase, error) {
+			var p inventory.Purchase
+			err := scanPurchase(rs, &p)
+			return p, err
+		})
+		if err != nil {
+			return nil, fmt.Errorf("scan purchases by DH inventory IDs: %w", err)
+		}
+		for i := range purchases {
+			dhID := purchases[i].DHInventoryID
+			if existing, ok := result[dhID]; ok {
+				return nil, fmt.Errorf("duplicate dh_inventory_id %d: purchases %s and %s", dhID, existing.ID, purchases[i].ID)
+			}
+			result[dhID] = &purchases[i]
+		}
+	}
+
+	return result, nil
+}
+
 // SetReceivedAt records when a purchase was received from grading.
 func (ps *PurchaseStore) SetReceivedAt(ctx context.Context, purchaseID string, receivedAt time.Time) error {
 	return ps.execAndExpectRow(ctx, "set received_at",

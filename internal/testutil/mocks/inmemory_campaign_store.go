@@ -63,6 +63,7 @@ type InMemoryCampaignStore struct {
 	GetAllPurchasesWithSalesFn          func(ctx context.Context, opts ...inventory.PurchaseFilterOpt) ([]inventory.PurchaseWithSale, error)
 	GetGlobalPNLByChannelFn             func(ctx context.Context) ([]inventory.ChannelPNL, error)
 	GetPurchasesByCertNumbersFn         func(ctx context.Context, certNumbers []string) (map[string]*inventory.Purchase, error)
+	GetPurchasesByDHInventoryIDsFn      func(ctx context.Context, dhIDs []int) (map[int]*inventory.Purchase, error)
 	UpdatePurchaseDHFieldsFn            func(ctx context.Context, id string, update inventory.DHFieldsUpdate) error
 	GetPurchasesByDHCertStatusFn        func(ctx context.Context, status string, limit int) ([]inventory.Purchase, error)
 	UpdatePurchaseDHPushStatusFn        func(ctx context.Context, id string, status string) error
@@ -333,6 +334,23 @@ func (m *InMemoryCampaignStore) GetPurchasesByCertNumbers(ctx context.Context, c
 	for _, p := range m.Purchases {
 		if certSet[p.CertNumber] {
 			result[p.CertNumber] = p
+		}
+	}
+	return result, nil
+}
+
+func (m *InMemoryCampaignStore) GetPurchasesByDHInventoryIDs(ctx context.Context, dhIDs []int) (map[int]*inventory.Purchase, error) {
+	if m.GetPurchasesByDHInventoryIDsFn != nil {
+		return m.GetPurchasesByDHInventoryIDsFn(ctx, dhIDs)
+	}
+	result := make(map[int]*inventory.Purchase, len(dhIDs))
+	idSet := make(map[int]bool, len(dhIDs))
+	for _, id := range dhIDs {
+		idSet[id] = true
+	}
+	for _, p := range m.Purchases {
+		if idSet[p.DHInventoryID] {
+			result[p.DHInventoryID] = p
 		}
 	}
 	return result, nil

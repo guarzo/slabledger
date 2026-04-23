@@ -315,6 +315,19 @@ func (m *mockRepo) GetPurchasesByCertNumbers(_ context.Context, certNumbers []st
 	return result, nil
 }
 
+func (m *mockRepo) GetPurchasesByDHInventoryIDs(_ context.Context, dhIDs []int) (map[int]*Purchase, error) {
+	result := make(map[int]*Purchase, len(dhIDs))
+	for _, id := range dhIDs {
+		for _, p := range m.purchases {
+			if p.DHInventoryID == id {
+				result[id] = p
+				break
+			}
+		}
+	}
+	return result, nil
+}
+
 func (m *mockRepo) GetPurchasesByIDs(_ context.Context, ids []string) (map[string]*Purchase, error) {
 	result := make(map[string]*Purchase, len(ids))
 	for _, id := range ids {

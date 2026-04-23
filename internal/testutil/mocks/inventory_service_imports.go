@@ -23,6 +23,7 @@ type MockImportService struct {
 	EnsureExternalCampaignFn    func(ctx context.Context) (*inventory.Campaign, error)
 	ImportExternalCSVFn         func(ctx context.Context, rows []inventory.ShopifyExportRow) (*inventory.ExternalImportResult, error)
 	ImportOrdersSalesFn         func(ctx context.Context, rows []inventory.OrdersExportRow) (*inventory.OrdersImportResult, error)
+	ImportEbayOrdersSalesFn     func(ctx context.Context, rows []inventory.EbayOrderRow) (*inventory.OrdersImportResult, error)
 	ConfirmOrdersSalesFn        func(ctx context.Context, items []inventory.OrdersConfirmItem) (*inventory.BulkSaleResult, error)
 	ImportCertsFn               func(ctx context.Context, certNumbers []string) (*inventory.CertImportResult, error)
 	GetPurchasesByCertNumbersFn func(ctx context.Context, certNumbers []string) (map[string]*inventory.Purchase, error)
@@ -71,6 +72,13 @@ func (m *MockImportService) ImportExternalCSV(ctx context.Context, rows []invent
 func (m *MockImportService) ImportOrdersSales(ctx context.Context, rows []inventory.OrdersExportRow) (*inventory.OrdersImportResult, error) {
 	if m.ImportOrdersSalesFn != nil {
 		return m.ImportOrdersSalesFn(ctx, rows)
+	}
+	return &inventory.OrdersImportResult{}, nil
+}
+
+func (m *MockImportService) ImportEbayOrdersSales(ctx context.Context, rows []inventory.EbayOrderRow) (*inventory.OrdersImportResult, error) {
+	if m.ImportEbayOrdersSalesFn != nil {
+		return m.ImportEbayOrdersSalesFn(ctx, rows)
 	}
 	return &inventory.OrdersImportResult{}, nil
 }
