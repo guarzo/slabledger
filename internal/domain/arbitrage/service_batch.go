@@ -9,6 +9,59 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
+type cardKey struct{ name, set, number string }
+
+func buildEbayFeeMap(campaigns []inventory.Campaign) map[string]float64 {
+	m := make(map[string]float64, len(campaigns))
+	for _, c := range campaigns {
+		m[c.ID] = inventory.EffectiveFeePct(&c)
+	}
+	return m
+}
+
+type resolveResult struct {
+	cardToDHID map[cardKey]int
+	dhCardIDs  []int
+}
+
+// resolveCardDHIDs maps unique cards from unsold purchases to DH card IDs via
+// the batch pricer. skipHighGrades filters out PSA 9+ (used by crack, not acquisition).
+func (s *service) resolveCardDHIDs(
+	ctx context.Context,
+	unsold []inventory.Purchase,
+	ebayFeeMap map[string]float64,
+	skipHighGrades bool,
+) resolveResult {
+	cardToDHID := make(map[cardKey]int)
+	var dhCardIDs []int
+	for _, p := range unsold {
+		if skipHighGrades && p.GradeValue >= 9 {
+			continue
+		}
+		if _, ok := ebayFeeMap[p.CampaignID]; !ok {
+			continue
+		}
+		key := cardKey{p.CardName, p.SetName, p.CardNumber}
+		if _, seen := cardToDHID[key]; seen {
+			continue
+		}
+		dhID, err := s.batchPricer.ResolveDHCardID(ctx, p.CardName, p.SetName, p.CardNumber)
+		if err != nil {
+			if s.logger != nil {
+				s.logger.Warn(ctx, "batch: resolve failed",
+					observability.String("cardName", p.CardName), observability.Err(err))
+			}
+			cardToDHID[key] = 0
+			continue
+		}
+		cardToDHID[key] = dhID
+		if dhID > 0 {
+			dhCardIDs = append(dhCardIDs, dhID)
+		}
+	}
+	return resolveResult{cardToDHID: cardToDHID, dhCardIDs: dhCardIDs}
+}
+
 // getCrackOpportunitiesLegacy is the original per-card price lookup path.
 // Uses a single ListAllUnsoldPurchases call to avoid N+1 DB queries.
 func (s *service) getCrackOpportunitiesLegacy(ctx context.Context) ([]CrackAnalysis, error) {
@@ -27,10 +80,7 @@ func (s *service) getCrackOpportunitiesLegacy(ctx context.Context) ([]CrackAnaly
 		return nil, fmt.Errorf("list active campaigns: %w", err)
 	}
 
-	ebayFeeMap := make(map[string]float64, len(allCampaigns))
-	for _, c := range allCampaigns {
-		ebayFeeMap[c.ID] = inventory.EffectiveFeePct(&c)
-	}
+	ebayFeeMap := buildEbayFeeMap(allCampaigns)
 
 	allUnsold, err := s.purchases.ListAllUnsoldPurchases(ctx)
 	if err != nil {
@@ -87,7 +137,9 @@ func (s *service) getCrackOpportunitiesLegacy(ctx context.Context) ([]CrackAnaly
 			p.BuyCostCents, p.PSASourcingFeeCents, rawCents, gradedCents,
 			ebayFee,
 		)
-		results = append(results, *analysis)
+		if analysis.CrackAdvantage > 0 {
+			results = append(results, *analysis)
+		}
 	}
 
 	sort.Slice(results, func(i, j int) bool {
@@ -103,52 +155,27 @@ func (s *service) getCrackOpportunitiesBatch(ctx context.Context) ([]CrackAnalys
 	if err != nil {
 		return nil, fmt.Errorf("list active campaigns: %w", err)
 	}
-	ebayFeeMap := make(map[string]float64, len(allCampaigns))
-	for _, c := range allCampaigns {
-		ebayFeeMap[c.ID] = inventory.EffectiveFeePct(&c)
-	}
+	ebayFeeMap := buildEbayFeeMap(allCampaigns)
 
 	allUnsold, err := s.purchases.ListAllUnsoldPurchases(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list all unsold purchases: %w", err)
 	}
 
-	type cardKey struct{ name, set, number string }
-	cardToDHID := make(map[cardKey]int)
-	var dhCardIDs []int
-	for _, p := range allUnsold {
-		if p.GradeValue >= 9 {
-			continue
-		}
-		if _, ok := ebayFeeMap[p.CampaignID]; !ok {
-			continue
-		}
-		key := cardKey{p.CardName, p.SetName, p.CardNumber}
-		if _, seen := cardToDHID[key]; seen {
-			continue
-		}
-		dhID, err := s.batchPricer.ResolveDHCardID(ctx, p.CardName, p.SetName, p.CardNumber)
-		if err != nil {
-			if s.logger != nil {
-				s.logger.Warn(ctx, "crack batch: resolve failed",
-					observability.String("cardName", p.CardName), observability.Err(err))
-			}
-			cardToDHID[key] = 0
-			continue
-		}
-		cardToDHID[key] = dhID
-		if dhID > 0 {
-			dhCardIDs = append(dhCardIDs, dhID)
-		}
-	}
+	resolved := s.resolveCardDHIDs(ctx, allUnsold, ebayFeeMap, true)
 
-	distributions, err := s.batchPricer.BatchPriceDistribution(ctx, dhCardIDs)
+	distributions, err := s.batchPricer.BatchPriceDistribution(ctx, resolved.dhCardIDs)
 	if err != nil {
 		return nil, fmt.Errorf("batch price distribution: %w", err)
 	}
 
 	var results []CrackAnalysis
 	for _, p := range allUnsold {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+		}
 		if p.GradeValue >= 9 {
 			continue
 		}
@@ -157,7 +184,7 @@ func (s *service) getCrackOpportunitiesBatch(ctx context.Context) ([]CrackAnalys
 			continue
 		}
 		key := cardKey{p.CardName, p.SetName, p.CardNumber}
-		dhID := cardToDHID[key]
+		dhID := resolved.cardToDHID[key]
 		if dhID == 0 {
 			continue
 		}
@@ -211,10 +238,7 @@ func (s *service) getAcquisitionTargetsLegacy(ctx context.Context) ([]Acquisitio
 		return nil, fmt.Errorf("list active campaigns: %w", err)
 	}
 
-	ebayFeeMap := make(map[string]float64, len(allCampaigns))
-	for _, c := range allCampaigns {
-		ebayFeeMap[c.ID] = inventory.EffectiveFeePct(&c)
-	}
+	ebayFeeMap := buildEbayFeeMap(allCampaigns)
 
 	allUnsold, err := s.purchases.ListAllUnsoldPurchases(ctx)
 	if err != nil {
@@ -292,43 +316,16 @@ func (s *service) getAcquisitionTargetsBatch(ctx context.Context) ([]Acquisition
 	if err != nil {
 		return nil, fmt.Errorf("list active campaigns: %w", err)
 	}
-	ebayFeeMap := make(map[string]float64, len(allCampaigns))
-	for _, c := range allCampaigns {
-		ebayFeeMap[c.ID] = inventory.EffectiveFeePct(&c)
-	}
+	ebayFeeMap := buildEbayFeeMap(allCampaigns)
 
 	allUnsold, err := s.purchases.ListAllUnsoldPurchases(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list all unsold purchases: %w", err)
 	}
 
-	type cardKey struct{ name, set, number string }
-	cardToDHID := make(map[cardKey]int)
-	var dhCardIDs []int
-	for _, p := range allUnsold {
-		if _, ok := ebayFeeMap[p.CampaignID]; !ok {
-			continue
-		}
-		key := cardKey{p.CardName, p.SetName, p.CardNumber}
-		if _, seen := cardToDHID[key]; seen {
-			continue
-		}
-		dhID, err := s.batchPricer.ResolveDHCardID(ctx, p.CardName, p.SetName, p.CardNumber)
-		if err != nil {
-			if s.logger != nil {
-				s.logger.Warn(ctx, "acquisition batch: resolve failed",
-					observability.String("cardName", p.CardName), observability.Err(err))
-			}
-			cardToDHID[key] = 0
-			continue
-		}
-		cardToDHID[key] = dhID
-		if dhID > 0 {
-			dhCardIDs = append(dhCardIDs, dhID)
-		}
-	}
+	resolved := s.resolveCardDHIDs(ctx, allUnsold, ebayFeeMap, false)
 
-	distributions, err := s.batchPricer.BatchPriceDistribution(ctx, dhCardIDs)
+	distributions, err := s.batchPricer.BatchPriceDistribution(ctx, resolved.dhCardIDs)
 	if err != nil {
 		return nil, fmt.Errorf("batch price distribution: %w", err)
 	}
@@ -336,6 +333,11 @@ func (s *service) getAcquisitionTargetsBatch(ctx context.Context) ([]Acquisition
 	seen := make(map[cardKey]bool)
 	var opportunities []AcquisitionOpportunity
 	for _, p := range allUnsold {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+		}
 		ebayFee, ok := ebayFeeMap[p.CampaignID]
 		if !ok {
 			continue
@@ -346,7 +348,7 @@ func (s *service) getAcquisitionTargetsBatch(ctx context.Context) ([]Acquisition
 		}
 		seen[key] = true
 
-		dhID := cardToDHID[key]
+		dhID := resolved.cardToDHID[key]
 		if dhID == 0 {
 			continue
 		}
