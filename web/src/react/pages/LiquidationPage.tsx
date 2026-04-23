@@ -2,8 +2,8 @@ import { useState, useCallback } from 'react';
 import { useLiquidationPreview, useApplyLiquidation } from '../queries/useLiquidationQueries';
 import type { LiquidationPreviewItem, ConfidenceLevel } from '../../types/liquidation';
 
-function dollars(cents: number): string {
-  return cents > 0 ? `$${(cents / 100).toFixed(2)}` : '—';
+function dollars(cents: number | null | undefined): string {
+  return cents != null && cents >= 0 ? `$${(cents / 100).toFixed(2)}` : '—';
 }
 
 function confidenceColor(level: ConfidenceLevel): string {
@@ -49,7 +49,10 @@ export default function LiquidationPage() {
     finalPrices[item.purchaseId] ?? item.suggestedPriceCents;
 
   const handleFinalPriceChange = (id: string, val: string) => {
-    const cents = Math.round(parseFloat(val) * 100);
+    const parts = val.split('.');
+    const dollars = parseInt(parts[0] || '0', 10);
+    const frac = (parts[1] || '0').slice(0, 2).padEnd(2, '0');
+    const cents = dollars * 100 + parseInt(frac, 10);
     if (!isNaN(cents) && cents >= 0) {
       setFinalPrices(prev => ({ ...prev, [id]: cents }));
     }
@@ -66,6 +69,8 @@ export default function LiquidationPage() {
       onSuccess: () => {
         setShowConfirm(false);
         setSelected(new Set());
+        setFinalPrices({});
+        fetchPreview(baseDiscountPct, noCompDiscountPct);
       },
     });
   };
@@ -203,8 +208,8 @@ export default function LiquidationPage() {
                           type="number"
                           min={0}
                           step={0.01}
-                          defaultValue={(getFinalPrice(item) / 100).toFixed(2)}
-                          onBlur={e => handleFinalPriceChange(item.purchaseId, e.target.value)}
+                          value={(getFinalPrice(item) / 100).toFixed(2)}
+                          onChange={e => handleFinalPriceChange(item.purchaseId, e.target.value)}
                           className="w-24 px-2 py-1 rounded border border-[var(--border)] bg-[var(--surface-2)] text-[var(--text)] text-right text-sm"
                         />
                       </td>

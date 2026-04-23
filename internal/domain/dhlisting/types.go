@@ -65,6 +65,7 @@ type DHCertResolveRequest struct {
 // DHCertCandidate is one possible match for an ambiguous cert resolution.
 type DHCertCandidate struct {
 	DHCardID   int
+	GemRateID  string
 	CardName   string
 	SetName    string
 	CardNumber string
@@ -74,6 +75,7 @@ type DHCertCandidate struct {
 type DHCertResolution struct {
 	Status     string // "matched", "ambiguous", "not_found"
 	DHCardID   int
+	GemRateID  string
 	Candidates []DHCertCandidate
 }
 

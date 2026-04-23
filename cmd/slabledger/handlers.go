@@ -319,6 +319,7 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 				dhlisting.WithDHListingCandidatesSaver(in.PurchaseStore),
 				dhlisting.WithDHListingResetter(in.PurchaseStore),
 				dhlisting.WithDHListingUnlistedClearer(in.PurchaseStore),
+				dhlisting.WithDHListingGemRateIDUpdater(in.PurchaseStore),
 			)
 		}
 		if in.CardIDMappingRepo != nil {

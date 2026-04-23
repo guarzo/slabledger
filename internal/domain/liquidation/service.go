@@ -38,7 +38,7 @@ func (s *service) Preview(ctx context.Context, req PreviewRequest) (PreviewRespo
 		}
 
 		if p.GemRateID != "" {
-			condition := fmt.Sprintf("g%d", int(p.GradeValue))
+			condition := fmt.Sprintf("PSA %g", p.GradeValue)
 			saleComps, compErr := s.comps.GetSaleCompsForCard(ctx, p.GemRateID, condition)
 			if compErr == nil && len(saleComps) > 0 {
 				result := ComputeCompPrice(saleComps, p.CLValueCents)

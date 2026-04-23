@@ -23,6 +23,7 @@ type dhListingService struct {
 	pusher            DHInventoryPusher
 	lister            DHInventoryLister
 	cardIDSaver       DHCardIDSaver
+	gemRateIDUpdater  DHGemRateIDUpdater
 	fieldsUpdater     DHListingFieldsUpdater
 	pushStatusUpdater DHListingPushStatusUpdater
 	candidatesSaver   DHListingCandidatesSaver
@@ -50,6 +51,11 @@ type DHListingPushStatusUpdater interface {
 // DHListingCandidatesSaver stores DH cert resolution candidates on a purchase.
 type DHListingCandidatesSaver interface {
 	UpdatePurchaseDHCandidates(ctx context.Context, id string, candidatesJSON string) error
+}
+
+// DHGemRateIDUpdater persists the CL gem_rate_id on a purchase.
+type DHGemRateIDUpdater interface {
+	UpdatePurchaseGemRateID(ctx context.Context, id, gemRateID string) error
 }
 
 // DHListingUnlistedClearer clears the dh_unlisted_detected_at timestamp on a
@@ -96,6 +102,11 @@ func WithDHListingPushStatusUpdater(u DHListingPushStatusUpdater) DHListingServi
 // WithDHListingCandidatesSaver enables storing ambiguous DH candidates.
 func WithDHListingCandidatesSaver(saver DHListingCandidatesSaver) DHListingServiceOption {
 	return func(s *dhListingService) { s.candidatesSaver = saver }
+}
+
+// WithDHListingGemRateIDUpdater enables persisting gem_rate_id from DH cert resolution.
+func WithDHListingGemRateIDUpdater(u DHGemRateIDUpdater) DHListingServiceOption {
+	return func(s *dhListingService) { s.gemRateIDUpdater = u }
 }
 
 // WithDHListingResetter enables inline reset of stale DH inventory IDs.
@@ -426,6 +437,15 @@ func (s *dhListingService) inlineMatchAndPush(ctx context.Context, p *inventory.
 		if err := s.cardIDSaver.SaveExternalID(ctx, p.CardName, p.SetName, p.CardNumber, SourceDH, externalID); err != nil {
 			s.logger.Error(ctx, "inline dh resolve: failed to save card mapping — cert resolver will be called again next run",
 				observability.String("cert", p.CertNumber), observability.String("cardName", p.CardName), observability.Err(err))
+		}
+	}
+
+	if s.gemRateIDUpdater != nil && resp.GemRateID != "" && p.GemRateID == "" {
+		if err := s.gemRateIDUpdater.UpdatePurchaseGemRateID(ctx, p.ID, resp.GemRateID); err != nil {
+			s.logger.Error(ctx, "inline dh resolve: failed to save gem_rate_id",
+				observability.String("cert", p.CertNumber), observability.String("gemRateID", resp.GemRateID), observability.Err(err))
+		} else {
+			p.GemRateID = resp.GemRateID
 		}
 	}
 

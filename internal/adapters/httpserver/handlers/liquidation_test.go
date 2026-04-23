@@ -12,19 +12,6 @@ import (
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
 )
 
-type mockLiquidationService struct {
-	PreviewFn func(ctx context.Context, req liquidation.PreviewRequest) (liquidation.PreviewResponse, error)
-	ApplyFn   func(ctx context.Context, req liquidation.ApplyRequest) (liquidation.ApplyResult, error)
-}
-
-func (m *mockLiquidationService) Preview(ctx context.Context, req liquidation.PreviewRequest) (liquidation.PreviewResponse, error) {
-	return m.PreviewFn(ctx, req)
-}
-
-func (m *mockLiquidationService) Apply(ctx context.Context, req liquidation.ApplyRequest) (liquidation.ApplyResult, error) {
-	return m.ApplyFn(ctx, req)
-}
-
 func TestHandleLiquidationPreview(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -52,7 +39,7 @@ func TestHandleLiquidationPreview(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			svc := &mockLiquidationService{PreviewFn: tc.previewFn}
+			svc := &mocks.MockLiquidationService{PreviewFn: tc.previewFn}
 			h := NewLiquidationHandler(svc, mocks.NewMockLogger())
 
 			req := httptest.NewRequest(http.MethodPost, "/api/liquidation/preview", bytes.NewBufferString(tc.body))
@@ -97,7 +84,7 @@ func TestHandleLiquidationApply(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			svc := &mockLiquidationService{ApplyFn: tc.applyFn}
+			svc := &mocks.MockLiquidationService{ApplyFn: tc.applyFn}
 			h := NewLiquidationHandler(svc, mocks.NewMockLogger())
 
 			req := httptest.NewRequest(http.MethodPost, "/api/liquidation/apply", bytes.NewBufferString(tc.body))

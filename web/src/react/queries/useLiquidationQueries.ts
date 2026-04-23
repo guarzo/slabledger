@@ -16,6 +16,7 @@ export function useLiquidationPreview() {
       const result = await api.getLiquidationPreview(baseDiscountPct, noCompDiscountPct);
       setData(result);
     } catch (err) {
+      setData(null);
       setError(err instanceof Error ? err : new Error('Failed to fetch liquidation preview'));
     } finally {
       setIsLoading(false);

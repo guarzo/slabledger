@@ -36,7 +36,7 @@ func ComputeCompPrice(comps []SaleComp, clValueCents int) CompPriceResult {
 
 	mean := meanPriceCents(trimmed)
 
-	// Most recent comp date from trimmed set
+	// Most recent comp date from filtered set (before trimming)
 	mostRecent := ""
 	for _, c := range filtered {
 		if mostRecent == "" || c.SaleDate > mostRecent {
