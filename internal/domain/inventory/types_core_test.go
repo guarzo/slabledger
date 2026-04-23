@@ -35,3 +35,75 @@ func TestCampaignSetKind(t *testing.T) {
 		})
 	}
 }
+
+func TestNeedsDHPush(t *testing.T) {
+	received := "2026-04-20"
+	tests := []struct {
+		name string
+		p    Purchase
+		want bool
+	}{
+		{
+			name: "ReceivedAtSet_Eligible",
+			p:    Purchase{ReceivedAt: &received},
+			want: true,
+		},
+		{
+			name: "PSAShipDateSet_Eligible",
+			p:    Purchase{PSAShipDate: "2026-04-20"},
+			want: true,
+		},
+		{
+			name: "BothSet_Eligible",
+			p:    Purchase{ReceivedAt: &received, PSAShipDate: "2026-04-20"},
+			want: true,
+		},
+		{
+			name: "NeitherSet_NotEligible",
+			p:    Purchase{},
+			want: false,
+		},
+		{
+			name: "ShippedButSoldOnDH_NotEligible",
+			p:    Purchase{PSAShipDate: "2026-04-20", DHStatus: DHStatusSold},
+			want: false,
+		},
+		{
+			name: "ShippedButAlreadyPushed_NotEligible",
+			p:    Purchase{PSAShipDate: "2026-04-20", DHInventoryID: 123},
+			want: false,
+		},
+		{
+			name: "ShippedButStatusPending_NotEligible",
+			p:    Purchase{PSAShipDate: "2026-04-20", DHPushStatus: DHPushStatusPending},
+			want: false,
+		},
+		{
+			name: "ShippedButStatusHeld_NotEligible",
+			p:    Purchase{PSAShipDate: "2026-04-20", DHPushStatus: DHPushStatusHeld},
+			want: false,
+		},
+		{
+			name: "ShippedButStatusUnmatched_NotEligible",
+			p:    Purchase{PSAShipDate: "2026-04-20", DHPushStatus: DHPushStatusUnmatched},
+			want: false,
+		},
+		{
+			name: "ShippedButStatusManual_NotEligible",
+			p:    Purchase{PSAShipDate: "2026-04-20", DHPushStatus: DHPushStatusManual},
+			want: false,
+		},
+		{
+			name: "ShippedButStatusDismissed_NotEligible",
+			p:    Purchase{PSAShipDate: "2026-04-20", DHPushStatus: DHPushStatusDismissed},
+			want: false,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.p.NeedsDHPush(); got != tc.want {
+				t.Errorf("NeedsDHPush() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}

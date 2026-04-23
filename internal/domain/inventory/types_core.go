@@ -256,12 +256,14 @@ func (p *Purchase) ToCardIdentity() CardIdentity {
 }
 
 // NeedsDHPush returns true if this purchase is eligible for DH push pipeline enrollment.
-// A purchase must be received (ReceivedAt != nil) before it can be pushed to DH.
+// A purchase is eligible once it has been received (ReceivedAt != nil) OR shipped by PSA
+// (PSAShipDate != ""). Shipping alone is sufficient because DH allows 2 days from order
+// placement to ship, which covers the typical 1-2 day PSA-to-receipt window.
 // Purchases already marked sold on DH (DHStatus == DHStatusSold) are excluded to keep
 // the in-memory check consistent with the DB-level GetPurchasesByDHPushStatus query,
 // which gates on a missing sale row.
 func (p *Purchase) NeedsDHPush() bool {
-	return p.ReceivedAt != nil &&
+	return (p.ReceivedAt != nil || p.PSAShipDate != "") &&
 		p.DHStatus != DHStatusSold &&
 		p.DHInventoryID == 0 &&
 		p.DHPushStatus != DHPushStatusPending &&
