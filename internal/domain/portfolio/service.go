@@ -20,6 +20,7 @@ type Service interface {
 	GetCapitalTimeline(ctx context.Context) (*inventory.CapitalTimeline, error)
 	GetWeeklyReviewSummary(ctx context.Context) (*inventory.WeeklyReviewSummary, error)
 	GetWeeklyHistory(ctx context.Context, weeks int) ([]inventory.WeeklyReviewSummary, error)
+	GetSnapshot(ctx context.Context) (*PortfolioSnapshot, error)
 }
 
 type service struct {
