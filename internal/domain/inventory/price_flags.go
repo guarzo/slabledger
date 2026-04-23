@@ -36,7 +36,8 @@ const (
 	ReviewSourceMarket     ReviewSource = "market"
 	ReviewSourceLastSold   ReviewSource = "last_sold"
 	ReviewSourceCostMarkup ReviewSource = "cost_markup"
-	ReviewSourceMM         ReviewSource = "mm"
+	ReviewSourceMM          ReviewSource = "mm"
+	ReviewSourceLiquidation ReviewSource = "liquidation"
 )
 
 // PriceFlag represents a user-reported data quality issue on a purchase's pricing.
