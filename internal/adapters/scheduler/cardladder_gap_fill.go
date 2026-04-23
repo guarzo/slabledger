@@ -2,7 +2,6 @@ package scheduler
 
 import (
 	"context"
-	"strings"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
 	"github.com/guarzo/slabledger/internal/adapters/storage/postgres"
@@ -10,40 +9,35 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
-// refreshSalesComps fetches recent sales comps for every unique
-// (gemRateID, condition) pair in the provided mappings and upserts them into
-// the CL sales comps store. Rate-limited by the client's built-in limiter.
-func (s *CardLadderRefreshScheduler) refreshSalesComps(ctx context.Context, client *cardladder.Client, mappings []postgres.CLCardMapping) {
-	seen := make(map[compKey]bool, len(mappings))
+// refreshSalesCompsDecoupled fetches recent sales comps for unsold purchases
+// that have a gem_rate_id, bypassing cl_card_mappings entirely. After fetching,
+// it backfills last_sold_date and last_sold_cents on campaign_purchases.
+func (s *CardLadderRefreshScheduler) refreshSalesCompsDecoupled(ctx context.Context, client *cardladder.Client) {
+	if s.compRefreshStore == nil {
+		s.logger.Debug(ctx, "CL sales: compRefreshStore not configured, skipping decoupled refresh")
+		return
+	}
+
+	cards, err := s.compRefreshStore.ListUnsoldCardsNeedingComps(ctx, 30)
+	if err != nil {
+		s.logger.Warn(ctx, "CL sales: failed to list cards needing comps", observability.Err(err))
+		return
+	}
+
 	fetched := 0
-
-	for _, m := range mappings {
-		if m.CLGemRateID == "" || m.CLCondition == "" {
-			continue
-		}
-
-		key := compKey{m.CLGemRateID, m.CLCondition}
-		if seen[key] {
-			continue
-		}
-		seen[key] = true
-
+	compsUpserted := 0
+	for _, card := range cards {
 		select {
 		case <-ctx.Done():
 			return
 		default:
 		}
 
-		// Extract grader from condition (e.g. "PSA 10" → "psa").
-		grader := "psa"
-		if parts := strings.SplitN(m.CLCondition, " ", 2); len(parts) > 0 && parts[0] != "" {
-			grader = strings.ToLower(parts[0])
-		}
-
-		resp, err := client.FetchSalesComps(ctx, m.CLGemRateID, m.CLCondition, grader, 0, 100)
+		resp, err := client.FetchSalesComps(ctx, card.GemRateID, card.Condition, "psa", 0, 100)
 		if err != nil {
 			s.logger.Warn(ctx, "CL sales: fetch failed",
-				observability.String("gemRateId", m.CLGemRateID),
+				observability.String("gemRateId", card.GemRateID),
+				observability.String("condition", card.Condition),
 				observability.Err(err))
 			continue
 		}
@@ -56,7 +50,7 @@ func (s *CardLadderRefreshScheduler) refreshSalesComps(ctx context.Context, clie
 			}
 			if err := s.salesStore.UpsertSaleComp(ctx, postgres.CLSaleCompRecord{
 				GemRateID:   comp.GemRateID,
-				Condition:   m.CLCondition,
+				Condition:   card.Condition,
 				ItemID:      comp.ItemID,
 				SaleDate:    saleDate,
 				PriceCents:  priceCents,
@@ -69,11 +63,21 @@ func (s *CardLadderRefreshScheduler) refreshSalesComps(ctx context.Context, clie
 				s.logger.Debug(ctx, "CL sales: upsert failed",
 					observability.String("itemId", comp.ItemID),
 					observability.Err(err))
+			} else {
+				compsUpserted++
 			}
 		}
 		fetched++
 	}
 
-	s.logger.Info(ctx, "CL sales: refresh complete",
-		observability.Int("cardsProcessed", fetched))
+	// Backfill last_sold_date and last_sold_cents from comps.
+	backfilled, err := s.compRefreshStore.BackfillLastSoldFromComps(ctx)
+	if err != nil {
+		s.logger.Warn(ctx, "CL sales: backfill last sold failed", observability.Err(err))
+	}
+
+	s.logger.Info(ctx, "CL sales: decoupled refresh complete",
+		observability.Int("cardsProcessed", fetched),
+		observability.Int("compsUpserted", compsUpserted),
+		observability.Int("purchasesBackfilled", backfilled))
 }
