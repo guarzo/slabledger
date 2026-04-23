@@ -192,7 +192,7 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 	var campaignSignalsHandler *handlers.CampaignSignalsHandler
 	if in.DemandRepo != nil {
 		coverage := postgres.NewCampaignCoverageLookup(in.DB.DB)
-		demandSvc := demand.NewService(in.DemandRepo, coverage)
+		demandSvc := demand.NewService(in.DemandRepo, coverage).WithLogger(logger)
 		nichesHandler = handlers.NewNichesHandler(demandSvc, logger)
 		campaignSignalsHandler = handlers.NewCampaignSignalsHandler(demandSvc, logger)
 	}
