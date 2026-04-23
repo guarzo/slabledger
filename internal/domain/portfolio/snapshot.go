@@ -11,26 +11,26 @@ import (
 
 // PortfolioSnapshot is a single-load aggregate of all portfolio dashboard data.
 type PortfolioSnapshot struct {
-	Health          *inventory.PortfolioHealth       `json:"health"`
-	Insights        *inventory.PortfolioInsights     `json:"insights"`
-	WeeklyReview    *inventory.WeeklyReviewSummary   `json:"weeklyReview"`
-	WeeklyHistory   []inventory.WeeklyReviewSummary  `json:"weeklyHistory"`
-	ChannelVelocity []inventory.ChannelVelocity      `json:"channelVelocity"`
-	Suggestions     *inventory.SuggestionsResponse   `json:"suggestions"`
-	CreditSummary   *inventory.CapitalSummary        `json:"creditSummary"`
-	Invoices        []inventory.Invoice              `json:"invoices"`
+	Health          *inventory.PortfolioHealth      `json:"health"`
+	Insights        *inventory.PortfolioInsights    `json:"insights"`
+	WeeklyReview    *inventory.WeeklyReviewSummary  `json:"weeklyReview"`
+	WeeklyHistory   []inventory.WeeklyReviewSummary `json:"weeklyHistory"`
+	ChannelVelocity []inventory.ChannelVelocity     `json:"channelVelocity"`
+	Suggestions     *inventory.SuggestionsResponse  `json:"suggestions"`
+	CreditSummary   *inventory.CapitalSummary       `json:"creditSummary"`
+	Invoices        []inventory.Invoice             `json:"invoices"`
 }
 
 // computePNLByCampaign groups PurchaseWithSale data by campaign and computes
 // CampaignPNL for each, matching the semantics of the Postgres GetCampaignPNL query.
 func computePNLByCampaign(data []inventory.PurchaseWithSale) map[string]inventory.CampaignPNL {
 	type agg struct {
-		totalSpend    int
-		totalRevenue  int
-		totalFees     int
-		netProfit     int
-		totalDays     int
-		totalSold     int
+		totalSpend     int
+		totalRevenue   int
+		totalFees      int
+		netProfit      int
+		totalDays      int
+		totalSold      int
 		totalPurchases int
 	}
 	buckets := make(map[string]*agg)
