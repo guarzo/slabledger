@@ -22,6 +22,7 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/finance"
 	"github.com/guarzo/slabledger/internal/domain/insights"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
+	liquidation "github.com/guarzo/slabledger/internal/domain/liquidation"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/domain/portfolio"
 	"github.com/guarzo/slabledger/internal/domain/pricing"
@@ -197,6 +198,14 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 		campaignSignalsHandler = handlers.NewCampaignSignalsHandler(demandSvc, logger)
 	}
 
+	// Liquidation handler
+	var liquidationHandler *handlers.LiquidationHandler
+	if in.PurchaseStore != nil && in.CampaignsService != nil {
+		liqStore := postgres.NewLiquidationStore(in.DB.DB)
+		liqSvc := liquidation.NewService(liqStore, liqStore, in.CampaignsService)
+		liquidationHandler = handlers.NewLiquidationHandler(liqSvc, logger)
+	}
+
 	// Card catalog handler (CL card catalog search; nil when CL is not configured)
 	var cardCatalogHandler *handlers.CardCatalogHandler
 	if in.CLClient != nil && in.CLClient.Available() {
@@ -292,6 +301,7 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 		CardCatalogHandler:        cardCatalogHandler,
 		NichesHandler:             nichesHandler,
 		CampaignSignalsHandler:    campaignSignalsHandler,
+		LiquidationHandler:        liquidationHandler,
 		InsightsHandler:           insightsHandler,
 	}
 	// Build DHListingService from available components.

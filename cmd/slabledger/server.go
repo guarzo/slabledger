@@ -60,6 +60,7 @@ type ServerDependencies struct {
 	CardCatalogHandler        *handlers.CardCatalogHandler     // CL card catalog search; nil = disabled
 	NichesHandler             *handlers.NichesHandler          // DH niche-opportunity leaderboard; nil = disabled
 	CampaignSignalsHandler    *handlers.CampaignSignalsHandler // DH campaign signals; nil = disabled
+	LiquidationHandler        *handlers.LiquidationHandler     // Liquidation pricing; nil = disabled
 	InsightsHandler           *handlers.InsightsHandler        // Insights overview; nil = disabled
 	SheetFetcher              handlers.SheetFetcher            // optional: Google Sheets fetcher for PSA sync
 	SheetsSpreadsheetID       string                           // Google Sheets spreadsheet ID
@@ -217,6 +218,7 @@ func startWebServer(ctx context.Context, deps ServerDependencies) error {
 		CardCatalogHandler:        deps.CardCatalogHandler,
 		NichesHandler:             deps.NichesHandler,
 		CampaignSignalsHandler:    deps.CampaignSignalsHandler,
+		LiquidationHandler:        deps.LiquidationHandler,
 		InsightsHandler:           deps.InsightsHandler,
 		Logger:                    logger,
 		AdminEmails:               cfg.Auth.AdminEmails,

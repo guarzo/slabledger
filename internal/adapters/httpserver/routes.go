@@ -318,6 +318,22 @@ func (rt *Router) registerOpportunitiesRoutes(mux *http.ServeMux) {
 	rt.logger.Info(context.Background(), "opportunities routes registered")
 }
 
+// registerLiquidationRoutes wires the liquidation pricing endpoints.
+func (rt *Router) registerLiquidationRoutes(mux *http.ServeMux) {
+	if rt.liquidationHandler == nil {
+		return
+	}
+	authRoute := func(h http.HandlerFunc) http.Handler {
+		if rt.authMW != nil {
+			return rt.authMW.RequireAuth(h)
+		}
+		return h
+	}
+	mux.Handle("POST /api/liquidation/preview", authRoute(rt.liquidationHandler.HandlePreview))
+	mux.Handle("POST /api/liquidation/apply", authRoute(rt.liquidationHandler.HandleApply))
+	mux.HandleFunc("/liquidation", rt.spaHandler.HandleIndex)
+}
+
 // TrackedEndpoints lists the endpoints whose response times are recorded.
 var TrackedEndpoints = []string{
 	"/api/portfolio/snapshot",
