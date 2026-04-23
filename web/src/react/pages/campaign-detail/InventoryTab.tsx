@@ -41,7 +41,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
     totalCost, totalMarket, totalPL,
     handleSort, handleReviewed, handleResolveFlag, handleApproveDHPush, handleListOnDH, dhListingInFlight, dhListedOptimistic, handleBulkListOnDH, handleFlagSubmit, handlePrint, handleDelete,
     toggleSelect, toggleAll, toggleExpand,
-    openSaleModal, closeSaleModal, handleFixPricing, handleFixDHMatch, handleFixDHMatchSaved, handleUnmatchDH, handleRetryDHMatch, handleSetPrice,
+    openSaleModal, closeSaleModal, handleFixPricing, handleFixDHMatch, handleFixDHMatchSaved, handleUnmatchDH, handleRetryDHMatch, dhRetryInFlight, handleSetPrice,
     handlePriceSaved, handleHintSaved, handleInlinePriceSave, handleDismiss, handleUndismiss, sellSheet, toast,
   } = state;
 
@@ -76,7 +76,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
     (purchase.dhPushStatus === 'matched' || purchase.dhPushStatus === 'manual') ? () => handleUnmatchDH(purchase) : undefined;
 
   const getOnRetryDHMatch = (purchase: Purchase) =>
-    purchase.dhPushStatus === 'unmatched' ? () => handleRetryDHMatch(purchase) : undefined;
+    purchase.dhPushStatus === 'unmatched' && !dhRetryInFlight.has(purchase.id) ? () => handleRetryDHMatch(purchase) : undefined;
 
   return (
     <div>
