@@ -11,16 +11,18 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 )
 
+const receivedOrShippedPredicate = `(p.received_at IS NOT NULL OR p.psa_ship_date != '')`
+
 // GetPurchasesByDHPushStatus returns received or shipped, unsold purchases with the given DH push status.
 func (ps *PurchaseStore) GetPurchasesByDHPushStatus(ctx context.Context, status string, limit int) ([]inventory.Purchase, error) {
 	query := fmt.Sprintf(
 		`SELECT %s FROM campaign_purchases p
 		 LEFT JOIN campaign_sales s ON s.purchase_id = p.id
 		 WHERE p.dh_push_status = $1
-		   AND (p.received_at IS NOT NULL OR p.psa_ship_date != '')
+		   AND %s
 		   AND s.id IS NULL
 		 ORDER BY p.updated_at ASC LIMIT $2`,
-		purchaseColumnsAliased,
+		purchaseColumnsAliased, receivedOrShippedPredicate,
 	)
 	rows, err := ps.db.QueryContext(ctx, query, status, limit)
 	if err != nil {
@@ -92,7 +94,7 @@ func (ps *PurchaseStore) CountUnsoldByDHPushStatus(ctx context.Context) (map[str
 // Both counts exclude sold rows and rows in closed campaigns.
 func (ps *PurchaseStore) CountDHPipelineHealth(ctx context.Context) (inventory.DHPipelineHealth, error) {
 	var health inventory.DHPipelineHealth
-	err := ps.db.QueryRowContext(ctx, `
+	err := ps.db.QueryRowContext(ctx, fmt.Sprintf(`
 		SELECT
 			COALESCE(SUM(CASE WHEN p.dh_push_status = 'pending' THEN 1 ELSE 0 END), 0) AS pending_received,
 			COALESCE(SUM(CASE
@@ -103,9 +105,9 @@ func (ps *PurchaseStore) CountDHPipelineHealth(ctx context.Context) (inventory.D
 		INNER JOIN campaigns c ON c.id = p.campaign_id
 		LEFT JOIN campaign_sales s ON s.purchase_id = p.id
 		WHERE s.id IS NULL
-		  AND (p.received_at IS NOT NULL OR p.psa_ship_date != '')
+		  AND %s
 		  AND c.phase != 'closed'
-	`).Scan(&health.PendingReceived, &health.UnenrolledReceived)
+	`, receivedOrShippedPredicate)).Scan(&health.PendingReceived, &health.UnenrolledReceived)
 	if err != nil {
 		return inventory.DHPipelineHealth{}, fmt.Errorf("count dh pipeline health: %w", err)
 	}
@@ -115,17 +117,17 @@ func (ps *PurchaseStore) CountDHPipelineHealth(ctx context.Context) (inventory.D
 // ListDHPendingItems returns received or shipped, unsold purchases that are queued for the
 // DH push pipeline (dh_push_status = 'pending') with an active parent campaign.
 func (ps *PurchaseStore) ListDHPendingItems(ctx context.Context) ([]inventory.DHPendingItem, error) {
-	query := `
+	query := fmt.Sprintf(`
 		SELECT p.id, p.card_name, p.set_name, p.grade_value,
 		       p.mid_price_cents, p.dh_last_synced_at, p.created_at
 		FROM campaign_purchases p
 		INNER JOIN campaigns c ON c.id = p.campaign_id
 		LEFT JOIN campaign_sales s ON s.purchase_id = p.id
 		WHERE p.dh_push_status = 'pending'
-		  AND (p.received_at IS NOT NULL OR p.psa_ship_date != '')
+		  AND %s
 		  AND s.id IS NULL
 		  AND c.phase != 'closed'
-		ORDER BY p.updated_at DESC`
+		ORDER BY p.updated_at DESC`, receivedOrShippedPredicate)
 	rows, err := ps.db.QueryContext(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("query dh pending items: %w", err)

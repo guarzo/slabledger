@@ -131,6 +131,9 @@ func (ps *PurchaseStore) UpdatePurchaseDHHoldReason(ctx context.Context, id stri
 // the hold reason in a single UPDATE, preventing any reader from observing
 // a held purchase with an empty reason.
 func (ps *PurchaseStore) SetHeldWithReason(ctx context.Context, purchaseID string, reason string) error {
+	if reason == "" {
+		return fmt.Errorf("SetHeldWithReason: reason must not be empty")
+	}
 	return ps.execAndExpectRow(ctx, "set held with reason",
 		`UPDATE campaign_purchases SET dh_push_status = $1, dh_hold_reason = $2, updated_at = $3 WHERE id = $4`,
 		inventory.DHPushStatusHeld, reason, time.Now(), purchaseID,
@@ -150,8 +153,8 @@ func (ps *PurchaseStore) ApproveHeldPurchase(ctx context.Context, purchaseID str
 	result, err := tx.ExecContext(ctx,
 		`UPDATE campaign_purchases
 		 SET dh_push_status = $1, dh_hold_reason = '', dh_push_attempts = 0, updated_at = $2
-		 WHERE id = $3`,
-		inventory.DHPushStatusPending, now, purchaseID,
+		 WHERE id = $3 AND dh_push_status = $4`,
+		inventory.DHPushStatusPending, now, purchaseID, inventory.DHPushStatusHeld,
 	)
 	if err != nil {
 		return fmt.Errorf("approve held purchase: %w", err)
@@ -200,6 +203,7 @@ func (ps *PurchaseStore) ResetDHFieldsForRepushDueToDelete(ctx context.Context, 
 		`UPDATE campaign_purchases
 		 SET dh_inventory_id = 0,
 		     dh_push_status = $1,
+		     dh_push_attempts = 0,
 		     dh_status = '',
 		     dh_listing_price_cents = 0,
 		     dh_channels_json = '[]',
