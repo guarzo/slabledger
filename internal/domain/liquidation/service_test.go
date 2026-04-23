@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+
+	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
 func TestServicePreview(t *testing.T) {
@@ -56,7 +58,7 @@ func TestServicePreview(t *testing.T) {
 			reader := &stubCompReader{comps: tc.comps}
 			writer := &stubPriceWriter{}
 
-			svc := NewService(lister, reader, writer)
+			svc := NewService(lister, reader, writer, observability.NewNoopLogger())
 			resp, err := svc.Preview(context.Background(), tc.req)
 			if err != nil {
 				t.Fatalf("Preview error: %v", err)
@@ -112,7 +114,7 @@ func TestServiceApply(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			writer := &stubPriceWriter{failID: tc.failID}
-			svc := NewService(&stubPurchaseLister{}, &stubCompReader{}, writer)
+			svc := NewService(&stubPurchaseLister{}, &stubCompReader{}, writer, observability.NewNoopLogger())
 
 			result, err := svc.Apply(context.Background(), ApplyRequest{Items: tc.items})
 			if err != nil {

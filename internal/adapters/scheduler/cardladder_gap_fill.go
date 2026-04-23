@@ -2,12 +2,11 @@ package scheduler
 
 import (
 	"context"
-	"strings"
-
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
 	"github.com/guarzo/slabledger/internal/adapters/storage/postgres"
 	"github.com/guarzo/slabledger/internal/domain/mathutil"
 	"github.com/guarzo/slabledger/internal/domain/observability"
+	"github.com/guarzo/slabledger/internal/platform/cardutil"
 )
 
 // refreshSalesCompsDecoupled fetches recent sales comps for unsold purchases
@@ -35,8 +34,10 @@ func (s *CardLadderRefreshScheduler) refreshSalesCompsDecoupled(ctx context.Cont
 		default:
 		}
 
-		// CL API expects "PSA 10" format; our DB condition is "g10" format.
-		apiCondition := "PSA " + strings.ReplaceAll(strings.TrimPrefix(card.Condition, "g"), "_", ".")
+		apiCondition := cardutil.ConditionToAPIFormat(card.Condition)
+		if apiCondition == "" {
+			continue
+		}
 		resp, err := client.FetchSalesComps(ctx, card.GemRateID, apiCondition, "psa", 0, 100)
 		if err != nil {
 			s.logger.Warn(ctx, "CL sales: fetch failed",

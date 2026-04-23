@@ -3,19 +3,21 @@ package liquidation
 import (
 	"context"
 	"fmt"
-	"math"
-	"strings"
+
+	"github.com/guarzo/slabledger/internal/domain/observability"
+	"github.com/guarzo/slabledger/internal/platform/cardutil"
 )
 
 type service struct {
 	purchases PurchaseLister
 	comps     CompReader
 	prices    PriceWriter
+	logger    observability.Logger
 }
 
 // NewService constructs a liquidation Service.
-func NewService(purchases PurchaseLister, comps CompReader, prices PriceWriter) Service {
-	return &service{purchases: purchases, comps: comps, prices: prices}
+func NewService(purchases PurchaseLister, comps CompReader, prices PriceWriter, logger observability.Logger) Service {
+	return &service{purchases: purchases, comps: comps, prices: prices, logger: logger}
 }
 
 func (s *service) Preview(ctx context.Context, req PreviewRequest) (PreviewResponse, error) {
@@ -39,9 +41,15 @@ func (s *service) Preview(ctx context.Context, req PreviewRequest) (PreviewRespo
 			CurrentReviewedPriceCents: p.ReviewedPriceCents,
 		}
 
-		if p.GemRateID != "" {
-			condition := gradeToCondition(p.GradeValue)
+		if p.GemRateID != "" && p.GradeValue > 0 {
+			condition := cardutil.GradeToCondition(p.GradeValue)
 			saleComps, compErr := s.comps.GetSaleCompsForCard(ctx, p.GemRateID, condition)
+			if compErr != nil {
+				s.logger.Warn(ctx, "liquidation: comp lookup failed",
+					observability.String("purchaseId", p.ID),
+					observability.String("gemRateId", p.GemRateID),
+					observability.Err(compErr))
+			}
 			if compErr == nil && len(saleComps) > 0 {
 				result := ComputeCompPrice(saleComps, p.CLValueCents)
 				item.CompPriceCents = result.CompPriceCents
@@ -111,12 +119,3 @@ const (
 	discountNoComps   = 10.0
 )
 
-// gradeToCondition converts a numeric grade to the CL sales comp condition
-// format stored in cl_sales_comps (e.g. 10 → "g10", 8.5 → "g8_5").
-func gradeToCondition(grade float64) string {
-	if grade == math.Trunc(grade) {
-		return fmt.Sprintf("g%d", int(grade))
-	}
-	s := fmt.Sprintf("g%g", grade)
-	return strings.ReplaceAll(s, ".", "_")
-}
