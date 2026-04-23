@@ -81,14 +81,15 @@ Known traps that have caused wrong analysis in past sessions. This block is refe
 Fetch these in parallel:
 
 - `GET /api/campaigns` — for name ↔ UUID resolution; filter out archived campaigns and any campaign with `kind == "external"` (synthetic catch-all buckets for pre-campaign purchases with cost basis = 0 — excluded from the portfolio-at-a-glance line AND from all ROI, margin, and sell-through calculations throughout the session; see API footguns)
-- `GET /api/portfolio/health` — per-campaign status, reason, capital at risk
-- `GET /api/portfolio/weekly-review` — week-over-week deltas
-- `GET /api/portfolio/insights` — cross-campaign segmentation by character, grade, era, tier. **Fetch AND parse** — extract `byCharacter` (filter `soldCount ≥ 3`, sort by ROI desc), `byGrade`, `byPriceTier`, `byCharacterGrade` standouts, and `coverageGaps` before drafting the opener. Listing only the response keys is not analysis.
-- `GET /api/portfolio/weekly-history?weeks=8` — trailing 8-week summaries (newest first). Used by the hold-verdict rule for the trailing-mean comparison; fetching it in the opener avoids a second round-trip when item-1 is a candidate for hold.
-- `GET /api/portfolio/channel-velocity` — average days-to-sell per channel. Sources channel-shift recommendations and feeds the days-to-sell delta math in repricing playbooks.
-- `GET /api/credit/summary` — outstanding balance, weeks to cover, recovery trend
-- `GET /api/credit/invoices` — list of *all* unpaid invoices with due dates and `totalCents` per row (backfilled from purchase costs for legacy rows). Use this endpoint to plan a multi-invoice horizon (next 2–4 weeks of obligations), not just one invoice.
-- `GET /api/portfolio/suggestions` — pre-computed adjustments + new-campaign ideas. **Apply the stale-suggestion filter** (Recommendation rules) before surfacing any entry: drop suggestions targeting fields on a campaign whose `updatedAt` is within the last 72h. Treat the remainder as one input among several, not the primary source — the per-campaign tuning + insights segmentation below has the higher-resolution signal.
+- `GET /api/portfolio/snapshot` — **composite endpoint** returning `health`, `insights`, `weeklyReview`, `weeklyHistory` (8 weeks), `channelVelocity`, `suggestions`, `creditSummary`, and `invoices` in a single response. This replaces 8 individual calls with one round-trip; the server loads shared data once internally. Parse each sub-field:
+  - `snapshot.health` — per-campaign status, reason, capital at risk
+  - `snapshot.weeklyReview` — week-over-week deltas
+  - `snapshot.insights` — cross-campaign segmentation by character, grade, era, tier. **Extract** `byCharacter` (filter `soldCount ≥ 3`, sort by ROI desc), `byGrade`, `byPriceTier`, `byCharacterGrade` standouts, and `coverageGaps` before drafting the opener. Listing only the response keys is not analysis.
+  - `snapshot.weeklyHistory` — trailing 8-week summaries (newest first). Used by the hold-verdict rule for the trailing-mean comparison.
+  - `snapshot.channelVelocity` — average days-to-sell per channel. Sources channel-shift recommendations and feeds the days-to-sell delta math in repricing playbooks.
+  - `snapshot.creditSummary` — outstanding balance, weeks to cover, recovery trend
+  - `snapshot.invoices` — list of *all* unpaid invoices with due dates and `totalCents` per row (backfilled from purchase costs for legacy rows). Use this endpoint to plan a multi-invoice horizon (next 2–4 weeks of obligations), not just one invoice.
+  - `snapshot.suggestions` — pre-computed adjustments + new-campaign ideas. **Apply the stale-suggestion filter** (Recommendation rules) before surfacing any entry: drop suggestions targeting fields on a campaign whose `updatedAt` is within the last 72h. Treat the remainder as one input among several, not the primary source — the per-campaign tuning + insights segmentation below has the higher-resolution signal.
 - `GET /api/inventory` — per-purchase inventory detail; the opener uses the `inHandUnsoldCount`, `inHandCapitalCents`, `inTransitUnsoldCount`, and `inTransitCapitalCents` fields already on each `CampaignHealth` entry from `/api/portfolio/health` to distinguish **in-hand** (received, sellable now) from **in-transit** (purchased but not yet received) capital. Fetch `/api/inventory` when you need per-card detail for a specific campaign, not just portfolio-wide sums.
 - `GET /api/dh/status` — reads `dh_listings_count` vs `dh_inventory_count` vs `pending_count`. This tells you how much of the in-hand inventory is actually *listed* and generating sales signal. A large received-but-not-listed gap is informational by default; promote it to a mover candidate ONLY if the operator config lists `dh_listing_gap` in `operationalPriorities` (otherwise it's a known-system-issue for some operators).
 - `GET /api/dh/pending` — the actual per-item pending-push queue (not just the aggregate count). Returns `{items: DHPendingItem[], count: int}` where each item carries `{purchaseId, cardName, setName, grade, recommendedPriceCents, daysQueued, dhConfidence}`. `dhConfidence` is `"high"` (listing synced <24h ago), `"medium"` (<7d), `"low"` (>7d or never synced) — use this as a data-freshness signal when reasoning about whether the queued recommendation is still trustworthy. This is the right endpoint for prioritizing the approval queue by `daysQueued` and sizing projected recovery from `recommendedPriceCents`.
@@ -112,7 +113,7 @@ For every endpoint fetched, check:
 
 Output a compact **Data sources** block at the top of the opener:
 
-    Data sources: /portfolio/{health ✓, insights ✓, weekly-review ✓, weekly-history ✓, channel-velocity ✓, suggestions ✓}, /credit/{summary ✓, invoices ✓}, /dh/{status ✓, pending ✓}, /intelligence/{niches ✓, campaign-signals ✓}, /opportunities/{crack ✓, acquisition ✓}, /campaigns/{id}/{tuning ✓, fill-rate ✓} ×N
+    Data sources: /portfolio/snapshot {health ✓, insights ✓, weeklyReview ✓, weeklyHistory ✓, channelVelocity ✓, suggestions ✓, creditSummary ✓, invoices ✓}, /dh/{status ✓, pending ✓}, /intelligence/{niches ✓, campaign-signals ✓}, /opportunities/{crack ✓, acquisition ✓}, /campaigns/{id}/{tuning ✓, fill-rate ✓} ×N
     Missing/degraded: /intelligence/niches (0 rows), /opportunities/crack (404)
     Impact: coverage-gap and crack analysis unavailable this session
 
