@@ -103,8 +103,15 @@ func TestTimeUntilHour(t *testing.T) {
 			wantMax: 0,
 		},
 		{
-			name:    "target hour is current hour — run immediately",
+			name:    "target hour is current hour (mid) — run immediately",
 			now:     time.Date(2026, 3, 26, 4, 30, 0, 0, time.UTC),
+			hour:    4,
+			wantMin: 0,
+			wantMax: 0,
+		},
+		{
+			name:    "exact on-the-hour boundary — run immediately",
+			now:     time.Date(2026, 3, 26, 4, 0, 0, 0, time.UTC),
 			hour:    4,
 			wantMin: 0,
 			wantMax: 0,
