@@ -22,6 +22,7 @@ interface MobileCardProps {
   onListOnDH?: (purchaseId: string) => void;
   onRemoveFromSellSheet?: () => void;
   onUnmatchDH?: () => void;
+  onRetryDHMatch?: () => void;
   onDismiss?: () => void;
   onUndismiss?: () => void;
   dhListingLoading?: boolean;
@@ -31,7 +32,7 @@ interface MobileCardProps {
   isOnSellSheet?: boolean;
 }
 
-export default function MobileCard({ item, selected, onToggle, onRecordSale, onFixPricing, onFixDHMatch, onSetPrice, onDelete, onListOnDH, onRemoveFromSellSheet, onUnmatchDH, onDismiss, onUndismiss, dhListingLoading, dhListedOverride, ev, showCampaignColumn, isOnSellSheet }: MobileCardProps) {
+export default function MobileCard({ item, selected, onToggle, onRecordSale, onFixPricing, onFixDHMatch, onSetPrice, onDelete, onListOnDH, onRemoveFromSellSheet, onUnmatchDH, onRetryDHMatch, onDismiss, onUndismiss, dhListingLoading, dhListedOverride, ev, showCampaignColumn, isOnSellSheet }: MobileCardProps) {
   const cb = costBasis(item.purchase);
   const snap = item.currentMarket;
   const daysColor = daysHeldColor(item.daysHeld);
@@ -245,6 +246,17 @@ export default function MobileCard({ item, selected, onToggle, onRecordSale, onF
             aria-label="Remove DH match"
           >
             Remove DH
+          </button>
+        )}
+        {onRetryDHMatch && (
+          <button
+            type="button"
+            onClick={onRetryDHMatch}
+            className="text-xs text-[var(--info)] underline"
+            title="Retry DH match"
+            aria-label="Retry DH match"
+          >
+            Retry DH
           </button>
         )}
         {isOnSellSheet && onRemoveFromSellSheet && (
