@@ -57,8 +57,8 @@ func TestBatchAdapter_ResolveDHCardID_NotFound(t *testing.T) {
 
 func TestBatchAdapter_BatchPriceDistribution(t *testing.T) {
 	distMap := dh.PriceDistributionMetrics{
-		"PSA 10": {Min: 100.0, Max: 300.0, Median: 200.0, Avg: 190.0, SampleSize: 15},
-		"Raw":    {Min: 50.0, Max: 150.0, Median: 80.0, Avg: 85.0, SampleSize: 10},
+		"psa_10": {Min: 100.0, Max: 300.0, Median: 200.0, Avg: 190.0, SampleSize: 15},
+		"raw":    {Min: 50.0, Max: 150.0, Median: 80.0, Avg: 85.0, SampleSize: 10},
 	}
 	adapter := dhprice.NewBatchAdapter(
 		&stubBatchClient{response: &dh.BatchAnalyticsResponse{
@@ -82,7 +82,7 @@ func TestBatchAdapter_BatchPriceDistribution(t *testing.T) {
 		t.Fatal("expected card 42 in results")
 	}
 
-	psa10 := dist.ByGrade["PSA 10"]
+	psa10 := dist.ByGrade["psa_10"]
 	if psa10.MedianCents != 20000 {
 		t.Errorf("expected PSA 10 median 20000 cents, got %d", psa10.MedianCents)
 	}
@@ -90,7 +90,7 @@ func TestBatchAdapter_BatchPriceDistribution(t *testing.T) {
 		t.Errorf("expected sample size 15, got %d", psa10.SampleSize)
 	}
 
-	raw := dist.ByGrade["Raw"]
+	raw := dist.ByGrade["raw"]
 	if raw.MedianCents != 8000 {
 		t.Errorf("expected Raw median 8000 cents, got %d", raw.MedianCents)
 	}
@@ -98,7 +98,7 @@ func TestBatchAdapter_BatchPriceDistribution(t *testing.T) {
 
 func TestBatchAdapter_BatchPriceDistribution_SkipsErrors(t *testing.T) {
 	distMap := dh.PriceDistributionMetrics{
-		"PSA 8": {Median: 50.0, SampleSize: 5},
+		"psa_8": {Median: 50.0, SampleSize: 5},
 	}
 	adapter := dhprice.NewBatchAdapter(
 		&stubBatchClient{response: &dh.BatchAnalyticsResponse{

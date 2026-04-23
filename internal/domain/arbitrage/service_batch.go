@@ -193,7 +193,7 @@ func (s *service) getCrackOpportunitiesBatch(ctx context.Context) ([]CrackAnalys
 			continue
 		}
 
-		rawBucket := dist.ByGrade["Raw"]
+		rawBucket := dist.ByGrade["raw"]
 		gradedBucket := dist.ByGrade[gradeKeyForValue(p.GradeValue)]
 
 		rawCents := rawBucket.MedianCents
@@ -357,7 +357,7 @@ func (s *service) getAcquisitionTargetsBatch(ctx context.Context) ([]Acquisition
 			continue
 		}
 
-		rawBucket := dist.ByGrade["Raw"]
+		rawBucket := dist.ByGrade["raw"]
 		if rawBucket.MedianCents == 0 {
 			continue
 		}

@@ -19,7 +19,7 @@ type BatchPricer interface {
 
 // GradedDistribution holds per-grade price statistics from a batch analytics call.
 type GradedDistribution struct {
-	// ByGrade maps DH grade keys (e.g. "PSA 10", "PSA 9", "Raw") to price stats.
+	// ByGrade maps DH grade keys (e.g. "psa_10", "psa_9", "raw") to price stats.
 	ByGrade map[string]PriceBucket
 }
 
@@ -33,22 +33,26 @@ type PriceBucket struct {
 }
 
 // gradeKeyForValue maps a numeric grade to the DH price_distribution key.
-// Grade 0 means raw/ungraded.
+// DH uses lowercase snake_case keys: "psa_10", "psa_9", "psa_4", "raw".
 func gradeKeyForValue(grade float64) string {
 	switch {
 	case grade >= 9.5:
-		return "PSA 10"
+		return "psa_10"
 	case grade >= 8.5:
-		return "PSA 9"
+		return "psa_9"
 	case grade >= 7.5:
-		return "PSA 8"
+		return "psa_8"
 	case grade >= 6.5:
-		return "PSA 7"
+		return "psa_7"
 	case grade >= 5.5:
-		return "PSA 6"
+		return "psa_6"
+	case grade >= 4.5:
+		return "psa_5"
+	case grade >= 3.5:
+		return "psa_4"
 	case grade == 0:
-		return "Raw"
+		return "raw"
 	default:
-		return "Raw"
+		return "raw"
 	}
 }
