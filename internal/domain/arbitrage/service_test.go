@@ -1002,8 +1002,8 @@ func TestGetCrackOpportunities_BatchPath(t *testing.T) {
 		cardIDs: map[string]int{"Charizard|Base Set|4": 42},
 		distributions: map[int]GradedDistribution{
 			42: {ByGrade: map[string]PriceBucket{
-				"Raw":   {MedianCents: 20000, SampleSize: 10},
-				"PSA 8": {MedianCents: 12000, SampleSize: 8},
+				"raw":   {MedianCents: 20000, SampleSize: 10},
+				"psa_8": {MedianCents: 12000, SampleSize: 8},
 			}},
 		},
 	}
@@ -1054,10 +1054,10 @@ func TestGetAcquisitionTargets_BatchPath(t *testing.T) {
 		cardIDs: map[string]int{"Pikachu|Base Set|58": 99},
 		distributions: map[int]GradedDistribution{
 			99: {ByGrade: map[string]PriceBucket{
-				"Raw":    {MedianCents: 5000, SampleSize: 10},
-				"PSA 8":  {MedianCents: 12000, SampleSize: 5},
-				"PSA 9":  {MedianCents: 25000, SampleSize: 8},
-				"PSA 10": {MedianCents: 80000, SampleSize: 3},
+				"raw":    {MedianCents: 5000, SampleSize: 10},
+				"psa_8":  {MedianCents: 12000, SampleSize: 5},
+				"psa_9":  {MedianCents: 25000, SampleSize: 8},
+				"psa_10": {MedianCents: 80000, SampleSize: 3},
 			}},
 		},
 	}
