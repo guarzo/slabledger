@@ -29,6 +29,9 @@ func (s *LiquidationStore) ListUnsoldForLiquidation(ctx context.Context) ([]liqu
 		LEFT JOIN campaign_sales s ON s.purchase_id = p.id
 		WHERE c.phase != 'closed'
 		  AND s.id IS NULL
+		  AND p.dh_status IN ('in_stock', 'listed')
+		  AND (p.gem_rate_id != '' OR p.cl_value_cents > 0)
+		  AND NOT (p.dh_status = 'listed' AND p.reviewed_price_cents > 0 AND p.reviewed_price_cents < p.cl_value_cents)
 		ORDER BY p.cl_value_cents DESC`
 
 	rows, err := s.db.QueryContext(ctx, q)

@@ -8,7 +8,7 @@ import (
 
 // UnsoldCardForComps represents an unsold purchase needing fresh sales comps.
 type UnsoldCardForComps struct {
-	PurchaseID int64
+	PurchaseID string
 	GemRateID  string
 	Condition  string
 }
