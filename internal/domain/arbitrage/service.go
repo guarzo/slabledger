@@ -488,8 +488,16 @@ func (s *service) GetActivationChecklist(ctx context.Context, campaignID string)
 }
 
 // GetAcquisitionTargets returns raw-to-graded arbitrage opportunities across all active campaigns.
-// Uses a single ListAllUnsoldPurchases call to avoid N+1 DB queries.
+// Dispatches to the batch path when BatchPricer is injected, otherwise falls back to legacy.
 func (s *service) GetAcquisitionTargets(ctx context.Context) ([]AcquisitionOpportunity, error) {
+	if s.batchPricer != nil {
+		return s.getAcquisitionTargetsBatch(ctx)
+	}
+	return s.getAcquisitionTargetsLegacy(ctx)
+}
+
+// getAcquisitionTargetsLegacy is the original per-card price lookup path.
+func (s *service) getAcquisitionTargetsLegacy(ctx context.Context) ([]AcquisitionOpportunity, error) {
 	if s.priceProv == nil {
 		if s.logger != nil {
 			s.logger.Info(ctx, "skipping acquisition targets",
@@ -505,7 +513,6 @@ func (s *service) GetAcquisitionTargets(ctx context.Context) ([]AcquisitionOppor
 		return nil, fmt.Errorf("list active campaigns: %w", err)
 	}
 
-	// Build campaignID → ebayFee map to avoid per-campaign DB lookups.
 	ebayFeeMap := make(map[string]float64, len(allCampaigns))
 	for _, c := range allCampaigns {
 		ebayFeeMap[c.ID] = inventory.EffectiveFeePct(&c)
@@ -576,6 +583,102 @@ func (s *service) GetAcquisitionTargets(ctx context.Context) ([]AcquisitionOppor
 			opportunities = append(opportunities, *opp)
 		}
 	}
+	sortAcquisitionByProfit(opportunities)
+	return opportunities, nil
+}
+
+// getAcquisitionTargetsBatch resolves all card IDs upfront and calls BatchPriceDistribution
+// instead of per-card GetLastSoldCents.
+func (s *service) getAcquisitionTargetsBatch(ctx context.Context) ([]AcquisitionOpportunity, error) {
+	allCampaigns, err := s.campaigns.ListCampaigns(ctx, true)
+	if err != nil {
+		return nil, fmt.Errorf("list active campaigns: %w", err)
+	}
+	ebayFeeMap := make(map[string]float64, len(allCampaigns))
+	for _, c := range allCampaigns {
+		ebayFeeMap[c.ID] = inventory.EffectiveFeePct(&c)
+	}
+
+	allUnsold, err := s.purchases.ListAllUnsoldPurchases(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list all unsold purchases: %w", err)
+	}
+
+	type cardKey struct{ name, set, number string }
+	cardToDHID := make(map[cardKey]int)
+	var dhCardIDs []int
+	for _, p := range allUnsold {
+		if _, ok := ebayFeeMap[p.CampaignID]; !ok {
+			continue
+		}
+		key := cardKey{p.CardName, p.SetName, p.CardNumber}
+		if _, seen := cardToDHID[key]; seen {
+			continue
+		}
+		dhID, err := s.batchPricer.ResolveDHCardID(ctx, p.CardName, p.SetName, p.CardNumber)
+		if err != nil {
+			if s.logger != nil {
+				s.logger.Warn(ctx, "acquisition batch: resolve failed",
+					observability.String("cardName", p.CardName), observability.Err(err))
+			}
+			cardToDHID[key] = 0
+			continue
+		}
+		cardToDHID[key] = dhID
+		if dhID > 0 {
+			dhCardIDs = append(dhCardIDs, dhID)
+		}
+	}
+
+	distributions, err := s.batchPricer.BatchPriceDistribution(ctx, dhCardIDs)
+	if err != nil {
+		return nil, fmt.Errorf("batch price distribution: %w", err)
+	}
+
+	seen := make(map[cardKey]bool)
+	var opportunities []AcquisitionOpportunity
+	for _, p := range allUnsold {
+		ebayFee, ok := ebayFeeMap[p.CampaignID]
+		if !ok {
+			continue
+		}
+		key := cardKey{p.CardName, p.SetName, p.CardNumber}
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+
+		dhID := cardToDHID[key]
+		if dhID == 0 {
+			continue
+		}
+		dist, ok := distributions[dhID]
+		if !ok {
+			continue
+		}
+
+		rawBucket := dist.ByGrade["Raw"]
+		if rawBucket.MedianCents == 0 {
+			continue
+		}
+
+		gradedEstimates := make(map[string]int)
+		for _, grade := range []float64{8, 9, 10} {
+			bucket := dist.ByGrade[gradeKeyForValue(grade)]
+			if bucket.MedianCents > 0 {
+				gradedEstimates[fmt.Sprintf("PSA %g", grade)] = bucket.MedianCents
+			}
+		}
+
+		opp := computeAcquisitionOpportunity(
+			p.CardName, p.SetName, p.CardNumber, p.CertNumber,
+			rawBucket.MedianCents, gradedEstimates, ebayFee, "inventory",
+		)
+		if opp != nil {
+			opportunities = append(opportunities, *opp)
+		}
+	}
+
 	sortAcquisitionByProfit(opportunities)
 	return opportunities, nil
 }
