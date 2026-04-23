@@ -33,19 +33,29 @@ type ServiceOption func(*service)
 
 // service implements Service.
 type service struct {
-	campaigns inventory.CampaignRepository
-	purchases inventory.PurchaseRepository
-	analytics inventory.AnalyticsRepository
-	finance   inventory.FinanceRepository
-	priceProv inventory.PriceLookup
-	projCache *projectionCache // optional; if nil, projection runs on every call
-	logger    observability.Logger
+	campaigns   inventory.CampaignRepository
+	purchases   inventory.PurchaseRepository
+	analytics   inventory.AnalyticsRepository
+	finance     inventory.FinanceRepository
+	priceProv   inventory.PriceLookup
+	batchPricer BatchPricer
+	projCache   *projectionCache // optional; if nil, projection runs on every call
+	logger      observability.Logger
 }
 
 // WithPriceLookup injects the price lookup dependency.
 func WithPriceLookup(priceProv inventory.PriceLookup) ServiceOption {
 	return func(s *service) {
 		s.priceProv = priceProv
+	}
+}
+
+// WithBatchPricer injects the batch price distribution dependency.
+// When set, GetCrackOpportunities and GetAcquisitionTargets use batch
+// DH API calls instead of per-card lookups.
+func WithBatchPricer(bp BatchPricer) ServiceOption {
+	return func(s *service) {
+		s.batchPricer = bp
 	}
 }
 
