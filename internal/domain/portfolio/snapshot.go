@@ -92,10 +92,7 @@ func ComputeHealthFromData(campaigns []inventory.Campaign, allData []inventory.P
 	totalSoldNetProfit := 0
 
 	for _, c := range campaigns {
-		pnl, ok := pnlByCampaign[c.ID]
-		if !ok {
-			continue
-		}
+		pnl := pnlByCampaign[c.ID]
 
 		capitalAtRisk := 0
 		if pnl.TotalUnsold > 0 {
@@ -213,6 +210,9 @@ func (s *service) GetSnapshot(ctx context.Context) (*PortfolioSnapshot, error) {
 	invoices, err := s.finance.ListInvoices(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list invoices: %w", err)
+	}
+	if invoices == nil {
+		invoices = []inventory.Invoice{}
 	}
 
 	// Health + Insights + Suggestions (share healthByCampaign)

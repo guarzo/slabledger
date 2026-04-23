@@ -320,6 +320,7 @@ func (rt *Router) registerOpportunitiesRoutes(mux *http.ServeMux) {
 
 // TrackedEndpoints lists the endpoints whose response times are recorded.
 var TrackedEndpoints = []string{
+	"/api/portfolio/snapshot",
 	"/api/portfolio/insights",
 	"/api/portfolio/capital-timeline",
 	"/api/portfolio/weekly-review",
