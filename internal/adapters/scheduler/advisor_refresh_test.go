@@ -96,18 +96,25 @@ func TestTimeUntilHour(t *testing.T) {
 			wantMax: 2*time.Hour + 1*time.Minute,
 		},
 		{
-			name:    "target hour already passed today",
+			name:    "target hour already passed today — run immediately",
 			now:     time.Date(2026, 3, 26, 10, 0, 0, 0, time.UTC),
 			hour:    4,
-			wantMin: 17*time.Hour + 59*time.Minute,
-			wantMax: 18*time.Hour + 1*time.Minute,
+			wantMin: 0,
+			wantMax: 0,
 		},
 		{
-			name:    "target hour is current hour",
+			name:    "target hour is current hour (mid) — run immediately",
 			now:     time.Date(2026, 3, 26, 4, 30, 0, 0, time.UTC),
 			hour:    4,
-			wantMin: 23*time.Hour + 29*time.Minute,
-			wantMax: 23*time.Hour + 31*time.Minute,
+			wantMin: 0,
+			wantMax: 0,
+		},
+		{
+			name:    "exact on-the-hour boundary — run immediately",
+			now:     time.Date(2026, 3, 26, 4, 0, 0, 0, time.UTC),
+			hour:    4,
+			wantMin: 0,
+			wantMax: 0,
 		},
 	}
 	for _, tt := range tests {
