@@ -7,7 +7,7 @@ import { queryKeys } from '../../../queries/queryKeys';
 import SellPriceHero from './SellPriceHero';
 import SignalChip from './SignalChip';
 import CompSummaryPanel from './CompSummaryPanel';
-import { costBasis, formatShipDate, mostRecentSale } from './utils';
+import { costBasis, formatShipDate, mostRecentSale, isShipmentOverdue } from './utils';
 import { formatCents } from '../../../utils/formatters';
 import { PriceDecisionBar, buildPriceSources, preSelectSource, Button } from '../../../ui';
 
@@ -212,18 +212,29 @@ export default function ExpandedDetail({ item, onReviewed, campaignId, onOpenFla
       />
 
       {/* Ship date chip (only when not yet received) */}
-      {purchase.psaShipDate && !purchase.receivedAt && (
-        <div className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-[rgba(148,163,184,0.15)] bg-[rgba(148,163,184,0.08)] px-2.5 py-1">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-[var(--text-muted)] shrink-0">
-            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-            <line x1="16" y1="2" x2="16" y2="6"/>
-            <line x1="8" y1="2" x2="8" y2="6"/>
-            <line x1="3" y1="10" x2="21" y2="10"/>
-          </svg>
-          <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Shipped</span>
-          <span className="text-xs text-[var(--text-muted)]">{formatShipDate(purchase.psaShipDate)}</span>
-        </div>
-      )}
+      {purchase.psaShipDate && !purchase.receivedAt && (() => {
+        const overdue = isShipmentOverdue(purchase.psaShipDate);
+        return (
+          <div className={`mt-2 inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 ${
+            overdue
+              ? 'border-[var(--warning-border)] bg-[var(--warning-bg)]'
+              : 'border-[rgba(148,163,184,0.15)] bg-[rgba(148,163,184,0.08)]'
+          }`}>
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={`shrink-0 ${overdue ? 'text-[var(--warning-text)]' : 'text-[var(--text-muted)]'}`}>
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+              <line x1="16" y1="2" x2="16" y2="6"/>
+              <line x1="8" y1="2" x2="8" y2="6"/>
+              <line x1="3" y1="10" x2="21" y2="10"/>
+            </svg>
+            <span className={`text-[10px] font-semibold uppercase tracking-wide ${overdue ? 'text-[var(--warning-text)]' : 'text-[var(--text-muted)]'}`}>
+              {overdue ? 'Overdue' : 'Shipped'}
+            </span>
+            <span className={`text-xs ${overdue ? 'text-[var(--warning-text)]' : 'text-[var(--text-muted)]'}`}>
+              {formatShipDate(purchase.psaShipDate)}
+            </span>
+          </div>
+        );
+      })()}
       {item.purchase.dhPushStatus === 'held' && onApproveDHPush && (
         <div className="mt-3 p-3 rounded-lg bg-[var(--warning-bg)] border border-[var(--warning-border)]">
           <div className="flex items-center justify-between">

@@ -355,6 +355,15 @@ export function formatShipDate(dateStr: string): string {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
+/** Returns true if the ship date is 2+ calendar days ago. */
+export function isShipmentOverdue(shipDateStr: string): boolean {
+  const shipDate = new Date(shipDateStr + 'T00:00:00');
+  const now = new Date();
+  const diffMs = now.getTime() - shipDate.getTime();
+  const diffDays = diffMs / (1000 * 60 * 60 * 24);
+  return diffDays >= 2;
+}
+
 // Sync dot logic lives in syncDot.ts — re-exported here for backward compat.
 export type { SyncDotProps } from './syncDot';
 export { syncDotProps } from './syncDot';
