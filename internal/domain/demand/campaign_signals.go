@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -85,15 +84,6 @@ type signalEntry struct {
 	computedAt  *time.Time
 }
 
-// signalVelocityJSON is the domain-local mirror of the velocity_json blob
-// stored in dh_character_cache. Numeric-as-string fields are typed as strings
-// to match DH's wire format exactly.
-type signalVelocityJSON struct {
-	MedianDaysToSell  string   `json:"median_days_to_sell"`
-	SampleSize        int      `json:"sample_size"`
-	VelocityChangePct *float64 `json:"velocity_change_pct,omitempty"`
-}
-
 // --- CampaignSignals ---
 
 // CampaignSignals reads all characters from the 30d character cache and, for
@@ -156,7 +146,7 @@ func buildSignalIndex(rows []CharacterCache) (map[string]signalEntry, int) {
 		if row.VelocityJSON == nil || row.AnalyticsComputedAt == nil {
 			continue
 		}
-		var v signalVelocityJSON
+		var v velocityBlobJSON
 		if err := json.Unmarshal([]byte(*row.VelocityJSON), &v); err != nil {
 			skipped++ // non-nil velocity_json failed to parse — unexpected
 			continue
@@ -164,18 +154,10 @@ func buildSignalIndex(rows []CharacterCache) (map[string]signalEntry, int) {
 		if v.VelocityChangePct == nil {
 			continue // no change metric — exclude from contributors
 		}
-		var medianDays *float64
-		// DH omits median_days_to_sell for low-volume characters (empty string
-		// on the wire). ParseFloat failure is expected in that case and nil is
-		// the correct zero value. If DH regresses to omitting the field
-		// entirely, it will also parse as empty string and produce nil.
-		if parsed, err := strconv.ParseFloat(v.MedianDaysToSell, 64); err == nil {
-			medianDays = &parsed
-		}
 		idx[strings.ToLower(row.Character)] = signalEntry{
 			displayName: row.Character,
 			vChange:     *v.VelocityChangePct,
-			medianDays:  medianDays,
+			medianDays:  v.MedianDaysToSell,
 			sampleSize:  v.SampleSize,
 			computedAt:  row.AnalyticsComputedAt,
 		}

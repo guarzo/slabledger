@@ -95,6 +95,11 @@ type NicheDemand struct {
 type NicheMarket struct {
 	MedianDaysToSell     *float64
 	VelocityChangePct    *float64
+	AvgDailySales        *float64
+	SellThroughRate30d   *float64
+	SalesVolume7d        *int
+	SalesVolume30d       *int
+	SupplyCount          *int
 	ActiveListingCount   int
 	SampleSize           int
 	AnalyticsNotComputed bool
