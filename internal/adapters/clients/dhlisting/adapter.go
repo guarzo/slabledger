@@ -45,13 +45,20 @@ func (a *CertResolverAdapter) ResolveCert(ctx context.Context, req dhlisting.DHC
 		Status:   resp.Status,
 		DHCardID: resp.DHCardID,
 	}
+	if resp.GemRateID != nil {
+		result.GemRateID = *resp.GemRateID
+	}
 	for _, c := range resp.Candidates {
-		result.Candidates = append(result.Candidates, dhlisting.DHCertCandidate{
+		candidate := dhlisting.DHCertCandidate{
 			DHCardID:   c.DHCardID,
 			CardName:   c.CardName,
 			SetName:    c.SetName,
 			CardNumber: c.CardNumber,
-		})
+		}
+		if c.GemRateID != nil {
+			candidate.GemRateID = *c.GemRateID
+		}
+		result.Candidates = append(result.Candidates, candidate)
 	}
 	return result, nil
 }
