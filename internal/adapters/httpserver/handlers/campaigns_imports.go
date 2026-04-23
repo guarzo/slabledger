@@ -295,6 +295,11 @@ func (h *CampaignsHandler) HandleImportOrders(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	if isEbayCSV(rows) {
+		h.handleEbayImport(w, r, rows)
+		return
+	}
+
 	orderRows, skipped, err := inventory.ParseOrdersExportRows(rows)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -302,7 +307,6 @@ func (h *CampaignsHandler) HandleImportOrders(w http.ResponseWriter, r *http.Req
 	}
 
 	if len(orderRows) == 0 {
-		// No valid PSA rows — return result with only skipped items
 		writeJSON(w, http.StatusOK, &inventory.OrdersImportResult{
 			Skipped: skipped,
 		})
@@ -316,10 +320,49 @@ func (h *CampaignsHandler) HandleImportOrders(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	// Merge parser-level skips into the result
 	result.Skipped = append(result.Skipped, skipped...)
 
 	writeJSON(w, http.StatusOK, result)
+}
+
+func (h *CampaignsHandler) handleEbayImport(w http.ResponseWriter, r *http.Request, rows [][]string) {
+	ebayRows, skipped, err := inventory.ParseEbayOrderRows(rows)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	if len(ebayRows) == 0 {
+		writeJSON(w, http.StatusOK, &inventory.OrdersImportResult{
+			Skipped: skipped,
+		})
+		return
+	}
+
+	result, ok := serviceCall(w, r.Context(), h.logger, "eBay orders import failed", func() (*inventory.OrdersImportResult, error) {
+		return h.service.ImportEbayOrdersSales(r.Context(), ebayRows)
+	})
+	if !ok {
+		return
+	}
+
+	result.Skipped = append(result.Skipped, skipped...)
+
+	writeJSON(w, http.StatusOK, result)
+}
+
+// isEbayCSV detects eBay File Exchange format by looking for "Custom Label" in the header row.
+func isEbayCSV(rows [][]string) bool {
+	if len(rows) < 2 {
+		return false
+	}
+	headerMap := inventory.BuildHeaderMap(rows[1])
+	for _, col := range []string{"custom label", "item title", "sold for", "sale date", "order number"} {
+		if _, ok := headerMap[col]; !ok {
+			return false
+		}
+	}
+	return true
 }
 
 // HandleConfirmOrdersSales handles POST /api/purchases/import-orders/confirm.

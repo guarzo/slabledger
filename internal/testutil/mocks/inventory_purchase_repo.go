@@ -20,6 +20,7 @@ type PurchaseRepositoryMock struct {
 	GetPurchasesByGraderAndCertNumbersFn func(ctx context.Context, grader string, certNumbers []string) (map[string]*inventory.Purchase, error)
 	GetPurchasesByIDsFn                  func(ctx context.Context, ids []string) (map[string]*inventory.Purchase, error)
 	GetPurchasesByCertNumbersFn          func(ctx context.Context, certNumbers []string) (map[string]*inventory.Purchase, error)
+	GetPurchasesByDHInventoryIDsFn       func(ctx context.Context, dhIDs []int) (map[int]*inventory.Purchase, error)
 	UpdatePurchaseCLValueFn              func(ctx context.Context, id string, clValueCents int, population int) error
 	UpdatePurchaseCLSyncedAtFn           func(ctx context.Context, id string, syncedAt string) error
 	UpdatePurchaseMMValueFn              func(ctx context.Context, id string, mmValueCents int) error
@@ -133,6 +134,13 @@ func (m *PurchaseRepositoryMock) GetPurchasesByCertNumbers(ctx context.Context, 
 		return m.GetPurchasesByCertNumbersFn(ctx, certNumbers)
 	}
 	return map[string]*inventory.Purchase{}, nil
+}
+
+func (m *PurchaseRepositoryMock) GetPurchasesByDHInventoryIDs(ctx context.Context, dhIDs []int) (map[int]*inventory.Purchase, error) {
+	if m.GetPurchasesByDHInventoryIDsFn != nil {
+		return m.GetPurchasesByDHInventoryIDsFn(ctx, dhIDs)
+	}
+	return map[int]*inventory.Purchase{}, nil
 }
 
 func (m *PurchaseRepositoryMock) GetPurchasesByIDs(ctx context.Context, ids []string) (map[string]*inventory.Purchase, error) {
