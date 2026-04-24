@@ -425,7 +425,7 @@ export default function CardIntakeTab() {
     if (!certNumber) return;
 
     if (mode === 'sale') {
-      handleSaleScan(certNumber);
+      await handleSaleScan(certNumber);
       return;
     }
 

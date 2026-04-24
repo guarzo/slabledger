@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { SALE_COST_VISIBLE_KEY, SALE_DEFAULT_DISCOUNT_KEY } from './sale-types';
 
 interface SaleToolbarProps {
@@ -10,6 +10,10 @@ interface SaleToolbarProps {
 
 export function SaleToolbar({ discountPct, onDiscountChange, costVisible, onCostVisibleChange }: SaleToolbarProps) {
   const [discountInput, setDiscountInput] = useState(String(discountPct));
+
+  useEffect(() => {
+    setDiscountInput(String(discountPct));
+  }, [discountPct]);
 
   const handleDiscountBlur = useCallback(() => {
     const val = Math.max(0, Math.min(100, Number(discountInput) || 0));

@@ -39,3 +39,16 @@ export interface SaleSummary {
 
 export const SALE_COST_VISIBLE_KEY = 'slabledger:sale-cost-visible';
 export const SALE_DEFAULT_DISCOUNT_KEY = 'slabledger:sale-default-discount';
+
+export const SALE_CHANNELS = [
+  { value: 'cardshow', label: 'Card Show' },
+  { value: 'local', label: 'Local' },
+  { value: 'ebay', label: 'eBay' },
+  { value: 'tcgplayer', label: 'TCGPlayer' },
+  { value: 'doubleholo', label: 'DoubleHolo' },
+  { value: 'other', label: 'Other' },
+] as const;
+
+export function formatCents(cents: number): string {
+  return `$${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}

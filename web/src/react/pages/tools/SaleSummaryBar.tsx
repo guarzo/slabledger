@@ -1,3 +1,4 @@
+import { formatCents } from './sale-types';
 import type { SaleSummary } from './sale-types';
 
 interface SaleSummaryBarProps {
@@ -7,10 +8,6 @@ interface SaleSummaryBarProps {
   onRecordSales: () => void;
 }
 
-function fmt(cents: number): string {
-  return `$${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
-}
-
 export function SaleSummaryBar({ summary, costVisible, onClearAll, onRecordSales }: SaleSummaryBarProps) {
   if (summary.cardCount === 0) return null;
 
@@ -18,10 +15,10 @@ export function SaleSummaryBar({ summary, costVisible, onClearAll, onRecordSales
     <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-zinc-800 bg-zinc-900/50 px-3 py-2">
       <div className="flex gap-4 text-xs">
         <div><span className="text-zinc-500">Cards:</span> <span className="text-white">{summary.cardCount}</span></div>
-        {costVisible && <div><span className="text-zinc-500">Cost:</span> <span className="text-zinc-300">{fmt(summary.costTotalCents)}</span></div>}
-        <div><span className="text-zinc-500">Comp:</span> <span className="text-emerald-500">{fmt(summary.compTotalCents)}</span></div>
-        <div><span className="text-zinc-500">Sale:</span> <span className="font-semibold text-white">{fmt(summary.saleTotalCents)}</span></div>
-        {costVisible && <div><span className="text-zinc-500">Profit:</span> <span className="font-semibold text-emerald-500">{fmt(summary.profitCents)}</span></div>}
+        {costVisible && <div><span className="text-zinc-500">Cost:</span> <span className="text-zinc-300">{formatCents(summary.costTotalCents)}</span></div>}
+        <div><span className="text-zinc-500">Comp:</span> <span className="text-emerald-500">{formatCents(summary.compTotalCents)}</span></div>
+        <div><span className="text-zinc-500">Sale:</span> <span className="font-semibold text-white">{formatCents(summary.saleTotalCents)}</span></div>
+        {costVisible && <div><span className="text-zinc-500">Profit:</span> <span className="font-semibold text-emerald-500">{formatCents(summary.profitCents)}</span></div>}
         <div><span className="text-zinc-500">Avg:</span> <span className="text-zinc-300">{summary.avgDiscountPct}%</span></div>
       </div>
       <div className="flex gap-2">

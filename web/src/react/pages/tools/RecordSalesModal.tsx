@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { SALE_CHANNELS, formatCents } from './sale-types';
 import type { SaleRowData, SaleSummary } from './sale-types';
 import type { SaleChannel } from '../../../types/campaigns';
 
@@ -11,12 +12,11 @@ interface RecordSalesModalProps {
   error?: string | null;
 }
 
-function fmt(cents: number): string {
-  return `$${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
-
 export function RecordSalesModal({ rows, summary, onConfirm, onCancel, loading, error }: RecordSalesModalProps) {
-  const [saleDate, setSaleDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [saleDate, setSaleDate] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  });
   const [channel, setChannel] = useState<SaleChannel>('cardshow');
 
   const handleConfirm = useCallback(() => {
@@ -40,12 +40,9 @@ export function RecordSalesModal({ rows, summary, onConfirm, onCancel, loading, 
             <label className="mb-1 block text-xs text-zinc-400">Channel</label>
             <select value={channel} onChange={e => setChannel(e.target.value as SaleChannel)}
               className="w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm text-white">
-              <option value="cardshow">Card Show</option>
-              <option value="local">Local</option>
-              <option value="ebay">eBay</option>
-              <option value="tcgplayer">TCGPlayer</option>
-              <option value="doubleholo">DoubleHolo</option>
-              <option value="other">Other</option>
+              {SALE_CHANNELS.map(ch => (
+                <option key={ch.value} value={ch.value}>{ch.label}</option>
+              ))}
             </select>
           </div>
         </div>
@@ -58,13 +55,13 @@ export function RecordSalesModal({ rows, summary, onConfirm, onCancel, loading, 
           {resolvedRows.map(row => (
             <div key={row.certNumber} className="grid grid-cols-[1fr_80px] gap-1 border-b border-zinc-800/50 px-3 py-1.5">
               <span className="truncate text-zinc-300">{row.cardName}</span>
-              <span className="text-right text-white">{fmt(row.salePriceCents)}</span>
+              <span className="text-right text-white">{formatCents(row.salePriceCents)}</span>
             </div>
           ))}
         </div>
 
         <div className="mb-4 flex gap-4 text-xs text-zinc-400">
-          <span>Total: <span className="font-semibold text-white">{fmt(summary.saleTotalCents)}</span></span>
+          <span>Total: <span className="font-semibold text-white">{formatCents(summary.saleTotalCents)}</span></span>
           <span>Avg: <span className="text-zinc-300">{summary.avgDiscountPct}%</span></span>
         </div>
 
