@@ -25,3 +25,17 @@ func ConditionToAPIFormat(condition string) string {
 	}
 	return "PSA " + strings.ReplaceAll(strings.TrimPrefix(condition, "g"), "_", ".")
 }
+
+// DisplayConditionToGFormat converts a display-format condition (e.g. "PSA 10",
+// "PSA 8.5") to the g-format used in cl_sales_comps (e.g. "g10", "g8_5").
+// Returns empty string if the condition doesn't match the expected "PSA " prefix.
+func DisplayConditionToGFormat(condition string) string {
+	if !strings.HasPrefix(condition, "PSA ") {
+		return ""
+	}
+	grade := strings.TrimSpace(strings.TrimPrefix(condition, "PSA "))
+	if grade == "" {
+		return ""
+	}
+	return "g" + strings.ReplaceAll(grade, ".", "_")
+}

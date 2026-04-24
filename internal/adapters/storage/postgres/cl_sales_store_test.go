@@ -35,14 +35,14 @@ func TestCLSalesStore_GetCompSummariesByKeys(t *testing.T) {
 	// Sorted: [9000, 10000, 11000, 12000, 13000] → median=11000, last=13000, high=13000, low=9000.
 	now := "2026-04-20"
 	for _, row := range [][]any{
-		{"gem-a", "item-a-1", "2026-04-16", 9000, "ebay", "PSA 10"},
-		{"gem-a", "item-a-2", "2026-04-17", 11000, "ebay", "PSA 10"},
-		{"gem-a", "item-a-3", "2026-04-18", 12000, "ebay", "PSA 10"},
-		{"gem-a", "item-a-4", "2026-04-19", 10000, "ebay", "PSA 10"},
-		{"gem-a", "item-a-5", now, 13000, "ebay", "PSA 10"},
-		{"gem-b", "item-b-1", now, 4000, "ebay", "PSA 9"},
-		{"gem-b", "item-b-2", now, 5000, "ebay", "PSA 9"},
-		{"gem-b", "item-b-3", now, 4500, "ebay", "PSA 9"},
+		{"gem-a", "item-a-1", "2026-04-16", 9000, "ebay", "g10"},
+		{"gem-a", "item-a-2", "2026-04-17", 11000, "ebay", "g10"},
+		{"gem-a", "item-a-3", "2026-04-18", 12000, "ebay", "g10"},
+		{"gem-a", "item-a-4", "2026-04-19", 10000, "ebay", "g10"},
+		{"gem-a", "item-a-5", now, 13000, "ebay", "g10"},
+		{"gem-b", "item-b-1", now, 4000, "ebay", "g9"},
+		{"gem-b", "item-b-2", now, 5000, "ebay", "g9"},
+		{"gem-b", "item-b-3", now, 4500, "ebay", "g9"},
 	} {
 		_, err := db.ExecContext(ctx,
 			`INSERT INTO cl_sales_comps

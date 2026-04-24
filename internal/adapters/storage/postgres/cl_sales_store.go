@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/inventory"
+	"github.com/guarzo/slabledger/internal/platform/cardutil"
 )
 
 // CLSaleCompRecord represents a stored sales comp.
@@ -114,6 +115,11 @@ func (s *CLSalesStore) lookupCondition(ctx context.Context, certNumber string) (
 	}
 	if err != nil {
 		return "", err
+	}
+	// cl_card_mappings stores display format ("PSA 10") but cl_sales_comps
+	// uses g-format ("g10"). Convert so callers can query comps directly.
+	if g := cardutil.DisplayConditionToGFormat(condition.String); g != "" {
+		return g, nil
 	}
 	return condition.String, nil
 }
@@ -469,7 +475,12 @@ func (s *CLSalesStore) lookupConditionsBatch(ctx context.Context, certs []string
 		if err := rows.Scan(&cert, &cond); err != nil {
 			return nil, err
 		}
-		out[cert] = cond.String
+		// Convert display format ("PSA 10") to g-format ("g10") for cl_sales_comps queries.
+		if g := cardutil.DisplayConditionToGFormat(cond.String); g != "" {
+			out[cert] = g
+		} else {
+			out[cert] = cond.String
+		}
 	}
 	return out, rows.Err()
 }
