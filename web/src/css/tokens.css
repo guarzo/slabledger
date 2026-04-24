@@ -91,8 +91,30 @@
   --color-button-text-dark: #f1f5f9;
 
   /* ===================================
-     PSA-GRADE COLORS
+     GRADE QUALITY RAMP
+     1 = poor, 10 = gem mint. Each step has fill / border / text.
      =================================== */
+  --grade-1-bg:  rgba(127, 29, 29, 0.22);   --grade-1-bd:  rgba(127, 29, 29, 0.45);   --grade-1-fg:  #fca5a5;
+  --grade-2-bg:  rgba(153, 27, 27, 0.22);   --grade-2-bd:  rgba(153, 27, 27, 0.45);   --grade-2-fg:  #fca5a5;
+  --grade-3-bg:  rgba(194, 65, 12, 0.22);   --grade-3-bd:  rgba(194, 65, 12, 0.45);   --grade-3-fg:  #fdba74;
+  --grade-4-bg:  rgba(180, 83,  9, 0.22);   --grade-4-bd:  rgba(180, 83,  9, 0.45);   --grade-4-fg:  #fdba74;
+  --grade-5-bg:  rgba(161, 98,  7, 0.22);   --grade-5-bd:  rgba(161, 98,  7, 0.45);   --grade-5-fg:  #fcd34d;
+  --grade-6-bg:  rgba(133, 77, 14, 0.22);   --grade-6-bd:  rgba(133, 77, 14, 0.45);   --grade-6-fg:  #fde68a;
+  --grade-7-bg:  rgba(101,163, 13, 0.20);   --grade-7-bd:  rgba(101,163, 13, 0.40);   --grade-7-fg:  #bef264;
+  --grade-8-bg:  rgba( 22,163, 74, 0.20);   --grade-8-bd:  rgba( 22,163, 74, 0.45);   --grade-8-fg:  #86efac;
+  --grade-9-bg:  rgba(  5,150,105, 0.22);   --grade-9-bd:  rgba(  5,150,105, 0.50);   --grade-9-fg:  #6ee7b7;
+  --grade-10-bg: linear-gradient(135deg, rgba(251,191,36,0.28), rgba(245,158,11,0.22));
+  --grade-10-bd: rgba(251,191,36,0.55);
+  --grade-10-fg: #fde68a;
+  --grade-10-glow: 0 0 12px rgba(251,191,36,0.25);
+
+  /* Half-grades (CGC 9.5, BGS 8.5) snap UP to the next integer's tokens. */
+  /* BGS 10 Black Label: keep the old black treatment as an opt-in variant. */
+  --grade-black-label-bg: rgba(0, 0, 0, 0.5);
+  --grade-black-label-bd: rgba(255, 255, 255, 0.2);
+  --grade-black-label-fg: #e5e7eb;
+
+  /* DEPRECATED — use --grade-{1..10}-* instead. Remove in next release. */
   --grade-psa10: #fbbf24;    /* Gold - PSA 10 Gem Mint (avoids warning-red confusion) */
   --grade-psa9: #2563eb;     /* Blue - PSA 9 Mint */
   --grade-psa8: #a16207;     /* Dark amber - PSA 8 (distinct from gold PSA 10) */

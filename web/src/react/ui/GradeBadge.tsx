@@ -1,34 +1,41 @@
-// General-purpose grade badge using grade-color logic and size variants.
+import { clsx } from 'clsx';
+import './GradeBadge.css';
 
 interface GradeBadgeProps {
   grader?: string;
+  /** 1–10, or 9.5 / 8.5 for half-grades. */
   grade: number;
-  size?: 'sm' | 'md';
+  /** BGS "Black Label" 10 — renders in slate instead of gold. */
+  blackLabel?: boolean;
+  size?: 'sm' | 'md' | 'lg';
+  className?: string;
 }
 
-function gradeColor(grader: string, grade: number): { bg: string; text: string; border: string } {
-  const g = grader.toUpperCase();
-  if (g === 'BGS' && grade >= 10) return { bg: 'rgba(0,0,0,0.3)', text: '#e5e7eb', border: 'rgba(255,255,255,0.2)' };
-  if (g === 'CGC') return { bg: 'rgba(245,158,11,0.12)', text: 'var(--grade-cgc)', border: 'rgba(245,158,11,0.25)' };
-  // Non-10 BGS and all other graders fall through to PSA color tiers
-  if (grade >= 10) return { bg: 'rgba(251,191,36,0.14)', text: 'var(--grade-psa10)', border: 'rgba(251,191,36,0.3)' };
-  if (grade >= 9) return { bg: 'rgba(37,99,235,0.12)', text: 'var(--grade-psa9)', border: 'rgba(37,99,235,0.25)' };
-  if (grade >= 8) return { bg: 'rgba(161,98,7,0.12)', text: 'var(--grade-psa8)', border: 'rgba(161,98,7,0.3)' };
-  return { bg: 'rgba(255,255,255,0.05)', text: 'var(--text-muted)', border: 'rgba(255,255,255,0.1)' };
-}
+const bucket = (g: number) => Math.min(10, Math.max(1, Math.ceil(g)));
 
-export default function GradeBadge({ grader = 'PSA', grade, size = 'sm' }: GradeBadgeProps) {
-  const color = gradeColor(grader, grade);
-  const label = grader.toUpperCase() === 'PSA' ? `${grade}` : `${grader} ${grade}`;
-  const sizeClass = size === 'sm' ? 'text-[10px] px-1.5 py-0.5' : 'text-xs px-2 py-0.5';
+export default function GradeBadge({
+  grader = 'PSA',
+  grade,
+  blackLabel,
+  size = 'sm',
+  className,
+}: GradeBadgeProps) {
+  const tier = blackLabel ? 'black-label' : bucket(grade);
+  const graderLabel = grader.toUpperCase();
 
   return (
     <span
-      className={`inline-flex items-center font-semibold rounded-full tabular-nums shrink-0 ${sizeClass}`}
-      style={{ background: color.bg, color: color.text, border: `1px solid ${color.border}` }}
-      title={`${grader} ${grade}`}
+      className={clsx(
+        'grade-badge',
+        `grade-badge--tier-${tier}`,
+        `grade-badge--${size}`,
+        className,
+      )}
+      aria-label={`${graderLabel} grade ${grade}${blackLabel ? ' Black Label' : ''}`}
+      title={`${graderLabel} ${grade}`}
     >
-      {label}
+      <span className="grade-badge__grader">{graderLabel}</span>
+      <span className="grade-badge__grade">{grade}</span>
     </span>
   );
 }

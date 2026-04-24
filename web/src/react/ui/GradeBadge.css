@@ -1,0 +1,53 @@
+.grade-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px 3px 5px;
+  border: 1px solid;
+  border-radius: 9999px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.grade-badge--sm { font-size: 11px; padding: 2px 7px 2px 4px; gap: 4px; }
+.grade-badge--md { font-size: 12px; }
+.grade-badge--lg { font-size: 14px; padding: 5px 11px 5px 6px; }
+
+.grade-badge__grader {
+  font-size: 0.72em;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.grade-badge__grade { font-size: 1em; }
+
+/* Keep grader chip legible in the dense sm variant (0.72em on 11px ≈ 8px is too small). */
+.grade-badge--sm .grade-badge__grader { font-size: 10px; }
+
+.grade-badge--tier-1  { background: var(--grade-1-bg);  border-color: var(--grade-1-bd);  color: var(--grade-1-fg); }
+.grade-badge--tier-2  { background: var(--grade-2-bg);  border-color: var(--grade-2-bd);  color: var(--grade-2-fg); }
+.grade-badge--tier-3  { background: var(--grade-3-bg);  border-color: var(--grade-3-bd);  color: var(--grade-3-fg); }
+.grade-badge--tier-4  { background: var(--grade-4-bg);  border-color: var(--grade-4-bd);  color: var(--grade-4-fg); }
+.grade-badge--tier-5  { background: var(--grade-5-bg);  border-color: var(--grade-5-bd);  color: var(--grade-5-fg); }
+.grade-badge--tier-6  { background: var(--grade-6-bg);  border-color: var(--grade-6-bd);  color: var(--grade-6-fg); }
+.grade-badge--tier-7  { background: var(--grade-7-bg);  border-color: var(--grade-7-bd);  color: var(--grade-7-fg); }
+.grade-badge--tier-8  { background: var(--grade-8-bg);  border-color: var(--grade-8-bd);  color: var(--grade-8-fg); }
+.grade-badge--tier-9  { background: var(--grade-9-bg);  border-color: var(--grade-9-bd);  color: var(--grade-9-fg); }
+.grade-badge--tier-10 {
+  background: var(--grade-10-bg);
+  border-color: var(--grade-10-bd);
+  color: var(--grade-10-fg);
+  box-shadow: var(--grade-10-glow);
+}
+.grade-badge--tier-black-label {
+  background: var(--grade-black-label-bg);
+  border-color: var(--grade-black-label-bd);
+  color: var(--grade-black-label-fg);
+}
