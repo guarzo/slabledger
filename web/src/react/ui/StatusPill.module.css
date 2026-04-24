@@ -1,0 +1,14 @@
+.pill {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 11px; font-weight: 600;
+  padding: 3px 9px; border-radius: 999px;
+  border: 1px solid;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.03em;
+}
+.t-success { background: rgba(16,185,129,0.10); color: #34d399; border-color: rgba(16,185,129,0.30); }
+.t-warning { background: rgba(245,158,11,0.10); color: #fbbf24; border-color: rgba(245,158,11,0.30); }
+.t-danger  { background: rgba(239,68,68,0.10);  color: #f87171; border-color: rgba(239,68,68,0.30); }
+.t-info    { background: rgba(34,211,238,0.10); color: #22d3ee; border-color: rgba(34,211,238,0.30); }
+.t-brand   { background: rgba(99,102,241,0.10); color: #a5b4fc; border-color: rgba(99,102,241,0.30); }
+.t-neutral { background: rgba(107,114,128,0.10); color: #9ca3af; border-color: rgba(107,114,128,0.30); }

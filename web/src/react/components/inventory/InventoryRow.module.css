@@ -1,0 +1,69 @@
+.row {
+  display: grid;
+  grid-template-columns: 80px 1.8fr 120px 180px 120px 150px;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 18px;
+  background: var(--surface-1);
+  border: 1px solid var(--surface-0);
+  border-radius: 14px;
+  box-shadow: var(--shadow-1);
+  text-align: left; width: 100%;
+  font-family: inherit; color: inherit;
+}
+.interactive {
+  cursor: pointer;
+  transition: transform 180ms cubic-bezier(.4,0,.2,1),
+    border-color 180ms cubic-bezier(.4,0,.2,1),
+    box-shadow 180ms cubic-bezier(.4,0,.2,1);
+}
+.interactive:hover {
+  transform: translateY(-1px);
+  border-color: var(--brand-500);
+  box-shadow: var(--shadow-2);
+}
+
+.gradeCol { display: flex; }
+.nameCol { min-width: 0; }
+.name {
+  font-size: 14px; font-weight: 600;
+  color: var(--color-heading);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.set { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+.numCol, .ageCol { display: flex; flex-direction: column; gap: 2px; }
+.numLabel {
+  font-size: 9px; color: var(--text-subtle);
+  text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600;
+}
+.numValue {
+  font-size: 14px; font-weight: 600;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  display: flex; align-items: center; gap: 6px;
+}
+
+.marketRow { display: flex; align-items: baseline; gap: 8px; }
+.dirChip {
+  font-size: 11px; font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  padding: 1px 6px; border-radius: 999px;
+  display: inline-flex; align-items: center; gap: 3px;
+}
+.dirRising  .dirChip { background: rgba(16,185,129,0.14); color: var(--success); }
+.dirFalling .dirChip { background: rgba(239,68,68,0.14);  color: var(--danger); }
+.dirStable  .dirChip { background: rgba(107,114,128,0.14); color: var(--text-muted); }
+
+.ageBar {
+  display: inline-block; width: 40px; height: 4px;
+  background: rgba(255,255,255,0.06); border-radius: 2px; overflow: hidden;
+}
+.ageBar > span { display: block; height: 100%; background: currentcolor; }
+.ageFresh   { color: var(--success); }
+.ageNeutral { color: var(--text-muted); }
+.ageWarning { color: var(--warning); }
+.ageDanger  { color: var(--danger); }
+.ageWarning .numValue, .ageDanger .numValue { color: currentcolor; }
+
+.recCol { display: flex; justify-content: flex-end; }

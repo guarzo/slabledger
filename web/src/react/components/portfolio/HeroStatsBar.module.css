@@ -1,0 +1,55 @@
+.hero {
+  display: flex; flex-wrap: wrap; align-items: flex-end;
+  gap: 32px;
+  padding-bottom: 24px;
+  border-bottom: var(--hero-divider);
+  margin-bottom: 24px;
+}
+
+.roiBlock { display: flex; flex-direction: column; gap: 6px; }
+.roiLabel {
+  font-size: 11px; font-weight: 600;
+  color: var(--brand-400);
+  text-transform: uppercase; letter-spacing: 0.12em;
+}
+.roiRow { display: flex; align-items: baseline; gap: 12px; }
+.roiValue {
+  font-size: var(--hero-roi-size);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  background: linear-gradient(180deg, var(--success) 0%, color-mix(in srgb, var(--success) 70%, #fff) 100%);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.hero[data-tone="neg"] .roiValue {
+  background: linear-gradient(180deg, var(--danger) 0%, color-mix(in srgb, var(--danger) 70%, #fff) 100%);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+
+.group { display: flex; flex-wrap: wrap; gap: 24px; padding-bottom: 4px; }
+.stat { display: flex; flex-direction: column; gap: 4px; min-width: 80px; }
+.statLabel {
+  font-size: 10px; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.08em; font-weight: 500;
+}
+.statValue {
+  font-size: 18px; font-weight: 600;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  display: flex; align-items: baseline; gap: 6px;
+}
+.tWarn { color: var(--warning); }
+.tNeg  { color: var(--danger); }
+.tMuted { color: var(--text-muted); }
+.tSuccess { color: var(--success); }
+
+.divider {
+  width: 1px; align-self: stretch;
+  background: rgba(255,255,255,0.08);
+  margin: 4px 0;
+}
+
+.alerts { display: flex; flex-direction: column; gap: 4px; align-self: center; }
+.alertLink { text-decoration: none; }
+.alertLink:hover { filter: brightness(1.15); }
