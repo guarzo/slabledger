@@ -63,6 +63,10 @@ type ScanCertResult struct {
 	DHInventoryID int    `json:"dhInventoryId,omitempty"`
 	DHPushStatus  string `json:"dhPushStatus,omitempty"`
 	DHStatus      string `json:"dhStatus,omitempty"`
+
+	// Sale-mode fields — pricing context + in-hand status
+	DHListingPriceCents int    `json:"dhListingPriceCents,omitempty"` // Current DH listing price
+	ReceivedAt          string `json:"receivedAt,omitempty"`          // Non-empty = in-hand
 }
 
 // ScanCertsRequest is the input for POST /api/purchases/scan-certs, the batch
