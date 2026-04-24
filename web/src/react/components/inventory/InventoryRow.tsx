@@ -23,7 +23,7 @@ interface InventoryRowProps {
 }
 
 const fmt = (cents: number) =>
-  `$${((cents ?? 0) / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+  `$${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
 
 const DIR_CLASS: Record<Direction, string> = {
   rising: styles.dirRising, falling: styles.dirFalling, stable: styles.dirStable,
@@ -37,21 +37,11 @@ const AGE_CLASS: Record<string, string> = {
 const ageTone = (d: number) => d > 90 ? 'danger' : d > 60 ? 'warning' : d < 30 ? 'fresh' : 'neutral';
 
 export function InventoryRow(p: InventoryRowProps) {
-  const days = Math.max(0, p.daysHeld ?? 0);
-  const deltaPct = p.marketDeltaPct ?? 0;
-  const isButton = !!p.onClick;
-  return (
-    <CardShell
-      variant="data"
-      padding="sm"
-      radius="md"
-      interactive={isButton}
-      as={isButton ? 'button' : 'div'}
-      onClick={p.onClick}
-      aria-label={p.ariaLabel}
-      className={styles.row}
-      {...(isButton ? { type: 'button' as const } : {})}
-    >
+  const days = Math.max(0, p.daysHeld);
+  const deltaPct = p.marketDeltaPct;
+
+  const body = (
+    <>
       <div className={styles.gradeCol}>
         <GradeBadge grader={p.grader} grade={p.grade} blackLabel={p.blackLabel} size="md" />
       </div>
@@ -85,6 +75,35 @@ export function InventoryRow(p: InventoryRowProps) {
       <div className={styles.recCol}>
         <RecommendationBadge tier={p.rec} />
       </div>
+    </>
+  );
+
+  if (p.onClick) {
+    return (
+      <CardShell
+        variant="data"
+        padding="sm"
+        radius="md"
+        interactive
+        as="button"
+        type="button"
+        onClick={p.onClick}
+        aria-label={p.ariaLabel}
+        className={styles.row}
+      >
+        {body}
+      </CardShell>
+    );
+  }
+  return (
+    <CardShell
+      variant="data"
+      padding="sm"
+      radius="md"
+      aria-label={p.ariaLabel}
+      className={styles.row}
+    >
+      {body}
     </CardShell>
   );
 }
