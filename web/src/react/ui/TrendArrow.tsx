@@ -11,9 +11,9 @@ interface TrendArrowProps {
 }
 
 const trendConfig = {
-  up:     { symbol: '\u2191', color: 'var(--success)',    label: 'Trending up' },
-  down:   { symbol: '\u2193', color: 'var(--error)',      label: 'Trending down' },
-  stable: { symbol: '\u2192', color: 'var(--text-muted)', label: 'Stable' },
+  up:     { symbol: '\u2191', color: 'var(--color-momentum-up)',   label: 'Trending up' },
+  down:   { symbol: '\u2193', color: 'var(--color-momentum-down)', label: 'Trending down' },
+  stable: { symbol: '\u2192', color: 'var(--color-momentum-flat)', label: 'Stable' },
 } as const;
 
 export function TrendArrow({ trend, size = 'sm' }: TrendArrowProps) {

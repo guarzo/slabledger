@@ -1,0 +1,42 @@
+.wrap { display: flex; flex-direction: column; gap: var(--space-2, 8px); }
+.label { font-size: var(--font-size-xs, 12px); color: var(--text-muted); margin-bottom: 2px; }
+
+.root {
+  position: relative; display: flex; align-items: center;
+  height: 24px; user-select: none; touch-action: none;
+}
+.track {
+  position: relative; flex-grow: 1; height: 6px;
+  border-radius: 9999px; background: var(--surface-2);
+}
+.range {
+  position: absolute; height: 100%; border-radius: 9999px;
+  background: linear-gradient(90deg, var(--brand-500), var(--brand-600));
+  box-shadow: 0 0 8px var(--glow-brand-color);
+}
+.thumb {
+  display: block; width: 16px; height: 16px; border-radius: 9999px;
+  border: 2px solid var(--surface-1);
+  background: var(--brand-500);
+  box-shadow: 0 0 6px var(--glow-brand-color);
+  transition: transform var(--transition-fast, 150ms);
+}
+.thumb:hover { transform: scale(1.10); }
+.thumb:focus-visible {
+  outline: none;
+  box-shadow: 0 0 6px var(--glow-brand-color),
+              0 0 0 2px var(--surface-1),
+              0 0 0 4px var(--brand-500);
+}
+
+.ticks { display: flex; justify-content: space-between; padding: 0 2px; }
+.tick {
+  width: 16px; text-align: center; font-size: 10px;
+  font-variant-numeric: tabular-nums; color: var(--text-subtle);
+}
+.tick.on { color: var(--brand-400); font-weight: var(--font-weight-semibold, 600); }
+
+.footer {
+  text-align: center; font-size: var(--font-size-xs, 12px);
+  color: var(--text); font-weight: var(--font-weight-medium, 500);
+}

@@ -1,0 +1,9 @@
+.wrap { display: inline-flex; gap: 2px; align-items: center; }
+.dot  { border-radius: 50%; background: var(--surface-2); }
+.s-sm .dot { width: 6px; height: 6px; }
+.s-md .dot { width: 8px; height: 8px; }
+
+.t-high     .dot.on { background: var(--color-confidence-high); }
+.t-medium   .dot.on { background: var(--color-confidence-medium); }
+.t-low      .dot.on { background: var(--color-confidence-low); }
+.t-very-low .dot.on { background: var(--color-confidence-low); }
