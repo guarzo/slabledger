@@ -165,28 +165,3 @@ func TestCleanCardNameForDH(t *testing.T) {
 		})
 	}
 }
-
-// TestNormalizeCardNum covers leading-zero stripping and edge cases.
-func TestNormalizeCardNum(t *testing.T) {
-	tests := []struct {
-		input string
-		want  string
-	}{
-		{"004", "4"},
-		{"001", "1"},
-		{"100", "100"},
-		{"0", "0"},
-		{"000", "0"},
-		{"", ""},
-		{"abc", "abc"},
-		{"0ab", "ab"},
-	}
-	for _, tc := range tests {
-		t.Run(tc.input, func(t *testing.T) {
-			got := normalizeCardNum(tc.input)
-			if got != tc.want {
-				t.Errorf("normalizeCardNum(%q) = %q, want %q", tc.input, got, tc.want)
-			}
-		})
-	}
-}

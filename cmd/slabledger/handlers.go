@@ -309,17 +309,14 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 	if in.DHClient != nil {
 		listingOpts := []dhlisting.DHListingServiceOption{
 			dhlisting.WithDHListingLister(dhlistingadapter.NewInventoryAdapter(in.DHClient)),
-			dhlisting.WithDHListingCertResolver(dhlistingadapter.NewCertResolverAdapter(in.DHClient)),
-			dhlisting.WithDHListingPusher(dhlistingadapter.NewInventoryPusherAdapter(in.DHClient)),
+			dhlisting.WithDHListingPSAImporter(dhlistingadapter.NewPSAImporterAdapter(in.DHClient)),
 		}
 		if in.PurchaseStore != nil {
 			listingOpts = append(listingOpts,
 				dhlisting.WithDHListingFieldsUpdater(in.PurchaseStore),
 				dhlisting.WithDHListingPushStatusUpdater(in.PurchaseStore),
-				dhlisting.WithDHListingCandidatesSaver(in.PurchaseStore),
 				dhlisting.WithDHListingResetter(in.PurchaseStore),
 				dhlisting.WithDHListingUnlistedClearer(in.PurchaseStore),
-				dhlisting.WithDHListingGemRateIDUpdater(in.PurchaseStore),
 			)
 		}
 		if in.CardIDMappingRepo != nil {

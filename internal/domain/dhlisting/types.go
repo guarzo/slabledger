@@ -52,39 +52,10 @@ type DHListingResult struct {
 
 // --- Domain-level abstractions for DH external operations ---
 
-// DHCertResolveRequest contains the fields needed to resolve a cert against DH.
-type DHCertResolveRequest struct {
-	CertNumber string
-	CardName   string
-	SetName    string
-	CardNumber string
-	Year       string
-	Variant    string
-}
-
-// DHCertCandidate is one possible match for an ambiguous cert resolution.
-type DHCertCandidate struct {
-	DHCardID   int
-	GemRateID  string
-	CardName   string
-	SetName    string
-	CardNumber string
-}
-
-// DHCertResolution is the result of resolving a single cert.
-type DHCertResolution struct {
-	Status     string // "matched", "ambiguous", "not_found"
-	DHCardID   int
-	GemRateID  string
-	Candidates []DHCertCandidate
-}
-
-// Domain-level cert resolution status constants.
-const (
-	DHCertStatusMatched   = "matched"
-	DHCertStatusAmbiguous = "ambiguous"
-	DHCertStatusNotFound  = "not_found"
-)
+// DHCertStatusMatched is the DH-side cert_status value for a cert whose card
+// has been identified. Persisted on campaign_purchases after a successful
+// psa_import resolution so the UI can distinguish resolved vs pending rows.
+const DHCertStatusMatched = "matched"
 
 // DefaultListingChannels are the DH sales channels enabled by default
 // when listing inventory items.
@@ -94,22 +65,64 @@ var DefaultListingChannels = []string{"ebay", "shopify"}
 // Duplicated from pricing.SourceDH to avoid cross-domain import.
 const SourceDH = "doubleholo"
 
-// DHCertResolver resolves PSA cert numbers to DH card IDs.
-// This is the domain-level interface; adapter implementations wrap the
-// external DH API client.
-type DHCertResolver interface {
-	ResolveCert(ctx context.Context, req DHCertResolveRequest) (*DHCertResolution, error)
+// DHPSAImportItem carries overrides sent with a psa_import call.
+// DH looks up the cert via PSA, then matches it against its catalog using
+// these overrides as hints (and falls back to creating a partner_submitted
+// card when the catalog has no match).
+type DHPSAImportItem struct {
+	CertNumber     string
+	CostBasisCents int
+	CardName       string
+	SetName        string
+	CardNumber     string
+	Year           string
+	Language       string // optional; inferred from set_name when empty
 }
 
-// DHInventoryPushItem is a single item to push to DH inventory.
-type DHInventoryPushItem struct {
-	DHCardID          int
-	CertNumber        string
-	Grade             float64
-	CostBasisCents    int
-	ListingPriceCents int    // 0 means omit — DH uses catalog fallback
-	CertImageURLFront string // optional; when set, DH skips its PSA lookup
-	CertImageURLBack  string // optional; when set, DH skips its PSA lookup
+// DHPSAImportResult is the per-cert result from a psa_import call.
+// Resolution is one of PSAImportStatus* constants below. For success paths
+// (matched / unmatched_created / override_corrected / already_listed) both
+// DHCardID and DHInventoryID are populated.
+type DHPSAImportResult struct {
+	CertNumber    string
+	Resolution    string
+	DHCardID      int
+	DHInventoryID int
+	DHStatus      string // "in_stock" | "listed" — DH's inventory status after the call
+	Error         string
+	RateLimited   bool
+}
+
+// PSAImport resolution constants mirror the adapter-side values; domain code
+// switches on these without importing the dh client package.
+const (
+	PSAImportStatusMatched           = "matched"
+	PSAImportStatusUnmatchedCreated  = "unmatched_created"
+	PSAImportStatusOverrideCorrected = "override_corrected"
+	PSAImportStatusAlreadyListed     = "already_listed"
+	PSAImportStatusPSAError          = "psa_error"
+	PSAImportStatusPartnerCardError  = "partner_card_error"
+)
+
+// IsPSAImportSuccess reports whether a psa_import resolution produced a
+// usable dh_card_id + dh_inventory_id pair.
+func IsPSAImportSuccess(resolution string) bool {
+	switch resolution {
+	case PSAImportStatusMatched,
+		PSAImportStatusUnmatchedCreated,
+		PSAImportStatusOverrideCorrected,
+		PSAImportStatusAlreadyListed:
+		return true
+	}
+	return false
+}
+
+// DHPSAImporter submits PSA-graded certs to DH's psa_import endpoint,
+// which does PSA lookup + catalog match + inventory creation in a single call.
+// This is the primary cert intake path for both the push scheduler and the
+// inline "list on import" flow in the dhlisting service.
+type DHPSAImporter interface {
+	PSAImport(ctx context.Context, items []DHPSAImportItem) ([]DHPSAImportResult, error)
 }
 
 // DHInventoryStatusUpdate carries the fields that UpdateInventoryStatus can
@@ -122,24 +135,6 @@ type DHInventoryStatusUpdate struct {
 	ListingPriceCents int // 0 means omit
 	CertImageURLFront string
 	CertImageURLBack  string
-}
-
-// DHInventoryPushResultItem is the per-item response from an inventory push.
-type DHInventoryPushResultItem struct {
-	DHInventoryID      int
-	Status             string // "in_stock", "listed", "failed"
-	AssignedPriceCents int
-	ChannelsJSON       string // serialized channel statuses
-}
-
-// DHInventoryPushResult is the response from pushing inventory to DH.
-type DHInventoryPushResult struct {
-	Results []DHInventoryPushResultItem
-}
-
-// DHInventoryPusher pushes inventory items to DH.
-type DHInventoryPusher interface {
-	PushInventory(ctx context.Context, items []DHInventoryPushItem) (*DHInventoryPushResult, error)
 }
 
 // DHInventoryLister transitions DH inventory items to listed and syncs channels.
