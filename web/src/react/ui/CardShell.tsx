@@ -1,294 +1,130 @@
-import { forwardRef, HTMLAttributes, KeyboardEvent, ReactNode } from 'react';
-import { cva, type VariantProps } from 'class-variance-authority';
 import { clsx } from 'clsx';
+import type {
+  ComponentPropsWithoutRef,
+  ElementType,
+  KeyboardEvent,
+  MouseEvent,
+  ReactNode,
+} from 'react';
+import styles from './CardShell.module.css';
 
-/**
- * CardShell Variant Definitions
- *
- * Base card component that ENFORCES design token usage.
- * All styling uses CSS custom properties from tokens.css.
- *
- * This component provides:
- * - Consistent design token usage across all cards
- * - Dark mode support via CSS variables
- * - Accessibility (keyboard navigation, ARIA)
- * - Selection state management
- * - Interactive behaviors (hover, focus, click)
- */
-const cardShellVariants = cva(
-  [
-    // Base token-based styles
-    'rounded-[var(--radius-lg)]',
-    'bg-[var(--surface-1)]',
-    'border',
-    'border-[var(--surface-0)]',
-    'text-[var(--text)]',
-    'transition-all',
-    'duration-[var(--transition-base)]',
-  ],
-  {
-    variants: {
-      variant: {
-        /**
-         * default - Standard card appearance
-         * Uses base surface with standard shadow
-         */
-        default: [
-          'shadow-[var(--shadow-1)]',
-        ],
+export type CardVariant = 'default' | 'elevated' | 'glass' | 'premium' | 'ai' | 'data';
+export type CardPadding = 'sm' | 'md' | 'lg' | 'none';
+export type CardRadius = 'sm' | 'md' | 'lg';
 
-        /**
-         * elevated - Raised card appearance
-         * Higher elevation with more prominent shadow
-         */
-        elevated: [
-          'bg-[var(--surface-2)]',
-          'shadow-[var(--shadow-2)]',
-        ],
-
-        /**
-         * interactive - Clickable/hoverable card
-         * Includes hover states and cursor pointer
-         */
-        interactive: [
-          'shadow-[var(--shadow-1)]',
-          'hover:bg-[var(--surface-hover)]',
-          'hover:shadow-[var(--shadow-2)]',
-          'hover:-translate-y-0.5',
-          'cursor-pointer',
-          'focus-visible:outline-none',
-          'focus-visible:ring-2',
-          'focus-visible:ring-[var(--brand-500)]',
-          'focus-visible:ring-offset-2',
-          'focus-visible:ring-offset-[var(--bg)]',
-        ],
-
-        /**
-         * premium - Premium/featured card appearance
-         * Subtle gradient and glow effect for special cards
-         */
-        premium: [
-          'bg-gradient-to-br',
-          'from-[var(--surface-1)]',
-          'to-[var(--surface-2)]',
-          'border-[var(--brand-500)]/30',
-          'shadow-[var(--shadow-2)]',
-          'hover:shadow-[var(--glow-brand)]',
-          'transition-all',
-          'duration-[var(--transition-slow)]',
-        ],
-
-        /**
-         * glass - Glassmorphism appearance
-         * Frosted glass effect with backdrop blur
-         */
-        glass: [
-          'bg-[var(--glass-bg,rgba(22,27,34,0.7))]',
-          'backdrop-blur-[20px]',
-          'backdrop-saturate-[180%]',
-          'border-[var(--glass-border,rgba(139,152,207,0.1))]',
-          'shadow-[0_8px_32px_0_rgba(0,0,0,0.37)]',
-          'hover:shadow-[0_12px_48px_0_rgba(0,0,0,0.5)]',
-          'transition-all',
-          'duration-[var(--transition-slow)]',
-        ],
-      },
-
-      padding: {
-        none: '',
-        sm: 'p-3',
-        md: 'p-4',
-        lg: 'p-6',
-      },
-    },
-    defaultVariants: {
-      variant: 'default',
-      padding: 'md',
-    },
-  }
-);
-
-/**
- * CardShell Component Props
- */
-export interface CardShellProps
-  extends Omit<HTMLAttributes<HTMLDivElement>, 'onClick'>,
-    VariantProps<typeof cardShellVariants> {
-  /** Card content */
-  children: ReactNode;
-
-  /** Additional CSS classes */
+type CardShellOwnProps<T extends ElementType> = {
+  variant?: CardVariant;
+  padding?: CardPadding;
+  radius?: CardRadius;
+  as?: T;
+  interactive?: boolean;
   className?: string;
+  children: ReactNode;
+};
 
-  // ========== Interaction ==========
+export type CardShellProps<T extends ElementType = 'div'> = CardShellOwnProps<T> &
+  Omit<ComponentPropsWithoutRef<T>, keyof CardShellOwnProps<T>>;
 
-  /** Click handler for the entire card */
-  onClick?: () => void;
+/**
+ * CardShell — typed card primitive with six variants.
+ *
+ * ## Clickable contract
+ *
+ * If you pass `onClick`, you MUST pick one of these to keep the card
+ * keyboard-operable (WCAG 2.1 AA requirement):
+ *
+ * - `as="button"` (or `as="a"` with `href`) — native element, native semantics.
+ * - `interactive` — CardShell adds `tabIndex`, `role="button"`, and
+ *   Enter/Space keyboard activation automatically for the div fallback.
+ * - Explicit `role` + `tabIndex` — caller takes full responsibility.
+ *
+ * A clickable div without any of these is a silent a11y footgun: mouse
+ * works, keyboard doesn't. In development, this component warns when that
+ * pattern is detected.
+ */
+export function CardShell<T extends ElementType = 'div'>({
+  variant = 'default',
+  padding = 'md',
+  radius = 'md',
+  as,
+  interactive = false,
+  className,
+  children,
+  ...rest
+}: CardShellProps<T>) {
+  const Tag = (as ?? 'div') as ElementType;
 
-  /** Keyboard event handler for custom keyboard interactions */
-  onKeyDown?: (e: KeyboardEvent<HTMLDivElement>) => void;
+  if (import.meta.env.DEV) {
+    warnOnBrokenClickableContract(Tag, interactive, rest as Record<string, unknown>);
+  }
 
-  // ========== Selection (for comparison mode) ==========
+  // Interactive divs aren't keyboard-operable by default. When a caller opts
+  // into `interactive` without overriding `as`, shim in tabIndex, role, and
+  // Enter/Space keyboard activation. Real buttons/anchors (`as="button"` /
+  // `as="a"`) get native semantics and skip this shim entirely.
+  const needsA11yShim = interactive && Tag === 'div';
+  const a11yProps = needsA11yShim ? buildA11yShim(rest as Record<string, unknown>) : undefined;
 
-  /** Whether the card can be selected/checked */
-  selectable?: boolean;
-
-  /** Whether the card is currently selected */
-  isSelected?: boolean;
-
-  /** Handler for toggling selection state */
-  onToggleSelect?: () => void;
-
-  // ========== Accessibility ==========
-
-  /** ARIA label for screen readers */
-  ariaLabel?: string;
-
-  /** ARIA role (defaults to 'article' for semantic cards) */
-  role?: string;
-
-  /** Tab index for keyboard navigation (-1 to exclude, 0 to include) */
-  tabIndex?: number;
-
-  /** HTML element type */
-  as?: 'article' | 'div' | 'section';
+  return (
+    <Tag
+      className={clsx(
+        styles.card,
+        styles[`v-${variant}`],
+        styles[`p-${padding}`],
+        styles[`r-${radius}`],
+        interactive && styles.interactive,
+        className,
+      )}
+      {...rest}
+      {...a11yProps}
+    >
+      {children}
+    </Tag>
+  );
 }
 
-/**
- * CardShell - Foundation Component for All Cards
- *
- * Enforces design token usage and provides common card behaviors.
- * All card components should build on top of this component.
- *
- * Features:
- * - ✅ Design token enforcement (no hard-coded colors)
- * - ✅ Dark mode support via CSS variables
- * - ✅ Accessibility (keyboard navigation, ARIA, focus management)
- * - ✅ Selection state (for comparison/multi-select UIs)
- * - ✅ Interactive behaviors (hover, click, keyboard)
- * - ✅ Flexible variants (default, elevated, interactive, premium)
- *
- * @example
- * ```tsx
- * // Basic card
- * <CardShell variant="default">
- *   <p>Card content</p>
- * </CardShell>
- *
- * // Interactive card with click handler
- * <CardShell
- *   variant="interactive"
- *   onClick={() => console.log('clicked')}
- *   ariaLabel="Product card"
- * >
- *   <ProductDetails />
- * </CardShell>
- *
- * // Selectable card (for comparison mode)
- * <CardShell
- *   variant="interactive"
- *   selectable={true}
- *   isSelected={isSelected}
- *   onToggleSelect={() => setSelected(!isSelected)}
- * >
- *   <CardContent />
- * </CardShell>
- * ```
- */
-export const CardShell = forwardRef<HTMLDivElement, CardShellProps>(
-  (
-    {
-      children,
-      variant,
-      padding,
-      className,
-      onClick,
-      onKeyDown,
-      selectable = false,
-      isSelected = false,
-      onToggleSelect,
-      ariaLabel,
-      role = 'article',
-      tabIndex,
-      as: Component = 'article',
-      ...props
-    },
-    ref
-  ) => {
-    /**
-     * Handle keyboard interactions
-     * - Enter/Space: Trigger onClick or onToggleSelect
-     * - Custom handlers via onKeyDown prop
-     */
-    const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-      // Allow custom keyboard handlers
-      if (onKeyDown) {
-        onKeyDown(e);
-      }
+const warnedContractViolations = new WeakSet<object>();
 
-      // Handle Enter/Space for interactive cards
-      if (e.key === 'Enter' || e.key === ' ') {
+function warnOnBrokenClickableContract(
+  Tag: ElementType,
+  interactive: boolean,
+  rest: Record<string, unknown>,
+): void {
+  const onClick = rest.onClick;
+  if (!onClick || typeof onClick !== 'function') return;
+
+  // Exempt when: caller picked a natively interactive element, opted in to
+  // the shim via `interactive`, or supplied role/tabIndex themselves.
+  const isNativeInteractive = Tag === 'button' || Tag === 'a';
+  const hasRoleOrTabIndex = rest.role !== undefined || rest.tabIndex !== undefined;
+  if (isNativeInteractive || interactive || hasRoleOrTabIndex) return;
+
+  // Once per handler identity to avoid log spam on re-renders.
+  if (warnedContractViolations.has(onClick)) return;
+  warnedContractViolations.add(onClick);
+
+  // eslint-disable-next-line no-console
+  console.warn(
+    'CardShell: onClick was passed on a non-interactive element. ' +
+      'Add `as="button"`, `interactive`, or explicit `role`/`tabIndex` — ' +
+      'otherwise keyboard users cannot activate the card.',
+  );
+}
+
+function buildA11yShim(rest: Record<string, unknown>): Record<string, unknown> {
+  const userOnClick = rest.onClick as ((e: MouseEvent<HTMLElement>) => void) | undefined;
+  const userOnKeyDown = rest.onKeyDown as ((e: KeyboardEvent<HTMLElement>) => void) | undefined;
+  return {
+    tabIndex: rest.tabIndex ?? 0,
+    role: rest.role ?? 'button',
+    onKeyDown: (e: KeyboardEvent<HTMLElement>) => {
+      userOnKeyDown?.(e);
+      if (!e.defaultPrevented && (e.key === 'Enter' || e.key === ' ') && userOnClick) {
         e.preventDefault();
-
-        // Priority: selection > click
-        if (selectable && onToggleSelect) {
-          onToggleSelect();
-        } else if (onClick) {
-          onClick();
-        }
+        userOnClick(e as unknown as MouseEvent<HTMLElement>);
       }
-    };
-
-    /**
-     * Handle click events
-     * - If selectable, toggle selection
-     * - Otherwise, trigger onClick handler
-     */
-    const handleClick = () => {
-      if (selectable && onToggleSelect) {
-        onToggleSelect();
-      } else if (onClick) {
-        onClick();
-      }
-    };
-
-    /**
-     * Determine if card should be keyboard-focusable
-     * - Interactive cards are focusable by default
-     * - Explicit tabIndex prop overrides
-     */
-    const shouldBeFocusable = variant === 'interactive' || onClick || selectable;
-    const effectiveTabIndex = tabIndex !== undefined ? tabIndex : shouldBeFocusable ? 0 : undefined;
-
-    return (
-      <Component
-        ref={ref}
-        className={clsx(
-          cardShellVariants({ variant, padding }),
-          // Selection state styling
-          isSelected && [
-            'ring-2',
-            'ring-[var(--brand-500)]',
-            'ring-offset-2',
-            'ring-offset-[var(--bg)]',
-            'bg-[var(--surface-2)]',
-          ],
-          className
-        )}
-        onClick={onClick || selectable ? handleClick : undefined}
-        onKeyDown={onClick || selectable || onKeyDown ? handleKeyDown : undefined}
-        role={role}
-        aria-label={ariaLabel}
-        aria-selected={selectable ? isSelected : undefined}
-        tabIndex={effectiveTabIndex}
-        {...props}
-      >
-        {children}
-      </Component>
-    );
-  }
-);
-
-CardShell.displayName = 'CardShell';
+    },
+  };
+}
 
 export default CardShell;

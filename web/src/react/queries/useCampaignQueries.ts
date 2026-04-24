@@ -109,10 +109,6 @@ export const usePortfolioInsights = createStaticQuery(
   queryKeys.portfolio.insights, () => api.getPortfolioInsights(), { staleTime: ANALYTICS_STALE_TIME },
 );
 
-export const useCapitalTimeline = createStaticQuery(
-  queryKeys.portfolio.capitalTimeline, () => api.getCapitalTimeline(),
-);
-
 export const useWeeklyReview = createStaticQuery(
   queryKeys.portfolio.weeklyReview, () => api.getWeeklyReview(),
 );

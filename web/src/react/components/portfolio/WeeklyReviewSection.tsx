@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from 'react';
 import type { WeeklyReviewSummary, WeeklyPerformer } from '../../../types/campaigns';
 import { formatCents } from '../../utils/formatters';
 import { saleChannelLabels } from '../../utils/campaignConstants';
+import { CardShell } from '../../ui';
 import CollapsibleHeader from './CollapsibleHeader';
 
 function DeltaIndicator({ current, previous, isCents = false, muted = false }: { current: number; previous: number; isCents?: boolean; muted?: boolean }) {
@@ -96,7 +97,7 @@ export default function WeeklyReviewSection({ data }: { data: WeeklyReviewSummar
   }, [data.weekStart, data.weekEnd, nowMs]);
 
   return (
-    <div className="p-4 bg-[var(--surface-1)] rounded-xl border border-[var(--surface-2)]">
+    <CardShell variant="default" padding="sm" radius="sm">
       <CollapsibleHeader
         title={`Weekly Review (${weekLabel})${inProgress ? ` \u00b7 in progress \u2014 day ${daysElapsed} of 7` : ''}`}
         open={open}
@@ -124,6 +125,6 @@ export default function WeeklyReviewSection({ data }: { data: WeeklyReviewSummar
           )}
         </div>
       )}
-    </div>
+    </CardShell>
   );
 }
