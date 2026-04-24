@@ -33,6 +33,9 @@ func DisplayConditionToGFormat(condition string) string {
 	if !strings.HasPrefix(condition, "PSA ") {
 		return ""
 	}
-	grade := strings.TrimPrefix(condition, "PSA ")
+	grade := strings.TrimSpace(strings.TrimPrefix(condition, "PSA "))
+	if grade == "" {
+		return ""
+	}
 	return "g" + strings.ReplaceAll(grade, ".", "_")
 }
