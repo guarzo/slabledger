@@ -1,0 +1,30 @@
+.pill {
+  display: flex; flex-direction: column; align-items: center;
+  min-width: 68px; padding: 6px 8px; gap: 2px;
+  font-size: var(--font-size-xs, 12px);
+  border-radius: var(--radius-sm, 10px);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color var(--transition-fast, 150ms), border-color var(--transition-fast, 150ms), background var(--transition-fast, 150ms);
+}
+.pill:hover:not(:disabled) { color: var(--text); border-color: var(--text-muted); }
+.pill:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.label {
+  font-size: 9px; text-transform: uppercase; letter-spacing: 0.04em;
+  opacity: 0.7; line-height: 1;
+}
+.price {
+  font-size: var(--font-size-xs, 12px); font-weight: var(--font-weight-semibold, 600);
+  line-height: 1.2; font-variant-numeric: tabular-nums;
+}
+
+.recommended { border-width: 2px; border-color: color-mix(in srgb, var(--accent) 50%, transparent); }
+.selected {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
+}
+.selected.recommended { border-width: 2px; }

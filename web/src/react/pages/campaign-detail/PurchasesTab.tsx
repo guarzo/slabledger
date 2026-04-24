@@ -4,11 +4,26 @@ import type { Purchase, Campaign } from '../../../types/campaigns';
 import { formatCents, getErrorMessage } from '../../utils/formatters';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { useToast } from '../../contexts/ToastContext';
-import { EmptyState, TrendBadge } from '../../ui';
+import { EmptyState, TrendArrow } from '../../ui';
 import { queryKeys } from '../../queries/queryKeys';
 import { useDeletePurchase, useReassignPurchase, useCampaigns } from '../../queries/useCampaignQueries';
 import QuickAddSection from './QuickAddSection';
 import { displayGrade } from './inventory/utils';
+
+function TrendDelta({ value }: { value: number | null | undefined }) {
+  if (value == null || value === 0) return null;
+  const trend = value > 0 ? 'up' : 'down';
+  const sign = value > 0 ? '+' : '';
+  const text = `${sign}${(value * 100).toFixed(0)}%`;
+  return (
+    <span className="ml-1 inline-flex items-center gap-0.5">
+      <TrendArrow trend={trend} />
+      <span className="text-xs tabular-nums" style={{ color: `var(--color-momentum-${trend})` }}>
+        {text}
+      </span>
+    </span>
+  );
+}
 
 /** Color-coded dot indicating whether a purchase has pricing data */
 function PricingBadge({ purchase }: { purchase: Purchase }) {
@@ -150,7 +165,7 @@ function PurchaseMobileCard({ purchase, soldPurchaseIds, otherCampaigns, reassig
           {purchase.medianCents != null ? (
             <span className="text-[var(--text)]">
               {formatCents(purchase.medianCents)}
-              <TrendBadge value={purchase.trend30d} />
+              <TrendDelta value={purchase.trend30d} />
             </span>
           ) : (
             <span className="text-[var(--text-muted)]">—</span>
@@ -185,7 +200,7 @@ function PurchaseDesktopRow({ purchase, soldPurchaseIds, otherCampaigns, reassig
           {purchase.medianCents != null ? (
             <span className="text-xs text-[var(--text-muted)] tabular-nums" title={`Last sold: ${formatCents(purchase.lastSoldCents || 0)}, Trend: ${((purchase.trend30d || 0) * 100).toFixed(0)}%`}>
               {formatCents(purchase.medianCents)}
-              <TrendBadge value={purchase.trend30d} />
+              <TrendDelta value={purchase.trend30d} />
             </span>
           ) : (
             <span className="text-xs text-[var(--text-muted)]">—</span>

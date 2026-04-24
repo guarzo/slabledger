@@ -1,6 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { Button } from '../ui';
 import { formatCents, dollarsToCents, centsToDollars } from '../utils/formatters';
+import { PricePill } from './PricePill';
+import { MarginBadge } from './MarginBadge';
+import styles from './PriceDecisionBar.module.css';
 import type { PreSelection } from './priceDecisionHelpers';
 
 export interface PriceSource {
@@ -47,11 +50,6 @@ export default function PriceDecisionBar({
   const [customValue, setCustomValue] = useState('');
   const [lastConfirmedCents, setLastConfirmedCents] = useState(0);
 
-  // Key the seeding effect on preSelected's semantic content, not its object
-  // identity. Consumers that hand us fresh references every render (without
-  // useMemo) would otherwise reset the user's pill choice on each re-render.
-  // appliedKeyRef records the last semantic value we actually seeded from, so
-  // unrelated re-renders are no-ops and a real change still triggers a re-seed.
   const preSelectedKey = preSelected
     ? preSelected.kind === 'source'
       ? `source:${preSelected.source}`
@@ -111,120 +109,55 @@ export default function PriceDecisionBar({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      handleConfirm();
-    }
+    if (e.key === 'Enter') handleConfirm();
   };
 
   const hasSelection = selectedSource !== null || (customValue !== '' && dollarsToCents(customValue) > 0);
   const allDisabled = disabled || isSubmitting;
   const noPriceData = sources.every(s => s.priceCents === 0) && dollarsToCents(customValue) === 0;
 
-  // Compute live margin from current selection vs cost basis
   const currentCents = dollarsToCents(customValue);
   const marginCents = costBasisCents != null && costBasisCents > 0 && currentCents > 0
     ? currentCents - costBasisCents : null;
-
-  const marginBadge = marginCents != null ? (
-    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
-      marginCents >= 0
-        ? 'text-[var(--success)] bg-[var(--success)]/10'
-        : 'text-red-400 bg-red-400/10'
-    }`}>
-      {marginCents >= 0 ? '+' : ''}{formatCents(marginCents)} margin
-    </span>
-  ) : null;
-
-  const pillClass = (src: PriceSource, isDisabled: boolean) => {
-    const isSelected = selectedSource === src.source;
-    const isRecommended = recommendedSource === src.source;
-    const base = 'text-xs rounded-md border transition-colors flex flex-col items-center min-w-[68px] px-2 py-1.5 disabled:opacity-40 disabled:cursor-not-allowed';
-    if (isSelected) return `${base} border-[var(--accent)] ${isRecommended ? 'border-2' : ''} bg-[var(--accent)]/10 text-[var(--accent)]`;
-    if (isRecommended && !isDisabled) return `${base} border-2 border-[var(--accent)]/50 text-[var(--text-muted)] hover:text-[var(--text)] hover:border-[var(--accent)]`;
-    return `${base} border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text)] hover:border-[var(--text-muted)]`;
-  };
 
   if (status === 'accepted') {
     const displayCents = acceptedPriceCents || lastConfirmedCents || (getConfirmValues()?.priceCents ?? 0);
     const acceptedMargin = costBasisCents != null && costBasisCents > 0 && displayCents > 0
       ? displayCents - costBasisCents : null;
-    return (
-      <div className="flex items-center gap-3 flex-wrap">
-        <span className="text-xs px-2.5 py-1.5 rounded-md bg-[var(--success)]/15 text-[var(--success)] font-semibold border border-[var(--success)]/30">
-          &#10003; {formatCents(displayCents)}
-        </span>
-        {acceptedMargin != null && (
-          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
-            acceptedMargin >= 0
-              ? 'text-[var(--success)] bg-[var(--success)]/10'
-              : 'text-red-400 bg-red-400/10'
-          }`}>
-            {acceptedMargin >= 0 ? '+' : ''}{formatCents(acceptedMargin)} margin
-          </span>
-        )}
-        {onReset && (
-          <Button variant="ghost" size="sm" onClick={onReset} disabled={disabled}>
-            Change
-          </Button>
-        )}
-      </div>
-    );
+    return <AcceptedView
+      displayCents={displayCents}
+      marginCents={acceptedMargin}
+      onReset={onReset}
+      disabled={disabled}
+    />;
   }
 
   if (status === 'skipped') {
-    return (
-      <div className="flex items-center gap-3 flex-wrap opacity-50">
-        <span className="text-xs text-[var(--text-muted)] italic">Skipped</span>
-        {onReset && (
-          <Button variant="ghost" size="sm" onClick={onReset} disabled={disabled}>
-            Undo
-          </Button>
-        )}
-      </div>
-    );
+    return <SkippedView onReset={onReset} disabled={disabled} />;
   }
 
-  if (noPriceData && status === 'pending') {
-    return (
-      <div className="flex items-center gap-3 flex-wrap rounded-md border border-[var(--warning-border,rgba(245,158,11,0.3))] bg-[var(--warning-bg,rgba(245,158,11,0.08))] px-3 py-2">
-        <div className="flex items-center gap-2">
-          <span className="text-[var(--warning)]" aria-hidden="true">&#9888;</span>
-          <div className="flex flex-col">
-            <span className="text-xs font-semibold text-[var(--warning)]">No price data</span>
-            <span className="text-[10px] text-[var(--text-muted)]">CL, DH, and last-sold signals are all missing — investigate before pricing.</span>
-          </div>
-        </div>
-        {onFlag && (
-          <div className="ml-auto">
-            <Button variant="danger" size="sm" onClick={onFlag} disabled={allDisabled}>
-              Flag for Fix
-            </Button>
-          </div>
-        )}
-      </div>
-    );
+  if (noPriceData) {
+    return <NoPriceDataView onFlag={onFlag} allDisabled={allDisabled} />;
   }
 
   return (
-    <div className="flex items-center gap-2.5 flex-wrap">
-      <span className="text-xs font-medium text-[var(--text-muted)] whitespace-nowrap">Set Price:</span>
+    <div className={styles.bar}>
+      <span className={styles.prompt}>Set Price:</span>
 
       {sources.map(src => (
-        <button
+        <PricePill
           key={src.source}
-          type="button"
+          label={src.label}
+          priceCents={src.priceCents}
+          selected={selectedSource === src.source}
+          recommended={recommendedSource === src.source}
+          disabled={allDisabled}
           onClick={() => handleSourceClick(src)}
-          disabled={allDisabled || src.priceCents === 0}
-          aria-pressed={selectedSource === src.source}
-          className={pillClass(src, allDisabled || src.priceCents === 0)}
-        >
-          <span className="leading-none text-[9px] uppercase tracking-wide opacity-70">{src.label}</span>
-          <span className="leading-tight font-semibold text-xs">{src.priceCents > 0 ? formatCents(src.priceCents) : '\u2014'}</span>
-        </button>
+        />
       ))}
 
-      <div className="flex items-center gap-1.5">
-        <span className="text-[var(--text-muted)] text-xs">$</span>
+      <div className={styles.inputGroup}>
+        <span className={styles.inputPrefix}>$</span>
         <input
           type="text"
           inputMode="decimal"
@@ -234,7 +167,7 @@ export default function PriceDecisionBar({
           onChange={handleCustomChange}
           onKeyDown={handleKeyDown}
           disabled={allDisabled}
-          className="w-20 px-2 py-1.5 text-xs rounded-md border border-[var(--border)] bg-[var(--surface-raised)] text-[var(--text)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent)] disabled:opacity-40"
+          className={styles.input}
         />
       </div>
 
@@ -254,12 +187,61 @@ export default function PriceDecisionBar({
         </Button>
       )}
 
-      {marginBadge}
+      {marginCents != null && <MarginBadge cents={marginCents} />}
 
       {onFlag && (
-        <div className="ml-auto">
+        <div className={styles.flag}>
           <Button variant="secondary" size="sm" onClick={onFlag} disabled={allDisabled}>
             Flag Price Issue
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AcceptedView({ displayCents, marginCents, onReset, disabled }: {
+  displayCents: number;
+  marginCents?: number | null;
+  onReset?: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div className={styles.accepted}>
+      <span className={styles.acceptedChip}>&#10003; {formatCents(displayCents)}</span>
+      {marginCents != null && <MarginBadge cents={marginCents} />}
+      {onReset && (
+        <Button variant="ghost" size="sm" onClick={onReset} disabled={disabled}>Change</Button>
+      )}
+    </div>
+  );
+}
+
+function SkippedView({ onReset, disabled }: { onReset?: () => void; disabled?: boolean }) {
+  return (
+    <div className={styles.skipped}>
+      <span className={styles.skippedLabel}>Skipped</span>
+      {onReset && (
+        <Button variant="ghost" size="sm" onClick={onReset} disabled={disabled}>Undo</Button>
+      )}
+    </div>
+  );
+}
+
+function NoPriceDataView({ onFlag, allDisabled }: { onFlag?: () => void; allDisabled: boolean }) {
+  return (
+    <div className={styles.warning}>
+      <div className={styles.warningBody}>
+        <span className={styles.warningIcon} aria-hidden="true">&#9888;</span>
+        <div className={styles.warningText}>
+          <span className={styles.warningTitle}>No price data</span>
+          <span className={styles.warningDesc}>CL, DH, and last-sold signals are all missing — investigate before pricing.</span>
+        </div>
+      </div>
+      {onFlag && (
+        <div className={styles.warningAction}>
+          <Button variant="danger" size="sm" onClick={onFlag} disabled={allDisabled}>
+            Flag for Fix
           </Button>
         </div>
       )}
