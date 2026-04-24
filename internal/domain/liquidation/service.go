@@ -43,6 +43,8 @@ func (s *service) Preview(ctx context.Context, req PreviewRequest) (PreviewRespo
 			PurchaseID:                p.ID,
 			CertNumber:                p.CertNumber,
 			CardName:                  p.CardName,
+			SetName:                   p.SetName,
+			CardNumber:                p.CardNumber,
 			Grade:                     p.GradeValue,
 			CampaignName:              p.CampaignName,
 			BuyCostCents:              p.BuyCostCents,

@@ -4,6 +4,8 @@ export interface LiquidationPreviewItem {
   purchaseId: string;
   certNumber: string;
   cardName: string;
+  setName: string;
+  cardNumber: string;
   grade: number;
   campaignName: string;
   buyCostCents: number;
