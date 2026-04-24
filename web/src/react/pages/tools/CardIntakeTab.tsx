@@ -618,8 +618,8 @@ export default function CardIntakeTab() {
 
       setSaleRows([]);
       setShowRecordModal(false);
-    } catch (err) {
-      console.error('Failed to record sales:', err);
+    } catch {
+      // Cards remain in list for retry
     } finally {
       setRecordLoading(false);
     }
