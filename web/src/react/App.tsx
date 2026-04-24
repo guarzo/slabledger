@@ -26,7 +26,7 @@ const CampaignDetailPage = lazy(() => import('./pages/CampaignDetailPage'));
 const AdminPage = lazy(() => import('./pages/AdminPage'));
 const GlobalInventoryPage = lazy(() => import('./pages/GlobalInventoryPage'));
 const InsightsPage = lazy(() => import('./pages/InsightsPage'));
-const ToolsPage = lazy(() => import('./pages/ToolsPage'));
+const ScanPage = lazy(() => import('./pages/ScanPage'));
 const InvoicesPage = lazy(() => import('./pages/InvoicesPage'));
 const LiquidationPage = lazy(() => import('./pages/LiquidationPage'));
 
@@ -60,11 +60,11 @@ function AppContent() {
                   <LoginPage />
                 </PageTransition>
               } />
-              {/* Tools */}
-              <Route path="/tools" element={
+              {/* Scan */}
+              <Route path="/scan" element={
                 <ProtectedRoute>
                   <PageTransition>
-                    <ToolsPage />
+                    <ScanPage />
                   </PageTransition>
                 </ProtectedRoute>
               } />

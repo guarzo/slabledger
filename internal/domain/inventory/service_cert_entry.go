@@ -261,6 +261,14 @@ func (s *service) ScanCert(ctx context.Context, certNumber string) (*ScanCertRes
 	return newScanCertResult("existing", existing, s.buildEnrichedSnapshot(existing)), nil
 }
 
+// pointerToString dereferences a string pointer, returning "" for nil.
+func pointerToString(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
 // newScanCertResult builds a ScanCertResult for an existing-or-sold cert,
 // copying the identity + search-helper metadata fields off the Purchase, plus
 // the DH pipeline state the intake screen uses to gate listability.
@@ -282,7 +290,9 @@ func newScanCertResult(status string, p *Purchase, market *MarketSnapshot) *Scan
 		DHCardID:      p.DHCardID,
 		DHInventoryID: p.DHInventoryID,
 		DHPushStatus:  p.DHPushStatus,
-		DHStatus:      p.DHStatus,
+		DHStatus:            p.DHStatus,
+		DHListingPriceCents: p.DHListingPriceCents,
+		ReceivedAt:          pointerToString(p.ReceivedAt),
 	}
 }
 

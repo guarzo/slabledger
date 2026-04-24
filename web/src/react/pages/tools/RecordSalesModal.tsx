@@ -1,0 +1,85 @@
+import { useState, useCallback } from 'react';
+import { SALE_CHANNELS, formatCents } from './sale-types';
+import type { SaleRowData, SaleSummary } from './sale-types';
+import type { SaleChannel } from '../../../types/campaigns';
+
+interface RecordSalesModalProps {
+  rows: SaleRowData[];
+  summary: SaleSummary;
+  onConfirm: (saleDate: string, channel: SaleChannel) => void;
+  onCancel: () => void;
+  loading: boolean;
+  error?: string | null;
+}
+
+export function RecordSalesModal({ rows, summary, onConfirm, onCancel, loading, error }: RecordSalesModalProps) {
+  const [saleDate, setSaleDate] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  });
+  const [channel, setChannel] = useState<SaleChannel>('cardshow');
+
+  const handleConfirm = useCallback(() => {
+    onConfirm(saleDate, channel);
+  }, [saleDate, channel, onConfirm]);
+
+  const resolvedRows = rows.filter(r => r.status === 'resolved');
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={loading ? undefined : onCancel}>
+      <div className="max-h-[80vh] w-full max-w-lg overflow-auto rounded-lg border border-zinc-700 bg-zinc-900 p-6" onClick={e => e.stopPropagation()}>
+        <h2 className="mb-4 text-lg font-semibold text-white">Record {summary.cardCount} Sale{summary.cardCount > 1 ? 's' : ''}</h2>
+
+        <div className="mb-4 grid grid-cols-2 gap-3">
+          <div>
+            <label className="mb-1 block text-xs text-zinc-400">Sale Date</label>
+            <input type="date" value={saleDate} onChange={e => setSaleDate(e.target.value)}
+              className="w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm text-white" />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-zinc-400">Channel</label>
+            <select value={channel} onChange={e => setChannel(e.target.value as SaleChannel)}
+              className="w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm text-white">
+              {SALE_CHANNELS.map(ch => (
+                <option key={ch.value} value={ch.value}>{ch.label}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="mb-4 rounded border border-zinc-800 text-xs">
+          <div className="grid grid-cols-[1fr_80px] gap-1 border-b border-zinc-800 bg-zinc-800/50 px-3 py-1.5 text-zinc-500">
+            <span>Card</span>
+            <span className="text-right">Sale Price</span>
+          </div>
+          {resolvedRows.map(row => (
+            <div key={row.certNumber} className="grid grid-cols-[1fr_80px] gap-1 border-b border-zinc-800/50 px-3 py-1.5">
+              <span className="truncate text-zinc-300">{row.cardName}</span>
+              <span className="text-right text-white">{formatCents(row.salePriceCents)}</span>
+            </div>
+          ))}
+        </div>
+
+        <div className="mb-4 flex gap-4 text-xs text-zinc-400">
+          <span>Total: <span className="font-semibold text-white">{formatCents(summary.saleTotalCents)}</span></span>
+          <span>Avg: <span className="text-zinc-300">{summary.avgDiscountPct}%</span></span>
+        </div>
+
+        {error && (
+          <div className="mb-4 rounded border border-red-800 bg-red-900/30 px-3 py-2 text-xs text-red-400">{error}</div>
+        )}
+
+        <div className="flex justify-end gap-2">
+          <button onClick={onCancel} disabled={loading}
+            className="rounded-md border border-zinc-700 px-4 py-2 text-sm text-zinc-300 hover:border-zinc-500 transition-colors disabled:opacity-50">
+            Cancel
+          </button>
+          <button onClick={handleConfirm} disabled={loading}
+            className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 transition-colors disabled:opacity-50">
+            {loading ? 'Recording...' : `Confirm ${summary.cardCount} Sale${summary.cardCount > 1 ? 's' : ''}`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

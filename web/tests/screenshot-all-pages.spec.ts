@@ -57,7 +57,7 @@ const PAGES = [
   { name: 'inventory', path: '/inventory', filterTab: 'Needs Attention' },
   { name: 'inventory-expanded', path: '/inventory', filterTab: 'Needs Attention', expandRow: true, desktopOnly: true },
   { name: 'reprice', path: '/reprice' },
-  { name: 'tools', path: '/tools' },
+  { name: 'scan', path: '/scan' },
   { name: 'admin-users', path: '/admin' },
   { name: 'admin-pricing', path: '/admin', tabLabel: 'Pricing' },
   { name: 'admin-stats', path: '/admin', tabLabel: 'Stats' },
