@@ -11,7 +11,7 @@ import type { APIClient } from './client';
 
 declare module './client' {
   interface APIClient {
-    getLiquidationPreview(baseDiscountPct: number, noCompDiscountPct: number): Promise<LiquidationPreviewResponse>;
+    getLiquidationPreview(): Promise<LiquidationPreviewResponse>;
     applyLiquidation(items: LiquidationApplyItem[]): Promise<LiquidationApplyResult>;
   }
 }
@@ -23,8 +23,8 @@ declare module './client' {
 import { APIClient as _APIClient } from './client';
 const proto = _APIClient.prototype;
 
-proto.getLiquidationPreview = async function (this: APIClient, baseDiscountPct: number, noCompDiscountPct: number): Promise<LiquidationPreviewResponse> {
-  return this.post<LiquidationPreviewResponse>('/liquidation/preview', { baseDiscountPct, noCompDiscountPct });
+proto.getLiquidationPreview = async function (this: APIClient): Promise<LiquidationPreviewResponse> {
+  return this.post<LiquidationPreviewResponse>('/liquidation/preview', {});
 };
 
 proto.applyLiquidation = async function (this: APIClient, items: LiquidationApplyItem[]): Promise<LiquidationApplyResult> {

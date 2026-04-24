@@ -27,11 +27,9 @@ type CompPriceResult struct {
 	GapPct             float64         `json:"gapPct"`
 }
 
-// PreviewRequest carries the discount settings for a liquidation preview.
-type PreviewRequest struct {
-	BaseDiscountPct   float64 `json:"baseDiscountPct"`
-	NoCompDiscountPct float64 `json:"noCompDiscountPct"`
-}
+// PreviewRequest carries settings for a liquidation preview.
+// Discount percentages are hardcoded server-side (2.5% with comps, 10% without).
+type PreviewRequest struct{}
 
 // PreviewItem is one card in the preview response.
 type PreviewItem struct {

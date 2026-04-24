@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+
+	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
 func TestServicePreview(t *testing.T) {
@@ -26,13 +28,13 @@ func TestServicePreview(t *testing.T) {
 				{ID: "p3", CertNumber: "333", CardName: "Card C", GradeValue: 8, CampaignName: "C1", BuyCostCents: 1000, CLValueCents: 0, GemRateID: "", ReviewedPriceCents: 0},
 			},
 			comps: map[string][]SaleComp{
-				"gem1:PSA 10": {
+				"gem1:g10": {
 					{SaleDate: dateStr(5), PriceCents: 9000},
 					{SaleDate: dateStr(6), PriceCents: 9200},
 					{SaleDate: dateStr(7), PriceCents: 9100},
 				},
 			},
-			req:          PreviewRequest{BaseDiscountPct: 10, NoCompDiscountPct: 20},
+			req:          PreviewRequest{},
 			wantTotal:    3,
 			wantWithComp: 1,
 			wantNoComp:   1,
@@ -42,7 +44,7 @@ func TestServicePreview(t *testing.T) {
 			name:         "empty inventory",
 			purchases:    nil,
 			comps:        nil,
-			req:          PreviewRequest{BaseDiscountPct: 10, NoCompDiscountPct: 20},
+			req:          PreviewRequest{},
 			wantTotal:    0,
 			wantWithComp: 0,
 			wantNoComp:   0,
@@ -56,7 +58,7 @@ func TestServicePreview(t *testing.T) {
 			reader := &stubCompReader{comps: tc.comps}
 			writer := &stubPriceWriter{}
 
-			svc := NewService(lister, reader, writer)
+			svc := NewService(lister, reader, writer, observability.NewNoopLogger())
 			resp, err := svc.Preview(context.Background(), tc.req)
 			if err != nil {
 				t.Fatalf("Preview error: %v", err)
@@ -112,7 +114,7 @@ func TestServiceApply(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			writer := &stubPriceWriter{failID: tc.failID}
-			svc := NewService(&stubPurchaseLister{}, &stubCompReader{}, writer)
+			svc := NewService(&stubPurchaseLister{}, &stubCompReader{}, writer, observability.NewNoopLogger())
 
 			result, err := svc.Apply(context.Background(), ApplyRequest{Items: tc.items})
 			if err != nil {
