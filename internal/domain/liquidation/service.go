@@ -26,13 +26,13 @@ func (s *service) Preview(ctx context.Context, req PreviewRequest) (PreviewRespo
 		return PreviewResponse{}, err
 	}
 
-	discWithComps := req.DiscountWithCompsPct
-	if discWithComps <= 0 {
-		discWithComps = discountWithComps
+	discWithComps := discountWithComps
+	if req.DiscountWithCompsPct != nil {
+		discWithComps = *req.DiscountWithCompsPct
 	}
-	discNoComps := req.DiscountNoCompsPct
-	if discNoComps <= 0 {
-		discNoComps = discountNoComps
+	discNoComps := discountNoComps
+	if req.DiscountNoCompsPct != nil {
+		discNoComps = *req.DiscountNoCompsPct
 	}
 
 	var items []PreviewItem

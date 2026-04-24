@@ -1,6 +1,6 @@
 # SlabLedger - Makefile
 
-.PHONY: all help build test test-verbose coverage lint check fmt clean install web web-build web-dev web-clean web-rebuild db-pull ci hooks screenshots kill
+.PHONY: all help build test test-verbose coverage lint check fmt clean install web web-build web-dev web-clean web-rebuild db-pull db-push ci hooks screenshots kill
 
 # Default target
 all: help
@@ -26,7 +26,7 @@ help:
 	@echo ""
 	@echo "Database sync (requires ~/.ssh mounted):"
 	@echo "  db-pull       Pull prod DB to local"
-	@echo "  # db-push     (disabled — use manually if needed)"
+	@echo "  db-push       (blocked — see error message)"
 	@echo ""
 	@echo "Local dev utilities:"
 	@echo "  kill          Kill any process running on port 8081"
@@ -85,11 +85,12 @@ coverage:
 	@echo "Coverage report: coverage.html"
 
 # Screenshots of all pages via Playwright (uses real backend + local Postgres).
+# Pulls prod data first via db-pull so pages render with real content.
 # Override SCREENSHOT_DB_URL to point at a non-devcontainer Postgres.
 # Output: web/screenshots/*.png (desktop) + web/screenshots/mobile/*.png (mobile)
 SCREENSHOT_TOKEN ?= playwright-screenshots
 SCREENSHOT_DB_URL ?= postgresql://slabledger:slabledger@postgres:5432/slabledger?sslmode=disable
-screenshots: build web-build
+screenshots: db-pull build web-build
 	@echo "Taking screenshots of all pages (real backend)..."
 	@LOCAL_API_TOKEN=$(SCREENSHOT_TOKEN) DATABASE_URL=$(SCREENSHOT_DB_URL) ./slabledger --web --port 4173 & SERVER_PID=$$! ; \
 	  sleep 3 ; \
@@ -151,28 +152,10 @@ db-pull:
 	trap - EXIT && rm -f "$$TMP_DUMP" && \
 	echo "Done."
 
-# db-push — commented out (overwrites prod DB, too dangerous for casual use)
-#db-push:
-#	@if [ -f .env ]; then set -a && . ./.env && set +a; fi && \
-#	PROD_DB_URL="$${PROD_DB_URL:-$$SUPABASE_URL}" && \
-#	if [ -z "$$PROD_DB_URL" ]; then echo "Error: PROD_DB_URL (or SUPABASE_URL) not set"; exit 1; fi && \
-#	echo "Pushing local → Supabase ..." && \
-#	printf 'This will OVERWRITE THE PROD DATABASE. Type "yes" to continue: ' && read confirm && [ "$$confirm" = "yes" ] || { printf 'Aborted.\n'; exit 1; } && \
-#	TIMESTAMP=$$(date +%Y%m%d%H%M%S) && \
-#	TMP_REMOTE=$$(mktemp -t slabledger-remote.XXXXXX.dump) && \
-#	TMP_LOCAL=$$(mktemp -t slabledger-local.XXXXXX.dump) && \
-#	cleanup() { rm -f "$$TMP_REMOTE" "$$TMP_LOCAL"; } && \
-#	trap cleanup EXIT && \
-#	echo "Backing up remote to local file: slabledger-remote-$$TIMESTAMP.dump ..." && \
-#	pg_dump --no-owner --no-privileges --format=custom --file="slabledger-remote-$$TIMESTAMP.dump" "$$PROD_DB_URL" && \
-#	echo "Dumping local ..." && \
-#	pg_dump --no-owner --no-privileges --format=custom --file="$$TMP_LOCAL" "$(LOCAL_DB_URL)" && \
-#	echo "Resetting remote schema ..." && \
-#	psql "$$PROD_DB_URL" -v ON_ERROR_STOP=1 -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;' >/dev/null && \
-#	echo "Restoring local dump into remote ..." && \
-#	pg_restore --no-owner --no-privileges --dbname="$$PROD_DB_URL" "$$TMP_LOCAL" && \
-#	trap - EXIT && \
-#	echo "Done. Remote backup: slabledger-remote-$$TIMESTAMP.dump"
+db-push:
+	@echo "ERROR: db-push is intentionally disabled — it overwrites the production database." && \
+	echo "Use the documented backup/restore procedure if you need to push data to prod." && \
+	false
 
 # Kill process on port 8081
 kill:

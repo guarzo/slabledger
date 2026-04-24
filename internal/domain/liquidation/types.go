@@ -29,8 +29,8 @@ type CompPriceResult struct {
 
 // PreviewRequest carries settings for a liquidation preview.
 type PreviewRequest struct {
-	DiscountWithCompsPct float64 `json:"discountWithCompsPct"`
-	DiscountNoCompsPct   float64 `json:"discountNoCompsPct"`
+	DiscountWithCompsPct *float64 `json:"discountWithCompsPct"`
+	DiscountNoCompsPct   *float64 `json:"discountNoCompsPct"`
 }
 
 // PreviewItem is one card in the preview response.

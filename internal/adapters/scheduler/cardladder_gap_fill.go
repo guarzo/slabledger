@@ -2,11 +2,18 @@ package scheduler
 
 import (
 	"context"
+	"time"
+
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
 	"github.com/guarzo/slabledger/internal/adapters/storage/postgres"
 	"github.com/guarzo/slabledger/internal/domain/mathutil"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/platform/cardutil"
+)
+
+const (
+	compRefreshBatchLimit = 200
+	compRefreshPause      = 2 * time.Second
 )
 
 // refreshSalesCompsDecoupled fetches recent sales comps for unsold purchases
@@ -22,6 +29,10 @@ func (s *CardLadderRefreshScheduler) refreshSalesCompsDecoupled(ctx context.Cont
 	if err != nil {
 		s.logger.Warn(ctx, "CL sales: failed to list cards needing comps", observability.Err(err))
 		return
+	}
+
+	if len(cards) > compRefreshBatchLimit {
+		cards = cards[:compRefreshBatchLimit]
 	}
 
 	fetched := 0
@@ -74,6 +85,8 @@ func (s *CardLadderRefreshScheduler) refreshSalesCompsDecoupled(ctx context.Cont
 			}
 		}
 		fetched++
+
+		time.Sleep(compRefreshPause)
 	}
 
 	// Backfill last_sold_date and last_sold_cents from comps.

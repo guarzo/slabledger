@@ -282,13 +282,15 @@ export default function LiquidationPage() {
 }
 
 function DiscountSlider({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
+  const id = `discount-${label.toLowerCase().replace(/\s+/g, '-')}`;
   return (
     <div>
       <div className="flex items-center justify-between mb-2">
-        <span className="text-xs font-medium text-[var(--text-muted)]">{label}</span>
+        <label htmlFor={id} className="text-xs font-medium text-[var(--text-muted)]">{label}</label>
         <span className="text-sm font-semibold text-[var(--text)] tabular-nums">{value.toFixed(1)}% below CL</span>
       </div>
       <input
+        id={id}
         type="range"
         min={0}
         max={25}
