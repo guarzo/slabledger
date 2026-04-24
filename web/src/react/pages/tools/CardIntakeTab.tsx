@@ -1,8 +1,7 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { api, isAPIError } from '../../../js/api';
-import type { ScannerMode } from './sale-types';
+import type { ScannerMode, SaleRowData, SaleSummary } from './sale-types';
 import { SALE_COST_VISIBLE_KEY, SALE_DEFAULT_DISCOUNT_KEY } from './sale-types';
-import type { SaleRowData, SaleSummary } from './sale-types';
 import { reportError } from '../../../js/errors';
 import type { ScanCertResponse, ResolveCertResponse, CertImportResult, MarketSnapshot } from '../../../types/campaigns';
 import { formatCents } from '../../utils/formatters';
@@ -188,6 +187,7 @@ export default function CardIntakeTab() {
 
   // Sale mode state
   const [saleRows, setSaleRows] = useState<SaleRowData[]>([]);
+  const saleCertsRef = useRef<Set<string>>(new Set());
   const [defaultDiscountPct, setDefaultDiscountPct] = useState<number>(() => {
     const saved = localStorage.getItem(SALE_DEFAULT_DISCOUNT_KEY);
     return saved ? Number(saved) : 80;
@@ -197,6 +197,7 @@ export default function CardIntakeTab() {
   });
   const [showRecordModal, setShowRecordModal] = useState(false);
   const [recordLoading, setRecordLoading] = useState(false);
+  const [recordError, setRecordError] = useState<string | null>(null);
 
   useEffect(() => { inputRef.current?.focus(); }, []);
 
@@ -220,7 +221,7 @@ export default function CardIntakeTab() {
     if (count > 0) {
       if (!window.confirm(`Switch to ${newMode} mode? This will clear ${count} scanned card(s).`)) return;
       if (newMode === 'sale') { setCerts(new Map()); saveQueue(new Map()); }
-      else { setSaleRows([]); }
+      else { setSaleRows([]); saleCertsRef.current.clear(); }
     }
     setMode(newMode);
   }, [mode, certs.size, saleRows.length]);
@@ -369,7 +370,8 @@ export default function CardIntakeTab() {
   }, [updateCert]);
 
   const handleSaleScan = useCallback(async (certNumber: string) => {
-    if (saleRows.some(r => r.certNumber === certNumber)) return;
+    if (saleCertsRef.current.has(certNumber)) return;
+    saleCertsRef.current.add(certNumber);
 
     setSaleRows(prev => [...prev, {
       certNumber, status: 'scanning', compValueCents: 0,
@@ -411,11 +413,12 @@ export default function CardIntakeTab() {
         compValueCents: compValue, compManuallySet: false,
         salePriceCents: salePrice, salePriceManuallySet: false,
       } : r));
-    } catch {
+    } catch (err) {
+      reportError('handleSaleScan', err instanceof Error ? err : new Error(String(err)));
       setSaleRows(prev => prev.map(r => r.certNumber === certNumber
-        ? { ...r, status: 'error' as const, error: 'Scan failed' } : r));
+        ? { ...r, status: 'error' as const, error: err instanceof Error ? err.message : 'Scan failed' } : r));
     }
-  }, [saleRows, defaultDiscountPct]);
+  }, [defaultDiscountPct]);
 
   const handleScan = useCallback(async (certNumber: string) => {
     certNumber = certNumber.trim();
@@ -581,7 +584,7 @@ export default function CardIntakeTab() {
 
   const handleClearAllSaleRows = useCallback(() => {
     if (saleRows.length > 0 && !window.confirm(`Clear ${saleRows.length} scanned card(s)?`)) return;
-    setSaleRows([]);
+    setSaleRows([]); saleCertsRef.current.clear();
   }, [saleRows.length]);
 
   const saleSummary = useMemo<SaleSummary>(() => {
@@ -604,25 +607,40 @@ export default function CardIntakeTab() {
     if (resolved.length === 0) return;
 
     setRecordLoading(true);
-    try {
-      const byCampaign = new Map<string, { purchaseId: string; salePriceCents: number }[]>();
-      for (const r of resolved) {
-        const items = byCampaign.get(r.campaignId!) ?? [];
-        items.push({ purchaseId: r.purchaseId!, salePriceCents: r.salePriceCents });
-        byCampaign.set(r.campaignId!, items);
-      }
-
-      for (const [campaignId, items] of byCampaign) {
-        await api.createBulkSales(campaignId, channel, saleDate, items);
-      }
-
-      setSaleRows([]);
-      setShowRecordModal(false);
-    } catch {
-      // Cards remain in list for retry
-    } finally {
-      setRecordLoading(false);
+    setRecordError(null);
+    const byCampaign = new Map<string, { purchaseId: string; salePriceCents: number }[]>();
+    for (const r of resolved) {
+      const items = byCampaign.get(r.campaignId!) ?? [];
+      items.push({ purchaseId: r.purchaseId!, salePriceCents: r.salePriceCents });
+      byCampaign.set(r.campaignId!, items);
     }
+
+    const succeededCerts = new Set<string>();
+    const errors: string[] = [];
+    for (const [campaignId, items] of byCampaign) {
+      try {
+        await api.createBulkSales(campaignId, channel, saleDate, items);
+        for (const item of items) {
+          const row = resolved.find(r => r.purchaseId === item.purchaseId);
+          if (row) succeededCerts.add(row.certNumber);
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Unknown error';
+        errors.push(msg);
+        reportError('handleRecordSales', err instanceof Error ? err : new Error(msg));
+      }
+    }
+
+    if (succeededCerts.size > 0) {
+      setSaleRows(prev => prev.filter(r => !succeededCerts.has(r.certNumber)));
+      for (const cert of succeededCerts) saleCertsRef.current.delete(cert);
+    }
+    if (errors.length > 0) {
+      setRecordError(`Failed for ${errors.length} campaign(s): ${errors.join('; ')}`);
+    } else {
+      setShowRecordModal(false);
+    }
+    setRecordLoading(false);
   }, [saleRows]);
 
   const rows = useMemo(() => Array.from(certs.values()), [certs]);
@@ -794,7 +812,6 @@ export default function CardIntakeTab() {
                 <SaleRow
                   key={row.certNumber}
                   row={row}
-                  discountPct={defaultDiscountPct}
                   costVisible={costVisible}
                   onCompValueChange={handleCompValueChange}
                   onSalePriceChange={handleSalePriceChange}
@@ -818,6 +835,7 @@ export default function CardIntakeTab() {
               onConfirm={handleRecordSales}
               onCancel={() => setShowRecordModal(false)}
               loading={recordLoading}
+              error={recordError}
             />
           )}
         </div>

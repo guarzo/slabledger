@@ -41,7 +41,7 @@ export function SaleToolbar({ discountPct, onDiscountChange, costVisible, onCost
         <span className="text-xs text-zinc-500">%</span>
       </div>
       <span className="text-xs text-zinc-600">of Comp Value</span>
-      <span className="ml-auto text-xs text-zinc-500">Channel: Local</span>
+      <span className="ml-auto text-xs text-zinc-500">Channel: Card Show</span>
       <button
         onClick={handleCostToggle}
         className="ml-2 text-zinc-500 hover:text-zinc-300 transition-colors"

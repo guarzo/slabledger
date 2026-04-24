@@ -1,21 +1,23 @@
 import { useState, useCallback } from 'react';
 import type { SaleRowData, SaleSummary } from './sale-types';
+import type { SaleChannel } from '../../../types/campaigns';
 
 interface RecordSalesModalProps {
   rows: SaleRowData[];
   summary: SaleSummary;
-  onConfirm: (saleDate: string, channel: string) => void;
+  onConfirm: (saleDate: string, channel: SaleChannel) => void;
   onCancel: () => void;
   loading: boolean;
+  error?: string | null;
 }
 
 function fmt(cents: number): string {
   return `$${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-export function RecordSalesModal({ rows, summary, onConfirm, onCancel, loading }: RecordSalesModalProps) {
+export function RecordSalesModal({ rows, summary, onConfirm, onCancel, loading, error }: RecordSalesModalProps) {
   const [saleDate, setSaleDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [channel, setChannel] = useState('local');
+  const [channel, setChannel] = useState<SaleChannel>('cardshow');
 
   const handleConfirm = useCallback(() => {
     onConfirm(saleDate, channel);
@@ -36,11 +38,13 @@ export function RecordSalesModal({ rows, summary, onConfirm, onCancel, loading }
           </div>
           <div>
             <label className="mb-1 block text-xs text-zinc-400">Channel</label>
-            <select value={channel} onChange={e => setChannel(e.target.value)}
+            <select value={channel} onChange={e => setChannel(e.target.value as SaleChannel)}
               className="w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm text-white">
+              <option value="cardshow">Card Show</option>
               <option value="local">Local</option>
               <option value="ebay">eBay</option>
               <option value="tcgplayer">TCGPlayer</option>
+              <option value="doubleholo">DoubleHolo</option>
               <option value="other">Other</option>
             </select>
           </div>
@@ -63,6 +67,10 @@ export function RecordSalesModal({ rows, summary, onConfirm, onCancel, loading }
           <span>Total: <span className="font-semibold text-white">{fmt(summary.saleTotalCents)}</span></span>
           <span>Avg: <span className="text-zinc-300">{summary.avgDiscountPct}%</span></span>
         </div>
+
+        {error && (
+          <div className="mb-4 rounded border border-red-800 bg-red-900/30 px-3 py-2 text-xs text-red-400">{error}</div>
+        )}
 
         <div className="flex justify-end gap-2">
           <button onClick={onCancel} disabled={loading}

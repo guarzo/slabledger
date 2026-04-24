@@ -3,7 +3,6 @@ import type { SaleRowData } from './sale-types';
 
 interface SaleRowProps {
   row: SaleRowData;
-  discountPct: number;
   costVisible: boolean;
   onCompValueChange: (certNumber: string, cents: number) => void;
   onSalePriceChange: (certNumber: string, cents: number) => void;
@@ -62,7 +61,7 @@ function EditableCell({ cents, onChange, highlight }: {
   );
 }
 
-export function SaleRow({ row, costVisible, onCompValueChange, onSalePriceChange, onDismiss }: Omit<SaleRowProps, 'discountPct'> & { discountPct?: number }) {
+export function SaleRow({ row, costVisible, onCompValueChange, onSalePriceChange, onDismiss }: SaleRowProps) {
   if (row.status === 'error') {
     return (
       <div className="flex items-center gap-3 border-t border-zinc-800 px-3 py-2">
