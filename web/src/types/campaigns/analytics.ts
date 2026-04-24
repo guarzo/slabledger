@@ -213,6 +213,17 @@ export interface ChannelVelocity {
   revenueCents: number;
 }
 
+// Delta types
+
+export interface PortfolioDelta {
+  /** Signed number. Percentage points for ROI, cents for money fields. */
+  value: number;
+  /** Optional human label, e.g. "vs last wk", "30d". */
+  label?: string;
+  /** "pct" renders with %, "cents" renders through formatCents. Defaults to "pct". */
+  unit?: 'pct' | 'cents';
+}
+
 // Portfolio health types
 
 export interface CampaignHealth {
@@ -236,6 +247,8 @@ export interface PortfolioHealth {
   totalAtRiskCents: number;
   overallROI: number;
   realizedROI: number;
+  realizedROIDelta?: PortfolioDelta;
+  totalRecoveredDelta?: PortfolioDelta;
 }
 
 // Crack Arbitrage types
