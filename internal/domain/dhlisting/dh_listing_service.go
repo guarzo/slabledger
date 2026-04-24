@@ -13,18 +13,15 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
-// dhListingService implements DHListingService by coordinating cert resolution,
-// inventory push, listing, and persistence operations.
+// dhListingService implements Service by coordinating inline cert intake
+// (via DH's psa_import), list transitions, channel sync, and persistence.
 type dhListingService struct {
 	purchaseLookup    DHListingPurchaseLookup
-	certResolver      DHCertResolver
-	pusher            DHInventoryPusher
+	psaImporter       DHPSAImporter
 	lister            DHInventoryLister
 	cardIDSaver       DHCardIDSaver
-	gemRateIDUpdater  DHGemRateIDUpdater
 	fieldsUpdater     DHListingFieldsUpdater
 	pushStatusUpdater DHListingPushStatusUpdater
-	candidatesSaver   DHListingCandidatesSaver
 	resetter          DHReconcileResetter      // optional: auto-resets stale DH inventory IDs inline
 	unlistedClearer   DHListingUnlistedClearer // optional: clears dh_unlisted_detected_at on successful list
 	logger            observability.Logger
@@ -46,16 +43,6 @@ type DHListingPushStatusUpdater interface {
 	UpdatePurchaseDHPushStatus(ctx context.Context, id string, status string) error
 }
 
-// DHListingCandidatesSaver stores DH cert resolution candidates on a purchase.
-type DHListingCandidatesSaver interface {
-	UpdatePurchaseDHCandidates(ctx context.Context, id string, candidatesJSON string) error
-}
-
-// DHGemRateIDUpdater persists the CL gem_rate_id on a purchase.
-type DHGemRateIDUpdater interface {
-	UpdatePurchaseGemRateID(ctx context.Context, id, gemRateID string) error
-}
-
 // DHListingUnlistedClearer clears the dh_unlisted_detected_at timestamp on a
 // purchase after it successfully transitions back to `listed` on DH. The
 // column is a UI badge marker set by the reconciler when a DH-side delisting
@@ -67,14 +54,10 @@ type DHListingUnlistedClearer interface {
 // DHListingServiceOption configures optional dependencies on dhListingService.
 type DHListingServiceOption func(*dhListingService)
 
-// WithDHListingCertResolver enables DH cert resolution for inline push.
-func WithDHListingCertResolver(c DHCertResolver) DHListingServiceOption {
-	return func(s *dhListingService) { s.certResolver = c }
-}
-
-// WithDHListingPusher enables inventory push to DH.
-func WithDHListingPusher(p DHInventoryPusher) DHListingServiceOption {
-	return func(s *dhListingService) { s.pusher = p }
+// WithDHListingPSAImporter enables inline cert intake via DH's psa_import
+// endpoint (match + inventory-create in one call).
+func WithDHListingPSAImporter(imp DHPSAImporter) DHListingServiceOption {
+	return func(s *dhListingService) { s.psaImporter = imp }
 }
 
 // WithDHListingLister enables DH inventory status updates and channel sync.
@@ -95,16 +78,6 @@ func WithDHListingFieldsUpdater(u DHListingFieldsUpdater) DHListingServiceOption
 // WithDHListingPushStatusUpdater enables setting dh_push_status.
 func WithDHListingPushStatusUpdater(u DHListingPushStatusUpdater) DHListingServiceOption {
 	return func(s *dhListingService) { s.pushStatusUpdater = u }
-}
-
-// WithDHListingCandidatesSaver enables storing ambiguous DH candidates.
-func WithDHListingCandidatesSaver(saver DHListingCandidatesSaver) DHListingServiceOption {
-	return func(s *dhListingService) { s.candidatesSaver = saver }
-}
-
-// WithDHListingGemRateIDUpdater enables persisting gem_rate_id from DH cert resolution.
-func WithDHListingGemRateIDUpdater(u DHGemRateIDUpdater) DHListingServiceOption {
-	return func(s *dhListingService) { s.gemRateIDUpdater = u }
 }
 
 // WithDHListingResetter enables inline reset of stale DH inventory IDs.
@@ -194,7 +167,7 @@ func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []stri
 		p := purchases[cn]
 		// If pending DH push, do inline match + push first.
 		if p.DHInventoryID == 0 && p.DHPushStatus == inventory.DHPushStatusPending {
-			if s.certResolver == nil || s.pusher == nil {
+			if s.psaImporter == nil {
 				skipped++
 				continue // no DH match client — skip
 			}

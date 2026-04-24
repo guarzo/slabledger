@@ -13,105 +13,99 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
-// --- DHCertResolver adapter ---
+// --- DHPSAImporter adapter ---
 
-// CertResolverAdapter wraps a dh.Client to implement dhlisting.DHCertResolver.
-type CertResolverAdapter struct {
+// PSAImporterAdapter wraps a dh.Client (or any object with the same method
+// signature) to implement dhlisting.DHPSAImporter. It translates between the
+// domain's DHPSAImportItem/Result types and the adapter-side dh.PSAImport*
+// types. It also exposes the client's PSAKeyRotator so the listing service
+// can rotate on rate-limit without importing the dh package.
+type PSAImporterAdapter struct {
 	client interface {
-		ResolveCert(ctx context.Context, req dh.CertResolveRequest) (*dh.CertResolution, error)
+		PSAImport(ctx context.Context, items []dh.PSAImportItem) (*dh.PSAImportResponse, error)
 	}
+	rotator dh.PSAKeyRotator
 }
 
-// NewCertResolverAdapter creates a new CertResolverAdapter.
-func NewCertResolverAdapter(client interface {
-	ResolveCert(ctx context.Context, req dh.CertResolveRequest) (*dh.CertResolution, error)
-}) *CertResolverAdapter {
-	return &CertResolverAdapter{client: client}
+// NewPSAImporterAdapter creates a new PSAImporterAdapter. If the client
+// implements dh.PSAKeyRotator, rotation is wired through.
+func NewPSAImporterAdapter(client interface {
+	PSAImport(ctx context.Context, items []dh.PSAImportItem) (*dh.PSAImportResponse, error)
+}) *PSAImporterAdapter {
+	a := &PSAImporterAdapter{client: client}
+	if r, ok := client.(dh.PSAKeyRotator); ok {
+		a.rotator = r
+	}
+	return a
 }
 
-func (a *CertResolverAdapter) ResolveCert(ctx context.Context, req dhlisting.DHCertResolveRequest) (*dhlisting.DHCertResolution, error) {
-	resp, err := a.client.ResolveCert(ctx, dh.CertResolveRequest{
-		CertNumber: req.CertNumber,
-		CardName:   req.CardName,
-		SetName:    req.SetName,
-		CardNumber: req.CardNumber,
-		Year:       req.Year,
-		Variant:    req.Variant,
-	})
-	if err != nil {
-		return nil, err
-	}
-	result := &dhlisting.DHCertResolution{
-		Status:   resp.Status,
-		DHCardID: resp.DHCardID,
-	}
-	if resp.GemRateID != nil {
-		result.GemRateID = *resp.GemRateID
-	}
-	for _, c := range resp.Candidates {
-		candidate := dhlisting.DHCertCandidate{
-			DHCardID:   c.DHCardID,
-			CardName:   c.CardName,
-			SetName:    c.SetName,
-			CardNumber: c.CardNumber,
-		}
-		if c.GemRateID != nil {
-			candidate.GemRateID = *c.GemRateID
-		}
-		result.Candidates = append(result.Candidates, candidate)
-	}
-	return result, nil
-}
-
-var _ dhlisting.DHCertResolver = (*CertResolverAdapter)(nil)
-
-// --- DHInventoryPusher adapter ---
-
-// InventoryPusherAdapter wraps a dh.Client to implement dhlisting.DHInventoryPusher.
-type InventoryPusherAdapter struct {
-	client interface {
-		PushInventory(ctx context.Context, items []dh.InventoryItem) (*dh.InventoryPushResponse, error)
-	}
-}
-
-// NewInventoryPusherAdapter creates a new InventoryPusherAdapter.
-func NewInventoryPusherAdapter(client interface {
-	PushInventory(ctx context.Context, items []dh.InventoryItem) (*dh.InventoryPushResponse, error)
-}) *InventoryPusherAdapter {
-	return &InventoryPusherAdapter{client: client}
-}
-
-func (a *InventoryPusherAdapter) PushInventory(ctx context.Context, items []dhlisting.DHInventoryPushItem) (*dhlisting.DHInventoryPushResult, error) {
-	dhItems := make([]dh.InventoryItem, len(items))
+func (a *PSAImporterAdapter) PSAImport(ctx context.Context, items []dhlisting.DHPSAImportItem) ([]dhlisting.DHPSAImportResult, error) {
+	dhItems := make([]dh.PSAImportItem, len(items))
 	for i, item := range items {
-		dhItem := dh.NewInStockItem(item.DHCardID, item.CertNumber, item.Grade, item.CostBasisCents, item.ListingPriceCents)
-		if item.CertImageURLFront != "" {
-			dhItem.CertImageURLFront = item.CertImageURLFront
+		overrides := &dh.PSAImportOverrides{
+			Name:       item.CardName,
+			SetName:    item.SetName,
+			CardNumber: item.CardNumber,
+			Year:       item.Year,
+			Language:   item.Language,
 		}
-		if item.CertImageURLBack != "" {
-			dhItem.CertImageURLBack = item.CertImageURLBack
+		dhItems[i] = dh.PSAImportItem{
+			CertNumber:     item.CertNumber,
+			CostBasisCents: item.CostBasisCents,
+			Status:         dh.InventoryStatusInStock,
+			Overrides:      overrides,
 		}
-		dhItems[i] = dhItem
 	}
 
-	resp, err := a.client.PushInventory(ctx, dhItems)
+	resp, err := a.client.PSAImport(ctx, dhItems)
 	if err != nil {
 		return nil, err
 	}
 
-	result := &dhlisting.DHInventoryPushResult{}
+	// Batch-level rejection — DH returns {success:false, error:"..."} on 422
+	// for invalid batches (>50 items, missing vendor profile, blank
+	// cert_number). Surface as an error so the domain caller logs the real
+	// reason instead of "no results".
+	if !resp.Success {
+		if resp.Error != "" {
+			return nil, fmt.Errorf("psa_import batch rejected: %s", resp.Error)
+		}
+		return nil, fmt.Errorf("psa_import batch rejected (no reason given)")
+	}
+
+	results := make([]dhlisting.DHPSAImportResult, 0, len(resp.Results))
 	for _, r := range resp.Results {
-		result.Results = append(result.Results, dhlisting.DHInventoryPushResultItem{
-			DHInventoryID:      r.DHInventoryID,
-			Status:             r.Status,
-			AssignedPriceCents: r.AssignedPriceCents,
-			ChannelsJSON:       dh.MarshalChannels(r.Channels),
+		results = append(results, dhlisting.DHPSAImportResult{
+			CertNumber:    r.CertNumber,
+			Resolution:    r.Resolution,
+			DHCardID:      r.DHCardID,
+			DHInventoryID: r.DHInventoryID,
+			DHStatus:      r.Status,
+			Error:         r.Error,
+			RateLimited:   r.RateLimited,
 		})
 	}
-	return result, nil
+	return results, nil
 }
 
-var _ dhlisting.DHInventoryPusher = (*InventoryPusherAdapter)(nil)
+// RotatePSAKey delegates to the underlying client when available.
+func (a *PSAImporterAdapter) RotatePSAKey() bool {
+	if a.rotator == nil {
+		return false
+	}
+	return a.rotator.RotatePSAKey()
+}
+
+// ResetPSAKeyRotation delegates to the underlying client when available.
+func (a *PSAImporterAdapter) ResetPSAKeyRotation() {
+	if a.rotator == nil {
+		return
+	}
+	a.rotator.ResetPSAKeyRotation()
+}
+
+var _ dhlisting.DHPSAImporter = (*PSAImporterAdapter)(nil)
+var _ dhlisting.PSAKeyRotator = (*PSAImporterAdapter)(nil)
 
 // --- DHInventoryLister / DHSoldNotifier adapter ---
 

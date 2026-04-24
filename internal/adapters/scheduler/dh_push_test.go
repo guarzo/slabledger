@@ -3,909 +3,356 @@ package scheduler
 import (
 	"context"
 	"errors"
-	"fmt"
 	"testing"
-	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	"github.com/guarzo/slabledger/internal/domain/dhevents"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
-// ---------------------------------------------------------------------------
-// Local mocks for DHPush-specific interfaces
-// ---------------------------------------------------------------------------
+// --- test doubles -----------------------------------------------------------
 
-type mockDHPushPendingLister struct {
-	ListFn func(ctx context.Context, status string, limit int) ([]inventory.Purchase, error)
+// stubPSAImporter is a scheduler.DHPushPSAImporter double that returns canned
+// responses from a FIFO queue. Also optionally implements dh.PSAKeyRotator for
+// rotation-path tests (RotateFn + RotateCalls).
+type stubPSAImporter struct {
+	responses []*dh.PSAImportResponse
+	errs      []error
+	requests  [][]dh.PSAImportItem
+
+	// Optional rotator hooks — nil means the importer doesn't satisfy
+	// dh.PSAKeyRotator (which the scheduler tolerates).
+	RotateFn          func() bool
+	RotateCalls       int
+	ResetRotationFn   func()
+	ResetRotationCall int
 }
 
-func (m *mockDHPushPendingLister) GetPurchasesByDHPushStatus(ctx context.Context, status string, limit int) ([]inventory.Purchase, error) {
-	if m.ListFn != nil {
-		return m.ListFn(ctx, status, limit)
-	}
-	return nil, nil
-}
-
-type mockDHPushStatusUpdater struct {
-	UpdateFn func(ctx context.Context, id string, status string) error
-	Calls    []struct{ ID, Status string }
-}
-
-func (m *mockDHPushStatusUpdater) UpdatePurchaseDHPushStatus(ctx context.Context, id string, status string) error {
-	m.Calls = append(m.Calls, struct{ ID, Status string }{id, status})
-	if m.UpdateFn != nil {
-		return m.UpdateFn(ctx, id, status)
-	}
-	return nil
-}
-
-type mockDHPushCertResolver struct {
-	ResolveFn func(ctx context.Context, req dh.CertResolveRequest) (*dh.CertResolution, error)
-}
-
-func (m *mockDHPushCertResolver) ResolveCert(ctx context.Context, req dh.CertResolveRequest) (*dh.CertResolution, error) {
-	if m.ResolveFn != nil {
-		return m.ResolveFn(ctx, req)
-	}
-	return &dh.CertResolution{Status: dh.CertStatusMatched, DHCardID: 42}, nil
-}
-
-type mockDHPushInventoryPusher struct {
-	PushFn func(ctx context.Context, items []dh.InventoryItem) (*dh.InventoryPushResponse, error)
-}
-
-func (m *mockDHPushInventoryPusher) PushInventory(ctx context.Context, items []dh.InventoryItem) (*dh.InventoryPushResponse, error) {
-	if m.PushFn != nil {
-		return m.PushFn(ctx, items)
-	}
-	return &dh.InventoryPushResponse{
-		Results: []dh.InventoryResult{
-			{DHInventoryID: 99, CertNumber: "", Status: "in_stock", AssignedPriceCents: 5000},
-		},
-	}, nil
-}
-
-type mockDHPushCardIDSaver struct {
-	SaveFn      func(ctx context.Context, cardName, setName, collectorNumber, provider, externalID string) error
-	GetMappedFn func(ctx context.Context, provider string) (map[string]string, error)
-}
-
-func (m *mockDHPushCardIDSaver) SaveExternalID(ctx context.Context, cardName, setName, collectorNumber, provider, externalID string) error {
-	if m.SaveFn != nil {
-		return m.SaveFn(ctx, cardName, setName, collectorNumber, provider, externalID)
-	}
-	return nil
-}
-
-func (m *mockDHPushCardIDSaver) GetMappedSet(ctx context.Context, provider string) (map[string]string, error) {
-	if m.GetMappedFn != nil {
-		return m.GetMappedFn(ctx, provider)
-	}
-	return make(map[string]string), nil
-}
-
-// newTestDHPushScheduler creates a DHPushScheduler with all defaults wired.
-func newTestDHPushScheduler(
-	lister *mockDHPushPendingLister,
-	statusUpdater *mockDHPushStatusUpdater,
-	certResolver *mockDHPushCertResolver,
-	pusher *mockDHPushInventoryPusher,
-	fieldsUpdater *mocks.MockDHFieldsUpdater,
-	cardIDSaver *mockDHPushCardIDSaver,
-) *DHPushScheduler {
-	return NewDHPushScheduler(
-		lister,
-		statusUpdater,
-		certResolver,
-		pusher,
-		fieldsUpdater,
-		cardIDSaver,
-		mocks.NewMockLogger(),
-		DHPushConfig{Enabled: true, Interval: 1 * time.Hour},
-	)
-}
-
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
-func TestDHPush_Disabled(t *testing.T) {
-	s := NewDHPushScheduler(
-		&mockDHPushPendingLister{},
-		&mockDHPushStatusUpdater{},
-		&mockDHPushCertResolver{},
-		&mockDHPushInventoryPusher{},
-		&mocks.MockDHFieldsUpdater{},
-		&mockDHPushCardIDSaver{},
-		mocks.NewMockLogger(),
-		DHPushConfig{Enabled: false},
-	)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-	defer cancel()
-
-	done := make(chan struct{})
-	go func() { s.Start(ctx); close(done) }()
-
-	select {
-	case <-done:
-		// expected — disabled scheduler returns immediately
-	case <-time.After(1 * time.Second):
-		t.Fatal("disabled scheduler should return immediately from Start")
-	}
-}
-
-func TestDHPush_EmptyBatch(t *testing.T) {
-	lister := &mockDHPushPendingLister{
-		ListFn: func(_ context.Context, _ string, _ int) ([]inventory.Purchase, error) {
-			return []inventory.Purchase{}, nil
-		},
-	}
-	statusUpdater := &mockDHPushStatusUpdater{}
-	certResolver := &mockDHPushCertResolver{}
-	pusher := &mockDHPushInventoryPusher{}
-	fieldsUpdater := &mocks.MockDHFieldsUpdater{}
-	cardIDSaver := &mockDHPushCardIDSaver{}
-
-	s := newTestDHPushScheduler(lister, statusUpdater, certResolver, pusher, fieldsUpdater, cardIDSaver)
-	s.push(context.Background())
-
-	assert.Empty(t, statusUpdater.Calls, "no status updates should occur for empty batch")
-	assert.Empty(t, fieldsUpdater.Calls, "no field updates should occur for empty batch")
-}
-
-func TestDHPush_ListerError(t *testing.T) {
-	lister := &mockDHPushPendingLister{
-		ListFn: func(_ context.Context, _ string, _ int) ([]inventory.Purchase, error) {
-			return nil, fmt.Errorf("database unavailable")
-		},
-	}
-	statusUpdater := &mockDHPushStatusUpdater{}
-	certResolver := &mockDHPushCertResolver{}
-	pusher := &mockDHPushInventoryPusher{}
-	fieldsUpdater := &mocks.MockDHFieldsUpdater{}
-	cardIDSaver := &mockDHPushCardIDSaver{}
-
-	s := newTestDHPushScheduler(lister, statusUpdater, certResolver, pusher, fieldsUpdater, cardIDSaver)
-	// Should not panic; errors are logged and the method returns
-	s.push(context.Background())
-
-	assert.Empty(t, statusUpdater.Calls)
-	assert.Empty(t, fieldsUpdater.Calls)
-}
-
-func TestDHPush_NoCertNumber_MarksUnmatched(t *testing.T) {
-	purchase := inventory.Purchase{
-		ID:         "pur-1",
-		CertNumber: "", // no cert
-		CardName:   "Charizard",
-	}
-	lister := &mockDHPushPendingLister{
-		ListFn: func(_ context.Context, _ string, _ int) ([]inventory.Purchase, error) {
-			return []inventory.Purchase{purchase}, nil
-		},
-	}
-	statusUpdater := &mockDHPushStatusUpdater{}
-	certResolver := &mockDHPushCertResolver{}
-	pusher := &mockDHPushInventoryPusher{}
-	fieldsUpdater := &mocks.MockDHFieldsUpdater{}
-	cardIDSaver := &mockDHPushCardIDSaver{}
-
-	s := newTestDHPushScheduler(lister, statusUpdater, certResolver, pusher, fieldsUpdater, cardIDSaver)
-	s.push(context.Background())
-
-	require.Len(t, statusUpdater.Calls, 1)
-	assert.Equal(t, "pur-1", statusUpdater.Calls[0].ID)
-	assert.Equal(t, inventory.DHPushStatusUnmatched, statusUpdater.Calls[0].Status)
-	assert.Empty(t, fieldsUpdater.Calls)
-}
-
-// TestDHPush_NoReviewedPrice_PushesWithoutPreset verifies that the scheduler
-// no longer blocks the push on having a price. With DH's listing_price_cents
-// API change, push happens without a preset (DH catalog fallback) so the item
-// gets matched + assigned an inventory ID. The actual list-time price gate
-// lives on the manual List-on-DH path.
-func TestDHPush_NoReviewedPrice_PushesWithoutPreset(t *testing.T) {
-	purchase := inventory.Purchase{
-		ID:                 "pur-noreview",
-		CertNumber:         "12345678",
-		CardName:           "Pikachu",
-		SetName:            "Base Set",
-		BuyCostCents:       5000,
-		CLValueCents:       9000, // CL is no longer used by ResolveListingPriceCents
-		ReviewedPriceCents: 0,    // no reviewed price → no preset sent to DH
-	}
-	lister := &mockDHPushPendingLister{
-		ListFn: func(_ context.Context, _ string, _ int) ([]inventory.Purchase, error) {
-			return []inventory.Purchase{purchase}, nil
-		},
-	}
-	var capturedItem dh.InventoryItem
-	certResolver := &mockDHPushCertResolver{
-		ResolveFn: func(_ context.Context, _ dh.CertResolveRequest) (*dh.CertResolution, error) {
-			return &dh.CertResolution{Status: dh.CertStatusMatched, DHCardID: 42}, nil
-		},
-	}
-	statusUpdater := &mockDHPushStatusUpdater{}
-	pusher := &mockDHPushInventoryPusher{
-		PushFn: func(_ context.Context, items []dh.InventoryItem) (*dh.InventoryPushResponse, error) {
-			capturedItem = items[0]
-			return &dh.InventoryPushResponse{
-				Results: []dh.InventoryResult{{DHInventoryID: 99, Status: "in_stock"}},
-			}, nil
-		},
-	}
-	fieldsUpdater := &mocks.MockDHFieldsUpdater{}
-	cardIDSaver := &mockDHPushCardIDSaver{}
-
-	s := newTestDHPushScheduler(lister, statusUpdater, certResolver, pusher, fieldsUpdater, cardIDSaver)
-	s.push(context.Background())
-
-	assert.Nil(t, capturedItem.ListingPriceCents, "listing_price_cents should be omitted when no reviewed price")
-	require.Len(t, statusUpdater.Calls, 1, "purchase should still transition to matched")
-	assert.Equal(t, inventory.DHPushStatusMatched, statusUpdater.Calls[0].Status)
-}
-
-func TestDHPush_CertResolveError_LeavesAsPending(t *testing.T) {
-	purchase := inventory.Purchase{
-		ID:           "pur-2",
-		CertNumber:   "12345678",
-		CardName:     "Pikachu",
-		SetName:      "Base Set",
-		CLValueCents: 5000,
-	}
-	lister := &mockDHPushPendingLister{
-		ListFn: func(_ context.Context, _ string, _ int) ([]inventory.Purchase, error) {
-			return []inventory.Purchase{purchase}, nil
-		},
-	}
-	certResolver := &mockDHPushCertResolver{
-		ResolveFn: func(_ context.Context, _ dh.CertResolveRequest) (*dh.CertResolution, error) {
-			return nil, fmt.Errorf("cert API error")
-		},
-	}
-	statusUpdater := &mockDHPushStatusUpdater{}
-	pusher := &mockDHPushInventoryPusher{}
-	fieldsUpdater := &mocks.MockDHFieldsUpdater{}
-	cardIDSaver := &mockDHPushCardIDSaver{}
-
-	s := newTestDHPushScheduler(lister, statusUpdater, certResolver, pusher, fieldsUpdater, cardIDSaver)
-	s.push(context.Background())
-
-	// Status should NOT be updated when cert resolve errors (stays pending)
-	assert.Empty(t, statusUpdater.Calls, "purchase should stay pending when cert resolve fails")
-	assert.Empty(t, fieldsUpdater.Calls)
-}
-
-func TestDHPush_CertNotMatched_MarksUnmatched(t *testing.T) {
-	purchase := inventory.Purchase{
-		ID:           "pur-3",
-		CertNumber:   "99999999",
-		CardName:     "Machamp",
-		SetName:      "Base Set",
-		CLValueCents: 5000,
-	}
-	lister := &mockDHPushPendingLister{
-		ListFn: func(_ context.Context, _ string, _ int) ([]inventory.Purchase, error) {
-			return []inventory.Purchase{purchase}, nil
-		},
-	}
-	certResolver := &mockDHPushCertResolver{
-		ResolveFn: func(_ context.Context, _ dh.CertResolveRequest) (*dh.CertResolution, error) {
-			return &dh.CertResolution{Status: dh.CertStatusNotFound}, nil
-		},
-	}
-	statusUpdater := &mockDHPushStatusUpdater{}
-	pusher := &mockDHPushInventoryPusher{}
-	fieldsUpdater := &mocks.MockDHFieldsUpdater{}
-	cardIDSaver := &mockDHPushCardIDSaver{}
-
-	s := newTestDHPushScheduler(lister, statusUpdater, certResolver, pusher, fieldsUpdater, cardIDSaver)
-	s.push(context.Background())
-
-	require.Len(t, statusUpdater.Calls, 1)
-	assert.Equal(t, "pur-3", statusUpdater.Calls[0].ID)
-	assert.Equal(t, inventory.DHPushStatusUnmatched, statusUpdater.Calls[0].Status)
-}
-
-// TestDHPush_MarkUnmatched_EmitsEvent verifies that every pending→unmatched
-// transition records a dh_state_events row. Without this event, the state
-// churn between pending (set by cl_refresh re-enrollment) and unmatched (set
-// here) has no audit trail — cards get stuck and operators can't see why.
-func TestDHPush_MarkUnmatched_EmitsEvent(t *testing.T) {
-	cases := []struct {
-		name           string
-		purchase       inventory.Purchase
-		resolveResp    *dh.CertResolution
-		wantNotes      string
-		updateErr      error // when set, UpdatePurchaseDHPushStatus fails
-		expectNoEvents bool  // when true, asserts recorder.Events is empty
-	}{
-		{
-			name:      "no cert number",
-			purchase:  inventory.Purchase{ID: "p1", DHPushStatus: inventory.DHPushStatusPending},
-			wantNotes: "purchase has no cert number",
-		},
-		{
-			name:        "cert resolve returns not_found",
-			purchase:    inventory.Purchase{ID: "p2", CertNumber: "c2", DHPushStatus: inventory.DHPushStatusPending},
-			resolveResp: &dh.CertResolution{Status: dh.CertStatusNotFound},
-			wantNotes:   "cert resolve returned not_found",
-		},
-		{
-			name:           "status update failure suppresses event",
-			purchase:       inventory.Purchase{ID: "p3", DHPushStatus: inventory.DHPushStatusPending},
-			updateErr:      errors.New("db locked"),
-			expectNoEvents: true,
-		},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			purchase := tc.purchase
-			lister := &mockDHPushPendingLister{
-				ListFn: func(_ context.Context, _ string, _ int) ([]inventory.Purchase, error) {
-					return []inventory.Purchase{purchase}, nil
-				},
-			}
-			certResolver := &mockDHPushCertResolver{
-				ResolveFn: func(_ context.Context, _ dh.CertResolveRequest) (*dh.CertResolution, error) {
-					return tc.resolveResp, nil
-				},
-			}
-			statusUpdater := &mockDHPushStatusUpdater{
-				UpdateFn: func(_ context.Context, _, _ string) error { return tc.updateErr },
-			}
-			pusher := &mockDHPushInventoryPusher{}
-			fieldsUpdater := &mocks.MockDHFieldsUpdater{}
-			cardIDSaver := &mockDHPushCardIDSaver{}
-			recorder := &mocks.MockEventRecorder{}
-
-			s := NewDHPushScheduler(
-				lister, statusUpdater, certResolver, pusher, fieldsUpdater, cardIDSaver,
-				mocks.NewMockLogger(),
-				DHPushConfig{Enabled: true, Interval: 1 * time.Hour},
-				WithDHPushEventRecorder(recorder),
-			)
-			s.push(context.Background())
-
-			if tc.expectNoEvents {
-				assert.Empty(t, recorder.Events, "no event should be emitted when the status update fails")
-				return
-			}
-
-			require.Len(t, recorder.Events, 1)
-			got := recorder.Events[0]
-			assert.Equal(t, dhevents.TypeUnmatched, got.Type)
-			assert.Equal(t, purchase.ID, got.PurchaseID)
-			assert.Equal(t, purchase.CertNumber, got.CertNumber)
-			assert.Equal(t, string(inventory.DHPushStatusPending), got.PrevPushStatus)
-			assert.Equal(t, string(inventory.DHPushStatusUnmatched), got.NewPushStatus)
-			assert.Equal(t, dhevents.SourceDHPush, got.Source)
-			assert.Equal(t, tc.wantNotes, got.Notes)
-		})
-	}
-}
-
-// mockDHPushAttemptsTracker records calls and returns a preset count.
-type mockDHPushAttemptsTracker struct {
-	CountFn func(ctx context.Context, id string) (int, error)
-	Calls   []string
-}
-
-func (m *mockDHPushAttemptsTracker) IncrementDHPushAttempts(ctx context.Context, id string) (int, error) {
-	m.Calls = append(m.Calls, id)
-	if m.CountFn != nil {
-		return m.CountFn(ctx, id)
-	}
-	return 0, nil
-}
-
-// TestDHPush_AttemptsTracker_CapsRetries verifies the skip-attempt cap:
-// below the cap, a skipped purchase stays 'pending' for another cycle; at the
-// cap, the scheduler flips the row to 'unmatched' with a diagnostic note and
-// emits a TypeUnmatched event so DH stops getting resolve-hammered with an
-// unsolvable cert. Push-API error is used as the skip trigger because it
-// exercises a late-stage processSkipped path that already has a valid cert
-// resolution (matched DHCardID), proving the cap runs after resolve succeeds.
-func TestDHPush_AttemptsTracker_CapsRetries(t *testing.T) {
-	cases := []struct {
-		name              string
-		attemptsFn        func(ctx context.Context, id string) (int, error)
-		wantMarkUnmatched bool
-		wantEventNotes    string
-	}{
-		{
-			name: "below cap — stays pending",
-			attemptsFn: func(_ context.Context, _ string) (int, error) {
-				return maxDHPushSkipAttempts - 1, nil
-			},
-			wantMarkUnmatched: false,
-		},
-		{
-			name: "at cap — flips to unmatched",
-			attemptsFn: func(_ context.Context, _ string) (int, error) {
-				return maxDHPushSkipAttempts, nil
-			},
-			wantMarkUnmatched: true,
-			wantEventNotes:    fmt.Sprintf("skipped %d consecutive cycles without resolution", maxDHPushSkipAttempts),
-		},
-		{
-			name: "over cap — flips to unmatched",
-			attemptsFn: func(_ context.Context, _ string) (int, error) {
-				return maxDHPushSkipAttempts + 3, nil
-			},
-			wantMarkUnmatched: true,
-			wantEventNotes:    fmt.Sprintf("skipped %d consecutive cycles without resolution", maxDHPushSkipAttempts+3),
-		},
-		{
-			name: "increment errors — tolerated, no markUnmatched",
-			attemptsFn: func(_ context.Context, _ string) (int, error) {
-				return 0, errors.New("db unavailable")
-			},
-			wantMarkUnmatched: false,
-		},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			purchase := inventory.Purchase{
-				ID:           "p-cap",
-				CertNumber:   "55555555",
-				CardName:     "Rocket's Tyranitar",
-				DHPushStatus: inventory.DHPushStatusPending,
-			}
-			lister := &mockDHPushPendingLister{
-				ListFn: func(_ context.Context, _ string, _ int) ([]inventory.Purchase, error) {
-					return []inventory.Purchase{purchase}, nil
-				},
-			}
-			certResolver := &mockDHPushCertResolver{
-				ResolveFn: func(_ context.Context, _ dh.CertResolveRequest) (*dh.CertResolution, error) {
-					return &dh.CertResolution{Status: dh.CertStatusMatched, DHCardID: 10}, nil
-				},
-			}
-			pusher := &mockDHPushInventoryPusher{
-				PushFn: func(_ context.Context, _ []dh.InventoryItem) (*dh.InventoryPushResponse, error) {
-					return nil, errors.New("push API error")
-				},
-			}
-			statusUpdater := &mockDHPushStatusUpdater{}
-			fieldsUpdater := &mocks.MockDHFieldsUpdater{}
-			cardIDSaver := &mockDHPushCardIDSaver{}
-			tracker := &mockDHPushAttemptsTracker{CountFn: tc.attemptsFn}
-			recorder := &mocks.MockEventRecorder{}
-
-			s := NewDHPushScheduler(
-				lister, statusUpdater, certResolver, pusher, fieldsUpdater, cardIDSaver,
-				mocks.NewMockLogger(),
-				DHPushConfig{Enabled: true, Interval: 1 * time.Hour},
-				WithDHPushAttemptsTracker(tracker),
-				WithDHPushEventRecorder(recorder),
-			)
-			s.push(context.Background())
-
-			// Tracker always incremented once per skipped purchase.
-			assert.Equal(t, []string{purchase.ID}, tracker.Calls)
-
-			if !tc.wantMarkUnmatched {
-				assert.Empty(t, statusUpdater.Calls,
-					"row should stay pending when cap not reached or increment errored")
-				assert.Empty(t, recorder.Events, "no event expected when row stays pending")
-				return
-			}
-
-			require.Len(t, statusUpdater.Calls, 1)
-			assert.Equal(t, purchase.ID, statusUpdater.Calls[0].ID)
-			assert.Equal(t, inventory.DHPushStatusUnmatched, statusUpdater.Calls[0].Status)
-
-			require.Len(t, recorder.Events, 1)
-			evt := recorder.Events[0]
-			assert.Equal(t, dhevents.TypeUnmatched, evt.Type)
-			assert.Equal(t, purchase.ID, evt.PurchaseID)
-			assert.Equal(t, tc.wantEventNotes, evt.Notes)
-			assert.Equal(t, dhevents.SourceDHPush, evt.Source)
-		})
-	}
-}
-
-// TestDHPush_AttemptsTracker_NotWired_PreservesLegacyBehavior ensures the cap
-// feature is fully opt-in. With no tracker configured, a skipped push leaves
-// the row pending and emits no event — matching the behavior from before the
-// cap was introduced so unrelated call sites aren't silently changed.
-func TestDHPush_AttemptsTracker_NotWired_PreservesLegacyBehavior(t *testing.T) {
-	purchase := inventory.Purchase{
-		ID:           "p-legacy",
-		CertNumber:   "66666666",
-		CardName:     "Espeon",
-		DHPushStatus: inventory.DHPushStatusPending,
-	}
-	lister := &mockDHPushPendingLister{
-		ListFn: func(_ context.Context, _ string, _ int) ([]inventory.Purchase, error) {
-			return []inventory.Purchase{purchase}, nil
-		},
-	}
-	certResolver := &mockDHPushCertResolver{
-		ResolveFn: func(_ context.Context, _ dh.CertResolveRequest) (*dh.CertResolution, error) {
-			return &dh.CertResolution{Status: dh.CertStatusMatched, DHCardID: 10}, nil
-		},
-	}
-	pusher := &mockDHPushInventoryPusher{
-		PushFn: func(_ context.Context, _ []dh.InventoryItem) (*dh.InventoryPushResponse, error) {
-			return nil, errors.New("push API error")
-		},
-	}
-	statusUpdater := &mockDHPushStatusUpdater{}
-	fieldsUpdater := &mocks.MockDHFieldsUpdater{}
-	cardIDSaver := &mockDHPushCardIDSaver{}
-	recorder := &mocks.MockEventRecorder{}
-
-	s := NewDHPushScheduler(
-		lister, statusUpdater, certResolver, pusher, fieldsUpdater, cardIDSaver,
-		mocks.NewMockLogger(),
-		DHPushConfig{Enabled: true, Interval: 1 * time.Hour},
-		WithDHPushEventRecorder(recorder),
-	)
-	s.push(context.Background())
-
-	assert.Empty(t, statusUpdater.Calls)
-	assert.Empty(t, recorder.Events)
-}
-
-func TestDHPush_InventoryPushError_LeavesAsPending(t *testing.T) {
-	purchase := inventory.Purchase{
-		ID:           "pur-4",
-		CertNumber:   "11111111",
-		CardName:     "Blastoise",
-		CLValueCents: 5000,
-	}
-	lister := &mockDHPushPendingLister{
-		ListFn: func(_ context.Context, _ string, _ int) ([]inventory.Purchase, error) {
-			return []inventory.Purchase{purchase}, nil
-		},
-	}
-	certResolver := &mockDHPushCertResolver{
-		ResolveFn: func(_ context.Context, _ dh.CertResolveRequest) (*dh.CertResolution, error) {
-			return &dh.CertResolution{Status: dh.CertStatusMatched, DHCardID: 10}, nil
-		},
-	}
-	pusher := &mockDHPushInventoryPusher{
-		PushFn: func(_ context.Context, _ []dh.InventoryItem) (*dh.InventoryPushResponse, error) {
-			return nil, fmt.Errorf("push API error")
-		},
-	}
-	statusUpdater := &mockDHPushStatusUpdater{}
-	fieldsUpdater := &mocks.MockDHFieldsUpdater{}
-	cardIDSaver := &mockDHPushCardIDSaver{}
-
-	s := newTestDHPushScheduler(lister, statusUpdater, certResolver, pusher, fieldsUpdater, cardIDSaver)
-	s.push(context.Background())
-
-	// Status should NOT be updated on push error — stays pending for retry
-	assert.Empty(t, statusUpdater.Calls)
-	assert.Empty(t, fieldsUpdater.Calls)
-}
-
-func TestDHPush_SuccessPath_UpdatesFields(t *testing.T) {
-	purchase := inventory.Purchase{
-		ID:                 "pur-5",
-		CertNumber:         "22222222",
-		CardName:           "Umbreon ex",
-		SetName:            "SV Promo",
-		CardNumber:         "176",
-		GradeValue:         10,
-		BuyCostCents:       6000,
-		ReviewedPriceCents: 8000, // reviewed price → DH listing_price_cents preset
-	}
-	lister := &mockDHPushPendingLister{
-		ListFn: func(_ context.Context, _ string, _ int) ([]inventory.Purchase, error) {
-			return []inventory.Purchase{purchase}, nil
-		},
-	}
-	certResolver := &mockDHPushCertResolver{
-		ResolveFn: func(_ context.Context, _ dh.CertResolveRequest) (*dh.CertResolution, error) {
-			return &dh.CertResolution{Status: dh.CertStatusMatched, DHCardID: 777}, nil
-		},
-	}
-	pusher := &mockDHPushInventoryPusher{
-		PushFn: func(_ context.Context, items []dh.InventoryItem) (*dh.InventoryPushResponse, error) {
-			require.Len(t, items, 1)
-			assert.Equal(t, 777, items[0].DHCardID)
-			assert.Equal(t, "22222222", items[0].CertNumber)
-			assert.Equal(t, float64(10), items[0].Grade)
-			assert.Equal(t, 6000, items[0].CostBasisCents)
-			require.NotNil(t, items[0].ListingPriceCents)
-			assert.Equal(t, 8000, *items[0].ListingPriceCents)
-			return &dh.InventoryPushResponse{
-				Results: []dh.InventoryResult{
-					{DHInventoryID: 555, Status: "in_stock", AssignedPriceCents: 9000},
-				},
-			}, nil
-		},
-	}
-	statusUpdater := &mockDHPushStatusUpdater{}
-	fieldsUpdater := &mocks.MockDHFieldsUpdater{}
-	cardIDSaver := &mockDHPushCardIDSaver{}
-
-	s := newTestDHPushScheduler(lister, statusUpdater, certResolver, pusher, fieldsUpdater, cardIDSaver)
-	s.push(context.Background())
-
-	require.Len(t, fieldsUpdater.Calls, 1)
-	assert.Equal(t, "pur-5", fieldsUpdater.IDs[0])
-	assert.Equal(t, 777, fieldsUpdater.Calls[0].CardID)
-	assert.Equal(t, 555, fieldsUpdater.Calls[0].InventoryID)
-	assert.Equal(t, 9000, fieldsUpdater.Calls[0].ListingPriceCents)
-	assert.Equal(t, dh.CertStatusMatched, fieldsUpdater.Calls[0].CertStatus)
-
-	require.Len(t, statusUpdater.Calls, 1)
-	assert.Equal(t, "pur-5", statusUpdater.Calls[0].ID)
-	assert.Equal(t, inventory.DHPushStatusMatched, statusUpdater.Calls[0].Status)
-}
-
-func TestDHPush_AlreadyMapped_SkipsCertResolve(t *testing.T) {
-	purchase := inventory.Purchase{
-		ID:           "pur-6",
-		CertNumber:   "33333333",
-		CardName:     "Charizard",
-		SetName:      "Base Set",
-		CardNumber:   "4",
-		CLValueCents: 5000,
-	}
-	lister := &mockDHPushPendingLister{
-		ListFn: func(_ context.Context, _ string, _ int) ([]inventory.Purchase, error) {
-			return []inventory.Purchase{purchase}, nil
-		},
-	}
-	resolverCalled := false
-	certResolver := &mockDHPushCertResolver{
-		ResolveFn: func(_ context.Context, _ dh.CertResolveRequest) (*dh.CertResolution, error) {
-			resolverCalled = true
-			return &dh.CertResolution{Status: dh.CertStatusMatched, DHCardID: 999}, nil
-		},
-	}
-	pusher := &mockDHPushInventoryPusher{}
-	statusUpdater := &mockDHPushStatusUpdater{}
-	fieldsUpdater := &mocks.MockDHFieldsUpdater{}
-	key := inventory.DHCardKey(purchase.CardName, purchase.SetName, purchase.CardNumber)
-	cardIDSaver := &mockDHPushCardIDSaver{
-		GetMappedFn: func(_ context.Context, _ string) (map[string]string, error) {
-			// Pre-populate cache so cert resolve is skipped
-			return map[string]string{key: "888"}, nil
-		},
-	}
-
-	s := newTestDHPushScheduler(lister, statusUpdater, certResolver, pusher, fieldsUpdater, cardIDSaver)
-	s.push(context.Background())
-
-	assert.False(t, resolverCalled, "cert resolver should not be called when DH card ID is already mapped")
-}
-
-func TestDHPush_InventoryPushEmptyResults_LeavesAsPending(t *testing.T) {
-	purchase := inventory.Purchase{
-		ID:           "pur-7",
-		CertNumber:   "44444444",
-		CardName:     "Venusaur",
-		CLValueCents: 5000,
-	}
-	lister := &mockDHPushPendingLister{
-		ListFn: func(_ context.Context, _ string, _ int) ([]inventory.Purchase, error) {
-			return []inventory.Purchase{purchase}, nil
-		},
-	}
-	certResolver := &mockDHPushCertResolver{
-		ResolveFn: func(_ context.Context, _ dh.CertResolveRequest) (*dh.CertResolution, error) {
-			return &dh.CertResolution{Status: dh.CertStatusMatched, DHCardID: 100}, nil
-		},
-	}
-	pusher := &mockDHPushInventoryPusher{
-		PushFn: func(_ context.Context, _ []dh.InventoryItem) (*dh.InventoryPushResponse, error) {
-			return &dh.InventoryPushResponse{Results: []dh.InventoryResult{}}, nil
-		},
-	}
-	statusUpdater := &mockDHPushStatusUpdater{}
-	fieldsUpdater := &mocks.MockDHFieldsUpdater{}
-	cardIDSaver := &mockDHPushCardIDSaver{}
-
-	s := newTestDHPushScheduler(lister, statusUpdater, certResolver, pusher, fieldsUpdater, cardIDSaver)
-	s.push(context.Background())
-
-	// Empty results = leave as pending for retry
-	assert.Empty(t, statusUpdater.Calls, "empty push results should leave purchase as pending")
-	assert.Empty(t, fieldsUpdater.Calls)
-}
-
-func TestDHPush_InventoryPushFailedStatus_LeavesAsPending(t *testing.T) {
-	purchase := inventory.Purchase{
-		ID:           "pur-8",
-		CertNumber:   "55555555",
-		CardName:     "Gyarados",
-		CLValueCents: 5000,
-	}
-	lister := &mockDHPushPendingLister{
-		ListFn: func(_ context.Context, _ string, _ int) ([]inventory.Purchase, error) {
-			return []inventory.Purchase{purchase}, nil
-		},
-	}
-	certResolver := &mockDHPushCertResolver{
-		ResolveFn: func(_ context.Context, _ dh.CertResolveRequest) (*dh.CertResolution, error) {
-			return &dh.CertResolution{Status: dh.CertStatusMatched, DHCardID: 200}, nil
-		},
-	}
-	pusher := &mockDHPushInventoryPusher{
-		PushFn: func(_ context.Context, _ []dh.InventoryItem) (*dh.InventoryPushResponse, error) {
-			return &dh.InventoryPushResponse{
-				Results: []dh.InventoryResult{
-					{DHInventoryID: 0, Status: "failed"},
-				},
-			}, nil
-		},
-	}
-	statusUpdater := &mockDHPushStatusUpdater{}
-	fieldsUpdater := &mocks.MockDHFieldsUpdater{}
-	cardIDSaver := &mockDHPushCardIDSaver{}
-
-	s := newTestDHPushScheduler(lister, statusUpdater, certResolver, pusher, fieldsUpdater, cardIDSaver)
-	s.push(context.Background())
-
-	assert.Empty(t, statusUpdater.Calls)
-	assert.Empty(t, fieldsUpdater.Calls)
-}
-
-func TestDHPush_MultiplePurchases_AllProcessed(t *testing.T) {
-	purchases := []inventory.Purchase{
-		{ID: "pur-a", CertNumber: "11111111", CardName: "Pikachu", CLValueCents: 5000},
-		{ID: "pur-b", CertNumber: "22222222", CardName: "Raichu", CLValueCents: 5000},
-		{ID: "pur-c", CertNumber: "", CardName: "Gengar", CLValueCents: 5000}, // no cert → unmatched
-	}
-	lister := &mockDHPushPendingLister{
-		ListFn: func(_ context.Context, _ string, _ int) ([]inventory.Purchase, error) {
-			return purchases, nil
-		},
-	}
-	certResolver := &mockDHPushCertResolver{
-		ResolveFn: func(_ context.Context, req dh.CertResolveRequest) (*dh.CertResolution, error) {
-			return &dh.CertResolution{Status: dh.CertStatusMatched, DHCardID: 1}, nil
-		},
-	}
-	pusher := &mockDHPushInventoryPusher{
-		PushFn: func(_ context.Context, _ []dh.InventoryItem) (*dh.InventoryPushResponse, error) {
-			return &dh.InventoryPushResponse{
-				Results: []dh.InventoryResult{
-					{DHInventoryID: 10, Status: "in_stock", AssignedPriceCents: 1000},
-				},
-			}, nil
-		},
-	}
-	statusUpdater := &mockDHPushStatusUpdater{}
-	fieldsUpdater := &mocks.MockDHFieldsUpdater{}
-	cardIDSaver := &mockDHPushCardIDSaver{}
-
-	s := newTestDHPushScheduler(lister, statusUpdater, certResolver, pusher, fieldsUpdater, cardIDSaver)
-	s.push(context.Background())
-
-	// pur-a and pur-b: matched → both get DHFields update + status=matched
-	// pur-c: no cert → status=unmatched
-	assert.Len(t, fieldsUpdater.Calls, 2, "two purchases should be matched")
-
-	var unmatchedCalls []string
-	var matchedCalls []string
-	for _, c := range statusUpdater.Calls {
-		switch c.Status {
-		case inventory.DHPushStatusUnmatched:
-			unmatchedCalls = append(unmatchedCalls, c.ID)
-		case inventory.DHPushStatusMatched:
-			matchedCalls = append(matchedCalls, c.ID)
+func (s *stubPSAImporter) PSAImport(_ context.Context, items []dh.PSAImportItem) (*dh.PSAImportResponse, error) {
+	s.requests = append(s.requests, items)
+	if len(s.errs) > 0 {
+		e := s.errs[0]
+		s.errs = s.errs[1:]
+		if e != nil {
+			return nil, e
 		}
 	}
-	assert.ElementsMatch(t, []string{"pur-c"}, unmatchedCalls)
-	assert.ElementsMatch(t, []string{"pur-a", "pur-b"}, matchedCalls)
+	if len(s.responses) == 0 {
+		return &dh.PSAImportResponse{}, nil
+	}
+	r := s.responses[0]
+	s.responses = s.responses[1:]
+	return r, nil
 }
 
-// ---------------------------------------------------------------------------
-// Hold setter mock
-// ---------------------------------------------------------------------------
-
-type mockDHPushHoldSetter struct {
-	Calls []struct{ ID, Reason string }
+// rotatingPSAImporter wraps stubPSAImporter and implements dh.PSAKeyRotator.
+// Separate type (rather than methods on stubPSAImporter) so tests that don't
+// want the rotator-path don't accidentally satisfy the type assertion.
+type rotatingPSAImporter struct {
+	*stubPSAImporter
+	keysLeft int // how many times RotatePSAKey() returns true before returning false
+	reset    int
 }
 
-func (m *mockDHPushHoldSetter) SetHeldWithReason(_ context.Context, purchaseID, reason string) error {
-	m.Calls = append(m.Calls, struct{ ID, Reason string }{purchaseID, reason})
+func (r *rotatingPSAImporter) RotatePSAKey() bool {
+	r.RotateCalls++
+	if r.keysLeft > 0 {
+		r.keysLeft--
+		return true
+	}
+	return false
+}
+
+func (r *rotatingPSAImporter) ResetPSAKeyRotation() { r.reset++ }
+
+type statusCall struct {
+	ID     string
+	Status string
+}
+
+type stubStatusUpdater struct {
+	Calls []statusCall
+}
+
+func (s *stubStatusUpdater) UpdatePurchaseDHPushStatus(_ context.Context, id, status string) error {
+	s.Calls = append(s.Calls, statusCall{id, status})
 	return nil
 }
 
-func TestDHPush_Hold_RecordsHeldEvent(t *testing.T) {
-	// Market value (3000) < 50% of buy cost (10000) triggers initial_value_mismatch hold.
-	purchase := inventory.Purchase{
-		ID:                 "pur-hold-1",
-		CertNumber:         "11112222",
-		CardName:           "Charizard",
-		SetName:            "Base Set",
-		CardNumber:         "4",
-		BuyCostCents:       10000,
-		ReviewedPriceCents: 3000, // listing_price_cents = 3000, floor = 50% of 10000 = 5000
-		DHCardID:           42,   // already mapped, skip cert resolve
-	}
-	lister := &mockDHPushPendingLister{
-		ListFn: func(_ context.Context, _ string, _ int) ([]inventory.Purchase, error) {
-			return []inventory.Purchase{purchase}, nil
-		},
-	}
-	statusUpdater := &mockDHPushStatusUpdater{}
-	certResolver := &mockDHPushCertResolver{}
-	pusher := &mockDHPushInventoryPusher{}
-	fieldsUpdater := &mocks.MockDHFieldsUpdater{}
-	cardIDSaver := &mockDHPushCardIDSaver{}
-	holdSetter := &mockDHPushHoldSetter{}
-	rec := &mocks.MockEventRecorder{}
-
-	s := NewDHPushScheduler(
-		lister, statusUpdater, certResolver, pusher, fieldsUpdater, cardIDSaver,
-		mocks.NewMockLogger(),
-		DHPushConfig{Enabled: true, Interval: 1 * time.Hour},
-		WithDHPushHoldSetter(holdSetter),
-		WithDHPushEventRecorder(rec),
-	)
-	s.push(context.Background())
-
-	// Hold setter should have been called.
-	require.Len(t, holdSetter.Calls, 1)
-	assert.Equal(t, "pur-hold-1", holdSetter.Calls[0].ID)
-	assert.Contains(t, holdSetter.Calls[0].Reason, "initial_value_mismatch")
-
-	// Event recorder should have captured TypeHeld.
-	require.Len(t, rec.Events, 1)
-	evt := rec.Events[0]
-	assert.Equal(t, dhevents.TypeHeld, evt.Type)
-	assert.Equal(t, "pur-hold-1", evt.PurchaseID)
-	assert.Equal(t, "11112222", evt.CertNumber)
-	assert.Equal(t, inventory.DHPushStatusHeld, evt.NewPushStatus)
-	assert.Equal(t, 42, evt.DHCardID)
-	assert.Contains(t, evt.Notes, "initial_value_mismatch")
-	assert.Equal(t, dhevents.SourceDHPush, evt.Source)
-
-	// No push should have occurred.
-	assert.Empty(t, fieldsUpdater.Calls)
+type stubCardIDSaver struct {
+	Calls []string
 }
 
-func TestDHPush_NilEventRecorderIsSafe(t *testing.T) {
-	// Same hold scenario but without event recorder — should not panic.
-	purchase := inventory.Purchase{
-		ID:                 "pur-hold-nil",
-		CertNumber:         "33334444",
-		CardName:           "Charizard",
-		SetName:            "Base Set",
-		BuyCostCents:       10000,
-		ReviewedPriceCents: 3000,
-		DHCardID:           42,
-	}
-	lister := &mockDHPushPendingLister{
-		ListFn: func(_ context.Context, _ string, _ int) ([]inventory.Purchase, error) {
-			return []inventory.Purchase{purchase}, nil
-		},
-	}
-	holdSetter := &mockDHPushHoldSetter{}
-
-	s := NewDHPushScheduler(
-		lister, &mockDHPushStatusUpdater{}, &mockDHPushCertResolver{},
-		&mockDHPushInventoryPusher{}, &mocks.MockDHFieldsUpdater{}, &mockDHPushCardIDSaver{},
-		mocks.NewMockLogger(),
-		DHPushConfig{Enabled: true, Interval: 1 * time.Hour},
-		WithDHPushHoldSetter(holdSetter),
-		// no WithDHPushEventRecorder
-	)
-	s.push(context.Background())
-
-	require.Len(t, holdSetter.Calls, 1, "hold should still be set even without event recorder")
+func (s *stubCardIDSaver) SaveExternalID(_ context.Context, _, _, _, provider, externalID string) error {
+	s.Calls = append(s.Calls, provider+":"+externalID)
+	return nil
 }
 
-// Compile-time interface checks
-var _ DHPushPendingLister = (*mockDHPushPendingLister)(nil)
-var _ DHPushStatusUpdater = (*mockDHPushStatusUpdater)(nil)
-var _ DHPushCertResolver = (*mockDHPushCertResolver)(nil)
-var _ DHPushInventoryPusher = (*mockDHPushInventoryPusher)(nil)
-var _ DHPushCardIDSaver = (*mockDHPushCardIDSaver)(nil)
-var _ DHFieldsUpdater = (*mocks.MockDHFieldsUpdater)(nil)
-var _ DHPushHoldSetter = (*mockDHPushHoldSetter)(nil)
+type stubEventRecorder struct {
+	Events []dhevents.Event
+}
+
+func (s *stubEventRecorder) Record(_ context.Context, e dhevents.Event) error {
+	s.Events = append(s.Events, e)
+	return nil
+}
+
+// --- helper -----------------------------------------------------------------
+
+func newTestDHPushScheduler(importer DHPushPSAImporter, fields *mocks.MockDHFieldsUpdater, status *stubStatusUpdater, mapper *stubCardIDSaver, events *stubEventRecorder) *DHPushScheduler {
+	var opts []DHPushOption
+	if events != nil {
+		opts = append(opts, WithDHPushEventRecorder(events))
+	}
+	return NewDHPushScheduler(
+		nil, status, importer, fields, mapper,
+		mocks.NewMockLogger(),
+		DHPushConfig{Enabled: false},
+		opts...,
+	)
+}
+
+// --- tests ------------------------------------------------------------------
+
+func TestProcessPurchase_AlreadyPushedFixesStatus(t *testing.T) {
+	status := &stubStatusUpdater{}
+	s := newTestDHPushScheduler(&stubPSAImporter{}, &mocks.MockDHFieldsUpdater{}, status, &stubCardIDSaver{}, nil)
+
+	p := inventory.Purchase{ID: "p1", CertNumber: "111", DHInventoryID: 42}
+	got := s.processPurchase(context.Background(), p, inventory.DefaultDHPushConfig())
+
+	if got != processMatched {
+		t.Fatalf("got=%v want=processMatched", got)
+	}
+	if len(status.Calls) != 1 || status.Calls[0].Status != inventory.DHPushStatusMatched {
+		t.Fatalf("expected one status update to matched, got %+v", status.Calls)
+	}
+}
+
+// failingStatusUpdater always returns an error — used to verify that setHeld
+// returns processSkipped (not processHeld) when the DB write fails.
+type failingStatusUpdater struct{ err error }
+
+func (f *failingStatusUpdater) UpdatePurchaseDHPushStatus(_ context.Context, _, _ string) error {
+	return f.err
+}
+
+func TestSetHeld_DBFailureReturnsSkipped(t *testing.T) {
+	// No holdSetter → setHeld falls back to statusUpdater, which here always fails.
+	events := &stubEventRecorder{}
+	s := NewDHPushScheduler(
+		nil,
+		&failingStatusUpdater{err: errors.New("db down")},
+		&stubPSAImporter{},
+		&mocks.MockDHFieldsUpdater{},
+		&stubCardIDSaver{},
+		mocks.NewMockLogger(),
+		DHPushConfig{Enabled: false},
+		WithDHPushEventRecorder(events),
+	)
+
+	got := s.setHeld(context.Background(), inventory.Purchase{ID: "p1", CertNumber: "111"}, "over-cap")
+
+	if got != processSkipped {
+		t.Fatalf("got=%v want=processSkipped — caller must know the hold did not land", got)
+	}
+	if len(events.Events) != 0 {
+		t.Fatalf("expected no held event when DB write fails, got %+v", events.Events)
+	}
+}
+
+func TestProcessPurchase_NoCertNumberMarksUnmatched(t *testing.T) {
+	status := &stubStatusUpdater{}
+	events := &stubEventRecorder{}
+	s := newTestDHPushScheduler(&stubPSAImporter{}, &mocks.MockDHFieldsUpdater{}, status, &stubCardIDSaver{}, events)
+
+	p := inventory.Purchase{ID: "p1", CertNumber: ""}
+	got := s.processPurchase(context.Background(), p, inventory.DefaultDHPushConfig())
+
+	if got != processUnmatched {
+		t.Fatalf("got=%v want=processUnmatched", got)
+	}
+	if len(status.Calls) != 1 || status.Calls[0].Status != inventory.DHPushStatusUnmatched {
+		t.Fatalf("expected one status update to unmatched, got %+v", status.Calls)
+	}
+	if len(events.Events) != 1 || events.Events[0].Type != dhevents.TypeUnmatched {
+		t.Fatalf("expected one unmatched event, got %+v", events.Events)
+	}
+}
+
+func TestPushViaPSAImport_SuccessPathsPersist(t *testing.T) {
+	successes := []string{
+		dh.PSAImportStatusMatched,
+		dh.PSAImportStatusUnmatchedCreated,
+		dh.PSAImportStatusOverrideCorrected,
+		dh.PSAImportStatusAlreadyListed,
+	}
+	for _, resolution := range successes {
+		t.Run(resolution, func(t *testing.T) {
+			importer := &stubPSAImporter{
+				responses: []*dh.PSAImportResponse{{
+					Success: true,
+					Results: []dh.PSAImportResult{{
+						CertNumber:    "111",
+						Resolution:    resolution,
+						DHCardID:      999,
+						DHInventoryID: 1234,
+						Status:        dh.InventoryStatusInStock,
+					}},
+				}},
+			}
+			fields := &mocks.MockDHFieldsUpdater{}
+			status := &stubStatusUpdater{}
+			mapper := &stubCardIDSaver{}
+			s := newTestDHPushScheduler(importer, fields, status, mapper, nil)
+
+			p := inventory.Purchase{ID: "p1", CertNumber: "111"}
+			got := s.pushViaPSAImport(context.Background(), p)
+
+			if got != processMatchedComplete {
+				t.Fatalf("got=%v want=processMatchedComplete", got)
+			}
+			if len(fields.Calls) != 1 || fields.Calls[0].InventoryID != 1234 {
+				t.Fatalf("expected fields persisted with inventory ID 1234, got %+v", fields.Calls)
+			}
+			if len(status.Calls) != 1 || status.Calls[0].Status != inventory.DHPushStatusMatched {
+				t.Fatalf("expected status=matched, got %+v", status.Calls)
+			}
+			if len(mapper.Calls) != 1 || mapper.Calls[0] != "doubleholo:999" {
+				t.Fatalf("expected card-ID mapping saved, got %+v", mapper.Calls)
+			}
+		})
+	}
+}
+
+func TestPushViaPSAImport_RateLimitedRotatesAndRetries(t *testing.T) {
+	importer := &rotatingPSAImporter{
+		stubPSAImporter: &stubPSAImporter{
+			responses: []*dh.PSAImportResponse{
+				{Success: true, Results: []dh.PSAImportResult{{Resolution: dh.PSAImportStatusPSAError, RateLimited: true, Error: "rate limited"}}},
+				{Success: true, Results: []dh.PSAImportResult{{Resolution: dh.PSAImportStatusMatched, DHCardID: 5, DHInventoryID: 55}}},
+			},
+		},
+		keysLeft: 3,
+	}
+	fields := &mocks.MockDHFieldsUpdater{}
+	status := &stubStatusUpdater{}
+	s := newTestDHPushScheduler(importer, fields, status, &stubCardIDSaver{}, nil)
+
+	got := s.pushViaPSAImport(context.Background(), inventory.Purchase{ID: "p1", CertNumber: "111"})
+
+	if got != processMatchedComplete {
+		t.Fatalf("got=%v want=processMatchedComplete", got)
+	}
+	if importer.RotateCalls != 1 {
+		t.Fatalf("expected one key rotation, got %d", importer.RotateCalls)
+	}
+	if len(importer.requests) != 2 {
+		t.Fatalf("expected 2 psa_import calls, got %d", len(importer.requests))
+	}
+}
+
+func TestPushViaPSAImport_RateLimitedExhaustedLeavesPending(t *testing.T) {
+	importer := &rotatingPSAImporter{
+		stubPSAImporter: &stubPSAImporter{
+			responses: []*dh.PSAImportResponse{
+				{Success: true, Results: []dh.PSAImportResult{{Resolution: dh.PSAImportStatusPSAError, RateLimited: true, Error: "rate limited"}}},
+			},
+		},
+		keysLeft: 0, // no keys to rotate to
+	}
+	fields := &mocks.MockDHFieldsUpdater{}
+	status := &stubStatusUpdater{}
+	s := newTestDHPushScheduler(importer, fields, status, &stubCardIDSaver{}, nil)
+
+	got := s.pushViaPSAImport(context.Background(), inventory.Purchase{ID: "p1", CertNumber: "111"})
+
+	if got != processSkipped {
+		t.Fatalf("got=%v want=processSkipped (should stay pending when keys exhausted)", got)
+	}
+	if len(status.Calls) != 0 {
+		t.Fatalf("expected no status update on rate-limit exhaustion, got %+v", status.Calls)
+	}
+	if len(fields.Calls) != 0 {
+		t.Fatalf("expected no fields update on failure, got %+v", fields.Calls)
+	}
+}
+
+func TestPushViaPSAImport_PSAErrorLeavesPending(t *testing.T) {
+	importer := &stubPSAImporter{
+		responses: []*dh.PSAImportResponse{{
+			Success: true,
+			Results: []dh.PSAImportResult{{Resolution: dh.PSAImportStatusPSAError, Error: "Certificate not found in PSA database"}},
+		}},
+	}
+	fields := &mocks.MockDHFieldsUpdater{}
+	status := &stubStatusUpdater{}
+	s := newTestDHPushScheduler(importer, fields, status, &stubCardIDSaver{}, nil)
+
+	got := s.pushViaPSAImport(context.Background(), inventory.Purchase{ID: "p1", CertNumber: "111"})
+
+	if got != processSkipped {
+		t.Fatalf("got=%v want=processSkipped (psa_error without rate-limit stays pending for later review)", got)
+	}
+	if len(status.Calls) != 0 {
+		t.Fatalf("expected no status update on psa_error, got %+v", status.Calls)
+	}
+}
+
+func TestPushViaPSAImport_PartnerCardErrorLeavesPending(t *testing.T) {
+	importer := &stubPSAImporter{
+		responses: []*dh.PSAImportResponse{{
+			Success: true,
+			Results: []dh.PSAImportResult{{Resolution: dh.PSAImportStatusPartnerCardError, Error: "Unknown language override 'klingon'"}},
+		}},
+	}
+	fields := &mocks.MockDHFieldsUpdater{}
+	status := &stubStatusUpdater{}
+	s := newTestDHPushScheduler(importer, fields, status, &stubCardIDSaver{}, nil)
+
+	got := s.pushViaPSAImport(context.Background(), inventory.Purchase{ID: "p1", CertNumber: "111"})
+
+	if got != processSkipped {
+		t.Fatalf("got=%v want=processSkipped", got)
+	}
+	if len(status.Calls) != 0 {
+		t.Fatalf("expected no status update on partner_card_error, got %+v", status.Calls)
+	}
+}
+
+func TestPushViaPSAImport_BatchLevelFailureLeavesPending(t *testing.T) {
+	importer := &stubPSAImporter{
+		responses: []*dh.PSAImportResponse{{Success: false, Error: "vendor profile missing"}},
+	}
+	fields := &mocks.MockDHFieldsUpdater{}
+	status := &stubStatusUpdater{}
+	s := newTestDHPushScheduler(importer, fields, status, &stubCardIDSaver{}, nil)
+
+	got := s.pushViaPSAImport(context.Background(), inventory.Purchase{ID: "p1", CertNumber: "111"})
+
+	if got != processSkipped {
+		t.Fatalf("got=%v want=processSkipped", got)
+	}
+}
+
+func TestPushViaPSAImport_SuccessMissingIDsSkips(t *testing.T) {
+	importer := &stubPSAImporter{
+		responses: []*dh.PSAImportResponse{{
+			Success: true,
+			Results: []dh.PSAImportResult{{Resolution: dh.PSAImportStatusMatched, DHCardID: 0, DHInventoryID: 0}},
+		}},
+	}
+	fields := &mocks.MockDHFieldsUpdater{}
+	status := &stubStatusUpdater{}
+	s := newTestDHPushScheduler(importer, fields, status, &stubCardIDSaver{}, nil)
+
+	got := s.pushViaPSAImport(context.Background(), inventory.Purchase{ID: "p1", CertNumber: "111"})
+
+	if got != processSkipped {
+		t.Fatalf("got=%v want=processSkipped", got)
+	}
+	if len(fields.Calls) != 0 {
+		t.Fatalf("expected no persistence when IDs are missing, got %+v", fields.Calls)
+	}
+}
