@@ -98,18 +98,6 @@ export interface SuggestionsResponse {
   dataSummary: InsightsDataSummary;
 }
 
-export interface DailyCapitalPoint {
-  date: string;
-  cumulativeSpendCents: number;
-  cumulativeRecoveryCents: number;
-  outstandingCents: number;
-}
-
-export interface CapitalTimeline {
-  dataPoints: DailyCapitalPoint[];
-  invoiceDates: string[];
-}
-
 export interface WeeklyPerformer {
   cardName: string;
   certNumber: string;

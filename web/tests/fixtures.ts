@@ -214,7 +214,6 @@ export async function setupPageWithMocks(
  */
 export const PORTFOLIO_MOCK: Record<string, unknown> = {
   '/api/portfolio/health': { campaigns: [], overallROI: 0, totalDeployedCents: 0, totalRecoveredCents: 0, totalAtRiskCents: 0 },
-  '/api/portfolio/capital-timeline': { dataPoints: [] },
   '/api/portfolio/insights': { dataSummary: { totalPurchases: 0 } },
   '/api/portfolio/channel-velocity': [],
   '/api/portfolio/suggestions': { suggestions: [] },

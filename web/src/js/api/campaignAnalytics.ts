@@ -7,7 +7,7 @@ import type {
   TuningResponse, CrackAnalysis, EVPortfolio, ActivationChecklist,
   MonteCarloComparison, CapitalSummary, Invoice, PortfolioHealth,
   ChannelVelocity, PortfolioInsights, SuggestionsResponse,
-  RevocationFlag, CapitalTimeline, WeeklyReviewSummary,
+  RevocationFlag, WeeklyReviewSummary,
 } from '../../types/campaigns';
 import { APIClient, isAPIError } from './client';
 
@@ -31,7 +31,6 @@ declare module './client' {
     getPortfolioChannelVelocity(): Promise<ChannelVelocity[]>;
     getPortfolioInsights(): Promise<PortfolioInsights>;
     getCampaignSuggestions(): Promise<SuggestionsResponse>;
-    getCapitalTimeline(): Promise<CapitalTimeline>;
     getWeeklyReview(): Promise<WeeklyReviewSummary>;
     listRevocationFlags(): Promise<RevocationFlag[]>;
 
@@ -107,10 +106,6 @@ proto.getPortfolioInsights = async function (this: APIClient): Promise<Portfolio
 
 proto.getCampaignSuggestions = async function (this: APIClient): Promise<SuggestionsResponse> {
   return this.get<SuggestionsResponse>('/portfolio/suggestions');
-};
-
-proto.getCapitalTimeline = async function (this: APIClient): Promise<CapitalTimeline> {
-  return this.get<CapitalTimeline>('/portfolio/capital-timeline');
 };
 
 proto.getWeeklyReview = async function (this: APIClient): Promise<WeeklyReviewSummary> {

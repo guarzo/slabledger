@@ -18,7 +18,7 @@ export { default as Breadcrumb } from './Breadcrumb';
 export { default as TabNavigation } from './TabNavigation';
 export type { Tab, TabNavigationProps } from './TabNavigation';
 export { default as CardShell } from './CardShell';
-export type { CardShellProps } from './CardShell';
+export type { CardShellProps, CardVariant, CardPadding, CardRadius } from './CardShell';
 export { default as EmptyState } from './EmptyState';
 
 // Feedback & Overlays

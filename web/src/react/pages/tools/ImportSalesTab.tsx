@@ -55,7 +55,6 @@ export default function ImportSalesTab() {
         queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.globalInventory }),
         queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.sellSheet }),
         queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.insights }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.capitalTimeline }),
         queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.weeklyReview }),
       ]);
 

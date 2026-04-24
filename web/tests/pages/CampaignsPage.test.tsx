@@ -60,7 +60,6 @@ vi.mock('../../src/js/api', () => ({
     })),
     listInvoices: vi.fn(() => Promise.resolve([])),
     getPortfolioChannelVelocity: vi.fn(() => Promise.resolve([])),
-    getCapitalTimeline: vi.fn(() => Promise.resolve({ dataPoints: [], invoiceDates: [] })),
     getWeeklyReview: vi.fn(() => Promise.resolve({
       weekStart: '',
       weekEnd: '',

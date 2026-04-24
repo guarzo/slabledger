@@ -1,6 +1,7 @@
 import { clsx } from 'clsx';
 import GradeBadge from '@/react/ui/GradeBadge';
 import { RecommendationBadge, type RecTier } from '@/react/ui/RecommendationBadge';
+import { CardShell } from '@/react/ui';
 import styles from './InventoryRow.module.css';
 
 type Direction = 'rising' | 'falling' | 'stable';
@@ -22,7 +23,7 @@ interface InventoryRowProps {
 }
 
 const fmt = (cents: number) =>
-  `$${((cents ?? 0) / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+  `$${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
 
 const DIR_CLASS: Record<Direction, string> = {
   rising: styles.dirRising, falling: styles.dirFalling, stable: styles.dirStable,
@@ -36,20 +37,11 @@ const AGE_CLASS: Record<string, string> = {
 const ageTone = (d: number) => d > 90 ? 'danger' : d > 60 ? 'warning' : d < 30 ? 'fresh' : 'neutral';
 
 export function InventoryRow(p: InventoryRowProps) {
-  const days = Math.max(0, p.daysHeld ?? 0);
-  const deltaPct = p.marketDeltaPct ?? 0;
-  const handleKeyDown = p.onClick
-    ? (e: React.KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); p.onClick!(); } }
-    : undefined;
-  return (
-    <div
-      className={clsx(styles.row, p.onClick && styles.interactive)}
-      onClick={p.onClick}
-      role={p.onClick ? 'button' : undefined}
-      tabIndex={p.onClick ? 0 : undefined}
-      onKeyDown={handleKeyDown}
-      aria-label={p.ariaLabel}
-    >
+  const days = Math.max(0, p.daysHeld);
+  const deltaPct = p.marketDeltaPct;
+
+  const body = (
+    <>
       <div className={styles.gradeCol}>
         <GradeBadge grader={p.grader} grade={p.grade} blackLabel={p.blackLabel} size="md" />
       </div>
@@ -83,6 +75,35 @@ export function InventoryRow(p: InventoryRowProps) {
       <div className={styles.recCol}>
         <RecommendationBadge tier={p.rec} />
       </div>
-    </div>
+    </>
+  );
+
+  if (p.onClick) {
+    return (
+      <CardShell
+        variant="data"
+        padding="sm"
+        radius="md"
+        interactive
+        as="button"
+        type="button"
+        onClick={p.onClick}
+        aria-label={p.ariaLabel}
+        className={styles.row}
+      >
+        {body}
+      </CardShell>
+    );
+  }
+  return (
+    <CardShell
+      variant="data"
+      padding="sm"
+      radius="md"
+      aria-label={p.ariaLabel}
+      className={styles.row}
+    >
+      {body}
+    </CardShell>
   );
 }

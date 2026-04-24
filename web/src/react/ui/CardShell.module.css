@@ -1,0 +1,103 @@
+.card {
+  position: relative;
+  color: var(--text);
+}
+
+/* radius */
+.r-sm { border-radius: var(--card-radius-sm); }
+.r-md { border-radius: var(--card-radius); }
+.r-lg { border-radius: var(--card-radius-lg); }
+
+/* padding */
+.p-sm   { padding: var(--card-padding-sm); }
+.p-md   { padding: var(--card-padding); }
+.p-lg   { padding: var(--card-padding-lg); }
+.p-none { padding: 0; }
+
+/* default — workhorse surface for dashboard widgets */
+.v-default {
+  background: var(--card-default-bg);
+  border: 1px solid var(--card-default-bd);
+  box-shadow: var(--card-default-shadow);
+}
+
+/* elevated — modals, dropdowns, popovers */
+.v-elevated {
+  background: var(--card-elevated-bg);
+  border: 1px solid var(--card-default-bd);
+  box-shadow: var(--card-elevated-shadow);
+}
+
+/* glass — header, login, floating panels */
+.v-glass {
+  background: var(--card-glass-bg);
+  backdrop-filter: var(--card-glass-blur);
+  -webkit-backdrop-filter: var(--card-glass-blur);
+  border: 1px solid var(--card-glass-bd);
+  box-shadow: var(--card-glass-shadow);
+}
+
+/* premium — MUST BUY detail, featured recommendation */
+.v-premium {
+  background: var(--card-premium-bg);
+  border: 1px solid var(--card-premium-bd);
+  box-shadow: var(--card-premium-glow);
+}
+
+/* ai — Insights, AI-generated surfaces. gradient border via padding mask.
+   `isolation: isolate` forces a new stacking context so the ::before
+   gradient paints at the base and children stack cleanly above it, even
+   when the mask-composite trick mis-renders (e.g. older WebKit). */
+.v-ai {
+  background: var(--card-ai-bg);
+  border: 1px solid transparent;
+  background-clip: padding-box;
+  box-shadow: var(--card-ai-shadow);
+  isolation: isolate;
+}
+.v-ai::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  padding: 1px;
+  background: var(--card-ai-border-grad);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+          mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+  pointer-events: none;
+}
+
+/* data — inventory rows, dense tabular surfaces */
+.v-data {
+  background: var(--card-data-bg);
+  border: 1px solid var(--card-data-bd);
+  box-shadow: var(--card-data-shadow);
+}
+
+/* interactive — adds hover lift + focus ring to any variant */
+.interactive {
+  cursor: pointer;
+  transition: transform 180ms cubic-bezier(0.4, 0, 0.2, 1),
+              box-shadow 180ms cubic-bezier(0.4, 0, 0.2, 1),
+              border-color 180ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.interactive:hover {
+  transform: translateY(-2px);
+  border-color: var(--brand-500);
+}
+.v-default.interactive:hover  { box-shadow: 0 12px 28px rgba(0, 0, 0, 0.32); }
+.v-elevated.interactive:hover { box-shadow: 0 16px 40px rgba(0, 0, 0, 0.40); }
+.v-glass.interactive:hover    { box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45); }
+.v-premium.interactive:hover  { box-shadow: 0 0 32px rgba(99, 102, 241, 0.50), 0 10px 24px rgba(0, 0, 0, 0.35); }
+.v-ai.interactive:hover       { box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.06); }
+.v-data.interactive:hover     { background: color-mix(in srgb, var(--card-data-bg) 90%, var(--brand-500) 10%); }
+
+/* Use outline (not box-shadow) so the focus ring composes with variant/hover shadows
+   instead of clobbering them. Modern browsers follow border-radius for outline. */
+.interactive:focus-visible {
+  outline: 3px solid var(--brand-500);
+  outline-offset: 2px;
+}

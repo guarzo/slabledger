@@ -25,7 +25,6 @@ export const queryKeys = {
     channelVelocity: ['portfolio', 'channelVelocity'] as const,
     insights: ['portfolio', 'insights'] as const,
     suggestions: ['portfolio', 'suggestions'] as const,
-    capitalTimeline: ['portfolio', 'capitalTimeline'] as const,
     weeklyReview: ['portfolio', 'weeklyReview'] as const,
     revocations: ['portfolio', 'revocations'] as const,
     sellSheet: ['portfolio', 'sellSheet'] as const,

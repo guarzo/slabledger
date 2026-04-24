@@ -151,7 +151,6 @@ export default function RecordSaleModal({ open, onClose, onSuccess, items }: Rec
       queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.sellSheet });
       queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.health });
       queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.weeklyReview });
-      queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.capitalTimeline });
       queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.channelVelocity });
       queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.insights });
       queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.suggestions });

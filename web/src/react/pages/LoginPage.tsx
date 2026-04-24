@@ -2,6 +2,7 @@ import React from 'react';
 import { Navigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import PokeballLoader from '../PokeballLoader';
+import { CardShell } from '../ui';
 import logoSrc from '../../assets/card-yeti-business-logo.png';
 import '../../css/LoginPage.css';
 
@@ -39,7 +40,7 @@ const LoginPage: React.FC = () => {
       </div>
 
       {/* Login Button */}
-      <div className="login-card">
+      <CardShell variant="glass" padding="lg" radius="lg" className="login-card">
         {error && (
           <div className="login-error" role="alert">
             {getErrorMessage(error)}
@@ -74,7 +75,7 @@ const LoginPage: React.FC = () => {
             <span className="feature-text">Price lookup</span>
           </div>
         </div>
-      </div>
+      </CardShell>
     </div>
   );
 };

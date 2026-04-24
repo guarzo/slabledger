@@ -387,10 +387,44 @@
   /* ===================================
      CARD/COMPONENT SIZING
      =================================== */
-  --card-padding: var(--space-5);
+  --card-padding: var(--space-5);      /* 20px */
+  --card-padding-sm: 14px;
+  --card-padding-lg: 28px;
   --card-gap: var(--space-3-5);
-  --card-radius: var(--radius-lg);
+  --card-radius: var(--radius-lg);     /* 18px */
+  --card-radius-sm: 12px;
+  --card-radius-lg: 24px;
   --card-shadow: var(--shadow-1);
+
+  /* ===================================
+     CARD SYSTEM — per-variant tokens
+     Six variants: default, elevated, glass, premium, ai, data
+     =================================== */
+  --card-default-bg: #111827;
+  --card-default-bd: #0b1220;
+  --card-default-shadow: 0 6px 16px rgba(0, 0, 0, 0.24);
+
+  --card-elevated-bg: #1f2937;
+  --card-elevated-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+
+  --card-glass-bg: rgba(22, 27, 34, 0.70);
+  --card-glass-bd: rgba(139, 152, 207, 0.10);
+  --card-glass-blur: blur(20px) saturate(180%);
+  --card-glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.37);
+
+  --card-premium-bg: linear-gradient(135deg, #111827 0%, #1f2937 100%);
+  --card-premium-bd: rgba(99, 102, 241, 0.30);
+  --card-premium-glow: 0 0 24px rgba(99, 102, 241, 0.35), 0 6px 16px rgba(0, 0, 0, 0.30);
+
+  /* AI / Insights — gradient border via mask trick */
+  --card-ai-bg: radial-gradient(120% 100% at 0% 0%, rgba(99, 102, 241, 0.10) 0%, transparent 60%), #111827;
+  --card-ai-border-grad: linear-gradient(135deg, #6366f1 0%, #22d3ee 50%, #a855f7 100%);
+  --card-ai-shadow: 0 8px 24px rgba(0, 0, 0, 0.30), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+
+  /* Data / Inventory — denser inset, no glow */
+  --card-data-bg: #0f1623;
+  --card-data-bd: rgba(255, 255, 255, 0.04);
+  --card-data-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 
   /* ===================================
      CHANNEL COLORS (Sales Channels)
