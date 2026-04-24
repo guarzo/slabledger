@@ -78,12 +78,16 @@
   animation: titleGlow 3s ease-in-out infinite alternate;
 }
 
+/* `filter` requires a filter-function (drop-shadow, blur, etc.), not a
+   bare box-shadow value. The glow tokens are shadow shorthands, so we
+   inline the same numeric values here as drop-shadow() so the animation
+   actually renders. */
 @keyframes titleGlow {
   from {
-    filter: var(--glow-brand-soft);
+    filter: drop-shadow(0 0 20px rgba(99, 102, 241, 0.3));
   }
   to {
-    filter: var(--glow-violet);
+    filter: drop-shadow(0 0 40px rgba(139, 92, 246, 0.5));
   }
 }
 

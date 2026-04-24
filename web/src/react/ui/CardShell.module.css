@@ -44,17 +44,22 @@
   box-shadow: var(--card-premium-glow);
 }
 
-/* ai — Insights, AI-generated surfaces. gradient border via padding mask */
+/* ai — Insights, AI-generated surfaces. gradient border via padding mask.
+   `isolation: isolate` forces a new stacking context so the ::before
+   gradient paints at the base and children stack cleanly above it, even
+   when the mask-composite trick mis-renders (e.g. older WebKit). */
 .v-ai {
   background: var(--card-ai-bg);
   border: 1px solid transparent;
   background-clip: padding-box;
   box-shadow: var(--card-ai-shadow);
+  isolation: isolate;
 }
 .v-ai::before {
   content: '';
   position: absolute;
   inset: 0;
+  z-index: -1;
   border-radius: inherit;
   padding: 1px;
   background: var(--card-ai-border-grad);

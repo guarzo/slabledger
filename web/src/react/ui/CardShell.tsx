@@ -1,31 +1,35 @@
 import { clsx } from 'clsx';
-import type { ElementType, HTMLAttributes, ReactNode } from 'react';
+import type { ComponentPropsWithoutRef, ElementType, ReactNode } from 'react';
 import styles from './CardShell.module.css';
 
 export type CardVariant = 'default' | 'elevated' | 'glass' | 'premium' | 'ai' | 'data';
 export type CardPadding = 'sm' | 'md' | 'lg' | 'none';
 export type CardRadius = 'sm' | 'md' | 'lg';
 
-export interface CardShellProps extends Omit<HTMLAttributes<HTMLElement>, 'className'> {
+type CardShellOwnProps<T extends ElementType> = {
   variant?: CardVariant;
   padding?: CardPadding;
   radius?: CardRadius;
-  as?: ElementType;
+  as?: T;
   interactive?: boolean;
   className?: string;
   children: ReactNode;
-}
+};
 
-export function CardShell({
+export type CardShellProps<T extends ElementType = 'div'> = CardShellOwnProps<T> &
+  Omit<ComponentPropsWithoutRef<T>, keyof CardShellOwnProps<T>>;
+
+export function CardShell<T extends ElementType = 'div'>({
   variant = 'default',
   padding = 'md',
   radius = 'md',
-  as: Tag = 'div',
+  as,
   interactive = false,
   className,
   children,
   ...rest
-}: CardShellProps) {
+}: CardShellProps<T>) {
+  const Tag = (as ?? 'div') as ElementType;
   return (
     <Tag
       className={clsx(
