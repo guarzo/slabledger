@@ -94,7 +94,7 @@ export default function LiquidationPage() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 pb-16">
-      <h1 className="text-[22px] font-bold text-[var(--text)] tracking-tight mb-6">Liquidation Pricing</h1>
+      <h1 className="text-[22px] font-bold text-[var(--text)] tracking-tight mb-6">Reprice</h1>
 
       {/* Discount controls */}
       <div className="mb-6 p-4 rounded-xl bg-[var(--surface-1)] border border-[var(--surface-2)]">
@@ -244,7 +244,7 @@ export default function LiquidationPage() {
       {showConfirm && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-20 p-4">
           <div className="bg-[var(--surface)] rounded-xl border border-[var(--border)] p-6 max-w-sm w-full">
-            <h2 className="text-lg font-bold text-[var(--text)] mb-2">Apply Liquidation Prices</h2>
+            <h2 className="text-lg font-bold text-[var(--text)] mb-2">Apply Repriced Values</h2>
             <p className="text-sm text-[var(--text-muted)] mb-6">
               This will update the reviewed price for {selected.size} card{selected.size !== 1 ? 's' : ''}. Continue?
             </p>
