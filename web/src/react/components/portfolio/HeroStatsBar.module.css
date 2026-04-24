@@ -53,3 +53,19 @@
 .alerts { display: flex; flex-direction: column; gap: 4px; align-self: center; }
 .alertLink { text-decoration: none; }
 .alertLink:hover { filter: brightness(1.15); }
+
+/* Delta chips */
+.delta {
+  display: inline-flex; align-items: center; gap: 3px;
+  font-size: 11px; font-weight: 700;
+  padding: 2px 7px; border-radius: 999px;
+  font-variant-numeric: tabular-nums;
+}
+.dSmall { font-size: 10px; padding: 1px 5px; }
+.dPos { background: rgba(16,185,129,0.14); color: var(--success); border: 1px solid rgba(16,185,129,0.25); }
+.dNeg { background: rgba(239,68,68,0.14);  color: var(--danger);  border: 1px solid rgba(239,68,68,0.25); }
+.dMeta { font-weight: 500; opacity: 0.8; }
+
+/* ROI magnitude tiers */
+.hero[data-mag="big"]  .roiValue { font-size: calc(var(--hero-roi-size) * 1.15); }
+.hero[data-mag="huge"] .roiValue { font-size: calc(var(--hero-roi-size) * 1.30); text-shadow: 0 0 24px currentColor; }
