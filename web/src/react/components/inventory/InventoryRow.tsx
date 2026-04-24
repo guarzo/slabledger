@@ -1,6 +1,7 @@
 import { clsx } from 'clsx';
 import GradeBadge from '@/react/ui/GradeBadge';
 import { RecommendationBadge, type RecTier } from '@/react/ui/RecommendationBadge';
+import { CardShell } from '@/react/ui';
 import styles from './InventoryRow.module.css';
 
 type Direction = 'rising' | 'falling' | 'stable';
@@ -38,17 +39,18 @@ const ageTone = (d: number) => d > 90 ? 'danger' : d > 60 ? 'warning' : d < 30 ?
 export function InventoryRow(p: InventoryRowProps) {
   const days = Math.max(0, p.daysHeld ?? 0);
   const deltaPct = p.marketDeltaPct ?? 0;
-  const handleKeyDown = p.onClick
-    ? (e: React.KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); p.onClick!(); } }
-    : undefined;
+  const isButton = !!p.onClick;
   return (
-    <div
-      className={clsx(styles.row, p.onClick && styles.interactive)}
+    <CardShell
+      variant="data"
+      padding="sm"
+      radius="md"
+      interactive={isButton}
+      as={isButton ? 'button' : 'div'}
       onClick={p.onClick}
-      role={p.onClick ? 'button' : undefined}
-      tabIndex={p.onClick ? 0 : undefined}
-      onKeyDown={handleKeyDown}
       aria-label={p.ariaLabel}
+      className={styles.row}
+      {...(isButton ? { type: 'button' as const } : {})}
     >
       <div className={styles.gradeCol}>
         <GradeBadge grader={p.grader} grade={p.grade} blackLabel={p.blackLabel} size="md" />
@@ -83,6 +85,6 @@ export function InventoryRow(p: InventoryRowProps) {
       <div className={styles.recCol}>
         <RecommendationBadge tier={p.rec} />
       </div>
-    </div>
+    </CardShell>
   );
 }

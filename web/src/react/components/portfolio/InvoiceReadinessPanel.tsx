@@ -1,5 +1,6 @@
 import type { CapitalSummary } from '../../../types/campaigns';
 import { formatCents } from '../../utils/formatters';
+import { CardShell } from '../../ui';
 
 interface InvoiceReadinessPanelProps {
   capital?: CapitalSummary;
@@ -16,12 +17,12 @@ export default function InvoiceReadinessPanel({ capital }: InvoiceReadinessPanel
 
   if ((capital.nextInvoiceAmountCents ?? 0) === 0) {
     return (
-      <div className="h-full p-4 bg-[var(--surface-1)] rounded-xl border border-[var(--surface-2)]">
+      <CardShell variant="default" padding="sm" radius="sm" className="h-full">
         <h3 className="text-sm font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-3">
           Invoice Readiness
         </h3>
         <div className="text-sm text-[var(--text-muted)]">No upcoming invoice.</div>
-      </div>
+      </CardShell>
     );
   }
 
@@ -48,7 +49,7 @@ export default function InvoiceReadinessPanel({ capital }: InvoiceReadinessPanel
     : 0;
 
   return (
-    <div className="h-full p-4 bg-[var(--surface-1)] rounded-xl border border-[var(--surface-2)]">
+    <CardShell variant="default" padding="sm" radius="sm" className="h-full">
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-semibold text-[var(--text-muted)] uppercase tracking-wider">
           Invoice Readiness
@@ -98,6 +99,6 @@ export default function InvoiceReadinessPanel({ capital }: InvoiceReadinessPanel
           </span>
         </div>
       </div>
-    </div>
+    </CardShell>
   );
 }

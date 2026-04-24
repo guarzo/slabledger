@@ -1,26 +1,14 @@
+/* Chrome (bg, border, radius, shadow, padding, hover) owned by CardShell variant="data" */
 .row {
   display: grid;
   grid-template-columns: 80px 1.8fr 120px 180px 120px 150px;
   align-items: center;
   gap: 16px;
-  padding: 14px 18px;
-  background: var(--surface-1);
-  border: 1px solid var(--surface-0);
-  border-radius: 14px;
-  box-shadow: var(--shadow-1);
-  text-align: left; width: 100%;
-  font-family: inherit; color: inherit;
-}
-.interactive {
-  cursor: pointer;
-  transition: transform 180ms cubic-bezier(.4,0,.2,1),
-    border-color 180ms cubic-bezier(.4,0,.2,1),
-    box-shadow 180ms cubic-bezier(.4,0,.2,1);
-}
-.interactive:hover {
-  transform: translateY(-1px);
-  border-color: var(--brand-500);
-  box-shadow: var(--shadow-2);
+  /* button-reset concerns for `as="button"` polymorphic usage */
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: inherit;
 }
 
 .gradeCol { display: flex; }

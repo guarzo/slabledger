@@ -109,18 +109,12 @@
   filter: drop-shadow(0 10px 30px rgba(0, 0, 0, 0.3));
 }
 
-/* Sign-in card */
+/* Sign-in card — layout only; chrome (bg/blur/border/radius/padding) owned by CardShell variant="glass" */
 .login-card {
   width: 100%;
   max-width: 380px;
   position: relative;
   z-index: 1;
-  background: rgba(22, 27, 34, 0.6);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(139, 152, 207, 0.12);
-  border-radius: var(--radius-xl);
-  padding: var(--space-8) var(--space-6);
 }
 
 .login-error {
