@@ -84,9 +84,86 @@ describe('CardShell', () => {
       expect((container.firstChild as HTMLElement).tagName).toBe('BUTTON');
     });
 
+    it('forwards the `type="button"` attribute when rendered as a button', () => {
+      const { container } = render(
+        <CardShell as="button" type="button" interactive>Click</CardShell>,
+      );
+      expect(container.firstChild).toHaveAttribute('type', 'button');
+    });
+
     it('renders as <section> when as="section"', () => {
       const { container } = render(<CardShell as="section">x</CardShell>);
       expect((container.firstChild as HTMLElement).tagName).toBe('SECTION');
+    });
+  });
+
+  describe('Keyboard a11y shim (interactive div fallback)', () => {
+    it('adds tabIndex=0 and role="button" on interactive div', () => {
+      const { container } = render(
+        <CardShell interactive onClick={() => {}}>x</CardShell>,
+      );
+      const card = container.firstChild as HTMLElement;
+      expect(card).toHaveAttribute('tabindex', '0');
+      expect(card).toHaveAttribute('role', 'button');
+    });
+
+    it('does NOT add the shim when `as="button"` is explicit', () => {
+      const { container } = render(
+        <CardShell as="button" type="button" interactive onClick={() => {}}>x</CardShell>,
+      );
+      const card = container.firstChild as HTMLElement;
+      expect(card).not.toHaveAttribute('role', 'button');
+      expect(card).not.toHaveAttribute('tabindex');
+    });
+
+    it('does NOT add the shim when interactive is false', () => {
+      const { container } = render(
+        <CardShell onClick={() => {}}>x</CardShell>,
+      );
+      const card = container.firstChild as HTMLElement;
+      expect(card).not.toHaveAttribute('role');
+      expect(card).not.toHaveAttribute('tabindex');
+    });
+
+    it('fires onClick on Enter key for an interactive div', () => {
+      const onClick = vi.fn();
+      const { container } = render(
+        <CardShell interactive onClick={onClick}>x</CardShell>,
+      );
+      fireEvent.keyDown(container.firstChild as HTMLElement, { key: 'Enter' });
+      expect(onClick).toHaveBeenCalledTimes(1);
+    });
+
+    it('fires onClick on Space key for an interactive div and preventDefaults', () => {
+      const onClick = vi.fn();
+      const { container } = render(
+        <CardShell interactive onClick={onClick}>x</CardShell>,
+      );
+      const card = container.firstChild as HTMLElement;
+      const event = new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true });
+      card.dispatchEvent(event);
+      expect(onClick).toHaveBeenCalledTimes(1);
+      expect(event.defaultPrevented).toBe(true);
+    });
+
+    it('respects caller-provided tabIndex/role', () => {
+      const { container } = render(
+        <CardShell interactive tabIndex={-1} role="link">x</CardShell>,
+      );
+      const card = container.firstChild as HTMLElement;
+      expect(card).toHaveAttribute('tabindex', '-1');
+      expect(card).toHaveAttribute('role', 'link');
+    });
+
+    it('invokes caller-provided onKeyDown before the shim', () => {
+      const onClick = vi.fn();
+      const onKeyDown = vi.fn();
+      const { container } = render(
+        <CardShell interactive onClick={onClick} onKeyDown={onKeyDown}>x</CardShell>,
+      );
+      fireEvent.keyDown(container.firstChild as HTMLElement, { key: 'Enter' });
+      expect(onKeyDown).toHaveBeenCalledTimes(1);
+      expect(onClick).toHaveBeenCalledTimes(1);
     });
   });
 

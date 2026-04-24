@@ -4,7 +4,14 @@
   grid-template-columns: 80px 1.8fr 120px 180px 120px 150px;
   align-items: center;
   gap: 16px;
-  /* button-reset concerns for `as="button"` polymorphic usage */
+  /* button-reset concerns for `as="button"` polymorphic usage.
+     `appearance: none` kills Safari's native button chrome so the variant's
+     bg/border shows through; width/text-align/font/color handle the rest.
+     Deliberately NOT setting background/border here — the variant owns those
+     and `.row` follows `.v-data` in cascade order, so any bg/border here
+     would clobber the variant. */
+  appearance: none;
+  -webkit-appearance: none;
   width: 100%;
   text-align: left;
   font: inherit;
