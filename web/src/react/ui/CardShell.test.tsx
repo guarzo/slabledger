@@ -167,11 +167,69 @@ describe('CardShell', () => {
     });
   });
 
+  describe('Clickable-contract dev warning', () => {
+    let warnSpy: ReturnType<typeof vi.spyOn>;
+    beforeEach(() => {
+      warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    });
+    afterEach(() => {
+      warnSpy.mockRestore();
+    });
+
+    it('warns when onClick is passed on a bare div with no a11y escape', () => {
+      render(<CardShell onClick={vi.fn()}>x</CardShell>);
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      expect(warnSpy.mock.calls[0][0]).toMatch(/CardShell: onClick/);
+    });
+
+    it('does NOT warn when as="button"', () => {
+      render(
+        <CardShell as="button" type="button" onClick={vi.fn()}>x</CardShell>,
+      );
+      expect(warnSpy).not.toHaveBeenCalled();
+    });
+
+    it('does NOT warn when as="a"', () => {
+      render(
+        <CardShell as="a" href="#" onClick={vi.fn()}>x</CardShell>,
+      );
+      expect(warnSpy).not.toHaveBeenCalled();
+    });
+
+    it('does NOT warn when interactive is set (shim takes over)', () => {
+      render(<CardShell interactive onClick={vi.fn()}>x</CardShell>);
+      expect(warnSpy).not.toHaveBeenCalled();
+    });
+
+    it('does NOT warn when caller supplies role + tabIndex manually', () => {
+      render(
+        <CardShell role="button" tabIndex={0} onClick={vi.fn()}>x</CardShell>,
+      );
+      expect(warnSpy).not.toHaveBeenCalled();
+    });
+
+    it('does NOT warn when there is no onClick', () => {
+      render(<CardShell>x</CardShell>);
+      expect(warnSpy).not.toHaveBeenCalled();
+    });
+
+    it('dedupes repeated renders of the same handler identity', () => {
+      const onClick = vi.fn();
+      const { rerender } = render(<CardShell onClick={onClick}>x</CardShell>);
+      rerender(<CardShell onClick={onClick}>y</CardShell>);
+      rerender(<CardShell onClick={onClick}>z</CardShell>);
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('HTML passthrough', () => {
     it('forwards onClick', () => {
       const onClick = vi.fn();
       render(
-        <CardShell onClick={onClick} data-testid="card">
+        // `interactive` silences the clickable-contract warning and is the
+        // intended pattern for a clickable CardShell div — we're just
+        // testing event forwarding here.
+        <CardShell interactive onClick={onClick} data-testid="card">
           x
         </CardShell>,
       );

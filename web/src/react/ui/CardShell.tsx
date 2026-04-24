@@ -25,6 +25,23 @@ type CardShellOwnProps<T extends ElementType> = {
 export type CardShellProps<T extends ElementType = 'div'> = CardShellOwnProps<T> &
   Omit<ComponentPropsWithoutRef<T>, keyof CardShellOwnProps<T>>;
 
+/**
+ * CardShell — typed card primitive with six variants.
+ *
+ * ## Clickable contract
+ *
+ * If you pass `onClick`, you MUST pick one of these to keep the card
+ * keyboard-operable (WCAG 2.1 AA requirement):
+ *
+ * - `as="button"` (or `as="a"` with `href`) — native element, native semantics.
+ * - `interactive` — CardShell adds `tabIndex`, `role="button"`, and
+ *   Enter/Space keyboard activation automatically for the div fallback.
+ * - Explicit `role` + `tabIndex` — caller takes full responsibility.
+ *
+ * A clickable div without any of these is a silent a11y footgun: mouse
+ * works, keyboard doesn't. In development, this component warns when that
+ * pattern is detected.
+ */
 export function CardShell<T extends ElementType = 'div'>({
   variant = 'default',
   padding = 'md',
@@ -36,6 +53,10 @@ export function CardShell<T extends ElementType = 'div'>({
   ...rest
 }: CardShellProps<T>) {
   const Tag = (as ?? 'div') as ElementType;
+
+  if (import.meta.env.DEV) {
+    warnOnBrokenClickableContract(Tag, interactive, rest as Record<string, unknown>);
+  }
 
   // Interactive divs aren't keyboard-operable by default. When a caller opts
   // into `interactive` without overriding `as`, shim in tabIndex, role, and
@@ -59,6 +80,34 @@ export function CardShell<T extends ElementType = 'div'>({
     >
       {children}
     </Tag>
+  );
+}
+
+const warnedContractViolations = new WeakSet<object>();
+
+function warnOnBrokenClickableContract(
+  Tag: ElementType,
+  interactive: boolean,
+  rest: Record<string, unknown>,
+): void {
+  const onClick = rest.onClick;
+  if (!onClick || typeof onClick !== 'function') return;
+
+  // Exempt when: caller picked a natively interactive element, opted in to
+  // the shim via `interactive`, or supplied role/tabIndex themselves.
+  const isNativeInteractive = Tag === 'button' || Tag === 'a';
+  const hasRoleOrTabIndex = rest.role !== undefined || rest.tabIndex !== undefined;
+  if (isNativeInteractive || interactive || hasRoleOrTabIndex) return;
+
+  // Once per handler identity to avoid log spam on re-renders.
+  if (warnedContractViolations.has(onClick)) return;
+  warnedContractViolations.add(onClick);
+
+  // eslint-disable-next-line no-console
+  console.warn(
+    'CardShell: onClick was passed on a non-interactive element. ' +
+      'Add `as="button"`, `interactive`, or explicit `role`/`tabIndex` — ' +
+      'otherwise keyboard users cannot activate the card.',
   );
 }
 
