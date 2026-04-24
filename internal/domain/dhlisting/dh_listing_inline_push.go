@@ -2,237 +2,160 @@ package dhlisting
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"strconv"
-	"strings"
 
 	"github.com/guarzo/slabledger/internal/domain/dhevents"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
-// inlineMatchAndPush resolves a single cert against DH and pushes inventory.
-// Returns the inventory ID on success, 0 on failure.
+// inlineMatchAndPush submits a single pending purchase to DH via
+// /api/v1/enterprise/inventory/psa_import — DH does the PSA lookup, catalog
+// match, and inventory creation atomically. Returns the DH inventory ID on
+// success, 0 on any failure (logged). The caller skips the list transition
+// when 0 is returned.
+//
+// Resolution handling mirrors the push scheduler:
+//
+//	matched / unmatched_created / override_corrected / already_listed
+//	  → persist IDs, flip dh_push_status to matched, return the inventory ID.
+//	psa_error (RateLimited)
+//	  → rotate PSA key and retry once. On exhaustion, return 0 — leave
+//	    dh_push_status pending so the next scheduler cycle retries.
+//	psa_error (other) / partner_card_error
+//	  → log the DH-supplied reason, leave dh_push_status pending, return 0.
+//	unknown resolution / empty results / missing IDs
+//	  → return 0.
 func (s *dhListingService) inlineMatchAndPush(ctx context.Context, p *inventory.Purchase) int {
 	if p.CertNumber == "" {
-		s.logger.Warn(ctx, "inline dh resolve: purchase has no cert number",
+		s.logger.Warn(ctx, "inline dh psa_import: purchase has no cert number",
 			observability.String("purchaseID", p.ID))
 		return 0
 	}
 
-	cardName, variant := CleanCardNameForDH(p.CardName)
-
-	resp, err := s.certResolver.ResolveCert(ctx, DHCertResolveRequest{
-		CertNumber: p.CertNumber,
-		CardName:   cardName,
-		SetName:    p.SetName,
-		CardNumber: p.CardNumber,
-		Year:       p.CardYear,
-		Variant:    variant,
-	})
-	if err != nil {
-		s.logger.Warn(ctx, "inline dh cert resolve failed",
-			observability.String("cert", p.CertNumber), observability.Err(err))
-		return 0
+	item := DHPSAImportItem{
+		CertNumber:     p.CertNumber,
+		CostBasisCents: p.BuyCostCents,
+		CardName:       p.CardName,
+		SetName:        p.SetName,
+		CardNumber:     p.CardNumber,
+		Year:           p.CardYear,
+		Language:       InferDHLanguage(p.SetName, p.CardName),
 	}
 
-	dhCardID, candidateGemRateID, ok := s.resolveInlineDHCardID(ctx, resp, p)
-	if !ok {
-		return 0
-	}
-
-	if s.cardIDSaver != nil {
-		externalID := strconv.Itoa(dhCardID)
-		if err := s.cardIDSaver.SaveExternalID(ctx, p.CardName, p.SetName, p.CardNumber, SourceDH, externalID); err != nil {
-			s.logger.Error(ctx, "inline dh resolve: failed to save card mapping — cert resolver will be called again next run",
-				observability.String("cert", p.CertNumber), observability.String("cardName", p.CardName), observability.Err(err))
+	// Cap total attempts (initial call + rotations) at 8 — matches the push
+	// scheduler's cap and is well above any realistic PSA_ACCESS_TOKEN count.
+	// The rotator itself returns false once keys are exhausted, so the loop
+	// usually exits earlier.
+	const psaImportMaxAttempts = 8
+	for range psaImportMaxAttempts {
+		results, err := s.psaImporter.PSAImport(ctx, []DHPSAImportItem{item})
+		if err != nil {
+			s.logger.Warn(ctx, "inline dh psa_import api error",
+				observability.String("cert", p.CertNumber), observability.Err(err))
+			return 0
 		}
-	}
-
-	gemRateID := resp.GemRateID
-	if gemRateID == "" {
-		gemRateID = candidateGemRateID
-	}
-	if s.gemRateIDUpdater != nil && gemRateID != "" && p.GemRateID == "" {
-		if err := s.gemRateIDUpdater.UpdatePurchaseGemRateID(ctx, p.ID, gemRateID); err != nil {
-			s.logger.Error(ctx, "inline dh resolve: failed to save gem_rate_id",
-				observability.String("cert", p.CertNumber), observability.String("gemRateID", gemRateID), observability.Err(err))
-		} else {
-			p.GemRateID = gemRateID
+		if len(results) == 0 {
+			s.logger.Warn(ctx, "inline dh psa_import returned no results",
+				observability.String("cert", p.CertNumber))
+			return 0
 		}
-	}
+		r := results[0]
 
-	// Reviewed price becomes the DH listing_price_cents preset. 0 means omit —
-	// DH uses catalog fallback. We don't gate the push on having a price:
-	// items land in_stock regardless, and the list transition (gated elsewhere)
-	// re-sends the price when the user clicks List on DH.
-	listingPrice := ResolveListingPriceCents(p)
-
-	item := DHInventoryPushItem{
-		DHCardID:          dhCardID,
-		CertNumber:        p.CertNumber,
-		Grade:             p.GradeValue,
-		CostBasisCents:    p.BuyCostCents,
-		ListingPriceCents: listingPrice,
-		CertImageURLFront: p.FrontImageURL,
-		CertImageURLBack:  p.BackImageURL,
-	}
-
-	pushResp, pushErr := s.pusher.PushInventory(ctx, []DHInventoryPushItem{item})
-	if pushErr != nil {
-		s.logger.Warn(ctx, "inline dh push failed",
-			observability.String("cert", p.CertNumber), observability.Err(pushErr))
-		return 0
-	}
-
-	for _, r := range pushResp.Results {
-		if r.Status == "failed" || r.DHInventoryID == 0 {
-			s.logger.Warn(ctx, "inline dh push: result failed or missing inventory ID",
-				observability.String("purchaseID", p.ID),
+		if r.RateLimited {
+			if rotator, ok := s.psaImporter.(PSAKeyRotator); ok && rotator.RotatePSAKey() {
+				s.logger.Info(ctx, "inline dh psa_import rate-limited, rotating PSA key",
+					observability.String("cert", p.CertNumber),
+					observability.String("psaError", r.Error))
+				continue
+			}
+			s.logger.Warn(ctx, "inline dh psa_import rate-limited, no more PSA keys",
 				observability.String("cert", p.CertNumber),
-				observability.String("status", r.Status),
+				observability.String("psaError", r.Error))
+			return 0
+		}
+
+		if !IsPSAImportSuccess(r.Resolution) {
+			s.logger.Warn(ctx, "inline dh psa_import did not create inventory",
+				observability.String("cert", p.CertNumber),
+				observability.String("resolution", r.Resolution),
+				observability.String("dhError", r.Error))
+			return 0
+		}
+
+		if r.DHCardID == 0 || r.DHInventoryID == 0 {
+			s.logger.Warn(ctx, "inline dh psa_import success missing IDs",
+				observability.String("cert", p.CertNumber),
+				observability.String("resolution", r.Resolution),
+				observability.Int("dhCardID", r.DHCardID),
 				observability.Int("dhInventoryID", r.DHInventoryID))
-			continue
+			return 0
 		}
 
-		if s.fieldsUpdater != nil {
-			if err := s.fieldsUpdater.UpdatePurchaseDHFields(ctx, p.ID, inventory.DHFieldsUpdate{
-				CardID:            dhCardID,
-				InventoryID:       r.DHInventoryID,
-				CertStatus:        DHCertStatusMatched,
-				ListingPriceCents: r.AssignedPriceCents,
-				ChannelsJSON:      r.ChannelsJSON,
-				DHStatus:          inventory.DHStatus(r.Status),
-			}); err != nil {
-				s.logger.Error(ctx, "inline dh push: failed to persist DH fields — returning 0 to prevent duplicate push",
-					observability.String("cert", p.CertNumber), observability.Err(err))
-				return 0
-			}
-		}
-
-		if s.pushStatusUpdater != nil {
-			if err := s.pushStatusUpdater.UpdatePurchaseDHPushStatus(ctx, p.ID, inventory.DHPushStatusMatched); err != nil {
-				s.logger.Warn(ctx, "inline dh push: failed to set matched status",
-					observability.String("cert", p.CertNumber), observability.Err(err))
-			}
-		}
-
-		s.recordEvent(ctx, dhevents.Event{
-			PurchaseID:    p.ID,
-			CertNumber:    p.CertNumber,
-			Type:          dhevents.TypePushed,
-			NewPushStatus: string(inventory.DHPushStatusMatched),
-			NewDHStatus:   r.Status,
-			DHInventoryID: r.DHInventoryID,
-			DHCardID:      dhCardID,
-			Source:        dhevents.SourceDHListing,
-		})
-
-		return r.DHInventoryID
+		return s.persistInlinePSAImport(ctx, p, r)
 	}
 
 	return 0
 }
 
-// resolveInlineDHCardID determines the DH card ID from a cert resolution response.
-// Returns the card ID and true on success, or 0 and false if unresolvable.
-func (s *dhListingService) resolveInlineDHCardID(ctx context.Context, resp *DHCertResolution, p *inventory.Purchase) (int, string, bool) {
-	if resp.Status == DHCertStatusMatched {
-		return resp.DHCardID, resp.GemRateID, true
+// persistInlinePSAImport saves the DH card/inventory IDs, flips dh_push_status
+// to matched, and emits a pushed event. Returns the DH inventory ID on full
+// success, 0 if DH-fields persistence failed (caller skips listing).
+func (s *dhListingService) persistInlinePSAImport(ctx context.Context, p *inventory.Purchase, r DHPSAImportResult) int {
+	if s.cardIDSaver != nil {
+		externalID := strconv.Itoa(r.DHCardID)
+		if err := s.cardIDSaver.SaveExternalID(ctx, p.CardName, p.SetName, p.CardNumber, SourceDH, externalID); err != nil {
+			s.logger.Error(ctx, "inline dh psa_import: failed to save card mapping",
+				observability.String("cert", p.CertNumber),
+				observability.String("cardName", p.CardName),
+				observability.Err(err))
+		}
 	}
 
-	if resp.Status == DHCertStatusAmbiguous && len(resp.Candidates) > 0 {
-		var saveFn func(string) error
-		if s.candidatesSaver != nil {
-			saveFn = func(j string) error { return s.candidatesSaver.UpdatePurchaseDHCandidates(ctx, p.ID, j) }
-		}
-		resolved, gemRateID, err := disambiguateCandidates(resp.Candidates, p.CardNumber, saveFn)
-		if err != nil {
-			s.logger.Warn(ctx, "inline dh resolve: failed to save candidates",
+	dhStatus := r.DHStatus
+	if dhStatus == "" {
+		dhStatus = string(inventory.DHStatusInStock)
+	}
+
+	if s.fieldsUpdater != nil {
+		if err := s.fieldsUpdater.UpdatePurchaseDHFields(ctx, p.ID, inventory.DHFieldsUpdate{
+			CardID:      r.DHCardID,
+			InventoryID: r.DHInventoryID,
+			CertStatus:  DHCertStatusMatched,
+			DHStatus:    inventory.DHStatus(dhStatus),
+		}); err != nil {
+			s.logger.Error(ctx, "inline dh psa_import: failed to persist DH fields — returning 0 to prevent duplicate push",
 				observability.String("cert", p.CertNumber), observability.Err(err))
-		}
-		if resolved > 0 {
-			return resolved, gemRateID, true
+			return 0
 		}
 	}
 
-	s.markInlineUnmatched(ctx, p, resp.Status)
-	return 0, "", false
-}
-
-// markInlineUnmatched sets the push status to unmatched and logs the outcome.
-func (s *dhListingService) markInlineUnmatched(ctx context.Context, p *inventory.Purchase, dhStatus string) {
 	if s.pushStatusUpdater != nil {
-		if err := s.pushStatusUpdater.UpdatePurchaseDHPushStatus(ctx, p.ID, inventory.DHPushStatusUnmatched); err != nil {
-			s.logger.Warn(ctx, "inline dh resolve: failed to set unmatched status",
+		if err := s.pushStatusUpdater.UpdatePurchaseDHPushStatus(ctx, p.ID, inventory.DHPushStatusMatched); err != nil {
+			// Fields + inventory ID are already persisted, so DH has the item
+			// and the push scheduler's early-exit guard (dh_push.go processPurchase)
+			// will flip status to matched on its next cycle. Until then, the UI
+			// shows stale push_status=pending. Error-level to flag the
+			// inconsistency; not fatal for this call.
+			s.logger.Error(ctx, "inline dh psa_import: failed to set matched status — scheduler will repair next cycle",
 				observability.String("cert", p.CertNumber), observability.Err(err))
 		}
 	}
+
+	p.DHCardID = r.DHCardID
+	p.DHInventoryID = r.DHInventoryID
+
 	s.recordEvent(ctx, dhevents.Event{
 		PurchaseID:    p.ID,
 		CertNumber:    p.CertNumber,
-		Type:          dhevents.TypeUnmatched,
-		NewPushStatus: string(inventory.DHPushStatusUnmatched),
-		Notes:         dhStatus,
+		Type:          dhevents.TypePushed,
+		NewPushStatus: string(inventory.DHPushStatusMatched),
+		NewDHStatus:   dhStatus,
+		DHInventoryID: r.DHInventoryID,
+		DHCardID:      r.DHCardID,
 		Source:        dhevents.SourceDHListing,
+		Notes:         r.Resolution,
 	})
-	s.logger.Warn(ctx, "inline dh cert resolve: unmatched",
-		observability.String("cert", p.CertNumber),
-		observability.String("dh_status", dhStatus))
-}
 
-// disambiguateCandidates tries card-number disambiguation on ambiguous candidates.
-// Returns the matched DHCardID (>0) on success. On failure, marshals
-// candidates to JSON and passes them to saveFn (if non-nil), then returns 0.
-func disambiguateCandidates(candidates []DHCertCandidate, cardNumber string, saveFn func(candidatesJSON string) error) (int, string, error) {
-	if id, gemRateID := disambiguateByCardNumber(candidates, cardNumber); id > 0 {
-		return id, gemRateID, nil
-	}
-	if saveFn != nil {
-		b, err := json.Marshal(candidates)
-		if err != nil {
-			return 0, "", fmt.Errorf("marshal candidates: %w", err)
-		}
-		if err := saveFn(string(b)); err != nil {
-			return 0, "", err
-		}
-	}
-	return 0, "", nil
-}
-
-// disambiguateByCardNumber selects a single candidate from an ambiguous cert
-// resolution using the card_number hint. Returns the matching candidate's
-// DHCardID if exactly one candidate matches, or 0 if disambiguation fails.
-func disambiguateByCardNumber(candidates []DHCertCandidate, cardNumber string) (int, string) {
-	normalized := normalizeCardNum(cardNumber)
-	if normalized == "" || len(candidates) == 0 {
-		return 0, ""
-	}
-
-	var matchID int
-	var matchGemRateID string
-	matches := 0
-	for _, c := range candidates {
-		if normalizeCardNum(c.CardNumber) == normalized {
-			matchID = c.DHCardID
-			matchGemRateID = c.GemRateID
-			matches++
-		}
-	}
-
-	if matches == 1 {
-		return matchID, matchGemRateID
-	}
-	return 0, ""
-}
-
-// normalizeCardNum strips leading zeros, preserving a single "0" for
-// all-zero inputs (e.g. "000" → "0").
-func normalizeCardNum(s string) string {
-	n := strings.TrimLeft(s, "0")
-	if n == "" && len(s) > 0 {
-		return "0"
-	}
-	return n
+	return r.DHInventoryID
 }

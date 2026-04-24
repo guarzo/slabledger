@@ -2,8 +2,6 @@ package scheduler
 
 import (
 	"context"
-	"fmt"
-	"strconv"
 	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
@@ -11,19 +9,9 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/dhlisting"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
-	"github.com/guarzo/slabledger/internal/domain/pricing"
 )
 
 const dhPushBatchLimit = 50
-
-// maxDHPushSkipAttempts caps the number of consecutive processSkipped outcomes
-// on a single pending purchase before the scheduler flips it to 'unmatched'.
-// At the default 5-minute interval that's ~50 minutes of retrying before
-// handing the row off to the operator-facing unmatched queue — long enough to
-// ride out transient errors, short enough to stop hammering DH with the same
-// unsolvable cert indefinitely. The counter is reset whenever the row
-// transitions back into 'pending' (re-enrollment) or 'matched' (success).
-const maxDHPushSkipAttempts = 10
 
 type processResult int
 
@@ -33,9 +21,8 @@ const (
 	processSkipped
 	processHeld
 	// processMatchedComplete indicates the purchase matched AND was fully
-	// persisted inline (used by the psa_import fallback, which creates
-	// inventory server-side). Callers should treat it like processMatched
-	// for counting but skip the normal PushInventory step.
+	// persisted inline (psa_import creates inventory server-side). Callers
+	// treat it like processMatched for counting.
 	processMatchedComplete
 )
 
@@ -49,25 +36,11 @@ type DHPushStatusUpdater interface {
 	UpdatePurchaseDHPushStatus(ctx context.Context, id string, status string) error
 }
 
-// DHPushCertResolver resolves PSA certs to DH card IDs.
-type DHPushCertResolver interface {
-	ResolveCert(ctx context.Context, req dh.CertResolveRequest) (*dh.CertResolution, error)
-}
-
-// DHPushInventoryPusher pushes inventory items to DH.
-type DHPushInventoryPusher interface {
-	PushInventory(ctx context.Context, items []dh.InventoryItem) (*dh.InventoryPushResponse, error)
-}
-
-// DHPushCardIDSaver persists DH card ID mappings.
+// DHPushCardIDSaver persists DH card ID mappings to the card_id_mappings
+// table so other consumers of external IDs (e.g. price sync) can reuse them
+// without re-hitting psa_import.
 type DHPushCardIDSaver interface {
 	SaveExternalID(ctx context.Context, cardName, setName, collectorNumber, provider, externalID string) error
-	GetMappedSet(ctx context.Context, provider string) (map[string]string, error)
-}
-
-// DHPushCandidatesSaver stores DH cert resolution candidates on a purchase.
-type DHPushCandidatesSaver interface {
-	UpdatePurchaseDHCandidates(ctx context.Context, id string, candidatesJSON string) error
 }
 
 // DHPushConfigLoader loads DH push safety config.
@@ -80,15 +53,6 @@ type DHPushHoldSetter interface {
 	SetHeldWithReason(ctx context.Context, purchaseID string, reason string) error
 }
 
-// DHPushAttemptsTracker atomically increments a purchase's consecutive
-// skip-attempt counter and returns the new value. Injected into the
-// DH push scheduler to cap indefinite retry loops when DH can't match a cert
-// (e.g. unknown promo variant). Optional: when nil the scheduler retries
-// forever, matching the pre-cap behavior.
-type DHPushAttemptsTracker interface {
-	IncrementDHPushAttempts(ctx context.Context, purchaseID string) (int, error)
-}
-
 // DHPushConfig controls the DH push scheduler.
 type DHPushConfig struct {
 	Enabled  bool
@@ -97,12 +61,6 @@ type DHPushConfig struct {
 
 // DHPushOption configures optional dependencies on a DHPushScheduler.
 type DHPushOption func(*DHPushScheduler)
-
-// WithDHPushCandidatesSaver injects a candidates saver for storing ambiguous
-// DH cert resolution candidates on purchases.
-func WithDHPushCandidatesSaver(saver DHPushCandidatesSaver) DHPushOption {
-	return func(s *DHPushScheduler) { s.candidatesSaver = saver }
-}
 
 // WithDHPushConfigLoader injects a config loader for DH push safety thresholds.
 func WithDHPushConfigLoader(loader DHPushConfigLoader) DHPushOption {
@@ -114,37 +72,26 @@ func WithDHPushHoldSetter(setter DHPushHoldSetter) DHPushOption {
 	return func(s *DHPushScheduler) { s.holdSetter = setter }
 }
 
-// WithDHPushEventRecorder enables DH state-event recording for hold
-// transitions driven by the push scheduler's safety gates.
+// WithDHPushEventRecorder enables DH state-event recording for hold and
+// unmatched transitions driven by the push scheduler's safety gates.
 func WithDHPushEventRecorder(r dhevents.Recorder) DHPushOption {
 	return func(s *DHPushScheduler) { s.eventRec = r }
 }
 
-// WithDHPushAttemptsTracker enables retry-attempt capping. When supplied, the
-// scheduler increments the counter on each processSkipped outcome and flips
-// the row to 'unmatched' once maxDHPushSkipAttempts is reached so DH isn't
-// re-resolved every cycle for a cert it genuinely can't match.
-func WithDHPushAttemptsTracker(t DHPushAttemptsTracker) DHPushOption {
-	return func(s *DHPushScheduler) { s.attemptsTracker = t }
-}
-
-// DHPushScheduler matches pending purchases against DH and pushes inventory.
+// DHPushScheduler routes pending purchases through DH's psa_import endpoint
+// (match + inventory-create in one call) on a fixed interval.
 type DHPushScheduler struct {
 	StopHandle
-	pendingLister   DHPushPendingLister
-	statusUpdater   DHPushStatusUpdater
-	certResolver    DHPushCertResolver
-	inventoryPush   DHPushInventoryPusher
-	fieldsUpdater   DHFieldsUpdater
-	cardIDSaver     DHPushCardIDSaver
-	candidatesSaver DHPushCandidatesSaver
-	configLoader    DHPushConfigLoader
-	holdSetter      DHPushHoldSetter
-	psaImporter     DHPushPSAImporter     // optional: off-catalog cert fallback
-	attemptsTracker DHPushAttemptsTracker // optional: caps consecutive skip retries
-	eventRec        dhevents.Recorder     // optional: records DH state-change events
-	logger          observability.Logger
-	config          DHPushConfig
+	pendingLister DHPushPendingLister
+	statusUpdater DHPushStatusUpdater
+	psaImporter   DHPushPSAImporter
+	fieldsUpdater DHFieldsUpdater
+	cardIDSaver   DHPushCardIDSaver
+	configLoader  DHPushConfigLoader
+	holdSetter    DHPushHoldSetter
+	eventRec      dhevents.Recorder
+	logger        observability.Logger
+	config        DHPushConfig
 }
 
 // recordEvent emits an event to the recorder if present. Failures are logged but do not abort.
@@ -160,12 +107,10 @@ func (s *DHPushScheduler) recordEvent(ctx context.Context, e dhevents.Event) {
 }
 
 // NewDHPushScheduler creates a new DH push scheduler.
-// Optional dependencies (e.g. candidates saver) are injected via DHPushOption.
 func NewDHPushScheduler(
 	pendingLister DHPushPendingLister,
 	statusUpdater DHPushStatusUpdater,
-	certResolver DHPushCertResolver,
-	inventoryPush DHPushInventoryPusher,
+	psaImporter DHPushPSAImporter,
 	fieldsUpdater DHFieldsUpdater,
 	cardIDSaver DHPushCardIDSaver,
 	logger observability.Logger,
@@ -179,8 +124,7 @@ func NewDHPushScheduler(
 		StopHandle:    NewStopHandle(),
 		pendingLister: pendingLister,
 		statusUpdater: statusUpdater,
-		certResolver:  certResolver,
-		inventoryPush: inventoryPush,
+		psaImporter:   psaImporter,
 		fieldsUpdater: fieldsUpdater,
 		cardIDSaver:   cardIDSaver,
 		logger:        logger.With(context.Background(), observability.String("component", "dh-push")),
@@ -208,11 +152,12 @@ func (s *DHPushScheduler) Start(ctx context.Context) {
 	}, s.push)
 }
 
-// push processes pending purchases, matching them against DH and pushing inventory.
+// push processes pending purchases, routing each through DH's psa_import.
 func (s *DHPushScheduler) push(ctx context.Context) {
 	// Reset PSA key rotation at the start of each cycle so previously
-	// rate-limited keys are retried (rate limits are typically hourly/daily).
-	if rotator, ok := s.certResolver.(dh.PSAKeyRotator); ok {
+	// rate-limited keys are retried — PSA's per-key rate limits are typically
+	// hourly/daily so they clear between cycles.
+	if rotator, ok := s.psaImporter.(dh.PSAKeyRotator); ok {
 		rotator.ResetPSAKeyRotation()
 	}
 
@@ -237,43 +182,19 @@ func (s *DHPushScheduler) push(ctx context.Context) {
 		}
 	}
 
-	// Load existing DH card ID mappings to avoid redundant Match calls.
-	mappedSet, err := s.cardIDSaver.GetMappedSet(ctx, pricing.SourceDH)
-	if err != nil {
-		s.logger.Warn(ctx, "dh push: failed to load mapped set, proceeding without cache",
-			observability.Err(err))
-		mappedSet = make(map[string]string)
-	}
-
 	matched := 0
 	unmatched := 0
 	skipped := 0
-	cappedUnmatched := 0
 	held := 0
 
 	for _, p := range pending {
-		switch s.processPurchase(ctx, p, mappedSet, pushCfg) {
+		switch s.processPurchase(ctx, p, pushCfg) {
 		case processMatched, processMatchedComplete:
 			matched++
 		case processUnmatched:
 			unmatched++
 		case processSkipped:
 			skipped++
-			// Bump the per-purchase attempts counter and move the row out of
-			// 'pending' once it's been skipped too many cycles in a row. Without
-			// this cap, a cert DH can't match (unknown promo variant, stale
-			// catalog, matched-with-zero response) gets re-resolved every 5
-			// minutes indefinitely. See maxDHPushSkipAttempts for the rationale.
-			// The counts on the summary log are kept unambiguous: skipped stays
-			// as the raw count of processSkipped returns (including capped ones);
-			// cappedUnmatched tracks how many of those were transitioned to
-			// unmatched this cycle; unmatched is also bumped so the pipeline-wide
-			// unmatched total lines up with what the DB will reflect after the
-			// cycle.
-			if s.giveUpOnSkipIfNeeded(ctx, p) {
-				unmatched++
-				cappedUnmatched++
-			}
 		case processHeld:
 			held++
 		}
@@ -283,13 +204,12 @@ func (s *DHPushScheduler) push(ctx context.Context) {
 		observability.Int("total", len(pending)),
 		observability.Int("matched", matched),
 		observability.Int("unmatched", unmatched),
-		observability.Int("cappedUnmatched", cappedUnmatched),
 		observability.Int("skipped", skipped),
 		observability.Int("held", held),
 	)
 }
 
-func (s *DHPushScheduler) processPurchase(ctx context.Context, p inventory.Purchase, mappedSet map[string]string, pushCfg inventory.DHPushConfig) processResult {
+func (s *DHPushScheduler) processPurchase(ctx context.Context, p inventory.Purchase, pushCfg inventory.DHPushConfig) processResult {
 	// Guard: if a previous cycle pushed successfully (inventory ID set) but the
 	// status update failed, just fix the status rather than re-pushing.
 	if p.DHInventoryID != 0 {
@@ -312,265 +232,60 @@ func (s *DHPushScheduler) processPurchase(ctx context.Context, p inventory.Purch
 		return processUnmatched
 	}
 
-	key := p.DHCardKey()
-
-	// Attempt to reuse an existing DH card ID — either from the purchase itself
-	// (re-push after CL value change) or from the mapping cache.
-	var dhCardID int
-	alreadyMapped := false
-
-	if p.DHCardID != 0 {
-		dhCardID = p.DHCardID
-		alreadyMapped = true
-	} else if dhCardIDStr := mappedSet[key]; dhCardIDStr != "" {
-		if parsed, err := strconv.Atoi(dhCardIDStr); err == nil && parsed > 0 {
-			dhCardID = parsed
-			alreadyMapped = true
-		}
-	}
-
-	// Resolve reviewed price as the listing_price_cents preset. 0 means
-	// "omit from the request" — DH then uses its catalog fallback for the
-	// preset, which is fine because the actual listing-time PATCH will
-	// re-send the reviewed price (and is gated on reviewed > 0). We no
-	// longer block the push itself on having a price: we want the item
-	// matched and in_stock on DH ASAP so the manual list flow has a ready
-	// dh_inventory_id to PATCH against.
-	listingPrice := dhlisting.ResolveListingPriceCents(&p)
-
-	if !alreadyMapped {
-		resolved, result := s.resolveCert(ctx, p, mappedSet)
-		switch result {
-		case processMatched:
-			dhCardID = resolved
-		case processMatchedComplete:
-			// psa_import fallback already created the inventory on DH's side
-			// and persisted fields+status inline. Return without running the
-			// normal PushInventory/fieldsUpdater path.
-			return processMatched
-		default:
-			return result
-		}
-	}
-
+	// Safety gates (capital-at-risk, unknown campaign, etc.) hold the row
+	// before we hit DH. Evaluated here so a push the operator wants to
+	// review never reaches psa_import.
 	if holdReason := dhlisting.EvaluateHoldTriggers(&p, pushCfg); holdReason != "" {
-		s.logger.Info(ctx, "dh push: holding re-push for review",
-			observability.String("purchaseID", p.ID),
-			observability.String("cert", p.CertNumber),
-			observability.String("reason", holdReason))
-		held := false
-		if s.holdSetter != nil {
-			if updateErr := s.holdSetter.SetHeldWithReason(ctx, p.ID, holdReason); updateErr != nil {
-				s.logger.Warn(ctx, "dh push: failed to set held status+reason",
-					observability.String("purchaseID", p.ID), observability.Err(updateErr))
-			} else {
-				held = true
-			}
+		return s.setHeld(ctx, p, holdReason)
+	}
+
+	return s.pushViaPSAImport(ctx, p)
+}
+
+// setHeld atomically flips a purchase to held status with a reason, records
+// the transition, and returns processHeld.
+func (s *DHPushScheduler) setHeld(ctx context.Context, p inventory.Purchase, reason string) processResult {
+	s.logger.Info(ctx, "dh push: holding re-push for review",
+		observability.String("purchaseID", p.ID),
+		observability.String("cert", p.CertNumber),
+		observability.String("reason", reason))
+
+	held := false
+	if s.holdSetter != nil {
+		if updateErr := s.holdSetter.SetHeldWithReason(ctx, p.ID, reason); updateErr != nil {
+			s.logger.Warn(ctx, "dh push: failed to set held status+reason",
+				observability.String("purchaseID", p.ID), observability.Err(updateErr))
 		} else {
-			if updateErr := s.statusUpdater.UpdatePurchaseDHPushStatus(ctx, p.ID, inventory.DHPushStatusHeld); updateErr != nil {
-				s.logger.Warn(ctx, "dh push: failed to set held status",
-					observability.String("purchaseID", p.ID), observability.Err(updateErr))
-			} else {
-				held = true
-			}
+			held = true
 		}
-		if held {
-			s.recordEvent(ctx, dhevents.Event{
-				PurchaseID:    p.ID,
-				CertNumber:    p.CertNumber,
-				Type:          dhevents.TypeHeld,
-				NewPushStatus: inventory.DHPushStatusHeld,
-				DHCardID:      dhCardID,
-				Notes:         holdReason,
-				Source:        dhevents.SourceDHPush,
-			})
-		}
-		return processHeld
+	} else if updateErr := s.statusUpdater.UpdatePurchaseDHPushStatus(ctx, p.ID, inventory.DHPushStatusHeld); updateErr != nil {
+		s.logger.Warn(ctx, "dh push: failed to set held status",
+			observability.String("purchaseID", p.ID), observability.Err(updateErr))
+	} else {
+		held = true
 	}
 
-	item := dh.NewInStockItem(dhCardID, p.CertNumber, p.GradeValue, p.BuyCostCents, listingPrice)
-	item.CertImageURLFront = p.FrontImageURL
-	item.CertImageURLBack = p.BackImageURL
-
-	pushResp, err := s.inventoryPush.PushInventory(ctx, []dh.InventoryItem{item})
-	if err != nil {
-		s.logger.Warn(ctx, "dh push: inventory push API error, leaving as pending",
-			observability.String("purchaseID", p.ID),
-			observability.String("cert", p.CertNumber),
-			observability.Err(err))
-		return processSkipped
+	if held {
+		s.recordEvent(ctx, dhevents.Event{
+			PurchaseID:    p.ID,
+			CertNumber:    p.CertNumber,
+			Type:          dhevents.TypeHeld,
+			NewPushStatus: inventory.DHPushStatusHeld,
+			Notes:         reason,
+			Source:        dhevents.SourceDHPush,
+		})
 	}
-
-	if len(pushResp.Results) == 0 {
-		s.logger.Warn(ctx, "dh push: inventory push returned empty results",
-			observability.String("purchaseID", p.ID),
-			observability.String("cert", p.CertNumber))
-		return processSkipped
-	}
-
-	result := pushResp.Results[0]
-
-	if result.Status == "failed" || result.DHInventoryID == 0 {
-		s.logger.Warn(ctx, "dh push: push result indicates failure, will retry",
-			observability.String("purchaseID", p.ID),
-			observability.String("cert", p.CertNumber),
-			observability.String("resultStatus", result.Status),
-			observability.Int("dhInventoryID", result.DHInventoryID))
-		return processSkipped
-	}
-
-	update := inventory.DHFieldsUpdate{
-		CardID:            dhCardID,
-		InventoryID:       result.DHInventoryID,
-		CertStatus:        dh.CertStatusMatched,
-		ListingPriceCents: result.AssignedPriceCents,
-		ChannelsJSON:      dh.MarshalChannels(result.Channels),
-		DHStatus:          inventory.DHStatus(result.Status),
-	}
-
-	if updateErr := s.fieldsUpdater.UpdatePurchaseDHFields(ctx, p.ID, update); updateErr != nil {
-		s.logger.Warn(ctx, "dh push: failed to update DH fields",
-			observability.String("purchaseID", p.ID),
-			observability.Err(updateErr))
-		return processSkipped
-	}
-
-	if updateErr := s.statusUpdater.UpdatePurchaseDHPushStatus(ctx, p.ID, inventory.DHPushStatusMatched); updateErr != nil {
-		// Fields are already saved with the inventory ID, so the purchase won't
-		// be re-pushed (NeedsDHPush checks DHInventoryID). Log at Error level
-		// since the status is inconsistent but won't cause duplicate pushes.
-		s.logger.Error(ctx, "dh push: DH fields saved but status update failed — purchase has inventory ID but status is not 'matched'",
-			observability.String("purchaseID", p.ID),
-			observability.Err(updateErr))
-	}
-
-	s.logger.Debug(ctx, "dh push: purchase matched and pushed",
-		observability.String("purchaseID", p.ID),
-		observability.String("cert", p.CertNumber),
-		observability.Int("dhCardID", dhCardID),
-		observability.Int("dhInventoryID", result.DHInventoryID),
-	)
-
-	return processMatched
+	return processHeld
 }
 
-// resolveCert resolves a purchase's cert number to a DH card ID, saving the
-// mapping on success. Returns the card ID and processMatched, or 0 and a
-// non-matched result indicating what happened.
-func (s *DHPushScheduler) resolveCert(ctx context.Context, p inventory.Purchase, mappedSet map[string]string) (int, processResult) {
-	cardName, variant := dhlisting.CleanCardNameForDH(p.CardName)
-	var rotateFn func() bool
-	if rotator, ok := s.certResolver.(dh.PSAKeyRotator); ok {
-		rotateFn = rotator.RotatePSAKey
-	}
-
-	resp, err := dh.ResolveCertWithRotation(ctx, dh.CertResolveRequest{
-		CertNumber: p.CertNumber,
-		GemRateID:  p.GemRateID,
-		CardName:   cardName,
-		SetName:    p.SetName,
-		CardNumber: p.CardNumber,
-		Year:       p.CardYear,
-		Variant:    variant,
-	}, s.certResolver.ResolveCert, rotateFn, s.logger, "dh push")
-	if err != nil {
-		s.logger.Warn(ctx, "dh push: cert resolve error, leaving as pending",
-			observability.String("purchaseID", p.ID),
-			observability.String("cert", p.CertNumber),
-			observability.Err(err))
-		return 0, processSkipped
-	}
-
-	switch {
-	case resp.Status == dh.CertStatusMatched:
-		dhCardID := resp.DHCardID
-		s.saveCardIDMapping(ctx, p, dhCardID, mappedSet)
-		return dhCardID, processMatched
-
-	case resp.Status == dh.CertStatusAmbiguous && len(resp.Candidates) > 0:
-		return s.resolveAmbiguousCert(ctx, p, resp.Candidates, mappedSet)
-
-	default:
-		s.logger.Debug(ctx, "dh push: cert not matched, attempting psa_import fallback",
-			observability.String("purchaseID", p.ID),
-			observability.String("cert", p.CertNumber),
-			observability.String("status", resp.Status))
-		return 0, s.tryPSAImportOrUnmatch(ctx, p, mappedSet, "cert resolve returned "+resp.Status)
-	}
-}
-
-// resolveAmbiguousCert attempts to disambiguate candidates by card number.
-func (s *DHPushScheduler) resolveAmbiguousCert(ctx context.Context, p inventory.Purchase, candidates []dh.CertResolutionCandidate, mappedSet map[string]string) (int, processResult) {
-	var saveFn func(string) error
-	if s.candidatesSaver != nil {
-		saveFn = func(j string) error { return s.candidatesSaver.UpdatePurchaseDHCandidates(ctx, p.ID, j) }
-	}
-
-	resolved, resolveErr := dh.ResolveAmbiguous(candidates, p.CardNumber, saveFn)
-	if resolveErr != nil {
-		s.logger.Warn(ctx, "dh push: failed to resolve/save candidates, will retry",
-			observability.String("purchaseID", p.ID), observability.Err(resolveErr))
-		return 0, processSkipped
-	}
-
-	if resolved == 0 {
-		s.logger.Debug(ctx, "dh push: cert ambiguous with no disambiguation, attempting psa_import fallback",
-			observability.String("purchaseID", p.ID),
-			observability.String("cert", p.CertNumber))
-		return 0, s.tryPSAImportOrUnmatch(ctx, p, mappedSet, "ambiguous with no disambiguation")
-	}
-
-	s.saveCardIDMapping(ctx, p, resolved, mappedSet)
-	return resolved, processMatched
-}
-
-// saveCardIDMapping persists a DH card ID mapping and updates the in-memory cache.
-func (s *DHPushScheduler) saveCardIDMapping(ctx context.Context, p inventory.Purchase, dhCardID int, mappedSet map[string]string) {
-	externalID := strconv.Itoa(dhCardID)
-	if saveErr := s.cardIDSaver.SaveExternalID(ctx, p.CardName, p.SetName, p.CardNumber, pricing.SourceDH, externalID); saveErr != nil {
-		s.logger.Warn(ctx, "dh push: failed to save external ID mapping",
-			observability.String("purchaseID", p.ID), observability.Err(saveErr))
-		return
-	}
-	mappedSet[p.DHCardKey()] = externalID
-}
-
-// giveUpOnSkipIfNeeded increments the skip-attempt counter for p and, once the
-// cap is reached, flips the row to 'unmatched' so it stops hammering DH.
-// Returns true when the row was transitioned to unmatched (so the caller can
-// reclassify it in the batch counters). The counter is read after the
-// increment so we cap on the Nth consecutive skip rather than N+1.
-func (s *DHPushScheduler) giveUpOnSkipIfNeeded(ctx context.Context, p inventory.Purchase) bool {
-	if s.attemptsTracker == nil {
-		return false
-	}
-	attempts, err := s.attemptsTracker.IncrementDHPushAttempts(ctx, p.ID)
-	if err != nil {
-		s.logger.Warn(ctx, "dh push: failed to increment attempts",
-			observability.String("purchaseID", p.ID),
-			observability.String("cert", p.CertNumber),
-			observability.Err(err))
-		return false
-	}
-	if attempts < maxDHPushSkipAttempts {
-		return false
-	}
-	s.logger.Info(ctx, "dh push: attempt cap reached, marking unmatched",
-		observability.String("purchaseID", p.ID),
-		observability.String("cert", p.CertNumber),
-		observability.Int("attempts", attempts))
-	return s.markUnmatched(ctx, p, fmt.Sprintf("skipped %d consecutive cycles without resolution", attempts))
-}
-
-// markUnmatched sets a purchase's DH push status to unmatched and emits an
-// observation event. The event is what makes the pending→unmatched transition
-// visible in dh_state_events — without it, the row silently churns between
-// pending (set by cl_refresh re-enrollment) and unmatched (set here) with no
-// audit trail, which made it hard to diagnose stuck cards.
+// markUnmatched sets a purchase's DH push status to unmatched and emits a
+// dh_state_events row documenting the transition. Used only for cases that
+// are genuinely unresolvable from the scheduler's perspective — today that
+// means "no cert number on the purchase." Transient DH/PSA errors stay
+// pending; there is no consecutive-skip cap.
 //
 // Returns true if the status update succeeded. Callers should treat a false
-// return as processSkipped, not processUnmatched — the transition didn't
-// happen, so counting it as "unmatched this cycle" misrepresents the batch.
+// return as processSkipped.
 func (s *DHPushScheduler) markUnmatched(ctx context.Context, p inventory.Purchase, reason string) bool {
 	prev := string(p.DHPushStatus)
 	if updateErr := s.statusUpdater.UpdatePurchaseDHPushStatus(ctx, p.ID, inventory.DHPushStatusUnmatched); updateErr != nil {
@@ -590,6 +305,5 @@ func (s *DHPushScheduler) markUnmatched(ctx context.Context, p inventory.Purchas
 	return true
 }
 
-// Compile-time checks that dh.Client satisfies the push client interfaces.
-var _ DHPushCertResolver = (*dh.Client)(nil)
-var _ DHPushInventoryPusher = (*dh.Client)(nil)
+// Compile-time check that dh.Client satisfies the primary intake interface.
+var _ DHPushPSAImporter = (*dh.Client)(nil)

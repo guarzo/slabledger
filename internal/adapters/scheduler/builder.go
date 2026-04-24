@@ -74,13 +74,11 @@ type BuildDeps struct {
 	CampaignService       domainCampaigns.Service
 
 	// DH push dependencies (optional)
-	DHPushPendingLister   DHPushPendingLister
-	DHPushStatusUpdater   DHPushStatusUpdater
-	DHPushCardIDSaver     DHPushCardIDSaver
-	DHPushCandidatesSaver DHPushCandidatesSaver
-	DHPushConfigLoader    DHPushConfigLoader
-	DHPushHoldSetter      DHPushHoldSetter
-	DHPushAttemptsTracker DHPushAttemptsTracker
+	DHPushPendingLister DHPushPendingLister
+	DHPushStatusUpdater DHPushStatusUpdater
+	DHPushCardIDSaver   DHPushCardIDSaver
+	DHPushConfigLoader  DHPushConfigLoader
+	DHPushHoldSetter    DHPushHoldSetter
 
 	// Scoring gap cleanup dependencies (optional)
 	GapStore scoring.GapStore
@@ -383,28 +381,19 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 			Interval: cfg.DH.PushInterval,
 		}
 		var pushOpts []DHPushOption
-		if deps.DHPushCandidatesSaver != nil {
-			pushOpts = append(pushOpts, WithDHPushCandidatesSaver(deps.DHPushCandidatesSaver))
-		}
 		if deps.DHPushConfigLoader != nil {
 			pushOpts = append(pushOpts, WithDHPushConfigLoader(deps.DHPushConfigLoader))
 		}
 		if deps.DHPushHoldSetter != nil {
 			pushOpts = append(pushOpts, WithDHPushHoldSetter(deps.DHPushHoldSetter))
 		}
-		if deps.DHPushAttemptsTracker != nil {
-			pushOpts = append(pushOpts, WithDHPushAttemptsTracker(deps.DHPushAttemptsTracker))
-		}
 		if deps.EventRecorder != nil {
 			pushOpts = append(pushOpts, WithDHPushEventRecorder(deps.EventRecorder))
 		}
-		// DH client also implements PSAImport for the off-catalog fallback.
-		pushOpts = append(pushOpts, WithDHPushPSAImporter(deps.DHClient))
 		schedulers = append(schedulers, NewDHPushScheduler(
 			deps.DHPushPendingLister,
 			deps.DHPushStatusUpdater,
-			deps.DHClient,
-			deps.DHClient,
+			deps.DHClient, // implements DHPushPSAImporter via PSAImport()
 			deps.DHFieldsUpdater,
 			deps.DHPushCardIDSaver,
 			deps.Logger,
