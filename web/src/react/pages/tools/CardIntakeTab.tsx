@@ -1,6 +1,8 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { api, isAPIError } from '../../../js/api';
 import type { ScannerMode } from './sale-types';
+import { SALE_COST_VISIBLE_KEY, SALE_DEFAULT_DISCOUNT_KEY } from './sale-types';
+import type { SaleRowData, SaleSummary } from './sale-types';
 import { reportError } from '../../../js/errors';
 import type { ScanCertResponse, ResolveCertResponse, CertImportResult, MarketSnapshot } from '../../../types/campaigns';
 import { formatCents } from '../../utils/formatters';
@@ -8,6 +10,10 @@ import PriceDecisionBar from '../../ui/PriceDecisionBar';
 import { buildPriceSources } from '../../ui/priceDecisionHelpers';
 import type { PreSelection } from '../../ui/priceDecisionHelpers';
 import FixDHMatchDialog from '../campaign-detail/inventory/FixDHMatchDialog';
+import { SaleToolbar } from './SaleToolbar';
+import { SaleRow } from './SaleRow';
+import { SaleSummaryBar } from './SaleSummaryBar';
+import { RecordSalesModal } from './RecordSalesModal';
 
 type CertStatus = 'scanning' | 'existing' | 'sold' | 'returned' | 'resolving' | 'resolved' | 'failed' | 'importing' | 'imported';
 type ListingStatus = 'setting-price' | 'listing' | 'listed' | 'list-error';
@@ -180,6 +186,18 @@ export default function CardIntakeTab() {
   // Tracks certs with an in-flight scanCert poll so we don't stack concurrent calls.
   const inflightPollsRef = useRef<Set<string>>(new Set());
 
+  // Sale mode state
+  const [saleRows, setSaleRows] = useState<SaleRowData[]>([]);
+  const [defaultDiscountPct, setDefaultDiscountPct] = useState<number>(() => {
+    const saved = localStorage.getItem(SALE_DEFAULT_DISCOUNT_KEY);
+    return saved ? Number(saved) : 80;
+  });
+  const [costVisible, setCostVisible] = useState<boolean>(() => {
+    return localStorage.getItem(SALE_COST_VISIBLE_KEY) === 'true';
+  });
+  const [showRecordModal, setShowRecordModal] = useState(false);
+  const [recordLoading, setRecordLoading] = useState(false);
+
   useEffect(() => { inputRef.current?.focus(); }, []);
 
   // Persist queue to localStorage whenever it changes.
@@ -198,15 +216,14 @@ export default function CardIntakeTab() {
 
   const handleModeSwitch = useCallback((newMode: ScannerMode) => {
     if (newMode === mode) return;
-    if (certs.size > 0) {
-      if (!window.confirm(`Switch to ${newMode} mode? This will clear ${certs.size} scanned card(s).`)) {
-        return;
-      }
-      setCerts(new Map());
-      saveQueue(new Map());
+    const count = newMode === 'sale' ? certs.size : saleRows.length;
+    if (count > 0) {
+      if (!window.confirm(`Switch to ${newMode} mode? This will clear ${count} scanned card(s).`)) return;
+      if (newMode === 'sale') { setCerts(new Map()); saveQueue(new Map()); }
+      else { setSaleRows([]); }
     }
     setMode(newMode);
-  }, [mode, certs.size]);
+  }, [mode, certs.size, saleRows.length]);
 
   const applyScanResult = useCallback((certNumber: string, result: ScanCertResponse) => {
     if (result.status === 'existing' || result.status === 'sold') {
@@ -351,9 +368,63 @@ export default function CardIntakeTab() {
     }
   }, [updateCert]);
 
+  const handleSaleScan = useCallback(async (certNumber: string) => {
+    if (saleRows.some(r => r.certNumber === certNumber)) return;
+
+    setSaleRows(prev => [...prev, {
+      certNumber, status: 'scanning', compValueCents: 0,
+      compManuallySet: false, salePriceCents: 0, salePriceManuallySet: false,
+    }]);
+
+    try {
+      const result = await api.scanCert(certNumber);
+
+      if (result.status === 'new') {
+        setSaleRows(prev => prev.map(r => r.certNumber === certNumber
+          ? { ...r, status: 'error' as const, error: 'Not in inventory' } : r));
+        return;
+      }
+      if (!result.receivedAt) {
+        setSaleRows(prev => prev.map(r => r.certNumber === certNumber
+          ? { ...r, status: 'error' as const, error: 'Not in-hand' } : r));
+        return;
+      }
+      if (result.status === 'sold') {
+        setSaleRows(prev => prev.map(r => r.certNumber === certNumber
+          ? { ...r, status: 'error' as const, error: 'Already sold' } : r));
+        return;
+      }
+
+      const clValue = result.market?.clValueCents ?? 0;
+      const compValue = clValue;
+      const salePrice = Math.round(compValue * defaultDiscountPct / 100);
+
+      setSaleRows(prev => prev.map(r => r.certNumber === certNumber ? {
+        ...r, status: 'resolved' as const,
+        cardName: result.cardName, purchaseId: result.purchaseId,
+        campaignId: result.campaignId, setName: result.setName,
+        cardNumber: result.cardNumber, cardYear: result.cardYear,
+        gradeValue: result.gradeValue, frontImageUrl: result.frontImageUrl,
+        buyCostCents: result.buyCostCents, clValueCents: clValue,
+        dhListingPriceCents: result.dhListingPriceCents,
+        lastSoldCents: result.market?.lastSoldCents,
+        compValueCents: compValue, compManuallySet: false,
+        salePriceCents: salePrice, salePriceManuallySet: false,
+      } : r));
+    } catch {
+      setSaleRows(prev => prev.map(r => r.certNumber === certNumber
+        ? { ...r, status: 'error' as const, error: 'Scan failed' } : r));
+    }
+  }, [saleRows, defaultDiscountPct]);
+
   const handleScan = useCallback(async (certNumber: string) => {
     certNumber = certNumber.trim();
     if (!certNumber) return;
+
+    if (mode === 'sale') {
+      handleSaleScan(certNumber);
+      return;
+    }
 
     if (certsRef.current.has(certNumber)) {
       setHighlightedCert(certNumber);
@@ -379,7 +450,7 @@ export default function CardIntakeTab() {
         error: err instanceof Error ? err.message : 'Scan failed',
       });
     }
-  }, [applyScanResult, updateCert, resolveInBackground]);
+  }, [mode, handleSaleScan, applyScanResult, updateCert, resolveInBackground]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
@@ -482,6 +553,77 @@ export default function CardIntakeTab() {
       inputRef.current?.focus();
     }
   };
+
+  const handleCompValueChange = useCallback((certNumber: string, cents: number) => {
+    setSaleRows(prev => prev.map(r => {
+      if (r.certNumber !== certNumber) return r;
+      const newSalePrice = r.salePriceManuallySet ? r.salePriceCents : Math.round(cents * defaultDiscountPct / 100);
+      return { ...r, compValueCents: cents, compManuallySet: true, salePriceCents: newSalePrice };
+    }));
+  }, [defaultDiscountPct]);
+
+  const handleSalePriceChange = useCallback((certNumber: string, cents: number) => {
+    setSaleRows(prev => prev.map(r =>
+      r.certNumber === certNumber ? { ...r, salePriceCents: cents, salePriceManuallySet: true } : r));
+  }, []);
+
+  const handleDismissSaleRow = useCallback((certNumber: string) => {
+    setSaleRows(prev => prev.filter(r => r.certNumber !== certNumber));
+  }, []);
+
+  const handleDiscountChange = useCallback((pct: number) => {
+    setDefaultDiscountPct(pct);
+    setSaleRows(prev => prev.map(r => {
+      if (r.salePriceManuallySet) return r;
+      return { ...r, salePriceCents: Math.round(r.compValueCents * pct / 100) };
+    }));
+  }, []);
+
+  const handleClearAllSaleRows = useCallback(() => {
+    if (saleRows.length > 0 && !window.confirm(`Clear ${saleRows.length} scanned card(s)?`)) return;
+    setSaleRows([]);
+  }, [saleRows.length]);
+
+  const saleSummary = useMemo<SaleSummary>(() => {
+    const resolved = saleRows.filter(r => r.status === 'resolved');
+    const compTotal = resolved.reduce((s, r) => s + r.compValueCents, 0);
+    const saleTotal = resolved.reduce((s, r) => s + r.salePriceCents, 0);
+    const costTotal = resolved.reduce((s, r) => s + (r.buyCostCents ?? 0), 0);
+    return {
+      cardCount: resolved.length,
+      compTotalCents: compTotal,
+      saleTotalCents: saleTotal,
+      costTotalCents: costTotal,
+      profitCents: saleTotal - costTotal,
+      avgDiscountPct: compTotal > 0 ? Math.round(saleTotal / compTotal * 100) : 0,
+    };
+  }, [saleRows]);
+
+  const handleRecordSales = useCallback(async (saleDate: string, channel: string) => {
+    const resolved = saleRows.filter(r => r.status === 'resolved' && r.purchaseId && r.campaignId);
+    if (resolved.length === 0) return;
+
+    setRecordLoading(true);
+    try {
+      const byCampaign = new Map<string, { purchaseId: string; salePriceCents: number }[]>();
+      for (const r of resolved) {
+        const items = byCampaign.get(r.campaignId!) ?? [];
+        items.push({ purchaseId: r.purchaseId!, salePriceCents: r.salePriceCents });
+        byCampaign.set(r.campaignId!, items);
+      }
+
+      for (const [campaignId, items] of byCampaign) {
+        await api.createBulkSales(campaignId, channel, saleDate, items);
+      }
+
+      setSaleRows([]);
+      setShowRecordModal(false);
+    } catch (err) {
+      console.error('Failed to record sales:', err);
+    } finally {
+      setRecordLoading(false);
+    }
+  }, [saleRows]);
 
   const rows = useMemo(() => Array.from(certs.values()), [certs]);
 
@@ -623,7 +765,62 @@ export default function CardIntakeTab() {
       )}
         </>
       ) : (
-        <div className="mt-4 text-sm text-zinc-500">Sale mode — UI coming soon</div>
+        <div className="mt-4 space-y-3">
+          <SaleToolbar
+            discountPct={defaultDiscountPct}
+            onDiscountChange={handleDiscountChange}
+            costVisible={costVisible}
+            onCostVisibleChange={setCostVisible}
+          />
+
+          {saleRows.length > 0 && (
+            <div className="rounded-md border border-zinc-800 overflow-hidden">
+              <div className="grid items-center gap-1 px-3 py-1.5 text-[10px] uppercase tracking-wider text-zinc-600"
+                style={{ gridTemplateColumns: costVisible
+                  ? '24px 1fr 64px 64px 64px 64px 80px 80px 36px'
+                  : '24px 1fr 64px 64px 64px 80px 80px 36px'
+                }}>
+                <span />
+                <span>Card</span>
+                {costVisible && <span className="text-right">Cost</span>}
+                <span className="text-right">CL</span>
+                <span className="text-right">DH List</span>
+                <span className="text-right">Last Sold</span>
+                <span className="text-right">Comp Value</span>
+                <span className="text-right">Sale Price</span>
+                <span />
+              </div>
+              {saleRows.map(row => (
+                <SaleRow
+                  key={row.certNumber}
+                  row={row}
+                  discountPct={defaultDiscountPct}
+                  costVisible={costVisible}
+                  onCompValueChange={handleCompValueChange}
+                  onSalePriceChange={handleSalePriceChange}
+                  onDismiss={handleDismissSaleRow}
+                />
+              ))}
+            </div>
+          )}
+
+          <SaleSummaryBar
+            summary={saleSummary}
+            costVisible={costVisible}
+            onClearAll={handleClearAllSaleRows}
+            onRecordSales={() => setShowRecordModal(true)}
+          />
+
+          {showRecordModal && (
+            <RecordSalesModal
+              rows={saleRows}
+              summary={saleSummary}
+              onConfirm={handleRecordSales}
+              onCancel={() => setShowRecordModal(false)}
+              loading={recordLoading}
+            />
+          )}
+        </div>
       )}
     </div>
   );
