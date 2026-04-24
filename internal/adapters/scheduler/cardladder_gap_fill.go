@@ -2,11 +2,11 @@ package scheduler
 
 import (
 	"context"
-
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
 	"github.com/guarzo/slabledger/internal/adapters/storage/postgres"
 	"github.com/guarzo/slabledger/internal/domain/mathutil"
 	"github.com/guarzo/slabledger/internal/domain/observability"
+	"github.com/guarzo/slabledger/internal/platform/cardutil"
 )
 
 // refreshSalesCompsDecoupled fetches recent sales comps for unsold purchases
@@ -34,7 +34,11 @@ func (s *CardLadderRefreshScheduler) refreshSalesCompsDecoupled(ctx context.Cont
 		default:
 		}
 
-		resp, err := client.FetchSalesComps(ctx, card.GemRateID, card.Condition, "psa", 0, 100)
+		apiCondition := cardutil.ConditionToAPIFormat(card.Condition)
+		if apiCondition == "" {
+			continue
+		}
+		resp, err := client.FetchSalesComps(ctx, card.GemRateID, apiCondition, "psa", 0, 100)
 		if err != nil {
 			s.logger.Warn(ctx, "CL sales: fetch failed",
 				observability.String("gemRateId", card.GemRateID),

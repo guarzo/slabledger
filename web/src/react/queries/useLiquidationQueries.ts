@@ -9,11 +9,11 @@ export function useLiquidationPreview() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
-  const fetchPreview = useCallback(async (baseDiscountPct: number, noCompDiscountPct: number) => {
+  const fetchPreview = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const result = await api.getLiquidationPreview(baseDiscountPct, noCompDiscountPct);
+      const result = await api.getLiquidationPreview();
       setData(result);
     } catch (err) {
       setData(null);

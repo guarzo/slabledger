@@ -84,5 +84,10 @@ func (s *LiquidationStore) GetSaleCompsForCard(ctx context.Context, gemRateID, c
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("liquidation store: rows error: %w", err)
 	}
+
+	// Fall back to legacy empty-condition rows if no grade-specific comps found.
+	if len(result) == 0 && condition != "" {
+		return s.GetSaleCompsForCard(ctx, gemRateID, "")
+	}
 	return result, nil
 }

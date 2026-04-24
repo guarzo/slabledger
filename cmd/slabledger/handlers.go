@@ -202,7 +202,7 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 	var liquidationHandler *handlers.LiquidationHandler
 	if in.PurchaseStore != nil && in.CampaignsService != nil {
 		liqStore := postgres.NewLiquidationStore(in.DB.DB)
-		liqSvc := liquidation.NewService(liqStore, liqStore, in.CampaignsService)
+		liqSvc := liquidation.NewService(liqStore, liqStore, in.CampaignsService, logger)
 		liquidationHandler = handlers.NewLiquidationHandler(liqSvc, logger)
 	}
 

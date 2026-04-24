@@ -28,22 +28,22 @@ func NewCompRefreshStore(db *sql.DB) *CompRefreshStore {
 // most recent comp is older than cutoffDays.
 func (s *CompRefreshStore) ListUnsoldCardsNeedingComps(ctx context.Context, cutoffDays int) ([]UnsoldCardForComps, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT DISTINCT ON (cp.gem_rate_id, 'PSA ' || cp.grade_value::text)
+		SELECT DISTINCT ON (cp.gem_rate_id, 'g' || REPLACE(cp.grade_value::text, '.', '_'))
 			cp.id AS purchase_id,
 			cp.gem_rate_id,
-			'PSA ' || cp.grade_value::text AS condition
+			'g' || REPLACE(cp.grade_value::text, '.', '_') AS condition
 		FROM campaign_purchases cp
 		LEFT JOIN LATERAL (
 			SELECT MAX(sale_date) AS latest
 			FROM cl_sales_comps sc
 			WHERE sc.gem_rate_id = cp.gem_rate_id
-			  AND sc.condition = 'PSA ' || cp.grade_value::text
+			  AND sc.condition = 'g' || REPLACE(cp.grade_value::text, '.', '_')
 		) lc ON true
 		WHERE cp.gem_rate_id != ''
 		  AND cp.grade_value > 0
 		  AND cp.sold_date = ''
 		  AND (lc.latest IS NULL OR lc.latest < to_char(NOW() - make_interval(days => $1), 'YYYY-MM-DD'))
-		ORDER BY cp.gem_rate_id, 'PSA ' || cp.grade_value::text, cp.id DESC
+		ORDER BY cp.gem_rate_id, 'g' || REPLACE(cp.grade_value::text, '.', '_'), cp.id DESC
 	`, cutoffDays)
 	if err != nil {
 		return nil, fmt.Errorf("list unsold cards needing comps: %w", err)
@@ -77,7 +77,7 @@ func (s *CompRefreshStore) BackfillLastSoldFromComps(ctx context.Context) (int, 
 			ORDER BY sc.gem_rate_id, sc.condition, sc.sale_date DESC
 		) sub
 		WHERE cp.gem_rate_id = sub.gem_rate_id
-		  AND 'PSA ' || cp.grade_value::text = sub.condition
+		  AND 'g' || REPLACE(cp.grade_value::text, '.', '_') = sub.condition
 		  AND cp.sold_date = ''
 		  AND (cp.last_sold_date = '' OR cp.last_sold_date < sub.sale_date)
 	`)
