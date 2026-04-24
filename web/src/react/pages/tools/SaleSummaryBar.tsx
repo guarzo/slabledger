@@ -18,7 +18,7 @@ export function SaleSummaryBar({ summary, costVisible, onClearAll, onRecordSales
         {costVisible && <div><span className="text-zinc-500">Cost:</span> <span className="text-zinc-300">{formatCents(summary.costTotalCents)}</span></div>}
         <div><span className="text-zinc-500">Comp:</span> <span className="text-emerald-500">{formatCents(summary.compTotalCents)}</span></div>
         <div><span className="text-zinc-500">Sale:</span> <span className="font-semibold text-white">{formatCents(summary.saleTotalCents)}</span></div>
-        {costVisible && <div><span className="text-zinc-500">Profit:</span> <span className="font-semibold text-emerald-500">{formatCents(summary.profitCents)}</span></div>}
+        {costVisible && <div><span className="text-zinc-500">Profit:</span> <span className={`font-semibold ${summary.profitCents < 0 ? 'text-red-500' : 'text-emerald-500'}`}>{formatCents(summary.profitCents)}</span></div>}
         <div><span className="text-zinc-500">Avg:</span> <span className="text-zinc-300">{summary.avgDiscountPct}%</span></div>
       </div>
       <div className="flex gap-2">

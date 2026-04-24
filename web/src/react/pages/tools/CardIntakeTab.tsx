@@ -189,11 +189,19 @@ export default function CardIntakeTab() {
   const [saleRows, setSaleRows] = useState<SaleRowData[]>([]);
   const saleCertsRef = useRef<Set<string>>(new Set());
   const [defaultDiscountPct, setDefaultDiscountPct] = useState<number>(() => {
-    const saved = localStorage.getItem(SALE_DEFAULT_DISCOUNT_KEY);
-    return saved ? Number(saved) : 80;
+    try {
+      const saved = localStorage.getItem(SALE_DEFAULT_DISCOUNT_KEY);
+      if (saved !== null) {
+        const n = Number(saved);
+        if (Number.isFinite(n)) return n;
+      }
+    } catch { /* blocked storage */ }
+    return 80;
   });
   const [costVisible, setCostVisible] = useState<boolean>(() => {
-    return localStorage.getItem(SALE_COST_VISIBLE_KEY) === 'true';
+    try {
+      return localStorage.getItem(SALE_COST_VISIBLE_KEY) === 'true';
+    } catch { return false; }
   });
   const [showRecordModal, setShowRecordModal] = useState(false);
   const [recordLoading, setRecordLoading] = useState(false);
@@ -572,6 +580,7 @@ export default function CardIntakeTab() {
 
   const handleDismissSaleRow = useCallback((certNumber: string) => {
     setSaleRows(prev => prev.filter(r => r.certNumber !== certNumber));
+    saleCertsRef.current.delete(certNumber);
   }, []);
 
   const handleDiscountChange = useCallback((pct: number) => {
@@ -619,10 +628,15 @@ export default function CardIntakeTab() {
     const errors: string[] = [];
     for (const [campaignId, items] of byCampaign) {
       try {
-        await api.createBulkSales(campaignId, channel, saleDate, items);
+        const result = await api.createBulkSales(campaignId, channel, saleDate, items);
+        const failedPurchaseIds = new Set(result.errors?.map(e => e.purchaseId) ?? []);
         for (const item of items) {
+          if (failedPurchaseIds.has(item.purchaseId)) continue;
           const row = resolved.find(r => r.purchaseId === item.purchaseId);
           if (row) succeededCerts.add(row.certNumber);
+        }
+        if (result.errors?.length) {
+          errors.push(...result.errors.map(e => e.error));
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Unknown error';
