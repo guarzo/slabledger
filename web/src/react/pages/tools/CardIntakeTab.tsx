@@ -890,7 +890,7 @@ const STATUS_STYLE: Record<CertStatus, {
   failed:    { leftBorder: 'var(--danger)',     pillBg: 'rgba(248,113,113,0.12)',       pillText: 'var(--danger)',     label: '✗ Failed' },
 };
 
-function StatusPill({ status }: { status: CertStatus }) {
+function CertStatusPill({ status }: { status: CertStatus }) {
   const s = STATUS_STYLE[status];
   return (
     <span
@@ -1038,7 +1038,7 @@ function CertRowItem({
           <span className="font-mono text-sm font-medium text-[var(--text)] tabular-nums">
             {row.certNumber}
           </span>
-          <StatusPill status={row.status} />
+          <CertStatusPill status={row.status} />
           {row.cardName && (
             <span className="text-sm text-[var(--text)] truncate">{row.cardName}</span>
           )}
