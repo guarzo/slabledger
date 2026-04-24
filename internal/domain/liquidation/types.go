@@ -41,7 +41,6 @@ type PreviewItem struct {
 	SetName                   string          `json:"setName"`
 	CardNumber                string          `json:"cardNumber"`
 	Grade                     float64         `json:"grade"`
-	CampaignName              string          `json:"campaignName"`
 	BuyCostCents              int             `json:"buyCostCents"`
 	CLValueCents              int             `json:"clValueCents"`
 	CompPriceCents            int             `json:"compPriceCents"`

@@ -46,7 +46,6 @@ func (s *service) Preview(ctx context.Context, req PreviewRequest) (PreviewRespo
 			SetName:                   p.SetName,
 			CardNumber:                p.CardNumber,
 			Grade:                     p.GradeValue,
-			CampaignName:              p.CampaignName,
 			BuyCostCents:              p.BuyCostCents,
 			CLValueCents:              p.CLValueCents,
 			CurrentReviewedPriceCents: p.ReviewedPriceCents,

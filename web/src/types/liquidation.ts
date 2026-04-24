@@ -7,7 +7,6 @@ export interface LiquidationPreviewItem {
   setName: string;
   cardNumber: string;
   grade: number;
-  campaignName: string;
   buyCostCents: number;
   clValueCents: number;
   compPriceCents: number;

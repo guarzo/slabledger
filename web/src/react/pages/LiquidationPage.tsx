@@ -74,6 +74,10 @@ export default function LiquidationPage() {
   };
 
   const handleFinalPriceChange = (id: string, val: string) => {
+    if (val === '' || val === '.') {
+      setFinalPrices(prev => ({ ...prev, [id]: 0 }));
+      return;
+    }
     const parts = val.split('.');
     const d = parseInt(parts[0] || '0', 10);
     const frac = (parts[1] || '0').slice(0, 2).padEnd(2, '0');
@@ -98,7 +102,7 @@ export default function LiquidationPage() {
         const item = items.find(i => i.purchaseId === id);
         return item ? { purchaseId: id, newPriceCents: getFinalPrice(item) } : null;
       })
-      .filter((x): x is NonNullable<typeof x> => x !== null);
+      .filter((x): x is NonNullable<typeof x> => x !== null && x.newPriceCents > 0);
     applyMutation.mutate(applyItems, {
       onSuccess: () => {
         setShowConfirm(false);
@@ -107,6 +111,11 @@ export default function LiquidationPage() {
       },
     });
   };
+
+  const applyableCount = Array.from(selected).filter(id => {
+    const item = items.find(i => i.purchaseId === id);
+    return item && getFinalPrice(item) > 0;
+  }).length;
 
   const summary = data?.summary;
 
@@ -279,7 +288,9 @@ export default function LiquidationPage() {
           <div className="bg-[var(--surface)] rounded-xl border border-[var(--border)] p-6 max-w-sm w-full">
             <h2 className="text-lg font-bold text-[var(--text)] mb-2">Apply Repriced Values</h2>
             <p className="text-sm text-[var(--text-muted)] mb-6">
-              This will update the reviewed price for {selected.size} card{selected.size !== 1 ? 's' : ''}. Continue?
+              This will update the reviewed price for {applyableCount} card{applyableCount !== 1 ? 's' : ''}.
+              {applyableCount < selected.size && ` (${selected.size - applyableCount} skipped — no price set)`}
+              {' '}Continue?
             </p>
             {applyMutation.error && (
               <p className="text-xs text-[var(--danger)] mb-4">{applyMutation.error.message}</p>
