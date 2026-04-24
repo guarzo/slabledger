@@ -108,6 +108,8 @@ export interface ScanCertResponse {
   dhInventoryId?: number;
   dhPushStatus?: string;
   dhStatus?: string;
+  dhListingPriceCents?: number;
+  receivedAt?: string;
 }
 
 /** Batch variant of ScanCertResponse, returned by POST /api/purchases/scan-certs. */
