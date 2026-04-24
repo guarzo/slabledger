@@ -1,67 +1,42 @@
-/**
- * ConfidenceIndicator - Renders filled/empty dots to indicate confidence level.
- *
- * Accepts string confidence from eBay data ('high' | 'medium' | 'low')
- * or numeric confidence (0-1) from estimate data.
- */
 import { clsx } from 'clsx';
+import styles from './ConfidenceIndicator.module.css';
 
 interface ConfidenceIndicatorProps {
-  /** String confidence from eBay data, or numeric 0-1 */
   confidence: 'high' | 'medium' | 'low' | number | null;
-  /** Size variant */
   size?: 'sm' | 'md';
 }
 
-const TOTAL_DOTS = 4;
+type Tier = 'high' | 'medium' | 'low' | 'very-low';
 
-function resolve(confidence: 'high' | 'medium' | 'low' | number): {
-  filled: number;
-  color: string;
-  label: string;
-} {
-  if (typeof confidence === 'string') {
-    switch (confidence) {
-      case 'high':
-        return { filled: 4, color: 'var(--success)', label: 'High confidence' };
-      case 'medium':
-        return { filled: 3, color: 'var(--warning)', label: 'Medium confidence' };
-      case 'low':
-        return { filled: 2, color: 'var(--error)', label: 'Low confidence' };
-    }
-  }
+const TIER_META: Record<Tier, { filled: number; label: string }> = {
+  'high':     { filled: 4, label: 'High confidence' },
+  'medium':   { filled: 3, label: 'Medium confidence' },
+  'low':      { filled: 2, label: 'Low confidence' },
+  'very-low': { filled: 1, label: 'Very low confidence' },
+};
 
-  // Numeric 0-1
-  if (confidence >= 0.8) return { filled: 4, color: 'var(--success)', label: 'High confidence' };
-  if (confidence >= 0.5) return { filled: 3, color: 'var(--warning)', label: 'Medium confidence' };
-  if (confidence >= 0.3) return { filled: 2, color: 'var(--error)', label: 'Low confidence' };
-  return { filled: 1, color: 'var(--error)', label: 'Very low confidence' };
+function resolveTier(c: 'high' | 'medium' | 'low' | number): Tier {
+  if (typeof c === 'string') return c;
+  if (c >= 0.8) return 'high';
+  if (c >= 0.5) return 'medium';
+  if (c >= 0.3) return 'low';
+  return 'very-low';
 }
 
 export function ConfidenceIndicator({ confidence, size = 'sm' }: ConfidenceIndicatorProps) {
   if (confidence == null) return null;
-
-  const { filled, color, label } = resolve(confidence);
-  const dotSize = size === 'md' ? 8 : 6;
+  const tier = resolveTier(confidence);
+  const { filled, label } = TIER_META[tier];
 
   return (
     <span
-      className={clsx('inline-flex items-center')}
-      style={{ gap: 2 }}
+      className={clsx(styles.wrap, styles[`s-${size}`], styles[`t-${tier}`])}
       role="img"
       title={label}
       aria-label={label}
     >
-      {Array.from({ length: TOTAL_DOTS }, (_, i) => (
-        <span
-          key={i}
-          style={{
-            width: dotSize,
-            height: dotSize,
-            borderRadius: '50%',
-            backgroundColor: i < filled ? color : 'var(--surface-2)',
-          }}
-        />
+      {Array.from({ length: 4 }, (_, i) => (
+        <span key={i} className={clsx(styles.dot, i < filled && styles.on)} />
       ))}
     </span>
   );

@@ -123,8 +123,8 @@ function EconomicsSection({
           </>
         )}
         <div className="md:col-span-2">
-          <ConfidenceRating label="CL Confidence" value={values.clConfidence}
-            onChange={(val) => onChange('clConfidence', val)} />
+          <ConfidenceRating label="CL Confidence" value={values.clConfidence ? parseFloat(values.clConfidence) : 1}
+            onChange={(val) => onChange('clConfidence', String(val))} />
         </div>
       </div>
     </FormSection>

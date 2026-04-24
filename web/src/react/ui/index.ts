@@ -39,6 +39,8 @@ export { default as PriceDecisionBar } from './PriceDecisionBar';
 export type { PriceSource, PriceDecisionBarProps } from './PriceDecisionBar';
 export type { PreSelection } from './priceDecisionHelpers';
 export { buildPriceSources, preSelectSource } from './priceDecisionHelpers';
+export { PricePill } from './PricePill';
+export { MarginBadge } from './MarginBadge';
 
 // Icons & Dropdowns
 export { ExternalLinkIcon } from './ExternalLinkIcon';
@@ -50,7 +52,6 @@ export { default as GradeBadge } from './GradeBadge';
 // Data Display
 export { ConfidenceIndicator } from './ConfidenceIndicator';
 export { TrendArrow } from './TrendArrow';
-export { TrendBadge } from './TrendBadge';
 
 // Status & Recommendations
 export { StatusPill } from './StatusPill';

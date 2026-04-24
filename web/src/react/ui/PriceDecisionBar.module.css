@@ -1,0 +1,60 @@
+.bar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+}
+.prompt {
+  font-size: var(--font-size-xs, 12px); font-weight: var(--font-weight-medium, 500);
+  color: var(--text-muted); white-space: nowrap;
+}
+
+/* Custom price input group */
+.inputGroup { display: flex; align-items: center; gap: 6px; }
+.inputPrefix { color: var(--text-muted); font-size: var(--font-size-xs, 12px); }
+.input {
+  width: 80px; padding: 6px 8px;
+  font-size: var(--font-size-xs, 12px);
+  border-radius: var(--radius-sm, 10px);
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+  color: var(--text);
+}
+.input::placeholder { color: var(--text-muted); }
+.input:focus { outline: none; border-color: var(--accent); }
+.input:disabled { opacity: 0.4; }
+
+.flag { margin-left: auto; }
+
+/* Accepted state */
+.accepted { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.acceptedChip {
+  font-size: var(--font-size-xs, 12px); padding: 6px 10px;
+  border-radius: var(--radius-sm, 10px);
+  background: var(--success-bg); color: var(--success);
+  font-weight: var(--font-weight-semibold, 600);
+  border: 1px solid var(--success-border);
+}
+
+/* Skipped state */
+.skipped {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap; opacity: 0.5;
+}
+.skippedLabel {
+  font-size: var(--font-size-xs, 12px); color: var(--text-muted); font-style: italic;
+}
+
+/* No-price-data warning */
+.warning {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  border-radius: var(--radius-sm, 10px);
+  border: 1px solid var(--warning-border);
+  background: var(--warning-bg);
+  padding: 8px 12px;
+}
+.warningBody { display: flex; align-items: center; gap: 8px; }
+.warningIcon { color: var(--warning); }
+.warningText { display: flex; flex-direction: column; }
+.warningTitle {
+  font-size: var(--font-size-xs, 12px); font-weight: var(--font-weight-semibold, 600);
+  color: var(--warning);
+}
+.warningDesc { font-size: 10px; color: var(--text-muted); }
+.warningAction { margin-left: auto; }
