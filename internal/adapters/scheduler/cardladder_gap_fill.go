@@ -18,7 +18,7 @@ func (s *CardLadderRefreshScheduler) refreshSalesCompsDecoupled(ctx context.Cont
 		return
 	}
 
-	cards, err := s.compRefreshStore.ListUnsoldCardsNeedingComps(ctx, 30)
+	cards, err := s.compRefreshStore.ListUnsoldCardsNeedingComps(ctx, 1)
 	if err != nil {
 		s.logger.Warn(ctx, "CL sales: failed to list cards needing comps", observability.Err(err))
 		return

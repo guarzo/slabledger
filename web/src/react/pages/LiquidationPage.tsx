@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useDeferredValue } from 'react';
 import { useLiquidationPreview, useApplyLiquidation } from '../queries/useLiquidationQueries';
 import type { LiquidationPreviewItem, ConfidenceLevel } from '../../types/liquidation';
 import StatCard from '../ui/StatCard';
@@ -17,18 +17,16 @@ function confidenceColor(level: ConfidenceLevel): string {
 }
 
 export default function LiquidationPage() {
+  const [discountWithComps, setDiscountWithComps] = useState(2.5);
+  const [discountNoComps, setDiscountNoComps] = useState(10);
+  const deferredWithComps = useDeferredValue(discountWithComps);
+  const deferredNoComps = useDeferredValue(discountNoComps);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [finalPrices, setFinalPrices] = useState<Record<string, number>>({});
   const [showConfirm, setShowConfirm] = useState(false);
 
-  const { data, isLoading, error, fetchPreview } = useLiquidationPreview();
+  const { data, isLoading, error } = useLiquidationPreview(deferredWithComps, deferredNoComps);
   const applyMutation = useApplyLiquidation();
-
-  const handlePreview = useCallback(() => {
-    fetchPreview();
-    setSelected(new Set());
-    setFinalPrices({});
-  }, [fetchPreview]);
 
   const items: LiquidationPreviewItem[] = data?.items ?? [];
 
@@ -47,8 +45,6 @@ export default function LiquidationPage() {
   const acceptSuggested = (id: string) => {
     setSelected(prev => new Set(prev).add(id));
     setFinalPrices(prev => {
-      const item = items.find(i => i.purchaseId === id);
-      if (!item) return prev;
       const { [id]: _, ...rest } = prev;
       return rest;
     });
@@ -70,9 +66,9 @@ export default function LiquidationPage() {
 
   const handleFinalPriceChange = (id: string, val: string) => {
     const parts = val.split('.');
-    const dollars = parseInt(parts[0] || '0', 10);
+    const d = parseInt(parts[0] || '0', 10);
     const frac = (parts[1] || '0').slice(0, 2).padEnd(2, '0');
-    const cents = dollars * 100 + parseInt(frac, 10);
+    const cents = d * 100 + parseInt(frac, 10);
     if (!isNaN(cents) && cents >= 0) {
       setFinalPrices(prev => ({ ...prev, [id]: cents }));
     }
@@ -90,7 +86,6 @@ export default function LiquidationPage() {
         setShowConfirm(false);
         setSelected(new Set());
         setFinalPrices({});
-        fetchPreview();
       },
     });
   };
@@ -101,20 +96,25 @@ export default function LiquidationPage() {
     <div className="max-w-7xl mx-auto px-4 pb-16">
       <h1 className="text-[22px] font-bold text-[var(--text)] tracking-tight mb-6">Liquidation Pricing</h1>
 
-      {/* Controls */}
-      <div className="flex flex-wrap items-center gap-4 mb-6 p-4 rounded-xl bg-[var(--surface-1)] border border-[var(--surface-2)]">
-        <div className="text-xs text-[var(--text-muted)]">
-          With comps: 2.5% below CL &middot; No comps: 10% below CL
+      {/* Discount controls */}
+      <div className="mb-6 p-4 rounded-xl bg-[var(--surface-1)] border border-[var(--surface-2)]">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+          <DiscountSlider
+            label="With comps"
+            value={discountWithComps}
+            onChange={setDiscountWithComps}
+          />
+          <DiscountSlider
+            label="Without comps"
+            value={discountNoComps}
+            onChange={setDiscountNoComps}
+          />
         </div>
-        <button
-          type="button"
-          onClick={handlePreview}
-          disabled={isLoading}
-          className="px-4 py-2 bg-[var(--brand-500)] text-white rounded-lg text-sm font-medium hover:bg-[var(--brand-600)] transition-colors disabled:opacity-50"
-        >
-          {isLoading ? 'Loading…' : 'Preview'}
-        </button>
       </div>
+
+      {isLoading && !data && (
+        <div className="text-sm text-[var(--text-muted)] py-8 text-center">Loading inventory…</div>
+      )}
 
       {error && (
         <div className="mb-4 p-3 rounded-lg bg-[var(--danger)]/10 border border-[var(--danger)]/20 text-sm text-[var(--danger)]">
@@ -277,6 +277,30 @@ export default function LiquidationPage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function DiscountSlider({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-xs font-medium text-[var(--text-muted)]">{label}</span>
+        <span className="text-sm font-semibold text-[var(--text)] tabular-nums">{value.toFixed(1)}% below CL</span>
+      </div>
+      <input
+        type="range"
+        min={0}
+        max={25}
+        step={0.5}
+        value={value}
+        onChange={e => onChange(parseFloat(e.target.value))}
+        className="w-full h-1.5 rounded-full appearance-none cursor-pointer bg-[var(--surface-2)] accent-[var(--brand-500)]"
+      />
+      <div className="flex justify-between text-[10px] text-[var(--text-muted)] mt-1">
+        <span>0%</span>
+        <span>25%</span>
+      </div>
     </div>
   );
 }
