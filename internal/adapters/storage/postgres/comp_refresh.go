@@ -33,6 +33,7 @@ func (s *CompRefreshStore) ListUnsoldCardsNeedingComps(ctx context.Context, cuto
 			cp.gem_rate_id,
 			'g' || REPLACE(cp.grade_value::text, '.', '_') AS condition
 		FROM campaign_purchases cp
+		LEFT JOIN campaign_sales cs ON cs.purchase_id = cp.id
 		LEFT JOIN LATERAL (
 			SELECT MAX(sale_date) AS latest
 			FROM cl_sales_comps sc
@@ -41,7 +42,7 @@ func (s *CompRefreshStore) ListUnsoldCardsNeedingComps(ctx context.Context, cuto
 		) lc ON true
 		WHERE cp.gem_rate_id != ''
 		  AND cp.grade_value > 0
-		  AND cp.sold_date = ''
+		  AND cs.id IS NULL
 		  AND (lc.latest IS NULL OR lc.latest < to_char(NOW() - make_interval(days => $1), 'YYYY-MM-DD'))
 		ORDER BY cp.gem_rate_id, 'g' || REPLACE(cp.grade_value::text, '.', '_'), cp.id DESC
 	`, cutoffDays)
@@ -78,7 +79,7 @@ func (s *CompRefreshStore) BackfillLastSoldFromComps(ctx context.Context) (int, 
 		) sub
 		WHERE cp.gem_rate_id = sub.gem_rate_id
 		  AND 'g' || REPLACE(cp.grade_value::text, '.', '_') = sub.condition
-		  AND cp.sold_date = ''
+		  AND NOT EXISTS (SELECT 1 FROM campaign_sales cs WHERE cs.purchase_id = cp.id)
 		  AND (cp.last_sold_date = '' OR cp.last_sold_date < sub.sale_date)
 	`)
 	if err != nil {
