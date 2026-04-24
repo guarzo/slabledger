@@ -1,14 +1,11 @@
 /**
  * UI Component Library
- *
- * Reusable UI components built with Tailwind CSS utilities.
- * All components follow consistent design patterns and support
- * light/dark themes via CSS variables.
  */
 
 // Form Controls
 export { default as Button } from './Button';
-export type { ButtonProps } from './Button';
+export type { ButtonProps, ButtonVariant, ButtonSize } from './Button';
+export { Segmented } from './Segmented';
 
 export { default as Input } from './Input';
 export type { InputProps } from './Input';
