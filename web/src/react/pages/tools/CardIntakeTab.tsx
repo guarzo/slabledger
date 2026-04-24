@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { api, isAPIError } from '../../../js/api';
+import type { ScannerMode } from './sale-types';
 import { reportError } from '../../../js/errors';
 import type { ScanCertResponse, ResolveCertResponse, CertImportResult, MarketSnapshot } from '../../../types/campaigns';
 import { formatCents } from '../../utils/formatters';
@@ -166,6 +167,7 @@ function buildDHSearchURL(row: Pick<CertRow, 'cardName' | 'dhSearchQuery'>): str
 }
 
 export default function CardIntakeTab() {
+  const [mode, setMode] = useState<ScannerMode>('intake');
   const [input, setInput] = useState('');
   const [certs, setCerts] = useState<Map<string, CertRow>>(() => loadQueue());
   const [importLoading, setImportLoading] = useState(false);
@@ -193,6 +195,18 @@ export default function CardIntakeTab() {
       return next;
     });
   }, []);
+
+  const handleModeSwitch = useCallback((newMode: ScannerMode) => {
+    if (newMode === mode) return;
+    if (certs.size > 0) {
+      if (!window.confirm(`Switch to ${newMode} mode? This will clear ${certs.size} scanned card(s).`)) {
+        return;
+      }
+      setCerts(new Map());
+      saveQueue(new Map());
+    }
+    setMode(newMode);
+  }, [mode, certs.size]);
 
   const applyScanResult = useCallback((certNumber: string, result: ScanCertResponse) => {
     if (result.status === 'existing' || result.status === 'sold') {
@@ -492,7 +506,7 @@ export default function CardIntakeTab() {
 
   return (
     <div className="space-y-3">
-      {/* Scan input */}
+      {/* Scan input + mode toggle */}
       <div className="flex items-center gap-2">
         <input
           ref={inputRef}
@@ -505,8 +519,32 @@ export default function CardIntakeTab() {
           autoFocus
         />
         <span className="text-xs text-[var(--text-muted)] whitespace-nowrap">↵ Enter</span>
+        <div className="flex overflow-hidden rounded-md border border-zinc-700">
+          <button
+            className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+              mode === 'intake'
+                ? 'bg-indigo-600 text-white'
+                : 'text-zinc-400 hover:text-zinc-200'
+            }`}
+            onClick={() => handleModeSwitch('intake')}
+          >
+            Intake
+          </button>
+          <button
+            className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+              mode === 'sale'
+                ? 'bg-indigo-600 text-white'
+                : 'text-zinc-400 hover:text-zinc-200'
+            }`}
+            onClick={() => handleModeSwitch('sale')}
+          >
+            Sale
+          </button>
+        </div>
       </div>
 
+      {mode === 'intake' ? (
+        <>
       {/* Batch status bar */}
       {batchStats.total > 0 && (
         <div className="flex flex-wrap items-center gap-4 rounded-lg border border-[var(--surface-2)] bg-[var(--surface-1)] px-3 py-2 text-xs">
@@ -582,6 +620,10 @@ export default function CardIntakeTab() {
             setFixMatchTarget(null);
           }}
         />
+      )}
+        </>
+      ) : (
+        <div className="mt-4 text-sm text-zinc-500">Sale mode — UI coming soon</div>
       )}
     </div>
   );
