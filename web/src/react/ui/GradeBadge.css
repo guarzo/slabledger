@@ -28,6 +28,9 @@
 
 .grade-badge__grade { font-size: 1em; }
 
+/* Keep grader chip legible in the dense sm variant (0.72em on 11px ≈ 8px is too small). */
+.grade-badge--sm .grade-badge__grader { font-size: 10px; }
+
 .grade-badge--tier-1  { background: var(--grade-1-bg);  border-color: var(--grade-1-bd);  color: var(--grade-1-fg); }
 .grade-badge--tier-2  { background: var(--grade-2-bg);  border-color: var(--grade-2-bd);  color: var(--grade-2-fg); }
 .grade-badge--tier-3  { background: var(--grade-3-bg);  border-color: var(--grade-3-bd);  color: var(--grade-3-fg); }
@@ -43,7 +46,7 @@
   color: var(--grade-10-fg);
   box-shadow: var(--grade-10-glow);
 }
-.grade-badge--black-label {
+.grade-badge--tier-black-label {
   background: var(--grade-black-label-bg);
   border-color: var(--grade-black-label-bd);
   color: var(--grade-black-label-fg);
