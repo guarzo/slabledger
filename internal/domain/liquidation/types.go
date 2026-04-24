@@ -38,8 +38,9 @@ type PreviewItem struct {
 	PurchaseID                string          `json:"purchaseId"`
 	CertNumber                string          `json:"certNumber"`
 	CardName                  string          `json:"cardName"`
+	SetName                   string          `json:"setName"`
+	CardNumber                string          `json:"cardNumber"`
 	Grade                     float64         `json:"grade"`
-	CampaignName              string          `json:"campaignName"`
 	BuyCostCents              int             `json:"buyCostCents"`
 	CLValueCents              int             `json:"clValueCents"`
 	CompPriceCents            int             `json:"compPriceCents"`
@@ -92,6 +93,8 @@ type UnsoldPurchase struct {
 	ID                 string
 	CertNumber         string
 	CardName           string
+	SetName            string
+	CardNumber         string
 	GradeValue         float64
 	CampaignName       string
 	BuyCostCents       int
