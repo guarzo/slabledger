@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
@@ -126,6 +127,38 @@ func TestProcessPurchase_AlreadyPushedFixesStatus(t *testing.T) {
 	}
 	if len(status.Calls) != 1 || status.Calls[0].Status != inventory.DHPushStatusMatched {
 		t.Fatalf("expected one status update to matched, got %+v", status.Calls)
+	}
+}
+
+// failingStatusUpdater always returns an error — used to verify that setHeld
+// returns processSkipped (not processHeld) when the DB write fails.
+type failingStatusUpdater struct{ err error }
+
+func (f *failingStatusUpdater) UpdatePurchaseDHPushStatus(_ context.Context, _, _ string) error {
+	return f.err
+}
+
+func TestSetHeld_DBFailureReturnsSkipped(t *testing.T) {
+	// No holdSetter → setHeld falls back to statusUpdater, which here always fails.
+	events := &stubEventRecorder{}
+	s := NewDHPushScheduler(
+		nil,
+		&failingStatusUpdater{err: errors.New("db down")},
+		&stubPSAImporter{},
+		&mocks.MockDHFieldsUpdater{},
+		&stubCardIDSaver{},
+		mocks.NewMockLogger(),
+		DHPushConfig{Enabled: false},
+		WithDHPushEventRecorder(events),
+	)
+
+	got := s.setHeld(context.Background(), inventory.Purchase{ID: "p1", CertNumber: "111"}, "over-cap")
+
+	if got != processSkipped {
+		t.Fatalf("got=%v want=processSkipped — caller must know the hold did not land", got)
+	}
+	if len(events.Events) != 0 {
+		t.Fatalf("expected no held event when DB write fails, got %+v", events.Events)
 	}
 }
 

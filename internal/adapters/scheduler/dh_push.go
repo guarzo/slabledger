@@ -243,7 +243,10 @@ func (s *DHPushScheduler) processPurchase(ctx context.Context, p inventory.Purch
 }
 
 // setHeld atomically flips a purchase to held status with a reason, records
-// the transition, and returns processHeld.
+// the transition, and returns processHeld on success. If the DB write fails,
+// returns processSkipped so the batch counters (and the caller's view of the
+// row's state) don't falsely attribute a held transition that didn't happen;
+// the row stays pending and the next scheduler cycle retries.
 func (s *DHPushScheduler) setHeld(ctx context.Context, p inventory.Purchase, reason string) processResult {
 	s.logger.Info(ctx, "dh push: holding re-push for review",
 		observability.String("purchaseID", p.ID),
@@ -265,16 +268,18 @@ func (s *DHPushScheduler) setHeld(ctx context.Context, p inventory.Purchase, rea
 		held = true
 	}
 
-	if held {
-		s.recordEvent(ctx, dhevents.Event{
-			PurchaseID:    p.ID,
-			CertNumber:    p.CertNumber,
-			Type:          dhevents.TypeHeld,
-			NewPushStatus: inventory.DHPushStatusHeld,
-			Notes:         reason,
-			Source:        dhevents.SourceDHPush,
-		})
+	if !held {
+		return processSkipped
 	}
+
+	s.recordEvent(ctx, dhevents.Event{
+		PurchaseID:    p.ID,
+		CertNumber:    p.CertNumber,
+		Type:          dhevents.TypeHeld,
+		NewPushStatus: inventory.DHPushStatusHeld,
+		Notes:         reason,
+		Source:        dhevents.SourceDHPush,
+	})
 	return processHeld
 }
 

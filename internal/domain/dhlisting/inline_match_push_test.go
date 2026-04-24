@@ -1,206 +1,201 @@
-package dhlisting
+package dhlisting_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/guarzo/slabledger/internal/domain/dhevents"
+	"github.com/guarzo/slabledger/internal/domain/dhlisting"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
+	"github.com/guarzo/slabledger/internal/testutil/mocks"
 )
 
-// --- doubles ---------------------------------------------------------------
+// --- local adapters (not duplicated fakes — just data-shape shims) ---------
 
-type fakePSAImporter struct {
-	responses [][]DHPSAImportResult
-	errs      []error
-	calls     int
+// purchaseLookupByCert returns pre-seeded purchases keyed by cert number.
+// Lookups through this shim are the only way to exercise ListPurchases
+// without coupling the tests to any particular store implementation.
+type purchaseLookupByCert struct {
+	byCert map[string]*inventory.Purchase
 }
 
-func (f *fakePSAImporter) PSAImport(_ context.Context, _ []DHPSAImportItem) ([]DHPSAImportResult, error) {
-	f.calls++
-	if len(f.errs) > 0 {
-		e := f.errs[0]
-		f.errs = f.errs[1:]
-		if e != nil {
-			return nil, e
+func (p *purchaseLookupByCert) GetPurchasesByCertNumbers(_ context.Context, certs []string) (map[string]*inventory.Purchase, error) {
+	out := make(map[string]*inventory.Purchase)
+	for _, c := range certs {
+		if x, ok := p.byCert[c]; ok {
+			out[c] = x
 		}
 	}
-	if len(f.responses) == 0 {
-		return nil, nil
+	return out, nil
+}
+
+// noopLister satisfies dhlisting.DHInventoryLister without doing anything —
+// the inline-push tests only care about the pre-list path.
+type noopLister struct{}
+
+func (noopLister) UpdateInventoryStatus(_ context.Context, _ int, _ dhlisting.DHInventoryStatusUpdate) (int, error) {
+	return 0, nil
+}
+func (noopLister) SyncChannels(_ context.Context, _ int, _ []string) error { return nil }
+
+// --- helper ----------------------------------------------------------------
+
+type serviceDeps struct {
+	importer *mocks.MockDHPSAImporter
+	fields   *mocks.MockDHFieldsUpdater
+	status   *mocks.MockDHPushStatusUpdater
+	cardSvr  *mocks.DHCardIDSaverMock
+	events   *mocks.MockEventRecorder
+}
+
+func buildService(t *testing.T, purchase *inventory.Purchase, importer *mocks.MockDHPSAImporter) (dhlisting.Service, serviceDeps) {
+	t.Helper()
+	lookup := &purchaseLookupByCert{byCert: map[string]*inventory.Purchase{purchase.CertNumber: purchase}}
+	deps := serviceDeps{
+		importer: importer,
+		fields:   &mocks.MockDHFieldsUpdater{},
+		status:   &mocks.MockDHPushStatusUpdater{},
+		cardSvr:  &mocks.DHCardIDSaverMock{},
+		events:   &mocks.MockEventRecorder{},
 	}
-	r := f.responses[0]
-	f.responses = f.responses[1:]
-	return r, nil
-}
-
-// rotatingFakeImporter adds rotator behaviour for the rate-limit retry test.
-type rotatingFakeImporter struct {
-	*fakePSAImporter
-	keysLeft    int
-	rotateCalls int
-}
-
-func (r *rotatingFakeImporter) RotatePSAKey() bool {
-	r.rotateCalls++
-	if r.keysLeft > 0 {
-		r.keysLeft--
-		return true
+	svc, err := dhlisting.NewDHListingService(
+		lookup,
+		observability.NewNoopLogger(),
+		dhlisting.WithDHListingPSAImporter(importer),
+		dhlisting.WithDHListingLister(noopLister{}),
+		dhlisting.WithDHListingFieldsUpdater(deps.fields),
+		dhlisting.WithDHListingPushStatusUpdater(deps.status),
+		dhlisting.WithDHListingCardIDSaver(deps.cardSvr),
+		dhlisting.WithEventRecorder(deps.events),
+	)
+	if err != nil {
+		t.Fatalf("NewDHListingService: %v", err)
 	}
-	return false
+	return svc, deps
 }
 
-func (r *rotatingFakeImporter) ResetPSAKeyRotation() {}
-
-type fakeFieldsUpdater struct {
-	calls []inventory.DHFieldsUpdate
-}
-
-func (f *fakeFieldsUpdater) UpdatePurchaseDHFields(_ context.Context, _ string, u inventory.DHFieldsUpdate) error {
-	f.calls = append(f.calls, u)
-	return nil
-}
-
-type fakePushStatusUpdater struct {
-	calls []string
-}
-
-func (f *fakePushStatusUpdater) UpdatePurchaseDHPushStatus(_ context.Context, _ string, status string) error {
-	f.calls = append(f.calls, status)
-	return nil
-}
-
-type fakeCardIDSaver struct{ calls []string }
-
-func (f *fakeCardIDSaver) SaveExternalID(_ context.Context, _, _, _, _, externalID string) error {
-	f.calls = append(f.calls, externalID)
-	return nil
-}
-
-type fakeEventRec struct{ events []dhevents.Event }
-
-func (f *fakeEventRec) Record(_ context.Context, e dhevents.Event) error {
-	f.events = append(f.events, e)
-	return nil
-}
-
-// --- helper ---------------------------------------------------------------
-
-func newInlineTestService(imp DHPSAImporter) (*dhListingService, *fakeFieldsUpdater, *fakePushStatusUpdater, *fakeCardIDSaver, *fakeEventRec) {
-	fields := &fakeFieldsUpdater{}
-	status := &fakePushStatusUpdater{}
-	cardSaver := &fakeCardIDSaver{}
-	events := &fakeEventRec{}
-	svc := &dhListingService{
-		psaImporter:       imp,
-		fieldsUpdater:     fields,
-		pushStatusUpdater: status,
-		cardIDSaver:       cardSaver,
-		logger:            observability.NewNoopLogger(),
-		eventRec:          events,
-	}
-	return svc, fields, status, cardSaver, events
-}
-
-// --- tests ----------------------------------------------------------------
-
-func TestInlineMatchAndPush_MatchedSuccess(t *testing.T) {
-	imp := &fakePSAImporter{responses: [][]DHPSAImportResult{{
-		{Resolution: PSAImportStatusMatched, DHCardID: 999, DHInventoryID: 1234, DHStatus: "in_stock"},
-	}}}
-	svc, fields, status, cardSaver, events := newInlineTestService(imp)
-
-	p := &inventory.Purchase{ID: "p1", CertNumber: "111", CardName: "Pikachu", SetName: "Base", CardNumber: "25"}
-	got := svc.inlineMatchAndPush(context.Background(), p)
-
-	if got != 1234 {
-		t.Fatalf("got=%d want=1234", got)
-	}
-	if p.DHInventoryID != 1234 || p.DHCardID != 999 {
-		t.Fatalf("expected purchase updated with IDs, got card=%d inv=%d", p.DHCardID, p.DHInventoryID)
-	}
-	if len(fields.calls) != 1 || fields.calls[0].InventoryID != 1234 {
-		t.Fatalf("expected fields persisted, got %+v", fields.calls)
-	}
-	if len(status.calls) != 1 || status.calls[0] != inventory.DHPushStatusMatched {
-		t.Fatalf("expected status=matched, got %+v", status.calls)
-	}
-	if len(cardSaver.calls) != 1 || cardSaver.calls[0] != "999" {
-		t.Fatalf("expected card-ID mapping saved, got %+v", cardSaver.calls)
-	}
-	if len(events.events) != 1 || events.events[0].Type != dhevents.TypePushed {
-		t.Fatalf("expected one pushed event, got %+v", events.events)
+// pending is a minimal purchase in the state the inline push acts on.
+func pending(cert string) *inventory.Purchase {
+	return &inventory.Purchase{
+		ID:           "p1",
+		CertNumber:   cert,
+		CardName:     "Pikachu",
+		SetName:      "Base",
+		CardNumber:   "25",
+		CardYear:     "1999",
+		DHPushStatus: inventory.DHPushStatusPending,
 	}
 }
 
-func TestInlineMatchAndPush_EmptyCertReturnsZero(t *testing.T) {
-	imp := &fakePSAImporter{}
-	svc, _, _, _, _ := newInlineTestService(imp)
+// --- tests -----------------------------------------------------------------
 
-	got := svc.inlineMatchAndPush(context.Background(), &inventory.Purchase{ID: "p1"})
-
-	if got != 0 {
-		t.Fatalf("expected 0 for empty cert, got %d", got)
-	}
-	if imp.calls != 0 {
-		t.Fatalf("expected no psa_import call, got %d", imp.calls)
-	}
-}
-
-func TestInlineMatchAndPush_RateLimitedRotatesAndRetries(t *testing.T) {
-	imp := &rotatingFakeImporter{
-		fakePSAImporter: &fakePSAImporter{responses: [][]DHPSAImportResult{
-			{{Resolution: PSAImportStatusPSAError, RateLimited: true}},
-			{{Resolution: PSAImportStatusMatched, DHCardID: 5, DHInventoryID: 55}},
+func TestListPurchases_InlineMatchedSuccess(t *testing.T) {
+	importer := &mocks.MockDHPSAImporter{
+		Results: [][]dhlisting.DHPSAImportResult{{
+			{Resolution: dhlisting.PSAImportStatusMatched, DHCardID: 999, DHInventoryID: 1234, DHStatus: "in_stock"},
 		}},
-		keysLeft: 3,
 	}
-	svc, _, _, _, _ := newInlineTestService(imp)
+	svc, deps := buildService(t, pending("111"), importer)
 
-	got := svc.inlineMatchAndPush(context.Background(), &inventory.Purchase{ID: "p1", CertNumber: "111"})
+	svc.ListPurchases(context.Background(), []string{"111"})
 
-	if got != 55 {
-		t.Fatalf("expected 55 after rotation, got %d", got)
+	if importer.Calls != 1 {
+		t.Fatalf("expected 1 psa_import call, got %d", importer.Calls)
 	}
-	if imp.rotateCalls != 1 {
-		t.Fatalf("expected one rotation, got %d", imp.rotateCalls)
+	if len(deps.fields.Calls) != 1 || deps.fields.Calls[0].InventoryID != 1234 {
+		t.Fatalf("expected fields persisted with inventory ID 1234, got %+v", deps.fields.Calls)
 	}
-	if imp.calls != 2 {
-		t.Fatalf("expected 2 psa_import calls, got %d", imp.calls)
+	if n := len(deps.status.Calls); n == 0 || deps.status.Calls[0].Status != inventory.DHPushStatusMatched {
+		t.Fatalf("expected first status call to be matched, got %+v", deps.status.Calls)
 	}
-}
-
-func TestInlineMatchAndPush_PSAErrorReturnsZero(t *testing.T) {
-	imp := &fakePSAImporter{responses: [][]DHPSAImportResult{{
-		{Resolution: PSAImportStatusPSAError, Error: "Certificate not found in PSA database"},
-	}}}
-	svc, fields, status, _, _ := newInlineTestService(imp)
-
-	got := svc.inlineMatchAndPush(context.Background(), &inventory.Purchase{ID: "p1", CertNumber: "111"})
-
-	if got != 0 {
-		t.Fatalf("expected 0 on psa_error, got %d", got)
+	foundPushedEvent := false
+	for _, e := range deps.events.Events {
+		if e.Type == dhevents.TypePushed {
+			foundPushedEvent = true
+			break
+		}
 	}
-	if len(fields.calls) != 0 {
-		t.Fatalf("expected no fields persisted, got %+v", fields.calls)
-	}
-	if len(status.calls) != 0 {
-		t.Fatalf("expected no status flip on psa_error, got %+v", status.calls)
+	if !foundPushedEvent {
+		t.Fatalf("expected a pushed event, got %+v", deps.events.Events)
 	}
 }
 
-func TestInlineMatchAndPush_MissingIDsReturnsZero(t *testing.T) {
-	imp := &fakePSAImporter{responses: [][]DHPSAImportResult{{
-		{Resolution: PSAImportStatusMatched, DHCardID: 0, DHInventoryID: 0},
-	}}}
-	svc, fields, _, _, _ := newInlineTestService(imp)
-
-	got := svc.inlineMatchAndPush(context.Background(), &inventory.Purchase{ID: "p1", CertNumber: "111"})
-
-	if got != 0 {
-		t.Fatalf("expected 0 when IDs missing, got %d", got)
+func TestListPurchases_InlineRateLimitedRotatesAndRetries(t *testing.T) {
+	keysLeft := 3
+	importer := &mocks.MockDHPSAImporter{
+		Results: [][]dhlisting.DHPSAImportResult{
+			{{Resolution: dhlisting.PSAImportStatusPSAError, RateLimited: true}},
+			{{Resolution: dhlisting.PSAImportStatusMatched, DHCardID: 5, DHInventoryID: 55}},
+		},
+		RotatePSAKeyFn: func() bool {
+			if keysLeft > 0 {
+				keysLeft--
+				return true
+			}
+			return false
+		},
 	}
-	if len(fields.calls) != 0 {
-		t.Fatalf("expected no persistence, got %+v", fields.calls)
+	svc, deps := buildService(t, pending("111"), importer)
+
+	svc.ListPurchases(context.Background(), []string{"111"})
+
+	if importer.Calls != 2 {
+		t.Fatalf("expected 2 psa_import calls (rotate then succeed), got %d", importer.Calls)
+	}
+	if importer.RotateCalls != 1 {
+		t.Fatalf("expected 1 rotation, got %d", importer.RotateCalls)
+	}
+	if len(deps.fields.Calls) != 1 || deps.fields.Calls[0].InventoryID != 55 {
+		t.Fatalf("expected inventory ID 55 persisted, got %+v", deps.fields.Calls)
+	}
+}
+
+func TestListPurchases_InlinePSAErrorLeavesPending(t *testing.T) {
+	importer := &mocks.MockDHPSAImporter{
+		Results: [][]dhlisting.DHPSAImportResult{{
+			{Resolution: dhlisting.PSAImportStatusPSAError, Error: "Certificate not found in PSA database"},
+		}},
+	}
+	svc, deps := buildService(t, pending("111"), importer)
+
+	svc.ListPurchases(context.Background(), []string{"111"})
+
+	if len(deps.fields.Calls) != 0 {
+		t.Fatalf("expected no fields persisted on psa_error, got %+v", deps.fields.Calls)
+	}
+	for _, c := range deps.status.Calls {
+		if c.Status == inventory.DHPushStatusMatched {
+			t.Fatalf("psa_error should not flip status to matched, got %+v", deps.status.Calls)
+		}
+	}
+}
+
+func TestListPurchases_InlineMissingIDsLeavesPending(t *testing.T) {
+	importer := &mocks.MockDHPSAImporter{
+		Results: [][]dhlisting.DHPSAImportResult{{
+			{Resolution: dhlisting.PSAImportStatusMatched, DHCardID: 0, DHInventoryID: 0},
+		}},
+	}
+	svc, deps := buildService(t, pending("111"), importer)
+
+	svc.ListPurchases(context.Background(), []string{"111"})
+
+	if len(deps.fields.Calls) != 0 {
+		t.Fatalf("expected no persistence when IDs are missing, got %+v", deps.fields.Calls)
+	}
+}
+
+func TestListPurchases_InlineAPIErrorLeavesPending(t *testing.T) {
+	importer := &mocks.MockDHPSAImporter{
+		Errs: []error{errors.New("connection refused")},
+	}
+	svc, deps := buildService(t, pending("111"), importer)
+
+	svc.ListPurchases(context.Background(), []string{"111"})
+
+	if len(deps.fields.Calls) != 0 {
+		t.Fatalf("expected no persistence on API error, got %+v", deps.fields.Calls)
 	}
 }
