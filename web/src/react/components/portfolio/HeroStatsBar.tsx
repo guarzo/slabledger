@@ -1,8 +1,10 @@
 import { Link } from 'react-router-dom';
+import { clsx } from 'clsx';
 import type { PortfolioHealth, CapitalSummary } from '../../../types/campaigns';
 import { formatCents, formatPct, formatWeeksToCover } from '../../utils/formatters';
-import { EmptyState } from '../../ui';
+import { EmptyState, StatusPill } from '../../ui';
 import TrendArrow from '../../ui/TrendArrow';
+import styles from './HeroStatsBar.module.css';
 
 const trendToArrow = { improving: 'up', declining: 'down', stable: 'stable' } as const;
 
@@ -12,9 +14,19 @@ interface HeroStatsBarProps {
 }
 
 export default function HeroStatsBar({ health, capital }: HeroStatsBarProps) {
-  if (!health) return null;
+  if (!health) {
+    return (
+      <section className={styles.hero} aria-label="Portfolio summary">
+        <div className={styles.roiBlock}>
+          <div className={styles.roiLabel}>Realized ROI</div>
+          <div className={styles.roiRow}>
+            <span className={clsx(styles.roiValue, styles.tMuted)}>—</span>
+          </div>
+        </div>
+      </section>
+    );
+  }
 
-  // Onboarding: all-zero state
   const hasActivity = health.totalDeployedCents > 0 || health.totalRecoveredCents > 0 || health.realizedROI !== 0;
   if (!hasActivity) {
     return (
@@ -31,75 +43,80 @@ export default function HeroStatsBar({ health, capital }: HeroStatsBarProps) {
   }
 
   const roi = health.realizedROI ?? 0;
+  const negative = roi < 0;
 
   return (
-    <div className="mb-7 pb-6 border-b border-[rgba(255,255,255,0.05)]">
-      <div className="flex items-end gap-7 flex-wrap">
-        <div>
-          <div className="text-[11px] font-semibold text-[var(--brand-400)] uppercase tracking-wider mb-0.5">
-            Realized ROI
-          </div>
-          <div className={`text-[32px] font-extrabold tracking-tight leading-none ${roi >= 0 ? 'text-[var(--success)]' : 'text-[var(--danger)]'}`}>
-            {formatPct(roi)}
-          </div>
+    <section className={styles.hero} data-tone={negative ? 'neg' : 'pos'} aria-label="Portfolio summary">
+      <div className={styles.roiBlock}>
+        <div className={styles.roiLabel}>Realized ROI</div>
+        <div className={styles.roiRow}>
+          <span className={styles.roiValue}>{formatPct(roi)}</span>
         </div>
-        <div className="flex flex-wrap gap-6 pb-1">
-          <div>
-            <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Deployed</div>
-            <div className="text-base font-semibold text-[var(--text)]">{formatCents(health.totalDeployedCents ?? 0)}</div>
-          </div>
-          <div>
-            <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Recovered</div>
-            <div className="text-base font-semibold text-[var(--text)]">{formatCents(health.totalRecoveredCents ?? 0)}</div>
-          </div>
-          <div>
-            <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">At Risk</div>
-            <div className={`text-base font-semibold ${(health.totalAtRiskCents ?? 0) > 0 ? 'text-[var(--warning)]' : 'text-[var(--text)]'}`}>{formatCents(health.totalAtRiskCents ?? 0)}</div>
-          </div>
-          {capital && (
-            <>
-              <div className="border-l border-[rgba(255,255,255,0.08)] pl-6">
-                <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Wks to Cover</div>
-                <div className={`text-base font-semibold ${
-                  capital.alertLevel === 'critical' ? 'text-[var(--danger)]'
-                    : capital.alertLevel === 'warning' ? 'text-[var(--warning)]'
-                    : capital.recoveryRate30dCents === 0 ? 'text-[var(--text-muted)]'
-                    : 'text-[var(--success)]'
-                }`}>
-                  {capital.outstandingCents === 0 && capital.recoveryRate30dCents > 0 ? '0' : formatWeeksToCover(capital.weeksToCover, capital.recoveryRate30dCents > 0)}
+      </div>
+
+      {/* Money group */}
+      <div className={styles.group}>
+        <Stat label="Deployed" value={formatCents(health.totalDeployedCents ?? 0)} />
+        <Stat label="Recovered" value={formatCents(health.totalRecoveredCents ?? 0)} />
+        <Stat label="At Risk" value={formatCents(health.totalAtRiskCents ?? 0)} tone={(health.totalAtRiskCents ?? 0) > 0 ? 'warn' : undefined} />
+      </div>
+
+      {capital && (
+        <>
+          <div className={styles.divider} aria-hidden />
+          {/* Time group */}
+          <div className={styles.group}>
+            <Stat
+              label="Wks to Cover"
+              value={capital.outstandingCents === 0 && capital.recoveryRate30dCents > 0
+                ? '0'
+                : formatWeeksToCover(capital.weeksToCover, capital.recoveryRate30dCents > 0)}
+              tone={capital.alertLevel === 'critical' ? 'neg'
+                : capital.alertLevel === 'warning' ? 'warn'
+                : capital.recoveryRate30dCents === 0 ? 'muted'
+                : 'success'}
+            />
+            <Stat
+              label="Outstanding"
+              value={formatCents(capital.outstandingCents)}
+              tone={capital.alertLevel === 'critical' ? 'neg' : capital.alertLevel === 'warning' ? 'warn' : undefined}
+            />
+            {capital.recoveryRate30dCents > 0 && (
+              <div className={styles.stat}>
+                <div className={styles.statLabel}>30d Recovery</div>
+                <div className={styles.statValue}>
+                  {formatCents(capital.recoveryRate30dCents)}
+                  <TrendArrow trend={trendToArrow[capital.recoveryTrend]} />
                 </div>
               </div>
-              <div>
-                <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Outstanding</div>
-                <div className={`text-base font-semibold ${
-                  capital.alertLevel === 'critical' ? 'text-[var(--danger)]'
-                    : capital.alertLevel === 'warning' ? 'text-[var(--warning)]'
-                    : 'text-[var(--text)]'
-                }`}>{formatCents(capital.outstandingCents)}</div>
-              </div>
-              {capital.recoveryRate30dCents > 0 && (
-                <div>
-                  <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">30d Recovery</div>
-                  <div className="flex items-center gap-1">
-                    <span className="text-base font-semibold text-[var(--text)]">{formatCents(capital.recoveryRate30dCents)}</span>
-                    <TrendArrow trend={trendToArrow[capital.recoveryTrend]} />
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-          {capital && capital.unpaidInvoiceCount > 0 && (
-            <div className="flex items-center self-center">
-              <Link
-                to="/invoices"
-                aria-label={`Open ${capital.unpaidInvoiceCount} unpaid invoice${capital.unpaidInvoiceCount !== 1 ? 's' : ''}`}
-                className="text-xs font-medium text-[var(--warning)] bg-[var(--warning)]/10 hover:bg-[var(--warning)]/20 px-2 py-0.5 rounded-full transition-colors"
-              >
-                {capital.unpaidInvoiceCount} unpaid invoice{capital.unpaidInvoiceCount !== 1 ? 's' : ''} →
-              </Link>
-            </div>
-          )}
+            )}
+          </div>
+        </>
+      )}
+
+      {capital && capital.unpaidInvoiceCount > 0 && (
+        <div className={styles.alerts}>
+          <Link to="/invoices" className={styles.alertLink}>
+            <StatusPill tone="warning">
+              {capital.unpaidInvoiceCount} unpaid invoice{capital.unpaidInvoiceCount !== 1 ? 's' : ''} →
+            </StatusPill>
+          </Link>
         </div>
+      )}
+    </section>
+  );
+}
+
+const TONE_CLASS: Record<string, string> = {
+  warn: styles.tWarn, neg: styles.tNeg, muted: styles.tMuted, success: styles.tSuccess,
+};
+
+function Stat({ label, value, tone }: { label: string; value: string; tone?: 'warn' | 'neg' | 'muted' | 'success' }) {
+  return (
+    <div className={styles.stat}>
+      <div className={styles.statLabel}>{label}</div>
+      <div className={clsx(styles.statValue, tone && TONE_CLASS[tone])}>
+        {value}
       </div>
     </div>
   );

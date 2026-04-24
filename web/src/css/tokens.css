@@ -474,6 +474,10 @@
   --rec-avoid-border: #b91c1c;
   --rec-avoid-text: #ffffff;
   --rec-avoid-shadow: 0 2px 8px rgba(220, 38, 38, 0.4);
+
+  /* Hero stats */
+  --hero-divider: 1px solid rgba(255,255,255,0.08);
+  --hero-roi-size: clamp(32px, 4vw, 44px);
 }
 
 /* Light mode removed — dark mode only */

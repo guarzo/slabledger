@@ -1,0 +1,13 @@
+.rec {
+  display: inline-flex; align-items: center;
+  font-size: 10px; font-weight: 800;
+  padding: 4px 9px; border-radius: 6px;
+  color: #fff; letter-spacing: 0.06em; text-transform: uppercase;
+  border: 1px solid;
+}
+.t-must-buy    { background: var(--rec-must-buy-gradient);    border-color: var(--rec-must-buy-border);    box-shadow: var(--rec-must-buy-shadow); }
+.t-strong-buy  { background: var(--rec-strong-buy-gradient);  border-color: var(--rec-strong-buy-border);  box-shadow: var(--rec-strong-buy-shadow); }
+.t-buy         { background: var(--rec-buy-gradient);         border-color: var(--rec-buy-border);         box-shadow: var(--rec-buy-shadow); }
+.t-buy-caution { background: var(--rec-buy-caution-gradient); border-color: var(--rec-buy-caution-border); box-shadow: var(--rec-buy-caution-shadow); color: #422006; }
+.t-watch       { background: var(--rec-watch-gradient);       border-color: var(--rec-watch-border);       box-shadow: var(--rec-watch-shadow); }
+.t-avoid       { background: var(--rec-avoid-gradient);       border-color: var(--rec-avoid-border);       box-shadow: var(--rec-avoid-shadow); }

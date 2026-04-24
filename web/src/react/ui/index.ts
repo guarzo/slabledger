@@ -52,6 +52,12 @@ export { ConfidenceIndicator } from './ConfidenceIndicator';
 export { TrendArrow } from './TrendArrow';
 export { TrendBadge } from './TrendBadge';
 
+// Status & Recommendations
+export { StatusPill } from './StatusPill';
+export type { StatusTone } from './StatusPill';
+export { RecommendationBadge } from './RecommendationBadge';
+export type { RecTier } from './RecommendationBadge';
+
 // Stats & Sections
 export { default as StatCard } from './StatCard';
 export type { StatCardProps } from './StatCard';
