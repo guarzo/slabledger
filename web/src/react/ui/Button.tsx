@@ -29,6 +29,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       <button
         ref={ref}
         type="button"
+        aria-busy={loading || undefined}
         className={clsx(
           styles.btn,
           styles[`v-${variant}`],
@@ -39,18 +40,10 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         disabled={disabled || loading}
         {...rest}
       >
-        {loading ? (
-          <>
-            <Spinner size={size} />
-            {children && <span>Loading...</span>}
-          </>
-        ) : (
-          <>
-            {icon && <span className={styles.icon} aria-hidden="true">{icon}</span>}
-            {children}
-            {kbd && <span className={styles.kbd}>{kbd}</span>}
-          </>
-        )}
+        {loading && <Spinner size={size} />}
+        {icon && !loading && <span className={styles.icon} aria-hidden="true">{icon}</span>}
+        {children}
+        {kbd && <span className={styles.kbd} aria-hidden="true">{kbd}</span>}
       </button>
     );
   },

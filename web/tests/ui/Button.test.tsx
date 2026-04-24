@@ -32,11 +32,12 @@ describe('Button Component', () => {
 
   describe('Loading State', () => {
     it('shows loading spinner when loading is true', () => {
-      render(<Button loading>Loading</Button>);
+      render(<Button loading>Save</Button>);
       const button = screen.getByRole('button');
       expect(button).toBeDisabled();
-      expect(screen.getByText('Loading...')).toBeInTheDocument();
+      expect(button).toHaveAttribute('aria-busy', 'true');
       expect(button.querySelector('svg')).toBeInTheDocument();
+      expect(screen.getByText('Save')).toBeInTheDocument();
     });
 
     it('disables button when loading', () => {
@@ -44,9 +45,9 @@ describe('Button Component', () => {
       expect(screen.getByRole('button')).toBeDisabled();
     });
 
-    it('hides children content when loading', () => {
+    it('preserves children when loading', () => {
       render(<Button loading>Click me</Button>);
-      expect(screen.queryByText('Click me')).not.toBeInTheDocument();
+      expect(screen.getByText('Click me')).toBeInTheDocument();
     });
 
     it('shows loading spinner without text when no children', () => {
