@@ -204,6 +204,7 @@ export default function LiquidationPage() {
                     <div className="glass-table-td flex-shrink-0 !px-1" style={{ width: '28px' }}>
                       <input
                         type="checkbox"
+                        aria-label={`Select ${item.cardName}`}
                         checked={isSelected}
                         onChange={() => toggleSelect(item.purchaseId)}
                         className="rounded accent-[var(--brand-500)]"
