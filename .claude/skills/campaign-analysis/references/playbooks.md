@@ -209,6 +209,32 @@ Every `/campaign-analysis` conversation must close with a short retrospective bl
 
 **When to write it.** At the end of a session, right before the closing question, or when the user signals they're wrapping up ("thanks, that's it for tonight", "ok let's apply these", etc.). Don't write it on every individual turn — once per session.
 
+### Step 5a — Strategy doc sync (MANDATORY, runs before the retrospective)
+
+**This step is non-negotiable.** If any campaign parameters were changed, campaigns were added/removed/paused, or emails were sent to Brady during this session, the strategy document MUST be updated before the session ends. Failing to do this breaks the next session's analysis — the strategy doc is the persistent state that carries across sessions, not memory.
+
+**What to update in `docs/private/CAMPAIGN_STRATEGY.md`:**
+
+1. **Add a "Changes Submitted YYYY-MM-DD" section** (after the most recent changes section, before the Overlap Map) documenting:
+   - What was removed/paused
+   - What parameters changed on each campaign (old → new, with rationale from this session's analysis)
+   - Full campaign blocks for any new campaigns
+   - Budget impact table (before/after)
+   - Context driving the changes
+   - "What to watch next session" bullets
+
+2. **Update the Quick-Copy Campaign Formats section** — every active campaign block must reflect current parameters. Mark removed campaigns under a "Removed Campaigns" subsection.
+
+3. **Update the Campaign Overlap Map** — reflect any changes to which campaigns catch which scenarios, and note new gaps.
+
+4. **Update the Budget Parameters table** at the top of "Current Campaign Structure."
+
+5. **Mark any superseded "Proposed Adjustments" sections** with a status note so future sessions don't treat proposals as current state.
+
+**Verification:** After writing, re-read the Quick-Copy section and confirm each campaign's parameters match what was sent to Brady. A mismatch here is the exact failure mode this step prevents.
+
+### Step 5b — Retrospective capture
+
 **What to capture.** Four buckets, each 1-3 bullets. Skip any bucket that's empty, don't invent filler:
 
 1. **Data gaps encountered** — endpoints that returned empty (`intelligence_count: 0`, niches empty, signals empty, etc.), fields missing from responses, hypotheses we couldn't test from current data.

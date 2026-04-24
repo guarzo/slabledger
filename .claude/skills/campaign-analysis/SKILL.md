@@ -246,9 +246,11 @@ Keep it concise — the goal is to prompt a focused follow-up, not dump a report
 
 Route each user follow-up to a playbook. Load `references/playbooks.md` for the full content of Playbooks A–G (tuning, liquidation, aging inventory, strategy-doc reconciliation, single-campaign deep dive, coverage gaps, DH marketplace) and the Step 5 retrospective procedure.
 
-## Step 5 — Retrospective
+## Step 5 — Strategy Doc Sync + Retrospective
 
-See `references/playbooks.md` for the full retrospective procedure — when to write it, the four capture buckets, and where to append it.
+**CRITICAL: Step 5a (strategy doc sync) is the most important step in the entire skill.** If campaign parameters changed, campaigns were added/removed/paused, or Brady emails were sent during this session, `docs/private/CAMPAIGN_STRATEGY.md` MUST be updated before the session ends. The next session's analysis depends entirely on this document being current. Failing to update it was identified as a critical process failure on 2026-04-23.
+
+See `references/playbooks.md` for the full procedure — Step 5a (strategy doc sync) and Step 5b (retrospective capture).
 
 ## Conversational guidelines
 

@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 
 	"github.com/guarzo/slabledger/internal/domain/liquidation"
@@ -19,9 +20,11 @@ func NewLiquidationHandler(svc liquidation.Service, logger observability.Logger)
 
 func (h *LiquidationHandler) HandlePreview(w http.ResponseWriter, r *http.Request) {
 	var req liquidation.PreviewRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid request body")
-		return
+	if r.Body != nil && r.ContentLength != 0 {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err != io.EOF {
+			writeError(w, http.StatusBadRequest, "invalid request body")
+			return
+		}
 	}
 	resp, err := h.svc.Preview(r.Context(), req)
 	if err != nil {
