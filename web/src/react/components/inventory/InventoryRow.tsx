@@ -18,10 +18,11 @@ interface InventoryRowProps {
   daysHeld: number;
   rec: RecTier;
   onClick?: () => void;
+  ariaLabel?: string;
 }
 
 const fmt = (cents: number) =>
-  `$${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+  `$${((cents ?? 0) / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
 
 const DIR_CLASS: Record<Direction, string> = {
   rising: styles.dirRising, falling: styles.dirFalling, stable: styles.dirStable,
@@ -36,11 +37,14 @@ const ageTone = (d: number) => d > 90 ? 'danger' : d > 60 ? 'warning' : d < 30 ?
 
 export function InventoryRow(p: InventoryRowProps) {
   const Tag = p.onClick ? 'button' : 'div';
+  const days = Math.max(0, p.daysHeld ?? 0);
+  const deltaPct = p.marketDeltaPct ?? 0;
   return (
     <Tag
       className={clsx(styles.row, p.onClick && styles.interactive)}
       onClick={p.onClick}
       type={p.onClick ? 'button' : undefined}
+      aria-label={p.ariaLabel}
     >
       <div className={styles.gradeCol}>
         <GradeBadge grader={p.grader} grade={p.grade} blackLabel={p.blackLabel} size="md" />
@@ -58,18 +62,18 @@ export function InventoryRow(p: InventoryRowProps) {
         <div className={styles.marketRow}>
           <span className={styles.numValue}>{fmt(p.marketCents)}</span>
           <span className={styles.dirChip}>
-            {DIR_ARROW[p.direction]}
-            {' '}{p.marketDeltaPct >= 0 ? '+' : ''}{p.marketDeltaPct.toFixed(1)}%
+            <span aria-hidden="true">{DIR_ARROW[p.direction]}</span>
+            {' '}{deltaPct >= 0 ? '+' : ''}{deltaPct.toFixed(1)}%
           </span>
         </div>
       </div>
-      <div className={clsx(styles.ageCol, AGE_CLASS[ageTone(p.daysHeld)])}>
+      <div className={clsx(styles.ageCol, AGE_CLASS[ageTone(days)])}>
         <div className={styles.numLabel}>Age</div>
         <div className={styles.numValue}>
           <span className={styles.ageBar}>
-            <span style={{ width: `${Math.min(100, (p.daysHeld / 120) * 100)}%` }} />
+            <span style={{ width: `${Math.min(100, (days / 90) * 100)}%` }} />
           </span>
-          {p.daysHeld}d
+          {days}d
         </div>
       </div>
       <div className={styles.recCol}>

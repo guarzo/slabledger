@@ -2,8 +2,7 @@ import { Link } from 'react-router-dom';
 import { clsx } from 'clsx';
 import type { PortfolioHealth, CapitalSummary } from '../../../types/campaigns';
 import { formatCents, formatPct, formatWeeksToCover } from '../../utils/formatters';
-import { EmptyState } from '../../ui';
-import { StatusPill } from '../../ui/StatusPill';
+import { EmptyState, StatusPill } from '../../ui';
 import TrendArrow from '../../ui/TrendArrow';
 import styles from './HeroStatsBar.module.css';
 
@@ -15,7 +14,18 @@ interface HeroStatsBarProps {
 }
 
 export default function HeroStatsBar({ health, capital }: HeroStatsBarProps) {
-  if (!health) return null;
+  if (!health) {
+    return (
+      <section className={styles.hero} aria-label="Portfolio summary">
+        <div className={styles.roiBlock}>
+          <div className={styles.roiLabel}>Realized ROI</div>
+          <div className={styles.roiRow}>
+            <span className={clsx(styles.roiValue, styles.tMuted)}>—</span>
+          </div>
+        </div>
+      </section>
+    );
+  }
 
   const hasActivity = health.totalDeployedCents > 0 || health.totalRecoveredCents > 0 || health.realizedROI !== 0;
   if (!hasActivity) {
@@ -61,7 +71,10 @@ export default function HeroStatsBar({ health, capital }: HeroStatsBarProps) {
               value={capital.outstandingCents === 0 && capital.recoveryRate30dCents > 0
                 ? '0'
                 : formatWeeksToCover(capital.weeksToCover, capital.recoveryRate30dCents > 0)}
-              tone={capital.alertLevel === 'critical' ? 'neg' : capital.alertLevel === 'warning' ? 'warn' : undefined}
+              tone={capital.alertLevel === 'critical' ? 'neg'
+                : capital.alertLevel === 'warning' ? 'warn'
+                : capital.recoveryRate30dCents === 0 ? 'muted'
+                : 'success'}
             />
             <Stat
               label="Outstanding"
@@ -94,11 +107,15 @@ export default function HeroStatsBar({ health, capital }: HeroStatsBarProps) {
   );
 }
 
-function Stat({ label, value, tone }: { label: string; value: string; tone?: 'warn' | 'neg' }) {
+const TONE_CLASS: Record<string, string> = {
+  warn: styles.tWarn, neg: styles.tNeg, muted: styles.tMuted, success: styles.tSuccess,
+};
+
+function Stat({ label, value, tone }: { label: string; value: string; tone?: 'warn' | 'neg' | 'muted' | 'success' }) {
   return (
     <div className={styles.stat}>
       <div className={styles.statLabel}>{label}</div>
-      <div className={clsx(styles.statValue, tone === 'warn' && styles.tWarn, tone === 'neg' && styles.tNeg)}>
+      <div className={clsx(styles.statValue, tone && TONE_CLASS[tone])}>
         {value}
       </div>
     </div>
