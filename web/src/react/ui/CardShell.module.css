@@ -90,7 +90,9 @@
 .v-ai.interactive:hover       { box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.06); }
 .v-data.interactive:hover     { background: color-mix(in srgb, var(--card-data-bg) 90%, var(--brand-500) 10%); }
 
+/* Use outline (not box-shadow) so the focus ring composes with variant/hover shadows
+   instead of clobbering them. Modern browsers follow border-radius for outline. */
 .interactive:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 3px var(--brand-500);
+  outline: 3px solid var(--brand-500);
+  outline-offset: 2px;
 }
