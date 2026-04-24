@@ -82,7 +82,7 @@ export default function SettingsTab({ campaign, onUpdate, onDelete }: {
             {isClosed ? (
               <Button variant="secondary" size="sm" loading={saving} onClick={handleReopen}>Reopen</Button>
             ) : (
-              <Button variant="link" size="sm" onClick={() => setEditing(true)}>Edit</Button>
+              <Button variant="ghost" size="sm" onClick={() => setEditing(true)}>Edit</Button>
             )}
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
