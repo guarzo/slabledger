@@ -47,6 +47,7 @@ export default function LiquidationPage() {
   const deferredNoComps = useDeferredValue(discountNoComps);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [finalPrices, setFinalPrices] = useState<Record<string, number>>({});
+  const [finalPriceInputs, setFinalPriceInputs] = useState<Record<string, string>>({});
   const [showConfirm, setShowConfirm] = useState(false);
 
   const { data, isLoading, error } = useLiquidationPreview(deferredWithComps, deferredNoComps);
@@ -71,11 +72,18 @@ export default function LiquidationPage() {
 
   const setPillPrice = (id: string, cents: number) => {
     setFinalPrices(prev => ({ ...prev, [id]: cents }));
+    setFinalPriceInputs(prev => ({ ...prev, [id]: cents > 0 ? (cents / 100).toFixed(2) : '' }));
   };
 
-  const handleFinalPriceChange = (id: string, val: string) => {
+  const handleInputChange = (id: string, val: string) => {
+    setFinalPriceInputs(prev => ({ ...prev, [id]: val }));
+  };
+
+  const handleInputBlur = (id: string) => {
+    const val = finalPriceInputs[id] ?? '';
     if (val === '' || val === '.') {
       setFinalPrices(prev => ({ ...prev, [id]: 0 }));
+      setFinalPriceInputs(prev => ({ ...prev, [id]: '' }));
       return;
     }
     const parts = val.split('.');
@@ -84,6 +92,7 @@ export default function LiquidationPage() {
     const cents = d * 100 + parseInt(frac, 10);
     if (!isNaN(cents) && cents >= 0) {
       setFinalPrices(prev => ({ ...prev, [id]: cents }));
+      setFinalPriceInputs(prev => ({ ...prev, [id]: cents > 0 ? (cents / 100).toFixed(2) : '' }));
     }
   };
 
@@ -108,6 +117,7 @@ export default function LiquidationPage() {
         setShowConfirm(false);
         setSelected(new Set());
         setFinalPrices({});
+        setFinalPriceInputs({});
       },
     });
   };
@@ -241,11 +251,12 @@ export default function LiquidationPage() {
                     </div>
                     <div className="glass-table-td flex-shrink-0 text-right" style={{ width: '100px' }}>
                       <input
-                        type="number"
-                        min={0}
-                        step={0.01}
-                        value={currentFinal > 0 ? (currentFinal / 100).toFixed(2) : ''}
-                        onChange={e => handleFinalPriceChange(item.purchaseId, e.target.value)}
+                        type="text"
+                        inputMode="decimal"
+                        aria-label={`Final price for ${item.cardName}`}
+                        value={finalPriceInputs[item.purchaseId] ?? (currentFinal > 0 ? (currentFinal / 100).toFixed(2) : '')}
+                        onChange={e => handleInputChange(item.purchaseId, e.target.value)}
+                        onBlur={() => handleInputBlur(item.purchaseId)}
                         placeholder="0.00"
                         className="w-20 px-2 py-1 rounded border border-[var(--surface-2)] bg-[var(--surface-1)] text-[var(--text)] text-right text-sm tabular-nums"
                       />
