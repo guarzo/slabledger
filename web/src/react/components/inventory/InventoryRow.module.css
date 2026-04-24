@@ -13,7 +13,9 @@
 }
 .interactive {
   cursor: pointer;
-  transition: all 180ms cubic-bezier(.4,0,.2,1);
+  transition: transform 180ms cubic-bezier(.4,0,.2,1),
+    border-color 180ms cubic-bezier(.4,0,.2,1),
+    box-shadow 180ms cubic-bezier(.4,0,.2,1);
 }
 .interactive:hover {
   transform: translateY(-1px);
@@ -57,11 +59,11 @@
   display: inline-block; width: 40px; height: 4px;
   background: rgba(255,255,255,0.06); border-radius: 2px; overflow: hidden;
 }
-.ageBar > span { display: block; height: 100%; background: currentColor; }
+.ageBar > span { display: block; height: 100%; background: currentcolor; }
 .ageFresh   { color: var(--success); }
 .ageNeutral { color: var(--text-muted); }
 .ageWarning { color: var(--warning); }
 .ageDanger  { color: var(--danger); }
-.ageWarning .numValue, .ageDanger .numValue { color: currentColor; }
+.ageWarning .numValue, .ageDanger .numValue { color: currentcolor; }
 
 .recCol { display: flex; justify-content: flex-end; }

@@ -36,14 +36,18 @@ const AGE_CLASS: Record<string, string> = {
 const ageTone = (d: number) => d > 90 ? 'danger' : d > 60 ? 'warning' : d < 30 ? 'fresh' : 'neutral';
 
 export function InventoryRow(p: InventoryRowProps) {
-  const Tag = p.onClick ? 'button' : 'div';
   const days = Math.max(0, p.daysHeld ?? 0);
   const deltaPct = p.marketDeltaPct ?? 0;
+  const handleKeyDown = p.onClick
+    ? (e: React.KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); p.onClick!(); } }
+    : undefined;
   return (
-    <Tag
+    <div
       className={clsx(styles.row, p.onClick && styles.interactive)}
       onClick={p.onClick}
-      type={p.onClick ? 'button' : undefined}
+      role={p.onClick ? 'button' : undefined}
+      tabIndex={p.onClick ? 0 : undefined}
+      onKeyDown={handleKeyDown}
       aria-label={p.ariaLabel}
     >
       <div className={styles.gradeCol}>
@@ -79,6 +83,6 @@ export function InventoryRow(p: InventoryRowProps) {
       <div className={styles.recCol}>
         <RecommendationBadge tier={p.rec} />
       </div>
-    </Tag>
+    </div>
   );
 }
