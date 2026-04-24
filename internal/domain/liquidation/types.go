@@ -28,8 +28,10 @@ type CompPriceResult struct {
 }
 
 // PreviewRequest carries settings for a liquidation preview.
-// Discount percentages are hardcoded server-side (2.5% with comps, 10% without).
-type PreviewRequest struct{}
+type PreviewRequest struct {
+	DiscountWithCompsPct *float64 `json:"discountWithCompsPct"`
+	DiscountNoCompsPct   *float64 `json:"discountNoCompsPct"`
+}
 
 // PreviewItem is one card in the preview response.
 type PreviewItem struct {

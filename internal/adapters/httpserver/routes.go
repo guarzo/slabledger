@@ -331,7 +331,7 @@ func (rt *Router) registerLiquidationRoutes(mux *http.ServeMux) {
 	}
 	mux.Handle("POST /api/liquidation/preview", authRoute(rt.liquidationHandler.HandlePreview))
 	mux.Handle("POST /api/liquidation/apply", authRoute(rt.liquidationHandler.HandleApply))
-	mux.HandleFunc("/liquidation", rt.spaHandler.HandleIndex)
+	mux.HandleFunc("/reprice", rt.spaHandler.HandleIndex)
 }
 
 // TrackedEndpoints lists the endpoints whose response times are recorded.

@@ -399,4 +399,3 @@ func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []stri
 
 	return DHListingResult{Listed: listed, Synced: synced, Skipped: skipped, Total: len(purchases)}
 }
-

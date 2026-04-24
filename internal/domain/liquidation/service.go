@@ -26,6 +26,15 @@ func (s *service) Preview(ctx context.Context, req PreviewRequest) (PreviewRespo
 		return PreviewResponse{}, err
 	}
 
+	discWithComps := discountWithComps
+	if req.DiscountWithCompsPct != nil {
+		discWithComps = *req.DiscountWithCompsPct
+	}
+	discNoComps := discountNoComps
+	if req.DiscountNoCompsPct != nil {
+		discNoComps = *req.DiscountNoCompsPct
+	}
+
 	var items []PreviewItem
 	var summary PreviewSummary
 
@@ -57,7 +66,7 @@ func (s *service) Preview(ctx context.Context, req PreviewRequest) (PreviewRespo
 				item.MostRecentCompDate = result.MostRecentCompDate
 				item.ConfidenceLevel = result.ConfidenceLevel
 				item.GapPct = result.GapPct
-				item.SuggestedPriceCents = applyDiscount(p.CLValueCents, discountWithComps)
+				item.SuggestedPriceCents = applyDiscount(p.CLValueCents, discWithComps)
 				if item.SuggestedPriceCents < p.BuyCostCents {
 					item.BelowCost = true
 					summary.BelowCostCount++
@@ -66,7 +75,7 @@ func (s *service) Preview(ctx context.Context, req PreviewRequest) (PreviewRespo
 				summary.TotalSuggestedValueCents += item.SuggestedPriceCents
 			} else {
 				if p.CLValueCents > 0 {
-					item.SuggestedPriceCents = applyDiscount(p.CLValueCents, discountNoComps)
+					item.SuggestedPriceCents = applyDiscount(p.CLValueCents, discNoComps)
 					if item.SuggestedPriceCents < p.BuyCostCents {
 						item.BelowCost = true
 						summary.BelowCostCount++
@@ -78,7 +87,7 @@ func (s *service) Preview(ctx context.Context, req PreviewRequest) (PreviewRespo
 				}
 			}
 		} else if p.CLValueCents > 0 {
-			item.SuggestedPriceCents = applyDiscount(p.CLValueCents, discountNoComps)
+			item.SuggestedPriceCents = applyDiscount(p.CLValueCents, discNoComps)
 			if item.SuggestedPriceCents < p.BuyCostCents {
 				item.BelowCost = true
 				summary.BelowCostCount++

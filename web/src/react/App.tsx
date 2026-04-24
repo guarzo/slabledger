@@ -97,8 +97,8 @@ function AppContent() {
                   </PageTransition>
                 </ProtectedRoute>
               } />
-              {/* Liquidation */}
-              <Route path="/liquidation" element={
+              {/* Reprice */}
+              <Route path="/reprice" element={
                 <ProtectedRoute>
                   <PageTransition>
                     <LiquidationPage />
