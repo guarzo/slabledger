@@ -272,6 +272,22 @@
   --ripple-dark: rgba(0, 0, 0, 0.2);          /* For secondary/ghost/outline buttons */
 
   /* ===================================
+     BUTTON CHROME
+     =================================== */
+  --btn-radius: 10px;
+  --btn-radius-sm: 8px;
+  --btn-radius-lg: 12px;
+  --btn-top-highlight: inset 0 1px 0 rgba(255,255,255,0.25);
+  --btn-bottom-edge: 0 1px 0 rgba(0,0,0,0.4);
+  --btn-glow-brand: 0 6px 20px -4px rgba(99,102,241,0.55);
+  --btn-glow-brand-h: 0 10px 28px -4px rgba(99,102,241,0.70);
+  --btn-glow-success: 0 6px 18px -4px rgba(16,185,129,0.45);
+  --btn-glow-gold: 0 6px 16px -2px rgba(251,191,36,0.50);
+  --btn-glow-gold-h: 0 10px 24px -4px rgba(251,191,36,0.70);
+  --btn-glow-ai: 0 4px 16px -4px rgba(167,139,250,0.40);
+  --btn-gold-edge: 0 2px 0 #b45309;
+
+  /* ===================================
      TRANSITIONS
      =================================== */
   --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);

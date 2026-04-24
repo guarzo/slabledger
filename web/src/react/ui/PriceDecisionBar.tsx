@@ -196,7 +196,7 @@ export default function PriceDecisionBar({
         </div>
         {onFlag && (
           <div className="ml-auto">
-            <Button variant="warning" size="sm" onClick={onFlag} disabled={allDisabled}>
+            <Button variant="danger" size="sm" onClick={onFlag} disabled={allDisabled}>
               Flag for Fix
             </Button>
           </div>

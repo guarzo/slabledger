@@ -364,7 +364,7 @@ export default function CampaignsPage() {
             Paste
           </Button>
           <Button
-            size="icon"
+            size="sm"
             title={showCreate ? 'Cancel' : 'New campaign'}
             variant={showCreate ? 'danger' : 'primary'}
             onClick={() => {
