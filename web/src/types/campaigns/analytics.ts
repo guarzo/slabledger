@@ -216,7 +216,7 @@ export interface ChannelVelocity {
 // Delta types
 
 export interface PortfolioDelta {
-  /** Signed number. Percentage points for ROI, dollars for money fields. */
+  /** Signed number. Percentage points for ROI, cents for money fields. */
   value: number;
   /** Optional human label, e.g. "vs last wk", "30d". */
   label?: string;
