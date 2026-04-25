@@ -3,7 +3,7 @@
  *
  * Lists all campaigns with P&L summary info and portfolio summary strip.
  */
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQueries, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../js/api';
@@ -179,6 +179,26 @@ const phaseFilterLabels: Record<PhaseFilter, string> = {
 export default function CampaignsPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [phaseFilter, setPhaseFilter] = useState<PhaseFilter>('all');
+  const phaseRadioGroupRef = useRef<HTMLDivElement>(null);
+  const handlePhaseRadioKeyDown = useCallback((e: React.KeyboardEvent) => {
+    const keys = ['ArrowLeft', 'ArrowUp', 'ArrowRight', 'ArrowDown', 'Home', 'End'];
+    if (!keys.includes(e.key)) return;
+    e.preventDefault();
+    const idx = phaseFilterOrder.indexOf(phaseFilter);
+    let next = idx;
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+      next = (idx - 1 + phaseFilterOrder.length) % phaseFilterOrder.length;
+    } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+      next = (idx + 1) % phaseFilterOrder.length;
+    } else if (e.key === 'Home') {
+      next = 0;
+    } else if (e.key === 'End') {
+      next = phaseFilterOrder.length - 1;
+    }
+    setPhaseFilter(phaseFilterOrder[next]);
+    const buttons = phaseRadioGroupRef.current?.querySelectorAll<HTMLButtonElement>('[role="radio"]');
+    buttons?.[next]?.focus();
+  }, [phaseFilter]);
   const toast = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -394,9 +414,11 @@ export default function CampaignsPage() {
 
       {allCampaigns.length > 0 && (
         <div
+          ref={phaseRadioGroupRef}
           role="radiogroup"
           aria-label="Filter campaigns by phase"
           className="flex flex-wrap items-center gap-2 mb-4"
+          onKeyDown={handlePhaseRadioKeyDown}
         >
           {phaseFilterOrder.map(filter => {
             const isActive = phaseFilter === filter;
@@ -415,6 +437,7 @@ export default function CampaignsPage() {
                 type="button"
                 role="radio"
                 aria-checked={isActive}
+                tabIndex={isActive ? 0 : -1}
                 onClick={() => setPhaseFilter(filter)}
                 className={`${base} ${stateClass}`}
               >

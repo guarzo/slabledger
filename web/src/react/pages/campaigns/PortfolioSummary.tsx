@@ -41,6 +41,7 @@ export default function PortfolioSummary({ campaignCount, pnlMap }: PortfolioSum
               role="progressbar"
               aria-label={`Capital recovered: ${formatCents(totalRevenue)} of ${formatCents(totalSpent)} invested (${recoveryPct.toFixed(0)}%)`}
               aria-valuenow={Math.round(clampedRecovery)}
+              aria-valuetext={`${recoveryPct.toFixed(0)}%`}
               aria-valuemin={0}
               aria-valuemax={100}
             >
