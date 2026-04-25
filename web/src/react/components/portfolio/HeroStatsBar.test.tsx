@@ -35,10 +35,19 @@ function baseCapital(overrides: Partial<CapitalSummary> = {}): CapitalSummary {
   };
 }
 
-function renderBar(health?: PortfolioHealth, capital?: CapitalSummary) {
+function renderBar(
+  health?: PortfolioHealth,
+  capital?: CapitalSummary,
+  extras: { needsAttentionCount?: number; pendingListingsCount?: number } = {},
+) {
   return render(
     <MemoryRouter>
-      <HeroStatsBar health={health} capital={capital} />
+      <HeroStatsBar
+        health={health}
+        capital={capital}
+        needsAttentionCount={extras.needsAttentionCount}
+        pendingListingsCount={extras.pendingListingsCount}
+      />
     </MemoryRouter>,
   );
 }
@@ -162,6 +171,47 @@ describe('HeroStatsBar', () => {
       renderBar(baseHealth({ realizedROI: -0.08 }));
       const roiText = screen.getByText(/-8\.0%/);
       expect(roiText.textContent).not.toMatch(/\+/);
+    });
+  });
+
+  describe('alert chips', () => {
+    it('renders unpaid invoices chip when capital reports unpaid', () => {
+      renderBar(baseHealth(), baseCapital({ unpaidInvoiceCount: 3 }));
+      const link = screen.getByRole('link', { name: /3 unpaid invoices/i });
+      expect(link).toHaveAttribute('href', '/invoices');
+    });
+
+    it('renders needs-attention chip routed to /inventory', () => {
+      renderBar(baseHealth(), baseCapital(), { needsAttentionCount: 2 });
+      const link = screen.getByRole('link', { name: /2 needs attention/i });
+      expect(link).toHaveAttribute('href', '/inventory');
+    });
+
+    it('renders pending-listings chip routed to /inventory', () => {
+      renderBar(baseHealth(), baseCapital(), { pendingListingsCount: 5 });
+      const link = screen.getByRole('link', { name: /5 pending listings/i });
+      expect(link).toHaveAttribute('href', '/inventory');
+    });
+
+    it('hides chips with zero counts', () => {
+      renderBar(baseHealth(), baseCapital({ unpaidInvoiceCount: 0 }), {
+        needsAttentionCount: 0,
+        pendingListingsCount: 0,
+      });
+      expect(screen.queryByRole('link', { name: /unpaid invoice/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: /needs attention/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: /pending listing/i })).not.toBeInTheDocument();
+    });
+
+    it('renders all three chips together when all counts are nonzero', () => {
+      renderBar(
+        baseHealth(),
+        baseCapital({ unpaidInvoiceCount: 1 }),
+        { needsAttentionCount: 4, pendingListingsCount: 7 },
+      );
+      expect(screen.getByRole('link', { name: /1 unpaid invoice/i })).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: /4 needs attention/i })).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: /7 pending listings/i })).toBeInTheDocument();
     });
   });
 

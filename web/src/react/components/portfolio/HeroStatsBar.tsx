@@ -11,9 +11,16 @@ const trendToArrow = { improving: 'up', declining: 'down', stable: 'stable' } as
 interface HeroStatsBarProps {
   health?: PortfolioHealth;
   capital?: CapitalSummary;
+  needsAttentionCount?: number;
+  pendingListingsCount?: number;
 }
 
-export default function HeroStatsBar({ health, capital }: HeroStatsBarProps) {
+export default function HeroStatsBar({
+  health,
+  capital,
+  needsAttentionCount = 0,
+  pendingListingsCount = 0,
+}: HeroStatsBarProps) {
   if (!health) {
     return (
       <section className={styles.hero} aria-label="Portfolio summary">
@@ -49,6 +56,9 @@ export default function HeroStatsBar({ health, capital }: HeroStatsBarProps) {
     : Math.abs(roi) >= 0.2 ? 'big'
     : 'normal';
 
+  const unpaidInvoiceCount = capital?.unpaidInvoiceCount ?? 0;
+  const showAlerts = unpaidInvoiceCount > 0 || needsAttentionCount > 0 || pendingListingsCount > 0;
+
   return (
     <section
       className={styles.hero}
@@ -66,22 +76,23 @@ export default function HeroStatsBar({ health, capital }: HeroStatsBarProps) {
         </div>
       </div>
 
-      {/* Money group */}
-      <div className={styles.group}>
+      <div className={styles.divider} aria-hidden />
+
+      <div className={styles.cluster}>
         <Stat label="Deployed" value={formatCents(health.totalDeployedCents ?? 0)} />
         <Stat
           label="Recovered"
           value={formatCents(health.totalRecoveredCents ?? 0)}
           delta={health.totalRecoveredDelta}
         />
-        <Stat label="At Risk" value={formatCents(health.totalAtRiskCents ?? 0)} tone={(health.totalAtRiskCents ?? 0) > 0 ? 'warn' : undefined} />
-      </div>
+        <Stat
+          label="At Risk"
+          value={formatCents(health.totalAtRiskCents ?? 0)}
+          tone={(health.totalAtRiskCents ?? 0) > 0 ? 'warn' : undefined}
+        />
 
-      {capital && (
-        <>
-          <div className={styles.divider} aria-hidden />
-          {/* Time group */}
-          <div className={styles.group}>
+        {capital && (
+          <>
             <Stat
               label="Wks to Cover"
               value={capital.outstandingCents === 0 && capital.recoveryRate30dCents > 0
@@ -106,17 +117,45 @@ export default function HeroStatsBar({ health, capital }: HeroStatsBarProps) {
                 </div>
               </div>
             )}
-          </div>
-        </>
-      )}
+          </>
+        )}
+      </div>
 
-      {capital && capital.unpaidInvoiceCount > 0 && (
+      {showAlerts && (
         <div className={styles.alerts}>
-          <Link to="/invoices" className={styles.alertLink}>
-            <StatusPill tone="warning">
-              {capital.unpaidInvoiceCount} unpaid invoice{capital.unpaidInvoiceCount !== 1 ? 's' : ''} →
-            </StatusPill>
-          </Link>
+          {unpaidInvoiceCount > 0 && (
+            <Link
+              to="/invoices"
+              className={styles.alertLink}
+              aria-label={`${unpaidInvoiceCount} unpaid invoice${unpaidInvoiceCount !== 1 ? 's' : ''}`}
+            >
+              <StatusPill tone="warning">
+                {unpaidInvoiceCount} unpaid invoice{unpaidInvoiceCount !== 1 ? 's' : ''} →
+              </StatusPill>
+            </Link>
+          )}
+          {needsAttentionCount > 0 && (
+            <Link
+              to="/inventory"
+              className={styles.alertLink}
+              aria-label={`${needsAttentionCount} needs attention`}
+            >
+              <StatusPill tone="warning">
+                {needsAttentionCount} needs attention →
+              </StatusPill>
+            </Link>
+          )}
+          {pendingListingsCount > 0 && (
+            <Link
+              to="/inventory"
+              className={styles.alertLink}
+              aria-label={`${pendingListingsCount} pending listing${pendingListingsCount !== 1 ? 's' : ''}`}
+            >
+              <StatusPill tone="warning">
+                {pendingListingsCount} pending listing{pendingListingsCount !== 1 ? 's' : ''} →
+              </StatusPill>
+            </Link>
+          )}
         </div>
       )}
     </section>
